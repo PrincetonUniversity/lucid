@@ -1,0 +1,14 @@
+{
+  "switches": 1,
+  "max time": 9999999,
+  "default input gap": 10000,
+  "random seed": 0,
+  "events": [
+    {"name":"update_both", "args": [0, 1]},
+    {"name":"update_both", "args": [1, 1]},
+    {"name":"update_both", "args": [2, 1]},
+    {"name":"update_both", "args": [3, 1]},
+    {"name":"update_both", "args": [4, 1]},
+    {"name":"update_both", "args": [5, 1]}
+  ]
+}

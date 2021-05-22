@@ -1,0 +1,33 @@
+// Simple test to check that global argument elimination is working
+
+global Array.t<<32>> arr1 = Array.create(6);
+global Array.t<<32>> arr2 = Array.create(6);
+global Counter.t<<32>> ctr1 = Counter.create(0);
+global Array.t<<32>> arr3 = Array.create(6);
+global Counter.t<<32>> ctr2 = Counter.create(0);
+
+event update_arr_ctr(Array.t<<32>> a, Counter.t<<32>> c, int idx, int val) [a < c];
+
+handle update_arr_ctr(Array.t<<32>> a, Counter.t<<32>> c, int idx, int val) {
+	Array.set(a, idx, val);
+	Counter.add(c, val);
+}
+
+// The interpreter can't directly generate events which take global arguments,
+// so we're using this as a workaround
+entry event in(int array_id, int counter_id, int idx, int val);
+exit event bad_inputs(int array_id, int counter_id);
+
+handle in(int array_id, int counter_id, int idx, int val) {
+	match (array_id, counter_id) with
+	| 1, 1 -> { generate update_arr_ctr(arr1, ctr1, idx, val); }
+	| 2, 1 -> { generate update_arr_ctr(arr2, ctr1, idx, val); }
+	//| 3, 1 -> { generate update_arr_ctr(arr3, ctr1, idx, val); }
+	| 1, 2 -> { generate update_arr_ctr(arr1, ctr2, idx, val); }
+	| 2, 2 -> { generate update_arr_ctr(arr2, ctr2, idx, val); }
+	| 3, 2 -> { generate update_arr_ctr(arr3, ctr2, idx, val); }
+	| _ -> {
+			printf("Invalid array or counter id");
+			generate bad_inputs(array_id, counter_id);
+	}
+}

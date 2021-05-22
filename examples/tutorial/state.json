@@ -1,0 +1,12 @@
+{
+  "switches": 1,
+  "max time": 9999999,
+  "default input gap": 10000,
+  "random seed": 0,
+  "events": [
+    {"name":"pktin", "args": [1, 64, 1, 0]},
+    {"name":"pktin", "args": [1, 1500, 0, 0]},
+    {"name":"pktin", "args": [1, 1500, 0, 0]},
+    {"name":"pktin", "args": [1, 1500, 0, 1]}
+  ]
+}

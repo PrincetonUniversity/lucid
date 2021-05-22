@@ -1,0 +1,17 @@
+{
+  "switches": 1,
+  "max time": 9999999,
+  "default input gap": 10000,
+  "random seed": 0,
+  "events": [
+    {"name":"in", "args": [1, 1, 1, 1]},
+    {"name":"in", "args": [1, 1, 1, 2]},
+    {"name":"in", "args": [1, 2, 2, 3]},
+    {"name":"in", "args": [1, 1, 3, 4]},
+    {"name":"in", "args": [2, 1, 1, 5]},
+    {"name":"in", "args": [5, 1, 1, 6]},
+    {"name":"in", "args": [3, 2, 2, 7]},
+    {"name":"in", "args": [3, 2, 3, 8]},
+    {"name":"in", "args": [3, 7, 3, 9]}
+  ]
+}

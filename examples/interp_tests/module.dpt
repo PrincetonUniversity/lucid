@@ -1,0 +1,66 @@
+module SafeArray : {
+  global type t<<a>>;
+  constr t<<a>> create(int sz);
+
+  fun void sz(t<<'a>> safe_arr);
+  fun void update(t<<'a>> safe_arr, int idx, int<<'a>> v) [start <= safe_arr; end safe_arr];
+  event update_twice(t<<'a>> t, int idx, int<<'a>> v);
+}
+{
+
+  // Basically the same code as user_types, but inside a module
+  global type t<<a>> = {
+    Array.t<<a>> arr;
+    Counter.t<<a>> bad_accesses;
+    int sz;
+  }
+
+  // How to create a t
+  constr t<<a>> create(int sz) {
+    global Array.t<<a>> arr = Array.create(sz);
+    global Counter.t<<a>> bad_accesses = Counter.create(0);
+    const int sz = sz;
+  }
+
+  fun int sz(t<<'a>> t) {
+    return t#sz;
+  }
+
+  fun void update(t<<'a>> safe_arr, int idx, int<<'a>> v) {
+    auto sz = safe_arr#sz;
+    if (idx < 0 || idx + 1 > sz) {
+      Counter.add(safe_arr#bad_accesses, 1);
+    } else {
+      Array.set(safe_arr#arr, idx, v);
+    }
+  }
+
+  // No actual point in doing this, just want to have some events here for
+  // completeness
+  event update_once(t<<'a>> t, int idx, int<<'a>> v);
+  event update_twice(t<<'a>> t, int idx, int<<'a>> v);
+
+  handle update_once(t<<32>> t, int idx, int<<'a>> v) {
+    update(t, idx, v);
+  }
+
+  handle update_twice(t<<'a>> t, int idx, int<<'a>> v) {
+    generate update_once(t, idx, v);
+    generate update_once(t, idx, v);
+  }
+
+} // End module definition
+
+// Actually creating some t values
+global SafeArray.t<<32>> arr1 = SafeArray.create(4);
+global SafeArray.t<<16>> arr2 = SafeArray.create(2);
+
+event update_both(int idx, int v) {
+  SafeArray.update(arr1, idx, v);
+  SafeArray.update(arr2, idx, v[15:0]);
+}
+
+// Just so we don't optimize away all copies of update_once and update_twice
+event foo() {
+  generate SafeArray.update_twice(arr1, 0, 0);
+}

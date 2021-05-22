@@ -1,0 +1,10 @@
+event in(int<<8>> i, int<<8>> j) {
+  printf("i < j: %b. i > j: %b. i <= j: %b. i >= j: %b. i == j: %b. i != j: %b",
+          i < j, i > j, i <= j, i >= j, i == j, i != j);
+
+  printf("i + j = %d. i - j = %d. i |-| j = %d. i & j = %d. i | j = %d. i <<< j = %d. i >>> j = %d. i ^ j = %d",
+          i + j, i - j, i |-| j, i & j, i | j, i <<< j, i >>> j, i ^ j);
+
+   printf("i[7:0] = %d. i[4:2] = %d. i[5:3] = %d. i[0:0] = %d",
+           i[7:0], i[4:2], i[5:3], i[0:0]);
+}

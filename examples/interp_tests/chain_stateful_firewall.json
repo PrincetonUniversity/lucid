@@ -1,0 +1,18 @@
+{
+  "switches": 3,
+  "max time": 900000000,
+  "default input gap": 100000,
+  "random seed": 0,
+  "externs": {
+    "head": [0, 0, 0],
+    "tail": [2, 2, 2],
+    "succ": [1, 2, 2]
+  },
+  "events": [
+    {"name":"packetin", "args": [10, 100, 0], "timestamp": 11000000},
+    {"name":"packetin", "args": [11, 101, 0], "locations": [1]},
+    {"name":"packetin", "args": [13, 103, 1], "locations": [0, 1, 2]},
+    {"name":"packetin", "args": [101, 11, 1], "locations": [0, 1, 2]},
+    {"name":"packetin", "args": [100, 10, 1], "locations": [0, 1, 2]}
+  ]
+}

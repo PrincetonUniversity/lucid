@@ -1,0 +1,19 @@
+{
+  "max time": 900000000,
+  "default input gap": 100000,
+  "random seed": 0,
+  "events": [
+    {"name":"outside_packet", "args": [10]},
+    {"name":"outside_packet", "args": [12]},
+    {"name":"outside_packet", "args": [14]},
+    {"name":"inside_packet", "args": [10, 100]},
+    {"name":"inside_packet", "args": [10, 100]},
+    {"name":"outside_packet", "args": [10]},
+    {"name":"outside_packet", "args": [12]},
+    {"name":"outside_packet", "args": [14]},
+    {"name":"inside_packet", "args": [11, 101]},
+    {"name":"outside_packet", "args": [10]},
+    {"name":"outside_packet", "args": [12]},
+    {"name":"outside_packet", "args": [14]}
+  ]
+}

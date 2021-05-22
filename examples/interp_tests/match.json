@@ -1,0 +1,16 @@
+{
+  "max time": 90000000,
+  "default input gap": 1000,
+  "random seed": 0,
+  "events": [
+    {"name":"packetin", "args": [0]},
+    {"name":"packetin", "args": [1]},
+    {"name":"packetin", "args": [2]},
+    {"name":"packetin", "args": [3]},
+    {"name":"packetin", "args": [4]},
+    {"name":"packetin", "args": [5]},
+    {"name":"packetin", "args": [6]},
+    {"name":"packetin", "args": [7]},
+    {"name":"packetin", "args": [8]}
+  ]
+}

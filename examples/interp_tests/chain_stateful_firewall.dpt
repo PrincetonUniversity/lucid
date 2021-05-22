@@ -1,0 +1,63 @@
+/*
+Implementing the SRO algorithm from section 6.1 of this paper:
+https://www.microsoft.com/en-us/research/uploads/prod/2020/10/swishmem-hotnets20.pdf
+
+As in that section, we assume reliable delivery and no router failures.
+*/
+
+const int NUM_REGISTERS = 4;
+const int HASH_SEED = 1234;
+
+const int INSIDE_PORT = 0; // Tells us if packets are coming from inside or outside
+const int TIME_THRESH = 10000000;
+
+/* Information about the chain. */
+extern int head;
+extern int tail;
+extern int succ;
+
+/* Time we last saw a packet for this flow coming from inside */
+global Array.t<<32>> last_seen = Array.create(NUM_REGISTERS);
+
+event update_last_seen(int idx, int time);
+
+entry event packetin(int src, int dst, int port);
+exit event continue(int dst);
+
+handle update_last_seen(int idx, int time) {
+  event this = update_last_seen(idx, time);
+  Array.set(last_seen, idx, time);
+  if (self != tail) {
+    generate Event.sslocate(this, succ);
+  }
+}
+
+handle packetin(int src, int dst, int port) {
+  if (port == INSIDE_PORT) {
+    // Coming from inside -- update the firewall
+    int idx = (int<<32>>)hash<<2>>(HASH_SEED, src, dst);
+    printf("Mapped (%d, %d) to index %d", src, dst, idx);
+
+    int last_seen_time = Array.get(last_seen, idx);
+    int now = Sys.time();
+
+    // Only update if we're nearing the timeout to avoid many many writes
+    if ((now - last_seen_time) > (TIME_THRESH - 500000)) {
+      event updater = update_last_seen(idx, now);
+      generate Event.sslocate(updater, head);
+    }
+
+    generate continue(dst);
+  } else {
+    // Coming from outside -- drop if not in firewall
+    int idx = (int<<32>>)hash<<2>>(HASH_SEED, dst, src);
+    printf("Mapped (%d, %d) to index %d", dst, src, idx);
+    int last_seen_time = Array.get(last_seen, idx);
+
+    if ((Sys.time() - last_seen_time) < TIME_THRESH) {
+      generate continue(dst);
+    } else {
+      printf("dropped");
+    }
+  }
+}

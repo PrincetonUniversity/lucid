@@ -1,0 +1,51 @@
+// Simple dpt program for testing match statements
+
+global Array.t<<32>> counts = Array.create(5);
+global Array.t<<32>> counts2 = Array.create(5);
+
+
+entry event packetin(int<<3>> idx);
+
+memop incr(int x, int y) {
+  return x + y;
+}
+
+fun void increment1(int<<3>> idx) {
+  printf("Incrementing index %d", idx);
+  Array.setm(counts, idx, incr, 1);
+}
+
+fun void increment2(int<<3>> idx) {
+  printf("Incrementing index %d", idx);
+  Array.setm(counts2, idx, incr, 1);
+}
+
+/*
+Write the same match statement two ways; the two arrays should always be the same
+  If 0, update index 0.
+  If 1, update index 1.
+  If even, update index 2
+  If at least 4 and odd, update index 3
+  Otherwise (i.e. if 3), update index 4
+*/
+handle packetin(int<<3>> idx) {
+  match idx with
+  | 0 -> { increment1(0); }
+  | 1 -> { increment1(1); }
+  | 2 -> { increment1(2); }
+  | 3 -> { increment1(4); }
+  | 4 -> { increment1(2); }
+  | 5 -> { increment1(3); }
+  | 6 -> { increment1(2); }
+  | 7 -> { increment1(3); }
+  | 8 -> { increment1(2); }
+
+  printf("Pattern update (should be the same as before)");
+
+  match idx with
+  | 0b000 -> { increment2(0); }
+  | 1 -> { increment2(1); }
+  | 0b**0 -> { increment2(2); }
+  | 0b1*1 -> { increment2(3); }
+  | _ -> { increment2(4); }
+}

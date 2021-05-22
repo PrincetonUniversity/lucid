@@ -1,0 +1,25 @@
+global Counter.t<<32>> c1 = Counter.create(0);
+global Counter.t<<32>> c2 = Counter.create(0);
+
+fun bool foo(bool b1, bool b2, bool b3) {
+  if (b1) {
+    return b2 && b3;
+  }
+  // No else here -- nonetheless, this code should only be executed if !b1
+  Counter.add(c1, 1);
+  if (b2) {
+    Counter.add(c2, 1);
+    return b3;
+  }
+  // Again, no else. But it should be safe to access c2 regardless!
+  Counter.add(c2, 5);
+  return false;
+}
+
+exit event out(bool b1, bool b2, bool b3);
+
+event in(bool b1, bool b2, bool b3) {
+  if (foo(b1, b2, b3)) {
+    generate out(b1, b2, b3);
+  }
+}

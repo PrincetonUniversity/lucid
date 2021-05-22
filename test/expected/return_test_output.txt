@@ -1,0 +1,45 @@
+dpt: Parsing ...
+Processing examples/interp_tests/return_test.dpt
+---------typing---------
+---------Making returns explicit-------------
+-----------renaming-----------
+-------Eliminating modules---------
+-----------inlining-----------
+---------------typing again-------------
+------------Checking entry handlers---------------
+---------Eliminating events with global arguments----------
+-------Eliminating user global types-------
+---------------typing again-------------
+dpt: Auto-detected specification file examples/interp_tests/return_test.json
+dpt: Simulating...
+dpt: Using random seed: 0
+
+t=0: Handling event in(true,true,true) at switch 0
+t=10000: Handling event in(true,true,false) at switch 0
+t=20000: Handling event in(true,false,true) at switch 0
+t=30000: Handling event in(true,false,false) at switch 0
+t=40000: Handling event in(false,true,true) at switch 0
+t=50000: Handling event in(false,true,false) at switch 0
+t=60000: Handling event in(false,false,true) at switch 0
+t=70000: Handling event in(false,false,false) at switch 0
+dpt: Final State:
+
+Switch 0 : {
+
+ Pipeline : [
+    0 : [4u32]
+    1 : [12u32]
+  ]
+
+ Events :   [ ]
+
+ Exits :    [
+    out(true,true,true) at t=0
+    out(false,true,true) at t=40000
+  ]
+
+ entry events handled: 0
+ total events handled: 8
+
+}
+dpt: Done

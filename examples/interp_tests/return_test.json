@@ -1,0 +1,16 @@
+{
+  "switches": 1,
+  "max time": 9999999,
+  "default input gap": 10000,
+  "random seed": 0,
+  "events": [
+    {"name":"in", "args": [true, true, true]},
+    {"name":"in", "args": [true, true, false]},
+    {"name":"in", "args": [true, false, true]},
+    {"name":"in", "args": [true, false, false]},
+    {"name":"in", "args": [false, true, true]},
+    {"name":"in", "args": [false, true, false]},
+    {"name":"in", "args": [false, false, true]},
+    {"name":"in", "args": [false, false, false]}
+  ]
+}

@@ -1,0 +1,98 @@
+dpt: Parsing ...
+Processing examples/interp_tests/global_args.dpt
+---------typing---------
+---------Making returns explicit-------------
+-----------renaming-----------
+-------Eliminating modules---------
+-----------inlining-----------
+---------------typing again-------------
+------------Checking entry handlers---------------
+
+In examples/interp_tests/global_args.dpt: 
+
+22|    | 1, 1 -> { generate update_arr_ctr(arr1, ctr1, idx, val); }
+                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+warning: examples/interp_tests/global_args.dpt: Conditional generation of potential non-exit event in entry handler.
+
+
+In examples/interp_tests/global_args.dpt: 
+
+23|    | 2, 1 -> { generate update_arr_ctr(arr2, ctr1, idx, val); }
+                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+warning: examples/interp_tests/global_args.dpt: Conditional generation of potential non-exit event in entry handler.
+
+
+In examples/interp_tests/global_args.dpt: 
+
+25|    | 1, 2 -> { generate update_arr_ctr(arr1, ctr2, idx, val); }
+                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+warning: examples/interp_tests/global_args.dpt: Conditional generation of potential non-exit event in entry handler.
+
+
+In examples/interp_tests/global_args.dpt: 
+
+26|    | 2, 2 -> { generate update_arr_ctr(arr2, ctr2, idx, val); }
+                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+warning: examples/interp_tests/global_args.dpt: Conditional generation of potential non-exit event in entry handler.
+
+
+In examples/interp_tests/global_args.dpt: 
+
+27|    | 3, 2 -> { generate update_arr_ctr(arr3, ctr2, idx, val); }
+                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+warning: examples/interp_tests/global_args.dpt: Conditional generation of potential non-exit event in entry handler.
+
+---------Eliminating events with global arguments----------
+-------Eliminating user global types-------
+---------------typing again-------------
+dpt: Auto-detected specification file examples/interp_tests/global_args.json
+dpt: Simulating...
+dpt: Using random seed: 0
+
+t=0: Handling entry event in(1,1,1,1) at switch 0
+t=600: Handling event update_arr_ctr_arr1_ctr1(1,1) at switch 0
+t=10000: Handling entry event in(1,1,1,2) at switch 0
+t=10600: Handling event update_arr_ctr_arr1_ctr1(1,2) at switch 0
+t=20000: Handling entry event in(1,2,2,3) at switch 0
+t=20600: Handling event update_arr_ctr_arr1_ctr2(2,3) at switch 0
+t=30000: Handling entry event in(1,1,3,4) at switch 0
+t=30600: Handling event update_arr_ctr_arr1_ctr1(3,4) at switch 0
+t=40000: Handling entry event in(2,1,1,5) at switch 0
+t=40600: Handling event update_arr_ctr_arr2_ctr1(1,5) at switch 0
+t=50000: Handling entry event in(5,1,1,6) at switch 0
+Invalid array or counter id
+t=60000: Handling entry event in(3,2,2,7) at switch 0
+t=60600: Handling event update_arr_ctr_arr3_ctr2(2,7) at switch 0
+t=70000: Handling entry event in(3,2,3,8) at switch 0
+t=70600: Handling event update_arr_ctr_arr3_ctr2(3,8) at switch 0
+t=80000: Handling entry event in(3,7,3,9) at switch 0
+Invalid array or counter id
+dpt: Final State:
+
+Switch 0 : {
+
+ Pipeline : [
+    0 : [0u32; 2u32; 3u32; 4u32; 0u32; 0u32]
+    1 : [0u32; 5u32; 0u32; 0u32; 0u32; 0u32]
+    2 : [12u32]
+    3 : [0u32; 0u32; 7u32; 8u32; 0u32; 0u32]
+    4 : [18u32]
+  ]
+
+ Events :   [ ]
+
+ Exits :    [
+    bad_inputs(5,1) at t=50000
+    bad_inputs(3,7) at t=80000
+  ]
+
+ entry events handled: 9
+ total events handled: 16
+
+}
+dpt: Done
