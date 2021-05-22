@@ -18,10 +18,10 @@ This branch of the repository contains an environment to reproduce the principle
 
 For more details on what this script is doing, see ``sigcomm_apps/readme.md``.
 
-The expected output is:
+Expected final output are statistics about the lines of code of each application in Lucid and P4. 
 
 ```
 
 ```
 
-4. (optional) If you want to compile Lucid-generated P4 to a Tofino binary, you will need access to the Tofino SDE. Put the 9.5.0 SDE file ``bf-sde-9.5.0.tar`` in the same directory as the VM file. Inside of the VM, run ``~/lucid/sigcomm_apps/utils/install_bf_sde.sh`` to start the install. The sde installs to ``~/bf-sde-9.5.0``. If you install the sde, make sure to also set the $SDE and $SDE_INSTALL environment variables. After installing the sde, ``~/lucid/sigcomm_apps/reproduce.sh`` will also compile the applications from P4 to Tofino binaries and report the number of tofino pipeline stages required.
+4. (optional) If you want to compile Lucid-generated P4 to a Tofino binary, to also get the number of pipeline stages required by each application, you will need access to the Tofino SDE. Put the 9.5.0 SDE file ``bf-sde-9.5.0.tar`` in the same directory as the VM file. Inside of the VM, run ``~/lucid/sigcomm_apps/utils/install_bf_sde.sh`` to start the install. The sde installs to ``~/bf-sde-9.5.0``. If you install the sde, make sure to also set the $SDE and $SDE_INSTALL environment variables. After installing the sde, ``~/lucid/sigcomm_apps/reproduce.sh`` will also compile the applications from P4 to Tofino binaries and report the number of tofino pipeline stages required.
