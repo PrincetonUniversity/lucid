@@ -1,0 +1,26 @@
+$run_setup_script = <<SCRIPT
+cd /vagrant/
+./install_dpt_prereqs.sh
+SCRIPT
+
+
+Vagrant.configure(2) do |config|
+
+  config.vm.box = "bento/ubuntu-18.04" # bionic 64 doesn't work with serial disconnected...
+  config.vm.hostname = "lucidDev"
+  config.vm.provider "virtualbox" do |vb|
+    # disable the log for portability.
+    vb.customize [ "modifyvm", :id, "--uartmode1", "disconnected" ]
+    #   # Display the VirtualBox GUI when booting the machine
+    #   vb.gui = true
+    vb.cpus = "2"
+    vb.memory = "4096" 
+    # config.disksize.size = "40GB"
+    # Add a private network for local SSH. 
+
+    # run the provisioning script to install dependencies and setup sde dir for install.
+    config.vm.provision "shell", inline: $run_setup_script, privileged: false
+  end
+
+
+end
