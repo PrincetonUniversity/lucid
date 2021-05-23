@@ -14,7 +14,14 @@ For other applications and general use of Lucid, we recommend returning to the m
 
 1. Download the vm: [vm link]( ). 
 
-2. Initialize the vm: from the vm's directory, run ``vagrant ...``. If you would rather rebuild the VM from scratch, see ``vagrant/readme.md``
+2. Initialize and start the vm: from the vm's directory, run
+``
+vagrant box add lucid_sigcomm lucid_sigcomm.box
+vagrant init lucid_sigcomm
+vagrant up --provider=virtualbox
+``
+
+If you would rather rebuild the VM from scratch, see ``vagrant/readme.md``
 
 3. Run the command to rebuild the 10 benchmark Lucid programs and report statistics about them: ``vagrant ssh -c ~/lucid/sigcomm_apps/reproduce.sh`` (from the vm's directory) **this takes around 1 - 2 hours to complete!**
 
