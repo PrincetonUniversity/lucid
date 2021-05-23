@@ -23,7 +23,56 @@ For more details on what this script is doing, see ``sigcomm_apps/readme.md``.
 The final output will be statistics about the benchmark applications. 
 
 ```
-
+----- stats for chain_replication.dpt -----
+lucid program:              ./chain_replication.dpt
+lucid program loc:          97
+p4-tofino program loc:      987
+number of tofino stages:    ---
+----- stats for countmin_historical.dpt -----
+lucid program:              ./countmin_historical.dpt
+lucid program loc:          93
+p4-tofino program loc:      920
+number of tofino stages:    ---
+----- stats for stateful_fw.dpt -----
+lucid program:              ./stateful_fw.dpt
+lucid program loc:          189
+p4-tofino program loc:      1889
+number of tofino stages:    ---
+----- stats for chain_prob_stateful_firewall.dpt -----
+lucid program:              ./chain_prob_stateful_firewall.dpt
+lucid program loc:          74
+p4-tofino program loc:      999
+number of tofino stages:    ---
+----- stats for rip_single.dpt -----
+lucid program:              ./rip_single.dpt
+lucid program loc:          81
+p4-tofino program loc:      855
+number of tofino stages:    ---
+----- stats for dnsguard.dpt -----
+lucid program:              ./dnsguard.dpt
+lucid program loc:          219
+p4-tofino program loc:      1867
+number of tofino stages:    ---
+----- stats for starflow.dpt -----
+lucid program:              ./starflow.dpt
+lucid program loc:          156
+p4-tofino program loc:      2017
+number of tofino stages:    ---
+----- stats for chain_prob_stateful_firewall_timeout.dpt -----
+lucid program:              ./chain_prob_stateful_firewall_timeout.dpt
+lucid program loc:          119
+p4-tofino program loc:      1620
+number of tofino stages:    ---
+----- stats for rerouter.dpt -----
+lucid program:              ./rerouter.dpt
+lucid program loc:          115
+p4-tofino program loc:      1076
+number of tofino stages:    ---
+----- stats for NAT.dpt -----
+lucid program:              ./NAT.dpt
+lucid program loc:          41
+p4-tofino program loc:      738
+number of tofino stages:    ---
 ```
 
 4. (optional) To get information about the number of pipeline stages required by each application, you will need access to the Tofino 9.5.0 SDE. Put the 9.5.0 SDE file ``bf-sde-9.5.0.tar`` in the same directory as the VM file. Inside of the VM, run ``~/lucid/sigcomm_apps/utils/install_bf_sde.sh`` to start the install. The sde installs to ``~/bf-sde-9.5.0``. If you install the sde, make sure to also set the $SDE and $SDE_INSTALL environment variables. After installing the sde, ``~/lucid/sigcomm_apps/reproduce.sh`` will also compile the applications from P4 to Tofino binaries and report the number of tofino pipeline stages required.
