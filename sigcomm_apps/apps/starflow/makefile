@@ -1,4 +1,4 @@
-DPTC = ../../../dptc
+LUCID = ../../../lucid
 STATS =  ../../utils/report_stats.py
 BUILD_DIR = p4
 src = $(wildcard *.dpt)
@@ -9,7 +9,7 @@ $(BUILD_DIR): $(src)
 	; echo "----- building $< -> $$proj/p4/lucid.* -----" \
 	; d=$$(date +%s) \
 	; mkdir -p logs \
-	; $(DPTC) $(src) harness.p4 $(BUILD_DIR) \
+	; $(LUCID) $(src) harness.p4 $(BUILD_DIR) \
 	&& echo "$$proj lucid to p4 build took $$(($$(date +%s)-d)) seconds" \
 	; echo "----- done building $< -> $(basename $<)/p4/ -----" \
 	; echo "run 'make tofino' to build p4 to tofino"

@@ -4,9 +4,9 @@ include $(shell ocamlfind query visitors)/Makefile.preprocess
 
 default:
 	dune build src/bin/main.exe
-	cp -f _build/default/src/bin/main.exe dpt
+	cp -f _build/default/src/bin/main.exe lucid_interp
 	dune build src/bin/compiler.exe
-	cp -f _build/default/src/bin/compiler.exe dptc
+	cp -f _build/default/src/bin/compiler.exe lucid
 
 
 generatedVisitors: src/lib/frontend/Syntax.processed.ml
@@ -43,5 +43,5 @@ install-deps:
 
 clean:
 	dune clean
-	rm -f dpt
-	rm -f dptc
+	rm -f lucid_interp
+	rm -f lucid
