@@ -121,3 +121,16 @@ lucid program loc:          41
 p4-tofino program loc:      738
 number of tofino stages:    10
 ```
+
+### The source code
+
+Lucid's compiler source code is in ``/src/``. The top level compiler is defined in ``/src/bin/Compiler.ml``. It calls modules in ``src/lib/``. Here are the libraries related to the parts of the compiler described in the paper: 
+
+- syntax (Section 3): ``/src/lib/frontend/syntax.ml``
+
+- type system (Section 4) and syntactic memop restrictions (Section 5.1): ``src/lib/frontend/typing/``
+
+- translation to an intermediate language for the Tofino (Section 5.2): ``src/lib/backend/translate/`` (start with ``TofinoFromDpt.ml``)
+
+- graph-based optimizations (Section 5.3): ``src/lib/backend/optimization/``
+
