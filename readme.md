@@ -6,15 +6,15 @@ The scripts and VM in this branch automate the compilation and analysis of these
 
 ### Short instructions
 
-Make sure you have virtualbox and vagrant installed and room for a vm that uses 2 cores, 4GB of ram, and 10GB of disk space. Run ``./vm_setup.sh; ./vm_reproduce.sh`` to setup a VM and compile the 10 benchmark programs from Figure 8 of the Lucid paper. This will take about 1.5 hours. When complete, the script will measure and report line of code statistics for the benchmark applications. 
+Make sure you have virtualbox and vagrant installed and room for a vm that uses 2 cores, 4GB of ram, and 10GB of disk space. Download this 3GB vm image and put it in the same directory as this readme: [lucidvm.box](https://drive.google.com/file/d/14h-8nJdGtYtNBrZoJim_c_wM-CFEQGbD/view?usp=sharing). Run ``./vm_setup.sh; ./vm_reproduce.sh`` to setup a VM and compile the 10 benchmark programs from Figure 8 of the Lucid paper. This will take about 1.5 hours. When complete, the script will measure and report line of code statistics for the benchmark applications. 
 
 ### Longer instructions
 
 0. Install [virtualbox](https://www.virtualbox.org/wiki/Downloads) (tested with virtualbox 6.1.8) and [vagrant](https://www.vagrantup.com/downloads) (tested with vagrant 2.2.9).
 
-1. Set up the VM: ``./vm_setup.sh`` This will download a pre-built vagrant box, [lucid_vm.box](princeton.edu) and set it up as the default vagrant box in this directory. If the VM is not accessible, see ``./vagrant/readme.md`` to rebuild ``lucid_vm.box``.
+1. Set up the VM. Download the pre-built vagrant box, [https://drive.google.com/file/d/14h-8nJdGtYtNBrZoJim_c_wM-CFEQGbD/view?usp=sharing](https://drive.google.com/file/d/14h-8nJdGtYtNBrZoJim_c_wM-CFEQGbD/view?usp=sharing) and save it in the root directory of this repository as ``lucidvm.box``. Then run ``./vm_setup.sh``. If the VM is not accessible, see ``./vagrant/readme.md`` to build ``lucid_vm.box``.
 
-2. Run the compiler and analysis: ``./vm_reproduce.sh`` This sshes into the VM set up in step 1, then runs ``sigcomm_apps/reproduce.sh`` to compile 10 benchmark applications from Lucid to P4. It will take about 1.5 hours to run and prints a bunch of output from the Lucid compiler. For more information about what ``reproduce.sh`` is doing, see ``sigcomm_apps/readme.md``. After compilation, an analysis script will report the following statistics about the applications.
+2. Run the compiler and analysis. Run ``./vm_reproduce.sh`` This sshes into the VM set up in step 1, then runs ``sigcomm_apps/reproduce.sh`` to compile 10 benchmark applications from Lucid to P4. It will take about 1.5 hours to run and prints a bunch of output from the Lucid compiler. For more information about what ``reproduce.sh`` is doing, see ``sigcomm_apps/readme.md``. After compilation, an analysis script will report the following statistics about the applications.
 ```
 ----- stats for chain_replication.dpt -----
 lucid program:              ./chain_replication.dpt
