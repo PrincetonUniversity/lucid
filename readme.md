@@ -68,7 +68,7 @@ p4-tofino program loc:      738
 number of tofino stages:    ---
 ```
 
-3. (optional) If you want to compile the Lucid-generate P4 to the Tofino, download a copy of ``bf-sde-9.5.0.tar`` and put it in the root directory of this git. Run ``./vm_install_sde.sh`` to install a copy of the SDE to the VM. Then, run ``./vm_reproduce.sh`` again. With the SDE installed, the script will also compile every benchmark Lucid app from P4 to the Tofino. This will take an additional 30 minutes - 1 hour. After running this command, the expected output is: 
+3. (optional) If you have access to the Tofino SDE and want to use it to compile Lucid-generate P4 to the Tofino binaries, download a copy of ``bf-sde-9.5.0.tar`` and put it in the root directory of this git. Run ``./vm_install_sde.sh`` to install a copy of the SDE to the VM. SDE installation will take a while, as usual. Then, run ``./vm_reproduce.sh`` again. With the SDE installed, the script will also compile every benchmark Lucid app from P4 to the Tofino. This will take an additional 30 minutes - 1 hour. With the SDE installed, the expected final output is: 
 ```
 ----- stats for chain_replication.dpt -----
 lucid program:              ./chain_replication.dpt
