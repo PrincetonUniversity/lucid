@@ -6,7 +6,7 @@ The scripts and VM in this branch automate the compilation and analysis of these
 
 ### Short instructions
 
-Make sure you have virtualbox and vagrant installed and room for a vm that uses 2 cores, 4GB of ram, and 10GB of disk space. Download this 3GB vm image and put it in the same directory as this readme: [lucidvm.box](https://drive.google.com/file/d/14h-8nJdGtYtNBrZoJim_c_wM-CFEQGbD/view?usp=sharing). Run ``./vm_setup.sh; ./vm_reproduce.sh`` to setup a VM and compile the 10 benchmark programs from Figure 8 of the Lucid paper. This will take about 1.5 hours. When complete, the script will measure and report line of code statistics for the benchmark applications. 
+Make sure you have [virtualbox](https://www.virtualbox.org/wiki/Downloads) and vagrant](https://www.vagrantup.com/downloads) installed and room for a vm that uses 2 cores, 4GB of ram, and 10GB of disk space. Download this [3GB vm image](https://drive.google.com/file/d/14h-8nJdGtYtNBrZoJim_c_wM-CFEQGbD/view?usp=sharing) and put it in the same directory as this readme. Run ``./vm_setup.sh; ./vm_reproduce.sh`` to setup a VM and compile the 10 benchmark programs from Figure 8 of the Lucid paper. This will take 1-2 hours. When complete, the script will measure and report line of code statistics for the benchmark applications. 
 
 ### Longer instructions
 
