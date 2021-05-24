@@ -68,7 +68,7 @@ p4-tofino program loc:      738
 number of tofino stages:    ---
 ```
 
-3. (optional) If you have access to the Tofino SDE and want to use it to compile Lucid-generate P4 to Tofino binaries, download a copy of ``bf-sde-9.5.0.tar`` and put it in the root directory of this git. Run ``./vm_install_sde.sh`` to install a copy of the SDE to the VM. After the SDE installs, run ``./vm_reproduce.sh`` again. The script will now compile the P4 version of every Lucid application into a Tofino binary. This will take an additional 30 minutes - 1 hour. With the SDE installed, the final output will also report the number of tofino stages that each application used based on the Tofino compiler's logs.
+3. (optional) If you have access to the Tofino SDE and want to use it to compile Lucid-generate P4 to Tofino binaries, download a copy of ``bf-sde-9.5.0.tar`` and put it in the root directory of this git. Run ``./vm_install_sde.sh`` to install a copy of the SDE to the VM. After the SDE installs, run ``./vm_reproduce.sh`` again. The script will now compile the P4 version of each Lucid application into a Tofino binary. This will take an additional 30 minutes - 1 hour. With the SDE installed, the final output will also report the number of tofino stages that each application used based on the Tofino compiler's logs.
 ```
 ----- stats for chain_replication.dpt -----
 lucid program:              ./chain_replication.dpt
@@ -124,7 +124,7 @@ number of tofino stages:    10
 
 ### The source code
 
-Lucid's compiler source code is in ``/src/``. The top level compiler is defined in ``/src/bin/Compiler.ml``. It calls modules in ``src/lib/``. Here are the libraries related to the parts of the compiler described in the paper: 
+Lucid's compiler source code is in ``/src/``. The compiler's main function is in ``/src/bin/Compiler.ml``. It calls modules in ``src/lib/``. Here are the libraries related to the parts of the compiler described in the paper: 
 
 - syntax (Section 3): ``/src/lib/frontend/syntax.ml``
 
