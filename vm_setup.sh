@@ -27,10 +27,15 @@ then
     else
         vagrant box add lucidvm lucidvm.box
         vagrant init lucidvm
-        vagrant up --provider=virtualbox
         echo "vm initialization complete. use 'vagrant ssh' to login"
     fi
 else
     echo "error: lucidvm.box not found."
     echo "see vagrant/readme.md for instructions to build it from source"
 fi
+# bring up vn
+vagrant up --provider=virtualbox
+
+# in vm: clone latest artifact branch
+echo "cloning latest branch of sigcomm21_artifact@lucid inside of VM..."
+vagrant ssh -c "git clone --single-branch --branch sigcomm21_artifact https://github.com/princetonUniversity/lucid"

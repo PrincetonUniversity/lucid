@@ -12,9 +12,9 @@ Make sure you have [virtualbox](https://www.virtualbox.org/wiki/Downloads) and [
 
 0. Install [virtualbox](https://www.virtualbox.org/wiki/Downloads) (tested with virtualbox 6.1.8) and [vagrant](https://www.vagrantup.com/downloads) (tested with vagrant 2.2.9).
 
-1. Set up the VM. Download the pre-built vagrant box, [https://drive.google.com/file/d/14h-8nJdGtYtNBrZoJim_c_wM-CFEQGbD/view?usp=sharing](https://drive.google.com/file/d/14h-8nJdGtYtNBrZoJim_c_wM-CFEQGbD/view?usp=sharing) and save it in the root directory of this repository as ``lucidvm.box``. Then run ``./vm_setup.sh``. If the VM is not accessible, see ``./vagrant/readme.md`` to build ``lucid_vm.box``.
+1. Download the pre-built vagrant image, [https://drive.google.com/file/d/14h-8nJdGtYtNBrZoJim_c_wM-CFEQGbD/view?usp=sharing](https://drive.google.com/file/d/14h-8nJdGtYtNBrZoJim_c_wM-CFEQGbD/view?usp=sharing) and save it in the root directory of this repository as ``lucidvm.box``. Then run ``./vm_setup.sh``. If the pre-built image is not accessible, see ``./vagrant/readme.md`` to build it.
 
-2. Run the compiler and analysis. Run ``./vm_reproduce.sh`` This sshes into the VM set up in step 1, then runs ``sigcomm_apps/reproduce.sh`` to compile 10 benchmark applications from Lucid to P4. It will take about 1.5 hours to run and prints a bunch of output from the Lucid compiler. For more information about what ``reproduce.sh`` is doing, see ``sigcomm_apps/readme.md``. After compilation, an analysis script will report the following statistics about the applications.
+2. Run the compiler and analysis. Run ``./vm_reproduce.sh`` This sshes into the VM set up in step 1, then runs ``sigcomm_apps/reproduce.sh`` to compile 10 benchmark applications from Lucid to P4. It will take about an hour and print a bunch of output from the Lucid compiler. For more information about what ``reproduce.sh`` is doing, see ``sigcomm_apps/readme.md``. After compilation, an analysis script will report the following statistics about the applications.
 ```
 ----- stats for chain_replication.dpt -----
 lucid program:              ./chain_replication.dpt
@@ -68,7 +68,7 @@ p4-tofino program loc:      738
 number of tofino stages:    ---
 ```
 
-3. (optional) If you have access to the Tofino SDE and want to use it to compile Lucid-generate P4 to Tofino binaries, download a copy of ``bf-sde-9.5.0.tar`` and put it in the root directory of this git. Run ``./vm_install_sde.sh`` to install a copy of the SDE to the VM. After the SDE installs, run ``./vm_reproduce.sh`` again. The script will now compile the P4 version of each Lucid application into a Tofino binary. This will take an additional 30 minutes - 1 hour. With the SDE installed, the final output will also report the number of tofino stages that each application used based on the Tofino compiler's logs.
+3. (optional) If you have access to the Tofino SDE and want to use it to compile Lucid-generate P4 to Tofino binaries, download a copy of ``bf-sde-9.5.0.tar`` and put it in the root directory of this git. Run ``./vm_install_sde.sh`` to install a copy of the SDE to the VM. After the SDE installs, run ``./vm_reproduce.sh`` again. The script will now compile the P4 version of each Lucid application into a Tofino binary. This will take an additional 30 minutes or so. With the SDE installed, the final output will also report the number of tofino stages that each application used based on the Tofino compiler's logs.
 ```
 ----- stats for chain_replication.dpt -----
 lucid program:              ./chain_replication.dpt
