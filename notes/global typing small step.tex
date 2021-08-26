@@ -1,0 +1,855 @@
+\documentclass{article}
+
+\usepackage{fancyhdr}
+\usepackage{extramarks}
+\usepackage{amsfonts}
+\usepackage{amsmath}
+\usepackage{syntax}
+\usepackage{stmaryrd}
+\usepackage{mathpartir}
+\usepackage{tipa}
+
+%
+% Basic Document Settings
+%
+
+\topmargin=-0.45in
+\evensidemargin=0in
+\oddsidemargin=0in
+\textwidth=6.5in
+\textheight=9.0in
+\headsep=0.25in
+
+\linespread{1.1}
+
+\pagestyle{fancy}
+\chead{Globally Ordered Type System}
+\lfoot{\lastxmark}
+\cfoot{\thepage}
+
+\renewcommand\headrulewidth{0.4pt}
+\renewcommand\footrulewidth{0.4pt}
+
+\setlength\parindent{30pt}
+
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\Zt}{$\Z$}
+
+% Create a relational rule
+% [#1] - Additional mathpartir arguments
+% {#2} - Name of the rule
+% {#3} - Premises for the rule
+% {#4} - Conclusions for the rule
+\newcommand{\relationRule}[4][]{\inferrule*[lab={\sc #2},#1]{#3}{#4}}
+
+\newcommand{\rel}[1]{\ensuremath{\llbracket {#1} \rrbracket}}
+\newcommand{\ttt}{\texttt}
+\newcommand{\transform}{\rightsquigarrow}
+\newcommand{\proj}{\pi}
+\newcommand{\ttuple}{(\tau_1, \ldots, \tau_n)}
+\newcommand{\etuple}{(e_1,\ldots,e_n)}
+\newcommand{\bool}{\mathrm{bool}}
+\newcommand{\integer}{\mathrm{int}}
+\newcommand{\option}{\mathrm{option}}
+\newcommand{\uoption}[1]{(\bool,#1)}
+\newcommand{\opt}[1]{\texttt{opt-#1}}
+\newcommand{\varOf}[1]{\texttt{varOf}(#1)}
+
+\newcommand{\oktype}{valid}
+
+
+\begin{document}
+\section*{The System}
+We begin by defining a grammar of "base types". These are the types which are eligible to be stored in global variables. The particular set of base types is not important, but we believe the following ones give a good overview.
+
+\begin{grammar}
+	<$T$ (base types)> ::= Unit | Int | Bool | T * T
+\end{grammar}
+
+Everything in the rest of this document is defined with respect to an ordered set $\mathbb{G} = \{g_0, \dots, g_{n-1}\}$ of \emph{global variables}, each of which has an associated base type $T_i$. Our goal is to enforce that $g_0$ is always used before $g_1$, $g_1$ before $g_2$, and so on. For simplicity, we require that each global variable be used; however, we will later relax this restriction by adding subtyping.
+
+In our model, a global variable is not considered \emph{used} until it is actually accessed. Note that this is different from a normal ordered type system, where any appearance of the variable is considered a use. To distinguish appearances from memory accesses, we adopt ref-cell-like syntax for dereferencing or updating global variables. Note that this is different from the user model in actual dpt, where global variables are viewed as simple values. Instead of the ref-cell operators, dpt contains several built-in functions with appropriate type signatures.
+
+The \emph{effects} $\epsilon$ in this system specify which global variables have been used so far. Effects are represented as an integer from $0$ to $n$, where effect $i$ means that all global variables up to but not including $g_i$ have been used so far (that is, we expect to use $g_i$ next).
+
+We will also wish to allow users to define functions which are polymorphic in effect; for example, a function which takes in any global variable, dereferences it, and returns the value. Such a function would have an "effect signature" of something like $\alpha \rightarrow \alpha + 1$. To accommodate this, we will add polymorphic variables and a $+$ operation to our effect grammar.
+
+Our effects are also intertwined with the language's value types $\tau$, in two ways. First, we have a special $\texttt{ref} (T, \epsilon)$ type for representing the value of a global variable. Second, function types must be altered to include their effect on the global variables. We do so by adding input and output effects to function types as well, using the form $(\tau, \epsilon) \rightarrow (\tau, \epsilon)$.
+
+All in all, we have the following grammar of types and effects.
+
+\begin{grammar}
+	<$\epsilon$ (effects)> ::= 0 | 2 | \dots | n | $\alpha$ | $\epsilon + \epsilon$
+	
+	<$\tau$ (types)> ::= T | ref ($\tau, \epsilon$) | $\forall \overline \alpha.(\tau, \epsilon) \rightarrow (\tau, \epsilon)$
+\end{grammar}
+
+Note that we use the convention that when representing effects, $\epsilon$ represents any effect, Latin letters represent only integer effects, and Greek letters represent effect variables.
+
+Next, we define a simple functional language to use this system on:
+
+\begin{grammar}
+	<$x$ (variables)> ::= alphanumeric
+	
+	<$v$ (values)> ::= () | $\Z$ | True | False | $(v, v)$ | $\texttt{fun}\ [\overline \alpha]\ (x:\tau, \epsilon) \rightarrow e$ | $g_0$ | \dots | $g_{n-1}$
+	
+	<$e$ (expressions)> ::= $v$ | $x$ | $e + e$ | $(e,e)$ | fst $e$ | snd $e$ | let $x$ = $e$ in $e$ | if $e$ then $e$ else $e$ | !$e$ | $e := e$ | $e[\overline \epsilon]$ $e$
+\end{grammar} 
+
+Note that we treat the global variables as values in their own right in this system.
+
+The $\texttt{fun } [\overline \alpha]\ (x : \tau, \epsilon) \rightarrow e$ syntax defines a possibly-polymorphic function within which annotations may reference the universally quantified effect variable $\alpha$. The $e [\overline \epsilon]\ e$ syntax applies a polymorphic function of this form, instantiating $\alpha$ with $\epsilon$.
+
+\clearpage
+\section*{Relations on Effects}
+\subsection*{Effect Equivalence}
+One may notice that our effect grammar allows us to write logically equivalent effects in different ways: for example, $1+1$ or $2$. To avoid this complication, we define an equivalence relation $\equiv$ on effects as follows, using $\oplus$ to represent integer addition:
+
+\begin{mathpar}
+	\relationRule{effect-refl}{
+		\ 
+	}{
+		\epsilon \equiv \epsilon
+	}
+
+	\relationRule{effect-sym}{
+		\epsilon_2 \equiv \epsilon_1
+	}{
+		\epsilon_1 \equiv \epsilon_2
+	}
+
+	\relationRule{effect-trans}{
+		\epsilon_1 \equiv \epsilon_2\\
+		\epsilon_2 \equiv \epsilon_3 
+	}{
+		\epsilon_1 \equiv \epsilon_3
+	}
+
+	
+	\relationRule{int-plus}{
+		i \oplus j = k
+	}{
+		i+j \equiv k
+	}
+\\
+	\relationRule{plus-comm}{
+		\
+	}{
+		\epsilon_1 + \epsilon_2 \equiv \epsilon_2 + \epsilon_1
+	}
+
+	\relationRule{plus-assoc}{
+		\
+	}{
+		(\epsilon_1 + \epsilon_2) + \epsilon_3 \equiv \epsilon_1 + (\epsilon_2 + \epsilon_3)
+	}
+
+	\relationRule{plus-cong}{
+		\epsilon_1 \equiv \epsilon_3\\
+		\epsilon_2 \equiv \epsilon_4 
+	}{
+		\epsilon_1 + \epsilon_2 \equiv \epsilon_3 + \epsilon_4
+	}
+\end{mathpar}
+
+\subsection*{Effect Substitution}
+In order to define our typing relation, we will need to be able to perform substitution on types to eliminate $\alpha$s. To do so, we define a standard capture-avoiding substitution relation $[\epsilon/\alpha]$, defined below.
+
+\begin{align*}
+	\alpha[\epsilon/\alpha] & = \epsilon\\
+	\beta[\epsilon/\alpha] & = \beta\ (\mbox{if }\beta \neq \alpha)\\
+	i[\epsilon/\alpha] & = i\\
+	(\epsilon_1 + \epsilon_2)[\epsilon/\alpha] & = \epsilon_1[\epsilon/\alpha] + \epsilon_2[\epsilon/\alpha]
+\\\hfill\\
+	T[\epsilon/\alpha] & = T\\
+	(\tau_1 * \tau_2)[\epsilon/\alpha] & = \tau_1[\epsilon/\alpha] * \tau_2[\epsilon/\alpha]\\
+	\texttt{ref } (\tau, \epsilon_1)[\epsilon/\alpha] & = \texttt{ref } (\tau[\epsilon/\alpha], \epsilon_1[\epsilon/\alpha])\\
+	\left(\forall \overline \alpha.(\tau_1, \epsilon_1) \rightarrow (\tau_2, \epsilon_2)\right)[\epsilon/\alpha] & = \forall \overline \alpha.(\tau_1, \epsilon_1) \rightarrow (\tau_2, \epsilon_2)\\
+	\left(\forall \beta.(\tau_1, \epsilon_1) \rightarrow (\tau_2, \epsilon_2)\right)[\epsilon/\alpha] & = \forall\beta.(\tau_1[\epsilon/\alpha], \epsilon_1[\epsilon/\alpha]) \rightarrow (\tau_2[\epsilon/\alpha], \epsilon_2[\epsilon/\alpha]) \mbox{ (if $\beta \neq \alpha$ and $\beta$ does not appear in $\epsilon$) }
+\end{align*}
+
+We define this to operate on effects and types according to the above rules, and extend it to operate on expressions and environments in the obvious way.
+
+\subsection*{Effect Ordering}
+We define a standard $\leq$ order on effects so we can compare them, using the $\preceq$ symbol to indicate integer less-than-or-equals.
+
+\begin{mathpar}
+	\relationRule{leq-trans}{
+		\epsilon_1 \leq \epsilon_2\\
+		\epsilon_2 \leq \epsilon_3 
+	}{
+		\epsilon_1 \leq \epsilon_3
+	}
+
+	\relationRule{leq-equiv}{
+		\epsilon_1 \equiv \epsilon_2
+	}{
+		\epsilon_1 \leq \epsilon_2
+	}
+
+	\relationRule{leq-int}{
+		i \preceq j
+	}{
+		i \leq j
+	}
+
+	\relationRule{leq-plus-1}{
+		\epsilon_1 \leq \epsilon_3\\
+		\epsilon_2 \leq \epsilon_4 
+	}{
+		\epsilon_1 + \epsilon_2 \leq \epsilon_3 + \epsilon_4
+	}
+
+	\relationRule{leq-plus-2}{
+		\
+	}{
+		\epsilon_1 \leq \epsilon_1 + \epsilon_2
+	}
+\end{mathpar}
+
+\section*{The Typing Relation}
+Type inference in this system simultaneously reasons about effects and regular types. As a result, the typing relation has an extra input and output, representing the state of the global variables before and after the expression, respectively.
+
+Our typing relation will thus have the form $\Delta, \Gamma, \epsilon \vdash e\ \colon \tau, \epsilon$. As usual, $\Gamma$ represents our current collection of bound variables; we treat it as a map. $\Delta$ represent our current collection of bound effect quantified variables; we treat it as a set. Our goal is that our program $p$ satisfies $\emptyset, \emptyset, 0 \vdash p\ \colon \tau, n$ for some $\tau$.
+
+We will say that an effect $\epsilon$ is \emph{well-typed} with respect to $\Delta$, written $\Delta \vdash \epsilon$ if all free effect variables in $\epsilon$ are contained in $\Delta$. We extend this relation to operate on types and environments in addition to effects in the obvious way.
+
+When writing rules, we use the convention that the metavariable $x$ matches all \emph{non-global} variables. We will always denote global variables using symbols of the form $g_i$. For the rest of these rules we will treat effects as being equal if they are equivalent.
+\begin{mathpar}
+	\relationRule{int}{
+		n \in \Z
+	}{
+		\Delta, \Gamma, \epsilon \vdash n\ \colon \texttt{Int}, \epsilon
+	}
+
+	\relationRule{true}{
+		\ 
+	}{
+		\Delta, \Gamma, \epsilon \vdash \texttt{True}\ \colon \texttt{Bool}, \epsilon
+	}
+
+	\relationRule{false}{
+		\ 
+	}{
+		\Delta, \Gamma, \epsilon \vdash \texttt{False}\ \colon \texttt{Bool}, \epsilon
+	}
+
+	\relationRule{Unit}{
+		\ 
+	}{
+		\Delta, \Gamma, \epsilon \vdash ()\ \colon \texttt{Unit}, \epsilon
+	}
+
+	\relationRule{global variable}{
+		\
+	}{
+		\Delta, \Gamma, \epsilon \vdash g_i\ \colon \texttt{ref}(T_i, i), \epsilon
+	}
+\end{mathpar}
+
+Now we can write rules for non-value expressions:
+
+\begin{mathpar}
+	\relationRule{local variable}{
+		\Gamma[x] = \tau
+	}{
+		\Delta, \Gamma, \epsilon \vdash x\ \colon \tau, \epsilon
+	}
+
+	\relationRule{plus}{
+		\Delta, \Gamma, \epsilon \vdash e_1\ \colon \texttt{Int}, \epsilon_1\\
+		\Delta, \Gamma, \epsilon_1 \vdash e_2\ \colon \texttt{Int}, \epsilon_2
+	}{
+		\Delta, \Gamma, \epsilon \vdash e_1 + e_2\ \colon \texttt{Int}, \epsilon_2
+	}
+	
+	\relationRule{pair}{
+		\Delta, \Gamma, \epsilon \vdash e_1\ \colon \tau_1, \epsilon_1\\
+		\Delta, \Gamma, \epsilon_1 \vdash e_2\ \colon \tau_2, \epsilon_2
+	}{
+		\Delta, \Gamma, \epsilon \vdash (e_1, e_2)\ \colon \tau_1 * \tau_2, \epsilon_2
+	}
+
+	\relationRule{fst}{
+		\Delta, \Gamma, \epsilon \vdash e\ \colon \tau_1 * \tau_2, \epsilon_1\\
+	}{
+		\Delta, \Gamma, \epsilon \vdash \texttt{fst } e\ \colon \tau_1, \epsilon_1
+	}
+
+	\relationRule{snd}{
+		\Delta, \Gamma, \epsilon \vdash e\ \colon \tau_1 * \tau_2, \epsilon_1\\
+	}{
+		\Delta, \Gamma, \epsilon \vdash \texttt{snd } e\ \colon \tau_2, \epsilon_1
+	}
+
+	\relationRule{let}{
+		\Delta, \Gamma, \epsilon \vdash e_1\ \colon \tau_1, \epsilon_1\\
+		\Delta, \Gamma[x := \tau_1], \epsilon_1 \vdash e_2\ \colon \tau_2, \epsilon_2
+	}{
+		\Delta, \Gamma, \epsilon \vdash \texttt{let } x = e_1 \texttt{ in } e_2\ \colon \tau_2, \epsilon_2
+	}
+
+	\relationRule{if}{
+		\Delta, \Gamma, \epsilon \vdash e_1\ \colon \texttt{Bool}, \epsilon_1\\
+		\Delta, \Gamma, \epsilon_1 \vdash e_2\ \colon \tau, \epsilon_2\\
+		\Delta, \Gamma, \epsilon_1 \vdash e_3\ \colon \tau, \epsilon_2
+	}{
+		\Delta, \Gamma, \epsilon \vdash \texttt{if } e_1 \texttt{ then } e_2 \texttt{ else } e_3\ \colon \tau, \epsilon_2
+	}
+\end{mathpar}
+
+Now let's finally write some rules that actually change $\epsilon$.
+
+\begin{mathpar}
+	\relationRule{deref}{
+		\Delta, \Gamma, \epsilon \vdash e\ \colon \texttt{ref}(\tau, \epsilon_1), \epsilon_1
+	}{
+		\Delta, \Gamma, \epsilon \vdash\ !e\ \colon \tau, \epsilon_1+1
+	}
+
+\relationRule{update}{
+	\Delta, \Gamma, \epsilon \vdash e_1\ \colon \tau, \epsilon_1\\
+	\Delta, \Gamma, \epsilon_1 \vdash e_2\ \colon \texttt{ref}(\tau, \epsilon_2), \epsilon_2
+}{
+	\Delta, \Gamma, \epsilon \vdash e_2 := e_1\ \colon \texttt{Unit}, \epsilon_2+1
+}
+\end{mathpar}
+
+And finally, the function rules: 
+\begin{mathpar}
+	\relationRule{abs}{
+		\Delta' = \Delta \cup \{\overline \alpha\}\\
+		\Delta' \vdash \tau_{in}\\
+		\Delta' \vdash \epsilon_{in}\\
+		\Delta', \Gamma[x := \tau_{in}], \epsilon_{in} \vdash e\ \colon \tau_{out}, \epsilon_{out}
+	}{
+		\Delta, \Gamma, \epsilon \vdash \texttt{fun } [\overline \alpha]\ (x : \tau_{in}, \epsilon_{in}) \rightarrow e\ \colon \forall \overline \alpha.(\tau_{in}, \epsilon_{in}) \rightarrow (\tau_{out}, \epsilon_{out}), \epsilon
+	}
+	
+	\relationRule{app}{
+		\Delta, \Gamma, \epsilon \vdash e_1\ \colon \forall \overline \alpha.(\tau_{in}, \epsilon_{in}) \rightarrow (\tau_{out}, \epsilon_{out}), \epsilon_1\\
+		\Delta \vdash \overline{\epsilon_\alpha}\\
+		\Delta, \Gamma, \epsilon_1 \vdash e_2\ \colon \tau_{in}[\overline{\epsilon_\alpha/\alpha}], \epsilon_{in}[\overline{\epsilon_\alpha/\alpha}]\\
+	}{
+		\Delta, \Gamma, \epsilon \vdash e_1[\overline {\epsilon_\alpha}]\ e_2\ \colon \tau_{out}[\overline{\epsilon_\alpha/\alpha}], \epsilon_{out}[\overline{\epsilon_\alpha/\alpha}]
+	}
+\end{mathpar}
+
+
+\subsection*{Skipping Variables}
+In practice, the requirement that we \emph{must} use each global variable more restrictive than we would like. We would like to programs in which some global variables are skipped. We do this by adding a subtyping relation on effects and types.
+
+\begin{mathpar}
+	\relationRule{sub-refl}{
+		\ 
+	}{
+		\tau <: \tau
+	}
+
+	\relationRule{sub-pair}{
+		\tau_1 <: \tau_3\\
+		\tau_2 <: \tau_4\\
+	}{
+		(\tau_1, \tau_2) <: (\tau_3, \tau_4)
+	}
+
+	\relationRule{sub-function}{
+		\tau_1' <: \tau_1\\
+		\tau_2 <: \tau_2'\\
+		\epsilon_1' \leq \epsilon_1\\
+		\epsilon_2 \leq \epsilon_2'
+	}{
+		\forall \overline \alpha.(\tau_1, \epsilon_1) \rightarrow (\tau_2, \epsilon_2) <: \forall \overline \alpha.(\tau_1', \epsilon_1') \rightarrow (\tau_2', \epsilon_2')
+	}
+\end{mathpar}
+
+Finally, we augment our typing relation with the single rule
+\begin{mathpar}
+	\relationRule{subtyping}{
+		\tau_1 <: \tau_2\\
+		\epsilon_1 \leq \epsilon_2\\
+		\Delta \vdash \tau_2\\
+		\Delta \vdash \epsilon_2\\
+		\Delta, \Gamma, \epsilon \vdash e\ \colon \tau_1, \epsilon_1
+	}{
+		\Delta, \Gamma, \epsilon \vdash e\ \colon \tau_2, \epsilon_2
+	}
+\end{mathpar}
+
+Note that we only really have two uses for this new typing rule: replacing functions, and incrementing the effect.
+
+\section*{Properties of the Typing Relation}
+
+\subsection*{Transitivity of subtyping}
+Theorem: If $\tau_1 <: \tau_2$ and $\tau_2 <: \tau_3$ then $\tau_1 <: \tau_3$.
+\\
+
+\noindent Proof: Straightforward structural induction on the proof that $\tau_1 <: \tau_2$, using inversion on the proof that $\tau_2 <: \tau_3$.
+
+\subsection*{Well-typedness}
+Lemma WT-1: If $\Delta \cup \{\alpha\} \vdash \epsilon$ if and only if $\Delta \vdash \epsilon'$ implies $\Delta \vdash \epsilon[\epsilon'/\alpha]$.
+\\
+
+\noindent Proof: Straightforward induction on $\epsilon$. The $\beta$ case is the tricky one in both instances. In the forward direction we note that since $\Delta \cup \{\overline\alpha\} \vdash \epsilon = \beta$, $\beta$ must be in $\Delta$. In the reverse direction we instantiate $\epsilon'$ with a constant $i$ to get $\Delta \vdash \beta[i/\alpha] = \beta$.
+\\ 
+
+\noindent Lemma WT-2: $\Delta \cup \{\alpha\} \vdash \tau$ if and only if $\Delta \vdash \epsilon'$ implies $\Delta \vdash \tau[\epsilon'/\alpha]$.
+\\
+
+\noindent Proof: Straightforward induction on $\tau$.
+\\ 
+
+\noindent Lemma WT-3: $\Delta \vdash \forall \overline \alpha.(\tau_1, \epsilon_1) \rightarrow (\tau_2, \epsilon_2)$  if and only if $\tau_1, \tau_2, \epsilon_1, \epsilon_2$ are all well-typed with respect to $\Delta \cup \{\overline \alpha\}$
+\\
+
+\noindent Proof: We prove the contrapositive. The function type is not well-typed iff it contains a free variable $\beta \notin \Delta$, and certainly $\beta \neq \alpha$ since all occurrences of $\alpha$ in the function type are bound. This can happen iff one of the sub-parts contains $\beta$, meaning that one of the sub-parts is not well-typed. 
+\\
+
+\noindent Theorem: If $\Delta, \Gamma, \epsilon \vdash e\ \colon \tau, \epsilon'$, where $\Delta \vdash \Gamma$ and $\Delta \vdash \epsilon$, then $\Delta \vdash \tau$ and $\Delta \vdash \epsilon'$.
+\\
+
+\noindent Proof: Structural induction on the typing derivation. In the LOCAL VARIABLE case, we use the fact that $\Delta \vdash \Gamma$. In the LET case we argue inductively that $\Delta \vdash \tau_1$, so that $\Delta \vdash \Gamma[x := \tau_1]$. In the ABS case we know that the input type and effect are well-typed with respect to $\Delta \cup \{\overline\alpha\}$, so by Lemma WT-3 the output is well-typed with respect to $\Delta$. In the APP case we use both Lemmas WT-2 and WT-3.
+
+\subsection*{Well-typed lemmas}
+Lemma WTL-1: If $\Delta \vdash \epsilon$ and $\epsilon' \leq \epsilon$ then $\Delta \vdash \epsilon'$.
+Proof: Induction on the $\leq$ derivation.
+\\
+
+\noindent Lemma WTL-2: If $\emptyset \vdash \epsilon$ then $\epsilon \in \Z$. Proof: Induction on $\epsilon$.
+
+\subsection*{Effect Weakening}
+Lemma W-1: If $\Delta, \Gamma, \epsilon_1 \vdash e\ \colon \tau, \epsilon_2$ and $\epsilon_1' \leq \epsilon_1$ then $\Delta, \Gamma, \epsilon_1' \vdash e\ \colon \tau, \epsilon_2'$ for some $\epsilon_2' \leq \epsilon_2$.
+\\
+
+\noindent Proof: Straightforward structural induction on the typing derivation. We have to use subtyping in the DEREF, UPDATE and APP cases.
+\\
+
+\noindent Theorem: $\Delta, \Gamma, \epsilon_1 \vdash e\ \colon \tau, \epsilon_2$, $\epsilon_1' \leq \epsilon_1$ and $\epsilon_2 \leq \epsilon_2'$ and $\Delta \vdash \epsilon_2'$ then $\Delta, \Gamma, \epsilon_1' \vdash e\ \colon \tau, \epsilon_2'$.
+\\
+
+\noindent Proof: Apply Lemma W-1 then use transitivity of $\leq$ to apply SUBTYPING.
+
+\subsection*{Environment Weakening}
+Theorem: If $\Delta, \Gamma, \epsilon \vdash e\ \colon \tau, \epsilon'$ and $z \notin \Gamma$, then for all $\tau$, $\Gamma[z := \tau], \Delta, \epsilon \vdash e\ \colon \tau, \epsilon'$.
+\\
+
+\noindent Proof: Straightforward structural induction on the typing derivation. In the LOCAL VARIABLE case we use the fact that $z \notin \Gamma$ to show that $\Gamma[z := \tau][x] = \Gamma[z]$. In the LET case, either $z = x$ in which case $\Gamma[z := \tau][x := \tau_1] = \Gamma[x := \tau_1]$ and so the original premise still works, or $z <> x$ in which case $z \notin \Gamma[x := \tau_1]$ and $\Gamma[x := \tau_1][z := \tau] = \Gamma[z := \tau][x := \tau_1]$ and induction gives us the result. We do the same in the ABS case.
+
+\subsection*{Delta-Weakening}
+\noindent Lemma DW-1: If $\Delta \vdash \epsilon$ then for all $\alpha$, $\Delta \cup \{\alpha\} \vdash \epsilon$, and similarly if we replace $\epsilon$ with $\tau$ or $\Gamma$.
+\\
+
+\noindent Proof: Immediate from the definition well-typedness.
+\\
+
+\noindent Theorem: If $\Delta, \Gamma, \epsilon \vdash e\ \colon \tau, \epsilon'$ then for all $\alpha$, $\Gamma, (\Delta \cup \{\alpha\}), \epsilon \vdash e\ \colon \tau, \epsilon'$.
+\\
+
+\noindent Proof: Straightforward structural induction on the typing derivation, applying Lemma DW-1 as needed.
+
+
+\subsection*{A shorthand for values}
+Definition: We will write $v : \tau$ as shorthand for $\forall \epsilon. \emptyset, \emptyset, \epsilon \vdash v\ \colon \tau, \epsilon$.
+\\
+
+\noindent Theorem V-1: If $v : \tau$ then $\forall \Delta, \Gamma, \epsilon. \Delta, \Gamma, \epsilon \vdash v\ \colon \tau, \epsilon$.
+\\
+
+\noindent Proof: Inductive application of Environment and Delta Weakening.
+\\
+
+\noindent Theorem V-2: If $\emptyset, \emptyset, \epsilon \vdash v\ \colon \tau, \epsilon'$ then $v : \tau$ and $\epsilon \leq \epsilon'$.
+\\
+
+\noindent Proof: Straightforward structural induction on the typing derivation.
+
+\subsection*{Canonical Forms}
+Lemma C-1: If $\tau_1 <: \tau_2$, then:
+\begin{itemize}
+	\item If either $\tau_1$ or $\tau_2$ is a base type or $\texttt{ref}$ type then $\tau_1 = \tau_2$
+	\item If either $\tau_1$ or $\tau_2$ is a pair type, then $\tau_1 = (\tau_a, \tau_b)$ and $\tau_2 = (\tau_c, \tau_d)$ where $\tau_a <: \tau_c$ and $\tau_b <: \tau_d$.
+	\item If either $\tau_1$ or $\tau_2$ is a function type, then $\tau_1 = \forall \overline \alpha. (\tau_a, \epsilon_a) \rightarrow (\tau_b, \epsilon_b)$ and $\tau_2 = \forall \overline \alpha. (\tau_c, \epsilon_c) \rightarrow (\tau_d, \epsilon_d)$ where $\tau_c <: \tau_a$, $\tau_b <: \tau_d$, $\epsilon_a \leq \epsilon_c$ and $\epsilon_b \leq \epsilon_d$.
+\end{itemize} 
+
+\noindent Proof: Inversion of the subtyping relation.
+\\
+
+\noindent Theorem: For all values $v$, if $v\ \colon \tau$ then
+\begin{itemize}
+	\item If $\tau = \texttt{Int}$ then $v \in \Z$
+	\item If $\tau = \texttt{Bool}$ then $v = \texttt{True}$ or $v = \texttt{False}$
+	\item If $\tau = \texttt{Unit}$ then $v = ()$
+	\item If $\tau = \tau_1 * \tau_2$ then $v = (v_1, v_2)$ where $v_1 : \tau_1$ and $v_2 : \tau_2$.
+	\item If $\tau = \texttt{ref} (\tau_1, \epsilon)$ then $\epsilon = i \in \Z$, $v = g_i$ and $\tau_1 = T_i$.
+	\item If $\tau = \forall \overline \alpha.(\tau_1, \epsilon_1) \rightarrow (\tau_2, \epsilon_2)$ then $v = \texttt{fun } [\overline \alpha]\ (x : \tau_{in}, \epsilon_{in}) \rightarrow e$ where $\tau_1 <: \tau_{in}$ and $\epsilon_1 \leq \epsilon_{in}$, and $\{x := \tau_{in}\}, \{\overline\alpha\}, \epsilon_{in} \vdash e\ \colon \tau_{out}, \epsilon_{out}$, where $\tau_{out} <: \tau_2$ and $\epsilon_{out} \leq \epsilon_2$. 
+\end{itemize}
+
+\noindent Proof: Induction on the proof that $v$ has type $\tau$ for some arbitrary $\Gamma, \epsilon$. Each $\tau$ has only two (or three, for booleans) that apply to a value and produce it: the base rules, and the subtyping rule. In the subtyping cases, we use Lemma C-1. In the pair case, we use induction and theorem V-2, and in the case where $\tau$ is a pair type and the subtyping rule was used, we Lemma C-1 twice in addition to induction, and similarly when $\tau$ is a function type.
+
+\subsection*{The Substitution Lemma for Values}
+
+\noindent Definition: If $\Gamma$ is a map, let $\Gamma \backslash x$ indicate the map which is identical to $\Gamma$ but contains no binding for $x$.
+\\
+
+\noindent Definition: Let $e[v/x]$ be the standard capture-avoiding substitution relation. It differs from the effect one in that it operates on values/variables instead of effects and effect variables.
+\\
+
+\noindent Theorem: If $\Gamma[x] = \tau$ and $v : \tau$ and $\Delta, \Gamma, \epsilon \vdash e\ \colon \tau', \epsilon'$, then $\Gamma\backslash x, \Delta, \epsilon \vdash e[v/x]\ \colon \tau', \epsilon'$
+
+\noindent Proof: Structural induction on the typing proof. The interesting cases are:
+
+\begin{itemize}
+	\item In the VAR case $e = z$, either $z = x$ in which case $e[v/x] = v$ and the premise $v : \tau$ solves it (using theorem V-1), or $z <> x$ in which case $z \in \Gamma\backslash x$ and we simply use the VAR rule.
+	\item In the LET case $e = \texttt{let } z = e_1 \texttt{ in }e_2$, either $z = x$ in which case $\Gamma\backslash z[x := \tau_1] = \Gamma[x := \tau_1]$ and we do not substitute in $e_2$, or $z <> x$ in which case $\Gamma\backslash z[x := \tau_1] = \Gamma[x := \tau_1]\backslash z$ and we do substitute in $e_2$. In either case the result follows immediately.
+	\item Similar reasoning works for the ABS case.
+	\item The subtyping case is immediate, but it bears noting that we don't change any of the types or effects that appear in the original derivation.
+\end{itemize}
+
+\subsection*{The Substitution Lemma for Effects}
+
+\noindent Definition: If $\Delta$ is a set, let $\Delta \backslash \alpha$ indicate the set which is identical to $\Delta$ but does not contain $\alpha$.
+\\
+
+\noindent Lemma SE-1: For all $\epsilon, \epsilon_1, \epsilon_2, \alpha$, if $\epsilon_1 \equiv \epsilon_2$, then $\epsilon_1[\epsilon/\alpha] \equiv \epsilon_2[\epsilon/\alpha]$
+\\
+
+\noindent Proof: Straightforward structural induction on the proof that $\epsilon_1 \equiv \epsilon_2$.
+\\
+
+\noindent Lemma SE-2: For all $\epsilon, \epsilon_1, \epsilon_2, \alpha$, if $\epsilon_1 \leq \epsilon_2$, then $\epsilon_1[\epsilon/\alpha] \leq \epsilon_2[\epsilon/\alpha]$
+\\
+
+\noindent Proof: Straightforward structural induction on the proof that $\epsilon_1 \leq \epsilon_2$, using lemma SE-1 in the \texttt{leq-equiv} case.
+\\
+
+\noindent Lemma SE-3: If $\tau_1 <: \tau_2$ then for all $\epsilon, \alpha$ $\tau_1[\epsilon/\alpha] <: \tau_2[\epsilon/\alpha]$.
+\\
+
+\noindent Proof: Straightforward structural induction on the proof that $\tau_1 <: \tau_2$.
+\\
+
+\noindent Theorem: (If $\Delta \vdash \Gamma$ and $\Delta \vdash \epsilon$ then) If $\Delta\backslash \alpha \vdash \epsilon_\alpha$, and $\Delta, \Gamma, \epsilon \vdash e\ \colon \tau', \epsilon'$, then $\Gamma[\epsilon_\alpha/\alpha], \Delta\backslash \alpha, \epsilon[\epsilon_\alpha/\alpha] \vdash e[\epsilon_\alpha/\alpha]\ \colon \tau'[\epsilon_\alpha/\alpha], \epsilon'[\epsilon_\alpha/\alpha]$
+
+\noindent Proof: Structural induction on the typing proof. The interesting cases are:
+
+\begin{itemize}
+	\item In the ABS case $e = \texttt{fun } [\beta] ...$, we have two cases. If $\beta = \alpha$ then $\Delta\backslash \alpha \cup \{\beta\} = \Delta \cup \{\beta\}$, and we did not change the expression when substituting, so the original premises suffice. Otherwise, by induction we can show what we need starting from $(\Delta \cup \{\beta\})\backslash \alpha$, and since $\beta \neq \alpha$ this is equal to $\Delta\backslash \alpha \cup \{\beta\}$, and the rest is easy. Note that we also use Lemma WT-2.
+	\item In the APP case we have a similar situation to the above. Note that in both cases we could just use alpha-equivalence to only consider the case where $\beta \neq \alpha$.
+	\item The subtyping case uses the induction hypothesis and Lemmas WT-2, SE-2 and SE-3.
+\end{itemize}
+
+\section*{Operational Semantics}
+
+Now we'll define an operational semantics for our language. We are modeling a situation in which global variables are ordered in a pipeline, such that each global variable must be accessed after the ones before it in the pipeline.
+
+As such, our operational semantics relation will have the form $(G, i, e) \rightarrow (G', i', e')$, where $G$ is an array $[v_0; \dots; v_{n-1}]$ of the current values for each global variable, $i$ is an integer indicating the current pipeline stage, and $e$ is the expression to be evaluated. We treat $G$ as a map from integers to values, so $G[0] = v_0$, etc. We say $G$ is well-typed if $G[i] : T_i$ for $0 \leq i \leq {n-1}$.
+
+As usual, the metavariable $v$ will refer exclusively to values, while $e$ represents any expression. We use $\oplus$ to denote regular integer addition.
+
+\clearpage
+\begin{mathpar}
+	\relationRule{plus-1}{
+		(G, i, e_1) \rightarrow (G', i', e_1')
+	}{
+		(G, i, e_1 + e_2) \rightarrow (G', i', e_1' + e_2)
+	}
+	
+	\relationRule{plus-2}{
+		(G, i, e_2) \rightarrow (G', i', e_2')
+	}{
+		(G, i, v + e_2) \rightarrow (G', i', v + e_2')
+	}
+
+	\relationRule{plus-3}{
+		v_1, v_2 \in \Z\\
+	}{
+		(G, i, v_1 + v_2) \rightarrow (G, i, v_1 \oplus v_2)
+	}
+\end{mathpar}
+
+\begin{mathpar}
+	\relationRule{pair-1}{
+		(G, i, e_1) \rightarrow (G', i', e_1')
+	}{
+		(G, i, (e_1, e_2)) \rightarrow (G', i', (e_1', e_2))
+	}
+	
+	\relationRule{pair-2}{
+		(G, i, e_2) \rightarrow (G', i', e_2')
+	}{
+		(G, i, (v, e_2)) \rightarrow (G', i', (v, e_2'))
+	}
+\end{mathpar}
+
+
+\begin{mathpar}
+	\relationRule{fst-1}{
+		(G, i, e) \rightarrow (G', i', e')
+	}{
+		(G, i, \texttt{fst } e) \rightarrow (G', i', \texttt{fst } e')
+	}
+	
+	\relationRule{fst-2}{
+		\ 
+	}{
+		(G, i, \texttt{fst } (v_1, v_2)) \rightarrow (G, i, v_1)
+	}
+\end{mathpar}
+
+\begin{mathpar}
+	\relationRule{snd-1}{
+		(G, i, e) \rightarrow (G', i', e')
+	}{
+		(G, i, \texttt{snd } e) \rightarrow (G', i', \texttt{fst } e')
+	}
+	
+	\relationRule{snd-2}{
+		\ 
+	}{
+		(G, i, \texttt{snd } (v_1, v_2)) \rightarrow (G, i, v_2)
+	}
+\end{mathpar}
+
+\begin{mathpar}
+	\relationRule{let-1}{
+		(G, i, e_1) \rightarrow (G', i', e_1')
+	}{
+		(G, i, \texttt{let } x = e_1 \texttt{ in } e_2) \rightarrow (G', i', \texttt{let } x = e_1' \texttt{ in } e_2)
+	}
+	
+	\relationRule{let-2}{
+		\ 
+	}{
+		(G, i, \texttt{let } x = v \texttt{ in } e_2) \rightarrow (G, i, e_2[v/x])
+	}
+\end{mathpar}
+
+\begin{mathpar}
+	\relationRule{if-1}{
+		(G, i, e_1) \rightarrow (G', i', e_1')
+	}{
+		(G, i, \texttt{if } e_1 \texttt{ then } e_2 \texttt{ else } e_3) \rightarrow (G', i', \texttt{if } e_1' \texttt{ then } e_2 \texttt{ else } e_3)
+	}
+	
+	\relationRule{if-true}{
+		\ 
+	}{
+		(G, i, \texttt{if } \texttt{True} \texttt{ then } e_2 \texttt{ else } e_3) \rightarrow (G, i, e_2)
+	}
+	
+	\relationRule{if-false}{
+		\ 
+	}{
+		(G, i, \texttt{if } \texttt{False} \texttt{ then } e_2 \texttt{ else } e_3) \rightarrow (G, i, e_3)
+	}
+\end{mathpar}
+
+\begin{mathpar}
+	\relationRule{deref-1}{
+		(G, i, e) \rightarrow (G', i', e')
+	}{
+		(G, i, !e) \rightarrow (G', i', !e')
+	}
+	
+	\relationRule{deref-2}{
+		i \leq j
+	}{
+		(G, i, !g_j) \rightarrow (G, j+1, G[j])
+	}
+\end{mathpar}
+
+\begin{mathpar}
+	\relationRule{update-1}{
+		(G, i, e_1) \rightarrow (G', i', e_1')
+	}{
+		(G, i, e_2 := e_1) \rightarrow (G', i', e_2 := e_1')
+	}
+	
+	\relationRule{update-2}{
+		(G, i, e_2) \rightarrow (G', i', e_2')
+	}{
+		(G, i, e_2 := v) \rightarrow (G', i', e_2' := v)
+	}
+	
+	\relationRule{update-3}{
+		i \leq j
+	}{
+		(G, i, g_j := v) \rightarrow (G[j := v], j+1, ())
+	}
+\end{mathpar}
+
+\begin{mathpar}
+	\relationRule{app-1}{
+		(G, i, e_1) \rightarrow (G', i', e_1')
+	}{
+		(G, i, e_1 [\overline{\epsilon_\alpha}]\ e_2) \rightarrow (G', i', e_1'[\overline{\epsilon_\alpha}]\ e_2)
+	}
+	
+	\relationRule{app-2}{
+		(G, i, e_2) \rightarrow (G', i', e_2')
+	}{
+		(G, i, v[\overline{\epsilon_\alpha}]\ e_2) \rightarrow (G', i', v[\overline{\epsilon_\alpha}]\ e_2')
+	}
+	
+	\relationRule{app-3}{
+		v_1 = \texttt{fun } [\overline \alpha]\ (x : \tau, \epsilon) \rightarrow e
+	}{
+		(G, i, v_1[\overline{\epsilon_\alpha}]\ v_2) \rightarrow (G, i, e[\overline{\epsilon_\alpha/\alpha}][v_2/x])
+	}
+\end{mathpar}
+
+\subsection*{Evaluation weakening}
+\noindent Theorem: If $(G, i, e) \rightarrow (G', i', v)$ and $j \leq i$ then $(G, j, e) \rightarrow (G', j', v)$ for some $j' \leq i'$.
+\\
+
+\noindent Proof: Straightforward induction on the proof of evaluation. The only mildly interesting cases are DEREF and UPDATE, where we use transitivity and reflexivity of $\leq$.
+
+\subsection*{Monotonicity}
+Theorem: if $(G, i, e) \rightarrow (G', i', e')$ then $i \leq i'$.
+\\
+
+\noindent Proof: Straightforward induction on the proof of evaluation.
+\\
+
+\noindent Corollary: If $(G, i, e) \rightarrow^* (G', i', e')$, then for all $j$, at the DEREF-2 and UPDATE-3 rules are used at most once (total, not each) on $g_j$. Furthermore, they are use only after any such rules are used on $g_k$ for all $k \leq j$.
+\\
+
+\noindent Proof: Each rule can only be used if the current state is at most $j$, and immediately sets the state to $j+1 > j$. By monotonicity, the state will remain above $j$ for the rest of the evaluation, so neither rule may be used again.
+
+\subsection*{Progress}
+Theorem: If $\emptyset, \emptyset, i \vdash e\ \colon \tau, j$, then either $e$ is a value or for all well-typed $G$ there exist some $G', j', e'$ such that $(G, i, e) \rightarrow (G', j', e')$.
+\\
+
+\noindent Proof: Structural induction on the typing derivation.
+\\
+
+Case INT/TRUE/FALSE/UNIT/GLOBAL VARIABLE/ABS: In these cases $e$ was already a value, so the result is trivial.
+\\
+
+Case LOCAL VARIABLE: Contradiction, since the environment is empty.
+\\
+
+\clearpage
+Case PLUS: We know that
+\begin{itemize}
+	\item INV1:	$e = e_1 + e_2$
+	\item PLUS: $\emptyset, \emptyset, i \vdash e_1 + e_2\ \colon \texttt{Int}, j$
+	\item INV2: $\emptyset, \emptyset, i \vdash e_1\ \colon \texttt{Int}, \epsilon_1$
+	\item INV3: $\emptyset, \emptyset, \epsilon_1 \vdash e_2\ \colon \texttt{Int}, j$
+	\item IND1: $e_1$ is a value OR $\forall G.\exists G_1, j_1.(G, i, e_1) \rightarrow (G_1, j_1, e_1')$
+	\item IND2: $e_2$ is a value OR $\forall G.\exists G_2, j_2.(G, \epsilon_1, e_2) \rightarrow (G_2, j_2, e_2')$
+\end{itemize}
+Note that by well-typedness and INV2, $\emptyset \vdash \epsilon_1$, so by Lemma WTL-2 $\epsilon_1 \in \Z$. Hence it is valid to use it in the second place of the evaluation relation in IND2.
+
+Now we have three cases:
+\begin{itemize}
+	\item $e_1$ steps. We may then use IND1 and PLUS-1 to show that $(G, i, e_1 + e_2) \rightarrow (G_1, j_1, e_1'+e_2)$.
+	\item $e_1$ is a value and $e_2$ steps. We first use INV2 and Theorem V-2 to show that $i \leq \epsilon_1$. We may then use evaluation weakening on IND2 to show that $(G, i, e_2) \rightarrow (G_2, j_2', e_2')$ for some $j_2' \leq j_2$. Finally we apply PLUS-2 to show that $(G, i, e_1+e_2) \rightarrow (G_2, j_2', e_1+e_2')$.
+	\item Both $e_1$ and $e_2$ are values. Then by canonical forms we may conclude that $e_1, e_2 \in \Z$, so we may apply PLUS-3.
+\end{itemize}
+
+Case PAIR: Analogous to PLUS, but in the final case $e$ itself is already a value.
+\\
+
+Case FST: Here $e = \texttt{fst }e_1$. By induction, either $e_1$ is a value or $(G, i, e_1) \rightarrow (G', i', e_1')$. In the first case, canonical forms tells us that $e = (v_1, v_2)$, so we may use FST-2; otherwise, we may use FST-1.
+\\
+
+Case SND: Analogous to FST.
+\\
+
+Case LET: Here $e = \texttt{let } x = e_1 \texttt{ in } e_2$. By induction, either $e_1$ is a value or $(G, i, e_1) \rightarrow (G', i', e_1')$. In the former case we may apply LET-2; otherwise, we apply LET-1.
+\\
+
+Case IF: If $e_1$ steps then we use IF-1; otherwise, by canonical forms $e_1$ is either true or false. We then use Theorem V-2 to reduce $\epsilon_1$ to $i$ in the appropriate induction hypothesis, and apply IF-TRUE or IF-FALSE respectively.
+\\
+
+CASE DEREF: Here $e = !e_1$. By induction we conclude that either $e_1$ steps or it is a value. In the former case we apply DEREF-1. If it is a value, then by canonical forms $e_1 = g_j$. We then use theorem V-2 to conclude that $i \leq j$, so we may apply DEREF-2.
+\\
+
+CASE UPDATE: Here $e = e_2 := e_1$; the only interesting case is when both are values. We use theorem V-2 twice to show that $e \leq \epsilon_1$ and $\epsilon_1 \leq j$, and use canonical forms to show that $e_2 = g_j$. Thus we may apply UPDATE-3.
+\\
+
+CASE APP: Analogous to PLUS.
+\\
+
+CASE SUBTYPING: The result is immediate from induction on the typing judgement in the premises.
+
+
+\subsection*{Preservation}
+Theorem: If $\emptyset, \emptyset, i \vdash e\ \colon \tau, j$, $G$ is well-typed and $(G, i', e) \rightarrow (G', j', e')$ where $i' \leq i$, then $G'$ is well-typed and $\emptyset, \emptyset, j' \vdash e'\ \colon \tau, j$.
+
+\noindent Proof: Structural induction on the typing derivation.
+\\
+
+Case INT/TRUE/FALSE/UNIT/GLOBAL VARIABLE/ABS: In these cases $e$ is a value, so it cannot step; hence these cases cannot occur.
+\\
+
+Case LOCAL VARIABLE: This case also cannot occur, because the environment is empty.
+\\
+
+Case PLUS: We have $e = e_1 + e_2$, so the proof that $e$ steps must have been PLUS-1, PLUS-2, or PLUS-3. We also know that $\emptyset, \emptyset, i \vdash e_1\ \colon \texttt{Int}, \epsilon_1$ and $\emptyset, \emptyset, \epsilon_1 \vdash e_2\ \colon \texttt{Int}, j$.
+\begin{itemize}
+	\item If we used PLUS-1, then $(G, i', e_1) \rightarrow (G', j', e_1')$, so by induction $G'$ is well-typed and $\emptyset, \emptyset, j' \vdash e_1'\ \colon \texttt{Int}, \epsilon_1$. We may then combine this with the other premise to show that $\emptyset, \emptyset, j' \vdash e_1' + e_2\ \colon \texttt{Int}, j$.
+	\item If we used PLUS-2, then $e_1$ is a value and $(G, i', e_2) \rightarrow (G', j', e_2')$ where $i' \leq i$. Since $e_1$ is a value, by $i \leq \epsilon_1$ by Theorem V-2. Hence $i' \leq \epsilon_1$, so by induction $\emptyset, \emptyset, j' \vdash e_2'\ \colon \texttt{Int}, j$.
+	
+	Since $e_1$ is a value, we may use theorem V-2 on the first premise to show that $e_1 : \texttt{Int}$, so in particular $\emptyset, \emptyset, j' \vdash e_1\ \colon \texttt{Int}, j'$. We may combine this with the result of our induction to show that $\emptyset, \emptyset, j' \vdash e_1 + e_2'\ \colon \texttt{Int}, j$.
+	\item If we use PLUS-3, then both $e_1$ and $e_2$ are integer values, $j' = i'$, and $G' = G$ is well-typed. We may then immediately show $\emptyset, \emptyset, j' \vdash e_1 \oplus e_2\ \colon \texttt{Int}, j'$ using the INT rule. Finally, we apply Theorem V-2 to our two premises to conclude that $i \leq \epsilon_1 \leq j$, so since $j' = i' \leq i$ we may use SUBTYPING to show that $\emptyset, \emptyset, j' \vdash e_1 \oplus e_2\ \colon \texttt{Int}, j$
+\end{itemize}
+
+Case PAIR: Analogous to the first two cases of PLUS
+\\
+
+Case FST: Analogous to the first and last cases of PLUS. In the latter case we also use canonical forms to show $v_1 : \tau_1$ instead of the INT rule.
+\\
+
+Case SND: Analogous to FST
+\\
+
+Case LET: The LET-1 case is analogous to previous cases. In the LET-2, case we get that $e_1$ is a value, $G' = G$ is well-typed, and $j' = i'$. From the typing proof, we also know that $\emptyset, \emptyset, i \vdash e_1\ \colon \tau_1, \epsilon_1$ and $\emptyset[x := \tau_1], \emptyset, \epsilon_1 \vdash e_2\ \colon \tau_2, j$. Since $e_1$ is a value, we immediately conclude $e_1 : \tau_1$ by Theorem V-2. Hence by the substitution lemma for values, $\emptyset, \emptyset, \epsilon_1 \vdash e_2[e_1/x]\ \colon \tau_2, \epsilon_2$. Using Theorem V-2 on the first premise we show that $i \leq \epsilon_1$, and since $i' \leq i$ we may use effect weakening to show that $\emptyset, \emptyset, i' \vdash e_2[e_1/x]\ \colon \tau_2, j$ as desired.
+\\
+
+Case IF: Analogous to previous cases.
+\\
+
+Case DEREF: We have $e =\ !e_1$ and $\emptyset, \emptyset, i \vdash e\ \colon \texttt{ref}(\tau, k), k$ where $k+1 = j$. We must have stepped using either DEREF-1 or DEREF-2. In the first case, we know that $(G, i', e_1) \rightarrow (G', j', e_1')$ and $i' \leq i$, so by induction $G'$ is well-typed and $\emptyset, \emptyset, j' \vdash e_1'\ \colon \texttt{ref}(\tau, k), k$. This is enough to show that $\emptyset, \emptyset, j' \vdash\ !e_1'\ \colon \tau, j$.
+
+In the second case, we know that $e_1 = g_k$, $G' = G$, $j' = k+1 = j$, and $e' = G[k]$. Now note that $\tau = T_k$ by canonical forms, and since $G$ is well-typed, $G[k] : T_k$. If we instantiate the previous proof with $\epsilon = j$, we have what we wished to show.
+\\
+
+Case UPDATE: We have $e = e_2 := e_1$ and $\emptyset, \emptyset, i \vdash e\ \colon \tau, \epsilon_1$ and $\emptyset, \emptyset, \epsilon_1 \vdash e_2\ \colon \texttt{ref}(\tau, j), j$. Note also that by well-typedness $\emptyset \vdash \epsilon_1$, so by Lemma WTL-2 $\epsilon_1 \in \Z$. Hence it is valid to use $\epsilon_1$ in the step relation. We have three cases for which evaluation rule we used:
+\begin{itemize}
+	\item UPDATE-1: Then $(G, i', e_1) \rightarrow (G', j', e_1')$ and $i' \leq i$, so by induction $G'$ is well-typed and $\emptyset, \emptyset, j' \vdash e_1'\ \colon \tau, \epsilon_1$. We can combine this with the other premise to show that $\emptyset, \emptyset, j' \vdash e_2 := e_1'\ \colon \texttt{Unit}, j$ as required.
+	\item UPDATE-2: In this case, we know that $(G, i', e_2) \rightarrow (G', j', e_2')$ and $i' \leq i$. We also know that $e_1$ is a value, so by Theorem V-2 $i \leq \epsilon_1$. Hence by induction $G'$ is well-typed and $\emptyset, \emptyset, j' \vdash e_2'\ \colon \texttt{ref}(\tau, j), j$.
+	
+	Next, we use Theorem V-2 on the first premise to show that $e_1 : \tau$, and so in particular $\emptyset, \emptyset, j' \vdash e_1\ \colon \tau, j'$. Now, finally, we may use these two premises to show that $\emptyset, \emptyset, j' \vdash e_2 := e_1'\ \colon \texttt{Unit}, j$ as required.
+	
+	\item UPDATE-3: In this case, $e' = ()$, $j' = j$, $e_1$ is a value and $e_2 = g_k$, where $k+1 = j$. Hence by the first premise $e_1 : \tau$ and by canonical forms, $\tau = T_k$, so $G[j := e_1]$ remains well-typed. Finally, $\emptyset, \emptyset, j' \vdash e'\ \colon \texttt{Unit}, j$ it is immediate with the UNIT rule.
+\end{itemize}
+\hfill
+
+Case APP: We have $e = e_1[\overline{\epsilon_\alpha}]\ e_2$ and know that $\emptyset, \emptyset, i \vdash e_1\ \colon \forall \overline \alpha.(\tau_{in}, \epsilon_{in}) \rightarrow (\tau_{out}, \epsilon_{out}), \epsilon_1$ and $\emptyset, \emptyset, \epsilon_1 \vdash e_2\ \colon \tau_{in}[\overline{\epsilon_\alpha/\alpha}], \epsilon_{in}[\overline{\epsilon_\alpha/\alpha}]$ and $(G, i', e) \rightarrow (G', j', e')$ where $i' \leq i$. We also know that $\emptyset \vdash \overline{\epsilon_\alpha}$. We have three cases:
+\begin{itemize}
+	\item Case APP-1: We then know that $(G, i', e_1) \rightarrow (G', j', e_1')$. Hence by induction $\emptyset, \emptyset, j' \vdash e_1'\ \colon \forall \overline \alpha.(\tau_{in}, \epsilon_{in}) \rightarrow (\tau_{out}, \epsilon_{out})$, which can be directly combined with our other premise to prove the conclusion.
+	\item Case APP-2. We then know that $e_1$ is a value, and $(G, i', e_2) \rightarrow (G', j', e_2')$. By Theorem V-2 on the first premise, $i \leq \epsilon_1$. Hence $i' \leq \epsilon_1$, so by induction $\emptyset, \emptyset, j' \vdash e_2'\ \colon \tau_{in}[\overline{\epsilon_\alpha/\alpha}], \epsilon_{in}[\overline{\epsilon_\alpha/\alpha}]$. We then again use Theorem V-2 on the first premise to show that $\emptyset, \emptyset, j' \vdash e_1\ \colon \forall \overline \alpha.(\tau_{in}, \epsilon_{in}) \rightarrow (\tau_{out}, \epsilon_{out})$, which may be combined with the above derivation to show our conclusion.
+	\item Case APP-3. We know that $G' = G$ is well-typed, and $j' = i'$ and $e_1 = \texttt{fun } [\overline \alpha]\ (x : \tau_{in}', \epsilon_{in}') \rightarrow e_{body}$ and $e_2$ is a value. 
+	We need to show that 
+	$$\emptyset, \emptyset, i' \vdash e_{body}[\overline{\epsilon_\alpha/\alpha}][e_2/x]\ \colon \tau_{out}[\overline{\epsilon_\alpha/\alpha}], \epsilon_{out}[\overline{\epsilon_\alpha/\alpha}].$$
+	
+	By canonical forms, we know that $\tau_{in} <: \tau_{in}'$ and $\epsilon_{in} \leq \epsilon_{in}'$ and $$\{x := \tau_{in}'\}, \{\overline\alpha\}, \epsilon_{in}' \vdash e_{body}\ \colon \tau_{out}', \epsilon_{out}'$$ where $\tau_{out}' <: \tau_{out}$ and $\epsilon_{out}' \leq \epsilon_{out}$.
+	We will first use SUBTYPING to change the above derivation into
+	$$\{x := \tau_{in}'\}, \{\overline\alpha\}, \epsilon_{in}' \vdash e_{body}\ \colon \tau_{out}, \epsilon_{out}$$
+	
+	and then apply the substitution lemma for effects to show that 
+	$$\{x := \tau_{in}'[\overline{\epsilon_\alpha/\alpha}]\}, \emptyset, \epsilon_{in}'[\overline{\epsilon_\alpha/\alpha}] \vdash e_{body}[\overline{\epsilon_\alpha/\alpha}]\ \colon \tau_{out}[\overline{\epsilon_\alpha/\alpha}], \epsilon_{out}[\overline{\epsilon_\alpha/\alpha}].$$
+
+	Next, since $e_2$ is a value, we conclude that $e_2 : \tau_{in}[\epsilon_\alpha/\alpha]$ by Theorem V-2, and thus by Lemma SE-3 $e_2 : \tau_{in}'[\overline{\epsilon_\alpha/\alpha}]$. So we may apply the substitution lemma for values to show that
+	$$\emptyset, \emptyset, \epsilon_{in}'[\overline{\epsilon_\alpha/\alpha}] \vdash e_{body}[\overline{\epsilon_\alpha/\alpha}][e_2/x]\ \colon \tau_{out}[\overline{\epsilon_\alpha/\alpha}], \epsilon_{out}[\overline{\epsilon_\alpha/\alpha}].$$
+	
+	Finally, we need only show that $i' \leq \epsilon_{in}'[\overline{\epsilon_\alpha/\alpha}]$ so that we may apply effect weakening. This follows from two applications of theorem V-2 on our original premises, the fact that $\epsilon_{in} \leq \epsilon_{in}'$, the fact that $i'[\overline{\epsilon_\alpha/\alpha}] = i'$, and lemma SE-2.
+\end{itemize}
+
+\end{document}
+%%% Local Variables:
+%%% mode: latex
+%%% TeX-master: t
+%%% End: 

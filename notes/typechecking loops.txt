@@ -1,0 +1,102 @@
+The problem: We wish to know how to typecheck loops where the length is a variable
+length. For example,
+
+for i < k do {
+  printf("At index: ", size_to_int(i));
+  Array.set(a[i], 0, 0);
+}
+
+We ensure things are in bounds by remembering that i is constrained to be less
+than k; when we use i as an index into a, we make sure that a has length exactly
+k. Thus we don't need to worry about out-of-bounds accesses, and need only
+concern ourselves with tracking effects.
+
+
+Restrictions:
+- Indices into a list of variable length must be variables which are appropriately
+constrained, and such variables can only be created via the for loop syntax.
+In particular, arithmetic expressions cannot be performed on indices.
+- WOLOG, we assume that there are no intermediate variables used, so all array
+indexing operations are immediately recognizable as such. e.g. we don't do
+`auto x = a[i]; get x[j]`.
+- We are ignoring user-defined record types, since we can check their ordering
+properties directly and hide the details of the accesses behind an abstraction barrier.
+
+
+Claim: It is sufficient to unroll the loop exactly twice. The twice-unrolled version
+will typecheck if and only if the entire loop typechecks. In the above example,
+the twice-unrolled version would be
+
+printf("At index: ", size_to_int(0));
+Array.set(a[0], 0, 0);
+printf("At index: ", size_to_int(1));
+Array.set(a[1], 0, 0);
+
+
+Proof: We will categorize all the ways a loop might fail, and show that each of
+them is caught during the first or second round of unrolling. When writing examples,
+we will use the function `get` to indicate some sort of memory access. Note that
+"access" below means "memory access", not simply an array indexing operation.
+
+Ways we can fail:
+0. The loop contains a "regular" ordering error (e.g accessing a variable that
+was used before the loop). This will be caught on the first round.
+
+1. Any statement inside the accesses a variable whose effect does not include
+the index variable for the loop. If so, we will try to access the same variable
+on the secound round, and will then fail.
+
+1.Example:
+for i < k do { get a; }
+unrolls to
+get a; get a;
+which clearly fails to typecheck.
+
+2. In a nested loop, a statement accesses a variable whose effect includes the loop
+variables in reverse declaration order. If so, on the second round of the inner loop,
+we will try to "go backwards" and fail.
+
+2.Example:
+for i < k do { for j < k' do { get a[j][i] } }
+unrolls to
+get a[0][0]; get a[1][0]; get a[0][1]; get a[1][1]
+which fails because it access a[0][1] after a[1][0].
+
+2.5: Note that the above two points imply that any variable access in a successful
+nested loop must (after inlining) have the form
+`get a[i_0][i_0]...[i_0][i_1]...[i_1]...[i_k]...[i_k]`.
+In other words, each array access must use each loop variable at least once,
+and do so in order.
+
+
+3. The loop contains two accesses to different "base" variables. In this case, one of the
+base variables must appear before the other, and we will end up accessing them in
+both possible orders by the second round.
+
+3. Example:
+for i < k do {
+  get a[i];
+  get b[i];
+}
+unrolls to
+get a[0]; get b[0]; get a[1]; get b[1],
+which fails because the first pair imply a < b, but then we need a[1] < b[0].
+
+4. The loop contains two variable accesses in a single control path. By the
+previous point, they must both be to the same variables, which is then used twice
+along a single control path. We will catch this on the first round.
+
+
+Taking all of these together, we get that any successful loop must:
+- Have at most one syntactic access along each control path.
+- In each access, use all loop variables, and use them in order
+
+
+In other words, all successful loops will have the same general form: namely, a
+bunch of stateless computation, with (at the most general) a single match statement,
+some of whose branches access the same variable, whose form is that in 2.5.
+These restrictions are strong enough that any such loops will obviously succeed.
+
+Hence points 1-4 are a complete enumeration of the ways a loop could fail. Since
+each of them are detected by the second round of unrolling, it is sufficient to
+unroll each loop twice during typechecking.

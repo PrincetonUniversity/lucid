@@ -1,0 +1,269 @@
+\documentclass{article}
+
+\usepackage{fancyhdr}
+\usepackage{extramarks}
+\usepackage{amsfonts}
+\usepackage{syntax}
+\usepackage{stmaryrd}
+\usepackage{mathpartir}
+\usepackage{tipa}
+
+%
+% Basic Document Settings
+%
+
+\topmargin=-0.45in
+\evensidemargin=0in
+\oddsidemargin=0in
+\textwidth=6.5in
+\textheight=9.0in
+\headsep=0.25in
+
+\linespread{1.1}
+
+\pagestyle{fancy}
+\chead{Globally Ordered Type System}
+\lfoot{\lastxmark}
+\cfoot{\thepage}
+
+\renewcommand\headrulewidth{0.4pt}
+\renewcommand\footrulewidth{0.4pt}
+
+\setlength\parindent{30pt}
+
+\newcommand{\Z}{\mathbb{Z}}
+\newcommand{\Zt}{$\Z$}
+
+% Create a relational rule
+% [#1] - Additional mathpartir arguments
+% {#2} - Name of the rule
+% {#3} - Premises for the rule
+% {#4} - Conclusions for the rule
+\newcommand{\relationRule}[4][]{\inferrule*[lab={\sc #2},#1]{#3}{#4}}
+
+\newcommand{\rel}[1]{\ensuremath{\llbracket {#1} \rrbracket}}
+\newcommand{\ttt}{\texttt}
+\newcommand{\transform}{\rightsquigarrow}
+\newcommand{\proj}{\pi}
+\newcommand{\ttuple}{(\tau_1, \ldots, \tau_n)}
+\newcommand{\etuple}{(e_1,\ldots,e_n)}
+\newcommand{\bool}{\mathrm{bool}}
+\newcommand{\integer}{\mathrm{int}}
+\newcommand{\option}{\mathrm{option}}
+\newcommand{\uoption}[1]{(\bool,#1)}
+\newcommand{\opt}[1]{\texttt{opt-#1}}
+\newcommand{\varOf}[1]{\texttt{varOf}(#1)}
+
+
+
+\begin{document}
+\section*{Globally Ordered Type Systems}
+A globally ordered type system is similar to an ordered type system, in that it specifies certain variables as ``ordered'', and aims to ensure that each variable is used exactly once, in the order that they were defined. However, unlike a ``normal'' ordered type system, the set of ordered variables is determined in advance -- all variables declared during the program itself are considered to be unordered. Since all ordered variables have global scope, this means we can refer to a singular order throughout the program.
+
+Specifically, a globally ordered type system is defined with respect to an ordered set $G = \{g_1, \dots, g_n\}$ of \emph{global variables}. Our goal is to enforce that $g_1$ is always used before $g_2$, $g_2$ before $g_3$, and so on.
+The \emph{types} in a globally ordered type system specify which global variables have been used so far. The system contains $n+1$ base types $\tau_0, \tau_1, \dots, \tau_n$. If an expression has type $\tau_i$, that signifies that all $g_j$ with $j <= i$ have been used; if $i < n$, this means that we expect $g_{i+1}$ to be the next global variable used.
+
+Convention: we use the symbols $\tau_i$ to represent the specific types $\tau_0, \dots, \tau_n$. The symbol $\tau$ with a non-integer subscript (or no subscript) denotes any type.
+
+A major benefit of this system over regular ordered type systems is that functions which use the globally ordered variables can be defined ``out-of-order'', and have a type signature that specifies when they may be used. For the moment, we will consider a non-functional (i.e. dpt-like) language, in which function are defined only in declarations and there are no higher-order functions. For simplicity, we still restrict our language to have only single-argument functions (but allow multiple arguments to be passed in via tuples).
+
+As a result, our system also contains function types $\tau_i \rightarrow \tau_j$ where $i < j$, as well as a special ``polymorphic'' function type $\alpha \rightarrow \alpha$ for functions which do not use global variables.
+
+   $\tau$ $::=$ \\
+	 \indent\ \ \ \textpipe\ $\tau_0$ \textpipe\ $\tau_1$ \textpipe\ \dots \textpipe\ $\tau_n$\\
+	 \indent\ \ \ \textpipe\ $\tau_i \rightarrow \tau_j$\\
+	 \indent\ \ \ \textpipe\ $\alpha \rightarrow \alpha$
+
+\section*{A Sample Language}
+To explore this system in practice, we'll write up some rules for applying it to a simple dpt-like language, defined below.
+
+\begin{grammar}
+  <prog> ::= <decl> \alt <decl>; <prog>
+
+  <decl> ::=
+  def $\tau$ f(x_1, \dots, x_n) \{<statement>\}
+  \alt <statement>
+
+  <statement> ::=
+  if <expr> then <statement> else <statement>
+  \alt let x = <expr>
+  \alt <statement>; <statement>
+  \alt <expr>
+
+  <expr> ::=
+  <value>
+  \alt x
+  \alt <expr>, <expr>
+  \alt f <expr>
+
+  <value> ::=
+  true \alt false \alt \Zt
+  \alt <value>, <value>
+
+\end{grammar}
+
+Note that in this system we track two kinds of variables: function variables $f$ which may only be bound to functions, and regular variables $x$ which may not be bound to functions. Also note that we expect function definitions to be annotated with their input type here, but in practice we can easily infer it.
+
+Note that a globally ordered type system says nothing about the ``actual'' types of the values in the program. It is \emph{only} concerned with checking the order of the global variables. That said, it can be freely used alongside a regular type inference algorithm, and so we assume that all expressions we consider are well-typed in the conventional sense.
+
+Our rules will define a three place relation $\Gamma, \tau_i \vdash e \colon \tau$. Note that the $\Gamma$ context here only stores information about function variables, since they're the only relevant ones.
+Note also that we include in the context a type telling us which global variables have been used so far. Our intention is that a program $p$ should be ``well-typed'' iff $\emptyset, \tau_0 \vdash p \colon \tau_n$.
+
+We also have a very similar relation for declarations of the form $\Gamma, \tau_i \vdash e \colon \Gamma', \tau$.
+
+When writing rules, we use the convention that the metavariable $x$ matches all \emph{non-global} variables. We will always denote global variables using symbols of the form $g_i$. We use the metavariable $v$ for values and $e$ for expressions
+
+To start out, let's write the high-level rules:
+
+\begin{mathpar}
+  \relationRule{prog-single}{
+   \Gamma, \tau_i \vdash d\ \colon \Gamma', \tau_j
+  }{
+          \Gamma, \tau_i \vdash d\ \colon \tau_j
+  }
+
+	\relationRule{prog}{
+   \Gamma, \tau_i \vdash d\ \colon \Gamma', \tau_j\\
+   \Gamma', \tau_j \vdash p\ \colon \tau_k
+	}{
+          \Gamma, \tau_i \vdash d; p\ \colon \tau_k
+	}
+\end{mathpar}
+
+\begin{mathpar}
+  \relationRule{decl-def}{
+   \Gamma, \tau_k \vdash s\ \colon \tau_j
+  }{
+          \Gamma, \tau_i \vdash \texttt{def}\ \tau_k\ f(x_1, \dots, x_n) \{s\} \colon \Gamma[f := \tau_k \rightarrow \tau_j], \tau_i
+  }
+
+	\relationRule{decl-statement}{
+     \Gamma, \tau_i \vdash s\ \colon \tau_j
+	}{
+     \Gamma, \tau_i \vdash s\ \colon \Gamma, \tau_j
+	}
+\end{mathpar}
+
+Now we can write rules governing statements. These are pretty straightforward.
+
+\begin{mathpar}
+  \relationRule{statement-if}{
+     \Gamma, \tau_i \vdash e\ \colon \tau_j\\
+     \Gamma, \tau_j \vdash s_1\ \colon \tau_k\\
+     \Gamma, \tau_j \vdash s_2\ \colon \tau_k
+	}{
+     \Gamma, \tau_i \vdash \texttt{if } e \texttt{ then } s_1 \texttt{ else } s_2\ \colon \tau_k
+	}
+
+  \relationRule{statement-let}{
+     \Gamma, \tau_i \vdash e\ \colon \tau_j
+	}{
+     \Gamma, \tau_i \vdash \texttt{let } x\ =\ e\ \colon \tau_j
+	}
+
+  \relationRule{statement-seq}{
+     \Gamma, \tau_i \vdash s_1\ \colon \tau_j\\
+     \Gamma, \tau_j \vdash s_1\ \colon \tau_k
+	}{
+     \Gamma, \tau_i \vdash s_1;s_2\ \colon \tau_k
+	}
+\end{mathpar}
+
+Finally, we can write some expr rules that actually make changes to the output type. The first few cases are easy: evaluating a value or non-global variable doesn't use any global variables.
+
+\begin{mathpar}
+	\relationRule{value}{
+   \
+	}{
+          \Gamma, \tau_i \vdash v\ \colon \tau_i
+	}
+
+	\relationRule{local variable}{
+   \
+	}{
+          \Gamma, \tau_i \vdash x\ \colon \tau_i
+	}
+\end{mathpar}
+
+On the other hand, when we evaluate a global variable, our output type increases.
+
+\begin{mathpar}
+	\relationRule{global variable}{
+   \
+	}{
+          \Gamma, \tau_i \vdash g_i\ \colon \tau_{i+1}
+	}
+\end{mathpar}
+
+Evaluating a tuple is nothing new; it's just a sequencing operation like we've seen before.
+
+\begin{mathpar}
+	\relationRule{tuple}{
+          \Gamma, \tau_i \vdash e_1\ \colon \tau_j\\
+          \Gamma, \tau_j \vdash e_2\ \colon \tau_k
+	}{
+          \Gamma, \tau_i \vdash e_1, e_2\ \colon \tau_k
+	}
+\end{mathpar}
+
+Finally, we can actually use our function types (and $\Gamma$!).
+
+\begin{mathpar}
+	\relationRule{app}{
+			 \tau_i \vdash e \colon \tau_j\\
+       \Gamma[f] = \tau_j \rightarrow \tau_k
+	}{
+       \tau_i \vdash f\ e \colon \tau_k
+	}
+
+  \relationRule{app}{
+  		 \tau_i \vdash e \colon \tau_j\\
+       \Gamma[f] = \alpha \rightarrow \alpha
+  }{
+       \tau_i \vdash f\ e \colon \tau_j
+  }
+\end{mathpar}
+
+And that's that!
+
+\subsection{Functional Languages}
+Extending this to languages with function values and higher-order functions isn't difficult, but it is somewhat less elegant. The problem we run into is expressions which return a function value and also use a global variable; for example,
+\texttt{let f = let x = g1 in (fun y -> x + y)}.
+Currently, our typing relation can either return a function type or a return a base type indicating which global variables have been used, \emph{but not both}. So we would need to extend the typing relation to return both.
+
+I guess we could also just have two typing rules for function expressions.
+
+\begin{mathpar}
+\relationRule{fun1}{
+    \
+}{
+     \tau_i \vdash \texttt{fun } \tau_j\ x \rightarrow e\ \colon \tau_i
+}
+
+\relationRule{fun2}{
+    \tau_j \vdash e\ \colon \tau_k
+}{
+     \tau_i \vdash \texttt{fun } \tau_j\ x \rightarrow e\ \colon \tau_j \rightarrow \tau_k
+}
+\end{mathpar}
+
+In fact, the first rule could be viewed as just the value rule. Hell, it might even work. It would be hella sketchy though.
+
+\section*{Weak Globally Ordered Type System}
+It's pretty easy to see how we could convert this to a weakly-ordered type system (in which each ordered variable may be used at most once, instead of exactly once) just by inserting some inequalities into the rules. More interesting, though, is the observation that this corresponds to adding subtyping, with the base rule
+
+\begin{mathpar}
+	\relationRule{subtyping}{
+			 i < j
+	}{
+      	\tau_i <: \tau_j
+	}
+\end{mathpar}
+
+and all other standard subtyping rules (refl, trans, function subtyping.)
+
+\end{document}
+%%% Local Variables:
+%%% mode: latex
+%%% TeX-master: t
+%%% End:
