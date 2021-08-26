@@ -10,7 +10,8 @@ Lucid also has other quality-of-life features for data plane developers: an inte
 
 
 ## Using Lucid
-To setup and use Lucid, see the documentation: [setup](docs/setup.md) and [tutorial](docs/tutorial_language.md)
+
+To setup and use Lucid, start with: the [setup guide](docs/setup.md) and tutorials that introduce the [language](docs/tutorial_language.md), [interpreter](docs/tutorial_interpreter.md), and [compiler](docs/tutorial_compiler.md).
 
 
 ## More details
