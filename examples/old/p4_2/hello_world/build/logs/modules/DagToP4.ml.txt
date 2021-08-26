@@ -1,0 +1,19 @@
+---DagToP4.ml log---
+build_statement_tree_from_node: table id: dpt_0_selectEventType
+build_statement_tree_from_node: action ids: dpt_76_pktin, dpt_77_extra_processing
+build_statement_tree_from_node: successor tids: dpt_88_generate_0_extra_processing, dpt_92_generate_0_continue
+---- syntax tree ----
+[(DagToP4.TableBranch ((Cid.Id ("selectEventType", 0)),
+    [((Cid.Id ("pktin", 76)),
+      [(DagToP4.TableCall
+          (Cid.Compound (("generate", 0), (Cid.Id ("extra_processing", 88)))))
+        ]);
+      ((Cid.Id ("extra_processing", 77)),
+       [(DagToP4.TableCall
+           (Cid.Compound (("generate", 0), (Cid.Id ("continue", 92)))))
+         ])
+      ]
+    ))
+  ]
+-----
+printing control body to: build/logs/ir/post_salu_frames.p4

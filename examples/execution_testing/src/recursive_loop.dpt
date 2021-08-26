@@ -1,0 +1,19 @@
+/* A recursive control event that executes 
+   10 times before reflecting the packet. */
+
+entry event ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos);
+event loop (int<<9>> port, int count);
+exit event ip_out (int<<1>> drop, int<<9>> egr_port);
+
+
+handle ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos) {
+    generate loop(igr_port, 0);
+}
+
+handle loop(int<<9>> port, int count){    
+    if (count == 10) {
+        generate ip_out(0, port);
+    } else {
+        generate loop(port, count+1);
+    }
+}

@@ -149,18 +149,22 @@ let adjust_returns prog =
             else
               (* Otherwise, we need to use the same trick with the retvar *)
               add_retvar_if s1 (s2' ())
+          | SLoop _ ->
+            (* If we conditionally returned inside a loop, we always have to use
+               the retvar trick *)
+            add_retvar_if s1 (s2' ())
           | _ ->
             failwith
-              "Somehow got unknown return status after non-If, non-Match \
-               statement")
+              "Somehow got unknown return status after a statement that wasn't \
+               an If, Match or Loop")
 
       method! visit_decl _ d =
         match d.d with
-        | DFun (id, ty, specs, body) ->
+        | DFun (id, ret_ty, specs, body) ->
           returned := Some false;
           let body = self#visit_body () body in
           (* Make sure that all paths lead to a return statement *)
-          if !returned <> Some true && ty.raw_ty <> TVoid
+          if !returned <> Some true && ret_ty.raw_ty <> TVoid
           then
             Console.error_position d.dspan "Non-void function may not return!";
           let body =
@@ -168,15 +172,10 @@ let adjust_returns prog =
             | None -> body
             | Some id ->
               let params, s = body in
-              let dec =
-                slocal
-                  id
-                  { raw_ty = TBool; tspan = Span.default }
-                  (value_to_exp (vbool false))
-              in
+              let dec = slocal id (ty TBool) (value_to_exp (vbool false)) in
               params, sseq dec s
           in
-          { d with d = DFun (id, ty, specs, body) }
+          { d with d = DFun (id, ret_ty, specs, body) }
         | _ -> d
     end
   in

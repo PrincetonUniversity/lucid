@@ -1,0 +1,251 @@
+---MergeUtils.ml log---
+[propagate_condition_generic] table dpt_0_selectEventType (noop copy: dpt_370_selectEventType_0_noop_pred) to table dpt_363_tbl_0_opstmt
+[propagate_condition_generic] AllMustMatch
+---- [merge tables] ----
+// Stage not set by dptc
+    table dpt_370_selectEventType_0_noop_pred {
+        key = {
+            md.dptMeta.eventType : ternary;
+        }
+        actions = {
+            dpt_111__368_pktin;
+        }
+        const default_action = dpt_111__368_pktin();
+        
+    }
+    
+    // Stage not set by dptc
+    table dpt_363_tbl_0_opstmt {
+        actions = {
+            dpt_363_acn_0_opstmt;
+        }
+        const default_action = dpt_363_acn_0_opstmt();
+        
+    }
+    
+---- [merge tables] ----
+
+[merge_t_into_all_s] START
+	t_rule:
+() : acn~0.opstmt~363();
+	s_rules:
+(0) : ~368.pktin~111();
+
+--------
+[merge_t_into_s] attempting to merge
+[merge_t_into_s] s_rule: (0) : ~368.pktin~111();
+[merge_t_into_s] t_rule: () : acn~0.opstmt~363(); 
+seq_st_feas: s_acn_id = dpt_111__368_pktin
+		intersect rule pat: (0)
+	[merge_t_into_s]deleting: (0) : ~368.pktin~111();
+	[merge_t_into_s]adding: (0) : acn~0.opstmt~363();
+
+[merge_t_into_s] ---- new_s_rules ----
+(0) : acn~0.opstmt~363();
+
+[merge_t_into_s] ---- end new_s_rules ----
+
+
+[merge_t_into_all_s]
+	t_rule:
+() : acn~0.opstmt~363();
+	UPDATED s_rules:
+(0) : acn~0.opstmt~363();
+
+--------
+[merge_t_into_all_s] filtered out 0 unreachable rules
+[merge_t_into_all_s] reachable rules: 
+(0) : acn~0.opstmt~363();
+
+[merge_t_into_all_s] END
+[merge_tables] finished merging into table dpt_370_selectEventType_0_noop_pred -- new table has 1 rules
+(0) : acn~0.opstmt~363();
+[propagate_condition_generic] table dpt_363_tbl_0_opstmt (noop copy: dpt_374_tbl_0_opstmt_363_noop_pred) to table dpt_364_tbl_0_opstmt
+[propagate_condition_generic] AllMustMatch
+---- [merge tables] ----
+// Stage not set by dptc
+    table dpt_374_tbl_0_opstmt_363_noop_pred {
+        key = {
+            md.dptMeta.eventType : ternary;
+        }
+        actions = {
+            dpt_363__372_acn_0_opstmt;
+        }
+        const default_action = dpt_363__372_acn_0_opstmt();
+        
+    }
+    
+    // Stage not set by dptc
+    table dpt_364_tbl_0_opstmt {
+        actions = {
+            dpt_364_acn_0_opstmt;
+        }
+        const default_action = dpt_364_acn_0_opstmt();
+        
+    }
+    
+---- [merge tables] ----
+
+[merge_t_into_all_s] START
+	t_rule:
+() : acn~0.opstmt~364();
+	s_rules:
+(0) : ~372.acn~0.opstmt~363();
+
+--------
+[merge_t_into_s] attempting to merge
+[merge_t_into_s] s_rule: (0) : ~372.acn~0.opstmt~363();
+[merge_t_into_s] t_rule: () : acn~0.opstmt~364(); 
+seq_st_feas: s_acn_id = dpt_363__372_acn_0_opstmt
+		intersect rule pat: (0)
+	[merge_t_into_s]deleting: (0) : ~372.acn~0.opstmt~363();
+	[merge_t_into_s]adding: (0) : acn~0.opstmt~364();
+
+[merge_t_into_s] ---- new_s_rules ----
+(0) : acn~0.opstmt~364();
+
+[merge_t_into_s] ---- end new_s_rules ----
+
+
+[merge_t_into_all_s]
+	t_rule:
+() : acn~0.opstmt~364();
+	UPDATED s_rules:
+(0) : acn~0.opstmt~364();
+
+--------
+[merge_t_into_all_s] filtered out 0 unreachable rules
+[merge_t_into_all_s] reachable rules: 
+(0) : acn~0.opstmt~364();
+
+[merge_t_into_all_s] END
+[merge_tables] finished merging into table dpt_374_tbl_0_opstmt_363_noop_pred -- new table has 1 rules
+(0) : acn~0.opstmt~364();
+---PARALLEL MERGE: tables dpt_1_merged_tbl and dpt_363_tbl_0_opstmt---
+---- [merge tables] ----
+@pragma stage 0
+    table dpt_1_merged_tbl {
+        actions = {
+            dpt_1_merged_acn;
+        }
+        const default_action = dpt_1_merged_acn();
+        
+    }
+    
+    // Stage not set by dptc
+    table dpt_363_tbl_0_opstmt {
+        key = {
+            md.dptMeta.eventType : ternary;
+        }
+        actions = {
+            dpt_363_acn_0_opstmt;
+        }
+        const default_action = dpt_363_acn_0_opstmt();
+        
+    }
+    
+---- [merge tables] ----
+
+[merge_t_into_all_s] START
+	t_rule:
+(0) : acn~0.opstmt~363();
+	s_rules:
+() : merged_acn~1();
+
+--------
+[merge_t_into_s] attempting to merge
+[merge_t_into_s] s_rule: () : merged_acn~1();
+[merge_t_into_s] t_rule: (0) : acn~0.opstmt~363(); 
+		intersect rule pat: (0)
+	[merge_t_into_s]adding: (0) : merged_acn~1.acn~0.opstmt~363();
+	[merge_t_into_s]adding: () : merged_acn~1();
+
+[merge_t_into_s] ---- new_s_rules ----
+(0) : merged_acn~1.acn~0.opstmt~363();
+() : merged_acn~1();
+
+[merge_t_into_s] ---- end new_s_rules ----
+
+
+[merge_t_into_all_s]
+	t_rule:
+(0) : acn~0.opstmt~363();
+	UPDATED s_rules:
+(0) : merged_acn~1.acn~0.opstmt~363();
+() : merged_acn~1();
+
+--------
+[merge_t_into_all_s] filtered out 0 unreachable rules
+[merge_t_into_all_s] reachable rules: 
+(0) : merged_acn~1.acn~0.opstmt~363();
+() : merged_acn~1();
+
+[merge_t_into_all_s] END
+[gen_union_acn] new_acn_id=dpt_363_merged_acn_1_acn_0_opstmt s_aid=dpt_1_merged_acn t_aid=dpt_363_acn_0_opstmt
+[merge_tables] finished merging into table dpt_1_merged_tbl -- new table has 2 rules
+(0) : merged_acn~1.acn~0.opstmt~363();
+() : merged_acn~1();
+---PARALLEL MERGE: tables dpt_2_merged_tbl and dpt_364_tbl_0_opstmt---
+---- [merge tables] ----
+@pragma stage 1
+    table dpt_2_merged_tbl {
+        actions = {
+            dpt_2_merged_acn;
+        }
+        const default_action = dpt_2_merged_acn();
+        
+    }
+    
+    // Stage not set by dptc
+    table dpt_364_tbl_0_opstmt {
+        key = {
+            md.dptMeta.eventType : ternary;
+        }
+        actions = {
+            dpt_364_acn_0_opstmt;
+        }
+        const default_action = dpt_364_acn_0_opstmt();
+        
+    }
+    
+---- [merge tables] ----
+
+[merge_t_into_all_s] START
+	t_rule:
+(0) : acn~0.opstmt~364();
+	s_rules:
+() : merged_acn~2();
+
+--------
+[merge_t_into_s] attempting to merge
+[merge_t_into_s] s_rule: () : merged_acn~2();
+[merge_t_into_s] t_rule: (0) : acn~0.opstmt~364(); 
+		intersect rule pat: (0)
+	[merge_t_into_s]adding: (0) : merged_acn~2.acn~0.opstmt~364();
+	[merge_t_into_s]adding: () : merged_acn~2();
+
+[merge_t_into_s] ---- new_s_rules ----
+(0) : merged_acn~2.acn~0.opstmt~364();
+() : merged_acn~2();
+
+[merge_t_into_s] ---- end new_s_rules ----
+
+
+[merge_t_into_all_s]
+	t_rule:
+(0) : acn~0.opstmt~364();
+	UPDATED s_rules:
+(0) : merged_acn~2.acn~0.opstmt~364();
+() : merged_acn~2();
+
+--------
+[merge_t_into_all_s] filtered out 0 unreachable rules
+[merge_t_into_all_s] reachable rules: 
+(0) : merged_acn~2.acn~0.opstmt~364();
+() : merged_acn~2();
+
+[merge_t_into_all_s] END
+[gen_union_acn] new_acn_id=dpt_364_merged_acn_2_acn_0_opstmt s_aid=dpt_2_merged_acn t_aid=dpt_364_acn_0_opstmt
+[merge_tables] finished merging into table dpt_2_merged_tbl -- new table has 2 rules
+(0) : merged_acn~2.acn~0.opstmt~364();
+() : merged_acn~2();

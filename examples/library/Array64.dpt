@@ -1,0 +1,33 @@
+include "Memops.dpt"
+
+// A module implementing a 64-bit array with restricted operations.
+module Array64 {
+  // Really it's just 2 32-bit arrays
+  type t = {
+    Array.t<<32>> arr1;
+    Array.t<<32>> arr2;
+  }
+
+  // How to create a t
+  constr t create(int sz) = {
+    arr1 = Array.create(sz);
+    arr2 = Array.create(sz);
+  };
+
+  fun int<<64>> get(t arr, int idx) {
+    int x = Array.get(arr#arr1, idx);
+    int y = Array.get(arr#arr2, idx);
+    return x ^ y;
+  }
+
+  fun void set(t arr, int idx, int<<64>> v) {
+    Array.set(arr#arr1, idx, v[63:32]);
+    Array.set(arr#arr2, idx, v[31:0]);
+  }
+
+  fun int<<64>> getAndSet(t arr, int idx, int<<64>> v) {
+    int x = Array.update(arr#arr1, idx, fst, 0, snd, v[63:32]);
+    int y = Array.update(arr#arr2, idx, fst, 0, snd, v[31:0]);
+    return x ^ y;
+  }
+}

@@ -1,0 +1,33 @@
+---eliminateBools.ml log---
+-----before boolean elimination-------
+entry event pktin~111(int<<32>> src_ip~109,int<<32>> dst_ip~110) ;
+
+handle pktin~111(int<<32>> src_ip~112,int<<32>> dst_ip~113) {
+int<<32>> x~114 = src_ip~112>>10<<Q{sz~271}>>;
+int<<32>> y~115 = x~114<<10<<Q{sz~275}>>;
+}
+-----end before boolean elimination-------
+-----after phase 1: non-immediate elimination-------
+entry event pktin~111(int<<32>> src_ip~109,int<<32>> dst_ip~110) ;
+
+handle pktin~111(int<<32>> src_ip~112,int<<32>> dst_ip~113) {
+int<<32>> x~114 = src_ip~112>>10<<Q{sz~271}>>;
+int<<32>> y~115 = x~114<<10<<Q{sz~275}>>;
+}
+-----end after phase 1: non-immediate elimination-------
+-----after phase 2: if expression cannonization-------
+entry event pktin~111(int<<32>> src_ip~109,int<<32>> dst_ip~110) ;
+
+handle pktin~111(int<<32>> src_ip~112,int<<32>> dst_ip~113) {
+int<<32>> x~114 = src_ip~112>>10<<Q{sz~292}>>;
+int<<32>> y~115 = x~114<<10<<Q{sz~296}>>;
+}
+-----end after phase 2: if expression cannonization-------
+-----after phase 3: immediate elimination-------
+entry event pktin~111(int<<32>> src_ip~109,int<<32>> dst_ip~110) ;
+
+handle pktin~111(int<<32>> src_ip~112,int<<32>> dst_ip~113) {
+int<<32>> x~114 = src_ip~112>>10<<Q{sz~313}>>;
+int<<32>> y~115 = x~114<<10<<Q{sz~317}>>;
+}
+-----end after phase 3: immediate elimination-------

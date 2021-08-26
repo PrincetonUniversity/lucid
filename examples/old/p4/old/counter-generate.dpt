@@ -1,0 +1,24 @@
+/* 
+Count packets and report the source of the first 10. 
+Report the sources in a second thread. 
+*/
+Counter c = Counter.create(0);
+
+/* report the src ips of the first 10 packets */
+handle packetin (int src, int dst) {
+    int temp = Counter.add(c,1);
+    if (temp < 10) {
+      generate doReport (src);
+      /* report_int src; */
+    } 
+    /* swap src and dst, then continue. */
+    int temp2 = src;
+    src = dst;
+    dst = temp2;
+    generate continue (src, dst);
+}
+
+/* match <event name> (<extracted values>) */
+handle doReport(int src) {
+	report_int src;
+}

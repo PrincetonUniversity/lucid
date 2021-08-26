@@ -1,0 +1,109 @@
+/** Design for a finite list type */
+
+/** A new type constructor: [k], where k is a size. We can think of these
+    as k-element tuples, where each entry is the same type. */
+// TY[k] is the type of a list of length k, where each element is of type TY
+// E.g. we have new types
+int<<16>>[k];
+int[k][k'] = (int[k])[k'];
+Array.t<<32>>[k];
+
+/** Creating list types */
+// To create values of these types, there are two options:
+// Direct creation:
+[1;2;3+4; f(3, 7)]; // Has type int[4], assuming f returns an int
+// List comprehension:
+[f(i) for i = 0 to k]; // Has type TY[k], where f returns type TY
+
+/** Using list types */
+// A new indexing operator, [i], where i is a size
+[1;2;3;4][2] = 3;
+[f(i) for i = 0 to k][4] = f(4); // ONLY IF 4 < k! Need to enforce this.
+
+/** Problems (before we consider globals and effects) */
+/*
+   We want to be able to handle lists of constant-but-unknown size, to handle
+   parametricity.
+   This makes it hard to ensure our indices are valid. Just looking at the variable
+   names i and k, we can't tell if i < k or not.
+   We'll probably need to add constraints for sizes into our typechecking.
+   This might be tricky because the scope of the sizes is more than a single function
+   Maybe what we should do instead is:
+    - If the list size is constant, then only constant indices may be used
+    - If the list size is unknown, then only sizes created by `for i = 0 to k may be used,
+      and only if k is identical to the list size
+  TODO: Enforce a similar thing for int slicing
+*/
+
+// It's also possible that people will want to use the index like an int, e.g.
+for i = 0 to k do {
+  if (i < 3) {
+    ...
+  } else {
+    ...'
+  }
+}
+// Right now, this isn't possible, since sizes are a separate kind
+// It seems unlikely that people will want to make heavy use of this, since lists
+// are pretty uniform by nature.
+// I suspect the easiest thing to do is add a `sizeof` function (or something)
+// which takes a size and returns it as an integer.
+
+/** Lists and global types */
+// To create a global with a list type, we enforce list comprehension syntax:
+global Array.t<<32>>[k] arrs = [Array.create(16) for dummy = 0 to k];
+global Array.t<<32>>[k][k'] arrs2 = [[Array.create(16) for dummy = 0 to k] for dummy = 0 to k'];
+// We can think of these as user types with k entries, with corresponding effects.
+// Indexing is equivalent to user-type projection, so arrs[3] has effect 0.3
+// We're probably gonna need to extend the syntax to handle arrs[i], though.
+
+/** Typechecking loops */
+// We need to ensure that loops won't violate the global order. Here's an example loop:
+global Array<<32>>[k] filter = [Array.create(1) for dummy = 0 to k];
+for i = 0 to k do {
+  acc = acc + Array.get(filter[i], 0);
+}
+/*
+  Here's a strategy we can use:
+  - Typecheck the loop body starting from a fresh effect alpha, rather than the current effect
+  - We get some loop constraints, and an ending effect in terms of alpha and the loop variable i
+  - Check that the initial constraints imply the loop constraints with alpha = 0, i = 0 (base case)
+  - Check that the initial constraints plus the loop constraints imply the loop constraints
+    with alpha = ending effect and i = i + 1
+  - Finish with no new constraints, and the final effect is the ending effect
+    with alpha = starting effect, i = k
+*/
+
+
+
+/*** Example use case of these lists ***/
+
+// Core code for a Bloom filter with parametric k
+global type t<<key_sz, idx_sz, k>> = {
+  Array.t<<1>>[k] arrs;
+  int[k] seeds;
+  int<<idx_sz>> m;
+}
+
+constr t<<a, b>> create(int<<b>> m, int[k] seeds) {
+  global Array.t<<1>>[k] arrs = [Array.create(m) for dummy = 0 to k];
+  const int[k] seeds = seeds;
+  const int<<b>> m = m;
+}
+
+fun void add_to_filter(t<<'a, 'b, 'c>> filter, int<<'a>> key) {
+  for i = 0 to 'c do {
+    Array.set(filter#arrs[i], hash<<'b>>(filter#seeds[i], key), 1);
+  }
+}
+
+fun bool in_filter(t<<'a, 'b, 'c>> filter, int<<'a>> key) {
+  bool acc = true;
+  for i = 0 to 'c do {
+    acc = acc && Array.get(filter#arrs[i], hash<<'b>>(filter#seeds[i], key));
+  }
+  return acc;
+}
+
+global t<<32, 32, 2>> b1 = create(16, [1;2]);
+global t<<16, 16, 4>> b2 = create(8, [1;2;3;4]);

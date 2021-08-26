@@ -2,6 +2,7 @@ type t =
   { fname : string
   ; start : int
   ; finish : int
+  ; spid : int
   }
 [@@deriving show, ord]
 
@@ -12,7 +13,7 @@ let extend (x : t) (y : t) : t =
   { x with start = s; finish = f }
 ;;
 
-let default = { fname = ""; start = -1; finish = -1 }
+let default = { fname = ""; start = -1; finish = -1; spid = -1 }
 
 let to_string (span : t) =
   if span = default

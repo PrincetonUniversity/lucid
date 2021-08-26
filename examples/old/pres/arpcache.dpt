@@ -1,0 +1,39 @@
+/* example mac learning */
+
+
+/* table: dst mac --> port */
+Array dst_1 = Array.create<32>(1024);
+Array dst_2 = Array.create<32>(1024);
+Array egr_1  = Array.create<32>(1024);
+Array egr_2  = Array.create<32>(1024);
+
+/* table: src mac --> last seen */
+Array src_1 = Array.create<32>(1024);
+Array src_2 = Array.create<32>(1024);
+Array ts_1  = Array.create<32>(1024);
+Array ts_2  = Array.create<32>(1024);
+
+handle cont (int src, int dst, int egr_port){
+	int placeholder = 1;	
+}
+
+handle packetin (int src, int dst) {
+	int BROADCAST = 0xFFFF;
+	int src_h1 = Sys.hash<32>(10398247, src); 
+	int src_h2 = Sys.hash<32>(1295981879, src);
+
+	/* lookup out port. */
+
+	/* lookup source and update last seen timestamp. */
+/*	int found_1 = Array.cmp<32>(src_1, src_h1);	*/
+	int found_1 = Array.get<32>(src_1, src_h1);	
+
+	if (found_1 == 0) { 
+		int found_2 = Array.get<32>(src_1, src_h2);
+		if (found_2 == 0) {
+			generate (src, dst, BROADCAST);
+		}
+	}
+
+
+}

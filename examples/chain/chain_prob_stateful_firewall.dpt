@@ -1,0 +1,79 @@
+/*
+Implementing the SRO algorithm from section 6.1 of this paper:
+https://www.microsoft.com/en-us/research/uploads/prod/2020/10/swishmem-hotnets20.pdf
+
+As in that section, we assume reliable delivery and no router failures.
+*/
+
+// Implement a Bloom filter with m = 16, k = 4
+const int NUM_REGISTERS = 16;
+const int HASH_SEED_1 = 22;
+const int HASH_SEED_2 = 33;
+const int HASH_SEED_3 = 44;
+const int HASH_SEED_4 = 55;
+
+const int<<1>> TRUE = 1;
+
+/* Information about the chain. */
+/* I want this to read "extern location foo;" but we don't have that syntax yet */
+const int head = 0;
+const int tail = 0;
+const int succ = 0;
+
+global filter1 = new Array<<1>>(NUM_REGISTERS);
+global filter2 = new Array<<1>>(NUM_REGISTERS);
+global filter3 = new Array<<1>>(NUM_REGISTERS);
+global filter4 = new Array<<1>>(NUM_REGISTERS);
+
+event add_to_filter(int idx1, int idx2, int idx3, int idx4);
+
+// Request_X is for packets coming from inside, reponse_x is for packets coming from outside
+// entry events
+event request_packet (int client_ip, int server_ip);
+event response_packet (int server_ip, int client_ip);
+// exit events
+event request_continue (int src_ip, int dst_ip);
+event response_continue (int src_ip, int dst_ip);
+
+handle add_to_filter(int idx1, int idx2, int idx3, int idx4) {
+  Array.set(filter1, idx1, TRUE);
+  Array.set(filter2, idx2, TRUE);
+  Array.set(filter3, idx3, TRUE);
+  Array.set(filter4, idx4, TRUE);
+  if (self != tail) {
+    event this = add_to_filter(idx1, idx2, idx3, idx4);
+    generate Event.sslocate(this, succ);
+  }
+}
+
+fun bool in_filter(int idx1, int idx2, int idx3, int idx4) {
+  bool ret = Array.get(filter1, idx1) == TRUE &&
+             Array.get(filter2, idx2) == TRUE &&
+             Array.get(filter3, idx3) == TRUE &&
+             Array.get(filter4, idx4) == TRUE;
+  return ret;
+
+}
+
+handle request_packet(int src, int dst) {
+  int idx1 = hash<<32>>(HASH_SEED_1, src, dst);
+  int idx2 = hash<<32>>(HASH_SEED_2, src, dst);
+  int idx3 = hash<<32>>(HASH_SEED_3, src, dst);
+  int idx4 = hash<<32>>(HASH_SEED_4, src, dst);
+  bool in_filter = in_filter(idx1, idx2, idx3, idx4);
+  if (!in_filter) {
+    generate Event.sslocate(add_to_filter(idx1, idx2, idx3, idx4), head);
+  }
+  generate request_continue(src, dst);
+}
+
+handle response_packet(int src, int dst) {
+  int idx1 = hash<<32>>(HASH_SEED_1, src, dst);
+  int idx2 = hash<<32>>(HASH_SEED_2, src, dst);
+  int idx3 = hash<<32>>(HASH_SEED_3, src, dst);
+  int idx4 = hash<<32>>(HASH_SEED_4, src, dst);
+  bool in_filter = in_filter(idx1, idx2, idx3, idx4);
+  if (in_filter) {
+    generate request_continue(src, dst);
+  }
+}

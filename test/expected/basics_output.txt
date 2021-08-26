@@ -1,10 +1,15 @@
 dpt: Parsing ...
 Processing examples/interp_tests/basics.dpt
+-------Eliminating type aliases 1---------
+-------Checking well-formedness---------
 ---------typing---------
 ---------Making returns explicit-------------
 -----------renaming-----------
 -------Eliminating modules---------
------------inlining-----------
+-------Eliminating type aliases 2---------
+-------Inlining size declarations---------
+---------Eliminating events with global arguments----------
+-----------inlining functions-----------
 ---------------typing again-------------
 ------------Checking entry handlers---------------
 
@@ -15,8 +20,9 @@ In examples/interp_tests/basics.dpt:
 
 warning: examples/interp_tests/basics.dpt: Unconditional generation of potential non-exit event in entry handler!
 
----------Eliminating events with global arguments----------
--------Eliminating user global types-------
+-------Eliminating records-------
+-------Eliminating vectors-------
+-------Eliminating tuples-------
 ---------------typing again-------------
 dpt: Auto-detected specification file examples/interp_tests/basics.json
 dpt: Simulating...

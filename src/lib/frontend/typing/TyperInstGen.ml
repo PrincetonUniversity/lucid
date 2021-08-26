@@ -62,18 +62,19 @@ let instantiator =
 
 (** Generalization (for function declarations). Consistently replace all unbound
     TVars (at a higher level than the current one) with QVars *)
-
 let generalizer =
   let generalize_tqvar constr gen tqv =
     match tqv with
-    | TVar { contents = Unbound (name, l) } when l > !current_level ->
-      constr (QVar name)
+    (* If we ever make Lucid functional we'll need to uncomment the when clause here.
+       But for now it's fine. We could also take the "let should not be generalized"
+       philosophy, and only generalize at the top level, in which case we wouldn't
+       need levels in the first place *)
+    | TVar ({ contents = Unbound (name, _) } as r) (* when l > !current_level *)
+      ->
+      let qvar = constr (QVar name) in
+      r := Link qvar;
+      qvar
     | TVar { contents = Link x } -> gen x
-    | QVar id ->
-      Printf.printf
-        "Unexpected: qvar %s appears during generalization\n"
-        (Printing.id_to_string id);
-      constr tqv
     | _ -> constr tqv
   in
   object (self)
@@ -88,4 +89,27 @@ let generalizer =
     method! visit_TQVar _ tqv =
       generalize_tqvar (fun x -> TQVar x) (self#visit_raw_ty ()) tqv
   end
+;;
+
+let rec instantiate_prog ds =
+  List.map
+    (fun d ->
+      enter_level ();
+      let d =
+        match d.d with
+        (* No point instantiating if there aren't any things to unify
+           the sub-parts with. *)
+        | DUserTy _ | DExtern _ | DSize _ | DEvent _ -> d
+        (* For modules, don't instantiate the inferface, for the same reason *)
+        | DModule (id, intf, ds) ->
+          leave_level ();
+          (* Hack to avoid going more than one level down *)
+          let d' = DModule (id, intf, instantiate_prog ds) in
+          enter_level ();
+          { d with d = d' }
+        | _ -> instantiator#visit_decl (fresh_maps ()) d
+      in
+      leave_level ();
+      d)
+    ds
 ;;

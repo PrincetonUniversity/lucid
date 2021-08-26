@@ -1,0 +1,82 @@
+/*
+Using builtin DPT data structures: Counters and Arrays.
+This program:
+- counts the first 10 packets with a counter.
+- stores the source addresses of the first 5 packets in an array.
+- iterates over the array when the 6th packet arrives,
+printing the stored addresses.
+*/
+/* jsonch 10/15/20 */
+
+/* DPT supports state that persists across events
+with simple builtin data structures. */
+
+/* The counter data structure is the simplest example.
+It has 2 methods:
+- create: allocate a new counter
+- add: increment the counter and return its updated value.
+The interpreter implementation of a counter is in Counters.ml
+*/
+/*
+builtin data structure objects are global: they can be
+used by any event handler. However, the order
+in which the objects are used has to be the same in all handlers.
+*/
+/* Counter.create<counter_width>(starting_value); */
+global c = new Counter<<32>>(0);
+
+/*
+Arrays are a generalization of counters.
+They are an array of memory cells, all the same width,
+that can be read and updated with custom functions.
+Only one position in an array can be accessed per event handler execution.
+The interpreter implementation of a array is in Arrays.ml
+*/
+/* Array.create<array_cell_width>(number_of_array_cells); */
+
+const int sz = 5;
+const int max_idx = sz - 1;
+global sources = new Array<<32>>(sz);
+
+
+event continue (int src, int dst);
+handle continue (int src, int dst){
+	int tmp = src;
+}
+
+/*print the source stored at idx in array sources. */
+event print_stored_src(int idx);
+handle print_stored_src(int idx) {
+	int stored_src = Array.get(sources, idx);
+	if (idx == 0){
+		print_string "----stored sources----";
+	}
+	print_int (stored_src);
+	if (idx < max_idx){
+		int next_idx = idx + 1;
+		generate print_stored_src (next_idx);
+	}
+	else {
+		print_string "----end stored sources----";
+
+	}
+}
+
+/* Store the first 10 packet sources to an array.
+Once the array is full, iterate over it with another handler. */
+handle packetin (int src, int dst){
+	int cur_count = Counter.add(c, 1);
+	int index = cur_count - 1;
+	if (index < sz){
+		print_string "saving source to array at index ";
+		print_int (index);
+		/* getAndset<bit_width>(array_id, index, set_value) */
+		Array.getAndset(sources, index, src); /* we only need array.set here, but its not implemented in the interpreter. */
+	}
+	else {
+		if (index == sz) {
+			generate print_stored_src (0);
+		}
+	}
+	generate continue(src, dst);
+}

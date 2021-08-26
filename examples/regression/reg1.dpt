@@ -1,0 +1,19 @@
+type foo = {
+  int foo1;
+  Array.t<<1>> foo2;
+}
+
+constr foo mk_foo(int x) = {
+  foo1 = x;
+  foo2 = Array.create(1);
+};
+
+type bar = {
+  foo bar1;
+  foo bar2;
+}
+
+constr bar mk_bar(int x) = {
+  bar1 = mk_foo(x);
+  bar2 = mk_foo(x);
+};

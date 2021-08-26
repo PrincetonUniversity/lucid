@@ -1,0 +1,3 @@
+---pipe_stats.csv log---
+table_id,stage_num,num_actions,num_ops,num_rules,num_cols
+dpt_1_merged_tbl,0,3,2,3,1

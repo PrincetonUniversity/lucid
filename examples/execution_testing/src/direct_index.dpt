@@ -1,0 +1,16 @@
+/* Accessing arrays with a direct index */
+
+entry event ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos);
+exit event ip_out (int<<1>> drop, int<<9>> egr_port);
+
+
+global Array.t<<32>> counters = Array.create(1024);
+memop incr(int memval, int incrval) {
+    return memval + incrval;
+}
+
+handle ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos) {
+    int idx = (int<<32>>) igr_port; 
+    int count = Array.update(counters, idx, incr, 1, incr, 1);
+    generate ip_out (0, igr_port);
+}

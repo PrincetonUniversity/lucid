@@ -5,7 +5,11 @@ type config =
   ; mutable verbose_types : bool (** Print out extra typing information *)
   ; mutable show_tvar_links : bool
         (** Print out a little more typing information *)
+  ; mutable show_constraints : bool
   ; mutable show_queries : bool
+        (* Try to print out record types using the user-defined name *)
+  ; mutable use_type_names : bool
+  ; mutable show_all_effects : bool (* Show effects even for non-global types *)
   ; mutable spec_file : string (** Path to an interpreter specification file *)
   }
 
@@ -18,6 +22,9 @@ let default () =
   ; verbose_types = false
   ; show_tvar_links = false
   ; show_queries = false
+  ; show_constraints = false
+  ; use_type_names = true
+  ; show_all_effects = false
   ; spec_file = ""
   }
 ;;
@@ -36,7 +43,15 @@ let parse () =
     set_types ();
     set_tvars ()
   in
+  let set_constraints () = cfg.show_constraints <- true in
   let set_queries () = cfg.show_queries <- true in
+  let set_type_names () = cfg.use_type_names <- false in
+  let set_all_effects () = cfg.show_all_effects <- true in
+  let really_print_all () =
+    print_all ();
+    set_type_names ();
+    set_all_effects ()
+  in
   let speclist =
     [ ( "--verbose"
       , Arg.Unit set_verbose
@@ -57,10 +72,24 @@ let parse () =
       , Arg.Unit set_queries
       , "If true, print out SMT queries made during typechecking. Not enabled \
          by -m." )
+    ; ( "--no-tynames"
+      , Arg.Unit set_type_names
+      , "Normally the printer tries to print user types using the user-defined \
+         name for the type. This disables that." )
+    ; ( "--all-effects"
+      , Arg.Unit set_all_effects
+      , "Show effects for all types, even non-global ones." )
+    ; ( "-mm"
+      , Arg.Unit really_print_all
+      , "Equivalent to -m --no-tynames --all-effects" )
     ; ( "-q"
       , Arg.Unit set_queries
       , "If true, print out SMT queries made during typechecking. Not enabled \
-         by -m." ) ]
+         by -m." )
+    ; ( "-c"
+      , Arg.Unit set_constraints
+      , "If true, print out each set of constraints we try to solve, but not \
+         the SMT query itself. Not enabled by -m." ) ]
   in
   let target_filename = ref "" in
   let usage_msg = "Lucid command line. Options available:" in

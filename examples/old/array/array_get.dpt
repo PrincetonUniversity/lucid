@@ -1,0 +1,12 @@
+global arr = new Array<<32>>(1024);
+
+handle packetin (int<<32>> src, int<<32>> dst){ 
+	generate setArray (src);
+	if (src == 1){
+		dst = Array.get(arr, 0);
+	}
+}
+
+handle setArray (int cur_ts) {
+	Array.set(arr, 0, cur_ts);
+}

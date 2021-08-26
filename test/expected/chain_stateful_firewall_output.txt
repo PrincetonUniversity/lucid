@@ -1,10 +1,15 @@
 dpt: Parsing ...
 Processing examples/interp_tests/chain_stateful_firewall.dpt
+-------Eliminating type aliases 1---------
+-------Checking well-formedness---------
 ---------typing---------
 ---------Making returns explicit-------------
 -----------renaming-----------
 -------Eliminating modules---------
------------inlining-----------
+-------Eliminating type aliases 2---------
+-------Inlining size declarations---------
+---------Eliminating events with global arguments----------
+-----------inlining functions-----------
 ---------------typing again-------------
 ------------Checking entry handlers---------------
 
@@ -15,56 +20,55 @@ In examples/interp_tests/chain_stateful_firewall.dpt:
 
 warning: examples/interp_tests/chain_stateful_firewall.dpt: Conditional generation of potential non-exit event in entry handler.
 
----------Eliminating events with global arguments----------
--------Eliminating user global types-------
+-------Eliminating records-------
+-------Eliminating vectors-------
+-------Eliminating tuples-------
 ---------------typing again-------------
 dpt: Auto-detected specification file examples/interp_tests/chain_stateful_firewall.json
 dpt: Simulating...
 dpt: Using random seed: 0
 
 t=11000000: Handling entry event packetin(10,100,0) at switch 0
-Mapped (10, 100) to index 0
-t=11000600: Handling event update_last_seen(0,11000000) at switch 0
-t=11001200: Handling event update_last_seen(0,11000000) at switch 1
-t=11001800: Handling event update_last_seen(0,11000000) at switch 2
+Mapped (10, 100) to index 3
+t=11000600: Handling event update_last_seen(3,11000000) at switch 0
+t=11001200: Handling event update_last_seen(3,11000000) at switch 1
+t=11001800: Handling event update_last_seen(3,11000000) at switch 2
 t=11100000: Handling entry event packetin(11,101,0) at switch 1
-Mapped (11, 101) to index 2
-t=11100600: Handling event update_last_seen(2,11100000) at switch 0
-t=11101200: Handling event update_last_seen(2,11100000) at switch 1
-t=11101800: Handling event update_last_seen(2,11100000) at switch 2
+Mapped (11, 101) to index 0
+t=11100600: Handling event update_last_seen(0,11100000) at switch 0
+t=11101200: Handling event update_last_seen(0,11100000) at switch 1
+t=11101800: Handling event update_last_seen(0,11100000) at switch 2
 t=11200000: Handling entry event packetin(13,103,1) at switch 0
-Mapped (103, 13) to index 3
-dropped
+Mapped (103, 13) to index 0
 t=11200000: Handling entry event packetin(13,103,1) at switch 1
-Mapped (103, 13) to index 3
-dropped
+Mapped (103, 13) to index 0
 t=11200000: Handling entry event packetin(13,103,1) at switch 2
-Mapped (103, 13) to index 3
-dropped
+Mapped (103, 13) to index 0
 t=11300000: Handling entry event packetin(101,11,1) at switch 0
-Mapped (11, 101) to index 2
+Mapped (11, 101) to index 0
 t=11300000: Handling entry event packetin(101,11,1) at switch 1
-Mapped (11, 101) to index 2
+Mapped (11, 101) to index 0
 t=11300000: Handling entry event packetin(101,11,1) at switch 2
-Mapped (11, 101) to index 2
+Mapped (11, 101) to index 0
 t=11400000: Handling entry event packetin(100,10,1) at switch 0
-Mapped (10, 100) to index 0
+Mapped (10, 100) to index 3
 t=11400000: Handling entry event packetin(100,10,1) at switch 1
-Mapped (10, 100) to index 0
+Mapped (10, 100) to index 3
 t=11400000: Handling entry event packetin(100,10,1) at switch 2
-Mapped (10, 100) to index 0
+Mapped (10, 100) to index 3
 dpt: Final State:
 
 Switch 0 : {
 
  Pipeline : [
-    0 : [11000000u32; 0u32; 11100000u32; 0u32]
+    0 : [11100000u32; 0u32; 0u32; 11000000u32]
   ]
 
  Events :   [ ]
 
  Exits :    [
     continue(100) at t=11000000
+    continue(103) at t=11200000
     continue(11) at t=11300000
     continue(10) at t=11400000
   ]
@@ -76,13 +80,14 @@ Switch 0 : {
 Switch 1 : {
 
  Pipeline : [
-    0 : [11000000u32; 0u32; 11100000u32; 0u32]
+    0 : [11100000u32; 0u32; 0u32; 11000000u32]
   ]
 
  Events :   [ ]
 
  Exits :    [
     continue(101) at t=11100000
+    continue(103) at t=11200000
     continue(11) at t=11300000
     continue(10) at t=11400000
   ]
@@ -94,12 +99,13 @@ Switch 1 : {
 Switch 2 : {
 
  Pipeline : [
-    0 : [11000000u32; 0u32; 11100000u32; 0u32]
+    0 : [11100000u32; 0u32; 0u32; 11000000u32]
   ]
 
  Events :   [ ]
 
  Exits :    [
+    continue(103) at t=11200000
     continue(11) at t=11300000
     continue(10) at t=11400000
   ]

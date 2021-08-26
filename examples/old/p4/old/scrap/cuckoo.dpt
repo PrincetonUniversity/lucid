@@ -1,0 +1,135 @@
+(* 
+   A program that uses a cuckoo hash table to 
+   calculate how long each source has been active for.  
+*)
+
+int stage_sz = 512;
+(* key and value arrays. *)
+Array keys_1 = Array.create(stage_sz);
+Array vals_1 = Array.create(stage_sz);
+
+Array keys_2 = Array.create(stage_sz);
+Array vals_2 = Array.create(stage_sz);
+
+(* The stash stores a temporarily displaced key, 
+   which may occur during an insert. *)
+Array key_stash = Array.create(1);
+Array val_stash = Array.create(1);
+
+int NULL = 0;
+
+int SUCCESS = 0;
+int FAIL    = 1;
+
+(* lookup the time when the src was first seen. *)
+handle packetin (int src, int dst) { 
+    int cur_ts = Sys.time();
+    int start_ts = NULL;
+
+    get(src, start_ts);
+    (* the key is not in the hash table, try to insert it *)
+    if (start_ts == NULL) {
+        int insert_status = FAIL;
+        try_insert(src, cur_ts, insert_status);
+        if (insert_status == FAIL){
+             (* inform controller about the insert failure. *)
+            generate report_insert_fail(src);
+        }
+    }
+    else {
+        int duration = cur_ts - start_ts;       
+        (* do something with duration. E.g., change route once flow lasts more than 1ms. *) 
+    }
+}
+
+(* get the value at key *)
+function get(int key, int val) {
+    int h1 = hash1(key, stage_sz);
+    int h2 = hash2(key, stage_sz);
+    int loaded_key = Array.get(keys_1, h1);
+
+    if (loaded_key == key) {
+        val = Array.get(vals_1, h1);
+    }
+    else {
+        loaded_key = Array.get(keys_2, h2);
+        if (loaded_key == key) {
+            val = Array.get(vals_2, h2);
+        }
+    }
+}
+
+(* Try to start an insert. *)
+function try_insert(int key, int val, int ret_code) {
+    int stashed_key = Array.getCondset(key_stash, 0, key, ==, NULL);
+    (* we can start the insert if the stash is empty. *)    
+    if (stashed_key == NULL) {
+        Array.set(val_stash, 0, val);
+        ret_code = SUCCESS;
+        generate insert(key, val, key, 0);
+    }
+    else {
+        ret_code = FAIL;
+    }
+}
+
+handle insert(int key, int val, int first_key, int num_repeats) {
+    (* 
+        insert the (key, val) pair into the hash table. 
+        Assumes that key is not already in the table. 
+    *)
+    (* cycle tracking *)
+    if (key == first_key) {
+        num_repeats = num_repeats + 1;
+    }
+    (*  
+        When we encounter the first key that we tried to insert 3 times, 
+        we know that the installation is unlikely to succeed with the 
+        current hash functions. So we can stop here, clear the stash, 
+        and notify the controller. In a more sophisticated implementation, 
+        we could also change one of the hash functions and 
+        rehash the entire data structure. 
+        https://cs.stackexchange.com/questions/75225/cuckoo-hashing-proof-of-cycle
+    *)
+    if (num_repeats == 3) {
+        int first_key_stashed = Array.getAndset(key_stash, 0, NULL);
+        int start_ts = array.getAndset(val_stash, 0, NULL);
+        (* at this point, key == first_key == first_key_stashed *)
+        generate report_insert_fail(key);
+    }
+    else {
+        int h = hash1(key, stage_sz);
+        int victim_key = Array.getAndset(keys_1, h, key);
+        int victim_val = Array.getAndset(vals_1, h, val);
+        int finished = 0;
+
+        if (victim_key == NULL) {
+            (* There is no victim. We're done. *)
+            finished = 1;       
+        }
+        else {
+            (* move victim to stage 2. *)
+            h = hash2(victim_key, stage_sz);
+            victim_key = Array.getAndset(keys_2, h, victim_key);
+            victim_val = Array.getAndset(vals_2, h, victim_val);
+            if (victim_key == NULL) {
+                finished = 1;
+            }
+        }
+        (* if we're finished, we can clear the stash. *)
+        (* else, we put the victim into the stash and re-insert it. *)
+        if (finished) {
+            Array.set(key_stash, 0, NULL);
+            Array.set(val_stash, 0, NULL);
+        }
+        else {
+            Array.set(key_stash, 0, victim_key);
+            Array.set(val_stash, 0, victim_val);
+            generate insert(victim_key, victim_val, first_key, num_repeats);
+        }
+    }
+}
+
+handle report_insert_fail(int src) {
+    report_int src;
+}

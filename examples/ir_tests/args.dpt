@@ -1,0 +1,6 @@
+//setting input variables
+entry event pktin(int src_ip, int dst_ip);
+
+handle pktin(int src_ip, int dst_ip) {
+    src_ip = src_ip;
+}

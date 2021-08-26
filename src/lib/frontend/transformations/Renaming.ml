@@ -14,7 +14,6 @@ type env =
   ; size_map : Cid.t CidMap.t
   ; ty_map : Cid.t CidMap.t
   ; active : int (* Tells us which map to do lookups in at any given point *)
-  ; in_constr : bool
   ; module_defs : KindSet.t
   }
 
@@ -23,7 +22,6 @@ let empty_env =
   ; size_map = CidMap.empty
   ; ty_map = CidMap.empty
   ; active = 0
-  ; in_constr = false
   ; module_defs = KindSet.empty
   }
 ;;
@@ -42,7 +40,7 @@ let add_module_defs m_id old_env m_env =
         | KConstr | KConst ->
           let x = CidMap.find cid m_env.var_map |> prefix in
           { acc with var_map = CidMap.add (prefix cid) x acc.var_map }
-        | KGlobalTy ->
+        | KUserTy ->
           let x = CidMap.find cid m_env.ty_map |> prefix in
           { acc with ty_map = CidMap.add (prefix cid) x acc.ty_map }
         | KHandler -> acc)
@@ -114,7 +112,7 @@ let rename prog =
         | _ ->
           env
             <- { env with
-                 module_defs = KindSet.add (KGlobalTy, x) env.module_defs
+                 module_defs = KindSet.add (KUserTy, x) env.module_defs
                ; ty_map = CidMap.add x new_x env.ty_map
                });
         new_x
@@ -149,12 +147,12 @@ let rename prog =
         env <- { env with active = old.active };
         ret
 
-      method! visit_global_ty dummy (cid, sizes) =
+      method! visit_TName dummy cid sizes b =
         let old = env in
         self#activate_ty ();
         let cid = self#lookup cid in
         env <- { env with active = old.active };
-        cid, List.map (self#visit_size dummy) sizes
+        TName (cid, List.map (self#visit_size dummy) sizes, b)
 
       method! visit_size dummy size =
         let old = env in
@@ -170,11 +168,11 @@ let rename prog =
       method! visit_cid _ c = self#lookup c
 
       (*** Places we bind new variables ***)
-      method! visit_SLocal dummy x ty body =
-        let replaced_body = self#visit_exp dummy body in
+      method! visit_SLocal dummy x ty e =
+        let replaced_e = self#visit_exp dummy e in
         let new_ty = self#visit_ty dummy ty in
         let new_x = self#freshen_var x in
-        SLocal (new_x, new_ty, replaced_body)
+        SLocal (new_x, new_ty, replaced_e)
 
       method! visit_body dummy (params, body) =
         let old_env = env in
@@ -192,12 +190,11 @@ let rename prog =
       method! visit_d dummy d =
         (* print_endline @@ "Working on:" ^ Printing.d_to_string d; *)
         match d with
-        | DGlobal (x, gty, cid, args) ->
-          let replaced_gty = self#visit_global_ty dummy gty in
-          let replaced_cid = self#visit_cid dummy cid in
-          let replaced_args = List.map (self#visit_exp dummy) args in
-          let new_x = if env.in_constr then x else self#freshen_var x in
-          DGlobal (new_x, replaced_gty, replaced_cid, replaced_args)
+        | DGlobal (x, ty, e) ->
+          let replaced_ty = self#visit_ty dummy ty in
+          let replaced_e = self#visit_exp dummy e in
+          let new_x = self#freshen_var x in
+          DGlobal (new_x, replaced_ty, replaced_e)
         | DSize (x, size) ->
           let replaced_size = self#visit_size dummy size in
           let new_x = self#freshen_size x in
@@ -233,11 +230,11 @@ let rename prog =
           env <- old_env;
           let new_f = self#freshen_var f in
           DFun (new_f, new_rty, new_cspecs, (new_params, new_body))
-        | DConst (x, ty, exp) ->
+        | ConstVar (x, ty, exp) ->
           let new_exp = self#visit_exp dummy exp in
           let new_ty = self#visit_ty dummy ty in
-          let new_x = if env.in_constr then x else self#freshen_var x in
-          DConst (new_x, new_ty, new_exp)
+          let new_x = self#freshen_var x in
+          ConstVar (new_x, new_ty, new_exp)
         | DExtern (x, ty) ->
           let new_ty = self#visit_ty dummy ty in
           let new_x = self#freshen_var x in
@@ -246,33 +243,23 @@ let rename prog =
           let new_es = List.map (self#visit_exp dummy) es in
           let new_x = self#freshen_var x in
           DGroup (new_x, new_es)
-        | DGlobalTy (id, ids, params) ->
-          let orig_env = env in
-          let new_ids = List.map self#freshen_size ids in
-          let new_params =
-            List.map (fun (id, ty) -> id, self#visit_ty dummy ty) params
-          in
-          env <- orig_env;
+        | DUserTy (id, sizes, ty) ->
+          let new_sizes = List.map (self#visit_size ()) sizes in
+          let new_ty = self#visit_ty () ty in
           let new_id = self#freshen_ty id in
-          DGlobalTy (new_id, new_ids, new_params)
-        | DConstr { constr_id; ty_id; size_args; params; body } ->
+          DUserTy (new_id, new_sizes, new_ty)
+        | ConstVarr (id, ret_ty, params, e) ->
           let orig_env = env in
-          let size_args = List.map self#freshen_size size_args in
           let params =
             List.map
               (fun (id, ty) -> self#freshen_var id, self#visit_ty dummy ty)
               params
           in
-          env <- { env with in_constr = true };
-          let body = self#visit_decls dummy body in
+          let e = self#visit_exp dummy e in
           env <- orig_env;
-          env <- { env with in_constr = false };
-          (* Not sure why this is needed but it is *)
-          self#activate_ty ();
-          let ty_id = self#lookup ty_id in
-          self#activate_var ();
-          let constr_id = self#freshen_var constr_id in
-          DConstr { constr_id; ty_id; size_args; params; body }
+          let ret_ty = self#visit_ty () ret_ty in
+          let id = self#freshen_var id in
+          ConstVarr (id, ret_ty, params, e)
         | DModule (id, intf, body) ->
           let orig_env = env in
           env <- { env with module_defs = KindSet.empty };
@@ -292,41 +279,41 @@ let rename prog =
         env <- orig_env;
         SIf (test', left', right')
 
-      (*** Special Cases ***)
-      method! visit_TFun dummy func =
-        let orig_env = env in
-        let new_arg_tys = List.map (self#visit_raw_ty dummy) func.arg_tys in
-        let new_ret_ty = self#visit_raw_ty dummy func.ret_ty in
-        env <- orig_env;
-        TFun { func with arg_tys = new_arg_tys; ret_ty = new_ret_ty }
+      method! visit_EComp dummy e i k =
+        let old_env = env in
+        let k = self#visit_size dummy k in
+        let i = self#freshen_size i in
+        let e = self#visit_exp dummy e in
+        env <- old_env;
+        EComp (e, i, k)
 
+      method! visit_SLoop dummy s i k =
+        let old_env = env in
+        let k = self#visit_size dummy k in
+        let i = self#freshen_size i in
+        let s = self#visit_statement dummy s in
+        env <- old_env;
+        SLoop (s, i, k)
+
+      (*** Special Cases ***)
       method! visit_params dummy params =
         (* Don't rename parameters unless they're part of a body declaration *)
         List.map (fun (id, ty) -> id, self#visit_ty dummy ty) params
 
       (* Declaration-like things where we don't rename parts of them *)
-      method! visit_InGlobalTy dummy id size_ids params =
-        let orig_env = env in
+      method! visit_InTy dummy id sizes tyo b =
         self#activate_ty ();
         let id = self#visit_id dummy id in
-        self#activate_size ();
-        let size_ids = List.map self#freshen_size size_ids in
         self#activate_var ();
-        let params = self#visit_params dummy params in
-        env <- orig_env;
-        InGlobalTy (id, size_ids, params)
+        let sizes = List.map (self#visit_size ()) sizes in
+        let tyo = Option.map (self#visit_ty dummy) tyo in
+        InTy (id, sizes, tyo, b)
 
-      method! visit_InConstr dummy id ret_id size_ids params =
-        let orig_env = env in
+      method! visit_InConstr dummy id ret_ty params =
         let id = self#visit_id dummy id in
-        self#activate_ty ();
-        let ret_id = self#visit_cid dummy ret_id in
-        self#activate_size ();
-        let size_ids = List.map self#freshen_size size_ids in
-        self#activate_var ();
+        let ret_ty = self#visit_ty dummy ret_ty in
         let params = self#visit_params dummy params in
-        env <- orig_env;
-        InConstr (id, ret_id, size_ids, params)
+        InConstr (id, ret_ty, params)
 
       method! visit_InModule dummy id intf =
         InModule (id, self#visit_interface dummy intf)
@@ -355,6 +342,10 @@ let rename prog =
         let new_cspecs = List.map (self#visit_constr_spec dummy) cspecs in
         env <- old_env;
         InEvent (new_id, new_cspecs, new_params)
+
+      method! visit_FIndex dummy id eff =
+        (* Don't rename the ids here, typing takes care of that *)
+        FIndex (id, self#visit_effect dummy eff)
 
       (* Ids inside tqvars aren't variable IDs and shouldn't be renamed *)
       method! visit_TQVar dummy tqv =

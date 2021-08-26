@@ -1,0 +1,49 @@
+/*
+Basic DPT primitives: events, handlers, and local variables
+*/
+
+global Array.t<<32>> x_arr = Array.create(1024);
+
+entry event pktin (int src, int dst);
+exit event continue (int src, int dst);
+event count_to_10 (int count);
+
+memop whatever(int stored, int updated) {
+    if ((stored + updated) > 10){
+        return stored + 1;
+    } else {
+        return updated + 3;
+    }
+}
+
+handle pktin (int src, int dst) {
+    int b = 1;
+    b = Array.getm(x_arr, 0, whatever, 1);
+    int x = src;
+    int<<32>> something = x+1;
+    // generate count_to_10 (0); // Dangerous, because this happens at linerate
+    // event myev = continue (src, dst);
+    // generate myev;
+}
+
+handle count_to_10 (int count) {
+    int x = count;
+    int<<32>> next_count = count; 
+    next_count = count + 1;
+    match count with
+        | 10 -> {
+            Array.set(x_arr, 0, 1);
+        }
+        | _ -> {            
+            int z = 1;
+            
+            // generate count_to_10(next_count);
+        }
+
+    // if (count == 10){
+    //  Array.set(x_arr, 0, 1);
+    // }
+    // else {
+    //  generate count_to_10(next_count);
+    // }
+}

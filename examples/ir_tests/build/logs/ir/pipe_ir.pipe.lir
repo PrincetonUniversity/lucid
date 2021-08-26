@@ -1,0 +1,168 @@
+---- GLOBAL OBJECTS ----
+bit<32> x_114;
+    
+    bit<32> y_115;
+    
+    
+    ---- STAGE OBJECTS ----
+---- stage ----
+    ----table group objects --------
+    @pragma stage 0
+        table dpt_1_merged_tbl {
+            key = {
+                md.dptMeta.eventType : ternary;
+            }
+            actions = {
+                dpt_363_merged_acn_1_acn_0_opstmt;
+                dpt_1_merged_acn;
+            }
+            const entries = {
+                0 : dpt_363_merged_acn_1_acn_0_opstmt();
+                _ : dpt_1_merged_acn();
+            }
+            
+        }
+        
+        action dpt_363_merged_acn_1_acn_0_opstmt( ){
+            dpt_363_alu_0_opstmt();
+            //next tables: [dpt_364_tbl_0_opstmt]
+            
+        }
+        
+        action dpt_1_merged_acn( ){
+            //next tables: []
+            
+        }
+        
+        action dpt_363_alu_0_opstmt( ){
+            x_114 = md.pktin.src_ip >> 10;
+            
+        }
+        ---- original objects ----
+    // Stage not set by dptc
+        table dpt_363_tbl_0_opstmt {
+            key = {
+                md.dptMeta.eventType : ternary;
+            }
+            actions = {
+                dpt_363_acn_0_opstmt;
+            }
+            const default_action = dpt_363_acn_0_opstmt();
+            
+        }
+        
+        action dpt_363_acn_0_opstmt( ){
+            dpt_363_alu_0_opstmt();
+            //next tables: [dpt_364_tbl_0_opstmt]
+            
+        }
+        
+        action dpt_363_alu_0_opstmt( ){
+            x_114 = md.pktin.src_ip >> 10;
+            
+        }
+        
+        // Stage not set by dptc
+        table dpt_363_tbl_0_opstmt {
+            key = {
+                md.dptMeta.eventType : ternary;
+            }
+            actions = {
+                dpt_363_acn_0_opstmt;
+            }
+            const default_action = dpt_363_acn_0_opstmt();
+            
+        }
+        
+        action dpt_363_acn_0_opstmt( ){
+            dpt_363_alu_0_opstmt();
+            //next tables: [dpt_364_tbl_0_opstmt]
+            
+        }
+        
+        action dpt_363_alu_0_opstmt( ){
+            x_114 = md.pktin.src_ip >> 10;
+            
+        }
+        ---- end stage ----
+
+---- stage ----
+    ----table group objects --------
+    @pragma stage 1
+        table dpt_2_merged_tbl {
+            key = {
+                md.dptMeta.eventType : ternary;
+            }
+            actions = {
+                dpt_364_merged_acn_2_acn_0_opstmt;
+                dpt_2_merged_acn;
+            }
+            const entries = {
+                0 : dpt_364_merged_acn_2_acn_0_opstmt();
+                _ : dpt_2_merged_acn();
+            }
+            
+        }
+        
+        action dpt_364_merged_acn_2_acn_0_opstmt( ){
+            dpt_364_alu_0_opstmt();
+            //next tables: []
+            
+        }
+        
+        action dpt_2_merged_acn( ){
+            //next tables: []
+            
+        }
+        
+        action dpt_364_alu_0_opstmt( ){
+            y_115 = x_114 << 10;
+            
+        }
+        ---- original objects ----
+    // Stage not set by dptc
+        table dpt_364_tbl_0_opstmt {
+            key = {
+                md.dptMeta.eventType : ternary;
+            }
+            actions = {
+                dpt_364_acn_0_opstmt;
+            }
+            const default_action = dpt_364_acn_0_opstmt();
+            
+        }
+        
+        action dpt_364_acn_0_opstmt( ){
+            dpt_364_alu_0_opstmt();
+            //next tables: []
+            
+        }
+        
+        action dpt_364_alu_0_opstmt( ){
+            y_115 = x_114 << 10;
+            
+        }
+        
+        // Stage not set by dptc
+        table dpt_364_tbl_0_opstmt {
+            key = {
+                md.dptMeta.eventType : ternary;
+            }
+            actions = {
+                dpt_364_acn_0_opstmt;
+            }
+            const default_action = dpt_364_acn_0_opstmt();
+            
+        }
+        
+        action dpt_364_acn_0_opstmt( ){
+            dpt_364_alu_0_opstmt();
+            //next tables: []
+            
+        }
+        
+        action dpt_364_alu_0_opstmt( ){
+            y_115 = x_114 << 10;
+            
+        }
+        ---- end stage ----

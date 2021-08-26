@@ -31,13 +31,14 @@ let event_delay_fun = delay_fun event_delay_error
 
 let delay_ty b =
   let eff = FVar (QVar (Id.fresh "eff")) in
-  TFun
-    { arg_tys = [TEvent b; TInt (IConst 32)]
-    ; ret_ty = TEvent b
-    ; start_eff = eff
-    ; end_eff = eff
-    ; constraints = ref []
-    }
+  ty
+  @@ TFun
+       { arg_tys = [ty @@ TEvent b; ty @@ TInt (IConst 32)]
+       ; ret_ty = ty @@ TEvent b
+       ; start_eff = eff
+       ; end_eff = eff
+       ; constraints = ref []
+       }
 ;;
 
 let event_delay_ty = delay_ty false
@@ -80,13 +81,14 @@ let event_sslocate_fun = locate_fun event_sslocate_error
 let locate_ty in_b out_b =
   let eff = FVar (QVar (Id.fresh "eff")) in
   let argty = if out_b then TGroup else TInt (IConst 32) in
-  TFun
-    { arg_tys = [TEvent in_b; argty]
-    ; ret_ty = TEvent out_b
-    ; start_eff = eff
-    ; end_eff = eff
-    ; constraints = ref []
-    }
+  ty
+  @@ TFun
+       { arg_tys = [ty @@ TEvent in_b; ty argty]
+       ; ret_ty = ty @@ TEvent out_b
+       ; start_eff = eff
+       ; end_eff = eff
+       ; constraints = ref []
+       }
 ;;
 
 let event_sslocate_ty = locate_ty false false

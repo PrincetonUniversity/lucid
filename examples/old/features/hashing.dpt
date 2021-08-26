@@ -1,0 +1,6 @@
+/* hash functions example */ 
+handle packetin (int<32> src, int<32> dst) {
+    int cur_ts = Sys.time(1);
+	int<32> h = Sys.hash<32>(238501, src, cur_ts);
+	dst = h;
+}

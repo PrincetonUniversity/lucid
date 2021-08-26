@@ -1,0 +1,54 @@
+include "BloomFilterTimeout.dpt"
+/*
+A distributed probabilistic stateful firewall implemented using a Bloom filter,
+with timeouts.
+
+Very similar to chain_prob_stateful_firewall, but uses a different bloom filter
+module
+*/
+
+// Implement a Bloom filter with m = 16, k = 2
+const int NUM_REGISTERS = 16;
+const int[2] HASH_SEEDS = [22 ; 33];
+
+const int TIMEOUT = 1000;
+const int EMPTY_PERIOD = 50;
+/* Information about the chain. */
+/* I want this to read "extern location foo;" but we don't have that syntax yet */
+const int head = 0;
+const int tail = 0;
+const int succ = 0;
+const int self = 0;
+
+
+global BloomFilterTimeout.t<<4, 2>> filter = BloomFilterTimeout.create(NUM_REGISTERS, HASH_SEEDS, TIMEOUT, EMPTY_PERIOD);
+
+// Request_X is for packets coming from inside, reponse_x is for packets coming from outside
+// entry events
+entry event request_packet (int client_ip, int server_ip);
+entry event response_packet (int server_ip, int client_ip);
+// exit events
+exit event request_continue (int src_ip, int dst_ip);
+exit event response_continue (int src_ip, int dst_ip);
+
+event add_to_firewall(int[2] args) {
+  BloomFilterTimeout.add_to_filter(filter, args);
+  if (self != tail) {
+    generate Event.sslocate(add_to_firewall(args), succ);
+  }
+}
+
+handle request_packet(int client_ip, int server_ip) {
+  bool in_filter = BloomFilterTimeout.in_filter(filter, [client_ip; server_ip]);
+  if (in_filter == false) {
+    generate Event.sslocate(add_to_firewall([client_ip; server_ip]), head);
+  }
+  generate request_continue(client_ip, server_ip);
+}
+
+handle response_packet(int server_ip, int client_ip) {
+  bool in_filter = BloomFilterTimeout.in_filter(filter, [client_ip; server_ip]);
+  if (in_filter) {
+    generate request_continue(client_ip, client_ip);
+  }
+}

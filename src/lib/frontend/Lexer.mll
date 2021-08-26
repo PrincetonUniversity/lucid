@@ -7,7 +7,7 @@
   exception Eof
 
   let position lexbuf =
-    {fname=(lexbuf.Lexing.lex_start_p).pos_fname; start=Lexing.lexeme_start lexbuf; finish=Lexing.lexeme_end lexbuf}
+    {fname=(lexbuf.Lexing.lex_start_p).pos_fname; start=Lexing.lexeme_start lexbuf; finish=Lexing.lexeme_end lexbuf; spid=0}
 
   let incr_linenum lexbuf =
     let pos = lexbuf.Lexing.lex_curr_p in
@@ -67,6 +67,8 @@ rule token = parse
   | "constr"          { CONSTR (position lexbuf) }
   | "module"          { MODULE (position lexbuf) }
   | "end"             { END (position lexbuf) }
+  | "for"             { FOR (position lexbuf) }
+  | "size_to_int"     { SIZECAST (position lexbuf) }
   | id as s           { ID (position lexbuf, Id.create s) }
   | "'"(id as s)      { QID (position lexbuf, Id.create s) }
   | num as n          { NUM (position lexbuf, Z.of_string n) }

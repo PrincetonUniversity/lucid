@@ -1,0 +1,23 @@
+    int h1 = hash_base + 10398247; (* a really simple hash function. *)
+    int h2 = hash_base + 1295981879; (* a really simple hash function. *)
+
+
+(* insert a (src, dst) tuple into the table. *)
+handle insert (int src, int dst, int first_src, int first_dst, int retry_ct) {
+    int cur_ts = Sys.time(1);
+    int hash_base = src + dst;
+
+    (* insert the key into stage 1, replacing whatever was there before. *)
+    int stored_src = Array.getAndset(src_1, hash_base, src);
+    int stored_dst = Array.getAndset(dst_1, hash_base, dst);
+    int stored_ts  = Array.getAndset(ts_1, hash_base, cur_ts);
+    (* if we evicted another entry, move that entry to stage 2.*)
+    if (stored_src != 0) {
+        stored_src = Array.getAndset(src_2, hash_base, stored_src);
+        stored_dst = Array.getAndset(dst_2, hash_base, stored_dst);
+        stored_ts = Array.getAndset(ts_2, hash_base, stored_ts);
+    }
+
+    (* finally, if we evicted an entry from stage 2, move that one to the stash and re-insert. *)
+    generate insert(stored_src, stored_dst, first_src, first_dst, retry_ct);
+}

@@ -105,11 +105,21 @@ let rec interp_exp (nst : State.network_state) swid locals e : State.ival =
       let hashed = Legacy.Hashtbl.seeded_hash (Integer.to_int seed) tl in
       V (vint hashed (interp_size nst size))
     | _ -> failwith "Wrong arguments to hash operation")
-  | EProj _ | ERecord _ ->
+  | EProj _ | ERecord _ | EWith _ ->
     Console.error_position
       e.espan
       "Record expressions and projection operators should be eliminated before \
        interpretation"
+  | EComp _ | EIndex _ | EVector _ ->
+    Console.error_position
+      e.espan
+      "Vector expressions should be eliminated before interpretation"
+  | ETuple _ ->
+    Console.error_position
+      e.espan
+      "Tuple expressions should be eliminated before interpretation"
+  | ESizeCast _ ->
+    Console.error_position e.espan "Should be eliminated before interpretation"
 
 and interp_exps nst swid locals es : State.ival list =
   List.map (interp_exp nst swid locals) es
@@ -224,13 +234,28 @@ let rec interp_statement nst swid locals s =
       | _ -> error "Match statement did not match any branch!"
     in
     interp_s (snd first_match)
+  | SLoop _ -> error "Loops should be eliminated before interpretation"
 ;;
 
-let interp_dglobal (nst : State.network_state) swid id gty args =
+let interp_dglobal (nst : State.network_state) swid id ty e =
+  (* FIXME: This functions is probably more complicated than it needs to be.
+     We can probably do this a lot better by writing the Array.create function
+     in Arrays.ml (and similarly for counters), then just calling that. But I
+     don't want to muck around with the interpreter for now, so I'm sticking to
+     quick fixes. *)
   let st = nst.switches.(swid) in
   let p = st.pipeline in
   let idx = Pipeline.length p in
-  let gty_name, gty_sizes = Cid.names (fst gty), snd gty in
+  let gty_name, gty_sizes =
+    match TyTQVar.strip_links ty.raw_ty with
+    | TName (cid, sizes, _) -> Cid.names cid, sizes
+    | _ -> failwith "Bad DGLobal"
+  in
+  let args =
+    match e.e with
+    | ECall (_, args) -> args
+    | _ -> failwith "Bad constructor"
+  in
   let new_p =
     match gty_name, gty_sizes, args with
     | ["Array"; "t"], [size], [e] ->
@@ -270,7 +295,7 @@ let interp_decl (nst : State.network_state) swid d =
   (* print_endline @@ "Interping decl: " ^ Printing.decl_to_string d; *)
   let interp_exp = interp_exp nst swid Env.empty in
   match d.d with
-  | DGlobal (id, gty, _, args) -> interp_dglobal nst swid id gty args
+  | DGlobal (id, ty, e) -> interp_dglobal nst swid id ty e
   | DHandler (id, (params, body)) ->
     let f nst swid event =
       let this_event = vevent { event with edelay = 0; elocations = [] } in
@@ -335,7 +360,7 @@ let interp_decl (nst : State.network_state) swid d =
     in
     State.add_global swid (Cid.id id) (State.F f) nst;
     nst
-  | DConst (x, _, e) ->
+  | ConstVar (x, _, e) ->
     let v = interp_exp e in
     State.add_global swid (Id x) v nst;
     nst
@@ -348,7 +373,7 @@ let interp_decl (nst : State.network_state) swid d =
   | DExtern _ | DSize _ ->
     failwith
       "Extern and size declarations should be handled during preprocessing"
-  | DGlobalTy _ | DConstr _ | DModule _ -> failwith "Should be eliminated"
+  | DUserTy _ | ConstVarr _ | DModule _ -> failwith "Should be eliminated"
 ;;
 
 let process_decls nst ds =

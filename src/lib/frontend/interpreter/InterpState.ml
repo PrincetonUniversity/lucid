@@ -55,7 +55,7 @@ module State = struct
   type global_fun =
     { cid : Cid.t
     ; body : code
-    ; ty : Syntax.raw_ty
+    ; ty : ty
     }
 
   let copy_state st =

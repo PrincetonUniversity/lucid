@@ -1,0 +1,8 @@
+type foo = { int x; int y; bool b; }
+
+event bar(foo foo) {
+  int z = foo#x + foo#y;
+  if (foo#b) {
+    generate bar(foo);
+  }
+}

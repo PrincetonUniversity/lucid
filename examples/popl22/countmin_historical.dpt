@@ -1,0 +1,34 @@
+include "CountMinSketchTimeout.dpt"
+/*
+Use three rotating count-min sketches to measure the frequency of events
+*/
+
+const int<<1>> TRUE = 1;
+const int<<1>> FALSE = 0;
+const int T_INTERVAL = 1000; // How long between rotations.
+const int SLOTS = 1024; // Size of each CMS
+
+const int[2] hash_seeds = [10398247; 1295981879];
+
+type CMS = CMSTimeout.t<<32, 10, 2>>
+
+global CMS sketch = CMSTimeout.create(SLOTS, hash_seeds, T_INTERVAL);
+
+// measure count.
+entry event pktin(int src, int dst);
+entry event query(int src, int dst, int response_loc);
+
+exit event forward(int src, int dst);
+exit event query_response(int src, int dst, int val);
+
+// packet in is dead simple: just write to the active and warming up sketches.
+handle pktin(int src, int dst) {
+  CMSTimeout.add(sketch, [src; dst]);
+  // Send the packet on its way
+  generate forward(src, dst);
+}
+
+handle query(int src, int dst, int response_loc) {
+  auto val = CMSTimeout.query(sketch, [src; dst]);
+  generate Event.sslocate(query_response(src, dst, val), response_loc);
+}

@@ -1,0 +1,89 @@
+// TurboFlow (eurosys 18') is a telemetry system that
+// measures flow statistics in the data plane,
+// using arrays as a cache.
+
+event packet_in (int<<32>> src, int<<32>> dst, int<<32>> inport);
+event packet_out (int<<32>> src, int<<32>> dst, int<<32>> outport);
+event raw_in (int<<32>> inport);
+event raw_out (int<<32>> outport);
+event flow_record (int<<32>> src, int<<32>> dst, int<<32>> pkt_ct);
+
+// Simple forwarding.
+const int p1 = 0;
+const int p2 = 1;
+fun int forward(int inport) {
+	if (inport == p1) {
+		return p2;
+	}
+	else {
+		return p1;
+	}
+}
+
+
+// TurboFlow module.
+// Measure the packet counts of flows defined
+// by (src, dst) pair.
+
+const int cache_sz = 1024;
+const int hash_width = 10;
+global src_array = new Array<<32>>(cache_sz);
+global dst_array = new Array<<32>>(cache_sz);
+global ct_array  = new Array<<32>>(cache_sz);
+
+memop fset(int stored_val, int new_val) {
+	return new_val;
+}
+memop fget(int stored_val, int new_val){
+	return stored_val;
+}
+
+memop fincr_by_n(int stored_val, int n){
+	return stored_val + n;
+}
+memop freset(int stored_val, int init_val){
+	return init_val;
+}
+fun void turboflow(int<<32>> src, int<<32>> dst){
+	int<<10>> idx = hash<<10>>(240821, src, dst);
+	// Update old value.
+	int old_src = Array.update(src_array, idx, fget, 0, fset, src);
+	int old_dst = Array.update(dst_array, idx, fget, 0, fset, dst);
+	int src_diff = old_src - src;
+	int dst_diff = old_dst - dst;
+	int old_ct = 0;
+	int is_eviction = 0;
+	// no collision -- update counter
+	if (src_diff == 0 && dst_diff == 0) {
+		Array.update(ct_array, idx, fget, 0, fincr_by_n, 1);
+	}
+	// collision -- reset counter and get old count.
+	else {
+		old_ct = Array.update(ct_array, idx, fincr_by_n, 0, freset, 1);
+		is_eviction = 1;
+		if (old_ct > 0){
+			generate flow_record(old_src, old_dst, old_ct);
+		}
+	}
+	return is_eviction;
+}
+handle packet_in (int<<32>> src, int<<32>> dst, int<<32>> inport) {
+	// TurboFlow
+	int is_eviction = turboflow(src, dst);
+
+	// Forwarding
+	int outport = forward(inport);
+	generate packet_out(src, dst, outport);
+}
+
+handle raw_in (int<<32>> inport) {
+	int outport = forward(inport);
+	generate raw_out(outport);
+}
+
+handle flow_record(int<<32>> src, int<<32>> dst, int<<32>> pkt_ct) {
+	// In a complete system, flow records would be collected by
+	// the switch's CPU or a server. We can implement that once
+	// we have remote events.
+	printf("got a flow record: --source = %d, dest = %d, pkt_ct = %d--", src, dst, pkt_ct);
+}

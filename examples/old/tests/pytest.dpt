@@ -1,0 +1,58 @@
+// Test for python backend that uses
+// all core functionality:
+// Arrays, memop functions, hashing,
+// timestamps, event generation,
+// recursive events, constants.
+// last compiled  12/3/20
+
+const int array_sz = 1024;
+const int max_loop_idx = 10;
+
+event packetin (int<<32>> src, int<<32>> dst);
+event continue (int<<32>> src, int<<32>> dst);
+event loop (int<<32>> src, int<<32>> cur_idx);
+
+global src_array = new Array<<32>>(array_sz);
+
+memop incr_mem(int stored_val, int unused){
+	return stored_val + 1;
+}
+
+memop get_mem(int stored_val, int unused){
+	return stored_val;
+}
+
+fun int continue_and_getfst (int s, int d) {
+	generate continue(s, d);
+	return 1;
+}
+
+fun void print_packetin_dbg(int<<32>> src, int<<32>> dst) {
+	int<<10>> idx = hash<<10>>(240821, src, dst);
+	int last_ct = Array.update(src_array, idx, incr_mem, 1, incr_mem, 1);
+	printf("packetin #%d: src = %d", last_ct, src);
+}
+
+handle packetin (int<<32>> src, int<<32>> dst) {
+	int<<32>> newsrc = 1 + 2 + 3 + 4;
+	int<<32>> newdst = src + dst;
+	print_packetin_dbg(src, dst);
+	int fst_idx = continue_and_getfst(newsrc, newdst);
+	generate loop(src, fst_idx);
+
+}
+
+fun void print_loop_dbg(int src, int cur_idx) {
+	printf("loop: src = %d, cur_idx = %d", src, cur_idx);
+}
+
+handle loop (int<<32>> src, int<<32>> cur_idx) {
+	print_loop_dbg(src, cur_idx);
+	int next_id = cur_idx + 1;
+	if (cur_idx > max_loop_idx) {
+		printf("loop: cur_idx is over %d", max_loop_idx);
+	}
+	else {
+		generate loop(src, next_id);
+	}
+}

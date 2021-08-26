@@ -1,0 +1,42 @@
+include "Memops.dpt"
+
+// A module implementing an Array with automatic bounds checking
+module SafeArray {
+
+  type t<<'a>> = {
+    Array.t<<'a>> arr;
+    int sz;
+  }
+
+  constr t<<'a>> create(int sz) = {
+    arr = Array.create(sz);
+    sz = sz;
+  };
+
+  fun int<<'b>> update(t<<'a>> arr, int idx,
+                       memop<<'a, 'b>> getop, int<<'b>> getarg,
+                       memop<<'a, 'a>> setop, int<<'a>> setarg)
+  {
+    if (idx >= 0 && idx < arr#sz) {
+      return Array.update(arr#arr, idx, getop, getarg, setop, setarg);
+    }
+    return 0;
+  }
+
+  fun int<<'a>> get(t<<'a>> arr, int idx) {
+    return update(arr, idx, fst, 0, fst, 0);
+  }
+
+  fun void set(t<<'a>> arr, int idx, int<<'a>> v) {
+    update(arr, idx, fst, 0, snd, v);
+  }
+
+  fun int<<'b>> getm(t<<'a>> arr, int idx, memop<<'a, 'b>> getop, int<<'b>> getarg) {
+    return update(arr, idx, getop, getarg, fst, 0);
+  }
+
+  fun void setm(t<<'a>> arr, int idx, memop<<'a, 'a>> setop, int<<'a>> setarg) {
+    update(arr, idx, fst, 0, setop, setarg);
+  }
+
+}

@@ -1,0 +1,26 @@
+{
+    "program":"p4src/DPT_harness.p4",
+    "language": "p4-16", 
+    "sim": {
+    	"asicSimLog" 	: "logs/asicSim.txt",
+    	"switchdLog" 	: "logs/switchd.txt",
+    	"controlLog" 	: "logs/control.txt",
+    	"showAsic" 	  	: false,
+    	"showSwitchd" 	: false,
+    	"showControl" 	: true,
+        "platform"      : "sim",
+        "control"       : "control/control.py",
+        "trace"         : "trace.json",
+        "agents"        : ["agents/wire.py 196 196"]
+    },
+    "hw": {
+        "asicSimLog"    : "logs/asicSim.txt",
+        "switchdLog"    : "logs/switchd.txt",
+        "controlLog"    : "logs/control.txt",
+        "showAsic"      : false,
+        "showSwitchd"   : false,
+        "showControl"   : true,
+        "platform"      : "hw",
+        "control"       : "control/control.py"
+    }
+}

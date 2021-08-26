@@ -1,0 +1,87 @@
+include "Memops.dpt"
+include "CountMinSketch.dpt"
+// A combination of three rotating count-min-CMST_sketches to simulate a timeout
+module CMSTimeout : {
+  global type t<<'val_sz, 'idx_sz, 'k>>;
+  constr t<<'a, 'b, 'k>> create(int len, int['k] seeds, int period);
+
+  fun void add(t<<'a, 'b, 'k>> cms, 'any_ty any) [start <= cms; end cms];
+  fun int<<'a>> query(t<<'a, 'b, 'k>> cms, 'any_ty any) [start <= cms; end cms];
+  fun int<<'a>> add_query(t<<'a, 'b, 'k>> cms, 'any_ty any) [start <= cms; end cms];
+  event init(t<<'a, 'b, 'k>> cms) [start <= cms; end cms];
+}
+{
+  type t<<'val_sz, 'idx_sz, 'k>> = {
+    Array.t<<2>> CMST_active;
+    CountMinSketch.t<<'val_sz, 'idx_sz, 'k>>[3] CMST_sketches;
+    int<<'idx_sz>> CMST_len;
+    int CMST_period; // How long between rotations
+  }
+
+  constr t<<'a, 'b, 'k>> create(int len, int['k] seeds, int period) = {
+    CMST_active = Array.create(1);
+    CMST_sketches = [CountMinSketch.create(len, seeds) for i < 3];
+    CMST_len = (int <<'b>>) len;
+    CMST_period = period;
+  };
+
+  // Add the entry to the CM sketch
+  fun void add(t<<'a, 'b, 'c>> cms, auto any) {
+    auto tmp = Array.get(cms#CMST_active, 0);
+    match (tmp) with
+    | 0 -> { CountMinSketch.add(cms#CMST_sketches[0], any);
+             CountMinSketch.add(cms#CMST_sketches[1], any); }
+    | 1 -> { CountMinSketch.add(cms#CMST_sketches[1], any);
+             CountMinSketch.add(cms#CMST_sketches[2], any); }
+    | _ -> { CountMinSketch.add(cms#CMST_sketches[0], any);
+             CountMinSketch.add(cms#CMST_sketches[2], any); }
+  }
+
+  // Query the CMS to get the count for a particular arg
+  fun int<<'a>> query(t<<'a, 'b, 'k>> cms, auto any) {
+    auto tmp = Array.get(cms#CMST_active, 0);
+    match (tmp) with
+    | 0 -> { return CountMinSketch.query(cms#CMST_sketches[0], any); }
+    | 1 -> { return CountMinSketch.query(cms#CMST_sketches[1], any); }
+    | _ -> { return CountMinSketch.query(cms#CMST_sketches[2], any); }
+  }
+
+  event clear(t<<'a, 'b, 'k>> cms, int<<'b>> idx) {
+    auto tmp = Array.get(cms#CMST_active, 0);
+    match (tmp) with
+    | 0 -> { CountMinSketch.clear_index(cms#CMST_sketches[2], idx); }
+    | 1 -> { CountMinSketch.clear_index(cms#CMST_sketches[0], idx); }
+    | 2 -> { CountMinSketch.clear_index(cms#CMST_sketches[1], idx); }
+    if (idx < cms#CMST_len) {
+      generate clear(cms, idx+1);
+    }
+  }
+
+  fun int<<'a>> add_query(t<<'a, 'b, 'k>> cms, auto any) {
+    int<<'a>> ret = 0;
+    auto tmp = Array.get(cms#CMST_active, 0);
+    match (tmp) with
+    | 0 -> { ret = CountMinSketch.add_query(cms#CMST_sketches[0], any);
+             CountMinSketch.add(cms#CMST_sketches[1], any); }
+    | 1 -> { ret = CountMinSketch.add_query(cms#CMST_sketches[1], any);
+             CountMinSketch.add(cms#CMST_sketches[2], any); }
+    | _ -> { ret = CountMinSketch.add_query(cms#CMST_sketches[0], any);
+             CountMinSketch.add(cms#CMST_sketches[2], any); }
+    return ret;
+  }
+
+  memop mod_3(int<<'a>> x, int<<'a>> y) {
+    if(x == 2) { return 0; }
+    else { return x+1; }
+  }
+
+  event rotate(t<<'a, 'b, 'k>> cms) {
+    Array.setm(cms#CMST_active, 0, mod_3, 0);
+    generate clear(cms, 0);
+    generate Event.delay(rotate(cms), cms#CMST_period);
+  }
+
+  event init(t<<'a, 'b, 'k>> cms) {
+    generate Event.delay(rotate(cms), cms#CMST_period);
+  }
+}

@@ -1,0 +1,38 @@
+const int baz = 10;
+global Array.t<<32>> foo = Array.create(1024);
+
+
+entry event pktin (int x);
+event secondpass (int y);
+
+handle pktin (int x) {
+    int z = 26;
+}
+
+handle secondpass(int y) {
+    int a = 1;
+    if (y == baz && a == 2){
+        int b = 1;
+    } else {
+        int c = 2;
+    }
+}
+
+
+// handle secondpass(int y) {
+//     if (y == 10){
+//         int a = 1;
+//     }
+//     else {
+//         int b = 2;        
+//         if ( y == 66) {
+//             int c = 2;
+//         }
+//         else {
+//             int d = 3;
+//             if (y == 67) {
+//                 int e = 4;
+//             }
+//         }
+//     }
+// }

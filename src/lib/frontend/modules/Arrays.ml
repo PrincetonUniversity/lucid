@@ -19,7 +19,15 @@ let sizes_labels = [Id.create "dummy_sz"], []
 let array_create_id = Cid.create_ids [array_id; Id.create "create"]
 
 let array_create_sig =
-  t_id, [Id.create "dummy_sz"], [TInt (IVar (QVar (Id.fresh "sz")))]
+  let arr_size = IVar (QVar (Id.fresh "a")) in
+  let arr_eff = FVar (QVar (Id.fresh "eff")) in
+  let start_eff = FVar (QVar (Id.fresh "eff")) in
+  { arg_tys = [ty @@ TInt (IVar (QVar (Id.fresh "sz")))]
+  ; ret_ty = ty_eff (TName (t_id, [arr_size], true)) arr_eff
+  ; start_eff
+  ; end_eff = start_eff
+  ; constraints = ref []
+  }
 ;;
 
 (* Array.update *)
@@ -30,27 +38,30 @@ let array_update_cid = Cid.create_ids [array_id; array_update_id]
 let array_update_error msg = array_error array_update_name msg
 
 (* Type of Array.update:
-    Array<<'a>> -> int<<32>> -> TMemop(int<<'a>>, 'b) -> 'b -> TMemop (int<<'a>>, 'c) -> 'c -> int<<'a>>
-  *)
+    Array<<'a>> -> int<<32>> ->
+   TMemop(int<<'a>>, int<<'b>>) -> int<<'b>> ->
+   TMemop(int<<'a>>, int<<'a>>) -> int<<'a>> ->
+   int<<'a>>
+*)
 let array_update_ty =
-  let size = IVar (QVar (Id.fresh "sz")) in
-  let b = TQVar (QVar (Id.fresh "b")) in
-  let c = TQVar (QVar (Id.fresh "c")) in
-  let ref_eff = FVar (QVar (Id.fresh "eff")) in
+  let a = IVar (QVar (Id.fresh "a")) in
+  let b = IVar (QVar (Id.fresh "b")) in
+  let arr_eff = FVar (QVar (Id.fresh "eff")) in
   let start_eff = FVar (QVar (Id.fresh "eff")) in
-  TFun
-    { arg_tys =
-        [ TGlobal ((t_id, [size]), ref_eff)
-        ; TInt (IVar (QVar (Id.fresh "sz")))
-        ; TMemop (size, b)
-        ; b
-        ; TMemop (size, c)
-        ; c ]
-    ; ret_ty = TInt size
-    ; start_eff
-    ; end_eff = FSucc ref_eff
-    ; constraints = ref [CLeq (start_eff, ref_eff)]
-    }
+  ty
+  @@ TFun
+       { arg_tys =
+           [ ty_eff (TName (t_id, [a], true)) arr_eff
+           ; ty @@ TInt (IVar (QVar (Id.fresh "sz")))
+           ; ty @@ TMemop (a, b)
+           ; ty @@ TInt b
+           ; ty @@ TMemop (a, a)
+           ; ty @@ TInt a ]
+       ; ret_ty = ty @@ TInt a
+       ; start_eff
+       ; end_eff = FSucc arr_eff
+       ; constraints = ref [CLeq (start_eff, arr_eff)]
+       }
 ;;
 
 let update_fun err nst swid args =
@@ -152,26 +163,35 @@ let array_setm_fun nst swid args =
 ;;
 
 (* Types for the above four functions *)
-let array_get_ty, array_set_ty, array_getm_ty =
-  let size = IVar (QVar (Id.fresh "sz")) in
-  let b = TQVar (QVar (Id.fresh "b")) in
-  let ref_eff = FVar (QVar (Id.fresh "eff")) in
+let array_get_ty, array_set_ty, array_getm_ty, array_setm_ty =
+  let a = IVar (QVar (Id.fresh "a")) in
+  let b = IVar (QVar (Id.fresh "b")) in
+  let arr_eff = FVar (QVar (Id.fresh "eff")) in
   let start_eff = FVar (QVar (Id.fresh "eff")) in
   let fty =
     { arg_tys =
-        [TGlobal ((t_id, [size]), ref_eff); TInt (IVar (QVar (Id.fresh "sz")))]
-    ; ret_ty = TInt size
+        [ ty_eff (TName (t_id, [a], true)) arr_eff
+        ; ty @@ TInt (IVar (QVar (Id.fresh "sz"))) ]
+    ; ret_ty = ty @@ TInt a
     ; start_eff
-    ; end_eff = FSucc ref_eff
-    ; constraints = ref [CLeq (start_eff, ref_eff)]
+    ; end_eff = FSucc arr_eff
+    ; constraints = ref [CLeq (start_eff, arr_eff)]
     }
   in
-  ( TFun fty
-  , TFun { fty with arg_tys = fty.arg_tys @ [TInt size] }
-  , TFun { fty with arg_tys = fty.arg_tys @ [TMemop (size, b); b] } )
+  ( ty @@ TFun fty
+  , ty @@ TFun { fty with arg_tys = fty.arg_tys @ [ty @@ TInt a] }
+  , ty
+    @@ TFun
+         { fty with
+           arg_tys = fty.arg_tys @ [ty @@ TMemop (a, b); ty @@ TInt b]
+         }
+  , ty
+    @@ TFun
+         { fty with
+           arg_tys = fty.arg_tys @ [ty @@ TMemop (a, a); ty @@ TInt a]
+         } )
 ;;
 
-let array_setm_ty = array_getm_ty
 let constructors = [array_create_id, array_create_sig]
 
 let defs : State.global_fun list =

@@ -1,0 +1,45 @@
++-------+----------------------------+----------+-----+-------------------
+|Stage  |Table Name                    event     loc     dpt statement   |
++-------+----------------------------+----------+-----+-------------------
+|0      |tbl_switch72                |     -                          
+|0      |dptStripArgHdr              |     -
+|1      |selectEventType_0_selector  |     -
+|1      |if_29_selector              | packetin | 20  | if (src != 10) {
+|1      |iVec_13                     | packetin | 22  | key = src;
+|1      |iVec_14                     | packetin | 25  | else { key = dst; }
+|1      |iVec_12                     | packetin | 21  | flow_dir = 1;
+|1      |iVec_2                      | insert   | 65  | int h1 = key + 10398247; 
+|1      |time_1                      | insert   | 64  | int cur_ts = Sys.time(1);
+|1      |time_9                      | packetin | 16  | int cur_ts = Sys.time(1);
+|1      |iVec_3                      | insert   | 66  | int h2 = key + 1295981879;
+|1      |iVec_11                     | packetin | 18  | int key = 0;
+|1      |iVec_10                     | packetin | 17  | int flow_dir = 0;
+|1      |iVec_4                      | insert   | 67  | int installed = 0;
+|2      |iVec_15                     | packetin | 27  | int h1 = key + 10398247;
+|2      |iVec_16                     | packetin | 28  | int h2 = key + 1295981879;
+|3      |array_get_17                | packetin | 31  | int key_stored_1 = Array.get(key_1, h1);
+|3      |array_getAndset_5           | insert   | 70  | int key_victim_1 = Array.getAndset(key_1, h1, key);
+|3      |if_47_selector              | packetin | 42  | if (flow_dir == 0) {
+|3      |array_getAndset_6           | insert   | 72  | int ts_victim_1  = Array.getAndset(ts_1, h1, cur_ts);
+|5      |array_getAndset_6           | ??????????????????????????????????????????????????????????????????????
+|4      |if_41_selector              | packetin | 43  | if (key_stored_1 == 1) {
+|4      |array_getCondset_22         | packetin | 47  | int stashed_key = Array.getCondset(key_stash, 0, key, ==, 0);
+|4      |generate_packetin_21        | packetin | 44  | generate continue(src, dst);
+|4      |if_44_selector              | packetin | 57  | if (key_stored_1 == 1) {
+|4      |generate_packetin_26        | packetin | 58  | generate continue(src, dst);
+|4      |array_getCondset_23         | packetin | 48  | int stashed_ts  = Array.getCondset(ts_stash, 0, cur_ts, ==, 0 );
+|5      |if_38_selector              | packetin | 49  | if (stashed_key == 0) {
+|5      |generate_packetin_25        | packetin | 52  | generate continue(src, dst);
+|5      |generate_insert_24          | packetin | 51  | generate insert(key, key, 0);
+|5      |array_get_19                | packetin | 37  | int key_stored_2 = Array.get(key_2, h2);
+|5      |if_32_selector              | packetin | 32  | if (key_stored_1 == 1) {
+|5      |array_set_18                | packetin | 33  | int junk1 = Array.set(ts_1, h1, cur_ts);
+|5      |if_50_selector              | insert   | 77  | if (key_victim_1 != 0) {
+|5      |array_getAndset_7           | insert   | 78  | int key_victim_2 = Array.getAndset(key_2, h2, key_victim_1);
+|6      |array_getAndset_8           | insert   | 80  | int ts_victim_2  = Array.getAndset(ts_2, h2, ts_victim_1);
+|6      |if_35_selector              | packetin | 38  | if (key_stored_2 == 1) {
+|6      |array_set_20                | packetin | 39  | int junk2 = Array.set(ts_2, h2, cur_ts);
+|6      |dptContinueHandler          |
+|7      |reflectPacketTable          |
+|0      |cond-2                      |
++-------+-------------------------------------------------------------+

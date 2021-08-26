@@ -1,0 +1,120 @@
+/*
+    testing SSA conversion. 
+*/
+// global Array.t<<32>> x_arr = Array.create(1024);
+
+// // if / else that causes a phi.
+entry event if_else (int src, int dst);
+handle if_else (int src, int dst) {
+    int a = 1;
+    int c = 0;
+    if (a == 1){
+        c = 1;
+    }  else {
+        c = 2;
+    }
+    int d = c;
+}
+
+// // if that causes a phi.
+entry event if_only (int src, int dst);
+handle if_only (int src, int dst) {
+    int a = 1;
+    int c = 0;
+    if (a == 1){
+        c = 1;
+    } 
+    int d = c;
+}
+
+// // manipulate a parameter inside of an if. 
+entry event if_else_param (int src, int dst);
+handle if_else_param(int src, int dst) {
+    int a = 1;
+    if (a == 1){
+        src = 1;
+    } else {
+        src = 2;
+    }
+    int d = src;
+}
+
+// // manipulate a parameter inside of an if. 
+entry event if_param (int src, int dst);
+handle if_param(int src, int dst) {
+    int a = 1;
+    if (a == 1){
+        src = 1;
+    }
+    int d = src;
+}
+
+entry event if_nested(int src, int dst);
+handle if_nested(int src, int dst){
+    int c = 1;
+    if (src == 1){
+        if (dst == 1) {
+            c = 2;
+        } else {
+            c = 3;
+        }
+    } 
+    int d = c;
+}
+
+entry event match_if(int src, int dst);
+handle match_if(int src, int dst){
+    int c = 1;
+    match src with
+        | 1 -> {c = 2;}
+        | 2 -> {c = 3;}
+        | 3 -> {c = 4;}
+    int d = c;
+
+    if (c == 4) {
+        d = 1;
+    } else {
+        d = 2;
+    }
+    int e = d;
+}
+
+
+
+// handle pktin (int src, int dst) {
+//     int foo = 1;
+//     if (foo == 1){
+//         src = 2;
+//     } else {
+//         int bar = 1;
+//     }
+// }
+
+
+// trouble -- something nested two deep?
+// handle pktin (int src, int dst) {
+//     int a = 1;
+//     int c = 0;
+//     if (a == 1){
+//         c = 1;
+//     }  else {
+//         c = 2;
+//     }
+//     int d = c;
+// }
+
+
+// This causes a problem in bool elimination?
+// handle pktin (int src, int dst) {
+//     int a = 1;
+//     int b = 1;    
+//     int c = 1;
+//     if (a == 1){
+//         if (b == 1) {
+//             c = 2;
+//         } else {
+//             c = 3;
+//         }
+//     } 
+//     int d = c;
+// }

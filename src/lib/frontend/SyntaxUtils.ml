@@ -29,20 +29,23 @@ let gname gty = Id.name (fst gty)
 let unwrap_effect eff =
   let rec aux eff =
     match eff with
-    | FZero -> FZero, [0]
-    | FVar (QVar _) | FVar (TVar { contents = Unbound _ }) -> eff, [0]
+    | FZero -> FZero, [None, 0]
+    | FVar (QVar _) | FVar (TVar { contents = Unbound _ }) -> eff, [None, 0]
     | FVar (TVar { contents = Link eff }) -> aux eff
     | FSucc eff ->
       let base, lst = aux eff in
       let lst =
         match lst with
         | [] -> failwith "impossible"
-        | hd :: tl -> (hd + 1) :: tl
+        | (o, n) :: tl -> (o, n + 1) :: tl
       in
       base, lst
     | FProj eff ->
       let base, lst = aux eff in
-      base, 0 :: lst
+      base, (None, 0) :: lst
+    | FIndex (id, eff) ->
+      let base, lst = aux eff in
+      base, (Some id, 0) :: lst
   in
   let base, lst = aux eff in
   base, List.rev lst
@@ -55,8 +58,15 @@ let wrap_effect base lst =
   in
   match lst with
   | [] -> failwith "Cannot wrap an empty list!"
-  | hd :: tl ->
-    List.fold_left (fun acc n -> add_succs (FProj acc) n) (add_succs base hd) tl
+  | (None, hd) :: tl ->
+    List.fold_left
+      (fun acc (o, n) ->
+        match o with
+        | None -> add_succs (FProj acc) n
+        | Some id -> add_succs (FIndex (id, acc)) n)
+      (add_succs base hd)
+      tl
+  | (Some _, _) :: _ -> failwith "First element of list cannot be FIndex!"
 ;;
 
 (******************************************)
@@ -75,7 +85,7 @@ let add_sizes s1 s2 =
   | ISum (vs1, n1), ISum (vs2, n2) -> ISum (vs1 @ vs2, n1 + n2)
 ;;
 
-(* If an ISum, the list is non-emoty, sorted, and no entries are Links *)
+(* If an ISum, the list is non-empty, sorted, and no entries are Links *)
 let rec normalize_size s =
   match STQVar.strip_links s with
   | ISum (vs, n) ->
@@ -99,10 +109,16 @@ let rec normalize_size s =
   | s -> s
 ;;
 
+let extract_size_default s def =
+  match normalize_size s with
+  | IConst n -> n
+  | _ -> def
+;;
+
 let extract_size s =
   match normalize_size s with
   | IConst n -> n
-  | _ -> failwith "Not yet implemented"
+  | _ -> failwith "[extract_size] error: normalized size is not a const"
 ;;
 
 let rec equiv_lists f lst1 lst2 =
@@ -112,20 +128,23 @@ let rec equiv_lists f lst1 lst2 =
   | _ -> false
 ;;
 
-let rec equiv_size s1 s2 =
+let rec equiv_size ?(qvars_wild = false) s1 s2 =
+  let equiv_size = equiv_size ~qvars_wild in
   match normalize_size s1, normalize_size s2 with
   | IConst n1, IConst n2 -> n1 = n2
   | IUser id1, IUser id2 -> Cid.equal id1 id2
   | ISum (vs1, n1), ISum (vs2, n2) -> n1 = n2 && equiv_lists equiv_size vs1 vs2
-  | IVar tqv, s | s, IVar tqv -> STQVar.equiv_tqvar equiv_size tqv s
+  | IVar tqv, s | s, IVar tqv -> STQVar.equiv_tqvar ~qvars_wild equiv_size tqv s
   | _ -> false
 ;;
 
-let rec equiv_effect e1 e2 =
+let rec equiv_effect ?(qvars_wild = false) e1 e2 =
+  let equiv_effect = equiv_effect ~qvars_wild in
   match e1, e2 with
   | FZero, FZero -> true
   | FSucc e1', FSucc e2' | FProj e1', FProj e2' -> equiv_effect e1' e2'
-  | FVar tqv, e | e, FVar tqv -> FTQVar.equiv_tqvar equiv_effect tqv e
+  | FVar tqv, e | e, FVar tqv ->
+    FTQVar.equiv_tqvar ~qvars_wild equiv_effect tqv e
   | _ -> false
 ;;
 
@@ -137,11 +156,11 @@ let equiv_constraints lst1 lst2 =
     (List.sort Pervasives.compare lst2)
 ;;
 
-let rec normalize_tfun func =
+let normalizer () =
   let count = ref 0 in
   let v =
-    object
-      inherit [_] s_map
+    object (self)
+      inherit [_] s_map as super
 
       val mutable renaming : id IdMap.t = IdMap.empty
 
@@ -150,46 +169,88 @@ let rec normalize_tfun func =
         | Some id' -> QVar id'
         | None ->
           let new_id = Id.create ("norm" ^ string_of_int !count) in
+          incr count;
           renaming <- IdMap.add id new_id renaming;
           QVar new_id
+
+      method! visit_TQVar _ tqv =
+        match tqv with
+        | TVar { contents = Link x } -> self#visit_raw_ty () x
+        | _ -> super#visit_TQVar () tqv
+
+      method! visit_IVar _ tqv =
+        match tqv with
+        | TVar { contents = Link x } -> self#visit_size () x
+        | _ -> super#visit_IVar () tqv
+
+      method! visit_FVar _ tqv =
+        match tqv with
+        | TVar { contents = Link x } -> self#visit_effect () x
+        | _ -> super#visit_FVar () tqv
+
+      method! visit_size () s = super#visit_size () (normalize_size s)
     end
   in
-  v#visit_func_ty () func
+  v
 ;;
 
-let equiv_global_ty (id1, sizes1) (id2, sizes2) =
-  Cid.equals id1 id2 && equiv_lists equiv_size sizes1 sizes2
-;;
+let normalize_tfun func_ty = (normalizer ())#visit_func_ty () func_ty
 
-let rec equiv_raw_ty ty1 ty2 =
+let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
+  let equiv_size = equiv_size ~qvars_wild in
+  let equiv_effect = equiv_effect ~qvars_wild in
+  let equiv_raw_ty = equiv_raw_ty ~ignore_effects ~qvars_wild in
+  let equiv_ty = equiv_ty ~ignore_effects ~qvars_wild in
   match ty1, ty2 with
   | TBool, TBool | TVoid, TVoid | TGroup, TGroup -> true
   | TInt size1, TInt size2 -> equiv_size size1 size2
   | TEvent b1, TEvent b2 -> b1 = b2
-  | TMemop (size1, ty1), TMemop (size2, ty2) ->
-    equiv_size size1 size2 && equiv_raw_ty ty1 ty2
-  | TGlobal (gty1, eff1), TGlobal (gty2, eff2) ->
-    equiv_global_ty gty1 gty2 && equiv_effect eff1 eff2
+  | TMemop (size1, size2), TMemop (size3, size4) ->
+    equiv_size size1 size3 && equiv_size size2 size4
+  | TName (id1, sizes1, b1), TName (id2, sizes2, b2) ->
+    b1 = b2 && Cid.equal id1 id2 && List.for_all2 equiv_size sizes1 sizes2
   | TFun func1, TFun func2 ->
     let func1 = normalize_tfun func1 in
     let func2 = normalize_tfun func2 in
-    equiv_lists equiv_raw_ty func1.arg_tys func2.arg_tys
-    && equiv_raw_ty func2.ret_ty func2.ret_ty
+    equiv_lists equiv_ty func1.arg_tys func2.arg_tys
+    && equiv_ty func2.ret_ty func2.ret_ty
     && equiv_effect func1.start_eff func2.start_eff
     && equiv_effect func1.end_eff func2.end_eff
     && equiv_constraints !(func1.constraints) !(func2.constraints)
-  | TQVar tqv, ty | ty, TQVar tqv -> TyTQVar.equiv_tqvar equiv_raw_ty tqv ty
+  | TQVar tqv, ty | ty, TQVar tqv ->
+    TyTQVar.equiv_tqvar ~qvars_wild equiv_raw_ty tqv ty
+  | TRecord lst1, TRecord lst2 ->
+    if List.length lst1 <> List.length lst2
+    then false
+    else
+      List.for_all2
+        (fun (str1, ty1) (str2, ty2) ->
+          String.equal str1 str2 && equiv_raw_ty ty1 ty2)
+        lst1
+        lst2
+  | TVector (ty1, size1), TVector (ty2, size2) ->
+    equiv_size size1 size2 && equiv_raw_ty ty1 ty2
+  | TTuple lst1, TTuple lst2 ->
+    if List.length lst1 <> List.length lst2
+    then false
+    else List.for_all2 equiv_raw_ty lst1 lst2
   | ( ( TBool
       | TMemop _
       | TInt _
       | TEvent _
-      | TGlobal _
+      | TName _
       | TFun _
       | TVoid
-      | TGroup )
+      | TGroup
+      | TRecord _
+      | TVector _
+      | TTuple _ )
     , _ ) -> false
 
-and equiv_ty ty1 ty2 = equiv_raw_ty ty1.raw_ty ty2.raw_ty
+and equiv_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
+  (ignore_effects || equiv_effect ~qvars_wild ty1.teffect ty2.teffect)
+  && equiv_raw_ty ~ignore_effects ~qvars_wild ty1.raw_ty ty2.raw_ty
+;;
 
 let max_effect e1 e2 =
   let base1, lst1 = unwrap_effect e1 in
@@ -199,31 +260,14 @@ let max_effect e1 e2 =
   else Some (wrap_effect base1 (max lst1 lst2))
 ;;
 
-(* TODO: Delete this if it doesn't end up useful
-
-(* packets, events *)
-
-(* a packet will be represented as a list of 2 values for now; src then dst *)
-type packet = value list
-
-let packet src dst = [vinteger src; vinteger dst]
-
-let src p =
-  match p with
-  | [src; _] -> raw_integer src
-  | _ -> error "bad packet; wrong number of values"
+let rec is_global_rty rty =
+  match TyTQVar.strip_links rty with
+  | TBool | TVoid | TGroup | TInt _ | TEvent _ | TFun _ | TMemop _ -> false
+  | TQVar _ -> false (* I think *)
+  | TName (_, _, b) -> b
+  | TTuple lst -> List.exists is_global_rty lst
+  | TRecord lst -> List.exists (fun (_, rty) -> is_global_rty rty) lst
+  | TVector (t, _) -> is_global_rty t
 ;;
 
-let dst p =
-  match p with
-  | [_; dst] -> raw_integer dst
-  | _ -> error "bad packet; wrong number of values"
-;;
-
-(* packet_in event name *)
-let packet_in = Cid.create ["packetin"]
-
-let packet_in_event p =
-  { eid = packet_in; data = p; edelay = 0; elocations = [] }
-;;
-*)
+let is_global ty = is_global_rty ty.raw_ty

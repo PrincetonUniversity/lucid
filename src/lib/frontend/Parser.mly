@@ -9,48 +9,12 @@
   let third (_, _, x, _) = x
   let fourth (_, _, _, x) = x
 
-  let label_sets : StringSet.t list ref = ref []
-
-  let lookup_label sp l =
-    match List.find_opt (StringSet.mem l) !label_sets with
-    | None -> Console.error_position sp @@ "Unknown label " ^ l
-    | Some s -> s
-
-  let fill_erecord base defs sp =
-    let label_set = lookup_label sp (fst (List.hd defs)) in
-    let undefined_set =
-      List.fold_left (fun acc (l, _) -> StringSet.remove l acc) label_set defs
-    in
-    let all_defs =
-      StringSet.fold
-        (fun s acc -> (s, proj_sp base s sp) :: acc)
-        undefined_set
-        defs
-    in
-    record_sp all_defs sp
-
-  let get_global_sizes span sizes =
-    List.map
-      (function
-        (* | IVar (QVar id) -> id *)
-        | IUser id -> Cid.to_id id
-        | _ -> Console.error_position span
-             "Sizes in a global type/constructor definition must be variables (not begin with a ')")
-    sizes
-
-  let mk_dgty id sizes params span =
-    let sizes = get_global_sizes span sizes in
-    let label_set = StringSet.of_list (List.map (Id.name % fst) params) in
-    label_sets := label_set :: !label_sets;
-    dgty_sp id sizes params span
-
-  let mk_dconstr constr_id ty_id sizes params body span =
-    let sizes = get_global_sizes span sizes in
-    dconstr_sp constr_id ty_id sizes params body span
+  let mk_trecord lst =
+    TRecord (List.map (fun (id, ty) -> Id.name id, ty.raw_ty) lst)
 
   let mk_tmemop span sizes =
     match sizes with
-    | [s1; s2] -> TMemop (s1, TInt s2)
+    | [s1; s2] -> TMemop (s1, s2)
     | _ -> Console.error_position span "Wrong number of size arguments to memop"
 
   (* We can't use Id.fresh for auto because it messes with regular ids *)
@@ -134,6 +98,8 @@
 %token <Span.t> LSHIFT
 %token <Span.t> RSHIFT
 %token <Span.t> END
+%token <Span.t> FOR
+%token <Span.t> SIZECAST
 
 %token EOF
 
@@ -162,13 +128,15 @@ ty:
     | TBOOL				                      { ty_sp TBool $1 }
     | QID                               { ty_sp (TQVar (QVar (snd $1))) (fst $1) }
     | AUTO                              { ty_sp (TQVar (QVar (fresh_auto ()))) $1 }
-    | cid    				                    { ty_sp (TGlobal ((snd $1, []), FVar (QVar (Id.fresh "eff")))) (fst $1) }
-    | cid poly				                  { ty_sp (TGlobal ((snd $1, snd $2), FVar (QVar (Id.fresh "eff")))) (fst $1) }
+    | cid    				                    { ty_sp (TName (snd $1, [], true)) (fst $1) }
+    | cid poly				                  { ty_sp (TName (snd $1, snd $2, true)) (fst $1) }
     | EVENT                             { ty_sp (TEvent false) $1}
     | MEVENT                            { ty_sp (TEvent true) $1}
     | VOID                              { ty_sp (TVoid) $1 }
     | GROUP                             { ty_sp (TGroup) $1 }
     | MEMOP poly                        { ty_sp (mk_tmemop (fst $2) (snd $2)) (Span.extend $1 (fst $2))}
+    | LBRACE record_def RBRACE          { ty_sp (mk_trecord $2) (Span.extend $1 $3) }
+    | ty LBRACKET size RBRACKET         { ty_sp (TVector ($1.raw_ty, snd $3)) (Span.extend $1.tspan $4) }
 
 cid:
     | ID				                        { (fst $1, Cid.id (snd $1)) }
@@ -229,7 +197,17 @@ exp:
     | exp LBRACKET NUM COLON NUM RBRACKET { op_sp (Slice (Z.to_int (snd $3), Z.to_int (snd $5))) [$1]
                                                       (Span.extend ($1).espan (fst $5)) }
     | LBRACE record_entries RBRACE        { record_sp $2 (Span.extend $1 $3) }
-    | LBRACE exp WITH record_entries RBRACE { fill_erecord $2 $4 (Span.extend $1 $5) }
+    | LBRACE exp WITH record_entries RBRACE { with_sp $2 $4 (Span.extend $1 $5) }
+    | exp LBRACKET size RBRACKET          { index_sp $1 (snd $3) (Span.extend $1.espan $4) }
+    | LBRACKET exp FOR ID LESS size RBRACKET { comp_sp $2 (snd $4) (snd $6) (Span.extend $1 $7) }
+    | LBRACKET exps RBRACKET              { vector_sp $2 (Span.extend $1 $3) }
+    | SIZECAST LPAREN size RPAREN             { szcast_sp (IConst 32) (snd $3) (Span.extend $1 $4) }
+    | SIZECAST single_poly LPAREN size RPAREN { szcast_sp (snd $2) (snd $4) (Span.extend $1 $5) }
+
+exps:
+  | exp                                 { [$1] }
+  | exp SEMI                            { [$1] }
+  | exp SEMI exps                       { $1::$3 }
 
 record_entry:
     | ID ASSIGN exp                     { Id.name (snd $1), $3 }
@@ -274,17 +252,16 @@ constr_list:
 interface_spec:
     | FUN ty ID paramsdef SEMI                       { infun_sp (snd $3) $2 [] $4 (Span.extend $1 $5)}
     | FUN ty ID paramsdef constr_list SEMI           { infun_sp (snd $3) $2 $5 $4 (Span.extend $1 $6) }
-    | GLOBAL TYPE ID poly ASSIGN LBRACE record_def RBRACE { ingty_sp (snd $3) (get_global_sizes $1 (snd $4)) $7 (Span.extend $1 $8) }
-    | GLOBAL TYPE ID ASSIGN LBRACE record_def RBRACE { ingty_sp (snd $3) [] $6 (Span.extend $1 $7) }
-    | GLOBAL TYPE ID poly SEMI                       { ingty_sp (snd $3) (get_global_sizes $1 (snd $4)) [] (Span.extend $1 $5) }
-    | GLOBAL TYPE ID SEMI                            { ingty_sp (snd $3) [] [] (Span.extend $1 $4) }
-    | CONSTR cid poly ID paramsdef SEMI              { inconstr_sp (snd $4) (snd $2) (get_global_sizes $1 (snd $3)) $5 (Span.extend $1 $6) }
-    | CONSTR cid ID paramsdef SEMI                   { inconstr_sp (snd $3) (snd $2) [] $4 (Span.extend $1 $5) }
+    | CONSTR ty ID paramsdef SEMI                    { inconstr_sp (snd $3) $2 $4 (Span.extend $1 $5) }
     | ty ID SEMI                                     { invar_sp (snd $2) $1 (Span.extend ($1.tspan) $3) }
     | EVENT ID paramsdef SEMI                        { inevent_sp (snd $2) [] $3 (Span.extend $1 $4) }
     | EVENT ID paramsdef constr_list SEMI            { inevent_sp (snd $2) $4 $3 (Span.extend $1 $5) }
     | SIZE ID SEMI                                   { insize_sp (snd $2) (Span.extend $1 $3) }
     | MODULE ID COLON LBRACE interface RBRACE        { inmodule_sp (snd $2) $5 (Span.extend $1 $6) }
+    | GLOBAL TYPE tyname_def ASSIGN ty               { inty_sp (fst $3) (snd $3) (Some $5) true (Span.extend $1 $5.tspan) }
+    | GLOBAL TYPE tyname_def SEMI                    { inty_sp (fst $3) (snd $3) None true (Span.extend $1 $4) }
+    | TYPE tyname_def ASSIGN ty                      { inty_sp (fst $2) (snd $2) (Some $4) false (Span.extend $1 $4.tspan) }
+    | TYPE tyname_def SEMI                           { inty_sp (fst $2) (snd $2) None false (Span.extend $1 $3) }
 
 interface:
     | interface_spec                    { [$1] }
@@ -293,6 +270,10 @@ interface:
 event_decl:
     | event_sort ID paramsdef             { ($1, snd $2, $3, []) }
     | event_sort ID paramsdef constr_list { ($1, snd $2, $3, $4) }
+
+tyname_def:
+    | ID                                  { snd $1, [] }
+    | ID poly                             { snd $1, snd $2}
 
 decl:
     | CONST ty ID ASSIGN exp SEMI           { [dconst_sp (snd $3) $2 $5 (Span.extend $1 $6)] }
@@ -313,15 +294,11 @@ decl:
     | MODULE ID LBRACE decls RBRACE         { [module_sp (snd $2) [] $4 (Span.extend $1 $5)] }
     | MODULE ID COLON LBRACE interface RBRACE LBRACE decls RBRACE
                                             { [module_sp (snd $2) $5 $8 (Span.extend $1 $9)] }
-    | GLOBAL TYPE ID poly ASSIGN LBRACE record_def RBRACE { [mk_dgty (snd $3) (snd $4) $7 (Span.extend $1 $8)] }
-    | CONSTR cid poly ID paramsdef LBRACE decls RBRACE { [mk_dconstr (snd $4) (snd $2) (snd $3) $5 $7 (Span.extend $1 $8)] }
-    | GLOBAL cid poly ID ASSIGN cid paren_args SEMI
-                                            { [dglobal_sp (snd $4) (snd $2, snd $3) (snd $6) (snd $7) (Span.extend $1 $8)] }
-    | GLOBAL TYPE ID ASSIGN LBRACE record_def RBRACE { [mk_dgty (snd $3) [] $6 (Span.extend $1 $7)] }
-    | CONSTR cid ID paramsdef LBRACE decls RBRACE { [mk_dconstr (snd $3) (snd $2) [] $4 $6 (Span.extend $1 $7)] }
-    | GLOBAL cid ID ASSIGN cid paren_args SEMI
-                                            { [dglobal_sp (snd $3) (snd $2, []) (snd $5) (snd $6) (Span.extend $1 $7)] }
 
+    | TYPE tyname_def ASSIGN ty             { [duty_sp (fst $2) (snd $2) $4 (Span.extend $1 $4.tspan)] }
+    | CONSTR ty ID paramsdef ASSIGN exp SEMI { [dconstr_sp (snd $3) $2 $4 $6 (Span.extend $1 $7)] }
+    | GLOBAL ty ID ASSIGN exp SEMI
+                                            { [dglobal_sp (snd $3) $2 $5 (Span.extend $1 $6)] }
 decls:
     | decl                             { $1 }
     | decl decls                       { $1 @ $2 }
@@ -388,6 +365,7 @@ statement1:
     | MATCH LPAREN multiargs RPAREN WITH branches  { match_sp $3 (snd $6) (Span.extend $1 (fst $6)) }
     | PRINTF LPAREN STRING RPAREN SEMI             { sprintf_sp (snd $3) [] (Span.extend $1 $5) }
     | PRINTF LPAREN STRING COMMA args RPAREN SEMI  { sprintf_sp (snd $3) $5 (Span.extend $1 $7) }
+    | FOR LPAREN ID LESS size RPAREN LBRACE statement RBRACE { loop_sp $8 (snd $3) (snd $5) (Span.extend $1 $9) }
 
 prog:
     | decls EOF                             { $1 }

@@ -1,0 +1,23 @@
+// Use a recursive event to count to 10 for
+// each packet.
+
+entry event packetin (int<<32>> src, int<<32>> dst);
+exit event continue (int<<32>> src, int<<32>> dst);
+event loop (int<<32>> src, int<<32>> cur_idx);
+
+handle packetin (int<<32>> src, int<<32>> dst) {
+	printf ("packetin...\n");
+	generate loop(src, 0);
+	generate continue(src, dst);
+
+}
+handle loop (int<<32>> src, int<<32>> cur_idx) {
+	printf("loop %d", cur_idx);
+	int next_id = cur_idx + 1;
+	if (cur_idx > 10) {
+		printf("cur_idx is over 10\n");
+	}
+	else {
+		generate loop(src, next_id);
+	}
+}

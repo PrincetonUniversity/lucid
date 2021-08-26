@@ -1,0 +1,15 @@
+Array arr1_src = Array.create<<32>>(1024);
+
+handle packetin (int<<32>> src, int<<32>> dst){ 
+	int startTs = Sys.time(1);
+	generate doReport (startTs);
+	if (src == 1){
+		Array.set<<32>>(arr1_src, 0, src);
+	}
+	generate continue (src, dst);
+}
+
+handle doReport (int genTs) {
+	int temp_genTs = genTs;
+	Array.set<<32>>(arr1_src, 2, genTs);
+}

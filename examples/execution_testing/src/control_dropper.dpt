@@ -1,0 +1,14 @@
+/* Generate a control event, which does nothing. */
+
+entry event ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos);
+event my_control_event(int<<9>> port);
+exit event ip_out (int<<1>> drop, int<<9>> egr_port);
+
+
+handle ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos) {
+    generate my_control_event(igr_port);
+}
+
+handle my_control_event(int<<9>> port){    
+    int x = 1;
+}

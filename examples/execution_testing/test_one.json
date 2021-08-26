@@ -1,0 +1,6 @@
+{
+    "builds_dir":"__builds",
+    "tests": [
+        {"commands":["compile", "assemble", "execute"], "prog":"src/simple_cuckoo_firewall.dpt", "harness":"src/ip_harness.p4", "build":"cuckoo_build", "testspec":"tests/cuckoo_collision.json"}
+    ]
+}

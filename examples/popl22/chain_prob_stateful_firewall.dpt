@@ -1,0 +1,70 @@
+include "BloomFilter.dpt"
+/*
+Implementing the SRO algorithm from section 6.1 of this paper:
+https://www.microsoft.com/en-us/research/uploads/prod/2020/10/swishmem-hotnets20.pdf
+
+As in that section, we assume reliable delivery and no router failures.
+
+With minor changes to compile into P4. (search for "backend bug")
+*/
+
+/* notes:
+distributed probabalistic stateful firewall
+(no aging)
+
+compiles to 9 stages with bug-workaround tweaks (same as in chain_replication.dpt)
+
+from:
+
+https://github.com/PrincetonUniversity/dpt/blob/master/examples/chain/O_chain_prob_stateful_firewall.dpt
+
+https://github.com/PrincetonUniversity/dpt/commit/b54bf717ae629a2f1a3e32bc2a9e245fa226b1ac
+
+*/
+
+// Implement a Bloom filter with m = 16, k = 4
+const int NUM_REGISTERS = 16;
+const int[4] HASH_SEEDS = [22 ; 33 ; 44 ; 55];
+
+/* Information about the chain. */
+/* I want this to read "extern location foo;" but we don't have that syntax yet */
+const int head = 0;
+const int tail = 0;
+const int succ = 0;
+
+// ADDED: self
+const int self = 0;
+
+global BloomFilter.t<<4, 4>> filter = BloomFilter.create(NUM_REGISTERS, HASH_SEEDS);
+
+// Request_X is for packets coming from inside, reponse_x is for packets coming from outside
+// entry events
+entry event request_packet (int client_ip, int server_ip);
+entry event response_packet (int server_ip, int client_ip);
+// exit events
+exit event request_continue (int src_ip, int dst_ip);
+exit event response_continue (int src_ip, int dst_ip);
+
+event add_to_firewall(int[2] args) {
+  BloomFilter.add_to_filter(filter, args);
+  if (self != tail) {
+    // generate Event.sslocate(this, succ);
+    generate Event.sslocate(add_to_firewall(args), succ);
+  }
+}
+
+handle request_packet(int client_ip, int server_ip) {
+  bool in_filter = BloomFilter.in_filter(filter, [client_ip; server_ip]);
+  if (in_filter == false) {
+    // event add = add_to_firewall([client_ip; server_ip]);
+    generate Event.sslocate(add_to_firewall([client_ip; server_ip]), head);
+  }
+  generate request_continue(client_ip, server_ip);
+}
+
+handle response_packet(int server_ip, int client_ip) {
+  bool in_filter = BloomFilter.in_filter(filter, [client_ip; server_ip]);
+  if (in_filter) {
+    generate request_continue(client_ip, client_ip);
+  }
+}

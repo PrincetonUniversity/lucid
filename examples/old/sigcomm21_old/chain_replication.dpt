@@ -1,0 +1,135 @@
+/*
+Implementing the SRO algorithm from section 6.1 of this paper:
+https://www.microsoft.com/en-us/research/uploads/prod/2020/10/swishmem-hotnets20.pdf
+
+As in that section, we assume reliable delivery and no router failures.
+*/
+
+
+const int NUM_REGISTERS = 10;
+const int TRUE = 1;
+const int FALSE = 0;
+
+/* Information about the chain. */
+/* I want this to read "extern location foo;" but we don't have that syntax yet */
+const int head = 0;
+const int tail = 0;
+const int succ = 0;
+
+/* Global data: the registers, plus metadata about each of them */
+global pending = new Array<<32>>(NUM_REGISTERS);
+global sequence_nums = new Array<<32>>(NUM_REGISTERS);
+global registers = new Array<<32>>(NUM_REGISTERS);
+
+event write(int idx, int seq, int data);
+event ack(int idx);
+
+event process(int src, int dst, int idx);
+
+entry event pktin(int src, int dst);
+exit event continue(int src, int dst);
+
+memop id (int x, int dummy) {
+  return x;
+}
+
+memop tru (int dummy, int dummy2) {
+  return TRUE;
+}
+
+memop incr (int x, int y) {
+  return x+y;
+}
+
+memop check_and_incr (int curr, int next) {
+  if (next == (curr + 1)) {
+    return next;
+  } else {
+    return curr;
+  }
+}
+
+handle write(int idx, int seq, int data) {
+  int self = 0;
+  // The event we just got
+  // event this = write(idx, seq, data); 
+  // Same event but delayed
+  // event delayed = Event.delay(write(idx, seq, data), 10);
+
+  // I'm assuming Array.update does getters then setters
+  int update_res = Array.update(pending, idx, id, 0, tru, 0);
+  if (update_res == TRUE) {
+    // If another write is happening, wait for that one to finish
+    generate Event.delay(write(idx, seq, data), 10);
+
+  } else {
+    bool continue = true;
+    /* The first router sets the sequence number, all other routers check it */
+    if (self == head) {
+      seq = Array.update(sequence_nums, idx, incr, 1, incr, 1);
+    } else {
+      int seq2 = Array.update(sequence_nums, idx, check_and_incr, seq, check_and_incr, seq);
+      if (seq2 != seq) { continue = false; }
+    }
+    if (continue==false) {
+      generate Event.delay(write(idx, seq, data), 10);
+    } else {
+      Array.set(registers, idx, data);
+      // Either propagate to next in chain, or tell head we're done
+      if (self != tail) {
+        generate Event.sslocate(write(idx, seq, data), succ);
+      } else {
+        generate Event.sslocate(ack(idx), head);
+      }
+    }
+  }
+}
+
+// Set pending bit to false across the whole chain
+handle ack(int idx) {
+  int self = 0;
+  Array.set(pending, idx, FALSE);
+  if (self != tail) {
+    generate Event.sslocate(ack(idx), succ);
+  }
+}
+
+fun bool need_to_write(int src, int dst) {
+  // Application-specific logic
+  return false;
+}
+
+/* Whatever application logic is involved in processing packets. E.g. checking
+   if a flow is in the firewall, sending to the right server, etc */
+fun void process_fun(int src, int dst, int idx) {
+  // This will probably involve reading from the registers
+  int foo = Array.get(registers, idx);
+  if (foo == 0) { // Or whatever
+    generate continue(src, dst);
+  }
+}
+
+// Should only ever be generated at the tail
+handle process(int src, int dst, int idx) {
+  process_fun(src, dst, idx);
+}
+
+handle pktin(int src, int dst) {
+  // See if we need to write (e.g. new flow in a stateful firewall)
+  bool ntw = need_to_write(src, dst); // Can't manually inline this or function inlining fails
+  if (ntw) {
+    // event writer = write(0,0,0); // Specific values are application-specific
+    generate Event.sslocate(write(0,0,0), head);
+  }
+
+  // Actually do the processing
+  int idx = hash<<32>>(0, src, dst); // Or whatever
+  int r = Array.get(pending, idx);
+  if (r == TRUE) {
+    // If we're in the middle of a write, send it to the tail, since that has
+    // the last fully consistent data
+    generate Event.sslocate(process(src, dst, idx), tail);
+  } else {
+    process_fun(src, dst, idx);
+  }
+}

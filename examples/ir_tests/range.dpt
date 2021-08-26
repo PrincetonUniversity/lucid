@@ -1,0 +1,10 @@
+entry event pktin (int x, int y);
+handle pktin (int x, int y) {
+    int foo = x;
+    int bar = y;
+    int baz = x;
+    int p = 0;
+    if (foo >= bar) {
+        p = 1;
+    }
+}

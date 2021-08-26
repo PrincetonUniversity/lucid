@@ -15,13 +15,14 @@ let sys_time_error msg = sys_error sys_time_name msg
 
 let sys_time_ty =
   let start_eff = FVar (QVar (Id.fresh "eff")) in
-  TFun
-    { arg_tys = []
-    ; ret_ty = TInt (IConst 32)
-    ; start_eff
-    ; end_eff = start_eff
-    ; constraints = ref []
-    }
+  ty
+  @@ TFun
+       { arg_tys = []
+       ; ret_ty = ty @@ TInt (IConst 32)
+       ; start_eff
+       ; end_eff = start_eff
+       ; constraints = ref []
+       }
 ;;
 
 let sys_time_fun (nst : State.network_state) _ args =
@@ -38,13 +39,14 @@ let sys_random_error msg = sys_error sys_random_name msg
 
 let sys_random_ty =
   let start_eff = FVar (QVar (Id.fresh "eff")) in
-  TFun
-    { arg_tys = []
-    ; ret_ty = TInt (IConst 32)
-    ; start_eff
-    ; end_eff = start_eff
-    ; constraints = ref []
-    }
+  ty
+  @@ TFun
+       { arg_tys = []
+       ; ret_ty = ty @@ TInt (IConst 32)
+       ; start_eff
+       ; end_eff = start_eff
+       ; constraints = ref []
+       }
 ;;
 
 let sys_random_fun _ _ args =

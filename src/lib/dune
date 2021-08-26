@@ -30,18 +30,24 @@
    syntaxUtils
    collections
    typer
-   typer_Z3
+   typerZ3
    typerUnify
    typerUtil
    typerInstGen
    typerModules
+   wellformed
    functionInlining
+   sizeInlining
    renaming
    globalArgElimination
    explicitReturns
-   userTypeElimination
+   recordElimination
    moduleElimination
+   tupleElimination
+   vectorElimination
+   replaceUserTys
    linerate
+   frontendPipeline
    interp
    interpCore
    pipeline
@@ -53,30 +59,37 @@
    system
    events
    builtins
-   TQVar
-   instrSyntax
-   dagSyntax
-   instrSeqSyntax
-   backendLogging
    consts
+   TQVar
+   OGSyntax
+   LLSyntax
+   DFSyntax
+   pipeSyntax
+   SLSyntax
+   backendLogging
+   poplPatches
    eliminateConsts
+   eliminateEqRangeOps
+   addDefaultBranches
    precomputeArgs
    normalizeBools
    eliminateBools
    normalizeInts
    singleAssignment
-   opGraph
+   partialSingleAssignment
+   uniqueSpans
    interpHelpers
-   tofinoFromDpt
-   tofinoConstants
-   tofinoContext
-   tofinoEvent
-   tofinoArray
-   tofinoSys
-   tofinoOp
-   tofinoMemop
-   tofinoScheduler
-   tofinoConfig
+   LLTranslate
+   LLConstants
+   LLContext
+   LLEvent
+   LLArray
+   LLOp
+   LLSys
+   LLMemop
+   LLScheduler
+   LLStartup
+   LLValidate
    printUtils
    miscUtils
    debugPrint
@@ -86,8 +99,6 @@
    branchElimination
    dataFlow
    liveliness
-   pipelinePlanning
-   pipelineGeneration
    p4tContext
    p4tPrint
    p4tMgrPrint
@@ -95,6 +106,7 @@
    genP4tappProj
    packageTofinoApp
    ioUtils
+   logIr
    )
  (preprocess
     (staged_pps ppx_import visitors.ppx ppx_deriving.show ppx_deriving.std ppx_string_interpolation))

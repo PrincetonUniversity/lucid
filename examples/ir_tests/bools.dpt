@@ -1,0 +1,13 @@
+// nested booleans are still failing. 
+entry event inside_packet(int src_ip, int<<32>> src_port);
+
+handle inside_packet(int src_ip, int<<32>> src_port) {
+    bool in = false; 
+    int foo = 1; 
+    if (foo == src_ip) {
+        in = true;
+        if (foo == src_port) {
+            in = true;
+        }
+    }
+}

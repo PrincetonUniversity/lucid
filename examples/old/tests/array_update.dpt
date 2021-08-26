@@ -1,0 +1,88 @@
+/*
+	[notes 12/2]
+
+	todo: add syntactic sugar for get and set operations (can just translate to array.update calls)
+		get(arr, idx)
+		getm(arr, idx, mOp, mOp_arg)
+		set(arr, idx)
+		setm(arr, idx, mOp, mOp_arg)
+
+
+
+	[notes 11/25]
+	grammar for allowed if / else expressions:
+		s ::= constant | parameter 
+		e ::= s + s | s - s | s 
+		test ::= s | e <cmp> e
+			- With the restriction that each parameter appears at most once in the test
+
+	grammar for allowed return expressions:
+		binop ::= <whatever> 
+		r ::= s | r <binop> r
+			- With the restriction that each parameter appears at most once in r
+
+	grammar for get/set function:
+		return r; | if <test> : { return r; } else { return r; } 
+
+
+	[notes 11/23]
+	limitations of get and set functions:
+	- There are two arguments:
+		1. (mandatory) current memory value
+		2. (optional) a value passed in from caller (can be a local variable or constant)
+	- There are no locally defined variables.
+	- There can be one if / else statement.
+		- Each branch of the if / else must have one statement: a return statement.
+	- The if / else branch expression must be something that we can translate into the form:
+		parameter1 <mathOp> parameter2 <comparisonOp> constant
+		for example: mem_val - local_val > 10, or mem_val == local_val
+	- A return statement expression may only reference each parameter once, plus an unlimited number of constants.
+		- The if / else expression has this limitation too.
+	- The get function returns to the caller, the set function returns to the memory cell.
+
+	Type of array.update:
+	Array<<'a>> -> int<<32>> -> TMemop(int<<'a>>, 'b) -> 'b -> TMemop (int<<'a>>, 'c) -> 'c -> int<<'a>>
+*/
+
+/* Examples of using array.update */
+global arr = new Array<<32>>(1024);
+
+/* memop keyword for functions passed into Array.update */
+memop id (int a, int unused) {
+	return a;
+}
+
+memop zero(int a, int unused) {
+	return 0;
+}
+
+/* update contents of memory if it is 0 */
+memop set_if_0(int mem_val, int local_var) {
+	if (mem_val == 0) {
+		return local_var;
+	}
+	else {
+		return mem_val;
+	}
+}
+
+entry event packetin (int src, int dst);
+exit event continue(int src, int dst);
+
+
+handle packetin (int src, int dst) {
+	int idx = 0;
+	int stored_dst = 0;
+
+	if (src == 1) {
+		/* Get the value from memory. */
+		stored_dst = Array.get(arr, idx);
+	}
+	else {
+		/* Set memory to dst if it is currently empty. */
+		Array.setm(arr, idx, set_if_0, dst);
+	}
+	if (stored_dst == 10) {
+		generate continue (src, dst);
+	}
+}

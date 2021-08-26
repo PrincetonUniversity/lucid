@@ -1,0 +1,76 @@
+Array keys_1 = Array.create(512);
+Array vals_1 = Array.create(512);
+Array keys_2 = Array.create(512);
+Array vals_2 = Array.create(512);
+Array key_stash = Array.create(1, 8);
+Array val_stash = Array.create(1, 9);
+
+handle packetin(int src, int dst) { 
+    int cur_ts = Sys.time(1);
+    int start_ts = 0;
+    int key_found = 0;
+
+    int get_h1 = src + 1298724972;
+    int get_h2 = src + 87593720; 
+    int get_loaded_key = Array.get(keys_1, get_h1);
+    int key_diff = get_loaded_key - src;
+    if (key_diff == 0) {
+        key_found = 1;
+        start_ts = Array.get(vals_1, get_h1);
+    }
+    else {
+        get_loaded_key = Array.get(keys_2, get_h2);
+        key_diff = get_loaded_key - src;
+        if (key_diff == 0) {
+            key_found = 1;
+            start_ts = Array.get(vals_2, get_h2);
+        }
+    }
+    if (key_found == 0) {
+        int stashed_key = Array.getCondset(key_stash, 0, src, ==, 0);
+        if (stashed_key == 0) {
+            int junk_0 = Array.set(val_stash, 0, cur_ts);
+            generate insert(src, cur_ts, src, 0);
+        }
+        else {
+            generate report_insert_fail(src);
+        }
+    }
+    else {
+        int duration = cur_ts - start_ts;
+        if (duration < 1000){
+            dst = 1;
+        }
+    }
+    generate continue(src, dst);
+}
+
+handle insert(int key, int val, int first_key, int num_first_reinserts) {
+    int h = key + 1298724972;
+    int h2 = key + 87593720; 
+    int victim_key = Array.getAndset(keys_1, h, key);
+    int victim_val = Array.getAndset(vals_1, h, val);
+
+    if (victim_key != 0) {
+        victim_key = Array.getAndset(keys_2, h2, victim_key);
+        victim_val = Array.getAndset(vals_2, h2, victim_val);
+    }
+    int key_diff = victim_key - first_key;
+    if (key_diff == 0) {
+        num_first_reinserts = num_first_reinserts + 1;
+    }
+    if (num_first_reinserts == 2){
+        victim_key = 0;
+        victim_val = 0;
+        generate report_insert_fail(first_key); (* Note: a more sophisticated implementation could rebuild the arrays with different hash keys. *)
+    }
+    int junk_3 = Array.set(key_stash, 0, victim_key);
+    int junk_4 = Array.set(val_stash, 0, victim_val);                
+
+    if (victim_key != 0){
+        generate insert(victim_key, victim_val, first_key, num_first_reinserts);
+    }
+}
+handle report_insert_fail(int src) {
+    report_int src;
+}

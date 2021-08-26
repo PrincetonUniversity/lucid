@@ -1,0 +1,21 @@
+/* 
+
+*/
+
+Array src_1 = Array.create<32>(1024, 3);
+
+handle packetin (int src, int dst) {
+	int temp_src = src;
+	int startTs = Sys.time(1);
+	if (src == 1){
+		int junk = Array.set<32>(src_1, 0, temp_src);
+	}
+	generate doReport (startTs);
+	generate continue (src, dst);
+}
+
+handle doReport (int genTs) {
+	int temp_genTs = genTs;
+	int junk2 = Array.set<32>(src_1, 2, temp_genTs);
+/*	print_int (genTs);
+*/}

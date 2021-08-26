@@ -1,0 +1,28 @@
+/* A recursive control event that executes 
+   10 times before reflecting the packet.
+   In this version, the counter is kept in a register, 
+   rather than in a parameter to the event. */
+
+entry event ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos);
+event loop (int<<9>> port);
+exit event ip_out (int<<1>> drop, int<<9>> egr_port);
+
+
+global Array.t<<32>> counters = Array.create(1024);
+memop incr(int memval, int incrval) {
+    return memval + incrval;
+}
+
+handle ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos) {
+    generate loop(igr_port);
+}
+
+handle loop(int<<9>> port){    
+    // increment counter and get new value. 
+    int count = Array.update(counters, 0, incr, 1, incr, 1);
+    if (count == 10){
+        generate ip_out(0, port);                
+    } else {
+        generate loop(port);        
+    }
+}

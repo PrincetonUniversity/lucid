@@ -27,14 +27,14 @@ let subst =
         | None -> IUser x
         | Some x' -> IUser (Id x')
 
-      method! visit_global_ty env (cid, sizes) =
+      method! visit_TName env cid sizes b =
         let sizes = List.map (self#visit_size env) sizes in
         let cid =
           match CidMap.find_opt cid env.types with
           | None -> cid
           | Some x -> Id x
         in
-        cid, sizes
+        TName (cid, sizes, b)
 
       method! visit_ECall env x args =
         let args = List.map (self#visit_exp env) args in
@@ -44,26 +44,6 @@ let subst =
           | Some x' -> Id x'
         in
         ECall (x, args)
-
-      method! visit_DGlobal env id gty cid args =
-        let gty = self#visit_global_ty env gty in
-        let args = List.map (self#visit_exp env) args in
-        let cid =
-          match CidMap.find_opt cid env.vars with
-          | None -> cid
-          | Some id -> Id id
-        in
-        DGlobal (id, gty, cid, args)
-
-      method! visit_DConstr env constr_id ty_id size_args params body =
-        let ty_id =
-          match CidMap.find_opt ty_id env.types with
-          | None -> ty_id
-          | Some x -> Id x
-        in
-        let params = self#visit_params env params in
-        let body = self#visit_decls env body in
-        DConstr { constr_id; ty_id; size_args; params; body }
     end
   in
   v
@@ -77,17 +57,17 @@ let add_definitions prefix env ds =
       CidMap.add (Compound (prefix, Id id)) (flat_prefix prefix id) map
     in
     match d.d with
-    | DConst (id, _, _)
+    | ConstVar (id, _, _)
     | DExtern (id, _)
     | DFun (id, _, _, _)
     | DGroup (id, _)
     | DMemop (id, _)
     | DEvent (id, _, _, _)
     | DHandler (id, _)
-    | DConstr { constr_id = id; _ }
-    | DGlobal (id, _, _, _) -> { env with vars = add_entry env.vars id }
+    | ConstVarr (id, _, _, _)
+    | DGlobal (id, _, _) -> { env with vars = add_entry env.vars id }
     | DSize (id, _) -> { env with sizes = add_entry env.sizes id }
-    | DGlobalTy (id, _, _) -> { env with types = add_entry env.types id }
+    | DUserTy (id, _, _) -> { env with types = add_entry env.types id }
     | DModule (id, _, ds) ->
       let env' = List.fold_left (aux id) empty_env ds in
       let prefix_entries map =
@@ -120,9 +100,9 @@ let rec replace_module env m_id ds =
         let d = subst#visit_decl env d in
         let env, d =
           match d.d with
-          | DConst (id, x, y) ->
+          | ConstVar (id, x, y) ->
             ( { env with vars = add_entry env.vars id }
-            , DConst (prefix id, x, y) |> wrap d )
+            , ConstVar (prefix id, x, y) |> wrap d )
           | DExtern (id, x) ->
             ( { env with vars = add_entry env.vars id }
             , DExtern (prefix id, x) |> wrap d )
@@ -141,18 +121,18 @@ let rec replace_module env m_id ds =
           | DHandler (id, x) ->
             ( { env with vars = add_entry env.vars id }
             , DHandler (prefix id, x) |> wrap d )
-          | DConstr x ->
-            ( { env with vars = add_entry env.vars x.constr_id }
-            , DConstr { x with constr_id = prefix x.constr_id } |> wrap d )
-          | DGlobal (id, x, y, z) ->
+          | ConstVarr (id, x, y, z) ->
             ( { env with vars = add_entry env.vars id }
-            , DGlobal (prefix id, x, y, z) |> wrap d )
+            , ConstVarr (prefix id, x, y, z) |> wrap d )
+          | DGlobal (id, x, y) ->
+            ( { env with vars = add_entry env.vars id }
+            , DGlobal (prefix id, x, y) |> wrap d )
           | DSize (id, x) ->
             ( { env with sizes = add_entry env.sizes id }
             , DSize (prefix id, x) |> wrap d )
-          | DGlobalTy (id, x, y) ->
+          | DUserTy (id, x, y) ->
             ( { env with types = add_entry env.types id }
-            , DGlobalTy (prefix id, x, y) |> wrap d )
+            , DUserTy (prefix id, x, y) |> wrap d )
           | DModule (id, _, ds) ->
             let _, ds = replace_module env id ds in
             replace_module env m_id ds

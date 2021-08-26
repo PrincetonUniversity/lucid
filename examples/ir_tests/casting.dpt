@@ -1,0 +1,7 @@
+// casting 
+entry event pktin(int src_ip, int dst_ip);
+
+handle pktin(int src_ip, int dst_ip) {
+    int<<16>> x = ((int<<16>>) dst_ip) + ((int<<16>>) src_ip) + 1;
+    src_ip = src_ip;
+}

@@ -17,10 +17,9 @@ let to_id (s, i) = s, i
 let from_id (s, i) = s, i
 let to_string (s, i) = s ^ delim ^ string_of_int i
 let to_string_delim d (s, i) = s ^ d ^ string_of_int i
-let prepend_string p (s, i) = (p^s, i)
-
-let refresh (s, _) = (fresh s)
-;;
+let prepend_string p (s, i) = p ^ s, i
+let refresh (s, _) = fresh s
+let freshen = refresh
 
 let of_id_string s =
   try
@@ -33,7 +32,6 @@ let of_id_string s =
 let equal (s1, i1) (s2, i2) = s1 = s2 && i1 = i2
 let equals = equal
 let equal_names (s1, _) (s2, _) = s1 = s2
-
 
 (* let compare (s1, i1) (s2, i2) =
  *   let s = compare s1 s2 in

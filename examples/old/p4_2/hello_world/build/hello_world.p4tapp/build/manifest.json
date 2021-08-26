@@ -1,0 +1,55 @@
+{
+  "schema_version": "2.0.3",
+  "target": "tofino",
+  "build_date": "Fri Feb 26 13:29:41 2021",
+  "compiler_version": "9.2.0",
+  "compilation_succeeded": true,
+  "compilation_time": "5.90108847618103",
+  "run_id": "901df41d0c3a20e2",
+  "architecture": "tna",
+  "programs": [
+    {
+      "program_name": "DPT_harness.p4",
+      "p4_version": "p4-16",
+      "source_files": {
+        "src_root": "/media/psf/Home/Desktop/gits/dpt/examples/p4/hello_world/build/hello_world.p4tapp/p4src",
+        "includes": [
+          "/home/jsonch/bf_sde/bf-sde-9.2.0/install/share/p4c/p4include"
+        ],
+        "defines": [
+          "__TARGET_TOFINO__=1",
+          "__p4c__=1",
+          "__p4c_major__=9",
+          "__p4c_minor__=2",
+          "__p4c_patchlevel__=0",
+          "__p4c_version__=\"9.2.0\""
+        ]
+      },
+      "pipes": [
+        {
+          "pipe_id": 0,
+          "pipe_name": "pipe",
+          "files": {
+            "context": {
+              "path": "pipe/context.json"
+            },
+            "resources": [],
+            "graphs": [],
+            "logs": [
+              {
+                "path": "pipe/logs/parser.characterize.log",
+                "log_type": "parser"
+              },
+              {
+                "path": "pipe/logs/power.json",
+                "log_type": "power"
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ],
+  "compile_command": "/home/jsonch/bf_sde/bf-sde-9.2.0//install/bin/bf-p4c --std p4-16 --target tofino --arch tna -o /media/psf/Home/Desktop/gits/dpt/examples/p4/hello_world/build/hello_world.p4tapp/build/ --bf-rt-schema /media/psf/Home/Desktop/gits/dpt/examples/p4/hello_world/build/hello_world.p4tapp/build/bf-rt.json /media/psf/Home/Desktop/gits/dpt/examples/p4/hello_world/build/hello_world.p4tapp/p4src/DPT_harness.p4 -Xp4c   --table-placement-in-order ",
+  "conf_file": "DPT_harness.conf"
+}

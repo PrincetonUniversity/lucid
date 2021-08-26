@@ -1,0 +1,63 @@
+// Stage not set by dptc
+    table dpt_0_selectEventType {
+        key = {
+            md.dptMeta.eventType : ternary;
+        }
+        actions = {
+            dpt_111_pktin;
+        }
+        const default_action = dpt_111_pktin();
+        
+    }
+    
+    action dpt_111_pktin( ){
+        //next tables: [dpt_363_tbl_0_opstmt]
+        
+    }
+    
+    bit<32> x_114;
+    
+    // Stage not set by dptc
+    table dpt_363_tbl_0_opstmt {
+        actions = {
+            dpt_363_acn_0_opstmt;
+        }
+        const default_action = dpt_363_acn_0_opstmt();
+        
+    }
+    
+    action dpt_363_acn_0_opstmt( ){
+        dpt_363_alu_0_opstmt();
+        //next tables: [dpt_364_tbl_0_opstmt]
+        
+    }
+    
+    action dpt_363_alu_0_opstmt( ){
+        x_114 = md.pktin.src_ip >> 10;
+        
+    }
+    
+    bit<32> y_115;
+    
+    // Stage not set by dptc
+    table dpt_364_tbl_0_opstmt {
+        actions = {
+            dpt_364_acn_0_opstmt;
+        }
+        const default_action = dpt_364_acn_0_opstmt();
+        
+    }
+    
+    action dpt_364_acn_0_opstmt( ){
+        dpt_364_alu_0_opstmt();
+        //next tables: []
+        
+    }
+    
+    action dpt_364_alu_0_opstmt( ){
+        y_115 = x_114 << 10;
+        
+    }
+    
+    
+    

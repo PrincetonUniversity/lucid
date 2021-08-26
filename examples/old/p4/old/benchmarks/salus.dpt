@@ -1,0 +1,26 @@
+(* Measure the number of stateful alus that 
+   fit concurrently in 1 stage. *)
+
+
+Array myArray = Array.create(1024);
+
+handle packetin (int src, int dst) {
+	int junk0 = Array.set(myArray, 0, src);
+	(* generate access0(dst); *)
+}
+
+handle access1 (int val) {
+	int junk1 = Array.set(myArray, 1, val);
+	(* generate access2(val);	 *)
+}
+
+handle access2 (int val) {
+	int junk2 = Array.set(myArray, 2, val);
+	(* generate access3(val);	 *)
+}
+
+
+(* handle access3 (int val) {
+	int junk3 = Array.set(myArray, 3, val);
+}
+ *)

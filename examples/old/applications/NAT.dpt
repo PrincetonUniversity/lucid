@@ -1,0 +1,55 @@
+// Simple NAT implementation
+// Started at 2:57
+
+const int HASH_SEED = 1234;
+const int NUM_PORTS = 6; 
+
+// Maps NAT ports to src IP
+global nat_to_ip = new Array<<32>>(NUM_PORTS);
+// Maps NAT ports to src port
+global nat_to_port = new Array<<16>>(NUM_PORTS);
+
+// Handle packets coming from behind the NAT
+entry event inside_packet(int src_ip, int<<16>> src_port);
+exit event inside_continue(int<<16>> src_port);
+
+// Handle packets coming from outside the NAT
+entry event outside_packet(int<<16>> dst_port);
+exit event outside_continue(int<<16>> dst_port, int dst_ip);
+
+event add_to_nat(int src_ip, int<<16>> src_port);
+
+handle add_to_nat(int src_ip, int<<16>> src_port) {
+	int NAT_port = (int<<32>>) hash<<16>>(HASH_SEED, src_ip, src_port);
+	Array.set(nat_to_ip, NAT_port, src_ip);
+	Array.set(nat_to_port, NAT_port, src_port);
+
+	// This was generated from an inside_packet event, and still carries that
+	// packet's payload, so send it along when we're done updating
+	generate inside_continue((int<<16>>) NAT_port);
+}
+
+fun bool in_nat(int src_ip, int<<16>> src_port) {
+	int idx = (int<<32>>) hash<<16>>(HASH_SEED, src_ip, src_port);
+	int ip = Array.get(nat_to_ip, idx);
+	int<<16>> port = Array.get(nat_to_port, idx);
+	bool ret = (ip == src_ip && port == src_port);
+	return ret;
+}
+
+handle inside_packet(int src_ip, int<<16>> src_port) {
+	bool in = in_nat(src_ip, src_port);
+	if(in) {
+		int<<16>> NAT_port = hash<<16>>(HASH_SEED, src_ip, src_port);
+		generate inside_continue(NAT_port);
+	} else {
+		generate add_to_nat(src_ip, src_port); // Will generate the continue for us
+	}
+}
+
+handle outside_packet(int<<16>> dst_port) {
+	int dst_port = (int<<32>>) dst_port;
+	int ip = Array.get(nat_to_ip, dst_port);
+	int<<16>> port = Array.get(nat_to_port, dst_port);
+	generate outside_continue(port, ip);
+}

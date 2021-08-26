@@ -10,8 +10,9 @@ val to_id : string * int -> t
 val from_id : t -> string * int
 val to_string : t -> string
 val to_string_delim : string -> t -> string
-val prepend_string : string -> (string * int) -> (string * int)
+val prepend_string : string -> string * int -> string * int
 val refresh : t -> t
+val freshen : t -> t (* Alias for refresh *)
 
 (* Inverse of to_string. Do not use for other values. *)
 val of_id_string : string -> t

@@ -68,10 +68,10 @@ let to_id d =
   | _ -> failwith "attempted to convert cid with multiple parts into id"
 ;;
 
-let rec to_ids d = 
-  match d with 
+let rec to_ids d =
+  match d with
   | Id id -> [id]
-  | Compound (id, cid) -> id::(to_ids cid)
+  | Compound (id, cid) -> id :: to_ids cid
 ;;
 
 let rec names cid =

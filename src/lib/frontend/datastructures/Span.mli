@@ -2,6 +2,7 @@ type t =
   { fname : string
   ; start : int
   ; finish : int
+  ; spid : int
   }
 [@@deriving show, ord]
 

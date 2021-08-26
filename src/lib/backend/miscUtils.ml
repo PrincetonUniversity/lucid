@@ -1,15 +1,16 @@
 open Batteries
 open Printf
 module CL = Caml.List
+
 (* misc util functions *)
+
+let sum xs = CL.fold_left (+) 0 xs
+;;
 
 let cons_uniq xs x = if List.mem x xs then xs else x :: xs
 let unique_list_of xs = List.rev (List.fold_left cons_uniq [] xs)
-
-let list_remove xs s = CL.filter
-  (fun x -> x<>s)
-  xs
-;; 
+let list_remove xs x = CL.filter (fun x_c -> x_c <> x) xs
+let remove x xs = list_remove xs x
 
 (* do lists l1 and l2 intersect? *)
 let intersect l1 l2 =
@@ -21,6 +22,14 @@ let intersect l1 l2 =
 
 (* l1 - l2 *)
 let list_sub l1 l2 = List.filter (fun x -> not (List.mem x l2)) l1
+
+let list_eq l1 l2 =
+  match list_sub l1 l2, list_sub l2 l1 with
+  | [], [] -> true
+  | _ -> false
+;;
+
+let contains l1 ele = CL.exists (fun e -> e = ele) l1
 
 (* do l1 and l2 contain the same elements? *)
 let test_set_eq l1 l2 =
@@ -56,4 +65,3 @@ let rec find_first_dup l =
     | true -> Some hd
     | false -> find_first_dup tl)
 ;;
-

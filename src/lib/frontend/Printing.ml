@@ -52,8 +52,8 @@ let rec size_to_string s =
     concat_map " + " size_to_string tqvs ^ " + " ^ string_of_int n
 ;;
 
-let sizes_to_string sizes = comma_sep size_to_string sizes
 let wrap l r str = if String.equal str "" then "" else l ^ str ^ r
+let sizes_to_string sizes = comma_sep size_to_string sizes |> wrap "<<" ">>"
 
 let rec effect_to_string e =
   let wrap_hd hd str =
@@ -61,16 +61,31 @@ let rec effect_to_string e =
   in
   let base_str, tl =
     match unwrap_effect e with
-    | FZero, hd :: tl -> string_of_int hd, tl
-    | FVar tqv, hd :: tl ->
+    | FZero, (_, hd) :: tl -> string_of_int hd, tl
+    | FVar tqv, (_, hd) :: tl ->
       tqvar_to_string effect_to_string tqv |> wrap_hd hd, tl
     | _ -> failwith "impossible"
   in
-  List.fold_left (fun acc n -> acc ^ "." ^ string_of_int n) base_str tl
+  List.fold_left
+    (fun acc (o, n) ->
+      let str =
+        match o with
+        | None -> string_of_int n
+        | Some id -> wrap_hd n (id_to_string id)
+      in
+      acc ^ "." ^ str)
+    base_str
+    tl
 ;;
 
-let constraint_to_string c =
+let rec constraint_to_string c =
   match c with
+  (* Possibly look into forall operators later *)
+  (* | CForAll (i, cs) ->
+      Printf.sprintf
+        "forall %s > 0.(%s)"
+        (id_to_string i)
+        (comma_sep constraint_to_string cs) *)
   | CLeq (e1, e2) -> effect_to_string e1 ^ " <= " ^ effect_to_string e2
 ;;
 
@@ -101,33 +116,35 @@ let cspecs_to_string constraints =
         constraints
 ;;
 
-let gty_to_string (cid, sizes) =
-  cid_to_string cid ^ "<<" ^ comma_sep size_to_string sizes ^ ">>"
-;;
-
 let rec raw_ty_to_string t =
   match t with
   | TQVar tqv -> tqvar_to_string raw_ty_to_string tqv
   | TBool -> "bool"
   | TInt i -> "int<<" ^ size_to_string i ^ ">>"
-  | TGlobal (gty, effect) ->
-    let eff =
-      if cfg.show_effects then "(" ^ effect_to_string effect ^ ")" else ""
-    in
-    gty_to_string gty ^ eff
+  | TName (cid, sizes, b) ->
+    cid_to_string cid
+    ^ sizes_to_string sizes
+    ^ if cfg.verbose_types then "{" ^ string_of_bool b ^ "}" else ""
   | TEvent b -> if b then "mevent" else "event"
   | TFun func -> func_to_string func
-  | TMemop (size, ty) ->
+  | TMemop (size1, size2) ->
     Printf.sprintf
       "memop[int<<%s>>, %s]"
-      (size_to_string size)
-      (raw_ty_to_string ty)
+      (size_to_string size1)
+      (size_to_string size2)
   | TVoid -> "void"
   | TGroup -> "group"
+  | TRecord lst ->
+    "{"
+    ^ concat_map "; " (fun (str, ty) -> raw_ty_to_string ty ^ " : " ^ str) lst
+    ^ "}"
+  | TVector (ty, size) ->
+    Printf.sprintf "%s[%s]" (raw_ty_to_string ty) (size_to_string size)
+  | TTuple tys -> "(" ^ concat_map " * " raw_ty_to_string tys ^ ")"
 
 and func_to_string func =
-  let arg_tys = concat_map ", " raw_ty_to_string func.arg_tys in
-  let ret_ty = raw_ty_to_string func.ret_ty in
+  let arg_tys = concat_map ", " ty_to_string func.arg_tys in
+  let ret_ty = ty_to_string func.ret_ty in
   if cfg.show_effects
   then
     Printf.sprintf
@@ -139,7 +156,17 @@ and func_to_string func =
       (effect_to_string func.end_eff)
   else Printf.sprintf "(%s) -> %s" arg_tys ret_ty
 
-and ty_to_string t = raw_ty_to_string t.raw_ty
+and ty_to_string t =
+  let eff_str =
+    if cfg.show_effects && (is_global t || cfg.show_all_effects)
+    then effect_to_string t.teffect |> wrap "(" ")"
+    else ""
+  in
+  match !(t.tprint_as) with
+  | Some raw_ty when cfg.use_type_names && false ->
+    raw_ty_to_string raw_ty ^ eff_str
+  | _ -> raw_ty_to_string t.raw_ty ^ eff_str
+;;
 
 let pat_to_string p =
   match p with
@@ -159,7 +186,6 @@ let op_to_string op =
   match op with
   | And -> "&&"
   | Or -> "||"
-  | Not -> "!"
   | Eq -> "=="
   | Neq -> "!="
   | Less -> "<"
@@ -175,7 +201,9 @@ let op_to_string op =
   | BitOr -> "|"
   | LShift -> "<<"
   | RShift -> ">>"
+  | Not -> "!" (* This case isn't actually used *)
   | Slice (n, m) -> Printf.sprintf "[%d : %d]" n m
+  | TGet (n, m) -> Printf.sprintf "[%d get %d]" n m
 ;;
 
 let rec v_to_string v =
@@ -220,7 +248,8 @@ let rec e_to_string e =
     | None -> ""
     | Some (IConst 32) -> ""
     | Some size -> "<<" ^ size_to_string size ^ ">>")
-  | EOp (op, [e]) -> op_to_string op ^ exp_to_string e
+  | EOp (Not, [e]) -> "!" ^ exp_to_string e
+  | EOp (op, [e]) -> exp_to_string e ^ op_to_string op
   | EOp (op, [e1; e2]) -> exp_to_string e1 ^ op_to_string op ^ exp_to_string e2
   | EOp (op, es) ->
     error
@@ -237,6 +266,23 @@ let rec e_to_string e =
     Printf.sprintf
       "{%s}"
       (concat_map "; " (fun (str, exp) -> str ^ " = " ^ exp_to_string exp) lst)
+  | EWith (base, lst) ->
+    Printf.sprintf
+      "{%s with %s}"
+      (exp_to_string base)
+      (concat_map "; " (fun (str, exp) -> str ^ " = " ^ exp_to_string exp) lst)
+  | EVector es -> list_to_string exp_to_string es
+  | EComp (e, i, k) ->
+    Printf.sprintf
+      "[%s for %s < %s]"
+      (exp_to_string e)
+      (id_to_string i)
+      (size_to_string k)
+  | EIndex (e, i) ->
+    Printf.sprintf "%s[%s]" (exp_to_string e) (size_to_string i)
+  | ETuple es -> "(" ^ concat_map ", " exp_to_string es ^ ")"
+  | ESizeCast (sz1, sz2) ->
+    Printf.sprintf "to_int<<%s>>(%s)" (size_to_string sz1) (size_to_string sz2)
 
 and exp_to_string e = e_to_string e.e
 and es_to_string es = comma_sep exp_to_string es
@@ -291,7 +337,15 @@ and stmt_to_string s =
       if List.length es = 1 then s else "(" ^ s ^ ")"
     in
     "match " ^ estr ^ " with \n" ^ concat_map "\n" branch_to_string branches
+  | SLoop (s, i, k) ->
+    Printf.sprintf
+      "for (%s < %s) {\n%s\n}"
+      (id_to_string i)
+      (size_to_string k)
+      (stmt_to_string s)
 ;;
+
+let statement_to_string = stmt_to_string
 
 let event_sort_to_string sort =
   match sort with
@@ -306,20 +360,17 @@ let rec interface_spec_to_string spec =
   | InSize id -> Printf.sprintf "size %s;" (id_to_string id)
   | InVar (id, ty) ->
     Printf.sprintf "%s %s;" (ty_to_string ty) (id_to_string id)
-  | InGlobalTy (id, size_names, body) ->
-    if not (List.is_empty body)
-    then d_to_string (DGlobalTy (id, size_names, body))
-    else
-      Printf.sprintf
-        "global type %s%s;"
-        (id_to_string id)
-        (comma_sep id_to_string size_names |> wrap "<<" ">>")
-  | InConstr (constr_id, ty_id, size_names, params) ->
+  | InTy (id, sizes, tyo, b) ->
+    let prefix = if b then "global " else "" in
+    let decl = prefix ^ "type " ^ id_to_string id ^ sizes_to_string sizes in
+    (match tyo with
+    | None -> decl ^ ";"
+    | Some ty -> decl ^ " = " ^ ty_to_string ty)
+  | InConstr (id, ty, params) ->
     Printf.sprintf
-      "constr %s%s %s(%s);"
-      (cid_to_string ty_id)
-      (comma_sep id_to_string size_names |> wrap "<<" ">>")
-      (id_to_string constr_id)
+      "constr %s %s(%s);"
+      (ty_to_string ty)
+      (id_to_string id)
       (params_to_string params)
   | InFun (id, rty, cspecs, params) ->
     Printf.sprintf
@@ -341,33 +392,32 @@ let rec interface_spec_to_string spec =
       (interface_to_string intf)
 
 and interface_to_string specs =
-  "{" ^ concat_map "\n" interface_spec_to_string specs ^ "}"
+  "{\n" ^ concat_map "\n\n" interface_spec_to_string specs ^ "\n}\n"
 
 and d_to_string d =
   match d with
-  | DGlobal (id, gty, cid, args) ->
+  | DGlobal (id, ty, exp) ->
     Printf.sprintf
-      "global %s %s = %s(%s);\n"
-      (gty_to_string gty)
+      "global %s %s = %s;\n"
+      (ty_to_string ty)
       (id_to_string id)
-      (cid_to_string cid)
-      (comma_sep exp_to_string args)
+      (exp_to_string exp)
   | DHandler (id, (params, s)) ->
     Printf.sprintf
-      "handle %s(%s) {\n%s\n}\n"
+      "handle %s(%s) {\n%s\n}"
       (id_to_string id)
       (params_to_string params)
       (stmt_to_string s)
   | DEvent (id, sort, cspecs, params) ->
     Printf.sprintf
-      "%s %s(%s) %s;\n"
+      "%s %s(%s) %s;"
       (event_sort_to_string sort)
       (id_to_string id)
       (params_to_string params)
       (cspecs_to_string cspecs)
   | DFun (id, rty, cspecs, (params, s)) ->
     Printf.sprintf
-      "fun %s %s(%s)%s {\n%s\n}\n"
+      "fun %s %s(%s)%s {\n%s\n}"
       (ty_to_string rty)
       (id_to_string id)
       (params_to_string params)
@@ -375,13 +425,13 @@ and d_to_string d =
       (stmt_to_string s)
   | DMemop (id, (params, s)) ->
     Printf.sprintf
-      "memop %s(%s)\n {%s}\n"
+      "memop %s(%s)\n {%s}"
       (id_to_string id)
       (params_to_string params)
       (stmt_to_string s)
   | DSize (id, size) ->
     Printf.sprintf "size %s = %s;" (id_to_string id) (size_to_string size)
-  | DConst (id, ty, e) ->
+  | ConstVar (id, ty, e) ->
     Printf.sprintf
       "const %s %s = %s;"
       (id_to_string id)
@@ -394,33 +444,28 @@ and d_to_string d =
       "group %s = {%s};"
       (id_to_string id)
       (comma_sep exp_to_string es)
-  | DGlobalTy (id, ids, params) ->
+  | DUserTy (id, sizes, ty) ->
     Printf.sprintf
-      "global type %s%s = {\n%s}"
+      "type %s%s = %s"
       (id_to_string id)
-      (comma_sep id_to_string ids |> wrap "<<" ">>")
-      (List.fold_right
-         (fun (id, ty) acc ->
-           ty_to_string ty ^ "  " ^ id_to_string id ^ ";\n" ^ acc)
-         params
-         "")
-  | DConstr { constr_id; ty_id; size_args; params; body } ->
+      (sizes_to_string sizes)
+      (ty_to_string ty)
+  | ConstVarr (id, ty, params, exp) ->
     Printf.sprintf
-      "constr %s%s %s(%s) {\n%s\n}"
-      (cid_to_string ty_id)
-      (comma_sep id_to_string size_args |> wrap "<<" ">>")
-      (id_to_string constr_id)
+      "constr %s %s(%s) = %s;"
+      (ty_to_string ty)
+      (id_to_string id)
       (params_to_string params)
-      (decls_to_string body)
+      (exp_to_string exp)
   | DModule (id, intf, ds) ->
     let intf_str =
       if List.is_empty intf then "" else " : " ^ interface_to_string intf
     in
     Printf.sprintf
-      "module %s%s {\n%s\n}\n"
+      "module %s%s {\n%s\n}"
       (id_to_string id)
       intf_str
       (decls_to_string ds)
 
 and decl_to_string d = d_to_string d.d
-and decls_to_string ds = concat_map "\n" decl_to_string ds
+and decls_to_string ds = concat_map "\n\n" decl_to_string ds

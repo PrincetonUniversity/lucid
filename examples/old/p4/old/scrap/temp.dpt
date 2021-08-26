@@ -1,0 +1,31 @@
+function (int, int) find (int key) {	
+	int val_idx = NOT_IN_ARRAY;
+	int h1 = hash1(key, stage_sz);
+	int h2 = hash2(key, stage_sz);
+
+	int stage1_key = keys_1.get(h1);
+	int stage2_key = keys_2.get(h2);
+	if (stage1_key == key) {
+		val_idx = h1;
+	}
+	(* the key was found in the second stage. *)
+	else {
+		if (stage2_key == key) {
+			val_idx = stage_sz + h2;
+		}
+	}	
+	return val_idx;
+}
+
+function int check_and_update_stash (int key) {
+	int stash_result = NOT_IN_STASH;
+	(* if the stash is empty, put this key in it. *)
+	int stashed_key == Array.getCondset(key_stash, 0, 1, ==, NULL_IDX);
+	if (stashed_key == key){
+		stash_result = IN_STASH;
+	}
+	if (stashed_key == SLOT_EMPTY) {
+		stash_result = JUST_STASHED;		
+	}
+	return stash_result;
+}

@@ -18,30 +18,13 @@ let level_reset () = current_level := 0
 let fresh_tvar name = TVar (ref (Unbound (Id.fresh name, level ())))
 let fresh_size ?(name = "sz") () = IVar (fresh_tvar name)
 let fresh_effect ?(name = "eff") () = FVar (fresh_tvar name)
-let fresh_type ?(name = "a") () = TQVar (fresh_tvar name)
-let error_sp sp msg = Console.error_position sp msg
 
-(* Make sure a type is fully determined -- no QVars or unbound TVars.
-   Events/Handlers are allowed to be polymorphic inside global types, though. *)
-let ensure_concrete ?(check_effects = true) ty =
-  let v =
-    object (self)
-      inherit [_] s_iter
-
-      method! visit_Unbound _ _ _ _ =
-        error_sp ty.tspan @@ "Unable to fully determine type of this expression"
-
-      method! visit_QVar _ _ _ =
-        error_sp ty.tspan
-        @@ "Encountered QVar in a type that should be concrete"
-
-      method! visit_TGlobal _ gty eff =
-        self#visit_global_ty () gty;
-        if check_effects then self#visit_effect () eff
-    end
-  in
-  v#visit_ty () ty
+let fresh_type ?(name = "a") () =
+  ty_eff (TQVar (fresh_tvar name)) (fresh_effect ())
 ;;
+
+let error_sp sp msg = Console.error_position sp msg
+let strip_links ty = { ty with raw_ty = TyTQVar.strip_links ty.raw_ty }
 
 (* Not really kinds, but rather everything we have a different map for in the
    environment *)
@@ -50,7 +33,7 @@ type kind =
   | KConst
   | KHandler
   | KConstr
-  | KGlobalTy
+  | KUserTy
 
 module KindSet = Set.Make (struct
   type t = kind * cid
@@ -61,21 +44,24 @@ end)
 type env =
   { (* Maps for all the different kinds of variables we have in a program *)
     sizes : CidSet.t
-  ; locals : raw_ty CidMap.t
-  ; consts : raw_ty CidMap.t (* Constant variables *)
+  ; locals : ty CidMap.t
+  ; consts : ty CidMap.t (* Constant variables *)
+  ; (* Maps vector index vars to their max size and an alpha-renamed cid *)
+    indices : (id * size) IdMap.t
   ; (* Maps for special "variables" like handlers and constructors *)
     handlers : (constr list * params) CidMap.t
-  ; constructors : (cid * id list * (* constr args *) raw_ty list) CidMap.t
-  ; global_tys : (id list (* size args *) * params) CidMap.t
-  ; global_labels : cid StringMap.t (* Maps labels to the gty with that label *)
+  ; constructors : func_ty CidMap.t
+  ; user_tys : (ty * sizes) CidMap.t
+  ; record_labels : ty StringMap.t (* Maps labels to the gty with that label *)
   ; (* Track the things we've defined in the current module body *)
     module_defs : KindSet.t
   ; (* Information we use while typechecking function/handler bodies *)
     current_effect : effect
   ; constraints : constr list
-  ; ret_ty : raw_ty option (* Some iff we're in a function body *)
+  ; ret_ty : ty option (* Some iff we're in a function body *)
   ; ret_effects : effect list (* All the effects we `return`ed at *)
   ; returned : bool (* If we ran into a return statement *)
+  ; in_global_def : bool (* True if we're able to use constructors *)
   }
 
 let empty_env =
@@ -83,15 +69,17 @@ let empty_env =
   ; handlers = CidMap.empty
   ; locals = CidMap.empty
   ; consts = CidMap.empty
+  ; indices = IdMap.empty
   ; current_effect = FZero
   ; constraints = []
   ; ret_ty = None
   ; ret_effects = []
   ; returned = false
   ; constructors = CidMap.empty
-  ; global_tys = CidMap.empty
-  ; global_labels = StringMap.empty
+  ; user_tys = CidMap.empty
+  ; record_labels = StringMap.empty
   ; module_defs = KindSet.empty
+  ; in_global_def = false
   }
 ;;
 
@@ -114,12 +102,26 @@ let default_env =
       CidMap.empty
       (Arrays.constructors @ Counters.constructors)
   in
-  let global_tys =
-    CidMap.empty
-    |> CidMap.add Arrays.t_id Arrays.sizes_labels
-    |> CidMap.add Counters.t_id Counters.sizes_labels
-  in
-  { empty_env with consts; constructors; global_tys }
+  { empty_env with consts; constructors }
+;;
+
+let lookup_var span env cid =
+  match CidMap.find_opt cid env.locals with
+  | Some t -> t
+  | None ->
+    (match CidMap.find_opt cid env.consts with
+    | Some t -> t
+    | None ->
+      (match CidMap.find_opt cid env.constructors with
+      | Some t ->
+        if env.in_global_def
+        then ty (TFun t)
+        else
+          error_sp
+            span
+            "Cannot call constructor except in global definitions or other \
+             constructors"
+      | None -> error_sp span ("Unbound variable " ^ Cid.to_string cid)))
 ;;
 
 (* Drops the last n constraints in the second environment and returns
@@ -212,13 +214,14 @@ let check_test id1 id2 exp =
    and parameters *)
 let mk_event_ty constrs params =
   let eff = FVar (QVar (Id.fresh "start")) in
-  TFun
-    { arg_tys = List.map (fun (_, ty) -> ty.raw_ty) params
-    ; ret_ty = TEvent false (* Events are singlecast by default *)
-    ; start_eff = eff
-    ; end_eff = eff
-    ; constraints = ref constrs
-    }
+  ty
+  @@ TFun
+       { arg_tys = List.map snd params
+       ; ret_ty = ty (TEvent false) (* Events are singlecast by default *)
+       ; start_eff = eff
+       ; end_eff = eff
+       ; constraints = ref constrs
+       }
 ;;
 
 (* Given a printf statement, return the list of expected types for its arguments
@@ -251,33 +254,30 @@ let rec validate_size span env size =
    on the effects of the parameters, as well as a starter list of ending effects
 *)
 let spec_to_constraints (env : env) sp start_eff (params : params) specs =
-  let rec extract_effect x rty =
-    match rty with
-    | TGlobal (_, eff) -> eff
-    | TQVar (TVar { contents = Link ty }) -> extract_effect x ty
-    | ty ->
-      error_sp sp
-      @@ Printf.sprintf
-           "Parameter %s was used in a constraint, but its type %s is not a \
-            global type"
-           x
-           (Printing.raw_ty_to_string ty)
-  in
   let lookup_effect env cid =
     if Cid.names cid = ["start"]
     then start_eff
     else (
-      match CidMap.find_opt cid env.locals with
-      | Some ty -> extract_effect (Printing.cid_to_string cid) ty
-      | None ->
-        (match CidMap.find_opt cid env.consts with
-        | Some ty -> extract_effect (Printing.cid_to_string cid) ty
-        | _ -> error_sp sp @@ "Unbound variable %s" ^ Printing.cid_to_string cid))
+      let ty =
+        match CidMap.find_opt cid env.locals with
+        | Some ty -> ty
+        | None ->
+          (match CidMap.find_opt cid env.consts with
+          | Some ty -> ty
+          | _ -> error_sp sp @@ "Unbound variable " ^ Printing.cid_to_string cid)
+      in
+      if not (is_global ty)
+      then
+        error_sp sp
+        @@ "Variable "
+        ^ Printing.cid_to_string cid
+        ^ " is not obviously global and cannot appear in a constraint."
+      else ty.teffect)
   in
   let env =
     List.fold_left
       (fun env (id, ty) ->
-        { env with locals = CidMap.add (Id id) ty.raw_ty env.locals })
+        { env with locals = CidMap.add (Id id) ty env.locals })
       env
       params
   in
@@ -317,163 +317,77 @@ let spec_to_constraints (env : env) sp start_eff (params : params) specs =
   constraints, end_eff
 ;;
 
-let add_global_label env span g_id l =
+let add_record_label env span recty l =
   let l = Id.name l in
-  let g_id = Id g_id in
-  match StringMap.find_opt l env.global_labels with
-  | None -> { env with global_labels = StringMap.add l g_id env.global_labels }
-  | Some id ->
+  match StringMap.find_opt l env.record_labels with
+  | None -> { env with record_labels = StringMap.add l recty env.record_labels }
+  | Some ty ->
     error_sp span
     @@ Printf.sprintf
          "The label %s already exists in type %s"
          l
-         (Printing.cid_to_string id)
+         (Printing.ty_to_string ty)
 ;;
 
-let subst_ivars mapping =
-  let v =
-    object
-      inherit [_] s_map
+(* Replace all user types with their definition -- even abstract ones.
+   For use when validating module interfaces -- everywhere else, this is already
+   done by ReplaceUserTys.ml. Expects the interface to be well-formed. *)
+(* FIXME: This currently doesn't fully replace the effect. It should work fine
+   as long as the effect is a QVar, though. *)
+let subst_user_tys =
+  object
+    inherit [_] s_map as super
 
-      val mapping : cid CidMap.t = mapping
-
-      method! visit_IUser _ cid =
-        match CidMap.find_opt cid mapping with
-        | None -> IUser cid
-        | Some cid' -> IUser cid'
-    end
-  in
-  v
+    method! visit_ty env ty =
+      match ty.raw_ty with
+      | TName (cid, sizes, _) ->
+        begin
+          match CidMap.find_opt cid env.user_tys with
+          | None -> (* Must be a builtin *) ty
+          | Some (ty', sizes') ->
+            let replaced_ty =
+              ReplaceUserTys.subst_sizes
+                ty.tspan
+                cid
+                ty'.raw_ty
+                (ReplaceUserTys.extract_ids ty.tspan sizes')
+                sizes
+            in
+            { ty with raw_ty = replaced_ty; teffect = ty'.teffect }
+        end
+      | _ -> super#visit_ty env ty
+  end
 ;;
 
-let inst_ivars mapping =
-  let v =
-    object
-      inherit [_] s_map
+type loop_subst = (id * int) * (id * effect)
 
-      val mapping : size tqvar IdMap.t = !mapping
+let subst_loop =
+  object (self)
+    inherit [_] s_map
 
-      method! visit_IUser _ cid =
-        match cid with
-        | Compound _ -> IUser cid
-        | Id id ->
-          (match IdMap.find_opt id mapping with
-          | None -> IUser cid
-          | Some x -> IVar x)
-    end
-  in
-  v
+    method! visit_FIndex (env : loop_subst) id eff =
+      let eff = self#visit_effect env eff in
+      let target, n = fst env in
+      if Id.equal id target
+      then if n = 0 then FProj eff else FSucc (FProj eff)
+      else FIndex (id, eff)
+
+    method! visit_FVar (env : loop_subst) tqv =
+      let target, eff = snd env in
+      match tqv with
+      | TVar { contents = Unbound (id, _) } when Id.equal id target -> eff
+      | _ -> FVar (self#visit_tqvar self#visit_effect env tqv)
+  end
 ;;
 
-let validate_constr_body expected_sizes size_args labels body =
-  let err span s exp got =
-    error_sp span
-    @@ Printf.sprintf
-         "Declaration in constructor has wrong %s: expected %s but got %s"
-         s
-         exp
-         got
+let drop_indexes target eff =
+  let rec aux lst =
+    match lst with
+    | [] -> []
+    | (Some id, _) :: _ when Id.equal id target -> []
+    | hd :: tl -> hd :: aux tl
   in
-  let subst =
-    subst_ivars
-      (List.fold_left2
-         (fun acc id1 id2 -> CidMap.add id1 id2 acc)
-         CidMap.empty
-         size_args
-         expected_sizes)
-  in
-  List.iter2
-    (fun d (id, ty) ->
-      match d.d, ty.raw_ty with
-      | (DGlobal (id2, _, _, _) | DConst (id2, _, _)), _
-        when not (Id.equal id id2) ->
-        err d.dspan "name" (Id.name id) (Id.name id2)
-      | DGlobal (_, gty2, _, _), TGlobal (gty1, _) ->
-        if gty1 <> subst#visit_global_ty () gty2
-        then
-          err
-            d.dspan
-            "type"
-            (Printing.gty_to_string gty1)
-            (Printing.gty_to_string gty2)
-      | DGlobal (_, gty2, _, _), ty ->
-        err
-          d.dspan
-          "type"
-          (Printing.raw_ty_to_string ty)
-          (Printing.gty_to_string gty2)
-      | DConst (_, ty2, _), _ ->
-        if not (equiv_ty ty (subst#visit_ty () ty2))
-        then
-          err
-            d.dspan
-            "type"
-            (Printing.ty_to_string ty)
-            (Printing.ty_to_string ty2)
-      | _ ->
-        error_sp
-          d.dspan
-          "Only global and constant declarations are allowed in constructor \
-           bodies")
-    body
-    labels
-;;
-
-(* Only meant to be called on global types. Tells us if it recursively contains
-   any global entries *)
-let has_global_entry env ty_cid =
-  let rec aux ty =
-    match TyTQVar.strip_links ty.raw_ty with
-    | TGlobal ((cid, _), _) ->
-      let _, params = CidMap.find cid env.global_tys in
-      List.exists (fun (_, ty) -> aux ty) params || List.is_empty params
-      (* Assume all abstract types are global *)
-    | _ -> false
-  in
-  aux (ty (TGlobal ((ty_cid, []), FZero)))
-;;
-
-(* Ensure that a record entry has entries for all labels, and no entries for
-   nonexistent labels. Also ensure that this type doesn't contain any globals. *)
-let verify_record_entries env span ty_cid labels expected_params =
-  if List.is_empty expected_params
-  then
-    error_sp span
-    @@ "Type "
-    ^ Printing.cid_to_string ty_cid
-    ^ " is abstract and cannot be created directly";
-  if has_global_entry env ty_cid
-  then
-    error_sp span
-    @@ "Type "
-    ^ Printing.cid_to_string ty_cid
-    ^ " contains globals, and so cannot be created dynamically";
-  let rec aux l1 l2 =
-    match l1, l2 with
-    | [], [] -> ()
-    | hd1 :: _, [] ->
-      error_sp span
-      @@ Printf.sprintf
-           "Label %s does not belong to type %s"
-           hd1
-           (Printing.cid_to_string ty_cid)
-    | [], hd2 :: _ ->
-      error_sp span @@ Printf.sprintf "Missing definition for label %s" hd2
-    | hd1 :: tl1, hd2 :: tl2 ->
-      if hd1 = hd2
-      then aux tl1 tl2
-      else if List.mem hd1 tl2
-      then error_sp span @@ Printf.sprintf "Missing definition for label %s" hd2
-      else
-        error_sp span
-        @@ Printf.sprintf
-             "Label %s does not belong to type %s"
-             hd1
-             (Printing.cid_to_string ty_cid)
-  in
-  aux
-    (List.sort Pervasives.compare labels)
-    (List.sort
-       Pervasives.compare
-       (List.map (fun (l_id, _) -> Id.name l_id) expected_params))
+  let base, lst = unwrap_effect eff in
+  let lst = aux lst in
+  wrap_effect base lst
 ;;

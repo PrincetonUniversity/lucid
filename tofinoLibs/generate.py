@@ -27,6 +27,7 @@ defaultPktRec = {
     "ip.src" : "12.12.12.12",
     "ip.dst" : "34.34.34.34",
     "ip.id"  : 0,
+    "ip.tos" : 0,
     "ip.proto" : dpkt.ip.IP_PROTO_UDP,
     "udp.src" : 10,
     "udp.dst" : 20,
@@ -89,7 +90,8 @@ def pktFromRec(rec):
             id = int(rec["ip.id"]), 
             src = socket.inet_aton(rec["ip.src"]), 
             dst = socket.inet_aton(rec["ip.dst"]), 
-            p   = int(rec["ip.proto"])
+            p   = int(rec["ip.proto"]),
+            tos = int(rec["ip.tos"])
         )
         ipPkt.data = L4Packet
         ipPkt.len += len(L4Packet)

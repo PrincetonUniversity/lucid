@@ -2,13 +2,14 @@
 # =           Helper functions for simple python control.           =
 # ===================================================================
 
-import time, sys, os, re, importlib, binascii, json
+import time, sys, os, re, importlib, binascii, json, logging
 
 
 # paths to tofino python libs
-pylib_paths = ["/lib/python2.7/site-packages/tofino", "/lib/python2.7/site-packages", "/lib/python2.7/site-packages/p4testutils"]
+pylib_paths = ["/lib/python2.7/site-packages/tofino", "/lib/python2.7/site-packages", "/lib/python2.7/site-packages/p4testutils", "/lib/python2.7/site-packages/bf-ptf"]
 pylib_paths = [os.getenv('SDE_INSTALL')+p for p in pylib_paths]
 for p in pylib_paths:
+  print ("adding path: %s"%str(p))
   sys.path.append(p)
 
 from thrift.transport import TSocket, TTransport
@@ -44,8 +45,8 @@ class Manager(object):
       client_id = 0
       print ("setting up gRPC client interface...")
       self.interface = gc.ClientInterface(grpc_addr, 
-        client_id = client_id, device_id=0, 
-        is_master=False,notifications=None)    
+        client_id = client_id, device_id=0,
+        notifications=None) 
       self.interface.bind_pipeline_config(self.p4Name)
 
   def fixed_function_connect(self):
@@ -67,7 +68,7 @@ class Manager(object):
   def disconnect(self):
     # grpc 
     if(self.p4Name != None):
-      self.interface._tear_down_stream()
+      self.interface.tear_down_stream()
 
     # fixed function
     self.mc.mc_destroy_session(self.mc_sess_hdl)

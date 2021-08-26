@@ -1,0 +1,8 @@
+{
+    "builds_dir":"__builds",
+    "tests": [
+        {"commands":["compile", "assemble", "execute"], "prog":"src/reflector.dpt","harness":"src/ip_harness.p4", "build":"reflector_build", "testspec":"tests/reflect_one.json"},
+        {"commands":["compile", "assemble", "execute"], "prog":"src/control_reflector.dpt","harness":"src/ip_harness.p4", "build":"control_reflector_build", "testspec":"tests/reflect_one_control.json"},
+        {"commands":["compile", "assemble", "execute"], "prog":"src/simple_cuckoo_firewall.dpt", "harness":"src/ip_harness.p4", "build":"cuckoo_build", "testspec":"tests/cuckoo_collision.json"}
+    ]
+}

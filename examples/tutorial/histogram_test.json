@@ -1,0 +1,23 @@
+{
+    "name" : "histogram_test", 
+    "input_port": "128",
+    "packets": [
+        {"ip.src" : "1.1.1.1", "ip.dst" : "2.2.2.2", "payload.length" : 256},
+        {"ip.src" : "2.1.1.1", "ip.dst" : "2.2.2.2", "payload.length" : 256},
+        {"ip.src" : "3.1.1.1", "ip.dst" : "2.2.2.2", "payload.length" : 256},
+        {"ip.src" : "4.1.1.1", "ip.dst" : "2.2.2.2", "payload.length" : 768},
+        {"ip.src" : "5.1.1.1", "ip.dst" : "2.2.2.2", "payload.length" : 768}
+    ],
+    "model-output":
+    [
+        {"port" : 128, "ip.src" : "1.1.1.1", "ip.dst" : "2.2.2.2"},
+        {"port" : 128, "ip.src" : "2.1.1.1", "ip.dst" : "2.2.2.2"},
+        {"port" : 128, "ip.src" : "3.1.1.1", "ip.dst" : "2.2.2.2"},
+        {"port" : 128, "ip.src" : "4.1.1.1", "ip.dst" : "2.2.2.2"},
+        {"port" : 128, "ip.src" : "5.1.1.1", "ip.dst" : "2.2.2.2"},
+        {"port":132, "ip.src" : "0.0.0.0", "ip.dst" : "0.0.0.0"},
+        {"port":132, "ip.src" : "0.0.0.1", "ip.dst" : "0.0.0.3"},
+        {"port":132, "ip.src" : "0.0.0.2", "ip.dst" : "0.0.0.1"},
+        {"port":132, "ip.src" : "0.0.0.3", "ip.dst" : "0.0.0.0"}
+    ]
+}

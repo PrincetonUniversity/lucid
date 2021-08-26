@@ -19,8 +19,15 @@ let sizes_labels = [Id.create "dummy_sz"], []
 let counter_create_id = Cid.create_ids [counter_id; Id.create "create"]
 
 let counter_create_sig =
-  let sz_id = Id.fresh "sz" in
-  t_id, [sz_id], [TInt (IVar (QVar sz_id))]
+  let counter_size = IVar (QVar (Id.fresh "a")) in
+  let counter_eff = FVar (QVar (Id.fresh "eff")) in
+  let start_eff = FVar (QVar (Id.fresh "eff")) in
+  { arg_tys = [ty @@ TInt counter_size]
+  ; ret_ty = ty_eff (TName (t_id, [counter_size], true)) counter_eff
+  ; start_eff
+  ; end_eff = start_eff
+  ; constraints = ref []
+  }
 ;;
 
 (* Counter.add *)
@@ -30,16 +37,19 @@ let counter_add_cid = Cid.create_ids [counter_id; counter_add_id]
 let counter_add_error msg = counter_error counter_add_name msg
 
 let counter_add_ty =
-  let size = IVar (QVar (Id.fresh "sz")) in
-  let ref_eff = FVar (QVar (Id.fresh "eff")) in
+  let counter_size = IVar (QVar (Id.fresh "a")) in
+  let counter_eff = FVar (QVar (Id.fresh "eff")) in
   let start_eff = FVar (QVar (Id.fresh "eff")) in
-  TFun
-    { arg_tys = [TGlobal ((t_id, [size]), ref_eff); TInt size]
-    ; ret_ty = TInt size
-    ; start_eff
-    ; end_eff = FSucc ref_eff
-    ; constraints = ref [CLeq (start_eff, ref_eff)]
-    }
+  ty
+  @@ TFun
+       { arg_tys =
+           [ ty_eff (TName (t_id, [counter_size], true)) counter_eff
+           ; ty @@ TInt counter_size ]
+       ; ret_ty = ty @@ TInt counter_size
+       ; start_eff
+       ; end_eff = FSucc counter_eff
+       ; constraints = ref [CLeq (start_eff, counter_eff)]
+       }
 ;;
 
 let dummy_memop = State.F (fun _ _ args -> extract_ival (List.hd args))

@@ -1,0 +1,76 @@
+include "BloomFilterTimeout.dpt"
+include "CountMinSketchTimeout.dpt"
+/*
+This program protects client againt DNS reflection attacks.
+1.  A count min sketch measures the number of DNS responses sent to each monitored client.
+2.  When the number of DNS responses crosses a threshold,
+    the monitored client is considered "protected".
+3.  DNS Packets from protected clients are passed
+    through a probabalistic stateful firewall (a bloom filter, basically).
+4.  The stateful firewall blocks DNS responses to clients unless the response
+    is for a request that the client has previously made.
+5.  Background threads, periodically reset the count min sketches and bloom filters.
+*/
+
+const int<<1>> TRUE = 1;
+const int<<1>> FALSE = 0;
+
+const int DNS_REQ = 0;
+const int DNS_RES = 1;
+const int THRESH = 1000;
+
+const int T_INTERVAL = 10000; // How long between rotations.
+const int T_EMPTY = 2; // Should be much less than T_INTERVAL / slots
+
+const int[2] seeds = [10398247; 1295981879];
+
+const int countmin_slots = 1024;
+const int firewall_slots = 1024;
+
+event init();
+
+entry event dnsrequest_in(int src, int dst, int req_id);
+entry event dnsresponse_in(int src, int dst, int req_id);
+// Exit point back to the P4 program. Generated when a packet is allowed to
+// proceed.
+exit event dnspkt_out ();
+
+
+/*========================================
+=            count-min sketch            =
+========================================*/
+
+global CMSTimeout.t<<32, 10, 2>> sketch = CMSTimeout.create(countmin_slots, seeds, T_INTERVAL);
+global BloomFilterTimeout.t<<10, 2>> firewall = BloomFilterTimeout.create(firewall_slots, seeds, T_INTERVAL, T_EMPTY);
+
+/* a DNS request. We assume its
+from a monitored host to some DNS server. */
+handle dnsrequest_in(int src, int dst, int req_id) {
+  int count = CMSTimeout.add_query(sketch, [src; dst; req_id]);
+  // if count > thresh, the host is protected. Put this request in the firewall
+  // so the response will be allowed through
+  if (count > THRESH) {
+    // Only proceed if the host made a request, so it has an entry in the firewall
+    BloomFilterTimeout.add_to_filter(firewall, [src; dst; req_id]);
+  }
+  // host not protected, always allow.
+  generate dnspkt_out();
+}
+
+handle dnsresponse_in(int src, int dst, int req_id) {
+  int count = CMSTimeout.add_query(sketch, [src; dst; req_id]);
+  // if count > thresh, the host is protected.
+  if (count > THRESH) {
+    // Only proceed if the host made a request, so it has an entry in the firewall
+    bool in_firewall = BloomFilterTimeout.in_filter(firewall, [src; dst; req_id]);
+    if (in_firewall) { generate dnspkt_out(); }
+  } else {
+    // host not protected, always allow.
+    generate dnspkt_out();
+  }
+}
+
+handle init() {
+  generate CMSTimeout.init(sketch);
+  generate BloomFilterTimeout.init(firewall);
+}

@@ -50,8 +50,9 @@ module Make (A : TQVarArg) = struct
     | _ -> a
   ;;
 
-  let equiv_tqvar equiv_a t a =
+  let equiv_tqvar ?(qvars_wild = false) equiv_a t a =
     match t, A.proj (strip_links a) with
+    | QVar _, _ when qvars_wild -> true
     | QVar id1, Some (QVar id2) -> Id.equal id1 id2
     | ( TVar { contents = Unbound (id1, l1) }
       , Some (TVar { contents = Unbound (id2, l2) }) ) ->

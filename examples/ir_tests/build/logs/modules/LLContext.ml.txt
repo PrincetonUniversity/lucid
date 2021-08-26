@@ -1,0 +1,9 @@
+---LLContext.ml log---
+--------------------------------
+[uname_of_stmt] opstatement id: opstmt~363
+[uname_of_stmt] statement:
+int<<32>> x~114 = src_ip~112>>10<<Q{sz~355}>>;
+--------------------------------
+[uname_of_stmt] opstatement id: opstmt~364
+[uname_of_stmt] statement:
+int<<32>> y~115 = x~114<<10<<Q{sz~359}>>;

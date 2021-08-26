@@ -1,0 +1,103 @@
+const int MISS = 1;
+const int HIT = 2;
+
+const int TRUE = 1;
+const int FALSE = 0;
+
+const int NULL = 0;
+
+const int seed1_val = 10398247;
+const int seed2_val = 1295981879;
+
+// NOTE: remember to make sure hash functions compute a value within range. 
+// No syntax for this yet in DPT, so we might need to modify the P4.
+
+
+entry event pktin(int ip);
+exit event continue(int status);
+event install(int ip);
+
+global s1a = new Array<<32>>(1024);
+global s2a = new Array<<32>>(1024);
+
+memop contains(int stored, int target) {
+	if (stored == target){
+		return TRUE;
+	}
+	else {
+		return FALSE;
+	}
+}
+
+handle pktin(int ip) {
+	int isHit = FALSE;
+	int tmp_ip = ip;
+
+	// check stage 1 for entry. 
+	int h1h = hash<<32>>(seed1_val, tmp_ip);
+	int in1h = Array.getm(s1a, h1h, contains, tmp_ip);
+	if (in1h == TRUE) {
+		isHit = TRUE;
+	} else {
+		// check stage 2 for entry. 
+		int h2h = hash<<32>>(seed2_val, tmp_ip);
+		int in2h = Array.getm(s2a, h2h, contains, tmp_ip);
+		if (in2h == TRUE) {
+			isHit = TRUE;
+		}
+	}
+	if (isHit == TRUE) {
+		generate continue(HIT);
+	} 
+	else{
+		generate install(tmp_ip);
+	}
+}
+
+
+// If the target value is already there, 
+// return 0. Else return the stored content 
+// that we will be evicting. 
+memop read_if_not_in(int stored, int targetval){
+	if (stored == targetval) {
+		return 0;
+	} else {
+		return stored;
+	}
+
+}
+// If the entry is empty, replace it with 
+// the update value. 
+memop write_if_empty(int stored, int updval) { 
+	if (stored == 0) {
+		return updval;
+	} else {
+		return stored;
+	}
+}
+
+handle install(int ip) {
+	int vict2v = 0;
+	int isHit = FALSE;	
+	int tmp_ip = ip;
+	int h1h = hash<<32>>(seed1_val, tmp_ip);
+
+	// install to first stage, evict victim. 
+	int vict = Array.update(s1a, h1h, read_if_not_in, tmp_ip, write_if_empty, tmp_ip);
+	if (vict == NULL) { // cell was either empty, or contained tmp_in already. 
+		isHit = TRUE;
+	} else {
+		// install victim to second stage, evict victim2.
+		int h2h = hash<<32>>(seed2_val, vict);
+		vict2v = Array.update(s2a, h2h, read_if_not_in, vict, write_if_empty, vict);
+		if (vict2v == NULL) {// cell was either empty, or contained vict already
+			isHit = TRUE;
+		} 
+	}
+	if (isHit == TRUE) {
+		generate continue(HIT);
+	} 
+	else {
+		generate install(vict2v);
+	}
+}

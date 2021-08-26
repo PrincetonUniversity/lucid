@@ -1,0 +1,205 @@
+---PipelineGeneration.ml log---
+[PipelineGeneration.do_passes] got layout for 1 stages
+[merge_into_master]-----Original tables-----
+[merge_into_master]------
+action dpt_88_acn_90_generate_0_extra_processing( ){
+    dpt_88_alu_89_generate_0_extra_processing();
+    //next tables: []
+    
+}
+// Stage not set by dptc
+table dpt_88_generate_0_extra_processing {
+    key = {
+        md.dptMeta.eventType : ternary;
+    }
+    actions = {
+        dpt_88_acn_90_generate_0_extra_processing;
+    }
+    //no default action
+    const entries = {
+        (1) : dpt_88_acn_90_generate_0_extra_processing();
+        (2) : NOOP();
+    }
+    
+}
+
+[merge_into_master]------
+action dpt_92_acn_94_generate_0_continue( ){
+    dpt_92_alu_93_generate_0_continue();
+    //next tables: []
+    
+}
+// Stage not set by dptc
+table dpt_92_generate_0_continue {
+    key = {
+        md.dptMeta.eventType : ternary;
+    }
+    actions = {
+        dpt_92_acn_94_generate_0_continue;
+    }
+    //no default action
+    const entries = {
+        (1) : NOOP();
+        (2) : dpt_92_acn_94_generate_0_continue();
+    }
+    
+}
+
+[merge_into_master] merging dpt_88_generate_0_extra_processing into dpt_1_merged_tbl
+[merge_into_master]-----MASTER-----
+action dpt_1_merged_acn( ){
+    //next tables: []
+    
+}
+// Stage not set by dptc
+table dpt_1_merged_tbl {
+    actions = {
+        dpt_1_merged_acn;
+    }
+    const default_action = dpt_1_merged_acn();
+    
+}
+
+[merge_into_master]-----TABLE TO BE MERGED-----
+action dpt_88_acn_90_generate_0_extra_processing( ){
+    dpt_88_alu_89_generate_0_extra_processing();
+    //next tables: []
+    
+}
+// Stage not set by dptc
+table dpt_88_generate_0_extra_processing {
+    key = {
+        md.dptMeta.eventType : ternary;
+    }
+    actions = {
+        dpt_88_acn_90_generate_0_extra_processing;
+    }
+    //no default action
+    const entries = {
+        (1) : dpt_88_acn_90_generate_0_extra_processing();
+        (2) : NOOP();
+    }
+    
+}
+
+[merge_into_master]-----NEW MASTER-----
+action dpt_88_merged_acn_1_acn_90_generate_0_extra_processing( ){
+    dpt_88_alu_89_generate_0_extra_processing();
+    //next tables: []
+    
+}
+
+action dpt_1_merged_acn( ){
+    //next tables: []
+    
+}
+// Stage not set by dptc
+table dpt_1_merged_tbl {
+    key = {
+        md.dptMeta.eventType : ternary;
+    }
+    actions = {
+        dpt_88_merged_acn_1_acn_90_generate_0_extra_processing;
+        dpt_1_merged_acn;
+    }
+    const default_action = dpt_1_merged_acn();
+    const entries = {
+        (1) : dpt_88_merged_acn_1_acn_90_generate_0_extra_processing();
+        (2) : dpt_1_merged_acn();
+    }
+    
+}
+
+[merge_into_master]-----DUP STATUS-----
+[merge_into_master] merging dpt_92_generate_0_continue into dpt_1_merged_tbl
+[merge_into_master]-----MASTER-----
+action dpt_88_merged_acn_1_acn_90_generate_0_extra_processing( ){
+    dpt_88_alu_89_generate_0_extra_processing();
+    //next tables: []
+    
+}
+
+action dpt_1_merged_acn( ){
+    //next tables: []
+    
+}
+// Stage not set by dptc
+table dpt_1_merged_tbl {
+    key = {
+        md.dptMeta.eventType : ternary;
+    }
+    actions = {
+        dpt_88_merged_acn_1_acn_90_generate_0_extra_processing;
+        dpt_1_merged_acn;
+    }
+    const default_action = dpt_1_merged_acn();
+    const entries = {
+        (1) : dpt_88_merged_acn_1_acn_90_generate_0_extra_processing();
+        (2) : dpt_1_merged_acn();
+    }
+    
+}
+
+[merge_into_master]-----TABLE TO BE MERGED-----
+action dpt_92_acn_94_generate_0_continue( ){
+    dpt_92_alu_93_generate_0_continue();
+    //next tables: []
+    
+}
+// Stage not set by dptc
+table dpt_92_generate_0_continue {
+    key = {
+        md.dptMeta.eventType : ternary;
+    }
+    actions = {
+        dpt_92_acn_94_generate_0_continue;
+    }
+    //no default action
+    const entries = {
+        (1) : NOOP();
+        (2) : dpt_92_acn_94_generate_0_continue();
+    }
+    
+}
+
+[merge_into_master]-----NEW MASTER-----
+action dpt_88_merged_acn_1_acn_90_generate_0_extra_processing( ){
+    dpt_88_alu_89_generate_0_extra_processing();
+    //next tables: []
+    
+}
+
+action dpt_92_merged_acn_1_acn_94_generate_0_continue( ){
+    dpt_92_alu_93_generate_0_continue();
+    //next tables: []
+    
+}
+
+action dpt_1_merged_acn( ){
+    //next tables: []
+    
+}
+// Stage not set by dptc
+table dpt_1_merged_tbl {
+    key = {
+        md.dptMeta.eventType : ternary;
+    }
+    actions = {
+        dpt_88_merged_acn_1_acn_90_generate_0_extra_processing;
+        dpt_92_merged_acn_1_acn_94_generate_0_continue;
+        dpt_1_merged_acn;
+    }
+    const default_action = dpt_1_merged_acn();
+    const entries = {
+        (1) : dpt_88_merged_acn_1_acn_90_generate_0_extra_processing();
+        (2) : dpt_92_merged_acn_1_acn_94_generate_0_continue();
+    }
+    
+}
+
+[merge_into_master]-----DUP STATUS-----
+[annotate_decls_in_stage] stage 0 has 6 declarations
+[annotate_decls_in_stage] table: dpt_1_merged_tbl stage: 0
+[pipeline_of_layout] number of stages: 1
+[PipelineGeneration.do_passes] pipeline has 1 stages
+----rebuilding dpa program----

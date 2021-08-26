@@ -1,0 +1,19 @@
+/*
+  inlined branches are causing control flow loops. 
+*/
+entry event pktin(int src_ip, int dst_ip);
+exit event continue(int src_ip, int dst_ip);
+
+fun void process_fun(int src_ip, int dst_ip) {
+  if (src_ip == 0) {
+    int boo = 1;
+  }
+}
+
+handle pktin(int src_ip, int dst_ip) {
+  // See if we need to write (e.g. new flow in a stateful firewall)
+  if (dst_ip == 0) {
+    int junkp = 2;
+  }
+  process_fun(src_ip, dst_ip);
+}

@@ -1,0 +1,9 @@
+entry event pktin (int x, int y);
+handle pktin (int x, int y) {
+    int foo = x;
+    int bar = y;
+    int p = 0;
+    if ((bar != 777) || (foo == 666)) {
+        p = 1;
+    }
+}

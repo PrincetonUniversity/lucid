@@ -28,3 +28,4 @@ val update:
   -> setop:(zint -> zint)
   -> t
   -> 'a
+    [@@ocamlformat "disable"]

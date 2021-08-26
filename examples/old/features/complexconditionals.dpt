@@ -1,0 +1,15 @@
+/* complex conditionals in if/else statements */
+
+Array a = Array.create<8>(4);
+handle packetin (int<32> src, int<32> dst) {
+	int<8> cur_val = (int<8>) src;
+	int<8> last_val = Array.getAndset<8>(a, 0, cur_val);
+	int<32> cur_val_32 = (int<32>) cur_val; 
+	if (cur_val == 10 && last_val == 9) {
+/*	if (cur_val_32 == 10) {*/
+		generate dosomething(cur_val_32);
+	}
+}
+handle dosomething (int val) {
+	report_int val;
+}

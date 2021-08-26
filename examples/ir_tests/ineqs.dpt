@@ -1,0 +1,6 @@
+entry event pktin (int x);
+handle pktin (int x) {
+    if (x != 2) {
+        int b = 10;
+    }
+}

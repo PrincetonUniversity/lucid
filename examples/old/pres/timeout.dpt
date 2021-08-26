@@ -1,0 +1,28 @@
+/* simple timeout thread */
+
+Array ips = Array.create<32>(1024);
+Array timestamps = Array.create<32>(1024);
+
+handle scan (int i) {
+	int cur_time = Sys.time(1);
+	int last_touched = Array.get<32>(timestamps, i);
+	int idle_time = cur_time - last_touched;
+	if (last_touched == 0 && idle_time == 1000)	{
+		generate delete(i);
+	}
+}
+handle delete (int i) {
+	int junk1 = Array.set<32>(ips, i, 0);
+	int junk2 = Array.set<32>(timestamps, i, 0);
+}
+
+handle packetin (int src, int dst) {
+
+	src = 1;	
+}
+
+
+/* report the MAC installation failure to a controller. */
+/*handle fail (int mac) {
+	mac = 1;
+}*/

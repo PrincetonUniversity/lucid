@@ -1,0 +1,27 @@
+---normalizeInts.ml log---
+[transform_precompute_exps.visit_exp] exp: src_ip~112>>10<<Q{sz~355}>>
+[transform_precompute_exps.visit_exp] atomic exp: src_ip~112>>10<<Q{sz~355}>>
+[transform_precompute_exps.visit_exp] exp: x~114<<10<<Q{sz~359}>>
+[transform_precompute_exps.visit_exp] atomic exp: x~114<<10<<Q{sz~359}>>
+original program: 
+entry event pktin~111(int<<32>> src_ip~109,int<<32>> dst_ip~110) ;
+
+handle pktin~111(int<<32>> src_ip~112,int<<32>> dst_ip~113) {
+int<<32>> x~114 = src_ip~112>>10<<Q{sz~355}>>;
+int<<32>> y~115 = x~114<<10<<Q{sz~359}>>;
+}
+program after exp tree balancing: 
+entry event pktin~111(int<<32>> src_ip~109,int<<32>> dst_ip~110) ;
+
+handle pktin~111(int<<32>> src_ip~112,int<<32>> dst_ip~113) {
+int<<32>> x~114 = src_ip~112>>10<<Q{sz~355}>>;
+int<<32>> y~115 = x~114<<10<<Q{sz~359}>>;
+}
+program after precomputation pass: 
+entry event pktin~111(int<<32>> src_ip~109,int<<32>> dst_ip~110) ;
+
+handle pktin~111(int<<32>> src_ip~112,int<<32>> dst_ip~113) {
+int<<32>> x~114 = src_ip~112>>10<<Q{sz~355}>>;
+int<<32>> y~115 = x~114<<10<<Q{sz~359}>>;
+}
+compute expressions simplified.

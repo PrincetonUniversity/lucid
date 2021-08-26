@@ -1,0 +1,122 @@
+include "Bimap.dpt"
+/* What does a NAT do? Fundamentally, it's a partial bidirectional map, in this case
+mapping (ip, port) pairs to integers (representing ports) and vice-versa. In a
+more general language, we could write a general bimap module, but I don't see a
+way to do that here.
+
+Instead, we'll represent the pair -> port mapping by hashing the pair, and the
+port -> pair mapping with a pair of arrays (we could use one array if arrays
+could store tuples, but the hardware doesn't support that).
+
+Doesn't handle collisions (the newest values overwrite any previous ones).
+Assumes the number of ports is 2^'port_size.
+*/
+
+/* // Slightly older, manually implemented version of Nat module
+// A little more memory-efficient than the below one.
+module Nat {
+  // 'port_size is the number of bits of a port ID
+  type t<<'port_size>> = {
+    int seed; // Hash seed
+    Array.t<<32>> to_ip;
+    Array.t<<'port_size>> to_port;
+  }
+
+  constr t<<'port_size>> create(int num_ports, int seed) = {
+    seed = seed;
+    to_ip = Array.create(num_ports);
+    to_port = Array.create(num_ports);
+  };
+
+  fun int<<'b>> get_mapped_port(t<<'b>> nat, int ip, int<<'b>> port) {
+    return hash<<'b>>(nat#seed, ip, port);
+  }
+
+  fun void add(t<<'b>> nat, int ip, int<<'b>> port) {
+    int<<'b>> nat_port = get_mapped_port(nat, ip, port);
+    Array.set(nat#to_ip, nat_port, ip);
+    Array.set(nat#to_port, nat_port, port);
+  }
+
+  fun bool in_nat(t<<'b>> nat, int ip, int<<'b>> port) {
+    int<<'b>> nat_port = get_mapped_port(nat, ip, port);
+    int ip_in_nat = Array.get(nat#to_ip, nat_port);
+    int<<4>> port_in_nat = Array.get(nat#to_port, nat_port);
+    return (ip == ip_in_nat) && (port == port_in_nat);
+  }
+
+  fun int[2] lookup(t<<'b>> nat, int<<'b>> port) {
+    int ip_in_nat = Array.get(nat#to_ip, port);
+    int<<4>> port_in_nat = Array.get(nat#to_port, port);
+    return [ip_in_nat; (int<<32>>) port_in_nat];
+  }
+}
+*/
+
+// Assume 4-bit ports
+const int NUM_PORTS = 16;
+
+// Version of Nat implemented using a Bimap. Slightly less memory efficient --
+// perhaps we should add size lists to remedy that.
+module Nat {
+  // 'port_size is the number of bits of a port ID
+  type t = Bimap.t<<2, 4>>
+
+  constr t create(int num_ports, int seed) = Bimap.create(num_ports, seed);
+
+  fun int<<4>> get_mapped_port(t nat, int ip, int<<4>> port) {
+    return (int<<4>>) Bimap.map_forward(nat, [ip; (int<<32>>) port]);
+  }
+
+  fun void add(t nat, int ip, int<<4>> port) {
+    Bimap.add(nat, [ip; (int<<32>>) port]);
+  }
+
+  fun bool in_nat(t nat, int ip, int<<4>> port) {
+    return Bimap.in_map_forward(nat, [ip; (int<<32>>) port]);
+  }
+
+  fun int[2] lookup(t nat, int<<4>> port) {
+    return Bimap.lookup_backward(nat, (int<<32>>) port);
+  }
+}
+
+const int HASH_SEED = 1234;
+
+global Nat.t nat = Nat.create(NUM_PORTS, HASH_SEED);
+
+// Handle packets coming from behind the NAT
+entry event inside_packet(int src_ip, int<<4>> src_port);
+exit event inside_continue(int<<4>> src_port);
+
+// Handle packets coming from outside the NAT
+entry event outside_packet(int<<4>> dst_port);
+exit event outside_continue(int dst_ip, int<<4>> dst_port);
+
+event add_to_nat(int src_ip, int<<4>> src_port) {
+  Nat.add(nat, src_ip, src_port);
+  generate inside_continue(src_port);
+}
+
+handle inside_packet(int src_ip, int<<4>> src_port) {
+    if(Nat.in_nat(nat, src_ip, src_port)) {
+        int<<4>> NAT_port = Nat.get_mapped_port(nat, src_ip, src_port);
+        printf("IP already in NAT, maps to port %d", NAT_port);
+        generate inside_continue(NAT_port);
+    } else {
+        printf("Adding to NAT");
+        generate add_to_nat(src_ip, src_port); // Will generate the continue for us
+    }
+}
+
+handle outside_packet(int<<4>> dst_port) {
+    int[2] nat_info = Nat.lookup(nat, dst_port);
+    int ip = nat_info[0];
+    int<<4>> port = (int<<4>>) nat_info[1];
+    printf("Mapped port %d to (ip: %d, port: %d)", dst_port, ip, port);
+    if (ip == 0) {
+      printf("dropped");
+    } else {
+      generate outside_continue(ip, port);
+    }
+}

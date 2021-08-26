@@ -1,0 +1,24 @@
+// Starflow telemetry cache.
+/* 
+A P4 program passes control to *Flow by generating a "monitor_pkt" event. 
+This calls the "monitor_pkt" handler in this program (around line 75)
+That handler may generate two other events: 
+  1. GPV records to collection servers (the events short_record and long_record)
+  2. A memory release event (free_block) that gets recirculated
+*/
+
+
+
+entry event pktin(int src_ip, int dst_ip);
+
+
+handle pktin(int src_ip, int dst_ip) {
+  int x = 1;
+  int y = x;
+  int z = 0;
+  match y with
+    | 1 -> {z = 1;}
+    | 2 -> {z = 2;}
+    | 3 -> {z = 4;}
+  int ret = z;
+}

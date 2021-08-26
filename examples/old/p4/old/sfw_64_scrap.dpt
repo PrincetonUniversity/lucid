@@ -1,0 +1,120 @@
+ handle insert (int src, int dst, int ts, int first_src, int first_dst, int<8> retry_ct) {
+
+    /* let first_ts = ts; hack to not pass arguments to registers. */
+    int h1 = Sys.hash<32>(10398247, src, dst);
+    int h2 = Sys.hash<32>(1295981879, src, dst);
+    int ts_temp = ts;
+    /* insert / replace to stage 1 */
+    int src_victim = Array.getAndset<32>(src_1, h1, src); /* stage 1 */
+    int dst_victim = Array.getAndset<32>(dst_1, h1, dst); /* stage 1 */
+    int is_victim = src_victim + dst_victim; /* stage 2 */
+    int ts_victim  = Array.getAndset<32>(ts_1, h1, ts_temp); /* stage 3 */
+
+    /* insert / replace to stage 2 */
+    if (is_victim != 0 ) {
+        src_victim = Array.getAndset<32>(src_2, h2, src_victim); /* stage 3 */
+        dst_victim = Array.getAndset<32>(dst_2, h2, dst_victim); /* stage 3 */
+        ts_victim  = Array.getAndset<32>(ts_2, h2, ts_victim); /* stage 5 */
+    }
+
+    /* increment retry_ct */
+    int src_diff = src_victim - first_src; /* stage 6 */
+    int dst_diff = dst_victim - first_dst; /* stage 6 */
+    if (src_diff == 0 && dst_diff == 0 && retry_ct == 2){
+        /* cycle: fail */
+        src_victim = 0; /* stage 8 */
+        dst_victim = 0; /* stage 8 */
+    }
+    else {
+        /* no cycle: okay to retry */
+        retry_ct = retry_ct + 1; /* stage 8 */
+        /* update or clear stash */
+        int junk3 = Array.set<32>(src_stash, 0, src_victim); /* stage 8 */
+        int junk4 = Array.set<32>(dst_stash, 0, dst_victim); /* stage 8 */
+        is_victim = src_victim + dst_victim; /* stage 9 */
+        if (key_victim != 0) { /* stage 10 */
+            generate insert (src_victim, dst_victim, ts_victim, first_src, first_dst, retry_ct);
+        }
+    }
+}
+
+
+
+handle scan (int cur_idx, int<8> stage) {
+    /* calculate next index and stage, in case of scan */
+    /* we put this at the top so it can be overlaid with the
+       other logic */
+    int ts = Sys.time(1);
+    int last_ts = 0;
+    if (stage == 1) {
+        last_ts = Array.get<32>(ts_1, cur_idx);
+    }
+    else {
+        last_ts = Array.get<32>(ts_2, cur_idx);
+    }
+    int time_since_update = ts - last_ts;
+
+    /* placeholder: should be inequality. */
+    if (1000 == time_since_update)  {                
+        generate delete(cur_idx, stage);
+    }
+    else {
+        cur_idx = cur_idx + 1; /* increment current index. Assume its the appropriate width to roll over automatically (10 bits here). */
+        if (cur_idx == 0) {
+            if (stage == 1) {
+                stage = 2;
+            }
+            else {
+                stage = 1;
+            }
+        }
+        generate scan(cur_idx, stage);    
+    }
+}
+
+
+
+
+/* 
+Delete should really check key. There is an edge case: 
+   1. scan checks slot i and sees that it is timed out. So it generates a delete. 
+   2. an insert occurs, replacing the item in slot i with something else.
+   3. the delete occurs, deleting the item in slot i, which is now the wrong item. 
+*/
+handle delete (int cur_idx, int<8> stage) {
+    if (stage == 1) {
+        int junk1 = Array.set<32>(src_1, cur_idx, 0);        
+        int junk2 = Array.set<32>(dst_1, cur_idx, 0);        
+    }
+    else {
+        int junk3 = Array.set<32>(src_2, cur_idx, 0);
+        int junk4 = Array.set<32>(dst_2, cur_idx, 0);
+    }
+    /* increment index and continue scanning */
+    cur_idx = cur_idx + 1;
+    if (cur_idx == 0) {
+        if (stage == 1) {
+            stage = 2;
+        }
+        else {
+            stage = 1;
+        }
+    }
+    generate scan(cur_idx, stage);    
+}
+
+handle insert (int src, int dst, int ts, int first_src, int first_dst, int<8> retry_ct) {
+
+    /* let first_ts = ts; hack to not pass arguments to registers. */
+    int ts_temp = ts;
+    int h1 = Sys.hash<32>(10398247, src, dst);
+    /* insert / replace to stage 1 */
+    int src_victim = Array.getAndset<32>(src_1, h1, src); /* stage 1 */
+    int dst_victim = Array.getAndset<32>(dst_1, h1, dst); /* stage 1 */
+
+    int h2 = Sys.hash<32>(1295981879, src, dst);
+    int is_victim = src_victim + dst_victim; /* stage 2 */
+    int ts_victim  = Array.getAndset<32>(ts_1, h1, ts_temp); /* stage 3 */
+    generate insert (src_victim, dst_victim, ts_victim, first_src, first_dst, retry_ct);
+
+}

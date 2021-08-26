@@ -1,26 +1,27 @@
 module SafeArray : {
-  global type t<<a>>;
-  constr t<<a>> create(int sz);
+  global type t<<'a>>;
 
-  fun void sz(t<<'a>> safe_arr);
+  constr t<<'a>> create(int sz);
+
+  fun int sz(t<<'a>> safe_arr);
   fun void update(t<<'a>> safe_arr, int idx, int<<'a>> v) [start <= safe_arr; end safe_arr];
   event update_twice(t<<'a>> t, int idx, int<<'a>> v);
 }
 {
-
   // Basically the same code as user_types, but inside a module
-  global type t<<a>> = {
-    Array.t<<a>> arr;
-    Counter.t<<a>> bad_accesses;
+
+  type t<<'a>> = {
+    Array.t<<'a>> arr;
+    Counter.t<<'a>> bad_accesses;
     int sz;
   }
 
   // How to create a t
-  constr t<<a>> create(int sz) {
-    global Array.t<<a>> arr = Array.create(sz);
-    global Counter.t<<a>> bad_accesses = Counter.create(0);
-    const int sz = sz;
-  }
+  constr t<<'a>> create(int sz) = {
+    arr = Array.create(sz);
+    bad_accesses = Counter.create(0);
+    sz = sz;
+  };
 
   fun int sz(t<<'a>> t) {
     return t#sz;
@@ -40,7 +41,7 @@ module SafeArray : {
   event update_once(t<<'a>> t, int idx, int<<'a>> v);
   event update_twice(t<<'a>> t, int idx, int<<'a>> v);
 
-  handle update_once(t<<32>> t, int idx, int<<'a>> v) {
+  handle update_once(t<<'a>> t, int idx, int<<'a>> v) {
     update(t, idx, v);
   }
 

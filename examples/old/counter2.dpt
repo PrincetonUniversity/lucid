@@ -1,0 +1,17 @@
+int count = 0;
+
+bool done = false;
+
+report_string "start";
+
+handle packetin (int src, int dst) {
+  if (!done) { 
+    if (count < 10) {
+      report_int count;
+      count = count + 1;
+    } else {
+      report_string "done";
+      done = true;
+    }
+  }
+}

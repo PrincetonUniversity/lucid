@@ -1,0 +1,11 @@
+// wire.dpt -- route packets based on input port. 
+entry event pktin(int ip);
+event extra_processing(int ip);
+exit event continue(int ip);
+
+handle pktin(int ip) {
+	generate extra_processing(0);
+}
+handle extra_processing(int ip) {
+	generate continue(ip);
+}

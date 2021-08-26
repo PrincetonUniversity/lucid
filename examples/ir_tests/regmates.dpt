@@ -1,0 +1,30 @@
+global Array.t<<32>> foo = Array.create(1024);
+
+entry event pktin(int src_ip, int dst_ip);
+
+/* 
+        (a, b)
+        /    \
+       /      \
+      c       e
+      |      /|
+      |  FOO  |
+      | /     |
+      d ----  f 
+
+this example is tricky to place right, because 
+it requires multiple passes over a topological ordering. 
+In the first pass, e will not be placed until FOO is visited, 
+which will cause the placement of f to fail. 
+*/
+
+handle pktin(int src_ip, int dst_ip) {
+    int a = 1; int b = 1;
+    if (a == 1) { 
+        int c = a;
+        int d = Array.get(foo, c);    
+    } else {
+        int e = Array.get(foo, b);
+        int f = e;
+    }
+}

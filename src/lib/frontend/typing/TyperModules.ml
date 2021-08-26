@@ -15,9 +15,11 @@ let prefixer =
     method! visit_IUser (f, kset) cid =
       if KindSet.mem (KSize, cid) kset then IUser (f cid) else IUser cid
 
-    method! visit_global_ty (f, kset) (cid, sizes) =
+    method! visit_TName (f, kset) cid sizes b =
       let sizes = List.map (self#visit_size (f, kset)) sizes in
-      if KindSet.mem (KGlobalTy, cid) kset then f cid, sizes else cid, sizes
+      if KindSet.mem (KUserTy, cid) kset
+      then TName (f cid, sizes, b)
+      else TName (cid, sizes, b)
   end
 ;;
 
@@ -25,10 +27,7 @@ let prefixer =
    environment, but with the module id as a prefix *)
 let add_all_module_defs m_id old_env m_env =
   let prefix cid = Compound (m_id, cid) in
-  let safe_prefix k cid =
-    if KindSet.mem (k, cid) m_env.module_defs then prefix cid else cid
-  in
-  let prefix_rty = prefixer#visit_raw_ty (prefix, m_env.module_defs) in
+  let prefix_ty = prefixer#visit_ty (prefix, m_env.module_defs) in
   let prefix_params = prefixer#visit_params (prefix, m_env.module_defs) in
   let prefixed_maps =
     KindSet.fold
@@ -36,7 +35,7 @@ let add_all_module_defs m_id old_env m_env =
         match k with
         | KSize -> { acc with sizes = CidSet.add (prefix cid) acc.sizes }
         | KConst ->
-          let ty = CidMap.find cid m_env.consts |> prefix_rty in
+          let ty = CidMap.find cid m_env.consts |> prefix_ty in
           { acc with consts = CidMap.add (prefix cid) ty acc.consts }
         | KHandler ->
           let handler =
@@ -45,19 +44,17 @@ let add_all_module_defs m_id old_env m_env =
           in
           { acc with handlers = CidMap.add (prefix cid) handler acc.handlers }
         | KConstr ->
-          let new_constr =
-            let cid, x, argtys = CidMap.find cid m_env.constructors in
-            safe_prefix KGlobalTy cid, x, List.map prefix_rty argtys
+          let new_fty =
+            let fty = CidMap.find cid m_env.constructors in
+            prefixer#visit_func_ty (prefix, m_env.module_defs) fty
           in
           { acc with
-            constructors = CidMap.add (prefix cid) new_constr acc.constructors
+            constructors = CidMap.add (prefix cid) new_fty acc.constructors
           }
-        | KGlobalTy ->
-          let gty =
-            let x, params = CidMap.find cid m_env.global_tys in
-            x, prefix_params params
-          in
-          { acc with global_tys = CidMap.add (prefix cid) gty acc.global_tys })
+        | KUserTy ->
+          (* Non-abstract user types have already been replaced,
+             so don't have to do anything here *)
+          acc)
       m_env.module_defs
       old_env
   in
@@ -66,7 +63,7 @@ let add_all_module_defs m_id old_env m_env =
       KindSet.union
         old_env.module_defs
         (KindSet.map (fun (k, id) -> k, prefix id) m_env.module_defs)
-  ; global_labels = StringMap.map (safe_prefix KGlobalTy) m_env.global_labels
+  ; record_labels = StringMap.map prefix_ty m_env.record_labels
   }
 ;;
 
@@ -79,12 +76,32 @@ let rec validate_interface prefix env interface =
          kind_str
          (Printing.id_to_string id)
   in
-  let equiv_tys mapping ty1 ty2 =
-    let subst = subst_ivars mapping in
-    equiv_raw_ty
-      (subst#visit_raw_ty () ty1.raw_ty)
-      (subst#visit_raw_ty () ty2.raw_ty)
+  let compare_tfuns span kind_str id (expected : func_ty) (declared : func_ty) =
+    if not (equiv_ty ~ignore_effects:true expected.ret_ty declared.ret_ty)
+    then
+      error_sp span
+      @@ Printf.sprintf
+           "%s %s returns type %s, but interface specifies return type %s."
+           kind_str
+           (Printing.id_to_string id)
+           (Printing.ty_to_string expected.ret_ty)
+           (Printing.ty_to_string declared.ret_ty);
+    if List.length expected.arg_tys <> List.length declared.arg_tys
+       || List.exists2
+            (fun ty1 ty2 -> not (equiv_ty ~ignore_effects:true ty1 ty2))
+            expected.arg_tys
+            declared.arg_tys
+    then
+      error_sp span
+      @@ Printf.sprintf
+           "%s %s takes arguments %s but interface specifies arguments %s"
+           kind_str
+           (Printing.id_to_string id)
+           (Printing.list_to_string Printing.ty_to_string expected.arg_tys)
+           (Printing.list_to_string Printing.ty_to_string declared.arg_tys)
   in
+  let subst ty = subst_user_tys#visit_ty env ty in
+  let normalize ty = (normalizer ())#visit_ty () ty in
   List.iter
     (fun spec ->
       match spec.ispec with
@@ -94,118 +111,100 @@ let rec validate_interface prefix env interface =
       | InVar (id, ty) ->
         if not (KindSet.mem (KConst, prefix id) env.module_defs)
         then err_id spec.ispan "value" id;
-        ensure_concrete ~check_effects:false ty;
-        let actual_ty = CidMap.find (prefix id) env.consts in
-        let equiv =
-          (* Hack to get around the fact that if ty is a global type, it'll have
-             a dummy effect. *)
-          let insted =
-            TyperInstGen.instantiator#visit_raw_ty
-              (TyperInstGen.fresh_maps ())
-              ty.raw_ty
-          in
-          try
-            TyperUnify.unify_ty spec.ispan insted actual_ty;
-            true
-          with
-          | _ -> false
-        in
-        if not equiv
+        let ty = ty |> subst |> normalize in
+        if is_global ty
+        then
+          error_sp spec.ispan "Cannot define global variables inside a module";
+        let actual_ty = CidMap.find (prefix id) env.consts |> normalize in
+        if not (equiv_ty ~ignore_effects:true ty actual_ty)
         then
           error_sp spec.ispan
           @@ Printf.sprintf
                "Value %s has type %s, but interface specified type %s"
                (Printing.id_to_string id)
-               (Printing.raw_ty_to_string actual_ty)
+               (Printing.ty_to_string actual_ty)
                (Printing.ty_to_string ty)
-      | InGlobalTy (id, size_ids, params) ->
-        if not (KindSet.mem (KGlobalTy, prefix id) env.module_defs)
-        then err_id spec.ispan "global type" id;
-        let actual_sizes, actual_params =
-          CidMap.find (prefix id) env.global_tys
-        in
-        let mapping =
-          List.fold_left2
-            (fun acc id1 id2 -> CidMap.add id1 id2 acc)
-            CidMap.empty
-            (List.map Cid.id actual_sizes)
-            (List.map Cid.id size_ids)
-        in
-        if List.length size_ids <> List.length actual_sizes
+      | InTy (id, sizes, tyo, b) ->
+        if not (KindSet.mem (KUserTy, prefix id) env.module_defs)
+        then err_id spec.ispan "user type" id;
+        let actual_ty, actual_sizes = CidMap.find (prefix id) env.user_tys in
+        if List.length sizes <> List.length actual_sizes
         then
           error_sp spec.ispan
           @@ Printf.sprintf
-               "Global type %s takes %d size arguments, but interface \
-                specified %d"
+               "Type %s takes %d size arguments, but interface specified %d"
                (Printing.id_to_string id)
                (List.length actual_sizes)
-               (List.length size_ids);
-        if (not (List.is_empty params))
-           && not
-                (List.for_all2
-                   (fun (id1, ty1) (id2, ty2) ->
-                     Id.equal id1 id2 && equiv_tys mapping ty1 ty2)
-                   params
-                   actual_params)
+               (List.length sizes);
+        if b <> is_global actual_ty
         then
           error_sp spec.ispan
           @@ Printf.sprintf
-               "Definition of global type %s does not match the one in the body"
+               "Type %s has%s global components and must%s be declared global \
+                in interface"
                (Printing.id_to_string id)
-      | InConstr (id, ret_cid, size_ids, params) ->
+               (if b then " no" else "")
+               (if b then " not" else "");
+        (match tyo with
+        | None -> ()
+        | Some ty ->
+          let ty =
+            { ty with
+              raw_ty =
+                ReplaceUserTys.subst_sizes
+                  ty.tspan
+                  (Id id)
+                  ty.raw_ty
+                  (ReplaceUserTys.extract_ids ty.tspan sizes)
+                  actual_sizes
+            }
+            |> subst
+            |> normalize
+          in
+          if not (equiv_ty ~ignore_effects:true ty actual_ty)
+          then
+            error_sp spec.ispan
+            @@ Printf.sprintf
+                 "Definition of global type %s does not match the one in the \
+                  body"
+                 (Printing.id_to_string id))
+      | InConstr (id, ret_ty, params) ->
         if not (KindSet.mem (KConstr, prefix id) env.module_defs)
         then err_id spec.ispan "constructor" id;
-        let actual_ret_cid, actual_sizes, actual_params =
-          CidMap.find (prefix id) env.constructors
+        let ret_ty = subst ret_ty in
+        let params = List.map (fun (id, ty) -> id, subst ty) params in
+        let actual_fty =
+          CidMap.find (prefix id) env.constructors |> normalize_tfun
         in
-        let mapping =
-          List.fold_left2
-            (fun acc id1 id2 -> CidMap.add id1 id2 acc)
-            CidMap.empty
-            (List.map Cid.id actual_sizes)
-            (List.map Cid.id size_ids)
+        let declared_fty =
+          { arg_tys = List.map snd params
+          ; ret_ty (* Last three entries don't matter *)
+          ; start_eff = fresh_effect ()
+          ; end_eff = fresh_effect ()
+          ; constraints = ref []
+          }
+          |> normalize_tfun
         in
-        if (not (Cid.equal ret_cid actual_ret_cid))
-           || List.length size_ids <> List.length actual_sizes
-        then
-          error_sp spec.ispan
-          @@ Printf.sprintf
-               "Constructor %s in interface has return type %s, but in module \
-                body has type %s"
-               (Printing.id_to_string id)
-               (Printing.gty_to_string
-                  (ret_cid, List.map (fun id -> IUser (Id id)) size_ids))
-               (Printing.gty_to_string
-                  ( actual_ret_cid
-                  , List.map (fun id -> IUser (Id id)) actual_sizes ));
-        if not
-             (List.for_all2
-                (fun (_, ty1) ty2 -> equiv_tys mapping ty1 (ty ty2))
-                params
-                actual_params)
-        then
-          error_sp spec.ispan
-          @@ Printf.sprintf
-               "Constructor %s takes different arguments in interface than in \
-                body"
-               (Printing.id_to_string id)
+        compare_tfuns spec.ispan "Constructor" id actual_fty declared_fty
       | InFun (id, ret_ty, specs, params) ->
         if not (KindSet.mem (KConst, prefix id) env.module_defs)
         then err_id spec.ispan "function" id;
+        let ret_ty = subst ret_ty in
+        let params = List.map (fun (id, ty) -> id, subst ty) params in
         let fty = CidMap.find (prefix id) env.consts in
         let func_ty : func_ty =
-          match fty with
-          | TFun f -> f
+          match fty.raw_ty with
+          | TFun f -> f |> normalize_tfun
           | _ ->
             error_sp spec.ispan
             @@ Printf.sprintf
                  "Definition of %s in module body has non-function type %s"
                  (Printing.id_to_string id)
-                 (Printing.raw_ty_to_string fty)
+                 (Printing.ty_to_string fty)
         in
         let start_eff = func_ty.start_eff in
         let new_params =
-          List.map2 (fun (id, _) rty -> id, ty rty) params func_ty.arg_tys
+          List.map2 (fun (id, _) ty -> id, ty) params func_ty.arg_tys
         in
         let spec_constraints, end_eff =
           spec_to_constraints env spec.ispan start_eff new_params specs
@@ -220,7 +219,7 @@ let rec validate_interface prefix env interface =
               :: !(func_ty.constraints)
             | Some eff -> CLeq (func_ty.end_eff, eff) :: !(func_ty.constraints)
           in
-          Typer_Z3.check_implies spec_constraints constrs
+          TyperZ3.check_implies spec_constraints constrs
         in
         if not sufficient_constraints
         then
@@ -230,21 +229,15 @@ let rec validate_interface prefix env interface =
                 constraints in the module body."
                (Printing.id_to_string id);
         let expected_func_ty =
-          TFun
-            { arg_tys = List.map (fun (_, ty) -> ty.raw_ty) params
-            ; ret_ty = ret_ty.raw_ty
-            ; start_eff
-            ; end_eff = func_ty.end_eff
-            ; constraints = ref !(func_ty.constraints)
-            }
+          { arg_tys = List.map snd params
+          ; ret_ty
+          ; start_eff
+          ; end_eff = func_ty.end_eff
+          ; constraints = ref !(func_ty.constraints)
+          }
+          |> normalize_tfun
         in
-        if not (equiv_raw_ty (TFun func_ty) expected_func_ty)
-        then
-          error_sp spec.ispan
-          @@ Printf.sprintf
-               "Function %s has different parameters or return type in \
-                interface than in body"
-               (Printing.id_to_string id)
+        compare_tfuns spec.ispan "Function" id expected_func_ty func_ty
       | InEvent (id, cspecs, params) ->
         if not (KindSet.mem (KConst, prefix id) env.module_defs)
         then err_id spec.ispan "event" id;
@@ -254,21 +247,20 @@ let rec validate_interface prefix env interface =
           @@ Printf.sprintf
                "Event %s has no corresponding handler definition in module body"
                (Printing.id_to_string id);
+        let params = List.map (fun (id, ty) -> id, subst ty) params in
         let fty = CidMap.find (prefix id) env.consts in
         let func_ty : func_ty =
-          match fty with
-          | TFun f -> f
+          match fty.raw_ty with
+          | TFun f -> f |> normalize_tfun
           | _ ->
             error_sp spec.ispan
             @@ Printf.sprintf
                  "Definition of %s in module body has non-event type %s"
                  (Printing.id_to_string id)
-                 (Printing.raw_ty_to_string fty)
+                 (Printing.ty_to_string fty)
         in
         let new_params =
-          try
-            List.map2 (fun (id, _) rty -> id, ty rty) params func_ty.arg_tys
-          with
+          try List.map2 (fun (id, _) ty -> id, ty) params func_ty.arg_tys with
           | Invalid_argument _ ->
             error_sp spec.ispan
             @@ Printf.sprintf
@@ -278,27 +270,22 @@ let rec validate_interface prefix env interface =
         let spec_constraints, _ =
           spec_to_constraints env spec.ispan func_ty.start_eff new_params cspecs
         in
-        if not (Typer_Z3.check_implies spec_constraints !(func_ty.constraints))
+        if not (TyperZ3.check_implies spec_constraints !(func_ty.constraints))
         then
           error_sp spec.ispan
           @@ Printf.sprintf
                "Event %s has different constraints in interface than in body"
                (Printing.id_to_string id);
         let expected_fty =
-          TFun
-            { arg_tys = List.map (fun (_, ty) -> ty.raw_ty) params
-            ; ret_ty = TEvent false
-            ; start_eff = func_ty.start_eff
-            ; end_eff = func_ty.start_eff
-            ; constraints = ref !(func_ty.constraints)
-            }
+          { arg_tys = List.map snd params
+          ; ret_ty = ty @@ TEvent false
+          ; start_eff = func_ty.start_eff
+          ; end_eff = func_ty.start_eff
+          ; constraints = ref !(func_ty.constraints)
+          }
+          |> normalize_tfun
         in
-        if not (equiv_raw_ty (TFun func_ty) expected_fty)
-        then
-          error_sp spec.ispan
-          @@ Printf.sprintf
-               "Event %s has different parameters in interface than in body"
-               (Printing.id_to_string id)
+        compare_tfuns spec.ispan "Event" id expected_fty func_ty
       | InModule (m_id, intf) ->
         validate_interface (fun id -> Compound (m_id, prefix id)) env intf)
     interface
@@ -309,9 +296,7 @@ let rec validate_interface prefix env interface =
 let rec add_interface m_id old_env interface =
   let prefix id = Cid.create_ids [m_id; id] in
   let prefix_c cid = Compound (m_id, cid) in
-  let prefix_rty env rty =
-    prefixer#visit_raw_ty (prefix_c, env.module_defs) rty
-  in
+  let prefix_ty env ty = prefixer#visit_ty (prefix_c, env.module_defs) ty in
   let prefix_params env params =
     prefixer#visit_params (prefix_c, env.module_defs) params
   in
@@ -323,33 +308,46 @@ let rec add_interface m_id old_env interface =
           { env with sizes = CidSet.add (prefix id) env.sizes } |> def KSize id
         | InVar (id, ty) ->
           { env with
-            consts =
-              CidMap.add (prefix id) (prefix_rty env ty.raw_ty) env.consts
+            consts = CidMap.add (prefix id) (prefix_ty env ty) env.consts
           }
           |> def KConst id
-        | InGlobalTy (id, size_ids, params) ->
+        | InTy (id, sizes, tyo, b) ->
+          begin
+            match tyo with
+            | None ->
+              let ty = ty @@ TName (prefix id, sizes, b) in
+              { env with
+                user_tys = CidMap.add (prefix id) (ty, sizes) env.user_tys
+              }
+              |> def KUserTy id
+            | Some ty ->
+              let ty = prefix_ty env ty in
+              let record_labels =
+                match ty.raw_ty with
+                | TRecord lst ->
+                  List.fold_left
+                    (fun acc (l, _) -> StringMap.add l ty acc)
+                    env.record_labels
+                    lst
+                | _ -> env.record_labels
+              in
+              { env with
+                user_tys = CidMap.add (prefix id) (ty, sizes) env.user_tys
+              ; record_labels
+              }
+              |> def KUserTy id
+          end
+        | InConstr (id, ret_ty, params) ->
+          let fty =
+            { arg_tys = List.map (prefix_ty env % snd) params
+            ; ret_ty = prefix_ty env ret_ty
+            ; start_eff = fresh_effect ()
+            ; end_eff = fresh_effect ()
+            ; constraints = ref []
+            }
+          in
           { env with
-            global_tys =
-              CidMap.add
-                (prefix id)
-                (size_ids, prefix_params env params)
-                env.global_tys
-          ; global_labels =
-              List.fold_left
-                (fun acc (l, _) -> StringMap.add (Id.name l) (prefix id) acc)
-                env.global_labels
-                params
-          }
-          |> def KGlobalTy id
-        | InConstr (id, ret_ty, size_ids, params) ->
-          { env with
-            constructors =
-              CidMap.add
-                (prefix id)
-                ( prefix_c ret_ty
-                , size_ids
-                , List.map (fun (_, ty) -> prefix_rty env ty.raw_ty) params )
-                env.constructors
+            constructors = CidMap.add (prefix id) fty env.constructors
           }
           |> def KConstr id
         | InFun (id, ret_ty, specs, params) ->
@@ -363,16 +361,15 @@ let rec add_interface m_id old_env interface =
             | None -> start_eff
           in
           let fty =
-            { arg_tys = List.map (fun (_, ty) -> ty.raw_ty) params
-            ; ret_ty = ret_ty.raw_ty
+            { arg_tys = List.map (prefix_ty env % snd) params
+            ; ret_ty = prefix_ty env ret_ty
             ; start_eff
             ; end_eff
             ; constraints = ref constraints
             }
           in
           { env with
-            consts =
-              CidMap.add (prefix id) (prefix_rty env (TFun fty)) env.consts
+            consts = CidMap.add (prefix id) (ty (TFun fty)) env.consts
           }
           |> def KConst id
         | InEvent (id, cspecs, params) ->
@@ -399,14 +396,12 @@ let rec add_interface m_id old_env interface =
       { old_env with module_defs = KindSet.empty }
       interface
   in
-  let safe_prefix k cid =
-    if KindSet.mem (k, cid) new_env.module_defs then prefix_c cid else cid
-  in
   { new_env with
     module_defs =
       KindSet.union old_env.module_defs
       @@ KindSet.map (fun (k, id) -> k, prefix_c id) new_env.module_defs
-  ; global_labels = StringMap.map (safe_prefix KGlobalTy) new_env.global_labels
+      (* FIXME: Not sure why this is here; it seems wrong *)
+      (*; record_labels = StringMap.map (safe_prefix KGlobalTy) new_env.record_labels *)
   }
 ;;
 
@@ -415,15 +410,15 @@ let rec add_interface m_id old_env interface =
 let rec wellformed_interface env interface =
   let validate_ty env ty =
     match ty.raw_ty with
-    | TGlobal ((id, sizes), _) ->
-      (match CidMap.find_opt id env.global_tys with
+    | TName (cid, sizes, _) ->
+      (match CidMap.find_opt cid env.user_tys with
       | None -> error_sp ty.tspan @@ "Unknown type " ^ Printing.ty_to_string ty
-      | Some (sizes2, _) ->
+      | Some (_, sizes2) ->
         if List.length sizes <> List.length sizes2
         then
           error_sp ty.tspan
           @@ "Wrong number of size arguments to type "
-          ^ Printing.cid_to_string id)
+          ^ Printing.cid_to_string cid)
     | _ -> ()
   in
   let validate_params env params =
@@ -437,26 +432,18 @@ let rec wellformed_interface env interface =
         | InVar (_, ty) ->
           validate_ty env ty;
           env
-        | InGlobalTy (id, sizes, params) ->
+        | InTy (id, sizes, tyo, _) ->
+          let ty =
+            match tyo with
+            | None -> ty TVoid (* Doesn't actually matter *)
+            | Some ty ->
+              validate_ty env ty;
+              ty
+          in
+          { env with user_tys = CidMap.add (Id id) (ty, sizes) env.user_tys }
+        | InConstr (_, ret_ty, params) ->
           validate_params env params;
-          { env with
-            global_tys = CidMap.add (Id id) (sizes, params) env.global_tys
-          }
-        | InConstr (_, cid, sizes, params) ->
-          validate_params env params;
-          (match CidMap.find_opt cid env.global_tys with
-          | None ->
-            error_sp spec.ispan
-            @@ "Unknown type "
-            ^ Printing.cid_to_string cid
-            ^ (Printing.comma_sep Printing.id_to_string sizes
-              |> Printing.wrap "<<" ">>")
-          | Some (sizes2, _) ->
-            if List.length sizes <> List.length sizes2
-            then
-              error_sp spec.ispan
-              @@ "Wrong number of size arguments to type "
-              ^ Printing.cid_to_string cid);
+          validate_ty env ret_ty;
           env
         | InFun (_, rty, cspecs, params) ->
           validate_ty env rty;

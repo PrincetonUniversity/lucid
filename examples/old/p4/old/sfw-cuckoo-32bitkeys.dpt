@@ -1,0 +1,177 @@
+/*
+    A simple stateful firewall with a cuckoo insertion thread.
+    [8/6/20]
+    The resulting P4 must be compiled with the compiler flag: 
+        --table-placement-in-order
+        or metadata initialization will fail and there won't be enough stages
+    There are many todos:
+        - 64 bit keys
+        - concatenation
+        - hash functions
+        - Array.cmp
+        - Register allocation for sALU inputs to support a background table cleanup thread
+        - An insert queue
+        - And probably more ...
+*/
+
+Array key_1 = Array.create<32>(1024, 3);
+Array ts_1  = Array.create<32>(1024);
+
+Array key_2 = Array.create<32>(1024);
+Array ts_2  = Array.create<32>(1024);
+
+Array key_stash = Array.create<32>(1, 8);
+
+
+handle packetin (int src, int dst) {
+    int cur_ts = Sys.time(1);
+    int cur_ts_2 = Sys.time(1); /* hack to eliminate overlap. */
+    int flow_dir = 0;
+    int key = 0;
+    
+    if (src != 10) {
+        flow_dir = 1;
+        key = src; /* stub: concat(src,dst) */
+    }
+    else {
+        key = dst; /* stub: concat(dst,src) */
+    }
+    int h1 = key + 10398247; /* stub: hash function */
+    int h2 = key + 1295981879; /* stub: hash function */
+
+    /* check stage 1 */
+    int key_stored_1 = Array.get<32>(key_1, h1); /* stub: Array.cmp(key_1, h1) */
+    if (key_stored_1 == 1) { /* stub: && (if key is wider than 1 word) */
+        int junk1 = Array.set<32>(ts_1, h1, cur_ts);
+    }
+
+    /* check stage 2 */
+    int key_stored_2 = Array.get<32>(key_2, h2);
+    if (key_stored_2 == 1) { /* stub: && (if key wider than 1 word) */
+        int junk2 = Array.set<32>(ts_2, h2, cur_ts_2);
+    }
+
+    int key_stored_1_or_2 = key_stored_1 + key_stored_2;
+    if (key_stored_1_or_2 == 1) { /* stub: key_stored_1 || key_stored_2 */
+        generate continue(src, dst);
+    }
+    else {
+        if (flow_dir == 0) {
+            int stashed_key = Array.getCondset<32>(key_stash, 0, key, ==, 0);
+            int stashed_key_eq = key - stashed_key;
+            if (stashed_key == 0) { /* the stash is empty. We can insert. */
+                generate insert (key, cur_ts, key, 0);
+                generate continue (src, dst);
+            }
+            else {
+                if (stashed_key_eq == 0) { /* the flow's key is in the stash, no need to insert. */
+                    generate continue (src, dst);
+                }
+                else { /* An install is in flight. Report the error to someone. */
+                    report_int key;
+                }
+            }
+        }
+        else { /* reverse direction flow */
+            int key_stored_stash = Array.get<32>(key_stash, 0); /* placeholder for comp.*/
+            if (key_stored_stash == 0) {
+                generate continue(src, dst);
+            }
+        }
+    }
+}
+
+handle scan (int cur_idx, int<8> stage) {
+    /* calculate next index and stage, in case of scan */
+    /* we put this at the top so it can be overlaid with the
+       other logic */
+    int ts = Sys.time(1);
+    int last_ts = 0;
+    if (stage == 1) {
+        last_ts = Array.get<32>(ts_1, cur_idx);
+    }
+    else {
+        last_ts = Array.get<32>(ts_2, cur_idx);
+    }
+    int time_since_update = ts - last_ts;
+
+    /* placeholder: should be inequality. */
+    if (1000 == time_since_update)  {                
+        generate delete(cur_idx, stage);
+    }
+    else {
+        cur_idx = cur_idx + 1; /* increment current index. Assume its the appropriate width to roll over automatically (10 bits here). */
+        if (cur_idx == 0) {
+            if (stage == 1) {
+                stage = 2;
+            }
+            else {
+                stage = 1;
+            }
+        }
+        generate scan(cur_idx, stage);    
+    }
+
+}
+/* 
+Delete should really check key. There is an edge case: 
+   1. scan checks slot i and sees that it is timed out. So it generates a delete. 
+   2. an insert occurs, replacing the item in slot i with something else.
+   3. the delete occurs, deleting the item in slot i, which is now the wrong item. 
+*/
+
+handle delete (int cur_idx, int<8> stage) {
+    if (stage == 1) {
+        int junk1 = Array.set<32>(key_1, cur_idx, 0);        
+    }
+    else {
+        int junk2 = Array.set<32>(key_2, cur_idx, 0);
+    }
+    /* increment index and continue scanning */
+    cur_idx = cur_idx + 1;
+    if (cur_idx == 0) {
+        if (stage == 1) {
+            stage = 2;
+        }
+        else {
+            stage = 1;
+        }
+    }
+    generate scan(cur_idx, stage);    
+}
+
+handle insert (int key, int ts, int first_key, int<8> retry_ct) {
+    /* int cur_ts = Sys.time(1);     */
+    /* let first_ts = ts; hack to not pass arguments to registers. */
+    int h1 = key + 10398247; /* stub: hash function */
+    int h2 = key + 1295981879; /* stub: hash function */
+    int ts_temp = ts;
+    /* insert / replace to stage 1 */
+    int key_victim = Array.getAndset<32>(key_1, h1, key);
+    int ts_victim  = Array.getAndset<32>(ts_1, h1, ts_temp);
+
+    /* insert / replace to stage 2 */
+    if (key_victim != 0) {
+        key_victim = Array.getAndset<32>(key_2, h2, key_victim);        
+        ts_victim  = Array.getAndset<32>(ts_2, h2, ts_victim);
+    }
+
+    /* increment retry_ct */
+    int key_diff = key_victim - first_key;
+    if (key_diff == 0) {
+        retry_ct = retry_ct + 1;
+    }
+
+    /* check for cycle */    
+    if (retry_ct == 2) {
+        key_victim = 0;
+        ts_victim = 0;
+    }
+
+    /* update or clear stash */
+    int junk3 = Array.set<32>(key_stash, 0, key_victim);
+    /* generate insert */
+    if (key_victim != 0) {
+        generate insert (key_victim, ts_victim, first_key, retry_ct);
+    }
+}

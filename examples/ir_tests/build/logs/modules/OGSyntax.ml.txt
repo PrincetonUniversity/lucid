@@ -1,0 +1,35 @@
+---OGSyntax.ml log---
+***** [extracting edges] *****
+HERE: [Op] int<<32>> x~114 = src_ip~112>>10<<Q{sz~355}>>;
+----------[to_op_edges]-----------
+---- statement ----
+int<<32>> x~114 = src_ip~112>>10<<Q{sz~355}>>;
+---- statement tree ----
+[Op] int<<32>> x~114 = src_ip~112>>10<<Q{sz~355}>>;
+----resulting edges -----
+HERE: [Op] int<<32>> y~115 = x~114<<10<<Q{sz~359}>>;
+----------[to_op_edges]-----------
+---- statement ----
+int<<32>> y~115 = x~114<<10<<Q{sz~359}>>;
+---- statement tree ----
+[Op] int<<32>> y~115 = x~114<<10<<Q{sz~359}>>;
+----resulting edges -----
+----------[to_op_edges]-----------
+---- statement ----
+int<<32>> x~114 = src_ip~112>>10<<Q{sz~355}>>;
+int<<32>> y~115 = x~114<<10<<Q{sz~359}>>;
+---- statement tree ----
+[SSeq]
+  [Op] int<<32>> x~114 = src_ip~112>>10<<Q{sz~355}>>;
+  [Op] int<<32>> y~115 = x~114<<10<<Q{sz~359}>>;
+----resulting edges -----
+edge: [Op] int<<32>> x~114 = src_ip~112>>10<<Q{sz~355}>>; --> [Op] int<<32>> y~115 = x~114<<10<<Q{sz~359}>>;
+
+***** [extracting vertices] *****
+---------[to_op_vertices]----------
+[Op] int<<32>> y~115 = x~114<<10<<Q{sz~359}>>;
+---------[to_op_vertices]----------
+[Op] int<<32>> x~114 = src_ip~112>>10<<Q{sz~355}>>;
+---------[to_op_vertices]----------
+[Op] int<<32>> x~114 = src_ip~112>>10<<Q{sz~355}>>;
+[Op] int<<32>> y~115 = x~114<<10<<Q{sz~359}>>;

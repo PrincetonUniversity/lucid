@@ -1,23 +1,23 @@
 // An array type that keeps track of its size, and logs the number of
 // access attempts that fell out-of-bounds
-global type safe_array<<a>> = {
-  Array.t<<a>> arr;
-  Counter.t<<a>> bad_accesses;
+type safe_array<<'a>> = {
+  Array.t<<'a>> arr;
+  Counter.t<<'a>> bad_accesses;
   int sz;
 }
 
 // To test record creation syntax
-global type int_record<<a>> = {
+type int_record<<'a>> = {
   int x;
-  int<<a>> y;
+  int<<'a>> y;
 }
 
 // How to create a t
-constr safe_array<<a>> create_safe_array(int sz, int<<a>> start) {
-  global Array.t<<a>> arr = Array.create(sz);
-  global Counter.t<<a>> bad_accesses = Counter.create(start);
-  const int sz = sz;
-}
+constr safe_array<<'a>> create_safe_array(int sz, int<<'a>> start) = {
+  arr = Array.create(sz);
+  bad_accesses = Counter.create(start);
+  sz = sz;
+};
 
 // Actually creating some t values
 global safe_array<<32>> arr1 = create_safe_array(4, 0);

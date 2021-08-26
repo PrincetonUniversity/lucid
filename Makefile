@@ -1,6 +1,8 @@
-include $(shell ocamlfind query visitors)/Makefile.preprocess
+# include $(shell ocamlfind query visitors)/Makefile.preprocess
 
 .PHONY: test clean
+
+
 
 default:
 	dune build src/bin/main.exe
@@ -11,6 +13,14 @@ default:
 
 generatedVisitors: src/lib/frontend/Syntax.processed.ml
 
+#install: default
+#	cp _build/default/src/bin/main.exe dpt
+
+# test: default
+# 	dune runtest -f --no-buffer
+# test:
+# 	dune build test/testing.exe
+# 	cp _build/default/test/testing.exe test
 test: default
 	python3 ./test/runtests.py
 
@@ -45,3 +55,4 @@ clean:
 	dune clean
 	rm -f dpt
 	rm -f dptc
+	rm -f test/testing.exe

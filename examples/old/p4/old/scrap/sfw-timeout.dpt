@@ -1,0 +1,76 @@
+(* Stateful firewall with flow timeouts. *) 
+(* hosts with addresses from 0 - 9 are internal, any others are external. *)
+Array occupied = Array.create(1024, 4);
+Array auth_src = Array.create(1024, 5);
+Array auth_dst = Array.create(1024, 6); (* a bit of complex logic between auth_dst and last_seen, give 2 stages.*)
+Array last_seen = Array.create(1024, 8); (* place last seen in stage 8, so the compiler doesn't overflow an early stage with registers. *)
+
+handle packetin (int src, int dst) {
+	int cur_ts = Sys.time(1);
+	int h = src + dst; (* a really simple hash function. *)
+	if (src == 10) { (* case: src is an internal host. *)
+		(* check if the slot is in use. If not in use, reserve it. *)
+		(* if (occupied[h] == 0) { is_occupied = occupied[h] && occupied[h] = 1 } *)
+		int is_occupied = Array.getCondset(occupied, h, 1, ==, 0);
+		(* if not occupied, insert and emit packet. *)
+		if (is_occupied == 0) {
+			(* auth_src[h] = src *)
+			int junk1 = Array.set(auth_src, h, src);
+			int junk2 = Array.set(auth_dst, h, dst);
+			int junk3 = Array.set(last_seen, h, cur_ts);
+			generate continue (src, dst);
+		}
+		(* if it is occupied, check for a collision before emitting packet. *)
+		else {
+			(* stored_src = auth_src[h] *)
+			int stored_src = Array.get(auth_src, h);
+			int stored_dst = Array.get(auth_dst, h);
+			int src_collision = stored_src - src;
+			int dst_collision = stored_dst - dst;
+			if (src_collision == 0) {
+				if (dst_collision == 0) {
+					int junk4 = Array.set(last_seen, h, cur_ts);
+					generate continue (src, dst);
+				}
+			}
+		}
+	}
+	else { (* case: src is not an internal host. *)
+		(* allow the packet if the reverse direction of the flow has been added to the table.*)
+		int is_occupied_rev = Array.get(occupied, h);
+		int stored_src_rev = Array.get(auth_src, h);
+		int stored_dst_rev = Array.get(auth_dst, h);
+		int src_collision_rev = stored_src_rev - dst; 
+		int dst_collision_rev = stored_dst_rev - src;
+		if (is_occupied_rev == 1) {
+			if (src_collision_rev == 0){
+				if (dst_collision_rev == 0) {
+					generate continue (src, dst);
+				}
+			}
+		}
+	}
+}
+(* continuously scan the table for entries that have timed out. *)
+handle check_timeout(int i) {
+	int next_i = i + 1;
+	int cur_ts = Sys.time(1);
+	int is_occupied = Array.get(occupied, i);
+	if (is_occupied == 1){
+		int stored_ts  = Array.get(last_seen, i);
+		int tsDif = cur_ts - stored_ts;
+		if (tsDif < 10000) { (* not timed out, goto next.*)			
+			generate check_timeout (next_i);			
+		}		
+		else { (* timed out, remove flow. *)
+			generate remove_flow (i);
+		}
+	}
+	else {
+		generate check_timeout (next_i);				
+	}
+}
+(* remove a flow. *)
+handle remove_flow(int i) {
+	int junk5 = Array.set(occupied, i, 0);
+}

@@ -1,0 +1,15 @@
+Counter c = Counter.create(0);
+
+event packetin(int src, int dest);
+event name(int src, int dest);
+
+handle packetin(int src, int dest){
+generate name(src, dest);
+}
+
+handle name(int src, int dest){
+	int temp = Counter.add(c, 1);
+	if (temp < 10) {
+		generate packetin( 0, 0);
+	}
+}

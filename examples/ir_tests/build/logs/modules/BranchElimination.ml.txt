@@ -1,0 +1,241 @@
+---BranchElimination.ml log---
+-----cid_decls at start of BranchElimination-----
+// Stage not set by dptc
+    table dpt_0_selectEventType {
+        key = {
+            md.dptMeta.eventType : ternary;
+        }
+        actions = {
+            dpt_111_pktin;
+        }
+        const default_action = dpt_111_pktin();
+        
+    }
+    
+    action dpt_111_pktin( ){
+        //next tables: [dpt_363_tbl_0_opstmt]
+        
+    }
+    
+    bit<32> x_114;
+    
+    // Stage not set by dptc
+    table dpt_363_tbl_0_opstmt {
+        actions = {
+            dpt_363_acn_0_opstmt;
+        }
+        const default_action = dpt_363_acn_0_opstmt();
+        
+    }
+    
+    action dpt_363_acn_0_opstmt( ){
+        dpt_363_alu_0_opstmt();
+        //next tables: [dpt_364_tbl_0_opstmt]
+        
+    }
+    
+    action dpt_363_alu_0_opstmt( ){
+        x_114 = md.pktin.src_ip >> 10;
+        
+    }
+    
+    bit<32> y_115;
+    
+    // Stage not set by dptc
+    table dpt_364_tbl_0_opstmt {
+        actions = {
+            dpt_364_acn_0_opstmt;
+        }
+        const default_action = dpt_364_acn_0_opstmt();
+        
+    }
+    
+    action dpt_364_acn_0_opstmt( ){
+        dpt_364_alu_0_opstmt();
+        //next tables: []
+        
+    }
+    
+    action dpt_364_alu_0_opstmt( ){
+        y_115 = x_114 << 10;
+        
+    }
+    
+    
+    
+-----end cid_decls at start of BranchElimination-----
+[eliminate_branch_nodes] adding full constraints to all tables 
+[visit_node_condition_pushdown] dpt_0_DptIngressParser
+[visit_node_condition_pushdown] dpt_0_dptMeta_t
+[visit_node_condition_pushdown] dpt_111_e_pktin
+[visit_node_condition_pushdown] dpt_0_egr_serialize_clone
+[visit_node_condition_pushdown] dpt_0_lucid_return_table
+[visit_node_condition_pushdown] dpt_111_pktin_t
+[visit_node_condition_pushdown] dpt_0_selectEventType
+predecessors of table: selectEventType~0
+
+[visit_node_condition_pushdown] dpt_0_single_event_pkt_generator
+[visit_node_condition_pushdown] dpt_114_x
+[visit_node_condition_pushdown] dpt_115_y
+[visit_node_condition_pushdown] dpt_0_md_0_dptMeta
+[visit_node_condition_pushdown] dpt_111_md_0_pktin
+[visit_node_condition_pushdown] dpt_111_pktin
+[visit_node_condition_pushdown] dpt_363_tbl_0_opstmt
+predecessors of table: tbl~0.opstmt~363
+selectEventType~0
+[visit_node_condition_pushdown] dpt_363_acn_0_opstmt
+[visit_node_condition_pushdown] dpt_364_tbl_0_opstmt
+predecessors of table: tbl~0.opstmt~364
+tbl~0.opstmt~363
+[visit_node_condition_pushdown] dpt_363_alu_0_opstmt
+[visit_node_condition_pushdown] dpt_364_acn_0_opstmt
+[visit_node_condition_pushdown] dpt_364_alu_0_opstmt
+----cid decls after pushing down conditions----
+// Stage not set by dptc
+    table dpt_0_selectEventType {
+        key = {
+            md.dptMeta.eventType : ternary;
+        }
+        actions = {
+            dpt_111_pktin;
+        }
+        const default_action = dpt_111_pktin();
+        
+    }
+    
+    action dpt_111_pktin( ){
+        //next tables: [dpt_363_tbl_0_opstmt]
+        
+    }
+    
+    bit<32> x_114;
+    
+    action dpt_363_acn_0_opstmt( ){
+        dpt_363_alu_0_opstmt();
+        //next tables: [dpt_364_tbl_0_opstmt]
+        
+    }
+    
+    action dpt_363_alu_0_opstmt( ){
+        x_114 = md.pktin.src_ip >> 10;
+        
+    }
+    
+    bit<32> y_115;
+    
+    action dpt_364_acn_0_opstmt( ){
+        dpt_364_alu_0_opstmt();
+        //next tables: []
+        
+    }
+    
+    action dpt_364_alu_0_opstmt( ){
+        y_115 = x_114 << 10;
+        
+    }
+    
+    
+    
+    // Stage not set by dptc
+    table dpt_363_tbl_0_opstmt {
+        key = {
+            md.dptMeta.eventType : ternary;
+        }
+        actions = {
+            dpt_363_acn_0_opstmt;
+        }
+        const default_action = dpt_363_acn_0_opstmt();
+        
+    }
+    
+    // Stage not set by dptc
+    table dpt_364_tbl_0_opstmt {
+        key = {
+            md.dptMeta.eventType : ternary;
+        }
+        actions = {
+            dpt_364_acn_0_opstmt;
+        }
+        const default_action = dpt_364_acn_0_opstmt();
+        
+    }
+    
+----end cid decls after pushing down conditions----
+[eliminate_branch_nodes] removing noop tables 
+[visit_node_noop_delete] node_id = dpt_0_DptIngressParser
+[visit_node_noop_delete] node_id = dpt_0_dptMeta_t
+[visit_node_noop_delete] node_id = dpt_111_e_pktin
+[visit_node_noop_delete] node_id = dpt_0_egr_serialize_clone
+[visit_node_noop_delete] node_id = dpt_0_lucid_return_table
+[visit_node_noop_delete] node_id = dpt_111_pktin_t
+[visit_node_noop_delete] node_id = dpt_0_selectEventType
+[delete_if_noop] deleting noop table selectEventType~0!
+[remove_noop_tbl] tbl_id = dpt_0_selectEventType
+[remove_noop_tbl] predecessor actions = []
+[visit_node_noop_delete] node_id = dpt_0_single_event_pkt_generator
+[visit_node_noop_delete] node_id = dpt_114_x
+[visit_node_noop_delete] node_id = dpt_115_y
+[visit_node_noop_delete] node_id = dpt_0_md_0_dptMeta
+[visit_node_noop_delete] node_id = dpt_111_md_0_pktin
+[visit_node_noop_delete] node_id = dpt_111_pktin
+[visit_node_noop_delete] node_id = dpt_363_tbl_0_opstmt
+[visit_node_noop_delete] node_id = dpt_363_acn_0_opstmt
+[visit_node_noop_delete] node_id = dpt_364_tbl_0_opstmt
+[visit_node_noop_delete] node_id = dpt_363_alu_0_opstmt
+[visit_node_noop_delete] node_id = dpt_364_acn_0_opstmt
+[visit_node_noop_delete] node_id = dpt_364_alu_0_opstmt
+----new program----
+-----new_cid_decls at end of BranchElimination-----
+bit<32> x_114;
+    
+    action dpt_363_acn_0_opstmt( ){
+        dpt_363_alu_0_opstmt();
+        //next tables: [dpt_364_tbl_0_opstmt]
+        
+    }
+    
+    action dpt_363_alu_0_opstmt( ){
+        x_114 = md.pktin.src_ip >> 10;
+        
+    }
+    
+    bit<32> y_115;
+    
+    action dpt_364_acn_0_opstmt( ){
+        dpt_364_alu_0_opstmt();
+        //next tables: []
+        
+    }
+    
+    action dpt_364_alu_0_opstmt( ){
+        y_115 = x_114 << 10;
+        
+    }
+    
+    
+    
+    // Stage not set by dptc
+    table dpt_363_tbl_0_opstmt {
+        key = {
+            md.dptMeta.eventType : ternary;
+        }
+        actions = {
+            dpt_363_acn_0_opstmt;
+        }
+        const default_action = dpt_363_acn_0_opstmt();
+        
+    }
+    
+    // Stage not set by dptc
+    table dpt_364_tbl_0_opstmt {
+        key = {
+            md.dptMeta.eventType : ternary;
+        }
+        actions = {
+            dpt_364_acn_0_opstmt;
+        }
+        const default_action = dpt_364_acn_0_opstmt();
+        
+    }
+    
+-----end new_cid_decls at end of BranchElimination-----

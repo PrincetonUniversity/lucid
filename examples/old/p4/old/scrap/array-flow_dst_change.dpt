@@ -1,0 +1,12 @@
+	(* Print an alert whenever a source sends a packet to a different dst. *)
+
+Array srcCts = Array.create(1024, 3);
+handle packetin (int src, int dst) {
+	(* lastDst = srcCts[src]; if (srcCts[src]!= dst) { srcCts[src] = dst }; *)
+	int lastDst = Array.getCondset(srcCts, src, dst, !=, dst);
+	int dstDiff = lastDst - dst;
+	if (dstDiff != 0) {
+		report_int src;
+		report_int dst;
+	}
+}

@@ -1,0 +1,45 @@
+---PipelinePlanning.ml log---
+----DagInstructionSelection----
+unallocated tids before placement: 2
+[place_tid] tid: dpt_88_generate_0_extra_processing
+[place_tid] dependees: []
+[reg_previously_accessed] tbl: dpt_88_generate_0_extra_processing 
+[reg_previously_accessed] tbl_rids: []
+[reg_previously_accessed] all_stage_layout_rids: []
+[dependees_are_placed] tbl_id: dpt_88_generate_0_extra_processing
+[dependees_are_placed] pred_ids: 
+[dependees_are_placed] tbl_rids: 
+[dependees_are_placed] other_rid_tbls: 
+[dependees_are_placed] other_rid_tbl_preds: 
+[dependees_are_placed] placed_tids: 
+[fits_in_stg] tbl_id: dpt_88_generate_0_extra_processing
+	prev_reg_use: false
+	reg_cap: true
+	dep_placed: true
+	tbl_cap: true
+[place_tid] tid: dpt_92_generate_0_continue
+[place_tid] dependees: []
+[reg_previously_accessed] tbl: dpt_92_generate_0_continue 
+[reg_previously_accessed] tbl_rids: []
+[reg_previously_accessed] all_stage_layout_rids: []
+[dependees_are_placed] tbl_id: dpt_92_generate_0_continue
+[dependees_are_placed] pred_ids: 
+[dependees_are_placed] tbl_rids: 
+[dependees_are_placed] other_rid_tbls: 
+[dependees_are_placed] other_rid_tbl_preds: 
+[dependees_are_placed] placed_tids: 
+[fits_in_stg] tbl_id: dpt_92_generate_0_continue
+	prev_reg_use: false
+	reg_cap: true
+	dep_placed: true
+	tbl_cap: true
+[place_tid] tbl fits in stage
+[place_tid_in_stage_layout] placing table dpt_92_generate_0_continue
+[fits_in_table_group] table: dpt_92_generate_0_continue group: [[generate~0.extra_processing~88]] cond_reg_is_free: true cond_reg_slots: true cond_hash_slots: true layout after placing table dpt_92_generate_0_continue:
+layout:
+[[generate~0.extra_processing~88, generate~0.continue~92]]
+------
+------LAYOUT (1 stages and 1 tables) ------
+layout:
+[[generate~0.extra_processing~88, generate~0.continue~92]]
+------END LAYOUT------

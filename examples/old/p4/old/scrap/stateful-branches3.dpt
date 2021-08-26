@@ -1,0 +1,89 @@
+(* 
+Testing a stateful program with branches. 
+*)
+
+Array key_1 = Array.create(1024);
+Array ts_1  = Array.create(1024);
+
+Array key_2 = Array.create(1024);
+Array ts_2  = Array.create(1024);
+
+Array key_stash = Array.create(1);
+Array ts_stash  = Array.create(1);
+Array something = Array.create(1);
+
+
+handle packetin (int src, int dst) {
+    int cur_ts = Sys.time(1);
+    int flow_dir = 0;
+    int key = 0;
+    (* stub: concat function. *)
+    if (src != 10) {
+        flow_dir = 1;
+        key = src;
+    }
+    else {
+        key = dst;
+    }
+    int h1 = key + 10398247; (* stub: hash function *)
+    int h2 = key + 1295981879; (* stub: hash function *)
+
+    (* check stage 1 *)
+    int key_stored_1 = Array.get(key_1, h1); (* stub: Array.cmp(key_1, h1) *)
+    if (key_stored_1 == 1) { (* stub: && (if key is wider than 1 word) *)
+        int junk1 = Array.set(ts_1, h1, cur_ts);
+    }
+
+    (* check stage 2 *)
+    int key_stored_2 = Array.get(key_2, h2);
+    if (key_stored_2 == 1) { (* stub: && (if key wider than 1 word) *)
+        int junk2 = Array.set(ts_2, h2, cur_ts);
+    }
+
+    if (flow_dir == 0) { (* internal -> external *)
+        if (key_stored_1 == 1) { (* stub: key_stored_1 || key_stored_2 *)
+            generate continue(src, dst);
+        }
+        else {
+            int stashed_key = Array.getCondset(key_stash, 0, key, ==, 0);
+            int stashed_ts  = Array.getCondset(ts_stash, 0, cur_ts, ==, 0 );
+            (* if the stash was empty, generate an insert and permit the packet. *)
+            if (stashed_key == 0) {
+                generate insert(key, key, 0);
+                generate continue(src, dst);
+            }
+        }
+    }
+    else { (* external -> internal *)
+        if (key_stored_1 == 1) { (* stub: key_stored_1 || key_stored_2 *)
+            generate continue(src, dst);
+        }                    
+    }
+}
+
+handle insert (int key, int first_key, int retry_ct) {
+    int cur_ts = Sys.time(1);    
+    int h1 = key + 10398247; (* stub: hash function *)
+    int h2 = key + 1295981879; (* stub: hash function *)
+    int installed = 0;
+
+    (* insert and evict to stage 1 *)
+    int key_victim_1 = Array.getAndset(key_1, h1, key);
+    (* this table is actually getting put in stage 9... why? what am I missing? *)
+    int ts_victim_1  = Array.getAndset(ts_1, h1, cur_ts);
+    (* key = ts_victim_1; *)
+
+    
+    (* insert and evict to stage 2 *)
+    if (key_victim_1 != 0) {
+        int key_victim_2 = Array.getAndset(key_2, h2, key_victim_1);
+        int ts_victim_2 = 0;
+        (* int ts_victim_2  = Array.getAndset(ts_2, h2, ts_victim_1); *)
+        if (key_victim_2 != 0) {
+            (* int key_stash_victim = Array.getAndset(key_stash, 0, key_victim_2); *)
+            int ts_stash_victim  = Array.getAndset(something, 0, ts_victim_2);
+            (* generate insert (key_victim_2, first_key, retry_ct); *)
+        }
+     }
+
+}

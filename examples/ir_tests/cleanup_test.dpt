@@ -1,0 +1,57 @@
+/*
+Basic DPT primitives: events, handlers, and local variables
+*/
+global Array.t<<32>> x_arr = Array.create(1024);
+
+entry event pktin (int src, int dst);
+exit event continue (int src, int dst);
+event count_to_10 (int count);
+
+handle pktin (int src, int dst) {
+    int x = 100;
+    bool foo = (src == dst);
+    bool bar = (dst == 100);
+    bool baz = (src == 200);
+
+    if (foo && (bar || dst != x)) {
+        generate count_to_10(9999);        
+    }
+}
+
+// handle pktin (int src, int dst) {
+//     int p = 1;
+//     int q = 2;
+//     int r = 3;
+//     int s = 4;
+
+//     int x = p + q - r + s;
+
+
+//     // int hello = 10;
+//     // if ((((((src == 10) || (src == 20)) && (p == 10)) && (q != 30))) || (q == 40))
+
+//     bool foo = (src == dst);
+//     bool bar = (dst == 100);
+//     bool baz = (src == 200);
+
+//     if (foo || (bar && baz)) {
+//         generate count_to_10(9999);        
+//     }
+//     // ??? --> ???
+//     if ((src == dst) || ((dst == 100) && (src == 200))) {
+//         generate count_to_10(9999);        
+//     }
+
+
+
+//     // if (src == hello){
+//     //     generate count_to_10(1000);
+//     // }
+// }
+
+handle count_to_10 (int count) {
+	int x = count;
+	int<<32>> next_count = count; 
+	next_count = count + 1;
+	// generate count_to_10(next_count);
+}

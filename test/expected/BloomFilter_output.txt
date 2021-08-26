@@ -1,0 +1,60 @@
+dpt: Parsing ...
+Processing examples/interp_tests/BloomFilter.dpt
+-------Eliminating type aliases 1---------
+-------Checking well-formedness---------
+---------typing---------
+---------Making returns explicit-------------
+-----------renaming-----------
+-------Eliminating modules---------
+-------Eliminating type aliases 2---------
+-------Inlining size declarations---------
+---------Eliminating events with global arguments----------
+-----------inlining functions-----------
+---------------typing again-------------
+------------Checking entry handlers---------------
+-------Eliminating records-------
+-------Eliminating vectors-------
+-------Eliminating tuples-------
+---------------typing again-------------
+dpt: Auto-detected specification file examples/interp_tests/BloomFilter.json
+dpt: Simulating...
+dpt: Using random seed: 0
+
+t=0: Handling entry event in(false,3) at switch 0
+t=10000: Handling entry event in(true,3) at switch 0
+t=20000: Handling entry event in(false,3) at switch 0
+t=30000: Handling entry event in(true,7) at switch 0
+t=40000: Handling entry event in(true,8) at switch 0
+t=50000: Handling entry event in(false,3) at switch 0
+t=60000: Handling entry event in(false,7) at switch 0
+t=70000: Handling entry event in(false,8) at switch 0
+t=80000: Handling entry event in(false,9) at switch 0
+t=90000: Handling entry event in(false,10) at switch 0
+dpt: Final State:
+
+Switch 0 : {
+
+ Pipeline : [
+    0 : [1u1; 0u1; 0u1; 1u1]
+    1 : [0u1; 1u1; 0u1; 1u1]
+    2 : [1u1; 1u1; 0u1; 0u1]
+    3 : [0u1; 1u1; 1u1; 0u1]
+  ]
+
+ Events :   [ ]
+
+ Exits :    [
+    denied(3) at t=0
+    allowed(3) at t=20000
+    allowed(3) at t=50000
+    allowed(7) at t=60000
+    allowed(8) at t=70000
+    denied(9) at t=80000
+    denied(10) at t=90000
+  ]
+
+ entry events handled: 10
+ total events handled: 10
+
+}
+dpt: Done

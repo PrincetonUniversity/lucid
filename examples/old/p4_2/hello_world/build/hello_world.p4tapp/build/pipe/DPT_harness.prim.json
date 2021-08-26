@@ -1,0 +1,346 @@
+{
+  "tables" : [
+    {
+      "name" : "tbl_dispatch_setup",
+      "actions" : [
+        {
+          "name" : "Ingress.dispatch_setup",
+          "primitives" : [
+            {
+              "name" : "ModifyFieldPrimitive",
+              "operation" : "set",
+              "dst" : {
+                "type" : "phv",
+                "name" : "md.dptMeta.eventType"
+              },
+              "dst_mask" : {
+                "type" : "immediate",
+                "name" : "255"
+              },
+              "src1" : {
+                "type" : "immediate",
+                "name" : "1"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name" : "Ingress.dpt_1_merged_tbl",
+      "actions" : [
+        {
+          "name" : "Ingress.dpt_88_merged_acn_1_acn_90_generate_0_extra_processing",
+          "primitives" : [
+            {
+              "name" : "AddHeaderPrimitive",
+              "dst" : {
+                "type" : "header",
+                "name" : "hdr.dpt_extra_processing_out.$valid"
+              }
+            },
+            {
+              "name" : "ModifyFieldPrimitive",
+              "operation" : "set",
+              "dst" : {
+                "type" : "phv",
+                "name" : "md.dptMeta.nextEventType"
+              },
+              "dst_mask" : {
+                "type" : "immediate",
+                "name" : "255"
+              },
+              "src1" : {
+                "type" : "immediate",
+                "name" : "2"
+              }
+            },
+            {
+              "name" : "ModifyFieldPrimitive",
+              "operation" : "set",
+              "dst" : {
+                "type" : "phv",
+                "name" : "hdr.dpt_extra_processing_out.dpt_82_eventType"
+              },
+              "dst_mask" : {
+                "type" : "immediate",
+                "name" : "255"
+              },
+              "src1" : {
+                "type" : "immediate",
+                "name" : "2"
+              }
+            },
+            {
+              "name" : "ModifyFieldPrimitive",
+              "operation" : "set",
+              "dst" : {
+                "type" : "phv",
+                "name" : "hdr.dpt_extra_processing_out.dpt_74_ip"
+              },
+              "dst_mask" : {
+                "type" : "immediate",
+                "name" : "0"
+              },
+              "src1" : {
+                "type" : "immediate",
+                "name" : "0"
+              }
+            }
+          ]
+        },
+        {
+          "name" : "Ingress.dpt_92_merged_acn_1_acn_94_generate_0_continue",
+          "primitives" : [
+            {
+              "name" : "ModifyFieldPrimitive",
+              "operation" : "set",
+              "dst" : {
+                "type" : "phv",
+                "name" : "md.dptMeta.exitEventType"
+              },
+              "dst_mask" : {
+                "type" : "immediate",
+                "name" : "255"
+              },
+              "src1" : {
+                "type" : "immediate",
+                "name" : "3"
+              }
+            },
+            {
+              "name" : "ModifyFieldPrimitive",
+              "operation" : "set",
+              "dst" : {
+                "type" : "phv",
+                "name" : "md.dpt_continue.ip"
+              },
+              "dst_mask" : {
+                "type" : "immediate",
+                "name" : "0"
+              },
+              "src1" : {
+                "type" : "phv",
+                "name" : "hdr.dpt_extra_processing_in.dpt_39_ip"
+              }
+            }
+          ]
+        },
+        {
+          "name" : "Ingress.dpt_113_noop",
+          "primitives" : []
+        }
+      ]
+    },
+    {
+      "name" : "Ingress.dptContinueHandler",
+      "actions" : [
+        {
+          "name" : "Ingress.continueAndGenerate",
+          "primitives" : [
+            {
+              "name" : "RemoveHeaderPrimitive",
+              "dst" : {
+                "type" : "header",
+                "name" : "hdr.dpt_extra_processing_in.$valid"
+              }
+            },
+            {
+              "name" : "ModifyFieldPrimitive",
+              "operation" : "set",
+              "dst" : {
+                "type" : "phv",
+                "name" : "ig_intr_md_for_tm.mcast_grp_a"
+              },
+              "dst_mask" : {
+                "type" : "immediate",
+                "name" : "65535"
+              },
+              "src1" : {
+                "type" : "immediate",
+                "name" : "1066"
+              }
+            },
+            {
+              "name" : "ModifyFieldPrimitive",
+              "operation" : "set",
+              "dst" : {
+                "type" : "phv",
+                "name" : "hdr.ethernet.ether_type"
+              },
+              "dst_mask" : {
+                "type" : "immediate",
+                "name" : "65535"
+              },
+              "src1" : {
+                "type" : "immediate",
+                "name" : "0x6666"
+              }
+            }
+          ]
+        },
+        {
+          "name" : "Ingress.continueOnly",
+          "primitives" : [
+            {
+              "name" : "RemoveHeaderPrimitive",
+              "dst" : {
+                "type" : "header",
+                "name" : "hdr.dpt_extra_processing_in.$valid"
+              }
+            }
+          ]
+        },
+        {
+          "name" : "Ingress.generateOnly",
+          "primitives" : [
+            {
+              "name" : "RemoveHeaderPrimitive",
+              "dst" : {
+                "type" : "header",
+                "name" : "hdr.dpt_extra_processing_in.$valid"
+              }
+            },
+            {
+              "name" : "ModifyFieldPrimitive",
+              "operation" : "set",
+              "dst" : {
+                "type" : "phv",
+                "name" : "hdr.ethernet.ether_type"
+              },
+              "dst_mask" : {
+                "type" : "immediate",
+                "name" : "65535"
+              },
+              "src1" : {
+                "type" : "immediate",
+                "name" : "0x6666"
+              }
+            },
+            {
+              "name" : "ModifyFieldPrimitive",
+              "operation" : "set",
+              "dst" : {
+                "type" : "phv",
+                "name" : "ig_intr_md_for_tm.mcast_grp_a"
+              },
+              "dst_mask" : {
+                "type" : "immediate",
+                "name" : "65535"
+              },
+              "src1" : {
+                "type" : "immediate",
+                "name" : "1066"
+              }
+            }
+          ]
+        },
+        {
+          "name" : "Ingress.noEventsOut",
+          "primitives" : [
+            {
+              "name" : "RemoveHeaderPrimitive",
+              "dst" : {
+                "type" : "header",
+                "name" : "hdr.dpt_extra_processing_in.$valid"
+              }
+            },
+            {
+              "name" : "DropPrimitive",
+              "dst" : {
+                "type" : "phv",
+                "name" : "ig_intr_md_for_dprsr.drop_ctl"
+              },
+              "src1" : {
+                "type" : "immediate",
+                "name" : "1"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name" : "tbl_handle_dispatch_result",
+      "actions" : [
+        {
+          "name" : "Ingress.handle_dispatch_result",
+          "primitives" : [
+            {
+              "name" : "ModifyFieldPrimitive",
+              "operation" : "set",
+              "dst" : {
+                "type" : "phv",
+                "name" : "hdr.ip.src_addr"
+              },
+              "dst_mask" : {
+                "type" : "immediate",
+                "name" : "0"
+              },
+              "src1" : {
+                "type" : "phv",
+                "name" : "md.dpt_continue.ip"
+              }
+            },
+            {
+              "name" : "ModifyFieldPrimitive",
+              "operation" : "set",
+              "dst" : {
+                "type" : "phv",
+                "name" : "ig_intr_md_for_tm.ucast_egress_port"
+              },
+              "dst_mask" : {
+                "type" : "immediate",
+                "name" : "511"
+              },
+              "src1" : {
+                "type" : "immediate",
+                "name" : "0"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name" : "tbl_DPT_harness382",
+      "actions" : [
+        {
+          "name" : "DPT_harness382",
+          "primitives" : [
+            {
+              "name" : "ModifyFieldPrimitive",
+              "operation" : "set",
+              "dst" : {
+                "type" : "phv",
+                "name" : "hdr.ethernet.ether_type"
+              },
+              "dst_mask" : {
+                "type" : "immediate",
+                "name" : "65535"
+              },
+              "src1" : {
+                "type" : "immediate",
+                "name" : "0x800"
+              }
+            },
+            {
+              "name" : "RemoveHeaderPrimitive",
+              "dst" : {
+                "type" : "header",
+                "name" : "hdr.dpt_extra_processing_out.$valid"
+              }
+            },
+            {
+              "name" : "RemoveHeaderPrimitive",
+              "dst" : {
+                "type" : "header",
+                "name" : "hdr.dpt_extra_processing_in.$valid"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

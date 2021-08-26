@@ -2,9 +2,10 @@
 # simple shell to build and run the components of a p4 program + c manager.
 
 # simulation configuration
-PORT_DPIDS="0 4 8 12 16 20 24 28 32 36 40 44 48 52 56 60 64 128 132 136 140 144 148 152 156 160 164 168 172 176 180 184 188 192 196"
+PORT_DPIDS="128 132 136 140 144 148 152 156 160 164 168 172 176 180 184 188 192"
 RECIRC_DPID="196"
 LOG_DIR="run_logs"
+MODEL_LOG_BASE="model_"
 VETH_JSON="sim_veth_map.json"
 
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )"
@@ -62,8 +63,14 @@ function to_python_mgr() {
 }
 function to_logs_dir() {
     local BASE_PROG=$(realpath $1)
-    local SIM_DIR=$(dirname $BASE_PROG)/$LOG_DIR
-    echo $SIM_DIR
+    local LDIR=$(dirname $BASE_PROG)/$LOG_DIR
+    echo $LDIR
+}
+function to_model_log() {
+    local LDIR=$(to_logs_dir $1)
+    local LFN=($LDIR/$MODEL_LOG_BASE*)
+    echo $LFN
+
 }
 
 # ================================
@@ -80,6 +87,7 @@ function build_p4() {
     fi
 
     local P4C_ARGS="" # useful p4c args: --listFrontendPasses --help
+    local P4C_ARGS="--table-placement-in-order"
     if [ -z "$P4C_ARGS" ] ; then 
         P4C_ARGS=""
     else
@@ -113,6 +121,13 @@ function build() {
     build_p4 "$P4_SRC" "$BUILD_DIR" "-v" $3 && build_mgr "$CTL_SRC" "$BUILD_DIR"
 }
 
+function build_quiet() {
+    P4_SRC=$(realpath "$1")
+    CTL_SRC=$(to_switchd_fn "$1")
+    BUILD_DIR=$(to_build_dir "$1")
+    rm -rf "$BUILD_DIR"; mkdir -p "$BUILD_DIR"
+    build_p4 "$P4_SRC" "$BUILD_DIR" $3 && build_mgr "$CTL_SRC" "$BUILD_DIR"
+}
 
 # ======  End of building  =======
 
@@ -161,12 +176,22 @@ create_veth_pairs() {
         json_str="$json_str{\"device_port\":$i, \"veth1\":$A, \"veth2\":$B},"
         (ip link show $vethA > /dev/null 2>&1 && echo "veth pair $vethA <--> $vethB exists") || create_veth_pair $vethA $vethB
     done
+    # one last iteration to set up the recirculation port.
+    i=$RECIRC_DPID
+    A=$(( i * 2 ))
+    B=$(( i * 2 + 1 ))
+    vethA=veth$(( i * 2 ))
+    vethB=veth$(( i * 2 + 1 ))
+    json_str="$json_str{\"device_port\":$i, \"veth1\":$A, \"veth2\":$B}"
+    (ip link show $vethA > /dev/null 2>&1 && echo "veth pair $vethA <--> $vethB exists") || create_veth_pair $vethA $vethB
+
     json_str="$json_str]}"
     echo $json_str > $(to_vethconf_fn)
 }
 
 # multi-threading helpers
 function run_prog() {
+    trap 'exit' 2
     PROG="unbuffer $1"
     SIG_STR=$2
     PREFIX=$3
@@ -207,7 +232,7 @@ function start_asic_sim() {
     create_veth_pairs 
 
     # launch simulator in background, wait for ready notification to continue.
-    local SIM_CMD="$SIMULATOR --p4-target-config $P4_CONF -d 1 -f $(to_vethconf_fn) --chip-type 2 --install-dir $SDE_INSTALL --log-dir . --json-logs-enable --pkt-log-len 100000 --int-port-loop $RECIRC_DPID"
+    local SIM_CMD="$SIMULATOR --time-disable --p4-target-config $P4_CONF -d 1 -f $(to_vethconf_fn) --chip-type 2 --install-dir $SDE_INSTALL --log-dir . --json-logs-enable --pkt-log-len 100000 --int-port-loop $RECIRC_DPID"
     local SIG_STR="Waiting for incoming connections..."
     echo "SIM_CMD: $SIM_CMD"
     cd_launch_and_wait "$LOG_DIR" "$SIM_CMD" "$SIG_STR" "SIM"
@@ -248,10 +273,16 @@ function startsim() {
     start_python "$MGR_PY"    
 }
 function stopsim() {
-    echo "**** stopping simulator and switchd! ****"
-    pkill -P $SWITCHD_PID
-    pkill -P $SIM_PID    
+    echo "**** stopping simulator and switchd ****"
+    { sudo pkill --signal 2 -P $SWITCHD_PID && wait $SWITCHD_PID; } 2>/dev/null
+    { sudo pkill --signal 2 -P $SIM_PID && wait $SIM_PID; } 2>/dev/null
 }
+# use this to clean up an aborted run
+function killsim() {
+    sudo killall bf_switchd
+    sudo killall tofino-model
+}
+
 
 function runsim() {
     startsim $1
@@ -276,7 +307,7 @@ function starthw() {
 }
 function stophw() {
     echo "**** stopping switchd! ****"
-    pkill -P $SWITCHD_PID
+    pkill --signal 2 -P $SWITCHD_PID
 }
 function runhw() {
     starthw $1
@@ -291,25 +322,19 @@ function runhw() {
 # =           testing           =
 # ===============================
 
-function pcapfn_of_jsonfn() {
+function pcapfn_of() {
     echo "$(strip_ext $1).pcap"
 }
-function rx_pcapfn_of_jsonfn() {
+function rx_pcapfn_of() {
     echo "$(strip_ext $1).rx.pcap"
 }
-function tracefn_of_p4fn() {
-    echo "$(strip_ext $1).json"
+function tracefn_of() {
+    echo "$(strip_ext $1).trace.json"
 }
-
-# craft the pcap 
-function generate_pcap() {
-    local jsonfn=$1; local pcapfn=$2
-    python3 $SCRIPT_DIR/generate.py "$jsonfn" "$pcapfn"
-}
-
 # capture pcap on an interface. Print pid to kill later.
 function capture_pcap() {
     local rx_pcap_fn=$1; local if_in=$2
+    sudo rm -f "$rx_pcap_fn"
     local cmd="sudo tcpdump -U -Q in -i $if_in -w $rx_pcap_fn"
     $cmd > /dev/null 2> /dev/null &
     echo $!
@@ -317,32 +342,68 @@ function capture_pcap() {
 # send pcap on an interface
 function send_pcap() {
     local pcap_fn=$1; local if_out=$2
-    echo "sending out of $if_out"
-    local cmd="sudo tcpreplay --preload-pcap --quiet -i $if_out $pcapfn"
+    echo "sending $pcap_fn out of $if_out"
+    local cmd="sudo tcpreplay --pps .2 --preload-pcap --quiet -i $if_out $pcap_fn"
     echo "send_pcap cmd: $cmd"
     $cmd
 }
 
-# usage (after everything is running) : runtest <p4 prog name> <output dpid> [<output dpid>]
-function runtest() {
-    local jsonfn="$(tracefn_of_p4fn $1)" # infer based on P4 program name. Will also work with *.json
-    local pcapfn="$(to_logs_dir $1)/$(pcapfn_of_jsonfn $1)"
-    local if_out="$(dpid_to_host_veth $2)"
-    if [ -z "$3" ] ; then
-        generate_pcap "$jsonfn" "$pcapfn"
-        send_pcap "$pcap_fn" "$if_out"
+# send pcap $1 into the veth interface for $2, record what comes out of $3 
+function send_and_collect_pcap() {
+    local tx_pcapfn="$1"
+    local if_in="$(dpid_to_host_veth $2)"
+    local if_out="$(dpid_to_host_veth $3)"
+    local rx_pcapfn="$(rx_pcapfn_of $tx_pcapfn)"
+    echo "starting tcpdump..."
+    tcpdump_pid=$(capture_pcap "$rx_pcapfn" "$if_in")
+    sleep 1
+    echo "sending pcap..."
+    send_pcap "$tx_pcapfn" "$if_out"
+    sleep 2
+    echo "killing tcpdump (pid $tcpdump_pid)..."
+    sudo kill -9 $tcpdump_pid
+}
+
+
+# generate a pcap from the test spec ($2), start the 
+# asic simulator, send the pcap, and analyze the 
+# compiler output log to see if the test spec's 
+# conditions were satisfied. 
+function test() {
+    local p4fn="$1"
+    local jsonfn="$2"
+    local pcapfn="trace.pcap"
+    # figure out port to send packets out of
+    local dpid_in=$(python3 $SCRIPT_DIR/testspec_utils.py input_port "$jsonfn")   
+    local port_in=$(dpid_to_host_veth $dpid_in)
+    local num_pkts_in=$(python3 $SCRIPT_DIR/testspec_utils.py len_packets "$jsonfn")
+    # # generate the pcap
+    echo "**** generating test pcap with $num_pkts_in pkts from test spec ****"
+    python3 $SCRIPT_DIR/testspec_utils.py gen_pcap "$jsonfn" "$pcapfn"
+    # start the simulator
+    echo "**** starting tofino model and p4 program ****"
+    startsim "$p4fn"
+    trap 'stopsim' 9
+    echo "**** sending pcap ****"
+    send_pcap "$pcapfn" "$port_in"
+    # give the model at least 10 seconds to process each packet
+    # echo "**** sleeping for $(num_pkts_in) ****"
+    # sleep "$num_pkts_in"
+    sleep 5
+    echo "**** cleaning up ****"
+    stopsim
+    echo "**** checking test spec against model log ****"
+    MODEL_LOG_FN="$(to_model_log $1)"
+    result=$(python3 $SCRIPT_DIR/check_testspec.py "$jsonfn" "$MODEL_LOG_FN")
+    if [ $result = "True" ]; then
+        echo "PASS"
+        exit 0
     else
-        local if_in="$(dpid_to_host_veth $3)"
-        local rx_pcapfn="$(to_logs_dir $1)/$(rx_pcapfn_of_jsonfn $1)"
-        tcpdump_pid=$(capture_pcap "$rx_pcapfn" "$if_in")
-        sleep 1
-        generate_pcap "$jsonfn" "$pcapfn"
-        send_pcap "$pcap_fn" "$if_out"
-        sleep 2
-        echo "killing tcpdump (pid $tcpdump_pid)"
-        sudo kill -9 $tcpdump_pid
+        echo "FAIL"
+        exit 1
     fi
 }
+
 
 # ======  End of testing  =======
 
@@ -352,13 +413,27 @@ function main() {
     case $1 in 
         "build") shift; build $@
         ;;
+        "build_quiet") shift; build_quiet $@
+        ;;
         "sim") shift; runsim $@
         ;;
         "hw") shift; runhw $@
         ;;
-        "test") shift; runtest $@
+        "send_and_collect_pcap") shift; send_and_collect_pcap $@
         ;;
-        *) echo "usage: p4_build.sh <build | sim | hw | test> <p4 fn>"
+        "test") shift; test $@
+        ;;
+        "simtest") shift; simtest $@
+        ;;
+        "killsim") shift; killsim $@
+        ;;
+        *) echo "usage:"; 
+           echo "p4tapp.sh <build | build_quiet | sim | hw> prog.p4";
+           echo "p4tapp.sh send_and_collect_pcap trace.pcap dpid_in dpid_out"
+           echo "p4tapp.sh simtest prog.p4 trace.pcap dpid_in dpid_out"
+           echo "p4tapp.sh test prog.p4 testspec.json"
+
+           echo "p4tall.sh killsim"
         ;;
     esac
 }
