@@ -21,4 +21,4 @@ The SIGCOMM 2021 artifact is in the ``sigcomm21_artifact`` branch.
 
 
 ## Limitations
-Lucid is an ongoing project. While the Lucid interpreter supports all the language features, the current Lucid compiler does not. . Specifically, the compiler does not support events as variables in programs and does not generate code for scheduling events (i.e., setting when and where events happen via the ``locate`` and ``delay`` combinators). There are also likely to be other bugs in the  compiler.
+The current Lucid-to-Tofino compiler is a rewrite of an initial prototype and doesn't yet support all the language features (e.g., events as variable in a program and event-scheduling combinators). There are also likely to be bugs in the compiler. The Lucid interpreter, however, is feature complete and much more reliable.
