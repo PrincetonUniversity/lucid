@@ -1,3 +1,39 @@
+echo "***** installing bf-sde *****"
+SDE_PARENT="/home/vagrant"
+SDE_FILE="bf-sde-9.5.0.tgz"
+SDE_DIR="bf-sde-9.5.0"
+cd /lucid/vagrant
+if [ -e $SDE_FILE ]
+then 
+  # install bf-sde-9.5.0.tgz
+  cp $SDE_FILE $SDE_PARENT
+  cp set_sde.bash $SDE_PARENT
+  cd $SDE_PARENT
+  tar -xzf $SDE_FILE
+  cd $SDE_DIR
+  echo "vm_sde_profile:
+    global_configure_options: ''
+    package_dependencies:
+    - thrift
+    - grpc
+    packages:
+    - bf-syslibs:
+      - bf_syslibs_configure_options: ''
+    - bf-utils:
+      - bf_utils_configure_options: ''
+    - bf-drivers:
+      - bf_drivers_configure_options: ''
+      - bf-runtime
+      - p4-runtime
+      - pi
+    - ptf-modules
+    tofino_architecture: tofino" > ./p4studio_build/profiles/vm_sde_profile.yaml
+  ./p4studio_build/p4studio_build.py -up vm_sde_profile
+  echo ". $SDE_PARENT/set_sde.bash" >> ~/.bashrc
+else
+  echo "not installing p4 studo SDE: $SDE_FILE not found"
+fi
+echo "***** installing Lucid toolchain dependencies *****"
 # install DPT dependencies for ubuntu 18.04
 echo "----installing packages from apt ----"
 sudo apt-get update -y
@@ -39,3 +75,4 @@ opam install -y \
     yojson \
     angstrom
 eval $(opam env)
+
