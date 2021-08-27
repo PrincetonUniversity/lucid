@@ -20,9 +20,10 @@ then
       - pi
     - ptf-modules
     tofino_architecture: tofino" > "$SDE_DIR"/p4studio_build/profiles/vm_sde_profile.yaml
+  cp set_sde.bash "$SDE_DIR"
   cd "$SDE_DIR"
   ./p4studio_build/p4studio_build.py -up vm_sde_profile
-  echo ". $SDE_DIR/set_sde.sh" | ~/.bashrc
+  echo ". $SDE_DIR/set_sde.sh" >> ~/.bashrc
   cd -
 else
   echo "not installing p4 studo SDE: bf-sde-9.5.0.tgz not found"
