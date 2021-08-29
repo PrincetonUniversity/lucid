@@ -1,4 +1,4 @@
-# set up the vm.
+BOX="lucid.box"
 # 1) make sure vagrant and virtualbox are installed.
 echo "checking if vagrant and virtualbox are installed..."
 if which vagrant > /dev/null ; then 
@@ -17,16 +17,15 @@ else
     exit
 fi
 
-# 2) initialize vm
-if [ -e lucidvm.box ]
+# 2) add box to vagrant
+if [ -e $BOX ]
 then 
-    echo "initializing lucid vm lucidvm.box"
-    vagrant box add lucidvm lucidvm.box
-    vagrant init lucidvm
-    echo "vm initialization complete. use 'vagrant ssh' to login"
+    echo "initializing lucid vm $BOX"
+    vagrant box add lucid $BOX
+    # vagrant init lucid
+    echo "vagrant setup complete."
+    echo "Start vm: 'vagrant up'\nLogin to vm: 'vagrant ssh'"
 else
-    echo "error: lucidvm.box not found."
-    echo "see readme.md for instructions to build it"
+    echo "error: lucid vagrant box ($BOX) not found."
+    echo "use createbox.sh to build it -- see readme.md for instructions to build it"
 fi
-# bring up vm
-vagrant up --provider=virtualbox

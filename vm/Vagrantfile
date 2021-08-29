@@ -1,5 +1,7 @@
+# This vagrant file uses the lucidvm box, which you can build 
+# in /lucidvm
 Vagrant.configure(2) do |config|
-  config.vm.box = "bento/ubuntu-18.04" # bionic 64 doesn't work with serial disconnected...
+  config.vm.box = "lucid" # bionic 64 doesn't work with serial disconnected...
   config.vm.hostname = "lucidvm"
   config.vm.synced_folder "../", "/lucid"
   config.vm.provider "virtualbox" do |vb|
@@ -10,10 +12,5 @@ Vagrant.configure(2) do |config|
     vb.cpus = "1"
     vb.memory = "4096" 
     # config.disksize.size = "40GB"
-  end
-
-  config.vm.provision "shell" do |s|
-    s.privileged = false
-    s.path = "./ubuntu_setup.sh"
   end
 end

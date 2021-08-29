@@ -1,0 +1,58 @@
+# options in a vagrant file: https://stackoverflow.com/a/54962782
+require 'getoptlong'
+
+# defaults -- if sde or set_script do not exist, the 
+sde_tar_base='bf_sde-9.5.0.tgz'
+cpus="1"
+sde=""
+set_script=""
+# sde='./bf_sde-9.5.0.tgz'
+# set_script='./set_sde.bash'
+
+opts = GetoptLong.new(
+  [ '--cpus', GetoptLong::OPTIONAL_ARGUMENT], 
+  ['--sde', GetoptLong::OPTIONAL_ARGUMENT ],
+  ['--set_script', GetoptLong::OPTIONAL_ARGUMENT ]
+)
+opts.ordering=(GetoptLong::REQUIRE_ORDER)   ### this line.
+opts.each do |opt, arg|
+  case opt
+    when '--cpus'
+      cpus=arg
+    when '--sde'
+      sde=arg
+    when '--set_script'
+      set_script=arg
+  end
+end
+
+Vagrant.configure(2) do |config|
+  mode = "compiler"
+  if (sde=="")
+    mode = "interpreter"
+  end
+  if (set_script=="")
+    mode = "interpreter"
+  end
+  config.vm.box = "bento/ubuntu-18.04" # bionic 64 doesn't work with serial disconnected...
+  config.vm.hostname = "lucidvm"
+  config.vm.synced_folder "../", "/lucid"
+  config.vm.provider "virtualbox" do |vb|
+    # disable the log for portability.
+    vb.customize [ "modifyvm", :id, "--uartmode1", "disconnected" ]
+    vb.cpus ="#{cpus}"
+    vb.memory = "4096" 
+    # config.disksize.size = "40GB"
+  end
+  # copy p4 studio sde files if they were included
+  if (sde != "")
+    config.vm.provision "file", source: sde, destination: "$HOME/#{sde_tar_base}"
+  end
+  if (set_script != "")
+    config.vm.provision "file", source: set_script, destination: "$HOME/set_sde.bash"
+  end
+  # copy and run the ubuntu setup script.
+  config.vm.provision "file", source: "ubuntu_setup.sh", destination: "$HOME/ubuntu_setup.sh"
+  setup_cmd = "$HOME/ubuntu_setup.sh #{mode}"
+  config.vm.provision "shell", privileged: false, inline: setup_cmd
+end
