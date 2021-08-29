@@ -1,23 +1,26 @@
 # Setting up Lucid
 
-This page briefly describes how to set up a Lucid environment on a virtualbox VM or bare metal. 
+This page briefly describes how to set up a Lucid environment in a virtualbox VM or from scratch. We have tested Lucid on OSX and Ubuntu 18.04. 
 
-## Prerequisites
 
-Lucid depends on a number of ocaml packages, mostly ocaml libraries. You can set up these dependencies in a VM, or on a bare metal machine.  
+## In a VM
+The easiest way to use Lucid is to build a vagrant virtualbox VM. In ``./vm``, run ``buildbox.sh`` to build ``lucid.box`` -- a vagrant box / appliance. Then, run ``setupvm.sh`` to create a local vm from the box.
 
-### Preparing a VM
-The easiest way to use Lucid is to build a vagrant virtualbox VM. Before setting up the VM, if you want to compile Lucid to P4,  get a copy of the p4 studio 9.5.0 and put``bf-sde-9.5.0.tgz`` in \vagrant. 
-Set up the vm with: 
-```
-cd vagrant; 
-vagrant up
-```
-This will take an hour or two, especially if it is also compiling p4-studio.
+If you want to compile Lucid-generated P4 to the Tofino in your VM, get a copy of the p4 studio 9.5.0 and put ``bf-sde-9.5.0.tgz`` in ``./vm`` before running ``buildbox.sh`` or ``setupvm.sh``. This is recommended if you want to follow along with the tutorials. 
 
-### From scratch
-If you want to install the Lucid prerequisites from scratch, first install opam and ocaml. Then run these commands: 
+The VM build process takes an hour or two on a laptop, especially if you are also compiling p4 studio.
 
+Once the VM is built, use ``vagrant ssh`` from the ``vm`` directory to ssh into the vm. This git is shared in ``/lucid``, so run ``cd /lucid; make`` to compile Lucid.
+
+## From scratch
+
+**Ubuntu 18.04** To install Lucid and p4 studio on an ubuntu 18.04 machine (or your own VM), see the script ``vm/lucidbox/setup_ubuntu.sh`` for installing dependencies. Then run ``make`` in the root directory of this git. 
+
+**Other platforms** To install Lucid on other platforms (e.g., OSX), 
+
+1. Install opam and ocaml. 
+
+2. Install the ocaml packages that Lucid requires: 
 ```
 opam init -a -y --compiler=4.11.1 
 # opam switch create 4.11.1
@@ -44,7 +47,8 @@ opam install -y \
     angstrom
 eval $(opam env)
 ```
-You may need to also install other libraries for these packages to install. For ubuntu 18.04, ``vagrant/setup_ubuntu.sh`` installs all the required libraries. Also, to compile Lucid to the Tofino, you will also need a local install of p4studio 9.5.0. 
+    **note**:You may need to also install other libraries for these packages to install. 
 
-## Building
-After either installing the prerequirements or sshing into the vm, build lucid by running ``make`` in the root directory of this repository.
+3. Finally run ``make`` in the root directory of this git.
+
+Also note that, while the steps install the dependencies for Lucid, they don't install p4 studio for compiling Lucid-generated P4 to the tofino. 
