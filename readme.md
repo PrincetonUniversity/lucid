@@ -11,7 +11,7 @@ Lucid also has other quality-of-life features for data plane developers. For exa
 
 ## Using Lucid
 
-To setup and use Lucid, start with: the [setup guide](docs/setup.md) and tutorials that introduce the [language](docs/tutorial_language.md), [interpreter](docs/tutorial_interpreter.md), and [compiler](docs/tutorial_compiler.md).
+To get started with Lucid, first follow the [setup guide](docs/setup.md) and then go through the tutorials that introduce the [language](docs/tutorial_language.md), [interpreter](docs/tutorial_interpreter.md), and [p4-tofino compiler](docs/tutorial_compiler.md).
 
 
 ## More details
