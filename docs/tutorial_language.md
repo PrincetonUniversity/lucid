@@ -9,7 +9,7 @@ Here's a visual representation of ``histogram.dpt``:
 
 When ip packets arrive, the switch generates an ``ip_in`` *event*. This event is declared in the Lucid program and carries the packet's addresses, input port, ip length, and ip tos. The ``ip_in`` *handler* processes the event. The handler:
 
-1. Increments a histogram array that persists across packets.
+1. Increments a packet length histogram array that persists across packets.
 2. Increments a total packet count array.
 3. Sends the packet back out of its input port.
 4. If the total packet count is above a threshold, generates a ``report`` event to export the histogram to the collection server and reset it. 
@@ -41,7 +41,7 @@ handle ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos) 
 }
 ```
 
-As we can see in this ``ip_in`` handler, handlers are simple imperative functions that can generate other events. When a handler generates an event, the event is encoded into a packet, recirculated, and processed in a subsequent pass through the switch's pipeline. You can think of a handler ``foo`` that generates an event ``bar`` as a function ``foo`` that invokes a continuation or callback function ``bar`` asynchronously, at some time in the future. Handlers that generate events are powerful because they express recursive computation in a way that maps naturally to the underlying hardware. In the histogram example, the ``report`` event is recursive: 
+As we can see in this ``ip_in`` handler, handlers are simple imperative functions that can generate other events. When a handler generates an event, the event is encoded into a packet, recirculated, and processed in a subsequent pass through the switch's pipeline. You can think of a handler ``foo`` that generates an event ``bar`` as a function ``foo`` that calls a continuation function ``bar`` that will run at some future time. Handlers that generate events are powerful because they express recursive computation in a way that maps naturally to the underlying hardware. In the histogram example, the ``report`` event is recursive: 
 ```
 handle report(int idx){
     int cur_idx = idx; 
