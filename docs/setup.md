@@ -22,10 +22,6 @@ Once the VM is built, use ``vagrant ssh`` from the ``vm`` directory to ssh into 
 
 2. Install the ocaml packages that Lucid requires: 
 ```
-opam init -a -y --compiler=4.11.1 
-# opam switch create 4.11.1
-eval $(opam env)
-echo "eval 'opam config env'" >> ~/.bashrc
 opam install -y \
     integers \
     batteries \
@@ -45,9 +41,8 @@ opam install -y \
     z3 \
     yojson \
     angstrom
-eval $(opam env)
 ```
-    **note**:You may need to also install other libraries for these packages to install. 
+**notes**: Tested with ocaml 4.11.1. You may need to also install other libraries for these packages to install. 
 
 3. Finally run ``make`` in the root directory of this git.
 
