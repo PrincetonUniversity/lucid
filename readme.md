@@ -1,4 +1,4 @@
-# The Lucid / DPT language
+# The Lucid / DPT (data plane threads) language
 
 Lucid is a high-level language for programming reconfigurable datapath switch ASICs, currently the Intel Tofino. Compared to P4, Lucid provides higher-level abstractions and a specialized type system that make it much easier to develop complex applications that compile to real hardware.
 
