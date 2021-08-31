@@ -4,7 +4,7 @@ This tutorial will walk through the pipeline of compiling a Lucid program to a P
 
 Here's how the pipeline looks: 
 
-![compiler_pipeline](compiler_pipeline.jpg)
+![compiler_pipeline](images/compiler_pipeline.jpg)
 
 You, as the programmer, write a Lucid program and a P4 harness / driver program that generates entry events for the program and handles any exit events that the program generates. The Lucid compiler translates the Lucid program and P4 harness into a single P4 program, which you then compile to a Tofino binary using the Tofino's native P4 compiler. Finally, you run this binary on either the Tofino's ASIC model or real hardware. 
 

@@ -3,7 +3,7 @@ There are three core abstractions in Lucid: events, handlers, and arrays. To see
 
 Here's a visual representation of ``histogram.dpt``:
 
-![histogram_monitor](histogram.jpg)
+![histogram_monitor](images/histogram_flowchart.jpg)
 
 ### Events and Handlers
 
