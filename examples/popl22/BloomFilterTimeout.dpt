@@ -72,7 +72,7 @@ module BloomFilterTimeout : {
     if (idx == filter#m_ - 1) {
       next_idx = 0;
     }
-    generate clear(filter, next_idx);
+    generate Event.delay(clear(filter, next_idx), filter#empty_period); // Fix bug on 8/31/2021
   }
 
   event init(t<<'a, 'k>> filter) {
