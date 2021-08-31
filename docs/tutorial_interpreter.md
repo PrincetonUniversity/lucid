@@ -1,14 +1,14 @@
 # Tutorial 2: the Lucid interpreter
 
-Lucid's interpreter type checks a program and then executes it on a pre-defined trace of events specified in a json file. Why use the Lucid interpreter instead of compiling to P4-Tofino and testing on the Tofino ASIC model? 
+Lucid's interpreter type checks a program and then executes it on a pre-defined trace of events specified in a json file. The Lucid interpreter is a quick way to prototype and test the correctness of a program before compiling it to P4 for the Tofino. There are a few reasons to use the interpreter instead of always compiling programs to P4 and testing them on the Tofino. 
 
-1. **Agile development** Compiling to P4, then to Tofino, then running the ASIC model takes a long time -- 30+ seconds for a simple program, possibly hours for a complex program. The interpreter, on the other hand, runs almost instantly (unless you are simulating a large workload). This makes iterating and prototyping *much* faster than in P4, where your only option is to compile everything to the ASIC model.
+1. **Agile development.** Compiling to P4, then to Tofino, then running the Tofino ASIC model takes a long time. The interpreter, on the other hand, runs almost instantly, which makes iterating and prototyping *much* faster.
 
-2. **Semantics and compiler bugs** The interpreter defines the semantics of the Lucid language in a relatively straightforward way. It is relatively free of bugs, because it is so much less complex than the Lucid --> Tofino toolchain. Simply put, in the interpreter things work the way they are supposed to work. So, you can use the interpreter to quickly gain confidence that there are no logical bugs in your program. In P4, its often very hard to tell if a program doesn't work because of a logical bug, a compiler bug, or a misunderstanding of the underlying hardware. 
+2. **Semantics and compiler bugs.** The interpreter defines the semantics of the Lucid language in a relatively straightforward way. It also has far fewer bugs than the Lucid --> Tofino toolchain, because its so much simpler. So, you can use the interpreter to quickly find and eliminate logical bugs in your program.
 
-3. **Language features** The interpreter supports the full Lucid language. There are some features not yet supported by the compiler, such as delaying events and scheduling events to execute at different nodes in the network. 
+3. **Language features.** The interpreter supports the full Lucid language. In contrast, there are some features that the compiler doesn't support yet, like delaying events and scheduling events to execute at different nodes in the network. 
 
-4. **Type-and-effects checking** The final reason to use the interpreter is because Lucid's type checking is done before interpretation. So, if your Lucid program that interprets, you *know* that the program uses persistent state in a way that can be mapped to the underlying hardware. That being said, it is still possible to write programs that interpret, but cannot fit into the underlying hardware's resources. Typically we use the interpreter for fast prototyping and correctness testing, then switch to the compiler when it is time to optimize the program. 
+4. **Type-and-effects checking.** The final reason to use the interpreter is because Lucid's type checking is done before interpretation. So, if your Lucid program  interprets, you know that the program uses persistent state in a way that can be mapped to legal instructions and laid out in a valid way for the underlying architecture. That being said, it is still possible to write programs that interpret, but require more resources than the underlying hardware can provide. 
 
 
 ## Using the interpreter
@@ -27,7 +27,7 @@ dpt: Done
 There are two things to understand about the interpreter: its input and output. 
 
 ## Interpreter input specification
-For the histogram example, the specification file is ``examples/tutorial/histogram.json``, which looks like: 
+For the histogram example, the interpreter specification file is ``examples/tutorial/histogram.json``: 
 
 ```
 {
@@ -123,4 +123,4 @@ Finally, at the end of the switch state block is a summary of the number of even
 
 ## Next steps
 
-The next tutorial will walk through the process of compiling a Lucid program to P4 and executing it on the Tofino model. [tutorial_compiler](tutorial_compiler.md).
+The next tutorial walks through the process of compiling a Lucid program to P4 and executing it on the Tofino model. [tutorial_compiler](tutorial_compiler.md).
