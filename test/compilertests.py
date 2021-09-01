@@ -1,31 +1,31 @@
 #!/usr/bin/env python3
 """ Run compile / assemble / execute tests. """
 
-usage = "./compilertests.py all_tests.json"
+usage = "./compilertests.py testsets/test_one.json"
 
 import os, sys, errno, shutil, subprocess, re, json, itertools
 from sys import path
 from pathlib import Path
 
-
 def main():
-
     dptc = find_file("dptc")
     if (len(sys.argv) != 2):        
         print ("incorrect args. usage: "+usage)
         return
-    srcs_path = os.path.dirname(os.path.realpath(sys.argv[1]))
-    tests_to_run = json.load(open(sys.argv[1], "r"))
-    builds_path = tests_to_run["builds_dir"]
-    tests = tests_to_run["tests"]
+    print (dptc)
+
+    tests_spec = json.load(open(sys.argv[1], "r"))
+    tests = tests_spec["tests"]
     all_cmds =  list(itertools.chain(*[t["commands"] for t in tests]))
-    print ("sources directory: %s"%srcs_path)
-    print ("builds directory: %s"%builds_path)
+    base_dir = os.path.dirname(dptc) + "/" + tests_spec["base_dir"]
+    builds_dir = base_dir + "/" + tests_spec["builds_dir"]
+    print ("base directory for tests: %s"%base_dir)
+    print ("builds directory: %s"%builds_dir)
     print ("**** running %s tests ****"%(len(all_cmds)))
-    os.makedirs(builds_path, exist_ok=True)
+    os.makedirs(builds_dir, exist_ok=True)
     results = []
     for test in tests:
-        results += run_test(srcs_path, builds_path, dptc, test)
+        results += run_test(base_dir, builds_dir, dptc, test)
     summarize(results)
     return
     # cleanup(builds_dir, results)
@@ -42,10 +42,12 @@ def finish_str(command, prog, result):
     else:
         return (red("[FAIL] ")+cmd_str(command, prog))
         
-def run_test(srcs_path, builds_dir, dptc, test):
+def run_test(base_dir, builds_dir, dptc, test):
+    # runs a sequence of tests for a single program. If one 
+    # test fails, all subsequent ones do as well. 
     commands = test["commands"]
     results = []
-    test_failed = False    
+    test_failed = False
     for command in commands:  
         result = False                  
         if (test_failed):
@@ -54,8 +56,8 @@ def run_test(srcs_path, builds_dir, dptc, test):
         else:
             print (start_str(command, test["prog"]))
             if (command == "compile"):
-                prog = srcs_path + "/" + test["prog"]
-                harness = srcs_path + "/" + test["harness"]
+                prog = base_dir + "/" + test["prog"]
+                harness = base_dir + "/" + test["harness"]
                 build = builds_dir + "/" + test["build"]
                 result = compile(dptc, prog, harness, build)
             elif (command == "assemble"):
@@ -63,7 +65,7 @@ def run_test(srcs_path, builds_dir, dptc, test):
                 result = assemble(build)
             elif (command == "execute"):
                 build = builds_dir + "/" + test["build"]
-                testspec = srcs_path + "/" + test["testspec"]
+                testspec = base_dir + "/" + test["testspec"]
                 result = execute(build, testspec)
             else:
                 print ("unsupported command!: %s"%command)
