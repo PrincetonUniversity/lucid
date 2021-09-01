@@ -2,7 +2,10 @@
 
 This tutorial will walk through the pipeline of compiling a Lucid program to a P4 program and running it on the Tofino's ASIC model. To follow along, you should first make sure that P4-studio 9.5.0 is installed and your ``$SDE`` and ``$SDE_INSTALL`` variables are set. 
 
-Here's how the pipeline looks: 
+**Setting the p4-studio environment variables** *(a note for those unfamiliar with p4-studio)*: If you are working in a VM set up from [the guide](setup.md), the ``$SDE`` variable should be set at startup. If you are in a custom environment with p4-studio installed, copy ``<git root>/vm/set_sde.bash`` to the directory that contains p4-studio directory (e.g., ``~/bf-sde-9.5.0``). Then just run ``. ./set_sde.bash``. 
+
+
+Here's how the Lucid-to-Tofino pipeline looks at a high level: 
 
 ![compiler_pipeline](images/compiler_pipeline.jpg)
 
