@@ -1,13 +1,10 @@
 # options in a vagrant file: https://stackoverflow.com/a/54962782
 require 'getoptlong'
 
-# defaults -- if sde or set_script do not exist, the 
-sde_tar_base='bf_sde-9.5.0.tgz'
+# where the sde tar gets put in the vm
 cpus="1"
 sde=""
 set_script=""
-# sde='./bf_sde-9.5.0.tgz'
-# set_script='./set_sde.bash'
 
 opts = GetoptLong.new(
   [ '--cpus', GetoptLong::OPTIONAL_ARGUMENT], 
@@ -45,14 +42,19 @@ Vagrant.configure(2) do |config|
     # config.disksize.size = "40GB"
   end
   # copy p4 studio sde files if they were included
-  if (sde != "")
-    config.vm.provision "file", source: sde, destination: "$HOME/#{sde_tar_base}"
+  if (sde != "" and set_script != "")
+    config.vm.provision "file", source: sde, destination: "$HOME/#{File.basename(sde)}"
+    config.vm.provision "file", source: set_script, destination: "$HOME/#{File.basename(set_script)}"
+    setup_cmd = "$HOME/ubuntu_setup.sh #{mode} $HOME/#{File.basename(sde)} $HOME/#{File.basename(set_script)}"
+  else
+    if (sde == "" and set_script == "")
+      setup_cmd = "$HOME/ubuntu_setup.sh"
+    else
+      abort ("if either sde or set script is provided, they must both be.")
+    end
   end
-  if (set_script != "")
-    config.vm.provision "file", source: set_script, destination: "$HOME/set_sde.bash"
-  end
+
   # copy and run the ubuntu setup script.
   config.vm.provision "file", source: "ubuntu_setup.sh", destination: "$HOME/ubuntu_setup.sh"
-  setup_cmd = "$HOME/ubuntu_setup.sh #{mode}"
   config.vm.provision "shell", privileged: false, inline: setup_cmd
 end

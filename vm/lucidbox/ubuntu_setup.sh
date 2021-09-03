@@ -2,28 +2,44 @@
 # run this script from the same directory as 
 # bf-sde-9.5.0.tgz and set_sde.bash
 # to also install the p4-studio sde
-SDE_FILE="bf_sde-9.5.0.tgz"
-SDE_DIR="bf-sde-9.5.0"
-SET_SCRIPT="/set_sde.bash"
 
-SDE_FILE="$(pwd)/$SDE_FILE"
-SDE_DIR="$(pwd)/$SDE_DIR"
-SET_SCRIPT="$(pwd)/$SET_SCRIPT"
+function abs_path() {
+    echo "$(cd "$(dirname "$1")"; pwd)/$(basename "$1")"    
+}
+
 
 if [[ $1 ]]
 then
-  echo "mode: $1"
+  echo "setting up for $1"
+  mode=$1
+  if [ $mode=="compiler" ]
+  then 
+    if [[ $2 ]]
+    then 
+      SDE_FILE=$(abs_path $2)
+      SDE_DIR=$(basename $SDE_FILE .tgz)
+      SDE_DIR="$(pwd)/$SDE_DIR"
+    else
+      echo "usage: ubuntu_setup.sh compiler <bf-sde-9.5.0.tgz> <set_sde.bash> -- setup lucid requirements and tofino sde (bf-sde)."
+    fi
+    if [[ $3 ]]
+    then 
+      SET_SCRIPT=$(abs_path $3)
+    else
+      echo "usage: ubuntu_setup.sh compiler <bf-sde-9.5.0.tgz> <set_sde.bash> -- setup lucid requirements and tofino sde (bf-sde)."
+    fi
+  fi
 else
-  echo "mode not provided. usage: ./ubuntu_setup.sh <interpreter> <compiler>"
-  exit
+  echo "usage: ubuntu_setup.sh compiler <bf-sde-9.5.0.tgz> <set_sde.bash> -- setup lucid requirements and tofino sde (bf-sde)."
+  echo "usage: ubuntu_setup.sh interpreter -- setup lucid requirements only (no bf-sde)."
+  exit 1
 fi
-mode=$1
+
 echo "***** installing requirements to run: lucid $mode *****"
 
 # install compiler requirements if selected.
 if [[ $mode == "compiler" ]]
 then
-  echo "----installing bf-sde----"
   if [[ -f $SDE_FILE && -f $SET_SCRIPT ]]
   then   
     echo "installing sde from: $SDE_FILE --> $SDE_DIR"
@@ -56,7 +72,7 @@ then
     echo ". $SET_SCRIPT" >> ~/.bashrc
   else
     echo "p4 studio cannot install: either $SDE_FILE or $SET_SCRIPT not found"
-    exit
+    exit 1
   fi
 fi
 

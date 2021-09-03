@@ -1,6 +1,11 @@
 #### Lucid development VM
 
-``./buildbox.sh`` -- builds the lucid vm box, ``lucid.box``. Put a copy bf-sde-9.5.0.tgz in this directory beforehand to build a box that can compile and run P4. Else, the box will just run the lucid interpreter. The box may take 1-2 hours to build.
+``./buildbox.sh interpreter`` -- builds a lucid vm box with everything preinstalled to run the lucid interpreter or lucid to P4 compiler. 
+
+``./buildbox.sh compiler <bf-sde-9.5.0.tgz>`` -- builds a lucid vm box with everything preinstalled to run the lucid interpreter, lucid compiler, and also the p4 to tofino 
+compiler in the tofino sde (bf-sde). Note that you need to get a copy of the tofino 
+sde yourself (bf-sde-9.5.0.tgz). Also, this has only been tested with sde 9.5.0, 
+though it may also work with 9.5.1. The box may take 1-2 hours to build.
 
 ``./setupvm.sh`` -- sets up a local lucid vm based on the lucid box.
 
