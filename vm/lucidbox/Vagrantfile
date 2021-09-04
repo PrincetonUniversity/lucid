@@ -33,6 +33,7 @@ Vagrant.configure(2) do |config|
   end
   config.vm.box = "bento/ubuntu-18.04" # bionic 64 doesn't work with serial disconnected...
   config.vm.hostname = "lucidvm"
+  config.ssh.insert_key = false
   config.vm.synced_folder "../", "/lucid"
   config.vm.provider "virtualbox" do |vb|
     # disable the log for portability.
@@ -53,7 +54,6 @@ Vagrant.configure(2) do |config|
       abort ("if either sde or set script is provided, they must both be.")
     end
   end
-
   # copy and run the ubuntu setup script.
   config.vm.provision "file", source: "ubuntu_setup.sh", destination: "$HOME/ubuntu_setup.sh"
   config.vm.provision "shell", privileged: false, inline: setup_cmd
