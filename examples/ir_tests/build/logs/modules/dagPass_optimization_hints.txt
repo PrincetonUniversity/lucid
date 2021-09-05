@@ -1,2 +1,0 @@
----dagPass_optimization_hints log---
-note: all salu input / output variable were merged successfully! No call overhead.

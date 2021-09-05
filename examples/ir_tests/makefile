@@ -6,6 +6,16 @@ all:
 	../../dptc cleanup_test.dpt harness.p4 build -p4tapp template.p4tapp ;\
 	}
 
+
+memop_and:
+	{ \
+	cd ../../ ;\
+	make ;\
+	cd - ;\
+	../../dptc memop_and.dpt harness.p4 build ;\
+	}
+
+
 shifts:
 	{ \
 	cd ../../ ;\

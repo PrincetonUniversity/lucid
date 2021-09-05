@@ -134,6 +134,8 @@ let binOp_from_op op =
   | SatSub -> IS.SatSub
   | RShift -> IS.RShift
   | LShift -> IS.LShift
+  | BitAnd -> IS.BAnd
+  | BitOr  -> IS.BOr
   | _ -> error "[binOp_from_op] unsupported op"
 ;;
 
