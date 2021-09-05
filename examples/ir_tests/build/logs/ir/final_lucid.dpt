@@ -1,6 +1,0 @@
-entry event pktin~111(int<<32>> src_ip~361,int<<32>> dst_ip~362) ;
-
-handle pktin~111(int<<32>> src_ip~112,int<<32>> dst_ip~113) {
-int<<32>> x~114 = src_ip~112>>10<<Q{sz~355}>>;
-int<<32>> y~115 = x~114<<10<<Q{sz~359}>>;
-}

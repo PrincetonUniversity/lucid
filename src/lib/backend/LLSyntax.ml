@@ -49,7 +49,7 @@ and lmid = mid
 (* var that gets read *)
 and rmid = mid
 
-(* ALU operations in the dataplane. *)
+(* ALU operations *)
 and binOp =
   | Add
   | Sub (* A - B *)
@@ -58,6 +58,8 @@ and binOp =
   | Cast
   | RShift
   | LShift
+  | BAnd
+  | BOr
 
 (* cast A to width of B *)
 and cmpOp =

@@ -715,7 +715,7 @@ let infer_memop span env (params, s) =
          (Id id2)
          (* TODO: There are more ops that are allowed in return statements, add them here *)
            (function
-           | Plus | Sub -> true
+           | Plus | Sub | BitAnd | BitOr -> true
            | _ -> false)
          (false, false)
          e

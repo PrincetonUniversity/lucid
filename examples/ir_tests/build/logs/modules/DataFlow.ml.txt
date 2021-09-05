@@ -1,9 +1,0 @@
----DataFlow.ml log---
-[get_data_dep_edges] tbl dpt_364_tbl_0_opstmt uses variables: [md~0.dptMeta~0.eventType~0, x~114]
-[get_data_dep_edges] due to the vars it uses, tbl dpt_364_tbl_0_opstmt must execute after tbls: [tbl~0.opstmt~363]
-[get_data_dep_edges] tbl dpt_364_tbl_0_opstmt sets variables: [y~115]
-[get_data_dep_edges] due to vars it sets, tbl dpt_364_tbl_0_opstmt must execute after tbls: []
-[get_data_dep_edges] tbl dpt_363_tbl_0_opstmt uses variables: [md~0.dptMeta~0.eventType~0, md~0.pktin~111.src_ip~361]
-[get_data_dep_edges] due to the vars it uses, tbl dpt_363_tbl_0_opstmt must execute after tbls: []
-[get_data_dep_edges] tbl dpt_363_tbl_0_opstmt sets variables: [x~114]
-[get_data_dep_edges] due to vars it sets, tbl dpt_363_tbl_0_opstmt must execute after tbls: []

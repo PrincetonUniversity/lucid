@@ -24,6 +24,8 @@ let from_arithop arithop =
   match arithop with
   | S.Plus -> Add
   | S.Sub -> Sub
+  | S.BitAnd -> BAnd
+  | S.BitOr -> BOr
   | _ -> error "not an arith op, or op not supported"
 ;;
 

@@ -147,6 +147,8 @@ module PrimitiveString = struct
     | SatSub -> "|-|"
     | RShift -> ">>"
     | LShift -> "<<"
+    | BAnd -> "&"
+    | BOr -> "|"
     | _ -> error "unsupported binop"
   ;;
 
