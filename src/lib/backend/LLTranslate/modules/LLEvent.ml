@@ -1,6 +1,6 @@
-(* Tofino events builtins
-  - generate expression
-  - event combinators *)
+(* Translate events into LLSyntax
+    - generate expressions
+    - event combinators (not implemented yet) *)
 open Syntax
 open LLSyntax
 open InterpHelpers

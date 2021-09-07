@@ -1,0 +1,12 @@
+{
+    "name" : "testprog_test", 
+    "input_port": "128",
+    "packets": [
+        {"ip.src" : "0.0.0.15", "ip.dst" : "0.0.0.15", "ip.tos":1, "payload.length" : 256}
+    ],
+    "model-output":
+    [
+        {"port" : 196},
+        {"port" : 128, "ip.src" : "0.0.0.1", "ip.dst" : "0.0.0.1"}
+    ]
+}

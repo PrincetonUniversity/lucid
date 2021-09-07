@@ -21,35 +21,38 @@ let dprint_endline = ref DBG.no_printf
 let compute_ct = ref 0
 let memo_ct = ref 0
 
-(* checker function is either set or get *)
+
 let rec fold_most_recent_set_or_use_var_from_tbl
-    checker_function
+    checker_function (* checker function is either a test to see if the table reads the variable, 
+    or a test to see if the table writes the variable *) 
     cid_decls
     var_id
-    (memo_assoc, setter_ids)
+    (memo_assoc, setter_ids) (* memoize the output of this function. *)
     src_tbl_id
   =
-  (* before anything else, check to see if this result has already been computed in memo_assoc *)
-  let args = var_id, src_tbl_id in
+  (* first step is to check to see if this result has already been computed in memo_assoc. *)
+  let args = var_id, src_tbl_id, checker_function in
+  (* let real_args = (var_id, src_tbl_id, checker_function) in  *)
   let memo_opt = CL.assoc_opt args memo_assoc in
   match memo_opt with
+  (* found memoized result *)
   | Some setter_ids ->
     memo_ct := !memo_ct + 1;
     memo_assoc, setter_ids
+  (* no memoized result, do new computation. *)
   | None ->
     compute_ct := !compute_ct + 1;
-    (* need to do new computation. *)
-    let new_memo_assoc, new_setter_ids =
-      match tbl_writes_var cid_decls src_tbl_id var_id with
-      (* if the tbl writes var_id, that is most recent setter for this path up. *)
+    let new_memo_assoc, new_accessor_ids =
+      match checker_function cid_decls src_tbl_id var_id with
+      (* if the tbl touches var_id, that is most recent user for this path back to root. *)
       | true ->
-        let new_setter_ids = [src_tbl_id] in
+        let new_accessor_ids = [src_tbl_id] in
         (* memo the result of this call *)
-        let new_memo_assoc = [(var_id, src_tbl_id), new_setter_ids] in
-        new_memo_assoc, new_setter_ids
+        let new_memo_assoc = [(var_id, src_tbl_id, checker_function), new_accessor_ids] in
+        new_memo_assoc, new_accessor_ids
       | false ->
         let preds = pred_tids_of_tid cid_decls src_tbl_id in
-        let new_memo_assoc, new_setter_ids =
+        let new_memo_assoc, new_accessor_ids =
           CL.fold_left
             (fold_most_recent_set_or_use_var_from_tbl
                checker_function
@@ -60,12 +63,12 @@ let rec fold_most_recent_set_or_use_var_from_tbl
         in
         (* memo the results of this call. *)
         let new_memo_assoc =
-          ((var_id, src_tbl_id), new_setter_ids) :: new_memo_assoc
+          ((var_id, src_tbl_id, checker_function), new_accessor_ids) :: new_memo_assoc
         in
-        new_memo_assoc, new_setter_ids
+        new_memo_assoc, new_accessor_ids
     in
     let out_memo_assoc = memo_assoc @ new_memo_assoc |> unique_list_of in
-    let out_setter_ids = setter_ids @ new_setter_ids |> unique_list_of in
+    let out_setter_ids = setter_ids @ new_accessor_ids |> unique_list_of in
     out_memo_assoc, out_setter_ids
 ;;
 
@@ -141,9 +144,10 @@ let get_data_dep_edges cid_decls tbl_id all_data_dep_edges =
     print_endline
       ("[get_data_dep_edges] start processing table: "
       ^ Printing.cid_to_string tbl_id);
+    (* get the predecessor tables *)
     let pred_tids = pred_tids_of_tid cid_decls tbl_id in
     print_endline "[get_data_dep_edges] got pred tids";
-    (* get the list of variables that tbl_id reads *)
+    (* get the list of variables that the table reads *)
     let vars_used = read_vars_of_tbl cid_decls tbl_id in
     print_endline "[get_data_dep_edges] got vars used";
     DBG.printf
@@ -151,11 +155,15 @@ let get_data_dep_edges cid_decls tbl_id all_data_dep_edges =
       "[get_data_dep_edges] tbl %s uses variables: [%s]\n"
       (P4tPrint.str_of_private_oid tbl_id)
       (str_of_cids vars_used);
+    (* find the most recent predecessor that writes to every variable that 
+       the table reads *)
     let use_var_dependee_tids =
       CL.map (most_recent_set_var_from_preds cid_decls pred_tids) vars_used
       |> CL.flatten
       |> unique_list_of
     in
+    (* generate edges of the form (predcessor, table) for every predecessor 
+       that writes to a variable that this table reads. *)
     let use_var_edges =
       CL.map (fun pred_t -> pred_t, tbl_id) use_var_dependee_tids
     in
@@ -166,6 +174,7 @@ let get_data_dep_edges cid_decls tbl_id all_data_dep_edges =
        tbls: [%s]\n"
       (P4tPrint.str_of_private_oid tbl_id)
       (str_of_cids use_var_dependee_tids);
+    (* get the variables that this table writes *)
     let vars_set = write_vars_of_tbl cid_decls tbl_id in
     print_endline "[get_data_dep_edges] got vars_set";
     DBG.printf
@@ -173,12 +182,19 @@ let get_data_dep_edges cid_decls tbl_id all_data_dep_edges =
       "[get_data_dep_edges] tbl %s sets variables: [%s]\n"
       (P4tPrint.str_of_private_oid tbl_id)
       (str_of_cids vars_set);
+    (* find the most recent predecessor that reads each variable written. *)
     let set_var_dependee_tids =
       CL.map (most_recent_use_var_from_preds cid_decls pred_tids) vars_set
       |> CL.flatten
       |> unique_list_of
     in
-    print_endline "[get_data_dep_edges] got set_var_dependee_tids";
+    DBG.printf
+      outc
+      "[get_data_dep_edges] tbl: %s predecessors that read set variables: [%s]\n"
+      (P4tPrint.str_of_private_oid tbl_id)
+      (str_of_cids set_var_dependee_tids);    
+    (* add edges of the form (predecessor, table) for every predecessor 
+       that reads a variable that this table writes. *)
     let set_var_edges =
       CL.map (fun pred_t -> pred_t, tbl_id) set_var_dependee_tids
     in

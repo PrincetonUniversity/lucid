@@ -1,0 +1,75 @@
+/* 
+This program tests write-after-read dependency 
+correctness. It used to cause a bug in the compiler. 
+*/
+entry event ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos);
+event report(int<<9>> port, int x, int y);
+exit event ip_out (int<<9>> egr_port, int src, int dst);
+
+
+handle ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos){
+  int foo = 1;
+  int bar = foo + 1;
+  int baz = bar + 1;
+  foo = 2;
+  int bat = foo + 2;
+  generate report(igr_port, baz, bat);
+  // expected output: report event packet with x = 3 and y = 4
+}
+
+// Make sure that generating an event, which sets 
+// the event's parameters, doesn't get placed before 
+// other statements that read the event parameters. 
+handle report(int<<9>> port, int x, int y){        
+    int foo = 2;
+    int bar = x + y; // test expected: 7
+    if (bar == 7) {
+      generate ip_out(port, 1, 1); // IP(3, 4)
+    } else {
+      generate ip_out(port, 2, 2); // IP(5, 4)
+    }
+    // expected out: IP packet with src = 1 and dst = 1
+}
+
+
+/* 
+This program will compile to, roughly:
+
+report:
+    if (hdr.report.idx == 0):
+        foo_162 = 1;
+        hdr.report.idx = 666;
+    else:
+        foo_162 = 1;
+    bar_163 = hdr.report.idx + foo_162;
+
+so, if header.report.idx 
+comes in as 0, bar_163 should be set to foo_162.
+however, bar_163 will be set to 667.
+
+The problem (might be) that the compiler doesn't know that a generate
+statement has lhs variables equal to the event's parameter variables. 
+So it may move the generate statement up earlier than allowed. 
+
+After changing event field ids to LHS variables, the program changes to: 
+
+report:
+  if (hdr.report.idx == 0):
+    foo_162 = 1;
+    hdr.report.idx = 666;
+  else:
+    foo_162 = 1;
+
+There is another problem, which is that we don't consider write after read dependencies, in general. 
+
+So, report_locals gets transformed into:
+
+report_locals:
+    foo_198 = 1;
+    bar_199 = 1 + foo_198; && foo_198 = 2; 
+    // foo should not change to 2 until after baz.
+    baz_200 = 1 + bar_199; && bat_201 = 2 + foo_198;
+
+
+
+*/

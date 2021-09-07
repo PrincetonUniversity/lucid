@@ -380,9 +380,14 @@ module TofinoAlu = struct
     CL.iter iter_f ev_args;
     (* get a list of qualified out struct field parameters *)
     (* generate alu instructions of the form: field_param := ev_arg *)
+    (* since the out fields are written, the variable references must be 
+       lmids, else dataflow analysis will fail. *)
+    let to_lmid (mid : Cid.t) : IS.lmid = mid in 
     let out_struct_fields =
-      TofinoStructs.qual_out_fieldnames_of_event (Cid.to_id ev_id)
+      TofinoStructs.qual_out_fieldnames_of_event (Cid.to_id ev_id) 
+      |> CL.map to_lmid
     in
+
     let alu_rhs_exps = CL.map (eoper_from_immediate hdl_id) ev_args in
     let to_ass_f (lhs, rhs) = IS.IAssign (lhs, rhs) in
     let (ivec : IS.instrVec) =
