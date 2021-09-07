@@ -10,6 +10,8 @@ Before proceeding, make sure you have virtualbox and vagrant installed.
 
 The VM build process takes an hour or two on a laptop, especially if you are also compiling p4 studio.
 
+*Note: if you have a Princeton google account, you can download a pre-built VM image with Lucid and the Tofino SDE here: https://drive.google.com/file/d/1wu8PjGdebsHAlj6JwlX0iWp8IFmkx38j/view?usp=sharing. Download that, put it in ``/vm``, and skip to "using the VM".*
+
 ### To build a lucid only VM
 
 In ``./vm``, run ``buildbox.sh interpreter`` to build ``lucid.box`` -- a vagrant box / appliance. Then, run ``setupvm.sh`` to create a local vm from the box. 
@@ -20,11 +22,13 @@ In ``./vm``, run ``buildbox.sh interpreter`` to build ``lucid.box`` -- a vagrant
 
 2. Put it in ``./vm``
 
-3. In ``./vm``, run ``buildbox.sh compiler bf-sde-9.5.1.tgz`` to build ``lucid.box`` -- a vagrant box / appliance. Then, run ``setupvm.sh`` to create a local vm from the box. 
+3. In ``./vm``, run ``buildbox.sh compiler bf-sde-9.5.1.tgz`` to build ``lucid.box`` -- a vagrant box / appliance. 
 
 ### Using the VM
 
-Once the VM is built, use ``vagrant ssh`` from the ``vm`` directory to ssh into the vm. This git is shared in ``/lucid``, so run ``cd /lucid; make`` to compile Lucid.
+Once the base vm box is build, in ``./vm`` run ``setupvm.sh`` to create a local vm from the box. 
+
+Then use ``vagrant ssh`` from the ``vm`` directory to ssh into the vm. This git is shared in ``/lucid``, so run ``cd /lucid; make`` to compile Lucid.
 
 ## From scratch
 
