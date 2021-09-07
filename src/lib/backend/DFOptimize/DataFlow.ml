@@ -132,8 +132,8 @@ let most_recent_use_var_from_preds cid_decls pred_tids var_id =
 
 (* get the edges (s -> tbl_id), where s is a table that writes a variable that tbl_id reads *)
 let get_data_dep_edges cid_decls tbl_id all_data_dep_edges =
-  print_endline
-    ("[get_data_dep_edges] on object: " ^ Printing.cid_to_string tbl_id);
+(*   print_endline
+    ("[get_data_dep_edges] on object: " ^ Printing.cid_to_string tbl_id); *)
   (* for each variable read in the table, find the most recently called predecessor table 
 	that writes to it*)
   (* for each variable written by the table, find the most recently called predecessor table 
@@ -141,15 +141,15 @@ let get_data_dep_edges cid_decls tbl_id all_data_dep_edges =
   match is_tbl cid_decls tbl_id with
   | false -> all_data_dep_edges (* skip non-tables *)
   | true ->
-    print_endline
+(*     print_endline
       ("[get_data_dep_edges] start processing table: "
-      ^ Printing.cid_to_string tbl_id);
+      ^ Printing.cid_to_string tbl_id); *)
     (* get the predecessor tables *)
     let pred_tids = pred_tids_of_tid cid_decls tbl_id in
-    print_endline "[get_data_dep_edges] got pred tids";
+    (* print_endline "[get_data_dep_edges] got pred tids"; *)
     (* get the list of variables that the table reads *)
     let vars_used = read_vars_of_tbl cid_decls tbl_id in
-    print_endline "[get_data_dep_edges] got vars used";
+    (* print_endline "[get_data_dep_edges] got vars used"; *)
     DBG.printf
       outc
       "[get_data_dep_edges] tbl %s uses variables: [%s]\n"
@@ -167,7 +167,7 @@ let get_data_dep_edges cid_decls tbl_id all_data_dep_edges =
     let use_var_edges =
       CL.map (fun pred_t -> pred_t, tbl_id) use_var_dependee_tids
     in
-    print_endline "[get_data_dep_edges] got use_var_edges";
+    (* print_endline "[get_data_dep_edges] got use_var_edges"; *)
     DBG.printf
       outc
       "[get_data_dep_edges] due to the vars it uses, tbl %s must execute after \
@@ -176,7 +176,7 @@ let get_data_dep_edges cid_decls tbl_id all_data_dep_edges =
       (str_of_cids use_var_dependee_tids);
     (* get the variables that this table writes *)
     let vars_set = write_vars_of_tbl cid_decls tbl_id in
-    print_endline "[get_data_dep_edges] got vars_set";
+    (* print_endline "[get_data_dep_edges] got vars_set"; *)
     DBG.printf
       outc
       "[get_data_dep_edges] tbl %s sets variables: [%s]\n"
@@ -206,9 +206,9 @@ let get_data_dep_edges cid_decls tbl_id all_data_dep_edges =
        tbls: [%s]\n"
       (P4tPrint.str_of_private_oid tbl_id)
       (str_of_cids set_var_dependee_tids);
-    print_endline
+(*     print_endline
       ("[get_data_dep_edges] finished processing table: "
-      ^ Printing.cid_to_string tbl_id);
+      ^ Printing.cid_to_string tbl_id); *)
     all_data_dep_edges @ use_var_edges @ set_var_edges
 ;;
 
