@@ -74,6 +74,7 @@ rule token = parse
   | num as n          { NUM (position lexbuf, Z.of_string n) }
   | bitpat as p       { BITPAT (position lexbuf, extract_bitpat p) }
   | "#"               { PROJ (position lexbuf) }
+  | "|+|"             { SATPLUS (position lexbuf) }
   | "+"               { PLUS (position lexbuf) }
   | "|-|"             { SATSUB (position lexbuf) }
   | "-"               { SUB  (position lexbuf)}
@@ -91,7 +92,9 @@ rule token = parse
   | ">="              { GEQ (position lexbuf) }
   | "<"               { LESS (position lexbuf) }
   | ">"               { MORE (position lexbuf)}
+  | "^^"              { BITXOR (position lexbuf) }
   | "^"               { CONCAT (position lexbuf)}
+  | "~"               { BITNOT (position lexbuf) }
   | ";"               { SEMI (position lexbuf) }
   | ":"               { COLON (position lexbuf) }
   | "("               { LPAREN (position lexbuf) }

@@ -184,6 +184,12 @@ let pat_to_string p =
 
 let op_to_string op =
   match op with
+  (* Unary operators *)
+  | Not -> "!"
+  | Neg -> "-"
+  | BitNot -> "~"
+  | Cast size -> "(int<<" ^ size_to_string size ^ ">>)"
+  (* Binary operators *)
   | And -> "&&"
   | Or -> "||"
   | Eq -> "=="
@@ -194,14 +200,14 @@ let op_to_string op =
   | Geq -> ">="
   | Plus -> "+"
   | Sub -> "-"
-  | SatSub -> "-"
-  | Cast size -> "(int<<" ^ size_to_string size ^ ">>)"
+  | SatPlus -> "|+|"
+  | SatSub -> "|-|"
   | Conc -> "^"
   | BitAnd -> "&"
   | BitOr -> "|"
+  | BitXor -> "^^"
   | LShift -> "<<"
   | RShift -> ">>"
-  | Not -> "!" (* This case isn't actually used *)
   | Slice (n, m) -> Printf.sprintf "[%d : %d]" n m
   | TGet (n, m) -> Printf.sprintf "[%d get %d]" n m
 ;;
@@ -248,8 +254,7 @@ let rec e_to_string e =
     | None -> ""
     | Some (IConst 32) -> ""
     | Some size -> "<<" ^ size_to_string size ^ ">>")
-  | EOp (Not, [e]) -> "!" ^ exp_to_string e
-  | EOp (op, [e]) -> exp_to_string e ^ op_to_string op
+  | EOp (op, [e]) -> op_to_string op ^ exp_to_string e
   | EOp (op, [e1; e2]) -> exp_to_string e1 ^ op_to_string op ^ exp_to_string e2
   | EOp (op, es) ->
     error

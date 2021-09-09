@@ -100,6 +100,9 @@
 %token <Span.t> END
 %token <Span.t> FOR
 %token <Span.t> SIZECAST
+%token <Span.t> BITXOR
+%token <Span.t> SATPLUS
+%token <Span.t> BITNOT
 
 %token EOF
 
@@ -166,6 +169,7 @@ paren_args:
 binop:
     | exp PLUS exp                        { op_sp Plus [$1; $3] (Span.extend $1.espan $3.espan) }
     | exp SUB exp                         { op_sp Sub [$1; $3] (Span.extend $1.espan $3.espan) }
+    | exp SATPLUS exp                     { op_sp SatPlus [$1; $3] (Span.extend $1.espan $3.espan) }
     | exp SATSUB exp                      { op_sp SatSub [$1; $3] (Span.extend $1.espan $3.espan) }
     | exp LESS exp                        { op_sp Less [$1; $3] (Span.extend $1.espan $3.espan) }
     | exp MORE exp                        { op_sp More [$1; $3] (Span.extend $1.espan $3.espan) }
@@ -175,6 +179,7 @@ binop:
     | exp OR exp                          { op_sp Or [$1; $3] (Span.extend $1.espan $3.espan) }
     | exp EQ exp                          { op_sp Eq [$1; $3] (Span.extend $1.espan $3.espan) }
     | exp NEQ exp                         { op_sp Neq [$1; $3] (Span.extend $1.espan $3.espan) }
+    | exp BITXOR exp                      { op_sp BitXor [$1; $3] (Span.extend $1.espan $3.espan) }
     | exp BITAND exp                      { op_sp BitAnd [$1; $3] (Span.extend $1.espan $3.espan) }
     | exp PIPE exp                        { op_sp BitOr [$1; $3] (Span.extend $1.espan $3.espan) }
     | exp CONCAT exp                      { op_sp Conc [$1; $3] (Span.extend $1.espan $3.espan) }
@@ -190,6 +195,8 @@ exp:
     | cid paren_args                      { call_sp (snd $1) (snd $2) (Span.extend (fst $1) (fst $2)) }
     | binop                               { $1 }
     | NOT exp                             { op_sp Not [$2] (Span.extend $1 $2.espan) }
+    | SUB exp                             { op_sp Neg [$2] (Span.extend $1 $2.espan) }
+    | BITNOT exp                          { op_sp BitNot [$2] (Span.extend $1 $2.espan) }
     | HASH single_poly LPAREN args RPAREN { hash_sp (snd $2) $4 (Span.extend $1 $5) }
     | LPAREN TINT single_poly RPAREN exp  { op_sp (Cast(snd $3))[$5] (Span.extend $1 $5.espan) }
     | exp PROJ ID                         { proj_sp $1 (Id.name (snd $3)) (Span.extend $1.espan (fst $3)) }

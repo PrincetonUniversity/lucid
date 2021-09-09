@@ -84,13 +84,17 @@ and op =
   | More
   | Leq
   | Geq
+  | Neg
   | Plus
   | Sub
+  | SatPlus
   | SatSub
   | Cast of size
   | Conc
   | BitAnd
   | BitOr
+  | BitXor
+  | BitNot
   | LShift
   | RShift
   | TGet of int * int (* Size of the tuple, index to get *)

@@ -355,6 +355,10 @@ and infer_op env span op args =
       let env, inf_e, inf_ety = infer_exp env e |> textract in
       unify_raw_ty span inf_ety.raw_ty TBool;
       env, mk_ty TBool, [inf_e]
+    | (Neg | BitNot), [e] ->
+      let env, inf_e, inf_ety = infer_exp env e |> textract in
+      unify_raw_ty span inf_ety.raw_ty TBool;
+      env, mk_ty (TInt (fresh_size ())), [inf_e]
     | (And | Or), [e1; e2] ->
       let env, inf_e1, inf_ety1 = infer_exp env e1 |> textract in
       let env, inf_e2, inf_ety2 = infer_exp env e2 |> textract in
@@ -373,7 +377,7 @@ and infer_op env span op args =
       unify_raw_ty span inf_ety1.raw_ty (TInt tsize);
       unify_raw_ty span inf_ety2.raw_ty (TInt tsize);
       env, mk_ty TBool, [inf_e1; inf_e2]
-    | (Plus | Sub | SatSub | BitAnd | BitOr), [e1; e2] ->
+    | (Plus | Sub | SatPlus | SatSub | BitAnd | BitOr | BitXor), [e1; e2] ->
       let tsize = fresh_size () in
       let env, inf_e1, inf_ety1 = infer_exp env e1 |> textract in
       let env, inf_e2, inf_ety2 = infer_exp env e2 |> textract in
@@ -424,6 +428,8 @@ and infer_op env span op args =
       in
       env, final_ty, [inf_e]
     | ( ( Not
+        | Neg
+        | BitNot
         | And
         | Or
         | Eq
@@ -434,9 +440,11 @@ and infer_op env span op args =
         | Geq
         | Plus
         | Sub
+        | SatPlus
         | SatSub
         | BitAnd
         | BitOr
+        | BitXor
         | LShift
         | RShift
         | Conc
