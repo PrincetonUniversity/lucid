@@ -26,6 +26,7 @@ let interp_op st op vs =
   | And, [v1; v2] -> vbool (raw_bool v1 && raw_bool v2)
   | Or, [v1; v2] -> vbool (raw_bool v1 || raw_bool v2)
   | Not, [v] -> vbool (not (raw_bool v))
+  | Neg, [_] -> failwith "Not actually supported since all ints are unsigned"
   | Cast size, [v] ->
     vinteger (Integer.set_size (interp_size st size) (raw_integer v))
   | Eq, [v1; v2] -> vbool (v1.v = v2.v)
@@ -36,6 +37,13 @@ let interp_op st op vs =
   | Leq, [v1; v2] -> vbool (Integer.leq (raw_integer v1) (raw_integer v2))
   | Geq, [v1; v2] -> vbool (Integer.geq (raw_integer v1) (raw_integer v2))
   | Plus, [v1; v2] -> vinteger (Integer.add (raw_integer v1) (raw_integer v2))
+  | SatPlus, [v1; v2] ->
+    let res = Integer.add (raw_integer v1) (raw_integer v2) in
+    if Integer.lt res (raw_integer v1)
+    then
+      vinteger
+        (Integer.create ~value:(-1) ~size:(Integer.size (raw_integer v1)))
+    else vinteger res
   | Sub, [v1; v2] -> vinteger (Integer.sub (raw_integer v1) (raw_integer v2))
   | SatSub, [v1; v2] ->
     if Integer.lt (raw_integer v1) (raw_integer v2)
@@ -51,6 +59,9 @@ let interp_op st op vs =
     vinteger (Integer.bitand (raw_integer v1) (raw_integer v2))
   | BitOr, [v1; v2] ->
     vinteger (Integer.bitor (raw_integer v1) (raw_integer v2))
+  | BitXor, [v1; v2] ->
+    vinteger (Integer.bitxor (raw_integer v1) (raw_integer v2))
+  | BitNot, [v1] -> vinteger (Integer.bitnot (raw_integer v1))
   | LShift, [v1; v2] ->
     vinteger
       (Integer.shift_left (raw_integer v1) (raw_integer v2 |> Integer.to_int))
@@ -60,7 +71,31 @@ let interp_op st op vs =
   | Slice (hi, lo), [v] ->
     vinteger
       (Integer.shift_right (raw_integer v) lo |> Integer.set_size (hi - lo + 1))
-  | _ ->
+  | ( ( Not
+      | Neg
+      | BitNot
+      | And
+      | Or
+      | Eq
+      | Neq
+      | Less
+      | More
+      | Leq
+      | Geq
+      | Plus
+      | Sub
+      | SatPlus
+      | SatSub
+      | BitAnd
+      | BitOr
+      | BitXor
+      | LShift
+      | RShift
+      | Conc
+      | Cast _
+      | Slice _
+      | TGet _ )
+    , _ ) ->
     error
       ("bad operator: "
       ^ Printing.op_to_string op

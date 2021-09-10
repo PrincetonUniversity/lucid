@@ -89,6 +89,13 @@ let bitor x y =
   mod_by_size @@ { x with value = Z.logor x.value y.value }
 ;;
 
+let bitxor x y =
+  check x y;
+  mod_by_size @@ { x with value = Z.logxor x.value y.value }
+;;
+
+let bitnot x = mod_by_size @@ { x with value = Z.lognot x.value }
+
 let shift_left (x : t) (n : int) =
   let value = Z.shift_left x.value n in
   mod_by_size @@ { size = x.size; value }
