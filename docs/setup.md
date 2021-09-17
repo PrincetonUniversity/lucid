@@ -6,7 +6,7 @@ This page briefly describes how to set up a Lucid environment in a virtualbox VM
 ## In a VM
 The easiest way to use Lucid is to build a vagrant virtualbox VM. You can either build a VM that runs Lucid's interpreter and P4 compiler, or you can build a VM that runs Lucid's interpreter, P4 compiler, and also the Tofino sde required to compile and run that P4 on the Tofino. The latter VM is recommended if you want to follow along with the tutorials. 
 
-Before proceeding, make sure you have virtualbox and vagrant installed. 
+Before proceeding, make sure you have virtualbox (https://www.virtualbox.org/wiki/Downloads) and vagrant (https://www.vagrantup.com/downloads) installed. 
 
 The VM build process takes an hour or two on a laptop, especially if you are also compiling p4 studio.
 
