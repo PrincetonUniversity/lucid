@@ -4,7 +4,7 @@ This page briefly describes how to set up a Lucid environment in a virtualbox VM
 
 
 ## In a VM
-The easiest way to use Lucid is to build a vagrant virtualbox VM. You can either build a VM that runs Lucid's interpreter and P4 compiler, or you can build a VM that runs Lucid's interpreter, P4 compiler, and also the Tofino sde required to compile that P4 into a Tofino binary and run it on a model of the Tofino ASIC. This is recommended if you want to follow along with the tutorials. 
+The easiest way to use Lucid is to build a vagrant virtualbox VM. You can either build a VM that runs Lucid's interpreter and P4 compiler, or you can build a VM that runs Lucid's interpreter, P4 compiler, and also the Tofino sde required to compile and run that P4 on the Tofino. The latter VM is recommended if you want to follow along with the tutorials. 
 
 Before proceeding, make sure you have virtualbox and vagrant installed. 
 
@@ -26,9 +26,26 @@ In ``./vm``, run ``buildbox.sh interpreter`` to build ``lucid.box`` -- a vagrant
 
 ### Using the VM
 
-Once the base vm box is build, in ``./vm`` run ``setupvm.sh`` to create a local vm from the box. 
+Once the base vm box is build, in ``./vm`` run ``setupvm.sh`` to create a local vm from the box. Access the vm by running ``vagrant ssh`` from the ``vm`` directory. Inside the vm, the git is shared in ``/lucid``. 
 
-Then use ``vagrant ssh`` from the ``vm`` directory to ssh into the vm. This git is shared in ``/lucid``, so run ``cd /lucid; make`` to compile Lucid.
+### Testing the build environment
+
+After sshing into the vm, you should test the build environment.
+
+1. compile lucid: 
+```
+cd /lucid; make
+```
+3. test the installation by running all four make commands for the tutorial: 
+```
+cd /lucid/examples/tutorial
+make interp
+make compile
+make assemble
+make test
+```
+
+If all of the above make commands succeed, the vm has been set up correctly.
 
 ## From scratch
 
@@ -61,7 +78,7 @@ opam install -y \
     angstrom
 ```
 
-3. Finally run ``make`` in the root directory of this git.
+3. Finally run ``make`` in the root directory of this git to build lucid.
 
 **notes**: 
 1. Tested with ocaml 4.11.1. 
