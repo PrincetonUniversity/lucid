@@ -1,4 +1,4 @@
-(* argument parsing and misc IO utils for tofino compiler. *)
+(* misc IO utils for tofino compiler. *)
 open Printf
 open Consts
 exception Error of string

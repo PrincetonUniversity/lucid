@@ -14,6 +14,7 @@ let report str = Console.show_message str ANSITerminal.Green "compiler"
 (* minimal input
    1. dpt program
    2. P4 harness
+   3. entry event trigger configuration file
    3. build directory *)
 
 (* output (in build dir):
@@ -26,25 +27,22 @@ let report str = Console.show_message str ANSITerminal.Green "compiler"
 
 (* args parsing *)
 module ArgParse = struct
-  let usage = "Usage: ./dptc myProg.dpt myHarness.p4 myBuildDir"
-
-  (*     "Usage:\n\
-           \twithout p4tapp: ./dptc myProg.dpt myHarness.p4 myBuildDir\n\
-           \twith p4tapp: ./dptc myProg.dpt myHarness.p4 myBuildDir [-p4tapp \
-           template.p4tapp]" *)
+  let usage = "Usage: ./dptc myProg.dpt myHarness.p4 myHarness.json myBuildDir"
 
   type args_t =
     { dptfn : string
     ; p4fn : string
+    ; configfn : string
     ; builddir : string
-    ; use_p4tapp : bool
-    ; p4tappfn : string
+    ; use_p4tapp : bool (* todo: remove *)
+    ; p4tappfn : string (* todo: remove *)
     ; aargs : string list
     }
 
   let args_default =
     { dptfn = ""
     ; p4fn = ""
+    ; configfn = ""
     ; builddir = ""
     ; use_p4tapp = false
     ; p4tappfn = ""
@@ -69,8 +67,8 @@ module ArgParse = struct
     (* interpret positional args as named *)
     let args =
       match !args_ref.aargs with
-      | [dptfn; p4fn; builddir] ->
-        { !args_ref with dptfn; p4fn; builddir; aargs = [] }
+      | [dptfn; p4fn; configfn; builddir] ->
+        { !args_ref with dptfn; p4fn; configfn; builddir; aargs = [] }
       | _ -> error usage
     in
     args
@@ -220,7 +218,7 @@ let backend_passes df_prog =
 ;;
 
 (* new (3/20/21) compilation pipeline *)
-let compile_to_tofino target_filename p4_harness_fn =
+let compile_to_tofino target_filename p4_harness_fn config_fn =
   start_logs ();
   (* compilation *)
   let ds = Input.parse target_filename in
@@ -228,9 +226,15 @@ let compile_to_tofino target_filename p4_harness_fn =
   let ds = middle_passes ds in
   let dag_instructions = to_ir ds in
   let straightline_dpa_prog = backend_passes dag_instructions in
-  (* P4 linking *)
+
+  (* generate the entry event trigger table *)
+  let trigger_macro_defs = TriggerTable.generate config_fn in 
+
+  (* link into P4 *)
   let p4_obj_dict = P4tPrint.from_straightline straightline_dpa_prog in
-  let p4_str = LinkP4.link_p4 p4_obj_dict p4_harness_fn in
+  (* the linker is really just a simple macro engine. Pass it an associative 
+     list: (pragma string, code string to replace macro with) *)
+  let p4_str = LinkP4.link_p4 (p4_obj_dict@trigger_macro_defs) p4_harness_fn in
   (* manager code *)
   let c_str = P4tMgrPrint.c_mgr_of straightline_dpa_prog in
   let py_str = P4tMgrPrint.py_mgr_of straightline_dpa_prog in
@@ -248,10 +252,10 @@ let main () =
   (* let args = { args with dptfn = cpy_src_to_build args.dptfn args.builddir } in
      let args = { args with p4fn = cpy_src_to_build args.p4fn args.builddir } in *)
   (* compile lucid code to P4 and C blocks *)
-  let p4_str, c_str, py_str = compile_to_tofino args.dptfn args.p4fn in
+  let p4_str, c_str, py_str = compile_to_tofino args.dptfn args.p4fn args.configfn in
   report "Compilation to P4 finished.";
   match args.use_p4tapp with
-  (* generate a P4tapp project directory. note -- this currently does not emit manager code! *)
+  (* generate a P4tapp project directory. *)
   | true ->
     GenP4tappProj.generate
       p4_str
