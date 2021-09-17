@@ -10,7 +10,7 @@ Before proceeding, make sure you have virtualbox (https://www.virtualbox.org/wik
 
 The VM build process takes an hour or two on a laptop, especially if you are also compiling p4 studio.
 
-*Note: if you have a Princeton google account, you can download a pre-built VM image with Lucid and the Tofino SDE here: https://drive.google.com/file/d/1wu8PjGdebsHAlj6JwlX0iWp8IFmkx38j/view?usp=sharing. Download that, put it in ``/vm``, and skip to "using the VM".*
+**Note for Princeton users: if you have a Princeton google account, you can save a lot of time by downloading the pre-built VM image with Lucid and the Tofino SDE here: https://drive.google.com/file/d/1wu8PjGdebsHAlj6JwlX0iWp8IFmkx38j/view?usp=sharing. Download that, put it in ``./vm``, and skip to "using the VM".**
 
 ### To build a lucid only VM
 
