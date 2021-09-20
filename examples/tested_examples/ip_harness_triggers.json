@@ -1,0 +1,16 @@
+{
+    "triggers" : 
+    [
+        {
+            "event" : "ip_in",
+            "conditions" : {"hdr.ip.isValid()" : [true], "ig_intr_md.ingress_port" : [128, 132]},
+            "arguments" : {
+                "igr_port":"ig_intr_md.ingress_port",
+                "src":"hdr.ip.src_addr",
+                "dst":"hdr.ip.dst_addr",
+                "len":"hdr.ip.total_len", 
+                "tos":"hdr.ip.tos"              
+            }
+        }
+    ]
+}

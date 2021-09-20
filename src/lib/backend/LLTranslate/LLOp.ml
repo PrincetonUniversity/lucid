@@ -34,8 +34,8 @@ let int_from_const_exp (ex : exp) =
 
 module TofinoStructs = struct
   (**** translate structure names ****)
-
-  let defname_from_evid evid = Cid.id ("e_" ^ fst evid, snd evid)
+  let defname_from_evname evname = "e_" ^ evname
+  let defname_from_evid evid = Cid.id (fst evid |> defname_from_evname, snd evid)
 
   (* struct names from event ids *)
   let structname_from_evid evid =

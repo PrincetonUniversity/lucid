@@ -58,9 +58,12 @@ let rec replace_or_app (k, v) assoc =
 
 
 (* internal representation of json event spec block *)
+type field_val = 
+  | FVInt of int 
+  | FVBool of bool
 type event_spec = {
   name : string;
-  conditions : (string * int list) list; (* (p4 field, list of matching values) *)
+  conditions : (string * field_val list) list; (* (p4 field, list of matching values) *)
   arguments : (string * string) list;(* (event parameter, p4 field) *)
 }
 let extract_event_spec json_spec = 
@@ -70,7 +73,13 @@ let extract_event_spec json_spec =
   let args_json = member "arguments" json_spec |> to_assoc in 
   let extract_condition_field (field, vals) = 
     (* extract a single field's triggering values *)
-    let vals = convert_each to_int vals in 
+    let convert_val (v : Yojson.Basic.t) : field_val = 
+      match v with 
+      | `Bool v -> FVBool v
+      | `Int v -> FVInt v
+      | _ -> error "[TriggerTable.extract_event_spec] json parsing error: field values must be integers or booleans."
+    in 
+    let vals = convert_each convert_val vals in 
     (field, vals)
   in 
   let process_arg (ev_param, field) = 
@@ -82,6 +91,12 @@ let extract_event_spec json_spec =
   let arguments = CL.map process_arg args_json in  
   {name=name; conditions=conditions; arguments=arguments;}
 ;; 
+
+let string_of_fieldval fv = 
+  match fv with 
+    | FVInt i -> string_of_int i
+    | FVBool b -> string_of_bool b 
+;;
 let dbg_print_event_spec event_spec =   
   (* print an event spec *)
   print_endline ("event: "^event_spec.name);
@@ -89,7 +104,7 @@ let dbg_print_event_spec event_spec =
     fun (f, vs) -> 
     print_endline ("field: "^f);
     print_endline ("values: ");
-    CL.iter (fun v -> string_of_int v |> print_endline) vs;
+    CL.iter (fun v -> string_of_fieldval v |> print_endline) vs;
   ) event_spec.conditions;
   print_endline ("arguments: ");
   CL.iter (
@@ -114,6 +129,7 @@ let dbg_print_event_spec event_spec =
 type field = string
 type value = 
   | VInt of int
+  | VBool of bool
   | VAny
 
 type command = string
@@ -155,6 +171,7 @@ let fields_to_string (fs: field list) : string = (CL.map field_to_string fs) |> 
 
 let value_to_string v = match v with 
   | VInt v -> string_of_int v
+  | VBool v -> string_of_bool v
   | VAny -> "_"
 let values_to_string vs = (CL.map value_to_string vs) |> String.concat ~sep:", "
 
@@ -240,7 +257,7 @@ let arguments_to_commands ev_name a_s = CL.map (argument_to_command ev_name) a_s
    guards is a conjunction: 
     (x=a && y=b && z=d) || (x=a && y=b && z=e) || ... || (x=a && y=c && z=f)
 *)
-let conditions_to_guards (conditions:(string * int list) list) = 
+let conditions_to_guards (conditions:(string * field_val list) list) = 
   (* 
     example: 
       conditions: 
@@ -254,8 +271,13 @@ let conditions_to_guards (conditions:(string * int list) list) =
     pattern_values_lists 
   in (* [[(foo, 1); (bar, 3)]; [(foo, 1); (bar, 4)]; [(foo, 2); (bar, 3)]; [(foo, 2); (bar, 4)]] *)
   let guard_of_tuples si_s = 
-    let pattern_of_tuple (s, i) = 
-      {field = s; value = VInt i;}
+    let pattern_of_tuple (s, (i:field_val)) = 
+      {field = s; 
+        value = match i with 
+          | FVInt i -> VInt i
+          | FVBool b -> VBool b
+        ;
+      }
     in 
     CL.map pattern_of_tuple si_s 
   in  
@@ -264,12 +286,19 @@ let conditions_to_guards (conditions:(string * int list) list) =
   guards 
 ;;
 
+let event_const_id = LLOp.TofinoStructs.defname_from_evname
+;;
+
+let set_event_type_cmd ename = 
+  sprintf "%s.%s.%s=%s;" LLConstants.md_instance_prefix LLConstants.dpt_meta_str LLConstants.handle_selector_str (event_const_id ename)
+;;
+
 (* accumulate actions and rules for event specs. *)
 let event_spec_to_action_rules_accumulator (acns, rules) e = 
   let acn = {
     aname = ("trigger_"^e.name);
     aparams = [];
-    acmds = (arguments_to_commands e.name e.arguments);
+    acmds = (set_event_type_cmd e.name)::(arguments_to_commands e.name e.arguments);
     } 
   in 
   let guards = conditions_to_guards e.conditions in 

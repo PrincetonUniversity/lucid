@@ -11,7 +11,8 @@ const int<<8>> TOS_TRUSTED = 1;
 
 entry event ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos);
 event cuckoo_insert(int<<9>> port, int src, int dst, int fst_src, int fst_dst);
-exit event ip_out (int<<1>> drop, int<<9>> egr_port);
+exit event port_out (int<<9>> egr_port);
+exit event ip_out (int<<9>> egr_port, int src, int dst);
 
 global Array.t<<32>> key_src_1 = Array.create(1024);
 global Array.t<<32>> key_dst_1 = Array.create(1024);
@@ -67,14 +68,14 @@ handle ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos) 
         // if the stage 1 record was null or the flow's key, this flow is stored 
         // and we can safely emit the packet. 
         if ((stg_1_src == NULL) && (stg_1_dst == NULL)) {
-            generate ip_out(0, igr_port);
+            generate port_out(igr_port);
         // else, repeat for stage 2.
         } else {
             int<<8>> idx_2 = hash<<8>>(seed_2, dst);
             int stg_2_src = Array.update(key_src_2, idx_2, null_if_eq, src, new_if_null, src);
             int stg_2_dst = Array.update(key_dst_2, idx_2, null_if_eq, dst, new_if_null, dst);
             if ((stg_2_src == NULL) && (stg_2_dst == NULL)) {
-                generate ip_out(0, igr_port);
+                generate port_out(igr_port);
             // Two collisions! If no cuckoo-installations are in-flight, 
             // we can try to do one to find room. 
             } else {
@@ -96,7 +97,7 @@ handle ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos) 
         // if the flow is found in either stage, the packet is permitted to exit.
         if (((src_match_1 == TRUE) && (dst_match_1 == TRUE)) || 
             ((src_match_2 == TRUE) && (dst_match_2 == TRUE))) {
-            generate ip_out(0, igr_port);
+            generate port_out(igr_port);
         }
     }
 }
@@ -147,7 +148,7 @@ handle cuckoo_insert(int<<9>> port, int src, int dst, int fst_src, int fst_dst){
         Array.set(cuckoo_inflight, 0, FALSE);
         // If the insert has succeeded, its now okay to send the original packet. 
         if (insert_success == true) {
-            generate ip_out(0, port);
+            generate port_out(port);
         }
     }
     // If the insert has neither succeeded nor failed, perform 

@@ -6,7 +6,7 @@ interp:
 
 # compile Lucid to P4
 compile: 
-	../../dptc histogram.dpt ip_harness.p4 hist_build
+	../../dptc histogram.dpt ip_harness.p4 ip_harness_triggers.json hist_build
 
 # compile P4 to tofino
 assemble:

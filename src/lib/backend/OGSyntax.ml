@@ -277,8 +277,8 @@ let check_unique_stmt_spans dec =
   let unique_spans = MiscUtils.unique_list_of v#spans in
   let n_spans = CL.length v#spans in
   let n_u_spans = CL.length unique_spans in
-  print_endline (Printing.decl_to_string dec);
-  print_endline (sprintf "# spans: %i # unique spans: %i" n_spans n_u_spans);
+  (* print_endline (Printing.decl_to_string dec); *)
+  (* print_endline (sprintf "# spans: %i # unique spans: %i" n_spans n_u_spans); *)
   match n_spans = n_u_spans with
   | true -> dec
   | false -> error "there are duplicate spans."

@@ -8,7 +8,9 @@ This directory contains example programs whose execution has been tested. In oth
 
 - ``tests/`` -- test cases, use with scripts in ``<git root>/test``
 
-- ``ip_harness.p4`` -- a simple IP harness. Note: this is not the same IP harness as used in the tutorial.
+- ``ip_harness.p4`` -- a simple IP harness. 
+
+- ``ip_harness_triggers.json`` -- entry event triggers for the IP harness.
 
 - ``makefile`` -- compile, assemble, and test all the applications in this directory. 
     - ``make assemble_{appname}`` compile ``src/appname.dpt`` from Lucid to P4, in ``builds/{appname}``

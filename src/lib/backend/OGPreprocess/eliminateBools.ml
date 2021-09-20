@@ -118,7 +118,7 @@ let do_passes (ds : decls) : Syntax.decls =
   (* type check. *)
   print_endline "TYPE CHECKING AFTER BOOL ELIM";
   print_endline "program: ";
-  print_endline (Printing.decls_to_string ds);
+  (* print_endline (Printing.decls_to_string ds); *)
   let ds = Typer.infer_prog ds in
   print_endline "DONE TYPE CHECKING AFTER BOOL ELIM";
   ds
