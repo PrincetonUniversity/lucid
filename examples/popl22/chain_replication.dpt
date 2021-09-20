@@ -44,7 +44,6 @@ memop check_and_incr (int curr, int next) {
 }
 
 handle write(int idx, int seq, int data) {
-  int self = 0;
   // The event we just got
   // event this = write(idx, seq, data);
   // Same event but delayed
@@ -81,7 +80,6 @@ handle write(int idx, int seq, int data) {
 
 // Set pending bit to false across the whole chain
 handle ack(int idx) {
-  int self = 0;
   Array.set(pending, idx, FALSE);
   if (self != tail) {
     generate Event.sslocate(ack(idx), succ);
