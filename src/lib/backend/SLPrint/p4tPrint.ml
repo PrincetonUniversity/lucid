@@ -810,7 +810,12 @@ let print_const_def fmt (name, scope, width, valu) =
     | SPublic -> str_of_public_varid name
     | SPrivate -> str_of_varid name
   in
-  fprintf fmt "const bit<%i> %s=%i;" width id_str valu
+  (* fprintf fmt "const bit<%i> %s=%i;" width id_str valu *)
+  (* use defines instead of consts, so that the P4 program can use 
+     the event id names in table rules. *)
+  let _ = width in 
+  fprintf fmt "#define %s %i" id_str valu
+
 ;;
 
 let print_p4_const_defs decls =

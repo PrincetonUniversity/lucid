@@ -228,7 +228,7 @@ let compile_to_tofino target_filename p4_harness_fn config_fn =
   let straightline_dpa_prog = backend_passes dag_instructions in
 
   (* generate the entry event trigger table *)
-  let trigger_macro_defs = TriggerTable.generate config_fn in 
+  let trigger_macro_defs = JsonBlocks.generate config_fn in 
 
   (* link into P4 *)
   let p4_obj_dict = P4tPrint.from_straightline straightline_dpa_prog in
