@@ -3,7 +3,6 @@ base directory for tests: /lucid/examples/tested_examples
 builds directory: /lucid/examples/tested_examples/__testbuilds
 **** running 12 tests ****
 [start] compile src/r_after_w.dpt
-deleting previous build directory...
 compile command: /lucid/dptc /lucid/examples/tested_examples/src/r_after_w.dpt /lucid/examples/tested_examples/ip_harness.p4 /lucid/examples/tested_examples/ip_harness_triggers.json /lucid/examples/tested_examples/__testbuilds/r_after_w
 [96m[PASS] [0mcompile src/r_after_w.dpt
 [start] assemble src/r_after_w.dpt

@@ -176,8 +176,8 @@ control Ingress(
         inout ingress_intrinsic_metadata_for_deparser_t ig_dprsr_md,
         inout ingress_intrinsic_metadata_for_tm_t ig_tm_md) {
 
-    @ENTRY_TRIGGER_OBJECTS
-    @EXIT_ACTION_OBJECTS
+    @ENTRY_OBJECTS
+    @EXIT_OBJECTS
 
     @DPT_OBJECTS
 
@@ -195,7 +195,7 @@ control Ingress(
         // This will add an "entry" event to the 
         // packet if one of the triggering conditions
         // matches. 
-        @ENTRY_TRIGGER_CALL 
+        @ENTRY_CALL 
 
         // if the packet has an event, call lucid
         // then apply 
@@ -203,7 +203,7 @@ control Ingress(
         if (md.dptMeta.eventType != 0) {
             @DPT_HANDLERS
 
-            @EXIT_ACTION_CALL
+            @EXIT_CALL
         }
         // Otherwise, do custom p4 processing 
         // to the packet.

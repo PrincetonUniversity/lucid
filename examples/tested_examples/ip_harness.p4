@@ -176,8 +176,8 @@ control Ingress(
         inout ingress_intrinsic_metadata_for_deparser_t ig_dprsr_md,
         inout ingress_intrinsic_metadata_for_tm_t ig_tm_md) {
 
-    @ENTRY_TRIGGER_OBJECTS
-    @EXIT_ACTION_OBJECTS
+    @ENTRY_OBJECTS
+    @EXIT_OBJECTS
 
     @DPT_OBJECTS
 
@@ -185,14 +185,14 @@ control Ingress(
 
     apply {
         // call the entry trigger table. 
-        @ENTRY_TRIGGER_CALL 
+        @ENTRY_CALL
 
         // If there's an event, call the Lucid handlers. 
         if (md.dptMeta.eventType != 0) {
             @DPT_HANDLERS
 
             // Handle any exit events produced by lucid. 
-            @EXIT_ACTION_CALL
+            @EXIT_CALL
         }
         // If there was no event, don't call lucid. 
         else {            
