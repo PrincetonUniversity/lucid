@@ -2,6 +2,9 @@
     "base_dir":"examples/tested_examples",
     "builds_dir":"__testbuilds",
     "tests": [
-        {"commands":["compile", "assemble", "execute"], "prog":"src/reflector.dpt", "harness":"ip_harness.p4", "linker_config":"ip_harness_triggers.json","build":"reflector", "testspec":"tests/reflector.json"}
+        {"commands":["compile", "assemble", "execute"], "prog":"src/r_after_w.dpt", "harness":"ip_harness.p4", "linker_config":"ip_harness_triggers.json", "build":"r_after_w", "testspec":"tests/r_after_w.json"},
+        {"commands":["compile", "assemble", "execute"], "prog":"src/reflector.dpt", "harness":"ip_harness.p4", "linker_config":"ip_harness_triggers.json","build":"reflector", "testspec":"tests/reflector.json"},
+        {"commands":["compile", "assemble", "execute"], "prog":"src/control_reflector.dpt", "harness":"ip_harness.p4", "linker_config":"ip_harness_triggers.json","build":"control_reflector", "testspec":"tests/control_reflector.json"},
+        {"commands":["compile", "assemble", "execute"], "prog":"src/simple_cuckoo_firewall.dpt", "harness":"ip_harness.p4", "linker_config":"ip_harness_triggers.json","build":"simple_cuckoo_firewall", "testspec":"tests/simple_cuckoo_firewall.json"}
     ]
 }

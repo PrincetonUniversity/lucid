@@ -99,7 +99,10 @@ def execute(build, test_spec):
     mk_cmd = "cd %s; make test %s"%(build, str(Path(test_spec).absolute()))
     print ("execute command: %s"%mk_cmd)
     ret = subprocess.run(mk_cmd, shell=True, stdout = subprocess.PIPE, stderr = subprocess.PIPE)   
-    success = check_manifest(build)
+    # to check success, see if the line "PASS" at the end of stdout.
+    success = False
+    if (len(re.findall ("PASS", ret.stdout.decode("utf-8"))) == 1):
+        success = True
     return success
 
 def summarize(results):
