@@ -24,3 +24,7 @@ This directory contains example programs whose execution has been tested. In oth
 - **control_reflector** -- generates a control event from an ip packet. When processing the control event, generates an exit event that sends the packet out of the same port it arrived on. 
 
 - **simple_cuckoo_firewall** -- a stateful firewall that uses a cuckoo hash table to remember connections from trusted hosts. Insert operations, for the hash table, may occur over multiple events that move items around in memory to mitigate collisions.
+
+#### Harness
+
+All programs use a common P4 harness, ``ip_harness.p4`` and its configuration file, ``ip_harness_triggers.json``. This harness parses ethernet/ip packets and can be configured, using the json, to generate events based on any parsed header fields, and handle exit events by changing parsed field values. 
