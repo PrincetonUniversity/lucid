@@ -210,7 +210,8 @@ let backend_passes df_prog =
   let df_prog = BranchElimination.do_passes df_prog in
   Console.report "Control flow -> Data flow";
   let dataflow_df_prog = DataFlow.do_passes df_prog in
-  LogIr.log_lir "dataflow_ir" df_prog;
+  LogIr.log_lir "partial_df_nobranch" df_prog;
+  LogIr.log_lir "df_prog" dataflow_df_prog;
   Console.report "Data flow -> Pipeline";
   let pipe, straightline_prog = PipeSyntax.do_passes dataflow_df_prog in
   LogIr.log_lir_pipe "pipe_ir" pipe;

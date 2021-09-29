@@ -35,20 +35,28 @@ let rec fold_most_recent_set_or_use_var_from_tbl
   (* let real_args = (var_id, src_tbl_id, checker_function) in  *)
   let memo_opt = CL.assoc_opt args memo_assoc in
   match memo_opt with
-  (* found memoized result *)
-  | Some setter_ids ->
+  (* found memoized result -- append to current result. *)
+  | Some additional_setter_ids ->
     memo_ct := !memo_ct + 1;
-    memo_assoc, setter_ids
+    memo_assoc, unique_list_of (setter_ids@additional_setter_ids)
   (* no memoized result, do new computation. *)
   | None ->
     compute_ct := !compute_ct + 1;
     let new_memo_assoc, new_accessor_ids =
-      match checker_function cid_decls src_tbl_id var_id with
+      let res = checker_function cid_decls src_tbl_id var_id in 
+      !dprint_endline ("[fold_most_recent_set_or_use_var_from_tbl] var_id: "^(Cid.to_string var_id)^
+      " tbl_id: "^(Cid.to_string src_tbl_id)^
+      "tbl uses var? "^(string_of_bool res));
+      match res with
       (* if the tbl touches var_id, that is most recent user for this path back to root. *)
       | true ->
         let new_accessor_ids = [src_tbl_id] in
         (* memo the result of this call *)
         let new_memo_assoc = [(var_id, src_tbl_id, checker_function), new_accessor_ids] in
+        !dprint_endline 
+        ("[fold_most_recent_set_or_use_var_from_tbl] returning table "^
+        (Cid.to_string src_tbl_id)^(" as an accessor table ")^
+        (""));
         new_memo_assoc, new_accessor_ids
       | false ->
         let preds = pred_tids_of_tid cid_decls src_tbl_id in
@@ -72,18 +80,34 @@ let rec fold_most_recent_set_or_use_var_from_tbl
     out_memo_assoc, out_setter_ids
 ;;
 
+(* find most recent list of predecessors that write to var_id, 
+   starting from a src_tbl_id *)
 let rec fold_most_recent_set_var_from_tbl
     cid_decls
     var_id
     (memo_assoc, setter_ids)
     src_tbl_id
   =
-  fold_most_recent_set_or_use_var_from_tbl
+  !dprint_endline 
+    ("[fold_most_recent_set_var_from_tbl] finding setters for var "^
+    (Cid.to_string var_id)^
+    " by table "^(P4tPrint.str_of_private_oid src_tbl_id)^
+    " or its predecessors. ");
+  !dprint_endline 
+    ("[fold_most_recent_set_var_from_tbl] INITIAL setter ids:  "^
+    (P4tPrint.str_of_private_oids setter_ids));
+  let (memo_assoc, setter_ids) = fold_most_recent_set_or_use_var_from_tbl
     tbl_writes_var
     cid_decls
     var_id
     (memo_assoc, setter_ids)
     src_tbl_id
+  in 
+  !dprint_endline 
+    ("[fold_most_recent_set_var_from_tbl] FOUND setter ids:  "^
+    (P4tPrint.str_of_private_oids setter_ids));
+
+  (memo_assoc, setter_ids)
 ;;
 
 let rec fold_most_recent_use_var_from_tbl
@@ -100,7 +124,8 @@ let rec fold_most_recent_use_var_from_tbl
     src_tbl_id
 ;;
 
-(* find most recent list of predecessors that write to var_id, starting from a list of predecessors *)
+(* find most recent list of predecessors that write to var_id, 
+   starting from a list of predecessors *)
 let most_recent_set_var_from_preds cid_decls pred_tids var_id =
   memo_ct := 0;
   compute_ct := 0;
@@ -110,6 +135,17 @@ let most_recent_set_var_from_preds cid_decls pred_tids var_id =
       ([], [])
       pred_tids
   in
+  !dprint_endline ("[most_recent_set_var_from_preds] var_id: "^
+    (Cid.to_string var_id)^
+    " predecessor tables that set this var: "^
+    (P4tPrint.str_of_private_oids res)
+  );
+  !dprint_endline ("[most_recent_set_var_from_preds] var_id: "^
+    (Cid.to_string var_id)^
+    " UNIQUE predecessor tables that set this var: "^
+    (P4tPrint.str_of_private_oids (unique_list_of res))
+  );
+
   (* print_endline (sprintf "memo_ct: %i compute_ct: %i " !memo_ct !compute_ct); *)
   (* let res = CL.map (most_recent_set_var_from_tbl [] cid_decls var_id) pred_tids |> CL.flatten |> unique_list_of in  *)
   unique_list_of res
@@ -152,6 +188,12 @@ let get_data_dep_edges cid_decls tbl_id all_data_dep_edges =
     (* print_endline "[get_data_dep_edges] got vars used"; *)
     DBG.printf
       outc
+      "[get_data_dep_edges] tbl %s pred_tids: [%s]\n"
+      (P4tPrint.str_of_private_oid tbl_id)
+      (str_of_cids pred_tids);
+
+    DBG.printf
+      outc
       "[get_data_dep_edges] tbl %s uses variables: [%s]\n"
       (P4tPrint.str_of_private_oid tbl_id)
       (str_of_cids vars_used);
@@ -173,7 +215,7 @@ let get_data_dep_edges cid_decls tbl_id all_data_dep_edges =
       "[get_data_dep_edges] due to the vars it uses, tbl %s must execute after \
        tbls: [%s]\n"
       (P4tPrint.str_of_private_oid tbl_id)
-      (str_of_cids use_var_dependee_tids);
+      (P4tPrint.str_of_private_oids use_var_dependee_tids);
     (* get the variables that this table writes *)
     let vars_set = write_vars_of_tbl cid_decls tbl_id in
     (* print_endline "[get_data_dep_edges] got vars_set"; *)
