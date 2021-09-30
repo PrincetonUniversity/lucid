@@ -107,6 +107,10 @@
    packageTofinoApp
    ioUtils
    logIr
+   P4ExternSyntax
+   JsonBlocks
+   JsonEntryTriggers
+   JsonExitActions
    )
  (preprocess
     (staged_pps ppx_import visitors.ppx ppx_deriving.show ppx_deriving.std ppx_string_interpolation))

@@ -58,8 +58,9 @@ def run_test(base_dir, builds_dir, dptc, test):
             if (command == "compile"):
                 prog = base_dir + "/" + test["prog"]
                 harness = base_dir + "/" + test["harness"]
+                linker_config = base_dir + "/" + test["linker_config"]
                 build = builds_dir + "/" + test["build"]
-                result = compile(dptc, prog, harness, build)
+                result = compile(dptc, prog, harness, linker_config, build)
             elif (command == "assemble"):
                 build = builds_dir + "/" + test["build"]
                 result = assemble(build)
@@ -76,11 +77,11 @@ def run_test(base_dir, builds_dir, dptc, test):
         results.append({"prog":test["prog"], "command":command, "result":result})
     return results
 
-def compile(dptc, prog, harness, build):
+def compile(dptc, prog, harness, linker_config, build):
     if (os.path.isdir(build) or os.path.isfile(build)):
         print ("deleting previous build directory...")
         shutil.rmtree(build)
-    cmd = [dptc, prog, harness, build]
+    cmd = [dptc, prog, harness, linker_config, build]
     print ("compile command: %s"%(" ".join(cmd)))
     ret = subprocess.run(cmd, stdout = subprocess.PIPE, stderr = subprocess.PIPE)   
     return (ret.returncode == 0)
@@ -98,7 +99,10 @@ def execute(build, test_spec):
     mk_cmd = "cd %s; make test %s"%(build, str(Path(test_spec).absolute()))
     print ("execute command: %s"%mk_cmd)
     ret = subprocess.run(mk_cmd, shell=True, stdout = subprocess.PIPE, stderr = subprocess.PIPE)   
-    success = check_manifest(build)
+    # to check success, see if the line "PASS" at the end of stdout.
+    success = False
+    if (len(re.findall ("PASS", ret.stdout.decode("utf-8"))) == 1):
+        success = True
     return success
 
 def summarize(results):

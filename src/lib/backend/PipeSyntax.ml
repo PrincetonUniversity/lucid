@@ -319,15 +319,15 @@ module Constraints = struct
     in
     let unplaced_preds = list_sub pred_tids placed_tids in
     (* if some pred actions were not placed, fail. *)
-    !dprint_endline ("[stage_check] table id: " ^ str_of_tid tid);
-    !dprint_endline ("[stage_check] pred_tids: " ^ str_of_tids pred_tids);
-    !dprint_endline ("[stage_check] placed_tids: " ^ str_of_tids placed_tids);
+    !dprint_endline ("[dataflow_check] table id: " ^ str_of_tid tid);
+    !dprint_endline ("[dataflow_check] pred_tids: " ^ str_of_tids pred_tids);
+    !dprint_endline ("[dataflow_check] placed_tids: " ^ str_of_tids placed_tids);
     !dprint_endline
-      ("[stage_check] unplaced_preds: " ^ str_of_tids unplaced_preds);
+      ("[dataflow_check] unplaced_preds: " ^ str_of_tids unplaced_preds);
     match unplaced_preds with
     | [] -> true
     | _ ->
-      !dprint_endline "[stage_check] fail: dataflow";
+      !dprint_endline "[dataflow_check] fail";
       false
   ;;
   (* are all the predecessors of all the tids placed into previous stages? *)
@@ -472,12 +472,13 @@ module Placement = struct
        stage, make sure that placement into this stage would not violate any dataflow constraints. *)
     match (Constraints.dataflow_multi_check dfg tids prior_stages) with 
     | false -> 
-      !dprint_endline (sprintf "[place_in_stage] skipping attempt to place {%s} in stage %i -- dataflow constraints would be violated" (str_of_tids tids) stage.s_num);
+      !dprint_endline (sprintf "[place_in_stage] dataflow constraints VIOLATED for {%s} in stage %i (skipping)" (str_of_tids tids) stage.s_num);
       impossible_stage_placements_skipped := !impossible_stage_placements_skipped + 1;
       failed_stage_placements := !failed_stage_placements + 1;
       ctx, None
     (* dataflow says we can place here -- so go ahead and try it. *)
     | true -> (
+      !dprint_endline (sprintf "[place_in_stage] dataflow constraints SATISFIED for {%s} in stage %i (placing)" (str_of_tids tids) stage.s_num);
       let (new_cid_decls, new_stage, unplaced_tids) = 
         CL.fold_left
           place_in_group
@@ -579,7 +580,8 @@ module Placement = struct
       ((ctx:ctx), (cid_decls:declsMap), (p:pipe)) 
       : (ctx * declsMap * pipe) =
     match (Cid.lookup_opt cid_decls oid) with 
-    (* the object does not exist -- this can happen because there are multiple passes *)
+    (* the object does not exist -- this can happen if a table was already placed 
+       in this round (e.g., because it shares a register with another table) *)
     | None -> (ctx, cid_decls, p)
     (* case: place table *)
     | Some (Table _) -> (
@@ -631,8 +633,7 @@ module Placement = struct
     There are multiple passes because some programs cannot be 
     laid out in a single traversal of the DFG. This happens 
     because tables that use the same register must be placed 
-    at the same time, i.e., out of order. For example, 
-    consider this example: 
+    in the same stage. For example, consider this example: 
             (a, b)
             /    \
            /      \
@@ -642,9 +643,11 @@ module Placement = struct
           | /     |
           d ----  f 
 
-    In the first pass, e will not be placed until FOO is visited. 
-    FOO may be visited after f, in a BFS or topological ordering. 
-    This will cause the placement of f to fail.  
+    Suppose the first pass visits e then c. We cannot place e 
+    because we must place FOO, and so also d. But we cannot 
+    place d because c has not been placed. So, the algorithm 
+    will skip e for now, moving on to c, and it will place 
+    e in the next iteration when it is safe to place e, FOO, and d. 
   *)
   let rec layout_rec (ctx:ctx) cid_decls dfg pipe previously_unplaced_nodes: pipe = 
     let ctx = {ctx with iteration = (ctx.iteration + 1)} in 
@@ -718,6 +721,26 @@ let to_tblseqprog pipe : tblSeqProg =
   }
 ;;
 
+(* temporarily copy debugging stuff from LogIr *)
+module DotConfig = struct
+  include DFSyntax.G (* use the graph module from above *)
+
+  let graph_attributes _ = []
+  let edge_attributes (_, _, _) = []
+  let default_edge_attributes _ = []
+  let get_subgraph _ = None
+  let vertex_attributes _ = [`Shape `Box]
+  let vertex_name v = P4tPrint.str_of_private_oid v
+  let default_vertex_attributes _ = []
+end
+
+module Dot = Graph.Graphviz.Dot (DotConfig)
+
+let log_lir_dag fn dag = 
+  let full_fn = !BackendLogging.irLogDir ^ "/" ^ fn ^ ".dot" in
+  Dot.output_graph (open_out_bin full_fn) dag
+;;
+
 (* transform a dataflow graph, where each node represents a single-instruction 
 table, into a dataflow graph that contains nodes for both tables and register arrays. 
 a table has an edge to a register array iff it uses that register array *)
@@ -730,6 +753,9 @@ let to_tbl_reg_dfg cid_decls dfg =
     CL.fold_left (add_edge tbl_id) g reg_ids
   in
   let tbl_reg_dfg = G.fold_vertex add_tbl_regs dfg dfg in
+  (* print out the table dataflow graph *)
+  log_lir_dag "pipeline_full_dataflow" dfg;
+  log_lir_dag "pipeline_tbl_reg_dataflow" tbl_reg_dfg;
   tbl_reg_dfg
 ;;
 

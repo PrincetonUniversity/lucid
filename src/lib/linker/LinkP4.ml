@@ -534,7 +534,7 @@ let pragma_replace_trans cs pragma_obj_dict =
       ^ pragname
       ^ "--------------");
     !dprint_endline ("[pragma_replace_trans] code:\n" ^ newcode);
-    Console.show_message newcode ANSITerminal.Green "linker";
+    (* Console.show_message newcode ANSITerminal.Green "linker"; *)
     let new_p4_tree = replace_prag pragname newcode p4_tree in
     match p4_tree <> new_p4_tree with
     | true -> new_p4_tree

@@ -1,10 +1,8 @@
 /* 
-This is a minimal harness for lucid programs that process IP packets 
-with fixed entry and exit events. 
-Programs that use this harness should have 1 entry and exit event: 
-    - ``entry event ip_in(int<9> igr_port, int src, int dst, int<16> len);``            
-    - ``exit event ip_out(int<1> drop, int<9> egr_port);``
-See ip_harness.md for more details. 
+This harness is for ingress programs that p
+    - entry event generators and exit event handlers are generated from 
+      ip_harness_triggers.json and inlined into ingress at @ENTRY_TRIGGER_CALL
+      and @EXIT_ACTION_CALL
 */
 
 #include <core.p4>
@@ -73,7 +71,6 @@ parser TofinoIngressParser(
         md.dptMeta.exitEventType = 0;
         md.dptMeta.nextEventType = 0;        
         md.dptMeta.timestamp = (bit<32>)(ig_intr_md.ingress_mac_tstamp[47:16]); 
-        md.ip_in.igr_port = ig_intr_md.ingress_port;
         transition select(ig_intr_md.resubmit_flag) {
             1 : parse_resubmit;
             0 : parse_port_metadata;
@@ -89,34 +86,30 @@ parser TofinoIngressParser(
     }
 }
 
-// Parser for eth/ip.
+// MANUAL HARNESS CODE
 const bit<16> ETHERTYPE_IPV4 = 16w0x0800;
 const bit<16> ETHERTYPE_DPT = 0x1111;
 parser EthIpParser(packet_in pkt, out header_t hdr, out metadata_t md){
-    DptIngressParser() dptIngressParser; // FIXED INTEGRATION.
+    DptIngressParser() dptIngressParser; // MANUAL HARNESS CODE
     state start {
         pkt.extract(hdr.ethernet);
         transition select(hdr.ethernet.ether_type) {
-            ETHERTYPE_IPV4 : parse_ip_event;
+            ETHERTYPE_IPV4 : parse_ip;
             ETHERTYPE_DPT  : parse_dpt;
             default : accept;
         }
     }
+    // MANUAL HARNESS CODE
     state parse_dpt {
         dptIngressParser.apply(pkt, hdr, md);                        
         transition parse_ip;
-    }
-    // Set the event type. 
-    state parse_ip_event {
-        pkt.extract(hdr.ip);
-        md.dptMeta.eventType = e_ip_in;
-        transition accept;        
     }
     state parse_ip {
         pkt.extract(hdr.ip);
         transition accept;
     }
 }
+
 
 parser TofinoEgressParser(
         packet_in pkt,
@@ -183,26 +176,27 @@ control Ingress(
         inout ingress_intrinsic_metadata_for_deparser_t ig_dprsr_md,
         inout ingress_intrinsic_metadata_for_tm_t ig_tm_md) {
 
+    @ENTRY_OBJECTS
+    @EXIT_OBJECTS
+
     @DPT_OBJECTS
 
     CiL2Fwd() ciL2Fwd; 
 
-    action setup_lucid_event() {
-        md.ip_in.tos = hdr.ip.tos;
-        md.ip_in.src = hdr.ip.src_addr;
-        md.ip_in.dst = hdr.ip.dst_addr;
-        md.ip_in.len = hdr.ip.total_len;
-    }
-
     apply {
-        // If the packet isn't an event, run user P4. 
-        if (md.dptMeta.eventType == 0) {
-            ciL2Fwd.apply(ig_intr_md, ig_tm_md);           
-        // Otherwise, call the lucid handler. 
-        } else {
-            setup_lucid_event();
+        // call the entry trigger table. 
+        @ENTRY_CALL
+
+        // If there's an event, call the Lucid handlers. 
+        if (md.dptMeta.eventType != 0) {
             @DPT_HANDLERS
-            ig_tm_md.ucast_egress_port = md.ip_out.egr_port;
+
+            // Handle any exit events produced by lucid. 
+            @EXIT_CALL
+        }
+        // If there was no event, don't call lucid. 
+        else {            
+            ciL2Fwd.apply(ig_intr_md, ig_tm_md);                       
         }
     }
 }
