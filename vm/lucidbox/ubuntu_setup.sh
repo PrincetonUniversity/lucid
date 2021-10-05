@@ -12,7 +12,7 @@ if [[ $1 ]]
 then
   echo "setting up for $1"
   mode=$1
-  if [ $mode=="compiler" ]
+  if [ $mode == "compiler" ]
   then 
     if [[ $2 ]]
     then 
@@ -38,7 +38,7 @@ fi
 echo "***** installing requirements to run: lucid $mode *****"
 
 # install compiler requirements if selected.
-if [[ $mode == "compiler" ]]
+if [ $mode == "compiler" ]
 then
   if [[ -f $SDE_FILE && -f $SET_SCRIPT ]]
   then   
@@ -83,7 +83,7 @@ echo "----installing packages from apt ----"
 sudo apt-get update -y
 sudo apt-get install -y software-properties-common sudo
 sudo apt-get update -y
-sudo apt-get install -y python3 m4 curl make build-essential python2.7 libgmp-dev pkg-config tcpreplay expect
+sudo apt-get install -y python3 python3-pip m4 curl make build-essential python2.7 libgmp-dev pkg-config tcpreplay expect
 pip3 install dpkt
 
 echo "----initializing opam + ocaml packages ----"

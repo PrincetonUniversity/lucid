@@ -31,9 +31,9 @@ function my_path() {
 
 if [[ $1 ]]
 then
-  echo "building box for $1"
   mode=$1
-  if [ $mode=="compiler" ]
+  echo "building box for $1"
+  if [[ $mode == "compiler" ]]
   then 
     if [[ $2 ]]
     then 
@@ -43,6 +43,7 @@ then
       echo "set_sde.bash: $SET_SCRIPT"
     else
       echo "usage: buildbox.sh compiler <bf-sde-9.5.0.tgz> -- build a vm with lucid requirements and the tofino sde (bf-sde)."
+      exit
     fi 
   fi
 else
@@ -64,7 +65,7 @@ else
         # construct vagrant command. 
         cmd="vagrant"
         cmd="$cmd --cpus=$CPUS"
-        if [ $mode=="compiler" ]
+        if [[ $mode == "compiler" ]]
         then
           cmd="$cmd --sde=$(abs_path $SDE) --set_script=$(abs_path $SET_SCRIPT)"
         fi

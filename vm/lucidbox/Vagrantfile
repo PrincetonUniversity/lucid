@@ -49,7 +49,7 @@ Vagrant.configure(2) do |config|
     setup_cmd = "$HOME/ubuntu_setup.sh #{mode} $HOME/#{File.basename(sde)} $HOME/#{File.basename(set_script)}"
   else
     if (sde == "" and set_script == "")
-      setup_cmd = "$HOME/ubuntu_setup.sh"
+      setup_cmd = "$HOME/ubuntu_setup.sh #{mode}"
     else
       abort ("if either sde or set script is provided, they must both be.")
     end
