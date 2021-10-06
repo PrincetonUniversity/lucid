@@ -8,19 +8,17 @@ refer to our artifact as Lucid from now on.
 The source code for Lucid is available at https://github.com/PrincetonUniversity/lucid.
 The contents of this artifact submission are a copy of the popl22_artifact branch, with the addition of
 a vagrant box containing the necessary tools to build Lucid from scratch. This branch is a subset of the
-main branch, with some minor tweaks and scripts to make evaluation easier. The download for the full
-artifact is located at [TODO].
+main branch, with some minor tweaks and scripts to make evaluation easier.
 
 Within the repo, the source code for Lucid is located in the src/ folder. Modules related to the typechecker are located in
 src/lib/frontend/typing, and the main file for the dpt executable is located at src/bin/Main.ml.
 
 ## Kicking the tires
-* This artifact requires both virtualbox (https://www.virtualbox.org/wiki/Downloads) and vagrant (https://www.vagrantup.com/downloads). It has been confirmed to work with virtualbox 6.1.26 and vagrant 2.2.18, on both Windows 10 and Big Sur 11.5.2. the virtual machine uses an unmodified version of Ubuntu 18.04.4 LTS.
-* In a terminal, navigate to the [ART]/vm/ directory, and run `setupvm.sh`
+* This artifact requires both virtualbox (https://www.virtualbox.org/wiki/Downloads) and vagrant (https://www.vagrantup.com/downloads). It has been confirmed to work with virtualbox 6.1.26 and vagrant 2.2.18, on both Windows 10 and Big Sur 11.5.2. The virtual machine uses an unmodified version of Ubuntu 18.04.4 LTS.
+* In a terminal, navigate to the /lucid/vm/ directory, and run `setupvm.sh`
 * If your computer does not support .sh files, you can instead run `vagrant box add lucid "lucid.box"`
 * Run `vagrant up` to start up the VM (may take a few minutes) and `vagrant ssh` to enter it.
-* Once in the VM, navigate to the /lucid directory with `cd /lucid`. This is a mirror of the [ART] directory on the host computer,
-so changes to the files will be reflected in the VM, and vice-versa.
+* Once in the VM, navigate to the /lucid directory with `cd /lucid`. This is a mirror of the /lucid directory on the host computer, so changes to the files will be reflected in the VM, and vice-versa.
 * To build Lucid, simply run `make` from within the /lucid directory. If the build is successful, you
 will see some parse warnings about shift/reduce conflicts, and there should be a `dpt` binary in the /lucid directory.
 This is the Lucid binary (the name dpt is from the project's original name, Data Plane Threads).
@@ -33,7 +31,7 @@ total events handled: 13
 dpt: Done
 ```
 The test should complete near-instantaneously. If you do not see any obvious error messages, the test was successful.
-* For a more comprehensive test, run `make test`. If you see a linker error (only observed when hosting the VM on a windows machine), delete the [ART]/_build directory on the host machine and try again; you will have to do this every time you run a `make ...` command. If the tests are successful, the last two lines of the output should be:
+* For a more comprehensive test, run `make test`. If you see a linker error (only observed when hosting the VM on a windows machine), delete the /lucid/_build directory on the host machine and try again; you will have to do this every time you run a `make ...` command. If the tests are successful, the last two lines of the output should be:
 ```
 Errors: ['bad_ordering.dpt']
 Diffs: []
@@ -47,7 +45,7 @@ the performance of our implementation (page 24). The bulk of the evaluation shou
 2. Running the `dpt` binary on these files to show that they pass the typechecker, and take the expected amount of time. This can be automated with the `make evaluate` command.
 
 ### Language feature claims
-We now list the language features we claim to support, how to recognize them in a program, and an example file which uses each feature. Most features appear in multiple examples. All examples files are in the [ART]/examples/popl22 directory.
+We now list the language features we claim to support, how to recognize them in a program, and an example file which uses each feature. Most features appear in multiple examples. All examples files are in the /lucid/examples/popl22 directory.
 * Polymorphism: Polymorphism is denoted by type variables beginning with a tick (as in OCaml). Our artifact actually supports
 multiple kinds of polymorphism:
   * _Size polymorphism_ is denoted by type variables appearing within double angle brackets, e.g. `int<<'a>>`. This kind of polymorphism is not relevant to the features described in the paper and can safely be ignored.
@@ -63,9 +61,9 @@ catches them as well, and does not simply accept every program. Otherwise, our c
 would be trivial! To demonstrate this, we include a simple example `bad_ordering.dpt`. By running `./dpt examples/popl/bad_ordering.dpt`, you will see that the type system generates an ordering error, and correctly points to the `Array.set(arr1, 0, 1)` line as the first out-of-order access. Reviewers are encouraged to try tweaking other examples to verify that ordering errors are in fact caught (the BloomFilterTimeout example is a good one for this, as it contains 3 BloomFilter globals).
 
 ### Performance claims
-Our performance claims appear in figures 14 and 15 of the paper, on page 24. Note that lines of code are not including comments; for easy evaluation, we have provided stripped-down versions of each example in the [ART]/examples/popl22_stripped directory that remove any comments and extraneous code. Note that we generally do not count `include` statements, since we are only evaluating the amount of _new_ code each written for each file. Note as well that the length of the Bidirectional Map file was reported incorrectly in the paper, and should be ~40 LoC instead of ~28.
+Our performance claims appear in figures 14 and 15 of the paper, on page 24. Note that lines of code are not including comments; for easy evaluation, we have provided stripped-down versions of each example in the /lucid/examples/popl22_stripped directory that remove any comments and extraneous code. Note that we generally do not count `include` statements, since we are only evaluating the amount of _new_ code each written for each file. Note as well that the length of the Bidirectional Map file was reported incorrectly in the paper, and should be ~40 LoC instead of ~28.
 
-The `make evaluate` command can be run in the [ART] directory to automatically run Lucid on each example file and report the time taken to typecheck it; remember that times prefixed with a + in the paper are cumulative with the above time. Due to running on a VM, times may be slightly longer than reported in the paper; empirically we see an overhead of around 0.2 seconds at most. The evaluation script is [ART]/test/aec_evaluate.py, and the code used to time the typechecking process appears on lines 13-15 of [ART]/src/lib/frontend/FrontendPipeline.ml. The evaluation script prints its results to the file "test/aec_output.txt". It should not take more than a minute to run.
+The `make evaluate` command can be run in the /lucid directory to automatically build Lucid, then run it on each example file and report the typing time; remember that times prefixed with a + in the paper are cumulative with the above time. Due to running on a VM, times may be slightly longer than reported in the paper; empirically we see an overhead of around 0.2 seconds at most. Sometimes we have also observed lower typing times than reported, which be believe to involve the background load of the host machine. The evaluation script is /lucid/test/aec_evaluate.py, and the code used to time the typechecking process appears on lines 13-15 of /lucid/src/lib/frontend/FrontendPipeline.ml. The evaluation script prints its results to the file "test/aec_output.txt". It should not take more than a minute to run.
 * Our first set of claims is that we have implemented several general-purpose modules, as depicted in figure 14 of the paper. The table entries correspond to the files below:
   * Bloom Filter -> BloomFilter.dpt.
   * BloomFilter + Aging -> BloomFilterTimeout.dpt
@@ -86,4 +84,4 @@ The `make evaluate` command can be run in the [ART] directory to automatically r
   * Historical Prob. Queries -> countmin_historical.dpt
 
 ## Resuability
-Reviewers are encouraged to try tweaking the given examples, or writing their own programs from scratch! Tutorials on the language are available in the [ART]/docs folder -- the most relevant one is tutorial_language, although it is also possible to run our interpreter in this artifact, if reviewers are curious (the interpreter is not related to any claims about the paper). Examples of programs that can be used with the interpreter appear in the [ART]/examples/interp_tests folder. Reviewers may further information about most Lucid language features can be found on the Lucid repo's wiki, at https://github.com/PrincetonUniversity/lucid/wiki.
+Reviewers are encouraged to try tweaking the given examples, or writing their own programs from scratch! Tutorials on the language are available in the /lucid/docs folder -- the most relevant one is tutorial_language, although it is also possible to run our interpreter in this artifact, if reviewers are curious (the interpreter is not related to any claims about the paper). Examples of programs that can be used with the interpreter appear in the /lucid/examples/interp_tests folder. It may be more convenient to view these documents on the github repo for markdown formatting. Reviewers may further information about most Lucid language features can be found on the Lucid repo's wiki, at https://github.com/PrincetonUniversity/lucid/wiki.
