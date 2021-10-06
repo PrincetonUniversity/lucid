@@ -7,9 +7,6 @@
 default:
 	dune build src/bin/main.exe
 	cp -f _build/default/src/bin/main.exe dpt
-	dune build src/bin/compiler.exe
-	cp -f _build/default/src/bin/compiler.exe dptc
-
 
 generatedVisitors: src/lib/frontend/Syntax.processed.ml
 
