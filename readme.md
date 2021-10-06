@@ -9,7 +9,10 @@ The source code for Lucid is available at https://github.com/PrincetonUniversity
 The contents of this artifact submission are a copy of the popl22_artifact branch, with the addition of
 a vagrant box containing the necessary tools to build Lucid from scratch. This branch is a subset of the
 main branch, with some minor tweaks and scripts to make evaluation easier. The download for the full
-artifact is located at [TODO]
+artifact is located at [TODO].
+
+Within the repo, the source code for Lucid is located in the src/ folder. Modules related to the typechecker are located in
+src/lib/frontend/typing, and the main file for the dpt executable is located at src/bin/Main.ml.
 
 ## Kicking the tires
 * This artifact requires both virtualbox (https://www.virtualbox.org/wiki/Downloads) and vagrant (https://www.vagrantup.com/downloads). It has been confirmed to work with virtualbox 6.1.26 and vagrant 2.2.18, on both Windows 10 and Big Sur 11.5.2. the virtual machine uses an unmodified version of Ubuntu 18.04.4 LTS.
@@ -47,20 +50,19 @@ the performance of our implementation (page 24). The bulk of the evaluation shou
 2. Running the `dpt` binary on these files to show that they pass the typechecker, and take the expected amount of time. This can be automated with the `make evaluate` command.
 
 ### Language feature claims
-We now list the language features we claim to support. We give one example file using each feature, but most features appear in
-multiple examples. All examples files are in the /lucid/examples/popl22 directory.
+We now list the language features we claim to support, how to recognize them in a program, and an example file which uses each feature. Most features appear in multiple examples. All examples files are in the [ART]/examples/popl22 directory.
 * Polymorphism: Polymorphism is denoted by type variables beginning with a tick (as in OCaml). Our artifact actually supports
-multiple kinds of polymorphism.
+multiple kinds of polymorphism:
   * _Size polymorphism_ is denoted by type variables appearing within double angle brackets, e.g. `int<<'a>>`. This kind of polymorphism is not relevant to the features described in the paper and can safely be ignored.
   * _Type polymorphism_ is denoted by type variables appearing where a type would otherwise appear, e.g. declaring a function parameter as `'a foo` instead of `int foo`. An example of this is in the Bloomfilter.dpt example, where the type variable 'any is used to ensure that the second argument of `add_to_filter` and `in_filter` can be any type.
   * _Location polymorphism_ is mostly implicit in Lucid's syntax, since locations are not exposed directly to the user. However, evidence of it can be seen in function constraints in module interfaces. Bloomfilter.dpt is another examples of this; the constraints `[start <= filter; end filter]` restrict the implicitly-polymorphic `filter` argument to be within a certain bound.
 * Hierarchical locations: As argued in section 2.5, hierarchical locations are necessary to include existential types (i.e. modules). Again, Bloomfilter.dpt is an example of this -- the type `t<<'idx_sz, 'k>>` is declared in the module interface without a definition, and is therefore abstract. Note that it is defined within the module body as a record.
 * Compile-time constructors: Constructors are used whenever we define abstract types, and use the `constr` keyword. Once again, Bloomfilter.dpt provides an example.
 * Vectors and loops: In order to be fully general, most of our modules use these. Vector types have the form `<type>[<size>]`, e.g. `int[2]` is the type of integer lists of length 2. Loops have the form `for (i < <size>) { ... }`. We also support vector comprehensions, which have the form `[<expresson> for i < <size>]`. Again, see BloomFilter.dpt.
-* Type inference. As with polymorphism, there are actually three kinds of inference: size inference, location inference, and type inference. Again, size inference is not relevant and may be ignored. Location inference is evident from the fact that we do not include explicit location annotations in the code -- indeed, the only place locations appear is in constraints on functions in module interfaces. For example, the type `Nat.t` (in NAT.dpt) is global, and therefore must be associated with a location. But we do not write the location when writing functions that take `Nat.t` as inputs. Type inference is rarely used in practice, but is done by replacing the type of a local variable with the keyword `auto` during its declaration; the NAT.dpt file contains two examples of this.
+* Type inference. As with polymorphism, there are actually three kinds of inference: size inference, location inference, and type inference. Again, size inference is not relevant and may be ignored. Location inference is evident from the fact that we do not include explicit location annotations in the code -- indeed, the only place locations appear is in constraints on functions in module interfaces. For example, the type `Nat.t` (in NAT.dpt) is global, and therefore must be associated with a location. But we do not write the location when writing functions that take `Nat.t` as inputs. Type inference is rarely used in practice, but can be done by replacing the type of a local variable with the keyword `auto` during its declaration; the NAT.dpt file contains two examples of this.
 
 Although the Lucid type system already had the ability to catch ordering errors, it is important to verify that our type system
-catches them as well (and does not simply accept every program). Otherwise, our claims that we support the above features
+catches them as well, and does not simply accept every program. Otherwise, our claims that we support the above features
 would be trivial! To demonstrate this, we include a simple example `bad_ordering.dpt`. By running `./dpt examples/popl/bad_ordering.dpt`, you will see that the type system generates an ordering error, and correctly points to the `Array.set(arr1, 0, 1)` line as the first out-of-order access. Reviewers are encouraged to try tweaking other examples to verify that ordering errors are in fact caught (the BloomFilterTimeout example is a good one for this, as it contains 3 BloomFilter globals).
 
 ### Performance claims
@@ -87,4 +89,4 @@ The `make evaluate` command can be used to automatically run Lucid on each examp
   * Historical Prob. Queries -> countmin_historical.dpt
 
 ## Resuability
-Reviewers are encouraged to try tweaking the given examples, or writing their own programs from scratch! Tutorials on the language are available in the [ART]/docs folder -- the most relevant one is tutorial_language, although it is also possible to run our interpreter in this artifact, if reviewers are curious (the interpreter is not related to any claims about the paper). Examples of programs that can be used with the interpreter appear in the [ART]/examples/interp_tests folder. Reviewers may further information about most Lucid language features can be found on the Lucid repo's wiki, at https://github.com/PrincetonUniversity/lucid/wiki. The source code for Lucid itself appears in the [ART]/src directory.
+Reviewers are encouraged to try tweaking the given examples, or writing their own programs from scratch! Tutorials on the language are available in the [ART]/docs folder -- the most relevant one is tutorial_language, although it is also possible to run our interpreter in this artifact, if reviewers are curious (the interpreter is not related to any claims about the paper). Examples of programs that can be used with the interpreter appear in the [ART]/examples/interp_tests folder. Reviewers may further information about most Lucid language features can be found on the Lucid repo's wiki, at https://github.com/PrincetonUniversity/lucid/wiki.
