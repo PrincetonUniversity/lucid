@@ -100,7 +100,7 @@ event add_to_nat(int src_ip, int<<4>> src_port) {
 
 handle inside_packet(int src_ip, int<<4>> src_port) {
     if(Nat.in_nat(nat, src_ip, src_port)) {
-        int<<4>> NAT_port = Nat.get_mapped_port(nat, src_ip, src_port);
+        auto NAT_port = Nat.get_mapped_port(nat, src_ip, src_port); // Type is int<<4>>
         printf("IP already in NAT, maps to port %d", NAT_port);
         generate inside_continue(NAT_port);
     } else {
@@ -110,7 +110,7 @@ handle inside_packet(int src_ip, int<<4>> src_port) {
 }
 
 handle outside_packet(int<<4>> dst_port) {
-    int[2] nat_info = Nat.lookup(nat, dst_port);
+    auto nat_info = Nat.lookup(nat, dst_port); // Type is int<<2>>
     int ip = nat_info[0];
     int<<4>> port = (int<<4>>) nat_info[1];
     printf("Mapped port %d to (ip: %d, port: %d)", dst_port, ip, port);

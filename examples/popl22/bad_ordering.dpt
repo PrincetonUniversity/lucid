@@ -1,0 +1,15 @@
+// Demonstrates that Lucid catches basic ordering errors
+
+global Array.t<<32>> arr1 = Array.create(1);
+global Array.t<<32>> arr2 = Array.create(1);
+
+
+event in_order() {
+	Array.get(arr1, 0);
+	Array.get(arr2, 0);
+}
+
+event out_of_order() {
+	Array.set(arr2, 0, 1);
+	Array.set(arr1, 0, 1);
+}

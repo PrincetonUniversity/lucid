@@ -1,0 +1,56 @@
+include "Memops.dpt"
+include "Hashtable.dpt"
+
+// Multi-stage hash table which attempts to reinsert entries in case of collision.
+// Uses events instead of functions because it requires recirculation.
+// From the stateful_fw example: do we need a stash? If not, seems like we don't need a separate reinsert event?
+module CuckooHash {
+  type t<<'k, 'key_sz, 'stages>> = {
+    Hashtable.t<<'k, 'key_sz>>['stages] arrs;
+  }
+
+  constr t<<'k, 'key_sz, 'stages>> create(int length, int['stages] seeds) = {
+    arrs = [Hashtable.create(length, seeds[i]) for i < 'stages];
+  };
+
+  fun bool all_null(int['k] lst) {
+    bool acc = true;
+    for (i < 'k) {
+      acc = acc && (lst[i] == 0);
+    }
+    return acc;
+  }
+
+  event insert_internal(t<<'k, 'key_sz, 'stages>> tbl, int['k] args, int['k] orig_args, int retry_count) {
+    int['k] victims = args;
+    for (i < 'k) {
+      if (!all_null(victims)) {
+        // Add to the next stage and evict whatever's there currently
+        victims = Hashtable.add(tbl#arrs[i], args);
+      }
+    }
+
+    // If something ended up being evicted at the end, try again to insert it
+    if (!all_null(victims)) {
+      if(args == orig_args) {
+        retry_count = retry_count + 1;
+      }
+      // Retry_count of 'k means the table is full, I think.
+      if (retry_count < size_to_int('k)) {
+        generate insert_internal(tbl, args, orig_args, retry_count);
+      }
+    }
+  }
+
+  event insert(t<<'k, 'key_sz, 'stages>> tbl, int['k] args) {
+    generate insert_internal(tbl, args, args, 0);
+  }
+
+  // Return true if args is in the hash table
+  fun bool mem(t<<'k, 'key_sz, 'stages>> tbl, int['k] args) {
+    for (i < 'k) {
+      if(Hashtable.mem(tbl#arrs[i], args)) { return true; }
+    }
+    return false;
+  }
+}
