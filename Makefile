@@ -21,6 +21,9 @@ generatedVisitors: src/lib/frontend/Syntax.processed.ml
 test: default
 	python3 ./test/runtests.py
 
+evaluate: default
+	python3 ./test/aec_evaluate.py
+
 doc:
 	dune build @doc
 

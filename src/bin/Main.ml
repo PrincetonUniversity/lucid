@@ -17,7 +17,7 @@ let cfg = Cmdline.cfg
 
 let main () =
   let target_filename = Cmdline.parse () in
-  Console.report "Parsing ...";
+  (* Console.report "Parsing ..."; *)
   let ds = Input.parse target_filename in
   let renaming, ds = FrontendPipeline.process_prog ds in
   let spec_file =
@@ -25,16 +25,18 @@ let main () =
     then find_spec_file target_filename
     else Some cfg.spec_file
   in
-  (match spec_file with
+  match spec_file with
   | None ->
-    Console.report "No specification file provided, so skipping simulation"
+    ()
+    (* Console.report "No specification file provided, so skipping simulation" *)
   | Some spec_file ->
     Console.report "Simulating...";
     let nst = Interp.initialize renaming spec_file ds in
     let nst = Interp.simulate nst in
     Console.report "Final State:";
-    print_endline @@ InterpState.State.nst_to_string nst);
-  Console.report "Done"
+    print_endline @@ InterpState.State.nst_to_string nst
 ;;
+
+(* Console.report "Done" *)
 
 let _ = main ()

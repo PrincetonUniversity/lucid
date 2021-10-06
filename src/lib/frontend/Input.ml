@@ -52,7 +52,7 @@ let adjust_filename source_fname dest_fname =
    in order. Do not include the same file more than once *)
 let process_includes (fname : string) : string list =
   let rec process_includes_aux (seen, imports) fname =
-    print_endline @@ "Processing " ^ fname;
+    (* print_endline @@ "Processing " ^ fname; *)
     if List.mem fname seen
     then seen, imports
     else (
