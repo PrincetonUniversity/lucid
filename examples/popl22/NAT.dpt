@@ -12,47 +12,6 @@ Doesn't handle collisions (the newest values overwrite any previous ones).
 Assumes the number of ports is 2^'port_size.
 */
 
-/* // Slightly older, manually implemented version of Nat module
-// A little more memory-efficient than the below one.
-module Nat {
-  // 'port_size is the number of bits of a port ID
-  type t<<'port_size>> = {
-    int seed; // Hash seed
-    Array.t<<32>> to_ip;
-    Array.t<<'port_size>> to_port;
-  }
-
-  constr t<<'port_size>> create(int num_ports, int seed) = {
-    seed = seed;
-    to_ip = Array.create(num_ports);
-    to_port = Array.create(num_ports);
-  };
-
-  fun int<<'b>> get_mapped_port(t<<'b>> nat, int ip, int<<'b>> port) {
-    return hash<<'b>>(nat#seed, ip, port);
-  }
-
-  fun void add(t<<'b>> nat, int ip, int<<'b>> port) {
-    int<<'b>> nat_port = get_mapped_port(nat, ip, port);
-    Array.set(nat#to_ip, nat_port, ip);
-    Array.set(nat#to_port, nat_port, port);
-  }
-
-  fun bool in_nat(t<<'b>> nat, int ip, int<<'b>> port) {
-    int<<'b>> nat_port = get_mapped_port(nat, ip, port);
-    int ip_in_nat = Array.get(nat#to_ip, nat_port);
-    int<<4>> port_in_nat = Array.get(nat#to_port, nat_port);
-    return (ip == ip_in_nat) && (port == port_in_nat);
-  }
-
-  fun int[2] lookup(t<<'b>> nat, int<<'b>> port) {
-    int ip_in_nat = Array.get(nat#to_ip, port);
-    int<<4>> port_in_nat = Array.get(nat#to_port, port);
-    return [ip_in_nat; (int<<32>>) port_in_nat];
-  }
-}
-*/
-
 // Assume 4-bit ports
 const int NUM_PORTS = 16;
 

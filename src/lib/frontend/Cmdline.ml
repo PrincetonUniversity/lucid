@@ -11,6 +11,7 @@ type config =
   ; mutable use_type_names : bool
   ; mutable show_all_effects : bool (* Show effects even for non-global types *)
   ; mutable spec_file : string (** Path to an interpreter specification file *)
+  ; mutable evaluate : bool (* Print out typechecking times *)
   }
 
 (* TODO: We might want to add more parameters controlling which transformations
@@ -26,6 +27,7 @@ let default () =
   ; use_type_names = true
   ; show_all_effects = false
   ; spec_file = ""
+  ; evaluate = false
   }
 ;;
 
@@ -52,6 +54,7 @@ let parse () =
     set_type_names ();
     set_all_effects ()
   in
+  let set_evaluate () = cfg.evaluate <- true in
   let speclist =
     [ ( "--verbose"
       , Arg.Unit set_verbose
@@ -89,7 +92,8 @@ let parse () =
     ; ( "-c"
       , Arg.Unit set_constraints
       , "If true, print out each set of constraints we try to solve, but not \
-         the SMT query itself. Not enabled by -m." ) ]
+         the SMT query itself. Not enabled by -m." )
+    ; "--evaluate", Arg.Unit set_evaluate, "Print out typechecking time" ]
   in
   let target_filename = ref "" in
   let usage_msg = "Lucid command line. Options available:" in

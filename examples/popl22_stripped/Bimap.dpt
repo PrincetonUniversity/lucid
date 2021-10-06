@@ -1,30 +1,40 @@
 include "Memops.dpt"
 module Bimap {
-  type t<<'k1, 'key_sz>> = GeneralBimap.t<<'k1, 1, 'key_sz>>
+  type t<<'k1, 'key_sz>> = {
+    Array.t<<32>>['k1] arrs;
+    int seed;
+  }
 
-  constr t<<'k1, 'key_sz>> create(int len, int seed) = GeneralBimap.create(len, [seed]);
+  constr t<<'k1, 'key_sz>> create(int len, int seed) = {
+    arrs = [Array.create(len) for i < 'k1];
+    seed = seed;
+  };
 
   fun int map_forward(t<<'k1, 'sz>> map, int['k1] args) {
-    return GeneralBimap.map_forward(map, args)[0];
+    return (int<<32>>) hash<<'sz>>(map#seed, args);
   }
 
   fun int['k1] add(t<<'k1, 'sz>> map, int['k1] args) {
-    return GeneralBimap.add(map, args)[0];
-  }
-
-  fun int['k1] lookup_forward(t<<'k1, 'sz>> map, int['k1] args) {
-    return GeneralBimap.lookup_forward(map, args)[0];
-  }
+   int['k1] ret = [Array.update(map#arrs[i], map_forward(map, args), fst, 0, snd, 0) for i < 'k1];
+   return ret;
+ }
 
   fun int['k1] lookup_backward(t<<'k1, 'sz>> map, int key) {
-    return GeneralBimap.lookup_backward(map, [key])[0];
-  }
+   return [Array.get(map#arrs[i], key) for i < 'k1];
+ }
 
-  fun bool in_map_forward(t<<'k1, 'sz>> map, int['k1] args) {
-    return GeneralBimap.in_map_forward(map, args);
-  }
+ fun int['k1] lookup_forward(t<<'k1, 'sz>> map, int['k1] args) {
+   return lookup_backward(map, map_forward(map, args));
+ }
 
-  fun bool in_map_backward(t<<'k1, 'sz>> map, int key) {
-    return GeneralBimap.in_map_backward(map, [key]);
-  }
+ fun bool in_map_backward(t<<'k1, 'sz>> map, int key) {
+   int['k1] ret = [Array.update(map#arrs[i], key, fst, 0, snd, 0) for i < 'k1];
+   bool acc = true;
+   for (i < 'k1) { acc = acc && (ret[i] == 0); }
+   return acc;
+ }
+
+ fun bool in_map_forward(t<<'k1, 'sz>> map, int['k1] args) {
+   return in_map_backward(map, map_forward(map, args));
+ }
 }

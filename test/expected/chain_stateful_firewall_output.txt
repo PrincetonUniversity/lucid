@@ -1,29 +1,3 @@
-dpt: Parsing ...
-Processing examples/interp_tests/chain_stateful_firewall.dpt
--------Eliminating type aliases 1---------
--------Checking well-formedness---------
----------typing---------
----------Making returns explicit-------------
------------renaming-----------
--------Eliminating modules---------
--------Eliminating type aliases 2---------
--------Inlining size declarations---------
----------Eliminating events with global arguments----------
------------inlining functions-----------
----------------typing again-------------
-------------Checking entry handlers---------------
-
-In examples/interp_tests/chain_stateful_firewall.dpt: 
-
-46|    generate Event.sslocate(updater, head);
-                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-warning: examples/interp_tests/chain_stateful_firewall.dpt: Conditional generation of potential non-exit event in entry handler.
-
--------Eliminating records-------
--------Eliminating vectors-------
--------Eliminating tuples-------
----------------typing again-------------
 dpt: Auto-detected specification file examples/interp_tests/chain_stateful_firewall.json
 dpt: Simulating...
 dpt: Using random seed: 0
@@ -114,4 +88,3 @@ Switch 2 : {
  total events handled: 5
 
 }
-dpt: Done

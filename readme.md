@@ -17,15 +17,14 @@ src/lib/frontend/typing, and the main file for the dpt executable is located at 
 ## Kicking the tires
 * This artifact requires both virtualbox (https://www.virtualbox.org/wiki/Downloads) and vagrant (https://www.vagrantup.com/downloads). It has been confirmed to work with virtualbox 6.1.26 and vagrant 2.2.18, on both Windows 10 and Big Sur 11.5.2. the virtual machine uses an unmodified version of Ubuntu 18.04.4 LTS.
 * In a terminal, navigate to the [ART]/vm/ directory, and run `setupvm.sh`
-* If you computer does not support .sh files, you can instead run `vagrant box add lucid "lucid.box"`
-* Run `vagrant up` to start up the VM and `vagrant ssh` to enter it.
-* Once in the VM, navigate to the /lucid directory. This is a mirror of the [ART] directory on the host computer,
+* If your computer does not support .sh files, you can instead run `vagrant box add lucid "lucid.box"`
+* Run `vagrant up` to start up the VM (may take a few minutes) and `vagrant ssh` to enter it.
+* Once in the VM, navigate to the /lucid directory with `cd /lucid`. This is a mirror of the [ART] directory on the host computer,
 so changes to the files will be reflected in the VM, and vice-versa.
 * To build Lucid, simply run `make` from within the /lucid directory. If the build is successful, you
 will see some parse warnings about shift/reduce conflicts, and there should be a `dpt` binary in the /lucid directory.
 This is the Lucid binary (the name dpt is from the project's original name, Data Plane Threads).
 * As a first test, run `./dpt examples/interp_tests/basics.dpt`. This should print out a lot of text, ending with the lines
-
 ```
 entry events handled: 1
 total events handled: 13
@@ -34,9 +33,7 @@ total events handled: 13
 dpt: Done
 ```
 The test should complete near-instantaneously. If you do not see any obvious error messages, the test was successful.
-* For a most comprehensive test, run `make test`. If you see a linker error (only observed when hosting the VM on a windows machine), delete the [ART]/_build directory on the host machine and try again; you will have to do this every time you run a `make ...` command. If the tests are successful, the last two
-lines of the output should be:
-
+* For a more comprehensive test, run `make test`. If you see a linker error (only observed when hosting the VM on a windows machine), delete the [ART]/_build directory on the host machine and try again; you will have to do this every time you run a `make ...` command. If the tests are successful, the last two lines of the output should be:
 ```
 Errors: ['bad_ordering.dpt']
 Diffs: []
@@ -46,7 +43,7 @@ The tests should complete quickly (well under a minute to finish all of them). I
 ## Claims in the paper:
 Our paper makes two types of claims: claims that we support certain language features (page 2), and claims about
 the performance of our implementation (page 24). The bulk of the evaluation should consist of
-1. Examining some or all of the files in the /lucid/examples/popl22 directory to verify that they make use of the language features we claim to support, and
+1. Examining some or all of the files in the /lucid/examples/popl22 directory to verify that they make use of the language features, and
 2. Running the `dpt` binary on these files to show that they pass the typechecker, and take the expected amount of time. This can be automated with the `make evaluate` command.
 
 ### Language feature claims
@@ -66,7 +63,7 @@ catches them as well, and does not simply accept every program. Otherwise, our c
 would be trivial! To demonstrate this, we include a simple example `bad_ordering.dpt`. By running `./dpt examples/popl/bad_ordering.dpt`, you will see that the type system generates an ordering error, and correctly points to the `Array.set(arr1, 0, 1)` line as the first out-of-order access. Reviewers are encouraged to try tweaking other examples to verify that ordering errors are in fact caught (the BloomFilterTimeout example is a good one for this, as it contains 3 BloomFilter globals).
 
 ### Performance claims
-Our performance claims appear in figures 14 and 15 of the paper, on page 24. Note that lines of code are not including comments; for easy evaluation, we have provided stripped-down versions of each example in the [ART]/examples/popl22_stripped directory that remove any comments and extraneous code. Note that we generally do not count `include` statements, since we are only evaluating the amount of _new_ code each written for each file.
+Our performance claims appear in figures 14 and 15 of the paper, on page 24. Note that lines of code are not including comments; for easy evaluation, we have provided stripped-down versions of each example in the [ART]/examples/popl22_stripped directory that remove any comments and extraneous code. Note that we generally do not count `include` statements, since we are only evaluating the amount of _new_ code each written for each file. Note as well that the length of the Bidirectional Map file was reported incorrectly in the paper, and should be ~40 LoC instead of ~28.
 
 The `make evaluate` command can be used to automatically run Lucid on each example file and report the time taken to typecheck it; remember that times prefixed with a + in the paper are cumulative with the above time. Due to running on a VM, times may be [TODO] slower than reported in the paper. The evaluation script is [ART]/test/aec_evaluate.py, and the code used to time the typechecking process appears on lines 13-15 of [ART]/src/lib/frontend/FrontendPipeline.ml. The evaluation script prints its results to the command line, but can be redirected to a file easily, e.g. `make evaluate > tmp.txt`.
 * Our first set of claims is that we have implemented several general-purpose modules, as depicted in figure 14 of the paper. The table entries correspond to the files below:

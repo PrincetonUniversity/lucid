@@ -28,7 +28,7 @@ print("Running tests on module files")
 for file in moduleFiles:
     print("\n"+file, flush=True)
     fullfile = "examples/popl22/"+file+".dpt"
-    cmd = ["./dpt", fullfile]
+    cmd = ["./dpt", "--evaluate", fullfile]
     ret = subprocess.run(cmd)
     if ret.returncode != 0:
         errors.append(file)
@@ -37,9 +37,9 @@ print("\nRunning tests on application files")
 for file in applicationFiles:
     print("\n"+file, flush=True)
     fullfile = "examples/popl22/"+file+".dpt"
-    cmd = ["./dpt", fullfile]
+    cmd = ["./dpt", "--evaluate", fullfile]
     ret = subprocess.run(cmd)
     if ret.returncode != 0:
         errors.append(file)
 
-print("Errors (should be empty):", errors)
+print("\nErrors (should be empty):", errors)

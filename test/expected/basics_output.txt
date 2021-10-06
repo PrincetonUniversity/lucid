@@ -1,29 +1,3 @@
-dpt: Parsing ...
-Processing examples/interp_tests/basics.dpt
--------Eliminating type aliases 1---------
--------Checking well-formedness---------
----------typing---------
----------Making returns explicit-------------
------------renaming-----------
--------Eliminating modules---------
--------Eliminating type aliases 2---------
--------Inlining size declarations---------
----------Eliminating events with global arguments----------
------------inlining functions-----------
----------------typing again-------------
-------------Checking entry handlers---------------
-
-In examples/interp_tests/basics.dpt: 
-
-69|    generate count_to_10 (0); // Dangerous, because this happens at linerate
-               ~~~~~~~~~~~~~~~
-
-warning: examples/interp_tests/basics.dpt: Unconditional generation of potential non-exit event in entry handler!
-
--------Eliminating records-------
--------Eliminating vectors-------
--------Eliminating tuples-------
----------------typing again-------------
 dpt: Auto-detected specification file examples/interp_tests/basics.json
 dpt: Simulating...
 dpt: Using random seed: 0
@@ -277,4 +251,3 @@ Switch 2 : {
  total events handled: 13
 
 }
-dpt: Done

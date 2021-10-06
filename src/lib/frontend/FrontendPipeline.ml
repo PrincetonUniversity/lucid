@@ -12,7 +12,8 @@ let process_prog ds =
   Wellformed.pre_typing_checks ds;
   let time1 = Sys.time () in
   let ds = Typer.infer_prog ds in
-  print_endline @@ "Typing time: " ^ string_of_float (Sys.time () -. time1);
+  if Cmdline.cfg.evaluate
+  then print_endline @@ "Typing time: " ^ string_of_float (Sys.time () -. time1);
   print_if_verbose ds;
   let ds = ExplicitReturns.adjust_returns ds in
   print_if_verbose ds;
