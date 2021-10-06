@@ -14,7 +14,7 @@ Within the repo, the source code for Lucid is located in the src/ folder. Module
 src/lib/frontend/typing, and the main file for the dpt executable is located at src/bin/Main.ml.
 
 ## Kicking the tires
-* This artifact requires both virtualbox (https://www.virtualbox.org/wiki/Downloads) and vagrant (https://www.vagrantup.com/downloads). It has been confirmed to work with virtualbox 6.1.26 and vagrant 2.2.18, on both Windows 10 and Big Sur 11.5.2. The virtual machine uses an unmodified version of Ubuntu 18.04.4 LTS.
+* This artifact requires both virtualbox (https://www.virtualbox.org/wiki/Downloads) and vagrant (https://www.vagrantup.com/downloads). It has been confirmed to work with virtualbox 6.1.26 and vagrant 2.2.18 on Big Sur 11.5.2, and on Windows 10 with some bugs. We recommend using a Mac for the evaluation. The virtual machine uses an unmodified version of Ubuntu 18.04.4 LTS.
 * In a terminal, navigate to the /lucid/vm/ directory, and run `setupvm.sh`
 * If your computer does not support .sh files, you can instead run `vagrant box add lucid "lucid.box"`
 * Run `vagrant up` to start up the VM (may take a few minutes) and `vagrant ssh` to enter it.
@@ -37,6 +37,10 @@ Errors: ['bad_ordering.dpt']
 Diffs: []
 ```
 The tests should complete quickly (well under a minute to finish all of them). If either the Errors or Diffs list doesn't match the above output, then something went wrong.
+* Windows bugs and workarounds: Ideally, use a Mac running Big Sur 11.5.2. If you insist on using Windows 10, the following tips may be helpful for dealing with bugs in the VM. We have not testing the artifact on any other OS.
+ * If you get strange error after building the artifact once and running a `make ...` command, try deleting the `_build/` directory on the _host_ machine (not from inside the VM), and try again. 
+ * If this fails, but the `dpt` binary was previously built successfully and still exists, you can run the testing script yourself (test/runtests.py for `make test` or test/aec_evaluate.py for `make evaluate`)
+ * Otherwise, you may have to begin the instructions from scratch: exit the VM, run `vagrant destroy` to shut it down, and run `vagrant box remove lucid` to finish cleaning up. Then unpack the zip file again and start from the beginning.
 
 ## Claims in the paper:
 Our paper makes two types of claims: claims that we support certain language features (page 2), and claims about
