@@ -1,5 +1,5 @@
 include "Memops.dpt"
-module Bimap {
+module Bimap { // This is a version of the Bimap file that uses only one module, rather than two
   type t<<'k1, 'key_sz>> = {
     Array.t<<32>>['k1] arrs;
     int seed;

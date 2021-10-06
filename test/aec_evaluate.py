@@ -24,22 +24,30 @@ applicationFiles = [
 
 errors = []
 
-print("Running tests on module files")
+outfile = open("test/aec_output.txt", "w")
+
+outfile.write("Running tests on module files")
 for file in moduleFiles:
-    print("\n"+file, flush=True)
+    outfile.write("\n"+file+" ")
+    outfile.flush()
     fullfile = "examples/popl22/"+file+".dpt"
     cmd = ["./dpt", "--evaluate", fullfile]
-    ret = subprocess.run(cmd)
+    ret = subprocess.run(cmd, stdout=outfile, stderr=subprocess.DEVNULL)
     if ret.returncode != 0:
         errors.append(file)
 
-print("\nRunning tests on application files")
+outfile.write("\nRunning tests on application files")
 for file in applicationFiles:
-    print("\n"+file, flush=True)
+    outfile.write("\n"+file+" ")
+    outfile.flush()
     fullfile = "examples/popl22/"+file+".dpt"
     cmd = ["./dpt", "--evaluate", fullfile]
-    ret = subprocess.run(cmd)
+    ret = subprocess.run(cmd, stdout=outfile, stderr=subprocess.DEVNULL)
     if ret.returncode != 0:
         errors.append(file)
 
-print("\nErrors (should be empty):", errors)
+outfile.write("\nErrors (should be empty): "+str(errors))
+
+outfile.close()
+
+print("Done with evaluation. Output can be found in test/aec_output.txt.")

@@ -53,3 +53,5 @@ dptl
 *.blg
 *.out
 *.pdf
+
+aec_output.txt
