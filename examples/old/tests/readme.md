@@ -1,1 +1,0 @@
-Snippits for testing the DPT toolchain.

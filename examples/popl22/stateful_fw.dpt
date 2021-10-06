@@ -1,5 +1,5 @@
 include "Memops.dpt"
-include "HashtableTimeout.dpt"
+include "HashtableCuckooTimeout.dpt"
 // A stateful firewall with the same functionality as sfw.dpt,
 // but with two entry events:
 // request_packet -- a packet from a local client to a remote server.

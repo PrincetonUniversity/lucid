@@ -6,11 +6,11 @@ review, in reality Pipe is a more modern version of the Lucid language. Hence we
 refer to our artifact as Lucid from now on.
 
 The source code for Lucid is available at https://github.com/PrincetonUniversity/lucid.
-The contents of this artifact submission are a copy of the popl22_artifact branch, with the addition of
+The contents of this artifact submission are a subset of the popl22_artifact branch, with the addition of
 a vagrant box containing the necessary tools to build Lucid from scratch.
 
 ## Kicking the tires
-* This artifact requires both virtualbox (https://www.virtualbox.org/wiki/Downloads) and vagrant (https://www.vagrantup.com/downloads)
+* This artifact requires both virtualbox (https://www.virtualbox.org/wiki/Downloads) and vagrant (https://www.vagrantup.com/downloads). It has been confirmed to work with virtualbox 6.1.26 and vagrant 2.2.18, on both Windows 10 and Big Sur 11.5.2. the virtual machine uses an unmodified version of Ubuntu 18.04.4 LTS.
 * In a terminal, navigate to the [ART]/vm/ directory, and run `setupvm.sh`
 * If you computer does not support .sh files, you can instead run `vagrant box add lucid "lucid.box"`
 * Run `vagrant up` to start up the VM and `vagrant ssh` to enter it.
@@ -28,15 +28,15 @@ total events handled: 13
 }
 dpt: Done
 ```
-If you do not see any obvious error messages, the test was successful.
+The test should complete near-instantaneously. If you do not see any obvious error messages, the test was successful.
 * For a most comprehensive test, run `make test`. If you see a linker error (only observed when hosting the VM on a windows machine), delete the [ART]/_build directory on the host machine and try again. If the tests are successful, the last two
-lines of the output should have two empty lists, i.e.
+lines of the output should be:
 
 ```
-Errors: []
+Errors: ['bad_ordering.dpt']
 Diffs: []
 ```
-If either the Errors or Diffs list is nonempty, something went wrong.
+The tests should complete quickly (well under a minute to finish all of them). If either the Errors or Diffs list doesn't match the above output, then something went wrong.
 
 ## Claims in the paper:
 Our paper makes two types of claims: claims that we support certain language features, and claims about
@@ -80,3 +80,6 @@ would be trivial! To demonstrate this, we include a simple example `bad_ordering
   * Distributed Prob. Firewall + Aging -> chain_prob_stateful_firewall_timeout.dpt
   * Simple NAT -> NAT.dpt
   * Historical Prob. Queries -> countmin_historical.dpt
+
+## Resuability
+Reviewers are encouraged to try tweaking the given examples, or writing their own programs from scratch! Tutorials on the language are available in the [ART]/docs folder -- the most relevant one is tutorial_language, although it is also possible to run our interpreter in this artifact, if reviewers are curious (the interpreter is not related to any claims about the paper). Examples of programs that can be used with the interpreter appear in the [ART]/examples/interp_tests folder. Reviewers may further information about most Lucid language features can be found on the Lucid repo's wiki, at https://github.com/PrincetonUniversity/lucid/wiki.

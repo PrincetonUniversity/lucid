@@ -1,9 +1,0 @@
----DataFlow.ml log---
-[get_data_dep_edges] tbl dpt_88_generate_0_extra_processing uses variables: [eventType~0]
-[get_data_dep_edges] due to the vars it uses, tbl dpt_88_generate_0_extra_processing must execute after tbls: []
-[get_data_dep_edges] tbl dpt_88_generate_0_extra_processing sets variables: [nextEventType~0, eventType~82, ip~74]
-[get_data_dep_edges] due to vars it sets, tbl dpt_88_generate_0_extra_processing must execute after tbls: []
-[get_data_dep_edges] tbl dpt_92_generate_0_continue uses variables: [eventType~0, ip~39]
-[get_data_dep_edges] due to the vars it uses, tbl dpt_92_generate_0_continue must execute after tbls: []
-[get_data_dep_edges] tbl dpt_92_generate_0_continue sets variables: [exitEventType~0, eventType~83, ip~75]
-[get_data_dep_edges] due to vars it sets, tbl dpt_92_generate_0_continue must execute after tbls: []

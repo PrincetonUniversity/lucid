@@ -1,9 +1,0 @@
-Counter c = Counter.create(0);
-
-(* report the src ips of the first 10 packets *)
-handle packetin (int src, int dst) {
-    int temp = Counter.add(c,1);
-    if (temp < 10) {
-      report_int src;
-    } 
-}

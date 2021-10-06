@@ -1,1 +1,0 @@
-Simple DPT programs that do somewhat useful things.

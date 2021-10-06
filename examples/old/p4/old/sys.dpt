@@ -1,9 +1,0 @@
-/* test Sys.time */
-event packetin (int src, int dst);
-event continue (int src, int dst);
-
-handle packetin (int src, int dst) {
-	src = Sys.time(1);
-	dst = Sys.hash(32, 10398247, src, dst);
-}
-

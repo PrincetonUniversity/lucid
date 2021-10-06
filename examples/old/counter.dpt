@@ -1,8 +1,0 @@
-int count = 0;
-
-handle packetin (int src, int dst) {  
-    if (count < 10) {
-      report_int count;
-      count = count + 1;
-    } 
-}

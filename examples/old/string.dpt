@@ -1,4 +1,0 @@
-report_string "start";
-int i = 0; 
-report_int i;
-report_string "end";

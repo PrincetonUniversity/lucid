@@ -14,7 +14,8 @@ testfiles = [
 ]
 
 libraryfiles = [x for x in os.listdir("examples/library/") if x.endswith(".dpt")]
-regressionfiles = [x for x in os.listdir("examples/regression/") if x.endswith(".dpt")]
+# Not relevant for AEC
+regressionfiles = []#[x for x in os.listdir("examples/regression/") if x.endswith(".dpt")]
 poplfiles = [x for x in os.listdir("examples/popl22/") if x.endswith(".dpt")]
 
 errors = []

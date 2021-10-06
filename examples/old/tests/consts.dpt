@@ -1,3 +1,0 @@
-const int array_sz = 1024;
-const int max_loop_idx = 10;
-global src_array = new Array<<32>>(array_sz);

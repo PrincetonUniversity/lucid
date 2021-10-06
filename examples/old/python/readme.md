@@ -1,1 +1,0 @@
-Examples that compile to python with dptpy and (should) run in the vnet environment.
