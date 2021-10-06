@@ -12,58 +12,7 @@ traffic destined to that output port.
 I don't see any good way to handle collisions if 'k2 > 1 though.
 */
 
-// Fully general version that can't handle collisions if 'k2 > 1.
-// I don't think this module is useful at all, just use Bimap instead
-module GeneralBimap {
-  type t<<'k1, 'k2, 'key_sz>> = {
-    Array.t<<32>>['k1]['k2] arrs;
-    int['k2] seeds;
-  }
-
-  constr t<<'k1, 'k2, 'key_sz>> create(int len, int['k2] seeds) = {
-    arrs = [[Array.create(len) for i < 'k1] for i < 'k2];
-    seeds = seeds;
-  };
-
-  fun int['k2] map_forward(t<<'k1, 'k2, 'sz>> map, int['k1] args) {
-    return [(int<<32>>) hash<<'sz>>(map#seeds[i], args) for i < 'k2];
-  }
-
-  // Add the arguments to the table, and return the previous values
-  fun int['k1]['k2] add(t<<'k1, 'k2, 'sz>> map, int['k1] args) {
-    int['k2] keys = map_forward(map, args);
-    int['k1]['k2] ret = [[Array.update(map#arrs[i][j], keys[i], fst, 0, snd, 0) for j < 'k1] for i < 'k2];
-    return ret;
-  }
-
-  // Given our list of keys (length 'k2), see if we already have entries for them
-  fun int['k1]['k2] lookup_backward(t<<'k1, 'k2, 'sz>> map, int['k2] keys) {
-    int['k1]['k2] ret = [[Array.get(map#arrs[i][j], keys[i]) for j < 'k1] for i < 'k2];
-    return ret;
-  }
-
-  // Given a list of arguments (length 'k1), see if we already have entries for them
-  fun int['k1]['k2] lookup_forward(t<<'k1, 'k2, 'sz>> map, int['k1] args) {
-    return lookup_backward(map, map_forward(map, args));
-  }
-
-  fun bool in_map_backward(t<<'k1, 'k2, 'sz>> map, int['k2] keys) {
-    int['k1]['k2] ret = [[Array.update(map#arrs[i][j], keys[i], fst, 0, snd, 0) for j < 'k1] for i < 'k2];
-    bool acc = true;
-    for (i < 'k2) {
-      for (j < 'k1) {
-        acc = acc && (ret[i][j] == 0);
-      }
-    }
-    return acc;
-  }
-
-  fun bool in_map_forward(t<<'k1, 'k2, 'sz>> map, int['k1] args) {
-    return in_map_backward(map, map_forward(map, args));
-  }
-}
-
-// Less general version which assume 'k2 = 1. Probably more useful in practice.
+// Version which assumes 'k2 = 1. Probably more useful in practice.
 // No less efficient than the general version, since vectors and loops get inlined
 // away.
 module Bimap {
