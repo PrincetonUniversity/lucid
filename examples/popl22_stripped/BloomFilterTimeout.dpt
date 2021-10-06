@@ -1,0 +1,73 @@
+include "BloomFilter.dpt"
+module BloomFilterTimeout : {
+  global type t<<'idx_sz, 'k>>;
+  constr t<<'idx_sz, 'k>> create(int m, int['k] seeds, int timeout, int empty_time);
+
+  fun void add_to_filter(t<<'a, 'k>> filter, 'any key) [start <= filter; end filter];
+  fun bool in_filter(t<<'a, 'k>> filter, 'any key) [start <= filter; end filter];
+
+  event init(t<<'a, 'k>> filter);
+} {
+  type t<<'idx_sz, 'k>> = {
+    Array.t<<2>> active;     BloomFilter.t<<'idx_sz, 'k>> filter1;
+    BloomFilter.t<<'idx_sz, 'k>> filter2;
+    BloomFilter.t<<'idx_sz, 'k>> filter3;
+    int<<'idx_sz>> m_;
+    int rotate_period;
+    int empty_period;   }
+
+  constr t<<'a, 'k>> create(int m, int['k] seeds, int timeout, int empty_time) = {
+    active = Array.create(1);
+    filter1 = BloomFilter.create(m, seeds);
+    filter2 = BloomFilter.create(m, seeds);
+    filter3 = BloomFilter.create(m, seeds);
+    m_ = (int <<'a>>) m;
+    rotate_period = timeout;
+    empty_period = empty_time;   };
+
+  fun void add_to_filter(t<<'a, 'k>> filter, 'any key) {
+    auto active = Array.get(filter#active, 0);
+    if (active == 0)        { BloomFilter.add_to_filter(filter#filter1, key);
+                              BloomFilter.add_to_filter(filter#filter2, key); }
+    else { if (active == 1) { BloomFilter.add_to_filter(filter#filter2, key);
+                              BloomFilter.add_to_filter(filter#filter3, key); }
+    else                    { BloomFilter.add_to_filter(filter#filter1, key);
+                              BloomFilter.add_to_filter(filter#filter3, key); } }
+  }
+
+  fun bool in_filter(t<<'a, 'k>> filter, 'any key) {
+    auto active = Array.get(filter#active, 0);
+    if (active == 0)        { return BloomFilter.in_filter(filter#filter1, key); }
+    else { if (active == 1) { return BloomFilter.in_filter(filter#filter2, key); }
+    else                    { return BloomFilter.in_filter(filter#filter3, key); } }
+  }
+
+    memop rotate_m (int<<2>> x, int<<2>> dummy) {
+    if (x == 2) {
+      return 0;
+    } else {
+      return x + 1;
+    }
+  }
+
+  event rotate(t<<'a, 'k>> filter) {
+    Array.setm(filter#active, 0, rotate_m, 0);
+    generate Event.delay(rotate(filter), filter#rotate_period);
+  }
+
+  event clear(t<<'a, 'k>> filter, int<<'a>> idx) {
+    auto active = Array.get(filter#active, 0);
+    if (active == 0)        { BloomFilter.clear_index(filter#filter3, idx); }
+    else { if (active == 1) { BloomFilter.clear_index(filter#filter1, idx); }
+    else                    { BloomFilter.clear_index(filter#filter2, idx); } }
+    auto next_idx = idx + 1;
+    if (idx == filter#m_ - 1) {
+      next_idx = 0;
+    }
+    generate Event.delay(clear(filter, next_idx), filter#empty_period);   }
+
+  event init(t<<'a, 'k>> filter) {
+    generate Event.delay(rotate(filter), filter#rotate_period);
+    generate clear(filter, 0);
+  }
+}

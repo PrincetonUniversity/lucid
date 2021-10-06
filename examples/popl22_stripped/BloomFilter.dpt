@@ -1,0 +1,53 @@
+module BloomFilter : {
+  global type t<<'idx_sz, 'k>>;
+  constr t<<'a, 'k>> create(int m, int['k] seeds);
+
+  fun void add_to_filter(t<<'a, 'k>> filter, 'any key) [start <= filter; end filter];
+  fun bool in_filter(t<<'a, 'k>> filter, 'any key) [start <= filter; end filter];
+  fun void clear_index(t<<'a, 'k>> filter, int<<'a>> idx) [start <= filter; end filter];
+}
+{
+  type t<<'idx_sz, 'k>> = {
+    Array.t<<1>>['k] arrs;
+    int['k] hash_seeds;
+    int<<'idx_sz>> m;
+  }
+
+  constr t<<'a, 'k>> create(int m, int['k] seeds) = {
+    arrs = [Array.create(m) for i < 'k];
+    hash_seeds = seeds;
+    m = (int<<'a>>) m;
+  };
+
+  fun void add_to_filter(t<<'a, 'k>> filter, 'any key) {
+    for (i < 'k) {
+      Array.set(filter#arrs[i], hash<<'b>>(filter#hash_seeds[i], key), 1);
+    }
+  }
+
+  fun bool in_filter(t<<'a, 'k>> filter, 'any key) {
+    bool acc = true;
+    for (i < 'k) {
+      int<<1>> x = Array.get(filter#arrs[i], hash<<'a>>(filter#hash_seeds[i], key));
+      acc = acc && x == 1;
+    }
+    return acc;
+  }
+
+    fun void clear_index(t<<'a, 'k>> filter, int<<'a>> idx) {
+    for (i < 'k) {
+      Array.set(filter#arrs[i], idx, 0);
+    }
+  }
+
+  event clear_all(t<<'a, 'k>> filter);   event clear_helper(t<<'a, 'k>> filter, int<<'a>> idx);
+
+  handle clear_all(t<<'a, 'k>> filter) { generate clear_helper(filter, 0); }
+
+  handle clear_helper(t<<'a, 'k>> filter, int<<'a>> idx) {
+    clear_index(filter, idx);
+    if (idx < (filter#m - 1)) {
+      generate clear_helper(filter, idx+1);
+    }
+  }
+}

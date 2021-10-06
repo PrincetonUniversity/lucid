@@ -1,0 +1,91 @@
+include "Memops.dpt"
+const int NUM_REGISTERS = 10;
+const int TRUE = 1;
+const int FALSE = 0;
+
+const int head = 0;
+const int tail = 0;
+const int succ = 0;
+
+global Array.t<<32>> pending = Array.create(NUM_REGISTERS);
+global Array.t<<32>> sequence_nums = Array.create(NUM_REGISTERS);
+global Array.t<<32>> registers = Array.create(NUM_REGISTERS);
+
+event write(int idx, int seq, int data);
+event ack(int idx);
+
+event process(int src, int dst, int idx);
+
+entry event pktin(int src, int dst);
+exit event continue(int src, int dst);
+
+memop tru (int dummy, int dummy2) {
+  return TRUE;
+}
+
+memop check_and_incr (int curr, int next) {
+  if (next == (curr + 1)) {
+    return next;
+  } else {
+    return curr;
+  }
+}
+
+handle write(int idx, int seq, int data) {
+  int update_res = Array.update(pending, idx, fst, 0, tru, 0);
+  if (update_res == TRUE) {
+        generate Event.delay(write(idx, seq, data), 10);
+  } else {
+    bool continue = true;
+    if (self == head) {
+      seq = Array.update(sequence_nums, idx, incr, 1, incr, 1);
+    } else {
+      int seq2 = Array.update(sequence_nums, idx, check_and_incr, seq, check_and_incr, seq);
+      if (seq2 != seq) { continue = false; }
+    }
+    if (continue==false) {
+      generate Event.delay(write(idx, seq, data), 10);
+    } else {
+      Array.set(registers, idx, data);
+            if (self != tail) {
+        generate Event.sslocate(write(idx, seq, data), succ);
+      } else {
+        generate Event.sslocate(ack(idx), head);
+      }
+    }
+  }
+}
+
+handle ack(int idx) {
+  Array.set(pending, idx, FALSE);
+  if (self != tail) {
+    generate Event.sslocate(ack(idx), succ);
+  }
+}
+
+fun bool need_to_write(int src, int dst) {
+    return false;
+}
+
+fun void process_fun(int src, int dst, int idx) {
+    int foo = Array.get(registers, idx);
+  if (foo == 0) {     generate continue(src, dst);
+  }
+}
+
+handle process(int src, int dst, int idx) {
+  process_fun(src, dst, idx);
+}
+
+handle pktin(int src, int dst) {
+    bool ntw = need_to_write(src, dst);   if (ntw) {
+        generate Event.sslocate(write(0,0,0), head);
+  }
+
+    int idx = hash<<32>>(0, src, dst);   int r = Array.get(pending, idx);
+  if (r == TRUE) {
+            generate Event.sslocate(process(src, dst, idx), tail);
+  } else {
+    process_fun(src, dst, idx);
+  }
+}

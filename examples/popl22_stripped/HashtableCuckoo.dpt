@@ -1,0 +1,48 @@
+include "Memops.dpt"
+include "Hashtable.dpt"
+module CuckooHash {
+  type t<<'k, 'key_sz, 'stages>> = {
+    Hashtable.t<<'k, 'key_sz>>['stages] arrs;
+  }
+
+  constr t<<'k, 'key_sz, 'stages>> create(int length, int['stages] seeds) = {
+    arrs = [Hashtable.create(length, seeds[i]) for i < 'stages];
+  };
+
+  fun bool all_null(int['k] lst) {
+    bool acc = true;
+    for (i < 'k) {
+      acc = acc && (lst[i] == 0);
+    }
+    return acc;
+  }
+
+  event insert_internal(t<<'k, 'key_sz, 'stages>> tbl, int['k] args, int['k] orig_args, int retry_count) {
+    int['k] victims = args;
+    for (i < 'k) {
+      if (!all_null(victims)) {
+                victims = Hashtable.add(tbl#arrs[i], args);
+      }
+    }
+
+        if (!all_null(victims)) {
+      if(args == orig_args) {
+        retry_count = retry_count + 1;
+      }
+            if (retry_count < size_to_int('k)) {
+        generate insert_internal(tbl, args, orig_args, retry_count);
+      }
+    }
+  }
+
+  event insert(t<<'k, 'key_sz, 'stages>> tbl, int['k] args) {
+    generate insert_internal(tbl, args, args, 0);
+  }
+
+    fun bool mem(t<<'k, 'key_sz, 'stages>> tbl, int['k] args) {
+    for (i < 'k) {
+      if(Hashtable.mem(tbl#arrs[i], args)) { return true; }
+    }
+    return false;
+  }
+}

@@ -1,0 +1,146 @@
+include "Memops.dpt"
+const int h1_poly = 10398247;
+const int H_SLOTS = 1024;
+const int L_SLOTS = 128;
+const int SIZE_SHORT = 2;
+const int MAX_IDX = 7;
+const int MMATCH = 0;
+
+entry event monitor_pkt(int src, int len);
+
+const int COLLECTION_SERVER = 1234;
+exit event short_record(int src, int len, int rec0, int rec1);
+exit event long_record(int src, int len, int rec0, int rec1, int rec2, int rec3, int rec4, int rec5, int rec6, int rec7);
+
+event free_block(int block_id);
+
+global Array.t<<32>> srcarr = Array.create(H_SLOTS);
+global Array.t<<32>> ctarr = Array.create(H_SLOTS);
+global Array.t<<32>> idxarr = Array.create(H_SLOTS);
+
+global Array.t<<32>> stack_top = Array.create(1);
+global Array.t<<32>> longblock_stack = Array.create(L_SLOTS);
+global Array.t<<32>> block_map = Array.create(H_SLOTS);
+
+global Array.t<<32>>[8] rec = [Array.create(H_SLOTS) for i < 8];
+
+memop incr_idx (int stored, int nothingval) {
+  if (stored == MAX_IDX) {
+    return 0;
+  }
+  else {
+    return stored + 1;
+  }
+}
+
+
+memop decr_sat (int stored, int nothingval) {
+  if (stored == 0) {
+    return 0;
+  }
+  else {
+    return stored - 1;
+  }
+}
+
+handle monitor_pkt(int src, int len) {
+  int ct = 0; int idx = 0;   int stored_rec0 = 0; int stored_rec1 = 0;
+  int stored_rec2 = 0; int stored_rec3 = 0;
+  int stored_rec4 = 0; int stored_rec5 = 0;
+  int stored_rec6 = 0; int stored_rec7 = 0;
+  int blk_id = 0;
+    int h1 = hash<<32>>(h1_poly, src);
+  int stored_src = Array.update(srcarr, h1, fst, 0, snd, src);
+    int mtch = src - stored_src;
+  if (mtch == MMATCH) {
+    ct = Array.update(ctarr, h1, sum, 1, sum, 1);
+    idx = Array.update(idxarr, h1, incr_idx, 1, incr_idx, 1);
+  }
+        if (ct == SIZE_SHORT) {
+    int stack_idx = Array.update(stack_top, 0, fst, 0, decr_sat, 1);
+        if (stack_idx != 0) {
+      blk_id = Array.get(longblock_stack, stack_idx);
+      Array.set(block_map, h1, blk_id);
+    }
+  } else {
+        blk_id = Array.get(block_map, h1);
+  }
+  if (blk_id == 0) {
+        if (idx == 2) { idx = 0; } else {
+    if (idx == 3) { idx = 1; } else {
+    if (idx == 4) { idx = 0; } else {
+    if (idx == 5) { idx = 1; } else {
+    if (idx == 6) { idx = 0; } else {
+    if (idx == 7) { idx = 1; } } } } } }
+  }
+
+  if (mtch == MMATCH) {
+    if ((idx == 0)) {
+      stored_rec0 = Array.update(rec[0], h1, fst, 0, snd, len);
+    } else {
+      stored_rec0 = Array.get(rec[0], h1);
+    if (idx == 1) {
+      stored_rec1 = Array.update(rec[1], h1, fst, 0, snd, len);
+    } else {
+      stored_rec1 = Array.get(rec[1], h1);
+    if (idx == 2) {
+      stored_rec2 = Array.update(rec[2], h1, fst, 0, snd, len);
+    } else {
+      stored_rec2 = Array.get(rec[2], h1);
+    if (idx == 3) {
+      stored_rec3 = Array.update(rec[3], h1, fst, 0, snd, len);
+    } else {
+      stored_rec3 = Array.get(rec[3], h1);
+    if (idx == 4) {
+      stored_rec4 = Array.update(rec[4], h1, fst, 0, snd, len);
+    } else {
+      stored_rec4 = Array.get(rec[4], h1);
+    if (idx == 5) {
+      stored_rec5 = Array.update(rec[5], h1, fst, 0, snd, len);
+    } else {
+      stored_rec5 = Array.get(rec[5], h1);
+    if (idx == 6) {
+      stored_rec6 = Array.update(rec[6], h1, fst, 0, snd, len);
+    } else {
+      stored_rec6 = Array.get(rec[6], h1);
+    if (idx == 7) {
+      stored_rec7 = Array.update(rec[7], h1, fst, 0, snd, len);
+    } else {
+      stored_rec7 = Array.get(rec[7], h1);
+      } } } } } } }
+    }
+  }
+    else {
+    stored_rec0 = Array.get(rec[0], h1);
+    stored_rec1 = Array.get(rec[1], h1);
+    stored_rec2 = Array.get(rec[2], h1);
+    stored_rec3 = Array.get(rec[3], h1);
+    stored_rec4 = Array.get(rec[4], h1);
+    stored_rec5 = Array.get(rec[5], h1);
+    stored_rec5 = Array.get(rec[6], h1);
+    stored_rec5 = Array.get(rec[7], h1);
+  }
+
+      if (mtch == MMATCH) {
+    if (idx == 0) {
+      if (blk_id == 0) {
+        generate Event.sslocate(short_record(src, len, stored_rec0, stored_rec1), COLLECTION_SERVER);
+      } else {
+        generate Event.sslocate(long_record(src, len, stored_rec0, stored_rec1, stored_rec2, stored_rec3, stored_rec4, stored_rec5, stored_rec6, stored_rec7), COLLECTION_SERVER);
+      }
+    }
+  }
+      else {
+      if (blk_id == 0) {
+        generate Event.sslocate(short_record(src, len, stored_rec0, stored_rec1), COLLECTION_SERVER);
+      } else {
+        generate Event.sslocate(long_record(src, len, stored_rec0, stored_rec1, stored_rec2, stored_rec3, stored_rec4, stored_rec5, stored_rec6, stored_rec7), COLLECTION_SERVER);
+                generate free_block(blk_id);
+      }
+  }
+}
+
+handle free_block(int block_id) {
+    int stack_idx = Array.update(stack_top, 0, sum, 1, sum, 1);
+    Array.set(longblock_stack, stack_idx, block_id);
+}

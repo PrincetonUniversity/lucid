@@ -1,0 +1,27 @@
+include "Memops.dpt"
+module Hashtable {
+  type t<<'k, 'key_sz>> = {
+    Array.t<<32>>['k] arrs;
+    int seed;
+  }
+
+    constr t<<'k, 'key_sz>> create(int length, int seed) = {
+    arrs = [Array.create(length) for i < 'k];
+    seed = seed;
+  };
+
+    fun int['k] add(t<<'k, 'key_sz>> tbl, int['k] args) {
+    int idx = hash<<'key_sz>>(tbl#seed, args);
+    int['k] ret = [Array.update(tbl#arrs[i], idx, fst, 0, snd, args[i]) for i < 'k];
+    return ret;
+  }
+
+  fun bool mem(t<<'k, 'key_sz>> tbl, int['k] args) {
+    int idx = hash<<'key_sz>>(tbl#seed, args);
+    bool ret = true;
+    for (i < 'k) {
+      ret = ret && (Array.get(tbl#arrs[i], idx) == args[i]);
+    }
+    return ret;
+  }
+}

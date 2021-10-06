@@ -1,0 +1,47 @@
+include "BloomFilterTimeout.dpt"
+include "CountMinSketchTimeout.dpt"
+
+const int<<1>> TRUE = 1;
+const int<<1>> FALSE = 0;
+
+const int DNS_REQ = 0;
+const int DNS_RES = 1;
+const int THRESH = 1000;
+
+const int T_INTERVAL = 10000; const int T_EMPTY = 2;
+const int[2] seeds = [10398247; 1295981879];
+
+const int countmin_slots = 1024;
+const int firewall_slots = 1024;
+
+event init();
+
+entry event dnsrequest_in(int src, int dst, int req_id);
+entry event dnsresponse_in(int src, int dst, int req_id);
+exit event dnspkt_out ();
+
+global CMSTimeout.t<<32, 10, 2>> sketch = CMSTimeout.create(countmin_slots, seeds, T_INTERVAL);
+global BloomFilterTimeout.t<<10, 2>> firewall = BloomFilterTimeout.create(firewall_slots, seeds, T_INTERVAL, T_EMPTY);
+
+handle dnsrequest_in(int src, int dst, int req_id) {
+  int count = CMSTimeout.add_query(sketch, [src; dst; req_id]);
+      if (count > THRESH) {
+        BloomFilterTimeout.add_to_filter(firewall, [src; dst; req_id]);
+  }
+    generate dnspkt_out();
+}
+
+handle dnsresponse_in(int src, int dst, int req_id) {
+  int count = CMSTimeout.add_query(sketch, [src; dst; req_id]);
+    if (count > THRESH) {
+        bool in_firewall = BloomFilterTimeout.in_filter(firewall, [src; dst; req_id]);
+    if (in_firewall) { generate dnspkt_out(); }
+  } else {
+        generate dnspkt_out();
+  }
+}
+
+handle init() {
+  generate CMSTimeout.init(sketch);
+  generate BloomFilterTimeout.init(firewall);
+}

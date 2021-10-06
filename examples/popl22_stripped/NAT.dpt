@@ -1,0 +1,60 @@
+include "Bimap.dpt"
+const int NUM_PORTS = 16;
+
+module Nat {
+    type t = Bimap.t<<2, 4>>
+
+  constr t create(int num_ports, int seed) = Bimap.create(num_ports, seed);
+
+  fun int<<4>> get_mapped_port(t nat, int ip, int<<4>> port) {
+    return (int<<4>>) Bimap.map_forward(nat, [ip; (int<<32>>) port]);
+  }
+
+  fun void add(t nat, int ip, int<<4>> port) {
+    Bimap.add(nat, [ip; (int<<32>>) port]);
+  }
+
+  fun bool in_nat(t nat, int ip, int<<4>> port) {
+    return Bimap.in_map_forward(nat, [ip; (int<<32>>) port]);
+  }
+
+  fun int[2] lookup(t nat, int<<4>> port) {
+    return Bimap.lookup_backward(nat, (int<<32>>) port);
+  }
+}
+
+const int HASH_SEED = 1234;
+
+global Nat.t nat = Nat.create(NUM_PORTS, HASH_SEED);
+
+entry event inside_packet(int src_ip, int<<4>> src_port);
+exit event inside_continue(int<<4>> src_port);
+
+entry event outside_packet(int<<4>> dst_port);
+exit event outside_continue(int dst_ip, int<<4>> dst_port);
+
+event add_to_nat(int src_ip, int<<4>> src_port) {
+  Nat.add(nat, src_ip, src_port);
+  generate inside_continue(src_port);
+}
+
+handle inside_packet(int src_ip, int<<4>> src_port) {
+    if(Nat.in_nat(nat, src_ip, src_port)) {
+        auto NAT_port = Nat.get_mapped_port(nat, src_ip, src_port);
+        printf("IP already in NAT, maps to port %d", NAT_port);
+        generate inside_continue(NAT_port);
+    } else {
+        printf("Adding to NAT");
+        generate add_to_nat(src_ip, src_port);     }
+}
+
+handle outside_packet(int<<4>> dst_port) {
+    auto nat_info = Nat.lookup(nat, dst_port);     int ip = nat_info[0];
+    int<<4>> port = (int<<4>>) nat_info[1];
+    printf("Mapped port %d to (ip: %d, port: %d)", dst_port, ip, port);
+    if (ip == 0) {
+      printf("dropped");
+    } else {
+      generate outside_continue(ip, port);
+    }
+}

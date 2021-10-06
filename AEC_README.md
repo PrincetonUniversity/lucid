@@ -6,8 +6,9 @@ review, in reality Pipe is a more modern version of the Lucid language. Hence we
 refer to our artifact as Lucid from now on.
 
 The source code for Lucid is available at https://github.com/PrincetonUniversity/lucid.
-The contents of this artifact submission are a subset of the popl22_artifact branch, with the addition of
-a vagrant box containing the necessary tools to build Lucid from scratch.
+The contents of this artifact submission are a copy of the popl22_artifact branch, with the addition of
+a vagrant box containing the necessary tools to build Lucid from scratch. This branch is a subset of the
+main branch, with some minor tweaks and scripts to make evaluation easier.
 
 ## Kicking the tires
 * This artifact requires both virtualbox (https://www.virtualbox.org/wiki/Downloads) and vagrant (https://www.vagrantup.com/downloads). It has been confirmed to work with virtualbox 6.1.26 and vagrant 2.2.18, on both Windows 10 and Big Sur 11.5.2. the virtual machine uses an unmodified version of Ubuntu 18.04.4 LTS.
@@ -39,8 +40,8 @@ Diffs: []
 The tests should complete quickly (well under a minute to finish all of them). If either the Errors or Diffs list doesn't match the above output, then something went wrong.
 
 ## Claims in the paper:
-Our paper makes two types of claims: claims that we support certain language features, and claims about
-the performance of our implementation. The bulk of the evaluation should consist of
+Our paper makes two types of claims: claims that we support certain language features (page 2), and claims about
+the performance of our implementation (page 24). The bulk of the evaluation should consist of
 1. Examining some or all of the files in the /lucid/examples/popl22 directory to verify that they make use of the language features we claim to support, and
 2. Running the `dpt` binary on these files to show that they pass the typechecker, and take the expected amount of time
 
@@ -62,7 +63,7 @@ catches them as well (and does not simply accept every program). Otherwise, our 
 would be trivial! To demonstrate this, we include a simple example `bad_ordering.dpt`. By running `./dpt examples/popl/bad_ordering.dpt`, you will see that the type system generates an ordering error, and correctly points to the `Array.set(arr1, 0, 1)` line as the first out-of-order access. Reviewers are encouraged to try tweaking other examples to verify that ordering errors are in fact caught (the BloomFilterTimeout example is a good one for this, as it contains 3 BloomFilter globals).
 
 ### Performance claims
-* Our first set of claims is that we have implemented several general-purpose modules, as depicted in figure 14 of the paper. Note that lines of code are not including comments, for better comparison with the Lucid paper's reported LoC. Comments are included in the files here to help explain the code, but can be removed either manually or using a comment-stripping tool. The table entries correspond to the files below; the script [TODO] will automatically run lucid on each of these files in turn, and report the time it took to typecheck each.
+* Our first set of claims is that we have implemented several general-purpose modules, as depicted in figure 14 of the paper. Note that lines of code are not including comments, for better comparison with the Lucid paper's reported LoC. For convenience, we have included stripped versions of each example in the examples/popl22_stripped folder, which have comments and any extraneous code removed. Note that when counting lines of code, we do not count `include` statements. The table entries correspond to the files below; the script [TODO] will automatically run Lucid on each of these files in turn, and report the time it took to typecheck each.
   * Bloom Filter -> BloomFilter.dpt.
   * BloomFilter + Aging -> BloomFilterTimeout.dpt
   * Hash table -> Hashtable.dpt
@@ -72,7 +73,7 @@ would be trivial! To demonstrate this, we include a simple example `bad_ordering
   * Bidirectional map -> Bimap.dpt
   * Count-min sketch -> CountMinSketch.dpt
   * CMS + Aging -> CountMinSketchTimeout.dpt
-* Our second set of claims is that we have implemented several specific applications, listed in figure 15 of the paper. Modules used may be verified by sight, and as before LoC is not including comments. The script [TODO] will run lucid on each file and report the typing time; the relevant files are listed below.
+* Our second set of claims is that we have implemented several specific applications, listed in figure 15 of the paper. Modules used may be verified by sight. As before, LoC is not including comments, and stripped examples appear in examples/popl22_stripped. The script [TODO] will run lucid on each file and report the typing time; the relevant files are listed below.
   * Stateful Firewall -> stateful_fw.dpt
   * Closed-loop DNS defense -> dnsguard.dpt
   * *Flow -> starflow.dpt

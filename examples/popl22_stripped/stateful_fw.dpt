@@ -1,0 +1,37 @@
+include "Memops.dpt"
+include "HashtableCuckooTimeout.dpt"
+
+const int num_entries = 1024;
+const int timeout_thresh = 10000;
+const int scan_period = 1000;
+const int NULL = 0;
+const int TRUE = 1;
+const int FALSE = 0;
+const int seed1_val = 10398247;
+const int seed2_val = 1295981879;
+
+entry event request_packet (int client_ip, int server_ip);
+entry event response_packet (int server_ip, int client_ip);
+exit event request_continue (int src_ip, int dst_ip);
+exit event response_continue (int src_ip, int dst_ip);
+event init ();
+
+global CuckooTimeout.t<<2, 10, 2>> firewall = CuckooTimeout.create(num_entries, [seed1_val; seed2_val]);
+
+
+handle request_packet(int client_ip, int server_ip) {
+  int time = Sys.time();
+	if (CuckooTimeout.mem_touch(firewall, [client_ip; server_ip], time) == false) {
+    generate CuckooTimeout.insert(firewall, [client_ip; server_ip], time);
+  }
+  generate request_continue(client_ip, server_ip);
+}
+
+handle response_packet(int server_ip, int client_ip) {
+  if (CuckooTimeout.mem(firewall, [client_ip; server_ip])) {
+    generate response_continue(client_ip, server_ip);   }
+}
+
+handle init () {
+  generate CuckooTimeout.scan(firewall, 0, timeout_thresh, scan_period);
+}

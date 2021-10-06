@@ -1,0 +1,85 @@
+include "Memops.dpt"
+include "HashtableTimeout.dpt"
+module CuckooTimeout {
+  type t<<'k, 'key_sz, 'stages>> = {
+    Hashtable.t<<'k, 'key_sz>>['stages] arrs;
+  }
+
+  constr t<<'k, 'key_sz, 'stages>> create(int length, int['stages] seeds) = {
+    arrs = [Hashtable.create(length, seeds[i]) for i < 'stages];
+  };
+
+  fun Hashtable.arg<<'k>> null_arg() {
+    return {
+            vals = [0 for i < 'k];
+            timestamp = 0;
+           };
+  }
+
+  fun bool all_null(int['k] lst) {
+    bool acc = true;
+    for (i < 'k) {
+      acc = acc && (lst[i] == 0);
+    }
+    return acc;
+  }
+
+  event insert_internal(t<<'k, 'key_sz, 'stages>> tbl, int['k] args, int timestamp, int['k] orig_args, int retry_count) {
+    Hashtable.arg<<'k>> victims = {vals = args; timestamp = timestamp};
+    Hashtable.arg<<'k>> orig_victims = victims;
+    for (i < 'k) {
+      if (all_null(victims#vals) == false) {
+                victims = Hashtable.add_arg(tbl#arrs[i], victims);
+      }
+    }
+
+        if (all_null(victims#vals) == false) {
+                        bool all_eq = true;
+      for (i < 'k) {
+        all_eq = all_eq && (args[i] == orig_args[i]);
+      }
+      if (all_eq) {
+        retry_count = retry_count + 1;
+      }
+            if (retry_count < size_to_int('k)) {
+        generate insert_internal(tbl, args, timestamp, orig_args, retry_count);
+      }
+    }
+  }
+
+  event insert(t<<'k, 'key_sz, 'stages>> tbl, int['k] args, int timestamp) {
+    generate insert_internal(tbl, args, timestamp, args, 0);
+  }
+
+    fun bool mem(t<<'k, 'key_sz, 'stages>> tbl, int['k] args) {
+    for (i < 'k) {
+      if(Hashtable.mem(tbl#arrs[i], args)) { return true; }
+    }
+    return false;
+  }
+
+    fun bool mem_touch(t<<'k, 'key_sz, 'stages>> tbl, int['k] args, int timestamp) {
+    for (i < 'k) {
+      if(Hashtable.mem_touch(tbl#arrs[i], args, timestamp)) { return true; }
+    }
+    return false;
+  }
+
+  event delete(t<<'k, 'key_sz, 'stages>> tbl, int stage, int idx) {
+    for (i < 'k) {
+      if (stage == size_to_int(i)) {
+        Hashtable.clear_idx(tbl#arrs[i], idx);
+      }
+    }
+  }
+
+    event scan(t<<'k, 'key_sz, 'stages>> tbl, int idx, int thresh, int period) {
+    for(i < 'k) {
+            bool timed_out = (Array.getm(tbl#arrs[i]#timestamps, idx, gt, thresh) == 1);
+      if (timed_out) {
+                generate delete(tbl, size_to_int(i), idx);       }
+    }
+    idx = idx + 1;
+    generate Event.delay(scan(tbl, idx, thresh, period), period);
+  }
+}

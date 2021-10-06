@@ -1,0 +1,30 @@
+include "Memops.dpt"
+module Bimap {
+  type t<<'k1, 'key_sz>> = GeneralBimap.t<<'k1, 1, 'key_sz>>
+
+  constr t<<'k1, 'key_sz>> create(int len, int seed) = GeneralBimap.create(len, [seed]);
+
+  fun int map_forward(t<<'k1, 'sz>> map, int['k1] args) {
+    return GeneralBimap.map_forward(map, args)[0];
+  }
+
+  fun int['k1] add(t<<'k1, 'sz>> map, int['k1] args) {
+    return GeneralBimap.add(map, args)[0];
+  }
+
+  fun int['k1] lookup_forward(t<<'k1, 'sz>> map, int['k1] args) {
+    return GeneralBimap.lookup_forward(map, args)[0];
+  }
+
+  fun int['k1] lookup_backward(t<<'k1, 'sz>> map, int key) {
+    return GeneralBimap.lookup_backward(map, [key])[0];
+  }
+
+  fun bool in_map_forward(t<<'k1, 'sz>> map, int['k1] args) {
+    return GeneralBimap.in_map_forward(map, args);
+  }
+
+  fun bool in_map_backward(t<<'k1, 'sz>> map, int key) {
+    return GeneralBimap.in_map_backward(map, [key]);
+  }
+}
