@@ -1,4 +1,4 @@
-BOX="lucid.box"
+BOX_BASE="lucid"
 BUILD_DIR="lucidbox"
 # configurable build parameters
 CPUS=6
@@ -52,6 +52,10 @@ else
   exit
 fi
 
+# build either lucid_compiler.box or lucid_interpreter.box
+BOX="$BOX_BASE$mode.box"
+
+
 if [ -e $BOX ]
 then 
     echo "$BOX already present"
@@ -69,7 +73,7 @@ else
         then
           cmd="$cmd --sde=$(abs_path $SDE) --set_script=$(abs_path $SET_SCRIPT)"
         fi
-        cmd="$cmd up --provider=virtualbox"
+        cmd="$cmd --mode=$mode up --provider=virtualbox"
         # execute command in build directory. 
         cd "$(my_path)/$BUILD_DIR"
         echo "running vagrant command: $cmd"

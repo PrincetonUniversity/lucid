@@ -3,11 +3,13 @@ require 'getoptlong'
 
 # where the sde tar gets put in the vm
 cpus="1"
+mode="interpreter"
 sde=""
 set_script=""
 
 opts = GetoptLong.new(
   [ '--cpus', GetoptLong::OPTIONAL_ARGUMENT], 
+  ['--mode', GetoptLong::OPTIONAL_ARGUMENT], 
   ['--sde', GetoptLong::OPTIONAL_ARGUMENT ],
   ['--set_script', GetoptLong::OPTIONAL_ARGUMENT ]
 )
@@ -20,19 +22,25 @@ opts.each do |opt, arg|
       sde=arg
     when '--set_script'
       set_script=arg
+    when '--mode'
+      mode=arg
   end
 end
 
 Vagrant.configure(2) do |config|
-  mode = "compiler"
-  if (sde=="")
-    mode = "interpreter"
+  if (mode=="")
+    abort("Mode not provided. Please use with --mode <interpreter|compiler>")
   end
-  if (set_script=="")
-    mode = "interpreter"
+  if (mode=="compiler")
+    if (sde=="")
+      abort("Mode set to compiler, but no sde tarball provided.")
+    end
+    if (set_script=="")
+      abort("Mode set to compiler, but no set_sde script provided.")
+    end
   end
   config.vm.box = "bento/ubuntu-18.04" # bionic 64 doesn't work with serial disconnected...
-  config.vm.hostname = "lucidvm"
+  config.vm.hostname = "lucidvm" + mode
   config.ssh.insert_key = false
   config.vm.synced_folder "../", "/lucid"
   config.vm.provider "virtualbox" do |vb|

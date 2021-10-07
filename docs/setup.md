@@ -4,29 +4,50 @@ This page briefly describes how to set up a Lucid environment in a virtualbox VM
 
 
 ## In a VM
-The easiest way to use Lucid is to build a vagrant virtualbox VM. You can either build a VM that runs Lucid's interpreter and P4 compiler, or you can build a VM that runs Lucid's interpreter, P4 compiler, and also the Tofino sde required to compile and run that P4 on the Tofino. The latter VM is recommended if you want to follow along with the tutorials. 
+The easiest way to use Lucid is to set up a virtualbox vm based on a vagrant box that contains all the Lucid requirements. There are two boxes: an *interpreter box* that only has the requirements to run the Lucid toolchain itself; and a *tofino compiler box* that has the requirement to run Lucid's toolchain, and also the underlying P4-Tofino compiler. Use the compiler box if you have access to the Tofino's toolchain and want to actually compile the P4 that Lucid produces. Otherwise, use the interpreter box. 
 
 Before proceeding, make sure you have virtualbox (https://www.virtualbox.org/wiki/Downloads) and vagrant (https://www.vagrantup.com/downloads) installed. 
 
-The VM build process takes an hour or two on a laptop, especially if you are also compiling p4 studio.
+### With a pre-build base box
 
-**Note for Princeton users: if you have a Princeton google account, you can save a lot of time by downloading the pre-built VM image with Lucid and the Tofino SDE here: https://drive.google.com/file/d/1wu8PjGdebsHAlj6JwlX0iWp8IFmkx38j/view?usp=sharing. Download that, put it in ``./vm``, and skip to "using the VM".**
+First, you need to either download or build the lucid box. It is easier to use the pre-build boxes if possible. We update these boxes whenever lucid's library requirements change. 
 
-### To build a lucid only VM
+Pre-built boxes are available at: 
 
-In ``./vm``, run ``buildbox.sh interpreter`` to build ``lucid.box`` -- a vagrant box / appliance. Then, run ``setupvm.sh`` to create a local vm from the box. 
+- The interpreter box: [lucidinterpreter.box](https://drive.google.com/file/d/1bIQXSOM4vZfL3hcz2JJhXKWxNHTNAtpk/view?usp=sharing)
 
-### To build a lucid + tofino sde VM
+- The compiler box: [lucidcompiler.box](https://drive.google.com/file/d/1wu8PjGdebsHAlj6JwlX0iWp8IFmkx38j/view?usp=sharing) **Note: to download the compiler box from this link, you must have a Princeton google drive account.**
+
+To use either of these boxes, place the downloaded file (lucidinterpreter.box or lucidcompiler.box) in the ``vm`` directory of this git and run ``installbox.sh <interpreter | compiler>``. This will use vagrant to install the selected box. Then, skip to the section **running the vm**.
+
+**note: boxes are currently global -- you cannot have both the interpreter and compiler box installed at once. However, installbox.sh can switch between them.**
+
+
+#### Building the base box
+
+You can also build lucidinterpreter.box and lucidcompiler.box from scratch. The process may take an hour or two, and assumes you have at least 6 free CPU cores. 
+
+To build the interpreter box (``lucidinterpreter.box``), just run ``buildbox.sh interpreter`` in the ``vm`` directory. ``installbox.sh interpreter`` will then install the box. 
+
+To build the compiler box (``lucidcompiler.box``): 
 
 1. Download a copy of bf-sde-9.5.0.tgz from Intel. *(bf-sde-9.5.1.tgz should also work, but it is untested)*
 
 2. Put it in ``./vm``
 
-3. In ``./vm``, run ``buildbox.sh compiler bf-sde-9.5.1.tgz`` to build ``lucid.box`` -- a vagrant box / appliance. 
+3. In ``./vm``, run ``buildbox.sh compiler bf-sde-9.5.0.tgz`` to build ``lucidcompiler.box``.
+
+4. Run ``installbox.sh compiler`` to install the box.
+
 
 ### Using the VM
 
-Once the base vm box is build, in ``./vm`` run ``setupvm.sh`` to create a local vm from the box. Access the vm by running ``vagrant ssh`` from the ``vm`` directory. Inside the vm, the git is shared in ``/lucid``. 
+After running ``installbox.sh``, you can use the vm with standard vagrant commands from the ``vm`` directory:
+
+- ``vagrant up`` launches the vm, and initializes it if it has never been initialized before. 
+- ``vagrant ssh`` logs into the vm.
+
+Inside the vm, the git from the host machine is shared in ``/lucid``. 
 
 ### Testing the build environment
 
@@ -45,9 +66,10 @@ make assemble
 make test
 ```
 
-If all of the above make commands succeed, the vm has been set up correctly.
+**Note: if you are using the interpreter vm, only make interp and make compile will work.**
 
-## From scratch
+
+## Setting up Lucid on a custom machine
 
 **Ubuntu 18.04** To install Lucid and p4 studio on an ubuntu 18.04 machine (or your own VM), see the script ``vm/lucidbox/setup_ubuntu.sh`` for installing dependencies. Then run ``make`` in the root directory of this git. 
 
