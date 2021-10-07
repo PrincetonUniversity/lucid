@@ -18,7 +18,7 @@ Pre-built boxes are available at:
 
 - The compiler box: [lucidcompiler.box](https://drive.google.com/file/d/1wu8PjGdebsHAlj6JwlX0iWp8IFmkx38j/view?usp=sharing) **Note: to download the compiler box from this link, you must have a Princeton google drive account.**
 
-To use either of these boxes, place the downloaded file (lucidinterpreter.box or lucidcompiler.box) in the ``vm`` directory of this git and run ``installbox.sh <interpreter | compiler>``. This will use vagrant to install the selected box. Then, skip to the section **running the vm**.
+To use either of these boxes, place the downloaded file (lucidinterpreter.box or lucidcompiler.box) in the ``vm`` directory of this git and run ``installbox.sh <interpreter | compiler>``. This will use vagrant to install the selected box. Then, skip to the section **using the vm**.
 
 **note: boxes are currently global -- you cannot have both the interpreter and compiler box installed at once. However, installbox.sh can switch between them.**
 
@@ -49,7 +49,7 @@ After running ``installbox.sh``, you can use the vm with standard vagrant comman
 
 Inside the vm, the git from the host machine is shared in ``/lucid``. 
 
-### Testing the build environment
+#### Testing the build environment
 
 After sshing into the vm, you should test the build environment.
 
