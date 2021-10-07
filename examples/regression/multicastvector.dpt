@@ -1,0 +1,70 @@
+// This file assumes there are 5 switches, numbered 1 through 5.
+
+/*** A method of encoding the topology ***/
+
+// Defines a new record type with two entries. Basically an int option.
+type map_entry = { int port; bool is_valid; }
+
+// Maps each id to a port on that switch
+type neighbor_list = map_entry[5]
+
+// List of neighbors for switch number 1
+const neighbor_list neighbors_1 =
+[
+  { port = 40; is_valid =  true}; // Switch 1 connected to port 40 of switch 0
+  { port =  0; is_valid = false}; // Switch 1 not connected to itself
+  { port = 43; is_valid =  true}; // Switch 1 connected to port 43 of switch 2
+  { port = 47; is_valid =  true}; // Switch 1 connected to port 47 of switch 3
+  { port =  0; is_valid = false}; // Switch 1 not connected to switch 4
+];
+
+// Imagine similar definitions for other switches
+const neighbor_list neighbors_0 = neighbors_1; // Dummy value
+const neighbor_list neighbors_2 = neighbors_1; // Dummy value
+const neighbor_list neighbors_3 = neighbors_1; // Dummy value
+const neighbor_list neighbors_4 = neighbors_1; // Dummy value
+
+type neighbor_map = neighbor_list[5]
+
+const neighbor_map topology = [ neighbors_0; neighbors_1; neighbors_2; neighbors_3; neighbors_4];
+
+/* If you want to know if switch i is connected to switch j,
+   you can lookup topology[i][j].
+   This has the downside that i and j have to be constant integers at the moment (or
+   declared to be less than 5 in a loop, e.g. for (i < 5) { ... }).
+   You could also write the toplogy as a function, which has the added advantage of
+   letting you lookup by both source and port number, e.g.
+*/
+fun int get_connected_port(int src, int output_port) {
+  // No relation to the topology map defined above
+  match (src, output_port) with
+  | 0, 41 -> { return 1; } // Connects to switch 1
+  | 0, 44 -> { return 2; }
+  | 1, 41 -> { return 2; }
+  | _ -> { return 99; } // No connection
+}
+
+// Of course, you can combine these approaches.
+
+/*** Groups and multicasting ***/
+
+// Defines a multicast group named group1.
+// Packets sent to this group arrive at switches 0, 1 and 3, and not 2 or 4.
+group group1 = {0, 1, 3};
+
+event foo() {
+  // To generate a singlecast event, you just do things normally, e.g.
+  event f = foo();
+  f = Event.sslocate(f, 1); // Send to switch 1
+  f = Event.delay(f, 100); // Delay by 100 ns
+  generate f; // Sends f off to appear at switch 1 in 100ns.
+
+  // To generate a multicast event, you start the same way...
+  event f = foo();
+  // But when you send it to a group, the type changes to "mevent" (multicast event)
+  // To do this, you use different combinators. Event.smlocate takes a singlecast event and a group,
+  // and generates a multicast event.
+  mevent m = Event.smlocate(f, group1); // Turns f into a mevent sent to group 1.
+  m = Event.mdelay(m, 100); // Different version of the delay function for multicast events
+  mgenerate m; // Different generate keyword as well. This will cause m to appear at switches 0, 1, 3 in 100ns.
+}
