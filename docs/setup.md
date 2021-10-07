@@ -8,7 +8,7 @@ The easiest way to use Lucid is to set up a virtualbox vm based on a vagrant box
 
 Before proceeding, make sure you have virtualbox (https://www.virtualbox.org/wiki/Downloads) and vagrant (https://www.vagrantup.com/downloads) installed. 
 
-### With a pre-build base box
+### With a pre-built base box
 
 First, you need to either download or build the lucid box. It is easier to use the pre-build boxes if possible. We update these boxes whenever lucid's library requirements change. 
 
