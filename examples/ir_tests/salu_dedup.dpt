@@ -14,11 +14,20 @@ handle ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos) 
   int idx = 1;
   int new_val = 1;
 
-  if (tos == 0) {
+  if (tos == 0) {    
     new_val = 1;
     Array.set(test_arr, idx, new_val);
   } else {
     new_val = 2;
     Array.set(test_arr, idx, new_val);    
   }
+
+  int hashval = 0;
+
+  if (tos == 0){
+    hashval = hash<<32>>(1, new_val);
+  } else {
+    hashval = hash<<32>>(1, new_val);
+  }
+
 }
