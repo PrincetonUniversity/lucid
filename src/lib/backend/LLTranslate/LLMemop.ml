@@ -74,6 +74,18 @@ let from_testexp hdl_id mem_var (exp : S.exp) =
        relational operation at its root."
 ;;
 
+(* workaround for assembler: transform the 
+  operation (memcell + const) --> (const + memcell) *)
+let _workaround_flip_memcell_const operation : sEvalExpr = 
+  match operation with 
+    | SBinOp(Add, a, b) -> (
+      match (a, b) with 
+        | (RegVar(_), Const(_)) -> SBinOp(Add, b, a)
+        | _ -> operation
+    )
+    | _ -> operation
+;;
+
 let from_retexp hdl_id mem_var (exp : S.exp) =
   (* the backend syntax only currently supports expressions that are immediates or have 1 binary operation. *)
   match exp.e with
@@ -82,7 +94,7 @@ let from_retexp hdl_id mem_var (exp : S.exp) =
     let arith_op = from_arithop arith_op in
     let o1 = soper_from_immediate hdl_id (Some mem_var) e1 in
     let o2 = soper_from_immediate hdl_id (Some mem_var) e2 in
-    SBinOp (arith_op, o1, o2)
+    SBinOp (arith_op, o1, o2) |> _workaround_flip_memcell_const
   (* a *)
   | _ -> SVar (soper_from_immediate hdl_id (Some mem_var) exp)
 ;;

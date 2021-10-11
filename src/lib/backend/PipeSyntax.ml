@@ -16,6 +16,8 @@ exception Error of string
 
 let error s = raise (Error s)
 
+let layout_report str = Console.show_message str ANSITerminal.Green "Pipeline layout"
+
 (* logging *)
 module DBG = BackendLogging
 
@@ -759,14 +761,189 @@ let to_tbl_reg_dfg cid_decls dfg =
   tbl_reg_dfg
 ;;
 
+(* left off here. If two salus in the same table are identical, replace them with one salu. 
+  0. define "identical"
+  1. create a new salu, which is just a copy of one of them. 
+  2. replace the calls to the original salus with the calls to the new salu.
+ *)
+
+
+module OperationDedup = struct
+  (**** New 10/11/21 -- deduplicate structurally equivalent 
+    operation decls (currently only salu and hash ops) ****)
+
+
+  (** Structural equality tests of operation objects (LLSyntax) **)
+  let opt_eq eq opt1 opt2 = 
+    match (opt1, opt2) with 
+    | (Some v1, Some v2) -> eq v1 v2
+    | (None, None) -> true
+    | _ -> false
+  ;;
+
+  let list_eq eq l1 l2 = 
+    match (CL.length l1 = CL.length l2) with 
+    | false -> false
+    | true -> 
+      CL.combine l1 l2 |> 
+      CL.map (fun (a, b) -> eq a b) |> 
+      CL.for_all (fun x -> x)
+  ;;
+
+  let int_eq i1 i2 = i1 = i2
+  let id_eq = Cid.equal 
+  let const_eq = Integer.equal
+  let regSlice_eq _ _ = true
+  ;;
+
+  let oper_eq o1 o2 = 
+    match (o1, o2) with 
+    | (Const c1, Const c2) -> const_eq c1 c2
+    | (Const _, _) -> false
+    | (Meta m1, Meta m2) -> id_eq m1 m2
+    | (Meta _, _) -> false
+    | (RegVar r1, RegVar r2) -> regSlice_eq r1 r2
+    | (RegVar _, _) -> false
+    | (NoOper, NoOper) -> true
+    | (NoOper, _) -> false
+  ;;
+
+  let binOp_eq b1 b2 = b1 = b2
+  let cmpOp_eq c1 c2 = c1 = c2
+  ;;
+
+  let sEvalExpr_eq e1 e2 =
+    match (e1, e2) with 
+    | (SVar o1, SVar o2) -> oper_eq o1 o2
+    | (SVar _, _) -> false
+    | (SBinOp (op1, a1, b1), SBinOp (op2, a2, b2)) -> 
+      (binOp_eq op1 op2) && (oper_eq a1 a2) && (oper_eq b1 b2)    
+    | (SBinOp _, _) -> false
+  ;;
+
+  let sCompExpr_eq e1 e2 = 
+    match (e1, e2) with 
+      | (a1, op1, b1, cmp1, c1), (a2, op2, b2, cmp2, c2) -> (
+        oper_eq a1 a2
+        && binOp_eq op1 op2
+        && oper_eq b1 b2
+        && cmpOp_eq cmp1 cmp2
+        && oper_eq c1 c2
+      )
+  ;;
+
+  let sPredExpr_eq e1 e2 = 
+    match (e1, e2) with 
+      | (Comp e1, Comp e2) -> sCompExpr_eq e1 e2
+      | (Comp _, _) -> false
+      | (Neg e1, Neg e2) -> sCompExpr_eq e1 e2
+      | (Neg _, _) -> false
+  ;;
+
+
+  let sExpr_eq e1 e2 =
+    match (e1, e2) with 
+    | MemExpr(sp1, se1), MemExpr(sp2, se2) -> 
+      opt_eq sPredExpr_eq sp1 sp2
+      && sEvalExpr_eq se1 se2
+    | MemExpr _, _ -> false
+    | RetExpr(sp1, se1), RetExpr(sp2, se2) -> 
+      opt_eq sPredExpr_eq sp1 sp2
+      && sEvalExpr_eq se1 se2
+    | RetExpr _, _ -> false
+  ;;
+
+  let sInstr_eq (iv1:sInstr) (iv2:sInstr) = 
+    id_eq iv1.sRid iv2.sRid
+    && int_eq iv1.sWid iv2.sWid
+    && list_eq sExpr_eq iv1.sExprs iv2.sExprs
+    && opt_eq id_eq iv1.sOut iv2.sOut
+    && oper_eq iv1.sIdx iv2.sIdx
+  ;;
+
+  (* for now, we only consider equality for 
+     stateful instructions and hash instructions. *)
+  let decl_eq d1 d2 = 
+    match (d1, d2) with 
+      | (SInstrVec(_, iv1), SInstrVec(_, iv2)) -> 
+        sInstr_eq iv1 iv2
+      | (SInstrVec _, _) -> false
+      | (Hasher(_, ai1, bi1, out1, opers1), Hasher(_, ai2, bi2, out2, opers2)) ->
+        int_eq ai1 ai2
+        && int_eq bi1 bi2
+        && id_eq out1 out2
+        && list_eq oper_eq opers1 opers2
+      | (Hasher _, _) -> false
+      | _ -> false
+  ;;
+
+  let decl_cmp d1 d2 = 
+    match (decl_eq d1 d2) with 
+    | true -> 0
+    | false -> 1
+  ;;
+
+  (* is d2 a duplicate of d1? *)
+  let decl_is_dup d1 d2 =   
+    match (decl_eq d1 d2) with 
+      | true -> 
+        not (id_eq (id_of_decl d1) (id_of_decl d2))
+      | false -> 
+        false
+  ;;
+
+  (* Main function: deduplicate a list of decls. 
+     eliminate any structurally equivalent decls, 
+     replace references to deleted decls with 
+     references to the structurally equivalent
+     decl that remains. 
+     This is meant to be used on the decls that 
+     are mapped to the same table in a pipeline. *)
+  let rec dedup_decls ds = 
+    match ds with 
+      | [] -> [] 
+      | d::ds -> (
+        let id_of_d = id_of_decl d in 
+        !dprint_endline ("removing duplicates of "^(Cid.to_string id_of_d));
+        (* find ids of duplicates of d in ds *)
+        let dup_ds = CL.filter (decl_is_dup d) ds in         
+        let aliases_of_d = CL.map id_of_decl dup_ds in 
+        !dprint_endline ("number of aliases: "^(CL.length aliases_of_d |> string_of_int));
+        (* get ds without any duplicates of the current element *)
+        let new_ds = CL.filter (fun d_ds -> not (decl_is_dup d d_ds)) ds in 
+        (* replace alias with d's id *)  
+        let replace_alias ds alias = 
+          !dprint_endline ("replacing alias: "^(Cid.to_string alias)^" with "^(Cid.to_string id_of_d));
+          CL.map (fun d -> replace_oid_in_decl d alias id_of_d) ds
+        in 
+        let new_ds = CL.fold_left replace_alias new_ds aliases_of_d in 
+        (* keep d, dedup the new tail of other elements. *)
+        d::(dedup_decls new_ds)
+      )
+  ;;
+end 
+
+let dedup_slprog tsprog = 
+  !dprint_endline "---- deduplication started -----";
+  let r = {tsprog with tspdecls = OperationDedup.dedup_decls tsprog.tspdecls} in 
+  let n_before = CL.length tsprog.tspdecls in 
+  let n_after = CL.length r.tspdecls in 
+  layout_report ("deduplication eliminated "^((n_before - n_after) |> string_of_int)^" operations");
+  !dprint_endline ("deduplication eliminated "^((n_before - n_after) |> string_of_int)^" operations");
+  !dprint_endline "---- deduplication finished -----";
+  r
+;;
+
 let do_passes df_prog =
   DBG.start_mlog __FILE__ outc dprint_endline;
   let cid_decls, _, dfg = df_prog in
   let dfg_with_regs = to_tbl_reg_dfg cid_decls dfg in
   let pipe = Placement.layout cid_decls dfg_with_regs in
   (* todo:  
-            - ?? instruction dedup (salus in particular)
-            - ?? huristic for traversal order -- is this necessary? *)
+      - move translation to SLSyntax and passes over it 
+        to the SLSyntax file. Messy because of cyclic 
+        dependency rules. *)
   let straightline_prog = to_tblseqprog pipe in
-  pipe, straightline_prog
+  let deduped_prog = dedup_slprog straightline_prog in 
+  pipe, deduped_prog
 ;;

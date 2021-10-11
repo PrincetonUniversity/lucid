@@ -96,19 +96,32 @@ let print_salu_merge_summary_hint () =
          (CL.length var_sets))
 ;;
 
-(* set up code for passing pass arg_var to salu_call, assuming that 
-   salu_call expects frame_var instead of arg_var *)
+  (* generate code to pass outer_var in the caller to inner_var in the salu_call *)  
 let prepare_call_var_for_salu inner_var cid_decls (salu_call, outer_var) =
   (* 
-    1. create an alu_call a that sets frame_var = arg_var
-    2. place before salu_call (more optimized: place immediately after arg_var is assigned)
-    3. change arg_var to frame_var in salu_call
+    replace outer_var in salu_call with inner_var. 
+    Add a command, before the call, that sets inner_var := outer_var.
+  example input: 
+    salu_call {
+      outer_var = foo; 
+    }
+  example output:
+    inner_var = outer_var;
+    salu_call {
+      inner_var = foo;
+    }
   *)
+
   let tbl_id = Cid.concat inner_var (oid_of_sInstr salu_call) in
+
+  (* inner_var := outer_var *)
   let new_decls = tbl_of_assign tbl_id inner_var (Meta outer_var) in
+
   let cid_decls = batch_emplace_decl cid_decls new_decls in
   let salu_call_tid = tid_of_oid cid_decls (id_of_decl salu_call) in
   let cid_decls = insert_before_tid cid_decls tbl_id salu_call_tid in
+
+  (* replace outer_var with inner_var in the salu call *)
   let new_salu_call = replace_mid_in_decl salu_call outer_var inner_var in
   let cid_decls = emplace_decl cid_decls new_salu_call in
   cid_decls
@@ -233,8 +246,7 @@ let cid_of_shared_arg_var sav =
   | SharedIndex cid | SharedInput cid -> cid
 ;;
 
-(* temporarily disable compile-time merging into one variable.
-  always create temporary input variables. This is the same as the above *)
+(* This function does not attempt to overlay variables, it always makes a temporary variable. *)
 let prepare_frame_var_for_rid_no_merging
     max_len
     _
@@ -267,11 +279,7 @@ let prepare_frame_var_for_rid_no_merging
     DBG.printf outc "-------------\n";
     (* the width of the intermediate is equal to the width of the register's cell *)
     (* except for index variables, which are always 32-bits (for now) *)
-    let var_size =
-      match shared_salu_arg_var with
-      | SharedIndex _ -> 32
-      | SharedInput _ -> width_of_regvec (Cid.lookup cid_decls rid)
-    in
+    let var_size = find_width_of_var cid_decls (CL.hd vars) in 
     (* declare the per-register input variable. *)
     let salu_var_decl = to_globalmeta salu_arg_id var_size in
     let cid_decls = emplace_decl cid_decls salu_var_decl in
@@ -292,10 +300,9 @@ let prepare_frame_var_for_rid
     rid
   =
   let salu_arg_id = cid_of_shared_arg_var shared_salu_arg_var in
-  (* get the variable in all salus that use this register. *)
+  (* get the set of variables that need to be overlaid. *) 
   let salu_vars_map = salu_param_finder cid_decls rid in
-  let _, vars = CL.split salu_vars_map in
-  let vars = unique_list_of vars in
+  let vars = CL.split salu_vars_map |> snd |> unique_list_of in
   match CL.length vars <= max_len with
   | true -> cid_decls (* nothing needs to change. *)
   | false ->
@@ -341,14 +348,22 @@ let prepare_frame_var_for_rid
         "[prepare_frame_var_for_rid] conflict pairs: %s\n"
         (dbgstr_of_cidpairs conflict_pairs);
       DBG.printf outc "-------------\n";
-      (* the width of the intermediate is equal to the width of the register's cell *)
-      (* except for index variables, which are always 32-bits (for now) *)
-      let var_size =
+      (* the width of the intermediate is equal to the width 
+         of the first variable that must be merged. This assumes 
+         that all variables passed to the same array.update parameter 
+         for a given array are the same type. That actually may 
+         not be true for the index variable, in which case 
+         incorrect code will be generated. 
+       *)
+      let var_size = find_width_of_var cid_decls (CL.hd vars) in 
+  (*     let var_size =
         match shared_salu_arg_var with
-        | SharedIndex _ -> 32
+        | SharedIndex _ -> find_width_of_var cid_decls (CL.hd vars)
         | SharedInput _ -> width_of_regvec (Cid.lookup cid_decls rid)
-      in
+      in *)
+
       (* declare the per-register input variable. *)
+      (* the declaration needs to be sized based on the variables that will be assigned to it. *)
       let salu_var_decl = to_globalmeta salu_arg_id var_size in
       let cid_decls = emplace_decl cid_decls salu_var_decl in
       let cid_decls =

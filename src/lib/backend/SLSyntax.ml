@@ -1,7 +1,12 @@
 (* The final low level representation: a straight line of 
   calls to tables. Generated from PipeSyntax and 
   translates almost directly into the apply block 
-  of a P4 control block. *)
+  of a P4 control block. 
+
+  There is only one transformation that happens on this 
+  syntax: deduplication of structurally equivalent 
+  commands in the program.
+*)
 open Base
 module CL = Caml.List
 open LLSyntax
@@ -52,3 +57,5 @@ let flatten_tups tups = CL.fold_left insert_tup [] tups
 let stageMap_of_tbls decls : stageMap =
   CL.filter_map stage_of_tbl decls |> flatten_tups
 ;;
+
+(*** Convert PipeSyntax into straightline syntax ***)

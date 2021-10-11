@@ -3,16 +3,24 @@ all:
 	cd ../../ ;\
 	make ;\
 	cd - ;\
-	../../dptc cleanup_test.dpt harness.p4 build -p4tapp template.p4tapp ;\
+	../../dptc cleanup_test.dpt ip_harness.p4 linker_config.json build -p4tapp template.p4tapp ;\
 	}
 
+
+salu_dedup:
+	{ \
+	cd ../../ ;\
+	make ;\
+	cd - ;\
+	../../dptc salu_dedup.dpt ip_harness.p4 linker_config.json build ;\
+	}
 
 memop_and:
 	{ \
 	cd ../../ ;\
 	make ;\
 	cd - ;\
-	../../dptc memop_and.dpt harness.p4 build ;\
+	../../dptc memop_and.dpt ip_harness.p4 linker_config.json build ;\
 	}
 
 
@@ -21,7 +29,7 @@ shifts:
 	cd ../../ ;\
 	make ;\
 	cd - ;\
-	../../dptc shifts.dpt harness.p4 build ;\
+	../../dptc shifts.dpt ip_harness.p4 linker_config.json build ;\
 	}
 
 casting:
@@ -29,7 +37,7 @@ casting:
 	cd ../../ ;\
 	make ;\
 	cd - ;\
-	../../dptc casting.dpt harness.p4 build ;\
+	../../dptc casting.dpt ip_harness.p4 linker_config.json build ;\
 	}
 
 conditional_set:
@@ -37,7 +45,7 @@ conditional_set:
 	cd ../../ ;\
 	make ;\
 	cd - ;\
-	../../dptc conditional_set.dpt harness.p4 build ;\
+	../../dptc conditional_set.dpt ip_harness.p4 linker_config.json build ;\
 	}
 
 regmates:
@@ -45,7 +53,7 @@ regmates:
 	cd ../../ ;\
 	make ;\
 	cd - ;\
-	../../dptc regmates.dpt harness.p4 build ;\
+	../../dptc regmates.dpt ip_harness.p4 linker_config.json build ;\
 	}
 
 layout:
@@ -53,7 +61,7 @@ layout:
 	cd ../../ ;\
 	make ;\
 	cd - ;\
-	../../dptc layout.dpt harness.p4 build ;\
+	../../dptc layout.dpt ip_harness.p4 linker_config.json build ;\
 	}
 
 ssa:  
@@ -61,7 +69,7 @@ ssa:
 	cd ../../ ;\
 	make ;\
 	cd - ;\
-	../../dptc ssa.dpt harness.p4 build ;\
+	../../dptc ssa.dpt ip_harness.p4 linker_config.json build ;\
 	}
 
 sat_sub:  
@@ -69,7 +77,7 @@ sat_sub:
 	cd ../../ ;\
 	make ;\
 	cd - ;\
-	../../dptc sat_sub.dpt harness.p4 build ;\
+	../../dptc sat_sub.dpt ip_harness.p4 linker_config.json build ;\
 	}
 
 range:  
@@ -77,7 +85,7 @@ range:
 	cd ../../ ;\
 	make ;\
 	cd - ;\
-	../../dptc range.dpt harness.p4 build ;\
+	../../dptc range.dpt ip_harness.p4 linker_config.json build ;\
 	}
 
 or:  
@@ -85,7 +93,7 @@ or:
 	cd ../../ ;\
 	make ;\
 	cd - ;\
-	../../dptc or.dpt harness.p4 build ;\
+	../../dptc or.dpt ip_harness.p4 linker_config.json build ;\
 	}
 
 events: 
@@ -93,7 +101,7 @@ events:
 	cd ../../ ;\
 	make ;\
 	cd - ;\
-	../../dptc events.dpt harness.p4 build ;\
+	../../dptc events.dpt ip_harness.p4 linker_config.json build ;\
 	}
 
 arrays: 
@@ -101,7 +109,7 @@ arrays:
 	cd ../../ ;\
 	make ;\
 	cd - ;\
-	../../dptc arrays.dpt harness.p4 build ;\
+	../../dptc arrays.dpt ip_harness.p4 linker_config.json build ;\
 	}
 
 bools: 
@@ -109,7 +117,7 @@ bools:
 	cd ../../ ;\
 	make ;\
 	cd - ;\
-	../../dptc bools.dpt harness.p4 build ;\
+	../../dptc bools.dpt ip_harness.p4 linker_config.json build ;\
 	}
 
 nested: 
@@ -117,7 +125,7 @@ nested:
 	cd ../../ ;\
 	make ;\
 	cd - ;\
-	../../dptc nested.dpt harness.p4 build ;\
+	../../dptc nested.dpt ip_harness.p4 linker_config.json build ;\
 	}
 
 args: 
@@ -125,14 +133,14 @@ args:
 	cd ../../ ;\
 	make ;\
 	cd - ;\
-	../../dptc args.dpt harness.p4 build ;\
+	../../dptc args.dpt ip_harness.p4 linker_config.json build ;\
 	}
 ineqs: 
 	{ \
 	cd ../../ ;\
 	make ;\
 	cd - ;\
-	../../dptc ineqs.dpt harness.p4 build ;\
+	../../dptc ineqs.dpt ip_harness.p4 linker_config.json build ;\
 	}
 
 fcns: 
@@ -140,14 +148,14 @@ fcns:
 	cd ../../ ;\
 	make ;\
 	cd - ;\
-	../../dptc functions.dpt harness.p4 build ;\
+	../../dptc functions.dpt ip_harness.p4 linker_config.json build ;\
 	}
 inbranch: 
 	{ \
 	cd ../../ ;\
 	make ;\
 	cd - ;\
-	../../dptc inlined_branches.dpt harness.p4 build ;\
+	../../dptc inlined_branches.dpt ip_harness.p4 linker_config.json build ;\
 	}
 
 match: 
@@ -155,7 +163,7 @@ match:
 	cd ../../ ;\
 	make ;\
 	cd - ;\
-	../../dptc match.dpt harness.p4 build ;\
+	../../dptc match.dpt ip_harness.p4 linker_config.json build ;\
 	}
 
 dup_stmts: 
@@ -163,7 +171,7 @@ dup_stmts:
 	cd ../../ ;\
 	make ;\
 	cd - ;\
-	../../dptc dup_stmts.dpt harness.p4 build ;\
+	../../dptc dup_stmts.dpt ip_harness.p4 linker_config.json build ;\
 	}
 
 events_p4tapp: 
@@ -171,7 +179,7 @@ events_p4tapp:
 	cd ../../ ;\
 	make ;\
 	cd - ;\
-	../../dptc events.dpt harness.p4 build -p4tapp template.p4tapp ;\
+	../../dptc events.dpt ip_harness.p4 linker_config.json build -p4tapp template.p4tapp ;\
 	}
 
 

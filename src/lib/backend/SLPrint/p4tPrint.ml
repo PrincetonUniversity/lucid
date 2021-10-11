@@ -837,7 +837,6 @@ let print_p4_hdr_insts decls =
   let filter_f dec =
     match dec with
     | StructVar (_, _, s_def_name) ->
-      print_endline ("here for " ^ Cid.to_string s_def_name);
       (match ctx_get_structdef_ty s_def_name with
       | SHeader -> true
       | _ -> false)

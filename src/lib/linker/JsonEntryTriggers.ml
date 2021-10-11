@@ -165,7 +165,7 @@ let event_specs_to_action_rules es =
 (* generate the entry trigger table. *)
 let generate configfn =
   let _ = configfn in  
-  print_endline ("TriggerTable.generate reading config file: "^(configfn));
+  (* print_endline ("TriggerTable.generate reading config file: "^(configfn)); *)
   let event_specs = extract_event_specs configfn in 
 
   let actions, rules = event_specs_to_action_rules event_specs in 
@@ -180,11 +180,11 @@ let generate configfn =
   in 
   let actions_string = actions_to_string actions in 
   let table_string = table_to_string table in 
-  print_endline ("------- actions -------");
+(*   print_endline ("------- actions -------");
   print_endline (actions_string);
   print_endline ("------- table   -------");
-  print_endline (table_string);
-  print_endline "\ndone.";
+  print_endline (table_string); *)
+  (* print_endline "\ndone."; *)
   let obj_string = actions_string^"\n"^table_string in 
   let call = sif (eqtest_to_bexpr event_field "0") (scall table) in 
   let call_str = stmt_to_string call in 

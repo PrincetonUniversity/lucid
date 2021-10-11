@@ -1,0 +1,24 @@
+/* Two stateful operations that should map to the 
+   same salu. */
+
+entry event ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos);
+exit event ip_out (int<<9>> egr_port, int src, int dst);
+
+global Array.t<<32>> test_arr = Array.create(4);
+
+memop incr(int memval, int incrval) {
+    return (memval & incrval);
+}
+
+handle ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos) {
+  int idx = 1;
+  int new_val = 1;
+
+  if (tos == 0) {
+    new_val = 1;
+    Array.set(test_arr, idx, new_val);
+  } else {
+    new_val = 2;
+    Array.set(test_arr, idx, new_val);    
+  }
+}

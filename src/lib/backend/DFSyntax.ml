@@ -113,7 +113,7 @@ let graph_of_declsMap cid_decls =
 ;;
 
 (* convert the objects into an instruction prog, which 
-   basically just adds a graph *)
+   just adds a graph *)
 let to_dfProg iprog =
   iprog.instr_dict, iprog.root_tid, graph_of_declsMap iprog.instr_dict
 ;;
@@ -333,22 +333,8 @@ let hids_of_aid cid_decls aid =
 (* action uses rid *)
 let aid_uses_rid cid_decls aid rid = CL.mem rid (rids_of_aid cid_decls aid)
 
-(***** metadata / var helpers *****)
-let size_of_mid cid_decls mid =
-  match Cid.lookup cid_decls mid with
-  | MetaVar (_, i) -> i
-  | _ -> error "[size_of_mid] not a mid decl"
-;;
-
-(* width of a variable that appears as either an argument or declared in cid_decls *)
-let width_of_var arg_vars cid_decls v =
-  match CL.assoc_opt v arg_vars with
-  | None -> size_of_mid cid_decls v
-  | Some width -> width
-;;
 
 (***** table helpers *****)
-
 let set_stage_of_tid cid_decls tid new_stage =
   let d = Cid.lookup cid_decls tid in
   match d with
