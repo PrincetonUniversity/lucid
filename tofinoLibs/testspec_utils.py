@@ -26,6 +26,7 @@ defaultPktRec = {
     "ip.dst" : "34.34.34.34",
     "ip.id"  : 0,
     "ip.tos" : 0,
+    "ip.ttl" : 64,
     "ip.proto" : dpkt.ip.IP_PROTO_UDP,
     "udp.src" : 10,
     "udp.dst" : 20,
@@ -49,6 +50,12 @@ def generatePcap(testspecfn, pcapFn):
         pw.write(pkt, i*4) # packets are 4 seconds apart
     pw.close()
 
+
+def fmt_ipaddr(addr):
+    if (isinstance(addr, str)):
+        return socket.inet_aton(addr)
+    elif (isinstance(addr, int)):
+        return struct.pack('!L', addr)
 
 def pktFromRec(rec):
     """ convert a pktRec into a packet """
@@ -74,12 +81,14 @@ def pktFromRec(rec):
 
     # craft a L3 packet (ip)
     if (rec["eth.type"] == dpkt.ethernet.ETH_TYPE_IP):
+        src = None
         ipPkt = dpkt.ip.IP(v=4, 
             id = int(rec["ip.id"]), 
-            src = socket.inet_aton(rec["ip.src"]), 
-            dst = socket.inet_aton(rec["ip.dst"]), 
+            src = fmt_ipaddr(rec["ip.src"]), 
+            dst = fmt_ipaddr(rec["ip.dst"]), 
             p   = int(rec["ip.proto"]),
-            tos = int(rec["ip.tos"])
+            tos = int(rec["ip.tos"]), 
+            ttl = int(rec["ip.ttl"])
         )
         ipPkt.data = L4Packet
         ipPkt.len += len(L4Packet)

@@ -289,7 +289,7 @@ module PrintSalu = struct
     | _ :: sIv -> has_ret_istr sIv
   ;;
 
-  let use_tmp = true
+  let use_tmp = false
 
   (* print a sExpr *)
   let print_sinstr fmt (si : sExpr) =

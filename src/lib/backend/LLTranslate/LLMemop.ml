@@ -86,6 +86,14 @@ let _workaround_flip_memcell_const operation : sEvalExpr =
     | _ -> operation
 ;;
 
+(* replace an expression that is just a memcell with a memcell identity 
+   that the p4 compiler will not optimize away. *)
+let _workaround_memcell_ident se = 
+  match se with 
+  | SVar (RegVar r) -> SBinOp(SatSub, RegVar(r), Const(Integer.of_int 0))
+  | _ -> se 
+;;
+
 let from_retexp hdl_id mem_var (exp : S.exp) =
   (* the backend syntax only currently supports expressions that are immediates or have 1 binary operation. *)
   match exp.e with
@@ -96,7 +104,7 @@ let from_retexp hdl_id mem_var (exp : S.exp) =
     let o2 = soper_from_immediate hdl_id (Some mem_var) e2 in
     SBinOp (arith_op, o1, o2) |> _workaround_flip_memcell_const
   (* a *)
-  | _ -> SVar (soper_from_immediate hdl_id (Some mem_var) exp)
+  | _ -> SVar (soper_from_immediate hdl_id (Some mem_var) exp) |> _workaround_memcell_ident
 ;;
 
 let from_memop
