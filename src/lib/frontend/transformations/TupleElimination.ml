@@ -159,19 +159,19 @@ let replace_statement env s = replacer#visit_statement (ref env) s
 
 let rec replace_decl (env : env) d =
   match d.d with
-  | ConstVar (id, { raw_ty = TTuple tys }, exp) ->
+  | DConst (id, { raw_ty = TTuple tys }, exp) ->
     let es = replace_exp env exp |> extract_etuple in
     let new_ids = rename_elements id tys in
     let env = IdMap.add id new_ids env in
     let new_ds =
       List.map2
-        (fun (id, ty) exp -> { d with d = ConstVar (id, ty, exp) })
+        (fun (id, ty) exp -> { d with d = DConst (id, ty, exp) })
         new_ids
         es
     in
     replace_decls env new_ds
   | DGlobal (id, { raw_ty = TTuple tys }, exp) ->
-    (* Same as ConstVar, except we might generate either a ConstVar or
+    (* Same as DConst, except we might generate either a DConst or
        a DGlobal for each component *)
     let es = replace_exp env exp |> extract_etuple in
     let new_ids = rename_elements id tys in
@@ -181,7 +181,7 @@ let rec replace_decl (env : env) d =
         (fun (id, ty) exp ->
           if is_global ty
           then { d with d = DGlobal (id, ty, exp) }
-          else { d with d = ConstVar (id, ty, exp) })
+          else { d with d = DConst (id, ty, exp) })
         new_ids
         es
     in
@@ -193,8 +193,8 @@ let rec replace_decl (env : env) d =
     let body_env, new_params = flatten_params env params in
     let body = replace_statement body_env body in
     env, [{ d with d = DHandler (id, (new_params, body)) }]
-  | DSize _ | DMemop _ | DGroup _ | DExtern _ | ConstVar _ | DGlobal _ -> env, [d]
-  | DFun _ | ConstVarr _ | DModule _ | DUserTy _ ->
+  | DSize _ | DMemop _ | DGroup _ | DExtern _ | DConst _ | DGlobal _ -> env, [d]
+  | DFun _ | DConstr _ | DModule _ | DUserTy _ ->
     Console.error_position
       d.dspan
       "Modules, records and functions should be eliminated before tuple \

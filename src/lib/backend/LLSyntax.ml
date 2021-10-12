@@ -146,7 +146,7 @@ and scope =
 
 and decl =
   (* Local state *)
-  | ConstVar of mid * scope * int * int (* a defined constant *)
+  | DConst of mid * scope * int * int (* a defined constant *)
   | MetaVar of mid * int (* meta<int (width)> myVar; *)
   | StructDef of mid * structType * (mid * int) list (* a header or metadata structure *)
   | StructVar of mid * scope * mid (* nput Mystruct X; output Mystruct Y; an instance of a structure. *)
@@ -182,7 +182,7 @@ and parse_next =
 (* None -> accept *)
 and select_pat =
   | SConst of int
-  | SConstVar of mid (* a constant variable *)
+  | SDConst of mid (* a constant variable *)
   | SDefault
 
 
@@ -414,7 +414,7 @@ let id_of_decl d =
   | SchedBlock (i, _)
   | StructDef (i, _, _)
   | StructVar (i, _, _)
-  | ConstVar (i, _, _, _)
+  | DConst (i, _, _, _)
   | ParseTree (i, _)
   | ConfigBlock (i, _) -> i
 ;;
@@ -545,8 +545,8 @@ let new_table tblname rules = Table (tblname, rules, None)
 let new_meta_structdef name params = StructDef (name, SMeta, params)
 let new_header_structdef name params = StructDef (name, SHeader, params)
 let new_struct sname stype iname = StructVar (iname, stype, sname)
-let new_public_constdef name width i = ConstVar (name, SPublic, width, i)
-let new_private_constdef name width i = ConstVar (name, SPrivate, width, i)
+let new_public_constdef name width i = DConst (name, SPublic, width, i)
+let new_private_constdef name width i = DConst (name, SPrivate, width, i)
 let new_ParseTree name root = ParseTree (name, root)
 let new_parse_node name stmts next = name, stmts, next
 let new_PStruct sname = PStruct sname
@@ -555,7 +555,7 @@ let new_PSet rvar lvar = PSet (rvar, lvar)
 let new_PNext pnodeid_opt = PNext pnodeid_opt
 let new_PSelect select_var branches = PSelect (select_var, branches)
 let new_SConst_branch i nid_opt = SConst i, nid_opt
-let new_SConstVar_branch v nid_opt = SConstVar v, nid_opt
+let new_SDConst_branch v nid_opt = SDConst v, nid_opt
 let new_SDefault_branch nid_opt = SDefault, nid_opt
 
 (* generate a native block that is not bound 
@@ -590,7 +590,7 @@ let is_fixedloc_decl dec =
   | MetaVar _
   | StructDef _
   | StructVar _
-  | ConstVar _
+  | DConst _
   | ParseTree _
   | ConfigBlock _
   | SchedBlock _ -> true

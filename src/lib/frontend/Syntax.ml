@@ -204,11 +204,11 @@ and d =
   | DHandler of id * body
   | DFun of id * ty * constr_spec list * body
   | DMemop of id * body
-  | ConstVar of id * ty * exp
+  | DConst of id * ty * exp
   | DGroup of id * exp list
   | DExtern of id * ty
   | DUserTy of id * sizes * ty
-  | ConstVarr of id * ty * params * exp
+  | DConstr of id * ty * params * exp
   | DModule of id * interface * decls
 
 (* name, return type, args & body *)
@@ -349,7 +349,7 @@ let szcast_sp sz1 sz2 span = exp_sp (ESizeCast (sz1, sz2)) span
 let decl d = { d; dspan = Span.default }
 let decl_sp d span = { d; dspan = span }
 let dglobal_sp id ty exp span = decl_sp (DGlobal (id, ty, exp)) span
-let dconst_sp id ty e span = decl_sp (ConstVar (id, ty, e)) span
+let dconst_sp id ty e span = decl_sp (DConst (id, ty, e)) span
 let dextern_sp id ty span = decl_sp (DExtern (id, ty)) span
 let handler_sp id p body span = decl_sp (DHandler (id, (p, body))) span
 let dsize_sp id size span = decl_sp (DSize (id, size)) span
@@ -359,7 +359,7 @@ let group_sp id es span = decl_sp (DGroup (id, es)) span
 let duty_sp id sizes rty span = decl_sp (DUserTy (id, sizes, rty)) span
 
 let dconstr_sp id ty params exp span =
-  decl_sp (ConstVarr (id, ty, params, exp)) span
+  decl_sp (DConstr (id, ty, params, exp)) span
 ;;
 
 let module_sp id intf ds span = decl_sp (DModule (id, intf, ds)) span

@@ -798,7 +798,7 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
         { env with consts = CidMap.add (Id id) ty env.consts } |> def KConst id
       in
       env, FSucc effect_count, DGlobal (id, ty, inf_e)
-    | ConstVar (id, ty, e) ->
+    | DConst (id, ty, e) ->
       enter_level ();
       let _, inf_e, inf_ety = infer_exp env e |> textract in
       leave_level ();
@@ -813,7 +813,7 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
       let env =
         { env with consts = CidMap.add (Id id) ty env.consts } |> def KConst id
       in
-      env, effect_count, ConstVar (id, ty, inf_e)
+      env, effect_count, DConst (id, ty, inf_e)
     | DExtern (id, ty) ->
       if is_global ty
       then
@@ -963,7 +963,7 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
         | _ -> new_env
       in
       new_env, effect_count, DUserTy (id, sizes, ty)
-    | ConstVarr (id, ty, params, e) ->
+    | DConstr (id, ty, params, e) ->
       enter_level ();
       let _, inf_e, inf_ety =
         let locals =
@@ -990,7 +990,7 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
         { env with constructors = CidMap.add (Id id) fty env.constructors }
         |> def KConstr id
       in
-      env, effect_count, ConstVarr (id, ty, params, inf_e)
+      env, effect_count, DConstr (id, ty, params, inf_e)
     | DModule (id, intf, ds) ->
       wellformed_interface env intf;
       let m_env, effect_count, ds =

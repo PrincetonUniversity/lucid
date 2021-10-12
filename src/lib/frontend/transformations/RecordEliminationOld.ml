@@ -64,12 +64,12 @@ let replacer =
         let constr id ty e =
           if is_global ty
           then { d with d = DGlobal (id, ty, e) }
-          else { d with d = ConstVar (id, ty, e) }
+          else { d with d = DConst (id, ty, e) }
         in
         let env, ds = split_definition env constr id ty e in
         env, super#visit_decls env ds
-      | ConstVar (id, ty, e) ->
-        let constr id ty e = { d with d = ConstVar (id, ty, e) } in
+      | DConst (id, ty, e) ->
+        let constr id ty e = { d with d = DConst (id, ty, e) } in
         let env, ds = split_definition env constr id ty e in
         env, super#visit_decls env ds
       | DEvent (id, sort, specs, params) ->

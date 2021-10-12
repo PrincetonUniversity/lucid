@@ -17,7 +17,7 @@ let ctx_add_structdef decl =
   match decl with
   | StructDef _ -> p4tCtx := P4tCtx.add (name_of_structdef decl) decl !p4tCtx
   (* also add const defs, for the final emit table. *)
-  | ConstVar (var_id, _, _, _) ->
+  | DConst (var_id, _, _, _) ->
     print_endline
       ("[ctx_add_structdef] adding const def: " ^ Cid.to_string var_id);
     p4tCtx := P4tCtx.add var_id decl !p4tCtx
@@ -40,7 +40,7 @@ let defname_from_evcid evcid =
 let ctx_get_event_iid event_id =
   let event_enum_var_id = defname_from_evcid event_id in
   match P4tCtx.find event_enum_var_id !p4tCtx with
-  | ConstVar (_, _, iid, _) -> iid
+  | DConst (_, _, iid, _) -> iid
   | _ ->
     error
       "[ctx_get_event_iid] unexpected declaration when looking for event enum."

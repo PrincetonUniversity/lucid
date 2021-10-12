@@ -722,7 +722,7 @@ module PrintParseTree = struct
   let string_of_select_pat s_pat =
     match s_pat with
     | SConst i -> string_of_int i
-    | SConstVar mid ->
+    | SDConst mid ->
       print_endline ("[string_of_select_pat]" ^ show_select_pat s_pat);
       str_of_public_globalid mid
     | SDefault -> "default"
@@ -824,7 +824,7 @@ let print_p4_const_defs decls =
     CL.filter_map
       (fun d ->
         match d with
-        | ConstVar (name, scope, width, valu) -> Some (name, scope, width, valu)
+        | DConst (name, scope, width, valu) -> Some (name, scope, width, valu)
         | _ -> None)
       decls
   in

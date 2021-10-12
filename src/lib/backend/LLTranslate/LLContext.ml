@@ -78,7 +78,7 @@ let ctx_add_decls (ds : Syntax.decls) =
   let iter_f dec =
     match dec.d with
     | DGlobal (id, _, _) | DMemop (id, _) -> ctx_add_decl (Cid.id id) dec
-    | ConstVar (id, _, _) -> ctx_add_decl (Cid.id id) dec
+    | DConst (id, _, _) -> ctx_add_decl (Cid.id id) dec
     | _ -> ()
   in
   CL.iter iter_f ds
@@ -103,13 +103,13 @@ let ctx_width_of_garr n =
 
 let ctx_int_of_const var_id =
   match ctx_find_decl var_id with
-  | { d = ConstVar (_, _, val_exp); _ } -> int_from_exp val_exp
+  | { d = DConst (_, _, val_exp); _ } -> int_from_exp val_exp
   | _ -> error "could not find const in decl context"
 ;;
 
 let ctx_var_is_const var_id =
   match ctx_find_decl_opt var_id with
-  | Some { d = ConstVar (_, _, _); _ } -> true
+  | Some { d = DConst (_, _, _); _ } -> true
   | _ -> false
 ;;
 

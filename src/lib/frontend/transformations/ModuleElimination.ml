@@ -57,14 +57,14 @@ let add_definitions prefix env ds =
       CidMap.add (Compound (prefix, Id id)) (flat_prefix prefix id) map
     in
     match d.d with
-    | ConstVar (id, _, _)
+    | DConst (id, _, _)
     | DExtern (id, _)
     | DFun (id, _, _, _)
     | DGroup (id, _)
     | DMemop (id, _)
     | DEvent (id, _, _, _)
     | DHandler (id, _)
-    | ConstVarr (id, _, _, _)
+    | DConstr (id, _, _, _)
     | DGlobal (id, _, _) -> { env with vars = add_entry env.vars id }
     | DSize (id, _) -> { env with sizes = add_entry env.sizes id }
     | DUserTy (id, _, _) -> { env with types = add_entry env.types id }
@@ -100,9 +100,9 @@ let rec replace_module env m_id ds =
         let d = subst#visit_decl env d in
         let env, d =
           match d.d with
-          | ConstVar (id, x, y) ->
+          | DConst (id, x, y) ->
             ( { env with vars = add_entry env.vars id }
-            , ConstVar (prefix id, x, y) |> wrap d )
+            , DConst (prefix id, x, y) |> wrap d )
           | DExtern (id, x) ->
             ( { env with vars = add_entry env.vars id }
             , DExtern (prefix id, x) |> wrap d )
@@ -121,9 +121,9 @@ let rec replace_module env m_id ds =
           | DHandler (id, x) ->
             ( { env with vars = add_entry env.vars id }
             , DHandler (prefix id, x) |> wrap d )
-          | ConstVarr (id, x, y, z) ->
+          | DConstr (id, x, y, z) ->
             ( { env with vars = add_entry env.vars id }
-            , ConstVarr (prefix id, x, y, z) |> wrap d )
+            , DConstr (prefix id, x, y, z) |> wrap d )
           | DGlobal (id, x, y) ->
             ( { env with vars = add_entry env.vars id }
             , DGlobal (prefix id, x, y) |> wrap d )

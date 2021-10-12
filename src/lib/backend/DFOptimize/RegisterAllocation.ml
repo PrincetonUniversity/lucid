@@ -535,7 +535,7 @@ let find_unbound_vars cid_decls =
     | MetaVar _
     | StructDef _
     | StructVar _
-    | ConstVar _
+    | DConst _
     | ParseTree _
     | SchedBlock _ -> false
     | _ -> true

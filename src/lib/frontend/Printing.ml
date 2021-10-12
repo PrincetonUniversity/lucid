@@ -436,7 +436,7 @@ and d_to_string d =
       (stmt_to_string s)
   | DSize (id, size) ->
     Printf.sprintf "size %s = %s;" (id_to_string id) (size_to_string size)
-  | ConstVar (id, ty, e) ->
+  | DConst (id, ty, e) ->
     Printf.sprintf
       "const %s %s = %s;"
       (id_to_string id)
@@ -455,7 +455,7 @@ and d_to_string d =
       (id_to_string id)
       (sizes_to_string sizes)
       (ty_to_string ty)
-  | ConstVarr (id, ty, params, exp) ->
+  | DConstr (id, ty, params, exp) ->
     Printf.sprintf
       "constr %s %s(%s) = %s;"
       (ty_to_string ty)

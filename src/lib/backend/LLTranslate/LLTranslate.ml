@@ -217,7 +217,7 @@ module TranslateEvents = struct
       (* this should be matching on the event's iid, not its name *)
       let ev_iid = ctx_find_event_iid (Cid.id evid) in
       IS.new_SConst_branch ev_iid (Some pnode_name)
-      (* IS.new_SConstVar_branch (Cid.id evid) (Some pnode_name) *)
+      (* IS.new_SDConst_branch (Cid.id evid) (Some pnode_name) *)
     in
     let root_branches = CL.map to_root_branch ev_tups in
     let root_parse_transition =
@@ -277,7 +277,7 @@ let regdec_from_decl dec =
 
 let constdec_from_decl dec =
   match dec.d with
-  | ConstVar (const_id, ty, exp) ->
+  | DConst (const_id, ty, exp) ->
     let width = width_from_ty ty in
     let rhs_val = Integer.to_int (LLOp.zint_from_evalue exp) in
     Some (IS.new_private_constdef (Cid.Id const_id) width rhs_val)

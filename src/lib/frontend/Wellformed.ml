@@ -47,7 +47,7 @@ let check_decls ds =
              "Global variable %s declared with non-global type %s"
              (id_to_string id)
              (ty_to_string ty)
-    | ConstVarr (id, ty, _, _) ->
+    | DConstr (id, ty, _, _) ->
       if not (is_global ty)
       then
         Console.error_position d.dspan
@@ -262,9 +262,9 @@ let rec check_qvars d =
   | DFun _ | DMemop _ -> (* No restrictions *) ()
   | DGlobal _ ->
     (* None allowed at all *) basic_qvar_checker#visit_decl (true, true) d
-  | DSize _ | ConstVar _ | DGroup _ | DExtern _ ->
+  | DSize _ | DConst _ | DGroup _ | DExtern _ ->
     (* Only allowed in effect *) basic_qvar_checker#visit_decl (false, true) d
-  | ConstVarr _ ->
+  | DConstr _ ->
     (* Allowed in both sizes and effects *)
     basic_qvar_checker#visit_decl (false, false) d
   | DUserTy (_, sizes, _) ->

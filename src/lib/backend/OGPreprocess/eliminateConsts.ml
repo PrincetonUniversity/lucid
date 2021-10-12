@@ -12,7 +12,7 @@ let rec eliminate_consts ds =
   print_endline "------- finding consts ------- ";
   let map_f dec =
     match dec.d with
-    | ConstVar (id, _, exp) -> Some (Cid.id id, exp)
+    | DConst (id, _, exp) -> Some (Cid.id id, exp)
     | _ -> None
   in
   let const_tups = CL.filter_map map_f ds in
@@ -28,11 +28,11 @@ let rec eliminate_consts ds =
 
         method! visit_d ctx d =
           (match d with
-          | ConstVar _ -> print_endline ("entering: " ^ Printing.d_to_string d)
+          | DConst _ -> print_endline ("entering: " ^ Printing.d_to_string d)
           | _ -> ());
           let new_d = super#visit_d ctx d in
           (match d with
-          | ConstVar _ -> print_endline ("leaving: " ^ Printing.d_to_string d)
+          | DConst _ -> print_endline ("leaving: " ^ Printing.d_to_string d)
           | _ -> ());
           new_d
 
@@ -53,7 +53,7 @@ let rec eliminate_consts ds =
     (* delete the const declaration *)
     let filter_f dec =
       match dec.d with
-      | ConstVar (id, _, _) -> not (Cid.equals (Cid.id id) const_cid)
+      | DConst (id, _, _) -> not (Cid.equals (Cid.id id) const_cid)
       | _ -> true
     in
     let ds = CL.filter filter_f ds in

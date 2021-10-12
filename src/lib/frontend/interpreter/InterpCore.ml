@@ -395,7 +395,7 @@ let interp_decl (nst : State.network_state) swid d =
     in
     State.add_global swid (Cid.id id) (State.F f) nst;
     nst
-  | ConstVar (x, _, e) ->
+  | DConst (x, _, e) ->
     let v = interp_exp e in
     State.add_global swid (Id x) v nst;
     nst
@@ -408,7 +408,7 @@ let interp_decl (nst : State.network_state) swid d =
   | DExtern _ | DSize _ ->
     failwith
       "Extern and size declarations should be handled during preprocessing"
-  | DUserTy _ | ConstVarr _ | DModule _ -> failwith "Should be eliminated"
+  | DUserTy _ | DConstr _ | DModule _ -> failwith "Should be eliminated"
 ;;
 
 let process_decls nst ds =

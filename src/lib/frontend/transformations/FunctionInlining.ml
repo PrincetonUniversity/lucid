@@ -341,7 +341,7 @@ let inline_decl env d =
       TyperInstGen.instantiator#visit_body (TyperInstGen.fresh_maps ()) body
     in
     env, Some { d with d = DHandler (id, inline_body env body) }
-  | ConstVarr (id, _, params, e) ->
+  | DConstr (id, _, params, e) ->
     { env with constrs = CidMap.add (Id id) (params, e) env.constrs }, None
   | DGlobal (id, ty, e) ->
     let e' =
@@ -356,7 +356,7 @@ let inline_decl env d =
   | DSize (id, sz) ->
     let n = subst_extract env.sizes sz in
     { env with sizes = IdMap.add id n env.sizes }, Some d
-  | DUserTy _ | DExtern _ | DEvent _ | ConstVar _ | DGroup _ ->
+  | DUserTy _ | DExtern _ | DEvent _ | DConst _ | DGroup _ ->
     (* We can't inline an exp that's not part of a statement *) env, Some d
   | DMemop _ ->
     (* No function calls allowed in Memops *)

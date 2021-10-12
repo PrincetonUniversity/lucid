@@ -230,11 +230,11 @@ let rename prog =
           env <- old_env;
           let new_f = self#freshen_var f in
           DFun (new_f, new_rty, new_cspecs, (new_params, new_body))
-        | ConstVar (x, ty, exp) ->
+        | DConst (x, ty, exp) ->
           let new_exp = self#visit_exp dummy exp in
           let new_ty = self#visit_ty dummy ty in
           let new_x = self#freshen_var x in
-          ConstVar (new_x, new_ty, new_exp)
+          DConst (new_x, new_ty, new_exp)
         | DExtern (x, ty) ->
           let new_ty = self#visit_ty dummy ty in
           let new_x = self#freshen_var x in
@@ -248,7 +248,7 @@ let rename prog =
           let new_ty = self#visit_ty () ty in
           let new_id = self#freshen_ty id in
           DUserTy (new_id, new_sizes, new_ty)
-        | ConstVarr (id, ret_ty, params, e) ->
+        | DConstr (id, ret_ty, params, e) ->
           let orig_env = env in
           let params =
             List.map
@@ -259,7 +259,7 @@ let rename prog =
           env <- orig_env;
           let ret_ty = self#visit_ty () ret_ty in
           let id = self#freshen_var id in
-          ConstVarr (id, ret_ty, params, e)
+          DConstr (id, ret_ty, params, e)
         | DModule (id, intf, body) ->
           let orig_env = env in
           env <- { env with module_defs = KindSet.empty };
