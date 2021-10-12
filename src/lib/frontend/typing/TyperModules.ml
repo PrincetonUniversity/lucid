@@ -161,7 +161,7 @@ let rec validate_interface prefix env interface =
             |> subst
             |> normalize
           in
-          if not (equiv_ty ~ignore_effects:true ty actual_ty)
+          if not (equiv_ty ~ignore_effects:true ty (normalize actual_ty))
           then
             error_sp spec.ispan
             @@ Printf.sprintf
