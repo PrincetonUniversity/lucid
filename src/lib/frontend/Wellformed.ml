@@ -48,13 +48,15 @@ let check_decls ds =
              (id_to_string id)
              (ty_to_string ty)
     | DConstr (id, ty, _, _) ->
-      if not (is_global ty)
+      ignore (id, ty)
+      (* This restriction isn't actually necessary, I don't think. *)
+      (* if not (is_global ty)
       then
         Console.error_position d.dspan
         @@ Printf.sprintf
              "Constructor %s returns non-global type %s"
              (id_to_string id)
-             (ty_to_string ty)
+             (ty_to_string ty) *)
     | DExtern (_, ty) ->
       begin
         match TyTQVar.strip_links ty.raw_ty with
