@@ -114,13 +114,13 @@ let lookup_var span env cid =
     | None ->
       (match CidMap.find_opt cid env.constructors with
       | Some t ->
-        if env.in_global_def
+        if env.in_global_def || not (is_global t.ret_ty)
         then ty (TFun t)
         else
           error_sp
             span
-            "Cannot call constructor except in global definitions or other \
-             constructors"
+            "Cannot call global constructor except in global definitions or \
+             other constructors"
       | None -> error_sp span ("Unbound variable " ^ Cid.to_string cid)))
 ;;
 

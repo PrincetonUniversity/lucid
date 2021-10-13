@@ -8,3 +8,22 @@ module PacketTable : {
         int<<'wsz>>[6] ptr_items;
     }
 }
+
+module M : {
+    type T;
+    constr T create(int t1);
+}
+{
+    type T = {
+        int t;
+    }
+    constr T create(int t1) = {
+        t = t1;
+    };
+}
+entry event entry_event (int a);
+exit event exit_event (int a);
+handle entry_event (int a) {
+    M.T t2 = M.create(a);
+    generate exit_event(a);
+}
