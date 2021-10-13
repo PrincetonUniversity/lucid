@@ -55,7 +55,7 @@ module BloomFilter : {
   }
 }
 
-global BloomFilter.t<<32, 2>> bf1 = BloomFilter.create(4, 0, 1);
+global BloomFilter.t<<32, 2>> bf1 = BloomFilter.create(0x04, 0, 1);
 
 exit event allowed(int x);
 exit event denied(int x);

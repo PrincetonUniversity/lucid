@@ -38,7 +38,7 @@ handle packetin(int<<3>> idx) {
   | 5 -> { increment1(3); }
   | 6 -> { increment1(2); }
   | 7 -> { increment1(3); }
-  | 8 -> { increment1(2); }
+  | 0x8 -> { increment1(0x2); } // Testing hex syntax
 
   printf("Pattern update (should be the same as before)");
 

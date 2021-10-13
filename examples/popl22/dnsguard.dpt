@@ -24,8 +24,8 @@ const int T_EMPTY = 2; // Should be much less than T_INTERVAL / slots
 
 const int[2] seeds = [10398247; 1295981879];
 
-const int countmin_slots = 1024;
-const int firewall_slots = 1024;
+const int countmin_slots = 0x400; // 1024
+const int firewall_slots = 0x400;
 
 event init();
 
