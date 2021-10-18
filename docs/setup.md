@@ -57,7 +57,7 @@ After sshing into the vm, you should test the build environment.
 ```
 cd /lucid; make
 ```
-3. test the installation by running all four make commands for the tutorial: 
+2. test the installation by running all four make commands for the tutorial: 
 ```
 cd /lucid/examples/tutorial
 make interp
