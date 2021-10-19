@@ -153,7 +153,7 @@ let rec interp_exp (nst : State.network_state) swid locals e : State.ival =
     Console.error_position
       e.espan
       "Tuple expressions should be eliminated before interpretation"
-  | ESizeCast _ ->
+  | ESizeCast _ | EStmt _ ->
     Console.error_position e.espan "Should be eliminated before interpretation"
 
 and interp_exps nst swid locals es : State.ival list =

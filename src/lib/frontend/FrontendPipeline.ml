@@ -52,6 +52,8 @@ let process_prog ds =
   print_endline "-------Eliminating tuples-------";
   let ds = TupleElimination.eliminate_prog ds in
   print_if_verbose ds;
+  let ds = EStmtElimination.eliminate_prog ds in
+  print_if_verbose ds;
   print_endline "---------------typing again-------------";
   (* Just to be safe *)
   let ds = Typer.infer_prog ds in

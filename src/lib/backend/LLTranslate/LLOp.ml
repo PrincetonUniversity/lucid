@@ -125,8 +125,6 @@ let mid_from_cid hdl_id cid =
 let const_from_int i = Integer.of_int i
 let const_from_z (z : Z.t) = Integer.of_int (Z.to_int z)
 
-
-
 let binOp_from_op op =
   match op with
   | Plus -> IS.Add
@@ -135,7 +133,7 @@ let binOp_from_op op =
   | RShift -> IS.RShift
   | LShift -> IS.LShift
   | BitAnd -> IS.BAnd
-  | BitOr  -> IS.BOr
+  | BitOr -> IS.BOr
   | _ -> error "[binOp_from_op] unsupported op"
 ;;
 
@@ -170,8 +168,8 @@ let oper_from_immediate hdl_id (immediate_exp : exp) =
     error dstr
 ;;
 
-let oper_from_size (sz : size) : IS.oper = 
-  match (extract_size_opt sz) with 
+let oper_from_size (sz : size) : IS.oper =
+  match extract_size_opt sz with
   | Some sz_int -> IS.Const (const_from_int sz_int)
   | None -> error "[oper_from_size] -- could not extract int from size"
 ;;
@@ -240,9 +238,11 @@ module TofinoAlu = struct
         let op = binOp_from_op op in
         alu_name, IS.new_dsingleinstr alu_name outvar_mid (IS.new_ebinop op a b)
       | EOp (Cast sz, cast_args) ->
-        let src = oper_from_immediate hdl_id (CL.hd cast_args) in    
+        let src = oper_from_immediate hdl_id (CL.hd cast_args) in
         let width = oper_from_size sz in
-        alu_name, IS.new_dsingleinstr alu_name outvar_mid (IS.new_ebinop Cast src width)
+        ( alu_name
+        , IS.new_dsingleinstr alu_name outvar_mid (IS.new_ebinop Cast src width)
+        )
       | EOp (_, _) ->
         let dstr = Printing.statement_to_string opstmt in
         error
@@ -292,7 +292,8 @@ module TofinoAlu = struct
       | EIndex _
       | EVector _
       | ETuple _
-      | ESizeCast _ -> error "Should be eliminated long before this point."
+      | ESizeCast _
+      | EStmt _ -> error "Should be eliminated long before this point."
     in
     !dprint_endline
       (sprintf "[from_assign] created alu: " ^ Printing.cid_to_string alu_name);
@@ -380,14 +381,13 @@ module TofinoAlu = struct
     CL.iter iter_f ev_args;
     (* get a list of qualified out struct field parameters *)
     (* generate alu instructions of the form: field_param := ev_arg *)
-    (* since the out fields are written, the variable references must be 
+    (* since the out fields are written, the variable references must be
        lmids, else dataflow analysis will fail. *)
-    let to_lmid (mid : Cid.t) : IS.lmid = mid in 
+    let to_lmid (mid : Cid.t) : IS.lmid = mid in
     let out_struct_fields =
-      TofinoStructs.qual_out_fieldnames_of_event (Cid.to_id ev_id) 
+      TofinoStructs.qual_out_fieldnames_of_event (Cid.to_id ev_id)
       |> CL.map to_lmid
     in
-
     let alu_rhs_exps = CL.map (eoper_from_immediate hdl_id) ev_args in
     let to_ass_f (lhs, rhs) = IS.IAssign (lhs, rhs) in
     let (ivec : IS.instrVec) =
@@ -509,23 +509,29 @@ module TofinoControl = struct
   (* if to table conversion (new 8/1/21) *)
 
   (* a rule in a binary table evaluates to either true or false. *)
-  type binary_rule = 
+  type binary_rule =
     | BTrue of IS.pattern
-    | BFalse of IS.pattern 
-  type binary_rules = binary_rule list
-  type table_actions = { ta_true : IS.decl; ta_false : IS.decl;}
+    | BFalse of IS.pattern
 
-  let str_of_binary_rule br = 
-    match br with 
-    | BTrue(pat) -> (P4tPrint.PrimitiveString.str_of_pat pat) ^ "-->TRUE"
-    | BFalse(pat) -> (P4tPrint.PrimitiveString.str_of_pat pat) ^ "-->FALSE"
+  type binary_rules = binary_rule list
+
+  type table_actions =
+    { ta_true : IS.decl
+    ; ta_false : IS.decl
+    }
+
+  let str_of_binary_rule br =
+    match br with
+    | BTrue pat -> P4tPrint.PrimitiveString.str_of_pat pat ^ "-->TRUE"
+    | BFalse pat -> P4tPrint.PrimitiveString.str_of_pat pat ^ "-->FALSE"
   ;;
-  let str_of_binary_rules brs = 
+
+  let str_of_binary_rules brs =
     String.concat "\n" (CL.map str_of_binary_rule brs)
   ;;
 
   (* a binary table is a list of binary rules and true / false actions *)
-(*   type binary_table = binary_rules * table_actions
+  (*   type binary_table = binary_rules * table_actions
  *)
   (* get the mapping from key (which appears in the atom) to value *)
   let field_pat_of_atom_exp hdl_id exp =
@@ -553,43 +559,42 @@ module TofinoControl = struct
     !dprint_endline (P4tPrint.PrimitiveString.str_of_rule r)
   ;;
 
-
-
-  (* for booleans, this data structure should have true and false as types of rules. *)  
+  (* for booleans, this data structure should have true and false as types of rules. *)
 
   (* generate the actions that point to true and false branches *)
-  let table_actions_of_ifnode opgraph opstmt : table_actions = 
+  let table_actions_of_ifnode opgraph opstmt : table_actions =
     (* get the true and false opstatements. *)
     let _, true_stmt, false_stmt, _ = unpack_if opstmt in
     let true_stmt, false_stmt =
       fst_op_of_branch true_stmt, fst_op_of_branch false_stmt
     in
     (* convert each statement into an action *)
-    let gen_case_action opgraph acn_name stmt = 
-      match stmt.s with 
-      | SNoop -> 
+    let gen_case_action opgraph acn_name stmt =
+      match stmt.s with
+      | SNoop ->
         let succ_tbls = successortbls_of_stmt opgraph stmt in
         (match succ_tbls with
-        | [] -> print_endline ("NO SUCCESSOR TABLE FOR NOOP: " ^ stmt.sspan.fname)
+        | [] ->
+          print_endline ("NO SUCCESSOR TABLE FOR NOOP: " ^ stmt.sspan.fname)
         | _ -> ());
         (* let succ_tbl = tblname_of_stmt stmt in *)
         IS.new_action acn_name [] succ_tbls
-      | _ -> 
+      | _ ->
         let succ_tbl = tblname_of_stmt stmt in
         IS.new_action acn_name [] [succ_tbl]
-    in 
+    in
     let true_name = Cid.fresh ["true"] in
     let false_name = Cid.fresh ["false"] in
-    let true_acn = gen_case_action opgraph true_name true_stmt in 
-    let false_acn = gen_case_action opgraph false_name false_stmt in 
-    {ta_true=true_acn; ta_false=false_acn;}
-;; 
+    let true_acn = gen_case_action opgraph true_name true_stmt in
+    let false_acn = gen_case_action opgraph false_name false_stmt in
+    { ta_true = true_acn; ta_false = false_acn }
+  ;;
 
   (* extract the toplevel expressions *)
-  let get_toplevel_exps = flatten_disjunction 
+  let get_toplevel_exps = flatten_disjunction
   let get_atom_exps = flatten_conjunction
-  ;;
-  let get_keys hdl_id exp = 
+
+  let get_keys hdl_id exp =
     let keys = dynamic_vars_in_exp exp |> CL.map (mid_from_cid hdl_id) in
     print_endline "KEYS: ";
     CL.iter (fun k -> print_endline (Cid.to_string k)) keys;
@@ -597,32 +602,32 @@ module TofinoControl = struct
     keys
   ;;
 
-  let binary_rules_from_toplevel_exp hdl_id keys toplevel_exp : binary_rules = 
+  let binary_rules_from_toplevel_exp hdl_id keys toplevel_exp : binary_rules =
     (* Given a toplevel expression, which is a conjunction of the form:
-        T1 && T2 && ... && TN, 
-        where T = [T1, ..., TN] are binary equality or inequality tests, 
-        this function generates a list of binary rules that 
+        T1 && T2 && ... && TN,
+        where T = [T1, ..., TN] are binary equality or inequality tests,
+        this function generates a list of binary rules that
         evaluate to true iff (T1 && T2 && ... && TN) is true.
-        Assume T is split into two non-overlapping subsets: 
+        Assume T is split into two non-overlapping subsets:
           - Te -- terms that are equal tests
           - Tn -- terms that are not equal tests
-        The rules generated are (in order): 
+        The rules generated are (in order):
           - one rule that evaluates to false for each term in Te.
-          - one rule that evaluates to true for _all_ the terms in Tn. 
-          - a final rule that evaluates to false. 
+          - one rule that evaluates to true for _all_ the terms in Tn.
+          - a final rule that evaluates to false.
 
-      (x != 0) -> 
+      (x != 0) ->
       x : 0 -> false
       x : _ -> true
 
-      (y == 0 || x != 0) -> 
+      (y == 0 || x != 0) ->
       y : 0, x : _ --> true
       y : _, x : _ --> false
 
       y : _, x : 0 --> false
       y : _, x : _ --> true
 
-      y : 0, x : _ --> 
+      y : 0, x : _ -->
 
       y : _, x : 0 -> false
       y : 0, x : _ -> true
@@ -630,126 +635,141 @@ module TofinoControl = struct
 
 
     *)
-    let atom_exps = get_atom_exps toplevel_exp in 
+    let atom_exps = get_atom_exps toplevel_exp in
     let eqs = CL.filter (filter_eop_kind Eq) atom_exps in
     let neqs = CL.filter (filter_eop_kind Neq) atom_exps in
-    (* neq_rules -- one rule that evaluates to false for 
-       every atom that does a not equals test *) 
-    let neq_rules = CL.map 
-      (fun neq -> BFalse(pattern_of_atoms hdl_id keys (neq::eqs)))
-      neqs
-    in 
-    (* eq_rules -- one rule for all the conditions that must hold for 
-       the term to evaluate to true, after all the inequalities 
+    (* neq_rules -- one rule that evaluates to false for
+       every atom that does a not equals test *)
+    let neq_rules =
+      CL.map
+        (fun neq -> BFalse (pattern_of_atoms hdl_id keys (neq :: eqs)))
+        neqs
+    in
+    (* eq_rules -- one rule for all the conditions that must hold for
+       the term to evaluate to true, after all the inequalities
        have been tested *)
-    let eq_rules = [BTrue(pattern_of_atoms hdl_id keys eqs)] in     
-    neq_rules@eq_rules
+    let eq_rules = [BTrue (pattern_of_atoms hdl_id keys eqs)] in
+    neq_rules @ eq_rules
   ;;
 
-  let remove_shadow true_rule pred = 
+  let remove_shadow true_rule pred =
     (* Poke a hole in pred so that true_rule is not shadowed. *)
-    match (true_rule, pred) with 
-    | BTrue(_), BTrue(_) -> [pred]
-    | BTrue(tpat), BFalse(ppat) -> (
-      match (MergeUtils.intersect_patterns tpat ppat) with 
+    match true_rule, pred with
+    | BTrue _, BTrue _ -> [pred]
+    | BTrue tpat, BFalse ppat ->
+      (match MergeUtils.intersect_patterns tpat ppat with
       | None -> [pred] (* no shadow *)
-      | Some ipat -> (* ipat is the shadow *)
-        [BTrue(ipat); pred]
-      )
-    | BFalse(_), _ -> error "[remove_shadow] it is okay to shadow a false rule."
+      | Some ipat ->
+        (* ipat is the shadow *)
+        [BTrue ipat; pred])
+    | BFalse _, _ -> error "[remove_shadow] it is okay to shadow a false rule."
   ;;
 
-  let rec remove_shadows rule pred_rules = 
-    (* If rule is true, poke holes in any false rules in pred_rules, so that 
+  let rec remove_shadows rule pred_rules =
+    (* If rule is true, poke holes in any false rules in pred_rules, so that
        rule matches. *)
-    match rule with 
-    | BTrue(_) -> (
-      match pred_rules with 
+    match rule with
+    | BTrue _ ->
+      (match pred_rules with
       | [] -> []
       | [pred_rule] -> remove_shadow rule pred_rule
-      | pred_rule::pred_rules -> (remove_shadow rule pred_rule)@(remove_shadows rule pred_rules)
-    )
-    | BFalse(_) -> pred_rules
+      | pred_rule :: pred_rules ->
+        remove_shadow rule pred_rule @ remove_shadows rule pred_rules)
+    | BFalse _ -> pred_rules
   ;;
-  
-  let remove_shadow_outer rule_lists = 
-    let remove_shadow_inner pred_lists rule_list = 
+
+  let remove_shadow_outer rule_lists =
+    let remove_shadow_inner pred_lists rule_list =
       (* find the positive rule in rule list. *)
-      let pos_rules = CL.filter (fun r -> match r with | BTrue(_) -> true | _ -> false) rule_list in 
-      let pos_rule = CL.hd pos_rules in       
+      let pos_rules =
+        CL.filter
+          (fun r ->
+            match r with
+            | BTrue _ -> true
+            | _ -> false)
+          rule_list
+      in
+      let pos_rule = CL.hd pos_rules in
       (* poke holes in all the predecessor lists *)
-      let deshadowed_pred_lists = CL.map (remove_shadows pos_rule) pred_lists in 
+      let deshadowed_pred_lists = CL.map (remove_shadows pos_rule) pred_lists in
       (* return the list up to here. *)
-      deshadowed_pred_lists@[rule_list]
-    in 
+      deshadowed_pred_lists @ [rule_list]
+    in
     CL.fold_left remove_shadow_inner [] rule_lists
   ;;
 
-  let is_rule_matchable pred_rules rule = 
-    let pat_of_rule r = match r with 
-      | BTrue(pat) -> pat 
-      | BFalse(pat) -> pat 
-    in 
-    let pred_pats = CL.map pat_of_rule pred_rules in 
-    let pat = pat_of_rule rule in 
+  let is_rule_matchable pred_rules rule =
+    let pat_of_rule r =
+      match r with
+      | BTrue pat -> pat
+      | BFalse pat -> pat
+    in
+    let pred_pats = CL.map pat_of_rule pred_rules in
+    let pat = pat_of_rule rule in
     RuleSolve.is_pat_still_feasible pat pred_pats
-  ;; 
+  ;;
 
-  (* delete any rules that cannot ever be matched due to 
+  (* delete any rules that cannot ever be matched due to
      shadows from combined predecessors. *)
-  let delete_unmatchable_rules rules = 
-    let fold_if_reachable preds rule = 
-      match (is_rule_matchable preds rule) with
-        | true -> preds@[rule]
-        | false -> 
-          !dprint_endline ("unreachable rule! "^(str_of_binary_rule rule));
-          !dprint_endline ("preds: "^(str_of_binary_rules preds));
-          preds
-    in 
-    CL.fold_left fold_if_reachable [] rules 
+  let delete_unmatchable_rules rules =
+    let fold_if_reachable preds rule =
+      match is_rule_matchable preds rule with
+      | true -> preds @ [rule]
+      | false ->
+        !dprint_endline ("unreachable rule! " ^ str_of_binary_rule rule);
+        !dprint_endline ("preds: " ^ str_of_binary_rules preds);
+        preds
+    in
+    CL.fold_left fold_if_reachable [] rules
   ;;
 
   let new_merge hdl_id keys toplevel_rule_lists =
-    (* for each true rule in a rule set, make sure that it is not shadowed by 
+    (* for each true rule in a rule set, make sure that it is not shadowed by
        and rules in previous rule lists. *)
-    let deshadowed_rule_lists = remove_shadow_outer toplevel_rule_lists in 
+    let deshadowed_rule_lists = remove_shadow_outer toplevel_rule_lists in
     (* flatten the list of rules *)
-    let rules = CL.flatten deshadowed_rule_lists in 
+    let rules = CL.flatten deshadowed_rule_lists in
     (* add the default rule *)
-    let default_false = BFalse(pattern_of_atoms hdl_id keys []) in     
-    let full_rules = rules@[default_false] in 
+    let default_false = BFalse (pattern_of_atoms hdl_id keys []) in
+    let full_rules = rules @ [default_false] in
     (* remove any unreachable rules. *)
-    delete_unmatchable_rules full_rules    
-  ;; 
-
-
-  (* generate a real rule from a binary rule *)
-  let generate_rule table_actions binary_rule =     
-    match binary_rule with 
-    | BTrue(pat) -> IS.new_rule (Cid.fresh ["btrue"]) pat (IS.id_of_decl table_actions.ta_true)
-    | BFalse(pat) -> IS.new_rule( Cid.fresh ["bfalse"]) pat (IS.id_of_decl table_actions.ta_false)
+    delete_unmatchable_rules full_rules
   ;;
 
-  let from_if hdl_id opgraph opstmt = 
-    print_endline ("FROM IF STARTING.");
+  (* generate a real rule from a binary rule *)
+  let generate_rule table_actions binary_rule =
+    match binary_rule with
+    | BTrue pat ->
+      IS.new_rule
+        (Cid.fresh ["btrue"])
+        pat
+        (IS.id_of_decl table_actions.ta_true)
+    | BFalse pat ->
+      IS.new_rule
+        (Cid.fresh ["bfalse"])
+        pat
+        (IS.id_of_decl table_actions.ta_false)
+  ;;
+
+  let from_if hdl_id opgraph opstmt =
+    print_endline "FROM IF STARTING.";
     !dprint_endline "-----[from_if]-----";
     (* extract the details of the statement *)
     let exp, _, _, _ = unpack_if opstmt in
     (* get the toplevel expressions *)
-    let toplevel_exps = get_toplevel_exps exp in 
+    let toplevel_exps = get_toplevel_exps exp in
     (* get the keys *)
-    let key_vars = get_keys hdl_id exp in 
-
+    let key_vars = get_keys hdl_id exp in
     (* generate a list of binary rules for each toplevel expression *)
-    let toplevel_rule_lists = CL.map (binary_rules_from_toplevel_exp hdl_id key_vars) toplevel_exps in 
+    let toplevel_rule_lists =
+      CL.map (binary_rules_from_toplevel_exp hdl_id key_vars) toplevel_exps
+    in
     (* merge the rule lists together, being careful about shadows and reachability *)
-    let rule_list = new_merge hdl_id key_vars toplevel_rule_lists in 
-
+    let rule_list = new_merge hdl_id key_vars toplevel_rule_lists in
     (* generate the true and false actions *)
-    let table_actions = table_actions_of_ifnode opgraph opstmt in 
-
+    let table_actions = table_actions_of_ifnode opgraph opstmt in
     (* generate real rules from binary rules *)
-    let rules = CL.map (generate_rule table_actions) rule_list in 
+    let rules = CL.map (generate_rule table_actions) rule_list in
     (* wrap everything in a table *)
     (* wrap it in a table *)
     let tblname = tblname_of_stmt opstmt in
@@ -762,11 +782,10 @@ module TofinoControl = struct
     !dprint_endline (Pr.stmt_to_string opstmt);
     !dprint_endline "new objects:";
     log_objs opstmt new_objs;
-    print_endline ("[from_if] finished.");
-
+    print_endline "[from_if] finished.";
     new_objs
-  ;;  
-  
+  ;;
+
   (**** match statements ****)
   let condition_from_pat pat =
     match pat with

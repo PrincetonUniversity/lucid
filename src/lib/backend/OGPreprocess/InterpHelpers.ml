@@ -239,7 +239,8 @@ let is_atomic exp =
   | EIndex _
   | EVector _
   | ETuple _
-  | ESizeCast _ -> error "Should be removed before IR."
+  | ESizeCast _
+  | EStmt _ -> error "Should be removed before IR."
 ;;
 
 let is_bool_non_immediate exp = is_bool exp && not (is_immediate exp)

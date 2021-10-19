@@ -135,6 +135,7 @@ and e =
   | ECall of cid * exp list
   | EHash of size * exp list
   | ESizeCast of size * size (* Cast a size to int *)
+  | EStmt of statement * exp
   | ERecord of (string * exp) list
   | EWith of exp * (string * exp) list (* { e with ...} syntax *)
   | EProj of exp * string

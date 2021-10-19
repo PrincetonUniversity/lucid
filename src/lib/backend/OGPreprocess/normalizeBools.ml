@@ -58,7 +58,6 @@ module NormalizeRelops = struct
     test_var_cid, test_var_stmt
   ;;
 
-
   (* normalize a boolean expression in an if. *)
   let rec normalize_exp exp =
     print_endline ("[normalize_exp] " ^ Printing.exp_to_string exp);
@@ -99,28 +98,27 @@ module NormalizeRelops = struct
       (* optimization case -- int, int --> evaluate here and
           replace with a boolean value, but int, int ops
           should be eliminated earlier *)
-      | _ -> error "unexpected args for Eq or Neq")      
-    | Less -> 
+      | _ -> error "unexpected args for Eq or Neq")
+    | Less ->
       (match args with
-        | [e1; e2] -> 
-          let test_var_cid, calc_test_var = create_precompute_test e2 SatSub e1 in
-          let new_e1 = aexp (EVar test_var_cid) e1.ety Span.default in
-          let new_e2 = value_to_exp (vint 0 (intwidth_of_exp e1)) in
-          let new_exp = aexp (EOp (Neq, [new_e1; new_e2])) ety espan in
-          new_exp, [calc_test_var]
-        | _ -> error "unexpected args for Less"
-      )
-    | More -> 
+      | [e1; e2] ->
+        let test_var_cid, calc_test_var = create_precompute_test e2 SatSub e1 in
+        let new_e1 = aexp (EVar test_var_cid) e1.ety Span.default in
+        let new_e2 = value_to_exp (vint 0 (intwidth_of_exp e1)) in
+        let new_exp = aexp (EOp (Neq, [new_e1; new_e2])) ety espan in
+        new_exp, [calc_test_var]
+      | _ -> error "unexpected args for Less")
+    | More ->
       (match args with
-        | [e1; e2] -> 
-          let test_var_cid, calc_test_var = create_precompute_test e1 SatSub e2 in
-          let new_e1 = aexp (EVar test_var_cid) e1.ety Span.default in
-          let new_e2 = value_to_exp (vint 0 (intwidth_of_exp e1)) in
-          let new_exp = aexp (EOp (Neq, [new_e1; new_e2])) ety espan in
-          new_exp, [calc_test_var]
-        | _ -> error "unexpected args for More"
-      )
-    | Leq | Geq -> error "[normalize_erelop] Leq and Geq should have been eliminated by now" 
+      | [e1; e2] ->
+        let test_var_cid, calc_test_var = create_precompute_test e1 SatSub e2 in
+        let new_e1 = aexp (EVar test_var_cid) e1.ety Span.default in
+        let new_e2 = value_to_exp (vint 0 (intwidth_of_exp e1)) in
+        let new_exp = aexp (EOp (Neq, [new_e1; new_e2])) ety espan in
+        new_exp, [calc_test_var]
+      | _ -> error "unexpected args for More")
+    | Leq | Geq ->
+      error "[normalize_erelop] Leq and Geq should have been eliminated by now"
     (* other operators are the base case, because they cannot have rel ops as leaves *)
     | _ -> exp_sp (EOp (op, args)) espan, []
 
@@ -290,6 +288,7 @@ module NormalizeBoolExps = struct
     | EVector _, _ -> error "z3_from_expr got a vector expression."
     | ETuple _, _ -> error "z3_from_expr got a tuple expression."
     | ESizeCast _, _ -> error "z3_from_expr got a size cast expression."
+    | EStmt _, _ -> error "z3_from_expr got a statement expression."
   ;;
 
   (* tell Z3 to convert a boolean expression into disjunctive normal form *)

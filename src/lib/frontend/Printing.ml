@@ -288,15 +288,16 @@ let rec e_to_string e =
   | ETuple es -> "(" ^ concat_map ", " exp_to_string es ^ ")"
   | ESizeCast (sz1, sz2) ->
     Printf.sprintf "to_int<<%s>>(%s)" (size_to_string sz1) (size_to_string sz2)
+  | EStmt (s, e) ->
+    Printf.sprintf "{%s; return %s}" (stmt_to_string s) (exp_to_string e)
 
 and exp_to_string e = e_to_string e.e
 and es_to_string es = comma_sep exp_to_string es
 
-let params_to_string ps =
+and params_to_string ps =
   comma_sep (fun (i, t) -> ty_to_string t ^ " " ^ id_to_string i) ps
-;;
 
-let rec branch_to_string (ps, s) =
+and branch_to_string (ps, s) =
   Printf.sprintf
     "| %s -> {\n%s\n}"
     (comma_sep pat_to_string ps)

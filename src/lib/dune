@@ -45,6 +45,7 @@
    moduleElimination
    tupleElimination
    vectorElimination
+   eStmtElimination
    replaceUserTys
    linerate
    frontendPipeline

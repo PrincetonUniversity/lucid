@@ -347,6 +347,10 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
         e = EComp (inf_e1, idx, sz)
       ; ety = Some (mk_ty (TVector (inf_ety.raw_ty, sz)))
       } )
+  | EStmt (s, e1) ->
+    let env, inf_s = infer_statement env s in
+    let env, inf_e1, inf_e1ty = infer_exp env e1 |> textract in
+    env, { e with e = EStmt (inf_s, inf_e1); ety = Some inf_e1ty }
 
 and infer_op env span op args =
   let env, ty, new_args =
@@ -468,9 +472,8 @@ and infer_exps env es =
       es
   in
   env, List.rev es'
-;;
 
-let rec infer_statement (env : env) (s : statement) : env * statement =
+and infer_statement (env : env) (s : statement) : env * statement =
   (* (match s.s with
   | SSeq _ | SNoop -> ()
   | _ -> print_endline @@ "Inferring " ^ stmt_to_string s); *)
