@@ -390,6 +390,7 @@ let gen_sp b e span = statement_sp (SGen (b, e)) span
 let scall_sp cid args span = statement_sp (SUnit (call_sp cid args span)) span
 let match_sp es bs span = statement_sp (SMatch (es, bs)) span
 let loop_sp e i k span = statement_sp (SLoop (e, i, k)) span
+let sexp_sp e span = statement_sp (SUnit e) span
 
 (* Interface spefications *)
 let spec ispec = { ispec; ispan = Span.default }
