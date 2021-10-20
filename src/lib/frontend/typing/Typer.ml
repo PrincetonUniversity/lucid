@@ -978,10 +978,13 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
       leave_level ();
       unify_ty d.dspan ty inf_ety;
       let fty =
+        (* If called at top level the start/end effects don't matter; otherwise,
+           the constructor doesn't involve any global stuff, so it's stateless. *)
+        let eff = fresh_effect () in
         { arg_tys = List.map snd params
         ; ret_ty = ty
-        ; start_eff = fresh_effect ()
-        ; end_eff = fresh_effect ()
+        ; start_eff = eff
+        ; end_eff = eff
         ; constraints = ref []
         }
         |> generalizer#visit_func_ty ()

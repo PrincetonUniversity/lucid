@@ -339,10 +339,11 @@ let rec add_interface m_id old_env interface =
           end
         | InConstr (id, ret_ty, params) ->
           let fty =
+            let start_eff = fresh_effect () in
             { arg_tys = List.map (prefix_ty env % snd) params
             ; ret_ty = prefix_ty env ret_ty
-            ; start_eff = fresh_effect ()
-            ; end_eff = fresh_effect ()
+            ; start_eff
+            ; end_eff = start_eff
             ; constraints = ref []
             }
           in
