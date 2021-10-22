@@ -22,6 +22,7 @@ warning: examples/interp_tests/basics.dpt: Unconditional generation of potential
 
 -------Eliminating records-------
 -------Eliminating vectors-------
+-------Eliminating EStmts-------
 -------Eliminating tuples-------
 ---------------typing again-------------
 dpt: Auto-detected specification file examples/interp_tests/basics.json

@@ -22,6 +22,7 @@ warning: examples/interp_tests/NAT.dpt: Conditional generation of potential non-
 
 -------Eliminating records-------
 -------Eliminating vectors-------
+-------Eliminating EStmts-------
 -------Eliminating tuples-------
 ---------------typing again-------------
 dpt: Auto-detected specification file examples/interp_tests/NAT.json

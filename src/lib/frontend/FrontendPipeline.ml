@@ -49,6 +49,9 @@ let process_prog ds =
   print_endline "-------Eliminating vectors-------";
   let ds = VectorElimination.eliminate_prog ds in
   print_if_verbose ds;
+  print_endline "-------Eliminating EStmts-------";
+  let ds = EStmtElimination.eliminate_prog ds in
+  print_if_verbose ds;
   print_endline "-------Eliminating tuples-------";
   let ds = TupleElimination.eliminate_prog ds in
   print_if_verbose ds;

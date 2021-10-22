@@ -54,6 +54,7 @@ warning: examples/interp_tests/global_args.dpt: Conditional generation of potent
 
 -------Eliminating records-------
 -------Eliminating vectors-------
+-------Eliminating EStmts-------
 -------Eliminating tuples-------
 ---------------typing again-------------
 dpt: Auto-detected specification file examples/interp_tests/global_args.json

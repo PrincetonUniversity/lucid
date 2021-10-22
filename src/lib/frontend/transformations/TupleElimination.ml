@@ -11,7 +11,10 @@ open Collections
 let extract_etuple e =
   match e.e with
   | ETuple es -> es
-  | _ -> failwith @@ "Bad extract_etuple: " ^ Printing.exp_to_string e
+  | _ ->
+    Console.error
+    @@ "Internal error (extract_etuple): "
+    ^ Printing.exp_to_string e
 ;;
 
 (* Given an id and a list of types, create a fresh id for each type *)
