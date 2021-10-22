@@ -4,8 +4,7 @@ handle foo (Array.t<<32>> arrg) {
     printf("");
 }
 
-// Uncomment line 9 when we get this working
 fun void bar (Array.t<<32>> fa) {
-    //generate foo(fa);
+    generate foo(fa);
     return;
 }

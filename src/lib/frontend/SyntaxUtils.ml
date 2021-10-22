@@ -274,7 +274,7 @@ let is_global ty = is_global_rty ty.raw_ty
 
 let default_expression ty =
   let rec aux rty =
-    match rty with
+    match TyTQVar.strip_links rty with
     | TInt size -> eint (Z.of_int 32) (Some size)
     | TBool -> value_to_exp (vbool false)
     | TVector (raw_ty, size) ->
@@ -287,8 +287,8 @@ let default_expression ty =
       record_sp (List.map (fun (s, raw_ty) -> s, aux raw_ty) lst) Span.default
     | _ ->
       failwith
-        "Can only create default expression for types int or bool, or records \
-         and vectors of such."
+      @@ "Can only create default expression for types int or bool, or records \
+          and vectors of such"
   in
   aux ty.raw_ty
 ;;

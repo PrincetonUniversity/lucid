@@ -33,11 +33,11 @@ let process_prog ds =
   print_if_verbose "-------Inlining size declarations---------";
   let ds = SizeInlining.replace_prog ds in
   print_if_debug ds;
-  print_if_verbose "---------Eliminating events with global arguments----------";
-  let ds = GlobalArgElimination.eliminate_prog ds in
-  print_if_debug ds;
   print_if_verbose "-----------inlining functions-----------";
   let ds = FunctionInlining.inline_prog ds in
+  print_if_debug ds;
+  print_if_verbose "---------Eliminating events with global arguments----------";
+  let ds = GlobalArgElimination.eliminate_prog ds in
   print_if_debug ds;
   print_if_verbose "---------------typing again-------------";
   let ds = Typer.infer_prog ds in

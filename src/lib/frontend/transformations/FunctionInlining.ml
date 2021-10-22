@@ -201,7 +201,12 @@ let inline_decl env d =
     let body =
       TyperInstGen.instantiator#visit_body (TyperInstGen.fresh_maps ()) body
     in
-    env, Some { d with d = DHandler (id, inline_body env body) }
+    let d' =
+      TyperInstGen.generalizer#visit_decl
+        ()
+        { d with d = DHandler (id, inline_body env body) }
+    in
+    env, Some d'
   | DGlobal (id, ty, e) ->
     env, Some { d with d = DGlobal (id, ty, inliner#visit_exp env e) }
     (* Other stuff is unaffected *)
