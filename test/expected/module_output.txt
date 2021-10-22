@@ -1,22 +1,5 @@
 dpt: Parsing ...
 Processing examples/interp_tests/module.dpt
--------Eliminating type aliases 1---------
--------Checking well-formedness---------
----------typing---------
----------Making returns explicit-------------
------------renaming-----------
--------Eliminating modules---------
--------Eliminating type aliases 2---------
--------Inlining size declarations---------
----------Eliminating events with global arguments----------
------------inlining functions-----------
----------------typing again-------------
-------------Checking entry handlers---------------
--------Eliminating records-------
--------Eliminating vectors-------
--------Eliminating EStmts-------
--------Eliminating tuples-------
----------------typing again-------------
 dpt: Auto-detected specification file examples/interp_tests/module.json
 dpt: Simulating...
 dpt: Using random seed: 0

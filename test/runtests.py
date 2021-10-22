@@ -28,7 +28,7 @@ for file in testfiles:
     outname = "{}_output.txt".format(file)
     with open("test/output/"+outname, "w") as outfile:
         fullfile = "examples/interp_tests/"+file+".dpt"
-        cmd = ["./dpt", fullfile]
+        cmd = ["./dpt", "--silent", fullfile]
         ret = subprocess.run(cmd, stdout=outfile, stderr=subprocess.DEVNULL)
     if ret.returncode != 0:
         errors.append(file)
@@ -39,7 +39,7 @@ for file in testfiles:
 def just_typecheck(path, file, suffix = ""):
     print("Typechecking "+file)
     fullfile = path+file+suffix
-    cmd = ["./dpt", fullfile]
+    cmd = ["./dpt", "--silent",  fullfile]
     ret = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if ret.returncode != 0:
         errors.append(file)

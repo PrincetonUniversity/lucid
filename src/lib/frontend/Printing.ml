@@ -229,7 +229,7 @@ and event_to_string { eid; data; edelay; elocations } =
     | [] -> "self"
     | _ -> list_to_string location_to_string elocations
   in
-  let locstr = if cfg.verbose then "@" ^ locstr else "" in
+  let locstr = if cfg.verbose_types then "@" ^ locstr else "" in
   let delaystr =
     if edelay <> 0 && cfg.verbose_types
     then "@" ^ string_of_int edelay ^ "ns"

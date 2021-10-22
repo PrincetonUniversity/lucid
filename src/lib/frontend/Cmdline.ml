@@ -1,5 +1,7 @@
 type config =
   { mutable verbose : bool
+        (* Print out each transformation name before we do it *)
+  ; mutable debug : bool
         (** Print out the whole program after each transformation *)
   ; mutable show_effects : bool (** Print out effect annotations *)
   ; mutable verbose_types : bool (** Print out extra typing information *)
@@ -17,7 +19,8 @@ type config =
    are applied (if we're using the interpreter) *)
 
 let default () =
-  { verbose = false
+  { verbose = true
+  ; debug = false
   ; show_effects = false
   ; verbose_types = false
   ; show_tvar_links = false
@@ -32,13 +35,14 @@ let default () =
 let cfg = default ()
 
 let parse () =
-  let set_verbose () = cfg.verbose <- true in
+  let unset_verbose () = cfg.verbose <- false in
+  let set_debug () = cfg.debug <- true in
   let set_effects () = cfg.show_effects <- true in
   let set_types () = cfg.verbose_types <- true in
   let set_tvars () = cfg.show_tvar_links <- true in
   let set_spec s = cfg.spec_file <- s in
   let print_all () =
-    set_verbose ();
+    set_debug ();
     set_effects ();
     set_types ();
     set_tvars ()
@@ -53,11 +57,14 @@ let parse () =
     set_all_effects ()
   in
   let speclist =
-    [ ( "--verbose"
-      , Arg.Unit set_verbose
+    [ ( "--silent"
+      , Arg.Unit unset_verbose
+      , "Don't print transformation names before we do them" )
+    ; ( "--debug"
+      , Arg.Unit set_debug
       , "Print out the whole program after each transformation" )
-    ; ( "-v"
-      , Arg.Unit set_verbose
+    ; ( "-d"
+      , Arg.Unit set_debug
       , "Print out the whole program after each transformation" )
     ; "--effects", Arg.Unit set_effects, "Print out effect annotations"
     ; "--types", Arg.Unit set_types, "Print out extra typing information"
