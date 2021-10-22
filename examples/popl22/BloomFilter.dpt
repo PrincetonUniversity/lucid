@@ -22,7 +22,7 @@ module BloomFilter : {
 
   fun void add_to_filter(t<<'a, 'k>> filter, 'any key) {
     for (i < 'k) {
-      Array.set(filter#arrs[i], hash<<'b>>(filter#hash_seeds[i], key), 1);
+      Array.set(filter#arrs[i], hash<<'a>>(filter#hash_seeds[i], key), 1);
     }
   }
 
