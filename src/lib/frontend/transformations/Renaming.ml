@@ -295,6 +295,19 @@ let rename prog =
         env <- old_env;
         SLoop (s, i, k)
 
+      method! visit_SMatch dummy es branches =
+        let es = List.map (self#visit_exp dummy) es in
+        let old_env = env in
+        let branches =
+          List.map
+            (fun b ->
+              let ret = self#visit_branch dummy b in
+              env <- old_env;
+              ret)
+            branches
+        in
+        SMatch (es, branches)
+
       (*** Special Cases ***)
       method! visit_params dummy params =
         (* Don't rename parameters unless they're part of a body declaration *)

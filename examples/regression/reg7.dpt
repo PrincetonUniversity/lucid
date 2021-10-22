@@ -1,0 +1,11 @@
+fun 'a id('a x) { return x; }
+
+event foo(int in_port, int out_port, int src_ip, int dst_ip) {
+  match in_port, out_port with
+  | 0, 1 -> { int<<32>> src_ip = (int<<32>>)src_ip;
+              int<<32>> dst_ip = (int<<32>>)dst_ip;
+              id([src_ip; dst_ip]); }
+  | _, _ -> { int<<32>> src_ip = (int<<32>>)src_ip;
+              int<<32>> dst_ip = (int<<32>>)dst_ip;
+              id([src_ip; dst_ip]); }
+}
