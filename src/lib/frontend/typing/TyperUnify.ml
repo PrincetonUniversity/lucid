@@ -192,7 +192,9 @@ let rec try_unify_ty span ty1 ty2 =
   then ()
   else (
     unify_raw_ty span ty1.raw_ty ty2.raw_ty;
-    try_unify_effect span ty1.teffect ty2.teffect;
+    (* Don't unify effects for things which definitely aren't global *)
+    if not (SyntaxUtils.is_not_global_rty ty1.raw_ty)
+    then try_unify_effect span ty1.teffect ty2.teffect;
     match !(ty1.tprint_as) with
     | None -> ty1.tprint_as := !(ty2.tprint_as)
     | Some x -> ty2.tprint_as := Some x)

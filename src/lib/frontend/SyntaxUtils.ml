@@ -272,6 +272,19 @@ let rec is_global_rty rty =
 
 let is_global ty = is_global_rty ty.raw_ty
 
+(* Similar to is_global_rty, but also returns false for TQVars *)
+let rec is_not_global_rty rty =
+  match TyTQVar.strip_links rty with
+  | TBool | TVoid | TGroup | TInt _ | TEvent _ | TFun _ | TMemop _ -> true
+  | TQVar _ -> false (* I think *)
+  | TName (_, _, b) -> not b
+  | TTuple lst -> List.for_all is_not_global_rty lst
+  | TRecord lst -> List.for_all (fun (_, rty) -> is_not_global_rty rty) lst
+  | TVector (t, _) -> is_not_global_rty t
+;;
+
+let is_not_global ty = is_not_global_rty ty.raw_ty
+
 let default_expression ty =
   let rec aux rty =
     match TyTQVar.strip_links rty with
