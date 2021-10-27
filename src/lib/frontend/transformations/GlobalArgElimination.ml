@@ -44,10 +44,11 @@ let collect_globals ds : global_info =
         | _ -> None)
       ds
   in
+  let start_id = Id.create "start" in
   List.fold_lefti
     (fun (idmap, gmap) i (id, gty) ->
       IdMap.add id i idmap, GMap.add (id, gty) gmap)
-    (IdMap.empty, GMap.empty)
+    (IdMap.singleton start_id 0, GMap.empty)
     gs
 ;;
 
