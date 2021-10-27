@@ -237,7 +237,7 @@ let rec validate_interface prefix env interface =
           }
           |> normalize_tfun
         in
-        compare_tfuns spec.ispan "Function" id expected_func_ty func_ty
+        compare_tfuns spec.ispan "Function" id func_ty expected_func_ty
       | InEvent (id, cspecs, params) ->
         if not (KindSet.mem (KConst, prefix id) env.module_defs)
         then err_id spec.ispan "event" id;
@@ -285,7 +285,7 @@ let rec validate_interface prefix env interface =
           }
           |> normalize_tfun
         in
-        compare_tfuns spec.ispan "Event" id expected_fty func_ty
+        compare_tfuns spec.ispan "Event" id func_ty expected_fty
       | InModule (m_id, intf) ->
         validate_interface (fun id -> Compound (m_id, prefix id)) env intf)
     interface
