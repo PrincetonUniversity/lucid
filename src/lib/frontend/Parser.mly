@@ -103,6 +103,7 @@
 %token <Span.t> BITXOR
 %token <Span.t> SATPLUS
 %token <Span.t> BITNOT
+%token <Span.t> SYMBOLIC
 
 %token EOF
 
@@ -285,6 +286,7 @@ tyname_def:
 decl:
     | CONST ty ID ASSIGN exp SEMI           { [dconst_sp (snd $3) $2 $5 (Span.extend $1 $6)] }
     | EXTERN ty ID SEMI                     { [dextern_sp (snd $3) $2 (Span.extend $1 $4)] }
+    | SYMBOLIC ty ID SEMI                   { [dsymbolic_sp (snd $3) $2 (Span.extend $1 $4)] }
     | event_decl SEMI                       { [event_sp (second $1) (snd (first $1)) (fourth $1) (third $1) (Span.extend (fst (first $1)) $2)] }
     | event_decl LBRACE statement RBRACE    { [event_sp (second $1) (snd (first $1)) (fourth $1) (third $1) (Span.extend (fst (first $1)) $4);
                                                handler_sp (second $1) (third $1) $3 (Span.extend (fst (first $1)) $4)] }
@@ -296,8 +298,9 @@ decl:
                                             { [fun_sp (snd $3) $2 $5 $4 $7 (Span.extend $1 $8)] }
     | MEMOP ID paramsdef LBRACE statement RBRACE
                                             { [memop_sp (snd $2) $3 $5 (Span.extend $1 $6)] }
-    | SIZE ID ASSIGN size SEMI              { [dsize_sp (snd $2) (snd $4) (Span.extend $1 (fst $4))] }
-    | GROUP ID ASSIGN LBRACE args RBRACE SEMI { [group_sp (snd $2) $5 (Span.extend $1 $6)] }
+    | SYMBOLIC SIZE ID SEMI                 { [dsize_sp (snd $3) None (Span.extend $1 $4)] }
+    | SIZE ID ASSIGN size SEMI              { [dsize_sp (snd $2) (Some (snd $4)) (Span.extend $1 $5)] }
+    | GROUP ID ASSIGN LBRACE args RBRACE SEMI { [group_sp (snd $2) $5 (Span.extend $1 $7)] }
     | MODULE ID LBRACE decls RBRACE         { [module_sp (snd $2) [] $4 (Span.extend $1 $5)] }
     | MODULE ID COLON LBRACE interface RBRACE LBRACE decls RBRACE
                                             { [module_sp (snd $2) $5 $8 (Span.extend $1 $9)] }

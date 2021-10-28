@@ -405,10 +405,10 @@ let interp_decl (nst : State.network_state) swid d =
     in
     State.add_global swid (Id x) (V (vgroup vs)) nst;
     nst
-  | DExtern _ | DSize _ ->
-    failwith
-      "Extern and size declarations should be handled during preprocessing"
-  | DUserTy _ | DConstr _ | DModule _ -> failwith "Should be eliminated"
+  | DExtern _ ->
+    failwith "Extern declarations should be handled during preprocessing"
+  | DUserTy _ | DConstr _ | DModule _ | DSymbolic _ | DSize _ ->
+    failwith "Should be eliminated"
 ;;
 
 let process_decls nst ds =

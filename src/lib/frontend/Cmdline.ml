@@ -13,6 +13,8 @@ type config =
   ; mutable use_type_names : bool
   ; mutable show_all_effects : bool (* Show effects even for non-global types *)
   ; mutable spec_file : string (** Path to an interpreter specification file *)
+  ; mutable symb_file : string (** Path to a symbolic specification file *)
+  ; mutable dpt_file : string (** Path to the input dpt file *)
   }
 
 (* TODO: We might want to add more parameters controlling which transformations
@@ -29,10 +31,13 @@ let default () =
   ; use_type_names = true
   ; show_all_effects = false
   ; spec_file = ""
+  ; symb_file = ""
+  ; dpt_file = ""
   }
 ;;
 
 let cfg = default ()
+let set_dpt_file fname = cfg.dpt_file <- fname
 
 let parse () =
   let unset_verbose () = cfg.verbose <- false in
@@ -41,6 +46,7 @@ let parse () =
   let set_types () = cfg.verbose_types <- true in
   let set_tvars () = cfg.show_tvar_links <- true in
   let set_spec s = cfg.spec_file <- s in
+  let set_symb s = cfg.symb_file <- s in
   let print_all () =
     set_debug ();
     set_effects ();
@@ -75,6 +81,7 @@ let parse () =
     ; ( "--spec"
       , Arg.String set_spec
       , "Path to the interpreter specification file" )
+    ; "--symb", Arg.String set_symb, "Path to the symbolic specification file"
     ; ( "--queries"
       , Arg.Unit set_queries
       , "If true, print out SMT queries made during typechecking. Not enabled \

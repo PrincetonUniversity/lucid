@@ -11,10 +11,11 @@ let replacer =
     inherit [_] s_map
 
     method! visit_DSize env id sz =
+      let sz = Option.get sz in
       let sz = self#visit_size env sz in
       env := CidMap.add (Id id) sz !env;
       (* We will filter this declaration later *)
-      DSize (id, sz)
+      DSize (id, Some sz)
 
     method! visit_IUser env cid =
       match CidMap.find_opt cid !env with

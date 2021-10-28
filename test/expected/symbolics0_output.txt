@@ -1,0 +1,29 @@
+dpt: Parsing ...
+Processing examples/interp_tests/symbolics0.dpt
+dpt: Auto-detected symbolic file examples/interp_tests/symbolics0.symb
+dpt: Auto-detected specification file examples/interp_tests/symbolics0.json
+dpt: Simulating...
+dpt: Using random seed: 0
+
+t=0: Handling event in(0) at switch 0
+dpt: Final State:
+
+Switch 0 : {
+
+ Pipeline : [
+    0 : [0u16; 0u16; 0u16; 0u16; 0u16]
+    1 : [0u16; 3u16; 0u16; 0u16; 0u16]
+    2 : [0u16; 0u16; 6u16; 0u16; 0u16]
+    3 : [0u16; 0u16; 0u16; 9u16; 0u16]
+    4 : [0u16; 0u16; 0u16; 0u16; 12u16]
+  ]
+
+ Events :   [ ]
+
+ Exits :    [ ]
+
+ entry events handled: 0
+ total events handled: 1
+
+}
+dpt: Done

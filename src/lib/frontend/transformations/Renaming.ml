@@ -196,7 +196,7 @@ let rename prog =
           let new_x = self#freshen_var x in
           DGlobal (new_x, replaced_ty, replaced_e)
         | DSize (x, size) ->
-          let replaced_size = self#visit_size dummy size in
+          let replaced_size = Option.map (self#visit_size dummy) size in
           let new_x = self#freshen_size x in
           DSize (new_x, replaced_size)
         | DMemop (x, body) ->
@@ -239,6 +239,10 @@ let rename prog =
           let new_ty = self#visit_ty dummy ty in
           let new_x = self#freshen_var x in
           DExtern (new_x, new_ty)
+        | DSymbolic (x, ty) ->
+          let new_ty = self#visit_ty dummy ty in
+          let new_x = self#freshen_var x in
+          DSymbolic (new_x, new_ty)
         | DGroup (x, es) ->
           let new_es = List.map (self#visit_exp dummy) es in
           let new_x = self#freshen_var x in

@@ -25,12 +25,13 @@ let preprocess ds =
           , d :: ds )
         | DExtern (id, ty) ->
           { pp with externs = Env.add (Id id) ty pp.externs }, ds
-        | DSize (id, size) ->
-          ( { pp with
+        | DSize _ ->
+          failwith "Size declarations should be inlined by now"
+          (* ( { pp with
               sizes =
                 Env.add (Id id) (InterpCore.compute_size pp.sizes size) pp.sizes
             }
-          , ds )
+          , ds ) *)
         | _ -> pp, d :: ds)
       (empty, [])
       ds
