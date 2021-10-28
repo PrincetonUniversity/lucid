@@ -1,0 +1,20 @@
+symbolic size a;
+symbolic size b;
+
+symbolic int n1;
+symbolic int<<a>> n2;
+symbolic bool b;
+
+global Array.t<<a>>[b] arrs = [Array.create(n1) for i < b];
+
+memop add(int<<'a>> x, int <<'b>> y) {
+  return x + y;
+}
+
+event in(int<<a>> arg) {
+  for (i < b) {
+    Array.setm(arrs[i], size_to_int(i), add, arg);
+    if (b) { arg = arg + n2 + 1; }
+    else { arg = arg + n2; }
+  }
+}

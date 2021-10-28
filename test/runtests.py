@@ -1,6 +1,6 @@
 import subprocess, os, filecmp
 
-testfiles = [
+interpfiles = [
 "basics",
 "NAT",
 "chain_stateful_firewall",
@@ -10,7 +10,9 @@ testfiles = [
 "user_types",
 "module",
 "operators",
-"BloomFilter"
+"BloomFilter",
+"symbolics",
+"symbolics0"
 ]
 
 libraryfiles = [x for x in os.listdir("examples/library/") if x.endswith(".dpt")]
@@ -23,12 +25,12 @@ diffs = []
 if not (os.path.isdir("test/output")):
     os.mkdir("test/output")
 
-for file in testfiles:
+def interp_test(file, args):
     print("Running test on "+file)
     outname = "{}_output.txt".format(file)
     with open("test/output/"+outname, "w") as outfile:
         fullfile = "examples/interp_tests/"+file+".dpt"
-        cmd = ["./dpt", "--silent", fullfile]
+        cmd = ["./dpt", "--silent", fullfile] + args
         ret = subprocess.run(cmd, stdout=outfile, stderr=subprocess.DEVNULL)
     if ret.returncode != 0:
         errors.append(file)
@@ -43,6 +45,10 @@ def just_typecheck(path, file, suffix = ""):
     ret = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if ret.returncode != 0:
         errors.append(file)
+
+
+for file in interpfiles:
+    interp_test(file, [])
 
 for file in libraryfiles:
     just_typecheck("examples/library/", file)

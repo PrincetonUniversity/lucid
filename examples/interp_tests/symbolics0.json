@@ -1,0 +1,8 @@
+{
+  "max time": 90000000,
+  "default input gap": 1000,
+  "random seed": 0,
+  "events": [
+    {"name":"in", "args": [0]}
+  ]
+}
