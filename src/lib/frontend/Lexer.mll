@@ -69,6 +69,7 @@ rule token = parse
   | "end"             { END (position lexbuf) }
   | "for"             { FOR (position lexbuf) }
   | "size_to_int"     { SIZECAST (position lexbuf) }
+  | "symbolic"        { SYMBOLIC (position lexbuf) }
   | id as s           { ID (position lexbuf, Id.create s) }
   | "'"(id as s)      { QID (position lexbuf, Id.create s) }
   | num as n          { NUM (position lexbuf, Z.of_string n) }

@@ -210,7 +210,13 @@ let inline_decl env d =
   | DGlobal (id, ty, e) ->
     env, Some { d with d = DGlobal (id, ty, inliner#visit_exp env e) }
     (* Other stuff is unaffected *)
-  | DUserTy _ | DExtern _ | DEvent _ | DConst _ | DGroup _ | DSize _ ->
+  | DUserTy _
+  | DExtern _
+  | DSymbolic _
+  | DEvent _
+  | DConst _
+  | DGroup _
+  | DSize _ ->
     (* We can't inline an exp that's not part of a statement *) env, Some d
   | DMemop _ ->
     (* No function calls allowed in Memops *)

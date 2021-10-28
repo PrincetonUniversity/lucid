@@ -199,7 +199,7 @@ and interface = interface_spec list
 
 (* declarations *)
 and d =
-  | DSize of id * size
+  | DSize of id * size option
   | DGlobal of id * ty * exp
   | DEvent of id * event_sort * constr_spec list * params
   | DHandler of id * body
@@ -208,6 +208,7 @@ and d =
   | DConst of id * ty * exp
   | DGroup of id * exp list
   | DExtern of id * ty
+  | DSymbolic of id * ty
   | DUserTy of id * sizes * ty
   | DConstr of id * ty * params * exp
   | DModule of id * interface * decls
@@ -352,6 +353,7 @@ let decl_sp d span = { d; dspan = span }
 let dglobal_sp id ty exp span = decl_sp (DGlobal (id, ty, exp)) span
 let dconst_sp id ty e span = decl_sp (DConst (id, ty, e)) span
 let dextern_sp id ty span = decl_sp (DExtern (id, ty)) span
+let dsymbolic_sp id ty span = decl_sp (DSymbolic (id, ty)) span
 let handler_sp id p body span = decl_sp (DHandler (id, (p, body))) span
 let dsize_sp id size span = decl_sp (DSize (id, size)) span
 let fun_sp id rty cs p body span = decl_sp (DFun (id, rty, cs, (p, body))) span

@@ -99,7 +99,7 @@ let rec instantiate_prog ds =
         match d.d with
         (* No point instantiating if there aren't any things to unify
            the sub-parts with. *)
-        | DUserTy _ | DExtern _ | DSize _ | DEvent _ -> d
+        | DUserTy _ | DExtern _ | DSymbolic _ | DSize _ | DEvent _ -> d
         (* For modules, don't instantiate the inferface, for the same reason *)
         | DModule (id, intf, ds) ->
           leave_level ();

@@ -783,8 +783,8 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
   (* print_endline @@ "Inferring decl " ^ decl_to_string d; *)
   let env, effect_count, new_d =
     match d.d with
-    | DSize (id, size) ->
-      validate_size d.dspan env size;
+    | DSize (id, szo) ->
+      let _ = Option.map (validate_size d.dspan env) szo in
       ( { env with sizes = CidSet.add (Id id) env.sizes } |> def KSize id
       , effect_count
       , d.d )
@@ -828,6 +828,17 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
         { env with consts = CidMap.add (Id id) ty env.consts } |> def KConst id
       in
       env, effect_count, DExtern (id, ty)
+    | DSymbolic (id, ty) ->
+      if is_global ty
+      then
+        error_sp ty.tspan
+        @@ "Type "
+        ^ ty_to_string ty
+        ^ " is global and cannot be declared symbolic";
+      let env =
+        { env with consts = CidMap.add (Id id) ty env.consts } |> def KConst id
+      in
+      env, effect_count, DSymbolic (id, ty)
     | DGroup (id, es) ->
       enter_level ();
       let _, inf_args = infer_exps env es in

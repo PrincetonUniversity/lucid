@@ -435,8 +435,13 @@ and d_to_string d =
       (id_to_string id)
       (params_to_string params)
       (stmt_to_string s)
-  | DSize (id, size) ->
-    Printf.sprintf "size %s = %s;" (id_to_string id) (size_to_string size)
+  | DSize (id, szo) ->
+    begin
+      match szo with
+      | None -> Printf.sprintf "size %s;" (id_to_string id)
+      | Some size ->
+        Printf.sprintf "size %s = %s;" (id_to_string id) (size_to_string size)
+    end
   | DConst (id, ty, e) ->
     Printf.sprintf
       "const %s %s = %s;"
@@ -445,6 +450,8 @@ and d_to_string d =
       (exp_to_string e)
   | DExtern (id, ty) ->
     Printf.sprintf "extern %s %s;" (id_to_string id) (ty_to_string ty)
+  | DSymbolic (id, ty) ->
+    Printf.sprintf "symbolic %s %s;" (id_to_string id) (ty_to_string ty)
   | DGroup (id, es) ->
     Printf.sprintf
       "group %s = {%s};"

@@ -264,7 +264,7 @@ let rec check_qvars d =
   | DFun _ | DMemop _ -> (* No restrictions *) ()
   | DGlobal _ ->
     (* None allowed at all *) basic_qvar_checker#visit_decl (true, true) d
-  | DSize _ | DConst _ | DGroup _ | DExtern _ ->
+  | DSize _ | DSymbolic _ | DConst _ | DGroup _ | DExtern _ ->
     (* Only allowed in effect *) basic_qvar_checker#visit_decl (false, true) d
   | DConstr _ ->
     (* Allowed in both sizes and effects *)

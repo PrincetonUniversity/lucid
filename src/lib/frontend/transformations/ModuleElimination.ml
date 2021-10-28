@@ -59,6 +59,7 @@ let add_definitions prefix env ds =
     match d.d with
     | DConst (id, _, _)
     | DExtern (id, _)
+    | DSymbolic (id, _)
     | DFun (id, _, _, _)
     | DGroup (id, _)
     | DMemop (id, _)
@@ -106,6 +107,9 @@ let rec replace_module env m_id ds =
           | DExtern (id, x) ->
             ( { env with vars = add_entry env.vars id }
             , DExtern (prefix id, x) |> wrap d )
+          | DSymbolic (id, x) ->
+            ( { env with vars = add_entry env.vars id }
+            , DSymbolic (prefix id, x) |> wrap d )
           | DFun (id, x, y, z) ->
             ( { env with vars = add_entry env.vars id }
             , DFun (prefix id, x, y, z) |> wrap d )
