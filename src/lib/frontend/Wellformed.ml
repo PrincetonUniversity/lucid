@@ -13,6 +13,7 @@ open Printing
    - No constructors/global declarations for non-global types
    - Only certain types allowed as externs (just ints? I guess bools too?)
    - All events have exactly one handler declared, which must be in the same scope as them.
+   - All sizes in symbolic declarations are either concrete or symbolic themselves
 
    Checks we do during typechecking:
    - No dynamic global creation
@@ -71,6 +72,36 @@ let check_decls ds =
     | _ -> ()
   in
   List.iter (check_decl false) ds
+;;
+
+(* Next up: Check that symbolic declarations don't use any non-symbolic sizes.
+   We could remove this constraint if we wanted by inlining concrete sizes immediately,
+   but that's possible tricky if the sizes appear inside of module. *)
+let check_symbolics ds =
+  let checker =
+    object (self)
+      inherit [_] s_iter
+
+      method! visit_IUser env cid =
+        match cid with
+        | Id id when IdSet.mem id !env -> ()
+        | _ -> raise @@ Failure (Printing.cid_to_string cid)
+
+      method! visit_decl env d =
+        match d.d with
+        | DSize (id, None) -> env := IdSet.add id !env
+        | DSymbolic (id, ty) ->
+          (try self#visit_ty env ty with
+          | Failure s ->
+            Console.error
+            @@ "Unknown or non-symbolic size "
+            ^ s
+            ^ " appears in type of symbolic "
+            ^ Printing.id_to_string id)
+        | _ -> ()
+    end
+  in
+  checker#visit_decls (ref IdSet.empty) ds
 ;;
 
 (* Next up: make sure each event has exactly one handler defined, which must be
@@ -134,7 +165,8 @@ let rec match_handlers ?(m_cid = None) (ds : decls) =
 
 let pre_typing_checks ds =
   check_decls ds;
-  match_handlers ds
+  match_handlers ds;
+  check_symbolics ds
 ;;
 
 (*** QVar checking. This is run on each decl after its type is inferred, and makes

@@ -17,6 +17,7 @@ let cfg = Cmdline.cfg
 
 let main () =
   let target_filename = Cmdline.parse () in
+  Cmdline.set_dpt_file target_filename;
   Console.report "Parsing ...";
   let ds = Input.parse target_filename in
   let renaming, ds = FrontendPipeline.process_prog ds in
