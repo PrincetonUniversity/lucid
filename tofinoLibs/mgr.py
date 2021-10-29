@@ -78,8 +78,12 @@ class Manager(object):
     print ("mgr.py disconnect complete.")
 
   def port_up(self, dpid, rate, fec_type):  
+    print ("bringing port %s up"%dpid)
     self.pal.pal_port_add(0, dpid, rate, fec_type)
-    self.pal.pal_port_enable(0, port)
+    # disable and then enable auto-negotiation
+    self.pal.pal_port_an_set(0, dpid, 2)
+    self.pal.pal_port_enable(0, dpid)
+    self.pal.pal_port_an_set(0, dpid, 1)
 
   def add_mc_group(self, mc_gid, dpids):
     lag_map = set_port_or_lag_bitmap(256, [])

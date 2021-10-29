@@ -2,7 +2,7 @@
 # simple shell to build and run the components of a p4 program + c manager.
 
 # simulation configuration
-PORT_DPIDS="128 132 136 140 144 148 152 156 160 164 168 172 176 180 184 188 192"
+PORT_DPIDS="128 129 130 131 132 136 140 144 148 152 156 160 164 168 172 176 180 184 188 192"
 RECIRC_DPID="196"
 LOG_DIR="run_logs"
 MODEL_LOG_BASE="model_"
@@ -161,10 +161,13 @@ create_veth_pair() {
     config_veth $2
 }
 
+# get a userspace veth from a tofino dpid
 function dpid_to_host_veth() {
     echo "veth$(( $1 * 2 + 1 ))"
 }
 
+# generate a configuration file for the tofino model 
+# that maps dpids to veth pairs
 create_veth_pairs() {
     echo "setting up veths for ports in simulator"
     json_str="{\"PortToVeth\": ["
@@ -187,6 +190,14 @@ create_veth_pairs() {
 
     json_str="$json_str]}"
     echo $json_str > $(to_vethconf_fn)
+}
+
+function print_userspace_veths() {
+    echo "tofino dpid,userspace veth" 
+    for i in $PORT_DPIDS; do 
+        echo "$i,$(dpid_to_host_veth $i)"
+    done
+
 }
 
 # multi-threading helpers
@@ -283,10 +294,11 @@ function killsim() {
     sudo killall tofino-model
 }
 
-
 function runsim() {
     startsim $1
     # wait for ctl + c or exit
+    echo "**** ports available in simulation ****"
+    print_userspace_veths
     echo "**** simulation running -- press ctrl+c to terminate. ****"
     trap 'stopsim' 9
     wait $SWITCHD_PID
@@ -296,6 +308,19 @@ function starthw() {
     local CONF_FN=$(to_conf_fn "$1")
     local MGR_BIN=$(to_switchd_bin "$1")
     local MGR_PY=$(to_python_mgr "$1")
+    echo "running on: $CONF_FN"    
+
+    # start the switchd program
+    start_switchd "$CONF_FN" "$MGR_BIN"
+    SWITCHD_PID=$!
+
+    # run the python manager script
+    start_python "$MGR_PY"    
+}
+function starthw_custom_py() {
+    local CONF_FN=$(to_conf_fn "$1")
+    local MGR_BIN=$(to_switchd_bin "$1")
+    local MGR_PY=$2
     echo "running on: $CONF_FN"    
 
     # start the switchd program
@@ -316,6 +341,15 @@ function runhw() {
     trap 'stophw' 9
     wait $SWITCHD_PID
 }
+
+function runhw_custom_py(){
+    starthw_custom_py $1 $2
+    # wait for ctl + c or exit
+    echo "**** switchd running -- press ctrl+c to terminate. ****"
+    trap 'stophw' 9
+    wait $SWITCHD_PID
+}
+
 # ======  End of running  =======
 
 # ===============================
@@ -418,6 +452,8 @@ function main() {
         "sim") shift; runsim $@
         ;;
         "hw") shift; runhw $@
+        ;;
+        "hw_custom_py") shift; runhw_custom_py $@
         ;;
         "send_and_collect_pcap") shift; send_and_collect_pcap $@
         ;;

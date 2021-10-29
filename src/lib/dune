@@ -105,7 +105,6 @@
    p4tPrint
    p4tMgrPrint
    linkP4
-   genP4tappProj
    packageTofinoApp
    ioUtils
    logIr

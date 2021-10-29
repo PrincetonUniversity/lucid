@@ -7,6 +7,15 @@ all:
 	}
 
 
+externs:
+	{ \
+	cd ../../ ;\
+	make ;\
+	cd - ;\
+	../../dptc externs.dpt ip_harness.p4 linker_config.json build --spec externs.json ;\
+	}
+
+
 salu_dedup:
 	{ \
 	cd ../../ ;\

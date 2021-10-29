@@ -6,6 +6,7 @@ open BackendLogging
 open LinkP4
 open Printf
 open IoUtils
+open Yojson.Basic
 
 [@@@ocaml.warning "-21"]
 
@@ -34,8 +35,7 @@ module ArgParse = struct
     ; p4fn : string
     ; configfn : string
     ; builddir : string
-    ; use_p4tapp : bool (* todo: remove *)
-    ; p4tappfn : string (* todo: remove *)
+    ; interp_spec_file : string
     ; aargs : string list
     }
 
@@ -44,8 +44,7 @@ module ArgParse = struct
     ; p4fn = ""
     ; configfn = ""
     ; builddir = ""
-    ; use_p4tapp = false
-    ; p4tappfn = ""
+    ; interp_spec_file = ""
     ; aargs = []
     }
   ;;
@@ -53,13 +52,14 @@ module ArgParse = struct
   let parse_args () =
     let args_ref = ref args_default in
     (* set named args *)
+    let set_spec = (fun s ->
+              args_ref := { !args_ref with interp_spec_file = s})
+    in 
     let speclist =
-      [ ( "-p4tapp"
-        , Arg.String
-            (fun s ->
-              args_ref := { !args_ref with p4tappfn = s; use_p4tapp = true })
-        , " <p4tapp template directory>" ) ]
-    in
+      [ ( "--spec"
+        , Arg.String set_spec
+        , "Path to the interpreter specification file" ) ]
+    in 
     let parse_aarg (arg : string) =
       args_ref := { !args_ref with aargs = !args_ref.aargs @ [arg] }
     in
@@ -218,25 +218,49 @@ let backend_passes df_prog =
   straightline_prog
 ;;
 
+(* right now, the interpreter is setting the extern 
+   variables in its global state. They aren't getting 
+   replaced with constants or anything. *)
+let parse_externs_from_interp_spec spec_file = 
+  let json = from_file spec_file in 
+  match json with
+  | `Assoc lst -> (
+    (* return a map from extern name strings to extern values *)
+    match List.assoc_opt "externs" lst with
+      | Some (`Assoc lst) -> lst
+      | None -> []
+      | Some _ -> error "Non-assoc type for extern definitions"
+  )
+  | _ -> error "Unexpected interpreter specification format"
+;;
+
 (* new (3/20/21) compilation pipeline *)
-let compile_to_tofino target_filename p4_harness_fn config_fn =
+let compile_to_tofino target_filename p4_harness_fn config_fn interp_spec_fn =
   start_logs ();
-  (* compilation *)
+  (* parse *)
   let ds = Input.parse target_filename in
+
+  let _ = interp_spec_fn in 
+  (* frontend eliminates most abstractions (modules, functions) *)
   let _, ds = FrontendPipeline.process_prog ds in
+
+
+  (* middle passes do a bit of regularization of the syntax tree *)
   let ds = middle_passes ds in
+  (* convert to IR for backend *)
   let dag_instructions = to_ir ds in
+  (* backend passes do optimization and layout. *)
   let straightline_dpa_prog = backend_passes dag_instructions in
-
-  (* generate the entry event trigger table *)
-  let trigger_macro_defs = JsonBlocks.generate config_fn in 
-
-  (* link into P4 *)
+  (* printing: to blocks of P4 *)
   let p4_obj_dict = P4tPrint.from_straightline straightline_dpa_prog in
   (* the linker is really just a simple macro engine. Pass it an associative 
      list: (pragma string, code string to replace macro with) *)
+  (* generate the entry event trigger table *)
+  (* generate entry event triggers (if any) from config file *)
+  let trigger_macro_defs = JsonBlocks.generate config_fn in 
+  (* linking: put p4 blocks together into a single file. *)
   let p4_str = LinkP4.link_p4 (p4_obj_dict@trigger_macro_defs) p4_harness_fn in
-  (* manager code *)
+  (* printing: other manager code *)
   let c_str = P4tMgrPrint.c_mgr_of straightline_dpa_prog in
   let py_str = P4tMgrPrint.py_mgr_of straightline_dpa_prog in
   p4_str, c_str, py_str
@@ -246,26 +270,15 @@ let main () =
   let args = ArgParse.parse_args () in
   (* setup output directory. *)
   IoUtils.setup_build_dir args.builddir;
-  (* copy the source, for information, but pass the original to the compiler. *)
   (* todo: also copy the included files *)
   let _ = cpy_src_to_build args.dptfn args.builddir in
   let _ = cpy_src_to_build args.p4fn args.builddir in
-  (* let args = { args with dptfn = cpy_src_to_build args.dptfn args.builddir } in
-     let args = { args with p4fn = cpy_src_to_build args.p4fn args.builddir } in *)
+
+
   (* compile lucid code to P4 and C blocks *)
-  let p4_str, c_str, py_str = compile_to_tofino args.dptfn args.p4fn args.configfn in
+  let p4_str, c_str, py_str = compile_to_tofino args.dptfn args.p4fn args.configfn args.interp_spec_file in
   report "Compilation to P4 finished.";
-  match args.use_p4tapp with
-  (* generate a P4tapp project directory. *)
-  | true ->
-    GenP4tappProj.generate
-      p4_str
-      args.p4fn
-      args.dptfn
-      args.builddir
-      args.p4tappfn
-  (* generate a tofino app *)
-  | false -> PackageTofinoApp.generate p4_str c_str py_str args.builddir
+  PackageTofinoApp.generate p4_str c_str py_str args.builddir
 ;;
 
 let _ = main ()
