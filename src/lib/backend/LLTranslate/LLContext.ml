@@ -10,9 +10,9 @@ module DBG = BackendLogging
 let outc = ref None
 let dprint_endline = ref DBG.no_printf
 
-(*** context for translation from source to Tofino instruction syntax. ***)
-(*** nothing in this context should be necessary to convert the
-Tofino instruction syntax into P4. ***)
+(*** context for translation from source to LLSyntax instructions. ***)
+(*** nothing in this context should be necessary to optimize the LLSyntax 
+     or translate it to P4. ***)
 
 (**** input and output of code generator functions ****)
 type codegenInput =
@@ -38,8 +38,9 @@ type event_rec =
   ; field_defs : (Cid.t * int) list
   ; hdl_param_ids : Id.t list
   ; event_sort : event_sort
-  ; in_struct : Cid.t option
-  ; out_struct : Cid.t option
+  ; event_struct : Cid.t
+(*   ; in_struct : Cid.t option
+  ; out_struct : Cid.t option *)
   }
 
 (*** context ***)
@@ -137,7 +138,7 @@ let ctx_call_codegen name args =
 ;;
 
 (* context event definition functions *)
-let ctx_add_eventrec evname eviid ev_sort field_defs in_struct out_struct =
+let ctx_add_eventrec evname eviid ev_sort field_defs struct_cid =
   print_endline
     ("[ctx_add_eventrec] adding event record for " ^ Cid.to_string evname);
   let erec =
@@ -147,8 +148,7 @@ let ctx_add_eventrec evname eviid ev_sort field_defs in_struct out_struct =
       ; event_iid = eviid
       ; hdl_param_ids = []
       ; event_sort = ev_sort
-      ; in_struct
-      ; out_struct
+      ; event_struct = struct_cid
       }
   in
   tofinoCtx := TofinoCtx.add evname erec !tofinoCtx
@@ -167,9 +167,13 @@ let ctx_find_event_fields id =
   (ctx_find_eventrec (Cid.id id)).field_defs |> CL.split |> fst
 ;;
 
-let ctx_find_event_instruct id =
+(* get the struct name for the event, by id *)
+let ctx_find_event_struct id =
   let cid = Cid.id id in
-  (ctx_find_eventrec cid).in_struct
+  (ctx_find_eventrec cid).event_struct
+;;
+let ctx_find_event_struct_cid cid =
+  (ctx_find_eventrec cid).event_struct
 ;;
 
 let ctx_find_event_iid cid = (ctx_find_eventrec cid).event_iid
@@ -184,26 +188,12 @@ let ctx_set_hdl_param_ids id hdl_param_ids =
 (* a map from handler param id to event param cid *)
 let ctx_get_hdl_param_map hdl_id =
   let erec = ctx_find_eventrec (Cid.id hdl_id) in
-  let in_struct =
-    match erec.in_struct with
-    | None ->
-      error
-        "[ctx_get_hdl_param_map] this event doesn't have an in struct, so we \
-         cannot build a handler map"
-    | Some in_struct -> in_struct
-  in
   CL.map
-    (fun field_cid -> Cid.concat in_struct field_cid)
+    (fun field_cid -> Cid.concat erec.event_struct field_cid)
     (CL.split erec.field_defs |> fst)
   |> CL.combine erec.hdl_param_ids
 ;;
 
-let ctx_find_event_outstruct id =
-  let cid = Cid.id id in
-  (ctx_find_eventrec cid).out_struct
-;;
-
-let ctx_find_event_outstruct_cid cid = (ctx_find_eventrec cid).out_struct
 let ctx_find_event_iid cid = (ctx_find_eventrec cid).event_iid
 
 let ctx_get_event_recs () =

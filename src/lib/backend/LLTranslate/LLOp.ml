@@ -51,6 +51,15 @@ module TofinoStructs = struct
     Cid.id (out_structname_prefix ^ fst evid, snd evid)
   ;;
 
+  (* fully qualified struct instance name from event id and type*)
+  let full_struct_from_ev evid evsort =
+    let prefix = match evsort with 
+      | EEntry _ | EExit -> (Id.create md_instance_prefix)
+      | EBackground -> (Id.create hdr_instance_prefix)
+    in
+    Cid.compound prefix (in_struct_from_ev evid)
+  ;;
+
   (* struct instance name from event id, with fully qualified prefix *)
   let full_in_struct_from_ev evid evsort =
     match evsort with
@@ -69,14 +78,7 @@ module TofinoStructs = struct
   ;;
 
   let qual_in_fieldnames_of_event hdl_id =
-    let struct_instance =
-      match ctx_find_event_instruct hdl_id with
-      | Some instance_cid -> instance_cid
-      | None ->
-        error
-          ("did not find an input struct in context for handler: "
-          ^ Id.to_string hdl_id)
-    in
+    let struct_instance = ctx_find_event_struct hdl_id in 
     let qual_fieldnames =
       ctx_find_event_fields hdl_id
       |> CL.map (fun field_cid -> Cid.concat struct_instance field_cid)
@@ -84,20 +86,7 @@ module TofinoStructs = struct
     qual_fieldnames
   ;;
 
-  let qual_out_fieldnames_of_event hdl_id =
-    let struct_instance =
-      match ctx_find_event_outstruct hdl_id with
-      | Some instance_cid -> instance_cid
-      | None ->
-        error
-          ("did not find an input struct in context for handler: "
-          ^ Id.to_string hdl_id)
-    in
-    let qual_fieldnames =
-      ctx_find_event_fields hdl_id
-      |> CL.map (fun field_cid -> Cid.concat struct_instance field_cid)
-    in
-    qual_fieldnames
+  let qual_out_fieldnames_of_event = qual_in_fieldnames_of_event
   ;;
 end
 
@@ -328,30 +317,27 @@ module TofinoAlu = struct
 
   (* TODO: add delay and location meta fields, put at the beginning, set to 0 initially *)
   let event_init_meta_instrs ev_id =
-    let outstruct_id_opt = ctx_find_event_outstruct_cid ev_id in
-    match outstruct_id_opt with
-    | Some outstruct_id ->
-      (* set the event id field in the packet header *)
-      let init_event_id_instr =
-        IS.new_iassign_int
-          (Cid.concat outstruct_id event_id_field)
-          (ctx_find_event_iid ev_id)
-      in
-      let init_event_mc_instr =
-        IS.new_iassign_int (Cid.concat outstruct_id event_mc_field) 0
-      in
-      let init_event_loc_instr =
-        IS.new_iassign_int (Cid.concat outstruct_id event_loc_field) 0
-      in
-      let init_event_delay_instr =
-        IS.new_iassign_int (Cid.concat outstruct_id event_delay_field) 0
-      in
-      (* let event_delay_field = Cid.concat outstruct_id event_ *)
-      [ init_event_id_instr
-      ; init_event_mc_instr
-      ; init_event_loc_instr
-      ; init_event_delay_instr ]
-    | _ -> []
+    let struct_id = ctx_find_event_struct_cid ev_id in 
+    (* set the event id field in the packet header *)
+    let init_event_id_instr =
+      IS.new_iassign_int
+        (Cid.concat struct_id event_id_field)
+        (ctx_find_event_iid ev_id)
+    in
+    let init_event_mc_instr =
+      IS.new_iassign_int (Cid.concat struct_id event_mc_field) 0
+    in
+    let init_event_loc_instr =
+      IS.new_iassign_int (Cid.concat struct_id event_loc_field) 0
+    in
+    let init_event_delay_instr =
+      IS.new_iassign_int (Cid.concat struct_id event_delay_field) 0
+    in
+    (* let event_delay_field = Cid.concat struct_id event_ *)
+    [ init_event_id_instr
+    ; init_event_mc_instr
+    ; init_event_loc_instr
+    ; init_event_delay_instr ]
   ;;
 
   let set_next_event_instr ev_id =
@@ -373,6 +359,18 @@ module TofinoAlu = struct
     IS.IAssign (exitevent_id_field, IS.new_expr_of_int event_iid)
   ;;
 
+  (* increment a variable that counts 
+     the number of background events generated. *)
+  let increment_event_counter () = 
+    let ev_ct_cid = Cid.create [md_instance_prefix; dpt_meta_str; events_count_str] in 
+    IS.new_iassign 
+      ev_ct_cid 
+      (IS.new_ebinop 
+        IS.Add 
+        (IS.new_oper_of_meta ev_ct_cid)
+        (IS.new_oper_of_int 1)
+      )
+  ;;
   (* generate an alu instruction from the instantiation of an event *)
   let from_event_instantiation hdl_id alu_basename ev_id ev_args =
     !dprint_endline ("[generate_event] event id: " ^ Cid.to_string ev_id);
@@ -393,17 +391,23 @@ module TofinoAlu = struct
     let (ivec : IS.instrVec) =
       CL.map to_ass_f (CL.combine out_struct_fields alu_rhs_exps)
     in
-    let outstruct_id = ctx_find_event_outstruct_cid ev_id in
+    let struct_id = ctx_find_event_struct_cid ev_id in
     (* add instructions to set metadata fields, e.g., event name *)
     let event_meta_instrs = event_init_meta_instrs ev_id in
-    (* generate validate and continuation instructions, which differ for event types. *)
-    let validate_instrs =
+    (* if the event is a background event: set the header field to valid, 
+        set the next event instruction, 
+        and increment the events generated count. *)
+    let final_instruction = 
       match (ctx_find_eventrec ev_id).event_sort with
       | EBackground ->
-        [IS.IValidate (Option.get outstruct_id); set_next_event_instr ev_id]
+        [ IS.IValidate struct_id
+        ; set_next_event_instr ev_id 
+        ; increment_event_counter ()
+
+        ]
       | _ -> [set_exit_event_instr ev_id]
     in
-    let ivec = event_meta_instrs @ ivec @ validate_instrs in
+    let ivec = event_meta_instrs @ ivec @ final_instruction in
     (* return a declaration of an alu with this vector of instructions *)
     let alu_id = Cid.compound (Id.create "generate_alu") alu_basename in
     let alu_obj = IS.new_dinstr alu_id ivec in

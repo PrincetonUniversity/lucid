@@ -16,6 +16,7 @@ let handle_selector_str = "eventType"
 let exit_event_str = "exitEventType"
 let next_event_str = "nextEventType"
 let timestamp_str = "timestamp"
+let events_count_str = "eventsCount"
 let dpt_meta_struct_instance = Cid.create [md_instance_prefix; dpt_meta_str]
 
 let timestamp_field =
@@ -52,6 +53,8 @@ let lucid_parser_name = Cid.create ["DptIngressParser"]
 let event_generate_cid = Cid.create ["generate"]
 let final_table_name = Cid.create ["dptContinueHandler"]
 let final_invalidate_acn_name = Cid.create ["invalidateInputHeaders"]
+
+
 let t_warn str = Console.show_message str ANSITerminal.Yellow "DPT-to-Tofino"
 let t_info str = Console.show_message str ANSITerminal.Green "DPT-to-Tofino"
 

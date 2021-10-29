@@ -7,12 +7,12 @@ all:
 	}
 
 
-externs:
+multi_events:
 	{ \
 	cd ../../ ;\
 	make ;\
 	cd - ;\
-	../../dptc externs.dpt ip_harness.p4 linker_config.json build --spec externs.json ;\
+	../../dptc multi_events.dpt ip_harness.p4 linker_config.json build;\
 	}
 
 

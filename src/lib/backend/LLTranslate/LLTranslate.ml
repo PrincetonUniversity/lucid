@@ -50,9 +50,14 @@ module TranslateEvents = struct
     | DEvent (evid, ev_sort, _, params) ->
       let ev_cid = Cid.id evid in
       let field_defs = vardefs_from_params params in
-      let instruct_name = TofinoStructs.full_in_struct_from_ev evid ev_sort in
-      let outstruct_name = instruct_name in
-      (match ev_sort with
+      let struct_cid = TofinoStructs.full_struct_from_ev evid ev_sort in 
+      ctx_add_eventrec
+        ev_cid
+        event_iid
+        ev_sort
+        field_defs
+        struct_cid
+(*       (match ev_sort with
       | EEntry _ ->
         ctx_add_eventrec
           ev_cid
@@ -76,55 +81,16 @@ module TranslateEvents = struct
           ev_sort
           field_defs
           (Some instruct_name)
-          (Some outstruct_name))
+          (Some outstruct_name)) *)
     | DHandler (hdl_id, (params, _)) ->
       ctx_set_hdl_param_ids (Cid.id hdl_id) (CL.split params |> fst)
     | _ -> ()
   ;;
 
-  (* save a record of the event's definition to context,
-  using separate struct instances for input and output *)
-  (* DEPRECIATED *)
-  let remember_event_def_separate_bg_io event_iid dec =
-    match dec.d with
-    | DEvent (evid, ev_sort, _, params) ->
-      let ev_cid = Cid.id evid in
-      let field_defs = vardefs_from_params params in
-      let instruct_name = TofinoStructs.full_in_struct_from_ev evid ev_sort in
-      let outstruct_name = TofinoStructs.full_out_struct_from_ev evid ev_sort in
-      (match ev_sort with
-      | EEntry _ ->
-        ctx_add_eventrec
-          ev_cid
-          event_iid
-          ev_sort
-          field_defs
-          (Some instruct_name)
-          None
-      | EExit ->
-        ctx_add_eventrec
-          ev_cid
-          event_iid
-          ev_sort
-          field_defs
-          None
-          (Some outstruct_name)
-      | EBackground ->
-        ctx_add_eventrec
-          ev_cid
-          event_iid
-          ev_sort
-          field_defs
-          (Some instruct_name)
-          (Some outstruct_name))
-    | _ -> ()
-  ;;
-
   (* Generate all the data structures for an event, based on its record.
-      - entry events --> metadata struct + one input instance
-      - exit events --> metadata struct + one output instance
-      - bg events --> header struct + one input and one output instance
-      + all events --> event id const *)
+      1. a struct.
+      2. a struct instance.
+      3. a constant e_<eventname>. *)
   let structs_from_eventrec erec =
     let struct_name = TofinoStructs.structname_from_evid erec.event_id in
     let field_defs = erec.field_defs in
@@ -141,8 +107,7 @@ module TranslateEvents = struct
       :: ev_delay_field
       :: field_defs
     in
-    let instruct_opt = erec.in_struct in
-    let outstruct_opt = erec.out_struct in
+
     (* build the struct def *)
     trans_info ("generating struct def for event: " ^ Id.to_string erec.event_id);
     let struct_def =
@@ -150,23 +115,10 @@ module TranslateEvents = struct
       | EBackground -> IS.new_header_structdef struct_name field_defs
       | _ -> IS.new_meta_structdef struct_name field_defs
     in
-    (* build the struct instances *)
-    let in_structs =
-      match instruct_opt with
-      | Some instruct_name -> [IS.new_struct struct_name SPublic instruct_name]
-      | None -> []
-    in
-    let out_structs =
-      match outstruct_opt with
-      | Some outstruct_name -> [IS.new_struct struct_name SPublic outstruct_name]
-      | None -> []
-    in
-    (* patch to support bg events with shared io structs *)
-    let iostructs =
-      match in_structs <> out_structs with
-      | true -> in_structs @ out_structs
-      | false -> in_structs
-    in
+
+    (* build the struct instance *)
+    let structs = [IS.new_struct struct_name SPublic erec.event_struct] in 
+
     (* build the const event iid def *)
     let event_iid_const =
       IS.new_public_constdef
@@ -174,7 +126,7 @@ module TranslateEvents = struct
         event_id_width
         erec.event_iid
     in
-    event_iid_const :: struct_def :: iostructs
+    event_iid_const :: struct_def :: structs
   ;;
 
   let structs_from_events () =
@@ -304,9 +256,9 @@ let gen_internal_structs () =
   let fnames =
     CL.map
       (fun f -> Cid.create [f])
-      [timestamp_str; handle_selector_str; exit_event_str; next_event_str]
+      [timestamp_str; handle_selector_str; exit_event_str; next_event_str; events_count_str]
   in
-  let fwidths = [32; 8; 8; 8] in
+  let fwidths = [32; 8; 8; 8; 8] in
   let fdefs = CL.combine fnames fwidths in
   let dptMeta_struct = IS.new_meta_structdef struct_cid fdefs in
   let dptMeta_instance =
@@ -390,10 +342,10 @@ let byte_align_header_structs (prog : IS.llProg) : IS.llProg =
 
 let from_dpt (ds : decls) (opgraph_recs : prog_opgraph) : IS.llProg =
   (* translation to IR currently does many passes over the backend, with each pass
-    translating a different part of the syntax tree. 5/18 -- now that the final
-    structure of the generated code is more concretely defined, we can redo this
-    to translate in a single pass. This would make the code clearer and also make it
-    easier to reason about the translation's completeness. *)
+    translating a different part of the syntax tree. 
+    5/18/21 -- now that the final structure of the generated code 
+    is more concretely defined, we can redo this to translate in a single pass. 
+    This would make the code clearer and easier to extend. *)
   DBG.start_mlog __FILE__ outc dprint_endline;
   LLOp.start_logging ();
   LLContext.start_logging ();
@@ -403,8 +355,9 @@ let from_dpt (ds : decls) (opgraph_recs : prog_opgraph) : IS.llProg =
   ctx_add_decls ds;
   (* put event records in the context *)
   CL.iteri TranslateEvents.remember_event_def ds;
-  (* generate backend defs for event structs *)
+  (* generate struct declarations, struct instances, and constants from events. *)
   let struct_defs = TranslateEvents.structs_from_events () in
+  (* generate struct declarations and instances for private Lucid-runtime only data. *)
   let dpt_struct_defs = gen_internal_structs () in
   (* generate parser for entry event instances. *)
   let parse_def = TranslateEvents.parsetree_from_events ds in

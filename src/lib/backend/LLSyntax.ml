@@ -489,11 +489,17 @@ let int_of_expr e =
 
 (**** new constructors used by IR (3/16/21) ****)
 
-let new_iconst i = Const i
-let new_eoper o = Oper o
 let new_const_of_int i : const = Integer.of_int i
-let new_oconst_of_int i = new_iconst (new_const_of_int i)
-let new_expr_of_int i = new_eoper (new_oconst_of_int i)
+let new_iconst i = Const i
+
+(* operands *)
+let new_oper_of_int i = Const (new_const_of_int i)
+let new_oper_of_meta m = Meta m
+(* let new_oconst_of_int i = new_iconst (new_const_of_int i) *)
+
+(* expressions *)
+let new_eoper o = Oper o
+let new_expr_of_int i = new_eoper (new_oper_of_int i)
 let new_expr_of_mid mid = new_eoper (Meta mid)
 
 (* Hasher of oid * int * int * lmid * oper list *)
