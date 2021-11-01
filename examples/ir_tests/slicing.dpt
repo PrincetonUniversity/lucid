@@ -1,0 +1,14 @@
+entry event pktin(int src_ip, int dst_ip);
+event bar(int x);
+
+handle pktin(int src_ip, int dst_ip) {
+    int foo = 0;
+    // int<<1>> foo = x[0:0];
+    if (foo[0:0] == 1){
+        int bar = 0;
+    }
+}
+
+handle bar(int x) {
+    int y = 1;
+}
