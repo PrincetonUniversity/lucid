@@ -55,13 +55,17 @@ and binOp =
   | Sub (* A - B *)
   | SubR (* B - A *)
   | SatSub (* A |-| B (i.e., max(A - B, 0)) *)
-  | Cast
   | RShift
   | LShift
   | BAnd
   | BOr
+  | Cast (* cast A to width of B *)
+  | Slice (* A[X:Y] -- the slice of A from X to Y. *)
 
-(* cast A to width of B *)
+(* non binary operations. *)
+(* and op = 
+  | Slice
+ *)
 and cmpOp =
   | Eq
   | Neq
@@ -85,7 +89,9 @@ and oper =
    the output is not set) *)
  and expr =
   | Oper of oper
-  | BinOp of binOp * oper * oper
+  | BinOp of binOp * oper list
+  (* | BinOp of binOp * oper * oper *)
+  (* | GenericOp of op * (oper list) *)
   | HashOp of mid list
  
 
@@ -519,7 +525,8 @@ let new_iassign lhs rhs = IAssign (lhs, rhs)
 let new_iassign_int lhs rhs_int = IAssign (lhs, new_expr_of_int rhs_int)
 let new_dsingleinstr oid lhs rhs = InstrVec (oid, [IAssign (lhs, rhs)])
 let new_dinstr oid ivec = InstrVec (oid, ivec)
-let new_ebinop o a b = BinOp (o, a, b)
+let new_ebinop o a b = BinOp (o, [a; b])
+let new_eop o args = BinOp (o, args)
 let memcell_operand = SVar (RegVar Lo)
 let new_meminstr pred_opt instr_rhs = MemExpr (pred_opt, instr_rhs)
 let new_retinstr pred_opt instr_rhs = RetExpr (pred_opt, instr_rhs)

@@ -169,15 +169,39 @@ module PrimitiveString = struct
     "(bit<" ^ str_of_const_oper w ^ ">) " ^ str_of_oper i
   ;;
 
+  (* i[s:e] *)
+  let str_of_slice (i : oper) (s : oper) (e : oper) = 
+    (str_of_oper i)^"["^(str_of_const_oper s)^":"^(str_of_const_oper e)^"]"
+  ;;  
+
   let rec str_of_expr (e : expr) : string =
     match e with
     | Oper i -> str_of_oper i ^ ";"
-    | BinOp (SubR, i1, i2) ->
-      str_of_expr (BinOp (Sub, i2, i1)) (* reverse operan *)
-    | BinOp (Cast, i1, w) -> str_of_cast i1 w ^ ";"
-    | BinOp (bo, i1, i2) ->
-      str_of_oper i1 ^ " " ^ str_of_binop bo ^ " " ^ str_of_oper i2 ^ ";"
     | HashOp _ -> error "UNIMPLEMENTED_HASH(...);"
+    (* Ops have the most cases *)
+    | BinOp (op, args) -> (
+      match op with 
+        (* SubR gets its operands flipped. *)
+        | SubR -> ( match args with 
+          | [i1; i2] -> str_of_expr (BinOp (Sub, [i2; i1])) (* reverse operands *)
+          | _ -> error "[str_of_expr] SubR opcode must have 2 operands.";
+        )
+        (* all the binary operations that compile to instructions *)
+        | Add | Sub | SatSub | RShift | LShift | BAnd | BOr -> ( match args with 
+            | [i1; i2] -> str_of_oper i1 ^ " " ^ str_of_binop op ^ " " ^ str_of_oper i2 ^ ";"
+            | _ -> error "[str_of_expr] Binary operation with wrong number of operands.."
+        )
+        (* Cast is a binary operation, but it doesn't compile to an instruction 
+           so we keep it separate for now. *)
+        | Cast -> ( match args with 
+            | [i1; w] -> str_of_cast i1 w ^ ";" 
+            | _ -> error "[str_of_expr] Cast operation must have 2 operands."
+        )
+        | Slice -> ( match args with 
+          | [i; s; e] -> str_of_slice i s e
+          | _ -> error "[str_of_expr] Slice operation must have 3 operands."
+        )
+    )
   ;;
 
   let str_of_instr instr =

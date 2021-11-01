@@ -157,6 +157,10 @@ let oper_from_immediate hdl_id (immediate_exp : exp) =
     error dstr
 ;;
 
+let oper_from_int (i : int) : IS.oper = 
+  IS.Const (const_from_int i)
+;;
+
 let oper_from_size (sz : size) : IS.oper =
   match extract_size_opt sz with
   | Some sz_int -> IS.Const (const_from_int sz_int)
@@ -231,6 +235,12 @@ module TofinoAlu = struct
         let width = oper_from_size sz in
         ( alu_name
         , IS.new_dsingleinstr alu_name outvar_mid (IS.new_ebinop Cast src width)
+        )
+      | EOp (Slice (s, e), slice_args) ->
+        let src = oper_from_immediate hdl_id (CL.hd slice_args) in 
+        let st, en = oper_from_int s, oper_from_int e in 
+        ( alu_name
+        , IS.new_dsingleinstr alu_name outvar_mid (IS.new_eop Slice [src; st; en])
         )
       | EOp (_, _) ->
         let dstr = Printing.statement_to_string opstmt in

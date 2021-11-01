@@ -6,6 +6,13 @@ all:
 	../../dptc cleanup_test.dpt ip_harness.p4 linker_config.json build -p4tapp template.p4tapp ;\
 	}
 
+slicing:
+	{ \
+	cd ../../ ;\
+	make ;\
+	cd - ;\
+	../../dptc slicing.dpt ip_harness.p4 linker_config.json build;\
+	}
 
 multi_events:
 	{ \
