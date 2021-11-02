@@ -113,11 +113,11 @@
 %right ID EVENT
 %left AND OR         /* lowest precedence */
 %nonassoc LESS EQ MORE NEQ LEQ GEQ
-%left PLUS SUB SATSUB
+%left PLUS SUB SATSUB SATPLUS
 %left CONCAT
-%left BITAND PIPE LSHIFT RSHIFT
+%left BITAND BITXOR PIPE LSHIFT RSHIFT
 %nonassoc PROJ
-%right NOT RPAREN
+%right NOT BITNOT RPAREN
 %right LBRACKET /* highest precedence */
 
 
