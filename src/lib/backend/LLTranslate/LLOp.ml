@@ -3,6 +3,7 @@ source syntax to tofino compute objects *)
 open Syntax
 module Pr = Printing
 module IS = LLSyntax
+module GS = IS.Generators
 open InterpHelpers
 open LLContext
 open LLConstants
@@ -32,16 +33,21 @@ let int_from_const_exp (ex : exp) =
   | _ -> trans_err "could not evaluate expression to an int" ex
 ;;
 
+(***
+  TODO: refactor this its really messy. 
+***)
 module TofinoStructs = struct
+  (**** [11/21] new helpers ****)
+  (* let  *)
+
+
   (**** translate structure names ****)
   let defname_from_evname evname = "e_" ^ evname
   let defname_from_evid evid = Cid.id (fst evid |> defname_from_evname, snd evid)
 
   (* struct names from event ids *)
   let structname_from_evid evid =
-    let ev_name, ev_num = evid in
-    let meta_struct_ty = Cid.id (ev_name ^ event_structdef_suffix, ev_num) in
-    meta_struct_ty
+    Id.append_string event_structdef_suffix evid |> Cid.id
   ;;
 
   (* struct instance name from event id. *)
@@ -78,12 +84,9 @@ module TofinoStructs = struct
   ;;
 
   let qual_in_fieldnames_of_event hdl_id =
-    let struct_instance = ctx_find_event_struct hdl_id in 
-    let qual_fieldnames =
-      ctx_find_event_fields hdl_id
-      |> CL.map (fun field_cid -> Cid.concat struct_instance field_cid)
-    in
-    qual_fieldnames
+    let struct_instance = ctx_find_event_struct_instance hdl_id in 
+    ctx_find_event_fields hdl_id
+    |> CL.map (fun field_cid -> Cid.concat struct_instance field_cid)
   ;;
 
   let qual_out_fieldnames_of_event = qual_in_fieldnames_of_event
@@ -325,66 +328,47 @@ module TofinoAlu = struct
     alu_name, alu_obj
   ;;
 
-  (* TODO: add delay and location meta fields, put at the beginning, set to 0 initially *)
-  let event_init_meta_instrs ev_id =
-    let struct_id = ctx_find_event_struct_cid ev_id in 
-    (* set the event id field in the packet header *)
-    let init_event_id_instr =
-      IS.new_iassign_int
-        (Cid.concat struct_id event_id_field)
-        (ctx_find_event_iid ev_id)
-    in
-    let init_event_mc_instr =
-      IS.new_iassign_int (Cid.concat struct_id event_mc_field) 0
-    in
-    let init_event_loc_instr =
-      IS.new_iassign_int (Cid.concat struct_id event_loc_field) 0
-    in
-    let init_event_delay_instr =
-      IS.new_iassign_int (Cid.concat struct_id event_delay_field) 0
-    in
-    (* let event_delay_field = Cid.concat struct_id event_ *)
-    [ init_event_id_instr
-    ; init_event_mc_instr
-    ; init_event_loc_instr
-    ; init_event_delay_instr ]
+  let event_meta_init_instrs ev_id =
+    let evrec = ctx_find_eventrec ev_id in 
+    let ev_struct_id = evrec.event_struct_instance in 
+    (* event id; multicast flag; location; delay*)
+    [ GS.int_assign_instr (Cid.concat ev_struct_id event_id_field) (ctx_find_event_iid ev_id)
+    ; GS.int_assign_instr (Cid.concat ev_struct_id event_mc_field) 0
+    ; GS.int_assign_instr (Cid.concat ev_struct_id event_loc_field) 0
+    ; GS.int_assign_instr (Cid.concat ev_struct_id event_delay_field) 0
+    ]
+    @ (* background events are carried in headers that need to be set to valid. *)
+    ( match evrec.event_sort with 
+      | EBackground -> [GS.validate_instr ev_struct_id]
+      | _ -> []
+    )
   ;;
 
-  let set_next_event_instr ev_id =
-    print_endline ("[set_next_event_instr] event id: " ^ Cid.to_string ev_id);
-    let event_iid = ctx_find_event_iid ev_id in
-    (* set the event id field in lucid metadata *)
-    let nextevent_id_field =
-      Cid.create [md_instance_prefix; dpt_meta_str; next_event_str]
-    in
-    IS.IAssign (nextevent_id_field, IS.new_expr_of_int event_iid)
-  ;;
-
-  let set_exit_event_instr ev_id =
-    let event_iid = ctx_find_event_iid ev_id in
-    (* set the event id field in lucid metadata *)
-    let exitevent_id_field =
-      Cid.create [md_instance_prefix; dpt_meta_str; exit_event_str]
-    in
-    IS.IAssign (exitevent_id_field, IS.new_expr_of_int event_iid)
-  ;;
-
-  (* increment a variable that counts 
-     the number of background events generated. *)
-  let increment_event_counter () = 
-    let ev_ct_cid = Cid.create [md_instance_prefix; dpt_meta_str; events_count_str] in 
-    IS.new_iassign 
-      ev_ct_cid 
-      (IS.new_ebinop 
-        IS.Add 
-        (IS.new_oper_of_meta ev_ct_cid)
-        (IS.new_oper_of_int 1)
-      )
+  let runtime_meta_init_instrs ev_id = 
+    (* todo: want a cleaner way to access the elements of the runtime metadata struct. *)
+    let evrec = ctx_find_eventrec ev_id in 
+    let event_iid = evrec.event_iid in
+    match evrec.event_sort with 
+      | EBackground -> 
+        let ev_ct_cid = Cid.create [md_instance_prefix; dpt_meta_str; events_count_str] in 
+        [
+          (* md.dptMeta.nextEvent = i:int *)
+          GS.int_assign_instr (Cid.create [md_instance_prefix; dpt_meta_str; next_event_str]) event_iid
+          (* md.dptMeta.eventCt += 1 *)
+        ; GS.incr_assign_instr ev_ct_cid ev_ct_cid 1
+          (* md.eventGeneratedFlags.<eventname> = 1 *)
+        ; GS.int_assign_instr evrec.event_generated_flag 1
+        ]
+      | EEntry _ | EExit -> 
+        [
+          (* md.dptMeta.exitEvent = i:int *)
+          GS.int_assign_instr (Cid.create [md_instance_prefix; dpt_meta_str; exit_event_str]) event_iid
+        ]
   ;;
   (* generate an alu instruction from the instantiation of an event *)
   let from_event_instantiation hdl_id alu_basename ev_id ev_args =
-    !dprint_endline ("[generate_event] event id: " ^ Cid.to_string ev_id);
-    !dprint_endline "[generate_event] event args: ";
+    !dprint_endline ("[from_event_instantiation] event id: " ^ Cid.to_string ev_id);
+    !dprint_endline "[from_event_instantiation] event args: ";
     let iter_f ev_arg = !dprint_endline (Printing.exp_to_string ev_arg) in
     CL.iter iter_f ev_args;
     (* get a list of qualified out struct field parameters *)
@@ -401,23 +385,11 @@ module TofinoAlu = struct
     let (ivec : IS.instrVec) =
       CL.map to_ass_f (CL.combine out_struct_fields alu_rhs_exps)
     in
-    let struct_id = ctx_find_event_struct_cid ev_id in
-    (* add instructions to set metadata fields, e.g., event name *)
-    let event_meta_instrs = event_init_meta_instrs ev_id in
-    (* if the event is a background event: set the header field to valid, 
-        set the next event instruction, 
-        and increment the events generated count. *)
-    let final_instruction = 
-      match (ctx_find_eventrec ev_id).event_sort with
-      | EBackground ->
-        [ IS.IValidate struct_id
-        ; set_next_event_instr ev_id 
-        ; increment_event_counter ()
-
-        ]
-      | _ -> [set_exit_event_instr ev_id]
-    in
-    let ivec = event_meta_instrs @ ivec @ final_instruction in
+    (* add instructions to set hidden fields in event header, e.g., event name *)
+    let event_meta_instrs = event_meta_init_instrs ev_id in
+    (* instructions to set non-serialized variables in runtime *)
+    let runtime_instrs = runtime_meta_init_instrs ev_id in 
+    let ivec = event_meta_instrs @ ivec @ runtime_instrs in
     (* return a declaration of an alu with this vector of instructions *)
     let alu_id = Cid.compound (Id.create "generate_alu") alu_basename in
     let alu_obj = IS.new_dinstr alu_id ivec in

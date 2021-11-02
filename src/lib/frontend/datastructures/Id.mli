@@ -11,6 +11,7 @@ val from_id : t -> string * int
 val to_string : t -> string
 val to_string_delim : string -> t -> string
 val prepend_string : string -> string * int -> string * int
+val append_string : string -> string * int -> string * int
 val refresh : t -> t
 val freshen : t -> t (* Alias for refresh *)
 

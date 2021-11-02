@@ -7,6 +7,8 @@
 let event_structdef_suffix = "_t"
 let out_structname_prefix = "new_"
 let md_instance_prefix = "md"
+let md_instance = Id.create "md" (* Id of the struct. refactor to use this instead of the strings. *)
+
 let hdr_instance_prefix = "hdr"
 let pkt_instance_prefix = "pkt"
 

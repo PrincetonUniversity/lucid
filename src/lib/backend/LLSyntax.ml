@@ -557,7 +557,8 @@ let new_table tblname rules = Table (tblname, rules, None)
 
 let new_meta_structdef name params = StructDef (name, SMeta, params)
 let new_header_structdef name params = StructDef (name, SHeader, params)
-let new_struct sname stype iname = StructVar (iname, stype, sname)
+let new_structdef name struct_ty params = StructDef (name, struct_ty, params)
+let new_struct sname scope iname = StructVar (iname, scope, sname)
 let new_public_constdef name width i = DConst (name, SPublic, width, i)
 let new_private_constdef name width i = DConst (name, SPrivate, width, i)
 let new_ParseTree name root = ParseTree (name, root)
@@ -693,3 +694,32 @@ let rule_eq x y =
     (pattern_eq patx paty)
   | _ -> false
 ;;
+
+
+module Generators = struct
+  let int_const i : const = Integer.of_int i
+
+  let const_oper i = Const i
+  let int_oper i = int_const i |> const_oper 
+  let cid_oper c = Meta c
+
+  let oper_expr o = Oper o
+  let int_expr i = int_oper i |> oper_expr
+  let cid_expr c = cid_oper c |> oper_expr
+  (*o1 <op> o2*)  
+  let binop_expr op o1 o2 = BinOp (op, [o1; o2])
+  (*c:cid + i:int*)
+  let incr_expr c i = binop_expr Add (cid_oper c) (int_oper i)
+
+  (* c := o:oper *)
+  let oper_assign_instr c o = IAssign(c, o)
+  (* c := i:int *)
+  let int_assign_instr c i = int_expr i |> oper_assign_instr c
+  (* c := c2:cid + i:int *)
+  let incr_assign_instr c1 c2 i = incr_expr c2 i |> oper_assign_instr c1
+
+  let validate_instr c = IValidate c
+
+
+
+end

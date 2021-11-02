@@ -7,7 +7,6 @@ open LLSyntax
 open InterpHelpers
 open LLContext
 open LLOp
-open LLContext
 open LLConstants
 open Format
 open P4tPrint
@@ -22,6 +21,7 @@ let instance_name evid =
   P4tPrint.str_of_varid (TofinoStructs.full_in_struct_from_ev evid EBackground)
 ;;
 
+(* Read the event's id from context as hex. *)
 let hex_iid evid = 
   let ev_iid = sprintf "%#x" (ctx_find_eventrec (Cid.id evid)).event_iid in 
   print_endline ("[hex_iid]: "^(Id.to_string evid)^" -- "^(ev_iid));
