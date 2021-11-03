@@ -1,5 +1,6 @@
 (* more straightforward DPT to Tofino translator for arrays. *)
-open Syntax
+open CoreSyntax
+module Printing = CorePrinting
 open LLSyntax
 open InterpHelpers
 open LLContext

@@ -52,14 +52,12 @@ module ArgParse = struct
   let parse_args () =
     let args_ref = ref args_default in
     (* set named args *)
-    let set_spec = (fun s ->
-              args_ref := { !args_ref with interp_spec_file = s})
-    in 
+    let set_spec s = args_ref := { !args_ref with interp_spec_file = s } in
     let speclist =
       [ ( "--spec"
         , Arg.String set_spec
         , "Path to the interpreter specification file" ) ]
-    in 
+    in
     let parse_aarg (arg : string) =
       args_ref := { !args_ref with aargs = !args_ref.aargs @ [arg] }
     in
@@ -93,9 +91,7 @@ let clear_output_dir () =
 
 let dump_decls logname decls =
   print_endline ("----" ^ logname ^ "----");
-  CL.iter
-    (fun dec -> print_endline ("decl: " ^ LLSyntax.show_decl dec))
-    decls;
+  CL.iter (fun dec -> print_endline ("decl: " ^ LLSyntax.show_decl dec)) decls;
   print_endline ("----" ^ logname ^ "----")
 ;;
 
@@ -117,12 +113,12 @@ let middle_passes ds =
     if cfg.verbose
     then (
       print_endline "decls: ";
-      let str = Printing.decls_to_string ds in
+      let str = CorePrinting.decls_to_string ds in
       Console.report str)
   in
   Cmdline.cfg.verbose_types <- true;
   (* eliminate Gte and Lte *)
-  let ds = EliminateEqRangeOps.transform ds in 
+  let ds = EliminateEqRangeOps.transform ds in
   (* temporary patches for incomplete features *)
   let ds = PoplPatches.eliminate_noncall_units ds in
   let ds = PoplPatches.delete_prints ds in
@@ -131,20 +127,18 @@ let middle_passes ds =
   print_if_verbose ds;
   print_endline "------prog at start of middle passes-------";
   report "deleting unit statements that are not calls.";
-  let ds = Typer.infer_prog ds in
-  report "eliminating constants.";
-  let ds = EliminateConsts.eliminate_consts ds in
-  let ds = Typer.infer_prog ds in
+  (* let ds = Typer.infer_prog ds in *)
   report "adding default branches.";
   let ds = AddDefaultBranches.add_default_branches ds in
-  let ds = Typer.infer_prog ds in
+  (* let ds = Typer.infer_prog ds in *)
   let ds =
     match do_ssa with
     | true ->
       let ds = SingleAssignment.transform ds in
-      Typer.infer_prog ds
+      ds
+      (* Typer.infer_prog ds *)
     | false ->
-      let ds = Typer.infer_prog ds in
+      (* let ds = Typer.infer_prog ds in *)
       report "partial SSA";
       print_endline "----------before partial SSA-----------";
       print_if_verbose ds;
@@ -154,7 +148,7 @@ let middle_passes ds =
       print_endline "----------after partial SSA-----------";
       print_if_verbose ds;
       print_endline "----------after partial SSA-----------";
-      Typer.infer_prog ds
+      (* Typer.infer_prog ds *) ds
   in
   let ds =
     match enable_compound_expressions with
@@ -179,7 +173,7 @@ let middle_passes ds =
 ;;
 
 (* do a few final pre-ir setup and temporary passes *)
-let final_ir_setup ds = 
+let final_ir_setup ds =
   (* make sure all the event parameters have unique ids *)
   let ds = InterpHelpers.refresh_event_param_ids ds in
   (* In the body of each handler, replace parameter variables with struct instance fields. *)
@@ -191,10 +185,11 @@ let final_ir_setup ds =
   let opgraph_recs = CL.filter_map OGSyntax.opgraph_from_handler ds in
   ds, opgraph_recs
 ;;
+
 (* translate to lucid ir *)
 let to_ir ds =
-  let ds, opgraph_recs = final_ir_setup ds in 
-  LogIr.log_lucid "final_lucid.dpt" ds;    
+  let ds, opgraph_recs = final_ir_setup ds in
+  LogIr.log_lucid "final_lucid.dpt" ds;
   LogIr.log_lucid_osg "lucid_opstmt.dot" opgraph_recs;
   Console.report "converting to tofino instructions";
   let dag_instructions = LLTranslate.from_dpt ds opgraph_recs in
@@ -202,6 +197,7 @@ let to_ir ds =
   LogIr.log_lir "initial_ir" df_prog;
   df_prog
 ;;
+
 (* do optimizations on tofino ir *)
 let backend_passes df_prog =
   Console.report "SALU register allocation";
@@ -218,19 +214,18 @@ let backend_passes df_prog =
   straightline_prog
 ;;
 
-(* right now, the interpreter is setting the extern 
-   variables in its global state. They aren't getting 
+(* right now, the interpreter is setting the extern
+   variables in its global state. They aren't getting
    replaced with constants or anything. *)
-let parse_externs_from_interp_spec spec_file = 
-  let json = from_file spec_file in 
+let parse_externs_from_interp_spec spec_file =
+  let json = from_file spec_file in
   match json with
-  | `Assoc lst -> (
-    (* return a map from extern name strings to extern values *)
+  | `Assoc lst ->
+    ((* return a map from extern name strings to extern values *)
     match List.assoc_opt "externs" lst with
-      | Some (`Assoc lst) -> lst
-      | None -> []
-      | Some _ -> error "Non-assoc type for extern definitions"
-  )
+    | Some (`Assoc lst) -> lst
+    | None -> []
+    | Some _ -> error "Non-assoc type for extern definitions")
   | _ -> error "Unexpected interpreter specification format"
 ;;
 
@@ -239,12 +234,10 @@ let compile_to_tofino target_filename p4_harness_fn config_fn interp_spec_fn =
   start_logs ();
   (* parse *)
   let ds = Input.parse target_filename in
-
-  let _ = interp_spec_fn in 
+  let _ = interp_spec_fn in
   (* frontend eliminates most abstractions (modules, functions) *)
   let _, ds = FrontendPipeline.process_prog ds in
-
-
+  let ds = SyntaxToCore.translate_to_core ds in
   (* middle passes do a bit of regularization of the syntax tree *)
   let ds = middle_passes ds in
   (* convert to IR for backend *)
@@ -253,13 +246,15 @@ let compile_to_tofino target_filename p4_harness_fn config_fn interp_spec_fn =
   let straightline_dpa_prog = backend_passes dag_instructions in
   (* printing: to blocks of P4 *)
   let p4_obj_dict = P4tPrint.from_straightline straightline_dpa_prog in
-  (* the linker is really just a simple macro engine. Pass it an associative 
+  (* the linker is really just a simple macro engine. Pass it an associative
      list: (pragma string, code string to replace macro with) *)
   (* generate the entry event trigger table *)
   (* generate entry event triggers (if any) from config file *)
-  let trigger_macro_defs = JsonBlocks.generate config_fn in 
+  let trigger_macro_defs = JsonBlocks.generate config_fn in
   (* linking: put p4 blocks together into a single file. *)
-  let p4_str = LinkP4.link_p4 (p4_obj_dict@trigger_macro_defs) p4_harness_fn in
+  let p4_str =
+    LinkP4.link_p4 (p4_obj_dict @ trigger_macro_defs) p4_harness_fn
+  in
   (* printing: other manager code *)
   let c_str = P4tMgrPrint.c_mgr_of straightline_dpa_prog in
   let py_str = P4tMgrPrint.py_mgr_of straightline_dpa_prog in
@@ -273,10 +268,10 @@ let main () =
   (* todo: also copy the included files *)
   let _ = cpy_src_to_build args.dptfn args.builddir in
   let _ = cpy_src_to_build args.p4fn args.builddir in
-
-
   (* compile lucid code to P4 and C blocks *)
-  let p4_str, c_str, py_str = compile_to_tofino args.dptfn args.p4fn args.configfn args.interp_spec_file in
+  let p4_str, c_str, py_str =
+    compile_to_tofino args.dptfn args.p4fn args.configfn args.interp_spec_file
+  in
   report "Compilation to P4 finished.";
   PackageTofinoApp.generate p4_str c_str py_str args.builddir
 ;;

@@ -121,6 +121,7 @@ and s =
   | SGen of bool * exp (* Bool is true iff multicast *)
   | SSeq of statement * statement
   | SMatch of exp list * branch list
+  | SRet of exp option
 
 and statement =
   { s : s
@@ -187,13 +188,56 @@ let ty raw_ty = { raw_ty; tspan = Span.default }
 let avalue v vty vspan = { v; vty; vspan }
 let value_sp v vspan = { v; vty = None; vspan }
 let value v = { v; vty = None; vspan = Span.default }
+let vint i size = value (VInt (Integer.create i size))
+let vinteger i = value (VInt i)
+let vbool b = value (VBool b)
+let default_vint size = value (VInt (Integer.create 0 size))
+let default_vbool = value (VBool false)
+let vint_sp i span = value_sp (VInt i) span
+let vbool_sp b span = value_sp (VBool b) span
+let vevent event = value (VEvent event)
+let vevent_sp event span = value_sp (VEvent event) span
+let vglobal idx = value (VGlobal idx)
+let vgroup locs = value (VGroup locs)
 
 (* Expressions *)
 let exp e = { e; ety = None; espan = Span.default }
 let aexp e ety espan = { e; ety; espan }
 let exp_sp e espan = { e; ety = None; espan }
 let value_to_exp v = aexp (EVal v) v.vty v.vspan
+let var_sp cid span = exp_sp (EVar cid) span
+let eint z size = exp (EInt (z, size))
+let eint_sp z size span = exp_sp (EInt (z, size)) span
+let op_sp op args span = exp_sp (EOp (op, args)) span
+let call_sp cid args span = exp_sp (ECall (cid, args)) span
+let hash_sp size args span = exp_sp (EHash (size, args)) span
+
+(* Statements *)
+
+let statement s = { s; sspan = Span.default }
+let statement_sp s span = { s; sspan = span }
+let snoop = statement SNoop
+let sseq s1 s2 = statement (SSeq (s1, s2))
+let slocal id ty e = statement (SLocal (id, ty, e))
+let sassign id e = statement (SAssign (id, e))
+let sprintf s es = statement (SPrintf (s, es))
+let sprintf_sp s es span = statement_sp (SPrintf (s, es)) span
+let sifte e s1 s2 = statement (SIf (e, s1, s2))
+let snoop_sp span = statement_sp SNoop span
+let slocal_sp id ty e span = statement_sp (SLocal (id, ty, e)) span
+let sassign_sp id e span = statement_sp (SAssign (id, e)) span
+let sseq_sp s1 s2 span = statement_sp (SSeq (s1, s2)) span
+let sifte_sp e s1 s2 span = statement_sp (SIf (e, s1, s2)) span
+let gen_sp b e span = statement_sp (SGen (b, e)) span
+let scall_sp cid args span = statement_sp (SUnit (call_sp cid args span)) span
+let match_sp es bs span = statement_sp (SMatch (es, bs)) span
+let sexp_sp e span = statement_sp (SUnit e) span
 
 (* Declarations *)
 let decl d = { d; dspan = Span.default }
 let decl_sp d span = { d; dspan = span }
+let dglobal_sp id ty exp span = decl_sp (DGlobal (id, ty, exp)) span
+let dextern_sp id ty span = decl_sp (DExtern (id, ty)) span
+let handler_sp id p body span = decl_sp (DHandler (id, (p, body))) span
+let memop_sp id p body span = decl_sp (DMemop (id, (p, body))) span
+let group_sp id es span = decl_sp (DGroup (id, es)) span

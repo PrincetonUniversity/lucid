@@ -1,6 +1,6 @@
 (* memop translation for tofino *)
-module S = Syntax
-module PR = Printing
+module S = CoreSyntax
+module PR = CorePrinting
 open LLSyntax
 open LLContext
 open InterpHelpers
@@ -74,24 +74,23 @@ let from_testexp hdl_id mem_var (exp : S.exp) =
        relational operation at its root."
 ;;
 
-(* workaround for assembler: transform the 
+(* workaround for assembler: transform the
   operation (memcell + const) --> (const + memcell) *)
-let _workaround_flip_memcell_const operation : sEvalExpr = 
-  match operation with 
-    | SBinOp(Add, a, b) -> (
-      match (a, b) with 
-        | (RegVar(_), Const(_)) -> SBinOp(Add, b, a)
-        | _ -> operation
-    )
-    | _ -> operation
+let _workaround_flip_memcell_const operation : sEvalExpr =
+  match operation with
+  | SBinOp (Add, a, b) ->
+    (match a, b with
+    | RegVar _, Const _ -> SBinOp (Add, b, a)
+    | _ -> operation)
+  | _ -> operation
 ;;
 
-(* replace an expression that is just a memcell with a memcell identity 
+(* replace an expression that is just a memcell with a memcell identity
    that the p4 compiler will not optimize away. *)
-let _workaround_memcell_ident se = 
-  match se with 
-  | SVar (RegVar r) -> SBinOp(SatSub, RegVar(r), Const(Integer.of_int 0))
-  | _ -> se 
+let _workaround_memcell_ident se =
+  match se with
+  | SVar (RegVar r) -> SBinOp (SatSub, RegVar r, Const (Integer.of_int 0))
+  | _ -> se
 ;;
 
 let from_retexp hdl_id mem_var (exp : S.exp) =
@@ -104,7 +103,9 @@ let from_retexp hdl_id mem_var (exp : S.exp) =
     let o2 = soper_from_immediate hdl_id (Some mem_var) e2 in
     SBinOp (arith_op, o1, o2) |> _workaround_flip_memcell_const
   (* a *)
-  | _ -> SVar (soper_from_immediate hdl_id (Some mem_var) exp) |> _workaround_memcell_ident
+  | _ ->
+    SVar (soper_from_immediate hdl_id (Some mem_var) exp)
+    |> _workaround_memcell_ident
 ;;
 
 let from_memop

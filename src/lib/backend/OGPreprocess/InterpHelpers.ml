@@ -1,7 +1,7 @@
 (* Helper functions to partially interpret the source syntax *)
-
-open Syntax
-open SyntaxUtils
+module Syntax = CoreSyntax
+module Printing = CorePrinting
+open CoreSyntax
 open Batteries
 module CL = Caml.List
 
@@ -16,38 +16,13 @@ let int_width = 32
 
 (**** types ****)
 let intwidth_from_raw_ty rty : int =
-  match TyTQVar.strip_links rty with
-  | TQVar _ ->
-    error
-      "tried to translate object type that was not inferred -- this can happen \
-       if the program has something that is declared without a type and then \
-       never used."
+  match rty with
   | TBool -> 1
-  | TInt sz -> extract_size sz
+  | TInt sz -> sz
   | _ -> error "cannot get size from this type"
 ;;
 
 let width_from_ty ty = intwidth_from_raw_ty ty.raw_ty
-
-let extract_size_opt s =
-  match normalize_size s with
-  | IConst n -> Some n
-  | _ -> None
-;;
-
-let intwidth_from_raw_ty_opt rty : int option =
-  match TyTQVar.strip_links rty with
-  | TQVar _ ->
-    error
-      "tried to translate object type that was not inferred -- this can happen \
-       if the program has something that is declared without a type and then \
-       never used."
-  | TBool -> Some 1
-  | TInt sz -> extract_size_opt sz
-  | _ -> error "cannot get size from this type"
-;;
-
-let width_from_ty_opt ty = intwidth_from_raw_ty_opt ty.raw_ty
 
 (**** values ****)
 let vint_ty i ty =
@@ -173,7 +148,7 @@ let ty_of_exp (exp : exp) : ty =
   | None -> error "untyped expression after type checking / inference..."
 ;;
 
-let raw_ty_of_exp exp = TyTQVar.strip_links (ty_of_exp exp).raw_ty
+let raw_ty_of_exp exp = (ty_of_exp exp).raw_ty
 
 let intwidth_of_exp (exp : exp) : int =
   match exp.ety with
@@ -232,15 +207,6 @@ let is_atomic exp =
   (* calls are atomic if they have all immediate args *)
   | EHash (_, args) | ECall (_, args) ->
     CL.map is_immediate args |> CL.for_all identity
-  | EProj _
-  | ERecord _
-  | EWith _
-  | EComp _
-  | EIndex _
-  | EVector _
-  | ETuple _
-  | ESizeCast _
-  | EStmt _ -> error "Should be removed before IR."
 ;;
 
 let is_bool_non_immediate exp = is_bool exp && not (is_immediate exp)
@@ -476,6 +442,7 @@ and replace_in_exps exps t n = CL.map (fun e -> replace_in_exp e t n) exps
 (* replace EVar(t) with exp n wherever it appears *)
 let rec replace_in_stmt (stmt : statement) t n =
   match stmt with
+  | { s = SNoop } | { s = SPrintf _ } | { s = SRet None } -> stmt
   | { s = SUnit e1; _ } -> { stmt with s = SUnit (replace_in_exp e1 t n) }
   | { s = SLocal (id, ty, exp); _ } ->
     { stmt with s = SLocal (id, ty, replace_in_exp exp t n) }
@@ -497,7 +464,6 @@ let rec replace_in_stmt (stmt : statement) t n =
     let map_f (pats, s) = pats, replace_in_stmt s t n in
     let updated_branches = CL.map map_f branches in
     { stmt with s = SMatch (replace_in_exps keys t n, updated_branches) }
-  | _ -> stmt
 ;;
 
 (* replace id with new_id in the left hand side
@@ -540,10 +506,8 @@ let refresh_param_id (i, ty) = Id.refresh i, ty
 let rec refresh_event_param_ids ds : decls =
   let map_f dec =
     match dec.d with
-    | DEvent (ev_id, ev_sort, constr_specs, ev_params) ->
-      { d =
-          DEvent
-            (ev_id, ev_sort, constr_specs, CL.map refresh_param_id ev_params)
+    | DEvent (ev_id, ev_sort, ev_params) ->
+      { d = DEvent (ev_id, ev_sort, CL.map refresh_param_id ev_params)
       ; dspan = dec.dspan
       }
     | _ -> dec

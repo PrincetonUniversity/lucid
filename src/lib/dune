@@ -73,7 +73,6 @@
    SLSyntax
    backendLogging
    poplPatches
-   eliminateConsts
    eliminateEqRangeOps
    addDefaultBranches
    precomputeArgs

@@ -110,6 +110,7 @@ let rec translate_statement (s : S.statement) : C.statement =
     | S.SSeq (s1, s2) -> C.SSeq (translate_statement s1, translate_statement s2)
     | S.SMatch (es, branches) ->
       C.SMatch (List.map translate_exp es, List.map translate_branch branches)
+    | S.SRet eopt -> C.SRet (Option.map translate_exp eopt)
     | _ -> err s.sspan (Printing.statement_to_string s)
   in
   { s = s'; sspan = s.sspan }

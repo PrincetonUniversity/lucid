@@ -1,13 +1,12 @@
 (* Transform if expressions into a canonical form that
 can easily map to a match action table *)
-open Syntax
+open CoreSyntax
 open Batteries
 open InterpHelpers
 module CL = Caml.List
 open Printf
 open Z3
 module Z3Int = Arithmetic.Integer
-open InterpHelpers
 module DBG = BackendLogging
 
 let outc = ref None
@@ -281,14 +280,6 @@ module NormalizeBoolExps = struct
       error
         "z3_from_expr got an ehash -- this should have been eliminated by an \
          earlier pass."
-    | EProj _, _ -> error "z3_from_expr got a projection operator."
-    | ERecord _, _ | EWith _, _ -> error "z3_from_expr got a record expression."
-    | EComp _, _ -> error "z3_from_expr got a vector comprehension."
-    | EIndex _, _ -> error "z3_from_expr got a vector indexing expression."
-    | EVector _, _ -> error "z3_from_expr got a vector expression."
-    | ETuple _, _ -> error "z3_from_expr got a tuple expression."
-    | ESizeCast _, _ -> error "z3_from_expr got a size cast expression."
-    | EStmt _, _ -> error "z3_from_expr got a statement expression."
   ;;
 
   (* tell Z3 to convert a boolean expression into disjunctive normal form *)

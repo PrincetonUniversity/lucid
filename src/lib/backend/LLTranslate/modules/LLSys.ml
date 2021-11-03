@@ -1,5 +1,5 @@
 (* Misc builtins. Mainly Sys.time() *)
-open Syntax
+open CoreSyntax
 open LLSyntax
 open InterpHelpers
 open LLContext

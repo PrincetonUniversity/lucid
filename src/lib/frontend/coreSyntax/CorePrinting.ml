@@ -190,6 +190,13 @@ and stmt_to_string s =
       if List.length es = 1 then s else "(" ^ s ^ ")"
     in
     "match " ^ estr ^ " with \n" ^ concat_map "\n" branch_to_string branches
+  | SRet eopt ->
+    let estr =
+      match eopt with
+      | Some e -> " " ^ exp_to_string e
+      | None -> ""
+    in
+    Printf.sprintf "return%s;" estr
 ;;
 
 let statement_to_string = stmt_to_string

@@ -1,8 +1,8 @@
-(* Generate Lucid scheduler objects for the Tofino. 
-   Part of the source to IR layer -- generates nativeblocks 
+(* Generate Lucid scheduler objects for the Tofino.
+   Part of the source to IR layer -- generates nativeblocks
    (native P4 blocks wrapped in IR syntax tree nodes) *)
 open MiscUtils
-open Syntax
+open CoreSyntax
 open LLSyntax
 open InterpHelpers
 open LLContext
@@ -22,15 +22,16 @@ let instance_name evid =
   P4tPrint.str_of_varid (TofinoStructs.full_in_struct_from_ev evid EBackground)
 ;;
 
-let hex_iid evid = 
-  let ev_iid = sprintf "%#x" (ctx_find_eventrec (Cid.id evid)).event_iid in 
-  print_endline ("[hex_iid]: "^(Id.to_string evid)^" -- "^(ev_iid));
-  ev_iid 
+let hex_iid evid =
+  let ev_iid = sprintf "%#x" (ctx_find_eventrec (Cid.id evid)).event_iid in
+  print_endline ("[hex_iid]: " ^ Id.to_string evid ^ " -- " ^ ev_iid);
+  ev_iid
+;;
 
 let ids_of_bg_events ds =
   let map_f dec =
     match dec.d with
-    | DEvent (evid, EBackground, _, _) -> Some evid
+    | DEvent (evid, EBackground, _) -> Some evid
     | _ -> None
   in
   CL.filter_map map_f ds
@@ -99,7 +100,7 @@ module IngressExit = struct
 
   (* RET: generated, BG: not generated *)
   (* return (ONLY an exit event was generated) *)
-  (* we set the ethertype to IP because the packet 
+  (* we set the ethertype to IP because the packet
      might be an event packet at this point *)
   let acn_return bg_ev_ids =
     { aname = "acn_return"
@@ -109,20 +110,20 @@ module IngressExit = struct
   ;;
 
   (* RET: not generated, BG: generated *)
-  (* note that in this case, we don't drop the packet -- it must 
-     get to the multicast engine. But we _do_ exit the ingress 
+  (* note that in this case, we don't drop the packet -- it must
+     get to the multicast engine. But we _do_ exit the ingress
      pipeline. *)
-  (* There may be a bug in my logic here -- we want to make sure 
+  (* There may be a bug in my logic here -- we want to make sure
      that the original packet actually gets dropped in egress. *)
   let acn_bg bg_ev_ids ev_id =
     let acn_name = "acn_bg_" ^ struct_name ev_id in
     { aname = acn_name
     ; acmds =
-        cmd_copy_to_recirc
+        (cmd_copy_to_recirc
         :: cmd_lucid_etype
-        :: cmd_disable_other_hdrs bg_ev_ids ev_id
-        @  [cmd_exit] (* exit must be last! *)
-
+        :: cmd_disable_other_hdrs bg_ev_ids ev_id)
+        @ [cmd_exit]
+        (* exit must be last! *)
     ; arule = "(0x0, " ^ hex_iid ev_id ^ ") :" ^ acn_name ^ "();"
     }
   ;;
@@ -213,7 +214,7 @@ module Egress = struct
     let egr_drop_decl = acn_str acn_egr_drop_event in
     let tbl_name = "egr_serialize_clone" in
     let print_fcn tbl_id =
-      let lucid_etype_str = string_of_int lucid_etype in 
+      let lucid_etype_str = string_of_int lucid_etype in
       let tbl_name = str_of_private_oid tbl_id in
       [%string
         {__nativeblock___|
@@ -225,12 +226,12 @@ module Egress = struct
           const entries = {
             ($lucid_etype_str, 0) : $egr_drop_name();
             ($lucid_etype_str, _) : egr_noop();
-            (_, _)      : egr_noop();  
+            (_, _)      : egr_noop();
           }
         }
         |__nativeblock___}]
     in
-    (* can't use the constructors for the ingress emit block because they require 
+    (* can't use the constructors for the ingress emit block because they require
     a 1:1 mapping from action names to rules. Might want to make that more general. *)
     new_native_block (Cid.create [tbl_name]) LEgr print_fcn
   ;;

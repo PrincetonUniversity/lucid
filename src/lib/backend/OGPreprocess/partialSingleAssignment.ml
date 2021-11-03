@@ -9,7 +9,7 @@
   of a program into single assignment form, so that the
   layout stage doesn't generate semantically incorrect programs.
 *)
-open Syntax
+open CoreSyntax
 open Printf
 open BatMap
 open Batteries

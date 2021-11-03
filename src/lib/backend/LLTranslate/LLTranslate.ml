@@ -5,7 +5,6 @@
     1. convert each handler into an operation-statement graph.
     2. translate each operation-statement into a graph.
 *)
-open SyntaxUtils
 open MiscUtils
 open Batteries
 open Format
@@ -17,7 +16,8 @@ open LLOp
 open LLValidate
 open LogIr
 module CL = Caml.List
-open Syntax
+open CoreSyntax
+module Printing = CorePrinting
 module IS = LLSyntax
 
 (* logging *)
@@ -45,19 +45,15 @@ module TranslateEvents = struct
   using the same struct instance for input and output.
   Also, remember the parameter ids of the event's handler. *)
   let remember_event_def event_iid dec =
-    let event_iid = event_iid + 1 in (* start at event id 1, not 0 *)
+    let event_iid = event_iid + 1 in
+    (* start at event id 1, not 0 *)
     match dec.d with
-    | DEvent (evid, ev_sort, _, params) ->
+    | DEvent (evid, ev_sort, params) ->
       let ev_cid = Cid.id evid in
       let field_defs = vardefs_from_params params in
-      let struct_cid = TofinoStructs.full_struct_from_ev evid ev_sort in 
-      ctx_add_eventrec
-        ev_cid
-        event_iid
-        ev_sort
-        field_defs
-        struct_cid
-(*       (match ev_sort with
+      let struct_cid = TofinoStructs.full_struct_from_ev evid ev_sort in
+      ctx_add_eventrec ev_cid event_iid ev_sort field_defs struct_cid
+    (*       (match ev_sort with
       | EEntry _ ->
         ctx_add_eventrec
           ev_cid
@@ -107,7 +103,6 @@ module TranslateEvents = struct
       :: ev_delay_field
       :: field_defs
     in
-
     (* build the struct def *)
     trans_info ("generating struct def for event: " ^ Id.to_string erec.event_id);
     let struct_def =
@@ -115,10 +110,8 @@ module TranslateEvents = struct
       | EBackground -> IS.new_header_structdef struct_name field_defs
       | _ -> IS.new_meta_structdef struct_name field_defs
     in
-
     (* build the struct instance *)
-    let structs = [IS.new_struct struct_name SPublic erec.event_struct] in 
-
+    let structs = [IS.new_struct struct_name SPublic erec.event_struct] in
     (* build the const event iid def *)
     let event_iid_const =
       IS.new_public_constdef
@@ -142,7 +135,7 @@ module TranslateEvents = struct
      *)
     let to_pstate dec =
       match dec.d with
-      | DEvent (evid, EBackground, _, _) ->
+      | DEvent (evid, EBackground, _) ->
         (*
           generate the parse state. Currently very simple.
             state parse_dpt_extra_processing_in_t {
@@ -185,7 +178,7 @@ end
 
 let get_dglobal_info ty e =
   let sz =
-    match TyTQVar.strip_links ty.raw_ty with
+    match ty.raw_ty with
     | TName (_, [sz], _) -> sz
     | _ -> error "Bad DGlobal"
   in
@@ -207,7 +200,7 @@ let regdec_from_decl dec =
     let reg_id = Cid.id reg_id in
     (* reg, width, length, ??? *)
     let arg_name = exp (EVar reg_id) in
-    let arg_width = exp (EVal (vint (extract_size sz) 8)) in
+    let arg_width = exp (EVal (vint sz 8)) in
     print_endline
       ("arg_width expr used as arg: " ^ Printing.exp_to_string arg_width);
     let args = arg_name :: arg_width :: args in
@@ -225,15 +218,6 @@ let regdec_from_decl dec =
     print_endline ("regdec: " ^ IS.show_decl decl);
     [decl]
   | _ -> []
-;;
-
-let constdec_from_decl dec =
-  match dec.d with
-  | DConst (const_id, ty, exp) ->
-    let width = width_from_ty ty in
-    let rhs_val = Integer.to_int (LLOp.zint_from_evalue exp) in
-    Some (IS.new_private_constdef (Cid.Id const_id) width rhs_val)
-  | _ -> None
 ;;
 
 (* declare groups as 16-bit ints. (todo: integrate groups and mc in distribution layer) *)
@@ -256,7 +240,11 @@ let gen_internal_structs () =
   let fnames =
     CL.map
       (fun f -> Cid.create [f])
-      [timestamp_str; handle_selector_str; exit_event_str; next_event_str; events_count_str]
+      [ timestamp_str
+      ; handle_selector_str
+      ; exit_event_str
+      ; next_event_str
+      ; events_count_str ]
   in
   let fwidths = [32; 8; 8; 8; 8] in
   let fdefs = CL.combine fnames fwidths in
@@ -267,7 +255,6 @@ let gen_internal_structs () =
   (* the p4t printer will automatically link the instance to the struct based on struct_cid *)
   [dptMeta_struct; dptMeta_instance]
 ;;
-
 
 (* Give all the spans in a program a unique id. *)
 let cur_span = ref 0
@@ -288,63 +275,57 @@ let make_unique_spans ds =
   v#visit_decls () ds
 ;;
 
+let public_cid_id = ref 0
 
-let public_cid_id = ref 0;;
-
-let fresh_pad_cid () = 
+let fresh_pad_cid () =
   public_cid_id := !public_cid_id + 1;
-  "pad_"^(string_of_int (!public_cid_id))^"_meta" |> Id.fresh |> Cid.id
+  "pad_" ^ string_of_int !public_cid_id ^ "_meta" |> Id.fresh |> Cid.id
 ;;
 
-let byte_align_header_structs (prog : IS.llProg) : IS.llProg = 
-  (* add pads so that every 8-bit field 
-     in every header struct starts on a byte-boundary, and 
-     every header struct ends on an byte-boundary. *) 
-
-
+let byte_align_header_structs (prog : IS.llProg) : IS.llProg =
+  (* add pads so that every 8-bit field
+     in every header struct starts on a byte-boundary, and
+     every header struct ends on an byte-boundary. *)
 
   (* pad fields so they end on byte boundary *)
-  let pad_tail fields = 
-    let fields_width = CL.split fields |> snd |> sum in 
-    match (fields_width mod 8) with 
-    | 0 ->  fields
+  let pad_tail fields =
+    let fields_width = CL.split fields |> snd |> sum in
+    match fields_width mod 8 with
+    | 0 -> fields
     (* pad by 8-n *)
     | n ->
-      let (pad_id, pad_width) = (fresh_pad_cid (), (8 - n)) in 
-      fields@[(pad_id, pad_width)]    
-  in 
-  let byte_align_fields fields field = 
-    match ((snd field) mod 8) with 
-      (* field is byte aligned, make sure prior fields are aligned before adding*)
-      | 0 ->
-          (pad_tail fields)@[field]
-      | _ -> 
-        (* field is not byte aligned, just add it *)    
-        fields@[field]
-  in 
-  let byte_align_header_struct (cid, decl) = 
-    match decl with 
-      | IS.StructDef(mid, struct_type, fields) -> (
-        match struct_type with 
-        | IS.SHeader -> 
-          let aligned_fields = 
-            CL.fold_left byte_align_fields [] fields
-            |> pad_tail
-           in 
-        (cid, IS.StructDef(mid, struct_type, aligned_fields))
-        | IS.SMeta -> (cid, decl)
-      )
-      | _ -> (cid, decl)
-  in 
-  let cid_decls = CL.map byte_align_header_struct prog.instr_dict in 
-  {prog with IS.instr_dict=cid_decls}
+      let pad_id, pad_width = fresh_pad_cid (), 8 - n in
+      fields @ [pad_id, pad_width]
+  in
+  let byte_align_fields fields field =
+    match snd field mod 8 with
+    (* field is byte aligned, make sure prior fields are aligned before adding*)
+    | 0 -> pad_tail fields @ [field]
+    | _ ->
+      (* field is not byte aligned, just add it *)
+      fields @ [field]
+  in
+  let byte_align_header_struct (cid, decl) =
+    match decl with
+    | IS.StructDef (mid, struct_type, fields) ->
+      (match struct_type with
+      | IS.SHeader ->
+        let aligned_fields =
+          CL.fold_left byte_align_fields [] fields |> pad_tail
+        in
+        cid, IS.StructDef (mid, struct_type, aligned_fields)
+      | IS.SMeta -> cid, decl)
+    | _ -> cid, decl
+  in
+  let cid_decls = CL.map byte_align_header_struct prog.instr_dict in
+  { prog with IS.instr_dict = cid_decls }
 ;;
 
 let from_dpt (ds : decls) (opgraph_recs : prog_opgraph) : IS.llProg =
   (* translation to IR currently does many passes over the backend, with each pass
-    translating a different part of the syntax tree. 
-    5/18/21 -- now that the final structure of the generated code 
-    is more concretely defined, we can redo this to translate in a single pass. 
+    translating a different part of the syntax tree.
+    5/18/21 -- now that the final structure of the generated code
+    is more concretely defined, we can redo this to translate in a single pass.
     This would make the code clearer and easier to extend. *)
   DBG.start_mlog __FILE__ outc dprint_endline;
   LLOp.start_logging ();
@@ -363,8 +344,6 @@ let from_dpt (ds : decls) (opgraph_recs : prog_opgraph) : IS.llProg =
   let parse_def = TranslateEvents.parsetree_from_events ds in
   (* generate backend defs for register arrays *)
   let regarray_defs = CL.map regdec_from_decl ds |> CL.flatten in
-  (* generate constants *)
-  let const_defs = CL.filter_map constdec_from_decl ds in
   (* generate constants for groups *)
   let group_defs = CL.filter_map groupdec_from_decl ds in
   (* translate operation statements into backend compute objects,
@@ -381,7 +360,6 @@ let from_dpt (ds : decls) (opgraph_recs : prog_opgraph) : IS.llProg =
     { tofino_prog with
       instr_dict =
         tofino_prog.instr_dict
-        @ IS.dict_of_decls const_defs
         @ IS.dict_of_decls group_defs
         @ IS.dict_of_decls regarray_defs
         @ IS.dict_of_decls struct_defs
@@ -392,17 +370,13 @@ let from_dpt (ds : decls) (opgraph_recs : prog_opgraph) : IS.llProg =
     }
   in
   (* pad header structs *)
-  let out_prog = byte_align_header_structs out_prog in 
-(*   !dprint_endline "-----object ids in cid decls at end of LLTranslate-----";
+  let out_prog = byte_align_header_structs out_prog in
+  (*   !dprint_endline "-----object ids in cid decls at end of LLTranslate-----";
   !dprint_endline (DebugPrint.ids_in_cid_decls out_prog.instr_dict);
   !dprint_endline "-----object decls in cid decls at end of LLTranslate-----";
   !dprint_endline (DebugPrint.str_of_cid_decls out_prog.instr_dict);
   !dprint_endline
     "-----end object decls in cid decls at end of LLTranslate-----"; *)
-  LLValidate.validate_cid_decls
-    out_prog.instr_dict
-    "[LLTranslate] end";  
-
+  LLValidate.validate_cid_decls out_prog.instr_dict "[LLTranslate] end";
   out_prog
-
 ;;

@@ -1,6 +1,6 @@
-(* make sure every match statement 
+(* make sure every match statement
 has an explicit default case. *)
-open Syntax
+open CoreSyntax
 module CL = Caml.List
 
 let is_default_pats pats =

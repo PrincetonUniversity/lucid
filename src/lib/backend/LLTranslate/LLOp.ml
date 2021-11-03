@@ -1,7 +1,8 @@
 (* translate individual operation statements from the
 source syntax to tofino compute objects *)
-open Syntax
-module Pr = Printing
+open CoreSyntax
+module Printing = CorePrinting
+module Pr = CorePrinting
 module IS = LLSyntax
 open InterpHelpers
 open LLContext
@@ -15,12 +16,6 @@ module DBG = BackendLogging
 let outc = ref None
 let dprint_endline = ref DBG.no_printf
 
-(* 5/18 added these quickly, they belong... somewhere else... *)
-(* get the variables that are not consts. Used in keys. *)
-let dynamic_vars_in_exp (ex : exp) : Cid.t list =
-  vars_in_exp ex |> CL.filter (fun v -> not (ctx_var_is_const v))
-;;
-
 (* get an integer from an expression. If the expression is a const, get the computed value. *)
 let int_from_const_exp (ex : exp) =
   print_endline ("[int_from_exp]: " ^ Printing.exp_to_string ex);
@@ -28,7 +23,6 @@ let int_from_const_exp (ex : exp) =
   | EVal { v = VInt zint; _ } -> Integer.to_int zint
   | EInt (z, _) ->
     Z.to_int z (* Integer.create_z ~value:z ~size:(extract_size sz)  *)
-  | EVar cid -> LLContext.ctx_int_of_const cid
   | _ -> trans_err "could not evaluate expression to an int" ex
 ;;
 
@@ -53,9 +47,10 @@ module TofinoStructs = struct
 
   (* fully qualified struct instance name from event id and type*)
   let full_struct_from_ev evid evsort =
-    let prefix = match evsort with 
-      | EEntry _ | EExit -> (Id.create md_instance_prefix)
-      | EBackground -> (Id.create hdr_instance_prefix)
+    let prefix =
+      match evsort with
+      | EEntry _ | EExit -> Id.create md_instance_prefix
+      | EBackground -> Id.create hdr_instance_prefix
     in
     Cid.compound prefix (in_struct_from_ev evid)
   ;;
@@ -78,7 +73,7 @@ module TofinoStructs = struct
   ;;
 
   let qual_in_fieldnames_of_event hdl_id =
-    let struct_instance = ctx_find_event_struct hdl_id in 
+    let struct_instance = ctx_find_event_struct hdl_id in
     let qual_fieldnames =
       ctx_find_event_fields hdl_id
       |> CL.map (fun field_cid -> Cid.concat struct_instance field_cid)
@@ -87,7 +82,6 @@ module TofinoStructs = struct
   ;;
 
   let qual_out_fieldnames_of_event = qual_in_fieldnames_of_event
-  ;;
 end
 
 (**** translate operation statements to DPA objects ****)
@@ -157,15 +151,8 @@ let oper_from_immediate hdl_id (immediate_exp : exp) =
     error dstr
 ;;
 
-let oper_from_int (i : int) : IS.oper = 
-  IS.Const (const_from_int i)
-;;
-
-let oper_from_size (sz : size) : IS.oper =
-  match extract_size_opt sz with
-  | Some sz_int -> IS.Const (const_from_int sz_int)
-  | None -> error "[oper_from_size] -- could not extract int from size"
-;;
+let oper_from_int (i : int) : IS.oper = IS.Const (const_from_int i)
+let oper_from_size (sz : size) : IS.oper = IS.Const (const_from_int sz)
 
 let soper_from_immediate
     hdl_id
@@ -237,11 +224,13 @@ module TofinoAlu = struct
         , IS.new_dsingleinstr alu_name outvar_mid (IS.new_ebinop Cast src width)
         )
       | EOp (Slice (s, e), slice_args) ->
-        let src = oper_from_immediate hdl_id (CL.hd slice_args) in 
-        let st, en = oper_from_int s, oper_from_int e in 
+        let src = oper_from_immediate hdl_id (CL.hd slice_args) in
+        let st, en = oper_from_int s, oper_from_int e in
         ( alu_name
-        , IS.new_dsingleinstr alu_name outvar_mid (IS.new_eop Slice [src; st; en])
-        )
+        , IS.new_dsingleinstr
+            alu_name
+            outvar_mid
+            (IS.new_eop Slice [src; st; en]) )
       | EOp (_, _) ->
         let dstr = Printing.statement_to_string opstmt in
         error
@@ -277,22 +266,13 @@ module TofinoAlu = struct
       | EHash (size, exps) ->
         (* let width = SyntaxUtils.extract_size size in *)
         (* hack for temporary cast *)
-        let width = SyntaxUtils.extract_size_default size 32 in
+        let width = size in
         let epoly = CL.hd exps in
         let poly = int_from_const_exp epoly in
         (* poly can be an integer or a const *)
         (* let poly = Integer.to_int (zint_from_evalue (CL.hd exps)) in  *)
         let args = CL.map (oper_from_immediate hdl_id) (CL.tl exps) in
         alu_name, IS.new_hasher alu_name width poly outvar_mid args
-      | EProj _
-      | ERecord _
-      | EWith _
-      | EComp _
-      | EIndex _
-      | EVector _
-      | ETuple _
-      | ESizeCast _
-      | EStmt _ -> error "Should be eliminated long before this point."
     in
     !dprint_endline
       (sprintf "[from_assign] created alu: " ^ Printing.cid_to_string alu_name);
@@ -327,7 +307,7 @@ module TofinoAlu = struct
 
   (* TODO: add delay and location meta fields, put at the beginning, set to 0 initially *)
   let event_init_meta_instrs ev_id =
-    let struct_id = ctx_find_event_struct_cid ev_id in 
+    let struct_id = ctx_find_event_struct_cid ev_id in
     (* set the event id field in the packet header *)
     let init_event_id_instr =
       IS.new_iassign_int
@@ -369,18 +349,20 @@ module TofinoAlu = struct
     IS.IAssign (exitevent_id_field, IS.new_expr_of_int event_iid)
   ;;
 
-  (* increment a variable that counts 
+  (* increment a variable that counts
      the number of background events generated. *)
-  let increment_event_counter () = 
-    let ev_ct_cid = Cid.create [md_instance_prefix; dpt_meta_str; events_count_str] in 
-    IS.new_iassign 
-      ev_ct_cid 
-      (IS.new_ebinop 
-        IS.Add 
-        (IS.new_oper_of_meta ev_ct_cid)
-        (IS.new_oper_of_int 1)
-      )
+  let increment_event_counter () =
+    let ev_ct_cid =
+      Cid.create [md_instance_prefix; dpt_meta_str; events_count_str]
+    in
+    IS.new_iassign
+      ev_ct_cid
+      (IS.new_ebinop
+         IS.Add
+         (IS.new_oper_of_meta ev_ct_cid)
+         (IS.new_oper_of_int 1))
   ;;
+
   (* generate an alu instruction from the instantiation of an event *)
   let from_event_instantiation hdl_id alu_basename ev_id ev_args =
     !dprint_endline ("[generate_event] event id: " ^ Cid.to_string ev_id);
@@ -404,17 +386,15 @@ module TofinoAlu = struct
     let struct_id = ctx_find_event_struct_cid ev_id in
     (* add instructions to set metadata fields, e.g., event name *)
     let event_meta_instrs = event_init_meta_instrs ev_id in
-    (* if the event is a background event: set the header field to valid, 
-        set the next event instruction, 
+    (* if the event is a background event: set the header field to valid,
+        set the next event instruction,
         and increment the events generated count. *)
-    let final_instruction = 
+    let final_instruction =
       match (ctx_find_eventrec ev_id).event_sort with
       | EBackground ->
         [ IS.IValidate struct_id
-        ; set_next_event_instr ev_id 
-        ; increment_event_counter ()
-
-        ]
+        ; set_next_event_instr ev_id
+        ; increment_event_counter () ]
       | _ -> [set_exit_event_instr ev_id]
     in
     let ivec = event_meta_instrs @ ivec @ final_instruction in
@@ -473,11 +453,7 @@ module TofinoControl = struct
       ("trying to find width of type: " ^ Printing.ty_to_string var_ty);
     (* let width = width_from_ty var_ty in  *)
     (* HACK (7/6/21) -- should figure out what is wrong here. Probably related to consts. *)
-    let width =
-      match width_from_ty_opt var_ty with
-      | Some width -> width
-      | None -> 32
-    in
+    let width = width_from_ty var_ty in
     let meta_obj = IS.new_globalmeta outvar_mid width in
     meta_obj :: assign_objs
   ;;
@@ -609,7 +585,7 @@ module TofinoControl = struct
   let get_atom_exps = flatten_conjunction
 
   let get_keys hdl_id exp =
-    let keys = dynamic_vars_in_exp exp |> CL.map (mid_from_cid hdl_id) in
+    let keys = vars_in_exp exp |> CL.map (mid_from_cid hdl_id) in
     print_endline "KEYS: ";
     CL.iter (fun k -> print_endline (Cid.to_string k)) keys;
     print_endline "-----";
