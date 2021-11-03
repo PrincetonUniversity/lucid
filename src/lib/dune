@@ -28,6 +28,7 @@
    lexer
    syntax
    syntaxUtils
+   coreSyntax
    collections
    typer
    typerZ3
@@ -50,6 +51,7 @@
    replaceUserTys
    linerate
    frontendPipeline
+   syntaxToCore
    interp
    interpCore
    pipeline
