@@ -24,6 +24,7 @@
    integer
    span
    printing
+   corePrinting
    parser
    lexer
    syntax
