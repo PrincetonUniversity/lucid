@@ -32,9 +32,9 @@ let str = '"'[^'"']*'"'
 let filename = "\""(['a'-'z' 'A'-'Z' '0'-'9' '_' '\\' '/' '.' '-'])+"\""
 
 rule token = parse
-  | "include" wspace* filename { token lexbuf } (* Include directives are processed separately *)
   | "/*"              { comments 0 lexbuf }
   | "//"              { comments (-1) lexbuf }
+  | "include"         { INCLUDE (position lexbuf) }
   | "false"           { FALSE (position lexbuf) }
   | "true"            { TRUE (position lexbuf) }
   | "if"              { IF (position lexbuf) }
