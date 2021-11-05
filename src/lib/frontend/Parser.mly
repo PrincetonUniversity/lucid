@@ -34,6 +34,7 @@
 %token <Span.t * Z.t> NUM
 %token <Span.t * int list> BITPAT
 %token <Span.t * string> STRING
+%token <Span.t> INCLUDE
 %token <Span.t> TRUE
 %token <Span.t> FALSE
 %token <Span.t> EQ
@@ -108,7 +109,7 @@
 %token EOF
 
 %start prog
-%type  <Syntax.decls> prog
+%type  <(string list * Syntax.decls)> prog
 
 %right ID EVENT
 %left AND OR         /* lowest precedence */
@@ -377,6 +378,12 @@ statement1:
     | PRINTF LPAREN STRING COMMA args RPAREN SEMI  { sprintf_sp (snd $3) $5 (Span.extend $1 $7) }
     | FOR LPAREN ID LESS size RPAREN LBRACE statement RBRACE { loop_sp $8 (snd $3) (snd $5) (Span.extend $1 $9) }
 
+includes:
+    | INCLUDE STRING                        {[(snd $2)]}
+    | INCLUDE STRING includes               {(snd $2)::$3}
+
+
 prog:
-    | decls EOF                             { $1 }
+    | includes decls EOF                    { ($1, $2) }
+    | decls EOF                             { ([], $1) }
 ;
