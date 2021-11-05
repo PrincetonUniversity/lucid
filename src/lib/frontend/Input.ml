@@ -30,16 +30,6 @@ let read ?(filename : string option = None) lexbuf =
          (string_of_int cnum))
 ;;
 
-let read_from_file fname =
-  let fin = open_in fname in
-  let lexbuf = Lexing.from_channel fin in
-  lexbuf.lex_curr_p <- { lexbuf.lex_curr_p with pos_fname = fname };
-  lexbuf.lex_start_p <- { lexbuf.lex_start_p with pos_fname = fname };
-  let res = read ~filename:(Some fname) lexbuf in
-  close_in fin;
-  res
-;;
-
 (* Make dest_fname relative to the current directory (or absolute),
    instead of relative to the source_fname *)
 let adjust_filename source_fname dest_fname =
@@ -48,53 +38,26 @@ let adjust_filename source_fname dest_fname =
   |> FilePath.reduce ~no_symlink:true
 ;;
 
-(* Process include directives: return a list of filenames to be processesed
-   in order. Do not include the same file more than once *)
-let process_includes (fname : string) : string list =
-  let rec process_includes_aux (seen, imports) fname =
-    print_endline @@ "Processing " ^ fname;
-    if List.mem fname seen
-    then seen, imports
-    else (
-      (* Get any imports in this file *)
-      let lines =
-        try File.lines_of fname with
-        | _ -> Console.error ("File not found: " ^ fname)
-      in
-      let includes =
-        Enum.take_while
-          (fun s -> String.starts_with s "include")
-          (Enum.filter
-             (fun s ->
-               (not @@ String.starts_with s "//") && String.trim s <> "")
-             lines)
-      in
-      let imported_fnames =
-        Enum.map
-          (fun s ->
-            if Str.string_match (Str.regexp "include[ ]*\\\"\\(.+\\)\\\"") s 0
-            then adjust_filename fname (Str.matched_group 1 s)
-            else
-              Console.error
-              @@ "Bad include directive (did you forget the quotes?): "
-              ^ s)
-          includes
-      in
-      (* Recursively process those imports *)
-      let rec_seen, rec_imports =
-        Enum.fold process_includes_aux (fname :: seen, imports) imported_fnames
-      in
-      rec_seen, fname :: rec_imports)
-  in
-  let _, imports =
-    process_includes_aux ([], []) (adjust_filename FilePath.current_dir fname)
-  in
-  List.rev imports
+let rec read_from_file fname visited: ('a list * string list) =
+  if List.mem fname visited then ([], []) else
+  let fin = open_in fname in
+  let lexbuf = Lexing.from_channel fin in
+  lexbuf.lex_curr_p <- { lexbuf.lex_curr_p with pos_fname = fname };
+  lexbuf.lex_start_p <- { lexbuf.lex_start_p with pos_fname = fname };
+  let res = read ~filename:(Some fname) lexbuf in
+  close_in fin;
+  match res with
+  | ([], d) -> (d, [fname])
+  | (f, d) ->
+  let ajust_f = List.map (adjust_filename fname) f in
+  List.fold_left (fun a b -> let pf = read_from_file b (fname::visited) in
+                ((fst pf)@(fst a), (snd a)@(snd pf))) (d,[fname]) ajust_f
 ;;
 
+
 let parse fname =
-  let files_to_parse = process_includes fname in
-  Console.read_files files_to_parse;
-  let ds = List.concat (List.map read_from_file files_to_parse) in
-  ds
+  let ajust_fname = adjust_filename FilePath.current_dir fname in
+  let ds = read_from_file ajust_fname [] in
+  Console.read_files (snd ds);
+  (fst ds)
 ;;
