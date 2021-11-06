@@ -60,7 +60,10 @@ let should_inline exp =
   let v =
     object
       inherit [_] s_iter
-      method! visit_ECall r _ _ = r := true
+
+      method! visit_ECall r cid _ =
+        if Id.name (Cid.first_id cid) = "Array" then r := true
+
       method! visit_EHash r _ _ = r := true
     end
   in

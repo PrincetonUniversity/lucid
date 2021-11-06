@@ -148,4 +148,4 @@ let translate_decl (d : S.decl) : C.decl =
   { d = d'; dspan = d.dspan }
 ;;
 
-let translate_to_core (ds : S.decls) : C.decls = List.map translate_decl ds
+let translate_prog (ds : S.decls) : C.decls = List.map translate_decl ds

@@ -237,7 +237,7 @@ let compile_to_tofino target_filename p4_harness_fn config_fn interp_spec_fn =
   let _ = interp_spec_fn in
   (* frontend eliminates most abstractions (modules, functions) *)
   let _, ds = FrontendPipeline.process_prog ds in
-  let ds = SyntaxToCore.translate_to_core ds in
+  let ds = SyntaxToCore.translate_prog ds in
   (* middle passes do a bit of regularization of the syntax tree *)
   let ds = middle_passes ds in
   (* convert to IR for backend *)
