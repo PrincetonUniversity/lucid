@@ -74,7 +74,7 @@ let rec to_ids d =
   | Compound (id, cid) -> id :: to_ids cid
 ;;
 
-let rec last_id d = 
+let rec last_id d =
   match d with
   | Id id -> id
   | Compound (_, cid) -> last_id cid

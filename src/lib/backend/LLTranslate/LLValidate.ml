@@ -12,9 +12,7 @@ let get_self_loop_tables cid_decls =
     match decl with
     | Table _ ->
       (match
-         Caml.List.exists
-           (Cid.equals cid)
-           (DFSyntax.succs_of_tid cid_decls cid)
+         Caml.List.exists (Cid.equals cid) (DFSyntax.succs_of_tid cid_decls cid)
        with
       | true -> Some (cid, decl)
       | false -> None)

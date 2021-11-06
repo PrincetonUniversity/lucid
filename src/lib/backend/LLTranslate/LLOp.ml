@@ -40,7 +40,6 @@ module TofinoStructs = struct
   (**** [11/21] new helpers ****)
   (* let  *)
 
-
   (**** translate structure names ****)
   let defname_from_evname evname = "e_" ^ evname
   let defname_from_evid evid = Cid.id (fst evid |> defname_from_evname, snd evid)
@@ -59,9 +58,10 @@ module TofinoStructs = struct
 
   (* fully qualified struct instance name from event id and type*)
   let full_struct_from_ev evid evsort =
-    let prefix = match evsort with 
-      | EEntry _ | EExit -> (Id.create md_instance_prefix)
-      | EBackground -> (Id.create hdr_instance_prefix)
+    let prefix =
+      match evsort with
+      | EEntry _ | EExit -> Id.create md_instance_prefix
+      | EBackground -> Id.create hdr_instance_prefix
     in
     Cid.compound prefix (in_struct_from_ev evid)
   ;;
@@ -84,13 +84,12 @@ module TofinoStructs = struct
   ;;
 
   let qual_in_fieldnames_of_event hdl_id =
-    let struct_instance = ctx_find_event_struct_instance hdl_id in 
+    let struct_instance = ctx_find_event_struct_instance hdl_id in
     ctx_find_event_fields hdl_id
     |> CL.map (fun field_cid -> Cid.concat struct_instance field_cid)
   ;;
 
   let qual_out_fieldnames_of_event = qual_in_fieldnames_of_event
-  ;;
 end
 
 (**** translate operation statements to DPA objects ****)
@@ -160,9 +159,7 @@ let oper_from_immediate hdl_id (immediate_exp : exp) =
     error dstr
 ;;
 
-let oper_from_int (i : int) : IS.oper = 
-  IS.Const (const_from_int i)
-;;
+let oper_from_int (i : int) : IS.oper = IS.Const (const_from_int i)
 
 let oper_from_size (sz : size) : IS.oper =
   match extract_size_opt sz with
@@ -240,11 +237,13 @@ module TofinoAlu = struct
         , IS.new_dsingleinstr alu_name outvar_mid (IS.new_ebinop Cast src width)
         )
       | EOp (Slice (s, e), slice_args) ->
-        let src = oper_from_immediate hdl_id (CL.hd slice_args) in 
-        let st, en = oper_from_int s, oper_from_int e in 
+        let src = oper_from_immediate hdl_id (CL.hd slice_args) in
+        let st, en = oper_from_int s, oper_from_int e in
         ( alu_name
-        , IS.new_dsingleinstr alu_name outvar_mid (IS.new_eop Slice [src; st; en])
-        )
+        , IS.new_dsingleinstr
+            alu_name
+            outvar_mid
+            (IS.new_eop Slice [src; st; en]) )
       | EOp (_, _) ->
         let dstr = Printing.statement_to_string opstmt in
         error
@@ -252,8 +251,8 @@ module TofinoAlu = struct
             statement: "
           ^ dstr)
       | ECall (fcn_id, args) ->
-        ((* a call could either be a call, or an event declaration. *)
-        match raw_ty_of_exp val_exp with
+        (* a call could either be a call, or an event declaration. *)
+        (match raw_ty_of_exp val_exp with
         | TEvent _ ->
           let call_result =
             ctx_call_codegen
@@ -329,45 +328,50 @@ module TofinoAlu = struct
   ;;
 
   let event_meta_init_instrs ev_id =
-    let evrec = ctx_find_eventrec ev_id in 
-    let ev_struct_id = evrec.event_struct_instance in 
+    let evrec = ctx_find_eventrec ev_id in
+    let ev_struct_id = evrec.event_struct_instance in
     (* event id; multicast flag; location; delay*)
-    [ GS.int_assign_instr (Cid.concat ev_struct_id event_id_field) (ctx_find_event_iid ev_id)
+    [ GS.int_assign_instr
+        (Cid.concat ev_struct_id event_id_field)
+        (ctx_find_event_iid ev_id)
     ; GS.int_assign_instr (Cid.concat ev_struct_id event_mc_field) 0
     ; GS.int_assign_instr (Cid.concat ev_struct_id event_loc_field) 0
-    ; GS.int_assign_instr (Cid.concat ev_struct_id event_delay_field) 0
-    ]
-    @ (* background events are carried in headers that need to be set to valid. *)
-    ( match evrec.event_sort with 
-      | EBackground -> [GS.validate_instr ev_struct_id]
-      | _ -> []
-    )
+    ; GS.int_assign_instr (Cid.concat ev_struct_id event_delay_field) 0 ]
+    @
+    (* background events are carried in headers that need to be set to valid. *)
+    match evrec.event_sort with
+    | EBackground -> [GS.validate_instr ev_struct_id]
+    | _ -> []
   ;;
 
-  let runtime_meta_init_instrs ev_id = 
+  let runtime_meta_init_instrs ev_id =
     (* todo: want a cleaner way to access the elements of the runtime metadata struct. *)
-    let evrec = ctx_find_eventrec ev_id in 
+    let evrec = ctx_find_eventrec ev_id in
     let event_iid = evrec.event_iid in
-    match evrec.event_sort with 
-      | EBackground -> 
-        let ev_ct_cid = Cid.create [md_instance_prefix; dpt_meta_str; events_count_str] in 
-        [
-          (* md.dptMeta.nextEvent = i:int *)
-          GS.int_assign_instr (Cid.create [md_instance_prefix; dpt_meta_str; next_event_str]) event_iid
-          (* md.dptMeta.eventCt += 1 *)
-        ; GS.incr_assign_instr ev_ct_cid ev_ct_cid 1
-          (* md.eventGeneratedFlags.<eventname> = 1 *)
-        ; GS.int_assign_instr evrec.event_generated_flag 1
-        ]
-      | EEntry _ | EExit -> 
-        [
-          (* md.dptMeta.exitEvent = i:int *)
-          GS.int_assign_instr (Cid.create [md_instance_prefix; dpt_meta_str; exit_event_str]) event_iid
-        ]
+    match evrec.event_sort with
+    | EBackground ->
+      let ev_ct_cid =
+        Cid.create [md_instance_prefix; dpt_meta_str; events_count_str]
+      in
+      [ (* md.dptMeta.nextEvent = i:int *)
+        GS.int_assign_instr
+          (Cid.create [md_instance_prefix; dpt_meta_str; next_event_str])
+          event_iid
+        (* md.dptMeta.eventCt += 1 *)
+      ; GS.incr_assign_instr ev_ct_cid ev_ct_cid 1
+        (* md.eventGeneratedFlags.<eventname> = 1 *)
+      ; GS.int_assign_instr evrec.event_generated_flag 1 ]
+    | EEntry _ | EExit ->
+      [ (* md.dptMeta.exitEvent = i:int *)
+        GS.int_assign_instr
+          (Cid.create [md_instance_prefix; dpt_meta_str; exit_event_str])
+          event_iid ]
   ;;
+
   (* generate an alu instruction from the instantiation of an event *)
   let from_event_instantiation hdl_id alu_basename ev_id ev_args =
-    !dprint_endline ("[from_event_instantiation] event id: " ^ Cid.to_string ev_id);
+    !dprint_endline
+      ("[from_event_instantiation] event id: " ^ Cid.to_string ev_id);
     !dprint_endline "[from_event_instantiation] event args: ";
     let iter_f ev_arg = !dprint_endline (Printing.exp_to_string ev_arg) in
     CL.iter iter_f ev_args;
@@ -388,7 +392,7 @@ module TofinoAlu = struct
     (* add instructions to set hidden fields in event header, e.g., event name *)
     let event_meta_instrs = event_meta_init_instrs ev_id in
     (* instructions to set non-serialized variables in runtime *)
-    let runtime_instrs = runtime_meta_init_instrs ev_id in 
+    let runtime_instrs = runtime_meta_init_instrs ev_id in
     let ivec = event_meta_instrs @ ivec @ runtime_instrs in
     (* return a declaration of an alu with this vector of instructions *)
     let alu_id = Cid.compound (Id.create "generate_alu") alu_basename in

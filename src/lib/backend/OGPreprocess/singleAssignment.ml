@@ -393,19 +393,17 @@ module PhiElimination = struct
     let v =
       object
         inherit [_] s_map as super
-
         val mutable did_set = false
-
         method did_set = did_set
 
         method! visit_statement ctx statement =
           match statement.s with
           | SLocal (id, _, exp) ->
-            ((* ty ?? = ?? *)
-            match Id.equal id arg, exp.e with
+            (* ty ?? = ?? *)
+            (match Id.equal id arg, exp.e with
             | true, ECall (fcn_id, _) ->
-              ((* ty arg = ?(...) *)
-              match Id.name (Cid.to_ids fcn_id |> CL.hd) = "phi" with
+              (* ty arg = ?(...) *)
+              (match Id.name (Cid.to_ids fcn_id |> CL.hd) = "phi" with
               | true ->
                 (* ty arg = phi(...);*)
                 !dprint_endline

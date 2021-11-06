@@ -7,7 +7,8 @@
 let event_structdef_suffix = "_t"
 let out_structname_prefix = "new_"
 let md_instance_prefix = "md"
-let md_instance = Id.create "md" (* Id of the struct. refactor to use this instead of the strings. *)
+let md_instance = Id.create "md"
+(* Id of the struct. refactor to use this instead of the strings. *)
 
 let hdr_instance_prefix = "hdr"
 let pkt_instance_prefix = "pkt"
@@ -55,8 +56,6 @@ let lucid_parser_name = Cid.create ["DptIngressParser"]
 let event_generate_cid = Cid.create ["generate"]
 let final_table_name = Cid.create ["dptContinueHandler"]
 let final_invalidate_acn_name = Cid.create ["invalidateInputHeaders"]
-
-
 let t_warn str = Console.show_message str ANSITerminal.Yellow "DPT-to-Tofino"
 let t_info str = Console.show_message str ANSITerminal.Green "DPT-to-Tofino"
 

@@ -22,10 +22,11 @@ let instance_name evid =
 ;;
 
 (* Read the event's id from context as hex. *)
-let hex_iid evid = 
-  let ev_iid = sprintf "%#x" (ctx_find_eventrec (Cid.id evid)).event_iid in 
-  print_endline ("[hex_iid]: "^(Id.to_string evid)^" -- "^(ev_iid));
-  ev_iid 
+let hex_iid evid =
+  let ev_iid = sprintf "%#x" (ctx_find_eventrec (Cid.id evid)).event_iid in
+  print_endline ("[hex_iid]: " ^ Id.to_string evid ^ " -- " ^ ev_iid);
+  ev_iid
+;;
 
 let ids_of_bg_events ds =
   let map_f dec =
@@ -118,11 +119,11 @@ module IngressExit = struct
     let acn_name = "acn_bg_" ^ struct_name ev_id in
     { aname = acn_name
     ; acmds =
-        cmd_copy_to_recirc
+        (cmd_copy_to_recirc
         :: cmd_lucid_etype
-        :: cmd_disable_other_hdrs bg_ev_ids ev_id
-        @  [cmd_exit] (* exit must be last! *)
-
+        :: cmd_disable_other_hdrs bg_ev_ids ev_id)
+        @ [cmd_exit]
+        (* exit must be last! *)
     ; arule = "(0x0, " ^ hex_iid ev_id ^ ") :" ^ acn_name ^ "();"
     }
   ;;
@@ -213,7 +214,7 @@ module Egress = struct
     let egr_drop_decl = acn_str acn_egr_drop_event in
     let tbl_name = "egr_serialize_clone" in
     let print_fcn tbl_id =
-      let lucid_etype_str = string_of_int lucid_etype in 
+      let lucid_etype_str = string_of_int lucid_etype in
       let tbl_name = str_of_private_oid tbl_id in
       [%string
         {__nativeblock___|

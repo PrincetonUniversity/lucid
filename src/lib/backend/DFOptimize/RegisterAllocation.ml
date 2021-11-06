@@ -96,7 +96,7 @@ let print_salu_merge_summary_hint () =
          (CL.length var_sets))
 ;;
 
-  (* generate code to pass outer_var in the caller to inner_var in the salu_call *)  
+(* generate code to pass outer_var in the caller to inner_var in the salu_call *)
 let prepare_call_var_for_salu inner_var cid_decls (salu_call, outer_var) =
   (* 
     replace outer_var in salu_call with inner_var. 
@@ -111,16 +111,12 @@ let prepare_call_var_for_salu inner_var cid_decls (salu_call, outer_var) =
       inner_var = foo;
     }
   *)
-
   let tbl_id = Cid.concat inner_var (oid_of_sInstr salu_call) in
-
   (* inner_var := outer_var *)
   let new_decls = tbl_of_assign tbl_id inner_var (Meta outer_var) in
-
   let cid_decls = batch_emplace_decl cid_decls new_decls in
   let salu_call_tid = tid_of_oid cid_decls (id_of_decl salu_call) in
   let cid_decls = insert_before_tid cid_decls tbl_id salu_call_tid in
-
   (* replace outer_var with inner_var in the salu call *)
   let new_salu_call = replace_mid_in_decl salu_call outer_var inner_var in
   let cid_decls = emplace_decl cid_decls new_salu_call in
@@ -168,9 +164,7 @@ let replace_var cid_decls v new_v =
   let renamer =
     object
       inherit [_] dataPathMap as super
-
       val mutable cur_oid : oid option = None
-
       method cur_oid = cur_oid
 
       method! visit_mid _ mid =
@@ -279,7 +273,7 @@ let prepare_frame_var_for_rid_no_merging
     DBG.printf outc "-------------\n";
     (* the width of the intermediate is equal to the width of the register's cell *)
     (* except for index variables, which are always 32-bits (for now) *)
-    let var_size = find_width_of_var cid_decls (CL.hd vars) in 
+    let var_size = find_width_of_var cid_decls (CL.hd vars) in
     (* declare the per-register input variable. *)
     let salu_var_decl = to_globalmeta salu_arg_id var_size in
     let cid_decls = emplace_decl cid_decls salu_var_decl in
@@ -300,7 +294,7 @@ let prepare_frame_var_for_rid
     rid
   =
   let salu_arg_id = cid_of_shared_arg_var shared_salu_arg_var in
-  (* get the set of variables that need to be overlaid. *) 
+  (* get the set of variables that need to be overlaid. *)
   let salu_vars_map = salu_param_finder cid_decls rid in
   let vars = CL.split salu_vars_map |> snd |> unique_list_of in
   match CL.length vars <= max_len with
@@ -355,8 +349,8 @@ let prepare_frame_var_for_rid
          not be true for the index variable, in which case 
          incorrect code will be generated. 
        *)
-      let var_size = find_width_of_var cid_decls (CL.hd vars) in 
-  (*     let var_size =
+      let var_size = find_width_of_var cid_decls (CL.hd vars) in
+      (*     let var_size =
         match shared_salu_arg_var with
         | SharedIndex _ -> find_width_of_var cid_decls (CL.hd vars)
         | SharedInput _ -> width_of_regvec (Cid.lookup cid_decls rid)
@@ -383,9 +377,14 @@ let salu_idx_vars_by_rid cid_decls rid =
     match idx_arg with
     | Const _ -> None
     | Meta m -> Some (salu_call, m)
-    | _ -> error "[salu_idx_vars_by_rid] index variable to an sALU must be a const or meta variable"
+    | _ ->
+      error
+        "[salu_idx_vars_by_rid] index variable to an sALU must be a const or \
+         meta variable"
   in
-  let var_idx_args = CL.filter_map filter_map_f (sInstrs_of_rid cid_decls rid) in
+  let var_idx_args =
+    CL.filter_map filter_map_f (sInstrs_of_rid cid_decls rid)
+  in
   var_idx_args
 ;;
 
@@ -393,11 +392,14 @@ let salu_idx_vars_by_rid cid_decls rid =
 let fst_salu_read_vars_by_rid cid_decls rid =
   let filter_map_f sInstr_id =
     let salu_call = Cid.lookup cid_decls sInstr_id in
-    let read_args = readvars_of_sInstr salu_call in 
-    Printf.printf "[fst_salu_read_vars_by_rid] rid: %s salu_id: %s read_args: %s\n" (P4tPrint.str_of_varid rid) (Cid.to_string sInstr_id) (P4tPrint.str_of_varids read_args); 
+    let read_args = readvars_of_sInstr salu_call in
+    Printf.printf
+      "[fst_salu_read_vars_by_rid] rid: %s salu_id: %s read_args: %s\n"
+      (P4tPrint.str_of_varid rid)
+      (Cid.to_string sInstr_id)
+      (P4tPrint.str_of_varids read_args);
     match read_args with
-    | fst :: _ ->
-      Some (salu_call, fst)
+    | fst :: _ -> Some (salu_call, fst)
     | _ -> None
   in
   let pos_args = CL.filter_map filter_map_f (sInstrs_of_rid cid_decls rid) in
@@ -519,11 +521,8 @@ let find_unbound_vars cid_decls =
     let v =
       object
         inherit [_] dataPathIter as super
-
         val mutable mids = []
-
         method mids = mids
-
         method! visit_mid _ m = mids <- m :: mids
       end
     in
@@ -560,13 +559,17 @@ let prepare_salu_frames dag prepare_frame_var_for_rid =
   let cid_decls = dmap_of_dprog dag in
   (* we do not merge mids declared inside of structures, 
      because some structures are bound outside of the program. *)
-  let struct_mids = find_unbound_vars cid_decls in 
-  let rids = ids_of_type is_reg cid_decls in 
-  let updated_cid_decls = CL.fold_left (prepare_salu_frames_for_rid prepare_frame_var_for_rid struct_mids) cid_decls rids in 
-  let updated_g = graph_of_declsMap updated_cid_decls in 
-
-  let _, root_tbl_id, _ = dag in   
-  let framed_dag = (updated_cid_decls, root_tbl_id, updated_g) in 
+  let struct_mids = find_unbound_vars cid_decls in
+  let rids = ids_of_type is_reg cid_decls in
+  let updated_cid_decls =
+    CL.fold_left
+      (prepare_salu_frames_for_rid prepare_frame_var_for_rid struct_mids)
+      cid_decls
+      rids
+  in
+  let updated_g = graph_of_declsMap updated_cid_decls in
+  let _, root_tbl_id, _ = dag in
+  let framed_dag = updated_cid_decls, root_tbl_id, updated_g in
   (* DagToP4.print_control dag (!BackendLogging.irLogDir^"/pre_salu_frames.p4"); *)
   (* DagToP4.print_control framed_dag (!BackendLogging.irLogDir^"/post_salu_frames.p4"); *)
   print_salu_merge_summary_hint ();

@@ -1,6 +1,7 @@
 (* misc IO utils for tofino compiler. *)
 open Printf
 open Consts
+
 exception Error of string
 
 let error s = raise (Error s)
@@ -82,7 +83,6 @@ let load_format_1 infn =
   let instr = readf infn in
   Scanf.format_from_string instr "%s"
 ;;
-
 
 (* Prepare the build directory. *)
 let setup_build_dir out_dir =

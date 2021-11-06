@@ -99,15 +99,17 @@ type prog_opgraph = handler_opgraph_rec list
 
 (* merge all the ophandlers into one graph 
 -- just meant for debugging / logging. *)
-let combine_graphs g1 g2 = 
-  let add_edge s d g = StGraph.add_edge g s d in   
-  StGraph.fold_edges add_edge g2 g1 
+let combine_graphs g1 g2 =
+  let add_edge s d g = StGraph.add_edge g s d in
+  StGraph.fold_edges add_edge g2 g1
 ;;
 
-let combine_opgraph prog_opgraph = 
-  let fold_in_opgrec merged_opgraph ogrec = combine_graphs merged_opgraph ogrec.h_opgraph in  
-  CL.fold_left fold_in_opgrec StGraph.empty prog_opgraph 
- ;;
+let combine_opgraph prog_opgraph =
+  let fold_in_opgrec merged_opgraph ogrec =
+    combine_graphs merged_opgraph ogrec.h_opgraph
+  in
+  CL.fold_left fold_in_opgrec StGraph.empty prog_opgraph
+;;
 
 (* the first and last statement in a sequence *)
 let fst_op_stmt (st : statement) =
@@ -261,9 +263,7 @@ let check_unique_stmt_spans dec =
   let v =
     object
       inherit [_] s_map as super
-
       val mutable spans = []
-
       method spans = spans
 
       method! visit_statement ctx st =
