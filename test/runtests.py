@@ -33,7 +33,7 @@ def interp_test(file, args):
         cmd = ["./dpt", "--silent", fullfile] + args
         ret = subprocess.run(cmd, stdout=outfile, stderr=subprocess.DEVNULL)
     if ret.returncode != 0:
-        errors.append(file)
+        errors.append(fullfile)
     elif not filecmp.cmp("test/output/"+outname, "test/expected/"+outname):
         diffs.append(file)
     outfile.close()
@@ -44,7 +44,7 @@ def just_typecheck(path, file, suffix = ""):
     cmd = ["./dpt", "--silent",  fullfile]
     ret = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if ret.returncode != 0:
-        errors.append(file)
+        errors.append(fullfile)
 
 
 for file in interpfiles:

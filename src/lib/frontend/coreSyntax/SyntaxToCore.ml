@@ -9,11 +9,13 @@ let err span str =
   ^ " to backend syntax"
 ;;
 
-let translate_size (sz : S.size) : C.size = SyntaxUtils.extract_size sz
+let translate_size (sz : S.size) : C.size =
+  SyntaxUtils.extract_size_default sz 32
+;;
 
 let rec translate_ty (ty : S.ty) : C.ty =
   let raw_ty =
-    match ty.raw_ty with
+    match S.TyTQVar.strip_links ty.raw_ty with
     | S.TBool -> C.TBool
     | S.TVoid -> C.TVoid
     | S.TGroup -> C.TGroup
@@ -96,6 +98,9 @@ let rec translate_exp (e : S.exp) : C.exp =
 ;;
 
 let rec translate_statement (s : S.statement) : C.statement =
+  (* (match s.s with
+  | SSeq _ -> ()
+  | _ -> print_endline @@ "Translating " ^ Printing.statement_to_string s); *)
   let translate_branch (ps, s) =
     List.map translate_pattern ps, translate_statement s
   in
