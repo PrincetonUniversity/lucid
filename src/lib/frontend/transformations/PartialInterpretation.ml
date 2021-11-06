@@ -56,9 +56,17 @@ let merge_branches base_stmt level prior_env branch_envs =
 (* True if it's safe to inline the variable. It's currently considered unsafe
    if the expression contains an array or hash call *)
 let should_inline exp =
-  ignore exp;
-  (* TODO: this *)
-  false
+  (* Rather inefficient but we can optimize if we need to *)
+  let v =
+    object
+      inherit [_] s_iter
+      method! visit_ECall r _ _ = r := true
+      method! visit_EHash r _ _ = r := true
+    end
+  in
+  let r = ref false in
+  v#visit_exp r exp;
+  !r
 ;;
 
 let mk_e v = EVal v
@@ -92,6 +100,8 @@ let rec interp_exp env e =
 (* Mostly copied from InterpCore, could maybe merge the two functions *)
 and interp_op env op args =
   let args = List.map (interp_exp env) args in
+  (* We could be more aggressive about constant folding, since this won't catch
+     e.g. 1 + (x + 1), but it will at least catch fully-constant expressions. *)
   match op, args with
   (* Boolean Ops *)
   | And, [{ e = EVal { v = VBool true } }; e]
@@ -229,10 +239,9 @@ and interp_op env op args =
     , _ ) -> EOp (op, args)
 ;;
 
-(* Partially interpret a statement. Return the new statment, the environment after
-   interpreting it, and a list of changed variables that were declared at a higher
-   level than the statement's scope. We only return the env so we can pass it
-   between the halves of an SSeq *)
+(* Partially interpret a statement. Takes an environment and the current level
+   (i.e. how deeply nested the scope is. Return the interpreted statment and the
+   environment after interpreting it. *)
 let rec interp_stmt env level s : statement * env =
   let interp_exp = interp_exp env in
   match s.s with
@@ -265,14 +274,17 @@ let rec interp_stmt env level s : statement * env =
   (* Cases where we branch *)
   | SIf (test, s1, s2) ->
     let test = interp_exp test in
-    (* TODO: Check to see if we actually need to branch *)
-    let s1, env1 = interp_stmt env (level + 1) s1 in
-    let s2, env2 = interp_stmt env (level + 1) s2 in
-    let base_stmt = { s with s = SIf (test, s1, s2) } in
-    merge_branches base_stmt level env [env1; env2]
+    (match test with
+    | { e = EVal { v = VBool b } } ->
+      if b then interp_stmt env level s1 else interp_stmt env level s2
+    | _ ->
+      let s1, env1 = interp_stmt env (level + 1) s1 in
+      let s2, env2 = interp_stmt env (level + 1) s2 in
+      let base_stmt = { s with s = SIf (test, s1, s2) } in
+      merge_branches base_stmt level env [env1; env2])
   | SMatch (es, branches) ->
     let es = List.map interp_exp es in
-    (* TODO: Check if we need to branch *)
+    (* TODO: Precompute the match as much as possible *)
     let branches, envs =
       List.map
         (fun (p, stmt) ->
@@ -283,4 +295,39 @@ let rec interp_stmt env level s : statement * env =
     in
     let base_stmt = { s with s = SMatch (es, branches) } in
     merge_branches base_stmt level env envs
+;;
+
+let interp_body env (params, stmt) =
+  let level = 1 in
+  let env =
+    List.fold_left
+      (fun acc (id, _) ->
+        IdMap.add id { level; body = None; is_declared = true } acc)
+      env
+      params
+  in
+  params, fst (interp_stmt env level stmt)
+;;
+
+let interp_decl env d =
+  let add_dec env id =
+    IdMap.add id { level = 0; body = None; is_declared = true } env
+  in
+  match d.d with
+  | DGlobal (id, ty, e) ->
+    let e = interp_exp env e in
+    let env = add_dec env id in
+    env, { d with d = DGlobal (id, ty, e) }
+  | DGroup (id, exps) ->
+    let env = add_dec env id in
+    env, { d with d = DGroup (id, List.map (interp_exp env) exps) }
+  | DMemop (id, body) ->
+    let env = add_dec env id in
+    env, { d with d = DMemop (id, interp_body env body) }
+  | DHandler (id, body) ->
+    let env = add_dec env id in
+    env, { d with d = DHandler (id, interp_body env body) }
+  | DEvent (id, _, _) | DExtern (id, _) ->
+    let env = add_dec env id in
+    env, d
 ;;
