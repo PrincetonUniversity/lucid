@@ -1,5 +1,4 @@
 dpt: Parsing ...
-Processing examples/interp_tests/global_args.dpt
 
 In examples/interp_tests/global_args.dpt: 
 

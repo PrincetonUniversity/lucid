@@ -1,5 +1,4 @@
 dpt: Parsing ...
-Processing examples/interp_tests/basics.dpt
 
 In examples/interp_tests/basics.dpt: 
 
