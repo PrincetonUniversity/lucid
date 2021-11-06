@@ -17,8 +17,6 @@ module DBG = BackendLogging
 let outc = ref None
 let dprint_endline = ref DBG.no_printf
 let start_logs () = DBG.start_mlog __FILE__ outc dprint_endline
-
-
 let memName = "memCell"
 let retName = "retCell"
 let tmpName = "tmp"
@@ -170,38 +168,39 @@ module PrimitiveString = struct
   ;;
 
   (* i[s:e] *)
-  let str_of_slice (i : oper) (s : oper) (e : oper) = 
-    (str_of_oper i)^"["^(str_of_const_oper s)^":"^(str_of_const_oper e)^"]"
-  ;;  
+  let str_of_slice (i : oper) (s : oper) (e : oper) =
+    str_of_oper i ^ "[" ^ str_of_const_oper s ^ ":" ^ str_of_const_oper e ^ "]"
+  ;;
 
   let rec str_of_expr (e : expr) : string =
     match e with
     | Oper i -> str_of_oper i ^ ";"
     | HashOp _ -> error "UNIMPLEMENTED_HASH(...);"
     (* Ops have the most cases *)
-    | BinOp (op, args) -> (
-      match op with 
-        (* SubR gets its operands flipped. *)
-        | SubR -> ( match args with 
-          | [i1; i2] -> str_of_expr (BinOp (Sub, [i2; i1])) (* reverse operands *)
-          | _ -> error "[str_of_expr] SubR opcode must have 2 operands.";
-        )
-        (* all the binary operations that compile to instructions *)
-        | Add | Sub | SatSub | RShift | LShift | BAnd | BOr -> ( match args with 
-            | [i1; i2] -> str_of_oper i1 ^ " " ^ str_of_binop op ^ " " ^ str_of_oper i2 ^ ";"
-            | _ -> error "[str_of_expr] Binary operation with wrong number of operands.."
-        )
-        (* Cast is a binary operation, but it doesn't compile to an instruction 
+    | BinOp (op, args) ->
+      (match op with
+      (* SubR gets its operands flipped. *)
+      | SubR ->
+        (match args with
+        | [i1; i2] -> str_of_expr (BinOp (Sub, [i2; i1])) (* reverse operands *)
+        | _ -> error "[str_of_expr] SubR opcode must have 2 operands.")
+      (* all the binary operations that compile to instructions *)
+      | Add | Sub | SatSub | RShift | LShift | BAnd | BOr ->
+        (match args with
+        | [i1; i2] ->
+          str_of_oper i1 ^ " " ^ str_of_binop op ^ " " ^ str_of_oper i2 ^ ";"
+        | _ ->
+          error "[str_of_expr] Binary operation with wrong number of operands..")
+      (* Cast is a binary operation, but it doesn't compile to an instruction 
            so we keep it separate for now. *)
-        | Cast -> ( match args with 
-            | [i1; w] -> str_of_cast i1 w ^ ";" 
-            | _ -> error "[str_of_expr] Cast operation must have 2 operands."
-        )
-        | Slice -> ( match args with 
-          | [i; s; e] -> str_of_slice i s e
-          | _ -> error "[str_of_expr] Slice operation must have 3 operands."
-        )
-    )
+      | Cast ->
+        (match args with
+        | [i1; w] -> str_of_cast i1 w ^ ";"
+        | _ -> error "[str_of_expr] Cast operation must have 2 operands.")
+      | Slice ->
+        (match args with
+        | [i; s; e] -> str_of_slice i s e
+        | _ -> error "[str_of_expr] Slice operation must have 3 operands."))
   ;;
 
   let str_of_instr instr =
@@ -619,7 +618,14 @@ module PrintComputeObject = struct
     match decl with
     | RegVec (rid, wid, len, def, _) -> print_reg fmt rid wid len def
     | InstrVec (iid, iVec) -> print_ivec fmt iid iVec
-    | SInstrVec (sid, {sRid=rid; sWid=rid_width; sExprs=siv; sOut=out_var_opt; sIdx=idx_oper}) ->
+    | SInstrVec
+        ( sid
+        , { sRid = rid
+          ; sWid = rid_width
+          ; sExprs = siv
+          ; sOut = out_var_opt
+          ; sIdx = idx_oper
+          } ) ->
       PrintSalu.print_sInstr fmt sid rid rid_width siv out_var_opt idx_oper
     | Hasher (hasher_id, out_width, poly, out_var, in_vars) ->
       print_hasher fmt hasher_id out_width poly out_var in_vars
@@ -693,8 +699,9 @@ module PrintStruct = struct
     match s_ty with
     | SMeta -> "struct"
     | SHeader -> "header"
-    (* | SHeader -> "@flexible header" *)
   ;;
+
+  (* | SHeader -> "@flexible header" *)
 
   let print_def fmt decl =
     match decl with
@@ -837,9 +844,8 @@ let print_const_def fmt (name, scope, width, valu) =
   (* fprintf fmt "const bit<%i> %s=%i;" width id_str valu *)
   (* use defines instead of consts, so that the P4 program can use 
      the event id names in table rules. *)
-  let _ = width in 
+  let _ = width in
   fprintf fmt "#define %s %i" id_str valu
-
 ;;
 
 let print_p4_const_defs decls =

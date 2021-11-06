@@ -18,9 +18,7 @@ let precompute_args ds =
   let v =
     object
       inherit [_] s_map as super
-
       val mutable pre_stmts : statement list = []
-
       method pre_stmts = pre_stmts
 
       method! visit_statement ctx statement =

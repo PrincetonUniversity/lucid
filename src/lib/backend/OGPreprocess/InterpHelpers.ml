@@ -335,11 +335,8 @@ let vars_in_exp exp =
   let v =
     object
       inherit [_] s_iter as super
-
       val mutable keyfields : cid list = []
-
       method keyfields = keyfields
-
       method! visit_EVar _ cid = keyfields <- keyfields @ [cid]
     end
   in
@@ -353,9 +350,7 @@ let evars_in_exp exp =
   let v =
     object
       inherit [_] s_iter as super
-
       val mutable evars : exp list = []
-
       method evars = evars
 
       method! visit_exp ctx exp =

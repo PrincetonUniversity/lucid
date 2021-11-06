@@ -250,9 +250,7 @@ let eliminate_branch_nodes cid_decls g =
   DBG.printf
     outc
     "[eliminate_branch_nodes] adding full constraints to all tables \n";
-  LLValidate.validate_cid_decls
-    cid_decls
-    "[eliminate_branch_nodes] start";
+  LLValidate.validate_cid_decls cid_decls "[eliminate_branch_nodes] start";
   let cid_decls = Topo.fold visit_node_condition_pushdown g cid_decls in
   !dprint_endline "----cid decls after pushing down conditions----";
   !dprint_endline (DebugPrint.str_of_cid_decls cid_decls);

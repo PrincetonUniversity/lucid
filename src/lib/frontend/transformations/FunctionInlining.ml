@@ -39,7 +39,6 @@ let is_assigned (id : Id.t) (s : statement) : bool =
   let v =
     object
       inherit [_] s_iter as super
-
       method! visit_SAssign _ id2 _ = if Id.equal id id2 then ret := true
     end
   in

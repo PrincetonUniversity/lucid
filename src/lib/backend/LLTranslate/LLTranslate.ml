@@ -268,7 +268,6 @@ let make_unique_spans ds =
   let v =
     object
       inherit [_] s_map as super
-
       method! visit_sp _ sp = refresh_span sp
     end
   in

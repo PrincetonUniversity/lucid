@@ -221,8 +221,8 @@ let parse_externs_from_interp_spec spec_file =
   let json = from_file spec_file in
   match json with
   | `Assoc lst ->
-    ((* return a map from extern name strings to extern values *)
-    match List.assoc_opt "externs" lst with
+    (* return a map from extern name strings to extern values *)
+    (match List.assoc_opt "externs" lst with
     | Some (`Assoc lst) -> lst
     | None -> []
     | Some _ -> error "Non-assoc type for extern definitions")

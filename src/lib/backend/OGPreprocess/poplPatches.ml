@@ -43,7 +43,6 @@ let delete_prints ds =
   let v =
     object
       inherit [_] s_map as super
-
       method! visit_SPrintf _ _ _ = SNoop
     end
   in

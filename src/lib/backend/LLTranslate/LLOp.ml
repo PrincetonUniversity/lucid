@@ -238,8 +238,8 @@ module TofinoAlu = struct
             statement: "
           ^ dstr)
       | ECall (fcn_id, args) ->
-        ((* a call could either be a call, or an event declaration. *)
-        match raw_ty_of_exp val_exp with
+        (* a call could either be a call, or an event declaration. *)
+        (match raw_ty_of_exp val_exp with
         | TEvent _ ->
           let call_result =
             ctx_call_codegen

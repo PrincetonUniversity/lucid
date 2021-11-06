@@ -118,9 +118,7 @@ let rename prog =
         new_x
 
       method freshen_var x = self#freshen_any 0 (Id x) |> Cid.to_id
-
       method freshen_size x = self#freshen_any 1 (Id x) |> Cid.to_id
-
       method freshen_ty x = self#freshen_any 2 (Id x) |> Cid.to_id
 
       method lookup x =
@@ -135,9 +133,7 @@ let rename prog =
         | _ -> failwith @@ "Renaming: Lookup failed: " ^ Cid.to_string x
 
       method activate_var () = env <- { env with active = 0 }
-
       method activate_size () = env <- { env with active = 1 }
-
       method activate_ty () = env <- { env with active = 2 }
 
       method! visit_ty dummy ty =
@@ -164,7 +160,6 @@ let rename prog =
       (*** Replace variable uses. Gotta be careful not to miss any cases later
            on so we don't accidentally rewrite extra things ***)
       method! visit_id _ x = self#lookup (Id x) |> Cid.to_id
-
       method! visit_cid _ c = self#lookup c
 
       (*** Places we bind new variables ***)

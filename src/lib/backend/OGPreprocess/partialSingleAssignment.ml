@@ -27,11 +27,8 @@ let count_locals ds =
   let v =
     object
       inherit [_] s_iter as super
-
       val mutable local_ids = []
-
       method local_ids = local_ids
-
       method! visit_SLocal _ id _ _ = local_ids <- id :: local_ids
     end
   in
@@ -44,11 +41,8 @@ let assigned_in_stmt query_id stmt =
   let v =
     object
       inherit [_] s_iter as super
-
       val mutable id_is_set = false
-
       method id_is_set = id_is_set
-
       method! visit_SAssign _ id _ = if query_id = id then id_is_set <- true
     end
   in

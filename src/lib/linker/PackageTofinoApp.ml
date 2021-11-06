@@ -43,7 +43,8 @@ let write_mk builddir =
   let makef = builddir ^ "/makefile" in
   report (sprintf "generating makefile: %s " makef);
   (* generic start of makefile. *)
-  let make_str_prefix = {x|
+  let make_str_prefix =
+    {x|
 MAKEFLAGS += -s
 # If the first argument is "test"...
 ifeq (test,$(firstword $(MAKECMDGOALS)))
@@ -54,18 +55,20 @@ ifeq (test,$(firstword $(MAKECMDGOALS)))
 endif
 .PHONY: test
 |x}
-  in 
+  in
   (* body of makefile *)
   let make_str =
-    [%string "build: $p4_fn $py_fn $c_fn\n\t./libs/p4tapp.sh build $p4_fn\ntest:\n\t./libs/p4tapp.sh test $p4_fn "]
+    [%string
+      "build: $p4_fn $py_fn $c_fn\n\
+       \t./libs/p4tapp.sh build $p4_fn\n\
+       test:\n\
+       \t./libs/p4tapp.sh test $p4_fn "]
   in
   (* generic end of makefile *)
   let make_str_suffix = {x|$(RUN_ARGS)
 
-dummy:|x}
-  in 
-
-  IoUtils.writef makef (make_str_prefix^make_str^make_str_suffix)
+dummy:|x} in
+  IoUtils.writef makef (make_str_prefix ^ make_str ^ make_str_suffix)
 ;;
 
 let generate p4_str c_str py_str builddir =

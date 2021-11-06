@@ -178,7 +178,6 @@ let pre_typing_checks ds =
 let basic_qvar_checker =
   object
     inherit [_] s_iter as super
-
     val mutable span = Span.default
 
     method! visit_Unbound _ _ _ _ =
@@ -218,7 +217,6 @@ let basic_qvar_checker =
 let preset_qvar_checker =
   object
     inherit [_] s_iter as super
-
     val mutable span = Span.default
 
     method! visit_Unbound _ _ _ _ =
@@ -259,7 +257,6 @@ let preset_qvar_checker =
 let event_qvar_checker =
   object (self)
     inherit [_] s_iter as super
-
     val mutable span = Span.default
 
     method! visit_Unbound _ _ _ _ =

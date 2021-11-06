@@ -121,9 +121,7 @@ let atomize_int_assigns ds =
   let v =
     object
       inherit [_] s_map as super
-
       val mutable precompute_stmts : statement list = []
-
       method precompute_stmts = precompute_stmts
 
       (* skip memops! *)

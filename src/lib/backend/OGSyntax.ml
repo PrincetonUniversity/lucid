@@ -263,9 +263,7 @@ let check_unique_stmt_spans dec =
   let v =
     object
       inherit [_] s_map as super
-
       val mutable spans = []
-
       method spans = spans
 
       method! visit_statement ctx st =

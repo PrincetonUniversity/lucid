@@ -664,9 +664,7 @@ type propagation_type =
 (* table t executes if any of its conditions hold. *)
 
 let propagate_condition_generic prop_type cid_decls s_tid t_tid =
-  LLValidate.validate_cid_decls
-    cid_decls
-    "[propagate_condition_generic] start";
+  LLValidate.validate_cid_decls cid_decls "[propagate_condition_generic] start";
   (* make a copy of the data structure, with table s_tid having actions replaced by null actions *)
   let noop_s_cid_decls, noop_s_tid =
     null_action_copy_of_s_tid cid_decls s_tid t_tid

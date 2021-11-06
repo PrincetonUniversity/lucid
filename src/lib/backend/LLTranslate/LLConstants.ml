@@ -53,8 +53,6 @@ let lucid_parser_name = Cid.create ["DptIngressParser"]
 let event_generate_cid = Cid.create ["generate"]
 let final_table_name = Cid.create ["dptContinueHandler"]
 let final_invalidate_acn_name = Cid.create ["invalidateInputHeaders"]
-
-
 let t_warn str = Console.show_message str ANSITerminal.Yellow "DPT-to-Tofino"
 let t_info str = Console.show_message str ANSITerminal.Green "DPT-to-Tofino"
 
