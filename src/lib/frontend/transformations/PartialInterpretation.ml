@@ -63,9 +63,10 @@ let should_inline exp =
 ;;
 
 let interp_exp env e =
-  ignore (env, e);
-  (* TODO: This *)
-  e
+  ignore env;
+  match e.e with
+  | EVal _ -> e
+  | _ -> failwith ""
 ;;
 
 (* Partially interpret a statement. Return the new statment, the environment after

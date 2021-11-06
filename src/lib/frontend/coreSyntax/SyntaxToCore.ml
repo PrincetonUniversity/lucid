@@ -83,7 +83,9 @@ let rec translate_exp (e : S.exp) : C.exp =
   let e' =
     match e.e with
     | S.EVal v -> C.EVal (translate_value v)
-    | S.EInt (z, szo) -> C.EInt (z, Option.map translate_size szo)
+    | S.EInt (z, szo) ->
+      let sz = Option.default 32 (Option.map translate_size szo) in
+      C.EVal (C.vint (Z.to_int z) sz)
     | S.EVar cid -> C.EVar cid
     | S.EOp (op, es) -> C.EOp (translate_op op, List.map translate_exp es)
     | S.ECall (cid, es) -> C.ECall (cid, List.map translate_exp es)

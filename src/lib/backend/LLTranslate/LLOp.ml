@@ -22,8 +22,6 @@ let int_from_const_exp (ex : exp) =
   print_endline ("[int_from_exp]: " ^ Printing.exp_to_string ex);
   match ex.e with
   | EVal { v = VInt zint; _ } -> Integer.to_int zint
-  | EInt (z, _) ->
-    Z.to_int z (* Integer.create_z ~value:z ~size:(extract_size sz)  *)
   | _ -> trans_err "could not evaluate expression to an int" ex
 ;;
 
@@ -134,7 +132,6 @@ let zint_from_evalue (immediate_exp : exp) =
         ("[zint_from_evalue] got value that cannot be translated directly into \
           IR: "
         ^ expstr))
-  | EInt (z, _) -> Integer.of_int (Z.to_int z)
   | _ ->
     error
       "[int_from_immediate] got value that cannot be translated directly into \
@@ -143,7 +140,7 @@ let zint_from_evalue (immediate_exp : exp) =
 
 let oper_from_immediate hdl_id (immediate_exp : exp) =
   match immediate_exp.e with
-  | EVal _ | EInt _ -> IS.Const (zint_from_evalue immediate_exp)
+  | EVal _ -> IS.Const (zint_from_evalue immediate_exp)
   | EVar cid -> Meta (mid_from_cid hdl_id cid)
   | _ ->
     let dstr =
@@ -162,7 +159,7 @@ let soper_from_immediate
     (immediate_exp : exp)
   =
   match immediate_exp.e with
-  | EVal _ | EInt _ -> IS.Const (zint_from_evalue immediate_exp)
+  | EVal _ -> IS.Const (zint_from_evalue immediate_exp)
   | EVar n ->
     (match memcell_name with
     | Some memcell_name ->
@@ -207,7 +204,7 @@ module TofinoAlu = struct
     let alu_name = aluname_of_stmt opstmt in
     let alu_name, alu_obj =
       match val_exp.e with
-      | EVal _ | EInt _ | EVar _ ->
+      | EVal _ | EVar _ ->
         ( alu_name
         , IS.new_dsingleinstr
             alu_name

@@ -137,8 +137,6 @@ let int_from_exp (ex : exp) =
   print_endline ("[int_from_exp]: " ^ Printing.exp_to_string ex);
   match ex.e with
   | EVal { v = VInt zint; _ } -> Integer.to_int zint
-  | EInt (z, _) ->
-    Z.to_int z (* Integer.create_z ~value:z ~size:(extract_size sz)  *)
   | _ -> trans_err "could not evaluate expression to an int" ex
 ;;
 
@@ -190,9 +188,7 @@ let is_assoc_op exp =
 
 let is_immediate exp =
   match exp.e with
-  | EVal _ -> true
-  | EInt _ -> true
-  | EVar _ -> true
+  | EVal _ | EVar _ -> true
   | _ -> false
 ;;
 
@@ -200,7 +196,7 @@ let is_immediate exp =
 let is_atomic exp =
   match exp.e with
   (* immediates are atomic. *)
-  | EVal _ | EInt _ | EVar _ -> true
+  | EVal _ | EVar _ -> true
   (* ops are atomic if they are binary with all args immediates *)
   | EOp (_, args) ->
     CL.map is_immediate args |> CL.for_all identity && CL.length args <= 2

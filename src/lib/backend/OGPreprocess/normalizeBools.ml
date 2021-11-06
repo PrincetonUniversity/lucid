@@ -78,12 +78,10 @@ module NormalizeRelops = struct
     | Eq | Neq ->
       (match args with
       (* var, int  --> no change *)
-      | [{ e = EVar _; _ }; { e = EVal _; _ }]
-      | [{ e = EVar _; _ }; { e = EInt _; _ }] ->
+      | [{ e = EVar _; _ }; { e = EVal _; _ }] ->
         exp_sp (EOp (op, args)) espan, []
       (* int, var  --> var, int *)
-      | [{ e = EVal _; _ }; { e = EVar _; _ }]
-      | [{ e = EInt _; _ }; { e = EVar _; _ }] ->
+      | [{ e = EVal _; _ }; { e = EVar _; _ }] ->
         exp_sp (EOp (op, CL.rev args)) espan, []
       (* expr1, expr2 --> precompute var_test = expr1 - expr2; var_test == 0; *)
       | [e1; e2] ->
@@ -217,11 +215,6 @@ module NormalizeBoolExps = struct
       var_ctx := (var_id_string, exp) :: !var_ctx;
       Boolean.mk_const_s ctx var_id_string
     | EVal { v = VInt _; _ }, _ ->
-      let val_cid = Cid.fresh ["tmp_val_id"] in
-      let var_id_string = cid_to_id_string val_cid in
-      var_ctx := (var_id_string, exp) :: !var_ctx;
-      Arithmetic.Integer.mk_const_s ctx var_id_string
-    | EInt _, _ ->
       let val_cid = Cid.fresh ["tmp_val_id"] in
       let var_id_string = cid_to_id_string val_cid in
       var_ctx := (var_id_string, exp) :: !var_ctx;

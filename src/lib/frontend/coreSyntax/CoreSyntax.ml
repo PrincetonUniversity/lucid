@@ -96,7 +96,6 @@ and value =
 (* expressions *)
 and e =
   | EVal of value
-  | EInt of z * size option (* Differs from VInt since size may be polymorphic *)
   | EVar of cid
   | EOp of op * exp list
   | ECall of cid * exp list
@@ -206,8 +205,6 @@ let aexp e ety espan = { e; ety; espan }
 let exp_sp e espan = { e; ety = None; espan }
 let value_to_exp v = aexp (EVal v) v.vty v.vspan
 let var_sp cid span = exp_sp (EVar cid) span
-let eint z size = exp (EInt (z, size))
-let eint_sp z size span = exp_sp (EInt (z, size)) span
 let op_sp op args span = exp_sp (EOp (op, args)) span
 let call_sp cid args span = exp_sp (ECall (cid, args)) span
 let hash_sp size args span = exp_sp (EHash (size, args)) span

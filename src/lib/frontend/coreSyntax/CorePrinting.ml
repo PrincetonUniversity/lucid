@@ -126,12 +126,6 @@ let rec e_to_string e =
   match e with
   | EVal v -> v_to_string v.v
   | EVar cid -> cid_to_string cid
-  | EInt (z, size) ->
-    Z.to_string z
-    ^
-    (match size with
-    | None | Some 32 -> ""
-    | Some size -> "<<" ^ size_to_string size ^ ">>")
   | EOp (op, [e]) -> op_to_string op ^ exp_to_string e
   | EOp (op, [e1; e2]) -> exp_to_string e1 ^ op_to_string op ^ exp_to_string e2
   | EOp (op, es) ->
