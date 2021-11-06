@@ -51,6 +51,7 @@
    symbolicElimination
    replaceUserTys
    partialInterpretation
+   constInlining
    linerate
    frontendPipeline
    syntaxToCore
