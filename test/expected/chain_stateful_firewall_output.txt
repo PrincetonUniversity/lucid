@@ -1,5 +1,4 @@
 dpt: Parsing ...
-Processing examples/interp_tests/chain_stateful_firewall.dpt
 
 In examples/interp_tests/chain_stateful_firewall.dpt: 
 

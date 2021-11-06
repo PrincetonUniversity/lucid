@@ -40,92 +40,98 @@ let dpt_builtin_fcns =
     (* (IrTranslate.hash_builtin, IrBuiltinToDag.do_hash) *) ]
 ;;
 
+(* code generators for events *)
 module TranslateEvents = struct
-  (* save a record of the event's definition to context,
-  using the same struct instance for input and output.
-  Also, remember the parameter ids of the event's handler. *)
-  let remember_event_def event_iid dec =
-    let event_iid = event_iid + 1 in
-    (* start at event id 1, not 0 *)
+  let event_out_flags_struct = Cid.create ["ev_out_flags_t"]
+
+  (* assumes that we link into the struct
+     with id md_instance, which is declared externally. *)
+  let event_out_flags_instance =
+    Cid.create_ids [md_instance; Id.create "ev_out_flags"]
+  ;;
+
+  (* translate the ith event declaration into LL code,
+     and save details about the event in the LL syntax.
+     This should be the ONLY FUNCTION that writes to event records. *)
+  let translate (ll_decls, last_eviid) dec =
     match dec.d with
     | DEvent (evid, ev_sort, params) ->
-      let ev_cid = Cid.id evid in
-      let field_defs = vardefs_from_params params in
-      let struct_cid = TofinoStructs.full_struct_from_ev evid ev_sort in
-      ctx_add_eventrec ev_cid event_iid ev_sort field_defs struct_cid
-    (*       (match ev_sort with
-      | EEntry _ ->
-        ctx_add_eventrec
-          ev_cid
-          event_iid
-          ev_sort
-          field_defs
-          (Some instruct_name)
-          None
-      | EExit ->
-        ctx_add_eventrec
-          ev_cid
-          event_iid
-          ev_sort
-          field_defs
-          None
-          (Some outstruct_name)
-      | EBackground ->
-        ctx_add_eventrec
-          ev_cid
-          event_iid
-          ev_sort
-          field_defs
-          (Some instruct_name)
-          (Some outstruct_name)) *)
+      (* all the details about the event that the translator
+         needs, in one context record. *)
+      let erec =
+        { event_id = evid
+        ; field_defs = vardefs_from_params params
+        ; event_iid = last_eviid + 1 (* start event ids at 1 *)
+        ; hdl_param_ids = [] (* filled in by DHandler match *)
+        ; event_sort = ev_sort
+        ; event_struct = TofinoStructs.structname_from_evid evid
+        ; event_struct_instance = TofinoStructs.full_struct_from_ev evid ev_sort
+        ; event_generated_flag =
+            Cid.concat event_out_flags_instance (Cid.id evid)
+        }
+      in
+      (* add the event to the context. *)
+      ctx_add_erec erec;
+      (* generate IR code for the event *)
+      (* all the fields in the event's struct *)
+      let all_event_fields =
+        (* hidden event parameters for lucid runtime *)
+        (event_id_field, event_id_width)
+        :: (event_mc_field, event_mc_width)
+        :: (event_loc_field, event_loc_width)
+        :: (event_delay_field, event_delay_width)
+        (* user-declared event parameters *)
+        :: erec.field_defs
+      in
+      let struct_ty =
+        match erec.event_sort with
+        | EBackground ->
+          IS.SHeader (* backround events get serialized to packet *)
+        | EEntry _ | EExit -> IS.SMeta
+        (* entry and exit events don't. kind of backwards seeming. *)
+      in
+      (* declaration of the struct, instance, and enum #define *)
+      let ev_struct_decl =
+        IS.new_structdef erec.event_struct struct_ty all_event_fields
+      in
+      let ev_struct_inst =
+        IS.new_struct erec.event_struct SPublic erec.event_struct_instance
+      in
+      let ev_enum =
+        IS.new_public_constdef
+          (TofinoStructs.defname_from_evid erec.event_id)
+          event_id_width
+          erec.event_iid
+      in
+      ll_decls @ [ev_struct_decl; ev_struct_inst; ev_enum], erec.event_iid
+    (* record the mapping from event to handler *)
     | DHandler (hdl_id, (params, _)) ->
-      ctx_set_hdl_param_ids (Cid.id hdl_id) (CL.split params |> fst)
-    | _ -> ()
+      ctx_set_hdl_param_ids (Cid.id hdl_id) (CL.split params |> fst);
+      ll_decls, last_eviid (* nothing to generate, just updating context *)
+    | _ -> ll_decls, last_eviid
   ;;
 
-  (* Generate all the data structures for an event, based on its record.
-      1. a struct.
-      2. a struct instance.
-      3. a constant e_<eventname>. *)
-  let structs_from_eventrec erec =
-    let struct_name = TofinoStructs.structname_from_evid erec.event_id in
-    let field_defs = erec.field_defs in
-    let ev_sort = erec.event_sort in
-    (* add the event metadata fields *)
-    let ev_name_field = event_id_field, event_id_width in
-    let ev_delay_field = event_delay_field, event_delay_width in
-    let ev_loc_field = event_loc_field, event_loc_width in
-    let ev_mc_field = event_mc_field, event_mc_width in
-    let field_defs =
-      ev_name_field
-      :: ev_mc_field
-      :: ev_loc_field
-      :: ev_delay_field
-      :: field_defs
+  (* nothing new *)
+
+  (* create the struct and instance of the event_generated bitvector *)
+  let event_triggered_bv () =
+    let to_generate_flag_field ev =
+      Cid.last_id ev.event_generated_flag |> Cid.id, 1
     in
-    (* build the struct def *)
-    trans_info ("generating struct def for event: " ^ Id.to_string erec.event_id);
-    let struct_def =
-      match ev_sort with
-      | EBackground -> IS.new_header_structdef struct_name field_defs
-      | _ -> IS.new_meta_structdef struct_name field_defs
-    in
-    (* build the struct instance *)
-    let structs = [IS.new_struct struct_name SPublic erec.event_struct] in
-    (* build the const event iid def *)
-    let event_iid_const =
-      IS.new_public_constdef
-        (TofinoStructs.defname_from_evid erec.event_id)
-        event_id_width
-        erec.event_iid
-    in
-    event_iid_const :: struct_def :: structs
+    let field_defs = ctx_get_event_recs () |> CL.map to_generate_flag_field in
+    [ IS.new_meta_structdef event_out_flags_struct field_defs
+    ; IS.new_struct event_out_flags_struct SPrivate event_out_flags_instance ]
   ;;
 
-  let structs_from_events () =
-    ctx_get_event_recs () |> CL.map structs_from_eventrec |> CL.flatten
+  (* translate all the event declarations and fill the context. *)
+  let translate_all ds =
+    let event_decls = CL.fold_left translate ([], 0) ds |> fst in
+    (* generate the event_out flag struct *)
+    let event_out_bv_decls = event_triggered_bv () in
+    event_decls @ event_out_bv_decls
   ;;
 
+  (*** parse generator for background events ***)
   let pnode_name_from_evid evid = Cid.id (Id.prepend_string "parse_" evid)
 
   let parsetree_from_events ds =
@@ -233,6 +239,22 @@ let groupdec_from_decl dec =
   | _ -> None
 ;;
 
+(* generate the bitvector metadata that indicate which
+   subset of events were generated. *)
+let gen_event_triggered_bitvec () =
+  let struct_cid = Cid.create ["outEvents_t"] in
+  let instance_cid = Cid.create [md_instance_prefix; "outEvents"] in
+  let event_id_to_bitfield er =
+    Cid.create [Id.to_string er.event_id ^ "_generated"]
+  in
+  let fields = ctx_get_event_recs () |> CL.map event_id_to_bitfield in
+  let widths = ctx_get_event_recs () |> CL.map (fun _ -> 1) in
+  let field_defs = CL.combine fields widths in
+  let newstruct = IS.new_meta_structdef struct_cid field_defs in
+  let newinstance = IS.new_struct struct_cid SPrivate instance_cid in
+  [newstruct; newinstance]
+;;
+
 (* generate structure definitions and instances for private DPT metadata and headers. *)
 let gen_internal_structs () =
   (* dptMeta *)
@@ -253,6 +275,8 @@ let gen_internal_structs () =
     IS.new_struct struct_cid SPrivate dpt_meta_struct_instance
   in
   (* the p4t printer will automatically link the instance to the struct based on struct_cid *)
+  (* the event active bit vector *)
+  (* *)
   [dptMeta_struct; dptMeta_instance]
 ;;
 
@@ -331,13 +355,13 @@ let from_dpt (ds : decls) (opgraph_recs : prog_opgraph) : IS.llProg =
   LLContext.start_logging ();
   (* put builtin function generators into the context *)
   ctx_add_codegens dpt_builtin_fcns;
-  (* put decls, including memops, into the context *)
+  (* put source decls into the context *)
   ctx_add_decls ds;
-  (* put event records in the context *)
-  CL.iteri TranslateEvents.remember_event_def ds;
-  (* generate struct declarations, struct instances, and constants from events. *)
-  let struct_defs = TranslateEvents.structs_from_events () in
-  (* generate struct declarations and instances for private Lucid-runtime only data. *)
+  (* put event records in the context and generate
+     all the LL code for event declarations. *)
+  let event_decls = TranslateEvents.translate_all ds in
+  (* generate struct declarations and instances for
+     other private Lucid-runtime only data. *)
   let dpt_struct_defs = gen_internal_structs () in
   (* generate parser for entry event instances. *)
   let parse_def = TranslateEvents.parsetree_from_events ds in
@@ -361,7 +385,7 @@ let from_dpt (ds : decls) (opgraph_recs : prog_opgraph) : IS.llProg =
         tofino_prog.instr_dict
         @ IS.dict_of_decls group_defs
         @ IS.dict_of_decls regarray_defs
-        @ IS.dict_of_decls struct_defs
+        @ IS.dict_of_decls event_decls
         @ IS.dict_of_decls dpt_struct_defs
         @ IS.dict_of_decls [parse_def]
         @ IS.dict_of_decls sched_defs

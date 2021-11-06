@@ -39,8 +39,8 @@ type event_rec =
   ; hdl_param_ids : Id.t list
   ; event_sort : event_sort
   ; event_struct : Cid.t
-        (*   ; in_struct : Cid.t option
-  ; out_struct : Cid.t option *)
+  ; event_struct_instance : Cid.t
+  ; event_generated_flag : Cid.t
   }
 
 (*** context ***)
@@ -125,20 +125,10 @@ let ctx_call_codegen name args =
 ;;
 
 (* context event definition functions *)
-let ctx_add_eventrec evname eviid ev_sort field_defs struct_cid =
-  print_endline
-    ("[ctx_add_eventrec] adding event record for " ^ Cid.to_string evname);
-  let erec =
-    EventRec
-      { event_id = Cid.to_id evname
-      ; field_defs
-      ; event_iid = eviid
-      ; hdl_param_ids = []
-      ; event_sort = ev_sort
-      ; event_struct = struct_cid
-      }
-  in
-  tofinoCtx := TofinoCtx.add evname erec !tofinoCtx
+let ctx_add_erec erec =
+  let key = Cid.id erec.event_id in
+  let entry = EventRec erec in
+  tofinoCtx := TofinoCtx.add key entry !tofinoCtx
 ;;
 
 let ctx_find_eventrec n =
@@ -155,9 +145,13 @@ let ctx_find_event_fields id =
 ;;
 
 (* get the struct name for the event, by id *)
-let ctx_find_event_struct id =
+let ctx_find_event_struct_instance id =
   let cid = Cid.id id in
-  (ctx_find_eventrec cid).event_struct
+  (ctx_find_eventrec cid).event_struct_instance
+;;
+
+let ctx_find_event_struct_instance_cid cid =
+  (ctx_find_eventrec cid).event_struct_instance
 ;;
 
 let ctx_find_event_struct_cid cid = (ctx_find_eventrec cid).event_struct
@@ -173,10 +167,20 @@ let ctx_set_hdl_param_ids id hdl_param_ids =
 (* a map from handler param id to event param cid *)
 let ctx_get_hdl_param_map hdl_id =
   let erec = ctx_find_eventrec (Cid.id hdl_id) in
-  CL.map
-    (fun field_cid -> Cid.concat erec.event_struct field_cid)
-    (CL.split erec.field_defs |> fst)
-  |> CL.combine erec.hdl_param_ids
+  print_endline
+    ("[ctx_get_hdl_param_map] " ^ Cid.to_string erec.event_struct_instance);
+  let recs =
+    CL.map
+      (fun field_cid -> Cid.concat erec.event_struct_instance field_cid)
+      (CL.split erec.field_defs |> fst)
+    |> CL.combine erec.hdl_param_ids
+  in
+  print_endline
+    ("[ctx_get_hdl_param_map]: key: "
+    ^ (CL.hd recs |> fst |> Id.to_string)
+    ^ " value: "
+    ^ (CL.hd recs |> snd |> Cid.to_string));
+  recs
 ;;
 
 let ctx_find_event_iid cid = (ctx_find_eventrec cid).event_iid

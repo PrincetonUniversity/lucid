@@ -25,7 +25,12 @@ let ctx_add_structdef decl =
 ;;
 
 let ctx_add_structdefs decls = CL.iter ctx_add_structdef decls
-let ctx_get_structdef structname = P4tCtx.find structname !p4tCtx
+
+let ctx_get_structdef structname =
+  print_endline ("[ctx_get_structdef] finding: " ^ Cid.to_string structname);
+  P4tCtx.find structname !p4tCtx
+;;
+
 let ctx_get_structdef_ty cid = ty_of_structdef (ctx_get_structdef cid)
 
 (* Temporary hack. Need to restructure IR, or something, to 

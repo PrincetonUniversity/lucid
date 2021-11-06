@@ -52,22 +52,20 @@ let check_decls ds =
       ignore (id, ty)
       (* This restriction isn't actually necessary, I don't think. *)
       (* if not (is_global ty)
-      then
+             then
+               Console.error_position d.dspan
+               @@ Printf.sprintf
+                    "Constructor %s returns non-global type %s"
+                    (id_to_string id)
+                    (ty_to_string ty) *)
+    | DExtern (_, ty) ->
+      (match TyTQVar.strip_links ty.raw_ty with
+      | TInt _ | TBool -> ()
+      | _ ->
         Console.error_position d.dspan
         @@ Printf.sprintf
-             "Constructor %s returns non-global type %s"
-             (id_to_string id)
-             (ty_to_string ty) *)
-    | DExtern (_, ty) ->
-      begin
-        match TyTQVar.strip_links ty.raw_ty with
-        | TInt _ | TBool -> ()
-        | _ ->
-          Console.error_position d.dspan
-          @@ Printf.sprintf
-               "Externs must have type int or bool, not %s"
-               (ty_to_string ty)
-      end
+             "Externs must have type int or bool, not %s"
+             (ty_to_string ty))
     | DModule (_, _, decls) -> List.iter (check_decl true) decls
     | _ -> ()
   in
