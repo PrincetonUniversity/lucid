@@ -89,7 +89,7 @@ and event =
 
 and value =
   { v : v
-  ; vty : ty option
+  ; vty : ty option (* TODO: Make this non-optional? *)
   ; vspan : sp
   }
 
@@ -104,7 +104,7 @@ and e =
 
 and exp =
   { e : e
-  ; ety : ty option
+  ; ety : ty option (* TODO: Make this non-optional? *)
   ; espan : sp
   }
 

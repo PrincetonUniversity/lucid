@@ -50,6 +50,7 @@
    eStmtElimination
    symbolicElimination
    replaceUserTys
+   partialInterpretation
    linerate
    frontendPipeline
    syntaxToCore
