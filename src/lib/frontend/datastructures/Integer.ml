@@ -150,3 +150,5 @@ let compare x y =
   let cmp = Z.compare x.value y.value in
   if cmp <> 0 then cmp else Z.compare x.size y.size
 ;;
+
+let is_zero x = x.value = Z.zero

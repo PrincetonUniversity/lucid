@@ -44,8 +44,7 @@ let merge_branches base_stmt level prior_env branch_envs =
           in
           let body =
             match x.body, y.body with
-            (* Direct equality comparison is a bit risky, but I think it's fine *)
-            | Some b1, Some b2 -> if b1.e = b2.e then x.body else None
+            | Some b1, Some b2 -> if equiv_exp b1 b2 then x.body else None
             | _ -> None
           in
           Some { level; is_declared; body })
@@ -62,11 +61,172 @@ let should_inline exp =
   false
 ;;
 
-let interp_exp env e =
-  ignore env;
+let mk_e v = EVal v
+
+let raw_integer v =
+  match v.v with
+  | VInt i -> i
+  | _ -> error "not integer"
+;;
+
+let raw_bool v =
+  match v.v with
+  | VBool b -> b
+  | _ -> error "not boolean"
+;;
+
+let rec interp_exp env e =
   match e.e with
   | EVal _ -> e
-  | _ -> failwith ""
+  | EVar cid ->
+    let binding = IdMap.find (Cid.to_id cid) env in
+    (match binding.body with
+    | None -> e
+    | Some e' -> e')
+  | ECall (cid, args) ->
+    { e with e = ECall (cid, List.map (interp_exp env) args) }
+  | EHash (sz, args) ->
+    { e with e = EHash (sz, List.map (interp_exp env) args) }
+  | EOp (op, args) -> { e with e = interp_op env op args }
+
+(* Mostly copied from InterpCore, could maybe merge the two functions *)
+and interp_op env op args =
+  let args = List.map (interp_exp env) args in
+  match op, args with
+  (* Boolean Ops *)
+  | And, [{ e = EVal { v = VBool true } }; e]
+  | Or, [{ e = EVal { v = VBool false } }; e]
+  | And, [e; { e = EVal { v = VBool true } }]
+  | Or, [e; { e = EVal { v = VBool false } }] -> e.e
+  | And, [{ e = EVal { v = VBool false } }; _]
+  | And, [_; { e = EVal { v = VBool false } }] -> vbool false |> mk_e
+  | Or, [{ e = EVal { v = VBool true } }; _]
+  | Or, [_; { e = EVal { v = VBool true } }] -> vbool true |> mk_e
+  | Not, [{ e = EVal { v = VBool b } }] -> vbool (not b) |> mk_e
+  (* Comparison ops *)
+  | Eq, [e1; e2] when equiv_exp e1 e2 -> vbool true |> mk_e
+  | Neq, [e1; e2] when equiv_exp e1 e2 -> vbool false |> mk_e
+  | Eq, [{ e = EVal v1 }; { e = EVal v2 }] when not (equiv_value v1 v2) ->
+    vbool false |> mk_e
+  | Neq, [{ e = EVal v1 }; { e = EVal v2 }] when not (equiv_value v1 v2) ->
+    vbool true |> mk_e
+  | Less, [{ e = EVal v1 }; { e = EVal v2 }] ->
+    vbool (Integer.lt (raw_integer v1) (raw_integer v2)) |> mk_e
+  | More, [{ e = EVal v1 }; { e = EVal v2 }] ->
+    vbool (Integer.lt (raw_integer v2) (raw_integer v1)) |> mk_e
+  | Leq, [{ e = EVal v1 }; { e = EVal v2 }] ->
+    vbool (Integer.leq (raw_integer v1) (raw_integer v2)) |> mk_e
+  | Geq, [{ e = EVal v1 }; { e = EVal v2 }] ->
+    vbool (Integer.geq (raw_integer v1) (raw_integer v2)) |> mk_e
+  (* Arithmetic ops *)
+  | Neg, [{ e = EOp (Neg, [e]) }] -> e.e
+  | Neg, [_] -> failwith "Not actually supported since all ints are unsigned"
+  | Cast size, [{ e = EVal v }] ->
+    vinteger (Integer.set_size size (raw_integer v)) |> mk_e
+  | Conc, [{ e = EVal v1 }; { e = EVal v2 }] ->
+    let v1, v2 = raw_integer v1, raw_integer v2 in
+    let sz = Integer.size v1 + Integer.size v2 in
+    let v1', v2' = Integer.set_size sz v1, Integer.set_size sz v2 in
+    vinteger (Integer.add (Integer.shift_left v1' (Integer.size v2)) v2')
+    |> mk_e
+  (* Zero right identity *)
+  | ( (Plus | SatPlus | Sub | SatSub | LShift | RShift | BitOr | BitXor)
+    , [{ e = EVal { v = VInt n } }; e2] )
+    when Integer.is_zero n -> e2.e
+  (* Zero left identity *)
+  | (Plus | SatPlus | BitOr | BitXor), [e1; { e = EVal { v = VInt n } }]
+    when Integer.is_zero n -> e1.e
+  (* Subtract from zero *)
+  | (Sub | SatSub), [e1; { e = EVal { v = VInt n } }] when Integer.is_zero n ->
+    (* Could replace with Neg but not sure that actually helps anything *)
+    (* interp_op env Neg [e1] *)
+    ignore e1;
+    EOp (op, args)
+  (* Zero left annihilator *)
+  | (LShift | RShift | BitAnd), [{ e = EVal ({ v = VInt n } as v) }; _]
+    when Integer.is_zero n -> v |> mk_e
+  (* Zero right annihilator *)
+  | BitAnd, [_; { e = EVal ({ v = VInt n } as v) }] when Integer.is_zero n ->
+    v |> mk_e
+  (* BitOr with max val -- two branches to suppress a warning *)
+  | BitOr, [_; { e = EVal ({ v = VInt n } as v) }]
+    when Integer.equal n (Integer.create ~value:(-1) ~size:(Integer.size n)) ->
+    { v with v = VInt (Integer.create ~value:(-1) ~size:(Integer.size n)) }
+    |> mk_e
+  | BitOr, [{ e = EVal ({ v = VInt n } as v) }; _]
+    when Integer.equal n (Integer.create ~value:(-1) ~size:(Integer.size n)) ->
+    { v with v = VInt (Integer.create ~value:(-1) ~size:(Integer.size n)) }
+    |> mk_e
+  (* BitAnd with max val *)
+  | BitAnd, [e; { e = EVal { v = VInt n } }]
+    when Integer.equal n (Integer.create ~value:(-1) ~size:(Integer.size n)) ->
+    e.e
+  | BitAnd, [{ e = EVal { v = VInt n } }; e]
+    when Integer.equal n (Integer.create ~value:(-1) ~size:(Integer.size n)) ->
+    e.e
+  (* Regular operators on values *)
+  | Plus, [{ e = EVal v1 }; { e = EVal v2 }] ->
+    vinteger (Integer.add (raw_integer v1) (raw_integer v2)) |> mk_e
+  | SatPlus, [{ e = EVal v1 }; { e = EVal v2 }] ->
+    let res = Integer.add (raw_integer v1) (raw_integer v2) in
+    if Integer.lt res (raw_integer v1)
+    then
+      vinteger
+        (Integer.create ~value:(-1) ~size:(Integer.size (raw_integer v1)))
+      |> mk_e
+    else vinteger res |> mk_e
+  | Sub, [{ e = EVal v1 }; { e = EVal v2 }] ->
+    vinteger (Integer.sub (raw_integer v1) (raw_integer v2)) |> mk_e
+  | SatSub, [{ e = EVal v1 }; { e = EVal v2 }] ->
+    if Integer.lt (raw_integer v1) (raw_integer v2)
+    then
+      vinteger (Integer.create ~value:0 ~size:(Integer.size (raw_integer v1)))
+      |> mk_e
+    else vinteger (Integer.sub (raw_integer v1) (raw_integer v2)) |> mk_e
+  | LShift, [{ e = EVal v1 }; { e = EVal v2 }] ->
+    vinteger
+      (Integer.shift_left (raw_integer v1) (raw_integer v2 |> Integer.to_int))
+    |> mk_e
+  | RShift, [{ e = EVal v1 }; { e = EVal v2 }] ->
+    vinteger
+      (Integer.shift_right (raw_integer v1) (raw_integer v2 |> Integer.to_int))
+    |> mk_e
+  | BitAnd, [{ e = EVal v1 }; { e = EVal v2 }] ->
+    vinteger (Integer.bitand (raw_integer v1) (raw_integer v2)) |> mk_e
+  | BitOr, [{ e = EVal v1 }; { e = EVal v2 }] ->
+    vinteger (Integer.bitor (raw_integer v1) (raw_integer v2)) |> mk_e
+  | BitXor, [{ e = EVal v1 }; { e = EVal v2 }] ->
+    vinteger (Integer.bitxor (raw_integer v1) (raw_integer v2)) |> mk_e
+  | BitNot, [{ e = EVal v1 }] ->
+    vinteger (Integer.bitnot (raw_integer v1)) |> mk_e
+  | Slice (hi, lo), [{ e = EVal v1 }] ->
+    vinteger
+      (Integer.shift_right (raw_integer v1) lo |> Integer.set_size (hi - lo + 1))
+    |> mk_e
+  | ( ( Not
+      | Neg
+      | BitNot
+      | And
+      | Or
+      | Eq
+      | Neq
+      | Less
+      | More
+      | Leq
+      | Geq
+      | Plus
+      | Sub
+      | SatPlus
+      | SatSub
+      | BitAnd
+      | BitOr
+      | BitXor
+      | LShift
+      | RShift
+      | Conc
+      | Cast _
+      | Slice _ )
+    , _ ) -> EOp (op, args)
 ;;
 
 (* Partially interpret a statement. Return the new statment, the environment after
@@ -74,13 +234,14 @@ let interp_exp env e =
    level than the statement's scope. We only return the env so we can pass it
    between the halves of an SSeq *)
 let rec interp_stmt env level s : statement * env =
+  let interp_exp = interp_exp env in
   match s.s with
   | SNoop -> s, env
-  | SUnit e -> { s with s = SUnit (interp_exp env e) }, env
+  | SUnit e -> { s with s = SUnit (interp_exp e) }, env
   | SPrintf (str, es) ->
-    { s with s = SPrintf (str, List.map (interp_exp env) es) }, env
-  | SGen (b, e) -> { s with s = SGen (b, interp_exp env e) }, env
-  | SRet eopt -> { s with s = SRet (Option.map (interp_exp env) eopt) }, env
+    { s with s = SPrintf (str, List.map interp_exp es) }, env
+  | SGen (b, e) -> { s with s = SGen (b, interp_exp e) }, env
+  | SRet eopt -> { s with s = SRet (Option.map interp_exp eopt) }, env
   | SSeq (s1, s2) ->
     let s1, env1 = interp_stmt env level s1 in
     let s2, env2 = interp_stmt env1 level s2 in
@@ -90,27 +251,27 @@ let rec interp_stmt env level s : statement * env =
     { s with s = s' }, env2
   (* Cases where we bind/mutate variables *)
   | SLocal (id, ty, exp) ->
-    let exp = interp_exp env exp in
+    let exp = interp_exp exp in
     if should_inline exp
     then snoop, IdMap.add id { level; body = Some exp; is_declared = false } env
     else
       ( { s with s = SLocal (id, ty, exp) }
       , IdMap.add id { level; body = None; is_declared = true } env )
   | SAssign (id, exp) ->
-    let exp = interp_exp env exp in
+    let exp = interp_exp exp in
     let old_binding = IdMap.find id env in
     let new_binding = { old_binding with level; body = Some exp } in
     { s with s = SAssign (id, exp) }, IdMap.add id new_binding env
   (* Cases where we branch *)
   | SIf (test, s1, s2) ->
-    let test = interp_exp env test in
+    let test = interp_exp test in
     (* TODO: Check to see if we actually need to branch *)
     let s1, env1 = interp_stmt env (level + 1) s1 in
     let s2, env2 = interp_stmt env (level + 1) s2 in
     let base_stmt = { s with s = SIf (test, s1, s2) } in
     merge_branches base_stmt level env [env1; env2]
   | SMatch (es, branches) ->
-    let es = List.map (interp_exp env) es in
+    let es = List.map interp_exp es in
     (* TODO: Check if we need to branch *)
     let branches, envs =
       List.map

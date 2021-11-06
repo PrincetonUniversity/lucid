@@ -238,3 +238,36 @@ let dextern_sp id ty span = decl_sp (DExtern (id, ty)) span
 let handler_sp id p body span = decl_sp (DHandler (id, (p, body))) span
 let memop_sp id p body span = decl_sp (DMemop (id, (p, body))) span
 let group_sp id es span = decl_sp (DGroup (id, es)) span
+
+(*** Utility -- may split into a separate file if it gets big *)
+
+let equiv_list f lst1 lst2 =
+  try List.for_all2 f lst1 lst2 with
+  | Invalid_argument _ -> false
+;;
+
+let rec equiv_value v1 v2 =
+  match v1.v, v2.v with
+  | VBool b1, VBool b2 -> b1 = b2
+  | VInt n1, VInt n2 -> Integer.equal n1 n2
+  | VGlobal n1, VGlobal n2 -> n1 = n2
+  | VGroup locs1, VGroup locs2 -> locs1 = locs2
+  | VEvent e1, VEvent e2 ->
+    Cid.equal e1.eid e2.eid
+    && e1.edelay = e2.edelay
+    && e1.elocations = e2.elocations
+    && equiv_list equiv_value e1.data e2.data
+  | _ -> false
+;;
+
+let rec equiv_exp e1 e2 =
+  match e1.e, e2.e with
+  | EVal v1, EVal v2 -> equiv_value v1 v2
+  | EVar cid1, EVar cid2 -> Cid.equal cid1 cid2
+  | ECall (cid1, es1), ECall (cid2, es2) ->
+    Cid.equal cid1 cid2 && equiv_list equiv_exp es1 es2
+  | EHash (sz1, es1), EHash (sz2, es2) ->
+    sz1 = sz2 && equiv_list equiv_exp es1 es2
+  | EOp (op1, es1), EOp (op2, es2) -> op1 = op2 && equiv_list equiv_exp es1 es2
+  | _ -> false
+;;
