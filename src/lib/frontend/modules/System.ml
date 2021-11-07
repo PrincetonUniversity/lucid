@@ -26,6 +26,7 @@ let sys_time_ty =
 ;;
 
 let sys_time_fun (nst : State.network_state) _ args =
+  let open CoreSyntax in
   match args with
   | [] -> vinteger (Integer.create ~value:nst.current_time ~size:32)
   | _ -> sys_time_error "takes no parameters"
@@ -50,6 +51,7 @@ let sys_random_ty =
 ;;
 
 let sys_random_fun _ _ args =
+  let open CoreSyntax in
   match args with
   | [] ->
     (* Random.bits only generates 30 random bits, so we need 2 more *)

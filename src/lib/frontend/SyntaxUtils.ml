@@ -2,24 +2,6 @@ open Syntax
 open Batteries
 open Collections
 
-let raw_integer v =
-  match v.v with
-  | VInt i -> i
-  | _ -> error "not integer"
-;;
-
-let raw_bool v =
-  match v.v with
-  | VBool b -> b
-  | _ -> error "not boolean"
-;;
-
-let raw_event v =
-  match v.v with
-  | VEvent e -> e
-  | _ -> error "not event"
-;;
-
 let extract_sizes gty = snd gty
 let gname gty = Id.name (fst gty)
 

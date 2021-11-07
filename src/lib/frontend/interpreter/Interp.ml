@@ -5,8 +5,7 @@ open InterpState
 let initial_state (pp : Preprocess.t) (spec : InterpSpec.t) =
   let nst =
     { (State.create spec.config) with
-      sizes = pp.sizes
-    ; event_sorts = Env.map fst pp.events
+      event_sorts = Env.map fst pp.events
     ; switches = Array.init spec.num_switches (fun _ -> State.empty_state ())
     }
   in
@@ -66,7 +65,7 @@ let simulate (nst : State.network_state) =
               (match Env.find event.eid nst.event_sorts with
               | EEntry _ -> "entry "
               | _ -> "")
-              (Printing.event_to_string event)
+              (CorePrinting.event_to_string event)
               idx;
             handler nst idx event);
           interp_events ((idx + 1) mod Array.length nst.switches) nst)

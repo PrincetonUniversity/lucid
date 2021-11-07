@@ -67,5 +67,6 @@ let process_prog ds =
   (* Just to be safe *)
   let ds = Typer.infer_prog ds in
   print_if_debug ds;
+  let ds = SyntaxToCore.translate_prog ds in
   renaming, ds
 ;;

@@ -17,6 +17,7 @@ let event_delay_cid = Cid.create_ids [event_id; event_delay_id]
 let event_delay_error msg = event_error event_delay_name msg
 
 let delay_fun err _ _ args =
+  let open CoreSyntax in
   let open State in
   match args with
   | [V { v = VEvent event }; V { v = VInt delay }] ->
@@ -60,6 +61,7 @@ let event_sslocate_error msg = event_error event_sslocate_name msg
 let locate_fun err nst _ args =
   (* Hack to make the types work *)
   let err str = failwith (err str) in
+  let open CoreSyntax in
   let open State in
   let event, locations =
     match args with

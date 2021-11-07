@@ -1,11 +1,11 @@
 (* Interpreter context + helpers for data structure interpretation. *)
-open Syntax
+open CoreSyntax
 open Batteries
 module Env = Collections.CidMap
 
 module State = struct
   module EventQueue = BatHeap.Make (struct
-    type t = int * Syntax.event
+    type t = int * event
 
     let compare t1 t2 = Pervasives.compare (fst t1) (fst t2)
   end)
@@ -29,7 +29,6 @@ module State = struct
   type network_state =
     { current_time : int
     ; config : config
-    ; sizes : int Env.t
     ; event_sorts : event_sort Env.t
     ; handlers : handler Env.t
     ; switches : state array
@@ -40,28 +39,28 @@ module State = struct
     ; event_queue : EventQueue.t
     ; pipeline : Pipeline.t
     ; exits : (event * int) Queue.t
-    ; retval : Syntax.value option ref
+    ; retval : value option ref
     ; counter : stats_counter ref
     }
 
   and ival =
-    | V of Syntax.value
+    | V of value
     | F of code
 
-  and code = network_state -> int -> ival list -> Syntax.value
+  and code = network_state -> int -> ival list -> value
 
   and handler = network_state -> int -> event -> unit
 
   type global_fun =
     { cid : Cid.t
     ; body : code
-    ; ty : ty
+    ; ty : Syntax.ty
+          (* Not CoreSyntax.ty, since this is needed only for type inference *)
     }
 
   let copy_state st =
     { st with
       pipeline = Pipeline.copy st.pipeline
-    ; retval = ref !(st.retval)
     ; exits = Queue.copy st.exits
     }
   ;;
@@ -69,7 +68,6 @@ module State = struct
   let create config : network_state =
     { current_time = -1
     ; config
-    ; sizes = Env.empty
     ; event_sorts = Env.empty
     ; handlers = Env.empty
     ; switches = Array.of_list []
@@ -80,8 +78,8 @@ module State = struct
     { global_env = Env.empty
     ; pipeline = Pipeline.empty ()
     ; event_queue = EventQueue.empty
-    ; retval = ref None
     ; exits = Queue.create ()
+    ; retval = ref None
     ; counter = ref empty_counter
     }
   ;;
@@ -96,11 +94,6 @@ module State = struct
   let lookup_handler cid nst =
     try Some (Env.find cid nst.handlers) with
     | Not_found -> error ("missing handler: " ^ Cid.to_string cid)
-  ;;
-
-  let lookup_size cid nst =
-    try Env.find cid nst.sizes with
-    | Not_found -> error ("missing size: " ^ Cid.to_string cid)
   ;;
 
   let add_global swid cid v nst =
@@ -125,8 +118,6 @@ module State = struct
   let add_handler cid lam nst =
     { nst with handlers = Env.add cid lam nst.handlers }
   ;;
-
-  let add_size cid n nst = { nst with sizes = Env.add cid n nst.sizes }
 
   let log_exit swid event nst =
     Queue.push (event, nst.current_time) nst.switches.(swid).exits
@@ -203,7 +194,7 @@ module State = struct
 
   let ival_to_string v =
     match v with
-    | V v -> Printing.value_to_string v
+    | V v -> CorePrinting.value_to_string v
     | F _ -> "<function>"
   ;;
 
@@ -233,7 +224,7 @@ module State = struct
                   "%s    %dns: %s\n"
                   acc
                   t
-                  (Printing.event_to_string event))
+                  (CorePrinting.event_to_string event))
               "")
   ;;
 
@@ -246,7 +237,7 @@ module State = struct
            (fun acc (event, time) ->
              acc
              ^ "    "
-             ^ Printing.event_to_string event
+             ^ CorePrinting.event_to_string event
              ^ " at t="
              ^ string_of_int time
              ^ "\n")
