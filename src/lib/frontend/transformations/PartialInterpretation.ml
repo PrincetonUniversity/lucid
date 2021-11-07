@@ -9,9 +9,27 @@ type var_binding =
   ; body : exp option
         (* This is Some e iff we know for sure the variable is bound to e *)
   ; is_declared : bool
+  ; declared_as : (ty * exp) option (* Original declaration value *)
   }
 
 type env = var_binding IdMap.t
+
+let print_env env =
+  print_endline "{";
+  IdMap.iter
+    (fun id binding ->
+      print_endline
+      @@ Printf.sprintf
+           "%s -> {l:%d; dec:%b; e:%s}"
+           (CorePrinting.id_to_string id)
+           binding.level
+           binding.is_declared
+           (match binding.body with
+           | None -> "None"
+           | Some e -> CorePrinting.exp_to_string e))
+    env;
+  print_endline "}"
+;;
 
 (* Merge the env after a branch of an if/match statement with the prior environment.
    Discard any variables that were defined inside the branch, and add declarations for
@@ -29,13 +47,9 @@ let merge_branches base_stmt level prior_env branch_envs =
             then true
             else if x.level < y.level && x.level = level
             then (
-              (* Was declared on this level, and modified in the branch *)
-              let body =
-                (* Should be safe since it was undeclared before, and hence unmodfied *)
-                Option.get x.body
-              in
-              decls_to_add
-                := sseq !decls_to_add (slocal id (Option.get body.ety) body);
+              (* Was originally declared on this level, and modified in the branch *)
+              let ty, body = Option.get x.declared_as in
+              decls_to_add := sseq (slocal id ty body) !decls_to_add;
               true)
             else false
           in
@@ -47,7 +61,7 @@ let merge_branches base_stmt level prior_env branch_envs =
             | Some b1, Some b2 -> if equiv_exp b1 b2 then x.body else None
             | _ -> None
           in
-          Some { level; is_declared; body })
+          Some { x with level; is_declared; body })
   in
   let merged = List.fold_left merge prior_env branch_envs in
   !decls_to_add, merged
@@ -62,12 +76,12 @@ let should_inline exp =
       inherit [_] s_iter
 
       method! visit_ECall r cid _ =
-        if Id.name (Cid.first_id cid) = "Array" then r := true
+        if Id.name (Cid.first_id cid) = "Array" then r := false
 
-      method! visit_EHash r _ _ = r := true
+      method! visit_EHash r _ _ = r := false
     end
   in
-  let r = ref false in
+  let r = ref true in
   v#visit_exp r exp;
   !r
 ;;
@@ -264,16 +278,37 @@ let rec interp_stmt env level s : statement * env =
   (* Cases where we bind/mutate variables *)
   | SLocal (id, ty, exp) ->
     let exp = interp_exp exp in
-    if should_inline exp
-    then snoop, IdMap.add id { level; body = Some exp; is_declared = false } env
-    else
-      ( { s with s = SLocal (id, ty, exp) }
-      , IdMap.add id { level; body = None; is_declared = true } env )
+    let new_s, body, is_declared =
+      if should_inline exp
+      then snoop, Some exp, false
+      else { s with s = SLocal (id, ty, exp) }, None, true
+    in
+    let new_binding =
+      { level; body; is_declared; declared_as = Some (ty, exp) }
+    in
+    new_s, IdMap.add id new_binding env
   | SAssign (id, exp) ->
     let exp = interp_exp exp in
     let old_binding = IdMap.find id env in
-    let new_binding = { old_binding with level; body = Some exp } in
-    { s with s = SAssign (id, exp) }, IdMap.add id new_binding env
+    let new_s, new_binding =
+      (* Using a match instead of if because it makes the code easier to read *)
+      match should_inline exp with
+      | true ->
+        (* Can completely remove the statement if we're on the declaration level *)
+        let new_s =
+          if old_binding.level = level then SNoop else SAssign (id, exp)
+        in
+        new_s, { old_binding with level; body = Some exp }
+      | false ->
+        if old_binding.is_declared || old_binding.level <> level
+        then SAssign (id, exp), { old_binding with level; body = None }
+        else
+          (* If we're on declaration level and it hasn't been declared yet,
+             we can replace the assignment with a declaration instead *)
+          ( SLocal (id, Option.get exp.ety, exp)
+          , { old_binding with body = None; is_declared = true } )
+    in
+    { s with s = new_s }, IdMap.add id new_binding env
   (* Cases where we branch *)
   | SIf (test, s1, s2) ->
     let test = interp_exp test in
@@ -302,19 +337,29 @@ let rec interp_stmt env level s : statement * env =
 
 let interp_body env (params, stmt) =
   let level = 1 in
-  let env =
+  let builtins =
+    (Builtins.this_id, Builtins.this_ty) :: Builtins.builtin_vars
+  in
+  let add_defs vars env =
     List.fold_left
       (fun acc (id, _) ->
-        IdMap.add id { level; body = None; is_declared = true } acc)
+        IdMap.add
+          id
+          { level; body = None; is_declared = true; declared_as = None }
+          acc)
       env
-      params
+      vars
   in
+  let env = env |> add_defs builtins |> add_defs params in
   params, fst (interp_stmt env level stmt)
 ;;
 
 let interp_decl env d =
   let add_dec env id =
-    IdMap.add id { level = 0; body = None; is_declared = true } env
+    IdMap.add
+      id
+      { level = 0; body = None; is_declared = true; declared_as = None }
+      env
   in
   match d.d with
   | DGlobal (id, ty, e) ->
@@ -333,4 +378,14 @@ let interp_decl env d =
   | DEvent (id, _, _) | DExtern (id, _) ->
     let env = add_dec env id in
     env, d
+;;
+
+let interp_prog ds =
+  let env = ref IdMap.empty in
+  List.map
+    (fun d ->
+      let env', d = interp_decl !env d in
+      env := env';
+      d)
+    ds
 ;;
