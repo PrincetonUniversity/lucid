@@ -48,7 +48,11 @@ let merge_branches base_stmt level prior_env branch_envs =
             else if x.level < y.level && x.level = level
             then (
               (* Was originally declared on this level, and modified in the branch *)
-              let ty, body = Option.get x.declared_as in
+              let ty, body =
+                match x.body with
+                | Some e -> Option.get e.ety, e
+                | None -> Option.get x.declared_as
+              in
               decls_to_add := sseq (slocal id ty body) !decls_to_add;
               true)
             else false

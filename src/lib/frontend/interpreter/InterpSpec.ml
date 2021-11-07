@@ -58,7 +58,7 @@ let parse_events
     match event with
     | `Assoc lst ->
       (* Find the event name, accounting for the renaming pass, and get its
-        sort and argument types *)
+         sort and argument types *)
       let eid =
         match List.assoc "name" lst with
         | `String id -> rename renaming.var_map "event" id
@@ -67,7 +67,7 @@ let parse_events
       let sort, tys = Env.find eid pp.events in
       if sort = EExit then error "Cannot specify exit event";
       (* Parse the arguments into values, and make sure they have the right types.
-       At the moment only integer and boolean arguments are supported *)
+         At the moment only integer and boolean arguments are supported *)
       let data =
         match List.assoc "args" lst with
         | `List lst ->

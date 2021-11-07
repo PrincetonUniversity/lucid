@@ -63,6 +63,10 @@ let process_prog ds =
   print_if_verbose "-------Inlining Constants-------";
   let ds = ConstInlining.inline_prog ds in
   print_if_debug ds;
+  print_if_verbose "-----------re-renaming-----------";
+  let renaming', ds = Renaming.rename ds in
+  let renaming = Renaming.compose_envs renaming renaming' in
+  print_if_debug ds;
   print_if_verbose "---------------typing again-------------";
   (* Just to be safe *)
   let ds = Typer.infer_prog ds in
