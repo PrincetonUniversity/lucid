@@ -96,6 +96,12 @@ let rec translate_exp (e : S.exp) : C.exp =
   { e = e'; ety = translate_ty (Option.get e.ety); espan = e.espan }
 ;;
 
+let translate_gen_type = function
+  | S.GSingle -> C.GSingle
+  | S.GMulti -> C.GMulti
+  | S.GPort e -> C.GPort (translate_exp e)
+;;
+
 let rec translate_statement (s : S.statement) : C.statement =
   (* (match s.s with
   | SSeq _ | SNoop -> ()
@@ -112,7 +118,7 @@ let rec translate_statement (s : S.statement) : C.statement =
     | S.SPrintf (str, es) -> C.SPrintf (str, List.map translate_exp es)
     | S.SIf (e, s1, s2) ->
       C.SIf (translate_exp e, translate_statement s1, translate_statement s2)
-    | S.SGen (b, e) -> C.SGen (b, translate_exp e)
+    | S.SGen (g, e) -> C.SGen (translate_gen_type g, translate_exp e)
     | S.SSeq (s1, s2) -> C.SSeq (translate_statement s1, translate_statement s2)
     | S.SMatch (es, branches) ->
       C.SMatch (List.map translate_exp es, List.map translate_branch branches)

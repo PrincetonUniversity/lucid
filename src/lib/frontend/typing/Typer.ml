@@ -574,10 +574,23 @@ and infer_statement (env : env) (s : statement) : env * statement =
                statement; neither branch ends obviously later than the other.")
       in
       { env with current_effect }, SIf (inf_e, inf_s1, inf_s2)
-    | SGen (b, e) ->
+    | SGen (g, e) ->
       let env, inf_e, ety = infer_exp env e |> textract in
-      unify_raw_ty s.sspan ety.raw_ty (TEvent b);
-      env, SGen (b, inf_e)
+      let env, inf_g =
+        match g with
+        | GSingle ->
+          unify_raw_ty s.sspan ety.raw_ty (TEvent false);
+          env, g
+        | GMulti ->
+          unify_raw_ty s.sspan ety.raw_ty (TEvent true);
+          env, g
+        | GPort e ->
+          unify_raw_ty s.sspan ety.raw_ty (TEvent false);
+          let env, inf_e, ety = infer_exp env e |> textract in
+          unify_raw_ty s.sspan ety.raw_ty (TInt (fresh_size ()));
+          env, GPort inf_e
+      in
+      env, SGen (inf_g, inf_e)
     | SSeq (s1, s2) ->
       let env, inf_s1 = infer_statement env s1 in
       let env, inf_s2 = infer_statement env s2 in

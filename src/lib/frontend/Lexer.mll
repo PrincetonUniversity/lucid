@@ -45,6 +45,7 @@ rule token = parse
   | "mevent"          { MEVENT (position lexbuf) }
   | "generate"        { GENERATE (position lexbuf) }
   | "mgenerate"       { MGENERATE (position lexbuf) }
+  | "generate_port"   { PGENERATE (position lexbuf) }
   | "printf"          { PRINTF (position lexbuf) }
   | "handle"	        { HANDLE (position lexbuf) }
   | "fun"             { FUN (position lexbuf)}

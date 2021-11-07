@@ -73,6 +73,7 @@
 %token <Span.t> MEVENT
 %token <Span.t> GENERATE
 %token <Span.t> MGENERATE
+%token <Span.t> PGENERATE
 %token <Span.t> TINT
 %token <Span.t> GLOBAL
 %token <Span.t> CONST
@@ -369,8 +370,9 @@ statement1:
     | ID ASSIGN exp SEMI	                  { sassign_sp (snd $1) $3 (Span.extend (fst $1) $4) }
     | RETURN SEMI                           { sret_sp None (Span.extend $1 $2) }
     | RETURN exp SEMI                       { sret_sp (Some $2) (Span.extend $1 $3) }
-    | GENERATE exp SEMI                     { gen_sp false $2 (Span.extend $1 $3)}
-    | MGENERATE exp SEMI                    { gen_sp true $2 (Span.extend $1 $3)}
+    | GENERATE exp SEMI                     { gen_sp GSingle $2 (Span.extend $1 $3)}
+    | MGENERATE exp SEMI                    { gen_sp GMulti $2 (Span.extend $1 $3)}
+    | PGENERATE LPAREN exp COMMA exp RPAREN SEMI { gen_sp (GPort $5) $3 (Span.extend $1 $7)}
     | cid paren_args SEMI                   { scall_sp (snd $1) (snd $2) (Span.extend (fst $1) $3) }
     | MATCH args WITH branches              { match_sp $2 (snd $4) (Span.extend $1 (fst $4)) }
     | MATCH LPAREN multiargs RPAREN WITH branches  { match_sp $3 (snd $6) (Span.extend $1 (fst $6)) }

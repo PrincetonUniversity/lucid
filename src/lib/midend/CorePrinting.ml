@@ -155,7 +155,14 @@ and stmt_to_string s =
   | SAssign (i, e) -> id_to_string i ^ " = " ^ exp_to_string e ^ ";"
   | SNoop -> ""
   | SGen (b, e) ->
-    Printf.sprintf "%sgenerate %s;" (if b then "m" else "") (exp_to_string e)
+    (match b with
+    | GSingle -> Printf.sprintf "generate %s;" (exp_to_string e)
+    | GMulti -> Printf.sprintf "mgenerate %s;" (exp_to_string e)
+    | GPort p ->
+      Printf.sprintf
+        "generate_port (%s, %s);"
+        (exp_to_string e)
+        (exp_to_string p))
   | SLocal (i, t, e) ->
     Printf.sprintf
       "%s %s = %s;"

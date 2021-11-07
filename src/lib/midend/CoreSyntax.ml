@@ -108,6 +108,11 @@ and exp =
 
 and branch = pat list * statement
 
+and gen_type =
+  | GSingle
+  | GMulti
+  | GPort of exp
+
 (* statements *)
 and s =
   | SNoop
@@ -116,7 +121,7 @@ and s =
   | SAssign of id * exp
   | SPrintf of string * exp list
   | SIf of exp * statement * statement
-  | SGen of bool * exp (* Bool is true iff multicast *)
+  | SGen of gen_type * exp (* Bool is true iff multicast *)
   | SSeq of statement * statement
   | SMatch of exp list * branch list
   | SRet of exp option

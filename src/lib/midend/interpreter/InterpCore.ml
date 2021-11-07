@@ -223,18 +223,23 @@ let rec interp_statement nst swid locals s =
     if !(nst.switches.(swid).retval) <> None
     then locals
     else interp_statement nst swid locals ss2
-  | SGen (_, e) ->
-    let event = interp_exp e |> extract_ival |> raw_event in
-    if Env.find event.eid nst.event_sorts = EExit
-    then State.log_exit swid event nst
-    else (
-      let locs =
-        if List.length event.elocations = 0
-        then [swid]
-        else List.map Integer.to_int event.elocations
-      in
-      List.iter (fun loc -> State.push_event loc event nst) locs);
-    locals
+  | SGen (g, e) ->
+    begin
+      match g with
+      | GSingle | GMulti ->
+        let event = interp_exp e |> extract_ival |> raw_event in
+        if Env.find event.eid nst.event_sorts = EExit
+        then State.log_exit swid event nst
+        else (
+          let locs =
+            if List.length event.elocations = 0
+            then [swid]
+            else List.map Integer.to_int event.elocations
+          in
+          List.iter (fun loc -> State.push_event loc event nst) locs);
+        locals
+      | _ -> failwith "NYI"
+    end
   | SRet (Some e) ->
     let v = interp_exp e |> extract_ival in
     (* Computation stops if retval is Some *)
