@@ -268,7 +268,7 @@ let interp_dglobal (nst : State.network_state) swid id ty e =
   let gty_name, gty_sizes =
     match ty.raw_ty with
     | TName (cid, sizes, _) -> Cid.names cid, sizes
-    | _ -> failwith "Bad DGLobal"
+    | _ -> failwith "Bad DGlobal"
   in
   let args =
     match e.e with
@@ -304,7 +304,7 @@ let interp_dglobal (nst : State.network_state) swid id ty e =
          appeared during interpretation"
   in
   nst.switches.(swid) <- { st with pipeline = new_p };
-  State.add_global swid (Id id) (V (vglobal idx)) nst;
+  State.add_global swid (Id id) (V (vglobal idx ty)) nst;
   nst
 ;;
 

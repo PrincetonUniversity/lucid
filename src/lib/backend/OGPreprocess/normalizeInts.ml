@@ -88,7 +88,7 @@ let rec to_immediate exp =
     (match is_atomic exp with
     (* the expression is an atomic op, so we can replace it with a precomputation. *)
     | true ->
-      let ty = ty_of_exp exp in
+      let ty = exp.ety in
       let var_id = Id.fresh "pc_tmp" in
       let stmt = slocal var_id ty exp in
       let exp = { exp with e = EVar (Cid.id var_id) } in

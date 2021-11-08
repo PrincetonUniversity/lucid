@@ -50,7 +50,7 @@ let merge_branches base_stmt level prior_env branch_envs =
               (* Was originally declared on this level, and modified in the branch *)
               let ty, body =
                 match x.body with
-                | Some e -> Option.get e.ety, e
+                | Some e -> e.ety, e
                 | None -> Option.get x.declared_as
               in
               decls_to_add := sseq (slocal id ty body) !decls_to_add;
@@ -309,7 +309,7 @@ let rec interp_stmt env level s : statement * env =
         else
           (* If we're on declaration level and it hasn't been declared yet,
              we can replace the assignment with a declaration instead *)
-          ( SLocal (id, Option.get exp.ety, exp)
+          ( SLocal (id, exp.ety, exp)
           , { old_binding with body = None; is_declared = true } )
     in
     { s with s = new_s }, IdMap.add id new_binding env

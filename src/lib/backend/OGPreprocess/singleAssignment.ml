@@ -173,8 +173,12 @@ module SSA = struct
       (* This transforms a phi back to a bound variable. *)
       | IdTbl.Phi (alt_ids, ty, Some pre_phi_id) ->
         (* add a phi call statement that sets a new variable name, bind variable to that name. *)
-        let phi_args = CL.map evar (pre_phi_id :: alt_ids) in
-        let phi_call = Syntax.exp (ECall (fresh_phi_cid (), phi_args)) in
+        (* FIXME: Not totally sure if this is right *)
+        let phi_ty = ty in
+        let phi_args =
+          CL.map (BatPervasives.flip evar phi_ty) (pre_phi_id :: alt_ids)
+        in
+        let phi_call = Syntax.exp (ECall (fresh_phi_cid (), phi_args)) ty in
         let new_id = Id.refresh id in
         let phi_stmt = slocal new_id ty phi_call in
         let new_entry = Bound (new_id, ty) in
@@ -357,7 +361,9 @@ module PhiElimination = struct
 
   let bind_at_dominator params phi stmt =
     (* the goal of this function is to find the right place to put bind_out *)
-    let bind_out = slocal phi.phi_out phi.phi_ty (evar phi.phi_dom) in
+    let bind_out =
+      slocal phi.phi_out phi.phi_ty (evar phi.phi_dom phi.phi_ty)
+    in
     let _, _ = params, phi in
     let param_ids = CL.split params |> fst in
     match CL.mem phi.phi_dom param_ids with
@@ -389,7 +395,7 @@ module PhiElimination = struct
 
   (* add the statement out = arg; right after arg is bound by a phi statement *)
   let set_arg_at_phi out stmt arg =
-    let set_out = sassign out (evar arg) in
+    let set_out ty = sassign out (evar arg ty) in
     let v =
       object
         inherit [_] s_map as super
@@ -398,7 +404,7 @@ module PhiElimination = struct
 
         method! visit_statement ctx statement =
           match statement.s with
-          | SLocal (id, _, exp) ->
+          | SLocal (id, ty, exp) ->
             (* ty ?? = ?? *)
             (match Id.equal id arg, exp.e with
             | true, ECall (fcn_id, _) ->
@@ -412,7 +418,7 @@ module PhiElimination = struct
                      (Id.to_string out)
                      (Printing.stmt_to_string statement));
                 did_set <- true;
-                sseq_sp statement set_out statement.sspan
+                sseq_sp statement (set_out ty) statement.sspan
               | false -> statement)
             | _ -> statement)
           | _ -> super#visit_statement ctx statement
@@ -423,14 +429,14 @@ module PhiElimination = struct
   ;;
 
   let set_arg_at_nonphi out stmt arg =
-    let set_out = sassign out (evar arg) in
+    let set_out ty = sassign out (evar arg ty) in
     let v =
       object
         inherit [_] s_map as super
 
         method! visit_statement ctx statement =
           match statement.s with
-          | SLocal (id, _, _) ->
+          | SLocal (id, ty, _) ->
             (match Id.equal id arg with
             | true ->
               !dprint_endline
@@ -438,7 +444,7 @@ module PhiElimination = struct
                    "[set_at_arg] setting %s after %s;"
                    (Id.to_string out)
                    (Printing.stmt_to_string statement));
-              sseq_sp statement set_out statement.sspan
+              sseq_sp statement (set_out ty) statement.sspan
             | false -> statement)
           | _ -> super#visit_statement ctx statement
       end

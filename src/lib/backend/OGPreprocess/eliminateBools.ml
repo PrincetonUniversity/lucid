@@ -21,8 +21,8 @@ let eliminate_complex_bool_assign stmt =
       x = true;
     }
   *)
-  let rhs_false = Syntax.exp (EVal (vbool false)) in
-  let rhs_true = Syntax.exp (EVal (vbool true)) in
+  let rhs_false = Syntax.exp (EVal (vbool false)) (ty TBool) in
+  let rhs_true = Syntax.exp (EVal (vbool true)) (ty TBool) in
   match stmt.s with
   | SAssign (id, rhs) ->
     let sinit = { stmt with s = SAssign (id, rhs_false) } in

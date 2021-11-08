@@ -205,8 +205,8 @@ let regdec_from_decl dec =
     let sz, args = get_dglobal_info ty e in
     let reg_id = Cid.id reg_id in
     (* reg, width, length, ??? *)
-    let arg_name = exp (EVar reg_id) in
-    let arg_width = exp (EVal (vint sz 8)) in
+    let arg_name = exp (EVar reg_id) ty in
+    let arg_width = exp (EVal (vint sz 8)) (TInt sz |> CoreSyntax.ty) in
     print_endline
       ("arg_width expr used as arg: " ^ Printing.exp_to_string arg_width);
     let args = arg_name :: arg_width :: args in

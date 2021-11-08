@@ -28,16 +28,16 @@ let width_from_ty ty = intwidth_from_raw_ty ty.raw_ty
 let vint_ty i ty =
   avalue
     (VInt (Integer.create ~value:i ~size:(width_from_ty ty)))
-    (Some ty)
+    ty
     Span.default
 ;;
 
 (**** expressions ****)
 (* typed op expression *)
 let eop_tyspan op args ety espan = aexp (EOp (op, args)) ety espan
-let eop_ty op args rty = eop_tyspan op args (Some rty) Span.default
+let eop_ty op args rty = eop_tyspan op args rty Span.default
 let eval v = Syntax.exp (EVal v)
-let eval_bool b = eval (vbool b)
+let eval_bool b = value_to_exp (value (VBool b))
 let evar_cid cid = Syntax.exp (EVar cid)
 let evar id = Syntax.exp (EVar (Cid.id id))
 
@@ -140,19 +140,8 @@ let int_from_exp (ex : exp) =
   | _ -> trans_err "could not evaluate expression to an int" ex
 ;;
 
-let ty_of_exp (exp : exp) : ty =
-  match exp.ety with
-  | Some rty -> rty
-  | None -> error "untyped expression after type checking / inference..."
-;;
-
-let raw_ty_of_exp exp = (ty_of_exp exp).raw_ty
-
-let intwidth_of_exp (exp : exp) : int =
-  match exp.ety with
-  | None -> error "untyped expression after type checking/inference..."
-  | Some rty -> intwidth_from_raw_ty rty.raw_ty
-;;
+let raw_ty_of_exp exp = exp.ety.raw_ty
+let intwidth_of_exp (exp : exp) : int = intwidth_from_raw_ty exp.ety.raw_ty
 
 let args_of_exp exp =
   match exp.e with
@@ -212,7 +201,7 @@ let is_bool_non_immediate exp = is_bool exp && not (is_immediate exp)
 and the variable that it gets put in *)
 let precompute exp =
   let var_id = Id.fresh "precompute" in
-  let precompute_stmt = slocal var_id (ty_of_exp exp) exp in
+  let precompute_stmt = slocal var_id exp.ety exp in
   let new_exp = { exp with e = EVar (Cid.id var_id) } in
   precompute_stmt, new_exp
 ;;

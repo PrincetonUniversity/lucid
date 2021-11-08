@@ -89,7 +89,7 @@ and event =
 
 and value =
   { v : v
-  ; vty : ty option (* TODO: Make this non-optional? *)
+  ; vty : ty
   ; vspan : sp
   }
 
@@ -103,7 +103,7 @@ and e =
 
 and exp =
   { e : e
-  ; ety : ty option (* TODO: Make this non-optional? *)
+  ; ety : ty
   ; espan : sp
   }
 
@@ -183,10 +183,20 @@ let error s = raise (Error s)
 let ty_sp raw_ty tspan = { raw_ty; tspan }
 let ty raw_ty = { raw_ty; tspan = Span.default }
 
+let infer_vty v =
+  match v with
+  | VBool _ -> TBool
+  | VInt z -> TInt (Integer.size z)
+  | VEvent e ->
+    if List.length e.elocations = 1 then TEvent false else TEvent true
+  | VGroup _ -> TGroup
+  | VGlobal _ -> failwith "Cannot infer type of global value"
+;;
+
 (* Values *)
 let avalue v vty vspan = { v; vty; vspan }
-let value_sp v vspan = { v; vty = None; vspan }
-let value v = { v; vty = None; vspan = Span.default }
+let value_sp v vspan = { v; vty = infer_vty v |> ty; vspan }
+let value v = { v; vty = infer_vty v |> ty; vspan = Span.default }
 let vint i size = value (VInt (Integer.create i size))
 let vinteger i = value (VInt i)
 let vbool b = value (VBool b)
@@ -196,18 +206,17 @@ let vint_sp i span = value_sp (VInt i) span
 let vbool_sp b span = value_sp (VBool b) span
 let vevent event = value (VEvent event)
 let vevent_sp event span = value_sp (VEvent event) span
-let vglobal idx = value (VGlobal idx)
+let vglobal idx ty = avalue (VGlobal idx) ty Span.default
 let vgroup locs = value (VGroup locs)
 
 (* Expressions *)
-let exp e = { e; ety = None; espan = Span.default }
+let exp e ety = { e; ety; espan = Span.default }
 let aexp e ety espan = { e; ety; espan }
-let exp_sp e espan = { e; ety = None; espan }
 let value_to_exp v = aexp (EVal v) v.vty v.vspan
-let var_sp cid span = exp_sp (EVar cid) span
-let op_sp op args span = exp_sp (EOp (op, args)) span
-let call_sp cid args span = exp_sp (ECall (cid, args)) span
-let hash_sp size args span = exp_sp (EHash (size, args)) span
+let var_sp cid ety span = aexp (EVar cid) ety span
+let op_sp op args ety span = aexp (EOp (op, args)) ety span
+let call_sp cid args ety span = aexp (ECall (cid, args)) ety span
+let hash_sp size args ety span = aexp (EHash (size, args)) ety span
 
 (* Statements *)
 
@@ -226,7 +235,11 @@ let sassign_sp id e span = statement_sp (SAssign (id, e)) span
 let sseq_sp s1 s2 span = statement_sp (SSeq (s1, s2)) span
 let sifte_sp e s1 s2 span = statement_sp (SIf (e, s1, s2)) span
 let gen_sp b e span = statement_sp (SGen (b, e)) span
-let scall_sp cid args span = statement_sp (SUnit (call_sp cid args span)) span
+
+let scall_sp cid args rty span =
+  statement_sp (SUnit (call_sp cid args rty span)) span
+;;
+
 let match_sp es bs span = statement_sp (SMatch (es, bs)) span
 let sexp_sp e span = statement_sp (SUnit e) span
 

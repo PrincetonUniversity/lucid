@@ -78,7 +78,7 @@ let rec translate_value (v : S.value) : C.value =
     | VEvent { eid; data; edelay; elocations } ->
       C.VEvent { eid; data = List.map translate_value data; edelay; elocations }
   in
-  { v = v'; vty = Option.map translate_ty v.vty; vspan = v.vspan }
+  { v = v'; vty = translate_ty (Option.get v.vty); vspan = v.vspan }
 ;;
 
 let rec translate_exp (e : S.exp) : C.exp =
@@ -94,12 +94,12 @@ let rec translate_exp (e : S.exp) : C.exp =
     | S.EHash (sz, es) -> C.EHash (translate_size sz, List.map translate_exp es)
     | _ -> err e.espan (Printing.exp_to_string e)
   in
-  { e = e'; ety = Option.map translate_ty e.ety; espan = e.espan }
+  { e = e'; ety = translate_ty (Option.get e.ety); espan = e.espan }
 ;;
 
 let rec translate_statement (s : S.statement) : C.statement =
   (* (match s.s with
-  | SSeq _ -> ()
+  | SSeq _ | SNoop -> ()
   | _ -> print_endline @@ "Translating " ^ Printing.statement_to_string s); *)
   let translate_branch (ps, s) =
     List.map translate_pattern ps, translate_statement s

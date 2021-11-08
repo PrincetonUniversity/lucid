@@ -59,7 +59,9 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
     let inst t = instantiator#visit_ty (fresh_maps ()) t in
     let t = lookup_var e.espan env cid in
     env, Some (inst t) |> wrap e
-  | EVal v -> env, (infer_value v).vty |> wrap e
+  | EVal v ->
+    let v = infer_value v in
+    env, { e with e = EVal v; ety = v.vty }
   | EInt (z, szo) ->
     ( env
     , (match szo with
@@ -1031,6 +1033,15 @@ let ensure_fully_typed ds =
   let v =
     object (self)
       inherit [_] s_iter
+
+      method! visit_value _ v =
+        match v.vty with
+        | Some _ -> self#visit_v () v.v
+        | None ->
+          error_sp v.vspan
+          @@ Printf.sprintf
+               "Internal error: value %s has no type!"
+               (Printing.value_to_string v)
 
       method! visit_exp _ exp =
         match exp.ety with

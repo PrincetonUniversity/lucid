@@ -53,7 +53,7 @@ module NormalizeRelops = struct
     (* create the actual statement *)
     let rhs = aexp (EOp (op, [e1; e2])) e1.ety Span.default in
     (* how big is the temp variable? *)
-    let test_var_stmt = slocal test_var_id (ty_of_exp e1) rhs in
+    let test_var_stmt = slocal test_var_id e1.ety rhs in
     test_var_cid, test_var_stmt
   ;;
 
@@ -73,16 +73,16 @@ module NormalizeRelops = struct
     (* boolean operations -- recurse on args *)
     | And | Or | Not | Cast _ ->
       let new_args, arg_precompute_stmts = normalize_exps args in
-      exp_sp (EOp (op, new_args)) espan, arg_precompute_stmts
+      aexp (EOp (op, new_args)) ety espan, arg_precompute_stmts
     (* relational operators -- precompute depending on form *)
     | Eq | Neq ->
       (match args with
       (* var, int  --> no change *)
       | [{ e = EVar _; _ }; { e = EVal _; _ }] ->
-        exp_sp (EOp (op, args)) espan, []
+        aexp (EOp (op, args)) ety espan, []
       (* int, var  --> var, int *)
       | [{ e = EVal _; _ }; { e = EVar _; _ }] ->
-        exp_sp (EOp (op, CL.rev args)) espan, []
+        aexp (EOp (op, CL.rev args)) ety espan, []
       (* expr1, expr2 --> precompute var_test = expr1 - expr2; var_test == 0; *)
       | [e1; e2] ->
         let test_var_cid, calc_test_var = create_precompute_test e1 Sub e2 in
@@ -117,14 +117,14 @@ module NormalizeRelops = struct
     | Leq | Geq ->
       error "[normalize_erelop] Leq and Geq should have been eliminated by now"
     (* other operators are the base case, because they cannot have rel ops as leaves *)
-    | _ -> exp_sp (EOp (op, args)) espan, []
+    | _ -> aexp (EOp (op, args)) ety espan, []
 
   (* normalize an immediate boolean expression in an if statement *)
   and normalize_eimmediate exp =
     let rty = raw_ty_of_exp exp in
     match rty with
     (* e --> op (eq, e, true) *)
-    | TBool -> eop_ty Eq [exp; eval_bool true] (Option.get exp.ety)
+    | TBool -> eop_ty Eq [exp; eval_bool true] exp.ety
     | _ -> exp
 
   and normalize_exps exps =
@@ -200,11 +200,11 @@ module NormalizeBoolExps = struct
     let _, _ = ctx, exp in
     match exp.e, exp.ety with
     (* variables *)
-    | EVar cid, Some { raw_ty = TInt _ } ->
+    | EVar cid, { raw_ty = TInt _ } ->
       let var_id_string = cid_to_id_string cid in
       var_ctx := (var_id_string, exp) :: !var_ctx;
       Z3Int.mk_const_s ctx var_id_string
-    | EVar cid, Some { raw_ty = TBool } ->
+    | EVar cid, { raw_ty = TBool } ->
       let var_id_string = cid_to_id_string cid in
       var_ctx := (var_id_string, exp) :: !var_ctx;
       Boolean.mk_const_s ctx var_id_string
@@ -247,14 +247,8 @@ module NormalizeBoolExps = struct
         error
           "Unsupported operation in z3_from_expr -- the clause transformation \
            pass may not have run, or failed.")
-    (* statements that should have been eliminated by now. *)
-    | EVar _, None ->
-      Printing.exp_to_string exp
-      |> sprintf
-           "z3_from_expr got an UNTYPED variable that is not an integer or \
-            boolean: <<%s>>"
-      |> error
-    | EVar _, Some rty ->
+      (* statements that should have been eliminated by now. *)
+    | EVar _, rty ->
       let expstr = Printing.exp_to_string exp in
       let tystr = Printing.ty_to_string rty in
       sprintf
