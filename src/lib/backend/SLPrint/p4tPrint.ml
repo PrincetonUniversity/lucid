@@ -88,7 +88,7 @@ let str_of_private_oids ms =
   String.concat ~sep:", " (CL.map str_of_private_oid ms)
 ;;
 
-(* public objects that are globally scoped, like the parse block *)
+(* compute objects with globally unique names. *) 
 let str_of_public_globalid m : string =
   let names = Cid.names m in
   String.concat ~sep:"_" names
