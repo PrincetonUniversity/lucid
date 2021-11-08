@@ -128,8 +128,15 @@ let rec interp_exp (nst : State.network_state) swid locals e : State.ival =
     | F f -> V (f nst swid vs))
   | EHash (size, args) ->
     let vs = interp_exps args in
+    let vs =
+      List.map
+        (function
+          | State.V v -> v.v
+          | _ -> failwith "What? No hashing functions!")
+        vs
+    in
     (match vs with
-    | V { v = VInt seed } :: tl ->
+    | VInt seed :: tl ->
       let hashed = Legacy.Hashtbl.seeded_hash (Integer.to_int seed) tl in
       V (vint hashed size)
     | _ -> failwith "Wrong arguments to hash operation")
