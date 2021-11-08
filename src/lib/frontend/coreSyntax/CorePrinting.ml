@@ -38,7 +38,6 @@ let rec raw_ty_to_string t =
       "memop[int<<%s>>, %s]"
       (size_to_string size1)
       (size_to_string size2)
-  | TVoid -> "void"
   | TGroup -> "group"
 
 and func_to_string func =

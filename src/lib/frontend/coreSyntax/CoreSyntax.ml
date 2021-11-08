@@ -21,11 +21,10 @@ and sizes = size list
 
 and raw_ty =
   | TBool
-  | TVoid
   | TGroup
   | TInt of size (* Number of bits *)
   | TEvent of bool (* True iff multicast *)
-  | TFun of func_ty (* Only used for Array update functions at this point *)
+  | TFun of func_ty (* Only used for Array/event functions at this point *)
   | TName of cid * sizes * bool (* Named type: e.g. "Array.t<<32>>". Bool is true if it represents a global type *)
   | TMemop of size * size
 

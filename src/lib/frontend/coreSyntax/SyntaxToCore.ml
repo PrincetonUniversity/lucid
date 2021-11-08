@@ -17,7 +17,6 @@ let rec translate_ty (ty : S.ty) : C.ty =
   let raw_ty =
     match S.TyTQVar.strip_links ty.raw_ty with
     | S.TBool -> C.TBool
-    | S.TVoid -> C.TVoid
     | S.TGroup -> C.TGroup
     | S.TInt sz -> C.TInt (translate_size sz)
     | S.TEvent b -> C.TEvent b
