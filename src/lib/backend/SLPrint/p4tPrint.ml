@@ -199,7 +199,7 @@ module PrimitiveString = struct
         | _ -> error "[str_of_expr] Cast operation must have 2 operands.")
       | Slice ->
         (match args with
-        | [i; s; e] -> str_of_slice i s e
+        | [i; s; e] -> (str_of_slice i s e) ^ ";"
         | _ -> error "[str_of_expr] Slice operation must have 3 operands."))
   ;;
 
