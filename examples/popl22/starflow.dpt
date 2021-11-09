@@ -19,8 +19,8 @@ entry event monitor_pkt(int src, int len);
 
 // records that the cache emits when something gets evicted.
 const int COLLECTION_SERVER = 1234;
-exit event short_record(int src, int len, int rec0, int rec1);
-exit event long_record(int src, int len, int rec0, int rec1, int rec2, int rec3, int rec4, int rec5, int rec6, int rec7);
+exit event short_record(int src, int len, int[2] recs);
+exit event long_record(int src, int len, int[8] recs);
 
 // free a "long slot" by pushing it's index back onto the stack.
 event free_block(int block_id);
@@ -39,29 +39,33 @@ global Array.t<<32>>[8] rec = [Array.create(H_SLOTS) for i < 8];
 memop incr_idx (int stored, int nothingval) {
   if (stored == MAX_IDX) {
     return 0;
-  }
-  else {
+  } else {
     return stored + 1;
   }
 }
 
 // We need to get the index, and also the count.
-
 memop decr_sat (int stored, int nothingval) {
   if (stored == 0) {
     return 0;
-  }
-  else {
+  } else {
     return stored - 1;
+  }
+}
+
+// Helper function for monitor_pkt. Could be replaced with a ternary if expression
+// if we add it
+fun int update_or_get(Array.t<<32>> rec, int h1, int len, bool update) {
+  if (update) {
+    return Array.update(rec, h1, fst, 0, snd, len);
+  } else {
+    return Array.get(rec, h1);
   }
 }
 
 handle monitor_pkt(int src, int len) {
   int ct = 0; int idx = 0; // idx = (count % num_rec_slots)
-  int stored_rec0 = 0; int stored_rec1 = 0;
-  int stored_rec2 = 0; int stored_rec3 = 0;
-  int stored_rec4 = 0; int stored_rec5 = 0;
-  int stored_rec6 = 0; int stored_rec7 = 0;
+  int[8] stored_recs = [0; 0; 0; 0; 0; 0; 0; 0];
   int blk_id = 0;
   // update the key.
   int h1 = hash<<32>>(h1_poly, src);
@@ -88,67 +92,18 @@ handle monitor_pkt(int src, int len) {
   }
   if (blk_id == 0) {
     // idx = idx mod SIZE_SHORT, but mod isnt implemented yet.
-    if (idx == 2) { idx = 0; } else {
-    if (idx == 3) { idx = 1; } else {
-    if (idx == 4) { idx = 0; } else {
-    if (idx == 5) { idx = 1; } else {
-    if (idx == 6) { idx = 0; } else {
-    if (idx == 7) { idx = 1; } } } } } }
+    match idx with
+    | 2 -> { idx = 0; }
+    | 4 -> { idx = 0; }
+    | 6 -> { idx = 0; }
+    | 3 -> { idx = 1; }
+    | 5 -> { idx = 1; }
+    | 7 -> { idx = 0; }
   }
-
-  // update all the packet record cells.
-  // always fst from every cell.
-  // only snd to the cell if: an evict has not happened AND we are at the right index value
-  // if (match == MMATCH) {
-
-  // }
-
   if (mtch == MMATCH) {
-    if ((idx == 0)) {
-      stored_rec0 = Array.update(rec[0], h1, fst, 0, snd, len);
-    } else {
-      stored_rec0 = Array.get(rec[0], h1);
-    if (idx == 1) {
-      stored_rec1 = Array.update(rec[1], h1, fst, 0, snd, len);
-    } else {
-      stored_rec1 = Array.get(rec[1], h1);
-    if (idx == 2) {
-      stored_rec2 = Array.update(rec[2], h1, fst, 0, snd, len);
-    } else {
-      stored_rec2 = Array.get(rec[2], h1);
-    if (idx == 3) {
-      stored_rec3 = Array.update(rec[3], h1, fst, 0, snd, len);
-    } else {
-      stored_rec3 = Array.get(rec[3], h1);
-    if (idx == 4) {
-      stored_rec4 = Array.update(rec[4], h1, fst, 0, snd, len);
-    } else {
-      stored_rec4 = Array.get(rec[4], h1);
-    if (idx == 5) {
-      stored_rec5 = Array.update(rec[5], h1, fst, 0, snd, len);
-    } else {
-      stored_rec5 = Array.get(rec[5], h1);
-    if (idx == 6) {
-      stored_rec6 = Array.update(rec[6], h1, fst, 0, snd, len);
-    } else {
-      stored_rec6 = Array.get(rec[6], h1);
-    if (idx == 7) {
-      stored_rec7 = Array.update(rec[7], h1, fst, 0, snd, len);
-    } else {
-      stored_rec7 = Array.get(rec[7], h1);
-      } } } } } } }
-    }
-  }
-  // No match, just fst for evict.
-  else {
-    stored_rec0 = Array.get(rec[0], h1);
-    stored_rec1 = Array.get(rec[1], h1);
-    stored_rec2 = Array.get(rec[2], h1);
-    stored_rec3 = Array.get(rec[3], h1);
-    stored_rec4 = Array.get(rec[4], h1);
-    stored_rec5 = Array.get(rec[5], h1);
-    stored_rec5 = Array.get(rec[6], h1);
-    stored_rec5 = Array.get(rec[7], h1);
+    stored_recs = [update_or_get(rec[i], h1, len, idx == size_to_int(i)) for i < 8];
+  } else {  // No match, just fst for evict.
+    stored_recs = [Array.get(rec[i], h1) for i < 8];
   }
 
   // We also need to generate (and implement) the memory free event...
@@ -156,22 +111,21 @@ handle monitor_pkt(int src, int len) {
   if (mtch == MMATCH) {
     if (idx == 0) {
       if (blk_id == 0) {
-        generate Event.sslocate(short_record(src, len, stored_rec0, stored_rec1), COLLECTION_SERVER);
+        generate Event.sslocate(short_record(src, len, [stored_recs[0]; stored_recs[1]]), COLLECTION_SERVER);
       } else {
-        generate Event.sslocate(long_record(src, len, stored_rec0, stored_rec1, stored_rec2, stored_rec3, stored_rec4, stored_rec5, stored_rec6, stored_rec7), COLLECTION_SERVER);
+        generate Event.sslocate(long_record(src, len, stored_recs), COLLECTION_SERVER);
       }
     }
-  }
-  // if there wasn't a match, we need to generate a new record no matter what.
-  // Note: at this point, we could zero out the invalid entries too. Original starflow implementation assumes the server takes care of it.
-  else {
-      if (blk_id == 0) {
-        generate Event.sslocate(short_record(src, len, stored_rec0, stored_rec1), COLLECTION_SERVER);
-      } else {
-        generate Event.sslocate(long_record(src, len, stored_rec0, stored_rec1, stored_rec2, stored_rec3, stored_rec4, stored_rec5, stored_rec6, stored_rec7), COLLECTION_SERVER);
-        // in this case, we also have to free the long block for another flow -- do that with a control event.
-        generate free_block(blk_id);
-      }
+  } else {
+    // if there wasn't a match, we need to generate a new record no matter what.
+    // Note: at this point, we could zero out the invalid entries too. Original starflow implementation assumes the server takes care of it.
+    if (blk_id == 0) {
+      generate Event.sslocate(short_record(src, len, [stored_recs[0]; stored_recs[1]]), COLLECTION_SERVER);
+    } else {
+      generate Event.sslocate(long_record(src, len, stored_recs), COLLECTION_SERVER);
+      // in this case, we also have to free the long block for another flow -- do that with a control event.
+      generate free_block(blk_id);
+    }
   }
 }
 

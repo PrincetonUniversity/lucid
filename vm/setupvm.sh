@@ -1,7 +1,7 @@
 BOX="lucid.box"
 # 1) make sure vagrant and virtualbox are installed.
 echo "checking if vagrant and virtualbox are installed..."
-if which vagrant > /dev/null ; then 
+if which vagrant > /dev/null ; then
     echo "vagrant installed"
 else
     echo "vagrant not installed! Install from: https://www.vagrantup.com/downloads"
@@ -9,7 +9,7 @@ else
     exit
 fi
 
-if which vboxmanage > /dev/null ; then 
+if (which vboxmanage > /dev/null) || (which VBoxManage > /dev/null); then
     echo "virtualbox installed"
 else
     echo "virtualbox not installed! Install from: https://www.virtualbox.org/wiki/Downloads"
@@ -19,7 +19,7 @@ fi
 
 # 2) add box to vagrant
 if [ -e $BOX ]
-then 
+then
     echo "initializing lucid vm $BOX"
     vagrant box add lucid $BOX
     # vagrant init lucid

@@ -6,7 +6,7 @@ review, in reality Pipe is a more modern version of the Lucid language. Hence we
 refer to our artifact as Lucid from now on.
 
 The source code for Lucid is available at https://github.com/PrincetonUniversity/lucid.
-The contents of this artifact submission are a copy of the popl22_artifact branch, with the addition of
+The contents of this artifact submission are a snapshot of the popl22_artifact branch, with the addition of
 a vagrant box containing the necessary tools to build Lucid from scratch. This branch is a subset of the
 main branch, with some minor tweaks and scripts to make evaluation easier.
 
@@ -38,7 +38,7 @@ Diffs: []
 ```
 The tests should complete quickly (well under a minute to finish all of them). If either the Errors or Diffs list doesn't match the above output, then something went wrong.
 * Windows bugs and workarounds: Ideally, use a Mac running Big Sur 11.5.2. If you insist on using Windows 10, the following tips may be helpful for dealing with bugs in the VM. We have not testing the artifact on any other OS.
- * If you get strange error after building the artifact once and running a `make ...` command, try deleting the `_build/` directory on the _host_ machine (not from inside the VM), and try again. 
+ * If you get strange error after building the artifact once and running a `make ...` command, try giving the vagrant user more permissions, and/or deleting the `_build/` directory on the _host_ machine (not from inside the VM), and try again.
  * If this fails, but the `dpt` binary was previously built successfully and still exists, you can run the testing script yourself (test/runtests.py for `make test` or test/aec_evaluate.py for `make evaluate`)
  * Otherwise, you may have to begin the instructions from scratch: exit the VM, run `vagrant destroy` to shut it down, and run `vagrant box remove lucid` to finish cleaning up. Then unpack the zip file again and start from the beginning.
 
