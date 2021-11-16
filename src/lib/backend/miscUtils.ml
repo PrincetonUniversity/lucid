@@ -2,9 +2,17 @@ open Batteries
 open Printf
 module CL = Caml.List
 
+exception Error of string
+let error s = raise (Error s)
+
 (* misc util functions *)
 
-(* Take a list of lists of objects of the form 
+
+(* (s, e] *)
+let range s e = List.init (e-s) (fun x -> s + x);;
+
+
+  (* Take a list of lists of objects of the form 
       [[a1; a2; ... aj]; [b1; b2; ... bk]; ... [c1; c2; ... cl]]
     Return a list of all possible combinations of the form 
       [[a1; b1; ... c1]; [a1; b1; ... c2]; [a1; b1; ... ck]; ... [a1; b2; ... c1] ... [aj; bk; ... cl]] *)

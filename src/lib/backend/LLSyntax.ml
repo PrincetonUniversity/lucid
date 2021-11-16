@@ -168,7 +168,7 @@ and decl =
   | SchedBlock of oid * scheduler_block (* P4 code generators for lucid's scheduler. *)
   | ConfigBlock of oid * config_block
 
-(*** parse tree ***)
+(*** the parse graph is just a list of nodes that point to each other ***)
 and parse_node = oid * parse_instr list * parse_next
 
 and parse_instr =
@@ -702,4 +702,26 @@ module Generators = struct
   (* c := c2:cid + i:int *)
   let incr_assign_instr c1 c2 i = incr_expr c2 i |> oper_assign_instr c1
   let validate_instr c = IValidate c
+
+(* create a header struct h_t with fields fs of widths ws *)
+  (* | StructDef of mid * structType * (mid * int) list  *)
+  (* a header or metadata structure *)
+
+  let hdr_struct h_t (fs, ws) = StructDef(h_t, SHeader, CL.combine fs ws)
+  ;;
+
+  (* Create an empty instance of s with id h. *)
+  let struct_inst s h = match s with 
+    | StructDef(struct_id, _, _) -> StructVar(h, SPublic, struct_id)
+    | _ -> error "[struct_inst] s is not a struct definition"
+  ;;
+
+
+  (* parse helpers *)
+  let parse_node name stmts next = name, stmts, next
+  
+
+
+  ;; 
+
 end

@@ -1,0 +1,12 @@
+{
+    "name" : "multi_events_test", 
+    "input_port": "128",
+    "packets": [
+        {"ip.src" : "1.1.1.1", "ip.dst" : "2.2.2.2", "payload.length" : 256}
+    ],
+    "model-output":
+    [
+        {"port" : 128, "ip.src" : "1.1.1.1", "ip.dst" : "2.2.2.2"},
+        {"port" : 128, "ip.src" : "2.2.2.2", "ip.dst" : "1.1.1.1"}
+    ]
+}

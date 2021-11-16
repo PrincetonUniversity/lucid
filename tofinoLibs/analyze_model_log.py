@@ -26,7 +26,7 @@ def main():
 def parse_tx_pkts_from_model_log(log_fn):
     """ extract from the model log all the packets that were sent out, 
         along with the port that they were sent out of. """
-    start_pkt_regex = r':-:(.*?):(.*?):=* Tx Pkt to port (\d*) \(.*='
+    start_pkt_regex = r':\s*?:.*?:(.*?):(<.*?>):=* Tx Pkt to port (\d*) \(.*='
     # r = r'Egress Pkt from TM to port (\d*).*?:Packet :.*?(.*?):='
     packets = []
     log_lines = open(log_fn, "r").readlines()
@@ -41,7 +41,7 @@ def parse_tx_pkts_from_model_log(log_fn):
             # check if this line contains data from any output packets
             updated_packets = []
             for (pkt_key, pkt_rec) in packets:
-                pkt_bytes_regex = r':-:%s:%s:(.*)'%(pkt_key["pid"], pkt_key["tid"])
+                pkt_bytes_regex = r':%s:%s:(.*)'%(pkt_key["pid"], pkt_key["tid"])
                 bytes_found = re.findall(pkt_bytes_regex, line)
                 if (len(bytes_found) > 0):
                     bytes_found = bytes_found[0].replace(" ", "")
