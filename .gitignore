@@ -36,6 +36,7 @@ tmp.txt
 
 backendTests
 test/output
+compilerOut
 
 # Compiled binaries
 dpt

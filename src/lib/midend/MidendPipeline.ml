@@ -54,6 +54,7 @@ let process_prog ?(for_interp = false) ds =
         (* let ds = EliminateBools.elimination_only ds in  *)
         ds
     in
+    print_if_debug ds;
     (* give all the spans in a program unique IDs. This should be a middle pass, before translate. *)
     let ds = UniqueSpans.make_unique_spans ds in
     ds
