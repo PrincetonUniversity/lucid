@@ -28,7 +28,9 @@ let linker_report str = Console.show_message str ANSITerminal.Green "linker"
 (* wrapper for angstrom's lift2 with params in a different order *)
 let parse2_map parse_1 parse_2 map_f = A.lift2 map_f parse_1 parse_2
 
-let parse3_map parse_1 parse_2 parse_3 map_f = A.lift3 map_f parse_1 parse_2 parse_3
+let parse3_map parse_1 parse_2 parse_3 map_f =
+  A.lift3 map_f parse_1 parse_2 parse_3
+;;
 
 (* the linker parses a P4 program as a sequence 
   of statements and (possibly nested) blocks. *)
@@ -333,21 +335,18 @@ module Tok = struct
 
   type p4tokens = p4token list
 
-  let p_Ident =
-    take_while1 is_ident >>| fun s -> Ident s 
-(*     parse2_map
+  let p_Ident = take_while1 is_ident >>| fun s -> Ident s
+  (*     parse2_map
       (take_while1 is_ident_start)
       (take_while is_ident)
       (fun s1 s2 -> s1 ^ s2)
     >>| fun s -> Ident s *)
-  ;;
 
   let p_Delim = take_while1 is_delim >>| fun s -> Delim s
-
   let p_p4tokens = A.many (p_Ident <|> p_Delim) <* A.end_of_input
 
   let tokenize_codeexpr ce =
-    print_endline ("[tokenize_codeexpr] tokenizing:\n"^(string_of_code_str ce));
+    print_endline ("[tokenize_codeexpr] tokenizing:\n" ^ string_of_code_str ce);
     let res =
       Angstrom.parse_string ~consume:Consume.All p_p4tokens ce.codestr
     in
@@ -391,15 +390,11 @@ let rec replace_prag (prag_name : string) (new_str : string) (cs : code_stmt)
 (*** does the pragma exist in the code? ***)
 let rec prag_exists (prag_name : string) (cs : code_stmt) : bool =
   match cs with
-  | LPragma { lb_name = lbl; _ } ->
-    code_expr_equals lbl { codestr = prag_name }
-  | LBlock brec ->
-    prag_exists prag_name brec.lb_body
-  | LSeq lss -> 
-    (CL.map (prag_exists prag_name) lss) |> CL.exists (fun f -> f) 
+  | LPragma { lb_name = lbl; _ } -> code_expr_equals lbl { codestr = prag_name }
+  | LBlock brec -> prag_exists prag_name brec.lb_body
+  | LSeq lss -> CL.map (prag_exists prag_name) lss |> CL.exists (fun f -> f)
   | _ -> false
 ;;
-
 
 (***** transformation helpers *****)
 (* if cs.name == bname -> tfun cs
@@ -482,7 +477,7 @@ let igr_condition_pre_and_post_dispatch igr_apply_cs =
   in
   (* wrap the pre_block with the if statement *)
   let pre_label =
-    let branch_arg_name = Consts.branchArg |> fst |> Cid.to_id |> fst in 
+    let branch_arg_name = Consts.branchArg |> fst |> Cid.to_id |> fst in
     to_code_expr
       (sprintf
          "\n\
@@ -493,7 +488,7 @@ let igr_condition_pre_and_post_dispatch igr_apply_cs =
   in
   let pre_css_new = [encap_in_block pre_label pre_css] in
   let post_label =
-    let exit_event_name = Consts.exitEventArg |> fst |> Cid.to_id |> fst  in 
+    let exit_event_name = Consts.exitEventArg |> fst |> Cid.to_id |> fst in
     to_code_expr
       (sprintf
          "\n\
@@ -515,7 +510,10 @@ let ingress_bg_event_trans cs =
   (* transform the ingress block by:
       transforming the "apply" block using igr_condition_pre_and_post_dispatch *)
   let igr_tf igr_cs =
-    print_endline (sprintf "[igr_tf] transforming block with sig: %s" (sigstring_of_block igr_cs));
+    print_endline
+      (sprintf
+         "[igr_tf] transforming block with sig: %s"
+         (sigstring_of_block igr_cs));
     let new_igr_cs =
       find_and_transform "apply" igr_condition_pre_and_post_dispatch igr_cs
     in
@@ -554,13 +552,13 @@ let link_p4 obj_dict p4fn =
   let tree_prog = parse_prog p4prog in
   !dprint_endline (sprintf "[link_p4] p4_syntax_tree:");
   !dprint_endline (dbg_string_of_code_stmt tree_prog);
-
   (* transform the ingress function so that the code before and after the 
   call to DPT dispatch doesn't apply to event packets. *)
   (* if there is a call to DPT_DISPATCH, add the pre and post guards *)
-  let tree_prog = if (prag_exists Consts.dpt_igr_call tree_prog)   
-    then (ingress_bg_event_trans tree_prog)  
-    else (tree_prog)
+  let tree_prog =
+    if prag_exists Consts.dpt_igr_call tree_prog
+    then ingress_bg_event_trans tree_prog
+    else tree_prog
   in
   (* replace all the DPT pragmas with compiler generated P4 code *)
   let tree_prog = pragma_replace_trans tree_prog obj_dict in

@@ -22,13 +22,13 @@ let eliminate_noncall_units ds =
 
 (* temporary: delete cast operations. *)
 let delete_casts ds =
-   let v =
+  let v =
     object
       inherit [_] s_map as super
 
       method! visit_EOp ctx op exps =
         match op with
-        | Cast _ -> 
+        | Cast _ ->
           print_endline "FOUND A CAST";
           super#visit_EOp ctx op exps
         (* (CL.hd exps).e *)
@@ -43,7 +43,6 @@ let delete_prints ds =
   let v =
     object
       inherit [_] s_map as super
-
       method! visit_SPrintf _ _ _ = SNoop
     end
   in

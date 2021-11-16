@@ -42,14 +42,13 @@ let dpt_builtin_fcns =
 
 (* code generators for events *)
 module TranslateEvents = struct
-
   let undeclared_instance_name = P4tPrint.str_of_public_varid 
   ;;   
 
   (* translate the ith event declaration into LL code, 
      and save details about the event in the LL syntax. 
      This should be the ONLY FUNCTION that writes to event records. *)
-  let translate (ll_decls, last_eviid) dec = 
+  let translate (ll_decls, last_eviid) dec =
     match dec.d with
     | DEvent (evid, ev_sort, _, params) ->
       (* all the details about the event that the translator 
@@ -61,43 +60,53 @@ module TranslateEvents = struct
         ; hdl_param_ids = [] (* filled in by DHandler match *)
         ; event_sort = ev_sort
         ; event_struct = TofinoStructs.structname_from_evid evid
-        ; event_struct_instance = TofinoStructs.full_struct_from_ev evid ev_sort 
-        ; event_generated_flag = Cid.concat event_out_flags_instance (Cid.id evid)
+        ; event_struct_instance = TofinoStructs.full_struct_from_ev evid ev_sort
+        ; event_generated_flag =
+            Cid.concat event_out_flags_instance (Cid.id evid)
         }
-      in 
+      in
       (* add the event to the context. *)
       ctx_add_erec erec;
       (* generate IR code for the event *)
       (* all the fields in the event's struct *)
-      let all_event_fields = 
-          (* hidden event parameters for lucid runtime *)
-           (event_id_field, event_id_width)
+      let all_event_fields =
+        (* hidden event parameters for lucid runtime *)
+        (event_id_field, event_id_width)
         :: (event_mc_field, event_mc_width)
         :: (event_loc_field, event_loc_width)
         :: (event_delay_field, event_delay_width)
         (* user-declared event parameters *)
         :: erec.field_defs
-      in 
-      let struct_ty = match erec.event_sort with 
-        | EBackground -> IS.SHeader  (* backround events get serialized to packet *)
-        | EEntry _ | EExit -> IS.SMeta (* entry and exit events don't. kind of backwards seeming. *)
-      in 
+      in
+      let struct_ty =
+        match erec.event_sort with
+        | EBackground ->
+          IS.SHeader (* backround events get serialized to packet *)
+        | EEntry _ | EExit -> IS.SMeta
+        (* entry and exit events don't. kind of backwards seeming. *)
+      in
       (* declaration of the struct, instance, and enum #define *)
-      let ev_struct_decl = IS.new_structdef erec.event_struct struct_ty all_event_fields in 
-      let ev_struct_inst = IS.new_struct erec.event_struct SPublic erec.event_struct_instance in 
-      let ev_enum = IS.new_public_constdef
-        (TofinoStructs.defname_from_evid erec.event_id)
-        event_id_width
-        erec.event_iid
-      in 
-      ll_decls@[ev_struct_decl; ev_struct_inst; ev_enum], erec.event_iid
-
+      let ev_struct_decl =
+        IS.new_structdef erec.event_struct struct_ty all_event_fields
+      in
+      let ev_struct_inst =
+        IS.new_struct erec.event_struct SPublic erec.event_struct_instance
+      in
+      let ev_enum =
+        IS.new_public_constdef
+          (TofinoStructs.defname_from_evid erec.event_id)
+          event_id_width
+          erec.event_iid
+      in
+      ll_decls @ [ev_struct_decl; ev_struct_inst; ev_enum], erec.event_iid
     (* record the mapping from event to handler *)
     | DHandler (hdl_id, (params, _)) ->
       ctx_set_hdl_param_ids (Cid.id hdl_id) (CL.split params |> fst);
       ll_decls, last_eviid (* nothing to generate, just updating context *)
-    | _ -> ll_decls, last_eviid (* nothing new *)
+    | _ -> ll_decls, last_eviid
   ;;
+
+  (* nothing new *)
 
   (* create the struct and instance of the event_generated bitvector *)
   let event_triggered_bv () = 
@@ -119,6 +128,7 @@ module TranslateEvents = struct
     (* generate the event_out flag struct *)
     let event_out_bv_decls = event_triggered_bv () in 
     event_decls@[footer_struct; footer_instance]@event_out_bv_decls
+
   ;;
 
   (*** parse generator for background events ***)
@@ -360,16 +370,14 @@ let groupdec_from_decl dec =
 
 (* generate the bitvector metadata that indicate which 
    subset of events were generated. *)
-let gen_event_triggered_bitvec () = 
-  let struct_cid = Cid.create ["outEvents_t"] in 
+let gen_event_triggered_bitvec () =
+  let struct_cid = Cid.create ["outEvents_t"] in
   let instance_cid = Cid.create [md_instance_prefix; "outEvents"] in
-  let event_id_to_bitfield er = 
-    Cid.create [Id.to_string er.event_id^"_generated"]
-  in   
-  let fields = ctx_get_event_recs ()
-    |> CL.map event_id_to_bitfield
-  in 
-  let widths = ctx_get_event_recs () |> CL.map (fun _ -> 1) in 
+  let event_id_to_bitfield er =
+    Cid.create [Id.to_string er.event_id ^ "_generated"]
+  in
+  let fields = ctx_get_event_recs () |> CL.map event_id_to_bitfield in
+  let widths = ctx_get_event_recs () |> CL.map (fun _ -> 1) in
   let field_defs = CL.combine fields widths in
   let newstruct = IS.new_header_structdef struct_cid field_defs in
   let newinstance = IS.new_struct struct_cid SPrivate instance_cid in 
@@ -383,7 +391,11 @@ let gen_internal_structs () =
   let fnames =
     CL.map
       (fun f -> Cid.create [f])
-      [timestamp_str; handle_selector_str; exit_event_str; next_event_str; events_count_str]
+      [ timestamp_str
+      ; handle_selector_str
+      ; exit_event_str
+      ; next_event_str
+      ; events_count_str ]
   in
   let fwidths = [32; 8; 8; 8; event_counts_width] in
   let fdefs = CL.combine fnames fwidths in
@@ -394,10 +406,8 @@ let gen_internal_structs () =
   (* the p4t printer will automatically link the instance to the struct based on struct_cid *)
   (* the event active bit vector *)
   (* *)
-
   [dptMeta_struct; dptMeta_instance]
 ;;
-
 
 (* Give all the spans in a program a unique id. *)
 let cur_span = ref 0
@@ -411,63 +421,56 @@ let make_unique_spans ds =
   let v =
     object
       inherit [_] s_map as super
-
       method! visit_sp _ sp = refresh_span sp
     end
   in
   v#visit_decls () ds
 ;;
 
+let public_cid_id = ref 0
 
-let public_cid_id = ref 0;;
-
-let fresh_pad_cid () = 
+let fresh_pad_cid () =
   public_cid_id := !public_cid_id + 1;
-  "pad_"^(string_of_int (!public_cid_id))^"_meta" |> Id.fresh |> Cid.id
+  "pad_" ^ string_of_int !public_cid_id ^ "_meta" |> Id.fresh |> Cid.id
 ;;
 
-let byte_align_header_structs (prog : IS.llProg) : IS.llProg = 
+let byte_align_header_structs (prog : IS.llProg) : IS.llProg =
   (* add pads so that every 8-bit field 
      in every header struct starts on a byte-boundary, and 
-     every header struct ends on an byte-boundary. *) 
-
-
+     every header struct ends on an byte-boundary. *)
 
   (* pad fields so they end on byte boundary *)
-  let pad_tail fields = 
-    let fields_width = CL.split fields |> snd |> sum in 
-    match (fields_width mod 8) with 
-    | 0 ->  fields
+  let pad_tail fields =
+    let fields_width = CL.split fields |> snd |> sum in
+    match fields_width mod 8 with
+    | 0 -> fields
     (* pad by 8-n *)
     | n ->
-      let (pad_id, pad_width) = (fresh_pad_cid (), (8 - n)) in 
-      fields@[(pad_id, pad_width)]    
-  in 
-  let byte_align_fields fields field = 
-    match ((snd field) mod 8) with 
-      (* field is byte aligned, make sure prior fields are aligned before adding*)
-      | 0 ->
-          (pad_tail fields)@[field]
-      | _ -> 
-        (* field is not byte aligned, just add it *)    
-        fields@[field]
-  in 
-  let byte_align_header_struct (cid, decl) = 
-    match decl with 
-      | IS.StructDef(mid, struct_type, fields) -> (
-        match struct_type with 
-        | IS.SHeader -> 
-          let aligned_fields = 
-            CL.fold_left byte_align_fields [] fields
-            |> pad_tail
-           in 
-        (cid, IS.StructDef(mid, struct_type, aligned_fields))
-        | IS.SMeta -> (cid, decl)
-      )
-      | _ -> (cid, decl)
-  in 
-  let cid_decls = CL.map byte_align_header_struct prog.instr_dict in 
-  {prog with IS.instr_dict=cid_decls}
+      let pad_id, pad_width = fresh_pad_cid (), 8 - n in
+      fields @ [pad_id, pad_width]
+  in
+  let byte_align_fields fields field =
+    match snd field mod 8 with
+    (* field is byte aligned, make sure prior fields are aligned before adding*)
+    | 0 -> pad_tail fields @ [field]
+    | _ ->
+      (* field is not byte aligned, just add it *)
+      fields @ [field]
+  in
+  let byte_align_header_struct (cid, decl) =
+    match decl with
+    | IS.StructDef (mid, struct_type, fields) ->
+      (match struct_type with
+      | IS.SHeader ->
+        let aligned_fields =
+          CL.fold_left byte_align_fields [] fields |> pad_tail
+        in
+        cid, IS.StructDef (mid, struct_type, aligned_fields)
+      | IS.SMeta -> cid, decl)
+    | _ -> cid, decl
+  in
+  let cid_decls = CL.map byte_align_header_struct prog.instr_dict in
+  { prog with IS.instr_dict = cid_decls }
 ;;
 
 let from_dpt (ds : decls) (opgraph_recs : prog_opgraph) : IS.llProg =
@@ -485,7 +488,7 @@ let from_dpt (ds : decls) (opgraph_recs : prog_opgraph) : IS.llProg =
   ctx_add_decls ds;
   (* put event records in the context and generate 
      all the LL code for event declarations. *)
-  let event_decls = TranslateEvents.translate_all ds in 
+  let event_decls = TranslateEvents.translate_all ds in
   (* generate struct declarations and instances for 
      other private Lucid-runtime only data. *)
   let dpt_struct_defs = gen_internal_structs () in
@@ -522,17 +525,13 @@ let from_dpt (ds : decls) (opgraph_recs : prog_opgraph) : IS.llProg =
     }
   in
   (* pad header structs *)
-  let out_prog = byte_align_header_structs out_prog in 
-(*   !dprint_endline "-----object ids in cid decls at end of LLTranslate-----";
+  let out_prog = byte_align_header_structs out_prog in
+  (*   !dprint_endline "-----object ids in cid decls at end of LLTranslate-----";
   !dprint_endline (DebugPrint.ids_in_cid_decls out_prog.instr_dict);
   !dprint_endline "-----object decls in cid decls at end of LLTranslate-----";
   !dprint_endline (DebugPrint.str_of_cid_decls out_prog.instr_dict);
   !dprint_endline
     "-----end object decls in cid decls at end of LLTranslate-----"; *)
-  LLValidate.validate_cid_decls
-    out_prog.instr_dict
-    "[LLTranslate] end";  
-
+  LLValidate.validate_cid_decls out_prog.instr_dict "[LLTranslate] end";
   out_prog
-
 ;;

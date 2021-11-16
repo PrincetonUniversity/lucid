@@ -97,9 +97,9 @@ let rec normalize_size s =
         (IConst n)
         vs
     in
-    begin
-      (* If the result is still a sum, then sort the list; otherwise, just return
+    (* If the result is still a sum, then sort the list; otherwise, just return
          the result *)
+    begin
       match recursively_normalize vs with
       | ISum ([], _) -> failwith "Sanity check: this should never happen"
       | ISum ([s], 0) -> s
@@ -161,7 +161,6 @@ let normalizer () =
   let v =
     object (self)
       inherit [_] s_map as super
-
       val mutable renaming : id IdMap.t = IdMap.empty
 
       method! visit_QVar _ _ id =

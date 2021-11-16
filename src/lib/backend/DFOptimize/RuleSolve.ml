@@ -47,7 +47,7 @@ let string_of_rule_pair ((r1 : rule), (r2 : rule)) =
 ;;
 
 (* generate a z3 equation from a pattern *)
-let eqn_of_pat ctx (m_exp : pattern) = 
+let eqn_of_pat ctx (m_exp : pattern) =
   let fold_f (ctx, terms) m_exp_entry =
     match m_exp_entry with
     | vid, Exact vint ->
@@ -60,7 +60,7 @@ let eqn_of_pat ctx (m_exp : pattern) =
   let ctx, terms = CL.fold_left fold_f (ctx, []) m_exp in
   let eqn = Z3Bool.mk_and ctx terms in
   ctx, eqn
-;;  
+;;
 
 (* generate a z3 equation from a rule *)
 let eqn_of_rule ctx (r : rule) =
@@ -192,27 +192,25 @@ let is_r_still_feasible (r : rule) (qs : rule list) =
 
 (* is a pattern pat still feasible after matching all the 
    patterns in preds? (i.e., can anything match <pat && (!preds)> *)
-let is_pat_still_feasible (pat : pattern) (preds : pattern list) = 
-  match preds with 
+let is_pat_still_feasible (pat : pattern) (preds : pattern list) =
+  match preds with
   | [] -> true
-  | _ -> (
+  | _ ->
     let ctx = mk_context ["model", "true"; "proof", "true"] in
     let ctx, pat_eqn = eqn_of_pat ctx pat in
     let _, pred_eqns = CL.split (CL.map (eqn_of_pat ctx) preds) in
     let preds_eqn = Z3Bool.mk_and ctx pred_eqns in
     let not_preds_eqn = Z3Bool.mk_not ctx preds_eqn in
     let intersect_eqn = Z3Bool.mk_and ctx [not_preds_eqn; pat_eqn] in
-
     let solver = Solver.mk_simple_solver ctx in
     Solver.add solver [intersect_eqn];
     let is_sat = Solver.check solver [] in
-    match is_sat with
+    (match is_sat with
     | UNSATISFIABLE -> false
     | SATISFIABLE -> true
     | UNKNOWN ->
       Printf.printf "unknown\n";
-      error "unknown sat..."
-  )
+      error "unknown sat...")
 ;;
 
 (* can rule r be reached after missing all the previous rules? *)

@@ -10,8 +10,8 @@ let nextEventArg = Cid.Id ("nextEventType", 0), 8
 let exitEventArg = Cid.Id ("exitEventType", 0), 8
 let tsArg = Cid.Id ("timestamp", 0), 32
 
-let globalArgs, globalArgWidths = 
-    Caml.List.split [branchArg; nextEventArg; exitEventArg; tsArg]
+let globalArgs, globalArgWidths =
+  Caml.List.split [branchArg; nextEventArg; exitEventArg; tsArg]
 ;;
 
 let dpa_global_raw_name = "dptMeta"
@@ -20,7 +20,7 @@ let dpa_global_name = "md." ^ dpa_global_raw_name
 (* default width for parts of the P4 printer that don't use polymorphic widths yet. *)
 let defWidth = 32
 let boolWidth = 8
-(* adjust boolWidth to 1 if possible with sALUs *) 
+(* adjust boolWidth to 1 if possible with sALUs *)
 
 (* DPT-generated code block names *)
 let dpt_igr_objs = "DPT_OBJECTS"

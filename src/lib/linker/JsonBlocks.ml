@@ -4,8 +4,6 @@
   - exit event action table
 *)
 
-let generate configfn = 
-  (JsonEntryTriggers.generate configfn)@
-  (JsonExitActions.generate configfn)  
+let generate configfn =
+  JsonEntryTriggers.generate configfn @ JsonExitActions.generate configfn
 ;;
-

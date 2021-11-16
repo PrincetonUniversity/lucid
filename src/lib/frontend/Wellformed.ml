@@ -52,22 +52,20 @@ let check_decls ds =
       ignore (id, ty)
       (* This restriction isn't actually necessary, I don't think. *)
       (* if not (is_global ty)
-      then
+             then
+               Console.error_position d.dspan
+               @@ Printf.sprintf
+                    "Constructor %s returns non-global type %s"
+                    (id_to_string id)
+                    (ty_to_string ty) *)
+    | DExtern (_, ty) ->
+      (match TyTQVar.strip_links ty.raw_ty with
+      | TInt _ | TBool -> ()
+      | _ ->
         Console.error_position d.dspan
         @@ Printf.sprintf
-             "Constructor %s returns non-global type %s"
-             (id_to_string id)
-             (ty_to_string ty) *)
-    | DExtern (_, ty) ->
-      begin
-        match TyTQVar.strip_links ty.raw_ty with
-        | TInt _ | TBool -> ()
-        | _ ->
-          Console.error_position d.dspan
-          @@ Printf.sprintf
-               "Externs must have type int or bool, not %s"
-               (ty_to_string ty)
-      end
+             "Externs must have type int or bool, not %s"
+             (ty_to_string ty))
     | DModule (_, _, decls) -> List.iter (check_decl true) decls
     | _ -> ()
   in
@@ -178,7 +176,6 @@ let pre_typing_checks ds =
 let basic_qvar_checker =
   object
     inherit [_] s_iter as super
-
     val mutable span = Span.default
 
     method! visit_Unbound _ _ _ _ =
@@ -218,7 +215,6 @@ let basic_qvar_checker =
 let preset_qvar_checker =
   object
     inherit [_] s_iter as super
-
     val mutable span = Span.default
 
     method! visit_Unbound _ _ _ _ =
@@ -259,7 +255,6 @@ let preset_qvar_checker =
 let event_qvar_checker =
   object (self)
     inherit [_] s_iter as super
-
     val mutable span = Span.default
 
     method! visit_Unbound _ _ _ _ =

@@ -46,7 +46,6 @@ let undeclared_instance_name = P4tPrint.str_of_public_varid
 ;;   
 
 
-
 (** commands  (just strings of P4) **)
 let etype_field = "hdr.ethernet.ether_type" ;;
 let cmd_lucid_etype = sprintf "%s = %#06x;" etype_field lucid_etype ;;
@@ -419,7 +418,7 @@ module Egress = struct
             let result_with_zero = CL.map (prepend 0) suffixes_with_zero in 
             result_with_one@result_with_zero
           )
-      ) 
+      )
   ;;
 
   (* generate all the bitvectors of length len that have _up to_ ones elements set to 1 *)

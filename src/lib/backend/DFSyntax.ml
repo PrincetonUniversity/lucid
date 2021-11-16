@@ -39,7 +39,6 @@ module G = Graph.Persistent.Digraph.ConcreteLabeled (Node) (Edge)
 type dagParams = (mid * int) list
 type declsMap = (oid * decl) list [@@deriving show]
 type dagProg = declsMap * oid * G.t
-
 type cid_decls = (oid * decl) list [@@deriving show]
 
 module PathWeight = struct
@@ -89,7 +88,7 @@ let get_edges (cid_decls : declsMap) : (cid * cid) list =
       nextid_to_edges node_id (next_tids @ obj_ids)
       (* action has pointers to tables and objects *)
     | Table (_, rules, _) -> nextid_to_edges node_id (rules_to_aids rules)
-    | SInstrVec (_, {sRid=reg_id; _}) -> nextid_to_edges node_id [reg_id]
+    | SInstrVec (_, { sRid = reg_id; _ }) -> nextid_to_edges node_id [reg_id]
     (* Hashers and InstrVecs aren't here because they don't have any out edges. *)
     | _ -> []
   in
@@ -118,12 +117,9 @@ let to_dfProg iprog =
   iprog.instr_dict, iprog.root_tid, graph_of_declsMap iprog.instr_dict
 ;;
 
-
 (**** cid_decls accessors ****)
 
-let ids_of_decls cid_decls = 
-  CL.split cid_decls |> fst
-;;
+let ids_of_decls cid_decls = CL.split cid_decls |> fst
 
 (* destructors *)
 let dmap_of_dprog dprog =
@@ -197,10 +193,11 @@ let decls_of_type filter_f cid_decls =
 let tbls_of_dmap = decls_of_type is_tbl
 let acns_of_dmap = decls_of_type is_acn
 
-let ids_of_type filter_f cid_decls = 
-   let map_f (a, _) = match (filter_f cid_decls a) with 
-     | true -> Some a
-     | false -> None
+let ids_of_type filter_f cid_decls =
+  let map_f (a, _) =
+    match filter_f cid_decls a with
+    | true -> Some a
+    | false -> None
   in
   CL.filter_map map_f cid_decls
 ;;
@@ -307,7 +304,7 @@ let rids_of_acn cid_decls acn_decl =
     oids
     |> Caml.List.filter_map (fun oid ->
            match Cid.lookup cid_decls oid with
-           | SInstrVec (_, {sRid=rid; _}) -> Some rid
+           | SInstrVec (_, { sRid = rid; _ }) -> Some rid
            | _ -> None)
   | _ -> error "rids_of_acn: acn_decl not an action"
 ;;
@@ -332,7 +329,6 @@ let hids_of_aid cid_decls aid =
 
 (* action uses rid *)
 let aid_uses_rid cid_decls aid rid = CL.mem rid (rids_of_aid cid_decls aid)
-
 
 (***** table helpers *****)
 let set_stage_of_tid cid_decls tid new_stage =
@@ -820,8 +816,8 @@ let succ_tids_of g cid_decls tbl_id =
 let is_branch_tbl g cid_decls oid =
   match Cid.lookup cid_decls oid with
   | Table _ ->
-    ((* does the table have multiple next tables? *)
-    match List.length (succ_tids_of g cid_decls oid) with
+    (* does the table have multiple next tables? *)
+    (match List.length (succ_tids_of g cid_decls oid) with
     | 0 | 1 -> false
     | _ -> true)
   | _ -> false
@@ -830,8 +826,8 @@ let is_branch_tbl g cid_decls oid =
 let is_merge_tbl g cid_decls oid =
   match Cid.lookup cid_decls oid with
   | Table _ ->
-    ((* does the table have multiple predecessor tables? *)
-    match List.length (pred_tids_of g cid_decls oid) with
+    (* does the table have multiple predecessor tables? *)
+    (match List.length (pred_tids_of g cid_decls oid) with
     | 0 | 1 -> false
     | _ -> true)
   | _ -> false
@@ -919,15 +915,10 @@ let lr_mids_of_tid cid_decls tbl_id : lmid list * mid list =
     let v =
       object
         inherit [_] dataPathIter as super
-
         val mutable write_mids = []
-
         method write_mids = write_mids
-
         val mutable read_mids = []
-
         method read_mids = read_mids
-
         method! visit_lmid _ m = write_mids <- write_mids @ [m]
 
         (* super#visit_lmid env m  *)

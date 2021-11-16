@@ -11,7 +11,6 @@ open Base
 module CL = Caml.List
 open LLSyntax
 
-
 (* Statements that define the sequential control flow of a datapath. *)
 type tblStmt =
   | Noop

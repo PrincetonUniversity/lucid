@@ -60,7 +60,8 @@ and binOp =
   | BAnd
   | BOr
   | Cast (* cast A to width of B *)
-  | Slice (* A[X:Y] -- the slice of A from X to Y. *)
+  | Slice
+(* A[X:Y] -- the slice of A from X to Y. *)
 
 (* non binary operations. *)
 (* and op = 
@@ -87,17 +88,16 @@ and oper =
 
 (* Right hand side of a stateless instruction (i.e., 
    the output is not set) *)
- and expr =
+and expr =
   | Oper of oper
   | BinOp of binOp * oper list
   (* | BinOp of binOp * oper * oper *)
   (* | GenericOp of op * (oper list) *)
   | HashOp of mid list
- 
 
 (* stateless instructions *)
 and instr =
-(*   | IMove of lmid * oper
+  (*   | IMove of lmid * oper
   | IBinOp of lmid * binOp * oper * oper
   | IHashOp of lmid * mid list  *)
   (* not implemented yet -- use Hasher *)
@@ -129,17 +129,15 @@ and sExpr =
 (* a stateful instruction evaluates multiple expressions 
    that update a return variable and multiple words of a 
    single array cell. *)
-and sInstr = 
-  {
-    sRid : rid;
-    sWid : int;
-    sExprs : sExpr list;
-    sOut : lmid option;
-    sIdx : oper;
+and sInstr =
+  { sRid : rid
+  ; sWid : int
+  ; sExprs : sExpr list
+  ; sOut : lmid option
+  ; sIdx : oper
   }
 
-and sInstrOld =
-  rid * int (* register width *) * sExpr list * lmid option * oper
+and sInstrOld = rid * int (* register width *) * sExpr list * lmid option * oper
 
 (* a header structure, mainly for events. *)
 and structType =
@@ -170,7 +168,6 @@ and decl =
   | SchedBlock of oid * scheduler_block (* P4 code generators for lucid's scheduler. *)
   | ConfigBlock of oid * config_block
 
-
 (*** the parse graph is just a list of nodes that point to each other ***)
 and parse_node = oid * parse_instr list * parse_next
 
@@ -190,7 +187,6 @@ and select_pat =
   | SConst of int
   | SDConst of mid (* a constant variable *)
   | SDefault
-
 
 (* mid: output var; oper: reg index. *)
 
@@ -255,7 +251,8 @@ and mc_copy_instr =
   ; pkt_copy_id : int
   }
 
-and cid_decl = (oid * decl) 
+and cid_decl = oid * decl
+
 (* an instruction program is a dictionary of table / action / alu declarations *)
 and llProg =
   { root_tid : oid
@@ -300,7 +297,6 @@ let is_hash dec =
 (* constructors for stateful alu stuff *)
 let to_meminstr (pred, expr) = MemExpr (pred, expr)
 let to_retinstr (pred, expr) = RetExpr (pred, expr)
-
 let lo_sExpr : sEvalExpr = SVar (RegVar Lo)
 let binop_sexpr_of op rs var = SBinOp (op, rs, var)
 let to_action a b c = Action (a, b, c)
@@ -344,69 +340,56 @@ let add_succ_tid tid acn_decl =
 
 (* accessors *)
 let oid_of_sInstr d : oid =
-  match d with 
-  | SInstrVec(oid, _) -> oid 
+  match d with
+  | SInstrVec (oid, _) -> oid
   | _ -> error "not an sInstr"
 ;;
 
-let rid_of_sInstr d : rid = 
-  (from_sInstr d).sRid
-;;
+let rid_of_sInstr d : rid = (from_sInstr d).sRid
 
 (* the index of a register that the sInstr accesses *)
-let idx_of_sInstr d : oper =
-  (from_sInstr d).sIdx
-;;
+let idx_of_sInstr d : oper = (from_sInstr d).sIdx
 
 (* the variable that an sInstr writes *)
-let outarg_of_sInstr d : mid option =
-  (from_sInstr d).sOut
-;;
+let outarg_of_sInstr d : mid option = (from_sInstr d).sOut
 
 (* get a unique list of variables that a sInstruction reads in 
-   its expressions (i.e., don't include the index) *) 
-let readvars_of_sInstr d : mid list = 
+   its expressions (i.e., don't include the index) *)
+let readvars_of_sInstr d : mid list =
   let arg_finder =
     object
       inherit [_] dataPathIter as super
-
       val mutable vars = []
-
       method vars = vars
+
       (* only search in the expression *)
-      method! visit_sInstr ctx s = 
-        CL.iter (super#visit_sExpr ctx) s.sExprs
+      method! visit_sInstr ctx s = CL.iter (super#visit_sExpr ctx) s.sExprs
       method! visit_mid _ m = vars <- vars @ [m]
       (* Caml.Printf.printf "[readargs_of_sInstr] visiting mid in %s\n" (mid_to_str_suffix sInstr_id); *)
     end
   in
-  let sInstr = from_sInstr d in 
+  let sInstr = from_sInstr d in
   arg_finder#visit_sInstr () sInstr;
   arg_finder#vars |> unique_list_of
 ;;
 
 (* the non-memory-cell operands of an sInstr *)
-let opers_of_sInstr d : oper list = 
+let opers_of_sInstr d : oper list =
   let oper_finder =
     object
       inherit [_] dataPathIter as super
-
       val mutable opers = []
       method opers = opers
-
-      method! visit_Meta _ m = opers <- opers @ [Meta(m)]
-      method! visit_Const _ c = opers <- opers @ [Const(c)]
+      method! visit_Meta _ m = opers <- opers @ [Meta m]
+      method! visit_Const _ c = opers <- opers @ [Const c]
     end
   in
-  let sInstr = from_sInstr d in 
+  let sInstr = from_sInstr d in
   oper_finder#visit_sInstr () sInstr;
   (* arg_finder#visit_sExprVec () sInstr_inner; *)
   let in_arg = oper_finder#opers in
   in_arg
 ;;
-
-
-
 
 let id_of_decl d =
   match d with
@@ -534,7 +517,14 @@ let new_readmem_instr cond_opt = new_retinstr cond_opt memcell_operand
 let new_writemem_instr cond_opt operand = new_meminstr cond_opt (SVar operand)
 
 let new_dsalu obj_id reg_id reg_wid sInstr outvar_opt reg_idx =
-  SInstrVec (obj_id, {sRid=reg_id; sWid=reg_wid; sExprs=sInstr; sOut=outvar_opt; sIdx=reg_idx})
+  SInstrVec
+    ( obj_id
+    , { sRid = reg_id
+      ; sWid = reg_wid
+      ; sExprs = sInstr
+      ; sOut = outvar_opt
+      ; sIdx = reg_idx
+      } )
 ;;
 
 let new_globalmeta name width = MetaVar (name, width)
@@ -643,84 +633,77 @@ let keys_of_table dec =
   | _ -> error "not a table"
 ;;
 
-
-let conditions_eq (x:condition) y =
-  match (x, y) with 
-  | (Any, Any) -> true
-  | (Exact xc, Exact yc) -> Integer.equal xc yc
+let conditions_eq (x : condition) y =
+  match x, y with
+  | Any, Any -> true
+  | Exact xc, Exact yc -> Integer.equal xc yc
   | _ -> false
 ;;
 
-let pat_ele_eq ex ey = 
-  (Cid.equal (fst ex) (fst ey)) && 
-  (conditions_eq (snd ex) (snd ey))
+let pat_ele_eq ex ey =
+  Cid.equal (fst ex) (fst ey) && conditions_eq (snd ex) (snd ey)
 ;;
 
-let rec patterns_contains ex y = 
-  match y with 
+let rec patterns_contains ex y =
+  match y with
   | [] -> false
-  | hd::y -> (
-    match (pat_ele_eq ex hd) with
+  | hd :: y ->
+    (match pat_ele_eq ex hd with
     | true -> true
-    | false -> patterns_contains ex y
-  )
+    | false -> patterns_contains ex y)
 ;;
-let patterns_remove ex y = 
-  let filter_f ex ey = 
-    not (pat_ele_eq ex ey)
-  in 
+
+let patterns_remove ex y =
+  let filter_f ex ey = not (pat_ele_eq ex ey) in
   CL.filter (filter_f ex) y
 ;;
 
-let rec pattern_eq (x:pattern) (y:pattern) = 
-  match x with 
-  | [] -> (
-    match y with
+let rec pattern_eq (x : pattern) (y : pattern) =
+  match x with
+  | [] ->
+    (match y with
     | [] -> true
-    | _ -> false
-  )
-  | hd::tl -> (
-    match (patterns_contains hd y) with
+    | _ -> false)
+  | hd :: tl ->
+    (match patterns_contains hd y with
     | true -> pattern_eq tl (patterns_remove hd y)
-    | false -> false
-  )
+    | false -> false)
 ;;
 
-let rule_eq x y = 
-  match (x, y) with 
-  | Match(_, patx, oidx), Match(_, paty, oidy) -> 
-    (pattern_eq patx paty) & (Cid.equals oidx oidy)
-  | OffPath(patx), OffPath(paty) -> 
-    (pattern_eq patx paty)
+let rule_eq x y =
+  match x, y with
+  | Match (_, patx, oidx), Match (_, paty, oidy) ->
+    pattern_eq patx paty & Cid.equals oidx oidy
+  | OffPath patx, OffPath paty -> pattern_eq patx paty
   | _ -> false
 ;;
 
-
 module Generators = struct
   let int_const i : const = Integer.of_int i
-
   let const_oper i = Const i
-  let int_oper i = int_const i |> const_oper 
+  let int_oper i = int_const i |> const_oper
   let cid_oper c = Meta c
-
   let oper_expr o = Oper o
   let int_expr i = int_oper i |> oper_expr
   let cid_expr c = cid_oper c |> oper_expr
-  (*o1 <op> o2*)  
+
+  (*o1 <op> o2*)
   let binop_expr op o1 o2 = BinOp (op, [o1; o2])
+
   (*c:cid + i:int*)
   let incr_expr c i = binop_expr Add (cid_oper c) (int_oper i)
 
   (* c := o:oper *)
-  let oper_assign_instr c o = IAssign(c, o)
+  let oper_assign_instr c o = IAssign (c, o)
+
   (* c := i:int *)
   let int_assign_instr c i = int_expr i |> oper_assign_instr c
+
   (* c := c2:cid + i:int *)
   let incr_assign_instr c1 c2 i = incr_expr c2 i |> oper_assign_instr c1
-
   let validate_instr c = IValidate c
 
-  (* create a header struct h_t with fields fs of widths ws *)
+(* create a header struct h_t with fields fs of widths ws *)
   (* | StructDef of mid * structType * (mid * int) list  *)
   (* a header or metadata structure *)
 

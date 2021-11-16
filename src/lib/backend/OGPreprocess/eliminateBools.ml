@@ -72,9 +72,7 @@ let eliminate_bool_values_and_types ds =
 
       (* skip memops! *)
       method! visit_DMemop _ id body = DMemop (id, body)
-
       method! visit_VBool _ b = VInt (zint_of_bool b)
-
       method! visit_TBool _ = TInt (IConst bool_sz)
     end
   in
