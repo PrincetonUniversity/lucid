@@ -49,34 +49,38 @@ let undeclared_instance_name = P4tPrint.str_of_public_varid
 
 (** commands  (just strings of P4) **)
 let etype_field = "hdr.ethernet.ether_type" ;;
-let cmd_lucid_etype = sprintf "%s = %#06x;" etype_field lucid_etype
-let cmd_ip_etype = sprintf "%s = %#06x;" etype_field ip_etype
+let cmd_lucid_etype = sprintf "%s = %#06x;" etype_field lucid_etype ;;
+let cmd_ip_etype = sprintf "%s = %#06x;" etype_field ip_etype ;;
 
-let cmd_disable_hdr hdr_cid =
-  sprintf "%s.setInvalid();" (instance_name hdr_cid)
+let cmd_enable_hdr event_id =
+  sprintf "%s.setValid();" (instance_name event_id)
+;;
+let cmd_enable_hdrs ev_ids = CL.map cmd_enable_hdr ev_ids
+;;
+let cmd_disable_hdr hdr_id =
+  sprintf "%s.setInvalid();" (instance_name hdr_id)
+;;
+let cmd_disable_cid hdr_cid = 
+  sprintf "%s.setInvalid();" (undeclared_instance_name hdr_cid)
+;;
+let cmds_disable_cids hdr_cids = 
+    CL.map cmd_disable_cid hdr_cids 
 ;;
 
 let cmds_disable_hdrs ev_ids = CL.map cmd_disable_hdr ev_ids
+;;
+let cmd_disable_other_hdrs ev_ids ev_id =
+  list_remove ev_ids ev_id |> cmds_disable_hdrs
+;;
+let cmd_exit = "exit;"
+;;
+let cmd_drop = "ig_dprsr_md.drop_ctl = 0x1;"
+;;
+let cmd_copy_to_recirc = sprintf "ig_tm_md.mcast_grp_a = %i + md.dptMeta.eventsCount;" (lucid_mc_group - 1)
+;;
 
 (* the ingress exit table applies after the handler tables. *)
 module IngressExit = struct
-  (*** commands constructors ***)
-  let cmd_exit = "exit;"
-  let cmd_drop = "ig_dprsr_md.drop_ctl = 0x1;"
-  let cmd_copy_to_recirc = sprintf "ig_tm_md.mcast_grp_a = %i;" lucid_mc_group
-
-  (* let cmd_lucid_recirc = sprintf "ig_tm_md.ucast_egress_port = %i;" lucid_recirc_port;; *)
-
-  let cmd_enable_hdr event_id =
-    sprintf "%s.setValid();" (instance_name event_id)
-  ;;
-
-  let cmd_enable_hdrs ev_ids = CL.map cmd_enable_hdr ev_ids
-
-  let cmd_disable_other_hdrs ev_ids ev_id =
-    list_remove ev_ids ev_id |> cmds_disable_hdrs
-  ;;
-
 
   (*** 
     Ingress exit table. 
@@ -173,6 +177,12 @@ module IngressExit = struct
     (event_count_cid)
     (exit_event_cid)
       = 
+    let bg_evrecs = CL.filter 
+      (fun evrec -> match evrec.event_sort with Syntax.EBackground -> true | _ -> false)
+      (ctx_get_event_recs ())
+    in 
+    let bg_evcids = CL.map (fun f -> f.event_id) bg_evrecs in 
+    let lucid_sys_hdr_cids = [footer_instance_cid; event_out_flags_instance] in 
     (* create actions. *)
     let entry_hdl_bg_continue = {
       aname="entry_hdl_bg_continue"; 
@@ -189,16 +199,23 @@ module IngressExit = struct
       aparams=[];
       acmds=[cmd_copy_to_recirc; cmd_lucid_etype]
     } in 
+    (* same as coming in from an entry handle *)
     let bg_hdl_recurse_no_continue = {
-      aname="entry_hdl_bg_no_continue"; 
+      aname="bg_hdl_recurse_no_continue"; 
       aparams=[];
       acmds=[cmd_copy_to_recirc; cmd_lucid_etype; cmd_exit]
     } in 
     let no_bg_continue = {
       aname="no_bg_continue"; 
       aparams=[];
-      acmds= [cmd_ip_etype]
+      acmds= cmd_ip_etype::((cmds_disable_hdrs bg_evcids)@(cmds_disable_cids lucid_sys_hdr_cids));
     } in 
+    (* the only time we drop a packet is when there is both no continue event and also no 
+       background event. 
+        NO. When there is no continue event, but a background event, we want to 
+        disable _unicast_. Setting port to 0 doesn't work in the asic model because 
+        that's an actual port!
+     *)
     let no_events = {
       aname="no_events"; 
       aparams=[];
@@ -210,7 +227,7 @@ module IngressExit = struct
       {
         aname="bg_hdl_"^(Id.name event_id)^"_no_recurse_no_continue";
         aparams = [];
-        acmds = [cmd_disable_hdr event_id; cmd_copy_to_recirc; cmd_lucid_etype]
+        acmds = [cmd_disable_hdr event_id; cmd_copy_to_recirc; cmd_lucid_etype; cmd_exit]
       }
     in
     let bg_hdl_no_recurse_continue event_id = 
@@ -218,7 +235,7 @@ module IngressExit = struct
       {
         aname="bg_hdl_"^(Id.name event_id)^"_no_recurse_continue";
         aparams = [];
-        acmds = [cmd_disable_hdr event_id; cmd_copy_to_recirc; cmd_lucid_etype; cmd_exit]
+        acmds = [cmd_disable_hdr event_id; cmd_copy_to_recirc; cmd_lucid_etype;]
       } 
     in 
 
@@ -269,9 +286,9 @@ module IngressExit = struct
       {
       guard = 
         [ {field = eventType_str; value = VInt erec.event_iid}
-        ; {field = str_of_public_varid erec.event_generated_flag; value = VInt 1}
+        ; {field = str_of_public_varid erec.event_generated_flag; value = VInt 0}
         ; {field = eventCount_str; value = VAny}
-        ; {field = exitEvent_str; value = VAny} ];
+        ; {field = exitEvent_str; value = VInt 0} ];
       action = (bg_hdl_no_recurse_no_continue erec.event_id);
       action_args = [];
       } in 
@@ -279,7 +296,7 @@ module IngressExit = struct
       {
       guard = 
         [ {field = eventType_str; value = VInt erec.event_iid}
-        ; {field = str_of_public_varid erec.event_generated_flag; value = VInt 1}
+        ; {field = str_of_public_varid erec.event_generated_flag; value = VInt 0}
         ; {field = eventCount_str; value = VAny}
         ; {field = exitEvent_str; value = VAny} ];
       action = (bg_hdl_no_recurse_continue erec.event_id);
@@ -470,7 +487,7 @@ module Egress = struct
       )
     in 
     (* invalidate every lucid header*)
-    let cmds_invalidate_all = 
+    let cmds_invalidate_all bg_erecs = 
       (cmd_invalid (undeclared_instance_name footer_cid))
       ::(cmd_invalid (undeclared_instance_name event_out_flags_instance))
       ::(
@@ -491,7 +508,7 @@ module Egress = struct
     let acn_lucid_wire = {
       aname = "acn_lucid_wire"; 
       aparams = [];
-      acmds = cmd_ip_etype::cmds_invalidate_all;
+      acmds = cmd_ip_etype::(cmds_invalidate_all bg_erecs);
     } in 
     (* serialize one action event, disable all others. *)
     let acn_event ev_id = ev_id, { 

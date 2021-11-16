@@ -58,7 +58,7 @@ let handle_selector_name =
 let event_counts_field = 
   Cid.create [md_instance_prefix; dpt_meta_str; events_count_str]
 ;;
-let event_counts_width = 8
+let event_counts_width = 16
 ;;
 (* event metadata fields *)
 let event_id_field = Cid.create ["eventType"]

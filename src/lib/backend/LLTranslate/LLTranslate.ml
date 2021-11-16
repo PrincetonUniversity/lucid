@@ -43,6 +43,8 @@ let dpt_builtin_fcns =
 (* code generators for events *)
 module TranslateEvents = struct
 
+  let undeclared_instance_name = P4tPrint.str_of_public_varid 
+  ;;   
 
   (* translate the ith event declaration into LL code, 
      and save details about the event in the LL syntax. 
@@ -123,9 +125,81 @@ module TranslateEvents = struct
   let parse_start_cid = Cid.create ["start"]
   let parse_end_cid = Cid.create ["finish"]
 
+  (* new *)
+  let evrec_hdrvar evrec = TofinoStructs.full_struct_from_ev evrec.event_id EBackground
+
+  let evrec_pnodecid pos evrec  = Cid.id (Id.prepend_string ("event_"^(string_of_int pos)^"_parse_") evrec.event_id)
+
+  let pos_selectorcid pos = Cid.create ["selector_"^(string_of_int pos)]
+  ;;
+
+
+  let parsetree_from_events _ = 
+    (* create a parser to extract the evrec 
+       from the i'th event in the lucid header. *)
+    let evrec_parse_node max_layers layer evrec = 
+      let parse_instr = IS.new_PStruct (evrec_hdrvar evrec) in     
+      let next_instr = match ((max_layers - 1) = layer) with
+        | true -> IS.new_PNext (Some parse_end_cid)   
+        | false ->IS.new_PNext (Some (pos_selectorcid (layer+1)))
+      in 
+      IS.new_parse_node (evrec_pnodecid layer evrec) [parse_instr] next_instr
+    in 
+    (* create the ith selector node *)
+    let pos_selector layer evrecs = 
+      let selector_cid = match layer with 
+        | 0 -> Cid.create ["start"]
+        | _ -> (pos_selectorcid layer)
+      in 
+      let peek_target_decl_cid, peek_target_cid = match layer with 
+        | 0 -> handle_selector_name, handle_selector_name
+        | _ -> Cid.create ["bit<8> tmp"], Cid.create ["tmp"]
+      in 
+      let extract_eventType = IS.new_PPeek peek_target_decl_cid event_id_width in
+      let evrec_branch evrec = 
+        IS.new_SConst_branch (evrec.event_iid) (Some (evrec_pnodecid layer evrec))
+      in       
+      let evrec_branches = 
+          (IS.new_SConst_branch 0 (Some parse_end_cid))
+        ::(CL.map evrec_branch evrecs) 
+      in 
+      IS.new_parse_node 
+        selector_cid
+        [extract_eventType]
+        (IS.new_PSelect peek_target_cid evrec_branches)
+    in 
+
+    (* create all nodes for a layer *)
+    let layer_nodes max_layers evrecs layer = 
+      (pos_selector layer evrecs)
+      ::(CL.map (evrec_parse_node max_layers layer) evrecs)
+    in 
+    (* create num_evs selectors and num_ev layers of parse nodes *)
+    let evrecs = ctx_get_event_recs () 
+      |> CL.filter (fun evr -> match evr.event_sort with |EBackground -> true | _ -> false)
+    in 
+    
+    let nodes = CL.map (layer_nodes max_generated_events evrecs)
+      (range 0 max_generated_events)
+      |> CL.flatten
+    in 
+    (* end state just parses a single 8 bit header and exits (no next instr) *)
+    let end_state = 
+      let parse_instr = IS.new_PStruct (TofinoStructs.qualify_struct footer IS.SHeader) in
+      let flags_parse_instr = IS.new_PStruct event_out_flags_instance in 
+      let next_instr = IS.new_PNext None in
+      IS.new_parse_node parse_end_cid [parse_instr; flags_parse_instr] next_instr
+    in    
+(*     print_endline ("HERE");
+    printf "number of node states: %i\n" (CL.length nodes);
+    exit 1;
+ *)    IS.new_ParseTree lucid_parser_name (nodes@[end_state])    
+  ;;
+
+  (* OLD *)
   let parsestate_name_of evid = Cid.id (Id.prepend_string "parse_" evid)
 
-  let parsetree_from_events ds =
+  let old_parsetree_from_events ds =
     (* 
       Given lucid events a and b, construct a parse graph: 
 
@@ -139,13 +213,39 @@ module TranslateEvents = struct
       - an event type of 0 indicates "no more events". 
       - node a and b extract the headers for events a and, then return to start. 
       - the end node extracts the footer, whose first 8 bits should always be 0. 
+
+      new parse tree design:
+      parse up to a fixed number of events. The graph to parse events n events with a
+      maximum of k events per packet has O(nk) nodes and transitions. For example, 
+      the graph for 3 events (a, b, c) with a maximum of 2 events per packet 
+      looks like: 
+          start
+            |
+            v
+        selector_1
+        |   |   |  
+        v   v   v
+        a1  b1  c1
+        |   |   |  
+        v   v   v
+        selector_2
+        |   |   |  
+        v   v   v
+        a2  b2  c2
+        |   |   |  
+        v   v   v
+        footer/end
     *)
+
+
+
 
     (* construct the end state. Just parses a single 8 bit header and exits (no next instr) *)
     let end_state = 
       let parse_instr = IS.new_PStruct (TofinoStructs.qualify_struct footer IS.SHeader) in
+      let flags_parse_instr = IS.new_PStruct event_out_flags_instance in 
       let next_instr = IS.new_PNext None in
-      IS.new_parse_node parse_end_cid [parse_instr] next_instr
+      IS.new_parse_node parse_end_cid [parse_instr; flags_parse_instr] next_instr
     in
 
     (* construct the start node. input is a mapping from enum values to parse states. *)
@@ -285,7 +385,7 @@ let gen_internal_structs () =
       (fun f -> Cid.create [f])
       [timestamp_str; handle_selector_str; exit_event_str; next_event_str; events_count_str]
   in
-  let fwidths = [32; 8; 8; 8; 8] in
+  let fwidths = [32; 8; 8; 8; event_counts_width] in
   let fdefs = CL.combine fnames fwidths in
   let dptMeta_struct = IS.new_meta_structdef struct_cid fdefs in
   let dptMeta_instance =
