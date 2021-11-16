@@ -1,0 +1,23 @@
+/* This example test's lucid's ability to support 
+   generating multiple background events from a 
+   single handler. Exercises the new (11/21) 
+   parse, ingress exit, and egress generation. */
+
+entry event ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos);
+exit event port_out (int<<9>> egr_port); // this event is just here for compatibility with the harness.
+event bg1(int<<9>> egr, int src, int dst);
+event bg2(int<<9>> egr, int src, int dst);
+exit event ip_out (int<<9>> egr_port, int src, int dst);
+
+handle ip_in(int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos) {
+  generate bg1(igr_port, src, dst);
+  generate bg2(igr_port, dst, src);
+}
+
+handle bg1(int<<9>> egr, int src, int dst) {
+  generate ip_out(egr, src, dst);
+}
+handle bg2(int<<9>> egr, int src, int dst) {
+  generate ip_out(egr, src, dst);
+}
+

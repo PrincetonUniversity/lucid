@@ -1,6 +1,28 @@
 ## Tested lucid examples
 
-This directory contains example programs whose execution has been tested. In other words, these are applications that you should be able to run completely on a real switch. 
+This directory contains example programs that are regularly tested on the tofino asic model. These are programs that should work on a real switch. 
+
+
+#### Applications 
+
+Applications are in the `./src/` subdirectory.
+
+**simple_cuckoo_firewall** -- a stateful firewall that uses a cuckoo hash table to remember connections from trusted hosts. Insert operations, for the hash table, may occur over multiple events that move items around in memory to mitigate collisions.
+
+**reflector** -- sends an ip packet out of the same port it came in on. 
+
+**control_reflector** -- generates a control event from an ip packet. When processing the control event, generates an exit event that sends the packet out of the same port it arrived on. 
+
+**multi_events** -- generate two background events from a handler. 
+
+#### Adding new cases
+
+To add a new test case: 
+
+1. add the program and test to `./src` and `./tests`. 
+
+2. update `<lucid_git_root>/test/testspecs/tested_examples.json` to include commands to compile / assemble / run the program.
+
 
 #### Contents
 
@@ -17,13 +39,6 @@ This directory contains example programs whose execution has been tested. In oth
     - ``make assemble_{appname}`` compile the P4 in ``builds/{appname}`` into a tofino binary
     - ``make test_{appname}`` test the compiled P4 in ``builds/{appname}`` on the Tofino asic model, using the test case ``tests/{appname}.json``.
 
-#### Applications 
-
-- **reflector** -- sends an ip packet out of the same port it came in on. 
-
-- **control_reflector** -- generates a control event from an ip packet. When processing the control event, generates an exit event that sends the packet out of the same port it arrived on. 
-
-- **simple_cuckoo_firewall** -- a stateful firewall that uses a cuckoo hash table to remember connections from trusted hosts. Insert operations, for the hash table, may occur over multiple events that move items around in memory to mitigate collisions.
 
 #### Harness
 

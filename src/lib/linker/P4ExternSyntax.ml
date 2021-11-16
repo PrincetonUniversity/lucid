@@ -72,6 +72,9 @@ let param_to_p4field ev_name param =
 ;;
 
 let cassign dst src : command = sprintf "%s = %s;" dst src
+let cmd_set dst i : command = sprintf "%s = %i;" dst i
+let cmd_valid hdr_cid : command = sprintf "%s.setValid();" hdr_cid
+let cmd_invalid hdr_cid : command = sprintf "%s.setInvalid();" hdr_cid
 
 (* processing *)
 let pattern_to_tup p = p.field, p.value
@@ -189,6 +192,8 @@ let rule_to_string r =
 
 let rules_to_string rs = CL.map rule_to_string rs |> String.concat ~sep:"\n"
 
+(*** create and print control flow syntax tree ***)
+
 let ktype_to_string m =
   match m with
   | Ternary -> "ternary"
@@ -221,6 +226,38 @@ let table_to_string t =
     ^ indent_block entries_string
   in
   sprintf "table %s {\n%s\n}" t.tname body_string
+;;
+
+let table_to_printer t =
+  let print_fcn t tbl_id =
+    let tbl_name = P4tPrint.str_of_private_oid tbl_id in
+    let actions_def_str = actions_to_string t.tactions in
+    let key_string =
+      "key = {\n" ^ (keys_to_string t.tkeys |> indent_block) ^ "\n}"
+    in
+    let actions_string =
+      "actions = {\n"
+      ^ (actions_names_to_string t.tactions |> indent_block)
+      ^ "\n}"
+    in
+    let entries_string =
+      "const entries = {\n" ^ (rules_to_string t.trules |> indent_block) ^ "\n}"
+    in
+    let body_string =
+      indent_block key_string
+      ^ "\n"
+      ^ indent_block actions_string
+      ^ "\n"
+      ^ indent_block entries_string
+    in
+    [%string "$actions_def_str\ntable $tbl_name {\n$body_string\n}"]
+  in
+  print_fcn t
+;;
+
+(* convert the table into a nativeblock object in the Lucid backend IR. *)
+let nativeblock_of_tbl location tid t =
+  LLSyntax.new_native_block tid location (table_to_printer t)
 ;;
 
 (*** create and print control flow syntax tree ***)

@@ -86,7 +86,7 @@ let str_of_private_oids ms =
   String.concat ~sep:", " (CL.map str_of_private_oid ms)
 ;;
 
-(* public objects that are globally scoped, like the parse block *)
+(* compute objects with globally unique names. *)
 let str_of_public_globalid m : string =
   let names = Cid.names m in
   String.concat ~sep:"_" names
@@ -199,7 +199,7 @@ module PrimitiveString = struct
         | _ -> error "[str_of_expr] Cast operation must have 2 operands.")
       | Slice ->
         (match args with
-        | [i; s; e] -> str_of_slice i s e
+        | [i; s; e] -> str_of_slice i s e ^ ";"
         | _ -> error "[str_of_expr] Slice operation must have 3 operands."))
   ;;
 

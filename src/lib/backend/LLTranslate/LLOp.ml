@@ -30,11 +30,22 @@ let int_from_const_exp (ex : exp) =
 ***)
 module TofinoStructs = struct
   (**** [11/21] new helpers ****)
-  (* let  *)
 
-  (**** translate structure names ****)
+  (*** get event enumerators ***)
   let defname_from_evname evname = "e_" ^ evname
   let defname_from_evid evid = Cid.id (fst evid |> defname_from_evname, snd evid)
+
+  (**** translate structure names ****)
+
+  (* get the qualified struct id *)
+  let qualify_struct struct_id struct_ty =
+    let outer_struct =
+      match struct_ty with
+      | IS.SHeader -> Id.create hdr_instance_prefix
+      | IS.SMeta -> Id.create md_instance_prefix
+    in
+    Cid.compound outer_struct struct_id
+  ;;
 
   (* struct names from event ids *)
   let structname_from_evid evid =
@@ -48,7 +59,7 @@ module TofinoStructs = struct
     Cid.id (out_structname_prefix ^ fst evid, snd evid)
   ;;
 
-  (* fully qualified struct instance name from event id and type*)
+  (* fully qualified struct instance name from event id and type *)
   let full_struct_from_ev evid evsort =
     let prefix =
       match evsort with
@@ -315,9 +326,17 @@ module TofinoAlu = struct
     ; GS.int_assign_instr (Cid.concat ev_struct_id event_loc_field) 0
     ; GS.int_assign_instr (Cid.concat ev_struct_id event_delay_field) 0 ]
     @
-    (* background events are carried in headers that need to be set to valid. *)
+    (* background events are carried in headers that need to be set to valid. 
+         Background events must also be sure to set up the footer. *)
     match evrec.event_sort with
-    | EBackground -> [GS.validate_instr ev_struct_id]
+    | EBackground ->
+      [ GS.validate_instr ev_struct_id
+      ; GS.validate_instr (TofinoStructs.qualify_struct footer IS.SHeader)
+      ; GS.int_assign_instr
+          (TofinoStructs.qualify_struct
+             (Cid.concat footer (CL.hd footer_fields |> fst))
+             IS.SHeader)
+          0 ]
     | _ -> []
   ;;
 
@@ -337,6 +356,7 @@ module TofinoAlu = struct
         (* md.dptMeta.eventCt += 1 *)
       ; GS.incr_assign_instr ev_ct_cid ev_ct_cid 1
         (* md.eventGeneratedFlags.<eventname> = 1 *)
+      ; GS.validate_instr event_out_flags_instance
       ; GS.int_assign_instr evrec.event_generated_flag 1 ]
     | EEntry _ | EExit ->
       [ (* md.dptMeta.exitEvent = i:int *)
