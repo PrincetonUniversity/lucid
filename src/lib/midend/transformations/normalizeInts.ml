@@ -1,6 +1,6 @@
-(* Balance the subexpressions of commutative 
+(* Balance the subexpressions of commutative
 operation expression trees, then atomize integer expressions.  *)
-open Syntax
+open CoreSyntax
 open InterpHelpers
 module DBG = BackendLogging
 
@@ -26,7 +26,7 @@ let dprint_eop exp =
 
 (**** transform operation expressions into balanced expression trees ****)
 let balance_assign_exp s =
-  (*  1. flatten expression based on op --> 
+  (*  1. flatten expression based on op -->
             op [arg1; arg2; ...; argn]
             - each arg is an expression _not_ of type op
         2. build a balanced tree from the list of atoms *)
@@ -67,7 +67,7 @@ let balance_assign_exps ds =
       inherit [_] s_map as super
 
       method! visit_s ctx s =
-        (* Question: 
+        (* Question:
             is it safe to balance every single expression, not just rhs of assign and local? *)
         match s with
         | SAssign _ | SLocal _ -> balance_assign_exp s
@@ -79,7 +79,7 @@ let balance_assign_exps ds =
 
 (**** transform expressions into atomic expressions ****)
 
-(* convert an expression into a variable whose value is 
+(* convert an expression into a variable whose value is
   the evaluation result of an atomic expression *)
 let rec to_immediate exp =
   match is_immediate exp with
@@ -88,7 +88,7 @@ let rec to_immediate exp =
     (match is_atomic exp with
     (* the expression is an atomic op, so we can replace it with a precomputation. *)
     | true ->
-      let ty = ty_of_exp exp in
+      let ty = exp.ety in
       let var_id = Id.fresh "pc_tmp" in
       let stmt = slocal var_id ty exp in
       let exp = { exp with e = EVar (Cid.id var_id) } in
@@ -99,8 +99,8 @@ let rec to_immediate exp =
       let exp, stmts_b = to_immediate exp in
       exp, stmts_a @ stmts_b)
 
-(* convert an expression into an atomic operation. If 
-  any of the expressions arguments are not immediates, 
+(* convert an expression into an atomic operation. If
+  any of the expressions arguments are not immediates,
 convert them to an immediate first. *)
 and to_atomic exp =
   match is_atomic exp with
@@ -139,7 +139,7 @@ let atomize_int_assigns ds =
         | _ -> super#visit_statement ctx stmt
 
       method! visit_exp in_assign exp =
-        (* We only want to normalize expressions on the rhs of an assignment. 
+        (* We only want to normalize expressions on the rhs of an assignment.
            By this point in time, all other complex expressions are removed. *)
         match in_assign with
         | true ->

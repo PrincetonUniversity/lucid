@@ -1,4 +1,4 @@
-(* Helpers to log the various IR representations 
+(* Helpers to log the various IR representations
 of Lucid. *)
 module IS = LLSyntax
 module CL = Caml.List
@@ -6,7 +6,7 @@ module CL = Caml.List
 (**** Print Lucid program ****)
 let log_lucid fn ds =
   let full_fn = !BackendLogging.irLogDir ^ "/" ^ fn in
-  Printf.fprintf (open_out full_fn) "%s" (Printing.decls_to_string ds)
+  Printf.fprintf (open_out full_fn) "%s" (CorePrinting.decls_to_string ds)
 ;;
 
 (* log program before and after a source pass *)

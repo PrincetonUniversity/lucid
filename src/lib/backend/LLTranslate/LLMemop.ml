@@ -1,6 +1,6 @@
 (* memop translation for tofino *)
-module S = Syntax
-module PR = Printing
+module S = CoreSyntax
+module PR = CorePrinting
 open LLSyntax
 open LLContext
 open InterpHelpers
@@ -74,7 +74,7 @@ let from_testexp hdl_id mem_var (exp : S.exp) =
        relational operation at its root."
 ;;
 
-(* workaround for assembler: transform the 
+(* workaround for assembler: transform the
   operation (memcell + const) --> (const + memcell) *)
 let _workaround_flip_memcell_const operation : sEvalExpr =
   match operation with
@@ -85,7 +85,7 @@ let _workaround_flip_memcell_const operation : sEvalExpr =
   | _ -> operation
 ;;
 
-(* replace an expression that is just a memcell with a memcell identity 
+(* replace an expression that is just a memcell with a memcell identity
    that the p4 compiler will not optimize away. *)
 let _workaround_memcell_ident se =
   match se with

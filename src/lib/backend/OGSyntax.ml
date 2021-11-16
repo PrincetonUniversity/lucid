@@ -1,9 +1,9 @@
-(* An intermediate representation of handlers in a lucid program, 
-   as a graph of statements instead of a tree. Used in 
+(* An intermediate representation of handlers in a lucid program,
+   as a graph of statements instead of a tree. Used in
  translation from Syntax --> LLSyntax.*)
-(* nodes in the graph are "op statements" -- statements that 
+(* nodes in the graph are "op statements" -- statements that
 do computation or move data, basically anything besides a noop or sequence. *)
-open Syntax
+open CoreSyntax
 open Batteries
 open InterpHelpers
 open Printf
@@ -97,7 +97,7 @@ type handler_opgraph_rec =
 (* the opstatement graph for all the handlers in a program *)
 type prog_opgraph = handler_opgraph_rec list
 
-(* merge all the ophandlers into one graph 
+(* merge all the ophandlers into one graph
 -- just meant for debugging / logging. *)
 let combine_graphs g1 g2 =
   let add_edge s d g = StGraph.add_edge g s d in
@@ -127,8 +127,8 @@ let lst_op_stmt (st : statement) =
 ;;
 
 (* find the pair of statements that link two branches of a sequence tree. *)
-(* connect two sibling branches: 
-  e.g., generate the edge b --> c in the tree below: 
+(* connect two sibling branches:
+  e.g., generate the edge b --> c in the tree below:
   SSeq
     SSeq
       a
@@ -145,8 +145,8 @@ let immediate_op_pair parent child =
 
 (* this happens if parent or child is a noop *)
 
-(* let fst_op_of_branch st = 
-  match fst_op_stmt st with 
+(* let fst_op_of_branch st =
+  match fst_op_stmt st with
     | Some s -> s
     | None -> snoop
 ;;
@@ -208,7 +208,7 @@ let rec to_op_edges (st : statement) : (statement * statement) list =
     match st.s with
     | SIf (_, a, b) ->
       (* connect if to first statement in each branch. recurse on branches. *)
-      (* let self_to_a = (immediate_op_pair st a) in 
+      (* let self_to_a = (immediate_op_pair st a) in
     let self_to_b = (immediate_op_pair st b) in  *)
       let edges_of_a = to_op_edges a in
       let edges_of_b = to_op_edges b in

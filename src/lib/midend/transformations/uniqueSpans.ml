@@ -1,5 +1,5 @@
 (* convert all booleans into 1-bit ints *)
-open Syntax
+open CoreSyntax
 open Printf
 open Batteries
 open InterpHelpers

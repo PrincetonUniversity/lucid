@@ -1,6 +1,6 @@
 (* eliminate non-call unit statements *)
 
-open Syntax
+open CoreSyntax
 open Cid
 open Batteries
 open Printf

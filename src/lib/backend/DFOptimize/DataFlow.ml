@@ -6,6 +6,7 @@ module CL = Caml.List
 open MiscUtils
 open Printf
 open DebugPrint
+module Printing = CorePrinting
 
 exception Error of string
 
@@ -23,7 +24,7 @@ let memo_ct = ref 0
 
 let rec fold_most_recent_set_or_use_var_from_tbl
     checker_function
-    (* checker function is either a test to see if the table reads the variable, 
+    (* checker function is either a test to see if the table reads the variable,
     or a test to see if the table writes the variable *)
       cid_decls
     var_id
@@ -88,7 +89,7 @@ let rec fold_most_recent_set_or_use_var_from_tbl
     out_memo_assoc, out_setter_ids
 ;;
 
-(* find most recent list of predecessors that write to var_id, 
+(* find most recent list of predecessors that write to var_id,
    starting from a src_tbl_id *)
 let rec fold_most_recent_set_var_from_tbl
     cid_decls
@@ -133,7 +134,7 @@ let rec fold_most_recent_use_var_from_tbl
     src_tbl_id
 ;;
 
-(* find most recent list of predecessors that write to var_id, 
+(* find most recent list of predecessors that write to var_id,
    starting from a list of predecessors *)
 let most_recent_set_var_from_preds cid_decls pred_tids var_id =
   memo_ct := 0;
@@ -178,9 +179,9 @@ let most_recent_use_var_from_preds cid_decls pred_tids var_id =
 let get_data_dep_edges cid_decls tbl_id all_data_dep_edges =
   (*   print_endline
     ("[get_data_dep_edges] on object: " ^ Printing.cid_to_string tbl_id); *)
-  (* for each variable read in the table, find the most recently called predecessor table 
+  (* for each variable read in the table, find the most recently called predecessor table
 	that writes to it*)
-  (* for each variable written by the table, find the most recently called predecessor table 
+  (* for each variable written by the table, find the most recently called predecessor table
 	that reads it. *)
   match is_tbl cid_decls tbl_id with
   | false -> all_data_dep_edges (* skip non-tables *)
@@ -204,14 +205,14 @@ let get_data_dep_edges cid_decls tbl_id all_data_dep_edges =
       "[get_data_dep_edges] tbl %s uses variables: [%s]\n"
       (P4tPrint.str_of_private_oid tbl_id)
       (str_of_cids vars_used);
-    (* find the most recent predecessor that writes to every variable that 
+    (* find the most recent predecessor that writes to every variable that
        the table reads *)
     let use_var_dependee_tids =
       CL.map (most_recent_set_var_from_preds cid_decls pred_tids) vars_used
       |> CL.flatten
       |> unique_list_of
     in
-    (* generate edges of the form (predcessor, table) for every predecessor 
+    (* generate edges of the form (predcessor, table) for every predecessor
        that writes to a variable that this table reads. *)
     let use_var_edges =
       CL.map (fun pred_t -> pred_t, tbl_id) use_var_dependee_tids
@@ -242,7 +243,7 @@ let get_data_dep_edges cid_decls tbl_id all_data_dep_edges =
       "[get_data_dep_edges] tbl: %s predecessors that read set variables: [%s]\n"
       (P4tPrint.str_of_private_oid tbl_id)
       (str_of_cids set_var_dependee_tids);
-    (* add edges of the form (predecessor, table) for every predecessor 
+    (* add edges of the form (predecessor, table) for every predecessor
        that reads a variable that this table writes. *)
     let set_var_edges =
       CL.map (fun pred_t -> pred_t, tbl_id) set_var_dependee_tids
@@ -289,7 +290,7 @@ let data_dep_dag_of cid_decls g =
   data_dag
 ;;
 
-(* convert a DAG with edges that represent call order 
+(* convert a DAG with edges that represent call order
    into a DAG with edges that represent data dependencies. *)
 (* note: the dag only represents tables! *)
 let do_passes df_prog =

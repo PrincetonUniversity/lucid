@@ -1,10 +1,11 @@
-(* Generate Lucid scheduler objects for the Tofino. 
-   Part of the source to IR layer -- generates nativeblocks 
+(* Generate Lucid scheduler objects for the Tofino.
+   Part of the source to IR layer -- generates nativeblocks
    (native P4 blocks wrapped in IR syntax tree nodes) *)
 
 (* TODO: 11/21 -- don't assume ethertype is IP, hold it in the footer. *)
 
 open MiscUtils
+open CoreSyntax
 open LLSyntax
 open InterpHelpers
 open LLContext
@@ -73,51 +74,51 @@ let cmd_copy_to_recirc =
 
 (* the ingress exit table applies after the handler tables. *)
 module IngressExit = struct
-  (*** 
-    Ingress exit table. 
+  (***
+    Ingress exit table.
 
-    As a Lucid event handler executes, it annotates a packet 
-    with metadata containing the names and arguments of 
-    other events that need to be generated. 
-    After the event handler finishes, the packet is effectively 
-    a "multi-event" packet -- it stores data belonging to 
-    multiple events that need to be executed somewhere at 
+    As a Lucid event handler executes, it annotates a packet
+    with metadata containing the names and arguments of
+    other events that need to be generated.
+    After the event handler finishes, the packet is effectively
+    a "multi-event" packet -- it stores data belonging to
+    multiple events that need to be executed somewhere at
     some time in the future.
-    The ingress exit table sets up the multi-event packet 
-    so that: 
-      1) all packets with wire events continue in the egress pipeline. 
-      2) packets with non-wire events are cloned to egress the appropriate number of times. 
+    The ingress exit table sets up the multi-event packet
+    so that:
+      1) all packets with wire events continue in the egress pipeline.
+      2) packets with non-wire events are cloned to egress the appropriate number of times.
       3) (temporary) packets with only non-wire events have ether_type = Lucid
-      4) (temporary) packets with wire events have ether_type = IP 
+      4) (temporary) packets with wire events have ether_type = IP
 
-    Notes: (3) should be done by the egress table; 
-           (4) should get ether_type from a hidden event parameter that stores 
+    Notes: (3) should be done by the egress table;
+           (4) should get ether_type from a hidden event parameter that stores
                the ether_type of the original packet.
 
-    Below is a quick summary of the actions that this table uses, 
-    and the cases that it matches on. 
-    new table: 
-        actions: 
+    Below is a quick summary of the actions that this table uses,
+    and the cases that it matches on.
+    new table:
+        actions:
           entry_hdl_bg_continue() {
             mc_group = 1065 + eventCount;
-            ethertype = LUCID;            
+            ethertype = LUCID;
           }
           entry_hdl_bg_no_continue() {
             mc_group = 1065 + eventCount;
-            ethertype = LUCID;            
+            ethertype = LUCID;
             exit;
           }
-  
+
           bg_hdl_recurse_continue() {
             mc_group = 1065 + eventCount;
             ethertype = LUCID;
           }
           bg_hdl_recurse_continue() {
-            mc_group = 1065 + eventCount; 
-            ethertype = LUCID;            
+            mc_group = 1065 + eventCount;
+            ethertype = LUCID;
             exit;
           }
-          for each bg event foo: 
+          for each bg event foo:
             bg_hdl_foo_no_recurse_continue() {
               hdr.foo.setInvalid();
               mc_group = 1065 + eventCount;
@@ -127,7 +128,7 @@ module IngressExit = struct
               hdr.foo.setInvalid();
               mc_group = 1065 + eventCount;
               ethertype = LUCID;
-              exit; 
+              exit;
             }
           no_bg_continue() {
               // invalidate all event headers.
@@ -136,23 +137,23 @@ module IngressExit = struct
           no_events() {
               // exit
           }
-        keys: 
+        keys:
           eventType (hdl id), <event_generated flags>, eventCount, exitEventType
 
-        cases: 
+        cases:
         (bg hdl, bg recursive event, no continue event) --> bg_hdl_recurse_continue();
               [eventType = foo; event_generated_foo = 1; event_count = *; exitEventType = 0]
               --> bg_hdl_recurse_no_continue();
-        (bg hdl, bg recursive event, continue event): 
+        (bg hdl, bg recursive event, continue event):
               [eventType = foo; event_generated_foo = 1; event_count = *; exitEventType = *]
               --> bg_hdl_recurse_continue();
-        (bg hdl, bg non-recursive event, no continue event) 
+        (bg hdl, bg non-recursive event, no continue event)
               [eventType = foo; event_generated_foo = 0; event_count = *; exitEventType = 0]
-              --> 
+              -->
               bg_hdl_foo_no_recurse_no_continue();
-        (bg hdl, bg non-recursive event, continue event) 
+        (bg hdl, bg non-recursive event, continue event)
               [eventType = foo; event_generated_foo = 0; event_count = *; exitEventType = *]
-              --> 
+              -->
               bg_hdl_foo_no_recurse_continue();
         (bg hdl, bg non-recursive event, no continue event) --> bg_hdl_foo_no_recurse_no_continue(); // PER-EVENT FOO.
         (entry hdl, bg event, continue event) --> entry_hdl_bg_continue();
@@ -209,10 +210,10 @@ module IngressExit = struct
           :: (cmds_disable_hdrs bg_evcids @ cmds_disable_cids lucid_sys_hdr_cids)
       }
     in
-    (* the only time we drop a packet is when there is both no continue event and also no 
-       background event. 
-        NO. When there is no continue event, but a background event, we want to 
-        disable _unicast_. Setting port to 0 doesn't work in the asic model because 
+    (* the only time we drop a packet is when there is both no continue event and also no
+       background event.
+        NO. When there is no continue event, but a background event, we want to
+        disable _unicast_. Setting port to 0 doesn't work in the asic model because
         that's an actual port!
      *)
     let no_events =
@@ -358,30 +359,30 @@ module IngressExit = struct
 end
 
 module Egress = struct
-  (*   Egress deserialization table generation. 
+  (*   Egress deserialization table generation.
 
-    The egress table converts a packet that holds many events 
-    into a packet that holds one event. This is necessary because 
-    every packet that leaves ingress must be the same. So, to 
-    generate multiple events, we have to generate multiple identical 
-    packets that hold the data for _all_ generated events, and then 
-    transform the multi-event packet into a single event packet here, 
-    in egress. 
-    The egress table matches on rid (replica id) and a bitvector 
-    that has a flag for each non-wire event that the multi-event packet 
-    contains. The egress table's action list has one action for each non-wire event, 
-    and 1 action for wire events. 
-    The rules for rid = x filter out all but the x'th 
-    _generated_ event. Note that, this is not the same as the 
-    x'th event, as not all events may have been generated. 
-    The pattern of a rule for rid = x has exactly x elements 
-    in the bit vector set to 1. The rule's action is action_list[last_ones_idx], 
-    where last_ones_idx is the index of the last 1 in the bit vector. 
+    The egress table converts a packet that holds many events
+    into a packet that holds one event. This is necessary because
+    every packet that leaves ingress must be the same. So, to
+    generate multiple events, we have to generate multiple identical
+    packets that hold the data for _all_ generated events, and then
+    transform the multi-event packet into a single event packet here,
+    in egress.
+    The egress table matches on rid (replica id) and a bitvector
+    that has a flag for each non-wire event that the multi-event packet
+    contains. The egress table's action list has one action for each non-wire event,
+    and 1 action for wire events.
+    The rules for rid = x filter out all but the x'th
+    _generated_ event. Note that, this is not the same as the
+    x'th event, as not all events may have been generated.
+    The pattern of a rule for rid = x has exactly x elements
+    in the bit vector set to 1. The rule's action is action_list[last_ones_idx],
+    where last_ones_idx is the index of the last 1 in the bit vector.
 
-    There are approximately ((N^3)/6 - N/6)) rules in this table, where 
-    N is the number of non-wire events. It is not exponential because 
-    the table uses TCAM wildcards so that we don't need a rule for 
-    every possible combination of event generations. 
+    There are approximately ((N^3)/6 - N/6)) rules in this table, where
+    N is the number of non-wire events. It is not exponential because
+    the table uses TCAM wildcards so that we don't need a rule for
+    every possible combination of event generations.
  *)
 
   let mcid_field = Cid.create ["eg_intr_md"; "egress_rid"]
@@ -437,7 +438,7 @@ module Egress = struct
   let rec bv_valv bv =
     match bv with
     | [] -> []
-    | [b] -> [VInt b]
+    | [b] -> [P4S.VInt b]
     | b :: bv -> VInt b :: bv_valv bv
   ;;
 
@@ -446,7 +447,7 @@ module Egress = struct
   (* wildcard prefix and suffix zeros *)
   let rec wildcard_prefix_zeros valv =
     match valv with
-    | VInt 0 :: valv -> VAny :: wildcard_prefix_zeros valv
+    | P4S.VInt 0 :: valv -> VAny :: wildcard_prefix_zeros valv
     | valv -> valv
   ;;
 
@@ -554,9 +555,9 @@ module Egress = struct
   ;;
 
   (* generate the rules for the egress table. *)
-  (* Use the bitvec generators to create a list 
+  (* Use the bitvec generators to create a list
      of rules for each replica ID value from 0 : len(bg_events)
-     The action of a rule is the index of the last bitvector element 
+     The action of a rule is the index of the last bitvector element
      set to 1... *)
   let egress_demultiplex_table footer_cid =
     let erecs = ctx_get_event_recs () in

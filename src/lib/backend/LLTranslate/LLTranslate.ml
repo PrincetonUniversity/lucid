@@ -5,7 +5,6 @@
     1. convert each handler into an operation-statement graph.
     2. translate each operation-statement into a graph.
 *)
-open SyntaxUtils
 open MiscUtils
 open Batteries
 open Format
@@ -17,7 +16,8 @@ open LLOp
 open LLValidate
 open LogIr
 module CL = Caml.List
-open Syntax
+open CoreSyntax
+module Printing = CorePrinting
 module IS = LLSyntax
 
 (* logging *)
@@ -44,13 +44,13 @@ let dpt_builtin_fcns =
 module TranslateEvents = struct
   let undeclared_instance_name = P4tPrint.str_of_public_varid
 
-  (* translate the ith event declaration into LL code, 
-     and save details about the event in the LL syntax. 
+  (* translate the ith event declaration into LL code,
+     and save details about the event in the LL syntax.
      This should be the ONLY FUNCTION that writes to event records. *)
   let translate (ll_decls, last_eviid) dec =
     match dec.d with
-    | DEvent (evid, ev_sort, _, params) ->
-      (* all the details about the event that the translator 
+    | DEvent (evid, ev_sort, params) ->
+      (* all the details about the event that the translator
          needs, in one context record. *)
       let erec =
         { event_id = evid
@@ -145,7 +145,7 @@ module TranslateEvents = struct
   let pos_selectorcid pos = Cid.create ["selector_" ^ string_of_int pos]
 
   let parsetree_from_events _ =
-    (* create a parser to extract the evrec 
+    (* create a parser to extract the evrec
        from the i'th event in the lucid header. *)
     let evrec_parse_node max_layers layer evrec =
       let parse_instr = IS.new_PStruct (evrec_hdrvar evrec) in
@@ -225,8 +225,8 @@ module TranslateEvents = struct
   let parsestate_name_of evid = Cid.id (Id.prepend_string "parse_" evid)
 
   let old_parsetree_from_events ds =
-    (* 
-      Given lucid events a and b, construct a parse graph: 
+    (*
+      Given lucid events a and b, construct a parse graph:
 
           <-- start -->
         /     / | \    \
@@ -234,30 +234,30 @@ module TranslateEvents = struct
                 v
                end
 
-      - the start node peeks at the next 8 bits to determine the event type. 
-      - an event type of 0 indicates "no more events". 
-      - node a and b extract the headers for events a and, then return to start. 
-      - the end node extracts the footer, whose first 8 bits should always be 0. 
+      - the start node peeks at the next 8 bits to determine the event type.
+      - an event type of 0 indicates "no more events".
+      - node a and b extract the headers for events a and, then return to start.
+      - the end node extracts the footer, whose first 8 bits should always be 0.
 
       new parse tree design:
       parse up to a fixed number of events. The graph to parse events n events with a
-      maximum of k events per packet has O(nk) nodes and transitions. For example, 
-      the graph for 3 events (a, b, c) with a maximum of 2 events per packet 
-      looks like: 
+      maximum of k events per packet has O(nk) nodes and transitions. For example,
+      the graph for 3 events (a, b, c) with a maximum of 2 events per packet
+      looks like:
           start
             |
             v
         selector_1
-        |   |   |  
+        |   |   |
         v   v   v
         a1  b1  c1
-        |   |   |  
+        |   |   |
         v   v   v
         selector_2
-        |   |   |  
+        |   |   |
         v   v   v
         a2  b2  c2
-        |   |   |  
+        |   |   |
         v   v   v
         footer/end
     *)
@@ -300,7 +300,7 @@ module TranslateEvents = struct
     *)
     let event_state dec =
       match dec.d with
-      | DEvent (evid, EBackground, _, _) ->
+      | DEvent (evid, EBackground, _) ->
         let parse_state_id = parsestate_name_of evid in
         let in_struct_name =
           TofinoStructs.full_struct_from_ev evid EBackground
@@ -323,7 +323,7 @@ end
 
 let get_dglobal_info ty e =
   let sz =
-    match TyTQVar.strip_links ty.raw_ty with
+    match ty.raw_ty with
     | TName (_, [sz], _) -> sz
     | _ -> error "Bad DGlobal"
   in
@@ -344,8 +344,8 @@ let regdec_from_decl dec =
     let sz, args = get_dglobal_info ty e in
     let reg_id = Cid.id reg_id in
     (* reg, width, length, ??? *)
-    let arg_name = exp (EVar reg_id) in
-    let arg_width = exp (EVal (vint (extract_size sz) 8)) in
+    let arg_name = exp (EVar reg_id) ty in
+    let arg_width = exp (EVal (vint sz 8)) (TInt sz |> CoreSyntax.ty) in
     print_endline
       ("arg_width expr used as arg: " ^ Printing.exp_to_string arg_width);
     let args = arg_name :: arg_width :: args in
@@ -365,15 +365,6 @@ let regdec_from_decl dec =
   | _ -> []
 ;;
 
-let constdec_from_decl dec =
-  match dec.d with
-  | DConst (const_id, ty, exp) ->
-    let width = width_from_ty ty in
-    let rhs_val = Integer.to_int (LLOp.zint_from_evalue exp) in
-    Some (IS.new_private_constdef (Cid.Id const_id) width rhs_val)
-  | _ -> None
-;;
-
 (* declare groups as 16-bit ints. (todo: integrate groups and mc in distribution layer) *)
 let cur_group_iid = ref 0
 
@@ -387,7 +378,7 @@ let groupdec_from_decl dec =
   | _ -> None
 ;;
 
-(* generate the bitvector metadata that indicate which 
+(* generate the bitvector metadata that indicate which
    subset of events were generated. *)
 let gen_event_triggered_bitvec () =
   let struct_cid = Cid.create ["outEvents_t"] in
@@ -454,8 +445,8 @@ let fresh_pad_cid () =
 ;;
 
 let byte_align_header_structs (prog : IS.llProg) : IS.llProg =
-  (* add pads so that every 8-bit field 
-     in every header struct starts on a byte-boundary, and 
+  (* add pads so that every 8-bit field
+     in every header struct starts on a byte-boundary, and
      every header struct ends on an byte-boundary. *)
 
   (* pad fields so they end on byte boundary *)
@@ -494,9 +485,9 @@ let byte_align_header_structs (prog : IS.llProg) : IS.llProg =
 
 let from_dpt (ds : decls) (opgraph_recs : prog_opgraph) : IS.llProg =
   (* translation to IR currently does many passes over the backend, with each pass
-    translating a different part of the syntax tree. 
-    5/18/21 -- now that the final structure of the generated code 
-    is more concretely defined, we can redo this to translate in a single pass. 
+    translating a different part of the syntax tree.
+    5/18/21 -- now that the final structure of the generated code
+    is more concretely defined, we can redo this to translate in a single pass.
     This would make the code clearer and easier to extend. *)
   DBG.start_mlog __FILE__ outc dprint_endline;
   LLOp.start_logging ();
@@ -505,18 +496,16 @@ let from_dpt (ds : decls) (opgraph_recs : prog_opgraph) : IS.llProg =
   ctx_add_codegens dpt_builtin_fcns;
   (* put source decls into the context *)
   ctx_add_decls ds;
-  (* put event records in the context and generate 
+  (* put event records in the context and generate
      all the LL code for event declarations. *)
   let event_decls = TranslateEvents.translate_all ds in
-  (* generate struct declarations and instances for 
+  (* generate struct declarations and instances for
      other private Lucid-runtime only data. *)
   let dpt_struct_defs = gen_internal_structs () in
   (* generate parser for entry event instances. *)
   let parse_def = TranslateEvents.parsetree_from_events ds in
   (* generate backend defs for register arrays *)
   let regarray_defs = CL.map regdec_from_decl ds |> CL.flatten in
-  (* generate constants *)
-  let const_defs = CL.filter_map constdec_from_decl ds in
   (* generate constants for groups *)
   let group_defs = CL.filter_map groupdec_from_decl ds in
   (* translate operation statements into backend compute objects,
@@ -533,7 +522,6 @@ let from_dpt (ds : decls) (opgraph_recs : prog_opgraph) : IS.llProg =
     { tofino_prog with
       instr_dict =
         tofino_prog.instr_dict
-        @ IS.dict_of_decls const_defs
         @ IS.dict_of_decls group_defs
         @ IS.dict_of_decls regarray_defs
         @ IS.dict_of_decls event_decls

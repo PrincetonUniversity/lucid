@@ -1,12 +1,12 @@
-(* pre-compute every non-immediate argument of a 
+(* pre-compute every non-immediate argument of a
 function or hash expression *)
-open Syntax
+open CoreSyntax
 open Printf
 open Batteries
 open InterpHelpers
 module CL = Caml.List
 
-(* 5/19 -- don't precompute arguments to event combinators. This is 
+(* 5/19 -- don't precompute arguments to event combinators. This is
 temporary to support event combinators inlined with a generate statement. *)
 let exception_cids =
   [ LLEvent.event_delay_cid
@@ -23,7 +23,7 @@ let precompute_args ds =
 
       method! visit_statement ctx statement =
         let new_stmt = super#visit_statement ctx statement in
-        (* integrate any precompute statements generated 
+        (* integrate any precompute statements generated
       while transforming the tree. *)
         let all_stmts = pre_stmts @ [new_stmt] in
         pre_stmts <- [];

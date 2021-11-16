@@ -1,5 +1,5 @@
-open Syntax
-open SyntaxUtils
+open CoreSyntax
+module Printing = CorePrinting
 open Batteries
 module CL = Caml.List
 open InterpHelpers
@@ -11,7 +11,7 @@ let outc = ref None
 let dprint_endline = ref DBG.no_printf
 
 (*** context for translation from source to LLSyntax instructions. ***)
-(*** nothing in this context should be necessary to optimize the LLSyntax 
+(*** nothing in this context should be necessary to optimize the LLSyntax
      or translate it to P4. ***)
 
 (**** input and output of code generator functions ****)
@@ -21,7 +21,7 @@ type codegenInput =
     basename : Cid.t option
   ; retname : Cid.t option
   ; (* the variable to write return value to, if any *)
-    args : Syntax.exp list (* a tuple of arguments *)
+    args : exp list (* a tuple of arguments *)
   }
 
 type codegenOutput =
@@ -75,11 +75,10 @@ let ctx_find_decl_opt n =
 ;;
 
 (* add all the toplevel declarations to the context. *)
-let ctx_add_decls (ds : Syntax.decls) =
+let ctx_add_decls (ds : decls) =
   let iter_f dec =
     match dec.d with
     | DGlobal (id, _, _) | DMemop (id, _) -> ctx_add_decl (Cid.id id) dec
-    | DConst (id, _, _) -> ctx_add_decl (Cid.id id) dec
     | _ -> ()
   in
   CL.iter iter_f ds
@@ -95,23 +94,11 @@ let ctx_width_of_garr n =
   match ctx_find_decl n with
   | { d = DGlobal (_, ty, _); _ } ->
     begin
-      match TyTQVar.strip_links ty.raw_ty with
-      | TName (_, [sz], _) -> extract_size sz
+      match ty.raw_ty with
+      | TName (_, [sz], _) -> sz
       | _ -> error "Bad DGlobal type"
     end
   | _ -> error "could not find memop in decl context"
-;;
-
-let ctx_int_of_const var_id =
-  match ctx_find_decl var_id with
-  | { d = DConst (_, _, val_exp); _ } -> int_from_exp val_exp
-  | _ -> error "could not find const in decl context"
-;;
-
-let ctx_var_is_const var_id =
-  match ctx_find_decl_opt var_id with
-  | Some { d = DConst (_, _, _); _ } -> true
-  | _ -> false
 ;;
 
 (**** context code generator functions ****)
@@ -167,6 +154,7 @@ let ctx_find_event_struct_instance_cid cid =
   (ctx_find_eventrec cid).event_struct_instance
 ;;
 
+let ctx_find_event_struct_cid cid = (ctx_find_eventrec cid).event_struct
 let ctx_find_event_iid cid = (ctx_find_eventrec cid).event_iid
 
 (* remember the parameters of the event's handler. *)

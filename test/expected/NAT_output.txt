@@ -23,9 +23,9 @@ dropped
 t=300000: Handling entry event inside_packet(10,100) at switch 0
 Adding to NAT
 t=300600: Handling event add_to_nat(10,100) at switch 0
-Mapped (ip: 10, port: 100) to port 7
+Mapped (ip: 10, port: 100) to port 11
 t=400000: Handling entry event inside_packet(10,100) at switch 0
-IP already in NAT, maps to port 7
+IP already in NAT, maps to port 11
 t=500000: Handling entry event outside_packet(10) at switch 0
 Mapped port 10 to (ip: 0, port: 0)
 dropped
@@ -38,31 +38,31 @@ dropped
 t=800000: Handling entry event inside_packet(11,101) at switch 0
 Adding to NAT
 t=800600: Handling event add_to_nat(11,101) at switch 0
-Mapped (ip: 11, port: 101) to port 12
+Mapped (ip: 11, port: 101) to port 14
 t=900000: Handling entry event outside_packet(10) at switch 0
 Mapped port 10 to (ip: 0, port: 0)
 dropped
 t=1000000: Handling entry event outside_packet(12) at switch 0
-Mapped port 12 to (ip: 11, port: 101)
-t=1100000: Handling entry event outside_packet(14) at switch 0
-Mapped port 14 to (ip: 0, port: 0)
+Mapped port 12 to (ip: 0, port: 0)
 dropped
+t=1100000: Handling entry event outside_packet(14) at switch 0
+Mapped port 14 to (ip: 11, port: 101)
 dpt: Final State:
 
 Switch 0 : {
 
  Pipeline : [
-    0 : [0u32; 0u32; 0u32; 0u32; 0u32; 0u32; 0u32; 10u32; 0u32; 0u32; 0u32; 0u32; 11u32; 0u32; 0u32; 0u32]
-    1 : [0u32; 0u32; 0u32; 0u32; 0u32; 0u32; 0u32; 100u32; 0u32; 0u32; 0u32; 0u32; 101u32; 0u32; 0u32; 0u32]
+    0 : [0u32; 0u32; 0u32; 0u32; 0u32; 0u32; 0u32; 0u32; 0u32; 0u32; 0u32; 10u32; 0u32; 0u32; 11u32; 0u32]
+    1 : [0u32; 0u32; 0u32; 0u32; 0u32; 0u32; 0u32; 0u32; 0u32; 0u32; 0u32; 100u32; 0u32; 0u32; 101u32; 0u32]
   ]
 
  Events :   [ ]
 
  Exits :    [
-    inside_continue(7) at t=300600
-    inside_continue(7) at t=400000
-    inside_continue(12) at t=800600
-    outside_continue(11,101) at t=1000000
+    inside_continue(11) at t=300600
+    inside_continue(11) at t=400000
+    inside_continue(14) at t=800600
+    outside_continue(11,101) at t=1100000
   ]
 
  entry events handled: 12

@@ -1,4 +1,4 @@
-(* Abstract syntax of DPT *)
+(* Abstract syntax of Lucid *)
 open Batteries
 include TQVar.TQVar_tys
 
@@ -19,7 +19,7 @@ and size =
   | IConst of int
   | IUser of cid (* User-defined size *)
   | IVar of size tqvar
-  (* Normal form: list is non-emoty, sorted, and no entries are Link, IConst, or ISum *)
+  (* Normal form: list is non-empty, sorted, and no entries are Link, IConst, or ISum *)
   | ISum of sizes * int
 
 and sizes = size list
@@ -240,7 +240,7 @@ and decls = decl list
       ; concrete = true
       ; nude = true
       }
-  , visitors (* fold into a new tree but ignore tqvars *)
+  , visitors (* fold into a new tree but ignore tqvars. Currently unused. *)
       { name = "s_fold"; variety = "fold"; ancestors = ["tqvar_map"] }]
 
 (********************************)

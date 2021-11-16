@@ -1,7 +1,7 @@
 (* Translate events into LLSyntax
     - generate expressions
     - event combinators (not implemented yet) *)
-open Syntax
+open CoreSyntax
 open LLSyntax
 open InterpHelpers
 open LLContext

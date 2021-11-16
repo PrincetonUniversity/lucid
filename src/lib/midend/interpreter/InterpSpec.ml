@@ -1,5 +1,5 @@
 open Batteries
-open Syntax
+open CoreSyntax
 open Yojson.Basic
 open Preprocess
 module Env = InterpState.Env
@@ -29,9 +29,9 @@ let parse_int_entry lst str default =
   | None -> default
 ;;
 
-let rec parse_value sizes err_str ty j =
+let rec parse_value err_str ty j =
   match j, ty.raw_ty with
-  | `Int n, TInt size -> vint n (InterpCore.compute_size sizes size)
+  | `Int n, TInt size -> vint n size
   | `Bool b, TBool -> vbool b
   | `List lst, TGroup ->
     vgroup
@@ -58,7 +58,7 @@ let parse_events
     match event with
     | `Assoc lst ->
       (* Find the event name, accounting for the renaming pass, and get its
-        sort and argument types *)
+         sort and argument types *)
       let eid =
         match List.assoc "name" lst with
         | `String id -> rename renaming.var_map "event" id
@@ -67,11 +67,11 @@ let parse_events
       let sort, tys = Env.find eid pp.events in
       if sort = EExit then error "Cannot specify exit event";
       (* Parse the arguments into values, and make sure they have the right types.
-       At the moment only integer and boolean arguments are supported *)
+         At the moment only integer and boolean arguments are supported *)
       let data =
         match List.assoc "args" lst with
         | `List lst ->
-          (try List.map2 (parse_value pp.sizes "Event") tys lst with
+          (try List.map2 (parse_value "Event") tys lst with
           | Invalid_argument _ ->
             error
             @@ Printf.sprintf
@@ -130,7 +130,7 @@ let parse_externs
       let ty = Env.find id pp.externs in
       let vs =
         match values with
-        | `List lst -> List.map (parse_value pp.sizes "Extern" ty) lst
+        | `List lst -> List.map (parse_value "Extern" ty) lst
         | _ -> error "Non-list type for extern value specification"
       in
       if List.length vs <> num_switches

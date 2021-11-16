@@ -1,34 +1,35 @@
 (* Interpreter evaluation functions *)
 open Batteries
-open Syntax
+open CoreSyntax
 open SyntaxUtils
 open InterpState
 
-let rec compute_size env size =
-  match STQVar.strip_links size with
-  | IConst n -> n
-  | IUser cid ->
-    (match Env.find_opt cid env with
-    | Some n -> n
-    | None -> error @@ "Unbound size identifer " ^ Printing.cid_to_string cid)
-  | ISum (sizes, n) ->
-    n + List.fold_left (fun acc s -> acc + compute_size env s) 0 sizes
-  | IVar _ ->
-    (* If any IVars are left over, their size shouldn't matter *)
-    32
+let raw_integer v =
+  match v.v with
+  | VInt i -> i
+  | _ -> error "not integer"
 ;;
 
-let interp_size (nst : State.network_state) size = compute_size nst.sizes size
+let raw_bool v =
+  match v.v with
+  | VBool b -> b
+  | _ -> error "not boolean"
+;;
 
-let interp_op st op vs =
+let raw_event v =
+  match v.v with
+  | VEvent e -> e
+  | _ -> error "not event"
+;;
+
+let interp_op op vs =
   let vs = List.map extract_ival vs in
   match op, vs with
   | And, [v1; v2] -> vbool (raw_bool v1 && raw_bool v2)
   | Or, [v1; v2] -> vbool (raw_bool v1 || raw_bool v2)
   | Not, [v] -> vbool (not (raw_bool v))
   | Neg, [_] -> failwith "Not actually supported since all ints are unsigned"
-  | Cast size, [v] ->
-    vinteger (Integer.set_size (interp_size st size) (raw_integer v))
+  | Cast size, [v] -> vinteger (Integer.set_size size (raw_integer v))
   | Eq, [v1; v2] -> vbool (v1.v = v2.v)
   | Neq, [v1; v2] ->
     vbool (not (Integer.equal (raw_integer v1) (raw_integer v2)))
@@ -93,12 +94,11 @@ let interp_op st op vs =
       | RShift
       | Conc
       | Cast _
-      | Slice _
-      | TGet _ )
+      | Slice _ )
     , _ ) ->
     error
       ("bad operator: "
-      ^ Printing.op_to_string op
+      ^ CorePrinting.op_to_string op
       ^ " with "
       ^ string_of_int (List.length vs)
       ^ " arguments")
@@ -115,16 +115,9 @@ let rec interp_exp (nst : State.network_state) swid locals e : State.ival =
   match e.e with
   | EVal v -> V v
   | EVar cid -> lookup cid
-  | EInt (value, size) ->
-    let size =
-      match size with
-      | Some s -> interp_size nst s
-      | _ -> 32
-    in
-    V (vinteger (Integer.create_z ~value ~size))
   | EOp (op, es) ->
     let vs = interp_exps es in
-    V (interp_op nst op vs)
+    V (interp_op op vs)
   | ECall (cid, es) ->
     let vs = interp_exps es in
     (match lookup cid with
@@ -135,26 +128,18 @@ let rec interp_exp (nst : State.network_state) swid locals e : State.ival =
     | F f -> V (f nst swid vs))
   | EHash (size, args) ->
     let vs = interp_exps args in
+    let vs =
+      List.map
+        (function
+          | State.V v -> v.v
+          | _ -> failwith "What? No hashing functions!")
+        vs
+    in
     (match vs with
-    | V { v = VInt seed } :: tl ->
+    | VInt seed :: tl ->
       let hashed = Legacy.Hashtbl.seeded_hash (Integer.to_int seed) tl in
-      V (vint hashed (interp_size nst size))
+      V (vint hashed size)
     | _ -> failwith "Wrong arguments to hash operation")
-  | EProj _ | ERecord _ | EWith _ ->
-    Console.error_position
-      e.espan
-      "Record expressions and projection operators should be eliminated before \
-       interpretation"
-  | EComp _ | EIndex _ | EVector _ ->
-    Console.error_position
-      e.espan
-      "Vector expressions should be eliminated before interpretation"
-  | ETuple _ ->
-    Console.error_position
-      e.espan
-      "Tuple expressions should be eliminated before interpretation"
-  | ESizeCast _ | EStmt _ ->
-    Console.error_position e.espan "Should be eliminated before interpretation"
 
 and interp_exps nst swid locals es : State.ival list =
   List.map (interp_exp nst swid locals) es
@@ -269,7 +254,6 @@ let rec interp_statement nst swid locals s =
       | _ -> error "Match statement did not match any branch!"
     in
     interp_s (snd first_match)
-  | SLoop _ -> error "Loops should be eliminated before interpretation"
 ;;
 
 let interp_dglobal (nst : State.network_state) swid id ty e =
@@ -282,9 +266,9 @@ let interp_dglobal (nst : State.network_state) swid id ty e =
   let p = st.pipeline in
   let idx = Pipeline.length p in
   let gty_name, gty_sizes =
-    match TyTQVar.strip_links ty.raw_ty with
+    match ty.raw_ty with
     | TName (cid, sizes, _) -> Cid.names cid, sizes
-    | _ -> failwith "Bad DGLobal"
+    | _ -> failwith "Bad DGlobal"
   in
   let args =
     match e.e with
@@ -294,7 +278,6 @@ let interp_dglobal (nst : State.network_state) swid id ty e =
   let new_p =
     match gty_name, gty_sizes, args with
     | ["Array"; "t"], [size], [e] ->
-      let size = interp_size nst size in
       let len =
         interp_exp nst swid Env.empty e
         |> extract_ival
@@ -303,7 +286,6 @@ let interp_dglobal (nst : State.network_state) swid id ty e =
       in
       Pipeline.append_stage size len p
     | ["Counter"; "t"], [size], [e] ->
-      let size = interp_size nst size in
       let init_value =
         interp_exp nst swid Env.empty e |> extract_ival |> raw_integer
       in
@@ -322,7 +304,7 @@ let interp_dglobal (nst : State.network_state) swid id ty e =
          appeared during interpretation"
   in
   nst.switches.(swid) <- { st with pipeline = new_p };
-  State.add_global swid (Id id) (V (vglobal idx)) nst;
+  State.add_global swid (Id id) (V (vglobal idx ty)) nst;
   nst
 ;;
 
@@ -346,7 +328,7 @@ let interp_decl (nst : State.network_state) swid d =
       ignore @@ interp_statement nst swid locals body
     in
     State.add_handler (Cid.id id) f nst
-  | DEvent (id, _, _, _) ->
+  | DEvent (id, _, _) ->
     let f _ _ args =
       vevent
         { eid = Id id
@@ -356,26 +338,6 @@ let interp_decl (nst : State.network_state) swid d =
         }
     in
     State.add_global swid (Id id) (State.F f) nst;
-    nst
-  | DFun (id, _, _, (params, body)) ->
-    let st = nst.switches.(swid) in
-    let f nst swid args =
-      let locals =
-        List.fold_left2
-          (fun acc arg (id, _) -> Env.add (Id id) arg acc)
-          Env.empty
-          args
-          params
-      in
-      let _ = interp_statement nst swid locals body in
-      let ret = !(st.retval) in
-      st.retval := None;
-      match ret with
-      | Some v -> v
-      | _ -> vbool false
-      (* Dummy value for no return statement *)
-    in
-    State.add_global swid (Cid.id id) (State.F f) nst;
     nst
   | DMemop (id, (params, body)) ->
     (* Basically the same as a function *)
@@ -395,10 +357,6 @@ let interp_decl (nst : State.network_state) swid d =
     in
     State.add_global swid (Cid.id id) (State.F f) nst;
     nst
-  | DConst (x, _, e) ->
-    let v = interp_exp e in
-    State.add_global swid (Id x) v nst;
-    nst
   | DGroup (x, es) ->
     let vs =
       List.map (fun e -> interp_exp e |> extract_ival |> raw_integer) es
@@ -407,8 +365,6 @@ let interp_decl (nst : State.network_state) swid d =
     nst
   | DExtern _ ->
     failwith "Extern declarations should be handled during preprocessing"
-  | DUserTy _ | DConstr _ | DModule _ | DSymbolic _ | DSize _ ->
-    failwith "Should be eliminated"
 ;;
 
 let process_decls nst ds =

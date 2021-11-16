@@ -24,10 +24,12 @@
    integer
    span
    printing
+   corePrinting
    parser
    lexer
    syntax
    syntaxUtils
+   coreSyntax
    collections
    typer
    typerZ3
@@ -48,8 +50,12 @@
    eStmtElimination
    symbolicElimination
    replaceUserTys
+   partialInterpretation
+   constInlining
    linerate
    frontendPipeline
+   midendPipeline
+   syntaxToCore
    interp
    interpCore
    pipeline
@@ -70,7 +76,6 @@
    SLSyntax
    backendLogging
    poplPatches
-   eliminateConsts
    eliminateEqRangeOps
    addDefaultBranches
    precomputeArgs

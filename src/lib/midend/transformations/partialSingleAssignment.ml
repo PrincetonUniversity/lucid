@@ -9,7 +9,7 @@
   of a program into single assignment form, so that the
   layout stage doesn't generate semantically incorrect programs.
 *)
-open Syntax
+open CoreSyntax
 open Printf
 open BatMap
 open Batteries
@@ -82,12 +82,12 @@ let update_exp_for_one_var stmts (exp, newvar_decls) var_subexp =
       ^ ")");
     !dprint_endline
       ("[update_exp_for_one_var] changing variable: " ^ Id.to_string var_id);
-    let var_ty = ty_of_exp var_subexp in
+    let var_ty = var_subexp.ety in
     let new_var_cid = refresh_cid var_cid in
-    let new_var_subexp = aexp (EVar new_var_cid) (Some var_ty) Span.default in
+    let new_var_subexp = aexp (EVar new_var_cid) var_ty Span.default in
     let new_exp = replace_in_exp exp var_cid new_var_subexp in
     let new_var_decl =
-      slocal (Cid.to_id new_var_cid) (ty_of_exp var_subexp) var_subexp
+      slocal (Cid.to_id new_var_cid) var_subexp.ety var_subexp
     in
     new_exp, new_var_decl :: newvar_decls
   (* otherwise, do nothing. *)

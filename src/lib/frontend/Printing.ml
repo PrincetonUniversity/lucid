@@ -336,7 +336,9 @@ and stmt_to_string s =
       | None -> ""
     in
     Printf.sprintf "return%s;" estr
-  | SSeq (s1, s2) -> stmt_to_string s1 ^ "\n" ^ stmt_to_string s2
+  | SSeq (s1, s2) ->
+    let str1, str2 = stmt_to_string s1, stmt_to_string s2 in
+    if str1 = "" then str2 else if str2 = "" then str1 else str1 ^ "\n" ^ str2
   | SMatch (es, branches) ->
     let estr =
       let s = comma_sep exp_to_string es in

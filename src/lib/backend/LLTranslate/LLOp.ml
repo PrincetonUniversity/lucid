@@ -1,7 +1,8 @@
 (* translate individual operation statements from the
 source syntax to tofino compute objects *)
-open Syntax
-module Pr = Printing
+open CoreSyntax
+module Printing = CorePrinting
+module Pr = CorePrinting
 module IS = LLSyntax
 module GS = IS.Generators
 open InterpHelpers
@@ -16,25 +17,16 @@ module DBG = BackendLogging
 let outc = ref None
 let dprint_endline = ref DBG.no_printf
 
-(* 5/18 added these quickly, they belong... somewhere else... *)
-(* get the variables that are not consts. Used in keys. *)
-let dynamic_vars_in_exp (ex : exp) : Cid.t list =
-  vars_in_exp ex |> CL.filter (fun v -> not (ctx_var_is_const v))
-;;
-
 (* get an integer from an expression. If the expression is a const, get the computed value. *)
 let int_from_const_exp (ex : exp) =
   print_endline ("[int_from_exp]: " ^ Printing.exp_to_string ex);
   match ex.e with
   | EVal { v = VInt zint; _ } -> Integer.to_int zint
-  | EInt (z, _) ->
-    Z.to_int z (* Integer.create_z ~value:z ~size:(extract_size sz)  *)
-  | EVar cid -> LLContext.ctx_int_of_const cid
   | _ -> trans_err "could not evaluate expression to an int" ex
 ;;
 
 (***
-  TODO: refactor this its really messy. 
+  TODO: refactor this its really messy.
 ***)
 module TofinoStructs = struct
   (**** [11/21] new helpers ****)
@@ -151,7 +143,6 @@ let zint_from_evalue (immediate_exp : exp) =
         ("[zint_from_evalue] got value that cannot be translated directly into \
           IR: "
         ^ expstr))
-  | EInt (z, _) -> Integer.of_int (Z.to_int z)
   | _ ->
     error
       "[int_from_immediate] got value that cannot be translated directly into \
@@ -160,7 +151,7 @@ let zint_from_evalue (immediate_exp : exp) =
 
 let oper_from_immediate hdl_id (immediate_exp : exp) =
   match immediate_exp.e with
-  | EVal _ | EInt _ -> IS.Const (zint_from_evalue immediate_exp)
+  | EVal _ -> IS.Const (zint_from_evalue immediate_exp)
   | EVar cid -> Meta (mid_from_cid hdl_id cid)
   | _ ->
     let dstr =
@@ -171,12 +162,7 @@ let oper_from_immediate hdl_id (immediate_exp : exp) =
 ;;
 
 let oper_from_int (i : int) : IS.oper = IS.Const (const_from_int i)
-
-let oper_from_size (sz : size) : IS.oper =
-  match extract_size_opt sz with
-  | Some sz_int -> IS.Const (const_from_int sz_int)
-  | None -> error "[oper_from_size] -- could not extract int from size"
-;;
+let oper_from_size (sz : size) : IS.oper = IS.Const (const_from_int sz)
 
 let soper_from_immediate
     hdl_id
@@ -184,7 +170,7 @@ let soper_from_immediate
     (immediate_exp : exp)
   =
   match immediate_exp.e with
-  | EVal _ | EInt _ -> IS.Const (zint_from_evalue immediate_exp)
+  | EVal _ -> IS.Const (zint_from_evalue immediate_exp)
   | EVar n ->
     (match memcell_name with
     | Some memcell_name ->
@@ -229,7 +215,7 @@ module TofinoAlu = struct
     let alu_name = aluname_of_stmt opstmt in
     let alu_name, alu_obj =
       match val_exp.e with
-      | EVal _ | EInt _ | EVar _ ->
+      | EVal _ | EVar _ ->
         ( alu_name
         , IS.new_dsingleinstr
             alu_name
@@ -290,22 +276,13 @@ module TofinoAlu = struct
       | EHash (size, exps) ->
         (* let width = SyntaxUtils.extract_size size in *)
         (* hack for temporary cast *)
-        let width = SyntaxUtils.extract_size_default size 32 in
+        let width = size in
         let epoly = CL.hd exps in
         let poly = int_from_const_exp epoly in
         (* poly can be an integer or a const *)
         (* let poly = Integer.to_int (zint_from_evalue (CL.hd exps)) in  *)
         let args = CL.map (oper_from_immediate hdl_id) (CL.tl exps) in
         alu_name, IS.new_hasher alu_name width poly outvar_mid args
-      | EProj _
-      | ERecord _
-      | EWith _
-      | EComp _
-      | EIndex _
-      | EVector _
-      | ETuple _
-      | ESizeCast _
-      | EStmt _ -> error "Should be eliminated long before this point."
     in
     !dprint_endline
       (sprintf "[from_assign] created alu: " ^ Printing.cid_to_string alu_name);
@@ -469,11 +446,7 @@ module TofinoControl = struct
       ("trying to find width of type: " ^ Printing.ty_to_string var_ty);
     (* let width = width_from_ty var_ty in  *)
     (* HACK (7/6/21) -- should figure out what is wrong here. Probably related to consts. *)
-    let width =
-      match width_from_ty_opt var_ty with
-      | Some width -> width
-      | None -> 32
-    in
+    let width = width_from_ty var_ty in
     let meta_obj = IS.new_globalmeta outvar_mid width in
     meta_obj :: assign_objs
   ;;
@@ -605,7 +578,7 @@ module TofinoControl = struct
   let get_atom_exps = flatten_conjunction
 
   let get_keys hdl_id exp =
-    let keys = dynamic_vars_in_exp exp |> CL.map (mid_from_cid hdl_id) in
+    let keys = vars_in_exp exp |> CL.map (mid_from_cid hdl_id) in
     print_endline "KEYS: ";
     CL.iter (fun k -> print_endline (Cid.to_string k)) keys;
     print_endline "-----";

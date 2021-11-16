@@ -23,6 +23,7 @@ val to_string_delim : string -> t -> string
 val names : t -> string list
 val to_id : t -> Id.t
 val to_ids : t -> Id.t list
+val first_id : t -> Id.t
 val last_id : t -> Id.t
 
 (* Operations *)

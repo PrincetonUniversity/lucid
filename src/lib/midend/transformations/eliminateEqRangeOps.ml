@@ -1,7 +1,7 @@
-(* convert: 
-  (x >= y) --> (x > y || x == y) 
+(* convert:
+  (x >= y) --> (x > y || x == y)
   (x <= y) --> (x < y || x == y) *)
-open Syntax
+open CoreSyntax
 
 let transform ds =
   let v =
@@ -14,14 +14,12 @@ let transform ds =
           super#visit_EOp
             ctx
             Or
-            [ exp_sp (EOp (Less, exps)) Span.default
-            ; exp_sp (EOp (Eq, exps)) Span.default ]
+            [exp (EOp (Less, exps)) (ty TBool); exp (EOp (Eq, exps)) (ty TBool)]
         | Geq ->
           super#visit_EOp
             ctx
             Or
-            [ exp_sp (EOp (More, exps)) Span.default
-            ; exp_sp (EOp (Eq, exps)) Span.default ]
+            [exp (EOp (More, exps)) (ty TBool); exp (EOp (Eq, exps)) (ty TBool)]
         | _ -> super#visit_EOp ctx op exps
     end
   in

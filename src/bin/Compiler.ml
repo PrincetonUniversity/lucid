@@ -101,79 +101,6 @@ let dump_decls_from_dagprog logname dagprog =
 ;;
 
 (**** compiler passes ****)
-(* this should be the same as (most of) Main.main() *)
-let cfg = Cmdline.cfg
-let enable_compound_expressions = true
-let do_ssa = false
-
-(* normalize code before translating to ir. *)
-let middle_passes ds =
-  let cfg = { cfg with verbose = true } in
-  let print_if_verbose ds =
-    if cfg.verbose
-    then (
-      print_endline "decls: ";
-      let str = Printing.decls_to_string ds in
-      Console.report str)
-  in
-  Cmdline.cfg.verbose_types <- true;
-  (* eliminate Gte and Lte *)
-  let ds = EliminateEqRangeOps.transform ds in
-  (* temporary patches for incomplete features *)
-  let ds = PoplPatches.eliminate_noncall_units ds in
-  let ds = PoplPatches.delete_prints ds in
-  (* let ds = PoplPatches.replace_ineqs ds in *)
-  print_endline "------prog at start of middle passes-------";
-  print_if_verbose ds;
-  print_endline "------prog at start of middle passes-------";
-  report "deleting unit statements that are not calls.";
-  let ds = Typer.infer_prog ds in
-  report "eliminating constants.";
-  let ds = EliminateConsts.eliminate_consts ds in
-  let ds = Typer.infer_prog ds in
-  report "adding default branches.";
-  let ds = AddDefaultBranches.add_default_branches ds in
-  let ds = Typer.infer_prog ds in
-  let ds =
-    match do_ssa with
-    | true ->
-      let ds = SingleAssignment.transform ds in
-      Typer.infer_prog ds
-    | false ->
-      let ds = Typer.infer_prog ds in
-      report "partial SSA";
-      print_endline "----------before partial SSA-----------";
-      print_if_verbose ds;
-      print_endline "----------before partial SSA-----------";
-      let ds = PartialSingleAssignment.const_branch_vars ds in
-      report "type checking after partial SSA";
-      print_endline "----------after partial SSA-----------";
-      print_if_verbose ds;
-      print_endline "----------after partial SSA-----------";
-      Typer.infer_prog ds
-  in
-  let ds =
-    match enable_compound_expressions with
-    | true ->
-      (* normalize arguments *)
-      let ds = PrecomputeArgs.precompute_args ds in
-      (* get rid of boolean expressions *)
-      let ds = EliminateBools.do_passes ds in
-      (* convert integer operations into atomic exps *)
-      let ds = NormalizeInts.do_passes ds in
-      ds
-    | false ->
-      (* get rid of boolean expressions, but don't do the other
-         transformations that normalize expression format. *)
-      let ds = EliminateBools.do_passes ds in
-      (* let ds = EliminateBools.elimination_only ds in  *)
-      ds
-  in
-  (* give all the spans in a program unique IDs. This should be a middle pass, before translate. *)
-  let ds = UniqueSpans.make_unique_spans ds in
-  ds
-;;
-
 (* do a few final pre-ir setup and temporary passes *)
 let final_ir_setup ds =
   (* make sure all the event parameters have unique ids *)
@@ -216,8 +143,8 @@ let backend_passes df_prog =
   straightline_prog
 ;;
 
-(* right now, the interpreter is setting the extern 
-   variables in its global state. They aren't getting 
+(* right now, the interpreter is setting the extern
+   variables in its global state. They aren't getting
    replaced with constants or anything. *)
 let parse_externs_from_interp_spec spec_file =
   let json = from_file spec_file in
@@ -240,14 +167,14 @@ let compile_to_tofino target_filename p4_harness_fn config_fn interp_spec_fn =
   (* frontend eliminates most abstractions (modules, functions) *)
   let _, ds = FrontendPipeline.process_prog ds in
   (* middle passes do a bit of regularization of the syntax tree *)
-  let ds = middle_passes ds in
+  let ds = MidendPipeline.process_prog ds in
   (* convert to IR for backend *)
   let dag_instructions = to_ir ds in
   (* backend passes do optimization and layout. *)
   let straightline_dpa_prog = backend_passes dag_instructions in
   (* printing: to blocks of P4 *)
   let p4_obj_dict = P4tPrint.from_straightline straightline_dpa_prog in
-  (* the linker is really just a simple macro engine. Pass it an associative 
+  (* the linker is really just a simple macro engine. Pass it an associative
      list: (pragma string, code string to replace macro with) *)
   (* generate the entry event trigger table *)
   (* generate entry event triggers (if any) from config file *)

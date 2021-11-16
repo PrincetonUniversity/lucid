@@ -30,6 +30,7 @@ let main () =
   | None ->
     Console.report "No specification file provided, so skipping simulation"
   | Some spec_file ->
+    let ds = MidendPipeline.process_prog ~for_interp:true ds in
     Console.report "Simulating...";
     let nst = Interp.initialize renaming spec_file ds in
     let nst = Interp.simulate nst in

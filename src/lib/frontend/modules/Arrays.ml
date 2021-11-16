@@ -75,9 +75,9 @@ let update_fun err nst swid args =
     ; getarg
     ; F setop
     ; setarg ] ->
-    let get_f arg = getop nst swid [V (vinteger arg); getarg] in
+    let get_f arg = getop nst swid [V (CoreSyntax.vinteger arg); getarg] in
     let set_f arg =
-      match setop nst swid [V (vinteger arg); setarg] with
+      match setop nst swid [V (CoreSyntax.vinteger arg); setarg] with
       | { v = VInt v } -> v
       | _ -> err "Wrong type of value from set op"
     in
@@ -88,7 +88,7 @@ let update_fun err nst swid args =
 let array_update_fun = update_fun array_update_error
 let dummy_memop = State.F (fun _ _ args -> extract_ival (List.hd args))
 let setop = State.F (fun _ _ args -> extract_ival (List.nth args 1))
-let dummy_int = State.V (vinteger (Integer.of_int 0))
+let dummy_int = State.V (CoreSyntax.vinteger (Integer.of_int 0))
 
 (* Array.get *)
 let array_get_name = "get"

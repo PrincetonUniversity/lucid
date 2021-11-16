@@ -54,10 +54,11 @@ let counter_add_ty =
 
 let dummy_memop = State.F (fun _ _ args -> extract_ival (List.hd args))
 let setop = State.F (fun _ _ args -> extract_ival (List.nth args 1))
-let dummy_int = State.V (vinteger (Integer.of_int 0))
+let dummy_int = State.V (CoreSyntax.vinteger (Integer.of_int 0))
 
 let counter_add_fun nst swid args =
   let open State in
+  let open CoreSyntax in
   match args with
   | [V { v = VGlobal stage }; V { v = VInt addval }] ->
     let get_f arg = vinteger arg in
