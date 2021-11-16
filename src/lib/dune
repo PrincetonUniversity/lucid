@@ -54,6 +54,7 @@
    constInlining
    linerate
    frontendPipeline
+   midendPipeline
    syntaxToCore
    interp
    interpCore

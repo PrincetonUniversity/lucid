@@ -71,14 +71,5 @@ let process_prog ds =
   (* Just to be safe *)
   let ds = Typer.infer_prog ds in
   print_if_debug ds;
-  let ds = SyntaxToCore.translate_prog ds in
-  (* Maybe this part should go in a new "midend" section *)
-  (* print_if_verbose "-------Partially interpreting-------";
-  let ds = PartialInterpretation.interp_prog ds in
-  if Cmdline.cfg.debug
-  then (
-    print_endline "decls: ";
-    let str = CorePrinting.decls_to_string ds in
-    Console.report str); *)
   renaming, ds
 ;;
