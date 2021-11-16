@@ -46,11 +46,12 @@ module TofinoStructs = struct
   (**** translate structure names ****)
 
   (* get the qualified struct id *)
-  let qualify_struct struct_id struct_ty = 
-    let outer_struct = match struct_ty with
-    | IS.SHeader -> (Id.create hdr_instance_prefix)
-    | IS.SMeta -> (Id.create md_instance_prefix)
-    in 
+  let qualify_struct struct_id struct_ty =
+    let outer_struct =
+      match struct_ty with
+      | IS.SHeader -> Id.create hdr_instance_prefix
+      | IS.SMeta -> Id.create md_instance_prefix
+    in
     Cid.compound outer_struct struct_id
   ;;
 
@@ -346,47 +347,45 @@ module TofinoAlu = struct
         (ctx_find_event_iid ev_id)
     ; GS.int_assign_instr (Cid.concat ev_struct_id event_mc_field) 0
     ; GS.int_assign_instr (Cid.concat ev_struct_id event_loc_field) 0
-    ; GS.int_assign_instr (Cid.concat ev_struct_id event_delay_field) 0
-    ]
-    @ (* background events are carried in headers that need to be set to valid. 
+    ; GS.int_assign_instr (Cid.concat ev_struct_id event_delay_field) 0 ]
+    @
+    (* background events are carried in headers that need to be set to valid. 
          Background events must also be sure to set up the footer. *)
-    ( match evrec.event_sort with 
-      | EBackground -> 
-        [ GS.validate_instr ev_struct_id
-        ; GS.validate_instr (TofinoStructs.qualify_struct footer IS.SHeader)
-        ; GS.int_assign_instr 
-            (TofinoStructs.qualify_struct 
-              (Cid.concat footer (CL.hd footer_fields |> fst))
-              IS.SHeader
-            )
-            0
-        ]
-      | _ -> []
-    )
+    match evrec.event_sort with
+    | EBackground ->
+      [ GS.validate_instr ev_struct_id
+      ; GS.validate_instr (TofinoStructs.qualify_struct footer IS.SHeader)
+      ; GS.int_assign_instr
+          (TofinoStructs.qualify_struct
+             (Cid.concat footer (CL.hd footer_fields |> fst))
+             IS.SHeader)
+          0 ]
+    | _ -> []
   ;;
 
   let runtime_meta_init_instrs ev_id =
     (* todo: want a cleaner way to access the elements of the runtime metadata struct. *)
     let evrec = ctx_find_eventrec ev_id in
     let event_iid = evrec.event_iid in
-    match evrec.event_sort with 
-      | EBackground -> 
-        let ev_ct_cid = Cid.create [md_instance_prefix; dpt_meta_str; events_count_str] in 
-        [
-          (* md.dptMeta.nextEvent = i:int *)
-          GS.int_assign_instr (Cid.create [md_instance_prefix; dpt_meta_str; next_event_str]) event_iid
-          (* md.dptMeta.eventCt += 1 *)
-        ; GS.incr_assign_instr ev_ct_cid ev_ct_cid 1
-          (* md.eventGeneratedFlags.<eventname> = 1 *)
-        ; GS.validate_instr event_out_flags_instance
-        ; GS.int_assign_instr evrec.event_generated_flag 1
-        ]
-      | EEntry _ | EExit -> 
-        [
-          (* md.dptMeta.exitEvent = i:int *)
-          GS.int_assign_instr (Cid.create [md_instance_prefix; dpt_meta_str; exit_event_str]) event_iid
-        ]
-
+    match evrec.event_sort with
+    | EBackground ->
+      let ev_ct_cid =
+        Cid.create [md_instance_prefix; dpt_meta_str; events_count_str]
+      in
+      [ (* md.dptMeta.nextEvent = i:int *)
+        GS.int_assign_instr
+          (Cid.create [md_instance_prefix; dpt_meta_str; next_event_str])
+          event_iid
+        (* md.dptMeta.eventCt += 1 *)
+      ; GS.incr_assign_instr ev_ct_cid ev_ct_cid 1
+        (* md.eventGeneratedFlags.<eventname> = 1 *)
+      ; GS.validate_instr event_out_flags_instance
+      ; GS.int_assign_instr evrec.event_generated_flag 1 ]
+    | EEntry _ | EExit ->
+      [ (* md.dptMeta.exitEvent = i:int *)
+        GS.int_assign_instr
+          (Cid.create [md_instance_prefix; dpt_meta_str; exit_event_str])
+          event_iid ]
   ;;
 
   (* generate an alu instruction from the instantiation of an event *)
