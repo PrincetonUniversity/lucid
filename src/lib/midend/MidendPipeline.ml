@@ -15,6 +15,7 @@ let do_ssa = false
 let process_prog ?(for_interp = false) ds =
   print_if_verbose "-------Translating to core syntax---------";
   let ds = SyntaxToCore.translate_prog ds in
+  LogIr.log_lucid "midend_start.dpt" ds;
   print_if_debug ds;
   print_if_verbose "-------Partial interpreting---------";
   
@@ -66,5 +67,7 @@ let process_prog ?(for_interp = false) ds =
     print_if_debug ds;
     (* give all the spans in a program unique IDs. This should be a middle pass, before translate. *)
     let ds = UniqueSpans.make_unique_spans ds in
+    (* log the program at the end of the mid end *)
+    LogIr.log_lucid "midend_end.dpt" ds;
     ds
 ;;

@@ -23,54 +23,13 @@ let log_rules rules =
 
 (* let log_prog cid_decls = DBG.printf outc "----\n%s\n----\n" (str_of_prog cid_decls) ;; *)
 
-(* push the constraints on table tbl_id to every one of its successor table. *)
-let push_constraints_to_successors cid_decls tbl_id =
-  (* if the successor is a join table, we have to 
-		propagate conditions with a parallel merge 
-		instead of a sequential merge.  *)
-  let succ_tids = succs_of_tid cid_decls tbl_id in
-  DBG.printf
-    outc
-    "pushing constraints from %s --> %s\n"
-    (P4tPrint.str_of_private_oid tbl_id)
-    (str_of_cids succ_tids);
-  let push_constraint_to_successor cid_decls succ_tid =
-    DBG.printf
-      outc
-      "[push_constraints_to_successor] PROPAGATING CONSTRAINTS %s --> %s\n"
-      (P4tPrint.str_of_private_oid tbl_id)
-      (P4tPrint.str_of_private_oid succ_tid);
-    DBG.printf
-      outc
-      "[push_constraints_to_successor] PREDECESSOR (%s)\n"
-      (P4tPrint.str_of_private_oid tbl_id);
-    (* DBG.printf outc "%s\n" (p4str_from_tid cid_decls tbl_id); *)
-    DBG.printf
-      outc
-      "[push_constraints_to_successor] SUCCESSOR (%s)\n"
-      (P4tPrint.str_of_private_oid succ_tid);
-    (* DBG.printf outc "%s\n" (p4str_from_tid cid_decls succ_tid); *)
-    let cid_decls =
-      match is_join_tbl cid_decls succ_tid with
-      | false ->
-        DBG.printf
-          outc
-          "[push_constraints_to_successor] propagating with ALL_MUST_MATCH\n";
-        MU.propagate_condition_generic MU.AllMustMatch cid_decls tbl_id succ_tid
-      | true ->
-        DBG.printf
-          outc
-          "[push_constraints_to_successor] propagating with ONE_MUST_MATCH\n";
-        MU.propagate_condition_generic MU.OneMustMatch cid_decls tbl_id succ_tid
-    in
-    DBG.printf
-      outc
-      "[push_constraints_to_successor] UPDATED SUCCESSOR (%s)\n"
-      (P4tPrint.str_of_private_oid succ_tid);
-    (* DBG.printf outc "%s\n" (p4str_from_tid cid_decls succ_tid); *)
-    cid_decls
-  in
-  CL.fold_left push_constraint_to_successor cid_decls succ_tids
+let num_keys_of_tid tbl_id cid_decls = 
+  let tbl = Cid.lookup cid_decls tbl_id in 
+  let keys = keys_of_table tbl in 
+  CL.length keys 
+;;
+
+let num_merges = ref 1
 ;;
 
 (* visit tbl_id, considering it as a successor node
@@ -86,10 +45,20 @@ let visit_tbl_as_succ tbl_id cid_decls =
     cid_decls
   (* one predecessor: add the predecessor's constraints to your constraints. *)
   | [pred_id] ->
-    MU.propagate_condition_generic MU.AllMustMatch cid_decls pred_id tbl_id
+    let new_cid_decls = MU.propagate_condition_generic MU.AllMustMatch cid_decls pred_id tbl_id in 
+    print_endline (sprintf "[visit_tbl_as_succ] merge %i: %i tables " (!num_merges) 2);
+    num_merges := (!num_merges + 1);
+    print_endline (sprintf "[visit_tbl_as_succ] created a single-op table with %i keys" (num_keys_of_tid tbl_id new_cid_decls));
+    new_cid_decls
   (* more than 1 predecessor, merge all the predecessor conditions together, then 
 		   call the same method as above. *)
-  | pred_ids -> MU.merge_pred_conditions cid_decls pred_ids tbl_id
+  | pred_ids -> 
+    print_endline (sprintf "[visit_tbl_as_succ] merge %i: %i tables " (!num_merges) ((CL.length pred_ids)+1));
+    num_merges := (!num_merges + 1);
+    let new_cid_decls = MU.merge_pred_conditions cid_decls pred_ids tbl_id in 
+    print_endline (sprintf "[visit_tbl_as_succ] created a single-op table with %i keys" (num_keys_of_tid tbl_id new_cid_decls));
+    new_cid_decls
+
 ;;
 
 (* visit node_id in unmodified graph g. transform cid_decls and the graph *)

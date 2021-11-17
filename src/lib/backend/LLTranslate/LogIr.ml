@@ -6,7 +6,9 @@ module CL = Caml.List
 (**** Print Lucid program ****)
 let log_lucid fn ds =
   let full_fn = !BackendLogging.irLogDir ^ "/" ^ fn in
-  Printf.fprintf (open_out full_fn) "%s" (CorePrinting.decls_to_string ds)
+  let outf = (open_out full_fn) in 
+  Printf.fprintf outf "%s" (CorePrinting.decls_to_string ds);
+  flush outf
 ;;
 
 (* log program before and after a source pass *)
