@@ -243,8 +243,8 @@ let new_is_r_still_feasible (r : rule) (qs : rule list) =
   Solver.add solver [intersect_eqn];
   let is_sat = Solver.check solver [] in
   match is_sat with
-  | SATISFIABLE -> print_endline ("SAT");  true
-  | UNSATISFIABLE -> print_endline ("UNSAT"); false
+  | SATISFIABLE ->true
+  | UNSATISFIABLE -> false
   | UNKNOWN ->
     Printf.printf "unknown\n";
     error "unknown sat..."
