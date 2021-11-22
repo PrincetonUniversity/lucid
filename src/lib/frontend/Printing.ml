@@ -125,7 +125,7 @@ let rec raw_ty_to_string t =
     cid_to_string cid
     ^ sizes_to_string sizes
     ^ if cfg.verbose_types then "{" ^ string_of_bool b ^ "}" else ""
-  | TEvent b -> if b then "mevent" else "event"
+  | TEvent -> "event"
   | TFun func -> func_to_string func
   | TMemop (size1, size2) ->
     Printf.sprintf
@@ -223,24 +223,17 @@ let rec v_to_string v =
 
 and value_to_string v = v_to_string v.v
 
-and event_to_string { eid; data; edelay; elocations } =
-  let locstr =
-    match elocations with
-    | [] -> "self"
-    | _ -> list_to_string location_to_string elocations
-  in
-  let locstr = if cfg.verbose_types then "@" ^ locstr else "" in
+and event_to_string { eid; data; edelay } =
   let delaystr =
     if edelay <> 0 && cfg.verbose_types
     then "@" ^ string_of_int edelay ^ "ns"
     else ""
   in
   Printf.sprintf
-    "%s(%s)%s%s"
+    "%s(%s)%s"
     (cid_to_string eid)
     (comma_sep value_to_string data)
     delaystr
-    locstr
 ;;
 
 let rec e_to_string e =
@@ -309,13 +302,24 @@ and stmt_to_string s =
   | SNoop -> ""
   | SGen (b, e) ->
     (match b with
-    | GSingle -> Printf.sprintf "generate %s;" (exp_to_string e)
-    | GMulti -> Printf.sprintf "mgenerate %s;" (exp_to_string e)
-    | GPort p ->
+    | GSingle eo ->
+      (match eo with
+      | None -> Printf.sprintf "generate %s;" (exp_to_string e)
+      | Some loc ->
+        Printf.sprintf
+          "generate_single (%s, %s)"
+          (exp_to_string loc)
+          (exp_to_string e))
+    | GMulti loc ->
+      Printf.sprintf
+        "generate_multi (%s, %s);"
+        (exp_to_string loc)
+        (exp_to_string e)
+    | GPort loc ->
       Printf.sprintf
         "generate_port (%s, %s);"
-        (exp_to_string e)
-        (exp_to_string p))
+        (exp_to_string loc)
+        (exp_to_string e))
   | SLocal (i, t, e) ->
     Printf.sprintf
       "%s %s = %s;"

@@ -42,9 +42,9 @@ rule token = parse
   | "int"             { TINT (position lexbuf) }
   | "bool"            { TBOOL (position lexbuf) }
   | "event"           { EVENT (position lexbuf) }
-  | "mevent"          { MEVENT (position lexbuf) }
   | "generate"        { GENERATE (position lexbuf) }
-  | "mgenerate"       { MGENERATE (position lexbuf) }
+  | "generate_single" { SGENERATE (position lexbuf) }
+  | "generate_multi"  { MGENERATE (position lexbuf) }
   | "generate_port"   { PGENERATE (position lexbuf) }
   | "printf"          { PRINTF (position lexbuf) }
   | "handle"	        { HANDLE (position lexbuf) }

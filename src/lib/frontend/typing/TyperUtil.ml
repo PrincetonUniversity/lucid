@@ -217,7 +217,7 @@ let mk_event_ty constrs params =
   ty
   @@ TFun
        { arg_tys = List.map snd params
-       ; ret_ty = ty (TEvent false) (* Events are singlecast by default *)
+       ; ret_ty = ty TEvent
        ; start_eff = eff
        ; end_eff = eff
        ; constraints = ref constrs

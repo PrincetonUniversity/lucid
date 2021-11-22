@@ -15,7 +15,7 @@ let builtin_defs = Arrays.defs @ Counters.defs @ Events.defs @ System.defs
 
 (* Not a global var *)
 let this_id = Id.create "this"
-let this_ty = ty @@ TEvent false
+let this_ty = TEvent |> ty
 
 (* Used in constraints *)
 let start_id = Id.create "start"

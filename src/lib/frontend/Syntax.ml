@@ -47,7 +47,7 @@ and raw_ty =
   | TVoid
   | TGroup
   | TInt of size (* Number of bits *)
-  | TEvent of bool (* True iff multicast *)
+  | TEvent
   | TFun of func_ty
   | TMemop of size * size
   | TName of cid * sizes * bool (* Named type: e.g. "Array.t<<32>>". Bool is true if it represents a global type *)
@@ -117,7 +117,6 @@ and event =
   { eid : cid
   ; data : value list
   ; edelay : int
-  ; elocations : location list
   }
 
 and value =
@@ -153,8 +152,8 @@ and exp =
 and branch = pat list * statement
 
 and gen_type =
-  | GSingle
-  | GMulti
+  | GSingle of exp option (* switch id *)
+  | GMulti of exp (* Multicast group name *)
   | GPort of exp
 
 (* statements *)
