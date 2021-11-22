@@ -106,6 +106,7 @@
 %token <Span.t> SATPLUS
 %token <Span.t> BITNOT
 %token <Span.t> SYMBOLIC
+%token <Span.t> FLOOD
 
 %token EOF
 
@@ -119,7 +120,7 @@
 %left CONCAT
 %left BITAND BITXOR PIPE LSHIFT RSHIFT
 %nonassoc PROJ
-%right NOT BITNOT RPAREN
+%right NOT FLOOD BITNOT RPAREN
 %right LBRACKET /* highest precedence */
 
 
@@ -212,6 +213,7 @@ exp:
     | LBRACKET exps RBRACKET              { vector_sp $2 (Span.extend $1 $3) }
     | SIZECAST LPAREN size RPAREN             { szcast_sp (IConst 32) (snd $3) (Span.extend $1 $4) }
     | SIZECAST single_poly LPAREN size RPAREN { szcast_sp (snd $2) (snd $4) (Span.extend $1 $5) }
+    | FLOOD exp { flood_sp $2 (Span.extend $1 $2.espan) }
 
 exps:
   | exp                                 { [$1] }

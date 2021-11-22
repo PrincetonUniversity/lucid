@@ -12,7 +12,7 @@ and z = [%import: (Z.t[@opaque])]
 
 and zint = [%import: (Integer.t[@with Z.t := (Z.t [@opaque])])]
 
-and location = zint
+and location = int
 
 (* All sizes should be inlined and precomputed *)
 and size = int
@@ -98,6 +98,7 @@ and e =
   | EOp of op * exp list
   | ECall of cid * exp list
   | EHash of size * exp list
+  | EFlood of exp
 
 and exp =
   { e : e

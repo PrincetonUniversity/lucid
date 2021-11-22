@@ -133,6 +133,7 @@ and e =
   | EOp of op * exp list
   | ECall of cid * exp list
   | EHash of size * exp list
+  | EFlood of exp (* Generate a group of all ports but one *)
   | ESizeCast of size * size (* Cast a size to int *)
   | EStmt of statement * exp
   | ERecord of (string * exp) list
@@ -350,6 +351,7 @@ let index_sp lst idx span = exp_sp (EIndex (lst, idx)) span
 let comp_sp e i k span = exp_sp (EComp (e, i, k)) span
 let vector_sp es span = exp_sp (EVector es) span
 let szcast_sp sz1 sz2 span = exp_sp (ESizeCast (sz1, sz2)) span
+let flood_sp e span = exp_sp (EFlood e) span
 
 (* declarations *)
 let decl d = { d; dspan = Span.default }

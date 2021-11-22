@@ -116,6 +116,7 @@ let rec interp_exp env e =
     { e with e = ECall (cid, List.map (interp_exp env) args) }
   | EHash (sz, args) ->
     { e with e = EHash (sz, List.map (interp_exp env) args) }
+  | EFlood e' -> { e with e = EFlood (interp_exp env e') }
   | EOp (op, args) -> { e with e = interp_op env op args }
 
 (* Mostly copied from InterpCore, could maybe merge the two functions *)

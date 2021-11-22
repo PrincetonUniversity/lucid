@@ -84,6 +84,10 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
     let hd = List.hd inf_es in
     unify_ty hd.espan (Option.get hd.ety) (mk_ty @@ TInt (fresh_size ()));
     env, { e with e = EHash (size, inf_es); ety = Some (mk_ty @@ TInt size) }
+  | EFlood e1 ->
+    let env, inf_e, inf_ety = infer_exp env e1 |> textract in
+    unify_ty e.espan inf_ety (mk_ty @@ TInt (fresh_size ()));
+    env, { e with e = EFlood inf_e; ety = Some (mk_ty @@ TGroup) }
   | ECall (f, args) ->
     let _, _, inferred_fty =
       (* Get type of f as if we used the var rule for the function *)

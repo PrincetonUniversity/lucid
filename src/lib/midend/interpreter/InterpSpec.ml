@@ -36,10 +36,7 @@ let rec parse_value err_str ty j =
   | `Int n, TInt size -> vint n size
   | `Bool b, TBool -> vbool b
   | `List lst, TGroup ->
-    vgroup
-      (List.map
-         (fun n -> Integer.of_int @@ parse_int "group value definition" n)
-         lst)
+    vgroup (List.map (fun n -> parse_int "group value definition" n) lst)
   | _ ->
     error
     @@ err_str

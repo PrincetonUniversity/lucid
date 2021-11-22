@@ -10,7 +10,7 @@ let integer_to_string n =
   if cfg.verbose_types then Integer.to_string n else Integer.value_string n
 ;;
 
-let location_to_string l = integer_to_string l
+let location_to_string l = string_of_int l
 let id_to_string id = if cfg.verbose_types then Id.to_string id else Id.name id
 
 let cid_to_string cid =
@@ -130,6 +130,7 @@ let rec e_to_string e =
     Printf.sprintf "%s(%s)" (cid_to_string cid) (es_to_string es)
   | EHash (size, es) ->
     Printf.sprintf "hash<<%s>>(%s)" (size_to_string size) (es_to_string es)
+  | EFlood e -> Printf.sprintf "flood %s" (exp_to_string e)
 
 and exp_to_string e = e_to_string e.e
 and es_to_string es = comma_sep exp_to_string es
@@ -154,7 +155,7 @@ and stmt_to_string s =
       let gen_str, loc =
         match g with
         | GSingle eo -> "generate_switch", Option.get eo
-        | GMulti loc -> "generate_multi", loc
+        | GMulti loc -> "generate_ports", loc
         | GPort loc -> "generate_port", loc
       in
       Printf.sprintf

@@ -1,0 +1,18 @@
+{
+  "switches": 5,
+  "links": {
+    "0:1" : "1:0",
+    "2:1" : "1:2",
+    "2:3" : "3:2",
+    "2:4" : "4:2"
+  },
+  "max time": 9999999,
+  "default input gap": 10000,
+  "random seed": 0,
+  "events": [
+    {"name":"eth", "args": [0, 1], "locations":["0:7"]},
+    {"name":"eth", "args": [1, 0], "locations":["3:9"]},
+    {"name":"eth", "args": [2, 1], "locations":["4:42"]},
+    {"name":"eth", "args": [0, 2], "locations":["0:7"]}
+  ]
+}

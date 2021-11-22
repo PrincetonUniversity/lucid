@@ -73,7 +73,7 @@ let rec translate_value (v : S.value) : C.value =
     | S.VBool b -> C.VBool b
     | S.VInt z -> C.VInt z
     | S.VGlobal n -> C.VGlobal n
-    | S.VGroup ls -> C.VGroup ls
+    | S.VGroup ls -> C.VGroup (List.map Integer.to_int ls)
     | VEvent { eid; data; edelay } ->
       C.VEvent { eid; data = List.map translate_value data; edelay }
   in
@@ -91,6 +91,7 @@ let rec translate_exp (e : S.exp) : C.exp =
     | S.EOp (op, es) -> C.EOp (translate_op op, List.map translate_exp es)
     | S.ECall (cid, es) -> C.ECall (cid, List.map translate_exp es)
     | S.EHash (sz, es) -> C.EHash (translate_size sz, List.map translate_exp es)
+    | S.EFlood e -> C.EFlood (translate_exp e)
     | _ -> err e.espan (Printing.exp_to_string e)
   in
   { e = e'; ety = translate_ty (Option.get e.ety); espan = e.espan }

@@ -259,6 +259,7 @@ let rec e_to_string e =
     Printf.sprintf "%s(%s)" (cid_to_string cid) (es_to_string es)
   | EHash (size, es) ->
     Printf.sprintf "hash<<%s>>(%s)" (size_to_string size) (es_to_string es)
+  | EFlood e -> Printf.sprintf "flood %s" (exp_to_string e)
   | EProj (e, l) -> exp_to_string e ^ "#" ^ l
   | ERecord lst ->
     Printf.sprintf
@@ -307,7 +308,7 @@ and stmt_to_string s =
       let gen_str, loc =
         match g with
         | GSingle eo -> "generate_switch", Option.get eo
-        | GMulti loc -> "generate_multi", loc
+        | GMulti loc -> "generate_ports", loc
         | GPort loc -> "generate_port", loc
       in
       Printf.sprintf

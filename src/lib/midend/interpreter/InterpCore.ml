@@ -146,6 +146,14 @@ let rec interp_exp (nst : State.network_state) swid locals e : State.ival =
       let hashed = Legacy.Hashtbl.seeded_hash (Integer.to_int seed) tl in
       V (vint hashed size)
     | _ -> failwith "Wrong arguments to hash operation")
+  | EFlood e1 ->
+    let port =
+      interp_exp nst swid locals e1
+      |> extract_ival
+      |> raw_integer
+      |> Integer.to_int
+    in
+    V (vgroup [-(port + 1)])
 
 and interp_exps nst swid locals es : State.ival list =
   List.map (interp_exp nst swid locals) es
@@ -230,7 +238,7 @@ let rec interp_statement nst swid locals s =
     then locals
     else interp_statement nst swid locals ss2
   | SGen (g, e) ->
-    (* TODO: Right now, port numbers for generate_single and generate_multi are
+    (* TODO: Right now, port numbers for generate_single are
        arbitrary (always 0). We could do better by e.g. finding a path through
        the graph and figuring out which port number it ends at *)
     let locs =
@@ -244,10 +252,16 @@ let rec interp_statement nst swid locals s =
       | GSingle (Some e) ->
         [interp_exp e |> extract_ival |> raw_integer |> Integer.to_int, 0]
       | GMulti grp ->
-        interp_exp grp
-        |> extract_ival
-        |> raw_group
-        |> List.map (fun i -> Integer.to_int i, 0)
+        let ports = interp_exp grp |> extract_ival |> raw_group in
+        (match ports with
+        | [port] when port < 0 ->
+          (* Flooding: send to every connected switch *)
+          (-1, port)
+          :: (IntMap.find swid nst.links
+             |> IntMap.bindings
+             |> List.filter_map (fun (p, dst) ->
+                    if p = -(port + 1) then None else Some dst))
+        | _ -> List.map (fun port -> State.lookup_dst nst (swid, port)) ports)
       | GPort port ->
         let port =
           interp_exp port |> extract_ival |> raw_integer |> Integer.to_int
@@ -390,7 +404,9 @@ let interp_decl (nst : State.network_state) swid d =
     nst
   | DGroup (x, es) ->
     let vs =
-      List.map (fun e -> interp_exp e |> extract_ival |> raw_integer) es
+      List.map
+        (fun e -> interp_exp e |> extract_ival |> raw_integer |> Integer.to_int)
+        es
     in
     State.add_global swid (Id x) (V (vgroup vs)) nst;
     nst

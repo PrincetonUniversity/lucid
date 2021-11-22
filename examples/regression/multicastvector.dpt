@@ -61,5 +61,5 @@ event foo() {
   // To generate a multicast event, you start the same way...
   event f = foo();
   event m = Event.delay(f, 100);
-  generate_multi (group1, m); // Different generate keyword. This will cause m to appear at switches 0, 1, 3 in 100ns.
+  generate_ports (group1, m); // Different generate keyword. This will cause m to appear at switches 0, 1, 3 in 100ns.
 }

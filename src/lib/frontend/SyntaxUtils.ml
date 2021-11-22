@@ -292,7 +292,7 @@ let rec is_compound e =
   match e.e with
   | EInt _ | EVal _ | EVar _ | ESizeCast _ -> false
   | EHash _ | EOp _ | ECall _ | EStmt _ -> true
-  | EComp (e, _, _) | EIndex (e, _) | EProj (e, _) -> is_compound e
+  | EComp (e, _, _) | EIndex (e, _) | EProj (e, _) | EFlood e -> is_compound e
   | EVector entries | ETuple entries -> List.exists is_compound entries
   | ERecord entries -> List.exists (is_compound % snd) entries
   | EWith (base, entries) ->
