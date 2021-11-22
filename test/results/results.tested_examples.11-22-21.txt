@@ -3,6 +3,7 @@ base directory for tests: /lucid/examples/tested_examples
 builds directory: /lucid/examples/tested_examples/__testbuilds
 **** running 15 tests ****
 [start] compile src/multi_events.dpt
+deleting previous build directory...
 compile command: /lucid/dptc /lucid/examples/tested_examples/src/multi_events.dpt /lucid/examples/tested_examples/ip_harness.p4 /lucid/examples/tested_examples/ip_harness_triggers.json /lucid/examples/tested_examples/__testbuilds/multi_events
 [96m[PASS] [0mcompile src/multi_events.dpt
 [start] assemble src/multi_events.dpt

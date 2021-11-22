@@ -809,17 +809,57 @@ let test_propagate_conditions () =
 let delete_unmatchable rules = 
   let add_rule_if_valid valid_rules candidate_rule =
     match (RS.new_is_r_still_feasible candidate_rule valid_rules) with 
-    | _ -> valid_rules@[candidate_rule]
-    (* | true -> valid_rules@[candidate_rule] *)
-    (* | false -> valid_rules *)
+    (* | _ -> valid_rules@[candidate_rule] *)
+    | true -> valid_rules@[candidate_rule]
+    | false -> valid_rules
   in 
-  let new_rules = match CL.length rules with 
+  CL.fold_left add_rule_if_valid [] rules 
+(*   let new_rules = match CL.length rules with 
     | 0 | 1 -> rules 
     | _ -> CL.fold_left add_rule_if_valid [] rules 
   in 
-  new_rules
+  new_rules *)
 ;;
 
+let delete_unmatchable_test () = 
+  print_endline ("testing delete unmatchable");
+  let a = Cid.create ["a"] in 
+  let b = Cid.create ["b"] in   
+  let pa = (a, Exact((Integer.of_int 1))) in 
+  let pb = (b, Exact((Integer.of_int 2))) in 
+  let pat = [pa; pb] in 
+  let raid = Cid.create ["rulea"] in 
+  let rbid = Cid.create ["ruleb"] in 
+  let aaid = Cid.create ["acna"] in 
+  let baid = Cid.create ["acnb"] in 
+  let ra = Match(raid, pat, aaid) in 
+  let rb = Match(rbid, pat, baid) in 
+
+  let all_rules = [ra; rb] in 
+  let print_rules rs = 
+    print_endline ("-----");
+    CL.iter (fun r -> dbgstr_of_rule r |> print_endline) rs;
+    print_endline ("-----")
+  in 
+  print_rules all_rules;
+  let matchable_rules = delete_unmatchable all_rules in 
+  print_rules matchable_rules;
+
+  exit 1;
+;;
+
+(* delete_unmatchable_test ();; *)
+
+
+let normalize_rules rules = 
+  let vars = match_vars_of_rules rules in
+  CL.map
+    (fun r ->
+      match r with
+      | Match (r_id, pat, a_id) -> Match (r_id, extend_pat vars pat, a_id)
+      | OffPath pat -> OffPath (extend_pat vars pat))
+    rules
+;;
 
 (* merge pat1 into pat2, producing a new 
    pattern that represents the condition 
@@ -978,9 +1018,12 @@ let to_rule_list cr : rule list =
       )
   in 
   let fold_over_conditions produced_rules condition = 
-    produced_rules
-    @(CL.map neg_to_rule condition.negs)
-    @[pos_to_rule condition.pos]
+    let new_rules = 
+      (CL.map neg_to_rule condition.negs)
+      @[pos_to_rule condition.pos] 
+    in 
+    let new_rules = new_rules |> normalize_rules in 
+    produced_rules@new_rules
   in 
   CL.fold_left fold_over_conditions [] cr.cs
 ;;
@@ -1009,17 +1052,6 @@ let condition_rules conditions rules =
   new_rules
 ;;
 
-
-let normalize_rules rules = 
-  let vars = match_vars_of_rules rules in
-  CL.map
-    (fun r ->
-      match r with
-      | Match (r_id, pat, a_id) -> Match (r_id, extend_pat vars pat, a_id)
-      | OffPath pat -> OffPath (extend_pat vars pat))
-    rules
-;;
-
 let condition_table cid_decls conditions tid = 
   (* print_endline ("conditioning table: "^(Cid.to_string tid)); *)
   let tbl = Cid.lookup cid_decls tid in 
@@ -1033,10 +1065,12 @@ let condition_table cid_decls conditions tid =
       (* generate the wildcard noop rule *)
       let noop_rule, noop_acn = Generators.concrete_noop [] in 
       let new_rules = new_rules@[noop_rule] in 
-(*       print_endline ("******** [condition_table] ********");
+(*        print_endline ("******** [condition_table] ********");
       print_endline ("table: "^(Cid.to_string tid));
       print_endline (str_of_rules new_rules);
-      print_endline ("******** [condition_table] ********"); *)
+      print_endline ("******** [condition_table] ********");
+      print_string (sprintf "... %i rules in new table ... " (CL.length new_rules)); *)
+
       let new_table = Table (tid, new_rules, something) in 
       let cid_decls = Cid.replace cid_decls tid new_table in 
       cid_decls@(dict_of_decls [noop_acn])
@@ -1083,6 +1117,7 @@ let condition_tbl_from_preds cid_decls pred_tids tid =
     pred_tids
     tid
   in 
+  (* print_string (sprintf "... %i preconditions ... " (CL.length preconditions)); *)
   let new_cid_decls = condition_table 
     cid_decls 
     preconditions 

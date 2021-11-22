@@ -233,15 +233,18 @@ let new_is_r_still_feasible (r : rule) (qs : rule list) =
   let ctx, r_eqn = eqn_of_rule ctx r in
   let _, q_eqns = CL.split (CL.map (eqn_of_rule ctx) qs) in
   (* let qs_eqn = Z3Bool.mk_and ctx q_eqns in *) (* BUG: why is this and instead of or? *)
+  (* match any one of qs *)
   let qs_eqn = Z3Bool.mk_or ctx q_eqns in (* BUG: why is this and instead of or? *)
+  (* negate: we do not match any one of the qs *)
   let not_qs_eqn = Z3Bool.mk_not ctx qs_eqn in
+  (* is it possible to not match any one of the qs, and match r? *)
   let intersect_eqn = Z3Bool.mk_and ctx [not_qs_eqn; r_eqn] in
   let solver = Solver.mk_simple_solver ctx in
   Solver.add solver [intersect_eqn];
   let is_sat = Solver.check solver [] in
   match is_sat with
-  | UNSATISFIABLE -> false
-  | SATISFIABLE -> true
+  | SATISFIABLE -> print_endline ("SAT");  true
+  | UNSATISFIABLE -> print_endline ("UNSAT"); false
   | UNKNOWN ->
     Printf.printf "unknown\n";
     error "unknown sat..."
