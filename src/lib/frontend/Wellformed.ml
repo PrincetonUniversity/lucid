@@ -14,6 +14,7 @@ open Printing
    - Only certain types allowed as externs (just ints? I guess bools too?)
    - All events have exactly one handler declared, which must be in the same scope as them.
    - All sizes in symbolic declarations are either concrete or symbolic themselves
+   - All non-flood group expressions are constant
 
    Checks we do during typechecking:
    - No dynamic global creation
@@ -105,7 +106,6 @@ let check_symbolics ds =
 (* Next up: make sure each event has exactly one handler defined, which must be
    in the same scope. Also ensure that we don't have two events with the same
    name in a given scope *)
-
 let rec match_handlers ?(m_cid = None) (ds : decls) =
   let m_str =
     match m_cid with
@@ -159,6 +159,26 @@ let rec match_handlers ?(m_cid = None) (ds : decls) =
          "Handler %s has no corresponding event definition"
          (m_str ^ id_to_string id)
   | None, None -> ()
+;;
+
+let check_group_exps ds =
+  let v =
+    object
+      inherit [_] s_iter
+
+      method! visit_EGroup _ es =
+        List.iter
+          (function
+            | { e = EInt _ } -> ()
+            | e ->
+              Console.error_position e.espan
+              @@ Printf.sprintf
+                   "Group entries must be constant integers, not %s"
+                   (Printing.exp_to_string e))
+          es
+    end
+  in
+  v#visit_decls () ds
 ;;
 
 let pre_typing_checks ds =
@@ -291,7 +311,7 @@ let rec check_qvars d =
   | DFun _ | DMemop _ -> (* No restrictions *) ()
   | DGlobal _ ->
     (* None allowed at all *) basic_qvar_checker#visit_decl (true, true) d
-  | DSize _ | DSymbolic _ | DConst _ | DGroup _ | DExtern _ ->
+  | DSize _ | DSymbolic _ | DConst _ | DExtern _ ->
     (* Only allowed in effect *) basic_qvar_checker#visit_decl (false, true) d
   | DConstr _ ->
     (* Allowed in both sizes and effects *)

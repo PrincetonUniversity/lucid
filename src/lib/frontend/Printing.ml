@@ -259,6 +259,7 @@ let rec e_to_string e =
     Printf.sprintf "%s(%s)" (cid_to_string cid) (es_to_string es)
   | EHash (size, es) ->
     Printf.sprintf "hash<<%s>>(%s)" (size_to_string size) (es_to_string es)
+  | EGroup es -> Printf.sprintf "{%s}" (comma_sep exp_to_string es)
   | EFlood e -> Printf.sprintf "flood %s" (exp_to_string e)
   | EProj (e, l) -> exp_to_string e ^ "#" ^ l
   | ERecord lst ->
@@ -461,11 +462,6 @@ and d_to_string d =
     Printf.sprintf "extern %s %s;" (id_to_string id) (ty_to_string ty)
   | DSymbolic (id, ty) ->
     Printf.sprintf "symbolic %s %s;" (id_to_string id) (ty_to_string ty)
-  | DGroup (id, es) ->
-    Printf.sprintf
-      "group %s = {%s};"
-      (id_to_string id)
-      (comma_sep exp_to_string es)
   | DUserTy (id, sizes, ty) ->
     Printf.sprintf
       "type %s%s = %s"

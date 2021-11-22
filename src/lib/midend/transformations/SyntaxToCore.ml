@@ -91,6 +91,7 @@ let rec translate_exp (e : S.exp) : C.exp =
     | S.EOp (op, es) -> C.EOp (translate_op op, List.map translate_exp es)
     | S.ECall (cid, es) -> C.ECall (cid, List.map translate_exp es)
     | S.EHash (sz, es) -> C.EHash (translate_size sz, List.map translate_exp es)
+    | S.EGroup es -> C.EGroup (List.map translate_exp es)
     | S.EFlood e -> C.EFlood (translate_exp e)
     | _ -> err e.espan (Printing.exp_to_string e)
   in
@@ -152,7 +153,6 @@ let translate_decl (d : S.decl) : C.decl =
       C.DEvent (id, translate_sort sort, translate_params params)
     | S.DHandler (id, body) -> C.DHandler (id, translate_body body)
     | S.DMemop (id, body) -> C.DMemop (id, translate_body body)
-    | S.DGroup (id, es) -> C.DGroup (id, List.map translate_exp es)
     | S.DExtern (id, ty) -> C.DExtern (id, translate_ty ty)
     | _ -> err d.dspan (Printing.decl_to_string d)
   in

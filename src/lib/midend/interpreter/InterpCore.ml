@@ -146,6 +146,17 @@ let rec interp_exp (nst : State.network_state) swid locals e : State.ival =
       let hashed = Legacy.Hashtbl.seeded_hash (Integer.to_int seed) tl in
       V (vint hashed size)
     | _ -> failwith "Wrong arguments to hash operation")
+  | EGroup es ->
+    let ports =
+      List.map
+        (fun e ->
+          interp_exp nst swid locals e
+          |> extract_ival
+          |> raw_integer
+          |> Integer.to_int)
+        es
+    in
+    V (vgroup ports)
   | EFlood e1 ->
     let port =
       interp_exp nst swid locals e1
@@ -354,7 +365,6 @@ let interp_dglobal (nst : State.network_state) swid id ty e =
 
 let interp_decl (nst : State.network_state) swid d =
   (* print_endline @@ "Interping decl: " ^ Printing.decl_to_string d; *)
-  let interp_exp = interp_exp nst swid Env.empty in
   match d.d with
   | DGlobal (id, ty, e) -> interp_dglobal nst swid id ty e
   | DHandler (id, (params, body)) ->
@@ -401,14 +411,6 @@ let interp_decl (nst : State.network_state) swid d =
       Option.get ret
     in
     State.add_global swid (Cid.id id) (State.F f) nst;
-    nst
-  | DGroup (x, es) ->
-    let vs =
-      List.map
-        (fun e -> interp_exp e |> extract_ival |> raw_integer |> Integer.to_int)
-        es
-    in
-    State.add_global swid (Id x) (V (vgroup vs)) nst;
     nst
   | DExtern _ ->
     failwith "Extern declarations should be handled during preprocessing"

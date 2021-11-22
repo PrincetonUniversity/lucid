@@ -116,6 +116,7 @@ let rec interp_exp env e =
     { e with e = ECall (cid, List.map (interp_exp env) args) }
   | EHash (sz, args) ->
     { e with e = EHash (sz, List.map (interp_exp env) args) }
+  | EGroup es -> { e with e = EGroup (List.map (interp_exp env) es) }
   | EFlood e' -> { e with e = EFlood (interp_exp env e') }
   | EOp (op, args) -> { e with e = interp_op env op args }
 
@@ -381,9 +382,6 @@ let interp_decl env d =
     let e = interp_exp env e in
     let env = add_dec env id in
     env, { d with d = DGlobal (id, ty, e) }
-  | DGroup (id, exps) ->
-    let env = add_dec env id in
-    env, { d with d = DGroup (id, List.map (interp_exp env) exps) }
   | DMemop (id, body) ->
     let env = add_dec env id in
     env, { d with d = DMemop (id, interp_body env body) }

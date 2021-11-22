@@ -38,8 +38,6 @@ const int t_wait = 10000;
 // Location identifiers
 // Set by macro preprocessor.
 const int SELF = 0;
-group NEIGHBORS = {1};
-
 // state
 // map dst --> (shortest known pathlen, next hop)
 global Array.t<<32>> nexthop_pathlen  = Array.create(tbl_sz);
@@ -189,7 +187,7 @@ handle update_route(int i) {
     // If the path length is infinite,
     // query all neighbors for a route to i.
     if (pathlen == INF) {
-        generate_ports (NEIGHBORS, query_nexthop(SELF, i));
+        generate_ports ({1}, query_nexthop(SELF, i));
     }
     else {
         // If the pathlength is not zero (i.e., this is not
@@ -200,7 +198,7 @@ handle update_route(int i) {
             int next_hop = Array.get(nexthop_nid, i);
             int nexthop_is_down = Array.getm(last_seen, next_hop, nid_is_down, ts);
             if (nexthop_is_down == TRUE) {
-                generate_ports (NEIGHBORS, query_nexthop(SELF, i));
+                generate_ports ({1}, query_nexthop(SELF, i));
             }
         }
     }
@@ -224,7 +222,7 @@ handle reply_probe (int nid) {
 }
 
 handle check_neighbors() {
-    generate_ports (NEIGHBORS, query_probe(SELF));
+    generate_ports ({1}, query_probe(SELF));
     generate Event.delay(check_neighbors(), t_wait);
 }
 

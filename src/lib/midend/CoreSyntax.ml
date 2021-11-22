@@ -98,6 +98,7 @@ and e =
   | EOp of op * exp list
   | ECall of cid * exp list
   | EHash of size * exp list
+  | EGroup of exp list
   | EFlood of exp
 
 and exp =
@@ -146,7 +147,6 @@ and d =
   | DEvent of id * event_sort * params
   | DHandler of id * body
   | DMemop of id * body
-  | DGroup of id * exp list
   | DExtern of id * ty
 
 (* name, return type, args & body *)
@@ -253,7 +253,6 @@ let dglobal_sp id ty exp span = decl_sp (DGlobal (id, ty, exp)) span
 let dextern_sp id ty span = decl_sp (DExtern (id, ty)) span
 let handler_sp id p body span = decl_sp (DHandler (id, (p, body))) span
 let memop_sp id p body span = decl_sp (DMemop (id, (p, body))) span
-let group_sp id es span = decl_sp (DGroup (id, es)) span
 
 (*** Utility -- may split into a separate file if it gets big *)
 

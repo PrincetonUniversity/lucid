@@ -50,7 +50,7 @@ fun int get_connected_port(int src, int output_port) {
 
 // Defines a multicast group named group1.
 // Packets sent to this group arrive at switches 0, 1 and 3, and not 2 or 4.
-group group1 = {0, 1, 3};
+const group group1 = {0, 1, 3};
 
 event foo() {
   // To generate a singlecast event, you just do things normally, e.g.

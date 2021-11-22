@@ -364,13 +364,17 @@ let regdec_from_decl dec =
 let cur_group_iid = ref 0
 
 let groupdec_from_decl dec =
-  match dec.d with
+  ignore dec;
+  (* match dec.d with
   | DGroup (group_id, _) ->
     let width = LLConstants.event_loc_width in
     cur_group_iid := !cur_group_iid + 1;
     let giid = !cur_group_iid in
     Some (IS.new_private_constdef (Cid.Id group_id) width giid)
-  | _ -> None
+  | _ -> None *)
+  failwith
+    "Group declarations don't exist anymore, gonna have to get these by \
+     walking through the program"
 ;;
 
 (* generate the bitvector metadata that indicate which

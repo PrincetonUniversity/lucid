@@ -213,7 +213,8 @@ exp:
     | LBRACKET exps RBRACKET              { vector_sp $2 (Span.extend $1 $3) }
     | SIZECAST LPAREN size RPAREN             { szcast_sp (IConst 32) (snd $3) (Span.extend $1 $4) }
     | SIZECAST single_poly LPAREN size RPAREN { szcast_sp (snd $2) (snd $4) (Span.extend $1 $5) }
-    | FLOOD exp { flood_sp $2 (Span.extend $1 $2.espan) }
+    | FLOOD exp                           { flood_sp $2 (Span.extend $1 $2.espan) }
+    | LBRACE args RBRACE                  { group_sp $2 (Span.extend $1 $3) }
 
 exps:
   | exp                                 { [$1] }
@@ -303,7 +304,6 @@ decl:
                                             { [memop_sp (snd $2) $3 $5 (Span.extend $1 $6)] }
     | SYMBOLIC SIZE ID SEMI                 { [dsize_sp (snd $3) None (Span.extend $1 $4)] }
     | SIZE ID ASSIGN size SEMI              { [dsize_sp (snd $2) (Some (snd $4)) (Span.extend $1 $5)] }
-    | GROUP ID ASSIGN LBRACE args RBRACE SEMI { [group_sp (snd $2) $5 (Span.extend $1 $7)] }
     | MODULE ID LBRACE decls RBRACE         { [module_sp (snd $2) [] $4 (Span.extend $1 $5)] }
     | MODULE ID COLON LBRACE interface RBRACE LBRACE decls RBRACE
                                             { [module_sp (snd $2) $5 $8 (Span.extend $1 $9)] }

@@ -84,6 +84,13 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
     let hd = List.hd inf_es in
     unify_ty hd.espan (Option.get hd.ety) (mk_ty @@ TInt (fresh_size ()));
     env, { e with e = EHash (size, inf_es); ety = Some (mk_ty @@ TInt size) }
+  | EGroup es ->
+    let env, inf_es = infer_exps env es in
+    List.iter
+      (fun e ->
+        unify_ty e.espan (Option.get e.ety) (mk_ty @@ TInt (fresh_size ())))
+      inf_es;
+    env, { e with e = EGroup inf_es; ety = Some (mk_ty @@ TGroup) }
   | EFlood e1 ->
     let env, inf_e, inf_ety = infer_exp env e1 |> textract in
     unify_ty e.espan inf_ety (mk_ty @@ TInt (fresh_size ()));
@@ -861,20 +868,6 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
         { env with consts = CidMap.add (Id id) ty env.consts } |> def KConst id
       in
       env, effect_count, DSymbolic (id, ty)
-    | DGroup (id, es) ->
-      enter_level ();
-      let _, inf_args = infer_exps env es in
-      leave_level ();
-      (* Locations are just ints for now *)
-      List.iter
-        (fun e ->
-          unify_raw_ty d.dspan (Option.get e.ety).raw_ty (TInt (IConst 32)))
-        inf_args;
-      let env =
-        { env with consts = CidMap.add (Id id) (mk_ty TGroup) env.consts }
-        |> def KConst id
-      in
-      env, effect_count, DGroup (id, inf_args)
     | DEvent (id, sort, constr_specs, params) ->
       let constrs, _ =
         spec_to_constraints env d.dspan FZero params constr_specs

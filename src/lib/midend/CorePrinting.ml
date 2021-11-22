@@ -131,6 +131,7 @@ let rec e_to_string e =
   | EHash (size, es) ->
     Printf.sprintf "hash<<%s>>(%s)" (size_to_string size) (es_to_string es)
   | EFlood e -> Printf.sprintf "flood %s" (exp_to_string e)
+  | EGroup es -> Printf.sprintf "{%s}" (comma_sep exp_to_string es)
 
 and exp_to_string e = e_to_string e.e
 and es_to_string es = comma_sep exp_to_string es
@@ -239,11 +240,6 @@ let d_to_string d =
       (stmt_to_string s)
   | DExtern (id, ty) ->
     Printf.sprintf "extern %s %s;" (id_to_string id) (ty_to_string ty)
-  | DGroup (id, es) ->
-    Printf.sprintf
-      "group %s = {%s};"
-      (id_to_string id)
-      (comma_sep exp_to_string es)
 ;;
 
 let decl_to_string d = d_to_string d.d
