@@ -3,7 +3,9 @@ open Syntax
 (* Builtin variables *)
 let self_id = Id.create "self"
 let self_ty = ty (TInt (IConst 32))
-let builtin_vars = [self_id, self_ty]
+let recirc_id = Id.create "recirculation_port"
+let recirc_ty = ty (TInt (IConst 32))
+let builtin_vars = [self_id, self_ty; recirc_id, recirc_ty]
 let builtin_type_ids = [Arrays.t_id; Counters.t_id]
 
 (* Building modules *)

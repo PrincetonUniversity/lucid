@@ -241,13 +241,22 @@ let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t 
       | _ -> error "No value or non-int value specified for max time"
     in
     let externs =
-      let lst =
+      let externs =
         match List.assoc_opt "externs" lst with
         | Some (`Assoc lst) -> lst
         | None -> []
         | Some _ -> error "Non-assoc type for extern definitions"
       in
-      parse_externs pp renaming num_switches lst
+      let recirc_ports =
+        (* This is an extern under the hood, but users don't see it that way *)
+        match List.assoc_opt "recirculation_ports" lst with
+        | Some (`List lst) -> "recirculation_port", `List lst
+        | None ->
+          ( "recirculation_port"
+          , `List (List.init num_switches (fun _ -> `Int 196)) )
+        | Some _ -> error "Non-list type for recirculation port definitions"
+      in
+      parse_externs pp renaming num_switches (recirc_ports :: externs)
     in
     let events =
       match List.assoc_opt "events" lst with

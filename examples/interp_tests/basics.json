@@ -4,6 +4,7 @@
   "max time": 9999999,
   "default input gap": 10000,
   "random seed": 0,
+  "recirculation_ports": [255, 196, 3],
   "events": [
     {"name":"packetin", "args": [10, 100]},
     {"name":"packetin", "args": [11, 101], "locations": ["0:0"]},

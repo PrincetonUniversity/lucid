@@ -92,7 +92,7 @@ let rename prog =
           List.fold_left
             (fun env id -> CidMap.add (Id id) (Id id) env)
             CidMap.empty
-            (start_id :: this_id :: List.map fst builtin_vars)
+            (start_id :: ingr_port_id :: this_id :: List.map fst builtin_vars)
         in
         let builtin_cids =
           List.map fst (Arrays.constructors @ Counters.constructors)

@@ -233,11 +233,14 @@ let rec interp_statement nst swid locals s =
     (* TODO: Right now, port numbers for generate_single and generate_multi are
        arbitrary (always 0). We could do better by e.g. finding a path through
        the graph and figuring out which port number it ends at *)
-    (* FIXME: Figure out where recirc_port should really be defined *)
-    let recirc_port = 196 in
     let locs =
       match g with
-      | GSingle None -> [swid, recirc_port]
+      | GSingle None ->
+        [ ( swid
+          , State.lookup swid (Cid.from_string "recirculation_port") nst
+            |> extract_ival
+            |> raw_integer
+            |> Integer.to_int ) ]
       | GSingle (Some e) ->
         [interp_exp e |> extract_ival |> raw_integer |> Integer.to_int, 0]
       | GMulti grp ->
