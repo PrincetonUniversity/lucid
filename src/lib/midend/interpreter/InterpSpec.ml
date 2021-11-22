@@ -3,9 +3,14 @@ open CoreSyntax
 open Yojson.Basic
 open Preprocess
 module Env = InterpState.Env
+module IntMap = Map.Make (Int)
+
+(* Maps switch -> port -> (switch * port) *)
+type topology = (int * int) IntMap.t IntMap.t
 
 type t =
   { num_switches : int
+  ; links : topology
   ; externs : value Env.t list
   ; events : (event * location list) list
   ; config : InterpState.State.config
@@ -144,6 +149,67 @@ let parse_externs
     externs
 ;;
 
+let parse_links num_switches links =
+  let parse_port str =
+    match String.split_on_char ':' str with
+    | [id; port] ->
+      (try int_of_string id, int_of_string port with
+      | _ -> error "Incorrect format for link entry!")
+    | _ -> error "Incorrect format for link entry!"
+  in
+  let add_link id port dst acc =
+    IntMap.modify
+      id
+      (fun map ->
+        match IntMap.find_opt port map with
+        | None -> IntMap.add port dst map
+        | Some dst' when dst = dst' -> map
+        | _ ->
+          error
+          @@ Printf.sprintf
+               "Switch:port pair %d:%d assigned to two different destinations!"
+               id
+               port)
+      acc
+  in
+  let add_links acc (src, dst) =
+    let src_id, src_port = parse_port src in
+    let dst_id, dst_port =
+      match dst with
+      | `String dst -> parse_port dst
+      | _ -> error "Non-string format for link entry!"
+    in
+    acc
+    |> add_link src_id src_port (dst_id, dst_port)
+    |> add_link dst_id dst_port (src_id, src_port)
+  in
+  let empty_topology =
+    List.fold_left
+      (fun acc n -> IntMap.add n IntMap.empty acc)
+      IntMap.empty
+      (List.init num_switches (fun n -> n))
+  in
+  List.fold_left add_links empty_topology links
+;;
+
+(* Make a full mesh with arbitrary port numbers.
+   Specifically, we map 1:2 to 2:1, and 3:4 to 4:3, etc. *)
+let make_full_mesh num_switches =
+  let switch_ids = List.init num_switches (fun n -> n) in
+  List.fold_left
+    (fun acc id ->
+      let port_map =
+        List.fold_left
+          (fun acc port ->
+            if id = port then acc else IntMap.add port (port, id) acc)
+          IntMap.empty
+          switch_ids
+      in
+      IntMap.add id port_map acc)
+    IntMap.empty
+    switch_ids
+;;
+
 let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t =
   let json = from_file filename in
   match json with
@@ -157,6 +223,15 @@ let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t 
     let random_propagate_range = parse_int_entry "random propagate range" 1 in
     let random_seed =
       parse_int_entry "random seed" (int_of_float @@ Unix.time ())
+    in
+    let links =
+      if num_switches = 1
+      then IntMap.empty
+      else (
+        match List.assoc_opt "links" lst with
+        | Some (`Assoc links) -> parse_links num_switches links
+        | Some (`String "full mesh") -> make_full_mesh num_switches
+        | _ -> error "Unexpected format or missing edge declarations")
     in
     let max_time =
       match List.assoc_opt "max time" lst with
@@ -187,6 +262,6 @@ let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t 
       ; random_seed
       }
     in
-    { num_switches; externs; events; config }
+    { num_switches; links; externs; events; config }
   | _ -> error "Unexpected interpreter specification format"
 ;;

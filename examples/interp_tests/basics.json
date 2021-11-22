@@ -1,5 +1,6 @@
 {
   "switches": 3,
+  "links": "full mesh",
   "max time": 9999999,
   "default input gap": 10000,
   "random seed": 0,

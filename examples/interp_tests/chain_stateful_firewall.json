@@ -1,5 +1,9 @@
 {
   "switches": 3,
+  "links": {
+    "0:1" : "1:0",
+    "1:2" : "2:1"
+  },
   "max time": 900000000,
   "default input gap": 100000,
   "random seed": 0,
