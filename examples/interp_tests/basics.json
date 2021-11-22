@@ -6,9 +6,9 @@
   "random seed": 0,
   "events": [
     {"name":"packetin", "args": [10, 100]},
-    {"name":"packetin", "args": [11, 101], "locations": [0]},
-    {"name":"packetin", "args": [12, 102], "locations": [0, 1, 2]},
+    {"name":"packetin", "args": [11, 101], "locations": ["0:0"]},
+    {"name":"packetin", "args": [12, 102], "locations": ["0:0", "1:7", "2:1"]},
     {"name":"packetin", "args": [13, 103], "timestamp": 40000},
-    {"name":"packetin", "args": [14, 104], "timestamp": 40007, "locations": [0, 1]}
+    {"name":"packetin", "args": [14, 104], "timestamp": 40007, "locations": ["0:3", "1:19"]}
   ]
 }

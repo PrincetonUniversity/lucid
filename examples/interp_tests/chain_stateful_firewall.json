@@ -14,9 +14,9 @@
   },
   "events": [
     {"name":"packetin", "args": [10, 100, 0], "timestamp": 11000000},
-    {"name":"packetin", "args": [11, 101, 0], "locations": [1]},
-    {"name":"packetin", "args": [13, 103, 1], "locations": [0, 1, 2]},
-    {"name":"packetin", "args": [101, 11, 1], "locations": [0, 1, 2]},
-    {"name":"packetin", "args": [100, 10, 1], "locations": [0, 1, 2]}
+    {"name":"packetin", "args": [11, 101, 0], "locations": ["1:1"]},
+    {"name":"packetin", "args": [13, 103, 1], "locations": ["0:0", "1:1", "2:0"]},
+    {"name":"packetin", "args": [101, 11, 1], "locations": ["0:0", "1:1", "2:0"]},
+    {"name":"packetin", "args": [100, 10, 1], "locations": ["0:0", "1:1", "2:0"]}
   ]
 }

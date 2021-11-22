@@ -21,8 +21,7 @@ let initial_state (pp : Preprocess.t) (spec : InterpSpec.t) =
   List.iter
     (fun (event, locs) ->
       List.iter
-        (fun (loc, port) ->
-          State.push_input_event (Integer.to_int loc) port event nst)
+        (fun (loc, port) -> State.push_input_event loc port event nst)
         locs)
     spec.events;
   nst

@@ -11,7 +11,7 @@ type t =
   { num_switches : int
   ; links : InterpState.State.topology
   ; externs : value Env.t list
-  ; events : (event * (location * int) list) list
+  ; events : (event * (int * int) list) list
   ; config : InterpState.State.config
   }
 
@@ -47,6 +47,14 @@ let rec parse_value err_str ty j =
     @@ err_str
     ^ " specification had wrong or unexpected argument "
     ^ to_string j
+;;
+
+let parse_port str =
+  match String.split_on_char ':' str with
+  | [id; port] ->
+    (try int_of_string id, int_of_string port with
+    | _ -> error "Incorrect format for link entry!")
+  | _ -> error "Incorrect format for link entry!"
 ;;
 
 let default_port = 0
@@ -101,16 +109,22 @@ let parse_events
         | Some (`List lst) ->
           List.map
             (function
-              | `Int n ->
-                if n < 0 || n >= num_switches
+              | `String str ->
+                let sw, port = parse_port str in
+                if sw < 0 || sw >= num_switches
                 then
                   error
-                  @@ "Cannot specify event at nonexistent location "
-                  ^ string_of_int n;
-                Integer.create n 32, default_port
-              | _ -> error "Event specification had non-integer location")
+                  @@ "Cannot specify event at nonexistent switch "
+                  ^ string_of_int sw;
+                if port < 0 || port >= 255
+                then
+                  error
+                  @@ "Cannot specify event at nonexistent port "
+                  ^ string_of_int port;
+                sw, port
+              | _ -> error "Event specification had non-string location")
             lst
-        | None -> [Integer.create 0 32, default_port]
+        | None -> [0, default_port]
         | _ -> error "Event specification has non-list locations field"
       in
       { eid; data; edelay }, locations
@@ -151,13 +165,6 @@ let parse_externs
 ;;
 
 let parse_links num_switches links =
-  let parse_port str =
-    match String.split_on_char ':' str with
-    | [id; port] ->
-      (try int_of_string id, int_of_string port with
-      | _ -> error "Incorrect format for link entry!")
-    | _ -> error "Incorrect format for link entry!"
-  in
   let add_link id port dst acc =
     IntMap.modify
       id

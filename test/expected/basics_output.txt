@@ -62,8 +62,8 @@ t=16600: Handling event count_to_10(10) at switch 0, port 196
 t=17200: Handling event count_to_10(11) at switch 0, port 196
 got to 10
 t=20000: Handling entry event packetin(12,102) at switch 0, port 0
-t=20000: Handling entry event packetin(12,102) at switch 1, port 0
-t=20000: Handling entry event packetin(12,102) at switch 2, port 0
+t=20000: Handling entry event packetin(12,102) at switch 1, port 7
+t=20000: Handling entry event packetin(12,102) at switch 2, port 1
 t=20600: Handling event count_to_10(0) at switch 0, port 196
 at 0
 t=20600: Handling event count_to_10(0) at switch 1, port 196
@@ -137,8 +137,8 @@ got to 10
 t=27200: Handling event count_to_10(11) at switch 2, port 196
 got to 10
 t=40000: Handling entry event packetin(13,103) at switch 0, port 0
-t=40007: Handling entry event packetin(14,104) at switch 0, port 0
-t=40007: Handling entry event packetin(14,104) at switch 1, port 0
+t=40007: Handling entry event packetin(14,104) at switch 0, port 3
+t=40007: Handling entry event packetin(14,104) at switch 1, port 19
 t=40600: Handling event count_to_10(0) at switch 0, port 196
 at 0
 t=40607: Handling event count_to_10(0) at switch 0, port 196
