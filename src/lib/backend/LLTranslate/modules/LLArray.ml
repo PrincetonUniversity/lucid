@@ -22,7 +22,6 @@ let create_array (args : codegenInput) : codegenOutput =
   let arrname, width, length =
     match args.args with
     | gname :: width :: length :: _ ->
-      print_endline ("got width expr: " ^ Printing.exp_to_string width);
       (* 5/18 -- the length arg can be a globally declared const *)
       name_from_exp gname, int_from_exp width, int_from_const_exp length
     | _ ->
@@ -30,7 +29,6 @@ let create_array (args : codegenInput) : codegenOutput =
         ("ir create array: wrong number of args: "
         ^ string_of_int (CL.length args.args))
   in
-  print_endline ("creating array of width: " ^ string_of_int width);
   { names = []; objs = [new_regvec arrname width length] }
 ;;
 
@@ -171,7 +169,7 @@ let update_array (args : codegenInput) : codegenOutput =
   let salu_dec =
     new_dsalu oid reg_id reg_cell_width sInstr args.retname idx_ex
   in
-  trans_info "generated getm_array salu dec:";
-  trans_info (show_decl salu_dec);
+(*   trans_info "generated getm_array salu dec:";
+  trans_info (show_decl salu_dec); *)
   { names = [oid]; objs = [salu_dec] }
 ;;

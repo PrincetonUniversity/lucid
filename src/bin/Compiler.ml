@@ -110,7 +110,6 @@ let final_ir_setup ds =
   (* generate the control flow graph version of the program *)
   (* convert handler statement trees into operation-statement graphs *)
   OGSyntax.start_log ();
-  let ds = PoplPatches.delete_casts ds in
   let opgraph_recs = CL.filter_map OGSyntax.opgraph_from_handler ds in
   ds, opgraph_recs
 ;;

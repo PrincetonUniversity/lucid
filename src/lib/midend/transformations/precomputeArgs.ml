@@ -34,8 +34,6 @@ let precompute_args ds =
           match is_immediate arg with
           | true -> arg
           | false ->
-            trans_info
-              ("precomputing argument expression: " ^ Printing.exp_to_string arg);
             let pre_stmt, new_arg = precompute arg in
             pre_stmts <- pre_stmts @ [pre_stmt];
             new_arg
@@ -48,7 +46,6 @@ let precompute_args ds =
           (match CL.mem fcn_id exception_cids with
           | true -> exp (* skip event combinators *)
           | false ->
-            trans_info ("Pulling arguments out for: " ^ Cid.to_string fcn_id);
             (* pull out the argument if it is not an immediate *)
             let new_args = CL.map map_f args in
             { exp with e = ECall (fcn_id, new_args) })

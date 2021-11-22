@@ -137,6 +137,13 @@ let dmap_rtid_of_dprog dprog =
 let to_edge_str (d1, d2) = sprintf "(%s --> %s)" (to_node_str d1) (to_node_str d2)  
 
  *)
+
+(* variant lookups *)
+let find_table cid_decls oid = 
+  match Cid.lookup cid_decls oid with
+  | Table(t) -> t
+  | _ -> error "not a table"
+;;
 (* type check ids *)
 let is_tbl cid_decls oid =
   match Cid.lookup cid_decls oid with

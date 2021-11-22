@@ -33,6 +33,11 @@ let rec all_combinations (stss : 'a list list) : 'a list list =
 let sum xs = CL.fold_left ( + ) 0 xs
 let cons_uniq xs x = if List.mem x xs then xs else x :: xs
 let unique_list_of xs = List.rev (List.fold_left cons_uniq [] xs)
+
+let has_dup xs = 
+  (xs |> unique_list_of |> CL.length) <> (xs |> CL.length)
+;;
+
 let list_remove xs x = CL.filter (fun x_c -> x_c <> x) xs
 let remove x xs = list_remove xs x
 

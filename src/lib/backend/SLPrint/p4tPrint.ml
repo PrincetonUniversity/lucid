@@ -8,6 +8,7 @@ open PrintUtils
 open SLSyntax
 open P4tContext
 open LLConstants
+module Option = Caml.Option
 
 (* new, simpler printing of a P4 program from the IR. *)
 
@@ -234,7 +235,7 @@ module PrimitiveString = struct
     match r with
     | Match (_, pat, acn_id) ->
       str_of_pat pat ^ " : " ^ str_of_private_oid acn_id ^ "();"
-    | OffPath pat -> str_of_pat pat ^ " : NOOP();"
+    | OffPath pat -> str_of_pat pat ^ " : dpt_0_NOOP();"
   ;;
 end
 
@@ -471,7 +472,7 @@ module PrintTable = struct
       fprintf
         fmt
         "const default_action = %s();@,"
-        (str_of_private_oid (aid_of_rule (CL.hd rules)))
+        (str_of_private_oid (Option.get (new_aid_of_rule (CL.hd rules))))
     | _ ->
       tab ();
       fprintf fmt "const entries = {@,";

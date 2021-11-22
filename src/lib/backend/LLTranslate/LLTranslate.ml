@@ -339,15 +339,11 @@ let get_dglobal_info ty e =
 let regdec_from_decl dec =
   match dec.d with
   | DGlobal (reg_id, ty, e) ->
-    print_endline
-      ("translating register declaration: " ^ Printing.decl_to_string dec);
     let sz, args = get_dglobal_info ty e in
     let reg_id = Cid.id reg_id in
     (* reg, width, length, ??? *)
     let arg_name = exp (EVar reg_id) ty in
     let arg_width = exp (EVal (vint sz 8)) (TInt sz |> CoreSyntax.ty) in
-    print_endline
-      ("arg_width expr used as arg: " ^ Printing.exp_to_string arg_width);
     let args = arg_name :: arg_width :: args in
     let result =
       ctx_call_codegen
@@ -360,7 +356,6 @@ let regdec_from_decl dec =
         }
     in
     let decl = CL.hd result.objs in
-    print_endline ("regdec: " ^ IS.show_decl decl);
     [decl]
   | _ -> []
 ;;

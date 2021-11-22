@@ -48,10 +48,6 @@ let eliminate_complex_bool_assigns ds =
         | Some exp ->
           (match is_bool_non_immediate exp with
           | true ->
-            trans_info
-              ("[to_bool_immediate_rhs] eliminating non-immediate boolean \
-                assignment in: "
-              ^ Printing.stmt_to_string statement);
             eliminate_complex_bool_assign statement
           | false -> super#visit_statement ctx statement)
         | None -> super#visit_statement ctx statement
@@ -114,12 +110,5 @@ let do_passes (ds : decls) : Syntax.decls =
   trans_info "immediate elimination complete.";
   (* let ds = Typer.infer_prog ds in *)
   (* 4: future improvement: convert directly into a match statement *)
-
-  (* type check. *)
-  print_endline "TYPE CHECKING AFTER BOOL ELIM";
-  print_endline "program: ";
-  (* print_endline (Printing.decls_to_string ds); *)
-  (* let ds = Typer.infer_prog ds in *)
-  print_endline "DONE TYPE CHECKING AFTER BOOL ELIM";
   ds
 ;;

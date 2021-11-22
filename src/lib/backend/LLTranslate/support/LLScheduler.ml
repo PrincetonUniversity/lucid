@@ -529,9 +529,6 @@ module Egress = struct
     (* generate the bitvectors relevant to this mcid. *)
     (* each bitvector has up to mcid ones set.*)
     let bitvecs = gen_bv (CL.length ev_flags) mcid in
-    print_endline ("[mcid_rules] mcid: " ^ string_of_int mcid);
-    print_endline "[mcid_rules] bitvecs";
-    print_bitvecs bitvecs;
     (* craft a single rule for mcid from a bitvec. *)
     let craft_rule actions mcid bitvec =
       let ev_flag_values = bitvec |> bv_valv |> wildcard_suffix_zeros in
@@ -548,7 +545,6 @@ module Egress = struct
         ; action_args = []
         }
       in
-      rule_to_string res |> print_endline;
       res
     in
     CL.map (craft_rule ev_actions mcid) bitvecs
@@ -577,7 +573,6 @@ module Egress = struct
     let bg_event_acns = CL.map snd acn_event_map in
     (* one action for each bg event *)
     let bg_ev_ids = CL.split acn_event_map |> fst in
-    CL.iter (fun aid -> print_endline (instance_name aid)) bg_ev_ids;
     (* create the rules for every mcid value that indicates a background event. *)
     let mcids = range 1 (1 + CL.length bg_ev_ids) in
     let mcid_rule_lists =

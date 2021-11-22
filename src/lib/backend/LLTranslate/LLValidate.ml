@@ -1,5 +1,6 @@
 (* Check for bugs in the control graph *)
 open LLSyntax
+open Printf
 module CL = Caml.List
 
 exception Error of string
@@ -34,4 +35,31 @@ let no_self_loop_tables cid_decls loc_str =
     error "SELF LOOP"
 ;;
 
-let validate_cid_decls cid_decls loc_str = no_self_loop_tables cid_decls loc_str
+(* is there more than one root table (table with 
+   no predecessor action?) *)
+let only_one_root cid_decls loc_str = 
+  let get_root_tables cid_decls = 
+    let is_root_table (cid, decl) = 
+      match decl with 
+        | (Table _) -> (
+          match ((DFSyntax.pred_aids_of_tid cid_decls cid) |> CL.length) with 
+            | 0 -> true 
+            | _ -> false
+        )
+        | _ -> false
+    in 
+    CL.filter is_root_table cid_decls
+  in 
+  match (get_root_tables cid_decls |> CL.length) with 
+    | 0 | 1 -> (
+      print_endline ("[assertion passed] only one root at "^loc_str)
+    )
+    | _ -> (
+      error ("[ASSERTION FAILED] more than 1 root table at "^loc_str)
+    )
+;;
+
+let validate_cid_decls cid_decls loc_str = 
+  no_self_loop_tables cid_decls loc_str;
+  only_one_root cid_decls loc_str
+;;

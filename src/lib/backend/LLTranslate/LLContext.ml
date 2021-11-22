@@ -103,7 +103,6 @@ let ctx_width_of_garr n =
 
 (**** context code generator functions ****)
 let ctx_add_codegen n c =
-  print_endline ("adding code generator: " ^ Cid.to_string n);
   tofinoCtx := TofinoCtx.add n (CodeGen c) !tofinoCtx
 ;;
 
@@ -113,7 +112,6 @@ let ctx_add_codegens ns_cs =
 ;;
 
 let ctx_find_codegen n =
-  print_endline ("calling code generator: " ^ Cid.to_string n);
   match TofinoCtx.find n !tofinoCtx with
   | CodeGen g -> g
   | _ -> error "did not find a decl in context"
@@ -138,9 +136,6 @@ let ctx_find_eventrec n =
 ;;
 
 let ctx_find_event_fields id =
-  let cid = Cid.id id in
-  print_endline
-    ("[ctx_find_event_fields] looking for fields of " ^ Cid.to_string cid);
   (ctx_find_eventrec (Cid.id id)).field_defs |> CL.split |> fst
 ;;
 
@@ -167,19 +162,12 @@ let ctx_set_hdl_param_ids id hdl_param_ids =
 (* a map from handler param id to event param cid *)
 let ctx_get_hdl_param_map hdl_id =
   let erec = ctx_find_eventrec (Cid.id hdl_id) in
-  print_endline
-    ("[ctx_get_hdl_param_map] " ^ Cid.to_string erec.event_struct_instance);
   let recs =
     CL.map
       (fun field_cid -> Cid.concat erec.event_struct_instance field_cid)
       (CL.split erec.field_defs |> fst)
     |> CL.combine erec.hdl_param_ids
   in
-  print_endline
-    ("[ctx_get_hdl_param_map]: key: "
-    ^ (CL.hd recs |> fst |> Id.to_string)
-    ^ " value: "
-    ^ (CL.hd recs |> snd |> Cid.to_string));
   recs
 ;;
 

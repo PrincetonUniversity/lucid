@@ -106,7 +106,7 @@ let intersect_conditions (a_cond : condition) (b_cond : condition)
     | Any -> Some a_cond (* b is wildcard, return a*)
     | Exact b_const ->
       if (* a and b are constants, if they're the same, return either. 
-			   if they're not the same, there is no intersection in this dimension. *)
+         if they're not the same, there is no intersection in this dimension. *)
          a_const = b_const
       then Some a_cond
       else None)
@@ -140,9 +140,9 @@ let intersect_patterns (a_pat : pattern) (b_pat : pattern) : pattern option =
 ;;
 
 (* generate the rule that is the intersection of 
-	s_rule : s and t_rule : t, assuming that s and t are parallel tables *)
+  s_rule : s and t_rule : t, assuming that s and t are parallel tables *)
 (* if both rules are offpath, the intersection is offpath. 
-	   if one rule is on path, the intersection is onpath *)
+     if one rule is on path, the intersection is onpath *)
 let gen_intersect_rule s_rule t_rule union_aid =
   let s_pat = pat_of_rule s_rule in
   let t_pat = pat_of_rule t_rule in
@@ -158,8 +158,8 @@ let gen_intersect_rule s_rule t_rule union_aid =
 ;;
 
 (* for sequential intersection, we know that s_rule is on path 
-	(to pass st feasibility check)
-	but t_rule may or may not be on path. If its not, 
+  (to pass st feasibility check)
+  but t_rule may or may not be on path. If its not, 
     we need to add an offpath rule. 
 *)
 
@@ -206,8 +206,8 @@ let seq_gen_union_acn_request_custom name_fcn s_rule t_rule =
 let seq_gen_union_acn_request = seq_gen_union_acn_request_custom Cid.concat
 
 (* generate a union action for parallel merging from two rules (s and t).
-	the union action calls all the objects and next tables from either action. 
-	assumption: at least one of s and t is on path. if not, there should never be a request to make a union rule *)
+  the union action calls all the objects and next tables from either action. 
+  assumption: at least one of s and t is on path. if not, there should never be a request to make a union rule *)
 let gen_union_acn t_tid cid_decls new_acn_request =
   let new_acn_id, s_rule, t_rule =
     match new_acn_request with
@@ -259,16 +259,16 @@ start with the rules in s
 one at a time, merge in rules from t
 
 for each rule in t:
-	for each rule in s:
-		- if (s is an added rule): do nothing
-		- if (s^t is not feasible): do nothing
-		- if (s^t is feasible and s^t covers s): replace s with s^t, note s^t as an added rule
-		- if (s^t is feasible and s^t does not cover s): add s^t before s, note s^t as an added rule
-	- if t is feasible given the current rules in s, add it to the end 
+  for each rule in s:
+    - if (s is an added rule): do nothing
+    - if (s^t is not feasible): do nothing
+    - if (s^t is feasible and s^t covers s): replace s with s^t, note s^t as an added rule
+    - if (s^t is feasible and s^t does not cover s): add s^t before s, note s^t as an added rule
+  - if t is feasible given the current rules in s, add it to the end 
 
 for sequential merging, we need two changes: 
-	1. the last step doesn't happen -- t can only get executed through a rule from s
-	2. the feasibility check changes -- s must have table(t) as one of its successor tables
+  1. the last step doesn't happen -- t can only get executed through a rule from s
+  2. the feasibility check changes -- s must have table(t) as one of its successor tables
 
 *)
 
@@ -511,8 +511,8 @@ let par_st_feas s_acns_map t s_rule t_rule =
 (* QUESTION: do we need to check the higher priority rules in t, for the intersect feasibility? *)
 
 (* 
-	is it possible to execute s_rule, then execute t_rule? 
-	if s_rule is off path, then it is not possible. 
+  is it possible to execute s_rule, then execute t_rule? 
+  if s_rule is off path, then it is not possible. 
 *)
 let seq_st_feas s_acns_map t s_rule t_rule =
   match s_rule with
@@ -569,11 +569,11 @@ let sequential_merge (cid_decls : declsMap) s_tid t_tid =
 (**** sequential condition propagation ****)
 
 (* copy a rule in s, to build the table s'. When we do merge s' t, we want a table with the actions of t, but the path constraints of st.
-	If the rule's action doesn't go to table t, replace the rule with an offpath. 
-		- this means that the rule can never execute in the new t, because s will never goto t if these constraints are satisfied. 
-		- if slicing was done correctly, the rule should already _be_ an offpath in this case.
-	If the rule's action does go to t, replace the rule with an empty action 
-	(because in the merged table we only want to execute the instructions from t).
+  If the rule's action doesn't go to table t, replace the rule with an offpath. 
+    - this means that the rule can never execute in the new t, because s will never goto t if these constraints are satisfied. 
+    - if slicing was done correctly, the rule should already _be_ an offpath in this case.
+  If the rule's action does go to t, replace the rule with an empty action 
+  (because in the merged table we only want to execute the instructions from t).
 *)
 let null_action_copy_of_rule cid_decls t_id r =
   match r with
@@ -748,7 +748,7 @@ let merge_pred_conditions cid_decls s_tids t_tid =
     CL.fold_left (fold_f t_tid) (cid_decls, []) s_tids
   in
   (* 2. parallel merge all the s_tids, to get a table with rules encoding all the ways control can flow 
-	from any one of s_tids to t_tid *)
+  from any one of s_tids to t_tid *)
   let merge_pred_pair cid_decls a_tid b_tid =
     merge_tables
       (par_gen_union_acn_request_custom (fun _ b -> b))
@@ -787,18 +787,314 @@ let run_test test_name case_generator merge_fcn =
 
 (* 
 let test_merge_tables () = 
-	(* run_test "parallel merge with simple table pair" gen_simple_table_ex parallel_merge; *)
- 	run_test "sequential merge with nested if/else tables" gen_nested_if_tbl_ex sequential_merge;
- 	(* run_test "parallel merge with nested if/else tables" gen_nested_if_tbl_ex parallel_merge; *)
-	(* run_test "parallel merge with infeasible path" gen_infeasible_tup_ex parallel_merge; *)
+  (* run_test "parallel merge with simple table pair" gen_simple_table_ex parallel_merge; *)
+  run_test "sequential merge with nested if/else tables" gen_nested_if_tbl_ex sequential_merge;
+  (* run_test "parallel merge with nested if/else tables" gen_nested_if_tbl_ex parallel_merge; *)
+  (* run_test "parallel merge with infeasible path" gen_infeasible_tup_ex parallel_merge; *)
 
- 	exit 1
+  exit 1
 
-	(* test_nested_if_tables () *)
+  (* test_nested_if_tables () *)
 ;;
 
 let test_propagate_conditions () = 
- 	run_test "sequential merge with nested if/else tables" gen_nested_if_tbl_ex sequential_merge;
- 	DBG.printf outc "-------------\n";
-	run_test "propagate conditions with nested if / else tables" gen_nested_if_tbl_ex propagate_condition;
+  run_test "sequential merge with nested if/else tables" gen_nested_if_tbl_ex sequential_merge;
+  DBG.printf outc "-------------\n";
+  run_test "propagate conditions with nested if / else tables" gen_nested_if_tbl_ex propagate_condition;
 ;; *)
+
+
+(********** NEW merge utils ************)
+
+let delete_unmatchable rules = 
+  let add_rule_if_valid valid_rules candidate_rule =
+    match (RS.new_is_r_still_feasible candidate_rule valid_rules) with 
+    | _ -> valid_rules@[candidate_rule]
+    (* | true -> valid_rules@[candidate_rule] *)
+    (* | false -> valid_rules *)
+  in 
+  let new_rules = match CL.length rules with 
+    | 0 | 1 -> rules 
+    | _ -> CL.fold_left add_rule_if_valid [] rules 
+  in 
+  new_rules
+;;
+
+
+(* merge pat1 into pat2, producing a new 
+   pattern that represents the condition 
+   pat1 && pat2. If merging the two patterns 
+   produces an inconsistent rule, return 
+   None. *)
+let and_patterns pat1 pat2 = 
+  let merge_into (pat_opt:pattern option) (new_col: mid * condition) : pattern option = 
+    let (new_mid, new_cond) = new_col in 
+    match pat_opt with 
+      | None -> None (* pat has a conflict, so we can't add a new column. *)
+      | Some pat -> (
+        match (Cid.lookup_opt pat new_mid) with 
+          (* the column is not in the pattern, so add it. *)
+          | None ->
+            Some ((new_mid, new_cond)::pat)          
+          (* the column is in the pattern *)
+          | Some (pat_cond) -> (
+            match (pat_cond, new_cond) with
+              (* both wildcards, no change *)
+              | Any, Any -> Some pat 
+              (* new is wildcard, no change *)
+              | _, Any -> Some pat
+              (* pat is wc, use new *)
+              | Any, _ -> 
+                Some (Cid.replace pat new_mid new_cond)
+              | Exact(c), Exact(newc) -> (
+                (* if the two conditions are exact and 
+                   the same value, then there's no change. 
+                   else, the resulting rule is invalid *)
+                if (c = newc) then (Some pat)
+                else (None)
+              )
+          )
+      )
+  in 
+  CL.fold_left merge_into (Some pat2) pat1
+;;
+
+let and_pattern_list (pat1:pattern) (pat2s:pattern list) : pattern list = 
+  CL.filter_map (and_patterns pat1) pat2s
+;;
+
+
+(* The core of this transformation pass operates on 
+  "conditioned rules". A conditioned rule is a rule 
+  that only applies when one of its conditions 
+  is satisfied. A condition is a list of negative 
+  patterns (patterns that must not match) followed 
+  by a positive pattern (a pattern that must match). 
+*)
+type condition = {
+  negs : pattern list;
+  pos  : pattern option;
+}
+let new_precondition () = {
+  negs = []; pos = None;
+}
+
+type conditioned_rule = {
+  cs : condition list; (* a list of alternatives *) 
+  r : rule; 
+}
+let rule_to_conditon r = 
+  {cs = [new_precondition ()] ; 
+   r = r}
+;;
+
+let conditioned_rule conditions r = 
+  {cs = conditions; r = r;}
+;;
+
+
+(* get the conditions between tid's precedessors and tid. 
+   At least one of these conditions must apply for 
+   any rule in table tid to execute. *)
+let get_preconditions cid_decls (pred_tids:oid list) (tid:oid) : condition list = 
+  (* does pred_rule point to tid? *)
+  let points_to_tid cid_decls pred_rule tid = 
+    match pred_rule with 
+    | Match _ -> (
+      let acn_id = Option.get (new_aid_of_rule pred_rule) in 
+      let acn = Cid.lookup cid_decls acn_id in 
+      let acn = match acn with 
+        | Action(acn) -> acn
+        | _ -> error "not an acn"
+      in 
+      let (_, _, next_tids) = acn in 
+      contains next_tids tid
+    )
+    | _ -> false
+  in
+  let fold_pred_tbl pre_conditions pred_tid = 
+    (* one rule in the table. *)
+    let fold_pred_rule (pre_conditions, precond) pred_rule = 
+      match (points_to_tid cid_decls pred_rule tid) with 
+      | true -> 
+        (* this branch points to the table, it is the positive precondition. *)
+        let precond = {precond with pos = Some (rule_pattern (pred_rule))} in 
+        (pre_conditions@[precond], new_precondition ())
+      | false -> 
+        (* this branch does not point to the table, 
+           it is another negative precondition. *)
+        let precond = {precond with negs = precond.negs@[rule_pattern (pred_rule)]} in 
+        (pre_conditions, precond) 
+    in 
+   let pred_rules = rules_of_table (Cid.lookup cid_decls pred_tid) in 
+   let pre_conditions, _ = CL.fold_left 
+      fold_pred_rule 
+      (pre_conditions, new_precondition ()) 
+      pred_rules
+    in 
+    pre_conditions
+  in 
+  CL.fold_left fold_pred_tbl [] pred_tids 
+;;
+
+(* move all the conditions into the precondition(s), 
+   leaving the rule as a wildcard. *)
+let normalize_conditioned_rule cr = 
+  (* add pat to condition *)
+  let add_to_condition pat condition = 
+    {
+      negs = and_pattern_list pat condition.negs;
+      pos = match condition.pos with 
+        | Some pos -> and_patterns pat pos
+        | None -> None
+      ;
+    }
+  in
+  match (cr.r) with 
+    | Match(cid, pat, oid) -> {
+      cs = CL.map (add_to_condition pat) cr.cs;
+      r = new_rule cid [] oid; (* a wildcard rule *)
+    }
+    | OffPath(pat) -> {
+      cs = CL.map (add_to_condition pat) cr.cs;
+      r = Generators.noop_rule;
+    }
+;;
+
+(* convert a normalized conditional rule 
+   into a list of rules. 
+   for each condition:    
+     make a list of offpaths for the negs
+     make an onpath for the positive *)
+let to_rule_list cr : rule list = 
+  let neg_to_rule n = OffPath(n) in 
+  let pos_to_rule p = 
+    match p with 
+      | None -> error "[to_rule_list] positive rule cannot be none by this point."
+      | Some pat -> (
+        match cr.r with
+          | OffPath _ -> OffPath(pat)
+          | Match(rid, _, aid) -> Match(rid, pat, aid)
+      )
+  in 
+  let fold_over_conditions produced_rules condition = 
+    produced_rules
+    @(CL.map neg_to_rule condition.negs)
+    @[pos_to_rule condition.pos]
+  in 
+  CL.fold_left fold_over_conditions [] cr.cs
+;;
+
+(* condition every rule so that the new ruleset is the 
+   cross product of conditions x rules *)
+let condition_rules conditions rules = 
+  let conditioned_rules = CL.map 
+    (fun r -> 
+      (* print_endline ((dbgstr_of_rule r)); *)
+      conditioned_rule conditions r) 
+    rules
+  in 
+
+  let normalized_rules = CL.map 
+    normalize_conditioned_rule 
+    conditioned_rules 
+  in 
+  let new_rules = CL.map 
+    to_rule_list
+    normalized_rules
+    |> CL.flatten
+  in 
+(*   print_endline ("[condition_rules] new rules: ");
+  CL.iter (fun r -> r |> dbgstr_of_rule |> print_endline) new_rules; *)
+  new_rules
+;;
+
+
+let normalize_rules rules = 
+  let vars = match_vars_of_rules rules in
+  CL.map
+    (fun r ->
+      match r with
+      | Match (r_id, pat, a_id) -> Match (r_id, extend_pat vars pat, a_id)
+      | OffPath pat -> OffPath (extend_pat vars pat))
+    rules
+;;
+
+let condition_table cid_decls conditions tid = 
+  (* print_endline ("conditioning table: "^(Cid.to_string tid)); *)
+  let tbl = Cid.lookup cid_decls tid in 
+  match tbl with 
+    | Table(tid, rules, something) -> 
+      let new_rules = rules
+        |> condition_rules conditions (* apply condition to get cross product *)
+        |> normalize_rules (* normalize columns *)
+        |> delete_unmatchable (* delete rules that cannot possibly be matched *)
+      in 
+      (* generate the wildcard noop rule *)
+      let noop_rule, noop_acn = Generators.concrete_noop [] in 
+      let new_rules = new_rules@[noop_rule] in 
+(*       print_endline ("******** [condition_table] ********");
+      print_endline ("table: "^(Cid.to_string tid));
+      print_endline (str_of_rules new_rules);
+      print_endline ("******** [condition_table] ********"); *)
+      let new_table = Table (tid, new_rules, something) in 
+      let cid_decls = Cid.replace cid_decls tid new_table in 
+      cid_decls@(dict_of_decls [noop_acn])
+    | _ -> error "[condition_table] not a table."
+
+(* make OffPath's concrete *)
+let concretize_offpaths cid_decls = 
+  let fold_rules (new_rules, new_acns) r = 
+    match r with 
+      | OffPath(pat) -> 
+        (* create new rule and action *)
+        let r, acn = Generators.concrete_noop pat in 
+
+        new_rules@[r], new_acns@[acn]
+      | _ -> new_rules@[r], new_acns
+  in 
+  let fold_decls processed_cid_decls (oid, decl) = 
+    match decl with 
+      | Table(tid, rules, something) -> 
+        let rules, new_actions = CL.fold_left fold_rules ([], []) rules in 
+        let updated_table = Table(tid, rules, something) in 
+        processed_cid_decls
+        @(dict_of_decls new_actions) 
+        @[(oid, updated_table)] 
+      | _ -> processed_cid_decls@[(oid, decl)]
+  in 
+  CL.fold_left fold_decls [] cid_decls
+;;
+
+
+(* 
+  input:  tid -- a table (id of a table in cid_decls)
+          pred_tids -- the predecessors of tid
+  description:        
+  transform table tid so that each action "a" only 
+  executes when one of the rules that points to a 
+  matches not only the rule's conditions, but also 
+  one of the conditions from a predecessor action. 
+  Also, concretize all the offpaths that may be created.
+*)
+let condition_tbl_from_preds cid_decls pred_tids tid = 
+  let preconditions = get_preconditions 
+    cid_decls 
+    pred_tids
+    tid
+  in 
+  let new_cid_decls = condition_table 
+    cid_decls 
+    preconditions 
+    tid 
+  in 
+  (* print_endline ("before concretization for "^(Cid.to_string tid)); *)
+  (* let cid_decls_tbls = CL.filter (fun (_, dec) -> is_table dec) new_cid_decls in  *)
+  (* print_endline (str_of_cid_decls cid_decls_tbls); *)
+  let res = concretize_offpaths new_cid_decls in 
+  (* print_endline ("after concretization for "^(Cid.to_string tid)); *)
+  (* let cid_decls_tbls = CL.filter (fun (_, dec) -> is_table dec) res in  *)
+  (* print_endline (str_of_cid_decls cid_decls_tbls); *)
+  res 
+;;
+

@@ -20,23 +20,6 @@ let eliminate_noncall_units ds =
   v#visit_decls () ds
 ;;
 
-(* temporary: delete cast operations. *)
-let delete_casts ds =
-  let v =
-    object
-      inherit [_] s_map as super
-
-      method! visit_EOp ctx op exps =
-        match op with
-        | Cast _ ->
-          print_endline "FOUND A CAST";
-          super#visit_EOp ctx op exps
-        (* (CL.hd exps).e *)
-        | _ -> super#visit_EOp ctx op exps
-    end
-  in
-  v#visit_decls () ds
-;;
 
 (* temporary: delete print statements *)
 let delete_prints ds =

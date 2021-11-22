@@ -1,7 +1,6 @@
 open LLSyntax
 open MiscUtils
 open DFSyntax
-module MU = MergeUtils
 module CL = Caml.List
 open MiscUtils
 open Printf
@@ -137,6 +136,7 @@ let rec fold_most_recent_use_var_from_tbl
 (* find most recent list of predecessors that write to var_id,
    starting from a list of predecessors *)
 let most_recent_set_var_from_preds cid_decls pred_tids var_id =
+  print_string "." |> Format.print_flush;
   memo_ct := 0;
   compute_ct := 0;
   let _, res =
@@ -186,15 +186,13 @@ let get_data_dep_edges cid_decls tbl_id all_data_dep_edges =
   match is_tbl cid_decls tbl_id with
   | false -> all_data_dep_edges (* skip non-tables *)
   | true ->
-    (*     print_endline
-      ("[get_data_dep_edges] start processing table: "
-      ^ Printing.cid_to_string tbl_id); *)
+    ((Cid.to_string tbl_id) ^ "; ") |> print_string |> Format.print_flush;
     (* get the predecessor tables *)
     let pred_tids = pred_tids_of_tid cid_decls tbl_id in
-    (* print_endline "[get_data_dep_edges] got pred tids"; *)
+    print_string "." |> Format.print_flush;
     (* get the list of variables that the table reads *)
     let vars_used = read_vars_of_tbl cid_decls tbl_id in
-    (* print_endline "[get_data_dep_edges] got vars used"; *)
+    print_string "." |> Format.print_flush;
     DBG.printf
       outc
       "[get_data_dep_edges] tbl %s pred_tids: [%s]\n"
@@ -212,11 +210,13 @@ let get_data_dep_edges cid_decls tbl_id all_data_dep_edges =
       |> CL.flatten
       |> unique_list_of
     in
+    print_string "." |> Format.print_flush;
     (* generate edges of the form (predcessor, table) for every predecessor
        that writes to a variable that this table reads. *)
     let use_var_edges =
       CL.map (fun pred_t -> pred_t, tbl_id) use_var_dependee_tids
     in
+    print_string "." |> Format.print_flush;
     (* print_endline "[get_data_dep_edges] got use_var_edges"; *)
     DBG.printf
       outc
@@ -226,6 +226,7 @@ let get_data_dep_edges cid_decls tbl_id all_data_dep_edges =
       (P4tPrint.str_of_private_oids use_var_dependee_tids);
     (* get the variables that this table writes *)
     let vars_set = write_vars_of_tbl cid_decls tbl_id in
+    print_string "." |> Format.print_flush;
     (* print_endline "[get_data_dep_edges] got vars_set"; *)
     DBG.printf
       outc
@@ -238,6 +239,7 @@ let get_data_dep_edges cid_decls tbl_id all_data_dep_edges =
       |> CL.flatten
       |> unique_list_of
     in
+    print_string "." |> Format.print_flush;
     DBG.printf
       outc
       "[get_data_dep_edges] tbl: %s predecessors that read set variables: [%s]\n"
@@ -248,6 +250,7 @@ let get_data_dep_edges cid_decls tbl_id all_data_dep_edges =
     let set_var_edges =
       CL.map (fun pred_t -> pred_t, tbl_id) set_var_dependee_tids
     in
+    print_string "." |> Format.print_flush;
     (* 		print_endline ("[get_data_dep_edges] got set_var_edges");
  *)
     DBG.printf
@@ -268,9 +271,11 @@ let data_dep_dag_of cid_decls g =
   let rev_g = reverse_dag_of g in
   (* get the edges that go from each table to the previous tables that use those edges. *)
   print_endline "[data_dep_dag_of] getting new edges";
+  print_string ("computing dataflow edges for each primitive operation table. Progress: ");
   let new_edges = Topo.fold (get_data_dep_edges cid_decls) rev_g [] in
   let oids, _ = CL.split cid_decls in
   (* create data_dag, adding tables as vertices *)
+  print_endline "done";
   print_endline "[data_dep_dag_of] creating data_dag";
   let data_dag =
     oids

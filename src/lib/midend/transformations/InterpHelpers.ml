@@ -134,7 +134,6 @@ let name_from_exp (ex : exp) : Cid.t =
 ;;
 
 let int_from_exp (ex : exp) =
-  print_endline ("[int_from_exp]: " ^ Printing.exp_to_string ex);
   match ex.e with
   | EVal { v = VInt zint; _ } -> Integer.to_int zint
   | _ -> trans_err "could not evaluate expression to an int" ex

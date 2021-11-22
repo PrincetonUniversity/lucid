@@ -32,33 +32,49 @@ let num_keys_of_tid tbl_id cid_decls =
 let num_merges = ref 1
 ;;
 
+let table_stats cid_decls tbl_id = 
+  sprintf "table %s with %i keys and %i rules" 
+  (Cid.to_string tbl_id)
+  (num_keys_of_tid tbl_id cid_decls)
+  (CL.length (rules_of_table (Cid.lookup cid_decls tbl_id)))
+;;
+
+(* 11/21 new version using updated and hopefully correct mergeutils 
+   methods *)
+let visit_tbl_as_succ tbl_id cid_decls = 
+  (Cid.to_string tbl_id)^"; "|> print_string |> Format.print_flush;
+  match pred_tids_of_tid cid_decls tbl_id with 
+  | [] -> cid_decls
+  | pred_tids ->  MU.condition_tbl_from_preds cid_decls pred_tids tbl_id
+;;
+
 (* visit tbl_id, considering it as a successor node
 	(get the conditions from all of tbl_id's predecessors) *)
-let visit_tbl_as_succ tbl_id cid_decls =
+let old_visit_tbl_as_succ tbl_id cid_decls =
+  LLValidate.only_one_root cid_decls "BranchElimination.visit_tbl_as_succ.start";
+  print_endline ("[visit_tbl_as_succ] before: "^(table_stats cid_decls tbl_id));
+  print_endline (DebugPrint.str_of_decl (Cid.lookup cid_decls tbl_id));
   let pred_tids = pred_tids_of_tid cid_decls tbl_id in
-  !dprint_endline ("predecessors of table: " ^ Cid.to_string tbl_id);
-  !dprint_endline (str_of_cids pred_tids);
-  match pred_tids with
-  (* no predecessors, do nothing *)
-  | [] ->
-    printf "table %s has no predecessors\n" (P4tPrint.str_of_private_oid tbl_id);
-    cid_decls
-  (* one predecessor: add the predecessor's constraints to your constraints. *)
-  | [pred_id] ->
-    let new_cid_decls = MU.propagate_condition_generic MU.AllMustMatch cid_decls pred_id tbl_id in 
-    print_endline (sprintf "[visit_tbl_as_succ] merge %i: %i tables " (!num_merges) 2);
-    num_merges := (!num_merges + 1);
-    print_endline (sprintf "[visit_tbl_as_succ] created a single-op table with %i keys" (num_keys_of_tid tbl_id new_cid_decls));
+  (* 11/21: bug: we are deducing no predecessor for tables that have predecessors... *)
+  let new_cid_decls = match pred_tids with
+    (* no predecessors, do nothing *)
+    | [] -> cid_decls
+    (* one predecessor: add the predecessor's constraints to your constraints. *)
+    | [pred_id] ->
+      num_merges := (!num_merges + 1);
+      let new_cid_decls = MU.propagate_condition_generic MU.AllMustMatch cid_decls pred_id tbl_id in 
+      new_cid_decls
+    (* more than 1 predecessor, merge all the predecessor conditions together, then 
+  		   call the same method as above. *)
+    | pred_ids -> 
+      (* print_endline (sprintf "[visit_tbl_as_succ] merge %i: %i tables " (!num_merges) ((CL.length pred_ids)+1)); *)
+      num_merges := (!num_merges + 1);
+      let new_cid_decls = MU.merge_pred_conditions cid_decls pred_ids tbl_id in 
+      new_cid_decls
+  in 
+    print_endline (DebugPrint.str_of_decl (Cid.lookup new_cid_decls tbl_id));
+    LLValidate.only_one_root new_cid_decls "BranchElimination.visit_tbl_as_succ.end";
     new_cid_decls
-  (* more than 1 predecessor, merge all the predecessor conditions together, then 
-		   call the same method as above. *)
-  | pred_ids -> 
-    print_endline (sprintf "[visit_tbl_as_succ] merge %i: %i tables " (!num_merges) ((CL.length pred_ids)+1));
-    num_merges := (!num_merges + 1);
-    let new_cid_decls = MU.merge_pred_conditions cid_decls pred_ids tbl_id in 
-    print_endline (sprintf "[visit_tbl_as_succ] created a single-op table with %i keys" (num_keys_of_tid tbl_id new_cid_decls));
-    new_cid_decls
-
 ;;
 
 (* visit node_id in unmodified graph g. transform cid_decls and the graph *)
@@ -220,7 +236,17 @@ let eliminate_branch_nodes cid_decls g =
     outc
     "[eliminate_branch_nodes] adding full constraints to all tables \n";
   LLValidate.validate_cid_decls cid_decls "[eliminate_branch_nodes] start";
+  !dprint_endline "----cid decls befure pushing down conditions----";
+  !dprint_endline (DebugPrint.str_of_cid_decls cid_decls);
+  !dprint_endline "----end cid decls before pushing down conditions----";
+  tids_of_declmap cid_decls 
+    |> CL.length 
+    |> sprintf "Computing execution constraints for every primitive operation table. There are %i tables. Progress: "
+    |> print_string
+    |> Format.print_flush;
+
   let cid_decls = Topo.fold visit_node_condition_pushdown g cid_decls in
+  print_endline " done.";
   !dprint_endline "----cid decls after pushing down conditions----";
   !dprint_endline (DebugPrint.str_of_cid_decls cid_decls);
   !dprint_endline "----end cid decls after pushing down conditions----";
@@ -239,17 +265,13 @@ let do_passes df_prog =
   DBG.start_mlog __FILE__ outc dprint_endline;
   MU.start_logging ();
   let cid_decls, root_tid, g = df_prog in
-  !dprint_endline "-----cid_decls at start of BranchElimination-----";
-  !dprint_endline (DebugPrint.str_of_cid_decls cid_decls);
-  !dprint_endline "-----end cid_decls at start of BranchElimination-----";
+  LLValidate.validate_cid_decls cid_decls "BranchElimination.do_passes@start";
+  print_endline ("----starting BranchElimination pass----");
   (* log_prog cid_decls; *)
   let new_cid_decls, g = eliminate_branch_nodes cid_decls g in
-  DBG.printf outc "----new program----\n";
   (* log_prog new_cid_decls; *)
   let new_prog = new_cid_decls, root_tid, g in
-  !dprint_endline "-----new_cid_decls at end of BranchElimination-----";
-  !dprint_endline (DebugPrint.str_of_cid_decls new_cid_decls);
-  !dprint_endline "-----end new_cid_decls at end of BranchElimination-----";
+  LLValidate.validate_cid_decls cid_decls "BranchElimination.do_passes@end";
   (* log_tbl_g_and_ir new_prog "nobranch_table_call"; *)
   (* log_tbl_dot_and_prog new_prog "nobranch_table_call"; *)
   new_prog

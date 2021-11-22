@@ -19,7 +19,6 @@ let dprint_endline = ref DBG.no_printf
 
 (* get an integer from an expression. If the expression is a const, get the computed value. *)
 let int_from_const_exp (ex : exp) =
-  print_endline ("[int_from_exp]: " ^ Printing.exp_to_string ex);
   match ex.e with
   | EVal { v = VInt zint; _ } -> Integer.to_int zint
   | _ -> trans_err "could not evaluate expression to an int" ex
@@ -262,7 +261,6 @@ module TofinoAlu = struct
           in
           CL.hd call_result.names, CL.hd call_result.objs
         | _ ->
-          t_info "[from_assign: ECall]";
           let call_result =
             ctx_call_codegen
               fcn_id
@@ -290,7 +288,6 @@ module TofinoAlu = struct
   ;;
 
   let from_unit hdl_id val_exp opstmt =
-    t_info "[from_unit]";
     let base_name = uname_of_stmt opstmt in
     let alu_name, alu_obj =
       match val_exp.e with
@@ -434,7 +431,6 @@ module TofinoControl = struct
     let outvar_id, var_ty, val_exp = unpack_local opstmt in
     (* caution: must use mid_from_id in from_assign too. *)
     let outvar_mid = mid_from_id hdl_id outvar_id in
-    print_endline ("FROM_LOCAL: " ^ Printing.stmt_to_string opstmt);
     (* make the ALU that does the computation. *)
     let alu_name, alu_obj =
       TofinoAlu.from_assign hdl_id outvar_id val_exp opstmt
@@ -442,8 +438,6 @@ module TofinoControl = struct
     (* wrap it in a table that calls the ALU and points to the next table. *)
     let assign_objs = wrap_alu_in_call_table opgraph opstmt alu_name alu_obj in
     (* add an object to declare the new local *)
-    print_endline
-      ("trying to find width of type: " ^ Printing.ty_to_string var_ty);
     (* let width = width_from_ty var_ty in  *)
     (* HACK (7/6/21) -- should figure out what is wrong here. Probably related to consts. *)
     let width = width_from_ty var_ty in
@@ -556,10 +550,6 @@ module TofinoControl = struct
       match stmt.s with
       | SNoop ->
         let succ_tbls = successortbls_of_stmt opgraph stmt in
-        (match succ_tbls with
-        | [] ->
-          print_endline ("NO SUCCESSOR TABLE FOR NOOP: " ^ stmt.sspan.fname)
-        | _ -> ());
         (* let succ_tbl = tblname_of_stmt stmt in *)
         IS.new_action acn_name [] succ_tbls
       | _ ->
@@ -579,9 +569,6 @@ module TofinoControl = struct
 
   let get_keys hdl_id exp =
     let keys = vars_in_exp exp |> CL.map (mid_from_cid hdl_id) in
-    print_endline "KEYS: ";
-    CL.iter (fun k -> print_endline (Cid.to_string k)) keys;
-    print_endline "-----";
     keys
   ;;
 
@@ -735,7 +722,6 @@ module TofinoControl = struct
   ;;
 
   let from_if hdl_id opgraph opstmt =
-    print_endline "FROM IF STARTING.";
     !dprint_endline "-----[from_if]-----";
     (* extract the details of the statement *)
     let exp, _, _, _ = unpack_if opstmt in
@@ -760,12 +746,7 @@ module TofinoControl = struct
     (* objects to return *)
     let new_objs = [table_actions.ta_true; table_actions.ta_false; table] in
     (* debug printing *)
-    !dprint_endline "-----[from_if SUMMARY]-----";
-    !dprint_endline "input statement:";
-    !dprint_endline (Pr.stmt_to_string opstmt);
-    !dprint_endline "new objects:";
     log_objs opstmt new_objs;
-    print_endline "[from_if] finished.";
     new_objs
   ;;
 
@@ -842,7 +823,6 @@ module TofinoControl = struct
     !dprint_endline "-----[from_opstmt] ------";
     !dprint_endline ("creating table: " ^ Cid.to_string (tblname_of_stmt opstmt));
     !dprint_endline ("statement: " ^ Printing.stmt_to_string opstmt);
-    print_endline (Printing.stmt_to_string opstmt);
     !dprint_endline ("op statement: " ^ OGSyntax.print_op_stmt opstmt);
     !dprint_endline "-----------";
     match opstmt.s with

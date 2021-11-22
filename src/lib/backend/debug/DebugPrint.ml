@@ -4,6 +4,7 @@ open Format
 open Base
 open Consts
 open PrintUtils
+open DFSyntax
 module CL = Caml.List
 
 (* debug string functions *)
@@ -114,3 +115,23 @@ let str_of_cid_decls cid_decls =
   P4tPrint.PrintComputeObject.print_decls (CL.split cid_decls |> snd);
   PrintUtils.close_block ()
 ;;
+
+let rulescts_of_tables cid_decls = 
+  let print_tbl_info (tbl) = 
+    print_endline (sprintf "%s,%i" 
+      (Cid.to_string (tid_of_tbl tbl))
+      (CL.length (rules_of_table tbl))
+    )
+  in 
+  print_endline ("**********");
+  print_endline ("tbl, rules");
+  (tbls_of_dmap cid_decls) |> CL.iter print_tbl_info;
+  print_endline ("**********")
+;;
+
+let str_of_rules rules = 
+  PrintUtils.open_block ();
+  P4tPrint.PrintTable.print_tbl_rules str_formatter rules;
+  PrintUtils.close_block ()
+;;
+

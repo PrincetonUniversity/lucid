@@ -127,10 +127,8 @@ let generate_event (args : codegenInput) : codegenOutput =
           ev_id
           ev_args
     in
-    t_info "returning generated event.";
     { names = [oid]; objs = [obj] }
   | EVar _ ->
-    t_info "generating an event from a variable.";
     { names = []; objs = [] }
     (* this is a generate statement for an event that has effectively already been generated. *)
     (* may need to add an is_valid type statement here. *)

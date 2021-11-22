@@ -267,8 +267,6 @@ let check_unique_stmt_spans dec =
       method spans = spans
 
       method! visit_statement ctx st =
-        printf "st: %s\n" (Printing.statement_to_string st);
-        printf "span fname: %s\n" st.sspan.fname;
         spans <- spans @ [st.sspan];
         super#visit_statement ctx st
     end

@@ -293,6 +293,7 @@ let prepare_frame_var_for_rid
     cid_decls
     rid
   =
+  ((Cid.to_string rid)^"; ") |> print_string |> print_flush;
   let salu_arg_id = cid_of_shared_arg_var shared_salu_arg_var in
   (* get the set of variables that need to be overlaid. *)
   let salu_vars_map = salu_param_finder cid_decls rid in
@@ -393,11 +394,6 @@ let fst_salu_read_vars_by_rid cid_decls rid =
   let filter_map_f sInstr_id =
     let salu_call = Cid.lookup cid_decls sInstr_id in
     let read_args = readvars_of_sInstr salu_call in
-    Printf.printf
-      "[fst_salu_read_vars_by_rid] rid: %s salu_id: %s read_args: %s\n"
-      (P4tPrint.str_of_varid rid)
-      (Cid.to_string sInstr_id)
-      (P4tPrint.str_of_varids read_args);
     match read_args with
     | fst :: _ -> Some (salu_call, fst)
     | _ -> None
@@ -561,12 +557,14 @@ let prepare_salu_frames dag prepare_frame_var_for_rid =
      because some structures are bound outside of the program. *)
   let struct_mids = find_unbound_vars cid_decls in
   let rids = ids_of_type is_reg cid_decls in
+  print_string (sprintf "processing inputs for %i registers: " (CL.length rids));
   let updated_cid_decls =
     CL.fold_left
       (prepare_salu_frames_for_rid prepare_frame_var_for_rid struct_mids)
       cid_decls
       rids
   in
+  print_endline (" done");
   let updated_g = graph_of_declsMap updated_cid_decls in
   let _, root_tbl_id, _ = dag in
   let framed_dag = updated_cid_decls, root_tbl_id, updated_g in

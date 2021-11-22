@@ -170,7 +170,7 @@ let is_intersection_feasible (s : rule) (t : rule) =
 ;;
 
 (* is rule r still feasible after matching on the rule in qs?
-		(can anything match ~qs and r)?
+    (can anything match ~qs and r)?
 *)
 let is_r_still_feasible (r : rule) (qs : rule list) =
   let ctx = mk_context ["model", "true"; "proof", "true"] in
@@ -227,3 +227,24 @@ let is_reachable_in_order all_rules rule =
     Printf.printf "unknown\n";
     error "unknown sat..."
 ;;
+(******* NEW rule solve *******)
+let new_is_r_still_feasible (r : rule) (qs : rule list) =
+  let ctx = mk_context ["model", "true"; "proof", "true"] in
+  let ctx, r_eqn = eqn_of_rule ctx r in
+  let _, q_eqns = CL.split (CL.map (eqn_of_rule ctx) qs) in
+  (* let qs_eqn = Z3Bool.mk_and ctx q_eqns in *) (* BUG: why is this and instead of or? *)
+  let qs_eqn = Z3Bool.mk_or ctx q_eqns in (* BUG: why is this and instead of or? *)
+  let not_qs_eqn = Z3Bool.mk_not ctx qs_eqn in
+  let intersect_eqn = Z3Bool.mk_and ctx [not_qs_eqn; r_eqn] in
+  let solver = Solver.mk_simple_solver ctx in
+  Solver.add solver [intersect_eqn];
+  let is_sat = Solver.check solver [] in
+  match is_sat with
+  | UNSATISFIABLE -> false
+  | SATISFIABLE -> true
+  | UNKNOWN ->
+    Printf.printf "unknown\n";
+    error "unknown sat..."
+;;
+
+

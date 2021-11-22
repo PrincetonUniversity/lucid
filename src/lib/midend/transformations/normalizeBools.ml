@@ -59,7 +59,6 @@ module NormalizeRelops = struct
 
   (* normalize a boolean expression in an if. *)
   let rec normalize_exp exp =
-    print_endline ("[normalize_exp] " ^ Printing.exp_to_string exp);
     match exp with
     (* operations need to be recursively normalized *)
     | { e = EOp (op, args); espan; ety } -> normalize_erelop op args ety espan
@@ -88,7 +87,6 @@ module NormalizeRelops = struct
         let test_var_cid, calc_test_var = create_precompute_test e1 Sub e2 in
         let new_e1 = aexp (EVar test_var_cid) e1.ety Span.default in
         (* new_e2 should be the same size as new_e1 *)
-        print_endline ("getting from e1: " ^ Printing.exp_to_string e1);
         let new_e2 = value_to_exp (vint 0 (intwidth_of_exp e1)) in
         let new_exp = aexp (EOp (op, [new_e1; new_e2])) ety espan in
         new_exp, [calc_test_var]
@@ -355,7 +353,7 @@ module NormalizeBoolExps = struct
       (sprintf
          "converted expression into a disjunction of %i exprs\n"
          (List.length disjunct_z3es));
-    List.iter (fun de -> printf "exp: %s\n" (Expr.to_string de)) disjunct_z3es;
+    (* List.iter (fun de -> printf "exp: %s\n" (Expr.to_string de)) disjunct_z3es; *)
     let new_exp = exp_of_disjunct_z3es disjunct_z3es in
     !dprint_endline
       (sprintf "old expression:  %s\n" (Printing.exp_to_string exp));

@@ -205,7 +205,7 @@ and table = oid * rule list * int option
    That's annoyingly irregular. (also, are OffPaths even used anywhere anymore?)*)
 and rule =
   | Match of cid * pattern * oid
-  | OffPath of pattern
+  | OffPath of pattern (* an "OffPath rule" just means noop. Used for default rules. *)
 
 (*  | OffPath (* matching an offpath rule means that a packet is not handled by this code path. These should not occur in final programs. *)
 *)
@@ -464,11 +464,29 @@ let pat_of_rule r =
   | OffPath pat -> pat
 ;;
 
+let new_aid_of_rule r = 
+  match r with 
+  | Match (_, _, s_aid) -> Some s_aid
+  | OffPath _ -> None
+;;
 let aid_of_rule r =
   match r with
   | Match (_, _, s_aid) -> s_aid
   | OffPath _ -> Cid.create ["OffPath"]
 ;;
+
+(* This should only be used 
+   for printing! Very dangerous 
+   to use in actual code, because 
+   there is no offpath object 
+   in cid_decls. *)
+let debug_aid_of_rule r =
+  match r with
+  | Match (_, _, s_aid) -> s_aid
+  | OffPath _ -> Cid.create ["OffPath"]
+;;
+
+
 
 let int_of_expr e =
   match e with
@@ -627,6 +645,12 @@ let width_of_regvec dec =
   | _ -> error "not a regvec decl"
 ;;
 
+let rules_of_table dec = 
+  match dec with
+  | Table (_, rules, _) -> rules 
+  | _ -> error "not a table"
+;;
+
 let keys_of_table dec =
   match dec with
   | Table (_, rules, _) -> match_vars_of_rules rules
@@ -678,6 +702,12 @@ let rule_eq x y =
   | _ -> false
 ;;
 
+(* more helpers... *)
+let rule_pattern rule = match rule with 
+  | Match(_, pat, _) -> pat
+  | OffPath(pat) -> pat
+;;
+
 module Generators = struct
   let int_const i : const = Integer.of_int i
   let const_oper i = Const i
@@ -718,4 +748,20 @@ module Generators = struct
 
   (* parse helpers *)
   let parse_node name stmts next = name, stmts, next
+
+
+  let noop_rule = OffPath([])
+  let concrete_noop pat = 
+    let acnid = Cid.fresh ["noop"] in 
+    let ruleid = Cid.fresh ["noop_rule"] in 
+    let acn = Action(acnid, [], []) in 
+    let rule = Match(ruleid, pat, acnid) in 
+    rule, acn  
+  ;; 
+
+  let noop_action idstr = Action((Cid.fresh [idstr]), [], [])
+
+
+  ;;
+
 end
