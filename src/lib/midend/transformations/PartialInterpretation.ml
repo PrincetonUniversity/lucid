@@ -339,22 +339,26 @@ let rec interp_stmt env level s : statement * env =
     merge_branches base_stmt level env envs
 ;;
 
+let add_builtin_defs level vars env =
+  List.fold_left
+    (fun acc (id, _) ->
+      IdMap.add
+        id
+        { level; body = None; is_declared = true; declared_as = None }
+        acc)
+    env
+    vars
+;;
+
 let interp_body env (params, stmt) =
   let level = 1 in
   let builtins =
-    (Builtins.this_id, Builtins.this_ty) :: Builtins.builtin_vars
+    let open Builtins in
+    (ingr_port_id, ingr_port_ty) :: (this_id, this_ty) :: builtin_vars
   in
-  let add_defs vars env =
-    List.fold_left
-      (fun acc (id, _) ->
-        IdMap.add
-          id
-          { level; body = None; is_declared = true; declared_as = None }
-          acc)
-      env
-      vars
+  let env =
+    env |> add_builtin_defs level builtins |> add_builtin_defs level params
   in
-  let env = env |> add_defs builtins |> add_defs params in
   params, fst (interp_stmt env level stmt)
 ;;
 
@@ -385,7 +389,11 @@ let interp_decl env d =
 ;;
 
 let interp_prog ds =
-  let env = ref IdMap.empty in
+  let builtins =
+    let open Builtins in
+    [recirc_id, recirc_ty; self_id, self_ty]
+  in
+  let env = ref (IdMap.empty |> add_builtin_defs 0 builtins) in
   List.map
     (fun d ->
       let env', d = interp_decl !env d in
