@@ -892,7 +892,9 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
           { env with
             current_effect = FZero
           ; consts =
-              CidMap.add (Id Builtins.this_id) Builtins.this_ty env.consts
+              env.consts
+              |> CidMap.add (Id Builtins.this_id) Builtins.this_ty
+              |> CidMap.add (Id Builtins.ingr_port_id) Builtins.ingr_port_ty
           ; constraints
           }
           body

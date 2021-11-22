@@ -4,7 +4,7 @@ dpt: Auto-detected specification file examples/interp_tests/symbolics0.json
 dpt: Simulating...
 dpt: Using random seed: 0
 
-t=0: Handling event in(0) at switch 0
+t=0: Handling event in(0) at switch 0, port 0
 dpt: Final State:
 
 Switch 0 : {

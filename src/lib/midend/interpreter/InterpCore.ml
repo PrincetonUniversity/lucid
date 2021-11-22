@@ -230,19 +230,37 @@ let rec interp_statement nst swid locals s =
     then locals
     else interp_statement nst swid locals ss2
   | SGen (g, e) ->
+    (* TODO: Right now, port numbers for generate_single and generate_multi are
+       arbitrary (always 0). We could do better by e.g. finding a path through
+       the graph and figuring out which port number it ends at *)
+    (* FIXME: Figure out where recirc_port should really be defined *)
+    let recirc_port = 196 in
     let locs =
       match g with
-      | GSingle None -> [swid]
+      | GSingle None -> [swid, recirc_port]
       | GSingle (Some e) ->
-        [interp_exp e |> extract_ival |> raw_integer |> Integer.to_int]
+        [interp_exp e |> extract_ival |> raw_integer |> Integer.to_int, 0]
       | GMulti grp ->
-        interp_exp grp |> extract_ival |> raw_group |> List.map Integer.to_int
-      | GPort _ -> failwith "Not yet implemented"
+        interp_exp grp
+        |> extract_ival
+        |> raw_group
+        |> List.map (fun i -> Integer.to_int i, 0)
+      | GPort port ->
+        let port =
+          interp_exp port |> extract_ival |> raw_integer |> Integer.to_int
+        in
+        [State.lookup_dst nst (swid, port)]
     in
     let event = interp_exp e |> extract_ival |> raw_event in
     if Env.find event.eid nst.event_sorts = EExit
-    then State.log_exit swid event nst
-    else List.iter (fun loc -> State.push_event loc event nst) locs;
+    then State.log_exit swid None event nst
+    else
+      List.iter
+        (fun (dst_id, port) ->
+          if dst_id = -1 (* lookup_dst failed *)
+          then State.log_exit dst_id (Some port) event nst
+          else State.push_event dst_id port event nst)
+        locs;
     locals
   | SRet (Some e) ->
     let v = interp_exp e |> extract_ival in
@@ -323,12 +341,18 @@ let interp_decl (nst : State.network_state) swid d =
   match d.d with
   | DGlobal (id, ty, e) -> interp_dglobal nst swid id ty e
   | DHandler (id, (params, body)) ->
-    let f nst swid event =
-      let this_event = vevent { event with edelay = 0 } in
+    let f nst swid port event =
+      let builtin_env =
+        List.fold_left
+          (fun acc (k, v) -> Env.add k v acc)
+          Env.empty
+          [ Id Builtins.this_id, State.V (vevent { event with edelay = 0 })
+          ; Id Builtins.ingr_port_id, State.V (vint port 32) ]
+      in
       let locals =
         List.fold_left2
           (fun acc v (id, _) -> Env.add (Id id) (State.V v) acc)
-          (Env.singleton (Id Builtins.this_id) (State.V this_event))
+          builtin_env
           event.data
           params
       in

@@ -3,16 +3,15 @@ open CoreSyntax
 open Yojson.Basic
 open Preprocess
 module Env = InterpState.Env
-module IntMap = Map.Make (Int)
+module IntMap = InterpState.IntMap
 
 (* Maps switch -> port -> (switch * port) *)
-type topology = (int * int) IntMap.t IntMap.t
 
 type t =
   { num_switches : int
-  ; links : topology
+  ; links : InterpState.State.topology
   ; externs : value Env.t list
-  ; events : (event * location list) list
+  ; events : (event * (location * int) list) list
   ; config : InterpState.State.config
   }
 
@@ -49,6 +48,8 @@ let rec parse_value err_str ty j =
     ^ " specification had wrong or unexpected argument "
     ^ to_string j
 ;;
+
+let default_port = 0
 
 let parse_events
     (pp : Preprocess.t)
@@ -106,10 +107,10 @@ let parse_events
                   error
                   @@ "Cannot specify event at nonexistent location "
                   ^ string_of_int n;
-                Integer.create n 32
+                Integer.create n 32, default_port
               | _ -> error "Event specification had non-integer location")
             lst
-        | None -> [Integer.create 0 32]
+        | None -> [Integer.create 0 32, default_port]
         | _ -> error "Event specification has non-list locations field"
       in
       { eid; data; edelay }, locations
@@ -183,13 +184,7 @@ let parse_links num_switches links =
     |> add_link src_id src_port (dst_id, dst_port)
     |> add_link dst_id dst_port (src_id, src_port)
   in
-  let empty_topology =
-    List.fold_left
-      (fun acc n -> IntMap.add n IntMap.empty acc)
-      IntMap.empty
-      (List.init num_switches (fun n -> n))
-  in
-  List.fold_left add_links empty_topology links
+  List.fold_left add_links (InterpState.State.empty_topology num_switches) links
 ;;
 
 (* Make a full mesh with arbitrary port numbers.

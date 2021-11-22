@@ -3,41 +3,41 @@ dpt: Auto-detected specification file examples/interp_tests/NAT.json
 dpt: Simulating...
 dpt: Using random seed: 0
 
-t=0: Handling entry event outside_packet(10) at switch 0
+t=0: Handling entry event outside_packet(10) at switch 0, port 0
 Mapped port 10 to (ip: 0, port: 0)
 dropped
-t=100000: Handling entry event outside_packet(12) at switch 0
+t=100000: Handling entry event outside_packet(12) at switch 0, port 0
 Mapped port 12 to (ip: 0, port: 0)
 dropped
-t=200000: Handling entry event outside_packet(14) at switch 0
+t=200000: Handling entry event outside_packet(14) at switch 0, port 0
 Mapped port 14 to (ip: 0, port: 0)
 dropped
-t=300000: Handling entry event inside_packet(10,100) at switch 0
+t=300000: Handling entry event inside_packet(10,100) at switch 0, port 0
 Adding to NAT
-t=300600: Handling event add_to_nat(10,100) at switch 0
+t=300600: Handling event add_to_nat(10,100) at switch 0, port 196
 Mapped (ip: 10, port: 100) to port 11
-t=400000: Handling entry event inside_packet(10,100) at switch 0
+t=400000: Handling entry event inside_packet(10,100) at switch 0, port 0
 IP already in NAT, maps to port 11
-t=500000: Handling entry event outside_packet(10) at switch 0
+t=500000: Handling entry event outside_packet(10) at switch 0, port 0
 Mapped port 10 to (ip: 0, port: 0)
 dropped
-t=600000: Handling entry event outside_packet(12) at switch 0
+t=600000: Handling entry event outside_packet(12) at switch 0, port 0
 Mapped port 12 to (ip: 0, port: 0)
 dropped
-t=700000: Handling entry event outside_packet(14) at switch 0
+t=700000: Handling entry event outside_packet(14) at switch 0, port 0
 Mapped port 14 to (ip: 0, port: 0)
 dropped
-t=800000: Handling entry event inside_packet(11,101) at switch 0
+t=800000: Handling entry event inside_packet(11,101) at switch 0, port 0
 Adding to NAT
-t=800600: Handling event add_to_nat(11,101) at switch 0
+t=800600: Handling event add_to_nat(11,101) at switch 0, port 196
 Mapped (ip: 11, port: 101) to port 14
-t=900000: Handling entry event outside_packet(10) at switch 0
+t=900000: Handling entry event outside_packet(10) at switch 0, port 0
 Mapped port 10 to (ip: 0, port: 0)
 dropped
-t=1000000: Handling entry event outside_packet(12) at switch 0
+t=1000000: Handling entry event outside_packet(12) at switch 0, port 0
 Mapped port 12 to (ip: 0, port: 0)
 dropped
-t=1100000: Handling entry event outside_packet(14) at switch 0
+t=1100000: Handling entry event outside_packet(14) at switch 0, port 0
 Mapped port 14 to (ip: 11, port: 101)
 dpt: Final State:
 
@@ -51,10 +51,10 @@ Switch 0 : {
  Events :   [ ]
 
  Exits :    [
-    inside_continue(11) at t=300600
-    inside_continue(11) at t=400000
-    inside_continue(14) at t=800600
-    outside_continue(11,101) at t=1100000
+    inside_continue(11) at port -1, t=300600
+    inside_continue(11) at port -1, t=400000
+    inside_continue(14) at port -1, t=800600
+    outside_continue(11,101) at port -1, t=1100000
   ]
 
  entry events handled: 12

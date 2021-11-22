@@ -1,6 +1,6 @@
 # include $(shell ocamlfind query visitors)/Makefile.preprocess
 
-.PHONY: test clean
+.PHONY: test test-promote clean
 
 
 
@@ -23,6 +23,10 @@ generatedVisitors: src/lib/frontend/Syntax.processed.ml
 # 	cp _build/default/test/testing.exe test
 test: default
 	python3 ./test/runtests.py
+
+test-promote: default
+	python3 ./test/runtests.py
+	cp test/output/* test/expected/
 
 doc:
 	dune build @doc

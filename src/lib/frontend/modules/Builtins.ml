@@ -16,6 +16,8 @@ let builtin_defs = Arrays.defs @ Counters.defs @ Events.defs @ System.defs
 (* Not a global var *)
 let this_id = Id.create "this"
 let this_ty = TEvent |> ty
+let ingr_port_id = Id.create "ingress_port"
+let ingr_port_ty = TInt (IConst 32) |> ty
 
 (* Used in constraints *)
 let start_id = Id.create "start"
