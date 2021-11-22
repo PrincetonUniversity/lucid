@@ -22,6 +22,12 @@ let raw_event v =
   | _ -> error "not event"
 ;;
 
+let raw_group v =
+  match v.v with
+  | VGroup ls -> ls
+  | _ -> error "not event"
+;;
+
 let interp_op op vs =
   let vs = List.map extract_ival vs in
   match op, vs with
@@ -224,22 +230,20 @@ let rec interp_statement nst swid locals s =
     then locals
     else interp_statement nst swid locals ss2
   | SGen (g, e) ->
-    begin
+    let locs =
       match g with
-      | GSingle | GMulti ->
-        let event = interp_exp e |> extract_ival |> raw_event in
-        if Env.find event.eid nst.event_sorts = EExit
-        then State.log_exit swid event nst
-        else (
-          let locs =
-            if List.length event.elocations = 0
-            then [swid]
-            else List.map Integer.to_int event.elocations
-          in
-          List.iter (fun loc -> State.push_event loc event nst) locs);
-        locals
-      | _ -> failwith "NYI"
-    end
+      | GSingle None -> [swid]
+      | GSingle (Some e) ->
+        [interp_exp e |> extract_ival |> raw_integer |> Integer.to_int]
+      | GMulti grp ->
+        interp_exp grp |> extract_ival |> raw_group |> List.map Integer.to_int
+      | GPort _ -> failwith "Not yet implemented"
+    in
+    let event = interp_exp e |> extract_ival |> raw_event in
+    if Env.find event.eid nst.event_sorts = EExit
+    then State.log_exit swid event nst
+    else List.iter (fun loc -> State.push_event loc event nst) locs;
+    locals
   | SRet (Some e) ->
     let v = interp_exp e |> extract_ival in
     (* Computation stops if retval is Some *)
@@ -320,7 +324,7 @@ let interp_decl (nst : State.network_state) swid d =
   | DGlobal (id, ty, e) -> interp_dglobal nst swid id ty e
   | DHandler (id, (params, body)) ->
     let f nst swid event =
-      let this_event = vevent { event with edelay = 0; elocations = [] } in
+      let this_event = vevent { event with edelay = 0 } in
       let locals =
         List.fold_left2
           (fun acc v (id, _) -> Env.add (Id id) (State.V v) acc)
@@ -335,12 +339,7 @@ let interp_decl (nst : State.network_state) swid d =
     State.add_handler (Cid.id id) f nst
   | DEvent (id, _, _) ->
     let f _ _ args =
-      vevent
-        { eid = Id id
-        ; data = List.map extract_ival args
-        ; edelay = 0
-        ; elocations = []
-        }
+      vevent { eid = Id id; data = List.map extract_ival args; edelay = 0 }
     in
     State.add_global swid (Id id) (State.F f) nst;
     nst

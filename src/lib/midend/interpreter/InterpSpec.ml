@@ -7,7 +7,7 @@ module Env = InterpState.Env
 type t =
   { num_switches : int
   ; externs : value Env.t list
-  ; events : event list
+  ; events : (event * location list) list
   ; config : InterpState.State.config
   }
 
@@ -90,7 +90,7 @@ let parse_events
           !last_delay
         | _ -> error "Event specification had non-integer delay field"
       in
-      let elocations =
+      let locations =
         match List.assoc_opt "locations" lst with
         | Some (`List lst) ->
           List.map
@@ -107,7 +107,7 @@ let parse_events
         | None -> [Integer.create 0 32]
         | _ -> error "Event specification has non-list locations field"
       in
-      { eid; data; edelay; elocations }
+      { eid; data; edelay }, locations
     | _ -> error "Non-assoc type for event definition"
   in
   List.map parse_event events

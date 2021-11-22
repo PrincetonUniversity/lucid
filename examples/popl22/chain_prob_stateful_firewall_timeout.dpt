@@ -34,14 +34,14 @@ exit event response_continue (int src_ip, int dst_ip);
 event add_to_firewall(int[2] args) {
   BloomFilterTimeout.add_to_filter(filter, args);
   if (self != tail) {
-    generate Event.sslocate(add_to_firewall(args), succ);
+    generate_switch (succ, add_to_firewall(args));
   }
 }
 
 handle request_packet(int client_ip, int server_ip) {
   bool in_filter = BloomFilterTimeout.in_filter(filter, [client_ip; server_ip]);
   if (in_filter == false) {
-    generate Event.sslocate(add_to_firewall([client_ip; server_ip]), head);
+    generate_switch (head, add_to_firewall([client_ip; server_ip]));
   }
   generate request_continue(client_ip, server_ip);
 }

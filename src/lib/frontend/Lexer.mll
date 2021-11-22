@@ -43,7 +43,7 @@ rule token = parse
   | "bool"            { TBOOL (position lexbuf) }
   | "event"           { EVENT (position lexbuf) }
   | "generate"        { GENERATE (position lexbuf) }
-  | "generate_single" { SGENERATE (position lexbuf) }
+  | "generate_switch" { SGENERATE (position lexbuf) }
   | "generate_multi"  { MGENERATE (position lexbuf) }
   | "generate_port"   { PGENERATE (position lexbuf) }
   | "printf"          { PRINTF (position lexbuf) }

@@ -2,8 +2,8 @@ dpt: Parsing ...
 
 In examples/interp_tests/chain_stateful_firewall.dpt: 
 
-46|    generate Event.sslocate(updater, head);
-                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+46|    generate_switch (head, updater);
+                                  ~~~~~~~
 
 warning: examples/interp_tests/chain_stateful_firewall.dpt: Conditional generation of potential non-exit event in entry handler.
 

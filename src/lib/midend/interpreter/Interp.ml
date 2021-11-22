@@ -18,10 +18,10 @@ let initial_state (pp : Preprocess.t) (spec : InterpSpec.t) =
     (fun i exs -> Env.iter (fun cid v -> State.add_global i cid (V v) nst) exs)
     spec.externs;
   List.iter
-    (fun event ->
+    (fun (event, locs) ->
       List.iter
         (fun loc -> State.push_input_event (Integer.to_int loc) event nst)
-        event.elocations)
+        locs)
     spec.events;
   nst
 ;;

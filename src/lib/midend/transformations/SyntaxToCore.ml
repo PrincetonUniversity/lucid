@@ -18,8 +18,8 @@ let rec translate_ty (ty : S.ty) : C.ty =
     match S.TyTQVar.strip_links ty.raw_ty with
     | S.TBool -> C.TBool
     | S.TGroup -> C.TGroup
+    | S.TEvent -> C.TEvent
     | S.TInt sz -> C.TInt (translate_size sz)
-    | S.TEvent b -> C.TEvent b
     | S.TName (cid, sizes, b) -> C.TName (cid, List.map translate_size sizes, b)
     | S.TMemop (sz1, sz2) -> C.TMemop (translate_size sz1, translate_size sz2)
     | S.TFun fty ->
@@ -74,8 +74,8 @@ let rec translate_value (v : S.value) : C.value =
     | S.VInt z -> C.VInt z
     | S.VGlobal n -> C.VGlobal n
     | S.VGroup ls -> C.VGroup ls
-    | VEvent { eid; data; edelay; elocations } ->
-      C.VEvent { eid; data = List.map translate_value data; edelay; elocations }
+    | VEvent { eid; data; edelay } ->
+      C.VEvent { eid; data = List.map translate_value data; edelay }
   in
   { v = v'; vty = translate_ty (Option.get v.vty); vspan = v.vspan }
 ;;
@@ -97,8 +97,8 @@ let rec translate_exp (e : S.exp) : C.exp =
 ;;
 
 let translate_gen_type = function
-  | S.GSingle -> C.GSingle
-  | S.GMulti -> C.GMulti
+  | S.GSingle eo -> C.GSingle (Option.map translate_exp eo)
+  | S.GMulti e -> C.GMulti (translate_exp e)
   | S.GPort e -> C.GPort (translate_exp e)
 ;;
 

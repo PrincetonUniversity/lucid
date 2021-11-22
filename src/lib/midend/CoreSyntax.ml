@@ -23,7 +23,7 @@ and raw_ty =
   | TBool
   | TGroup
   | TInt of size (* Number of bits *)
-  | TEvent of bool (* True iff multicast *)
+  | TEvent
   | TFun of func_ty (* Only used for Array/event functions at this point *)
   | TName of cid * sizes * bool (* Named type: e.g. "Array.t<<32>>". Bool is true if it represents a global type *)
   | TMemop of size * size
@@ -83,7 +83,6 @@ and event =
   { eid : cid
   ; data : value list
   ; edelay : int
-  ; elocations : location list
   }
 
 and value =
@@ -109,8 +108,8 @@ and exp =
 and branch = pat list * statement
 
 and gen_type =
-  | GSingle
-  | GMulti
+  | GSingle of exp option
+  | GMulti of exp
   | GPort of exp
 
 (* statements *)
@@ -121,7 +120,7 @@ and s =
   | SAssign of id * exp
   | SPrintf of string * exp list
   | SIf of exp * statement * statement
-  | SGen of gen_type * exp (* Bool is true iff multicast *)
+  | SGen of gen_type * exp
   | SSeq of statement * statement
   | SMatch of exp list * branch list
   | SRet of exp option
@@ -191,8 +190,7 @@ let infer_vty v =
   match v with
   | VBool _ -> TBool
   | VInt z -> TInt (Integer.size z)
-  | VEvent e ->
-    if List.length e.elocations = 1 then TEvent false else TEvent true
+  | VEvent _ -> TEvent
   | VGroup _ -> TGroup
   | VGlobal _ -> failwith "Cannot infer type of global value"
 ;;
@@ -272,7 +270,6 @@ let rec equiv_value v1 v2 =
   | VEvent e1, VEvent e2 ->
     Cid.equal e1.eid e2.eid
     && e1.edelay = e2.edelay
-    && e1.elocations = e2.elocations
     && equiv_list equiv_value e1.data e2.data
   | _ -> false
 ;;

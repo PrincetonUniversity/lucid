@@ -300,24 +300,19 @@ and stmt_to_string s =
   match s.s with
   | SAssign (i, e) -> id_to_string i ^ " = " ^ exp_to_string e ^ ";"
   | SNoop -> ""
-  | SGen (b, e) ->
-    (match b with
-    | GSingle eo ->
-      (match eo with
-      | None -> Printf.sprintf "generate %s;" (exp_to_string e)
-      | Some loc ->
-        Printf.sprintf
-          "generate_single (%s, %s)"
-          (exp_to_string loc)
-          (exp_to_string e))
-    | GMulti loc ->
+  | SGen (g, e) ->
+    (match g with
+    | GSingle None -> Printf.sprintf "generate %s;" (exp_to_string e)
+    | _ ->
+      let gen_str, loc =
+        match g with
+        | GSingle eo -> "generate_switch", Option.get eo
+        | GMulti loc -> "generate_multi", loc
+        | GPort loc -> "generate_port", loc
+      in
       Printf.sprintf
-        "generate_multi (%s, %s);"
-        (exp_to_string loc)
-        (exp_to_string e)
-    | GPort loc ->
-      Printf.sprintf
-        "generate_port (%s, %s);"
+        "%s (%s, %s);"
+        gen_str
         (exp_to_string loc)
         (exp_to_string e))
   | SLocal (i, t, e) ->

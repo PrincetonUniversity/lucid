@@ -249,7 +249,7 @@ module TofinoAlu = struct
       | ECall (fcn_id, args) ->
         (* a call could either be a call, or an event declaration. *)
         (match raw_ty_of_exp val_exp with
-        | TEvent _ ->
+        | TEvent ->
           let call_result =
             ctx_call_codegen
               LLConstants.event_generate_cid
@@ -323,7 +323,7 @@ module TofinoAlu = struct
     ; GS.int_assign_instr (Cid.concat ev_struct_id event_loc_field) 0
     ; GS.int_assign_instr (Cid.concat ev_struct_id event_delay_field) 0 ]
     @
-    (* background events are carried in headers that need to be set to valid. 
+    (* background events are carried in headers that need to be set to valid.
          Background events must also be sure to set up the footer. *)
     match evrec.event_sort with
     | EBackground ->
