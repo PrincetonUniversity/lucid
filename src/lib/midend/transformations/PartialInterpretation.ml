@@ -260,6 +260,12 @@ and interp_op env op args =
     , _ ) -> EOp (op, args)
 ;;
 
+let interp_gen_ty env = function
+  | GSingle eo -> GSingle (Option.map (interp_exp env) eo)
+  | GMulti e -> GMulti (interp_exp env e)
+  | GPort e -> GPort (interp_exp env e)
+;;
+
 (* Partially interpret a statement. Takes an environment and the current level
    (i.e. how deeply nested the scope is. Return the interpreted statment and the
    environment after interpreting it. *)
@@ -270,7 +276,7 @@ let rec interp_stmt env level s : statement * env =
   | SUnit e -> { s with s = SUnit (interp_exp e) }, env
   | SPrintf (str, es) ->
     { s with s = SPrintf (str, List.map interp_exp es) }, env
-  | SGen (b, e) -> { s with s = SGen (b, interp_exp e) }, env
+  | SGen (g, e) -> { s with s = SGen (interp_gen_ty env g, interp_exp e) }, env
   | SRet eopt -> { s with s = SRet (Option.map interp_exp eopt) }, env
   | SSeq (s1, s2) ->
     let s1, env1 = interp_stmt env level s1 in
@@ -330,7 +336,7 @@ let rec interp_stmt env level s : statement * env =
     let branches, envs =
       List.map
         (fun (p, stmt) ->
-          let stmt', env' = interp_stmt env level stmt in
+          let stmt', env' = interp_stmt env (level + 1) stmt in
           (p, stmt'), env')
         branches
       |> List.split

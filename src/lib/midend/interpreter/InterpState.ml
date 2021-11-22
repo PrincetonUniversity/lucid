@@ -18,6 +18,7 @@ module State = struct
 
   let empty_counter = { entries_handled = 0; total_handled = 0 }
 
+  (* Maps switch -> port -> (switch * port) *)
   type topology = (int * int) IntMap.t IntMap.t
 
   let empty_topology num_switches =

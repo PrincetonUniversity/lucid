@@ -17,14 +17,13 @@ let process_prog ?(for_interp = false) ds =
   let ds = SyntaxToCore.translate_prog ds in
   LogIr.log_lucid "midend_start.dpt" ds;
   print_if_debug ds;
-  print_if_verbose "-------Partial interpreting---------";
-  
-  print_if_debug ds;
   (* The rest of these transformations aren't necessary for the interpreter *)
   match for_interp with
-  | true -> 
+  | true ->
     (* partial interpretation is causing execution tests to fail in P4. *)
+    print_if_verbose "-------Partial interpreting---------";
     let ds = PartialInterpretation.interp_prog ds in
+    print_if_debug ds;
     ds
   | false ->
     print_if_verbose "-------Eliminating range relational ops--------";
@@ -32,7 +31,6 @@ let process_prog ?(for_interp = false) ds =
     (* temporary patches for incomplete features. *)
     let ds = PoplPatches.eliminate_noncall_units ds in
     let ds = PoplPatches.delete_prints ds in
-
     print_if_verbose "-------Adding default branches--------";
     let ds = AddDefaultBranches.add_default_branches ds in
     print_if_debug ds;

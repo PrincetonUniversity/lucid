@@ -5,8 +5,6 @@ open Preprocess
 module Env = InterpState.Env
 module IntMap = InterpState.IntMap
 
-(* Maps switch -> port -> (switch * port) *)
-
 type t =
   { num_switches : int
   ; links : InterpState.State.topology
@@ -166,19 +164,23 @@ let parse_externs
 
 let parse_links num_switches links =
   let add_link id port dst acc =
-    IntMap.modify
-      id
-      (fun map ->
-        match IntMap.find_opt port map with
-        | None -> IntMap.add port dst map
-        | Some dst' when dst = dst' -> map
-        | _ ->
-          error
-          @@ Printf.sprintf
-               "Switch:port pair %d:%d assigned to two different destinations!"
-               id
-               port)
-      acc
+    try
+      IntMap.modify
+        id
+        (fun map ->
+          match IntMap.find_opt port map with
+          | None -> IntMap.add port dst map
+          | Some dst' when dst = dst' -> map
+          | _ ->
+            error
+            @@ Printf.sprintf
+                 "Switch:port pair %d:%d assigned to two different \
+                  destinations!"
+                 id
+                 port)
+        acc
+    with
+    | Not_found -> error @@ "Invalid switch id " ^ string_of_int id
   in
   let add_links acc (src, dst) =
     let src_id, src_port = parse_port src in

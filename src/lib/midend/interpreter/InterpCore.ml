@@ -261,7 +261,7 @@ let rec interp_statement nst swid locals s =
       List.iter
         (fun (dst_id, port) ->
           if dst_id = -1 (* lookup_dst failed *)
-          then State.log_exit dst_id (Some port) event nst
+          then State.log_exit swid (Some port) event nst
           else State.push_event dst_id port event nst)
         locs;
     locals
