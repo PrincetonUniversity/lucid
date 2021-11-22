@@ -119,10 +119,11 @@ let check prog =
         then ()
         else if env.in_if
         then
-          Console.warning_position
+          ()
+          (* Console.warning_position
             e.espan
             "Conditional generation of potential non-exit event in entry \
-             handler."
+             handler." *)
         else
           Console.warning_position
             e.espan

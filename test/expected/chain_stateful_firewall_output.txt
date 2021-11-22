@@ -1,12 +1,4 @@
 dpt: Parsing ...
-
-In examples/interp_tests/chain_stateful_firewall.dpt: 
-
-46|    generate_switch (head, updater);
-                                  ~~~~~~~
-
-warning: examples/interp_tests/chain_stateful_firewall.dpt: Conditional generation of potential non-exit event in entry handler.
-
 dpt: Auto-detected specification file examples/interp_tests/chain_stateful_firewall.json
 dpt: Simulating...
 dpt: Using random seed: 0

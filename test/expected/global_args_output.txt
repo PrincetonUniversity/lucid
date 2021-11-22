@@ -1,44 +1,4 @@
 dpt: Parsing ...
-
-In examples/interp_tests/global_args.dpt: 
-
-22|    | 1, 1 -> { generate update_arr_ctr(arr1, ctr1, idx, val); }
-                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-warning: examples/interp_tests/global_args.dpt: Conditional generation of potential non-exit event in entry handler.
-
-
-In examples/interp_tests/global_args.dpt: 
-
-23|    | 2, 1 -> { generate update_arr_ctr(arr2, ctr1, idx, val); }
-                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-warning: examples/interp_tests/global_args.dpt: Conditional generation of potential non-exit event in entry handler.
-
-
-In examples/interp_tests/global_args.dpt: 
-
-25|    | 1, 2 -> { generate update_arr_ctr(arr1, ctr2, idx, val); }
-                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-warning: examples/interp_tests/global_args.dpt: Conditional generation of potential non-exit event in entry handler.
-
-
-In examples/interp_tests/global_args.dpt: 
-
-26|    | 2, 2 -> { generate update_arr_ctr(arr2, ctr2, idx, val); }
-                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-warning: examples/interp_tests/global_args.dpt: Conditional generation of potential non-exit event in entry handler.
-
-
-In examples/interp_tests/global_args.dpt: 
-
-27|    | 3, 2 -> { generate update_arr_ctr(arr3, ctr2, idx, val); }
-                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-warning: examples/interp_tests/global_args.dpt: Conditional generation of potential non-exit event in entry handler.
-
 dpt: Auto-detected specification file examples/interp_tests/global_args.json
 dpt: Simulating...
 dpt: Using random seed: 0

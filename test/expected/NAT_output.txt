@@ -1,12 +1,4 @@
 dpt: Parsing ...
-
-In examples/interp_tests/NAT.dpt: 
-
-53|    generate add_to_nat(src_ip, src_port); // Will generate the continue for us
-                      ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-warning: examples/interp_tests/NAT.dpt: Conditional generation of potential non-exit event in entry handler.
-
 dpt: Auto-detected specification file examples/interp_tests/NAT.json
 dpt: Simulating...
 dpt: Using random seed: 0
