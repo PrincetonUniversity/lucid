@@ -506,7 +506,9 @@ let from_dpt (ds : decls) (opgraph_recs : prog_opgraph) : IS.llProg =
   (* generate backend defs for register arrays *)
   let regarray_defs = CL.map regdec_from_decl ds |> CL.flatten in
   (* generate constants for groups *)
-  let group_defs = CL.filter_map groupdec_from_decl ds in
+  (* no more groups! *)
+  (* let group_defs = CL.filter_map groupdec_from_decl ds in *)
+
   (* translate operation statements into backend compute objects,
        use the opgraphs to set control flow between objects. *)
   let backend_handler_defs = CL.map dpahandler_from_handler opgraph_recs in
@@ -521,7 +523,7 @@ let from_dpt (ds : decls) (opgraph_recs : prog_opgraph) : IS.llProg =
     { tofino_prog with
       instr_dict =
         tofino_prog.instr_dict
-        @ IS.dict_of_decls group_defs
+        (* @ IS.dict_of_decls group_defs *)
         @ IS.dict_of_decls regarray_defs
         @ IS.dict_of_decls event_decls
         @ IS.dict_of_decls dpt_struct_defs

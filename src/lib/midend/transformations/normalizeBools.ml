@@ -265,6 +265,10 @@ module NormalizeBoolExps = struct
       error
         "z3_from_expr got an ehash -- this should have been eliminated by an \
          earlier pass."
+    | (EFlood _, _) -> 
+      error
+        "z3_from_expr got an eflood -- there shouldn't be a flood constructor \
+        inside of a boolean"
   ;;
 
   (* tell Z3 to convert a boolean expression into disjunctive normal form *)

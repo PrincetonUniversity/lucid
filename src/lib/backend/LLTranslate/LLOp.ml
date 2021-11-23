@@ -281,6 +281,8 @@ module TofinoAlu = struct
         (* let poly = Integer.to_int (zint_from_evalue (CL.hd exps)) in  *)
         let args = CL.map (oper_from_immediate hdl_id) (CL.tl exps) in
         alu_name, IS.new_hasher alu_name width poly outvar_mid args
+      | EFlood _ -> 
+        error "[from_assign] flood not yet supported by backend."        
     in
     !dprint_endline
       (sprintf "[from_assign] created alu: " ^ Printing.cid_to_string alu_name);
