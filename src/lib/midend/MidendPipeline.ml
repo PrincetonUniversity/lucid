@@ -15,7 +15,6 @@ let do_ssa = false
 let process_prog ?(for_interp = false) ds =
   print_if_verbose "-------Translating to core syntax---------";
   let ds = SyntaxToCore.translate_prog ds in
-  LogIr.log_lucid "midend_start.dpt" ds;
   print_if_debug ds;
   (* The rest of these transformations aren't necessary for the interpreter *)
   match for_interp with
@@ -26,6 +25,7 @@ let process_prog ?(for_interp = false) ds =
     print_if_debug ds;
     ds
   | false ->
+    LogIr.log_lucid "midend_start.dpt" ds;
     print_if_verbose "-------Eliminating range relational ops--------";
     let ds = EliminateEqRangeOps.transform ds in
     (* temporary patches for incomplete features. *)
