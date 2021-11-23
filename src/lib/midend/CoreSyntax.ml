@@ -98,7 +98,6 @@ and e =
   | EOp of op * exp list
   | ECall of cid * exp list
   | EHash of size * exp list
-  | EGroup of exp list
   | EFlood of exp
 
 and exp =

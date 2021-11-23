@@ -146,17 +146,6 @@ let rec interp_exp (nst : State.network_state) swid locals e : State.ival =
       let hashed = Legacy.Hashtbl.seeded_hash (Integer.to_int seed) tl in
       V (vint hashed size)
     | _ -> failwith "Wrong arguments to hash operation")
-  | EGroup es ->
-    let ports =
-      List.map
-        (fun e ->
-          interp_exp nst swid locals e
-          |> extract_ival
-          |> raw_integer
-          |> Integer.to_int)
-        es
-    in
-    V (vgroup ports)
   | EFlood e1 ->
     let port =
       interp_exp nst swid locals e1

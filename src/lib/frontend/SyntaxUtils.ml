@@ -293,8 +293,7 @@ let rec is_compound e =
   | EInt _ | EVal _ | EVar _ | ESizeCast _ -> false
   | EHash _ | EOp _ | ECall _ | EStmt _ -> true
   | EComp (e, _, _) | EIndex (e, _) | EProj (e, _) | EFlood e -> is_compound e
-  | EVector entries | ETuple entries | EGroup entries ->
-    List.exists is_compound entries
+  | EVector entries | ETuple entries -> List.exists is_compound entries
   | ERecord entries -> List.exists (is_compound % snd) entries
   | EWith (base, entries) ->
     is_compound base || List.exists (is_compound % snd) entries

@@ -39,8 +39,8 @@ let infer_value v =
     match v.v with
     | VBool _ -> TBool
     | VInt n -> TInt (IConst (Integer.size n))
-    | VGlobal _ | VEvent _ | VGroup _ ->
-      failwith "Cannot write values of these types"
+    | VGroup _ -> TGroup
+    | VGlobal _ | VEvent _ -> failwith "Cannot write values of these types"
   in
   { v with vty = Some (mk_ty vty) }
 ;;
@@ -84,13 +84,6 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
     let hd = List.hd inf_es in
     unify_ty hd.espan (Option.get hd.ety) (mk_ty @@ TInt (fresh_size ()));
     env, { e with e = EHash (size, inf_es); ety = Some (mk_ty @@ TInt size) }
-  | EGroup es ->
-    let env, inf_es = infer_exps env es in
-    List.iter
-      (fun e ->
-        unify_ty e.espan (Option.get e.ety) (mk_ty @@ TInt (fresh_size ())))
-      inf_es;
-    env, { e with e = EGroup inf_es; ety = Some (mk_ty @@ TGroup) }
   | EFlood e1 ->
     let env, inf_e, inf_ety = infer_exp env e1 |> textract in
     unify_ty e.espan inf_ety (mk_ty @@ TInt (fresh_size ()));

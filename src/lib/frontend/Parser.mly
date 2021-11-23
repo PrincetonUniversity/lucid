@@ -27,6 +27,17 @@
     if String.equal (Id.name id) "_" then PWild
     else failwith "Parse error: identifiers not allowed in patterns"
 
+  let make_group es span =
+    let locs = List.map
+        (fun e ->
+          match e.e with
+          | EInt (n, _) -> Z.to_int n
+          | _ -> Console.error_position span @@
+            "Group entries must be integers, not " ^ Printing.exp_to_string e)
+        es
+    in
+    value_sp (VGroup locs) span |> value_to_exp
+
 %}
 
 %token <Span.t * Id.t> ID
@@ -214,7 +225,7 @@ exp:
     | SIZECAST LPAREN size RPAREN             { szcast_sp (IConst 32) (snd $3) (Span.extend $1 $4) }
     | SIZECAST single_poly LPAREN size RPAREN { szcast_sp (snd $2) (snd $4) (Span.extend $1 $5) }
     | FLOOD exp                           { flood_sp $2 (Span.extend $1 $2.espan) }
-    | LBRACE args RBRACE                  { group_sp $2 (Span.extend $1 $3) }
+    | LBRACE args RBRACE                  { make_group $2 (Span.extend $1 $3) }
 
 exps:
   | exp                                 { [$1] }

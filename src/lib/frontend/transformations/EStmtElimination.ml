@@ -18,9 +18,6 @@ let rec inline_exp e =
   | EHash (sz, es) ->
     let stmt, es' = inline_exps es in
     stmt, { e with e = EHash (sz, es') }
-  | EGroup es ->
-    let stmt, es' = inline_exps es in
-    stmt, { e with e = EGroup es' }
   | EFlood e ->
     let stmt, e' = inline_exp e in
     stmt, { e with e = EFlood e' }

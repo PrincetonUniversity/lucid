@@ -14,7 +14,6 @@ open Printing
    - Only certain types allowed as externs (just ints? I guess bools too?)
    - All events have exactly one handler declared, which must be in the same scope as them.
    - All sizes in symbolic declarations are either concrete or symbolic themselves
-   - All non-flood group expressions are constant
 
    Checks we do during typechecking:
    - No dynamic global creation
@@ -159,26 +158,6 @@ let rec match_handlers ?(m_cid = None) (ds : decls) =
          "Handler %s has no corresponding event definition"
          (m_str ^ id_to_string id)
   | None, None -> ()
-;;
-
-let check_group_exps ds =
-  let v =
-    object
-      inherit [_] s_iter
-
-      method! visit_EGroup _ es =
-        List.iter
-          (function
-            | { e = EInt _ } -> ()
-            | e ->
-              Console.error_position e.espan
-              @@ Printf.sprintf
-                   "Group entries must be constant integers, not %s"
-                   (Printing.exp_to_string e))
-          es
-    end
-  in
-  v#visit_decls () ds
 ;;
 
 let pre_typing_checks ds =
