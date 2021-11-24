@@ -70,9 +70,9 @@ handle write(int idx, int seq, int data) {
       Array.set(registers, idx, data);
       // Either propagate to next in chain, or tell head we're done
       if (self != tail) {
-        generate Event.sslocate(write(idx, seq, data), succ);
+        generate_switch (succ, write(idx, seq, data));
       } else {
-        generate Event.sslocate(ack(idx), head);
+        generate_switch (head, ack(idx));
       }
     }
   }
@@ -82,7 +82,7 @@ handle write(int idx, int seq, int data) {
 handle ack(int idx) {
   Array.set(pending, idx, FALSE);
   if (self != tail) {
-    generate Event.sslocate(ack(idx), succ);
+    generate_switch (succ, ack(idx));
   }
 }
 
@@ -111,7 +111,7 @@ handle pktin(int src, int dst) {
   bool ntw = need_to_write(src, dst); // Can't manually inline this or function inlining fails
   if (ntw) {
     // event writer = write(0,0,0); // Specific values are application-specific
-    generate Event.sslocate(write(0,0,0), head);
+    generate_switch (head, write(0,0,0));
   }
 
   // Actually do the processing
@@ -120,7 +120,7 @@ handle pktin(int src, int dst) {
   if (r == TRUE) {
     // If we're in the middle of a write, send it to the tail, since that has
     // the last fully consistent data
-    generate Event.sslocate(process(src, dst, idx), tail);
+    generate_switch (tail, process(src, dst, idx));
   } else {
     process_fun(src, dst, idx);
   }

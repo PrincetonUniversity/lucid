@@ -27,6 +27,17 @@
     if String.equal (Id.name id) "_" then PWild
     else failwith "Parse error: identifiers not allowed in patterns"
 
+  let make_group es span =
+    let locs = List.map
+        (fun e ->
+          match e.e with
+          | EInt (n, _) -> Z.to_int n
+          | _ -> Console.error_position span @@
+            "Group entries must be integers, not " ^ Printing.exp_to_string e)
+        es
+    in
+    value_sp (VGroup locs) span |> value_to_exp
+
 %}
 
 %token <Span.t * Id.t> ID
@@ -70,9 +81,10 @@
 %token <Span.t> DOT
 %token <Span.t> TBOOL
 %token <Span.t> EVENT
-%token <Span.t> MEVENT
 %token <Span.t> GENERATE
+%token <Span.t> SGENERATE
 %token <Span.t> MGENERATE
+%token <Span.t> PGENERATE
 %token <Span.t> TINT
 %token <Span.t> GLOBAL
 %token <Span.t> CONST
@@ -105,6 +117,7 @@
 %token <Span.t> SATPLUS
 %token <Span.t> BITNOT
 %token <Span.t> SYMBOLIC
+%token <Span.t> FLOOD
 
 %token EOF
 
@@ -118,7 +131,7 @@
 %left CONCAT
 %left BITAND BITXOR PIPE LSHIFT RSHIFT
 %nonassoc PROJ
-%right NOT BITNOT RPAREN
+%right NOT FLOOD BITNOT RPAREN
 %right LBRACKET /* highest precedence */
 
 
@@ -135,8 +148,7 @@ ty:
     | AUTO                              { ty_sp (TQVar (QVar (fresh_auto ()))) $1 }
     | cid    				                    { ty_sp (TName (snd $1, [], true)) (fst $1) }
     | cid poly				                  { ty_sp (TName (snd $1, snd $2, true)) (fst $1) }
-    | EVENT                             { ty_sp (TEvent false) $1}
-    | MEVENT                            { ty_sp (TEvent true) $1}
+    | EVENT                             { ty_sp TEvent $1}
     | VOID                              { ty_sp (TVoid) $1 }
     | GROUP                             { ty_sp (TGroup) $1 }
     | MEMOP poly                        { ty_sp (mk_tmemop (fst $2) (snd $2)) (Span.extend $1 (fst $2))}
@@ -212,6 +224,8 @@ exp:
     | LBRACKET exps RBRACKET              { vector_sp $2 (Span.extend $1 $3) }
     | SIZECAST LPAREN size RPAREN             { szcast_sp (IConst 32) (snd $3) (Span.extend $1 $4) }
     | SIZECAST single_poly LPAREN size RPAREN { szcast_sp (snd $2) (snd $4) (Span.extend $1 $5) }
+    | FLOOD exp                           { flood_sp $2 (Span.extend $1 $2.espan) }
+    | LBRACE args RBRACE                  { make_group $2 (Span.extend $1 $3) }
 
 exps:
   | exp                                 { [$1] }
@@ -301,7 +315,6 @@ decl:
                                             { [memop_sp (snd $2) $3 $5 (Span.extend $1 $6)] }
     | SYMBOLIC SIZE ID SEMI                 { [dsize_sp (snd $3) None (Span.extend $1 $4)] }
     | SIZE ID ASSIGN size SEMI              { [dsize_sp (snd $2) (Some (snd $4)) (Span.extend $1 $5)] }
-    | GROUP ID ASSIGN LBRACE args RBRACE SEMI { [group_sp (snd $2) $5 (Span.extend $1 $7)] }
     | MODULE ID LBRACE decls RBRACE         { [module_sp (snd $2) [] $4 (Span.extend $1 $5)] }
     | MODULE ID COLON LBRACE interface RBRACE LBRACE decls RBRACE
                                             { [module_sp (snd $2) $5 $8 (Span.extend $1 $9)] }
@@ -369,8 +382,10 @@ statement1:
     | ID ASSIGN exp SEMI	                  { sassign_sp (snd $1) $3 (Span.extend (fst $1) $4) }
     | RETURN SEMI                           { sret_sp None (Span.extend $1 $2) }
     | RETURN exp SEMI                       { sret_sp (Some $2) (Span.extend $1 $3) }
-    | GENERATE exp SEMI                     { gen_sp false $2 (Span.extend $1 $3)}
-    | MGENERATE exp SEMI                    { gen_sp true $2 (Span.extend $1 $3)}
+    | GENERATE exp SEMI                     { gen_sp (GSingle None) $2 (Span.extend $1 $3)}
+    | SGENERATE LPAREN exp COMMA exp RPAREN SEMI { gen_sp (GSingle (Some $3)) $5 (Span.extend $1 $7)}
+    | MGENERATE LPAREN exp COMMA exp RPAREN SEMI { gen_sp (GMulti $3) $5 (Span.extend $1 $7)}
+    | PGENERATE LPAREN exp COMMA exp RPAREN SEMI { gen_sp (GPort $3) $5 (Span.extend $1 $7)}
     | cid paren_args SEMI                   { scall_sp (snd $1) (snd $2) (Span.extend (fst $1) $3) }
     | MATCH args WITH branches              { match_sp $2 (snd $4) (Span.extend $1 (fst $4)) }
     | MATCH LPAREN multiargs RPAREN WITH branches  { match_sp $3 (snd $6) (Span.extend $1 (fst $6)) }

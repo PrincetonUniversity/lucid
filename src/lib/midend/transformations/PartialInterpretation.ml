@@ -116,6 +116,7 @@ let rec interp_exp env e =
     { e with e = ECall (cid, List.map (interp_exp env) args) }
   | EHash (sz, args) ->
     { e with e = EHash (sz, List.map (interp_exp env) args) }
+  | EFlood e' -> { e with e = EFlood (interp_exp env e') }
   | EOp (op, args) -> { e with e = interp_op env op args }
 
 (* Mostly copied from InterpCore, could maybe merge the two functions *)
@@ -260,6 +261,12 @@ and interp_op env op args =
     , _ ) -> EOp (op, args)
 ;;
 
+let interp_gen_ty env = function
+  | GSingle eo -> GSingle (Option.map (interp_exp env) eo)
+  | GMulti e -> GMulti (interp_exp env e)
+  | GPort e -> GPort (interp_exp env e)
+;;
+
 (* Partially interpret a statement. Takes an environment and the current level
    (i.e. how deeply nested the scope is. Return the interpreted statment and the
    environment after interpreting it. *)
@@ -270,7 +277,7 @@ let rec interp_stmt env level s : statement * env =
   | SUnit e -> { s with s = SUnit (interp_exp e) }, env
   | SPrintf (str, es) ->
     { s with s = SPrintf (str, List.map interp_exp es) }, env
-  | SGen (b, e) -> { s with s = SGen (b, interp_exp e) }, env
+  | SGen (g, e) -> { s with s = SGen (interp_gen_ty env g, interp_exp e) }, env
   | SRet eopt -> { s with s = SRet (Option.map interp_exp eopt) }, env
   | SSeq (s1, s2) ->
     let s1, env1 = interp_stmt env level s1 in
@@ -330,7 +337,7 @@ let rec interp_stmt env level s : statement * env =
     let branches, envs =
       List.map
         (fun (p, stmt) ->
-          let stmt', env' = interp_stmt env level stmt in
+          let stmt', env' = interp_stmt env (level + 1) stmt in
           (p, stmt'), env')
         branches
       |> List.split
@@ -339,22 +346,26 @@ let rec interp_stmt env level s : statement * env =
     merge_branches base_stmt level env envs
 ;;
 
+let add_builtin_defs level vars env =
+  List.fold_left
+    (fun acc (id, _) ->
+      IdMap.add
+        id
+        { level; body = None; is_declared = true; declared_as = None }
+        acc)
+    env
+    vars
+;;
+
 let interp_body env (params, stmt) =
   let level = 1 in
   let builtins =
-    (Builtins.this_id, Builtins.this_ty) :: Builtins.builtin_vars
+    let open Builtins in
+    (ingr_port_id, ingr_port_ty) :: (this_id, this_ty) :: builtin_vars
   in
-  let add_defs vars env =
-    List.fold_left
-      (fun acc (id, _) ->
-        IdMap.add
-          id
-          { level; body = None; is_declared = true; declared_as = None }
-          acc)
-      env
-      vars
+  let env =
+    env |> add_builtin_defs level builtins |> add_builtin_defs level params
   in
-  let env = env |> add_defs builtins |> add_defs params in
   params, fst (interp_stmt env level stmt)
 ;;
 
@@ -370,9 +381,6 @@ let interp_decl env d =
     let e = interp_exp env e in
     let env = add_dec env id in
     env, { d with d = DGlobal (id, ty, e) }
-  | DGroup (id, exps) ->
-    let env = add_dec env id in
-    env, { d with d = DGroup (id, List.map (interp_exp env) exps) }
   | DMemop (id, body) ->
     let env = add_dec env id in
     env, { d with d = DMemop (id, interp_body env body) }
@@ -385,7 +393,11 @@ let interp_decl env d =
 ;;
 
 let interp_prog ds =
-  let env = ref IdMap.empty in
+  let builtins =
+    let open Builtins in
+    [recirc_id, recirc_ty; self_id, self_ty]
+  in
+  let env = ref (IdMap.empty |> add_builtin_defs 0 builtins) in
   List.map
     (fun d ->
       let env', d = interp_decl !env d in

@@ -65,7 +65,7 @@ let check prog =
             let orig_env = env in
             self#visit_body dummy body;
             env <- orig_env)
-        | DConst (x, { raw_ty = TEvent _; _ }, exp) ->
+        | DConst (x, { raw_ty = TEvent; _ }, exp) ->
           if is_exit env exp
           then env <- { env with exit_vars = VarSet.add x env.exit_vars }
           else ()
@@ -119,10 +119,11 @@ let check prog =
         then ()
         else if env.in_if
         then
-          Console.warning_position
+          ()
+          (* Console.warning_position
             e.espan
             "Conditional generation of potential non-exit event in entry \
-             handler."
+             handler." *)
         else
           Console.warning_position
             e.espan

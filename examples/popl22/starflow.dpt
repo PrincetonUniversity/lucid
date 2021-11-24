@@ -111,18 +111,18 @@ handle monitor_pkt(int src, int len) {
   if (mtch == MMATCH) {
     if (idx == 0) {
       if (blk_id == 0) {
-        generate Event.sslocate(short_record(src, len, [stored_recs[0]; stored_recs[1]]), COLLECTION_SERVER);
+        generate_switch (COLLECTION_SERVER, short_record(src, len, [stored_recs[0]; stored_recs[1]]));
       } else {
-        generate Event.sslocate(long_record(src, len, stored_recs), COLLECTION_SERVER);
+        generate_switch (COLLECTION_SERVER, long_record(src, len, stored_recs));
       }
     }
   } else {
     // if there wasn't a match, we need to generate a new record no matter what.
     // Note: at this point, we could zero out the invalid entries too. Original starflow implementation assumes the server takes care of it.
     if (blk_id == 0) {
-      generate Event.sslocate(short_record(src, len, [stored_recs[0]; stored_recs[1]]), COLLECTION_SERVER);
+      generate_switch (COLLECTION_SERVER, short_record(src, len, [stored_recs[0]; stored_recs[1]]));
     } else {
-      generate Event.sslocate(long_record(src, len, stored_recs), COLLECTION_SERVER);
+      generate_switch (COLLECTION_SERVER, long_record(src, len, stored_recs));
       // in this case, we also have to free the long block for another flow -- do that with a control event.
       generate free_block(blk_id);
     }

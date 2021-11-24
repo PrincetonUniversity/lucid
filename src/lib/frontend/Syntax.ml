@@ -13,7 +13,7 @@ and z = [%import: (Z.t[@opaque])]
 
 and zint = [%import: (Integer.t[@with Z.t := (Z.t [@opaque])])]
 
-and location = zint
+and location = int
 
 and size =
   | IConst of int
@@ -47,7 +47,7 @@ and raw_ty =
   | TVoid
   | TGroup
   | TInt of size (* Number of bits *)
-  | TEvent of bool (* True iff multicast *)
+  | TEvent
   | TFun of func_ty
   | TMemop of size * size
   | TName of cid * sizes * bool (* Named type: e.g. "Array.t<<32>>". Bool is true if it represents a global type *)
@@ -117,7 +117,6 @@ and event =
   { eid : cid
   ; data : value list
   ; edelay : int
-  ; elocations : location list
   }
 
 and value =
@@ -134,6 +133,7 @@ and e =
   | EOp of op * exp list
   | ECall of cid * exp list
   | EHash of size * exp list
+  | EFlood of exp (* Generate a group of all ports but one *)
   | ESizeCast of size * size (* Cast a size to int *)
   | EStmt of statement * exp
   | ERecord of (string * exp) list
@@ -152,6 +152,11 @@ and exp =
 
 and branch = pat list * statement
 
+and gen_type =
+  | GSingle of exp option (* switch id *)
+  | GMulti of exp (* Multicast group name *)
+  | GPort of exp
+
 (* statements *)
 and s =
   | SNoop
@@ -160,7 +165,7 @@ and s =
   | SAssign of id * exp
   | SPrintf of string * exp list
   | SIf of exp * statement * statement
-  | SGen of bool * exp (* Bool is true iff multicast *)
+  | SGen of gen_type * exp
   | SRet of exp option
   | SSeq of statement * statement
   | SMatch of exp list * branch list
@@ -206,7 +211,6 @@ and d =
   | DFun of id * ty * constr_spec list * body
   | DMemop of id * body
   | DConst of id * ty * exp
-  | DGroup of id * exp list
   | DExtern of id * ty
   | DSymbolic of id * ty
   | DUserTy of id * sizes * ty
@@ -346,6 +350,7 @@ let index_sp lst idx span = exp_sp (EIndex (lst, idx)) span
 let comp_sp e i k span = exp_sp (EComp (e, i, k)) span
 let vector_sp es span = exp_sp (EVector es) span
 let szcast_sp sz1 sz2 span = exp_sp (ESizeCast (sz1, sz2)) span
+let flood_sp e span = exp_sp (EFlood e) span
 
 (* declarations *)
 let decl d = { d; dspan = Span.default }
@@ -358,7 +363,6 @@ let handler_sp id p body span = decl_sp (DHandler (id, (p, body))) span
 let dsize_sp id size span = decl_sp (DSize (id, size)) span
 let fun_sp id rty cs p body span = decl_sp (DFun (id, rty, cs, (p, body))) span
 let memop_sp id p body span = decl_sp (DMemop (id, (p, body))) span
-let group_sp id es span = decl_sp (DGroup (id, es)) span
 let duty_sp id sizes rty span = decl_sp (DUserTy (id, sizes, rty)) span
 
 let dconstr_sp id ty params exp span =

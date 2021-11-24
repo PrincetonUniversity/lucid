@@ -38,8 +38,6 @@ const int t_wait = 10000;
 // Location identifiers
 // Set by macro preprocessor.
 const int SELF = 0;
-group NEIGHBORS = {1};
-
 // state
 // map dst --> (shortest known pathlen, next hop)
 global Array.t<<32>> nexthop_pathlen  = Array.create(tbl_sz);
@@ -163,7 +161,7 @@ handle packetin(int dst) {
 // lookup pathlen to dst, send message back to q_nid
 handle query_nexthop(int q_nid, int dst) {
     int pathlen = Array.get(nexthop_pathlen, dst);
-    generate Event.sslocate(reply_nexthop(SELF, dst, pathlen), q_nid);
+    generate_switch (q_nid, reply_nexthop(SELF, dst, pathlen));
 }
 
 // update the routing table if the path is shorter.
@@ -189,7 +187,7 @@ handle update_route(int i) {
     // If the path length is infinite,
     // query all neighbors for a route to i.
     if (pathlen == INF) {
-        mgenerate Event.smlocate(query_nexthop(SELF, i), NEIGHBORS);
+        generate_ports ({1}, query_nexthop(SELF, i));
     }
     else {
         // If the pathlength is not zero (i.e., this is not
@@ -200,7 +198,7 @@ handle update_route(int i) {
             int next_hop = Array.get(nexthop_nid, i);
             int nexthop_is_down = Array.getm(last_seen, next_hop, nid_is_down, ts);
             if (nexthop_is_down == TRUE) {
-                mgenerate Event.smlocate(query_nexthop(SELF, i), NEIGHBORS);
+                generate_ports ({1}, query_nexthop(SELF, i));
             }
         }
     }
@@ -215,7 +213,7 @@ handle update_route(int i) {
 // ---- fault detection ----
 // Just reply to src_nid.
 handle query_probe(int src_nid) {
-    generate Event.sslocate(reply_probe(SELF), src_nid);
+    generate_switch (src_nid, reply_probe(SELF));
 }
 // update the last_seen table.
 handle reply_probe (int nid) {
@@ -224,7 +222,7 @@ handle reply_probe (int nid) {
 }
 
 handle check_neighbors() {
-    mgenerate Event.smlocate(query_probe(SELF), NEIGHBORS);
+    generate_ports ({1}, query_probe(SELF));
     generate Event.delay(check_neighbors(), t_wait);
 }
 

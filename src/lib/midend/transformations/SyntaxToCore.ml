@@ -18,8 +18,8 @@ let rec translate_ty (ty : S.ty) : C.ty =
     match S.TyTQVar.strip_links ty.raw_ty with
     | S.TBool -> C.TBool
     | S.TGroup -> C.TGroup
+    | S.TEvent -> C.TEvent
     | S.TInt sz -> C.TInt (translate_size sz)
-    | S.TEvent b -> C.TEvent b
     | S.TName (cid, sizes, b) -> C.TName (cid, List.map translate_size sizes, b)
     | S.TMemop (sz1, sz2) -> C.TMemop (translate_size sz1, translate_size sz2)
     | S.TFun fty ->
@@ -74,8 +74,8 @@ let rec translate_value (v : S.value) : C.value =
     | S.VInt z -> C.VInt z
     | S.VGlobal n -> C.VGlobal n
     | S.VGroup ls -> C.VGroup ls
-    | VEvent { eid; data; edelay; elocations } ->
-      C.VEvent { eid; data = List.map translate_value data; edelay; elocations }
+    | VEvent { eid; data; edelay } ->
+      C.VEvent { eid; data = List.map translate_value data; edelay }
   in
   { v = v'; vty = translate_ty (Option.get v.vty); vspan = v.vspan }
 ;;
@@ -91,9 +91,16 @@ let rec translate_exp (e : S.exp) : C.exp =
     | S.EOp (op, es) -> C.EOp (translate_op op, List.map translate_exp es)
     | S.ECall (cid, es) -> C.ECall (cid, List.map translate_exp es)
     | S.EHash (sz, es) -> C.EHash (translate_size sz, List.map translate_exp es)
+    | S.EFlood e -> C.EFlood (translate_exp e)
     | _ -> err e.espan (Printing.exp_to_string e)
   in
   { e = e'; ety = translate_ty (Option.get e.ety); espan = e.espan }
+;;
+
+let translate_gen_type = function
+  | S.GSingle eo -> C.GSingle (Option.map translate_exp eo)
+  | S.GMulti e -> C.GMulti (translate_exp e)
+  | S.GPort e -> C.GPort (translate_exp e)
 ;;
 
 let rec translate_statement (s : S.statement) : C.statement =
@@ -112,7 +119,7 @@ let rec translate_statement (s : S.statement) : C.statement =
     | S.SPrintf (str, es) -> C.SPrintf (str, List.map translate_exp es)
     | S.SIf (e, s1, s2) ->
       C.SIf (translate_exp e, translate_statement s1, translate_statement s2)
-    | S.SGen (b, e) -> C.SGen (b, translate_exp e)
+    | S.SGen (g, e) -> C.SGen (translate_gen_type g, translate_exp e)
     | S.SSeq (s1, s2) -> C.SSeq (translate_statement s1, translate_statement s2)
     | S.SMatch (es, branches) ->
       C.SMatch (List.map translate_exp es, List.map translate_branch branches)
@@ -145,7 +152,6 @@ let translate_decl (d : S.decl) : C.decl =
       C.DEvent (id, translate_sort sort, translate_params params)
     | S.DHandler (id, body) -> C.DHandler (id, translate_body body)
     | S.DMemop (id, body) -> C.DMemop (id, translate_body body)
-    | S.DGroup (id, es) -> C.DGroup (id, List.map translate_exp es)
     | S.DExtern (id, ty) -> C.DExtern (id, translate_ty ty)
     | _ -> err d.dspan (Printing.decl_to_string d)
   in

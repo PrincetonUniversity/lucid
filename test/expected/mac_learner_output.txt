@@ -1,0 +1,132 @@
+dpt: Parsing ...
+dpt: Auto-detected specification file examples/interp_tests/mac_learner.json
+dpt: Simulating...
+dpt: Using random seed: 0
+
+t=0: Handling event eth(0,1) at switch 0, port 7
+t=600: Handling event learn_mac(0,7) at switch 0, port 196
+t=600: Handling event eth(0,1) at switch 1, port 0
+t=1200: Handling event learn_mac(0,0) at switch 1, port 196
+t=1200: Handling event eth(0,1) at switch 2, port 1
+t=1800: Handling event learn_mac(0,1) at switch 2, port 196
+t=1800: Handling event eth(0,1) at switch 3, port 2
+t=1800: Handling event eth(0,1) at switch 4, port 2
+t=2400: Handling event learn_mac(0,2) at switch 3, port 196
+t=2400: Handling event learn_mac(0,2) at switch 4, port 196
+t=10000: Handling event eth(1,0) at switch 3, port 9
+t=10600: Handling event eth(1,0) at switch 2, port 3
+t=10600: Handling event learn_mac(1,9) at switch 3, port 196
+t=11200: Handling event eth(1,0) at switch 1, port 2
+t=11200: Handling event learn_mac(1,3) at switch 2, port 196
+t=11800: Handling event eth(1,0) at switch 0, port 1
+t=11800: Handling event learn_mac(1,2) at switch 1, port 196
+t=12400: Handling event learn_mac(1,1) at switch 0, port 196
+t=20000: Handling event eth(2,1) at switch 4, port 42
+t=20600: Handling event eth(2,1) at switch 2, port 4
+t=20600: Handling event learn_mac(2,42) at switch 4, port 196
+t=21200: Handling event learn_mac(2,4) at switch 2, port 196
+t=21200: Handling event eth(2,1) at switch 3, port 2
+t=21800: Handling event learn_mac(2,2) at switch 3, port 196
+t=30000: Handling event eth(0,2) at switch 0, port 7
+t=30600: Handling event eth(0,2) at switch 1, port 0
+t=31200: Handling event eth(0,2) at switch 2, port 1
+t=31800: Handling event eth(0,2) at switch 4, port 2
+dpt: Final State:
+
+Switch 0 : {
+
+ Pipeline : [
+    0 : [1u1; 1u1; 0u1; 0u1]
+    1 : [1u1; 1u1; 0u1; 0u1]
+    2 : [7u8; 1u8; 0u8; 0u8]
+  ]
+
+ Events :   [ ]
+
+ Exits :    [
+    eth(0,1) at port -8, t=0
+    eth(1,0) at port 7, t=11800
+    eth(0,2) at port -8, t=30000
+  ]
+
+ entry events handled: 0
+ total events handled: 5
+
+}
+Switch 1 : {
+
+ Pipeline : [
+    0 : [1u1; 1u1; 0u1; 0u1]
+    1 : [1u1; 1u1; 0u1; 0u1]
+    2 : [0u8; 2u8; 0u8; 0u8]
+  ]
+
+ Events :   [ ]
+
+ Exits :    [
+    eth(0,1) at port -1, t=600
+    eth(0,2) at port -1, t=30600
+  ]
+
+ entry events handled: 0
+ total events handled: 5
+
+}
+Switch 2 : {
+
+ Pipeline : [
+    0 : [1u1; 1u1; 1u1; 0u1]
+    1 : [1u1; 1u1; 1u1; 0u1]
+    2 : [1u8; 3u8; 4u8; 0u8]
+  ]
+
+ Events :   [ ]
+
+ Exits :    [
+    eth(0,1) at port -2, t=1200
+  ]
+
+ entry events handled: 0
+ total events handled: 7
+
+}
+Switch 3 : {
+
+ Pipeline : [
+    0 : [1u1; 1u1; 1u1; 0u1]
+    1 : [1u1; 1u1; 1u1; 0u1]
+    2 : [2u8; 9u8; 2u8; 0u8]
+  ]
+
+ Events :   [ ]
+
+ Exits :    [
+    eth(0,1) at port -3, t=1800
+    eth(2,1) at port 9, t=21200
+  ]
+
+ entry events handled: 0
+ total events handled: 6
+
+}
+Switch 4 : {
+
+ Pipeline : [
+    0 : [1u1; 0u1; 1u1; 0u1]
+    1 : [1u1; 0u1; 1u1; 0u1]
+    2 : [2u8; 0u8; 42u8; 0u8]
+  ]
+
+ Events :   [ ]
+
+ Exits :    [
+    eth(0,1) at port -3, t=1800
+    eth(2,1) at port -43, t=20000
+    eth(0,2) at port 42, t=31800
+  ]
+
+ entry events handled: 0
+ total events handled: 5
+
+}
+dpt: Done

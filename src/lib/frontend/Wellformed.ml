@@ -105,7 +105,6 @@ let check_symbolics ds =
 (* Next up: make sure each event has exactly one handler defined, which must be
    in the same scope. Also ensure that we don't have two events with the same
    name in a given scope *)
-
 let rec match_handlers ?(m_cid = None) (ds : decls) =
   let m_str =
     match m_cid with
@@ -291,7 +290,7 @@ let rec check_qvars d =
   | DFun _ | DMemop _ -> (* No restrictions *) ()
   | DGlobal _ ->
     (* None allowed at all *) basic_qvar_checker#visit_decl (true, true) d
-  | DSize _ | DSymbolic _ | DConst _ | DGroup _ | DExtern _ ->
+  | DSize _ | DSymbolic _ | DConst _ | DExtern _ ->
     (* Only allowed in effect *) basic_qvar_checker#visit_decl (false, true) d
   | DConstr _ ->
     (* Allowed in both sizes and effects *)

@@ -61,7 +61,7 @@ let occurs_ty span tvar raw_ty : unit =
   let rec occ tvar raw_ty =
     match raw_ty with
     | TQVar tvr -> occurs_tqvar occ tvar tvr
-    | TBool | TInt _ | TName _ | TVoid | TEvent _ | TGroup | TMemop _ -> ()
+    | TBool | TInt _ | TName _ | TVoid | TEvent | TGroup | TMemop _ -> ()
     | TRecord lst -> List.iter (fun (_, raw_ty) -> occ tvar raw_ty) lst
     | TTuple lst -> List.iter (occ tvar) lst
     | TFun { arg_tys; ret_ty; _ } ->
@@ -208,12 +208,11 @@ and try_unify_rty span rty1 rty2 =
       TyTQVar.phys_equiv_tqvar
       tqv
       ty
-  | TBool, TBool | TVoid, TVoid | TGroup, TGroup -> ()
+  | TBool, TBool | TVoid, TVoid | TGroup, TGroup | TEvent, TEvent -> ()
   | TInt size1, TInt size2 -> try_unify_size span size1 size2
   | TMemop (size1a, size1b), TMemop (size2a, size2b) ->
     try_unify_size span size1a size2a;
     try_unify_size span size1b size2b
-  | TEvent b1, TEvent b2 -> if b1 <> b2 then raise CannotUnify
   | TName (cid1, sizes1, b1), TName (cid2, sizes2, b2) ->
     if b1 <> b2 || not (Cid.equal cid1 cid2) then raise CannotUnify;
     List.iter2 (try_unify_size span) sizes1 sizes2
@@ -240,9 +239,9 @@ and try_unify_rty span rty1 rty2 =
   | ( ( TVoid
       | TGroup
       | TBool
+      | TEvent
       | TInt _
       | TMemop _
-      | TEvent _
       | TName _
       | TFun _
       | TRecord _

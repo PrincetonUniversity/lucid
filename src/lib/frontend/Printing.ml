@@ -11,7 +11,7 @@ let integer_to_string n =
   if cfg.verbose_types then Integer.to_string n else Integer.value_string n
 ;;
 
-let location_to_string l = integer_to_string l
+let location_to_string l = string_of_int l
 let id_to_string id = if cfg.verbose_types then Id.to_string id else Id.name id
 
 let cid_to_string cid =
@@ -125,7 +125,7 @@ let rec raw_ty_to_string t =
     cid_to_string cid
     ^ sizes_to_string sizes
     ^ if cfg.verbose_types then "{" ^ string_of_bool b ^ "}" else ""
-  | TEvent b -> if b then "mevent" else "event"
+  | TEvent -> "event"
   | TFun func -> func_to_string func
   | TMemop (size1, size2) ->
     Printf.sprintf
@@ -223,24 +223,17 @@ let rec v_to_string v =
 
 and value_to_string v = v_to_string v.v
 
-and event_to_string { eid; data; edelay; elocations } =
-  let locstr =
-    match elocations with
-    | [] -> "self"
-    | _ -> list_to_string location_to_string elocations
-  in
-  let locstr = if cfg.verbose_types then "@" ^ locstr else "" in
+and event_to_string { eid; data; edelay } =
   let delaystr =
     if edelay <> 0 && cfg.verbose_types
     then "@" ^ string_of_int edelay ^ "ns"
     else ""
   in
   Printf.sprintf
-    "%s(%s)%s%s"
+    "%s(%s)%s"
     (cid_to_string eid)
     (comma_sep value_to_string data)
     delaystr
-    locstr
 ;;
 
 let rec e_to_string e =
@@ -266,6 +259,7 @@ let rec e_to_string e =
     Printf.sprintf "%s(%s)" (cid_to_string cid) (es_to_string es)
   | EHash (size, es) ->
     Printf.sprintf "hash<<%s>>(%s)" (size_to_string size) (es_to_string es)
+  | EFlood e -> Printf.sprintf "flood %s" (exp_to_string e)
   | EProj (e, l) -> exp_to_string e ^ "#" ^ l
   | ERecord lst ->
     Printf.sprintf
@@ -307,8 +301,21 @@ and stmt_to_string s =
   match s.s with
   | SAssign (i, e) -> id_to_string i ^ " = " ^ exp_to_string e ^ ";"
   | SNoop -> ""
-  | SGen (b, e) ->
-    Printf.sprintf "%sgenerate %s;" (if b then "m" else "") (exp_to_string e)
+  | SGen (g, e) ->
+    (match g with
+    | GSingle None -> Printf.sprintf "generate %s;" (exp_to_string e)
+    | _ ->
+      let gen_str, loc =
+        match g with
+        | GSingle eo -> "generate_switch", Option.get eo
+        | GMulti loc -> "generate_ports", loc
+        | GPort loc -> "generate_port", loc
+      in
+      Printf.sprintf
+        "%s (%s, %s);"
+        gen_str
+        (exp_to_string loc)
+        (exp_to_string e))
   | SLocal (i, t, e) ->
     Printf.sprintf
       "%s %s = %s;"
@@ -454,11 +461,6 @@ and d_to_string d =
     Printf.sprintf "extern %s %s;" (id_to_string id) (ty_to_string ty)
   | DSymbolic (id, ty) ->
     Printf.sprintf "symbolic %s %s;" (id_to_string id) (ty_to_string ty)
-  | DGroup (id, es) ->
-    Printf.sprintf
-      "group %s = {%s};"
-      (id_to_string id)
-      (comma_sep exp_to_string es)
   | DUserTy (id, sizes, ty) ->
     Printf.sprintf
       "type %s%s = %s"

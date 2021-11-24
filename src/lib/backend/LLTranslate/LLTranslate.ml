@@ -364,13 +364,17 @@ let regdec_from_decl dec =
 let cur_group_iid = ref 0
 
 let groupdec_from_decl dec =
-  match dec.d with
+  ignore dec;
+  (* match dec.d with
   | DGroup (group_id, _) ->
     let width = LLConstants.event_loc_width in
     cur_group_iid := !cur_group_iid + 1;
     let giid = !cur_group_iid in
     Some (IS.new_private_constdef (Cid.Id group_id) width giid)
-  | _ -> None
+  | _ -> None *)
+  failwith
+    "Group declarations don't exist anymore, gonna have to get these by \
+     walking through the program"
 ;;
 
 (* generate the bitvector metadata that indicate which
@@ -502,7 +506,9 @@ let from_dpt (ds : decls) (opgraph_recs : prog_opgraph) : IS.llProg =
   (* generate backend defs for register arrays *)
   let regarray_defs = CL.map regdec_from_decl ds |> CL.flatten in
   (* generate constants for groups *)
-  let group_defs = CL.filter_map groupdec_from_decl ds in
+  (* no more groups! *)
+  (* let group_defs = CL.filter_map groupdec_from_decl ds in *)
+
   (* translate operation statements into backend compute objects,
        use the opgraphs to set control flow between objects. *)
   let backend_handler_defs = CL.map dpahandler_from_handler opgraph_recs in
@@ -517,7 +523,7 @@ let from_dpt (ds : decls) (opgraph_recs : prog_opgraph) : IS.llProg =
     { tofino_prog with
       instr_dict =
         tofino_prog.instr_dict
-        @ IS.dict_of_decls group_defs
+        (* @ IS.dict_of_decls group_defs *)
         @ IS.dict_of_decls regarray_defs
         @ IS.dict_of_decls event_decls
         @ IS.dict_of_decls dpt_struct_defs

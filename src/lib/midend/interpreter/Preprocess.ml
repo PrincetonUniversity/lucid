@@ -8,7 +8,14 @@ type t =
   ; externs : ty Env.t
   }
 
-let empty = { events = Env.empty; externs = Env.empty }
+let empty =
+  { events = Env.empty
+  ; externs =
+      Env.singleton
+        (Id Builtins.recirc_id)
+        (SyntaxToCore.translate_ty Builtins.recirc_ty)
+  }
+;;
 
 (* Remove and process declarations which we can/must do beforehand --
    extern/event declarations, and precompute size values *)

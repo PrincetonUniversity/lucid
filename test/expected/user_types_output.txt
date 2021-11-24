@@ -3,12 +3,12 @@ dpt: Auto-detected specification file examples/interp_tests/user_types.json
 dpt: Simulating...
 dpt: Using random seed: 0
 
-t=0: Handling event update_both(0,1) at switch 0
-t=10000: Handling event update_both(1,1) at switch 0
-t=20000: Handling event update_both(2,1) at switch 0
-t=30000: Handling event update_both(3,1) at switch 0
-t=40000: Handling event update_both(4,1) at switch 0
-t=50000: Handling event update_both(5,1) at switch 0
+t=0: Handling event update_both(0,1) at switch 0, port 0
+t=10000: Handling event update_both(1,1) at switch 0, port 0
+t=20000: Handling event update_both(2,1) at switch 0, port 0
+t=30000: Handling event update_both(3,1) at switch 0, port 0
+t=40000: Handling event update_both(4,1) at switch 0, port 0
+t=50000: Handling event update_both(5,1) at switch 0, port 0
 dpt: Final State:
 
 Switch 0 : {

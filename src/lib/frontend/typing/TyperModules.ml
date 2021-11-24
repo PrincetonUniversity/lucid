@@ -278,7 +278,7 @@ let rec validate_interface prefix env interface =
                (Printing.id_to_string id);
         let expected_fty =
           { arg_tys = List.map snd params
-          ; ret_ty = ty @@ TEvent false
+          ; ret_ty = ty TEvent
           ; start_eff = func_ty.start_eff
           ; end_eff = func_ty.start_eff
           ; constraints = ref !(func_ty.constraints)

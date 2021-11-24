@@ -12,7 +12,7 @@ and z = [%import: (Z.t[@opaque])]
 
 and zint = [%import: (Integer.t[@with Z.t := (Z.t [@opaque])])]
 
-and location = zint
+and location = int
 
 (* All sizes should be inlined and precomputed *)
 and size = int
@@ -23,7 +23,7 @@ and raw_ty =
   | TBool
   | TGroup
   | TInt of size (* Number of bits *)
-  | TEvent of bool (* True iff multicast *)
+  | TEvent
   | TFun of func_ty (* Only used for Array/event functions at this point *)
   | TName of cid * sizes * bool (* Named type: e.g. "Array.t<<32>>". Bool is true if it represents a global type *)
   | TMemop of size * size
@@ -83,7 +83,6 @@ and event =
   { eid : cid
   ; data : value list
   ; edelay : int
-  ; elocations : location list
   }
 
 and value =
@@ -99,6 +98,7 @@ and e =
   | EOp of op * exp list
   | ECall of cid * exp list
   | EHash of size * exp list
+  | EFlood of exp
 
 and exp =
   { e : e
@@ -108,6 +108,11 @@ and exp =
 
 and branch = pat list * statement
 
+and gen_type =
+  | GSingle of exp option
+  | GMulti of exp
+  | GPort of exp
+
 (* statements *)
 and s =
   | SNoop
@@ -116,7 +121,7 @@ and s =
   | SAssign of id * exp
   | SPrintf of string * exp list
   | SIf of exp * statement * statement
-  | SGen of bool * exp (* Bool is true iff multicast *)
+  | SGen of gen_type * exp
   | SSeq of statement * statement
   | SMatch of exp list * branch list
   | SRet of exp option
@@ -141,7 +146,6 @@ and d =
   | DEvent of id * event_sort * params
   | DHandler of id * body
   | DMemop of id * body
-  | DGroup of id * exp list
   | DExtern of id * ty
 
 (* name, return type, args & body *)
@@ -186,8 +190,7 @@ let infer_vty v =
   match v with
   | VBool _ -> TBool
   | VInt z -> TInt (Integer.size z)
-  | VEvent e ->
-    if List.length e.elocations = 1 then TEvent false else TEvent true
+  | VEvent _ -> TEvent
   | VGroup _ -> TGroup
   | VGlobal _ -> failwith "Cannot infer type of global value"
 ;;
@@ -249,7 +252,6 @@ let dglobal_sp id ty exp span = decl_sp (DGlobal (id, ty, exp)) span
 let dextern_sp id ty span = decl_sp (DExtern (id, ty)) span
 let handler_sp id p body span = decl_sp (DHandler (id, (p, body))) span
 let memop_sp id p body span = decl_sp (DMemop (id, (p, body))) span
-let group_sp id es span = decl_sp (DGroup (id, es)) span
 
 (*** Utility -- may split into a separate file if it gets big *)
 
@@ -267,7 +269,6 @@ let rec equiv_value v1 v2 =
   | VEvent e1, VEvent e2 ->
     Cid.equal e1.eid e2.eid
     && e1.edelay = e2.edelay
-    && e1.elocations = e2.elocations
     && equiv_list equiv_value e1.data e2.data
   | _ -> false
 ;;

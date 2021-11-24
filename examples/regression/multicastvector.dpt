@@ -50,21 +50,16 @@ fun int get_connected_port(int src, int output_port) {
 
 // Defines a multicast group named group1.
 // Packets sent to this group arrive at switches 0, 1 and 3, and not 2 or 4.
-group group1 = {0, 1, 3};
+const group group1 = {0, 1, 3};
 
 event foo() {
   // To generate a singlecast event, you just do things normally, e.g.
   event f = foo();
-  f = Event.sslocate(f, 1); // Send to switch 1
   f = Event.delay(f, 100); // Delay by 100 ns
-  generate f; // Sends f off to appear at switch 1 in 100ns.
+  generate_switch (1, f); // Sends f off to appear at switch 1 in 100ns.
 
   // To generate a multicast event, you start the same way...
   event f = foo();
-  // But when you send it to a group, the type changes to "mevent" (multicast event)
-  // To do this, you use different combinators. Event.smlocate takes a singlecast event and a group,
-  // and generates a multicast event.
-  mevent m = Event.smlocate(f, group1); // Turns f into a mevent sent to group 1.
-  m = Event.mdelay(m, 100); // Different version of the delay function for multicast events
-  mgenerate m; // Different generate keyword as well. This will cause m to appear at switches 0, 1, 3 in 100ns.
+  event m = Event.delay(f, 100);
+  generate_ports (group1, m); // Different generate keyword. This will cause m to appear at switches 0, 1, 3 in 100ns.
 }

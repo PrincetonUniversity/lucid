@@ -183,9 +183,8 @@ let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
   let equiv_raw_ty = equiv_raw_ty ~ignore_effects ~qvars_wild in
   let equiv_ty = equiv_ty ~ignore_effects ~qvars_wild in
   match ty1, ty2 with
-  | TBool, TBool | TVoid, TVoid | TGroup, TGroup -> true
+  | TBool, TBool | TVoid, TVoid | TGroup, TGroup | TEvent, TEvent -> true
   | TInt size1, TInt size2 -> equiv_size size1 size2
-  | TEvent b1, TEvent b2 -> b1 = b2
   | TMemop (size1, size2), TMemop (size3, size4) ->
     equiv_size size1 size3 && equiv_size size2 size4
   | TName (id1, sizes1, b1), TName (id2, sizes2, b2) ->
@@ -218,7 +217,7 @@ let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
   | ( ( TBool
       | TMemop _
       | TInt _
-      | TEvent _
+      | TEvent
       | TName _
       | TFun _
       | TVoid
@@ -243,7 +242,7 @@ let max_effect e1 e2 =
 
 let rec is_global_rty rty =
   match TyTQVar.strip_links rty with
-  | TBool | TVoid | TGroup | TInt _ | TEvent _ | TFun _ | TMemop _ -> false
+  | TBool | TVoid | TGroup | TInt _ | TEvent | TFun _ | TMemop _ -> false
   | TQVar _ -> false (* I think *)
   | TName (_, _, b) -> b
   | TTuple lst -> List.exists is_global_rty lst
@@ -256,7 +255,7 @@ let is_global ty = is_global_rty ty.raw_ty
 (* Similar to is_global_rty, but also returns false for TQVars *)
 let rec is_not_global_rty rty =
   match TyTQVar.strip_links rty with
-  | TBool | TVoid | TGroup | TInt _ | TEvent _ | TFun _ | TMemop _ -> true
+  | TBool | TVoid | TGroup | TInt _ | TEvent | TFun _ | TMemop _ -> true
   | TQVar _ -> false (* I think *)
   | TName (_, _, b) -> not b
   | TTuple lst -> List.for_all is_not_global_rty lst
@@ -293,7 +292,7 @@ let rec is_compound e =
   match e.e with
   | EInt _ | EVal _ | EVar _ | ESizeCast _ -> false
   | EHash _ | EOp _ | ECall _ | EStmt _ -> true
-  | EComp (e, _, _) | EIndex (e, _) | EProj (e, _) -> is_compound e
+  | EComp (e, _, _) | EIndex (e, _) | EProj (e, _) | EFlood e -> is_compound e
   | EVector entries | ETuple entries -> List.exists is_compound entries
   | ERecord entries -> List.exists (is_compound % snd) entries
   | EWith (base, entries) ->

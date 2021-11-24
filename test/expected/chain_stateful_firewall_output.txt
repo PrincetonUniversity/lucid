@@ -1,43 +1,35 @@
 dpt: Parsing ...
-
-In examples/interp_tests/chain_stateful_firewall.dpt: 
-
-46|    generate Event.sslocate(updater, head);
-                    ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
-
-warning: examples/interp_tests/chain_stateful_firewall.dpt: Conditional generation of potential non-exit event in entry handler.
-
 dpt: Auto-detected specification file examples/interp_tests/chain_stateful_firewall.json
 dpt: Simulating...
 dpt: Using random seed: 0
 
-t=11000000: Handling entry event packetin(10,100,0) at switch 0
+t=11000000: Handling entry event packetin(10,100,0) at switch 0, port 0
 Mapped (10, 100) to index 3
-t=11000600: Handling event update_last_seen(3,11000000) at switch 0
-t=11001200: Handling event update_last_seen(3,11000000) at switch 1
-t=11001800: Handling event update_last_seen(3,11000000) at switch 2
-t=11100000: Handling entry event packetin(11,101,0) at switch 1
+t=11000600: Handling event update_last_seen(3,11000000) at switch 0, port 0
+t=11001200: Handling event update_last_seen(3,11000000) at switch 1, port 0
+t=11001800: Handling event update_last_seen(3,11000000) at switch 2, port 0
+t=11100000: Handling entry event packetin(11,101,0) at switch 1, port 1
 Mapped (11, 101) to index 2
-t=11100600: Handling event update_last_seen(2,11100000) at switch 0
-t=11101200: Handling event update_last_seen(2,11100000) at switch 1
-t=11101800: Handling event update_last_seen(2,11100000) at switch 2
-t=11200000: Handling entry event packetin(13,103,1) at switch 0
+t=11100600: Handling event update_last_seen(2,11100000) at switch 0, port 0
+t=11101200: Handling event update_last_seen(2,11100000) at switch 1, port 0
+t=11101800: Handling event update_last_seen(2,11100000) at switch 2, port 0
+t=11200000: Handling entry event packetin(13,103,1) at switch 0, port 0
 Mapped (103, 13) to index 2
-t=11200000: Handling entry event packetin(13,103,1) at switch 1
+t=11200000: Handling entry event packetin(13,103,1) at switch 1, port 1
 Mapped (103, 13) to index 2
-t=11200000: Handling entry event packetin(13,103,1) at switch 2
+t=11200000: Handling entry event packetin(13,103,1) at switch 2, port 0
 Mapped (103, 13) to index 2
-t=11300000: Handling entry event packetin(101,11,1) at switch 0
+t=11300000: Handling entry event packetin(101,11,1) at switch 0, port 0
 Mapped (11, 101) to index 2
-t=11300000: Handling entry event packetin(101,11,1) at switch 1
+t=11300000: Handling entry event packetin(101,11,1) at switch 1, port 1
 Mapped (11, 101) to index 2
-t=11300000: Handling entry event packetin(101,11,1) at switch 2
+t=11300000: Handling entry event packetin(101,11,1) at switch 2, port 0
 Mapped (11, 101) to index 2
-t=11400000: Handling entry event packetin(100,10,1) at switch 0
+t=11400000: Handling entry event packetin(100,10,1) at switch 0, port 0
 Mapped (10, 100) to index 3
-t=11400000: Handling entry event packetin(100,10,1) at switch 1
+t=11400000: Handling entry event packetin(100,10,1) at switch 1, port 1
 Mapped (10, 100) to index 3
-t=11400000: Handling entry event packetin(100,10,1) at switch 2
+t=11400000: Handling entry event packetin(100,10,1) at switch 2, port 0
 Mapped (10, 100) to index 3
 dpt: Final State:
 
@@ -50,10 +42,10 @@ Switch 0 : {
  Events :   [ ]
 
  Exits :    [
-    continue(100) at t=11000000
-    continue(103) at t=11200000
-    continue(11) at t=11300000
-    continue(10) at t=11400000
+    continue(100) at port -1, t=11000000
+    continue(103) at port -1, t=11200000
+    continue(11) at port -1, t=11300000
+    continue(10) at port -1, t=11400000
   ]
 
  entry events handled: 4
@@ -69,10 +61,10 @@ Switch 1 : {
  Events :   [ ]
 
  Exits :    [
-    continue(101) at t=11100000
-    continue(103) at t=11200000
-    continue(11) at t=11300000
-    continue(10) at t=11400000
+    continue(101) at port -1, t=11100000
+    continue(103) at port -1, t=11200000
+    continue(11) at port -1, t=11300000
+    continue(10) at port -1, t=11400000
   ]
 
  entry events handled: 4
@@ -88,9 +80,9 @@ Switch 2 : {
  Events :   [ ]
 
  Exits :    [
-    continue(103) at t=11200000
-    continue(11) at t=11300000
-    continue(10) at t=11400000
+    continue(103) at port -1, t=11200000
+    continue(11) at port -1, t=11300000
+    continue(10) at port -1, t=11400000
   ]
 
  entry events handled: 3

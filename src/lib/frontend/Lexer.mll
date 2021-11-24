@@ -42,9 +42,10 @@ rule token = parse
   | "int"             { TINT (position lexbuf) }
   | "bool"            { TBOOL (position lexbuf) }
   | "event"           { EVENT (position lexbuf) }
-  | "mevent"          { MEVENT (position lexbuf) }
   | "generate"        { GENERATE (position lexbuf) }
-  | "mgenerate"       { MGENERATE (position lexbuf) }
+  | "generate_switch" { SGENERATE (position lexbuf) }
+  | "generate_ports"  { MGENERATE (position lexbuf) }
+  | "generate_port"   { PGENERATE (position lexbuf) }
   | "printf"          { PRINTF (position lexbuf) }
   | "handle"	        { HANDLE (position lexbuf) }
   | "fun"             { FUN (position lexbuf)}
@@ -70,6 +71,7 @@ rule token = parse
   | "for"             { FOR (position lexbuf) }
   | "size_to_int"     { SIZECAST (position lexbuf) }
   | "symbolic"        { SYMBOLIC (position lexbuf) }
+  | "flood"           { FLOOD (position lexbuf) }
   | id as s           { ID (position lexbuf, Id.create s) }
   | "'"(id as s)      { QID (position lexbuf, Id.create s) }
   | num as n          { NUM (position lexbuf, Z.of_string n) }

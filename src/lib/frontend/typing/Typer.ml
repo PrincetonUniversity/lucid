@@ -39,8 +39,8 @@ let infer_value v =
     match v.v with
     | VBool _ -> TBool
     | VInt n -> TInt (IConst (Integer.size n))
-    | VGlobal _ | VEvent _ | VGroup _ ->
-      failwith "Cannot write values of these types"
+    | VGroup _ -> TGroup
+    | VGlobal _ | VEvent _ -> failwith "Cannot write values of these types"
   in
   { v with vty = Some (mk_ty vty) }
 ;;
@@ -84,6 +84,10 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
     let hd = List.hd inf_es in
     unify_ty hd.espan (Option.get hd.ety) (mk_ty @@ TInt (fresh_size ()));
     env, { e with e = EHash (size, inf_es); ety = Some (mk_ty @@ TInt size) }
+  | EFlood e1 ->
+    let env, inf_e, inf_ety = infer_exp env e1 |> textract in
+    unify_ty e.espan inf_ety (mk_ty @@ TInt (fresh_size ()));
+    env, { e with e = EFlood inf_e; ety = Some (mk_ty @@ TGroup) }
   | ECall (f, args) ->
     let _, _, inferred_fty =
       (* Get type of f as if we used the var rule for the function *)
@@ -574,10 +578,26 @@ and infer_statement (env : env) (s : statement) : env * statement =
                statement; neither branch ends obviously later than the other.")
       in
       { env with current_effect }, SIf (inf_e, inf_s1, inf_s2)
-    | SGen (b, e) ->
+    | SGen (g, e) ->
       let env, inf_e, ety = infer_exp env e |> textract in
-      unify_raw_ty s.sspan ety.raw_ty (TEvent b);
-      env, SGen (b, inf_e)
+      unify_raw_ty s.sspan ety.raw_ty TEvent;
+      let env, inf_g =
+        match g with
+        | GSingle None -> env, g
+        | GSingle (Some loc) ->
+          let env, inf_loc, lty = infer_exp env loc |> textract in
+          unify_raw_ty s.sspan lty.raw_ty (TInt (fresh_size ()));
+          env, GSingle (Some inf_loc)
+        | GMulti loc ->
+          let env, inf_loc, lty = infer_exp env loc |> textract in
+          unify_raw_ty s.sspan lty.raw_ty TGroup;
+          env, GMulti inf_loc
+        | GPort loc ->
+          let env, inf_loc, lty = infer_exp env loc |> textract in
+          unify_raw_ty s.sspan lty.raw_ty (TInt (fresh_size ()));
+          env, GPort inf_loc
+      in
+      env, SGen (inf_g, inf_e)
     | SSeq (s1, s2) ->
       let env, inf_s1 = infer_statement env s1 in
       let env, inf_s2 = infer_statement env s2 in
@@ -841,20 +861,6 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
         { env with consts = CidMap.add (Id id) ty env.consts } |> def KConst id
       in
       env, effect_count, DSymbolic (id, ty)
-    | DGroup (id, es) ->
-      enter_level ();
-      let _, inf_args = infer_exps env es in
-      leave_level ();
-      (* Locations are just ints for now *)
-      List.iter
-        (fun e ->
-          unify_raw_ty d.dspan (Option.get e.ety).raw_ty (TInt (IConst 32)))
-        inf_args;
-      let env =
-        { env with consts = CidMap.add (Id id) (mk_ty TGroup) env.consts }
-        |> def KConst id
-      in
-      env, effect_count, DGroup (id, inf_args)
     | DEvent (id, sort, constr_specs, params) ->
       let constrs, _ =
         spec_to_constraints env d.dspan FZero params constr_specs
@@ -876,7 +882,9 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
           { env with
             current_effect = FZero
           ; consts =
-              CidMap.add (Id Builtins.this_id) Builtins.this_ty env.consts
+              env.consts
+              |> CidMap.add (Id Builtins.this_id) Builtins.this_ty
+              |> CidMap.add (Id Builtins.ingr_port_id) Builtins.ingr_port_ty
           ; constraints
           }
           body

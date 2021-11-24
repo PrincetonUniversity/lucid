@@ -28,7 +28,7 @@ handle update_last_seen(int idx, int time) {
   event this = update_last_seen(idx, time);
   Array.set(last_seen, idx, time);
   if (self != tail) {
-    generate Event.sslocate(this, succ);
+    generate_switch (succ, this);
   }
 }
 
@@ -44,7 +44,7 @@ handle packetin(int src, int dst, int port) {
     // Only update if we're nearing the timeout to avoid many many writes
     if ((now - last_seen_time) > (TIME_THRESH - 500000)) {
       event updater = update_last_seen(idx, now);
-      generate Event.sslocate(updater, head);
+      generate_switch (head, updater);
     }
 
     generate continue(dst);

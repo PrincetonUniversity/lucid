@@ -196,13 +196,8 @@ let rec replace_decl (env : env) d =
     let body_env, new_params = flatten_params env params in
     let body = replace_statement body_env body in
     env, [{ d with d = DHandler (id, (new_params, body)) }]
-  | DSize _
-  | DMemop _
-  | DGroup _
-  | DExtern _
-  | DSymbolic _
-  | DConst _
-  | DGlobal _ -> env, [d]
+  | DSize _ | DMemop _ | DExtern _ | DSymbolic _ | DConst _ | DGlobal _ ->
+    env, [d]
   | DFun _ | DConstr _ | DModule _ | DUserTy _ ->
     Console.error_position
       d.dspan

@@ -30,5 +30,5 @@ handle pktin(int src, int dst) {
 
 handle query(int src, int dst, int response_loc) {
   auto val = CMSTimeout.query(sketch, [src; dst]);
-  generate Event.sslocate(query_response(src, dst, val), response_loc);
+  generate_switch (response_loc, query_response(src, dst, val));
 }

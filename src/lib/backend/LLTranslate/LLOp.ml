@@ -249,7 +249,7 @@ module TofinoAlu = struct
       | ECall (fcn_id, args) ->
         (* a call could either be a call, or an event declaration. *)
         (match raw_ty_of_exp val_exp with
-        | TEvent _ ->
+        | TEvent ->
           let call_result =
             ctx_call_codegen
               LLConstants.event_generate_cid
@@ -281,6 +281,8 @@ module TofinoAlu = struct
         (* let poly = Integer.to_int (zint_from_evalue (CL.hd exps)) in  *)
         let args = CL.map (oper_from_immediate hdl_id) (CL.tl exps) in
         alu_name, IS.new_hasher alu_name width poly outvar_mid args
+      | EFlood _ -> 
+        error "[from_assign] flood not yet supported by backend."        
     in
     !dprint_endline
       (sprintf "[from_assign] created alu: " ^ Printing.cid_to_string alu_name);
@@ -323,7 +325,7 @@ module TofinoAlu = struct
     ; GS.int_assign_instr (Cid.concat ev_struct_id event_loc_field) 0
     ; GS.int_assign_instr (Cid.concat ev_struct_id event_delay_field) 0 ]
     @
-    (* background events are carried in headers that need to be set to valid. 
+    (* background events are carried in headers that need to be set to valid.
          Background events must also be sure to set up the footer. *)
     match evrec.event_sort with
     | EBackground ->

@@ -1,20 +1,6 @@
 import subprocess, os, filecmp
 
-interpfiles = [
-"basics",
-"NAT",
-"chain_stateful_firewall",
-"match",
-"global_args",
-"return_test",
-"user_types",
-"module",
-"operators",
-"BloomFilter",
-"symbolics",
-"symbolics0"
-]
-
+interpfiles = [x for x in os.listdir("examples/interp_tests/") if x.endswith(".dpt")]
 libraryfiles = [x for x in os.listdir("examples/library/") if x.endswith(".dpt")]
 regressionfiles = [x for x in os.listdir("examples/regression/") if x.endswith(".dpt")]
 poplfiles = [x for x in os.listdir("examples/popl22/") if x.endswith(".dpt")]
@@ -25,17 +11,18 @@ diffs = []
 if not (os.path.isdir("test/output")):
     os.mkdir("test/output")
 
-def interp_test(file, args):
-    print("Running test on "+file)
-    outname = "{}_output.txt".format(file)
+def interp_test(fullfile, args):
+    shortfile = fullfile[0:-4]
+    print("Running test on "+shortfile)
+    outname = "{}_output.txt".format(shortfile)
     with open("test/output/"+outname, "w") as outfile:
-        fullfile = "examples/interp_tests/"+file+".dpt"
+        fullfile = "examples/interp_tests/"+fullfile
         cmd = ["./dpt", "--silent", fullfile] + args
         ret = subprocess.run(cmd, stdout=outfile, stderr=subprocess.DEVNULL)
     if ret.returncode != 0:
         errors.append(fullfile)
     elif not filecmp.cmp("test/output/"+outname, "test/expected/"+outname):
-        diffs.append(file)
+        diffs.append(shortfile)
     outfile.close()
 
 def just_typecheck(path, file, suffix = ""):

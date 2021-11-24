@@ -3,11 +3,13 @@ open CoreSyntax
 open Yojson.Basic
 open Preprocess
 module Env = InterpState.Env
+module IntMap = InterpState.IntMap
 
 type t =
   { num_switches : int
+  ; links : InterpState.State.topology
   ; externs : value Env.t list
-  ; events : event list
+  ; events : (event * (int * int) list) list
   ; config : InterpState.State.config
   }
 
@@ -34,16 +36,23 @@ let rec parse_value err_str ty j =
   | `Int n, TInt size -> vint n size
   | `Bool b, TBool -> vbool b
   | `List lst, TGroup ->
-    vgroup
-      (List.map
-         (fun n -> Integer.of_int @@ parse_int "group value definition" n)
-         lst)
+    vgroup (List.map (fun n -> parse_int "group value definition" n) lst)
   | _ ->
     error
     @@ err_str
     ^ " specification had wrong or unexpected argument "
     ^ to_string j
 ;;
+
+let parse_port str =
+  match String.split_on_char ':' str with
+  | [id; port] ->
+    (try int_of_string id, int_of_string port with
+    | _ -> error "Incorrect format for link entry!")
+  | _ -> error "Incorrect format for link entry!"
+;;
+
+let default_port = 0
 
 let parse_events
     (pp : Preprocess.t)
@@ -90,24 +99,30 @@ let parse_events
           !last_delay
         | _ -> error "Event specification had non-integer delay field"
       in
-      let elocations =
+      let locations =
         match List.assoc_opt "locations" lst with
         | Some (`List lst) ->
           List.map
             (function
-              | `Int n ->
-                if n < 0 || n >= num_switches
+              | `String str ->
+                let sw, port = parse_port str in
+                if sw < 0 || sw >= num_switches
                 then
                   error
-                  @@ "Cannot specify event at nonexistent location "
-                  ^ string_of_int n;
-                Integer.create n 32
-              | _ -> error "Event specification had non-integer location")
+                  @@ "Cannot specify event at nonexistent switch "
+                  ^ string_of_int sw;
+                if port < 0 || port >= 255
+                then
+                  error
+                  @@ "Cannot specify event at nonexistent port "
+                  ^ string_of_int port;
+                sw, port
+              | _ -> error "Event specification had non-string location")
             lst
-        | None -> [Integer.create 0 32]
+        | None -> [0, default_port]
         | _ -> error "Event specification has non-list locations field"
       in
-      { eid; data; edelay; elocations }
+      { eid; data; edelay }, locations
     | _ -> error "Non-assoc type for event definition"
   in
   List.map parse_event events
@@ -144,6 +159,58 @@ let parse_externs
     externs
 ;;
 
+let parse_links num_switches links =
+  let add_link id port dst acc =
+    try
+      IntMap.modify
+        id
+        (fun map ->
+          match IntMap.find_opt port map with
+          | None -> IntMap.add port dst map
+          | Some dst' when dst = dst' -> map
+          | _ ->
+            error
+            @@ Printf.sprintf
+                 "Switch:port pair %d:%d assigned to two different \
+                  destinations!"
+                 id
+                 port)
+        acc
+    with
+    | Not_found -> error @@ "Invalid switch id " ^ string_of_int id
+  in
+  let add_links acc (src, dst) =
+    let src_id, src_port = parse_port src in
+    let dst_id, dst_port =
+      match dst with
+      | `String dst -> parse_port dst
+      | _ -> error "Non-string format for link entry!"
+    in
+    acc
+    |> add_link src_id src_port (dst_id, dst_port)
+    |> add_link dst_id dst_port (src_id, src_port)
+  in
+  List.fold_left add_links (InterpState.State.empty_topology num_switches) links
+;;
+
+(* Make a full mesh with arbitrary port numbers.
+   Specifically, we map 1:2 to 2:1, and 3:4 to 4:3, etc. *)
+let make_full_mesh num_switches =
+  let switch_ids = List.init num_switches (fun n -> n) in
+  List.fold_left
+    (fun acc id ->
+      let port_map =
+        List.fold_left
+          (fun acc port ->
+            if id = port then acc else IntMap.add port (port, id) acc)
+          IntMap.empty
+          switch_ids
+      in
+      IntMap.add id port_map acc)
+    IntMap.empty
+    switch_ids
+;;
+
 let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t =
   let json = from_file filename in
   match json with
@@ -158,19 +225,37 @@ let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t 
     let random_seed =
       parse_int_entry "random seed" (int_of_float @@ Unix.time ())
     in
+    let links =
+      if num_switches = 1
+      then IntMap.empty
+      else (
+        match List.assoc_opt "links" lst with
+        | Some (`Assoc links) -> parse_links num_switches links
+        | Some (`String "full mesh") -> make_full_mesh num_switches
+        | _ -> error "Unexpected format or missing edge declarations")
+    in
     let max_time =
       match List.assoc_opt "max time" lst with
       | Some (`Int n) -> n
       | _ -> error "No value or non-int value specified for max time"
     in
     let externs =
-      let lst =
+      let externs =
         match List.assoc_opt "externs" lst with
         | Some (`Assoc lst) -> lst
         | None -> []
         | Some _ -> error "Non-assoc type for extern definitions"
       in
-      parse_externs pp renaming num_switches lst
+      let recirc_ports =
+        (* This is an extern under the hood, but users don't see it that way *)
+        match List.assoc_opt "recirculation_ports" lst with
+        | Some (`List lst) -> "recirculation_port", `List lst
+        | None ->
+          ( "recirculation_port"
+          , `List (List.init num_switches (fun _ -> `Int 196)) )
+        | Some _ -> error "Non-list type for recirculation port definitions"
+      in
+      parse_externs pp renaming num_switches (recirc_ports :: externs)
     in
     let events =
       match List.assoc_opt "events" lst with
@@ -187,6 +272,6 @@ let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t 
       ; random_seed
       }
     in
-    { num_switches; externs; events; config }
+    { num_switches; links; externs; events; config }
   | _ -> error "Unexpected interpreter specification format"
 ;;

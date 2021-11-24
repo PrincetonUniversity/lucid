@@ -22,6 +22,12 @@ let raw_event v =
   | _ -> error "not event"
 ;;
 
+let raw_group v =
+  match v.v with
+  | VGroup ls -> ls
+  | _ -> error "not event"
+;;
+
 let interp_op op vs =
   let vs = List.map extract_ival vs in
   match op, vs with
@@ -140,6 +146,14 @@ let rec interp_exp (nst : State.network_state) swid locals e : State.ival =
       let hashed = Legacy.Hashtbl.seeded_hash (Integer.to_int seed) tl in
       V (vint hashed size)
     | _ -> failwith "Wrong arguments to hash operation")
+  | EFlood e1 ->
+    let port =
+      interp_exp nst swid locals e1
+      |> extract_ival
+      |> raw_integer
+      |> Integer.to_int
+    in
+    V (vgroup [-(port + 1)])
 
 and interp_exps nst swid locals es : State.ival list =
   List.map (interp_exp nst swid locals) es
@@ -223,17 +237,47 @@ let rec interp_statement nst swid locals s =
     if !(nst.switches.(swid).retval) <> None
     then locals
     else interp_statement nst swid locals ss2
-  | SGen (_, e) ->
+  | SGen (g, e) ->
+    (* TODO: Right now, port numbers for generate_single are
+       arbitrary (always 0). We could do better by e.g. finding a path through
+       the graph and figuring out which port number it ends at *)
+    let locs =
+      match g with
+      | GSingle None ->
+        [ ( swid
+          , State.lookup swid (Cid.from_string "recirculation_port") nst
+            |> extract_ival
+            |> raw_integer
+            |> Integer.to_int ) ]
+      | GSingle (Some e) ->
+        [interp_exp e |> extract_ival |> raw_integer |> Integer.to_int, 0]
+      | GMulti grp ->
+        let ports = interp_exp grp |> extract_ival |> raw_group in
+        (match ports with
+        | [port] when port < 0 ->
+          (* Flooding: send to every connected switch *)
+          (-1, port)
+          :: (IntMap.find swid nst.links
+             |> IntMap.bindings
+             |> List.filter_map (fun (p, dst) ->
+                    if p = -(port + 1) then None else Some dst))
+        | _ -> List.map (fun port -> State.lookup_dst nst (swid, port)) ports)
+      | GPort port ->
+        let port =
+          interp_exp port |> extract_ival |> raw_integer |> Integer.to_int
+        in
+        [State.lookup_dst nst (swid, port)]
+    in
     let event = interp_exp e |> extract_ival |> raw_event in
     if Env.find event.eid nst.event_sorts = EExit
-    then State.log_exit swid event nst
-    else (
-      let locs =
-        if List.length event.elocations = 0
-        then [swid]
-        else List.map Integer.to_int event.elocations
-      in
-      List.iter (fun loc -> State.push_event loc event nst) locs);
+    then State.log_exit swid None event nst
+    else
+      List.iter
+        (fun (dst_id, port) ->
+          if dst_id = -1 (* lookup_dst failed *)
+          then State.log_exit swid (Some port) event nst
+          else State.push_event dst_id port event nst)
+        locs;
     locals
   | SRet (Some e) ->
     let v = interp_exp e |> extract_ival in
@@ -310,16 +354,21 @@ let interp_dglobal (nst : State.network_state) swid id ty e =
 
 let interp_decl (nst : State.network_state) swid d =
   (* print_endline @@ "Interping decl: " ^ Printing.decl_to_string d; *)
-  let interp_exp = interp_exp nst swid Env.empty in
   match d.d with
   | DGlobal (id, ty, e) -> interp_dglobal nst swid id ty e
   | DHandler (id, (params, body)) ->
-    let f nst swid event =
-      let this_event = vevent { event with edelay = 0; elocations = [] } in
+    let f nst swid port event =
+      let builtin_env =
+        List.fold_left
+          (fun acc (k, v) -> Env.add k v acc)
+          Env.empty
+          [ Id Builtins.this_id, State.V (vevent { event with edelay = 0 })
+          ; Id Builtins.ingr_port_id, State.V (vint port 32) ]
+      in
       let locals =
         List.fold_left2
           (fun acc v (id, _) -> Env.add (Id id) (State.V v) acc)
-          (Env.singleton (Id Builtins.this_id) (State.V this_event))
+          builtin_env
           event.data
           params
       in
@@ -330,12 +379,7 @@ let interp_decl (nst : State.network_state) swid d =
     State.add_handler (Cid.id id) f nst
   | DEvent (id, _, _) ->
     let f _ _ args =
-      vevent
-        { eid = Id id
-        ; data = List.map extract_ival args
-        ; edelay = 0
-        ; elocations = []
-        }
+      vevent { eid = Id id; data = List.map extract_ival args; edelay = 0 }
     in
     State.add_global swid (Id id) (State.F f) nst;
     nst
@@ -356,12 +400,6 @@ let interp_decl (nst : State.network_state) swid d =
       Option.get ret
     in
     State.add_global swid (Cid.id id) (State.F f) nst;
-    nst
-  | DGroup (x, es) ->
-    let vs =
-      List.map (fun e -> interp_exp e |> extract_ival |> raw_integer) es
-    in
-    State.add_global swid (Id x) (V (vgroup vs)) nst;
     nst
   | DExtern _ ->
     failwith "Extern declarations should be handled during preprocessing"

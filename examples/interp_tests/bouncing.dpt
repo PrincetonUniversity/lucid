@@ -1,0 +1,76 @@
+/*
+Basic DPT primitives: events, handlers, and local variables
+*/
+/* jsonch 10/15/20 */
+
+/* an event is a data record.
+An event declaration defines the record type and fields. */
+event count_to_10 (int count);
+
+/* Each event has a handler that executes when a new event
+of that type arrives.*/
+/* Print the first 10 integers. */
+handle count_to_10 (int count) {
+	/* Inside of an event handler, local variables can be
+	declared and used in typical ways. */
+	/* Note that the only global variables are constants. */
+	/* integers have a polymorphic argument: their width in bits.
+	If the argument is omitted, the default is 32 bits. */
+	/*	integers are currently unsigned. */
+	int<<32>> next_count = count + 1;
+	if (count > 10){
+		/* Print functions are for debugging.
+		   Currently, only integer printing
+		   is implemented in the backend (10/15/20) */
+		printf("got to 10");
+	}
+	else {
+		if (count == 0){
+			printf("at 0");
+		}
+		else {
+			printf("%d", count);
+		}
+		/* For testing our port variables: send to another switch in the network
+		   after the second time processing it.
+		*/
+		if (ingress_port == recirculation_port) {
+			int next_loc = self;
+			if (next_loc == 2) {
+				next_loc = 0;
+			} else {
+				next_loc = next_loc + 1;
+			}
+			generate_switch (next_loc, count_to_10(next_count));
+		} else {
+			generate count_to_10(next_count);
+		}
+	}
+}
+
+/*
+packetin and continue are special builtin events that let
+a DPT program interface with an underlying P4 program.
+-- packetin is an event that a P4 program can generate
+from a single point in its control flow. From the P4 program's
+point of view, the event handler gets executed immediately,
+just like a function call would. There are no queues or recirculation
+for packetin events.
+-- continue is an event that allows a DPT handler to emit a packet
+back to P4, from the exact point in the P4 code where packetin is called.
+The arguments of a continue event are the same as the arguments to a
+packetin event. Like packetin events, there are no queues or packet
+recirculations for continue events.
+
+Down the line, we want to generalize this so that the P4 program
+can call other types of events as well (for example, a packetin event
+that is specific to a TCP packet and has extra arguments)
+*/
+
+entry event packetin (int src, int dst);
+exit event continue (int src, int dst);
+
+handle packetin (int src, int dst){
+	generate count_to_10 (0); // Dangerous, because this happens at linerate
+	generate continue (src, dst);
+}

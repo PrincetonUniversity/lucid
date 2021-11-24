@@ -2,12 +2,13 @@
 open CoreSyntax
 open Batteries
 module Env = Collections.CidMap
+module IntMap = Map.Make (Int)
 
 module State = struct
   module EventQueue = BatHeap.Make (struct
-    type t = int * event
+    type t = int * event * int
 
-    let compare t1 t2 = Pervasives.compare (fst t1) (fst t2)
+    let compare (t1, _, _) (t2, _, _) = Pervasives.compare t1 t2
   end)
 
   type stats_counter =
@@ -16,6 +17,16 @@ module State = struct
     }
 
   let empty_counter = { entries_handled = 0; total_handled = 0 }
+
+  (* Maps switch -> port -> (switch * port) *)
+  type topology = (int * int) IntMap.t IntMap.t
+
+  let empty_topology num_switches =
+    List.fold_left
+      (fun acc n -> IntMap.add n IntMap.empty acc)
+      IntMap.empty
+      (List.init num_switches (fun n -> n))
+  ;;
 
   type config =
     { max_time : int
@@ -31,6 +42,7 @@ module State = struct
     ; config : config
     ; event_sorts : event_sort Env.t
     ; handlers : handler Env.t
+    ; links : topology
     ; switches : state array
     }
 
@@ -38,7 +50,7 @@ module State = struct
     { global_env : ival Env.t
     ; event_queue : EventQueue.t
     ; pipeline : Pipeline.t
-    ; exits : (event * int) Queue.t
+    ; exits : (event * int option * int) Queue.t
     ; retval : value option ref
     ; counter : stats_counter ref
     }
@@ -47,9 +59,10 @@ module State = struct
     | V of value
     | F of code
 
-  and code = network_state -> int -> ival list -> value
+  and code = network_state -> int (* switch *) -> ival list -> value
 
-  and handler = network_state -> int -> event -> unit
+  and handler =
+    network_state -> int (* switch *) -> int (* port *) -> event -> unit
 
   type global_fun =
     { cid : Cid.t
@@ -71,6 +84,7 @@ module State = struct
     ; event_sorts = Env.empty
     ; handlers = Env.empty
     ; switches = Array.of_list []
+    ; links = empty_topology 0
     }
   ;;
 
@@ -119,8 +133,8 @@ module State = struct
     { nst with handlers = Env.add cid lam nst.handlers }
   ;;
 
-  let log_exit swid event nst =
-    Queue.push (event, nst.current_time) nst.switches.(swid).exits
+  let log_exit swid port event nst =
+    Queue.push (event, port, nst.current_time) nst.switches.(swid).exits
   ;;
 
   let update_counter swid event nst =
@@ -137,21 +151,23 @@ module State = struct
     st.counter := new_counter
   ;;
 
-  let push_event swid event nst =
+  let push_event swid port event nst =
     let st = nst.switches.(swid) in
     let t =
       nst.current_time
       + max event.edelay nst.config.generate_delay
       + Random.int nst.config.random_delay_range
     in
-    let event_queue = EventQueue.add (t, event) st.event_queue in
+    let event_queue = EventQueue.add (t, event, port) st.event_queue in
     nst.switches.(swid) <- { st with event_queue }
   ;;
 
   (* Like push_event, but doesn't add any artificial delays *)
-  let push_input_event swid event nst =
+  let push_input_event swid port event nst =
     let st = nst.switches.(swid) in
-    let event_queue = EventQueue.add (event.edelay, event) st.event_queue in
+    let event_queue =
+      EventQueue.add (event.edelay, event, port) st.event_queue
+    in
     nst.switches.(swid) <- { st with event_queue }
   ;;
 
@@ -160,13 +176,13 @@ module State = struct
     if EventQueue.size q = 0
     then None
     else (
-      let t, event = EventQueue.find_min q in
+      let t, event, port = EventQueue.find_min q in
       if t > nst.current_time
       then None
       else (
         nst.switches.(swid)
           <- { (nst.switches.(swid)) with event_queue = EventQueue.del_min q };
-        Some event))
+        Some (event, port)))
   ;;
 
   let next_time_st st =
@@ -174,7 +190,7 @@ module State = struct
     if EventQueue.size q = 0
     then None
     else (
-      let t, _ = EventQueue.find_min q in
+      let t, _, _ = EventQueue.find_min q in
       Some t)
   ;;
 
@@ -190,6 +206,16 @@ module State = struct
 
   let update_switch swid stage idx getop setop nst =
     Pipeline.update ~stage ~idx ~getop ~setop nst.switches.(swid).pipeline
+  ;;
+
+  (* Maps switch * port -> switch * port according to the topology *)
+  let lookup_dst nst (sw, p) =
+    match IntMap.find_opt sw nst.links with
+    | Some map ->
+      (match IntMap.find_opt p map with
+      | None -> -1, p
+      | Some ret -> ret)
+    | None -> error @@ "Invalid switch id " ^ string_of_int sw
   ;;
 
   let ival_to_string v =
@@ -219,12 +245,13 @@ module State = struct
       @@ (q
          |> EventQueue.to_list (* No BatHeap.fold :( *)
          |> List.fold_left
-              (fun acc (t, event) ->
+              (fun acc (t, event, port) ->
                 Printf.sprintf
-                  "%s    %dns: %s\n"
+                  "%s    %dns: %s at port %d\n"
                   acc
                   t
-                  (CorePrinting.event_to_string event))
+                  (CorePrinting.event_to_string event)
+                  port)
               "")
   ;;
 
@@ -234,13 +261,13 @@ module State = struct
     else
       Printf.sprintf "[\n%s  ]"
       @@ Queue.fold
-           (fun acc (event, time) ->
-             acc
-             ^ "    "
-             ^ CorePrinting.event_to_string event
-             ^ " at t="
-             ^ string_of_int time
-             ^ "\n")
+           (fun acc (event, port, time) ->
+             Printf.sprintf
+               "%s    %s at port %d, t=%d\n"
+               acc
+               (CorePrinting.event_to_string event)
+               (Option.default (-1) port)
+               time)
            ""
            s
   ;;

@@ -18,6 +18,9 @@ let rec inline_exp e =
   | EHash (sz, es) ->
     let stmt, es' = inline_exps es in
     stmt, { e with e = EHash (sz, es') }
+  | EFlood e ->
+    let stmt, e' = inline_exp e in
+    stmt, { e with e = EFlood e' }
   | ERecord lst ->
     let strs, es = List.split lst in
     let stmt, es = inline_exps es in

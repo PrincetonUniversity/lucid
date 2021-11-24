@@ -92,7 +92,7 @@ let rename prog =
           List.fold_left
             (fun env id -> CidMap.add (Id id) (Id id) env)
             CidMap.empty
-            (start_id :: this_id :: List.map fst builtin_vars)
+            (start_id :: ingr_port_id :: this_id :: List.map fst builtin_vars)
         in
         let builtin_cids =
           List.map fst (Arrays.constructors @ Counters.constructors)
@@ -258,10 +258,6 @@ let rename prog =
           let new_ty = self#visit_ty dummy ty in
           let new_x = self#freshen_var x in
           DSymbolic (new_x, new_ty)
-        | DGroup (x, es) ->
-          let new_es = List.map (self#visit_exp dummy) es in
-          let new_x = self#freshen_var x in
-          DGroup (new_x, new_es)
         | DUserTy (id, sizes, ty) ->
           let new_sizes = List.map (self#visit_size ()) sizes in
           let new_ty = self#visit_ty () ty in

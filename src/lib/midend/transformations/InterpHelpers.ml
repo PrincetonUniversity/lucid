@@ -191,6 +191,8 @@ let is_atomic exp =
   (* calls are atomic if they have all immediate args *)
   | EHash (_, args) | ECall (_, args) ->
     CL.map is_immediate args |> CL.for_all identity
+  (* a flood expression is atomic if its argument is an immediate *)
+  | EFlood(arg) -> is_immediate arg 
 ;;
 
 let is_bool_non_immediate exp = is_bool exp && not (is_immediate exp)
