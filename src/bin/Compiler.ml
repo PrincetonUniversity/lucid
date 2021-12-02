@@ -53,13 +53,19 @@ module ArgParse = struct
     let args_ref = ref args_default in
     (* set named args *)
     let set_spec s = args_ref := { !args_ref with interp_spec_file = s } in
+    (* FIXME: Crazy hack, we should unify the two methods of commandline parsing *)
+    let set_symb s = Cmdline.cfg.symb_file <- s in
     let speclist =
       [ ( "--spec"
         , Arg.String set_spec
-        , "Path to the interpreter specification file" ) ]
+        , "Path to the interpreter specification file" )
+      ; "--symb", Arg.String set_symb, "Path to the symbolic specification file"
+      ]
     in
     let parse_aarg (arg : string) =
-      args_ref := { !args_ref with aargs = !args_ref.aargs @ [arg] }
+      args_ref := { !args_ref with aargs = !args_ref.aargs @ [arg] };
+      (* Fixme: second part of crazy hack *)
+      Cmdline.cfg.dpt_file <- arg
     in
     Arg.parse speclist parse_aarg usage;
     (* interpret positional args as named *)
