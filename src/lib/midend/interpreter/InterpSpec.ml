@@ -69,24 +69,26 @@ let parse_events
       (* Find the event name, accounting for the renaming pass, and get its
          sort and argument types *)
       let eid =
-        match List.assoc "name" lst with
-        | `String id -> rename renaming.var_map "event" id
-        | _ -> error "Event specification had wrong type for name field"
+        match List.assoc_opt "name" lst with
+        | Some (`String id) -> rename renaming.var_map "event" id
+        | None -> error "Event specification missing name field"
+        | _ -> error "Event specification had non-string type for name field"
       in
       let sort, tys = Env.find eid pp.events in
       if sort = EExit then error "Cannot specify exit event";
       (* Parse the arguments into values, and make sure they have the right types.
          At the moment only integer and boolean arguments are supported *)
       let data =
-        match List.assoc "args" lst with
-        | `List lst ->
+        match List.assoc_opt "args" lst with
+        | Some (`List lst) ->
           (try List.map2 (parse_value "Event") tys lst with
           | Invalid_argument _ ->
             error
             @@ Printf.sprintf
                  "Event specification for %s had wrong number of arguments"
                  (Cid.to_string eid))
-        | _ -> error "Event specification had non-list type for arguments"
+        | None -> error "Event specification missing args field"
+        | _ -> error "Event specification had non-list type for args field"
       in
       (* Parse the delay and location fields, if they exist *)
       let edelay =
@@ -232,7 +234,8 @@ let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t 
         match List.assoc_opt "links" lst with
         | Some (`Assoc links) -> parse_links num_switches links
         | Some (`String "full mesh") -> make_full_mesh num_switches
-        | _ -> error "Unexpected format or missing edge declarations")
+        | None -> error "No links field in network with multiple switches"
+        | _ -> error "Unexpected format for links field")
     in
     let max_time =
       match List.assoc_opt "max time" lst with
