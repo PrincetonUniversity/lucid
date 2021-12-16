@@ -24,6 +24,7 @@ let int_from_const_exp (ex : exp) =
   | _ -> trans_err "could not evaluate expression to an int" ex
 ;;
 
+
 (***
   TODO: refactor this its really messy.
 ***)
@@ -250,16 +251,8 @@ module TofinoAlu = struct
         (* a call could either be a call, or an event declaration. *)
         (match raw_ty_of_exp val_exp with
         | TEvent ->
-          let call_result =
-            ctx_call_codegen
-              LLConstants.event_generate_cid
-              { hdl_id = Some hdl_id
-              ; basename = Some base_name
-              ; retname = Some outvar_mid
-              ; args = [val_exp]
-              }
-          in
-          CL.hd call_result.names, CL.hd call_result.objs
+          error ("Event variables are not yet supported by the backend. \
+                  Declarations must be inlined.");
         | _ ->
           let call_result =
             ctx_call_codegen
@@ -313,89 +306,7 @@ module TofinoAlu = struct
     in
     alu_name, alu_obj
   ;;
-
-  let event_meta_init_instrs ev_id =
-    let evrec = ctx_find_eventrec ev_id in
-    let ev_struct_id = evrec.event_struct_instance in
-    (* event id; multicast flag; location; delay*)
-    [ GS.int_assign_instr
-        (Cid.concat ev_struct_id event_id_field)
-        (ctx_find_event_iid ev_id)
-    ; GS.int_assign_instr (Cid.concat ev_struct_id event_mc_field) 0
-    ; GS.int_assign_instr (Cid.concat ev_struct_id event_loc_field) 0
-    ; GS.int_assign_instr (Cid.concat ev_struct_id event_delay_field) 0 ]
-    @
-    (* background events are carried in headers that need to be set to valid.
-         Background events must also be sure to set up the footer. *)
-    match evrec.event_sort with
-    | EBackground ->
-      [ GS.validate_instr ev_struct_id
-      ; GS.validate_instr (TofinoStructs.qualify_struct footer IS.SHeader)
-      ; GS.int_assign_instr
-          (TofinoStructs.qualify_struct
-             (Cid.concat footer (CL.hd footer_fields |> fst))
-             IS.SHeader)
-          0 ]
-    | _ -> []
-  ;;
-
-  let runtime_meta_init_instrs ev_id =
-    (* todo: want a cleaner way to access the elements of the runtime metadata struct. *)
-    let evrec = ctx_find_eventrec ev_id in
-    let event_iid = evrec.event_iid in
-    match evrec.event_sort with
-    | EBackground ->
-      let ev_ct_cid =
-        Cid.create [md_instance_prefix; dpt_meta_str; events_count_str]
-      in
-      [ (* md.dptMeta.nextEvent = i:int *)
-        GS.int_assign_instr
-          (Cid.create [md_instance_prefix; dpt_meta_str; next_event_str])
-          event_iid
-        (* md.dptMeta.eventCt += 1 *)
-      ; GS.incr_assign_instr ev_ct_cid ev_ct_cid 1
-        (* md.eventGeneratedFlags.<eventname> = 1 *)
-      ; GS.validate_instr event_out_flags_instance
-      ; GS.int_assign_instr evrec.event_generated_flag 1 ]
-    | EEntry _ | EExit ->
-      [ (* md.dptMeta.exitEvent = i:int *)
-        GS.int_assign_instr
-          (Cid.create [md_instance_prefix; dpt_meta_str; exit_event_str])
-          event_iid ]
-  ;;
-
-  (* generate an alu instruction from the instantiation of an event *)
-  let from_event_instantiation hdl_id alu_basename ev_id ev_args =
-    !dprint_endline
-      ("[from_event_instantiation] event id: " ^ Cid.to_string ev_id);
-    !dprint_endline "[from_event_instantiation] event args: ";
-    let iter_f ev_arg = !dprint_endline (Printing.exp_to_string ev_arg) in
-    CL.iter iter_f ev_args;
-    (* get a list of qualified out struct field parameters *)
-    (* generate alu instructions of the form: field_param := ev_arg *)
-    (* since the out fields are written, the variable references must be
-       lmids, else dataflow analysis will fail. *)
-    let to_lmid (mid : Cid.t) : IS.lmid = mid in
-    let out_struct_fields =
-      TofinoStructs.qual_out_fieldnames_of_event (Cid.to_id ev_id)
-      |> CL.map to_lmid
-    in
-    let alu_rhs_exps = CL.map (eoper_from_immediate hdl_id) ev_args in
-    let to_ass_f (lhs, rhs) = IS.IAssign (lhs, rhs) in
-    let (ivec : IS.instrVec) =
-      CL.map to_ass_f (CL.combine out_struct_fields alu_rhs_exps)
-    in
-    (* add instructions to set hidden fields in event header, e.g., event name *)
-    let event_meta_instrs = event_meta_init_instrs ev_id in
-    (* instructions to set non-serialized variables in runtime *)
-    let runtime_instrs = runtime_meta_init_instrs ev_id in
-    let ivec = event_meta_instrs @ ivec @ runtime_instrs in
-    (* return a declaration of an alu with this vector of instructions *)
-    let alu_id = Cid.compound (Id.create "generate_alu") alu_basename in
-    let alu_obj = IS.new_dinstr alu_id ivec in
-    alu_id, alu_obj
-  ;;
-end
+end 
 
 module TofinoControl = struct
   (* wrap a compute alu in an action and call table. *)
@@ -460,27 +371,47 @@ module TofinoControl = struct
     !dprint_endline "generate handler.";
     let base_name = uname_of_stmt opstmt in
     (* generate the ALU *)
-    let args = unpack_generate opstmt in
-    let fcn_name = LLConstants.event_generate_cid in
-    let generated_alus =
-      ctx_call_codegen
-        fcn_name
-        { hdl_id = Some hdl_id
-        ; basename = Some base_name
-        ; retname = None
-        ; (* generate doesn't return *)
-          args = [args]
-        }
-    in
-    (* the generate statement can translate to a no-op if it is generating from
-    an event variable. *)
-    match CL.length generated_alus.names with
-    | 0 -> []
-    | _ ->
-      let alu_name = CL.hd generated_alus.names in
-      let alu_obj = CL.hd generated_alus.objs in
-      (* wrap in control flow object *)
-      wrap_alu_in_call_table opgraph opstmt alu_name alu_obj
+    match opstmt.s with 
+    | SGen (gen_type, event_exp) -> (
+      let generated_alus = match gen_type with 
+      | GSingle (None) ->
+          ctx_call_codegen
+            (* LLEvent.generate_self *)
+            LLConstants.generate_self_cid
+            { hdl_id = Some hdl_id
+            ; basename = Some base_name
+            ; retname = None
+            ; (* generate doesn't return *)
+              args = [event_exp]
+            }
+      | GSingle (Some _) ->
+          error "[LLOp.from_gen] backend does not support generate_switch."
+      | GPort port_exp -> 
+          ctx_call_codegen
+            (* LLEvent.generate_port *)
+            LLConstants.generate_port_cid
+            { hdl_id = Some hdl_id
+            ; basename = Some base_name
+            ; retname = None
+            ; (* generate doesn't return *)
+              args = [port_exp; event_exp]
+            }
+      | GMulti _ -> 
+          error "[LLOp.from_gen] backend does not support generate_ports."
+      in 
+      (* the generate statement can translate to a no-op if it is generating from
+      an event variable. (11/21 -- this is just a result of not supporting events 
+      as values / variables) *)
+      match CL.length generated_alus.names with
+      | 0 -> []
+      | _ ->
+        let alu_name = CL.hd generated_alus.names in
+        let alu_obj = CL.hd generated_alus.objs in
+        (* wrap in control flow object *)
+        wrap_alu_in_call_table opgraph opstmt alu_name alu_obj
+
+    )
+    | _ -> error "[LLOp.from_gen] not a generate statement."
   ;;
 
   (* generators for statements that are _JUST_ control flow operations. *)

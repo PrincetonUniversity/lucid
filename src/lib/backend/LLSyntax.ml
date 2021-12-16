@@ -726,6 +726,10 @@ module Generators = struct
   (* c := o:oper *)
   let oper_assign_instr c o = IAssign (c, o)
 
+  let oper_assign_instrs cs os = 
+    CL.map2 oper_assign_instr cs os 
+  ;;
+
   (* c := i:int *)
   let int_assign_instr c i = int_expr i |> oper_assign_instr c
 

@@ -20,58 +20,63 @@ let hdr_instance_cid = Cid.create_ids [hdr_instance]
 let hdr_instance_prefix = "hdr"
 let pkt_instance_prefix = "pkt"
 
-(* dpt private metadata *)
+(* dpt internal ingress metadata *)
 let dpt_meta_str = "dptMeta"
-let handle_selector_str = "eventType"
-let exit_event_str = "exitEventType"
-let next_event_str = "nextEventType"
+
 let timestamp_str = "timestamp"
+let timestamp_width = 32
+let handle_selector_str = "eventType"
+let handle_selector_width = 8
+let exit_event_str = "exitEventType"
+let exit_event_width = 8
+let next_event_str = "nextEventType"
+let next_event_width = 8
 let events_count_str = "eventsCount"
+let events_count_width = 16
+let event_port_str = "outPort"
+let event_port_width = 16
 let dpt_meta_struct_instance = Cid.create [md_instance_prefix; dpt_meta_str]
 
 let timestamp_field =
   Cid.create_ids
     (Cid.to_ids dpt_meta_struct_instance @ [Id.create timestamp_str])
 ;;
-
-let exit_event_field =
-  Cid.create_ids
-    (Cid.to_ids dpt_meta_struct_instance @ [Id.create exit_event_str])
-;;
-
-let exit_event_width = 8
-
 let current_event_field =
   Cid.create_ids
     (Cid.to_ids dpt_meta_struct_instance @ [Id.create handle_selector_str])
 ;;
-
+let handle_selector_name = current_event_field ;;
+let exit_event_field =
+  Cid.create_ids
+    (Cid.to_ids dpt_meta_struct_instance @ [Id.create exit_event_str])
+;;
 let next_event_field =
   Cid.create_ids
     (Cid.to_ids dpt_meta_struct_instance @ [Id.create next_event_str])
 ;;
-
-let handle_selector_name =
-  Cid.create [md_instance_prefix; dpt_meta_str; handle_selector_str]
-;;
-
-let event_counts_field =
+let event_count_field =
   Cid.create [md_instance_prefix; dpt_meta_str; events_count_str]
 ;;
 
-let event_counts_width = 16
+let event_port_field =
+  Cid.create [md_instance_prefix; dpt_meta_str; event_port_str]
+;;
 
-(* event metadata fields *)
+
+(* hidden event fields *)
 let event_id_field = Cid.create ["eventType"]
 let event_id_width = 8
-let event_mc_field = Cid.create ["eventMc"]
-let event_mc_width = 8
 let event_loc_field = Cid.create ["eventLoc"]
 let event_loc_width = 32
 let event_delay_field = Cid.create ["eventDelay"]
 let event_delay_width = 32
+
+(* ids of code building functions *)
+let generate_self_cid = Cid.create ["generate_self"]
+let generate_port_cid = Cid.create ["generate_port"]
+
+
 let lucid_parser_name = Cid.create ["DptIngressParser"]
-let event_generate_cid = Cid.create ["generate"]
 let final_table_name = Cid.create ["dptContinueHandler"]
 let final_invalidate_acn_name = Cid.create ["invalidateInputHeaders"]
 let t_warn str = Console.show_message str ANSITerminal.Yellow "DPT-to-Tofino"

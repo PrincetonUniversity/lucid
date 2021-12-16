@@ -34,11 +34,41 @@ let dpt_builtin_fcns =
   ; LLArray.array_get_cid, LLArray.get_array
   ; LLArray.array_setm_cid, LLArray.setm_array
   ; LLArray.array_getm_cid, LLArray.getm_array
-  ; LLConstants.event_generate_cid, LLEvent.generate_event
+  ; LLConstants.generate_self_cid, LLEvent.generate_self
+  ; LLConstants.generate_port_cid, LLEvent.generate_port
   ; LLEvent.event_delay_cid, LLEvent.delay_event
   ; LLSys.time_cid, LLSys.get_time
     (* (IrTranslate.hash_builtin, IrBuiltinToDag.do_hash) *) ]
 ;;
+
+(* lucid's internal metadata struct for ingress processing *)
+let lucid_internal_struct = 
+  let struct_cid = Cid.create ["dptMeta_t"] in
+  let struct_instance_cid = dpt_meta_struct_instance in 
+  let struct_fields =
+    CL.map
+      (fun (f, w) -> (Cid.create [f], w))
+      (* field names and widths are defined in LLConstants. *)
+      [ timestamp_str, timestamp_width
+      ; handle_selector_str, handle_selector_width
+      ; exit_event_str, exit_event_width
+      ; next_event_str, next_event_width
+      ; events_count_str, events_count_width ]
+  in 
+  let dptMeta_struct = IS.new_meta_structdef struct_cid struct_fields in
+  let dptMeta_instance =
+    IS.new_struct struct_cid SPrivate struct_instance_cid
+  in
+  [dptMeta_struct; dptMeta_instance]
+;;  
+
+let hidden_event_fields = [
+  (event_id_field, event_id_width); 
+  (event_loc_field, event_loc_width); 
+  (event_delay_field, event_delay_width)
+]
+
+
 
 (* code generators for events *)
 module TranslateEvents = struct
@@ -55,6 +85,7 @@ module TranslateEvents = struct
       let erec =
         { event_id = evid
         ; field_defs = vardefs_from_params params
+        ; hidden_fields = hidden_event_fields
         ; event_iid = last_eviid + 1 (* start event ids at 1 *)
         ; hdl_param_ids = [] (* filled in by DHandler match *)
         ; event_sort = ev_sort
@@ -71,7 +102,6 @@ module TranslateEvents = struct
       let all_event_fields =
         (* hidden event parameters for lucid runtime *)
         (event_id_field, event_id_width)
-        :: (event_mc_field, event_mc_width)
         :: (event_loc_field, event_loc_width)
         :: (event_delay_field, event_delay_width)
         (* user-declared event parameters *)
@@ -360,23 +390,6 @@ let regdec_from_decl dec =
   | _ -> []
 ;;
 
-(* declare groups as 16-bit ints. (todo: integrate groups and mc in distribution layer) *)
-let cur_group_iid = ref 0
-
-let groupdec_from_decl dec =
-  ignore dec;
-  (* match dec.d with
-  | DGroup (group_id, _) ->
-    let width = LLConstants.event_loc_width in
-    cur_group_iid := !cur_group_iid + 1;
-    let giid = !cur_group_iid in
-    Some (IS.new_private_constdef (Cid.Id group_id) width giid)
-  | _ -> None *)
-  failwith
-    "Group declarations don't exist anymore, gonna have to get these by \
-     walking through the program"
-;;
-
 (* generate the bitvector metadata that indicate which
    subset of events were generated. *)
 let gen_event_triggered_bitvec () =
@@ -393,30 +406,6 @@ let gen_event_triggered_bitvec () =
   [newstruct; newinstance]
 ;;
 
-(* generate structure definitions and instances for private DPT metadata and headers. *)
-let gen_internal_structs () =
-  (* dptMeta *)
-  let struct_cid = Cid.create ["dptMeta_t"] in
-  let fnames =
-    CL.map
-      (fun f -> Cid.create [f])
-      [ timestamp_str
-      ; handle_selector_str
-      ; exit_event_str
-      ; next_event_str
-      ; events_count_str ]
-  in
-  let fwidths = [32; 8; 8; 8; event_counts_width] in
-  let fdefs = CL.combine fnames fwidths in
-  let dptMeta_struct = IS.new_meta_structdef struct_cid fdefs in
-  let dptMeta_instance =
-    IS.new_struct struct_cid SPrivate dpt_meta_struct_instance
-  in
-  (* the p4t printer will automatically link the instance to the struct based on struct_cid *)
-  (* the event active bit vector *)
-  (* *)
-  [dptMeta_struct; dptMeta_instance]
-;;
 
 (* Give all the spans in a program a unique id. *)
 let cur_span = ref 0
@@ -500,15 +489,10 @@ let from_dpt (ds : decls) (opgraph_recs : prog_opgraph) : IS.llProg =
   let event_decls = TranslateEvents.translate_all ds in
   (* generate struct declarations and instances for
      other private Lucid-runtime only data. *)
-  let dpt_struct_defs = gen_internal_structs () in
   (* generate parser for entry event instances. *)
   let parse_def = TranslateEvents.parsetree_from_events ds in
   (* generate backend defs for register arrays *)
   let regarray_defs = CL.map regdec_from_decl ds |> CL.flatten in
-  (* generate constants for groups *)
-  (* no more groups! *)
-  (* let group_defs = CL.filter_map groupdec_from_decl ds in *)
-
   (* translate operation statements into backend compute objects,
        use the opgraphs to set control flow between objects. *)
   let backend_handler_defs = CL.map dpahandler_from_handler opgraph_recs in
@@ -526,7 +510,7 @@ let from_dpt (ds : decls) (opgraph_recs : prog_opgraph) : IS.llProg =
         (* @ IS.dict_of_decls group_defs *)
         @ IS.dict_of_decls regarray_defs
         @ IS.dict_of_decls event_decls
-        @ IS.dict_of_decls dpt_struct_defs
+        @ IS.dict_of_decls lucid_internal_struct
         @ IS.dict_of_decls [parse_def]
         @ IS.dict_of_decls sched_defs
         @ IS.dict_of_decls control_defs

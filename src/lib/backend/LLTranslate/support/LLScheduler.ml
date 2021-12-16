@@ -611,7 +611,7 @@ let generate _ =
   let ingress_exit_tbl =
     IngressExit.generate_lucid_exit_table
       current_event_field
-      event_counts_field
+      event_count_field
       exit_event_field
   in
   let egress_demultiplex_tbl =

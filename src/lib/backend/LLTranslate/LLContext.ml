@@ -36,6 +36,7 @@ type event_rec =
   { event_id : id
   ; event_iid : int
   ; field_defs : (Cid.t * int) list
+  ; hidden_fields : (Cid.t * int) list
   ; hdl_param_ids : Id.t list
   ; event_sort : event_sort
   ; event_struct : Cid.t
@@ -129,10 +130,17 @@ let ctx_add_erec erec =
   tofinoCtx := TofinoCtx.add key entry !tofinoCtx
 ;;
 
-let ctx_find_eventrec n =
-  match TofinoCtx.find n !tofinoCtx with
+let ctx_find_eventrec (cid: Cid.t) =
+  match TofinoCtx.find cid !tofinoCtx with
   | EventRec r -> r
   | _ -> error "did not find event rec in context"
+;;
+
+let ctx_find_eventrec_opt (cid: Cid.t) =
+  match TofinoCtx.find_opt cid !tofinoCtx with
+  | Some (EventRec r) -> Some r
+  | Some (_) -> None
+  | None -> None 
 ;;
 
 let ctx_find_event_fields id =
