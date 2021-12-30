@@ -4,11 +4,12 @@ open Batteries
 module CL = Caml.List
 open InterpHelpers
 
+
 (* logging *)
 module DBG = BackendLogging
-
 let outc = ref None
 let dprint_endline = ref DBG.no_printf
+let start_logging () = DBG.start_mlog __FILE__ outc dprint_endline
 
 (*** context for translation from source to LLSyntax instructions. ***)
 (*** nothing in this context should be necessary to optimize the LLSyntax
@@ -220,4 +221,3 @@ let acnname_of_stmt (st : statement) = prefix_of_stmt st "acn"
 let tblname_of_stmt (st : statement) = prefix_of_stmt st "tbl"
 let aluname_of_stmt (st : statement) = prefix_of_stmt st "alu"
 let saluname_of_stmt (st : statement) = prefix_of_stmt st "salu"
-let start_logging () = DBG.start_mlog __FILE__ outc dprint_endline

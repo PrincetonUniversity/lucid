@@ -11,11 +11,8 @@ open MiscUtils
 
 (* logging *)
 module DBG = BackendLogging
-
 let outc = ref None
 let dprint_endline = ref DBG.no_printf
-
-(* enable logging for this module. *)
 let start_logging () = DBG.start_mlog __FILE__ outc dprint_endline
 
 let log_rules rules =
@@ -980,9 +977,15 @@ delete neg, because neg and pos is false (there is no intersection)
 input: 
 r1: neg: (x = 1;);
 r2: pos: (x = _;);
-
 output: 
 keep neg, because neg and pos is true (there is some intersection)
+
+input:
+r1: neg: (x = _;);
+r2: pos: (x = 1;);
+output: 
+keep neg. Safe to delete pos as an optimization.
+
 *)
 let delete_implied_negs c = 
   match c.pos with 

@@ -20,11 +20,13 @@ let layout_report str =
   Console.show_message str ANSITerminal.Green "Pipeline layout"
 ;;
 
+
 (* logging *)
 module DBG = BackendLogging
-
 let outc = ref None
 let dprint_endline = ref DBG.no_printf
+let start_logging () = DBG.start_mlog __FILE__ outc dprint_endline
+
 let str_of_tid = P4tPrint.str_of_private_oid
 let str_of_tids tids = CL.map str_of_tid tids |> String.concat ", "
 
@@ -1027,7 +1029,6 @@ let dedup_slprog tsprog =
 ;;
 
 let do_passes df_prog =
-  DBG.start_mlog __FILE__ outc dprint_endline;
   let cid_decls, _, dfg = df_prog in
   let dfg_with_regs = to_tbl_reg_dfg cid_decls dfg in
   let pipe = Placement.layout cid_decls dfg_with_regs in

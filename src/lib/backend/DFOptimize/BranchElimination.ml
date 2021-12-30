@@ -13,9 +13,9 @@ let error s = raise (Error s)
 
 (* logging *)
 module DBG = BackendLogging
-
 let outc = ref None
 let dprint_endline = ref DBG.no_printf
+let start_logging () = DBG.start_mlog __FILE__ outc dprint_endline
 
 let log_rules rules =
   CL.iter (fun r -> DBG.printf outc "%s" (dbgstr_of_rule r)) rules
@@ -262,8 +262,6 @@ let eliminate_branch_nodes cid_decls g =
 ;;
 
 let do_passes df_prog =
-  DBG.start_mlog __FILE__ outc dprint_endline;
-  MU.start_logging ();
   let cid_decls, root_tid, g = df_prog in
   LLValidate.validate_cid_decls cid_decls "BranchElimination.do_passes@start";
   print_endline ("----starting BranchElimination pass----");

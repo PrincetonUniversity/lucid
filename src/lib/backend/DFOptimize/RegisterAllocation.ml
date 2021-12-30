@@ -14,86 +14,15 @@ module CL = Caml.List
 
 (* logging *)
 module DBG = BackendLogging
-
 let outc = ref None
 let dprint_endline = ref DBG.no_printf
-
-(* printing hints to rewrite program for better layout... *)
-let out_hintc = ref None
-let hintprint_endline = ref DBG.no_printf
-
-(* a map from variable id to all the variable ids that it replaces *)
-let var_contains_map = ref []
-let unmergable_var_sets = ref []
+let start_logging () = DBG.start_mlog __FILE__ outc dprint_endline
 
 (* concat b to assoc_list[a] *)
 let emplace_concat assoc_list (a, b) =
   match Cid.lookup_opt assoc_list a with
   | Some bs -> emplace assoc_list (a, bs @ b)
   | None -> emplace assoc_list (a, b)
-;;
-
-let print_salu_input_conflict_hint rid vars conflict_pairs =
-  unmergable_var_sets := !unmergable_var_sets @ [conflict_pairs];
-  let hint_str =
-    sprintf
-      "[salu input merging] there are conflicts between the variables that the \
-       salus for register array %s access\n"
-      (P4tPrint.str_of_private_oid rid)
-  in
-  let hint_str =
-    hint_str ^ sprintf "[salu input merging] (%s) \n" (str_of_cids vars)
-  in
-  let map_f v =
-    match Cid.lookup_opt !var_contains_map v with
-    | None -> None
-    | Some vs ->
-      Some
-        (sprintf
-           "\t%s represents (%s)"
-           (P4tPrint.str_of_private_oid v)
-           (str_of_cids vs))
-  in
-  let represented_vs_str =
-    (CL.filter_map map_f vars |> String.concat "\n") ^ "\n"
-  in
-  let hint_str = hint_str ^ represented_vs_str in
-  let hint_str =
-    hint_str
-    ^ sprintf "conflict pairs: %s\n" (dbgstr_of_cidpairs conflict_pairs)
-  in
-  let hint_str =
-    hint_str
-    ^ sprintf
-        "[salu input merging] removing these conflicts may allow a more \
-         compact layout. \n"
-  in
-  !hintprint_endline hint_str
-;;
-
-let print_salu_input_merge_hint master_v (vs : mid list) =
-  (* loop through the contains map, update the lists for any var that represents master_v*)
-  var_contains_map := emplace_concat !var_contains_map (master_v, vs);
-  let hint_str =
-    sprintf
-      "[salu input merging] %s <-- (%s)\n"
-      (P4tPrint.str_of_private_oid master_v)
-      (str_of_cids vs)
-  in
-  !hintprint_endline hint_str
-;;
-
-let print_salu_merge_summary_hint () =
-  match !unmergable_var_sets with
-  | [] ->
-    !hintprint_endline
-      "note: all salu input / output variable were merged successfully! No \
-       call overhead."
-  | var_sets ->
-    !hintprint_endline
-      (sprintf
-         "note: %i var sets could not be merged. There is call overhead."
-         (CL.length var_sets))
 ;;
 
 (* generate code to pass outer_var in the caller to inner_var in the salu_call *)
@@ -227,7 +156,6 @@ let merge_vars_in arg_vars cid_decls vars =
     (str_of_cids vars_to_remove)
     (P4tPrint.str_of_private_oid master_v);
   let fold_f cid_decls v = replace_var cid_decls v master_v in
-  print_salu_input_merge_hint master_v vars_to_remove;
   CL.fold_left fold_f cid_decls vars_to_remove
 ;;
 
@@ -324,7 +252,6 @@ let prepare_frame_var_for_rid
     (* there are conflicts. We have to add the per-register input variable and 
            instructions to load arguments to the input variable before the salu call. *)
     | _ ->
-      print_salu_input_conflict_hint rid vars conflict_pairs;
       DBG.printf outc "-------------\n";
       DBG.printf
         outc
@@ -570,34 +497,24 @@ let prepare_salu_frames dag prepare_frame_var_for_rid =
   let framed_dag = updated_cid_decls, root_tbl_id, updated_g in
   (* DagToP4.print_control dag (!BackendLogging.irLogDir^"/pre_salu_frames.p4"); *)
   (* DagToP4.print_control framed_dag (!BackendLogging.irLogDir^"/post_salu_frames.p4"); *)
-  print_salu_merge_summary_hint ();
   framed_dag
 ;;
 
 (* try to merge alu input variables before creating temp variables. *)
 let merge_and_temp dag =
-  DBG.start_mlog __FILE__ outc dprint_endline;
-  DBG.start_mlog "dagPass_optimization_hints" out_hintc hintprint_endline;
+  (* DBG.start_mlog __FILE__ outc dprint_endline; *)
+  (* DBG.start_mlog "dagPass_optimization_hints" out_hintc hintprint_endline; *)
   let framed_dag = prepare_salu_frames dag prepare_frame_var_for_rid in
   framed_dag
 ;;
 
 (* just create alu input variables, don't do merging. *)
 let temp_only dag =
-  DBG.start_mlog __FILE__ outc dprint_endline;
-  DBG.start_mlog "dagPass_optimization_hints" out_hintc hintprint_endline;
+  (* DBG.start_mlog __FILE__ outc dprint_endline; *)
+  (* DBG.start_mlog "dagPass_optimization_hints" out_hintc hintprint_endline; *)
   let framed_dag =
     prepare_salu_frames dag prepare_frame_var_for_rid_no_merging
   in
   framed_dag
 ;;
 
-(* let doPasses dag =
-  DBG.start_mlog __FILE__ outc dprint_endline;
-  DBG.start_mlog "dagPass_optimization_hints" out_hintc hintprint_endline;
-
-  let framed_dag = prepare_salu_frames dag prepare_frame_var_for_rid in 
-  framed_dag
-  (* dag *)
-;;
- *)

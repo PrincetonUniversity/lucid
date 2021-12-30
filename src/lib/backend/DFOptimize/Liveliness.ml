@@ -10,11 +10,12 @@ open DFSyntax
 open DebugPrint
 open MiscUtils
 
+
 (* logging *)
 module DBG = BackendLogging
-
 let outc = ref None
 let dprint_endline = ref DBG.no_printf
+let start_logging () = DBG.start_mlog __FILE__ outc dprint_endline
 
 type varMap = (oid * mid list) list
 

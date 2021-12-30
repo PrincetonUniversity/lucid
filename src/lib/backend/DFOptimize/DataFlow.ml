@@ -13,9 +13,10 @@ let error s = raise (Error s)
 
 (* logging *)
 module DBG = BackendLogging
-
 let outc = ref None
 let dprint_endline = ref DBG.no_printf
+let start_logging () = DBG.start_mlog __FILE__ outc dprint_endline
+
 
 (* find the first predecessors that set a variable, starting at a table or set of tables *)
 let compute_ct = ref 0
@@ -299,7 +300,6 @@ let data_dep_dag_of cid_decls g =
    into a DAG with edges that represent data dependencies. *)
 (* note: the dag only represents tables! *)
 let do_passes df_prog =
-  DBG.start_mlog __FILE__ outc dprint_endline;
   let cid_decls, root_tid, g = df_prog in
   let data_dag = data_dep_dag_of cid_decls g in
   cid_decls, root_tid, data_dag

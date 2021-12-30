@@ -11,9 +11,9 @@ module CL = Caml.List
 
 (* logging *)
 module DBG = BackendLogging
-
 let outc = ref None
 let dprint_endline = ref DBG.no_printf
+let start_logging () = DBG.start_mlog __FILE__ outc dprint_endline
 
 let print_op_match exps (branches : branch list) =
   let pats_list = CL.map fst branches in
@@ -336,7 +336,6 @@ let rec to_op_vertices (st : statement) : statement list =
   resulting_vertices
 ;;
 
-let start_log () = DBG.start_mlog __FILE__ outc dprint_endline
 
 (* make sure that every statement has a unique span *)
 let check_unique_stmt_spans dec =

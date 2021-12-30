@@ -83,9 +83,24 @@ exception Error of string
 
 let error s = raise (Error s)
 
-(* todo: start all the per-module logging *)
-let start_logs () = ()
+(* start per-pass logs. *)
+let start_backend_logs () = 
+  LLTranslate.start_logging ();
+  LLOp.start_logging ();
+  LLContext.start_logging ();
 
+
+  OGSyntax.start_logging ();
+  BranchElimination.start_logging ();
+  MergeUtils.start_logging ();
+  DataFlow.start_logging ();
+  Liveliness.start_logging ();
+  RegisterAllocation.start_logging ();
+  PipeSyntax.start_logging ();
+
+  P4tPrint.start_logging ();
+  ()
+;;
 (* shouldn't need to do this anymore. *)
 let clear_output_dir () =
   (* clear output directory of old source. *)
@@ -115,7 +130,6 @@ let final_ir_setup ds =
   (* let ds = CL.map TranslateHandlers.rename_handler_params ds in  *)
   (* generate the control flow graph version of the program *)
   (* convert handler statement trees into operation-statement graphs *)
-  OGSyntax.start_log ();
   let opgraph_recs = CL.filter_map OGSyntax.opgraph_from_handler ds in
   ds, opgraph_recs
 ;;
@@ -165,7 +179,7 @@ let parse_externs_from_interp_spec spec_file =
 
 (* new (3/20/21) compilation pipeline *)
 let compile_to_tofino target_filename p4_harness_fn config_fn interp_spec_fn =
-  start_logs ();
+  start_backend_logs ();
   (* parse *)
   let ds = Input.parse target_filename in
   let _ = interp_spec_fn in

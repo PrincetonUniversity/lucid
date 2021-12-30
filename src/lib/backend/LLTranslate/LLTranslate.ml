@@ -22,9 +22,9 @@ module IS = LLSyntax
 
 (* logging *)
 module DBG = BackendLogging
-
 let outc = ref None
 let dprint_endline = ref DBG.no_printf
+let start_logging () = DBG.start_mlog __FILE__ outc dprint_endline
 
 (* code generators for builtin functions *)
 let dpt_builtin_fcns =
@@ -477,9 +477,6 @@ let from_dpt (ds : decls) (opgraph_recs : prog_opgraph) : IS.llProg =
     5/18/21 -- now that the final structure of the generated code
     is more concretely defined, we can redo this to translate in a single pass.
     This would make the code clearer and easier to extend. *)
-  DBG.start_mlog __FILE__ outc dprint_endline;
-  LLOp.start_logging ();
-  LLContext.start_logging ();
   (* put builtin function generators into the context *)
   ctx_add_codegens dpt_builtin_fcns;
   (* put source decls into the context *)

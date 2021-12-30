@@ -12,12 +12,13 @@ module Option = Caml.Option
 
 (* new, simpler printing of a P4 program from the IR. *)
 
+
 (* logging *)
 module DBG = BackendLogging
-
 let outc = ref None
 let dprint_endline = ref DBG.no_printf
-let start_logs () = DBG.start_mlog __FILE__ outc dprint_endline
+let start_logging () = DBG.start_mlog __FILE__ outc dprint_endline
+
 let memName = "memCell"
 let retName = "retCell"
 let tmpName = "tmp"

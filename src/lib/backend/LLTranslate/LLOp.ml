@@ -13,9 +13,9 @@ open LogIr
 
 (* logging *)
 module DBG = BackendLogging
-
 let outc = ref None
 let dprint_endline = ref DBG.no_printf
+let start_logging () = DBG.start_mlog __FILE__ outc dprint_endline
 
 (* get an integer from an expression. If the expression is a const, get the computed value. *)
 let int_from_const_exp (ex : exp) =
@@ -824,5 +824,3 @@ let merge_handler_defs (hdl_defs : tofino_control_g list) : IS.llProg =
   merged.  *)
   { root_tid = root_tblname; instr_dict = cid_decls }
 ;;
-
-let start_logging () = DBG.start_mlog __FILE__ outc dprint_endline
