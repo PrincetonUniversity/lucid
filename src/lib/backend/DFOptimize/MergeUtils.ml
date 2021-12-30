@@ -22,6 +22,8 @@ let log_rules rules =
   CL.iter (fun r -> DBG.printf outc "%s\n" (dbgstr_of_rule r)) rules
 ;;
 
+let cid_to_string = P4tPrint.str_of_private_oid ;;
+
 let oids_and_next_tids_of_rule cid_decls r =
   match r with
   | Match (_, _, acn_id) ->
@@ -910,7 +912,10 @@ let and_pattern_list (pat1:pattern) (pat2s:pattern list) : pattern list =
   is satisfied. A condition is a list of negative 
   patterns (patterns that must not match) followed 
   by a positive pattern (a pattern that must match). 
-*)
+  If pos is None, it means the condition cannot be 
+  satisfied. This can happen when augmenting a condition 
+  with the match guard of a rule, during 
+  the normalization step. *)
 type condition = {
   negs : pattern list;
   pos  : pattern option;
@@ -930,6 +935,62 @@ let rule_to_conditon r =
 
 let conditioned_rule conditions r = 
   {cs = conditions; r = r;}
+;;
+
+let dbgstr_of_negs ns = 
+  match ns with 
+    | [] -> "<no negative clauses>"
+    | _ -> (CL.map dbgstr_of_pat ns) 
+          |> (CL.map (fun s -> "NOT "^s^";"))
+          |> String.concat "\n"
+;;
+let dbgstr_of_pos p = 
+  match p with 
+    | None -> "<no positive clause>;"
+    | Some p -> (dbgstr_of_pat p)^";"
+;; 
+let dbgstr_of_condition c = 
+  sprintf "[\n\t%s;\n\t%s\n]" (dbgstr_of_negs c.negs) (dbgstr_of_pos c.pos)  
+;;
+let dbgstr_of_conditions cs = 
+  "number of conditions: "
+  ^(CL.length cs |> string_of_int)^"\n"
+  ^(CL.map dbgstr_of_condition cs |> String.concat "\n")
+;;
+
+let dbgstr_of_conditioned_rule cr = 
+   "******conditioned rule ********\n"
+  ^"*****conditions*****\n"
+  ^(dbgstr_of_conditions cr.cs)
+  ^"\n*****rule*****\n"
+  ^(dbgstr_of_rule cr.r)
+  ^"\n******end conditioned rule ********"
+;;
+
+
+(* find and delete all the negative clauses that are 
+implied by the positive clause and thus not needed. 
+
+input: 
+r1: neg: (x = 1;);
+r2: pos: (x = 3;);
+output: 
+delete neg, because neg and pos is false (there is no intersection)
+
+input: 
+r1: neg: (x = 1;);
+r2: pos: (x = _;);
+
+output: 
+keep neg, because neg and pos is true (there is some intersection)
+*)
+let delete_implied_negs c = 
+  match c.pos with 
+    | None -> c
+    | Some pat ->
+      (* filter *)
+      let necessary_negs = CL.filter (RS.p_and_q pat) c.negs in 
+      {c with negs=necessary_negs}
 ;;
 
 
@@ -954,17 +1015,25 @@ let get_preconditions cid_decls (pred_tids:oid list) (tid:oid) : condition list 
   in
   let fold_pred_tbl pre_conditions pred_tid = 
     (* one rule in the table. *)
-    let fold_pred_rule (pre_conditions, precond) pred_rule = 
+    let fold_pred_rule (pre_conditions, current_precond) pred_rule = 
       match (points_to_tid cid_decls pred_rule tid) with 
       | true -> 
-        (* this branch points to the table, it is the positive precondition. *)
-        let precond = {precond with pos = Some (rule_pattern (pred_rule))} in 
-        (pre_conditions@[precond], new_precondition ())
+        (* this branch points to the table,
+           it is the positive precondition 
+           that ends a single precondition. *)
+        let current_precond = 
+          {current_precond with pos = Some (rule_pattern (pred_rule))} 
+          |> delete_implied_negs
+        in 
+        !dprint_endline "[get_preconditions] adding precondition:";
+        !dprint_endline (dbgstr_of_condition current_precond);
+        (pre_conditions@[current_precond], new_precondition ())
       | false -> 
         (* this branch does not point to the table, 
-           it is another negative precondition. *)
-        let precond = {precond with negs = precond.negs@[rule_pattern (pred_rule)]} in 
-        (pre_conditions, precond) 
+           it is another negative precondition 
+           on the precondition currently being built. *)
+        let current_precond = {current_precond with negs = current_precond.negs@[rule_pattern (pred_rule)]} in 
+        (pre_conditions, current_precond) 
     in 
    let pred_rules = rules_of_table (Cid.lookup cid_decls pred_tid) in 
    let pre_conditions, _ = CL.fold_left 
@@ -981,24 +1050,71 @@ let get_preconditions cid_decls (pred_tids:oid list) (tid:oid) : condition list 
    leaving the rule as a wildcard. *)
 let normalize_conditioned_rule cr = 
   (* add pat to condition *)
-  let add_to_condition pat condition = 
-    {
-      negs = and_pattern_list pat condition.negs;
-      pos = match condition.pos with 
-        | Some pos -> and_patterns pat pos
-        | None -> None
-      ;
-    }
+  !dprint_endline "[normalize_conditioned_rule] conditions BEFORE:";
+  !dprint_endline (dbgstr_of_conditions cr.cs);
+  (* transform the clauses in the condition so that 
+     each clause c becomes (c && pat). *)
+  let refine_condition_with_pat pat condition = 
+    let new_negs = and_pattern_list pat condition.negs in     
+    let new_pos =  match condition.pos with 
+        | Some pos -> 
+          !dprint_endline ("[refine_condition_with_pat] anding two patterns: ");
+          !dprint_endline ("[refine_condition_with_pat] pos: ");          
+          !dprint_endline (dbgstr_of_pat pos);
+          !dprint_endline ("[refine_condition_with_pat] pat: ");          
+          !dprint_endline (dbgstr_of_pat pat);
+          let res = and_patterns pat pos in 
+          (match res with
+          | None -> !dprint_endline ("RESULT OF AND IS NONE!");
+          | Some res -> !dprint_endline ("Result: "); !dprint_endline (dbgstr_of_pat res);
+          );
+          res
+          (*
+            sometimes when we run and_patterns here, we 
+            get an infeasible pattern. That is legitimate behavior. 
+            We might have code like this, for example. 
+            if (x == 1){
+              if (x == 2) {
+                foo();
+              } else {
+                bar();
+              }
+            }
+            Right now, we represent infeasible code paths as 
+            rules with no positive clause. 
+          *)
+        | None -> error "[refine_condition_with_pat] no positive clause?"
+           (* 
+        if there is no positive clause, 
+        then there may be now... *)
+
+    in 
+    !dprint_endline "[refine_condition_with_pat] original pos";
+    !dprint_endline (dbgstr_of_pos condition.pos);
+    !dprint_endline "[refine_condition_with_pat] refined pos";
+    !dprint_endline (dbgstr_of_pos new_pos);
+    { negs = new_negs; pos = new_pos; }
   in
-  match (cr.r) with 
-    | Match(cid, pat, oid) -> {
-      cs = CL.map (add_to_condition pat) cr.cs;
-      r = new_rule cid [] oid; (* a wildcard rule *)
-    }
-    | OffPath(pat) -> {
-      cs = CL.map (add_to_condition pat) cr.cs;
-      r = Generators.noop_rule;
-    }
+  let new_cr = 
+    match (cr.r) with 
+      | Match(cid, pat, oid) -> {
+        (* pat is the rule's pattern. 
+          We want to change the conditioned rule so that 
+          pat is a wildcard. To do this, refine_condition_with_pat 
+          transforms every clause in cr.cs from c --> c && pat. 
+        *)
+        cs = CL.map (refine_condition_with_pat pat) cr.cs;
+        r = new_rule cid [] oid; (* a wildcard rule *)
+      }
+      | OffPath(pat) -> {
+        cs = CL.map (refine_condition_with_pat pat) cr.cs;
+        r = Generators.noop_rule;
+      }
+  in 
+  !dprint_endline "[normalize_conditioned_rule] conditions AFTER:";
+  !dprint_endline (dbgstr_of_conditions new_cr.cs);
+  new_cr
+
 ;;
 
 (* convert a normalized conditional rule 
@@ -1007,74 +1123,111 @@ let normalize_conditioned_rule cr =
      make a list of offpaths for the negs
      make an onpath for the positive *)
 let to_rule_list cr : rule list = 
+  (* TODO: if the rule is unsatisfiable, return an empty list. 
+     one way to represent them is for unsatisfiable rules to have 
+     no positive clause. *)
   let neg_to_rule n = OffPath(n) in 
   let pos_to_rule p = 
     match p with 
-      | None -> error "[to_rule_list] positive rule cannot be none by this point."
+      | None -> !dprint_endline "[to_rule_list] ERROR."; error "[to_rule_list] positive rule cannot be none by this point."
       | Some pat -> (
         match cr.r with
           | OffPath _ -> OffPath(pat)
           | Match(rid, _, aid) -> Match(rid, pat, aid)
       )
   in 
+  (* the conditions form a disjunction. *)
   let fold_over_conditions produced_rules condition = 
-    let new_rules = 
-      (CL.map neg_to_rule condition.negs)
-      @[pos_to_rule condition.pos] 
-    in 
-    let new_rules = new_rules |> normalize_rules in 
-    produced_rules@new_rules
+    !dprint_endline "[to_rule_list] PROCESSING CONDITON: ";
+    !dprint_endline (dbgstr_of_condition condition);
+    !dprint_endline "\n---------";
+    match condition.pos with 
+      | None -> produced_rules (* this condition is unsatisfiable, so we produce nothing. *)
+      | _ -> 
+        let new_rules = 
+          (CL.map neg_to_rule condition.negs)
+          @[pos_to_rule condition.pos] 
+        in 
+        let new_rules = new_rules |> normalize_rules in 
+        produced_rules@new_rules
   in 
+
   CL.fold_left fold_over_conditions [] cr.cs
 ;;
 
+let print_rules rules = 
+  CL.iter
+    (fun r -> print_endline ((dbgstr_of_rule r)))
+    rules  
+;;
+let print_conditioned_rules crs = 
+  CL.iter
+    (fun cr -> dbgstr_of_conditioned_rule cr |> print_endline)
+    crs
+;;
 (* condition every rule so that the new ruleset is the 
    cross product of conditions x rules *)
 let condition_rules conditions rules = 
-  let conditioned_rules = CL.map 
-    (fun r -> 
-      (* print_endline ((dbgstr_of_rule r)); *)
-      conditioned_rule conditions r) 
-    rules
+  (* for debugging, try conditioning just one rule at a time. *)
+(*   print_endline ("---- [condition_rules] input rules ----");
+  print_rules rules;
+  print_endline ("---- [condition_rules] end input rules ----"); *)
+  (* let print_rule_pipe m r = print_endline m; print_rules [r]; r in  *)
+  (* let print_conditioned_rule m r = print_endline m; print_conditioned_rules [r]; print_newline (); r in  *)
+  let pipe rule =  
+    rule 
+        (* print_rule_pipe "**** input rule: " rule  *)
+    |>  conditioned_rule conditions 
+    (* |>  print_conditioned_rule "**** conditioned rule: " *)
+    |>  normalize_conditioned_rule
+    (* |>  print_conditioned_rule "**** normalized rule: " *)
+    |>  to_rule_list 
   in 
-
-  let normalized_rules = CL.map 
-    normalize_conditioned_rule 
-    conditioned_rules 
-  in 
-  let new_rules = CL.map 
-    to_rule_list
-    normalized_rules
-    |> CL.flatten
-  in 
+  let new_rules = CL.map pipe rules |> CL.flatten in 
 (*   print_endline ("[condition_rules] new rules: ");
   CL.iter (fun r -> r |> dbgstr_of_rule |> print_endline) new_rules; *)
   new_rules
 ;;
 
+
 let condition_table cid_decls conditions tid = 
-  (* print_endline ("conditioning table: "^(Cid.to_string tid)); *)
   let tbl = Cid.lookup cid_decls tid in 
-  match tbl with 
+  !dprint_endline ("\n*** [condition_table] STARTING TABLE: "^(cid_to_string tid));
+  !dprint_endline ("****original table****");
+  !dprint_endline (str_of_decl tbl);
+  !dprint_endline ("\n****preconditions****");
+  dbgstr_of_conditions conditions |> !dprint_endline;
+  let new_table, noop_acn = match tbl with 
     | Table(tid, rules, something) -> 
       let new_rules = rules
         |> condition_rules conditions (* apply condition to get cross product *)
         |> normalize_rules (* normalize columns *)
-        |> delete_unmatchable (* delete rules that cannot possibly be matched *)
+        |> delete_unmatchable 
+        (* delete rules that cannot possibly be matched *)
       in 
       (* generate the wildcard noop rule *)
       let noop_rule, noop_acn = Generators.concrete_noop [] in 
       let new_rules = new_rules@[noop_rule] in 
 (*        print_endline ("******** [condition_table] ********");
-      print_endline ("table: "^(Cid.to_string tid));
+      print_endline ("table: "^(cid_to_string tid));
       print_endline (str_of_rules new_rules);
       print_endline ("******** [condition_table] ********");
       print_string (sprintf "... %i rules in new table ... " (CL.length new_rules)); *)
 
       let new_table = Table (tid, new_rules, something) in 
-      let cid_decls = Cid.replace cid_decls tid new_table in 
-      cid_decls@(dict_of_decls [noop_acn])
+      new_table, noop_acn
     | _ -> error "[condition_table] not a table."
+  in 
+  !dprint_endline ("\n***[condition_table] summary for "^(cid_to_string tid));
+  !dprint_endline ("****original table****");
+  !dprint_endline (str_of_decl tbl);
+  !dprint_endline ("\n****preconditions****");
+  dbgstr_of_conditions conditions |> !dprint_endline;
+  !dprint_endline ("\n****conditioned table**** ");
+  !dprint_endline (str_of_decl new_table);
+  !dprint_endline ("\n*** [condition_table] END TABLE: "^(cid_to_string tid));
+  let cid_decls = Cid.replace cid_decls tid new_table in 
+  cid_decls@(dict_of_decls [noop_acn])
 
 (* make OffPath's concrete *)
 let concretize_offpaths cid_decls = 

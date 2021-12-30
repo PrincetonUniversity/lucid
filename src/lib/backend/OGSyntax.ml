@@ -32,13 +32,16 @@ let print_op_match exps (branches : branch list) =
 ;;
 
 let print_op_stmt stmt =
-  match stmt.s with
-  | SSeq _ -> error "[print_op_stmt] sequence is not an op statement!"
-  | SMatch (exps, branches) -> print_op_match exps branches
-  | SIf (e, _, _) -> "[SIf] (" ^ Printing.exp_to_string e ^ ")"
-  | SNoop ->
-    "[Op]" ^ Printing.stmt_to_string stmt ^ "---" ^ Span.to_string stmt.sspan
-  | _ -> "[Op] " ^ Printing.stmt_to_string stmt
+  let codestr = match stmt.s with
+    | SSeq _ -> error "[print_op_stmt] sequence is not an op statement!"
+    | SMatch (exps, branches) -> print_op_match exps branches
+    | SIf (e, _, _) -> "[SIf] (" ^ Printing.exp_to_string e ^ ")"
+    | SNoop ->
+      "[Op]" ^ Printing.stmt_to_string stmt ^ "---" ^ Span.to_string stmt.sspan
+    | _ -> "[Op] " ^ Printing.stmt_to_string stmt
+  in 
+  let idstr = string_of_int stmt.sspan.spid in 
+  codestr^" //[id="^idstr^"]"
 ;;
 
 let rec print_stmt_tree_recurse (st : statement) d =
@@ -173,12 +176,50 @@ let rec op_stmt_leaves (st : statement) =
   | _ -> [st]
 ;;
 
+
+
 (* return edges linking two sibling branches *)
-let connect_siblings left right =
+(* 
+left and right are two statements that appear in sequence. 
+The goal is to find the last statement to execute in every 
+control flow of left, the first statement to execute in 
+right, and create an edge from each last statement of left 
+to the first statement of right. 
+LEFT OFF HERE. We don't actually do this because left_leaves 
+is finding the leaves of the syntax tree, not the last 
+statements to execute. 
+*)
+let connect_siblings_old left right =
   let left_leaves = op_stmt_leaves left in
   let right_root = op_stmt_root right in
   CL.map (fun st -> st, right_root) left_leaves
 ;;
+
+
+(* find the non control statements 
+  that execute last. *)
+let rec last_to_execute (stmt : statement) : statement list = 
+  match stmt.s with 
+    | SSeq (_, b) -> last_to_execute b
+    | SIf (_, a, b) -> (last_to_execute a)@(last_to_execute b)
+    | SMatch (_, bs) -> 
+      CL.map last_to_execute (CL.split bs |> snd) |> CL.flatten
+    | _ -> [stmt]
+;;
+(* find the statement that executes first. 
+   note that this may be a control statement, 
+   just not a sequence. *)
+let rec first_to_execute stmt = 
+  match stmt.s with
+    | SSeq (a, _) -> first_to_execute a
+    | _ -> stmt
+
+let connect_siblings left right =
+  let left_leaves = last_to_execute left in
+  let right_root = first_to_execute right in
+  CL.map (fun st -> st, right_root) left_leaves
+;;
+
 
 (* remove all noops except those that occur in an empty branch *)
 let rec remove_interior_noops (st : statement) =
@@ -204,7 +245,11 @@ let print_fst_in_seq (st : statement) =
 ;;
 
 let rec to_op_edges (st : statement) : (statement * statement) list =
-  let resulting_edges =
+  print_endline ("[to_op_edges] processing statement -----\n"
+    ^(CorePrinting.statement_to_string st)
+    ^"\n-------"
+  );
+  let resulting_edges, base_edges_dbg, dbg_str =
     match st.s with
     | SIf (_, a, b) ->
       (* connect if to first statement in each branch. recurse on branches. *)
@@ -212,22 +257,51 @@ let rec to_op_edges (st : statement) : (statement * statement) list =
     let self_to_b = (immediate_op_pair st b) in  *)
       let edges_of_a = to_op_edges a in
       let edges_of_b = to_op_edges b in
-      [st, fst_op_of_branch a; st, fst_op_of_branch b] @ edges_of_a @ edges_of_b
+      let base_edges = [st, fst_op_of_branch a; st, fst_op_of_branch b] in 
+      base_edges @ edges_of_a @ edges_of_b, base_edges, ""
     | SMatch (_, branches) ->
       (* connect each branch to the first op statement in the branch *)
       let map_start_f (_, branch_st) = [st, fst_op_of_branch branch_st] in
       (* recurse on each branch. *)
       let map_continue_f (_, branch_st) = to_op_edges branch_st in
-      CL.map map_start_f branches @ CL.map map_continue_f branches |> CL.flatten
+      let base_edges = CL.map map_start_f branches |> CL.flatten in 
+      (base_edges @ (CL.map map_continue_f branches |> CL.flatten)), base_edges, ""
     | SSeq (a, b) ->
       (* recurse on a, connect a to b, recurse on b.*)
+      print_endline ("its a sequence.");
+      print_endline ("first statement: ");
+      print_endline ("****");
+      CorePrinting.statement_to_string a |> print_endline;
+      print_endline ("****");
       let edges_of_a = to_op_edges a in
-      let a_to_b_edge = connect_siblings a b in
+      let a_to_b_edge = connect_siblings a b in    
+      let a_leaves = op_stmt_leaves a in 
+      let b_root = op_stmt_root b in   
+      let dbg_str =  
+        ("\na statement:\n"^CorePrinting.statement_to_string a)
+        ^("\nb statement:\n"^CorePrinting.statement_to_string b)
+        ^("\nSSeq: # a_to_b_edges: "^(CL.length a_to_b_edge |> string_of_int))
+        ^("\nleaves of a:\n"
+          ^(
+            (CL.map 
+            (fun st -> CorePrinting.statement_to_string st) a_leaves) 
+            |> String.concat "\n "
+          )
+        )
+        ^("\nroot of b:\n"
+          ^(
+            (CL.map 
+            (fun st -> CorePrinting.statement_to_string st) [b_root]) 
+            |> String.concat "\n "
+          )
+        )
+      in 
       let edges_of_b = to_op_edges b in
-      edges_of_a @ a_to_b_edge @ edges_of_b
+      let base_edges = a_to_b_edge in 
+      edges_of_a @ a_to_b_edge @ edges_of_b, base_edges, dbg_str
     | _ ->
       !dprint_endline ("HERE: " ^ print_op_stmt st);
-      []
+      [], [], ""
     (* none of the other statements produce edges *)
   in
   !dprint_endline "----------[to_op_edges]-----------";
@@ -235,8 +309,14 @@ let rec to_op_edges (st : statement) : (statement * statement) list =
   !dprint_endline (Printing.stmt_to_string st);
   !dprint_endline "---- statement tree ----";
   print_stmt_tree_recurse st 0;
+  !dprint_endline "---- debug string ----";
+  !dprint_endline dbg_str;
+  !dprint_endline "----new BASE EDGES -----";
+  print_stmt_edges base_edges_dbg;
+  !dprint_endline "-------";
   !dprint_endline "----resulting edges -----";
   print_stmt_edges resulting_edges;
+  !dprint_endline "-------";
   resulting_edges
 ;;
 

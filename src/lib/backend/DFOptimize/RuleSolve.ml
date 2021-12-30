@@ -250,4 +250,20 @@ let new_is_r_still_feasible (r : rule) (qs : rule list) =
     error "unknown sat..."
 ;;
 
-
+(* is p && q true? *)
+let p_and_q (p : pattern) (q : pattern) = 
+  let ctx = mk_context ["model", "true"; "proof", "true"] in
+  let ctx, p_eqn = eqn_of_pat ctx p in
+  let ctx, q_eqn = eqn_of_pat ctx q in 
+  let solver = Solver.mk_simple_solver ctx in
+  (* assert p && q *)
+  Solver.add solver [Z3Bool.mk_and ctx [p_eqn;q_eqn]];
+  (* check satisfiability *)
+  let is_sat = Solver.check solver [] in
+  match is_sat with
+  | SATISFIABLE ->true
+  | UNSATISFIABLE -> false
+  | UNKNOWN ->
+    Printf.printf "unknown\n";
+    error "unknown sat..."
+;;

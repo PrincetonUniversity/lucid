@@ -18,11 +18,14 @@ let mid_to_dbgstr (m : mid) : string =
   let names = Cid.names m in
   String.concat ~sep:"_" names
 ;;
+let objcid_str = P4tPrint.str_of_private_oid ;;
+let varcid_str = P4tPrint.str_of_varid ;;
+
 
 let oper_to_dbgstr i =
   match i with
   | Const c -> Integer.value_string c
-  | Meta m -> Cid.to_string m
+  | Meta m -> varcid_str m
   | RegVar _ -> "<mem_cell>"
   | NoOper -> "<None>"
 ;;
@@ -42,12 +45,12 @@ let dbgstr_of_cidpairs cidpairs =
   Caml.String.concat
     ", "
     (CL.map
-       (fun (s, d) -> sprintf "(%s, %s)" (Cid.to_string s) (Cid.to_string d))
+       (fun (s, d) -> sprintf "(%s, %s)" (varcid_str s) (varcid_str d))
        cidpairs)
 ;;
 
 let str_of_cids cids =
-  let names = Core.List.map cids ~f:Cid.to_string in
+  let names = Core.List.map cids ~f:varcid_str in
   Core.String.concat ~sep:", " names
 ;;
 
@@ -57,15 +60,27 @@ let dbgstr_of_cond c =
   | Any -> "_"
 ;;
 
-let dbgstr_of_pat pat =
+let dbgstr_of_pat_conditions pat =
   let pat_strs = Caml.List.map (fun (_, cond) -> dbgstr_of_cond cond) pat in
   "(" ^ Caml.String.concat ", " pat_strs ^ ")"
 ;;
 
+let dbgstr_of_pat pat = 
+  (* [x: 1; y: _; ] *)
+  match pat with 
+    | [] -> "<EMPTY PATTERN>"
+    | _ -> 
+      let dbgstr_of_field (m, c) = 
+        sprintf "%s: %s" (varcid_str m) (dbgstr_of_cond c) 
+      in 
+      CL.map dbgstr_of_field pat |> String.concat ~sep:"; "
+;;
+
+
 let dbgstr_of_rule r =
   match r with
   | Match (_, pat, acn_id) ->
-    dbgstr_of_pat pat ^ " : " ^ Cid.to_string acn_id ^ "();"
+    (dbgstr_of_pat pat) ^ " --> " ^ objcid_str acn_id ^ "();"
   | OffPath pat -> dbgstr_of_pat pat ^ " : NOOP();"
 ;;
 
@@ -119,7 +134,7 @@ let str_of_cid_decls cid_decls =
 let rulescts_of_tables cid_decls = 
   let print_tbl_info (tbl) = 
     print_endline (sprintf "%s,%i" 
-      (Cid.to_string (tid_of_tbl tbl))
+      (objcid_str (tid_of_tbl tbl))
       (CL.length (rules_of_table tbl))
     )
   in 
