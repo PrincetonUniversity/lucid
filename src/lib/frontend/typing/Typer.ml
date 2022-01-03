@@ -520,23 +520,16 @@ and infer_statement (env : env) (s : statement) : env * statement =
       | _ -> ());
       ( { env with locals = CidMap.add (Id id) ty env.locals }
       , SLocal (id, ty, inf_e) )
-    | SAssign (id, e) ->
+    | SAssign (lval, e) ->
       let env, inf_e, ety = infer_exp env e |> textract in
-      (match CidMap.find_opt (Id id) env.locals with
-      | Some rty -> unify_ty s.sspan rty ety
-      | None ->
-        (match CidMap.find_opt (Id id) env.consts with
-        | Some _ ->
-          error_sp s.sspan @@ "Assignment to constant variable " ^ Id.name id
-        | None ->
-          error_sp s.sspan @@ "Assignment to unbound variable " ^ Id.name id));
+      unify_raw_ty s.sspan (expected_lval_ty s.sspan env lval) ety.raw_ty;
       (match TyTQVar.strip_links ety.raw_ty with
       | TVoid ->
         error_sp s.sspan
         @@ "Cannot assign result of void function to variable: "
         ^ stmt_to_string s
       | _ -> ());
-      env, SAssign (id, inf_e)
+      env, SAssign (lval, inf_e)
     | SPrintf (str, es) ->
       let expected_tys = extract_print_tys s.sspan str in
       if List.length expected_tys <> List.length es

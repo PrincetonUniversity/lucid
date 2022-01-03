@@ -43,7 +43,6 @@
    renaming
    globalArgElimination
    explicitReturns
-   recordElimination
    moduleElimination
    tupleElimination
    vectorElimination

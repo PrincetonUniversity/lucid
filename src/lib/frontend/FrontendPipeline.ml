@@ -46,11 +46,6 @@ let process_prog ds =
   let ds = Typer.infer_prog ds in
   print_if_verbose "------------Checking entry handlers---------------";
   Linerate.check ds;
-  (* Record elimination removes useful debugging information, so we want it as
-     close to the end of the pipeline as possible. *)
-  print_if_verbose "-------Eliminating records-------";
-  let ds = RecordElimination.eliminate_prog ds in
-  print_if_debug ds;
   print_if_verbose "-------Eliminating vectors-------";
   let ds = VectorElimination.eliminate_prog ds in
   print_if_debug ds;

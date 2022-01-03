@@ -124,6 +124,29 @@ let lookup_var span env cid =
       | None -> error_sp span ("Unbound variable " ^ Cid.to_string cid)))
 ;;
 
+let expected_lval_ty span env lval =
+  let id, labels = destruct_lval lval in
+  let base_ty =
+    match CidMap.find_opt (Id id) env.locals with
+    | Some rty -> rty
+    | None ->
+      (match CidMap.find_opt (Id id) env.consts with
+      | Some _ ->
+        error_sp span @@ "Assignment to constant variable " ^ Id.name id
+      | None -> error_sp span @@ "Assignment to unbound variable " ^ Id.name id)
+  in
+  let rec proj rty labels =
+    match labels with
+    | [] -> rty
+    | hd :: tl ->
+      (match rty with
+      | TRecord entries -> proj (List.assoc hd entries) tl
+      | _ ->
+        error_sp span @@ "Cannot get label " ^ hd ^ " from a non-record type!")
+  in
+  proj base_ty.raw_ty labels
+;;
+
 (* Drops the last n constraints in the second environment and returns
    the rest. For use after if/match statments, where the result after
    each side constains all the constraints from the original env plus

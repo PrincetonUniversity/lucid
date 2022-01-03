@@ -19,7 +19,7 @@ let insert_retvar retvar s =
       method! visit_exp _ e = e
 
       method! visit_SRet _ e =
-        let asn = sassign retvar (value_to_exp (vbool true)) in
+        let asn = sassign (LId retvar) (value_to_exp (vbool true)) in
         SSeq (asn, sret_sp e Span.default)
     end
   in

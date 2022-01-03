@@ -32,14 +32,19 @@ let subst =
   end
 ;;
 
-(* Check if a variable is assigned to in s. We always need to make a new variable
-   for a parameter if it's assigned to. *)
+(* Check if a variable (or one of its components) is assigned to in s.
+   We always need to make a new variable for a parameter if it's assigned to. *)
 let is_assigned (id : Id.t) (s : statement) : bool =
   let ret = ref false in
+  let rec check_assign lval =
+    match lval with
+    | LId id2 -> Id.equal id id2
+    | LProj (lval, _) -> check_assign lval
+  in
   let v =
     object
       inherit [_] s_iter as super
-      method! visit_SAssign _ id2 _ = if Id.equal id id2 then ret := true
+      method! visit_SAssign _ lval _ = if check_assign lval then ret := true
     end
   in
   v#visit_statement () s;
@@ -54,7 +59,7 @@ let replace_returns (retvar : Id.t) (s : statement) : statement =
 
       method! visit_SRet dummy eopt =
         match eopt with
-        | Some e -> SAssign (retvar, self#visit_exp dummy e)
+        | Some e -> SAssign (LId retvar, self#visit_exp dummy e)
         | None -> SNoop
     end
   in

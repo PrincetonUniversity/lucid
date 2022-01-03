@@ -29,13 +29,26 @@ let sequence_statements ss =
   seq.s
 ;;
 
-(* Maps tuple variable names to the list of variables represening
+(* Maps tuple variable names to the list of variables representing
    their components. *)
 type env = (id * ty) list IdMap.t
+
+let new_label i l = l ^ "_" ^ string_of_int i
 
 let replacer =
   object (self)
     inherit [_] s_map as super
+
+    method! visit_TRecord env entries =
+      let entries =
+        List.map
+          (fun (l, ty) ->
+            match self#visit_raw_ty env ty with
+            | TTuple rtys -> List.mapi (fun i rty -> new_label i l, rty) rtys
+            | rty -> [l, rty])
+          entries
+      in
+      TRecord (List.concat entries)
 
     (* Split into a bunch of variable definitions, one for each
        tuple element. *)
@@ -58,21 +71,35 @@ let replacer =
       | _ -> super#visit_SLocal env id ty exp
 
     (* Like SLocal, but we look up the new variable names *)
-    method! visit_SAssign env id exp =
-      match (Option.get exp.ety).raw_ty with
-      | TTuple _ ->
+    method! visit_SAssign env lval exp =
+      match (Option.get exp.ety).raw_ty, lval with
+      | TTuple _, LId id ->
         let entries = self#visit_exp env exp |> extract_etuple in
         let new_ids = IdMap.find id !env in
         let new_defs =
           List.map2
             (fun (id, _) e ->
-              let recursive_defs = self#visit_SAssign env id e in
+              let recursive_defs = self#visit_SAssign env (LId id) e in
               statement recursive_defs)
             new_ids
             entries
         in
         sequence_statements new_defs
-      | _ -> super#visit_SAssign env id exp
+      | TTuple rtys, LProj (lval, label) ->
+        let entries = self#visit_exp env exp |> extract_etuple in
+        let new_ids = List.mapi (fun i rty -> new_label i label, ty rty) rtys in
+        let new_defs =
+          List.map2
+            (fun (label, _) e ->
+              let recursive_defs =
+                self#visit_SAssign env (LProj (lval, label)) e
+              in
+              statement recursive_defs)
+            new_ids
+            entries
+        in
+        sequence_statements new_defs
+      | _ -> super#visit_SAssign env lval exp
 
     (* Split up variable expressions into tuple expressions, where
        each component is a variable from the environment *)
@@ -135,6 +162,20 @@ let replacer =
     method! visit_EHash env sz args =
       let args = List.map (self#flatten env) args |> List.concat in
       EHash (sz, args)
+
+    method! visit_ERecord env entries =
+      let entries =
+        List.map
+          (fun (l, e) ->
+            let e = self#visit_exp env e in
+            match Option.get e.ety with
+            | { raw_ty = TTuple _ } ->
+              let tentries = extract_etuple e in
+              List.mapi (fun i e -> new_label i l, e) tentries
+            | _ -> [l, e])
+          entries
+      in
+      ERecord (List.concat entries)
   end
 ;;
 

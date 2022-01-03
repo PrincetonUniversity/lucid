@@ -377,9 +377,14 @@ branches:
 multiargs:
     | exp COMMA args                         { $1::$3 }
 
+lvalue:
+    | ID                                    { fst $1, LId (snd $1) }
+    /* | lvalue LBRACKET size RBRACKET         { Span.extend (fst $1) $4, LIndex (snd $1, snd $3) } */
+    | lvalue PROJ ID                        { Span.extend (fst $1) (fst $3), LProj (snd $1, Id.name (snd $3)) }
+
 statement1:
     | ty ID ASSIGN exp SEMI                 { slocal_sp (snd $2) $1 $4 (Span.extend $1.tspan $5) }
-    | ID ASSIGN exp SEMI	                  { sassign_sp (snd $1) $3 (Span.extend (fst $1) $4) }
+    | lvalue ASSIGN exp SEMI	              { sassign_sp (snd $1) $3 (Span.extend (fst $1) $4) }
     | RETURN SEMI                           { sret_sp None (Span.extend $1 $2) }
     | RETURN exp SEMI                       { sret_sp (Some $2) (Span.extend $1 $3) }
     | GENERATE exp SEMI                     { gen_sp (GSingle None) $2 (Span.extend $1 $3)}

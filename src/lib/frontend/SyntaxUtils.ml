@@ -298,3 +298,10 @@ let rec is_compound e =
   | EWith (base, entries) ->
     is_compound base || List.exists (is_compound % snd) entries
 ;;
+
+let rec destruct_lval = function
+  | LId id -> id, []
+  | LProj (lval, label) ->
+    let base, acc = destruct_lval lval in
+    base, label :: acc
+;;

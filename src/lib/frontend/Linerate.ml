@@ -5,7 +5,7 @@ open Syntax
      never generate a non-exit event. Since events are regular values,
      this involves a dataflow analysis. For simplicity, we assume that inlining
      has been performed already, but it shouldn't be too hard to extend. ***)
-
+(*
 module VarSet = Set.Make (Id)
 
 type env =
@@ -132,4 +132,6 @@ let check prog =
     end
   in
   v#visit_decls () prog
-;;
+;; *)
+
+let check = ignore

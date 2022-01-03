@@ -157,12 +157,17 @@ and gen_type =
   | GMulti of exp (* Multicast group name *)
   | GPort of exp
 
+and lvalue =
+  | LId of id
+  (* | LIndex of lvalue * size *)
+  | LProj of lvalue * string
+
 (* statements *)
 and s =
   | SNoop
   | SUnit of exp
   | SLocal of id * ty * exp
-  | SAssign of id * exp
+  | SAssign of lvalue * exp
   | SPrintf of string * exp list
   | SIf of exp * statement * statement
   | SGen of gen_type * exp
