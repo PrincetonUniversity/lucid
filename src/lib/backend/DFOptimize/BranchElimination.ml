@@ -558,6 +558,12 @@ let enforce_path_constraints_at_table idom tid (cid_decls, pcs) =
          because it prevents most conditional tests from 
          propagating through the entire program. It solves 
          the "diamond control flow" problem. *)
+(*       let preconditions = get_preconditions 
+        cid_decls 
+        pred_tids
+        tid
+      in 
+ *)
       let preconditions = PathConstraints.find (idom tid) pcs in 
       let new_cid_decls = condition_table 
         cid_decls 
