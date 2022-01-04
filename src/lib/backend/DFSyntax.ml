@@ -70,6 +70,9 @@ module Check = Path.Check (G)
 (* module M1 = Traverse.Bfs(G) *)
 module Topo = Topological.Make (G)
 module DFS = Traverse.Dfs (G)
+module Dom = Dominator.Make(G)
+
+
 
 (******* graph building (from a dagProgram to a dag graph) *******)
 let get_nodes (cid_decls : declsMap) : cid list =
@@ -692,154 +695,6 @@ let get_first_common_descendent decl_map acn_ids =
       "trying to find the common descendent of a table with 0 or 1 actions..."
 ;;
 
-(******* pathfinding *******)
-
-(* convert a path of edges to a path of nodes *)
-let to_nodepath edges =
-  match edges with
-  | [] -> []
-  | fst_edge :: edges ->
-    let fld_f node_acc e =
-      let _, _, dst = e in
-      node_acc @ [dst]
-    in
-    let tl_nodes = Caml.List.fold_left fld_f [] edges in
-    let hd_node, _, hd_edge_dst = fst_edge in
-    hd_node :: hd_edge_dst :: tl_nodes
-;;
-
-(* 
-let to_nodepath_wrong edges = 
-  match edges with 
-  | [] -> []
-  | fst_edge::edges -> 
-    let fld_f = (fun node_acc e -> let (_, _, dst) = e in node_acc@[dst]) in 
-    let tl_nodes = (Caml.List.fold_left fld_f [] edges) in 
-    let (hd_node, _, _) = fst_edge in 
-    hd_node::tl_nodes
-;; 
-*)
-
-(* get the callables in a nodepath *)
-let to_callablepath cid_decls node_path =
-  (* printf "to_callablepath: %s\n" (cids_to_string node_path); *)
-  let filter_f obj_id =
-    match Cid.lookup cid_decls obj_id with
-    | Table _ -> true
-    | SchedBlock _ -> true
-    | _ -> false
-  in
-  node_path |> Caml.List.filter filter_f
-;;
-
-let rec print_edgepath es =
-  match es with
-  | [] -> printf "\n"
-  | e :: es ->
-    let src_id, _, dst_id = e in
-    printf
-      "[%s -> %s]"
-      (P4tPrint.str_of_private_oid src_id)
-      (P4tPrint.str_of_private_oid dst_id);
-    print_edgepath es
-;;
-
-(* get the shortest path of nodes from root to tgt. 
-   returns empty path if none exists. *)
-let find_shortest_nodepath g root_id tgt_id =
-  (* printf "find_shortest_nodepath: root: %s tgt: %s\n" (mid_to_str_suffix root_id) (mid_to_str_suffix tgt_id); *)
-  let edge_path, len =
-    try D.shortest_path g root_id tgt_id with
-    | Not_found -> [], 0
-  in
-  let _ = len in
-  (* printf "shortest path from src to %s: %i\n" (mid_to_str_suffix tgt_id) (len); *)
-  (* print_edgepath edge_path; *)
-  (* let (edge_path, _) = D.shortest_path g root_id tgt_id in  *)
-  (* let node_path = to_nodepath edge_path in  *)
-  let node_path = to_nodepath edge_path in
-  (* let node_path_old = to_nodepath_old edge_path in  *)
-  (* printf "node_path output (len %i): [%s]\n" (CL.length node_path) (cids_to_string node_path);
-  printf "node_path_fixed output (len %i): [%s]\n" (CL.length node_path_fixed) (cids_to_string node_path_fixed); *)
-  node_path
-;;
-
-(* find the shortest table path from root to tgt *)
-let find_shortest_callablepath g cid_decls root_id tgt_id =
-  let nodepath = find_shortest_nodepath g root_id tgt_id in
-  let callablepath = to_callablepath cid_decls nodepath in
-  callablepath
-;;
-
-(******* table queries *******)
-
-(* is there a path from src to dst? *)
-let path_exists g cid_decls src_tid dst_tid =
-  let res =
-    match
-      find_shortest_callablepath g cid_decls src_tid dst_tid |> Caml.List.length
-    with
-    | 0 -> false (* no path found *)
-    | _ -> true
-    (* path found *)
-  in
-  res
-;;
-
-(* is src_tid the callable that immediately preceeds dst_tid? *)
-let direct_path_exists g cid_decls src_tid dst_tid =
-  let res =
-    match
-      find_shortest_callablepath g cid_decls src_tid dst_tid |> Caml.List.length
-    with
-    | 2 -> true (* the path is [src; dst] *)
-    | _ -> false
-    (* not 2 --> not pred *)
-  in
-  res
-;;
-
-(* find the predecessor callables of tbl_id *)
-let pred_tids_of g cid_decls tbl_id =
-  let oids, _ = CL.split cid_decls in
-  let cids = CL.filter (is_callable cid_decls) oids in
-  let pred_ids =
-    CL.filter (fun src_id -> direct_path_exists g cid_decls src_id tbl_id) cids
-  in
-  (* printf "pred_tids_of: %s:[%s]\n" (mid_to_str_suffix tbl_id) (str_of_cids pids); *)
-  pred_ids
-;;
-
-(* find the successor callables of tbl_id *)
-let succ_tids_of g cid_decls tbl_id =
-  let oids, _ = CL.split cid_decls in
-  let cids = CL.filter (is_callable cid_decls) oids in
-  let succ_ids =
-    CL.filter (fun dst_id -> direct_path_exists g cid_decls tbl_id dst_id) cids
-  in
-  succ_ids
-;;
-
-let is_branch_tbl g cid_decls oid =
-  match Cid.lookup cid_decls oid with
-  | Table _ ->
-    (* does the table have multiple next tables? *)
-    (match List.length (succ_tids_of g cid_decls oid) with
-    | 0 | 1 -> false
-    | _ -> true)
-  | _ -> false
-;;
-
-let is_merge_tbl g cid_decls oid =
-  match Cid.lookup cid_decls oid with
-  | Table _ ->
-    (* does the table have multiple predecessor tables? *)
-    (match List.length (pred_tids_of g cid_decls oid) with
-    | 0 | 1 -> false
-    | _ -> true)
-  | _ -> false
-;;
-
 (******* register queries *******)
 (* find the tables that use reg_id *)
 let tids_of_rid cid_decls reg_id =
@@ -984,8 +839,20 @@ let tbl_reads_var cid_decls tbl_id var_id =
   let _, read_vars = lr_mids_of_tid cid_decls tbl_id in
   CL.mem var_id read_vars
 ;;
-
-(* a call table has 0 or 1 one successor tables *)
+(* does a table branch to multiple successors? *)
+let is_branch_tbl cid_decls tbl_id = 
+  match Cid.lookup cid_decls tbl_id with
+  | Table _ ->
+    (
+      match (CL.length (acns_of_tid cid_decls tbl_id)) with 
+        | 0 | 1 -> false
+        | _ -> true
+    )
+  | _ -> false
+;;
+(* a call table has 0 or 1 one successor tables 
+  TODO: this should probably decide based on actions, like 
+        is_branch_tbl. *)
 let is_call_tbl cid_decls tbl_id =
   match Cid.lookup cid_decls tbl_id with
   | Table _ ->

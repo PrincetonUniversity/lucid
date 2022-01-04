@@ -13,6 +13,17 @@ open Solver
 module Z3Bool = Boolean
 module Z3Int = Arithmetic.Integer
 
+(* todo: pretty sure context is a mutable 
+   that Z3 maintains internally. We do not 
+   need to pass it around in all the functions. 
+   Should just be able to call new_ctx at the 
+   beginning of a public function and use that 
+   context throughout, eliminating it from 
+   the helper functions like eqn_of_pat, etc. *)
+let new_ctx () = 
+  mk_context ["model", "true"; "proof", "true"] 
+;;
+
 (* print rule lists *)
 let string_of_match (m : pattern) : string =
   CL.map

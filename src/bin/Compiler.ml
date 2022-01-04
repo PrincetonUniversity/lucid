@@ -89,7 +89,6 @@ let start_backend_logs () =
   LLOp.start_logging ();
   LLContext.start_logging ();
 
-
   OGSyntax.start_logging ();
   BranchElimination.start_logging ();
   MergeUtils.start_logging ();

@@ -903,6 +903,8 @@ let and_pattern_list (pat1:pattern) (pat2s:pattern list) : pattern list =
 ;;
 
 
+(**** path constraint based pass ****)
+
 (* The core of this transformation pass operates on 
   "conditioned rules". A conditioned rule is a rule 
   that only applies when one of its conditions 
@@ -912,7 +914,21 @@ let and_pattern_list (pat1:pattern) (pat2s:pattern list) : pattern list =
   If pos is None, it means the condition cannot be 
   satisfied. This can happen when augmenting a condition 
   with the match guard of a rule, during 
-  the normalization step. *)
+  the normalization step. 
+  LEFT OFF HERE: 
+    - this is a poor way to do things because of the diamond 
+    problem. The more optimal rewrite of BranchElimination.ml
+    may change this code significantly, or make it un-necessary.
+*)
+
+(* move this to Cid.ml? *)
+module CidTbl = struct 
+  type t = Cid.t
+  let compare = Cid.compare
+end
+
+module PathConstraints = BatMap.Make(CidTbl)
+
 type condition = {
   negs : pattern list;
   pos  : pattern option;
@@ -920,6 +936,9 @@ type condition = {
 let new_precondition () = {
   negs = []; pos = None;
 }
+let wildcard_condition () = 
+  {negs = []; pos = Some ([])}
+
 
 type conditioned_rule = {
   cs : condition list; (* a list of alternatives *) 
@@ -930,7 +949,7 @@ let rule_to_conditon r =
    r = r}
 ;;
 
-let conditioned_rule conditions r = 
+let condition_rule conditions r = 
   {cs = conditions; r = r;}
 ;;
 
@@ -1049,6 +1068,108 @@ let get_preconditions cid_decls (pred_tids:oid list) (tid:oid) : condition list 
   CL.fold_left fold_pred_tbl [] pred_tids 
 ;;
 
+
+(* a bit of conditioned rule algebra: 
+   convert the conditions on a rule into a Z3 equation *)
+let eqn_of_precondition ctx cr = 
+  let eqn_of_condition ctx c = 
+    let fold_negs ctx eqns p = 
+      let ctx, p_eqn = RS.eqn_of_pat ctx p in 
+      let not_p = RS.Z3Bool.mk_not ctx p_eqn in 
+      eqns@[not_p]
+    in 
+    let neg_eqns = CL.fold_left (fold_negs ctx) [] c.negs in 
+    let pos_eqns = match c.pos with 
+      | None -> []
+      | Some p -> 
+        let _, pos_eqn = RS.eqn_of_pat ctx p in 
+        [pos_eqn]
+    in 
+    let eqn = RS.Z3Bool.mk_and ctx (neg_eqns@pos_eqns) in 
+    eqn
+  in
+  let condition_eqs = CL.fold_left 
+    (fun eqns c -> eqns@[eqn_of_condition ctx c])
+    []
+    cr.cs
+  in 
+  RS.Z3Bool.mk_or ctx condition_eqs
+;;
+
+(* figure out if the preconditions on a rule 
+   actually mean that the rule executes unconditionally, 
+   by testing if the negation of the preconditions is 
+   feasible. 
+   If the negation is not feasible, 
+   remove all the preconditions because the rule always 
+   executes. *)
+(* 
+this is not enough. The first branch of a 
+program actually looks like this: 
+
+if (event == 1) {
+  if (x == 1) {
+    foo(); [event == 1 && x == 1]
+  }  
+  else {
+    bar(); [event == 1 && x != 1]
+  }
+  baz(); // [event == 1]
+}
+
+// baz's preconditions is: 
+// [event == 1 && x == 1] || [event == 1 && x != 1]
+// this should simplify to [event == 1]
+// but how do we do that? 
+// can we use z3 to find the variables that don't matter? 
+// not directly. Have to do it manually... Ugh. 
+
+algorithm: 
+  for each variable in any condition: (fcn: get_variables)
+    extract the clauses with that variable (fcn: view of a cr?)
+    test if the resulting precondition is always true. (fcn: similar to current simplify / test)
+    if it is always true, the variable is irrelevant and can be removed. (fcn: remove from cr?)
+  - this is sub-optimal. Example: 
+    if (x == 1 || y == 1) {
+      foo();
+    } 
+    else { bar(); }
+    baz(); 
+
+    [x == 1, y == _; x == _; y = 1;] foo();
+    [x != 1, y != 1] bar();
+    [(x == 1, y == _; x == _; y = 1;) || (x != 1, y != 1)] baz();    
+    we can't eliminate x, if we look at it by itself
+
+algorithm 2: 
+  - track the stack of conditions on every table. 
+  - when you get to a join node, pop off the last condition. 
+    - assumes the most recent condition is the same for all branches in a join node. 
+      - is this correct? 
+
+    if (x == 1 || y == 1) {
+      foo(); [[x == 1, y == _; x == _; y = 1;]; []]
+    } 
+    else { bar(); [[x != 1, y != 1]; []] }
+    baz(); 
+*)
+(* the idom-based algorithm makes this unnecessary. *)
+let simplify_preconditions cr = 
+  print_endline "simplifying preconditions: ";
+  print_endline (dbgstr_of_conditions cr.cs);
+  let ctx = RS.new_ctx () in 
+  let precondition_eqn = eqn_of_precondition ctx cr in 
+  let not_preconditions_eqn = RS.Z3Bool.mk_not ctx precondition_eqn in 
+  let solver =  Z3.Solver.mk_simple_solver ctx in 
+  Z3.Solver.add solver [not_preconditions_eqn];
+  let is_sat = Z3.Solver.check solver [] in 
+  match is_sat with
+    | Z3.Solver.SATISFIABLE -> cr
+    | Z3.Solver.UNSATISFIABLE -> {cr with cs = []}
+    | Z3.Solver.UNKNOWN -> error "[simplify_conditions] Z3 returned unknown.."  
+;;
+
+
 (* move all the conditions into the precondition(s), 
    leaving the rule as a wildcard. *)
 let normalize_conditioned_rule cr = 
@@ -1158,6 +1279,32 @@ let to_rule_list cr : rule list =
   CL.fold_left fold_over_conditions [] cr.cs
 ;;
 
+(* 
+
+if (x = 1) { foo(); }
+else { bar(); }
+baz();
+
+goal: 
+want the call to baz to be unconditional. 
+
+So, when we get the preconditions for baz, 
+we should test to see if the preconditions cover all possible inputs. 
+
+harder version: 
+
+if (x == 1) { foo(); }
+else { bar(); }
+if (y == 1) {baz();}
+
+here, the call to baz is not unconditional, but it 
+still should not be conditioned on (x == 1). 
+We should 
+
+
+
+*)
+
 let print_rules rules = 
   CL.iter
     (fun r -> print_endline ((dbgstr_of_rule r)))
@@ -1180,7 +1327,8 @@ let condition_rules conditions rules =
   let pipe rule =  
     rule 
         (* print_rule_pipe "**** input rule: " rule  *)
-    |>  conditioned_rule conditions 
+    |>  condition_rule conditions 
+    (* |>  simplify_preconditions *)
     (* |>  print_conditioned_rule "**** conditioned rule: " *)
     |>  normalize_conditioned_rule
     (* |>  print_conditioned_rule "**** normalized rule: " *)
@@ -1267,25 +1415,52 @@ let concretize_offpaths cid_decls =
   one of the conditions from a predecessor action. 
   Also, concretize all the offpaths that may be created.
 *)
-let condition_tbl_from_preds cid_decls pred_tids tid = 
-  let preconditions = get_preconditions 
-    cid_decls 
-    pred_tids
-    tid
-  in 
-  (* print_string (sprintf "... %i preconditions ... " (CL.length preconditions)); *)
-  let new_cid_decls = condition_table 
-    cid_decls 
-    preconditions 
-    tid 
-  in 
-  (* print_endline ("before concretization for "^(Cid.to_string tid)); *)
-  (* let cid_decls_tbls = CL.filter (fun (_, dec) -> is_table dec) new_cid_decls in  *)
-  (* print_endline (str_of_cid_decls cid_decls_tbls); *)
-  let res = concretize_offpaths new_cid_decls in 
-  (* print_endline ("after concretization for "^(Cid.to_string tid)); *)
-  (* let cid_decls_tbls = CL.filter (fun (_, dec) -> is_table dec) res in  *)
-  (* print_endline (str_of_cid_decls cid_decls_tbls); *)
-  res 
+let condition_tbl_from_preds idom cid_decls pred_tids pcs tid = 
+  match (CL.length pred_tids) with  
+  | 0 -> 
+    (* this is the root node, there are no preconditions. *)
+    let preconditions = [wildcard_condition ()] in 
+    let pcs = PathConstraints.add tid preconditions pcs in 
+    cid_decls, pcs 
+  | 1 -> (
+    (* this is a sequence or branch node, preconditions are 
+       the same as the predecessor. *)
+    let preconditions = get_preconditions 
+      cid_decls 
+      pred_tids
+      tid
+    in 
+    (* print_string (sprintf "... %i preconditions ... " (CL.length preconditions)); *)
+    let new_cid_decls = condition_table 
+      cid_decls 
+      preconditions 
+      tid 
+    in 
+    (* print_endline ("before concretization for "^(Cid.to_string tid)); *)
+    (* let cid_decls_tbls = CL.filter (fun (_, dec) -> is_table dec) new_cid_decls in  *)
+    (* print_endline (str_of_cid_decls cid_decls_tbls); *)
+    let pcs = PathConstraints.add tid preconditions pcs in 
+    let res = concretize_offpaths new_cid_decls in 
+    (* print_endline ("after concretization for "^(Cid.to_string tid)); *)
+    (* let cid_decls_tbls = CL.filter (fun (_, dec) -> is_table dec) res in  *)
+    (* print_endline (str_of_cid_decls cid_decls_tbls); *)
+    res, pcs 
+  )
+  | _ -> (
+    (* this is a join node, preconditions are the same as 
+       the immediate dominator. 
+       Special-casing join nodes is really important 
+       because it prevents most conditional tests from 
+       propagating through the entire program. It solves 
+       the "diamond control flow" problem. *)
+    let preconditions = PathConstraints.find (idom tid) pcs in 
+    let new_cid_decls = condition_table 
+      cid_decls 
+      preconditions 
+      tid 
+    in 
+    let pcs = PathConstraints.add tid preconditions pcs in 
+    let res = concretize_offpaths new_cid_decls in     
+    res, pcs 
+  )
 ;;
-

@@ -10,7 +10,6 @@ open DebugPrint
 exception Error of string
 
 let error s = raise (Error s)
-
 (* logging *)
 module DBG = BackendLogging
 let outc = ref None
@@ -41,11 +40,10 @@ let table_stats cid_decls tbl_id =
 
 (* 11/21 new version using updated and hopefully correct mergeutils 
    methods *)
-let visit_tbl_as_succ tbl_id cid_decls = 
+let visit_tbl_as_succ idom tbl_id cid_decls pcs = 
   (Cid.to_string tbl_id)^"; "|> print_string |> Format.print_flush;
-  match pred_tids_of_tid cid_decls tbl_id with 
-  | [] -> cid_decls
-  | pred_tids ->  MU.condition_tbl_from_preds cid_decls pred_tids tbl_id
+  let pred_tids = pred_tids_of_tid cid_decls tbl_id in 
+  MU.condition_tbl_from_preds idom cid_decls pred_tids pcs tbl_id
 ;;
 
 (* visit tbl_id, considering it as a successor node
@@ -78,26 +76,20 @@ let old_visit_tbl_as_succ tbl_id cid_decls =
 ;;
 
 (* visit node_id in unmodified graph g. transform cid_decls and the graph *)
-let visit_node_condition_pushdown node_id cid_decls =
+let visit_node_condition_pushdown idom node_id (cid_decls, pcs) =
   DBG.printf
     outc
     "[visit_node_condition_pushdown] %s\n"
     (P4tPrint.str_of_private_oid node_id);
-  (* DBG.printf outc "%s" "[visit_node_condition_pushdown] table before visit\n"; *)
-  (* BUG: sometimes MU functions delete actions from table. visit really should only be applied to tables. *)
-  let cid_decls =
+  let cid_decls, pcs =
     match Cid.exists cid_decls node_id with
     | true ->
       (match is_tbl cid_decls node_id with
-      | false -> cid_decls (* not a table? nothing changes. *)
-      | true -> visit_tbl_as_succ node_id cid_decls)
-    | false -> cid_decls
+      | false -> cid_decls, pcs (* not a table? nothing changes. *)
+      | true -> visit_tbl_as_succ idom node_id cid_decls pcs)
+    | false -> cid_decls, pcs
   in
-  (* 	DBG.printf outc "%s" "[visit_node_condition_pushdown] table after visit\n";
-	DBG.printf outc "%s" (p4str_from_tid cid_decls node_id);
-	DBG.printf outc "%s" "\n-------\n";
- *)
-  cid_decls
+  cid_decls, pcs
 ;;
 
 (* replace tid with its successor tables in acn_id. acn_id is a predecessor action of tid.*)
@@ -227,11 +219,14 @@ let acn_with_activate_next tid_flags cid_decls (_, dec) =
 (* basic 2-pass algorithm to eliminate branch nodes:
 pass 1: update each table node so that it checks the constraints of its predecessors in the graph. 
 pass 2: delete each table node whose actions all do nothing. *)
-let eliminate_branch_nodes cid_decls g =
+let eliminate_branch_nodes cid_decls g root_tid =
   (*  We must traverse the dag topologically -- 
 		before you can operate on a node, 
-		you must operate on all the node's predecessors. 
-	*)
+		you must operate on all the node's predecessors. *)
+  (* compute dominator tree *)
+  let idom = Dom.compute_idom g root_tid in 
+  let pcs = MU.PathConstraints.empty in 
+
   DBG.printf
     outc
     "[eliminate_branch_nodes] adding full constraints to all tables \n";
@@ -245,7 +240,7 @@ let eliminate_branch_nodes cid_decls g =
     |> print_string
     |> Format.print_flush;
 
-  let cid_decls = Topo.fold visit_node_condition_pushdown g cid_decls in
+  let cid_decls, _ = Topo.fold (visit_node_condition_pushdown idom) g (cid_decls, pcs) in
   print_endline " done.";
   !dprint_endline "----cid decls after pushing down conditions----";
   !dprint_endline (DebugPrint.str_of_cid_decls cid_decls);
@@ -261,12 +256,14 @@ let eliminate_branch_nodes cid_decls g =
   cid_decls, new_g
 ;;
 
+
+
 let do_passes df_prog =
   let cid_decls, root_tid, g = df_prog in
   LLValidate.validate_cid_decls cid_decls "BranchElimination.do_passes@start";
   print_endline ("----starting BranchElimination pass----");
   (* log_prog cid_decls; *)
-  let new_cid_decls, g = eliminate_branch_nodes cid_decls g in
+  let new_cid_decls, g = eliminate_branch_nodes cid_decls g root_tid in
   (* log_prog new_cid_decls; *)
   let new_prog = new_cid_decls, root_tid, g in
   LLValidate.validate_cid_decls cid_decls "BranchElimination.do_passes@end";
