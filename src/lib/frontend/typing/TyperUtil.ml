@@ -34,6 +34,7 @@ type kind =
   | KHandler
   | KConstr
   | KUserTy
+  | KModule
 
 module KindSet = Set.Make (struct
   type t = kind * cid
@@ -53,6 +54,7 @@ type env =
   ; constructors : func_ty CidMap.t
   ; user_tys : (ty * sizes) CidMap.t
   ; record_labels : ty StringMap.t (* Maps labels to the gty with that label *)
+  ; defined_modules : interface CidMap.t
   ; (* Track the things we've defined in the current module body *)
     module_defs : KindSet.t
   ; (* Information we use while typechecking function/handler bodies *)
@@ -80,6 +82,7 @@ let empty_env =
   ; record_labels = StringMap.empty
   ; module_defs = KindSet.empty
   ; in_global_def = false
+  ; defined_modules = CidMap.empty
   }
 ;;
 

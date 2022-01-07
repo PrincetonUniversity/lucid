@@ -216,6 +216,7 @@ and d =
   | DUserTy of id * sizes * ty
   | DConstr of id * ty * params * exp
   | DModule of id * interface * decls
+  | DModuleAlias of id * exp * cid * cid
 
 (* name, return type, args & body *)
 and decl =
@@ -370,6 +371,10 @@ let dconstr_sp id ty params exp span =
 ;;
 
 let module_sp id intf ds span = decl_sp (DModule (id, intf, ds)) span
+
+let module_alias_sp id1 e cid1 cid2 span =
+  decl_sp (DModuleAlias (id1, e, cid1, cid2)) span
+;;
 
 (* let func_sp id p body span =
    decl_sp (DProc (id, (p,body))) span *)

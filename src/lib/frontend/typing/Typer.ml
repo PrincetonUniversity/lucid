@@ -1031,6 +1031,24 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
       let ds = List.rev ds in
       let env = add_module_defs id intf env m_env in
       env, effect_count, DModule (id, intf, ds)
+    | DModuleAlias (id1, e, cid1, cid2) ->
+      let env, inf_e, inf_ety = infer_exp env e |> textract in
+      unify_raw_ty e.espan inf_ety.raw_ty TBool;
+      let intf =
+        match
+          ( CidMap.find_opt cid1 env.defined_modules
+          , CidMap.find_opt cid2 env.defined_modules )
+        with
+        | None, _ -> error_sp d.dspan @@ "Unbound module " ^ cid_to_string cid1
+        | _, None -> error_sp d.dspan @@ "Unbound module " ^ cid_to_string cid2
+        | Some intf1, Some intf2 ->
+          if equiv_intf intf1 intf2
+          then intf1
+          else error_sp d.dspan @@ "Unbound module " ^ cid_to_string cid1
+      in
+      ( add_interface id1 env intf
+      , effect_count
+      , DModuleAlias (id1, inf_e, cid1, cid2) )
   in
   let new_d = { d with d = new_d } in
   Wellformed.check_qvars new_d;

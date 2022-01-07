@@ -232,6 +232,73 @@ and equiv_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
   && equiv_raw_ty ~ignore_effects ~qvars_wild ty1.raw_ty ty2.raw_ty
 ;;
 
+let equiv_cspecs params1 params2 cspecs1 cspecs2 =
+  let lookup_cid params cid =
+    match cid with
+    | Id id ->
+      (try
+         Some (fst @@ List.findi (fun _ (pid, _) -> Id.equal id pid) params)
+       with
+      | Not_found -> None)
+    | _ -> None
+  in
+  let compare_cids cid1 cid2 =
+    match lookup_cid params1 cid1, lookup_cid params2 cid2 with
+    | None, None -> Cid.equal cid1 cid2
+    | Some idx1, Some idx2 -> idx1 = idx2
+    | _ -> false
+  in
+  equiv_lists
+    (fun spec1 spec2 ->
+      match spec1, spec2 with
+      | CSpec lst1, CSpec lst2 ->
+        equiv_lists
+          (fun (cid1, cmp1) (cid2, cmp2) ->
+            cmp1 = cmp2 && compare_cids cid1 cid2)
+          lst1
+          lst2
+      | CEnd cid1, CEnd cid2 -> compare_cids cid1 cid2
+      | _ -> false)
+    cspecs1
+    cspecs2
+;;
+
+let rec equiv_intf intf1 intf2 = equiv_lists equiv_ispec intf1 intf2
+
+and equiv_ispec spec1 spec2 =
+  match spec1.ispec, spec2.ispec with
+  | InSize id1, InSize id2 -> Id.equal id1 id2
+  | InVar (id1, ty1), InVar (id2, ty2) -> Id.equal id1 id2 && equiv_ty ty1 ty2
+  | InTy (id1, sizes1, tyo1, b1), InTy (id2, sizes2, tyo2, b2) ->
+    Id.equal id1 id2
+    && equiv_lists equiv_size sizes1 sizes2
+    && b1 = b2
+    && Option.eq ~eq:equiv_ty tyo1 tyo2
+  | InConstr (id1, ty1, params1), InConstr (id2, ty2, params2) ->
+    Id.equal id1 id2
+    && equiv_ty ty1 ty2
+    && equiv_lists (fun (_, ty1) (_, ty2) -> equiv_ty ty1 ty2) params1 params2
+  | InFun (id1, ty1, cspecs1, params1), InFun (id2, ty2, cspecs2, params2) ->
+    Id.equal id1 id2
+    && equiv_ty ty1 ty2
+    && equiv_lists (fun (_, ty1) (_, ty2) -> equiv_ty ty1 ty2) params1 params2
+    && equiv_cspecs params1 params2 cspecs1 cspecs2
+  | InEvent (id1, cspecs1, params1), InEvent (id2, cspecs2, params2) ->
+    Id.equal id1 id2
+    && equiv_lists (fun (_, ty1) (_, ty2) -> equiv_ty ty1 ty2) params1 params2
+    && equiv_cspecs params1 params2 cspecs1 cspecs2
+  | InModule (id1, intf1), InModule (id2, intf2) ->
+    Id.equal id1 id2 && equiv_intf intf1 intf2
+  | ( ( InSize _
+      | InVar _
+      | InTy _
+      | InConstr _
+      | InFun _
+      | InEvent _
+      | InModule _ )
+    , _ ) -> false
+;;
+
 let max_effect e1 e2 =
   let base1, lst1 = unwrap_effect e1 in
   let base2, lst2 = unwrap_effect e2 in

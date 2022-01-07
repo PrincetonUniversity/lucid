@@ -54,7 +54,8 @@ let add_all_module_defs m_id old_env m_env =
         | KUserTy ->
           (* Non-abstract user types have already been replaced,
              so don't have to do anything here *)
-          acc)
+          acc
+        | KModule -> (* This is only used in interfaces at the moment *) acc)
       m_env.module_defs
       old_env
   in
@@ -300,6 +301,11 @@ let rec add_interface m_id old_env interface =
   let prefix_params env params =
     prefixer#visit_params (prefix_c, env.module_defs) params
   in
+  let old_env =
+    { old_env with
+      defined_modules = CidMap.add (Id m_id) interface old_env.defined_modules
+    }
+  in
   let new_env =
     List.fold_left
       (fun env spec ->
@@ -393,7 +399,19 @@ let rec add_interface m_id old_env interface =
             { env with handlers; consts } |> def KConst id |> def KHandler id
           in
           env
-        | InModule (id, intf) -> add_interface id env intf)
+        | InModule (id, intf) ->
+          let env = add_interface id env intf |> def KModule id in
+          { env with
+            defined_modules =
+              KindSet.fold
+                (fun (k, cid) acc ->
+                  if k = KModule && Id.equal id (Cid.first_id cid)
+                  then
+                    CidMap.update cid (prefix_c cid) (CidMap.find cid acc) acc
+                  else acc)
+                env.module_defs
+                env.defined_modules
+          })
       { old_env with module_defs = KindSet.empty }
       interface
   in
@@ -401,9 +419,8 @@ let rec add_interface m_id old_env interface =
     module_defs =
       KindSet.union old_env.module_defs
       @@ KindSet.map (fun (k, id) -> k, prefix_c id) new_env.module_defs
-      (* FIXME: Not sure why this is here; it seems wrong *)
-      (*; record_labels = StringMap.map (safe_prefix KGlobalTy) new_env.record_labels *)
   }
+  |> def KModule m_id
 ;;
 
 (* Ensure the interface doesn't reference any hidden information, e.g.

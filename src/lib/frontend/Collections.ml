@@ -1,3 +1,4 @@
+open Batteries
 module IdMap = Map.Make (Id)
 
 let idmap_to_string f map =
