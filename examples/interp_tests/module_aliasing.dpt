@@ -1,0 +1,66 @@
+include "../library/BloomFilterTimeout.dpt"
+
+/* This file demonstrates how to use Lucid's module aliasing feature. It
+   requires you to have two modules which both have identical interfaces declared,
+   and lets you select one of the two based on a symbolic (or constant) boolean.
+
+   In this example, we choose between a regular Bloom Filter and a Bloom Filter
+   with a timeout. Because they don't have the same interface, we first create
+   a wrapper module BF around the BloomFilter module, which adjusts things so that
+   it matches the BloomFilterTimeout interface.
+   */
+
+module BF : {
+  global type t<<'key_sz, 'idx_sz, 'k>>;
+  constr t<<'key_sz, 'idx_sz, 'k>> create(int<<'idx_sz>> m, int['k] seeds, int timeout, int empty_time);
+
+  fun void add_to_filter(t<<'a, 'b, 'k>> filter, int<<'a>> key) [start <= filter; end filter];
+  fun bool in_filter(t<<'a, 'b, 'k>> filter, int<<'a>> key) [start <= filter; end filter];
+
+  event init(t<<'a, 'b, 'k>> filter);
+} {
+  type t<<'key_sz, 'idx_sz, 'k>> = BloomFilter.t<<'key_sz, 'idx_sz, 'k>>
+
+  // Ignore timeout and empty_time
+  constr t<<'a, 'b, 'c>> create(int<<'b>> m, int['k] seeds, int timeout, int empty_time) =
+    BloomFilter.create(m, seeds);
+
+  fun void add_to_filter(t<<'a, 'b, 'k>> filter, int<<'a>> key) {
+    BloomFilter.add_to_filter(filter, key);
+  }
+
+  fun bool in_filter(t<<'a, 'b, 'k>> filter, int<<'a>> key) {
+    return BloomFilter.in_filter(filter, key);
+  }
+
+  event init(t<<'a, 'b, 'k>> filter) {
+    // Do nothing
+    int x = 0;
+  }
+
+}
+
+symbolic bool b;
+
+module Filter = BF if b else BloomFilterTimeout;
+
+global Filter.t<<32, 2, 4>> bf1 = Filter.create(4, [0; 1; 2; 3], 2000, 10);
+
+exit event allowed(int x);
+exit event denied(int x);
+
+entry event in(bool add, int x) {
+  if (add) {
+    Filter.add_to_filter(bf1, x);
+  } else {
+    if (Filter.in_filter(bf1, x)) {
+      generate allowed(x);
+    } else {
+      generate denied(x);
+    }
+  }
+}
+
+event init_all() {
+  generate BF.init(bf1);
+}

@@ -318,7 +318,7 @@ decl:
     | MODULE ID LBRACE decls RBRACE         { [module_sp (snd $2) [] $4 (Span.extend $1 $5)] }
     | MODULE ID COLON LBRACE interface RBRACE LBRACE decls RBRACE
                                             { [module_sp (snd $2) $5 $8 (Span.extend $1 $9)] }
-    | MODULE ID EQ cid IF exp ELSE cid      { [module_alias_sp (snd $2) $6 (snd $4) (snd $8) (Span.extend $1 (fst $8))] }
+    | MODULE ID ASSIGN cid IF exp ELSE cid SEMI { [module_alias_sp (snd $2) $6 (snd $4) (snd $8) (Span.extend $1 $9)] }
     | TYPE tyname_def ASSIGN ty             { [duty_sp (fst $2) (snd $2) $4 (Span.extend $1 $4.tspan)] }
     | CONSTR ty ID paramsdef ASSIGN exp SEMI { [dconstr_sp (snd $3) $2 $4 $6 (Span.extend $1 $7)] }
     | GLOBAL ty ID ASSIGN exp SEMI
