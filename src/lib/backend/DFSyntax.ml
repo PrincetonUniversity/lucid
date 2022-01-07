@@ -72,6 +72,7 @@ module Topo = Topological.Make (G)
 module DFS = Traverse.Dfs (G)
 module Dom = Dominator.Make(G)
 
+module PCheck = Path.Check(G)
 
 
 (******* graph building (from a dagProgram to a dag graph) *******)
