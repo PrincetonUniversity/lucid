@@ -144,9 +144,14 @@ and branch_to_string (ps, s) =
     (comma_sep pat_to_string ps)
     (stmt_to_string s)
 
+and lvalue_to_string = function
+  | LId i -> id_to_string i
+  (* | LIndex (l, i) -> lvalue_to_string l ^ wrap "[" "]" (size_to_string i) *)
+  | LProj (l, i) -> lvalue_to_string l ^ "." ^ i
+
 and stmt_to_string s =
   match s.s with
-  | SAssign (i, e) -> id_to_string i ^ " = " ^ exp_to_string e ^ ";"
+  | SAssign (lval, e) -> lvalue_to_string lval ^ " = " ^ exp_to_string e ^ ";"
   | SNoop -> ""
   | SGen (g, e) ->
     (match g with

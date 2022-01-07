@@ -1,7 +1,7 @@
 open Batteries
 open CoreSyntax
 open Collections
-
+(*
 type level = int
 
 type var_binding =
@@ -397,7 +397,7 @@ let interp_prog ds = ds
    need to keep mutations which might or might not get overwritten later.
    For example, the following program prints 8 when in(1,2) is called, but should
    print 10:
-   
+
    event in(int<<8>> i, int<<8>> j) {
      int<<'a>> k = 2;
      if (j == 2) { k = 3; }
@@ -417,4 +417,6 @@ let interp_prog ds = ds
       let env', d = interp_decl !env d in
       env := env';
       d)
-    ds *)
+    ds *) *)
+
+let interp_prog ds = ds

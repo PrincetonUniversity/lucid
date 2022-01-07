@@ -113,13 +113,6 @@ let rhs_of_stmt s =
   | _ -> None
 ;;
 
-let id_of_stmt s =
-  match s with
-  | SAssign (id, _) -> Some id
-  | SLocal (id, _, _) -> Some id
-  | _ -> None
-;;
-
 (* destructors and filters *)
 let unpack_eop exp =
   match exp with
@@ -192,7 +185,7 @@ let is_atomic exp =
   | EHash (_, args) | ECall (_, args) ->
     CL.map is_immediate args |> CL.for_all identity
   (* a flood expression is atomic if its argument is an immediate *)
-  | EFlood(arg) -> is_immediate arg 
+  | EFlood arg -> is_immediate arg
 ;;
 
 let is_bool_non_immediate exp = is_bool exp && not (is_immediate exp)

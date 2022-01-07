@@ -103,6 +103,12 @@ let translate_gen_type = function
   | S.GPort e -> C.GPort (translate_exp e)
 ;;
 
+let rec translate_lvalue (lval : S.lvalue) : C.lvalue =
+  match lval with
+  | S.LId id -> C.LId id
+  | S.LProj (lval, label) -> C.LProj (translate_lvalue lval, label)
+;;
+
 let rec translate_statement (s : S.statement) : C.statement =
   (* (match s.s with
   | SSeq _ | SNoop -> ()
@@ -115,7 +121,7 @@ let rec translate_statement (s : S.statement) : C.statement =
     | S.SNoop -> C.SNoop
     | S.SUnit e -> C.SUnit (translate_exp e)
     | S.SLocal (id, ty, e) -> C.SLocal (id, translate_ty ty, translate_exp e)
-    | S.SAssign (id, e) -> C.SAssign (id, translate_exp e)
+    | S.SAssign (lval, e) -> C.SAssign (translate_lvalue lval, translate_exp e)
     | S.SPrintf (str, es) -> C.SPrintf (str, List.map translate_exp es)
     | S.SIf (e, s1, s2) ->
       C.SIf (translate_exp e, translate_statement s1, translate_statement s2)
