@@ -86,6 +86,7 @@ let add_definitions prefix env ds =
         }
       in
       env
+    | DModuleAlias _ -> failwith "Should be eliminated before this"
   in
   List.fold_left (aux prefix) env ds
 ;;
@@ -136,6 +137,7 @@ let rec replace_module env m_id ds =
           | DModule (id, _, ds) ->
             let _, ds = replace_module env id ds in
             replace_module env m_id ds
+          | DModuleAlias _ -> failwith "Should be eliminated before this"
         in
         env, d :: ds)
       (env, [])

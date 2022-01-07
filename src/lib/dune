@@ -49,6 +49,7 @@
    vectorElimination
    eStmtElimination
    symbolicElimination
+   moduleAliasing
    replaceUserTys
    partialInterpretation
    constInlining
