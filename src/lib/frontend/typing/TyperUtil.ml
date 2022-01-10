@@ -128,13 +128,13 @@ let default_env =
         let vars =
           List.fold_left
             (fun acc (r : InterpState.State.global_fun) ->
-              IdMap.add (Cid.first_id r.cid) r.ty acc)
+              IdMap.add (Cid.last_id r.cid) r.ty acc)
             IdMap.empty
             defs
         in
         let constructors =
           List.fold_left
-            (fun acc (cid, fty) -> IdMap.add (Cid.first_id cid) fty acc)
+            (fun acc (cid, fty) -> IdMap.add (Cid.last_id cid) fty acc)
             IdMap.empty
             constructors
         in
@@ -174,15 +174,21 @@ let lookup_any span lookup env cid =
     List.find_map_opt (lookup id) (env.current_modul :: env.parents)
   | Compound (id, cid) ->
     (* Walk up until we find a module with the appropriate name *)
-    let starting_submodule =
+    let starting_module =
       List.find_map_opt
         (fun m -> IdMap.find_opt id m.submodules)
         (env.current_modul :: env.parents)
     in
-    if starting_submodule = None
-    then
-      Console.error_position span @@ "Unkown module " ^ Printing.id_to_string id;
+    let starting_module =
+      match starting_module with
+      | Some x -> x
+      | None ->
+        Console.error_position span
+        @@ "Unkown module "
+        ^ Printing.id_to_string id
+    in
     (* Now walk down through that module's submodules until we hit the end of the cid *)
+    let final_id, prefix = Cid.to_ids_prefix cid in
     let _, final_modul =
       List.fold_left
         (fun (path, m) id ->
@@ -194,11 +200,11 @@ let lookup_any span lookup env cid =
             ^ BatString.concat
                 "."
                 (List.rev_map Printing.id_to_string (id :: path)))
-        ([id], env.current_modul)
-        (Cid.to_ids cid)
+        ([id], starting_module)
+        prefix
     in
     (* Finally, do the appropriate lookup in the module we ended up at *)
-    lookup id final_modul
+    lookup final_id final_modul
 ;;
 
 let size_exists span env cid =

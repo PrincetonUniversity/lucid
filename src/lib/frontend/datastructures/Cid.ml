@@ -74,6 +74,14 @@ let rec to_ids d =
   | Compound (id, cid) -> id :: to_ids cid
 ;;
 
+let rec to_ids_prefix d =
+  match d with
+  | Id id -> id, []
+  | Compound (id, cid) ->
+    let base, rest = to_ids_prefix cid in
+    base, id :: rest
+;;
+
 let rec first_id d =
   match d with
   | Id id -> id
