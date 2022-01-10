@@ -504,7 +504,7 @@ let rec modul_of_interface span env interface =
 ;;
 
 (* Replace TNames with their definitions, according to the map provided in env *)
-let subst_interface_tys target sizes ty modul =
+(* let subst_interface_tys target sizes ty modul =
   let v =
     object
       inherit [_] s_map as super
@@ -536,9 +536,8 @@ let subst_interface_tys target sizes ty modul =
     }
   in
   subst_modul modul
-;;
+;; *)
 
-(* FIXME: Do we need to pass any optional args to equiv_ty? *)
 let rec equiv_modul m1 m2 =
   let cmp_user_tys (szs1, ty1) (szs2, ty2) =
     let szs1, ty1 =
@@ -559,32 +558,84 @@ let rec equiv_modul m1 m2 =
   && IdMap.equal equiv_modul m1.submodules m2.submodules
 ;;
 
-(* Validate that the module matches the interface, and return the interface modul
-   to be added to the environment *)
-let add_interface span env intf modul =
-  let intf_modul = modul_of_interface span env intf in
-  let subst_tys id (_, ty) acc =
-    match ty.raw_ty with
-    | TName (Id id', _, _) when Id.equal id id' ->
-      (* Abstract type in interface, replace it with its definition *)
-      let sizes', ty' =
-        match IdMap.find_opt id modul.user_tys with
-        | Some x -> x
-        | None ->
-          Console.error_position span
-          @@ "Type "
-          ^ Printing.id_to_string id
-          ^ " is declared in interface but not in module body."
-      in
-      subst_interface_tys id sizes' ty' acc
-    | _ -> acc
-  in
-  let subst_modul = IdMap.fold subst_tys intf_modul.user_tys intf_modul in
-  if not (equiv_modul subst_modul modul)
+let rec compatible_interface span intf_modul modul =
+  let open Printing in
+  let diff = IdSet.diff intf_modul.sizes modul.sizes in
+  if not (IdSet.is_empty diff)
   then
-    Console.error_position
-      span
-      "Module interface does not match declarations in body";
-  (* Return the un-substed version *)
-  intf_modul
+    error_sp span
+    @@ "Size "
+    ^ id_to_string (IdSet.choose diff)
+    ^ " appears in interface but not module body";
+  IdMap.iter
+    (fun id ty ->
+      match IdMap.find_opt id modul.vars with
+      | Some ty' when equiv_ty ty ty' -> ()
+      | Some ty' ->
+        error_sp span
+        @@ Printf.sprintf
+             "%s has type %s in interface but type %s in module body"
+             (id_to_string id)
+             (ty_to_string ty)
+             (ty_to_string ty')
+      | None ->
+        error_sp span
+        @@ id_to_string id
+        ^ " is declared in module interface but does not appear in the body")
+    intf_modul.vars;
+  IdMap.iter
+    (fun id fty ->
+      match IdMap.find_opt id modul.constructors with
+      | Some fty' when equiv_raw_ty (TFun fty) (TFun fty') -> ()
+      | Some fty' ->
+        error_sp span
+        @@ Printf.sprintf
+             "Constructor %s has type %s in interface but type %s in module \
+              body"
+             (id_to_string id)
+             (func_to_string fty)
+             (func_to_string fty')
+      | None ->
+        error_sp span
+        @@ "Constructor "
+        ^ id_to_string id
+        ^ " is declared in module interface but does not appear in the body")
+    intf_modul.constructors;
+  IdMap.iter
+    (fun id (sizes, ty) ->
+      match IdMap.find_opt id modul.user_tys with
+      | None ->
+        error_sp span
+        @@ "Type "
+        ^ id_to_string id
+        ^ " is declared in module interface but does not appear in the body"
+      | Some (sizes', ty') ->
+        if List.length sizes <> List.length sizes'
+        then
+          error_sp span
+          @@ Printf.sprintf
+               "Type %s has %d size parameters in interface but %d in body"
+               (id_to_string id)
+               (List.length sizes)
+               (List.length sizes');
+        (match ty.raw_ty with
+        | TName (Id id', _, _) when Id.equal id id' -> ()
+        | _ ->
+          if not (equiv_ty ty ty')
+          then
+            error_sp span
+            @@ Printf.sprintf
+                 "Type %s has different definition in interface than in body"
+                 (id_to_string id)))
+    intf_modul.user_tys;
+  IdMap.iter
+    (fun id m ->
+      match IdMap.find_opt id modul.submodules with
+      | Some m' -> compatible_interface span m m'
+      | None ->
+        error_sp span
+        @@ "Module "
+        ^ id_to_string id
+        ^ " is declared in module interface but does not appear in the body")
+    intf_modul.submodules
 ;;
