@@ -176,6 +176,7 @@ let normalizer () =
 ;;
 
 let normalize_tfun func_ty = (normalizer ())#visit_func_ty () func_ty
+let normalize_ty ty = (normalizer ())#visit_ty () ty
 
 let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
   let equiv_size = equiv_size ~qvars_wild in

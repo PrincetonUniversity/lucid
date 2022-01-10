@@ -27,17 +27,15 @@ let error_sp sp msg = Console.error_position sp msg
 let strip_links ty = { ty with raw_ty = TyTQVar.strip_links ty.raw_ty }
 
 type modul =
-  { name : cid option
-  ; sizes : IdSet.t
+  { sizes : IdSet.t
   ; vars : ty IdMap.t
   ; user_tys : (sizes * ty) IdMap.t
   ; constructors : func_ty IdMap.t
   ; submodules : modul IdMap.t
   }
 
-let empty_modul name =
-  { name
-  ; sizes = IdSet.empty
+let empty_modul =
+  { sizes = IdSet.empty
   ; vars = IdMap.empty
   ; user_tys = IdMap.empty
   ; constructors = IdMap.empty
@@ -84,7 +82,7 @@ let empty_env =
   ; returned = false
   ; record_labels = StringMap.empty
   ; in_global_def = false
-  ; current_modul = empty_modul None
+  ; current_modul = empty_modul
   }
 ;;
 
@@ -111,12 +109,12 @@ let default_env =
             IdMap.empty
             tys
         in
-        { (empty_modul (Some (Id id))) with vars; constructors; user_tys })
+        id, { empty_modul with vars; constructors; user_tys })
       Builtins.builtin_modules
   in
   let submodules =
     List.fold_left
-      (fun acc modul -> IdMap.add (Cid.to_id (Option.get modul.name)) modul acc)
+      (fun acc (id, modul) -> IdMap.add id modul acc)
       IdMap.empty
       modules
   in
@@ -438,4 +436,155 @@ let drop_indexes target eff =
   let base, lst = unwrap_effect eff in
   let lst = aux lst in
   wrap_effect base lst
+;;
+
+(* TODO: If we still have TyperModules, this might fit better there *)
+let rec modul_of_interface span env interface =
+  let aux acc intf =
+    match intf.ispec with
+    | InSize id -> { acc with sizes = IdSet.add id acc.sizes }
+    | InVar (id, ty) -> { acc with vars = IdMap.add id ty acc.vars }
+    | InTy (id, sizes, tyo, b) ->
+      let ty =
+        match tyo with
+        | Some ty ->
+          ty
+          (* FIXME: We need to ensure these TNames are always unique. Maybe. *)
+        | None -> ty @@ TName (Id id, sizes, b)
+      in
+      { acc with user_tys = IdMap.add id (sizes, ty) acc.user_tys }
+    | InConstr (id, ty, params) ->
+      let start_eff = fresh_effect () in
+      let fty =
+        { arg_tys = List.map snd params
+        ; ret_ty = ty
+        ; start_eff
+        ; end_eff = start_eff
+        ; constraints = ref []
+        }
+        |> normalize_tfun
+      in
+      { acc with constructors = IdMap.add id fty acc.constructors }
+    | InFun (id, ret_ty, constrs, params) ->
+      let start_eff = fresh_effect () in
+      let constrs, end_eff =
+        spec_to_constraints env span start_eff params constrs
+      in
+      let end_eff = Option.default start_eff end_eff in
+      let fty =
+        { arg_tys = List.map snd params
+        ; ret_ty
+        ; start_eff
+        ; end_eff
+        ; constraints = ref constrs
+        }
+        |> normalize_tfun
+      in
+      { acc with vars = IdMap.add id (ty @@ TFun fty) acc.vars }
+    | InEvent (id, constrs, params) ->
+      let start_eff = fresh_effect () in
+      let constrs, _ = spec_to_constraints env span start_eff params constrs in
+      let fty =
+        { arg_tys = List.map snd params
+        ; ret_ty = ty TEvent
+        ; start_eff
+        ; end_eff = start_eff
+        ; constraints = ref constrs
+        }
+        |> normalize_tfun
+      in
+      { acc with vars = IdMap.add id (ty @@ TFun fty) acc.vars }
+    | InModule (id, interface) ->
+      { acc with
+        submodules =
+          IdMap.add id (modul_of_interface span env interface) acc.submodules
+      }
+  in
+  List.fold_left aux empty_modul interface
+;;
+
+(* Replace TNames with their definitions, according to the map provided in env *)
+let subst_interface_tys target sizes ty modul =
+  let v =
+    object
+      inherit [_] s_map as super
+
+      method! visit_ty (target, sizes', ty') ty =
+        match ty.raw_ty with
+        | TName (Id id, sizes, _) when Id.equal id target ->
+          let replaced_ty =
+            ReplaceUserTys.subst_sizes
+              ty.tspan
+              (Id id)
+              ty'.raw_ty
+              (ReplaceUserTys.extract_ids ty.tspan sizes')
+              sizes
+          in
+          { ty with raw_ty = replaced_ty; teffect = ty'.teffect }
+        | _ -> super#visit_ty (target, sizes', ty') ty
+    end
+  in
+  let env = target, sizes, ty in
+  let rec subst_modul modul =
+    { modul with
+      vars = IdMap.map (v#visit_ty env) modul.vars
+    ; user_tys =
+        (* FIXME: The handling of sizes here might be wrong *)
+        IdMap.map (fun (_, ty) -> sizes, v#visit_ty env ty) modul.user_tys
+    ; constructors = IdMap.map (v#visit_func_ty env) modul.constructors
+    ; submodules = IdMap.map subst_modul modul.submodules
+    }
+  in
+  subst_modul modul
+;;
+
+(* FIXME: Do we need to pass any optional args to equiv_ty? *)
+let rec equiv_modul m1 m2 =
+  let cmp_user_tys (szs1, ty1) (szs2, ty2) =
+    let szs1, ty1 =
+      let norm = normalizer () in
+      List.map (norm#visit_size ()) szs1, norm#visit_ty () ty1
+    in
+    let szs2, ty2 =
+      let norm = normalizer () in
+      List.map (norm#visit_size ()) szs2, norm#visit_ty () ty2
+    in
+    List.length szs1 = List.length szs2 && equiv_ty ty1 ty2
+  in
+  let cmp_ftys fty1 fty2 = equiv_raw_ty (TFun fty1) (TFun fty2) in
+  IdSet.equal m1.sizes m2.sizes
+  && IdMap.equal equiv_ty m1.vars m2.vars
+  && IdMap.equal cmp_user_tys m1.user_tys m2.user_tys
+  && IdMap.equal cmp_ftys m1.constructors m2.constructors
+  && IdMap.equal equiv_modul m1.submodules m2.submodules
+;;
+
+(* Validate that the module matches the interface, and return the interface modul
+   to be added to the environment *)
+let add_interface span env intf modul =
+  let intf_modul = modul_of_interface span env intf in
+  let subst_tys id (_, ty) acc =
+    match ty.raw_ty with
+    | TName (Id id', _, _) when Id.equal id id' ->
+      (* Abstract type in interface, replace it with its definition *)
+      let sizes', ty' =
+        match IdMap.find_opt id modul.user_tys with
+        | Some x -> x
+        | None ->
+          Console.error_position span
+          @@ "Type "
+          ^ Printing.id_to_string id
+          ^ " is declared in interface but not in module body."
+      in
+      subst_interface_tys id sizes' ty' acc
+    | _ -> acc
+  in
+  let subst_modul = IdMap.fold subst_tys intf_modul.user_tys intf_modul in
+  if not (equiv_modul subst_modul modul)
+  then
+    Console.error_position
+      span
+      "Module interface does not match declarations in body";
+  (* Return the un-substed version *)
+  intf_modul
 ;;
