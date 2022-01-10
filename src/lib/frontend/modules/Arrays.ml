@@ -201,3 +201,11 @@ let defs : State.global_fun list =
   ; { cid = array_setm_cid; body = array_setm_fun; ty = array_setm_ty }
   ; { cid = array_update_cid; body = array_update_fun; ty = array_update_ty } ]
 ;;
+
+let signature =
+  let sz = IVar (QVar (Id.fresh "sz")) in
+  ( module_id
+  , [Cid.last_id t_id, [sz], TName (t_id, [sz], true) |> ty]
+  , defs
+  , constructors )
+;;

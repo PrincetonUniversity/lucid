@@ -26,37 +26,46 @@ let fresh_type ?(name = "a") () =
 let error_sp sp msg = Console.error_position sp msg
 let strip_links ty = { ty with raw_ty = TyTQVar.strip_links ty.raw_ty }
 
-(* Not really kinds, but rather everything we have a different map for in the
-   environment *)
-type kind =
-  | KSize
-  | KConst
-  | KHandler
-  | KConstr
-  | KUserTy
+type modul =
+  { name : cid option
+  ; sizes : IdSet.t
+  ; vars : ty IdMap.t
+  ; user_tys : (sizes * ty) IdMap.t
+  ; constructors : func_ty IdMap.t
+  ; submodules : modul IdMap.t
+  }
 
-module KindSet = Set.Make (struct
-  type t = kind * cid
+let empty_modul name =
+  { name
+  ; sizes = IdSet.empty
+  ; vars = IdMap.empty
+  ; user_tys = IdMap.empty
+  ; constructors = IdMap.empty
+  ; submodules = IdMap.empty
+  }
+;;
 
-  let compare = Pervasives.compare
-end)
+(* Not sure which set of functions will end up being the most useful *)
+(* let modul_sizes m = m.sizes
+let modul_vars m = m.vars
+let modul_tys m = m.user_tys
+let modul_constrs m = m.constructors *)
+
+let lookup_modul_size id m = IdSet.find_opt id m.sizes
+let lookup_modul_var id m = IdMap.find_opt id m.vars
+let lookup_modul_ty id m = IdMap.find_opt id m.user_tys
+let lookup_modul_constr id m = IdMap.find_opt id m.constructors
 
 type env =
-  { (* Maps for all the different kinds of variables we have in a program *)
-    sizes : CidSet.t
-  ; locals : ty CidMap.t
-  ; consts : ty CidMap.t (* Constant variables *)
+  { (*** Global information ***)
+    current_modul : modul
+  ; parents : modul list
+  ; record_labels : ty StringMap.t (* Maps labels to the gty with that label *)
+  ; (*** Information we use while typechecking function/handler bodies ***)
+    locals : ty IdMap.t
+  ; current_effect : effect
   ; (* Maps vector index vars to their max size and an alpha-renamed cid *)
     indices : (id * size) IdMap.t
-  ; (* Maps for special "variables" like handlers and constructors *)
-    handlers : (constr list * params) CidMap.t
-  ; constructors : func_ty CidMap.t
-  ; user_tys : (ty * sizes) CidMap.t
-  ; record_labels : ty StringMap.t (* Maps labels to the gty with that label *)
-  ; (* Track the things we've defined in the current module body *)
-    module_defs : KindSet.t
-  ; (* Information we use while typechecking function/handler bodies *)
-    current_effect : effect
   ; constraints : constr list
   ; ret_ty : ty option (* Some iff we're in a function body *)
   ; ret_effects : effect list (* All the effects we `return`ed at *)
@@ -65,63 +74,140 @@ type env =
   }
 
 let empty_env =
-  { sizes = CidSet.empty
-  ; handlers = CidMap.empty
-  ; locals = CidMap.empty
-  ; consts = CidMap.empty
+  { locals = IdMap.empty
+  ; parents = []
   ; indices = IdMap.empty
   ; current_effect = FZero
   ; constraints = []
   ; ret_ty = None
   ; ret_effects = []
   ; returned = false
-  ; constructors = CidMap.empty
-  ; user_tys = CidMap.empty
   ; record_labels = StringMap.empty
-  ; module_defs = KindSet.empty
   ; in_global_def = false
+  ; current_modul = empty_modul None
   }
 ;;
 
 let default_env =
-  let builtins =
-    List.fold_left
-      (fun acc (r : InterpState.State.global_fun) -> CidMap.add r.cid r.ty acc)
-      CidMap.empty
-      Builtins.builtin_defs
+  let modules =
+    List.map
+      (fun (id, tys, defs, constructors) ->
+        let vars =
+          List.fold_left
+            (fun acc (r : InterpState.State.global_fun) ->
+              IdMap.add (Cid.first_id r.cid) r.ty acc)
+            IdMap.empty
+            defs
+        in
+        let constructors =
+          List.fold_left
+            (fun acc (cid, fty) -> IdMap.add (Cid.first_id cid) fty acc)
+            IdMap.empty
+            constructors
+        in
+        let user_tys =
+          List.fold_left
+            (fun acc (tid, sizes, ty) -> IdMap.add tid (sizes, ty) acc)
+            IdMap.empty
+            tys
+        in
+        { (empty_modul (Some (Id id))) with vars; constructors; user_tys })
+      Builtins.builtin_modules
   in
-  let consts =
+  let submodules =
     List.fold_left
-      (fun acc (id, ty) -> CidMap.add (Id id) ty acc)
-      builtins
+      (fun acc modul -> IdMap.add (Cid.to_id (Option.get modul.name)) modul acc)
+      IdMap.empty
+      modules
+  in
+  let global_vars =
+    List.fold_left
+      (fun acc (id, ty) -> IdMap.add id ty acc)
+      IdMap.empty
       Builtins.builtin_vars
   in
-  let constructors =
-    List.fold_left
-      (fun acc (cid, ty) -> CidMap.add cid ty acc)
-      CidMap.empty
-      (Arrays.constructors @ Counters.constructors)
+  let current_modul =
+    { empty_env.current_modul with submodules; vars = global_vars }
   in
-  { empty_env with consts; constructors }
+  { empty_env with current_modul }
+;;
+
+(* Helper function, you probably don't want to call this directly. We expect
+   f to be one of the "lookup_modul_xxx" functions from above. *)
+let lookup_any span lookup env cid =
+  match cid with
+  | Id id ->
+    (* Walk up through parents, checking at each step *)
+    List.find_map_opt (lookup id) (env.current_modul :: env.parents)
+  | Compound (id, cid) ->
+    (* Walk up until we find a module with the appropriate name *)
+    let starting_submodule =
+      List.find_map_opt
+        (fun m -> IdMap.find_opt id m.submodules)
+        (env.current_modul :: env.parents)
+    in
+    if starting_submodule = None
+    then
+      Console.error_position span @@ "Unkown module " ^ Printing.id_to_string id;
+    (* Now walk down through that module's submodules until we hit the end of the cid *)
+    let _, final_modul =
+      List.fold_left
+        (fun (path, m) id ->
+          match IdMap.find_opt id m.submodules with
+          | Some m -> id :: path, m
+          | None ->
+            Console.error_position span
+            @@ "Unkown module "
+            ^ BatString.concat
+                "."
+                (List.rev_map Printing.id_to_string (id :: path)))
+        ([id], env.current_modul)
+        (Cid.to_ids cid)
+    in
+    (* Finally, do the appropriate lookup in the module we ended up at *)
+    lookup id final_modul
+;;
+
+let size_exists span env cid =
+  match lookup_any span lookup_modul_size env cid with
+  | None -> false
+  | _ -> true
+;;
+
+let lookup_ty span env cid =
+  match lookup_any span lookup_modul_ty env cid with
+  | Some x -> x
+  | None ->
+    Console.error_position span @@ "Unknown type " ^ Printing.cid_to_string cid
 ;;
 
 let lookup_var span env cid =
-  match CidMap.find_opt cid env.locals with
+  let local_val =
+    match cid with
+    | Id id -> IdMap.find_opt id env.locals
+    | _ -> None
+  in
+  match local_val with
   | Some t -> t
   | None ->
-    (match CidMap.find_opt cid env.consts with
+    let lookup_fun id m =
+      match lookup_modul_var id m with
+      | Some t -> Some t
+      | None ->
+        (match lookup_modul_constr id m with
+        | None -> None
+        | Some t ->
+          if env.in_global_def || not (is_global t.ret_ty)
+          then Some (ty (TFun t))
+          else
+            error_sp
+              span
+              "Cannot call global constructor except in global definitions or \
+               other constructors")
+    in
+    (match lookup_any span lookup_fun env cid with
     | Some t -> t
-    | None ->
-      (match CidMap.find_opt cid env.constructors with
-      | Some t ->
-        if env.in_global_def || not (is_global t.ret_ty)
-        then ty (TFun t)
-        else
-          error_sp
-            span
-            "Cannot call global constructor except in global definitions or \
-             other constructors"
-      | None -> error_sp span ("Unbound variable " ^ Cid.to_string cid)))
+    | None -> error_sp span @@ "Unbound variable " ^ Printing.cid_to_string cid)
 ;;
 
 (* Drops the last n constraints in the second environment and returns
@@ -242,7 +328,7 @@ let extract_print_tys span (s : string) =
 let rec validate_size span env size =
   match STQVar.strip_links size with
   | IUser cid ->
-    if not (CidSet.mem cid env.sizes)
+    if not (size_exists span env cid)
     then error_sp span @@ "Unknown size " ^ Printing.cid_to_string cid
   | ISum (sizes, n) ->
     if n < 0 then error_sp span @@ "Size sum had negative number?";
@@ -258,14 +344,7 @@ let spec_to_constraints (env : env) sp start_eff (params : params) specs =
     if Cid.names cid = ["start"]
     then start_eff
     else (
-      let ty =
-        match CidMap.find_opt cid env.locals with
-        | Some ty -> ty
-        | None ->
-          (match CidMap.find_opt cid env.consts with
-          | Some ty -> ty
-          | _ -> error_sp sp @@ "Unbound variable " ^ Printing.cid_to_string cid)
-      in
+      let ty = lookup_var sp env cid in
       if not (is_global ty)
       then
         error_sp sp
@@ -276,8 +355,7 @@ let spec_to_constraints (env : env) sp start_eff (params : params) specs =
   in
   let env =
     List.fold_left
-      (fun env (id, ty) ->
-        { env with locals = CidMap.add (Id id) ty env.locals })
+      (fun env (id, ty) -> { env with locals = IdMap.add id ty env.locals })
       env
       params
   in
@@ -327,36 +405,6 @@ let add_record_label env span recty l =
          "The label %s already exists in type %s"
          l
          (Printing.ty_to_string ty)
-;;
-
-(* Replace all user types with their definition -- even abstract ones.
-   For use when validating module interfaces -- everywhere else, this is already
-   done by ReplaceUserTys.ml. Expects the interface to be well-formed. *)
-(* FIXME: This currently doesn't fully replace the effect. It should work fine
-   as long as the effect is a QVar, though. *)
-let subst_user_tys =
-  object
-    inherit [_] s_map as super
-
-    method! visit_ty env ty =
-      match ty.raw_ty with
-      | TName (cid, sizes, _) ->
-        begin
-          match CidMap.find_opt cid env.user_tys with
-          | None -> (* Must be a builtin *) ty
-          | Some (ty', sizes') ->
-            let replaced_ty =
-              ReplaceUserTys.subst_sizes
-                ty.tspan
-                cid
-                ty'.raw_ty
-                (ReplaceUserTys.extract_ids ty.tspan sizes')
-                sizes
-            in
-            { ty with raw_ty = replaced_ty; teffect = ty'.teffect }
-        end
-      | _ -> super#visit_ty env ty
-  end
 ;;
 
 type loop_subst = (id * int) * (id * effect)

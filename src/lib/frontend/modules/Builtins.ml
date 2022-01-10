@@ -10,7 +10,7 @@ let builtin_type_ids = [Arrays.t_id; Counters.t_id]
 
 (* Building modules *)
 let builtin_modules =
-  [Arrays.module_id; Counters.module_id; Events.module_id; System.module_id]
+  [Arrays.signature; Counters.signature; Events.signature; System.signature]
 ;;
 
 let builtin_defs = Arrays.defs @ Counters.defs @ Events.defs @ System.defs

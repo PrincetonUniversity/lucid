@@ -4,8 +4,33 @@ open Collections
 open Batteries
 open TyperUtil
 
-let def k id env =
-  { env with module_defs = KindSet.add (k, Id id) env.module_defs }
+(* Replace all user types with their definition -- even abstract ones.
+   For use when validating module interfaces -- everywhere else, this is already
+   done by ReplaceUserTys.ml. Expects the interface to be well-formed. *)
+(* FIXME: This currently doesn't fully replace the effect. It should work fine
+   as long as the effect is a QVar, though. *)
+let subst_user_tys =
+  object
+    inherit [_] s_map as super
+
+    method! visit_ty env ty =
+      match ty.raw_ty with
+      | TName (cid, sizes, _) ->
+        let modul, id = lookup_cid_modul ty.tspan env.current_modul cid in
+        (match IdMap.find_opt id modul.user_tys with
+        | None -> (* Must be a builtin *) ty
+        | Some (sizes', ty') ->
+          let replaced_ty =
+            ReplaceUserTys.subst_sizes
+              ty.tspan
+              cid
+              ty'.raw_ty
+              (ReplaceUserTys.extract_ids ty.tspan sizes')
+              sizes
+          in
+          { ty with raw_ty = replaced_ty; teffect = ty'.teffect })
+      | _ -> super#visit_ty env ty
+  end
 ;;
 
 let prefixer =

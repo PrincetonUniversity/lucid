@@ -73,3 +73,11 @@ let constructors = [counter_create_id, counter_create_sig]
 let defs : State.global_fun list =
   [{ cid = counter_add_cid; body = counter_add_fun; ty = counter_add_ty }]
 ;;
+
+let signature =
+  let sz = IVar (QVar (Id.fresh "sz")) in
+  ( module_id
+  , [Cid.last_id t_id, [sz], TName (t_id, [sz], true) |> ty]
+  , defs
+  , constructors )
+;;

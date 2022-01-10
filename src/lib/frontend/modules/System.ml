@@ -71,3 +71,5 @@ let defs : State.global_fun list =
   [ { cid = sys_time_cid; body = sys_time_fun; ty = sys_time_ty }
   ; { cid = sys_random_cid; body = sys_random_fun; ty = sys_random_ty } ]
 ;;
+
+let signature = module_id, [], defs, []
