@@ -43,12 +43,6 @@ let empty_modul =
   }
 ;;
 
-(* Not sure which set of functions will end up being the most useful *)
-(* let modul_sizes m = m.sizes
-let modul_vars m = m.vars
-let modul_tys m = m.user_tys
-let modul_constrs m = m.constructors *)
-
 let lookup_modul_size id m = IdSet.find_opt id m.sizes
 let lookup_modul_var id m = IdMap.find_opt id m.vars
 let lookup_modul_ty id m = IdMap.find_opt id m.user_tys
@@ -83,6 +77,47 @@ let empty_env =
   ; record_labels = StringMap.empty
   ; in_global_def = false
   ; current_modul = empty_modul
+  }
+;;
+
+let define_size id (env : env) =
+  { env with
+    current_modul =
+      { env.current_modul with sizes = IdSet.add id env.current_modul.sizes }
+  }
+;;
+
+let define_const id ty (env : env) =
+  { env with
+    current_modul =
+      { env.current_modul with vars = IdMap.add id ty env.current_modul.vars }
+  }
+;;
+
+let define_constructor id fty (env : env) =
+  { env with
+    current_modul =
+      { env.current_modul with
+        constructors = IdMap.add id fty env.current_modul.constructors
+      }
+  }
+;;
+
+let define_user_ty id sizes ty (env : env) =
+  { env with
+    current_modul =
+      { env.current_modul with
+        user_tys = IdMap.add id (sizes, ty) env.current_modul.user_tys
+      }
+  }
+;;
+
+let define_submodule id m (env : env) =
+  { env with
+    current_modul =
+      { env.current_modul with
+        submodules = IdMap.add id m env.current_modul.submodules
+      }
   }
 ;;
 

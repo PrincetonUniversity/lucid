@@ -518,18 +518,15 @@ and infer_statement (env : env) (s : statement) : env * statement =
         @@ "Cannot assign result of void function to variable: "
         ^ stmt_to_string s
       | _ -> ());
-      ( { env with locals = CidMap.add (Id id) ty env.locals }
-      , SLocal (id, ty, inf_e) )
+      { env with locals = IdMap.add id ty env.locals }, SLocal (id, ty, inf_e)
     | SAssign (id, e) ->
       let env, inf_e, ety = infer_exp env e |> textract in
-      (match CidMap.find_opt (Id id) env.locals with
+      (match IdMap.find_opt id env.locals with
       | Some rty -> unify_ty s.sspan rty ety
       | None ->
-        (match CidMap.find_opt (Id id) env.consts with
-        | Some _ ->
-          error_sp s.sspan @@ "Assignment to constant variable " ^ Id.name id
-        | None ->
-          error_sp s.sspan @@ "Assignment to unbound variable " ^ Id.name id));
+        (match lookup_var s.sspan env (Id id) with
+        | _ ->
+          error_sp s.sspan @@ "Assignment to constant variable " ^ Id.name id));
       (match TyTQVar.strip_links ety.raw_ty with
       | TVoid ->
         error_sp s.sspan
@@ -713,10 +710,7 @@ and infer_branches (env : env) s etys branches =
 
 let infer_body env (params, s) =
   let locals =
-    List.fold_left
-      (fun acc (id, ty) -> CidMap.add (Id id) ty acc)
-      env.locals
-      params
+    List.fold_left (fun acc (id, ty) -> IdMap.add id ty acc) env.locals params
   in
   let env, s = infer_statement { env with locals } s in
   env, (params, s)
@@ -733,8 +727,8 @@ let infer_memop span env (params, s) =
     | [(id1, ty1); (id2, ty2)] ->
       unify_raw_ty ty1.tspan ty1.raw_ty arg1ty;
       unify_raw_ty ty2.tspan ty2.raw_ty arg2ty;
-      let locals = CidMap.add (Id id1) ty1 env.locals in
-      let locals = CidMap.add (Id id2) ty2 locals in
+      let locals = IdMap.add id1 ty1 env.locals in
+      let locals = IdMap.add id2 ty2 locals in
       { env with locals }, id1, id2
     | _ -> error_sp span "Wrong number of parameters to memop"
   in
@@ -767,22 +761,24 @@ let infer_memop span env (params, s) =
    expected paramters, and return an instantiated version of the constraints.
    Expects that params has already been instantiated. *)
 let retrieve_constraints env span id params =
-  match CidMap.find_opt (Id id) env.handlers with
-  | None ->
-    error_sp span
-    @@ Printf.sprintf
-         "Handler %s has no corresponding event declaration."
-         (id_to_string id)
-  | Some (constraints, params2) ->
+  match IdMap.find_opt id env.current_modul.vars with
+  | Some
+      { raw_ty =
+          TFun
+            { ret_ty = { raw_ty = TEvent }
+            ; constraints = { contents = constraints }
+            ; arg_tys
+            }
+      } ->
     let maps = fresh_maps () in
-    let params2 = instantiator#visit_params maps params2 in
+    let params2 = List.map (instantiator#visit_ty maps) arg_tys in
     let constraints = List.map (instantiator#visit_constr maps) constraints in
     let _ =
       (* FIXME: This isn't quite sufficient -- it won't catch e.g.
            an event which takes Array.t<<'a>>, but a hander which takes Array.t<<32>> *)
       try
         try_unify_lists
-          (fun (_, ty1) (_, ty2) -> unify_ty span ty1 ty2)
+          (fun (_, ty1) ty2 -> unify_ty span ty1 ty2)
           params
           params2
       with
@@ -793,10 +789,22 @@ let retrieve_constraints env span id params =
              "Event %s was declared with arguments (%s) but its handler takes \
               arguments (%s)."
              (id_to_string id)
-             (comma_sep (fun (_, ty) -> ty_to_string ty) params2)
+             (comma_sep (fun ty -> ty_to_string ty) params2)
              (comma_sep (fun (_, ty) -> ty_to_string ty) params))
     in
     constraints
+  | Some ty ->
+    error_sp span
+    @@ Printf.sprintf
+         "Handler declared for event %s, but %s has non-event type %s."
+         (id_to_string id)
+         (id_to_string id)
+         (ty_to_string ty)
+  | None ->
+    error_sp span
+    @@ Printf.sprintf
+         "Handler %s has no corresponding event declaration."
+         (id_to_string id)
 ;;
 
 let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
@@ -807,9 +815,7 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
     match d.d with
     | DSize (id, szo) ->
       let _ = Option.map (validate_size d.dspan env) szo in
-      ( { env with sizes = CidSet.add (Id id) env.sizes } |> def KSize id
-      , effect_count
-      , d.d )
+      define_size id env, effect_count, d.d
     | DGlobal (id, ty, e) ->
       enter_level ();
       let _, inf_e, inf_ety =
@@ -819,9 +825,7 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
       let ty = { ty with teffect = effect_count } in
       unify_ty d.dspan inf_ety ty;
       let ty = generalizer#visit_ty () ty in
-      let env =
-        { env with consts = CidMap.add (Id id) ty env.consts } |> def KConst id
-      in
+      let env = define_const id ty env in
       env, FSucc effect_count, DGlobal (id, ty, inf_e)
     | DConst (id, ty, e) ->
       enter_level ();
@@ -835,9 +839,7 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
         @@ "Type "
         ^ ty_to_string ty
         ^ " is global and must be created via a global declaration";
-      let env =
-        { env with consts = CidMap.add (Id id) ty env.consts } |> def KConst id
-      in
+      let env = define_const id ty env in
       env, effect_count, DConst (id, ty, inf_e)
     | DExtern (id, ty) ->
       if is_global ty
@@ -846,9 +848,7 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
         @@ "Type "
         ^ ty_to_string ty
         ^ " is global and cannot be declared extern";
-      let env =
-        { env with consts = CidMap.add (Id id) ty env.consts } |> def KConst id
-      in
+      let env = define_const id ty env in
       env, effect_count, DExtern (id, ty)
     | DSymbolic (id, ty) ->
       if is_global ty
@@ -857,37 +857,24 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
         @@ "Type "
         ^ ty_to_string ty
         ^ " is global and cannot be declared symbolic";
-      let env =
-        { env with consts = CidMap.add (Id id) ty env.consts } |> def KConst id
-      in
+      let env = define_const id ty env in
       env, effect_count, DSymbolic (id, ty)
     | DEvent (id, sort, constr_specs, params) ->
       let constrs, _ =
         spec_to_constraints env d.dspan FZero params constr_specs
       in
-      let env =
-        { env with
-          handlers = CidMap.add (Id id) (constrs, params) env.handlers
-        ; consts = CidMap.add (Id id) (mk_event_ty constrs params) env.consts
-        }
-        |> def KConst id
-        |> def KHandler id
-      in
+      let env = define_const id (mk_event_ty constrs params) env in
       env, effect_count, DEvent (id, sort, constr_specs, params)
     | DHandler (id, body) ->
       enter_level ();
       let constraints = retrieve_constraints env d.dspan id (fst body) in
       let _, inf_body =
-        infer_body
-          { env with
-            current_effect = FZero
-          ; consts =
-              env.consts
-              |> CidMap.add (Id Builtins.this_id) Builtins.this_ty
-              |> CidMap.add (Id Builtins.ingr_port_id) Builtins.ingr_port_ty
-          ; constraints
-          }
-          body
+        let starting_env =
+          { env with current_effect = FZero; constraints }
+          |> define_const Builtins.this_id Builtins.this_ty
+          |> define_const Builtins.ingr_port_id Builtins.ingr_port_ty
+        in
+        infer_body starting_env body
       in
       leave_level ();
       let inf_body = generalizer#visit_body () inf_body in
@@ -949,10 +936,7 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
         |> generalizer#visit_func_ty ()
       in
       let inf_body = generalizer#visit_body () inf_body in
-      let env =
-        { env with consts = CidMap.add (Id id) (mk_ty @@ TFun fty) env.consts }
-        |> def KConst id
-      in
+      let env = define_const id (mk_ty @@ TFun fty) env in
       (* print_endline
       @@ "Inferred type for "
       ^ id_to_string id
@@ -964,16 +948,10 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
       let inf_size1, inf_size2, inf_memop = infer_memop d.dspan env body in
       leave_level ();
       let tmem = generalizer#visit_raw_ty () (TMemop (inf_size1, inf_size2)) in
-      let env =
-        { env with consts = CidMap.add (Id id) (ty tmem) env.consts }
-        |> def KConst id
-      in
+      let env = define_const id (ty tmem) env in
       env, effect_count, DMemop (id, inf_memop)
     | DUserTy (id, sizes, ty) ->
-      let new_env =
-        { env with user_tys = CidMap.add (Id id) (ty, sizes) env.user_tys }
-        |> def KUserTy id
-      in
+      let new_env = define_user_ty id sizes ty env in
       let new_env =
         match ty.raw_ty with
         | TRecord lst ->
@@ -992,7 +970,7 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
       let _, inf_e, inf_ety =
         let locals =
           List.fold_left
-            (fun acc (id, ty) -> CidMap.add (Id id) ty acc)
+            (fun acc (id, ty) -> IdMap.add id ty acc)
             env.locals
             params
         in
@@ -1013,23 +991,25 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
         }
         |> generalizer#visit_func_ty ()
       in
-      let env =
-        { env with constructors = CidMap.add (Id id) fty env.constructors }
-        |> def KConstr id
-      in
+      let env = define_constructor id fty env in
       env, effect_count, DConstr (id, ty, params, inf_e)
     | DModule (id, intf, ds) ->
-      wellformed_interface env intf;
       let m_env, effect_count, ds =
+        let subenv =
+          { env with
+            current_modul = empty_modul
+          ; parents = env.current_modul :: env.parents
+          }
+        in
         List.fold_left
           (fun (env, effect_count, ds) d ->
             let env, effect_count, d = infer_declaration env effect_count d in
             env, effect_count, d :: ds)
-          ({ env with module_defs = KindSet.empty }, effect_count, [])
+          (subenv, effect_count, [])
           ds
       in
       let ds = List.rev ds in
-      let env = add_module_defs id intf env m_env in
+      let env = add_interface d.dspan env id intf m_env.current_modul in
       env, effect_count, DModule (id, intf, ds)
   in
   let new_d = { d with d = new_d } in

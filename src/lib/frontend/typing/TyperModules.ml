@@ -123,7 +123,7 @@ let rec equiv_modul m1 m2 =
   && IdMap.equal equiv_modul m1.submodules m2.submodules
 ;;
 
-let rec compatible_interface span intf_modul modul =
+let rec ensure_compatible_interface span intf_modul modul =
   let open Printing in
   let diff = IdSet.diff intf_modul.sizes modul.sizes in
   if not (IdSet.is_empty diff)
@@ -196,11 +196,17 @@ let rec compatible_interface span intf_modul modul =
   IdMap.iter
     (fun id m ->
       match IdMap.find_opt id modul.submodules with
-      | Some m' -> compatible_interface span m m'
+      | Some m' -> ensure_compatible_interface span m m'
       | None ->
         error_sp span
         @@ "Module "
         ^ id_to_string id
         ^ " is declared in module interface but does not appear in the body")
     intf_modul.submodules
+;;
+
+let add_interface span env id interface modul =
+  let intf_modul = modul_of_interface span env interface in
+  ensure_compatible_interface span intf_modul modul;
+  define_submodule id intf_modul env
 ;;

@@ -2,9 +2,18 @@ open Batteries
 open Syntax
 open Collections
 
-type kind = [%import: TyperUtil.kind]
+type kind =
+  | KSize
+  | KConst
+  | KHandler
+  | KConstr
+  | KUserTy
 
-module KindSet = TyperUtil.KindSet
+module KindSet = Set.Make (struct
+  type t = kind * cid
+
+  let compare = Pervasives.compare
+end)
 
 (*** Do alpha-renaming to ensure that variable names are globally unique. Do the
     same for size names ***)
