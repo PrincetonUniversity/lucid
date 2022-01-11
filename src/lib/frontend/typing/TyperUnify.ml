@@ -186,12 +186,12 @@ let unify_effect (span : Span.t) eff1 eff2 : unit =
   check_unify span (try_unify_effect span) effect_to_string eff1 eff2
 ;;
 
-let rec try_unify_ty span ty1 ty2 =
+let rec try_unify_ty span env ty1 ty2 =
   let ty1, ty2 = strip_links ty1, strip_links ty2 in
   if ty1.raw_ty == ty2.raw_ty && ty1.teffect == ty2.teffect
   then ()
   else (
-    unify_raw_ty span ty1.raw_ty ty2.raw_ty;
+    unify_raw_ty span env ty1.raw_ty ty2.raw_ty;
     (* Don't unify effects for things which definitely aren't global *)
     if not (SyntaxUtils.is_not_global_rty ty1.raw_ty)
     then try_unify_effect span ty1.teffect ty2.teffect;
@@ -199,12 +199,16 @@ let rec try_unify_ty span ty1 ty2 =
     | None -> ty1.tprint_as := !(ty2.tprint_as)
     | Some x -> ty2.tprint_as := Some x)
 
-and try_unify_rty span rty1 rty2 =
+and try_unify_rty span env rty1 rty2 =
+  let unify_raw_ty = unify_raw_ty span env in
+  let unify_ty = unify_ty span env in
+  let rty1 = lookup_TName span env rty1 in
+  let rty2 = lookup_TName span env rty2 in
   match rty1, rty2 with
   | TQVar tqv, ty | ty, TQVar tqv ->
     try_unify_tqvar
       (occurs_ty span)
-      (unify_raw_ty span)
+      unify_raw_ty
       TyTQVar.phys_equiv_tqvar
       tqv
       ty
@@ -217,8 +221,8 @@ and try_unify_rty span rty1 rty2 =
     if b1 <> b2 || not (Cid.equal cid1 cid2) then raise CannotUnify;
     List.iter2 (try_unify_size span) sizes1 sizes2
   | TFun func1, TFun func2 ->
-    try_unify_lists (unify_ty span) func1.arg_tys func2.arg_tys;
-    unify_ty span func1.ret_ty func2.ret_ty;
+    try_unify_lists unify_ty func1.arg_tys func2.arg_tys;
+    unify_ty func1.ret_ty func2.ret_ty;
     try_unify_effect span func1.start_eff func2.start_eff;
     try_unify_effect span func1.end_eff func2.end_eff;
     let combined = !(func1.constraints) @ !(func2.constraints) in
@@ -229,13 +233,13 @@ and try_unify_rty span rty1 rty2 =
     try_unify_lists
       (fun (str1, ty1) (str2, ty2) ->
         if not (String.equal str1 str2) then raise CannotUnify;
-        unify_raw_ty span ty1 ty2)
+        unify_raw_ty ty1 ty2)
       (List.sort (fun (x, _) (y, _) -> Pervasives.compare x y) lst1)
       (List.sort (fun (x, _) (y, _) -> Pervasives.compare x y) lst2)
-  | TTuple lst1, TTuple lst2 -> try_unify_lists (unify_raw_ty span) lst1 lst2
+  | TTuple lst1, TTuple lst2 -> try_unify_lists unify_raw_ty lst1 lst2
   | TVector (ty1, size1), TVector (ty2, size2) ->
     try_unify_size span size1 size2;
-    unify_raw_ty span ty1 ty2
+    unify_raw_ty ty1 ty2
   | ( ( TVoid
       | TGroup
       | TBool
@@ -249,9 +253,9 @@ and try_unify_rty span rty1 rty2 =
       | TTuple _ )
     , _ ) -> raise CannotUnify
 
-and unify_ty (span : Span.t) ty1 ty2 : unit =
-  check_unify span (try_unify_ty span) ty_to_string ty1 ty2
+and unify_ty (span : Span.t) env ty1 ty2 : unit =
+  check_unify span (try_unify_ty span env) ty_to_string ty1 ty2
 
-and unify_raw_ty (span : Span.t) ty1 ty2 : unit =
-  check_unify span (try_unify_rty span) raw_ty_to_string ty1 ty2
+and unify_raw_ty (span : Span.t) env ty1 ty2 : unit =
+  check_unify span (try_unify_rty span env) raw_ty_to_string ty1 ty2
 ;;

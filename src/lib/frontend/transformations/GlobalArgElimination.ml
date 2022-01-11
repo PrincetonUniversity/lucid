@@ -148,7 +148,11 @@ let duplicate_event_decl global_info (eid, constr_specs, params)
       let gparams = List.filter (is_global % snd) params in
       List.iter
         (fun (id, ty) ->
-          TyperUnify.unify_ty ty.tspan ty (snd @@ IdMap.find id inst))
+          TyperUnify.unify_ty
+            ty.tspan
+            TyperUtil.empty_env
+            ty
+            (snd @@ IdMap.find id inst))
         gparams;
       let params = TyperInstGen.generalizer#visit_params () params in
       { inst; new_id = new_id inst; params })
@@ -206,7 +210,7 @@ let update_handler span handler_body { inst; new_id; params } =
     (* Use id from the handler param, but type from the instantiated event *)
     List.map2
       (fun (id, hty) (_, ety) ->
-        TyperUnify.unify_ty hty.tspan hty ety;
+        TyperUnify.unify_ty hty.tspan TyperUtil.empty_env hty ety;
         id, ety)
       handler_params
       params

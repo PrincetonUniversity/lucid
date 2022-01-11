@@ -10,9 +10,6 @@ let print_if_verbose str = if Cmdline.cfg.verbose then Console.report str
 
 let process_prog ds =
   print_if_debug ds;
-  print_if_verbose "-------Eliminating type aliases 1---------";
-  let ds = ReplaceUserTys.replace_prog ds in
-  print_if_debug ds;
   print_if_verbose "-------Checking well-formedness---------";
   Wellformed.pre_typing_checks ds;
   print_if_verbose "---------typing---------";

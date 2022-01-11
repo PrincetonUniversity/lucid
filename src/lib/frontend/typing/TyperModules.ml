@@ -12,14 +12,12 @@ let rec modul_of_interface span env interface =
     | InTy (id, sizes, tyo, b) ->
       let ty =
         match tyo with
-        | Some ty ->
-          ty
-          (* FIXME: We need to ensure these TNames are always unique. Maybe. *)
+        | Some ty -> ty
         | None -> ty @@ TName (Id id, sizes, b)
       in
       { acc with user_tys = IdMap.add id (sizes, ty) acc.user_tys }
     | InConstr (id, ty, params) ->
-      let start_eff = fresh_effect () in
+      let start_eff = FVar (QVar (Id.fresh "eff")) in
       let fty =
         { arg_tys = List.map snd params
         ; ret_ty = ty
@@ -31,7 +29,7 @@ let rec modul_of_interface span env interface =
       in
       { acc with constructors = IdMap.add id fty acc.constructors }
     | InFun (id, ret_ty, constrs, params) ->
-      let start_eff = fresh_effect () in
+      let start_eff = FVar (QVar (Id.fresh "eff")) in
       let constrs, end_eff =
         spec_to_constraints env span start_eff params constrs
       in
@@ -47,7 +45,7 @@ let rec modul_of_interface span env interface =
       in
       { acc with vars = IdMap.add id (ty @@ TFun fty) acc.vars }
     | InEvent (id, constrs, params) ->
-      let start_eff = fresh_effect () in
+      let start_eff = FVar (QVar (Id.fresh "eff")) in
       let constrs, _ = spec_to_constraints env span start_eff params constrs in
       let fty =
         { arg_tys = List.map snd params
@@ -125,6 +123,38 @@ let rec equiv_modul m1 m2 =
 
 let rec ensure_compatible_interface span intf_modul modul =
   let open Printing in
+  let check_func_tys id fty1 fty2 =
+    if List.length fty1.arg_tys <> List.length fty2.arg_tys
+    then
+      error_sp span
+      @@ Printf.sprintf
+           "%s takes %d arguments in interface but %d in body"
+           (id_to_string id)
+           (List.length fty1.arg_tys)
+           (List.length fty2.arg_tys);
+    List.iter2i
+      (fun n ty1 ty2 ->
+        if not (equiv_ty ty1 ty2)
+        then
+          error_sp ty1.tspan
+          @@ Printf.sprintf
+               "Argument %d to %s has type %s in interface but %s in module \
+                body"
+               n
+               (id_to_string id)
+               (ty_to_string ty1)
+               (ty_to_string ty2))
+      fty1.arg_tys
+      fty2.arg_tys;
+    if not (equiv_ty fty1.ret_ty fty2.ret_ty)
+    then
+      error_sp span
+      @@ Printf.sprintf
+           "%s returns %s in interface but %s in body"
+           (id_to_string id)
+           (ty_to_string fty1.ret_ty)
+           (ty_to_string fty2.ret_ty)
+  in
   let diff = IdSet.diff intf_modul.sizes modul.sizes in
   if not (IdSet.is_empty diff)
   then
@@ -135,14 +165,46 @@ let rec ensure_compatible_interface span intf_modul modul =
   IdMap.iter
     (fun id ty ->
       match IdMap.find_opt id modul.vars with
-      | Some ty' when equiv_ty ty ty' -> ()
+      (* Note: This won't work right if we get more functional later *)
+      | Some { raw_ty = TFun body_fty } ->
+        (* Gotta handle functions differently, since the constraints in the
+           interface may be less restrictive. Need to ensure:
+           1. Constraints in the interface imply constraints in the body
+           2. End effect in interface is >= end effect in body *)
+        let intf_fty =
+          match ty.raw_ty with
+          | TFun fty -> normalize_tfun fty
+          | _ ->
+            error_sp span
+            @@ Printf.sprintf
+                 "%s has type non-function type %s in interface but function \
+                  type in module body"
+                 (id_to_string id)
+                 (ty_to_string (normalize_ty ty))
+        in
+        let body_fty = normalize_tfun body_fty in
+        let sufficient_constraints =
+          let rhs =
+            CLeq (body_fty.end_eff, intf_fty.end_eff) :: !(body_fty.constraints)
+          in
+          TyperZ3.check_implies !(intf_fty.constraints) rhs
+        in
+        if not sufficient_constraints
+        then
+          error_sp span
+          @@ Printf.sprintf
+               "Constraints in interface (for function %s) are weaker than the \
+                constraints in the module body."
+               (Printing.id_to_string id);
+        check_func_tys id intf_fty body_fty
+      | Some ty' when equiv_raw_ty ty.raw_ty ty'.raw_ty -> ()
       | Some ty' ->
         error_sp span
         @@ Printf.sprintf
              "%s has type %s in interface but type %s in module body"
              (id_to_string id)
-             (ty_to_string ty)
-             (ty_to_string ty')
+             (ty_to_string (normalize_ty ty))
+             (ty_to_string @@ normalize_ty ty')
       | None ->
         error_sp span
         @@ id_to_string id

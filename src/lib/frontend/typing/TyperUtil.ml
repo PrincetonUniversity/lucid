@@ -478,3 +478,19 @@ let drop_indexes target eff =
   let lst = aux lst in
   wrap_effect base lst
 ;;
+
+let lookup_TName span env rty =
+  match rty with
+  | TName (cid, sizes, _) ->
+    let sizes', ty = lookup_ty span env cid in
+    let replaced_ty =
+      ReplaceUserTys.subst_sizes
+        span
+        cid
+        ty.raw_ty
+        (ReplaceUserTys.extract_ids span sizes')
+        sizes
+    in
+    replaced_ty
+  | _ -> rty
+;;

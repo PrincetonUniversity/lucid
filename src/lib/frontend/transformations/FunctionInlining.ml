@@ -89,7 +89,8 @@ let rec inline_call inline_stmt env (call : call) =
   in
   let args = List.combine params arg_exps in
   List.iter
-    (fun ((_, pty), e) -> TyperUnify.unify_ty e.espan pty (Option.get e.ety))
+    (fun ((_, pty), e) ->
+      TyperUnify.unify_ty e.espan TyperUtil.empty_env pty (Option.get e.ety))
     args;
   let body = inline_stmt env body in
   (* Replace any compound arguments with new intermediate variables, and include
@@ -163,10 +164,18 @@ let inliner =
             ( TyperInstGen.instantiator#visit_params maps params
             , TyperInstGen.instantiator#visit_exp maps body )
           in
-          TyperUnify.unify_ty e.espan (Option.get e.ety) (Option.get body.ety);
+          TyperUnify.unify_ty
+            e.espan
+            TyperUtil.empty_env
+            (Option.get e.ety)
+            (Option.get body.ety);
           List.iter2
             (fun (_, pty) e ->
-              TyperUnify.unify_ty e.espan pty (Option.get e.ety))
+              TyperUnify.unify_ty
+                e.espan
+                TyperUtil.empty_env
+                pty
+                (Option.get e.ety))
             params
             es;
           let subst_map =
