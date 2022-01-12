@@ -61,7 +61,14 @@ let occurs_ty span tvar raw_ty : unit =
   let rec occ tvar raw_ty =
     match raw_ty with
     | TQVar tvr -> occurs_tqvar occ tvar tvr
-    | TBool | TInt _ | TName _ | TVoid | TEvent | TGroup | TMemop _ -> ()
+    | TBool
+    | TInt _
+    | TName _
+    | TAbstract _
+    | TVoid
+    | TEvent
+    | TGroup
+    | TMemop _ -> ()
     | TRecord lst -> List.iter (fun (_, raw_ty) -> occ tvar raw_ty) lst
     | TTuple lst -> List.iter (occ tvar) lst
     | TFun { arg_tys; ret_ty; _ } ->
@@ -220,6 +227,9 @@ and try_unify_rty span env rty1 rty2 =
   | TName (cid1, sizes1, b1), TName (cid2, sizes2, b2) ->
     if b1 <> b2 || not (Cid.equal cid1 cid2) then raise CannotUnify;
     List.iter2 (try_unify_size span) sizes1 sizes2
+  | TAbstract (cid1, sizes1, b1), TAbstract (cid2, sizes2, b2) ->
+    if b1 <> b2 || not (Cid.equal cid1 cid2) then raise CannotUnify;
+    List.iter2 (try_unify_size span) sizes1 sizes2
   | TFun func1, TFun func2 ->
     try_unify_lists unify_ty func1.arg_tys func2.arg_tys;
     unify_ty func1.ret_ty func2.ret_ty;
@@ -250,7 +260,8 @@ and try_unify_rty span env rty1 rty2 =
       | TFun _
       | TRecord _
       | TVector _
-      | TTuple _ )
+      | TTuple _
+      | TAbstract _ )
     , _ ) -> raise CannotUnify
 
 and unify_ty (span : Span.t) env ty1 ty2 : unit =

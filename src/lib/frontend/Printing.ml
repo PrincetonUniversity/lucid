@@ -125,6 +125,15 @@ let rec raw_ty_to_string t =
     cid_to_string cid
     ^ sizes_to_string sizes
     ^ if cfg.verbose_types then "{" ^ string_of_bool b ^ "}" else ""
+  | TAbstract (cid, sizes, b) ->
+    let base =
+      if cfg.verbose_types
+      then Printf.sprintf "Abs[%s]" (cid_to_string cid)
+      else cid_to_string cid
+    in
+    base
+    ^ sizes_to_string sizes
+    ^ if cfg.verbose_types then "{" ^ string_of_bool b ^ "}" else ""
   | TEvent -> "event"
   | TFun func -> func_to_string func
   | TMemop (size1, size2) ->
