@@ -812,6 +812,7 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
     : env * effect * decl
   =
   (* print_endline @@ "Inferring decl " ^ decl_to_string d; *)
+  let d = subst_TNames env d in
   let env, effect_count, new_d =
     match d.d with
     | DSize (id, szo) ->
@@ -1010,7 +1011,13 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
           ds
       in
       let ds = List.rev ds in
-      let env = add_interface d.dspan env id intf m_env.current_modul in
+      let env =
+        if List.is_empty intf
+        then define_submodule id m_env.current_modul env
+        else add_interface d.dspan env id intf m_env.current_modul
+      in
+      (* print_endline @@ "After module " ^ id_to_string id ^ ", env is";
+      print_endline @@ modul_to_string ~show_defs:false env.current_modul; *)
       env, effect_count, DModule (id, intf, ds)
   in
   let new_d = { d with d = new_d } in

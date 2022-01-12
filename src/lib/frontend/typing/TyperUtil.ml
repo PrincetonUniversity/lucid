@@ -494,3 +494,56 @@ let lookup_TName span env rty =
     replaced_ty
   | _ -> rty
 ;;
+
+let rec modul_to_string ?(show_defs = true) m =
+  let open Printing in
+  Printf.sprintf
+    "{\n\
+     sizes = [%s]\n\
+     vars = {%s}\n\
+     user_tys = {%s}\n\
+     constructors = {%s};\n\
+     submodules = {%s}\n\
+     }"
+    (IdSet.fold (fun s acc -> id_to_string s ^ ", " ^ acc) m.sizes "")
+    (IdMap.fold
+       (fun id ty acc ->
+         let str =
+           if show_defs
+           then id_to_string id ^ " -> " ^ ty_to_string ty
+           else id_to_string id
+         in
+         str ^ ", " ^ acc)
+       m.vars
+       "")
+    (IdMap.fold
+       (fun id (_, ty) acc ->
+         let str =
+           if show_defs
+           then id_to_string id ^ " -> " ^ ty_to_string ty
+           else id_to_string id
+         in
+         str ^ ", " ^ acc)
+       m.user_tys
+       "")
+    (IdMap.fold
+       (fun id ty acc ->
+         let str =
+           if show_defs
+           then id_to_string id ^ " -> " ^ func_to_string ty
+           else id_to_string id
+         in
+         str ^ ", " ^ acc)
+       m.constructors
+       "")
+    (IdMap.fold
+       (fun id m acc ->
+         let str =
+           if show_defs
+           then id_to_string id ^ " -> " ^ modul_to_string m
+           else id_to_string id
+         in
+         str ^ ", " ^ acc)
+       m.submodules
+       "")
+;;

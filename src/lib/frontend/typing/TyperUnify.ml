@@ -209,8 +209,6 @@ let rec try_unify_ty span env ty1 ty2 =
 and try_unify_rty span env rty1 rty2 =
   let unify_raw_ty = unify_raw_ty span env in
   let unify_ty = unify_ty span env in
-  let rty1 = lookup_TName span env rty1 in
-  let rty2 = lookup_TName span env rty2 in
   match rty1, rty2 with
   | TQVar tqv, ty | ty, TQVar tqv ->
     try_unify_tqvar

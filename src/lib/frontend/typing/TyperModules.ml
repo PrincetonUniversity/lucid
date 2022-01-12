@@ -4,16 +4,58 @@ open Collections
 open Batteries
 open TyperUtil
 
+(* Goes through each decl and substitutes each bound TName for whatever it's
+   bound to. If it runs into a type declaration in an interface, it adds it to
+   the environment before continuing. If it runs into an abstract type declaration,
+   it first explicitly binds it to a TAbstract before continuing. *)
+let subst_TNames env d =
+  let v =
+    object (self)
+      inherit [_] s_map as super
+
+      method! visit_ty env ty =
+        { ty with raw_ty = lookup_TName ty.tspan !env ty.raw_ty }
+
+      method! visit_DUserTy env id sizes ty =
+        let ty = self#visit_ty env ty in
+        env := define_user_ty id sizes ty !env;
+        DUserTy (id, sizes, ty)
+
+      method! visit_InTy env id sizes tyo b =
+        let tyo' =
+          match tyo with
+          | Some ty -> Some (self#visit_ty env ty)
+          | None -> Some (TAbstract (Id (Id.freshen id), sizes, b) |> ty)
+        in
+        env := define_user_ty id sizes (Option.get tyo') !env;
+        InTy (id, sizes, tyo', b)
+
+      method! visit_DModule env id interface ds =
+        let old_env = !env in
+        let ret = super#visit_DModule env id interface ds in
+        env := old_env;
+        ret
+
+      method! visit_interface env interface =
+        let old_env = !env in
+        let ret = super#visit_interface env interface in
+        env := old_env;
+        ret
+    end
+  in
+  v#visit_decl (ref env) d
+;;
+
 let rec modul_of_interface span env interface =
   let aux acc intf =
     match intf.ispec with
     | InSize id -> { acc with sizes = IdSet.add id acc.sizes }
     | InVar (id, ty) -> { acc with vars = IdMap.add id ty acc.vars }
-    | InTy (id, sizes, tyo, b) ->
+    | InTy (id, sizes, tyo, _) ->
       let ty =
         match tyo with
         | Some ty -> ty
-        | None -> ty @@ TName (Id id, sizes, b)
+        | None -> failwith "Internal error: should be replaced by subst_TNames"
       in
       { acc with user_tys = IdMap.add id (sizes, ty) acc.user_tys }
     | InConstr (id, ty, params) ->
@@ -66,43 +108,60 @@ let rec modul_of_interface span env interface =
   List.fold_left aux empty_modul interface
 ;;
 
-(* Replace TNames with their definitions, according to the map provided in env *)
-(* let subst_interface_tys target sizes ty modul =
+(* Go through a module and consistently replace each abstract type which is
+   defined in the body. For use in checking equivalence/interface validity *)
+let replace_abstract_type (target : cid) (replacement : sizes * ty) modul =
   let v =
     object
       inherit [_] s_map as super
 
-      method! visit_ty (target, sizes', ty') ty =
+      method! visit_ty (target, (sizes', ty')) ty =
         match ty.raw_ty with
-        | TName (Id id, sizes, _) when Id.equal id target ->
+        | TAbstract (cid, sizes, _) ->
           let replaced_ty =
             ReplaceUserTys.subst_sizes
               ty.tspan
-              (Id id)
+              cid
               ty'.raw_ty
               (ReplaceUserTys.extract_ids ty.tspan sizes')
               sizes
           in
-          { ty with raw_ty = replaced_ty; teffect = ty'.teffect }
-        | _ -> super#visit_ty (target, sizes', ty') ty
+          { ty with raw_ty = replaced_ty }
+        | _ -> super#visit_ty (target, (sizes', ty')) ty
     end
   in
-  let env = target, sizes, ty in
-  let rec subst_modul modul =
+  let rec replace_modul env modul =
     { modul with
       vars = IdMap.map (v#visit_ty env) modul.vars
-    ; user_tys =
-        (* FIXME: The handling of sizes here might be wrong *)
-        IdMap.map (fun (_, ty) -> sizes, v#visit_ty env ty) modul.user_tys
     ; constructors = IdMap.map (v#visit_func_ty env) modul.constructors
-    ; submodules = IdMap.map subst_modul modul.submodules
+    ; user_tys =
+        IdMap.map (fun (sz, ty) -> sz, v#visit_ty env ty) modul.user_tys
+    ; submodules = IdMap.map (replace_modul env) modul.submodules
     }
   in
-  subst_modul modul
-;; *)
+  let env = target, replacement in
+  replace_modul env modul
+;;
 
 let rec equiv_modul m1 m2 =
+  (* For each abstract type declared in m1, ensure that m2 also declares an abstract
+     type with the same name, and replace each occurrence of that abstract type in
+     m1 with the definition in m2 (so they can be compared directly later *)
+  let m1 =
+    IdMap.fold
+      (fun id (_, ty) acc ->
+        match ty.raw_ty with
+        | TAbstract (Id id1, _, b) when Id.name id = Id.name id1 ->
+          (match IdMap.find_opt id m2.user_tys with
+          | Some (sizes', ({ raw_ty = TAbstract (_, _, b') } as ty'))
+            when b = b' -> replace_abstract_type (Id id1) (sizes', ty') acc
+          | _ -> (* We'll return false later *) acc)
+        | _ -> (* Not an abstract type, don't need to replace *) acc)
+      m1.user_tys
+      m1
+  in
   let cmp_user_tys (szs1, ty1) (szs2, ty2) =
+    (* I think this is overkill but I don't think it's wrong *)
     let szs1, ty1 =
       let norm = normalizer () in
       List.map (norm#visit_size ()) szs1, norm#visit_ty () ty1
@@ -123,6 +182,24 @@ let rec equiv_modul m1 m2 =
 
 let rec ensure_compatible_interface span intf_modul modul =
   let open Printing in
+  (* For each abstract type declared in the interface, endsure the body has a
+     corresponding type declared, and replace the version in the interface with
+     the body's definition *)
+  let intf_modul =
+    IdMap.fold
+      (fun id (_, ty) acc ->
+        match ty.raw_ty with
+        | TAbstract (Id id1, _, b) when Id.name id = Id.name id1 ->
+          (match IdMap.find_opt id modul.user_tys with
+          | Some (sizes', ty') ->
+            if (b && is_global ty') || ((not b) && is_not_global ty')
+            then replace_abstract_type (Id id1) (sizes', ty') acc
+            else acc
+          | _ -> (* We'll return false later *) acc)
+        | _ -> (* Not an abstract type, don't need to replace *) acc)
+      intf_modul.user_tys
+      intf_modul
+  in
   let check_func_tys id fty1 fty2 =
     if List.length fty1.arg_tys <> List.length fty2.arg_tys
     then
@@ -245,15 +322,14 @@ let rec ensure_compatible_interface span intf_modul modul =
                (id_to_string id)
                (List.length sizes)
                (List.length sizes');
-        (match ty.raw_ty with
-        | TName (Id id', _, _) when Id.equal id id' -> ()
-        | _ ->
-          if not (equiv_ty ty ty')
-          then
-            error_sp span
-            @@ Printf.sprintf
-                 "Type %s has different definition in interface than in body"
-                 (id_to_string id)))
+        if not (equiv_raw_ty ty.raw_ty ty'.raw_ty)
+        then
+          error_sp span
+          @@ Printf.sprintf
+               "Type %s has is defined as %s in interface but %s in body"
+               (id_to_string id)
+               (ty_to_string ty)
+               (ty_to_string ty'))
     intf_modul.user_tys;
   IdMap.iter
     (fun id m ->

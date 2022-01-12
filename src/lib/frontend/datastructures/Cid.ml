@@ -24,6 +24,8 @@ let rec create_ids ids =
   | id :: ids -> Compound (id, create_ids ids)
 ;;
 
+let create_ids_rev ids = create_ids (List.rev ids)
+
 let rec fresh ss =
   match ss with
   | [] -> Id (Id.fresh "")

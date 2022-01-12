@@ -9,6 +9,7 @@ type t =
 
 val create : string list -> t
 val create_ids : Id.t list -> t
+val create_ids_rev : Id.t list -> t
 val fresh : string list -> t
 val id : Id.t -> t
 val compound : Id.t -> t -> t

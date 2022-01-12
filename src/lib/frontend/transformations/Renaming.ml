@@ -384,7 +384,9 @@ let rename prog =
         (* Don't rename the ids here, typing takes care of that *)
         FIndex (id, self#visit_effect dummy eff)
 
-      (* Ids inside tqvars aren't variable IDs and shouldn't be renamed *)
+      (* Ids that aren't variable IDs and shouldn't be renamed *)
+      method! visit_TAbstract _ cid sizes b = TAbstract (cid, sizes, b)
+
       method! visit_TQVar dummy tqv =
         match tqv with
         | TVar { contents = Link x } -> self#visit_raw_ty dummy x
