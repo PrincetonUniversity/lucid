@@ -165,10 +165,15 @@ let replace_abstract_type (target : cid) (replacement : sizes * ty) modul =
   replace_modul env modul
 ;;
 
-let rec equiv_modul m1 m2 =
+let rec ensure_equiv_modul span m1 m2 =
   (* For each abstract type declared in m1, ensure that m2 also declares an abstract
      type with the same name, and replace each occurrence of that abstract type in
      m1 with the definition in m2 (so they can be compared directly later *)
+  let open Printing in
+  let err str =
+    Console.error_position span @@ "Modules have inequvalent interfaces: " ^ str
+  in
+  (* print_endline @@ "m1: " ^ modul_to_string m1; *)
   let m1 =
     IdMap.fold
       (fun id (_, ty) acc ->
@@ -182,24 +187,80 @@ let rec equiv_modul m1 m2 =
       m1.user_tys
       m1
   in
-  let cmp_user_tys (szs1, ty1) (szs2, ty2) =
-    (* I think this is overkill but I don't think it's wrong *)
-    let szs1, ty1 =
-      let norm = normalizer () in
-      List.map (norm#visit_size ()) szs1, norm#visit_ty () ty1
-    in
-    let szs2, ty2 =
-      let norm = normalizer () in
-      List.map (norm#visit_size ()) szs2, norm#visit_ty () ty2
-    in
-    List.length szs1 = List.length szs2 && equiv_ty ty1 ty2
+  (* print_endline @@ "replaced_m1: " ^ modul_to_string m1;
+  print_endline @@ "m2: " ^ modul_to_string m1; *)
+  let compare_sizes m1 m2 =
+    let sz_diff = IdSet.sym_diff m1.sizes m2.sizes in
+    if not (IdSet.is_empty sz_diff)
+    then
+      Console.error_position span
+      @@ "Size "
+      ^ id_to_string (IdSet.choose sz_diff)
+      ^ " is defined in one module but not the other"
   in
-  let cmp_ftys fty1 fty2 = equiv_raw_ty (TFun fty1) (TFun fty2) in
-  IdSet.equal m1.sizes m2.sizes
-  && IdMap.equal equiv_ty m1.vars m2.vars
-  && IdMap.equal cmp_user_tys m1.user_tys m2.user_tys
-  && IdMap.equal cmp_ftys m1.constructors m2.constructors
-  && IdMap.equal equiv_modul m1.submodules m2.submodules
+  let compare_maps cmp print map1 map2 =
+    ignore
+    @@ IdMap.merge
+         (fun id o1 o2 ->
+           match o1, o2 with
+           | None, None -> failwith "impossible"
+           | None, _ | _, None ->
+             err
+             @@ id_to_string id
+             ^ " is defined in one module but not the other"
+           | Some x1, Some x2 ->
+             if not (cmp x1 x2)
+             then
+               err
+               @@ Printf.sprintf
+                    "%s has type %s in one module and %s in the other"
+                    (id_to_string id)
+                    (print x1)
+                    (print x2);
+             None)
+         map1
+         map2
+  in
+  let compare_vars m1 m2 = compare_maps equiv_ty ty_to_string m1.vars m2.vars in
+  let compare_user_tys m1 m2 =
+    compare_maps
+      (fun (szs1, ty1) (szs2, ty2) ->
+        (* I think this is overkill since we replaced in m1 but I don't think it's wrong *)
+        let szs1, ty1 =
+          let norm = normalizer () in
+          List.map (norm#visit_size ()) szs1, norm#visit_ty () ty1
+        in
+        let szs2, ty2 =
+          let norm = normalizer () in
+          List.map (norm#visit_size ()) szs2, norm#visit_ty () ty2
+        in
+        List.length szs1 = List.length szs2
+        && equiv_ty ~ignore_effects:true ty1 ty2)
+      (fun (_, ty) -> ty_to_string ty)
+      m1.user_tys
+      m2.user_tys
+  in
+  let compare_constructors m1 m2 =
+    compare_maps
+      (fun fty1 fty2 -> equiv_raw_ty (TFun fty1) (TFun fty2))
+      func_to_string
+      m1.constructors
+      m2.constructors
+  in
+  let compare_submodules m1 m2 =
+    compare_maps
+      (fun m1 m2 ->
+        ensure_equiv_modul span m1 m2;
+        true)
+      modul_to_string
+      m1.submodules
+      m2.submodules
+  in
+  compare_sizes m1 m2;
+  compare_vars m1 m2;
+  compare_user_tys m1 m2;
+  compare_constructors m1 m2;
+  compare_submodules m1 m2
 ;;
 
 let rec ensure_compatible_interface span intf_modul modul =

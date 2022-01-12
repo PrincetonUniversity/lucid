@@ -85,25 +85,27 @@ let parse_symbolics (filename : string) =
   match j with
   | `Assoc lst ->
     let sizes =
-      match List.assoc "sizes" lst with
-      | `Assoc lst ->
+      match List.assoc_opt "sizes" lst with
+      | Some (`Assoc lst) ->
         List.fold_left
           (fun acc (name, j) ->
             let size = parse_size name j in
             StringMap.add name size acc)
           StringMap.empty
           lst
-      | _ -> failwith "Unexpected symbolic sizes format"
+      | Some _ -> failwith "Unexpected symbolic sizes format"
+      | None -> StringMap.empty
     in
     let symbolics =
-      match List.assoc "symbolics" lst with
-      | `Assoc lst ->
+      match List.assoc_opt "symbolics" lst with
+      | Some (`Assoc lst) ->
         (* We have to delay parsing until we know what type to expect *)
         List.fold_left
           (fun acc (name, j) -> StringMap.add name j acc)
           StringMap.empty
           lst
-      | _ -> failwith "Unexpected symbolic sizes format"
+      | Some _ -> failwith "Unexpected symbolic sizes format"
+      | None -> StringMap.empty
     in
     sizes, symbolics
   | _ -> failwith "Unexpected symbolic file format"

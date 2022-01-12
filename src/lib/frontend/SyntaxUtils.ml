@@ -55,6 +55,31 @@ let wrap_effect base lst =
 (* Normalization and comparison functions *)
 (******************************************)
 
+let rec is_global_rty rty =
+  match TyTQVar.strip_links rty with
+  | TBool | TVoid | TGroup | TInt _ | TEvent | TFun _ | TMemop _ -> false
+  | TQVar _ -> false (* I think *)
+  | TName (_, _, b) | TAbstract (_, _, b) -> b
+  | TTuple lst -> List.exists is_global_rty lst
+  | TRecord lst -> List.exists (fun (_, rty) -> is_global_rty rty) lst
+  | TVector (t, _) -> is_global_rty t
+;;
+
+let is_global ty = is_global_rty ty.raw_ty
+
+(* Similar to is_global_rty, but also returns false for TQVars *)
+let rec is_not_global_rty rty =
+  match TyTQVar.strip_links rty with
+  | TBool | TVoid | TGroup | TInt _ | TEvent | TFun _ | TMemop _ -> true
+  | TQVar _ -> false (* I think *)
+  | TName (_, _, b) | TAbstract (_, _, b) -> not b
+  | TTuple lst -> List.for_all is_not_global_rty lst
+  | TRecord lst -> List.for_all (fun (_, rty) -> is_not_global_rty rty) lst
+  | TVector (t, _) -> is_not_global_rty t
+;;
+
+let is_not_global ty = is_not_global_rty ty.raw_ty
+
 let add_sizes s1 s2 =
   match STQVar.strip_links s1, STQVar.strip_links s2 with
   | IConst n1, IConst n2 -> IConst (n1 + n2)
@@ -231,7 +256,9 @@ let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
     , _ ) -> false
 
 and equiv_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
-  (ignore_effects || equiv_effect ~qvars_wild ty1.teffect ty2.teffect)
+  (ignore_effects
+  || is_not_global ty1
+  || equiv_effect ~qvars_wild ty1.teffect ty2.teffect)
   && equiv_raw_ty ~ignore_effects ~qvars_wild ty1.raw_ty ty2.raw_ty
 ;;
 
@@ -242,31 +269,6 @@ let max_effect e1 e2 =
   then None
   else Some (wrap_effect base1 (max lst1 lst2))
 ;;
-
-let rec is_global_rty rty =
-  match TyTQVar.strip_links rty with
-  | TBool | TVoid | TGroup | TInt _ | TEvent | TFun _ | TMemop _ -> false
-  | TQVar _ -> false (* I think *)
-  | TName (_, _, b) | TAbstract (_, _, b) -> b
-  | TTuple lst -> List.exists is_global_rty lst
-  | TRecord lst -> List.exists (fun (_, rty) -> is_global_rty rty) lst
-  | TVector (t, _) -> is_global_rty t
-;;
-
-let is_global ty = is_global_rty ty.raw_ty
-
-(* Similar to is_global_rty, but also returns false for TQVars *)
-let rec is_not_global_rty rty =
-  match TyTQVar.strip_links rty with
-  | TBool | TVoid | TGroup | TInt _ | TEvent | TFun _ | TMemop _ -> true
-  | TQVar _ -> false (* I think *)
-  | TName (_, _, b) | TAbstract (_, _, b) -> not b
-  | TTuple lst -> List.for_all is_not_global_rty lst
-  | TRecord lst -> List.for_all (fun (_, rty) -> is_not_global_rty rty) lst
-  | TVector (t, _) -> is_not_global_rty t
-;;
-
-let is_not_global ty = is_not_global_rty ty.raw_ty
 
 let default_expression ty =
   let rec aux rty =

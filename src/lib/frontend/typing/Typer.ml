@@ -1025,11 +1025,8 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
       let m =
         let m1 = lookup_module d.dspan env cid1 in
         let m2 = lookup_module d.dspan env cid2 in
-        print_endline @@ "m1 : " ^ modul_to_string m1;
-        print_endline @@ "m2 : " ^ modul_to_string m2;
-        if equiv_modul m1 m2
-        then m1
-        else error_sp d.dspan @@ "Modules have different interfaces"
+        ensure_equiv_modul d.dspan m1 m2;
+        m1
       in
       ( define_submodule id1 m env
       , effect_count
