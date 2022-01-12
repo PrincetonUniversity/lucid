@@ -47,6 +47,7 @@ let lookup_modul_size id m = IdSet.find_opt id m.sizes
 let lookup_modul_var id m = IdMap.find_opt id m.vars
 let lookup_modul_ty id m = IdMap.find_opt id m.user_tys
 let lookup_modul_constr id m = IdMap.find_opt id m.constructors
+let lookup_modul_submodule id m = IdMap.find_opt id m.submodules
 
 type env =
   { (*** Global information ***)
@@ -247,6 +248,15 @@ let lookup_var span env cid =
     (match lookup_any span lookup_fun env cid with
     | Some t -> t
     | None -> error_sp span @@ "Unbound variable " ^ Printing.cid_to_string cid)
+;;
+
+let lookup_module span env cid =
+  match lookup_any span lookup_modul_submodule env cid with
+  | Some m -> m
+  | None ->
+    Console.error_position span
+    @@ "Unknown module "
+    ^ Printing.cid_to_string cid
 ;;
 
 (* Drops the last n constraints in the second environment and returns

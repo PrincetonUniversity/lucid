@@ -1019,6 +1019,21 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
       (* print_endline @@ "After module " ^ id_to_string id ^ ", env is";
       print_endline @@ modul_to_string ~show_defs:false env.current_modul; *)
       env, effect_count, DModule (id, intf, ds)
+    | DModuleAlias (id1, e, cid1, cid2) ->
+      let env, inf_e, inf_ety = infer_exp env e |> textract in
+      unify_raw_ty e.espan inf_ety.raw_ty TBool;
+      let m =
+        let m1 = lookup_module d.dspan env cid1 in
+        let m2 = lookup_module d.dspan env cid2 in
+        print_endline @@ "m1 : " ^ modul_to_string m1;
+        print_endline @@ "m2 : " ^ modul_to_string m2;
+        if equiv_modul m1 m2
+        then m1
+        else error_sp d.dspan @@ "Modules have different interfaces"
+      in
+      ( define_submodule id1 m env
+      , effect_count
+      , DModuleAlias (id1, inf_e, cid1, cid2) )
   in
   let new_d = { d with d = new_d } in
   Wellformed.check_qvars new_d;
