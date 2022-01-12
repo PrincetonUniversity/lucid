@@ -18,6 +18,9 @@ let process_prog ds =
   print_if_verbose "---------Concretizing symbolics-------------";
   let ds = SymbolicElimination.eliminate_prog ds in
   print_if_debug ds;
+  print_if_verbose "---------Aliasing Modules-------------";
+  let ds = ModuleAliasing.alias_prog ds in
+  print_if_debug ds;
   print_if_verbose "---------Making returns explicit-------------";
   let ds = ExplicitReturns.adjust_returns ds in
   print_if_debug ds;
