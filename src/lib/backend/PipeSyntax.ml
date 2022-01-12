@@ -613,10 +613,15 @@ module Placement = struct
       ^ (CL.length p.p_stages |> string_of_int));
     match p.p_stages with
     (* pipe is empty, add first stage. *)
-    | [] ->
+    | [] -> (
+      (* edge case can happen here: we try to place an instruction in the 
+         first stage, but that instruction can't be placed yet. *)
       let updated_ctx, opt_res = place_in_new_stage ctx dfg cid_decls p tids in
-      let new_cid_decls, fst_stage = Option.get opt_res in
-      updated_ctx, new_cid_decls, add_stage p fst_stage
+      match opt_res with 
+      | Some (new_cid_decls, fst_stage) -> 
+        updated_ctx, new_cid_decls, add_stage p fst_stage
+      | None -> ctx, cid_decls, p
+    )
     (* pipe has stages. try to place into one of them. If that fails, append a new stage. *)
     | stages ->
       (match place_in_stages ctx dfg cid_decls stages [] tids with
