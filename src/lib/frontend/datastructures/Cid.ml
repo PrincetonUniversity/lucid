@@ -33,6 +33,12 @@ let rec fresh ss =
   | s :: ss -> Compound (Id.create s, fresh ss)
 ;;
 
+let rec freshen_last cid =
+  match cid with
+  | Id id -> Id (Id.freshen id)
+  | Compound (id, cid) -> Compound (id, freshen_last cid)
+;;
+
 let str_cons str cid : t =
   match cid with
   | Id id -> Compound (Id.fresh str, Id id)

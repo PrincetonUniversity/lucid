@@ -132,20 +132,28 @@ let eliminate_prog ds =
     then StringMap.empty, StringMap.empty
     else parse_symbolics filename
   in
-  List.map
-    (fun d ->
-      match d.d with
-      | DSize (id, None) ->
-        let sz =
-          match StringMap.find_opt (Id.name id) sizes with
-          | Some n -> IConst n
-          | None ->
-            Console.error
-            @@ "Specification file contains no definition for size "
-            ^ Printing.id_to_string id
-        in
-        { d with d = DSize (id, Some sz) }
-      | DSymbolic (id, ty) ->
+  (* Replace symbolic variable/size declarations with constant declarations.
+     HACK: Also inline any symbolic booleans into module aliasing declarations,
+     since we need to do that before we could normally run ConstInlining *)
+  let replacer =
+    object
+      inherit [_] s_map as super
+
+      method! visit_DSize env id szo =
+        match szo with
+        | None ->
+          let sz =
+            match StringMap.find_opt (Id.name id) sizes with
+            | Some n -> IConst n
+            | None ->
+              Console.error
+              @@ "Specification file contains no definition for size "
+              ^ Printing.id_to_string id
+          in
+          DSize (id, Some sz)
+        | _ -> super#visit_DSize env id szo
+
+      method! visit_DSymbolic env id ty =
         let e =
           match StringMap.find_opt (Id.name id) symbolics with
           | Some j -> parse_symbolic sizes id ty j
@@ -154,7 +162,33 @@ let eliminate_prog ds =
             @@ "Specification file contains no definition for symbolic "
             ^ Printing.id_to_string id
         in
-        { d with d = DConst (id, ty, e) }
-      | _ -> d)
-    ds
+        env := IdMap.add id e !env;
+        DConst (id, ty, e)
+
+      method! visit_DConst env id ty e =
+        (* Just in case a const shadows a symbolic, since we haven't run alpha-
+           renaming yet *)
+        env := IdMap.add id e !env;
+        DConst (id, ty, e)
+
+      method! visit_DModuleAlias env id e cid1 cid2 =
+        let e =
+          match e.e with
+          | EVar (Id id') ->
+            (match IdMap.find_opt id' !env with
+            | Some e -> e
+            | None -> e)
+          | _ -> e
+        in
+        DModuleAlias (id, e, cid1, cid2)
+
+      method! visit_DModule env id intf ds =
+        let old_env = !env in
+        let ret = super#visit_DModule env id intf ds in
+        (* Symbolic declarations inside modules are not supported *)
+        env := old_env;
+        ret
+    end
+  in
+  replacer#visit_decls (ref IdMap.empty) ds
 ;;

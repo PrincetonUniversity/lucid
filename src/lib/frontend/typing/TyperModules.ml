@@ -15,57 +15,56 @@ let subst_TNames env d =
 
       method! visit_ty env ty =
         match ty.raw_ty with
-        | TName _ -> { ty with raw_ty = lookup_TName ty.tspan !env ty.raw_ty }
+        | TName _ ->
+          { ty with raw_ty = lookup_TName ty.tspan (snd !env) ty.raw_ty }
         | _ -> super#visit_ty env ty
 
       method! visit_raw_ty env raw_ty =
         match raw_ty with
-        | TName _ -> lookup_TName Span.default !env raw_ty
+        | TName _ -> lookup_TName Span.default (snd !env) raw_ty
         | _ -> super#visit_raw_ty env raw_ty
 
       method! visit_DUserTy env id sizes ty =
         let ty = self#visit_ty env ty in
-        env := define_user_ty id sizes ty !env;
+        env := fst !env, define_user_ty id sizes ty (snd !env);
         DUserTy (id, sizes, ty)
 
       method! visit_InTy env id sizes tyo b =
         let tyo' =
           match tyo with
           | Some ty -> Some (self#visit_ty env ty)
-          | None -> Some (TAbstract (Id (Id.freshen id), sizes, b) |> ty)
+          | None ->
+            let abs_cid = Cid.create_ids_rev @@ (Id.freshen id :: fst !env) in
+            Some (TAbstract (abs_cid, sizes, b) |> ty)
         in
-        env := define_user_ty id sizes (Option.get tyo') !env;
+        env := fst !env, define_user_ty id sizes (Option.get tyo') (snd !env);
         InTy (id, sizes, tyo', b)
 
       method! visit_DModule env id interface ds =
-        let old_env = !env in
-        let ret = super#visit_DModule env id interface ds in
-        env := old_env;
-        ret
+        let orig_path, orig_env = !env in
+        let ds = self#visit_decls env ds in
+        env := id :: orig_path, orig_env;
+        let interface = self#visit_interface env interface in
+        env := orig_path, orig_env;
+        DModule (id, interface, ds)
 
-      method! visit_interface env interface =
-        let old_env = !env in
-        let ret = super#visit_interface env interface in
-        env := old_env;
-        ret
-
-      method! visit_TQVar dummy tqv =
+      method! visit_TQVar env tqv =
         match tqv with
-        | TVar { contents = Link x } -> self#visit_raw_ty dummy x
+        | TVar { contents = Link x } -> self#visit_raw_ty env x
         | _ -> TQVar tqv
 
-      method! visit_IVar dummy tqv =
+      method! visit_IVar env tqv =
         match tqv with
-        | TVar { contents = Link x } -> self#visit_size dummy x
+        | TVar { contents = Link x } -> self#visit_size env x
         | _ -> IVar tqv
 
-      method! visit_FVar dummy tqv =
+      method! visit_FVar env tqv =
         match tqv with
-        | TVar { contents = Link x } -> self#visit_effect dummy x
+        | TVar { contents = Link x } -> self#visit_effect env x
         | _ -> FVar tqv
     end
   in
-  v#visit_decl (ref env) d
+  v#visit_decl (ref ([], env)) d
 ;;
 
 let rec modul_of_interface span env interface =
@@ -178,10 +177,10 @@ let rec ensure_equiv_modul span m1 m2 =
     IdMap.fold
       (fun id (_, ty) acc ->
         match ty.raw_ty with
-        | TAbstract (Id id1, _, b) when Id.name id = Id.name id1 ->
+        | TAbstract (cid, _, b) when Id.name id = Id.name (Cid.last_id cid) ->
           (match IdMap.find_opt id m2.user_tys with
           | Some (sizes', ({ raw_ty = TAbstract (_, _, b') } as ty'))
-            when b = b' -> replace_abstract_type (Id id1) (sizes', ty') acc
+            when b = b' -> replace_abstract_type cid (sizes', ty') acc
           | _ -> (* We'll return false later *) acc)
         | _ -> (* Not an abstract type, don't need to replace *) acc)
       m1.user_tys
@@ -272,11 +271,11 @@ let rec ensure_compatible_interface span intf_modul modul =
     IdMap.fold
       (fun id (_, ty) acc ->
         match ty.raw_ty with
-        | TAbstract (Id id1, _, b) when Id.name id = Id.name id1 ->
+        | TAbstract (cid, _, b) when Id.name id = Id.name (Cid.last_id cid) ->
           (match IdMap.find_opt id modul.user_tys with
           | Some (sizes', ty') ->
             if (b && is_global ty') || ((not b) && is_not_global ty')
-            then replace_abstract_type (Id id1) (sizes', ty') acc
+            then replace_abstract_type cid (sizes', ty') acc
             else acc
           | _ -> (* We'll return false later *) acc)
         | _ -> (* Not an abstract type, don't need to replace *) acc)
@@ -432,4 +431,20 @@ let add_interface span env id interface modul =
   let intf_modul = modul_of_interface span env interface in
   ensure_compatible_interface span intf_modul modul;
   define_submodule id intf_modul env
+;;
+
+(* Replace each abstract type declared in a modul with a fresh abstract type *)
+let re_abstract_modul new_id m =
+  IdMap.fold
+    (fun id (_, uty) acc ->
+      match uty.raw_ty with
+      | TAbstract (cid, sizes, b) when Id.name id = Id.name (Cid.last_id cid) ->
+        let new_cid = Compound (new_id, Id (Id.freshen (Cid.last_id cid))) in
+        replace_abstract_type
+          cid
+          (sizes, ty @@ TAbstract (new_cid, sizes, b))
+          acc
+      | _ -> (* Not an abstract type, don't need to replace *) acc)
+    m.user_tys
+    m
 ;;

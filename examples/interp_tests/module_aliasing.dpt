@@ -62,5 +62,5 @@ entry event in(bool add, int x) {
 }
 
 event init_all() {
-  generate BF.init(bf1);
+  generate Filter.init(bf1);
 }

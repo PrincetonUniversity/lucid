@@ -1026,7 +1026,7 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
         let m1 = lookup_module d.dspan env cid1 in
         let m2 = lookup_module d.dspan env cid2 in
         ensure_equiv_modul d.dspan m1 m2;
-        m1
+        re_abstract_modul id1 m1
       in
       ( define_submodule id1 m env
       , effect_count

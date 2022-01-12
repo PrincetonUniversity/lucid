@@ -40,3 +40,4 @@ val exists : (t * 'a) list -> t -> bool
 val replace : (t * 'a) list -> t -> 'a -> (t * 'a) list
 val remove : (t * 'a) list -> t -> (t * 'a) list
 val modify_tail : (id -> id) -> t -> t
+val freshen_last : t -> t
