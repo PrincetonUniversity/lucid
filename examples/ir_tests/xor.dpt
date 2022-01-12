@@ -1,0 +1,9 @@
+entry event pktin(int src_ip, int dst_ip);
+
+handle pktin(int src_ip, int dst_ip) {
+    int<<32>> key = src_ip ^^ dst_ip;
+    // int<<1>> foo = x[0:0];
+    if (key == 0){
+        int bar = 0;
+    }
+}
