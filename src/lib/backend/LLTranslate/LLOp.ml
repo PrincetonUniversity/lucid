@@ -128,6 +128,7 @@ let binOp_from_op op =
   | LShift -> IS.LShift
   | BitAnd -> IS.BAnd
   | BitOr -> IS.BOr
+  | BitXor -> IS.BXor
   | _ -> error "[binOp_from_op] unsupported op"
 ;;
 

@@ -59,6 +59,7 @@ and binOp =
   | LShift
   | BAnd
   | BOr
+  | BXor
   | Cast (* cast A to width of B *)
   | Slice
 (* A[X:Y] -- the slice of A from X to Y. *)
