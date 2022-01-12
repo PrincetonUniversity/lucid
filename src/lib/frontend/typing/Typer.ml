@@ -1015,6 +1015,7 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
         then define_submodule id m_env.current_modul env
         else add_interface d.dspan env id intf m_env.current_modul
       in
+      let env = { env with record_labels = m_env.record_labels } in
       (* print_endline @@ "After module " ^ id_to_string id ^ ", env is";
       print_endline @@ modul_to_string ~show_defs:false env.current_modul; *)
       env, effect_count, DModule (id, intf, ds)

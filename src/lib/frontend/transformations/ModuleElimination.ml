@@ -167,6 +167,7 @@ let replace_abstract_tys ds =
         let path, map = !env in
         env := id :: path, map;
         let interface = self#visit_interface env interface in
+        env := path, snd !env;
         DModule (id, interface, ds)
 
       method! visit_InTy env id sizes tyo b =
