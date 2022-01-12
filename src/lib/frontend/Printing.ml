@@ -492,6 +492,13 @@ and d_to_string d =
       (id_to_string id)
       intf_str
       (decls_to_string ds)
+  | DModuleAlias (id1, e, cid1, cid2) ->
+    Printf.sprintf
+      "module %s = %s if %s else %s"
+      (id_to_string id1)
+      (cid_to_string cid1)
+      (exp_to_string e)
+      (cid_to_string cid2)
 
 and decl_to_string d = d_to_string d.d
 and decls_to_string ds = concat_map "\n\n" decl_to_string ds

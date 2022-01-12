@@ -68,6 +68,7 @@ let add_definitions prefix env ds =
     | DGlobal (id, _, _) -> { env with vars = add_entry env.vars id }
     | DSize (id, _) -> { env with sizes = add_entry env.sizes id }
     | DUserTy (id, _, _) -> { env with types = add_entry env.types id }
+    | DModuleAlias _ -> failwith "Should be eliminated before this"
     | DModule (id, _, ds) ->
       let env' = List.fold_left (aux id) empty_env ds in
       let prefix_entries map =
@@ -136,6 +137,7 @@ let rec replace_module env m_id ds =
           | DModule (id, _, ds) ->
             let _, ds = replace_module env id ds in
             replace_module env m_id ds
+          | DModuleAlias _ -> failwith "Should be eliminated before this"
         in
         env, d :: ds)
       (env, [])

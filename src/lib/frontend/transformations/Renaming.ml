@@ -8,6 +8,7 @@ type kind =
   | KHandler
   | KConstr
   | KUserTy
+  | KModule
 
 module KindSet = Set.Make (struct
   type t = kind * cid
@@ -72,7 +73,7 @@ let add_module_defs m_id old_env m_env =
         | KUserTy ->
           let x = CidMap.find cid m_env.ty_map |> prefix in
           { acc with ty_map = CidMap.add (prefix cid) x acc.ty_map }
-        | KHandler -> acc)
+        | KHandler | KModule -> acc)
       m_env.module_defs
       old_env
   in
@@ -292,6 +293,7 @@ let rename prog =
           let new_env = add_module_defs id orig_env env in
           env <- new_env;
           DModule (id, intf, body)
+        | DModuleAlias _ -> failwith "Should be eliminated before this"
 
       (*** Places we enter a scope ***)
       method! visit_SIf dummy test left right =

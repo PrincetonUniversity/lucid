@@ -198,7 +198,7 @@ let rec replace_decl (env : env) d =
     env, [{ d with d = DHandler (id, (new_params, body)) }]
   | DSize _ | DMemop _ | DExtern _ | DSymbolic _ | DConst _ | DGlobal _ ->
     env, [d]
-  | DFun _ | DConstr _ | DModule _ | DUserTy _ ->
+  | DFun _ | DConstr _ | DModule _ | DUserTy _ | DModuleAlias _ ->
     Console.error_position
       d.dspan
       "Modules, records and functions should be eliminated before tuple \
