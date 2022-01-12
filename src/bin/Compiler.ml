@@ -33,7 +33,7 @@ module ArgParse = struct
   type args_t =
     { dptfn : string
     ; p4fn : string
-    ; configfn : string
+    ; configfn : string option
     ; builddir : string
     ; interp_spec_file : string
     ; aargs : string list
@@ -42,7 +42,7 @@ module ArgParse = struct
   let args_default =
     { dptfn = ""
     ; p4fn = ""
-    ; configfn = ""
+    ; configfn = None
     ; builddir = ""
     ; interp_spec_file = ""
     ; aargs = []
@@ -72,7 +72,9 @@ module ArgParse = struct
     let args =
       match !args_ref.aargs with
       | [dptfn; p4fn; configfn; builddir] ->
-        { !args_ref with dptfn; p4fn; configfn; builddir; aargs = [] }
+        { !args_ref with dptfn; p4fn; configfn=(Some configfn); builddir; aargs = [] }
+      | [dptfn; p4fn; builddir] -> (* manual linking for custom entry / exit P4 integration *)
+        { !args_ref with dptfn; p4fn; configfn=None; builddir; aargs = [] }
       | _ -> error usage
     in
     args
@@ -177,7 +179,7 @@ let parse_externs_from_interp_spec spec_file =
 ;;
 
 (* new (3/20/21) compilation pipeline *)
-let compile_to_tofino target_filename p4_harness_fn config_fn interp_spec_fn =
+let compile_to_tofino target_filename p4_harness_fn config_fn_opt interp_spec_fn =
   start_backend_logs ();
   (* parse *)
   let ds = Input.parse target_filename in
@@ -196,7 +198,10 @@ let compile_to_tofino target_filename p4_harness_fn config_fn interp_spec_fn =
      list: (pragma string, code string to replace macro with) *)
   (* generate the entry event trigger table *)
   (* generate entry event triggers (if any) from config file *)
-  let trigger_macro_defs = JsonBlocks.generate config_fn in
+  let trigger_macro_defs = match config_fn_opt with 
+    | Some config_fn -> JsonBlocks.generate config_fn
+    | None -> [] 
+  in
   (* linking: put p4 blocks together into a single file. *)
   let p4_str =
     LinkP4.link_p4 (p4_obj_dict @ trigger_macro_defs) p4_harness_fn
