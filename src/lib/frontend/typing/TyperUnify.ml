@@ -193,12 +193,12 @@ let unify_effect (span : Span.t) eff1 eff2 : unit =
   check_unify span (try_unify_effect span) effect_to_string eff1 eff2
 ;;
 
-let rec try_unify_ty span env ty1 ty2 =
+let rec try_unify_ty span ty1 ty2 =
   let ty1, ty2 = strip_links ty1, strip_links ty2 in
   if ty1.raw_ty == ty2.raw_ty && ty1.teffect == ty2.teffect
   then ()
   else (
-    unify_raw_ty span env ty1.raw_ty ty2.raw_ty;
+    unify_raw_ty span ty1.raw_ty ty2.raw_ty;
     (* Don't unify effects for things which definitely aren't global *)
     if not (SyntaxUtils.is_not_global_rty ty1.raw_ty)
     then try_unify_effect span ty1.teffect ty2.teffect;
@@ -206,9 +206,9 @@ let rec try_unify_ty span env ty1 ty2 =
     | None -> ty1.tprint_as := !(ty2.tprint_as)
     | Some x -> ty2.tprint_as := Some x)
 
-and try_unify_rty span env rty1 rty2 =
-  let unify_raw_ty = unify_raw_ty span env in
-  let unify_ty = unify_ty span env in
+and try_unify_rty span rty1 rty2 =
+  let unify_raw_ty = unify_raw_ty span in
+  let unify_ty = unify_ty span in
   match rty1, rty2 with
   | TQVar tqv, ty | ty, TQVar tqv ->
     try_unify_tqvar
@@ -262,9 +262,9 @@ and try_unify_rty span env rty1 rty2 =
       | TAbstract _ )
     , _ ) -> raise CannotUnify
 
-and unify_ty (span : Span.t) env ty1 ty2 : unit =
-  check_unify span (try_unify_ty span env) ty_to_string ty1 ty2
+and unify_ty (span : Span.t) ty1 ty2 : unit =
+  check_unify span (try_unify_ty span) ty_to_string ty1 ty2
 
-and unify_raw_ty (span : Span.t) env ty1 ty2 : unit =
-  check_unify span (try_unify_rty span env) raw_ty_to_string ty1 ty2
+and unify_raw_ty (span : Span.t) ty1 ty2 : unit =
+  check_unify span (try_unify_rty span) raw_ty_to_string ty1 ty2
 ;;

@@ -82,11 +82,11 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
     validate_size e.espan env size;
     let env, inf_es = infer_exps env es in
     let hd = List.hd inf_es in
-    unify_ty hd.espan env (Option.get hd.ety) (mk_ty @@ TInt (fresh_size ()));
+    unify_ty hd.espan (Option.get hd.ety) (mk_ty @@ TInt (fresh_size ()));
     env, { e with e = EHash (size, inf_es); ety = Some (mk_ty @@ TInt size) }
   | EFlood e1 ->
     let env, inf_e, inf_ety = infer_exp env e1 |> textract in
-    unify_ty e.espan env inf_ety (mk_ty @@ TInt (fresh_size ()));
+    unify_ty e.espan inf_ety (mk_ty @@ TInt (fresh_size ()));
     env, { e with e = EFlood inf_e; ety = Some (mk_ty @@ TGroup) }
   | ECall (f, args) ->
     let _, _, inferred_fty =
@@ -104,7 +104,7 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
     in
     (* print_endline @@ "Inferred_fty: " ^ Printing.ty_to_string inferred_fty;
     print_endline @@ "fty: " ^ Printing.func_to_string fty; *)
-    unify_raw_ty e.espan env (TFun fty) inferred_fty.raw_ty;
+    unify_raw_ty e.espan (TFun fty) inferred_fty.raw_ty;
     let new_env =
       check_constraints e.espan "Function call" env fty.end_eff
       @@ !(fty.constraints)
@@ -118,7 +118,7 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
       | Some _ -> failwith "Impossible, I hope"
       | None -> error_sp e.espan @@ "Unknown label " ^ label
     in
-    unify_ty e.espan env expected_ty (Option.get inf_e.ety);
+    unify_ty e.espan expected_ty (Option.get inf_e.ety);
     let e_effect = (Option.get inf_e.ety).teffect in
     let idx, (_, raw_ret_ty) = List.findi (fun _ (l, _) -> l = label) entries in
     let ret_ty =
@@ -142,7 +142,7 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
         (List.map2 (fun l e -> l, (Option.get e.ety).raw_ty) labels inf_es)
       |> mk_ty
     in
-    unify_ty e.espan env expected_ty inf_ety;
+    unify_ty e.espan expected_ty inf_ety;
     let inf_entries = List.combine labels inf_es in
     env, { e with e = ERecord inf_entries; ety = Some expected_ty }
   | EWith (base, entries) ->
@@ -157,7 +157,7 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
       | None -> error_sp e.espan @@ "Unknown label " ^ List.hd labels
     in
     let env, inf_base, inf_basety = infer_exp env base |> textract in
-    unify_raw_ty e.espan env expected_ty.raw_ty inf_basety.raw_ty;
+    unify_raw_ty e.espan expected_ty.raw_ty inf_basety.raw_ty;
     let env, inf_es = infer_exps env es in
     let inf_entries = List.combine labels inf_es in
     let expected_entries =
@@ -176,7 +176,7 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
             ^ " does not belong to the same type as label "
             ^ List.hd labels
         in
-        unify_raw_ty e.espan env (Option.get e.ety).raw_ty expected)
+        unify_raw_ty e.espan (Option.get e.ety).raw_ty expected)
       inf_entries;
     env, { e with e = EWith (inf_base, inf_entries); ety = Some expected_ty }
   | ETuple es ->
@@ -211,7 +211,7 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
           let expected =
             { ety with teffect = wrap_effect ety.teffect [None, 0; None, i] }
           in
-          unify_ty e.espan env expected (Option.get e'.ety)))
+          unify_ty e.espan expected (Option.get e'.ety)))
       inf_es;
     let final_ety = TVector (ety.raw_ty, IConst (List.length es)) |> mk_ty in
     env, { e with e = EVector inf_es; ety = Some final_ety }
@@ -231,7 +231,7 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
     let expected_ety =
       ty_eff (TVector (entry_ty.raw_ty, length)) (fresh_effect ())
     in
-    unify_ty e1.espan env inf_e1ty expected_ety;
+    unify_ty e1.espan inf_e1ty expected_ety;
     if List.exists
          (function
            | Some id, _ -> Id.equal id renamed_idx
@@ -272,7 +272,7 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
     let expected_ety =
       ty_eff (TVector (entry_ty.raw_ty, length)) (fresh_effect ())
     in
-    unify_ty e1.espan env inf_e1ty expected_ety;
+    unify_ty e1.espan inf_e1ty expected_ety;
     (match STQVar.strip_links length with
     | IConst n ->
       if i >= n
@@ -363,56 +363,56 @@ and infer_op env span op args =
     match op, args with
     | Not, [e] ->
       let env, inf_e, inf_ety = infer_exp env e |> textract in
-      unify_raw_ty span env inf_ety.raw_ty TBool;
+      unify_raw_ty span inf_ety.raw_ty TBool;
       env, mk_ty TBool, [inf_e]
     | (Neg | BitNot), [e] ->
       let env, inf_e, inf_ety = infer_exp env e |> textract in
-      unify_raw_ty span env inf_ety.raw_ty TBool;
+      unify_raw_ty span inf_ety.raw_ty TBool;
       env, mk_ty (TInt (fresh_size ())), [inf_e]
     | (And | Or), [e1; e2] ->
       let env, inf_e1, inf_ety1 = infer_exp env e1 |> textract in
       let env, inf_e2, inf_ety2 = infer_exp env e2 |> textract in
-      unify_raw_ty span env inf_ety1.raw_ty TBool;
-      unify_raw_ty span env inf_ety2.raw_ty TBool;
+      unify_raw_ty span inf_ety1.raw_ty TBool;
+      unify_raw_ty span inf_ety2.raw_ty TBool;
       env, mk_ty TBool, [inf_e1; inf_e2]
     | (Eq | Neq), [e1; e2] ->
       let env, inf_e1, inf_ety1 = infer_exp env e1 |> textract in
       let env, inf_e2, inf_ety2 = infer_exp env e2 |> textract in
-      unify_ty span env inf_ety1 inf_ety2;
+      unify_ty span inf_ety1 inf_ety2;
       env, mk_ty TBool, [inf_e1; inf_e2]
     | (Less | More | Leq | Geq), [e1; e2] ->
       let tsize = fresh_size () in
       let env, inf_e1, inf_ety1 = infer_exp env e1 |> textract in
       let env, inf_e2, inf_ety2 = infer_exp env e2 |> textract in
-      unify_raw_ty span env inf_ety1.raw_ty (TInt tsize);
-      unify_raw_ty span env inf_ety2.raw_ty (TInt tsize);
+      unify_raw_ty span inf_ety1.raw_ty (TInt tsize);
+      unify_raw_ty span inf_ety2.raw_ty (TInt tsize);
       env, mk_ty TBool, [inf_e1; inf_e2]
     | (Plus | Sub | SatPlus | SatSub | BitAnd | BitOr | BitXor), [e1; e2] ->
       let tsize = fresh_size () in
       let env, inf_e1, inf_ety1 = infer_exp env e1 |> textract in
       let env, inf_e2, inf_ety2 = infer_exp env e2 |> textract in
-      unify_raw_ty span env inf_ety1.raw_ty (TInt tsize);
-      unify_raw_ty span env inf_ety2.raw_ty (TInt tsize);
+      unify_raw_ty span inf_ety1.raw_ty (TInt tsize);
+      unify_raw_ty span inf_ety2.raw_ty (TInt tsize);
       env, mk_ty @@ TInt tsize, [inf_e1; inf_e2]
     | (LShift | RShift), [e1; e2] ->
       let tsize = fresh_size () in
       let env, inf_e1, inf_ety1 = infer_exp env e1 |> textract in
       let env, inf_e2, inf_ety2 = infer_exp env e2 |> textract in
-      unify_raw_ty span env inf_ety1.raw_ty (TInt tsize);
-      unify_raw_ty span env inf_ety2.raw_ty (TInt (fresh_size ()));
+      unify_raw_ty span inf_ety1.raw_ty (TInt tsize);
+      unify_raw_ty span inf_ety2.raw_ty (TInt (fresh_size ()));
       env, mk_ty @@ TInt tsize, [inf_e1; inf_e2]
     | Conc, [e1; e2] ->
       let tsize1 = fresh_size () in
       let tsize2 = fresh_size () in
       let env, inf_e1, inf_ety1 = infer_exp env e1 |> textract in
       let env, inf_e2, inf_ety2 = infer_exp env e2 |> textract in
-      unify_raw_ty span env inf_ety1.raw_ty (TInt tsize1);
-      unify_raw_ty span env inf_ety2.raw_ty (TInt tsize2);
+      unify_raw_ty span inf_ety1.raw_ty (TInt tsize1);
+      unify_raw_ty span inf_ety2.raw_ty (TInt tsize2);
       env, mk_ty @@ TInt (add_sizes tsize1 tsize2), [inf_e1; inf_e2]
     | Cast out_size, [e] ->
       let tsize = fresh_size () in
       let env, inf_e, inf_ety = infer_exp env e |> textract in
-      unify_raw_ty span env inf_ety.raw_ty (TInt tsize);
+      unify_raw_ty span inf_ety.raw_ty (TInt tsize);
       env, mk_ty @@ TInt out_size, [inf_e]
     | Slice (hi, lo), [e] ->
       (* FIXME: To be sound, we should also require that the size is at most hi.
@@ -422,13 +422,13 @@ and infer_op env span op args =
       else (
         let tsize = fresh_size () in
         let env, inf_e, inf_ety = infer_exp env e |> textract in
-        unify_raw_ty span env inf_ety.raw_ty (TInt tsize);
+        unify_raw_ty span inf_ety.raw_ty (TInt tsize);
         env, mk_ty @@ TInt (IConst (hi - lo + 1)), [inf_e])
     | TGet (size, idx), [e] ->
       let env, inf_e, inf_ety = infer_exp env e |> textract in
       let expected_rtys = List.init size (fun _ -> (fresh_type ()).raw_ty) in
       let expected_ty = mk_ty @@ TTuple expected_rtys in
-      unify_ty span env inf_ety expected_ty;
+      unify_ty span inf_ety expected_ty;
       if idx < 0 || idx >= size
       then error_sp span "Invalid index in TGet operator";
       let final_ty =
@@ -506,12 +506,12 @@ and infer_statement (env : env) (s : statement) : env * statement =
         | Some _, None -> err "Empty return inside non-void function body"
         | Some ty, Some e ->
           let env, inf_e, inf_ety = infer_exp env e |> textract in
-          unify_ty s.sspan env ty inf_ety;
+          unify_ty s.sspan ty inf_ety;
           return env, SRet (Some inf_e)
       end
     | SLocal (id, ty, e) ->
       let env, inf_e, ety = infer_exp env e |> textract in
-      unify_ty s.sspan env ty ety;
+      unify_ty s.sspan ty ety;
       (match TyTQVar.strip_links ety.raw_ty with
       | TVoid ->
         error_sp s.sspan
@@ -522,7 +522,7 @@ and infer_statement (env : env) (s : statement) : env * statement =
     | SAssign (id, e) ->
       let env, inf_e, ety = infer_exp env e |> textract in
       (match IdMap.find_opt id env.locals with
-      | Some rty -> unify_ty s.sspan env rty ety
+      | Some rty -> unify_ty s.sspan rty ety
       | None ->
         (match lookup_var s.sspan env (Id id) with
         | _ ->
@@ -540,13 +540,13 @@ and infer_statement (env : env) (s : statement) : env * statement =
       then error_sp s.sspan "Incorrect number of arguments to printf statement";
       let env, inf_es = infer_exps env es in
       List.iter2
-        (fun e ty -> unify_raw_ty s.sspan env (Option.get e.ety).raw_ty ty)
+        (fun e ty -> unify_raw_ty s.sspan (Option.get e.ety).raw_ty ty)
         inf_es
         expected_tys;
       env, SPrintf (str, inf_es)
     | SIf (e, s1, s2) ->
       let env, inf_e, inf_ety = infer_exp env e |> textract in
-      unify_raw_ty e.espan env TBool inf_ety.raw_ty;
+      unify_raw_ty e.espan TBool inf_ety.raw_ty;
       let env1, inf_s1 = infer_statement env s1 in
       let env2, inf_s2 = infer_statement env s2 in
       let env =
@@ -577,21 +577,21 @@ and infer_statement (env : env) (s : statement) : env * statement =
       { env with current_effect }, SIf (inf_e, inf_s1, inf_s2)
     | SGen (g, e) ->
       let env, inf_e, ety = infer_exp env e |> textract in
-      unify_raw_ty s.sspan env ety.raw_ty TEvent;
+      unify_raw_ty s.sspan ety.raw_ty TEvent;
       let env, inf_g =
         match g with
         | GSingle None -> env, g
         | GSingle (Some loc) ->
           let env, inf_loc, lty = infer_exp env loc |> textract in
-          unify_raw_ty s.sspan env lty.raw_ty (TInt (fresh_size ()));
+          unify_raw_ty s.sspan lty.raw_ty (TInt (fresh_size ()));
           env, GSingle (Some inf_loc)
         | GMulti loc ->
           let env, inf_loc, lty = infer_exp env loc |> textract in
-          unify_raw_ty s.sspan env lty.raw_ty TGroup;
+          unify_raw_ty s.sspan lty.raw_ty TGroup;
           env, GMulti inf_loc
         | GPort loc ->
           let env, inf_loc, lty = infer_exp env loc |> textract in
-          unify_raw_ty s.sspan env lty.raw_ty (TInt (fresh_size ()));
+          unify_raw_ty s.sspan lty.raw_ty (TInt (fresh_size ()));
           env, GPort inf_loc
       in
       env, SGen (inf_g, inf_e)
@@ -676,8 +676,7 @@ and infer_branches (env : env) s etys branches =
       error_sp
         s.sspan
         "A branch of this match statement has the wrong number of patterns"
-    | _ ->
-      List.iter2 (unify_raw_ty s.sspan env) etys (List.map infer_pattern pats)
+    | _ -> List.iter2 (unify_raw_ty s.sspan) etys (List.map infer_pattern pats)
   in
   let infer_branch (pats, s) =
     check_pats pats;
@@ -726,8 +725,8 @@ let infer_memop span env (params, s) =
   let env, id1, id2 =
     match params with
     | [(id1, ty1); (id2, ty2)] ->
-      unify_raw_ty ty1.tspan env ty1.raw_ty arg1ty;
-      unify_raw_ty ty2.tspan env ty2.raw_ty arg2ty;
+      unify_raw_ty ty1.tspan ty1.raw_ty arg1ty;
+      unify_raw_ty ty2.tspan ty2.raw_ty arg2ty;
       let locals = IdMap.add id1 ty1 env.locals in
       let locals = IdMap.add id2 ty2 locals in
       { env with locals }, id1, id2
@@ -779,7 +778,7 @@ let retrieve_constraints env span id params =
            an event which takes Array.t<<'a>>, but a hander which takes Array.t<<32>> *)
       try
         try_unify_lists
-          (fun (_, ty1) ty2 -> unify_ty span env ty1 ty2)
+          (fun (_, ty1) ty2 -> unify_ty span ty1 ty2)
           params
           params2
       with
@@ -825,7 +824,7 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
       in
       leave_level ();
       let ty = { ty with teffect = effect_count } in
-      unify_ty d.dspan env inf_ety ty;
+      unify_ty d.dspan inf_ety ty;
       let ty = generalizer#visit_ty () ty in
       let env = define_const id ty env in
       env, FSucc effect_count, DGlobal (id, ty, inf_e)
@@ -833,7 +832,7 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
       enter_level ();
       let _, inf_e, inf_ety = infer_exp env e |> textract in
       leave_level ();
-      unify_ty d.dspan env ty inf_ety;
+      unify_ty d.dspan ty inf_ety;
       let ty = generalizer#visit_ty () ty in
       if is_global ty
       then
@@ -980,7 +979,7 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
         infer_exp inf_env e |> textract
       in
       leave_level ();
-      unify_ty d.dspan env ty inf_ety;
+      unify_ty d.dspan ty inf_ety;
       let fty =
         (* If called at top level the start/end effects don't matter; otherwise,
            the constructor doesn't involve any global stuff, so it's stateless. *)
