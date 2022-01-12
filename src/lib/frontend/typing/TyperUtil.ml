@@ -185,7 +185,7 @@ let lookup_any span lookup env cid =
       | Some x -> x
       | None ->
         Console.error_position span
-        @@ "Unkown module "
+        @@ "Unknown module "
         ^ Printing.id_to_string id
     in
     (* Now walk down through that module's submodules until we hit the end of the cid *)
@@ -197,7 +197,7 @@ let lookup_any span lookup env cid =
           | Some m -> id :: path, m
           | None ->
             Console.error_position span
-            @@ "Unkown module "
+            @@ "Unknown module "
             ^ BatString.concat
                 "."
                 (List.rev_map Printing.id_to_string (id :: path)))
