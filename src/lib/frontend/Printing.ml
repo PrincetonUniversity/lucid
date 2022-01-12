@@ -145,7 +145,7 @@ let rec raw_ty_to_string t =
   | TGroup -> "group"
   | TRecord lst ->
     "{"
-    ^ concat_map "; " (fun (str, ty) -> raw_ty_to_string ty ^ " : " ^ str) lst
+    ^ concat_map "; " (fun (str, ty) -> raw_ty_to_string ty ^ " " ^ str) lst
     ^ "}"
   | TVector (ty, size) ->
     Printf.sprintf "%s[%s]" (raw_ty_to_string ty) (size_to_string size)
