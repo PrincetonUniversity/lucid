@@ -262,7 +262,9 @@ let rec ensure_compatible_interface span intf_modul modul =
         let body_fty = normalize_tfun body_fty in
         let sufficient_constraints =
           let rhs =
-            CLeq (body_fty.end_eff, intf_fty.end_eff) :: !(body_fty.constraints)
+            match !(body_fty.constraints) with
+            | [] -> []
+            | lst -> CLeq (body_fty.end_eff, intf_fty.end_eff) :: lst
           in
           TyperZ3.check_implies !(intf_fty.constraints) rhs
         in
