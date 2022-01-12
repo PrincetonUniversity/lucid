@@ -295,6 +295,9 @@ let rec e_to_string e =
     Printf.sprintf "{%s; return %s}" (stmt_to_string s) (exp_to_string e)
 
 and exp_to_string e = e_to_string e.e
+(* ^ Printf.sprintf "[ty:%s]"
+  @@ Option.map_default ty_to_string "" e.ety *)
+
 and es_to_string es = comma_sep exp_to_string es
 
 and params_to_string ps =

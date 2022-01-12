@@ -21,7 +21,7 @@ let fresh_maps () =
 
 let instantiator =
   (* Replace each QVar with a new unbound TVar, doing so consistently if we
-   encounter it more than once. *)
+     encounter it more than once. *)
   let inst_QVar (type a) (map : a tqvar IdMap.t ref) id =
     match IdMap.find_opt id !map with
     | Some x -> x
@@ -36,6 +36,7 @@ let instantiator =
     method! visit_IVar maps tqv =
       match tqv with
       | QVar id -> IVar (inst_QVar maps.size_map id)
+      | TVar { contents = Link x } -> self#visit_size maps x
       | TVar ({ contents = tvar } as r) ->
         let tvar' = self#visit_tyvar self#visit_size maps tvar in
         (* Make sure _not_ to create a new ref! *)
@@ -45,6 +46,7 @@ let instantiator =
     method! visit_FVar maps tqv =
       match tqv with
       | QVar id -> FVar (inst_QVar maps.effect_map id)
+      | TVar { contents = Link x } -> self#visit_effect maps x
       | TVar ({ contents = tvar } as r) ->
         let tvar' = self#visit_tyvar self#visit_effect maps tvar in
         r := tvar';
@@ -53,6 +55,7 @@ let instantiator =
     method! visit_TQVar maps tqv =
       match tqv with
       | QVar id -> TQVar (inst_QVar maps.ty_map id)
+      | TVar { contents = Link x } -> self#visit_raw_ty maps x
       | TVar ({ contents = tvar } as r) ->
         let tvar' = self#visit_tyvar self#visit_raw_ty maps tvar in
         r := tvar';
