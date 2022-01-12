@@ -59,7 +59,7 @@ let rec is_global_rty rty =
   match TyTQVar.strip_links rty with
   | TBool | TVoid | TGroup | TInt _ | TEvent | TFun _ | TMemop _ -> false
   | TQVar _ -> false (* I think *)
-  | TName (_, _, b) | TAbstract (_, _, b) -> b
+  | TName (_, _, b) | TAbstract (_, _, b, _) -> b
   | TTuple lst -> List.exists is_global_rty lst
   | TRecord lst -> List.exists (fun (_, rty) -> is_global_rty rty) lst
   | TVector (t, _) -> is_global_rty t
@@ -72,7 +72,7 @@ let rec is_not_global_rty rty =
   match TyTQVar.strip_links rty with
   | TBool | TVoid | TGroup | TInt _ | TEvent | TFun _ | TMemop _ -> true
   | TQVar _ -> false (* I think *)
-  | TName (_, _, b) | TAbstract (_, _, b) -> not b
+  | TName (_, _, b) | TAbstract (_, _, b, _) -> not b
   | TTuple lst -> List.for_all is_not_global_rty lst
   | TRecord lst -> List.for_all (fun (_, rty) -> is_not_global_rty rty) lst
   | TVector (t, _) -> is_not_global_rty t
@@ -214,7 +214,7 @@ let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
   | TMemop (size1, size2), TMemop (size3, size4) ->
     equiv_size size1 size3 && equiv_size size2 size4
   | TName (id1, sizes1, b1), TName (id2, sizes2, b2)
-  | TAbstract (id1, sizes1, b1), TAbstract (id2, sizes2, b2) ->
+  | TAbstract (id1, sizes1, b1, _), TAbstract (id2, sizes2, b2, _) ->
     b1 = b2 && Cid.equal id1 id2 && List.for_all2 equiv_size sizes1 sizes2
   | TFun func1, TFun func2 ->
     let func1 = normalize_tfun func1 in

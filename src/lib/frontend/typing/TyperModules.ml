@@ -15,13 +15,24 @@ let subst_TNames env d =
 
       method! visit_ty env ty =
         match ty.raw_ty with
-        | TName _ ->
-          { ty with raw_ty = lookup_TName ty.tspan (snd !env) ty.raw_ty }
+        | TName (cid, _, _) ->
+          let raw_ty =
+            match lookup_TName ty.tspan (snd !env) ty.raw_ty with
+            | TAbstract (x, y, z, _) -> TAbstract (x, y, z, cid)
+            | raw_ty -> raw_ty
+          in
+          { ty with raw_ty }
         | _ -> super#visit_ty env ty
 
       method! visit_raw_ty env raw_ty =
         match raw_ty with
-        | TName _ -> lookup_TName Span.default (snd !env) raw_ty
+        | TName (cid, _, _) ->
+          let raw_ty =
+            match lookup_TName Span.default (snd !env) raw_ty with
+            | TAbstract (x, y, z, _) -> TAbstract (x, y, z, cid)
+            | raw_ty -> raw_ty
+          in
+          raw_ty
         | _ -> super#visit_raw_ty env raw_ty
 
       method! visit_DUserTy env id sizes ty =
@@ -35,7 +46,7 @@ let subst_TNames env d =
           | Some ty -> Some (self#visit_ty env ty)
           | None ->
             let abs_cid = Cid.create_ids_rev @@ (Id.freshen id :: fst !env) in
-            Some (TAbstract (abs_cid, sizes, b) |> ty)
+            Some (TAbstract (abs_cid, sizes, b, Id id) |> ty)
         in
         env := fst !env, define_user_ty id sizes (Option.get tyo') (snd !env);
         InTy (id, sizes, tyo', b)
@@ -62,9 +73,31 @@ let subst_TNames env d =
         match tqv with
         | TVar { contents = Link x } -> self#visit_effect env x
         | _ -> FVar tqv
+
+      method! visit_exp env e = { e with e = self#visit_e env e.e }
     end
   in
   v#visit_decl (ref ([], env)) d
+;;
+
+let unsubst_TAbstracts ds =
+  let v =
+    object (self)
+      inherit [_] s_map
+      method! visit_TAbstract _ _ sizes b cid = TName (cid, sizes, b)
+
+      method! visit_InTy env id sizes tyo b =
+        let tyo =
+          match tyo with
+          | Some { raw_ty = TAbstract (_, _, _, Id id1) } when Id.equal id id1
+            -> None
+          | Some ty -> Some (self#visit_ty env ty)
+          | None -> failwith "Sanity check: shouldn't happen"
+        in
+        InTy (id, sizes, tyo, b)
+    end
+  in
+  v#visit_decls () ds
 ;;
 
 let rec modul_of_interface span env interface =
@@ -138,7 +171,7 @@ let replace_abstract_type (target : cid) (replacement : sizes * ty) modul =
 
       method! visit_ty (target, (sizes', ty')) ty =
         match ty.raw_ty with
-        | TAbstract (cid, sizes, _) ->
+        | TAbstract (cid, sizes, _, _) ->
           let replaced_ty =
             ReplaceUserTys.subst_sizes
               ty.tspan
@@ -177,9 +210,10 @@ let rec ensure_equiv_modul span m1 m2 =
     IdMap.fold
       (fun id (_, ty) acc ->
         match ty.raw_ty with
-        | TAbstract (cid, _, b) when Id.name id = Id.name (Cid.last_id cid) ->
+        | TAbstract (cid, _, b, _) when Id.name id = Id.name (Cid.last_id cid)
+          ->
           (match IdMap.find_opt id m2.user_tys with
-          | Some (sizes', ({ raw_ty = TAbstract (_, _, b') } as ty'))
+          | Some (sizes', ({ raw_ty = TAbstract (_, _, b', _) } as ty'))
             when b = b' -> replace_abstract_type cid (sizes', ty') acc
           | _ -> (* We'll return false later *) acc)
         | _ -> (* Not an abstract type, don't need to replace *) acc)
@@ -271,7 +305,8 @@ let rec ensure_compatible_interface span intf_modul modul =
     IdMap.fold
       (fun id (_, ty) acc ->
         match ty.raw_ty with
-        | TAbstract (cid, _, b) when Id.name id = Id.name (Cid.last_id cid) ->
+        | TAbstract (cid, _, b, _) when Id.name id = Id.name (Cid.last_id cid)
+          ->
           (match IdMap.find_opt id modul.user_tys with
           | Some (sizes', ty') ->
             if (b && is_global ty') || ((not b) && is_not_global ty')
@@ -438,11 +473,12 @@ let re_abstract_modul new_id m =
   IdMap.fold
     (fun id (_, uty) acc ->
       match uty.raw_ty with
-      | TAbstract (cid, sizes, b) when Id.name id = Id.name (Cid.last_id cid) ->
+      | TAbstract (cid, sizes, b, orig_cid)
+        when Id.name id = Id.name (Cid.last_id cid) ->
         let new_cid = Compound (new_id, Id (Id.freshen (Cid.last_id cid))) in
         replace_abstract_type
           cid
-          (sizes, ty @@ TAbstract (new_cid, sizes, b))
+          (sizes, ty @@ TAbstract (new_cid, sizes, b, orig_cid))
           acc
       | _ -> (* Not an abstract type, don't need to replace *) acc)
     m.user_tys

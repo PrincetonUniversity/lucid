@@ -125,7 +125,7 @@ let rec raw_ty_to_string t =
     cid_to_string cid
     ^ sizes_to_string sizes
     ^ if cfg.verbose_types then "{" ^ string_of_bool b ^ "}" else ""
-  | TAbstract (cid, sizes, b) ->
+  | TAbstract (cid, sizes, b, _) ->
     let base =
       if cfg.verbose_types
       then Printf.sprintf "Abs[%s]" (cid_to_string cid)

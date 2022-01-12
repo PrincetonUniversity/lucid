@@ -153,41 +153,7 @@ let replace_decl env d =
   | _ -> env, [subst#visit_decl env d]
 ;;
 
-(* Go through the body and replace abstract types with the original TName *)
-let replace_abstract_tys ds =
-  let v =
-    object (self)
-      inherit [_] s_map
-
-      method! visit_TAbstract env cid sizes b =
-        match CidMap.find_opt cid (snd !env) with
-        | Some cid -> TName (cid, sizes, b)
-        | None -> TAbstract (cid, sizes, b)
-
-      method! visit_DModule env id interface ds =
-        let ds = self#visit_decls env ds in
-        let path, map = !env in
-        env := id :: path, map;
-        let interface = self#visit_interface env interface in
-        env := path, snd !env;
-        DModule (id, interface, ds)
-
-      method! visit_InTy env id sizes tyo b =
-        match Option.map (self#visit_ty env) tyo with
-        | None -> failwith "Internal error: ModuleElimination.visit_InTy"
-        | Some { raw_ty = TAbstract (cid, _, _) } ->
-          let path, map = !env in
-          let map = CidMap.add cid (Cid.create_ids_rev (id :: path)) map in
-          env := path, map;
-          InTy (id, sizes, None, b)
-        | Some ty -> InTy (id, sizes, Some ty, b)
-    end
-  in
-  v#visit_decls (ref ([], CidMap.empty)) ds
-;;
-
 let eliminate_prog ds =
-  let ds = replace_abstract_tys ds in
   let _, ds =
     List.fold_left
       (fun (env, ds) d ->

@@ -30,6 +30,9 @@ let process_prog ds =
   print_if_verbose "-------Eliminating modules---------";
   let ds = ModuleElimination.eliminate_prog ds in
   print_if_debug ds;
+  print_if_verbose "---------typing2---------";
+  let ds = Typer.infer_prog ds in
+  print_if_debug ds;
   print_if_verbose "-------Eliminating type aliases 2---------";
   let ds = ReplaceUserTys.replace_prog ds in
   print_if_debug ds;

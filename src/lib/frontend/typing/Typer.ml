@@ -1073,5 +1073,6 @@ let infer_prog (decls : decls) : decls =
   in
   let _, _, inf_decls = List.fold_left infer_d (env, FZero, []) decls in
   ensure_fully_typed inf_decls;
+  let inf_decls = unsubst_TAbstracts inf_decls in
   List.rev inf_decls
 ;;
