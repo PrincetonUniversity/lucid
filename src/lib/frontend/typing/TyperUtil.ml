@@ -492,7 +492,7 @@ let lookup_TName span env rty =
         sizes
     in
     replaced_ty
-  | _ -> rty
+  | rty -> rty
 ;;
 
 let rec modul_to_string ?(show_defs = true) m =

@@ -14,7 +14,14 @@ let subst_TNames env d =
       inherit [_] s_map as super
 
       method! visit_ty env ty =
-        { ty with raw_ty = lookup_TName ty.tspan !env ty.raw_ty }
+        match ty.raw_ty with
+        | TName _ -> { ty with raw_ty = lookup_TName ty.tspan !env ty.raw_ty }
+        | _ -> super#visit_ty env ty
+
+      method! visit_raw_ty env raw_ty =
+        match raw_ty with
+        | TName _ -> lookup_TName Span.default !env raw_ty
+        | _ -> super#visit_raw_ty env raw_ty
 
       method! visit_DUserTy env id sizes ty =
         let ty = self#visit_ty env ty in
