@@ -41,6 +41,21 @@ let subst_TNames env d =
         let ret = super#visit_interface env interface in
         env := old_env;
         ret
+
+      method! visit_TQVar dummy tqv =
+        match tqv with
+        | TVar { contents = Link x } -> self#visit_raw_ty dummy x
+        | _ -> TQVar tqv
+
+      method! visit_IVar dummy tqv =
+        match tqv with
+        | TVar { contents = Link x } -> self#visit_size dummy x
+        | _ -> IVar tqv
+
+      method! visit_FVar dummy tqv =
+        match tqv with
+        | TVar { contents = Link x } -> self#visit_effect dummy x
+        | _ -> FVar tqv
     end
   in
   v#visit_decl (ref env) d

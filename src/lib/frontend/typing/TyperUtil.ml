@@ -480,7 +480,7 @@ let drop_indexes target eff =
 ;;
 
 let lookup_TName span env rty =
-  match rty with
+  match TyTQVar.strip_links rty with
   | TName (cid, sizes, _) ->
     let sizes', ty = lookup_ty span env cid in
     let replaced_ty =
