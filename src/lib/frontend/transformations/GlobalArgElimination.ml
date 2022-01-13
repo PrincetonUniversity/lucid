@@ -303,11 +303,11 @@ let mapping_to_string m =
   idmap_to_string
     (fun lst ->
       Printing.list_to_string
-        (fun (inst, eid, params) ->
+        (fun { inst; new_id; params } ->
           Printf.sprintf
             "inst: %s, %s(%s)\n"
-            (idmap_to_string Id.to_string inst)
-            (Id.to_string eid)
+            (idmap_to_string (Id.to_string % fst) inst)
+            (Id.to_string new_id)
             (Printing.comma_sep
                (fun (id, ty) ->
                  Printing.ty_to_string ty ^ " " ^ Id.to_string id)
@@ -372,6 +372,7 @@ let sink_handlers ds =
 let eliminate_prog ds =
   let global_info = collect_globals ds in
   let event_mappings = duplicate_all_events global_info ds in
+  (* print_endline @@ mapping_to_string event_mappings; *)
   let ds = replace_decls event_mappings ds in
   let ds = replace_uses event_mappings ds in
   let ds = deduplicate event_mappings ds in

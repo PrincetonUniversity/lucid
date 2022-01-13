@@ -141,6 +141,15 @@ let rec equiv_size ?(qvars_wild = false) s1 s2 =
   | IConst n1, IConst n2 -> n1 = n2
   | IUser id1, IUser id2 -> Cid.equal id1 id2
   | ISum (vs1, n1), ISum (vs2, n2) -> n1 = n2 && equiv_lists equiv_size vs1 vs2
+  | IConst n1, ISum (vs, n2) | ISum (vs, n2), IConst n1 ->
+    (* Special case *)
+    qvars_wild
+    && n2 <= n1
+    && List.for_all
+         (function
+           | IVar (QVar _) -> true
+           | _ -> false)
+         vs
   | IVar tqv, s | s, IVar tqv -> STQVar.equiv_tqvar ~qvars_wild equiv_size tqv s
   | _ -> false
 ;;
