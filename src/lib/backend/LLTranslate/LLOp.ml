@@ -129,6 +129,7 @@ let binOp_from_op op =
   | BitAnd -> IS.BAnd
   | BitOr -> IS.BOr
   | BitXor -> IS.BXor
+  | Conc -> IS.Concat
   | _ -> error "[binOp_from_op] unsupported op"
 ;;
 

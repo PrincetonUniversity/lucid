@@ -62,6 +62,7 @@ and binOp =
   | BXor
   | Cast (* cast A to width of B *)
   | Slice
+  | Concat
 (* A[X:Y] -- the slice of A from X to Y. *)
 
 (* non binary operations. *)

@@ -7,6 +7,24 @@ all:
 	}
 
 
+concat:
+	{ \
+	cd ../../ ;\
+	make ;\
+	cd - ;\
+	../../dptc concat.dpt ip_harness.p4 linker_config.json build;\
+	}
+
+
+inlining:
+	{ \
+	cd ../../ ;\
+	make ;\
+	cd - ;\
+	../../dptc inlining.dpt ip_harness.p4 linker_config.json build;\
+	}
+
+
 xor:
 	{ \
 	cd ../../ ;\

@@ -150,6 +150,7 @@ module PrimitiveString = struct
     | BAnd -> "&"
     | BOr -> "|"
     | BXor -> "^"
+    | Concat -> "++"
     | _ -> error "unsupported binop"
   ;;
 
@@ -188,7 +189,7 @@ module PrimitiveString = struct
         | [i1; i2] -> str_of_expr (BinOp (Sub, [i2; i1])) (* reverse operands *)
         | _ -> error "[str_of_expr] SubR opcode must have 2 operands.")
       (* all the binary operations that compile to instructions *)
-      | Add | Sub | SatSub | RShift | LShift | BAnd | BOr | BXor ->
+      | Add | Sub | SatSub | RShift | LShift | BAnd | BOr | BXor | Concat ->
         (match args with
         | [i1; i2] ->
           str_of_oper i1 ^ " " ^ str_of_binop op ^ " " ^ str_of_oper i2 ^ ";"
