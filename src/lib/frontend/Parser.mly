@@ -38,6 +38,19 @@
     in
     value_sp (VGroup locs) span |> value_to_exp
 
+  let mk_fty tspan params =
+    let start_eff = FVar (QVar (Id.fresh "eff")) in
+    let ret_ty = ty_sp TVoid tspan in
+    let fty =
+      { arg_tys = List.map snd params
+      ; ret_ty
+      ; start_eff
+      ; end_eff = start_eff
+      ; constraints = ref []
+      }
+    in
+    ty_sp (TFun fty) tspan
+
 %}
 
 %token <Span.t * Id.t> ID
@@ -301,6 +314,7 @@ tyname_def:
 decl:
     | CONST ty ID ASSIGN exp SEMI           { [dconst_sp (snd $3) $2 $5 (Span.extend $1 $6)] }
     | EXTERN ty ID SEMI                     { [dextern_sp (snd $3) $2 (Span.extend $1 $4)] }
+    | EXTERN ID paramsdef SEMI              { [dextern_sp (snd $2) (mk_fty (fst $2) $3) (Span.extend $1 $4)] }
     | SYMBOLIC ty ID SEMI                   { [dsymbolic_sp (snd $3) $2 (Span.extend $1 $4)] }
     | event_decl SEMI                       { [event_sp (second $1) (snd (first $1)) (fourth $1) (third $1) (Span.extend (fst (first $1)) $2)] }
     | event_decl LBRACE statement RBRACE    { [event_sp (second $1) (snd (first $1)) (fourth $1) (third $1) (Span.extend (fst (first $1)) $4);
