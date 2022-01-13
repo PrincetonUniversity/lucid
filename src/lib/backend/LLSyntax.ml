@@ -85,6 +85,8 @@ and regSlice = Lo
 and oper =
   | Const of const
   | Meta of mid
+  (* todo: add slices of values? *)
+  | MetaSlice of int * int * mid (* a slice of a variable *)
   | RegVar of regSlice
   | NoOper
 

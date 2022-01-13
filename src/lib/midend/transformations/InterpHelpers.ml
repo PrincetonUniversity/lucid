@@ -177,13 +177,19 @@ let is_assoc_op exp =
 let is_immediate exp =
   match exp.e with
   | EVal _ | EVar _ -> true
+  | EOp(Slice _, args) -> (
+    (* a slice of a value or immediate is immediate *)
+    match ((CL.hd args).e) with 
+      | EVal _ | EVar _ -> true
+      | _ -> false
+  )
   | _ -> false
 ;;
 
-(* can an expression be done in one step? *)
+(* can an expression be evaluated in one step? *)
 let is_atomic exp =
   match exp.e with
-  (* immediates are atomic. *)
+  (* values and variables are atomic. *)
   | EVal _ | EVar _ -> true
   (* ops are atomic if they are binary with all args immediates *)
   | EOp (_, args) ->

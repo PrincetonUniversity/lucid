@@ -26,6 +26,7 @@ let oper_to_dbgstr i =
   match i with
   | Const c -> Integer.value_string c
   | Meta m -> varcid_str m
+  | MetaSlice(l, h, m) -> sprintf "%s[%i:%i]" (varcid_str m) l h
   | RegVar _ -> "<mem_cell>"
   | NoOper -> "<None>"
 ;;

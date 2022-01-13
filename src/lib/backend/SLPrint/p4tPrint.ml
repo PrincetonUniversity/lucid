@@ -108,6 +108,13 @@ module PrimitiveString = struct
   let str_of_oper oper =
     match oper with
     | Meta m -> str_of_varid m
+    | MetaSlice(l, h, m) -> 
+      str_of_varid m ^ 
+      "["^
+      (string_of_int l)^
+      ":"^
+      (string_of_int h)^
+      "]"
     | Const c -> string_of_int (Integer.to_int c)
     | RegVar _ -> memName
     | NoOper -> ""

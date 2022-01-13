@@ -897,6 +897,9 @@ module OperationDedup = struct
     | Const _, _ -> false
     | Meta m1, Meta m2 -> id_eq m1 m2
     | Meta _, _ -> false
+    | MetaSlice(l1, h1, m1), MetaSlice(l2, h2, m2) -> 
+      (id_eq m1 m2) & (l1 = l2) & (h1 = h2)
+    | MetaSlice(_), _ -> false
     | RegVar r1, RegVar r2 -> regSlice_eq r1 r2
     | RegVar _, _ -> false
     | NoOper, NoOper -> true

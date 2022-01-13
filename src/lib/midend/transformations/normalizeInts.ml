@@ -138,10 +138,10 @@ let atomize_int_assigns ds =
         (* for other statement kinds, just recurse *)
         | _ -> super#visit_statement ctx stmt
 
-      method! visit_exp in_assign exp =
+      method! visit_exp in_assign_or_local exp =
         (* We only want to normalize expressions on the rhs of an assignment.
            By this point in time, all other complex expressions are removed. *)
-        match in_assign with
+        match in_assign_or_local with
         | true ->
           (* transform the expression into an atomic (if not already) *)
           !dprint_endline

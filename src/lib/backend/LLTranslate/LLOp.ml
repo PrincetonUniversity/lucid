@@ -155,6 +155,8 @@ let oper_from_immediate hdl_id (immediate_exp : exp) =
   match immediate_exp.e with
   | EVal _ -> IS.Const (zint_from_evalue immediate_exp)
   | EVar cid -> Meta (mid_from_cid hdl_id cid)
+  | EOp (Slice(l, h), [{e=EVar (cid); _}]) ->  
+    MetaSlice (l, h, mid_from_cid hdl_id cid)
   | _ ->
     let dstr =
       "[oper_from_immediate] not a backend-recognized immediate: "
