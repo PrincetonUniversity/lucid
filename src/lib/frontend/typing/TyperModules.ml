@@ -15,10 +15,10 @@ let subst_TNames env d =
 
       method! visit_ty env ty =
         match ty.raw_ty with
-        | TName (cid, _, _) ->
+        | TName _ ->
           let raw_ty =
             match lookup_TName ty.tspan (snd !env) ty.raw_ty with
-            | TAbstract (x, y, z, _) -> TAbstract (x, y, z, cid)
+            | TAbstract (x, y, z, _) -> TAbstract (x, y, z, ty.raw_ty)
             | raw_ty -> raw_ty
           in
           { ty with raw_ty }
@@ -26,14 +26,18 @@ let subst_TNames env d =
 
       method! visit_raw_ty env raw_ty =
         match raw_ty with
-        | TName (cid, _, _) ->
+        | TName _ ->
           let raw_ty =
             match lookup_TName Span.default (snd !env) raw_ty with
-            | TAbstract (x, y, z, _) -> TAbstract (x, y, z, cid)
+            | TAbstract (x, y, z, _) -> TAbstract (x, y, z, raw_ty)
             | raw_ty -> raw_ty
           in
           raw_ty
         | _ -> super#visit_raw_ty env raw_ty
+
+      method! visit_TAbstract _ cid sizes b rty =
+        (* Don't replace in rty *)
+        TAbstract (cid, sizes, b, rty)
 
       method! visit_DUserTy env id sizes ty =
         let ty = self#visit_ty env ty in
@@ -46,7 +50,7 @@ let subst_TNames env d =
           | Some ty -> Some (self#visit_ty env ty)
           | None ->
             let abs_cid = Cid.create_ids_rev @@ (Id.freshen id :: fst !env) in
-            Some (TAbstract (abs_cid, sizes, b, Id id) |> ty)
+            Some (TAbstract (abs_cid, sizes, b, TVoid) |> ty)
         in
         env := fst !env, define_user_ty id sizes (Option.get tyo') (snd !env);
         InTy (id, sizes, tyo', b)
@@ -84,13 +88,12 @@ let unsubst_TAbstracts ds =
   let v =
     object (self)
       inherit [_] s_map
-      method! visit_TAbstract _ _ sizes b cid = TName (cid, sizes, b)
+      method! visit_TAbstract _ _ _ _ orig_ty = orig_ty
 
       method! visit_InTy env id sizes tyo b =
         let tyo =
           match tyo with
-          | Some { raw_ty = TAbstract (_, _, _, Id id1) } when Id.equal id id1
-            -> None
+          | Some { raw_ty = TAbstract (_, _, _, TVoid) } -> None
           | Some ty -> Some (self#visit_ty env ty)
           | None -> failwith "Sanity check: shouldn't happen"
         in
@@ -210,8 +213,8 @@ let rec ensure_equiv_modul span m1 m2 =
     IdMap.fold
       (fun id (_, ty) acc ->
         match ty.raw_ty with
-        | TAbstract (cid, _, b, _) when Id.name id = Id.name (Cid.last_id cid)
-          ->
+        | TAbstract (cid, _, b, TVoid)
+        (* when Id.name id = Id.name (Cid.last_id cid) *) ->
           (match IdMap.find_opt id m2.user_tys with
           | Some (sizes', ({ raw_ty = TAbstract (_, _, b', _) } as ty'))
             when b = b' -> replace_abstract_type cid (sizes', ty') acc
@@ -305,8 +308,8 @@ let rec ensure_compatible_interface span intf_modul modul =
     IdMap.fold
       (fun id (_, ty) acc ->
         match ty.raw_ty with
-        | TAbstract (cid, _, b, _) when Id.name id = Id.name (Cid.last_id cid)
-          ->
+        | TAbstract (cid, _, b, TVoid)
+        (* when Id.name id = Id.name (Cid.last_id cid) *) ->
           (match IdMap.find_opt id modul.user_tys with
           | Some (sizes', ty') ->
             if (b && is_global ty') || ((not b) && is_not_global ty')
@@ -471,14 +474,14 @@ let add_interface span env id interface modul =
 (* Replace each abstract type declared in a modul with a fresh abstract type *)
 let re_abstract_modul new_id m =
   IdMap.fold
-    (fun id (_, uty) acc ->
+    (fun _ (_, uty) acc ->
       match uty.raw_ty with
-      | TAbstract (cid, sizes, b, orig_cid)
-        when Id.name id = Id.name (Cid.last_id cid) ->
+      | TAbstract (cid, sizes, b, TVoid)
+      (* when Id.name id = Id.name (Cid.last_id cid)  *) ->
         let new_cid = Compound (new_id, Id (Id.freshen (Cid.last_id cid))) in
         replace_abstract_type
           cid
-          (sizes, ty @@ TAbstract (new_cid, sizes, b, orig_cid))
+          (sizes, ty @@ TAbstract (new_cid, sizes, b, TVoid))
           acc
       | _ -> (* Not an abstract type, don't need to replace *) acc)
     m.user_tys

@@ -51,7 +51,7 @@ and raw_ty =
   | TFun of func_ty
   | TMemop of size * size
   | TName of cid * sizes * bool (* Named type: e.g. "Array.t<<32>>". Bool is true if it represents a global type *)
-  | TAbstract of cid * sizes * bool * cid (* Last cid is the cid when it was a TName *)
+  | TAbstract of cid * sizes * bool * raw_ty (* raw_ty is the type when it was a TName *)
   | TRecord of (string * raw_ty) list
   | TVector of raw_ty * size
   | TTuple of raw_ty list
