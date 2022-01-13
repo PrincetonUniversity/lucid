@@ -11,6 +11,7 @@ type t =
   ; externs : value Env.t list
   ; events : (event * (int * int) list) list
   ; config : InterpState.State.config
+  ; extern_funs : InterpState.State.ival Env.t
   }
 
 let rename env err_str id_str =
@@ -213,6 +214,49 @@ let make_full_mesh num_switches =
     switch_ids
 ;;
 
+(*   and code = network_state -> int (* switch *) -> ival list -> value
+*)
+let create_foreign_functions efuns python_file =
+  let open InterpState.State in
+  let oc_to_py v =
+    match v with
+    | V { v = VBool b } -> Py.Bool.of_bool b
+    | V { v = VInt n } -> Py.Int.of_int (Integer.to_int n)
+    | _ -> error "Can only call external functions with int/bool arguments"
+  in
+  let obj = Py.Run.load (Filename python_file) python_file in
+  if Collections.IdSet.is_empty efuns
+  then
+    Console.warning
+      "A Python file was provided, but no extern functions were declared.";
+  Collections.IdSet.fold
+    (fun id acc ->
+      let f_id = Id.name id in
+      match Py.Object.get_attr_string obj f_id with
+      | None ->
+        error @@ "External function " ^ f_id ^ " not found in python file"
+      | Some o when not (Py.Callable.check o) ->
+        error
+        @@ "External function "
+        ^ f_id
+        ^ " is not a function in the python file!"
+      | Some o ->
+        let f =
+          InterpState.State.F
+            (fun _ _ args ->
+              let _ =
+                Py.Callable.to_function
+                  o
+                  (Array.of_list @@ List.map oc_to_py args)
+              in
+              (* Dummy return value *)
+              value (VBool false))
+        in
+        Env.add (Id id) f acc)
+    efuns
+    Env.empty
+;;
+
 let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t =
   let json = from_file filename in
   match json with
@@ -266,6 +310,12 @@ let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t 
         parse_events pp renaming num_switches default_input_gap lst
       | _ -> error "No or non-list value for event definitions"
     in
+    let extern_funs =
+      match List.assoc_opt "python_file" lst with
+      | Some (`String file) -> create_foreign_functions pp.extern_funs file
+      | None -> Env.empty
+      | _ -> error "Non-string value for python_file"
+    in
     let config : InterpState.State.config =
       { max_time
       ; generate_delay
@@ -275,6 +325,6 @@ let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t 
       ; random_seed
       }
     in
-    { num_switches; links; externs; events; config }
+    { num_switches; links; externs; events; config; extern_funs }
   | _ -> error "Unexpected interpreter specification format"
 ;;

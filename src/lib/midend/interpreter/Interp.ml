@@ -18,6 +18,12 @@ let initial_state (pp : Preprocess.t) (spec : InterpSpec.t) =
   List.iteri
     (fun i exs -> Env.iter (fun cid v -> State.add_global i cid (V v) nst) exs)
     spec.externs;
+  (* Add foreign functions *)
+  Env.iter
+    (fun cid fval ->
+      Array.iteri (fun i _ -> State.add_global i cid fval nst) nst.switches)
+    spec.extern_funs;
+  (* Add events *)
   List.iter
     (fun (event, locs) ->
       List.iter
@@ -28,6 +34,7 @@ let initial_state (pp : Preprocess.t) (spec : InterpSpec.t) =
 ;;
 
 let initialize renaming spec_file ds =
+  Py.initialize ();
   let pp, ds = Preprocess.preprocess ds in
   let spec = InterpSpec.parse pp renaming spec_file in
   let nst = initial_state pp spec in

@@ -54,6 +54,7 @@ install-deps:
 	ocamlgraph \
 	angstrom \
 	yojson \
+	pyml \
 	z3
 
 clean:
