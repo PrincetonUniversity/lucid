@@ -566,7 +566,7 @@ module PrintComputeObject = struct
     let poly_name = str_of_private_oid (Cid.fresh ["poly"]) in
     fprintf
       fmt
-      "CRCPolynomial<bit<%s>>(%s, true, false, false, 0, 0) %s;@,"
+      "CRCPolynomial<bit<%s>>(%s, false, false, false, 0, 0) %s;@,"
       (string_of_int out_width)
       (string_of_int poly)
       poly_name;
