@@ -216,7 +216,7 @@ let make_full_mesh num_switches =
 
 (*   and code = network_state -> int (* switch *) -> ival list -> value
 *)
-let create_foreign_functions efuns python_file =
+let create_foreign_functions renaming efuns python_file =
   let open InterpState.State in
   let oc_to_py v =
     match v with
@@ -224,14 +224,18 @@ let create_foreign_functions efuns python_file =
     | V { v = VInt n } -> Py.Int.of_int (Integer.to_int n)
     | _ -> error "Can only call external functions with int/bool arguments"
   in
-  let obj = Py.Run.load (Filename python_file) python_file in
+  let obj =
+    Py.Run.simple_file (Channel (Legacy.open_in python_file)) python_file;
+    Py.Module.main ()
+  in
   if Collections.IdSet.is_empty efuns
   then
     Console.warning
       "A Python file was provided, but no extern functions were declared.";
   Collections.IdSet.fold
     (fun id acc ->
-      let f_id = Id.name id in
+      let id = rename renaming.Renaming.var_map "extern" (Id.name id) in
+      let f_id = Id.name (Cid.to_id id) in
       match Py.Object.get_attr_string obj f_id with
       | None ->
         error @@ "External function " ^ f_id ^ " not found in python file"
@@ -252,7 +256,7 @@ let create_foreign_functions efuns python_file =
               (* Dummy return value *)
               value (VBool false))
         in
-        Env.add (Id id) f acc)
+        Env.add id f acc)
     efuns
     Env.empty
 ;;
@@ -311,9 +315,15 @@ let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t 
       | _ -> error "No or non-list value for event definitions"
     in
     let extern_funs =
-      match List.assoc_opt "python_file" lst with
-      | Some (`String file) -> create_foreign_functions pp.extern_funs file
-      | None -> Env.empty
+      match List.assoc_opt "python file" lst with
+      | Some (`String file) ->
+        create_foreign_functions renaming pp.extern_funs file
+      | None ->
+        if Collections.IdSet.is_empty pp.extern_funs
+        then Env.empty
+        else
+          error
+            "Extern functions were declared but no python file was provided!"
       | _ -> error "Non-string value for python_file"
     in
     let config : InterpState.State.config =

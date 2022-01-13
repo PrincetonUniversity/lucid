@@ -27,6 +27,7 @@ let rec translate_ty (ty : S.ty) : C.ty =
         { arg_tys = List.map translate_ty fty.arg_tys
         ; ret_ty = translate_ty fty.ret_ty
         }
+    | S.TVoid -> C.TBool (* Dummy translation needed for foreign functions *)
     | _ -> err ty.tspan (Printing.ty_to_string ty)
   in
   { raw_ty; tspan = ty.tspan }

@@ -1,0 +1,24 @@
+{
+  "switches": 1,
+  "max time": 9999999,
+  "default input gap": 10000,
+  "random seed": 0,
+  "python file": "BloomFilter.py",
+  "events": [
+    {"name":"in", "args": [false, 3]},
+    {"name":"in", "args": [true, 3]},
+    {"name":"in", "args": [false, 3]},
+    {"name":"in", "args": [true, 7]},
+    {"name":"in", "args": [true, 8]},
+    {"name":"in", "args": [false, 3]},
+    {"name":"in", "args": [false, 7]},
+    {"name":"in", "args": [false, 8]},
+    {"name":"in", "args": [false, 9]},
+    {"name":"in", "args": [false, 10]},
+    {"name":"in", "args": [false, 1]},
+    {"name":"in", "args": [false, 2]},
+    {"name":"in", "args": [false, 4]},
+    {"name":"in", "args": [false, 5]},
+    {"name":"in", "args": [false, 6]}
+  ]
+}
