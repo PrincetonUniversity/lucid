@@ -61,6 +61,18 @@ let check_decls ds =
     | DExtern (_, ty) ->
       (match TyTQVar.strip_links ty.raw_ty with
       | TInt _ | TBool -> ()
+      | TFun { arg_tys } ->
+        List.iter
+          (fun ty ->
+            match TyTQVar.strip_links ty.raw_ty with
+            | TInt _ | TBool -> ()
+            | _ ->
+              Console.error_position d.dspan
+              @@ Printf.sprintf
+                   "Arguments to an extern function must have type int or \
+                    bool, not %s"
+                   (ty_to_string ty))
+          arg_tys
       | _ ->
         Console.error_position d.dspan
         @@ Printf.sprintf

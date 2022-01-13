@@ -2,10 +2,12 @@ open Batteries
 open CoreSyntax
 open InterpCore
 open InterpState
+open Collections
 
 type t =
   { events : (event_sort * ty list) Env.t
   ; externs : ty Env.t
+  ; extern_funs : IdSet.t
   }
 
 let empty =
@@ -14,6 +16,7 @@ let empty =
       Env.singleton
         (Id Builtins.recirc_id)
         (SyntaxToCore.translate_ty Builtins.recirc_ty)
+  ; extern_funs = IdSet.empty
   }
 ;;
 
@@ -30,7 +33,12 @@ let preprocess ds =
             }
           , d :: ds )
         | DExtern (id, ty) ->
-          { pp with externs = Env.add (Id id) ty pp.externs }, ds
+          begin
+            match ty.raw_ty with
+            | TFun _ ->
+              { pp with extern_funs = IdSet.add id pp.extern_funs }, ds
+            | _ -> { pp with externs = Env.add (Id id) ty pp.externs }, ds
+          end
         | _ -> pp, d :: ds)
       (empty, [])
       ds
