@@ -10,7 +10,7 @@ let print_if_verbose str = if Cmdline.cfg.verbose then Console.report str
 let report str = Console.show_message str ANSITerminal.Green "compiler"
 let cfg = Cmdline.cfg
 let enable_compound_expressions = true
-let do_ssa = false
+let do_ssa = true
 
 let process_prog ?(for_interp = false) ds =
   print_if_verbose "-------Translating to core syntax---------";
@@ -25,6 +25,15 @@ let process_prog ?(for_interp = false) ds =
     print_if_debug ds;
     ds
   | false ->
+    print_if_verbose
+      (if do_ssa
+      then "-------SSA Transform--------"
+      else "-------Partial SSA Transform--------");
+    let ds =
+      if do_ssa
+      then SingleAssignment.transform ds
+      else PartialSingleAssignment.const_branch_vars ds
+    in
     print_if_verbose "-------Partial interpreting---------";
     let ds = PartialInterpretation.interp_prog ds in
     print_if_debug ds;
