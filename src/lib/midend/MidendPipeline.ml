@@ -25,6 +25,9 @@ let process_prog ?(for_interp = false) ds =
     print_if_debug ds;
     ds
   | false ->
+    print_if_verbose "-------Partial interpreting---------";
+    let ds = PartialInterpretation.interp_prog ds in
+    print_if_debug ds;
     LogIr.log_lucid "midend_start.dpt" ds;
     print_if_verbose "-------Eliminating range relational ops--------";
     let ds = EliminateEqRangeOps.transform ds in

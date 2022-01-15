@@ -392,12 +392,12 @@ let interp_decl env d =
     env, d
 ;;
 
-let interp_prog ds = ds
-(* FIXME: In addition to keeping declarations for variables which are mutated, we also
+let interp_prog ds =
+  (* FIXME: In addition to keeping declarations for variables which are mutated, we also
    need to keep mutations which might or might not get overwritten later.
    For example, the following program prints 8 when in(1,2) is called, but should
    print 10:
-   
+
    event in(int<<8>> i, int<<8>> j) {
      int<<'a>> k = 2;
      if (j == 2) { k = 3; }
@@ -407,7 +407,7 @@ let interp_prog ds = ds
      printf("%d", i+j + k);
    }
 *)
-(* let builtins =
+  let builtins =
     let open Builtins in
     [recirc_id, recirc_ty; self_id, self_ty]
   in
@@ -417,4 +417,5 @@ let interp_prog ds = ds
       let env', d = interp_decl !env d in
       env := env';
       d)
-    ds *)
+    ds
+;;
