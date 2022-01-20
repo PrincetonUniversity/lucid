@@ -193,15 +193,55 @@ let is_whitespace c =
 
 let is_not_stmt_delim c =
   match c with
-  | '}' | '{' | ';' | '@' -> false
+  ';' | '@' -> false
   | _ -> true
 ;;
+
+let not_body_start_delim c = 
+  match c with 
+  | '{' -> false
+  | _ -> true
+
+let not_body_end_delim c = 
+  match c with 
+  | '}' -> false
+  | _ -> true
+
+(* a block label cannot possibly have these 
+   chars in it. If we reach one, we have 
+   reached either the end of the label, 
+   OR the string we are parsing is not 
+   a block label.  *)
+let block_label_chars c = 
+  match c with 
+  | '@' | ';'| '}' | '{' -> false
+  | _ -> true
+
 
 let is_not_pragma_delim c =
   match c with
   | '}' | '{' | ';' | ')' | '(' -> false
   | _ -> true
 ;;
+
+let valid_statement_start c = 
+  match c with 
+  | '}' | '{' | ')' | '@'-> false
+  | _ -> true
+;;
+
+let valid_blocklabel_start c = 
+  match c with 
+  | '@'-> false
+  | _ -> true
+;;
+
+
+
+let valid_block_label c = 
+  match c with 
+  | '{' -> false
+  | _ -> true
 
 let is_end_of_pragma_name c = is_whitespace c || not (is_not_pragma_delim c)
 
@@ -210,13 +250,27 @@ let is_end_of_pragma_name c = is_whitespace c || not (is_not_pragma_delim c)
 let whitespace = take_while is_whitespace
 let whitespace_lstmt = whitespace >>| to_noop
 
+
+
 (* <statement:code_expr>; *)
 let statement =
-  take_while is_not_stmt_delim
-  <* A.char ';'
-  >>| fun codestr ->
-  (* print_endline ("[statement]"^(codestr)); *)
-  to_lstmt codestr
+  map2
+    (* after stripping whitespace, a statement must start 
+       with a certain character. This disambiguates statements 
+       with nested {'s from blocks. *)
+    (
+      map2 
+        whitespace
+        (A.satisfy valid_statement_start)
+        (fun wss fc -> (Batteries.String.to_list wss@[fc]) |> Batteries.String.of_list)
+    )
+    (* the rest of the characters can be anything until a ; *)
+    (take_while is_not_stmt_delim <* A.char ';')
+    (fun sa sb ->
+      let codestr =  sa^sb in 
+      print_endline ("[statement]"^(codestr));
+      to_lstmt codestr
+    )
 ;;
 
 (*@<name:code_expr>(<body:code_expr>)*)
@@ -264,43 +318,78 @@ let multiline_comment =
     (fun wss cs -> to_noop (wss ^ "/*" ^ cs ^ "*/"))
 ;;
 
-(* all statements besides blocks *)
-let basic_statement =
+let comments = 
   line_comment
   <|> line_include
   <|> line_define
   <|> multiline_comment
-  <|> pragma
+
+
+(* all statements besides blocks *)
+let basic_statement =
+      pragma
   <|> statement
 ;;
 
+
+
+
+let isnot b = not b ;;
 (* <label:code_expr>:lexpr {<body>:lseq} *)
 let block =
   fix (fun block ->
+    print_endline "[start block parse]";
       (* a block label is a sequence of characters with no delims *)
       let block_label =
-        take_while is_not_stmt_delim
+        take_while (block_label_chars)
         >>| fun ps ->
-        (* print_endline ("[block_label]"^(ps)); *)
+        print_endline ("[block_label]"^(ps));
         to_lexpr ps
-      in
+      in       
+
       (* the body of a block is a sequence of statements, pragmas, or blocks *)
       let block_body =
         parse2_map
-          (A.char '{' *> A.many (basic_statement <|> block)) (* body *)
-          (whitespace_lstmt <* A.string "}" >>| fun v -> [v])
-          (* terminating whitespace *)
-            (fun bdy_lstmts ws_stmts -> to_lseq (bdy_lstmts @ ws_stmts))
+          (    
+               A.char '{' (* take the {, throw it away *)
+            *> A.many (comments <|> block<|> basic_statement ) 
+            (* take many comments, blocks, or basic statements, return a list of parsed things *)
+          ) 
+          (    
+               whitespace_lstmt (* take whitespace *)
+            <* A.char '}' (* take the }, throw it away. *)
+            >>| fun v -> 
+            [v] (* return the whitespace object. *)
+          )
+          (
+            fun bdy_lstmts ws_stmts -> 
+              (* combine the statements and the trailing whitespace statement 
+                 into a sequence of statements. *)
+              let entire_body = to_lseq (bdy_lstmts @ ws_stmts) in 
+              print_endline ("[block_body] "^(dbg_string_of_code_stmt entire_body));
+              entire_body
+          )
+            (* after parsing both, make a sequence *)
       in
       (* a block is a label followed by a body *)
-      let whole_block = parse2_map block_label block_body to_lblock in
+      let whole_block = parse2_map 
+        block_label 
+        block_body 
+        (fun bl bb -> 
+          let res = to_lblock bl bb in 
+          print_endline ("[complete block] "^(dbg_string_of_code_stmt res));
+          res
+
+        )
+        (* to_lblock  *)
+      in
       whole_block)
 ;;
 
 (* a program is a sequence of basic statements and blocks, surrounded 
 by whitespace that we discard *)
 let prog =
-  whitespace *> (A.many (basic_statement <|> block) >>| to_lseq) <* whitespace
+  whitespace *> (A.many (comments <|> block <|> basic_statement ) >>| to_lseq) <* whitespace
 ;;
 
 let parse_prog progstr =
@@ -550,6 +639,8 @@ let link_p4 obj_dict p4fn =
   start_log ();
   let p4prog = IoUtils.readf p4fn in
   let tree_prog = parse_prog p4prog in
+  dbg_print_stree tree_prog;
+  (* exit 1; *)
   !dprint_endline (sprintf "[link_p4] p4_syntax_tree:");
   !dprint_endline (dbg_string_of_code_stmt tree_prog);
   (* transform the ingress function so that the code before and after the 
