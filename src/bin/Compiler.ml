@@ -184,6 +184,10 @@ let compile_to_tofino target_filename p4_harness_fn config_fn_opt interp_spec_fn
   (* parse *)
   let ds = Input.parse target_filename in
   let _ = interp_spec_fn in
+  (* before the "official" frontend, do temporary optimization 
+     passes that will eventually be removed once the 
+     mid/back-end is better optimized. *)
+  let ds = FunctionInliningSpecialCase.inline_prog_specialcase ds in
   (* frontend eliminates most abstractions (modules, functions) *)
   let _, ds = FrontendPipeline.process_prog ds in
   (* middle passes do a bit of regularization of the syntax tree *)
