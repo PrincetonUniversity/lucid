@@ -1,0 +1,216 @@
+// Starflow telemetry cache.
+/* 
+This is a tunable / elastic implementation.
+TODO: 
+  - convert fixed-length records to records with length based on size. 
+
+*/
+const int match_flag = 0;
+const int h1_poly = 10398247;
+
+// variables that can be tuned (symbolics)
+const int S_SLOTS = 1024;
+const int L_SLOTS = 128;
+size max_short_idx = 1; // NOTE: must be a power of two minus 1. (num_short must be a power of 2.)
+size num_long = 6;
+
+// calculated from symbolic variables. 
+size num_short = max_short_idx + 1; 
+const int max_idx = size_to_int(num_short + num_long) - 1;
+
+/* 
+note: 
+num_short has to be a power of two so that we can compute its 
+modulo using bit arithematic. Ideally, though, I'd like to write 
+a compile-time modulo function in Lucid that uses if / else statements 
+and compile-time loops to calculate the modulo. Something like this: 
+  fun int modulo(int idx, size max_input, size max_output) {
+    int short_idx = 0;
+    for (i < max_input) {
+      if (idx == size_to_int(i)) {
+        short_idx = size_to_int(i%(max_output+1));
+      }      
+    }        
+    return short_idx;
+  }
+  This would compile into an unrolled loop that just tests index 
+  against constants and, in each branch, sets short_idx to a constant. 
+*/
+
+
+entry event ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len_short, int<<8>> tos);
+exit event ip_out (int<<9>> egr_port, int src, int dst);
+
+
+// records that the cache emits when something gets evicted. 
+const int COLLECTION_SERVER = 1234;
+event short_record(int src, int len, int[num_short] short_recs);
+event long_record(int src, int len, int[num_short] short_recs, int[num_long] long_recs);
+
+
+// free a "long slot" by pushing it's index back onto the stack. 
+event free_block(int block_id);
+
+global Array.t<<32>> srcarr = Array.create(S_SLOTS);
+global Array.t<<32>> ctarr = Array.create(S_SLOTS);
+global Array.t<<32>> idxarr = Array.create(S_SLOTS);
+
+global Array.t<<32>> stack_top = Array.create(1);
+global Array.t<<32>> longblock_stack = Array.create(S_SLOTS);
+global Array.t<<32>> block_map = Array.create(S_SLOTS);
+
+global Array.t<<32>>[num_short] arr_short = [Array.create(S_SLOTS) for i < num_short];
+global Array.t<<32>>[num_long] arr_long = [Array.create(L_SLOTS) for i < num_long];
+
+memop read (int stored, int nothingval) { 
+  return stored;
+}
+memop write (int stored, int newval) {
+  return newval;
+}
+memop incr (int stored, int nothingval) { 
+  return stored + 1;
+}
+
+memop sub (int stored, int cur) {
+  return stored - cur;
+}
+
+
+// increment index with rollover.
+memop incr_idx (int stored, int nothingval) { 
+  if (stored == max_idx) {
+    return 0;
+  }
+  else {
+    return stored + 1;
+  }
+}
+
+// We need to get the index, and also the count. 
+
+memop decr_sat (int stored, int nothingval) {
+  if (stored == 0) {
+    return 0;
+  }
+  else {
+    return stored - 1;
+  }
+}
+
+
+fun int update_or_get(Array.t<<32>> rec, int h1, int len, int idx_minus_i) {
+  if (idx_minus_i == 0) {
+    return Array.update(rec, h1, read, 0, write, len);
+  } else {
+    return Array.get(rec, h1);    
+  }
+}
+
+handle ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len_short, int<<8>> tos) {  
+  int len = (int<<32>>) len_short;
+  int ct  = 0; int idx = 0; // idx = (count % num_rec_slots)
+
+
+
+  int[num_short] short_recs = [0 for i < num_short];
+  int[num_long] long_recs = [0 for i < num_long];
+
+  int blk_id = 0;
+  // update the key. 
+  int h1 = hash<<32>>(h1_poly, src); 
+  // Collision and bookkeeping logic.
+  int is_match = Array.update(srcarr, h1, sub, src, write, src);
+  if (is_match == match_flag) {
+    ct = Array.update(ctarr, h1, incr, 1, incr, 1);
+    idx = Array.update(idxarr, h1, incr_idx, 1, incr_idx, 1);
+  }
+  int stored_src = is_match + src; // restore stored_src from is_match. 
+
+
+  // **** Memory allocation logic ****
+  // the first time a flow runs out of memory in the short array, 
+  // try to get a slot in the long array. 
+  if (ct == size_to_int(num_short)) {  
+    int stack_idx = Array.update(stack_top, 0, read, 0, decr_sat, 1);
+    // if we got an index from the stack, then we have 
+    // successfully allocated a slot in the long array.
+    if (stack_idx != 0) {
+      blk_id = Array.get(longblock_stack, stack_idx);
+      Array.set(block_map, h1, blk_id);      
+    }
+  } else {
+    // if we are not at the right count to try and 
+    // claim a long array slot then 
+    // all we can do is see if we already have one. 
+    blk_id = Array.get(block_map, h1);
+  }
+  // index is the position in the full slot that we are writing to.
+  // if we didn't load a long slot, we need 
+  // to adjust the index so that its within 
+  // the bounds of the short slot (0, num_short)
+  if (blk_id == 0) {
+    idx = idx & size_to_int(max_short_idx);
+  }
+  else {
+    // case: we loaded a long slot. What are 
+    // the short and long indices?
+
+    // If we found a slot in long array, 
+    // but are evicting the flow, 
+    // then we recirculate to free the long array slot
+    if (is_match != match_flag) {
+      generate free_block(blk_id);
+    }
+  }
+
+  // **** persistent state update logic ****
+  if (is_match == match_flag) {
+    short_recs = [update_or_get(arr_short[i], h1, len, idx - size_to_int(i)) for i < num_short];
+    // we update position i = idx - num_short in the long array 
+    // when we reach position idx. 
+    // e.g., with num_short = 2: 
+    // at index 7, we update position 5. the condition parameter for i = 5 is: 7 - (2 + 5) = 0
+    // at index 2, we update position 2. the condition parameter for i = 0 is: 2 - (2 + 0) = 0
+    // at index 1, we update position <none>. the condition parameter for i = 0 is: 1 - (2 + 0) = not 0
+    long_recs =  [update_or_get(arr_long[i], h1, len, idx - size_to_int(num_short+i)) for i < num_long];
+  }
+  else {
+    short_recs = [Array.get(arr_short[i], h1) for i < num_short];
+    long_recs = [Array.get(arr_long[i], h1) for i < num_long];
+  }
+  // ***** event generation logic *****
+  if (is_match != match_flag) {
+    if (blk_id == 0) {
+      generate short_record(stored_src, ct, short_recs);
+    } else {
+      generate long_record(stored_src, ct, short_recs, long_recs);
+    }
+  }
+  else {
+    if (idx == 0) {
+      if (blk_id == 0) {
+        generate short_record(stored_src, ct, short_recs);
+      } else {
+        generate long_record(stored_src, ct, short_recs, long_recs);
+      }
+    }
+  }
+} 
+
+handle free_block(int block_id) {
+  // get a pointer to an unused slot in the free stack.
+  int stack_idx = Array.update(stack_top, 0, incr, 1, incr, 1);
+  // write the block id to the unused slot. 
+  Array.set(longblock_stack, stack_idx, block_id);
+}
+
+handle short_record(int src, int len, int[num_short] short_recs) {
+  int foo_short = 1; // TODO: backend fails on empty handlers. Should have dead-code elimination.
+  printf("short_record output event\n");
+}
+handle long_record(int src, int len, int[num_short] short_recs, int[num_long] long_recs){
+  int foo_long = 1;
+  printf("long_record output event\n");
+
+}
