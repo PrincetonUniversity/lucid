@@ -67,9 +67,12 @@ let cmd_exit = "exit;"
 let cmd_drop = "ig_dprsr_md.drop_ctl = 0x1;"
 
 let cmd_copy_to_recirc =
+  (* HACK: forward background events instead of using multicast. *)
   sprintf
+    "ig_tm_md.ucast_egress_port = 196;"
+(*   sprintf
     "ig_tm_md.mcast_grp_a = %i + md.dptMeta.eventsCount;"
-    (lucid_mc_group - 1)
+    (lucid_mc_group - 1) *)
 ;;
 
 (* the ingress exit table applies after the handler tables. *)
@@ -531,11 +534,13 @@ module Egress = struct
     let bitvecs = gen_bv (CL.length ev_flags) mcid in
     (* craft a single rule for mcid from a bitvec. *)
     let craft_rule actions mcid bitvec =
+      (* HACK: ignore mcid *)
+      let _ = mcid in 
       let ev_flag_values = bitvec |> bv_valv |> wildcard_suffix_zeros in
       let flag_guard = combine_fields_vals ev_flags ev_flag_values in
       let guard =
         { field = etype_field; value = VInt lucid_etype }
-        :: { field = str_of_public_varid mcid_field; value = VInt mcid }
+        :: { field = str_of_public_varid mcid_field; value = VInt 0 }
         :: flag_guard
       in
       let res =
@@ -597,7 +602,7 @@ module Egress = struct
       }
     in
     let all_rules =
-      non_lucid_pkt_rule :: lucid_wire_pkt_rule :: CL.flatten mcid_rule_lists
+      (non_lucid_pkt_rule :: CL.flatten mcid_rule_lists )@ [lucid_wire_pkt_rule]
     in
     (* create the table from rules. *)
     let tbl_str = "egr_serialize_clone" in
