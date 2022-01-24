@@ -27,3 +27,21 @@ let get_time (args : codegenInput) : codegenOutput =
          variable.")
   | None -> error "[get_time] opstmt doesn't have an id..."
 ;;
+
+(* 48-bit timestamp. Temporary. *)
+let time48_cid = cid_of_fname "time48"
+let get_time48 (args : codegenInput) : codegenOutput =
+  match args.basename with
+  | Some basename ->
+    (match args.retname with
+    | Some retname ->
+      let ivec_decl =
+        IS.new_dsingleinstr basename retname (new_expr_of_mid timestamp48_field)
+      in
+      { names = [basename]; objs = [ivec_decl] }
+    | _ ->
+      error
+        "[get_time] error: Sys.time() generator not provided with a return \
+         variable.")
+  | None -> error "[get_time] opstmt doesn't have an id..."
+;;

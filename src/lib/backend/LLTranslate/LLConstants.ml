@@ -25,6 +25,8 @@ let dpt_meta_str = "dptMeta"
 
 let timestamp_str = "timestamp"
 let timestamp_width = 32
+let timestamp48_str = "timestamp48"
+let timestamp48_width = 48
 let handle_selector_str = "eventType"
 let handle_selector_width = 8
 let exit_event_str = "exitEventType"
@@ -40,6 +42,10 @@ let dpt_meta_struct_instance = Cid.create [md_instance_prefix; dpt_meta_str]
 let timestamp_field =
   Cid.create_ids
     (Cid.to_ids dpt_meta_struct_instance @ [Id.create timestamp_str])
+;;
+let timestamp48_field =
+  Cid.create_ids
+    (Cid.to_ids dpt_meta_struct_instance @ [Id.create timestamp48_str])
 ;;
 let current_event_field =
   Cid.create_ids
