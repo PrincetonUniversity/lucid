@@ -181,6 +181,7 @@ let pat_to_string p =
   match p with
   | PWild -> "_"
   | PNum n -> Z.to_string n
+  | PVar (cid, _) -> cid_to_string cid
   | PBit bs ->
     "0b"
     ^ (bs

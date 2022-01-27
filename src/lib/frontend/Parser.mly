@@ -23,9 +23,10 @@
     incr auto_count;
     Id.create ("auto" ^ string_of_int !auto_count)
 
-  let pat_of_id id =
-    if String.equal (Id.name id) "_" then PWild
-    else failwith "Parse error: identifiers not allowed in patterns"
+  let pat_of_cid (span, cid) =
+    match Cid.names cid with
+    | [name] when String.equal name "_" -> PWild
+    | _ -> PVar (cid, span)
 
   let make_group es span =
     let locs = List.map
@@ -353,7 +354,7 @@ record_def:
     | param SEMI record_def            { $1 :: $3 }
 
 pattern:
-    | ID                                { pat_of_id (snd $1) }
+    | cid                               { pat_of_cid $1 }
     | NUM                               { PNum (snd $1) }
     | BITPAT                            { PBit (snd $1) }
 

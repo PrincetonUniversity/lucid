@@ -103,6 +103,7 @@ and op =
 
 and pat =
   | PWild
+  | PVar of cid * sp (* Span is just for easy error messaging in ConstInlining *)
   | PNum of z
   | PBit of int list
 

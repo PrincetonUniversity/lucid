@@ -14,6 +14,16 @@ let inliner =
       match IdMap.find_opt (Cid.to_id cid) env with
       | None -> EVar cid
       | Some e -> e
+
+    method! visit_PVar env cid span =
+      match IdMap.find_opt (Cid.to_id cid) env with
+      | Some (EVal { v = VInt n }) -> PNum (Integer.value n)
+      | Some (EInt (n, _)) -> PNum n
+      | None ->
+        Console.error_position span
+        @@ Printing.cid_to_string cid
+        ^ " is either unbound or not a constant/symbolic."
+      | _ -> failwith "Non-int PVar?"
   end
 ;;
 
