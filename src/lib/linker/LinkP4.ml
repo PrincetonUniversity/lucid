@@ -639,7 +639,7 @@ let link_p4 obj_dict p4fn =
   start_log ();
   let p4prog = IoUtils.readf p4fn in
   let tree_prog = parse_prog p4prog in
-  dbg_print_stree tree_prog;
+  (* dbg_print_stree tree_prog; *)
   (* exit 1; *)
   !dprint_endline (sprintf "[link_p4] p4_syntax_tree:");
   !dprint_endline (dbg_string_of_code_stmt tree_prog);
