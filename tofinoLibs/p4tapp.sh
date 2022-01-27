@@ -258,7 +258,7 @@ function start_switchd() {
 }
 
 function start_python() {
-    local CMD="python2 $1"
+    local CMD="python2 $@"
     local SIG="mgr.py disconnect complete."
     launch_and_wait "$CMD" "$SIG" "PY_MGR"
 }
@@ -310,12 +310,17 @@ function starthw() {
     local MGR_PY=$(to_python_mgr "$1")
     echo "running on: $CONF_FN"    
 
+    rm -rf "$LOG_DIR"; mkdir -p "$LOG_DIR"
+
     # start the switchd program
     start_switchd "$CONF_FN" "$MGR_BIN"
     SWITCHD_PID=$!
 
     # run the python manager script
-    start_python "$MGR_PY"    
+    # pass one argument.
+    echo "starting controller: "
+    echo "start_python $MGR_PY $2"
+    start_python "$MGR_PY" $2
 }
 function starthw_custom_py() {
     local CONF_FN=$(to_conf_fn "$1")
@@ -335,7 +340,7 @@ function stophw() {
     pkill --signal 2 -P $SWITCHD_PID
 }
 function runhw() {
-    starthw $1
+    starthw $@
     # wait for ctl + c or exit
     echo "**** switchd running -- press ctrl+c to terminate. ****"
     trap 'stophw' 9

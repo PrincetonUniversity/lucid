@@ -62,7 +62,10 @@ endif
       "build: $p4_fn $py_fn $c_fn\n\
        \t./libs/p4tapp.sh build $p4_fn\n\
        test:\n\
-       \t./libs/p4tapp.sh test $p4_fn "]
+       \t./libs/p4tapp.sh test $p4_fn\n\
+       hw:\n\
+       \t./libs/p4tapp.sh hw $p4_fn ports_up\n\
+       "]
   in
   (* generic end of makefile *)
   let make_str_suffix = {x|$(RUN_ARGS)
