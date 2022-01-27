@@ -310,6 +310,8 @@ function starthw() {
     local MGR_PY=$(to_python_mgr "$1")
     echo "running on: $CONF_FN"    
 
+    rm -rf "$LOG_DIR"; mkdir -p "$LOG_DIR"
+
     # start the switchd program
     start_switchd "$CONF_FN" "$MGR_BIN"
     SWITCHD_PID=$!
