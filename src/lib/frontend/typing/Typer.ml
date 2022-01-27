@@ -45,9 +45,13 @@ let infer_value v =
   { v with vty = Some (mk_ty vty) }
 ;;
 
-let infer_pattern p =
+let infer_pattern env p =
   match p with
   | PWild -> (fresh_type ()).raw_ty
+  | PVar (cid, span) ->
+    (* Basically the same process as typing an EVar *)
+    (lookup_var span env cid).raw_ty
+    |> instantiator#visit_raw_ty (fresh_maps ())
   | PNum _ -> TInt (fresh_size ())
   | PBit ps -> TInt (IConst (List.length ps))
 ;;
@@ -676,7 +680,8 @@ and infer_branches (env : env) s etys branches =
       error_sp
         s.sspan
         "A branch of this match statement has the wrong number of patterns"
-    | _ -> List.iter2 (unify_raw_ty s.sspan) etys (List.map infer_pattern pats)
+    | _ ->
+      List.iter2 (unify_raw_ty s.sspan) etys (List.map (infer_pattern env) pats)
   in
   let infer_branch (pats, s) =
     check_pats pats;

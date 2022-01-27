@@ -20,6 +20,8 @@ fun void increment2(int<<3>> idx) {
   Array.setm(counts2, idx, incr, 1);
 }
 
+const int<<3>> five = 5;
+
 /*
 Write the same match statement two ways; the two arrays should always be the same
   If 0, update index 0.
@@ -35,7 +37,7 @@ handle packetin(int<<3>> idx) {
   | 2 -> { increment1(2); }
   | 3 -> { increment1(4); }
   | 4 -> { increment1(2); }
-  | 5 -> { increment1(3); }
+  | five -> { increment1(3); }
   | 6 -> { increment1(2); }
   | 7 -> { increment1(3); }
   | 0x8 -> { increment1(0x2); } // Testing hex syntax
