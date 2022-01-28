@@ -1,30 +1,36 @@
 ### Running a lucid program on a physical testbed
 
-### Topology
+This note walks through compiling and running the program `wire.dpt` on the Lucid testbed. 
 
-The table below lists all the important details about the current Lucid testbed's topology. 
-jc4: 
-    - ubuntu 21.10
-    - 20 cores, 256GB ram
-    - 1 40Gb NIC, enp5s0f0 connected to dpid 136 on tofino
-jc5: 
-    - ubuntu 18.04 (feel free to upgrade!)
-    - 8 cores, 32GB ram
-    - 2 10Gb NICs: 
-        - enp3s0f0 (connected to dpid 128)
-        - enp3s0f1 (connected to dpid 129)
-jc6: 
-    - ubuntu 20.04 (feel free to upgrade!)
-    - 8 cores, 32GB ram
-    - 2 10Gb NICs: 
-        - enp3s0f0 (connected to dpid 130)
-        - enp3s0f1 (connected to dpid 131)
 
-If you are not on the Lucid testbed, you can follow along with the example by connecting Your tofino to machines on ports 128 and 130 with 10G cables.
+#### Topology
 
-#### Running a lucid program 
+Here are the servers in the lucid testbed.
 
-This section walks through running the lucid program `wire.dpt` on the physical testbed. We will compile and run the program, then perform an iperf between the two hosts it connects. 
+**jc4**
+- ubuntu 21.10
+- 20 cores, 256GB ram
+- 1 40Gb NIC, enp5s0f0 connected to dpid 136 on tofino
+
+**jc5**
+- ubuntu 18.04 (feel free to upgrade!)
+- 8 cores, 32GB ram
+- 2 10Gb NICs: 
+    - enp3s0f0 (connected to dpid 128)
+    - enp3s0f1 (connected to dpid 129)
+
+**jc6**
+- ubuntu 20.04 (feel free to upgrade!)
+- 8 cores, 32GB ram
+- 2 10Gb NICs: 
+    - enp3s0f0 (connected to dpid 130)
+    - enp3s0f1 (connected to dpid 131)
+
+If you are not on the Lucid testbed, you can follow along with the example by connecting your tofino to machines on ports 128 and 130 with 10G cables.
+
+### Running the program
+
+Here is how to run `wire.dpt` and perform an iperf between the two hosts it connects.
 
 1. on your local machine, compile `wire.dpt` from lucid to P4. In this directory, run
 ```make compile```
