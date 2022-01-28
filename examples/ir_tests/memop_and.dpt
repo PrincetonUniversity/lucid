@@ -19,6 +19,7 @@ test case:
 handle ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos) {
   // write dest to memory. 
   int new_dst = 0;
+  int<<10>> foo = hash<<10>>(101, src);
   // mem = src;
   // dst = 0;
   if (tos == 1) {

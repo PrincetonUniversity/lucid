@@ -65,6 +65,9 @@ let process_prog ?(for_interp = false) ds =
     print_if_debug ds;
     (* give all the spans in a program unique IDs. This should be a middle pass, before translate. *)
     let ds = UniqueSpans.make_unique_spans ds in
+    (* make sure that all variables in the program have unique names. 
+        for non-unique ids, bring the variable's number into the name *)
+    let ds = UniqueIds.make_var_names_unique ds in 
     (* log the program at the end of the mid end *)
     LogIr.log_lucid "midend_end.dpt" ds;
     ds

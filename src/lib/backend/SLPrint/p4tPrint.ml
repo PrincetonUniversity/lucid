@@ -32,13 +32,23 @@ let print_fmt_list fmt objs obj_printer =
 (**** identifier printing ****)
 (* print the name of a variable. 
   Assumes that compound names are globally unique handler params. 
-  Assumes that non-compound names are not globally unique, and so need ids. *)
+  Assumes that non-compound names are not globally unique, and so need ids. 
+  Update: mid-end now guarantees that simple names are globally unique.
+*)
+
+(* Variable ID rules:
+  0. Variables are metadata and register arrays.
+  1. Variables created by the user, frontend, and midend use only simple ids. 
+  2. Tables and actions created by the P4 compiler use compound ids. 
+  3. All variable IDs have unique name strings. This is enforced in the 
+     mid-end for simple variable IDs. *) 
 let str_of_varid mid =
   match mid with
   | Compound _ ->
     let names = Cid.names mid in
     String.concat ~sep:"." names
-  | Id i -> Id.to_string_delim "_" i
+  | Id i -> Id.name i
+  (* Id.to_string_delim "_" i *)
 ;;
 
 let str_of_varids mids = CL.map str_of_varid mids |> String.concat ~sep:", "
@@ -367,7 +377,7 @@ module PrintSalu = struct
       (string_of_int rid_width)
       (string_of_int defWidth)
       (string_of_int rid_width)
-      (str_of_private_oid rid)
+      (str_of_varid rid)
       (str_of_private_oid salu_routine_id);
     pp_open_vbox str_formatter 4;
     fprintf
@@ -545,7 +555,7 @@ module PrintComputeObject = struct
       defWidth
       len
       (Integer.to_int def)
-      (str_of_private_oid rid)
+      (str_of_varid rid)
   ;;
 
   let print_ivec fmt alu_id iVec =
