@@ -38,6 +38,7 @@
    typerUtil
    typerInstGen
    typerModules
+   typerMemops
    wellformed
    functionInlining
    functionInliningSpecialCase

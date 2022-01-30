@@ -312,3 +312,14 @@ let rec is_compound e =
   | EWith (base, entries) ->
     is_compound base || List.exists (is_compound % snd) entries
 ;;
+
+(* Turn a SSeq into a list of statements. Only applies to top-level SSeqs *)
+let flatten_stmt s =
+  let rec aux acc s =
+    match s.s with
+    | SNoop -> acc
+    | SSeq (s1, s2) -> aux (aux acc s2) s1
+    | _ -> s :: acc
+  in
+  aux [] s
+;;

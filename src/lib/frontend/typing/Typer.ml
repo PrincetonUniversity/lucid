@@ -722,6 +722,7 @@ let infer_body env (params, s) =
 ;;
 
 let infer_memop span env (params, s) =
+  let open TyperMemops in
   (* First, make sure we have the right number/type of arguments *)
   let arg1size = fresh_size () in
   let arg2size = fresh_size () in
