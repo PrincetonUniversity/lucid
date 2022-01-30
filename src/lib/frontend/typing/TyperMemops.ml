@@ -6,6 +6,10 @@ open TyperUtil
 
 (** Inference and well-formedness for memops *)
 
+(* Builtin ids for the memory cells. *)
+let cell1_id = Id.create "cell1"
+let cell2_id = Id.create "cell2"
+
 (* Validate that the expression only uses one of each kind of variable (memory/local),
    doesn't use any other variables, and only uses allowed operations *)
 let check_e memvars localvars allowed_op exp =
@@ -34,7 +38,13 @@ let check_e memvars localvars allowed_op exp =
         error_sp
           exp.espan
           "Second use of a local parameter in a single memop expression"
-    | EVar _ -> seen_mem, seen_local
+    | EVar cid ->
+      if Cid.equal cid (Id cell1_id) || Cid.equal cid (Id cell2_id)
+      then
+        error_sp exp.espan
+        @@ "Cannot use cell1 and cell2 in an expression, except as the final \
+            return value"
+      else seen_mem, seen_local
     | EOp (op, [e1; e2]) ->
       if allowed_op op
       then (
@@ -75,8 +85,17 @@ let check_int_exp memvars localvars e =
 
 (* Conditional expressions in complex memops have different requirements: they
    only allow combinations of the two booleans defined at the beginning of the
-   expression, plus constant/symbolic variables *)
-let check_conditional allowed_var e =
+   expression, plus constant/symbolic variables. Since the user can't define any
+   other local variables, this is equivalent to saying they're not allowed to
+   use any of the memop parameters *)
+let check_conditional param_ids e =
+  let allowed_var = function
+    | Compound _ -> true
+    | Id id ->
+      (match List.find_opt (Id.equal id) param_ids with
+      | None -> true
+      | Some _ -> false)
+  in
   let rec aux e =
     match e.e with
     | EVal _ -> ()
@@ -109,8 +128,8 @@ type simple_body =
 type conditional_return = exp * exp
 
 type complex_body =
-  { b1 : exp option
-  ; b2 : exp option
+  { b1 : (id * exp) option
+  ; b2 : (id * exp) option
   ; cell1 : conditional_return option * conditional_return option
   ; cell2 : conditional_return option * conditional_return option
   ; ret : conditional_return option
@@ -182,9 +201,6 @@ let classify_stmts (body : statement) : (complex_stmt * sp) list =
   body |> flatten_stmt |> List.map classify
 ;;
 
-let cell1_id = Id.create "cell1"
-let cell2_id = Id.create "cell2"
-
 (* Ensure that each cell id appears at most once, and no invalid ids are used *)
 let check_cell_ids stmts =
   let counts = (* Seen cell1, Seen cell2 *) ref (false, false) in
@@ -213,34 +229,43 @@ let check_cell_ids stmts =
 ;;
 
 let extract_complex_body mems locals body =
+  let check_bool = check_bool_exp mems locals in
   let check_int = check_int_exp mems locals in
-  let check_bool = check_int_exp mems locals in
+  let check_cond = check_conditional (mems @ locals) in
+  let check_assign_cr cro =
+    let check (cond, e) =
+      check_cond cond;
+      check_int e
+    in
+    ignore @@ Option.map check cro
+  in
+  let check_return_cr (cond, e) =
+    check_cond cond;
+    match e.e with
+    | EVar (Id id) when Id.equal id cell1_id || Id.equal id cell2_id -> ()
+    | _ -> check_int e
+  in
   let body = classify_stmts body in
   check_cell_ids body;
-  let extract_booldef b_ids body =
+  let extract_booldef body =
     match body with
     | (BoolDef (id, e), _) :: tl ->
       check_bool e;
-      Some e, id :: b_ids, tl
-    | _ -> None, b_ids, body
+      Some (id, e), tl
+    | _ -> None, body
   in
-  let b1, b_ids, body = extract_booldef [] body in
-  let b2, b_ids, body = extract_booldef b_ids body in
-  let check_cond e =
-    check_conditional
-      (function
-        | Compound _ -> false
-        | Id id -> List.mem id b_ids)
-      e
-  in
+  let b1, body = extract_booldef body in
+  let b2, body = extract_booldef body in
   let cell1, cell2, body =
     match body with
     | (CellAssign (id1, cr1_1, cr1_2), _)
       :: (CellAssign (_, cr2_1, cr2_2), _) :: tl ->
+      List.iter check_assign_cr [cr1_1; cr1_2; cr2_1; cr2_2];
       if Id.name id1 = Id.name cell1_id
       then (cr1_1, cr1_2), (cr2_1, cr2_2), tl
       else (cr2_1, cr2_2), (cr1_1, cr1_2), tl
     | (CellAssign (id1, cr1_1, cr1_2), _) :: tl ->
+      List.iter check_assign_cr [cr1_1; cr1_2];
       if Id.name id1 = Id.name cell1_id
       then (cr1_1, cr1_2), (None, None), tl
       else (None, None), (cr1_1, cr1_2), tl
@@ -249,7 +274,9 @@ let extract_complex_body mems locals body =
   let ret =
     match body with
     | [] -> None
-    | [(LocalRet cr, _)] -> Some cr
+    | [(LocalRet cr, _)] ->
+      check_return_cr cr;
+      Some cr
     | (_, sp) :: _ ->
       error_sp sp
       @@ "Unexpected statement in a memop. Are you sure your statements are in \
@@ -284,6 +311,11 @@ let ensure_same_size span params =
    which can be distinguished by the number of arguments they take. *)
 let extract_memop span (params : params) (body : statement) : memop =
   ensure_same_size span params;
+  List.iter
+    (fun (id, _) ->
+      if Id.equal id cell1_id || Id.equal id cell2_id
+      then error_sp span "Arguments to a memop may not be named cell1 or cell2")
+    params;
   match params with
   | [(mem1, _); (local1, _)] -> TwoArg (extract_simple_body mem1 local1 body)
   | [(mem1, _); (local1, _); (local2, _)] ->
