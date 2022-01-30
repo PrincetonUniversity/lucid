@@ -116,19 +116,19 @@ let cid_str_in_cid_decls cid_decls cidstr =
 
 let str_of_decl decl =
   PrintUtils.open_block ();
-  P4tPrint.PrintComputeObject.print_decls [decl];
+  P4tPrint.PrintComputeObject.print_decls P4tPrint.default_config [decl];
   PrintUtils.close_block ()
 ;;
 
 let str_of_decls decls =
   PrintUtils.open_block ();
-  P4tPrint.PrintComputeObject.print_decls decls;
+  P4tPrint.PrintComputeObject.print_decls P4tPrint.default_config decls;
   PrintUtils.close_block ()
 ;;
 
 let str_of_cid_decls cid_decls =
   PrintUtils.open_block ();
-  P4tPrint.PrintComputeObject.print_decls (CL.split cid_decls |> snd);
+  P4tPrint.PrintComputeObject.print_decls P4tPrint.default_config (CL.split cid_decls |> snd);
   PrintUtils.close_block ()
 ;;
 

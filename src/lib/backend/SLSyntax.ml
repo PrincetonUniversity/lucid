@@ -25,7 +25,9 @@ and tblSeq =
 (* this is what gets printed to P4. *)
 and tblSeqProg =
   { tspname : oid
-  ; tspglobals : mid list
+  ; tspinputs : (mid * int) list (* inputs to the program. *)
+  (* variables bound outside the program that are not inputs. *)
+  ; tspglobals : mid list 
   ; (* next event type, exit event type, timestamp. 
   Should be depreciated now that we have structs *)
     tspglobal_widths : int list

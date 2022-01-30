@@ -148,7 +148,7 @@ let to_ir ds =
 ;;
 
 (* do optimizations on tofino ir *)
-let backend_passes df_prog =
+let backend_passes (df_prog: DFSyntax.dagProg) =
   Console.report "SALU register allocation";
   let df_prog = RegisterAllocation.merge_and_temp df_prog in
   Console.report "Control flow elimination";

@@ -38,8 +38,19 @@ module G = Graph.Persistent.Digraph.ConcreteLabeled (Node) (Edge)
 
 type dagParams = (mid * int) list
 type declsMap = (oid * decl) list [@@deriving show]
-type dagProg = declsMap * oid * G.t
-type cid_decls = (oid * decl) list [@@deriving show]
+type cid_decls = declsMap
+
+
+(* type dagProg = cid_decls * oid * G.t *)
+
+type dagProg = 
+  { dp_instr_dict : cid_decls
+  ; dp_inputs : (cid * int) list
+  ; dp_root : oid
+  ; dp_g    : G.t 
+  ; dp_name : id
+  }
+
 
 module PathWeight = struct
   type edge = G.E.t
@@ -117,9 +128,31 @@ let graph_of_declsMap cid_decls =
 
 (* convert the objects into an instruction prog, which 
    just adds a graph *)
-let to_dfProg iprog =
-  iprog.instr_dict, iprog.root_tid, graph_of_declsMap iprog.instr_dict
+let to_dfProg iprog : dagProg =
+  let stuff = 
+    { dp_instr_dict = iprog.instr_dict
+    ; dp_root = iprog.root_tid
+    ; dp_inputs = iprog.inputs
+    ; dp_g = graph_of_declsMap iprog.instr_dict
+    ; dp_name = iprog.name
+    } 
+  in 
+  stuff
+
+  (* iprog.instr_dict, iprog.root_tid, graph_of_declsMap iprog.instr_dict *)
 ;;
+
+let to_tuple dagProg = 
+  (dagProg.dp_instr_dict, dagProg.dp_root, dagProg.dp_g)
+;;
+let from_tuple (idict, root, g) dagProg = 
+  { dp_instr_dict = idict
+  ; dp_root = root
+  ; dp_inputs = dagProg.dp_inputs
+  ; dp_g = g
+  ; dp_name = dagProg.dp_name
+  } 
+;;  
 
 (**** cid_decls accessors ****)
 

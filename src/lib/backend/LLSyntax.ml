@@ -261,6 +261,10 @@ and cid_decl = oid * decl
 and llProg =
   { root_tid : oid
   ; instr_dict : cid_decl list
+  (* input are only for compiling single handler programs. *)
+  ; inputs : (cid * int) list
+  (* name is only for compiling single handle programs... *)
+  ; name  : id;
   }
 [@@deriving
   visitors

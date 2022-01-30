@@ -7,6 +7,8 @@ default:
 	cp -f _build/default/src/bin/main.exe dpt
 	dune build src/bin/compiler.exe
 	cp -f _build/default/src/bin/compiler.exe dptc
+	dune build src/bin/functionCompiler.exe
+	cp -f _build/default/src/bin/functionCompiler.exe dptf
 
 
 generatedVisitors: src/lib/frontend/Syntax.processed.ml

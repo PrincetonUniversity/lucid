@@ -1,0 +1,9 @@
+// Very simple single-pass lucid events that each 
+// get compiled into their own P4 control block. 
+event my_ingress_function(int x, int y, int retval) {
+  retval = x + y;
+}
+
+event my_egress_function(int a, int b, int c) {
+    c = a + b;
+}

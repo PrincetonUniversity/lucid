@@ -501,20 +501,22 @@ let prepare_salu_frames dag prepare_frame_var_for_rid =
 ;;
 
 (* try to merge alu input variables before creating temp variables. *)
-let merge_and_temp dag =
+let merge_and_temp (dag:DFSyntax.dagProg) =
+  let dag_tup = DFSyntax.to_tuple dag in 
   (* DBG.start_mlog __FILE__ outc dprint_endline; *)
   (* DBG.start_mlog "dagPass_optimization_hints" out_hintc hintprint_endline; *)
-  let framed_dag = prepare_salu_frames dag prepare_frame_var_for_rid in
-  framed_dag
+  let framed_dag = prepare_salu_frames dag_tup prepare_frame_var_for_rid in
+  DFSyntax.from_tuple framed_dag dag
 ;;
 
 (* just create alu input variables, don't do merging. *)
 let temp_only dag =
   (* DBG.start_mlog __FILE__ outc dprint_endline; *)
   (* DBG.start_mlog "dagPass_optimization_hints" out_hintc hintprint_endline; *)
+  let dag = DFSyntax.to_tuple dag in 
   let framed_dag =
     prepare_salu_frames dag prepare_frame_var_for_rid_no_merging
   in
-  framed_dag
+  DFSyntax.from_tuple framed_dag
 ;;
 

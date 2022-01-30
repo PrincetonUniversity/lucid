@@ -37,7 +37,7 @@ let dpt_egr_objs = "DPT_EGRESS_OBJECTS"
 let p4out_prefix = "DPT_"
 
 (* output directories. was in ioUtils.ml *)
-let outDir = ref "./compilerOut"
+let outDir = ref "./LucidCompileLogs"
 let srcDir = ref (!outDir ^ "/src")
 let logDir = ref (!outDir ^ "/logs")
 let scriptsDir = ref (!outDir ^ "/scripts")

@@ -1,9 +1,9 @@
 (executables
- (names main compiler)
+ (names main compiler functionCompiler)
  (libraries dpt)
  (link_flags -cc g++)
  )
 
 (install
  (section bin)
- (files (main.exe as dpt) (compiler.exe as compiler)))
+ (files (main.exe as dpt) (compiler.exe as compiler) (functionCompiler.exe as functionCompiler)))

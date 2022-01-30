@@ -806,18 +806,19 @@ let rec callseq_of_tids tids : tblStmt =
   | tid :: tids -> Seq (CallTable tid, callseq_of_tids tids)
 ;;
 
-let tblseq_of_pipe pipe : tblSeq =
-  { tsname = Consts.mergedDpName
+let tblseq_of_pipe pipe dagProg : tblSeq =
+  { tsname = Cid.Id dagProg.dp_name
   ; tsstmt = tbls_of_pipe pipe |> CL.map id_of_decl |> callseq_of_tids
   }
 ;;
 
-let to_tblseqprog pipe : tblSeqProg =
+let to_tblseqprog pipe dagProg : tblSeqProg =
   { tspname = Consts.progId
+  ; tspinputs = dagProg.dp_inputs
   ; tspglobals = Consts.globalArgs
   ; tspglobal_widths = Consts.globalArgWidths
   ; tspdecls = objs_of_pipe pipe
-  ; tsptblseq = tblseq_of_pipe pipe
+  ; tsptblseq = tblseq_of_pipe pipe dagProg
   }
 ;;
 
@@ -1037,14 +1038,14 @@ let dedup_slprog tsprog =
 ;;
 
 let do_passes df_prog =
-  let cid_decls, _, dfg = df_prog in
+  let cid_decls, _, dfg = DFSyntax.to_tuple df_prog in
   let dfg_with_regs = to_tbl_reg_dfg cid_decls dfg in
   let pipe = Placement.layout cid_decls dfg_with_regs in
   (* todo:  
       - move translation to SLSyntax and passes over it 
         to the SLSyntax file. Messy because of cyclic 
         dependency rules. *)
-  let straightline_prog = to_tblseqprog pipe in
+  let straightline_prog = to_tblseqprog pipe df_prog in
   let deduped_prog = dedup_slprog straightline_prog in
   pipe, deduped_prog
 ;;
