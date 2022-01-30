@@ -722,7 +722,6 @@ let infer_body env (params, s) =
 ;;
 
 let infer_memop span env (params, s) =
-  let open TyperMemops in
   (* First, make sure we have the right number/type of arguments *)
   let arg1size = fresh_size () in
   let arg2size = fresh_size () in
@@ -950,7 +949,7 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
       ^ " is "
       ^ raw_ty_to_string (TFun fty); *)
       env, effect_count, DFun (id, ret_ty, constr_specs, inf_body)
-    | DMemop (id, body) ->
+    | DMemop (id, params, memop_body) ->
       enter_level ();
       let inf_size1, inf_size2, inf_memop = infer_memop d.dspan env body in
       leave_level ();

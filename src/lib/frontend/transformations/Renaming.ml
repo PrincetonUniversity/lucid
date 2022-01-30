@@ -224,10 +224,24 @@ let rename prog =
           let replaced_size = Option.map (self#visit_size dummy) size in
           let new_x = self#freshen_size x in
           DSize (new_x, replaced_size)
-        | DMemop (x, body) ->
-          let replaced_body = self#visit_body dummy body in
+        | DMemop (x, params, body) ->
+          let old_env = env in
+          let replaced_params =
+            List.map
+              (fun (id, ty) -> self#freshen_var id, self#visit_ty dummy ty)
+              params
+          in
+          let added_cell_ids =
+            List.fold_left
+              (fun acc id -> CidMap.add (Id id) (Id id) acc)
+              env.var_map
+              [Builtins.cell1_id; Builtins.cell2_id]
+          in
+          env <- { env with var_map = added_cell_ids };
+          let replaced_body = self#visit_memop_body dummy body in
+          env <- old_env;
           let new_x = self#freshen_var x in
-          DMemop (new_x, replaced_body)
+          DMemop (new_x, replaced_params, replaced_body)
         | DEvent (x, s, cspecs, params) ->
           let old_env = env in
           let new_params =

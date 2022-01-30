@@ -17,6 +17,10 @@
     | [s1; s2] -> TMemop (s1, s2)
     | _ -> Console.error_position span "Wrong number of size arguments to memop"
 
+  let mk_dmemop id params body span =
+    memop_sp id params (Memops.extract_memop span params body) span
+  ;;
+
   (* We can't use Id.fresh for auto because it messes with regular ids *)
   let auto_count = ref (-1)
   let fresh_auto () =
@@ -327,7 +331,7 @@ decl:
     | FUN ty ID paramsdef constr_list LBRACE statement RBRACE
                                             { [fun_sp (snd $3) $2 $5 $4 $7 (Span.extend $1 $8)] }
     | MEMOP ID paramsdef LBRACE statement RBRACE
-                                            { [memop_sp (snd $2) $3 $5 (Span.extend $1 $6)] }
+                                            { [mk_dmemop (snd $2) $3 $5 (Span.extend $1 $6)] }
     | SYMBOLIC SIZE ID SEMI                 { [dsize_sp (snd $3) None (Span.extend $1 $4)] }
     | SIZE ID ASSIGN size SEMI              { [dsize_sp (snd $2) (Some (snd $4)) (Span.extend $1 $5)] }
     | MODULE ID LBRACE decls RBRACE         { [module_sp (snd $2) [] $4 (Span.extend $1 $5)] }

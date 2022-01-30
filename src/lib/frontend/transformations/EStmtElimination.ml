@@ -96,7 +96,7 @@ let eliminator =
     method! visit_statement _ s = inline_stmt s
 
     (* Don't replace inside memops, it confuses the typer and is semantically a no-op anyway *)
-    method! visit_DMemop _ id body = DMemop (id, body)
+    method! visit_DMemop _ id params body = DMemop (id, params, body)
   end
 ;;
 

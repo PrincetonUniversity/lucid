@@ -23,3 +23,7 @@ let ingr_port_ty = TInt (IConst 32) |> ty
 
 (* Used in constraints *)
 let start_id = Id.create "start"
+
+(* Used in memops *)
+let cell1_id = SyntaxUtils.cell1_id
+let cell2_id = SyntaxUtils.cell2_id

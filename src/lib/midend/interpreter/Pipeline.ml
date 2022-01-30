@@ -1,5 +1,5 @@
 open Batteries
-open Syntax
+open CoreSyntax
 
 type t =
   { arrs : zint array array

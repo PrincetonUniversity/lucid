@@ -61,7 +61,7 @@ let add_definitions prefix env ds =
     | DExtern (id, _)
     | DSymbolic (id, _)
     | DFun (id, _, _, _)
-    | DMemop (id, _)
+    | DMemop (id, _, _)
     | DEvent (id, _, _, _)
     | DHandler (id, _)
     | DConstr (id, _, _, _)
@@ -113,9 +113,9 @@ let rec replace_module env m_id ds =
           | DFun (id, x, y, z) ->
             ( { env with vars = add_entry env.vars id }
             , DFun (prefix id, x, y, z) |> wrap d )
-          | DMemop (id, x) ->
+          | DMemop (id, x, y) ->
             ( { env with vars = add_entry env.vars id }
-            , DMemop (prefix id, x) |> wrap d )
+            , DMemop (prefix id, x, y) |> wrap d )
           | DEvent (id, x, y, z) ->
             ( { env with vars = add_entry env.vars id }
             , DEvent (prefix id, x, y, z) |> wrap d )

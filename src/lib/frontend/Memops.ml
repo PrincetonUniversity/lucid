@@ -2,13 +2,13 @@ open Syntax
 open SyntaxUtils
 open Collections
 open Batteries
-open TyperUtil
 
 (** Inference and well-formedness for memops *)
 
 (* Builtin ids for the memory cells. *)
-let cell1_id = Id.create "cell1"
-let cell2_id = Id.create "cell2"
+let cell1_id = Builtins.cell1_id
+let cell2_id = Builtins.cell2_id
+let error_sp = Console.error_position
 
 (* Validate that the expression only uses one of each kind of variable (memory/local),
    doesn't use any other variables, and only uses allowed operations *)
@@ -120,40 +120,20 @@ let check_conditional param_ids e =
   aux e
 ;;
 
-type simple_body =
-  | Return of exp
-  | If of exp * exp * exp
-
-(* Boolean condition * return value *)
-type conditional_return = exp * exp
-
-type complex_body =
-  { b1 : (id * exp) option
-  ; b2 : (id * exp) option
-  ; cell1 : conditional_return option * conditional_return option
-  ; cell2 : conditional_return option * conditional_return option
-  ; ret : conditional_return option
-  }
-
-type memop =
-  | TwoArg of simple_body
-  | ThreeArg of complex_body
-  | FourArg of complex_body
-
 let extract_simple_body mem1 local1 body =
   let check_int = check_int_exp [mem1] [local1] in
   let check_bool = check_int_exp [mem1] [local1] in
   match flatten_stmt body with
   | [{ s = SRet (Some e) }] ->
     check_int e;
-    Return e
+    SBReturn e
   | [{ s = SIf (e, s1, s2) }] ->
     check_bool e;
     (match flatten_stmt s1, flatten_stmt s2 with
     | [{ s = SRet (Some e1) }], [{ s = SRet (Some e2) }] ->
       check_int e1;
       check_int e2;
-      If (e, e1, e2)
+      SBIf (e, e1, e2)
     | _ ->
       error_sp body.sspan "Invalid if statement in a memop with two arguments")
   | _ -> error_sp body.sspan "Invalid form for a memop with two arguments"
@@ -309,7 +289,7 @@ let ensure_same_size span params =
 (* Verify that a memop is well-formed, and turn it from a statement into a memop.
    There are three kinds of memop (see Language Features on the wiki for details),
    which can be distinguished by the number of arguments they take. *)
-let extract_memop span (params : params) (body : statement) : memop =
+let extract_memop span (params : params) (body : statement) : memop_body =
   ensure_same_size span params;
   List.iter
     (fun (id, _) ->

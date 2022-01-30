@@ -2,6 +2,8 @@ open Syntax
 open Batteries
 open Collections
 
+let cell1_id = Id.create "cell1"
+let cell2_id = Id.create "cell2"
 let extract_sizes gty = snd gty
 let gname gty = Id.name (fst gty)
 
@@ -313,6 +315,13 @@ let rec is_compound e =
     is_compound base || List.exists (is_compound % snd) entries
 ;;
 
+(* Turn a list of statements into an SSeq (or a SNoop, if empty) *)
+let sequence_stmts lst =
+  match lst with
+  | [] -> snoop
+  | hd :: tl -> List.fold_left (fun acc s -> sseq acc s) hd tl
+;;
+
 (* Turn a SSeq into a list of statements. Only applies to top-level SSeqs *)
 let flatten_stmt s =
   let rec aux acc s =
@@ -322,4 +331,43 @@ let flatten_stmt s =
     | _ -> s :: acc
   in
   aux [] s
+;;
+
+(* Mostly useful for printing *)
+
+let simple_body_to_stmt (body : simple_body) =
+  match body with
+  | SBReturn e -> statement (SRet (Some e))
+  | SBIf (e1, e2, e3) ->
+    sifte e1 (statement (SRet (Some e2))) (statement (SRet (Some e3)))
+;;
+
+let complex_body_to_stmt (body : complex_body) =
+  let handle_bool b = Option.map (fun (id, e) -> slocal id (ty TBool) e) b in
+  let handle_cell id (cro1, cro2) =
+    let els =
+      match cro2 with
+      | None -> snoop
+      | Some (cond, e) -> sifte cond (sassign id e) snoop
+    in
+    match cro1 with
+    | None -> None
+    | Some (cond, e) -> Some (sifte cond (sassign id e) els)
+  in
+  let b1 = handle_bool body.b1 in
+  let b2 = handle_bool body.b2 in
+  let c1 = handle_cell cell1_id body.cell1 in
+  let c2 = handle_cell cell2_id body.cell2 in
+  let ret =
+    Option.map
+      (fun (cond, e) -> sifte cond (statement (SRet (Some e))) snoop)
+      body.ret
+  in
+  List.filter_map (fun x -> x) [b1; b2; c1; c2; ret] |> sequence_stmts
+;;
+
+let memop_body_to_stmt memop_body =
+  match memop_body with
+  | TwoArg b -> simple_body_to_stmt b
+  | ThreeArg b | FourArg b -> complex_body_to_stmt b
 ;;
