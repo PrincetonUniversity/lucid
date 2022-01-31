@@ -222,8 +222,7 @@ let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
   match ty1, ty2 with
   | TBool, TBool | TVoid, TVoid | TGroup, TGroup | TEvent, TEvent -> true
   | TInt size1, TInt size2 -> equiv_size size1 size2
-  | TMemop (size1, size2), TMemop (size3, size4) ->
-    equiv_size size1 size3 && equiv_size size2 size4
+  | TMemop (n1, size1), TMemop (n2, size2) -> n1 = n2 && equiv_size size1 size2
   | TName (id1, sizes1, b1), TName (id2, sizes2, b2)
   | TAbstract (id1, sizes1, b1, _), TAbstract (id2, sizes2, b2, _) ->
     b1 = b2 && Cid.equal id1 id2 && List.for_all2 equiv_size sizes1 sizes2

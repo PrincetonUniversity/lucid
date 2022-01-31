@@ -12,10 +12,10 @@
   let mk_trecord lst =
     TRecord (List.map (fun (id, ty) -> Id.name id, ty.raw_ty) lst)
 
-  let mk_tmemop span sizes =
+  let mk_tmemop span n sizes =
     match sizes with
-    | [s1; s2] -> TMemop (s1, s2)
-    | _ -> Console.error_position span "Wrong number of size arguments to memop"
+    | [s1] -> TMemop (n, s1)
+    | _ -> Console.error_position span "A memop should have only one size argument"
 
   let mk_dmemop id params body span =
     memop_sp id params (Memops.extract_memop span params body) span
@@ -85,7 +85,7 @@
 %token <Span.t> SEMI
 %token <Span.t> HANDLE
 %token <Span.t> FUN
-%token <Span.t> MEMOP
+%token <Span.t * int> MEMOP
 %token <Span.t> RETURN
 %token <Span.t> PRINTF
 %token <Span.t> SIZE
@@ -169,7 +169,7 @@ ty:
     | EVENT                             { ty_sp TEvent $1}
     | VOID                              { ty_sp (TVoid) $1 }
     | GROUP                             { ty_sp (TGroup) $1 }
-    | MEMOP poly                        { ty_sp (mk_tmemop (fst $2) (snd $2)) (Span.extend $1 (fst $2))}
+    | MEMOP poly                        { ty_sp (mk_tmemop (fst $2) (snd $1) (snd $2)) (Span.extend (fst $1) (fst $2)) }
     | LBRACE record_def RBRACE          { ty_sp (mk_trecord $2) (Span.extend $1 $3) }
     | ty LBRACKET size RBRACKET         { ty_sp (TVector ($1.raw_ty, snd $3)) (Span.extend $1.tspan $4) }
 
@@ -331,7 +331,7 @@ decl:
     | FUN ty ID paramsdef constr_list LBRACE statement RBRACE
                                             { [fun_sp (snd $3) $2 $5 $4 $7 (Span.extend $1 $8)] }
     | MEMOP ID paramsdef LBRACE statement RBRACE
-                                            { [mk_dmemop (snd $2) $3 $5 (Span.extend $1 $6)] }
+                                            { [mk_dmemop (snd $2) $3 $5 (Span.extend (fst $1) $6)] }
     | SYMBOLIC SIZE ID SEMI                 { [dsize_sp (snd $3) None (Span.extend $1 $4)] }
     | SIZE ID ASSIGN size SEMI              { [dsize_sp (snd $2) (Some (snd $4)) (Span.extend $1 $5)] }
     | MODULE ID LBRACE decls RBRACE         { [module_sp (snd $2) [] $4 (Span.extend $1 $5)] }

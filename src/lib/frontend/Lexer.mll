@@ -49,7 +49,8 @@ rule token = parse
   | "printf"          { PRINTF (position lexbuf) }
   | "handle"	        { HANDLE (position lexbuf) }
   | "fun"             { FUN (position lexbuf)}
-  | "memop"           { MEMOP (position lexbuf)}
+  | "memop"(num as n) { MEMOP (position lexbuf, Int.of_string n) }
+  | "memop"           { MEMOP (position lexbuf, 0) }
   | "return"          { RETURN (position lexbuf)}
   | "size"            { SIZE (position lexbuf) }
   | "global"          { GLOBAL (position lexbuf) }

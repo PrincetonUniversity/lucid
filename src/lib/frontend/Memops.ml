@@ -271,7 +271,7 @@ let ensure_same_size span params =
   let sizes =
     List.map
       (fun (_, ty) ->
-        match ty.raw_ty with
+        match TyTQVar.strip_links ty.raw_ty with
         | TInt sz -> sz
         | _ ->
           Console.error_position
@@ -302,5 +302,5 @@ let extract_memop span (params : params) (body : statement) : memop_body =
     ThreeArg (extract_complex_body [mem1] [local1; local2] body)
   | [(mem1, _); (mem2, _); (local1, _); (local2, _)] ->
     FourArg (extract_complex_body [mem1; mem2] [local1; local2] body)
-  | _ -> failwith ""
+  | _ -> error_sp span "A memop must have exactly 2, 3, or 4 arguments"
 ;;

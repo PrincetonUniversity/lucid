@@ -136,11 +136,7 @@ let rec raw_ty_to_string t =
     ^ if cfg.verbose_types then "{" ^ string_of_bool b ^ "}" else ""
   | TEvent -> "event"
   | TFun func -> func_to_string func
-  | TMemop (size1, size2) ->
-    Printf.sprintf
-      "memop[int<<%s>>, %s]"
-      (size_to_string size1)
-      (size_to_string size2)
+  | TMemop (n, size) -> Printf.sprintf "memop%d<<%s>>" n (size_to_string size)
   | TVoid -> "void"
   | TGroup -> "group"
   | TRecord lst ->

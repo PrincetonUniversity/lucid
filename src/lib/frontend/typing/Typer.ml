@@ -522,7 +522,8 @@ and infer_statement (env : env) (s : statement) : env * statement =
         @@ "Cannot assign result of void function to variable: "
         ^ stmt_to_string s
       | _ -> ());
-      { env with locals = IdMap.add id ty env.locals }, SLocal (id, ty, inf_e)
+      let env = add_locals env [id, ty] in
+      env, SLocal (id, ty, inf_e)
     | SAssign (id, e) ->
       let env, inf_e, ety = infer_exp env e |> textract in
       (match IdMap.find_opt id env.locals with
@@ -714,52 +715,53 @@ and infer_branches (env : env) s etys branches =
 ;;
 
 let infer_body env (params, s) =
-  let locals =
-    List.fold_left (fun acc (id, ty) -> IdMap.add id ty acc) env.locals params
-  in
-  let env, s = infer_statement { env with locals } s in
+  let env = add_locals env params in
+  let env, s = infer_statement env s in
   env, (params, s)
 ;;
 
-let infer_memop span env (params, s) =
-  (* First, make sure we have the right number/type of arguments *)
-  let arg1size = fresh_size () in
-  let arg2size = fresh_size () in
-  let arg1ty = TInt arg1size in
-  let arg2ty = TInt arg2size in
-  let env, id1, id2 =
-    match params with
-    | [(id1, ty1); (id2, ty2)] ->
-      unify_raw_ty ty1.tspan ty1.raw_ty arg1ty;
-      unify_raw_ty ty2.tspan ty2.raw_ty arg2ty;
-      let locals = IdMap.add id1 ty1 env.locals in
-      let locals = IdMap.add id2 ty2 locals in
-      { env with locals }, id1, id2
-    | _ -> error_sp span "Wrong number of parameters to memop"
+let infer_memop env params mbody =
+  (* Memops.ml has already enforced most of the restrictions on the form of the
+     memop during parsing. Now we just need to make sure the different parts
+     have the right type. *)
+  let expected_tint = snd (List.hd params) in
+  let check_e env expected e =
+    let _, inf_e, inf_ety = infer_exp env e |> textract in
+    try_unify_ty e.espan inf_ety expected;
+    inf_e
   in
-  (* Do regular typechecking of the body *)
-  let _, inf_s = infer_statement { env with ret_ty = Some (mk_ty arg1ty) } s in
-  (* Do grammar checking of the body *)
-  let check_return e =
-    ignore
-    @@ check_e
-         (Id id1)
-         (Id id2)
-         (* TODO: There are more ops that are allowed in return statements, add them here *)
-           (function
-           | Plus | Sub | BitAnd | BitOr -> true
-           | _ -> false)
-         (false, false)
-         e
-  in
-  (match inf_s.s with
-  | SRet (Some e) -> check_return e
-  | SIf (test, { s = SRet (Some e1) }, { s = SRet (Some e2) }) ->
-    check_test id1 id2 test;
-    check_return e1;
-    check_return e2
-  | _ -> error_sp span "Invalid grammar for body of memop");
-  arg1size, arg2size, (params, inf_s)
+  let check_bool env e = check_e env (ty TBool) e in
+  let check_int env e = check_e env expected_tint e in
+  let env = add_locals env params in
+  match mbody with
+  | TwoArg (SBReturn e) -> TwoArg (SBReturn (check_int env e))
+  | TwoArg (SBIf (e1, e2, e3)) ->
+    TwoArg (SBIf (check_bool env e1, check_int env e2, check_int env e3))
+  | ThreeArg body | FourArg body ->
+    let check_b env (id, e) = id, check_bool env e in
+    let b1 = Option.map (check_b env) body.b1 in
+    let b2 = Option.map (check_b env) body.b2 in
+    let bs =
+      [b1; b2]
+      |> List.filter_map (fun x -> x)
+      |> List.map (fun (id, _) -> id, ty TBool)
+    in
+    let env = add_locals env bs in
+    let infer_cr env (e1, e2) = check_bool env e1, check_int env e2 in
+    let infer_cell (cro1, cro2) =
+      Option.map (infer_cr env) cro1, Option.map (infer_cr env) cro2
+    in
+    let cell1 = infer_cell body.cell1 in
+    let cell2 = infer_cell body.cell2 in
+    let env =
+      add_locals
+        env
+        [Builtins.cell1_id, expected_tint; Builtins.cell2_id, expected_tint]
+    in
+    let ret = Option.map (infer_cr env) body.ret in
+    (match mbody with
+    | ThreeArg _ -> ThreeArg { b1; b2; cell1; cell2; ret }
+    | _ -> FourArg { b1; b2; cell1; cell2; ret })
 ;;
 
 (* Check that the event id has already been defined, and that it has the
@@ -951,11 +953,16 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
       env, effect_count, DFun (id, ret_ty, constr_specs, inf_body)
     | DMemop (id, params, memop_body) ->
       enter_level ();
-      let inf_size1, inf_size2, inf_memop = infer_memop d.dspan env body in
+      let inf_body = infer_memop env params memop_body in
       leave_level ();
-      let tmem = generalizer#visit_raw_ty () (TMemop (inf_size1, inf_size2)) in
+      let sz =
+        match snd (List.hd params) with
+        | { raw_ty = TInt sz } -> sz
+        | _ -> failwith "Memops.ml should make this impossible"
+      in
+      let tmem = TMemop (List.length params, sz) in
       let env = define_const id (ty tmem) env in
-      env, effect_count, DMemop (id, inf_memop)
+      env, effect_count, DMemop (id, params, inf_body)
     | DUserTy (id, sizes, ty) ->
       let new_env = define_user_ty id sizes ty env in
       let new_env =

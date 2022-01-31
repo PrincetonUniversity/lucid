@@ -259,6 +259,13 @@ let lookup_module span env cid =
     ^ Printing.cid_to_string cid
 ;;
 
+let add_locals env bindings =
+  let locals =
+    List.fold_left (fun acc (id, ty) -> IdMap.add id ty acc) env.locals bindings
+  in
+  { env with locals }
+;;
+
 (* Drops the last n constraints in the second environment and returns
    the rest. For use after if/match statments, where the result after
    each side constains all the constraints from the original env plus
