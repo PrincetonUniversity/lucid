@@ -199,7 +199,8 @@ let array_update_complex_error msg = array_error array_update_complex_name msg
 
 (* Type of Array.update_complex:
     Array<<'a>> -> int<<32>> ->
-   TMemop(3, 'a) -> int<<'a>> -> int<<'a>> ->
+   TMemop(3, 'a) ->
+   int<<'a>> -> int<<'a>> -> int<<'a>> ->
    int<<'a>>
 *)
 let array_update_complex_ty =
@@ -213,6 +214,7 @@ let array_update_complex_ty =
            ; ty @@ TInt (IVar (QVar (Id.fresh "sz")))
            ; ty @@ TMemop (3, a)
            ; ty @@ TInt a
+           ; ty @@ TInt a
            ; ty @@ TInt a ]
        ; ret_ty = ty @@ TInt a
        ; start_eff
@@ -224,10 +226,15 @@ let array_update_complex_ty =
 let array_update_complex_fun nst swid args =
   let open State in
   match args with
-  | [V { v = VGlobal stage }; V { v = VInt idx }; F memop; arg1; arg2] ->
+  | [V { v = VGlobal stage }; V { v = VInt idx }; F memop; arg1; arg2; default]
+    ->
     let update_f mem1 mem2 =
       let args =
-        [V (CoreSyntax.vinteger mem1); V (CoreSyntax.vinteger mem2); arg1; arg2]
+        [ V (CoreSyntax.vinteger mem1)
+        ; V (CoreSyntax.vinteger mem2)
+        ; arg1
+        ; arg2
+        ; default ]
       in
       let v = memop nst swid args in
       match v.v with

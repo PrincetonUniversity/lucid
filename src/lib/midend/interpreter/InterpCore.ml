@@ -326,12 +326,12 @@ let interp_dglobal (nst : State.network_state) swid id ty e =
         |> raw_integer
         |> Integer.to_int
       in
-      Pipeline.append_stage size len p
+      Pipeline.append_stage size len false p
     | ["Counter"; "t"], [size], [e] ->
       let init_value =
         interp_exp nst swid Env.empty e |> extract_ival |> raw_integer
       in
-      let new_p = Pipeline.append_stage size 1 p in
+      let new_p = Pipeline.append_stage size 1 false p in
       ignore
         (Pipeline.update
            ~stage:idx
@@ -348,6 +348,79 @@ let interp_dglobal (nst : State.network_state) swid id ty e =
   nst.switches.(swid) <- { st with pipeline = new_p };
   State.add_global swid (Id id) (V (vglobal idx ty)) nst;
   nst
+;;
+
+let interp_complex_body params body nst swid args =
+  let args, default = List.takedrop (List.length params) args in
+  let default = List.hd default in
+  let cell1_val = List.hd args in
+  let cell2_val =
+    match args with
+    | [_; v; _; _] -> v
+    | _ -> default
+  in
+  let locals =
+    List.fold_left2
+      (fun acc arg (id, _) -> Env.add (Id id) arg acc)
+      Env.empty
+      args
+      params
+    |> Env.add (Id Builtins.cell1_id) cell1_val
+    |> Env.add (Id Builtins.cell2_id) cell2_val
+  in
+  let interp_b locals = function
+    | None -> locals
+    | Some (id, e) -> Env.add (Id id) (interp_exp nst swid locals e) locals
+  in
+  let interp_cro id locals = function
+    | None -> false, locals
+    | Some (e1, e2) ->
+      let b = interp_exp nst swid locals e1 |> extract_ival |> raw_bool in
+      if b
+      then b, Env.add (Id id) (interp_exp nst swid locals e2) locals
+      else b, locals
+  in
+  let interp_cell id locals (cro1, cro2) =
+    let b, locals = interp_cro id locals cro1 in
+    if b then locals else snd @@ interp_cro id locals cro2
+  in
+  let ret_id = Id.create "memop_retval" in
+  let locals = interp_b locals body.b1 in
+  let locals = interp_b locals body.b2 in
+  let locals = interp_cell Builtins.cell1_id locals body.cell1 in
+  let locals = interp_cell Builtins.cell2_id locals body.cell2 in
+  let _, locals = interp_cro ret_id locals body.ret in
+  let vs =
+    [Builtins.cell1_id; Builtins.cell2_id; ret_id]
+    |> List.map (fun id -> (Env.find (Id id) locals |> extract_ival).v)
+  in
+  value @@ VTuple vs
+;;
+
+let interp_memop params body nst swid args =
+  match body with
+  | MBComplex body -> interp_complex_body params body nst swid args
+  | MBReturn e ->
+    let locals =
+      List.fold_left2
+        (fun acc arg (id, _) -> Env.add (Id id) arg acc)
+        Env.empty
+        args
+        params
+    in
+    interp_exp nst swid locals e |> extract_ival
+  | MBIf (e1, e2, e3) ->
+    let locals =
+      List.fold_left2
+        (fun acc arg (id, _) -> Env.add (Id id) arg acc)
+        Env.empty
+        args
+        params
+    in
+    let b = interp_exp nst swid locals e1 |> extract_ival |> raw_bool in
+    if b
+    then interp_exp nst swid locals e2 |> extract_ival
+    else interp_exp nst swid locals e3 |> extract_ival
 ;;
 
 let interp_decl (nst : State.network_state) swid d =
@@ -381,22 +454,8 @@ let interp_decl (nst : State.network_state) swid d =
     in
     State.add_global swid (Id id) (State.F f) nst;
     nst
-  | DMemop (id, (params, body)) ->
-    (* Basically the same as a function *)
-    let st = nst.switches.(swid) in
-    let f nst swid args =
-      let locals =
-        List.fold_left2
-          (fun acc arg (id, _) -> Env.add (Id id) arg acc)
-          Env.empty
-          args
-          params
-      in
-      let _ = interp_statement nst swid locals body in
-      let ret = !(st.retval) in
-      st.retval := None;
-      Option.get ret
-    in
+  | DMemop (id, params, body) ->
+    let f = interp_memop params body in
     State.add_global swid (Cid.id id) (State.F f) nst;
     nst
   | DExtern _ ->

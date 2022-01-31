@@ -32,7 +32,7 @@ val update:
   -> 'a
 [@@ocamlformat "disable"]
 
-(* Same as update, but takes a complex memop, and works on either kind of array *)
+(* Same as update, but takes a complex memop, and works on either kind of array. *)
 val update_complex:
      stage:int
   -> idx:int
