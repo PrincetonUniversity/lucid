@@ -207,10 +207,6 @@ and interface = interface_spec list
 (* For memops -- Boolean condition * return value *)
 and conditional_return = exp * exp
 
-and simple_body =
-  | SBReturn of exp
-  | SBIf of exp * exp * exp
-
 and complex_body =
   { b1 : (id * exp) option
   ; b2 : (id * exp) option
@@ -220,9 +216,9 @@ and complex_body =
   }
 
 and memop_body =
-  | TwoArg of simple_body
-  | ThreeArg of complex_body
-  | FourArg of complex_body
+  | MBReturn of exp
+  | MBIf of exp * exp * exp
+  | MBComplex of complex_body
 
 (* declarations *)
 and d =

@@ -41,14 +41,13 @@ let eliminate_complex_bool_assigns ds =
       inherit [_] s_map as super
 
       (* skip memops! *)
-      method! visit_DMemop _ id body = DMemop (id, body)
+      method! visit_DMemop _ id params body = DMemop (id, params, body)
 
       method! visit_statement ctx statement =
         match rhs_of_stmt statement.s with
         | Some exp ->
           (match is_bool_non_immediate exp with
-          | true ->
-            eliminate_complex_bool_assign statement
+          | true -> eliminate_complex_bool_assign statement
           | false -> super#visit_statement ctx statement)
         | None -> super#visit_statement ctx statement
     end
@@ -69,7 +68,7 @@ let eliminate_bool_values_and_types ds =
       inherit [_] s_map as super
 
       (* skip memops! *)
-      method! visit_DMemop _ id body = DMemop (id, body)
+      method! visit_DMemop _ id params body = DMemop (id, params, body)
       method! visit_VBool _ b = VInt (zint_of_bool b)
       method! visit_TBool _ = TInt bool_sz
     end

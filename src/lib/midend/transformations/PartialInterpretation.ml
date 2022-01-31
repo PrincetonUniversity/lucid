@@ -381,9 +381,10 @@ let interp_decl env d =
     let e = interp_exp env e in
     let env = add_dec env id in
     env, { d with d = DGlobal (id, ty, e) }
-  | DMemop (id, body) ->
+  | DMemop (id, params, body) ->
     let env = add_dec env id in
-    env, { d with d = DMemop (id, interp_body env body) }
+    (* TODO: Maybe interp in the body? Maybe that's handled later? *)
+    env, { d with d = DMemop (id, params, body) }
   | DHandler (id, body) ->
     let env = add_dec env id in
     env, { d with d = DHandler (id, interp_body env body) }
@@ -397,7 +398,7 @@ let interp_prog ds = ds
    need to keep mutations which might or might not get overwritten later.
    For example, the following program prints 8 when in(1,2) is called, but should
    print 10:
-   
+
    event in(int<<8>> i, int<<8>> j) {
      int<<'a>> k = 2;
      if (j == 2) { k = 3; }

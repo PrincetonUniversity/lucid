@@ -734,10 +734,10 @@ let infer_memop env params mbody =
   let check_int env e = check_e env expected_tint e in
   let env = add_locals env params in
   match mbody with
-  | TwoArg (SBReturn e) -> TwoArg (SBReturn (check_int env e))
-  | TwoArg (SBIf (e1, e2, e3)) ->
-    TwoArg (SBIf (check_bool env e1, check_int env e2, check_int env e3))
-  | ThreeArg body | FourArg body ->
+  | MBReturn e -> MBReturn (check_int env e)
+  | MBIf (e1, e2, e3) ->
+    MBIf (check_bool env e1, check_int env e2, check_int env e3)
+  | MBComplex body ->
     let check_b env (id, e) = id, check_bool env e in
     let b1 = Option.map (check_b env) body.b1 in
     let b2 = Option.map (check_b env) body.b2 in
@@ -759,9 +759,7 @@ let infer_memop env params mbody =
         [Builtins.cell1_id, expected_tint; Builtins.cell2_id, expected_tint]
     in
     let ret = Option.map (infer_cr env) body.ret in
-    (match mbody with
-    | ThreeArg _ -> ThreeArg { b1; b2; cell1; cell2; ret }
-    | _ -> FourArg { b1; b2; cell1; cell2; ret })
+    MBComplex { b1; b2; cell1; cell2; ret }
 ;;
 
 (* Check that the event id has already been defined, and that it has the

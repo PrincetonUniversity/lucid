@@ -21,7 +21,7 @@ let rec translate_ty (ty : S.ty) : C.ty =
     | S.TEvent -> C.TEvent
     | S.TInt sz -> C.TInt (translate_size sz)
     | S.TName (cid, sizes, b) -> C.TName (cid, List.map translate_size sizes, b)
-    | S.TMemop (sz1, sz2) -> C.TMemop (translate_size sz1, translate_size sz2)
+    | S.TMemop (n, sz) -> C.TMemop (n, translate_size sz)
     | S.TFun fty ->
       C.TFun
         { arg_tys = List.map translate_ty fty.arg_tys
@@ -139,6 +139,25 @@ let translate_body (params, stmt) =
   translate_params params, translate_statement stmt
 ;;
 
+let translate_memop body =
+  match body with
+  | S.MBReturn e -> C.MBReturn (translate_exp e)
+  | S.MBIf (e1, e2, e3) ->
+    C.MBIf (translate_exp e1, translate_exp e2, translate_exp e3)
+  | S.MBComplex { b1; b2; cell1; cell2; ret } ->
+    let translate_b = Option.map (fun (id, e) -> id, translate_exp e) in
+    let translate_cro =
+      Option.map (fun (e1, e2) -> translate_exp e1, translate_exp e2)
+    in
+    C.MBComplex
+      { b1 = translate_b b1
+      ; b2 = translate_b b2
+      ; cell1 = translate_cro (fst cell1), translate_cro (snd cell1)
+      ; cell2 = translate_cro (fst cell2), translate_cro (snd cell2)
+      ; ret = translate_cro ret
+      }
+;;
+
 let translate_sort = function
   | S.EEntry b -> C.EEntry b
   | S.EExit -> C.EExit
@@ -153,7 +172,8 @@ let translate_decl (d : S.decl) : C.decl =
     | S.DEvent (id, sort, _, params) ->
       C.DEvent (id, translate_sort sort, translate_params params)
     | S.DHandler (id, body) -> C.DHandler (id, translate_body body)
-    | S.DMemop (id, body) -> C.DMemop (id, translate_body body)
+    | S.DMemop (id, params, body) ->
+      C.DMemop (id, translate_params params, translate_memop body)
     | S.DExtern (id, ty) -> C.DExtern (id, translate_ty ty)
     | _ -> err d.dspan (Printing.decl_to_string d)
   in

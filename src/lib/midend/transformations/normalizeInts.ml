@@ -125,7 +125,7 @@ let atomize_int_assigns ds =
       method precompute_stmts = precompute_stmts
 
       (* skip memops! *)
-      method! visit_DMemop _ id body = DMemop (id, body)
+      method! visit_DMemop _ id params body = DMemop (id, params, body)
 
       method! visit_statement ctx stmt =
         match stmt.s with

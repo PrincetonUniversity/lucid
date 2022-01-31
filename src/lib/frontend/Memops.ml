@@ -126,14 +126,14 @@ let extract_simple_body mem1 local1 body =
   match flatten_stmt body with
   | [{ s = SRet (Some e) }] ->
     check_int e;
-    SBReturn e
+    MBReturn e
   | [{ s = SIf (e, s1, s2) }] ->
     check_bool e;
     (match flatten_stmt s1, flatten_stmt s2 with
     | [{ s = SRet (Some e1) }], [{ s = SRet (Some e2) }] ->
       check_int e1;
       check_int e2;
-      SBIf (e, e1, e2)
+      MBIf (e, e1, e2)
     | _ ->
       error_sp body.sspan "Invalid if statement in a memop with two arguments")
   | _ -> error_sp body.sspan "Invalid form for a memop with two arguments"
@@ -297,10 +297,10 @@ let extract_memop span (params : params) (body : statement) : memop_body =
       then error_sp span "Arguments to a memop may not be named cell1 or cell2")
     params;
   match params with
-  | [(mem1, _); (local1, _)] -> TwoArg (extract_simple_body mem1 local1 body)
+  | [(mem1, _); (local1, _)] -> extract_simple_body mem1 local1 body
   | [(mem1, _); (local1, _); (local2, _)] ->
-    ThreeArg (extract_complex_body [mem1] [local1; local2] body)
+    MBComplex (extract_complex_body [mem1] [local1; local2] body)
   | [(mem1, _); (mem2, _); (local1, _); (local2, _)] ->
-    FourArg (extract_complex_body [mem1; mem2] [local1; local2] body)
+    MBComplex (extract_complex_body [mem1; mem2] [local1; local2] body)
   | _ -> error_sp span "A memop must have exactly 2, 3, or 4 arguments"
 ;;

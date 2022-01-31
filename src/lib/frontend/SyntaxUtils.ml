@@ -334,13 +334,6 @@ let flatten_stmt s =
 
 (* Mostly useful for printing *)
 
-let simple_body_to_stmt (body : simple_body) =
-  match body with
-  | SBReturn e -> statement (SRet (Some e))
-  | SBIf (e1, e2, e3) ->
-    sifte e1 (statement (SRet (Some e2))) (statement (SRet (Some e3)))
-;;
-
 let complex_body_to_stmt (body : complex_body) =
   let handle_bool b = Option.map (fun (id, e) -> slocal id (ty TBool) e) b in
   let handle_cell id (cro1, cro2) =
@@ -367,6 +360,8 @@ let complex_body_to_stmt (body : complex_body) =
 
 let memop_body_to_stmt memop_body =
   match memop_body with
-  | TwoArg b -> simple_body_to_stmt b
-  | ThreeArg b | FourArg b -> complex_body_to_stmt b
+  | MBReturn e -> statement (SRet (Some e))
+  | MBIf (e1, e2, e3) ->
+    sifte e1 (statement (SRet (Some e2))) (statement (SRet (Some e3)))
+  | MBComplex b -> complex_body_to_stmt b
 ;;
