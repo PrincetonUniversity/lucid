@@ -59,9 +59,7 @@ let interp_op op vs =
     else vinteger (Integer.sub (raw_integer v1) (raw_integer v2))
   | Conc, [v1; v2] ->
     let v1, v2 = raw_integer v1, raw_integer v2 in
-    let sz = Integer.size v1 + Integer.size v2 in
-    let v1', v2' = Integer.set_size sz v1, Integer.set_size sz v2 in
-    vinteger (Integer.add (Integer.shift_left v1' (Integer.size v2)) v2')
+    vinteger (Integer.concat v1 v2)
   | BitAnd, [v1; v2] ->
     vinteger (Integer.bitand (raw_integer v1) (raw_integer v2))
   | BitOr, [v1; v2] ->

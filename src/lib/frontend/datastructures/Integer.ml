@@ -152,3 +152,9 @@ let compare x y =
 ;;
 
 let is_zero x = x.value = Z.zero
+
+let concat x y =
+  let sz = size x + size y in
+  let x', y' = set_size sz x, set_size sz y in
+  add (shift_left x' (size y)) y'
+;;
