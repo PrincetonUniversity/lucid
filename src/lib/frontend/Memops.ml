@@ -53,7 +53,8 @@ let check_e memvars localvars allowed_op exp =
       else
         error_sp
           e.espan
-          ("Disallowed operation in memop expression" ^ Printing.exp_to_string e)
+          ("Disallowed operation in memop expression: "
+          ^ Printing.exp_to_string e)
     | _ ->
       error_sp
         e.espan
@@ -122,7 +123,7 @@ let check_conditional param_ids e =
 
 let extract_simple_body mem1 local1 body =
   let check_int = check_int_exp [mem1] [local1] in
-  let check_bool = check_int_exp [mem1] [local1] in
+  let check_bool = check_bool_exp [mem1] [local1] in
   match flatten_stmt body with
   | [{ s = SRet (Some e) }] ->
     check_int e;
