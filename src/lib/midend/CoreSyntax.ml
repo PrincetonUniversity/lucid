@@ -77,6 +77,7 @@ and v =
   | VInt of zint
   | VEvent of event
   | VGlobal of int (* Stage number *)
+  | VTuple of v list (* Only used in the interpreter during complex memops *)
   | VGroup of location list
 
 and event =
@@ -193,6 +194,8 @@ let infer_vty v =
   | VEvent _ -> TEvent
   | VGroup _ -> TGroup
   | VGlobal _ -> failwith "Cannot infer type of global value"
+  | VTuple _ ->
+    failwith "Cannot infer type of tuple value (only used in complex memops)"
 ;;
 
 (* Values *)

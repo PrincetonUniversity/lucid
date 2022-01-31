@@ -98,6 +98,7 @@ let rec v_to_string v =
   | VEvent event -> event_to_string event
   | VGlobal i -> "global_" ^ string_of_int i
   | VGroup vs -> Printf.sprintf "{%s}" (comma_sep location_to_string vs)
+  | VTuple vs -> Printf.sprintf "(%s)" (comma_sep v_to_string vs)
 
 and value_to_string v = v_to_string v.v
 
