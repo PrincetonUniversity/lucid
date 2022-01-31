@@ -68,6 +68,7 @@
    interpState
    arrays
    counters
+   pairArrays
    system
    events
    builtins
