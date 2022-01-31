@@ -35,7 +35,8 @@ let main () =
     let nst = Interp.initialize renaming spec_file ds in
     let nst = Interp.simulate nst in
     Console.report "Final State:";
-    print_endline @@ InterpState.State.nst_to_string nst);
+    if cfg.show_interp_state
+    then print_endline @@ InterpState.State.nst_to_string nst);
   Console.report "Done"
 ;;
 

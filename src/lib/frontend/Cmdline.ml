@@ -15,6 +15,7 @@ type config =
   ; mutable spec_file : string (** Path to an interpreter specification file *)
   ; mutable symb_file : string (** Path to a symbolic specification file *)
   ; mutable dpt_file : string (** Path to the input dpt file *)
+  ; mutable show_interp_state : bool
   }
 
 (* TODO: We might want to add more parameters controlling which transformations
@@ -33,6 +34,7 @@ let default () =
   ; spec_file = ""
   ; symb_file = ""
   ; dpt_file = ""
+  ; show_interp_state = true
   }
 ;;
 
@@ -62,6 +64,7 @@ let parse () =
     set_type_names ();
     set_all_effects ()
   in
+  let set_final_state () = cfg.show_interp_state <- false in
   let speclist =
     [ ( "--silent"
       , Arg.Unit unset_verbose
@@ -103,7 +106,11 @@ let parse () =
     ; ( "-c"
       , Arg.Unit set_constraints
       , "If true, print out each set of constraints we try to solve, but not \
-         the SMT query itself. Not enabled by -m." ) ]
+         the SMT query itself. Not enabled by -m." )
+    ; ( "--suppress-final-state"
+      , Arg.Unit set_final_state
+      , "If set, don't print the final state of the interpreter when it \
+         finishes." ) ]
   in
   let target_filename = ref "" in
   let usage_msg = "Lucid command line. Options available:" in
