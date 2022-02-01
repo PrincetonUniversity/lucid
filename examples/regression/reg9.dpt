@@ -1,0 +1,25 @@
+/* TODO: Enable this test when we've fixed the bug
+The bug: The key argument to add_to_struct_count can't actually be 'any, since it's
+used as an argument to a memop. But instead of catching this and reporting the error,
+the constraint checker gets confused and either reports unknown or unsatisfactory constraints
+The fix: Add a check that ensures all parts of the function declaration in interface
+         are sufficiently general, not just the constraints
+memop keyupdate(int<<'a>> memval, int<<'a>> keyval) {
+    return keyval;
+}
+
+module HashTable : {
+    global type t<<'idx_sz, 'k, 'a>>;
+
+    // funs to match bloom and cms
+    fun void add_to_struct_count(t<<'idx_sz, 'k, 'a>> struct, 'any key) [start <= struct; end struct];
+} {
+    type t<<'idx_sz, 'k, 'a>> = {
+        Array.t<<'a>> keys;
+    }
+
+    fun void add_to_struct_count(t<<'idx_sz, 'k, 'a>> struct, 'any key) {
+	     Array.update(struct#keys, 0, keyupdate, key, keyupdate, key);
+    }
+}
+*/
