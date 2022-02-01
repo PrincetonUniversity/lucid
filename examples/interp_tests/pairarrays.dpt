@@ -1,0 +1,49 @@
+// Note: All logic in this file is completely made up, don't try to figure out
+// what it's trying to do
+
+global PairArray.t<<16>> g1 = PairArray.create(4);
+global PairArray.t<<8>>  g2 = PairArray.create(4);
+global Array.t<<16>>     g3 = Array.create(4);
+
+memop twoarg(int<<'a>> memval1, int<<'a>> localval1) {
+  return memval1 + localval1 + 1;
+}
+
+memop fourarg(int<<'a>> memval1, int<<'a>> memval2, int<<'a>> localval1, int<<'a>> localval2) {
+  bool b1 = memval1 + localval1 < 3;
+  bool b2 = memval2 > localval1 + 7;
+
+    if (b1 && b2)          { cell1 = memval2 + localval2; } else
+  { if (!b1 || !b2)        { cell1 = memval1 + 2; } }
+
+    if ((b1 && !b2) || b2) { cell2 = memval2 + 1; } else
+  { if (!b1 || b2)         { cell2 = memval2 + localval1; } }
+
+    if (b1) { return memval1 + localval2 + 3 + 8; }
+}
+
+memop threearg(int<<'a>> memval1, int<<'a>> localval1, int<<'a>> localval2) {
+  bool b1 = memval1 + localval1 < 3;
+  bool b2 = memval1 > localval1 + 7;
+
+    if (b1 && b2)          { cell1 = memval1 + localval2; } else
+  { if (!b1 || !b2)        { cell1 = memval1 + 2; } }
+
+    if ((b1 && !b2) || b2) { cell2 = memval1 + 1; } else
+  { if (!b1 || b2)         { cell2 = memval1 + localval1; } }
+
+    if (b1 || !b2) { return cell2; }
+}
+
+event in(int idx, int<<16>> i, int<<16>> j) {
+  int<<16>> x = PairArray.update(g1, idx, fourarg, i, j, 0);
+  int<<8>> y = PairArray.update(g2, idx, fourarg, (int<<8>>)i, (int<<8>>)j, 0);
+  int<<16>> z = 0;
+  if (idx < 2) {
+    z = Array.update(g3, idx, twoarg, i, twoarg, j);
+  } else {
+    z = Array.update_complex(g3, idx, threearg, i, j, 0);
+  }
+
+  printf("%d, %d, %d", x, y, z);
+}

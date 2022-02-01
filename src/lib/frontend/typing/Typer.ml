@@ -958,7 +958,9 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
         | { raw_ty = TInt sz } -> sz
         | _ -> failwith "Memops.ml should make this impossible"
       in
-      let tmem = TMemop (List.length params, sz) in
+      let tmem =
+        TMemop (List.length params, sz) |> generalizer#visit_raw_ty ()
+      in
       let env = define_const id (ty tmem) env in
       env, effect_count, DMemop (id, params, inf_body)
     | DUserTy (id, sizes, ty) ->

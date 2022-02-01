@@ -5,7 +5,7 @@ open CoreSyntax
 type stage = zint array * bool
 
 let split_integer n =
-  let sz = Integer.size n in
+  let sz = Integer.size n / 2 in
   let upper = Integer.shift_right n sz |> Integer.set_size sz in
   let lower = Integer.set_size sz n in
   upper, lower
@@ -127,7 +127,9 @@ let update_complex
       let new_upper, new_lower, ret = memop upper lower in
       Integer.concat new_upper new_lower, ret
     | false ->
-      let new_val, _, ret = memop orig_val (Integer.of_int 0) in
+      let new_val, _, ret =
+        memop orig_val (Integer.create ~value:0 ~size:(Integer.size orig_val))
+      in
       new_val, ret
   in
   arr.(idx) <- new_val;

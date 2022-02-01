@@ -220,7 +220,13 @@ and try_unify_rty span rty1 rty2 =
   | TBool, TBool | TVoid, TVoid | TGroup, TGroup | TEvent, TEvent -> ()
   | TInt size1, TInt size2 -> try_unify_size span size1 size2
   | TMemop (n1, size1), TMemop (n2, size2) ->
-    if n1 <> n2 then raise CannotUnify;
+    if n1 <> n2
+    then
+      error_sp span
+      @@ Printf.sprintf
+           "Unification error: memops has wrong number of arumgnets (%d vs %d)"
+           n1
+           n2;
     try_unify_size span size1 size2
   | TName (cid1, sizes1, b1), TName (cid2, sizes2, b2) ->
     if b1 <> b2 || not (Cid.equal cid1 cid2) then raise CannotUnify;

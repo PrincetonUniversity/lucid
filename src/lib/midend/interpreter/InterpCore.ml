@@ -114,6 +114,7 @@ let lookup_var swid nst locals cid =
 ;;
 
 let rec interp_exp (nst : State.network_state) swid locals e : State.ival =
+  (* print_endline @@ "Interping: " ^ CorePrinting.exp_to_string e; *)
   let interp_exps = interp_exps nst swid locals in
   let lookup cid = lookup_var swid nst locals cid in
   match e.e with
@@ -204,8 +205,8 @@ let printf_replace vs (s : string) : string =
 
 let rec interp_statement nst swid locals s =
   (* (match s.s with
-  | SSeq _ -> () (* We'll print the sub-parts when we get to them *)
-  | _ -> print_endline @@ "Interpreting " ^ Printing.stmt_to_string s); *)
+  | SSeq _ | SNoop -> () (* We'll print the sub-parts when we get to them *)
+  | _ -> print_endline @@ "Interpreting " ^ CorePrinting.stmt_to_string s); *)
   let interp_exp = interp_exp nst swid locals in
   let interp_s = interp_statement nst swid locals in
   match s.s with
@@ -340,6 +341,14 @@ let interp_dglobal (nst : State.network_state) swid id ty e =
            ~setop:(fun _ -> init_value)
            new_p);
       new_p
+    | ["PairArray"; "t"], [size], [e] ->
+      let len =
+        interp_exp nst swid Env.empty e
+        |> extract_ival
+        |> raw_integer
+        |> Integer.to_int
+      in
+      Pipeline.append_stage size len true p
     | _ ->
       error
         "Wrong number of arguments to global constructor, or user type \
@@ -359,6 +368,7 @@ let interp_complex_body params body nst swid args =
     | [_; v; _; _] -> v
     | _ -> default
   in
+  let ret_id = Id.create "memop_retval" in
   let locals =
     List.fold_left2
       (fun acc arg (id, _) -> Env.add (Id id) arg acc)
@@ -367,6 +377,7 @@ let interp_complex_body params body nst swid args =
       params
     |> Env.add (Id Builtins.cell1_id) cell1_val
     |> Env.add (Id Builtins.cell2_id) cell2_val
+    |> Env.add (Id ret_id) default
   in
   let interp_b locals = function
     | None -> locals
@@ -384,7 +395,6 @@ let interp_complex_body params body nst swid args =
     let b, locals = interp_cro id locals cro1 in
     if b then locals else snd @@ interp_cro id locals cro2
   in
-  let ret_id = Id.create "memop_retval" in
   let locals = interp_b locals body.b1 in
   let locals = interp_b locals body.b2 in
   let locals = interp_cell Builtins.cell1_id locals body.cell1 in
@@ -394,10 +404,22 @@ let interp_complex_body params body nst swid args =
     [Builtins.cell1_id; Builtins.cell2_id; ret_id]
     |> List.map (fun id -> (Env.find (Id id) locals |> extract_ival).v)
   in
-  value @@ VTuple vs
+  { v = VTuple vs; vty = ty TBool (* Dummy type *); vspan = Span.default }
 ;;
 
 let interp_memop params body nst swid args =
+  (* Memops are polymorphic, but since the midend doesn't understand polymorphism,
+      the size of all the ints in its body got set to 32. We'll just handle this by
+      going through now and setting all the sizes to that of the first argument.
+      It only actually matters for integer constants. *)
+  let replacer =
+    object
+      inherit [_] s_map
+      method! visit_VInt sz n = VInt (Integer.set_size sz n)
+    end
+  in
+  let sz = List.hd args |> extract_ival |> raw_integer |> Integer.size in
+  let body = replacer#visit_memop_body sz body in
   match body with
   | MBComplex body -> interp_complex_body params body nst swid args
   | MBReturn e ->

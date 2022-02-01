@@ -65,7 +65,7 @@ let check_e memvars localvars allowed_op exp =
 ;;
 
 let allowed_bool_op = function
-  | Eq | Neq | Less | More -> true
+  | Eq | Neq | Less | More | And | Or | Not -> true
   | _ -> false
 ;;
 
@@ -104,6 +104,7 @@ let check_conditional param_ids e =
       if not (allowed_var cid)
       then
         error_sp e.espan "Disallowed variable in memop conditional expression"
+    | EOp (Not, [e1]) -> aux e1
     | EOp (op, [e1; e2]) ->
       if not (allowed_bool_op op)
       then

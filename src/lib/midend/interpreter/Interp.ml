@@ -13,7 +13,7 @@ let initial_state (pp : Preprocess.t) (spec : InterpSpec.t) =
   (* Add builtins *)
   List.iter
     (fun f -> State.add_global_function f nst)
-    (System.defs @ Events.defs @ Counters.defs @ Arrays.defs);
+    (System.defs @ Events.defs @ Counters.defs @ Arrays.defs @ PairArrays.defs);
   (* Add externs *)
   List.iteri
     (fun i exs -> Env.iter (fun cid v -> State.add_global i cid (V v) nst) exs)
