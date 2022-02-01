@@ -162,7 +162,7 @@ module NormalizeRelops = struct
         inherit [_] s_map as super
 
         (* skip memops! *)
-        method! visit_DMemop _ id body = DMemop (id, body)
+        method! visit_DMemop _ id params body = DMemop (id, params, body)
 
         method! visit_statement ctx stmt =
           match stmt with
@@ -265,10 +265,10 @@ module NormalizeBoolExps = struct
       error
         "z3_from_expr got an ehash -- this should have been eliminated by an \
          earlier pass."
-    | (EFlood _, _) -> 
+    | EFlood _, _ ->
       error
         "z3_from_expr got an eflood -- there shouldn't be a flood constructor \
-        inside of a boolean"
+         inside of a boolean"
   ;;
 
   (* tell Z3 to convert a boolean expression into disjunctive normal form *)
@@ -375,7 +375,7 @@ module NormalizeBoolExps = struct
         inherit [_] s_map as super
 
         (* skip memops! *)
-        method! visit_DMemop _ id body = DMemop (id, body)
+        method! visit_DMemop _ id params body = DMemop (id, params, body)
 
         method! visit_statement ctx stmt =
           match stmt with

@@ -39,13 +39,12 @@ let array_update_error msg = array_error array_update_name msg
 
 (* Type of Array.update:
     Array<<'a>> -> int<<32>> ->
-   TMemop(int<<'a>>, int<<'b>>) -> int<<'b>> ->
-   TMemop(int<<'a>>, int<<'a>>) -> int<<'a>> ->
+   TMemop(2, 'a) -> int<<'a>> ->
+   TMemop(2, 'a) -> int<<'a>> ->
    int<<'a>>
 *)
 let array_update_ty =
   let a = IVar (QVar (Id.fresh "a")) in
-  let b = IVar (QVar (Id.fresh "b")) in
   let arr_eff = FVar (QVar (Id.fresh "eff")) in
   let start_eff = FVar (QVar (Id.fresh "eff")) in
   ty
@@ -53,9 +52,9 @@ let array_update_ty =
        { arg_tys =
            [ ty_eff (TName (t_id, [a], true)) arr_eff
            ; ty @@ TInt (IVar (QVar (Id.fresh "sz")))
-           ; ty @@ TMemop (a, b)
-           ; ty @@ TInt b
-           ; ty @@ TMemop (a, a)
+           ; ty @@ TMemop (2, a)
+           ; ty @@ TInt a
+           ; ty @@ TMemop (2, a)
            ; ty @@ TInt a ]
        ; ret_ty = ty @@ TInt a
        ; start_eff
@@ -165,7 +164,6 @@ let array_setm_fun nst swid args =
 (* Types for the above four functions *)
 let array_get_ty, array_set_ty, array_getm_ty, array_setm_ty =
   let a = IVar (QVar (Id.fresh "a")) in
-  let b = IVar (QVar (Id.fresh "b")) in
   let arr_eff = FVar (QVar (Id.fresh "eff")) in
   let start_eff = FVar (QVar (Id.fresh "eff")) in
   let fty =
@@ -183,13 +181,68 @@ let array_get_ty, array_set_ty, array_getm_ty, array_setm_ty =
   , ty
     @@ TFun
          { fty with
-           arg_tys = fty.arg_tys @ [ty @@ TMemop (a, b); ty @@ TInt b]
+           arg_tys = fty.arg_tys @ [ty @@ TMemop (2, a); ty @@ TInt a]
          }
   , ty
     @@ TFun
          { fty with
-           arg_tys = fty.arg_tys @ [ty @@ TMemop (a, a); ty @@ TInt a]
+           arg_tys = fty.arg_tys @ [ty @@ TMemop (2, a); ty @@ TInt a]
          } )
+;;
+
+(* Array.update_complex *)
+
+let array_update_complex_name = "update_complex"
+let array_update_complex_id = Id.create array_update_complex_name
+let array_update_complex_cid = Cid.create_ids [array_id; array_update_complex_id]
+let array_update_complex_error msg = array_error array_update_complex_name msg
+
+(* Type of Array.update_complex:
+    Array<<'a>> -> int<<32>> ->
+   TMemop(3, 'a) ->
+   int<<'a>> -> int<<'a>> -> int<<'a>> ->
+   int<<'a>>
+*)
+let array_update_complex_ty =
+  let a = IVar (QVar (Id.fresh "a")) in
+  let arr_eff = FVar (QVar (Id.fresh "eff")) in
+  let start_eff = FVar (QVar (Id.fresh "eff")) in
+  ty
+  @@ TFun
+       { arg_tys =
+           [ ty_eff (TName (t_id, [a], true)) arr_eff
+           ; ty @@ TInt (IVar (QVar (Id.fresh "sz")))
+           ; ty @@ TMemop (3, a)
+           ; ty @@ TInt a
+           ; ty @@ TInt a
+           ; ty @@ TInt a ]
+       ; ret_ty = ty @@ TInt a
+       ; start_eff
+       ; end_eff = FSucc arr_eff
+       ; constraints = ref [CLeq (start_eff, arr_eff)]
+       }
+;;
+
+let array_update_complex_fun nst swid args =
+  let open State in
+  match args with
+  | [V { v = VGlobal stage }; V { v = VInt idx }; F memop; arg1; arg2; default]
+    ->
+    let update_f mem1 mem2 =
+      let args =
+        [ V (CoreSyntax.vinteger mem1)
+        ; V (CoreSyntax.vinteger mem2)
+        ; arg1
+        ; arg2
+        ; default ]
+      in
+      let v = memop nst swid args in
+      match v.v with
+      | VTuple [VInt n1; VInt n2; v3] -> n1, n2, { v with v = v3 }
+      | _ -> failwith "array_update_complex: Internal error"
+    in
+    update_switch_complex swid stage (Integer.to_int idx) update_f nst
+  | _ -> array_update_complex_error "Incorrect number or type of arguments"
 ;;
 
 let constructors = [array_create_id, array_create_sig]
@@ -199,7 +252,11 @@ let defs : State.global_fun list =
   ; { cid = array_getm_cid; body = array_getm_fun; ty = array_getm_ty }
   ; { cid = array_set_cid; body = array_set_fun; ty = array_set_ty }
   ; { cid = array_setm_cid; body = array_setm_fun; ty = array_setm_ty }
-  ; { cid = array_update_cid; body = array_update_fun; ty = array_update_ty } ]
+  ; { cid = array_update_cid; body = array_update_fun; ty = array_update_ty }
+  ; { cid = array_update_complex_cid
+    ; body = array_update_complex_fun
+    ; ty = array_update_complex_ty
+    } ]
 ;;
 
 let signature =

@@ -26,7 +26,7 @@ and raw_ty =
   | TEvent
   | TFun of func_ty (* Only used for Array/event functions at this point *)
   | TName of cid * sizes * bool (* Named type: e.g. "Array.t<<32>>". Bool is true if it represents a global type *)
-  | TMemop of size * size
+  | TMemop of int * size
 
 (* Don't need effects or constraints since we passed typechecking ages ago *)
 and func_ty =
@@ -77,6 +77,7 @@ and v =
   | VInt of zint
   | VEvent of event
   | VGlobal of int (* Stage number *)
+  | VTuple of v list (* Only used in the interpreter during complex memops *)
   | VGroup of location list
 
 and event =
@@ -140,12 +141,28 @@ and event_sort =
   | EExit
   | EBackground
 
+(* For memops -- Boolean condition * return value *)
+and conditional_return = exp * exp
+
+and complex_body =
+  { b1 : (id * exp) option
+  ; b2 : (id * exp) option
+  ; cell1 : conditional_return option * conditional_return option
+  ; cell2 : conditional_return option * conditional_return option
+  ; ret : conditional_return option
+  }
+
+and memop_body =
+  | MBReturn of exp
+  | MBIf of exp * exp * exp
+  | MBComplex of complex_body
+
 (* declarations *)
 and d =
   | DGlobal of id * ty * exp
   | DEvent of id * event_sort * params
   | DHandler of id * body
-  | DMemop of id * body
+  | DMemop of id * params * memop_body
   | DExtern of id * ty
 
 (* name, return type, args & body *)
@@ -193,6 +210,8 @@ let infer_vty v =
   | VEvent _ -> TEvent
   | VGroup _ -> TGroup
   | VGlobal _ -> failwith "Cannot infer type of global value"
+  | VTuple _ ->
+    failwith "Cannot infer type of tuple value (only used in complex memops)"
 ;;
 
 (* Values *)
@@ -251,7 +270,7 @@ let decl_sp d span = { d; dspan = span }
 let dglobal_sp id ty exp span = decl_sp (DGlobal (id, ty, exp)) span
 let dextern_sp id ty span = decl_sp (DExtern (id, ty)) span
 let handler_sp id p body span = decl_sp (DHandler (id, (p, body))) span
-let memop_sp id p body span = decl_sp (DMemop (id, (p, body))) span
+let memop_sp id p body span = decl_sp (DMemop (id, p, body)) span
 
 (*** Utility -- may split into a separate file if it gets big *)
 

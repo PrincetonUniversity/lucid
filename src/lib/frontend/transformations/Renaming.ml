@@ -105,7 +105,11 @@ let rename prog =
             (start_id :: ingr_port_id :: this_id :: List.map fst builtin_vars)
         in
         let builtin_cids =
-          List.map fst (Arrays.constructors @ Counters.constructors)
+          List.map
+            fst
+            (Arrays.constructors
+            @ Counters.constructors
+            @ PairArrays.constructors)
           @ List.map
               (fun (gf : InterpState.State.global_fun) -> gf.cid)
               builtin_defs
@@ -120,7 +124,7 @@ let rename prog =
           List.fold_left
             (fun env cid -> CidMap.add cid cid env)
             CidMap.empty
-            [Arrays.t_id; Counters.t_id]
+            [Arrays.t_id; Counters.t_id; PairArrays.t_id]
         in
         { empty_env with var_map; ty_map }
 
@@ -224,10 +228,32 @@ let rename prog =
           let replaced_size = Option.map (self#visit_size dummy) size in
           let new_x = self#freshen_size x in
           DSize (new_x, replaced_size)
-        | DMemop (x, body) ->
-          let replaced_body = self#visit_body dummy body in
+        | DMemop (x, params, body) ->
+          let old_env = env in
+          let replaced_params =
+            List.map
+              (fun (id, ty) -> self#freshen_var id, self#visit_ty dummy ty)
+              params
+          in
+          let var_map =
+            match body with
+            | MBComplex body ->
+              let bound_ids =
+                [body.b1; body.b2]
+                |> List.filter_map (fun x -> x)
+                |> List.map fst
+              in
+              List.fold_left
+                (fun acc id -> CidMap.add (Id id) (Id id) acc)
+                env.var_map
+                ([Builtins.cell1_id; Builtins.cell2_id] @ bound_ids)
+            | _ -> env.var_map
+          in
+          env <- { env with var_map };
+          let replaced_body = self#visit_memop_body dummy body in
+          env <- old_env;
           let new_x = self#freshen_var x in
-          DMemop (new_x, replaced_body)
+          DMemop (new_x, replaced_params, replaced_body)
         | DEvent (x, s, cspecs, params) ->
           let old_env = env in
           let new_params =

@@ -38,6 +38,7 @@
    typerUtil
    typerInstGen
    typerModules
+   memops
    wellformed
    functionInlining
    functionInliningSpecialCase
@@ -67,6 +68,7 @@
    interpState
    arrays
    counters
+   pairArrays
    system
    events
    builtins

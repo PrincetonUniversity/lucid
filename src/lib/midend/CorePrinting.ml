@@ -33,11 +33,7 @@ let rec raw_ty_to_string t =
     ^ if cfg.verbose_types then "{" ^ string_of_bool b ^ "}" else ""
   | TEvent -> "event"
   | TFun func -> func_to_string func
-  | TMemop (size1, size2) ->
-    Printf.sprintf
-      "memop[int<<%s>>, %s]"
-      (size_to_string size1)
-      (size_to_string size2)
+  | TMemop (n, size) -> Printf.sprintf "memop%d<<%s>>" n (size_to_string size)
   | TGroup -> "group"
 
 and func_to_string func =
@@ -98,6 +94,7 @@ let rec v_to_string v =
   | VEvent event -> event_to_string event
   | VGlobal i -> "global_" ^ string_of_int i
   | VGroup vs -> Printf.sprintf "{%s}" (comma_sep location_to_string vs)
+  | VTuple vs -> Printf.sprintf "(%s)" (comma_sep v_to_string vs)
 
 and value_to_string v = v_to_string v.v
 
@@ -211,6 +208,38 @@ let event_sort_to_string sort =
   | EBackground -> "event"
 ;;
 
+let memop_to_string body =
+  match body with
+  | MBReturn e -> "return " ^ exp_to_string e ^ ";\n"
+  | MBIf (e1, e2, e3) ->
+    Printf.sprintf
+      "if %s then %s else %s"
+      (exp_to_string e1)
+      (exp_to_string e2)
+      (exp_to_string e3)
+  | MBComplex body ->
+    let print_b b =
+      match b with
+      | None -> "None"
+      | Some (id, e) -> Id.name id ^ "," ^ exp_to_string e |> wrap "(" ")"
+    in
+    let print_cr cro =
+      match cro with
+      | None -> "None"
+      | Some (e1, e2) ->
+        exp_to_string e1 ^ " -> " ^ exp_to_string e2 |> wrap "(" ")"
+    in
+    Printf.sprintf
+      "{\nb1=%s;\nb2=%s\ncell1=%s, %s\ncell2=%s, %s\nret=%s\n}"
+      (print_b body.b1)
+      (print_b body.b2)
+      (print_cr @@ fst body.cell1)
+      (print_cr @@ snd body.cell1)
+      (print_cr @@ fst body.cell2)
+      (print_cr @@ snd body.cell2)
+      (print_cr @@ body.ret)
+;;
+
 let d_to_string d =
   match d with
   | DGlobal (id, ty, exp) ->
@@ -231,12 +260,12 @@ let d_to_string d =
       (event_sort_to_string sort)
       (id_to_string id)
       (params_to_string params)
-  | DMemop (id, (params, s)) ->
+  | DMemop (id, params, mbody) ->
     Printf.sprintf
       "memop %s(%s)\n {%s}"
       (id_to_string id)
       (params_to_string params)
-      (stmt_to_string s)
+      (memop_to_string mbody)
   | DExtern (id, ty) ->
     Printf.sprintf "extern %s %s;" (id_to_string id) (ty_to_string ty)
 ;;

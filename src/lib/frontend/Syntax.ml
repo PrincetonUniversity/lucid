@@ -49,7 +49,7 @@ and raw_ty =
   | TInt of size (* Number of bits *)
   | TEvent
   | TFun of func_ty
-  | TMemop of size * size
+  | TMemop of int (* Number of arguments: 2-4 *) * size
   | TName of cid * sizes * bool (* Named type: e.g. "Array.t<<32>>". Bool is true if it represents a global type *)
   | TAbstract of cid * sizes * bool * raw_ty (* raw_ty is the type when it was a TName *)
   | TRecord of (string * raw_ty) list
@@ -204,6 +204,22 @@ and interface_spec =
 
 and interface = interface_spec list
 
+(* For memops -- Boolean condition * return value *)
+and conditional_return = exp * exp
+
+and complex_body =
+  { b1 : (id * exp) option
+  ; b2 : (id * exp) option
+  ; cell1 : conditional_return option * conditional_return option
+  ; cell2 : conditional_return option * conditional_return option
+  ; ret : conditional_return option
+  }
+
+and memop_body =
+  | MBReturn of exp
+  | MBIf of exp * exp * exp
+  | MBComplex of complex_body
+
 (* declarations *)
 and d =
   | DSize of id * size option
@@ -211,7 +227,7 @@ and d =
   | DEvent of id * event_sort * constr_spec list * params
   | DHandler of id * body
   | DFun of id * ty * constr_spec list * body
-  | DMemop of id * body
+  | DMemop of id * params * memop_body
   | DConst of id * ty * exp
   | DExtern of id * ty
   | DSymbolic of id * ty
@@ -365,7 +381,7 @@ let dsymbolic_sp id ty span = decl_sp (DSymbolic (id, ty)) span
 let handler_sp id p body span = decl_sp (DHandler (id, (p, body))) span
 let dsize_sp id size span = decl_sp (DSize (id, size)) span
 let fun_sp id rty cs p body span = decl_sp (DFun (id, rty, cs, (p, body))) span
-let memop_sp id p body span = decl_sp (DMemop (id, (p, body))) span
+let memop_sp id p body span = decl_sp (DMemop (id, p, body)) span
 let duty_sp id sizes rty span = decl_sp (DUserTy (id, sizes, rty)) span
 
 let dconstr_sp id ty params exp span =

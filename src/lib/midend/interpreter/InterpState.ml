@@ -61,6 +61,8 @@ module State = struct
 
   and code = network_state -> int (* switch *) -> ival list -> value
 
+  and memop
+
   and handler =
     network_state -> int (* switch *) -> int (* port *) -> event -> unit
 
@@ -206,6 +208,10 @@ module State = struct
 
   let update_switch swid stage idx getop setop nst =
     Pipeline.update ~stage ~idx ~getop ~setop nst.switches.(swid).pipeline
+  ;;
+
+  let update_switch_complex swid stage idx memop nst =
+    Pipeline.update_complex ~stage ~idx ~memop nst.switches.(swid).pipeline
   ;;
 
   (* Maps switch * port -> switch * port according to the topology *)

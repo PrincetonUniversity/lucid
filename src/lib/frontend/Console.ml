@@ -27,41 +27,38 @@ let error msg =
 let warning msg = show_message msg T.Yellow "warning"
 let report msg = show_message msg T.Black "dpt"
 
-let read_files fnames : unit =
-  let read_one_file fname =
-    let lines = ref [] in
-    let indices = ref [] in
-    let index = ref 0 in
-    let chan =
-      try open_in fname with
-      | _ -> error (Printf.sprintf "file '%s' not found" fname)
-    in
-    try
-      while true do
-        let line = input_line chan in
-        (* print_endline @@ "Line:" ^ line; *)
-        let len = String.length line in
-        let new_len = !index + len + 1 in
-        indices := (!index, new_len) :: !indices;
-        index := new_len;
-        lines := line :: !lines
-      done;
-      { input = Array.of_list !lines; linenums = Array.of_list !indices }
-    with
-    | End_of_file ->
-      close_in chan;
-      { input = Array.of_list (List.rev !lines)
-      ; linenums = Array.of_list (List.rev !indices)
-      }
+let read_one_file fname =
+  let lines = ref [] in
+  let indices = ref [] in
+  let index = ref 0 in
+  let chan =
+    try open_in fname with
+    | _ -> error (Printf.sprintf "file '%s' not found" fname)
   in
-  let info =
-    List.fold_left
-      (fun acc fname -> StringMap.add fname (read_one_file fname) acc)
-      StringMap.empty
-      fnames
-  in
-  global_info := info
+  try
+    while true do
+      let line = input_line chan in
+      (* print_endline @@ "Line:" ^ line; *)
+      let len = String.length line in
+      let new_len = !index + len + 1 in
+      indices := (!index, new_len) :: !indices;
+      index := new_len;
+      lines := line :: !lines
+    done;
+    { input = Array.of_list !lines; linenums = Array.of_list !indices }
+  with
+  | End_of_file ->
+    close_in chan;
+    { input = Array.of_list (List.rev !lines)
+    ; linenums = Array.of_list (List.rev !indices)
+    }
 ;;
+
+let read_file fname : unit =
+  global_info := StringMap.add fname (read_one_file fname) !global_info
+;;
+
+let read_files fnames : unit = List.iter read_file fnames
 
 let get_position_opt fname idx =
   if fname = ""

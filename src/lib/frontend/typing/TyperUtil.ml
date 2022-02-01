@@ -259,6 +259,13 @@ let lookup_module span env cid =
     ^ Printing.cid_to_string cid
 ;;
 
+let add_locals env bindings =
+  let locals =
+    List.fold_left (fun acc (id, ty) -> IdMap.add id ty acc) env.locals bindings
+  in
+  { env with locals }
+;;
+
 (* Drops the last n constraints in the second environment and returns
    the rest. For use after if/match statments, where the result after
    each side constains all the constraints from the original env plus
@@ -281,68 +288,6 @@ let textract (env, e) =
   match e.ety with
   | None -> failwith "internal error (textract)"
   | Some ty -> env, e, ty
-;;
-
-(** Inference and well-formedness for memops. They have a lot of restrictions
-    on them: They must have exactly two arguments, an int<<'a>> and a 'b, plus
-    their bodies follow a restricted grammar *)
-
-(* An expression in a memop may use an unlimited number of binops, but
-   only some are allowed. Furthermore, each parameter can appear only once in the
-   expression; all other arguments must be constants. *)
-let check_e cid1 cid2 allowed (seen1, seen2) exp =
-  let rec aux (seen1, seen2) e =
-    match e.e with
-    | EVal _ | EInt _ -> seen1, seen2
-    | EVar cid when Cid.equals cid cid1 ->
-      if not seen1
-      then true, seen2
-      else
-        error_sp
-          exp.espan
-          ("Parameter "
-          ^ Cid.to_string cid
-          ^ " appears more than once in memop expression")
-    | EVar cid when Cid.equals cid cid2 ->
-      if not seen2
-      then seen1, true
-      else
-        error_sp
-          exp.espan
-          ("Parameter "
-          ^ Cid.to_string cid
-          ^ " appears more than once in memop expression")
-    | EVar _ -> seen1, seen2
-    | EOp (op, [e1; e2]) ->
-      if allowed op
-      then (
-        let seen_vars = aux (seen1, seen2) e1 in
-        aux seen_vars e2)
-      else
-        error_sp
-          e.espan
-          ("Disallowed operation in memop expression" ^ Printing.exp_to_string e)
-    | _ ->
-      error_sp
-        e.espan
-        ("Disallowed expression in memop expression: "
-        ^ Printing.exp_to_string e)
-  in
-  aux (seen1, seen2) exp
-;;
-
-(* Similar to check_return, except the test of the body also conditionals *)
-let check_test id1 id2 exp =
-  let check_e = check_e (Id id1) (Id id2) in
-  let allowed = function
-    | Plus | Sub -> true
-    | _ -> false
-  in
-  match exp.e with
-  | EOp ((Eq | Neq | Less | More), [e1; e2]) ->
-    let seen_vars1 = check_e allowed (false, false) e1 in
-    ignore @@ check_e allowed seen_vars1 e2
-  | _ -> ignore @@ check_e allowed (false, false) exp
 ;;
 
 (* Construct the type for an event creation function given its constraints
@@ -556,4 +501,13 @@ let rec modul_to_string ?(show_defs = true) m =
          str ^ ", " ^ acc)
        m.submodules
        "")
+;;
+
+(* Note: causes an unbound variable error if the variable is unbound *)
+let is_const env span id =
+  match IdMap.find_opt id env.locals with
+  | Some _ -> false
+  | None ->
+    (match lookup_var span env (Id id) with
+    | _ -> true)
 ;;

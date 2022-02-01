@@ -7,7 +7,7 @@ symbolic bool b;
 
 global Array.t<<a>>[b] arrs = [Array.create(n1) for i < b];
 
-memop add(int<<'a>> x, int <<'b>> y) {
+memop add(int<<'a>> x, int <<'a>> y) {
   return x + y;
 }
 

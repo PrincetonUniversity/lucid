@@ -19,6 +19,7 @@ let read ?(filename : string option = None) lexbuf =
   | Failure x -> Console.error (Printf.sprintf "%s %s" err_header x)
   | End_of_file ->
     Console.error (Printf.sprintf "%s end of file in comment" err_header)
+  | Console.Error _ as e -> raise e
   | _ ->
     let tok, line, cnum = get_info () in
     Console.error
@@ -42,6 +43,7 @@ let rec read_from_file fname visited : 'a list * string list =
   if List.mem fname visited
   then [], []
   else (
+    Console.read_file fname;
     let fin = open_in fname in
     let lexbuf = Lexing.from_channel fin in
     lexbuf.lex_curr_p <- { lexbuf.lex_curr_p with pos_fname = fname };
@@ -51,18 +53,17 @@ let rec read_from_file fname visited : 'a list * string list =
     match res with
     | [], d -> d, [fname]
     | f, d ->
-      let ajust_f = List.map (adjust_filename fname) f in
+      let adjust_f = List.map (adjust_filename fname) f in
       List.fold_left
         (fun a b ->
           let pf = read_from_file b (fname :: visited) in
           fst pf @ fst a, snd a @ snd pf)
         (d, [fname])
-        ajust_f)
+        adjust_f)
 ;;
 
 let parse fname =
-  let ajust_fname = adjust_filename FilePath.current_dir fname in
-  let ds = read_from_file ajust_fname [] in
-  Console.read_files (snd ds);
-  fst ds
+  let adjust_fname = adjust_filename FilePath.current_dir fname in
+  let ds, _ = read_from_file adjust_fname [] in
+  ds
 ;;

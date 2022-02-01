@@ -4,9 +4,9 @@ open Batteries
 module CL = Caml.List
 open InterpHelpers
 
-
 (* logging *)
 module DBG = BackendLogging
+
 let outc = ref None
 let dprint_endline = ref DBG.no_printf
 let start_logging () = DBG.start_mlog __FILE__ outc dprint_endline
@@ -80,17 +80,20 @@ let ctx_find_decl_opt n =
 let ctx_add_decls (ds : decls) =
   let iter_f dec =
     match dec.d with
-    | DGlobal (id, _, _) | DMemop (id, _) -> ctx_add_decl (Cid.id id) dec
+    | DGlobal (id, _, _) | DMemop (id, _, _) -> ctx_add_decl (Cid.id id) dec
     | _ -> ()
   in
   CL.iter iter_f ds
 ;;
 
 let ctx_bdy_of_memop n =
-  match ctx_find_decl n with
-  | { d = DMemop (_, (params, stmt)); _ } -> cids_from_params params, stmt
-  | _ -> error "could not find memop in decl context"
+  ignore n;
+  failwith "New memops not yet implemented in the backend!"
 ;;
+
+(* match ctx_find_decl n with
+  | { d = DMemop (_, (params, stmt)); _ } -> cids_from_params params, stmt
+  | _ -> error "could not find memop in decl context" *)
 
 let ctx_width_of_garr n =
   match ctx_find_decl n with
@@ -104,9 +107,7 @@ let ctx_width_of_garr n =
 ;;
 
 (**** context code generator functions ****)
-let ctx_add_codegen n c =
-  tofinoCtx := TofinoCtx.add n (CodeGen c) !tofinoCtx
-;;
+let ctx_add_codegen n c = tofinoCtx := TofinoCtx.add n (CodeGen c) !tofinoCtx
 
 let ctx_add_codegens ns_cs =
   let iter_f (n, c) = ctx_add_codegen n c in
@@ -131,17 +132,17 @@ let ctx_add_erec erec =
   tofinoCtx := TofinoCtx.add key entry !tofinoCtx
 ;;
 
-let ctx_find_eventrec (cid: Cid.t) =
+let ctx_find_eventrec (cid : Cid.t) =
   match TofinoCtx.find cid !tofinoCtx with
   | EventRec r -> r
   | _ -> error "did not find event rec in context"
 ;;
 
-let ctx_find_eventrec_opt (cid: Cid.t) =
+let ctx_find_eventrec_opt (cid : Cid.t) =
   match TofinoCtx.find_opt cid !tofinoCtx with
   | Some (EventRec r) -> Some r
-  | Some (_) -> None
-  | None -> None 
+  | Some _ -> None
+  | None -> None
 ;;
 
 let ctx_find_event_fields id =

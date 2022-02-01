@@ -2,7 +2,9 @@ module T = ANSITerminal
 
 exception Error of string
 
-(* read_files initializes info about the input files for position printing *)
+(* Initialize info about the input files for position printing.
+   Can be called incrementally. *)
+val read_file : string -> unit
 val read_files : string list -> unit
 val error : string -> 'a
 val warning : string -> unit

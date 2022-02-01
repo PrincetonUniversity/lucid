@@ -136,11 +136,7 @@ let rec raw_ty_to_string t =
     ^ if cfg.verbose_types then "{" ^ string_of_bool b ^ "}" else ""
   | TEvent -> "event"
   | TFun func -> func_to_string func
-  | TMemop (size1, size2) ->
-    Printf.sprintf
-      "memop[int<<%s>>, %s]"
-      (size_to_string size1)
-      (size_to_string size2)
+  | TMemop (n, size) -> Printf.sprintf "memop%d<<%s>>" n (size_to_string size)
   | TVoid -> "void"
   | TGroup -> "group"
   | TRecord lst ->
@@ -422,6 +418,8 @@ let rec interface_spec_to_string spec =
 and interface_to_string specs =
   "{\n" ^ concat_map "\n\n" interface_spec_to_string specs ^ "\n}\n"
 
+and memop_to_string body = stmt_to_string (memop_body_to_stmt body)
+
 and d_to_string d =
   match d with
   | DGlobal (id, ty, exp) ->
@@ -451,12 +449,12 @@ and d_to_string d =
       (params_to_string params)
       (cspecs_to_string cspecs)
       (stmt_to_string s)
-  | DMemop (id, (params, s)) ->
+  | DMemop (id, params, mbody) ->
     Printf.sprintf
       "memop %s(%s)\n {%s}"
       (id_to_string id)
       (params_to_string params)
-      (stmt_to_string s)
+      (memop_to_string mbody)
   | DSize (id, szo) ->
     begin
       match szo with

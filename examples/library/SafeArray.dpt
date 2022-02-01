@@ -14,8 +14,8 @@ module SafeArray {
   };
 
   fun int<<'b>> update(t<<'a>> arr, int idx,
-                       memop<<'a, 'b>> getop, int<<'b>> getarg,
-                       memop<<'a, 'a>> setop, int<<'a>> setarg)
+                       memop2<<'a>> getop, int<<'a>> getarg,
+                       memop2<<'a>> setop, int<<'a>> setarg)
   {
     if (idx >= 0 && idx < arr#sz) {
       return Array.update(arr#arr, idx, getop, getarg, setop, setarg);
@@ -31,11 +31,11 @@ module SafeArray {
     update(arr, idx, fst, 0, snd, v);
   }
 
-  fun int<<'b>> getm(t<<'a>> arr, int idx, memop<<'a, 'b>> getop, int<<'b>> getarg) {
+  fun int<<'b>> getm(t<<'a>> arr, int idx, memop2<<'a>> getop, int<<'b>> getarg) {
     return update(arr, idx, getop, getarg, fst, 0);
   }
 
-  fun void setm(t<<'a>> arr, int idx, memop<<'a, 'a>> setop, int<<'a>> setarg) {
+  fun void setm(t<<'a>> arr, int idx, memop2<<'a>> setop, int<<'a>> setarg) {
     update(arr, idx, fst, 0, setop, setarg);
   }
 
