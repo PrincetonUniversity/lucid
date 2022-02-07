@@ -1,3 +1,4 @@
+fun int dummy_delete_me () { return 0; }
 /* TODO: Enable this test when we've fixed the bug
 The bug: The key argument to add_to_struct_count can't actually be 'any, since it's
 used as an argument to a memop. But instead of catching this and reporting the error,

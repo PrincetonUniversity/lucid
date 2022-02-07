@@ -57,6 +57,11 @@ let process_prog ds =
   print_if_verbose "-------Eliminating vectors-------";
   let ds = VectorElimination.eliminate_prog ds in
   print_if_debug ds;
+  (* We might have duplicate variable names in EStmts that got copied during
+     vector elimination *)
+  print_if_verbose "-----------re-renaming-----------";
+  let renaming', ds = Renaming.rename ds in
+  print_if_debug ds;
   print_if_verbose "-------Eliminating EStmts-------";
   let ds = EStmtElimination.eliminate_prog ds in
   print_if_debug ds;
@@ -66,9 +71,10 @@ let process_prog ds =
   print_if_verbose "-------Inlining Constants-------";
   let ds = ConstInlining.inline_prog ds in
   print_if_debug ds;
+  (* Not sure if this is still necessary *)
   print_if_verbose "-----------re-renaming-----------";
-  let renaming', ds = Renaming.rename ds in
-  let renaming = Renaming.compose_envs renaming renaming' in
+  let renaming'', ds = Renaming.rename ds in
+  let renaming = Renaming.compose_envs [renaming; renaming'; renaming''] in
   print_if_debug ds;
   print_if_verbose "---------------typing again-------------";
   (* Just to be safe *)

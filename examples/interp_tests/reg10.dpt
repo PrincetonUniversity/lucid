@@ -1,0 +1,8 @@
+fun int foo(int x) {
+  return x;
+}
+
+event in () {
+  int[3] short_recs = [foo(size_to_int(i)) for i < 3];
+  for (i < 3) { printf("short_recs[%d] = %d", size_to_int<<32>>(i), short_recs[i]); }
+}

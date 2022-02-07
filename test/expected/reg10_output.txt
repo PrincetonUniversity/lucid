@@ -1,0 +1,24 @@
+dpt: Parsing ...
+dpt: Auto-detected specification file examples/interp_tests/reg10.json
+dpt: Simulating...
+dpt: Using random seed: 1
+
+t=0: Handling event in() at switch 0, port 0
+short_recs[0] = 0
+short_recs[1] = 1
+short_recs[2] = 2
+dpt: Final State:
+
+Switch 0 : {
+
+ Pipeline : [ ]
+
+ Events :   [ ]
+
+ Exits :    [ ]
+
+ entry events handled: 0
+ total events handled: 1
+
+}
+dpt: Done
