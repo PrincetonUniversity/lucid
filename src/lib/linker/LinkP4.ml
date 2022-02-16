@@ -20,6 +20,12 @@ let outc = ref None
 let dprint_endline = ref DBG.no_printf
 let start_log () = DBG.start_mlog __FILE__ outc dprint_endline
 
+let debug_mode = ref false;;
+let debug_print_endline = match (!debug_mode) with 
+  | true -> print_endline 
+  | false -> fun _ -> ()
+;; 
+
 exception Error of string
 
 let error s = raise (Error s)
@@ -177,11 +183,20 @@ let num_stmts s =
 ;;
 
 let dbg_print_stree ls =
-  print_endline ("number of nodes: " ^ string_of_int (num_stmts ls));
-  print_endline "----- debug print -----";
-  print_endline (dbg_string_of_code_stmt ls);
-  print_endline "----- real print -----";
-  print_endline (string_of_code_stmt ls)
+  debug_print_endline ("number of nodes: " ^ string_of_int (num_stmts ls));
+  debug_print_endline "----- debug print -----";
+  debug_print_endline (dbg_string_of_code_stmt ls);
+  debug_print_endline "----- real print -----";
+  debug_print_endline (string_of_code_stmt ls)
+;;
+
+
+let keyword_char c =
+  match c with    
+  | '\x20' | '\x0a' | '\x0d' | '\x09'
+  | ';' | '@' | '{' | '}'
+  | '(' | ')' -> false
+  | _ -> true
 ;;
 
 (* Token definitions *)
@@ -236,12 +251,15 @@ let valid_blocklabel_start c =
   | _ -> true
 ;;
 
-
-
 let valid_block_label c = 
   match c with 
   | '{' -> false
   | _ -> true
+
+let not_param_delim c = 
+  match c with 
+  | '(' | ')' -> false
+  | _ -> true 
 
 let is_end_of_pragma_name c = is_whitespace c || not (is_not_pragma_delim c)
 
@@ -268,7 +286,7 @@ let statement =
     (take_while is_not_stmt_delim <* A.char ';')
     (fun sa sb ->
       let codestr =  sa^sb in 
-      (* print_endline ("[statement]"^(codestr)); *)
+      debug_print_endline ("[statement]"^(codestr));
       to_lstmt codestr
     )
 ;;
@@ -332,6 +350,30 @@ let basic_statement =
 ;;
 
 
+(* block labels *)
+let keyword = A.take_while1 keyword_char
+let name    = A.take_while1 keyword_char
+let params  = [A.string "("; take_while not_param_delim; A.string ")"]
+let block_label =   
+  (
+      A.list ([whitespace;keyword; whitespace; name; whitespace]@params@[whitespace]) (* keyword + name + params *)
+  <|> A.list ([whitespace;keyword; whitespace]@params@[whitespace]) (* keyword + params (if block) *) 
+  <|> A.list ([whitespace;keyword; whitespace; name; whitespace]) (* keyword + name with no params *) 
+  <|> A.list ([whitespace;keyword; whitespace])
+  ) >>| 
+  fun strs -> 
+    let str = (String.concat "" strs) in 
+    debug_print_endline ("strs len: "^(string_of_int (CL.length strs)));
+    CL.iter (fun str -> 
+      debug_print_endline ("str ele: ***"^(str)^"***");
+    )
+    strs;
+    debug_print_endline ("[block_label] "^str);
+    to_lexpr str 
+;;  
+
+
+
 
 
 let isnot b = not b ;;
@@ -340,19 +382,16 @@ let block =
   fix (fun block ->
     (* print_endline "[start block parse]"; *)
       (* a block label is a sequence of characters with no delims *)
-      let block_label =
-        take_while (block_label_chars)
-        >>| fun ps ->
-        (* print_endline ("[block_label]"^(ps)); *)
-        to_lexpr ps
-      in       
+      (* if a block label has an (, it must also have a ) *)
+
+
 
       (* the body of a block is a sequence of statements, pragmas, or blocks *)
       let block_body =
         parse2_map
           (    
                A.char '{' (* take the {, throw it away *)
-            *> A.many (comments <|> block<|> basic_statement ) 
+            *> A.many (comments <|> block <|> basic_statement ) 
             (* take many comments, blocks, or basic statements, return a list of parsed things *)
           ) 
           (    
@@ -366,18 +405,18 @@ let block =
               (* combine the statements and the trailing whitespace statement 
                  into a sequence of statements. *)
               let entire_body = to_lseq (bdy_lstmts @ ws_stmts) in 
-              (* print_endline ("[block_body] "^(dbg_string_of_code_stmt entire_body)); *)
+              debug_print_endline ("[block_body] "^(dbg_string_of_code_stmt entire_body));
               entire_body
           )
             (* after parsing both, make a sequence *)
       in
       (* a block is a label followed by a body *)
       let whole_block = parse2_map 
-        block_label 
+        block_label
         block_body 
         (fun bl bb -> 
           let res = to_lblock bl bb in 
-          (* print_endline ("[complete block] "^(dbg_string_of_code_stmt res)); *)
+          debug_print_endline ("[complete block] "^(dbg_string_of_code_stmt res));
           res
 
         )
@@ -494,7 +533,7 @@ let rec find_and_transform bname tfun cs : code_stmt =
   | LBlock brec ->
     (match Tok.code_expr_contains_token bname brec.lb_label with
     | true ->
-      (*           print_endline (sprintf "[find_and_transform] found: %s in\n---\n%s\n---\n" bname (sigstring_of_block cs)); *)
+      (*           debug_print_endline (sprintf "[find_and_transform] found: %s in\n---\n%s\n---\n" bname (sigstring_of_block cs)); *)
       tfun cs
     | false ->
       LBlock { brec with lb_body = find_and_transform bname tfun brec.lb_body }
@@ -639,8 +678,7 @@ let link_p4 obj_dict p4fn =
   start_log ();
   let p4prog = IoUtils.readf p4fn in
   let tree_prog = parse_prog p4prog in
-  (* dbg_print_stree tree_prog; *)
-  (* exit 1; *)
+  dbg_print_stree tree_prog;
   !dprint_endline (sprintf "[link_p4] p4_syntax_tree:");
   !dprint_endline (dbg_string_of_code_stmt tree_prog);
   (* transform the ingress function so that the code before and after the 
