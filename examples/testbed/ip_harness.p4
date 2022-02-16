@@ -218,10 +218,54 @@ control IngressDeparser(
         inout header_t hdr, 
         in metadata_t md,
         in ingress_intrinsic_metadata_for_deparser_t ig_dprsr_md) {
-    apply {
-        pkt.emit(hdr);
+   
+        Checksum() ip_checksum;
+        Checksum() tcp_checksum;    
+
+        apply {
+            if(md.is_modified==1) { 
+                  hdr.ip.hdr_checksum = ip_checksum.update({
+                  hdr.ip.version,
+                  hdr.ip.ihl,
+                  hdr.ip.tos,
+                  hdr.ip.total_len,
+                  hdr.ip.identification,
+                  hdr.ip.flags,
+                  hdr.ip.frag_offset,
+                  hdr.ip.ttl,
+                  hdr.ip.protocol,
+                  hdr.ip.src_addr,
+                  hdr.ip.dst_addr
+              });
+              hdr.tcp.checksum = tcp_checksum.update({
+                          hdr.ip.src_addr,
+                          hdr.ip.dst_addr,
+                          8w0,
+                          hdr.ip.protocol,
+                          md.tcp_total_len,
+                          hdr.tcp.src_port,
+                          hdr.tcp.dst_port,
+                          hdr.tcp.seq_no,
+                          hdr.tcp.ack_no,
+                          hdr.tcp.data_offset,
+                          hdr.tcp.res,
+                          hdr.tcp.flag_cwr, 
+                          hdr.tcp.flag_ece, 
+                          hdr.tcp.flag_urg, 
+                          hdr.tcp.flag_ack, 
+                          hdr.tcp.flag_psh, 
+                          hdr.tcp.flag_rst, 
+                          hdr.tcp.flag_syn, 
+                          hdr.tcp.flag_fin, 
+                          hdr.tcp.window,
+                          hdr.tcp.urgent_ptr
+              });
+          }
+          pkt.emit(hdr);    
     }
 }
+
+
 
 /*======================================
 =            Egress parsing            =
