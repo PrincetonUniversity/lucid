@@ -26,7 +26,12 @@ let event_pkt_generator_mc_config =
       mc_instrs = copy_instrs
     }
   in
-  let mc_groups = CL.map mk_mc_group (range 0 max_generated_events) in
+  let mc_groups = match (!LLConfig.ll_opts.use_multicast) with 
+    | true -> 
+      (* add the multicast group config code if mc enabled *)
+      CL.map mk_mc_group (range 0 max_generated_events)
+    | false -> []
+  in 
   new_config_block (Cid.create ["event_pkt_generator"]) (McConfig mc_groups)
 ;;
 

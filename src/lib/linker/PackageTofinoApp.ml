@@ -43,6 +43,7 @@ let write_mk builddir =
   let makef = builddir ^ "/makefile" in
   report (sprintf "generating makefile: %s " makef);
   (* generic start of makefile. *)
+  let run_args_string = "$(RUN_ARGS)" in 
   let make_str_prefix =
     {x|
 MAKEFLAGS += -s
@@ -64,13 +65,12 @@ endif
        hw:\n\
        \t./libs/p4tapp.sh hw $p4_fn ports_up\n\
        test:\n\
-       \t./libs/p4tapp.sh test $p4_fn "]
+       \t./libs/p4tapp.sh test $p4_fn $run_args_string\n\
+       hw:\n\
+       \t./libs/p4tapp.sh hw $p4_fn ports_up\n\
+       \tdummy:"]
   in
-  (* generic end of makefile *)
-  let make_str_suffix = {x|$(RUN_ARGS)
-
-dummy:|x} in
-  IoUtils.writef makef (make_str_prefix ^ make_str ^ make_str_suffix)
+  IoUtils.writef makef (make_str_prefix ^ make_str)
 ;;
 
 let generate p4_str c_str py_str builddir =

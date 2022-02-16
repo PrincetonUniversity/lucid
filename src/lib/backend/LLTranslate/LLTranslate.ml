@@ -21,6 +21,8 @@ module Printing = CorePrinting
 module IS = LLSyntax
 
 (* logging *)
+let backend_report str = Console.show_message str ANSITerminal.Green "Backend"
+
 module DBG = BackendLogging
 let outc = ref None
 let dprint_endline = ref DBG.no_printf

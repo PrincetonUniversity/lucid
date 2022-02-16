@@ -41,7 +41,7 @@ $(ASSEMBLE_TARGETS):
 
 # test tofino
 $(TEST_TARGETS):
-	$(eval TARGET = $(subst test_,,$@)) # test --> x
+	$(eval TARGET = $(subst test_,,$@)) # test_x --> x
 	cd $(BUILDDIR)/$(TARGET); make test $(TESTDIR)/$(TARGET).json
 
 compile_all : $(COMPILE_TARGETS)
