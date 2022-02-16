@@ -93,6 +93,7 @@ module StGraph = Graph.Persistent.Digraph.ConcreteLabeled (StNode) (StEdge)
 (* the opstatement graph for a single handler *)
 type handler_opgraph_rec =
   { h_name : id
+  ; h_params : params
   ; h_root : statement
   ; h_opgraph : StGraph.t
   }
@@ -364,7 +365,7 @@ let check_unique_stmt_spans dec =
 let opgraph_from_handler (dec : decl) =
   let dec = check_unique_stmt_spans dec in
   match dec.d with
-  | DHandler (hdl_id, (_, hdl_stmt)) ->
+  | DHandler (hdl_id, (hdl_params, hdl_stmt)) ->
     let hdl_stmt = remove_interior_noops hdl_stmt in
     !dprint_endline "***** [extracting edges] *****";
     let edges = to_op_edges hdl_stmt in
@@ -385,6 +386,6 @@ let opgraph_from_handler (dec : decl) =
         snoop, StGraph.empty
       | Some root -> root, g
     in
-    Some { h_name = hdl_id; h_root = root; h_opgraph = g }
+    Some { h_name = hdl_id; h_root = root; h_params = hdl_params; h_opgraph = g }
   | _ -> None
 ;;

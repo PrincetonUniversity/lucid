@@ -6,6 +6,25 @@ all:
 	../../dptc cleanup_test.dpt ip_harness.p4 linker_config.json build -p4tapp template.p4tapp ;\
 	}
 
+
+param_branching:
+	{ \
+	cd ../../ ;\
+	make ;\
+	cd - ;\
+	../../dptf param_branching.dpt ;\
+	}
+
+
+main:
+	{ \
+	cd ../../ ;\
+	make ;\
+	cd - ;\
+	../../dptc main.dpt ip_harness.p4 linker_config.json build;\
+	}
+
+
 identity_hash:
 	{ \
 	cd ../../ ;\

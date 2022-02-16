@@ -135,7 +135,7 @@ let data_dep_dag_of cid_decls g =
 ;;
 
 let do_passes df_prog =
-  let cid_decls, root_tid, g = df_prog in
+  let cid_decls, root_tid, g = DFSyntax.to_tuple df_prog in
   let data_dag = data_dep_dag_of cid_decls g in
-  cid_decls, root_tid, data_dag
+  DFSyntax.from_tuple (cid_decls, root_tid, data_dag) df_prog
 ;;

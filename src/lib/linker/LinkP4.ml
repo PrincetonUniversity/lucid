@@ -268,7 +268,7 @@ let statement =
     (take_while is_not_stmt_delim <* A.char ';')
     (fun sa sb ->
       let codestr =  sa^sb in 
-      print_endline ("[statement]"^(codestr));
+      (* print_endline ("[statement]"^(codestr)); *)
       to_lstmt codestr
     )
 ;;
@@ -338,12 +338,12 @@ let isnot b = not b ;;
 (* <label:code_expr>:lexpr {<body>:lseq} *)
 let block =
   fix (fun block ->
-    print_endline "[start block parse]";
+    (* print_endline "[start block parse]"; *)
       (* a block label is a sequence of characters with no delims *)
       let block_label =
         take_while (block_label_chars)
         >>| fun ps ->
-        print_endline ("[block_label]"^(ps));
+        (* print_endline ("[block_label]"^(ps)); *)
         to_lexpr ps
       in       
 
@@ -366,7 +366,7 @@ let block =
               (* combine the statements and the trailing whitespace statement 
                  into a sequence of statements. *)
               let entire_body = to_lseq (bdy_lstmts @ ws_stmts) in 
-              print_endline ("[block_body] "^(dbg_string_of_code_stmt entire_body));
+              (* print_endline ("[block_body] "^(dbg_string_of_code_stmt entire_body)); *)
               entire_body
           )
             (* after parsing both, make a sequence *)
@@ -377,7 +377,7 @@ let block =
         block_body 
         (fun bl bb -> 
           let res = to_lblock bl bb in 
-          print_endline ("[complete block] "^(dbg_string_of_code_stmt res));
+          (* print_endline ("[complete block] "^(dbg_string_of_code_stmt res)); *)
           res
 
         )
@@ -435,7 +435,7 @@ module Tok = struct
   let p_p4tokens = A.many (p_Ident <|> p_Delim) <* A.end_of_input
 
   let tokenize_codeexpr ce =
-    print_endline ("[tokenize_codeexpr] tokenizing:\n" ^ string_of_code_str ce);
+    (* print_endline ("[tokenize_codeexpr] tokenizing:\n" ^ string_of_code_str ce); *)
     let res =
       Angstrom.parse_string ~consume:Consume.All p_p4tokens ce.codestr
     in
@@ -489,7 +489,7 @@ let rec prag_exists (prag_name : string) (cs : code_stmt) : bool =
 (* if cs.name == bname -> tfun cs
    else -> cs *)
 let rec find_and_transform bname tfun cs : code_stmt =
-  print_endline (sprintf "[find_and_transform] looking for: %s" bname);
+  (* print_endline (sprintf "[find_and_transform] looking for: %s" bname); *)
   match cs with
   | LBlock brec ->
     (match Tok.code_expr_contains_token bname brec.lb_label with
@@ -599,10 +599,10 @@ let ingress_bg_event_trans cs =
   (* transform the ingress block by:
       transforming the "apply" block using igr_condition_pre_and_post_dispatch *)
   let igr_tf igr_cs =
-    print_endline
+(*     print_endline
       (sprintf
          "[igr_tf] transforming block with sig: %s"
-         (sigstring_of_block igr_cs));
+         (sigstring_of_block igr_cs)); *)
     let new_igr_cs =
       find_and_transform "apply" igr_condition_pre_and_post_dispatch igr_cs
     in

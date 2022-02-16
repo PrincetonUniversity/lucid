@@ -90,6 +90,7 @@
    singleAssignment
    partialSingleAssignment
    uniqueSpans
+   uniqueIds
    interpHelpers
    LLTranslate
    LLConstants

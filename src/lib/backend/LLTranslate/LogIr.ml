@@ -62,9 +62,9 @@ let log_lir_dag fn dag =
   Dot.output_graph (open_out_bin full_fn) dag
 ;;
 
-let log_lir fn (cid_decls, _, g) =
-  log_lir_objs fn cid_decls;
-  log_lir_dag fn g
+let log_lir fn (dagProg:DFSyntax.dagProg) =
+  log_lir_objs fn dagProg.dp_instr_dict;
+  log_lir_dag fn dagProg.dp_g;
 ;;
 
 (**** Print pipeline ****)

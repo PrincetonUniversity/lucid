@@ -102,16 +102,24 @@ translate identifiers into IR local variable
 identifiers. These functions are mainly here
 for handler parameter ids, which must change
 to event struct field ids. *)
-let mid_from_id hdl_id id =
-  let id_map = ctx_get_hdl_param_map hdl_id in
+let local_mid_from_id hdl_id id =
+  (* there may not be an ID map, if we are 
+     compiling a single handler 
+     to a P4 control block. *)
+  let id_map = 
+    try
+      ctx_get_hdl_param_map hdl_id 
+    with 
+      Not_found -> []
+  in
   match CL.assoc_opt id id_map with
   | Some qualified_cid -> qualified_cid
   | None -> Cid.id id
 ;;
 
-let mid_from_cid hdl_id cid =
+let local_mid_from_cid hdl_id cid =
   match cid with
-  | Id id -> mid_from_id hdl_id id
+  | Id id -> local_mid_from_id hdl_id id
   | _ -> cid
 ;;
 
@@ -154,9 +162,9 @@ let zint_from_evalue (immediate_exp : exp) =
 let oper_from_immediate hdl_id (immediate_exp : exp) =
   match immediate_exp.e with
   | EVal _ -> IS.Const (zint_from_evalue immediate_exp)
-  | EVar cid -> Meta (mid_from_cid hdl_id cid)
+  | EVar cid -> Meta (local_mid_from_cid hdl_id cid)
   | EOp (Slice(l, h), [{e=EVar (cid); _}]) ->  
-    MetaSlice (l, h, mid_from_cid hdl_id cid)
+    MetaSlice (l, h, local_mid_from_cid hdl_id cid)
   | _ ->
     let dstr =
       "[oper_from_immediate] not a backend-recognized immediate: "
@@ -180,8 +188,8 @@ let soper_from_immediate
     | Some memcell_name ->
       (match Cid.equals memcell_name n with
       | true -> IS.RegVar Lo
-      | false -> IS.Meta (mid_from_cid hdl_id n))
-    | None -> IS.Meta (mid_from_cid hdl_id n))
+      | false -> IS.Meta (local_mid_from_cid hdl_id n))
+    | None -> IS.Meta (local_mid_from_cid hdl_id n))
   | _ -> error "[soper_from_immediate] expression is not an immediate"
 ;;
 
@@ -199,7 +207,7 @@ open Format
 let obj_decl_str obj =
   PrintUtils.open_block ();
   fprintf str_formatter " @,";
-  P4tPrint.PrintComputeObject.print_decls [obj];
+  P4tPrint.PrintComputeObject.print_decls P4tPrint.default_config [obj];
   PrintUtils.close_block ()
 ;;
 
@@ -214,7 +222,9 @@ let log_objs opstmt objs =
 module TofinoAlu = struct
   (**** generate an (alu_name, alu_declaration) pair from an op statement  ****)
   let from_assign hdl_id outvar_id val_exp opstmt =
-    let outvar_mid = mid_from_id hdl_id outvar_id in
+    (* this is where parameters are renamed. How awful to be nested so 
+       deeply into the translation, instead of done in a pass of its own. *)
+    let outvar_mid = local_mid_from_id hdl_id outvar_id in 
     let base_name = uname_of_stmt opstmt in
     let alu_name = aluname_of_stmt opstmt in
     let alu_name, alu_obj =
@@ -346,8 +356,7 @@ module TofinoControl = struct
   (* almost the same as assign, but there's also an extra declaration before control objects. *)
   let from_local hdl_id opgraph opstmt =
     let outvar_id, var_ty, val_exp = unpack_local opstmt in
-    (* caution: must use mid_from_id in from_assign too. *)
-    let outvar_mid = mid_from_id hdl_id outvar_id in
+    let outvar_mid = local_mid_from_id hdl_id outvar_id in
     (* make the ALU that does the computation. *)
     let alu_name, alu_obj =
       TofinoAlu.from_assign hdl_id outvar_id val_exp opstmt
@@ -451,7 +460,7 @@ module TofinoControl = struct
   let field_pat_of_atom_exp hdl_id exp =
     match exp.e with
     | EOp (Eq, [evar; eval]) | EOp (Neq, [evar; eval]) ->
-      ( name_from_exp evar |> mid_from_cid hdl_id
+      ( name_from_exp evar |> local_mid_from_cid hdl_id
       , IS.Exact (Integer.of_int (int_from_const_exp eval)) )
     | _ -> error "unexpected form of expression to convert into a pattern. "
   ;;
@@ -505,7 +514,7 @@ module TofinoControl = struct
   let get_atom_exps = flatten_conjunction
 
   let get_keys hdl_id exp =
-    let keys = vars_in_exp exp |> CL.map (mid_from_cid hdl_id) in
+    let keys = vars_in_exp exp |> CL.map (local_mid_from_cid hdl_id) in
     keys
   ;;
 
@@ -734,7 +743,7 @@ module TofinoControl = struct
   let from_match hdl_id opgraph opstmt =
     let _ = opgraph in
     let keys, branches = unpack_match opstmt in
-    let key_mids = CL.map name_from_exp keys |> CL.map (mid_from_cid hdl_id) in
+    let key_mids = CL.map name_from_exp keys |> CL.map (local_mid_from_cid hdl_id) in
     (* make a rule and action for each entry. *)
     let tbl_entries = CL.map (tblentry_from_branch key_mids opgraph) branches in
     (* may need to make a default rule too, if the last one is not PWild,
@@ -755,7 +764,7 @@ module TofinoControl = struct
     log_objs opstmt new_objs;
     new_objs
   ;;
-
+  (* translate one single-op statement into one tofino operation. *)
   let from_opstmt hdl_id opgraph opstmt objs =
     !dprint_endline "-----[from_opstmt] ------";
     !dprint_endline ("creating table: " ^ Cid.to_string (tblname_of_stmt opstmt));
@@ -781,7 +790,27 @@ module TofinoControl = struct
   ;;
 end
 
-(* convert a handler's statement graph into a tofino control graph *)
+(* convert a handler in a single handler program 
+   to a low level program. This fills the 
+   input_params field of the llProg *)
+let llprog_from_single_handler hog_rec : IS.llProg = 
+  let tofino_objs = TofinoControl.from_opstmt_graph 
+    hog_rec.h_name 
+    hog_rec.h_opgraph
+  in
+  let param_to_input (id, ty) = 
+    (Cid.id id, InterpHelpers.intwidth_from_raw_ty ty.raw_ty)
+  in
+  { IS.root_tid = tblname_of_stmt hog_rec.h_root
+  ; IS.instr_dict = IS.dict_of_decls tofino_objs
+  ; IS.inputs = CL.map param_to_input hog_rec.h_params 
+  ; IS.name = hog_rec.h_name
+  }
+;;
+
+(* convert a handler's statement graph into a tofino control graph. 
+   This will end up not filling the input_params field of the llProg, 
+   because we are not ultimately generating a control block. *)
 type tofino_control_g =
   { hid : id
   ; cid_decls : (Cid.t * IS.decl) list
@@ -793,6 +822,7 @@ let dpahandler_from_handler hog_rec : tofino_control_g =
   let tofino_objs =
     TofinoControl.from_opstmt_graph hog_rec.h_name hog_rec.h_opgraph
   in
+  print_endline ("after from_opstmt_graph");
   (* 2. convert to an assoc list of object declarations *)
   let cid_decls = IS.dict_of_decls tofino_objs in
   LLValidate.validate_cid_decls cid_decls "[dpahandler_from_handler]";
@@ -826,5 +856,5 @@ let merge_handler_defs (hdl_defs : tofino_control_g list) : IS.llProg =
   let cid_decls = IS.dict_of_decls (tbl :: acns) @ cid_decls in
   (* return the complete instruction prog, with the cid_decls
   merged.  *)
-  { root_tid = root_tblname; instr_dict = cid_decls }
+  { root_tid = root_tblname; instr_dict = cid_decls; inputs = []; name = Id.create "lucid_prog"}
 ;;

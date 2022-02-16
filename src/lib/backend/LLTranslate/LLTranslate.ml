@@ -471,7 +471,38 @@ let byte_align_header_structs (prog : IS.llProg) : IS.llProg =
   { prog with IS.instr_dict = cid_decls }
 ;;
 
-let from_dpt (ds : decls) (opgraph_recs : prog_opgraph) : IS.llProg =
+(* Compiles ds, a program with a single event/handler named "main" and no 
+   generate statements, into P4. 
+    Changes: 
+      1. don't generate the event selection table at the beginning. 
+      2. print the parameters of main as local variables, 
+         instead of fields of md.main.
+      3. don't generate the final / exit lucid table. 
+ *)
+ let from_handler (ds : decls) (hog_rec : handler_opgraph_rec) : IS.llProg = 
+  (* put builtin function generators into the context *)
+  ctx_add_codegens dpt_builtin_fcns;
+  ctx_add_decls ds; (* we probably don't need decls in context any more. *)
+  (* Events are not used in this compilation mode, so there's 
+     nothing to translate. Skipping this step also makes the handler's 
+     parameters get printed as local variables -- which is what we want. *)
+  (* let event_decls = TranslateEvents.translate_all ds in *)
+
+  (* translate the array declarations into LL decls *)
+  let regarray_defs = CL.map regdec_from_decl ds |> CL.flatten in
+  (* translate the one handler into LL program *)
+  let tofino_prog = llprog_from_single_handler hog_rec in 
+  let out_prog =
+    { tofino_prog with
+      instr_dict =
+          tofino_prog.instr_dict 
+        @ IS.dict_of_decls regarray_defs
+    }
+  in
+  out_prog
+;;
+
+let from_dpt (ds : decls) (opgraph_recs : handler_opgraph_rec list) : IS.llProg =
   (* translation to IR currently does many passes over the backend, with each pass
     translating a different part of the syntax tree.
     5/18/21 -- now that the final structure of the generated code

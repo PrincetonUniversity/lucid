@@ -201,7 +201,7 @@ let prepare_frame_var_for_rid_no_merging
     DBG.printf outc "-------------\n";
     (* the width of the intermediate is equal to the width of the register's cell *)
     (* except for index variables, which are always 32-bits (for now) *)
-    let var_size = find_width_of_var cid_decls (CL.hd vars) in
+    let var_size = find_width_of_declared_var cid_decls (CL.hd vars) in
     (* declare the per-register input variable. *)
     let salu_var_decl = to_globalmeta salu_arg_id var_size in
     let cid_decls = emplace_decl cid_decls salu_var_decl in
@@ -277,10 +277,10 @@ let prepare_frame_var_for_rid
          not be true for the index variable, in which case 
          incorrect code will be generated. 
        *)
-      let var_size = find_width_of_var cid_decls (CL.hd vars) in
+      let var_size = find_width_of_declared_var cid_decls (CL.hd vars) in
       (*     let var_size =
         match shared_salu_arg_var with
-        | SharedIndex _ -> find_width_of_var cid_decls (CL.hd vars)
+        | SharedIndex _ -> find_width_of_declared_var cid_decls (CL.hd vars)
         | SharedInput _ -> width_of_regvec (Cid.lookup cid_decls rid)
       in *)
 
@@ -501,20 +501,22 @@ let prepare_salu_frames dag prepare_frame_var_for_rid =
 ;;
 
 (* try to merge alu input variables before creating temp variables. *)
-let merge_and_temp dag =
+let merge_and_temp (dag:DFSyntax.dagProg) =
+  let dag_tup = DFSyntax.to_tuple dag in 
   (* DBG.start_mlog __FILE__ outc dprint_endline; *)
   (* DBG.start_mlog "dagPass_optimization_hints" out_hintc hintprint_endline; *)
-  let framed_dag = prepare_salu_frames dag prepare_frame_var_for_rid in
-  framed_dag
+  let framed_dag = prepare_salu_frames dag_tup prepare_frame_var_for_rid in
+  DFSyntax.from_tuple framed_dag dag
 ;;
 
 (* just create alu input variables, don't do merging. *)
 let temp_only dag =
   (* DBG.start_mlog __FILE__ outc dprint_endline; *)
   (* DBG.start_mlog "dagPass_optimization_hints" out_hintc hintprint_endline; *)
+  let dag = DFSyntax.to_tuple dag in 
   let framed_dag =
     prepare_salu_frames dag prepare_frame_var_for_rid_no_merging
   in
-  framed_dag
+  DFSyntax.from_tuple framed_dag
 ;;
 

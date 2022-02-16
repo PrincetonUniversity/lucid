@@ -23,6 +23,14 @@ let memName = "memCell"
 let retName = "retCell"
 let tmpName = "tmp"
 
+(* configuration *)
+type config = {
+  print_stage_pragmas : bool;
+}
+let default_config = {
+  print_stage_pragmas = true;
+}
+
 (* general helpers. *)
 let print_fmt_list fmt objs obj_printer =
   let ppSep fmt () = fprintf fmt "@," in
@@ -32,13 +40,25 @@ let print_fmt_list fmt objs obj_printer =
 (**** identifier printing ****)
 (* print the name of a variable. 
   Assumes that compound names are globally unique handler params. 
-  Assumes that non-compound names are not globally unique, and so need ids. *)
+  Assumes that non-compound names are not globally unique, and so need ids. 
+  Update: mid-end now guarantees that simple names are globally unique.
+*)
+
+(* Variable ID rules:
+  0. Variables are metadata and register arrays.
+  1. Variables created by the user, frontend, and midend use only simple ids. 
+  2. Tables and actions created by the P4 compiler use compound ids. 
+  3. All variable IDs have unique name strings. This is enforced in the 
+     mid-end for simple variable IDs. *) 
 let str_of_varid mid =
   match mid with
   | Compound _ ->
     let names = Cid.names mid in
-    String.concat ~sep:"." names
-  | Id i -> Id.to_string_delim "_" i
+    let name = String.concat ~sep:"." names in 
+    print_endline ("got a compound variable in p4tPrint: "^name);
+    name 
+  | Id i -> Id.name i
+  (* Id.to_string_delim "_" i *)
 ;;
 
 let str_of_varids mids = CL.map str_of_varid mids |> String.concat ~sep:", "
@@ -367,7 +387,7 @@ module PrintSalu = struct
       (string_of_int rid_width)
       (string_of_int defWidth)
       (string_of_int rid_width)
-      (str_of_private_oid rid)
+      (str_of_varid rid)
       (str_of_private_oid salu_routine_id);
     pp_open_vbox str_formatter 4;
     fprintf
@@ -502,10 +522,14 @@ module PrintTable = struct
     ignore table deps pragmas 
     (one for every other table in the same stage)
   *)
-  let print_tbl_pragmas fmt tbl_id stage_opt stage_tbl_map =
+  let print_tbl_pragmas config fmt tbl_id stage_opt stage_tbl_map =
     match stage_opt with
-    | Some stage_num ->
-      fprintf fmt "@pragma stage %i@," stage_num;
+    | Some stage_num -> 
+    (
+      (
+        if (config.print_stage_pragmas)
+        then (fprintf fmt "@pragma stage %i@," stage_num)
+      );
       let same_stage_tbls = CL.assoc stage_num stage_tbl_map in
       let other_ss_tbls =
         CL.filter (fun t -> not (Cid.equals tbl_id t)) same_stage_tbls
@@ -517,12 +541,13 @@ module PrintTable = struct
           (str_of_private_oid other_tid)
       in
       CL.iter ignore_dep_printer other_ss_tbls
+    )
     | None -> fprintf fmt "// Stage not set by dptc@,"
   ;;
 
-  let print_tbl fmt tbl_id match_vars rules stage_opt stage_tbl_map =
+  let print_tbl config fmt tbl_id match_vars rules stage_opt stage_tbl_map =
     (*   fprintf fmt "//table %s@," (qstr_of_mid tbl_id); *)
-    print_tbl_pragmas fmt tbl_id stage_opt stage_tbl_map;
+    print_tbl_pragmas config fmt tbl_id stage_opt stage_tbl_map;
     tab ();
     fprintf fmt "table %s {@," (str_of_private_oid tbl_id);
     print_tbl_key fmt match_vars;
@@ -545,7 +570,7 @@ module PrintComputeObject = struct
       defWidth
       len
       (Integer.to_int def)
-      (str_of_private_oid rid)
+      (str_of_varid rid)
   ;;
 
   let print_ivec fmt alu_id iVec =
@@ -625,7 +650,7 @@ module PrintComputeObject = struct
     fprintf fmt "%s@," block_str
   ;;
 
-  let print_decl stage_tbl_map fmt (decl : decl) =
+  let print_decl config stage_tbl_map fmt (decl : decl) =
     match decl with
     | RegVec (rid, wid, len, def, _) -> print_reg fmt rid wid len def
     | InstrVec (iid, iVec) -> print_ivec fmt iid iVec
@@ -645,6 +670,7 @@ module PrintComputeObject = struct
       print_action fmt actn_id obj_ids next_tids
     | Table (tbl_id, branches, stage_opt) ->
       PrintTable.print_tbl
+        config
         fmt
         tbl_id
         (match_vars_of_rules branches)
@@ -671,14 +697,14 @@ module PrintComputeObject = struct
     | _ -> false
   ;;
 
-  let print_decls decls =
+  let print_decls config decls =
     (* get a mapping from stage number to table, for 
        printing the ignore table dependency pragmas *)
     let printable_decls = CL.filter filter_decl decls in
     print_fmt_list
       str_formatter
       printable_decls
-      (print_decl (stageMap_of_tbls decls))
+      (print_decl config (stageMap_of_tbls decls))
   ;;
 end
 
@@ -815,10 +841,10 @@ end
 
 (**** top level interface ****)
 (* print the objects defined inside of the ingress control block *)
-let str_of_igr_objs decls =
+let str_of_igr_objs config decls =
   open_block ();
   fprintf str_formatter " @,";
-  PrintComputeObject.print_decls decls;
+  PrintComputeObject.print_decls config decls;
   close_block ()
 ;;
 
@@ -999,11 +1025,19 @@ let callstr_of_igr_scheds = callstr_of_located_scheds LIgrEnd
 let str_of_egr_scheds = str_of_located_sched_block LEgr
 let callstr_of_egr_scheds = callstr_of_located_scheds LEgr
 
+
+(* print a generic lucid program, whose handlers are represented 
+   as a straightline of table calls, as a configuration for 
+   multiple blocks of the Tofino. (including ingress, egress, 
+   parsers, etc)
+   The straightline program's inputs should be empty for 
+   this mode of compilation. *)
 let from_straightline (blk : tblSeqProg) =
+  let config = {print_stage_pragmas = true} in 
   (* set up context for event structs. *)
   ctx_add_structdefs blk.tspdecls;
   let dpt_igr_obj_str =
-    str_of_igr_objs blk.tspdecls ^ str_of_igr_scheds blk.tspdecls
+    (str_of_igr_objs config blk.tspdecls) ^ str_of_igr_scheds blk.tspdecls
   in
   let dpt_igr_call_str =
     print_p4_calls blk.tsptblseq ^ callstr_of_igr_scheds blk.tspdecls
@@ -1048,3 +1082,41 @@ let from_straightline (blk : tblSeqProg) =
   print_endline dpt_egr_call_str; *)
   generated_blocks
 ;;
+
+(* build a P4 control block parameter string from 
+   a list of input variable IDs and sizes. *)
+(* LEFT OFF HERE. TODO: 
+    1. write out parameters. 
+    2. generate control block. 
+    3. write out control block to DPT_CONTROL 
+       position in entry. 
+    4. in functionCompiler, take the result and 
+       save it in the appropriate file. 
+    5. update the P4 harness to call two functions: 
+        one in ingress, one in egress.
+*)
+let str_of_inputs (inputs : (mid * int) list) = 
+  CL.map 
+    (fun (m, i) -> (sprintf "inout bit<%i> %s" i (str_of_varid m) )) 
+    inputs
+  |> String.concat ~sep:","
+;;
+
+(* Print a control block from a straight-line program. 
+   The program is created from a lucid program with 
+   1 handler and no generate statements. The handler's 
+   arguments, which should be in blk.tspinputs, 
+   are the control block's parameters. *)
+let to_p4ctl_str  (blk : tblSeqProg) =
+  (* we have no idea where this will be placed 
+     in the p4, so there's no point in even trying 
+     to use stage pragmas. *)
+  let config = {print_stage_pragmas = false} in 
+  sprintf "control %s(%s) {\n%s\n\tapply{\n%s\n\t}\n}"
+    (str_of_varid blk.tsptblseq.tsname)
+    (str_of_inputs blk.tspinputs)
+    (str_of_igr_objs config blk.tspdecls)
+    (print_p4_calls blk.tsptblseq)
+;;
+
+
