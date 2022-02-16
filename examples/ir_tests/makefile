@@ -7,6 +7,15 @@ all:
 	}
 
 
+param_branching:
+	{ \
+	cd ../../ ;\
+	make ;\
+	cd - ;\
+	../../dptf param_branching.dpt ;\
+	}
+
+
 main:
 	{ \
 	cd ../../ ;\

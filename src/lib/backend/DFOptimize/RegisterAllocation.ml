@@ -201,7 +201,7 @@ let prepare_frame_var_for_rid_no_merging
     DBG.printf outc "-------------\n";
     (* the width of the intermediate is equal to the width of the register's cell *)
     (* except for index variables, which are always 32-bits (for now) *)
-    let var_size = find_width_of_var cid_decls (CL.hd vars) in
+    let var_size = find_width_of_declared_var cid_decls (CL.hd vars) in
     (* declare the per-register input variable. *)
     let salu_var_decl = to_globalmeta salu_arg_id var_size in
     let cid_decls = emplace_decl cid_decls salu_var_decl in
@@ -277,10 +277,10 @@ let prepare_frame_var_for_rid
          not be true for the index variable, in which case 
          incorrect code will be generated. 
        *)
-      let var_size = find_width_of_var cid_decls (CL.hd vars) in
+      let var_size = find_width_of_declared_var cid_decls (CL.hd vars) in
       (*     let var_size =
         match shared_salu_arg_var with
-        | SharedIndex _ -> find_width_of_var cid_decls (CL.hd vars)
+        | SharedIndex _ -> find_width_of_declared_var cid_decls (CL.hd vars)
         | SharedInput _ -> width_of_regvec (Cid.lookup cid_decls rid)
       in *)
 

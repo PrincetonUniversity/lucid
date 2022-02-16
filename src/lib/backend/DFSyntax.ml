@@ -30,8 +30,6 @@ module Edge = struct
   let compare = Pervasives.compare
   let equal = ( = )
   let default = 1
-
-  (* let default = Cid.create [""] *)
 end
 
 module G = Graph.Persistent.Digraph.ConcreteLabeled (Node) (Edge)
@@ -41,14 +39,13 @@ type declsMap = (oid * decl) list [@@deriving show]
 type cid_decls = declsMap
 
 
-(* type dagProg = cid_decls * oid * G.t *)
-
+(* the actual program *)
 type dagProg = 
-  { dp_instr_dict : cid_decls
+  { dp_instr_dict : cid_decls (* declared variables and compute nodes *)
   ; dp_inputs : (cid * int) list
-  ; dp_root : oid
-  ; dp_g    : G.t 
-  ; dp_name : id
+  ; dp_root : oid (* entry point *)
+  ; dp_g    : G.t (* dataflow graph *)
+  ; dp_name : id (* program name *)
   }
 
 
@@ -1015,8 +1012,29 @@ let find_structdef_of_var cid_decls cid =
   | _ -> error "expected a struct instance, but could not find one."
 ;;
 
+(* find the width of a variable that is either declared or 
+   a parameter. *)
+let find_width_of_var dagProg cid =
+  match cid with
+  (* non-compound identifier --> this is a builtin datatype *)
+  | Id _ ->
+    (match Cid.lookup_opt dagProg.dp_instr_dict cid with
+    | Some(MetaVar (_, i)) -> i
+    | _ -> 
+      (* if not declared, it must be an input. *)
+      Cid.lookup dagProg.dp_inputs cid
+    )
+  (* compound id --> this is a field in a struct datatype *)
+  | Cid.Compound _ ->
+    let struct_def = find_structdef_of_var dagProg.dp_instr_dict cid in
+    let field_cid = Cid.to_ids cid |> CL.rev |> CL.hd |> Cid.id in
+    (match struct_def with
+    | StructDef (_, _, field_defs) -> CL.assoc field_cid field_defs
+    | _ -> error "expected a struct def, but got something else")
+;;
+
 (* find the width of a declared variable or struct field. *)
-let find_width_of_var cid_decls cid =
+let find_width_of_declared_var cid_decls cid =
   match cid with
   (* non-compound identifier --> this is a builtin datatype *)
   | Id _ ->

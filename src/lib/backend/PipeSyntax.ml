@@ -127,11 +127,11 @@ let tbls_of_pipe pipe =
 (* merge the table cid_decls[tid], and all of the actions / objects that it calls, 
 into tg. return the updated table group and cid decls. This function is 
 NOT AWARE OF CONSTRAINTS. *)
-let merge_into_group cid_decls group tid : table_group =
+let merge_into_group dagProg group tid : table_group =
   (* get the objects for tbl group and new tid *)
   let group_tid = tid_of_tg group in
   let group_decls = objs_of_tg group in
-  let new_decls = objs_of_tid cid_decls tid in
+  let new_decls = objs_of_tid dagProg.dp_instr_dict tid in
   !dprint_endline "[merge_into_group] --- single-operation tables --- ";
   !dprint_endline (DebugPrint.str_of_decls new_decls);
   !dprint_endline "[merge_into_group] --- single-operation tables --- ";
@@ -153,8 +153,8 @@ let merge_into_group cid_decls group tid : table_group =
   }
 ;;
 
-let merge_set_into_group cid_decls group tids : table_group =
-  CL.fold_left (merge_into_group cid_decls) group tids
+let merge_set_into_group dagProg group tids : table_group =
+  CL.fold_left (merge_into_group dagProg) group tids
 ;;
 
 (* merge cid_decls[tid] 
@@ -163,15 +163,15 @@ let merge_set_into_group cid_decls group tids : table_group =
 (* turns out, this is wrong. We can't just place everything that 
 uses a register the first time we see something that uses a register, 
 because we might not be able to place some of the tables yet. *)
-let merge_into_group_with_shared_reg_tbls cid_decls group tid =
-  let regmates_of_tid = regmates_of_tid cid_decls tid in
+let merge_into_group_with_shared_reg_tbls dagProg group tid =
+  let regmates_of_tid = regmates_of_tid dagProg.dp_instr_dict tid in
   sprintf
     "[merge_into_group_with_shared_reg_tbls] merging %s and %i other tables \
      that share the same registers"
     (str_of_tid tid)
     (CL.length regmates_of_tid)
   |> !dprint_endline;
-  CL.fold_left (merge_into_group cid_decls) group (tid :: regmates_of_tid)
+  CL.fold_left (merge_into_group dagProg) group (tid :: regmates_of_tid)
 ;;
 
 let add_tg s tg = { s with s_tgs = s.s_tgs @ [tg] }
@@ -266,7 +266,7 @@ module Constraints = struct
     |> !dprint_endline
   ;;
 
-  let group_check cid_decls tg =
+  let group_check dagProg tg =
     let max_tbls tg =
       let res =
         CL.length (src_tids_of_tg tg |> unique_list_of) <= group_def.gmax_tbls
@@ -288,9 +288,12 @@ module Constraints = struct
       if res <> true then !dprint_endline "[group_check] fail: max_hash";
       res
     in
-    let max_matchbits cid_decls tg =
+    let max_matchbits dagProg tg =
       let keys = keys_of_table tg.g_tbl in
-      let widths = CL.map (find_width_of_var cid_decls) keys in
+      (* bug when the variable is a parameter. *) 
+
+
+      let widths = CL.map (find_width_of_var dagProg) keys in
       !dprint_endline
         ("[max_matchbits] checking table group: " ^ summary_of_group tg);
       CL.combine keys widths
@@ -303,7 +306,7 @@ module Constraints = struct
       if res <> true then !dprint_endline "[group_check] fail: max_matchbits";
       res
     in
-    max_tbls tg && max_regs tg && max_hash tg && max_matchbits cid_decls tg
+    max_tbls tg && max_regs tg && max_hash tg && max_matchbits dagProg tg
   ;;
 
   (* When we place table t into a stage s, we have to make 
@@ -406,12 +409,13 @@ module Placement = struct
 
   type ctx =
     { iteration : int
-    ; unplaced : Cid.t list
-    ; placed : (Cid.t * int) list (* table / reg id : stage #*)
+    ; prog : dagProg
+    ; unplaced : Cid.t list (* from dp_instr_dict *)
+    ; placed : (Cid.t * int) list (* table / reg id : stage # *)
     }
 
-  let ctx_new cid_decls =
-    { iteration = 0; unplaced = ids_of_type is_tbl cid_decls; placed = [] }
+  let ctx_new dagProg =
+    { iteration = 0; prog = dagProg; unplaced = ids_of_type is_tbl dagProg.dp_instr_dict; placed = [] }
   ;;
 
   let ctx_summary ctx =
@@ -434,39 +438,39 @@ module Placement = struct
   ;;
 
   (* try to place tid into tg of stage. *)
-  let place_in_group (cid_decls, rebuilt_stage, tids) tg =
+  let place_in_group (dagProg, rebuilt_stage, tids) tg =
     match tids with
     (* there's nothing to place. *)
-    | [] -> cid_decls, add_tg rebuilt_stage tg, []
+    | [] -> dagProg, add_tg rebuilt_stage tg, []
     | _ ->
       (* 1. merge all tids into table group *)
-      let new_tg = merge_set_into_group cid_decls tg tids in
+      let new_tg = merge_set_into_group dagProg tg tids in
       !dprint_endline
         ("[place_in_group] proposed table group: " ^ summary_of_group new_tg);
       !dprint_endline "[place_in_group] checking table group constraints.";
-      (match Constraints.group_check cid_decls new_tg with
+      (match Constraints.group_check dagProg new_tg with
       (* constraint check passes -- remove all the now placed source objects, 
           add updated tg to stage, return updated cid_decls. *)
       | true ->
         !dprint_endline "[place_in_group] constraint check passed";
-        let new_cid_decls = remove_decls cid_decls new_tg.g_src in
+        let new_cid_decls = remove_decls dagProg.dp_instr_dict new_tg.g_src in
         (*             !dprint_endline ("[place_in_group] removing objects from globals: "^(CL.map id_of_decl new_tg.g_src |> P4tPrint.str_of_private_oids));
             !dprint_endline ("[place_in_group] remaining global/unplaced objects: "^(CL.split new_cid_decls |> fst |> P4tPrint.str_of_private_oids));
  *)
-        new_cid_decls, add_tg rebuilt_stage new_tg, []
+        {dagProg with dp_instr_dict = new_cid_decls}, add_tg rebuilt_stage new_tg, []
       (* constraint check fails -- return original versions *)
       | false ->
         !dprint_endline "[place_in_group] constraint check FAILED";
-        cid_decls, add_tg rebuilt_stage tg, tids)
+        dagProg, add_tg rebuilt_stage tg, tids)
   ;;
 
-  let place_in_new_group cid_decls stage tids =
+  let place_in_new_group dagProg stage tids =
     let tg = empty_tg stage.s_num in
-    let cid_decls, rebuilt_stage, unplaced_tids =
-      place_in_group (cid_decls, stage, tids) tg
+    let dagProg, rebuilt_stage, unplaced_tids =
+      place_in_group (dagProg, stage, tids) tg
     in
     match unplaced_tids with
-    | [] -> cid_decls, rebuilt_stage
+    | [] -> dagProg, rebuilt_stage
     | _ -> error "bug: a newly-created group violates group constraints"
   ;;
 
@@ -482,11 +486,11 @@ module Placement = struct
   let place_in_stage
       (ctx : ctx)
       dfg
-      cid_decls
+      dagProg
       stage
       prior_stages
       (tids : oid list)
-      : ctx * (declsMap * stage) option
+      : ctx * (dagProg * stage) option
     =
     (* optimization: before actually trying to place the table into any of the groups in this 
        stage, make sure that placement into this stage would not violate any dataflow constraints. *)
@@ -510,21 +514,21 @@ module Placement = struct
             %i (placing)"
            (str_of_tids tids)
            stage.s_num);
-      let new_cid_decls, new_stage, unplaced_tids =
+      let new_dagProg, new_stage, unplaced_tids =
         CL.fold_left
           place_in_group
-          (cid_decls, empty_stage stage.s_num, tids)
+          (dagProg, empty_stage stage.s_num, tids)
           stage.s_tgs
       in
-      let new_cid_decls, new_stage =
+      let new_dagProg, new_stage =
         match unplaced_tids with
-        | [] -> new_cid_decls, new_stage
+        | [] -> new_dagProg, new_stage
         (* if that fails, place in a new group. We assume this always succeeds, but that's actually not true, if the 
          set of tables we're trying to place into a group are too complex for a group. That is currently an 
          un-compilable program. *)
         | _ ->
-          let cid_decls, new_stage = place_in_new_group cid_decls stage tids in
-          cid_decls, new_stage
+          let dagProg, new_stage = place_in_new_group dagProg stage tids in
+          dagProg, new_stage
       in
       (* check the stage-level constraints. *)
       (match Constraints.stage_check dfg tids new_stage prior_stages with
@@ -537,7 +541,7 @@ module Placement = struct
           ^ str_of_tids tids
           ^ " } successful. "
           ^ ctx_summary new_ctx);
-        new_ctx, Some (new_cid_decls, new_stage)
+        new_ctx, Some (new_dagProg, new_stage)
       | false ->
         failed_stage_placements := !failed_stage_placements + 1;
         !dprint_endline "[place_in_stage] stage constraints violated";
@@ -545,15 +549,15 @@ module Placement = struct
   ;;
 
   (* try to put tids first stage. Recurse on tail stages if fail. *)
-  let rec place_in_stages (ctx : ctx) dfg cid_decls stages prior_stages tids
-      : ctx * (declsMap * stage list) option
+  let rec place_in_stages (ctx : ctx) dfg dagProg stages prior_stages tids
+      : ctx * (dagProg * stage list) option
     =
     match stages with
     | [] -> ctx, None (* ran out of stages. *)
     | stage :: remaining_stages ->
       (* try placing in first stage. *)
       let placement_result =
-        place_in_stage ctx dfg cid_decls stage prior_stages tids
+        place_in_stage ctx dfg dagProg stage prior_stages tids
       in
       (match placement_result with
       (* fail -- move stage to attempted and try next. *)
@@ -561,12 +565,12 @@ module Placement = struct
         place_in_stages
           ctx
           dfg
-          cid_decls
+          dagProg
           remaining_stages
           (prior_stages @ [stage])
           tids
       (* success -- replace the stage with the new stage and prepend prior stages *)
-      | updated_ctx, Some (new_cid_decls, new_stage) ->
+      | updated_ctx, Some (new_dagProg, new_stage) ->
         let num_stages =
           CL.length (prior_stages @ [new_stage] @ remaining_stages)
         in
@@ -577,12 +581,12 @@ module Placement = struct
              (CL.length prior_stages)
              num_stages);
         ( updated_ctx
-        , Some (new_cid_decls, prior_stages @ [new_stage] @ remaining_stages) ))
+        , Some (new_dagProg, prior_stages @ [new_stage] @ remaining_stages) ))
   ;;
 
   (* extend the pipeline with a new stage and place into that stage *)
-  let place_in_new_stage ctx dfg cid_decls pipe tids
-      : ctx * (declsMap * stage) option
+  let place_in_new_stage ctx dfg dagProg pipe tids
+      : ctx * (dagProg * stage) option
     =
     let new_stage_num = CL.length pipe.p_stages in
     !dprint_endline
@@ -593,7 +597,7 @@ module Placement = struct
     place_in_stage
       ctx
       dfg
-      cid_decls
+      dagProg
       (empty_stage new_stage_num)
       pipe.p_stages
       tids
@@ -603,9 +607,10 @@ module Placement = struct
   let place_in_pipe
       dfg
       (tids : Cid.t list)
-      ((ctx : ctx), (cid_decls : declsMap), (p : pipe))
-      : ctx * declsMap * pipe
+      ((ctx : ctx), (dagProg : dagProg), (p : pipe))
+      : ctx * dagProg * pipe
     =
+
     !dprint_endline
       ("[place_in_pipe] starting placement for: " ^ str_of_tids tids);
     !dprint_endline
@@ -616,24 +621,24 @@ module Placement = struct
     | [] -> (
       (* edge case can happen here: we try to place an instruction in the 
          first stage, but that instruction can't be placed yet. *)
-      let updated_ctx, opt_res = place_in_new_stage ctx dfg cid_decls p tids in
+      let updated_ctx, opt_res = place_in_new_stage ctx dfg dagProg p tids in
       match opt_res with 
-      | Some (new_cid_decls, fst_stage) -> 
-        updated_ctx, new_cid_decls, add_stage p fst_stage
-      | None -> ctx, cid_decls, p
+      | Some (new_dagProg, fst_stage) -> 
+        updated_ctx, new_dagProg, add_stage p fst_stage
+      | None -> ctx, dagProg, p
     )
     (* pipe has stages. try to place into one of them. If that fails, append a new stage. *)
     | stages ->
-      (match place_in_stages ctx dfg cid_decls stages [] tids with
+      (match place_in_stages ctx dfg dagProg stages [] tids with
       (* placement in some existing stage succeeded. Replace the stages in the pipe. *)
-      | updated_ctx, Some (new_cid_decls, new_stages) ->
+      | updated_ctx, Some (new_dagProg, new_stages) ->
         let new_p = { p with p_stages = new_stages } in
         !dprint_endline
           ("[place_in_pipe] finished placement for: " ^ str_of_tids tids);
         !dprint_endline
           ("[place_in_pipe] stages in updated pipe: "
           ^ (CL.length new_p.p_stages |> string_of_int));
-        updated_ctx, new_cid_decls, new_p
+        updated_ctx, new_dagProg, new_p
       (* placement in an existing stage failed. 
               - try placing in a new last stage. 
               - if this fails, we cannot place the table in this round due to dataflow dependencies. *)
@@ -642,15 +647,15 @@ module Placement = struct
           ("[place_in_pipe] placement in existing stages failed. trying a new \
             stage for: "
           ^ str_of_tids tids);
-        (match place_in_new_stage ctx dfg cid_decls p tids with
-        | updated_ctx, Some (new_cid_decls, new_last_stage) ->
-          updated_ctx, new_cid_decls, add_stage p new_last_stage
+        (match place_in_new_stage ctx dfg dagProg p tids with
+        | updated_ctx, Some (new_dagProg, new_last_stage) ->
+          updated_ctx, new_dagProg, add_stage p new_last_stage
         | _, None ->
           !dprint_endline
             ("[place_in_pipe] placement in existing or new stages failed. \
               leaving table for next round: "
             ^ str_of_tids tids);
-          ctx, cid_decls, p))
+          ctx, dagProg, p))
   ;;
 
   (* place a table or register node into a single table group into the earliest 
@@ -662,23 +667,23 @@ module Placement = struct
   let place_node_in_pipe
       dfg
       (oid : Cid.t)
-      ((ctx : ctx), (cid_decls : declsMap), (p : pipe))
-      : ctx * declsMap * pipe
+      ((ctx : ctx), (dagProg:dagProg), (p : pipe))
+      : ctx * dagProg * pipe
     =
-    match Cid.lookup_opt cid_decls oid with
+    match Cid.lookup_opt dagProg.dp_instr_dict oid with
     (* the object does not exist -- this can happen if a table was already placed 
        in this round (e.g., because it shares a register with another table) *)
-    | None -> ctx, cid_decls, p
+    | None -> ctx, dagProg, p
     (* case: place table *)
     | Some (Table _) ->
-      (match rids_of_tid cid_decls oid with
+      (match rids_of_tid dagProg.dp_instr_dict oid with
       (* the table does not use any registers, place it *)
-      | [] -> place_in_pipe dfg [oid] (ctx, cid_decls, p)
+      | [] -> place_in_pipe dfg [oid] (ctx, dagProg, p)
       (* the table uses a register, skip placing it for now *)
-      | _ -> ctx, cid_decls, p)
+      | _ -> ctx, dagProg, p)
     (* case: place register + associated tables *)
     | Some (RegVec _) ->
-      place_in_pipe dfg (tids_of_rid cid_decls oid) (ctx, cid_decls, p)
+      place_in_pipe dfg (tids_of_rid dagProg.dp_instr_dict oid) (ctx, dagProg, p)
     | Some _ ->
       error
         ("[place_node_in_pipe] attempting to place object that is not a table \
@@ -738,7 +743,7 @@ module Placement = struct
     will skip e for now, moving on to c, and it will place 
     e in the next iteration when it is safe to place e, FOO, and d. 
   *)
-  let rec layout_rec (ctx : ctx) cid_decls dfg pipe previously_unplaced_nodes
+  let rec layout_rec (ctx : ctx) (dagProg:dagProg) dfg pipe previously_unplaced_nodes
       : pipe
     =
     let ctx = { ctx with iteration = ctx.iteration + 1 } in
@@ -749,16 +754,16 @@ module Placement = struct
     !dprint_endline
       ("[layout_rec] (start) impossible_stage_placements_skipped: "
       ^ string_of_int !impossible_stage_placements_skipped);
-    let ctx, remaining_cid_decls, updated_pipe =
-      Topo.fold (place_node_in_pipe dfg) dfg (ctx, cid_decls, pipe)
+    let ctx, unplaced_dag_prog, updated_pipe =
+      Topo.fold (place_node_in_pipe dfg) dfg (ctx, dagProg, pipe)
     in
     let res =
-      match unplaced_nodes dfg remaining_cid_decls updated_pipe with
+      match unplaced_nodes dfg unplaced_dag_prog.dp_instr_dict updated_pipe with
       (* placement of all nodes in dfg is complete. The remaining
     objects in cid_decls are global -- build the final pipe. *)
       | [] ->
         !dprint_endline "[layout_rec] finished placing nodes in this pass.";
-        { updated_pipe with p_globals = CL.split remaining_cid_decls |> snd }
+        { updated_pipe with p_globals = CL.split unplaced_dag_prog.dp_instr_dict |> snd }
       (* placement is not complete, we need to recurse on the 
     pipe that we have built and the remaining cid_decls *)
       | nodes ->
@@ -771,7 +776,7 @@ module Placement = struct
             "[layout_rec] the nodes that could not be placed in the previous \
              pass are exactly the same as the nodes that code not be placed in \
              the current pass."
-        | false -> layout_rec ctx remaining_cid_decls dfg updated_pipe nodes)
+        | false -> layout_rec ctx {dagProg with dp_instr_dict = unplaced_dag_prog.dp_instr_dict} dfg updated_pipe nodes)
     in
     !dprint_endline ("[layout_rec] (end) " ^ ctx_summary ctx);
     !dprint_endline
@@ -791,8 +796,8 @@ module Placement = struct
       the tables use. 
       - the other objects in cid_decls are placed as "globals" in the 
       pipe. *)
-  let layout cid_decls dfg : pipe =
-    layout_rec (ctx_new cid_decls) cid_decls dfg empty_pipe []
+  let layout (dfprog:DFSyntax.dagProg) dfg : pipe =
+    layout_rec (ctx_new dfprog) dfprog dfg empty_pipe []
   ;;
 end
 
@@ -1040,7 +1045,7 @@ let dedup_slprog tsprog =
 let do_passes df_prog =
   let cid_decls, _, dfg = DFSyntax.to_tuple df_prog in
   let dfg_with_regs = to_tbl_reg_dfg cid_decls dfg in
-  let pipe = Placement.layout cid_decls dfg_with_regs in
+  let pipe = Placement.layout df_prog dfg_with_regs in
   (* todo:  
       - move translation to SLSyntax and passes over it 
         to the SLSyntax file. Messy because of cyclic 
