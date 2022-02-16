@@ -73,6 +73,7 @@
    consts
    TQVar
    OGSyntax
+   LLConfig
    LLSyntax
    DFSyntax
    pipeSyntax

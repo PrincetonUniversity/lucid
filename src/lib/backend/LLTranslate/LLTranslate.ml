@@ -21,6 +21,8 @@ module Printing = CorePrinting
 module IS = LLSyntax
 
 (* logging *)
+let backend_report str = Console.show_message str ANSITerminal.Green "Backend"
+
 module DBG = BackendLogging
 let outc = ref None
 let dprint_endline = ref DBG.no_printf
@@ -38,7 +40,6 @@ let dpt_builtin_fcns =
   ; LLConstants.generate_port_cid, LLEvent.generate_port
   ; LLEvent.event_delay_cid, LLEvent.delay_event
   ; LLSys.time_cid, LLSys.get_time
-  ; LLSys.time48_cid, LLSys.get_time48
     (* (IrTranslate.hash_builtin, IrBuiltinToDag.do_hash) *) ]
 ;;
 
@@ -50,8 +51,7 @@ let lucid_internal_struct =
     CL.map
       (fun (f, w) -> (Cid.create [f], w))
       (* field names and widths are defined in LLConstants. *)
-      [ timestamp48_str, timestamp48_width
-      ; timestamp_str, timestamp_width
+      [ timestamp_str, timestamp_width
       ; handle_selector_str, handle_selector_width
       ; exit_event_str, exit_event_width
       ; next_event_str, next_event_width

@@ -60,6 +60,7 @@ module ArgParse = struct
         , Arg.String set_spec
         , "Path to the interpreter specification file" )
       ; "--symb", Arg.String set_symb, "Path to the symbolic specification file"
+      ; "--nomc", Arg.Unit LLConfig.set_nomc, "Disable multicast" 
       ]
     in
     let parse_aarg (arg : string) =

@@ -71,7 +71,6 @@ parser TofinoIngressParser(
         md.dptMeta.exitEventType = 0;
         md.dptMeta.nextEventType = 0;        
         md.dptMeta.timestamp = (bit<32>)(ig_intr_md.ingress_mac_tstamp[47:16]); 
-        md.dptMeta.timestamp48 =ig_intr_md.ingress_mac_tstamp; 
         transition select(ig_intr_md.resubmit_flag) {
             1 : parse_resubmit;
             0 : parse_port_metadata;

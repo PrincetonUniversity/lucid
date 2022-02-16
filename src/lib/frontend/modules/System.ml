@@ -32,31 +32,6 @@ let sys_time_fun (nst : State.network_state) _ args =
   | _ -> sys_time_error "takes no parameters"
 ;;
 
-(* temporary 48-bit timestamp *)
-let sys_time48_name = "time48"
-let sys_time48_id = Id.create sys_time48_name
-let sys_time48_cid = Cid.create_ids [sys_id; sys_time48_id]
-let sys_time48_error msg = sys_error sys_time48_name msg
-
-let sys_time48_ty =
-  let start_eff = FVar (QVar (Id.fresh "eff")) in
-  ty
-  @@ TFun
-       { arg_tys = []
-       ; ret_ty = ty @@ TInt (IConst 48)
-       ; start_eff
-       ; end_eff = start_eff
-       ; constraints = ref []
-       }
-;;
-
-let sys_time48_fun (nst : State.network_state) _ args =
-  let open CoreSyntax in
-  match args with
-  | [] -> vinteger (Integer.create ~value:nst.current_time ~size:48)
-  | _ -> sys_time_error "takes no parameters"
-;;
-
 (* Sys.random *)
 let sys_random_name = "random"
 let sys_random_id = Id.create sys_random_name
@@ -94,7 +69,6 @@ let sys_random_fun _ _ args =
 
 let defs : State.global_fun list =
   [ { cid = sys_time_cid; body = sys_time_fun; ty = sys_time_ty }
-  ; { cid = sys_time48_cid; body = sys_time48_fun; ty = sys_time48_ty }
   ; { cid = sys_random_cid; body = sys_random_fun; ty = sys_random_ty } ]
 ;;
 
