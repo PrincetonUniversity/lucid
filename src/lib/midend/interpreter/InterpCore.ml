@@ -140,10 +140,32 @@ let rec interp_exp (nst : State.network_state) swid locals e : State.ival =
           | _ -> failwith "What? No hashing functions!")
         vs
     in
+    let extract_int = function
+      | VInt n -> n
+      | _ -> failwith "No good"
+    in
     (match vs with
     | VInt seed :: tl ->
-      let hashed = Legacy.Hashtbl.seeded_hash (Integer.to_int seed) tl in
-      V (vint hashed size)
+      (* Special case: if the hash seed is 1 and all the arguments are integers,
+          we perform an identity hash (i.e. just concatenate the arguments) *)
+      if Z.to_int (Integer.value seed) = 1
+      then (
+        try
+          let n =
+            List.fold_left
+              (fun acc v -> Integer.concat acc (extract_int v))
+              (List.hd tl |> extract_int)
+              (List.tl tl)
+          in
+          V (VInt (Integer.set_size size n) |> value)
+        with
+        | Failure _ ->
+          (* Fallback to non-special case *)
+          let hashed = Legacy.Hashtbl.seeded_hash (Integer.to_int seed) tl in
+          V (vint hashed size))
+      else (
+        let hashed = Legacy.Hashtbl.seeded_hash (Integer.to_int seed) tl in
+        V (vint hashed size))
     | _ -> failwith "Wrong arguments to hash operation")
   | EFlood e1 ->
     let port =
