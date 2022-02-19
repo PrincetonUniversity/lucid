@@ -229,14 +229,25 @@ let memop_to_string body =
       | Some (e1, e2) ->
         exp_to_string e1 ^ " -> " ^ exp_to_string e2 |> wrap "(" ")"
     in
+    let print_calls calls =
+      concat_map
+        "\n"
+        (fun (cid, es) ->
+          Printf.sprintf
+            "%s(%s);"
+            (cid_to_string cid)
+            (comma_sep exp_to_string es))
+        calls
+    in
     Printf.sprintf
-      "{\nb1=%s;\nb2=%s\ncell1=%s, %s\ncell2=%s, %s\nret=%s\n}"
+      "{\nb1=%s;\nb2=%s\ncell1=%s, %s\ncell2=%s, %s\n%s\nret=%s\n}"
       (print_b body.b1)
       (print_b body.b2)
       (print_cr @@ fst body.cell1)
       (print_cr @@ snd body.cell1)
       (print_cr @@ fst body.cell2)
       (print_cr @@ snd body.cell2)
+      (print_calls body.extern_calls)
       (print_cr @@ body.ret)
 ;;
 

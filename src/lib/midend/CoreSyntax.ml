@@ -149,6 +149,7 @@ and complex_body =
   ; b2 : (id * exp) option
   ; cell1 : conditional_return option * conditional_return option
   ; cell2 : conditional_return option * conditional_return option
+  ; extern_calls : (cid * exp list) list
   ; ret : conditional_return option
   }
 

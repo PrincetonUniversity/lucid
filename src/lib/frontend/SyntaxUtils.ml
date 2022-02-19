@@ -350,12 +350,18 @@ let complex_body_to_stmt (body : complex_body) =
   let b2 = handle_bool body.b2 in
   let c1 = handle_cell cell1_id body.cell1 in
   let c2 = handle_cell cell2_id body.cell2 in
+  let calls =
+    List.map
+      (fun (cid, es) -> Some (scall_sp cid es Span.default))
+      body.extern_calls
+  in
   let ret =
     Option.map
       (fun (cond, e) -> sifte cond (statement (SRet (Some e))) snoop)
       body.ret
   in
-  List.filter_map (fun x -> x) [b1; b2; c1; c2; ret] |> sequence_stmts
+  List.filter_map (fun x -> x) ([b1; b2; c1; c2] @ calls @ [ret])
+  |> sequence_stmts
 ;;
 
 let memop_body_to_stmt memop_body =

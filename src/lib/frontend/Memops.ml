@@ -146,6 +146,7 @@ let extract_simple_body mem1 local1 body =
 type complex_stmt =
   | BoolDef of id * exp
   | CellAssign of id * conditional_return option * conditional_return option
+  | ExternCall of cid * exp list
   | LocalRet of conditional_return
 
 let classify_stmts (body : statement) : (complex_stmt * sp) list =
@@ -153,6 +154,7 @@ let classify_stmts (body : statement) : (complex_stmt * sp) list =
     let ret =
       match s.s with
       | SLocal (id, { raw_ty = TBool }, e) -> BoolDef (id, e)
+      | SUnit { e = ECall (cid, es) } -> ExternCall (cid, es)
       | SIf (test1, s1, s2) ->
         begin
           match flatten_stmt s1, flatten_stmt s2 with
@@ -188,7 +190,7 @@ let check_cell_ids stmts =
   let counts = (* Seen cell1, Seen cell2 *) ref (false, false) in
   List.iter
     (function
-      | BoolDef _, _ | LocalRet _, _ -> ()
+      | BoolDef _, _ | LocalRet _, _ | ExternCall _, _ -> ()
       | CellAssign (id, _, _), sp when Id.equal id cell1_id ->
         if fst !counts
         then
@@ -253,6 +255,20 @@ let extract_complex_body mems locals body =
       else (None, None), (cr1_1, cr1_2), tl
     | _ -> (None, None), (None, None), body
   in
+  let extern_calls, body =
+    List.span
+      (function
+        | ExternCall _, _ -> true
+        | _ -> false)
+      body
+  in
+  let extern_calls =
+    List.map
+      (function
+        | ExternCall (cid, es), _ -> cid, es
+        | _ -> failwith "impossible")
+      extern_calls
+  in
   let ret =
     match body with
     | [] -> None
@@ -264,7 +280,7 @@ let extract_complex_body mems locals body =
       @@ "Unexpected statement in a memop. Are you sure your statements are in \
           order?"
   in
-  { b1; b2; cell1; cell2; ret }
+  { b1; b2; cell1; cell2; extern_calls; ret }
 ;;
 
 let ensure_same_size span params =

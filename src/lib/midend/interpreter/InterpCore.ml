@@ -421,6 +421,11 @@ let interp_complex_body params body nst swid args =
   let locals = interp_b locals body.b2 in
   let locals = interp_cell Builtins.cell1_id locals body.cell1 in
   let locals = interp_cell Builtins.cell2_id locals body.cell2 in
+  List.iter
+    (fun (cid, es) ->
+      ignore
+      @@ interp_exp nst swid locals (call_sp cid es (ty TBool) Span.default))
+    body.extern_calls;
   let _, locals = interp_cro ret_id locals body.ret in
   let vs =
     [Builtins.cell1_id; Builtins.cell2_id; ret_id]

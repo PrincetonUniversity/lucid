@@ -144,16 +144,20 @@ let translate_memop body =
   | S.MBReturn e -> C.MBReturn (translate_exp e)
   | S.MBIf (e1, e2, e3) ->
     C.MBIf (translate_exp e1, translate_exp e2, translate_exp e3)
-  | S.MBComplex { b1; b2; cell1; cell2; ret } ->
+  | S.MBComplex { b1; b2; cell1; cell2; extern_calls; ret } ->
     let translate_b = Option.map (fun (id, e) -> id, translate_exp e) in
     let translate_cro =
       Option.map (fun (e1, e2) -> translate_exp e1, translate_exp e2)
+    in
+    let translate_calls calls =
+      List.map (fun (cid, es) -> cid, List.map translate_exp es) calls
     in
     C.MBComplex
       { b1 = translate_b b1
       ; b2 = translate_b b2
       ; cell1 = translate_cro (fst cell1), translate_cro (snd cell1)
       ; cell2 = translate_cro (fst cell2), translate_cro (snd cell2)
+      ; extern_calls = translate_calls extern_calls
       ; ret = translate_cro ret
       }
 ;;

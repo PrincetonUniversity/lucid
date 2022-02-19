@@ -212,6 +212,7 @@ and complex_body =
   ; b2 : (id * exp) option
   ; cell1 : conditional_return option * conditional_return option
   ; cell2 : conditional_return option * conditional_return option
+  ; extern_calls : (cid * exp list) list
   ; ret : conditional_return option
   }
 
@@ -420,6 +421,7 @@ let scall_sp cid args span = statement_sp (SUnit (call_sp cid args span)) span
 let match_sp es bs span = statement_sp (SMatch (es, bs)) span
 let loop_sp e i k span = statement_sp (SLoop (e, i, k)) span
 let sexp_sp e span = statement_sp (SUnit e) span
+let scall_sp cid es span = sexp_sp (call_sp cid es span) span
 
 (* Interface spefications *)
 let spec ispec = { ispec; ispan = Span.default }

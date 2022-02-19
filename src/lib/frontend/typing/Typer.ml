@@ -758,8 +758,25 @@ let infer_memop env params mbody =
         env
         [Builtins.cell1_id, expected_tint; Builtins.cell2_id, expected_tint]
     in
+    let extern_calls =
+      let unpack_ecall = function
+        | { e = ECall (cid, es) } -> cid, es
+        | _ -> failwith "impossible"
+      in
+      List.map
+        (fun (cid, es) ->
+          let env', call = infer_exp env (call_sp cid es Span.default) in
+          if not (equiv_effect env.current_effect env'.current_effect)
+          then
+            Console.error
+            @@ "Function "
+            ^ cid_to_string cid
+            ^ " cannot be called inside a memop";
+          unpack_ecall call)
+        body.extern_calls
+    in
     let ret = Option.map (infer_cr env) body.ret in
-    MBComplex { b1; b2; cell1; cell2; ret }
+    MBComplex { b1; b2; cell1; cell2; extern_calls; ret }
 ;;
 
 (* Check that the event id has already been defined, and that it has the
