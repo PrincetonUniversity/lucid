@@ -53,6 +53,8 @@ let get_array (args : codegenInput) : codegenOutput =
   { names = [oid]; objs = [salu_dec] }
 ;;
 
+
+
 let getm_array (args : codegenInput) : codegenOutput =
   let hdl_id = Option.get args.hdl_id in
   (* x = array.get(A, idx, memop, memop_arg2); *)
@@ -62,17 +64,20 @@ let getm_array (args : codegenInput) : codegenOutput =
       regname_ex, idx_ex, memop_name_ex, memop_arg_ex
     | _ -> error "unexpected arg form in get array."
   in
-  (* translate the memop. *)
-  let sInstr =
-    from_memop_name hdl_id (name_from_exp memop_name_ex) Get memop_arg_ex
-  in
-  (* build the object that uses the memop. *)
+  (* translate the memop into instructions *)
+  let instrs = translate_simple_memop
+    hdl_id
+    Get
+    memop_name_ex
+    memop_arg_ex
+  in 
+  (* build the complete instruction. *)
   let reg_id = name_from_exp regname_ex in
   let reg_cell_width = ctx_width_of_garr reg_id in
   let oid = Cid.compound (Id.create "salu") (Option.get args.basename) in
   let idx_ex = oper_from_immediate hdl_id idx_ex in
   let salu_dec =
-    new_dsalu oid reg_id reg_cell_width sInstr args.retname idx_ex
+    new_dsalu oid reg_id reg_cell_width instrs args.retname idx_ex
   in
   { names = [oid]; objs = [salu_dec] }
 ;;
@@ -106,22 +111,24 @@ let setm_array (args : codegenInput) : codegenOutput =
       regname_ex, idx_ex, memop_name_ex, memop_arg_ex
     | _ -> error "unexpected arg form in get array."
   in
-  (* translate the memop. *)
-  let sInstr =
-    from_memop_name hdl_id (name_from_exp memop_name_ex) Set memop_arg_ex
-  in
+  (* translate the memop into instructions *)
+  let instrs = translate_simple_memop
+    hdl_id
+    Set
+    memop_name_ex
+    memop_arg_ex
+  in 
   (* build the object that uses the memop. *)
   let reg_id = name_from_exp regname_ex in
   let reg_cell_width = ctx_width_of_garr reg_id in
   let oid = Cid.compound (Id.create "salu") (Option.get args.basename) in
   let idx_ex = oper_from_immediate hdl_id idx_ex in
-  let salu_dec = new_dsalu oid reg_id reg_cell_width sInstr None idx_ex in
+  let salu_dec = new_dsalu oid reg_id reg_cell_width instrs None idx_ex in
   { names = [oid]; objs = [salu_dec] }
 ;;
 
 let update_array (args : codegenInput) : codegenOutput =
   let hdl_id = Option.get args.hdl_id in
-  (* x = array.update(A, idx, readmemop, readmemop_arg2, writememop, writememop_arg2); *)
   let ( regname_ex
       , idx_ex
       , read_memop_name_ex
@@ -144,32 +151,28 @@ let update_array (args : codegenInput) : codegenOutput =
       , write_memop_arg_ex )
     | _ -> error "unexpected arg form in get array."
   in
-  (* translate the memops. *)
-  let read_sInstr =
-    from_memop_name
-      hdl_id
-      (name_from_exp read_memop_name_ex)
-      Get
-      read_memop_arg_ex
-  in
-  let write_sInstr =
-    from_memop_name
-      hdl_id
-      (name_from_exp write_memop_name_ex)
-      Set
-      write_memop_arg_ex
-  in
-  (* combine the memops, read then write *)
-  let sInstr = read_sInstr @ write_sInstr in
-  (* build the object that uses the memop. *)
+  (* translate the read and write memops into a vector of 
+     operations for the instruction to perform *)
+  let read_instrs = translate_simple_memop
+    hdl_id
+    Get
+    read_memop_name_ex
+    read_memop_arg_ex
+  in 
+  let write_instrs = translate_simple_memop
+    hdl_id
+    Set
+    write_memop_name_ex
+    write_memop_arg_ex
+  in 
+  (* now put the read and write instructions together. *)
+  let instrs = read_instrs @ write_instrs in 
   let reg_id = name_from_exp regname_ex in
   let reg_cell_width = ctx_width_of_garr reg_id in
   let oid = Cid.compound (Id.create "salu") (Option.get args.basename) in
   let idx_ex = oper_from_immediate hdl_id idx_ex in
   let salu_dec =
-    new_dsalu oid reg_id reg_cell_width sInstr args.retname idx_ex
-  in
-(*   trans_info "generated getm_array salu dec:";
-  trans_info (show_decl salu_dec); *)
+    new_dsalu oid reg_id reg_cell_width instrs args.retname idx_ex
+  in     
   { names = [oid]; objs = [salu_dec] }
 ;;

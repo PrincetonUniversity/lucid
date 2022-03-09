@@ -682,7 +682,7 @@ let eliminate_branch_nodes cid_decls g root_tid =
   DBG.printf
     outc
     "[eliminate_branch_nodes] adding full constraints to all tables \n";
-  LLValidate.validate_cid_decls cid_decls "[eliminate_branch_nodes] start";
+  LLValidate.validate_cid_decls cid_decls "[BranchElimination.eliminate_branch_nodes (start)]";
   !dprint_endline "----cid decls before eliminating control branches ----";
   !dprint_endline (DebugPrint.str_of_cid_decls cid_decls);
   !dprint_endline "----end cid decls before eliminating control branches ----";
@@ -699,7 +699,7 @@ let eliminate_branch_nodes cid_decls g root_tid =
   !dprint_endline "----end cid decls after eliminating control branches ----";
   LLValidate.validate_cid_decls
     cid_decls
-    "[eliminate_branch_nodes] after visit_node_condition.";
+    "[BranchElimination.eliminate_branch_nodes (end)]";
   DBG.printf outc "[eliminate_branch_nodes] removing noop tables \n";
   let cid_decls = Topo.fold visit_node_noop_delete g cid_decls in
   (* let new_cid_decls, new_g = Topo.fold visit_node g (cid_decls, g) in  *)
@@ -710,13 +710,13 @@ let eliminate_branch_nodes cid_decls g root_tid =
 
 let do_passes df_prog =
   let cid_decls, root_tid, g = DFSyntax.to_tuple df_prog in
-  LLValidate.validate_cid_decls cid_decls "BranchElimination.do_passes@start";
+  LLValidate.validate_cid_decls cid_decls "[BranchElimination.do_passes (start)]";
   print_endline ("----starting BranchElimination pass----");
   (* log_prog cid_decls; *)
   let new_cid_decls, g = eliminate_branch_nodes cid_decls g root_tid in
   (* log_prog new_cid_decls; *)
   let new_prog = new_cid_decls, root_tid, g in
-  LLValidate.validate_cid_decls cid_decls "BranchElimination.do_passes@end";
+  LLValidate.validate_cid_decls cid_decls "BranchElimination.do_passes (end)]";
   (* log_tbl_g_and_ir new_prog "nobranch_table_call"; *)
   (* log_tbl_dot_and_prog new_prog "nobranch_table_call"; *)
   DFSyntax.from_tuple new_prog df_prog

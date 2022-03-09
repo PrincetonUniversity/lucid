@@ -822,10 +822,9 @@ let dpahandler_from_handler hog_rec : tofino_control_g =
   let tofino_objs =
     TofinoControl.from_opstmt_graph hog_rec.h_name hog_rec.h_opgraph
   in
-  print_endline ("after from_opstmt_graph");
   (* 2. convert to an assoc list of object declarations *)
   let cid_decls = IS.dict_of_decls tofino_objs in
-  LLValidate.validate_cid_decls cid_decls "[dpahandler_from_handler]";
+  LLValidate.validate_cid_decls cid_decls "[LLOp.dpahandler_from_handler]";
   { hid = hog_rec.h_name; cid_decls; root_tid = tblname_of_stmt hog_rec.h_root }
 ;;
 

@@ -80,15 +80,18 @@ let ctx_find_decl_opt n =
 let ctx_add_decls (ds : decls) =
   let iter_f dec =
     match dec.d with
-    | DGlobal (id, _, _) | DMemop (id, _, _) -> ctx_add_decl (Cid.id id) dec
+    | DGlobal (id, _, _) -> ctx_add_decl (Cid.id id) dec
+    | DMemop (id, _, _) -> 
+      ctx_add_decl (Cid.id id) dec
     | _ -> ()
   in
   CL.iter iter_f ds
 ;;
 
 let ctx_bdy_of_memop n =
-  ignore n;
-  failwith "New memops not yet implemented in the backend!"
+  match ctx_find_decl n with 
+  | {d = DMemop(_, params, memop_body); _} -> params, memop_body
+  | _ -> error "could not find memop in decl context"
 ;;
 
 (* match ctx_find_decl n with

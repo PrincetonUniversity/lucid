@@ -246,10 +246,10 @@ let print_fst_in_seq (st : statement) =
 ;;
 
 let rec to_op_edges (st : statement) : (statement * statement) list =
-  print_endline ("[to_op_edges] processing statement -----\n"
+(*   print_endline ("[to_op_edges] processing statement -----\n"
     ^(CorePrinting.statement_to_string st)
     ^"\n-------"
-  );
+  ); *)
   let resulting_edges, base_edges_dbg, dbg_str =
     match st.s with
     | SIf (_, a, b) ->
@@ -269,11 +269,11 @@ let rec to_op_edges (st : statement) : (statement * statement) list =
       (base_edges @ (CL.map map_continue_f branches |> CL.flatten)), base_edges, ""
     | SSeq (a, b) ->
       (* recurse on a, connect a to b, recurse on b.*)
-      print_endline ("its a sequence.");
+(*       print_endline ("its a sequence.");
       print_endline ("first statement: ");
       print_endline ("****");
       CorePrinting.statement_to_string a |> print_endline;
-      print_endline ("****");
+      print_endline ("****"); *)
       let edges_of_a = to_op_edges a in
       let a_to_b_edge = connect_siblings a b in    
       let a_leaves = op_stmt_leaves a in 
@@ -301,11 +301,12 @@ let rec to_op_edges (st : statement) : (statement * statement) list =
       let base_edges = a_to_b_edge in 
       edges_of_a @ a_to_b_edge @ edges_of_b, base_edges, dbg_str
     | _ ->
-      !dprint_endline ("HERE: " ^ print_op_stmt st);
+(*       !dprint_endline ("HERE: " ^ print_op_stmt st); *)
       [], [], ""
     (* none of the other statements produce edges *)
   in
-  !dprint_endline "----------[to_op_edges]-----------";
+  let _, _ = base_edges_dbg, dbg_str in 
+(*   !dprint_endline "----------[to_op_edges]-----------";
   !dprint_endline "---- statement ----";
   !dprint_endline (Printing.stmt_to_string st);
   !dprint_endline "---- statement tree ----";
@@ -317,7 +318,7 @@ let rec to_op_edges (st : statement) : (statement * statement) list =
   !dprint_endline "-------";
   !dprint_endline "----resulting edges -----";
   print_stmt_edges resulting_edges;
-  !dprint_endline "-------";
+  !dprint_endline "-------"; *)
   resulting_edges
 ;;
 

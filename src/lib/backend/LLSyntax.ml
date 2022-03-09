@@ -126,9 +126,10 @@ and sPredExpr =
   | Neg of sCompExpr
 
 (* Right hand side of an salu instruction. *)
+and sExprRhs = sPredExpr option * sEvalExpr
 and sExpr =
-  | MemExpr of sPredExpr option * sEvalExpr
-  | RetExpr of sPredExpr option * sEvalExpr
+  | MemExpr of sExprRhs
+  | RetExpr of sExprRhs
 
 (* a stateful instruction evaluates multiple expressions 
    that update a return variable and multiple words of a 

@@ -111,11 +111,6 @@ class Manager(object):
       mc_node_hdls.append(mc_node_hdl)
     return mc_node_hdls, mc_grp_hdl
 
-
-
-
-
-
   def delete_mc_group(self, mc_grp_hdl):
     self.mc.mc_mgrp_destroy(self.mc_sess_hdl, self.dev_tgt.dev_id, hex_to_i32(mc_grp_hdl))
 

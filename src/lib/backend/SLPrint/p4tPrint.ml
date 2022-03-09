@@ -871,7 +871,7 @@ let print_p4_struct_defs decls =
 ;;
 
 let print_const_def fmt (name, scope, width, valu) =
-  print_endline ("emitting const def for " ^ str_of_varid name);
+  (* print_endline ("emitting const def for " ^ str_of_varid name); *)
   (* constant definitions are public variables (i.e., used in P4) *)
   let id_str =
     match scope with
@@ -919,9 +919,9 @@ let print_p4_md_insts decls =
   let filter_f dec =
     match dec with
     | StructVar (_, _, s_def_name) ->
-      print_endline
+(*       print_endline
         ("[print_p4_md_insts] printing metadata struct: "
-        ^ Cid.to_string s_def_name);
+        ^ Cid.to_string s_def_name); *)
       (match ctx_get_structdef_ty s_def_name with
       | SMeta -> true
       | _ -> false)
@@ -941,7 +941,7 @@ let print_p4_parser decls =
     | _ -> None
   in
   let parser_name, nodes = CL.filter_map filter_f decls |> CL.hd in
-  print_endline ("parser name: " ^ str_of_public_globalid parser_name);
+  (* print_endline ("parser name: " ^ str_of_public_globalid parser_name); *)
   open_block ();
   (* block header *)
   fprintf

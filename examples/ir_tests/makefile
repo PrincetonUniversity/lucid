@@ -7,6 +7,14 @@ all:
 	}
 
 
+memop:
+	{ \
+	cd ../../ ;\
+	make ;\
+	cd - ;\
+	../../dptf memop.dpt ;\
+	}
+
 param_branching:
 	{ \
 	cd ../../ ;\
@@ -14,7 +22,6 @@ param_branching:
 	cd - ;\
 	../../dptf param_branching.dpt ;\
 	}
-
 
 main:
 	{ \

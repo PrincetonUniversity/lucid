@@ -18,8 +18,8 @@ let ctx_add_structdef decl =
   | StructDef _ -> p4tCtx := P4tCtx.add (name_of_structdef decl) decl !p4tCtx
   (* also add const defs, for the final emit table. *)
   | DConst (var_id, _, _, _) ->
-    print_endline
-      ("[ctx_add_structdef] adding const def: " ^ Cid.to_string var_id);
+(*     print_endline
+      ("[ctx_add_structdef] adding const def: " ^ Cid.to_string var_id); *)
     p4tCtx := P4tCtx.add var_id decl !p4tCtx
   | _ -> ()
 ;;
@@ -27,7 +27,7 @@ let ctx_add_structdef decl =
 let ctx_add_structdefs decls = CL.iter ctx_add_structdef decls
 
 let ctx_get_structdef structname =
-  print_endline ("[ctx_get_structdef] finding: " ^ Cid.to_string structname);
+  (* print_endline ("[ctx_get_structdef] finding: " ^ Cid.to_string structname); *)
   P4tCtx.find structname !p4tCtx
 ;;
 
@@ -36,7 +36,7 @@ let ctx_get_structdef_ty cid = ty_of_structdef (ctx_get_structdef cid)
 (* Temporary hack. Need to restructure IR, or something, to 
 avoid duplicating this code from LLOp. *)
 let defname_from_evcid evcid =
-  print_endline ("[defname_from_evcid]: " ^ Cid.to_string evcid);
+  (* print_endline ("[defname_from_evcid]: " ^ Cid.to_string evcid); *)
   (*   match (Cid.to_ids evcid) with 
     | [] *)
   Cid.id ("e_" ^ fst (Cid.to_id evcid), snd (Cid.to_id evcid))
