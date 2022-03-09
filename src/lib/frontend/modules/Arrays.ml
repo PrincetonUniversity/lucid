@@ -228,14 +228,8 @@ let array_update_complex_fun nst swid args =
   match args with
   | [V { v = VGlobal stage }; V { v = VInt idx }; F memop; arg1; arg2; default]
     ->
-    let update_f mem1 mem2 =
-      let args =
-        [ V (CoreSyntax.vinteger mem1)
-        ; V (CoreSyntax.vinteger mem2)
-        ; arg1
-        ; arg2
-        ; default ]
-      in
+    let update_f mem1 _ =
+      let args = [V (CoreSyntax.vinteger mem1); arg1; arg2; default] in
       let v = memop nst swid args in
       match v.v with
       | VTuple [VInt n1; VInt n2; v3] -> n1, n2, { v with v = v3 }

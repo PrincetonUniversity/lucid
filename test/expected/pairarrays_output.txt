@@ -8,15 +8,15 @@ t=0: Handling event in(0,2,7) at switch 0, port 0
 t=1000: Handling event in(1,1,2) at switch 0, port 0
 13, 13, 2
 t=2000: Handling event in(2,4,1) at switch 0, port 0
-0, 0, 1
+0, 0, 4
 t=3000: Handling event in(3,30,15) at switch 0, port 0
-0, 0, 1
+0, 0, 30
 t=4000: Handling event in(1,63,1) at switch 0, port 0
 0, 0, 67
 t=5000: Handling event in(2,63,2) at switch 0, port 0
-0, 0, 3
+0, 0, 65
 t=6000: Handling event in(3,63,3) at switch 0, port 0
-0, 0, 3
+0, 0, 65
 t=7000: Handling event in(0,63,20) at switch 0, port 0
 0, 0, 72
 dpt: Final State:

@@ -3,6 +3,7 @@ open Batteries
 open CoreSyntax
 open SyntaxUtils
 open InterpState
+module Printing = CorePrinting
 
 let raw_integer v =
   match v.v with
