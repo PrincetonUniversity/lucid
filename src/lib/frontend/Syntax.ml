@@ -236,6 +236,8 @@ and d =
   | DConstr of id * ty * params * exp
   | DModule of id * interface * decls
   | DModuleAlias of id * exp * cid * cid
+  | DHeaderTy of id * ty
+  | DPacketTy of id * ty
 
 (* name, return type, args & body *)
 and decl =
@@ -384,6 +386,8 @@ let dsize_sp id size span = decl_sp (DSize (id, size)) span
 let fun_sp id rty cs p body span = decl_sp (DFun (id, rty, cs, (p, body))) span
 let memop_sp id p body span = decl_sp (DMemop (id, p, body)) span
 let duty_sp id sizes rty span = decl_sp (DUserTy (id, sizes, rty)) span
+let header_sp id ty span = decl_sp (DHeaderTy (id, ty)) span
+let packet_ty_sp id ty span = decl_sp (DPacketTy (id, ty)) span
 
 let dconstr_sp id ty params exp span =
   decl_sp (DConstr (id, ty, params, exp)) span

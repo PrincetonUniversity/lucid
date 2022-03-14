@@ -136,6 +136,8 @@
 %token <Span.t> BITNOT
 %token <Span.t> SYMBOLIC
 %token <Span.t> FLOOD
+%token <Span.t> HEADER
+%token <Span.t> PACKETTY
 
 %token EOF
 
@@ -339,6 +341,8 @@ decl:
                                             { [module_sp (snd $2) $5 $8 (Span.extend $1 $9)] }
     | MODULE ID ASSIGN cid IF exp ELSE cid SEMI { [module_alias_sp (snd $2) $6 (snd $4) (snd $8) (Span.extend $1 $9)] }
     | TYPE tyname_def ASSIGN ty             { [duty_sp (fst $2) (snd $2) $4 (Span.extend $1 $4.tspan)] }
+    | HEADER ID ASSIGN ty                   { [header_sp (snd $2) $4 (Span.extend $1 $4.tspan)] }
+    | PACKETTY ID ASSIGN ty                 { [packet_ty_sp (snd $2) $4 (Span.extend $1 $4.tspan)] }
     | CONSTR ty ID paramsdef ASSIGN exp SEMI { [dconstr_sp (snd $3) $2 $4 $6 (Span.extend $1 $7)] }
     | GLOBAL ty ID ASSIGN exp SEMI
                                             { [dglobal_sp (snd $3) $2 $5 (Span.extend $1 $6)] }

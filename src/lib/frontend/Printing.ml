@@ -501,6 +501,10 @@ and d_to_string d =
       (cid_to_string cid1)
       (exp_to_string e)
       (cid_to_string cid2)
+  | DHeaderTy (id, ty) ->
+    Printf.sprintf "header %s = %s;" (id_to_string id) (ty_to_string ty)
+  | DPacketTy (id, ty) ->
+    Printf.sprintf "packet_type %s = %s;" (id_to_string id) (ty_to_string ty)
 
 and decl_to_string d = d_to_string d.d
 and decls_to_string ds = concat_map "\n\n" decl_to_string ds

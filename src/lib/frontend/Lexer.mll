@@ -73,6 +73,8 @@ rule token = parse
   | "size_to_int"     { SIZECAST (position lexbuf) }
   | "symbolic"        { SYMBOLIC (position lexbuf) }
   | "flood"           { FLOOD (position lexbuf) }
+  | "header"          { HEADER (position lexbuf) }
+  | "packet_type"     { PACKETTY (position lexbuf) }
   | id as s           { ID (position lexbuf, Id.create s) }
   | "'"(id as s)      { QID (position lexbuf, Id.create s) }
   | num as n          { NUM (position lexbuf, Z.of_string n) }
