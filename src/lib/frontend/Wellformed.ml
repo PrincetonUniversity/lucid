@@ -115,7 +115,7 @@ let rec match_handlers ?(m_cid = None) (ds : decls) =
   in
   let aux (events, handlers) d =
     match d.d with
-    | DEvent (id, sort, _, _) ->
+    | DEvent (id, _, _, _) | DPacketTy (id, _) ->
       if IdSet.mem id events
       then
         Console.error_position d.dspan
@@ -123,8 +123,6 @@ let rec match_handlers ?(m_cid = None) (ds : decls) =
         ^ m_str
         ^ id_to_string id
         ^ " is declared twice in this scope."
-      else if sort = EExit
-      then events, handlers
       else IdSet.add id events, handlers
     | DHandler (id, _) ->
       if IdSet.mem id handlers
@@ -290,7 +288,7 @@ let event_qvar_checker =
 let rec check_qvars d =
   match d.d with
   | DFun _ | DMemop _ | DModuleAlias _ -> (* No restrictions *) ()
-  | DGlobal _ ->
+  | DGlobal _ | DHeaderTy _ | DPacketTy _ ->
     (* None allowed at all *) basic_qvar_checker#visit_decl (true, true) d
   | DSize _ | DSymbolic _ | DConst _ | DExtern _ ->
     (* Only allowed in effect *) basic_qvar_checker#visit_decl (false, true) d

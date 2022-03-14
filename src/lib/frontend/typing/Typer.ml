@@ -995,6 +995,17 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
         | _ -> new_env
       in
       new_env, effect_count, DUserTy (id, sizes, ty)
+    | DHeaderTy (id, ty) ->
+      let ty_dec = { d with d = DUserTy (id, [], ty) } in
+      let new_env, _, _ = infer_declaration env effect_count ty_dec in
+      new_env, effect_count, DHeaderTy (id, ty)
+    | DPacketTy (id, ty) ->
+      let ty_dec = { d with d = DUserTy (id, [], ty) } in
+      let params = [Id.fresh "pkt_arg", mk_ty (TName (Id id, [], false))] in
+      let event_dec = { d with d = DEvent (id, EEntry true, [], params) } in
+      let new_env, _, _ = infer_declaration env effect_count ty_dec in
+      let new_env, _, _ = infer_declaration new_env effect_count event_dec in
+      new_env, effect_count, DPacketTy (id, ty)
     | DConstr (id, ty, params, e) ->
       enter_level ();
       let _, inf_e, inf_ety =
