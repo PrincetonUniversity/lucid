@@ -4,10 +4,9 @@
   open SyntaxUtils
   open Collections
 
-  let first (x, _, _, _) = x
-  let second (_, x, _, _) = x
-  let third (_, _, x, _) = x
-  let fourth (_, _, _, x) = x
+  let first (x, _, _) = x
+  let second (_, x, _) = x
+  let third (_, _, x) = x
 
   let mk_trecord lst =
     TRecord (List.map (fun (id, ty) -> Id.name id, ty.raw_ty) lst)
@@ -110,9 +109,6 @@
 %token <Span.t> HASH
 %token <Span.t> AUTO
 %token <Span.t> GROUP
-%token <Span.t> CONTROL
-%token <Span.t> ENTRY
-%token <Span.t> EXIT
 %token <Span.t> MATCH
 %token <Span.t> WITH
 %token <Span.t> PIPE
@@ -268,12 +264,6 @@ paramsdef:
     | LPAREN RPAREN                     { [] }
     | LPAREN params RPAREN              { $2 }
 
-event_sort:
-    | EVENT                             { ($1, EBackground) }
-    | ENTRY EVENT                       { ($1, EEntry false) }
-    | ENTRY CONTROL EVENT               { ($1, EEntry true) }
-    | EXIT EVENT                        { ($1, EExit) }
-
 speclist:
     | cid LESS cid                     { (snd $1, SpecLess) :: [snd $3, SpecLess] }
     | cid LEQ cid                      { (snd $1, SpecLeq) :: [snd $3, SpecLeq] }
@@ -311,8 +301,8 @@ interface:
     | interface_spec interface          { $1::$2 }
 
 event_decl:
-    | event_sort ID paramsdef             { ($1, snd $2, $3, []) }
-    | event_sort ID paramsdef constr_list { ($1, snd $2, $3, $4) }
+    | ID paramsdef             { ($1, $2, []) }
+    | ID paramsdef constr_list { ($1, $2, $3) }
 
 tyname_def:
     | ID                                  { snd $1, [] }
@@ -323,9 +313,9 @@ decl:
     | EXTERN ty ID SEMI                     { [dextern_sp (snd $3) $2 (Span.extend $1 $4)] }
     | EXTERN ID paramsdef SEMI              { [dextern_sp (snd $2) (mk_fty (fst $2) $3) (Span.extend $1 $4)] }
     | SYMBOLIC ty ID SEMI                   { [dsymbolic_sp (snd $3) $2 (Span.extend $1 $4)] }
-    | event_decl SEMI                       { [event_sp (second $1) (snd (first $1)) (fourth $1) (third $1) (Span.extend (fst (first $1)) $2)] }
-    | event_decl LBRACE statement RBRACE    { [event_sp (second $1) (snd (first $1)) (fourth $1) (third $1) (Span.extend (fst (first $1)) $4);
-                                               handler_sp (second $1) (third $1) $3 (Span.extend (fst (first $1)) $4)] }
+    | event_decl SEMI                       { [event_sp (snd (first $1)) None (third $1) (second $1) (Span.extend (fst (first $1)) $2)] }
+    | event_decl LBRACE statement RBRACE    { [event_sp (snd (first $1)) None (third $1) (second $1) (Span.extend (fst (first $1)) $4);
+                                               handler_sp (snd (first $1)) (second $1) $3 (Span.extend (fst (first $1)) $4)] }
     | HANDLE ID paramsdef LBRACE statement RBRACE
       	     	       	      	     	        { [handler_sp (snd $2) $3 $5 (Span.extend $1 $6)] }
     | FUN ty ID paramsdef LBRACE statement RBRACE

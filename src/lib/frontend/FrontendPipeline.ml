@@ -48,7 +48,7 @@ let process_prog ds =
   print_if_verbose "---------------typing3-------------";
   let ds = Typer.infer_prog ds in
   print_if_verbose "------------Checking entry handlers---------------";
-  Linerate.check ds;
+  (* Linerate.check ds; *)
   print_if_verbose "-------Eliminating vectors-------";
   (* WARNING: Don't run the typechecker from now until records have been eliminated.
      See VectorElimination.ml for an explanation. *)
@@ -61,6 +61,9 @@ let process_prog ds =
   print_if_debug ds;
   print_if_verbose "-------Eliminating EStmts-------";
   let ds = EStmtElimination.eliminate_prog ds in
+  print_if_debug ds;
+  print_if_verbose "-------Eliminating header declarations---------";
+  let pkt_decs, ds = HeaderElimination.eliminate_prog ds in
   print_if_debug ds;
   (* Record elimination removes useful debugging information, so we want it as
      close to the end of the pipeline as possible. *)
@@ -82,5 +85,5 @@ let process_prog ds =
   (* Just to be safe *)
   let ds = Typer.infer_prog ds in
   print_if_debug ds;
-  renaming, ds
+  pkt_decs, renaming, ds
 ;;

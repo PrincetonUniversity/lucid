@@ -136,10 +136,7 @@ and params = (id * ty) list
 
 and body = params * statement
 
-and event_sort =
-  | EEntry of bool (* true iff "control", i.e. it can generate non-continue events *)
-  | EExit
-  | EBackground
+and event_packet = id option
 
 (* For memops -- Boolean condition * return value *)
 and conditional_return = exp * exp
@@ -161,7 +158,7 @@ and memop_body =
 (* declarations *)
 and d =
   | DGlobal of id * ty * exp
-  | DEvent of id * event_sort * params
+  | DEvent of id * event_packet * params
   | DHandler of id * body
   | DMemop of id * params * memop_body
   | DExtern of id * ty

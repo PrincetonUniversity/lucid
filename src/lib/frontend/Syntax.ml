@@ -183,10 +183,7 @@ and params = (id * ty) list
 
 and body = params * statement
 
-and event_sort =
-  | EEntry of bool (* true iff "control", i.e. it can generate non-continue events *)
-  | EExit
-  | EBackground
+and event_packet = id option
 
 and ispec =
   | InSize of id
@@ -225,7 +222,7 @@ and memop_body =
 and d =
   | DSize of id * size option
   | DGlobal of id * ty * exp
-  | DEvent of id * event_sort * constr_spec list * params
+  | DEvent of id * event_packet * constr_spec list * params
   | DHandler of id * body
   | DFun of id * ty * constr_spec list * body
   | DMemop of id * params * memop_body

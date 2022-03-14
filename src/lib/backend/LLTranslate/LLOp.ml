@@ -13,6 +13,7 @@ open LogIr
 
 (* logging *)
 module DBG = BackendLogging
+
 let outc = ref None
 let dprint_endline = ref DBG.no_printf
 let start_logging () = DBG.start_mlog __FILE__ outc dprint_endline
@@ -23,7 +24,6 @@ let int_from_const_exp (ex : exp) =
   | EVal { v = VInt zint; _ } -> Integer.to_int zint
   | _ -> trans_err "could not evaluate expression to an int" ex
 ;;
-
 
 (***
   TODO: refactor this its really messy.
@@ -62,28 +62,34 @@ module TofinoStructs = struct
   (* fully qualified struct instance name from event id and type *)
   let full_struct_from_ev evid evsort =
     let prefix =
-      match evsort with
+      (* match evsort with
       | EEntry _ | EExit -> Id.create md_instance_prefix
-      | EBackground -> Id.create hdr_instance_prefix
+         | EBackground -> Id.create hdr_instance_prefix *)
+      ignore evsort;
+      failwith "TODO:HEADERS"
     in
     Cid.compound prefix (in_struct_from_ev evid)
   ;;
 
   (* struct instance name from event id, with fully qualified prefix *)
   let full_in_struct_from_ev evid evsort =
-    match evsort with
+    (* match evsort with
     | EEntry _ | EExit ->
       Cid.compound (Id.create md_instance_prefix) (in_struct_from_ev evid)
     | EBackground ->
-      Cid.compound (Id.create hdr_instance_prefix) (in_struct_from_ev evid)
+       Cid.compound (Id.create hdr_instance_prefix) (in_struct_from_ev evid) *)
+    ignore (evid, evsort);
+    failwith "TODO:HEADERS"
   ;;
 
   let full_out_struct_from_ev evid evsort =
-    match evsort with
+    (* match evsort with
     | EEntry _ | EExit ->
       Cid.compound (Id.create md_instance_prefix) (out_struct_from_ev evid)
     | EBackground ->
-      Cid.compound (Id.create hdr_instance_prefix) (out_struct_from_ev evid)
+       Cid.compound (Id.create hdr_instance_prefix) (out_struct_from_ev evid) *)
+    ignore (evid, evsort);
+    failwith "TODO:HEADERS"
   ;;
 
   let qual_in_fieldnames_of_event hdl_id =
@@ -103,14 +109,12 @@ identifiers. These functions are mainly here
 for handler parameter ids, which must change
 to event struct field ids. *)
 let local_mid_from_id hdl_id id =
-  (* there may not be an ID map, if we are 
-     compiling a single handler 
+  (* there may not be an ID map, if we are
+     compiling a single handler
      to a P4 control block. *)
-  let id_map = 
-    try
-      ctx_get_hdl_param_map hdl_id 
-    with 
-      Not_found -> []
+  let id_map =
+    try ctx_get_hdl_param_map hdl_id with
+    | Not_found -> []
   in
   match CL.assoc_opt id id_map with
   | Some qualified_cid -> qualified_cid
@@ -163,7 +167,7 @@ let oper_from_immediate hdl_id (immediate_exp : exp) =
   match immediate_exp.e with
   | EVal _ -> IS.Const (zint_from_evalue immediate_exp)
   | EVar cid -> Meta (local_mid_from_cid hdl_id cid)
-  | EOp (Slice(l, h), [{e=EVar (cid); _}]) ->  
+  | EOp (Slice (l, h), [{ e = EVar cid; _ }]) ->
     MetaSlice (l, h, local_mid_from_cid hdl_id cid)
   | _ ->
     let dstr =
@@ -222,9 +226,9 @@ let log_objs opstmt objs =
 module TofinoAlu = struct
   (**** generate an (alu_name, alu_declaration) pair from an op statement  ****)
   let from_assign hdl_id outvar_id val_exp opstmt =
-    (* this is where parameters are renamed. How awful to be nested so 
+    (* this is where parameters are renamed. How awful to be nested so
        deeply into the translation, instead of done in a pass of its own. *)
-    let outvar_mid = local_mid_from_id hdl_id outvar_id in 
+    let outvar_mid = local_mid_from_id hdl_id outvar_id in
     let base_name = uname_of_stmt opstmt in
     let alu_name = aluname_of_stmt opstmt in
     let alu_name, alu_obj =
@@ -265,8 +269,9 @@ module TofinoAlu = struct
         (* a call could either be a call, or an event declaration. *)
         (match raw_ty_of_exp val_exp with
         | TEvent ->
-          error ("Event variables are not yet supported by the backend. \
-                  Declarations must be inlined.");
+          error
+            "Event variables are not yet supported by the backend. \
+             Declarations must be inlined."
         | _ ->
           let call_result =
             ctx_call_codegen
@@ -288,8 +293,7 @@ module TofinoAlu = struct
         (* let poly = Integer.to_int (zint_from_evalue (CL.hd exps)) in  *)
         let args = CL.map (oper_from_immediate hdl_id) (CL.tl exps) in
         alu_name, IS.new_hasher alu_name width poly outvar_mid args
-      | EFlood _ -> 
-        error "[from_assign] flood not yet supported by backend."        
+      | EFlood _ -> error "[from_assign] flood not yet supported by backend."
     in
     !dprint_endline
       (sprintf "[from_assign] created alu: " ^ Printing.cid_to_string alu_name);
@@ -320,7 +324,7 @@ module TofinoAlu = struct
     in
     alu_name, alu_obj
   ;;
-end 
+end
 
 module TofinoControl = struct
   (* wrap a compute alu in an action and call table. *)
@@ -384,10 +388,11 @@ module TofinoControl = struct
     !dprint_endline "generate handler.";
     let base_name = uname_of_stmt opstmt in
     (* generate the ALU *)
-    match opstmt.s with 
-    | SGen (gen_type, event_exp) -> (
-      let generated_alus = match gen_type with 
-      | GSingle (None) ->
+    match opstmt.s with
+    | SGen (gen_type, event_exp) ->
+      let generated_alus =
+        match gen_type with
+        | GSingle None ->
           ctx_call_codegen
             (* LLEvent.generate_self *)
             LLConstants.generate_self_cid
@@ -397,9 +402,9 @@ module TofinoControl = struct
             ; (* generate doesn't return *)
               args = [event_exp]
             }
-      | GSingle (Some _) ->
+        | GSingle (Some _) ->
           error "[LLOp.from_gen] backend does not support generate_switch."
-      | GPort port_exp -> 
+        | GPort port_exp ->
           ctx_call_codegen
             (* LLEvent.generate_port *)
             LLConstants.generate_port_cid
@@ -409,21 +414,19 @@ module TofinoControl = struct
             ; (* generate doesn't return *)
               args = [port_exp; event_exp]
             }
-      | GMulti _ -> 
+        | GMulti _ ->
           error "[LLOp.from_gen] backend does not support generate_ports."
-      in 
+      in
       (* the generate statement can translate to a no-op if it is generating from
-      an event variable. (11/21 -- this is just a result of not supporting events 
+      an event variable. (11/21 -- this is just a result of not supporting events
       as values / variables) *)
-      match CL.length generated_alus.names with
+      (match CL.length generated_alus.names with
       | 0 -> []
       | _ ->
         let alu_name = CL.hd generated_alus.names in
         let alu_obj = CL.hd generated_alus.objs in
         (* wrap in control flow object *)
-        wrap_alu_in_call_table opgraph opstmt alu_name alu_obj
-
-    )
+        wrap_alu_in_call_table opgraph opstmt alu_name alu_obj)
     | _ -> error "[LLOp.from_gen] not a generate statement."
   ;;
 
@@ -743,7 +746,9 @@ module TofinoControl = struct
   let from_match hdl_id opgraph opstmt =
     let _ = opgraph in
     let keys, branches = unpack_match opstmt in
-    let key_mids = CL.map name_from_exp keys |> CL.map (local_mid_from_cid hdl_id) in
+    let key_mids =
+      CL.map name_from_exp keys |> CL.map (local_mid_from_cid hdl_id)
+    in
     (* make a rule and action for each entry. *)
     let tbl_entries = CL.map (tblentry_from_branch key_mids opgraph) branches in
     (* may need to make a default rule too, if the last one is not PWild,
@@ -764,6 +769,7 @@ module TofinoControl = struct
     log_objs opstmt new_objs;
     new_objs
   ;;
+
   (* translate one single-op statement into one tofino operation. *)
   let from_opstmt hdl_id opgraph opstmt objs =
     !dprint_endline "-----[from_opstmt] ------";
@@ -790,26 +796,25 @@ module TofinoControl = struct
   ;;
 end
 
-(* convert a handler in a single handler program 
-   to a low level program. This fills the 
+(* convert a handler in a single handler program
+   to a low level program. This fills the
    input_params field of the llProg *)
-let llprog_from_single_handler hog_rec : IS.llProg = 
-  let tofino_objs = TofinoControl.from_opstmt_graph 
-    hog_rec.h_name 
-    hog_rec.h_opgraph
+let llprog_from_single_handler hog_rec : IS.llProg =
+  let tofino_objs =
+    TofinoControl.from_opstmt_graph hog_rec.h_name hog_rec.h_opgraph
   in
-  let param_to_input (id, ty) = 
-    (Cid.id id, InterpHelpers.intwidth_from_raw_ty ty.raw_ty)
+  let param_to_input (id, ty) =
+    Cid.id id, InterpHelpers.intwidth_from_raw_ty ty.raw_ty
   in
   { IS.root_tid = tblname_of_stmt hog_rec.h_root
   ; IS.instr_dict = IS.dict_of_decls tofino_objs
-  ; IS.inputs = CL.map param_to_input hog_rec.h_params 
+  ; IS.inputs = CL.map param_to_input hog_rec.h_params
   ; IS.name = hog_rec.h_name
   }
 ;;
 
-(* convert a handler's statement graph into a tofino control graph. 
-   This will end up not filling the input_params field of the llProg, 
+(* convert a handler's statement graph into a tofino control graph.
+   This will end up not filling the input_params field of the llProg,
    because we are not ultimately generating a control block. *)
 type tofino_control_g =
   { hid : id
@@ -855,5 +860,9 @@ let merge_handler_defs (hdl_defs : tofino_control_g list) : IS.llProg =
   let cid_decls = IS.dict_of_decls (tbl :: acns) @ cid_decls in
   (* return the complete instruction prog, with the cid_decls
   merged.  *)
-  { root_tid = root_tblname; instr_dict = cid_decls; inputs = []; name = Id.create "lucid_prog"}
+  { root_tid = root_tblname
+  ; instr_dict = cid_decls
+  ; inputs = []
+  ; name = Id.create "lucid_prog"
+  }
 ;;

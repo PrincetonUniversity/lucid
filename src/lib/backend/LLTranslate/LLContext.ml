@@ -39,7 +39,7 @@ type event_rec =
   ; field_defs : (Cid.t * int) list
   ; hidden_fields : (Cid.t * int) list
   ; hdl_param_ids : Id.t list
-  ; event_sort : event_sort
+  ; event_sort : event_packet (* TODO:HEADERS Fix this *)
   ; event_struct : Cid.t
   ; event_struct_instance : Cid.t
   ; event_generated_flag : Cid.t
@@ -81,16 +81,15 @@ let ctx_add_decls (ds : decls) =
   let iter_f dec =
     match dec.d with
     | DGlobal (id, _, _) -> ctx_add_decl (Cid.id id) dec
-    | DMemop (id, _, _) -> 
-      ctx_add_decl (Cid.id id) dec
+    | DMemop (id, _, _) -> ctx_add_decl (Cid.id id) dec
     | _ -> ()
   in
   CL.iter iter_f ds
 ;;
 
 let ctx_bdy_of_memop n =
-  match ctx_find_decl n with 
-  | {d = DMemop(_, params, memop_body); _} -> params, memop_body
+  match ctx_find_decl n with
+  | { d = DMemop (_, params, memop_body); _ } -> params, memop_body
   | _ -> error "could not find memop in decl context"
 ;;
 

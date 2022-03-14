@@ -882,12 +882,12 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
         ^ " is global and cannot be declared symbolic";
       let env = define_const id ty env in
       env, effect_count, DSymbolic (id, ty)
-    | DEvent (id, sort, constr_specs, params) ->
+    | DEvent (id, pkt, constr_specs, params) ->
       let constrs, _ =
         spec_to_constraints env d.dspan FZero params constr_specs
       in
       let env = define_const id (mk_event_ty constrs params) env in
-      env, effect_count, DEvent (id, sort, constr_specs, params)
+      env, effect_count, DEvent (id, pkt, constr_specs, params)
     | DHandler (id, body) ->
       enter_level ();
       let constraints = retrieve_constraints env d.dspan id (fst body) in
@@ -1004,7 +1004,7 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
     | DPacketTy (id, ty) ->
       let ty_dec = { d with d = DUserTy (id, [], ty) } in
       let params = [Id.fresh "pkt_arg", mk_ty (TName (Id id, [], false))] in
-      let event_dec = { d with d = DEvent (id, EEntry true, [], params) } in
+      let event_dec = { d with d = DEvent (id, Some id, [], params) } in
       let new_env, _, _ = infer_declaration env effect_count ty_dec in
       let new_env, _, _ = infer_declaration new_env effect_count event_dec in
       new_env, effect_count, DPacketTy (id, ty)

@@ -6,7 +6,7 @@ open Syntax
      this involves a dataflow analysis. For simplicity, we assume that inlining
      has been performed already, but it shouldn't be too hard to extend. ***)
 
-module VarSet = Set.Make (Id)
+(* module VarSet = Set.Make (Id)
 
 type env =
   { linerate_entrys : VarSet.t
@@ -132,4 +132,4 @@ let check prog =
     end
   in
   v#visit_decls () prog
-;;
+;; *)

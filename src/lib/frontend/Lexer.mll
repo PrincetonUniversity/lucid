@@ -60,9 +60,6 @@ rule token = parse
   | "hash"            { HASH (position lexbuf) }
   | "auto"            { AUTO (position lexbuf) }
   | "group"           { GROUP (position lexbuf) }
-  | "control"         { CONTROL (position lexbuf) }
-  | "entry"           { ENTRY (position lexbuf) }
-  | "exit"            { EXIT (position lexbuf) }
   | "match"           { MATCH (position lexbuf) }
   | "with"            { WITH (position lexbuf) }
   | "type"            { TYPE (position lexbuf) }

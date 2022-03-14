@@ -24,6 +24,7 @@ module IS = LLSyntax
 let backend_report str = Console.show_message str ANSITerminal.Green "Backend"
 
 module DBG = BackendLogging
+
 let outc = ref None
 let dprint_endline = ref DBG.no_printf
 let start_logging () = DBG.start_mlog __FILE__ outc dprint_endline
@@ -44,33 +45,31 @@ let dpt_builtin_fcns =
 ;;
 
 (* lucid's internal metadata struct for ingress processing *)
-let lucid_internal_struct = 
+let lucid_internal_struct =
   let struct_cid = Cid.create ["dptMeta_t"] in
-  let struct_instance_cid = dpt_meta_struct_instance in 
+  let struct_instance_cid = dpt_meta_struct_instance in
   let struct_fields =
     CL.map
-      (fun (f, w) -> (Cid.create [f], w))
+      (fun (f, w) -> Cid.create [f], w)
       (* field names and widths are defined in LLConstants. *)
       [ timestamp_str, timestamp_width
       ; handle_selector_str, handle_selector_width
       ; exit_event_str, exit_event_width
       ; next_event_str, next_event_width
       ; events_count_str, events_count_width ]
-  in 
+  in
   let dptMeta_struct = IS.new_meta_structdef struct_cid struct_fields in
   let dptMeta_instance =
     IS.new_struct struct_cid SPrivate struct_instance_cid
   in
   [dptMeta_struct; dptMeta_instance]
-;;  
+;;
 
-let hidden_event_fields = [
-  (event_id_field, event_id_width); 
-  (event_loc_field, event_loc_width); 
-  (event_delay_field, event_delay_width)
-]
-
-
+let hidden_event_fields =
+  [ event_id_field, event_id_width
+  ; event_loc_field, event_loc_width
+  ; event_delay_field, event_delay_width ]
+;;
 
 (* code generators for events *)
 module TranslateEvents = struct
@@ -110,10 +109,11 @@ module TranslateEvents = struct
         :: erec.field_defs
       in
       let struct_ty =
-        match erec.event_sort with
+        (* match erec.event_sort with
         | EBackground ->
           IS.SHeader (* backround events get serialized to packet *)
-        | EEntry _ | EExit -> IS.SMeta
+           | EEntry _ | EExit -> IS.SMeta *)
+        failwith "TODO:HEADERS"
         (* entry and exit events don't. kind of backwards seeming. *)
       in
       (* declaration of the struct, instance, and enum #define *)
@@ -164,7 +164,9 @@ module TranslateEvents = struct
 
   (* new *)
   let evrec_hdrvar evrec =
-    TofinoStructs.full_struct_from_ev evrec.event_id EBackground
+    (* TofinoStructs.full_struct_from_ev evrec.event_id EBackground *)
+    ignore evrec;
+    failwith "TODO:HEADERS"
   ;;
 
   let evrec_pnodecid pos evrec =
@@ -225,7 +227,8 @@ module TranslateEvents = struct
       ctx_get_event_recs ()
       |> CL.filter (fun evr ->
              match evr.event_sort with
-             | EBackground -> true
+             (* | EBackground -> true *)
+             (*TODO:HEADERS*)
              | _ -> false)
     in
     let nodes =
@@ -332,7 +335,7 @@ module TranslateEvents = struct
     *)
     let event_state dec =
       match dec.d with
-      | DEvent (evid, EBackground, _) ->
+      (* | DEvent (evid, EBackground, _) ->
         let parse_state_id = parsestate_name_of evid in
         let in_struct_name =
           TofinoStructs.full_struct_from_ev evid EBackground
@@ -342,7 +345,8 @@ module TranslateEvents = struct
         let next_instr = IS.new_PNext (Some parse_start_cid) in
         (* let next_instr = IS.new_PNext None in *)
         let pnode = IS.new_parse_node parse_state_id [parse_instr] next_instr in
-        Some ((evid, parse_state_id), pnode)
+         Some ((evid, parse_state_id), pnode) *)
+      (* TODO:HEADERS *)
       | _ -> None
     in
     let enum_map, event_states = CL.filter_map event_state ds |> CL.split in
@@ -408,7 +412,6 @@ let gen_event_triggered_bitvec () =
   [newstruct; newinstance]
 ;;
 
-
 (* Give all the spans in a program a unique id. *)
 let cur_span = ref 0
 
@@ -473,32 +476,31 @@ let byte_align_header_structs (prog : IS.llProg) : IS.llProg =
   { prog with IS.instr_dict = cid_decls }
 ;;
 
-(* Compiles ds, a program with a single event/handler named "main" and no 
-   generate statements, into P4. 
-    Changes: 
-      1. don't generate the event selection table at the beginning. 
-      2. print the parameters of main as local variables, 
+(* Compiles ds, a program with a single event/handler named "main" and no
+   generate statements, into P4.
+    Changes:
+      1. don't generate the event selection table at the beginning.
+      2. print the parameters of main as local variables,
          instead of fields of md.main.
-      3. don't generate the final / exit lucid table. 
+      3. don't generate the final / exit lucid table.
  *)
- let from_handler (ds : decls) (hog_rec : handler_opgraph_rec) : IS.llProg = 
+let from_handler (ds : decls) (hog_rec : handler_opgraph_rec) : IS.llProg =
   (* put builtin function generators into the context *)
   ctx_add_codegens dpt_builtin_fcns;
-  ctx_add_decls ds; (* we probably don't need decls in context any more. *)
-  (* Events are not used in this compilation mode, so there's 
-     nothing to translate. Skipping this step also makes the handler's 
+  ctx_add_decls ds;
+  (* we probably don't need decls in context any more. *)
+  (* Events are not used in this compilation mode, so there's
+     nothing to translate. Skipping this step also makes the handler's
      parameters get printed as local variables -- which is what we want. *)
   (* let event_decls = TranslateEvents.translate_all ds in *)
 
   (* translate the array declarations into LL decls *)
   let regarray_defs = CL.map regdec_from_decl ds |> CL.flatten in
   (* translate the one handler into LL program *)
-  let tofino_prog = llprog_from_single_handler hog_rec in 
+  let tofino_prog = llprog_from_single_handler hog_rec in
   let out_prog =
     { tofino_prog with
-      instr_dict =
-          tofino_prog.instr_dict 
-        @ IS.dict_of_decls regarray_defs
+      instr_dict = tofino_prog.instr_dict @ IS.dict_of_decls regarray_defs
     }
   in
   out_prog

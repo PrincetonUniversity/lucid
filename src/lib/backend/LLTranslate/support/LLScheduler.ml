@@ -38,7 +38,9 @@ let struct_name evid =
 
 (* header instance name *)
 let instance_name evid =
-  P4tPrint.str_of_varid (TofinoStructs.full_in_struct_from_ev evid EBackground)
+  (* P4tPrint.str_of_varid (TofinoStructs.full_in_struct_from_ev evid EBackground) *)
+  ignore evid;
+  failwith "TODO:HEADERS"
 ;;
 
 let undeclared_instance_name = P4tPrint.str_of_public_varid
@@ -67,14 +69,14 @@ let cmd_exit = "exit;"
 let cmd_drop = "ig_dprsr_md.drop_ctl = 0x1;"
 
 let cmd_copy_to_recirc =
-  match (!LLConfig.ll_opts.use_multicast) with 
-    | true -> 
-     sprintf
+  match !LLConfig.ll_opts.use_multicast with
+  | true ->
+    sprintf
       "ig_tm_md.mcast_grp_a = %i + md.dptMeta.eventsCount;"
       (lucid_mc_group - 1)
-    | false ->
-      (* forward background events instead of using multicast. *)
-      sprintf "ig_tm_md.ucast_egress_port = 196;"
+  | false ->
+    (* forward background events instead of using multicast. *)
+    sprintf "ig_tm_md.ucast_egress_port = 196;"
 ;;
 
 (* the ingress exit table applies after the handler tables. *)
@@ -175,7 +177,8 @@ module IngressExit = struct
       CL.filter
         (fun evrec ->
           match evrec.event_sort with
-          | Syntax.EBackground -> true
+          (* | Syntax.EBackground -> true *)
+          (* TODO:HEADERS *)
           | _ -> false)
         (ctx_get_event_recs ())
     in
@@ -324,8 +327,11 @@ module IngressExit = struct
       CL.filter_map
         (fun erec ->
           match erec.event_sort with
-          | EBackground -> Some (create_bg_event_rules erec)
-          | _ -> None)
+          (* | EBackground -> Some (create_bg_event_rules erec) *)
+          (*TODO:HEADERS*)
+          | _ ->
+            ignore create_bg_event_rules;
+            None)
         (ctx_get_event_recs ())
       |> CL.flatten
     in
@@ -477,7 +483,8 @@ module Egress = struct
       erecs
       |> CL.filter_map (fun erec ->
              match erec.event_sort with
-             | Syntax.EBackground -> Some erec
+             (* | Syntax.EBackground -> Some erec *)
+             (*TODO:HEADERS*)
              | _ -> None)
     in
     let event_to_flag =
@@ -539,12 +546,13 @@ module Egress = struct
       (* HACK: ignore mcid *)
       let ev_flag_values = bitvec |> bv_valv |> wildcard_suffix_zeros in
       let flag_guard = combine_fields_vals ev_flags ev_flag_values in
-      let guard = match (!LLConfig.ll_opts.use_multicast) with 
-        | true -> 
+      let guard =
+        match !LLConfig.ll_opts.use_multicast with
+        | true ->
           { field = etype_field; value = VInt lucid_etype }
           :: { field = str_of_public_varid mcid_field; value = VInt mcid }
           :: flag_guard
-        | false -> 
+        | false ->
           { field = etype_field; value = VInt lucid_etype }
           :: { field = str_of_public_varid mcid_field; value = VInt 0 }
           :: flag_guard
@@ -573,7 +581,8 @@ module Egress = struct
       ctx_get_event_recs ()
       |> CL.filter (fun erec ->
              match erec.event_sort with
-             | Syntax.EBackground -> true
+             (* | Syntax.EBackground -> true *)
+             (* TODO:HEADERS *)
              | _ -> false)
       |> CL.map (fun erec -> str_of_public_varid erec.event_generated_flag)
     in
@@ -607,12 +616,14 @@ module Egress = struct
       ; action_args = []
       }
     in
-    let all_rules = match (!LLConfig.ll_opts.use_multicast) with 
+    let all_rules =
+      match !LLConfig.ll_opts.use_multicast with
       (* its unclear why we change the order when multicast is disabled *)
-      | true -> 
+      | true ->
         non_lucid_pkt_rule :: lucid_wire_pkt_rule :: CL.flatten mcid_rule_lists
-      | false -> 
-        (non_lucid_pkt_rule :: CL.flatten mcid_rule_lists )@ [lucid_wire_pkt_rule]
+      | false ->
+        (non_lucid_pkt_rule :: CL.flatten mcid_rule_lists)
+        @ [lucid_wire_pkt_rule]
     in
     (* create the table from rules. *)
     let tbl_str = "egr_serialize_clone" in

@@ -371,14 +371,6 @@ and stmt_to_string s =
 
 let statement_to_string = stmt_to_string
 
-let event_sort_to_string sort =
-  match sort with
-  | EEntry true -> "entry control event"
-  | EEntry false -> "entry event"
-  | EExit -> "exit event"
-  | EBackground -> "event"
-;;
-
 let rec interface_spec_to_string spec =
   match spec.ispec with
   | InSize id -> Printf.sprintf "size %s;" (id_to_string id)
@@ -434,10 +426,11 @@ and d_to_string d =
       (id_to_string id)
       (params_to_string params)
       (stmt_to_string s)
-  | DEvent (id, sort, cspecs, params) ->
+  | DEvent (id, pkt, cspecs, params) ->
+    let pkt_str = Option.map_default (fun id -> id_to_string id ^ " ") "" pkt in
     Printf.sprintf
       "%s %s(%s) %s;"
-      (event_sort_to_string sort)
+      pkt_str
       (id_to_string id)
       (params_to_string params)
       (cspecs_to_string cspecs)

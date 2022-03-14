@@ -162,19 +162,13 @@ let translate_memop body =
       }
 ;;
 
-let translate_sort = function
-  | S.EEntry b -> C.EEntry b
-  | S.EExit -> C.EExit
-  | S.EBackground -> C.EBackground
-;;
-
 let translate_decl (d : S.decl) : C.decl =
   let d' =
     match d.d with
     | S.DGlobal (id, ty, exp) ->
       C.DGlobal (id, translate_ty ty, translate_exp exp)
-    | S.DEvent (id, sort, _, params) ->
-      C.DEvent (id, translate_sort sort, translate_params params)
+    | S.DEvent (id, pkt, _, params) ->
+      C.DEvent (id, pkt, translate_params params)
     | S.DHandler (id, body) -> C.DHandler (id, translate_body body)
     | S.DMemop (id, params, body) ->
       C.DMemop (id, translate_params params, translate_memop body)
