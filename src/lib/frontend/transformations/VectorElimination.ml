@@ -4,8 +4,18 @@ open SyntaxUtils
 open Collections
 
 (* Remove all vectors from the program by transforming them into tuples.
-   Assumes records and functions have already been eliminated, so we don't have
+   Assumes functions have already been eliminated, so we don't have
    any more polymorphic vector sizes. *)
+
+(* WARNING: It's convenient to run this before record elimination, but we
+   might have problems if a record contains a vector of polymorphic length. All
+   record _uses_ should be concretized, but record type declarations won't be.
+   We take the lazy approach to get around this and simply remove all DUserTys,
+   but this technically leaves the program in an ill-formed state until we run
+   record elimination, because we are now using record types without a corresponding
+   declaration. As long as we don't run the typechecker in between, it should be
+   fine. The "right" way to do this is to duplicate the DUserTy once for each
+   set of polymorphic values, but that's a loooooot of work. *)
 
 let extract_size sz =
   match normalize_size sz with
@@ -76,4 +86,10 @@ let replacer =
   end
 ;;
 
-let eliminate_prog ds = replacer#visit_decls () ds
+let eliminate_prog ds =
+  ds
+  |> List.filter (function
+         | { d = DUserTy _ } -> false
+         | _ -> true)
+  |> replacer#visit_decls ()
+;;
