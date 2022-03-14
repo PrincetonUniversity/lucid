@@ -1,0 +1,19 @@
+type foo<<'a>> = {
+    Array.t<<'a>> z;
+    Array.t<<'a>> a;
+}
+
+constr foo<<'a>> mk_foo() = {
+    z = Array.create(1);
+    a = Array.create(1);
+};
+
+global foo<<32>>[1] arrs = [mk_foo() for i < 1];
+entry event in();
+
+handle in() {
+    for (i < 1) {
+        Array.set(arrs[i]#z,0, 0);
+        Array.set(arrs[i]#a,0, 0);
+    }
+}

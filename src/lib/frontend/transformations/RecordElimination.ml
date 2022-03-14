@@ -8,11 +8,36 @@ open Collections
    effect of removing the label names from the syntax, which can make it harder
    to debug problems during later transformations. *)
 
-let sort_by_label lst =
-  List.sort (fun (x, _) (y, _) -> Pervasives.compare x y) lst
+(* Preprocessing pass: we need to sort our labels not alphabetically,
+   but by declaration order. We do this by collecting the index for
+   each label, and looking those up every time we do a sort. *)
+let create_label_map ds : int StringMap.t =
+  let label_indexer =
+    object
+      inherit [_] s_iter
+
+      method! visit_DUserTy env _ _ ty =
+        match ty.raw_ty with
+        | TRecord lst ->
+          List.iteri (fun n (str, _) -> env := StringMap.add str n !env) lst
+        | _ -> ()
+    end
+  in
+  let label_map = ref StringMap.empty in
+  label_indexer#visit_decls label_map ds;
+  !label_map
 ;;
 
-let replacer =
+let sort_by_label label_map lst =
+  let lst =
+    List.map (fun (str, x) -> StringMap.find str label_map, (str, x)) lst
+  in
+  let sorted = List.sort (fun (x, _) (y, _) -> Int.compare x y) lst in
+  List.map snd sorted
+;;
+
+let record_replacer label_map =
+  let sort_by_label lst = sort_by_label label_map lst in
   object (self)
     inherit [_] s_map
 
@@ -58,6 +83,7 @@ let replacer =
 ;;
 
 let eliminate_prog ds =
+  let replacer = record_replacer (create_label_map ds) in
   ds
   |> List.filter (function
          | { d = DUserTy _ } -> false
