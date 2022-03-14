@@ -107,11 +107,7 @@ let rename prog =
             (start_id :: ingr_port_id :: this_id :: List.map fst builtin_vars)
         in
         let builtin_cids =
-          List.map
-            fst
-            (Arrays.constructors
-            @ Counters.constructors
-            @ PairArrays.constructors)
+          List.map fst Builtins.builtin_constructors
           @ List.map
               (fun (gf : InterpState.State.global_fun) -> gf.cid)
               builtin_defs
@@ -126,7 +122,7 @@ let rename prog =
           List.fold_left
             (fun env cid -> CidMap.add cid cid env)
             CidMap.empty
-            [Arrays.t_id; Counters.t_id; PairArrays.t_id]
+            Builtins.builtin_type_ids
         in
         { empty_env with var_map; ty_map }
 
