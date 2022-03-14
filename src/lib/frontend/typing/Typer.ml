@@ -996,6 +996,8 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
       in
       new_env, effect_count, DUserTy (id, sizes, ty)
     | DHeaderTy (id, ty) ->
+      if is_global ty
+      then error_sp d.dspan "Header types may not contain global types";
       let ty_dec = { d with d = DUserTy (id, [], ty) } in
       let new_env, _, _ = infer_declaration env effect_count ty_dec in
       new_env, effect_count, DHeaderTy (id, ty)

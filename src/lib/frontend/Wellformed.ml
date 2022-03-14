@@ -14,11 +14,14 @@ open Printing
    - Only certain types allowed as externs (just ints? I guess bools too?)
    - All events have exactly one handler declared, which must be in the same scope as them.
    - All sizes in symbolic declarations are either concrete or symbolic themselves
+   - Header and packet types are records, and packet types only include header types,
+     except for terminating in a Payload.t
 
    Checks we do during typechecking:
    - No dynamic global creation
-   - QVars should only sometimes be allowed in declarations (defined in this file) -- TODO
+   - QVars should only sometimes be allowed in declarations (defined in this file)
    - Constraint specifications only reference global types
+   - Header types are non-global
 
    Checks we should do at some point (TODO):
    - Check for accidental unification of different user-declared QVars
@@ -160,10 +163,48 @@ let rec match_handlers ?(m_cid = None) (ds : decls) =
   | None, None -> ()
 ;;
 
+let check_packets ds =
+  ignore
+  @@ List.fold_left
+       (fun headers d ->
+         match d.d with
+         | DHeaderTy (id, { raw_ty = TRecord _ }) -> IdSet.add id headers
+         | DPacketTy (_, { raw_ty = TRecord lst }) ->
+           let last_idx = List.length lst in
+           List.iteri
+             (fun idx (_, rty) ->
+               match rty with
+               | TName (cid, _, _) when idx = last_idx && cid = Payload.t_id ->
+                 ()
+               | TName (Id id, _, _)
+                 when idx <> last_idx && IdSet.mem id headers -> ()
+               | _ ->
+                 let msg =
+                   if idx = last_idx
+                   then
+                     "The last field of a packet must have type Payload.t, not "
+                     ^ Printing.raw_ty_to_string rty
+                   else
+                     "All packet fields except the last must be a header, not "
+                     ^ Printing.raw_ty_to_string rty
+                 in
+                 Console.error_position d.dspan msg)
+             lst;
+           headers
+         | DHeaderTy _ | DPacketTy _ ->
+           Console.error_position
+             d.dspan
+             "Headers and packets must have record types!"
+         | _ -> headers)
+       IdSet.empty
+       ds
+;;
+
 let pre_typing_checks ds =
   check_decls ds;
   match_handlers ds;
-  check_symbolics ds
+  check_symbolics ds;
+  check_packets ds
 ;;
 
 (*** QVar checking. This is run on each decl after its type is inferred, and makes
