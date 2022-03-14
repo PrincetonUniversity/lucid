@@ -53,6 +53,7 @@
    vectorElimination
    eStmtElimination
    symbolicElimination
+   headerElimination
    replaceUserTys
    partialInterpretation
    constInlining
