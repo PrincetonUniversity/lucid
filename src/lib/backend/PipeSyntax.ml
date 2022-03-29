@@ -895,7 +895,7 @@ module OperationDedup = struct
   let int_eq i1 i2 = i1 = i2
   let id_eq = Cid.equal
   let const_eq = Integer.equal
-  let regSlice_eq _ _ = true
+  let memCell_eq _ _ = true
 
   let oper_eq o1 o2 =
     match o1, o2 with
@@ -906,7 +906,7 @@ module OperationDedup = struct
     | MetaSlice(l1, h1, m1), MetaSlice(l2, h2, m2) -> 
       (id_eq m1 m2) & (l1 = l2) & (h1 = h2)
     | MetaSlice(_), _ -> false
-    | RegVar r1, RegVar r2 -> regSlice_eq r1 r2
+    | RegVar r1, RegVar r2 -> memCell_eq r1 r2
     | RegVar _, _ -> false
     | NoOper, NoOper -> true
     | NoOper, _ -> false
@@ -915,7 +915,7 @@ module OperationDedup = struct
   let binOp_eq b1 b2 = b1 = b2
   let cmpOp_eq c1 c2 = c1 = c2
 
-  let sEvalExpr_eq e1 e2 =
+  let sArithExp_eq e1 e2 =
     match e1, e2 with
     | SVar o1, SVar o2 -> oper_eq o1 o2
     | SVar _, _ -> false
@@ -945,10 +945,10 @@ module OperationDedup = struct
   let sExpr_eq e1 e2 =
     match e1, e2 with
     | MemExpr (sp1, se1), MemExpr (sp2, se2) ->
-      opt_eq sPredExpr_eq sp1 sp2 && sEvalExpr_eq se1 se2
+      opt_eq sPredExpr_eq sp1 sp2 && sArithExp_eq se1 se2
     | MemExpr _, _ -> false
     | RetExpr (sp1, se1), RetExpr (sp2, se2) ->
-      opt_eq sPredExpr_eq sp1 sp2 && sEvalExpr_eq se1 se2
+      opt_eq sPredExpr_eq sp1 sp2 && sArithExp_eq se1 se2
     | RetExpr _, _ -> false
   ;;
 

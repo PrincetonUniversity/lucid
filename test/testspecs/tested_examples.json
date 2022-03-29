@@ -2,6 +2,7 @@
     "base_dir":"examples/tested_examples",
     "builds_dir":"__testbuilds",
     "tests": [
+        {"commands":["compile", "assemble", "execute"], "prog":"src/complex_memops.dpt", "harness":"ip_harness.p4", "linker_config":"ip_harness_triggers.json","build":"complex_memops", "testspec":"tests/complex_memops.json"},
         {"commands":["compile", "assemble", "execute"], "prog":"src/multi_events.dpt", "harness":"ip_harness.p4", "linker_config":"ip_harness_triggers.json", "build":"multi_events", "testspec":"tests/multi_events.json"},
         {"commands":["compile", "assemble", "execute"], "prog":"src/r_after_w.dpt", "harness":"ip_harness.p4", "linker_config":"ip_harness_triggers.json", "build":"r_after_w", "testspec":"tests/r_after_w.json"},
         {"commands":["compile", "assemble", "execute"], "prog":"src/reflector.dpt", "harness":"ip_harness.p4", "linker_config":"ip_harness_triggers.json","build":"reflector", "testspec":"tests/reflector.json"},
