@@ -696,12 +696,21 @@ module TofinoControl = struct
     new_objs
   ;;
 
+  (**** TEMPORARY HACK TO COMPILE BIT PATTERNS ****)
+  let bitpat_counter = ref 0
+
+  let next_bitpat () =
+    bitpat_counter := !bitpat_counter + 1;
+    !bitpat_counter
+  ;;
+
+
   (**** match statements ****)
   let condition_from_pat pat =
     match pat with
     | PWild -> IS.Any
     | PNum z -> IS.Exact (const_from_z z)
-    | PBit _ -> error "bit-vectors in conditions not yet supported in backend."
+    | PBit _ -> IS.Exact (const_from_int (next_bitpat ()))
   ;;
 
   let pattern_from_branchguard keylist patlist : IS.pattern =
