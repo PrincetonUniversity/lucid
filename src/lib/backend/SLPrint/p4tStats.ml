@@ -9,7 +9,7 @@ let stat_report str =
 ;;
 
 
-let stats_fn = "p4_stats.txt"
+let stages_fn = "num_stages.txt"
 
 (* Print statistics about the compiled program.
   right now, just the number of stages. *)
@@ -32,5 +32,5 @@ let print_stats (prog : tblSeqProg) builddir =
   let num_stages = string_of_int (max_stage+1) in 
   stat_report ("max stage: "^(string_of_int max_stage));
   stat_report ("number of stages: "^(num_stages));
-  IoUtils.writef (builddir ^ "/" ^ stats_fn) num_stages
+  IoUtils.writef (builddir ^ "/" ^ stages_fn) num_stages
 ;;
