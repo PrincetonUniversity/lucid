@@ -21,7 +21,6 @@ COMPILE_TARGETS := $(addprefix compile_,$(strip $(basename $(notdir $(SOURCES)))
 ASSEMBLE_TARGETS := $(addprefix assemble_,$(strip $(basename $(notdir $(SOURCES)))))
 TEST_TARGETS := $(addprefix test_,$(strip $(basename $(notdir $(SOURCES)))))
 
-
 lucid: 
 	{ \
 	cd ../../ ;\

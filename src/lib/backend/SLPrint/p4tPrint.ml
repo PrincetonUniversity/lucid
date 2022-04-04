@@ -19,9 +19,15 @@ let outc = ref None
 let dprint_endline = ref DBG.no_printf
 let start_logging () = DBG.start_mlog __FILE__ outc dprint_endline
 
-let memName = "memCell"
-let retName = "retCell"
+(* names of the lo and hi variables in P4 memops. *)
+let loName = "localLo"
+let hiName = "localHi"
+let loOutName = "remoteLo"
+let hiOutName = "remoteHi"
+let retName = "remoteRet"
 let tmpName = "tmp"
+
+
 
 (* configuration *)
 type config = {
@@ -125,6 +131,16 @@ let str_of_vardec field_name field_width =
 ;;
 
 module PrimitiveString = struct
+
+  let str_of_rslice rs =
+    match rs with
+    | Lo -> loName
+    | Hi -> hiName
+    | LoNew -> loOutName
+    | HiNew -> hiOutName
+    | MemOut -> retName
+  ;;
+
   let str_of_oper oper =
     match oper with
     | Meta m -> str_of_varid m
@@ -136,7 +152,7 @@ module PrimitiveString = struct
       (string_of_int h)^
       "]"
     | Const c -> string_of_int (Integer.to_int c)
-    | RegVar _ -> memName
+    | RegVar rv -> str_of_rslice rv
     | NoOper -> ""
   ;;
 
@@ -190,8 +206,10 @@ module PrimitiveString = struct
   ;;
 
   let str_of_boolop bo =
-    let _ = bo in
-    "UNIMPLEMENTED BOOL OP"
+    match bo with
+    | And -> "&&"
+    | Or -> "||"
+    | Not -> "!"
   ;;
 
   let str_of_cast (i : oper) (w : oper) =
@@ -272,13 +290,6 @@ end
 module PrintSalu = struct
   (**** salu monster... This needs to be seriously cleaned up. ****)
 
-  let str_of_rslice rs =
-    match rs with
-    | Lo -> fprintf str_formatter "%s" memName
-  ;;
-
-  (* | Hi -> error "unsupported register_hi" *)
-
   let str_of_sbinop op rs oper : string =
     sprintf
       "%s %s %s"
@@ -287,7 +298,7 @@ module PrintSalu = struct
       (PrimitiveString.str_of_oper oper)
   ;;
 
-  let string_of_sexpr sExpr =
+  let string_of_sexpr sExpr : string =
     match sExpr with
     | SVar v -> PrimitiveString.str_of_oper v
     | SBinOp (op, rs, oper) -> str_of_sbinop op rs oper
@@ -349,7 +360,7 @@ module PrintSalu = struct
   let print_sinstr fmt (si : sExpr) =
     match si with
     | MemExpr (predExp, opExp) ->
-      print_sinstr_with_outvar fmt memName predExp opExp
+      print_sinstr_with_outvar fmt loName predExp opExp
     | RetExpr (predExp, opExp) ->
       (match use_tmp with
       | true -> print_sinstr_with_outvar fmt tmpName predExp opExp
@@ -375,6 +386,192 @@ module PrintSalu = struct
       | false -> ())
   ;;
 
+
+  (*** string printers for new complex memops ***)
+  let str_of_sArithExp exp = 
+    match exp with 
+      | SVar(oper) -> PrimitiveString.str_of_oper oper
+      | SBinOp(op, o1, o2) -> sprintf
+        "(%s %s %s)"
+        (PrimitiveString.str_of_oper o1)
+        (PrimitiveString.str_of_binop op)
+        (PrimitiveString.str_of_oper o2)    
+  ;;
+
+  let str_of_sBoolExp (exp:sBoolExp) = 
+    match exp with 
+      | BVal true -> 
+        sprintf "1 == 1"
+      | BVal false -> 
+        sprintf "1 == 0"
+      | BRel(arith, op, oper) ->
+        sprintf "%s %s %s"
+          (str_of_sArithExp arith)
+          (PrimitiveString.str_of_cmpop op)
+          (PrimitiveString.str_of_oper oper)
+
+  ;;
+
+  let rec str_of_sCondExp (exp:sCondExp) : string = 
+    match exp with 
+      | CTrue -> ""
+      | CBool(exp) -> 
+        str_of_sBoolExp exp
+      | COp(op, [exp]) -> 
+        sprintf "%s (%s)"
+          (PrimitiveString.str_of_boolop op)
+          (str_of_sCondExp exp)
+      | COp(op, [exp1; exp2]) -> 
+        sprintf "(%s) %s (%s)"
+          (str_of_sCondExp exp1)
+          (PrimitiveString.str_of_boolop op)
+          (str_of_sCondExp exp2)
+      | COp(_) -> 
+        error "[p4tPrint.print_sCondExp] conditional operation must have 1 or 2 args"
+  ;;
+
+  let str_of_sUpdateExp outoper exp = 
+    (* outoper is the output variable *)
+    match (exp) with 
+      | (Some(cond_exp), arith_exp) ->
+        sprintf "if (%s) { %s = %s; }"
+          (str_of_sCondExp cond_exp)
+          (PrimitiveString.str_of_oper outoper)
+          (str_of_sArithExp arith_exp)
+      | (None, arith_exp) -> 
+        sprintf "%s = %s;"
+          (PrimitiveString.str_of_oper outoper)
+          (str_of_sArithExp arith_exp)
+  ;;
+
+  let str_of_cell_stmts out_oper stmt_opt_pair = 
+    (* I don't think we need an else block between branches, 
+       but if we do, this is where to put it. *)
+    match stmt_opt_pair with 
+    | Some(update_exp1), Some(update_exp2) ->
+      (* if there are two statements, the semantics are 
+        to treat them as an if / else. *)
+      sprintf "%s\nelse {%s}"
+        (str_of_sUpdateExp out_oper update_exp1)
+        (str_of_sUpdateExp out_oper update_exp2)
+    | Some(update_exp), None -> 
+      sprintf "%s\n"
+        (str_of_sUpdateExp out_oper update_exp)
+    | None, Some(update_exp) -> 
+      sprintf "%s\n"
+        (str_of_sUpdateExp out_oper update_exp)
+    | None, None -> ""
+
+  let str_of_sInstrBody cell_width num_cells sbody = 
+    (* 1. initialize aluLo and aluHi *)
+    (* 2. execute code *)
+    (* 3. set remote variables to aluLo and aluHi *)
+
+    ( (* setup local copies of variables. *)
+      let init_local_copy width lhs rhs = 
+        sprintf "bit<%i> %s = %s;"
+        width
+        (PrimitiveString.str_of_rslice lhs)
+        (PrimitiveString.str_of_rslice rhs)
+      in 
+      let init_local_var width lhs = 
+        sprintf "bit<%i> %s = 0;"
+        width
+        (PrimitiveString.str_of_rslice lhs)
+      in 
+      (* always copy remoteLo to localLo *)
+      let lo_str = init_local_copy cell_width Lo LoNew in 
+      let hi_str = match num_cells with 
+        | 1 ->
+          (* single-wide register, initialize 
+             localHi just in case it is used. *)
+            (init_local_var cell_width HiNew)          
+        | 2 ->
+          (* A double wide. Copy remoteHi to localHi *)
+          (init_local_copy cell_width Hi HiNew)
+        | _ -> error "invalid number of memory cells in regarray"
+      in            
+      sprintf "%s\n%s\n"
+        lo_str
+        (indent_block ~nspaces:12 hi_str)
+    ) 
+    ^ 
+    ( 
+      indent_block ~nspaces:12
+      (
+        match sbody.ret with
+        | Some(exp) -> 
+          sprintf "%s\n%s\n%s"
+            (str_of_cell_stmts (RegVar LoNew) sbody.cell1)
+            (str_of_cell_stmts (RegVar HiNew) sbody.cell2)
+            (str_of_sUpdateExp (RegVar MemOut) exp)
+        | _ ->
+          sprintf "%s\n%s"
+            (str_of_cell_stmts (RegVar LoNew) sbody.cell1)
+            (str_of_cell_stmts (RegVar HiNew) sbody.cell2)
+        )
+    )
+  ;;
+
+  (* print new sinstr format -- with a body *)
+  let print_complex_sInstr fmt callable_id rid rid_width sbody out_var_opt idx_oper num_cells =
+(*     printf 
+      "--- salu instruction body ---\n%s\n-----------------"
+      (str_of_sInstrBody rid_width num_cells sbody)
+    ;  *)
+    let salu_routine_id = Cid.str_cons "sprog" callable_id in
+    (* print the register action *)
+    pp_open_vbox str_formatter 4;
+    (* <type, index type, output type> *)
+    fprintf
+      fmt
+      "RegisterAction<bit<%s>,bit<%s>,bit<%s>>(%s) %s = {@,"
+      (string_of_int rid_width)
+      (string_of_int defWidth)
+      (string_of_int rid_width)
+      (str_of_varid rid)
+      (str_of_private_oid salu_routine_id);
+    (* open apply function *)
+    pp_open_vbox str_formatter 4;
+    fprintf
+      fmt
+      "void apply(inout bit<%s> %s, out bit<%s> %s) {@,%s@,}"
+      (string_of_int rid_width)
+      loOutName
+      (string_of_int rid_width)
+      retName
+      (str_of_sInstrBody rid_width num_cells sbody)
+      ;
+    (* close the registerAction *)
+    pp_close_box str_formatter ();
+    fprintf fmt "@,};@,";
+    (* print the callable outer action. *)
+    tab ();
+    fprintf fmt "action %s() {@," (str_of_private_oid callable_id);
+    let print_execute_si_stmt out_var_opt salu_routine_id idx_oper =
+      match out_var_opt with
+      | Some _ ->
+        print_optional_mid out_var_opt;
+        fprintf
+          str_formatter
+          "=%s.execute((bit<%s>)%s);"
+          (str_of_private_oid salu_routine_id)
+          (string_of_int defWidth)
+          (PrimitiveString.str_of_oper idx_oper)
+      | None ->
+        fprintf
+          str_formatter
+          "%s.execute((bit<%s>)%s);"
+          (str_of_private_oid salu_routine_id)
+          (string_of_int defWidth)
+          (PrimitiveString.str_of_oper idx_oper)
+    in
+    print_execute_si_stmt out_var_opt salu_routine_id idx_oper;
+    untab ();
+    fprintf fmt "@,}@,"    
+  ;;
+
+  (* print an old-style sInstr with a vector of instructions. *)
   let print_sInstr fmt callable_id rid rid_width siv out_var_opt idx_oper =
     (* print_endline ("printing sInstr: " ^ qstr_of_mid callable_id); *)
     let salu_routine_id = Cid.str_cons "sprog" callable_id in
@@ -394,7 +591,7 @@ module PrintSalu = struct
       fmt
       "void apply(inout bit<%s> %s, out bit<%s> %s) {@,"
       (string_of_int rid_width)
-      memName
+      loName
       (string_of_int rid_width)
       retName;
     print_sinstrs siv rid_width;
@@ -659,10 +856,17 @@ module PrintComputeObject = struct
         , { sRid = rid
           ; sWid = rid_width
           ; sExprs = siv
+          ; sInstrBody = sbody
           ; sOut = out_var_opt
           ; sIdx = idx_oper
-          } ) ->
-      PrintSalu.print_sInstr fmt sid rid rid_width siv out_var_opt idx_oper
+          ; sNumCells = num_cells
+          } ) -> (
+      match sbody with 
+      | None -> 
+        PrintSalu.print_sInstr fmt sid rid rid_width siv out_var_opt idx_oper
+      | Some sbody -> 
+        PrintSalu.print_complex_sInstr fmt sid rid rid_width sbody out_var_opt idx_oper num_cells
+      )
     | Hasher (hasher_id, out_width, poly, out_var, in_vars) ->
       print_hasher fmt hasher_id out_width poly out_var in_vars
     | MetaVar (newMid, midWidth) -> print_var fmt midWidth newMid

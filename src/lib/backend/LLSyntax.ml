@@ -78,8 +78,16 @@ and cmpOp =
 and boolOp =
   | And
   | Or
+  | Not
 
-and regSlice = Lo
+
+(* Lo and Hi are the inputs. *)
+and memCell = 
+  | Lo 
+  | Hi 
+  | LoNew
+  | HiNew
+  | MemOut
 
 (* An operand to an ALU or sALU instruction. *)
 and oper =
@@ -87,7 +95,7 @@ and oper =
   | Meta of mid
   (* todo: add slices of values? *)
   | MetaSlice of int * int * mid (* a slice of a variable *)
-  | RegVar of regSlice
+  | RegVar of memCell
   | NoOper
 
 (* Right hand side of a stateless instruction (i.e., 
@@ -115,7 +123,8 @@ and instr =
 and instrVec = instr list
 
 (* stateful instructions *)
-and sEvalExpr =
+
+and sArithExp =
   | SVar of oper
   | SBinOp of binOp * oper * oper
 
@@ -126,23 +135,55 @@ and sPredExpr =
   | Neg of sCompExpr
 
 (* Right hand side of an salu instruction. *)
-and sExprRhs = sPredExpr option * sEvalExpr
+and sExprRhs = sPredExpr option * sArithExp
 and sExpr =
   | MemExpr of sExprRhs
   | RetExpr of sExprRhs
 
+(* complex stateful instructions *)
+
+(* a boolean expression *)
+and sBoolExp = 
+  | BRel of sArithExp * cmpOp * oper
+  | BVal of bool (* true or false*)
+
+(* a conditional expression *)
+and sCondExp = 
+  | CTrue 
+  | CBool of sBoolExp 
+  | COp of boolOp * sCondExp list 
+
+and sUpdateExp = sCondExp option * sArithExp
+
+(* A stateful instruction evaluates a sequence 
+   of statements that write back to locations that 
+   are defined outside of the instruction body. *)
+and sInstrBody = {
+  (* locally declared booleans -- not used. *)
+(*   b1 : (cid * sBoolExp) option;
+  b2 : (cid * sBoolExp) option;  *)
+  (* use booleans, inputs, and builtins 
+     to update cell1, cell2, and ret (the output). *)
+  cell1: sUpdateExp option * sUpdateExp option;
+  cell2: sUpdateExp option * sUpdateExp option;
+  ret: sUpdateExp option;  
+}
+
 (* a stateful instruction evaluates multiple expressions 
    that update a return variable and multiple words of a 
    single array cell. *)
+(*  a complete stateful ALU has a body. 
+    eventually, we will remove the sExprs field 
+    and translate everything into the body form. *)
 and sInstr =
   { sRid : rid
-  ; sWid : int
-  ; sExprs : sExpr list
-  ; sOut : lmid option
   ; sIdx : oper
+  ; sWid : int
+  ; sNumCells : int (* how many persistent memory cells per array slot? *)
+  ; sExprs : sExpr list
+  ; sInstrBody : sInstrBody option 
+  ; sOut : lmid option
   }
-
-and sInstrOld = rid * int (* register width *) * sExpr list * lmid option * oper
 
 (* a header structure, mainly for events. *)
 and structType =
@@ -306,7 +347,7 @@ let is_hash dec =
 (* constructors for stateful alu stuff *)
 let to_meminstr (pred, expr) = MemExpr (pred, expr)
 let to_retinstr (pred, expr) = RetExpr (pred, expr)
-let lo_sExpr : sEvalExpr = SVar (RegVar Lo)
+let lo_sExpr : sArithExp = SVar (RegVar Lo)
 let binop_sexpr_of op rs var = SBinOp (op, rs, var)
 let to_action a b c = Action (a, b, c)
 
@@ -549,6 +590,8 @@ let new_dsalu obj_id reg_id reg_wid sInstr outvar_opt reg_idx =
     , { sRid = reg_id
       ; sWid = reg_wid
       ; sExprs = sInstr
+      ; sNumCells = 1
+      ; sInstrBody = None
       ; sOut = outvar_opt
       ; sIdx = reg_idx
       } )

@@ -68,7 +68,7 @@ endif
        \t./libs/p4tapp.sh test $p4_fn $run_args_string\n\
        hw:\n\
        \t./libs/p4tapp.sh hw $p4_fn ports_up\n\
-       \tdummy:"]
+       dummy:"]
   in
   IoUtils.writef makef (make_str_prefix ^ make_str)
 ;;

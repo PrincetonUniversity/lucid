@@ -32,11 +32,12 @@ let start_logging () = DBG.start_mlog __FILE__ outc dprint_endline
 (* code generators for builtin functions *)
 let dpt_builtin_fcns =
   [ LLArray.array_create_cid, LLArray.create_array
-  ; LLArray.array_update_cid, LLArray.update_array
   ; LLArray.array_set_cid, LLArray.set_array
   ; LLArray.array_get_cid, LLArray.get_array
   ; LLArray.array_setm_cid, LLArray.setm_array
   ; LLArray.array_getm_cid, LLArray.getm_array
+  ; LLArray.array_update_cid, LLArray.update_array
+  ; LLArray.array_update_complex_cid, LLArray.update_complex
   ; LLConstants.generate_self_cid, LLEvent.generate_self
   ; LLConstants.generate_port_cid, LLEvent.generate_port
   ; LLEvent.event_delay_cid, LLEvent.delay_event
