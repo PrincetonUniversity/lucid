@@ -318,6 +318,14 @@ let rename prog =
           env <- new_env;
           DModule (id, intf, body)
         | DModuleAlias _ -> failwith "Should be eliminated before this"
+        | DHeaderTy (id, ty) ->
+          let ty = self#visit_ty dummy ty in
+          let id = self#freshen_var id in
+          DHeaderTy (id, ty)
+        | DPacketTy (id, ty) ->
+          let ty = self#visit_ty dummy ty in
+          let id = self#freshen_var id in
+          DPacketTy (id, ty)
 
       (*** Places we enter a scope ***)
       method! visit_SIf dummy test left right =

@@ -95,6 +95,7 @@
    uniqueSpans
    uniqueIds
    interpHelpers
+   headerTrie
    LLTranslate
    LLConstants
    LLContext

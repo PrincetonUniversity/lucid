@@ -12,11 +12,11 @@ module State = struct
   end)
 
   type stats_counter =
-    { entries_handled : int
+    { pkts_handled : int
     ; total_handled : int
     }
 
-  let empty_counter = { entries_handled = 0; total_handled = 0 }
+  let empty_counter = { pkts_handled = 0; total_handled = 0 }
 
   (* Maps switch -> port -> (switch * port) *)
   type topology = (int * int) IntMap.t IntMap.t
@@ -40,7 +40,6 @@ module State = struct
   type network_state =
     { current_time : int
     ; config : config
-    ; event_sorts : event_sort Env.t
     ; handlers : handler Env.t
     ; links : topology
     ; switches : state array
@@ -83,7 +82,6 @@ module State = struct
   let create config : network_state =
     { current_time = -1
     ; config
-    ; event_sorts = Env.empty
     ; handlers = Env.empty
     ; switches = Array.of_list []
     ; links = empty_topology 0
@@ -139,16 +137,16 @@ module State = struct
     Queue.push (event, port, nst.current_time) nst.switches.(swid).exits
   ;;
 
-  let update_counter swid event nst =
+  let update_counter swid _ nst =
     let st = nst.switches.(swid) in
     let new_counter =
-      match Env.find event.eid nst.event_sorts with
+      (* match Env.find event.eid nst.event_sorts with
       | EEntry _ ->
-        { entries_handled = !(st.counter).entries_handled + 1
+        { pkts_handled = !(st.counter).pkts_handled + 1
         ; total_handled = !(st.counter).total_handled + 1
         }
-      | _ ->
-        { !(st.counter) with total_handled = !(st.counter).total_handled + 1 }
+      | _ -> *)
+      { !(st.counter) with total_handled = !(st.counter).total_handled + 1 }
     in
     st.counter := new_counter
   ;;
@@ -280,8 +278,9 @@ module State = struct
 
   let stats_counter_to_string counter =
     Printf.sprintf
-      "\n entry events handled: %d\n total events handled: %d\n"
-      counter.entries_handled
+      (* "\n packet events handled: %d\n total events handled: %d\n"
+         counter.pkts_handled *)
+      "\n total events handled: %d\n"
       counter.total_handled
   ;;
 

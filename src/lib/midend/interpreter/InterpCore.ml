@@ -291,15 +291,12 @@ let rec interp_statement nst swid locals s =
         [State.lookup_dst nst (swid, port)]
     in
     let event = interp_exp e |> extract_ival |> raw_event in
-    if Env.find event.eid nst.event_sorts = EExit
-    then State.log_exit swid None event nst
-    else
-      List.iter
-        (fun (dst_id, port) ->
-          if dst_id = -1 (* lookup_dst failed *)
-          then State.log_exit swid (Some port) event nst
-          else State.push_event dst_id port event nst)
-        locs;
+    List.iter
+      (fun (dst_id, port) ->
+        if dst_id = -1 (* lookup_dst failed *)
+        then State.log_exit swid (Some port) event nst
+        else State.push_event dst_id port event nst)
+      locs;
     locals
   | SRet (Some e) ->
     let v = interp_exp e |> extract_ival in

@@ -5,14 +5,21 @@ open Preprocess
 module Env = InterpState.Env
 module IntMap = InterpState.IntMap
 
+type port = int * int (* Switch id * port number *)
+
 type t =
   { num_switches : int
   ; links : InterpState.State.topology
   ; externs : value Env.t list
-  ; events : (event * (int * int) list) list
+  ; events : (event * port list) list
   ; config : InterpState.State.config
   ; extern_funs : InterpState.State.ival Env.t
   }
+
+type header_autofill =
+  | Never
+  | Random of int (* seed *)
+  | Zero
 
 let rename env err_str id_str =
   match Collections.CidMap.find_opt (Cid.from_string id_str) env with
@@ -60,13 +67,67 @@ let parse_events
     (renaming : Renaming.env)
     (num_switches : int)
     (gap : int)
+    (autofill_headers : header_autofill)
     (events : json list)
   =
   (* Using state because I'm lazy *)
   let last_delay = ref (-gap) in
+  let parse_locations lst =
+    match List.assoc_opt "locations" lst with
+    | Some (`List []) | None -> [0, default_port]
+    | Some (`List lst) ->
+      List.map
+        (function
+          | `String str ->
+            let sw, port = parse_port str in
+            if sw < 0 || sw >= num_switches
+            then
+              error
+              @@ "Cannot specify event at nonexistent switch "
+              ^ string_of_int sw;
+            if port < 0 || port >= 255
+            then
+              error
+              @@ "Cannot specify event at nonexistent port "
+              ^ string_of_int port;
+            sw, port
+          | _ -> error "Event specification had non-string location")
+        lst
+    | _ -> error "Event specification has non-list locations field"
+  in
+  let parse_delay lst =
+    match List.assoc_opt "timestamp" lst with
+    | Some (`Int n) ->
+      last_delay := n;
+      n
+    | None ->
+      last_delay := !last_delay + gap;
+      !last_delay
+    | _ -> error "Event specification had non-integer delay field"
+  in
   let parse_event (event : json) =
     match event with
     | `Assoc lst ->
+      (* Parse the delay and location fields, if they exist *)
+      let edelay = parse_delay lst in
+      let locations = parse_locations lst in
+      (* Get the list of headers and their declared types *)
+      let headers =
+        match List.assoc_opt "headers" lst with
+        | Some (`List []) -> error "Empty headers list!"
+        | Some (`List lst) ->
+          List.map
+            (fun json ->
+              match json with
+              | `Assoc lst ->
+                (match List.assoc_opt "type" lst with
+                | Some (`String str) -> str, lst
+                | None -> error "Each header must have a \"type\" field"
+                | _ -> error "Non-string \"type\" field for header")
+              | _ -> error "Each entry in the header list must be a json object")
+            lst
+        | _ -> error "Missing or non-list type for header specification!"
+      in
       (* Find the event name, accounting for the renaming pass, and get its
          sort and argument types *)
       let eid =
@@ -90,40 +151,6 @@ let parse_events
                  (Cid.to_string eid))
         | None -> error "Event specification missing args field"
         | _ -> error "Event specification had non-list type for args field"
-      in
-      (* Parse the delay and location fields, if they exist *)
-      let edelay =
-        match List.assoc_opt "timestamp" lst with
-        | Some (`Int n) ->
-          last_delay := n;
-          n
-        | None ->
-          last_delay := !last_delay + gap;
-          !last_delay
-        | _ -> error "Event specification had non-integer delay field"
-      in
-      let locations =
-        match List.assoc_opt "locations" lst with
-        | Some (`List lst) ->
-          List.map
-            (function
-              | `String str ->
-                let sw, port = parse_port str in
-                if sw < 0 || sw >= num_switches
-                then
-                  error
-                  @@ "Cannot specify event at nonexistent switch "
-                  ^ string_of_int sw;
-                if port < 0 || port >= 255
-                then
-                  error
-                  @@ "Cannot specify event at nonexistent port "
-                  ^ string_of_int port;
-                sw, port
-              | _ -> error "Event specification had non-string location")
-            lst
-        | None -> [0, default_port]
-        | _ -> error "Event specification has non-list locations field"
       in
       { eid; data; edelay }, locations
     | _ -> error "Non-assoc type for event definition"
@@ -275,6 +302,13 @@ let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t 
     let random_seed =
       parse_int_entry "random seed" (int_of_float @@ Unix.time ())
     in
+    let header_autofill =
+      match List.assoc_opt "autofill_headers" lst with
+      | None -> Never
+      | Some (`String "zero") | Some (`String "Zero") | Some (`Int 0) -> Zero
+      | Some (`String "random") | Some (`String "Random") -> Random random_seed
+      | _ -> error "Unexpected value for autofill_headers"
+    in
     let links =
       if num_switches = 1
       then IntMap.empty
@@ -311,7 +345,13 @@ let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t 
     let events =
       match List.assoc_opt "events" lst with
       | Some (`List lst) ->
-        parse_events pp renaming num_switches default_input_gap lst
+        parse_events
+          pp
+          renaming
+          num_switches
+          default_input_gap
+          header_autofill
+          lst
       | _ -> error "No or non-list value for event definitions"
     in
     let extern_funs =

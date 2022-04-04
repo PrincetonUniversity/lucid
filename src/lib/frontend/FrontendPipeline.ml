@@ -33,7 +33,7 @@ let process_prog ds =
   print_if_verbose "---------typing2---------";
   let ds = Typer.infer_prog ds in
   print_if_debug ds;
-  print_if_verbose "-------Eliminating type aliases 2---------";
+  print_if_verbose "-------Eliminating type aliases---------";
   let ds = ReplaceUserTys.replace_prog ds in
   print_if_debug ds;
   print_if_verbose "-------Inlining size declarations---------";

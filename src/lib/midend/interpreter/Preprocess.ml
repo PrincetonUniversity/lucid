@@ -5,7 +5,7 @@ open InterpState
 open Collections
 
 type t =
-  { events : (event_sort * ty list) Env.t
+  { events : (event_packet * ty list) Env.t
   ; externs : ty Env.t
   ; extern_funs : IdSet.t
   }
