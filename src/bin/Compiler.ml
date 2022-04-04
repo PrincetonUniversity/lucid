@@ -180,7 +180,7 @@ let parse_externs_from_interp_spec spec_file =
 ;;
 
 (* new (3/20/21) compilation pipeline *)
-let compile_to_tofino target_filename p4_harness_fn config_fn_opt interp_spec_fn =
+let compile_to_tofino target_filename p4_harness_fn config_fn_opt interp_spec_fn build_dir =
   start_backend_logs ();
   (* parse *)
   let ds = Input.parse target_filename in
@@ -197,7 +197,9 @@ let compile_to_tofino target_filename p4_harness_fn config_fn_opt interp_spec_fn
   let dag_instructions = to_ir ds in
   (* backend passes do optimization and layout. *)
   let straightline_dpa_prog = backend_passes dag_instructions in
-  (* printing: to blocks of P4 *)
+  (* print stats *)
+  P4tStats.print_stats straightline_dpa_prog build_dir;
+  (* printing: to blocks of P4 strings *)
   let p4_obj_dict = P4tPrint.from_straightline straightline_dpa_prog in
   (* the linker is really just a simple macro engine. Pass it an associative
      list: (pragma string, code string to replace macro with) *)
@@ -226,7 +228,7 @@ let main () =
   let _ = cpy_src_to_build args.p4fn args.builddir in
   (* compile lucid code to P4 and C blocks *)
   let p4_str, c_str, py_str =
-    compile_to_tofino args.dptfn args.p4fn args.configfn args.interp_spec_file
+    compile_to_tofino args.dptfn args.p4fn args.configfn args.interp_spec_file args.builddir
   in
   report "Compilation to P4 finished.";
   PackageTofinoApp.generate p4_str c_str py_str args.builddir

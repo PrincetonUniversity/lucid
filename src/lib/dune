@@ -116,6 +116,7 @@
    p4tContext
    p4tPrint
    p4tMgrPrint
+   p4tStats
    linkP4
    packageTofinoApp
    ioUtils

@@ -6,6 +6,14 @@ all:
 	../../dptc cleanup_test.dpt ip_harness.p4 linker_config.json build -p4tapp template.p4tapp ;\
 	}
 
+hashing:
+	{ \
+	cd ../../ ;\
+	make ;\
+	cd - ;\
+	../../dptf hashing.dpt ;\
+	}
+
 memop_complex:
 	{ \
 	cd ../../ ;\
