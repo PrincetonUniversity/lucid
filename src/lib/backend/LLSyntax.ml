@@ -209,6 +209,7 @@ and decl =
   | InstrVec of oid * instrVec (* InstrVec myIvec(mid list (args)) = {instrVec}*)
   | SInstrVec of oid * sInstr
   | Hasher of oid * int * int * lmid * oper list (* lmid = hash<int[width], int[poly]>(mid list) *)
+  | Random of oid * lmid (* decl: Random<<size>> oid; stmt: lmid = oid.get(); *)
   (* I/O *)
   | ParseTree of oid * parse_node list
   | SchedBlock of oid * scheduler_block (* P4 code generators for lucid's scheduler. *)
@@ -344,6 +345,12 @@ let is_hash dec =
   | _ -> false
 ;;
 
+let is_random dec = 
+  match dec with 
+  | Random _ -> true
+  | _ -> false
+;;
+
 (* constructors for stateful alu stuff *)
 let to_meminstr (pred, expr) = MemExpr (pred, expr)
 let to_retinstr (pred, expr) = RetExpr (pred, expr)
@@ -455,7 +462,8 @@ let id_of_decl d =
   | StructVar (i, _, _)
   | DConst (i, _, _, _)
   | ParseTree (i, _)
-  | ConfigBlock (i, _) -> i
+  | ConfigBlock (i, _)
+  | Random(i, _) -> i
 ;;
 
 (* associative object lists *)
@@ -575,6 +583,7 @@ let new_iinvalidate_vec mids = CL.map new_iinvalidate mids
 let new_iassign lhs rhs = IAssign (lhs, rhs)
 let new_iassign_int lhs rhs_int = IAssign (lhs, new_expr_of_int rhs_int)
 let new_dsingleinstr oid lhs rhs = InstrVec (oid, [IAssign (lhs, rhs)])
+let new_random oid lhs = Random(oid, lhs)
 let new_dinstr oid ivec = InstrVec (oid, ivec)
 let new_ebinop o a b = BinOp (o, [a; b])
 let new_eop o args = BinOp (o, args)
@@ -668,7 +677,7 @@ let is_fixedloc_decl dec =
   | ParseTree _
   | ConfigBlock _
   | SchedBlock _ -> true
-  | Table _ | Action _ | InstrVec _ | SInstrVec _ | Hasher _ -> false
+  | Table _ | Action _ | InstrVec _ | SInstrVec _ | Hasher _ | Random _ -> false
 ;;
 
 (* new destructors *)

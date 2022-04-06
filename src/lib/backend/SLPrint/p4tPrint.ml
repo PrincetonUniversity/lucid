@@ -818,6 +818,20 @@ module PrintComputeObject = struct
     fprintf fmt "}@,"
   ;;
 
+  let print_random fmt rand_id out_var = 
+    let inner_id = (Cid.str_cons "rnd" rand_id) in 
+    fprintf
+      fmt
+      "Random<bit<32>>() %s;@,"
+      (str_of_private_oid inner_id);
+    fprintf
+      fmt
+      "action %s() { %s = %s.get(); }@,"
+      (str_of_private_oid rand_id)
+      (str_of_varid out_var)
+      (str_of_private_oid inner_id)
+  ;;
+
   let print_var fmt midWidth midId =
     (* print_var_pragmas fmt newMid; *)
     (* allow P4 to overlay variables by commenting out this line *)
@@ -869,6 +883,8 @@ module PrintComputeObject = struct
       )
     | Hasher (hasher_id, out_width, poly, out_var, in_vars) ->
       print_hasher fmt hasher_id out_width poly out_var in_vars
+    | Random (rand_id, out_var) -> 
+      print_random fmt rand_id out_var
     | MetaVar (newMid, midWidth) -> print_var fmt midWidth newMid
     | Action (actn_id, obj_ids, next_tids) ->
       print_action fmt actn_id obj_ids next_tids
@@ -885,10 +901,10 @@ module PrintComputeObject = struct
       ()
       (* 5/18 -- don't print the scheduler blocks here *)
       (* print_native_block fmt oid blockdef  *)
-    | _ -> ()
+    | _ -> error "unprintable object!"
   ;;
 
-  let filter_decl decl =
+  let is_compute_decl decl =
     match decl with
     | RegVec _
     | InstrVec _
@@ -897,14 +913,19 @@ module PrintComputeObject = struct
     | MetaVar _
     | Action _
     | Table _
-    | SchedBlock _ -> true
-    | _ -> false
+    | SchedBlock _ 
+    | Random _ -> true
+    | DConst _ 
+    | StructDef _ 
+    | StructVar _ 
+    | ParseTree _ 
+    | ConfigBlock _ -> false
   ;;
 
   let print_decls config decls =
     (* get a mapping from stage number to table, for 
        printing the ignore table dependency pragmas *)
-    let printable_decls = CL.filter filter_decl decls in
+    let printable_decls = CL.filter is_compute_decl decls in
     print_fmt_list
       str_formatter
       printable_decls

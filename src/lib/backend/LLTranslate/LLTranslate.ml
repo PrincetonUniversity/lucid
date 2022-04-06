@@ -41,6 +41,7 @@ let dpt_builtin_fcns =
   ; LLConstants.generate_port_cid, LLEvent.generate_port
   ; LLEvent.event_delay_cid, LLEvent.delay_event
   ; LLSys.time_cid, LLSys.get_time
+  ; LLSys.random_cid, LLSys.get_random
     (* (IrTranslate.hash_builtin, IrBuiltinToDag.do_hash) *) ]
 ;;
 

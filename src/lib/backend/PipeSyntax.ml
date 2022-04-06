@@ -93,7 +93,9 @@ let regs_of_tg tg =
   objs_of_tg tg |> CL.filter_map reg_of_alu
 ;;
 
-let hashers_of_tg tg = objs_of_tg tg |> CL.filter is_hash
+let hashers_of_tg tg = 
+  (objs_of_tg tg |> CL.filter is_hash)
+  @ (objs_of_tg tg |> CL.filter is_random) (* randoms use hash alu. *)
 let src_of_tg tg = tg.g_src
 
 let src_tids_of_tg tg =
@@ -160,9 +162,6 @@ let merge_set_into_group dagProg group tids : table_group =
 (* merge cid_decls[tid] 
   **and all of the tables that it shares registers with** 
   into tg *)
-(* turns out, this is wrong. We can't just place everything that 
-uses a register the first time we see something that uses a register, 
-because we might not be able to place some of the tables yet. *)
 let merge_into_group_with_shared_reg_tbls dagProg group tid =
   let regmates_of_tid = regmates_of_tid dagProg.dp_instr_dict tid in
   sprintf
