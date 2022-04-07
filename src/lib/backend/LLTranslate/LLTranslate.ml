@@ -61,7 +61,7 @@ let lucid_internal_struct =
   in 
   let dptMeta_struct = IS.new_meta_structdef struct_cid struct_fields in
   let dptMeta_instance =
-    IS.new_struct struct_cid SPrivate struct_instance_cid
+    IS.new_struct struct_cid () struct_instance_cid
   in
   [dptMeta_struct; dptMeta_instance]
 ;;  
@@ -123,7 +123,7 @@ module TranslateEvents = struct
         IS.new_structdef erec.event_struct struct_ty all_event_fields
       in
       let ev_struct_inst =
-        IS.new_struct erec.event_struct SPublic erec.event_struct_instance
+        IS.new_struct erec.event_struct () erec.event_struct_instance
       in
       let ev_enum =
         IS.new_public_constdef
@@ -148,7 +148,7 @@ module TranslateEvents = struct
     in
     let field_defs = ctx_get_event_recs () |> CL.map to_generate_flag_field in
     [ IS.new_header_structdef event_out_flags_struct field_defs
-    ; IS.new_struct event_out_flags_struct SPrivate event_out_flags_instance ]
+    ; IS.new_struct event_out_flags_struct () event_out_flags_instance ]
   ;;
 
   (* translate all the event declarations and fill the context. *)
@@ -406,7 +406,7 @@ let gen_event_triggered_bitvec () =
   let widths = ctx_get_event_recs () |> CL.map (fun _ -> 1) in
   let field_defs = CL.combine fields widths in
   let newstruct = IS.new_header_structdef struct_cid field_defs in
-  let newinstance = IS.new_struct struct_cid SPrivate instance_cid in
+  let newinstance = IS.new_struct struct_cid () instance_cid in
   [newstruct; newinstance]
 ;;
 
@@ -461,13 +461,13 @@ let byte_align_header_structs (prog : IS.llProg) : IS.llProg =
   in
   let byte_align_header_struct (cid, decl) =
     match decl with
-    | IS.StructDef (mid, struct_type, fields) ->
+    | IS.StructDef {sdId=mid; sdType=struct_type;sdFields=fields;} ->
       (match struct_type with
       | IS.SHeader ->
         let aligned_fields =
           CL.fold_left byte_align_fields [] fields |> pad_tail
         in
-        cid, IS.StructDef (mid, struct_type, aligned_fields)
+        cid, IS.StructDef {sdId=mid; sdType=struct_type;sdFields=aligned_fields;}
       | IS.SMeta -> cid, decl)
     | _ -> cid, decl
   in

@@ -863,7 +863,8 @@ module PrintComputeObject = struct
 
   let print_decl config stage_tbl_map fmt (decl : decl) =
     match decl with
-    | RegVec (rid, wid, len, def, _) -> print_reg fmt rid wid len def
+    | RegVec {rvId=rid; rvWidth=wid; rvLength=len; rvDefault=def;} -> 
+      print_reg fmt rid wid len def
     | InstrVec (iid, iVec) -> print_ivec fmt iid iVec
     | SInstrVec
         ( sid
@@ -967,7 +968,7 @@ module PrintStruct = struct
 
   let print_def fmt decl =
     match decl with
-    | StructDef (s_name, s_ty, s_fields) ->
+    | StructDef {sdId=s_name; sdType=s_ty; sdFields=s_fields;} ->
       tab ();
       fprintf fmt "%s %s {@," (str_of_type s_ty) (str_of_public_globalid s_name);
       let print_f fmt (fname, fwid) =
@@ -981,7 +982,7 @@ module PrintStruct = struct
 
   let print_inst fmt decl =
     match decl with
-    | StructVar (s_inst_name, _, s_def_name) ->
+    | StructVar {svId=s_inst_name; svTypeId=s_def_name; _} ->
       fprintf
         fmt
         "%s %s;"
@@ -1128,7 +1129,7 @@ let print_p4_const_defs decls =
 let print_p4_hdr_insts decls =
   let filter_f dec =
     match dec with
-    | StructVar (_, _, s_def_name) ->
+    | StructVar {svTypeId=s_def_name; _} ->
       (match ctx_get_structdef_ty s_def_name with
       | SHeader -> true
       | _ -> false)
@@ -1143,7 +1144,7 @@ let print_p4_hdr_insts decls =
 let print_p4_md_insts decls =
   let filter_f dec =
     match dec with
-    | StructVar (_, _, s_def_name) ->
+    | StructVar {svTypeId=s_def_name; _} ->
 (*       print_endline
         ("[print_p4_md_insts] printing metadata struct: "
         ^ Cid.to_string s_def_name); *)

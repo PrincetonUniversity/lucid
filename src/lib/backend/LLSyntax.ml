@@ -179,29 +179,62 @@ and sInstr =
   { sRid : rid
   ; sIdx : oper
   ; sWid : int
-  ; sNumCells : int (* how many persistent memory cells per array slot? *)
+  ; sNumCells : int (* how many persistent memory cells per array slot? 
+    This should be tied to the array, not the sALU instruction. *)
   ; sExprs : sExpr list
   ; sInstrBody : sInstrBody option 
   ; sOut : lmid option
   }
 
-(* a header structure, mainly for events. *)
-and structType =
+(* user-defined structs can be header or metadata. 
+   There are different rules for each class.  *)
+and structClass =
   | SMeta
   | SHeader
 
+(* is an instance of a user-defined struct public or private? 
+   do we even use this anymore? *)
 and scope =
   | SPrivate
   | SPublic
+
+and regvec = 
+  { rvId      : rid
+  ; rvWidth   : int
+  ; rvLength  : int
+  ; rvDefault : const
+  ; rvStage   : int option
+  }
 
 and decl =
   (* Local state *)
   | DConst of mid * scope * int * int (* a defined constant *)
   | MetaVar of mid * int (* meta<int (width)> myVar; *)
-  | StructDef of mid * structType * (mid * int) list (* a header or metadata structure *)
-  | StructVar of mid * scope * mid (* nput Mystruct X; output Mystruct Y; an instance of a structure. *)
+  (* a user type declaration -- header or metadata structure *)
+  | StructDef of 
+    { sdId : mid
+    ; sdType : structClass
+    ; sdFields : (mid * int) list
+    }
+  (* mid * structType * (mid * int) list  *)
+  | StructVar of 
+    { svId : mid
+    (* ; svScope : scope  *)
+    ; svTypeId : mid
+    }
+  (* mid * scope * mid  *)
+
+  (* nput Mystruct X; output Mystruct Y; an instance of a structure. *)
   (* Persistent state *)
-  | RegVec of rid * int * int * const * int option
+  | RegVec of 
+    { rvId      : rid
+    ; rvWidth   : int
+    ; rvLength  : int
+    ; rvDefault : const
+    ; rvStage   : int option
+    ; rvCells   : int
+    }
+  (* | RegVec of rid * int * int * const * int option *)
   (* Control flow *)
   | Table of table
   | Action of action
@@ -451,15 +484,15 @@ let opers_of_sInstr d : oper list =
 let id_of_decl d =
   match d with
   | MetaVar (i, _)
-  | RegVec (i, _, _, _, _)
+  | RegVec {rvId=i; _}
   | Table (i, _, _)
   | Action (i, _, _)
   | InstrVec (i, _)
   | SInstrVec (i, _)
   | Hasher (i, _, _, _, _)
   | SchedBlock (i, _)
-  | StructDef (i, _, _)
-  | StructVar (i, _, _)
+  | StructDef {sdId=i;}
+  | StructVar {svId=i;}
   | DConst (i, _, _, _)
   | ParseTree (i, _)
   | ConfigBlock (i, _)
@@ -573,7 +606,13 @@ let new_hasher name width poly outvar args =
 ;;
 
 let new_regvec name width length =
-  RegVec (name, width, length, new_const_of_int 0, None)
+  RegVec {rvId=name; 
+          rvWidth = width; 
+          rvLength = length; 
+          rvDefault = new_const_of_int 0; 
+          rvStage = None; 
+          rvCells = 1; }
+   (* width, length, new_const_of_int 0, None) *)
 ;;
 
 let new_iinvalidate mid = IInvalidate mid
@@ -624,10 +663,10 @@ let new_table tblname rules = Table (tblname, rules, None)
   | Def of mid * int (* a defined constant *)
 *)
 
-let new_meta_structdef name params = StructDef (name, SMeta, params)
-let new_header_structdef name params = StructDef (name, SHeader, params)
-let new_structdef name struct_ty params = StructDef (name, struct_ty, params)
-let new_struct sname scope iname = StructVar (iname, scope, sname)
+let new_structdef name struct_ty params = StructDef {sdId=name; sdType=struct_ty; sdFields=params;}
+let new_meta_structdef name params = new_structdef name SMeta params
+let new_header_structdef name params = new_structdef name SHeader params
+let new_struct sname scope iname = let _ = scope in StructVar {svId=iname; svTypeId=sname}
 let new_public_constdef name width i = DConst (name, SPublic, width, i)
 let new_private_constdef name width i = DConst (name, SPrivate, width, i)
 let new_ParseTree name root = ParseTree (name, root)
@@ -684,25 +723,25 @@ let is_fixedloc_decl dec =
 
 let name_of_structdef dec =
   match dec with
-  | StructDef (mid, _, _) -> mid
+  | StructDef {sdId=mid; _} -> mid
   | _ -> error "Not a struct def"
 ;;
 
 let ty_of_structdef dec =
   match dec with
-  | StructDef (_, s_ty, _) -> s_ty
+  | StructDef {sdType=s_ty; _} -> s_ty
   | _ -> error "not a struct def"
 ;;
 
 let name_of_structinst dec =
   match dec with
-  | StructVar (structname, _, _) -> structname
+  | StructVar {svId=structname; _}-> structname
   | _ -> error "not a struct instance decl"
 ;;
 
 let width_of_regvec dec =
   match dec with
-  | RegVec (_, wid, _, _, _) -> wid
+  | RegVec {rvWidth=wid; _} -> wid
   | _ -> error "not a regvec decl"
 ;;
 
@@ -802,12 +841,12 @@ module Generators = struct
   (* | StructDef of mid * structType * (mid * int) list  *)
   (* a header or metadata structure *)
 
-  let hdr_struct h_t (fs, ws) = StructDef (h_t, SHeader, CL.combine fs ws)
+  let hdr_struct h_t (fs, ws) = StructDef {sdId=h_t; sdType=SHeader; sdFields=CL.combine fs ws}
 
   (* Create an empty instance of s with id h. *)
   let struct_inst s h =
     match s with
-    | StructDef (struct_id, _, _) -> StructVar (h, SPublic, struct_id)
+    | StructDef {sdId=struct_id; _} -> StructVar {svId=h; svTypeId=struct_id}
     | _ -> error "[struct_inst] s is not a struct definition"
   ;;
 

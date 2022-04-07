@@ -287,7 +287,7 @@ let mids_of_declmap cid_decls =
 let stage_of_rid cid_decls rid =
   let dec = Cid.lookup cid_decls rid in
   match dec with
-  | RegVec (_, _, _, _, stage_opt) -> stage_opt
+  | RegVec {rvStage=stage_opt; _} -> stage_opt
   | _ ->
     error
       ("stage_of_rid: identifier "
@@ -1008,7 +1008,8 @@ let find_structdef_of_var cid_decls cid =
   let struct_instance_cid = CL.rev ids |> CL.tl |> CL.rev |> Cid.create_ids in
   let struct_instance_decl = Cid.lookup cid_decls struct_instance_cid in
   match struct_instance_decl with
-  | StructVar (_, _, struct_ty_id) -> Cid.lookup cid_decls struct_ty_id
+  | StructVar {svTypeId=struct_ty_id; _} ->
+    Cid.lookup cid_decls struct_ty_id
   | _ -> error "expected a struct instance, but could not find one."
 ;;
 
@@ -1029,7 +1030,7 @@ let find_width_of_var dagProg cid =
     let struct_def = find_structdef_of_var dagProg.dp_instr_dict cid in
     let field_cid = Cid.to_ids cid |> CL.rev |> CL.hd |> Cid.id in
     (match struct_def with
-    | StructDef (_, _, field_defs) -> CL.assoc field_cid field_defs
+    | StructDef {sdFields=field_defs; _} -> CL.assoc field_cid field_defs
     | _ -> error "expected a struct def, but got something else")
 ;;
 
@@ -1046,6 +1047,6 @@ let find_width_of_declared_var cid_decls cid =
     let struct_def = find_structdef_of_var cid_decls cid in
     let field_cid = Cid.to_ids cid |> CL.rev |> CL.hd |> Cid.id in
     (match struct_def with
-    | StructDef (_, _, field_defs) -> CL.assoc field_cid field_defs
+    | StructDef {sdFields=field_defs; _} -> CL.assoc field_cid field_defs
     | _ -> error "expected a struct def, but got something else")
 ;;
