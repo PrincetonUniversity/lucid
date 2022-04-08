@@ -165,7 +165,10 @@ let rec interp_exp (nst : State.network_state) swid locals e : State.ival =
           let hashed = Legacy.Hashtbl.seeded_hash (Integer.to_int seed) tl in
           V (vint hashed size))
       else (
-        let hashed = Legacy.Hashtbl.seeded_hash (Integer.to_int seed) tl in
+        (* For some reason hash would only take into account the first few elements
+           of the list, so this forces all of them to have some impact on the output *)
+        let feld = List.fold_left (fun acc v -> Hashtbl.hash (acc, v)) 0 tl in
+        let hashed = Legacy.Hashtbl.seeded_hash (Integer.to_int seed) feld in
         V (vint hashed size))
     | _ -> failwith "Wrong arguments to hash operation")
   | EFlood e1 ->

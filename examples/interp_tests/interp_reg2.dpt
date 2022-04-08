@@ -1,0 +1,9 @@
+exit event out(int x);
+
+event in(int a, int b, int c, int d, int e, int f, int g) {
+  // int pkt_signature = hash<<32>>(10398247, 1, 2, 3, 4, 4294967295);
+  // int pkt_signature2 = hash<<32>>(10398247, 1, 2, 3, 8, 7, 15);
+  // printf("FIRST  SIG %d", pkt_signature);
+  // printf("SECOND SIG %d", pkt_signature2);
+  generate out(hash<<32>>(a, b, c, d, e, f, g));
+}

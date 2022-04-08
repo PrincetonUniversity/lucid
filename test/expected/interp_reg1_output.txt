@@ -1,5 +1,5 @@
 dpt: Parsing ...
-dpt: Auto-detected specification file examples/interp_tests/reg10.json
+dpt: Auto-detected specification file examples/interp_tests/interp_reg1.json
 dpt: Simulating...
 dpt: Using random seed: 1
 
