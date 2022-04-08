@@ -417,7 +417,8 @@ let subst_loop =
     method! visit_FVar (env : loop_subst) tqv =
       let target, eff = snd env in
       match tqv with
-      | TVar { contents = Unbound (id, _) } when Id.equal id target -> eff
+      | TVar { contents = Unbound (id, _) } ->
+        if Id.equal id target then eff else FVar tqv
       | _ -> FVar (self#visit_tqvar self#visit_effect env tqv)
   end
 ;;
