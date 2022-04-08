@@ -43,6 +43,7 @@ let dpt_builtin_fcns =
   ; LLSys.time_cid, LLSys.get_time
   ; LLSys.random_cid, LLSys.get_random
     (* (IrTranslate.hash_builtin, IrBuiltinToDag.do_hash) *) ]
+  @LLPairArray.builtins
 ;;
 
 (* lucid's internal metadata struct for ingress processing *)
@@ -361,19 +362,19 @@ let get_dglobal_info ty e =
     | TName (_, [sz], _) -> sz
     | _ -> error "Bad DGlobal"
   in
-  let args =
+  let fcn_cid, args =
     match e.e with
-    | ECall (_, args) -> args
+    | ECall (fcn_cid, args) -> fcn_cid, args
     | _ -> error "Bad DGlobal"
   in
-  sz, args
+  sz, fcn_cid, args
 ;;
 
 (**** register array declarations ****)
 let regdec_from_decl dec =
   match dec.d with
   | DGlobal (reg_id, ty, e) ->
-    let sz, args = get_dglobal_info ty e in
+    let sz, create_fcn_cid, args = get_dglobal_info ty e in
     let reg_id = Cid.id reg_id in
     (* reg, width, length, ??? *)
     let arg_name = exp (EVar reg_id) ty in
@@ -381,7 +382,7 @@ let regdec_from_decl dec =
     let args = arg_name :: arg_width :: args in
     let result =
       ctx_call_codegen
-        LLArray.array_create_cid
+        create_fcn_cid
         { hdl_id = None
         ; (* global code, no handler context. *)
           basename = None
@@ -389,8 +390,7 @@ let regdec_from_decl dec =
         ; args
         }
     in
-    let decl = CL.hd result.objs in
-    [decl]
+    result.objs
   | _ -> []
 ;;
 
@@ -494,6 +494,11 @@ let byte_align_header_structs (prog : IS.llProg) : IS.llProg =
 
   (* translate the array declarations into LL decls *)
   let regarray_defs = CL.map regdec_from_decl ds |> CL.flatten in
+  !dprint_endline "-----object ids in regarray_defs-----";
+  !dprint_endline (DebugPrint.ids_in_cid_decls (IS.dict_of_decls regarray_defs));
+  !dprint_endline "-----object decls in regarray_defs-----";
+  !dprint_endline (DebugPrint.str_of_cid_decls (IS.dict_of_decls regarray_defs));
+
   (* translate the one handler into LL program *)
   let tofino_prog = llprog_from_single_handler hog_rec in 
   let out_prog =

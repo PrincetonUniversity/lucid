@@ -178,7 +178,8 @@ and sInstrBody = {
 and sInstr =
   { sRid : rid
   ; sIdx : oper
-  ; sWid : int
+  ; sFmt : mid (* format of the memory cell (StructDef id) *)
+  ; sWid : int (* output width. *)
   ; sNumCells : int (* how many persistent memory cells per array slot? 
     This should be tied to the array, not the sALU instruction. *)
   ; sExprs : sExpr list
@@ -202,6 +203,7 @@ and regvec =
   { rvId      : rid
   ; rvWidth   : int
   ; rvLength  : int
+  ; rvFmt     : mid
   ; rvDefault : const
   ; rvStage   : int option
   }
@@ -210,31 +212,28 @@ and decl =
   (* Local state *)
   | DConst of mid * scope * int * int (* a defined constant *)
   | MetaVar of mid * int (* meta<int (width)> myVar; *)
-  (* a user type declaration -- header or metadata structure *)
+  (* a user type declaration -- header or metadata structure. 
+     headers are printed differently than metadata. *)
   | StructDef of 
     { sdId : mid
     ; sdType : structClass
     ; sdFields : (mid * int) list
     }
-  (* mid * structType * (mid * int) list  *)
+  (* a struct variable *)
   | StructVar of 
     { svId : mid
-    (* ; svScope : scope  *)
     ; svTypeId : mid
     }
-  (* mid * scope * mid  *)
-
-  (* nput Mystruct X; output Mystruct Y; an instance of a structure. *)
-  (* Persistent state *)
+  (* array of rvLength slots. Each slot has rvCells entries of rvWidth. *)
   | RegVec of 
     { rvId      : rid
     ; rvWidth   : int
+    ; rvCells   : int
+    ; rvFmt     : mid
     ; rvLength  : int
     ; rvDefault : const
     ; rvStage   : int option
-    ; rvCells   : int
     }
-  (* | RegVec of rid * int * int * const * int option *)
   (* Control flow *)
   | Table of table
   | Action of action
@@ -605,13 +604,14 @@ let new_hasher name width poly outvar args =
   Hasher (name, width, poly, outvar, args)
 ;;
 
-let new_regvec name width length =
+let new_regvec name width length cells fmtid =
   RegVec {rvId=name; 
           rvWidth = width; 
           rvLength = length; 
+          rvFmt = fmtid;
           rvDefault = new_const_of_int 0; 
           rvStage = None; 
-          rvCells = 1; }
+          rvCells = cells; }
    (* width, length, new_const_of_int 0, None) *)
 ;;
 
@@ -632,10 +632,11 @@ let new_retinstr pred_opt instr_rhs = RetExpr (pred_opt, instr_rhs)
 let new_readmem_instr cond_opt = new_retinstr cond_opt memcell_operand
 let new_writemem_instr cond_opt operand = new_meminstr cond_opt (SVar operand)
 
-let new_dsalu obj_id reg_id reg_wid sInstr outvar_opt reg_idx =
+let new_dsalu obj_id reg_id reg_wid sInstr outvar_opt reg_idx reg_fmt =
   SInstrVec
     ( obj_id
     , { sRid = reg_id
+      ; sFmt = reg_fmt
       ; sWid = reg_wid
       ; sExprs = sInstr
       ; sNumCells = 1

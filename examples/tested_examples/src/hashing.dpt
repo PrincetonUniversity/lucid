@@ -1,0 +1,10 @@
+entry event ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos);
+exit event port_out (int<<9>> egr_port);
+exit event ip_out (int<<9>> egr_port, int src, int dst);
+
+size i = 10;
+
+handle ip_in(int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos) {
+  int<<16>> foo = hash<<16>>(size_to_int(i + 3), src);
+  generate ip_out(igr_port, src, dst);
+}

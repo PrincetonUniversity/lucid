@@ -109,6 +109,11 @@ let ctx_width_of_garr n =
   | _ -> error "could not find memop in decl context"
 ;;
 
+let ctx_fmt_of_reg arrname = 
+  (*no need for ctx. should put this elsewhere.*)
+  Cid.concat (Cid.create ["fmt"]) arrname
+;;
+
 (**** context code generator functions ****)
 let ctx_add_codegen n c = tofinoCtx := TofinoCtx.add n (CodeGen c) !tofinoCtx
 

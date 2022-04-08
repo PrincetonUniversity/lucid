@@ -30,7 +30,10 @@ let create_array (args : codegenInput) : codegenOutput =
         ("ir create array: wrong number of args: "
         ^ string_of_int (CL.length args.args))
   in
-  { names = []; objs = [new_regvec arrname width length] }
+  let fmt_cid = ctx_fmt_of_reg arrname in 
+  let fmt_struct = new_meta_structdef fmt_cid [(P4tPrint.loFieldCid, width)] in 
+  let rv = new_regvec arrname width length 1 fmt_cid in 
+  { names = []; objs = [rv; fmt_struct] }
 ;;
 
 let get_array (args : codegenInput) : codegenOutput =
@@ -46,10 +49,11 @@ let get_array (args : codegenInput) : codegenOutput =
   (* build the object that uses it. *)
   let reg_id = name_from_exp regname_ex in
   let reg_cell_width = ctx_width_of_garr reg_id in
+  let reg_cell_fmt = ctx_fmt_of_reg reg_id in 
   let oid = Cid.compound (Id.create "salu") (Option.get args.basename) in
   let idx_ex = oper_from_immediate hdl_id idx_ex in
   let salu_dec =
-    new_dsalu oid reg_id reg_cell_width sInstr args.retname idx_ex
+    new_dsalu oid reg_id reg_cell_width sInstr args.retname idx_ex reg_cell_fmt
   in
   { names = [oid]; objs = [salu_dec] }
 ;;
@@ -78,7 +82,7 @@ let getm_array (args : codegenInput) : codegenOutput =
   let oid = Cid.compound (Id.create "salu") (Option.get args.basename) in
   let idx_ex = oper_from_immediate hdl_id idx_ex in
   let salu_dec =
-    new_dsalu oid reg_id reg_cell_width instrs args.retname idx_ex
+    new_dsalu oid reg_id reg_cell_width instrs args.retname idx_ex (ctx_fmt_of_reg reg_id)
   in
   { names = [oid]; objs = [salu_dec] }
 ;;
@@ -99,7 +103,7 @@ let set_array (args : codegenInput) : codegenOutput =
   let reg_cell_width = ctx_width_of_garr reg_id in
   let oid = Cid.compound (Id.create "salu") (Option.get args.basename) in
   let idx = oper_from_immediate hdl_id idx in
-  let salu_dec = new_dsalu oid reg_id reg_cell_width sInstr None idx in
+  let salu_dec = new_dsalu oid reg_id reg_cell_width sInstr None idx (ctx_fmt_of_reg reg_id) in
   { names = [oid]; objs = [salu_dec] }
 ;;
 
@@ -124,7 +128,7 @@ let setm_array (args : codegenInput) : codegenOutput =
   let reg_cell_width = ctx_width_of_garr reg_id in
   let oid = Cid.compound (Id.create "salu") (Option.get args.basename) in
   let idx_ex = oper_from_immediate hdl_id idx_ex in
-  let salu_dec = new_dsalu oid reg_id reg_cell_width instrs None idx_ex in
+  let salu_dec = new_dsalu oid reg_id reg_cell_width instrs None idx_ex (ctx_fmt_of_reg reg_id) in
   { names = [oid]; objs = [salu_dec] }
 ;;
 
@@ -173,14 +177,13 @@ let update_array (args : codegenInput) : codegenOutput =
   let oid = Cid.compound (Id.create "salu") (Option.get args.basename) in
   let idx_ex = oper_from_immediate hdl_id idx_ex in
   let salu_dec =
-    new_dsalu oid reg_id reg_cell_width instrs args.retname idx_ex
+    new_dsalu oid reg_id reg_cell_width instrs args.retname idx_ex (ctx_fmt_of_reg reg_id)
   in     
   { names = [oid]; objs = [salu_dec] }
 ;;
 
 let update_complex (args : codegenInput) : codegenOutput =
   let _ = args in 
-  print_endline ("in update_complex");
   let hdl_id = Option.get args.hdl_id in
   let reg_id = CL.nth args.args 0 |> name_from_exp in 
   let reg_wid = ctx_width_of_garr reg_id in 
@@ -190,10 +193,13 @@ let update_complex (args : codegenInput) : codegenOutput =
   let arg2_ex = CL.nth args.args 4 in 
   let default_ex = CL.nth args.args 5 in 
   let instr_body = translate_complex_memop hdl_id memop_name_ex arg1_ex arg2_ex default_ex in 
+  let reg_fmt_str = ctx_fmt_of_reg reg_id in 
+
   let sinstr = {
       sRid =  reg_id; 
       sIdx = idx;
       sWid = reg_wid;
+      sFmt = reg_fmt_str;
       sNumCells = 1;
       sExprs = [];
       sInstrBody = Some(instr_body);

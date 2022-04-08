@@ -99,8 +99,8 @@ let ordered_arg_opers hdl_id params args : LLSyntax.oper list =
   let num_meta_params = CL.length args in 
   let num_regvar_params = (CL.length params) - num_meta_params in   
   match num_regvar_params with 
-    | 1 -> (RegVar Lo)::(args |> CL.map (oper_from_immediate hdl_id))
-    | 2 -> error "[LLMemop.translate_params] memops for pair arrays are not supported yet."
+    | 1 -> [RegVar Lo]@(args |> CL.map (oper_from_immediate hdl_id))
+    | 2 -> [RegVar Lo; RegVar Hi]@(args |> CL.map (oper_from_immediate hdl_id))
     | _ -> error "[LLMemop.translate_params] got invalid arguments for given parameter list"
 ;;
 

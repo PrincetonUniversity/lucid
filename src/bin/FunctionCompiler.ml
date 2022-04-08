@@ -172,12 +172,16 @@ let compile_single_handler_to_tofino ds =
   Console.report "Data flow -> Pipeline";
   let pipe, straightline_prog = PipeSyntax.do_passes dataflow_df_prog in
   LogIr.log_lir_pipe "pipe_ir" pipe;
+  (* print the typedefs *)
+  let p4_typedefs_str = P4tPrint.to_p4defs_str straightline_prog in 
   (* print to a P4 control object *)
   let p4_ctlblock_str = P4tPrint.to_p4ctl_str straightline_prog in 
+  print_endline ("-------- P4 struct definitions --------");
+  print_endline p4_typedefs_str;
   print_endline ("-------- P4 control block --------");
   print_endline p4_ctlblock_str;
   print_endline ("----------------------------------");
-  p4_ctlblock_str
+  p4_typedefs_str^"\n"^p4_ctlblock_str
 ;;
 
 (* compile each handler in the program to its own P4 block 

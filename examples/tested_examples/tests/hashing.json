@@ -1,0 +1,28 @@
+{
+    "name" : "hashing_test", 
+    "input_port": "128",
+    "packets": [
+        {
+            "ip.src" : "0.0.0.1", 
+            "ip.dst" : "0.0.0.1",             
+            "ip.tos" : 1
+        },
+        {
+            "ip.src" : "0.0.0.2", 
+            "ip.dst" : "0.0.0.1",             
+            "ip.tos" : 1
+        }
+    ],
+    "model-output": [
+        {
+            "ip.src" : "0.0.0.1", 
+            "ip.dst" : "0.0.0.1",             
+            "ip.tos" : 1
+        },
+        {
+            "ip.src" : "0.0.0.2", 
+            "ip.dst" : "0.0.0.1",             
+            "ip.tos" : 1
+        }
+    ]
+}
