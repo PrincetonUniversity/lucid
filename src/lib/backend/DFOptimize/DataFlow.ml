@@ -5,9 +5,13 @@ module CL = Caml.List
 
 (* convert a DAG with edges that represent call order
    into a DAG with edges that represent data dependencies. 
- we consider (read, write) and (write, read) dependencies. That is, 
+ we consider:
+  (read, write) and
+  (write, read) and 
+  (write, write)
+  dependencies. That is, 
  a table s must be placed before t if: 
-  s reads variables that t writes or 
+  s reads or writes variables that t writes or 
   s writes variables that t reads
  we will be able to eliminate the (read, write) dependencies
  once we add SSA. *)
@@ -99,10 +103,28 @@ let get_dependencies cid_decls readmap writemap g tid =
       )
       reader_tids
   in 
+  (* now get write, write dependencies *)
+  (* variables written by tid *)
+  let written_by_tid = write_vars_of_tbl cid_decls tid in 
+  (* other tids that write these variables *)
+  let writer_tids_of_write_vars = 
+    CL.map
+      (fun varid -> UseMap.find_default [] varid writemap)
+      written_by_tid
+    |> CL.flatten
+    |> unique_list_of
+    |> CL.filter (fun tidb -> tidb <> tid)
+  in 
+  let pred_writer_tids_of_write_vars = CL.filter 
+      (fun tidb ->
+        PCheck.check_path checker tidb tid
+      )
+      writer_tids_of_write_vars
+  in 
   (* make edges between the predecessors and tid *)
   let dag_edges = CL.map 
     (fun dtid -> (dtid, tid)) 
-    (pred_writers@pred_readers) 
+    (pred_writers@pred_readers@pred_writer_tids_of_write_vars) 
   in 
   dag_edges 
 ;;

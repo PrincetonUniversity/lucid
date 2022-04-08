@@ -15,6 +15,30 @@ let outc = ref None
 let dprint_endline = ref DBG.no_printf
 let start_logging () = DBG.start_mlog __FILE__ outc dprint_endline
 
+
+(* new helpers 4/22 *)
+
+let is_non_control_flow (stmt:statement)= 
+  match stmt.s with 
+  | SNoop -> true
+  | SUnit _ -> true
+  | SLocal _ -> true
+  | SAssign _ -> true
+  | SGen _ -> true 
+  | SPrintf _ -> true (* translates to noop *)
+  | SRet _ -> true (* true because it gets eliminated *)
+  | SIf _ -> false
+  | SSeq _ -> false
+  | SMatch _ -> false
+
+let fst_non_seq (st : statement) =
+  match st.s with
+  | SSeq _ -> Some (CL.hd (unfold_stmts st))
+  | SNoop -> None
+  | _ -> Some st
+;;
+
+
 let print_op_match exps (branches : branch list) =
   let pats_list = CL.map fst branches in
   let fold_f out_str (pats : pat list) =
@@ -89,6 +113,8 @@ module StEdge = struct
 end
 
 module StGraph = Graph.Persistent.Digraph.ConcreteLabeled (StNode) (StEdge)
+
+module StTopo = Graph.Topological.Make (StGraph)
 
 (* the opstatement graph for a single handler *)
 type handler_opgraph_rec =

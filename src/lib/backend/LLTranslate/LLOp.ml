@@ -323,26 +323,35 @@ module TofinoAlu = struct
 end 
 
 module TofinoControl = struct
-  (* wrap a compute alu in an action and call table. *)
-  let wrap_alu_in_call_table opgraph opstmt alu_name alu_obj =
-    let acn_name = acnname_of_stmt opstmt in
-    let tbl_name = tblname_of_stmt opstmt in
-    let succ_tbls = successortbls_of_stmt opgraph opstmt in
-    !dprint_endline "[wrap_alu_in_call_table] successor tables: ";
-    CL.iter
-      (fun t -> !dprint_endline ("[wrap_alu_in_call_table] " ^ Cid.to_string t))
-      succ_tbls;
-    (* make the action, pointing to the compute object and any successor tables *)
-    let acn = IS.Action (acn_name, [alu_name], succ_tbls) in
-    (* make the table with one action *)
-    let tbl = IS.Table (tbl_name, [IS.fresh_any_rule acn_name], None) in
-    (* return the updated name context and the table, action, and (s)alu *)
-    let new_objs = [tbl; acn; alu_obj] in
-    log_objs opstmt new_objs;
-    new_objs
+
+  (**** non-control flow opstatements ****)
+
+  (* action wrapper for non-control-flow opstatement. *)
+  (* note that this is what links the LL alu to the next 
+     instruction (table). *)
+  let action_wrapper_of_opstmt opgraph opstmt alu_name = 
+    IS.Action (
+      (acnname_of_stmt opstmt), 
+      [alu_name], 
+      (successortbls_of_stmt opgraph opstmt)
+    )
+  ;;
+  (* table wrapper for non-control-flow opstatement. *)
+  let table_wrapper_of_opstmt opstmt = 
+  IS.Table(
+    (tblname_of_stmt opstmt),
+    [IS.fresh_any_rule (acnname_of_stmt opstmt)],
+    None
+  )
+  ;;
+  (* gather all the LL objects for a non control opstatement. *)
+  let objs_of_non_control_opstatement opgraph opstmt alu_name alu_obj = 
+    [ table_wrapper_of_opstmt opstmt
+    ; action_wrapper_of_opstmt opgraph opstmt alu_name
+    ; alu_obj
+    ]
   ;;
 
-  (* generate control flow objects that wrap compute objects *)
   let from_assign hdl_id opgraph opstmt =
     let outvar_id, val_exp = unpack_assign opstmt in
     (* make the ALU that does the computation. *)
@@ -350,7 +359,7 @@ module TofinoControl = struct
       TofinoAlu.from_assign hdl_id outvar_id val_exp opstmt
     in
     (* wrap it in a table that calls the ALU and points to the next table. *)
-    wrap_alu_in_call_table opgraph opstmt alu_name alu_obj
+    objs_of_non_control_opstatement opgraph opstmt alu_name alu_obj
   ;;
 
   (* almost the same as assign, but there's also an extra declaration before control objects. *)
@@ -362,7 +371,7 @@ module TofinoControl = struct
       TofinoAlu.from_assign hdl_id outvar_id val_exp opstmt
     in
     (* wrap it in a table that calls the ALU and points to the next table. *)
-    let assign_objs = wrap_alu_in_call_table opgraph opstmt alu_name alu_obj in
+    let assign_objs = objs_of_non_control_opstatement opgraph opstmt alu_name alu_obj in
     (* add an object to declare the new local *)
     (* let width = width_from_ty var_ty in  *)
     (* HACK (7/6/21) -- should figure out what is wrong here. Probably related to consts. *)
@@ -377,7 +386,7 @@ module TofinoControl = struct
     (* generate alu *)
     let alu_name, alu_obj = TofinoAlu.from_unit hdl_id val_exp opstmt in
     (* wrap in a table *)
-    wrap_alu_in_call_table opgraph opstmt alu_name alu_obj
+    objs_of_non_control_opstatement opgraph opstmt alu_name alu_obj
   ;;
 
   let from_gen hdl_id opgraph opstmt =
@@ -421,12 +430,28 @@ module TofinoControl = struct
         let alu_name = CL.hd generated_alus.names in
         let alu_obj = CL.hd generated_alus.objs in
         (* wrap in control flow object *)
-        wrap_alu_in_call_table opgraph opstmt alu_name alu_obj
+        objs_of_non_control_opstatement opgraph opstmt alu_name alu_obj
 
     )
     | _ -> error "[LLOp.from_gen] not a generate statement."
   ;;
 
+
+  (* non control-flow opstatements can be 
+    translated into actions that call alus *)
+  let acn_from_non_control_opstatement hdl_id opgraph opstmt =
+    match opstmt.s with 
+      | SNoop -> []
+      | SGen _ -> CL.tl (from_gen hdl_id opgraph opstmt)
+      | SUnit _ -> CL.tl (from_unit hdl_id opgraph opstmt)
+      | SLocal _ -> CL.tl (from_local hdl_id opgraph opstmt)
+      | SAssign _ -> CL.tl (from_assign hdl_id opgraph opstmt)
+      | SPrintf _ -> []
+      | _ -> error "[acn_from_non_control_opstatement] called with control flow opstatement."  
+  ;;
+
+
+  (*** control flow opstatement translators ***)
   (* generators for statements that are _JUST_ control flow operations. *)
 
   (* if to table conversion (new 8/1/21) *)
@@ -727,12 +752,12 @@ module TofinoControl = struct
   ;;
 
   let tblentry_from_branch keylist opgraph (patlist, stmt) =
-    (* tricky: the statement here might not be an opstatement. *)
+    (* get the first statement that is an actual operation (not just a sequence) *)
     let stmt = fst_op_of_branch stmt in
     match stmt.s with
     | SNoop ->
-      (* if the action in this branch is a noop, its successor is the
-      successor of the match statement *)
+      (* if the first statement in this branch is a noop, 
+          its successor is the successor of the match statement *)
       let acn_name = Cid.fresh ["match_stmt_action"] in
       let succ_tbls = successortbls_of_stmt opgraph stmt in
       let acn = IS.new_action acn_name [] succ_tbls in
@@ -749,8 +774,65 @@ module TofinoControl = struct
       rule, acn
   ;;
 
-  let from_match hdl_id opgraph opstmt =
-    let _ = opgraph in
+  let tblentry_from_branch_optimized keylist opgraph hdl_id (patlist, stmt) : ((statement * IS.rule) * IS.decl list) = 
+    (* processing: 
+      1. get the first non-control flow statement of a branch.
+      2. create an action for that statement, with the appropriate successor.
+      3. mark that statement as "translated".
+      4. make all the translators skip statements marked as "translated". *)
+
+    (* create an entry for a branch, 
+       where the action includes its first opstatement. *)
+    let stmt = fst_op_of_branch stmt in 
+    match stmt.s with 
+      | SNoop -> 
+        (* there's no generator for noop, because this is 
+           the only place where a noop has to translate to 
+           something. *)
+        let acn_name = Cid.fresh ["noop_branch"] in
+        let succ_tbls = successortbls_of_stmt opgraph stmt in
+        let acn = IS.new_action acn_name [] succ_tbls in
+        let rule = rule_from_branchguard keylist patlist acn_name in
+        ((stmt, rule), [acn])
+      | _ -> 
+        (* [action; alu(s)] *)
+        let objs = acn_from_non_control_opstatement hdl_id opgraph stmt in 
+        let acn = CL.hd objs in 
+        let alus = CL.tl objs in 
+        let acn_name = IS.id_of_decl acn in 
+        let rule = rule_from_branchguard keylist patlist acn_name in
+        (* gotta return the alus too *)
+        ((stmt, rule), acn::alus)
+  ;;
+
+  (* Special case -- translate a match statement and all the statements in its branches 
+  into a single table. Can only be used when each branch has at most 1 statement in it, 
+     and that statement cannot be a control flow statement. *)
+  let from_match_optimized hdl_id opgraph opstmt = 
+    (* if we call this, we know that each branch in the match statement 
+       has a single non-control-flow operation. So we can translate the entire 
+       match statement into a single table. *)
+    let keys, branches = unpack_match opstmt in
+    let key_mids = CL.map name_from_exp keys |> CL.map (local_mid_from_cid hdl_id) in
+    let tbl_entries = CL.map (tblentry_from_branch_optimized key_mids opgraph hdl_id) branches in
+    let stmts_rules, acn_alus_lists = CL.split tbl_entries in
+    let stmts, rules = CL.split stmts_rules in 
+    let all_objs = CL.flatten acn_alus_lists in 
+    (* now construct the table. *)
+    let tblname = tblname_of_stmt opstmt in
+    let tbl = IS.new_table tblname rules in
+    let new_objs = all_objs @ [tbl] in
+    !dprint_endline "[from_match_optimized] handling match:";
+    !dprint_endline (Pr.stmt_to_string opstmt);
+    !dprint_endline "[from_match_optimized] generated actions, alus, and table:";
+    !dprint_endline (DebugPrint.str_of_decls new_objs);
+    log_objs opstmt new_objs;
+    new_objs, (CL.map uname_of_stmt stmts) (* names of translated statements. *)
+  ;;
+
+(* translate just the match statement itself into a table. Leave all statements in 
+   branches for other tables. *)
+let from_match_default hdl_id opgraph opstmt =
     let keys, branches = unpack_match opstmt in
     let key_mids = CL.map name_from_exp keys |> CL.map (local_mid_from_cid hdl_id) in
     (* make a rule and action for each entry. *)
@@ -771,31 +853,88 @@ module TofinoControl = struct
     !dprint_endline (DebugPrint.str_of_decls acns);
     let new_objs = acns @ [tbl] in
     log_objs opstmt new_objs;
-    new_objs
+    new_objs, [uname_of_stmt opstmt]
   ;;
-  (* translate one single-op statement into one tofino operation. *)
-  let from_opstmt hdl_id opgraph opstmt objs =
+
+  type translate_ctx = {
+    t_objs : IS.decl list;
+    t_translated : Cid.t list;  
+  }
+  let empty_translate_ctx = {t_objs = []; t_translated = [];}
+  ;;
+
+  let from_match ctx hdl_id opgraph opstmt =
+    let _, branches = unpack_match opstmt in
+    (* check if the special case translator can be used. *)
+    let is_simple_branch (_, stmt) = 
+      match unfold_stmts stmt with 
+        | [] -> true
+        | [fst_stmt] -> is_non_control_flow fst_stmt
+        | _ -> false
+    in 
+    let all_simple_branches = CL.fold_left
+      (fun prev_pass branch -> prev_pass & (is_simple_branch branch))
+      true 
+      branches 
+    in 
+    let new_objs, translated_opstmt_cids = match all_simple_branches with 
+      | true -> from_match_optimized hdl_id opgraph opstmt
+      | false -> from_match_default hdl_id opgraph opstmt
+    in 
+    {t_objs = ctx.t_objs@new_objs; t_translated = ctx.t_translated@translated_opstmt_cids;}
+  ;;
+  let cids_to_string cids = 
+    CL.map (Cid.to_string) cids |> String.concat ","
+  ;;
+
+  (* translate an opstatement into LL objects, if it hasn't been translated already. *)
+  let tbl_from_opstmt hdl_id opgraph opstmt (ctx:translate_ctx) =
     !dprint_endline "-----[from_opstmt] ------";
     !dprint_endline ("creating table: " ^ Cid.to_string (tblname_of_stmt opstmt));
     !dprint_endline ("statement: " ^ Printing.stmt_to_string opstmt);
     !dprint_endline ("op statement: " ^ OGSyntax.print_op_stmt opstmt);
     !dprint_endline "-----------";
-    match opstmt.s with
-    | SAssign _ -> objs @ from_assign hdl_id opgraph opstmt
-    | SUnit _ ->
-      objs @ from_unit hdl_id opgraph opstmt
-      (* a local is a variable declaration followed by an assign. *)
-    | SLocal _ -> objs @ from_local hdl_id opgraph opstmt
-    | SGen _ -> objs @ from_gen hdl_id opgraph opstmt
-    | SIf _ -> objs @ from_if hdl_id opgraph opstmt
-    | SMatch _ -> objs @ from_match hdl_id opgraph opstmt
-    | SSeq _ -> error "Seq is not an opstatement."
-    | _ -> objs
+    let opstmt_cid = LLContext.uname_of_stmt opstmt in 
+    print_endline ("[tbl_from_opstmt] on opstmt: "^(cids_to_string [opstmt_cid]));
+    let already_translated = CL.exists (Cid.equal opstmt_cid) ctx.t_translated in 
+    if (already_translated) 
+    then (print_endline ("opstmt "^(cids_to_string [opstmt_cid])^(" is already translated!")); ctx) 
+    else (
+      print_endline ("opstmt "^(cids_to_string [opstmt_cid])^(" is NOT YET translated!"));
+      match opstmt.s with
+      | SAssign _ -> let new_obj = from_assign hdl_id opgraph opstmt in 
+        {t_objs = ctx.t_objs@new_obj; t_translated = opstmt_cid::ctx.t_translated}
+      | SUnit _ -> let new_obj = from_unit hdl_id opgraph opstmt in 
+        {t_objs = ctx.t_objs@new_obj; t_translated = opstmt_cid::ctx.t_translated}
+        (* a local is a variable declaration followed by an assign. *)
+      | SLocal _ -> let new_obj = from_local hdl_id opgraph opstmt in 
+        {t_objs = ctx.t_objs@new_obj; t_translated = opstmt_cid::ctx.t_translated}
+      | SGen _ -> let new_obj = from_gen hdl_id opgraph opstmt in 
+        {t_objs = ctx.t_objs@new_obj; t_translated = opstmt_cid::ctx.t_translated}
+      | SIf _ -> let new_obj = from_if hdl_id opgraph opstmt in 
+        {t_objs = ctx.t_objs@new_obj; t_translated = opstmt_cid::ctx.t_translated}
+      | SMatch _ -> 
+        print_endline (" --- start of tbl_from_opstmt.SMatch ---");
+        print_endline ("opstmt: "^(cids_to_string [opstmt_cid]));
+        print_endline ("translated opstmts: "^(cids_to_string ctx.t_translated));
+        let new_ctx = from_match ctx hdl_id opgraph opstmt in 
+        print_endline (" --- end of tbl_from_opstmt.SMatch ---");
+        print_endline ("translated opstmts: "^(cids_to_string new_ctx.t_translated));
+        new_ctx
+
+(*         let new_obj = from_match hdl_id opgraph opstmt in 
+        {t_objs = ctx.t_objs@new_obj; t_translated = opstmt_cid::ctx.t_translated} *)
+      | SSeq _ -> error "Seq is not an opstatement."
+      | _ -> ctx
+    )
   ;;
 
   (* main function. make a tofino control graph from an op statement graph. *)
   let from_opstmt_graph hdl_id opgraph =
-    StGraph.fold_vertex (from_opstmt hdl_id opgraph) opgraph []
+    (* a fold over vertices is no good. We need to do topological ordering. *)
+    (* Topo.fold (place_node_in_pipe dfg) dfg (ctx, dagProg, pipe) *)    
+    let ctx = StTopo.fold (tbl_from_opstmt hdl_id opgraph) opgraph empty_translate_ctx in 
+    ctx.t_objs
   ;;
 end
 

@@ -704,6 +704,7 @@ let eliminate_branch_nodes cid_decls g root_tid =
   let cid_decls = Topo.fold visit_node_noop_delete g cid_decls in
   (* let new_cid_decls, new_g = Topo.fold visit_node g (cid_decls, g) in  *)
   (* rebuild the graph based on new_cid_decls *)
+  DBG.printf outc "[eliminate_branch_nodes] rebuilding graph...\n";
   let new_g = DFSyntax.graph_of_declsMap cid_decls in
   cid_decls, new_g
 ;;
@@ -716,6 +717,7 @@ let do_passes df_prog =
   let new_cid_decls, g = eliminate_branch_nodes cid_decls g root_tid in
   (* log_prog new_cid_decls; *)
   let new_prog = new_cid_decls, root_tid, g in
+  DBG.printf outc "[BranchElimination.do_passes (start)] validating output...\n";
   LLValidate.validate_cid_decls cid_decls "BranchElimination.do_passes (end)]";
   (* log_tbl_g_and_ir new_prog "nobranch_table_call"; *)
   (* log_tbl_dot_and_prog new_prog "nobranch_table_call"; *)
