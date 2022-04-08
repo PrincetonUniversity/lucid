@@ -252,7 +252,8 @@ let rename prog =
           env <- old_env;
           let new_x = self#freshen_var x in
           DMemop (new_x, replaced_params, replaced_body)
-        | DEvent (x, s, cspecs, params) ->
+        | DEvent (x, hdr, cspecs, params) ->
+          let hdr = Option.map (self#visit_ty dummy) hdr in
           let old_env = env in
           let new_params =
             List.map
@@ -262,7 +263,7 @@ let rename prog =
           let new_cspecs = List.map (self#visit_constr_spec dummy) cspecs in
           env <- old_env;
           let new_x = self#freshen_var x in
-          DEvent (new_x, s, new_cspecs, new_params)
+          DEvent (new_x, hdr, new_cspecs, new_params)
         | DHandler (x, body) ->
           (* Note that we require events to be declared before their handler *)
           DHandler (self#lookup (Id x) |> Cid.to_id, self#visit_body dummy body)
@@ -320,11 +321,11 @@ let rename prog =
         | DModuleAlias _ -> failwith "Should be eliminated before this"
         | DHeaderTy (id, ty) ->
           let ty = self#visit_ty dummy ty in
-          let id = self#freshen_var id in
+          env <- { env with var_map = CidMap.add (Id id) (Id id) env.var_map };
           DHeaderTy (id, ty)
         | DPacketTy (id, ty) ->
           let ty = self#visit_ty dummy ty in
-          let id = self#freshen_var id in
+          env <- { env with var_map = CidMap.add (Id id) (Id id) env.var_map };
           DPacketTy (id, ty)
 
       (*** Places we enter a scope ***)

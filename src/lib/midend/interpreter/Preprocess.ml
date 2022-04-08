@@ -5,7 +5,7 @@ open InterpState
 open Collections
 
 type t =
-  { events : (event_packet * ty list) Env.t
+  { events : (packet_ty option * ty list) Env.t
   ; externs : ty Env.t
   ; extern_funs : IdSet.t
   }
@@ -27,9 +27,9 @@ let preprocess ds =
     List.fold_left
       (fun (pp, ds) d ->
         match d.d with
-        | DEvent (id, sort, params) ->
+        | DEvent (id, pkt_ty, params) ->
           ( { pp with
-              events = Env.add (Id id) (sort, List.map snd params) pp.events
+              events = Env.add (Id id) (pkt_ty, List.map snd params) pp.events
             }
           , d :: ds )
         | DExtern (id, ty) ->

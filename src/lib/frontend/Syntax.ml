@@ -183,8 +183,6 @@ and params = (id * ty) list
 
 and body = params * statement
 
-and event_packet = id option
-
 and ispec =
   | InSize of id
   | InVar of id * ty
@@ -222,7 +220,7 @@ and memop_body =
 and d =
   | DSize of id * size option
   | DGlobal of id * ty * exp
-  | DEvent of id * event_packet * constr_spec list * params
+  | DEvent of id * ty option (* packet ty *) * constr_spec list * params
   | DHandler of id * body
   | DFun of id * ty * constr_spec list * body
   | DMemop of id * params * memop_body

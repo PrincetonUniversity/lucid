@@ -31,10 +31,10 @@ let initial_state (pp : Preprocess.t) (spec : InterpSpec.t) =
   nst
 ;;
 
-let initialize renaming spec_file ds =
+let initialize header_defs renaming spec_file ds =
   Py.initialize ();
   let pp, ds = Preprocess.preprocess ds in
-  let spec = InterpSpec.parse pp renaming spec_file in
+  let spec = InterpSpec.parse pp header_defs renaming spec_file in
   let nst = initial_state pp spec in
   let nst = InterpCore.process_decls nst ds in
   nst

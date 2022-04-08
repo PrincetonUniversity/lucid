@@ -44,20 +44,35 @@ end
 (* Not CoreSyntax since the packet type declarations aren't really part of the
    main program anymore *)
 open Syntax
+module HTrie = Trie (String)
 
 let mk_trie header_defs =
   let packet_tys =
-    List.filter_map (function
-        | DPacketTy (id, ty) ->
-          let labels =
+    List.filter_map
+      (fun d ->
+        match d.d with
+        | DPacketTy (pkt_ty_id, ty) ->
+          let header_ty_ids =
             match TyTQVar.strip_links ty.raw_ty with
-            | TRecord lst -> List.map fst lst
+            | TRecord lst ->
+              List.map
+                (function
+                  | _, TName (cid, _, _) -> Id.name @@ Cid.to_id cid
+                  | _ ->
+                    Console.error_position
+                      ty.tspan
+                      "Expected the name of a header type")
+                lst
             | _ ->
               failwith
                 "Internal error: Expected TRecord for packet_ty definition"
           in
-          0
+          Some ((pkt_ty_id, ty), header_ty_ids)
         | _ -> None)
+      header_defs
   in
-  0
+  List.fold_left
+    (fun acc (id, strs) -> HTrie.add strs id acc)
+    HTrie.empty
+    packet_tys
 ;;

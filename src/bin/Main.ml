@@ -20,7 +20,7 @@ let main () =
   Cmdline.set_dpt_file target_filename;
   Console.report "Parsing ...";
   let ds = Input.parse target_filename in
-  let renaming, ds = FrontendPipeline.process_prog ds in
+  let header_defs, renaming, ds = FrontendPipeline.process_prog ds in
   let spec_file =
     if cfg.spec_file = ""
     then find_spec_file target_filename

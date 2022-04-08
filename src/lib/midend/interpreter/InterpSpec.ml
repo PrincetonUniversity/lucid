@@ -68,10 +68,12 @@ let parse_events
     (num_switches : int)
     (gap : int)
     (autofill_headers : header_autofill)
+    (header_defs : Syntax.decls)
     (events : json list)
   =
   (* Using state because I'm lazy *)
   let last_delay = ref (-gap) in
+  let header_trie = HeaderTrie.mk_trie header_defs in
   let parse_locations lst =
     match List.assoc_opt "locations" lst with
     | Some (`List []) | None -> [0, default_port]
@@ -128,30 +130,60 @@ let parse_events
             lst
         | _ -> error "Missing or non-list type for header specification!"
       in
-      (* Find the event name, accounting for the renaming pass, and get its
-         sort and argument types *)
-      let eid =
-        match List.assoc_opt "name" lst with
-        | Some (`String id) -> rename renaming.var_map "event" id
-        | None -> error "Event specification missing name field"
-        | _ -> error "Event specification had non-string type for name field"
+      (* Figure out if this is an event packet, and what packet type to expect
+         from the remaining headers *)
+      let eid, event_args, rest, expected_packet_ty =
+        match headers with
+        | (("event" | "Event"), event_args) :: rest ->
+          (* Find the event name, accounting for the renaming pass *)
+          let eid =
+            match List.assoc_opt "name" event_args with
+            | Some (`String id) -> rename renaming.var_map "event" id
+            | None -> error "Event header missing name field"
+            | _ -> error "Event header had non-string type for name field"
+          in
+          (* Look up its expected argument types and headers, if any *)
+          let expected_packet_ty, arg_tys = Env.find eid pp.events in
+          (* Parse the arguments into values, and make sure they have the right types.
+             At the moment only integer and boolean arguments are supported *)
+          let event_args =
+            match List.assoc_opt "args" event_args with
+            | Some (`List args) ->
+              let arg_tys =
+                (* If there's an expected packet ty, then the first argument is
+                   a header, so its values will be provided separately *)
+                if expected_packet_ty <> None then List.tl arg_tys else arg_tys
+              in
+              (try List.map2 (parse_value "Event") arg_tys args with
+              | Invalid_argument _ ->
+                error
+                @@ Printf.sprintf
+                     "Event header for %s had wrong number of arguments"
+                     (Cid.to_string eid))
+            | None -> error "Event header missing args field"
+            | _ -> error "Event header had non-list type for args field"
+          in
+          eid, event_args, rest, expected_packet_ty
+        | _ ->
+          (* Not an event *)
+          (match HeaderTrie.HTrie.lpm (List.map fst headers) header_trie with
+          | Some (id, ty) -> Id id, [], headers, Some ty
+          | None ->
+            Console.error
+            @@ "No declared packet type matches the following sequence of \
+                headers: "
+            ^ Printing.list_to_string (fun (x, _) -> x) headers)
       in
-      let sort, tys = Env.find eid pp.events in
-      if sort = EExit then error "Cannot specify exit event";
-      (* Parse the arguments into values, and make sure they have the right types.
-         At the moment only integer and boolean arguments are supported *)
-      let data =
-        match List.assoc_opt "args" lst with
-        | Some (`List lst) ->
-          (try List.map2 (parse_value "Event") tys lst with
-          | Invalid_argument _ ->
-            error
-            @@ Printf.sprintf
-                 "Event specification for %s had wrong number of arguments"
-                 (Cid.to_string eid))
-        | None -> error "Event specification missing args field"
-        | _ -> error "Event specification had non-list type for args field"
+      (* Now we just need to parse the rest of the headers according to the expected
+         packet type, and prepend their arguments to the event arguments *)
+      let header_data =
+        match expected_packet_ty with
+        | None ->
+          (* User event with no header argument, so ignore any other headers *)
+          []
+        | Some { raw_ty = TRecord expected_headers } -> List.map entries
       in
+      let data = header_data @ event_args in
       { eid; data; edelay }, locations
     | _ -> error "Non-assoc type for event definition"
   in
@@ -288,7 +320,13 @@ let create_foreign_functions renaming efuns python_file =
     Env.empty
 ;;
 
-let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t =
+let parse
+    (pp : Preprocess.t)
+    (header_defs : Syntax.decls)
+    (renaming : Renaming.env)
+    (filename : string)
+    : t
+  =
   let json = from_file filename in
   match json with
   | `Assoc lst ->

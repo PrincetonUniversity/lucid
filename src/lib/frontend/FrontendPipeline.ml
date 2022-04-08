@@ -33,11 +33,14 @@ let process_prog ds =
   print_if_verbose "---------typing2---------";
   let ds = Typer.infer_prog ds in
   print_if_debug ds;
-  print_if_verbose "-------Eliminating type aliases---------";
-  let ds = ReplaceUserTys.replace_prog ds in
-  print_if_debug ds;
   print_if_verbose "-------Inlining size declarations---------";
   let ds = SizeInlining.replace_prog ds in
+  print_if_debug ds;
+  print_if_verbose "-------Eliminating header declarations---------";
+  let pkt_decs, ds = HeaderElimination.eliminate_prog ds in
+  print_if_debug ds;
+  print_if_verbose "-------Eliminating type aliases---------";
+  let ds = ReplaceUserTys.replace_prog ds in
   print_if_debug ds;
   print_if_verbose "-----------inlining functions-----------";
   let ds = FunctionInlining.inline_prog ds in
@@ -61,9 +64,6 @@ let process_prog ds =
   print_if_debug ds;
   print_if_verbose "-------Eliminating EStmts-------";
   let ds = EStmtElimination.eliminate_prog ds in
-  print_if_debug ds;
-  print_if_verbose "-------Eliminating header declarations---------";
-  let pkt_decs, ds = HeaderElimination.eliminate_prog ds in
   print_if_debug ds;
   (* Record elimination removes useful debugging information, so we want it as
      close to the end of the pipeline as possible. *)

@@ -39,7 +39,7 @@ type event_rec =
   ; field_defs : (Cid.t * int) list
   ; hidden_fields : (Cid.t * int) list
   ; hdl_param_ids : Id.t list
-  ; event_sort : event_packet (* TODO:HEADERS Fix this *)
+  ; event_sort : packet_ty option (* TODO:HEADERS Fix this *)
   ; event_struct : Cid.t
   ; event_struct_instance : Cid.t
   ; event_generated_flag : Cid.t

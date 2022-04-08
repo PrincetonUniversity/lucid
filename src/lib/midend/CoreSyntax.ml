@@ -136,8 +136,6 @@ and params = (id * ty) list
 
 and body = params * statement
 
-and event_packet = id option
-
 (* For memops -- Boolean condition * return value *)
 and conditional_return = exp * exp
 
@@ -155,10 +153,12 @@ and memop_body =
   | MBIf of exp * exp * exp
   | MBComplex of complex_body
 
+and packet_ty = (Syntax.ty[@opaque])
+
 (* declarations *)
 and d =
   | DGlobal of id * ty * exp
-  | DEvent of id * event_packet * params
+  | DEvent of id * packet_ty option * params
   | DHandler of id * body
   | DMemop of id * params * memop_body
   | DExtern of id * ty
