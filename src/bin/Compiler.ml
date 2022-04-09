@@ -154,6 +154,7 @@ let backend_passes (df_prog: DFSyntax.dagProg) =
   let df_prog = RegisterAllocation.merge_and_temp df_prog in
   Console.report "Control flow elimination";
   let df_prog = BranchElimination.do_passes df_prog in
+  print_endline ("---finished with branch elimination---");
   Console.report "Control flow -> Data flow";
   let dataflow_df_prog = DataFlow.do_passes df_prog in
   LogIr.log_lir "partial_df_nobranch" df_prog;

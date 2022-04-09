@@ -895,12 +895,14 @@ let from_match_default hdl_id opgraph opstmt =
     !dprint_endline ("op statement: " ^ OGSyntax.print_op_stmt opstmt);
     !dprint_endline "-----------";
     let opstmt_cid = LLContext.uname_of_stmt opstmt in 
-    print_endline ("[tbl_from_opstmt] on opstmt: "^(cids_to_string [opstmt_cid]));
+    (* print_endline ("[tbl_from_opstmt] on opstmt: "^(cids_to_string [opstmt_cid])); *)
     let already_translated = CL.exists (Cid.equal opstmt_cid) ctx.t_translated in 
     if (already_translated) 
-    then (print_endline ("opstmt "^(cids_to_string [opstmt_cid])^(" is already translated!")); ctx) 
+    then (
+      (* print_endline ("opstmt "^(cids_to_string [opstmt_cid])^(" is already translated!"));  *)
+    ctx) 
     else (
-      print_endline ("opstmt "^(cids_to_string [opstmt_cid])^(" is NOT YET translated!"));
+      (* print_endline ("opstmt "^(cids_to_string [opstmt_cid])^(" is NOT YET translated!")); *)
       match opstmt.s with
       | SAssign _ -> let new_obj = from_assign hdl_id opgraph opstmt in 
         {t_objs = ctx.t_objs@new_obj; t_translated = opstmt_cid::ctx.t_translated}
@@ -914,12 +916,12 @@ let from_match_default hdl_id opgraph opstmt =
       | SIf _ -> let new_obj = from_if hdl_id opgraph opstmt in 
         {t_objs = ctx.t_objs@new_obj; t_translated = opstmt_cid::ctx.t_translated}
       | SMatch _ -> 
-        print_endline (" --- start of tbl_from_opstmt.SMatch ---");
+(*         print_endline (" --- start of tbl_from_opstmt.SMatch ---");
         print_endline ("opstmt: "^(cids_to_string [opstmt_cid]));
-        print_endline ("translated opstmts: "^(cids_to_string ctx.t_translated));
+        print_endline ("translated opstmts: "^(cids_to_string ctx.t_translated)); *)
         let new_ctx = from_match ctx hdl_id opgraph opstmt in 
-        print_endline (" --- end of tbl_from_opstmt.SMatch ---");
-        print_endline ("translated opstmts: "^(cids_to_string new_ctx.t_translated));
+(*         print_endline (" --- end of tbl_from_opstmt.SMatch ---");
+        print_endline ("translated opstmts: "^(cids_to_string new_ctx.t_translated)); *)
         new_ctx
 
 (*         let new_obj = from_match hdl_id opgraph opstmt in 

@@ -717,9 +717,10 @@ let do_passes df_prog =
   let new_cid_decls, g = eliminate_branch_nodes cid_decls g root_tid in
   (* log_prog new_cid_decls; *)
   let new_prog = new_cid_decls, root_tid, g in
-  DBG.printf outc "[BranchElimination.do_passes (start)] validating output...\n";
+  DBG.printf outc "[BranchElimination.do_passes (end)] validating output...\n";
   LLValidate.validate_cid_decls cid_decls "BranchElimination.do_passes (end)]";
   (* log_tbl_g_and_ir new_prog "nobranch_table_call"; *)
   (* log_tbl_dot_and_prog new_prog "nobranch_table_call"; *)
+  DBG.printf outc "[BranchElimination.do_passes (end)] DONE.\n";
   DFSyntax.from_tuple new_prog df_prog
 ;;

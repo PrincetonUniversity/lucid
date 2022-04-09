@@ -69,6 +69,7 @@ let build_writemap cid_decls =
 
 (* find the tables that must execute before tid in control graph g *)
 let get_dependencies cid_decls readmap writemap g tid = 
+  !dprint_endline ("[get_dependencies] processing node: "^(Cid.to_string tid));
   let checker = PCheck.create g in (* path checker *)
   (* get write, read dependencies (tid reads) *)
   let read_by_tid = read_vars_of_tbl cid_decls tid in 
@@ -126,6 +127,7 @@ let get_dependencies cid_decls readmap writemap g tid =
     (fun dtid -> (dtid, tid)) 
     (pred_writers@pred_readers@pred_writer_tids_of_write_vars) 
   in 
+  !dprint_endline ("[get_dependencies] done processing node: "^(Cid.to_string tid));
   dag_edges 
 ;;
 
@@ -142,11 +144,13 @@ let data_dep_dag_of cid_decls g =
     |> CL.flatten
   in 
   (* add vertices *)
+  !dprint_endline ("adding vertices to dataflow...");
   let data_dag = CL.fold_left 
     (G.add_vertex)
     G.empty
     dag_nodes
   in 
+  !dprint_endline ("adding edges to dataflow...");
   let data_dag =
     CL.fold_left
       (fun data_dag (s, d) -> G.add_edge data_dag s d)
@@ -157,7 +161,10 @@ let data_dep_dag_of cid_decls g =
 ;;
 
 let do_passes df_prog =
+  print_endline ("starting dataflow conversion pass.");
   let cid_decls, root_tid, g = DFSyntax.to_tuple df_prog in
   let data_dag = data_dep_dag_of cid_decls g in
-  DFSyntax.from_tuple (cid_decls, root_tid, data_dag) df_prog
+  let result = DFSyntax.from_tuple (cid_decls, root_tid, data_dag) df_prog in 
+  print_endline ("done with dataflow conversion pass.");
+  result 
 ;;

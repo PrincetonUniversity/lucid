@@ -40,6 +40,7 @@ type table_group =
   ; g_alus : decl list
   ; (* the objects merged into this table group, these are just here for tracking. *)
     g_src : decl list
+  ; g_solitary : bool
   }
 
 (* a stage is a vector of tables applied in parallel. *)
@@ -72,11 +73,12 @@ let empty_tg stage_num =
   (* a rule to do nothing for any packet.*)
   let def_rule = Match (Cid.fresh ["r"], [], acn_id) in
   let tbl = Table (tbl_id, [def_rule], Some stage_num) in
-  { g_tbl = tbl; g_acns = [acn]; g_alus = []; g_src = [] }
+  { g_tbl = tbl; g_acns = [acn]; g_alus = []; g_src = []; g_solitary = false}
 ;;
 
 let empty_stage num = { s_num = num; s_tgs = [] }
 let empty_pipe = { p_globals = []; p_stages = [] }
+
 
 (*** accessors ***)
 let tid_of_tg tg = tid_of_tbl tg.g_tbl
@@ -126,6 +128,7 @@ let tbls_of_pipe pipe =
 
 (*** updates ***)
 
+
 (* merge the table cid_decls[tid], and all of the actions / objects that it calls, 
 into tg. return the updated table group and cid decls. This function is 
 NOT AWARE OF CONSTRAINTS. *)
@@ -152,6 +155,7 @@ let merge_into_group dagProg group tid : table_group =
   ; g_alus = alus_of_tid merged_cid_decls group_tid |> unique_list_of
   ; (* add the new source objects to the source fields. *)
     g_src = group.g_src @ new_decls
+  ; g_solitary = false
   }
 ;;
 
@@ -239,6 +243,18 @@ module Constraints = struct
     }
   ;;
 
+  (* the group pre-merge constraints are here to protect the 
+     compiler itself -- the current implementation has trouble 
+     merging very large tables together. *)
+  type pregroup = 
+  { gmax_acns : int
+  ; gmax_rules : int
+  }
+  let pregroup_def = 
+  { gmax_acns = 100  
+  ; gmax_rules = 100
+  }
+
   (* check if stage meet stage constraints *)
   type stage =
     { smax_tbls : int
@@ -265,6 +281,17 @@ module Constraints = struct
     |> !dprint_endline
   ;;
 
+  let group_precheck dagProg tg = 
+    let _ = dagProg in 
+    (* make sure that the group isn't already too large. *)
+    let max_actions tg = 
+      !dprint_endline ("[group_precheck] number of actions in tg: "^(string_of_int (CL.length (tg.g_acns))));
+      CL.length (tg.g_acns) <= pregroup_def.gmax_acns      
+    in
+    max_actions tg
+  ;;
+
+  (* this is a check that applies _after_ we merge a table into a group. *)
   let group_check dagProg tg =
     let max_tbls tg =
       let res =
@@ -290,8 +317,6 @@ module Constraints = struct
     let max_matchbits dagProg tg =
       let keys = keys_of_table tg.g_tbl in
       (* bug when the variable is a parameter. *) 
-
-
       let widths = CL.map (find_width_of_var dagProg) keys in
       !dprint_endline
         ("[max_matchbits] checking table group: " ^ summary_of_group tg);
@@ -438,39 +463,102 @@ module Placement = struct
 
   (* try to place tid into tg of stage. *)
   let place_in_group (dagProg, rebuilt_stage, tids) tg =
-    match tids with
-    (* there's nothing to place. *)
-    | [] -> dagProg, add_tg rebuilt_stage tg, []
-    | _ ->
-      (* 1. merge all tids into table group *)
-      let new_tg = merge_set_into_group dagProg tg tids in
-      !dprint_endline
-        ("[place_in_group] proposed table group: " ^ summary_of_group new_tg);
-      !dprint_endline "[place_in_group] checking table group constraints.";
-      (match Constraints.group_check dagProg new_tg with
-      (* constraint check passes -- remove all the now placed source objects, 
-          add updated tg to stage, return updated cid_decls. *)
-      | true ->
-        !dprint_endline "[place_in_group] constraint check passed";
-        let new_cid_decls = remove_decls dagProg.dp_instr_dict new_tg.g_src in
-        (*             !dprint_endline ("[place_in_group] removing objects from globals: "^(CL.map id_of_decl new_tg.g_src |> P4tPrint.str_of_private_oids));
-            !dprint_endline ("[place_in_group] remaining global/unplaced objects: "^(CL.split new_cid_decls |> fst |> P4tPrint.str_of_private_oids));
- *)
-        {dagProg with dp_instr_dict = new_cid_decls}, add_tg rebuilt_stage new_tg, []
-      (* constraint check fails -- return original versions *)
-      | false ->
-        !dprint_endline "[place_in_group] constraint check FAILED";
-        dagProg, add_tg rebuilt_stage tg, tids)
+    match tg.g_solitary with
+      (* we can't add anything to a solitary table group *)
+      true -> 
+      (
+        !dprint_endline ("[place_in_group] skipping solitary group "^(str_of_tid (tid_of_tg tg)));
+        dagProg, add_tg rebuilt_stage tg, tids
+      )
+      | false -> 
+      (
+        match tids with
+        (* there's nothing to place. return this stage with the current tablegroup. *)
+        | [] -> 
+        (
+          dagProg, add_tg rebuilt_stage tg, tids
+        )
+        | _ -> 
+        (
+          (* 1. merge all tids into table group *)
+          let new_tg = merge_set_into_group dagProg tg tids in
+          !dprint_endline
+            ("[place_in_group] proposed table group: " ^ summary_of_group new_tg);
+          !dprint_endline "[place_in_group] checking table group constraints.";
+          match Constraints.group_check dagProg new_tg with
+          (* constraint check passes -- remove all the now placed source objects, 
+              add updated tg to stage, return updated cid_decls. *)
+          | true ->
+          (
+            !dprint_endline "[place_in_group] constraint check passed";
+            let new_cid_decls = remove_decls dagProg.dp_instr_dict new_tg.g_src in
+            {dagProg with dp_instr_dict = new_cid_decls}, add_tg rebuilt_stage new_tg, []
+          )
+          (* constraint check fails -- return original versions *)
+          | false ->
+          (
+            !dprint_endline "[place_in_group] constraint check FAILED";
+            dagProg, add_tg rebuilt_stage tg, tids
+          )
+        )
+      )
+
+  ;;
+
+  let create_new_tg stage_num rules acns alus src_objs solitary = 
+    let tbl_id = Cid.create_ids [Id.to_id ("merged_tbl", tg_next ())] in
+    let tbl = Table (tbl_id, rules, Some stage_num) in
+    { g_tbl = tbl; g_acns = acns; g_alus = alus; g_src = src_objs; g_solitary = solitary }
+  ;;
+
+  (* place a table that is too complex to be merged with any other 
+     tables into its own "solitary" group. *)
+  let place_in_solitary_group dagProg stage tids = 
+    (* get the rules, actions, and ALUs of the solitary table. *)
+    let tbl_rules, tbl_acns, tbl_alus, all_tbl_objs =
+      match (Cid.lookup dagProg.dp_instr_dict (CL.hd tids)) with
+      | Table(tid, rules, _) -> (
+        rules, 
+        acns_of_tid dagProg.dp_instr_dict tid, 
+        alus_of_tid dagProg.dp_instr_dict tid,
+        objs_of_tid dagProg.dp_instr_dict tid
+      )
+      | _ -> error "[placement_in_solitary_group] unexpected input (tids). Expected a single table."
+    in 
+    (* create the new table group *)
+    let new_tg = create_new_tg 
+      stage.s_num 
+      tbl_rules 
+      tbl_acns 
+      tbl_alus 
+      all_tbl_objs
+      true
+    in 
+    !dprint_endline (
+      "[place_in_solitary_group] placing table "
+      ^(str_of_tid (CL.hd tids))
+      ^" into solitary group "
+      ^(str_of_tid (tid_of_tg new_tg))
+    );
+    (* remove the placed declarations from the dagProg, return the stage 
+       with the new table group added to it. *)
+    { dagProg with dp_instr_dict = 
+        remove_decls dagProg.dp_instr_dict new_tg.g_src
+    }, add_tg stage new_tg
+  ;;
+
+  let num_actions dagProg tid = 
+    acns_of_tid dagProg.dp_instr_dict tid |> CL.length
   ;;
 
   let place_in_new_group dagProg stage tids =
-    let tg = empty_tg stage.s_num in
-    let dagProg, rebuilt_stage, unplaced_tids =
-      place_in_group (dagProg, stage, tids) tg
-    in
-    match unplaced_tids with
-    | [] -> dagProg, rebuilt_stage
-    | _ -> error "bug: a newly-created group violates group constraints"
+    let new_tg = CL.fold_left 
+      (fun cur_group tid -> merge_into_group dagProg cur_group tid)
+      (empty_tg stage.s_num)
+      tids
+    in 
+    let new_cid_decls = remove_decls dagProg.dp_instr_dict new_tg.g_src in
+    {dagProg with dp_instr_dict = new_cid_decls}, add_tg stage new_tg
   ;;
 
   (* Try to place tids into stage. 
@@ -481,6 +569,17 @@ module Placement = struct
 
   let impossible_stage_placements_skipped = ref 0
   let failed_stage_placements = ref 0
+  (* try placing into one of the existing groups in a 
+     stage. return rebuilt stage and updated dagProg. *)
+  let place_in_one_group dagProg stage tids = 
+    let dagProg, stage, unplaced_tids =
+      CL.fold_left
+        place_in_group
+        (dagProg, empty_stage stage.s_num, tids)
+        stage.s_tgs
+    in
+    dagProg, stage, unplaced_tids
+  ;;
 
   let place_in_stage
       (ctx : ctx)
@@ -491,60 +590,84 @@ module Placement = struct
       (tids : oid list)
       : ctx * (dagProg * stage) option
     =
-    (* optimization: before actually trying to place the table into any of the groups in this 
-       stage, make sure that placement into this stage would not violate any dataflow constraints. *)
-    match Constraints.dataflow_multi_check dfg tids prior_stages with
-    | false ->
-      !dprint_endline
-        (sprintf
-           "[place_in_stage] dataflow constraints VIOLATED for {%s} in stage \
-            %i (skipping)"
-           (str_of_tids tids)
-           stage.s_num);
-      impossible_stage_placements_skipped
-        := !impossible_stage_placements_skipped + 1;
-      failed_stage_placements := !failed_stage_placements + 1;
-      ctx, None
-    (* dataflow says we can place here -- so go ahead and try it. *)
-    | true ->
-      !dprint_endline
-        (sprintf
-           "[place_in_stage] dataflow constraints SATISFIED for {%s} in stage \
-            %i (placing)"
-           (str_of_tids tids)
-           stage.s_num);
-      let new_dagProg, new_stage, unplaced_tids =
-        CL.fold_left
-          place_in_group
-          (dagProg, empty_stage stage.s_num, tids)
-          stage.s_tgs
-      in
-      let new_dagProg, new_stage =
-        match unplaced_tids with
-        | [] -> new_dagProg, new_stage
-        (* if that fails, place in a new group. We assume this always succeeds, but that's actually not true, if the 
-         set of tables we're trying to place into a group are too complex for a group. That is currently an 
-         un-compilable program. *)
-        | _ ->
-          let dagProg, new_stage = place_in_new_group dagProg stage tids in
-          dagProg, new_stage
-      in
-      (* check the stage-level constraints. *)
-      (match Constraints.stage_check dfg tids new_stage prior_stages with
-      | true ->
-        !dprint_endline "[place_in_stage] stage constraints satisfied";
-        (* if placement succeeded, note it in the context *)
-        let new_ctx = ctx_note_placements stage.s_num ctx tids in
-        !dprint_endline
-          ("[place_in_stage] placement of { "
-          ^ str_of_tids tids
-          ^ " } successful. "
-          ^ ctx_summary new_ctx);
-        new_ctx, Some (new_dagProg, new_stage)
+    if (CL.length tids = 0)
+    (* no tids to place! *)
+    then (ctx, Some(dagProg, stage))
+    else (
+      (* optimization: before actually trying to place the table into any of the groups in this 
+         stage, make sure that placement into this stage would not violate any dataflow constraints. *)
+      match Constraints.dataflow_multi_check dfg tids prior_stages with
       | false ->
+        !dprint_endline
+          (sprintf
+             "[place_in_stage] dataflow constraints VIOLATED for {%s} in stage \
+              %i (skipping)"
+             (str_of_tids tids)
+             stage.s_num);
+        impossible_stage_placements_skipped
+          := !impossible_stage_placements_skipped + 1;
         failed_stage_placements := !failed_stage_placements + 1;
-        !dprint_endline "[place_in_stage] stage constraints violated";
-        ctx, None)
+        ctx, None
+      (* dataflow says we can place in this stage -- so go ahead and try it. *)
+      | true ->
+        (* for now, very large tables cannot be placed into a group 
+          with other tables because the compiler takes too long to do 
+          the merge. We detect large tables and put them into 
+          their own group. We detect large merged tables and 
+          don't try to add anything else into them. *) 
+        !dprint_endline
+          (sprintf
+             "[place_in_stage] dataflow constraints SATISFIED for {%s} in stage \
+              %i (placing)"
+             (str_of_tids tids)
+             stage.s_num);
+        (* try placing the table into each group in this stage, one at a time. 
+           or, if the table is large, place it in a solitary group. *)
+        (* if this is a large table from a match statement, place it in a 
+           solitary table group. Else, try placing it into an existing table. *)
+        if ((num_actions dagProg (CL.hd tids)) > 10)
+        then (
+          let new_dagprog, updated_stage = place_in_solitary_group dagProg stage tids in 
+          let ctx = ctx_note_placements stage.s_num ctx tids in 
+          ctx, Some (new_dagprog, updated_stage)
+        )
+        else (
+          let new_dagProg, new_stage, unplaced_tids = 
+            place_in_one_group dagProg stage tids
+          in 
+          (* if that failed, place the table into a new stage. *)      
+          let new_dagProg, new_stage =
+            match unplaced_tids with 
+            (* we have placed all the tids that we wanted to -- success. *)
+            | [] -> new_dagProg, new_stage
+            (* could not place into any current group -- try a new group. *)
+            (* We assume this always succeeds, but that's actually not true, if the 
+             set of tables we're trying to place into a group are too complex for a group. That is currently an 
+             un-compilable program. *)
+            | _ ->
+              let dagProg, new_stage = place_in_new_group dagProg stage tids in
+              dagProg, new_stage
+          in
+          (* check the stage-level constraints. *)
+          (match Constraints.stage_check dfg tids new_stage prior_stages with
+          | true ->
+            !dprint_endline "[place_in_stage] stage constraints satisfied";
+            (* if placement succeeded, note it in the context *)
+            let new_ctx = ctx_note_placements stage.s_num ctx tids in
+            !dprint_endline
+              ("[place_in_stage] placement of { "
+              ^ str_of_tids tids
+              ^ " } successful. "
+              ^ ctx_summary new_ctx);
+            new_ctx, Some (new_dagProg, new_stage)
+          | false ->
+            failed_stage_placements := !failed_stage_placements + 1;
+            !dprint_endline "[place_in_stage] stage constraints violated";
+            ctx, None)
+        )
+    )
+
+
   ;;
 
   (* try to put tids first stage. Recurse on tail stages if fail. *)
@@ -602,7 +725,9 @@ module Placement = struct
       tids
   ;;
 
-  (* place tids into a single group in the pipe, extending the pipe if needed. *)
+  (* place tids into a single group in the pipe, extending the pipe if needed. 
+     tids is either a single table, or a set of tables that all use a common 
+     register, plus that register. *)
   let place_in_pipe
       dfg
       (tids : Cid.t list)
@@ -721,7 +846,7 @@ module Placement = struct
   ;;
 
   (* The core layout function. In each pass, the layout function 
-    tries to place as many tables and registers from dfg as possible, 
+    tries to place tables and registers from the dfg, one at a time, 
     by traversing dfg topologically.  
     There are multiple passes because some programs cannot be 
     laid out in a single traversal of the DFG. This happens 
@@ -1042,6 +1167,7 @@ let dedup_slprog tsprog =
 ;;
 
 let do_passes df_prog =
+  print_endline "---- starting pipesyntax passes ----";
   let cid_decls, _, dfg = DFSyntax.to_tuple df_prog in
   let dfg_with_regs = to_tbl_reg_dfg cid_decls dfg in
   let pipe = Placement.layout df_prog dfg_with_regs in
