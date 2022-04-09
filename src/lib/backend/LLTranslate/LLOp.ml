@@ -470,8 +470,8 @@ module TofinoControl = struct
 
   let str_of_binary_rule br =
     match br with
-    | BTrue pat -> P4tPrint.PrimitiveString.str_of_pat pat ^ "-->TRUE"
-    | BFalse pat -> P4tPrint.PrimitiveString.str_of_pat pat ^ "-->FALSE"
+    | BTrue pat -> P4tPrint.PrimitiveString.str_of_pat 1 pat ^ "-->TRUE"
+    | BFalse pat -> P4tPrint.PrimitiveString.str_of_pat 1 pat ^ "-->FALSE"
   ;;
 
   let str_of_binary_rules brs =
@@ -504,7 +504,7 @@ module TofinoControl = struct
   ;;
 
   let dprint_entry_rule (r, _) =
-    !dprint_endline (P4tPrint.PrimitiveString.str_of_rule r)
+    !dprint_endline (P4tPrint.PrimitiveString.str_of_rule 1 r)
   ;;
 
   (* for booleans, this data structure should have true and false as types of rules. *)

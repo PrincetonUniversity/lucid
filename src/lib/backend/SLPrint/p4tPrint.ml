@@ -290,11 +290,17 @@ module PrimitiveString = struct
     | Any -> "_"
   ;;
 
-  let str_of_pat pat =
-    let pat_strs =
+  (* problem: an any pat must have a _ for every field in the table. *)
+  let str_of_pat ncols pat =
+    let pat_strs = 
       match CL.length pat with
-      | 0 -> str_of_cond Any (* this is the equivalent of a default rule. *)
-      | 1 -> str_of_cond (snd (CL.hd pat))
+      | 0 -> 
+        (* this is the equivalent of a default rule, but annoyingly, 
+           we have to print a _ for every column in the table. *)
+        let field_strs = CL.map (fun _ -> str_of_cond Any) (range 0 ncols) in 
+        let pat_str = "(" ^ (Caml.String.concat ", " field_strs) ^")" in 
+        pat_str
+      | 1 -> str_of_cond (snd (CL.hd pat)) (* no commas or parens *)
       | _ ->
         let field_strs =
           Caml.List.map (fun (_, cond) -> str_of_cond cond) pat
@@ -304,11 +310,11 @@ module PrimitiveString = struct
     pat_strs
   ;;
 
-  let str_of_rule r =
+  let str_of_rule ncols r =
     match r with
     | Match (_, pat, acn_id) ->
-      str_of_pat pat ^ " : " ^ str_of_private_oid acn_id ^ "();"
-    | OffPath pat -> str_of_pat pat ^ " : dpt_0_NOOP();"
+      str_of_pat ncols pat ^ " : " ^ str_of_private_oid acn_id ^ "();"
+    | OffPath pat -> str_of_pat ncols pat ^ " : dpt_0_NOOP();"
   ;;
 end
 
@@ -742,7 +748,23 @@ module PrintTable = struct
     | _ ->
       tab ();
       fprintf fmt "const entries = {@,";
-      let rule_strs = Caml.List.map PrimitiveString.str_of_rule rules in
+      (* HACK -- inferring the number of keys in a rule, 
+                 so that empty patterns can be printed 
+                 with the correct number of _'s *)
+      let ncols_of_rules rules = 
+        let ncols_of_rule rule = 
+          match rule with 
+            | Match(_, pat, _)
+            | OffPath(pat) -> 
+              CL.length pat
+        in 
+        CL.fold_left 
+          (fun prev_max rule -> max prev_max (ncols_of_rule rule))
+          0
+          rules
+      in 
+      let ncols = ncols_of_rules rules in 
+      let rule_strs = Caml.List.map (PrimitiveString.str_of_rule ncols) rules in
       pp_print_list
         ~pp_sep:lineSep
         (fun fmt s -> fprintf fmt "%s" s)

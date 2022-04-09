@@ -1018,6 +1018,12 @@ module OperationDedup = struct
 
   let int_eq i1 i2 = i1 = i2
   let id_eq = Cid.equal
+
+  let ids_eq xs ys = 
+    if (CL.length xs = CL.length ys)
+    then (CL.fold_left2 (fun prev x y -> prev & (id_eq x y)) true xs ys)
+    else (false)
+  ;;
   let const_eq = Integer.equal
   let memCell_eq _ _ = true
 
@@ -1034,6 +1040,12 @@ module OperationDedup = struct
     | RegVar _, _ -> false
     | NoOper, NoOper -> true
     | NoOper, _ -> false
+  ;;
+
+  let opers_eq o1s o2s = 
+    if (CL.length o1s = CL.length o2s)
+    then (CL.fold_left2 (fun prev x y -> prev & (oper_eq x y)) true o1s o2s)
+    else (false)
   ;;
 
   let binOp_eq b1 b2 = b1 = b2
@@ -1084,17 +1096,52 @@ module OperationDedup = struct
     && oper_eq iv1.sIdx iv2.sIdx
   ;;
 
-  (* for now, we only consider equality for 
-     stateful instructions and hash instructions. *)
+  let expr_eq e1 e2 = 
+    match (e1, e2) with 
+      | Oper o1, Oper o2 -> oper_eq o1 o2
+      | BinOp(b1, o1s), BinOp(b2, o2s) -> 
+        (binOp_eq b1 b2) & (opers_eq o1s o2s)
+      | HashOp(m1s), HashOp (m2s) -> (ids_eq m1s m2s)
+      | _, _ -> false
+  ;;
+
+
+  let instr_eq i1 i2 = 
+    match i1, i2 with 
+    | (IAssign(l1, e1), IAssign(l2, e2)) ->
+      (id_eq l1 l2) & (expr_eq e1 e2)
+    | IValidate l1, IValidate l2 -> 
+      id_eq l1 l2
+    | IInvalidate l1, IInvalidate l2 ->
+      id_eq l1 l2
+    | _, _ -> false
+  ;;
+
+  let instrVec_eq (iv1 : instrVec) (iv2 : instrVec) = 
+    if ((CL.length iv1) = (CL.length iv2))
+    then (
+      let folder prev i1 i2 = 
+        prev & (instr_eq i1 i2) 
+      in 
+      CL.fold_left2 folder true iv1 iv2
+    )
+    else (false)
+  ;;  
+
+  (* We only consider equality of instructions and actions for now. 
+     Note that action comparison is shallow based on ids *)
   let decl_eq d1 d2 =
     match d1, d2 with
+    | InstrVec (_, iv1), InstrVec (_, iv2) -> instrVec_eq iv1 iv2
     | SInstrVec (_, iv1), SInstrVec (_, iv2) -> sInstr_eq iv1 iv2
-    | SInstrVec _, _ -> false
     | Hasher (_, ai1, bi1, out1, opers1), Hasher (_, ai2, bi2, out2, opers2) ->
       int_eq ai1 ai2
       && int_eq bi1 bi2
       && id_eq out1 out2
       && list_eq oper_eq opers1 opers2
+    | Action (_, instr_ids1, succ_ids1), Action (_, instr_ids2, succ_ids2) -> 
+      (* note: this is a shallow comparison, so you need to *)
+      (ids_eq instr_ids1 instr_ids2) & (ids_eq succ_ids1 succ_ids2) 
     | Hasher _, _ -> false
     | _ -> false
   ;;
@@ -1107,9 +1154,19 @@ module OperationDedup = struct
 
   (* is d2 a duplicate of d1? *)
   let decl_is_dup d1 d2 =
+    let d1_id = id_of_decl d1 in 
+    let d2_id = id_of_decl d2 in
     match decl_eq d1 d2 with
-    | true -> not (id_eq (id_of_decl d1) (id_of_decl d2))
-    | false -> false
+    | true -> (
+      !dprint_endline (sprintf "%s EQUALS %s" (str_of_tid d1_id) (str_of_tid d2_id));
+      let result = not (id_eq (id_of_decl d1) (id_of_decl d2)) in 
+      (* !dprint_endline ("result: "^(string_of_bool result)); *)
+      result
+    )
+    | false -> (
+      (* !dprint_endline (sprintf "%s NEQ %s" (str_of_tid d1_id) (str_of_tid d2_id)); *)
+      false
+    )
   ;;
 
   (* Main function: deduplicate a list of decls. 
@@ -1124,21 +1181,22 @@ module OperationDedup = struct
     | [] -> []
     | d :: ds ->
       let id_of_d = id_of_decl d in
-      !dprint_endline ("removing duplicates of " ^ Cid.to_string id_of_d);
+      !dprint_endline ("removing duplicates of " ^ (str_of_tid id_of_d));
       (* find ids of duplicates of d in ds *)
       let dup_ds = CL.filter (decl_is_dup d) ds in
       let aliases_of_d = CL.map id_of_decl dup_ds in
       !dprint_endline
-        ("number of aliases: " ^ (CL.length aliases_of_d |> string_of_int));
+        ("decl id: "^(str_of_tid id_of_d)^" number of aliases: " ^ (CL.length aliases_of_d |> string_of_int));
       (* get ds without any duplicates of the current element *)
       let new_ds = CL.filter (fun d_ds -> not (decl_is_dup d d_ds)) ds in
+      !dprint_endline ("original ds len: "^(string_of_int (CL.length ds))^" new ds len:"^(string_of_int (CL.length new_ds)));
       (* replace alias with d's id *)
       let replace_alias ds alias =
         !dprint_endline
           ("replacing alias: "
-          ^ Cid.to_string alias
+          ^ str_of_tid alias
           ^ " with "
-          ^ Cid.to_string id_of_d);
+          ^ str_of_tid id_of_d);
         CL.map (fun d -> replace_oid_in_decl d alias id_of_d) ds
       in
       let new_ds = CL.fold_left replace_alias new_ds aliases_of_d in
@@ -1150,7 +1208,13 @@ end
 let dedup_slprog tsprog =
   !dprint_endline "---- deduplication started -----";
   let r =
-    { tsprog with tspdecls = OperationDedup.dedup_decls tsprog.tspdecls }
+    { tsprog with tspdecls = 
+      tsprog.tspdecls 
+      |> OperationDedup.dedup_decls
+      |> OperationDedup.dedup_decls
+    } (* two passes because we must 
+    dedup instructions before 
+    we can dedup actions *)
   in
   let n_before = CL.length tsprog.tspdecls in
   let n_after = CL.length r.tspdecls in
