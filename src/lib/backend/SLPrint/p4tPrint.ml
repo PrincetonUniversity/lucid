@@ -189,7 +189,8 @@ module PrimitiveString = struct
   let sized_str_of_oper oper =
     match oper with
     | Const c ->
-      string_of_int (Integer.to_int c) ^ "w" ^ string_of_int (Integer.size c)
+      string_of_int (Integer.size c) ^ "w" ^ string_of_int (Integer.to_int c)
+      (* string_of_int (Integer.to_int c) ^ "w" ^ string_of_int (Integer.size c) *)
     | _ -> str_of_oper oper
   ;;
 
@@ -259,12 +260,19 @@ module PrimitiveString = struct
         | [i1; i2] -> str_of_expr (BinOp (Sub, [i2; i1])) (* reverse operands *)
         | _ -> error "[str_of_expr] SubR opcode must have 2 operands.")
       (* all the binary operations that compile to instructions *)
-      | Add | Sub | SatSub | RShift | LShift | BAnd | BOr | BXor | Concat ->
+      | Add | Sub | SatSub | RShift | LShift | BAnd | BOr | BXor ->
         (match args with
         | [i1; i2] ->
           str_of_oper i1 ^ " " ^ str_of_binop op ^ " " ^ str_of_oper i2 ^ ";"
         | _ ->
           error "[str_of_expr] Binary operation with wrong number of operands..")
+      | Concat -> (* concat is special -- needs to know width *)
+        (match args with
+        | [i1; i2] ->
+          sized_str_of_oper i1 ^ " " ^ str_of_binop op ^ " " ^ sized_str_of_oper i2 ^ ";"
+        | _ ->
+          error "[str_of_expr] Binary operation with wrong number of operands..")
+
       (* Cast is a binary operation, but it doesn't compile to an instruction 
            so we keep it separate for now. *)
       | Cast ->

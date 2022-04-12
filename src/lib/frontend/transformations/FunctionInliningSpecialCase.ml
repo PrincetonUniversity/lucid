@@ -44,7 +44,8 @@ let read_only_var (id : Id.t) (s : statement) : bool =
 let read_only_params fcn_params fcn_stmt = 
   List.fold_left (fun prev p -> prev & (read_only_var (fst p) fcn_stmt)) true fcn_params 
 ;;
-let single_return fcn_stmt = 
+
+let count_returns fcn_stmt =
   let num_rets = ref 0 in 
   let finder = 
     object
@@ -55,8 +56,17 @@ let single_return fcn_stmt =
     end
   in 
   finder#visit_statement () fcn_stmt;
-  !num_rets = 1
+  !num_rets
+
+
+let single_return fcn_stmt = 
+  (count_returns fcn_stmt) = 1
 ;;
+
+let no_return fcn_stmt = 
+  (count_returns fcn_stmt) = 0
+;;
+
 
 (* replace each parameter with its argument. This should only be caled 
    for functions with read_only_params! *)
@@ -154,8 +164,8 @@ let inline_multi_return_immutable (ds:decl list) ((fcn_id:Id.t),(fcn_params : pa
 
 (* Inline functions that have one return statement and immutable variables 
    anywhere they appear. *)
-let inline_single_return_immutable (ds:decl list) ((fcn_id:Id.t),(fcn_params : params),fcn_stmt)  = 
-  match ((read_only_params fcn_params fcn_stmt) && (single_return fcn_stmt)) with 
+let inline_no_return_or_single_return_immutable (ds:decl list) ((fcn_id:Id.t),(fcn_params : params),fcn_stmt)  = 
+  match ((read_only_params fcn_params fcn_stmt) && ((single_return fcn_stmt) || (no_return fcn_stmt))) with 
   | true -> 
     let assign_subst = 
       object
@@ -184,6 +194,19 @@ let inline_single_return_immutable (ds:decl list) ((fcn_id:Id.t),(fcn_params : p
                 )
                 | _ -> stmt
               )
+            (* for unit calls to functions with read only params, we can just 
+               replace params and be done. *)
+            | SUnit(exp) -> (
+              match exp.e with 
+                | ECall(cid, args) -> (
+                  match (Cid.equal (Cid.id fcn_id) cid) with 
+                  | true -> 
+                    let fcn_stmt = replace_params_with_args fcn_stmt fcn_params args in 
+                    fcn_stmt
+                  | false -> stmt
+                )
+                | _ -> stmt
+            )
             | _ -> stmt
           in 
           super#visit_statement (fcn_id, fcn_params, fcn_stmt) stmt
@@ -201,6 +224,7 @@ let inline_prog_specialcase ds =
   let ds = List.fold_left inline_multi_return_immutable ds (dfuns ds) in 
   (* all functions with 1 return statement and immutable parameters can 
   be inlined with 0 overhead, regardless of where they appear. *)
-  let ds = List.fold_left inline_single_return_immutable ds (dfuns ds) in 
+  let ds = List.fold_left inline_no_return_or_single_return_immutable ds (dfuns ds) in 
+  (* finally, inline all function calls in unit statements with immutable parameters *)
   ds
 ;;

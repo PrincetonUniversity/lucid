@@ -389,7 +389,7 @@ module Constraints = struct
     let max_hashers stage =
       let res =
         CL.length (CL.map hashers_of_tg stage.s_tgs |> unique_list_of)
-        < stage_def.smax_hashers
+        <= stage_def.smax_hashers
       in
       if res <> true then !dprint_endline "[stage_check] fail: max_hashers";
       res
@@ -625,7 +625,7 @@ module Placement = struct
            or, if the table is large, place it in a solitary group. *)
         (* if this is a large table from a match statement, place it in a 
            solitary table group. Else, try placing it into an existing table. *)
-        if ((num_actions dagProg (CL.hd tids)) > 10)
+        if ((num_actions dagProg (CL.hd tids)) > 50)
         then (
           let new_dagprog, updated_stage = place_in_solitary_group dagProg stage tids in 
           let ctx = ctx_note_placements stage.s_num ctx tids in 
