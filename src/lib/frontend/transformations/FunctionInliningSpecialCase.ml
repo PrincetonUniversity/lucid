@@ -117,12 +117,16 @@ let replace_return_with_local id ty stmt =
 let inline_multi_return_immutable (ds:decl list) ((fcn_id:Id.t),(fcn_params : params),fcn_stmt)  = 
   match (read_only_params fcn_params fcn_stmt) with 
   | true -> 
+    (* print_endline (("[inline_multi_return_immutable] all parameters immutable for function:"^(Id.to_string fcn_id))); *)
     let assign_subst = 
       object
         inherit [_] s_map as super
         method! visit_SAssign (fcn_id, fcn_params, fcn_stmt) id exp = 
+          (* print_endline ("[inline_multi_return_immutable] visiting assign."); *)
+          (* Printing.exp_to_string exp |> print_endline; *)
           match exp.e with 
           | ECall(cid, args) -> (
+            (* print_endline ("[inline_multi_return_immutable] call in assign: "^(Cid.to_string cid)); *)
             match (Cid.equal (Cid.id fcn_id) cid) with 
             | true ->
               (* an assignment that calls a function with read only params. 
@@ -135,7 +139,6 @@ let inline_multi_return_immutable (ds:decl list) ((fcn_id:Id.t),(fcn_params : pa
               let fcn_stmt = replace_return_with_assign id fcn_stmt in 
               (* step 3: return the transformed function body instead of the 
                          call. *)
-              print_endline ("HEEEERE.");
               fcn_stmt.s
             | false -> SAssign(id, exp) (* call to different function *)
           )
@@ -144,7 +147,9 @@ let inline_multi_return_immutable (ds:decl list) ((fcn_id:Id.t),(fcn_params : pa
       end
     in 
     assign_subst#visit_decls (fcn_id, fcn_params, fcn_stmt) ds
-  | false -> ds (* some of the parameters in the function are written *)
+  | false -> 
+    (* print_endline ("[inline_multi_return_immutable] cannot inline -- mutable parameter."); *)
+  ds (* some of the parameters in the function are written *)
 ;;
 
 (* Inline functions that have one return statement and immutable variables 

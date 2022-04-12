@@ -12,6 +12,13 @@ let cfg = Cmdline.cfg
 let enable_compound_expressions = true
 let do_ssa = false
 
+let optimize_simple_calls = ref true
+
+let set_no_call_optimize () = 
+  optimize_simple_calls := false
+;;
+
+
 let process_prog ?(for_interp = false) ds =
   print_if_verbose "-------Translating to core syntax---------";
   let ds = SyntaxToCore.translate_prog ds in
@@ -26,6 +33,13 @@ let process_prog ?(for_interp = false) ds =
     ds
   | false ->
     LogIr.log_lucid "midend_start.dpt" ds;
+    let ds = if (!optimize_simple_calls)
+      then (
+        print_if_verbose "-------Optimizing simple calls--------";
+        OptimizeSimpleCalls.eliminate_single_use_retvars ds
+      )
+      else (ds)
+    in 
     print_if_verbose "-------Eliminating range relational ops--------";
     let ds = EliminateEqRangeOps.transform ds in
     (* temporary patches for incomplete features. *)

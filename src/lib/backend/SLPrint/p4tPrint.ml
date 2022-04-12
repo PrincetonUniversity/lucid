@@ -448,7 +448,7 @@ module PrintSalu = struct
         sprintf "%s %s %s"
           (str_of_sArithExp ncells_opt arith)
           (PrimitiveString.str_of_cmpop op)
-          (PrimitiveString.str_of_oper oper)
+          (PrimitiveString.str_of_stateful_oper ncells_opt oper)
 
   ;;
 

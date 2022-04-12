@@ -87,6 +87,7 @@
    precomputeArgs
    normalizeBools
    eliminateBools
+   optimizeSimpleCalls
    normalizeInts
    singleAssignment
    partialSingleAssignment
