@@ -95,22 +95,24 @@ opam init -a -y --compiler=4.11.1
 eval $(opam env)
 echo "eval 'opam config env'" >> ~/.bashrc
 opam install -y \
-    integers \
-    batteries \
-    ounit \
-    ansiterminal \
-    menhir \
-    ppx_deriving \
-    ppx_deriving_argparse \
-    ppx_string_interpolation \
-    zarith \
-    visitors \
-    fileutils \
-    ppx_import \
-    core \
-    dune \
-    ocamlgraph \
-    z3 \
-    yojson \
-    angstrom
+  integers \
+  batteries \
+  ounit \
+  ansiterminal \
+  menhir \
+  ppx_deriving \
+  ppx_deriving_argparse \
+  ppx_string_interpolation \
+  zarith \
+  visitors \
+  fileutils \
+  ppx_import \
+  core \
+  dune \
+  ocamlgraph \
+  angstrom \
+  yojson \
+  pyml \
+  z3
+
 eval $(opam env)

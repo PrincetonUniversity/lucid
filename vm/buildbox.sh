@@ -81,7 +81,7 @@ else
         $cmd \
         && vagrant reload \
         && echo "clearing unused space for smaller image" \
-        && vagrant ssh -c "sudo dd if=/dev/zero of=/EMPTY bs=1M; sudo rm -f /EMPTY" \
+        && vagrant ssh -c "sudo dd if=/dev/zero of=/EMPTY bs=4096k; sudo rm -f /EMPTY" \
         && echo "packaging into $BOX" \
         && vagrant package --output "$BOX" \
         && echo "destroying default box" \
