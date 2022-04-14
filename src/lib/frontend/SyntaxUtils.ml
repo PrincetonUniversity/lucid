@@ -159,9 +159,8 @@ let rec equiv_size ?(qvars_wild = false) s1 s2 =
    "Obvious" means they are both integers, or s1 is just s2 plus something *)
 let try_subtract_sizes s1 s2 =
   match normalize_size s1, normalize_size s2 with
-  | s1, s2 when equiv_size s1 s2 -> Some (IConst 0)
   | IConst n, IConst m when n >= m -> Some (IConst (n - m))
-  | IConst n, ISum (sizes, m) when n >= m -> Some (ISum (sizes, n - m))
+  | ISum (sizes, n), IConst m when n >= m -> Some (ISum (sizes, n - m))
   | ISum (sizes1, n1), ISum (sizes2, n2) when n1 >= n2 ->
     (try
        let new_sizes =
@@ -176,8 +175,9 @@ let try_subtract_sizes s1 s2 =
        else Some (ISum (new_sizes, n1 - n2))
      with
     | Failure _ -> None)
-  | s1, ISum (sizes, n) when List.mem s1 sizes ->
-    Some (ISum (List.remove sizes s1, n))
+  | ISum (sizes, n), s2 when List.mem s2 sizes ->
+    Some (ISum (List.remove sizes s2, n))
+  | s1, s2 when equiv_size s1 s2 -> Some (IConst 0)
   | _ -> None
 ;;
 
