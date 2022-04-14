@@ -214,7 +214,8 @@ let op_to_string op =
   | BitXor -> "^^"
   | LShift -> "<<"
   | RShift -> ">>"
-  | Slice (n, m) -> Printf.sprintf "[%d : %d]" n m
+  | Slice (n, m) ->
+    Printf.sprintf "[%s : %s]" (size_to_string n) (size_to_string m)
   | TGet (n, m) -> Printf.sprintf "[%d get %d]" n m
 ;;
 

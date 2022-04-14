@@ -99,7 +99,7 @@ and op =
   | LShift
   | RShift
   | TGet of int * int (* Size of the tuple, index to get *)
-  | Slice of int * int
+  | Slice of size * size
 
 and pat =
   | PWild
