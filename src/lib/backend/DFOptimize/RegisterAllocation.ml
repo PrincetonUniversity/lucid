@@ -463,7 +463,8 @@ let find_unbound_vars cid_decls =
     | _ -> true
   in
   let compute_ds = CL.filter is_compute_object ds in
-  let all_mids = CL.map mids_of_compute_objs compute_ds |> CL.flatten in
+  (* get a unique list of all the identifiers used in expressions. *)
+  let all_mids = CL.map mids_of_compute_objs compute_ds |> CL.flatten  |> unique_list_of in
   let mid_of_metadec d =
     match d with
     | MetaVar (mid, _) -> Some mid
@@ -471,9 +472,11 @@ let find_unbound_vars cid_decls =
   in
   let declared_mids = CL.filter_map mid_of_metadec ds in
   let struct_mids = list_sub all_mids declared_mids in
+  let struct_mids = unique_list_of struct_mids in 
   !dprint_endline
     ("undeclared mids that are used in compute objects: "
     ^ P4tPrint.str_of_varids struct_mids);
+  !dprint_endline "----";
   (* struct_mids should consist of struct instances and their fields *)
   struct_mids
 ;;
