@@ -421,13 +421,18 @@ and infer_op env span op args =
     | Slice (hi, lo), [e] ->
       (* FIXME: To be sound, we should also require that the size is at most hi.
                 But we can't express that at the moment. *)
-      if lo < 0 || lo > hi
-      then error_sp span "Bad arguments to slice operator"
-      else (
+      (match try_subtract_sizes hi lo with
+      | None ->
+        error_sp span
+        @@ Printf.sprintf
+             "Invalid slice arguments: %s is not obviously larger than %s"
+             (size_to_string hi)
+             (size_to_string lo)
+      | Some diff ->
         let tsize = fresh_size () in
         let env, inf_e, inf_ety = infer_exp env e |> textract in
         unify_raw_ty span inf_ety.raw_ty (TInt tsize);
-        env, mk_ty @@ TInt (IConst (hi - lo + 1)), [inf_e])
+        env, mk_ty @@ TInt (ISum ([diff], 1)), [inf_e])
     | TGet (size, idx), [e] ->
       let env, inf_e, inf_ety = infer_exp env e |> textract in
       let expected_rtys = List.init size (fun _ -> (fresh_type ()).raw_ty) in

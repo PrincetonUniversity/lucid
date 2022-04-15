@@ -233,8 +233,7 @@ exp:
     | LPAREN TINT single_poly RPAREN exp  { op_sp (Cast(snd $3))[$5] (Span.extend $1 $5.espan) }
     | exp PROJ ID                         { proj_sp $1 (Id.name (snd $3)) (Span.extend $1.espan (fst $3)) }
     | LPAREN exp RPAREN		             	  { $2 }
-    | exp LBRACKET NUM COLON NUM RBRACKET { op_sp (Slice (Z.to_int (snd $3), Z.to_int (snd $5))) [$1]
-                                                      (Span.extend ($1).espan (fst $5)) }
+    | exp LBRACKET size COLON size RBRACKET { op_sp (Slice (snd $3, snd $5)) [$1] (Span.extend ($1).espan (fst $5)) }
     | LBRACE record_entries RBRACE        { record_sp $2 (Span.extend $1 $3) }
     | LBRACE exp WITH record_entries RBRACE { with_sp $2 $4 (Span.extend $1 $5) }
     | exp LBRACKET size RBRACKET          { index_sp $1 (snd $3) (Span.extend $1.espan $4) }

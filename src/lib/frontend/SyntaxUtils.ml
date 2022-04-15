@@ -106,8 +106,7 @@ let rec normalize_size s =
         (IConst n)
         vs
     in
-    (* If the result is still a sum, then sort the list; otherwise, just return
-         the result *)
+    (* If the result is still a sum, then sort the list; otherwise, just return the result *)
     begin
       match recursively_normalize vs with
       | ISum ([], _) -> failwith "Sanity check: this should never happen"
@@ -154,6 +153,32 @@ let rec equiv_size ?(qvars_wild = false) s1 s2 =
          vs
   | IVar tqv, s | s, IVar tqv -> STQVar.equiv_tqvar ~qvars_wild equiv_size tqv s
   | _ -> false
+;;
+
+(* If s1 is "obviously" greater than s2, return the difference; otherwise None.
+   "Obvious" means they are both integers, or s1 is just s2 plus something *)
+let try_subtract_sizes s1 s2 =
+  match normalize_size s1, normalize_size s2 with
+  | IConst n, IConst m when n >= m -> Some (IConst (n - m))
+  | ISum (sizes, n), IConst m when n >= m -> Some (ISum (sizes, n - m))
+  | ISum (sizes1, n1), ISum (sizes2, n2) when n1 >= n2 ->
+    (try
+       let new_sizes =
+         List.fold_left
+           (fun acc sz ->
+             if List.mem sz acc then List.remove acc sz else raise (Failure ""))
+           sizes1
+           sizes2
+       in
+       if List.is_empty new_sizes
+       then Some (IConst (n1 - n2))
+       else Some (ISum (new_sizes, n1 - n2))
+     with
+    | Failure _ -> None)
+  | ISum (sizes, n), s2 when List.mem s2 sizes ->
+    Some (ISum (List.remove sizes s2, n))
+  | s1, s2 when equiv_size s1 s2 -> Some (IConst 0)
+  | _ -> None
 ;;
 
 let rec equiv_effect ?(qvars_wild = false) e1 e2 =

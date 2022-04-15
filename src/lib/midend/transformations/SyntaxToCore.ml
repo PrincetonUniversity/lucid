@@ -57,7 +57,7 @@ let translate_op (op : S.op) : C.op =
   | S.BitNot -> C.BitNot
   | S.LShift -> C.LShift
   | S.RShift -> C.RShift
-  | S.Slice (lo, hi) -> C.Slice (lo, hi)
+  | S.Slice (lo, hi) -> C.Slice (translate_size lo, translate_size hi)
   | S.TGet _ -> err Span.default "tuple get operator"
 ;;
 
