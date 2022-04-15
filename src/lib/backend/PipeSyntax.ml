@@ -232,6 +232,7 @@ module Constraints = struct
     ; gmax_regs : int
     ; gmax_hashers : int
     ; gmax_matchbits : int
+    ; gmax_actions : int
     }
 
   let group_def =
@@ -240,20 +241,9 @@ module Constraints = struct
       gmax_regs = 1
     ; gmax_hashers = 1
     ; gmax_matchbits = 512
+    ; gmax_actions = 25 (* this should probably count alus. *)
     }
   ;;
-
-  (* the group pre-merge constraints are here to protect the 
-     compiler itself -- the current implementation has trouble 
-     merging very large tables together. *)
-  type pregroup = 
-  { gmax_acns : int
-  ; gmax_rules : int
-  }
-  let pregroup_def = 
-  { gmax_acns = 100  
-  ; gmax_rules = 100
-  }
 
   (* check if stage meet stage constraints *)
   type stage =
@@ -279,16 +269,6 @@ module Constraints = struct
            | _ -> None)
     |> String.concat "\n--\n"
     |> !dprint_endline
-  ;;
-
-  let group_precheck dagProg tg = 
-    let _ = dagProg in 
-    (* make sure that the group isn't already too large. *)
-    let max_actions tg = 
-      !dprint_endline ("[group_precheck] number of actions in tg: "^(string_of_int (CL.length (tg.g_acns))));
-      CL.length (tg.g_acns) <= pregroup_def.gmax_acns      
-    in
-    max_actions tg
   ;;
 
   (* this is a check that applies _after_ we merge a table into a group. *)
@@ -330,7 +310,13 @@ module Constraints = struct
       if res <> true then !dprint_endline "[group_check] fail: max_matchbits";
       res
     in
-    max_tbls tg && max_regs tg && max_hash tg && max_matchbits dagProg tg
+    let max_actions tg = 
+      let n_acns = CL.length (tg.g_acns) in 
+      !dprint_endline
+        ("[max_actions] tg number of actions: " ^ string_of_int n_acns);
+      n_acns <= group_def.gmax_actions      
+    in
+    max_tbls tg && max_regs tg && max_hash tg && max_matchbits dagProg tg && max_actions tg
   ;;
 
   (* When we place table t into a stage s, we have to make 

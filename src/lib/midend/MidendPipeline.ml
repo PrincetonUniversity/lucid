@@ -33,6 +33,8 @@ let process_prog ?(for_interp = false) ds =
     ds
   | false ->
     LogIr.log_lucid "midend_start.dpt" ds;
+    print_if_verbose "-------Eliminating value cast ops--------";
+    let ds = EliminateValueCasts.eliminate_value_casts ds in 
     let ds = if (!optimize_simple_calls)
       then (
         print_if_verbose "-------Optimizing simple calls--------";
