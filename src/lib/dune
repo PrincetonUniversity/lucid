@@ -89,6 +89,7 @@
    eliminateBools
    optimizeSimpleCalls
    eliminateValueCasts
+   eliminateExterns
    normalizeInts
    singleAssignment
    partialSingleAssignment

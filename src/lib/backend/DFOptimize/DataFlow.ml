@@ -69,10 +69,11 @@ let build_writemap cid_decls =
 
 (* find the tables that must execute before tid in control graph g *)
 let get_dependencies cid_decls readmap writemap g tid = 
-  !dprint_endline ("[get_dependencies] processing node: "^(Cid.to_string tid));
+  !dprint_endline ("[get_dependencies] start processing node: "^(P4tPrint.str_of_private_oids [tid]));
   let checker = PCheck.create g in (* path checker *)
   (* get write, read dependencies (tid reads) *)
   let read_by_tid = read_vars_of_tbl cid_decls tid in 
+  !dprint_endline ("variables that the table reads: "^(P4tPrint.str_of_varids read_by_tid));
   let writer_tids = 
     CL.map
       (fun varid -> UseMap.find_default [] varid writemap)
@@ -81,6 +82,7 @@ let get_dependencies cid_decls readmap writemap g tid =
     |> unique_list_of
     |> CL.filter (fun tidb -> tidb <> tid)
   in 
+  !dprint_endline ("other tables that write these variables: "^(P4tPrint.str_of_private_oids writer_tids));
   (* which writers are preds of tid? *)
   let pred_writers = CL.filter 
       (fun tidb ->
@@ -88,8 +90,10 @@ let get_dependencies cid_decls readmap writemap g tid =
       )
       writer_tids
   in 
+  !dprint_endline ("predecessors that write these variables: "^(P4tPrint.str_of_private_oids writer_tids));
   (* now get read, write dependencies (tid writes) *)
   let written_by_tid = write_vars_of_tbl cid_decls tid in 
+  (* !dprint_endline ("variables that the table writes: "^(P4tPrint.str_of_private_oids written_by_tid)); *)
   let reader_tids = 
     CL.map
       (fun varid -> UseMap.find_default [] varid readmap)
@@ -122,12 +126,14 @@ let get_dependencies cid_decls readmap writemap g tid =
       )
       writer_tids_of_write_vars
   in 
+  let predecessors = pred_writers@pred_readers@pred_writer_tids_of_write_vars in 
   (* make edges between the predecessors and tid *)
   let dag_edges = CL.map 
     (fun dtid -> (dtid, tid)) 
-    (pred_writers@pred_readers@pred_writer_tids_of_write_vars) 
-  in 
-  !dprint_endline ("[get_dependencies] done processing node: "^(Cid.to_string tid));
+    (predecessors) 
+  in   
+  !dprint_endline ("[get_dependencies] done processing node: "^(P4tPrint.str_of_private_oids [tid]));
+  !dprint_endline ("[get_dependencies] predecessors: "^( P4tPrint.str_of_private_oids predecessors));
   dag_edges 
 ;;
 

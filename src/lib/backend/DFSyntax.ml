@@ -552,6 +552,26 @@ let replace_oid_in_decl d old_oid new_oid =
   new_d
 ;;
 
+(* replace reads of old_mid with reads of new_mid *)
+let replace_rmid_in_decl d old_mid new_mid =
+  let v =
+    object
+      inherit [_] dataPathMap as super
+
+      (* skip lmids! *)
+      method! visit_lmid _ i = 
+        i
+
+      method! visit_mid _ i =
+        match old_mid = i with
+        | true -> new_mid
+        | false -> i
+    end
+  in
+  let new_d = v#visit_decl () d in
+  new_d
+;;
+
 let replace_mid_in_decl d old_mid new_mid =
   let v =
     object
@@ -833,7 +853,10 @@ let lr_mids_of_tid cid_decls tbl_id : lmid list * mid list =
   match Cid.lookup cid_decls tbl_id with
   | Table (_, rules, _) ->
     let match_mids = match_vars_of_rules rules in
-    lmids, match_mids @ rmids
+    let rmids = match_mids @ rmids in 
+(*     print_endline ("table: "^(P4tPrint.str_of_private_oid tbl_id));
+    print_endline ("write mids: "^(P4tPrint.str_of_varids lmids)); *)
+    lmids, rmids
   | _ ->
     error
       ("lr_mids_of_tid: object "

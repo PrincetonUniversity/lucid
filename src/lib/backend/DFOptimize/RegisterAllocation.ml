@@ -47,7 +47,12 @@ let prepare_call_var_for_salu inner_var cid_decls (salu_call, outer_var) =
   let salu_call_tid = tid_of_oid cid_decls (id_of_decl salu_call) in
   let cid_decls = insert_before_tid cid_decls tbl_id salu_call_tid in
   (* replace outer_var with inner_var in the salu call *)
-  let new_salu_call = replace_mid_in_decl salu_call outer_var inner_var in
+  (* 
+    longstanding bug fix: 
+      this should only be replacing the READS, not the WRITES! 
+  *)
+  let new_salu_call = replace_rmid_in_decl salu_call outer_var inner_var in
+  (* let new_salu_call = replace_mid_in_decl salu_call outer_var inner_var in *)
   let cid_decls = emplace_decl cid_decls new_salu_call in
   cid_decls
 ;;
@@ -233,7 +238,7 @@ let prepare_frame_var_for_rid
     (match CL.length conflict_pairs with
     (* more than 1 variable, but there are no conflicts, so we can merge all variables. *)
     | 0 ->
-      DBG.printf outc "-------------\n";
+      DBG.printf outc "-------merging variables------\n";
       DBG.printf
         outc
         "[prepare_frame_var_for_rid] memory cell: %s\n"
@@ -252,7 +257,7 @@ let prepare_frame_var_for_rid
     (* there are conflicts. We have to add the per-register input variable and 
            instructions to load arguments to the input variable before the salu call. *)
     | _ ->
-      DBG.printf outc "-------------\n";
+      DBG.printf outc "------adding an input variable-------\n";
       DBG.printf
         outc
         "[prepare_frame_var_for_rid] memory cell: %s\n"
@@ -263,7 +268,7 @@ let prepare_frame_var_for_rid
         (P4tPrint.str_of_private_oid salu_arg_id);
       DBG.printf
         outc
-        "[prepare_frame_var_for_rid] vars: %s\n"
+        "[prepare_frame_var_for_rid] vars that get copied to parameter: %s\n"
         (str_of_cids vars);
       DBG.printf
         outc
