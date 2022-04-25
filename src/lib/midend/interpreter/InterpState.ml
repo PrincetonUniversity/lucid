@@ -140,12 +140,6 @@ module State = struct
   let update_counter swid _ nst =
     let st = nst.switches.(swid) in
     let new_counter =
-      (* match Env.find event.eid nst.event_sorts with
-      | EEntry _ ->
-        { pkts_handled = !(st.counter).pkts_handled + 1
-        ; total_handled = !(st.counter).total_handled + 1
-        }
-      | _ -> *)
       { !(st.counter) with total_handled = !(st.counter).total_handled + 1 }
     in
     st.counter := new_counter

@@ -1,6 +1,7 @@
 open Batteries
 open CoreSyntax
 open Yojson.Basic
+open ParseJsonValues
 open Preprocess
 module Env = InterpState.Env
 module IntMap = InterpState.IntMap
@@ -17,48 +18,10 @@ type t =
   ; extern_funs : InterpState.State.ival Env.t
   }
 
-type header_autofill =
-  | Never
-  | Random of int (* seed *)
-  | Zero
-
 let rename env err_str id_str =
   match Collections.CidMap.find_opt (Cid.from_string id_str) env with
   | Some id -> id
   | None -> error @@ Printf.sprintf "Unknown %s %s" err_str id_str
-;;
-
-let parse_int err_str (j : json) =
-  match j with
-  | `Int n -> n
-  | _ -> error @@ "Non-integer value for " ^ err_str
-;;
-
-let parse_int_entry lst str default =
-  match List.assoc_opt str lst with
-  | Some j -> parse_int str j
-  | None -> default
-;;
-
-let rec parse_value err_str ty j =
-  match j, ty.raw_ty with
-  | `Int n, TInt size -> vint n size
-  | `Bool b, TBool -> vbool b
-  | `List lst, TGroup ->
-    vgroup (List.map (fun n -> parse_int "group value definition" n) lst)
-  | _ ->
-    error
-    @@ err_str
-    ^ " specification had wrong or unexpected argument "
-    ^ to_string j
-;;
-
-let parse_port str =
-  match String.split_on_char ':' str with
-  | [id; port] ->
-    (try int_of_string id, int_of_string port with
-    | _ -> error "Incorrect format for link entry!")
-  | _ -> error "Incorrect format for link entry!"
 ;;
 
 let default_port = 0
@@ -75,7 +38,7 @@ let parse_events
     (renaming : Renaming.env)
     (num_switches : int)
     (gap : int)
-    (autofill_headers : header_autofill)
+    (autofill_headers : record_autofill)
     (events : json list)
   =
   (* Using state because I'm lazy *)
@@ -183,7 +146,7 @@ let parse_events
                 | None -> arg_tys
                 | Some { size } -> List.drop size arg_tys
               in
-              (try List.map2 (parse_value "Event") arg_tys args with
+              (try List.map2 (parse_simple_value "Event") arg_tys args with
               | Invalid_argument _ ->
                 error
                 @@ Printf.sprintf
@@ -217,7 +180,11 @@ let parse_events
         | None ->
           (* User event with no header argument, so throw out any remaining headers *)
           []
-        | Some { raw_ty = TRecord expected_headers } -> List.map entries
+        | Some ty ->
+          parse_header_value
+            autofill_headers
+            ty.raw_ty
+            (`List (List.map (fun (_, json) -> `Assoc json) rest))
       in
       let data = header_data @ event_args in
       { eid; data; edelay }, locations
@@ -243,7 +210,7 @@ let parse_externs
       let ty = Env.find id pp.externs in
       let vs =
         match values with
-        | `List lst -> List.map (parse_value "Extern" ty) lst
+        | `List lst -> List.map (parse_simple_value "Extern" ty) lst
         | _ -> error "Non-list type for extern value specification"
       in
       if List.length vs <> num_switches
@@ -356,13 +323,7 @@ let create_foreign_functions renaming efuns python_file =
     Env.empty
 ;;
 
-let parse
-    (pp : Preprocess.t)
-    (header_defs : Syntax.decls)
-    (renaming : Renaming.env)
-    (filename : string)
-    : t
-  =
+let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t =
   let json = from_file filename in
   match json with
   | `Assoc lst ->
@@ -379,7 +340,7 @@ let parse
     let header_autofill =
       match List.assoc_opt "autofill_headers" lst with
       | None -> Never
-      | Some (`String "zero") | Some (`String "Zero") | Some (`Int 0) -> Zero
+      | Some (`String "default") | Some (`String "Default") -> Default
       | Some (`String "random") | Some (`String "Random") -> Random random_seed
       | _ -> error "Unexpected value for autofill_headers"
     in

@@ -60,8 +60,7 @@ module ArgParse = struct
         , Arg.String set_spec
         , "Path to the interpreter specification file" )
       ; "--symb", Arg.String set_symb, "Path to the symbolic specification file"
-      ; "--nomc", Arg.Unit LLConfig.set_nomc, "Disable multicast" 
-      ]
+      ; "--nomc", Arg.Unit LLConfig.set_nomc, "Disable multicast" ]
     in
     let parse_aarg (arg : string) =
       args_ref := { !args_ref with aargs = !args_ref.aargs @ [arg] };
@@ -73,9 +72,16 @@ module ArgParse = struct
     let args =
       match !args_ref.aargs with
       | [dptfn; p4fn; configfn; builddir] ->
-        { !args_ref with dptfn; p4fn; configfn=(Some configfn); builddir; aargs = [] }
-      | [dptfn; p4fn; builddir] -> (* manual linking for custom entry / exit P4 integration *)
-        { !args_ref with dptfn; p4fn; configfn=None; builddir; aargs = [] }
+        { !args_ref with
+          dptfn
+        ; p4fn
+        ; configfn = Some configfn
+        ; builddir
+        ; aargs = []
+        }
+      | [dptfn; p4fn; builddir] ->
+        (* manual linking for custom entry / exit P4 integration *)
+        { !args_ref with dptfn; p4fn; configfn = None; builddir; aargs = [] }
       | _ -> error usage
     in
     args
@@ -87,11 +93,10 @@ exception Error of string
 let error s = raise (Error s)
 
 (* start per-pass logs. *)
-let start_backend_logs () = 
+let start_backend_logs () =
   LLTranslate.start_logging ();
   LLOp.start_logging ();
   LLContext.start_logging ();
-
   OGSyntax.start_logging ();
   BranchElimination.start_logging ();
   MergeUtils.start_logging ();
@@ -99,10 +104,10 @@ let start_backend_logs () =
   Liveliness.start_logging ();
   RegisterAllocation.start_logging ();
   PipeSyntax.start_logging ();
-
   P4tPrint.start_logging ();
   ()
 ;;
+
 (* shouldn't need to do this anymore. *)
 let clear_output_dir () =
   (* clear output directory of old source. *)
@@ -149,7 +154,7 @@ let to_ir ds =
 ;;
 
 (* do optimizations on tofino ir *)
-let backend_passes (df_prog: DFSyntax.dagProg) =
+let backend_passes (df_prog : DFSyntax.dagProg) =
   Console.report "SALU register allocation";
   let df_prog = RegisterAllocation.merge_and_temp df_prog in
   Console.report "Control flow elimination";
@@ -180,17 +185,18 @@ let parse_externs_from_interp_spec spec_file =
 ;;
 
 (* new (3/20/21) compilation pipeline *)
-let compile_to_tofino target_filename p4_harness_fn config_fn_opt interp_spec_fn =
+let compile_to_tofino target_filename p4_harness_fn config_fn_opt interp_spec_fn
+  =
   start_backend_logs ();
   (* parse *)
   let ds = Input.parse target_filename in
   let _ = interp_spec_fn in
-  (* before the "official" frontend, do temporary optimization 
-     passes that will eventually be removed once the 
+  (* before the "official" frontend, do temporary optimization
+     passes that will eventually be removed once the
      mid/back-end is better optimized. *)
   let ds = FunctionInliningSpecialCase.inline_prog_specialcase ds in
   (* frontend eliminates most abstractions (modules, functions) *)
-  let _, ds = FrontendPipeline.process_prog ds in
+  let _, _, ds = FrontendPipeline.process_prog ds in
   (* middle passes do a bit of regularization of the syntax tree *)
   let ds = MidendPipeline.process_prog ds in
   (* convert to IR for backend *)
@@ -203,9 +209,10 @@ let compile_to_tofino target_filename p4_harness_fn config_fn_opt interp_spec_fn
      list: (pragma string, code string to replace macro with) *)
   (* generate the entry event trigger table *)
   (* generate entry event triggers (if any) from config file *)
-  let trigger_macro_defs = match config_fn_opt with 
+  let trigger_macro_defs =
+    match config_fn_opt with
     | Some config_fn -> JsonBlocks.generate config_fn
-    | None -> [] 
+    | None -> []
   in
   (* linking: put p4 blocks together into a single file. *)
   let p4_str =

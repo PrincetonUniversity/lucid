@@ -5,8 +5,7 @@ open InterpState
 let initial_state (pp : Preprocess.t) (spec : InterpSpec.t) =
   let nst =
     { (State.create spec.config) with
-      event_sorts = Env.map fst pp.events
-    ; switches = Array.init spec.num_switches (fun _ -> State.empty_state ())
+      switches = Array.init spec.num_switches (fun _ -> State.empty_state ())
     ; links = spec.links
     }
   in
@@ -33,8 +32,8 @@ let initial_state (pp : Preprocess.t) (spec : InterpSpec.t) =
 
 let initialize header_defs renaming spec_file ds =
   Py.initialize ();
-  let pp, ds = Preprocess.preprocess ds in
-  let spec = InterpSpec.parse pp header_defs renaming spec_file in
+  let pp, ds = Preprocess.preprocess header_defs ds in
+  let spec = InterpSpec.parse pp renaming spec_file in
   let nst = initial_state pp spec in
   let nst = InterpCore.process_decls nst ds in
   nst
@@ -66,11 +65,8 @@ let simulate (nst : State.network_state) =
           | None -> error @@ "No handler for event " ^ Cid.to_string event.eid
           | Some handler ->
             Printf.printf
-              "t=%d: Handling %sevent %s at switch %d, port %d\n"
+              "t=%d: Handling event %s at switch %d, port %d\n"
               nst.current_time
-              (match Env.find event.eid nst.event_sorts with
-              | EEntry _ -> "entry "
-              | _ -> "")
               (CorePrinting.event_to_string event)
               idx
               port;

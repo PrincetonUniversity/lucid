@@ -32,7 +32,7 @@ let main () =
   | Some spec_file ->
     let ds = MidendPipeline.process_prog ~for_interp:true ds in
     Console.report "Simulating...";
-    let nst = Interp.initialize renaming spec_file ds in
+    let nst = Interp.initialize header_defs renaming spec_file ds in
     let nst = Interp.simulate nst in
     Console.report "Final State:";
     if cfg.show_interp_state

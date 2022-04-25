@@ -53,5 +53,6 @@ let eliminate_prog ds =
            | _ -> false)
   in
   let ds = annotate_events pkt_decs ds in
+  let pkt_decs = List.map (fun d -> d.d) pkt_decs in
   pkt_decs, ds
 ;;
