@@ -426,9 +426,9 @@ and d_to_string d =
       (id_to_string id)
       (params_to_string params)
       (stmt_to_string s)
-  | DEvent (id, hdrs, cspecs, params) ->
+  | DEvent (id, pkt_ty, cspecs, params) ->
     let hdr_str =
-      Option.map_default (fun ty -> ty_to_string ty ^ " ") "" hdrs
+      Option.map_default (fun x -> id_to_string x ^ " ") "" pkt_ty
     in
     Printf.sprintf
       "%s event %s(%s) %s;"

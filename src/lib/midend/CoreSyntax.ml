@@ -153,12 +153,10 @@ and memop_body =
   | MBIf of exp * exp * exp
   | MBComplex of complex_body
 
-and packet_ty = (Syntax.ty[@opaque])
-
 (* declarations *)
 and d =
   | DGlobal of id * ty * exp
-  | DEvent of id * packet_ty option * params
+  | DEvent of id * id option * params
   | DHandler of id * body
   | DMemop of id * params * memop_body
   | DExtern of id * ty

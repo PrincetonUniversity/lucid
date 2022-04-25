@@ -259,7 +259,7 @@ let d_to_string d =
       (stmt_to_string s)
   | DEvent (id, pkt_ty, params) ->
     let pkt_str =
-      Option.map_default (fun ty -> Printing.ty_to_string ty ^ " ") "" pkt_ty
+      Option.map_default (fun z -> Printing.id_to_string z ^ " ") "" pkt_ty
     in
     Printf.sprintf
       "%s event %s(%s);"

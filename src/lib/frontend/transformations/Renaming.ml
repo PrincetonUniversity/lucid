@@ -253,7 +253,6 @@ let rename prog =
           let new_x = self#freshen_var x in
           DMemop (new_x, replaced_params, replaced_body)
         | DEvent (x, hdr, cspecs, params) ->
-          let hdr = Option.map (self#visit_ty dummy) hdr in
           let old_env = env in
           let new_params =
             List.map

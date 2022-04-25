@@ -47,6 +47,10 @@ end
 open Syntax
 module HTrie = Trie (String)
 
+type header_trie = (id * ty) HTrie.t
+
+let lpm = HTrie.lpm
+
 let get_header_ids ty =
   match TyTQVar.strip_links ty.raw_ty with
   | TRecord lst ->

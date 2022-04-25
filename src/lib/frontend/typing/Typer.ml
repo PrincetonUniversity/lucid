@@ -1005,7 +1005,7 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
       let ty_dec = { d with d = DUserTy (id, [], ty) } in
       let pkt_ty = mk_ty (TName (Id id, [], false)) in
       let params = [Id.fresh "pkt_arg", pkt_ty] in
-      let event_dec = { d with d = DEvent (id, Some pkt_ty, [], params) } in
+      let event_dec = { d with d = DEvent (id, Some id, [], params) } in
       let new_env, _, _ = infer_declaration env effect_count ty_dec in
       let new_env, _, _ = infer_declaration new_env effect_count event_dec in
       new_env, effect_count, DPacketTy (id, ty)

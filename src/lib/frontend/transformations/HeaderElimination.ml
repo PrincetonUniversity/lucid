@@ -20,13 +20,10 @@ let annotate_events pkt_decs ds =
       (fun d ->
         match d.d with
         | DEvent
-            ( id
-            , _
-            , cs
-            , ((_, ({ raw_ty = TName (Id id2, _, _) } as ty)) :: _ as params) )
+            (id, _, cs, ((_, { raw_ty = TName (Id id2, _, _) }) :: _ as params))
           when IdSet.mem id2 pkt_ids ->
           (* The first argument's type is a packet type *)
-          { d with d = DEvent (id, Some ty, cs, params) }
+          { d with d = DEvent (id, Some id2, cs, params) }
         | _ -> d)
       ds
   in
@@ -44,7 +41,7 @@ let eliminate_prog ds =
         let params = [Id.fresh "pkt_arg", pkt_ty] in
         [ d
         ; { d with d = DUserTy (id, [], ty) }
-        ; { d with d = DEvent (id, Some pkt_ty, [], params) } ]
+        ; { d with d = DEvent (id, Some id, [], params) } ]
       | _ -> [d]
     in
     ds

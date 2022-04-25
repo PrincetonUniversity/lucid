@@ -168,12 +168,6 @@ let translate_decl (d : S.decl) : C.decl =
     | S.DGlobal (id, ty, exp) ->
       C.DGlobal (id, translate_ty ty, translate_exp exp)
     | S.DEvent (id, pkt, _, params) ->
-      let pkt =
-        Option.map
-          (fun (ty : Syntax.ty) ->
-            { ty with raw_ty = Syntax.TyTQVar.strip_links ty.raw_ty })
-          pkt
-      in
       C.DEvent (id, pkt, translate_params params)
     | S.DHandler (id, body) -> C.DHandler (id, translate_body body)
     | S.DMemop (id, params, body) ->

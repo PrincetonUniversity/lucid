@@ -3,15 +3,18 @@ open CoreSyntax
 open InterpCore
 open InterpState
 open Collections
+open PreprocessHeaders
 
 type t =
-  { events : (packet_ty option * ty list) Env.t
+  { events : (id option * ty list) Env.t
+  ; headers : pkt_entry IdMap.t * header_trie
   ; externs : ty Env.t
   ; extern_funs : IdSet.t
   }
 
 let empty =
   { events = Env.empty
+  ; headers = IdMap.empty, HTrie.empty
   ; externs =
       Env.singleton
         (Id Builtins.recirc_id)
@@ -22,7 +25,8 @@ let empty =
 
 (* Remove and process declarations which we can/must do beforehand --
    extern/event declarations, and precompute size values *)
-let preprocess ds =
+let preprocess header_decs ds =
+  let pp = { empty with headers = preprocess_headers header_decs } in
   let pp, ds =
     List.fold_left
       (fun (pp, ds) d ->
@@ -40,7 +44,7 @@ let preprocess ds =
             | _ -> { pp with externs = Env.add (Id id) ty pp.externs }, ds
           end
         | _ -> pp, d :: ds)
-      (empty, [])
+      (pp, [])
       ds
   in
   pp, List.rev ds

@@ -4,6 +4,7 @@ open Yojson.Basic
 open Preprocess
 module Env = InterpState.Env
 module IntMap = InterpState.IntMap
+open Collections
 
 type port = int * int (* Switch id * port number *)
 
@@ -62,18 +63,24 @@ let parse_port str =
 
 let default_port = 0
 
+let rec is_prefix eq lst1 lst2 =
+  match lst1, lst2 with
+  | [], _ -> true
+  | _, [] -> false
+  | hd1 :: tl1, hd2 :: tl2 -> eq hd1 hd2 && is_prefix eq tl1 tl2
+;;
+
 let parse_events
     (pp : Preprocess.t)
     (renaming : Renaming.env)
     (num_switches : int)
     (gap : int)
     (autofill_headers : header_autofill)
-    (header_defs : Syntax.decls)
     (events : json list)
   =
   (* Using state because I'm lazy *)
   let last_delay = ref (-gap) in
-  let header_trie = HeaderTrie.mk_trie header_defs in
+  let pkt_map, header_trie = pp.headers in
   let parse_locations lst =
     match List.assoc_opt "locations" lst with
     | Some (`List []) | None -> [0, default_port]
@@ -144,6 +151,26 @@ let parse_events
           in
           (* Look up its expected argument types and headers, if any *)
           let expected_packet_ty, arg_tys = Env.find eid pp.events in
+          let expected_pty_info =
+            Option.map (fun id -> IdMap.find id pkt_map) expected_packet_ty
+          in
+          (* Validate that the header list matches the expected packet type *)
+          let _ =
+            match expected_pty_info with
+            | None -> ()
+            | Some { header_names = expected_header_names } ->
+              let err () =
+                error
+                @@ "Incorrect headers for event "
+                ^ Printing.cid_to_string eid
+              in
+              if not
+                   (is_prefix
+                      String.equal
+                      expected_header_names
+                      (List.map fst headers))
+              then err ()
+          in
           (* Parse the arguments into values, and make sure they have the right types.
              At the moment only integer and boolean arguments are supported *)
           let event_args =
@@ -152,7 +179,9 @@ let parse_events
               let arg_tys =
                 (* If there's an expected packet ty, then the first argument is
                    a header, so its values will be provided separately *)
-                if expected_packet_ty <> None then List.tl arg_tys else arg_tys
+                match expected_pty_info with
+                | None -> arg_tys
+                | Some { size } -> List.drop size arg_tys
               in
               (try List.map2 (parse_value "Event") arg_tys args with
               | Invalid_argument _ ->
@@ -163,10 +192,17 @@ let parse_events
             | None -> error "Event header missing args field"
             | _ -> error "Event header had non-list type for args field"
           in
+          let expected_packet_ty =
+            Option.map
+              (fun entry -> entry.PreprocessHeaders.full_ty)
+              expected_pty_info
+          in
           eid, event_args, rest, expected_packet_ty
         | _ ->
           (* Not an event *)
-          (match HeaderTrie.HTrie.lpm (List.map fst headers) header_trie with
+          (match
+             PreprocessHeaders.HTrie.lpm (List.map fst headers) header_trie
+           with
           | Some (id, ty) -> Id id, [], headers, Some ty
           | None ->
             Console.error
@@ -179,7 +215,7 @@ let parse_events
       let header_data =
         match expected_packet_ty with
         | None ->
-          (* User event with no header argument, so ignore any other headers *)
+          (* User event with no header argument, so throw out any remaining headers *)
           []
         | Some { raw_ty = TRecord expected_headers } -> List.map entries
       in
