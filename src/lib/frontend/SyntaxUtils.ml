@@ -371,3 +371,18 @@ let memop_body_to_stmt memop_body =
     sifte e1 (statement (SRet (Some e2))) (statement (SRet (Some e3)))
   | MBComplex b -> complex_body_to_stmt b
 ;;
+
+(* Given a type, return the number of individual variables it will represent after
+   unrolling. Accounts for record, vector and tuple unrollings. *)
+let unrolled_size ty =
+  let rec aux rty =
+    match TyTQVar.strip_links rty with
+    | TBool | TInt _ | TEvent | TGroup -> 1
+    | TRecord lst -> List.fold_left (fun acc (_, rty) -> acc + aux rty) 0 lst
+    | TTuple lst -> List.fold_left (fun acc rty -> acc + aux rty) 0 lst
+    | TVector (rty, size) -> aux rty * extract_size size
+    | TQVar _ | TName _ | TAbstract _ | TVoid | TFun _ | TMemop _ ->
+      failwith "Internal error: Cannot get size of type"
+  in
+  aux ty.raw_ty
+;;

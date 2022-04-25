@@ -65,6 +65,7 @@
    interpCore
    pipeline
    preprocess
+   preprocessHeaders
    interpSpec
    interpState
    arrays
@@ -95,7 +96,6 @@
    uniqueSpans
    uniqueIds
    interpHelpers
-   headerTrie
    LLTranslate
    LLConstants
    LLContext
