@@ -1,6 +1,7 @@
 (* Main file of compiler. *)
 (* open Batteries *)
 open Dpt
+open Cmdline
 open Consts
 open BackendLogging
 open LinkP4
@@ -10,7 +11,6 @@ open Yojson.Basic
 
 [@@@ocaml.warning "-21"]
 
-let report str = Console.show_message str ANSITerminal.Green "compiler"
 
 (* minimal input
    1. dpt program
@@ -25,6 +25,38 @@ let report str = Console.show_message str ANSITerminal.Green "compiler"
    4. run sim script
    5. run hw script
    6. makefile *)
+
+(* hack in a disable logging option for optimizer iterations.
+   turns out this doesn't matter for performance.*)
+let do_logging = ref true ;;
+let disable_logging () = 
+  do_logging := false;
+  Cmdline.cfg.verbose <- false;
+  InterpHelpers.silent := true;
+  NormalizeInts.silent := true;
+  LLValidate.silent := true;
+  LogIr.silent := true;
+  RegisterAllocation.silent := true;
+  BranchElimination.silent := true;
+  PipeSyntax.silent := true;
+  P4tStats.silent := true;
+  LinkP4.silent := true;
+  PackageTofinoApp.silent := true;
+  ()
+;;
+
+
+let unmutable_report str = 
+  Console.show_message str ANSITerminal.Green "compiler"
+;;
+
+let report str = 
+  if (!do_logging)
+  then (
+  Console.show_message str ANSITerminal.Green "compiler";
+  )
+;;
+
 
 (* args parsing *)
 module ArgParse = struct
@@ -62,6 +94,7 @@ module ArgParse = struct
       ; "--symb", Arg.String set_symb, "Path to the symbolic specification file"
       ; "--nomc", Arg.Unit LLConfig.set_nomc, "Disable multicast" 
       ; "--nocallopt", Arg.Unit MidendPipeline.set_no_call_optimize, "Disable call optimization" 
+      ; "--silent", Arg.Unit disable_logging, "Disable all logging"
       ]
     in
     let parse_aarg (arg : string) =
@@ -87,28 +120,32 @@ exception Error of string
 
 let error s = raise (Error s)
 
+
 (* start per-pass logs. *)
 let start_backend_logs () = 
-  LLTranslate.start_logging ();
-  LLOp.start_logging ();
-  LLContext.start_logging ();
+  if (!do_logging) 
+  then (
+    LLTranslate.start_logging ();
+    LLOp.start_logging ();
+    LLContext.start_logging ();
 
-  OGSyntax.start_logging ();
-  BranchElimination.start_logging ();
-  MergeUtils.start_logging ();
-  DataFlow.start_logging ();
-  Liveliness.start_logging ();
-  RegisterAllocation.start_logging ();
-  PipeSyntax.start_logging ();
+    OGSyntax.start_logging ();
+    BranchElimination.start_logging ();
+    MergeUtils.start_logging ();
+    DataFlow.start_logging ();
+    Liveliness.start_logging ();
+    RegisterAllocation.start_logging ();
+    PipeSyntax.start_logging ();
 
-  P4tPrint.start_logging ();
-  ()
+    P4tPrint.start_logging ();
+  )
+  else ()
 ;;
 (* shouldn't need to do this anymore. *)
 let clear_output_dir () =
   (* clear output directory of old source. *)
   let cmd = "rm " ^ !outDir ^ "/*.dpt" in
-  print_endline ("[clear_output_dir] command: " ^ cmd);
+  (* print_endline ("[clear_output_dir] command: " ^ cmd); *)
   let _ = Sys.command cmd in
   ()
 ;;
@@ -140,27 +177,33 @@ let final_ir_setup ds =
 (* translate to lucid ir *)
 let to_ir ds =
   let ds, opgraph_recs = final_ir_setup ds in
-  LogIr.log_lucid "final_lucid.dpt" ds;
-  LogIr.log_lucid_osg "lucid_opstmt.dot" opgraph_recs;
-  Console.report "converting to tofino instructions";
+  if (!do_logging) then 
+  (
+    LogIr.log_lucid "final_lucid.dpt" ds;
+    LogIr.log_lucid_osg "lucid_opstmt.dot" opgraph_recs;
+    report "converting to tofino instructions";
+  );
   let dag_instructions = LLTranslate.from_dpt ds opgraph_recs in
   let df_prog = DFSyntax.to_dfProg dag_instructions in
+  if (!do_logging) then 
+  (
   LogIr.log_lir "initial_ir" df_prog;
+  );
   df_prog
 ;;
 
 (* do optimizations on tofino ir *)
 let backend_passes (df_prog: DFSyntax.dagProg) =
-  Console.report "SALU register allocation";
+  report "SALU register allocation";
   let df_prog = RegisterAllocation.merge_and_temp df_prog in
-  Console.report "Control flow elimination";
+  report "Control flow elimination";
   let df_prog = BranchElimination.do_passes df_prog in
-  print_endline ("---finished with branch elimination---");
-  Console.report "Control flow -> Data flow";
+  (* print_endline ("---finished with branch elimination---"); *)
+  report "Control flow -> Data flow";
   let dataflow_df_prog = DataFlow.do_passes df_prog in
   LogIr.log_lir "partial_df_nobranch" df_prog;
   LogIr.log_lir "df_prog" dataflow_df_prog;
-  Console.report "Data flow -> Pipeline";
+  report "Data flow -> Pipeline";
   let pipe, straightline_prog = PipeSyntax.do_passes dataflow_df_prog in
   LogIr.log_lir_pipe "pipe_ir" pipe;
   straightline_prog
@@ -222,6 +265,8 @@ let compile_to_tofino target_filename p4_harness_fn config_fn_opt interp_spec_fn
 ;;
 
 let main () =
+  unmutable_report "Compilation to P4 started...";
+
   let args = ArgParse.parse_args () in
   (* setup output directory. *)
   IoUtils.setup_build_dir args.builddir;
@@ -232,7 +277,8 @@ let main () =
   let p4_str, c_str, py_str =
     compile_to_tofino args.dptfn args.p4fn args.configfn args.interp_spec_file args.builddir
   in
-  report "Compilation to P4 finished.";
+
+  unmutable_report "Compilation to P4 finished.";
   PackageTofinoApp.generate p4_str c_str py_str args.builddir
 ;;
 

@@ -10,7 +10,12 @@ let libs_src_dir = "/tofinoLibs"
 let p4_fn = "lucid.p4"
 let c_fn = "lucid.cpp"
 let py_fn = "lucid.py"
-let report str = Console.show_message str ANSITerminal.Green "Packager"
+
+let silent = ref false ;;
+let report str = 
+  if (not !silent) then (
+  Console.show_message str ANSITerminal.Green "Packager"
+  )
 
 (* runtime libraries + launcher *)
 let copy_libs builddir =

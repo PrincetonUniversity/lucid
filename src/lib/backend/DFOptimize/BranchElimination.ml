@@ -8,6 +8,8 @@ module RS = RuleSolve
 open Printf
 open DebugPrint
 
+let silent = ref false;;
+
 (* move this to Cid.ml? *)
 module CidTbl = struct 
   type t = Cid.t
@@ -686,14 +688,18 @@ let eliminate_branch_nodes cid_decls g root_tid =
   !dprint_endline "----cid decls before eliminating control branches ----";
   !dprint_endline (DebugPrint.str_of_cid_decls cid_decls);
   !dprint_endline "----end cid decls before eliminating control branches ----";
-  tids_of_declmap cid_decls 
-    |> CL.length 
-    |> sprintf "Computing execution constraints for every primitive operation table. There are %i tables. Progress: "
-    |> print_string
-    |> Format.print_flush;
+  if (not !silent) then (
+    tids_of_declmap cid_decls 
+      |> CL.length 
+      |> sprintf "Computing execution constraints for every primitive operation table. There are %i tables. Progress: "
+      |> print_string
+      |> Format.print_flush;
+  );
 
   let cid_decls, _ = Topo.fold (enforce_path_constraints_at_table idom) g (cid_decls, pcs) in
-  print_endline " done.";
+  if (not !silent) then (
+    print_endline " done.";
+  );
   !dprint_endline "----cid decls after eliminating control branches ----";
   !dprint_endline (DebugPrint.str_of_cid_decls cid_decls);
   !dprint_endline "----end cid decls after eliminating control branches ----";
@@ -712,7 +718,7 @@ let eliminate_branch_nodes cid_decls g root_tid =
 let do_passes df_prog =
   let cid_decls, root_tid, g = DFSyntax.to_tuple df_prog in
   LLValidate.validate_cid_decls cid_decls "[BranchElimination.do_passes (start)]";
-  print_endline ("----starting BranchElimination pass----");
+  (* print_endline ("----starting BranchElimination pass----"); *)
   (* log_prog cid_decls; *)
   let new_cid_decls, g = eliminate_branch_nodes cid_decls g root_tid in
   (* log_prog new_cid_decls; *)

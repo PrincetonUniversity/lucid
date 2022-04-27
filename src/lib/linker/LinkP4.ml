@@ -16,6 +16,8 @@ open Angstrom
 module A = Angstrom
 module DBG = BackendLogging
 
+let silent = ref false
+
 let outc = ref None
 let dprint_endline = ref DBG.no_printf
 let start_log () = DBG.start_mlog __FILE__ outc dprint_endline
@@ -29,7 +31,12 @@ let debug_print_endline = match (!debug_mode) with
 exception Error of string
 
 let error s = raise (Error s)
-let linker_report str = Console.show_message str ANSITerminal.Green "linker"
+let linker_report str = 
+  if (not !silent) then (
+    Console.show_message str ANSITerminal.Green "linker"
+  )
+;;
+
 
 (* wrapper for angstrom's lift2 with params in a different order *)
 let parse2_map parse_1 parse_2 map_f = A.lift2 map_f parse_1 parse_2
@@ -665,7 +672,9 @@ let pragma_replace_trans cs pragma_obj_dict =
     match p4_tree <> new_p4_tree with
     | true -> new_p4_tree
     | false ->
-      Console.warning (sprintf "did not replace DPT pragma %s in P4" pragname);
+      (if (not !silent) then (
+      Console.warning (sprintf "did not replace DPT pragma %s in P4" pragname);)
+      );
       new_p4_tree
   in
   let cs = CL.fold_left fold_f cs pragma_obj_dict in

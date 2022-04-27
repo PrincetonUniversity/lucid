@@ -16,8 +16,12 @@ exception Error of string
 
 let error s = raise (Error s)
 
+let silent = ref false;;
+
 let layout_report str =
-  Console.show_message str ANSITerminal.Green "Pipeline layout"
+  if (not !silent) then (
+    Console.show_message str ANSITerminal.Green "Pipeline layout"
+  )
 ;;
 
 
@@ -1217,7 +1221,7 @@ let dedup_slprog tsprog =
 ;;
 
 let do_passes df_prog =
-  print_endline "---- starting pipesyntax passes ----";
+  (* print_endline "---- starting pipesyntax passes ----"; *)
   let cid_decls, _, dfg = DFSyntax.to_tuple df_prog in
   let dfg_with_regs = to_tbl_reg_dfg cid_decls dfg in
   let pipe = Placement.layout df_prog dfg_with_regs in

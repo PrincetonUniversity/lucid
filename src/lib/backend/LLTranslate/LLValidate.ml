@@ -7,6 +7,8 @@ exception Error of string
 
 let error s = raise (Error s)
 
+let silent = ref false;;
+
 (* is there a table in cid decls that self loops?  *)
 let get_self_loop_tables cid_decls =
   let if_self_loop (cid, decl) =
@@ -60,6 +62,9 @@ let only_one_root cid_decls loc_str =
 ;;
 
 let validate_cid_decls cid_decls loc_str = 
-  no_self_loop_tables cid_decls loc_str;
-  only_one_root cid_decls loc_str
+  if (not !silent) 
+  then (
+    no_self_loop_tables cid_decls loc_str;
+    only_one_root cid_decls loc_str
+  )
 ;;

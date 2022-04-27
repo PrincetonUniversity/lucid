@@ -4,8 +4,12 @@ open Base
 module CL = Caml.List
 module Option = Caml.Option
 
+let silent = ref false;;
+
 let stat_report str =
+  if (not !silent) then (
   Console.show_message str ANSITerminal.Green "Compiled P4 stats"
+  )
 ;;
 
 

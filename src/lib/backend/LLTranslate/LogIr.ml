@@ -3,6 +3,8 @@ of Lucid. *)
 module IS = LLSyntax
 module CL = Caml.List
 
+let silent = ref false
+
 (**** Print Lucid program ****)
 let log_lucid fn ds =
   let full_fn = !BackendLogging.irLogDir ^ "/" ^ fn in
@@ -53,24 +55,33 @@ module Dot = Graph.Graphviz.Dot (DotConfig)
 
 (* log the current program in lucid ir (graph + node definitions) *)
 let log_lir_objs fn cid_decls =
+  if (!silent) then (
   let full_fn = !BackendLogging.irLogDir ^ "/" ^ fn ^ ".lir" in
   Printf.fprintf (open_out full_fn) "%s" (DebugPrint.str_of_cid_decls cid_decls)
+  )
 ;;
 
 let log_lir_dag fn dag =
+  if (!silent) then (
   let full_fn = !BackendLogging.irLogDir ^ "/" ^ fn ^ ".dot" in
   Dot.output_graph (open_out_bin full_fn) dag
+  )
 ;;
 
 let log_lir fn (dagProg:DFSyntax.dagProg) =
+  if (!silent) then (
   log_lir_objs fn dagProg.dp_instr_dict;
   log_lir_dag fn dagProg.dp_g;
+  )
 ;;
 
 (**** Print pipeline ****)
 let log_lir_pipe fn pipe =
+  if (!silent) then (
+
   let full_fn = !BackendLogging.irLogDir ^ "/" ^ fn ^ ".pipe.lir" in
   Printf.fprintf (open_out full_fn) "%s" (PipeSyntax.dbgstr_of_pipe pipe);
   let summary_fn = !BackendLogging.irLogDir ^ "/" ^ fn ^ ".pipe.summary.lir" in
   Printf.fprintf (open_out summary_fn) "%s" (PipeSyntax.summary_of_pipe pipe)
+  )
 ;;

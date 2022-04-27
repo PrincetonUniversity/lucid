@@ -12,6 +12,8 @@ open Liveliness
 open MiscUtils
 module CL = Caml.List
 
+let silent = ref false
+
 (* logging *)
 module DBG = BackendLogging
 let outc = ref None
@@ -226,7 +228,9 @@ let prepare_frame_var_for_rid
     cid_decls
     rid
   =
-  ((Cid.to_string rid)^"; ") |> print_string |> print_flush;
+  if (not !silent) then (
+    ((Cid.to_string rid)^"; ") |> print_string |> print_flush;
+  );
   let salu_arg_id = cid_of_shared_arg_var shared_salu_arg_var in
   (* get the set of variables that need to be overlaid. *)
   let salu_vars_map = salu_param_finder cid_decls rid in
@@ -492,14 +496,18 @@ let prepare_salu_frames dag prepare_frame_var_for_rid =
      because some structures are bound outside of the program. *)
   let struct_mids = find_unbound_vars cid_decls in
   let rids = ids_of_type is_reg cid_decls in
-  print_string (sprintf "processing inputs for %i registers: " (CL.length rids));
+  if (not !silent) then (
+    print_string (sprintf "processing inputs for %i registers: " (CL.length rids));
+  );
   let updated_cid_decls =
     CL.fold_left
       (prepare_salu_frames_for_rid prepare_frame_var_for_rid struct_mids)
       cid_decls
       rids
   in
-  print_endline (" done");
+  if (not !silent) then (
+    print_endline (" done")
+  );
   let updated_g = graph_of_declsMap updated_cid_decls in
   let _, root_tbl_id, _ = dag in
   let framed_dag = updated_cid_decls, root_tbl_id, updated_g in

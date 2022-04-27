@@ -9,6 +9,8 @@ open Z3
 module Z3Int = Arithmetic.Integer
 module DBG = BackendLogging
 
+let silent = ref false;;
+
 let outc = ref None
 let dprint_endline = ref DBG.no_printf
 
@@ -388,7 +390,8 @@ module NormalizeBoolExps = struct
 end
 
 let do_passes ds =
-  DBG.start_mlog __FILE__ outc dprint_endline;
+  if (not !silent)
+  then (DBG.start_mlog __FILE__ outc dprint_endline);
   (* normalize the relational operations inside of if statements, so
      that each atomic boolean is a relational operation of the form
      <var> <!=, ==> <const> *)

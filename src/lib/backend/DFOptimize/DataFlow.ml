@@ -167,10 +167,10 @@ let data_dep_dag_of cid_decls g =
 ;;
 
 let do_passes df_prog =
-  print_endline ("starting dataflow conversion pass.");
+  (* print_endline ("starting dataflow conversion pass."); *)
   let cid_decls, root_tid, g = DFSyntax.to_tuple df_prog in
   let data_dag = data_dep_dag_of cid_decls g in
   let result = DFSyntax.from_tuple (cid_decls, root_tid, data_dag) df_prog in 
-  print_endline ("done with dataflow conversion pass.");
+  (* print_endline ("done with dataflow conversion pass."); *)
   result 
 ;;

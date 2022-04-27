@@ -87,7 +87,7 @@ let load_format_1 infn =
 (* Prepare the build directory. *)
 let setup_build_dir out_dir =
   outDir := out_dir;
-  print_endline (sprintf "clearing build directory: %s\n" !outDir);
+  (* print_endline (sprintf "clearing build directory: %s\n" !outDir); *)
   clear_dir_recursive !outDir;
   logDir := !outDir ^ "/logs";
   ensure_dir !logDir;

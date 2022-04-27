@@ -4,6 +4,9 @@ open CoreSyntax
 open InterpHelpers
 module DBG = BackendLogging
 
+let silent = ref false;;
+
+
 let outc = ref None
 let dprint_endline = ref DBG.no_printf
 
@@ -11,7 +14,9 @@ exception Error of string
 
 let error s = raise (Error s)
 let err msg ex = error (msg ^ " " ^ Printing.exp_to_string ex)
-let info str = Console.show_message str ANSITerminal.Green "normalizeIntOps"
+let info str = 
+    if (not !silent)
+    then (Console.show_message str ANSITerminal.Green "normalizeIntOps")
 
 let dprint_eop exp =
   let op, args, _, _ = unpack_eop exp in
@@ -160,7 +165,8 @@ let atomize_int_assigns ds =
 ;;
 
 let do_passes ds =
-  DBG.start_mlog __FILE__ outc dprint_endline;
+  if (not !silent)
+  then (DBG.start_mlog __FILE__ outc dprint_endline);
   let orig_ds = ds in
   let ds = balance_assign_exps ds in
   info "assignments transformed to balanced exps";

@@ -32,7 +32,7 @@ let start_mlog module_name outc logfcn_ref =
   Core.Unix.mkdir_p !moduleLogDir;
   let module_name = Filename.basename module_name in
   let out_fn = !moduleLogDir ^ "/" ^ module_name ^ ".txt" in
-  print_endline (sprintf "logging for %s: %s" module_name out_fn);
+  (* print_endline (sprintf "logging for %s: %s" module_name out_fn); *)
   let outf = Caml.open_out out_fn in
   dopen outf outc;
   printf outc "%s" ("---" ^ module_name ^ " log---\n");
@@ -45,7 +45,7 @@ let start_module_log module_name outc =
   Core.Unix.mkdir_p !moduleLogDir;
   let module_name = Filename.basename module_name in
   let out_fn = !moduleLogDir ^ module_name ^ ".txt" in
-  print_endline (sprintf "logging for %s: %s" module_name out_fn);
+  (* print_endline (sprintf "logging for %s: %s" module_name out_fn); *)
   let outf = Caml.open_out out_fn in
   dopen outf outc;
   (* printf outc "%s" ("---"^module_name^" log---\n"); *)
