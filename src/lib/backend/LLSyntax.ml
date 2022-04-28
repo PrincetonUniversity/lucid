@@ -451,8 +451,15 @@ let readvars_of_sInstr d : mid list =
       val mutable vars = []
       method vars = vars
 
-      (* only search in the expression *)
-      method! visit_sInstr ctx s = CL.iter (super#visit_sExpr ctx) s.sExprs
+      method! visit_sInstr ctx s = 
+        (* search in the expressions, for old style salu instrs *)
+        CL.iter (super#visit_sExpr ctx) s.sExprs;
+        (* search in the body, for new style salu instrs *)
+        match s.sInstrBody with
+          | Some bdy -> 
+            super#visit_sInstrBody ctx bdy
+          | _ -> ()
+
       method! visit_mid _ m = vars <- vars @ [m]
       (* Caml.Printf.printf "[readargs_of_sInstr] visiting mid in %s\n" (mid_to_str_suffix sInstr_id); *)
     end

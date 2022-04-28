@@ -198,13 +198,13 @@ let prepare_frame_var_for_rid_no_merging
     DBG.printf outc "-------------\n";
     DBG.printf
       outc
-      "[prepare_frame_var_for_rid] memory cell: %s\n"
+      "[prepare_frame_var_for_rid_no_merging] memory cell: %s\n"
       (P4tPrint.str_of_private_oid rid);
     DBG.printf
       outc
-      "[prepare_frame_var_for_rid] parameter: %s\n"
+      "[prepare_frame_var_for_rid_no_merging] parameter: %s\n"
       (P4tPrint.str_of_private_oid salu_arg_id);
-    DBG.printf outc "[prepare_frame_var_for_rid] vars: %s\n" (str_of_cids vars);
+    DBG.printf outc "[prepare_frame_var_for_rid_no_merging] vars: %s\n" (str_of_cids vars);
     DBG.printf outc "-------------\n";
     (* the width of the intermediate is equal to the width of the register's cell *)
     (* except for index variables, which are always 32-bits (for now) *)
@@ -329,7 +329,14 @@ let salu_idx_vars_by_rid cid_decls rid =
 let fst_salu_read_vars_by_rid cid_decls rid =
   let filter_map_f sInstr_id =
     let salu_call = Cid.lookup cid_decls sInstr_id in
+    !dprint_endline (LLSyntax.show_decl salu_call);
     let read_args = readvars_of_sInstr salu_call in
+    !dprint_endline ("register: "
+      ^(P4tPrint.str_of_private_oid rid)
+      ^" sinstr: "^(P4tPrint.str_of_private_oid sInstr_id)
+      ^" read vars: "^(P4tPrint.str_of_varids read_args));
+
+
     match read_args with
     | fst :: _ -> Some (salu_call, fst)
     | _ -> None
