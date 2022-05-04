@@ -482,8 +482,8 @@ let rec replace_in_stmt_lhs (stmt : statement) (id : Id.t) new_id =
     | true -> { stmt with s = SLocal (id, ty, exp) }
     | false -> stmt)
   | { s = SAssign (orig_id, exp); _ } ->
-    print_endline ("LOOKING FOR ID IN LHS: " ^ Id.to_string id);
-    print_endline ("I SEE ID IN LHS: " ^ Id.to_string orig_id);
+(*     print_endline ("LOOKING FOR ID IN LHS: " ^ Id.to_string id);
+    print_endline ("I SEE ID IN LHS: " ^ Id.to_string orig_id); *)
     (match Id.equals id orig_id with
     | true -> { stmt with s = SAssign (new_id, exp) }
     | false -> stmt)
@@ -504,3 +504,10 @@ let rec refresh_event_param_ids ds : decls =
   in
   CL.map map_f ds
 ;;
+
+          (* let not_c1 = S.exp (S.EOp(S.Not, [c1_cond])) c1_cond.ety in  *)
+
+let eop_and x y = 
+  aexp (EOp(And, [x; y])) x.ety
+;;
+

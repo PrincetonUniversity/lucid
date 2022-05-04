@@ -289,6 +289,11 @@ let translate_simple_memop hdl_id memop_kind name_exp arg_exp : IS.sExpr list =
  *)
 
 
+(* helper: simplify a conditional expression in a memop
+            this is an IR transformation that should maybe 
+            be in its own pass. *)
+
+
 (* 
 Translation steps: 
 
@@ -304,7 +309,6 @@ Translation steps:
   2. translate boolean expressions using context and add to context. 
   3. translate cell1, cell2, and cell3 using context. 
 *)
-
 let rec translate_cond_exp ctx (cond_exp:CoreSyntax.exp) : sCondExp = 
   match cond_exp.e with 
     | EVal({v = VBool(true); _}) -> CTrue
@@ -351,6 +355,229 @@ let translate_ret_update ctx (update_exp_opt:CoreSyntax.conditional_return optio
     )
 ;;
 
+
+
+(* These functions get the second return statement's condition into a 
+   form that is easy for the backend P4 compiler to handle. *)
+
+(* distribute the precondition x over the expression y, recursively *)
+let rec distribute_precondition (x: S.exp) (y: S.exp) = 
+  print_endline ("[distribute_precondition]");
+  print_endline ("x: "^(CorePrinting.exp_to_string x));
+  print_endline ("y: "^(CorePrinting.exp_to_string y));
+  let y_e = match y.e with 
+    | S.EVar(_)
+    | S.EVal(_) 
+    | S.ECall(_) -> S.EOp(S.And, [x; y])
+    | S.EOp(o, inners) -> S.EOp(o, CL.map (distribute_precondition x) inners)
+    | S.EHash(_) -> error "[distribute_precondition] got a hash -- expected bool expr"
+    | S.EFlood(_) -> error "[distribute_precondition] got a flood -- expected bool expr"
+  in 
+  let new_y = {y with e=y_e;} in 
+  print_endline ("new_y: "^(CorePrinting.exp_to_string new_y));
+  new_y
+;;
+
+let distribute_and (b : S.exp) = 
+  match b.e with 
+    | S.EOp(And, [x; y]) -> 
+      distribute_precondition x y
+    | _ -> b
+;;
+
+(* simplify conjunctions and disjunctions that 
+   contain only a single variables and its negation *)
+   (* 
+    annoying: 
+
+    !(x && y) && y
+    
+    equality is not the right test. 
+    I think implication is the test.     
+    if one side implies the other, reduce the expression 
+    to the stronger side. 
+
+    ...not quite...
+    !(x && y) && y
+    --> 
+    (!x || !y) && y
+    --> 
+    (!x && y) || (!y && y)
+    --> 
+    true
+
+    (assert (= 
+          true 
+          (and 
+              y
+              (not
+                  (and
+                       x
+                       y
+                  )
+              )
+          )
+        )
+)
+      and y (not (and x y))
+      y and (not (x and y))
+      !(x && y) && y
+
+      !(x && y) --> 
+      (x && !y) || (y && !x)
+
+      !(x || y) --> (!x && !y)
+
+      ---------
+      !(x && y) && y
+      ((x && !y) || (y && !x)) && y
+
+      ((x && !y) && y) || ((y && !x) && y)
+      x || (y && !x)
+      (y || x) && (x || !x) 
+      y || x
+
+      How would we ever reduce that... 
+
+      for each expression e, do: 
+          1. recurse on each inner term
+          2. 
+            distribute negation 
+            distribute and
+            distribute or
+            simplify
+          3. 
+            repeat if the e changed
+
+      How do I know this is correct?
+
+
+
+
+        simplify
+        distribute
+      do this recursively?
+
+
+
+
+
+      okay, so maybe this is too complicated and we should just make a giant truth table... 
+
+      expression 1 is:
+      a
+      b
+      !a
+      !b
+      a  && b
+      !a && b
+      a  && !b
+      !a && !b
+      a  || b
+      !a || b
+      a  || !b
+      !a || !b
+
+      expression 2 is also that. 
+      So there are 144 cases.... (12 * 12)
+
+   *)
+let rec simplify_negation_clauses (b : S.exp) = 
+  let b_e = match b.e with 
+    | S.EVar(_)
+    | S.EVal(_) -> b.e
+    (*  x ||!x 
+       !x || x -> true
+     *)
+    | S.EOp(S.Or, [x; {e=S.EOp(S.Not, [y]); _}]) 
+    | S.EOp(S.Or, [{e=S.EOp(S.Not, [x]); _}; y]) -> (
+      if (S.equiv_exp x y)
+        then ((S.vbool true |> S.value_to_exp).e)
+        else (b.e)
+    )
+    (*  x &&!x 
+       !x && x -> false
+     *)
+    | S.EOp(S.And, [x; {e=S.EOp(S.Not, [y]); _}]) 
+    | S.EOp(S.And, [{e=S.EOp(S.Not, [x]); _}; y]) -> (
+      if (S.equiv_exp x y)
+        then ((S.vbool false |> S.value_to_exp).e)
+        else (b.e)
+    )
+    (* x && x -> x; *)
+    | S.EOp(S.And, [x; y]) -> (
+      if (S.equiv_exp x y)
+        then (x.e)
+        else (b.e)
+    )
+    (* x || x -> x *)
+    | S.EOp(S.Or, [x; y]) -> (
+      if (S.equiv_exp x y)
+        then (x.e)
+        else (b.e)
+    )
+    (* recurse for non-atoms *)
+    | S.EOp(o, inners) -> (
+      let new_b = S.exp 
+        (S.EOp(o, CL.map simplify_negation_clauses inners))
+        b.ety
+       in 
+      if (S.equiv_exp new_b b)
+      then (b.e)
+      else ((simplify_negation_clauses new_b).e) 
+    )
+    | S.ECall(_) -> error "[simplify_negation_clauses] unexpected expression form"
+    | _ -> error ""
+  in 
+  {b with e=b_e;}
+;;
+
+
+
+
+
+
+
+
+(* 
+   condition the second return statement of both cell1 and cell2, 
+   so that they can be implemented as a sequence of ifs instead of 
+   an if / else: 
+
+    if (<x>) 
+      --> 
+    if (!cell1_condition  && x) 
+*)
+let condition_snd_cr_stmts (b:CoreSyntax.complex_body) = 
+  (* condition the second return statement of a single cell. *)
+  let condition_snd_cr_stmt (cr_opt1, cr_opt2)  = 
+    let cr_opt2 = match cr_opt1, cr_opt2 with 
+      | None, None -> cr_opt2
+      | Some _, None -> cr_opt2
+      | None, Some _ -> cr_opt2
+      | Some(c1_cond, _), Some(c2_cond, c2_exp) -> 
+        (* c2_cond = !c1_cond && c2_cond 
+          but, we have to simplify it for the P4 compiler
+          DNF form seems to work well... *)
+        (
+          let not_c1 = S.exp (S.EOp(S.Not, [c1_cond])) c1_cond.ety in 
+          let not_c1_and_c2 = S.exp (S.EOp(S.And, [not_c1; c2_cond])) c2_cond.ety in           
+          let s, ze = CoreZ3.exp_to_expr not_c1_and_c2 in 
+          let ze_simp = CoreZ3.simplify_to_dnf s ze in 
+          let simplified_c2_cond = CoreZ3.expr_to_exp s ze_simp in 
+          !dprint_endline ("not_c1: "^(CorePrinting.exp_to_string not_c1));
+          !dprint_endline ("c2_cond: "^(CorePrinting.exp_to_string c2_cond));
+          !dprint_endline ("raw c2: "^(CorePrinting.exp_to_string not_c1_and_c2));
+          !dprint_endline ("simplified c2: "^(CorePrinting.exp_to_string simplified_c2_cond));
+          Some(simplified_c2_cond, c2_exp)
+        )
+    in 
+    (cr_opt1, cr_opt2)
+  in
+  {b with cell1 = condition_snd_cr_stmt b.cell1; cell2 = condition_snd_cr_stmt b.cell2;}
+;;
+
+
 let translate_complex_memop hdl_id name_exp arg1_ex arg2_ex default_ex : IS.sInstrBody = 
   let _, _ ,_, _, _ = hdl_id, name_exp, arg1_ex, arg2_ex, default_ex in 
   (* get the memop *)
@@ -360,12 +587,15 @@ let translate_complex_memop hdl_id name_exp arg1_ex arg2_ex default_ex : IS.sIns
     | S.MBComplex(b) -> b
     | _ -> error "[translate_complex_memop] this function only handles complex memops right now."
   in 
+  (* transform and simplify the condition of the second conditional statement *)
+  let b = condition_snd_cr_stmts b in 
   (* 1. translate params and add to context *)
   let ctx = bind_memop_params hdl_id params [arg1_ex; arg2_ex] in 
   (* 2. translate bools and add to context. *)
   let ctx = bind_memop_bool ctx b.b1 in 
   let ctx = bind_memop_bool ctx b.b2 in 
   (* 3. useing context, translate cell1, cell2, and ret expressions *)
+
   let cell1 = 
     ( translate_mem_update ctx (fst b.cell1)
     , translate_mem_update ctx (snd b.cell1) )

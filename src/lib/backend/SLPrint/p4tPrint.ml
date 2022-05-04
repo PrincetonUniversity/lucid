@@ -493,13 +493,9 @@ module PrintSalu = struct
   ;;
 
   let str_of_cell_stmts ncells_opt out_oper stmt_opt_pair = 
-    (* I don't think we need an else block between branches, 
-       but if we do, this is where to put it. *)
     match stmt_opt_pair with 
     | Some(update_exp1), Some(update_exp2) ->
-      (* if there are two statements, the semantics are 
-        to treat them as an if / else. *)
-      sprintf "%s\nelse {%s}"
+      sprintf "%s\n%s"
         (str_of_sUpdateExp ncells_opt out_oper update_exp1)
         (str_of_sUpdateExp ncells_opt out_oper update_exp2)
     | Some(update_exp), None -> 
@@ -614,17 +610,7 @@ module PrintSalu = struct
     fprintf fmt "@,}@,"    
   ;;
 
-  (* LEFT OFF HERE. PROBLEMS: 
-      1. structs must be defined globally. So we can't print them out right 
-         next to the register, we have to print them in the global program.
-         TODO: generate the struct separately and save its name in the register's 
-               object. Save it in the salu's definition too. 
-      2. The non-complex stateful alus might still mess up. 
-         TODO: bite the bullet and eliminate simple stateful ALUs. 
-               transform them into complex stateful ALUs. *)
-
   (* print an old-style sInstr with a vector of instructions. *)
-  (* TODO: fix this function so it uses the new lo / hi variables. *)
   let print_sInstr fmt callable_id rid rid_width siv out_var_opt idx_oper reg_fmt =
     (* print_endline ("printing sInstr: " ^ qstr_of_mid callable_id); *)
     let salu_routine_id = Cid.str_cons "sprog" callable_id in

@@ -31,6 +31,7 @@
    syntax
    syntaxUtils
    coreSyntax
+   coreZ3
    collections
    typer
    typerZ3
