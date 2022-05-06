@@ -1,5 +1,29 @@
 # include $(shell ocamlfind query visitors)/Makefile.preprocess
 
+DEPENDENCIES = \
+integers \
+batteries \
+ounit \
+ansiterminal \
+menhir \
+ppx_deriving \
+ppx_string_interpolation \
+zarith \
+visitors \
+fileutils \
+ppx_import \
+core \
+dune \
+ocamlgraph \
+angstrom \
+yojson \
+pyml \
+z3
+
+DEV_DEPENDENCIES = \
+merlin \
+ocamlformat
+
 .PHONY: test promote test-promote clean
 
 default:
@@ -39,25 +63,10 @@ format:
 	find test -type f -regex ".*\.mli*" -exec ocamlformat --inplace {} \;
 
 install-deps:
-	opam install -y \
- 	integers \
- 	batteries \
- 	ounit \
- 	ansiterminal \
- 	menhir \
- 	ppx_deriving \
- 	ppx_string_interpolation \
- 	zarith \
- 	visitors \
- 	fileutils \
- 	ppx_import \
- 	core \
- 	dune \
-	ocamlgraph \
-	angstrom \
-	yojson \
-	pyml \
-	z3
+	opam install -y $(DEPENDENCIES)
+
+install-dev:
+	opam install -y $(DEV_DEPENDENCIES) $(DEPENDENCIES)
 
 clean:
 	dune clean
