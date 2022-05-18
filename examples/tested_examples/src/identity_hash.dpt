@@ -1,10 +1,6 @@
 /* Reflect the packet back. Applies an identity hash function to source address. */
-
-entry event ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos);
-exit event port_out (int<<9>> egr_port);
-exit event ip_out (int<<9>> egr_port, int src, int dst);
-
+include "io_events.dpt"
 handle ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos) {
     int src_cpy = hash<<32>>(1, src[31:16], src[15:0]);
-    generate ip_out(igr_port, src_cpy, dst);
+    generate_port (igr_port, ip_out(src_cpy, dst));
 }

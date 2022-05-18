@@ -11,6 +11,7 @@ let outc = ref None
 let dprint_endline = ref DBG.no_printf
 let start_logging () = DBG.start_mlog __FILE__ outc dprint_endline
 
+
 (*** context for translation from source to LLSyntax instructions. ***)
 (*** nothing in this context should be necessary to optimize the LLSyntax
      or translate it to P4. ***)
@@ -58,6 +59,9 @@ type ctx_entry =
   | CodeGen of codegenFcn
   | Decl of decl (* for memops *)
   | EventRec of event_rec
+  (* | LLDecl of LLSyntax.decl  *)
+  (* a declaration... but isn't this just the same as 
+     building up the cid_decls as we go? *)
 
 let tofinoCtx : ctx_entry TofinoCtx.t ref = ref TofinoCtx.empty
 

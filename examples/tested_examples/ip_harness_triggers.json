@@ -18,15 +18,13 @@
         {
             "event" : "ip_out",
             "outputs" : {
-                "ig_tm_md.ucast_egress_port" : "egr_port" ,
                 "hdr.ip.src_addr" : "src",
                 "hdr.ip.dst_addr" : "dst"
             }
         },
         {
-            "event" : "port_out",
+            "event" : "raw_out",
             "outputs" : {
-                "ig_tm_md.ucast_egress_port" : "egr_port" 
             }
         }
     ]

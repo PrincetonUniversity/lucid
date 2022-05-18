@@ -77,6 +77,11 @@ let cmd_copy_to_recirc =
       sprintf "ig_tm_md.ucast_egress_port = 196;"
 ;;
 
+(* bug: need the outport field's complete id *)
+let cmd_set_egr_port = 
+  sprintf "ig_tm_md.ucast_egress_port = (bit<9>)%s;" (undeclared_instance_name event_port_field)
+;;
+
 (* the ingress exit table applies after the handler tables. *)
 module IngressExit = struct
   (***
@@ -104,54 +109,54 @@ module IngressExit = struct
     and the cases that it matches on.
     new table:
         actions:
-          entry_hdl_bg_continue() {
+          from_wire_to_bg_wire() { // current event is entry, generated a bg and a wire.
             mc_group = 1065 + eventCount;
             ethertype = LUCID;
           }
-          entry_hdl_bg_no_continue() {
+          from_wire_to_bg() { // current event is entry, generated a bg only.
             mc_group = 1065 + eventCount;
             ethertype = LUCID;
             exit;
           }
 
-          bg_hdl_recurse_continue() {
+          from_bg_to_selfbg_wire() { // current event is a background, generated same bg and a wire.
             mc_group = 1065 + eventCount;
             ethertype = LUCID;
           }
-          bg_hdl_recurse_continue() {
+          from_bg_to_selfbg() { // current event is a background, generated same bg only.
             mc_group = 1065 + eventCount;
             ethertype = LUCID;
             exit;
           }
           for each bg event foo:
-            bg_hdl_foo_no_recurse_continue() {
+            from_bg_to_otherbg_wire() { // current event is background foo, generated some other bg and wire. 
               hdr.foo.setInvalid();
               mc_group = 1065 + eventCount;
               ethertype = LUCID;
             }
-            bg_hdl_foo_no_recurse_no_continue() {
+            from_bg_to_otherbg() { // current event is background foo, generated some other bg.
               hdr.foo.setInvalid();
               mc_group = 1065 + eventCount;
               ethertype = LUCID;
               exit;
             }
-          no_bg_continue() {
+          from_bg_to_wire() { //current event is bg, generated wire.
               // invalidate all event headers.
               ethertype = IP;
           }
-          no_events() {
+          no_events() { // no background event or continue event.
               // exit
           }
         keys:
           eventType (hdl id), <event_generated flags>, eventCount, exitEventType
 
         cases:
-        (bg hdl, bg recursive event, no continue event) --> bg_hdl_recurse_continue();
+        (bg hdl, bg recursive event, no continue event) --> from_bg_to_selfbg_wire();
               [eventType = foo; event_generated_foo = 1; event_count = *; exitEventType = 0]
-              --> bg_hdl_recurse_no_continue();
+              --> from_bg_to_selfbg();
         (bg hdl, bg recursive event, continue event):
               [eventType = foo; event_generated_foo = 1; event_count = *; exitEventType = *]
-              --> bg_hdl_recurse_continue();
+              --> from_bg_to_selfbg_wire();
         (bg hdl, bg non-recursive event, no continue event)
               [eventType = foo; event_generated_foo = 0; event_count = *; exitEventType = 0]
               -->
@@ -161,12 +166,12 @@ module IngressExit = struct
               -->
               bg_hdl_foo_no_recurse_continue();
         (bg hdl, bg non-recursive event, no continue event) --> bg_hdl_foo_no_recurse_no_continue(); // PER-EVENT FOO.
-        (entry hdl, bg event, continue event) --> entry_hdl_bg_continue();
-        (entry hdl, bg event, no continue event) --> entry_hdl_bg_no_continue();
-        (bg hdl, no bg event, continue event) --> no_bg_continue();
-        (bg hdl, no bg event, no continue event) --> no_bg_no_continue();
-        (entry hdl, no bg event, continue event) --> no_bg_continue();
-        (entry hdl, no bg event, no continue event) --> no_bg_no_continue();
+        (entry hdl, bg event, continue event) --> from_wire_to_bg_wire();
+        (entry hdl, bg event, no continue event) --> from_wire_to_bg();
+        (bg hdl, no bg event, continue event) --> no_bg_wire();
+        (bg hdl, no bg event, no continue event) --> from_any_to_none();
+        (entry hdl, no bg event, continue event) --> no_bg_wire();
+        (entry hdl, no bg event, no continue event) --> from_any_to_none();
   ***)
 
   let generate_lucid_exit_table current_event_cid event_count_cid exit_event_cid
@@ -182,52 +187,52 @@ module IngressExit = struct
     let bg_evcids = CL.map (fun f -> f.event_id) bg_evrecs in
     let lucid_sys_hdr_cids = [footer_instance_cid; event_out_flags_instance] in
     (* create actions. *)
-    let entry_hdl_bg_continue =
-      { aname = "entry_hdl_bg_continue"
+    let from_wire_to_bg_wire =
+      { aname = "from_wire_to_bg_wire"
       ; aparams = []
-      ; acmds = [cmd_copy_to_recirc; cmd_lucid_etype]
+      ; acmds = [cmd_set_egr_port; cmd_copy_to_recirc; cmd_lucid_etype]
       }
     in
-    let entry_hdl_bg_no_continue =
-      { aname = "entry_hdl_bg_no_continue"
+    let from_wire_to_bg =
+      { aname = "from_wire_to_bg"
       ; aparams = []
       ; acmds = [cmd_copy_to_recirc; cmd_lucid_etype; cmd_exit]
       }
     in
-    let bg_hdl_recurse_continue =
-      { aname = "entry_hdl_recurse_continue"
+    let from_bg_to_selfbg_wire =
+      { aname = "from_bg_to_selfbg_wire"
       ; aparams = []
-      ; acmds = [cmd_copy_to_recirc; cmd_lucid_etype]
+      ; acmds = [cmd_set_egr_port; cmd_copy_to_recirc; cmd_lucid_etype]
       }
     in
     (* same as coming in from an entry handle *)
-    let bg_hdl_recurse_no_continue =
-      { aname = "bg_hdl_recurse_no_continue"
+    let from_bg_to_selfbg =
+      { aname = "from_bg_to_selfbg"
       ; aparams = []
       ; acmds = [cmd_copy_to_recirc; cmd_lucid_etype; cmd_exit]
       }
     in
-    let no_bg_continue =
-      { aname = "no_bg_continue"
+    let from_bg_to_wire =
+      { aname = "from_bg_to_wire"
       ; aparams = []
       ; acmds =
-          cmd_ip_etype
-          :: (cmds_disable_hdrs bg_evcids @ cmds_disable_cids lucid_sys_hdr_cids)
+          [
+          cmd_ip_etype;
+          cmd_set_egr_port]
+          @(cmds_disable_hdrs bg_evcids)
+          @(cmds_disable_cids lucid_sys_hdr_cids)
       }
     in
     (* the only time we drop a packet is when there is both no continue event and also no
        background event.
-        NO. When there is no continue event, but a background event, we want to
-        disable _unicast_. Setting port to 0 doesn't work in the asic model because
-        that's an actual port!
      *)
-    let no_events =
-      { aname = "no_events"; aparams = []; acmds = [cmd_drop; cmd_exit] }
+    let from_any_to_none =
+      { aname = "from_any_to_none"; aparams = []; acmds = [cmd_drop; cmd_exit] }
     in
     (* per-background event generators *)
-    let bg_hdl_no_recurse_no_continue event_id =
+    let from_bg_to_otherbg event_id =
       (* the handler for erec generated a non recursive background event and NO continue. *)
-      { aname = "bg_hdl_" ^ Id.name event_id ^ "_no_recurse_no_continue"
+      { aname = "bg_hdl_" ^ Id.name event_id ^ "_to_otherbg"
       ; aparams = []
       ; acmds =
           [ cmd_disable_hdr event_id
@@ -236,32 +241,32 @@ module IngressExit = struct
           ; cmd_exit ]
       }
     in
-    let bg_hdl_no_recurse_continue event_id =
+    let from_bg_to_otherbg_wire event_id =
       (* the handler for erec generated a non recursive background event and a continue. *)
-      { aname = "bg_hdl_" ^ Id.name event_id ^ "_no_recurse_continue"
+      { aname = "bg_hdl_" ^ Id.name event_id ^ "_to_otherbg_wire"
       ; aparams = []
-      ; acmds = [cmd_disable_hdr event_id; cmd_copy_to_recirc; cmd_lucid_etype]
+      ; acmds = [cmd_set_egr_port; cmd_disable_hdr event_id; cmd_copy_to_recirc; cmd_lucid_etype]
       }
     in
-    (* create rules. note: the rules are ordered! *)
+    (* create rules. note: the rules must be ordered when inserted into table. *)
     let eventType_str = str_of_public_varid current_event_cid in
     let eventCount_str = str_of_public_varid event_count_cid in
     let exitEvent_str = str_of_public_varid exit_event_cid in
-    let no_events_rule =
-      { guard =
-          [ { field = eventType_str; value = VAny }
-          ; { field = eventCount_str; value = VInt 0 }
-          ; { field = exitEvent_str; value = VInt 0 } ]
-      ; action = no_events
-      ; action_args = []
-      }
-    in
-    let no_bg_continue_rule =
+    let from_bg_to_wire_rule =
       { guard =
           [ { field = eventType_str; value = VAny }
           ; { field = eventCount_str; value = VInt 0 }
           ; { field = exitEvent_str; value = VAny } ]
-      ; action = no_bg_continue
+      ; action = from_bg_to_wire
+      ; action_args = []
+      }
+    in
+    let from_any_to_none_rule =
+      { guard =
+          [ { field = eventType_str; value = VAny }
+          ; { field = eventCount_str; value = VInt 0 }
+          ; { field = exitEvent_str; value = VInt 0 } ]
+      ; action = from_any_to_none
       ; action_args = []
       }
     in
@@ -275,7 +280,7 @@ module IngressExit = struct
               }
             ; { field = eventCount_str; value = VAny }
             ; { field = exitEvent_str; value = VInt 0 } ]
-        ; action = bg_hdl_recurse_no_continue
+        ; action = from_bg_to_selfbg
         ; action_args = []
         }
       in
@@ -287,7 +292,7 @@ module IngressExit = struct
               }
             ; { field = eventCount_str; value = VAny }
             ; { field = exitEvent_str; value = VAny } ]
-        ; action = bg_hdl_recurse_continue
+        ; action = from_bg_to_selfbg_wire
         ; action_args = []
         }
       in
@@ -299,7 +304,7 @@ module IngressExit = struct
               }
             ; { field = eventCount_str; value = VAny }
             ; { field = exitEvent_str; value = VInt 0 } ]
-        ; action = bg_hdl_no_recurse_no_continue erec.event_id
+        ; action = from_bg_to_otherbg erec.event_id
         ; action_args = []
         }
       in
@@ -311,7 +316,7 @@ module IngressExit = struct
               }
             ; { field = eventCount_str; value = VAny }
             ; { field = exitEvent_str; value = VAny } ]
-        ; action = bg_hdl_no_recurse_continue erec.event_id
+        ; action = from_bg_to_otherbg_wire erec.event_id
         ; action_args = []
         }
       in
@@ -330,28 +335,30 @@ module IngressExit = struct
       |> CL.flatten
     in
     (* create the entry event rules. *)
-    let entry_hdl_bg_no_continue_rule =
+    let from_wire_to_bg_rule =
       { guard =
           [ { field = eventType_str; value = VAny }
           ; { field = eventCount_str; value = VAny }
           ; { field = exitEvent_str; value = VInt 0 } ]
-      ; action = entry_hdl_bg_no_continue
+      ; action = from_wire_to_bg
       ; action_args = []
       }
     in
-    let entry_hdl_bg_continue_rule =
+    let from_wire_to_bg_wire_rule =
       { guard =
           [ { field = eventType_str; value = VAny }
           ; { field = eventCount_str; value = VAny }
           ; { field = exitEvent_str; value = VAny } ]
-      ; action = entry_hdl_bg_continue
+      ; action = from_wire_to_bg_wire
       ; action_args = []
       }
     in
     let rules =
-      [no_events_rule; no_bg_continue_rule]
+      (* first two rules can go at beginning or end, 
+         but bg event rules must go before wire rules *)
+      [from_any_to_none_rule; from_bg_to_wire_rule]
       @ bg_event_rules
-      @ [entry_hdl_bg_no_continue_rule; entry_hdl_bg_continue_rule]
+      @ [from_wire_to_bg_rule; from_wire_to_bg_wire_rule]
     in
     let tbl_str = "lucid_return_table" in
     let tbl_cid = Cid.create [tbl_str] in

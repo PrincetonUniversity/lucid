@@ -1,8 +1,5 @@
 /* Testing complex memops. */
-
-entry event ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos);
-exit event port_out (int<<9>> egr_port);
-exit event ip_out (int<<9>> egr_port, int src, int dst);
+include "io_events.dpt"
 
 global Array.t<<32>> arr_1 = Array.create(1024);
 global Array.t<<32>> arr_2 = Array.create(1024);
@@ -47,5 +44,5 @@ memop set_and_check(int memval, int newval, int seekval) {
 handle ip_in(int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos) {
   int a1_out = Array.update_complex(arr_1, 0, postcount_rollover, src, dst, 0);
   int a2_out = Array.update_complex(arr_2, 0, set_and_check, src, dst, 0);
-  generate ip_out(igr_port, a1_out, a2_out);
+  generate_port(igr_port, ip_out(a1_out, a2_out));
 }

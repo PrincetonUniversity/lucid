@@ -7,11 +7,218 @@ open InterpHelpers
 open LLContext
 open LLOp
 open LLConstants
+open MiscUtils
 
 (* "interface" for this module -- the functions implemented here. *)
 let module_name = "Event"
 let module_id = Id.create module_name
 let cid_of_fname name_str = Cid.create_ids [module_id; Id.create name_str]
+
+
+(*** Event declaration translator ***)
+
+
+(* code generators for events *)
+module TranslateEvents = struct
+
+  (* translate the ith event declaration into LL code,
+     and save details about the event in the LL context.
+     This should be the ONLY FUNCTION that writes the event records to 
+   context. *)
+  let translate (ll_decls, last_eviid) dec =
+    match dec.d with
+    | DEvent (evid, ev_sort, params) ->
+      let cur_eviid = last_eviid + 1 in (* start event ids at 1 *)
+      (* all the details about the event that the translator
+         needs, in one context record. *)
+      let erec =
+        { event_id = evid
+        ; field_defs = vardefs_from_params params
+        ; hidden_fields = hidden_event_fields
+        ; event_iid = cur_eviid 
+        ; hdl_param_ids = [] (* filled in by DHandler match *)
+        ; event_sort = ev_sort
+        ; event_struct = TofinoStructs.structname_from_evid evid
+        ; event_struct_instance = TofinoStructs.full_struct_from_ev evid ev_sort
+        ; event_generated_flag =
+            Cid.concat event_out_flags_instance (Cid.id evid)
+        }
+      in
+      (* add the event to the context. *)
+      ctx_add_erec erec;
+
+      (* generate IR code for the event *)
+      let all_event_fields =
+        (* hidden params and user-defined params *)
+        erec.hidden_fields @ erec.field_defs
+      in
+      let struct_ty =
+        match erec.event_sort with
+        | EBackground ->
+          IS.SHeader (* backround events get serialized to packet *)
+        | EEntry _ | EExit -> IS.SMeta
+        (* entry and exit events get serialized to metadata... 
+            kind of backwards seeming. *)
+      in
+      (* the struct is the datatype *)
+      let ev_struct_decl =
+        IS.new_structdef erec.event_struct struct_ty all_event_fields
+      in
+      (* each event has one global instance of the struct. *)
+      let ev_struct_inst =
+        IS.new_struct erec.event_struct () erec.event_struct_instance
+      in
+      (* the enum lets the P4 program set the event type. *)
+      let ev_enum =
+        IS.new_public_constdef
+          (TofinoStructs.defname_from_evid erec.event_id)
+          event_id_width
+          erec.event_iid
+      in
+      ll_decls @ [ev_struct_decl; ev_struct_inst; ev_enum], cur_eviid
+    (* record the mapping from event to handler in the context *)
+    | DHandler (hdl_id, (params, _)) ->
+      ctx_set_hdl_param_ids (Cid.id hdl_id) (CL.split params |> fst);
+      ll_decls, last_eviid (* nothing to generate, just updating context *)
+    (* all other decls -- do nothing *)
+    | _ -> ll_decls, last_eviid
+  ;;
+
+  (* create the struct and instance of the event_generated bitvector *)
+  let event_triggered_bv () =
+    let to_generate_flag_field ev =
+      Cid.last_id ev.event_generated_flag |> Cid.id, 1
+    in
+    let field_defs = ctx_get_event_recs () |> CL.map to_generate_flag_field in
+    [ IS.new_header_structdef event_out_flags_struct field_defs
+    ; IS.new_struct event_out_flags_struct () event_out_flags_instance ]
+  ;;
+
+  (* translate all the event declarations and fill the context. *)
+  let translate_events ds =
+    (* generate headers and header instances for events *)
+    let event_decls = CL.fold_left translate ([], 0) ds |> fst in
+    (* generate the event_out flag struct *)
+    let event_out_bv_decls = event_triggered_bv () in
+    event_decls @ [footer_struct; footer_instance] @ event_out_bv_decls
+  ;;
+
+  (*** parse generator for background events ***)
+  (* note: this reads event records from context! 
+    so all events must be translated before it can 
+    be called. *)
+  let parsetree_from_events _ =
+    let parse_start_cid = Cid.create ["start"] in 
+    let parse_end_cid = Cid.create ["finish"] in 
+    (* get the name of the event's struct *)
+    let evrec_hdrvar evrec =
+      TofinoStructs.full_struct_from_ev evrec.event_id EBackground
+    in 
+    (* get the name of the event's parse node *)
+    let evrec_pnodecid pos evrec =
+      Cid.id
+        (Id.prepend_string
+           ("event_" ^ string_of_int pos ^ "_parse_")
+           evrec.event_id)
+    in
+    (* the selector node id for a layer of the parser *)
+    let pos_selectorcid pos = 
+      Cid.create ["selector_" ^ string_of_int pos] 
+    in 
+    (* create a parser to extract the evrec
+       from the i'th event in the lucid header. *)
+    let evrec_parse_node max_layers layer evrec =
+      let parse_instr = IS.new_PStruct (evrec_hdrvar evrec) in
+      let next_instr =
+        match max_layers - 1 = layer with
+        | true -> IS.new_PNext (Some parse_end_cid)
+        | false -> IS.new_PNext (Some (pos_selectorcid (layer + 1)))
+      in
+      IS.new_parse_node (evrec_pnodecid layer evrec) [parse_instr] next_instr
+    in
+    (* create the ith selector node *)
+    let pos_selector layer evrecs =
+      let selector_cid =
+        match layer with
+        | 0 -> parse_start_cid
+        | _ -> pos_selectorcid layer
+      in
+      let peek_target_decl_cid, peek_target_cid =
+        match layer with
+        | 0 -> handle_selector_name, handle_selector_name
+        | _ -> Cid.create ["bit<8> tmp"], Cid.create ["tmp"]
+      in
+      let extract_eventType =
+        IS.new_PPeek peek_target_decl_cid event_id_width
+      in
+      let evrec_branch evrec =
+        IS.new_SConst_branch evrec.event_iid (Some (evrec_pnodecid layer evrec))
+      in
+      let evrec_branches =
+        IS.new_SConst_branch 0 (Some parse_end_cid)
+        :: CL.map evrec_branch evrecs
+      in
+      IS.new_parse_node
+        selector_cid
+        [extract_eventType]
+        (IS.new_PSelect peek_target_cid evrec_branches)
+    in
+    (* create all nodes for a layer *)
+    let layer_nodes max_layers evrecs layer =
+      pos_selector layer evrecs
+      :: CL.map (evrec_parse_node max_layers layer) evrecs
+    in
+    (* create num_evs selectors and num_ev layers of parse nodes *)
+    let evrecs =
+      ctx_get_event_recs ()
+      |> CL.filter (fun evr ->
+             match evr.event_sort with
+             | EBackground -> true
+             | _ -> false)
+    in
+    let nodes =
+      CL.map
+        (layer_nodes max_generated_events evrecs)
+        (range 0 max_generated_events)
+      |> CL.flatten
+    in
+    (* end state just parses a single 8 bit header and exits (no next instr) *)
+    let end_state =
+      let parse_instr =
+        IS.new_PStruct (TofinoStructs.qualify_struct footer IS.SHeader)
+      in
+      let flags_parse_instr = IS.new_PStruct event_out_flags_instance in
+      let next_instr = IS.new_PNext None in
+      IS.new_parse_node
+        parse_end_cid
+        [parse_instr; flags_parse_instr]
+        next_instr
+    in
+    (*     print_endline ("HERE");
+    printf "number of node states: %i\n" (CL.length nodes);
+    exit 1;
+ *)
+    IS.new_ParseTree lucid_parser_name (nodes @ [end_state])
+  ;;
+end
+
+
+
+
+
+
+(*   
+  new generate functions strategy:
+    generating an entry or exit event is an in-place modification of the current 
+    packet header. 
+    generating a "control" event is a copy. It always recirculates. 
+
+    Implemented now:
+    generate(control event);
+    generate_port(portexp, packet event);
+
+*)
+
 
 (*** temporary solution to event combinator inlining ***)
 let unpack_ecall exp =
@@ -41,9 +248,6 @@ let replace_rhs iassign new_rhs =
   | _ -> error "[replace_rhs] not an IAssign"
 ;;
 
-(* from LLOp *)
-
-
   (* set the visible arguments of the event, 
      its fields defined in ev_rec. *)
   let event_visible_args_instrs hdl_id ev_rec ev_args = 
@@ -56,29 +260,15 @@ let replace_rhs iassign new_rhs =
       visible_ev_fields 
       rhs_exps 
   ;;
-
-(*   let hidden_fields_of_event evrec = 
-    let fields = CL.map 
-    (fun fld -> Cid.concat evrec.event_struct_instance fld)
-    []
- *)
-  (* set the hidden aruguments the event 
-     instance defined in ev_rec. *)
-
-
-
-  let event_hidden_args_instrs ev_rec =
+  (* set the hidden fields of the ev_rec *)
+  let event_hidden_args_instrs ev_rec args =
     let hidden_ev_fields = CL.map 
       (fun fld -> Cid.concat ev_rec.event_struct_instance fld)
       (ev_rec.hidden_fields |> CL.split |> fst)
     in 
-    let rhs_exps = CL.map 
-      Generators.int_expr  
-      [ev_rec.event_iid; 0; 0] 
-    in 
-      Generators.oper_assign_instrs 
-        hidden_ev_fields 
-        rhs_exps 
+    Generators.oper_assign_instrs 
+      hidden_ev_fields 
+      args 
   ;;
 
   (* instructions to set headers to valid. *)
@@ -97,10 +287,13 @@ let replace_rhs iassign new_rhs =
           0 ]
     | _ -> []
   ;;
-  (* left off here: get rid of this, 
-     then update runtime_meta_init_instrs. *)
+
   let event_meta_init_instrs evrec = 
-    (event_hidden_args_instrs evrec)
+    let hidden_args = CL.map 
+      Generators.int_expr  
+      [evrec.event_iid; 0; 0] 
+    in 
+    (event_hidden_args_instrs evrec hidden_args)
     @
     (event_other_setup_instrs evrec)
   ;;
@@ -145,6 +338,7 @@ let from_event_call hdl_id alu_basename ev_id ev_args =
   in
   let alu_rhs_exps = CL.map (eoper_from_immediate hdl_id) ev_args in
   let to_ass_f (lhs, rhs) = IS.IAssign (lhs, rhs) in
+
   let (ivec : IS.instrVec) =
     CL.map to_ass_f (CL.combine out_struct_fields alu_rhs_exps)
   in
@@ -184,7 +378,7 @@ let event_combinator_inliners =
 (* generate an alu object from a generate statement that has
 an arbitrary sequence of event combinators inlined.
 for example: generate Event.delay(foo(x), 100); *)
-
+(* This is probably depreciated. If not, it should be. *)
 let rec generate_modified_self hdl_id alu_name fcn_id fcn_args =
   match Cid.exists event_combinator_inliners fcn_id with
   | true ->
@@ -241,8 +435,7 @@ let generate_port (args : codegenInput) : codegenOutput =
     | [port_exp; event_exp] -> (port_exp, event_exp) 
     | _ -> error "[generate_port] invalid arguments."
   in 
-  let port = int_from_const_exp port_exp in 
-  let _ = port in 
+  (* ge the event record and event args *)
   let ev_rec, ev_args = match (event_exp.e) with 
     | ECall (ev_cid, ev_args) ->
       let ev_rec = match ctx_find_eventrec_opt ev_cid with 
@@ -256,16 +449,43 @@ let generate_port (args : codegenInput) : codegenOutput =
     | _ -> error "[generate_port] unexpected expression form\
       for event argument."
   in 
-  (* the vector of instructions to 
-     set fields for this generate call. *)
-  let ivec = 
+
+
+  let hidden_field_args = 
+  [
+    Generators.int_expr ev_rec.event_iid;
+    Generators.int_expr 0;
+    Generators.int_expr 0
+  ] 
+  in 
+
+  (* set user-defined parameters. *)  
+  let user_ivec = 
     (event_visible_args_instrs hdl_id ev_rec ev_args)
   in 
+  (* set hidden parameters. *)
+  let hidden_ivec = 
+    event_hidden_args_instrs ev_rec hidden_field_args
+  in 
+  (* set internal Lucid metadata. *)
+  (* out port and exit event ID. Exit event ID is set because right now, 
+     we assume that generate_port is only used with a wire event. *)
+  let internal_ivec = 
+    [
+      GS.oper_assign_instr 
+        event_port_field
+        (eoper_from_immediate hdl_id port_exp);
+      GS.int_assign_instr 
+        exit_event_field 
+        ev_rec.event_iid
+    ]
+  in 
+
 
   (* event_meta_instrs @ ivec @ runtime_instrs in *)
   (* return a declaration of an alu with this vector of instructions *)
   let alu_id = Cid.compound (Id.create "generate_alu") (Option.get args.basename) in
-  let alu_obj = IS.new_dinstr alu_id ivec in
+  let alu_obj = IS.new_dinstr alu_id (user_ivec@hidden_ivec@internal_ivec) in
   { names = [alu_id]; objs = [alu_obj] }
 ;;
 

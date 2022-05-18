@@ -2,16 +2,13 @@
   then generate an exit event that sends the packet 
   back to its source. */
 
-entry event ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos);
+include "io_events.dpt"
+
 event my_control_event(int<<9>> port, int src, int dst);
-exit event port_out (int<<9>> egr_port);
-exit event ip_out (int<<9>> egr_port, int src, int dst);
 
 handle ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos) {
    generate my_control_event(igr_port, src, dst);
 }
- 
-
 handle my_control_event(int<<9>> port, int src, int dst) {    
-    generate ip_out(port, src, dst);
+    generate_port(port, ip_out(src, dst));
 }

@@ -34,7 +34,7 @@ let next_event_width = 8
 let events_count_str = "eventsCount"
 let events_count_width = 16
 let event_port_str = "outPort"
-let event_port_width = 16
+let event_port_width = 9
 let dpt_meta_struct_instance = Cid.create [md_instance_prefix; dpt_meta_str]
 
 let timestamp_field =
@@ -57,10 +57,34 @@ let next_event_field =
 let event_count_field =
   Cid.create [md_instance_prefix; dpt_meta_str; events_count_str]
 ;;
-
 let event_port_field =
   Cid.create [md_instance_prefix; dpt_meta_str; event_port_str]
 ;;
+
+
+(* lucid's internal metadata struct for ingress processing *)
+let lucid_internal_struct = 
+  let struct_cid = Cid.create ["dptMeta_t"] in
+  let struct_instance_cid = dpt_meta_struct_instance in 
+  let struct_fields =
+    CL.map
+      (fun (f, w) -> (Cid.create [f], w))
+      [ timestamp_str, timestamp_width
+      ; handle_selector_str, handle_selector_width
+      ; exit_event_str, exit_event_width
+      ; next_event_str, next_event_width
+      ; events_count_str, events_count_width 
+      ; event_port_str, event_port_width
+      ; ]
+  in 
+  let dptMeta_struct = LLSyntax.new_meta_structdef struct_cid struct_fields in
+  let dptMeta_instance =
+    LLSyntax.new_struct struct_cid () struct_instance_cid
+  in
+  [dptMeta_struct; dptMeta_instance]
+;;  
+
+
 
 
 (* hidden event fields *)
@@ -70,6 +94,13 @@ let event_loc_field = Cid.create ["eventLoc"]
 let event_loc_width = 32
 let event_delay_field = Cid.create ["eventDelay"]
 let event_delay_width = 32
+(* hidden fields that every event carries. *)
+let hidden_event_fields = [
+  (event_id_field, event_id_width); 
+  (event_loc_field, event_loc_width); 
+  (event_delay_field, event_delay_width)
+]
+
 
 (* ids of code building functions *)
 let generate_self_cid = Cid.create ["generate_self"]
@@ -97,6 +128,8 @@ let event_out_flags_instance =
   Cid.create_ids [hdr_instance; Id.create "ev_out_flags"]
 ;;
 
+(**** 5/22 -- builtin datatypes and variables ****)
+
 (* The lucid footer that goes after all the event headers. *)
 let footer_t = Cid.create ["lucid_footer_t"]
 let footer = Cid.create ["lucid_footer"]
@@ -104,4 +137,10 @@ let footer_fields = [Cid.create ["end"], 8]
 let footer_struct = GS.hdr_struct footer_t (CL.split footer_fields)
 let footer_instance = GS.struct_inst footer_struct footer
 let footer_instance_cid = Cid.concat (Cid.create_ids [hdr_instance]) footer
+
+
+(*** some more misc config... ***)
 let max_generated_events = 4
+
+
+

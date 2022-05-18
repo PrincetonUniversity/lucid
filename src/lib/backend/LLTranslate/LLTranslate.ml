@@ -20,6 +20,7 @@ open CoreSyntax
 module Printing = CorePrinting
 module IS = LLSyntax
 
+
 (* logging *)
 let backend_report str = Console.show_message str ANSITerminal.Green "Backend"
 
@@ -46,332 +47,21 @@ let dpt_builtin_fcns =
   @LLPairArray.builtins
 ;;
 
-(* lucid's internal metadata struct for ingress processing *)
-let lucid_internal_struct = 
-  let struct_cid = Cid.create ["dptMeta_t"] in
-  let struct_instance_cid = dpt_meta_struct_instance in 
-  let struct_fields =
-    CL.map
-      (fun (f, w) -> (Cid.create [f], w))
-      (* field names and widths are defined in LLConstants. *)
-      [ timestamp_str, timestamp_width
-      ; handle_selector_str, handle_selector_width
-      ; exit_event_str, exit_event_width
-      ; next_event_str, next_event_width
-      ; events_count_str, events_count_width ]
-  in 
-  let dptMeta_struct = IS.new_meta_structdef struct_cid struct_fields in
-  let dptMeta_instance =
-    IS.new_struct struct_cid () struct_instance_cid
-  in
-  [dptMeta_struct; dptMeta_instance]
-;;  
-
-let hidden_event_fields = [
-  (event_id_field, event_id_width); 
-  (event_loc_field, event_loc_width); 
-  (event_delay_field, event_delay_width)
-]
-
-
-
-(* code generators for events *)
-module TranslateEvents = struct
-  let undeclared_instance_name = P4tPrint.str_of_public_varid
-
-  (* translate the ith event declaration into LL code,
-     and save details about the event in the LL syntax.
-     This should be the ONLY FUNCTION that writes to event records. *)
-  let translate (ll_decls, last_eviid) dec =
-    match dec.d with
-    | DEvent (evid, ev_sort, params) ->
-      (* all the details about the event that the translator
-         needs, in one context record. *)
-      let erec =
-        { event_id = evid
-        ; field_defs = vardefs_from_params params
-        ; hidden_fields = hidden_event_fields
-        ; event_iid = last_eviid + 1 (* start event ids at 1 *)
-        ; hdl_param_ids = [] (* filled in by DHandler match *)
-        ; event_sort = ev_sort
-        ; event_struct = TofinoStructs.structname_from_evid evid
-        ; event_struct_instance = TofinoStructs.full_struct_from_ev evid ev_sort
-        ; event_generated_flag =
-            Cid.concat event_out_flags_instance (Cid.id evid)
-        }
-      in
-      (* add the event to the context. *)
-      ctx_add_erec erec;
-      (* generate IR code for the event *)
-      (* all the fields in the event's struct *)
-      let all_event_fields =
-        (* hidden event parameters for lucid runtime *)
-        (event_id_field, event_id_width)
-        :: (event_loc_field, event_loc_width)
-        :: (event_delay_field, event_delay_width)
-        (* user-declared event parameters *)
-        :: erec.field_defs
-      in
-      let struct_ty =
-        match erec.event_sort with
-        | EBackground ->
-          IS.SHeader (* backround events get serialized to packet *)
-        | EEntry _ | EExit -> IS.SMeta
-        (* entry and exit events don't. kind of backwards seeming. *)
-      in
-      (* declaration of the struct, instance, and enum #define *)
-      let ev_struct_decl =
-        IS.new_structdef erec.event_struct struct_ty all_event_fields
-      in
-      let ev_struct_inst =
-        IS.new_struct erec.event_struct () erec.event_struct_instance
-      in
-      let ev_enum =
-        IS.new_public_constdef
-          (TofinoStructs.defname_from_evid erec.event_id)
-          event_id_width
-          erec.event_iid
-      in
-      ll_decls @ [ev_struct_decl; ev_struct_inst; ev_enum], erec.event_iid
-    (* record the mapping from event to handler *)
-    | DHandler (hdl_id, (params, _)) ->
-      ctx_set_hdl_param_ids (Cid.id hdl_id) (CL.split params |> fst);
-      ll_decls, last_eviid (* nothing to generate, just updating context *)
-    | _ -> ll_decls, last_eviid
-  ;;
-
-  (* nothing new *)
-
-  (* create the struct and instance of the event_generated bitvector *)
-  let event_triggered_bv () =
-    let to_generate_flag_field ev =
-      Cid.last_id ev.event_generated_flag |> Cid.id, 1
-    in
-    let field_defs = ctx_get_event_recs () |> CL.map to_generate_flag_field in
-    [ IS.new_header_structdef event_out_flags_struct field_defs
-    ; IS.new_struct event_out_flags_struct () event_out_flags_instance ]
-  ;;
-
-  (* translate all the event declarations and fill the context. *)
-  let translate_all ds =
-    (* generate headers and header instances for events *)
-    let event_decls = CL.fold_left translate ([], 0) ds |> fst in
-    (* generate the event_out flag struct *)
-    let event_out_bv_decls = event_triggered_bv () in
-    event_decls @ [footer_struct; footer_instance] @ event_out_bv_decls
-  ;;
-
-  (*** parse generator for background events ***)
-  let parse_start_cid = Cid.create ["start"]
-  let parse_end_cid = Cid.create ["finish"]
-
-  (* new *)
-  let evrec_hdrvar evrec =
-    TofinoStructs.full_struct_from_ev evrec.event_id EBackground
-  ;;
-
-  let evrec_pnodecid pos evrec =
-    Cid.id
-      (Id.prepend_string
-         ("event_" ^ string_of_int pos ^ "_parse_")
-         evrec.event_id)
-  ;;
-
-  let pos_selectorcid pos = Cid.create ["selector_" ^ string_of_int pos]
-
-  let parsetree_from_events _ =
-    (* create a parser to extract the evrec
-       from the i'th event in the lucid header. *)
-    let evrec_parse_node max_layers layer evrec =
-      let parse_instr = IS.new_PStruct (evrec_hdrvar evrec) in
-      let next_instr =
-        match max_layers - 1 = layer with
-        | true -> IS.new_PNext (Some parse_end_cid)
-        | false -> IS.new_PNext (Some (pos_selectorcid (layer + 1)))
-      in
-      IS.new_parse_node (evrec_pnodecid layer evrec) [parse_instr] next_instr
-    in
-    (* create the ith selector node *)
-    let pos_selector layer evrecs =
-      let selector_cid =
-        match layer with
-        | 0 -> Cid.create ["start"]
-        | _ -> pos_selectorcid layer
-      in
-      let peek_target_decl_cid, peek_target_cid =
-        match layer with
-        | 0 -> handle_selector_name, handle_selector_name
-        | _ -> Cid.create ["bit<8> tmp"], Cid.create ["tmp"]
-      in
-      let extract_eventType =
-        IS.new_PPeek peek_target_decl_cid event_id_width
-      in
-      let evrec_branch evrec =
-        IS.new_SConst_branch evrec.event_iid (Some (evrec_pnodecid layer evrec))
-      in
-      let evrec_branches =
-        IS.new_SConst_branch 0 (Some parse_end_cid)
-        :: CL.map evrec_branch evrecs
-      in
-      IS.new_parse_node
-        selector_cid
-        [extract_eventType]
-        (IS.new_PSelect peek_target_cid evrec_branches)
-    in
-    (* create all nodes for a layer *)
-    let layer_nodes max_layers evrecs layer =
-      pos_selector layer evrecs
-      :: CL.map (evrec_parse_node max_layers layer) evrecs
-    in
-    (* create num_evs selectors and num_ev layers of parse nodes *)
-    let evrecs =
-      ctx_get_event_recs ()
-      |> CL.filter (fun evr ->
-             match evr.event_sort with
-             | EBackground -> true
-             | _ -> false)
-    in
-    let nodes =
-      CL.map
-        (layer_nodes max_generated_events evrecs)
-        (range 0 max_generated_events)
-      |> CL.flatten
-    in
-    (* end state just parses a single 8 bit header and exits (no next instr) *)
-    let end_state =
-      let parse_instr =
-        IS.new_PStruct (TofinoStructs.qualify_struct footer IS.SHeader)
-      in
-      let flags_parse_instr = IS.new_PStruct event_out_flags_instance in
-      let next_instr = IS.new_PNext None in
-      IS.new_parse_node
-        parse_end_cid
-        [parse_instr; flags_parse_instr]
-        next_instr
-    in
-    (*     print_endline ("HERE");
-    printf "number of node states: %i\n" (CL.length nodes);
-    exit 1;
- *)
-    IS.new_ParseTree lucid_parser_name (nodes @ [end_state])
-  ;;
-
-  (* OLD *)
-  let parsestate_name_of evid = Cid.id (Id.prepend_string "parse_" evid)
-
-  let old_parsetree_from_events ds =
-    (*
-      Given lucid events a and b, construct a parse graph:
-
-          <-- start -->
-        /     / | \    \
-       a --->   |  <--- b
-                v
-               end
-
-      - the start node peeks at the next 8 bits to determine the event type.
-      - an event type of 0 indicates "no more events".
-      - node a and b extract the headers for events a and, then return to start.
-      - the end node extracts the footer, whose first 8 bits should always be 0.
-
-      new parse tree design:
-      parse up to a fixed number of events. The graph to parse events n events with a
-      maximum of k events per packet has O(nk) nodes and transitions. For example,
-      the graph for 3 events (a, b, c) with a maximum of 2 events per packet
-      looks like:
-          start
-            |
-            v
-        selector_1
-        |   |   |
-        v   v   v
-        a1  b1  c1
-        |   |   |
-        v   v   v
-        selector_2
-        |   |   |
-        v   v   v
-        a2  b2  c2
-        |   |   |
-        v   v   v
-        footer/end
-    *)
-
-    (* construct the end state. Just parses a single 8 bit header and exits (no next instr) *)
-    let end_state =
-      let parse_instr =
-        IS.new_PStruct (TofinoStructs.qualify_struct footer IS.SHeader)
-      in
-      let flags_parse_instr = IS.new_PStruct event_out_flags_instance in
-      let next_instr = IS.new_PNext None in
-      IS.new_parse_node
-        parse_end_cid
-        [parse_instr; flags_parse_instr]
-        next_instr
-    in
-    (* construct the start node. input is a mapping from enum values to parse states. *)
-    let start_state enum_to_state =
-      (* peek at the next n bits to find the event ID to execute. *)
-      let root_parse_instr = IS.new_PPeek handle_selector_name event_id_width in
-      (* branch on the extracted handle selector *)
-      let to_root_branch (evid, pnode_name) =
-        let ev_iid = ctx_find_event_iid (Cid.id evid) in
-        IS.new_SConst_branch ev_iid (Some pnode_name)
-      in
-      let event_branches = CL.map to_root_branch enum_to_state in
-      let branches =
-        IS.new_SConst_branch 0 (Some parse_end_cid) :: event_branches
-      in
-      let selector = IS.new_PSelect handle_selector_name branches in
-      (* assemble node *)
-      IS.new_parse_node parse_start_cid [root_parse_instr] selector
-    in
-    (*
-      generate parse state for evid and transition to accept.
-        state parse_<evid> {
-            pkt.extract(hdr.dpt_<evid>);
-            transition start;
-         }
-    *)
-    let event_state dec =
-      match dec.d with
-      | DEvent (evid, EBackground, _) ->
-        let parse_state_id = parsestate_name_of evid in
-        let in_struct_name =
-          TofinoStructs.full_struct_from_ev evid EBackground
-        in
-        let parse_instr = IS.new_PStruct in_struct_name in
-        (* always transition back to start *)
-        let next_instr = IS.new_PNext (Some parse_start_cid) in
-        (* let next_instr = IS.new_PNext None in *)
-        let pnode = IS.new_parse_node parse_state_id [parse_instr] next_instr in
-        Some ((evid, parse_state_id), pnode)
-      | _ -> None
-    in
-    let enum_map, event_states = CL.filter_map event_state ds |> CL.split in
-    let start_state = start_state enum_map in
-    IS.new_ParseTree
-      lucid_parser_name
-      ((start_state :: event_states) @ [end_state])
-  ;;
-end
-
-let get_dglobal_info ty e =
-  let sz =
-    match ty.raw_ty with
-    | TName (_, [sz], _) -> sz
-    | _ -> error "Bad DGlobal"
-  in
-  let fcn_cid, args =
-    match e.e with
-    | ECall (fcn_cid, args) -> fcn_cid, args
-    | _ -> error "Bad DGlobal"
-  in
-  sz, fcn_cid, args
-;;
-
 (**** register array declarations ****)
 let regdec_from_decl dec =
+  let get_dglobal_info ty e =
+    let sz =
+      match ty.raw_ty with
+      | TName (_, [sz], _) -> sz
+      | _ -> error "Bad DGlobal"
+    in
+    let fcn_cid, args =
+      match e.e with
+      | ECall (fcn_cid, args) -> fcn_cid, args
+      | _ -> error "Bad DGlobal"
+    in
+    sz, fcn_cid, args
+  in
   match dec.d with
   | DGlobal (reg_id, ty, e) ->
     let sz, create_fcn_cid, args = get_dglobal_info ty e in
@@ -523,11 +213,11 @@ let from_dpt (ds : decls) (opgraph_recs : handler_opgraph_rec list) : IS.llProg 
   ctx_add_decls ds;
   (* put event records in the context and generate
      all the LL code for event declarations. *)
-  let event_decls = TranslateEvents.translate_all ds in
+  let event_decls = LLEvent.TranslateEvents.translate_events ds in
   (* generate struct declarations and instances for
      other private Lucid-runtime only data. *)
   (* generate parser for entry event instances. *)
-  let parse_def = TranslateEvents.parsetree_from_events ds in
+  let parse_def = LLEvent.TranslateEvents.parsetree_from_events () in
   (* generate backend defs for register arrays *)
   let regarray_defs = CL.map regdec_from_decl ds |> CL.flatten in
   (* translate operation statements into backend compute objects,
@@ -547,7 +237,7 @@ let from_dpt (ds : decls) (opgraph_recs : handler_opgraph_rec list) : IS.llProg 
         (* @ IS.dict_of_decls group_defs *)
         @ IS.dict_of_decls regarray_defs
         @ IS.dict_of_decls event_decls
-        @ IS.dict_of_decls lucid_internal_struct
+        @ IS.dict_of_decls LLConstants.lucid_internal_struct
         @ IS.dict_of_decls [parse_def]
         @ IS.dict_of_decls sched_defs
         @ IS.dict_of_decls control_defs

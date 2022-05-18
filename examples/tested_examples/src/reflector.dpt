@@ -1,9 +1,6 @@
 /* Reflect the packet back. Simple test of ip harness. */
-
-entry event ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos);
-exit event port_out (int<<9>> egr_port);
-exit event ip_out (int<<9>> egr_port, int src, int dst);
+include "io_events.dpt"
 
 handle ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos) {
-    generate ip_out(igr_port, src, dst);
+    generate_port (igr_port, ip_out(src, dst));
 }
