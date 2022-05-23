@@ -35,7 +35,10 @@ let events_count_str = "eventsCount"
 let events_count_width = 16
 let event_port_str = "outPort"
 let event_port_width = 9
+let event_group_str = "outGroup"
+let event_group_width = 16
 let dpt_meta_struct_instance = Cid.create [md_instance_prefix; dpt_meta_str]
+
 
 let timestamp_field =
   Cid.create_ids
@@ -60,6 +63,10 @@ let event_count_field =
 let event_port_field =
   Cid.create [md_instance_prefix; dpt_meta_str; event_port_str]
 ;;
+let event_group_field =
+  Cid.create [md_instance_prefix; dpt_meta_str; event_group_str]
+;;
+
 
 
 (* lucid's internal metadata struct for ingress processing *)
@@ -75,6 +82,7 @@ let lucid_internal_struct =
       ; next_event_str, next_event_width
       ; events_count_str, events_count_width 
       ; event_port_str, event_port_width
+      ; event_group_str, event_group_width
       ; ]
   in 
   let dptMeta_struct = LLSyntax.new_meta_structdef struct_cid struct_fields in
@@ -105,7 +113,7 @@ let hidden_event_fields = [
 (* ids of code building functions *)
 let generate_self_cid = Cid.create ["generate_self"]
 let generate_port_cid = Cid.create ["generate_port"]
-
+let generate_ports_cid = Cid.create ["generate_ports"]
 
 let lucid_parser_name = Cid.create ["DptIngressParser"]
 let final_table_name = Cid.create ["dptContinueHandler"]
@@ -139,8 +147,11 @@ let footer_instance = GS.struct_inst footer_struct footer
 let footer_instance_cid = Cid.concat (Cid.create_ids [hdr_instance]) footer
 
 
-(*** some more misc config... ***)
+(*** some more misc config that really should be in a config file ***)
 let max_generated_events = 4
-
-
-
+let active_ports = [128; 129; 130; 131]
+let packet_unicast_field = Cid.create ["ig_tm_md"; "ucast_egress_port"]
+(* used for control event generation *)
+let multicast_group_a = Cid.create ["ig_tm_md"; "mcast_grp_a"]
+(* used for (ports) packet event generation *)
+let packet_multicast_field = Cid.create ["ig_tm_md"; "mcast_grp_b"]

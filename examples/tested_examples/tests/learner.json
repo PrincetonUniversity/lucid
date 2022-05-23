@@ -1,0 +1,45 @@
+{
+    "name" : "flood_one", 
+    "input_port": "128",
+    "packets": [
+        {
+            "ip.src" : "1.1.1.1", 
+            "ip.dst" : "2.2.2.2",
+            "ip.tos" : 1
+        },
+        {
+            "ip.src" : "2.2.2.2", 
+            "ip.dst" : "1.1.1.1",
+            "ip.tos" : 1
+        }
+    ],
+    "model-output":
+    [
+        {
+            "port" : 129,
+            "ip.src" : "1.1.1.1", 
+            "ip.dst" : "2.2.2.2",
+            "ip.tos" : 1
+        },                                
+        {
+            "port" : 130,
+            "ip.src" : "1.1.1.1", 
+            "ip.dst" : "2.2.2.2",
+            "ip.tos" : 1
+        },                                
+        {
+            "port" : 131,
+            "ip.src" : "1.1.1.1", 
+            "ip.dst" : "2.2.2.2",
+            "ip.tos" : 1
+        },                                
+        {
+            "port" : 128,
+            "ip.src" : "2.2.2.2", 
+            "ip.dst" : "1.1.1.1",
+            "ip.tos" : 1
+        },
+        { "port" : 196 }
+
+    ]
+}

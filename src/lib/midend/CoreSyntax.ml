@@ -251,6 +251,7 @@ let sassign id e = statement (SAssign (id, e))
 let sprintf s es = statement (SPrintf (s, es))
 let sprintf_sp s es span = statement_sp (SPrintf (s, es)) span
 let sifte e s1 s2 = statement (SIf (e, s1, s2))
+let smatch es ss = statement (SMatch(es, ss))
 let snoop_sp span = statement_sp SNoop span
 let slocal_sp id ty e span = statement_sp (SLocal (id, ty, e)) span
 let sassign_sp id e span = statement_sp (SAssign (id, e)) span

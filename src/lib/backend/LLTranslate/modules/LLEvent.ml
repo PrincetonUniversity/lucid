@@ -15,6 +15,12 @@ let module_id = Id.create module_name
 let cid_of_fname name_str = Cid.create_ids [module_id; Id.create name_str]
 
 
+let tuple_of_list l = 
+  match l with 
+  | [a; b] -> (a, b)
+  | _ -> error "[tuple_of_list] list does not have two elements."
+;;
+
 (*** Event declaration translator ***)
 
 
@@ -428,13 +434,38 @@ let generate_self (args : codegenInput) : codegenOutput =
   | _ -> error "unsupported argument to generate."
 ;;
 
-let generate_port (args : codegenInput) : codegenOutput =
-  (* id of the callee handle *)
-  let hdl_id = Option.get args.hdl_id in
-  let (port_exp, event_exp) = match args.args with 
-    | [port_exp; event_exp] -> (port_exp, event_exp) 
-    | _ -> error "[generate_port] invalid arguments."
+(* instructions to set user-defined params, common 
+   hidden params, and common lucid runtime params. *)
+let common_generate_port_instrs hdl_id ev_rec ev_args = 
+  (* set user-defined parameters. *)  
+  let user_ivec = 
+    (event_visible_args_instrs hdl_id ev_rec ev_args)
   in 
+  (* set hidden parameters. *)
+  let hidden_field_args = 
+  [
+    Generators.int_expr ev_rec.event_iid;
+    Generators.int_expr 0;
+    Generators.int_expr 0
+  ] 
+  in   let hidden_ivec = 
+    event_hidden_args_instrs ev_rec hidden_field_args
+  in 
+  (* set internal Lucid metadata. *)
+  (* out port and exit event ID. Exit event ID is set because right now, 
+     we assume that generate_port is only used with a wire event. *)
+  let internal_ivec = 
+    [
+      GS.int_assign_instr 
+        exit_event_field 
+        ev_rec.event_iid
+    ]
+  in 
+  user_ivec@hidden_ivec@internal_ivec
+
+;;
+
+let rec_args_from_event_exp event_exp = 
   (* ge the event record and event args *)
   let ev_rec, ev_args = match (event_exp.e) with 
     | ECall (ev_cid, ev_args) ->
@@ -449,45 +480,58 @@ let generate_port (args : codegenInput) : codegenOutput =
     | _ -> error "[generate_port] unexpected expression form\
       for event argument."
   in 
+  ev_rec, ev_args
+;;
 
-
-  let hidden_field_args = 
-  [
-    Generators.int_expr ev_rec.event_iid;
-    Generators.int_expr 0;
-    Generators.int_expr 0
-  ] 
+let generate_port (args : codegenInput) : codegenOutput =
+  (* id of the callee handle *)
+  let hdl_id = Option.get args.hdl_id in
+  let (port_exp, event_exp) = match args.args with 
+    | [port_exp; event_exp] -> (port_exp, event_exp) 
+    | _ -> error "[generate_port] invalid arguments."
   in 
+  (* ge the event record and event args *)
+  let ev_rec, ev_args = rec_args_from_event_exp event_exp in 
 
-  (* set user-defined parameters. *)  
-  let user_ivec = 
-    (event_visible_args_instrs hdl_id ev_rec ev_args)
+  (* the instructions *)
+  let ivec = common_generate_port_instrs hdl_id ev_rec ev_args
+    @[
+        GS.oper_assign_instr 
+          packet_unicast_field
+          (eoper_from_immediate hdl_id port_exp);
+     ]
   in 
-  (* set hidden parameters. *)
-  let hidden_ivec = 
-    event_hidden_args_instrs ev_rec hidden_field_args
-  in 
-  (* set internal Lucid metadata. *)
-  (* out port and exit event ID. Exit event ID is set because right now, 
-     we assume that generate_port is only used with a wire event. *)
-  let internal_ivec = 
-    [
-      GS.oper_assign_instr 
-        event_port_field
-        (eoper_from_immediate hdl_id port_exp);
-      GS.int_assign_instr 
-        exit_event_field 
-        ev_rec.event_iid
-    ]
-  in 
-
-
-  (* event_meta_instrs @ ivec @ runtime_instrs in *)
   (* return a declaration of an alu with this vector of instructions *)
-  let alu_id = Cid.compound (Id.create "generate_alu") (Option.get args.basename) in
-  let alu_obj = IS.new_dinstr alu_id (user_ivec@hidden_ivec@internal_ivec) in
+  let alu_id = Cid.compound (Id.create "generate_port_alu") (Option.get args.basename) in
+  let alu_obj = IS.new_dinstr alu_id ivec in
   { names = [alu_id]; objs = [alu_obj] }
 ;;
+
+let generate_ports (args : codegenInput) : codegenOutput =
+  let hdl_id = Option.get args.hdl_id in
+  let (group_exp, event_exp) = tuple_of_list args.args in 
+  let ev_rec, ev_args = rec_args_from_event_exp event_exp in 
+  let set_mcid_instr, supporting_objs = match group_exp.e with 
+  | EVar(group_var) ->
+    GS.oper_assign_instr packet_multicast_field (GS.cid_expr group_var), []
+  | EVal(value) ->
+    let mcid_oper, mc_decls = TofinoAlu.ll_of_vgroup value in 
+    GS.oper_assign_instr packet_multicast_field (GS.oper_expr mcid_oper), mc_decls
+  | _ -> error "[generate_ports] first arg of generate ports must be a group value or variable."
+  in 
+  let clear_outport_instr =  GS.oper_assign_instr event_port_field (GS.int_expr 0) in 
+  let ivec = 
+    (common_generate_port_instrs hdl_id ev_rec ev_args)
+    @[clear_outport_instr; set_mcid_instr]
+  in 
+  (* return a declaration of an alu with this vector of instructions, 
+     and the supporting objects in case we had to create a new group. *)
+  let alu_id = Cid.compound (Id.create "generate_ports_alu") (Option.get args.basename) in
+  let alu_obj = IS.new_dinstr alu_id ivec in
+  { names = [alu_id]; objs = alu_obj::supporting_objs }
+;;
+
+
 
 let delay_event (args : codegenInput) : codegenOutput =
   let _ = args in

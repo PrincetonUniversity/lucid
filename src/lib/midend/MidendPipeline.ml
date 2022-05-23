@@ -67,6 +67,7 @@ let process_prog ?(for_interp = false) ds =
       match enable_compound_expressions with
       | true ->
         print_if_verbose "-------Removing compound expressions--------";
+        let ds = EliminateFloods.eliminate_floods ds in 
         let ds = PrecomputeArgs.precompute_args ds in
         (* get rid of boolean expressions *)
         let ds = EliminateBools.do_passes ds in

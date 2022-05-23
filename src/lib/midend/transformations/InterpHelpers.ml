@@ -22,6 +22,7 @@ let intwidth_from_raw_ty rty : int =
   match rty with
   | TBool -> 1
   | TInt sz -> sz
+  | TGroup -> 16 (* hard coded for tofino! *)
   | _ -> error "cannot get size from this type"
 ;;
 
@@ -371,13 +372,13 @@ let vardefs_from_params params =
 (* unpacking parameters *)
 let unpack_assign stmt =
   match stmt.s with
-  | SAssign (id, val_exp) -> id, val_exp
+  | SAssign (id, rhs_exp) -> id, rhs_exp
   | _ -> error "not an assign."
 ;;
 
 let unpack_local stmt =
   match stmt.s with
-  | SLocal (id, ty, val_exp) -> id, ty, val_exp
+  | SLocal (id, ty, rhs_exp) -> id, ty, rhs_exp
   | _ -> error "not a local."
 ;;
 

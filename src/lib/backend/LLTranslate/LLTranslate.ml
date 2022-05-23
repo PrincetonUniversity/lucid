@@ -40,6 +40,7 @@ let dpt_builtin_fcns =
   ; LLArray.array_update_complex_cid, LLArray.update_complex
   ; LLConstants.generate_self_cid, LLEvent.generate_self
   ; LLConstants.generate_port_cid, LLEvent.generate_port
+  ; LLConstants.generate_ports_cid, LLEvent.generate_ports
   ; LLEvent.event_delay_cid, LLEvent.delay_event
   ; LLSys.time_cid, LLSys.get_time
   ; LLSys.random_cid, LLSys.get_random

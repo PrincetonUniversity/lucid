@@ -85,6 +85,7 @@
    poplPatches
    eliminateEqRangeOps
    addDefaultBranches
+   eliminateFloods
    precomputeArgs
    normalizeBools
    eliminateBools

@@ -77,11 +77,15 @@ let cmd_copy_to_recirc =
       sprintf "ig_tm_md.ucast_egress_port = 196;"
 ;;
 
-(* bug: need the outport field's complete id *)
-let cmd_set_egr_port = 
+(* let cmd_set_egr_port = 
   sprintf "ig_tm_md.ucast_egress_port = (bit<9>)%s;" (undeclared_instance_name event_port_field)
 ;;
-
+ *)
+(* for generate_ports, set the second multicast group of the packet. *)
+(* let cmd_set_mc_group = 
+  sprintf "ig_tm_md.mcast_grp_b = %s;" (undeclared_instance_name event_group_field)
+;;
+ *)
 (* the ingress exit table applies after the handler tables. *)
 module IngressExit = struct
   (***
@@ -190,7 +194,7 @@ module IngressExit = struct
     let from_wire_to_bg_wire =
       { aname = "from_wire_to_bg_wire"
       ; aparams = []
-      ; acmds = [cmd_set_egr_port; cmd_copy_to_recirc; cmd_lucid_etype]
+      ; acmds = [cmd_copy_to_recirc; cmd_lucid_etype]
       }
     in
     let from_wire_to_bg =
@@ -202,7 +206,7 @@ module IngressExit = struct
     let from_bg_to_selfbg_wire =
       { aname = "from_bg_to_selfbg_wire"
       ; aparams = []
-      ; acmds = [cmd_set_egr_port; cmd_copy_to_recirc; cmd_lucid_etype]
+      ; acmds = [cmd_copy_to_recirc; cmd_lucid_etype]
       }
     in
     (* same as coming in from an entry handle *)
@@ -216,9 +220,7 @@ module IngressExit = struct
       { aname = "from_bg_to_wire"
       ; aparams = []
       ; acmds =
-          [
-          cmd_ip_etype;
-          cmd_set_egr_port]
+          [cmd_ip_etype]
           @(cmds_disable_hdrs bg_evcids)
           @(cmds_disable_cids lucid_sys_hdr_cids)
       }
@@ -245,7 +247,7 @@ module IngressExit = struct
       (* the handler for erec generated a non recursive background event and a continue. *)
       { aname = "bg_hdl_" ^ Id.name event_id ^ "_to_otherbg_wire"
       ; aparams = []
-      ; acmds = [cmd_set_egr_port; cmd_disable_hdr event_id; cmd_copy_to_recirc; cmd_lucid_etype]
+      ; acmds = [cmd_disable_hdr event_id; cmd_copy_to_recirc; cmd_lucid_etype]
       }
     in
     (* create rules. note: the rules must be ordered when inserted into table. *)

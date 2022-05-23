@@ -220,50 +220,97 @@ let log_objs opstmt objs =
 ;;
 
 module TofinoAlu = struct
-  (**** generate an (alu_name, alu_declaration) pair from an op statement  ****)
-  let from_assign hdl_id outvar_id val_exp opstmt =
+
+
+  (* translate a group value into an int operand (the groups multicast id)
+     and a declaration of the multicast group. *)
+  (* note: we can have a general ll_of_value function, if we 
+           add a context for coresyntax primitives that get eliminated in the 
+           translation. *)
+  let new_mc_group mcid ports = 
+    (* instructions to put ports in the group *)
+    let mc_instrs = CL.map 
+    (* pkt copy ID must be 0, else egress will be not 
+       be able to distinguish between multicast clones 
+       for multiple generates and a single generate_ports *)
+      (fun p -> {IS.port = p; IS.pkt_copy_id = 0;})
+      ports 
+    in 
+    (* the multicast group *)
+    let mc_group = [{IS.mc_id=mcid; IS.mc_instrs=mc_instrs}] in 
+    (* wrap in a config block *)
+    let config_block = IS.McConfig(mc_group) in 
+    let obj_id = Cid.fresh ["generate_ports_obj"] in 
+    (* wrap in a decl *)
+    let mc_decl = IS.ConfigBlock(obj_id, config_block) in 
+    mc_decl
+  ;;
+
+  let num_groups = ref 0
+
+  let group_base_mcid = 2048
+  let fresh_groupid () = 
+    num_groups := !num_groups + 1;
+    group_base_mcid + !num_groups
+  ;;
+
+  let ll_of_vgroup value : (IS.oper * IS.decl list) = 
+    match value.v with 
+    | VGroup(ports) ->
+      let mcid = fresh_groupid () in 
+      (oper_from_int mcid), [new_mc_group mcid ports]      
+    | _ -> 
+      error ("[ll_of_vgroup] value is not a VGroup ("^(CorePrinting.value_to_string value)^")")
+  ;;
+
+  (**** generate (alu_name, alu_obj, supporting_objs) from an op statement  ****)
+  let from_assign hdl_id outvar_id lhs_exp opstmt : Cid.t * IS.decl * (IS.decl list) =
     (* this is where parameters are renamed. How awful to be nested so 
        deeply into the translation, instead of done in a pass of its own. *)
     let outvar_mid = local_mid_from_id hdl_id outvar_id in 
-    let base_name = uname_of_stmt opstmt in
+    let base_obj_name = uname_of_stmt opstmt in
     let alu_name = aluname_of_stmt opstmt in
-    let alu_name, alu_obj =
-      match val_exp.e with
-      | EVal _ | EVar _ ->
-        ( alu_name
-        , IS.new_dsingleinstr
-            alu_name
-            outvar_mid
-            (eoper_from_immediate hdl_id val_exp) )
-      (* binary operations are alus as an action *)
+    let default_alu rhs_llexp = IS.new_dsingleinstr
+      alu_name
+      outvar_mid
+      rhs_llexp
+    in 
+    (* alu name might change if we call a codegen object *)
+    let alu_name, alu_obj, other_objs =
+      match lhs_exp.e with
+      (* special case for group. *)
+      | EVal (value) -> (
+        match value.v with
+        (* special case for groups *)
+        | VGroup(_) ->
+          let oper, mcdecls = ll_of_vgroup value in 
+          alu_name, default_alu (IS.new_eoper oper), mcdecls
+        | _ ->
+          alu_name, default_alu (eoper_from_immediate hdl_id lhs_exp), []
+      )
+      | EVar _ ->
+        alu_name, default_alu (eoper_from_immediate hdl_id lhs_exp), []
       | EOp (op, [a; b]) ->
         let a = oper_from_immediate hdl_id a in
         let b = oper_from_immediate hdl_id b in
         let op = binOp_from_op op in
-        alu_name, IS.new_dsingleinstr alu_name outvar_mid (IS.new_ebinop op a b)
+        alu_name, default_alu (IS.new_ebinop op a b), []
       | EOp (Cast sz, cast_args) ->
         let src = oper_from_immediate hdl_id (CL.hd cast_args) in
         let width = oper_from_size sz in
-        ( alu_name
-        , IS.new_dsingleinstr alu_name outvar_mid (IS.new_ebinop Cast src width)
-        )
+        alu_name, default_alu (IS.new_ebinop Cast src width), []
       | EOp (Slice (s, e), slice_args) ->
         let src = oper_from_immediate hdl_id (CL.hd slice_args) in
         let st, en = oper_from_int s, oper_from_int e in
-        ( alu_name
-        , IS.new_dsingleinstr
-            alu_name
-            outvar_mid
-            (IS.new_eop Slice [src; st; en]) )
+        alu_name, default_alu (IS.new_eop Slice [src; st; en]), []
       | EOp (_, _) ->
-        let dstr = Printing.statement_to_string opstmt in
         error
           ("operations must all be binary for translation to tofino. \
             statement: "
-          ^ dstr)
-      | ECall (fcn_id, args) ->
-        (* a call could either be a call, or an event declaration. *)
-        (match raw_ty_of_exp val_exp with
+          ^ Printing.statement_to_string opstmt)
+      (* a call could either be a call, or an event declaration. *)  
+      | ECall (fcn_id, args) -> (
+        match raw_ty_of_exp lhs_exp with
         | TEvent ->
           error ("Event variables are not yet supported by the backend. \
                   Declarations must be inlined.");
@@ -272,12 +319,13 @@ module TofinoAlu = struct
             ctx_call_codegen
               fcn_id
               { hdl_id = Some hdl_id
-              ; basename = Some base_name
+              ; basename = Some base_obj_name
               ; retname = Some outvar_mid
               ; args
               }
           in
-          CL.hd call_result.names, CL.hd call_result.objs)
+          CL.hd call_result.names, CL.hd call_result.objs, CL.tl call_result.objs
+        )
       | EHash (size, exps) ->
         (* let width = SyntaxUtils.extract_size size in *)
         (* hack for temporary cast *)
@@ -287,13 +335,13 @@ module TofinoAlu = struct
         (* poly can be an integer or a const *)
         (* let poly = Integer.to_int (zint_from_evalue (CL.hd exps)) in  *)
         let args = CL.map (oper_from_immediate hdl_id) (CL.tl exps) in
-        alu_name, IS.new_hasher alu_name width poly outvar_mid args
+        alu_name, IS.new_hasher alu_name width poly outvar_mid args, []
       | EFlood _ -> 
         error "[from_assign] flood not yet supported by backend."        
     in
     !dprint_endline
       (sprintf "[from_assign] created alu: " ^ Printing.cid_to_string alu_name);
-    alu_name, alu_obj
+    alu_name, alu_obj, other_objs
   ;;
 
   let from_unit hdl_id val_exp opstmt =
@@ -353,31 +401,30 @@ module TofinoControl = struct
   ;;
 
   let from_assign hdl_id opgraph opstmt =
-    let outvar_id, val_exp = unpack_assign opstmt in
+    let outvar_id, lhs_exp = unpack_assign opstmt in
     (* make the ALU that does the computation. *)
-    let alu_name, alu_obj =
-      TofinoAlu.from_assign hdl_id outvar_id val_exp opstmt
+    let alu_name, alu_obj, support_objs =
+      TofinoAlu.from_assign hdl_id outvar_id lhs_exp opstmt
     in
-    (* wrap it in a table that calls the ALU and points to the next table. *)
-    objs_of_non_control_opstatement opgraph opstmt alu_name alu_obj
+    (* wrap the main compute object in a table that calls it and points to the next table. *)
+    (objs_of_non_control_opstatement opgraph opstmt alu_name alu_obj)
+    @support_objs
   ;;
 
   (* almost the same as assign, but there's also an extra declaration before control objects. *)
   let from_local hdl_id opgraph opstmt =
     let outvar_id, var_ty, val_exp = unpack_local opstmt in
     let outvar_mid = local_mid_from_id hdl_id outvar_id in
-    (* make the ALU that does the computation. *)
-    let alu_name, alu_obj =
+    (* make the ALU that fits into the control flow, and any other supporting objects. *)
+    let alu_name, alu_obj, support_objs =
       TofinoAlu.from_assign hdl_id outvar_id val_exp opstmt
     in
     (* wrap it in a table that calls the ALU and points to the next table. *)
     let assign_objs = objs_of_non_control_opstatement opgraph opstmt alu_name alu_obj in
     (* add an object to declare the new local *)
-    (* let width = width_from_ty var_ty in  *)
-    (* HACK (7/6/21) -- should figure out what is wrong here. Probably related to consts. *)
     let width = width_from_ty var_ty in
     let meta_obj = IS.new_globalmeta outvar_mid width in
-    meta_obj :: assign_objs
+    meta_obj :: assign_objs@support_objs
   ;;
 
   (* unit statements can only be calls, so handle them separately. *)
@@ -418,8 +465,15 @@ module TofinoControl = struct
             ; (* generate doesn't return *)
               args = [port_exp; event_exp]
             }
-      | GMulti _ -> 
-          error "[LLOp.from_gen] backend does not support generate_ports."
+      | GMulti group_exp -> 
+          ctx_call_codegen
+            LLConstants.generate_ports_cid
+            { hdl_id = Some hdl_id
+            ; basename = Some base_name
+            ; retname = None
+            ; (* generate doesn't return *)
+              args = [group_exp; event_exp]
+            }      
       in 
       (* the generate statement can translate to a no-op if it is generating from
       an event variable. (11/21 -- this is just a result of not supporting events 
@@ -429,9 +483,10 @@ module TofinoControl = struct
       | _ ->
         let alu_name = CL.hd generated_alus.names in
         let alu_obj = CL.hd generated_alus.objs in
-        (* wrap in control flow object *)
-        objs_of_non_control_opstatement opgraph opstmt alu_name alu_obj
-
+        (* wrap alu in control flow object *)
+        let main_objs = objs_of_non_control_opstatement opgraph opstmt alu_name alu_obj in 
+        (* generate_ports (GMulti) returns multiple objects *)
+        main_objs@(CL.tl generated_alus.objs)
     )
     | _ -> error "[LLOp.from_gen] not a generate statement."
   ;;

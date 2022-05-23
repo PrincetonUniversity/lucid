@@ -1,0 +1,44 @@
+/* Simple unoptimized IP address learner. */
+include "io_events.dpt"
+
+
+global Array.t<<32>> adst = Array.create(1024);
+global Array.t<<32>> aegr = Array.create(1024);
+
+global Array.t<<32>> asrc = Array.create(1024);
+global Array.t<<32>> aigr = Array.create(1024);
+
+
+// learn an address
+event learn_addr(int<<9>> port, int addr) {
+    int<<10>> h = hash<<10>>(3, addr);
+    Array.set(adst, h, addr);
+    Array.set(aegr, h, (int<<32>>)port);
+
+    Array.set(asrc, h, addr);
+    Array.set(aigr, h, (int<<32>>)port);
+}
+
+handle ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos) {
+    int<<10>> hdst = hash<<10>>(3, dst);
+    int sdst = Array.get(adst, hdst);
+    int<<9>> segr = (int<<9>>)Array.get(aegr, hdst);
+    // mapping found --> unicast
+    if ((sdst == dst)) {
+        generate_port(segr, ip_out(src, dst));
+    }
+    // mapping not found --> multicast flood
+    else {
+        generate_ports(flood igr_port, ip_out(src, dst));
+    }
+
+    // Learning: if the source address is 
+    // not in the table (and there is room)
+    // generate an event to learn the address:port
+    int<<10>> hsrc = hash<<10>>(3, src);
+    int ssrc = Array.get(asrc, hsrc);
+
+    if (ssrc == 0){
+        generate learn_addr(igr_port, src);
+    }
+}

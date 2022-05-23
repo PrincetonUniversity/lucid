@@ -3,6 +3,7 @@ module Printing = CorePrinting
 open Batteries
 module CL = Caml.List
 open InterpHelpers
+open Collections
 
 (* logging *)
 module DBG = BackendLogging
@@ -10,6 +11,14 @@ module DBG = BackendLogging
 let outc = ref None
 let dprint_endline = ref DBG.no_printf
 let start_logging () = DBG.start_mlog __FILE__ outc dprint_endline
+
+
+(*** context for multicast groups ***)
+let mcCtx : int CidMap.t ref = ref CidMap.empty
+
+let mcadd cid mciid = 
+  mcCtx := CidMap.add cid mciid (!mcCtx);
+;;
 
 
 (*** context for translation from source to LLSyntax instructions. ***)
@@ -59,6 +68,7 @@ type ctx_entry =
   | CodeGen of codegenFcn
   | Decl of decl (* for memops *)
   | EventRec of event_rec
+  | McGroup of int (* a multicast group id *)
   (* | LLDecl of LLSyntax.decl  *)
   (* a declaration... but isn't this just the same as 
      building up the cid_decls as we go? *)
