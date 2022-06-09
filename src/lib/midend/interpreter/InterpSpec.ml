@@ -12,7 +12,6 @@ type t =
   ; events : (event * (int * int) list) list
   ; config : InterpState.State.config
   ; extern_funs : InterpState.State.ival Env.t
-  ; python_path : string option
   }
 
 let rename env err_str id_str =
@@ -276,11 +275,12 @@ let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t 
     let random_seed =
       parse_int_entry "random seed" (int_of_float @@ Unix.time ())
     in
-    let python_path =
+    let _ =
+      (* Initialize Python env *)
       match List.assoc_opt "python path" lst with
-      | Some (`String str) -> Some str
+      | Some (`String library_name) -> Py.initialize ~library_name ()
       | Some _ -> error "Python path entry must be a string!"
-      | None -> None
+      | None -> Py.initialize ()
     in
     let links =
       if num_switches = 1
@@ -342,6 +342,6 @@ let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t 
       ; random_seed
       }
     in
-    { num_switches; links; externs; events; config; extern_funs; python_path }
+    { num_switches; links; externs; events; config; extern_funs }
   | _ -> error "Unexpected interpreter specification format"
 ;;
