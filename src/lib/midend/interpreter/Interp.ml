@@ -34,9 +34,11 @@ let initial_state (pp : Preprocess.t) (spec : InterpSpec.t) =
 ;;
 
 let initialize renaming spec_file ds =
-  Py.initialize ();
   let pp, ds = Preprocess.preprocess ds in
   let spec = InterpSpec.parse pp renaming spec_file in
+  (match spec.python_path with
+  | Some library_name -> Py.initialize ~library_name ()
+  | None -> Py.initialize ());
   let nst = initial_state pp spec in
   let nst = InterpCore.process_decls nst ds in
   nst
