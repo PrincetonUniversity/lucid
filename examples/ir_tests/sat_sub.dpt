@@ -1,6 +1,0 @@
-//saturating subtraction
-entry event pktin(int src_ip, int dst_ip);
-
-handle pktin(int src_ip, int dst_ip) {
-    int sat_sub_result = src_ip |-| dst_ip;
-}

@@ -1,10 +1,15 @@
-// Tofino-specific definitions.
+/* 
+This is a minimal harness for lucid programs that process IP packets 
+with fixed entry and exit events. 
+Programs that use this harness should have 1 entry and exit event: 
+    - ``entry event ip_in(int<9> igr_port, int src, int dst, int<16> len);``            
+    - ``exit event ip_out(int<1> drop, int<9> egr_port);``
+See ip_harness.md for more details. 
+*/
+
 #include <core.p4>
 #include <tna.p4>
 
-#define TEST_OUT_PORT 0
-#define DPT_ETYPE 1111
-#define DPT_RECIRC_PORT 196
 
 @DPT_HEADERS
 
@@ -22,7 +27,7 @@ typedef bit<32> ipv4_addr_t;
 header ipv4_h {
     bit<4> version;
     bit<4> ihl;
-    bit<8> diffserv;
+    bit<8> tos;
     bit<16> total_len;
     bit<16> identification;
     bit<3> flags;
@@ -34,24 +39,21 @@ header ipv4_h {
     ipv4_addr_t dst_addr;
 }
 
-// Global headers.
+struct ip_event_fields_t {
+    bit<8> tos; 
+    bit<16> len;
+    ipv4_addr_t src;
+    ipv4_addr_t dst;    
+}
+
+// Global headers and metadata
 struct header_t {
     ethernet_h ethernet;
     @DPT_HEADER_INSTANCES
     ipv4_h ip;
 }
-
-// Copy of fields passed to entry events. 
-struct hdrcpy_t {
-    bit<9> ingress_port;
-    bit<32> src_addr;
-    bit<32> dst_addr;    
-}
-
-// Global metadata.
 struct metadata_t {
     @DPT_METADATA_INSTANCES
-    hdrcpy_t hdrcpy;
 }
 
 @DPT_PARSER
@@ -71,7 +73,6 @@ parser TofinoIngressParser(
         md.dptMeta.exitEventType = 0;
         md.dptMeta.nextEventType = 0;        
         md.dptMeta.timestamp = (bit<32>)(ig_intr_md.ingress_mac_tstamp[47:16]); 
-        md.hdrcpy.ingress_port = ig_intr_md.ingress_port;
         transition select(ig_intr_md.resubmit_flag) {
             1 : parse_resubmit;
             0 : parse_port_metadata;
@@ -88,10 +89,11 @@ parser TofinoIngressParser(
 }
 
 // Parser for eth/ip.
+// MANUAL HARNESS CODE
 const bit<16> ETHERTYPE_IPV4 = 16w0x0800;
-const bit<16> ETHERTYPE_DPT = 0x6666;
+const bit<16> ETHERTYPE_DPT = 0x1111;
 parser EthIpParser(packet_in pkt, out header_t hdr, out metadata_t md){
-    DptIngressParser() dptIngressParser; // FIXED INTEGRATION.
+    DptIngressParser() dptIngressParser; // MANUAL HARNESS CODE
     state start {
         pkt.extract(hdr.ethernet);
         transition select(hdr.ethernet.ether_type) {
@@ -100,14 +102,13 @@ parser EthIpParser(packet_in pkt, out header_t hdr, out metadata_t md){
             default : accept;
         }
     }
+    // MANUAL HARNESS CODE
     state parse_dpt {
         dptIngressParser.apply(pkt, hdr, md);                        
         transition parse_ip;
     }
     state parse_ip {
         pkt.extract(hdr.ip);
-        md.hdrcpy.src_addr = hdr.ip.src_addr;
-        md.hdrcpy.dst_addr = hdr.ip.dst_addr;   
         transition accept;
     }
 }
@@ -138,6 +139,33 @@ parser IngressParser(
     }
 }
 
+control CiL2Fwd(
+        in ingress_intrinsic_metadata_t ig_intr_md,
+        inout ingress_intrinsic_metadata_for_tm_t ig_tm_md) {
+    /* Basic L2 forwarding */
+    action aiOut(bit<9> out_port) {
+        ig_tm_md.ucast_egress_port = out_port;
+    }
+    action aiNoop() {}
+    action aiReflect() {
+        ig_tm_md.ucast_egress_port = ig_intr_md.ingress_port;
+    }
+    table tiWire {
+        key = {
+            ig_intr_md.ingress_port : exact;
+        }
+        actions = {
+            aiOut; 
+            aiNoop;
+            aiReflect;
+        }
+        const default_action = aiReflect();
+    }
+    apply {
+        tiWire.apply();
+    }
+}
+
 /*===========================================
 =            ingress match-action             =
 ===========================================*/
@@ -149,27 +177,27 @@ control Ingress(
         inout ingress_intrinsic_metadata_for_deparser_t ig_dprsr_md,
         inout ingress_intrinsic_metadata_for_tm_t ig_tm_md) {
 
-    // DPT gets along with the P4 compiler best if you give entry 
-    // event inputs that cannot be overlaid with packet headers. 
-    @pa_solitary("ingress", "md.hdrcpy.src_addr")
-    @pa_no_overlay("ingress", "md.hdrcpy.src_addr")
+    // entry trigger actions and table. 
 
-    bit<32> out_port; 
-    bit<32> in_port = (bit<32>)ig_intr_md.ingress_port;
+    @ENTRY_TRIGGER_OBJECTS
 
     @DPT_OBJECTS
 
-    action dispatch_setup(){
-        md.pktin.src_ip = md.hdrcpy.src_addr;
-        md.dptMeta.eventType = e_pktin;
-    }
-    action handle_dispatch_result() {
-        ig_tm_md.ucast_egress_port  = TEST_OUT_PORT; 
-    }
+    CiL2Fwd() ciL2Fwd; 
+
     apply {
-        dispatch_setup();
-        @DPT_DISPATCH
-        handle_dispatch_result();
+
+        // call the entry trigger table. 
+        @ENTRY_TRIGGER_CALL 
+
+        if (md.dptMeta.eventType == 0) {
+            ciL2Fwd.apply(ig_intr_md, ig_tm_md);                       
+        } else {
+            // call lucid generated handlers. 
+            @DPT_HANDLERS
+            // set egress port if there was a return.
+            ig_tm_md.ucast_egress_port = md.ip_out.egr_port;            
+        }
     }
 }
 

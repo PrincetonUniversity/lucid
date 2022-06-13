@@ -1,11 +1,11 @@
-## Tested lucid examples
+## Tofino examples
 
-This directory contains example programs that are regularly tested on the tofino asic model. These are programs that should work on a real switch. 
+This directory contains example programs that are regularly compiled and tested on the tofino asic model -- these programs should work correctly on a real switch. 
 
 
 #### Applications 
 
-Applications are in the `./src/` subdirectory.
+Applications are in the `./src/` subdirectory. Some applications include:
 
 **simple_cuckoo_firewall** -- a stateful firewall that uses a cuckoo hash table to remember connections from trusted hosts. Insert operations, for the hash table, may occur over multiple events that move items around in memory to mitigate collisions.
 

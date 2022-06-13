@@ -1,7 +1,0 @@
-/* Drop every packet by never generating an exit event. */
-
-entry event ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos);
-exit event ip_out (int<<1>> drop, int<<9>> egr_port);
-
-handle ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos) {
-     int x = 1;
