@@ -1,0 +1,483 @@
+---MergeUtils.ml log---
+---PARALLEL MERGE: tables dpt_1_merged_tbl and dpt_776_tbl_0_opstmt---
+---- [merge tables] ----
+@pragma stage 0
+    table dpt_1_merged_tbl {
+        actions = {
+            dpt_1_merged_acn;
+        }
+        const default_action = dpt_1_merged_acn();
+        
+    }
+    
+    // Stage not set by dptc
+    table dpt_776_tbl_0_opstmt {
+        key = {
+            md.dptMeta.eventType : ternary;
+        }
+        actions = {
+            dpt_776_acn_0_opstmt;
+            dpt_786_noop;
+        }
+        const entries = {
+            1 : dpt_776_acn_0_opstmt();
+            (_) : dpt_786_noop();
+        }
+        
+    }
+    
+---- [merge tables] ----
+
+[merge_t_into_all_s] START
+	t_rule:
+md.dptMeta.eventType: 1 --> dpt_776_acn_0_opstmt();
+	s_rules:
+<EMPTY PATTERN> --> dpt_1_merged_acn();
+
+--------
+[merge_t_into_s] attempting to merge
+[merge_t_into_s] s_rule: <EMPTY PATTERN> --> dpt_1_merged_acn();
+[merge_t_into_s] t_rule: md.dptMeta.eventType: 1 --> dpt_776_acn_0_opstmt(); 
+		intersect rule pat: md.dptMeta.eventType: 1
+	[merge_t_into_s]adding: md.dptMeta.eventType: 1 --> dpt_776_merged_acn_1_acn_0_opstmt();
+	[merge_t_into_s]adding: <EMPTY PATTERN> --> dpt_1_merged_acn();
+
+[merge_t_into_s] ---- new_s_rules ----
+md.dptMeta.eventType: 1 --> dpt_776_merged_acn_1_acn_0_opstmt();
+<EMPTY PATTERN> --> dpt_1_merged_acn();
+
+[merge_t_into_s] ---- end new_s_rules ----
+
+
+[merge_t_into_all_s]
+	t_rule:
+md.dptMeta.eventType: 1 --> dpt_776_acn_0_opstmt();
+	UPDATED s_rules:
+md.dptMeta.eventType: 1 --> dpt_776_merged_acn_1_acn_0_opstmt();
+<EMPTY PATTERN> --> dpt_1_merged_acn();
+
+--------
+[merge_t_into_all_s] filtered out 0 unreachable rules
+[merge_t_into_all_s] reachable rules: 
+md.dptMeta.eventType: 1 --> dpt_776_merged_acn_1_acn_0_opstmt();
+<EMPTY PATTERN> --> dpt_1_merged_acn();
+
+[merge_t_into_all_s] END
+
+[merge_t_into_all_s] START
+	t_rule:
+<EMPTY PATTERN> --> dpt_786_noop();
+	s_rules:
+md.dptMeta.eventType: 1 --> dpt_776_merged_acn_1_acn_0_opstmt();
+<EMPTY PATTERN> --> dpt_1_merged_acn();
+
+--------
+[merge_t_into_s] attempting to merge
+[merge_t_into_s] s_rule: md.dptMeta.eventType: 1 --> dpt_776_merged_acn_1_acn_0_opstmt();
+[merge_t_into_s] t_rule: <EMPTY PATTERN> --> dpt_786_noop(); 
+
+[merge_t_into_s] ---- new_s_rules ----
+md.dptMeta.eventType: 1 --> dpt_776_merged_acn_1_acn_0_opstmt();
+
+[merge_t_into_s] ---- end new_s_rules ----
+
+[merge_t_into_s] attempting to merge
+[merge_t_into_s] s_rule: <EMPTY PATTERN> --> dpt_1_merged_acn();
+[merge_t_into_s] t_rule: <EMPTY PATTERN> --> dpt_786_noop(); 
+		intersect rule pat: <EMPTY PATTERN>
+	[merge_t_into_s]deleting: <EMPTY PATTERN> --> dpt_1_merged_acn();
+	[merge_t_into_s]adding: <EMPTY PATTERN> --> dpt_786_merged_acn_1_noop();
+
+[merge_t_into_s] ---- new_s_rules ----
+<EMPTY PATTERN> --> dpt_786_merged_acn_1_noop();
+
+[merge_t_into_s] ---- end new_s_rules ----
+
+
+[merge_t_into_all_s]
+	t_rule:
+<EMPTY PATTERN> --> dpt_786_noop();
+	UPDATED s_rules:
+md.dptMeta.eventType: 1 --> dpt_776_merged_acn_1_acn_0_opstmt();
+<EMPTY PATTERN> --> dpt_786_merged_acn_1_noop();
+<EMPTY PATTERN> --> dpt_786_noop();
+
+--------
+[merge_t_into_all_s] filtered out 1 unreachable rules
+[merge_t_into_all_s] reachable rules: 
+md.dptMeta.eventType: 1 --> dpt_776_merged_acn_1_acn_0_opstmt();
+<EMPTY PATTERN> --> dpt_786_merged_acn_1_noop();
+
+[merge_t_into_all_s] END
+[gen_union_acn] new_acn_id=dpt_776_merged_acn_1_acn_0_opstmt s_aid=dpt_1_merged_acn t_aid=dpt_776_acn_0_opstmt
+[gen_union_acn] new_acn_id=dpt_786_merged_acn_1_noop s_aid=dpt_1_merged_acn t_aid=dpt_786_noop
+[merge_tables] finished merging into table dpt_1_merged_tbl -- new table has 2 rules
+md.dptMeta.eventType: 1 --> dpt_776_merged_acn_1_acn_0_opstmt();
+<EMPTY PATTERN> --> dpt_786_merged_acn_1_noop();
+---PARALLEL MERGE: tables dpt_1_merged_tbl and dpt_777_tbl_0_opstmt---
+---- [merge tables] ----
+@pragma stage 0
+    table dpt_1_merged_tbl {
+        key = {
+            md.dptMeta.eventType : ternary;
+        }
+        actions = {
+            dpt_776_merged_acn_1_acn_0_opstmt;
+            dpt_786_merged_acn_1_noop;
+        }
+        const entries = {
+            1 : dpt_776_merged_acn_1_acn_0_opstmt();
+            _ : dpt_786_merged_acn_1_noop();
+        }
+        
+    }
+    
+    // Stage not set by dptc
+    table dpt_777_tbl_0_opstmt {
+        key = {
+            md.dptMeta.eventType : ternary;
+        }
+        actions = {
+            dpt_777_acn_0_opstmt;
+            dpt_788_noop;
+        }
+        const entries = {
+            1 : dpt_777_acn_0_opstmt();
+            (_) : dpt_788_noop();
+        }
+        
+    }
+    
+---- [merge tables] ----
+
+[merge_t_into_all_s] START
+	t_rule:
+md.dptMeta.eventType: 1 --> dpt_777_acn_0_opstmt();
+	s_rules:
+md.dptMeta.eventType: 1 --> dpt_776_merged_acn_1_acn_0_opstmt();
+md.dptMeta.eventType: _ --> dpt_786_merged_acn_1_noop();
+
+--------
+[merge_t_into_s] attempting to merge
+[merge_t_into_s] s_rule: md.dptMeta.eventType: 1 --> dpt_776_merged_acn_1_acn_0_opstmt();
+[merge_t_into_s] t_rule: md.dptMeta.eventType: 1 --> dpt_777_acn_0_opstmt(); 
+		intersect rule pat: md.dptMeta.eventType: 1
+	[merge_t_into_s]deleting: md.dptMeta.eventType: 1 --> dpt_776_merged_acn_1_acn_0_opstmt();
+	[merge_t_into_s]adding: md.dptMeta.eventType: 1 --> dpt_777_merged_acn_1_acn_0_opstmt_776_acn_0_opstmt();
+
+[merge_t_into_s] ---- new_s_rules ----
+md.dptMeta.eventType: 1 --> dpt_777_merged_acn_1_acn_0_opstmt_776_acn_0_opstmt();
+
+[merge_t_into_s] ---- end new_s_rules ----
+
+[merge_t_into_s] attempting to merge
+[merge_t_into_s] s_rule: md.dptMeta.eventType: _ --> dpt_786_merged_acn_1_noop();
+[merge_t_into_s] t_rule: md.dptMeta.eventType: 1 --> dpt_777_acn_0_opstmt(); 
+		intersect rule pat: md.dptMeta.eventType: 1
+	[merge_t_into_s]adding: md.dptMeta.eventType: 1 --> dpt_777_merged_acn_1_noop_786_acn_0_opstmt();
+	[merge_t_into_s]adding: md.dptMeta.eventType: _ --> dpt_786_merged_acn_1_noop();
+
+[merge_t_into_s] ---- new_s_rules ----
+md.dptMeta.eventType: 1 --> dpt_777_merged_acn_1_noop_786_acn_0_opstmt();
+md.dptMeta.eventType: _ --> dpt_786_merged_acn_1_noop();
+
+[merge_t_into_s] ---- end new_s_rules ----
+
+
+[merge_t_into_all_s]
+	t_rule:
+md.dptMeta.eventType: 1 --> dpt_777_acn_0_opstmt();
+	UPDATED s_rules:
+md.dptMeta.eventType: 1 --> dpt_777_merged_acn_1_acn_0_opstmt_776_acn_0_opstmt();
+md.dptMeta.eventType: 1 --> dpt_777_merged_acn_1_noop_786_acn_0_opstmt();
+md.dptMeta.eventType: _ --> dpt_786_merged_acn_1_noop();
+
+--------
+[merge_t_into_all_s] filtered out 1 unreachable rules
+[merge_t_into_all_s] reachable rules: 
+md.dptMeta.eventType: 1 --> dpt_777_merged_acn_1_acn_0_opstmt_776_acn_0_opstmt();
+md.dptMeta.eventType: _ --> dpt_786_merged_acn_1_noop();
+
+[merge_t_into_all_s] END
+
+[merge_t_into_all_s] START
+	t_rule:
+<EMPTY PATTERN> --> dpt_788_noop();
+	s_rules:
+md.dptMeta.eventType: 1 --> dpt_777_merged_acn_1_acn_0_opstmt_776_acn_0_opstmt();
+md.dptMeta.eventType: _ --> dpt_786_merged_acn_1_noop();
+
+--------
+[merge_t_into_s] attempting to merge
+[merge_t_into_s] s_rule: md.dptMeta.eventType: 1 --> dpt_777_merged_acn_1_acn_0_opstmt_776_acn_0_opstmt();
+[merge_t_into_s] t_rule: <EMPTY PATTERN> --> dpt_788_noop(); 
+
+[merge_t_into_s] ---- new_s_rules ----
+md.dptMeta.eventType: 1 --> dpt_777_merged_acn_1_acn_0_opstmt_776_acn_0_opstmt();
+
+[merge_t_into_s] ---- end new_s_rules ----
+
+[merge_t_into_s] attempting to merge
+[merge_t_into_s] s_rule: md.dptMeta.eventType: _ --> dpt_786_merged_acn_1_noop();
+[merge_t_into_s] t_rule: <EMPTY PATTERN> --> dpt_788_noop(); 
+		intersect rule pat: md.dptMeta.eventType: _
+	[merge_t_into_s]deleting: md.dptMeta.eventType: _ --> dpt_786_merged_acn_1_noop();
+	[merge_t_into_s]adding: md.dptMeta.eventType: _ --> dpt_788_merged_acn_1_noop_786_noop();
+
+[merge_t_into_s] ---- new_s_rules ----
+md.dptMeta.eventType: _ --> dpt_788_merged_acn_1_noop_786_noop();
+
+[merge_t_into_s] ---- end new_s_rules ----
+
+
+[merge_t_into_all_s]
+	t_rule:
+<EMPTY PATTERN> --> dpt_788_noop();
+	UPDATED s_rules:
+md.dptMeta.eventType: 1 --> dpt_777_merged_acn_1_acn_0_opstmt_776_acn_0_opstmt();
+md.dptMeta.eventType: _ --> dpt_788_merged_acn_1_noop_786_noop();
+<EMPTY PATTERN> --> dpt_788_noop();
+
+--------
+[merge_t_into_all_s] filtered out 1 unreachable rules
+[merge_t_into_all_s] reachable rules: 
+md.dptMeta.eventType: 1 --> dpt_777_merged_acn_1_acn_0_opstmt_776_acn_0_opstmt();
+md.dptMeta.eventType: _ --> dpt_788_merged_acn_1_noop_786_noop();
+
+[merge_t_into_all_s] END
+[gen_union_acn] new_acn_id=dpt_777_merged_acn_1_acn_0_opstmt_776_acn_0_opstmt s_aid=dpt_776_merged_acn_1_acn_0_opstmt t_aid=dpt_777_acn_0_opstmt
+[gen_union_acn] new_acn_id=dpt_777_merged_acn_1_noop_786_acn_0_opstmt s_aid=dpt_786_merged_acn_1_noop t_aid=dpt_777_acn_0_opstmt
+[gen_union_acn] new_acn_id=dpt_788_merged_acn_1_noop_786_noop s_aid=dpt_786_merged_acn_1_noop t_aid=dpt_788_noop
+[merge_tables] finished merging into table dpt_1_merged_tbl -- new table has 2 rules
+md.dptMeta.eventType: 1 --> dpt_777_merged_acn_1_acn_0_opstmt_776_acn_0_opstmt();
+md.dptMeta.eventType: _ --> dpt_788_merged_acn_1_noop_786_noop();
+---PARALLEL MERGE: tables dpt_2_merged_tbl and dpt_777_tbl_0_opstmt---
+---- [merge tables] ----
+@pragma stage 0
+    table dpt_2_merged_tbl {
+        actions = {
+            dpt_2_merged_acn;
+        }
+        const default_action = dpt_2_merged_acn();
+        
+    }
+    
+    // Stage not set by dptc
+    table dpt_777_tbl_0_opstmt {
+        key = {
+            md.dptMeta.eventType : ternary;
+        }
+        actions = {
+            dpt_777_acn_0_opstmt;
+            dpt_788_noop;
+        }
+        const entries = {
+            1 : dpt_777_acn_0_opstmt();
+            (_) : dpt_788_noop();
+        }
+        
+    }
+    
+---- [merge tables] ----
+
+[merge_t_into_all_s] START
+	t_rule:
+md.dptMeta.eventType: 1 --> dpt_777_acn_0_opstmt();
+	s_rules:
+<EMPTY PATTERN> --> dpt_2_merged_acn();
+
+--------
+[merge_t_into_s] attempting to merge
+[merge_t_into_s] s_rule: <EMPTY PATTERN> --> dpt_2_merged_acn();
+[merge_t_into_s] t_rule: md.dptMeta.eventType: 1 --> dpt_777_acn_0_opstmt(); 
+		intersect rule pat: md.dptMeta.eventType: 1
+	[merge_t_into_s]adding: md.dptMeta.eventType: 1 --> dpt_777_merged_acn_2_acn_0_opstmt();
+	[merge_t_into_s]adding: <EMPTY PATTERN> --> dpt_2_merged_acn();
+
+[merge_t_into_s] ---- new_s_rules ----
+md.dptMeta.eventType: 1 --> dpt_777_merged_acn_2_acn_0_opstmt();
+<EMPTY PATTERN> --> dpt_2_merged_acn();
+
+[merge_t_into_s] ---- end new_s_rules ----
+
+
+[merge_t_into_all_s]
+	t_rule:
+md.dptMeta.eventType: 1 --> dpt_777_acn_0_opstmt();
+	UPDATED s_rules:
+md.dptMeta.eventType: 1 --> dpt_777_merged_acn_2_acn_0_opstmt();
+<EMPTY PATTERN> --> dpt_2_merged_acn();
+
+--------
+[merge_t_into_all_s] filtered out 0 unreachable rules
+[merge_t_into_all_s] reachable rules: 
+md.dptMeta.eventType: 1 --> dpt_777_merged_acn_2_acn_0_opstmt();
+<EMPTY PATTERN> --> dpt_2_merged_acn();
+
+[merge_t_into_all_s] END
+
+[merge_t_into_all_s] START
+	t_rule:
+<EMPTY PATTERN> --> dpt_788_noop();
+	s_rules:
+md.dptMeta.eventType: 1 --> dpt_777_merged_acn_2_acn_0_opstmt();
+<EMPTY PATTERN> --> dpt_2_merged_acn();
+
+--------
+[merge_t_into_s] attempting to merge
+[merge_t_into_s] s_rule: md.dptMeta.eventType: 1 --> dpt_777_merged_acn_2_acn_0_opstmt();
+[merge_t_into_s] t_rule: <EMPTY PATTERN> --> dpt_788_noop(); 
+
+[merge_t_into_s] ---- new_s_rules ----
+md.dptMeta.eventType: 1 --> dpt_777_merged_acn_2_acn_0_opstmt();
+
+[merge_t_into_s] ---- end new_s_rules ----
+
+[merge_t_into_s] attempting to merge
+[merge_t_into_s] s_rule: <EMPTY PATTERN> --> dpt_2_merged_acn();
+[merge_t_into_s] t_rule: <EMPTY PATTERN> --> dpt_788_noop(); 
+		intersect rule pat: <EMPTY PATTERN>
+	[merge_t_into_s]deleting: <EMPTY PATTERN> --> dpt_2_merged_acn();
+	[merge_t_into_s]adding: <EMPTY PATTERN> --> dpt_788_merged_acn_2_noop();
+
+[merge_t_into_s] ---- new_s_rules ----
+<EMPTY PATTERN> --> dpt_788_merged_acn_2_noop();
+
+[merge_t_into_s] ---- end new_s_rules ----
+
+
+[merge_t_into_all_s]
+	t_rule:
+<EMPTY PATTERN> --> dpt_788_noop();
+	UPDATED s_rules:
+md.dptMeta.eventType: 1 --> dpt_777_merged_acn_2_acn_0_opstmt();
+<EMPTY PATTERN> --> dpt_788_merged_acn_2_noop();
+<EMPTY PATTERN> --> dpt_788_noop();
+
+--------
+[merge_t_into_all_s] filtered out 1 unreachable rules
+[merge_t_into_all_s] reachable rules: 
+md.dptMeta.eventType: 1 --> dpt_777_merged_acn_2_acn_0_opstmt();
+<EMPTY PATTERN> --> dpt_788_merged_acn_2_noop();
+
+[merge_t_into_all_s] END
+[gen_union_acn] new_acn_id=dpt_777_merged_acn_2_acn_0_opstmt s_aid=dpt_2_merged_acn t_aid=dpt_777_acn_0_opstmt
+[gen_union_acn] new_acn_id=dpt_788_merged_acn_2_noop s_aid=dpt_2_merged_acn t_aid=dpt_788_noop
+[merge_tables] finished merging into table dpt_2_merged_tbl -- new table has 2 rules
+md.dptMeta.eventType: 1 --> dpt_777_merged_acn_2_acn_0_opstmt();
+<EMPTY PATTERN> --> dpt_788_merged_acn_2_noop();
+---PARALLEL MERGE: tables dpt_3_merged_tbl and dpt_779_tbl_0_opstmt---
+---- [merge tables] ----
+@pragma stage 1
+    table dpt_3_merged_tbl {
+        actions = {
+            dpt_3_merged_acn;
+        }
+        const default_action = dpt_3_merged_acn();
+        
+    }
+    
+    // Stage not set by dptc
+    table dpt_779_tbl_0_opstmt {
+        key = {
+            md.dptMeta.eventType : ternary;
+        }
+        actions = {
+            dpt_779_acn_0_opstmt;
+            dpt_790_noop;
+        }
+        const entries = {
+            1 : dpt_779_acn_0_opstmt();
+            (_) : dpt_790_noop();
+        }
+        
+    }
+    
+---- [merge tables] ----
+
+[merge_t_into_all_s] START
+	t_rule:
+md.dptMeta.eventType: 1 --> dpt_779_acn_0_opstmt();
+	s_rules:
+<EMPTY PATTERN> --> dpt_3_merged_acn();
+
+--------
+[merge_t_into_s] attempting to merge
+[merge_t_into_s] s_rule: <EMPTY PATTERN> --> dpt_3_merged_acn();
+[merge_t_into_s] t_rule: md.dptMeta.eventType: 1 --> dpt_779_acn_0_opstmt(); 
+		intersect rule pat: md.dptMeta.eventType: 1
+	[merge_t_into_s]adding: md.dptMeta.eventType: 1 --> dpt_779_merged_acn_3_acn_0_opstmt();
+	[merge_t_into_s]adding: <EMPTY PATTERN> --> dpt_3_merged_acn();
+
+[merge_t_into_s] ---- new_s_rules ----
+md.dptMeta.eventType: 1 --> dpt_779_merged_acn_3_acn_0_opstmt();
+<EMPTY PATTERN> --> dpt_3_merged_acn();
+
+[merge_t_into_s] ---- end new_s_rules ----
+
+
+[merge_t_into_all_s]
+	t_rule:
+md.dptMeta.eventType: 1 --> dpt_779_acn_0_opstmt();
+	UPDATED s_rules:
+md.dptMeta.eventType: 1 --> dpt_779_merged_acn_3_acn_0_opstmt();
+<EMPTY PATTERN> --> dpt_3_merged_acn();
+
+--------
+[merge_t_into_all_s] filtered out 0 unreachable rules
+[merge_t_into_all_s] reachable rules: 
+md.dptMeta.eventType: 1 --> dpt_779_merged_acn_3_acn_0_opstmt();
+<EMPTY PATTERN> --> dpt_3_merged_acn();
+
+[merge_t_into_all_s] END
+
+[merge_t_into_all_s] START
+	t_rule:
+<EMPTY PATTERN> --> dpt_790_noop();
+	s_rules:
+md.dptMeta.eventType: 1 --> dpt_779_merged_acn_3_acn_0_opstmt();
+<EMPTY PATTERN> --> dpt_3_merged_acn();
+
+--------
+[merge_t_into_s] attempting to merge
+[merge_t_into_s] s_rule: md.dptMeta.eventType: 1 --> dpt_779_merged_acn_3_acn_0_opstmt();
+[merge_t_into_s] t_rule: <EMPTY PATTERN> --> dpt_790_noop(); 
+
+[merge_t_into_s] ---- new_s_rules ----
+md.dptMeta.eventType: 1 --> dpt_779_merged_acn_3_acn_0_opstmt();
+
+[merge_t_into_s] ---- end new_s_rules ----
+
+[merge_t_into_s] attempting to merge
+[merge_t_into_s] s_rule: <EMPTY PATTERN> --> dpt_3_merged_acn();
+[merge_t_into_s] t_rule: <EMPTY PATTERN> --> dpt_790_noop(); 
+		intersect rule pat: <EMPTY PATTERN>
+	[merge_t_into_s]deleting: <EMPTY PATTERN> --> dpt_3_merged_acn();
+	[merge_t_into_s]adding: <EMPTY PATTERN> --> dpt_790_merged_acn_3_noop();
+
+[merge_t_into_s] ---- new_s_rules ----
+<EMPTY PATTERN> --> dpt_790_merged_acn_3_noop();
+
+[merge_t_into_s] ---- end new_s_rules ----
+
+
+[merge_t_into_all_s]
+	t_rule:
+<EMPTY PATTERN> --> dpt_790_noop();
+	UPDATED s_rules:
+md.dptMeta.eventType: 1 --> dpt_779_merged_acn_3_acn_0_opstmt();
+<EMPTY PATTERN> --> dpt_790_merged_acn_3_noop();
+<EMPTY PATTERN> --> dpt_790_noop();
+
+--------
+[merge_t_into_all_s] filtered out 1 unreachable rules
+[merge_t_into_all_s] reachable rules: 
+md.dptMeta.eventType: 1 --> dpt_779_merged_acn_3_acn_0_opstmt();
+<EMPTY PATTERN> --> dpt_790_merged_acn_3_noop();
+
+[merge_t_into_all_s] END
+[gen_union_acn] new_acn_id=dpt_779_merged_acn_3_acn_0_opstmt s_aid=dpt_3_merged_acn t_aid=dpt_779_acn_0_opstmt
+[gen_union_acn] new_acn_id=dpt_790_merged_acn_3_noop s_aid=dpt_3_merged_acn t_aid=dpt_790_noop
+[merge_tables] finished merging into table dpt_3_merged_tbl -- new table has 2 rules
+md.dptMeta.eventType: 1 --> dpt_779_merged_acn_3_acn_0_opstmt();
+<EMPTY PATTERN> --> dpt_790_merged_acn_3_noop();

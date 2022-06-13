@@ -1,0 +1,13 @@
+digraph egress {
+dpt_0_egr_serialize_clone_0 [ shape=record, style="filled", fillcolor=cornsilk, label="dpt_0_egr_serialize_clone_0\l\l
+M:\l
+ hdr.ethernet.ether_type\l
+ eg_intr_md.egress_rid\l
+\lW:\l
+ hdr.ethernet.ether_type\l
+ hdr.lucid_footer.$valid\l
+ hdr.ev_out_flags.$valid\l
+ "];
+    PARSER -> dpt_0_egr_serialize_clone_0
+    dpt_0_egr_serialize_clone_0 -> DEPARSER
+}

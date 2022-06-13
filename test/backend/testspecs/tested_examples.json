@@ -1,5 +1,5 @@
 {
-    "base_dir":"examples/tested_examples",
+    "base_dir":"examples/tofino_apps",
     "builds_dir":"__testbuilds",
     "tests": [
         {"commands":["compile", "assemble", "execute"], "prog":"src/complex_memops.dpt", "harness":"ip_harness.p4", "linker_config":"ip_harness_triggers.json","build":"complex_memops", "testspec":"tests/complex_memops.json"},

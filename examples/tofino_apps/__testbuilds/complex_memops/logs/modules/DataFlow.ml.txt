@@ -1,0 +1,21 @@
+---DataFlow.ml log---
+[get_dependencies] start processing node: dpt_776_tbl_0_opstmt
+variables that the table reads: md.dptMeta.eventType, fmt.arr_1
+other tables that write these variables: 
+predecessors that write these variables: 
+[get_dependencies] done processing node: dpt_776_tbl_0_opstmt
+[get_dependencies] predecessors: 
+[get_dependencies] start processing node: dpt_777_tbl_0_opstmt
+variables that the table reads: md.dptMeta.eventType, fmt.arr_2, md.ip_in.src, md.ip_in.dst, md.ip_in.dst
+other tables that write these variables: 
+predecessors that write these variables: 
+[get_dependencies] done processing node: dpt_777_tbl_0_opstmt
+[get_dependencies] predecessors: 
+[get_dependencies] start processing node: dpt_779_tbl_0_opstmt
+variables that the table reads: md.dptMeta.eventType, a1_out, a2_out, md.ip_in.igr_port
+other tables that write these variables: dpt_776_tbl_0_opstmt, dpt_777_tbl_0_opstmt
+predecessors that write these variables: dpt_776_tbl_0_opstmt, dpt_777_tbl_0_opstmt
+[get_dependencies] done processing node: dpt_779_tbl_0_opstmt
+[get_dependencies] predecessors: dpt_776_tbl_0_opstmt, dpt_777_tbl_0_opstmt
+adding vertices to dataflow...
+adding edges to dataflow...
