@@ -165,7 +165,8 @@ let intersect_conditions (a_cond : condition) (b_cond : condition)
       else None
   )
   | (Bitstring _, Bitstring _) -> (
-
+    (* left off here. case: two bitstrings *)
+    
     error "bitstring not implemented"
 
   )
