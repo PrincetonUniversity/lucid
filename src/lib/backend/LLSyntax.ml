@@ -286,13 +286,35 @@ and rule =
   | Match of cid * pattern * oid
   | OffPath of pattern (* an "OffPath rule" just means noop. Used for default rules. *)
 
-(*  | OffPath (* matching an offpath rule means that a packet is not handled by this code path. These should not occur in final programs. *)
-*)
+
 and pattern = (mid * condition) list
 
+and bit = 
+  | B0
+  | B1
+  | BANY
+
 and condition =
+  | Bitstring of bit list 
+(*   | Masked of {v:const; m:const;} *)
   | Exact of const
   | Any
+
+(* 
+  (* converting bitvecs to masked integers *)
+  bitvec:   01*001 
+  mask:     110111 // replace (0 or 1) with 1, replace * with 0
+  number:   010001 // algorithm: replace wildcard with 0
+  (* 
+    ***compiling tables with masked rules***
+      simplest option: mark tables as "solitary" at the beginning of layout -- they cannot be merged with other tables
+  *)
+
+*)
+
+
+
+
 
 (*** scheduler blocks  ***)
 (* A block of P4 that appears at a fixed 
@@ -872,8 +894,46 @@ module Generators = struct
   ;; 
 
   let noop_action idstr = Action((Cid.fresh [idstr]), [], [])
-
-
   ;;
-
 end
+
+
+let bits_to_maskedint (bits : bit list) : (int * int) = 
+  let to_val_and_mask bit = 
+    match bit with 
+    | B0    -> (0, 1) (* val: 0, mask 1 *) 
+    | B1    -> (1, 1) (* val: 1, mask 1 *) 
+    | BANY  -> (0, 0) (* val: 0, mask :0 *)
+  in
+  let rec bitstring_to_int bits =  
+    match bits with 
+      | [] -> 0
+      | hd::tl ->
+        (Int.shift_left hd (List.length tl)) + (bitstring_to_int tl)
+  in      
+  let vbits, mbits = CL.map to_val_and_mask bits |> CL.split in 
+  (bitstring_to_int vbits, bitstring_to_int mbits)
+;;  
+
+let int_to_bits (i:int) : bit list = 
+  let rec int_to_bits_rev (i:int) : bit list = 
+    match i with 
+    | 0 -> []
+    | _ -> 
+      let lastbit = match (Int.(land) i 1) with
+        | 0 -> B0
+        | 1 -> B1
+        | _ -> error "[int_to_bits_rev] impossible case: (i && 1) > 1"
+      in 
+      lastbit::(int_to_bits_rev (Int.shift_right i 1))
+  in 
+  CL.rev (int_to_bits_rev i)
+;;
+
+let rec pad_to_w w bs = 
+  let bits_to_add = w - (CL.length bs) in 
+  if (bits_to_add <= 0)
+  then (bs)
+  else (pad_to_w (w) (B0::bs))
+;;
+

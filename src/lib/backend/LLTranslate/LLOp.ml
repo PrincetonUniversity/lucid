@@ -786,11 +786,26 @@ module TofinoControl = struct
 
 
   (**** match statements ****)
+
+  let rec bits_from_ints ints = 
+    let open LLSyntax in
+    match ints with 
+    | [] -> []
+    | hd::tl -> (
+        match hd with
+        | 0 -> B0
+        | 1 -> B1
+        | _ -> BANY
+      )::(bits_from_ints tl)
+  ;;
+
   let condition_from_pat pat =
     match pat with
     | PWild -> IS.Any
     | PNum z -> IS.Exact (const_from_z z)
-    | PBit _ -> IS.Exact (const_from_int (next_bitpat ()))
+    | PBit bits -> Bitstring (bits_from_ints bits)
+      (* IS.Exact (const_from_int (next_bitpat ())) *)
+
   ;;
 
   let pattern_from_branchguard keylist patlist : IS.pattern =

@@ -55,10 +55,7 @@ let str_of_cids cids =
   Core.String.concat ~sep:", " names
 ;;
 
-let dbgstr_of_cond c =
-  match c with
-  | Exact z -> string_of_int (Integer.to_int z)
-  | Any -> "_"
+let dbgstr_of_cond = P4tPrint.PrimitiveString.str_of_cond 
 ;;
 
 let dbgstr_of_pat_conditions pat =

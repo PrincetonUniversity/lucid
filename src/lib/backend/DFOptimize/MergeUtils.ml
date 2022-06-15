@@ -2,7 +2,7 @@
    After updating BranchElimination (1/22), 
    this is only used in pipesyntax.ml and 
    can be greatly simplified. *)
-[@@@ocaml.warning "-17-8-27"]
+(* [@@@ocaml.warning "-17-8-27"] *)
 
 open Format
 open LLSyntax
@@ -28,8 +28,11 @@ let oids_and_next_tids_of_rule cid_decls r =
   match r with
   | Match (_, _, acn_id) ->
     let acn = Cid.lookup cid_decls acn_id in
-    let (Action (_, oids, next_tids)) = acn in
-    oids, next_tids
+    (
+    match acn with 
+      | Action (_, oids, next_tids) -> (oids, next_tids)
+      | _ -> error "[oids_and_next_tids_of_rule] expected action."
+    )
   | OffPath _ -> [], []
 ;;
 
@@ -57,9 +60,15 @@ let normalize_patterns a_pat b_pat =
   a_pat, b_pat
 ;;
 
+let unpack_tbl t = match t with 
+    | Table(t_id, rules, stg_opt) -> t_id, rules, stg_opt
+    | _ -> error "expected table"  
+;;
+
 (* make sure that all rules in table t have the same columns in the same order *)
 let normalize_table_patterns t =
-  let (Table (t_id, rules, stg_opt)) = t in
+
+  let t_id, rules, stg_opt = unpack_tbl t in 
   let vars = match_vars_of_rules rules in
   let rules =
     CL.map
@@ -74,8 +83,8 @@ let normalize_table_patterns t =
 
 (* make sure two tables both have the same columns *)
 let normalize_table_pair s t =
-  let (Table (s_id, s_rules, s_stg_opt)) = s in
-  let (Table (t_id, t_rules, t_stg_opt)) = t in
+  let s_id, s_rules, s_stg_opt = unpack_tbl s in
+  let (t_id, t_rules, t_stg_opt) = unpack_tbl t in
   let vars = match_vars_of_rules (s_rules @ t_rules) in
   let s_rules =
     CL.map
@@ -96,26 +105,76 @@ let normalize_table_pair s t =
   Table (s_id, s_rules, s_stg_opt), Table (t_id, t_rules, t_stg_opt)
 ;;
 
+
+
+let bit_to_string b = 
+  match b with 
+  | B1 -> "1"
+  | B0 -> "0"
+  | BANY -> "*"
+;;
+let bits_to_string bs = 
+  String.concat "" (CL.map bit_to_string bs) 
+;;
+
+
+(* produce a bitstring condition that is x && y 
+   return None if the condition is unsatisfiable *)
+let rec and_bitstrings (xs: bit list) (ys:bit list) : (bit list option) = 
+  !dprint_endline ("[and_bitstrings] "^(bits_to_string xs)^(" -- ")^(bits_to_string ys));
+  match (xs, ys) with
+  | ([], []) -> 
+    (* empty bitstrings *)
+    Some []    
+  | (_, []) | ([], _) -> 
+    error "[and_bitstrings] bitstring length mismatch"
+    (* length mismatch *) 
+    (* None *)
+  | (x::xs, y::ys) -> (
+    let tail_opt = and_bitstrings xs ys in 
+    match tail_opt with 
+      | None -> None
+      | Some (tail) -> (
+        match (x, y) with 
+        | (B0, B1) 
+        | (B1, B0) -> None
+        | (B0, B0)
+        | (B0, BANY)
+        | (BANY, B0) -> Some (B0::tail)
+        | (B1, B1)
+        | (B1, BANY) 
+        | (BANY, B1) -> Some (B1::tail)
+        | (BANY, BANY) -> Some (BANY::tail)
+      )
+  )
+;;
 (**** intersection of patterns ****)
 (* find the intersection of two conditions (columns) in a match pattern, if it exists *)
 let intersect_conditions (a_cond : condition) (b_cond : condition)
     : condition option
   =
-  match a_cond with
-  | Any -> Some b_cond (* a is wildcard, just b*)
-  | Exact a_const ->
-    (match b_cond with
-    | Any -> Some a_cond (* b is wildcard, return a*)
-    | Exact b_const ->
-      if (* a and b are constants, if they're the same, return either. 
-         if they're not the same, there is no intersection in this dimension. *)
-         a_const = b_const
+  !dprint_endline ("[intersect_conditions] a: "^ (dbgstr_of_cond a_cond) ^ " b: "^(dbgstr_of_cond b_cond));
+  match (a_cond, b_cond) with 
+  | (Any, _) -> Some b_cond
+  | (_, Any) -> Some a_cond
+  | (Exact a_const, Exact b_const) -> (
+    (* a and b are constants, if they're the same, return either. 
+       if they're not the same, there is no intersection in this dimension. *)
+    if (a_const = b_const) 
       then Some a_cond
-      else None)
+      else None
+  )
+  | (Bitstring _, Bitstring _) -> (
+
+    error "bitstring not implemented"
+
+  )
+  | (Bitstring _, Exact _) | (Exact _ , Bitstring _) -> (error "bitstring not done.")
 ;;
 
 (* find the intersection of patterns a and b *)
 let intersect_patterns (a_pat : pattern) (b_pat : pattern) : pattern option =
+  !dprint_endline "[intersect_patterns] reached";
   let a_pat, b_pat = normalize_patterns a_pat b_pat in
   let vars, _ = CL.split a_pat in
   (* get the intersection conditions *)
@@ -430,9 +489,12 @@ let merge_tables
     (DebugPrint.str_of_decls
        [Cid.lookup cid_decls s_tid; Cid.lookup cid_decls t_tid]);
   !dprint_endline "---- [merge tables] ----";
-  let [s; t] = CL.map (Cid.lookup cid_decls) [s_tid; t_tid] in
-  let (Table (s_id, s_rules, s_stage)) = s in
-  let (Table (t_id, t_rules, t_stage)) = t in
+  let s, t = match CL.map (Cid.lookup cid_decls) [s_tid; t_tid] with 
+   | [s; t] -> s, t
+   | _ -> error "lookup failed?"
+   in
+  let s_id, s_rules, s_stage = unpack_tbl s in
+  let t_id, t_rules, _ = unpack_tbl t in
   (* normalize the patterns of both tables -- will this help the invalid merging of table groups? *)
   let s, t = normalize_table_pair s t in
   let cid_decls = Cid.replace cid_decls s_id s in

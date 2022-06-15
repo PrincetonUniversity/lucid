@@ -102,29 +102,58 @@ let normalize_rules rules =
     rules
 ;;
 
+
 (* merge pat1 into pat2, producing a new 
    pattern that represents the condition 
    pat1 && pat2. If merging the two patterns 
    produces an inconsistent rule, return 
    None. *)
 let and_patterns pat1 pat2 = 
+  !dprint_endline (sprintf "[and_patterns] %s ----- %s " (dbgstr_of_pat pat1) (dbgstr_of_pat pat2));
+
   let merge_into (pat_opt:pattern option) (new_col: mid * condition) : pattern option = 
     let (new_mid, new_cond) = new_col in 
     match pat_opt with 
       | None -> None (* pat has a conflict, so we can't add a new column. *)
       | Some pat -> (
         match (Cid.lookup_opt pat new_mid) with 
-          (* the column is not in the pattern, so add it. *)
+          (* the column (variable new_mid) is not in the pattern, so add it. *)
           | None ->
             Some ((new_mid, new_cond)::pat)          
-          (* the column is in the pattern *)
+          (* the column (variable new_mid) is in the pattern *)
           | Some (pat_cond) -> (
+            !dprint_endline (sprintf "[merge_into] %s <--- %s " (dbgstr_of_pat pat) (dbgstr_of_cond new_cond));
             match (pat_cond, new_cond) with
+              (* two bitstrings... *)
+              | Bitstring pat_bits, Bitstring new_bits  -> (
+                !dprint_endline ("merging two bitstrings...");
+                match MU.and_bitstrings pat_bits new_bits with 
+                  | Some bs -> 
+                    (* bs is the condition on new_mid, so we want to replace 
+                       pat_cond with (new_mid, bs) in pat *)
+                    (* pat - pat_cond + (new_mid, bs) *)
+                    Some (Cid.replace pat new_mid (Bitstring bs))
+                  | None -> None
+              )
+              | Bitstring pat_bits, Exact c 
+              | Exact c, Bitstring pat_bits -> (
+                !dprint_endline ("merging a constant with a bitstring...");
+                (* one bitstring and one constant: 
+                   convert the constant to a bitstring and do same as 2 bitstrings *)
+                let new_bits = int_to_bits (Integer.to_int c)
+                  |> pad_to_w (CL.length pat_bits) 
+                in 
+                (* print_endline ("new_bits len: "^((CL.length new_bits)|> string_of_int)); *)
+                match MU.and_bitstrings pat_bits new_bits with 
+                  | Some bs -> 
+                    Some (Cid.replace pat new_mid (Bitstring bs))
+                  | None -> None
+                )
               (* both wildcards, no change *)
               | Any, Any -> Some pat 
               (* new is wildcard, no change *)
               | _, Any -> Some pat
-              (* pat is wc, use new *)
+              (* pat is wc, replace with new condition *)
               | Any, _ -> 
                 Some (Cid.replace pat new_mid new_cond)
               | Exact(c), Exact(newc) -> (
@@ -138,7 +167,14 @@ let and_patterns pat1 pat2 =
       )
   in 
   CL.fold_left merge_into (Some pat2) pat1
+  ;;
+  let and_is_sat pat1 pat2 = 
+    match (and_patterns pat1 pat2) with 
+      | None -> false
+      | _ -> true  
+  ;;
 ;;
+
 
 let and_pattern_list (pat1:pattern) (pat2s:pattern list) : pattern list = 
   CL.filter_map (and_patterns pat1) pat2s
@@ -215,7 +251,9 @@ let dbgstr_of_conditioned_rule cr =
 ;;
 
 
-(* find and delete all the negative clauses that are 
+(* 
+optimization: 
+find and delete all the negative clauses that are 
 implied by the positive clause and thus not needed. 
 
 input: 
@@ -242,13 +280,14 @@ let delete_implied_negs c =
     | None -> c
     | Some pat ->
       (* filter *)
+      (* let necessary_negs = CL.filter (and_is_sat pat) c.negs in  *)
       let necessary_negs = CL.filter (RS.p_and_q pat) c.negs in 
       {c with negs=necessary_negs}
 ;;
 
 
-(* get the conditions between tid's precedessors and tid. 
-   At least one of these conditions must apply for 
+(* get the conditions that must hold after tid's predecessors execute 
+   in order for tid to execute. At least one of these conditions must apply for 
    any rule in table tid to execute. *)
 let get_preconditions cid_decls (pred_tids:oid list) (tid:oid) : condition list = 
   (* does pred_rule point to tid? *)
@@ -266,8 +305,10 @@ let get_preconditions cid_decls (pred_tids:oid list) (tid:oid) : condition list 
     )
     | _ -> false
   in
+  (* find the preconditions for pred_tid, 
+     add them to the list pre_conditions *)
   let fold_pred_tbl pre_conditions pred_tid = 
-    (* one rule in the table. *)
+    (* fold over one rule at a time in table pred_tid *)
     let fold_pred_rule (pre_conditions, current_precond) pred_rule = 
       match (points_to_tid cid_decls pred_rule tid) with 
       | true -> 
@@ -555,11 +596,17 @@ let enforce_path_constraints_at_table idom tid (cid_decls, pcs) =
     )
     | _ -> (
       (* this is a join node, preconditions are the same as 
-         the immediate dominator. 
+         the immediate dominator -- the last table that covers 
+         every control flow path that leads from the root to 
+         this node. e.g.: 
+                            /-> a >-\
+                   root -> i -> b >- d
+                            \-> c >-/
+                  here, foo is the immediate dominator of d
+
          Special-casing join nodes is really important 
-         because it prevents most conditional tests from 
-         propagating through the entire program. It solves 
-         the "diamond control flow" problem. *)
+         because it prevents a lot of conditional tests from 
+         propagating through the entire program. *)
 (*       let preconditions = get_preconditions 
         cid_decls 
         pred_tids

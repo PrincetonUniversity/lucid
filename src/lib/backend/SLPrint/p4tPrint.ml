@@ -133,6 +133,7 @@ let str_of_public_globalid m : string =
   String.concat ~sep:"_" names
 ;;
 
+
 (* the unqualified variable name *)
 let strbase_of_varid mid =
   let names = Cid.names mid in
@@ -296,6 +297,9 @@ module PrimitiveString = struct
     match c with
     | Exact z -> string_of_int (Integer.to_int z)
     | Any -> "_"
+    | Bitstring bits -> 
+      let v, m = bits_to_maskedint bits in 
+      sprintf "%i &&& %i" v m
   ;;
 
   (* problem: an any pat must have a _ for every field in the table. *)

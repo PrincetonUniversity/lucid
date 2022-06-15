@@ -114,8 +114,8 @@
    miscUtils
    debugPrint
    registerAllocation
-   mergeUtils
    ruleSolve
+   mergeUtils
    branchElimination
    dataFlow
    liveliness

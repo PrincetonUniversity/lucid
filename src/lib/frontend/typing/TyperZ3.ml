@@ -17,7 +17,8 @@ type solver =
     mutable variables : (Z3.Expr.expr * Z3.Expr.expr) IdMap.t
   }
 
-let default_ctx = mk_context ["auto_config", "true"]
+(* we want a new context each time, else z3 shares things *)
+let default_ctx () = mk_context ["auto_config", "true"]
 
 let start_solver ctx =
   { ctx; solver = Solver.mk_simple_solver ctx; variables = IdMap.empty }
@@ -228,7 +229,8 @@ let check_sat constraints =
     ^ Printing.list_to_string Printing.constraint_to_string constraints;
   (* We could possibly get some performance gains by not restarting the solver
      every time this is called *)
-  let solver = start_solver default_ctx in
+  Z3.Memory.reset (); (* reset here to stop z3 from freezing *)
+  let solver = start_solver (default_ctx ()) in
   let encoded = encode_constraints solver constraints in
   check_sat_encoded solver encoded
 ;;
@@ -248,7 +250,8 @@ let find_max constraints eff1 eff2 =
            (Printing.effect_to_string eff1)
            (Printing.effect_to_string eff2)
            (Printing.list_to_string Printing.constraint_to_string constraints);
-    let solver = start_solver default_ctx in
+    Z3.Memory.reset ();
+    let solver = start_solver (default_ctx ()) in
     let encoded_constraints = encode_constraints solver constraints in
     let encoded_1_2 =
       encode_constraints solver [CLeq (eff1, eff2)] @ encoded_constraints
@@ -279,7 +282,8 @@ let check_implies constrs1 constrs2 =
          "Checking constraints %s imply %s"
          (Printing.list_to_string Printing.constraint_to_string constrs1)
          (Printing.list_to_string Printing.constraint_to_string constrs2);
-  let solver = start_solver default_ctx in
+  Z3.Memory.reset ();
+  let solver = start_solver (default_ctx ()) in
   let negate = function
     | CLeq (e1, e2) -> CLeq (FSucc e2, e1)
   in

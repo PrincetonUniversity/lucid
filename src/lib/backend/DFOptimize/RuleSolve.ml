@@ -12,6 +12,7 @@ open Z3
 open Solver
 module Z3Bool = Boolean
 module Z3Int = Arithmetic.Integer
+module Z3Bit = BitVector
 
 (* todo: pretty sure context is a mutable 
    that Z3 maintains internally. We do not 
@@ -33,7 +34,9 @@ let string_of_match (m : pattern) : string =
         (P4tPrint.str_of_varid m_var)
         (match m_val with
         | Exact i -> Int.to_string (Integer.to_int i)
-        | Any -> "*"))
+        | Any -> "*"
+        | Bitstring _ -> "<bitstring>")
+      )
     m
   |> Caml.String.concat ","
 ;;
@@ -58,15 +61,45 @@ let string_of_rule_pair ((r1 : rule), (r2 : rule)) =
 ;;
 
 (* generate a z3 equation from a pattern *)
+(* 
+TODO: 
+  how does a z3 equation of a bitstring pattern look? 
+  Does that even make sense semantically? 
+  what has to change?
+
+*)
+
+
 let eqn_of_pat ctx (m_exp : pattern) =
+  let var_bw = 32 in (* for now, use 32-bit vectors throughout *)
+  (* one term for each field of the pattern *)
   let fold_f (ctx, terms) m_exp_entry =
     match m_exp_entry with
-    | vid, Exact vint ->
-      let z3_vid = Z3Int.mk_numeral_i ctx (Integer.to_int vint) in
-      let z3_vint = Z3Int.mk_const_s ctx (Cid.to_string vid) in
-      let term = Z3Bool.mk_eq ctx z3_vid z3_vint in
+    | vid, Exact vint -> (
+      (* output equation: var == const; *)
+      let z3_vid = Z3Bit.mk_const_s ctx (Cid.to_string vid) var_bw in 
+      let z3_val = Z3Bit.mk_const   ctx (Z3.Symbol.mk_int ctx (Integer.to_int vint)) var_bw in 
+      let term = Z3Bool.mk_eq ctx z3_vid z3_val in
+
+      (* let z3_vid = Z3Int.mk_const_s ctx (Cid.to_string vid) in *)
+      (* let z3_vint = Z3Int.mk_numeral_i ctx (Integer.to_int vint) in *)
+      (* let term = Z3Bool.mk_eq ctx z3_vid z3_vint in *)
       ctx, terms @ [term]
-    | _ -> ctx, terms
+    )
+    | vid, Bitstring bits -> (
+      (* output equation: var && mask == const; *)
+      let vint, mint = bits_to_maskedint bits in 
+
+      let z3_vid = Z3Bit.mk_const_s ctx (Cid.to_string vid) var_bw in 
+      let z3_v   = Z3Bit.mk_const   ctx (Z3.Symbol.mk_int ctx vint) var_bw in 
+      let z3_m   = Z3Bit.mk_const   ctx (Z3.Symbol.mk_int ctx mint) var_bw in 
+      let z3_lhs = Z3Bit.mk_and ctx z3_vid z3_m in 
+      let term = Z3Bool.mk_eq ctx z3_lhs z3_v in
+      ctx, terms @ [term]
+    )
+    | _, Any -> 
+      (* output no equation, because there are no restrictions on the variable *)
+      ctx, terms
   in
   let ctx, terms = CL.fold_left fold_f (ctx, []) m_exp in
   let eqn = Z3Bool.mk_and ctx terms in
@@ -239,16 +272,16 @@ let is_reachable_in_order all_rules rule =
     error "unknown sat..."
 ;;
 (******* NEW rule solve *******)
+(* is rule r feasible given ~(qs) *)
 let new_is_r_still_feasible (r : rule) (qs : rule list) =
   let ctx = mk_context ["model", "true"; "proof", "true"] in
   let ctx, r_eqn = eqn_of_rule ctx r in
   let _, q_eqns = CL.split (CL.map (eqn_of_rule ctx) qs) in
-  (* let qs_eqn = Z3Bool.mk_and ctx q_eqns in *) (* BUG: why is this and instead of or? *)
   (* match any one of qs *)
-  let qs_eqn = Z3Bool.mk_or ctx q_eqns in (* BUG: why is this and instead of or? *)
+  let qs_eqn = Z3Bool.mk_or ctx q_eqns in
   (* negate: we do not match any one of the qs *)
   let not_qs_eqn = Z3Bool.mk_not ctx qs_eqn in
-  (* is it possible to not match any one of the qs, and match r? *)
+  (* (match r) and (do not match any of the qs)  *)
   let intersect_eqn = Z3Bool.mk_and ctx [not_qs_eqn; r_eqn] in
   let solver = Solver.mk_simple_solver ctx in
   Solver.add solver [intersect_eqn];
@@ -261,8 +294,8 @@ let new_is_r_still_feasible (r : rule) (qs : rule list) =
     error "unknown sat..."
 ;;
 
-(* is p && q true? *)
-let p_and_q (p : pattern) (q : pattern) = 
+(* is p && q satisfiable? *)
+let p_and_q (p : pattern) (q : pattern) : bool = 
   let ctx = mk_context ["model", "true"; "proof", "true"] in
   let ctx, p_eqn = eqn_of_pat ctx p in
   let ctx, q_eqn = eqn_of_pat ctx q in 
