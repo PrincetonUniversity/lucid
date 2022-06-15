@@ -1,9 +1,14 @@
 import subprocess, os, filecmp
 
-interpfiles = [x for x in os.listdir("examples/interp_tests/") if x.endswith(".dpt")]
-libraryfiles = [x for x in os.listdir("examples/library/") if x.endswith(".dpt")]
-regressionfiles = [x for x in os.listdir("examples/regression/") if x.endswith(".dpt")]
-poplfiles = [x for x in os.listdir("examples/popl22/") if x.endswith(".dpt")]
+interpdir = "examples/interp_tests/"
+librarydir = "examples/library/"
+regressiondir = "examples/misc/regression/"
+popldir = "examples/publications/popl22/"
+
+interpfiles = [x for x in os.listdir(interpdir) if x.endswith(".dpt")]
+libraryfiles = [x for x in os.listdir(librarydir) if x.endswith(".dpt")]
+regressionfiles = [x for x in os.listdir(regressiondir) if x.endswith(".dpt")]
+poplfiles = [x for x in os.listdir(popldir) if x.endswith(".dpt")]
 
 errors = []
 diffs = []
@@ -16,7 +21,7 @@ def interp_test(fullfile, args):
     print("Running test on "+shortfile)
     outname = "{}_output.txt".format(shortfile)
     with open("test/output/"+outname, "w") as outfile:
-        fullfile = "examples/interp_tests/"+fullfile
+        fullfile = interpdir+fullfile
         cmd = ["./dpt", "--silent", fullfile] + args
         ret = subprocess.run(cmd, stdout=outfile, stderr=subprocess.DEVNULL)
     if ret.returncode != 0:
@@ -38,13 +43,13 @@ for file in interpfiles:
     interp_test(file, [])
 
 for file in libraryfiles:
-    just_typecheck("examples/library/", file)
+    just_typecheck(librarydir, file)
 
 for file in regressionfiles:
-    just_typecheck("examples/regression/", file)
+    just_typecheck(regressiondir, file)
 
 for file in poplfiles:
-    just_typecheck("examples/popl22/", file)
+    just_typecheck(popldir, file)
 
 print("Errors:", errors)
 print("Diffs:", diffs)
