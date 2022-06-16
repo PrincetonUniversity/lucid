@@ -1,0 +1,19 @@
+/**** bitpatterns.dpt ****/
+/* Simple test of bit patterns in match statements  */
+include "io_events.dpt"
+
+handle ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos) {    
+    int new_src = 0;
+    int new_dst = 0;
+    match src with  
+    | 0b*****************************1** -> {new_src = 4;}
+    | 0b******************************1* -> {new_src = 2;}
+    | 0b*******************************1 -> {new_src = 1;}
+    | _                                  -> {new_src = 0;}
+   match dst with  
+    | 0b*****************************1** -> {new_dst = 4;}
+    | 0b******************************1* -> {new_dst = 2;}
+    | 0b*******************************1 -> {new_dst = 1;}
+    | _                                  -> {new_dst = 0;}
+   generate_port(128, (ip_out(new_src, new_dst)));
+}

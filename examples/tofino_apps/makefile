@@ -42,8 +42,8 @@ $(ASSEMBLE_TARGETS):
 # test tofino
 $(TEST_TARGETS):
 	$(eval TARGET = $(subst test_,,$@)) # test_x --> x
-	builds/$(TARGET)/libs/analyze_model_log.py txpkts builds/$(TARGET)/run_logs/model_*	
 	cd $(BUILDDIR)/$(TARGET); make test $(TESTDIR)/$(TARGET).json
+	builds/$(TARGET)/libs/analyze_model_log.py txpkts builds/$(TARGET)/run_logs/model_*	
 
 $(INFO_TARGETS):
 	$(eval TARGET = $(subst info_,,$@)) # info_x --> x	
