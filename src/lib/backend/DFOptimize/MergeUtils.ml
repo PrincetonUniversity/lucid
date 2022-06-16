@@ -105,8 +105,6 @@ let normalize_table_pair s t =
   Table (s_id, s_rules, s_stg_opt), Table (t_id, t_rules, t_stg_opt)
 ;;
 
-
-
 let bit_to_string b = 
   match b with 
   | B1 -> "1"
@@ -116,7 +114,6 @@ let bit_to_string b =
 let bits_to_string bs = 
   String.concat "" (CL.map bit_to_string bs) 
 ;;
-
 
 (* produce a bitstring condition that is x && y 
    return None if the condition is unsatisfiable *)
@@ -164,13 +161,16 @@ let intersect_conditions (a_cond : condition) (b_cond : condition)
       then Some a_cond
       else None
   )
-  | (Bitstring _, Bitstring _) -> (
-    (* left off here. case: two bitstrings *)
-    
-    error "bitstring not implemented"
-
+  | (Bitstring a_bits, Bitstring b_bits) -> (
+    match (and_bitstrings a_bits b_bits) with 
+    | Some ab_bits -> Some (Bitstring ab_bits)
+    | None -> None
   )
-  | (Bitstring _, Exact _) | (Exact _ , Bitstring _) -> (error "bitstring not done.")
+  | (Bitstring bits, Exact const) | (Exact const , Bitstring bits) -> (
+    match (and_bitstrings bits (int_to_bits (Integer.to_int const))) with 
+    | Some ab_bits -> Some (Bitstring ab_bits)
+    | None -> None
+  )
 ;;
 
 (* find the intersection of patterns a and b *)
@@ -208,6 +208,8 @@ let intersect_patterns (a_pat : pattern) (b_pat : pattern) : pattern option =
 let gen_intersect_rule s_rule t_rule union_aid =
   let s_pat = pat_of_rule s_rule in
   let t_pat = pat_of_rule t_rule in
+  (* okay to use Option.get here because st_feas_checker guarantees that 
+     the intersection is on path *)
   let st_pat = Option.get (intersect_patterns s_pat t_pat) in
   DBG.printf outc "\t\tintersect rule pat: %s\n" (dbgstr_of_pat st_pat);
   let st_rid = Cid.fresh ["r"] in
@@ -563,8 +565,9 @@ let par_t_only_feas st_rules t_rule = RS.is_r_still_feasible t_rule st_rules
 
 (* is it possible to execute s_rule and t_rule? *)
 let par_st_feas s_acns_map t s_rule t_rule =
+  let res = RS.is_intersection_feasible s_rule t_rule in 
   let _, _ = s_acns_map, t in
-  RS.is_intersection_feasible s_rule t_rule
+  res
 ;;
 
 (* merge two parallel tables, return updated cid_decls with new s_tid *)

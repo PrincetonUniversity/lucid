@@ -78,7 +78,7 @@ let eqn_of_pat ctx (m_exp : pattern) =
     | vid, Exact vint -> (
       (* output equation: var == const; *)
       let z3_vid = Z3Bit.mk_const_s ctx (Cid.to_string vid) var_bw in 
-      let z3_val = Z3Bit.mk_const   ctx (Z3.Symbol.mk_int ctx (Integer.to_int vint)) var_bw in 
+      let z3_val = Z3Bit.mk_numeral ctx (string_of_int (Integer.to_int vint)) var_bw in 
       let term = Z3Bool.mk_eq ctx z3_vid z3_val in
 
       (* let z3_vid = Z3Int.mk_const_s ctx (Cid.to_string vid) in *)
@@ -91,8 +91,8 @@ let eqn_of_pat ctx (m_exp : pattern) =
       let vint, mint = bits_to_maskedint bits in 
 
       let z3_vid = Z3Bit.mk_const_s ctx (Cid.to_string vid) var_bw in 
-      let z3_v   = Z3Bit.mk_const   ctx (Z3.Symbol.mk_int ctx vint) var_bw in 
-      let z3_m   = Z3Bit.mk_const   ctx (Z3.Symbol.mk_int ctx mint) var_bw in 
+      let z3_v   = Z3Bit.mk_numeral   ctx (string_of_int vint) var_bw in 
+      let z3_m   = Z3Bit.mk_numeral   ctx (string_of_int mint) var_bw in 
       let z3_lhs = Z3Bit.mk_and ctx z3_vid z3_m in 
       let term = Z3Bool.mk_eq ctx z3_lhs z3_v in
       ctx, terms @ [term]
@@ -205,11 +205,13 @@ let is_intersection_feasible (s : rule) (t : rule) =
   let solver = Solver.mk_simple_solver ctx in
   Solver.add solver [intersect_eqn];
   let is_sat = Solver.check solver [] in
+
   match is_sat with
-  | UNSATISFIABLE -> false
-  | SATISFIABLE -> true
+  | UNSATISFIABLE -> 
+    false
+  | SATISFIABLE -> 
+    true
   | UNKNOWN ->
-    Printf.printf "unknown\n";
     error "unknown sat..."
 ;;
 
