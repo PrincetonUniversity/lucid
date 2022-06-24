@@ -1,0 +1,1 @@
+This builds the image on dockerhub at jsonch/lucid:ocamlbase
