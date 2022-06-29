@@ -1,10 +1,16 @@
 # This runs ./dpt inside of an ubuntu 18.04 docker image. 
-# WARNING: THIS SCRIPT WILL ONLY WORK IF IT IS 
-# This script only works if it is in the root directory of the lucid git
+# WARNING: This script must be run from the root directory of the lucid repo
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
+to_parent_dir()
+{
+    cd $1 && cd ../ && pwd
+}
+
+LUCID_DIR=$(to_parent_dir "$SCRIPT_DIR")
+
 # check if this is the root directory by looking for the opam file.
-if [ -f "$SCRIPT_DIR/dpt.opam" ]; 
+if [ -f "$LUCID_DIR/dpt.opam" ]; 
 then
     continue;
 else
@@ -14,7 +20,7 @@ fi
 # build the ocamlbase docker image if it doesnt exist
 if [[ "$(docker images -q ocamlbase 2> /dev/null)" == "" ]]; then
   echo "building ocamlbase docker image"
-  docker build -t ocamlbase "$SCRIPT_DIR/docker/ocamlbase"
+  docker build -t ocamlbase "$LUCID_DIR/docker/ocamlbase"
 fi
 
 
@@ -34,11 +40,11 @@ to_absolute_path()
     var=$1
     if   [ -d "${var}" ]
     then 
-        ABSOLUTE_PATH=$(cd $(dirname {var}); pwd)
+        ABSOLUTE_PATH=$(cd $(dirname ${var}); pwd)
         echo $ABSOLUTE_PATH
     elif [ -f "${var}" ]
     then 
-        ABSOLUTE_PATH=$(cd $(dirname {var}); pwd)
+        ABSOLUTE_PATH=$(cd $(dirname ${var}); pwd)
         BASE=$(basename ${var})
         echo $ABSOLUTE_PATH/$BASE
     else 
@@ -49,7 +55,7 @@ to_absolute_path()
 
 
 # command to run docker image, compile lucid, then execute it
-CMD="docker run --rm -it -v $SCRIPT_DIR:/home/opam/lucid"
+CMD="docker run --rm -it -v $LUCID_DIR:/home/opam/lucid"
 
 # arguments to dpt inside of docker
 ARGS=""
