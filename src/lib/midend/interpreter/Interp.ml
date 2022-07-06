@@ -42,17 +42,45 @@ let initialize renaming spec_file ds =
   nst
 ;;
 
+(* 
+  What does it take for an interactive interpreter? 
+  - asynchronous processing. We need a background 
+    process that modifies nst.event_queue...
+
+  - Alternately...
+    before processing each event, call a "read newline"
+    function, that checks if there are any input events
+    on stdin.
+
+  - The problem is time... When an event comes in from stdin, 
+    what time do we assign it? 
+    - The only option that makes sense is "now" 
+        -- the current simulation time. 
+
+
+*)
+
 let simulate (nst : State.network_state) =
   Console.report
   @@ "Using random seed: "
   ^ string_of_int nst.config.random_seed
   ^ "\n";
   Random.init nst.config.random_seed;
+  (* 
+    the interpret event loop
+    loop through the switches (indexed by idx), 
+    process all events that arrived before state.current time
+    increment current_time by 1 each time we arrive at switch idx=0
+  *)
   let rec interp_events idx nst =
+(*     let input_event = InterpStream.get_event () in 
+    print_endline @@ "got input event: "^input_event; *)
     match State.next_time nst with
     | None -> nst
     | Some t ->
       (* Increment the current time *)
+      print_endline (Printf.sprintf "[switch %i @ time %i] " idx t);
+      (* when we reach switch idx = 0, increment the time by 1. *)
       let nst =
         if idx = 0
         then { nst with current_time = max t (nst.current_time + 1) }
