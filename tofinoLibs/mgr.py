@@ -6,7 +6,12 @@ import time, sys, os, re, importlib, binascii, json, logging
 
 
 # paths to tofino python libs
-pylib_paths = ["/lib/python2.7/site-packages/tofino", "/lib/python2.7/site-packages", "/lib/python2.7/site-packages/p4testutils", "/lib/python2.7/site-packages/bf-ptf"]
+pylib_paths = [
+"/lib/python3.6/site-packages/tofino", 
+"/lib/python3.6/site-packages/tofino/bfrt_grpc", 
+"/lib/python3.6/site-packages", 
+"/lib/python3.6/site-packages/p4testutils", 
+"/lib/python3.6/site-packages/bf-ptf"]
 pylib_paths = [os.getenv('SDE_INSTALL')+p for p in pylib_paths]
 for p in pylib_paths:
   print ("adding path: %s"%str(p))
@@ -111,11 +116,6 @@ class Manager(object):
       mc_node_hdls.append(mc_node_hdl)
     return mc_node_hdls, mc_grp_hdl
 
-
-
-
-
-
   def delete_mc_group(self, mc_grp_hdl):
     self.mc.mc_mgrp_destroy(self.mc_sess_hdl, self.dev_tgt.dev_id, hex_to_i32(mc_grp_hdl))
 
@@ -139,10 +139,10 @@ def port_to_pipe_local_id(port):
 def port_to_bit_idx(port):
   pipe = port_to_pipe(port)
   index = port_to_pipe_local_id(port)
-  return 72 * pipe + index
+  return int(72 * pipe + index)
 def set_port_or_lag_bitmap(bit_map_size, indicies):
   bit_map = [0] * ((bit_map_size+7)/8)
   for i in indicies:
     index = port_to_bit_idx(i)
-    bit_map[index/8] = (bit_map[index/8] | (1 << (index%8))) & 0xFF
+    bit_map[index//8] = (bit_map[index//8] | (1 << (index%8))) & 0xFF
   return bytes_to_string(bit_map)

@@ -106,7 +106,11 @@ function build_mgr() {
     local BIN="$BUILD_OUT/bf_switchd"
     echo "**** compiling $(strip_path $CTL_SRC) to $(strip_path $BUILD_DIR)/$(strip_path $BIN) ****"
     BF_DRV_SRC=${SDE}/pkgsrc/bf-drivers
-    local CMD="g++ -I${BF_DRV_SRC}/include -I${SDE_INSTALL}/include -Wno-missing-field-initializers -Werror -Wshadow -g -O2 -std=c++11 -o ${BIN} ${CTL_SRC} -ldriver -lbfsys -lbf_switchd_lib -lpifeproto -lpiall -lm -ldl -lpthread -pthread -Wl,--disable-new-dtags -L${SDE_INSTALL}/lib -Wl,-rpath -Wl,${SDE_INSTALL}/lib"
+    # local CMD="g++ -I${BF_DRV_SRC}/include -I${SDE_INSTALL}/include -Wno-missing-field-initializers -Werror -Wshadow -g -O2 -std=c++11 -o ${BIN} ${CTL_SRC} -ldriver -lbfsys -lbf_switchd_lib -lpifeproto -lpiall -lm -ldl -lpthread -pthread -Wl,--disable-new-dtags -L${SDE_INSTALL}/lib -Wl,-rpath -Wl,${SDE_INSTALL}/lib"
+    # 9.7.0 -- rename libbf_switchd --> libbf_switch
+    # local CMD="g++ -I${BF_DRV_SRC}/include -I${SDE_INSTALL}/include -Wno-missing-field-initializers -Werror -Wshadow -g -O2 -std=c++11 -o ${BIN} ${CTL_SRC} -ldriver -lbfsys -lbf_switch -lpifeproto -lpiall -lm -ldl -lpthread -pthread -Wl,--disable-new-dtags -L${SDE_INSTALL}/lib -Wl,-rpath -Wl,${SDE_INSTALL}/lib"
+    # remove un-needed libraries
+    local CMD="g++ -I${BF_DRV_SRC}/include -I${SDE_INSTALL}/include -Wno-missing-field-initializers -Werror -Wshadow -g -O2 -std=c++11 -o ${BIN} ${CTL_SRC} -ldriver -lbfsys -lbf_switch -lm -ldl -lpthread -pthread -Wl,--disable-new-dtags -L${SDE_INSTALL}/lib -Wl,-rpath -Wl,${SDE_INSTALL}/lib"
     echo "CMD: $CMD"
     $CMD
     echo "**** done compiling $(strip_path $CTL_SRC) to $(strip_path $BUILD_DIR)/$(strip_path $BIN) ****"
