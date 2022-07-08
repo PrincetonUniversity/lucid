@@ -26,7 +26,7 @@ let raw_event v =
 let raw_group v =
   match v.v with
   | VGroup ls -> ls
-  | _ -> error "not event"
+  | _ -> error "not group"
 ;;
 
 let interp_op op vs =
@@ -230,6 +230,32 @@ let printf_replace vs (s : string) : string =
     vs
 ;;
 
+(* print an exit event as a json to stdout *)
+let output_exit_event swid port (event:CoreSyntax.event) = 
+  let open Yojson.Basic in 
+  let raw_json_val v = 
+    match v.v with 
+    | VInt i -> `Int (Integer.to_int i)
+    | VBool b -> `Bool b
+    | _ -> error "not an int or bool"
+  in 
+  let {eid; data; edelay} = event in 
+  let name = `String (CorePrinting.cid_to_string eid) in 
+  let args = `List (List.map raw_json_val data) in 
+  let locs = `List [`String (Printf.sprintf "%i:%i" swid port)] in 
+  let timestamp = `Int edelay in 
+  (* let args = CorePrinting.value_to_string data in  *)
+  let evjson = `Assoc [
+    ("name", name);
+    ("args", args);
+    ("locations", locs);
+    ("timestamp", timestamp)
+    ]
+  in 
+  print_endline (Yojson.Basic.to_string evjson);
+;;
+
+
 let rec interp_statement nst swid locals s =
   (* (match s.s with
   | SSeq _ | SNoop -> () (* We'll print the sub-parts when we get to them *)
@@ -301,7 +327,13 @@ let rec interp_statement nst swid locals s =
       List.iter
         (fun (dst_id, port) ->
           if dst_id = -1 (* lookup_dst failed *)
-          then State.log_exit swid (Some port) event nst
+          then (
+            State.log_exit swid (Some port) event nst;
+            (* if we are in interactive mode, print out 
+               the generated event in json format *)
+            if (Cmdline.cfg.interactive)
+            then (output_exit_event swid port event)
+          )
           else State.push_event dst_id port event nst)
         locs;
     locals

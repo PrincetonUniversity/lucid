@@ -10,7 +10,10 @@ open Yojson.Basic
 
 
 
-(* parse a single event from stdin *)
+(* parse a single event json 
+   this should probably be merged with 
+   parse_event inside of parse_events, 
+   if possible *)
 let parse_streamed_event 
   (pp:Preprocess.t) 
   (renaming:Renaming.env) 
@@ -96,5 +99,4 @@ let get_event_blocking pp renaming spec current_time =
     )
     | _ -> None
 ;;
-
 

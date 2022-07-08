@@ -42,24 +42,6 @@ let initialize renaming spec_file ds =
   nst, pp, spec
 ;;
 
-(* 
-  What does it take for an interactive interpreter? 
-  - asynchronous processing. We need a background 
-    process that modifies nst.event_queue...
-
-  - Alternately...
-    before processing each event, call a "read newline"
-    function, that checks if there are any input events
-    on stdin.
-
-  - The problem is time... When an event comes in from stdin, 
-    what time do we assign it? 
-    - The only option that makes sense is "now" 
-        -- the current simulation time. 
-
-
-*)
-
 let simulate_inner (nst : State.network_state) = 
   let rec interp_events idx nst =
     match State.next_time nst with
@@ -105,26 +87,10 @@ let simulate (nst : State.network_state) =
 ;;
 
 
-(* run the interpreter in interactive mode 
-  This means: 
+(* run the interpreter in interactive mode:
   1. execute all the events in the spec file. 
   2. poll stdin for new events until it closes.
-
-  Question:
-    - how do we handle time? 
-    option 1: simulated time. 
-      - each new event executes at the simulation time when it is read, 
-        and increments the clock by default_gap
-    option 2: real time.
-      - each new event executes now? 
-      - each new event executes
-
-*)
-(* 
-  left off here. 
-    - Use PP and renaming to call event parser.
-    - Signal the exit event handler to print output events.
-*)
+  3. print exit events to stdout. *)
 let run pp renaming spec (nst : State.network_state) =
    Random.init nst.config.random_seed;
   (* step 1: run the startup events *)
@@ -134,7 +100,7 @@ let run pp renaming spec (nst : State.network_state) =
   print_endline @@ "startup complete. Waiting for events from sdtin";
 
   let rec poll_loop (nst : State.network_state) = 
-    (* parse the event, give it a time of current_time *)
+    (* parse the event, give it a time of max(time, current_time) *)
     print_endline "[poll_loop] polling for new event";
     let next_ev_opt = InterpStream.get_event_blocking 
       pp 
@@ -150,8 +116,6 @@ let run pp renaming spec (nst : State.network_state) =
         (* run the interpreter until there are no more events to process *)
         print_endline "[poll_loop] running interpreter";
         let nst = simulate_inner nst in 
-        (* increment the time by input_gap *)
-        (* repeat *)
         poll_loop nst
       | _ -> 
         print_endline "[poll_loop] EOF -- done polling";
