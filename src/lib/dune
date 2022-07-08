@@ -67,7 +67,6 @@
    preprocess
    interpSpec
    interpState
-   interpStream
    arrays
    counters
    pairArrays

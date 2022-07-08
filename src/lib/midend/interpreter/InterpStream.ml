@@ -81,22 +81,4 @@ let parse_streamed_event
   | _ -> error "Non-assoc type for event definition"
 ;;
 
-(* poll stdin for a single event. 
-    Expects 1 event per line.
-    Returns None on EOF. *)
-let get_event_blocking pp renaming spec current_time = 
-  let read_fds, _, _ = Unix.select [Unix.stdin] [] [] (-1.0) in 
-  match read_fds with 
-    | [_] -> (
-        try (
-          let ev_str = input_line stdin in 
-          let ev_json = from_string ev_str in 
-          let ev_internal = parse_streamed_event pp renaming spec current_time ev_json in 
-          Some (ev_internal)
-        )
-        (* eof --> nothing to read *)
-        with End_of_file -> None
-    )
-    | _ -> None
-;;
 
