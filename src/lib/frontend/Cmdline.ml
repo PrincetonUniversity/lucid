@@ -67,7 +67,7 @@ let parse () =
     set_all_effects ()
   in
   let set_final_state () = cfg.show_interp_state <- false in
-  let set_interactive () = cfg.interactive <- true in 
+  let set_interactive () = cfg.interactive <- true; unset_verbose () in 
   let speclist =
     [ ( "--silent"
       , Arg.Unit unset_verbose

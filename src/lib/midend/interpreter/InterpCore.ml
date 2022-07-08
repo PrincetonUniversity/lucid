@@ -231,7 +231,7 @@ let printf_replace vs (s : string) : string =
 ;;
 
 (* print an exit event as a json to stdout *)
-let output_exit_event swid port (event:CoreSyntax.event) = 
+let output_exit_event swid port_opt event time = 
   let open Yojson.Basic in 
   let raw_json_val v = 
     match v.v with 
@@ -239,11 +239,15 @@ let output_exit_event swid port (event:CoreSyntax.event) =
     | VBool b -> `Bool b
     | _ -> error "not an int or bool"
   in 
-  let {eid; data; edelay} = event in 
+  let {eid; data; _} = event in 
   let name = `String (CorePrinting.cid_to_string eid) in 
   let args = `List (List.map raw_json_val data) in 
+  let port = match port_opt with
+    | None -> -1
+    | Some p -> p
+  in 
   let locs = `List [`String (Printf.sprintf "%i:%i" swid port)] in 
-  let timestamp = `Int edelay in 
+  let timestamp = `Int time in 
   (* let args = CorePrinting.value_to_string data in  *)
   let evjson = `Assoc [
     ("name", name);
@@ -254,6 +258,17 @@ let output_exit_event swid port (event:CoreSyntax.event) =
   in 
   print_endline (Yojson.Basic.to_string evjson);
 ;;
+
+
+(* print event as json if interactive mode is set, 
+   else log for final report *)
+let log_exit swid port_opt event (nst : State.network_state) = 
+  if (Cmdline.cfg.interactive) 
+  then 
+    (output_exit_event swid port_opt event nst.current_time)
+  else 
+  (State.log_exit swid port_opt event nst)
+;; 
 
 
 let rec interp_statement nst swid locals s =
@@ -278,7 +293,9 @@ let rec interp_statement nst swid locals s =
   | SLocal (id, _, e) -> Env.add (Id id) (interp_exp e) locals
   | SPrintf (s, es) ->
     let vs = List.map (fun e -> interp_exp e |> extract_ival) es in
-    print_endline (printf_replace vs s);
+    if (Cmdline.cfg.interactive)
+    then (()) (* TODO: what to print when running interactively?*)
+    else (print_endline (printf_replace vs s));
     locals
   | SIf (e, ss1, ss2) ->
     let b = interp_exp e |> extract_ival |> raw_bool in
@@ -322,17 +339,13 @@ let rec interp_statement nst swid locals s =
     in
     let event = interp_exp e |> extract_ival |> raw_event in
     if Env.find event.eid nst.event_sorts = EExit
-    then State.log_exit swid None event nst
+    then log_exit swid None event nst
     else
       List.iter
         (fun (dst_id, port) ->
           if dst_id = -1 (* lookup_dst failed *)
           then (
-            State.log_exit swid (Some port) event nst;
-            (* if we are in interactive mode, print out 
-               the generated event in json format *)
-            if (Cmdline.cfg.interactive)
-            then (output_exit_event swid port event)
+            log_exit swid (Some port) event nst;
           )
           else State.push_event dst_id port event nst)
         locs;

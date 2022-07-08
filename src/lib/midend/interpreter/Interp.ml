@@ -61,16 +61,18 @@ let simulate_inner (nst : State.network_state) =
           (match Env.find_opt event.eid nst.handlers with
           | None -> error @@ "No handler for event " ^ Cid.to_string event.eid
           | Some handler ->
-            Printf.printf
-              "t=%d: Handling %sevent %s at switch %d, port %d\n"
-              nst.current_time
-              (match Env.find event.eid nst.event_sorts with
-              | EEntry _ -> "entry "
-              | _ -> "")
-              (CorePrinting.event_to_string event)
-              idx
-              port;
-            handler nst idx port event);
+            if (Cmdline.cfg.verbose)
+            then 
+              Printf.printf
+                "t=%d: Handling %sevent %s at switch %d, port %d\n"
+                nst.current_time
+                (match Env.find event.eid nst.event_sorts with
+                | EEntry _ -> "entry "
+                | _ -> "")
+                (CorePrinting.event_to_string event)
+                idx
+                port;
+              handler nst idx port event);
           interp_events ((idx + 1) mod Array.length nst.switches) nst)
   in
   let nst = interp_events 0 nst in
@@ -97,11 +99,9 @@ let run pp renaming spec (nst : State.network_state) =
   let nst = simulate_inner nst in 
 
   (* step 2: poll for events and interpret them as they arrive from stdin *)
-  print_endline @@ "startup complete. Waiting for events from sdtin";
-
   let rec poll_loop (nst : State.network_state) = 
     (* parse the event, give it a time of max(time, current_time) *)
-    print_endline "[poll_loop] polling for new event";
+    (* print_endline "[poll_loop] polling for new event"; *)
     let next_ev_opt = InterpStream.get_event_blocking 
       pp 
       renaming 
@@ -110,16 +110,12 @@ let run pp renaming spec (nst : State.network_state) =
     in 
     match next_ev_opt with 
       | Some(ev, locs) -> 
-        print_endline "[poll_loop] updating interpreter state";
         (* update interpreter state (push) *)        
         State.push_input_events locs ev nst;
         (* run the interpreter until there are no more events to process *)
-        print_endline "[poll_loop] running interpreter";
         let nst = simulate_inner nst in 
         poll_loop nst
-      | _ -> 
-        print_endline "[poll_loop] EOF -- done polling";
-        nst
+      | _ -> (* EOF *) nst
   in 
   (* return final state *)
   poll_loop nst
