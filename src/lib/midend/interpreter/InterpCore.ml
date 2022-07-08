@@ -26,7 +26,7 @@ let raw_event v =
 let raw_group v =
   match v.v with
   | VGroup ls -> ls
-  | _ -> error "not event"
+  | _ -> error "not group"
 ;;
 
 let interp_op op vs =
@@ -230,6 +230,47 @@ let printf_replace vs (s : string) : string =
     vs
 ;;
 
+(* print an exit event as a json to stdout *)
+let output_exit_event swid port_opt event time = 
+  let open Yojson.Basic in 
+  let raw_json_val v = 
+    match v.v with 
+    | VInt i -> `Int (Integer.to_int i)
+    | VBool b -> `Bool b
+    | _ -> error "not an int or bool"
+  in 
+  let {eid; data; _} = event in 
+  let name = `String (CorePrinting.cid_to_string eid) in 
+  let args = `List (List.map raw_json_val data) in 
+  let port = match port_opt with
+    | None -> -1
+    | Some p -> p
+  in 
+  let locs = `List [`String (Printf.sprintf "%i:%i" swid port)] in 
+  let timestamp = `Int time in 
+  (* let args = CorePrinting.value_to_string data in  *)
+  let evjson = `Assoc [
+    ("name", name);
+    ("args", args);
+    ("locations", locs);
+    ("timestamp", timestamp)
+    ]
+  in 
+  print_endline (Yojson.Basic.to_string evjson);
+;;
+
+
+(* print event as json if interactive mode is set, 
+   else log for final report *)
+let log_exit swid port_opt event (nst : State.network_state) = 
+  if (Cmdline.cfg.interactive) 
+  then 
+    (output_exit_event swid port_opt event nst.current_time)
+  else 
+  (State.log_exit swid port_opt event nst)
+;; 
+
+
 let rec interp_statement nst swid locals s =
   (* (match s.s with
   | SSeq _ | SNoop -> () (* We'll print the sub-parts when we get to them *)
@@ -252,7 +293,10 @@ let rec interp_statement nst swid locals s =
   | SLocal (id, _, e) -> Env.add (Id id) (interp_exp e) locals
   | SPrintf (s, es) ->
     let vs = List.map (fun e -> interp_exp e |> extract_ival) es in
-    print_endline (printf_replace vs s);
+    if (Cmdline.cfg.interactive)
+    (* for interactive mode, print messages to stderr *)
+    then (prerr_endline (printf_replace vs s)) 
+    else (print_endline (printf_replace vs s));
     locals
   | SIf (e, ss1, ss2) ->
     let b = interp_exp e |> extract_ival |> raw_bool in
@@ -296,12 +340,14 @@ let rec interp_statement nst swid locals s =
     in
     let event = interp_exp e |> extract_ival |> raw_event in
     if Env.find event.eid nst.event_sorts = EExit
-    then State.log_exit swid None event nst
+    then log_exit swid None event nst
     else
       List.iter
         (fun (dst_id, port) ->
           if dst_id = -1 (* lookup_dst failed *)
-          then State.log_exit swid (Some port) event nst
+          then (
+            log_exit swid (Some port) event nst;
+          )
           else State.push_event dst_id port event nst)
         locs;
     locals

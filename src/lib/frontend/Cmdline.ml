@@ -16,6 +16,7 @@ type config =
   ; mutable symb_file : string (** Path to a symbolic specification file *)
   ; mutable dpt_file : string (** Path to the input dpt file *)
   ; mutable show_interp_state : bool
+  ; mutable interactive : bool (** Run interpreter interactively (stdin / stdout) **)
   }
 
 (* TODO: We might want to add more parameters controlling which transformations
@@ -35,6 +36,7 @@ let default () =
   ; symb_file = ""
   ; dpt_file = ""
   ; show_interp_state = true
+  ; interactive = false
   }
 ;;
 
@@ -65,6 +67,7 @@ let parse () =
     set_all_effects ()
   in
   let set_final_state () = cfg.show_interp_state <- false in
+  let set_interactive () = cfg.interactive <- true; unset_verbose () in 
   let speclist =
     [ ( "--silent"
       , Arg.Unit unset_verbose
@@ -110,7 +113,14 @@ let parse () =
     ; ( "--suppress-final-state"
       , Arg.Unit set_final_state
       , "If set, don't print the final state of the interpreter when it \
-         finishes." ) ]
+         finishes." ) 
+    ; ( "--interactive"
+      , Arg.Unit set_interactive
+      , "Run interpreter interactively, piping events to/from stdin/stdout" )
+    ; ( "-i"
+      , Arg.Unit set_interactive
+      , "Run interpreter interactively, piping events to/from stdin/stdout" )
+    ]
   in
   let target_filename = ref "" in
   let usage_msg = "Lucid command line. Options available:" in
