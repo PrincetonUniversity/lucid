@@ -39,7 +39,7 @@ let initialize renaming spec_file ds =
   let spec = InterpSpec.parse pp renaming spec_file in
   let nst = initial_state pp spec in
   let nst = InterpCore.process_decls nst ds in
-  nst
+  nst, pp, spec
 ;;
 
 (* 
@@ -60,27 +60,11 @@ let initialize renaming spec_file ds =
 
 *)
 
-let simulate (nst : State.network_state) =
-  Console.report
-  @@ "Using random seed: "
-  ^ string_of_int nst.config.random_seed
-  ^ "\n";
-  Random.init nst.config.random_seed;
-  (* 
-    the interpret event loop
-    loop through the switches (indexed by idx), 
-    process all events that arrived before state.current time
-    increment current_time by 1 each time we arrive at switch idx=0
-  *)
+let simulate_inner (nst : State.network_state) = 
   let rec interp_events idx nst =
-(*     let input_event = InterpStream.get_event () in 
-    print_endline @@ "got input event: "^input_event; *)
     match State.next_time nst with
     | None -> nst
     | Some t ->
-      (* Increment the current time *)
-      print_endline (Printf.sprintf "[switch %i @ time %i] " idx t);
-      (* when we reach switch idx = 0, increment the time by 1. *)
       let nst =
         if idx = 0
         then { nst with current_time = max t (nst.current_time + 1) }
@@ -109,4 +93,70 @@ let simulate (nst : State.network_state) =
   in
   let nst = interp_events 0 nst in
   nst
+;;
+
+let simulate (nst : State.network_state) =
+  Console.report
+  @@ "Using random seed: "
+  ^ string_of_int nst.config.random_seed
+  ^ "\n";
+  Random.init nst.config.random_seed;
+  simulate_inner nst 
+;;
+
+
+(* run the interpreter in interactive mode 
+  This means: 
+  1. execute all the events in the spec file. 
+  2. poll stdin for new events until it closes.
+
+  Question:
+    - how do we handle time? 
+    option 1: simulated time. 
+      - each new event executes at the simulation time when it is read, 
+        and increments the clock by default_gap
+    option 2: real time.
+      - each new event executes now? 
+      - each new event executes
+
+*)
+(* 
+  left off here. 
+    - Use PP and renaming to call event parser.
+    - Signal the exit event handler to print output events.
+*)
+let run pp renaming spec (nst : State.network_state) =
+   Random.init nst.config.random_seed;
+  (* step 1: run the startup events *)
+  let nst = simulate_inner nst in 
+
+  (* step 2: poll for events and interpret them as they arrive from stdin *)
+  print_endline @@ "startup complete. Waiting for events from sdtin";
+
+  let rec poll_loop (nst : State.network_state) = 
+    (* parse the event, give it a time of current_time *)
+    print_endline "[poll_loop] polling for new event";
+    let next_ev_opt = InterpStream.get_event_blocking 
+      pp 
+      renaming 
+      spec 
+      nst.current_time 
+    in 
+    match next_ev_opt with 
+      | Some(ev, locs) -> 
+        print_endline "[poll_loop] updating interpreter state";
+        (* update interpreter state (push) *)        
+        State.push_input_events locs ev nst;
+        (* run the interpreter until there are no more events to process *)
+        print_endline "[poll_loop] running interpreter";
+        let nst = simulate_inner nst in 
+        (* increment the time by input_gap *)
+        (* repeat *)
+        poll_loop nst
+      | _ -> 
+        print_endline "[poll_loop] EOF -- done polling";
+        nst
+  in 
+  (* return final state *)
+  poll_loop nst
 ;;

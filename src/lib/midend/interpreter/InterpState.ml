@@ -30,6 +30,7 @@ module State = struct
 
   type config =
     { max_time : int
+    ; default_input_gap : int
     ; generate_delay : int
     ; propagate_delay : int
     ; random_seed : int
@@ -171,6 +172,13 @@ module State = struct
       EventQueue.add (event.edelay, event, port) st.event_queue
     in
     nst.switches.(swid) <- { st with event_queue }
+  ;;
+  (* Push an event to a list of entry points *)
+  let push_input_events swids_ports event nst = 
+    let push_wrapper (swid, port) = 
+      push_input_event swid port event nst
+    in 
+    List.iter push_wrapper swids_ports
   ;;
 
   let next_event swid nst =

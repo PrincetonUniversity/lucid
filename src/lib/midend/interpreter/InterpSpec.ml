@@ -335,6 +335,7 @@ let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t 
     in
     let config : InterpState.State.config =
       { max_time
+      ; default_input_gap
       ; generate_delay
       ; propagate_delay
       ; random_delay_range
