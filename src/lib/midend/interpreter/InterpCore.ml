@@ -294,7 +294,8 @@ let rec interp_statement nst swid locals s =
   | SPrintf (s, es) ->
     let vs = List.map (fun e -> interp_exp e |> extract_ival) es in
     if (Cmdline.cfg.interactive)
-    then (()) (* TODO: what to print when running interactively?*)
+    (* for interactive mode, print messages to stderr *)
+    then (prerr_endline (printf_replace vs s)) 
     else (print_endline (printf_replace vs s));
     locals
   | SIf (e, ss1, ss2) ->
