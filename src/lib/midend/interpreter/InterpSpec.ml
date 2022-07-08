@@ -55,80 +55,95 @@ let parse_port str =
 
 let default_port = 0
 
-let parse_events
+
+type located_event = event * (int * int) list
+let parse_event 
+      (pp : Preprocess.t) 
+      (renaming : Renaming.env) 
+      num_switches 
+      (cur_ts:int) 
+      (event : json) 
+    : located_event =
+  match event with
+  | `Assoc lst ->
+    (* Find the event name, accounting for the renaming pass, and get its
+       sort and argument types *)
+    let eid =
+      match List.assoc_opt "name" lst with
+      | Some (`String id) -> rename renaming.var_map "event" id
+      | None -> error "Event specification missing name field"
+      | _ -> error "Event specification had non-string type for name field"
+    in
+    let sort, tys = Env.find eid pp.events in
+    if sort = EExit then error "Cannot specify exit event";
+    (* Parse the arguments into values, and make sure they have the right types.
+       At the moment only integer and boolean arguments are supported *)
+    let data =
+      match List.assoc_opt "args" lst with
+      | Some (`List lst) ->
+        (try List.map2 (parse_value "Event") tys lst with
+        | Invalid_argument _ ->
+          error
+          @@ Printf.sprintf
+               "Event specification for %s had wrong number of arguments"
+               (Cid.to_string eid))
+      | None -> error "Event specification missing args field"
+      | _ -> error "Event specification had non-list type for args field"
+    in    
+    (* Parse the delay and location fields, if they exist *)
+    let edelay =
+      match List.assoc_opt "timestamp" lst with
+      | Some (`Int n) -> n
+      | None -> cur_ts
+      | _ -> error "Event specification had non-integer delay field"
+    in    
+    let locations =
+      match List.assoc_opt "locations" lst with
+      | Some (`List lst) ->
+        List.map
+          (function
+            | `String str ->
+              let sw, port = parse_port str in
+              if sw < 0 || sw >= num_switches
+              then
+                error
+                @@ "Cannot specify event at nonexistent switch "
+                ^ string_of_int sw;
+              if port < 0 || port >= 255
+              then
+                error
+                @@ "Cannot specify event at nonexistent port "
+                ^ string_of_int port;
+              sw, port
+            | _ -> error "Event specification had non-string location")
+          lst
+      | None -> [0, default_port]
+      | _ -> error "Event specification has non-list locations field"
+    in
+    { eid; data; edelay }, locations
+    | _ -> error "Non-assoc type for event definition"
+;;
+
+let parse_events 
     (pp : Preprocess.t)
     (renaming : Renaming.env)
     (num_switches : int)
     (gap : int)
     (events : json list)
-  =
-  (* Using state because I'm lazy *)
-  let last_delay = ref (-gap) in
-  let parse_event (event : json) =
-    match event with
-    | `Assoc lst ->
-      (* Find the event name, accounting for the renaming pass, and get its
-         sort and argument types *)
-      let eid =
-        match List.assoc_opt "name" lst with
-        | Some (`String id) -> rename renaming.var_map "event" id
-        | None -> error "Event specification missing name field"
-        | _ -> error "Event specification had non-string type for name field"
-      in
-      let sort, tys = Env.find eid pp.events in
-      if sort = EExit then error "Cannot specify exit event";
-      (* Parse the arguments into values, and make sure they have the right types.
-         At the moment only integer and boolean arguments are supported *)
-      let data =
-        match List.assoc_opt "args" lst with
-        | Some (`List lst) ->
-          (try List.map2 (parse_value "Event") tys lst with
-          | Invalid_argument _ ->
-            error
-            @@ Printf.sprintf
-                 "Event specification for %s had wrong number of arguments"
-                 (Cid.to_string eid))
-        | None -> error "Event specification missing args field"
-        | _ -> error "Event specification had non-list type for args field"
-      in
-      (* Parse the delay and location fields, if they exist *)
-      let edelay =
-        match List.assoc_opt "timestamp" lst with
-        | Some (`Int n) ->
-          last_delay := n;
-          n
-        | None ->
-          last_delay := !last_delay + gap;
-          !last_delay
-        | _ -> error "Event specification had non-integer delay field"
-      in
-      let locations =
-        match List.assoc_opt "locations" lst with
-        | Some (`List lst) ->
-          List.map
-            (function
-              | `String str ->
-                let sw, port = parse_port str in
-                if sw < 0 || sw >= num_switches
-                then
-                  error
-                  @@ "Cannot specify event at nonexistent switch "
-                  ^ string_of_int sw;
-                if port < 0 || port >= 255
-                then
-                  error
-                  @@ "Cannot specify event at nonexistent port "
-                  ^ string_of_int port;
-                sw, port
-              | _ -> error "Event specification had non-string location")
-            lst
-        | None -> [0, default_port]
-        | _ -> error "Event specification has non-list locations field"
-      in
-      { eid; data; edelay }, locations
-    | _ -> error "Non-assoc type for event definition"
-  in
-  List.map parse_event events
+  = 
+  let wrapper ((located_events:located_event list), (current_ts:int)) (event_json:json) =
+    let located_event = 
+      parse_event pp renaming num_switches current_ts event_json
+    in 
+    let next_ts = (fst located_event).edelay+gap in
+    (located_events@[located_event], next_ts)
+  in 
+  let located_events, _ = List.fold_left 
+    wrapper 
+    ([], 0) 
+    events 
+  in 
+  located_events
 ;;
 
 let builtins renaming n =

@@ -61,7 +61,7 @@ let simulate_inner (nst : State.network_state) =
           (match Env.find_opt event.eid nst.handlers with
           | None -> error @@ "No handler for event " ^ Cid.to_string event.eid
           | Some handler ->
-            if (Cmdline.cfg.verbose)
+            if (not Cmdline.cfg.interactive)
             then 
               Printf.printf
                 "t=%d: Handling %sevent %s at switch %d, port %d\n"
