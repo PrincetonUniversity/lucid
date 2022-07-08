@@ -83,6 +83,20 @@ let simulate (nst : State.network_state) =
   nst
 ;;
 
+(** interactive mode (stdio) implementation 
+  Interactive mode behavior notes: 
+    - Input:
+      - expects every event to be a json dictionary on its own line
+      - waits for eof
+    - Execution:
+      - starts polling stdin after max_time has elapsed
+      - polls stdin for new events once per time unit
+      - events on stdin execute at time = max(current_ts, event.timestamp)
+    - Output:
+      - prints each exit event to stdout as a json, one event per line
+      - all printfs in the program print to stderr
+**)
+
 type event_getter = int -> InterpSpec.located_event list
 
 (* interp events until max_time is reached 
@@ -133,18 +147,7 @@ let rec interp_events event_getter_opt idx max_time nst =
 ;;
 
 
-(* Run the interpreter in interactive mode. Behavior notes: 
-    - Input:
-      - expects every event to be a json dictionary on its own line
-      - waits for eof
-    - Execution:
-      - starts polling stdin after max_time has elapsed
-      - polls stdin for new events once per time unit
-      - events on stdin execute at time = max(current_ts, event.timestamp)
-    - Output:
-      - prints each exit event to stdout as a json, one event per line
-      - all printfs in the program print to stderr
-*)
+(* Run the interpreter in interactive mode. *)
 let run pp renaming (spec:InterpSpec.t) (nst : State.network_state) =
   let get_event pp renaming num_switches current_time twait = 
     let read_fds, _, _ = 

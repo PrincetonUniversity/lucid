@@ -17,7 +17,6 @@ let find_spec_file dpt_file =
     else None)
 ;;
 
-
 let main () =
   let target_filename = Cmdline.parse () in
   Cmdline.set_dpt_file target_filename;
