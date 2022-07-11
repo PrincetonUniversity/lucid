@@ -519,10 +519,9 @@ let generate_ports (args : codegenInput) : codegenOutput =
     GS.oper_assign_instr packet_multicast_field (GS.oper_expr mcid_oper), mc_decls
   | _ -> error "[generate_ports] first arg of generate ports must be a group value or variable."
   in 
-  let clear_outport_instr =  GS.oper_assign_instr event_port_field (GS.int_expr 0) in 
   let ivec = 
     (common_generate_port_instrs hdl_id ev_rec ev_args)
-    @[clear_outport_instr; set_mcid_instr]
+    @[set_mcid_instr]
   in 
   (* return a declaration of an alu with this vector of instructions, 
      and the supporting objects in case we had to create a new group. *)

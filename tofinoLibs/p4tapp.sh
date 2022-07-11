@@ -262,7 +262,7 @@ function start_switchd() {
 }
 
 function start_python() {
-    local CMD="python2 $@"
+    local CMD="python3 $@"
     local SIG="mgr.py disconnect complete."
     launch_and_wait "$CMD" "$SIG" "PY_MGR"
 }

@@ -141,7 +141,7 @@ def port_to_bit_idx(port):
   index = port_to_pipe_local_id(port)
   return int(72 * pipe + index)
 def set_port_or_lag_bitmap(bit_map_size, indicies):
-  bit_map = [0] * ((bit_map_size+7)/8)
+  bit_map = [0] * ((bit_map_size+7)//8)
   for i in indicies:
     index = port_to_bit_idx(i)
     bit_map[index//8] = (bit_map[index//8] | (1 << (index%8))) & 0xFF

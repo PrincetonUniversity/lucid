@@ -70,6 +70,7 @@ parser TofinoIngressParser(
         // DPT: populate metadata.
         md.dptMeta.exitEventType = 0;
         md.dptMeta.nextEventType = 0;        
+        md.dptMeta.eventsCount = 0;
         md.dptMeta.timestamp = (bit<32>)(ig_intr_md.ingress_mac_tstamp[47:16]); 
         transition select(ig_intr_md.resubmit_flag) {
             1 : parse_resubmit;

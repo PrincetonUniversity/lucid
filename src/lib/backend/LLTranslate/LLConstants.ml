@@ -33,10 +33,6 @@ let next_event_str = "nextEventType"
 let next_event_width = 8
 let events_count_str = "eventsCount"
 let events_count_width = 16
-let event_port_str = "outPort"
-let event_port_width = 9
-let event_group_str = "outGroup"
-let event_group_width = 16
 let dpt_meta_struct_instance = Cid.create [md_instance_prefix; dpt_meta_str]
 
 
@@ -60,13 +56,6 @@ let next_event_field =
 let event_count_field =
   Cid.create [md_instance_prefix; dpt_meta_str; events_count_str]
 ;;
-let event_port_field =
-  Cid.create [md_instance_prefix; dpt_meta_str; event_port_str]
-;;
-let event_group_field =
-  Cid.create [md_instance_prefix; dpt_meta_str; event_group_str]
-;;
-
 
 
 (* lucid's internal metadata struct for ingress processing *)
@@ -81,8 +70,6 @@ let lucid_internal_struct =
       ; exit_event_str, exit_event_width
       ; next_event_str, next_event_width
       ; events_count_str, events_count_width 
-      ; event_port_str, event_port_width
-      ; event_group_str, event_group_width
       ; ]
   in 
   let dptMeta_struct = LLSyntax.new_meta_structdef struct_cid struct_fields in
