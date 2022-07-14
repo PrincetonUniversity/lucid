@@ -50,6 +50,7 @@ module TranslateEvents = struct
             Cid.concat event_out_flags_instance (Cid.id evid)
         }
       in
+      (* print_endline @@ "first parameter: " ^ (Cid.to_string (fst (CL.hd erec.field_defs))); *)
       (* add the event to the context. *)
       ctx_add_erec erec;
 

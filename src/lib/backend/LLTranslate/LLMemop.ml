@@ -541,9 +541,8 @@ let rec simplify_negation_clauses (b : S.exp) =
 
 (* 
    condition the second return statement of both cell1 and cell2, 
-   so that they can be implemented as a sequence of ifs instead of 
-   an if / else: 
-
+   so that they can be executed as 2 parallel applied 
+   conditional statements instead of an if / else: 
     if (<x>) 
       --> 
     if (!cell1_condition  && x) 

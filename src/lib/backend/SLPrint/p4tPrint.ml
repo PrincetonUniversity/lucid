@@ -74,7 +74,7 @@ let str_of_varid mid =
   | Compound _ ->
     let names = Cid.names mid in
     let name = String.concat ~sep:"." names in 
-    (* print_endline ("got a compound variable in p4tPrint: "^name); *)
+    print_endline ("got a compound variable in p4tPrint: "^name);
     name 
   | Id i -> Id.name i
   (* Id.to_string_delim "_" i *)

@@ -139,33 +139,6 @@ parser IngressParser(
 }
 
 
-control CiL2Fwd(
-        in ingress_intrinsic_metadata_t ig_intr_md,
-        inout ingress_intrinsic_metadata_for_tm_t ig_tm_md) {
-    /* Basic L2 forwarding */
-    action aiOut(bit<9> out_port) {
-        ig_tm_md.ucast_egress_port = out_port;
-    }
-    action aiNoop() {}
-    action aiReflect() {
-        ig_tm_md.ucast_egress_port = ig_intr_md.ingress_port;
-    }
-    table tiWire {
-        key = {
-            ig_intr_md.ingress_port : exact;
-        }
-        actions = {
-            aiOut; 
-            aiNoop;
-            aiReflect;
-        }
-        const default_action = aiReflect();
-    }
-    apply {
-        tiWire.apply();
-    }
-}
-
 /*===========================================
 =            ingress match-action             =
 ===========================================*/
@@ -181,8 +154,6 @@ control Ingress(
     @EXIT_OBJECTS
 
     @DPT_OBJECTS
-
-    CiL2Fwd() ciL2Fwd; 
 
     apply {
         // call the entry trigger table. 
