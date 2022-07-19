@@ -33,6 +33,8 @@ default:
 	cp -f _build/default/src/bin/compiler.exe dptc
 	dune build src/bin/functionCompiler.exe
 	cp -f _build/default/src/bin/functionCompiler.exe dptf
+	dune build src/bin/tofinoLinker.exe
+	cp -f _build/default/src/bin/tofinoLinker.exe tofinoLinker
 
 
 generatedVisitors: src/lib/frontend/Syntax.processed.ml

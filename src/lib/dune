@@ -131,6 +131,9 @@
    JsonBlocks
    JsonEntryTriggers
    JsonExitActions
+   P4Parser
+   P4Lexer
+   P4Syntax
    )
  (preprocess
     (staged_pps ppx_import visitors.ppx ppx_deriving.show ppx_deriving.std ppx_string_interpolation))
@@ -138,4 +141,8 @@
 (subdir frontend
    (menhir (modules Parser))
    (ocamllex (modules Lexer))
+)
+(subdir tofinoLinker
+   (menhir (modules P4Parser))
+   (ocamllex (modules P4Lexer))
 )
