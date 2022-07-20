@@ -131,9 +131,7 @@
    JsonBlocks
    JsonEntryTriggers
    JsonExitActions
-   P4Parser
-   P4Lexer
-   P4Syntax
+   tofinoSyntax
    )
  (preprocess
     (staged_pps ppx_import visitors.ppx ppx_deriving.show ppx_deriving.std ppx_string_interpolation))

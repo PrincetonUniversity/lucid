@@ -1,5 +1,5 @@
 (executables
- (names main compiler functionCompiler tofinoLinker)
+ (names main compiler functionCompiler)
  (libraries dpt)
  (link_flags -cc g++)
  )
@@ -10,6 +10,5 @@
     (main.exe as dpt) 
     (compiler.exe as compiler) 
     (functionCompiler.exe as functionCompiler)
-    (tofinoLinker.exe as tofinoLinker)
     )
     )
