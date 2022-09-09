@@ -68,7 +68,7 @@ let rec exp_to_expr solver exp =
     new_solver, expr
   )
   | (EOp(_), _) ->
-    error "[exp_to_expr] unsupported expression type for z3 conversion"
+    error ("[exp_to_expr] unsupported expression type for z3 conversion: "^(CorePrinting.exp_to_string exp))
   | _ -> error "[exp_to_expr] unsupported expression construct for z3 conversion"
 ;;
 

@@ -555,10 +555,10 @@ let transform ds =
   trans_info "in single assignment form. removing Phi calls ";
   let ds = PhiElimination.elim_phis phi_annotated_ds in
   log_prog "after phi_out inlining" ds;
-  !dprint_endline
+ (*  !dprint_endline
     ((CL.length !SSA.new_vars |> string_of_int)
     ^ " new variables created in transformation to SSA:\n"
-    ^ (CL.map Cid.id !SSA.new_vars |> DebugPrint.cids_to_string));
+    ^ (CL.map Cid.id !SSA.new_vars |> DebugPrint.cids_to_string)); *)
   trans_info "phi calls eliminates ";
   (*   exit 1; *)
   ds

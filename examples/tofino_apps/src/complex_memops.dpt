@@ -1,5 +1,5 @@
 /* Testing complex memops. */
-include "io_events.dpt"
+include "ip_default.dpt"
 
 global Array.t<<32>> arr_1 = Array.create(1024);
 global Array.t<<32>> arr_2 = Array.create(1024);
@@ -40,9 +40,8 @@ memop set_and_check(int memval, int newval, int seekval) {
   }
 }
 
-
-handle ip_in(int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos) {
+handle ip_pkt (eth_hdr eth, ip_hdr_prefix ip, int<<32>> src, int<<32>> dst){
   int a1_out = Array.update_complex(arr_1, 0, postcount_rollover, src, dst, 0);
   int a2_out = Array.update_complex(arr_2, 0, set_and_check, src, dst, 0);
-  generate_port(igr_port, ip_out(a1_out, a2_out));
+  generate_port(ingress_port, ip_pkt(eth, ip, a1_out, a2_out));
 }

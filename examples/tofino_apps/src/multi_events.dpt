@@ -1,21 +1,24 @@
-/* This example test's lucid's ability to support 
-   generating multiple background events from a 
-   single handler. Exercises the new (11/21) 
-   parse, ingress exit, and egress generation. */
-include "io_events.dpt"
+/* Test generating multiple events in parallel. 
+   Generate two events in parallel that each reflect the original packet 
+   back to its source port. The two events have src and dst swapped. */
+include "ip_default.dpt"
 
-event bg1(int<<9>> egr, int src, int dst);
-event bg2(int<<9>> egr, int src, int dst);
+event bg1(int<<32>> egr, eth_hdr eth, ip_hdr_prefix ip, int src, int dst);
+event bg2(int<<32>> egr, eth_hdr eth, ip_hdr_prefix ip, int src, int dst);
 
-handle ip_in(int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos) {
-  generate bg1(igr_port, src, dst);
-  generate bg2(igr_port, dst, src);
+handle ip_pkt (eth_hdr eth, ip_hdr_prefix ip, int<<32>> src, int<<32>> dst) {
+  generate bg1((int<<32>>)ingress_port, eth, ip, src, dst);
+  generate bg2((int<<32>>)ingress_port, eth, ip, dst, src);
+}
+handle bg1(int<<32>> egr, eth_hdr eth, ip_hdr_prefix ip, int src, int dst) {
+  generate_port ((int<<9>>)egr, ip_pkt(eth, ip, src, dst));
+}
+handle bg2(int<<32>> egr, eth_hdr eth, ip_hdr_prefix ip, int src, int dst) {
+  generate_port ((int<<9>>)egr, ip_pkt(eth, ip, src, dst));
 }
 
-handle bg1(int<<9>> egr, int src, int dst) {
-  generate_port (egr, ip_out(src, dst));
-}
-handle bg2(int<<9>> egr, int src, int dst) {
-  generate_port (egr, ip_out(src, dst));
-}
-
+// include "io_events.dpt"
+// handle ip_in(int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos) {
+//   generate bg1(igr_port, src, dst);
+//   generate bg2(igr_port, dst, src);
+// }

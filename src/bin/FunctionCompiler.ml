@@ -1,10 +1,9 @@
 open Dpt
-open Consts
 open BackendLogging
-open LinkP4
 open Printf
 open IoUtils
 open Yojson.Basic
+module CL = List
 
 exception Error of string
 let error s = raise (Error s)
@@ -14,7 +13,7 @@ let report str = Console.show_message str ANSITerminal.Green "function compiler"
    with its own copies of all globals. 
    Handlers must never generate events. 
 
-  (* input: dpt program name. *)
+  (* input: dpt program name, output: p4 file *)
 *)
 
 (* args parsing *)
@@ -48,26 +47,6 @@ module ArgParse = struct
     args
   ;;
 end
-
-
-(* start per-pass logs. *)
-let start_backend_logs () = 
-  LLTranslate.start_logging ();
-  LLOp.start_logging ();
-  LLContext.start_logging ();
-
-  OGSyntax.start_logging ();
-  BranchElimination.start_logging ();
-  MergeUtils.start_logging ();
-  DataFlow.start_logging ();
-  Liveliness.start_logging ();
-  RegisterAllocation.start_logging ();
-  PipeSyntax.start_logging ();
-
-  P4tPrint.start_logging ();
-  ()
-;;
-
 
 
 (* do a rough check to delete unused 
@@ -137,81 +116,28 @@ let to_single_handler_progs (ds:Syntax.decls) =
   |> CL.map delete_unused_globals
 ;;
 
-
-let compile_single_handler_to_tofino ds = 
+let compile_to_tofino target_filename =
+  (* parse *)
+  let ds = Input.parse target_filename in
   (* before the "official" frontend, do temporary optimization 
      passes that will eventually be removed once the 
      mid/back-end is better optimized. *)
   let ds = FunctionInliningSpecialCase.inline_prog_specialcase ds in
-  (* frontend eliminates high level abstractions (modules, functions) *)
+  (* frontend type checks and eliminates most abstractions (modules, functions) *)
   let _, ds = FrontendPipeline.process_prog ds in
-  (* middle passes do a bit of regularization of the syntax tree *)
-  let ds = MidendPipeline.process_prog ds in
-  (* make sure all the event parameters have unique ids *)
-  let ds = InterpHelpers.refresh_event_param_ids ds in
-  (* convert handler statement trees into operation-statement graphs *)
-  let opgraph_recs = CL.filter_map OGSyntax.opgraph_from_handler ds in
-  let opgraph = CL.hd opgraph_recs in 
-  LogIr.log_lucid "final_lucid.dpt" ds;
-  LogIr.log_lucid_osg "lucid_opstmt.dot" opgraph_recs;
-  Console.report "translating to tofino instructions";
-  (* translation to backend instructions *)
-  let ll_prog = LLTranslate.from_handler ds opgraph in
-  (* compute data flow *)
-  let df_prog = DFSyntax.to_dfProg ll_prog in
-  LogIr.log_lir "initial_ir" df_prog;
-  (* backend optimization, layout, and straightlining *)
-  Console.report "SALU register allocation";
-  let df_prog = RegisterAllocation.merge_and_temp df_prog in
-  Console.report "Control flow elimination";
-  let df_prog = BranchElimination.do_passes df_prog in
-  Console.report "Control flow -> Data flow";
-  let dataflow_df_prog = DataFlow.do_passes df_prog in
-  LogIr.log_lir "partial_df_nobranch" df_prog;
-  LogIr.log_lir "df_prog" dataflow_df_prog;
-  Console.report "Data flow -> Pipeline";
-  let pipe, straightline_prog = PipeSyntax.do_passes dataflow_df_prog in
-  LogIr.log_lir_pipe "pipe_ir" pipe;
-  (* print the typedefs *)
-  let p4_typedefs_str = P4tPrint.to_p4defs_str straightline_prog in 
-  (* print to a P4 control object *)
-  let p4_ctlblock_str = P4tPrint.to_p4ctl_str straightline_prog in 
-  print_endline ("-------- P4 struct definitions --------");
-  print_endline p4_typedefs_str;
-  print_endline ("-------- P4 control block --------");
-  print_endline p4_ctlblock_str;
-  print_endline ("----------------------------------");
-  p4_typedefs_str^"\n"^p4_ctlblock_str
-;;
+  (* middle passes do regularization over simplified syntax *)
+  let core_ds = MidendPipeline.process_prog ds in
+  (* backend does tofino-specific transformations, layout, 
+  then translates into p4tofino syntax and produces program strings *)
+  let p4_str = TofinoPipeline.process_handler_block core_ds in 
+  IoUtils.writef 
+    (target_filename^".temp.p4") 
+    (p4_str)
 
-(* compile each handler in the program to its own P4 block 
-with local copies of all state. *)
-let compile_handlers_to_p4_controls target_filename = 
-  start_backend_logs ();
-  (* parse *)
-  let ds = Input.parse target_filename in
-  print_endline (Printing.decls_to_string ds);
-  let handler_progs = to_single_handler_progs ds in 
-  let p4_ctl_strs = CL.map 
-    compile_single_handler_to_tofino 
-    handler_progs 
-  in 
-  p4_ctl_strs
-;;
-
-let main () =
-  let p4t_includes = "#include <core.p4>\n#include <tna.p4>" in   
+let new_main () = 
   let args = ArgParse.parse_args () in
   setup_build_dir "LucidCompilerLogs";
-  (* compile the lucid function to a P4 block. 
-     Note: since we're just compiling a function, there's 
-     no control plane stuff to do. *)
-  let p4_ctl_strs = compile_handlers_to_p4_controls args.dptfn in   
-  report "Compilation to P4 finished.";
-  (* write the generated P4 blocks to the file. *)
-  IoUtils.writef 
-    (args.dptfn^".p4") 
-    (String.concat "\n" (p4t_includes::p4_ctl_strs))
+  compile_to_tofino args.dptfn
 ;;
 
-let _ = main ()
+let _ = new_main ()

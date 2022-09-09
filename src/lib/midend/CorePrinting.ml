@@ -11,7 +11,8 @@ let integer_to_string n =
 ;;
 
 let location_to_string l = string_of_int l
-let id_to_string id = if cfg.verbose_types then Id.to_string id else Id.name id
+let id_to_string id = 
+  if cfg.verbose_types then Id.to_string id else Id.name id
 
 let cid_to_string cid =
   if cfg.verbose_types

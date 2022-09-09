@@ -32,7 +32,7 @@ lucid:
 $(COMPILE_TARGETS): lucid
 	@mkdir -p $(BUILDDIR)
 	$(eval TARGET := $(subst compile_,,$@)) # compile_x --> x
-	../../dptc $(SOURCEDIR)/$(TARGET).dpt ip_harness.p4 ip_harness_triggers.json $(BUILDDIR)/$(TARGET)
+	../../dptc $(SOURCEDIR)/$(TARGET).dpt $(BUILDDIR)/$(TARGET)
 
 # p4 -> tofino
 $(ASSEMBLE_TARGETS):

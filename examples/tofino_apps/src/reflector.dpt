@@ -1,6 +1,6 @@
-/* Reflect the packet back. Simple test of ip harness. */
-include "io_events.dpt"
+/* Reflect the packet back out of ingress port */
+include "ip_default.dpt"
 
-handle ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos) {
-    generate_port (igr_port, ip_out(src, dst));
+handle ip_pkt (eth_hdr eth, ip_hdr_prefix ip, int<<32>> src, int<<32>> dst){
+    generate_port (ingress_port, ip_pkt(eth, ip, src, dst));
 }
