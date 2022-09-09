@@ -18,6 +18,7 @@ ocamlgraph \
 angstrom \
 yojson \
 pyml \
+pprint \
 z3
 
 DEV_DEPENDENCIES = \
