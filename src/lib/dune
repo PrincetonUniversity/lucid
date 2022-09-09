@@ -15,6 +15,7 @@
    angstrom
    fileutils
    pyml
+   pprint
    )
  (modules
    cmdline
@@ -73,16 +74,9 @@
    system
    events
    builtins
-   consts
    TQVar
-   OGSyntax
-   LLConfig
-   LLSyntax
-   DFSyntax
-   pipeSyntax
-   SLSyntax
-   backendLogging
    poplPatches
+   backendLogging
    eliminateEqRangeOps
    addDefaultBranches
    eliminateFloods
@@ -98,44 +92,39 @@
    uniqueSpans
    uniqueIds
    interpHelpers
-   LLTranslate
-   LLConstants
-   LLContext
-   LLEvent
-   LLArray
-   LLPairArray
-   LLOp
-   LLSys
-   LLMemop
-   LLScheduler
-   LLStartup
-   LLValidate
-   printUtils
    miscUtils
-   debugPrint
-   registerAllocation
-   ruleSolve
-   mergeUtils
-   branchElimination
-   dataFlow
-   liveliness
-   p4tContext
-   p4tPrint
-   p4tMgrPrint
-   p4tStats
-   linkP4
    packageTofinoApp
    ioUtils
-   logIr
-   P4ExternSyntax
-   JsonBlocks
-   JsonEntryTriggers
-   JsonExitActions
+   TofinoPipeline
+   UnifyHandlerParams
+   TofinoCore
+   InlineEventVars
+   SolitaryMatches
+   Generates
+   IfToMatch
+   RegularizeMemops
+   ShareMemopInputs
+   MatchAlgebra
+   CoreCfg
+   CoreCdg
+   CoreDfg
+   CoreLayout
+   BranchDedup
+   P4TofinoSyntax
+   CoreToP4TofinoHeaders
+   CoreToP4Tofino
+   P4TofinoPrinting
+   ControlPrinter
+   ParsePortSpec
    )
  (preprocess
-    (staged_pps ppx_import visitors.ppx ppx_deriving.show ppx_deriving.std ppx_string_interpolation))
+    (staged_pps ppx_import visitors.ppx ppx_deriving.show ppx_deriving.std ppx_string))
 )
 (subdir frontend
    (menhir (modules Parser))
    (ocamllex (modules Lexer))
+)
+(subdir tofinoLinker
+   (menhir (modules P4Parser))
+   (ocamllex (modules P4Lexer))
 )

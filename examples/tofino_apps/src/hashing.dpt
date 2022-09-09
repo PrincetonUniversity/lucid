@@ -1,8 +1,16 @@
-include "io_events.dpt"
+/* hashing. This test should be updated to do something with the hash. */
+include "ip_default.dpt"
 
 size i = 10;
 
-handle ip_in(int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos) {
+handle ip_pkt (eth_hdr eth, ip_hdr_prefix ip, int<<32>> src, int<<32>> dst){
   int<<16>> foo = hash<<16>>(size_to_int(i + 3), src);
-  generate_port(igr_port, ip_out(src, dst));
+  generate_port(ingress_port, ip_pkt(eth, ip, src, dst));
+
+
 }
+// handle ip_in(int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos) {
+//   int<<16>> foo = hash<<16>>(size_to_int(i + 3), src);
+//   generate_port(igr_port, ip_out(src, dst));
+// }
+

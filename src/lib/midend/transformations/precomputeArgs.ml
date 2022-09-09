@@ -10,7 +10,7 @@ module CL = Caml.List
 (* 5/19 -- don't precompute arguments to event combinators. This is
 temporary to support event combinators inlined with a generate statement. *)
 let exception_cids =
-  [ LLEvent.event_delay_cid ]
+  [ Cid.create ["Event";"delay"] ]
 ;;
 
 let precompute_args ds =

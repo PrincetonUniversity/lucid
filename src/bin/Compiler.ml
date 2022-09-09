@@ -2,29 +2,21 @@
 (* open Batteries *)
 open Dpt
 open Cmdline
-open Consts
 open BackendLogging
-open LinkP4
 open Printf
 open IoUtils
 open Yojson.Basic
 
-[@@@ocaml.warning "-21"]
-
-
 (* minimal input
    1. dpt program
-   2. P4 harness
-   3. entry event trigger configuration file
-   3. build directory *)
+   2. build directory *)
 
 (* output (in build dir):
-   1. P4 program (dpt + harness) -- lucid.p4
+   1. P4 program -- lucid.p4
    2. switchd program -- lucid.cpp
-   3. build script
-   4. run sim script
-   5. run hw script
-   6. makefile *)
+   3. python control -- lucid.py
+   4. makefile
+   5. helpers *)
 
 (* hack in a disable logging option for optimizer iterations.
    turns out this doesn't matter for performance.*)
@@ -34,13 +26,6 @@ let disable_logging () =
   Cmdline.cfg.verbose <- false;
   InterpHelpers.silent := true;
   NormalizeInts.silent := true;
-  LLValidate.silent := true;
-  LogIr.silent := true;
-  RegisterAllocation.silent := true;
-  BranchElimination.silent := true;
-  PipeSyntax.silent := true;
-  P4tStats.silent := true;
-  LinkP4.silent := true;
   PackageTofinoApp.silent := true;
   ()
 ;;
@@ -57,25 +42,22 @@ let report str =
   )
 ;;
 
-
 (* args parsing *)
 module ArgParse = struct
-  let usage = "Usage: ./dptc myProg.dpt myHarness.p4 myHarness.json myBuildDir"
+  let usage = "Usage: ./dptc myProg.dpt myBuildDir"
 
   type args_t =
     { dptfn : string
-    ; p4fn : string
-    ; configfn : string option
     ; builddir : string
+    ; portspec : string option
     ; interp_spec_file : string
     ; aargs : string list
     }
 
   let args_default =
     { dptfn = ""
-    ; p4fn = ""
-    ; configfn = None
     ; builddir = ""
+    ; portspec = None
     ; interp_spec_file = ""
     ; aargs = []
     }
@@ -87,12 +69,13 @@ module ArgParse = struct
     let set_spec s = args_ref := { !args_ref with interp_spec_file = s } in
     (* FIXME: Crazy hack, we should unify the two methods of commandline parsing *)
     let set_symb s = Cmdline.cfg.symb_file <- s in
+    let set_ports s = args_ref := { !args_ref with portspec = Some(s) } in
     let speclist =
       [ ( "--spec"
         , Arg.String set_spec
         , "Path to the interpreter specification file" )
+      ; "--ports", Arg.String set_ports, "Path to the ports specification file"
       ; "--symb", Arg.String set_symb, "Path to the symbolic specification file"
-      ; "--nomc", Arg.Unit LLConfig.set_nomc, "Disable multicast" 
       ; "--nocallopt", Arg.Unit MidendPipeline.set_no_call_optimize, "Disable call optimization" 
       ; "--silent", Arg.Unit disable_logging, "Disable all logging"
       ]
@@ -106,10 +89,8 @@ module ArgParse = struct
     (* interpret positional args as named *)
     let args =
       match !args_ref.aargs with
-      | [dptfn; p4fn; configfn; builddir] ->
-        { !args_ref with dptfn; p4fn; configfn=(Some configfn); builddir; aargs = [] }
-      | [dptfn; p4fn; builddir] -> (* manual linking for custom entry / exit P4 integration *)
-        { !args_ref with dptfn; p4fn; configfn=None; builddir; aargs = [] }
+      | [dptfn; builddir] ->
+        { !args_ref with dptfn; builddir; aargs = [] }
       | _ -> error usage
     in
     args
@@ -120,25 +101,10 @@ exception Error of string
 
 let error s = raise (Error s)
 
-
 (* start per-pass logs. *)
 let start_backend_logs () = 
   if (!do_logging) 
-  then (
-    LLTranslate.start_logging ();
-    LLOp.start_logging ();
-    LLContext.start_logging ();
-
-    OGSyntax.start_logging ();
-    BranchElimination.start_logging ();
-    MergeUtils.start_logging ();
-    DataFlow.start_logging ();
-    Liveliness.start_logging ();
-    RegisterAllocation.start_logging ();
-    PipeSyntax.start_logging ();
-
-    P4tPrint.start_logging ();
-  )
+  then ()
   else ()
 ;;
 (* shouldn't need to do this anymore. *)
@@ -150,64 +116,7 @@ let clear_output_dir () =
   ()
 ;;
 
-let dump_decls logname decls =
-  print_endline ("----" ^ logname ^ "----");
-  CL.iter (fun dec -> print_endline ("decl: " ^ LLSyntax.show_decl dec)) decls;
-  print_endline ("----" ^ logname ^ "----")
-;;
 
-let dump_decls_from_dagprog logname dagprog =
-  let dmap, _, _ = dagprog in
-  dump_decls logname (CL.split dmap |> snd)
-;;
-
-(**** compiler passes ****)
-(* do a few final pre-ir setup and temporary passes *)
-let final_ir_setup ds =
-  (* make sure all the event parameters have unique ids *)
-  let ds = InterpHelpers.refresh_event_param_ids ds in
-  (* In the body of each handler, replace parameter variables with struct instance fields. *)
-  (* let ds = CL.map TranslateHandlers.rename_handler_params ds in  *)
-  (* generate the control flow graph version of the program *)
-  (* convert handler statement trees into operation-statement graphs *)
-  let opgraph_recs = CL.filter_map OGSyntax.opgraph_from_handler ds in
-  ds, opgraph_recs
-;;
-
-(* translate to lucid ir *)
-let to_ir ds =
-  let ds, opgraph_recs = final_ir_setup ds in
-  if (!do_logging) then 
-  (
-    LogIr.log_lucid "final_lucid.dpt" ds;
-    LogIr.log_lucid_osg "lucid_opstmt.dot" opgraph_recs;
-    report "converting to tofino instructions";
-  );
-  let dag_instructions = LLTranslate.from_dpt ds opgraph_recs in
-  let df_prog = DFSyntax.to_dfProg dag_instructions in
-  if (!do_logging) then 
-  (
-  LogIr.log_lir "initial_ir" df_prog;
-  );
-  df_prog
-;;
-
-(* do optimizations on tofino ir *)
-let backend_passes (df_prog: DFSyntax.dagProg) =
-  report "SALU register allocation";
-  let df_prog = RegisterAllocation.merge_and_temp df_prog in
-  report "Control flow elimination";
-  let df_prog = BranchElimination.do_passes df_prog in
-  (* print_endline ("---finished with branch elimination---"); *)
-  report "Control flow -> Data flow";
-  let dataflow_df_prog = DataFlow.do_passes df_prog in
-  LogIr.log_lir "partial_df_nobranch" df_prog;
-  LogIr.log_lir "df_prog" dataflow_df_prog;
-  report "Data flow -> Pipeline";
-  let pipe, straightline_prog = PipeSyntax.do_passes dataflow_df_prog in
-  LogIr.log_lir_pipe "pipe_ir" pipe;
-  straightline_prog
-;;
 
 (* right now, the interpreter is setting the extern
    variables in its global state. They aren't getting
@@ -224,62 +133,38 @@ let parse_externs_from_interp_spec spec_file =
   | _ -> error "Unexpected interpreter specification format"
 ;;
 
-(* new (3/20/21) compilation pipeline *)
-let compile_to_tofino target_filename p4_harness_fn config_fn_opt interp_spec_fn build_dir =
+
+let compile_to_tofino target_filename portspec build_dir =
   start_backend_logs ();
   (* parse *)
   let ds = Input.parse target_filename in
-  let _ = interp_spec_fn in
   (* before the "official" frontend, do temporary optimization 
      passes that will eventually be removed once the 
      mid/back-end is better optimized. *)
   let ds = FunctionInliningSpecialCase.inline_prog_specialcase ds in
-  (* frontend eliminates most abstractions (modules, functions) *)
+  (* frontend type checks and eliminates most abstractions (modules, functions) *)
   let _, ds = FrontendPipeline.process_prog ds in
-  (* middle passes do a bit of regularization of the syntax tree *)
-  let ds = MidendPipeline.process_prog ds in
-  (* convert to IR for backend *)
-  let dag_instructions = to_ir ds in
-  (* backend passes do optimization and layout. *)
-  let straightline_dpa_prog = backend_passes dag_instructions in
-  (* print stats *)
-  P4tStats.print_stats straightline_dpa_prog build_dir;
-  (* printing: to blocks of P4 strings *)
-  let p4_obj_dict = P4tPrint.from_straightline straightline_dpa_prog in
-  (* the linker is really just a simple macro engine. Pass it an associative
-     list: (pragma string, code string to replace macro with) *)
-  (* generate the entry event trigger table *)
-  (* generate entry event triggers (if any) from config file *)
-  let trigger_macro_defs = match config_fn_opt with 
-    | Some config_fn -> JsonBlocks.generate config_fn
-    | None -> [] 
-  in
-  (* linking: put p4 blocks together into a single file. *)
-  let p4_str =
-    LinkP4.link_p4 (p4_obj_dict @ trigger_macro_defs) p4_harness_fn
-  in
-  (* printing: other manager code *)
-  let c_str = P4tMgrPrint.c_mgr_of straightline_dpa_prog in
-  let py_str = P4tMgrPrint.py_mgr_of straightline_dpa_prog in
-  p4_str, c_str, py_str
-;;
+  (* middle passes do regularization over simplified syntax *)
+  let core_ds = MidendPipeline.process_prog ds in
+  (* backend does tofino-specific transformations, layout, 
+  then translates into p4tofino syntax and produces program strings *)
+  let portspec = ParsePortSpec.parse portspec in 
+  let p4_str, c_str, py_str = TofinoPipeline.process_prog core_ds portspec build_dir in 
+  (* finally, generate the build directory *)
+  unmutable_report@@"Compilation to P4 finished. Writing to build directory:"^(build_dir);
+  PackageTofinoApp.generate p4_str c_str py_str build_dir
 
-let main () =
+let main () = 
   unmutable_report "Compilation to P4 started...";
-
   let args = ArgParse.parse_args () in
-  (* setup output directory. *)
+  (* setup build directory directory. *)
   IoUtils.setup_build_dir args.builddir;
   (* todo: also copy the included files *)
   let _ = cpy_src_to_build args.dptfn args.builddir in
-  let _ = cpy_src_to_build args.p4fn args.builddir in
-  (* compile lucid code to P4 and C blocks *)
-  let p4_str, c_str, py_str =
-    compile_to_tofino args.dptfn args.p4fn args.configfn args.interp_spec_file args.builddir
-  in
-
-  unmutable_report "Compilation to P4 finished.";
-  PackageTofinoApp.generate p4_str c_str py_str args.builddir
+  (* compile lucid code to P4 / python / C *)
+  compile_to_tofino args.dptfn args.portspec args.builddir
 ;;
 
 let _ = main ()
+
+

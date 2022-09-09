@@ -1,0 +1,288 @@
+(* coreDfg.ml -- 
+    convert a control flow graph into a data flow graph 
+    (really a data dependency graph) 
+    The control flow graph should have edge constraints 
+    propagated to nodes and match statements removed.
+    Each node is a statement, annotated with its condition 
+    for execution. 
+    An edge from (s, t) represents a data dependency 
+    (read, write), (write, write), or (write, read) 
+    between s and t.
+*)
+open Collections
+open CoreSyntax
+open MatchAlgebra
+open CoreCfg
+
+
+(* a node is a statement and a condition that 
+   must hold for it to be executed *)
+module DfgNode = CfgNode 
+
+(* an edge between (s, t) is a variable that is either 
+   read or written in s and read or written in t. *)
+type data_dependency = 
+  | DRW
+  | DWW
+  | DWR
+  | DNone
+
+let string_of_data_dependency d =
+  match d with 
+  | DRW -> "RW"
+  | DWW -> "WW"
+  | DWR -> "WR"
+  | DNone -> "NO DEPENDENCY"
+
+module DfgEdge = struct 
+  type t = data_dependency
+  let compare = Pervasives.compare
+  let hash = Hashtbl.hash
+  let equal = ( = )
+  let default = DNone
+end
+
+module Dfg = Graph.Persistent.Digraph.ConcreteLabeled (DfgNode) (DfgEdge)
+module DfgTopo = Graph.Topological.Make (Dfg)
+
+
+module DfgDotConfig = struct
+  include Dfg
+  let graph_attributes _ = []
+  let edge_attributes (_, (d:data_dependency), _) = 
+    [`Label (string_of_data_dependency d)]
+  let default_edge_attributes _ = []
+  let get_subgraph _ = None
+  let vertex_attributes _ = [`Shape `Box]
+  let vertex_name v = "\"" ^str_of_cond_stmt v^ "\""
+  let default_vertex_attributes _ = []
+end
+
+module DfgDot = Graph.Graphviz.Dot (DfgDotConfig)
+
+let print_dfg fn (g:Dfg.t) =
+    DfgDot.output_graph (Caml.open_out_bin fn) g
+;;
+
+let rec read_ids_of_exp exp = 
+  match exp.e with 
+  | EVar(cid) -> [Cid.to_id cid]
+  | EOp(_, args)
+  | ECall(_, args)
+  | EHash(_, args) ->
+    List.map read_ids_of_exp args |> List.flatten
+  | EFlood(arg) -> read_ids_of_exp arg
+  | EVal _ -> []
+;;
+
+let rec read_ids_of_stmt (stmt:CoreSyntax.statement) = 
+  match stmt.s with 
+  | SNoop -> []
+  | SRet(None) -> []
+  | SLocal(_, _, exp) 
+  | SAssign(_, exp)
+  | SGen(_, exp)
+  | SRet(Some(exp)) -> read_ids_of_exp exp
+  | SPrintf(_, exps) -> List.map read_ids_of_exp exps |> List.flatten
+  | SIf(exp, s1, s2) -> 
+    read_ids_of_exp exp@(read_ids_of_stmt s1)@(read_ids_of_stmt s2)
+  | SSeq(s1, s2) -> (read_ids_of_stmt s1)@(read_ids_of_stmt s2)
+  | SMatch(exps, branches) -> 
+      let ids_in_branches = List.map
+        (fun (_, s) -> read_ids_of_stmt s)
+        branches
+        |> List.flatten
+      in 
+      let ids_in_exps = List.map read_ids_of_exp exps |> List.flatten in 
+      ids_in_exps@ids_in_branches
+  (* invalidate call _writes_ to its arg fields *)
+  | SUnit(exp) -> (
+    match exp.e with 
+    | ECall(fcn_cid, _) -> (
+      match Cid.names fcn_cid with 
+      | "Sys"::"invalidate"::_ -> []
+      | _ -> read_ids_of_exp exp
+    )
+    | _ -> read_ids_of_exp exp
+  )  
+;;
+
+(* return the IDs that a statement writes to *)
+let rec write_ids_of_stmt (stmt:CoreSyntax.statement) : (Id.t list) = 
+  match stmt.s with 
+  | SNoop
+  | SRet(_)
+  | SGen(_, _)
+  | SPrintf(_) -> [] 
+  | SLocal(id, _, _) 
+  | SAssign(id, _) -> [id]
+  | SIf(_, s1, s2)
+  | SSeq(s1, s2) -> 
+    (write_ids_of_stmt s1)@(write_ids_of_stmt s2)
+  | SMatch(_, branches) -> 
+    List.map 
+      (fun (_, s) -> write_ids_of_stmt s)
+      branches
+    |> List.flatten
+  (* an invalidate call writes to its fields *)
+  | SUnit(exp) -> (
+    match exp.e with 
+    | ECall(fcn_cid, args) -> (
+      match Cid.names fcn_cid with 
+      | "Sys"::"invalidate"::_ -> (
+        List.map (fun arg_exp -> 
+          match arg_exp.e with
+          | EVar(cid) -> Cid.to_id cid
+          | _ -> error "sys.invalidate with an arg that is not an evar?"
+        )
+        args
+      )
+      | _ -> []
+    )
+    | _ -> []
+  )  
+;;
+
+let rec read_ids_of_pattern pattern =
+  match pattern with
+  | [] -> []
+  | (exp, _)::pattern_remaining -> (cid_of_exp exp |> Cid.to_id)::(read_ids_of_pattern pattern_remaining)
+;;
+
+let read_ids_of_patterns patterns =
+  List.map read_ids_of_pattern patterns |> List.flatten
+;;
+
+let rec read_ids_of_condition (c:edge_condition) = 
+  match c with 
+    CMatch(c) -> 
+      let negs_read_ids = read_ids_of_patterns c.negs in   
+      let pos_read_ids =  match c.pos with 
+        | None -> []
+        | Some pattern -> read_ids_of_pattern pattern
+      in 
+      ShareMemopInputs.unique_list_of_eq Id.equals (negs_read_ids@pos_read_ids)
+    | CNone -> []
+    | CExp(_) -> 
+      error "[coreDfg] CExp edge conditions not supported"
+;;
+
+(* read ids of node, write ids of node. *)
+let read_ids_of_vertex v = 
+  read_ids_of_stmt v.stmt
+;;
+let write_ids_of_vertex v =
+  write_ids_of_stmt v.stmt
+;;
+
+
+(* a map from an id to a list of statements that read / write that id *)
+type usemap = {
+  reads : (vertex_stmt list) IdMap.t;
+  writes : (vertex_stmt list) IdMap.t;
+}
+let empty_usemap = {reads = IdMap.empty; writes = IdMap.empty} ;;
+
+(* does cs read id *)
+let is_reader usemap cs id = 
+  match IdMap.find_opt id usemap.reads with 
+  | None -> false
+  | Some (css) -> 
+      MiscUtils.contains css cs 
+;;
+
+let is_writer usemap cs id = 
+  match IdMap.find_opt id usemap.writes with 
+  | None -> false
+  | Some (css) -> 
+      MiscUtils.contains css cs 
+;;
+
+
+(* get dependency edges from s --> t in ts of 
+   type dconstr as defined by s_var_getter and t_checker *)
+let get_dependencies dconstr s_var_getter t_checker (s:vertex_stmt) (ts:vertex_stmt list) =   
+  let s_varids = s_var_getter s in 
+  let dependent_ts = 
+    let update_for_var deps id =
+      let update_for_desc deps desc =
+        match t_checker desc id with 
+        | false -> deps
+        | true -> desc::deps
+      in 
+      CL.fold_left update_for_desc deps ts
+    in 
+    CL.fold_left update_for_var [] s_varids
+  in 
+  CL.map
+    (fun desc -> (s, dconstr, desc))
+    (MiscUtils.unique_list_of dependent_ts)
+;;
+(* read, write *)
+let get_drws usemap v descs =
+  get_dependencies DRW read_ids_of_vertex (is_writer usemap) v descs
+;;
+(* write, read *)
+let get_dwrs usemap v descs =
+  get_dependencies DWR write_ids_of_vertex (is_reader usemap) v descs
+;;
+(* write, write *)
+let get_dwws usemap v descs =
+  get_dependencies DWW write_ids_of_vertex (is_writer usemap) v descs
+;;
+
+let print_usemap usemap =
+  print_endline ("----read map----");
+  let ids = IdMap.keys usemap.reads in 
+  BatEnum.iter (fun id -> 
+    print_endline ("------------");
+    print_endline("id: "^(Id.to_string id));
+    List.iter (fun v -> 
+      print_endline ("----");
+      print_endline (CorePrinting.stmt_to_string v.stmt);
+      print_endline ("----");
+      )
+      (IdMap.find id usemap.reads)
+  )
+  ids;
+  print_endline ("------------");
+;;
+
+let process cfg = 
+
+  (* compute the variable : read / write maps *)
+  let update_usemap  (v:vertex_stmt) (m:usemap) : usemap = 
+    let update m id = match (IdMap.find_opt id m) with 
+      | Some current_users -> (
+        let new_m = IdMap.remove id m in
+        IdMap.add id (v::current_users) new_m
+      )
+      | None -> IdMap.add id [v] m
+    in 
+    {
+      reads = List.fold_left update m.reads (read_ids_of_vertex v);
+      writes = List.fold_left update m.writes (write_ids_of_vertex v);
+    }
+  in 
+  let usemap = Cfg.fold_vertex update_usemap cfg empty_usemap in 
+  (* print_usemap usemap; *)
+  (* exit 1; *)
+  (* walk through the nodes in a cfg. 
+      for each node: 
+        1. find descendents. 
+        2. filter groups of decendents by is_reader and is_writer
+        3. add node -> descendent edges
+  *)
+  let update_dfg cfg_node dfg = 
+    let descs = descendents cfg cfg_node in 
+    let dfg = Dfg.add_vertex dfg cfg_node in 
+    let edges = 
+        (get_drws usemap cfg_node descs)
+      @(get_dwrs usemap cfg_node descs)
+      @(get_dwws usemap cfg_node descs)
+    in 
+    CL.fold_left Dfg.add_edge_e dfg edges
+  in 
+  let dfg = Cfg.fold_vertex update_dfg cfg (Dfg.empty) in 
+  dfg 
+;;

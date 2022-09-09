@@ -44,3 +44,5 @@ let compare (s1, i1) (s2, i2) =
   let i = compare i1 i2 in
   if i = 0 then compare s1 s2 else i
 ;;
+
+let fresh_name s = create (s^"_"^(string_of_int (next ())))

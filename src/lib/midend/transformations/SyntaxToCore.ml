@@ -128,7 +128,7 @@ let rec translate_statement (s : S.statement) : C.statement =
     | S.SRet eopt -> C.SRet (Option.map translate_exp eopt)
     | _ -> err s.sspan (Printing.statement_to_string s)
   in
-  { s = s'; sspan = s.sspan }
+  { s = s'; sspan = s.sspan; spragma = None}
 ;;
 
 let translate_params params =

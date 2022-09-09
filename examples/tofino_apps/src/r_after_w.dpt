@@ -2,30 +2,30 @@
 This program tests write-after-read dependency 
 correctness. It used to cause a bug in the compiler. 
 */
-include "io_events.dpt"
-event report(int<<9>> port, int x, int y);
+include "ip_default.dpt"
 
+event report(int<<32>> port, eth_hdr eth, ip_hdr_prefix ip, int x, int y);
 
-handle ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos){
+handle ip_pkt (eth_hdr eth, ip_hdr_prefix ip, int<<32>> src, int<<32>> dst) {
   int foo = 1;
   int bar = foo + 1;
   int baz = bar + 1;
   foo = 2;
   int bat = foo + 2;
-  generate report(igr_port, baz, bat);
+  generate report((int<<32>>)ingress_port, eth, ip, baz, bat);
   // expected output: report event packet with x = 3 and y = 4
 }
 
 // Make sure that generating an event, which sets 
 // the event's parameters, doesn't get placed before 
 // other statements that read the event parameters. 
-handle report(int<<9>> port, int x, int y){        
+handle report(int<<32>> port, eth_hdr eth, ip_hdr_prefix ip,int x, int y){        
     int foo = 2;
     int bar = x + y; // test expected: 7
     if (bar == 7) {
-      generate_port (port, ip_out(1, 1)); 
+      generate_port ((int<<9>>)port, ip_pkt(eth, ip, 1, 1)); 
     } else {
-      generate_port (port, ip_out(2, 2));
+      generate_port ((int<<9>>)port, ip_pkt(eth, ip, 2, 2));
     }
     // expected out: IP packet with src = 1 and dst = 1
 }

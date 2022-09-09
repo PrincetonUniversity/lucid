@@ -2,13 +2,13 @@
     "base_dir":"examples/tofino_apps",
     "builds_dir":"__testbuilds",
     "tests": [
-        {"commands":["compile", "assemble", "execute"], "prog":"src/complex_memops.dpt", "harness":"ip_harness.p4", "linker_config":"ip_harness_triggers.json","build":"complex_memops", "testspec":"tests/complex_memops.json"},
-        {"commands":["compile", "assemble", "execute"], "prog":"src/multi_events.dpt", "harness":"ip_harness.p4", "linker_config":"ip_harness_triggers.json", "build":"multi_events", "testspec":"tests/multi_events.json"},
-        {"commands":["compile", "assemble", "execute"], "prog":"src/r_after_w.dpt", "harness":"ip_harness.p4", "linker_config":"ip_harness_triggers.json", "build":"r_after_w", "testspec":"tests/r_after_w.json"},
-        {"commands":["compile", "assemble", "execute"], "prog":"src/reflector.dpt", "harness":"ip_harness.p4", "linker_config":"ip_harness_triggers.json","build":"reflector", "testspec":"tests/reflector.json"},
-        {"commands":["compile", "assemble", "execute"], "prog":"src/identity_hash.dpt", "harness":"ip_harness.p4", "linker_config":"ip_harness_triggers.json","build":"identity_hash", "testspec":"tests/identity_hash.json"},
-        {"commands":["compile", "assemble", "execute"], "prog":"src/control_reflector.dpt", "harness":"ip_harness.p4", "linker_config":"ip_harness_triggers.json","build":"control_reflector", "testspec":"tests/control_reflector.json"},
-        {"commands":["compile", "assemble", "execute"], "prog":"src/simple_cuckoo_firewall.dpt", "harness":"ip_harness.p4", "linker_config":"ip_harness_triggers.json","build":"simple_cuckoo_firewall", "testspec":"tests/simple_cuckoo_firewall.json"},
-        {"commands":["compile", "assemble", "execute"], "prog":"src/learner.dpt", "harness":"ip_harness.p4", "linker_config":"ip_harness_triggers.json","build":"learner", "testspec":"tests/learner.json"}
+        {"commands":["compile", "assemble", "execute"], "prog":"src/complex_memops.dpt","build":"complex_memops", "testspec":"tests/complex_memops.json"},
+        {"commands":["compile", "assemble", "execute"], "prog":"src/multi_events.dpt", "build":"multi_events", "testspec":"tests/multi_events.json"},
+        {"commands":["compile", "assemble", "execute"], "prog":"src/r_after_w.dpt", "build":"r_after_w", "testspec":"tests/r_after_w.json"},
+        {"commands":["compile", "assemble", "execute"], "prog":"src/reflector.dpt", "build":"reflector", "testspec":"tests/reflector.json"},
+        {"commands":["compile", "assemble", "execute"], "prog":"src/identity_hash.dpt","build":"identity_hash", "testspec":"tests/identity_hash.json"},
+        {"commands":["compile", "assemble", "execute"], "prog":"src/control_reflector.dpt","build":"control_reflector", "testspec":"tests/control_reflector.json"},
+        {"commands":["compile", "assemble", "execute"], "prog":"src/simple_cuckoo_firewall.dpt","build":"simple_cuckoo_firewall", "testspec":"tests/simple_cuckoo_firewall.json"},
+        {"commands":["compile", "assemble", "execute"], "prog":"src/learner.dpt","build":"learner", "testspec":"tests/learner.json"}
     ]
 }

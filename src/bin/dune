@@ -6,4 +6,9 @@
 
 (install
  (section bin)
- (files (main.exe as dpt) (compiler.exe as compiler) (functionCompiler.exe as functionCompiler)))
+ (files 
+    (main.exe as dpt) 
+    (compiler.exe as compiler) 
+    (functionCompiler.exe as functionCompiler)
+    )
+    )

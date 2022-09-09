@@ -37,13 +37,21 @@ let count_locals ds =
 ;;
 
 (* check if a variable is set in a statement subtree. *)
-let assigned_in_stmt query_id stmt =
+let assigned_in_stmt (evid_params:((Id.t * Id.t list) list)) query_id stmt =
+  let _ = evid_params in 
   let v =
     object
       inherit [_] s_iter as super
       val mutable id_is_set = false
       method id_is_set = id_is_set
       method! visit_SAssign _ id _ = if query_id = id then id_is_set <- true
+
+      (* method! visit_SGen(_, ev_exp) -> ( *)
+
+      (* BUG: 
+        a generate statement sets all the parameters of its event! 
+        but generates aren't eliminated by this point!
+      *)
     end
   in
   v#visit_statement () stmt;
@@ -52,17 +60,19 @@ let assigned_in_stmt query_id stmt =
 
 let rec refresh_cid cid =
   match cid with
-  | Cid.Id id -> Cid.id (Id.refresh id)
+  | Cid.Id id -> 
+    let unique_name = (fst id)^"_branch_test_copy_"^((snd (Id.refresh id)) |> string_of_int) in
+    Cid.id (Id.fresh unique_name)
   | Cid.Compound (id, cid) -> Cid.compound (Id.refresh id) (refresh_cid cid)
 ;;
 
-let assigned_in_one_stmt query_id stmts =
-  CL.map (assigned_in_stmt query_id) stmts |> CL.fold_left ( || ) false
+let assigned_in_one_stmt evid_params query_id stmts =
+  CL.map (assigned_in_stmt evid_params query_id) stmts |> CL.fold_left ( || ) false
 ;;
 
 (* update exp so that if var_subexp is used in any statement in stmts,
   it is replaced with a constant copy. *)
-let update_exp_for_one_var stmts (exp, newvar_decls) var_subexp =
+let update_exp_for_one_var evid_params stmts (exp, newvar_decls) var_subexp =
   let var_cid =
     match var_subexp.e with
     | EVar cid -> cid
@@ -74,7 +84,7 @@ let update_exp_for_one_var stmts (exp, newvar_decls) var_subexp =
     | _ -> error "subexp var is a compound identifier."
   in
   (* if the variable is assigned in at least one statement, change it. *)
-  match assigned_in_one_stmt var_id stmts with
+  match assigned_in_one_stmt evid_params var_id stmts with
   | true ->
     !dprint_endline
       ("[update_exp_for_one_var] in expression: ("
@@ -96,9 +106,9 @@ let update_exp_for_one_var stmts (exp, newvar_decls) var_subexp =
 
 (* update one expression, so that any vars used in the expression and also the statements
 are replaced in the expression with constant copies. *)
-let update_one_exp stmts exp =
+let update_one_exp evid_params stmts exp =
   let new_exp, new_var_decls =
-    CL.fold_left (update_exp_for_one_var stmts) (exp, []) (evars_in_exp exp)
+    CL.fold_left (update_exp_for_one_var evid_params stmts) (exp, []) (evars_in_exp exp)
   in
   new_exp, new_var_decls
 ;;
@@ -109,6 +119,14 @@ of the if / match is replaced by a constant. *)
 let const_branch_vars ds =
   DBG.start_mlog __FILE__ outc dprint_endline;
   trans_info "making branch variables single assignment";
+  let evid_params = List.filter_map (fun decl -> 
+    match decl.d with
+    | DEvent(id, _, params) -> Some(id, List.split params |> fst)
+    | _ -> None
+    )
+    ds
+  in
+
   let v =
     object
       inherit [_] s_map as super
@@ -128,7 +146,7 @@ let const_branch_vars ds =
         so that a single evar subexpression in it, var_subexp,
         is replaced by a fresh, constant copy of the variable.
         Also generate the statement that sets the constant copy. *)
-          let new_exp, new_var_decls = update_one_exp [st1; st2] exp in
+          let new_exp, new_var_decls = update_one_exp evid_params [st1; st2] exp in
           let new_vars_decl = fold_stmts new_var_decls in
           let new_sif = { statement with s = SIf (new_exp, st1, st2) } in
           (* return the sequence of new_vars_decl, new_if_stmt *)
@@ -136,7 +154,7 @@ let const_branch_vars ds =
         | SMatch (exps, branches) ->
           let _, sts = CL.split branches in
           let new_exps, new_var_declses =
-            CL.map (update_one_exp sts) exps |> CL.split
+            CL.map (update_one_exp evid_params sts) exps |> CL.split
           in
           let new_vars_decl = CL.flatten new_var_declses |> fold_stmts in
           let new_smatch = { statement with s = SMatch (new_exps, branches) } in

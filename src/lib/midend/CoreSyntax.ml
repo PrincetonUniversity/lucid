@@ -130,6 +130,7 @@ and s =
 and statement =
   { s : s
   ; sspan : sp
+  ; spragma : (string * string list) option;
   }
 
 and params = (id * ty) list
@@ -165,6 +166,7 @@ and d =
   | DHandler of id * body
   | DMemop of id * params * memop_body
   | DExtern of id * ty
+
 
 (* name, return type, args & body *)
 and decl =
@@ -242,8 +244,8 @@ let hash_sp size args ety span = aexp (EHash (size, args)) ety span
 
 (* Statements *)
 
-let statement s = { s; sspan = Span.default }
-let statement_sp s span = { s; sspan = span }
+let statement s = { s; sspan = Span.default ; spragma = None;}
+let statement_sp s span = { s; sspan = span ; spragma = None;}
 let snoop = statement SNoop
 let sseq s1 s2 = statement (SSeq (s1, s2))
 let slocal id ty e = statement (SLocal (id, ty, e))
@@ -281,6 +283,13 @@ let equiv_list f lst1 lst2 =
   | Invalid_argument _ -> false
 ;;
 
+let equiv_options f o1 o2 =
+  match (o1, o2) with 
+  | None, None -> true
+  | Some _, None | None, Some _ -> false
+  | Some(o1), Some(o2) -> f o1 o2
+;;
+
 let rec equiv_value v1 v2 =
   match v1.v, v2.v with
   | VBool b1, VBool b2 -> b1 = b2
@@ -305,3 +314,43 @@ let rec equiv_exp e1 e2 =
   | EOp (op1, es1), EOp (op2, es2) -> op1 = op2 && equiv_list equiv_exp es1 es2
   | _ -> false
 ;;
+
+let equiv_pat p1 p2 = 
+  match p1, p2 with
+  | PWild, PWild -> true
+  | PNum(z1), PNum(z2) -> Z.equal z1 z2
+  | PBit(is1), PBit(is2) -> equiv_list Int.equal is1 is2
+  | _, _ -> false
+;;
+
+let rec equiv_stmt s1 s2 =
+  match s1.s, s2.s with
+  | SNoop, SNoop -> true
+  | SUnit(e1), SUnit(e2) -> equiv_exp e1 e2
+  | SLocal(id1, _, exp1), SLocal(id2, _, exp2) 
+  | SAssign(id1, exp1), SAssign(id2, exp2) -> 
+    (Id.equal id1 id2) && (equiv_exp exp1 exp2)
+  | SPrintf(s1, es1), SPrintf(s2, es2) -> 
+    String.equal s1 s2 && equiv_list equiv_exp es1 es2
+  | SIf(e1, s11, s12), SIf(e2, s21, s22) -> 
+    equiv_exp e1 e2 && equiv_stmt s11 s21 && equiv_stmt s12 s22
+  | SGen(GSingle(Some e1), e11), SGen(GSingle(Some e2), e22)
+  | SGen(GMulti(e1), e11), SGen(GMulti(e2), e22)
+  | SGen(GPort(e1), e11), SGen(GPort(e2), e22) -> 
+    equiv_exp e1 e2 && equiv_exp e11 e22
+  | SGen(GSingle(None), e11), SGen(GSingle(None), e22) -> 
+    equiv_exp e11 e22
+  | SSeq(s11, s12), SSeq(s21, s22) -> 
+    equiv_stmt s11 s21 && equiv_stmt s12 s22
+  | SMatch(es1, bs1), SMatch(es2, bs2) -> 
+    equiv_list equiv_exp es1 es2 && equiv_list equiv_branch bs1 bs2
+  | SRet(None), SRet(None) ->
+    true
+  | SRet(Some(e1)), SRet(Some(e2)) -> 
+    equiv_exp e1 e2
+  | _ -> false
+and equiv_branch (ps1, s1) (ps2, s2) =  
+  equiv_list equiv_pat ps1 ps2 && equiv_stmt s1 s2
+;;
+
+

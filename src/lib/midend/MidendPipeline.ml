@@ -32,7 +32,6 @@ let process_prog ?(for_interp = false) ds =
     print_if_debug ds;
     ds
   | false ->
-    LogIr.log_lucid "midend_start.dpt" ds;
     print_if_verbose "-------Eliminating extern calls--------";
     let ds = EliminateExterns.eliminate_externs ds in 
 
@@ -67,7 +66,7 @@ let process_prog ?(for_interp = false) ds =
       match enable_compound_expressions with
       | true ->
         print_if_verbose "-------Removing compound expressions--------";
-        let ds = EliminateFloods.eliminate_floods ds in 
+        (* let ds = EliminateFloods.eliminate_floods ds in  *)
         let ds = PrecomputeArgs.precompute_args ds in
         (* get rid of boolean expressions *)
         let ds = EliminateBools.do_passes ds in
@@ -88,7 +87,5 @@ let process_prog ?(for_interp = false) ds =
     (* make sure that all variables in the program have unique names. 
         for non-unique ids, bring the variable's number into the name *)
     let ds = UniqueIds.make_var_names_unique ds in 
-    (* log the program at the end of the mid end *)
-    LogIr.log_lucid "midend_end.dpt" ds;
     ds
 ;;

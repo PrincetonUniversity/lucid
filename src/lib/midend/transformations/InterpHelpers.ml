@@ -131,6 +131,7 @@ let unpack_eop exp =
   | _ -> error "cannot unpack exp"
 ;;
 
+
 let name_from_exp (ex : exp) : Cid.t =
   match ex.e with
   | EVar n -> n
@@ -181,8 +182,9 @@ let is_assoc_op exp =
 let is_immediate exp =
   match exp.e with
   | EVal _ | EVar _ -> true
+  (* a cast or slice of a value or immediate is immediate *)
+  | EOp(Cast _, args)
   | EOp(Slice _, args) -> (
-    (* a slice of a value or immediate is immediate *)
     match ((CL.hd args).e) with 
       | EVal _ | EVar _ -> true
       | _ -> false
@@ -241,7 +243,7 @@ let rec flatten_disjunction exp =
 ;;
 
 let rec flatten_conjunction exp =
-  (* flatten all the ors *)
+  (* flatten all the ands *)
   match exp with
   | { e = EOp (And, args) } -> CL.map flatten_conjunction args |> CL.flatten
   | _ -> [exp]
@@ -490,6 +492,9 @@ let rec replace_in_stmt_lhs (stmt : statement) (id : Id.t) new_id =
     | false -> stmt)
   | _ -> stmt
 ;;
+
+
+
 
 (* make sure event parameter IDs are globally unique *)
 let refresh_param_id (i, ty) = Id.refresh i, ty
