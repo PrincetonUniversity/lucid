@@ -5,6 +5,8 @@ open Preprocess
 module Env = InterpState.Env
 module IntMap = InterpState.IntMap
 
+type json = Yojson.Basic.t
+
 type t =
   { num_switches : int
   ; links : InterpState.State.topology
@@ -55,15 +57,16 @@ let parse_port str =
 
 let default_port = 0
 
-
 type located_event = event * (int * int) list
-let parse_event 
-      (pp : Preprocess.t) 
-      (renaming : Renaming.env) 
-      num_switches 
-      (cur_ts:int) 
-      (event : json) 
-    : located_event =
+
+let parse_event
+    (pp : Preprocess.t)
+    (renaming : Renaming.env)
+    num_switches
+    (cur_ts : int)
+    (event : json)
+    : located_event
+  =
   match event with
   | `Assoc lst ->
     (* Find the event name, accounting for the renaming pass, and get its
@@ -89,14 +92,14 @@ let parse_event
                (Cid.to_string eid))
       | None -> error "Event specification missing args field"
       | _ -> error "Event specification had non-list type for args field"
-    in    
+    in
     (* Parse the delay and location fields, if they exist *)
     let edelay =
       match List.assoc_opt "timestamp" lst with
       | Some (`Int n) -> n
       | None -> cur_ts
       | _ -> error "Event specification had non-integer delay field"
-    in    
+    in
     let locations =
       match List.assoc_opt "locations" lst with
       | Some (`List lst) ->
@@ -121,28 +124,27 @@ let parse_event
       | _ -> error "Event specification has non-list locations field"
     in
     { eid; data; edelay }, locations
-    | _ -> error "Non-assoc type for event definition"
+  | _ -> error "Non-assoc type for event definition"
 ;;
 
-let parse_events 
+let parse_events
     (pp : Preprocess.t)
     (renaming : Renaming.env)
     (num_switches : int)
     (gap : int)
     (events : json list)
-  = 
-  let wrapper ((located_events:located_event list), (current_ts:int)) (event_json:json) =
-    let located_event = 
+  =
+  let wrapper
+      ((located_events : located_event list), (current_ts : int))
+      (event_json : json)
+    =
+    let located_event =
       parse_event pp renaming num_switches current_ts event_json
-    in 
-    let next_ts = (fst located_event).edelay+gap in
-    (located_events@[located_event], next_ts)
-  in 
-  let located_events, _ = List.fold_left 
-    wrapper 
-    ([], 0) 
-    events 
-  in 
+    in
+    let next_ts = (fst located_event).edelay + gap in
+    located_events @ [located_event], next_ts
+  in
+  let located_events, _ = List.fold_left wrapper ([], 0) events in
   located_events
 ;;
 

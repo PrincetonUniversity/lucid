@@ -3,6 +3,8 @@ open Syntax
 open Collections
 open Yojson.Basic
 
+type json = Yojson.Basic.t
+
 let parse_size name j =
   match j with
   | `Int n -> n
