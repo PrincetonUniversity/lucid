@@ -7,7 +7,6 @@ SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 if [[ "$(docker images -q tofinobase 2> /dev/null)" == "" ]]; then
   echo "building tofinobase docker image"
   docker build -t tofinobase ./tofinobase
-  # do something
 fi
 
 to_absolute_path() 
@@ -33,4 +32,4 @@ to_gparent_dir()
 }
 
 LUCID_GIT_DIR=$(to_gparent_dir "$SCRIPT_DIR")
-docker run --privileged --rm -it -v $LUCID_GIT_DIR:/lucid tofinobase
+docker start tofinobase || docker run --privileged --rm -it -v $LUCID_GIT_DIR:/lucid tofinobase

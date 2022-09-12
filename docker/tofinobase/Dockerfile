@@ -18,7 +18,6 @@ RUN chmod a+x start_with_hugepages.sh && \
     cp lucid.yaml bf-sde-9.7.2/p4studio/profiles/
 
 # build the sde
-# possible problem: the SDE probably requires hugepages to be built? 
 RUN cd bf-sde-9.7.2/p4studio && \
     sudo -E ./install-p4studio-dependencies.sh && \
     ./p4studio profile apply ./profiles/lucid.yaml

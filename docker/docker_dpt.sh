@@ -1,5 +1,6 @@
 # This runs ./dpt inside of an ubuntu 18.04 docker image. 
-# WARNING: This script must be run from the root directory of the lucid repo
+# WARNING: This script expects to be run from 
+# the /docker directory of the lucid repo
 SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
 
 to_parent_dir()

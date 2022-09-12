@@ -211,7 +211,6 @@ let tdecls_of_decls decls =
 (* generate the main handler, for a program where 
    the event gets compiled to a control block library *)
 let add_lib_handler decls =
-  let main_id = Id.create "main_handler" in 
   let hdl_selector = (Id.create "event_id", (ty (TInt 8))) in 
   let hdl_enum, hdl_params, default_hdl, _= 
     let acc (enum, all_params, default_hdl, cur_ev_num) dec = 

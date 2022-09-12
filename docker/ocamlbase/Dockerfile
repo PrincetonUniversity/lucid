@@ -30,5 +30,6 @@ RUN opam install -y integers \
     angstrom \
     yojson.1.7.0 \
     pyml \
-    z3
+    z3 \
+    pprint
 RUN opam init
