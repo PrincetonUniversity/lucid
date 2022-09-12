@@ -97,6 +97,7 @@
    ioUtils
    TofinoPipeline
    UnifyHandlerParams
+   EliminateExitEvents
    TofinoCore
    InlineEventVars
    SolitaryMatches

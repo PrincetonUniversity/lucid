@@ -22,6 +22,7 @@ let process_prog ds portspec build_dir =
     (* 0. make sure handlers always have the same params as their events *)
     let ds = UnifyHandlerParams.rename_event_params ds in 
     let ds = UnifyHandlerParams.unify_event_and_handler_params ds in 
+    let ds = EliminateExitEvents.process ds in 
     (* 1. inline event variables. *)
     let ds = InlineEventVars.inline ds in 
     (* 2. Translate the program into the tofinoCore ir, with a merged main handler *)

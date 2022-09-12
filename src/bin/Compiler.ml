@@ -149,6 +149,10 @@ let compile_to_tofino target_filename portspec build_dir =
   (* backend does tofino-specific transformations, layout, 
   then translates into p4tofino syntax and produces program strings *)
   let portspec = ParsePortSpec.parse portspec in 
+  unmutable_report@@"Starting P4-Tofino compilation. Using switch port configuration: ";
+  unmutable_report@@"------- port configuration -------";
+  print_endline (ParsePortSpec.string_of_portconfig portspec);
+
   let p4_str, c_str, py_str = TofinoPipeline.process_prog core_ds portspec build_dir in 
   (* finally, generate the build directory *)
   unmutable_report@@"Compilation to P4 finished. Writing to build directory:"^(build_dir);
