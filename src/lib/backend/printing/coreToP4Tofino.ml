@@ -69,7 +69,6 @@ let find ctx x =
 ;;
 
 
-
 (* memop context -- should merge with renaming context? *)
 type mctx = renames
 (* = CS.exp CidMap.t *)
@@ -170,11 +169,33 @@ let cell_struct_of_array_ty module_name cell_width rid : T.decl =
 ;;
 
 
-let rec translate_exp (renames:renames) memops exp : (T.decl list * T.expr)=
+type prog_env = {
+  memops : (id * memop) list;
+  user_fcns : (cid * tdecl) list;
+}
+let empty_prog_env = {memops = []; user_fcns = [];}
+;;
+
+let mk_prog_env tds = 
+  List.fold_left (fun prog_env tdecl -> 
+    match tdecl.td with
+      | TDMemop(m) -> {prog_env with memops=(m.mid, m)::prog_env.memops;}
+      | TDLabeledBlock(id, _) -> {prog_env with user_fcns=(Cid.id id, tdecl)::prog_env.user_fcns;}
+      | _ -> prog_env
+    )
+    empty_prog_env
+    tds
+;;
+
+let rec translate_exp (renames:renames) (prog_env:prog_env) exp : (T.decl list * T.expr) =
   match exp.e with 
-  | ECall(fcn_cid, args) -> 
-  (* TODO: a call can also be an event... *)
-    translate_module_call renames memops fcn_cid args
+  | ECall(fcn_cid, args) -> (
+    (* if it is a user function, just add a call *)
+    match (CL.mem_assoc fcn_cid prog_env.user_fcns) with
+    | true -> [], (ecall fcn_cid [])
+    (* if not a user function call, its a builtin module *)
+    | false -> translate_module_call renames prog_env.memops fcn_cid args
+  )
   | CS.EHash (size, args) -> translate_hash renames size args 
   | CS.EFlood _ -> error "[translate_memop_exp] flood expressions inside of memop are not supported"
   | CS.EVal v -> [], T.EVal (translate_value v.v)
@@ -188,25 +209,27 @@ let rec translate_exp (renames:renames) memops exp : (T.decl list * T.expr)=
       | Some (CExp(new_exp)) -> (
         match new_exp.e with 
           | EVar(cid) -> [], T.EVar (name renames cid) 
-          | _ -> translate_exp renames memops new_exp        
+          | _ -> translate_exp renames prog_env new_exp        
       )
       | None -> [], T.EVar(cid)
   )
   | CS.EOp(op, args) -> (
     let args = match op with 
       | CS.Cast(sz) -> 
-        let _, exps = translate_exps renames memops args in 
+        let _, exps = translate_exps renames prog_env args in 
         (eval_int sz)::(exps)
       | CS.Slice(s, e) -> 
-        let _, exps = translate_exps renames memops args in 
+        let _, exps = translate_exps renames prog_env args in 
         (eval_int s)::(eval_int e)::(exps)
-      | _ -> translate_exps renames memops args |> snd
+      | _ -> translate_exps renames prog_env args |> snd
     in
     let op = translate_op op in 
     [], eop op args
   )
-and translate_exps renames memops exps = 
-  let decls, exps = List.map (translate_exp renames memops) exps |> List.split in
+
+and translate_exps renames (prog_env:prog_env) exps = 
+  let translate_exp_wrapper exp = translate_exp renames prog_env exp in
+  let decls, exps = List.map translate_exp_wrapper exps |> List.split in
   List.flatten decls, exps
 
 and translate_hash renames size args = 
@@ -216,7 +239,7 @@ and translate_hash renames size args =
     | poly::args -> poly, args
     | _ -> error "[translate_hash] invalid arguments to hash call" 
   in
-  let args = (snd (translate_exps renames [] args)) in 
+  let args = (snd (translate_exps renames empty_prog_env args)) in 
   let arg = EList(args) in 
   let dhash = decl (DHash{
     id = hasher_id;
@@ -233,7 +256,7 @@ and translate_hash renames size args =
 (* translate exp in a memop -- this used to be its own method, 
    but now we re-use the rename context *)
 and translate_memop_exp renames exp = 
-  translate_exp renames [] exp |> snd 
+  translate_exp renames empty_prog_env exp |> snd 
 and translate_memop_exps renames exps =
   List.map (translate_memop_exp renames) exps
 
@@ -494,13 +517,13 @@ and translate_module_call renames (memops:(Id.t * memop) list) fcn_id args =
   match (List.hd (Cid.names fcn_id)) with 
       | "Array" -> 
         let regacn_id, decl = translate_array_call renames memops fcn_id args in
-        let idx_arg = translate_memop_exp CidMap.empty
+        let idx_arg = translate_memop_exp renames
           (List.hd (List.tl args))
         in        
         [decl], ecall (Cid.create_ids [regacn_id; (id "execute")]) [idx_arg]
       | "PairArray" -> 
         let regacn_id, decl = translate_pairarray_call renames memops fcn_id args in 
-        let idx_arg = translate_memop_exp CidMap.empty
+        let idx_arg = translate_memop_exp renames
           (List.hd (List.tl args))
         in        
         [decl], ecall (Cid.create_ids [regacn_id; (id "execute")]) [idx_arg]
@@ -548,7 +571,7 @@ let translate_generate (renames:renames) (prev_decls:T.decl list) hdl_enum hdl_p
   let param_assignments = 
     let set_event_param ev_id (param_id,arg_exp) =
       let param_arg = handler_param_arg ev_id param_id in 
-      let _, translated_arg_exps = translate_exp renames [] arg_exp in 
+      let _, translated_arg_exps = translate_exp renames empty_prog_env arg_exp in 
       sassign param_arg translated_arg_exps
     in
     List.map 
@@ -564,7 +587,7 @@ let translate_generate (renames:renames) (prev_decls:T.decl list) hdl_enum hdl_p
   | GPort(eport) -> 
     [], [
       sassign (port_out_event_arg) (eval_int event_num);
-      sassign (egr_port_arg) ((translate_exp renames [] eport )|> snd)
+      sassign (egr_port_arg) ((translate_exp renames empty_prog_env eport )|> snd)
     ]
   (* create multicast group, set mc_group_b and port_out_event*)
   | GMulti(egroup) -> (
@@ -584,7 +607,7 @@ let translate_generate (renames:renames) (prev_decls:T.decl list) hdl_enum hdl_p
         eval_int mc_group, new_mc_decls
       )
       | EFlood(eport) -> 
-        let _, eport = translate_exp renames [] eport in 
+        let _, eport = translate_exp renames empty_prog_env eport in 
         let eport = eop Cast [eval_int 16; eport] in (* mcid is 16 bit *)
         eop Add [eport; eval_int (mcast_flood_start)], []
       | _ -> error "[translate_generate.GMulti] group expression must be group value or flood call"    
@@ -600,25 +623,40 @@ let translate_generate (renames:renames) (prev_decls:T.decl list) hdl_enum hdl_p
 ;;
 
 
+let declared_vars prev_decls = CL.filter_map (fun dec -> 
+  match dec.d with 
+    | DVar(id, _, _) -> Some id
+    | _ -> None
+  )
+  prev_decls
+
 (* let new_ctx = {mc_groups = [];} *)
 
 (* translate a statement that appears inside of an action. 
    generate a list of decls and a statement. *)
-let rec translate_statement (renames:renames) prev_decls hdl_enum hdl_params memops stmt =
+let rec translate_statement (renames:renames) prev_decls hdl_enum hdl_params prog_env stmt =
   match stmt.s with
   | SNoop -> [], Noop
   | C.SUnit(e) ->
-    let decls, expr = translate_exp renames memops e in 
+    let decls, expr = translate_exp renames prog_env e in 
     decls, sunit expr
-  | C.SLocal(id, ty, e) -> 
+  | C.SLocal(id, ty, e) -> (
     (* variables can't be declared inside of an action, so produce a global declaration 
        with a default value and return an assign statement. *)
-    let vardecl = dvar_uninit id (translate_rty ty.raw_ty) in 
-    let decls, expr = translate_exp renames memops e in 
-    (* use the new name, if there is one *)
-    vardecl::decls, sassign (Cid.id id) expr
+    match (List.exists (fun idb -> Id.equals id idb) (declared_vars prev_decls)) with
+    | true -> (
+      (* let vardecl = dvar_uninit id (translate_rty ty.raw_ty) in  *)
+      let decls, expr = translate_exp renames prog_env e in 
+      decls, sassign (Cid.id id) expr
+    )
+    | false -> (
+      let vardecl = dvar_uninit id (translate_rty ty.raw_ty) in 
+      let decls, expr = translate_exp renames prog_env e in 
+      vardecl::decls, sassign (Cid.id id) expr
+    )
+  )
   | C.SAssign(id, e) -> 
-    let decls, expr = translate_exp renames memops e in 
+    let decls, expr = translate_exp renames prog_env e in 
     (* use the new name, if there is one *)
     decls, sassign (name renames (Cid.id id)) expr 
   | SPrintf _ -> error "[translate_statement] printf should be removed by now"
@@ -627,16 +665,16 @@ let rec translate_statement (renames:renames) prev_decls hdl_enum hdl_params mem
   | SRet _ -> error "[translate_statement] ret statement cannot appear inside action body"
   | SGen(gty, ev_exp) -> translate_generate renames prev_decls hdl_enum hdl_params gty ev_exp
   | SSeq (s1, s2) -> 
-    let s1_decls, s1_stmt = translate_statement renames prev_decls hdl_enum hdl_params memops s1 in
-    let s2_decls, s2_stmt = translate_statement renames prev_decls hdl_enum hdl_params memops s2 in
+    let s1_decls, s1_stmt = translate_statement renames prev_decls hdl_enum hdl_params prog_env s1 in
+    let s2_decls, s2_stmt = translate_statement renames prev_decls hdl_enum hdl_params prog_env s2 in
     s1_decls@s2_decls, sseq [s1_stmt; s2_stmt]
 ;;
 
 (* generate an action, and other compute objects, from a labeled statement *)
-let translate_labeled_block (renames, hdl_enum,hdl_params,memops) p4tdecls tdecl =
+let translate_labeled_block (renames, hdl_enum,hdl_params,prog_env) p4tdecls tdecl =
   let new_decls = match tdecl.td with 
     | TDLabeledBlock(id, stmt) -> (
-      let decls, action_body = translate_statement renames p4tdecls hdl_enum hdl_params memops stmt in
+      let decls, action_body = translate_statement renames p4tdecls hdl_enum hdl_params prog_env stmt in
       let action_decl = decl (DAction({id=id; body=action_body;})) in 
       decls@[action_decl]
     )
@@ -715,7 +753,7 @@ let generate_table renames (stage_pragma:pragma) (ignore_pragmas: (id * pragma) 
   in
   match stmt.s with
   | SMatch(exps, branches) -> 
-    let _, keys = translate_exps renames [] exps in 
+    let _, keys = translate_exps renames empty_prog_env exps in 
     let keys = List.map tern_key_of_exp keys in 
     let actions = List.map action_id_of_branch branches |> MiscUtils.unique_list_of in 
 
@@ -788,7 +826,7 @@ let mc_recirc_decls evids recirc_port =
   List.map mc_group_n_recirc possible_rids
 ;;
 
-let generate_ingress_control block_id tds =
+let generate_ingress_control prog_env block_id tds =
   let renames = mk_ingress_rename_map tds in 
   (* declare local copies of all event parameters *)
   (* let tds, param_decls = initialize_params tds in  *)
@@ -799,7 +837,11 @@ let generate_ingress_control block_id tds =
   let apply_body = sseq table_calls in 
 
   let action_decls = List.fold_left
-    (translate_labeled_block (renames, m.hdl_enum,m.hdl_params,memops tds))
+    (translate_labeled_block 
+      (renames, m.hdl_enum,m.hdl_params,
+        prog_env
+      )
+    )
     []
     tds
   in
@@ -1057,7 +1099,7 @@ let generate_reg_arrays tds =
           let module_name = List.hd (Cid.names tcid) in 
           let len, default_opt = match exp.e with 
             | ECall(_, args) -> (
-              match (translate_exps empty_renames [] args |> snd) with 
+              match (translate_exps empty_renames empty_prog_env args |> snd) with 
               | [elen; edefault] -> elen, Some(edefault)
               | [elen] -> elen, None
               | _ -> error "[generate_reg_array] expected 1 or 2 arguments in global constructor"
@@ -1103,6 +1145,7 @@ let mc_flood_decls external_ports =
 ;;
 
 let translate tds (portspec:ParsePortSpec.port_config) = 
+  let prog_env = mk_prog_env tds in 
   let port_defs = Caml.List.map 
     (fun (port:ParsePortSpec.port) -> decl (DPort{dpid=port.dpid; speed=port.speed;})) 
     (portspec.internal_ports@portspec.external_ports)
@@ -1112,7 +1155,7 @@ let translate tds (portspec:ParsePortSpec.port_config) =
   (* translate multicast groups first, 
       because we need them for ingress control translation *)
   (* let mcgroup_enum, mc_branches = generate_mc_config tds in  *)
-  let ingress_control, mc_decls = generate_ingress_control (id "IngressControl") tds in 
+  let ingress_control, mc_decls = generate_ingress_control prog_env (id "IngressControl") tds in 
   let mc_defs = mc_decls@mc_flood_decls external_dpids@(mc_recirc_decls ((main tds).hdl_enum |> List.split |> fst) portspec.recirc_dpid) in 
   (*     List.map (fun port -> decl (DPort{dpid=port; speed=40;})) ports_40g
     @(List.map (fun port -> decl (DPort{dpid=port; speed=10;})) ports_10g)
@@ -1147,7 +1190,7 @@ let control_block_lib_params tds =
   params
 ;;
 
-let generate_control_lib tds =
+let generate_control_lib prog_env tds =
   let renames = empty_renames in 
   let m = main tds in 
   let block_id = m.hdl_enum |> List.hd |> fst in 
@@ -1155,7 +1198,11 @@ let generate_control_lib tds =
   let table_decls, table_calls = generate_stages 0 renames block_id m.main_body |> List.split in 
   let apply_body = sseq table_calls in 
   let action_decls = List.fold_left
-    (translate_labeled_block (renames, m.hdl_enum,m.hdl_params,memops tds))
+    (translate_labeled_block 
+      (renames, m.hdl_enum,m.hdl_params,
+        prog_env
+      )
+    )
     []
     tds
     |> non_mcgroups_of_decls  
@@ -1172,5 +1219,6 @@ let generate_control_lib tds =
 
 
 (* translate a single handler program into a control block. *)
-let translate_to_control_block = generate_control_lib
+let translate_to_control_block tds = 
+  generate_control_lib (mk_prog_env tds) tds
 ;;

@@ -302,6 +302,19 @@ let exp_lookup_opt exps_assoc exp =
   CL.assoc_opt exp.e es_assoc
 ;;
 
+let e_eq exp1 exp2 = CoreSyntax.equiv_exp exp1 exp2
+
+
+let unique_exp_list exps = 
+  ShareMemopInputs.unique_list_of_eq e_eq exps
+;;
+let check_key_uniqueness exps =
+ let unique_exps = ShareMemopInputs.unique_list_of_eq e_eq exps in
+ if (CL.length exps <> CL.length unique_exps)
+ then (error ("[check_key_uniqueness] failed in: "^(CorePrinting.es_to_string exps)))
+ else ()
+;;
+
 
 let rec replace eq tuples key new_val =
   match tuples with
@@ -320,8 +333,13 @@ let exp_replace = (replace CoreSyntax.equiv_exp)
    produces a rule that cannot match anything, 
  return None. *)
 let and_patterns (pat1:pattern) (pat2:pattern) : pattern option = 
-
+  let pat1_es = CL.split pat1 |> fst in
+  let pat2_es = CL.split pat2 |> fst in
+  (* print_endline "(input check)"; *)
+  check_key_uniqueness pat1_es;
+  check_key_uniqueness pat2_es;
   let merge_into (pat_opt:pattern option) (new_col: exp * pat) : pattern option = 
+
     let (new_exp, new_cond) = new_col in 
     let res = match pat_opt with 
       | None -> None (* pat has a conflict, so we can't add a new column. *)
@@ -329,9 +347,14 @@ let and_patterns (pat1:pattern) (pat2:pattern) : pattern option =
         match (exp_lookup_opt pat new_exp) with 
           (* the column (variable new_exp) is not in the pattern, so add it. *)
           | None ->
+(*             print_endline@@"I have divined that the column: "^(CorePrinting.exp_to_string new_exp)^" ";
+            print_endline@@"is NOT in the pattern: "^(string_of_pattern pat); *)
             Some ((new_exp, new_cond)::pat)          
           (* the column (variable new_mid) is in the pattern *)
           | Some (pat_cond) -> (
+(*             print_endline@@"[merge_into] the column: "^(CorePrinting.exp_to_string new_exp)^" ";
+            print_endline@@"IS in the pattern: "^(string_of_pattern pat); *)
+
             match (pat_cond, new_cond) with
               (* two bitstrings *)
               | PBit pat_bits, PBit new_bits  -> (
@@ -374,7 +397,16 @@ let and_patterns (pat1:pattern) (pat2:pattern) : pattern option =
     in
     res
   in 
-  CL.fold_left merge_into (Some pat2) pat1
+  let res_all = CL.fold_left merge_into (Some pat2) pat1 in
+  (match (res_all) with 
+  | Some res -> 
+    (* print_endline "(output check)"; *)
+    check_key_uniqueness ((CL.split res) |> fst);
+
+    (* print_endline ("[and_patterns] result: "^(string_of_pattern res)); *)
+  | _ -> ();
+  );
+  res_all
   ;;
   let and_is_sat pat1 pat2 = 
     match (and_patterns pat1 pat2) with 

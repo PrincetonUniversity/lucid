@@ -353,6 +353,12 @@ let tdecls_to_string tdecs =
   String.concat "\n"
 ;;
 
+let dump_prog fn tds =
+  let outf = (open_out fn) in 
+  Printf.fprintf outf "%s" (tdecls_to_string tds);
+  flush outf
+;;
+
 (* 
   (draft)
     To go back to core syntax: 

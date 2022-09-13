@@ -5,7 +5,7 @@ exception Error of string
 let error s = raise (Error s)
 
 
-let verbose = ref false
+let verbose = ref true
 
 let cprint_endline s =
   if (!verbose)
@@ -27,8 +27,8 @@ let process_prog ds portspec build_dir =
     let ds = InlineEventVars.inline ds in 
     (* 2. Translate the program into the tofinoCore ir, with a merged main handler *)
     let tds = tdecls_of_decls ds in 
+    TofinoCore.dump_prog (!BackendLogging.irLogDir ^ "/initial.tofinocore.dpt") tds;
     cprint_prog "----------- initial tofinoCore program------- " tds;
-
     (* 3. tag wide match statements as solitary *)
     let tds = SolitaryMatches.process tds 20 in
     (* 4. remove if statements *)
@@ -37,12 +37,14 @@ let process_prog ds portspec build_dir =
     (* 5. regularize memop and Array update call formats *)
     let tds = RegularizeMemops.process tds in 
     cprint_prog "----------- after RegularizeMemops ------- " tds;
-    (* 6. allocated shared inputs for array update operations *)
+    (* 6. ensure that the memops to each register only reference two input variables *)
+    (* TofinoCore.dump_prog (!BackendLogging.irLogDir ^ "before_reg_alloc.tofinocore.dpt") tds; *)
     let tds = ShareMemopInputs.process tds in 
     cprint_prog "----------- after ShareMemopInputs ------- " tds;
     (* 7. eliminate all generate statements and add invalidate calls *)
     let tds = Generates.eliminate tds in 
     cprint_prog "----------- after Generates.eliminate ------- " tds;
+    TofinoCore.dump_prog (!BackendLogging.irLogDir ^ "/initial.before_layout.dpt") tds;
 
     (**** instruction layout ****)
     (* 8. compute control flow graph for main handler *)
@@ -51,14 +53,18 @@ let process_prog ds portspec build_dir =
     let cdg = CoreCdg.to_control_dependency_graph cfg in        
     (* 10. compute data flow / dependency graph *)
     let dfg = CoreDfg.process cdg in 
-    (* CoreDfg.print_dfg "dfg.dot" dfg; *)
+    CoreDfg.print_dfg ((!BackendLogging.graphLogDir)^"/dfg.dot") dfg;
     (* 11. lay out the dfg on a pipeline of match stmt seqs *)
     print_endline "-------- layout ----------";
     let tds = CoreLayout.process tds dfg in
     CoreLayout.profile tds build_dir;
     cprint_prog "----------- after layout ------- " tds;
-    (* 12. deduplicate match branch statements *)
-    let tds = BranchDedup.process tds in 
+
+    TofinoCore.dump_prog (!BackendLogging.irLogDir ^ "/laid_out.tofinocore.dpt") tds;
+    (* 12. put each branch into a labeled statement *)
+    let tds = ActionForm.process tds in 
+    (* 12.1 deduplicate certain expensive operation within the labeled statements *)
+    let tds = Dedup.process tds in 
     cprint_prog "----------- after action extraction ------- " tds;
     (*** 13. translate to P4-like IR ***)
     let tofino_prog = CoreToP4Tofino.translate tds portspec in 
@@ -94,7 +100,7 @@ let process_handler_block ds =
     let dfg = CoreDfg.process cdg in 
     print_endline "-------- layout ----------";
     let tds = CoreLayout.process tds dfg in
-    let tds = BranchDedup.process tds in 
+    let tds = ActionForm.process tds in 
     let p4decls = CoreToP4Tofino.translate_to_control_block tds in 
     P4TofinoPrinting.string_of_decls p4decls |> P4TofinoPrinting.doc_to_string
 ;;

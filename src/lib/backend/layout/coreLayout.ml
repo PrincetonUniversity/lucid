@@ -88,8 +88,10 @@ let pattern_branches_of_match m: pattern_branches =
 ;;
 
 let keys_of_pattern_branches pbs =
-  CL.map (fun pb -> pb.pattern |> CL.split |> fst) pbs
-  |> CL.flatten |> MiscUtils.unique_list_of
+  let foo = CL.map (fun pb -> pb.pattern |> CL.split |> fst) pbs
+  |> CL.flatten 
+  in
+  MatchAlgebra.unique_exp_list foo
 ;;
 
 let cases_of_pattern_branches pbs =  
@@ -203,6 +205,11 @@ let delete_unreachable bs =
 
 let combine_pattern_branches bs1 bs2 = 
   (* first, make sure bs1 and bs2 are over the same fields. *)
+(*   print_endline ("[combine_pattern_branches] bs1_PRE:");
+  print_endline (string_of_patts_something bs1);
+  print_endline ("[combine_pattern_branches] bs2_PRE:");
+  print_endline (string_of_patts_something bs2); *)
+
   let bs1, bs2 = align_keys bs1 bs2 in 
 (*   print_endline ("[combine_pattern_branches] bs1:");
   print_endline (string_of_patts_something bs1);
@@ -215,7 +222,7 @@ let combine_pattern_branches bs1 bs2 =
     | _, _ -> 
       let m2_integrate bs b2 =     
         let m1_integrate bs b1 = 
-          cross_product bs (b1, b2) (* swap to preserve stmt ordering *)
+          cross_product bs (b1, b2)
         in 
         List.fold_left m1_integrate bs bs1
       in 

@@ -303,10 +303,15 @@ let rec string_of_decl dec =
           separate_map hardline (fun id -> string_of_id id^^s'";") actions
         )
       ^^hardline
-      ^^s'"const entries = "^^nested_block_better ( 
-          separate_map hardline
-            string_of_rule
-            rules
+      (* printing an empty const entries messes up the compiler... *)
+      ^^(match List.length rules with 
+        | 0 -> s'""
+        | _ -> 
+          s'"const entries = "^^nested_block_better ( 
+            separate_map hardline
+              string_of_rule
+              rules
+          )
         )
       ^^(match default with 
         | None -> s'" "

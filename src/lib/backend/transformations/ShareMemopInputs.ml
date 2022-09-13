@@ -26,6 +26,27 @@ exception Error of string
 let error s = raise (Error s)
 
 
+let var_params ds vars = 
+  let rec params_of_prog ds = 
+    match ds with
+    | [] -> []
+    | {td=TDEvent(_, _, params); _}::ds -> 
+      (CL.split params |> fst)@(params_of_prog ds)
+    | _::ds -> params_of_prog ds
+  in
+  let params = params_of_prog ds in
+  let var_params = 
+    let folder var_params var =
+      if (MiscUtils.contains params var)
+      then var::var_params
+      else (var_params)
+    in
+    CL.fold_left folder [] vars
+  in 
+  var_params
+;;
+
+
 (* is a variable in the list a parameter of some event? *)
 let some_var_is_param ds vars = 
   let rec params_of_prog ds = 
@@ -45,59 +66,127 @@ let some_var_is_param ds vars =
   param_present
 ;;
 
-(* do x and y have a pairwise conflict? *)
-let rec pairwise_conflict ds x y = 
-  let rec pairwise_conflict_in_stmt (declared_vars:id list) (x:id) (y:id) stmt : (id list * bool) = 
-    (* Simple conflict detection: 
-      if you reach a point in the program where both vars are declared, 
-    they conflict and you cannot merge them. *)
-    match stmt.s with 
-      | SSeq(s1, s2) -> (
-        let declared_after_s1, conflict_in_s1 = pairwise_conflict_in_stmt declared_vars x y s1 in 
-        if    (conflict_in_s1)
-        then  (declared_after_s1, conflict_in_s1)
-        else  (pairwise_conflict_in_stmt declared_after_s1 x y s2)
-      )
-      | SIf(_, s1, s2) -> 
-        let _, conflict_in_s1 = pairwise_conflict_in_stmt declared_vars x y s1 in 
-        let _, conflict_in_s2 = pairwise_conflict_in_stmt declared_vars x y s2 in 
-        (* exiting scope, declared vars don't change *)
-        declared_vars, conflict_in_s1 || conflict_in_s2
-      | SMatch(_, branches) -> 
-        let conflict_in_branch (_, s) =
-          pairwise_conflict_in_stmt declared_vars x y s |> snd
-        in 
-        let conflict_in_branches = CL.fold_left 
-          (fun acc (b:branch) -> 
-            acc || (conflict_in_branch b)
-            )
-          false
-          branches
-        in
-        declared_vars, conflict_in_branches
-      | SLocal(id, _, _) -> 
-        (* if, at this point, x and y have been both declared, 
-           then they are conflicted. *)
-        let declared_vars = id::declared_vars in 
-        declared_vars,
-        (MiscUtils.contains declared_vars x && MiscUtils.contains declared_vars y)
-      | _ -> declared_vars, false
+let ids_to_string ids = CL.map Id.to_string ids |> Caml.String.concat " , "
+
+
+(* better conflict analysis. 
+
+  x and y conflict if they are alive at the same time in the program. 
+
+  at any point in a program, an alive variable is one that:
+    - has been declared in the past
+    - is used in the future
+*)
+
+(* which variables are used, i.e., read, in the statement? *)
+let read_vars statement =
+  let vars = ref [] in 
+  let v =
+    object
+      inherit [_] TofinoCore.s_iter as super
+
+      method! visit_EVar _ var_cid = 
+        vars := (Cid.to_id var_cid)::(!vars);
+    end
   in
-  (* if x any y are the same variable, there's no conflict *)
-  match (Id.equal x y) with 
-  | true -> false
-  | false -> (
-    match ds with 
-    | [] -> false
-    | d::ds -> (
-      match d.td with 
-      | TDHandler(_, (_, stmt)) -> 
-        let conflict_in_handler = snd (pairwise_conflict_in_stmt [] x y stmt) in
-        conflict_in_handler || (pairwise_conflict ds x y)
-      | _ -> (pairwise_conflict ds x y)
+  v#visit_statement () statement;
+  !vars
+;;
+(* which variables are written, i.e., 
+   declared or assigned, in the statement? *)
+let assigned_vars statement = 
+  let vars = ref [] in 
+  let v =
+    object
+      inherit [_] TofinoCore.s_iter as super
+
+      method! visit_SLocal  _ id _ _ = 
+        vars := (id)::(!vars);
+      method! visit_SAssign  _ id _ = 
+        vars := (id)::(!vars);
+    end
+  in
+  v#visit_statement () statement;
+  !vars
+;;
+
+let intersection l1 l2 =
+  CL.filter_map (fun l1e -> match MiscUtils.contains l2 l1e with 
+    | true -> Some(l1e)
+    | false -> None
+  )
+  l1
+;;
+
+(* build the conflict graph for the statement *)
+let rec conflict_graph declared_before used_after statement =
+  match statement.s with
+  | SLocal(var_id, _, _) -> (
+    (* if the var is used later, add conflicts with all the live vars *)
+    let live_vars = CL.filter (fun dec_id -> MiscUtils.contains used_after dec_id) declared_before in
+    if (MiscUtils.contains used_after var_id)
+      then (CL.map (fun live_var -> (var_id, live_var)) live_vars)
+      (* if its not used later, we don't add any conflicts at this point *)
+      else ([])
+  )
+  | SAssign(var_id, _) -> (
+    (* if this is the first assignment, consider it the same as a decl *)
+    (* if the var is used later, add conflicts with all the live vars *)
+    let live_vars = CL.filter (fun dec_id -> MiscUtils.contains used_after dec_id) declared_before in
+    (* already declared -- nothing changes here. *)
+    if (MiscUtils.contains declared_before var_id)
+    then ([])
+    else (
+      if (MiscUtils.contains used_after var_id)
+        then (CL.map (fun live_var -> (var_id, live_var)) live_vars)
+        (* if its not used later, we don't add any conflicts at this point *)
+        else ([])  
     )
   )
+  | SIf(_, s1, s2) -> (
+    (* recurse in s1, s2 -- nothing changes about declared before or used after *)
+    let edges_from_s1 = conflict_graph declared_before used_after s1 in
+    let edges_from_s2 = conflict_graph declared_before used_after s2 in
+    edges_from_s1@edges_from_s2
+  )
+  | SMatch(_, bs) -> (
+    CL.map 
+      (fun (_, stmt) -> conflict_graph declared_before used_after stmt) 
+      bs
+    |> CL.flatten
+  )
+  | SSeq(s1, s2) -> (
+    let declared_in_s1 = assigned_vars s1 in
+    let used_in_s2 = read_vars s2 in
+    (* recurse in s1 and s2, updating the contexts. 
+      s1 needs to know everything used in s2.
+      s2 needs to know everything declared in s1.
+    *)
+    let s1_edges = conflict_graph (declared_before) (used_after@used_in_s2) s1 in
+    let s2_edges = conflict_graph (declared_before@declared_in_s1) used_after s2 in
+    s1_edges@s2_edges
+  )
+  (* no other statements add conflicts. Just update the declared before / used after sets *)
+  | _ -> []
 ;;
+
+
+let pairwise_conflict ds x y =
+  let res = match (Id.equal x y) with 
+    | true -> false
+    | false -> (
+    (* build a conflict graph for main, check if (x, y) or (y, x) are there. *)
+    let main_param_ids = (main ds).hdl_params |> CL.split |> snd |> CL.flatten  |> CL.split |> fst in 
+    let main_stmt = (main ds).main_body |> CL.hd in
+    let conflict_pairs = conflict_graph main_param_ids [] main_stmt |> MiscUtils.unique_list_of in
+    (MiscUtils.contains conflict_pairs (x, y)) || (MiscUtils.contains conflict_pairs (y, x))
+    )
+  in
+  print_endline@@"[pairwise_conflict] ("^(Id.to_string x)^" , "^(Id.to_string y)^" ) : "^(string_of_bool res);
+  res  
+
+;;
+
 
 (* are there any pairwise conflicts in vars? *)
 let string_of_ids ids = Caml.String.concat ", " (CL.map Id.to_string ids) ;; 
@@ -220,6 +309,24 @@ let merge_vars ds (vars: cid list) argty =
   ds
 ;;
 
+(* merge vars together into a single parameter variable.*)
+let merge_vars_into_param ds (vars: cid list) argty param_var_id = 
+  let vars = MiscUtils.list_remove vars (Cid.id param_var_id) in 
+  let tmp_id = param_var_id in 
+  let tmp_ty = argty in 
+  let tmp_e = var_sp (Cid.id tmp_id) tmp_ty Span.default in 
+  let ds = 
+    let merge_var ds var_cid = 
+      (* replace every expression using var with the new var *)
+      let ds = replace_evar ds var_cid tmp_e in 
+      (* replace every declaration and assignment to this var with an assignment to new var *)
+      let ds = replace_slocal ds (Cid.to_id var_cid) tmp_id in
+      ds
+    in 
+    CL.fold_left merge_var ds vars
+  in 
+  ds
+;;
 
 
 let cons_uniq_eq eq xs x = if List.mem xs x ~equal:eq then xs else x :: xs
@@ -536,13 +643,29 @@ let setup_nth_var_arg tds arr_id nth args argty =
     | 0 | 1 -> tds
     (* >= 2 vars -- we need to either merge the vars or make an input tmp *)
     | _ -> (
+      (* case: there is 1 parameter variable and no conflicts -- merge *)
+      (* case: more than 1 parameter variable -- make tmp *)
+      (* case: conflicts -- make tmp *)
+      if (any_pairs_conflict tds arg_ids)
+      then (create_memop_input_var tds arr_id nth argty)
+      else (
+        match (var_params tds arg_ids) with
+        (* case - no conflicts, 0 params - merge *)
+        | [] -> merge_vars tds args argty
+        (* 1 param -- merge into that param *)
+        | [param_var] -> merge_vars_into_param tds args argty param_var
+        (* multiple params -- make a new var *)
+        | _ -> create_memop_input_var tds arr_id nth argty
+      )
+(* 
+
       if ((any_pairs_conflict tds arg_ids) || (some_var_is_param tds arg_ids))
-      (* if there are any conflicts between the variables, or 
+      if there are any conflicts between the variables, or 
          one of the arguments is an event parameter, 
-         then we must make an input arg var *)
+         then we must make an input arg var
       then (create_memop_input_var tds arr_id nth argty)
       (* no conflicts --> we can just merge the variables *)
-      else (merge_vars tds args argty)
+      else (merge_vars tds args argty) *)
     )
 ;;
 
