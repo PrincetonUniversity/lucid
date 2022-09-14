@@ -66,7 +66,7 @@ endif
   let make_str =
     [%string
       "build: %{p4_fn} %{py_fn} %{c_fn}\n\
-       \t./libs/p4tapp.sh build %{p4_fn}\n\
+       \t./libs/p4tapp.sh build_quiet %{p4_fn}\n\
        hw:\n\
        \t./libs/p4tapp.sh hw %{p4_fn} ports_up\n\
        test:\n\
