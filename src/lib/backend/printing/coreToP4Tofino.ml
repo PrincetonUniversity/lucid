@@ -730,17 +730,23 @@ let translate_pat pat =
    A default statement is necessary in a table with 
    no rules. So we don't use it for now.
 *)
-let translate_branch (complete_branches, default_rule) 
+let translate_branch_call stmt =
+  match stmt.s with 
+  | SUnit({e=ECall(acn_id, _); _}) -> sunit (ecall acn_id [])
+  | _ -> error "[translate_branch] branch statement must be a method call to a labeled block, which represents an action"
+;;
+let translate_branch complete_branches 
     ((pats:C.pat list),(stmt:C.statement))
-    : ((T.pat list * T.statement) list * T.statement option) =    
+    : ((T.pat list * T.statement) list) =    
 
-  let translate_call stmt =
-    match stmt.s with 
-    | SUnit({e=ECall(acn_id, _); _}) -> sunit (ecall acn_id [])
-    | _ -> error "[translate_branch] branch statement must be a method call to a labeled block, which represents an action"
-  in 
-  complete_branches@[(List.map translate_pat pats, translate_call stmt)],
-  default_rule
+  complete_branches@[(List.map translate_pat pats, translate_branch_call stmt)]
+;;
+
+(* we use a default action when there's 1 branch with an empty pattern. *)
+let translate_default branches =
+  match branches with
+  | [([], call_stmt)] -> Some(translate_branch_call call_stmt)
+  | _ -> None
 ;;
 
 (* translate a match statement into a table *)
@@ -756,25 +762,28 @@ let generate_table renames (stage_pragma:pragma) (ignore_pragmas: (id * pragma) 
     let _, keys = translate_exps renames empty_prog_env exps in 
     let keys = List.map tern_key_of_exp keys in 
     let actions = List.map action_id_of_branch branches |> MiscUtils.unique_list_of in 
-
-    let tbl_call = sunit (ecall_table tid) in 
-    (* note: we don't use default rules because the compiler doesn't 
-             generate keyless tables. *)
-    let branches, default_opt = List.fold_left 
+    let default_opt = translate_default branches in
+    (* Tables with a default action have only 1 branch -- the default. 
+       So there are no rules by definition. *)
+    let rules = match default_opt with 
+    | Some _ -> []
+    | None -> List.fold_left 
       translate_branch
-      ([], None)
+      []
       branches
     in 
+
     let tbl_dec = 
       dtable 
         tid
         keys
         actions
-        branches
+        rules
         default_opt
         ((List.remove_assoc tid ignore_pragmas |> List.split |> snd;))
         (* (stage_pragma::(List.remove_assoc tid ignore_pragmas |> List.split |> snd;)) *)
     in
+    let tbl_call = sunit (ecall_table tid) in 
     (tbl_dec, tbl_call)
   | _ -> error "[generate_table] not a match statement!"
 ;;
