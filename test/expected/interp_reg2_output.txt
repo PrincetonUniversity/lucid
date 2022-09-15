@@ -1,4 +1,3 @@
-dpt: Parsing ...
 dpt: Auto-detected specification file examples/interp_tests/interp_reg2.json
 dpt: Simulating...
 dpt: Using random seed: 0
@@ -30,4 +29,3 @@ Switch 0 : {
  total events handled: 6
 
 }
-dpt: Done

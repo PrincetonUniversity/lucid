@@ -1,4 +1,3 @@
-dpt: Parsing ...
 dpt: Auto-detected specification file examples/interp_tests/NAT.json
 dpt: Simulating...
 dpt: Using random seed: 0
@@ -61,4 +60,3 @@ Switch 0 : {
  total events handled: 14
 
 }
-dpt: Done

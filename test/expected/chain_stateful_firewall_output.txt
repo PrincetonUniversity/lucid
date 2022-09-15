@@ -1,4 +1,3 @@
-dpt: Parsing ...
 dpt: Auto-detected specification file examples/interp_tests/chain_stateful_firewall.json
 dpt: Simulating...
 dpt: Using random seed: 0
@@ -89,4 +88,3 @@ Switch 2 : {
  total events handled: 5
 
 }
-dpt: Done
