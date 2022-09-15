@@ -59,20 +59,15 @@ def interactive_test(fullfile, args):
     outfile.close()
 
 
-for file in interactivefiles:
-    interactive_test(file, [])
+for file in interactivefiles: interactive_test(file, [])
 
-for file in interpfiles:
-    interp_test(file, [])
+for file in interpfiles: interp_test(file, [])
 
-for file in libraryfiles:
-    just_typecheck(librarydir, file)
+for file in libraryfiles: just_typecheck(librarydir, file)
 
-for file in regressionfiles:
-    just_typecheck(regressiondir, file)
+for file in regressionfiles: just_typecheck(regressiondir, file)
 
-for file in poplfiles:
-    just_typecheck(popldir, file)
+for file in poplfiles: just_typecheck(popldir, file)
 
 print("Errors:", errors)
 print("Diffs:", diffs)

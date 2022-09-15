@@ -25,6 +25,7 @@
    input
    integer
    span
+   profile
    printing
    corePrinting
    parser

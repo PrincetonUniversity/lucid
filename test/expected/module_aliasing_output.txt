@@ -1,4 +1,3 @@
-dpt: Parsing ...
 dpt: Auto-detected symbolic file examples/interp_tests/module_aliasing.symb
 dpt: Auto-detected specification file examples/interp_tests/module_aliasing.json
 dpt: Simulating...
@@ -21719,4 +21718,3 @@ Switch 0 : {
  total events handled: 21676
 
 }
-dpt: Done
