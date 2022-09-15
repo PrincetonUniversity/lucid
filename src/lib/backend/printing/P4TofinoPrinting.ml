@@ -64,12 +64,12 @@ let string_of_tys ts =
   separate_map (s'", ") string_of_ty ts
 
 let string_of_value v = match v with 
-  | VInt i -> str_of_int i
+  | VInt (i, None) -> (str_of_int i)
+  | VInt (i, Some(w)) -> (str_of_int w)^^(s'"w")^^(str_of_int i)
   | VBool b -> str_of_bool b
   | VStruct _ -> error "vstruct printing not implemented"
   | VString _ -> error "strings are not expected in the p4 program"
 ;;
-
 
 let rec string_of_expr e = match e with 
   | EVal v -> string_of_value v
@@ -133,7 +133,9 @@ and string_of_eop op args : PPrint.document =
     | Not, _ -> error "[string_of_eop] wrong args for op."
     | Cast, [new_wid; var] -> 
       let wid_int = match new_wid with 
-        | EVal(VInt(v)) -> v
+        (* we are casting to the width value, 
+           _not_ the width of the width value *)
+        | EVal(VInt(v, _)) -> v
         | _ -> error "first argument of cast op must be an int constant"
       in
      (!^"(")^^(string_of_ty (tint wid_int))^^(!^")")^^(string_of_expr var)
@@ -277,13 +279,13 @@ let string_of_sty sty =
 let rec string_of_decl dec = 
   match dec.d with
   | DReg{id=id; cellty=cellty; idxty=idxty; len=len; def=def;} -> 
-        let edef = match def with 
-          | None -> EVal(VInt 0)
-          | Some def -> def
+        let argstr = match def with 
+          | None -> (parens (string_of_exprs [len]))
+          | Some edef -> (parens (string_of_exprs [len; edef]))
         in
         s'"Register"
           ^^(angles (separate_map (s'",") string_of_ty [cellty; idxty]))
-          ^^(parens (string_of_exprs [len; edef]))
+          ^^argstr
           ^-^(string_of_id id)^^s'";"
   | DVar(id, ty, Some(expr)) -> 
     (string_of_ty ty)^-^(string_of_id id)^^s'"="^^(string_of_expr expr)^^s'";"

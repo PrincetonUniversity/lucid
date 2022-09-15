@@ -1,11 +1,16 @@
 (* Tofino backend pipeline. *)
 open TofinoCore
 
+let fail_report str = 
+  Console.show_message str ANSITerminal.Red "Tofino Checker"
+;;
+
 exception Error of string
 let error s = raise (Error s)
 
 
-let verbose = ref true
+let verbose = ref false
+let do_log = ref false
 
 let cprint_endline s =
   if (!verbose)
@@ -18,15 +23,38 @@ let cprint_prog label tds =
   cprint_endline label
 ;;
 
+(* statically analyze the program to see if we can 
+   compile it. *)
+let check_prog ds =
+    let checks = [EventAlignment.check] in
+    let pass = List.fold_left (fun pass check -> 
+        pass && (check ds) )
+     true
+     checks
+    in
+    if (pass <> true)
+    then (fail_report "some compatability checks failed. See above."; exit 1)
+    else ()
+;;
+
 let process_prog ds portspec build_dir = 
+    if (!do_log) then (
+        CoreCdg.start_logging ();
+        CoreDfg.start_logging ();
+    );
+
+    check_prog ds;
+    cprint_endline "starting transformations";
+    let ds = EliminateEventCombinators.process ds in
     (* 0. make sure handlers always have the same params as their events *)
     let ds = UnifyHandlerParams.rename_event_params ds in 
     let ds = UnifyHandlerParams.unify_event_and_handler_params ds in 
-    let ds = AlignEventParams.process ds in
+    (* let ds = AlignEventParams.process ds in *)
     let ds = EliminateExitEvents.process ds in 
     (* 1. inline event variables. *)
     let ds = InlineEventVars.inline ds in 
     (* 2. Translate the program into the tofinoCore ir, with a merged main handler *)
+    cprint_endline "translating to TofinoCore";
     let tds = tdecls_of_decls ds in 
     TofinoCore.dump_prog (!BackendLogging.irLogDir ^ "/initial.tofinocore.dpt") tds;
     cprint_prog "----------- initial tofinoCore program------- " tds;
@@ -50,8 +78,10 @@ let process_prog ds portspec build_dir =
     (**** instruction layout ****)
     (* 8. compute control flow graph for main handler *)
     let cfg = CoreCfg.cfg_of_main tds in 
+    CoreCfg.print_cfg ((!BackendLogging.graphLogDir)^"/cfg.dot") cfg;
     (* 9. compute control dependency graph *)
     let cdg = CoreCdg.to_control_dependency_graph cfg in        
+    CoreCfg.print_cfg ((!BackendLogging.graphLogDir)^"/cdg.dot") cfg;
     (* 10. compute data flow / dependency graph *)
     let dfg = CoreDfg.process cdg in 
     CoreDfg.print_dfg ((!BackendLogging.graphLogDir)^"/dfg.dot") dfg;
@@ -86,6 +116,7 @@ let process_prog ds portspec build_dir =
 
 (* compile the single handler of ds into a control block. *)
 let process_handler_block ds = 
+    check_prog ds;
     (* let config = load_config () in  *)
     let ds = UnifyHandlerParams.unify_event_and_handler_params ds in 
     let ds = InlineEventVars.inline ds in 

@@ -147,9 +147,13 @@ module Z3Helpers = struct
         let term = Z3Bool.mk_eq ctx z3_lhs z3_v in
         ctx, terms @ [term]
       )
-      | _, PWild -> 
-        (* output no equation, because there are no restrictions on the variable *)
-        ctx, terms
+      | var_exp, PWild -> 
+        let z3_vid = Z3Bit.mk_const_s ctx (cid_of_exp var_exp |> Cid.to_string) var_bw in 
+        let z3_v   = Z3Bit.mk_numeral   ctx (string_of_int 0) var_bw in 
+        let z3_m   = Z3Bit.mk_numeral   ctx (string_of_int 0) var_bw in 
+        let z3_lhs = Z3Bit.mk_and ctx z3_vid z3_m in 
+        let term = Z3Bool.mk_eq ctx z3_lhs z3_v in
+        ctx, terms @ [term]
     in
     let ctx, terms = CL.fold_left fold_f (ctx, []) m_exp in
     let eqn = Z3Bool.mk_and ctx terms in
@@ -167,14 +171,6 @@ module Z3Helpers = struct
   ;;
 
 
-  (* how do we treat a pattern q that has no 
-     fields? 
-      - well.. it is a wildcard. 
-
-  match event_id with 
-  |  -> { }
-
-   *)
   (* can p match after qs have all been checked? *)
   let is_pattern_matchable (p:pattern) (qs : pattern list) =  
     let ctx = mk_context ["model", "true"; "proof", "true"] in
@@ -524,7 +520,10 @@ let normalize_conditioned_rule cr =
         | Some pos -> 
           let res = and_patterns pat pos in 
           res
-        | None -> error "[refine_condition_with_pat] no positive clause?"
+        | None -> 
+          print_endline ("[normalize_conditioned_rule] input: "^(string_of_conditioned_rule cr));
+          error "[refine_condition_with_pat] no positive clause?"
+          (* the precondition doesn't have a feasible branch -- so neither does the generated one? *)
     in 
     { negs = new_negs; pos = new_pos; }
   in

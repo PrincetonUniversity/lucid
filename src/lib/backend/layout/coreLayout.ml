@@ -326,11 +326,16 @@ let stmts_of_pipe p =
 ;;
 
 
+(* hash units are used by hash calls and Sys.random calls *)
 let rec hashers_of_exp exp = 
   match exp.e with 
-  | EOp(_, es) 
-  | ECall(_, es) -> 
-    CL.map hashers_of_exp es |> CL.flatten
+  | EOp(_, es) -> CL.map hashers_of_exp es |> CL.flatten
+  | ECall(fcn_cid, es) -> (
+    match (Cid.names fcn_cid) with
+    | "Sys"::"random"::_ -> 
+      exp::(CL.map hashers_of_exp es |> CL.flatten)
+    | _ -> CL.map hashers_of_exp es |> CL.flatten
+  )
   | EHash(_, es) -> 
     exp::(CL.map hashers_of_exp es |> CL.flatten)
   | EFlood(e) -> hashers_of_exp e
@@ -343,9 +348,7 @@ let rec hashers_of_stmt stmt =
   | SLocal(_, _, exp)
   | SUnit(exp)
   | SGen(_, exp) 
-  | SRet(Some exp)
-  ->
-   (
+  | SRet(Some exp) -> (
     match hashers_of_exp exp with 
     | [] -> []
     | _ -> [stmt]
@@ -754,7 +757,7 @@ let rec schedule (arrmap:array_users_map) dfg pipeline scheduled_nodes unschedul
 
   let n_unscheduled = CL.length unscheduled_nodes in 
   (if (((n_unscheduled mod 10) = 0) && (n_failures = 0))
-  then (print_endline@@"statements left to lay out: "^(string_of_int n_unscheduled)^" # pipeline stages (so far): "^(CL.length pipeline.stages |> string_of_int)));
+  then (print_endline@@"statements left to lay out: "^(string_of_int n_unscheduled)^" # pipeline stages: "^(CL.length pipeline.stages |> string_of_int)));
   (* print_endline ("number of unscheduled vertices: "^(CL.length unscheduled_nodes |> string_of_int)); *)
   (* print_endline ("number of scheduled vertices: "^(CL.length scheduled_nodes |> string_of_int)); *)
   if ((n_unscheduled>0) &&  (n_unscheduled = n_failures))

@@ -96,8 +96,9 @@
    packageTofinoApp
    ioUtils
    TofinoPipeline
-   AlignEventParams
+   EventAlignment
    UnifyHandlerParams
+   EliminateEventCombinators
    EliminateExitEvents
    TofinoCore
    InlineEventVars

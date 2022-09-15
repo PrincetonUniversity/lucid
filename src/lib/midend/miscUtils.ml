@@ -34,6 +34,18 @@ let sum xs = CL.fold_left ( + ) 0 xs
 let cons_uniq xs x = if List.mem x xs then xs else x :: xs
 let unique_list_of xs = List.rev (List.fold_left cons_uniq [] xs)
 
+module Seq = Core.Sequence
+let seq_cons_unique eq xs x = 
+  let found = (Seq.mem ~equal:eq xs x) in
+  if found then xs else (Seq.append xs (Seq.singleton x))
+;;
+let unique_seq_of eq xs =
+  Seq.fold
+    xs
+    ~init:Seq.empty
+    ~f:(seq_cons_unique eq)
+;;
+
 let has_dup xs = 
   (xs |> unique_list_of |> CL.length) <> (xs |> CL.length)
 ;;

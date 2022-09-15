@@ -17,6 +17,7 @@ module CS = CoreSyntax
 open CoreToP4TofinoHeaders
 open P4TofinoPrinting
 
+let dbgstr_of_cids cids = List.map (Cid.to_string) cids |> String.concat ", ";;
 
 (*** Generate the ingress control block. ***)
 
@@ -91,6 +92,7 @@ let cell1_remote = id "cell1_remote" ;; (* written *)
 let cell2_remote = id "cell2_remote" ;;
 let ret_remote = id "ret_remote" ;; 
 let remote_pair_id = id "remote"
+let local_pair_id = id "local"
 
 let exp_of_cellid cell_id cell_ty = 
 CS.var_sp 
@@ -109,7 +111,8 @@ let translate_ty ty = match ty with
 let translate_value v =
   match v with 
   | CS.VBool(b) -> T.VBool(b)
-  | CS.VInt(z) -> T.VInt(Integer.to_int z)
+  | CS.VInt(z) -> vint (Integer.to_int z) (Some (Integer.size z))
+  (* | CS.VInt(z) -> vint (Integer.to_int z) None *)
   | _ -> error "[translate_value] values must be bools or ints"
 ;;
 
@@ -361,22 +364,23 @@ and translate_pairarray_memop_complex renames slot_ty cell_ty (args: exp list) (
       2. cell1_remote and cell2_remote are fields of that struct.
         *)
     (* update the remote cells, so that they are part of the remote var *)
-    let cell1_remote_cid = Cid.create_ids [remote_pair_id; cell1_remote] in  
-    let cell2_remote_cid = Cid.create_ids [remote_pair_id; cell2_remote] in  
+    let cell1_remote_cid = Cid.create_ids [remote_pair_id; id "lo"] in  
+    let cell2_remote_cid = Cid.create_ids [remote_pair_id; id "hi"] in  
 
     (* 1. add cell1 and cell2 args *)
-    let cell1_in_arg = exp_of_cellid (Cid.id cell1_local) cell_ty in 
-    let cell2_in_arg = exp_of_cellid (Cid.id cell2_local) cell_ty in 
-    let args = cell1_in_arg::cell2_in_arg::args in 
+    let cell1_in_field = exp_of_cellid (Cid.create_ids [local_pair_id; id "lo"]) cell_ty in
+    let cell2_in_field = exp_of_cellid (Cid.create_ids [local_pair_id; id "hi"]) cell_ty in
+    let args = cell1_in_field::cell2_in_field::args in 
     let param_ids = memop.mparams |> List.split |> fst |> List.map Cid.id in 
-    (* bind parameters *)
+    (* bind parameters to arguments *)
     let ctx = List.fold_left
       (fun ctx (param_id, arg) -> 
         bind ctx (param_id, arg))
       renames
       (List.combine param_ids args)
     in 
-    (* bind "cell1" and "cell2", which may appear in the return statement. *)
+    (* rename cell1 and cell2 to remote.lo and remote.hi 
+      bind "cell1" and "cell2", which may appear in the return statement. *)
     let ctx = List.fold_left
       (fun ctx (param_id, arg) -> 
         bind ctx (param_id, arg))
@@ -413,7 +417,7 @@ and translate_pairarray_memop_complex renames slot_ty cell_ty (args: exp list) (
     let cell_ty = translate_rty cell_ty in 
     let init_stmts = [
       (* copy the value of cell 1 and cell2 to a local variable *)
-      local remote_pair_id slot_ty (evar cell1_remote_cid)
+      local local_pair_id slot_ty (evar (Cid.id remote_pair_id))
       ]
     in     
     let statements = init_stmts@statements in
@@ -466,10 +470,10 @@ and translate_pairarray_call renames (memops:(Id.t * memop) list) fcn_id (args:C
   let reg_id =  reg |> Cid.to_id in 
   let reg_acn_id = Id.fresh_name ((fst reg_id)^"_regaction") in 
   let memop, args, cell_ty = match (string_of_fcncid fcn_id) with 
-    | "PairArray.update_complex" -> (
+    | "PairArray.update" -> (
       let  memop, arg1, arg2 = match args with
         | [_; _; memop; arg1; arg2; _] -> memop, arg1, arg2
-        | _ -> error "[translate_pairarray_call] unexpected arguments for array.update_complex"
+        | _ -> error "[translate_pairarray_call] unexpected arguments for array.update"
       in 
       let memop = List.assoc 
         (InterpHelpers.name_from_exp memop |> Cid.to_id )
@@ -491,8 +495,7 @@ and translate_pairarray_call renames (memops:(Id.t * memop) list) fcn_id (args:C
 and translate_sys_call fcn_id _ = 
   let e_ts = eop 
     (Slice) 
-    [evar (Cid.create ["ig_intr_md"; "ingress_mac_tstamp"]); 
-      eval_int 47; eval_int 16]
+    [eval_int 47; eval_int 16; evar (Cid.create ["ig_intr_md"; "ingress_mac_tstamp"])]
   in 
   let fcn_name = List.nth (Cid.names fcn_id) 1 in 
   match fcn_name with

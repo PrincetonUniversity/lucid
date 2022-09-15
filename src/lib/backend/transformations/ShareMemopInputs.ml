@@ -182,7 +182,7 @@ let pairwise_conflict ds x y =
     (MiscUtils.contains conflict_pairs (x, y)) || (MiscUtils.contains conflict_pairs (y, x))
     )
   in
-  print_endline@@"[pairwise_conflict] ("^(Id.to_string x)^" , "^(Id.to_string y)^" ) : "^(string_of_bool res);
+  (* print_endline@@"[pairwise_conflict] ("^(Id.to_string x)^" , "^(Id.to_string y)^" ) : "^(string_of_bool res); *)
   res  
 
 ;;
@@ -410,7 +410,7 @@ let memop_args_of_array_call exp =
       [arg1; arg2]
     | "Array.update_complex", [_; _; _; arg1; arg2; _] -> 
       [arg1; arg2]
-    | "PairArray.update", [_; _; _; arg1; arg2] -> 
+    | "PairArray.update", [_; _; _; arg1; arg2; _] -> 
       [arg1; arg2]
     | _ -> error "[posarg_of_arrcall] either the function is not an array accessor, or it has the wrong arguments"
   )

@@ -33,7 +33,32 @@ module FromOldBackend = struct
 
   type binary_rules = binary_rule list
 
+  let string_of_pattern pattern =
+    CL.map 
+      (
+        fun (cid, pat) -> (
+          (Cid.to_string cid)
+          ^" : "
+          ^(CorePrinting.pat_to_string pat)
+        )
+      )
+      pattern
+    |> Caml.String.concat ","
+  ;;
 
+  let string_of_patterns brs =
+    CL.map string_of_pattern brs |> Caml.String.concat "\n"
+  ;;
+
+  let string_of_binary_rule br = 
+    match br with
+    | BTrue(pattern) -> "BTrue("^(string_of_pattern pattern)^")"
+    | BFalse(pattern) -> "BFalse("^(string_of_pattern pattern)^")"
+  ;;
+
+  let string_of_binary_rules brs =
+    CL.map string_of_binary_rule brs |> Caml.String.concat "\n"
+  ;;
 
     let get_keys exp =
         vars_in_exp exp |> MiscUtils.unique_list_of
@@ -292,6 +317,7 @@ module Z3Bool = Boolean
 module Z3Int = Arithmetic.Integer
 module Z3Bit = BitVector
 
+
 let eqn_of_core_pat ctx (m_exp : pattern) =
   let var_bw = 32 in (* for now, use 32-bit vectors throughout *)
   (* one term for each field of the pattern *)
@@ -319,24 +345,43 @@ let eqn_of_core_pat ctx (m_exp : pattern) =
       let term = Z3Bool.mk_eq ctx z3_lhs z3_v in
       ctx, terms @ [term]
     )
-    | _, PWild -> 
-      (* output no equation, because there are no restrictions on the variable *)
-      ctx, terms
-  in
+    | vid, PWild -> 
+      (* output equation: var && 0 == 0. This says "var may be anything". 
+         It is important to add a negatable constraint for checking feasibility 
+         of matching rules in sequence. *)
+      let z3_vid = Z3Bit.mk_const_s ctx (Cid.to_string vid) var_bw in 
+      let z3_v   = Z3Bit.mk_numeral   ctx (string_of_int 0) var_bw in 
+      let z3_m   = Z3Bit.mk_numeral   ctx (string_of_int 0) var_bw in 
+      let z3_lhs = Z3Bit.mk_and ctx z3_vid z3_m in 
+      let term = Z3Bool.mk_eq ctx z3_lhs z3_v in
+      (* print_endline ("encoded "^(Cid.to_string vid)^"= wild"); *)
+      ctx, terms @ [term]  in
   let ctx, terms = CL.fold_left fold_f (ctx, []) m_exp in
   let eqn = Z3Bool.mk_and ctx terms in
   ctx, eqn
 ;;
 
 let is_core_pat_still_feasible (pat : pattern) (preds : pattern list) =
-  match preds with
+(*   print_endline ("[is_core_pat_still_feasible]");
+  print_endline ("----");
+  print_endline ("pattern:");
+  print_endline (string_of_pattern pat);
+  print_endline ("previous patterns:");
+  print_endline (string_of_patterns preds);
+  print_endline ("----"); *)
+  let res = match preds with
   | [] -> true
   | _ ->
     let ctx = mk_context ["model", "true"; "proof", "true"] in
+    (* encode current rule as equation *)
     let ctx, pat_eqn = eqn_of_core_pat ctx pat in
+    (* encode previous rules as equation *)
     let _, pred_eqns = CL.split (CL.map (eqn_of_core_pat ctx) preds) in
-    let preds_eqn = Z3Bool.mk_and ctx pred_eqns in
+    (* the previous rules, overall, are an or *)
+    let preds_eqn = Z3Bool.mk_or ctx pred_eqns in
+    (* we are interested in something that doesn't match any previous rule *)
     let not_preds_eqn = Z3Bool.mk_not ctx preds_eqn in
+    (* but matches the current rule *)
     let intersect_eqn = Z3Bool.mk_and ctx [not_preds_eqn; pat_eqn] in
     let solver = Solver.mk_simple_solver ctx in
     Solver.add solver [intersect_eqn];
@@ -347,6 +392,9 @@ let is_core_pat_still_feasible (pat : pattern) (preds : pattern list) =
     | UNKNOWN ->
       Printf.printf "unknown\n";
       error "unknown sat...")
+  in
+  (* print_endline ("RESULT: "^(string_of_bool res)); *)
+  res
 ;;
 
 
@@ -368,8 +416,7 @@ let is_core_pat_still_feasible (pat : pattern) (preds : pattern list) =
     let fold_if_reachable preds rule =
       match is_rule_matchable preds rule with
       | true -> preds @ [rule]
-      | false ->
-        preds
+      | false -> preds
     in
     CL.fold_left fold_if_reachable [] rules
   ;;
@@ -436,11 +483,19 @@ let match_of_if exp s1 s2 =
         and every BFalse rule is a branch where the exp ecaluates to false
      *)
     let rules = FromOldBackend.from_if_core exp in 
+(*     print_endline ("rules: ");
+    print_endline ("----");
+    FromOldBackend.string_of_binary_rules rules |> print_endline;
+    print_endline ("----"); *)
+
     (* get keys *)
     let key_exps = evars_in_exp exp |> ShareMemopInputs.unique_list_of_eq CoreSyntax.equiv_exp in 
     (* construct branches from rules and keys *)
     let branches = CL.map (binary_rule_to_branch s1 s2) rules in 
-    SMatch(key_exps, branches)
+    let res = SMatch(key_exps, branches) in
+    (* print_endline ("RESULT:"); *)
+    (* print_endline (CorePrinting.statement_to_string (statement res)); *)
+    res
 ;;
 
 let rec process tds = 

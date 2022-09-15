@@ -14,6 +14,13 @@ open CoreSyntax
 open MatchAlgebra
 open CoreCfg
 
+(* logging *)
+module DBG = BackendLogging
+let outc = ref None
+let dprint_endline = ref DBG.no_printf
+let start_logging () = DBG.start_mlog __FILE__ outc dprint_endline
+
+
 
 (* a node is a statement and a condition that 
    must hold for it to be executed *)
@@ -199,6 +206,13 @@ let is_writer usemap cs id =
 ;;
 
 
+let string_of_dcons dconstr = match dconstr with 
+  | DRW -> "read-write"
+  | DWR -> "write-read"
+  | DWW -> "write-write"
+  | DNone -> "NONE"
+;;
+
 (* get dependency edges from s --> t in ts of 
    type dconstr as defined by s_var_getter and t_checker *)
 let get_dependencies dconstr s_var_getter t_checker (s:vertex_stmt) (ts:vertex_stmt list) =   
@@ -214,9 +228,16 @@ let get_dependencies dconstr s_var_getter t_checker (s:vertex_stmt) (ts:vertex_s
     in 
     CL.fold_left update_for_var [] s_varids
   in 
-  CL.map
+  !dprint_endline@@"[get_dependencies "^(string_of_dcons dconstr)^"]";
+  !dprint_endline@@"s:"^(CoreCfg.summarystr_of_stmt s.stmt true);
+  !dprint_endline@@"ts:";
+  List.iter (fun t -> !dprint_endline@@"DEPENDEE:"^(CoreCfg.summarystr_of_stmt t.stmt true)) dependent_ts; 
+  !dprint_endline "---------";
+  let res = CL.map
     (fun desc -> (s, dconstr, desc))
     (MiscUtils.unique_list_of dependent_ts)
+  in
+  res
 ;;
 (* read, write *)
 let get_drws usemap v descs =
@@ -232,20 +253,20 @@ let get_dwws usemap v descs =
 ;;
 
 let print_usemap usemap =
-  print_endline ("----read map----");
+  !dprint_endline ("----read map----");
   let ids = IdMap.keys usemap.reads in 
   BatEnum.iter (fun id -> 
-    print_endline ("------------");
-    print_endline("id: "^(Id.to_string id));
+    !dprint_endline ("------------");
+    !dprint_endline("id: "^(Id.to_string id));
     List.iter (fun v -> 
-      print_endline ("----");
-      print_endline (CorePrinting.stmt_to_string v.stmt);
-      print_endline ("----");
+      !dprint_endline ("----");
+      !dprint_endline (CorePrinting.stmt_to_string v.stmt);
+      !dprint_endline ("----");
       )
       (IdMap.find id usemap.reads)
   )
   ids;
-  print_endline ("------------");
+  !dprint_endline ("------------");
 ;;
 
 let process cfg = 
@@ -265,7 +286,7 @@ let process cfg =
     }
   in 
   let usemap = Cfg.fold_vertex update_usemap cfg empty_usemap in 
-  (* print_usemap usemap; *)
+  print_usemap usemap;
   (* exit 1; *)
   (* walk through the nodes in a cfg. 
       for each node: 

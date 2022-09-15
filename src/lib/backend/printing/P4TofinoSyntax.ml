@@ -18,7 +18,7 @@ and ty =
     | TAuto
 
 and value = 
-    | VInt of int
+    | VInt of int * (int option)
     | VBool of bool    
     | VStruct of id * value list
     | VString of string (* for control plane programs *)
@@ -58,6 +58,8 @@ and expr =
      can represent things like parse state transitions, 
      which never have arguments and don't get ()'s.*)
   | EList of expr list
+
+
 
 and args = expr list
 
@@ -141,7 +143,7 @@ let id = Id.create
 let cid s = Cid.create (String.split_on_char '.' s)
 ;;
 
-let vint i = VInt i
+let vint i w = VInt (i, w)
 let tint i = TInt(i)
 let tstruct sid = TStruct sid
 let tbool = TBool
@@ -155,7 +157,7 @@ let ejump label =
   ECall(EVar(label), None)
 
 let evar cid = EVar(cid)
-let eval_int i = EVal(VInt(i))
+let eval_int i = EVal(VInt(i, None))
 
 let elist es = EList es
 
