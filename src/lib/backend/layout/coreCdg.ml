@@ -280,7 +280,7 @@ let vertices_in_normal_match_form g =
 
                     (* there is no hit branch on this precondition... how does that happen? *)
                     let hit_branch = match match_cond.pos with
-                        | None -> error "no hit branch on a precondition. Double check that this is possible."
+                        | None -> [] (* error "no hit branch on a precondition. Double check that this is possible." *)
                             (* Note: a precondition can have no hit. Its just a branch that can never 
                                     be reached in the program. If a precondition has no hit, 
                                     then the match representation of the table also has no hit. 
