@@ -165,7 +165,7 @@ let encode_constraint ctx constr =
 ;;
 
 let encode_constraints ctx constraints =
-  List.map (encode_constraint ctx) constraints
+  List.map (encode_constraint ctx) (prune_constraints constraints)
 ;;
 
 (* For each list, make sure
@@ -216,15 +216,14 @@ let check_sat_encoded ctx encoded_constraints =
   let vars = ensure_wellformed ctx in
   (* try multiple logics with timeouts from 100ms to 10s *)
   let logics =
-    [ "QF_UF"
+    [ "QF_UFIDL"
+    ; "QF_UF"
     ; "QF_RDL"
     ; "QF_IDL"
-    ; "QF_UFIDL"
     ; "QF_LRA"
     ; "QF_LIA"
     ; "QF_UFLIA"
-    ; "QF_UFLRA"
-    ; "QF_AX"
+    ; "QF_UFLRA" (* ; "QF_AX" *)
     ; "QF_AUFLIA"
     ; "QF_BV"
     ; "QF_AUFBV"
@@ -292,7 +291,7 @@ let check_sat constraints =
     @@ "Checking satisfiability of "
     ^ Printing.list_to_string
         Printing.constraint_to_string
-        (prune_constraints constraints);
+        (prune_constraints ~ignore_contradictions:true constraints);
   let ctx = new_context () in
   let encoded = encode_constraints ctx constraints in
   let ret = check_sat_encoded ctx encoded in
@@ -315,7 +314,7 @@ let find_max constraints eff1 eff2 =
            (Printing.effect_to_string eff2)
            (Printing.list_to_string
               Printing.constraint_to_string
-              (prune_constraints constraints));
+              (prune_constraints ~ignore_contradictions:true constraints));
     let ctx = new_context () in
     let encoded_constraints = encode_constraints ctx constraints in
     let encoded_1_2 =
@@ -346,10 +345,10 @@ let check_implies constrs1 constrs2 =
          "Checking constraints %s imply %s"
          (Printing.list_to_string
             Printing.constraint_to_string
-            (prune_constraints constrs1))
+            (prune_constraints ~ignore_contradictions:true constrs1))
          (Printing.list_to_string
             Printing.constraint_to_string
-            (prune_constraints constrs2));
+            (prune_constraints ~ignore_contradictions:true constrs2));
   let ctx = new_context () in
   let negate = function
     | CLeq (e1, e2) -> CLeq (FSucc e2, e1)

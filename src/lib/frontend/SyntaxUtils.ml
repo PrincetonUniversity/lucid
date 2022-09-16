@@ -186,9 +186,11 @@ let rec equiv_effect ?(qvars_wild = false) e1 e2 =
   match e1, e2 with
   | FZero, FZero -> true
   | FSucc e1', FSucc e2' | FProj e1', FProj e2' -> equiv_effect e1' e2'
+  | FIndex (id1, e1'), FIndex (id2, e2') ->
+    Id.equal id1 id2 && equiv_effect e1' e2'
   | FVar tqv, e | e, FVar tqv ->
     FTQVar.equiv_tqvar ~qvars_wild equiv_effect tqv e
-  | _ -> false
+  | (FZero | FSucc _ | FProj _ | FIndex _), _ -> false
 ;;
 
 let equiv_constraints lst1 lst2 =
@@ -396,7 +398,7 @@ let memop_body_to_stmt memop_body =
   | MBComplex b -> complex_body_to_stmt b
 ;;
 
-let constraint_is_tautology = function
+let simplify_constraint = function
   | CLeq (e1, e2) ->
     if equiv_effect e1 e2 || e1 = FZero
     then Some true
@@ -405,15 +407,20 @@ let constraint_is_tautology = function
       Option.map (equiv_effect e2) (max_effect e1 e2)
 ;;
 
-(* Removes tautologies. Might be useful to have it also handle contradictions,
-   but it's also useful to leave them in for easier debugging. *)
-let prune_constraints constraints =
-  List.filter_map
-    (fun c ->
-      match constraint_is_tautology c with
-      | None -> Some c
-      | Some true -> None
-      | Some false -> Some c
-      (* Some (CLeq (FSucc FZero, FZero)) *))
-    constraints
+(* Removes tautologies, and either ignores contradictions (for debugging)
+   or replaces the entire thing with false if it finds any. *)
+let prune_constraints ?(ignore_contradictions = false) constraints =
+  let rec aux acc cs =
+    match cs with
+    | [] -> acc
+    | hd :: tl ->
+      (match simplify_constraint hd with
+       | None -> aux (hd :: acc) tl
+       | Some true -> aux acc tl
+       | Some false ->
+         if ignore_contradictions
+         then aux (hd :: acc) tl
+         else [CLeq (FSucc FZero, FZero)])
+  in
+  aux [] constraints |> List.rev
 ;;
