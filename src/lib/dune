@@ -96,7 +96,9 @@
    miscUtils
    packageTofinoApp
    ioUtils
+   TofinoProfiling
    TofinoPipeline
+   DependencyProfiling
    EventAlignment
    UnifyHandlerParams
    EliminateEventCombinators
