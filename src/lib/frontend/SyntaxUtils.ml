@@ -148,8 +148,8 @@ let rec equiv_size ?(qvars_wild = false) s1 s2 =
     && n2 <= n1
     && List.for_all
          (function
-           | IVar (QVar _) -> true
-           | _ -> false)
+          | IVar (QVar _) -> true
+          | _ -> false)
          vs
   | IVar tqv, s | s, IVar tqv -> STQVar.equiv_tqvar ~qvars_wild equiv_size tqv s
   | _ -> false
@@ -174,7 +174,7 @@ let try_subtract_sizes s1 s2 =
        then Some (IConst (n1 - n2))
        else Some (ISum (new_sizes, n1 - n2))
      with
-    | Failure _ -> None)
+     | Failure _ -> None)
   | ISum (sizes, n), s2 when List.mem s2 sizes ->
     Some (ISum (List.remove sizes s2, n))
   | s1, s2 when equiv_size s1 s2 -> Some (IConst 0)
@@ -310,12 +310,11 @@ let default_expression ty =
     match TyTQVar.strip_links rty with
     | TInt size -> eint (Z.of_int 32) (Some size)
     | TBool -> value_to_exp (vbool false)
-    | TVector (raw_ty, size) ->
-      begin
-        match size with
-        | IConst n -> vector_sp (List.init n (fun _ -> aux raw_ty)) Span.default
-        | _ -> comp_sp (aux raw_ty) (Id.create "_") size Span.default
-      end
+    | TVector (raw_ty, size) -> begin
+      match size with
+      | IConst n -> vector_sp (List.init n (fun _ -> aux raw_ty)) Span.default
+      | _ -> comp_sp (aux raw_ty) (Id.create "_") size Span.default
+    end
     | TRecord lst ->
       record_sp (List.map (fun (s, raw_ty) -> s, aux raw_ty) lst) Span.default
     | _ ->
@@ -395,4 +394,26 @@ let memop_body_to_stmt memop_body =
   | MBIf (e1, e2, e3) ->
     sifte e1 (statement (SRet (Some e2))) (statement (SRet (Some e3)))
   | MBComplex b -> complex_body_to_stmt b
+;;
+
+let constraint_is_tautology = function
+  | CLeq (e1, e2) ->
+    if equiv_effect e1 e2 || e1 = FZero
+    then Some true
+    else
+      (* Compute max of e1, e2; tautology if we get e2, contradiction if we get e1 *)
+      Option.map (equiv_effect e2) (max_effect e1 e2)
+;;
+
+(* Removes tautologies. Might be useful to have it also handle contradictions,
+   but it's also useful to leave them in for easier debugging. *)
+let prune_constraints constraints =
+  List.filter_map
+    (fun c ->
+      match constraint_is_tautology c with
+      | None -> Some c
+      | Some true -> None
+      | Some false -> Some c
+      (* Some (CLeq (FSucc FZero, FZero)) *))
+    constraints
 ;;
