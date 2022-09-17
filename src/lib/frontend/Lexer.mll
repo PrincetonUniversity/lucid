@@ -73,6 +73,7 @@ rule token = parse
   | "size_to_int"     { SIZECAST (position lexbuf) }
   | "symbolic"        { SYMBOLIC (position lexbuf) }
   | "flood"           { FLOOD (position lexbuf) }
+  | "spec"            { SPEC (position lexbuf) }
   | id as s           { ID (position lexbuf, Id.create s) }
   | "'"(id as s)      { QID (position lexbuf, Id.create s) }
   | num as n          { NUM (position lexbuf, Z.of_string n) }
@@ -112,6 +113,13 @@ rule token = parse
   | "."               { DOT (position lexbuf) }
   | "|"               { PIPE (position lexbuf) }
   | "->"              { ARROW (position lexbuf) }
+  | "@"               { BINDING (position lexbuf) }
+  | "\\*"             { STAR (position lexbuf) }
+  | "\"\""            { EMPTYSTRING (position lexbuf)}
+  | "\\0"             { EMPTYSET (position lexbuf)}
+  | "\\|"             { REGEXPIPE (position lexbuf)}
+  | "\\&"             { REGEXAND (position lexbuf)}
+  | "\\+"             { REGEXOR (position lexbuf)}
   | wspace            { token lexbuf }
   | '\n'              { incr_linenum lexbuf; token lexbuf}
   | str as s          { STRING (position lexbuf, extract_string s) }

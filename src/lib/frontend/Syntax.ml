@@ -55,6 +55,7 @@ and raw_ty =
   | TRecord of (string * raw_ty) list
   | TVector of raw_ty * size
   | TTuple of raw_ty list
+  | TSpec
 
 and func_ty =
   { arg_tys : tys
@@ -221,6 +222,24 @@ and memop_body =
   | MBIf of exp * exp * exp
   | MBComplex of complex_body
 
+
+(*Spec regexes*)
+and espec = 
+  | ESEmptySet
+  | ESEmptyStr
+  | ESLetter of exp * exp * exp
+  | ESBinding of exp * exp * event_spec
+  | ESConcat of event_spec * event_spec
+  | ESClosure of event_spec
+  | ESOr of event_spec * event_spec
+  | ESAnd of event_spec * event_spec
+
+and event_spec = 
+  {
+    espec : espec
+    ; espec_span : sp
+  }
+
 (* declarations *)
 and d =
   | DSize of id * size option
@@ -236,6 +255,7 @@ and d =
   | DConstr of id * ty * params * exp
   | DModule of id * interface * decls
   | DModuleAlias of id * exp * cid * cid
+  | DSpec of id * exp list * exp * event_spec
 
 (* name, return type, args & body *)
 and decl =
@@ -385,6 +405,8 @@ let fun_sp id rty cs p body span = decl_sp (DFun (id, rty, cs, (p, body))) span
 let memop_sp id p body span = decl_sp (DMemop (id, p, body)) span
 let duty_sp id sizes rty span = decl_sp (DUserTy (id, sizes, rty)) span
 
+let dspec_sp id alphabet exp event_spec span = decl_sp (DSpec (id, alphabet, exp, event_spec)) span
+
 let dconstr_sp id ty params exp span =
   decl_sp (DConstr (id, ty, params, exp)) span
 ;;
@@ -441,3 +463,17 @@ let inevent_sp id cspecs params span =
 ;;
 
 let inmodule_sp id intf span = spec_sp (InModule (id, intf)) span
+
+
+(*spec regexes*)
+let event_spec espec = { espec; espec_span = Span.default }
+let eventspec_sp espec span = {espec ; espec_span = span}
+let empty_set_sp span = eventspec_sp ESEmptySet span
+let empty_string_sp span = eventspec_sp ESEmptyStr span
+let letter_sp letter varname pred span = eventspec_sp (ESLetter (letter, varname, pred)) span
+let binding_sp letter name sub span = eventspec_sp (ESBinding (letter, name, sub)) span
+let concat_sp suba subb span = eventspec_sp (ESConcat (suba, subb)) span
+let or_sp suba subb span = eventspec_sp (ESOr (suba, subb)) span
+let and_sp suba subb span = eventspec_sp (ESAnd (suba, subb)) span
+let closure_sp sub span = eventspec_sp (ESClosure sub) span
+

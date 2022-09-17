@@ -379,6 +379,13 @@ let event_sort_to_string sort =
   | EExit -> "exit event"
   | EBackground -> "event"
 ;;
+let event_spec_to_string es = 
+  Printf.sprintf 
+    "TODO: EVENT SPEC TO STRING"
+    (*(id_to_string (fst es))
+    (list_to_string exp_to_string (snd es))*)
+;;
+
 
 let rec interface_spec_to_string spec =
   match spec.ispec with
@@ -420,6 +427,8 @@ and interface_to_string specs =
   "{\n" ^ concat_map "\n\n" interface_spec_to_string specs ^ "\n}\n"
 
 and memop_to_string body = stmt_to_string (memop_body_to_stmt body)
+
+
 
 and d_to_string d =
   match d with
@@ -502,6 +511,11 @@ and d_to_string d =
       (cid_to_string cid1)
       (exp_to_string e)
       (cid_to_string cid2)
+  | DSpec (id, al, size, es) ->
+    Printf.sprintf
+      "spec %s event %s"
+      (id_to_string id)
+      (event_spec_to_string es)
 
 and decl_to_string d = d_to_string d.d
 and decls_to_string ds = concat_map "\n\n" decl_to_string ds
