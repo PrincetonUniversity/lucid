@@ -72,10 +72,12 @@ module ArgParse = struct
     let set_symb s = Cmdline.cfg.symb_file <- s in
     let set_ports s = args_ref := { !args_ref with portspec = Some(s) } in
     let set_profile_cmd s = args_ref := {!args_ref with profile_cmd = Some(s)} in
+    let set_build_dir s = args_ref :=  {!args_ref with builddir=s;} in 
     let speclist =
       [ ( "--spec"
         , Arg.String set_spec
         , "Path to the interpreter specification file" )
+      ; "-o", Arg.String set_build_dir, "Output build directory"
       ; "--ports", Arg.String set_ports, "Path to the ports specification file"
       ; "--symb", Arg.String set_symb, "Path to the symbolic specification file"
       ; "--nocallopt", Arg.Unit MidendPipeline.set_no_call_optimize, "Disable call optimization" 
@@ -92,6 +94,8 @@ module ArgParse = struct
     (* interpret positional args as named *)
     let args =
       match !args_ref.aargs with
+      | [dptfn;] ->
+        { !args_ref with dptfn; aargs = [] }
       | [dptfn; builddir] ->
         { !args_ref with dptfn; builddir; aargs = [] }
       | _ -> error usage
