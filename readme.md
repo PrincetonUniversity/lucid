@@ -1,6 +1,8 @@
 # The Lucid / DPT (data plane threads) language
 
-Lucid is a language for programming the Intel Tofino, and eventually other data plane platforms. Compared to P4, Lucid provides higher-level abstractions, a specialized type system, a relatively fast software interpreter, and an optimizing compiler. All of these features are designed to make it easier to prototype and develop complex data plane applications that compile to real hardware. 
+Lucid is a language for programming the Intel Tofino, and eventually other data plane platforms. Compared to P4, Lucid provides higher-level abstractions, a specialized type system, a relatively fast (and semantically accurate) software interpreter, and an optimizing compiler. All of these features are designed to make it easier to prototype and develop complex data plane applications that compile to real hardware. 
+
+Lucid is especially useful for programs that feature *complex, user-defined data structures* (e.g., data-plane writeable cuckoo hash tables, approximate data structures), *packet recirculation*, or *integrated network control*.
 
 ## Getting Started
 
@@ -54,7 +56,6 @@ libs           logs           lucid.cpp      lucid.p4       lucid.py       makef
 For more information about Lucid, play around with the examples (in `/examples`) or check out the tutorials that introduce the Lucid [language](docs/tutorial_language.md), [interpreter](docs/tutorial_interpreter.md), and [p4-tofino compiler](docs/tutorial_compiler.md).
 
 **Warning: the tutorials are currently (9/22) being updated. The P4-tofino compiler tutorial is particularly out of date.**
-
 
 
 ## More details
