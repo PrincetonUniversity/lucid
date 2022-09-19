@@ -1,24 +1,63 @@
 # The Lucid / DPT (data plane threads) language
 
-Lucid is a high-level language for programming reconfigurable datapath switch ASICs, currently the Intel Tofino. Compared to P4, Lucid provides higher-level abstractions and a specialized type system that make it much easier to develop complex applications that compile to real hardware.
+Lucid is a language for programming the Intel Tofino, and eventually other data plane platforms. Compared to P4, Lucid provides higher-level abstractions, a specialized type system, a relatively fast software interpreter, and an optimizing compiler. All of these features are designed to make it easier to prototype and develop complex data plane applications that compile to real hardware. 
 
-Lucid's **event-driven abstractions** make it easier to write programs that interleave stateful packet processing with network control *and* compile to real switch ASICs. So, for example, with about 200 lines of Lucid code, you can implement a cuckoo hash table that can install new entries from the data plane. This is possible in P4, but would take thousands of lines of code. 
+## Getting Started
 
-Lucid's **domain-specific type system** catches bugs in programs related to persistent state in data plane programs by applying syntactic checks early in compilation. This lets Lucid's compiler give developers useful  feedback, such as error messages that point to specific lines of source code, when developers accidentally write code that violates fundamental architectural constraints of the underlying hardware. 
+The easiest way to get started with Lucid is to use the Lucid docker image. 
 
-Lucid also has other quality-of-life features for data plane developers. For example, an interpreter for fast prototyping and an optimizing compiler that encodes many of the tricks that we have learned over the years to write efficient Tofino code.
+First, install Docker:
+  - if you are on a laptop/desktop, just install the docker desktop app: [docker desktop](https://www.docker.com/products/docker-desktop/)
+  - if you are on a server... you can probably figure out how to install docker
 
+Now, just use the `lucid.sh` to automatically pull the docker image (about 400MB) and run the Lucid compiler or interpreter.
 
-## Using Lucid
+### Run the interpreter
 
-To get started with Lucid, first follow the [setup guide](docs/setup.md) and then go through the tutorials that introduce the [language](docs/tutorial_language.md), [interpreter](docs/tutorial_interpreter.md), and [p4-tofino compiler](docs/tutorial_compiler.md).
+Run the interpreter with `./lucid.sh interpret <lucid program name>`. The interpreter type checks your program, then runs it in a simulated network defined by a specification file. 
+Try it out with the tutorial program, `histogram.dpt`:
+```
+% ./lucid.sh interpret examples/tutorial/histogram.dpt 
+running command:docker run --rm -it -v /Users/jsonch/Desktop/gits/lucid/examples/tutorial/histogram.dpt:/app/inputs/histogram.dpt -v /Users/jsonch/Desktop/gits/lucid/examples/tutorial/histogram.json:/app/inputs/histogram.json jsonch/lucid:lucid /bin/sh -c "./dpt /app/inputs/histogram.dpt --spec /app/inputs/histogram.json"
+dpt: -------Checking well-formedness---------
+# ... type checker output elided ...
+dpt: Simulating...
+# ... interpreter output elided ...
+t=32400: Handling event report(3) at switch 0, port 196
+t=40000: Handling entry event ip_in(128,5,2,768,0) at switch 0, port 0
+dpt: Final State:
+# ... interpreter output elided ...
+ entry events handled: 5
+ total events handled: 9
+
+}
+``` 
+
+### Run the compiler
+
+Run the compiler with `./lucid.sh compile <lucid program name>`.
+
+The compiler translates a Lucid program into P4, optimizes it, and generates a build directory with a P4 program, Python control plane, and helper scripts to make deployment easier. 
+
+Try it out with a simple application that bounces packets back to their ingress port:
+
+```
+% ./lucid.sh compile examples/tofino_apps/src/reflector.dpt                            
+compiler: Compilation to P4 started...
+...
+% ls reflector_build                                       
+libs           logs           lucid.cpp      lucid.p4       lucid.py       makefile       num_stages.txt scripts        src
+```
+
+### What to do next
+
+For more information about Lucid, play around with the examples (in `/examples`) or check out the tutorials that introduce the Lucid [language](docs/tutorial_language.md), [interpreter](docs/tutorial_interpreter.md), and [p4-tofino compiler](docs/tutorial_compiler.md).
+
+**Warning: the tutorials are currently (9/22) being updated. The P4-tofino compiler tutorial is particularly out of date.**
+
 
 
 ## More details
 For more information about Lucid, check out our paper and talk at [SIGCOMM 2021](https://conferences.sigcomm.org/sigcomm/2021/program.html)
 
 The SIGCOMM 2021 artifact is in the ``sigcomm21_artifact`` branch.
-
-
-## Limitations
-The current Lucid-to-Tofino compiler is a rewrite of an initial prototype and doesn't yet support all the language features (e.g., events as variable in a program and event-scheduling combinators). There are also likely to be bugs in the compiler. The Lucid interpreter, however, is feature complete and much more reliable.
