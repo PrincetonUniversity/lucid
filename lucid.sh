@@ -93,7 +93,8 @@ interpret_cmd ()
     # infer based on program name.
     if [[ $SPEC == "" ]]
     then 
-        SPEC="$(basename ${PROG} .dpt).json"
+        PROG_ABS=$(to_absolute_path "$PROG")
+        SPEC="$(dirname ${PROG_ABS})/$(basename ${PROG_ABS} .dpt).json"
     fi
     # add spec if it exists.
     if   [ -f "$SPEC" ]
@@ -265,5 +266,5 @@ case $1 in
 esac
 
 
-echo "COMMAND:$CMD"
+echo "running command:$CMD"
 eval "$CMD"
