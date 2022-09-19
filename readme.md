@@ -6,7 +6,7 @@ Lucid is especially useful for programs that feature *complex, user-defined data
 
 ## Getting Started
 
-The easiest way to get started with Lucid is to use the Lucid docker image. 
+The easiest way to use Lucid is with the Lucid docker image. 
 
 First, install Docker:
   - if you are on a laptop/desktop, just install the docker desktop app: [docker desktop](https://www.docker.com/products/docker-desktop/)
