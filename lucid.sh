@@ -81,10 +81,18 @@ interpret_cmd ()
     # prepare prog: mount and add arg
     if [[ $PROG != "" ]]
     then 
+        # share the parent of the program, because we need includes
         local=$(to_absolute_path "$PROG")
-        remote="/app/inputs/$(basename ${PROG})"
-        DOCKER_CMD="$DOCKER_CMD -v $local:$remote"
+        local_dir=$(dirname "$local")
+        remote_dir="/app/inputs/$(basename ${local_dir})"
+        remote="$remote_dir/$(basename ${PROG})"
+        # remote="/app/inputs/$(basename ${PROG})"
+        DOCKER_CMD="$DOCKER_CMD -v $local_dir:$remote_dir"
         ARGS="$ARGS $remote"
+        # local=$(to_absolute_path "$PROG")
+        # remote="/app/inputs/$(basename ${PROG})"
+        # DOCKER_CMD="$DOCKER_CMD -v $local:$remote"
+        # ARGS="$ARGS $remote"
     else
         echo "ERROR: please provide a .dpt file as input."
     fi
@@ -157,9 +165,13 @@ compile_cmd ()
     # prepare prog: mount and add arg
     if [[ $PROG != "" ]]
     then 
+        # share the parent of the program, because we need includes
         local=$(to_absolute_path "$PROG")
-        remote="/app/inputs/$(basename ${PROG})"
-        DOCKER_CMD="$DOCKER_CMD -v $local:$remote"
+        local_dir=$(dirname "$local")
+        remote_dir="/app/inputs/$(basename ${local_dir})"
+        remote="$remote_dir/$(basename ${PROG})"
+        # remote="/app/inputs/$(basename ${PROG})"
+        DOCKER_CMD="$DOCKER_CMD -v $local_dir:$remote_dir"
         ARGS="$ARGS $remote"
     else
         echo "ERROR: please provide a .dpt file as input."
