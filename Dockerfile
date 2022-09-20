@@ -31,7 +31,7 @@ ADD dune-workspace .
 
 # build lucid 
 RUN sudo chown -R opam:nogroup . && \
-    opam config exec make
+    opam config exec make all
 # save list of system dependencies
 RUN opam depext -ln dpt > depexts
     #| egrep -o "\-\s.*" | sed "s/- //" > depexts
@@ -42,11 +42,11 @@ RUN cd ../; cp "`pwd`/`find .opam -name 'libz3.so'`" ./lucid
 # --- docker image to run lucid ---
 FROM alpine AS production_lucid
 WORKDIR /app
-COPY --from=builder /home/opam/lucid/dpt dpt
-COPY --from=builder /home/opam/lucid/dptc dptc
-COPY --from=builder /home/opam/lucid/dptf dptf
-ADD  tofinoLibs ./tofinoLibs
-
 COPY --from=builder /home/opam/lucid/depexts depexts
 RUN cat depexts | xargs apk --update add && rm -rf /var/cache/apk/*
 COPY --from=builder /home/opam/lucid/libz3.so /usr/lib/libz3.so
+
+COPY --from=builder /home/opam/lucid/dpt dpt
+COPY --from=builder /home/opam/lucid/dptc dptc
+COPY --from=builder /home/opam/lucid/bin bin
+ADD  tofinoLibs ./tofinoLibs
