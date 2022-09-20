@@ -12,16 +12,22 @@
 # docker image tag lucid jsonch/lucid:lucid
 # docker push jsonch/lucid:lucid
 
-# --- docker image to build lucid ---
-FROM ocaml/opam:alpine AS builder
+# --- docker image with lucid dependencies ---
+# this should only be rebuilt when dependencies change, 
+# and tagged 
+FROM jsonch/lucid:lucid_dev AS lucid_dev
 MAINTAINER John Sonchack
-WORKDIR lucid
 
 # install lucid dependencies
 ADD dpt.opam .
 RUN opam pin add -yn dpt . && \
     opam depext dpt && \
     opam install --deps-only dpt
+
+# --- docker image to build lucid ---
+# this should be rebuilt whenever lucid changes
+FROM lucid_dev AS builder
+MAINTAINER John Sonchack
 
 # add source files
 ADD src ./src
@@ -38,8 +44,9 @@ RUN opam depext -ln dpt > depexts
 # copy z3 to local dir
 RUN cd ../; cp "`pwd`/`find .opam -name 'libz3.so'`" ./lucid
 
-
 # --- docker image to run lucid ---
+# this should be rebuild whenever lucid changes
+# TODO: pin this to a specific version of alpine
 FROM alpine AS production_lucid
 WORKDIR /app
 COPY --from=builder /home/opam/lucid/depexts depexts

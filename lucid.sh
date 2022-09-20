@@ -311,22 +311,7 @@ compile_cmd ()
 # --- MAIN ---
 ensure_docker
 
-case $1 in
-    # rebuild the docker image from local source, 
-    # e.g., after a compiler update
-    rebuild)
-        shift 
-        check_lucid_dir
-        CMD="docker build -t $DOCKER_IMAGE ."
-        eval "$CMD"
-        ;;
-    # rebuild and push to docker hub -- will only work for admins
-    rebuild_and_push)
-        shift 
-        check_lucid_dir
-        CMD="docker build -t $DOCKER_IMAGE .  && docker push $DOCKER_IMAGE"
-        eval "$CMD"
-        ;;        
+case $1 in    
     # get latest from docker hub
     pull)
         shift
@@ -345,8 +330,31 @@ case $1 in
         shift
         compile_cmd "$@"
         ;;
+    # rebuild lucid -- run when you change lucid's source code.
+    rebuild)
+        shift 
+        check_lucid_dir
+        CMD="docker build -t $DOCKER_IMAGE ."
+        eval "$CMD"
+        ;;
+    # (admin only) rebuild a new lucid binary and push to docker hub.
+    rebuild_and_push)
+        shift 
+        check_lucid_dir
+        CMD="docker build -t $DOCKER_IMAGE .  && docker push $DOCKER_IMAGE"
+        eval "$CMD"
+        ;;        
+    # (admin only) rebuild the lucid dev image and push to public repo -- 
+    # this is for when lucid's dependencies have changed on the master branch (rare)
+    rebuild_and_push_dev)
+        shift 
+        check_lucid_dir
+        eval "docker build --target lucid_dev --tag jsonch/lucid:lucid_dev . && docker push jsonch/lucid:lucid_dev"
+        ;;
     *)
         echo "usage: ./lucid.sh <interpret | compile> <arguments to lucid interpreter or compiler>"
         exit 1;
         ;;
+
+
 esac
