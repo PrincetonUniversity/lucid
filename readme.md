@@ -65,7 +65,7 @@ libs           logs           lucid.cpp      lucid.p4       lucid.py       makef
 
 ### What to do next
 
-For more information about Lucid, play around with the examples (in `/examples`) or check out the tutorials that introduce the Lucid [language](docs/tutorial_language.md), [interpreter](docs/tutorial_interpreter.md), and [p4-tofino compiler](docs/tutorial_compiler.md).
+Ultimately, Lucid is simple language -- by design. The best way to get a feel for Lucid is to play around with the examples (in `/examples`) or check out the tutorials that introduce the Lucid [language](docs/tutorial_language.md), [interpreter](docs/tutorial_interpreter.md), and [p4-tofino compiler](docs/tutorial_compiler.md).
 
 **Warning: the tutorials are currently (9/22) being updated. The P4-tofino compiler tutorial is particularly out of date.**
 
