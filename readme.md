@@ -6,17 +6,29 @@ Lucid is especially useful for programs that feature *complex, user-defined data
 
 ## Getting Started
 
-The easiest way to use Lucid is with the Lucid docker image. 
+The easiest way to use Lucid is with the Lucid docker image.
 
-First, install Docker:
+**1. Install docker**
   - if you are on a laptop/desktop, just install the docker desktop app: [docker desktop](https://www.docker.com/products/docker-desktop/)
   - if you are on a server... you can probably figure out how to install docker
 
-Now, just use the `lucid.sh` to automatically pull the docker image (about 400MB) and run the Lucid compiler or interpreter.
+**2. Clone this repository and pull the lucid_production docker container**
+
+Run this in your terminal:
+```
+git clone https://github.com/PrincetonUniversity/lucid/
+cd lucid
+./lucid.sh pull
+```
+
+This will download about 400MB of data and should take < 5 minutes. 
+
+That's it! Once the pull is done, you are ready to run the Lucid interpreter and P4 compiler inside the `lucid_production` docker container. The `lucid.sh` script makes this easy.
 
 ### Run the interpreter
 
-Run the interpreter with `./lucid.sh interpret <lucid program name>`. The interpreter type checks your program, then runs it in a simulated network defined by a specification file. 
+Run the interpreter (in the lucid_production docker container) with `./lucid.sh interpret <lucid program name>`. The interpreter type checks your program, then runs it in a simulated network defined by a specification file. 
+
 Try it out with the tutorial program, `histogram.dpt`:
 ```
 % ./lucid.sh interpret examples/tutorial/histogram.dpt 
@@ -37,9 +49,9 @@ dpt: Final State:
 
 ### Run the compiler
 
-Run the compiler with `./lucid.sh compile <lucid program name>`.
+Finally, to compile Lucid programs to P4, run the compiler with `./lucid.sh compile <lucid program name>`.
 
-The compiler translates a Lucid program into P4, optimizes it, and generates a build directory with a P4 program, Python control plane, and helper scripts to make deployment easier. 
+The compiler translates a Lucid program into P4, optimizes it, and produces a build directory with a P4 program, Python control plane, and helper scripts to make deployment easier. 
 
 Try it out with a simple application that bounces packets back to their ingress port:
 
