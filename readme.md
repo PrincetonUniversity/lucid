@@ -27,7 +27,7 @@ That's it! Once the pull is done, you are ready to run the Lucid interpreter and
 
 ### Run the interpreter
 
-Run the interpreter (in the lucid_production docker container) with `./lucid.sh interpret <lucid program name>`. The interpreter type checks your program, then runs it in a simulated network defined by a specification file. 
+Run the interpreter with `./lucid.sh interpret <lucid program name>`. The interpreter type checks your program, then runs it in a simulated network defined by a specification file. 
 
 Try it out with the tutorial program, `histogram.dpt`:
 ```
