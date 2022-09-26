@@ -671,6 +671,152 @@ let and_conditions c1 c2 =
 ;;
 
 
+(*** use match algebra to merge match statements ***)
+
+type pattern_branch = {
+  pattern : (exp * pat) list;
+  bstmt    : statement;
+}
+
+type pattern_branches = pattern_branch list ;;
+
+let pattern_branches_of_match m: pattern_branches = 
+  match m.s with 
+  | SMatch(es, bs) -> (
+    let pattern_branch_of_branch (pats, stmt) =
+      { pattern = List.combine es pats;
+        bstmt = stmt; }
+    in 
+    List.map pattern_branch_of_branch bs
+  )
+  | SNoop -> []
+  | _ -> error "[pattern_branches_of_match] not a match statement (or noop)"
+;;
+
+let keys_of_pattern_branches pbs =
+  let foo = CL.map (fun pb -> pb.pattern |> CL.split |> fst) pbs
+  |> CL.flatten 
+  in
+  unique_exp_list foo
+;;
+
+let cases_of_pattern_branches pbs =  
+  CL.map 
+    (fun pb -> 
+      (CL.split pb.pattern |> snd, pb.bstmt)
+    )
+    pbs
+;;
+
+(* match statement of a pattern branches list. *)
+let smatch_of_pattern_branches pbs =
+  smatch 
+    (keys_of_pattern_branches pbs)
+    (cases_of_pattern_branches pbs)
+;;
+
+
+let can_match_after = Z3Helpers.is_pattern_matchable
+;;
+
+
+(* compute the cross product branch 
+   of (b1, b2) and add it into bs 
+    The cross product branch is simply: 
+      b1 && b2 --> (s1; s2)
+      b1 --> s1
+      b2 --> s2
+    Each of these branches is only added if it is 
+    matchable after all rules added before it.*) 
+(* find the rules that are the intersection of b1 and b2, if any. *)
+let cross_product bs (b1, b2) = 
+  (* b1 and b2 may not have the same fields.*)
+  let patterns_of_bs bs = List.map (fun b -> b.pattern) bs in 
+  let intersect_pattern = and_patterns b1.pattern b2.pattern in 
+  (* add the intersection branch after previous intersect branches, if its 
+     possible for the intersection branch to match after them. *)
+  match intersect_pattern with 
+    | Some (pattern) -> (
+      match (can_match_after pattern (patterns_of_bs bs)) with 
+      | true -> 
+        let bstmt = sseq_sp b1.bstmt b2.bstmt Span.default in
+        bs@[{pattern; bstmt;}]
+      | false -> bs
+    )
+    | None -> 
+      (* the intersection between the two statements cannot 
+         match anything.  *)
+      (* print_endline ("[cross_product] no intersection pattern."); *)
+      bs
+;;
+
+let align_keys pb1 pb2 =
+  let keys = keys_of_pattern_branches (pb1@pb2) in 
+  CL.map 
+    (fun pb -> {pb with pattern=extend_pat keys pb.pattern;})
+    pb1
+  ,CL.map 
+    (fun pb -> {pb with pattern=extend_pat keys pb.pattern;})
+    pb2
+
+;;
+
+
+(* delete the pattern branches that cannot be matched in a list *)
+let delete_unreachable bs =
+  let patterns_of_bs bs = List.map (fun b -> b.pattern) bs in 
+  let res = List.fold_left
+    (fun bs b -> 
+      if (can_match_after b.pattern (patterns_of_bs bs))
+      then (bs@[b])
+      else (bs)
+    )
+    []
+    bs
+  in 
+  res
+;;
+
+let combine_pattern_branches bs1 bs2 = 
+  (* first, make sure bs1 and bs2 are over the same fields. *)
+  let bs1, bs2 = align_keys bs1 bs2 in 
+  match (bs1, bs2) with 
+    | [], [] -> []
+    | _, [] -> bs1
+    | [], _ -> bs2
+    | _, _ -> 
+      let m2_integrate bs b2 =     
+        let m1_integrate bs b1 = 
+          cross_product bs (b1, b2)
+        in 
+        List.fold_left m1_integrate bs bs1
+      in 
+      let intersect_rules = List.fold_left m2_integrate [] bs2 in 
+      (* the original rules must come after _all_ the intersect rules, 
+         else they may block some from matching. Also, some rules 
+         may not be reachable anymore. *)
+      delete_unreachable (intersect_rules@bs1@bs2)
+;;
+
+(* combine two match statements into a pattern branch *)
+let combine_matches m1 m2 = 
+  let bs1 = pattern_branches_of_match m1 in
+  let bs2 = pattern_branches_of_match m2 in 
+  combine_pattern_branches bs1 bs2
+;;
+
+let merge_matches m1 m2 = 
+  combine_pattern_branches
+    (pattern_branches_of_match m1)
+    (pattern_branches_of_match m2)
+  |> smatch_of_pattern_branches
+;;
+
+(* update pattern branch list bs1, folding in the match statement m2 *)
+let fold_match_into_pattern_branches bs1 m2 =
+  let bs2 = pattern_branches_of_match m2 in 
+  combine_pattern_branches bs1 bs2
+;;
 
 
 

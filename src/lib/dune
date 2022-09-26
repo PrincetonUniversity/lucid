@@ -114,6 +114,7 @@
    CoreCfg
    CoreCdg
    CoreDfg
+   CoreResources
    CoreLayout
    ActionForm
    Dedup

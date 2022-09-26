@@ -55,7 +55,8 @@ module CfgDot = Graph.Graphviz.Dot (CfgDotConfig)
 module DfgDotConfig = struct
   include Dfg
   let graph_attributes _ = []
-  let edge_attributes (_, _, _) = []
+  let edge_attributes (_, (d:CoreDfg.data_dependency), _) = 
+    [`Label (string_of_data_dependency d)]
   let default_edge_attributes _ = []
   let get_subgraph _ = None
   let vertex_attributes _ = [`Shape `Box]
@@ -115,6 +116,24 @@ let dump_dep_graphs tds output_dir =
   dump_symbol_table_json Dfg.fold_vertex ddg_symbols_fn dfg;
   ()
  ;;
+
+let dump_layout_data tds output_dir =
+  let _, _ = tds, output_dir in 
+  (* dump everything needed to do layout externally. *)
+  (* 
+    1. data flow graph, nodes are statements and edges are data dependencies
+    2. node annotations. for each node: 
+      1. local match guard variables (i.e., expressions in match statement)
+      2. array variables
+      3. alu type (alu, salu, halu)
+    3. edge annotations. for each edge: 
+      1. dependency type (rw, ww, wr)
+    4. variable definitions
+      1. arrays: type (single | double), cell width (bits), number of cells
+      2. locals: width (bits)
+  *)
+  ()
+;;
 
 let profile ds output_dir = 
   let _, _ = ds, output_dir in

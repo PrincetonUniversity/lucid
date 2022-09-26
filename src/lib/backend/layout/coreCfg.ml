@@ -98,6 +98,8 @@ let str_of_cond_stmt cs =
     (summarystr_of_stmt cs.stmt cs.solitary)
 ;;
 
+
+(* node and edge helpers functions *)
 let id_of_v (cs:vertex_stmt) =
   cs.stmt.sspan.spid |> string_of_int
 ;;

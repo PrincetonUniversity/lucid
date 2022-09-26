@@ -9,250 +9,25 @@ open TofinoCore
 open MatchAlgebra
 open CoreCfg
 open CoreDfg
-
-(*** helpers that belong in a prior module (coredfg?) ***)
-
-
-let string_of_fcncid cid = 
-    Caml.String.concat "." @@ Cid.names cid
-;;
-
-
-let arrays_of_exp exp = 
-  match exp.e with 
-  | ECall(fid, args) -> (
-    match (string_of_fcncid fid) with 
-      | "Array.get"| "Array.getm" | "Array.set"
-      | "Array.setm" | "Array.update" 
-      | "Array.update_complex" | "PairArray.update" -> 
-      [List.hd args |> InterpHelpers.name_from_exp]
-      | _ -> []
-  )
-  | _ -> []
-;;
-
-let rec arrays_of_stmt stmt : Cid.t list = 
-  match stmt.s with
-  | SLocal(_, _, exp)
-  | SAssign(_, exp)
-  | SUnit(exp) -> arrays_of_exp exp
-  | SIf(exp, s1, s2) -> 
-      (arrays_of_exp exp)
-      @(arrays_of_stmt s1)
-      @(arrays_of_stmt s2)
-  | SMatch(es, bs) ->
-    (CL.map arrays_of_exp es |> CL.flatten)
-    @(CL.map 
-        (fun (_, stmt) -> arrays_of_stmt stmt)
-        bs
-      |> CL.flatten
-    )
-  | SSeq(s1, s2) -> 
-    (arrays_of_stmt s1)@(arrays_of_stmt s2)
-  | _ -> []
-;;
-
-let arrays_of_cond_stmt v = 
-  arrays_of_stmt v.stmt
-;;
-
-
-(**** branch representation simple match-statement merging ****)
-
-type pattern_branch = {
-  pattern : (exp * pat) list;
-  stmt    : statement;
-}
-
-type pattern_branches = pattern_branch list ;;
-
-let cid_from_exp (ex : exp) : Cid.t =
-  match ex.e with
-  | EVar n -> n
-  | _ -> error "could not evaluate expression to a name"
-;;
-
-
-let pattern_branches_of_match m: pattern_branches = 
-  match m.s with 
-  | SMatch(es, bs) -> (
-(*     print_endline ("es:"^( (List.map CorePrinting.exp_to_string es) |> String.concat "," ));
-    print_endline ("pats:"^(CorePrinting.comma_sep CorePrinting.pat_to_string (List.hd bs |> fst))); *)
-    let pattern_branch_of_branch (pats, stmt) =
-      { pattern = List.combine es pats;
-        stmt = stmt; }
-    in 
-    List.map pattern_branch_of_branch bs
-  )
-  | _ -> error "[pattern_branches_of_match] not a match statement."
-;;
-
-let keys_of_pattern_branches pbs =
-  let foo = CL.map (fun pb -> pb.pattern |> CL.split |> fst) pbs
-  |> CL.flatten 
-  in
-  MatchAlgebra.unique_exp_list foo
-;;
-
-let cases_of_pattern_branches pbs =  
-  CL.map 
-    (fun pb -> 
-      (CL.split pb.pattern |> snd, pb.stmt)
-    )
-    pbs
-;;
-
-(* match statement of a pattern branches list. *)
-let smatch_of_pattern_branches pbs =
-  smatch 
-    (keys_of_pattern_branches pbs)
-    (cases_of_pattern_branches pbs)
-;;
-
-
-let can_match_after = MatchAlgebra.Z3Helpers.is_pattern_matchable
-;;
-
-(*** 
-
-BUG: when there's a no-op rule, there's an unmatchable pattern and it somehow messes everything up...
-
-
-
-***)
-
-let string_of_patts_something rs = 
-(smatch_of_pattern_branches rs
-  |> CorePrinting.statement_to_string)
-;;
-(* compute the cross product branch 
-   of (b1, b2) and add it into bs 
-    The cross product branch is simply: 
-      b1 && b2 --> (s1; s2)
-      b1 --> s1
-      b2 --> s2
-    Each of these branches is only added if it is 
-    matchable after all rules added before it.*) 
-(* find the rules that are the intersection of b1 and b2, if any. *)
-let cross_product bs (b1, b2) = 
-  (* b1 and b2 may not have the same fields.*)
-(*   print_endline ("[cross_product] bs:");
-  string_of_patts_something bs |> print_endline;
-  print_endline ("[cross_product] b1:");
-  string_of_patts_something [b1] |> print_endline;
-  print_endline ("[cross_product] b2:");
-  string_of_patts_something [b2] |> print_endline; *)
-
-  let patterns_of_bs bs = List.map (fun b -> b.pattern) bs in 
-  let intersect_pattern = MatchAlgebra.and_patterns b1.pattern b2.pattern in 
-  (* add the intersection branch after previous intersect branches, if its 
-     possible for the intersection branch to match after them. *)
-  let bs = match intersect_pattern with 
-    | Some (pattern) -> (
-
-      match (can_match_after pattern (patterns_of_bs bs)) with 
-      | true -> 
-        let stmt = sseq_sp b1.stmt b2.stmt Span.default in
-        bs@[{pattern; stmt;}]
-      | false -> bs
-    )
-    | None -> 
-      (* the intersection between the two statements cannot 
-         match anything.  *)
-      (* print_endline ("[cross_product] no intersection pattern."); *)
-      bs
-  in 
-  let res = bs in 
-  (* add b1 and b2, if they can match after new bs. *)
-(*   let update_bs bs b =
-    match (can_match_after b.pattern (patterns_of_bs bs)) with 
-    | true -> bs@[b]
-    | false -> bs
-  in 
-  let res = List.fold_left (update_bs) bs [b1; b2] in
- *)
-  (* print_endline("[cross_product] result:\n"^(string_of_patts_something res)); *)
-  res
-;;
-
-let align_keys pb1 pb2 =
-  let keys = keys_of_pattern_branches (pb1@pb2) in 
-  CL.map 
-    (fun pb -> {pb with pattern=extend_pat keys pb.pattern;})
-    pb1
-  ,CL.map 
-    (fun pb -> {pb with pattern=extend_pat keys pb.pattern;})
-    pb2
-
-;;
-
-
-(* delete the pattern branches that cannot be matched in a list *)
-let delete_unreachable bs =
-  let patterns_of_bs bs = List.map (fun b -> b.pattern) bs in 
-  let res = List.fold_left
-    (fun bs b -> 
-      if (can_match_after b.pattern (patterns_of_bs bs))
-      then (bs@[b])
-      else (bs)
-    )
-    []
-    bs
-  in 
-  res
-
-;;
-
-let combine_pattern_branches bs1 bs2 = 
-  (* first, make sure bs1 and bs2 are over the same fields. *)
-(*   print_endline ("[combine_pattern_branches] bs1_PRE:");
-  print_endline (string_of_patts_something bs1);
-  print_endline ("[combine_pattern_branches] bs2_PRE:");
-  print_endline (string_of_patts_something bs2); *)
-
-  let bs1, bs2 = align_keys bs1 bs2 in 
-(*   print_endline ("[combine_pattern_branches] bs1:");
-  print_endline (string_of_patts_something bs1);
-  print_endline ("[combine_pattern_branches] bs2:");
-  print_endline (string_of_patts_something bs2); *)
-  match (bs1, bs2) with 
-    | [], [] -> []
-    | _, [] -> bs1
-    | [], _ -> bs2
-    | _, _ -> 
-      let m2_integrate bs b2 =     
-        let m1_integrate bs b1 = 
-          cross_product bs (b1, b2)
-        in 
-        List.fold_left m1_integrate bs bs1
-      in 
-      let intersect_rules = List.fold_left m2_integrate [] bs2 in 
-      (* the original rules must come after _all_ the intersect rules, 
-         else they may block some from matching. Also, some rules 
-         may not be reachable anymore. *)
-      delete_unreachable (intersect_rules@bs1@bs2)
-;;
-
-(* combine two match statements into a pattern branch *)
-let combine_matches m1 m2 = 
-  let bs1 = pattern_branches_of_match m1 in
-  let bs2 = pattern_branches_of_match m2 in 
-  combine_pattern_branches bs1 bs2
-;;
-
-(* update pattern branch list bs1, folding in the match statement m2 *)
-let fold_match_into_pattern_branches bs1 m2 =
-  let bs2 = pattern_branches_of_match m2 in 
-  combine_pattern_branches bs1 bs2
-;;
-
+open CoreResources
 
 (**** A simple model of the hardware ****)
 
+(* 
+TODO next: 
+  - test updated algorithm
+  - check per-stage sram and tcam constraints
+  - can we dump everything we need for layout to python, and do it there?
+*)
+
+type rule = pattern_branch
+
+(* a table is just a match statement annotated with 
+   a list of source statements (for debugging)
+   and a "solitary" flag, which means no more can be added to it. *)
 type table = {
   keys  : exp list;
-  rules : pattern_branches;
-  arrays : Cid.t list;
+  branches : branch list; (* the "rules" of the table *)
   sources : CoreCfg.vertex_stmt list;
   solitary : bool; 
 }
@@ -265,10 +40,29 @@ type pipeline = {
   stages : stage list;
 }
 
-let empty_table = {keys =[]; rules=[]; arrays = []; solitary = false; sources = [];}
+(* initializers *)
+let empty_table = {keys =[]; branches = []; solitary = false; sources = [];}
 let empty_stage = {tables = [];}
 let empty_pipeline = {stages = [];}
 
+let table_is_empty table =
+  match table.sources with
+  | [] -> true
+  | _ -> false
+;;
+
+(* deconstructors *)
+let stmt_of_table t = smatch t.keys t.branches
+  (* smatch_of_pattern_branches t.rules; *)
+;;
+let stmt_of_stage s =  
+  InterpHelpers.fold_stmts (List.map stmt_of_table s.tables) 
+;;
+let stmts_of_pipe p = 
+  CL.map stmt_of_stage p.stages
+;;
+
+(* printers *)
 let summarystr_of_stage s = ("number of tables: "^((CL.length s.tables) |> string_of_int))
 
 let summarystr_of_pipeline p = 
@@ -278,14 +72,13 @@ let summarystr_of_pipeline p =
   p.stages)
   |> String.concat "\n"
 
-
 let string_of_rules rs = (smatch_of_pattern_branches rs
   |> CorePrinting.statement_to_string)
 
 let string_of_table t =
-  "//rules in table: "^(CL.length t.rules |> string_of_int)^"\n"^
-  "//source statements in table: "^(CL.length t.sources |> string_of_int)^"\n"^
-  (string_of_rules t.rules)
+  "// #branches in table: "^(CL.length t.branches |> string_of_int)^"\n"^
+  "// #source statements in table: "^(CL.length t.sources |> string_of_int)^"\n"^
+  (CorePrinting.statement_to_string (stmt_of_table t))
 ;;
 
 let string_of_stage s =
@@ -302,98 +95,28 @@ let string_of_pipe p =
     )
 ;;
 
+(* accessors *)
+let statements_of_table table = 
+  CL.map (fun (_, bstmt) -> bstmt) table.branches |> MatchAlgebra.unique_stmt_list
+
 let vertices_of_table (t:table) = t.sources
 let vertices_of_stage s = CL.map vertices_of_table s.tables |> CL.flatten
 let vertices_of_stages ss = CL.map vertices_of_stage ss |> CL.flatten
 let vertices_of_pipe  p = vertices_of_stages p.stages
+;;
 
-let arrays_of_table (t:table) = t.arrays
+(*** resource constraints ***)
+let arrays_of_vertex v = arrays_of_stmt v.stmt
+let arrays_of_table (t:table) = arrays_of_stmt (stmt_of_table t)
 let arrays_of_stage s = CL.map arrays_of_table s.tables |> CL.flatten |> (MatchAlgebra.unique_list_of_eq Cid.equal)
 
-(* a table is a match statement *)
-let stmt_of_table t =
-  smatch_of_pattern_branches t.rules;
-;;
-
-(* a stage is a sequence statement of tables *)
-let stmt_of_stage s =  
-  InterpHelpers.fold_stmts (List.map stmt_of_table s.tables) 
-;;
-
-(* a pipeline is a list of stage statements *)
-let stmts_of_pipe p = 
-  CL.map stmt_of_stage p.stages
-;;
-
-
-(* hash units are used by hash calls and Sys.random calls *)
-let rec hashers_of_exp exp = 
-  match exp.e with 
-  | EOp(_, es) -> CL.map hashers_of_exp es |> CL.flatten
-  | ECall(fcn_cid, es) -> (
-    match (Cid.names fcn_cid) with
-    | "Sys"::"random"::_ -> 
-      exp::(CL.map hashers_of_exp es |> CL.flatten)
-    | _ -> CL.map hashers_of_exp es |> CL.flatten
-  )
-  | EHash(_, es) -> 
-    exp::(CL.map hashers_of_exp es |> CL.flatten)
-  | EFlood(e) -> hashers_of_exp e
-  | _ -> []
-
-
-let rec hashers_of_stmt stmt = 
-  match stmt.s with
-  | SAssign(_, exp)
-  | SLocal(_, _, exp)
-  | SUnit(exp)
-  | SGen(_, exp) 
-  | SRet(Some exp) -> (
-    match hashers_of_exp exp with 
-    | [] -> []
-    | _ -> [stmt]
-  )
-  | SPrintf(_, exps) -> (
-    match CL.map hashers_of_exp exps |> CL.flatten with 
-    | [] -> []
-    | _ -> [stmt]
-  )
-  | SIf(exp, s1, s2) -> (
-    match hashers_of_exp exp with 
-    | [] -> (hashers_of_stmt s1)@(hashers_of_stmt s2)
-    | _ -> stmt::(hashers_of_stmt s1)@(hashers_of_stmt s2)
-  )
-  | SRet(None)
-  | SNoop -> []
-  | SSeq(s1, s2) -> (hashers_of_stmt s1)@(hashers_of_stmt s2)
-  | SMatch(es, bs) -> (
-    let es_has_hasher = match CL.map hashers_of_exp es with
-      | [] -> false
-      | _ -> true
-    in 
-    let hashers_of_branch (_, stmt) = hashers_of_stmt stmt in
-    (match es_has_hasher with | true -> [stmt] | false -> [])@(CL.map hashers_of_branch bs |> CL.flatten)
-  )
-
 let hashers_of_table table =
-  let hashers_of_pattern_branch (pb:pattern_branch) = hashers_of_stmt pb.stmt in 
-  CL.map hashers_of_pattern_branch table.rules |> CL.flatten |> unique_stmt_list
+  hashers_of_stmt (stmt_of_table table) |> unique_stmt_list
 ;;
 
 let hashers_of_stage stage =
   CL.map hashers_of_table stage.tables |> CL.flatten |> unique_stmt_list
 ;;
-
-(* let hashers_of_table (t:table)  *)
-
-
-
-let preds_of_vertices dfg vs =
-  CL.map (Dfg.pred dfg) vs |> CL.flatten |> MiscUtils.unique_list_of
-;;
-
-let statements_of_table table = 
-  CL.map (fun (pb:pattern_branch) -> pb.stmt) table.rules |> MatchAlgebra.unique_stmt_list
 
 let keywidth_of_table table = 
   let width_of_exp exp =
@@ -405,75 +128,6 @@ let keywidth_of_table table =
   CL.fold_left (+) 0 (CL.map width_of_exp table.keys)
 ;;
 
-
-let table_is_empty table =
-  match table.sources with
-  | [] -> true
-  | _ -> false
-;;
-
-(*** core placement method: 
-    merge a match table in the DFG into a table ***)
-let merge_bundle_into_table cond_stmts table =
-  (* merge a bundle of conditional statements that 
-     touch the same array into a table 
-     It would be nicer to fold the conditional statements into the table 
-     one at a time, but we can't do that because we need to be 
-     able to merge user match statements that are in the same 
-     bundle (i.e., touch the same register array).
-   *)
-  (* start by merging all the conditional statements in the bundle together *)
-  let new_pbs, contains_usermatch = 
-    let folder (pbs, contains_usermatch) (vertex_stmt:vertex_stmt) = 
-      let pbs = fold_match_into_pattern_branches pbs vertex_stmt.stmt in 
-(*       print_endline ("[merge_bundle_into_table.folder] folding in the statement:");
-      print_endline (CorePrinting.statement_to_string vertex_stmt.stmt);
-      print_endline ("[merge_bundle_into_table.folder] fold_match_into_pattern_branches result ");
-      print_endline (string_of_rules pbs);
-      print_endline ("[merge_bundle_into_table.folder] ---------------------- "); *)
-      let contains_usermatch = contains_usermatch || vertex_stmt.solitary in 
-      (* replaced -- old merge logic and usermatch stuff, before it was a dfg of tables *)
-      (* let new_pbs, new_is_usermatch = pattern_branches_of_cond_stmt vertex_stmt in *)
-      (* let pbs = combine_pattern_branches pbs new_pbs in *)
-      (* let contains_usermatch = contains_usermatch || new_is_usermatch in  *)
-      (pbs, contains_usermatch)
-    in 
-    CL.fold_left folder ([], false) cond_stmts
-  in 
-  let can_proceed = match (contains_usermatch, table_is_empty table, table.solitary) with 
-    | true, true, false -> true (* usermatch into an empty table *)
-    | true, _, _ -> false       (* usermatch into anything else *)
-    | _, _, true -> false       (* anything into a user table *)
-    | false, _, false -> true   (* non usermatch into any non user table *)
-  in 
-
-  if (can_proceed)
-  then (
-    (* the main op: combine the rules *)
-(*     print_endline ("-------");
-    print_endline ("[merge_bundle_into_table] table.rules:\n"^(string_of_rules table.rules));
-    print_endline ("-------");
-    print_endline ("[merge_bundle_into_table] new_pbs:\n"^(string_of_rules new_pbs));
-    print_endline ("-------"); *)
-    let rules = combine_pattern_branches (table.rules) new_pbs in 
-(*     print_endline ("-------");
-    print_endline ("[merge_bundle_into_table] new table rules:\n"^(string_of_rules rules));
-    print_endline ("-------"); *)
-    let keys = (keys_of_pattern_branches rules) in
-    let arrays = (arrays_of_cond_stmt (CL.hd cond_stmts))@(table.arrays) in
-    let sources = cond_stmts@table.sources in
-    let solitary = table.solitary || contains_usermatch in
-    let new_table = {rules; keys; arrays;sources;solitary} in 
-    (* print_endline@@"[merge_bundle_into_table] created table:\n"^(string_of_table new_table); *)
-    Some(new_table)
-  )
-  else (None)
-;;
-
-(**** simple resource constraints and checks ****)
-
-
-(* some simple constraints on tables and stages *)
 type constraints_table = {
   max_statements : int;
   max_matchbits : int;  
@@ -485,6 +139,7 @@ type constraints_stage = {
   max_tables : int;
   max_arrays : int;
   max_hashers : int;
+  max_array_blocks : int;
 }
 
 let table_constraints = {
@@ -498,9 +153,10 @@ let stage_constraints = {
   max_tables = 16;
   max_arrays = 4;
   max_hashers = 6;
+  max_array_blocks = 48;
 }
 
-let table_fits (table:table) = 
+let table_fits table = 
   if (
     ((statements_of_table table |> CL.length) <= table_constraints.max_statements)
     && 
@@ -527,6 +183,47 @@ let stage_fits stage =
     (* print_endline "[stage_fits] FALSE";  *)
     false)
 ;;  
+
+(*** statement scheduling / placement ***)
+
+(*** core placement method: 
+    merge a list of match statements that must be placed in the same stage 
+    into a table. ***)
+let place_in_table cond_stmts table =
+  (* first, figure out if the merge is possible depending on whether the 
+     conditional statement or table is a user-defined table *)
+  let contains_usermatch = List.fold_left 
+    (fun acc (s:vertex_stmt) -> acc || s.solitary) 
+    false 
+    cond_stmts 
+  in
+  let can_proceed = match (contains_usermatch, table_is_empty table, table.solitary) with 
+    | true, true, false -> true (* usermatch into an empty table *)
+    | true, _, _ -> false       (* usermatch into anything else *)
+    | _, _, true -> false       (* anything into a user table *)
+    | false, _, false -> true   (* non usermatch into any non user table *)
+  in 
+  if (can_proceed) then (
+    (* fold each conditional statement into the table *)
+    let new_tbl_smatch = List.fold_left 
+      merge_matches 
+      (stmt_of_table table)
+      (List.map (fun s -> s.stmt) cond_stmts)
+    in
+    match new_tbl_smatch.s with
+    | SMatch(es, bs) ->
+      Some({
+        keys=es;
+        branches=bs;
+        solitary = table.solitary || contains_usermatch;
+        sources=cond_stmts@table.sources;
+        })
+    | _ -> error "[merge_into_table] merge matches didn't return a match statement. What?]" 
+  )
+  else (None)  
+
+
+;;
 
 
 (* are all of these vertices placed in 
@@ -568,14 +265,13 @@ let build_array_map dfg : array_users_map =
         CidMap.add arr_cid [vertex] m
       )      
     in 
-    CL.fold_left update_for_array m (arrays_of_cond_stmt vertex)
+    CL.fold_left update_for_array m (arrays_of_vertex vertex)
   in 
   Dfg.fold_vertex update_array_map dfg CidMap.empty
 ;;
 
 (* the main helpers for array stuff 
    node -> array and array -> node *)
-let arrays_of_vertex = arrays_of_cond_stmt
 let vertices_of_array arrmap arrid = 
   CidMap.find arrid arrmap
 ;;
@@ -606,11 +302,37 @@ type placement_args =
   arrays : Cid.t list;
 }
 
-
 let placement_done pargs_opt = 
   match pargs_opt with 
   | None -> true
   | Some _ -> false
+;;
+
+(**** placement loops ****)
+
+(* try to place all the vertices in the table *)
+let try_place_in_table (prior_tables, pargs_opt) (table:table) =
+  let not_placed_result = (prior_tables@[table], pargs_opt) in 
+  match pargs_opt with 
+  | None -> not_placed_result
+  | Some(pargs) -> (
+      (* check to make sure we are allowed to merge into this table *)
+      if (table.solitary)
+      then (not_placed_result)
+      else (        
+        (* table merge may fail, if the table is a user table *)
+        let new_table_opt = place_in_table pargs.vertex_bundle table in
+        match new_table_opt with 
+        | None -> not_placed_result
+        | Some(new_table) -> (
+          (* check to make sure resulting table is not too big *)
+          if (not (table_fits new_table))
+          then (not_placed_result)
+          (* if not too big, return the new table and empty placement request *)
+          else (prior_tables@[new_table], None)
+        )
+      )
+  )
 ;;
 
 (* If the vertex is ready to be placed, 
@@ -636,35 +358,8 @@ let bundle_placement_args arrmap dfg pipe vertex : placement_args option =
     | true -> Some ({
       vertex_bundle = bundle;
       dependencies = bundle_preds;
-    arrays = arrays_of_cond_stmt vertex;})
+    arrays = arrays_of_vertex vertex;})
     | false -> None 
-;;
-
-(**** placement loops ****)
-
-(* try to place all the vertices in the table *)
-let try_place_in_table (prior_tables, pargs_opt) (table:table) =
-  let not_placed_result = (prior_tables@[table], pargs_opt) in 
-  match pargs_opt with 
-  | None -> not_placed_result
-  | Some(pargs) -> (
-      (* check to make sure we are allowed to merge into this table *)
-      if (table.solitary)
-      then (not_placed_result)
-      else (        
-        (* table merge may fail, if the table is a user table *)
-        let new_table_opt = merge_bundle_into_table pargs.vertex_bundle table in
-        match new_table_opt with 
-        | None -> not_placed_result
-        | Some(new_table) -> (
-          (* check to make sure resulting table is not too big *)
-          if (not (table_fits new_table))
-          then (not_placed_result)
-          (* if not too big, return the new table and empty placement request *)
-          else (prior_tables@[new_table], None)
-        )
-      )
-  )
 ;;
 
 let try_place_in_stage (prior_stages, pargs_opt) stage = 
@@ -691,7 +386,7 @@ let try_place_in_stage (prior_stages, pargs_opt) stage =
         else (
           updated_tables@
           (
-            match (merge_bundle_into_table pargs.vertex_bundle empty_table) with 
+            match (place_in_table pargs.vertex_bundle empty_table) with 
           | None -> error "[try_place_in_stage] failed to merge into an emtpy table...";
           | Some (tbl) -> [tbl]
           )
@@ -784,7 +479,6 @@ let rec schedule (arrmap:array_users_map) dfg pipeline scheduled_nodes unschedul
   )
 ;;
 
-
 (* find a layout based on dfg, update main body in tds, replacing 
    it with the laid-out version. *)
 let process tds dfg = 
@@ -820,4 +514,17 @@ let profile tds build_dir =
 ;;
 
 
+let compare_layouts tds_old tds_new = 
+  let stmt_old = (main tds_old).main_body in
+  let stmt_new = (main tds_new).main_body in
+  let len_old = (CL.length stmt_old) in
+  let len_new = (CL.length stmt_new) in 
+  if (len_old = len_new) then (
+    print_endline ("old and new layouts both have "^(string_of_int len_old)^" statements");
+  ) else (
+    print_endline ("LAYOUTS DIFFER. OLD STAGES: " ^ (string_of_int len_old) ^ " NEW STAGES: "^(string_of_int len_new));
+    error "[compare_layouts] layout changed in new algo!"
+  )
 
+
+;;

@@ -71,6 +71,15 @@ let print_dfg fn (g:Dfg.t) =
     DfgDot.output_graph (Caml.open_out_bin fn) g
 ;;
 
+(** helpers **)
+let preds_of_vertices dfg vs =
+  CL.map (Dfg.pred dfg) vs |> CL.flatten |> MiscUtils.unique_list_of
+;;
+let preds_of_vertices dfg vs =
+  CL.map (Dfg.pred dfg) vs |> CL.flatten |> MiscUtils.unique_list_of
+;;
+
+(** dependency helpers **)
 let rec read_ids_of_exp exp = 
   match exp.e with 
   | EVar(cid) -> [Cid.to_id cid]
