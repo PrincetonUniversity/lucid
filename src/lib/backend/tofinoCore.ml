@@ -433,6 +433,27 @@ let memops tds =
   tds
 ;;
 
+(* returns assoc list: (arrayid : (slot width, num slots)) list *)
+let array_dimensions tds =
+  List.filter_map 
+  (fun dec -> match dec.td with
+    | TDGlobal(
+        id, 
+        {raw_ty=TName(ty_cid, sizes, true); _}, 
+        {e=ECall(_, num_slots::_)}) -> (
+        match (Cid.names ty_cid |> List.hd) with 
+        | "Array" ->           
+          let num_slots = InterpHelpers.int_from_exp num_slots in 
+          Some((id, (List.hd sizes, num_slots)))
+        | "PairArray" -> 
+          let num_slots = InterpHelpers.int_from_exp num_slots in 
+          Some((id, (2*(List.hd sizes), num_slots)))
+        | _ -> None
+    )
+    | _ -> None
+  )
+  tds 
+;;
 
 (*** output ***)
 let decl_of_tdecl tdecl = 

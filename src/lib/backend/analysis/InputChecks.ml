@@ -17,7 +17,7 @@ let params_wid params =
     params
 ;;
 
-let check ds = 
+let event_param_alignment ds = 
   let pass = ref true in
   let v = object
     inherit [_] s_iter as super
@@ -36,6 +36,63 @@ let check ds =
   v#visit_decls () ds;
   !pass
 ;;
+
+
+let array_sizes ds =
+  let max_sblocks = 36 in
+  List.fold_left 
+  (fun prev_pass dec -> match dec.d with
+    | DGlobal(
+        id, 
+        {raw_ty=TName(ty_cid, sizes, true); _}, 
+        {e=ECall(_, num_slots::_)}) -> (
+        match (Cid.names ty_cid |> List.hd) with 
+        | "Array" ->           
+          let slot_sz = List.hd sizes in
+          let num_slots = InterpHelpers.int_from_exp num_slots in 
+          let sblocks = CoreResources.sblocks_of_arr slot_sz num_slots in
+          let pass = (sblocks <= max_sblocks) in
+          if (not pass) then (
+           fail_report@@"[array sizes check] Array "^(Id.to_string id)^" is too large. An array must fit into 35 16KB blocks. This array requires "^(string_of_int (sblocks - 1));
+          );
+          prev_pass && pass
+        | "PairArray" -> 
+          let slot_sz = 2*(List.hd sizes) in
+          let num_slots = InterpHelpers.int_from_exp num_slots in 
+          let sblocks = CoreResources.sblocks_of_arr slot_sz num_slots in
+          let pass = (sblocks <= max_sblocks) in
+          if (not pass) then (
+           fail_report@@"[array sizes check] PairArray "^(Id.to_string id)^" is too large. An array must fit into 35 16KB blocks. This array requires "^(string_of_int (sblocks - 1));
+          );
+          prev_pass && pass
+        | _ -> prev_pass
+    )
+    | _ -> prev_pass
+  )
+  true
+  ds 
+;;
+
+
+
+let all_checks ds =
+  let checks = [event_param_alignment; array_sizes] in
+  let pass = List.fold_left (fun pass check -> 
+      pass && (check ds) )
+   true
+   checks
+  in
+  if (pass <> true)
+  then (fail_report "some compatability checks failed. See above."; exit 1)
+  else ()
+;;  
+
+
+
+
+
+
+
 
 (*** old code to align parameters automatically. This is not a good idea currently, 
      because events represent packet headers in their wire format. We don't want 

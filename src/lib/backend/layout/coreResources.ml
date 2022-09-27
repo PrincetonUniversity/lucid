@@ -43,6 +43,23 @@ let rec arrays_of_stmt stmt : Cid.t list =
   nonunique_cids |> (MatchAlgebra.unique_list_of_eq Cid.equal)
 ;;
 
+(*** sram of arrays called by statement ***)
+let sblocks_of_arr cell_sz num_cells =
+  let base_bits = cell_sz * num_cells in
+  let n_blocks = ((base_bits - 1) / (128*1024) + 1) (* ceil (kb / 128kbit) *)
+    + 1 (* overhead blk *)
+  in
+  n_blocks
+;;
+
+let sblocks_of_stmt arr_info stmt =
+  List.fold_left (fun total arr_id -> 
+    let cell_sz, num_cells = List.assoc arr_id arr_info in
+    total + (sblocks_of_arr cell_sz num_cells))
+    0
+    (arrays_of_stmt stmt |> List.map Cid.to_id)
+;;
+
 (*** hash units ***)
 let rec hashers_of_exp exp = 
   match exp.e with 

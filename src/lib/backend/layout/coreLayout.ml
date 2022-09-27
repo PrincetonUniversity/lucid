@@ -13,15 +13,6 @@ open CoreResources
 
 (**** A simple model of the hardware ****)
 
-(* 
-TODO next: 
-  - test updated algorithm
-  - check per-stage sram and tcam constraints
-  - can we dump everything we need for layout to python, and do it there?
-*)
-
-type rule = pattern_branch
-
 (* a table is just a match statement annotated with 
    a list of source statements (for debugging)
    and a "solitary" flag, which means no more can be added to it. *)
@@ -39,6 +30,16 @@ type stage = {
 type pipeline = {
   stages : stage list;
 }
+
+
+(* program information used by the placement loop *)
+type prog_info = {
+  dfg : CoreDfg.Dfg.t;
+  arr_users : vertex_stmt list CidMap.t;
+  arr_dimensions : (id * (int * int)) list;
+}
+;;
+
 
 (* initializers *)
 let empty_table = {keys =[]; branches = []; solitary = false; sources = [];}
@@ -170,12 +171,16 @@ let table_fits table =
   else (false)
 ;;
 
-let stage_fits stage =
-  let c1 = (CL.length stage.tables <= stage_constraints.max_tables) in
-  let c2 = ((arrays_of_stage stage |> CL.length) <= stage_constraints.max_arrays) in
-  let c3 = ((hashers_of_stage stage |> CL.length) <= stage_constraints.max_hashers) in 
+let stage_fits prog_info stage =
+  let c_tbls = (CL.length stage.tables <= stage_constraints.max_tables) in
+  let c_arrays = ((arrays_of_stage stage |> CL.length) <= stage_constraints.max_arrays) in
+  let c_hashers = ((hashers_of_stage stage |> CL.length) <= stage_constraints.max_hashers) in 
+  let n_blocks = sblocks_of_stmt prog_info.arr_dimensions (stmt_of_stage stage) in
+  let c_blocks = (n_blocks <= stage_constraints.max_array_blocks) in
+  (* left off here. Check additional constraint: all the arrays 
+     that the stage uses fit into the stage's memory *)
   (* print_endline@@"[stage_fits] c1: "^(string_of_bool c1)^" c2: "^(string_of_bool c2)^" c3: "^(string_of_bool c3); *)
-  if ( c1 && c2 && c3)
+  if ( c_tbls && c_arrays && c_hashers && c_blocks)
   then (
     (* print_endline "[stage_fits] TRUE";  *)
     true)
@@ -225,7 +230,6 @@ let place_in_table cond_stmts table =
 
 ;;
 
-
 (* are all of these vertices placed in 
    one of the stages? *)
 let vertices_placed vertices stages =
@@ -244,10 +248,10 @@ let vertices_placed vertices stages =
 ;;
 
 
+
 (*** map from arrays to caller statements ***)
 type array_users_map = (vertex_stmt list) CidMap.t
 ;;
-
 
 let build_array_map dfg : array_users_map =
   let update_array_map vertex m = 
@@ -338,9 +342,9 @@ let try_place_in_table (prior_tables, pargs_opt) (table:table) =
 (* If the vertex is ready to be placed, 
    based on the dataflow constraints, 
    get placement args *)
-let bundle_placement_args arrmap dfg pipe vertex : placement_args option =
-  let bundle = vertex_bundle arrmap vertex in 
-  let bundle_preds = preds_of_vertices dfg bundle in
+let bundle_placement_args prog_info pipe vertex : placement_args option =
+  let bundle = vertex_bundle prog_info.arr_users vertex in 
+  let bundle_preds = preds_of_vertices prog_info.dfg bundle in
   let placed_vertices = vertices_of_pipe pipe in
   (* print_endline@@"[bundle_placement_args] placed vertices: "^(ids_of_vs placed_vertices); *)
   let rdy = 
@@ -362,13 +366,13 @@ let bundle_placement_args arrmap dfg pipe vertex : placement_args option =
     | false -> None 
 ;;
 
-let try_place_in_stage (prior_stages, pargs_opt) stage = 
+let try_place_in_stage prog_info (prior_stages, pargs_opt) stage = 
   let not_placed_result = (prior_stages@[stage], pargs_opt) in 
   match pargs_opt with 
-  | None -> not_placed_result (* placed in a prior stage *)
+  | None -> not_placed_result (* already placed in a prior stage *)
   | Some(pargs) -> (
-    let dfg_satisfied = vertices_placed pargs.dependencies prior_stages in
-    if (not dfg_satisfied)
+    let deps_satisfied = vertices_placed pargs.dependencies prior_stages in
+    if (not deps_satisfied)
     then (
       (* print_endline "[try_place_in_stage] fail: data dependencies not satisfied."; *)
       not_placed_result
@@ -394,17 +398,17 @@ let try_place_in_stage (prior_stages, pargs_opt) stage =
       in     
       let updated_stage = {tables = updated_tables;} in
       (* if the placement makes the stage full, placement fails.*)
-      if (not (stage_fits updated_stage)) 
+      if (not (stage_fits prog_info updated_stage)) 
       then (not_placed_result)
       else (prior_stages@[updated_stage], None)
     )
   )
 ;;
 
-let place_in_pipe pargs pipe : (pipeline * vertex_stmt list) option =
+let place_in_pipe prog_info pargs pipe : (pipeline * vertex_stmt list) option =
   let placed_vertices = pargs.vertex_bundle in 
   let updated_stages, pargs_result_opt = CL.fold_left 
-    try_place_in_stage
+    (try_place_in_stage prog_info)
     ([], Some(pargs))
     pipe.stages
   in 
@@ -413,7 +417,7 @@ let place_in_pipe pargs pipe : (pipeline * vertex_stmt list) option =
     else (
       (* could not place in current stages: try new*)
       (* print_endline ("[place_in_pipe] placement in current stages failed, attempting to place in new stage"); *)
-      let updated_stages, pargs_result_opt = try_place_in_stage 
+      let updated_stages, pargs_result_opt = try_place_in_stage prog_info
         (updated_stages, pargs_result_opt) 
         empty_stage
       in 
@@ -429,23 +433,23 @@ let place_in_pipe pargs pipe : (pipeline * vertex_stmt list) option =
 ;;
 
 (* try to place the node somewhere in the pipeline. *)
-let try_place_vertex arrmap dfg pipe vertex =
+let try_place_vertex prog_info pipe vertex =
 (*   print_endline ("attempting to place:\n"^(str_of_cond_stmt vertex));
   print_endline ("current pipe: ");
   print_endline (string_of_pipe pipe); *)
   (* make sure the vertex is ready to be placed according to data dependencies, 
      if it is, place the vertex in the pipe.  *)
-  match (bundle_placement_args arrmap dfg pipe vertex) with 
+  match (bundle_placement_args prog_info pipe vertex) with 
     | None -> 
       (* print_endline ("vertex cannot be placed: dependencies not yet placed."); *)
       None
     | Some(pargs) -> 
       (* print_endline ("placing a vertex:\n"^(str_of_cond_stmt vertex)); *)
-      place_in_pipe pargs pipe
+      place_in_pipe prog_info pargs pipe
 ;;
 
 (*** main placement function ***)
-let rec schedule (arrmap:array_users_map) dfg pipeline scheduled_nodes unscheduled_nodes n_failures : pipeline option = 
+let rec schedule prog_info pipeline scheduled_nodes unscheduled_nodes n_failures : pipeline option = 
   (* if we have had n successive failures, and there are n unscheduled nodes, 
      that means we have tried to schedule every unscheduled node and none is 
    ready, i.e., there is no schedule. *) 
@@ -462,28 +466,34 @@ let rec schedule (arrmap:array_users_map) dfg pipeline scheduled_nodes unschedul
     (* nothing to schedule, done *)
     | [] -> Some (pipeline)
     | node::unscheduled_nodes -> (
-      match try_place_vertex arrmap dfg pipeline node with 
+      match try_place_vertex prog_info pipeline node with 
       | Some (updated_pipe, placed_vertices) -> 
         (* print_endline@@"[schedule] placed "^(CL.length placed_vertices |> string_of_int)^" vertices"; *)
         (* some vertices were placed. Move them to scheduled list and go on. *)
         let new_scheduled_nodes = placed_vertices@scheduled_nodes in 
         let new_unscheduled_nodes = MiscUtils.list_sub unscheduled_nodes placed_vertices in 
         (* node was scheduled, go on with the rest *)
-        schedule arrmap dfg updated_pipe new_scheduled_nodes new_unscheduled_nodes 0
+        schedule prog_info updated_pipe new_scheduled_nodes new_unscheduled_nodes 0
       | None -> 
         (* print_endline@@"[schedule] node could not be scheduled!"; *)
       (* node could _not_ be scheduled. Move it to the back 
          of the unscheduled node list and go on. *)
-        schedule arrmap dfg pipeline scheduled_nodes (unscheduled_nodes@[node]) (n_failures + 1)   
+        schedule prog_info pipeline scheduled_nodes (unscheduled_nodes@[node]) (n_failures + 1)   
     )
   )
 ;;
 
+let prog_info tds dfg = {
+  dfg = dfg;
+  arr_users = build_array_map dfg;
+  arr_dimensions = array_dimensions tds;
+}
+;;
 (* find a layout based on dfg, update main body in tds, replacing 
    it with the laid-out version. *)
 let process tds dfg = 
-  (* 1 build array map. *)
-  let arrmap = build_array_map dfg in
+  (* extract information from program that is important for layout *)
+  let prog_info = prog_info tds dfg in
   (* 2. get list of statements to schedule. *)
   let unscheduled_nodes = Dfg.fold_vertex 
     (fun v vs -> 
@@ -495,7 +505,7 @@ let process tds dfg =
     []
   in 
   (* 3. schedule everything *)
-  let result_pipe_opt = schedule arrmap dfg (empty_pipeline) [] unscheduled_nodes 0 in 
+  let result_pipe_opt = schedule prog_info (empty_pipeline) [] unscheduled_nodes 0 in 
   match result_pipe_opt with 
   | Some(pipe) -> 
     print_endline "---- layout summary ----";
@@ -513,7 +523,6 @@ let profile tds build_dir =
   IoUtils.writef (build_dir ^ "/" ^ stages_fn) num_stages
 ;;
 
-
 let compare_layouts tds_old tds_new = 
   let stmt_old = (main tds_old).main_body in
   let stmt_new = (main tds_new).main_body in
@@ -525,6 +534,4 @@ let compare_layouts tds_old tds_new =
     print_endline ("LAYOUTS DIFFER. OLD STAGES: " ^ (string_of_int len_old) ^ " NEW STAGES: "^(string_of_int len_new));
     error "[compare_layouts] layout changed in new algo!"
   )
-
-
 ;;

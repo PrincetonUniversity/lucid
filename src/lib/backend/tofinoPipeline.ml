@@ -23,19 +23,6 @@ let cprint_prog label tds =
   cprint_endline label
 ;;
 
-(* statically analyze the program to see if we can 
-   compile it. *)
-let check_prog ds =
-    let checks = [EventAlignment.check] in
-    let pass = List.fold_left (fun pass check -> 
-        pass && (check ds) )
-     true
-     checks
-    in
-    if (pass <> true)
-    then (fail_report "some compatability checks failed. See above."; exit 1)
-    else ()
-;;
 
 let process_prog ds portspec build_dir = 
     if (!do_log) then (
@@ -43,7 +30,8 @@ let process_prog ds portspec build_dir =
         CoreDfg.start_logging ();
     );
 
-    check_prog ds;
+    (* static analysis to see if this program is compile-able *)
+    InputChecks.all_checks ds;
     cprint_endline "starting transformations";
     let ds = EliminateEventCombinators.process ds in
     (* 0. make sure handlers always have the same params as their events *)
@@ -116,7 +104,7 @@ let process_prog ds portspec build_dir =
 
 (* compile the single handler of ds into a control block. *)
 let process_handler_block ds = 
-    check_prog ds;
+    InputChecks.all_checks ds;
     (* let config = load_config () in  *)
     let ds = UnifyHandlerParams.unify_event_and_handler_params ds in 
     let ds = InlineEventVars.inline ds in 

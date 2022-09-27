@@ -99,7 +99,7 @@
    TofinoProfiling
    TofinoPipeline
    DependencyProfiling
-   EventAlignment
+   InputChecks
    UnifyHandlerParams
    EliminateEventCombinators
    EliminateExitEvents
