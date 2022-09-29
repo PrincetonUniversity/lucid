@@ -329,6 +329,6 @@ let to_control_dependency_graph g =
     |> vertices_in_normal_match_form
     |> remove_noop_match_nodes 
     in  
-    CoreCfg.print_cfg ((!BackendLogging.graphLogDir)^"/cdg_noops_gone.dot") g;
+    (* CoreCfg.print_cfg ((!BackendLogging.graphLogDir)^"/cdg_noops_gone.dot") g; *)
     g
 ;;

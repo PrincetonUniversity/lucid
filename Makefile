@@ -43,6 +43,8 @@ all:
 	cp -f _build/default/src/bin/functionCompiler.exe bin/dptf
 	dune build src/bin/dockerUtils.exe
 	cp -f _build/default/src/bin/dockerUtils.exe bin/dockerUtils
+	dune build src/bin/dfgCompiler.exe
+	cp -f _build/default/src/bin/dfgCompiler.exe bin/dfgCompiler
 
 generatedVisitors: src/lib/frontend/Syntax.processed.ml
 

@@ -1,5 +1,5 @@
 (executables
- (names main compiler functionCompiler dockerUtils)
+ (names main compiler dfgCompiler functionCompiler dockerUtils)
  (libraries dpt)
  (link_flags -cc g++)
  )
@@ -9,6 +9,7 @@
  (files 
     (main.exe as dpt) 
     (compiler.exe as compiler) 
+    (dfgCompiler.exe as dfgCompiler) 
     (functionCompiler.exe as functionCompiler)
     (dockerUtils.exe as dockerUtils)
     )

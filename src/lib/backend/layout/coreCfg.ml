@@ -62,6 +62,10 @@ module CfgTopo = Graph.Topological.Make (Cfg)
 module CfgDom = Graph.Dominator.Make(Cfg)
 module Dfs = Graph.Traverse.Dfs(Cfg)
 
+
+let vertex_num v = v.stmt.sspan.spid
+;;
+
 (*** graph printing ***)
 (* statement --> graph node string *)
 let summarystr_of_branch (pats, stmt) =

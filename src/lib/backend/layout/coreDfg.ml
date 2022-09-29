@@ -52,7 +52,6 @@ end
 module Dfg = Graph.Persistent.Digraph.ConcreteLabeled (DfgNode) (DfgEdge)
 module DfgTopo = Graph.Topological.Make (Dfg)
 
-
 module DfgDotConfig = struct
   include Dfg
   let graph_attributes _ = []

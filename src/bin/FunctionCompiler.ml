@@ -129,7 +129,7 @@ let compile_to_tofino target_filename =
   let core_ds = MidendPipeline.process_prog ds in
   (* backend does tofino-specific transformations, layout, 
   then translates into p4tofino syntax and produces program strings *)
-  let p4_str = TofinoPipeline.process_handler_block core_ds in 
+  let p4_str = TofinoPipeline.compile_handler_block core_ds in 
   IoUtils.writef 
     (target_filename^".temp.p4") 
     (p4_str)
