@@ -136,14 +136,12 @@
 %token <Span.t> BITNOT
 %token <Span.t> SYMBOLIC
 %token <Span.t> FLOOD
-%token <Span.t> SPEC
+%token <Span.t> VARREGEX
 %token <Span.t> EMPTYSET
 %token <Span.t> EMPTYSTRING
 %token <Span.t> BINDING
 %token <Span.t> STAR
-%token <Span.t> REGEXOR
-%token <Span.t> REGEXAND
-%token <Span.t> REGEXPIPE
+%token <Span.t> TRANSITIONREGEX
 %token EOF
 
 %start prog
@@ -250,6 +248,7 @@ exp:
     | SIZECAST single_poly LPAREN size RPAREN { szcast_sp (snd $2) (snd $4) (Span.extend $1 $5) }
     | FLOOD exp                           { flood_sp $2 (Span.extend $1 $2.espan) }
     | LBRACE args RBRACE                  { make_group $2 (Span.extend $1 $3) }
+    | TRANSITIONREGEX LPAREN ID COMMA exp RPAREN    {transregex_sp (snd $3) $5 (Span.extend $1 $6) }
 
 exps:
   | exp                                 { [$1] }
@@ -318,16 +317,23 @@ event_decl:
     | event_sort ID paramsdef             { ($1, snd $2, $3, []) }
     | event_sort ID paramsdef constr_list { ($1, snd $2, $3, $4) }
 
-event_spec :
-    | EMPTYSET                          { empty_set_sp (Span.extend $1 $1) }
+ids: 
+    | ID                                { [(snd $1)] }
+    | ID COMMA ids                      {(snd $1) :: $3}
+
+binding_list:
+    | BINDING ID                        { [(snd $2)] }
+    | BINDING ID COMMA binding_list     { (snd $2) :: $4}
+
+var_regex :
     | EMPTYSTRING                       { empty_string_sp (Span.extend $1 $1) }
-    | LPAREN exp LBRACKET exp REGEXPIPE binop RBRACKET RPAREN      { letter_sp $2 $4 $6 (Span.extend $1 $8) }
-    | LPAREN exp LBRACKET BINDING exp RBRACKET DOT event_spec RPAREN {binding_sp $2 $5 $8 (Span.extend $1 $9) }
-    | LPAREN event_spec DOT event_spec RPAREN        { concat_sp $2 $4 (Span.extend $1 $5) }
-    | LPAREN event_spec REGEXOR event_spec RPAREN        { or_sp $2 $4 (Span.extend $1 $5) }
-    | LPAREN event_spec REGEXAND event_spec RPAREN     { and_sp $2 $4 (Span.extend $1 $5) }
-    | LPAREN event_spec RPAREN STAR     { closure_sp $2 (Span.extend $1 $4) }
-    | LPAREN event_spec RPAREN          { $2 }
+    | ID LBRACKET ids PIPE exp RBRACKET      { letter_sp (snd $1) $3 $5 (Span.extend (fst $1) $6) }
+    | ID LBRACKET binding_list RBRACKET DOT var_regex {binding_sp (snd $1) $3 $6 (Span.extend (fst $1) $6.v_regex_span) }
+    | var_regex DOT var_regex        { concat_sp $1 $3 (Span.extend $1.v_regex_span $3.v_regex_span) }
+    | var_regex OR var_regex        { or_sp $1 $3 (Span.extend $1.v_regex_span $3.v_regex_span) }
+    | var_regex AND var_regex     { and_sp $1 $3 (Span.extend $1.v_regex_span $3.v_regex_span) }
+    | LPAREN var_regex RPAREN STAR     { closure_sp $2 (Span.extend $1 $4) }
+    | LPAREN var_regex RPAREN          { $2 }
 
 tyname_def:
     | ID                                  { snd $1, [] }
@@ -359,7 +365,7 @@ decl:
     | CONSTR ty ID paramsdef ASSIGN exp SEMI { [dconstr_sp (snd $3) $2 $4 $6 (Span.extend $1 $7)] }
     | GLOBAL ty ID ASSIGN exp SEMI
                                             { [dglobal_sp (snd $3) $2 $5 (Span.extend $1 $6)] }
-    | SPEC ID LPAREN args RPAREN COLON exp COLON event_spec SEMI { [dspec_sp (snd $2) $4 $7 $9 (Span.extend $1 $10)] }
+    | VARREGEX ID ASSIGN var_regex SEMI            { [dvarregex_sp (snd $2) $4 (Span.extend $1 $5)] }
 
 decls:
     | decl                             { $1 }

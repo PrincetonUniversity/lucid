@@ -379,7 +379,7 @@ let event_sort_to_string sort =
   | EExit -> "exit event"
   | EBackground -> "event"
 ;;
-let event_spec_to_string es = 
+let var_regex_to_string vr = 
   Printf.sprintf 
     "TODO: EVENT SPEC TO STRING"
     (*(id_to_string (fst es))
@@ -511,11 +511,11 @@ and d_to_string d =
       (cid_to_string cid1)
       (exp_to_string e)
       (cid_to_string cid2)
-  | DSpec (id, al, size, es) ->
+  | DVarRegex (id, var_regex) ->
     Printf.sprintf
       "spec %s event %s"
       (id_to_string id)
-      (event_spec_to_string es)
+      (var_regex_to_string var_regex)
 
 and decl_to_string d = d_to_string d.d
 and decls_to_string ds = concat_map "\n\n" decl_to_string ds

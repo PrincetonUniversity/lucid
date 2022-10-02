@@ -55,7 +55,7 @@ and raw_ty =
   | TRecord of (string * raw_ty) list
   | TVector of raw_ty * size
   | TTuple of raw_ty list
-  | TSpec
+  | TVarRegex
 
 and func_ty =
   { arg_tys : tys
@@ -146,6 +146,7 @@ and e =
   | EComp of exp * id * size (* Vector comprehension *)
   | EIndex of exp * size
   | ETuple of exp list
+  | ETransitionRegex of id * exp
 
 and exp =
   { e : e
@@ -223,21 +224,22 @@ and memop_body =
   | MBComplex of complex_body
 
 
-(*Spec regexes*)
-and espec = 
-  | ESEmptySet
-  | ESEmptyStr
-  | ESLetter of exp * exp * exp
-  | ESBinding of exp * exp * event_spec
-  | ESConcat of event_spec * event_spec
-  | ESClosure of event_spec
-  | ESOr of event_spec * event_spec
-  | ESAnd of event_spec * event_spec
 
-and event_spec = 
+(*Spec regexes*)
+and v_regex = 
+  | VREmptySet
+  | VREmptyStr
+  | VRLetter of id * id list * exp
+  | VRBinding of id * id list * var_regex
+  | VRConcat of var_regex * var_regex
+  | VRClosure of var_regex
+  | VROr of var_regex * var_regex
+  | VRAnd of var_regex * var_regex
+
+and var_regex = 
   {
-    espec : espec
-    ; espec_span : sp
+    v_regex : v_regex
+    ; v_regex_span : sp
   }
 
 (* declarations *)
@@ -255,7 +257,7 @@ and d =
   | DConstr of id * ty * params * exp
   | DModule of id * interface * decls
   | DModuleAlias of id * exp * cid * cid
-  | DSpec of id * exp list * exp * event_spec
+  | DVarRegex of id * var_regex
 
 (* name, return type, args & body *)
 and decl =
@@ -391,6 +393,7 @@ let comp_sp e i k span = exp_sp (EComp (e, i, k)) span
 let vector_sp es span = exp_sp (EVector es) span
 let szcast_sp sz1 sz2 span = exp_sp (ESizeCast (sz1, sz2)) span
 let flood_sp e span = exp_sp (EFlood e) span
+let transregex_sp id event span = exp_sp (ETransitionRegex (id, event)) span
 
 (* declarations *)
 let decl d = { d; dspan = Span.default }
@@ -404,8 +407,7 @@ let dsize_sp id size span = decl_sp (DSize (id, size)) span
 let fun_sp id rty cs p body span = decl_sp (DFun (id, rty, cs, (p, body))) span
 let memop_sp id p body span = decl_sp (DMemop (id, p, body)) span
 let duty_sp id sizes rty span = decl_sp (DUserTy (id, sizes, rty)) span
-
-let dspec_sp id alphabet exp event_spec span = decl_sp (DSpec (id, alphabet, exp, event_spec)) span
+let dvarregex_sp id var_regex span = decl_sp (DVarRegex (id, var_regex)) span
 
 let dconstr_sp id ty params exp span =
   decl_sp (DConstr (id, ty, params, exp)) span
@@ -466,14 +468,14 @@ let inmodule_sp id intf span = spec_sp (InModule (id, intf)) span
 
 
 (*spec regexes*)
-let event_spec espec = { espec; espec_span = Span.default }
-let eventspec_sp espec span = {espec ; espec_span = span}
-let empty_set_sp span = eventspec_sp ESEmptySet span
-let empty_string_sp span = eventspec_sp ESEmptyStr span
-let letter_sp letter varname pred span = eventspec_sp (ESLetter (letter, varname, pred)) span
-let binding_sp letter name sub span = eventspec_sp (ESBinding (letter, name, sub)) span
-let concat_sp suba subb span = eventspec_sp (ESConcat (suba, subb)) span
-let or_sp suba subb span = eventspec_sp (ESOr (suba, subb)) span
-let and_sp suba subb span = eventspec_sp (ESAnd (suba, subb)) span
-let closure_sp sub span = eventspec_sp (ESClosure sub) span
+let var_regex v_regex = { v_regex; v_regex_span = Span.default }
+let var_regex_sp v_regex span = {v_regex ; v_regex_span = span}
+let empty_set_sp span = var_regex_sp VREmptySet span
+let empty_string_sp span = var_regex_sp VREmptyStr span
+let letter_sp letter varnames pred span = var_regex_sp (VRLetter (letter, varnames, pred)) span
+let binding_sp letter names sub span = var_regex_sp (VRBinding (letter, names, sub)) span
+let concat_sp suba subb span = var_regex_sp (VRConcat (suba, subb)) span
+let or_sp suba subb span = var_regex_sp (VROr (suba, subb)) span
+let and_sp suba subb span = var_regex_sp (VRAnd (suba, subb)) span
+let closure_sp sub span = var_regex_sp (VRClosure sub) span
 

@@ -20,6 +20,6 @@ let process_prog ds =
   (*let ds = replacer#visit_decls (ref CidMap.empty) in *)
   List.filter(
     function 
-    | {d = DSpec _} -> false
+    | {d = DVarRegex _} -> false
     | _ -> true) ds
 ;; 

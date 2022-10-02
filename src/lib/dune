@@ -55,6 +55,7 @@
    vectorElimination
    eStmtElimination
    symbolicElimination
+   regexElimination
    replaceUserTys
    partialInterpretation
    constInlining

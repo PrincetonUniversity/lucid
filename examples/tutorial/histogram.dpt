@@ -15,7 +15,7 @@ global Array.t<<32>> hist_arr = Array.create(4);
 // total packet count.
 global Array.t<<32>> total_arr = Array.create(1);
 
-
+re myVR = (report[@x, @y]."" || report[a,y | y == 1]);
 // Events
 entry event ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos);
 event report(int idx);
