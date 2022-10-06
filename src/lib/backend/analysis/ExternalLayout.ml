@@ -19,9 +19,11 @@ let json_of_vertices g =
   let json_of_vertex v = 
     let viid = vertex_num v in
     let vcodestr = CorePrinting.statement_to_string v.stmt in
+    let is_user_tbl = string_of_bool v.solitary in
     `Assoc [
-      ("sid", `Int viid); 
-      ("statement",`String vcodestr)
+      ("id", `Int viid); 
+      ("statement",`String vcodestr);
+      ("user_table", `String is_user_tbl)
     ]
   in
   let vertex_jsons = (Dfg.fold_vertex 
@@ -38,8 +40,8 @@ let json_of_edges g =
   let json_of_edge e =
     let (src, dep_ty, dst) = e in
     `Assoc [
-      ("src_sid", `Int (vertex_num src));
-      ("dst_sid", `Int (vertex_num dst));
+      ("srcid", `Int (vertex_num src));
+      ("dstid", `Int (vertex_num dst));
       ("dep_ty", `String (string_of_data_dependency dep_ty))
     ]  
   in
@@ -74,6 +76,7 @@ let json_of_locals tds =
       "size", `Int (InterpHelpers.width_from_ty ty)
     ]
   in
+  (* locals declared in bodies *)
   let local_specs = ref [] in 
   let v = object 
     inherit [_] s_iter as super    
@@ -83,11 +86,20 @@ let json_of_locals tds =
   in
   v#visit_tdecls () tds;
   let local_specs = !local_specs in
+  (* locals declared globally *)
   let shared_local_specs = 
     List.map (fun (id, ty) -> json_of_local id ty)
-    ((main tds).shared_locals)
+    (((main tds).hdl_selector)::(main tds).shared_locals)
   in
-  `List (shared_local_specs@local_specs)
+  (* locals declared as parameters *)
+  let param_specs = 
+    List.split (main tds).hdl_params 
+    |> snd 
+    |> List.flatten
+    |> List.map (fun (id, ty) -> json_of_local id ty)
+  in
+
+  `List (shared_local_specs@local_specs@param_specs)
 ;;
 
 let export tds json_fn =
@@ -97,10 +109,10 @@ let export tds json_fn =
   let cdg = CoreCdg.to_control_dependency_graph cfg in        
   let dfg = CoreDfg.process cdg in   
   let json = `Assoc [
-    "globals", json_of_globals tds;
-    "locals", json_of_locals tds;
-    "nodes", json_of_vertices dfg;
-    "edges", json_of_edges dfg
+    "arrays", json_of_globals tds;
+    "vars", json_of_locals tds;
+    "statements", json_of_vertices dfg;
+    "dependencies", json_of_edges dfg
     ] 
   in
   info@@"exporting dataflow graph representation of program to: "^(json_fn);
