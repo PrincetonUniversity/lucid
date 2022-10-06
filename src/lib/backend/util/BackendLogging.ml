@@ -8,9 +8,9 @@ exception Error of string
 let error s = raise (Error s)
 
 (* output directories *)
-let moduleLogDir = ref "./compilerOut/modules"
-let irLogDir = ref "./compilerOut/ir"
-let graphLogDir = ref "./compilerOut/graphs"
+let moduleLogDir = ref "./lucidCompilerOut/modules"
+let irLogDir = ref "./lucidCompilerOut/ir"
+let graphLogDir = ref "./lucidCompilerOut/graphs"
 let dopen f out = out := Some (CF.formatter_of_out_channel f)
 let null_out = CF.formatter_of_out_channel (Caml.open_out "/dev/null")
 let no_printf (_ : string) = ()

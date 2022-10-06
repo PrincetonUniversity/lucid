@@ -15,7 +15,7 @@ Usage:
   without symb file: ./layout.py <input.dpt>
 """
 
-import json, re, sys, os, subprocess, argparse
+import json, re, sys, os, subprocess, argparse, random
 import networkx as nx
 from collections import namedtuple
 
@@ -45,6 +45,9 @@ def main():
 Array = namedtuple("Array", "id ty size")
 Variable = namedtuple("Variable", "id ty size")
 Statement = namedtuple("Statement", "id statement user_table resources")
+
+def statement_to_string(s):
+  return s.statement.replace("\n", " ")
 
 def arr_from_json(js): 
   return Array(js["id"], js["ty"], js["size"])
@@ -154,6 +157,9 @@ class StatementGroup (object):
   def node_key(self):
     return (self.gid)#, {"obj":self})
 
+  def __str__(self):
+    return ("    ")+"\n    ".join([f"{i}: {statement_to_string(s)}" for i, s in enumerate(self.statements)])
+
   def resource_summary(self):
     rstr = "statements : %i"%len(self.statements)
     for (r, v) in self.resources.items():
@@ -194,8 +200,12 @@ def build_dependency_graph(json_fn):
     deps[key] = d
 
   dg = nx.DiGraph()
-  dg.add_nodes_from([sg.node_key() for sg in groups.values()])
-  dg.add_edges_from([dep.edge_key() for dep in deps.values()])
+  nodes = [sg.node_key() for sg in groups.values()][::-1]
+  edges = [dep.edge_key() for dep in deps.values()][::-1]
+  # random.shuffle(nodes)
+  # random.shuffle(edges)
+  dg.add_nodes_from(nodes)
+  dg.add_edges_from(edges)
   return dg, groups
 
 # find the minimum stage for each group based
@@ -269,6 +279,10 @@ class Table(object):
     rstr = "-- table %s resources --\n"%(self.table_id)
     rstr +=self.statement_group.resource_summary()
     return rstr
+  def __str__(self):
+    s = f"  table table{self.table_id}"+"{\n"+f"{self.statement_group}"+"\n  }"
+    return s
+
 
 class Stage(object):
   """ A physical tofino stage """
@@ -281,7 +295,18 @@ class Stage(object):
       "array_ops": 4
     }
     self.tables = [Table(i) for i in range(n_tables)]      
+  
+  # can the new statement group fit into this stage?
+  def check_resources(self, new_statement_group):
+    for resource, limit in self.constraints.items():
+      total = new_statement_group.resources[resource] + sum([t.statement_group.resources[resource] for t in self.tables])
+      if (total > limit):
+        return False
+    return True
+
   def add_group(self, sg):
+    if (not self.check_resources(sg)):
+      return None
     loc = None
     for t in self.tables:
       success = t.add_group(sg)
@@ -290,6 +315,8 @@ class Stage(object):
         print ("placed in (stage, table): (%i, %i)"%loc)
         break
     return loc
+  def __str__(self):
+    return f"stage {self.stage_id} "+"{\n"+"\n".join([str(t) for t in self.tables if t.active])+"\n}"
 
 class Pipeline(object):
   """ The tofino match-action pipeline """
@@ -302,8 +329,29 @@ class Pipeline(object):
       if loc is not None:
         return loc
     return None
+  def __str__(self):
+    st = ""
+    for s in self.stages:
+      n_active = len([t for t in s.tables if t.active])
+      if (n_active):
+        st = st + str(s) + "\n"
+    return st
+
+
+def layout_dependencies_only(dg, groups):
+  """ layout based only on dependencies -- this is a lower bound of stages """
+  dep_stages = []
+  for gid in nx.topological_sort(dg):
+    dependency_stage = min_stage_from_dependencies(groups[gid], dg, groups)
+    groups[gid].stage=dependency_stage
+    dep_stages.append(dependency_stage)
+  print (f"number of stages (dependencies only): {max(dep_stages)+1}")
+
 
 def layout(dg, groups):
+  """ layout based on dependencies and pipeline resources -- 
+      this is approximately equal to lucid compiler, though there may be variations due 
+      to the order in which statements are placed. """
   pipe = Pipeline(12, 16)
   print ("**** starting layout ****")  
   # layout can be done in a single topologically 
@@ -315,6 +363,8 @@ def layout(dg, groups):
     groups[gid].stage=stage
 
   print ("**** layout finished ****")
+  print (str(pipe))
+  print ("**** resources ****")
   n_stages_used = 0
   for s in pipe.stages:
     n_active = len([t for t in s.tables if t.active])
@@ -324,8 +374,9 @@ def layout(dg, groups):
       for t in s.tables:
         if (t.active):
           print (t.resource_summary())
-  print ("number of stages used:")
-  print (n_stages_used)
+
+  layout_dependencies_only(dg, groups)
+  print (f"number of stages (full layout): {n_stages_used}")
   return pipe
 
 if __name__ == '__main__':

@@ -22,8 +22,14 @@ let cprint_prog label tds =
   cprint_endline label
 ;;
 
+let mk_ir_log_dirs () = 
+    Core.Unix.mkdir_p !BackendLogging.irLogDir;
+    Core.Unix.mkdir_p !BackendLogging.graphLogDir
+;;
+
 (* start with a few passes in CoreSyntax *)
 let core_passes ds = 
+    mk_ir_log_dirs ();
     let ds = EliminateEventCombinators.process ds in
     (* 0. make sure handlers always have the same params as their events *)
     let ds = UnifyHandlerParams.rename_event_params ds in 
@@ -53,7 +59,7 @@ let tofinocore_normalization full_compile tds =
     (* 7. eliminate all generate statements and add invalidate calls *)
     let tds = if (full_compile) then (Generates.eliminate tds) else tds in 
     cprint_prog "----------- after Generates.eliminate ------- " tds;
-    (* TofinoCore.dump_prog (!BackendLogging.irLogDir ^ "/initial.before_layout.dpt") tds; *)
+    TofinoCore.dump_prog (!BackendLogging.irLogDir ^ "/initial.before_layout.dpt") tds;
     tds
 ;;
 
@@ -78,7 +84,7 @@ let layout tds build_dir_opt =
     );
     cprint_prog "----------- after layout ------- " tds;
 
-    (* TofinoCore.dump_prog (!BackendLogging.irLogDir ^ "/laid_out.tofinocore.dpt") tds; *)
+    TofinoCore.dump_prog (!BackendLogging.irLogDir ^ "/laid_out.tofinocore.dpt") tds;
     (* 12. put each branch into a labeled statement *)
     let tds = ActionForm.process tds in 
     (* deduplicate certain expensive operations in the labeled statements *)
