@@ -315,13 +315,18 @@ def layout(dg, groups):
     groups[gid].stage=stage
 
   print ("**** layout finished ****")
+  n_stages_used = 0
   for s in pipe.stages:
     n_active = len([t for t in s.tables if t.active])
     if (n_active):
+      n_stages_used += 1
       print ("---- stage %i [%i tables] ----"%(s.stage_id, n_active))
       for t in s.tables:
         if (t.active):
           print (t.resource_summary())
+  print ("number of stages used:")
+  print (n_stages_used)
+  return pipe
 
 if __name__ == '__main__':
   main()
