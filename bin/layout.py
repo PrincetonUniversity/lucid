@@ -1,14 +1,44 @@
 #!python3
 
-import json, re, sys
+"""
+This script uses the lucid tofino compiler to 
+generate a dataflow graph, then lays that 
+dataflow graph out on a model of the tofino 
+pipeline to estimate how many stages it 
+will require. The layout algorithm used 
+in this script is the same as the one in the 
+lucid backend (as of 10/4/22), except this script has some 
+optimizations in it to reduce layout time. -jsonch
+
+Usage: 
+  with symb file: ./layout.py <input.dpt> --symb <input.symb>
+  without symb file: ./layout.py <input.dpt>
+"""
+
+import json, re, sys, os, subprocess, argparse
 import networkx as nx
 from collections import namedtuple
 
+script_dir = os.path.realpath(os.path.dirname(__file__))
+
+parser = argparse.ArgumentParser()
 
 def main():
-  infn = sys.argv[1]
-  print (infn)
-  dg, groups = build_dependency_graph("learner.json")
+  parser.add_argument('--symb', type=str, required=False)
+  parser.add_argument('infn', type=str)
+  args = parser.parse_args()
+  tmpjson = args.infn + ".layout.json"
+  mk_cmd = f"cd {script_dir}/..; make all"
+  print ("building lucid...")
+  subprocess.call(mk_cmd, shell=True)
+  print (f"compiling {args.infn} to dataflow graph ({tmpjson})")
+  if (args.symb):
+    build_cmd = f"{script_dir}/dfgCompiler --symb {args.symb} {args.infn} -o {tmpjson}"
+  else:
+    build_cmd = f"{script_dir}/dfgCompiler {args.infn} -o {tmpjson}"
+  subprocess.call(build_cmd, shell=True)
+  print (f"laying out {tmpjson}")
+  dg, groups = build_dependency_graph(tmpjson)
   pipe = layout(dg, groups)
   return
 
@@ -251,10 +281,6 @@ class Stage(object):
       "array_ops": 4
     }
     self.tables = [Table(i) for i in range(n_tables)]      
-  # left off here: 
-  # what is the relationship between table resources and stage 
-  # resources? Given a new statement group, can you tell whether the 
-  # table will fit into the stage without merging it into a table?
   def add_group(self, sg):
     loc = None
     for t in self.tables:
