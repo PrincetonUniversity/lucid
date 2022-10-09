@@ -178,34 +178,6 @@ let pre_typing_checks ds =
   check_symbolics ds
 ;;
 
-let check_char e_id v_ids span events = 
-  let e_filter = List.filter (fun e -> e.eid = e_id) events in
-    if (List.length e_filter) = 0 then Console.error_position span @@ "No Event named " ^ cid_to_string e_id
-    else if List.length (List.hd e_filter).params <> List.length v_ids then Console.error_position span @@ "Wrong number of parameters for event character " ^ e_id
-
-
-let rec check_regex var_regex events =
-  let span = var_regex.v_regex_span in 
-    match var_regex.v_regex with
-    | VRLetter (event_id, var_ids, _) -> check_char event_id var_ids span events
-    | VRBinding (event_id, var_ids, sub) -> check_char event_id var_ids span events; check_regex sub events
-    | VRConcat (sub1, sub2) -> check_regex sub1 events; check_regex sub2 events
-    | _ -> ()
-
-
-let rec check_events ds = 
-  let events = filter_map
-    (fun d ->
-      match d.d with 
-      | DEvent (_, _, _, _) -> Some d
-      | _ -> None)
-    ds in
-    match d.d with 
-    | DVarRegex (_, var_regex) -> check_regex var_regex events
-    | _ -> ()
-    ;;
-    
-
 (*** QVar checking. This is run on each decl after its type is inferred, and makes
      sure all types, sizes, and effects are appropriately determined (i.e. it makes
      sure that polymorphism only appears in places where it is supported). Different
