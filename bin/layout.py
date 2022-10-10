@@ -292,7 +292,7 @@ class Stage(object):
       "arrays" : 4,
       "sram_blocks": 48,
       "hash_ops" : 6,
-      "array_ops": 4
+      # "array_ops": 4
     }
     self.tables = [Table(i) for i in range(n_tables)]      
   
