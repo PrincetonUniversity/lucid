@@ -114,4 +114,47 @@ let rec plain_re_to_string pre =
     | PRClosure (pre) -> Printf.sprintf "(%s)*" (plain_re_to_string pre)
 ;;
 
-let plain_re_to_dfa pre = true;;
+type dfa = 
+  {
+    states : Set.Make(plain_re).t
+    alphabet : plain_re_symbol list;
+    initial : plain_re;
+    transition : Hashtbl.t (string, plain_re_symbol) string;
+    accepting : Set.Make(plain_re).t
+  };;
+
+let rec next state letter acc = 
+  let statederiv = (pre_deriv state letter) in
+    let states, trans = acc in
+      Hashtbl.add trans (state, letter) statederiv;
+      if (not (SS.mem state states)) then (explore statederiv acc);
+      ((SS.add statederiv states) trans)
+and expore state acc alphabet =
+  fold_left (next state) acc alphabet
+;;
+
+let plain_re_to_dfa pre alphabet = 
+  let init = pre in
+    let (states, trans) = explore init ((Set.singleton init), (Hashtbl.create 123)) alphabet in
+      let accepting = Set.filter (fun q -> (nullable q) = PREmptyString) states in
+        {
+          states=states;
+          alphabet=alphabet;
+          initial=init;
+          transition=trans;
+          accepting=accepting
+        }
+;;
+
+type synthesis_response = 
+{
+  accepting : int list;
+  f : 'int Map.Make(plain_re_symbol).t;
+  g : 'int Map.Make(plain_re_symbol).t;
+  whichop : 'int Map.Make(plain_re_symbol).t;
+  memops : DMemop list
+  init : int
+}
+
+let do_synthesis dfa = 
+  true;;

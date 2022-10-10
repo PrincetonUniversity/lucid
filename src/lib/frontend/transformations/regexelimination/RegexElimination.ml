@@ -16,17 +16,7 @@ and pred_info =
   }
 
 and alphabet_letter_def = {ev_id : id ; preds : exp list}
-
-and dfa = {
-  alphabet : plain_re_symbol_list;
-  init : plain_re;
-  transition : plain_re -> plain_re_symbol -> plain_re
-}
-
-let similar pre1 pre2 =
-  match pre1 with 
-  | 
-
+;;
 
 let binders re = 
   let rec binders_acc re acc = 
@@ -100,6 +90,26 @@ let rec translate re re_alphabet =
     | VRAnd (sub1, sub2) -> PRAnd((translate sub1.v_regex re_alphabet),(translate sub2.v_regex re_alphabet))
 ;;
 
+let sequence_statements ss =
+  let seq = List.fold_left sseq snoop ss in
+  seq.s
+;;
+
+let make_binding_def id = 
+  DGlobal (id, TInt(8), EVal(vinteger 0))
+;;
+(*Each of the below adds a declaration (or many) to the acc*)
+let add_binding_defs binders acc = 
+  List.fold_left (fun binder acc -> List.append (List.map (fun id -> make_binding_def id) binder.var_names) acc) [] binders
+;;
+
+
+let make_defs binders preds synthesis_response = 
+  let binding_defs = (var_defs re_binders) in
+    let state_def = (state_def id) in
+
+
+;;
 
 let replace_var_regex id vr = 
   (*List.iter (function b -> (Printf.printf "%s " (fst b.binding_event)); List.iter (function vn -> Printf.printf "%s " (fst vn)) b.var_names) (binders vr);*)
@@ -107,7 +117,13 @@ let replace_var_regex id vr =
     let re_preds = preds vr in
       let re_alphabet = alphabet_def vr re_binders re_preds in 
         let pre = translate vr.v_regex re_alphabet in
-          print_string (plain_re_to_string pre);
+          let synthesized = do_synthesis (plain_re_to_dfa pre) in
+            let statement = make_defs re_binders re_preds synthesized
+
+        
+        print_string (plain_re_to_string pre);
+
+
           print_string (List.fold_left String.cat "" (List.map (fun b -> (if b then "1" else "0")) [true; false;true; false]));
   DVarRegex(id, vr)
 
