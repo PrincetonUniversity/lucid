@@ -16,11 +16,16 @@ global Array.t<<32>> hist_arr = Array.create(4);
 global Array.t<<32>> total_arr = Array.create(1);
 
 //re myVR = (report[@x, @y]."" || report[a,y | y == 1]);
-re myVR2 = report[a,y | True].report[a,z | a+1 > z];
+
 // Events
 entry event ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos);
 event report(int idx);
 exit event ip_out (int<<9>> egr_port, int src, int dst);
+
+re myVR2 = (ip_in[port, src, dst, len, tos | true]
+          .report[@idx1]
+          .report[idx2 | idx2 > 21]
+          .report[idx2 | idx1 == idx2]);
 
 // Helper memop functions
 memop incr(int memval, int incrval) {
@@ -48,6 +53,8 @@ handle report(int idx){
     if (cur_idx < 3){
       generate report(cur_idx + 1);
     }
+
+    int b = transition(myVR2, this);
 }
 
 handle ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos) {

@@ -291,6 +291,8 @@ let rec e_to_string e =
     Printf.sprintf "to_int<<%s>>(%s)" (size_to_string sz1) (size_to_string sz2)
   | EStmt (s, e) ->
     Printf.sprintf "{%s; return %s}" (stmt_to_string s) (exp_to_string e)
+  | ETransitionRegex (id, ev) ->
+    Printf.sprintf "{Transition %s with %s}" (id_to_string id) (exp_to_string ev)
 
 and exp_to_string e = e_to_string e.e
 (* ^ Printf.sprintf "[ty:%s]"

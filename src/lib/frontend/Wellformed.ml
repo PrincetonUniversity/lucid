@@ -32,57 +32,90 @@ open Printing
    - Ensure that that each global/constructor actually has a global type
    - Ensure that each Extern has int/bool type
 *)
+let rec check_var_regex id vr event_infos used vars = 
+  let rec no_bindings vr = 
+    match vr.v_regex with 
+    | VRBinding (event_id, var_names, sub) -> 
+      Console.error_position vr.v_regex_span @@ Printf.sprintf "No bindings under connectors";
+    | VRConcat (sub1, sub2) | VROr (sub1, sub2) | VRAnd (sub1, sub2) -> no_bindings sub1;no_bindings sub2
+    | VRClosure sub -> no_bindings sub
+    | _ -> () in 
+      match vr.v_regex with
+      | VREmptySet | VREmptyStr -> used, vars
+      | VRLetter (event_id, var_names, pred) -> if (not (List.exists (fun (id, params) -> event_id = id && (List.length var_names) = (List.length params)) event_infos)) then 
+        Console.error_position vr.v_regex_span @@ Printf.sprintf "%s: Not an event or wrong number of args" (id_to_string event_id);
+        (if (not (List.mem event_id used)) then event_id :: used else used), vars
+      | VRBinding (event_id, var_names, sub) -> 
+        if (not (List.exists (fun (id, params) -> event_id = id && (List.length var_names) = (List.length params)) event_infos)) then 
+          Console.error_position vr.v_regex_span @@ Printf.sprintf "%s: Not an event or wrong number of args" (id_to_string event_id);
+        if (List.mem event_id used) then 
+          Console.error_position vr.v_regex_span @@ Printf.sprintf "%s: This binding event might not be its first occurrence" (id_to_string event_id);
+        if (List.exists (fun id -> List.mem id vars) var_names) then
+          Console.error_position vr.v_regex_span @@ Printf.sprintf "%s: This variable has already been used" (id_to_string (List.find (fun id -> List.mem id vars) var_names));
+        check_var_regex id sub event_infos (event_id :: used) (List.append var_names vars);
+        (if (not (List.mem event_id used)) then event_id :: used else used), vars
+      | VRConcat (sub1, sub2) -> let used, vars = check_var_regex id sub1 event_infos used vars in 
+                                    check_var_regex id sub2 event_infos used vars
+      | VROr (sub1, sub2) | VRAnd (sub1, sub2) -> 
+        no_bindings sub1; no_bindings sub2; check_var_regex id sub1 event_infos used vars; check_var_regex id sub2 event_infos used vars; used, vars
+      | VRClosure sub -> no_bindings sub; check_var_regex id sub event_infos used vars; used, vars
+
 let check_decls ds =
-  let rec check_decl in_module d =
+  let event_defs = List.filter_map (fun d -> 
     match d.d with
-    | DGlobal (id, ty, _) ->
-      if in_module
-      then
-        Console.error_position
-          d.dspan
-          "All globals must be declared at toplevel, not with in a module.";
-      if not (is_global ty)
-      then
-        Console.error_position d.dspan
-        @@ Printf.sprintf
-             "Global variable %s declared with non-global type %s"
-             (id_to_string id)
-             (ty_to_string ty)
-    | DConstr (id, ty, _, _) ->
-      ignore (id, ty)
-      (* This restriction isn't actually necessary, I don't think. *)
-      (* if not (is_global ty)
-             then
-               Console.error_position d.dspan
-               @@ Printf.sprintf
-                    "Constructor %s returns non-global type %s"
-                    (id_to_string id)
-                    (ty_to_string ty) *)
-    | DExtern (_, ty) ->
-      (match TyTQVar.strip_links ty.raw_ty with
-      | TInt _ | TBool -> ()
-      | TFun { arg_tys } ->
-        List.iter
-          (fun ty ->
-            match TyTQVar.strip_links ty.raw_ty with
-            | TInt _ | TBool -> ()
-            | _ ->
-              Console.error_position d.dspan
-              @@ Printf.sprintf
-                   "Arguments to an extern function must have type int or \
-                    bool, not %s"
-                   (ty_to_string ty))
-          arg_tys
-      | _ ->
-        Console.error_position d.dspan
-        @@ Printf.sprintf
-             "Externs must have type int or bool, not %s"
-             (ty_to_string ty))
-    | DModule (_, _, decls) -> List.iter (check_decl true) decls
-    | _ -> ()
-  in
-  List.iter (check_decl false) ds
-;;
+    | DEvent (id, _, _, params) -> Some (id, params) 
+    | _ -> None) ds in 
+    let rec check_decl in_module d =
+      match d.d with
+      | DGlobal (id, ty, _) ->
+        if in_module
+        then
+          Console.error_position
+            d.dspan
+            "All globals must be declared at toplevel, not with in a module.";
+        if not (is_global ty)
+        then
+          Console.error_position d.dspan
+          @@ Printf.sprintf
+              "Global variable %s declared with non-global type %s"
+              (id_to_string id)
+              (ty_to_string ty)
+      | DConstr (id, ty, _, _) ->
+        ignore (id, ty)
+        (* This restriction isn't actually necessary, I don't think. *)
+        (* if not (is_global ty)
+              then
+                Console.error_position d.dspan
+                @@ Printf.sprintf
+                      "Constructor %s returns non-global type %s"
+                      (id_to_string id)
+                      (ty_to_string ty) *)
+      | DExtern (_, ty) ->
+        (match TyTQVar.strip_links ty.raw_ty with
+        | TInt _ | TBool -> ()
+        | TFun { arg_tys } ->
+          List.iter
+            (fun ty ->
+              match TyTQVar.strip_links ty.raw_ty with
+              | TInt _ | TBool -> ()
+              | _ ->
+                Console.error_position d.dspan
+                @@ Printf.sprintf
+                    "Arguments to an extern function must have type int or \
+                      bool, not %s"
+                    (ty_to_string ty))
+            arg_tys
+        | _ ->
+          Console.error_position d.dspan
+          @@ Printf.sprintf
+              "Externs must have type int or bool, not %s"
+              (ty_to_string ty))
+      | DModule (_, _, decls) -> List.iter (check_decl true) decls
+      | DVarRegex (id, vr) -> check_var_regex id vr event_defs [] []; ()
+      | _ -> ()
+    in
+    List.iter (check_decl false) ds
+  ;;
 
 (* Next up: Check that symbolic declarations don't use any non-symbolic sizes.
    We could remove this constraint if we wanted by inlining concrete sizes immediately,
