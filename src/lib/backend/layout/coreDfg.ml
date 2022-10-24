@@ -96,7 +96,6 @@ let rec read_ids_of_stmt (stmt:CoreSyntax.statement) =
   | SRet(None) -> []
   | SLocal(_, _, exp) 
   | SAssign(_, exp)
-  | SGen(_, exp)
   | SRet(Some(exp)) -> read_ids_of_exp exp
   | SPrintf(_, exps) -> List.map read_ids_of_exp exps |> List.flatten
   | SIf(exp, s1, s2) -> 
@@ -110,6 +109,13 @@ let rec read_ids_of_stmt (stmt:CoreSyntax.statement) =
       in 
       let ids_in_exps = List.map read_ids_of_exp exps |> List.flatten in 
       ids_in_exps@ids_in_branches
+
+  | SGen(GSingle(Some(eport)), eev) 
+  | SGen(GMulti(eport), eev)
+  | SGen(GPort(eport), eev) -> (
+    (read_ids_of_exp eport)@(read_ids_of_exp eev)
+  )
+  | SGen(GSingle(None), eev) -> read_ids_of_exp eev
   (* invalidate call _writes_ to its arg fields *)
   | SUnit(exp) -> (
     match exp.e with 

@@ -39,7 +39,8 @@ RUN cd $sde_base/p4studio && \
 # install a few more dependencies
 RUN pip3 install dpkt
 
-RUN sudo apt-get update -y && sudo apt-get install -y \
+RUN sudo apt update -y 
+RUN sudo apt install -y \
     software-properties-common \
     m4 \
     curl \
@@ -48,7 +49,7 @@ RUN sudo apt-get update -y && sudo apt-get install -y \
     libgmp-dev \
     pkg-config \
     tcpreplay \
-    expect && \
+    expect
 
 # use bash as the shell, so we can use bashrc
 SHELL ["/bin/bash", "-c"]

@@ -10,6 +10,7 @@ val error : string -> 'a
 val warning : string -> unit
 val report : string -> unit
 val show_message : string -> T.color -> string -> unit
+val show_message_position : Span.t -> string -> T.color -> string -> unit
 val error_position : Span.t -> string -> 'a
 val warning_position : Span.t -> string -> unit
 val report_position : Span.t -> string -> unit

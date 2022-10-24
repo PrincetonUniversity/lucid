@@ -21,11 +21,25 @@ let builtin_defs =
   Arrays.defs @ Counters.defs @ Events.defs @ System.defs @ PairArrays.defs
 ;;
 
-(* Not a global var *)
+(* Builtin local vars with 
+   platform-dependent types *)
 let this_id = Id.create "this"
-let this_ty = TEvent |> ty
 let ingr_port_id = Id.create "ingress_port"
-let ingr_port_ty = TInt (IConst 32) |> ty
+
+type builtin_tys = {
+  ingr_port_ty : Syntax.ty;
+  this_ty : Syntax.ty;
+}
+
+let interp_builtin_tys = {
+  ingr_port_ty = ty_sp (TQVar (QVar (Id.create ("auto_ingress_port")))) (Span.default);
+  this_ty = TEvent |> ty;
+}
+
+let tofino_builtin_tys = {
+  ingr_port_ty = TInt (IConst 9) |> ty;
+  this_ty = TEvent |> ty;
+}
 
 (* Used in constraints *)
 let start_id = Id.create "start"
@@ -33,3 +47,4 @@ let start_id = Id.create "start"
 (* Used in memops *)
 let cell1_id = SyntaxUtils.cell1_id
 let cell2_id = SyntaxUtils.cell2_id
+

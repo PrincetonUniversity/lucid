@@ -916,7 +916,7 @@ let extract_recirc_event_actions ev_enum =
 ;;
 
 (* create the table to extract recirculation events from the packet *)
-let extract_recirc_event_table tbl_id tds (evids : Id.t list) =
+let extract_recirc_event_table noop_acn_id tbl_id tds (evids : Id.t list) =
   let hdl_enum = (main tds).hdl_enum in 
   let hdl_enum_rev = List.map (fun (x, y) -> (y, x)) hdl_enum in 
   let event_seqs = (main tds).event_output.ev_gen_seqs in 
@@ -926,8 +926,8 @@ let extract_recirc_event_table tbl_id tds (evids : Id.t list) =
         (fun evid -> Ternary(handler_multi_ev_flag_arg evid)) 
         evids) 
   in
-  (* action ids:  one for each event *)
-  let action_ids = List.map recirc_acn_id evids in  
+  (* action ids:  one for each event, plus the noop *)
+  let action_ids = noop_acn_id::(List.map recirc_acn_id evids) in  
 
 
   (* let string_of_ids ids = List.map Id.to_string ids |> String.concat ", " in  *)
@@ -1000,6 +1000,17 @@ let extract_recirc_event_table tbl_id tds (evids : Id.t list) =
       branches possible_evnums
     )
     [] possible_rids
+  in (* end let branches *)
+  (* add a default noop branch if the table has 1 entry -- because 1 entry tables 
+     cause a runtime failure (9.8). *)
+  let branches = if ((List.length branches) == 1)
+    then (
+      let noop_branch = (List.map (fun _ -> pwild) (keys), scall_action noop_acn_id) in 
+      branches@[noop_branch]
+    )
+    else (
+      branches
+    )
   in
   dtable tbl_id keys action_ids branches None []
 ;;
@@ -1047,6 +1058,8 @@ let extract_port_event_actions ev_enum =
     (List.split ev_enum |> fst)
     |> List.split
   in
+  (* add a noop action, to make sure that the table has at least 
+     2 actions... *)
   exts@ints
 ;;
 
@@ -1084,13 +1097,16 @@ let egress_control_params = [
 
 
 let generate_egress_control block_id tds lucid_internal_ports =
+  let egr_noop_id = id "egr_noop" in 
   let ev_enum = (main tds).hdl_enum in 
   let t_extract_port_event = id "t_extract_port_event" in
   let t_extract_recirc_event = id "t_extract_recirc_event" in 
+  let egr_noop = [daction egr_noop_id (snoop)] in 
   let decls = 
-    (extract_recirc_event_actions ev_enum)
+    (egr_noop)
+    @(extract_recirc_event_actions ev_enum)
     @(extract_port_event_actions ev_enum)
-    @[(extract_recirc_event_table t_extract_recirc_event tds (List.split ev_enum |> fst));
+    @[(extract_recirc_event_table egr_noop_id t_extract_recirc_event tds (List.split ev_enum |> fst));
     extract_port_event_table t_extract_port_event ev_enum lucid_internal_ports]
   in
   let stmt = 

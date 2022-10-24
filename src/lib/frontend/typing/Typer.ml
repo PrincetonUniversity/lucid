@@ -834,7 +834,7 @@ let retrieve_constraints env span id params =
          (id_to_string id)
 ;;
 
-let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
+let rec infer_declaration (builtin_tys : Builtins.builtin_tys) (env : env) (effect_count : effect) (d : decl)
     : env * effect * decl
   =
   (* print_endline @@ "Inferring decl " ^ decl_to_string d; *)
@@ -899,8 +899,8 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
       let _, inf_body =
         let starting_env =
           { env with current_effect = FZero; constraints }
-          |> define_const Builtins.this_id Builtins.this_ty
-          |> define_const Builtins.ingr_port_id Builtins.ingr_port_ty
+          |> define_const Builtins.this_id builtin_tys.this_ty
+          |> define_const Builtins.ingr_port_id builtin_tys.ingr_port_ty
         in
         infer_body starting_env body
       in
@@ -1038,7 +1038,7 @@ let rec infer_declaration (env : env) (effect_count : effect) (d : decl)
         in
         List.fold_left
           (fun (env, effect_count, ds) d ->
-            let env, effect_count, d = infer_declaration env effect_count d in
+            let env, effect_count, d = infer_declaration builtin_tys env effect_count d in
             env, effect_count, d :: ds)
           (subenv, effect_count, [])
           ds
@@ -1098,11 +1098,11 @@ let ensure_fully_typed ds =
   v#visit_decls () ds
 ;;
 
-let infer_prog (decls : decls) : decls =
+let infer_prog (builtin_tys : Builtins.builtin_tys) (decls : decls) : decls =
   let decls = instantiate_prog decls in
   let (env : env) = default_env in
   let infer_d (env, count, ds) d =
-    let env, count, d = infer_declaration env count d in
+    let env, count, d = infer_declaration builtin_tys env count d in
     env, count, d :: ds
   in
   let _, _, inf_decls = List.fold_left infer_d (env, FZero, []) decls in

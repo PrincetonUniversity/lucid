@@ -22,7 +22,7 @@ let main () =
   let ds = Input.parse target_filename in
   let renaming, ds =
     (* Profile.time_profile "frontend" @@ fun () -> *)
-    FrontendPipeline.process_prog ds
+    FrontendPipeline.process_prog Builtins.interp_builtin_tys ds
   in
   let spec_file =
     if cfg.spec_file = ""

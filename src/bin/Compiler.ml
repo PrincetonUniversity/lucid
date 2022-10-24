@@ -122,7 +122,7 @@ let parse_externs_from_interp_spec spec_file =
 let profile_for_tofino target_filename portspec build_dir profile_cmd = 
   let ds = Input.parse target_filename in
   let ds = FunctionInliningSpecialCase.inline_prog_specialcase ds in
-  let _, ds = FrontendPipeline.process_prog ds in
+  let _, ds = FrontendPipeline.process_prog Builtins.tofino_builtin_tys ds in
   let core_ds = MidendPipeline.process_prog ds in
   let portspec = ParsePortSpec.parse portspec in 
   TofinoProfiling.profile core_ds portspec build_dir profile_cmd
@@ -135,7 +135,7 @@ let compile_to_tofino target_filename portspec build_dir =
      mid/back-end is better optimized. *)
   let ds = FunctionInliningSpecialCase.inline_prog_specialcase ds in
   (* frontend type checks and eliminates most abstractions (modules, functions) *)
-  let _, ds = FrontendPipeline.process_prog ds in
+  let _, ds = FrontendPipeline.process_prog Builtins.tofino_builtin_tys ds in
   (* middle passes do regularization over simplified syntax *)
   let core_ds = MidendPipeline.process_prog ds in
   (* backend does tofino-specific transformations, layout, 

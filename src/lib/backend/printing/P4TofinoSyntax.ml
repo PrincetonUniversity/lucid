@@ -186,6 +186,8 @@ let sunit e = Unit(e)
 let smatch es bs = Match(es, bs)
 let sif e s1 = If(e, s1, None)
 let sifelse e s1 s2 = If(e, s1, Some(s2))
+let snoop = Noop
+
 
 let sassign cid e = Assign(cid,e)
 let slocal id ty e = Local(id, ty, e)

@@ -6,6 +6,10 @@ let fail_report str =
   Console.show_message str ANSITerminal.Red "Tofino Checker"
 ;;
 
+
+let report_err span msg : unit = 
+  Console.show_message_position span msg ANSITerminal.Red "Tofino Checker"
+;;
 let params_wid params = 
   List.fold_left (fun tot_wid (_, pty) -> 
     match pty.raw_ty with 
@@ -22,25 +26,27 @@ let event_param_alignment ds =
   let v = object
     inherit [_] s_iter as super
 
-    method! visit_DEvent _ id _ params =
-      if (((params_wid params) mod 8) <> 0)
-      then (
-        fail_report 
-          ("[Event Alignment Check] all event parameters must be byte-aligned,\
-          i.e., the total width is a multiple of 8. \
-          The event "^(fst id)^"'s parameters are not byte-aligned.");
-        pass := false
-      )
+    method! visit_decl ctx decl =
+      super#visit_decl ctx decl;
+      match decl.d with 
+      | DEvent(id, _, params) -> 
+        if (((params_wid params) mod 8) <> 0)
+        then (
+          report_err decl.dspan ("[Event Alignment Check] all event parameters must be byte-aligned, \
+            i.e., the total width is a multiple of 8. \
+            The event "^(fst id)^"'s parameters are not byte-aligned.");
+          pass := false
+        )
+      | _ -> ()
     end
   in
   v#visit_decls () ds;
   !pass
 ;;
 
-
-let array_sizes ds =
+let array_sizes ds : bool =
   let max_sblocks = 36 in
-  List.fold_left 
+  let pass = List.fold_left 
   (fun prev_pass dec -> match dec.d with
     | DGlobal(
         id, 
@@ -53,7 +59,9 @@ let array_sizes ds =
           let sblocks = CoreResources.sblocks_of_arr slot_sz num_slots in
           let pass = (sblocks <= max_sblocks) in
           if (not pass) then (
-           fail_report@@"[array sizes check] Array "^(Id.to_string id)^" is too large. An array must fit into 35 16KB blocks. This array requires "^(string_of_int (sblocks - 1));
+           report_err 
+            dec.dspan 
+            ("[array sizes check] Array "^(Id.to_string id)^" is too large. An array must fit into 35 16KB blocks. This array requires "^(string_of_int (sblocks - 1)));
           );
           prev_pass && pass
         | "PairArray" -> 
@@ -62,30 +70,82 @@ let array_sizes ds =
           let sblocks = CoreResources.sblocks_of_arr slot_sz num_slots in
           let pass = (sblocks <= max_sblocks) in
           if (not pass) then (
-           fail_report@@"[array sizes check] PairArray "^(Id.to_string id)^" is too large. An array must fit into 35 16KB blocks. This array requires "^(string_of_int (sblocks - 1));
+           report_err 
+            dec.dspan 
+            ("[array sizes check] Array "^(Id.to_string id)^" is too large. An array must fit into 35 16KB blocks. This array requires "^(string_of_int (sblocks - 1)));
           );
           prev_pass && pass
         | _ -> prev_pass
     )
     | _ -> prev_pass
   )
-  true
-  ds 
+    true
+    ds
+  in 
+  pass
 ;;
 
 
+let port_tys ds =
+  (* in the tofino, ingress and egress port variables are 9 bits wide. 
+     This check makes sure that: 
+     1. the ingress_port builtin is 9 bits; 
+     2. the first parameter of generate_ports is 9 bits *)
+  let tofino_port_var_wid = 9 in 
+  let pass = ref true in
+
+  let v = object
+    inherit [_] s_iter as super
+
+    method! visit_statement ctx stmt = 
+      super#visit_statement ctx stmt;
+      match stmt.s with 
+      | SGen(GPort(port_exp), _) -> (
+        let wid = InterpHelpers.width_from_ty port_exp.ety in
+        if (wid <> tofino_port_var_wid) then (
+          pass := false;
+          report_err port_exp.espan ("For Tofino, the first argument of generate must have type int<<9>>")
+        )
+      )
+      | _ -> ()
+    method! visit_exp ctx exp =
+      super#visit_exp ctx exp; 
+      match exp.e with
+      | EVar(var_cid) -> (
+        if (Cid.to_id var_cid = Builtins.ingr_port_id)
+        then (
+          let wid = InterpHelpers.width_from_ty exp.ety in 
+          if (wid <> tofino_port_var_wid) then (
+            pass := false;
+            report_err exp.espan 
+              ("For Tofino, ingress_port must have type int<<9>> (9-bit int). This expression requires it to be int<<"
+                ^(string_of_int wid)
+                ^">>.")
+          )
+        )
+      )
+      | _ -> ()
+    end
+  in
+  v#visit_decls () ds;
+  !pass
+;;
 
 let all_checks ds =
-  let checks = [event_param_alignment; array_sizes] in
+  let checks = [event_param_alignment; array_sizes; port_tys] in
   let pass = List.fold_left (fun pass check -> 
-      pass && (check ds) )
+      let check_pass = check ds in
+      pass && check_pass
+   )
    true
    checks
   in
   if (pass <> true)
-  then (fail_report "some compatability checks failed. See above."; exit 1)
-  else ()
+  then (fail_report "some Tofino-specific syntax checks failed. See above."; exit 1)
 ;;  
+
+
+
 
 
 

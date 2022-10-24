@@ -130,7 +130,8 @@ function build_quiet() {
     CTL_SRC=$(to_switchd_fn "$1")
     BUILD_DIR=$(to_build_dir "$1")
     rm -rf "$BUILD_DIR"; mkdir -p "$BUILD_DIR"
-    build_p4 "$P4_SRC" "$BUILD_DIR" $3 && build_mgr "$CTL_SRC" "$BUILD_DIR"
+    build_p4 "$P4_SRC" "$BUILD_DIR" "-v" $3 && build_mgr "$CTL_SRC" "$BUILD_DIR"
+    # build_p4 "$P4_SRC" "$BUILD_DIR" $3 && build_mgr "$CTL_SRC" "$BUILD_DIR"
 }
 
 # ======  End of building  =======
