@@ -31,6 +31,7 @@ class Controller(object):
       return
     self.libc = LibcInterface(clib_driver_obj_fn)
     prognames = list(self.libc.progs.keys())
+    self.next_mc_node_id = 1
     if (len(prognames) == 0):
       raise ValueError("no program appears to be loaded into bf_switchd")
     if (len(prognames) > 1):
@@ -53,11 +54,14 @@ class Controller(object):
   def add_multicast_group(self, mc_gid, ports_rids):
     """Add a basic multicast group that clones to all (port, rid) in ports_rids"""
     print ("[add_multicast_group] adding mc group: {0}--> [{1}]".format(str(mc_gid), str(ports_rids)))
-    node_ids = list(range(1, len(ports_rids)+1))
     node_tbl = self.tables["$pre.node"]
-    for i, (port, rid) in enumerate(ports_rids):      
+    node_ids = []
+    for i, (port, rid) in enumerate(ports_rids):    
+      node_id = self.next_mc_node_id
+      node_ids.append(node_id)
+      self.next_mc_node_id += 1  
       key_hdl = node_tbl.add_entry(
-        {b'$MULTICAST_NODE_ID':node_ids[i]}, None,
+        {b'$MULTICAST_NODE_ID':node_id}, None,
         {b'$DEV_PORT':[port], b'$MULTICAST_RID':rid})
       self.installed_entries.append(key_hdl)
     mc_tbl = self.tables["$pre.mgid"]

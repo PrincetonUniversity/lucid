@@ -68,11 +68,11 @@ endif
       "build: %{p4_fn} %{py_fn} %{c_fn}\n\
        \t./libs/p4tapp.sh build_quiet %{p4_fn}\n\
        hw:\n\
-       \t./libs/p4tapp.sh hw %{p4_fn} ports_up\n\
+       \t./libs/p4tapp.sh hw %{p4_fn}\n\
        test:\n\
        \t./libs/p4tapp.sh test %{p4_fn} %{run_args_string}\n\
-       hw:\n\
-       \t./libs/p4tapp.sh hw %{p4_fn} ports_up\n\
+       sim:\n\
+       \t./libs/p4tapp.sh sim %{p4_fn}\n\
        dummy:"]
   in
   IoUtils.writef makef (make_str_prefix ^ make_str)
