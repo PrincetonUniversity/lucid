@@ -4,7 +4,7 @@ event count_src (int src);
 // component: basic packet forwarding
 fun int get_output_port(int current_switch, int dst) {
 	match (current_switch, dst) with 
-		| 0, 22 -> {return 0;} // could also use port 1
+		| 0, 22 -> {return 0;}
 		| 1, 22 -> {return 1;}
 		| 2, 22 -> {return 1;}
 		| 3, 22 -> {return 99;}
@@ -24,7 +24,6 @@ handle ip_pkt(int src, int dst) {
 
 // component: basic packet counting
 global Array.t<<32>> src_cts = Array.create(16);
-global Array.t<<32>> dst_cts = Array.create(16);
 memop incr(int mv, int lv) {
 	return mv + 1;
 }
