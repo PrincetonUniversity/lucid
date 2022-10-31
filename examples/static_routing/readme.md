@@ -1,19 +1,18 @@
 ### static routing example
 
-This example implements a network with 4 switches that use static routing to forward packets between 2 endhosts. The example is designed mainly run in the Lucid interpreter, with the network's topology provided by the interpreter specification file. 
+This example is meant to be a quick introduction to Lucid via a static routing program. We will run the program in the Lucid interpreter in a simulated network with 4 switches that connect 2 endhosts. The Lucid program itself is in ``staticrouter.dpt``, while the interpreter specification file, ``staticrouter.json`` configures the simulated network's topology and gives the interpreter a sequence of input events to execute. 
 
-To run the program from the root of the Lucid repo, do: 
+Before continuing, you may want to make sure you can run the program. Assuming you have already installed docker and run `./lucid.sh pull`, run this example by executing the following command from the root of the Lucid repo: 
 
 ```
 ./lucid.sh interp examples/static_routing/staticrouter.dpt
 ```
-(this assumes you have already installed docker and run `./lucid.sh pull`)
 
 #### Network topology
 
-Here's the physical topology of the network we will use in this example: ![physical topology](./diagrams/topology.png)
+Here's the physical topology of the simulated network in this example: ![physical topology](./diagrams/topology.png)
 
-- There are 4 switches in this network, represented by the large white rectangles. The switches have globally unique identifiers (0, 1, 2, and 3). 
+- There are 4 switches in the network, represented by the large white rectangles. The switches have globally unique identifiers (0, 1, 2, and 3). 
 
 - Each switch has some number of physical ports, represented by the small grey boxes in the diagram. Port identifiers are locally unique, so for example every switch in the network has a port 0. The globally unique identifier of a port is the concatenation of its switch id and port id, which we write as <switch>:<port>. 
 
@@ -70,7 +69,6 @@ Notes:
   - ``self`` is a Lucid builtin for "the unique identifier of this switch"
   - ``ingress_port`` is a Lucid builtin for "the port that this packet came in on"
   - The ``generate_port`` function is what "moves" a packet from one switch to another. The first argument of ``generate_port`` is the output port, the second argument is the event to generate. In a real network, events may have payloads that are invisible to the Lucid program. ``generate`` commands always copy the input event's payload to the output event.
-
   
 #### Input events
   
