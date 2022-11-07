@@ -165,7 +165,7 @@ let encode_constraint ctx constr =
 ;;
 
 let encode_constraints ctx constraints =
-  List.map (encode_constraint ctx) (prune_constraints constraints)
+  List.map (encode_constraint ctx) constraints
 ;;
 
 (* For each list, make sure
@@ -285,13 +285,12 @@ let check_sat_encoded ctx encoded_constraints =
 ;;
 
 let check_sat constraints =
+  let constraints = prune_constraints constraints in
   if Cmdline.cfg.show_constraints
   then
     print_endline
     @@ "Checking satisfiability of "
-    ^ Printing.list_to_string
-        Printing.constraint_to_string
-        (prune_constraints ~ignore_contradictions:true constraints);
+    ^ Printing.list_to_string Printing.constraint_to_string constraints;
   let ctx = new_context () in
   let encoded = encode_constraints ctx constraints in
   let ret = check_sat_encoded ctx encoded in
@@ -301,6 +300,7 @@ let check_sat constraints =
 exception NoMax
 
 let find_max constraints eff1 eff2 =
+  let constraints = prune_constraints constraints in
   (* If one is obviously bigger, return that *)
   match max_effect eff1 eff2 with
   | Some eff -> eff
@@ -312,9 +312,7 @@ let find_max constraints eff1 eff2 =
            "Finding maximum of %s and %s given %s]"
            (Printing.effect_to_string eff1)
            (Printing.effect_to_string eff2)
-           (Printing.list_to_string
-              Printing.constraint_to_string
-              (prune_constraints ~ignore_contradictions:true constraints));
+           (Printing.list_to_string Printing.constraint_to_string constraints);
     let ctx = new_context () in
     let encoded_constraints = encode_constraints ctx constraints in
     let encoded_1_2 =
@@ -338,25 +336,27 @@ let find_max constraints eff1 eff2 =
 
 (* Check that constrs1 imply constrs2 *)
 let check_implies constrs1 constrs2 =
+  let constrs1 = prune_constraints constrs1 in
+  let constrs2 = prune_constraints constrs2 in
   if Cmdline.cfg.show_constraints
   then
     print_endline
     @@ Printf.sprintf
          "Checking constraints %s imply %s"
-         (Printing.list_to_string
-            Printing.constraint_to_string
-            (prune_constraints ~ignore_contradictions:true constrs1))
-         (Printing.list_to_string
-            Printing.constraint_to_string
-            (prune_constraints ~ignore_contradictions:true constrs2));
+         (Printing.list_to_string Printing.constraint_to_string constrs1)
+         (Printing.list_to_string Printing.constraint_to_string constrs2);
   let ctx = new_context () in
   let negate = function
     | CLeq (e1, e2) -> CLeq (FSucc e2, e1)
   in
+  let negate_constraints = function
+    | [] -> [CLeq (FSucc FZero, FZero)]
+    | lst -> List.map negate lst
+  in
   let encoded1 = encode_constraints ctx constrs1 in
   let encoded2 =
     constrs2
-    |> List.map negate
+    |> negate_constraints
     |> encode_constraints ctx
     |> Boolean.mk_or ctx.ctx
   in
