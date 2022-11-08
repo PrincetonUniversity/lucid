@@ -490,9 +490,72 @@ and infer_exps env es =
   in
   env, List.rev es'
 
-and infer_actions (env : env) (acns : action list) : env * action list =
-  let infer_action (env, acc) acn = 
+
+and infer_keys env s inf_keysizes keys =
+  let inf_keys = List.map (infer_exp env) keys |> List.split |> snd in 
+  if (List.length inf_keysizes <> List.length keys)
+  then (error_sp s.sspan "Key has incorrect number of fields for table_type.");
+  List.iter2 
+    (fun key_exp inf_keysz -> 
+      let keysz = match key_exp.ety with 
+      | None -> error_sp key_exp.espan "Could not infer type"
+      | Some(ty) -> (
+        match ty.raw_ty with
+          | TInt(sz) -> extract_size(sz)
+          | TBool -> 1
+          | _ -> error_sp key_exp.espan "key must be int or bool")
+      in
+      if (keysz <> extract_size inf_keysz)
+      then (error_sp 
+        key_exp.espan 
+        ("Table key is incorrect size. expected: "
+          ^(extract_size inf_keysz |> string_of_int)
+          ^" bits, got: "^(keysz |> string_of_int)^" bits")))
+    inf_keys 
+    inf_keysizes
+  ;
+  inf_keys
+
+
+and infer_actions (env : env) s acn_sizes (acns : action list) : env * action list =
+  if (List.length acns <> List.length acn_sizes)
+  then (error_sp 
+    s.sspan 
+    ("Table has incorrect number of actions."
+      ^" expected: "^(List.length acn_sizes |> string_of_int)
+      ^" got: "^(List.length acns |> string_of_int)));
+  let infer_action (env, acc) (acn, acn_sig) = 
     let (name, (params, stmt)) = acn in  
+    let (sig_name, param_sizes, _) = acn_sig in
+    if (name <> sig_name)
+    then (error_sp s.sspan ("Action in table has wrong name. expected: "^sig_name^", got: "^name));
+    if (List.length params <> List.length param_sizes)
+    then (error_sp 
+      s.sspan 
+      ("Action "^name^" in table has wrong number of parameters. "
+        ^" expected "^(List.length param_sizes |> string_of_int)
+        ^" got "^((List.length params |> string_of_int))));
+    List.iter2 
+      (fun (param_id, param_ty) sig_size -> 
+        let param_size = match param_ty.raw_ty with 
+          | TInt(sz) -> extract_size(sz)
+          | TBool -> 1
+          | _ -> 
+            (error_sp 
+              s.sspan 
+              ("parameter "^(Printing.id_to_string param_id)
+                ^" of action "^name^" is not an int or bool"))
+        in
+        if (param_size <> extract_size sig_size)
+        then (error_sp 
+          s.sspan 
+          ("parameter "^(Printing.id_to_string param_id)
+            ^" of action "^name^" has wrong size. expected: "
+            ^(extract_size sig_size |> string_of_int)
+            ^" got: "^(param_size |> string_of_int))))
+      params
+      param_sizes
+    ;
     (* add locals, check statement, unbind locals *)
     let old_locals = env.locals in
     let acn_env = add_locals env params in
@@ -501,7 +564,12 @@ and infer_actions (env : env) (acns : action list) : env * action list =
     let inf_acn = (name, (params, inf_stmt)) in 
     (env, inf_acn::acc)
   in
-  let inf_acns = List.fold_left infer_action (env, []) acns |> snd |> List.rev in
+  let inf_acns = List.fold_left 
+      infer_action 
+      (env, []) 
+      (List.combine acns acn_sizes) 
+    |> snd |> List.rev 
+  in
   env, inf_acns
 
 
@@ -689,12 +757,23 @@ and infer_statement (env : env) (s : statement) : env * statement =
       in
       env, SMatch (inf_es, inf_bs)
     | SInlineTable(tytbl, etbl, keys, actions, cases) -> (
-      (* TODO: check key and action signatures against table type *)
       (* type check all components individually *)
       let _, inf_etbl = infer_exp env etbl in 
-      let inf_keys = List.map (infer_exp env) keys |> List.split |> snd in 
-      let _, inf_actions = infer_actions env actions in 
-      (* entries need to know types of keys and action parameters *)
+      (* need to check the expected key and action sizes *)
+      let inf_keysize, inf_actionsizes = 
+        match inf_etbl.ety with 
+        | Some(ty) -> (
+          match ty.raw_ty with
+          | TTable(inf_keysize, inf_actionsizes) -> 
+            inf_keysize, 
+            inf_actionsizes
+          | _ -> error_sp s.sspan "table_match argument is not a table.")
+        | None ->  error_sp s.sspan "table expression has no type."
+      in
+
+      let inf_keys = infer_keys env s inf_keysize keys in 
+      let _, inf_actions = infer_actions env s inf_actionsizes actions in 
+
       let _, inf_cases = infer_cases 
         env
         s
@@ -703,10 +782,10 @@ and infer_statement (env : env) (s : statement) : env * statement =
         cases 
       in
 
-
       (* check effects *)
       (* inferred type of the match statement -- 
          a function call with 1 arg that has the declared table type.
+         Note: we could also build the table type, from the key and action sizes.
          start effect is fresh, table effect is fresh, end effect is table effect+1, 
          constraints are that start effect is equal to table effect.   *)
       let base_apply_fty =
