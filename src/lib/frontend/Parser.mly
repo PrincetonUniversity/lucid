@@ -339,7 +339,8 @@ tyname_def:
     | ID poly                             { snd $1, snd $2}
 
 action_sig:
-    | ID COLON sizes             { Span.extend (fst $1) (fst $3), ((snd $1 |> Id.name), snd $3, []) }
+    | ID COLON LPAREN sizes RPAREN        { Span.extend (fst $1) (fst $4), ((snd $1 |> Id.name), (snd $4), []) }
+    | ID COLON LPAREN RPAREN              { Span.extend (fst $1) $4, ((snd $1 |> Id.name), [], []) }
 
 action_sigs:
     | action_sig                           { fst $1, [snd $1] }
@@ -372,14 +373,24 @@ decl:
     | GLOBAL ty ID ASSIGN exp SEMI
                                             { [dglobal_sp (snd $3) $2 $5 (Span.extend $1 $6)] }
     | TABLE_TYPE ID ASSIGN LBRACE
-        KEY_SIZE sizes
+        KEY_SIZE LPAREN sizes RPAREN
         ACTION_SIZES action_sigs RBRACE
                                             { [
                                                 duty_sp 
                                                     (snd $2)
                                                     []
-                                                    (mk_ttable (snd $6) (snd $8) (Span.extend $4 $9))
-                                                    (Span.extend $1 $9)
+                                                    (mk_ttable (snd $7) (snd $10) (Span.extend $4 $11))
+                                                    (Span.extend $1 $11)
+                                                ] }
+    | TABLE_TYPE ID ASSIGN LBRACE
+        KEY_SIZE LPAREN RPAREN
+        ACTION_SIZES action_sigs RBRACE
+                                            { [
+                                                duty_sp 
+                                                    (snd $2)
+                                                    []
+                                                    (mk_ttable [] (snd $9) (Span.extend $4 $10))
+                                                    (Span.extend $1 $10)
                                                 ] }
 
 

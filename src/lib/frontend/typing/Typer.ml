@@ -689,6 +689,7 @@ and infer_statement (env : env) (s : statement) : env * statement =
       in
       env, SMatch (inf_es, inf_bs)
     | SInlineTable(tytbl, etbl, keys, actions, cases) -> (
+      (* TODO: check key and action signatures against table type *)
       (* type check all components individually *)
       let _, inf_etbl = infer_exp env etbl in 
       let inf_keys = List.map (infer_exp env) keys |> List.split |> snd in 
