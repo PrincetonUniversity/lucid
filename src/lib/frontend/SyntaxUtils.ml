@@ -65,6 +65,7 @@ let rec is_global_rty rty =
   | TTuple lst -> List.exists is_global_rty lst
   | TRecord lst -> List.exists (fun (_, rty) -> is_global_rty rty) lst
   | TVector (t, _) -> is_global_rty t
+  | TTable (_) -> true
 ;;
 
 let is_global ty = is_global_rty ty.raw_ty
@@ -78,6 +79,8 @@ let rec is_not_global_rty rty =
   | TTuple lst -> List.for_all is_not_global_rty lst
   | TRecord lst -> List.for_all (fun (_, rty) -> is_not_global_rty rty) lst
   | TVector (t, _) -> is_not_global_rty t
+  | TTable (_) -> false
+
 ;;
 
 let is_not_global ty = is_not_global_rty ty.raw_ty
@@ -278,6 +281,14 @@ let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
     if List.length lst1 <> List.length lst2
     then false
     else List.for_all2 equiv_raw_ty lst1 lst2
+  | TTable(ks1, as1), TTable(ks2, as2) -> 
+    (List.for_all2 equiv_size ks1 ks2)
+    && (List.for_all2 
+        (fun (a1, si1, so1) (a2, si2, so2) -> 
+          (String.equal a1 a2) 
+          && (List.for_all2 equiv_size si1 si2)
+          && (List.for_all2 equiv_size so1 so2))
+        as1 as2)
   | ( ( TBool
       | TMemop _
       | TInt _
@@ -289,7 +300,8 @@ let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
       | TRecord _
       | TVector _
       | TTuple _
-      | TAbstract _ )
+      | TAbstract _
+      | TTable _ )
     , _ ) -> false
 
 and equiv_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
@@ -333,6 +345,7 @@ let rec is_compound e =
   match e.e with
   | EInt _ | EVal _ | EVar _ | ESizeCast _ -> false
   | EHash _ | EOp _ | ECall _ | EStmt _ -> true
+  | ECreateTable _ -> true
   | EComp (e, _, _) | EIndex (e, _) | EProj (e, _) | EFlood e -> is_compound e
   | EVector entries | ETuple entries -> List.exists is_compound entries
   | ERecord entries -> List.exists (is_compound % snd) entries

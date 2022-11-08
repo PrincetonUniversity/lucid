@@ -146,7 +146,16 @@ let rec raw_ty_to_string t =
   | TVector (ty, size) ->
     Printf.sprintf "%s[%s]" (raw_ty_to_string ty) (size_to_string size)
   | TTuple tys -> "(" ^ concat_map " * " raw_ty_to_string tys ^ ")"
-
+  | TTable(ksize, asizes) -> 
+    " {"
+    ^"\n\tkey_size: "^(comma_sep size_to_string ksize)
+    ^"\n\taction_sizes: "
+    ^"\n\t\t"^((List.map 
+                (fun (aname, insizes, outsizes) -> 
+                  aname^" : "^(comma_sep size_to_string insizes)
+                  ^" -> "^(comma_sep size_to_string outsizes))
+                asizes) |> String.concat "\n\t\t")
+    ^"\n}"
 and func_to_string func =
   let arg_tys = concat_map ", " ty_to_string func.arg_tys in
   let ret_ty = ty_to_string func.ret_ty in
@@ -291,6 +300,8 @@ let rec e_to_string e =
     Printf.sprintf "to_int<<%s>>(%s)" (size_to_string sz1) (size_to_string sz2)
   | EStmt (s, e) ->
     Printf.sprintf "{%s; return %s}" (stmt_to_string s) (exp_to_string e)
+  | ECreateTable(ty) -> 
+    Printf.sprintf "table_create(%s)" (ty_to_string ty)
 
 and exp_to_string e = e_to_string e.e
 (* ^ Printf.sprintf "[ty:%s]"
@@ -306,6 +317,21 @@ and branch_to_string (ps, s) =
     "| %s -> {\n%s\n}"
     (comma_sep pat_to_string ps)
     (stmt_to_string s)
+
+
+and action_to_string (name, (ps, stmt)) =
+  Printf.sprintf 
+    "%s(%s) =\n\t{%s}"
+    name
+    (params_to_string ps)
+    (stmt_to_string stmt)
+
+and entry_to_string (ps, name, es) = 
+  Printf.sprintf
+    "| %s -> %s(%s);"
+    (comma_sep pat_to_string ps)
+    name
+    (comma_sep exp_to_string es)
 
 and stmt_to_string s =
   match s.s with
@@ -368,6 +394,22 @@ and stmt_to_string s =
       (id_to_string i)
       (size_to_string k)
       (stmt_to_string s)
+  | SInlineTable(_, tblexp, keys, acns, entries) -> 
+    Printf.sprintf
+      "table_match with %s = {\n\tkey:%s\n\tactions:\n\t\t%s\n\tcases:%s};"
+        (* (id_to_string tblty) *)
+        (exp_to_string tblexp)
+        (comma_sep exp_to_string keys)
+        (String.concat 
+          "\n\t\t" 
+          (List.map 
+            (fun acn -> action_to_string acn)
+            acns))
+        (String.concat 
+          "\n\t\t" 
+          (List.map 
+            (fun entry -> entry_to_string entry)
+            entries))
 ;;
 
 let statement_to_string = stmt_to_string
@@ -501,6 +543,18 @@ and d_to_string d =
       (cid_to_string cid1)
       (exp_to_string e)
       (cid_to_string cid2)
+  | DTable(id, ty, None) -> 
+    Printf.sprintf
+      "inline_table %s %s;"
+      (ty_to_string ty)
+      (id_to_string id)
+  | DTable(id, ty, Some exp) -> 
+    Printf.sprintf
+      "inline_table %s %s = %s;"
+      (ty_to_string ty)
+      (id_to_string id)
+      (exp_to_string exp)
+
 
 and decl_to_string d = d_to_string d.d
 and decls_to_string ds = concat_map "\n\n" decl_to_string ds

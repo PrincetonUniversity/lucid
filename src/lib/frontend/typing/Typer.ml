@@ -361,6 +361,8 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
     let env, inf_s = infer_statement env s in
     let env, inf_e1, inf_e1ty = infer_exp env e1 |> textract in
     env, { e with e = EStmt (inf_s, inf_e1); ety = Some inf_e1ty }
+  | ECreateTable(tbl_ty) -> 
+    env, { e with e = ECreateTable(tbl_ty); ety = Some tbl_ty }
 
 and infer_op env span op args =
   let env, ty, new_args =
@@ -487,6 +489,73 @@ and infer_exps env es =
       es
   in
   env, List.rev es'
+
+and infer_actions (env : env) (acns : action list) : env * action list =
+  let infer_action (env, acc) acn = 
+    let (name, (params, stmt)) = acn in  
+    (* add locals, check statement, unbind locals *)
+    let old_locals = env.locals in
+    let acn_env = add_locals env params in
+    let acn_env, inf_stmt = infer_statement acn_env stmt in       
+    let env = {acn_env with locals=old_locals} in 
+    let inf_acn = (name, (params, inf_stmt)) in 
+    (env, inf_acn::acc)
+  in
+  let inf_acns = List.fold_left infer_action (env, []) acns |> snd |> List.rev in
+  env, inf_acns
+
+
+and infer_cases 
+  (env : env)
+  (s : statement)
+  (key_tys : raw_ty list) 
+  (acn_params : (string * params) list) 
+  (cases : case list) : (env * case list) =
+  (* check key pattern lengths and types *)
+  let check_pats pats =
+    match pats with
+    | [PWild] -> ()
+    | _ when List.length pats <> List.length key_tys ->
+      error_sp
+        s.sspan
+        "A const_entry of this table statement has the wrong number of patterns."
+    | _ ->
+      List.iter2 (unify_raw_ty s.sspan) key_tys (List.map (infer_pattern env) pats)
+  in
+  (* check action name, get parameters *)
+  let check_acn aname : params =
+    match (List.assoc_opt aname acn_params) with
+    | None -> 
+      error_sp
+        s.sspan
+        ("A const_entry in this table uses action "^(aname)^", which is not declared in this table.")
+    | Some(params) -> params
+  in
+
+  let infer_case (env, cases) (pats, acn_name, args) =
+    (* check pattern *)
+    check_pats pats;
+    (* make sure action is declared *)
+    let acn_params = check_acn acn_name in
+    (* check arguments with the action's params as locals *)
+    let old_locals = env.locals in
+    let case_env = add_locals env acn_params in
+    if (List.length acn_params <> List.length args)
+    then (
+      error_sp
+        s.sspan
+        ("The const entry [[ "^(Printing.entry_to_string (pats, acn_name, args))^" ]] in this table has the wrong number of arguments for its action.")
+    );
+    let inf_args = List.map (infer_exp case_env) args |> List.split |> snd in
+    (* restore env *)
+    let env = {case_env with locals=old_locals} in 
+    (* rebuild case with types *)
+    let inf_case = (pats, acn_name, inf_args) in 
+    (env, inf_case::cases)
+  in
+  let env, inf_cases = List.fold_left infer_case (env, []) cases in 
+  let inf_cases = List.rev inf_cases in 
+  env, inf_cases
 
 and infer_statement (env : env) (s : statement) : env * statement =
   (* (match s.s with
@@ -619,6 +688,59 @@ and infer_statement (env : env) (s : statement) : env * statement =
           bs
       in
       env, SMatch (inf_es, inf_bs)
+    | SInlineTable(tytbl, etbl, keys, actions, cases) -> (
+      (* type check all components individually *)
+      let _, inf_etbl = infer_exp env etbl in 
+      let inf_keys = List.map (infer_exp env) keys |> List.split |> snd in 
+      let _, inf_actions = infer_actions env actions in 
+      (* entries need to know types of keys and action parameters *)
+      let _, inf_cases = infer_cases 
+        env
+        s
+        (List.map (fun k -> (Option.get k.ety).raw_ty) inf_keys) 
+        (List.map (fun (name, (params, _)) -> (name, params)) inf_actions)
+        cases 
+      in
+
+
+      (* check effects *)
+      (* inferred type of the match statement -- 
+         a function call with 1 arg that has the declared table type.
+         start effect is fresh, table effect is fresh, end effect is table effect+1, 
+         constraints are that start effect is equal to table effect.   *)
+      let base_apply_fty =
+        let tbl_eff = FVar (QVar (Id.fresh "eff")) in
+        let start_eff = FVar (QVar (Id.fresh "eff")) in
+        { arg_tys =[ty_eff tytbl.raw_ty tbl_eff]
+        ; ret_ty = ty @@ TVoid
+        ; start_eff
+        ; end_eff = FSucc tbl_eff
+        ; constraints = ref [CLeq (start_eff, tbl_eff)]
+        }
+      in
+      (* the inferred type is a copy of the base type *)
+      let inf_apply_fty = instantiator#visit_ty (fresh_maps ()) (ty (TFun(base_apply_fty))) in
+
+      (* the actual type is a call with 1st arg of INFERRED type of the table variable. 
+         This is important because the inferred type will have the concrete effect corresponding 
+         to where the variable was declared. *)
+      print_endline ("inferred table effect: "^(Printing.effect_to_string (Option.get inf_etbl.ety).teffect));
+      let fty = {
+        arg_tys = [(Option.get inf_etbl.ety)];
+        ret_ty = ty @@ TVoid;
+        start_eff = env.current_effect;
+        end_eff = fresh_effect ();
+        constraints = ref [];
+      }
+      in
+      (* unify inferred and actual types *)
+      unify_raw_ty s.sspan (TFun fty) (inf_apply_fty.raw_ty);
+      let new_env = 
+        check_constraints s.sspan "Table match" env fty.end_eff
+          @@ !(fty.constraints)
+      in
+      new_env, (SInlineTable(tytbl,inf_etbl, inf_keys, inf_actions, inf_cases))
+    )
     | SLoop (s1, idx, sz) ->
       validate_size s.sspan env sz;
       let renamed_idx = Id.freshen idx in
@@ -855,6 +977,20 @@ let rec infer_declaration (builtin_tys : Builtins.builtin_tys) (env : env) (effe
       let ty = generalizer#visit_ty () ty in
       let env = define_const id ty env in
       env, FSucc effect_count, DGlobal (id, ty, inf_e)
+    | DTable (id, ty, None) -> 
+      (* TABLE QUESTION: is this correct? *) 
+      (* set effect to current stage *)
+      let ty = {ty with teffect = effect_count } in 
+      (* unify_ty d.dspan inf_ety ty; *) (* nothing to unify because there's no rhs *)
+      (* not sure what this does, something with tqvars, which seem to be type refs? *)
+      let ty = generalizer#visit_ty () ty in
+      (* define the variable of type id *)
+      let env = define_const id ty env in
+      (* important_ increment FSucc effect_count *)
+      env, FSucc effect_count, DTable(id, ty, None)
+    | DTable(_, _, Some(_)) -> 
+      error_sp d.dspan
+      @@ "Global tables (non-inlined) are not implemented."
     | DConst (id, ty, e) ->
       enter_level ();
       let _, inf_e, inf_ety = infer_exp env e |> textract in
@@ -1108,5 +1244,6 @@ let infer_prog (builtin_tys : Builtins.builtin_tys) (decls : decls) : decls =
   let _, _, inf_decls = List.fold_left infer_d (env, FZero, []) decls in
   ensure_fully_typed inf_decls;
   let inf_decls = unsubst_TAbstracts inf_decls in
+  (* exit 1; *)
   List.rev inf_decls
 ;;

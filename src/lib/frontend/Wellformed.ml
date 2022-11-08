@@ -302,6 +302,9 @@ let rec check_qvars d =
   | DFun _ | DMemop _ | DModuleAlias _ -> (* No restrictions *) ()
   | DGlobal _ ->
     (* None allowed at all *) basic_qvar_checker#visit_decl (true, true) d
+  | DTable _ -> 
+    (* TABLE QUESTION: not sure what is right here, but tables are globals.*)
+    (* None allowed at all *) basic_qvar_checker#visit_decl (true, true) d
   | DSize _ | DSymbolic _ | DConst _ | DExtern _ ->
     (* Only allowed in effect *) basic_qvar_checker#visit_decl (false, true) d
   | DConstr _ ->
@@ -312,7 +315,7 @@ let rec check_qvars d =
     preset_qvar_checker#visit_decl (List.map STQVar.strip_links sizes) d
   | DEvent (_, _, _, params) | DHandler (_, (params, _)) ->
     (* Effects always ok, sizes only allowed if they appear inside at least one global-type argument *)
-    event_qvar_checker#visit_params (false, ref []) params
+    event_qvar_checker#visit_params (false, ref []) params  
   | DModule (_, intf, ds) ->
     List.iter check_qvars_intf intf;
     List.iter check_qvars ds

@@ -69,6 +69,7 @@ let occurs_ty span tvar raw_ty : unit =
     | TEvent
     | TGroup
     | TMemop _ -> ()
+    | TTable _ -> ()
     | TRecord lst -> List.iter (fun (_, raw_ty) -> occ tvar raw_ty) lst
     | TTuple lst -> List.iter (occ tvar) lst
     | TFun { arg_tys; ret_ty; _ } ->
@@ -254,6 +255,15 @@ and try_unify_rty span rty1 rty2 =
   | TVector (ty1, size1), TVector (ty2, size2) ->
     try_unify_size span size1 size2;
     unify_raw_ty ty1 ty2
+  | TTable(ksizes1, asizes1),  TTable(ksizes2, asizes2) ->
+    List.iter2 (try_unify_size span) ksizes1 ksizes2;
+    List.iter2
+      (fun (aname1, ainsize1, aoutsize1) (aname2, ainsize2, aoutsize2) -> 
+        if not (String.equal aname1 aname2) then raise CannotUnify;
+        List.iter2 (try_unify_size span) ainsize1 ainsize2;
+        List.iter2 (try_unify_size span) aoutsize1 aoutsize2)
+      asizes1
+      asizes2
   | ( ( TVoid
       | TGroup
       | TBool
@@ -265,7 +275,8 @@ and try_unify_rty span rty1 rty2 =
       | TRecord _
       | TVector _
       | TTuple _
-      | TAbstract _ )
+      | TAbstract _ 
+      | TTable _ )
     , _ ) -> raise CannotUnify
 
 and unify_ty (span : Span.t) ty1 ty2 : unit =

@@ -41,6 +41,8 @@ and constr_spec =
   | CSpec of (cid * constr_spec_cmp) list
   | CEnd of cid
 
+and action_sig = (string * size list * size list)
+
 and raw_ty =
   | TQVar of raw_ty tqvar
   | TBool
@@ -55,6 +57,7 @@ and raw_ty =
   | TRecord of (string * raw_ty) list
   | TVector of raw_ty * size
   | TTuple of raw_ty list
+  | TTable of (size list * action_sig list)
 
 and func_ty =
   { arg_tys : tys
@@ -145,6 +148,7 @@ and e =
   | EComp of exp * id * size (* Vector comprehension *)
   | EIndex of exp * size
   | ETuple of exp list
+  | ECreateTable of ty
 
 and exp =
   { e : e
@@ -159,6 +163,10 @@ and gen_type =
   | GMulti of exp (* Multicast group name *)
   | GPort of exp
 
+(* actions and cases, which are guarded actions *)
+and action = string * body
+and case = pat list * string * exp list
+
 (* statements *)
 and s =
   | SNoop
@@ -172,6 +180,7 @@ and s =
   | SSeq of statement * statement
   | SMatch of exp list * branch list
   | SLoop of statement * id * size
+  | SInlineTable of ty * exp * exp list * action list * case list
 
 and statement =
   { s : s
@@ -236,6 +245,9 @@ and d =
   | DConstr of id * ty * params * exp
   | DModule of id * interface * decls
   | DModuleAlias of id * exp * cid * cid
+  | DTable of id * ty * exp option
+    (* if no exp given, it is an inlined table *)
+
 
 (* name, return type, args & body *)
 and decl =
@@ -389,6 +401,9 @@ let dconstr_sp id ty params exp span =
   decl_sp (DConstr (id, ty, params, exp)) span
 ;;
 
+let dtable_sp id ty opt_exp span = decl_sp (DTable(id, ty, opt_exp)) span
+;;
+
 let module_sp id intf ds span = decl_sp (DModule (id, intf, ds)) span
 
 let module_alias_sp id1 e cid1 cid2 span =
@@ -422,6 +437,8 @@ let match_sp es bs span = statement_sp (SMatch (es, bs)) span
 let loop_sp e i k span = statement_sp (SLoop (e, i, k)) span
 let sexp_sp e span = statement_sp (SUnit e) span
 let scall_sp cid es span = sexp_sp (call_sp cid es span) span
+let smatchtable_sp tblty etbl keys actions cases span =
+    statement_sp (SInlineTable(tblty, etbl, keys, actions, cases)) span 
 
 (* Interface spefications *)
 let spec ispec = { ispec; ispan = Span.default }

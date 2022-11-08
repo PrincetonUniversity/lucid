@@ -221,6 +221,16 @@ let rename prog =
       method! visit_d dummy d =
         (* print_endline @@ "Working on:" ^ Printing.d_to_string d; *)
         match d with
+        | DTable (x, ty, None) -> 
+          (* TABLE QUESTION: is this correct? *)
+          let new_x = self#freshen_var x in
+          let replaced_ty = self#visit_ty dummy ty in
+          DTable(new_x, replaced_ty, None)
+        | DTable(x, ty, Some(e)) -> 
+          let replaced_ty = self#visit_ty dummy ty in
+          let replaced_e = self#visit_exp dummy e in
+          let new_x = self#freshen_var x in
+          DTable(new_x, replaced_ty, Some(replaced_e))
         | DGlobal (x, ty, e) ->
           let replaced_ty = self#visit_ty dummy ty in
           let replaced_e = self#visit_exp dummy e in

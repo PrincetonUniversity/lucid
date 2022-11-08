@@ -66,6 +66,18 @@ rule token = parse
   | "match"           { MATCH (position lexbuf) }
   | "with"            { WITH (position lexbuf) }
   | "type"            { TYPE (position lexbuf) }
+
+  | "table_type"      { TABLE_TYPE (position lexbuf) }
+  | "key_size:"      { KEY_SIZE (position lexbuf) }
+  | "action_sizes:"   { ACTION_SIZES (position lexbuf) }
+
+  | "table_create"    { TABLE_CREATE (position lexbuf) }
+
+  | "table_match"     { TABLE_MATCH (position lexbuf) }
+  | "key:"            { KEY         (position lexbuf) }
+  | "actions:"        { ACTIONS (position lexbuf) }
+  | "const_entries:"          { CASES (position lexbuf) }
+
   | "constr"          { CONSTR (position lexbuf) }
   | "module"          { MODULE (position lexbuf) }
   | "end"             { END (position lexbuf) }

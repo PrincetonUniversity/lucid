@@ -12,6 +12,9 @@
   let mk_trecord lst =
     TRecord (List.map (fun (id, ty) -> Id.name id, ty.raw_ty) lst)
 
+  let mk_ttable key_sizes action_sizes span = 
+    ty_sp (TTable(key_sizes, action_sizes)) span
+
   let mk_tmemop span n sizes =
     match sizes with
     | [s1] -> TMemop (n, s1)
@@ -42,6 +45,9 @@
         es
     in
     value_sp (VGroup locs) span |> value_to_exp
+
+  let make_create_table tbl_ty span = 
+    exp_sp (ECreateTable(tbl_ty)) span
 
   let mk_fty tspan params =
     let start_eff = FVar (QVar (Id.fresh "eff")) in
@@ -119,6 +125,18 @@
 %token <Span.t> ARROW
 %token <Span.t> EXTERN
 %token <Span.t> TYPE
+
+%token <Span.t> TABLE_TYPE
+%token <Span.t> KEY_SIZE
+%token <Span.t> ACTION_SIZES
+
+%token <Span.t> TABLE_CREATE
+
+%token <Span.t> TABLE_MATCH
+%token <Span.t> ACTIONS
+%token <Span.t> KEY
+%token <Span.t> CASES
+
 %token <Span.t> CONSTR
 %token <Span.t> PROJ
 %token <Span.t> MODULE
@@ -184,6 +202,10 @@ size:
     | AUTO                              { $1, IVar (QVar (fresh_auto ())) }
     | size PLUS size                    { Span.extend (fst $1) (fst $3), add_sizes (snd $1) (snd $3)}
 
+sizes:
+    | size                              { fst $1, [snd $1] }
+    | size COMMA sizes                  { Span.extend (fst $1) (fst $3), (snd $1)::(snd $3) }
+
 polys:
     | size                              { fst $1, [snd $1] }
     | size COMMA polys                  { Span.extend (fst $1) (fst $3), (snd $1)::(snd $3) }
@@ -243,6 +265,7 @@ exp:
     | SIZECAST single_poly LPAREN size RPAREN { szcast_sp (snd $2) (snd $4) (Span.extend $1 $5) }
     | FLOOD exp                           { flood_sp $2 (Span.extend $1 $2.espan) }
     | LBRACE args RBRACE                  { make_group $2 (Span.extend $1 $3) }
+    | TABLE_CREATE LESS ty MORE LPAREN RPAREN       { make_create_table $3 (Span.extend $1 $6) }
 
 exps:
   | exp                                 { [$1] }
@@ -315,6 +338,13 @@ tyname_def:
     | ID                                  { snd $1, [] }
     | ID poly                             { snd $1, snd $2}
 
+action_sig:
+    | ID COLON sizes             { Span.extend (fst $1) (fst $3), ((snd $1 |> Id.name), snd $3, []) }
+
+action_sigs:
+    | action_sig                           { fst $1, [snd $1] }
+    | action_sig action_sigs              { Span.extend (fst $1) (fst $2), (snd $1)::(snd $2) }
+
 decl:
     | CONST ty ID ASSIGN exp SEMI           { [dconst_sp (snd $3) $2 $5 (Span.extend $1 $6)] }
     | EXTERN ty ID SEMI                     { [dextern_sp (snd $3) $2 (Span.extend $1 $4)] }
@@ -341,6 +371,21 @@ decl:
     | CONSTR ty ID paramsdef ASSIGN exp SEMI { [dconstr_sp (snd $3) $2 $4 $6 (Span.extend $1 $7)] }
     | GLOBAL ty ID ASSIGN exp SEMI
                                             { [dglobal_sp (snd $3) $2 $5 (Span.extend $1 $6)] }
+    | TABLE_TYPE ID ASSIGN LBRACE
+        KEY_SIZE sizes
+        ACTION_SIZES action_sigs RBRACE
+                                            { [
+                                                duty_sp 
+                                                    (snd $2)
+                                                    []
+                                                    (mk_ttable (snd $6) (snd $8) (Span.extend $4 $9))
+                                                    (Span.extend $1 $9)
+                                                ] }
+
+
+
+
+
 decls:
     | decl                             { $1 }
     | decl decls                       { $1 @ $2 }
@@ -395,6 +440,26 @@ branches:
 multiargs:
     | exp COMMA args                         { $1::$3 }
 
+
+action:
+    | ID LPAREN RPAREN LBRACE statement RBRACE
+                {Span.extend (fst $1) $6, ((snd $1|> Id.name), ([] ,$5))}
+    | ID LPAREN params RPAREN LBRACE statement RBRACE
+                {Span.extend (fst $1) $7, ((snd $1|> Id.name),  ($3, $6))}
+actions:
+    | action                                        {fst $1, [snd $1]}
+    | action actions                                { Span.extend (fst $1) (fst $2), (snd $1::snd $2) }
+
+case: 
+    | PIPE patterns ARROW ID LPAREN RPAREN SEMI 
+        {Span.extend $1 $7, ($2, (snd $4 |> Id.name), [])}
+    | PIPE patterns ARROW ID LPAREN args RPAREN SEMI 
+        {Span.extend $1 $8, ($2, (snd $4 |> Id.name), $6)}
+
+cases: 
+    | case                                   { fst $1, [snd $1] }
+    | case cases                     { Span.extend (fst $1) (fst $2), (snd $1::snd $2) }
+
 statement1:
     | ty ID ASSIGN exp SEMI                 { slocal_sp (snd $2) $1 $4 (Span.extend $1.tspan $5) }
     | ID ASSIGN exp SEMI	                  { sassign_sp (snd $1) $3 (Span.extend (fst $1) $4) }
@@ -410,6 +475,13 @@ statement1:
     | PRINTF LPAREN STRING RPAREN SEMI             { sprintf_sp (snd $3) [] (Span.extend $1 $5) }
     | PRINTF LPAREN STRING COMMA args RPAREN SEMI  { sprintf_sp (snd $3) $5 (Span.extend $1 $7) }
     | FOR LPAREN ID LESS size RPAREN LBRACE statement RBRACE { loop_sp $8 (snd $3) (snd $5) (Span.extend $1 $9) }
+    | TABLE_MATCH LESS ty MORE LPAREN exp ASSIGN LBRACE 
+        KEY args
+        ACTIONS actions
+        CASES cases
+        RBRACE RPAREN SEMI
+        { smatchtable_sp $3 $6 $10 (snd $12) (snd $14) (Span.extend $1 $17) }
+
 
 includes:
     | INCLUDE STRING                        {[(snd $2)]}

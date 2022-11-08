@@ -46,6 +46,8 @@ let rec inline_exp e =
   | ETuple es ->
     let stmt, es' = inline_exps es in
     stmt, { e with e = ETuple es' }
+  | ECreateTable _ -> 
+    snoop, e
 
 and inline_exps es =
   List.fold_right
@@ -85,6 +87,12 @@ and inline_stmt s =
     let branches' = List.map (fun (p, stmt) -> p, inline_stmt stmt) branches in
     sseq s' { s with s = SMatch (es', branches') }
   | SLoop (s1, id, sz) -> { s with s = SLoop (inline_stmt s1, id, sz) }
+  | SInlineTable(tblty, tblexp, keys, acns, entries) -> (
+    let ts', tblexp' = inline_exp tblexp in 
+    let s', keys' = inline_exps keys in
+    let acns' = List.map (fun (id, (params, stmt)) -> id, (params, inline_stmt stmt)) acns in
+    sseq (sseq ts' s') {s with s=SInlineTable(tblty, tblexp', keys', acns', entries)}
+  )
 ;;
 
 let eliminator =
