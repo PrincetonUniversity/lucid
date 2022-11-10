@@ -1057,20 +1057,6 @@ let rec infer_declaration (builtin_tys : Builtins.builtin_tys) (env : env) (effe
       let ty = generalizer#visit_ty () ty in
       let env = define_const id ty env in
       env, FSucc effect_count, DGlobal (id, ty, inf_e)
-    | DTable (id, ty, None) -> 
-      (* TABLE QUESTION: is this correct? *) 
-      (* set effect to current stage *)
-      let ty = {ty with teffect = effect_count } in 
-      (* unify_ty d.dspan inf_ety ty; *) (* nothing to unify because there's no rhs *)
-      (* not sure what this does, something with tqvars, which seem to be type refs? *)
-      let ty = generalizer#visit_ty () ty in
-      (* define the variable of type id *)
-      let env = define_const id ty env in
-      (* important_ increment FSucc effect_count *)
-      env, FSucc effect_count, DTable(id, ty, None)
-    | DTable(_, _, Some(_)) -> 
-      error_sp d.dspan
-      @@ "Global tables (non-inlined) are not implemented."
     | DConst (id, ty, e) ->
       enter_level ();
       let _, inf_e, inf_ety = infer_exp env e |> textract in

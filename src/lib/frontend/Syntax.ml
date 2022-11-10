@@ -245,7 +245,7 @@ and d =
   | DConstr of id * ty * params * exp
   | DModule of id * interface * decls
   | DModuleAlias of id * exp * cid * cid
-  | DTable of id * ty * exp option
+  (* | DTable of id * ty * exp option *)
     (* if no exp given, it is an inlined table *)
 
 
@@ -401,9 +401,9 @@ let dconstr_sp id ty params exp span =
   decl_sp (DConstr (id, ty, params, exp)) span
 ;;
 
-let dtable_sp id ty opt_exp span = decl_sp (DTable(id, ty, opt_exp)) span
+(* let dtable_sp id ty opt_exp span = decl_sp (DTable(id, ty, opt_exp)) span
 ;;
-
+ *)
 let module_sp id intf ds span = decl_sp (DModule (id, intf, ds)) span
 
 let module_alias_sp id1 e cid1 cid2 span =

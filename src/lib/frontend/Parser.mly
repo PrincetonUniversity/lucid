@@ -265,7 +265,7 @@ exp:
     | SIZECAST single_poly LPAREN size RPAREN { szcast_sp (snd $2) (snd $4) (Span.extend $1 $5) }
     | FLOOD exp                           { flood_sp $2 (Span.extend $1 $2.espan) }
     | LBRACE args RBRACE                  { make_group $2 (Span.extend $1 $3) }
-    | TABLE_CREATE LESS ty MORE LPAREN RPAREN       { make_create_table $3 (Span.extend $1 $6) }
+    | TABLE_CREATE LESS ty MORE LPAREN RPAREN      { make_create_table $3 (Span.extend $1 $6) }
 
 exps:
   | exp                                 { [$1] }

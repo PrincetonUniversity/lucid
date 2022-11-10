@@ -179,7 +179,10 @@ let rec interp_exp (nst : State.network_state) swid locals e : State.ival =
       |> Integer.to_int
     in
     V (vgroup [-(port + 1)])
-  | ECreateTable _ -> error "Tables not supported by interpreter!"
+  (* | ECreateTable _ -> ( *)
+    
+    (* allocate the table in interpState *)
+  (* ) *)
 
 and interp_exps nst swid locals es : State.ival list =
   List.map (interp_exp nst swid locals) es
@@ -371,7 +374,6 @@ let rec interp_statement nst swid locals s =
       | _ -> error "Match statement did not match any branch!"
     in
     interp_s (snd first_match)
-  | SInlineTable(_) -> error "tables not supported by interpreter!"
 ;;
 
 let interp_dglobal (nst : State.network_state) swid id ty e =

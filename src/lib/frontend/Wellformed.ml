@@ -302,9 +302,6 @@ let rec check_qvars d =
   | DFun _ | DMemop _ | DModuleAlias _ -> (* No restrictions *) ()
   | DGlobal _ ->
     (* None allowed at all *) basic_qvar_checker#visit_decl (true, true) d
-  | DTable _ -> 
-    (* TABLE QUESTION: not sure what is right here, but tables are globals.*)
-    (* None allowed at all *) basic_qvar_checker#visit_decl (true, true) d
   | DSize _ | DSymbolic _ | DConst _ | DExtern _ ->
     (* Only allowed in effect *) basic_qvar_checker#visit_decl (false, true) d
   | DConstr _ ->

@@ -543,18 +543,6 @@ and d_to_string d =
       (cid_to_string cid1)
       (exp_to_string e)
       (cid_to_string cid2)
-  | DTable(id, ty, None) -> 
-    Printf.sprintf
-      "inline_table %s %s;"
-      (ty_to_string ty)
-      (id_to_string id)
-  | DTable(id, ty, Some exp) -> 
-    Printf.sprintf
-      "inline_table %s %s = %s;"
-      (ty_to_string ty)
-      (id_to_string id)
-      (exp_to_string exp)
-
 
 and decl_to_string d = d_to_string d.d
 and decls_to_string ds = concat_map "\n\n" decl_to_string ds

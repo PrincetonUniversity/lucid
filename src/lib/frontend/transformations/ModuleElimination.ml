@@ -66,7 +66,6 @@ let add_definitions prefix env ds =
     | DHandler (id, _)
     | DConstr (id, _, _, _)
     | DGlobal (id, _, _) -> { env with vars = add_entry env.vars id }
-    | DTable(id, _, _) -> { env with vars = add_entry env.vars id }
     | DSize (id, _) -> { env with sizes = add_entry env.sizes id }
     | DUserTy (id, _, _) -> { env with types = add_entry env.types id }
     | DModuleAlias _ -> failwith "Should be eliminated before this"
@@ -129,9 +128,6 @@ let rec replace_module env m_id ds =
           | DGlobal (id, x, y) ->
             ( { env with vars = add_entry env.vars id }
             , DGlobal (prefix id, x, y) |> wrap d )
-          | DTable (id, ty, exp) -> 
-            ( {env with vars = add_entry env.vars id }
-            , DTable (prefix id, ty, exp) |> wrap d)
           | DSize (id, x) ->
             ( { env with sizes = add_entry env.sizes id }
             , DSize (prefix id, x) |> wrap d )
