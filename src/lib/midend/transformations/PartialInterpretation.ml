@@ -118,6 +118,7 @@ let rec interp_exp env e =
     { e with e = EHash (sz, List.map (interp_exp env) args) }
   | EFlood e' -> { e with e = EFlood (interp_exp env e') }
   | EOp (op, args) -> { e with e = interp_op env op args }
+  | ECreateTable(_) -> e
 
 (* Mostly copied from InterpCore, could maybe merge the two functions *)
 and interp_op env op args =
@@ -267,6 +268,18 @@ let interp_gen_ty env = function
   | GPort e -> GPort (interp_exp env e)
 ;;
 
+
+let add_builtin_defs level vars env =
+  List.fold_left
+    (fun acc (id, _) ->
+      IdMap.add
+        id
+        { level; body = None; is_declared = true; declared_as = None }
+        acc)
+    env
+    vars
+;;
+
 (* Partially interpret a statement. Takes an environment and the current level
    (i.e. how deeply nested the scope is. Return the interpreted statment and the
    environment after interpreting it. *)
@@ -344,17 +357,19 @@ let rec interp_stmt env level s : statement * env =
     in
     let base_stmt = { s with s = SMatch (es, branches) } in
     merge_branches base_stmt level env envs
-;;
-
-let add_builtin_defs level vars env =
-  List.fold_left
-    (fun acc (id, _) ->
-      IdMap.add
-        id
-        { level; body = None; is_declared = true; declared_as = None }
-        acc)
-    env
-    vars
+  | SInlineTable(ty, etbl, ekeys, actions, cases) -> 
+    let ekeys' = List.map interp_exp ekeys in
+    let actions_envs = List.map
+      (fun (aname, (params, stmt)) -> 
+        let env = add_builtin_defs (level+1) params env in
+        let stmt, env = interp_stmt env (level+1) stmt in
+        let acn = (aname, (params, stmt)) in
+        acn, env)
+      actions
+    in
+    let actions', envs = List.split actions_envs in 
+    let base_stmt = {s with s = SInlineTable(ty, etbl, ekeys', actions', cases)} in 
+    merge_branches base_stmt level env envs
 ;;
 
 let interp_body builtin_tys env (params, stmt) =

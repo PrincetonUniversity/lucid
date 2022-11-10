@@ -37,7 +37,9 @@ and event_sort = [%import: CoreSyntax.event_sort]
 and conditional_return = [%import: CoreSyntax.conditional_return]
 and complex_body = [%import: CoreSyntax.complex_body]
 and memop_body = [%import: CoreSyntax.memop_body]
-
+and action = [%import: CoreSyntax.action]
+and case = [%import: CoreSyntax.case]
+and action_sig = [%import: CoreSyntax.action_sig]
 
 (* multicast id space: 
   0 - 511: recirculated event cloning

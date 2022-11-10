@@ -205,6 +205,7 @@ let is_atomic exp =
     CL.map is_immediate args |> CL.for_all identity
   (* a flood expression is atomic if its argument is an immediate *)
   | EFlood(arg) -> is_immediate arg 
+  | ECreateTable(_) -> false
 ;;
 
 let is_bool_non_immediate exp = is_bool exp && not (is_immediate exp)
@@ -431,68 +432,6 @@ let rec replace_in_exp (exp : exp) (t : cid) (n : exp) : exp =
   | _ -> exp
 
 and replace_in_exps exps t n = CL.map (fun e -> replace_in_exp e t n) exps
-
-(* replace EVar(t) with exp n wherever it appears *)
-let rec replace_in_stmt (stmt : statement) t n =
-  match stmt with
-  | { s = SNoop } | { s = SPrintf _ } | { s = SRet None } -> stmt
-  | { s = SUnit e1; _ } -> { stmt with s = SUnit (replace_in_exp e1 t n) }
-  | { s = SLocal (id, ty, exp); _ } ->
-    { stmt with s = SLocal (id, ty, replace_in_exp exp t n) }
-  | { s = SAssign (id, exp); _ } ->
-    { stmt with s = SAssign (id, replace_in_exp exp t n) }
-  | { s = SIf (e1, s1, s2); _ } ->
-    { stmt with
-      s =
-        SIf
-          (replace_in_exp e1 t n, replace_in_stmt s1 t n, replace_in_stmt s2 t n)
-    }
-  | { s = SGen (b, exp); _ } ->
-    { stmt with s = SGen (b, replace_in_exp exp t n) }
-  | { s = SRet (Some e1); _ } ->
-    { stmt with s = SRet (Some (replace_in_exp e1 t n)) }
-  | { s = SSeq (s1, s2); _ } ->
-    { stmt with s = SSeq (replace_in_stmt s1 t n, replace_in_stmt s2 t n) }
-  | { s = SMatch (keys, branches); _ } ->
-    let map_f (pats, s) = pats, replace_in_stmt s t n in
-    let updated_branches = CL.map map_f branches in
-    { stmt with s = SMatch (replace_in_exps keys t n, updated_branches) }
-;;
-
-(* replace id with new_id in the left hand side
-  of local and assign statements *)
-let rec replace_in_stmt_lhs (stmt : statement) (id : Id.t) new_id =
-  match stmt with
-  | { s = SSeq (s1, s2); _ } ->
-    { stmt with
-      s =
-        SSeq (replace_in_stmt_lhs s1 id new_id, replace_in_stmt_lhs s2 id new_id)
-    }
-  | { s = SMatch (keys, branches); _ } ->
-    let map_f (pats, s) = pats, replace_in_stmt_lhs s id new_id in
-    let updated_branches = CL.map map_f branches in
-    { stmt with s = SMatch (keys, updated_branches) }
-  | { s = SIf (e1, s1, s2); _ } ->
-    { stmt with
-      s =
-        SIf
-          ( e1
-          , replace_in_stmt_lhs s1 id new_id
-          , replace_in_stmt_lhs s2 id new_id )
-    }
-  | { s = SLocal (orig_id, ty, exp); _ } ->
-    (match Id.equals id orig_id with
-    | true -> { stmt with s = SLocal (id, ty, exp) }
-    | false -> stmt)
-  | { s = SAssign (orig_id, exp); _ } ->
-(*     print_endline ("LOOKING FOR ID IN LHS: " ^ Id.to_string id);
-    print_endline ("I SEE ID IN LHS: " ^ Id.to_string orig_id); *)
-    (match Id.equals id orig_id with
-    | true -> { stmt with s = SAssign (new_id, exp) }
-    | false -> stmt)
-  | _ -> stmt
-;;
-
 
 
 

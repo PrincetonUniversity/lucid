@@ -19,6 +19,8 @@ and size = int
 
 and sizes = size list
 
+and action_sig = (string * size list * size list)
+
 and raw_ty =
   | TBool
   | TGroup
@@ -27,6 +29,7 @@ and raw_ty =
   | TFun of func_ty (* Only used for Array/event functions at this point *)
   | TName of cid * sizes * bool (* Named type: e.g. "Array.t<<32>>". Bool is true if it represents a global type *)
   | TMemop of int * size
+  | TTable of (size list * action_sig list)
 
 (* Don't need effects or constraints since we passed typechecking ages ago *)
 and func_ty =
@@ -100,6 +103,7 @@ and e =
   | ECall of cid * exp list
   | EHash of size * exp list
   | EFlood of exp
+  | ECreateTable of ty
 
 and exp =
   { e : e
@@ -114,6 +118,10 @@ and gen_type =
   | GMulti of exp
   | GPort of exp
 
+(* actions and cases, which are guarded actions *)
+and action = string * body
+and case = pat list * string * exp list
+
 (* statements *)
 and s =
   | SNoop
@@ -126,6 +134,7 @@ and s =
   | SSeq of statement * statement
   | SMatch of exp list * branch list
   | SRet of exp option
+  | SInlineTable of ty * exp * exp list * action list * case list
 
 and statement =
   { s : s
