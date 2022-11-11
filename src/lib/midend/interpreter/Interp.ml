@@ -146,46 +146,80 @@ let rec interp_events event_getter_opt idx max_time nst =
         interp_events event_getter_opt ((idx + 1) mod Array.length nst.switches) max_time nst)
 ;;
 
+let sighdl s =
+  print_endline ("got signal "^(string_of_int s));
+  if (s != -14) then (exit 1)
+;;
+
+
+type 'a inp = 
+  | IEvent of 'a
+  | ICmdStr of string 
+  | Continue
+  | End
+
+let handle_cmd cmdstr = 
+  (* execute a command string *)
+  print_endline ("executing command: "^cmdstr)
+;;
 
 (* Run the interpreter in interactive mode. *)
 let run pp renaming (spec:InterpSpec.t) (nst : State.network_state) =
-  let get_event pp renaming num_switches current_time twait = 
+
+  let ctl_pipe_name = "/tmp/lucidctl" in
+  (* make control pipe *)
+  (try Unix.mkfifo ctl_pipe_name 0o664 with
+    | Unix.Unix_error(Unix.EEXIST, _, _) -> ()
+    | e -> raise e);
+  (* open control pipe, reading and nonblocking *)
+  let ctl_fd = Unix.openfile ctl_pipe_name [Unix.O_RDONLY; Unix.O_NONBLOCK] 0 in
+  let get_input pp renaming num_switches current_time twait = 
     let read_fds, _, _ = 
-      try (Unix.select [Unix.stdin] [] [] twait)
+      try (Unix.select [Unix.stdin; ctl_fd] [] [] twait)
       with (Unix.Unix_error(err, fname, arg)) -> (
         match err with 
-        | Unix.EBADF -> [], [], [] (* happens when stdin has closed *)
-        | _ -> error @@ "[get_event] unix error: " ^ fname ^ "("^ arg ^")"
+        | Unix.EBADF -> print_endline "here?"; [], [], [] (* happens when stdin has closed *)
+        | _ -> error @@ "[get_input] unix error: " ^ fname ^ "("^ arg ^")"
       ) 
     in 
-    match read_fds with 
-      | [_] -> (
-          try (
-            let ev_str = input_line stdin in 
-            let ev_json = Yojson.Basic.from_string ev_str in 
-            let ev_internal = InterpSpec.parse_event pp renaming num_switches current_time ev_json in 
-            Some (ev_internal)
-          )
-          (* eof --> nothing to read *)
-          with 
-            | End_of_file -> None
-            | e -> let _ = e in None (* Bad file descriptor*)
-      )
-      | _ -> None
+    if List.mem Unix.stdin read_fds
+    then try 
+        let ev_str = input_line stdin in 
+        let ev_json = Yojson.Basic.from_string ev_str in 
+        let ev_internal = InterpSpec.parse_event pp renaming num_switches current_time ev_json in 
+        IEvent (ev_internal)
+      with
+        | _ -> End (* when we can't read events from stdin, we're done *)
+    else if (List.mem ctl_fd read_fds)
+    then try 
+        let cmd = input_line (Unix.in_channel_of_descr ctl_fd) in 
+        ICmdStr(cmd)
+      with
+        | End_of_file -> Continue 
+          (* end of file just means a control client closed -- its okay *)
+        | e -> let _ = e in error "error reading from control pipe (NOT an EOF)"
+    (* there's nothing to read right now, but there may be in the future *)
+    else Continue
   in
 
-  (* get up to n events if they are available *)
+  (* get up to n inputs. process the commands and return the events. 
+     used while the interpreter's event processing loop is running. *)
   let get_events_nonblocking pp renaming num_switches n current_time = 
     let located_events = List.filter_map 
-      (fun _ -> get_event pp renaming num_switches current_time 0.0)
+      (fun _ -> 
+          match (get_input pp renaming num_switches current_time 0.0) with
+          | IEvent(e) -> Some(e)
+          | ICmdStr(s) -> handle_cmd s; None
+          | _ -> None)
       (MiscUtils.range 0 n)
     in 
     located_events
   in
 
   (* wait for 1 event or eof *)
-  let get_event_blocking pp renaming num_switches current_time = 
-    get_event pp renaming num_switches current_time (-1.0)
+  let get_input_blocking pp renaming num_switches current_time = 
+    let res = get_input pp renaming num_switches current_time (-1.0) in
+    res
   in
 
   (* function to get events that arrive while interpreter is executing *)
@@ -196,17 +230,22 @@ let run pp renaming (spec:InterpSpec.t) (nst : State.network_state) =
      its input events *)
   let rec poll_loop (nst : State.network_state) = 
     (* get a single event or eof *)
-    let located_ev_opt = get_event_blocking 
+    let input = get_input_blocking 
       pp 
       renaming 
       spec.num_switches 
       nst.current_time 
     in 
-    match located_ev_opt with
-    | None -> nst (* end *)
-    | Some (ev, locs) -> 
+    match input with
+    | End -> nst (* end *)
+    | Continue -> poll_loop nst        
+    | IEvent (ev, locs) -> 
         State.push_located_event locs ev nst;
         let nst = interp_events (Some event_getter) 0 (-1) nst in
+        poll_loop nst        
+    (* control command -- execute it then continue *)
+    | ICmdStr(cmd_str) -> 
+      print_endline ("executing control command: "^(cmd_str));
         poll_loop nst        
   in
 
