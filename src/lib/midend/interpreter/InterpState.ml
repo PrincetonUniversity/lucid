@@ -222,6 +222,9 @@ module State = struct
       nst.switches
   ;;
 
+  let get_table_entries_switch swid stage nst =
+    Pipeline.get_table_entries ~stage nst.switches.(swid).pipeline
+  ;;
   let update_switch swid stage idx getop setop nst =
     Pipeline.update ~stage ~idx ~getop ~setop nst.switches.(swid).pipeline
   ;;

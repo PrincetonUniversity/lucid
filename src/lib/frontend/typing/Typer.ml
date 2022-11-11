@@ -810,7 +810,6 @@ and infer_statement (env : env) (s : statement) : env * statement =
       (* the actual type is a call with 1st arg of INFERRED type of the table variable. 
          This is important because the inferred type will have the concrete effect corresponding 
          to where the variable was declared. *)
-      print_endline ("inferred table effect: "^(Printing.effect_to_string (Option.get inf_etbl.ety).teffect));
       let fty = {
         arg_tys = [(Option.get inf_etbl.ety)];
         ret_ty = ty @@ TVoid;

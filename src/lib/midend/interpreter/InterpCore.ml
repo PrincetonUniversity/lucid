@@ -374,7 +374,56 @@ let rec interp_statement nst swid locals s =
       | _ -> error "Match statement did not match any branch!"
     in
     interp_s (snd first_match)
-  | SInlineTable(_) -> error "not implemented"
+  | SInlineTable(_, tbl, keys, actions, const_entries) -> 
+    (* load the dynamic entries from the pipeline *)
+    let tbl_pos = match (interp_exp tbl) with
+      | V {v = VGlobal stage} -> stage
+      | _ -> error "Table did not evaluate to a global value"
+    in
+    let dynamic_entries = State.get_table_entries_switch swid tbl_pos nst in 
+    let entries = dynamic_entries@const_entries in
+    (* find the first matching case *)
+    let key_vs = List.map (fun e -> interp_exp e |> extract_ival) keys in
+    let fst_match = List.fold_left 
+      (fun fst_match (pats, acn, args) -> 
+        match fst_match with 
+        | None -> 
+          if (matches_pat key_vs pats)
+          then Some(acn, args)
+          else None
+        | Some(_) -> fst_match)
+      None
+      entries
+    in
+    match fst_match with 
+    | None -> error "No entries match in table"
+    | Some(acn, args) -> 
+      (* find action *)
+      let (params, stmt) = 
+        try List.assoc acn actions with
+        | _ -> error "Action could not be found in table"
+      in
+      (* evaluate action arguments *)
+      let arg_vs = List.map interp_exp args in
+      (* create a locals env for action *)
+      let inner_locals = List.fold_left2
+        (fun inner_locals v (id, _) -> 
+          Env.add (Id id) v inner_locals)
+        locals
+        arg_vs
+        params
+      in
+      (* evaluate the action *)
+      let new_locals = interp_statement nst swid inner_locals stmt in  
+
+      (* finally, update locals with new values *)
+      let locals = Env.mapi
+        (fun k _ -> 
+          try Env.find k new_locals with
+          | _ -> error "Could not find a variable declared in outer scope after applying action..")
+        locals
+      in
+    locals
 ;;
 
 let interp_dtable (nst : State.network_state) swid id ty e =
@@ -398,7 +447,6 @@ let interp_dtable (nst : State.network_state) swid id ty e =
   nst.switches.(swid) <- { st with pipeline = new_p };
   State.add_global swid (Id id) (V (vglobal idx ty)) nst;
   nst
-
 ;;
 
 let _interp_dglobal (nst : State.network_state) swid id ty e =

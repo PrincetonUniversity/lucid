@@ -1,4 +1,4 @@
-open Syntax
+open CoreSyntax
 
 type obj
 
@@ -42,3 +42,10 @@ val update_complex:
   -> t
   -> 'a
 [@@ocamlformat "disable"]
+
+(* get mutable entries from table at stage *)
+val get_table_entries:
+      stage:int
+   -> t
+   -> case list
+[@@ocamlformat "disable"]   

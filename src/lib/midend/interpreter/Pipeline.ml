@@ -5,7 +5,8 @@ open CoreSyntax
 (*** pipeline objects ***)
 type obj = 
   | OArray of {sid : id; sarr : zint array; spair : bool}
-  | OTable  of {sid : id; sactions : action list; scases : case array;}
+  (* "None" cases are un-used entries *)
+  | OTable  of {sid : id; sactions : action list; scases : (case option) array;}
   | ONone
 
 
@@ -18,8 +19,8 @@ let mk_array ~(id : Id.t) ~(width : int) ~(length : int) ~(pair : bool) =
 
 (* allocate a table with room for n entries *)
 let mk_table ~(id : Id.t) ~(length : int) =
-  let empty_entry = ([], "", []) in 
-  OTable({sid=id; sactions=[]; scases = Array.make length empty_entry;})
+  (* let empty_entry = ([], "", []) in  *)
+  OTable({sid=id; sactions=[]; scases = Array.make length None;})
 ;;
 
 
@@ -73,10 +74,16 @@ let stage_to_string ?(pad = "") show_ids idx s =
   | ONone -> ""
 ;;
 
-let validate_obj_update obj idx = 
+let validate_arr_idx idx obj = 
   (* is an update to obj[idx] valid? *)
   match obj with
   | OArray(a) -> 
+    if (idx < 0)
+    then 
+      failwith 
+      @@ Printf.sprintf 
+          "Pipeline Error: Index %d is negative." 
+          idx;
     if (idx >= Array.length a.sarr)
     then
       failwith
@@ -135,9 +142,10 @@ let to_string ?(pad = "") t =
     Printf.sprintf "[\n%s%s]" str pad)
 ;;
 
-let validate_update stage idx t =
-  if stage < 0 || idx < 0
-  then failwith "Pipeline Error: Stage or index value is negative";
+let get_obj stage t = 
+  (* load the object from the pipe *)
+  if stage < 0 
+  then failwith "Pipeline Error: Stage is negative";
   if stage < !(t.current_stage)
   then
     failwith
@@ -148,9 +156,24 @@ let validate_update stage idx t =
     failwith
       "Pipeline Error: Attempted to access nonexistent global. This should be \
        impossible.";
-  let obj = t.arrs.(stage) in
-  validate_obj_update obj idx
+  t.arrs.(stage)
 ;;
+
+let get_table_entries
+  (* read the entries in a table for a table match *)
+    ~(stage : int)
+    (t : t)
+  =
+  let obj = get_obj stage t in 
+  match obj with
+  | OTable(tbl) -> 
+    (* advance stage and return the list of cases *)
+    t.current_stage := stage + 1;
+    Array.to_list tbl.scases |> List.filter_map (fun co -> co)
+  | OArray(_) -> failwith "Pipeline Error: Expected a table obj, got array obj."
+  | ONone -> failwith "Pipeline Error: Expected array, got nonetype."
+;;
+
 
 let update
     ~(stage : int)
@@ -159,20 +182,20 @@ let update
     ~(setop : zint -> zint)
     (t : t)
   =
-  let obj = validate_update stage idx t in 
+  let obj = get_obj stage t |> validate_arr_idx idx in 
+
   match obj with
   | OArray(a) ->
     if a.spair
-      then failwith 
-        @@ "Pipeline Error: Tried to use Array.update on a paired array";
+      then failwith "Pipeline Error: Tried to use Array.update on a paired array";
     let orig_val = a.sarr.(idx) in
     a.sarr.(idx) <- setop orig_val;
     t.current_stage := stage + 1;
     getop orig_val
   | OTable(_) -> 
-    failwith @@ "Pipeline Error: Tried to use Array.update on a table"
+    failwith "Pipeline Error: Tried to use Array.update on a table"
   | ONone -> 
-    failwith @@ "Pipeline Error: Tried to use Array.update on none object"
+    failwith "Pipeline Error: Tried to use Array.update on none object"
 ;;
 
 let update_complex
@@ -181,7 +204,7 @@ let update_complex
     ~(memop : zint -> zint -> zint * zint * 'a)
     (t : t)
   =
-  let obj = validate_update stage idx t in 
+  let obj = get_obj stage t |> validate_arr_idx idx in 
   match obj with
   | OArray(a) -> 
     let orig_val = a.sarr.(idx) in
