@@ -29,7 +29,7 @@ and raw_ty =
   | TFun of func_ty (* Only used for Array/event functions at this point *)
   | TName of cid * sizes * bool (* Named type: e.g. "Array.t<<32>>". Bool is true if it represents a global type *)
   | TMemop of int * size
-  | TTable of (size list * action_sig list)
+  | TTable of (size list * action_sig list * size)
 
 (* Don't need effects or constraints since we passed typechecking ages ago *)
 and func_ty =

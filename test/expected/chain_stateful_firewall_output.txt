@@ -35,7 +35,7 @@ dpt: Final State:
 Switch 0 : {
 
  Pipeline : [
-    0 : [11000000u32; 11100000u32; 0u32; 0u32]
+    last_seen(0) : [11000000u32; 11100000u32; 0u32; 0u32]
   ]
 
  Events :   [ ]
@@ -54,7 +54,7 @@ Switch 0 : {
 Switch 1 : {
 
  Pipeline : [
-    0 : [11000000u32; 11100000u32; 0u32; 0u32]
+    last_seen(0) : [11000000u32; 11100000u32; 0u32; 0u32]
   ]
 
  Events :   [ ]
@@ -73,7 +73,7 @@ Switch 1 : {
 Switch 2 : {
 
  Pipeline : [
-    0 : [11000000u32; 11100000u32; 0u32; 0u32]
+    last_seen(0) : [11000000u32; 11100000u32; 0u32; 0u32]
   ]
 
  Events :   [ ]

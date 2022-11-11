@@ -281,7 +281,7 @@ let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
     if List.length lst1 <> List.length lst2
     then false
     else List.for_all2 equiv_raw_ty lst1 lst2
-  | TTable(ks1, as1), TTable(ks2, as2) -> 
+  | TTable(ks1, as1, s1), TTable(ks2, as2, s2) -> 
     (List.for_all2 equiv_size ks1 ks2)
     && (List.for_all2 
         (fun (a1, si1, so1) (a2, si2, so2) -> 
@@ -289,6 +289,7 @@ let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
           && (List.for_all2 equiv_size si1 si2)
           && (List.for_all2 equiv_size so1 so2))
         as1 as2)
+    && (equiv_size s1 s2)
   | ( ( TBool
       | TMemop _
       | TInt _

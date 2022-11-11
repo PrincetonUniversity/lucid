@@ -12,8 +12,8 @@
   let mk_trecord lst =
     TRecord (List.map (fun (id, ty) -> Id.name id, ty.raw_ty) lst)
 
-  let mk_ttable key_sizes action_sizes span = 
-    ty_sp (TTable(key_sizes, action_sizes)) span
+  let mk_ttable key_sizes action_sizes n_entries span = 
+    ty_sp (TTable(key_sizes, action_sizes, n_entries)) span
 
   let mk_tmemop span n sizes =
     match sizes with
@@ -129,6 +129,7 @@
 %token <Span.t> TABLE_TYPE
 %token <Span.t> KEY_SIZE
 %token <Span.t> ACTION_SIZES
+%token <Span.t> NUM_ENTRIES
 
 %token <Span.t> TABLE_CREATE
 
@@ -374,23 +375,25 @@ decl:
                                             { [dglobal_sp (snd $3) $2 $5 (Span.extend $1 $6)] }
     | TABLE_TYPE ID ASSIGN LBRACE
         KEY_SIZE LPAREN sizes RPAREN
-        ACTION_SIZES action_sigs RBRACE
+        ACTION_SIZES action_sigs 
+        NUM_ENTRIES size RBRACE
                                             { [
                                                 duty_sp 
                                                     (snd $2)
                                                     []
-                                                    (mk_ttable (snd $7) (snd $10) (Span.extend $4 $11))
-                                                    (Span.extend $1 $11)
+                                                    (mk_ttable (snd $7) (snd $10) (snd $12) (Span.extend $4 $13))
+                                                    (Span.extend $1 $13)
                                                 ] }
     | TABLE_TYPE ID ASSIGN LBRACE
         KEY_SIZE LPAREN RPAREN
-        ACTION_SIZES action_sigs RBRACE
+        ACTION_SIZES action_sigs 
+        NUM_ENTRIES size RBRACE
                                             { [
                                                 duty_sp 
                                                     (snd $2)
                                                     []
-                                                    (mk_ttable [] (snd $9) (Span.extend $4 $10))
-                                                    (Span.extend $1 $10)
+                                                    (mk_ttable [] (snd $9) (snd $11) (Span.extend $4 $12))
+                                                    (Span.extend $1 $12)
                                                 ] }
 
 

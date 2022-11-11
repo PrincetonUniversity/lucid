@@ -57,7 +57,7 @@ and raw_ty =
   | TRecord of (string * raw_ty) list
   | TVector of raw_ty * size
   | TTuple of raw_ty list
-  | TTable of (size list * action_sig list)
+  | TTable of (size list * action_sig list * size)
 
 and func_ty =
   { arg_tys : tys

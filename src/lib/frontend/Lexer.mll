@@ -70,6 +70,7 @@ rule token = parse
   | "table_type"      { TABLE_TYPE (position lexbuf) }
   | "key_size:"      { KEY_SIZE (position lexbuf) }
   | "action_sizes:"   { ACTION_SIZES (position lexbuf) }
+  | "num_entries:"    { NUM_ENTRIES (position lexbuf) }
 
   | "table_create"    { TABLE_CREATE (position lexbuf) }
 

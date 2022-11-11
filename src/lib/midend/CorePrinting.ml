@@ -36,7 +36,7 @@ let rec raw_ty_to_string t =
   | TFun func -> func_to_string func
   | TMemop (n, size) -> Printf.sprintf "memop%d<<%s>>" n (size_to_string size)
   | TGroup -> "group"
-  | TTable(ksize, asizes) -> 
+  | TTable(ksize, asizes, tblsize) -> 
     " {"
     ^"\n\tkey_size: "^(comma_sep size_to_string ksize)
     ^"\n\taction_sizes: "
@@ -45,6 +45,7 @@ let rec raw_ty_to_string t =
                   aname^" : "^(comma_sep size_to_string insizes)
                   ^" -> "^(comma_sep size_to_string outsizes))
                 asizes) |> String.concat "\n\t\t")
+    ^"\n\num_entries: "^(size_to_string tblsize)
     ^"\n}"
 and func_to_string func =
   let arg_tys = concat_map ", " ty_to_string func.arg_tys in

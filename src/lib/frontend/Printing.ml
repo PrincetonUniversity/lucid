@@ -146,7 +146,7 @@ let rec raw_ty_to_string t =
   | TVector (ty, size) ->
     Printf.sprintf "%s[%s]" (raw_ty_to_string ty) (size_to_string size)
   | TTuple tys -> "(" ^ concat_map " * " raw_ty_to_string tys ^ ")"
-  | TTable(ksize, asizes) -> 
+  | TTable(ksize, asizes, tblsize) -> 
     " {"
     ^"\n\tkey_size: "^(comma_sep size_to_string ksize)
     ^"\n\taction_sizes: "
@@ -155,6 +155,7 @@ let rec raw_ty_to_string t =
                   aname^" : "^(comma_sep size_to_string insizes)
                   ^" -> "^(comma_sep size_to_string outsizes))
                 asizes) |> String.concat "\n\t\t")
+    ^"\n\num_entries: "^(size_to_string tblsize)
     ^"\n}"
 and func_to_string func =
   let arg_tys = concat_map ", " ty_to_string func.arg_tys in

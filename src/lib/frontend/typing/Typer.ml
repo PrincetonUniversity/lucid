@@ -576,6 +576,7 @@ and infer_actions (env : env) s acn_sizes (acns : action list) : env * action li
 and infer_cases 
   (env : env)
   (s : statement)
+  (num_entries : size)
   (key_tys : raw_ty list) 
   (acn_params : (string * params) list) 
   (cases : case list) : (env * case list) =
@@ -599,7 +600,7 @@ and infer_cases
         ("A const_entry in this table uses action "^(aname)^", which is not declared in this table.")
     | Some(params) -> params
   in
-
+  (* infer and check cases *)
   let infer_case (env, cases) (pats, acn_name, args) =
     (* check pattern *)
     check_pats pats;
@@ -623,6 +624,8 @@ and infer_cases
   in
   let env, inf_cases = List.fold_left infer_case (env, []) cases in 
   let inf_cases = List.rev inf_cases in 
+  if (List.length inf_cases > extract_size num_entries)
+  then (error_sp s.sspan ("This table has more const entries than allowed by its type."));
   env, inf_cases
 
 and infer_statement (env : env) (s : statement) : env * statement =
@@ -757,16 +760,18 @@ and infer_statement (env : env) (s : statement) : env * statement =
       in
       env, SMatch (inf_es, inf_bs)
     | SInlineTable(tytbl, etbl, keys, actions, cases) -> (
-      (* type check all components individually *)
+      (* infer table type *)
       let _, inf_etbl = infer_exp env etbl in 
+      (* type check all components individually *)
       (* need to check the expected key and action sizes *)
-      let inf_keysize, inf_actionsizes = 
+      let inf_keysize, inf_actionsizes, inf_tblsize = 
         match inf_etbl.ety with 
         | Some(ty) -> (
           match ty.raw_ty with
-          | TTable(inf_keysize, inf_actionsizes) -> 
+          | TTable(inf_keysize, inf_actionsizes, inf_tblsize) -> 
             inf_keysize, 
-            inf_actionsizes
+            inf_actionsizes,
+            inf_tblsize
           | _ -> error_sp s.sspan "table_match argument is not a table.")
         | None ->  error_sp s.sspan "table expression has no type."
       in
@@ -777,6 +782,7 @@ and infer_statement (env : env) (s : statement) : env * statement =
       let _, inf_cases = infer_cases 
         env
         s
+        inf_tblsize
         (List.map (fun k -> (Option.get k.ety).raw_ty) inf_keys) 
         (List.map (fun (name, (params, _)) -> (name, params)) inf_actions)
         cases 

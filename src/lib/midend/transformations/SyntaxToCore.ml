@@ -9,8 +9,21 @@ let err span str =
   ^ " to backend syntax"
 ;;
 
+let err_unsupported span str =
+  Console.error_position span
+  @@ "cannot translate to backend syntax. the construct "
+  ^ str
+  ^ " does not exist in the backend and should have been eliminated"
+;;
+
+
 let translate_size (sz : S.size) : C.size =
   SyntaxUtils.extract_size_default sz 32
+;;
+
+let translate_asig asig = 
+  let (name, insizes, outsizes) = asig in
+  (name, List.map translate_size insizes, List.map translate_size outsizes)
 ;;
 
 let rec translate_ty (ty : S.ty) : C.ty =
@@ -28,6 +41,10 @@ let rec translate_ty (ty : S.ty) : C.ty =
         ; ret_ty = translate_ty fty.ret_ty
         }
     | S.TVoid -> C.TBool (* Dummy translation needed for foreign functions *)
+    | S.TTable(sizes, asigs, sz) -> C.TTable(
+      List.map translate_size sizes,
+      List.map translate_asig asigs, 
+      translate_size sz)
     | _ -> err ty.tspan (Printing.ty_to_string ty)
   in
   { raw_ty; tspan = ty.tspan }
@@ -94,7 +111,9 @@ let rec translate_exp (e : S.exp) : C.exp =
     | S.ECall (cid, es) -> C.ECall (cid, List.map translate_exp es)
     | S.EHash (sz, es) -> C.EHash (translate_size sz, List.map translate_exp es)
     | S.EFlood e -> C.EFlood (translate_exp e)
-    | _ -> err e.espan (Printing.exp_to_string e)
+    | S.ECreateTable(ty) -> C.ECreateTable(translate_ty ty)
+    | ESizeCast(_) | EStmt(_) | ERecord(_) | EWith(_) | EProj(_)
+    | EVector(_) | EComp(_) | EIndex(_) | ETuple(_) -> err_unsupported e.espan (Printing.exp_to_string e)
   in
   { e = e'; ety = translate_ty (Option.get e.ety); espan = e.espan }
 ;;
@@ -126,17 +145,29 @@ let rec translate_statement (s : S.statement) : C.statement =
     | S.SMatch (es, branches) ->
       C.SMatch (List.map translate_exp es, List.map translate_branch branches)
     | S.SRet eopt -> C.SRet (Option.map translate_exp eopt)
+    | S.SInlineTable(ty, e, es, acns, cases) -> 
+      C.SInlineTable(
+        translate_ty ty,
+        translate_exp e,
+        List.map translate_exp es,
+        List.map translate_acn acns,
+        List.map translate_case cases)
     | _ -> err s.sspan (Printing.statement_to_string s)
   in
   { s = s'; sspan = s.sspan; spragma = None}
-;;
 
-let translate_params params =
+and translate_params params =
   List.map (fun (id, ty) -> id, translate_ty ty) params
-;;
 
-let translate_body (params, stmt) =
+and translate_body (params, stmt) =
   translate_params params, translate_statement stmt
+
+and translate_acn acn =
+  let (name, body) = acn in
+  (name, translate_body body)
+and translate_case case =
+  let (pats, acn, args) = case in
+  (List.map translate_pattern pats, acn, List.map translate_exp args)
 ;;
 
 let translate_memop body =

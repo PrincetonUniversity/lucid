@@ -1,8 +1,33 @@
 open Batteries
 open CoreSyntax
 
-(* Bool is true if this is a paired array *)
-type stage = zint array * bool
+
+(*** pipeline objects ***)
+type obj = 
+  | OArray of {sid : id; sarr : zint array; spair : bool}
+  | OTable  of {sid : id; sactions : action list; scases : case array;}
+  | ONone
+
+
+let mk_array ~(id : Id.t) ~(width : int) ~(length : int) ~(pair : bool) = 
+  let full_width = if pair then width * 2 else width in
+  let new_arr = Array.make length (Integer.create 0 full_width) in
+  OArray({sid=id; sarr=new_arr; spair=pair})  
+;;
+
+
+(* allocate a table with room for n entries *)
+let mk_table ~(id : Id.t) ~(length : int) =
+  let empty_entry = ([], "", []) in 
+  OTable({sid=id; sactions=[]; scases = Array.make length empty_entry;})
+;;
+
+
+let copy_stage s = match s with 
+  | OArray(a) -> OArray({a with sarr=Array.copy a.sarr})
+  | OTable(t) -> OTable({t with scases=Array.copy t.scases})
+  | ONone -> ONone
+;;
 
 let split_integer n =
   let sz = Integer.size n / 2 in
@@ -11,34 +36,87 @@ let split_integer n =
   upper, lower
 ;;
 
+let stage_to_string ?(pad = "") show_ids idx s =
+  match s with
+  | OArray(a) -> 
+    let print_entry n =
+      if not a.spair
+      then Integer.to_string n
+      else (
+        let upper, lower = split_integer n in
+        Printf.sprintf
+          "(%s, %s)"
+          (Integer.to_string upper)
+          (Integer.to_string lower))
+    in
+    if show_ids
+    then 
+      Printf.sprintf
+        "%s%s(%d) : %s\n"
+        (pad ^ pad)
+        (CorePrinting.id_to_string a.sid)
+        idx
+        (Printing.list_to_string print_entry (Array.to_list a.sarr))
+    else
+      (* old printer, just for testing *)
+      Printf.sprintf
+         "%s%d : %s\n"
+         (pad ^ pad)
+         idx
+         (Printing.list_to_string print_entry (Array.to_list a.sarr))
+  | OTable(t) -> 
+    Printf.sprintf 
+      "%s%s(%d) : Table [...]\n" 
+      (pad ^ pad) 
+      (CorePrinting.id_to_string t.sid)
+      idx
+  | ONone -> ""
+;;
+
+let validate_obj_update obj idx = 
+  (* is an update to obj[idx] valid? *)
+  match obj with
+  | OArray(a) -> 
+    if (idx >= Array.length a.sarr)
+    then
+      failwith
+      @@ Printf.sprintf
+          "Pipeline Error: Index %d is invalid for global object %s."
+          idx
+          (CorePrinting.id_to_string a.sid);
+    obj
+  | OTable(_) -> 
+    failwith @@ Printf.sprintf "Pipeline Error: table updates not implemented"
+  | ONone -> 
+    failwith @@ Printf.sprintf "Pipeline Error: Cannot update NoneType"
+
+(*** pipeline operations ***)
+
 type t =
-  { arrs : stage array
+  { arrs : obj array
   ; current_stage : int ref
   }
 
+
 let empty () =
-  { arrs = Array.make 0 (Array.make 0 (Integer.of_int 0), false)
+  { arrs = Array.make 
+    0 
+    ONone
+    (* (Array.make 0 (Integer.of_int 0), false) *)
   ; current_stage = ref 0
   }
 ;;
 
-let append_stage ~(width : int) ~(length : int) ~(pair : bool) t =
-  let full_width = if pair then width * 2 else width in
-  let new_arr = Array.make length (Integer.create 0 full_width) in
-  { t with arrs = Array.append t.arrs @@ Array.make 1 (new_arr, pair) }
-;;
+let append t obj = 
+  {t with arrs = Array.append t.arrs @@ Array.make 1 (obj)}  
 
-let of_globals (gs : (int * int * bool) list) =
-  List.fold_left
-    (fun acc (width, length, pair) -> append_stage ~width ~length ~pair acc)
-    (empty ())
-    gs
-;;
 
 let reset_stage t = t.current_stage := 0
 
+
 let copy t =
-  { arrs = Array.map (fun (arr, o) -> Array.copy arr, o) t.arrs
+  (* { arrs = Array.map (fun (arr, o) -> Array.copy arr, o) t.arrs *)
+  { arrs = Array.map copy_stage t.arrs
   ; current_stage = ref !(t.current_stage)
   }
 ;;
@@ -51,22 +129,7 @@ let to_string ?(pad = "") t =
   else (
     let str =
       t.arrs
-      |> Array.mapi (fun idx (arr, pair) ->
-             let print_entry n =
-               if not pair
-               then Integer.to_string n
-               else (
-                 let upper, lower = split_integer n in
-                 Printf.sprintf
-                   "(%s, %s)"
-                   (Integer.to_string upper)
-                   (Integer.to_string lower))
-             in
-             Printf.sprintf
-               "%s%d : %s\n"
-               (pad ^ pad)
-               idx
-               (Printing.list_to_string print_entry (Array.to_list arr)))
+      |> Array.mapi (stage_to_string ~pad true)
       |> Array.fold_left ( ^ ) ""
     in
     Printf.sprintf "[\n%s%s]" str pad)
@@ -85,15 +148,8 @@ let validate_update stage idx t =
     failwith
       "Pipeline Error: Attempted to access nonexistent global. This should be \
        impossible.";
-  let arr, pair = t.arrs.(stage) in
-  if idx >= Array.length arr
-  then
-    failwith
-    @@ Printf.sprintf
-         "Pipeline Error: Index %d is invalid for global number %d."
-         idx
-         stage;
-  arr, pair
+  let obj = t.arrs.(stage) in
+  validate_obj_update obj idx
 ;;
 
 let update
@@ -103,13 +159,20 @@ let update
     ~(setop : zint -> zint)
     (t : t)
   =
-  let arr, pair = validate_update stage idx t in
-  if pair
-  then failwith @@ "Pipeline Error: Tried to use Array.update on a paired array";
-  let orig_val = arr.(idx) in
-  arr.(idx) <- setop orig_val;
-  t.current_stage := stage + 1;
-  getop orig_val
+  let obj = validate_update stage idx t in 
+  match obj with
+  | OArray(a) ->
+    if a.spair
+      then failwith 
+        @@ "Pipeline Error: Tried to use Array.update on a paired array";
+    let orig_val = a.sarr.(idx) in
+    a.sarr.(idx) <- setop orig_val;
+    t.current_stage := stage + 1;
+    getop orig_val
+  | OTable(_) -> 
+    failwith @@ "Pipeline Error: Tried to use Array.update on a table"
+  | ONone -> 
+    failwith @@ "Pipeline Error: Tried to use Array.update on none object"
 ;;
 
 let update_complex
@@ -118,21 +181,29 @@ let update_complex
     ~(memop : zint -> zint -> zint * zint * 'a)
     (t : t)
   =
-  let arr, pair = validate_update stage idx t in
-  let orig_val = arr.(idx) in
-  let new_val, ret =
-    match pair with
-    | true ->
-      let upper, lower = split_integer orig_val in
-      let new_upper, new_lower, ret = memop upper lower in
-      Integer.concat new_upper new_lower, ret
-    | false ->
-      let new_val, _, ret =
-        memop orig_val (Integer.create ~value:0 ~size:(Integer.size orig_val))
-      in
-      new_val, ret
-  in
-  arr.(idx) <- new_val;
-  t.current_stage := stage + 1;
-  ret
+  let obj = validate_update stage idx t in 
+  match obj with
+  | OArray(a) -> 
+    let orig_val = a.sarr.(idx) in
+    let new_val, ret = 
+      match a.spair with
+      | true -> 
+        let upper, lower = split_integer orig_val in
+        let new_upper, new_lower, ret = memop upper lower in
+        Integer.concat new_upper new_lower, ret
+      | false -> 
+        let new_val, _, ret =
+          memop 
+            orig_val 
+            (Integer.create ~value:0 ~size:(Integer.size orig_val))
+        in
+        new_val, ret
+    in
+    a.sarr.(idx) <- new_val;
+    t.current_stage := stage + 1;
+    ret
+  | OTable(_) -> 
+    failwith @@ "Pipeline Error: Tried to use Array.update_complex on a table"
+  | ONone -> 
+    failwith @@ "Pipeline Error: Tried to use Array.update_complex on none object"
 ;;

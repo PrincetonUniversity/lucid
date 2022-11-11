@@ -255,7 +255,8 @@ and try_unify_rty span rty1 rty2 =
   | TVector (ty1, size1), TVector (ty2, size2) ->
     try_unify_size span size1 size2;
     unify_raw_ty ty1 ty2
-  | TTable(ksizes1, asizes1),  TTable(ksizes2, asizes2) ->
+  | TTable(ksizes1, asizes1, tblsize1),  TTable(ksizes2, asizes2, tblsize2) ->
+    try_unify_size span tblsize1 tblsize2;
     List.iter2 (try_unify_size span) ksizes1 ksizes2;
     List.iter2
       (fun (aname1, ainsize1, aoutsize1) (aname2, ainsize2, aoutsize2) -> 

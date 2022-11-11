@@ -43,8 +43,8 @@ dpt: Final State:
 Switch 0 : {
 
  Pipeline : [
-    0 : [2u32; 1u32; 3u32; 2u32; 1u32]
-    1 : [2u32; 1u32; 3u32; 2u32; 1u32]
+    counts(0) : [2u32; 1u32; 3u32; 2u32; 1u32]
+    counts2(1) : [2u32; 1u32; 3u32; 2u32; 1u32]
   ]
 
  Events :   [ ]

@@ -179,10 +179,10 @@ let rec interp_exp (nst : State.network_state) swid locals e : State.ival =
       |> Integer.to_int
     in
     V (vgroup [-(port + 1)])
-  (* | ECreateTable _ -> ( *)
-    
-    (* allocate the table in interpState *)
-  (* ) *)
+  | ECreateTable _ -> (
+    error "[InterpCore.interp_exp] got an create_table expression, which should not happen\
+    because global declarations are interpreted in their own function";
+  )
 
 and interp_exps nst swid locals es : State.ival list =
   List.map (interp_exp nst swid locals) es
@@ -374,9 +374,34 @@ let rec interp_statement nst swid locals s =
       | _ -> error "Match statement did not match any branch!"
     in
     interp_s (snd first_match)
+  | SInlineTable(_) -> error "not implemented"
 ;;
 
-let interp_dglobal (nst : State.network_state) swid id ty e =
+let interp_dtable (nst : State.network_state) swid id ty e =
+  (* FIXME: hacked in a dtable interp that gets called from 
+            interp_dglobal. *)
+
+  let st = nst.switches.(swid) in
+  let p = st.pipeline in
+  let idx = Pipeline.length p in
+
+  (* add element to pipeline *)
+  let new_p = match ty.raw_ty with 
+    | TTable(ksizes, acnsigs, tblsize) -> (
+      match e.e with
+      | ECreateTable(_) -> 
+        let _, _ = ksizes, acnsigs in 
+        Pipeline.append p (Pipeline.mk_table id tblsize)
+      | _ -> error "[interp_dtable] incorrect constructor for table")
+    | _ -> error "[interp_dtable] called to create a non table type object"
+  in
+  nst.switches.(swid) <- { st with pipeline = new_p };
+  State.add_global swid (Id id) (V (vglobal idx ty)) nst;
+  nst
+
+;;
+
+let _interp_dglobal (nst : State.network_state) swid id ty e =
   (* FIXME: This functions is probably more complicated than it needs to be.
      We can probably do this a lot better by writing the Array.create function
      in Arrays.ml (and similarly for counters), then just calling that. But I
@@ -404,12 +429,12 @@ let interp_dglobal (nst : State.network_state) swid id ty e =
         |> raw_integer
         |> Integer.to_int
       in
-      Pipeline.append_stage size len false p
+      Pipeline.append p (Pipeline.mk_array id size len false)
     | ["Counter"; "t"], [size], [e] ->
       let init_value =
         interp_exp nst swid Env.empty e |> extract_ival |> raw_integer
       in
-      let new_p = Pipeline.append_stage size 1 false p in
+      let new_p = Pipeline.append p (Pipeline.mk_array id size 1 false) in
       ignore
         (Pipeline.update
            ~stage:idx
@@ -425,7 +450,7 @@ let interp_dglobal (nst : State.network_state) swid id ty e =
         |> raw_integer
         |> Integer.to_int
       in
-      Pipeline.append_stage size len true p
+      Pipeline.append p (Pipeline.mk_array id size len true)
     | _ ->
       error
         "Wrong number of arguments to global constructor, or user type \
@@ -435,6 +460,12 @@ let interp_dglobal (nst : State.network_state) swid id ty e =
   State.add_global swid (Id id) (V (vglobal idx ty)) nst;
   nst
 ;;
+
+let interp_dglobal (nst : State.network_state) swid id ty e =
+  match ty.raw_ty with 
+    | TTable _ -> interp_dtable nst swid id ty e
+    | _ -> _interp_dglobal nst swid id ty e
+
 
 let interp_complex_body params body nst swid args =
   let args, default = List.takedrop (List.length params) args in

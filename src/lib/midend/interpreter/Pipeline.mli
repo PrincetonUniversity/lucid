@@ -1,16 +1,18 @@
 open Syntax
 
+type obj
+
+(* create an array object to place in pipeline *)
+val mk_array : id:Id.t -> width:int -> length:int -> pair:bool -> obj
+
+val mk_table : id:Id.t -> length:int -> obj
+
 type t
 
 val empty : unit -> t
 
-(* Takes a list of (width * length, is_pair) triple -- width is the number of bits in each entry,
-   length is the number of entries, and is_pair indicates that this is a pair array, with both halves
-   having width bits *)
-val of_globals : (int * int * bool) list -> t
-
 (* Returns a _new_ pipeline with one more stage *)
-val append_stage : width:int -> length:int -> pair:bool -> t -> t
+val append : t -> obj -> t
 
 (* Reset stage counter to 0. Should be done at the beginning of each handler *)
 val reset_stage : t -> unit
