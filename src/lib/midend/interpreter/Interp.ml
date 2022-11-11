@@ -165,17 +165,47 @@ let handle_cmd cmdstr =
 
 (* Run the interpreter in interactive mode. *)
 let run pp renaming (spec:InterpSpec.t) (nst : State.network_state) =
-
-  let ctl_pipe_name = "/tmp/lucidctl" in
-  (* make control pipe *)
-  (try Unix.mkfifo ctl_pipe_name 0o664 with
-    | Unix.Unix_error(Unix.EEXIST, _, _) -> ()
-    | e -> raise e);
+  let all_fds = match spec.ctl_pipe_name with 
+    | Some (ctl_pipe_name) -> 
+      print_endline ("using control pipe: "^ctl_pipe_name);
+      let exists = try
+        Unix.access ctl_pipe_name [Unix.F_OK];
+        true
+      with Unix.Unix_error _ -> false
+      in
+      (* we can mkfifo if file is fifo or does not exist *) 
+      let okay_to_mkfifo = 
+        if (not exists) then 
+          true
+        else
+          let stats = Unix.stat ctl_pipe_name in
+          if (stats.st_kind <> Unix.S_FIFO) then
+            error
+              @@"the control pipe file "
+              ^ctl_pipe_name
+              ^" already exists, and is not a named pipe. "
+              ^" please delete it or use another file."
+          else
+            true
+      in
+      (if (okay_to_mkfifo) then 
+        (try Unix.mkfifo ctl_pipe_name 0o664 with
+          | Unix.Unix_error(Unix.EEXIST, _, _) -> ()
+          | e ->  raise e)
+      else
+        error "could not create named pipe to controller");
+      let ctl_fd = Unix.openfile 
+        ctl_pipe_name 
+        [Unix.O_RDONLY; Unix.O_NONBLOCK] 
+        0 
+      in
+      [Unix.stdin; ctl_fd]
+    | None -> [Unix.stdin]
+  in
   (* open control pipe, reading and nonblocking *)
-  let ctl_fd = Unix.openfile ctl_pipe_name [Unix.O_RDONLY; Unix.O_NONBLOCK] 0 in
   let get_input pp renaming num_switches current_time twait = 
     let read_fds, _, _ = 
-      try (Unix.select [Unix.stdin; ctl_fd] [] [] twait)
+      try (Unix.select all_fds [] [] twait)
       with (Unix.Unix_error(err, fname, arg)) -> (
         match err with 
         | Unix.EBADF -> print_endline "here?"; [], [], [] (* happens when stdin has closed *)
@@ -190,8 +220,9 @@ let run pp renaming (spec:InterpSpec.t) (nst : State.network_state) =
         IEvent (ev_internal)
       with
         | _ -> End (* when we can't read events from stdin, we're done *)
-    else if (List.mem ctl_fd read_fds)
+    else if ((List.length all_fds) = 2) && (List.mem (List.nth all_fds 1) read_fds)
     then try 
+        let ctl_fd = (List.nth all_fds 1) in 
         let cmd = input_line (Unix.in_channel_of_descr ctl_fd) in 
         ICmdStr(cmd)
       with
