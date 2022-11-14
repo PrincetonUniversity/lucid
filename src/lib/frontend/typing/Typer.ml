@@ -361,8 +361,8 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
     let env, inf_s = infer_statement env s in
     let env, inf_e1, inf_e1ty = infer_exp env e1 |> textract in
     env, { e with e = EStmt (inf_s, inf_e1); ety = Some inf_e1ty }
-  | ECreateTable(tbl_ty) -> 
-    env, { e with e = ECreateTable(tbl_ty); ety = Some tbl_ty }
+  | ECreateTableInline(tbl_ty) -> 
+    env, { e with e = ECreateTableInline(tbl_ty); ety = Some tbl_ty }
 
 and infer_op env span op args =
   let env, ty, new_args =
@@ -526,7 +526,7 @@ and infer_actions (env : env) s acn_sizes (acns : action list) : env * action li
       ^" got: "^(List.length acns |> string_of_int)));
   let infer_action (env, acc) (acn, acn_sig) = 
     let (name, (params, stmt)) = acn in  
-    let (sig_name, param_sizes, _) = acn_sig in
+    let (sig_name, param_sizes) = acn_sig in
     if (name <> sig_name)
     then (error_sp s.sspan ("Action in table has wrong name. expected: "^sig_name^", got: "^name));
     if (List.length params <> List.length param_sizes)
@@ -768,13 +768,25 @@ and infer_statement (env : env) (s : statement) : env * statement =
         match inf_etbl.ety with 
         | Some(ty) -> (
           match ty.raw_ty with
-          | TTable(inf_keysize, inf_actionsizes, inf_tblsize) -> 
+          | TTable({key_size = inf_keysize; action_sizes = inf_actionsizes; num_entries = inf_tblsize;}) -> 
             inf_keysize, 
             inf_actionsizes,
             inf_tblsize
-          | _ -> error_sp s.sspan "table_match argument is not a table.")
+          | _ -> error_sp s.sspan "table_inline_match argument is not a table.")
         | None ->  error_sp s.sspan "table expression has no type."
       in
+      (* make sure an inlined table has no arg or ret sizes *)
+      (match tytbl.raw_ty with 
+        | TTable(t) -> (
+            if (t.arg_size <> [] || t.ret_size <> [])
+            then (error_sp
+              s.sspan
+              "table_inline_match can only be applied to tables with empty action argument sizes (arg_size) and return sizes (ret_size).")
+          )
+        | _ -> error_sp
+          s.sspan
+          "the type argument of table_inline_match must be a named table_type, but here, it is not"
+        );
 
       let inf_keys = infer_keys env s inf_keysize keys in 
       let _, inf_actions = infer_actions env s inf_actionsizes actions in 

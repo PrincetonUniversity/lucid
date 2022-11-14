@@ -46,7 +46,7 @@ let rec inline_exp e =
   | ETuple es ->
     let stmt, es' = inline_exps es in
     stmt, { e with e = ETuple es' }
-  | ECreateTable _ -> 
+  | ECreateTableInline _ -> 
     snoop, e
 
 and inline_exps es =

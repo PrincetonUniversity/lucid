@@ -22,8 +22,8 @@ let translate_size (sz : S.size) : C.size =
 ;;
 
 let translate_asig asig = 
-  let (name, insizes, outsizes) = asig in
-  (name, List.map translate_size insizes, List.map translate_size outsizes)
+  let (name, sizes) = asig in
+  (name, List.map translate_size sizes)
 ;;
 
 let rec translate_ty (ty : S.ty) : C.ty =
@@ -41,10 +41,13 @@ let rec translate_ty (ty : S.ty) : C.ty =
         ; ret_ty = translate_ty fty.ret_ty
         }
     | S.TVoid -> C.TBool (* Dummy translation needed for foreign functions *)
-    | S.TTable(sizes, asigs, sz) -> C.TTable(
-      List.map translate_size sizes,
-      List.map translate_asig asigs, 
-      translate_size sz)
+    | S.TTable(t) -> C.TTable({
+        key_size = List.map translate_size t.key_size;
+        arg_size = List.map translate_size t.arg_size;
+        ret_size = List.map translate_size t.ret_size;
+        action_sizes = List.map translate_asig t.action_sizes;
+        num_entries = translate_size t.num_entries;
+      })
     | _ -> err ty.tspan (Printing.ty_to_string ty)
   in
   { raw_ty; tspan = ty.tspan }
@@ -111,7 +114,7 @@ let rec translate_exp (e : S.exp) : C.exp =
     | S.ECall (cid, es) -> C.ECall (cid, List.map translate_exp es)
     | S.EHash (sz, es) -> C.EHash (translate_size sz, List.map translate_exp es)
     | S.EFlood e -> C.EFlood (translate_exp e)
-    | S.ECreateTable(ty) -> C.ECreateTable(translate_ty ty)
+    | S.ECreateTableInline(ty) -> C.ECreateTableInline(translate_ty ty)
     | ESizeCast(_) | EStmt(_) | ERecord(_) | EWith(_) | EProj(_)
     | EVector(_) | EComp(_) | EIndex(_) | ETuple(_) -> err_unsupported e.espan (Printing.exp_to_string e)
   in

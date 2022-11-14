@@ -12,8 +12,8 @@
   let mk_trecord lst =
     TRecord (List.map (fun (id, ty) -> Id.name id, ty.raw_ty) lst)
 
-  let mk_ttable key_sizes action_sizes n_entries span = 
-    ty_sp (TTable(key_sizes, action_sizes, n_entries)) span
+  let mk_ttable key_size arg_size ret_size action_sizes num_entries span = 
+    ty_sp (TTable({key_size; arg_size; ret_size; action_sizes; num_entries})) span
 
   let mk_tmemop span n sizes =
     match sizes with
@@ -47,7 +47,7 @@
     value_sp (VGroup locs) span |> value_to_exp
 
   let make_create_table tbl_ty span = 
-    exp_sp (ECreateTable(tbl_ty)) span
+    exp_sp (ECreateTableInline(tbl_ty)) span
 
   let mk_fty tspan params =
     let start_eff = FVar (QVar (Id.fresh "eff")) in
@@ -131,9 +131,9 @@
 %token <Span.t> ACTION_SIZES
 %token <Span.t> NUM_ENTRIES
 
-%token <Span.t> TABLE_CREATE
+%token <Span.t> TABLE_INLINE_CREATE
+%token <Span.t> TABLE_INLINE_MATCH
 
-%token <Span.t> TABLE_MATCH
 %token <Span.t> ACTIONS
 %token <Span.t> KEY
 %token <Span.t> CASES
@@ -266,7 +266,7 @@ exp:
     | SIZECAST single_poly LPAREN size RPAREN { szcast_sp (snd $2) (snd $4) (Span.extend $1 $5) }
     | FLOOD exp                           { flood_sp $2 (Span.extend $1 $2.espan) }
     | LBRACE args RBRACE                  { make_group $2 (Span.extend $1 $3) }
-    | TABLE_CREATE LESS ty MORE LPAREN RPAREN      { make_create_table $3 (Span.extend $1 $6) }
+    | TABLE_INLINE_CREATE LESS ty MORE LPAREN RPAREN      { make_create_table $3 (Span.extend $1 $6) }
 
 exps:
   | exp                                 { [$1] }
@@ -340,8 +340,8 @@ tyname_def:
     | ID poly                             { snd $1, snd $2}
 
 action_sig:
-    | ID COLON LPAREN sizes RPAREN        { Span.extend (fst $1) (fst $4), ((snd $1 |> Id.name), (snd $4), []) }
-    | ID COLON LPAREN RPAREN              { Span.extend (fst $1) $4, ((snd $1 |> Id.name), [], []) }
+    | ID COLON LPAREN sizes RPAREN        { Span.extend (fst $1) (fst $4), ((snd $1 |> Id.name), (snd $4)) }
+    | ID COLON LPAREN RPAREN              { Span.extend (fst $1) $4, ((snd $1 |> Id.name), []) }
 
 action_sigs:
     | action_sig                           { fst $1, [snd $1] }
@@ -381,7 +381,7 @@ decl:
                                                 duty_sp 
                                                     (snd $2)
                                                     []
-                                                    (mk_ttable (snd $7) (snd $10) (snd $12) (Span.extend $4 $13))
+                                                    (mk_ttable (snd $7) [] [] (snd $10) (snd $12) (Span.extend $4 $13))
                                                     (Span.extend $1 $13)
                                                 ] }
     | TABLE_TYPE ID ASSIGN LBRACE
@@ -392,7 +392,7 @@ decl:
                                                 duty_sp 
                                                     (snd $2)
                                                     []
-                                                    (mk_ttable [] (snd $9) (snd $11) (Span.extend $4 $12))
+                                                    (mk_ttable [] [] [] (snd $9) (snd $11) (Span.extend $4 $12))
                                                     (Span.extend $1 $12)
                                                 ] }
 
@@ -489,7 +489,7 @@ statement1:
     | PRINTF LPAREN STRING RPAREN SEMI             { sprintf_sp (snd $3) [] (Span.extend $1 $5) }
     | PRINTF LPAREN STRING COMMA args RPAREN SEMI  { sprintf_sp (snd $3) $5 (Span.extend $1 $7) }
     | FOR LPAREN ID LESS size RPAREN LBRACE statement RBRACE { loop_sp $8 (snd $3) (snd $5) (Span.extend $1 $9) }
-    | TABLE_MATCH LESS ty MORE LPAREN exp ASSIGN LBRACE 
+    | TABLE_INLINE_MATCH LESS ty MORE LPAREN exp ASSIGN LBRACE 
         KEY args
         ACTIONS actions
         CASES cases

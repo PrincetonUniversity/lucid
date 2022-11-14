@@ -41,8 +41,6 @@ and constr_spec =
   | CSpec of (cid * constr_spec_cmp) list
   | CEnd of cid
 
-and action_sig = (string * size list * size list)
-
 and raw_ty =
   | TQVar of raw_ty tqvar
   | TBool
@@ -57,7 +55,14 @@ and raw_ty =
   | TRecord of (string * raw_ty) list
   | TVector of raw_ty * size
   | TTuple of raw_ty list
-  | TTable of (size list * action_sig list * size)
+  | TTable of {
+    key_size : size list;
+    arg_size : size list;
+    ret_size : size list;
+    action_sizes : (string * size list) list;
+    num_entries : size;}
+
+  (* size list * action_sig list * size) *)
 
 and func_ty =
   { arg_tys : tys
@@ -148,7 +153,7 @@ and e =
   | EComp of exp * id * size (* Vector comprehension *)
   | EIndex of exp * size
   | ETuple of exp list
-  | ECreateTable of ty
+  | ECreateTableInline of ty
 
 and exp =
   { e : e

@@ -179,7 +179,7 @@ let rec interp_exp (nst : State.network_state) swid locals e : State.ival =
       |> Integer.to_int
     in
     V (vgroup [-(port + 1)])
-  | ECreateTable _ -> (
+  | ECreateTableInline _ -> (
     error "[InterpCore.interp_exp] got an create_table expression, which should not happen\
     because global declarations are interpreted in their own function";
   )
@@ -436,11 +436,10 @@ let interp_dtable (nst : State.network_state) swid id ty e =
 
   (* add element to pipeline *)
   let new_p = match ty.raw_ty with 
-    | TTable(ksizes, acnsigs, tblsize) -> (
+    | TTable(t) -> (
       match e.e with
-      | ECreateTable(_) -> 
-        let _, _ = ksizes, acnsigs in 
-        Pipeline.append p (Pipeline.mk_table id tblsize)
+      | ECreateTableInline(_) -> 
+        Pipeline.append p (Pipeline.mk_table id t.num_entries)
       | _ -> error "[interp_dtable] incorrect constructor for table")
     | _ -> error "[interp_dtable] called to create a non table type object"
   in

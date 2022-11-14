@@ -29,8 +29,12 @@ and raw_ty =
   | TFun of func_ty (* Only used for Array/event functions at this point *)
   | TName of cid * sizes * bool (* Named type: e.g. "Array.t<<32>>". Bool is true if it represents a global type *)
   | TMemop of int * size
-  | TTable of (size list * action_sig list * size)
-
+  | TTable of {
+    key_size : size list;
+    arg_size : size list;
+    ret_size : size list;
+    action_sizes : (string * size list) list;
+    num_entries : size;}
 (* Don't need effects or constraints since we passed typechecking ages ago *)
 and func_ty =
   { arg_tys : tys
@@ -103,7 +107,7 @@ and e =
   | ECall of cid * exp list
   | EHash of size * exp list
   | EFlood of exp
-  | ECreateTable of ty
+  | ECreateTableInline of ty
 
 and exp =
   { e : e

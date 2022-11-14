@@ -72,9 +72,9 @@ rule token = parse
   | "action_sizes:"   { ACTION_SIZES (position lexbuf) }
   | "num_entries:"    { NUM_ENTRIES (position lexbuf) }
 
-  | "table_create"    { TABLE_CREATE (position lexbuf) }
+  | "table_inline_create"    { TABLE_INLINE_CREATE (position lexbuf) }
+  | "table_inline_match"     { TABLE_INLINE_MATCH (position lexbuf) }
 
-  | "table_match"     { TABLE_MATCH (position lexbuf) }
   | "key:"            { KEY         (position lexbuf) }
   | "actions:"        { ACTIONS (position lexbuf) }
   | "const_entries:"          { CASES (position lexbuf) }

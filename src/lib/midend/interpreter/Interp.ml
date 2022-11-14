@@ -160,6 +160,7 @@ type 'a inp =
 
 let handle_cmd cmdstr = 
   (* execute a command string *)
+  (* left off here. Implement table update command. *)
   print_endline ("executing command: "^cmdstr)
 ;;
 

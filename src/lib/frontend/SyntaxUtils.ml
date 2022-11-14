@@ -281,15 +281,17 @@ let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
     if List.length lst1 <> List.length lst2
     then false
     else List.for_all2 equiv_raw_ty lst1 lst2
-  | TTable(ks1, as1, s1), TTable(ks2, as2, s2) -> 
-    (List.for_all2 equiv_size ks1 ks2)
-    && (List.for_all2 
-        (fun (a1, si1, so1) (a2, si2, so2) -> 
-          (String.equal a1 a2) 
-          && (List.for_all2 equiv_size si1 si2)
-          && (List.for_all2 equiv_size so1 so2))
-        as1 as2)
-    && (equiv_size s1 s2)
+  | TTable(t1), TTable(t2) -> 
+    (List.for_all2 equiv_size t1.key_size t2.key_size)
+    &&  (List.for_all2 equiv_size t1.arg_size t2.arg_size)
+    &&  (List.for_all2 equiv_size t1.ret_size t2.ret_size)
+    &&  (List.for_all2
+          (fun (a1, s1) (a2, s2) -> 
+            (String.equal a1 a2)
+            && (List.for_all2 equiv_size s1 s2))
+          t1.action_sizes
+          t2.action_sizes)
+    &&  (equiv_size t1.num_entries t2.num_entries)
   | ( ( TBool
       | TMemop _
       | TInt _
@@ -346,7 +348,7 @@ let rec is_compound e =
   match e.e with
   | EInt _ | EVal _ | EVar _ | ESizeCast _ -> false
   | EHash _ | EOp _ | ECall _ | EStmt _ -> true
-  | ECreateTable _ -> true
+  | ECreateTableInline _ -> true
   | EComp (e, _, _) | EIndex (e, _) | EProj (e, _) | EFlood e -> is_compound e
   | EVector entries | ETuple entries -> List.exists is_compound entries
   | ERecord entries -> List.exists (is_compound % snd) entries

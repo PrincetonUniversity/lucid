@@ -271,7 +271,7 @@ module NormalizeBoolExps = struct
       error
         "z3_from_expr got an eflood -- there shouldn't be a flood constructor \
          inside of a boolean"
-    | ECreateTable _, _ -> error "[z3_from_expr] a create table call inside a bool"
+    | ECreateTableInline _, _ -> error "[z3_from_expr] a create table call inside a bool"
   ;;
 
   (* tell Z3 to convert a boolean expression into disjunctive normal form *)

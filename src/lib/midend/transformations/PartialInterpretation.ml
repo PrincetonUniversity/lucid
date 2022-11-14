@@ -118,7 +118,7 @@ let rec interp_exp env e =
     { e with e = EHash (sz, List.map (interp_exp env) args) }
   | EFlood e' -> { e with e = EFlood (interp_exp env e') }
   | EOp (op, args) -> { e with e = interp_op env op args }
-  | ECreateTable(_) -> e
+  | ECreateTableInline(_) -> e
 
 (* Mostly copied from InterpCore, could maybe merge the two functions *)
 and interp_op env op args =

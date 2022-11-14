@@ -146,16 +146,15 @@ let rec raw_ty_to_string t =
   | TVector (ty, size) ->
     Printf.sprintf "%s[%s]" (raw_ty_to_string ty) (size_to_string size)
   | TTuple tys -> "(" ^ concat_map " * " raw_ty_to_string tys ^ ")"
-  | TTable(ksize, asizes, tblsize) -> 
+  | TTable(t) -> 
     " {"
-    ^"\n\tkey_size: "^(comma_sep size_to_string ksize)
+    ^"\n\tkey_size: "^(comma_sep size_to_string t.key_size)
     ^"\n\taction_sizes: "
     ^"\n\t\t"^((List.map 
-                (fun (aname, insizes, outsizes) -> 
-                  aname^" : "^(comma_sep size_to_string insizes)
-                  ^" -> "^(comma_sep size_to_string outsizes))
-                asizes) |> String.concat "\n\t\t")
-    ^"\n\num_entries: "^(size_to_string tblsize)
+                (fun (aname, sizes) -> 
+                  aname^" : "^(comma_sep size_to_string sizes))
+                t.action_sizes) |> String.concat "\n\t\t")
+    ^"\n\num_entries: "^(size_to_string t.num_entries)
     ^"\n}"
 and func_to_string func =
   let arg_tys = concat_map ", " ty_to_string func.arg_tys in
@@ -301,7 +300,7 @@ let rec e_to_string e =
     Printf.sprintf "to_int<<%s>>(%s)" (size_to_string sz1) (size_to_string sz2)
   | EStmt (s, e) ->
     Printf.sprintf "{%s; return %s}" (stmt_to_string s) (exp_to_string e)
-  | ECreateTable(ty) -> 
+  | ECreateTableInline(ty) -> 
     Printf.sprintf "table_create(%s)" (ty_to_string ty)
 
 and exp_to_string e = e_to_string e.e

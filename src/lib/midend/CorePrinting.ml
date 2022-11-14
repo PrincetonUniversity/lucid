@@ -36,16 +36,15 @@ let rec raw_ty_to_string t =
   | TFun func -> func_to_string func
   | TMemop (n, size) -> Printf.sprintf "memop%d<<%s>>" n (size_to_string size)
   | TGroup -> "group"
-  | TTable(ksize, asizes, tblsize) -> 
+  | TTable(t) -> 
     " {"
-    ^"\n\tkey_size: "^(comma_sep size_to_string ksize)
+    ^"\n\tkey_size: "^(comma_sep size_to_string t.key_size)
     ^"\n\taction_sizes: "
     ^"\n\t\t"^((List.map 
-                (fun (aname, insizes, outsizes) -> 
-                  aname^" : "^(comma_sep size_to_string insizes)
-                  ^" -> "^(comma_sep size_to_string outsizes))
-                asizes) |> String.concat "\n\t\t")
-    ^"\n\num_entries: "^(size_to_string tblsize)
+                (fun (aname, sizes) -> 
+                  aname^" : "^(comma_sep size_to_string sizes))
+                t.action_sizes) |> String.concat "\n\t\t")
+    ^"\n\num_entries: "^(size_to_string t.num_entries)
     ^"\n}"
 and func_to_string func =
   let arg_tys = concat_map ", " ty_to_string func.arg_tys in
@@ -139,7 +138,7 @@ let rec e_to_string e =
   | EHash (size, es) ->
     Printf.sprintf "hash<<%s>>(%s)" (size_to_string size) (es_to_string es)
   | EFlood e -> Printf.sprintf "flood %s" (exp_to_string e)
-  | ECreateTable(ty) -> 
+  | ECreateTableInline(ty) -> 
     Printf.sprintf "table_create(%s)" (ty_to_string ty)
 
 and exp_to_string e = e_to_string e.e
