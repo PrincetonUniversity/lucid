@@ -69,13 +69,27 @@ let occurs_ty span tvar raw_ty : unit =
     | TEvent
     | TGroup
     | TMemop _ -> ()
-    | TTable _ -> ()
     | TRecord lst -> List.iter (fun (_, raw_ty) -> occ tvar raw_ty) lst
     | TTuple lst -> List.iter (occ tvar) lst
     | TFun { arg_tys; ret_ty; _ } ->
       List.iter (fun ty -> occ tvar ty.raw_ty) arg_tys;
       occ tvar ret_ty.raw_ty
     | TVector (raw_ty, _) -> occ tvar raw_ty
+    | TTable(t) -> 
+      List.iter (fun rty -> occ tvar rty) t.arg_ty;
+      List.iter (fun rty -> occ tvar rty) t.ret_ty;
+      List.iter 
+        (fun (_, aty) -> 
+          (List.iter (fun rty -> occ tvar rty) aty))
+        t.action_tys
+    | TAction(a) -> 
+      List.iter (fun ty -> occ tvar ty.raw_ty) a.const_aarg_tys;
+      List.iter (fun ty -> occ tvar ty.raw_ty) a.aarg_tys;
+      occ tvar a.aret_ty.raw_ty
+
+
+
+
   in
   check_occurs span occ raw_ty_to_string tvar raw_ty
 ;;
@@ -257,14 +271,14 @@ and try_unify_rty span rty1 rty2 =
     unify_raw_ty ty1 ty2
   | TTable(t1),  TTable(t2) ->
     List.iter2 (try_unify_size span) t1.key_size t2.key_size;
-    List.iter2 (try_unify_size span) t1.arg_size t2.arg_size;
-    List.iter2 (try_unify_size span) t1.ret_size t2.ret_size;
+    List.iter2 (try_unify_rty span) t1.arg_ty t2.arg_ty;
+    List.iter2 (try_unify_rty span) t1.ret_ty t2.ret_ty;
     List.iter2
-      (fun (aname1, s1) (aname2, s2) -> 
+      (fun (aname1, t1) (aname2, t2) -> 
         if not (String.equal aname1 aname2) then raise CannotUnify;
-        List.iter2 (try_unify_size span) s1 s2)
-      t1.action_sizes
-      t2.action_sizes;
+        List.iter2 (try_unify_rty span) t1 t2)
+      t1.action_tys
+      t2.action_tys;
     try_unify_size span t1.num_entries t2.num_entries
   | ( ( TVoid
       | TGroup
@@ -278,7 +292,8 @@ and try_unify_rty span rty1 rty2 =
       | TVector _
       | TTuple _
       | TAbstract _ 
-      | TTable _ )
+      | TTable _ 
+      | TAction _)
     , _ ) -> raise CannotUnify
 
 and unify_ty (span : Span.t) ty1 ty2 : unit =

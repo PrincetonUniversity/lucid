@@ -517,7 +517,7 @@ and infer_keys env s inf_keysizes keys =
   inf_keys
 
 
-and infer_actions (env : env) s acn_sizes (acns : action list) : env * action list =
+and infer_inlined_actions (env : env) s acn_sizes (acns : action list) : env * action list =
   if (List.length acns <> List.length acn_sizes)
   then (error_sp 
     s.sspan 
@@ -526,18 +526,18 @@ and infer_actions (env : env) s acn_sizes (acns : action list) : env * action li
       ^" got: "^(List.length acns |> string_of_int)));
   let infer_action (env, acc) (acn, acn_sig) = 
     let (name, (params, stmt)) = acn in  
-    let (sig_name, param_sizes) = acn_sig in
+    let (sig_name, param_raw_tys) = acn_sig in
     if (name <> sig_name)
     then (error_sp s.sspan ("Action in table has wrong name. expected: "^sig_name^", got: "^name));
-    if (List.length params <> List.length param_sizes)
+    if (List.length params <> List.length param_raw_tys)
     then (error_sp 
       s.sspan 
       ("Action "^name^" in table has wrong number of parameters. "
-        ^" expected "^(List.length param_sizes |> string_of_int)
+        ^" expected "^(List.length param_raw_tys |> string_of_int)
         ^" got "^((List.length params |> string_of_int))));
     List.iter2 
-      (fun (param_id, param_ty) sig_size -> 
-        let param_size = match param_ty.raw_ty with 
+      (fun (_, param_ty) sig_raw_ty -> 
+(*         let param_size = match param_ty.raw_ty with 
           | TInt(sz) -> extract_size(sz)
           | TBool -> 1
           | _ -> 
@@ -545,16 +545,17 @@ and infer_actions (env : env) s acn_sizes (acns : action list) : env * action li
               s.sspan 
               ("parameter "^(Printing.id_to_string param_id)
                 ^" of action "^name^" is not an int or bool"))
-        in
-        if (param_size <> extract_size sig_size)
+        in *)
+        try_unify_rty s.sspan (param_ty.raw_ty) sig_raw_ty)
+(*         if (param_size <> extract_size sig_size)
         then (error_sp 
           s.sspan 
           ("parameter "^(Printing.id_to_string param_id)
             ^" of action "^name^" has wrong size. expected: "
             ^(extract_size sig_size |> string_of_int)
-            ^" got: "^(param_size |> string_of_int))))
+            ^" got: "^(param_size |> string_of_int)))) *)
       params
-      param_sizes
+      param_raw_tys
     ;
     (* add locals, check statement, unbind locals *)
     let old_locals = env.locals in
@@ -768,9 +769,9 @@ and infer_statement (env : env) (s : statement) : env * statement =
         match inf_etbl.ety with 
         | Some(ty) -> (
           match ty.raw_ty with
-          | TTable({key_size = inf_keysize; action_sizes = inf_actionsizes; num_entries = inf_tblsize;}) -> 
+          | TTable({key_size = inf_keysize; action_tys = inf_actiontys; num_entries = inf_tblsize;}) -> 
             inf_keysize, 
-            inf_actionsizes,
+            inf_actiontys,
             inf_tblsize
           | _ -> error_sp s.sspan "table_inline_match argument is not a table.")
         | None ->  error_sp s.sspan "table expression has no type."
@@ -778,10 +779,10 @@ and infer_statement (env : env) (s : statement) : env * statement =
       (* make sure an inlined table has no arg or ret sizes *)
       (match tytbl.raw_ty with 
         | TTable(t) -> (
-            if (t.arg_size <> [] || t.ret_size <> [])
+            if (t.arg_ty <> [] || t.ret_ty <> [])
             then (error_sp
               s.sspan
-              "table_inline_match can only be applied to tables with empty action argument sizes (arg_size) and return sizes (ret_size).")
+              "table_inline_match can only be applied to tables with no action arguments or returns (arg_ty and ret_ty must be empty in table_type declaration).")
           )
         | _ -> error_sp
           s.sspan
@@ -789,7 +790,7 @@ and infer_statement (env : env) (s : statement) : env * statement =
         );
 
       let inf_keys = infer_keys env s inf_keysize keys in 
-      let _, inf_actions = infer_actions env s inf_actionsizes actions in 
+      let _, inf_actions = infer_inlined_actions env s inf_actionsizes actions in 
 
       let _, inf_cases = infer_cases 
         env
@@ -1284,6 +1285,29 @@ let rec infer_declaration (builtin_tys : Builtins.builtin_tys) (env : env) (effe
       ( define_submodule id1 m env
       , effect_count
       , DModuleAlias (id1, inf_e, cid1, cid2) )
+    | DAction (id, ret_ty, const_params, (params, stmt)) -> 
+      enter_level ();
+      (* add const params to locals *)
+      let fun_env = add_locals env const_params in 
+      (* infer body with given return type *)
+      let fun_env, inf_body = 
+        infer_body 
+          {fun_env with ret_ty = Some ret_ty;}
+          (params, stmt)
+      in 
+      (* make sure there is no return iff return type is void *)
+      if (fun_env.returned = (ret_ty.raw_ty = TVoid))
+      then Console.error_position d.dspan "Mismatch between declared action return type and actual return type.";
+      leave_level ();
+      (* add variable to type env *)
+      let acn_ty = TAction({
+        const_aarg_tys = List.map (fun (_, ty) -> ty) (const_params);
+        aarg_tys = List.map (fun (_, ty) -> ty) (fst inf_body);
+        aret_ty = ret_ty;
+      }) 
+      in 
+      let env = define_const id (mk_ty @@ acn_ty ) env in 
+      env, effect_count, DAction (id, ret_ty, const_params, (params, stmt))
   in
   let new_d = { d with d = new_d } in
   Wellformed.check_qvars new_d;

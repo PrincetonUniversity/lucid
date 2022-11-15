@@ -67,17 +67,22 @@ rule token = parse
   | "with"            { WITH (position lexbuf) }
   | "type"            { TYPE (position lexbuf) }
 
-  | "table_type"      { TABLE_TYPE (position lexbuf) }
-  | "key_size:"      { KEY_SIZE (position lexbuf) }
-  | "action_sizes:"   { ACTION_SIZES (position lexbuf) }
-  | "num_entries:"    { NUM_ENTRIES (position lexbuf) }
+  | "table_type"              { TABLE_TYPE (position lexbuf) }
+  | "key_size:"               { KEY_SIZE (position lexbuf) }
+  | "arg_type:"               { ARG_SIZE (position lexbuf) }
+  | "ret_type:"               { RET_SIZE (position lexbuf) }
+  | "action_types:"           { ACTION_SIZES (position lexbuf) }
+  | "num_entries:"            { NUM_ENTRIES (position lexbuf) }
 
-  | "table_inline_create"    { TABLE_INLINE_CREATE (position lexbuf) }
-  | "table_inline_match"     { TABLE_INLINE_MATCH (position lexbuf) }
-
+  | "table_inline_create"     { TABLE_INLINE_CREATE (position lexbuf) }
+  | "table_inline_match"      { TABLE_INLINE_MATCH (position lexbuf) }
   | "key:"            { KEY         (position lexbuf) }
   | "actions:"        { ACTIONS (position lexbuf) }
   | "const_entries:"          { CASES (position lexbuf) }
+
+  | "action"                  { ACTION (position lexbuf) }
+  | "table_create"            { TABLE_CREATE (position lexbuf) }
+  | "table_match"             { TABLE_MATCH (position lexbuf) }
 
   | "constr"          { CONSTR (position lexbuf) }
   | "module"          { MODULE (position lexbuf) }

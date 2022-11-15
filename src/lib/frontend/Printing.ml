@@ -149,11 +149,11 @@ let rec raw_ty_to_string t =
   | TTable(t) -> 
     " {"
     ^"\n\tkey_size: "^(comma_sep size_to_string t.key_size)
-    ^"\n\taction_sizes: "
+    ^"\n\taction_tys: "
     ^"\n\t\t"^((List.map 
-                (fun (aname, sizes) -> 
-                  aname^" : "^(comma_sep size_to_string sizes))
-                t.action_sizes) |> String.concat "\n\t\t")
+                (fun (aname, aty) -> 
+                  aname^" : "^(comma_sep raw_ty_to_string aty))
+                t.action_tys) |> String.concat "\n\t\t")
     ^"\n\num_entries: "^(size_to_string t.num_entries)
     ^"\n}"
 and func_to_string func =

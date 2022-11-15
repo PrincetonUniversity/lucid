@@ -66,6 +66,7 @@ let rec is_global_rty rty =
   | TRecord lst -> List.exists (fun (_, rty) -> is_global_rty rty) lst
   | TVector (t, _) -> is_global_rty t
   | TTable (_) -> true
+  | TAction _ -> false
 ;;
 
 let is_global ty = is_global_rty ty.raw_ty
@@ -80,7 +81,7 @@ let rec is_not_global_rty rty =
   | TRecord lst -> List.for_all (fun (_, rty) -> is_not_global_rty rty) lst
   | TVector (t, _) -> is_not_global_rty t
   | TTable (_) -> false
-
+  | TAction _ -> false
 ;;
 
 let is_not_global ty = is_not_global_rty ty.raw_ty
@@ -283,14 +284,14 @@ let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
     else List.for_all2 equiv_raw_ty lst1 lst2
   | TTable(t1), TTable(t2) -> 
     (List.for_all2 equiv_size t1.key_size t2.key_size)
-    &&  (List.for_all2 equiv_size t1.arg_size t2.arg_size)
-    &&  (List.for_all2 equiv_size t1.ret_size t2.ret_size)
+    &&  (List.for_all2 equiv_raw_ty t1.arg_ty t2.arg_ty)
+    &&  (List.for_all2 equiv_raw_ty t1.ret_ty t2.ret_ty)
     &&  (List.for_all2
           (fun (a1, s1) (a2, s2) -> 
             (String.equal a1 a2)
-            && (List.for_all2 equiv_size s1 s2))
-          t1.action_sizes
-          t2.action_sizes)
+            && (List.for_all2 equiv_raw_ty s1 s2))
+          t1.action_tys
+          t2.action_tys)
     &&  (equiv_size t1.num_entries t2.num_entries)
   | ( ( TBool
       | TMemop _
@@ -304,7 +305,8 @@ let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
       | TVector _
       | TTuple _
       | TAbstract _
-      | TTable _ )
+      | TTable _ 
+      | TAction _)
     , _ ) -> false
 
 and equiv_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =

@@ -12,8 +12,16 @@
   let mk_trecord lst =
     TRecord (List.map (fun (id, ty) -> Id.name id, ty.raw_ty) lst)
 
-  let mk_ttable key_size arg_size ret_size action_sizes num_entries span = 
-    ty_sp (TTable({key_size; arg_size; ret_size; action_sizes; num_entries})) span
+  let mk_ttable key_size arg_ty ret_ty action_tys num_entries span = 
+    let arg_ty = List.map (fun t -> t.raw_ty) arg_ty in
+    let ret_ty = List.map (fun t -> t.raw_ty) ret_ty in
+    let action_tys = List.map 
+        (fun (aname, aty) -> 
+            (aname, List.map (fun t -> t.raw_ty) aty))
+        action_tys
+    in
+
+    ty_sp (TTable({key_size; arg_ty; ret_ty; action_tys; num_entries})) span
 
   let mk_tmemop span n sizes =
     match sizes with
@@ -128,15 +136,23 @@
 
 %token <Span.t> TABLE_TYPE
 %token <Span.t> KEY_SIZE
+%token <Span.t> ARG_SIZE
+%token <Span.t> RET_SIZE
 %token <Span.t> ACTION_SIZES
 %token <Span.t> NUM_ENTRIES
 
 %token <Span.t> TABLE_INLINE_CREATE
 %token <Span.t> TABLE_INLINE_MATCH
-
 %token <Span.t> ACTIONS
 %token <Span.t> KEY
 %token <Span.t> CASES
+
+
+%token <Span.t> ACTION
+%token <Span.t> TABLE_CREATE
+%token <Span.t> TABLE_MATCH
+
+
 
 %token <Span.t> CONSTR
 %token <Span.t> PROJ
@@ -339,13 +355,48 @@ tyname_def:
     | ID                                  { snd $1, [] }
     | ID poly                             { snd $1, snd $2}
 
+
+optional_sizes:
+    | LPAREN sizes RPAREN                       { (Span.extend $1 $3, snd $2) }
+    | LPAREN RPAREN                             { (Span.extend $1 $2, []) }
+
+tys:
+    | ty                                        { $1.tspan, [ $1 ] }
+    | ty COMMA tys                              { (Span.extend $1.tspan (fst $3), $1::(snd $3)) }
+
+optional_tys: 
+    | LPAREN tys RPAREN                         { (Span.extend $1 $3, snd $2) }
+    | LPAREN RPAREN                             { (Span.extend $1 $2, []) }
+
 action_sig:
-    | ID COLON LPAREN sizes RPAREN        { Span.extend (fst $1) (fst $4), ((snd $1 |> Id.name), (snd $4)) }
-    | ID COLON LPAREN RPAREN              { Span.extend (fst $1) $4, ((snd $1 |> Id.name), []) }
+    | ID COLON optional_tys                     { (Span.extend (fst $1) (fst $3)), (snd $1 |> Id.name, snd $3)  }
 
 action_sigs:
-    | action_sig                           { fst $1, [snd $1] }
-    | action_sig action_sigs              { Span.extend (fst $1) (fst $2), (snd $1)::(snd $2) }
+    | action_sig                                {  fst $1, [snd $1] }
+    | action_sig action_sigs                    {  Span.extend (fst $1) (fst $2), (snd $1)::(snd $2) }
+
+dttable:
+    | ID ASSIGN LBRACE
+        KEY_SIZE optional_sizes
+        ARG_SIZE optional_tys
+        RET_SIZE optional_tys
+        ACTION_SIZES action_sigs 
+        NUM_ENTRIES size RBRACE
+                                            { duty_sp 
+                                                    (snd $1)
+                                                    []
+                                                    (mk_ttable (snd $5) (snd $7) (snd $9) (snd $11) (snd $13) (Span.extend $3 $14))
+                                                    (Span.extend (fst $1) $14) }
+    | ID ASSIGN LBRACE
+        KEY_SIZE optional_sizes
+        ACTION_SIZES action_sigs 
+        NUM_ENTRIES size RBRACE
+                                            { duty_sp 
+                                                    (snd $1)
+                                                    []
+                                                    (mk_ttable (snd $5) [] [] (snd $7) (snd $9) (Span.extend $3 $10))
+                                                    (Span.extend (fst $1) $10) }
+
 
 decl:
     | CONST ty ID ASSIGN exp SEMI           { [dconst_sp (snd $3) $2 $5 (Span.extend $1 $6)] }
@@ -361,6 +412,8 @@ decl:
                                             { [fun_sp (snd $3) $2 [] $4 $6 (Span.extend $1 $7)] }
     | FUN ty ID paramsdef constr_list LBRACE statement RBRACE
                                             { [fun_sp (snd $3) $2 $5 $4 $7 (Span.extend $1 $8)] }
+    | ACTION ty ID paramsdef paramsdef LBRACE statement RBRACE
+                                            { [action_sp (snd $3) $2 $4 $5 $7 (Span.extend $1 $8)]}
     | MEMOP ID paramsdef LBRACE statement RBRACE
                                             { [mk_dmemop (snd $2) $3 $5 (Span.extend (fst $1) $6)] }
     | SYMBOLIC SIZE ID SEMI                 { [dsize_sp (snd $3) None (Span.extend $1 $4)] }
@@ -373,28 +426,8 @@ decl:
     | CONSTR ty ID paramsdef ASSIGN exp SEMI { [dconstr_sp (snd $3) $2 $4 $6 (Span.extend $1 $7)] }
     | GLOBAL ty ID ASSIGN exp SEMI
                                             { [dglobal_sp (snd $3) $2 $5 (Span.extend $1 $6)] }
-    | TABLE_TYPE ID ASSIGN LBRACE
-        KEY_SIZE LPAREN sizes RPAREN
-        ACTION_SIZES action_sigs 
-        NUM_ENTRIES size RBRACE
-                                            { [
-                                                duty_sp 
-                                                    (snd $2)
-                                                    []
-                                                    (mk_ttable (snd $7) [] [] (snd $10) (snd $12) (Span.extend $4 $13))
-                                                    (Span.extend $1 $13)
-                                                ] }
-    | TABLE_TYPE ID ASSIGN LBRACE
-        KEY_SIZE LPAREN RPAREN
-        ACTION_SIZES action_sigs 
-        NUM_ENTRIES size RBRACE
-                                            { [
-                                                duty_sp 
-                                                    (snd $2)
-                                                    []
-                                                    (mk_ttable [] [] [] (snd $9) (snd $11) (Span.extend $4 $12))
-                                                    (Span.extend $1 $12)
-                                                ] }
+    | TABLE_TYPE dttable                    { [$2] }
+
 
 
 

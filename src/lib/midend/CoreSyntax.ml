@@ -31,9 +31,9 @@ and raw_ty =
   | TMemop of int * size
   | TTable of {
     key_size : size list;
-    arg_size : size list;
-    ret_size : size list;
-    action_sizes : (string * size list) list;
+    arg_ty : raw_ty list;
+    ret_ty : raw_ty list;
+    action_tys : (string * raw_ty list) list;
     num_entries : size;}
 (* Don't need effects or constraints since we passed typechecking ages ago *)
 and func_ty =

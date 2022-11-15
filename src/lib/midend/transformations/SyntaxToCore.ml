@@ -21,10 +21,6 @@ let translate_size (sz : S.size) : C.size =
   SyntaxUtils.extract_size_default sz 32
 ;;
 
-let translate_asig asig = 
-  let (name, sizes) = asig in
-  (name, List.map translate_size sizes)
-;;
 
 let rec translate_ty (ty : S.ty) : C.ty =
   let raw_ty =
@@ -43,15 +39,19 @@ let rec translate_ty (ty : S.ty) : C.ty =
     | S.TVoid -> C.TBool (* Dummy translation needed for foreign functions *)
     | S.TTable(t) -> C.TTable({
         key_size = List.map translate_size t.key_size;
-        arg_size = List.map translate_size t.arg_size;
-        ret_size = List.map translate_size t.ret_size;
-        action_sizes = List.map translate_asig t.action_sizes;
+        arg_ty = List.map (fun rty -> (translate_ty (S.ty rty)).raw_ty) t.arg_ty;
+        ret_ty = List.map (fun rty -> (translate_ty (S.ty rty)).raw_ty) t.ret_ty;
+        action_tys = List.map translate_asig t.action_tys;
         num_entries = translate_size t.num_entries;
       })
     | _ -> err ty.tspan (Printing.ty_to_string ty)
   in
   { raw_ty; tspan = ty.tspan }
+and translate_asig asig = 
+  let (name, tys) = asig in
+  (name, List.map (fun rty -> (translate_ty (S.ty rty)).raw_ty) tys;)
 ;;
+
 
 let translate_op (op : S.op) : C.op =
   match op with

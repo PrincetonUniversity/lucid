@@ -57,10 +57,16 @@ and raw_ty =
   | TTuple of raw_ty list
   | TTable of {
     key_size : size list;
-    arg_size : size list;
-    ret_size : size list;
-    action_sizes : (string * size list) list;
+    arg_ty : raw_ty list;
+    ret_ty : raw_ty list;
+    action_tys : (string * raw_ty list) list;
     num_entries : size;}
+  | TAction of {
+    const_aarg_tys : tys;
+    aarg_tys : tys;
+    aret_ty  : ty;
+    (* no effects, actions may not be effectual for now. *)
+  }
 
   (* size list * action_sig list * size) *)
 
@@ -154,6 +160,13 @@ and e =
   | EIndex of exp * size
   | ETuple of exp list
   | ECreateTableInline of ty
+(*   | ETable of {
+    tactions : (string * exp) list;
+    tentries : case list;
+  } *)
+  (* | ECreateTable of ty * exp  *)
+    (* table type * ETable *)
+
 
 and exp =
   { e : e
@@ -250,6 +263,7 @@ and d =
   | DConstr of id * ty * params * exp
   | DModule of id * interface * decls
   | DModuleAlias of id * exp * cid * cid
+  | DAction of id * ty * params * body
   (* | DTable of id * ty * exp option *)
     (* if no exp given, it is an inlined table *)
 
@@ -401,6 +415,8 @@ let dsize_sp id size span = decl_sp (DSize (id, size)) span
 let fun_sp id rty cs p body span = decl_sp (DFun (id, rty, cs, (p, body))) span
 let memop_sp id p body span = decl_sp (DMemop (id, p, body)) span
 let duty_sp id sizes rty span = decl_sp (DUserTy (id, sizes, rty)) span
+
+let action_sp id rty cp p body span = decl_sp (DAction (id, rty, cp, (p, body))) span
 
 let dconstr_sp id ty params exp span =
   decl_sp (DConstr (id, ty, params, exp)) span
