@@ -9,6 +9,7 @@ let print_if_debug ds =
 let print_if_verbose str = if Cmdline.cfg.verbose then Console.report str
 
 let process_prog builtin_tys ds =
+  Cmdline.cfg.debug <- true;
   print_if_debug ds;
   print_if_verbose "-------Checking well-formedness---------";
   Wellformed.pre_typing_checks ds;
