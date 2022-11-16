@@ -13,8 +13,10 @@
     TRecord (List.map (fun (id, ty) -> Id.name id, ty.raw_ty) lst)
 
   let mk_ttable key_size arg_ty ret_ty action_tys num_entries span = 
-    let arg_ty = List.map (fun t -> t.raw_ty) arg_ty in
-    let ret_ty = List.map (fun t -> t.raw_ty) ret_ty in
+    (* empty type list is the same as [tvoid] *)
+    let arg_ty = match arg_ty with 
+        | _ -> List.map (fun t -> t.raw_ty) arg_ty 
+    in
     let action_tys = List.map 
         (fun (aname, aty) -> 
             (aname, List.map (fun t -> t.raw_ty) aty))
@@ -54,8 +56,12 @@
     in
     value_sp (VGroup locs) span |> value_to_exp
 
-  let make_create_table tbl_ty span = 
+  let make_create_inline_table tbl_ty span = 
     exp_sp (ECreateTableInline(tbl_ty)) span
+
+  let make_create_table tty tactions tentries span = 
+    exp_sp (ECreateTable({tty; tactions; tentries})) span
+
 
   let mk_fty tspan params =
     let start_eff = FVar (QVar (Id.fresh "eff")) in
@@ -148,6 +154,7 @@
 %token <Span.t> CASES
 
 
+%token <Span.t> INLINE_ACTION
 %token <Span.t> ACTION
 %token <Span.t> TABLE_CREATE
 %token <Span.t> TABLE_MATCH
@@ -257,6 +264,25 @@ binop:
     | exp LSHIFT exp                      { op_sp LShift [$1; $3] (Span.extend $1.espan $3.espan) }
     | exp RSHIFT exp                      { op_sp RShift [$1; $3] (Span.extend $1.espan $3.espan) }
 
+pattern:
+    | cid                               { pat_of_cid $1 }
+    | NUM                               { PNum (snd $1) }
+    | BITPAT                            { PBit (snd $1) }
+
+patterns:
+  | pattern                             { [$1] }
+  | pattern COMMA patterns              { $1 :: $3 }
+
+case: 
+    | PIPE patterns ARROW ID LPAREN RPAREN SEMI 
+        {Span.extend $1 $7, ($2, (snd $4 |> Id.name), [])}
+    | PIPE patterns ARROW ID LPAREN args RPAREN SEMI 
+        {Span.extend $1 $8, ($2, (snd $4 |> Id.name), $6)}
+
+cases: 
+    | case                                   { fst $1, [snd $1] }
+    | case cases                             { Span.extend (fst $1) (fst $2), (snd $1::snd $2) }
+
 exp:
     | cid			                            { var_sp (snd $1) (fst $1) }
     | NUM                                 { eint_sp (snd $1) None (fst $1) }
@@ -282,7 +308,16 @@ exp:
     | SIZECAST single_poly LPAREN size RPAREN { szcast_sp (snd $2) (snd $4) (Span.extend $1 $5) }
     | FLOOD exp                           { flood_sp $2 (Span.extend $1 $2.espan) }
     | LBRACE args RBRACE                  { make_group $2 (Span.extend $1 $3) }
-    | TABLE_INLINE_CREATE LESS ty MORE LPAREN RPAREN      { make_create_table $3 (Span.extend $1 $6) }
+    | TABLE_INLINE_CREATE LESS ty MORE LPAREN RPAREN      { make_create_inline_table $3 (Span.extend $1 $6) }
+    | TABLE_CREATE LESS ty MORE LPAREN LBRACE
+        ACTIONS LPAREN args RPAREN
+        CASES cases RBRACE RPAREN 
+                                         { make_create_table $3 $9 (snd $12) (Span.extend $1 $14) }
+    | TABLE_MATCH LESS ty MORE LPAREN args RPAREN 
+                                        { tblmatch_sp $3 $6 (Span.extend $1 $7)}
+
+
+
 
 exps:
   | exp                                 { [$1] }
@@ -375,17 +410,18 @@ action_sigs:
     | action_sig                                {  fst $1, [snd $1] }
     | action_sig action_sigs                    {  Span.extend (fst $1) (fst $2), (snd $1)::(snd $2) }
 
+
 dttable:
     | ID ASSIGN LBRACE
         KEY_SIZE optional_sizes
         ARG_SIZE optional_tys
-        RET_SIZE optional_tys
+        RET_SIZE ty
         ACTION_SIZES action_sigs 
         NUM_ENTRIES size RBRACE
                                             { duty_sp 
                                                     (snd $1)
                                                     []
-                                                    (mk_ttable (snd $5) (snd $7) (snd $9) (snd $11) (snd $13) (Span.extend $3 $14))
+                                                    (mk_ttable (snd $5) (snd $7) ($9.raw_ty) (snd $11) (snd $13) (Span.extend $3 $14))
                                                     (Span.extend (fst $1) $14) }
     | ID ASSIGN LBRACE
         KEY_SIZE optional_sizes
@@ -394,8 +430,8 @@ dttable:
                                             { duty_sp 
                                                     (snd $1)
                                                     []
-                                                    (mk_ttable (snd $5) [] [] (snd $7) (snd $9) (Span.extend $3 $10))
-                                                    (Span.extend (fst $1) $10) }
+                                                    (mk_ttable (snd $5) [] TVoid (snd $7) (snd $9) (Span.extend $3 $10))
+                                                    (Span.extend (fst $1) $8) }
 
 
 decl:
@@ -414,6 +450,7 @@ decl:
                                             { [fun_sp (snd $3) $2 $5 $4 $7 (Span.extend $1 $8)] }
     | ACTION ty ID paramsdef paramsdef LBRACE statement RBRACE
                                             { [action_sp (snd $3) $2 $4 $5 $7 (Span.extend $1 $8)]}
+    | INLINE_ACTION ID paramsdef SEMI    { [inline_action_sp (snd $2) $3 (Span.extend $1 $4)]}
     | MEMOP ID paramsdef LBRACE statement RBRACE
                                             { [mk_dmemop (snd $2) $3 $5 (Span.extend (fst $1) $6)] }
     | SYMBOLIC SIZE ID SEMI                 { [dsize_sp (snd $3) None (Span.extend $1 $4)] }
@@ -448,14 +485,7 @@ record_def:
     | param	SEMI			                 { [ $1 ] }
     | param SEMI record_def            { $1 :: $3 }
 
-pattern:
-    | cid                               { pat_of_cid $1 }
-    | NUM                               { PNum (snd $1) }
-    | BITPAT                            { PBit (snd $1) }
 
-patterns:
-  | pattern                             { [$1] }
-  | pattern COMMA patterns              { $1 :: $3 }
 
 statement:
     | statement0			                  { $1 }
@@ -497,15 +527,6 @@ actions:
     | action                                        {fst $1, [snd $1]}
     | action actions                                { Span.extend (fst $1) (fst $2), (snd $1::snd $2) }
 
-case: 
-    | PIPE patterns ARROW ID LPAREN RPAREN SEMI 
-        {Span.extend $1 $7, ($2, (snd $4 |> Id.name), [])}
-    | PIPE patterns ARROW ID LPAREN args RPAREN SEMI 
-        {Span.extend $1 $8, ($2, (snd $4 |> Id.name), $6)}
-
-cases: 
-    | case                                   { fst $1, [snd $1] }
-    | case cases                     { Span.extend (fst $1) (fst $2), (snd $1::snd $2) }
 
 statement1:
     | ty ID ASSIGN exp SEMI                 { slocal_sp (snd $2) $1 $4 (Span.extend $1.tspan $5) }
@@ -528,6 +549,7 @@ statement1:
         CASES cases
         RBRACE RPAREN SEMI
         { smatchtable_sp $3 $6 $10 (snd $12) (snd $14) (Span.extend $1 $17) }
+
 
 
 includes:

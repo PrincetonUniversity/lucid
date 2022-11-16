@@ -32,7 +32,7 @@ and raw_ty =
   | TTable of {
     key_size : size list;
     arg_ty : raw_ty list;
-    ret_ty : raw_ty list;
+    ret_ty : raw_ty;
     action_tys : (string * raw_ty list) list;
     num_entries : size;}
 (* Don't need effects or constraints since we passed typechecking ages ago *)
@@ -108,6 +108,10 @@ and e =
   | EHash of size * exp list
   | EFlood of exp
   | ECreateTableInline of ty
+  | ECreateTable of {
+    tty: ty;
+    tactions : exp list;
+    tentries : case list;}
 
 and exp =
   { e : e

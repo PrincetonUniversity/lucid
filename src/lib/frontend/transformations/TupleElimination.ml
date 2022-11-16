@@ -198,6 +198,12 @@ let rec replace_decl (env : env) d =
     env, [{ d with d = DHandler (id, (new_params, body)) }]
   | DSize _ | DMemop _ | DExtern _ | DSymbolic _ | DConst _ | DGlobal _ ->
     env, [d]
+  | DInlineAction _ -> env, [d]
+  | DAction(id, ty, const_params, (params, body)) -> 
+    (* TODO: what about const params and inline actions? *)
+    let body_env, new_params = flatten_params env params in
+    let body = replace_statement body_env body in
+    env, [{d with d=DAction(id, ty, const_params, (new_params, body))}]
   | DFun _ | DConstr _ | DModule _ | DUserTy _ | DModuleAlias _ ->
     Console.error_position
       d.dspan

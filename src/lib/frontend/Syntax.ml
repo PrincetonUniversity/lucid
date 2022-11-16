@@ -58,7 +58,7 @@ and raw_ty =
   | TTable of {
     key_size : size list;
     arg_ty : raw_ty list;
-    ret_ty : raw_ty list;
+    ret_ty : raw_ty;
     action_tys : (string * raw_ty list) list;
     num_entries : size;}
   | TAction of {
@@ -160,12 +160,11 @@ and e =
   | EIndex of exp * size
   | ETuple of exp list
   | ECreateTableInline of ty
-(*   | ETable of {
-    tactions : (string * exp) list;
-    tentries : case list;
-  } *)
-  (* | ECreateTable of ty * exp  *)
-    (* table type * ETable *)
+  | ECreateTable of {
+    tty: ty;
+    tactions : exp list;
+    tentries : case list;}
+  | ETableApply of ty * exp list
 
 
 and exp =
@@ -264,6 +263,8 @@ and d =
   | DModule of id * interface * decls
   | DModuleAlias of id * exp * cid * cid
   | DAction of id * ty * params * body
+  (* TODO: remove inline actions. *)
+  | DInlineAction of id * params (* inline actions only have const params *)
   (* | DTable of id * ty * exp option *)
     (* if no exp given, it is an inlined table *)
 
@@ -403,6 +404,8 @@ let vector_sp es span = exp_sp (EVector es) span
 let szcast_sp sz1 sz2 span = exp_sp (ESizeCast (sz1, sz2)) span
 let flood_sp e span = exp_sp (EFlood e) span
 
+let tblmatch_sp ty args span = exp_sp (ETableApply(ty, args)) span 
+
 (* declarations *)
 let decl d = { d; dspan = Span.default }
 let decl_sp d span = { d; dspan = span }
@@ -417,6 +420,7 @@ let memop_sp id p body span = decl_sp (DMemop (id, p, body)) span
 let duty_sp id sizes rty span = decl_sp (DUserTy (id, sizes, rty)) span
 
 let action_sp id rty cp p body span = decl_sp (DAction (id, rty, cp, (p, body))) span
+let inline_action_sp id cp span = decl_sp (DInlineAction (id, cp)) span
 
 let dconstr_sp id ty params exp span =
   decl_sp (DConstr (id, ty, params, exp)) span

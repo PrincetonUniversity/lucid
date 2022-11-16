@@ -81,6 +81,7 @@ rule token = parse
   | "const_entries:"          { CASES (position lexbuf) }
 
   | "action"                  { ACTION (position lexbuf) }
+  | "inline_action"           { INLINE_ACTION (position lexbuf) }
   | "table_create"            { TABLE_CREATE (position lexbuf) }
   | "table_match"             { TABLE_MATCH (position lexbuf) }
 

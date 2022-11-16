@@ -77,7 +77,7 @@ let occurs_ty span tvar raw_ty : unit =
     | TVector (raw_ty, _) -> occ tvar raw_ty
     | TTable(t) -> 
       List.iter (fun rty -> occ tvar rty) t.arg_ty;
-      List.iter (fun rty -> occ tvar rty) t.ret_ty;
+      occ tvar t.ret_ty;
       List.iter 
         (fun (_, aty) -> 
           (List.iter (fun rty -> occ tvar rty) aty))
@@ -272,7 +272,7 @@ and try_unify_rty span rty1 rty2 =
   | TTable(t1),  TTable(t2) ->
     List.iter2 (try_unify_size span) t1.key_size t2.key_size;
     List.iter2 (try_unify_rty span) t1.arg_ty t2.arg_ty;
-    List.iter2 (try_unify_rty span) t1.ret_ty t2.ret_ty;
+    try_unify_rty span t1.ret_ty t2.ret_ty;
     List.iter2
       (fun (aname1, t1) (aname2, t2) -> 
         if not (String.equal aname1 aname2) then raise CannotUnify;
@@ -280,6 +280,10 @@ and try_unify_rty span rty1 rty2 =
       t1.action_tys
       t2.action_tys;
     try_unify_size span t1.num_entries t2.num_entries
+  | TAction(a1), TAction(a2) -> 
+    List.iter2 (try_unify_ty span) a1.const_aarg_tys a2.const_aarg_tys;
+    List.iter2 (try_unify_ty span) a1.aarg_tys a2.aarg_tys;
+    try_unify_ty span a1.aret_ty a2.aret_ty
   | ( ( TVoid
       | TGroup
       | TBool

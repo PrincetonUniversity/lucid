@@ -36,6 +36,10 @@ let subst =
         in
         TName (cid, sizes, b)
 
+      method! visit_ECreateTable env tty tactions tentries =
+        let tactions = List.map (self#visit_exp env) (tactions) in
+        ECreateTable({tty; tactions; tentries})
+
       method! visit_ECall env x args =
         let args = List.map (self#visit_exp env) args in
         let x =
@@ -68,6 +72,8 @@ let add_definitions prefix env ds =
     | DGlobal (id, _, _) -> { env with vars = add_entry env.vars id }
     | DSize (id, _) -> { env with sizes = add_entry env.sizes id }
     | DUserTy (id, _, _) -> { env with types = add_entry env.types id }
+    | DAction(id, _, _, _) -> { env with vars = add_entry env.vars id }
+    | DInlineAction(_) -> failwith "Inline action declarations are depreciated."
     | DModuleAlias _ -> failwith "Should be eliminated before this"
     | DModule (id, _, ds) ->
       let env' = List.fold_left (aux id) empty_env ds in
@@ -98,6 +104,7 @@ let rec replace_module env m_id ds =
   let env, ds' =
     List.fold_left
       (fun (env, ds) d ->
+
         let d = subst#visit_decl env d in
         let env, d =
           match d.d with
@@ -134,6 +141,10 @@ let rec replace_module env m_id ds =
           | DUserTy (id, x, y) ->
             ( { env with types = add_entry env.types id }
             , DUserTy (prefix id, x, y) |> wrap d )
+          | DAction(id, x, y, z) -> 
+            ( { env with vars = add_entry env.vars id }
+            , DAction (prefix id, x, y, z) |> wrap d )
+          | DInlineAction(_) -> failwith "inline actions are depreciated."
           | DModule (id, _, ds) ->
             let _, ds = replace_module env id ds in
             replace_module env m_id ds

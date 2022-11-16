@@ -45,6 +45,7 @@
    wellformed
    functionInlining
    functionInliningSpecialCase
+   tableInlining
    sizeInlining
    renaming
    globalArgElimination

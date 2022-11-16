@@ -301,6 +301,7 @@ let rec check_qvars d =
   match d.d with
   | DFun _ | DMemop _ | DModuleAlias _ -> (* No restrictions *) ()
   | DAction _ -> ()
+  | DInlineAction _ -> ()
   | DGlobal _ ->
     (* None allowed at all *) basic_qvar_checker#visit_decl (true, true) d
   | DSize _ | DSymbolic _ | DConst _ | DExtern _ ->

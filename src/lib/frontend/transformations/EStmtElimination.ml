@@ -48,6 +48,10 @@ let rec inline_exp e =
     stmt, { e with e = ETuple es' }
   | ECreateTableInline _ -> 
     snoop, e
+  | ECreateTable _ -> snoop, e
+  | ETableApply(ty, args) -> 
+    let stmt, args' = inline_exps args in
+    stmt, {e with e = ETableApply(ty, args')}
 
 and inline_exps es =
   List.fold_right
@@ -87,12 +91,27 @@ and inline_stmt s =
     let branches' = List.map (fun (p, stmt) -> p, inline_stmt stmt) branches in
     sseq s' { s with s = SMatch (es', branches') }
   | SLoop (s1, id, sz) -> { s with s = SLoop (inline_stmt s1, id, sz) }
-  | SInlineTable(tblty, tblexp, keys, acns, entries) -> (
-    let ts', tblexp' = inline_exp tblexp in 
-    let s', keys' = inline_exps keys in
-    let acns' = List.map (fun (id, (params, stmt)) -> id, (params, inline_stmt stmt)) acns in
-    sseq (sseq ts' s') {s with s=SInlineTable(tblty, tblexp', keys', acns', entries)}
-  )
+  | SInlineTable(tbl_ty, tbl, keys, actions, const_entries) -> 
+    let s_tbl, tbl = inline_exp tbl in
+    let s_keys, keys = inline_exps keys in
+    let actions = List.map (fun (id, (params, stmt)) -> id, (params, inline_stmt stmt)) actions in
+    let s_tentries, const_entries = List.fold_left
+      (fun (s_tentries, tentries) (pat, name, eargs) -> 
+        let s_eargs, eargs = inline_exps eargs in
+        ((sseq s_tentries s_eargs), (pat, name, eargs)::tentries))
+      (snoop, [])
+      const_entries
+    in
+    let const_entries = List.rev const_entries in 
+    let setup_stmt = sseq 
+      (sseq s_tbl s_keys) 
+      s_tentries
+    in 
+    let new_stmt = {s with s=SInlineTable(tbl_ty, tbl, keys, actions, const_entries)} in 
+    sseq setup_stmt new_stmt
+    (* setup_stmt, {e with e=ETableApplyInline{tty; ttbl; tkey; tactions; tentries}} *)
+
+
 ;;
 
 let eliminator =

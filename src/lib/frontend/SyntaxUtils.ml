@@ -285,7 +285,7 @@ let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
   | TTable(t1), TTable(t2) -> 
     (List.for_all2 equiv_size t1.key_size t2.key_size)
     &&  (List.for_all2 equiv_raw_ty t1.arg_ty t2.arg_ty)
-    &&  (List.for_all2 equiv_raw_ty t1.ret_ty t2.ret_ty)
+    &&  (equiv_raw_ty t1.ret_ty t2.ret_ty)
     &&  (List.for_all2
           (fun (a1, s1) (a2, s2) -> 
             (String.equal a1 a2)

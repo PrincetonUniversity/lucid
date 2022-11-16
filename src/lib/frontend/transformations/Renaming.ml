@@ -230,6 +230,26 @@ let rename prog =
           let replaced_size = Option.map (self#visit_size dummy) size in
           let new_x = self#freshen_size x in
           DSize (new_x, replaced_size)
+        | DInlineAction(x, params) -> 
+          let new_x = self#freshen_var x in
+          DInlineAction(new_x, params)
+        | DAction(x, rty, const_params, (params, stmt)) -> 
+          let old_env = env in
+          let new_rty = self#visit_ty dummy rty in
+          let new_const_params =
+            List.map
+              (fun (id, ty) -> self#freshen_var id, self#visit_ty dummy ty)
+              const_params
+          in
+          let new_params =
+            List.map
+              (fun (id, ty) -> self#freshen_var id, self#visit_ty dummy ty)
+              params
+          in
+          let new_stmt = self#visit_statement dummy stmt in
+          env <- old_env;
+          let new_x = self#freshen_var x in
+          DAction(new_x, new_rty, new_const_params, (new_params, new_stmt))
         | DMemop (x, params, body) ->
           let old_env = env in
           let replaced_params =
