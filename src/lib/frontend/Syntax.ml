@@ -55,18 +55,26 @@ and raw_ty =
   | TRecord of (string * raw_ty) list
   | TVector of raw_ty * size
   | TTuple of raw_ty list
-  | TTable of {
-    key_size : size list;
-    arg_ty : raw_ty list;
-    ret_ty : raw_ty;
-    action_tys : (string * raw_ty list) list;
-    num_entries : size;}
-  | TAction of {
+  | T_Table of tbl_ty
+  | TAction of acn_ty 
+  (* {
     const_aarg_tys : tys;
     aarg_tys : tys;
-    aret_ty  : ty;
+    aret_ty  : tys;
     (* no effects, actions may not be effectual for now. *)
   }
+ *)
+and tbl_ty = {
+    tkey_sizes : size list;
+    tparam_tys : ty list;
+    tret_tys : ty list;
+  }
+
+and acn_ty = {
+  aconst_param_tys : tys;
+  aparam_tys : tys;
+  aret_tys : tys;
+}
 
   (* size list * action_sig list * size) *)
 
@@ -159,13 +167,17 @@ and e =
   | EComp of exp * id * size (* Vector comprehension *)
   | EIndex of exp * size
   | ETuple of exp list
-  | ECreateTableInline of ty
-  | ECreateTable of {
+(*   | ECreateTable of {
     tty: ty;
     tactions : exp list;
-    tentries : case list;}
-  | ETableApply of ty * exp list
-
+    tentries : case list;} *)
+  | ETableCreate of {
+    tty: ty;
+    tactions: exp list; 
+    tsize: size;
+  }
+  (* | ETableApply of ty * exp list *)
+  | ETableApply of tbl_match
 
 and exp =
   { e : e
@@ -180,10 +192,6 @@ and gen_type =
   | GMulti of exp (* Multicast group name *)
   | GPort of exp
 
-(* actions and cases, which are guarded actions *)
-and action = string * body
-and case = pat list * string * exp list
-
 (* statements *)
 and s =
   | SNoop
@@ -197,7 +205,18 @@ and s =
   | SSeq of statement * statement
   | SMatch of exp list * branch list
   | SLoop of statement * id * size
-  | SInlineTable of ty * exp * exp list * action list * case list
+  | SApplyTable of tbl_match
+
+and tbl_match_out_param = (id * (ty option))
+
+and tbl_match = 
+    { tty : ty;
+    tbl  : exp;
+    keys  : exp list;
+    args : exp list;
+    outs : id list; 
+    out_tys : ty list option;}
+    (* out_tys set for statements that create new vars *)
 
 and statement =
   { s : s
@@ -247,6 +266,9 @@ and memop_body =
   | MBIf of exp * exp * exp
   | MBComplex of complex_body
 
+(* an action is just a list of expressions to return *)
+and action_body = exp list
+
 (* declarations *)
 and d =
   | DSize of id * size option
@@ -262,11 +284,7 @@ and d =
   | DConstr of id * ty * params * exp
   | DModule of id * interface * decls
   | DModuleAlias of id * exp * cid * cid
-  | DAction of id * ty * params * body
-  (* TODO: remove inline actions. *)
-  | DInlineAction of id * params (* inline actions only have const params *)
-  (* | DTable of id * ty * exp option *)
-    (* if no exp given, it is an inlined table *)
+  | DAction of id * ty list * params * (params * action_body)
 
 
 (* name, return type, args & body *)
@@ -404,8 +422,10 @@ let vector_sp es span = exp_sp (EVector es) span
 let szcast_sp sz1 sz2 span = exp_sp (ESizeCast (sz1, sz2)) span
 let flood_sp e span = exp_sp (EFlood e) span
 
-let tblmatch_sp ty args span = exp_sp (ETableApply(ty, args)) span 
-
+let tblmatch_sp tty tbl keys args span =
+  let t = {tty; tbl; keys; args; outs=[]; out_tys=None;} in
+  exp_sp (ETableApply(t)) span
+;;
 (* declarations *)
 let decl d = { d; dspan = Span.default }
 let decl_sp d span = { d; dspan = span }
@@ -420,7 +440,7 @@ let memop_sp id p body span = decl_sp (DMemop (id, p, body)) span
 let duty_sp id sizes rty span = decl_sp (DUserTy (id, sizes, rty)) span
 
 let action_sp id rty cp p body span = decl_sp (DAction (id, rty, cp, (p, body))) span
-let inline_action_sp id cp span = decl_sp (DInlineAction (id, cp)) span
+
 
 let dconstr_sp id ty params exp span =
   decl_sp (DConstr (id, ty, params, exp)) span
@@ -462,8 +482,6 @@ let match_sp es bs span = statement_sp (SMatch (es, bs)) span
 let loop_sp e i k span = statement_sp (SLoop (e, i, k)) span
 let sexp_sp e span = statement_sp (SUnit e) span
 let scall_sp cid es span = sexp_sp (call_sp cid es span) span
-let smatchtable_sp tblty etbl keys actions cases span =
-    statement_sp (SInlineTable(tblty, etbl, keys, actions, cases)) span 
 
 (* Interface spefications *)
 let spec ispec = { ispec; ispan = Span.default }

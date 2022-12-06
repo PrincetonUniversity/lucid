@@ -209,6 +209,9 @@ let basic_qvar_checker =
       span <- ty.tspan;
       super#visit_ty env ty
 
+    (* table types are always allowed to have QVars *)
+    method! visit_T_Table _ _ = ()
+
     method! visit_exp _ _ = ()
 
     method! visit_decl env d =
@@ -301,7 +304,6 @@ let rec check_qvars d =
   match d.d with
   | DFun _ | DMemop _ | DModuleAlias _ -> (* No restrictions *) ()
   | DAction _ -> ()
-  | DInlineAction _ -> ()
   | DGlobal _ ->
     (* None allowed at all *) basic_qvar_checker#visit_decl (true, true) d
   | DSize _ | DSymbolic _ | DConst _ | DExtern _ ->

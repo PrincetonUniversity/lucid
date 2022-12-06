@@ -59,6 +59,7 @@ let occurs_effect span tvar eff : unit =
 
 let occurs_ty span tvar raw_ty : unit =
   let rec occ tvar raw_ty =
+    let occ_ty ty = occ tvar ty.raw_ty in 
     match raw_ty with
     | TQVar tvr -> occurs_tqvar occ tvar tvr
     | TBool
@@ -75,21 +76,13 @@ let occurs_ty span tvar raw_ty : unit =
       List.iter (fun ty -> occ tvar ty.raw_ty) arg_tys;
       occ tvar ret_ty.raw_ty
     | TVector (raw_ty, _) -> occ tvar raw_ty
-    | TTable(t) -> 
-      List.iter (fun rty -> occ tvar rty) t.arg_ty;
-      occ tvar t.ret_ty;
-      List.iter 
-        (fun (_, aty) -> 
-          (List.iter (fun rty -> occ tvar rty) aty))
-        t.action_tys
+    | T_Table(t) -> 
+      List.iter occ_ty t.tparam_tys;
+      List.iter occ_ty t.tret_tys
     | TAction(a) -> 
-      List.iter (fun ty -> occ tvar ty.raw_ty) a.const_aarg_tys;
-      List.iter (fun ty -> occ tvar ty.raw_ty) a.aarg_tys;
-      occ tvar a.aret_ty.raw_ty
-
-
-
-
+      List.iter occ_ty a.aconst_param_tys;
+      List.iter occ_ty a.aparam_tys;
+      List.iter occ_ty a.aret_tys
   in
   check_occurs span occ raw_ty_to_string tvar raw_ty
 ;;
@@ -269,21 +262,14 @@ and try_unify_rty span rty1 rty2 =
   | TVector (ty1, size1), TVector (ty2, size2) ->
     try_unify_size span size1 size2;
     unify_raw_ty ty1 ty2
-  | TTable(t1),  TTable(t2) ->
-    List.iter2 (try_unify_size span) t1.key_size t2.key_size;
-    List.iter2 (try_unify_rty span) t1.arg_ty t2.arg_ty;
-    try_unify_rty span t1.ret_ty t2.ret_ty;
-    List.iter2
-      (fun (aname1, t1) (aname2, t2) -> 
-        if not (String.equal aname1 aname2) then raise CannotUnify;
-        List.iter2 (try_unify_rty span) t1 t2)
-      t1.action_tys
-      t2.action_tys;
-    try_unify_size span t1.num_entries t2.num_entries
+  | T_Table(t1), T_Table(t2) -> 
+    List.iter2 (try_unify_size span) t1.tkey_sizes t2.tkey_sizes;
+    List.iter2 (try_unify_ty span) t1.tparam_tys t2.tparam_tys;
+    List.iter2 (try_unify_ty span) t1.tret_tys t2.tret_tys
   | TAction(a1), TAction(a2) -> 
-    List.iter2 (try_unify_ty span) a1.const_aarg_tys a2.const_aarg_tys;
-    List.iter2 (try_unify_ty span) a1.aarg_tys a2.aarg_tys;
-    try_unify_ty span a1.aret_ty a2.aret_ty
+    List.iter2 (try_unify_ty span) a1.aconst_param_tys a2.aconst_param_tys;
+    List.iter2 (try_unify_ty span) a1.aparam_tys a2.aparam_tys;
+    List.iter2 (try_unify_ty span) a1.aret_tys a2.aret_tys
   | ( ( TVoid
       | TGroup
       | TBool
@@ -296,8 +282,8 @@ and try_unify_rty span rty1 rty2 =
       | TVector _
       | TTuple _
       | TAbstract _ 
-      | TTable _ 
-      | TAction _)
+      | TAction _
+      | T_Table _)
     , _ ) -> raise CannotUnify
 
 and unify_ty (span : Span.t) ty1 ty2 : unit =

@@ -37,14 +37,6 @@ let rec translate_ty (ty : S.ty) : C.ty =
         ; ret_ty = translate_ty fty.ret_ty
         }
     | S.TVoid -> C.TBool (* Dummy translation needed for foreign functions *)
-    | S.TTable(t) -> C.TTable({
-        key_size = List.map translate_size t.key_size;
-        arg_ty = List.map (fun rty -> (translate_ty (S.ty rty)).raw_ty) t.arg_ty;
-        ret_ty = (translate_ty (S.ty t.ret_ty)).raw_ty;
-        (* (fun rty -> (translate_ty (S.ty rty)).raw_ty) t.ret_ty; *)
-        action_tys = List.map translate_asig t.action_tys;
-        num_entries = translate_size t.num_entries;
-      })
     | _ -> err ty.tspan (Printing.ty_to_string ty)
   in
   { raw_ty; tspan = ty.tspan }
@@ -115,12 +107,8 @@ let rec translate_exp (e : S.exp) : C.exp =
     | S.ECall (cid, es) -> C.ECall (cid, List.map translate_exp es)
     | S.EHash (sz, es) -> C.EHash (translate_size sz, List.map translate_exp es)
     | S.EFlood e -> C.EFlood (translate_exp e)
-    | S.ECreateTableInline(ty) -> C.ECreateTableInline(translate_ty ty)
-    | S.ECreateTable(t) -> C.ECreateTable({
-      tty = translate_ty t.tty;
-      tactions = List.map translate_exp t.tactions;
-      tentries = List.map translate_case t.tentries;
-    })
+    | S.ETableCreate(_) -> err e.espan "tables not implemented in backend"
+    | S.ETableApply(_) -> err e.espan "tables not implemented in backend"
     | ESizeCast(_) | EStmt(_) | ERecord(_) | EWith(_) | EProj(_)
     | EVector(_) | EComp(_) | EIndex(_) | ETuple(_) -> err_unsupported e.espan (Printing.exp_to_string e)
   in
@@ -166,13 +154,6 @@ and translate_statement (s : S.statement) : C.statement =
     | S.SMatch (es, branches) ->
       C.SMatch (List.map translate_exp es, List.map translate_branch branches)
     | S.SRet eopt -> C.SRet (Option.map translate_exp eopt)
-    | S.SInlineTable(ty, e, es, acns, cases) -> 
-          C.SInlineTable(
-            translate_ty ty,
-            translate_exp e,
-            List.map translate_exp es,
-            List.map translate_acn acns,
-            List.map translate_case cases)    
     | _ -> err s.sspan (Printing.statement_to_string s)
   in
   { s = s'; sspan = s.sspan; spragma = None}

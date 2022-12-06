@@ -146,22 +146,18 @@ let rec raw_ty_to_string t =
   | TVector (ty, size) ->
     Printf.sprintf "%s[%s]" (raw_ty_to_string ty) (size_to_string size)
   | TTuple tys -> "(" ^ concat_map " * " raw_ty_to_string tys ^ ")"
-  | TTable(t) -> 
-    " TTable{"
-    ^"\n\tkey_size: "^(comma_sep size_to_string t.key_size)
-    ^"\n\taction_tys: "
-    ^"\n\t\t"^((List.map 
-                (fun (aname, aty) -> 
-                  aname^" : "^(comma_sep raw_ty_to_string aty))
-                t.action_tys) |> String.concat "\n\t\t")
-    ^"\nnum_entries: "^(size_to_string t.num_entries)
-    ^"\n}"
+  | T_Table(t) -> 
+    " table_type {"
+    ^"\n\tkey_size: "^(comma_sep size_to_string t.tkey_sizes)
+    ^"\n\targ_ty: "^(comma_sep ty_to_string t.tparam_tys)
+    ^"\n\tret_ty: "^(comma_sep ty_to_string t.tret_tys)
+    ^"}\n"
   | TAction(a) -> 
     Printf.sprintf 
       "%s -> %s -> %s"
-      (concat_map " * " ty_to_string a.const_aarg_tys)
-      (concat_map " * " ty_to_string a.aarg_tys)
-      (ty_to_string a.aret_ty)
+      (concat_map " * " ty_to_string a.aconst_param_tys)
+      (concat_map " * " ty_to_string a.aparam_tys)
+      (comma_sep ty_to_string a.aret_tys)
 
 and func_to_string func =
   let arg_tys = concat_map ", " ty_to_string func.arg_tys in
@@ -181,7 +177,7 @@ and ty_to_string t =
   let eff_str =
     if cfg.show_effects && (is_global t || cfg.show_all_effects)
     then effect_to_string t.teffect |> wrap "(" ")"
-    else ""
+    else "<no effect>"
   in
   match !(t.tprint_as) with
   | Some raw_ty when cfg.use_type_names && false ->
@@ -307,17 +303,16 @@ let rec e_to_string e =
     Printf.sprintf "to_int<<%s>>(%s)" (size_to_string sz1) (size_to_string sz2)
   | EStmt (s, e) ->
     Printf.sprintf "{%s; return %s}" (stmt_to_string s) (exp_to_string e)
-  | ECreateTableInline(ty) -> 
-    Printf.sprintf "table_inline_create<%s>()" (ty_to_string ty)
-  | ECreateTable(t) -> 
-    Printf.sprintf "table_create<%s>({\n\tactions: (%s)\n\tconst_entries:\n\t%s" 
+  | ETableCreate(t) -> 
+    Printf.sprintf "table_create<%s>((%s),%s)" 
       (ty_to_string t.tty)
       (concat_map "," exp_to_string t.tactions)
-      (concat_map "\n\t" (entry_to_string) t.tentries)
-  | ETableApply(tbl_ty, args) -> 
+      (size_to_string t.tsize)
+  | ETableApply(tr) -> 
     Printf.sprintf "table_apply<%s>(%s);"
-      (ty_to_string tbl_ty)
-      (comma_sep exp_to_string args)
+      (ty_to_string tr.tty)
+      (comma_sep exp_to_string tr.args)
+
 
 and exp_to_string e = e_to_string e.e
 (* ^ Printf.sprintf "[ty:%s]"
@@ -410,22 +405,29 @@ and stmt_to_string s =
       (id_to_string i)
       (size_to_string k)
       (stmt_to_string s)
-  | SInlineTable(_, tbl, keys, actions, const_entries) -> 
+  | SApplyTable(tbl_rec) -> 
+(*     let ret_ty_str = match tbl_rec.tty.raw_ty with
+      | T_Table({ret_ty=ret_ty;}) -> raw_ty_to_string ret_ty
+      | _ -> "auto"
+    in  *)
+    if (tbl_rec.out_tys <> None)
+    then (
     Printf.sprintf
-      "table_match with %s = {\n\tkey:%s\n\tactions:\n\t\t%s\n\tcases:%s};"
-        (* (id_to_string tblty) *)
-        (exp_to_string tbl)
-        (comma_sep exp_to_string keys)
-        (String.concat 
-          "\n\t\t" 
-          (List.map 
-            (fun acn -> action_to_string acn)
-            actions))
-        (String.concat 
-          "\n\t\t" 
-          (List.map 
-            (fun entry -> entry_to_string entry)
-            const_entries))
+     "%s %s = table_match<%s>(%s, (%s), (%s));"
+      (comma_sep ty_to_string (Option.get tbl_rec.out_tys))
+      (comma_sep id_to_string tbl_rec.outs)
+      (ty_to_string tbl_rec.tty)
+      (exp_to_string tbl_rec.tbl)
+      (comma_sep exp_to_string tbl_rec.keys)
+      (comma_sep exp_to_string tbl_rec.args)
+    )
+  else (
+    Printf.sprintf
+     "%s = table_match<%s>(%s);"
+      (comma_sep id_to_string tbl_rec.outs)
+      (ty_to_string tbl_rec.tty)
+      (comma_sep exp_to_string (tbl_rec.tbl::tbl_rec.keys@tbl_rec.args))
+  ) 
 ;;
 
 let statement_to_string = stmt_to_string
@@ -559,8 +561,14 @@ and d_to_string d =
       (cid_to_string cid1)
       (exp_to_string e)
       (cid_to_string cid2)
-  | DAction(id, _, _, _) -> Printf.sprintf "action %s...;" (id_to_string id)
-  | DInlineAction(_) -> "inline_action...(printer not implemented)...;"
+  | DAction(id, ret_tys, const_params, (dyn_params, acn_body)) -> 
+    Printf.sprintf 
+      "action (%s) %s(%s)(%s) {\n\treturn %s\n}\n" 
+      (comma_sep ty_to_string ret_tys)
+      (id_to_string id)
+      (params_to_string const_params)
+      (params_to_string dyn_params)
+      (comma_sep exp_to_string acn_body)
 
 and decl_to_string d = d_to_string d.d
 and decls_to_string ds = concat_map "\n\n" decl_to_string ds

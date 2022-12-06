@@ -46,12 +46,18 @@ let rec inline_exp e =
   | ETuple es ->
     let stmt, es' = inline_exps es in
     stmt, { e with e = ETuple es' }
-  | ECreateTableInline _ -> 
-    snoop, e
-  | ECreateTable _ -> snoop, e
-  | ETableApply(ty, args) -> 
-    let stmt, args' = inline_exps args in
-    stmt, {e with e = ETableApply(ty, args')}
+  | ETableCreate _ -> error "not done?"
+  | ETableApply(tm) -> 
+    let stmt, tm' = inline_tbl_match tm in
+    stmt, {e with e = ETableApply(tm')}
+
+and inline_tbl_match tm =
+    let tbl_stmt, tbl = inline_exp tm.tbl in
+    let keys_stmt, keys = inline_exps tm.keys in
+    let args_stmt, args = inline_exps tm.args in
+    sseq tbl_stmt (sseq keys_stmt args_stmt), 
+    {tm with tbl; keys; args}
+
 
 and inline_exps es =
   List.fold_right
@@ -60,6 +66,7 @@ and inline_exps es =
       sseq stmt acc_s, e' :: acc_es)
     es
     (snoop, [])
+
 
 and inline_stmt s =
   match s.s with
@@ -91,27 +98,9 @@ and inline_stmt s =
     let branches' = List.map (fun (p, stmt) -> p, inline_stmt stmt) branches in
     sseq s' { s with s = SMatch (es', branches') }
   | SLoop (s1, id, sz) -> { s with s = SLoop (inline_stmt s1, id, sz) }
-  | SInlineTable(tbl_ty, tbl, keys, actions, const_entries) -> 
-    let s_tbl, tbl = inline_exp tbl in
-    let s_keys, keys = inline_exps keys in
-    let actions = List.map (fun (id, (params, stmt)) -> id, (params, inline_stmt stmt)) actions in
-    let s_tentries, const_entries = List.fold_left
-      (fun (s_tentries, tentries) (pat, name, eargs) -> 
-        let s_eargs, eargs = inline_exps eargs in
-        ((sseq s_tentries s_eargs), (pat, name, eargs)::tentries))
-      (snoop, [])
-      const_entries
-    in
-    let const_entries = List.rev const_entries in 
-    let setup_stmt = sseq 
-      (sseq s_tbl s_keys) 
-      s_tentries
-    in 
-    let new_stmt = {s with s=SInlineTable(tbl_ty, tbl, keys, actions, const_entries)} in 
-    sseq setup_stmt new_stmt
-    (* setup_stmt, {e with e=ETableApplyInline{tty; ttbl; tkey; tactions; tentries}} *)
-
-
+  | SApplyTable(tm) -> 
+    let pre_s, tm' = inline_tbl_match tm in
+    sseq pre_s {s with s=SApplyTable(tm')}
 ;;
 
 let eliminator =

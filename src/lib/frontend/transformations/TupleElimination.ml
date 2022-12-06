@@ -33,6 +33,25 @@ let sequence_statements ss =
    their components. *)
 type env = (id * ty) list IdMap.t
 
+(* this is what we need for tables that create new vars *)
+let flatten_params env params =
+  let env = ref env in
+  let rec aux params =
+    List.flatten
+    @@ List.map
+         (fun (id, ty) ->
+           match ty.raw_ty with
+           | TTuple tys ->
+             let new_params = rename_elements id tys in
+             env := IdMap.add id new_params !env;
+             aux new_params
+           | _ -> [id, ty])
+         params
+  in
+  let new_params = aux params in
+  !env, new_params
+;;
+
 let replacer =
   object (self)
     inherit [_] s_map as super
@@ -138,23 +157,7 @@ let replacer =
   end
 ;;
 
-let flatten_params env params =
-  let env = ref env in
-  let rec aux params =
-    List.flatten
-    @@ List.map
-         (fun (id, ty) ->
-           match ty.raw_ty with
-           | TTuple tys ->
-             let new_params = rename_elements id tys in
-             env := IdMap.add id new_params !env;
-             aux new_params
-           | _ -> [id, ty])
-         params
-  in
-  let new_params = aux params in
-  !env, new_params
-;;
+
 
 let flatten env e = replacer#flatten (ref env) e
 let replace_exp env exp = replacer#visit_exp (ref env) exp
@@ -198,12 +201,12 @@ let rec replace_decl (env : env) d =
     env, [{ d with d = DHandler (id, (new_params, body)) }]
   | DSize _ | DMemop _ | DExtern _ | DSymbolic _ | DConst _ | DGlobal _ ->
     env, [d]
-  | DInlineAction _ -> env, [d]
-  | DAction(id, ty, const_params, (params, body)) -> 
-    (* TODO: what about const params and inline actions? *)
-    let body_env, new_params = flatten_params env params in
-    let body = replace_statement body_env body in
-    env, [{d with d=DAction(id, ty, const_params, (new_params, body))}]
+  | DAction(id, ty, const_params, (params, action_body)) -> 
+    let body_env, const_params' = flatten_params env const_params in
+    let body_env, params' = flatten_params body_env params in
+    (* Flatten all tuples in action body *)
+    let action_body' = List.map (flatten body_env) action_body |> List.flatten in 
+    env, [{d with d=DAction(id, ty, const_params', (params', action_body'))}]
   | DFun _ | DConstr _ | DModule _ | DUserTy _ | DModuleAlias _ ->
     Console.error_position
       d.dspan
@@ -222,6 +225,120 @@ and replace_decls env ds =
   env, List.flatten (List.rev ds)
 ;;
 
+
+(* Do all the tuple elimination for tables and actions *)
+let table_tuple_eliminator env ds =
+  let eliminator =
+    object (self)
+      inherit [_] s_map as super
+
+      method! visit_exp do_flatten exp =
+        if (do_flatten)
+        then (
+          match exp.e with
+          | ETuple(exps) -> 
+            let flat_inner_exps = List.fold_left
+              (fun flat_exps exp -> 
+                let flat_exp = self#visit_exp do_flatten exp in
+                match flat_exp.e with
+                  ETuple(exps) -> flat_exps@exps
+                  | _ -> flat_exps@[flat_exp])
+              []
+              exps
+            in
+            {exp with e=ETuple(flat_inner_exps)}
+          | _ -> super#visit_exp do_flatten exp
+        )
+        else (exp)
+
+      method! visit_raw_ty do_flatten raw_ty =
+        if (do_flatten)
+        then (
+          match raw_ty with
+          | TTuple(inner_tys) ->
+            (* flatten inner types *)
+            let flat_inner_tys = List.map (self#visit_raw_ty do_flatten) inner_tys in
+            (* concat together *)
+            let flat_inner_tys = List.map
+              (fun raw_ty -> 
+                match raw_ty with
+                | TTuple(inner_tys) -> inner_tys
+                | raw_ty -> [raw_ty])
+              flat_inner_tys
+              |> List.flatten
+            in
+            (* return flat tuple *) 
+            TTuple(flat_inner_tys)
+          | raw_ty ->
+            (* transform inner *)
+            super#visit_raw_ty do_flatten raw_ty
+        )
+        else (raw_ty)
+
+      (* flatten a list of raw types. Example: 
+          [ Tup(Int, Tup(Bool, Bool)), Tup(Int, Bool)]
+          --> 
+          [ Int, Bool, Bool, Int, Bool ] *)
+      method flatten_tys tys =
+        (* a list of raw types where all tuples are flattened *)
+        let flat_tys = List.map (self#visit_ty true) tys in
+        List.map 
+          (fun ty -> 
+            match ty.raw_ty with
+            | TTuple(inner_rawtys) -> List.map (fun raw_ty -> ty_sp raw_ty ty.tspan) inner_rawtys
+            | _ -> [ty_sp ty.raw_ty ty.tspan])
+          flat_tys
+        |> List.concat
+      (* method flatten_tys tys = *)
+
+      (* flatten a list of expressions, which may contain tuples *)
+      method flatten_exps exps = 
+        let flat_exps = List.map (self#visit_exp true) exps in
+        List.map
+          (fun exp -> match exp.e with
+            | ETuple(exps) -> exps
+            | _ -> [exp])
+          flat_exps
+        |> List.concat 
+
+      (* types *)
+      method! visit_T_Table _ tbl_ty = 
+        (* flatten param and return types *)    
+        let tparam_tys = self#flatten_tys tbl_ty.tparam_tys in                
+        let tret_tys = self#flatten_tys tbl_ty.tret_tys in        
+        T_Table({tbl_ty with tparam_tys; tret_tys;})
+
+      method! visit_TAction _ acn_ty = 
+        let aconst_param_tys = self#flatten_tys acn_ty.aconst_param_tys in                
+        let aparam_tys = self#flatten_tys acn_ty.aparam_tys in        
+        let aret_tys = self#flatten_tys acn_ty.aret_tys in        
+        TAction({aconst_param_tys; aparam_tys; aret_tys})
+      
+      (* expressions (should be eliminated by now) *)
+      method! visit_ETableApply _ _ = 
+        error "[TupleElimination.table_tuple_eliminator] table expressions (ETableApply) should
+        have been eliminated by now.";
+
+      (* flatten a list of ids that have not been bound *)
+      (* method! flatten_unbound_ids ids tys = *)
+
+
+
+      (* method! visit_ApplyTable dummy tbl_match = *)
+        (* everything will be taken care of automatically, except the ids *)
+
+
+
+
+
+      end
+  in
+
+  let new_decls = eliminator#visit_decls false ds in
+  env, new_decls
+;;
+
+
 (* Sanity checker to make sure no tuples remain in the program *)
 let checker =
   object
@@ -237,8 +354,22 @@ let checker =
   end
 ;;
 
+let print_prog ds =
+  print_endline ("---- after main tuple elimination ----");
+  print_endline "decls: ";
+  let str = Printing.decls_to_string ds in
+  Console.report str 
+;;
+
 let eliminate_prog ds =
-  let _, ds = replace_decls IdMap.empty ds in
+  let env, ds = replace_decls IdMap.empty ds in
+  print_prog ds;
+  print_endline ("starting tuple elimination in table constructs. ");
+  let _, ds = table_tuple_eliminator env ds in
+  exit 1;
   checker#visit_decls () ds;
   ds
+  (* let _ = env in  *)
+  (* checker#visit_decls () ds; *)
+  (* ds *)
 ;;

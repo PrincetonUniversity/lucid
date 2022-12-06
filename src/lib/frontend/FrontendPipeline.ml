@@ -44,7 +44,7 @@ let process_prog builtin_tys ds =
   let ds = FunctionInlining.inline_prog ds in
   print_if_debug ds;
   print_if_verbose "-----------inlining tables-----------";
-  let ds = TableInlining.inline_prog ds in
+  let ds = TableInlining.eliminate_prog ds in
   print_if_debug ds;
   print_if_verbose "---------Eliminating events with global arguments----------";
   let ds = GlobalArgElimination.eliminate_prog ds in
@@ -71,6 +71,7 @@ let process_prog builtin_tys ds =
   print_if_verbose "-------Eliminating records-------";
   let ds = RecordElimination.eliminate_prog ds in
   print_if_debug ds;
+  let ds = Typer.infer_prog builtin_tys ds in
   print_if_verbose "-------Eliminating tuples-------";
   let ds = TupleElimination.eliminate_prog ds in
   print_if_debug ds;
