@@ -14,11 +14,7 @@
 
   let mk_t_table tkey_sizes tparam_tys tret_tys span = 
     Cmdline.cfg.show_tvar_links <- true;
-    print_endline "ttable param typs from parser:";
-    List.map (Printing.ty_to_string) tparam_tys |> String.concat ", " |> print_endline; 
-    print_endline "";
     ty_sp (T_Table({tkey_sizes; tparam_tys; tret_tys})) span
-
 
   let mk_tmemop span n sizes =
     match sizes with

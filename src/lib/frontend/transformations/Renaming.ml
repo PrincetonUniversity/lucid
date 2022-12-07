@@ -212,7 +212,9 @@ let rename prog =
         let args = List.map (self#visit_exp dummy) tm.args in
         (* rename if the variables are declared here *)
         let outs, out_tys = match tm.out_tys with 
-          | None -> tm.outs, None 
+          | None ->
+            (* must visit outs because they have been renamed too. *)
+            List.map (self#visit_id dummy) tm.outs, None
           | Some out_tys -> 
             List.map (self#freshen_var) tm.outs, 
             Some(List.map (self#visit_ty dummy) out_tys)

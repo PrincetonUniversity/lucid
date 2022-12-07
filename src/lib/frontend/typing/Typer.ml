@@ -1190,7 +1190,6 @@ let rec infer_declaration (builtin_tys : Builtins.builtin_tys) (env : env) (effe
           in
           { new_env with record_labels }
         | T_Table ttbl -> 
-          print_endline ("in DUserTy.");
           (* want to do something about the inner types ?*)
           let inf_tparam_tys = List.map 
             (fun stated_ty -> 

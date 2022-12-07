@@ -177,7 +177,7 @@ and ty_to_string t =
   let eff_str =
     if cfg.show_effects && (is_global t || cfg.show_all_effects)
     then effect_to_string t.teffect |> wrap "(" ")"
-    else "<no effect>"
+    else ""
   in
   match !(t.tprint_as) with
   | Some raw_ty when cfg.use_type_names && false ->
@@ -563,7 +563,7 @@ and d_to_string d =
       (cid_to_string cid2)
   | DAction(id, ret_tys, const_params, (dyn_params, acn_body)) -> 
     Printf.sprintf 
-      "action (%s) %s(%s)(%s) {\n\treturn %s\n}\n" 
+      "action (%s) %s(%s)(%s) {\n\taction_return (%s)\n}\n" 
       (comma_sep ty_to_string ret_tys)
       (id_to_string id)
       (params_to_string const_params)
