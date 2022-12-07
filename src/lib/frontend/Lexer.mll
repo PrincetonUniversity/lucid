@@ -69,8 +69,8 @@ rule token = parse
 
   | "table_type"              { TABLE_TYPE (position lexbuf) }
   | "key_size:"               { KEY_SIZE (position lexbuf) }
-  | "arg_type:"               { ARG_SIZE (position lexbuf) }
-  | "ret_type:"               { RET_SIZE (position lexbuf) }
+  | "arg_types:"              { ARG_TYPES (position lexbuf) }
+  | "ret_type:"               { RET_TYPE (position lexbuf) }
   | "action"                  { ACTION (position lexbuf) }
   | "table_create"            { TABLE_CREATE (position lexbuf) }
   | "table_match"             { TABLE_MATCH (position lexbuf) }

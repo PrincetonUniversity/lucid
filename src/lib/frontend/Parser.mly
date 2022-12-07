@@ -129,8 +129,8 @@
 
 %token <Span.t> TABLE_TYPE
 %token <Span.t> KEY_SIZE
-%token <Span.t> ARG_SIZE
-%token <Span.t> RET_SIZE
+%token <Span.t> ARG_TYPES
+%token <Span.t> RET_TYPE
 %token <Span.t> ACTION
 %token <Span.t> TABLE_CREATE
 %token <Span.t> TABLE_MATCH
@@ -373,20 +373,13 @@ optional_tys:
 dt_table:
     | ID ASSIGN LBRACE
         KEY_SIZE optional_sizes
-        ARG_SIZE optional_tys
-        RET_SIZE ty RBRACE
+        ARG_TYPES optional_tys
+        RET_TYPE ty RBRACE
                                             { duty_sp 
                                                     (snd $1)
                                                     []
                                                     (mk_t_table (snd $5) (snd $7) [$9] (Span.extend $3 $10))
                                                     (Span.extend (fst $1) $10) }
-    | ID ASSIGN LBRACE
-        KEY_SIZE optional_sizes RBRACE
-                                            { duty_sp 
-                                                    (snd $1)
-                                                    []
-                                                    (mk_t_table (snd $5) [] [ty TVoid] (Span.extend $3 $6))
-                                                    (Span.extend (fst $1) $6) }
 
 decl:
     | CONST ty ID ASSIGN exp SEMI           { [dconst_sp (snd $3) $2 $5 (Span.extend $1 $6)] }
