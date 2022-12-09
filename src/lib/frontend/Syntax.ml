@@ -229,12 +229,13 @@ and memop_body =
 and v_regex = 
   | VREmptySet
   | VREmptyStr
-  | VRLetter of id * id list * exp
-  | VRBinding of id * id list * var_regex
+  | VRLetter of id * exp
+  | VRBinding of id * (id * id) list * var_regex
   | VRConcat of var_regex * var_regex
   | VRClosure of var_regex
   | VROr of var_regex * var_regex
   | VRAnd of var_regex * var_regex
+  | VRUnambigConcat of var_regex * var_regex
 
 and var_regex = 
   {
@@ -257,7 +258,7 @@ and d =
   | DConstr of id * ty * params * exp
   | DModule of id * interface * decls
   | DModuleAlias of id * exp * cid * cid
-  | DVarRegex of id * var_regex
+  | DVarRegex of id * z * var_regex
 
 (* name, return type, args & body *)
 and decl =
@@ -393,7 +394,7 @@ let comp_sp e i k span = exp_sp (EComp (e, i, k)) span
 let vector_sp es span = exp_sp (EVector es) span
 let szcast_sp sz1 sz2 span = exp_sp (ESizeCast (sz1, sz2)) span
 let flood_sp e span = exp_sp (EFlood e) span
-let transregex_sp id event span = exp_sp (ETransitionRegex (id, event)) span
+let transregex_sp id idx_expr span = exp_sp (ETransitionRegex (id, idx_expr)) span
 
 (* declarations *)
 let decl d = { d; dspan = Span.default }
@@ -407,7 +408,7 @@ let dsize_sp id size span = decl_sp (DSize (id, size)) span
 let fun_sp id rty cs p body span = decl_sp (DFun (id, rty, cs, (p, body))) span
 let memop_sp id p body span = decl_sp (DMemop (id, p, body)) span
 let duty_sp id sizes rty span = decl_sp (DUserTy (id, sizes, rty)) span
-let dvarregex_sp id var_regex span = decl_sp (DVarRegex (id, var_regex)) span
+let dvarregex_sp id size var_regex span = decl_sp (DVarRegex (id, size, var_regex)) span
 
 let dconstr_sp id ty params exp span =
   decl_sp (DConstr (id, ty, params, exp)) span
@@ -472,10 +473,11 @@ let var_regex v_regex = { v_regex; v_regex_span = Span.default }
 let var_regex_sp v_regex span = {v_regex ; v_regex_span = span}
 let empty_set_sp span = var_regex_sp VREmptySet span
 let empty_string_sp span = var_regex_sp VREmptyStr span
-let letter_sp letter varnames pred span = var_regex_sp (VRLetter (letter, varnames, pred)) span
-let binding_sp letter names sub span = var_regex_sp (VRBinding (letter, names, sub)) span
+let letter_sp letter pred span = var_regex_sp (VRLetter (letter, pred)) span
+let binding_sp letter assigns sub span = var_regex_sp (VRBinding (letter, assigns, sub)) span
 let concat_sp suba subb span = var_regex_sp (VRConcat (suba, subb)) span
 let or_sp suba subb span = var_regex_sp (VROr (suba, subb)) span
 let and_sp suba subb span = var_regex_sp (VRAnd (suba, subb)) span
 let closure_sp sub span = var_regex_sp (VRClosure sub) span
+let unambig_concat_sp suba subb span = var_regex_sp (VRUnambigConcat (suba, subb)) span
 

@@ -291,8 +291,8 @@ let rec e_to_string e =
     Printf.sprintf "to_int<<%s>>(%s)" (size_to_string sz1) (size_to_string sz2)
   | EStmt (s, e) ->
     Printf.sprintf "{%s; return %s}" (stmt_to_string s) (exp_to_string e)
-  | ETransitionRegex (id, ev) ->
-    Printf.sprintf "{Transition %s with %s}" (id_to_string id) (exp_to_string ev)
+  | ETransitionRegex (id, exp) ->
+    Printf.sprintf "{Transition %s with idx %s}" (id_to_string id) (exp_to_string exp)
 
 and exp_to_string e = e_to_string e.e
 (* ^ Printf.sprintf "[ty:%s]"
@@ -513,7 +513,7 @@ and d_to_string d =
       (cid_to_string cid1)
       (exp_to_string e)
       (cid_to_string cid2)
-  | DVarRegex (id, var_regex) ->
+  | DVarRegex (id, size, var_regex) ->
     Printf.sprintf
       "spec %s event %s"
       (id_to_string id)

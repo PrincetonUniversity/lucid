@@ -1,0 +1,109 @@
+include "CountMinSketchTimeout.dpt"
+include "Memops.dpt"
+
+memop checkThenSet(int memval, int newval) {
+  if (memval == 0) {
+    return newval;
+  }
+  else {
+    return memval;
+  }
+}
+
+memop incr(int<<'a>> x, int<<'a>> y) {
+  return x + y;
+}
+
+memop decr(int<<'a>> x, int<<'a>> y) {
+  return x - y;
+}
+
+entry event syn_in(int src_ip, int src_port, int dst_ip, int dst_port);
+entry event synack_out(int src_ip, int src_port, int dst_ip, int dst_port);
+entry event ack_in(int src_ip, int src_port, int dst_ip, int dst_port);
+
+entry event fin_in(int src_ip, int src_port, int dst_ip, int dst_port);
+entry event fin_out(int src_ip, int src_port, int dst_ip, int dst_port);
+entry event ack_out(int src_ip, int src_port, int dst_ip, int dst_port);
+
+exit event syn_continue(int src_ip, int src_port, int dst_ip, int dst_port);
+exit event synack_continue(int src_ip, int src_port, int dst_ip, int dst_port);
+exit event ack_continue(int src_ip, int src_port, int dst_ip, int dst_port);
+exit event fin_continue(int src_ip, int src_port, int dst_ip, int dst_port);
+exit event error(int src_ip, int src_port, int dst_ip, int dst_port, int count);
+exit event handshake_opened(int idx);
+exit event handshake_closed(int idx);
+
+const int Threshold = 2;
+
+re<<1024>> handshake_open = syn_in(true)
+                            .(syn_in(true))*
+                            .synack_out(true)
+                            .ack_in(true);
+
+re<<1024>> handshake_close = fin_in(true)
+                            .ack_out(true)
+                            .fin_out(true)
+                            .ack_in(true);
+
+global Array.t<<32>> counts = Array.create(256);
+
+fun int compute_idx(int src_ip, int src_port, int dst_ip, int dst_port) {
+    return (int<<32>>)(hash<<10>>(213124214, src_ip, src_port, dst_ip, dst_port));
+}
+
+handle syn_in(int src_ip, int src_port, int dst_ip, int dst_port) {
+    int idx = (int<<32>>)compute_idx(src_ip, src_port, dst_ip, dst_port);
+    if (transition(handshake_open, idx)){
+        generate handshake_opened(idx);
+    }
+    generate syn_continue(src_ip, src_port, dst_ip, dst_port);
+}
+
+handle synack_out(int src_ip, int src_port, int dst_ip, int dst_port) {
+    int idx = compute_idx(dst_ip, dst_port, src_ip, src_port);
+    if (transition(handshake_open, idx)){
+        generate handshake_opened(idx);
+    }
+    generate synack_continue(src_ip, src_port, dst_ip, dst_port);
+}
+
+handle ack_in(int src_ip, int src_port, int dst_ip, int dst_port) {
+    int idx = compute_idx(src_ip, src_port, dst_ip, dst_port);
+    int count_idx = (int<<32>>)(hash<<8>>(2314532, src_ip));
+    if (transition(handshake_open, idx)) {
+        generate handshake_opened(idx);
+        int res = Array.setm(counts, count_idx, incr, 1) + 1;
+        printf("count at %d", res);
+        if (res > Threshold) {
+            generate error(src_ip, src_port, dst_ip, dst_port, res);
+        }
+    } else if (transition(handshake_close, idx)) {
+        Array.setm(counts, count_idx, decr, 1);
+    }
+    generate ack_continue(src_ip, src_port, dst_ip, dst_port);
+}
+
+handle fin_in(int src_ip, int src_port, int dst_ip, int dst_port) {
+    int idx = compute_idx(src_ip, src_port, dst_ip, dst_port);
+    if (transition(handshake_close, idx)) {
+        generate handshake_closed(idx);
+    }
+    generate fin_continue(src_ip, src_port, dst_ip, dst_port);
+}
+
+handle ack_out(int src_ip, int src_port, int dst_ip, int dst_port) {
+    int idx = compute_idx(dst_ip, dst_port, src_ip, src_port);
+    if (transition(handshake_close, idx)) {
+        generate handshake_closed(idx);
+    }
+    generate ack_continue(src_ip, src_port, dst_ip, dst_port);
+}
+
+handle fin_out(int src_ip, int src_port, int dst_ip, int dst_port){
+    int idx = compute_idx(dst_ip, dst_port, src_ip, src_port);
+    if (transition(handshake_close, idx)) {
+        generate handshake_closed(idx);
+    }
+    generate fin_continue(src_ip, src_port, dst_ip, dst_port);
+}

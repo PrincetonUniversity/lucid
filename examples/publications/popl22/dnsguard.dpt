@@ -1,5 +1,6 @@
 include "BloomFilterTimeout.dpt"
 include "CountMinSketchTimeout.dpt"
+
 /*
 This program protects client againt DNS reflection attacks.
 1.  A count min sketch measures the number of DNS responses sent to each monitored client.
@@ -35,6 +36,34 @@ entry event dnsresponse_in(int src, int dst, int req_id);
 // proceed.
 exit event dnspkt_out ();
 
+
+event request_in (int time); 
+event response_out (int time);
+event protected (int time);
+
+re<<1000>> myVR = (request_in(true) || response_out(true))*
+          .protected(@pt=time)
+          .response_out(time - ptval < 10000);
+
+exit event error(int timestamp);
+
+handle request_in(int time) {
+  if (transition(myVR, idx)) {
+      generate error(time);
+  }
+}
+
+handle response_out(int time) {
+  if (transition(myVR)) {
+      generate error(time);
+  }
+}
+
+handle protected(int time) {
+  if (transition(myVR)) {
+      generate error(time);
+  }
+}
 
 /*========================================
 =            count-min sketch            =

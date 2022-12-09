@@ -35,30 +35,33 @@ open Printing
 let rec check_var_regex id vr event_infos used vars = 
   let rec no_bindings vr = 
     match vr.v_regex with 
-    | VRBinding (event_id, var_names, sub) -> 
+    | VRBinding (event_id, assignments, sub) -> 
       Console.error_position vr.v_regex_span @@ Printf.sprintf "No bindings under connectors";
+    | VRUnambigConcat (sub1, sub2) -> 
+      Console.error_position vr.v_regex_span @@ Printf.sprintf "No UnambigConcat under connectors";
     | VRConcat (sub1, sub2) | VROr (sub1, sub2) | VRAnd (sub1, sub2) -> no_bindings sub1;no_bindings sub2
     | VRClosure sub -> no_bindings sub
     | _ -> () in 
       match vr.v_regex with
       | VREmptySet | VREmptyStr -> used, vars
-      | VRLetter (event_id, var_names, pred) -> if (not (List.exists (fun (id, params) -> event_id = id && (List.length var_names) = (List.length params)) event_infos)) then 
+      | VRLetter (event_id, pred) -> if (not (List.exists (fun (id, params) -> event_id = id) event_infos)) then 
         Console.error_position vr.v_regex_span @@ Printf.sprintf "%s: Not an event or wrong number of args" (id_to_string event_id);
         (if (not (List.mem event_id used)) then event_id :: used else used), vars
-      | VRBinding (event_id, var_names, sub) -> 
-        if (not (List.exists (fun (id, params) -> event_id = id && (List.length var_names) = (List.length params)) event_infos)) then 
+      | VRBinding (event_id, assignments, sub) -> 
+        if (not (List.exists (fun (id, params) -> event_id = id) event_infos)) then 
           Console.error_position vr.v_regex_span @@ Printf.sprintf "%s: Not an event or wrong number of args" (id_to_string event_id);
         if (List.mem event_id used) then 
           Console.error_position vr.v_regex_span @@ Printf.sprintf "%s: This binding event might not be its first occurrence" (id_to_string event_id);
-        if (List.exists (fun id -> List.mem id vars) var_names) then
-          Console.error_position vr.v_regex_span @@ Printf.sprintf "%s: This variable has already been used" (id_to_string (List.find (fun id -> List.mem id vars) var_names));
-        check_var_regex id sub event_infos (event_id :: used) (List.append var_names vars);
+        if (List.exists (fun (id1, id2) -> List.mem id1 vars) assignments) then
+          Console.error_position vr.v_regex_span @@ Printf.sprintf "%s: This variable has already been used" (id_to_string (List.find_map (fun (id1,id2) -> if (List.mem id1 vars) then Some id1 else None) assignments));
+        check_var_regex id sub event_infos (event_id :: used) (List.append (List.map (fun (id1, id2) -> id1) assignments) vars);
         (if (not (List.mem event_id used)) then event_id :: used else used), vars
-      | VRConcat (sub1, sub2) -> let used, vars = check_var_regex id sub1 event_infos used vars in 
+        | VRUnambigConcat (sub1, sub2) | VRConcat (sub1, sub2) -> let used, vars = check_var_regex id sub1 event_infos used vars in 
                                     check_var_regex id sub2 event_infos used vars
       | VROr (sub1, sub2) | VRAnd (sub1, sub2) -> 
         no_bindings sub1; no_bindings sub2; check_var_regex id sub1 event_infos used vars; check_var_regex id sub2 event_infos used vars; used, vars
       | VRClosure sub -> no_bindings sub; check_var_regex id sub event_infos used vars; used, vars
+
 
 let check_decls ds =
   let event_defs = List.filter_map (fun d -> 
@@ -111,7 +114,7 @@ let check_decls ds =
               "Externs must have type int or bool, not %s"
               (ty_to_string ty))
       | DModule (_, _, decls) -> List.iter (check_decl true) decls
-      | DVarRegex (id, vr) -> check_var_regex id vr event_defs [] []; ()
+      | DVarRegex (id, size, vr) -> check_var_regex id vr event_defs [] []; ()
       | _ -> ()
     in
     List.iter (check_decl false) ds

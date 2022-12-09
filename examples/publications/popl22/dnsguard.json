@@ -1,0 +1,14 @@
+{
+    "switches": 1,
+    "max time": 9999999,
+    "default input gap": 10000,
+    "random seed": 0,
+    "events": [ 
+      {"name":"request_in", "args": [10]}, 
+      {"name":"response_out", "args": [11]}, 
+      {"name":"request_in", "args": [12]}, 
+      {"name":"response_out", "args": [13]}, 
+      {"name":"protected", "args": [16]},
+      {"name":"response_out", "args": [200]}
+    ]
+  }

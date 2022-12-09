@@ -115,6 +115,7 @@ rule token = parse
   | "|"               { PIPE (position lexbuf) }
   | "->"              { ARROW (position lexbuf) }
   | "@"               { BINDING (position lexbuf) }
+  | "!!"              { UNAMBIGCONCAT (position lexbuf)}
   | "*"               { STAR (position lexbuf) }
   | "\"\""            { EMPTYSTRING (position lexbuf)}
   | wspace            { token lexbuf }

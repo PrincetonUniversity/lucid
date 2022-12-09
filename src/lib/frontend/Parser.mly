@@ -140,6 +140,7 @@
 %token <Span.t> EMPTYSET
 %token <Span.t> EMPTYSTRING
 %token <Span.t> BINDING
+%token <Span.t> UNAMBIGCONCAT
 %token <Span.t> STAR
 %token <Span.t> TRANSITIONREGEX
 %token EOF
@@ -322,18 +323,19 @@ ids:
     | ID COMMA ids                      {(snd $1) :: $3}
 
 binding_list:
-    | BINDING ID                        { [(snd $2)] }
-    | BINDING ID COMMA binding_list     { (snd $2) :: $4}
+    | BINDING ID ASSIGN ID                       { [(snd $2), (snd $4)] }
+    | BINDING ID ASSIGN ID COMMA binding_list     { ((snd $2),(snd $4)) :: $6}
 
 var_regex :
     | EMPTYSTRING                       { empty_string_sp (Span.extend $1 $1) }
-    | ID LBRACKET ids PIPE exp RBRACKET      { letter_sp (snd $1) $3 $5 (Span.extend (fst $1) $6) }
-    | ID LBRACKET binding_list RBRACKET DOT var_regex {binding_sp (snd $1) $3 $6 (Span.extend (fst $1) $6.v_regex_span) }
+    | ID LPAREN exp RPAREN      { letter_sp (snd $1) $3 (Span.extend (fst $1) $4) }
+    | ID LPAREN binding_list RPAREN DOT var_regex {binding_sp (snd $1) $3 $6 (Span.extend (fst $1) $6.v_regex_span) }
     | var_regex DOT var_regex        { concat_sp $1 $3 (Span.extend $1.v_regex_span $3.v_regex_span) }
     | var_regex OR var_regex        { or_sp $1 $3 (Span.extend $1.v_regex_span $3.v_regex_span) }
     | var_regex AND var_regex     { and_sp $1 $3 (Span.extend $1.v_regex_span $3.v_regex_span) }
     | LPAREN var_regex RPAREN STAR     { closure_sp $2 (Span.extend $1 $4) }
     | LPAREN var_regex RPAREN          { $2 }
+    | var_regex UNAMBIGCONCAT var_regex { unambig_concat_sp $1 $3 (Span.extend $1.v_regex_span $3.v_regex_span) }
 
 tyname_def:
     | ID                                  { snd $1, [] }
@@ -365,7 +367,7 @@ decl:
     | CONSTR ty ID paramsdef ASSIGN exp SEMI { [dconstr_sp (snd $3) $2 $4 $6 (Span.extend $1 $7)] }
     | GLOBAL ty ID ASSIGN exp SEMI
                                             { [dglobal_sp (snd $3) $2 $5 (Span.extend $1 $6)] }
-    | VARREGEX ID ASSIGN var_regex SEMI            { [dvarregex_sp (snd $2) $4 (Span.extend $1 $5)] }
+    | VARREGEX LLEFT NUM RRIGHT ID ASSIGN var_regex SEMI            { [dvarregex_sp (snd $5) (snd $3) $7 (Span.extend $1 $8)] }
 
 decls:
     | decl                             { $1 }

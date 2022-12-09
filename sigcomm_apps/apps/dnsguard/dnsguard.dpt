@@ -39,12 +39,10 @@ const int T_INTERVAL = 1000; // How long between rotations.
 const int h1_poly = 10398247;
 const int h2_poly = 1295981879;
 
-entry event dnsrequest_in(int src, int dst, int req_id);
 entry event dnsresponse_in(int src, int dst, int req_id);
 // Exit point back to the P4 program. Generated when a packet is allowed to 
 // proceed.
 exit event dnspkt_out (int<<1>> packet_allowed);
-
 event clear(int idx);
 event rotate();
 
@@ -74,6 +72,7 @@ global Array.t<<1>> sfw4 = Array.create(sfw_slots);
 
 global Array.t<<1>> sfw5 = Array.create(sfw_slots);
 global Array.t<<1>> sfw6 = Array.create(sfw_slots);
+
 
 // zero out a position in all the arrays.
 handle clear(int idx) {  

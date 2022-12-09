@@ -55,6 +55,8 @@
    vectorElimination
    eStmtElimination
    symbolicElimination
+   plainRegex
+   dFASynthesis
    regexElimination
    replaceUserTys
    partialInterpretation
