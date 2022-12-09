@@ -62,6 +62,28 @@ let rec read_from_file fname visited : 'a list * string list =
         adjust_f)
 ;;
 
+(* get the files included in fname *)
+let get_includes fname = 
+    Console.read_file fname;
+    let fin = open_in fname in
+    let lexbuf = Lexing.from_channel fin in
+    lexbuf.lex_curr_p <- { lexbuf.lex_curr_p with pos_fname = fname };
+    lexbuf.lex_start_p <- { lexbuf.lex_start_p with pos_fname = fname };
+    let res = read ~filename:(Some fname) lexbuf in
+    close_in fin;
+    match res with
+    | [], _ -> []
+    | fs, _ ->
+      let adjust_fs = List.map (adjust_filename fname) fs in
+      adjust_fs
+;;
+
+let get_all_source_filenames fname = 
+  let adjust_fname = adjust_filename FilePath.current_dir fname in
+  let _, fnames = read_from_file adjust_fname [] in
+  fnames
+;;
+
 let parse fname =
   let adjust_fname = adjust_filename FilePath.current_dir fname in
   let ds, _ = read_from_file adjust_fname [] in

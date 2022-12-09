@@ -102,3 +102,17 @@ let setup_build_dir out_dir =
   ensure_dir !BackendLogging.moduleLogDir;
   ensure_dir !BackendLogging.graphLogDir
 ;;
+
+let setup_profile_dir out_dir = 
+  outDir := out_dir;
+  (* print_endline (sprintf "clearing build directory: %s\n" !outDir); *)
+  clear_dir_recursive !outDir;
+  logDir := !outDir ^ "/logs";
+  ensure_dir !logDir;
+  BackendLogging.moduleLogDir := !logDir ^ "/modules";
+  BackendLogging.irLogDir := !logDir ^ "/ir";
+  BackendLogging.graphLogDir := !logDir ^ "/graphs";
+  ensure_dir !BackendLogging.irLogDir;
+  ensure_dir !BackendLogging.moduleLogDir;
+  ensure_dir !BackendLogging.graphLogDir
+;;

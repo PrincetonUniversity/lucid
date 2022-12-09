@@ -101,18 +101,18 @@ let cspecs_to_string constraints =
     " "
     ^ list_to_string
         (function
-          | CSpec lst ->
-            fst
-            @@ List.fold_left
-                 (fun (acc, prev) curr ->
-                   ( acc
-                     ^ cid_to_string (fst prev)
-                     ^ cmp_to_string (snd prev)
-                     ^ cid_to_string (fst curr)
-                   , curr ))
-                 ("", List.hd lst)
-                 (List.tl lst)
-          | CEnd cid1 -> "end " ^ cid_to_string cid1)
+         | CSpec lst ->
+           fst
+           @@ List.fold_left
+                (fun (acc, prev) curr ->
+                  ( acc
+                    ^ cid_to_string (fst prev)
+                    ^ cmp_to_string (snd prev)
+                    ^ cid_to_string (fst curr)
+                  , curr ))
+                ("", List.hd lst)
+                (List.tl lst)
+         | CEnd cid1 -> "end " ^ cid_to_string cid1)
         constraints
 ;;
 
@@ -182,9 +182,9 @@ let pat_to_string p =
     "0b"
     ^ (bs
       |> List.map (function
-             | 0 -> '0'
-             | 1 -> '1'
-             | _ -> '*')
+           | 0 -> '0'
+           | 1 -> '1'
+           | _ -> '*')
       |> String.of_list)
 ;;
 
@@ -251,9 +251,9 @@ let rec e_to_string e =
     Z.to_string z
     ^
     (match Option.map STQVar.strip_links size with
-    | None -> ""
-    | Some (IConst 32) -> ""
-    | Some size -> "<<" ^ size_to_string size ^ ">>")
+     | None -> ""
+     | Some (IConst 32) -> ""
+     | Some size -> "<<" ^ size_to_string size ^ ">>")
   | EOp (op, [e]) -> op_to_string op ^ exp_to_string e
   | EOp (op, [e1; e2]) -> exp_to_string e1 ^ op_to_string op ^ exp_to_string e2
   | EOp (op, es) ->
@@ -315,19 +315,19 @@ and stmt_to_string s =
   | SNoop -> ""
   | SGen (g, e) ->
     (match g with
-    | GSingle None -> Printf.sprintf "generate %s;" (exp_to_string e)
-    | _ ->
-      let gen_str, loc =
-        match g with
-        | GSingle eo -> "generate_switch", Option.get eo
-        | GMulti loc -> "generate_ports", loc
-        | GPort loc -> "generate_port", loc
-      in
-      Printf.sprintf
-        "%s (%s, %s);"
-        gen_str
-        (exp_to_string loc)
-        (exp_to_string e))
+     | GSingle None -> Printf.sprintf "generate %s;" (exp_to_string e)
+     | _ ->
+       let gen_str, loc =
+         match g with
+         | GSingle eo -> "generate_switch", Option.get eo
+         | GMulti loc -> "generate_ports", loc
+         | GPort loc -> "generate_port", loc
+       in
+       Printf.sprintf
+         "%s (%s, %s);"
+         gen_str
+         (exp_to_string loc)
+         (exp_to_string e))
   | SLocal (i, t, e) ->
     Printf.sprintf
       "%s %s = %s;"
@@ -398,8 +398,8 @@ let rec interface_spec_to_string spec =
     let prefix = if b then "global " else "" in
     let decl = prefix ^ "type " ^ id_to_string id ^ sizes_to_string sizes in
     (match tyo with
-    | None -> decl ^ ";"
-    | Some ty -> decl ^ " = " ^ ty_to_string ty)
+     | None -> decl ^ ";"
+     | Some ty -> decl ^ " = " ^ ty_to_string ty)
   | InConstr (id, ty, params) ->
     Printf.sprintf
       "constr %s %s(%s);"
@@ -467,13 +467,12 @@ and d_to_string d =
       (id_to_string id)
       (params_to_string params)
       (memop_to_string mbody)
-  | DSize (id, szo) ->
-    begin
-      match szo with
-      | None -> Printf.sprintf "size %s;" (id_to_string id)
-      | Some size ->
-        Printf.sprintf "size %s = %s;" (id_to_string id) (size_to_string size)
-    end
+  | DSize (id, szo) -> begin
+    match szo with
+    | None -> Printf.sprintf "size %s;" (id_to_string id)
+    | Some size ->
+      Printf.sprintf "size %s = %s;" (id_to_string id) (size_to_string size)
+  end
   | DConst (id, ty, e) ->
     Printf.sprintf
       "const %s %s = %s;"

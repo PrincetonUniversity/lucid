@@ -135,17 +135,17 @@ let parse_events
     (events : json list)
   =
   let wrapper
-      ((located_events : located_event list), (current_ts : int))
+      ((located_events_rev : located_event list), (current_ts : int))
       (event_json : json)
     =
     let located_event =
       parse_event pp renaming num_switches current_ts event_json
     in
     let next_ts = (fst located_event).edelay + gap in
-    located_events @ [located_event], next_ts
+    located_event::located_events_rev,next_ts
   in
-  let located_events, _ = List.fold_left wrapper ([], 0) events in
-  located_events
+  let located_events_rev, _ = List.fold_left wrapper ([], 0) events in
+  List.rev located_events_rev
 ;;
 
 let builtins renaming n =

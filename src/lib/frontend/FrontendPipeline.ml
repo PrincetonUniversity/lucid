@@ -8,7 +8,7 @@ let print_if_debug ds =
 
 let print_if_verbose str = if Cmdline.cfg.verbose then Console.report str
 
-let process_prog ds =
+let process_prog builtin_tys ds =
   print_if_debug ds;
   print_if_verbose "-------Checking well-formedness---------";
   Wellformed.pre_typing_checks ds;
@@ -16,7 +16,7 @@ let process_prog ds =
   let ds = RegexElimination.process_prog ds in
   print_if_debug ds;
   print_if_verbose "---------typing1---------";
-  let ds = Typer.infer_prog ds in
+  let ds = Typer.infer_prog builtin_tys ds in
   print_if_debug ds;
   print_if_verbose "---------Concretizing symbolics-------------";
   let ds = SymbolicElimination.eliminate_prog ds in
@@ -34,7 +34,7 @@ let process_prog ds =
   let ds = ModuleElimination.eliminate_prog ds in
   print_if_debug ds;
   print_if_verbose "---------typing2---------";
-  let ds = Typer.infer_prog ds in
+  let ds = Typer.infer_prog builtin_tys ds in
   print_if_debug ds;
   print_if_verbose "-------Eliminating type aliases 2---------";
   let ds = ReplaceUserTys.replace_prog ds in
@@ -49,7 +49,7 @@ let process_prog ds =
   let ds = GlobalArgElimination.eliminate_prog ds in
   print_if_debug ds;
   print_if_verbose "---------------typing3-------------";
-  let ds = Typer.infer_prog ds in
+  let ds = Typer.infer_prog builtin_tys ds in
   print_if_verbose "------------Checking entry handlers---------------";
   Linerate.check ds;
   print_if_verbose "-------Eliminating vectors-------";
@@ -83,7 +83,7 @@ let process_prog ds =
   print_if_debug ds;
   print_if_verbose "---------------typing again-------------";
   (* Just to be safe *)
-  let ds = Typer.infer_prog ds in
+  let ds = Typer.infer_prog builtin_tys ds in
   print_if_debug ds;
   renaming, ds
 ;;

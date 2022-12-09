@@ -10,7 +10,7 @@ open P4TofinoSyntax
 exception Error of string
 let error s = raise (Error s)
 
-(* simple syntax for indented code lines *)
+(* a small dsl for source code generation and printing *)
 type srcline =
   | S of string
   | L of (srcline list) (* list of stmts *)
@@ -51,19 +51,54 @@ let int_list ls =
 
 (*** python controller ***)
 let py_header = l [
+  s "import sys, os";
+  s {|sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/libs")|};
+  s "from controldriver import *";
+  s "clib_driver_so = find_clib_driver_file(dict(locals()))";
+  s "c = Controller(clib_driver_so)"
+]
+let py_footer = l [
+  (* s "ports_up()"; *)
+  s "add_mc_nodes()";
+  s "c.close()";
+  s "print ('control startup complete.')"
+]
+
+let fcn_ports_up port_defs =
+  f "def ports_up():" [
+    f "if ((len(sys.argv) > 1) and (sys.argv[1] == 'ports_up')):" 
+      (List.map 
+        (fun (dpid, speed) -> 
+          s [%string "c.port_up(%{dpid#Int}, pal_port_speed_t.BF_SPEED_%{speed#Int}G, pal_fec_type_t.BF_FEC_TYP_NONE)"]
+        )
+        port_defs
+      )
+    ]
+;;
+
+let fcn_add_mc_nodes node_defs =
+  f "def add_mc_nodes():" [
+    l (List.map (fun (mcid, replicas) -> 
+        s [%string "c.add_multicast_group(%{mcid#Int}, %{tup_int_list replicas})"])
+       node_defs)
+  ]
+;;  
+
+(* let py_header = l [
   s "import sys, os, time";
   s {|sys.path.append(os.path.dirname(os.path.realpath(__file__))+"/libs")|};
   s "from mgr import *";
   s "m = Manager()"
 ]
-
-let py_footer = l [
-  s "ports_up()";
+ *)
+(* let py_footer = l [
+  (* s "ports_up()"; *)
   s "add_mc_nodes()";
   s "m.disconnect()"
 ]
+ *)
 
-let fcn_ports_up port_defs =
+(* let fcn_ports_up port_defs =
   f "def ports_up():" [
     f "if ((len(sys.argv) > 1) and (sys.argv[1] == 'ports_up')):" 
       (List.map 
@@ -81,7 +116,7 @@ let fcn_add_mc_nodes node_defs =
         s [%string "m.add_multinode_mc_group(%{mcid#Int}, %{tup_int_list replicas})"])
        node_defs)
   ]
-;;  
+;;   *)
 
 (* complete python manager script *)
 let py_mgr port_defs node_defs = 

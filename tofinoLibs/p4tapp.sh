@@ -119,25 +119,25 @@ function build_mgr() {
 # compile a P4 program and its custom bf_switchd agent to the local build directory.
 function build() {
     P4_SRC=$(realpath "$1")
-    CTL_SRC=$(to_switchd_fn "$1")
+    # CTL_SRC=$(to_switchd_fn "$1")
     BUILD_DIR=$(to_build_dir "$1")
     rm -rf "$BUILD_DIR"; mkdir -p "$BUILD_DIR"
-    build_p4 "$P4_SRC" "$BUILD_DIR" "-v" $3 && build_mgr "$CTL_SRC" "$BUILD_DIR"
+    build_p4 "$P4_SRC" "$BUILD_DIR" "-v" $3 # && build_mgr "$CTL_SRC" "$BUILD_DIR"
 }
 
 function build_quiet() {
     P4_SRC=$(realpath "$1")
-    CTL_SRC=$(to_switchd_fn "$1")
+    # CTL_SRC=$(to_switchd_fn "$1")
     BUILD_DIR=$(to_build_dir "$1")
     rm -rf "$BUILD_DIR"; mkdir -p "$BUILD_DIR"
-    build_p4 "$P4_SRC" "$BUILD_DIR" $3 && build_mgr "$CTL_SRC" "$BUILD_DIR"
+    build_p4 "$P4_SRC" "$BUILD_DIR" $3 # && build_mgr "$CTL_SRC" "$BUILD_DIR"
 }
 
 # ======  End of building  =======
 
 
 # ===============================
-# =           running           =
+# =           simulation setup           =
 # ===============================
 
 # setup veths for tofino simulator and create a matching json config file.
@@ -204,7 +204,15 @@ function print_userspace_veths() {
 
 }
 
+# ========================================
+# =           running programs           =
+# ========================================
+
+
 # multi-threading helpers
+# run program, print stdout to stdout prefixed with
+# PREFIX, and when SIG_STR appears, move program 
+# to background and return 
 function run_prog() {
     trap 'exit' 2
     PROG="unbuffer $1"
@@ -254,23 +262,30 @@ function start_asic_sim() {
 }
 # sudo ./${PROG} --install-dir $SDE_INSTALL --conf-file $SDE_INSTALL/share/p4/targets/tofino/$PROGNAME.conf
 
+# start the bf_switchd included with sde
 function start_switchd() {
-    local CMD="sudo $2 --install-dir $SDE_INSTALL --conf-file $1"
-    local SIG="bfruntime gRPC server started on"
-    echo $CMD
+    local CMD="sudo env SDE=$SDE SDE_INSTALL=$SDE_INSTALL PATH=$SDE_INSTALL/bin:$PATH LD_LIBRARY_PATH=/usr/local/lib:$SDE_INSTALL/lib:$LD_LIBRARY_PATH /home/opam/lucid/bf-sde-9.7.2/install/bin/bf_switchd --background --status-port 7777 --install-dir $SDE_INSTALL --conf-file $1"
+    # local CMD="sudo $SDE_INSTALL/bin/bf_switchd --install-dir $SDE_INSTALL --conf-file $1"
+    local SIG="bf_switchd: server started - listening on port 9999"
+    echo "SWITCHD COMMAND: $CMD"
     cd_launch_and_wait "$LOG_DIR" "$CMD" "$SIG" "SWITCHD_MGR"
 }
 
+# run the control script through bf_cli
 function start_python() {
-    local CMD="python3 $@"
-    local SIG="mgr.py disconnect complete."
+    local CMD="$SDE/run_bfshell.sh -b $1"
+    local SIG="control startup complete."
+    echo "PYTHON CONTROL: $CMD"
     launch_and_wait "$CMD" "$SIG" "PY_MGR"
 }
 
-# start up the asic simulator and switchd for a built project.
+# =========================================
+# =           toplevel commands           =
+# =========================================
+
 function startsim() {
     local CONF_FN=$(to_conf_fn "$1")
-    local MGR_BIN=$(to_switchd_bin "$1")
+    # local MGR_BIN=$(to_switchd_bin "$1")
     local MGR_PY=$(to_python_mgr "$1")
 
     echo "running simulator on: $CONF_FN"    
@@ -281,12 +296,13 @@ function startsim() {
     SIM_PID=$!
 
     # start the switchd program
-    start_switchd "$CONF_FN" "$MGR_BIN"
+    start_switchd "$CONF_FN"
     SWITCHD_PID=$!
 
     # run the python manager script
     start_python "$MGR_PY"    
 }
+
 function stopsim() {
     echo "**** stopping simulator and switchd ****"
     { sudo pkill --signal 2 -P $SWITCHD_PID && wait $SWITCHD_PID; } 2>/dev/null
@@ -297,7 +313,7 @@ function killsim() {
     sudo killall bf_switchd
     sudo killall tofino-model
 }
-
+# start sim and wait
 function runsim() {
     startsim $1
     # wait for ctl + c or exit
@@ -316,28 +332,14 @@ function starthw() {
 
     rm -rf "$LOG_DIR"; mkdir -p "$LOG_DIR"
 
-    # start the switchd program
-    start_switchd "$CONF_FN" "$MGR_BIN"
+    # start switchd
+    start_switchd "$CONF_FN"
     SWITCHD_PID=$!
 
     # run the python manager script
-    # pass one argument.
     echo "starting controller: "
-    echo "start_python $MGR_PY $2"
-    start_python "$MGR_PY" $2
-}
-function starthw_custom_py() {
-    local CONF_FN=$(to_conf_fn "$1")
-    local MGR_BIN=$(to_switchd_bin "$1")
-    local MGR_PY=$2
-    echo "running on: $CONF_FN"    
-
-    # start the switchd program
-    start_switchd "$CONF_FN" "$MGR_BIN"
-    SWITCHD_PID=$!
-
-    # run the python manager script
-    start_python "$MGR_PY"    
+    echo "start_python $MGR_PY"
+    start_python "$MGR_PY"
 }
 function stophw() {
     echo "**** stopping switchd! ****"
@@ -345,14 +347,6 @@ function stophw() {
 }
 function runhw() {
     starthw $@
-    # wait for ctl + c or exit
-    echo "**** switchd running -- press ctrl+c to terminate. ****"
-    trap 'stophw' 9
-    wait $SWITCHD_PID
-}
-
-function runhw_custom_py(){
-    starthw_custom_py $1 $2
     # wait for ctl + c or exit
     echo "**** switchd running -- press ctrl+c to terminate. ****"
     trap 'stophw' 9
@@ -461,8 +455,6 @@ function main() {
         "sim") shift; runsim $@
         ;;
         "hw") shift; runhw $@
-        ;;
-        "hw_custom_py") shift; runhw_custom_py $@
         ;;
         "send_and_collect_pcap") shift; send_and_collect_pcap $@
         ;;

@@ -216,9 +216,9 @@ let rec ensure_equiv_modul span m1 m2 =
         | TAbstract (cid, _, b, TVoid)
         (* when Id.name id = Id.name (Cid.last_id cid) *) ->
           (match IdMap.find_opt id m2.user_tys with
-          | Some (sizes', ({ raw_ty = TAbstract (_, _, b', _) } as ty'))
-            when b = b' -> replace_abstract_type cid (sizes', ty') acc
-          | _ -> (* We'll return false later *) acc)
+           | Some (sizes', ({ raw_ty = TAbstract (_, _, b', _) } as ty'))
+             when b = b' -> replace_abstract_type cid (sizes', ty') acc
+           | _ -> (* We'll return false later *) acc)
         | _ -> (* Not an abstract type, don't need to replace *) acc)
       m1.user_tys
       m1
@@ -311,11 +311,11 @@ let rec ensure_compatible_interface span intf_modul modul =
         | TAbstract (cid, _, b, TVoid)
         (* when Id.name id = Id.name (Cid.last_id cid) *) ->
           (match IdMap.find_opt id modul.user_tys with
-          | Some (sizes', ty') ->
-            if (b && is_global ty') || ((not b) && is_not_global ty')
-            then replace_abstract_type cid (sizes', ty') acc
-            else acc
-          | _ -> (* We'll return false later *) acc)
+           | Some (sizes', ty') ->
+             if (b && is_global ty') || ((not b) && is_not_global ty')
+             then replace_abstract_type cid (sizes', ty') acc
+             else acc
+           | _ -> (* We'll return false later *) acc)
         | _ -> (* Not an abstract type, don't need to replace *) acc)
       intf_modul.user_tys
       intf_modul

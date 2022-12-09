@@ -41,6 +41,7 @@ memop set_and_check(int memval, int newval, int seekval) {
 }
 
 handle ip_pkt (eth_hdr eth, ip_hdr_prefix ip, int<<32>> src, int<<32>> dst){
+  int<<9>> foo = ingress_port;
   int a1_out = Array.update_complex(arr_1, 0, postcount_rollover, src, dst, 0);
   int a2_out = Array.update_complex(arr_2, 0, set_and_check, src, dst, 0);
   generate_port(ingress_port, ip_pkt(eth, ip, a1_out, a2_out));

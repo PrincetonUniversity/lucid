@@ -108,7 +108,7 @@ let event_bridged_arg evid = handler_multi_ev_flag_arg evid
 let dmulti_ev_struct evids =
   let flag_fields = List.map (fun (evid) -> (evid, tint 1)) evids in
   let multi_ev_pad_field = 
-    (id "flag_pad", tint (8 - (List.length flag_fields) mod 8))
+    (Id.fresh_name "flag_pad", tint (8 - (List.length flag_fields) mod 8))
   in
   dstruct 
     multi_ev_t THdr 
@@ -127,7 +127,6 @@ let handler_struct_id = ev_struct_t
 let ev_param_arg evid id = Cid.concat (ev_arg evid) (Cid.id id)
 let handler_param_arg = ev_param_arg
 ;;
-
 
 let devent_struct (evid, params) =
   let fields = 

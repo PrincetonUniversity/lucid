@@ -1,31 +1,35 @@
 opam-version: "2.0"
-name: "dp"
+name: "dpt"
 version: "~dev"
 synopsis: "Dataplane threads"
-maintainer: "David Walker <dpw@cs.princeton.edu>"
+maintainer: "John Sonchack <jsonch@princeton.edu>"
 authors:
-  "David Walker <dpw@cs.princeton.edu>"
+  "John Sonchack <jsonch@princeton.edu>"
 license: "MIT"
-homepage: "git+https://github.com/princedpw/dpt"
-dev-repo: "git+https://github.com/princedpw/dpt.git"
-bug-reports: "https://github.com/princedpw/dpt/issues"
+homepage: "git+https://github.com/PrincetonUniversity/lucid"
+dev-repo: "git+https://github.com/PrincetonUniversity/lucid"
+bug-reports: "git+https://github.com/PrincetonUniversity/lucid/issues"
 depends: [
-  "dune" { build }
   "odoc"
-  "ounit"
   "integers"
-  "ANSITerminal"
   "batteries"
-  "lru-cache"
-  "zarith"
-  "mlcuddidl" { <= "3.0.4" }
-  "ocamlgraph"
-  "fileutils"
-  "ppx_deriving"
-  "ppx_deriving_argparse"
+  "ounit"
+  "ANSITerminal"
   "menhir"
-  "parmap"
-  "fix"
+  "ppx_deriving"
+  "ppx_string_interpolation"
+  "zarith"
+  "visitors"
+  "fileutils"
+  "ppx_import"
+  "core"  { <= "v0.14.1" }
+  "dune" { build }
+  "ocamlgraph"
+  "angstrom"
+  "yojson"
+  "pyml"
+  "pprint"
+  "z3"
 ]
 build: [
   ["dune" "build" "-p" name "-j" jobs]

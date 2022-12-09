@@ -102,39 +102,162 @@ let tdecl_of_decl decl =
   | DExtern(i, t) -> {td=TDExtern(i, t); tdspan=decl.dspan;}
 ;;
 
+module Seq = Core.Sequence
+
+let dbgstr_of_ids cids = List.map (Id.to_string) cids |> String.concat ", ";;
+
+let seq_eq eq s1 s2 = 
+  match ((Seq.length s1) = (Seq.length s2)) with
+  | true -> 
+    Seq.fold
+      (Seq.zip s1 s2)
+      ~init:true
+      ~f:(fun a (e1, e2) -> (a && (eq e1 e2)))
+  | false -> false
+;;
+let idseq_eq = seq_eq (Id.equal)
+
+let dprint_seqs res = 
+  Seq.iter res 
+    ~f:(fun pathseq -> 
+      let plen = Seq.length pathseq in 
+      print_endline@@"path: ("^(string_of_int plen)^") elements "^(dbgstr_of_ids (Seq.to_list pathseq)))
+;;
+
 
 (* find all the possible sequences of events that get generated *)
-let rec find_ev_gen_seqs statement =
+let rec find_ev_gen_seqs statement : id Core.Sequence.t Core.Sequence.t = 
   match statement.s with 
   | SGen(_, ev_exp) -> (
     match ev_exp.e with 
     | ECall(ev_cid, _) -> (
-      [[Cid.to_id ev_cid]]
+      let res = Seq.of_list [Seq.of_list [Cid.to_id ev_cid]] in 
+      res
     )
     | _ -> error "[find_ev_gen_seqs] event should be a call by this point"
   )
   | SIf(_, s1, s2) ->
-    (find_ev_gen_seqs s1)@(find_ev_gen_seqs s2)
+    (* make sure we only find the _unique_ paths *)
+    let res = Seq.append (find_ev_gen_seqs s1) (find_ev_gen_seqs s2) in
+    let res = MiscUtils.unique_seq_of idseq_eq res in
+    (* print_endline ("IF"); *)
+    (* dprint_seqs res; *)
+    res    
+    (* |> (MiscUtils.unique_seq_of idseq_eq) *)
   | SMatch(_, branches) -> 
-    List.fold_left (fun seqs (_, stmt) -> seqs@(find_ev_gen_seqs stmt)) [] branches 
+    let res = List.fold_left 
+      (fun seqs (_, stmt) -> Seq.append seqs (find_ev_gen_seqs stmt)) 
+      Seq.empty 
+      branches 
+    in
+    let res = MiscUtils.unique_seq_of idseq_eq res in
+    (* print_endline ("MATCH"); *)
+    (* dprint_seqs res; *)
+    res    
+    (* |> (MiscUtils.unique_seq_of idseq_eq) *)
+
   | SSeq(s1, s2) -> (
     let seqs_s1 = find_ev_gen_seqs s1 in
     let seqs_s2 = find_ev_gen_seqs s2 in
-    let update_seqs seqs seq = 
-      List.map (fun s -> s@seq) seqs
-    in 
+    (* for each sequence in s1:
+        for each sequence in s2:
+          create a new sequence: s1@s2
+    *)
+    let res = match Seq.length seqs_s1, Seq.length seqs_s2 with
+      | (0, 0) -> seqs_s1
+      | (_, 0) -> seqs_s1
+      | (0, _) -> seqs_s2
+      | (_, _) -> (
+        (* print_endline ("seqs_s1 and seqs_s2 are both nonempty."); *)
+        Seq.fold seqs_s1
+          ~init:(Seq.of_list [Seq.empty])
+          ~f:(fun merged_seqs s1_seq -> 
+            Seq.fold seqs_s2
+            ~init:merged_seqs
+            ~f:(fun merged_seqs s2_seq -> 
+              let res = Seq.append merged_seqs (Seq.of_list [(Seq.append s1_seq s2_seq)]) in
+              (* print_endline ("inner loop result: "); *)
+              (* dprint_seqs res; *)
+              res
+            )
+          )
+        )
+    in
+    (* print_endline "AFTER FOLD"; *)
+    (* dprint_seqs res; *)
 
-    List.fold_left 
-      (fun new_seqs_s1 seq -> 
-        new_seqs_s1@(update_seqs seqs_s1 seq)
-      )
-      []
+(*     let update_seqs seqs seq = 
+      Seq.map seqs (fun s -> Seq.append seq s)
+    in 
+ *)
+(*     let res = Seq.fold 
       seqs_s2
+      ~init:(Seq.of_list [Seq.empty])
+      ~f:(fun new_seqs_s1 seq -> 
+        Seq.append new_seqs_s1 (update_seqs seqs_s1 seq)
+      )
+    in *)
+    let res = MiscUtils.unique_seq_of idseq_eq res in
+(*     print_endline "AFTER UNIQUE";
+    dprint_seqs res;
+    (match (s1.s, s2.s) with 
+    | SGen(_), _ -> (
+      print_endline ("SEQ");
+      print_endline ("---------");
+      print_endline (CorePrinting.stmt_to_string statement);
+      print_endline ("---------");
+      print_endline ("s1 results: ");
+      dprint_seqs seqs_s1;
+      print_endline ("s2 results: ");
+      dprint_seqs seqs_s2;
+      print_endline ("merged results: ");
+      dprint_seqs res;
+      exit 1;
+    )
+    | _, SGen(_) -> (
+      print_endline ("SEQ");
+      print_endline ("---------");
+      print_endline (CorePrinting.stmt_to_string statement);
+      print_endline ("---------");
+      print_endline ("s1 results: ");
+      dprint_seqs seqs_s1;
+      print_endline ("s2 results: ");
+      dprint_seqs seqs_s2;
+      print_endline ("merged results: ");
+      dprint_seqs res;
+      exit 1;
+    )
+    | _, _ -> ()
+    ); *)
+    (* let res = res |> (MiscUtils.unique_seq_of idseq_eq) in *)
+    res
+
+(*     List.fold_left 
+      (fun new_seqs_s1 seq -> 
+        Seq.append new_seqs_s1 (update_seqs seqs_s1 seq)
+      )
+      Seq.of_list [Seq.empty]
+      seqs_s2
+    in *)
+    (* Seq.of_list [Seq.empty] *)
     )
   (* no events in rest *)
-  | _ -> [[]]
+  | _ -> Seq.of_list [Seq.empty]
 ;;
 
+let find_ev_gen_lists statement = 
+  let res = Seq.map (find_ev_gen_seqs statement) 
+    ~f:(fun inner_seq -> Seq.to_list inner_seq)
+  |> Seq.to_list
+  in
+(*   print_endline ("[find_ev_gen_lists] result: ");
+  List.iter (fun idlist -> 
+    idlist |> List.map Id.to_string |> String.concat ", " |> print_endline;
+  )
+  res;
+  exit 1; *)
+  res
+;;
 
 (* generate the main handler *)
 let add_main_handler decls =
@@ -191,7 +314,7 @@ let add_main_handler decls =
   in 
   let event_output = {
     recirc_mcid_var = (Id.create "recirc_mcid", (ty (TInt 16)));
-    ev_gen_seqs = find_ev_gen_seqs (List.hd main_body) |> MiscUtils.unique_list_of;
+    ev_gen_seqs = find_ev_gen_lists (List.hd main_body) |> MiscUtils.unique_list_of;
   } 
   in
   let tds =(erase_handler_bodies decls)
@@ -211,7 +334,6 @@ let tdecls_of_decls decls =
 (* generate the main handler, for a program where 
    the event gets compiled to a control block library *)
 let add_lib_handler decls =
-  let main_id = Id.create "main_handler" in 
   let hdl_selector = (Id.create "event_id", (ty (TInt 8))) in 
   let hdl_enum, hdl_params, default_hdl, _= 
     let acc (enum, all_params, default_hdl, cur_ev_num) dec = 
@@ -252,7 +374,7 @@ let add_lib_handler decls =
   in 
   let event_output = {
     recirc_mcid_var = (Id.create "recirc_mcid", (ty (TInt 16)));
-    ev_gen_seqs = find_ev_gen_seqs main_body |> MiscUtils.unique_list_of;
+    ev_gen_seqs = find_ev_gen_lists main_body |> MiscUtils.unique_list_of;
   } 
   in
   let tds =(erase_handler_bodies decls)
@@ -311,6 +433,27 @@ let memops tds =
   tds
 ;;
 
+(* returns assoc list: (arrayid : (slot width, num slots)) list *)
+let array_dimensions tds =
+  List.filter_map 
+  (fun dec -> match dec.td with
+    | TDGlobal(
+        id, 
+        {raw_ty=TName(ty_cid, sizes, true); _}, 
+        {e=ECall(_, num_slots::_)}) -> (
+        match (Cid.names ty_cid |> List.hd) with 
+        | "Array" ->           
+          let num_slots = InterpHelpers.int_from_exp num_slots in 
+          Some((id, (List.hd sizes, num_slots)))
+        | "PairArray" -> 
+          let num_slots = InterpHelpers.int_from_exp num_slots in 
+          Some((id, (2*(List.hd sizes), num_slots)))
+        | _ -> None
+    )
+    | _ -> None
+  )
+  tds 
+;;
 
 (*** output ***)
 let decl_of_tdecl tdecl = 
@@ -353,6 +496,14 @@ let tdecls_to_string tdecs =
   List.map tdecl_to_string tdecs |> 
   String.concat "\n"
 ;;
+
+let dump_prog fn tds =
+  let outf = (open_out fn) in 
+  Printf.fprintf outf "%s" (tdecls_to_string tds);
+  flush outf
+;;
+
+
 
 (* 
   (draft)

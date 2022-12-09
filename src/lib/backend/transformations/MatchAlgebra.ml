@@ -147,9 +147,13 @@ module Z3Helpers = struct
         let term = Z3Bool.mk_eq ctx z3_lhs z3_v in
         ctx, terms @ [term]
       )
-      | _, PWild -> 
-        (* output no equation, because there are no restrictions on the variable *)
-        ctx, terms
+      | var_exp, PWild -> 
+        let z3_vid = Z3Bit.mk_const_s ctx (cid_of_exp var_exp |> Cid.to_string) var_bw in 
+        let z3_v   = Z3Bit.mk_numeral   ctx (string_of_int 0) var_bw in 
+        let z3_m   = Z3Bit.mk_numeral   ctx (string_of_int 0) var_bw in 
+        let z3_lhs = Z3Bit.mk_and ctx z3_vid z3_m in 
+        let term = Z3Bool.mk_eq ctx z3_lhs z3_v in
+        ctx, terms @ [term]
     in
     let ctx, terms = CL.fold_left fold_f (ctx, []) m_exp in
     let eqn = Z3Bool.mk_and ctx terms in
@@ -167,14 +171,6 @@ module Z3Helpers = struct
   ;;
 
 
-  (* how do we treat a pattern q that has no 
-     fields? 
-      - well.. it is a wildcard. 
-
-  match event_id with 
-  |  -> { }
-
-   *)
   (* can p match after qs have all been checked? *)
   let is_pattern_matchable (p:pattern) (qs : pattern list) =  
     let ctx = mk_context ["model", "true"; "proof", "true"] in
@@ -302,6 +298,19 @@ let exp_lookup_opt exps_assoc exp =
   CL.assoc_opt exp.e es_assoc
 ;;
 
+let e_eq exp1 exp2 = CoreSyntax.equiv_exp exp1 exp2
+
+
+let unique_exp_list exps = 
+  ShareMemopInputs.unique_list_of_eq e_eq exps
+;;
+let check_key_uniqueness exps =
+ let unique_exps = ShareMemopInputs.unique_list_of_eq e_eq exps in
+ if (CL.length exps <> CL.length unique_exps)
+ then (error ("[check_key_uniqueness] failed in: "^(CorePrinting.es_to_string exps)))
+ else ()
+;;
+
 
 let rec replace eq tuples key new_val =
   match tuples with
@@ -320,8 +329,13 @@ let exp_replace = (replace CoreSyntax.equiv_exp)
    produces a rule that cannot match anything, 
  return None. *)
 let and_patterns (pat1:pattern) (pat2:pattern) : pattern option = 
-
+  let pat1_es = CL.split pat1 |> fst in
+  let pat2_es = CL.split pat2 |> fst in
+  (* print_endline "(input check)"; *)
+  check_key_uniqueness pat1_es;
+  check_key_uniqueness pat2_es;
   let merge_into (pat_opt:pattern option) (new_col: exp * pat) : pattern option = 
+
     let (new_exp, new_cond) = new_col in 
     let res = match pat_opt with 
       | None -> None (* pat has a conflict, so we can't add a new column. *)
@@ -329,9 +343,14 @@ let and_patterns (pat1:pattern) (pat2:pattern) : pattern option =
         match (exp_lookup_opt pat new_exp) with 
           (* the column (variable new_exp) is not in the pattern, so add it. *)
           | None ->
+(*             print_endline@@"I have divined that the column: "^(CorePrinting.exp_to_string new_exp)^" ";
+            print_endline@@"is NOT in the pattern: "^(string_of_pattern pat); *)
             Some ((new_exp, new_cond)::pat)          
           (* the column (variable new_mid) is in the pattern *)
           | Some (pat_cond) -> (
+(*             print_endline@@"[merge_into] the column: "^(CorePrinting.exp_to_string new_exp)^" ";
+            print_endline@@"IS in the pattern: "^(string_of_pattern pat); *)
+
             match (pat_cond, new_cond) with
               (* two bitstrings *)
               | PBit pat_bits, PBit new_bits  -> (
@@ -374,7 +393,16 @@ let and_patterns (pat1:pattern) (pat2:pattern) : pattern option =
     in
     res
   in 
-  CL.fold_left merge_into (Some pat2) pat1
+  let res_all = CL.fold_left merge_into (Some pat2) pat1 in
+  (match (res_all) with 
+  | Some res -> 
+    (* print_endline "(output check)"; *)
+    check_key_uniqueness ((CL.split res) |> fst);
+
+    (* print_endline ("[and_patterns] result: "^(string_of_pattern res)); *)
+  | _ -> ();
+  );
+  res_all
   ;;
   let and_is_sat pat1 pat2 = 
     match (and_patterns pat1 pat2) with 
@@ -492,7 +520,10 @@ let normalize_conditioned_rule cr =
         | Some pos -> 
           let res = and_patterns pat pos in 
           res
-        | None -> error "[refine_condition_with_pat] no positive clause?"
+        | None -> 
+          print_endline ("[normalize_conditioned_rule] input: "^(string_of_conditioned_rule cr));
+          error "[refine_condition_with_pat] no positive clause?"
+          (* the precondition doesn't have a feasible branch -- so neither does the generated one? *)
     in 
     { negs = new_negs; pos = new_pos; }
   in
@@ -640,6 +671,152 @@ let and_conditions c1 c2 =
 ;;
 
 
+(*** use match algebra to merge match statements ***)
+
+type pattern_branch = {
+  pattern : (exp * pat) list;
+  bstmt    : statement;
+}
+
+type pattern_branches = pattern_branch list ;;
+
+let pattern_branches_of_match m: pattern_branches = 
+  match m.s with 
+  | SMatch(es, bs) -> (
+    let pattern_branch_of_branch (pats, stmt) =
+      { pattern = List.combine es pats;
+        bstmt = stmt; }
+    in 
+    List.map pattern_branch_of_branch bs
+  )
+  | SNoop -> []
+  | _ -> error "[pattern_branches_of_match] not a match statement (or noop)"
+;;
+
+let keys_of_pattern_branches pbs =
+  let foo = CL.map (fun pb -> pb.pattern |> CL.split |> fst) pbs
+  |> CL.flatten 
+  in
+  unique_exp_list foo
+;;
+
+let cases_of_pattern_branches pbs =  
+  CL.map 
+    (fun pb -> 
+      (CL.split pb.pattern |> snd, pb.bstmt)
+    )
+    pbs
+;;
+
+(* match statement of a pattern branches list. *)
+let smatch_of_pattern_branches pbs =
+  smatch 
+    (keys_of_pattern_branches pbs)
+    (cases_of_pattern_branches pbs)
+;;
+
+
+let can_match_after = Z3Helpers.is_pattern_matchable
+;;
+
+
+(* compute the cross product branch 
+   of (b1, b2) and add it into bs 
+    The cross product branch is simply: 
+      b1 && b2 --> (s1; s2)
+      b1 --> s1
+      b2 --> s2
+    Each of these branches is only added if it is 
+    matchable after all rules added before it.*) 
+(* find the rules that are the intersection of b1 and b2, if any. *)
+let cross_product bs (b1, b2) = 
+  (* b1 and b2 may not have the same fields.*)
+  let patterns_of_bs bs = List.map (fun b -> b.pattern) bs in 
+  let intersect_pattern = and_patterns b1.pattern b2.pattern in 
+  (* add the intersection branch after previous intersect branches, if its 
+     possible for the intersection branch to match after them. *)
+  match intersect_pattern with 
+    | Some (pattern) -> (
+      match (can_match_after pattern (patterns_of_bs bs)) with 
+      | true -> 
+        let bstmt = sseq_sp b1.bstmt b2.bstmt Span.default in
+        bs@[{pattern; bstmt;}]
+      | false -> bs
+    )
+    | None -> 
+      (* the intersection between the two statements cannot 
+         match anything.  *)
+      (* print_endline ("[cross_product] no intersection pattern."); *)
+      bs
+;;
+
+let align_keys pb1 pb2 =
+  let keys = keys_of_pattern_branches (pb1@pb2) in 
+  CL.map 
+    (fun pb -> {pb with pattern=extend_pat keys pb.pattern;})
+    pb1
+  ,CL.map 
+    (fun pb -> {pb with pattern=extend_pat keys pb.pattern;})
+    pb2
+
+;;
+
+
+(* delete the pattern branches that cannot be matched in a list *)
+let delete_unreachable bs =
+  let patterns_of_bs bs = List.map (fun b -> b.pattern) bs in 
+  let res = List.fold_left
+    (fun bs b -> 
+      if (can_match_after b.pattern (patterns_of_bs bs))
+      then (bs@[b])
+      else (bs)
+    )
+    []
+    bs
+  in 
+  res
+;;
+
+let combine_pattern_branches bs1 bs2 = 
+  (* first, make sure bs1 and bs2 are over the same fields. *)
+  let bs1, bs2 = align_keys bs1 bs2 in 
+  match (bs1, bs2) with 
+    | [], [] -> []
+    | _, [] -> bs1
+    | [], _ -> bs2
+    | _, _ -> 
+      let m2_integrate bs b2 =     
+        let m1_integrate bs b1 = 
+          cross_product bs (b1, b2)
+        in 
+        List.fold_left m1_integrate bs bs1
+      in 
+      let intersect_rules = List.fold_left m2_integrate [] bs2 in 
+      (* the original rules must come after _all_ the intersect rules, 
+         else they may block some from matching. Also, some rules 
+         may not be reachable anymore. *)
+      delete_unreachable (intersect_rules@bs1@bs2)
+;;
+
+(* combine two match statements into a pattern branch *)
+let combine_matches m1 m2 = 
+  let bs1 = pattern_branches_of_match m1 in
+  let bs2 = pattern_branches_of_match m2 in 
+  combine_pattern_branches bs1 bs2
+;;
+
+let merge_matches m1 m2 = 
+  combine_pattern_branches
+    (pattern_branches_of_match m1)
+    (pattern_branches_of_match m2)
+  |> smatch_of_pattern_branches
+;;
+
+(* update pattern branch list bs1, folding in the match statement m2 *)
+let fold_match_into_pattern_branches bs1 m2 =
+  let bs2 = pattern_branches_of_match m2 in 
+  combine_pattern_branches bs1 bs2
+;;
 
 
 

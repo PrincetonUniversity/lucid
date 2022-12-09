@@ -357,11 +357,11 @@ let add_builtin_defs level vars env =
     vars
 ;;
 
-let interp_body env (params, stmt) =
+let interp_body builtin_tys env (params, stmt) =
   let level = 1 in
   let builtins =
     let open Builtins in
-    (ingr_port_id, ingr_port_ty) :: (this_id, this_ty) :: builtin_vars
+    (ingr_port_id, builtin_tys.ingr_port_ty) :: (this_id, builtin_tys.this_ty) :: builtin_vars
   in
   let env =
     env |> add_builtin_defs level builtins |> add_builtin_defs level params
@@ -369,7 +369,7 @@ let interp_body env (params, stmt) =
   params, fst (interp_stmt env level stmt)
 ;;
 
-let interp_decl env d =
+let interp_decl builtin_tys env d =
   let add_dec env id =
     IdMap.add
       id
@@ -387,7 +387,7 @@ let interp_decl env d =
     env, { d with d = DMemop (id, params, body) }
   | DHandler (id, body) ->
     let env = add_dec env id in
-    env, { d with d = DHandler (id, interp_body env body) }
+    env, { d with d = DHandler (id, interp_body builtin_tys env body) }
   | DEvent (id, _, _) | DExtern (id, _) ->
     let env = add_dec env id in
     env, d

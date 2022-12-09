@@ -25,6 +25,7 @@
    input
    integer
    span
+   profile
    printing
    corePrinting
    parser
@@ -98,8 +99,13 @@
    miscUtils
    packageTofinoApp
    ioUtils
+   TofinoProfiling
    TofinoPipeline
+   DependencyProfiling
+   InputChecks
    UnifyHandlerParams
+   EliminateEventCombinators
+   EliminateExitEvents
    TofinoCore
    InlineEventVars
    SolitaryMatches
@@ -111,8 +117,11 @@
    CoreCfg
    CoreCdg
    CoreDfg
+   CoreResources
+   ExternalLayout
    CoreLayout
-   BranchDedup
+   ActionForm
+   Dedup
    P4TofinoSyntax
    CoreToP4TofinoHeaders
    CoreToP4Tofino

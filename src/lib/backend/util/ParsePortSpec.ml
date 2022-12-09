@@ -60,8 +60,6 @@ let parse fn_opt =
     let internal_ports = parse_port_list (member "internal_ports" json) in
     let external_ports = parse_port_list (member "external_ports" json) in
     let res = {recirc_dpid;internal_ports;external_ports} in
-    print_endline "------- port configuration -------";
-    print_endline (string_of_portconfig res);
     res
   )
 ;;

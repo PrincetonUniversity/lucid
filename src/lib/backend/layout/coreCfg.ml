@@ -62,6 +62,10 @@ module CfgTopo = Graph.Topological.Make (Cfg)
 module CfgDom = Graph.Dominator.Make(Cfg)
 module Dfs = Graph.Traverse.Dfs(Cfg)
 
+
+let vertex_num v = v.stmt.sspan.spid
+;;
+
 (*** graph printing ***)
 (* statement --> graph node string *)
 let summarystr_of_branch (pats, stmt) =
@@ -69,13 +73,19 @@ let summarystr_of_branch (pats, stmt) =
     ^(CL.map CorePrinting.pat_to_string pats |> String.concat ", ")
     ^" -> {"^(CorePrinting.statement_to_string stmt)^"}";
 ;;
-let summarystr_of_stmt (stmt) = 
+let summarystr_of_stmt (stmt) is_solitary_match = 
     match stmt.s with
     | SMatch(es, bs) ->
-        (string_of_int stmt.sspan.spid)^": "
-        ^"match ("^(CorePrinting.es_to_string es)^") with\n"
-        ^(CL.map summarystr_of_branch bs |> (String.concat "\n"))
-        (* ": match ("^(CorePrinting.es_to_string es)^") ..." *)
+        if (is_solitary_match) then (
+            (string_of_int stmt.sspan.spid)^": "
+            ^"match ("^(CorePrinting.es_to_string es)^") with\n"
+            ^(CL.map summarystr_of_branch bs |> (String.concat "\n"))
+            (* ": match ("^(CorePrinting.es_to_string es)^") ..." *)        
+        ) else (
+            (string_of_int stmt.sspan.spid)^": "
+            ^"match ("^(CorePrinting.es_to_string es)^") ...\n"
+        )
+
     | SIf(e, _, _) -> 
         (string_of_int stmt.sspan.spid)^": if ("^(CorePrinting.exp_to_string e)^")..."
     | _ -> (string_of_int stmt.sspan.spid)^": "^(CorePrinting.statement_to_string stmt)
@@ -89,17 +99,17 @@ let str_of_edge_condition e =
 ;;
 
 let str_of_cond_stmt cs =  
-    (summarystr_of_stmt cs.stmt)
+    (summarystr_of_stmt cs.stmt cs.solitary)
 ;;
 
+
+(* node and edge helpers functions *)
 let id_of_v (cs:vertex_stmt) =
   cs.stmt.sspan.spid |> string_of_int
 ;;
 let ids_of_vs vs =
   CL.map id_of_v vs |> String.concat ","
 ;;
-
-
 
 module CfgDotConfig = struct
   include Cfg
@@ -232,8 +242,11 @@ let rec cfg_of_statement_inner (st:statement) =
         (* a match statement that gets broken apart *)
         else (
             let branch_conditions = conditions_of_match es bs in 
-
-            (* TODO: change the statement so that it has pointers in its branches *) 
+(*             print_endline ("input match statement: ");
+            print_endline (CorePrinting.stmt_to_string st); *)
+            (* empty branches --> empty match that will be deleted later. *)
+            let new_bs = [] in 
+            let new_st = {st with s=SMatch(es, new_bs)} in 
 
             (* add the graph of this branch to the graph, 
                and an edge from statement --> root branch_graph *)
@@ -241,8 +254,10 @@ let rec cfg_of_statement_inner (st:statement) =
                 let branch_g = cfg_of_statement_inner b_stmt in 
                 let g = concat_graphs g branch_g in 
                 let edge_label = CL.nth branch_conditions branch_idx in 
+(*                 print_endline ("branch condition: ");
+                print_endline (str_of_edge_condition (CMatch(edge_label))); *)
                 let g = CL.fold_left 
-                    (fun g root -> Cfg.add_edge_e g ({stmt=st; solitary = false;} , CMatch(edge_label), root))
+                    (fun g root -> Cfg.add_edge_e g ({stmt=new_st; solitary = false;} , CMatch(edge_label), root))
                     g
                     (roots branch_g)
                 in 
