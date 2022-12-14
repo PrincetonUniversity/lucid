@@ -287,7 +287,7 @@ module SSA = struct
       it2, { stmt with s = SSeq (stmt1, stmt2) }, phis1 @ phis2
     (* all other nodes are leaves in the
       statement tree and we just need to update expressions. *)
-    | SNoop | SUnit _ | SPrintf _ | SGen _ | SRet _  | SInlineTable _ ->
+    | SNoop | SUnit _ | SPrintf _ | SGen _ | SRet _  | STableMatch _ ->
       it, update_exps_in_stmt it stmt, []
   ;;
 

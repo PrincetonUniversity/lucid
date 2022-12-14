@@ -118,7 +118,7 @@ let rec interp_exp env e =
     { e with e = EHash (sz, List.map (interp_exp env) args) }
   | EFlood e' -> { e with e = EFlood (interp_exp env e') }
   | EOp (op, args) -> { e with e = interp_op env op args }
-  | ECreateTableInline(_) -> e
+  | ETableCreate(_) -> e
 
 (* Mostly copied from InterpCore, could maybe merge the two functions *)
 and interp_op env op args =
@@ -357,19 +357,10 @@ let rec interp_stmt env level s : statement * env =
     in
     let base_stmt = { s with s = SMatch (es, branches) } in
     merge_branches base_stmt level env envs
-  | SInlineTable(ty, etbl, ekeys, actions, cases) -> 
-    let ekeys' = List.map interp_exp ekeys in
-    let actions_envs = List.map
-      (fun (aname, (params, stmt)) -> 
-        let env = add_builtin_defs (level+1) params env in
-        let stmt, env = interp_stmt env (level+1) stmt in
-        let acn = (aname, (params, stmt)) in
-        acn, env)
-      actions
-    in
-    let actions', envs = List.split actions_envs in 
-    let base_stmt = {s with s = SInlineTable(ty, etbl, ekeys', actions', cases)} in 
-    merge_branches base_stmt level env envs
+  | STableMatch(tm) -> 
+    let keys' = List.map interp_exp tm.keys in
+    let args' = List.map interp_exp tm.args in
+    {s with s= STableMatch({tm with keys=keys'; args=args';})}, env
 ;;
 
 let interp_body builtin_tys env (params, stmt) =
@@ -406,6 +397,16 @@ let interp_decl builtin_tys env d =
   | DEvent (id, _, _) | DExtern (id, _) ->
     let env = add_dec env id in
     env, d
+  | DAction(acn) -> 
+    let env = add_dec env acn.aid in
+    let level = 1 in 
+    let acn_env = 
+      env 
+      |> add_builtin_defs level acn.aconst_params
+      |> add_builtin_defs level acn.aparams
+    in
+    let abody = List.map (interp_exp acn_env) acn.abody in
+    env, {d with d = DAction({acn with abody})}
 ;;
 
 let interp_prog ds = ds

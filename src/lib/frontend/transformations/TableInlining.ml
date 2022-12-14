@@ -1,24 +1,10 @@
-(* convert tables to inlined tables 
-
-  We inline tables because without tuples or records in the backend 
-  ir, non-inlined tables cannot return / modify more than 1 variable. 
-*)
-
-(* 
-Left off here. TODO: table inlining.
-
-*)
+(* This pass translates ETableMatches into STableMatches *)
 
 open Syntax
 open Collections
 
 module CMap = Collections.CidMap
 
-(* This pass translates ETableApply(TTable..., args) expressions 
-   into SApplyTable {tblty; tble; key; aargs; aout; decl_out_vars}
-
-  The translation depends on where the expression appears. 
- *)
 
 let fresh_intermediate () = 
   Id.fresh "tbl_ret"
@@ -27,7 +13,7 @@ let fresh_intermediate () =
 (* eliminate table expression in an expression *)
 let rec eliminate_exp e = 
   match e.e with 
-  | ETableApply(tr) ->
+  | ETableMatch(tr) ->
     (* replace table apply expression with: 
        1. an intermediate variable that gets set in a pre statement
        2. an evar of the intermediate *)
@@ -35,7 +21,7 @@ let rec eliminate_exp e =
       let outvar_ty = Option.get e.ety in 
       let args_pre_stmt, args' = eliminate_exps tr.args in
       let new_tr = {tr with outs=[outvar]; out_tys=Some [outvar_ty]; args=args';} in 
-      let sapply = {s=SApplyTable(new_tr); sspan=Span.default} in
+      let sapply = {s=STableMatch(new_tr); sspan=Span.default} in
       sseq args_pre_stmt sapply, {e with e=EVar(Cid.id outvar)}
   (* all other cases just recurse *)    
   | EStmt (s1, e1) -> 
@@ -101,22 +87,22 @@ and eliminate_exps exps =
 
 
 (* eliminate table expression in a statement. 
-   SAssign and SLocal with rhs of ETableApply are translated directly
+   SAssign and SLocal with rhs of ETableMatch are translated directly
    for all other statements, recurse on inner components to generate 
    pre-compute statement, then return {pre-compute statement; statement;} *)
 and eliminate_stmt stmt =
   match stmt.s with
   (* locals and assigns get special cased to avoid copy overhead *)
-  | SAssign(id, {e=ETableApply(tr)}) ->   
+  | SAssign(id, {e=ETableMatch(tr)}) ->   
     let pre_stmt, args' = eliminate_exps tr.args in
     let new_tr = {tr with args=args'; outs=[id]; out_tys=None;} in
-    sseq pre_stmt {stmt with s=SApplyTable(new_tr)}
-  | SLocal(id, ty, {e=ETableApply(tr)}) -> 
+    sseq pre_stmt {stmt with s=STableMatch(new_tr)}
+  | SLocal(id, ty, {e=ETableMatch(tr)}) -> 
     (* I think we can throw away the local's type because its 
        in the table type *)
     let pre_stmt, args' = eliminate_exps tr.args in
     let new_tr = {tr with args=args'; outs=[id]; out_tys=Some[ty];} in
-    sseq pre_stmt {stmt with s=SApplyTable(new_tr)}
+    sseq pre_stmt {stmt with s=STableMatch(new_tr)}
   (* everything else is just recursing *)
   | SNoop -> stmt
   | SUnit exp -> 
@@ -152,13 +138,22 @@ and eliminate_stmt stmt =
     sseq pre_stmt {stmt with s = SMatch(exps, branches)}
   | SLoop(stmt, id, size) -> 
     {stmt with s=SLoop(eliminate_stmt stmt, id, size)}
-  | SApplyTable (t) -> 
+  | STableMatch (t) -> 
     let pre_tble, tbl = eliminate_exp t.tbl in
     let pre_key, keys =  eliminate_exps t.keys in
     let pre_aargs, args = eliminate_exps t.args in
     let pre_stmt = sseq (sseq pre_tble pre_key) pre_aargs in
     let t' = {t with tbl; keys; args} in 
-    sseq pre_stmt {stmt with s=SApplyTable(t')}
+    sseq pre_stmt {stmt with s=STableMatch(t')}
+  | STableInstall (tbl_id, entries) -> 
+    let pre_stmt, entries_rev = List.fold_left
+      (fun (pre_stmt, entries') entry -> 
+        let args_stmt, eargs = eliminate_exps entry.eargs in
+        sseq pre_stmt args_stmt, {entry with eargs}::entries')
+      (snoop, [])
+      entries
+    in
+    sseq pre_stmt {stmt with s=STableInstall(tbl_id, List.rev entries_rev)}
 ;;
 
 let eliminator = 

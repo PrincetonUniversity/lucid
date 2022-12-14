@@ -205,7 +205,7 @@ let rename prog =
         let new_x = self#freshen_var x in
         SLocal (new_x, new_ty, replaced_e)
 
-      method! visit_SApplyTable dummy tm =
+      method! visit_STableMatch dummy tm =
         let tty = self#visit_ty dummy tm.tty in
         let tbl = self#visit_exp dummy tm.tbl in
         let keys = List.map (self#visit_exp dummy) tm.keys in
@@ -219,7 +219,7 @@ let rename prog =
             List.map (self#freshen_var) tm.outs, 
             Some(List.map (self#visit_ty dummy) out_tys)
         in 
-        SApplyTable({tty; tbl; keys; args; outs; out_tys})
+        STableMatch({tty; tbl; keys; args; outs; out_tys})
 
       method! visit_body dummy (params, body) =
         let old_env = env in

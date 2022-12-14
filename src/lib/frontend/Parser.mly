@@ -14,7 +14,7 @@
 
   let mk_t_table tkey_sizes tparam_tys tret_tys span = 
     Cmdline.cfg.show_tvar_links <- true;
-    ty_sp (T_Table({tkey_sizes; tparam_tys; tret_tys})) span
+    ty_sp (TTable({tkey_sizes; tparam_tys; tret_tys})) span
 
   let mk_tmemop span n sizes =
     match sizes with
@@ -47,8 +47,8 @@
     in
     value_sp (VGroup locs) span |> value_to_exp
 
-  let make_create_table tty tactions tsize span = 
-    exp_sp (ETableCreate({tty; tactions; tsize})) span
+  let make_create_table tty tactions tsize tdefault span = 
+    exp_sp (ETableCreate({tty; tactions; tsize; tdefault})) span
 
   let mk_fty tspan params =
     let start_eff = FVar (QVar (Id.fresh "eff")) in
@@ -134,6 +134,7 @@
 %token <Span.t> ACTION
 %token <Span.t> TABLE_CREATE
 %token <Span.t> TABLE_MATCH
+%token <Span.t> TABLE_INSTALL
 
 %token <Span.t> CONSTR
 %token <Span.t> PROJ
@@ -273,10 +274,12 @@ exp:
     | FLOOD exp                           { flood_sp $2 (Span.extend $1 $2.espan) }
     | LBRACE args RBRACE                  { make_group $2 (Span.extend $1 $3) }
     | TABLE_CREATE LESS ty MORE LPAREN
-        LPAREN args RPAREN
-        COMMA size RPAREN
-                                         { make_create_table $3 $7 (snd $10) (Span.extend $1 $11) }
+        LPAREN args RPAREN COMMA 
+        size COMMA
+        cid opt_args 
+        RPAREN
 
+                                         { make_create_table $3 $7 (snd $10) (snd $12, snd $13) (Span.extend $1 $14) }
     | TABLE_MATCH LESS ty MORE 
         LPAREN exp COMMA 
         LPAREN args RPAREN COMMA
@@ -302,6 +305,10 @@ record_entries:
 args:
     | exp                               { [$1] }
     | exp COMMA args                    { $1::$3 }
+
+opt_args:
+    | LPAREN args RPAREN                { Span.extend $1 $3, $2}
+    | LPAREN RPAREN                { Span.extend $1 $2, []}
 
 paramsdef:
     | LPAREN RPAREN                     { [] }
@@ -454,6 +461,22 @@ branches:
     | branch                                 { fst $1, [snd $1] }
     | branch branches                        { Span.extend (fst $1) (fst $2), (snd $1::snd $2) }
 
+opt_patterns: 
+    | LPAREN patterns RPAREN                { Span.extend $1 $3, $2}
+    | LPAREN RPAREN                         { Span.extend $1 $2, []}
+
+entry: 
+    (* an entry with no priority *)
+    | opt_patterns ARROW ID opt_args SEMI             { Span.extend (fst $1) $5, mk_entry 0 (snd $1) (snd $3) (snd $4)}
+    (* an entry with a priority *)
+    | LBRACKET NUM RBRACKET opt_patterns ARROW ID opt_args SEMI 
+                                                    { Span.extend $1 $8, mk_entry (snd $2 |> Z.to_int) (snd $4) (snd $6) (snd $7)}
+
+entries:
+    | entry                                       { fst $1, [snd $1] }
+    | entry entries                               { Span.extend (fst $1) (fst $2), (snd $1::snd $2)}
+
+
 (* Only needed to avoid a shift-reduce warning on with match statemnets.
    We'd get the same result either way, though. *)
 multiargs:
@@ -475,6 +498,8 @@ statement1:
     | PRINTF LPAREN STRING RPAREN SEMI             { sprintf_sp (snd $3) [] (Span.extend $1 $5) }
     | PRINTF LPAREN STRING COMMA args RPAREN SEMI  { sprintf_sp (snd $3) $5 (Span.extend $1 $7) }
     | FOR LPAREN ID LESS size RPAREN LBRACE statement RBRACE { loop_sp $8 (snd $3) (snd $5) (Span.extend $1 $9) }
+    | TABLE_INSTALL LPAREN ID COMMA
+      LBRACE entries RBRACE RPAREN SEMI                 {tblinstall_sp (snd $3) (snd $6) (Span.extend $1 $9)}
 
 
 

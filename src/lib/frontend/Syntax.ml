@@ -55,15 +55,9 @@ and raw_ty =
   | TRecord of (string * raw_ty) list
   | TVector of raw_ty * size
   | TTuple of raw_ty list
-  | T_Table of tbl_ty
+  | TTable of tbl_ty
   | TAction of acn_ty 
-  (* {
-    const_aarg_tys : tys;
-    aarg_tys : tys;
-    aret_ty  : tys;
-    (* no effects, actions may not be effectual for now. *)
-  }
- *)
+
 and tbl_ty = {
     tkey_sizes : size list;
     tparam_tys : ty list;
@@ -75,8 +69,6 @@ and acn_ty = {
   aparam_tys : tys;
   aret_tys : tys;
 }
-
-  (* size list * action_sig list * size) *)
 
 and func_ty =
   { arg_tys : tys
@@ -167,17 +159,13 @@ and e =
   | EComp of exp * id * size (* Vector comprehension *)
   | EIndex of exp * size
   | ETuple of exp list
-(*   | ECreateTable of {
-    tty: ty;
-    tactions : exp list;
-    tentries : case list;} *)
   | ETableCreate of {
     tty: ty;
     tactions: exp list; 
     tsize: size;
-  }
-  (* | ETableApply of ty * exp list *)
-  | ETableApply of tbl_match
+    tdefault: cid * (exp list); (* ECall(default_acn_id, default_installtime_args) *)
+  }  
+  | ETableMatch of tbl_match
 
 and exp =
   { e : e
@@ -205,9 +193,9 @@ and s =
   | SSeq of statement * statement
   | SMatch of exp list * branch list
   | SLoop of statement * id * size
-  | SApplyTable of tbl_match
+  | STableMatch of tbl_match
+  | STableInstall of id * tbl_entry list
 
-and tbl_match_out_param = (id * (ty option))
 
 and tbl_match = 
     { tty : ty;
@@ -217,6 +205,18 @@ and tbl_match =
     outs : id list; 
     out_tys : ty list option;}
     (* out_tys set for statements that create new vars *)
+
+(* entries are like branches in match statements, except instead of 
+   a statement there is an action id + const args *)
+(* notes on entry priorities: 
+  1. Lower priorities are checked first. 
+  2. Priorities should be a bounded size, under 24 bits for tof. *)
+and tbl_entry = {
+  eprio : int; 
+  ematch : pat list;
+  eaction : id;
+  eargs : exp list;
+}
 
 and statement =
   { s : s
@@ -424,7 +424,7 @@ let flood_sp e span = exp_sp (EFlood e) span
 
 let tblmatch_sp tty tbl keys args span =
   let t = {tty; tbl; keys; args; outs=[]; out_tys=None;} in
-  exp_sp (ETableApply(t)) span
+  exp_sp (ETableMatch(t)) span
 ;;
 (* declarations *)
 let decl d = { d; dspan = Span.default }
@@ -483,6 +483,9 @@ let loop_sp e i k span = statement_sp (SLoop (e, i, k)) span
 let sexp_sp e span = statement_sp (SUnit e) span
 let scall_sp cid es span = sexp_sp (call_sp cid es span) span
 
+let tblinstall_sp tbl entries span = 
+  statement_sp (STableInstall(tbl, entries)) span
+;;
 (* Interface spefications *)
 let spec ispec = { ispec; ispan = Span.default }
 let spec_sp ispec ispan = { ispec; ispan }

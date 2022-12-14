@@ -99,13 +99,13 @@ let replacer =
     inherit [_] s_map as super
 
     (* Table extensions -- types *)
-    method! visit_T_Table _ tbl_ty = 
+    method! visit_TTable _ tbl_ty = 
       (* flatten param and return types *)    
       let tbl_ty' = { tbl_ty with 
         tparam_tys = flatten_tys tbl_ty.tparam_tys;
         tret_tys = flatten_tys tbl_ty.tret_tys; }
       in 
-      T_Table(tbl_ty')
+      TTable(tbl_ty')
 
     method! visit_TAction _ acn_ty =
       let acn_ty' = {
@@ -116,7 +116,7 @@ let replacer =
       TAction(acn_ty')
     
     (* Table extensions -- statements *)
-    method! visit_SApplyTable env tblmatch =
+    method! visit_STableMatch env tblmatch =
       (* recurse on inner components *)
       let tblmatch = self#visit_tbl_match env tblmatch in
       match tblmatch.out_tys with
@@ -129,7 +129,7 @@ let replacer =
         (* update the environment with the new ids *)
         env := env';
         (* return apply table statement with updates *)
-        SApplyTable({tblmatch with outs=outs'; out_tys=Some(out_tys');})
+        STableMatch({tblmatch with outs=outs'; out_tys=Some(out_tys');})
       )
       | None -> 
         (* the match table writes existing variables, we must 
@@ -143,8 +143,8 @@ let replacer =
             |> List.flatten
         in 
         let outs' = List.map lookup_flat_ids tblmatch.outs |> List.flatten in        
-        SApplyTable({tblmatch with outs=outs';})
-    method! visit_ETableApply _ tblmatch =
+        STableMatch({tblmatch with outs=outs';})
+    method! visit_ETableMatch _ tblmatch =
       Console.error_position
         tblmatch.tbl.espan
         "Table apply expressions should be converted to statements before tuple elim."
@@ -287,7 +287,7 @@ let rec replace_decl (env : env) d =
         in
         replace_decls env new_ds
       (* The tuple types inside of a table types must be flattened *)
-      | T_Table(_) ->
+      | TTable(_) ->
         env, [{ d with d = DGlobal(id, replace_ty ty, replace_exp env exp)}]
       | _ -> env, [d])
   | DEvent (id, sort, _, params) ->

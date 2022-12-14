@@ -36,9 +36,10 @@ let subst =
         in
         TName (cid, sizes, b)
 
-      method! visit_ETableCreate env tty tactions tsize =
+      method! visit_ETableCreate env tty tactions tsize tdefault =
         let tactions = List.map (self#visit_exp env) (tactions) in
-        ETableCreate({tty; tactions; tsize})
+        let tdefault = fst tdefault, List.map (self#visit_exp env) (snd tdefault) in
+        ETableCreate({tty; tactions; tsize; tdefault})
 
       method! visit_ECall env x args =
         let args = List.map (self#visit_exp env) args in

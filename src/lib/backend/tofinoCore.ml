@@ -17,6 +17,8 @@ and location = int
 and size = int
 and sizes = size list
 and raw_ty = [%import: CoreSyntax.raw_ty]
+and tbl_ty = [%import: CoreSyntax.tbl_ty]
+and acn_ty = [%import: CoreSyntax.acn_ty]
 and func_ty = [%import: CoreSyntax.func_ty]
 and ty = [%import: CoreSyntax.ty]
 and tys = [%import: CoreSyntax.tys]
@@ -29,7 +31,11 @@ and e = [%import: CoreSyntax.e]
 and exp = [%import: CoreSyntax.exp]
 and branch = [%import: CoreSyntax.branch]
 and gen_type = [%import: CoreSyntax.gen_type]
+(* and table_entry = [%import: CoreSyntax.table_entry] *)
 and s = [%import: CoreSyntax.s]
+and tbl_match_out_param = [%import: CoreSyntax.tbl_match_out_param]
+and tbl_match = [%import: CoreSyntax.tbl_match]
+and tbl_entry = [%import: CoreSyntax.tbl_entry]
 and statement = [%import: CoreSyntax.statement]
 and params = [%import: CoreSyntax.params]
 and body = [%import: CoreSyntax.body]
@@ -37,10 +43,8 @@ and event_sort = [%import: CoreSyntax.event_sort]
 and conditional_return = [%import: CoreSyntax.conditional_return]
 and complex_body = [%import: CoreSyntax.complex_body]
 and memop_body = [%import: CoreSyntax.memop_body]
+and action_body = [%import: CoreSyntax.action_body]
 and action = [%import: CoreSyntax.action]
-and case = [%import: CoreSyntax.case]
-and action_sig = [%import: CoreSyntax.action_sig]
-
 (* multicast id space: 
   0 - 511: recirculated event cloning
   512 - 1024: port flooding groups
@@ -73,6 +77,7 @@ and td =
   | TDExtern of id * ty
   | TDMain of main_handler
   | TDLabeledBlock of id * statement
+  | TDAction of action
 
 and tdecl = {td:td; tdspan: sp;}
 and tdecls = tdecl list
@@ -102,6 +107,7 @@ let tdecl_of_decl decl =
   | DHandler(i, b) -> {td=TDHandler(i, b); tdspan=decl.dspan;}
   | DMemop(i, p, m) -> {td=TDMemop{mid=i; mparams=p; mbody=m;}; tdspan=decl.dspan;}
   | DExtern(i, t) -> {td=TDExtern(i, t); tdspan=decl.dspan;}
+  | DAction(a) -> {td=TDAction(a); tdspan = decl.dspan;}
 ;;
 
 module Seq = Core.Sequence

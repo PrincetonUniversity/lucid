@@ -46,10 +46,16 @@ let rec inline_exp e =
   | ETuple es ->
     let stmt, es' = inline_exps es in
     stmt, { e with e = ETuple es' }
-  | ETableCreate _ -> error "not done?"
-  | ETableApply(tm) -> 
+  | ETableCreate tc -> 
+    let acn_stmt, tactions = inline_exps tc.tactions in
+    let def_stmt, def_args = inline_exps (snd tc.tdefault) in
+    let tdefault = (fst tc.tdefault, def_args) in
+    sseq 
+      acn_stmt def_stmt
+      ,{e with e = ETableCreate({tc with tactions; tdefault})}  
+  | ETableMatch(tm) -> 
     let stmt, tm' = inline_tbl_match tm in
-    stmt, {e with e = ETableApply(tm')}
+    stmt, {e with e = ETableMatch(tm')}
 
 and inline_tbl_match tm =
     let tbl_stmt, tbl = inline_exp tm.tbl in
@@ -98,9 +104,19 @@ and inline_stmt s =
     let branches' = List.map (fun (p, stmt) -> p, inline_stmt stmt) branches in
     sseq s' { s with s = SMatch (es', branches') }
   | SLoop (s1, id, sz) -> { s with s = SLoop (inline_stmt s1, id, sz) }
-  | SApplyTable(tm) -> 
+  | STableMatch(tm) -> 
     let pre_s, tm' = inline_tbl_match tm in
-    sseq pre_s {s with s=SApplyTable(tm')}
+    sseq pre_s {s with s=STableMatch(tm')}
+  | STableInstall(tbl_id, entries) -> 
+    let stmt, entries_rev = List.fold_left
+      (fun (s,entries) entry -> 
+        let a_s, eargs = inline_exps entry.eargs in
+        sseq a_s s, {entry with eargs}::entries)
+      (snoop, [])
+      entries
+    in
+    let entries = List.rev entries_rev in
+    sseq stmt {s with s=STableInstall(tbl_id, entries)}
 ;;
 
 let eliminator =

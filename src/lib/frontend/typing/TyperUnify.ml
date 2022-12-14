@@ -76,7 +76,7 @@ let occurs_ty span tvar raw_ty : unit =
       List.iter (fun ty -> occ tvar ty.raw_ty) arg_tys;
       occ tvar ret_ty.raw_ty
     | TVector (raw_ty, _) -> occ tvar raw_ty
-    | T_Table(t) -> 
+    | TTable(t) -> 
       List.iter occ_ty t.tparam_tys;
       List.iter occ_ty t.tret_tys
     | TAction(a) -> 
@@ -262,7 +262,7 @@ and try_unify_rty span rty1 rty2 =
   | TVector (ty1, size1), TVector (ty2, size2) ->
     try_unify_size span size1 size2;
     unify_raw_ty ty1 ty2
-  | T_Table(t1), T_Table(t2) -> 
+  | TTable(t1), TTable(t2) -> 
     List.iter2 (try_unify_size span) t1.tkey_sizes t2.tkey_sizes;
     List.iter2 (try_unify_ty span) t1.tparam_tys t2.tparam_tys;
     List.iter2 (try_unify_ty span) t1.tret_tys t2.tret_tys
@@ -283,7 +283,7 @@ and try_unify_rty span rty1 rty2 =
       | TTuple _
       | TAbstract _ 
       | TAction _
-      | T_Table _)
+      | TTable _)
     , _ ) -> raise CannotUnify
 
 and unify_ty (span : Span.t) ty1 ty2 : unit =

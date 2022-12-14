@@ -29,12 +29,21 @@ and raw_ty =
   | TFun of func_ty (* Only used for Array/event functions at this point *)
   | TName of cid * sizes * bool (* Named type: e.g. "Array.t<<32>>". Bool is true if it represents a global type *)
   | TMemop of int * size
-  | TTable of {
-    key_size : size list;
-    arg_ty : raw_ty list;
-    ret_ty : raw_ty;
-    action_tys : (string * raw_ty list) list;
-    num_entries : size;}
+  | TTable of tbl_ty
+  | TAction of acn_ty 
+
+and tbl_ty = {
+    tkey_sizes : size list;
+    tparam_tys : ty list;
+    tret_tys : ty list;
+  }
+
+and acn_ty = {
+  aconst_param_tys : tys;
+  aparam_tys : tys;
+  aret_tys : tys;
+}
+
 (* Don't need effects or constraints since we passed typechecking ages ago *)
 and func_ty =
   { arg_tys : tys
@@ -107,11 +116,12 @@ and e =
   | ECall of cid * exp list
   | EHash of size * exp list
   | EFlood of exp
-  | ECreateTableInline of ty
-  | ECreateTable of {
+  | ETableCreate of {
     tty: ty;
-    tactions : exp list;
-    tentries : case list;}
+    tactions: exp list; 
+    tsize: size;
+    tdefault : cid * exp list;
+  }
 
 and exp =
   { e : e
@@ -126,9 +136,6 @@ and gen_type =
   | GMulti of exp
   | GPort of exp
 
-(* actions and cases, which are guarded actions *)
-and action = string * body
-and case = pat list * string * exp list
 
 (* statements *)
 and s =
@@ -142,7 +149,30 @@ and s =
   | SSeq of statement * statement
   | SMatch of exp list * branch list
   | SRet of exp option
-  | SInlineTable of ty * exp * exp list * action list * case list
+  | STableMatch of tbl_match
+  | STableInstall of id * tbl_entry list
+
+and tbl_match_out_param = (id * (ty option))
+
+and tbl_match = 
+    { tty : ty;
+    tbl  : exp;
+    keys  : exp list;
+    args : exp list;
+    outs : id list; 
+    out_tys : ty list option;}
+    (* out_tys set for statements that create new vars *)
+
+(* table entries are patterns that point 
+   to actions, with values to be used 
+   as the install-time arguments. *)
+and tbl_entry = {
+  eprio : int;
+  ematch : pat list;
+  eaction : id;
+  eargs : exp list;
+}
+
 
 and statement =
   { s : s
@@ -176,6 +206,8 @@ and memop_body =
   | MBIf of exp * exp * exp
   | MBComplex of complex_body
 
+and action_body = exp list
+
 (* declarations *)
 and d =
   | DGlobal of id * ty * exp
@@ -183,7 +215,16 @@ and d =
   | DHandler of id * body
   | DMemop of id * params * memop_body
   | DExtern of id * ty
+  | DAction of action
+  (* id * ty list * params * (params * action_body) *)
 
+and action = {
+  aid : id; 
+  artys : ty list;
+  aconst_params : params;
+  aparams : params; 
+  abody : action_body;
+}
 
 (* name, return type, args & body *)
 and decl =

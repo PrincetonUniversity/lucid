@@ -210,7 +210,7 @@ let basic_qvar_checker =
       super#visit_ty env ty
 
     (* table types are always allowed to have QVars *)
-    method! visit_T_Table _ _ = ()
+    method! visit_TTable _ _ = ()
 
     method! visit_exp _ _ = ()
 

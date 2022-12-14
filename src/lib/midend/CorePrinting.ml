@@ -37,15 +37,17 @@ let rec raw_ty_to_string t =
   | TMemop (n, size) -> Printf.sprintf "memop%d<<%s>>" n (size_to_string size)
   | TGroup -> "group"
   | TTable(t) -> 
-    " {"
-    ^"\n\tkey_size: "^(comma_sep size_to_string t.key_size)
-    ^"\n\taction_sizes: "
-    ^"\n\t\t"^((List.map 
-                (fun (aname, aty) -> 
-                  aname^" : "^(comma_sep raw_ty_to_string aty))
-                t.action_tys) |> String.concat "\n\t\t")
-    ^"\n\num_entries: "^(size_to_string t.num_entries)
-    ^"\n}"
+    " table_type {"
+    ^"\n\tkey_size: "^(comma_sep size_to_string t.tkey_sizes)
+    ^"\n\targ_ty: "^(comma_sep ty_to_string t.tparam_tys)
+    ^"\n\tret_ty: "^(comma_sep ty_to_string t.tret_tys)
+    ^"}\n"
+  | TAction(a) -> 
+    Printf.sprintf 
+      "%s -> %s -> %s"
+      (concat_map " * " ty_to_string a.aconst_param_tys)
+      (concat_map " * " ty_to_string a.aparam_tys)
+      (comma_sep ty_to_string a.aret_tys)
 and func_to_string func =
   let arg_tys = concat_map ", " ty_to_string func.arg_tys in
   let ret_ty = ty_to_string func.ret_ty in
@@ -138,8 +140,13 @@ let rec e_to_string e =
   | EHash (size, es) ->
     Printf.sprintf "hash<<%s>>(%s)" (size_to_string size) (es_to_string es)
   | EFlood e -> Printf.sprintf "flood %s" (exp_to_string e)
-  | ECreateTableInline(ty) -> 
-    Printf.sprintf "table_create(%s)" (ty_to_string ty)
+  | ETableCreate(t) -> 
+    Printf.sprintf "table_create<%s>((%s),%s, %s(%s))" 
+      (ty_to_string t.tty)
+      (concat_map "," exp_to_string t.tactions)
+      (size_to_string t.tsize)
+      (cid_to_string (fst t.tdefault))
+      (comma_sep exp_to_string (snd t.tdefault))
 
 and exp_to_string e = e_to_string e.e
 and es_to_string es = comma_sep exp_to_string es
@@ -160,12 +167,13 @@ and action_to_string (name, (ps, stmt)) =
     (params_to_string ps)
     (stmt_to_string stmt)
 
-and entry_to_string (ps, name, es) = 
+and entry_to_string entry =
   Printf.sprintf
-    "| %s -> %s(%s);"
-    (comma_sep pat_to_string ps)
-    name
-    (comma_sep exp_to_string es)
+    "[%s](%s) -> %s(%s);"
+    (string_of_int entry.eprio)
+    (comma_sep pat_to_string entry.ematch)
+    (id_to_string entry.eaction)
+    (comma_sep exp_to_string entry.eargs)
 
 and stmt_to_string s =
   match s.s with
@@ -222,22 +230,30 @@ and stmt_to_string s =
       | None -> ""
     in
     Printf.sprintf "return%s;" estr
-  | SInlineTable(_, tblexp, keys, acns, entries) -> 
+  | STableMatch(tbl_rec) -> 
+    if (tbl_rec.out_tys <> None)
+    then (
     Printf.sprintf
-      "table_match with %s = {\n\tkey:%s\n\tactions:\n\t\t%s\n\tcases:%s};"
-        (* (id_to_string tblty) *)
-        (exp_to_string tblexp)
-        (comma_sep exp_to_string keys)
-        (String.concat 
-          "\n\t\t" 
-          (List.map 
-            (fun acn -> action_to_string acn)
-            acns))
-        (String.concat 
-          "\n\t\t" 
-          (List.map 
-            (fun entry -> entry_to_string entry)
-            entries))
+     "%s %s = table_match<%s>(%s, (%s), (%s));"
+      (comma_sep ty_to_string (Option.get tbl_rec.out_tys))
+      (comma_sep id_to_string tbl_rec.outs)
+      (ty_to_string tbl_rec.tty)
+      (exp_to_string tbl_rec.tbl)
+      (comma_sep exp_to_string tbl_rec.keys)
+      (comma_sep exp_to_string tbl_rec.args)
+    )
+  else (
+    Printf.sprintf
+     "%s = table_match<%s>(%s);"
+      (comma_sep id_to_string tbl_rec.outs)
+      (ty_to_string tbl_rec.tty)
+      (comma_sep exp_to_string (tbl_rec.tbl::tbl_rec.keys@tbl_rec.args))
+  ) 
+  | STableInstall(id, entries) -> 
+    Printf.sprintf
+     "table_install(%s, {\n\t%s\n\t}\n);"
+     (id_to_string id)
+     (List.map entry_to_string entries |> String.concat "\n")
 ;;
 
 let statement_to_string = stmt_to_string
@@ -321,6 +337,15 @@ let d_to_string d =
       (memop_to_string mbody)
   | DExtern (id, ty) ->
     Printf.sprintf "extern %s %s;" (id_to_string id) (ty_to_string ty)
+  | DAction(acn) -> 
+  (* id, ret_tys, const_params, (dyn_params, acn_body)) ->  *)
+    Printf.sprintf 
+      "action (%s) %s(%s)(%s) {\n\taction_return (%s)\n}\n" 
+      (comma_sep ty_to_string acn.artys)
+      (id_to_string acn.aid)
+      (params_to_string acn.aconst_params)
+      (params_to_string acn.aparams)
+      (comma_sep exp_to_string acn.abody)    
 ;;
 
 let decl_to_string d = d_to_string d.d

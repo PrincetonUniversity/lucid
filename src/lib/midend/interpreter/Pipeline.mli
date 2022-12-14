@@ -5,7 +5,7 @@ type obj
 (* create an array object to place in pipeline *)
 val mk_array : id:Id.t -> width:int -> length:int -> pair:bool -> obj
 
-val mk_table : id:Id.t -> length:int -> obj
+val mk_table : id:Id.t -> length:int -> def: (id * exp list) -> obj
 
 type t
 
@@ -43,9 +43,17 @@ val update_complex:
   -> 'a
 [@@ocamlformat "disable"]
 
-(* get mutable entries from table at stage *)
+(* get entries from table at stage *)
 val get_table_entries:
       stage:int
    -> t
-   -> case list
+   -> (id * exp list) * tbl_entry list
+[@@ocamlformat "disable"]   
+
+(* install entry into table at stage *)
+val install_table_entry:
+     stage: int
+   -> entry: tbl_entry
+   -> t
+   -> unit
 [@@ocamlformat "disable"]   

@@ -146,7 +146,7 @@ let rec raw_ty_to_string t =
   | TVector (ty, size) ->
     Printf.sprintf "%s[%s]" (raw_ty_to_string ty) (size_to_string size)
   | TTuple tys -> "(" ^ concat_map " * " raw_ty_to_string tys ^ ")"
-  | T_Table(t) -> 
+  | TTable(t) -> 
     " table_type {"
     ^"\n\tkey_size: "^(comma_sep size_to_string t.tkey_sizes)
     ^"\n\targ_ty: "^(comma_sep ty_to_string t.tparam_tys)
@@ -304,12 +304,14 @@ let rec e_to_string e =
   | EStmt (s, e) ->
     Printf.sprintf "{%s; return %s}" (stmt_to_string s) (exp_to_string e)
   | ETableCreate(t) -> 
-    Printf.sprintf "table_create<%s>((%s),%s)" 
+    Printf.sprintf "table_create<%s>((%s),%s, %s(%s))" 
       (ty_to_string t.tty)
       (concat_map "," exp_to_string t.tactions)
       (size_to_string t.tsize)
-  | ETableApply(tr) -> 
-    Printf.sprintf "table_apply<%s>(%s);"
+      (cid_to_string (fst t.tdefault))
+      (comma_sep exp_to_string (snd t.tdefault))
+  | ETableMatch(tr) -> 
+    Printf.sprintf "table_match<%s>(%s);"
       (ty_to_string tr.tty)
       (comma_sep exp_to_string tr.args)
 
@@ -329,7 +331,6 @@ and branch_to_string (ps, s) =
     (comma_sep pat_to_string ps)
     (stmt_to_string s)
 
-
 and action_to_string (name, (ps, stmt)) =
   Printf.sprintf 
     "%s(%s) =\n\t{%s}"
@@ -337,12 +338,13 @@ and action_to_string (name, (ps, stmt)) =
     (params_to_string ps)
     (stmt_to_string stmt)
 
-and entry_to_string (ps, name, es) = 
+and entry_to_string entry =
   Printf.sprintf
-    "| %s -> %s(%s);"
-    (comma_sep pat_to_string ps)
-    name
-    (comma_sep exp_to_string es)
+    "[%s](%s) -> %s(%s);"
+    (string_of_int entry.eprio)
+    (comma_sep pat_to_string entry.ematch)
+    (id_to_string entry.eaction)
+    (comma_sep exp_to_string entry.eargs)
 
 and stmt_to_string s =
   match s.s with
@@ -405,11 +407,7 @@ and stmt_to_string s =
       (id_to_string i)
       (size_to_string k)
       (stmt_to_string s)
-  | SApplyTable(tbl_rec) -> 
-(*     let ret_ty_str = match tbl_rec.tty.raw_ty with
-      | T_Table({ret_ty=ret_ty;}) -> raw_ty_to_string ret_ty
-      | _ -> "auto"
-    in  *)
+  | STableMatch(tbl_rec) -> 
     if (tbl_rec.out_tys <> None)
     then (
     Printf.sprintf
@@ -426,8 +424,12 @@ and stmt_to_string s =
      "%s = table_match<%s>(%s);"
       (comma_sep id_to_string tbl_rec.outs)
       (ty_to_string tbl_rec.tty)
-      (comma_sep exp_to_string (tbl_rec.tbl::tbl_rec.keys@tbl_rec.args))
-  ) 
+      (comma_sep exp_to_string (tbl_rec.tbl::tbl_rec.keys@tbl_rec.args)))
+  | STableInstall(id, entries) -> 
+    Printf.sprintf
+     "table_install(%s, {\n\t%s\n\t}\n);"
+     (id_to_string id)
+     (List.map entry_to_string entries |> String.concat "\n")
 ;;
 
 let statement_to_string = stmt_to_string

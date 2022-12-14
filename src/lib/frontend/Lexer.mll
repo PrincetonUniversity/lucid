@@ -74,6 +74,7 @@ rule token = parse
   | "action"                  { ACTION (position lexbuf) }
   | "table_create"            { TABLE_CREATE (position lexbuf) }
   | "table_match"             { TABLE_MATCH (position lexbuf) }
+  | "table_install"           { TABLE_INSTALL (position lexbuf) }
 
   | "constr"          { CONSTR (position lexbuf) }
   | "module"          { MODULE (position lexbuf) }

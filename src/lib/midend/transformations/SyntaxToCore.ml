@@ -37,6 +37,16 @@ let rec translate_ty (ty : S.ty) : C.ty =
         ; ret_ty = translate_ty fty.ret_ty
         }
     | S.TVoid -> C.TBool (* Dummy translation needed for foreign functions *)
+    | S.TTable(tbl) -> 
+      let tkey_sizes = List.map translate_size tbl.tkey_sizes in
+      let tparam_tys = List.map translate_ty tbl.tparam_tys in
+      let tret_tys = List.map translate_ty tbl.tret_tys in
+      C.TTable({tkey_sizes; tparam_tys; tret_tys})
+    | S.TAction(a) -> 
+      let aconst_param_tys = List.map translate_ty a.aconst_param_tys in
+      let aparam_tys = List.map translate_ty a.aparam_tys in
+      let aret_tys = List.map translate_ty a.aret_tys in
+      C.TAction({aconst_param_tys; aparam_tys; aret_tys})
     | _ -> err ty.tspan (Printing.ty_to_string ty)
   in
   { raw_ty; tspan = ty.tspan }
@@ -107,10 +117,16 @@ let rec translate_exp (e : S.exp) : C.exp =
     | S.ECall (cid, es) -> C.ECall (cid, List.map translate_exp es)
     | S.EHash (sz, es) -> C.EHash (translate_size sz, List.map translate_exp es)
     | S.EFlood e -> C.EFlood (translate_exp e)
-    | S.ETableCreate(_) -> err e.espan "tables not implemented in backend"
-    | S.ETableApply(_) -> err e.espan "tables not implemented in backend"
     | ESizeCast(_) | EStmt(_) | ERecord(_) | EWith(_) | EProj(_)
     | EVector(_) | EComp(_) | EIndex(_) | ETuple(_) -> err_unsupported e.espan (Printing.exp_to_string e)
+    | S.ETableCreate(e) ->  
+      let tty = translate_ty e.tty in
+      let tactions = List.map translate_exp e.tactions in
+      let tsize = translate_size e.tsize in
+      let tdefault = (fst e.tdefault), (snd e.tdefault |> List.map translate_exp) in
+      C.ETableCreate({tty; tactions; tsize; tdefault})
+    | S.ETableMatch _ ->
+        err e.espan "table match exps should have been eliminated before IR."
   in
   { e = e'; ety = translate_ty (Option.get e.ety); espan = e.espan }
 
@@ -132,13 +148,19 @@ and translate_gen_type = function
   | S.GMulti e -> C.GMulti (translate_exp e)
   | S.GPort e -> C.GPort (translate_exp e)
 
-
 and translate_statement (s : S.statement) : C.statement =
   (* (match s.s with
   | SSeq _ | SNoop -> ()
   | _ -> print_endline @@ "Translating " ^ Printing.statement_to_string s); *)
   let translate_branch (ps, s) =
     List.map translate_pattern ps, translate_statement s
+  in
+  let translate_entry (entry: S.tbl_entry) : C.tbl_entry = {
+      ematch = List.map translate_pattern entry.ematch;
+      eprio=entry.eprio;
+      eaction=entry.eaction;
+      eargs = List.map translate_exp entry.eargs;
+    }
   in
   let s' =
     match s.s with
@@ -154,6 +176,18 @@ and translate_statement (s : S.statement) : C.statement =
     | S.SMatch (es, branches) ->
       C.SMatch (List.map translate_exp es, List.map translate_branch branches)
     | S.SRet eopt -> C.SRet (Option.map translate_exp eopt)
+    | S.STableMatch(tm) -> C.STableMatch({
+      C.tty = translate_ty tm.tty;
+      C.tbl = translate_exp tm.tbl;
+      C.keys = List.map translate_exp tm.keys;
+      C.args = List.map translate_exp tm.args;
+      C.outs = tm.outs;
+      C.out_tys = match tm.out_tys with 
+        | None -> None
+        | Some(otys) -> Some(List.map translate_ty otys);
+    })
+    | S.STableInstall(tbl_id, entries) -> 
+      C.STableInstall(tbl_id, List.map translate_entry entries)
     | _ -> err s.sspan (Printing.statement_to_string s)
   in
   { s = s'; sspan = s.sspan; spragma = None}
@@ -199,6 +233,13 @@ let translate_decl (d : S.decl) : C.decl =
     | S.DMemop (id, params, body) ->
       C.DMemop (id, translate_params params, translate_memop body)
     | S.DExtern (id, ty) -> C.DExtern (id, translate_ty ty)
+    | S.DAction(id, tys, const_params, (params, acn_body)) -> 
+      C.DAction({
+          aid = id;
+          artys = List.map translate_ty tys;
+          aconst_params = translate_params const_params;
+          aparams = translate_params params;
+        abody = List.map translate_exp acn_body;})
     | _ -> err d.dspan (Printing.decl_to_string d)
   in
   { d = d'; dspan = d.dspan }

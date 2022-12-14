@@ -65,7 +65,7 @@ let rec is_global_rty rty =
   | TTuple lst -> List.exists is_global_rty lst
   | TRecord lst -> List.exists (fun (_, rty) -> is_global_rty rty) lst
   | TVector (t, _) -> is_global_rty t
-  | T_Table (_) -> true
+  | TTable (_) -> true
   | TAction _ -> false
 ;;
 
@@ -80,7 +80,7 @@ let rec is_not_global_rty rty =
   | TTuple lst -> List.for_all is_not_global_rty lst
   | TRecord lst -> List.for_all (fun (_, rty) -> is_not_global_rty rty) lst
   | TVector (t, _) -> is_not_global_rty t
-  | T_Table (_) -> false
+  | TTable (_) -> false
   | TAction _ -> false
 ;;
 
@@ -282,7 +282,7 @@ let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
     if List.length lst1 <> List.length lst2
     then false
     else List.for_all2 equiv_raw_ty lst1 lst2
-  | T_Table(t1), T_Table(t2) -> 
+  | TTable(t1), TTable(t2) -> 
     (List.for_all2 equiv_size t1.tkey_sizes t2.tkey_sizes)
     &&  (List.for_all2 equiv_ty t1.tparam_tys t2.tparam_tys)
     &&  (List.for_all2 equiv_ty t1.tret_tys t2.tret_tys)
@@ -299,7 +299,7 @@ let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
       | TTuple _
       | TAbstract _
       | TAction _
-      | T_Table _)
+      | TTable _)
     , _ ) -> false
 
 and equiv_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
@@ -344,7 +344,7 @@ let rec is_compound e =
   | EInt _ | EVal _ | EVar _ | ESizeCast _ -> false
   | EHash _ | EOp _ | ECall _ | EStmt _ -> true
   | ETableCreate _ -> true
-  | ETableApply _ -> true
+  | ETableMatch _ -> true
   | EComp (e, _, _) | EIndex (e, _) | EProj (e, _) | EFlood e -> is_compound e
   | EVector entries | ETuple entries -> List.exists is_compound entries
   | ERecord entries -> List.exists (is_compound % snd) entries
@@ -449,4 +449,12 @@ let extract_action_body (body:statement) : action_body  =
 
 
 let mk_daction id rty cp p body span = decl_sp (DAction (id, rty, cp, (p, extract_action_body body))) span
+;;
+
+
+let mk_entry prio pats acn args = 
+  {eprio=prio;
+  eaction = acn;
+  ematch = pats;
+  eargs = args;}
 ;;
