@@ -47,6 +47,7 @@ let infer_value v =
     | VInt n -> TInt (IConst (Integer.size n))
     | VGroup _ -> TGroup
     | VGlobal _ | VEvent _ -> failwith "Cannot write values of these types"
+    | VPat bs -> TPat (IConst (List.length bs))
   in
   { v with vty = Some (mk_ty vty) }
 ;;
@@ -440,6 +441,18 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
     in 
     let new_e = ETableMatch(new_tr) in 
     new_env, {e with e = new_e; ety = Some ret_ty;}
+  | EPatWild(sz) -> 
+    ( env
+      , (match sz with
+        | None -> 
+          let new_size = fresh_size () in
+          { e with
+            e = EPatWild(Some new_size)
+          ; ety = Some (mk_ty @@ TPat new_size)
+          }
+        | Some sz -> 
+          validate_size e.espan env sz;
+          Some (mk_ty @@ TPat sz) |> wrap e))
 
 and infer_op env span op args =
   let env, ty, new_args =
@@ -525,6 +538,21 @@ and infer_op env span op args =
           (wrap_effect inf_ety.teffect [None, 0; None, idx])
       in
       env, final_ty, [inf_e]
+    | PatExact, [e] -> 
+      (* infer operand type *)
+      let env, inf_e, inf_ety = infer_exp env e |> textract in
+      (* check to make sure it is int of some size *)
+      let tsize = fresh_size () in
+      unify_raw_ty span inf_ety.raw_ty (TInt tsize);
+      (* result type is a TPat of that size, with typed operand *)
+      env, mk_ty @@ TPat tsize, [inf_e]
+    | PatMask, [e1; e2] -> 
+      let tsize = fresh_size () in
+      let env, inf_e1, inf_ety1 = infer_exp env e1 |> textract in
+      let env, inf_e2, inf_ety2 = infer_exp env e2 |> textract in
+      unify_raw_ty span inf_ety1.raw_ty (TInt tsize);
+      unify_raw_ty span inf_ety2.raw_ty (TInt tsize);
+      env, mk_ty @@ TPat tsize, [inf_e1; inf_e2]
     | ( ( Not
         | Neg
         | BitNot
@@ -548,7 +576,9 @@ and infer_op env span op args =
         | Conc
         | Cast _
         | Slice _
-        | TGet _ )
+        | TGet _ 
+        | PatExact
+        | PatMask )
       , _ ) ->
       error_sp span
       @@ "Wrong number of arguments to operator: "
@@ -909,44 +939,48 @@ and infer_statement (env : env) (s : statement) : env * statement =
   env, { s with s = stmt }
 
 
+
 (* check / infer types of entries in a table install statement *)
 and infer_entries (env : env) sp tbl_id entries = 
   (* get type of table *)
   let tbl_ty = lookup_var sp env (Cid.id tbl_id) in 
+  (* get key sizes *)
   let key_sizes = match tbl_ty.raw_ty with
     | TTable(tbl_ty) -> tbl_ty.tkey_sizes
     | _ -> error_sp sp "first argument to table_install is not a table."
   in
+  let expected_pat_rawtys = List.map (fun sz -> TPat sz) key_sizes in
   (* do inference and checks for a single entry *)
   let infer_entry env entry = 
-    (* check pat sizes match table type.key_sizes *)
-    if (List.length entry.ematch <> List.length key_sizes)
-    then (error_sp sp "an entry's pattern has the wrong number of elements.")
-    else (
-      let inf_sizes = List.map (infer_pattern_size env sp) entry.ematch in
-      List.iter2 
-        (fun inf_size key_size -> 
-          match (normalize_size inf_size) with
-          | IConst(i) ->
-            if (i > key_size)
-            then (error_sp sp "pattern element is larger than corresponding key size.")
-            else ()
-          | IVar _ -> ()
-          | _ -> error_sp sp "internal typer error: pattern element size is not a constant or var")
-        inf_sizes
-        (List.map extract_size key_sizes));
-    (* look up types of action params  *)
+    (* type the patterns *)
+    let env, inf_ematch = if (List.length entry.ematch <> List.length expected_pat_rawtys)
+      then (error_sp sp "an entry has the wrong number of patterns based on this table's key.")
+      else (
+        let env, inf_epats_rev = List.fold_left
+          (fun (env, inf_epats_rev) (epat, expected_epat_rawty) -> 
+            (* infer the expression's type *)
+            let env, inf_epat, inf_epat_ty = infer_exp env epat |> textract in
+            (* unify that type with the expected type *)
+            unify_raw_ty epat.espan expected_epat_rawty inf_epat_ty.raw_ty;
+            (* return the new environment and pat *)
+            (env, inf_epat::inf_epats_rev))
+          (env, [])
+          (List.combine entry.ematch expected_pat_rawtys)
+        in
+        env, List.rev inf_epats_rev)
+    in
+    (* type the constant action parameters *)
     let param_tys = match (lookup_var sp env (Cid.id entry.eaction)).raw_ty with 
       | TAction(acn_ty) -> acn_ty.aconst_param_tys
       | _ -> error_sp sp "table entry does not refer to an action."
     in
     (* infer types of action args *)
-    let env', eargs' = infer_exps env entry.eargs in
-    let inf_arg_tys = List.map (fun arg -> (Option.get arg.ety)) eargs' in 
+    let env, inf_eargs = infer_exps env entry.eargs in
+    let inf_arg_tys = List.map (fun arg -> (Option.get arg.ety)) inf_eargs in 
     (* "unify", inferred args with params (make sure they are equiv) *)
     List.iter2 (unify_ty sp) inf_arg_tys param_tys;
-    (* return new env and entry with typed args *)
-    env', {entry with eargs = eargs';}
+    (* return new env and entry with typed patterns and args *)
+    env, {entry with ematch = inf_ematch; eargs = inf_eargs;}
   in 
   let env', entries_rev = List.fold_left
     (fun (env, entries_rev) entry -> 
@@ -957,6 +991,7 @@ and infer_entries (env : env) sp tbl_id entries =
   in
   let entries = List.rev entries_rev in
   env', entries 
+
 
 and infer_branches (env : env) s etys branches =
   let drop_constraints = drop_constraints env in

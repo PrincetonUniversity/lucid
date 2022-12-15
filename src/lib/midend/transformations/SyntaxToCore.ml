@@ -47,6 +47,7 @@ let rec translate_ty (ty : S.ty) : C.ty =
       let aparam_tys = List.map translate_ty a.aparam_tys in
       let aret_tys = List.map translate_ty a.aret_tys in
       C.TAction({aconst_param_tys; aparam_tys; aret_tys})
+    | S.TPat(s) -> C.TPat(translate_size s)
     | _ -> err ty.tspan (Printing.ty_to_string ty)
   in
   { raw_ty; tspan = ty.tspan }
@@ -82,6 +83,8 @@ let translate_op (op : S.op) : C.op =
   | S.RShift -> C.RShift
   | S.Slice (lo, hi) -> C.Slice (translate_size lo, translate_size hi)
   | S.TGet _ -> err Span.default "tuple get operator"
+  | S.PatExact -> C.PatExact
+  | S.PatMask -> C.PatMask
 ;;
 
 let translate_pattern (p : S.pat) : C.pat =
@@ -101,6 +104,7 @@ let rec translate_value (v : S.value) : C.value =
     | S.VGroup ls -> C.VGroup ls
     | VEvent { eid; data; edelay } ->
       C.VEvent { eid; data = List.map translate_value data; edelay }
+    | S.VPat bs -> C.VPat bs
   in
   { v = v'; vty = translate_ty (Option.get v.vty); vspan = v.vspan }
 ;;
@@ -127,6 +131,8 @@ let rec translate_exp (e : S.exp) : C.exp =
       C.ETableCreate({tty; tactions; tsize; tdefault})
     | S.ETableMatch _ ->
         err e.espan "table match exps should have been eliminated before IR."
+    | S.EPatWild(Some(sz)) -> C.EVal (C.vwild (translate_size sz)) 
+    | S.EPatWild(None) -> err e.espan "wildcard patterns (_) should have a size before IR."
   in
   { e = e'; ety = translate_ty (Option.get e.ety); espan = e.espan }
 
@@ -156,7 +162,7 @@ and translate_statement (s : S.statement) : C.statement =
     List.map translate_pattern ps, translate_statement s
   in
   let translate_entry (entry: S.tbl_entry) : C.tbl_entry = {
-      ematch = List.map translate_pattern entry.ematch;
+      ematch = List.map translate_exp entry.ematch;
       eprio=entry.eprio;
       eaction=entry.eaction;
       eargs = List.map translate_exp entry.eargs;

@@ -31,6 +31,7 @@ and raw_ty =
   | TMemop of int * size
   | TTable of tbl_ty
   | TAction of acn_ty 
+  | TPat of size
 
 and tbl_ty = {
     tkey_sizes : size list;
@@ -81,6 +82,8 @@ and op =
   | LShift
   | RShift
   | Slice of int * int
+  | PatExact
+  | PatMask
 
 and pat =
   | PWild
@@ -95,6 +98,7 @@ and v =
   | VGlobal of int (* Stage number *)
   | VTuple of v list (* Only used in the interpreter during complex memops *)
   | VGroup of location list
+  | VPat of int list
 
 and event =
   { eid : cid
@@ -168,7 +172,7 @@ and tbl_match =
    as the install-time arguments. *)
 and tbl_entry = {
   eprio : int;
-  ematch : pat list;
+  ematch : exp list;
   eaction : id;
   eargs : exp list;
 }
@@ -271,6 +275,7 @@ let infer_vty v =
   | VEvent _ -> TEvent
   | VGroup _ -> TGroup
   | VGlobal _ -> failwith "Cannot infer type of global value"
+  | VPat bs -> TPat(List.length bs)
   | VTuple _ ->
     failwith "Cannot infer type of tuple value (only used in complex memops)"
 ;;
@@ -280,7 +285,9 @@ let avalue v vty vspan = { v; vty; vspan }
 let value_sp v vspan = { v; vty = infer_vty v |> ty; vspan }
 let value v = { v; vty = infer_vty v |> ty; vspan = Span.default }
 let vint i size = value (VInt (Integer.create i size))
+let vwild size = value (VPat (List.init size (fun _ -> -1)))
 let vinteger i = value (VInt i)
+let vpat bs = value (VPat bs)
 let vbool b = value (VBool b)
 let default_vint size = value (VInt (Integer.create 0 size))
 let default_vbool = value (VBool false)

@@ -59,7 +59,7 @@ let wrap_effect base lst =
 
 let rec is_global_rty rty =
   match TyTQVar.strip_links rty with
-  | TBool | TVoid | TGroup | TInt _ | TEvent | TFun _ | TMemop _ -> false
+  | TBool | TVoid | TGroup | TInt _ | TEvent | TFun _ | TMemop _ | TPat _-> false
   | TQVar _ -> false (* I think *)
   | TName (_, _, b) | TAbstract (_, _, b, _) -> b
   | TTuple lst -> List.exists is_global_rty lst
@@ -74,7 +74,7 @@ let is_global ty = is_global_rty ty.raw_ty
 (* Similar to is_global_rty, but also returns false for TQVars *)
 let rec is_not_global_rty rty =
   match TyTQVar.strip_links rty with
-  | TBool | TVoid | TGroup | TInt _ | TEvent | TFun _ | TMemop _ -> true
+  | TBool | TVoid | TGroup | TInt _ | TEvent | TFun _ | TMemop _ | TPat _ -> true
   | TQVar _ -> false (* I think *)
   | TName (_, _, b) | TAbstract (_, _, b, _) -> not b
   | TTuple lst -> List.for_all is_not_global_rty lst
@@ -253,6 +253,7 @@ let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
   match ty1, ty2 with
   | TBool, TBool | TVoid, TVoid | TGroup, TGroup | TEvent, TEvent -> true
   | TInt size1, TInt size2 -> equiv_size size1 size2
+  | TPat size1, TPat size2 -> equiv_size size1 size2
   | TMemop (n1, size1), TMemop (n2, size2) -> n1 = n2 && equiv_size size1 size2
   | TName (id1, sizes1, b1), TName (id2, sizes2, b2)
   | TAbstract (id1, sizes1, b1, _), TAbstract (id2, sizes2, b2, _) ->
@@ -289,6 +290,7 @@ let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
   | ( ( TBool
       | TMemop _
       | TInt _
+      | TPat _
       | TEvent
       | TName _
       | TFun _
@@ -341,7 +343,7 @@ let default_expression ty =
    be duplicated) *)
 let rec is_compound e =
   match e.e with
-  | EInt _ | EVal _ | EVar _ | ESizeCast _ -> false
+  | EInt _ | EVal _ | EVar _ | ESizeCast _ | EPatWild _ -> false
   | EHash _ | EOp _ | ECall _ | EStmt _ -> true
   | ETableCreate _ -> true
   | ETableMatch _ -> true
@@ -457,4 +459,22 @@ let mk_entry prio pats acn args =
   eaction = acn;
   ematch = pats;
   eargs = args;}
+;;
+
+(* convert something parsed as an expression into a pattern *) 
+let tpat_of_exp exp =
+  match exp.e with
+  (* if we somehow get an EPatWild, keep it *)
+  | EPatWild(_) -> exp
+  (* _ is a builtin for wildcard *)
+  | EVar(Cid.Id("_", _)) ->
+    {exp with e=EPatWild(None)}
+  (* &&& is an operation that produces a pattern, 
+     so keep the expression as is *) 
+  | EOp(PatMask, _) -> exp
+  (* pattern values are already patterns *)
+  | EVal({v=VPat(_);}) -> exp 
+  (* everything else is assumed to be an int and 
+     gets wrapped in a PatExact op *)
+  | _ -> op_sp PatExact [exp] exp.espan
 ;;

@@ -29,7 +29,43 @@ let raw_group v =
   | _ -> error "not group"
 ;;
 
+
+
+let int_to_bitpat n len = 
+  let bs = Array.create len 0 in
+  for i = 0 to len - 1 
+  do
+    let pos = len - 1 - i in
+    if (n land (1 lsl i) != 0)
+      then (bs.(pos) <- 1) 
+      else (bs.(pos) <- 0)
+  done;
+  Array.to_list bs
+;;
+
+let int_mask_to_bitpat n mask len =
+  let bs = Array.create len 0 in
+  for i = 0 to len - 1 
+  do
+    let pos = len - 1 - i in
+    (* if the mask's value is 1 at pos, use value *)
+    if (mask land (1 lsl i) != 0)
+    then (
+      if (n land (1 lsl i) != 0)
+        then (bs.(pos) <- 1) 
+        else (bs.(pos) <- 0))
+    (* otherwise, use -1 *)    
+    else (bs.(pos) <- -1)
+  done;
+  Array.to_list bs
+;;  
+
+
 let interp_op op vs =
+  let extract_int = function
+    | VInt n -> n
+    | _ -> failwith "No good"
+  in
   let vs = List.map extract_ival vs in
   match op, vs with
   | And, [v1; v2] -> vbool (raw_bool v1 && raw_bool v2)
@@ -77,6 +113,27 @@ let interp_op op vs =
   | Slice (hi, lo), [v] ->
     vinteger
       (Integer.shift_right (raw_integer v) lo |> Integer.set_size (hi - lo + 1))
+  | PatExact, [v] -> 
+    let vint = extract_int v.v in
+    let pat_len = Integer.size vint in
+    let pat_val = Integer.to_int vint in
+    let bs = int_to_bitpat pat_val pat_len in
+    let outv = vpat bs in 
+    print_endline ("[interp_op.PatExact] input: "
+      ^(CorePrinting.value_to_string v)
+      ^" output: "^(CorePrinting.value_to_string outv));
+    outv
+  | PatMask, [v; m] -> 
+    let vint = extract_int v.v in
+    let pat_len = Integer.size vint in
+    let pat_val = Integer.to_int vint in
+    let pat_mask = Integer.to_int (extract_int m.v) in
+    let bs = int_mask_to_bitpat pat_val pat_mask pat_len in
+    let outv = vpat bs in 
+    print_endline ("[interp_op.PatMask] input: "
+      ^(CorePrinting.value_to_string v)
+      ^" output: "^(CorePrinting.value_to_string outv));
+    outv
   | ( ( Not
       | Neg
       | BitNot
@@ -99,7 +156,9 @@ let interp_op op vs =
       | RShift
       | Conc
       | Cast _
-      | Slice _ )
+      | Slice _ 
+      | PatExact
+      | PatMask)
     , _ ) ->
     error
       ("bad operator: "
@@ -228,6 +287,17 @@ let matches_pat vs ps =
       ps
 ;;
 
+(* updated version with pattern values *)
+let matches_pat_vals (vs : value list) (pats : value list) = 
+  List.for_all2
+    (fun v p -> 
+      match (v.v, p.v) with
+      | (VInt(n), VPat(bs)) -> bitmatch bs (Integer.value n)
+      | _ -> false)
+    vs
+    pats
+;;
+
 let printf_replace vs (s : string) : string =
   List.fold_left
     (fun s v ->
@@ -280,13 +350,12 @@ let log_exit swid port_opt event (nst : State.network_state) =
 ;; 
 
 
-
-let partial_interp_const_action_args nst swid env eargs =
+let partial_interp_exps nst swid env exps =
   List.map
     (fun exp -> match (interp_exp nst swid env exp) with 
       | V v -> {e=EVal(v); espan=Span.default; ety=v.vty}
-      | _ -> error "[interp_dtable] default argument evaluated to function pointer, expected value")
-    eargs
+      | _ -> error "[partial_interp_exps] default argument evaluated to function pointer, expected value")
+    exps
 ;; 
 
 
@@ -396,11 +465,12 @@ let rec interp_statement nst swid locals s =
         1. evaluate arguments to install
         2. need pipeline entry install or install next?
     *)
-    (* evaluate all entry action args *)
+    (* evaluate entry patterns and install-time action args to EVals *)
     let entries = List.map 
       (fun entry -> 
-        let eargs = partial_interp_const_action_args nst swid locals entry.eargs in
-        {entry with eargs})
+        let ematch = partial_interp_exps nst swid locals entry.ematch in
+        let eargs = partial_interp_exps nst swid locals entry.eargs in
+        {entry with ematch; eargs})
       entries
     in
     (* get index of table in pipeline *)
@@ -423,12 +493,14 @@ let rec interp_statement nst swid locals s =
     let key_vs = List.map (fun e -> interp_exp e |> extract_ival) tm.keys in    
     let fst_match = List.fold_left 
       (fun fst_match entry -> 
+        print_endline ("checking entry: "^(CorePrinting.entry_to_string entry));
         match fst_match with 
         | None -> 
-          if (matches_pat key_vs entry.ematch)
-          then Some(entry.eaction, entry.eargs)
-          else None
-        | Some(_) -> fst_match)
+          let pat_vs = List.map (fun e -> interp_exp e |> extract_ival) entry.ematch in
+          if (matches_pat_vals key_vs pat_vs)
+          then (print_endline ("match"); Some(entry.eaction, entry.eargs))
+          else (print_endline ("no match"); None)
+        | Some(_) -> print_endline ("skipping because matched previously"); fst_match)
       None
       entries
     in 
@@ -479,7 +551,7 @@ let interp_dtable (nst : State.network_state) swid id ty e =
       match e.e with
       | ETableCreate(t) -> 
         (* eval args to value expressions *)
-        let def_acn_args = partial_interp_const_action_args nst swid (Env.empty) (snd t.tdefault) in
+        let def_acn_args = partial_interp_exps nst swid (Env.empty) (snd t.tdefault) in
         (* construct the default entry with wildcard args *)
 (*         let def_entry_pats = List.map (fun _ -> PWild) (tbl_ty.tkey_sizes) in
         let (def_entry:tbl_entry) = {ematch=def_entry_pats; eaction=(Cid.to_id (fst t.tdefault)); eargs=def_install_args;eprio=0;} in *)

@@ -57,6 +57,7 @@ and raw_ty =
   | TTuple of raw_ty list
   | TTable of tbl_ty
   | TAction of acn_ty 
+  | TPat of size (* number of bits *)
 
 and tbl_ty = {
     tkey_sizes : size list;
@@ -114,6 +115,8 @@ and op =
   | RShift
   | TGet of int * int (* Size of the tuple, index to get *)
   | Slice of size * size
+  | PatExact
+  | PatMask (* x && y matches z when z && y == x && y *)
 
 and pat =
   | PWild
@@ -128,6 +131,7 @@ and v =
   | VEvent of event
   | VGlobal of int (* Stage number *)
   | VGroup of location list
+  | VPat of int list (* every pattern typed expression evaluates to a VPat *)
 
 and event =
   { eid : cid
@@ -166,6 +170,7 @@ and e =
     tdefault: cid * (exp list); (* ECall(default_acn_id, default_installtime_args) *)
   }  
   | ETableMatch of tbl_match
+  | EPatWild of size option (* Polymorphic wildcard pat, handled similar to EInt *)
 
 and exp =
   { e : e
@@ -213,7 +218,7 @@ and tbl_match =
   2. Priorities should be a bounded size, under 24 bits for tof. *)
 and tbl_entry = {
   eprio : int; 
-  ematch : pat list;
+  ematch : exp list;
   eaction : id;
   eargs : exp list;
 }
@@ -361,6 +366,7 @@ let vevent event = value (VEvent event)
 let vevent_sp event span = value_sp (VEvent event) span
 let vglobal idx = value (VGlobal idx)
 let vgroup locs = value (VGroup locs)
+let vpat_sp bs span = value_sp (VPat bs) span
 
 (***********************************)
 (* Modules for manipulating tqvars *)

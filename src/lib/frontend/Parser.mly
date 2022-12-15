@@ -135,6 +135,7 @@
 %token <Span.t> TABLE_CREATE
 %token <Span.t> TABLE_MATCH
 %token <Span.t> TABLE_INSTALL
+%token <Span.t> PATAND
 
 %token <Span.t> CONSTR
 %token <Span.t> PROJ
@@ -165,6 +166,7 @@
 %left PLUS SUB SATSUB SATPLUS
 %left CONCAT
 %left BITAND BITXOR PIPE LSHIFT RSHIFT
+%left PATAND
 %nonassoc PROJ
 %right NOT FLOOD BITNOT RPAREN
 %right LBRACKET /* highest precedence */
@@ -238,6 +240,7 @@ binop:
     | exp CONCAT exp                      { op_sp Conc [$1; $3] (Span.extend $1.espan $3.espan) }
     | exp LSHIFT exp                      { op_sp LShift [$1; $3] (Span.extend $1.espan $3.espan) }
     | exp RSHIFT exp                      { op_sp RShift [$1; $3] (Span.extend $1.espan $3.espan) }
+    | exp PATAND exp                      { op_sp PatMask [$1; $3] (Span.extend $1.espan $3.espan) }
 
 pattern:
     | cid                               { pat_of_cid $1 }
@@ -249,7 +252,8 @@ patterns:
   | pattern COMMA patterns              { $1 :: $3 }
 
 exp:
-    | cid			                            { var_sp (snd $1) (fst $1) }
+    | BITPAT                              { value_to_exp (vpat_sp (snd $1) (fst $1))}
+    | cid			                      { var_sp (snd $1) (fst $1) }
     | NUM                                 { eint_sp (snd $1) None (fst $1) }
     | NUM single_poly                     { eint_sp (snd $1) (Some (snd $2)) (Span.extend (fst $1) (fst $2)) }
     | TRUE                                { value_to_exp (vbool_sp true $1) }
@@ -285,8 +289,6 @@ exp:
         LPAREN args RPAREN COMMA
         LPAREN args RPAREN
         RPAREN                          { tblmatch_sp $3 $6 $9 $13 (Span.extend $1 $15)}
-
-
 
 
 exps:
@@ -461,15 +463,24 @@ branches:
     | branch                                 { fst $1, [snd $1] }
     | branch branches                        { Span.extend (fst $1) (fst $2), (snd $1::snd $2) }
 
-opt_patterns: 
-    | LPAREN patterns RPAREN                { Span.extend $1 $3, $2}
+
+tpat:
+    | exp                               { tpat_of_exp $1 }
+
+tpats:
+  | tpat                             { [$1] }
+  | tpat COMMA tpats              { $1 :: $3 }
+
+
+opt_tpats: 
+    | LPAREN tpats RPAREN                   { Span.extend $1 $3, $2}
     | LPAREN RPAREN                         { Span.extend $1 $2, []}
 
 entry: 
     (* an entry with no priority *)
-    | opt_patterns ARROW ID opt_args SEMI             { Span.extend (fst $1) $5, mk_entry 0 (snd $1) (snd $3) (snd $4)}
+    | opt_tpats ARROW ID opt_args SEMI             { Span.extend (fst $1) $5, mk_entry 0 (snd $1) (snd $3) (snd $4)}
     (* an entry with a priority *)
-    | LBRACKET NUM RBRACKET opt_patterns ARROW ID opt_args SEMI 
+    | LBRACKET NUM RBRACKET opt_tpats ARROW ID opt_args SEMI 
                                                     { Span.extend $1 $8, mk_entry (snd $2 |> Z.to_int) (snd $4) (snd $6) (snd $7)}
 
 entries:

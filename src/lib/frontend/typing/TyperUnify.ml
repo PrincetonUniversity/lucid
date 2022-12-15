@@ -83,6 +83,7 @@ let occurs_ty span tvar raw_ty : unit =
       List.iter occ_ty a.aconst_param_tys;
       List.iter occ_ty a.aparam_tys;
       List.iter occ_ty a.aret_tys
+    | TPat _ -> ()
   in
   check_occurs span occ raw_ty_to_string tvar raw_ty
 ;;
@@ -227,6 +228,7 @@ and try_unify_rty span rty1 rty2 =
       ty
   | TBool, TBool | TVoid, TVoid | TGroup, TGroup | TEvent, TEvent -> ()
   | TInt size1, TInt size2 -> try_unify_size span size1 size2
+  | TPat size1, TPat size2 -> try_unify_size span size1 size2
   | TMemop (n1, size1), TMemop (n2, size2) ->
     if n1 <> n2
     then
@@ -283,7 +285,8 @@ and try_unify_rty span rty1 rty2 =
       | TTuple _
       | TAbstract _ 
       | TAction _
-      | TTable _)
+      | TTable _
+      | TPat _)
     , _ ) -> raise CannotUnify
 
 and unify_ty (span : Span.t) ty1 ty2 : unit =

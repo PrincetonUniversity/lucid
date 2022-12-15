@@ -158,6 +158,9 @@ let rec raw_ty_to_string t =
       (concat_map " * " ty_to_string a.aconst_param_tys)
       (concat_map " * " ty_to_string a.aparam_tys)
       (comma_sep ty_to_string a.aret_tys)
+  | TPat(s) -> 
+    Printf.sprintf
+      "pat<<%s>>" (size_to_string s)
 
 and func_to_string func =
   let arg_tys = concat_map ", " ty_to_string func.arg_tys in
@@ -229,6 +232,17 @@ let op_to_string op =
   | Slice (n, m) ->
     Printf.sprintf "[%s : %s]" (size_to_string n) (size_to_string m)
   | TGet (n, m) -> Printf.sprintf "[%d get %d]" n m
+  | PatExact -> ""
+  | PatMask -> "&"
+;;
+
+let bs_to_string bs ="0b"
+  ^ (bs
+    |> List.map (function
+         | 0 -> '0'
+         | 1 -> '1'
+         | _ -> '*')
+    |> String.of_list)
 ;;
 
 let rec v_to_string v =
@@ -239,6 +253,7 @@ let rec v_to_string v =
   | VEvent event -> event_to_string event
   | VGlobal i -> "global_" ^ string_of_int i
   | VGroup vs -> Printf.sprintf "{%s}" (comma_sep location_to_string vs)
+  | VPat bs -> bs_to_string bs
 
 and value_to_string v = v_to_string v.v
 
@@ -314,6 +329,7 @@ let rec e_to_string e =
     Printf.sprintf "table_match<%s>(%s);"
       (ty_to_string tr.tty)
       (comma_sep exp_to_string tr.args)
+  | EPatWild(_) -> "_"
 
 
 and exp_to_string e = e_to_string e.e
@@ -342,7 +358,7 @@ and entry_to_string entry =
   Printf.sprintf
     "[%s](%s) -> %s(%s);"
     (string_of_int entry.eprio)
-    (comma_sep pat_to_string entry.ematch)
+    (comma_sep exp_to_string entry.ematch)
     (id_to_string entry.eaction)
     (comma_sep exp_to_string entry.eargs)
 

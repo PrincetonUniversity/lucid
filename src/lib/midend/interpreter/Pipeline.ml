@@ -266,6 +266,7 @@ let get_table_entries
   | OTable(tbl) -> 
     (* advance stage and return default + list of cases *)
     t.current_stage := stage + 1;
+    print_endline ("[get_table_entries] number of entries: "^(string_of_int (List.length tbl.sentries)));
     tbl.sdefault, tbl.sentries
   | OArray(_) -> failwith "Pipeline Error: Expected a table obj, got array obj."
   | ONone -> failwith "Pipeline Error: Expected array, got nonetype."
@@ -292,20 +293,21 @@ let install_table_entry
     let entries = match tbl.sentries with 
     | [] -> [entry]
     |  _ -> 
-      let _, entries_rev = List.fold_left 
+      let added, entries_rev = List.fold_left 
         (fun (added, entries_rev) cur_entry -> 
           if (added)
           (* nothing else to do *)
           then (added, cur_entry::entries_rev)
           else (
-            (* put new entry before cur, (after in reversed list) *)
+            (* reached an entry with higher prio, put new entry before it (after in reversed list) *)
             if (cur_entry.eprio > entry.eprio)
             then (print_endline ("[install_table_entry] found spot for new entry"); (true, cur_entry::entry::entries_rev))
             else (false, cur_entry::entries_rev)))
         (false, [])
         tbl.sentries
       in 
-      List.rev entries_rev
+      let entries = if added then List.rev entries_rev else (List.rev (entry::entries_rev)) in
+      entries
     in 
     (* update stage with new table *)
     set_obj stage t (OTable({tbl with sentries=entries;}))
