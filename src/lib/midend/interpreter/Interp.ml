@@ -151,7 +151,11 @@ let sighdl s =
   if (s != -14) then (exit 1)
 ;;
 
-
+(* work in progress: adding command strings to interpreter, 
+   read commands from a control pipe file if one is given
+   in the interpreter config entry ("control pipe"). 
+   The pipe is created if it does not exist, 
+   but command handling is currently just a stub. *)
 type 'a inp = 
   | IEvent of 'a
   | ICmdStr of string 
@@ -209,7 +213,7 @@ let run pp renaming (spec:InterpSpec.t) (nst : State.network_state) =
       try (Unix.select all_fds [] [] twait)
       with (Unix.Unix_error(err, fname, arg)) -> (
         match err with 
-        | Unix.EBADF -> print_endline "here?"; [], [], [] (* happens when stdin has closed *)
+        | Unix.EBADF -> [], [], [] (* supposed to happen when stdin closes, but not sure of that.*)
         | _ -> error @@ "[get_input] unix error: " ^ fname ^ "("^ arg ^")"
       ) 
     in 
