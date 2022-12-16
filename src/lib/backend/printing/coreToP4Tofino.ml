@@ -140,6 +140,8 @@ let translate_op o = match o with
   | CS.LShift -> T.LShift
   | CS.RShift -> T.RShift
   | CS.Slice(_) ->T.Slice
+  | CS.PatExact -> error "[coreToP4Tofino.translate_op] patterns are not implemented!"
+  | CS.PatMask -> error "[coreToP4Tofino.translate_op] patterns are not implemented!"
 ;;
 
 
@@ -228,6 +230,9 @@ let rec translate_exp (renames:renames) (prog_env:prog_env) exp : (T.decl list *
     in
     let op = translate_op op in 
     [], eop op args
+  )
+  | CS.ETableCreate(_) -> (
+    error "[coreToP4Tofino.translate_exp] tables are not supported!"
   )
 
 and translate_exps renames (prog_env:prog_env) exps = 
@@ -671,6 +676,7 @@ let rec translate_statement (renames:renames) prev_decls hdl_enum hdl_params pro
     let s1_decls, s1_stmt = translate_statement renames prev_decls hdl_enum hdl_params prog_env s1 in
     let s2_decls, s2_stmt = translate_statement renames prev_decls hdl_enum hdl_params prog_env s2 in
     s1_decls@s2_decls, sseq [s1_stmt; s2_stmt]
+  | STableMatch _ | STableInstall _ -> error "[coreToP4Tofino.translate_statement] tables not implemented"
 ;;
 
 (* generate an action, and other compute objects, from a labeled statement *)

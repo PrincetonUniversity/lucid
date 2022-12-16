@@ -234,8 +234,8 @@ and body = params * statement
 
 and event_sort =
   | EEntry of bool (* true iff "control", i.e. it can generate non-continue events *)
-  | EExit
-  | EBackground
+  | EExit       (* events that leave the lucid program *)
+  | EBackground (* standard event sort *)
 
 and ispec =
   | InSize of id

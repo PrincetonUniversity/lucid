@@ -418,3 +418,32 @@ and equiv_branch (ps1, s1) (ps2, s2) =
 ;;
 
 
+(* bit pattern helpers, for interp *)
+let int_to_bitpat n len = 
+  let bs = Array.create len 0 in
+  for i = 0 to len - 1 
+  do
+    let pos = len - 1 - i in
+    if (n land (1 lsl i) != 0)
+      then (bs.(pos) <- 1) 
+      else (bs.(pos) <- 0)
+  done;
+  Array.to_list bs
+;;
+
+let int_mask_to_bitpat n mask len =
+  let bs = Array.create len 0 in
+  for i = 0 to len - 1 
+  do
+    let pos = len - 1 - i in
+    (* if the mask's value is 1 at pos, use value *)
+    if (mask land (1 lsl i) != 0)
+    then (
+      if (n land (1 lsl i) != 0)
+        then (bs.(pos) <- 1) 
+        else (bs.(pos) <- 0))
+    (* otherwise, use -1 *)    
+    else (bs.(pos) <- -1)
+  done;
+  Array.to_list bs
+;;  

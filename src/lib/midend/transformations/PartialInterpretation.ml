@@ -200,6 +200,11 @@ and interp_op env op args =
   (* Regular operators on values *)
   | Plus, [{ e = EVal v1 }; { e = EVal v2 }] ->
     vinteger (Integer.add (raw_integer v1) (raw_integer v2)) |> mk_e
+  (* patterns *)
+  | PatExact, [{ e = EVal {v = VInt n} }] ->
+    vpat (int_to_bitpat (Integer.to_int n) (Integer.size n)) |> mk_e
+  | PatMask, [{ e = EVal {v = VInt n} }; { e = EVal {v = VInt m} }] ->
+    vpat (int_mask_to_bitpat (Integer.to_int n) (Integer.to_int m) (Integer.size n)) |> mk_e
   | SatPlus, [{ e = EVal v1 }; { e = EVal v2 }] ->
     let res = Integer.add (raw_integer v1) (raw_integer v2) in
     if Integer.lt res (raw_integer v1)
@@ -258,7 +263,9 @@ and interp_op env op args =
       | RShift
       | Conc
       | Cast _
-      | Slice _ )
+      | Slice _ 
+      | PatExact
+      | PatMask )
     , _ ) -> EOp (op, args)
 ;;
 
@@ -361,6 +368,15 @@ let rec interp_stmt env level s : statement * env =
     let keys' = List.map interp_exp tm.keys in
     let args' = List.map interp_exp tm.args in
     {s with s= STableMatch({tm with keys=keys'; args=args';})}, env
+  | STableInstall(id, entries) -> 
+    let entries = List.map
+      (fun entry -> 
+        {entry with 
+          ematch = List.map interp_exp entry.ematch;
+          eargs = List.map interp_exp entry.eargs;})
+      entries
+    in
+    {s with s = STableInstall(id, entries)}, env
 ;;
 
 let interp_body builtin_tys env (params, stmt) =

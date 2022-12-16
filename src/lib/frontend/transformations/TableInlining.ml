@@ -67,6 +67,7 @@ let rec eliminate_exp e =
   | EComp(e, id, size) -> 
     let stmt, e' = eliminate_exp e in
     stmt, { e with e = EComp (e', id, size) }
+  | EPatWild _ -> snoop, e
 
 
 

@@ -222,7 +222,18 @@ module SSA = struct
     v#visit_statement () stmt
   ;;
 
-  (* log the number of new variables created by this process. *)
+
+  let tbl_match_core_to_ssa it tbl_match =
+    {
+      tbl = update_exp it tbl_match.tbl;
+      keys = CL.map (update_exp it) tbl_match.keys;
+      args = CL.map (update_exp it) tbl_match.args;
+      outs = tbl_match.outs;
+      out_tys = tbl_match.out_tys;
+    }
+  ;;
+
+  (* just for debugging -- log the new vars creates *)
   let new_vars = ref []
 
   (* convert a statement tree into ssa form with phi calls *)
@@ -233,6 +244,34 @@ module SSA = struct
       let new_exp = update_exp it exp in
       let new_it = it_set it id ty in
       new_it, { stmt with s = SLocal (id, ty, new_exp) }, []
+    | STableMatch(t) -> (
+      let t = tbl_match_core_to_ssa it t in 
+      match t.out_tys with
+      (* Table match initializes new variables *)
+      | Some(out_tys) ->
+        let new_it = CL.fold_left2 it_set it t.outs out_tys in
+        new_it, {stmt with s = STableMatch(t) }, []
+      (* Table match assigns to existing variables, 
+         change it to assign to new variables *)
+      | None -> 
+        let new_ids = CL.map Id.refresh t.outs in
+        List.iter 
+          (fun new_id -> new_vars := new_id :: !new_vars)
+          new_ids;
+        let tys = CL.map (it_get_ty it) t.outs in
+        let new_it = CL.fold_left2 it_update it t.outs new_ids in
+        let t = {t with outs = new_ids; out_tys = Some(tys);} in
+        new_it, {stmt with s = STableMatch(t) }, []
+    )
+    | STableInstall(id, entries) -> 
+      let entries = CL.map
+        (fun entry -> 
+          {entry with
+            ematch = CL.map (update_exp it) entry.ematch;
+            eargs = CL.map (update_exp it) entry.eargs;})
+        entries
+      in
+      it, {stmt with s = STableInstall(id, entries) }, []
     (* assigns update an entry in id table *)
     | SAssign (id, exp) ->
       let new_id = Id.refresh id in
@@ -287,7 +326,7 @@ module SSA = struct
       it2, { stmt with s = SSeq (stmt1, stmt2) }, phis1 @ phis2
     (* all other nodes are leaves in the
       statement tree and we just need to update expressions. *)
-    | SNoop | SUnit _ | SPrintf _ | SGen _ | SRet _  | STableMatch _ ->
+    | SNoop | SUnit _ | SPrintf _ | SGen _ | SRet _  ->
       it, update_exps_in_stmt it stmt, []
   ;;
 

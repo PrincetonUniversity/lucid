@@ -88,6 +88,10 @@ let rec read_ids_of_exp exp =
     List.map read_ids_of_exp args |> List.flatten
   | EFlood(arg) -> read_ids_of_exp arg
   | EVal _ -> []
+  | ETableCreate _ -> [] 
+;;
+
+let read_ids_of_exps exps = List.map read_ids_of_exp exps |> List.flatten
 ;;
 
 let rec read_ids_of_stmt (stmt:CoreSyntax.statement) = 
@@ -126,6 +130,16 @@ let rec read_ids_of_stmt (stmt:CoreSyntax.statement) =
     )
     | _ -> read_ids_of_exp exp
   )  
+  | STableMatch(tm) -> 
+    (read_ids_of_exps tm.keys)
+    @(read_ids_of_exps tm.args)
+  | STableInstall(_, entries) -> 
+    List.map 
+      (fun entry -> 
+        (read_ids_of_exps entry.ematch)
+        @(read_ids_of_exps entry.eargs))
+      entries
+    |> List.flatten
 ;;
 
 (* return the IDs that a statement writes to *)
@@ -162,6 +176,8 @@ let rec write_ids_of_stmt (stmt:CoreSyntax.statement) : (Id.t list) =
     )
     | _ -> []
   )  
+  | STableInstall _ -> []
+  | STableMatch(tm) -> tm.outs
 ;;
 
 let rec read_ids_of_pattern pattern =

@@ -30,37 +30,6 @@ let raw_group v =
 ;;
 
 
-
-let int_to_bitpat n len = 
-  let bs = Array.create len 0 in
-  for i = 0 to len - 1 
-  do
-    let pos = len - 1 - i in
-    if (n land (1 lsl i) != 0)
-      then (bs.(pos) <- 1) 
-      else (bs.(pos) <- 0)
-  done;
-  Array.to_list bs
-;;
-
-let int_mask_to_bitpat n mask len =
-  let bs = Array.create len 0 in
-  for i = 0 to len - 1 
-  do
-    let pos = len - 1 - i in
-    (* if the mask's value is 1 at pos, use value *)
-    if (mask land (1 lsl i) != 0)
-    then (
-      if (n land (1 lsl i) != 0)
-        then (bs.(pos) <- 1) 
-        else (bs.(pos) <- 0))
-    (* otherwise, use -1 *)    
-    else (bs.(pos) <- -1)
-  done;
-  Array.to_list bs
-;;  
-
-
 let interp_op op vs =
   let extract_int = function
     | VInt n -> n
@@ -172,6 +141,7 @@ let lookup_var swid nst locals cid =
   try Env.find cid locals with
   | _ -> State.lookup swid cid nst
 ;;
+
 
 let interp_eval exp : State.ival =
   match exp.e with
@@ -461,10 +431,6 @@ let rec interp_statement nst swid locals s =
     interp_s (snd first_match)
   | STableInstall(tbl_id, entries) -> 
     (* install entries into the pipeline *)
-    (* for each entry: 
-        1. evaluate arguments to install
-        2. need pipeline entry install or install next?
-    *)
     (* evaluate entry patterns and install-time action args to EVals *)
     let entries = List.map 
       (fun entry -> 
