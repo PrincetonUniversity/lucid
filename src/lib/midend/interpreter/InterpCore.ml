@@ -119,9 +119,9 @@ let interp_op op vs =
     let pat_val = Integer.to_int vint in
     let bs = int_to_bitpat pat_val pat_len in
     let outv = vpat bs in 
-    print_endline ("[interp_op.PatExact] input: "
+(*     print_endline ("[interp_op.PatExact] input: "
       ^(CorePrinting.value_to_string v)
-      ^" output: "^(CorePrinting.value_to_string outv));
+      ^" output: "^(CorePrinting.value_to_string outv)); *)
     outv
   | PatMask, [v; m] -> 
     let vint = extract_int v.v in
@@ -130,9 +130,9 @@ let interp_op op vs =
     let pat_mask = Integer.to_int (extract_int m.v) in
     let bs = int_mask_to_bitpat pat_val pat_mask pat_len in
     let outv = vpat bs in 
-    print_endline ("[interp_op.PatMask] input: "
+(*     print_endline ("[interp_op.PatMask] input: "
       ^(CorePrinting.value_to_string v)
-      ^" output: "^(CorePrinting.value_to_string outv));
+      ^" output: "^(CorePrinting.value_to_string outv)); *)
     outv
   | ( ( Not
       | Neg
@@ -493,14 +493,14 @@ let rec interp_statement nst swid locals s =
     let key_vs = List.map (fun e -> interp_exp e |> extract_ival) tm.keys in    
     let fst_match = List.fold_left 
       (fun fst_match entry -> 
-        print_endline ("checking entry: "^(CorePrinting.entry_to_string entry));
+        (* print_endline ("checking entry: "^(CorePrinting.entry_to_string entry)); *)
         match fst_match with 
         | None -> 
           let pat_vs = List.map (fun e -> interp_exp e |> extract_ival) entry.ematch in
           if (matches_pat_vals key_vs pat_vs)
-          then (print_endline ("match"); Some(entry.eaction, entry.eargs))
-          else (print_endline ("no match"); None)
-        | Some(_) -> print_endline ("skipping because matched previously"); fst_match)
+          then (Some(entry.eaction, entry.eargs))
+          else (None)
+        | Some(_) -> fst_match)
       None
       entries
     in 

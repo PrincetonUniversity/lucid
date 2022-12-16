@@ -479,14 +479,14 @@ opt_tpats:
 
 entry: 
     (* an entry with no priority *)
-    | opt_tpats ARROW ID opt_args SEMI             { Span.extend (fst $1) $5, mk_entry 0 (snd $1) (snd $3) (snd $4)}
+    | opt_tpats ARROW ID opt_args             { Span.extend (fst $1) (fst $4), mk_entry 0 (snd $1) (snd $3) (snd $4)}
     (* an entry with a priority *)
-    | LBRACKET NUM RBRACKET opt_tpats ARROW ID opt_args SEMI 
-                                                    { Span.extend $1 $8, mk_entry (snd $2 |> Z.to_int) (snd $4) (snd $6) (snd $7)}
+    | LBRACKET NUM RBRACKET opt_tpats ARROW ID opt_args 
+                                                    { Span.extend $1 (fst $7), mk_entry (snd $2 |> Z.to_int) (snd $4) (snd $6) (snd $7)}
 
 entries:
-    | entry                                       { fst $1, [snd $1] }
-    | entry entries                               { Span.extend (fst $1) (fst $2), (snd $1::snd $2)}
+    | entry                                            { fst $1, [snd $1] }
+    | entry SEMI entries                               { Span.extend (fst $1) (fst $3), (snd $1::snd $3)}
 
 
 (* Only needed to avoid a shift-reduce warning on with match statemnets.

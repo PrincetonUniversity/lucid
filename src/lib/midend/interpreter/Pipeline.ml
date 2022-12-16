@@ -266,7 +266,7 @@ let get_table_entries
   | OTable(tbl) -> 
     (* advance stage and return default + list of cases *)
     t.current_stage := stage + 1;
-    print_endline ("[get_table_entries] number of entries: "^(string_of_int (List.length tbl.sentries)));
+    (* print_endline ("[get_table_entries] number of entries: "^(string_of_int (List.length tbl.sentries))); *)
     tbl.sdefault, tbl.sentries
   | OArray(_) -> failwith "Pipeline Error: Expected a table obj, got array obj."
   | ONone -> failwith "Pipeline Error: Expected array, got nonetype."
@@ -285,9 +285,9 @@ let install_table_entry
     (* install semantics: 
         - entries are always sorted by priority (lowest priority first)
         - a new entry is added immediately before the first entry with a higher priority *)
-    print_endline ("[install_table_entry] installing table entry.. ");
-    CorePrinting.entry_to_string entry |> print_endline;
-    print_endline ("[install_table_entry] ----");
+    (* print_endline ("[install_table_entry] installing table entry.. "); *)
+    (* CorePrinting.entry_to_string entry |> print_endline; *)
+    (* print_endline ("[install_table_entry] ----"); *)
     if (List.length tbl.sentries == tbl.smaxlen)
     then (failwith "Pipeline Error: tried to add an entry to a full table!");
     let entries = match tbl.sentries with 
@@ -301,7 +301,7 @@ let install_table_entry
           else (
             (* reached an entry with higher prio, put new entry before it (after in reversed list) *)
             if (cur_entry.eprio > entry.eprio)
-            then (print_endline ("[install_table_entry] found spot for new entry"); (true, cur_entry::entry::entries_rev))
+            then ((true, cur_entry::entry::entries_rev))
             else (false, cur_entry::entries_rev)))
         (false, [])
         tbl.sentries
