@@ -55,6 +55,9 @@ let process_prog builtin_tys ds =
   print_if_verbose "-------Eliminating vectors-------";
   (* WARNING: Don't run the typechecker from now until records have been eliminated.
      See VectorElimination.ml for an explanation. *)
+  (* jsonch note: actually, its until tuples have been eliminated. 
+     Not sure why, but typing just before tuple elimination fails for 
+     programs with vectors. *)
   let ds = VectorElimination.eliminate_prog ds in
   print_if_debug ds;
   (* We might have duplicate variable names in EStmts that got copied during
@@ -70,7 +73,6 @@ let process_prog builtin_tys ds =
   print_if_verbose "-------Eliminating records-------";
   let ds = RecordElimination.eliminate_prog ds in
   print_if_debug ds;
-  let ds = Typer.infer_prog builtin_tys ds in
   print_if_verbose "-------Eliminating tuples-------";
   let ds = TupleElimination.eliminate_prog ds in
   print_if_debug ds;
