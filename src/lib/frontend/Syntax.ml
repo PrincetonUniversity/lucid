@@ -203,8 +203,7 @@ and s =
 
 
 and tbl_match = 
-    { tty : ty;
-    tbl  : exp;
+    {tbl  : exp;
     keys  : exp list;
     args : exp list;
     outs : id list; 
@@ -428,8 +427,8 @@ let vector_sp es span = exp_sp (EVector es) span
 let szcast_sp sz1 sz2 span = exp_sp (ESizeCast (sz1, sz2)) span
 let flood_sp e span = exp_sp (EFlood e) span
 
-let tblmatch_sp tty tbl keys args span =
-  let t = {tty; tbl; keys; args; outs=[]; out_tys=None;} in
+let tblmatch_sp tbl keys args span =
+  let t = {tbl; keys; args; outs=[]; out_tys=None;} in
   exp_sp (ETableMatch(t)) span
 ;;
 (* declarations *)

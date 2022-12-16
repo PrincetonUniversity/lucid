@@ -159,8 +159,7 @@ and s =
 and tbl_match_out_param = (id * (ty option))
 
 and tbl_match = 
-    { tty : ty;
-    tbl  : exp;
+    {tbl  : exp;
     keys  : exp list;
     args : exp list;
     outs : id list; 

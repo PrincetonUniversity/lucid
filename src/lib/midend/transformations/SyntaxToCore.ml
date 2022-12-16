@@ -183,7 +183,6 @@ and translate_statement (s : S.statement) : C.statement =
       C.SMatch (List.map translate_exp es, List.map translate_branch branches)
     | S.SRet eopt -> C.SRet (Option.map translate_exp eopt)
     | S.STableMatch(tm) -> C.STableMatch({
-      C.tty = translate_ty tm.tty;
       C.tbl = translate_exp tm.tbl;
       C.keys = List.map translate_exp tm.keys;
       C.args = List.map translate_exp tm.args;

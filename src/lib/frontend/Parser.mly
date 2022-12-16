@@ -284,11 +284,11 @@ exp:
         RPAREN
 
                                          { make_create_table $3 $7 (snd $10) (snd $12, snd $13) (Span.extend $1 $14) }
-    | TABLE_MATCH LESS ty MORE 
+    | TABLE_MATCH
         LPAREN exp COMMA 
         LPAREN args RPAREN COMMA
         LPAREN args RPAREN
-        RPAREN                          { tblmatch_sp $3 $6 $9 $13 (Span.extend $1 $15)}
+        RPAREN                          { tblmatch_sp $3 $6 $10 (Span.extend $1 $12)}
 
 
 exps:

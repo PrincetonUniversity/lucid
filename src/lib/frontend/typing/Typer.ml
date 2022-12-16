@@ -634,7 +634,6 @@ and infer_keys env sp inf_keysizes keys =
   ;
   inf_keys
 
-
 (* for table return types *)
 and tup_of_tys tys = 
  match tys with
@@ -644,10 +643,9 @@ and tup_of_tys tys =
 and infer_tblmatch (env : env) (tr : tbl_match) sp : env * tbl_match * ty list =
     let etbl = tr.tbl in
     let keys_acn_args = tr.keys@tr.args in
-    (* infer table type *)
+    (* infer table type, which looks it up from context *)
     let _, inf_etbl = infer_exp env etbl in 
-    (* make sure raw table types match *)
-    try_unify_ty sp (Option.get inf_etbl.ety) (tr.tty);
+    let tblty = (Option.get inf_etbl.ety) in 
     (* try_unify_rty sp ((Option.get inf_etbl.ety).raw_ty) tr.tty.raw_ty; *)
     (* get information from inferred table type *)
     let inf_keysize, inf_arg_rtys, inf_ret_ty = match inf_etbl.ety with 
@@ -682,7 +680,7 @@ and infer_tblmatch (env : env) (tr : tbl_match) sp : env * tbl_match * ty list =
     let base_apply_fty =
       let tbl_eff = FVar (QVar (Id.fresh "eff")) in
       let start_eff = FVar (QVar (Id.fresh "eff")) in
-      let base_tblty = ty_eff tr.tty.raw_ty tbl_eff in 
+      let base_tblty = ty_eff tblty.raw_ty tbl_eff in 
       (* note: its okay to use inferred keys/acn args because they have been 
          checked against inferred table, which has been checked against declared table. *)
       let base_key_tys = List.map (fun ekey -> Option.get (ekey.ety)) inf_keys in 
@@ -722,7 +720,6 @@ and infer_tblmatch (env : env) (tr : tbl_match) sp : env * tbl_match * ty list =
         @@ !(expected_fty.constraints)
     in
     let new_tr = {
-        tty = tr.tty;
         tbl = inf_etbl;
         keys = inf_keys;
         args = inf_acn_args;

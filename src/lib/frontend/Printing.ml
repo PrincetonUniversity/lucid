@@ -326,8 +326,7 @@ let rec e_to_string e =
       (cid_to_string (fst t.tdefault))
       (comma_sep exp_to_string (snd t.tdefault))
   | ETableMatch(tr) -> 
-    Printf.sprintf "table_match<%s>(%s);"
-      (ty_to_string tr.tty)
+    Printf.sprintf "table_match(%s);"
       (comma_sep exp_to_string tr.args)
   | EPatWild(_) -> "_"
 
@@ -427,19 +426,17 @@ and stmt_to_string s =
     if (tbl_rec.out_tys <> None)
     then (
     Printf.sprintf
-     "%s %s = table_match<%s>(%s, (%s), (%s));"
+     "%s %s = table_match(%s, (%s), (%s));"
       (comma_sep ty_to_string (Option.get tbl_rec.out_tys))
       (comma_sep id_to_string tbl_rec.outs)
-      (ty_to_string tbl_rec.tty)
       (exp_to_string tbl_rec.tbl)
       (comma_sep exp_to_string tbl_rec.keys)
       (comma_sep exp_to_string tbl_rec.args)
     )
   else (
     Printf.sprintf
-     "%s = table_match<%s>(%s);"
+     "%s = table_match(%s);"
       (comma_sep id_to_string tbl_rec.outs)
-      (ty_to_string tbl_rec.tty)
       (comma_sep exp_to_string (tbl_rec.tbl::tbl_rec.keys@tbl_rec.args)))
   | STableInstall(id, entries) -> 
     Printf.sprintf
