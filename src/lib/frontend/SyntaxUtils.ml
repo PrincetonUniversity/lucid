@@ -478,3 +478,10 @@ let tpat_of_exp exp =
      gets wrapped in a PatExact op *)
   | _ -> op_sp PatExact [exp] exp.espan
 ;;
+
+
+let mk_tblinstall_single id entries span =
+  if ((List.length entries) > 1)
+  then (Console.error_position span "table_install can only install one entry at a time.")
+  else (tblinstall_sp id entries span)
+;;

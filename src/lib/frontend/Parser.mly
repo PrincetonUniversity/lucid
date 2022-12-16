@@ -135,6 +135,7 @@
 %token <Span.t> TABLE_CREATE
 %token <Span.t> TABLE_MATCH
 %token <Span.t> TABLE_INSTALL
+%token <Span.t> TABLE_MULTI_INSTALL
 %token <Span.t> PATAND
 
 %token <Span.t> CONSTR
@@ -509,8 +510,10 @@ statement1:
     | PRINTF LPAREN STRING RPAREN SEMI             { sprintf_sp (snd $3) [] (Span.extend $1 $5) }
     | PRINTF LPAREN STRING COMMA args RPAREN SEMI  { sprintf_sp (snd $3) $5 (Span.extend $1 $7) }
     | FOR LPAREN ID LESS size RPAREN LBRACE statement RBRACE { loop_sp $8 (snd $3) (snd $5) (Span.extend $1 $9) }
-    | TABLE_INSTALL LPAREN ID COMMA
+    | TABLE_MULTI_INSTALL LPAREN ID COMMA
       LBRACE entries RBRACE RPAREN SEMI                 {tblinstall_sp (snd $3) (snd $6) (Span.extend $1 $9)}
+    | TABLE_INSTALL LPAREN ID COMMA
+      LBRACE entries RBRACE RPAREN SEMI                 { mk_tblinstall_single (snd $3) (snd $6) (Span.extend $1 $9)}
 
 
 
