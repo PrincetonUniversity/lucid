@@ -203,10 +203,11 @@ type reInfo =
   alphabet : plain_re_symbol list
 };;
 
+
 type env = {
   re_info_map : reInfo IdMap.t; 
   current_handler : (Id.t * params) option;
-  params_map : params IdMap.t
+  params_map : params IdMap.t;
 };;
 
 let rec check_unmabig_concat_vr vr alphabet = 
@@ -324,7 +325,8 @@ let make_transition_statements env id idx_expr =
   return_def
 ;;
 
-      
+let make_sr_macro id effect = 
+  statement (SIf ((exp (ETransitionRegex (id, (make_num 0)))), effect, (statement SNoop)))
 
 let replacer = 
   object (self)
@@ -337,8 +339,39 @@ let replacer =
     method! visit_DVarRegex env id size vr = env := {(!env) with re_info_map=(IdMap.add id (re_info id vr) (!env).re_info_map)}; DVarRegex (id, size, vr)
     
     method! visit_ETransitionRegex env id idx = make_exp_from_statements id (make_transition_statements !env id idx)
+
   end
   ;;
+
+type insert_info = {
+  vr_id : Id.t;
+  events : Id.t list; 
+  data : decl option;
+  effect : statement
+}
+
+  
+let insert_if_necessary h_id body infos = 
+  let insertions = List.filter_map (fun info -> if (List.mem h_id info.events) then Some (make_sr_macro info.vr_id info.effect) else None) infos in
+  DHandler (h_id, ((fst body), statement (sequence_statements (List.rev ((snd body) :: insertions)))))
+
+let replace_spec_regex env id size sr = 
+  match sr.s_regex with
+  | SRDetect (Some data, vr, effect) -> 
+    let vr_decl = decl (DVarRegex (id, size, vr)) in 
+    List.append [vr_decl] [data]
+  |  SRDetect (None, vr, effect) -> [(decl (DVarRegex (id, size, vr)))]
+
+let replacer2 = 
+  object (self) 
+    inherit [_] s_map as super
+    method! visit_DSpecRegex env id size sr = 
+      match sr.s_regex with 
+      | SRDetect(data, vr, effect) -> env := {vr_id = id; events = (get_events vr); data = data; effect = effect} :: (!env); DSpecRegex (id, size, sr)
+  
+    method! visit_DHandler env id body = insert_if_necessary id body (!env)
+  end
+
 
 let replace_var_regex env id size vr = 
   let re_info = IdMap.find id env.re_info_map in
@@ -349,12 +382,20 @@ let replace_var_regex env id size vr =
 
 
 let process_prog ds = 
+  let env_infos = (ref []) in
+  let ds = 
+    let ds = replacer2#visit_decls env_infos ds in
+    let replace_spec d = 
+      match d.d with 
+      | DSpecRegex (id, size, spec_regex) -> replace_spec_regex !env_infos id size spec_regex
+      | _ -> [d] in
+    List.flatten (List.map replace_spec ds) in
   let env = (ref {re_info_map=IdMap.empty; current_handler=None; params_map=IdMap.empty}) in 
-    let ds = replacer#visit_decls env ds in
-      let replace d = 
-        match d.d with 
-        | DVarRegex (id, size, var_regex) -> replace_var_regex !env id (Z.to_int size) var_regex
-        | _ -> [d] in
+  let ds = replacer#visit_decls env ds in
+    let replace d = 
+      match d.d with 
+      | DVarRegex (id, size, var_regex) -> replace_var_regex !env id (Z.to_int size) var_regex
+      | _ -> [d] in
     List.flatten (List.map replace ds)
       
 

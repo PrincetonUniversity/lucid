@@ -74,7 +74,10 @@ rule token = parse
   | "symbolic"        { SYMBOLIC (position lexbuf) }
   | "flood"           { FLOOD (position lexbuf) }
   | "re"              { VARREGEX (position lexbuf) }
+  | "sre"             { SPECREGEX (position lexbuf)}
   | "transition"      { TRANSITIONREGEX (position lexbuf)}
+  | "DATA"            { DATA (position lexbuf)}
+  | "DETECT"          { DETECT (position lexbuf)}
   | id as s           { ID (position lexbuf, Id.create s) }
   | "'"(id as s)      { QID (position lexbuf, Id.create s) }
   | num as n          { NUM (position lexbuf, Z.of_string n) }
@@ -118,6 +121,7 @@ rule token = parse
   | "!!"              { UNAMBIGCONCAT (position lexbuf)}
   | "*"               { STAR (position lexbuf) }
   | "\"\""            { EMPTYSTRING (position lexbuf)}
+  | "=>"              { EFFECT_ARROW (position lexbuf)}
   | wspace            { token lexbuf }
   | '\n'              { incr_linenum lexbuf; token lexbuf}
   | str as s          { STRING (position lexbuf, extract_string s) }

@@ -41,6 +41,19 @@ re<<1024>> handshake_open = syn_in(true)
                             .synack_out(true)
                             .ack_in(true);
 
+
+/*re<<1024>> handshake_open = DATA {global Array.t<<32>> counts = Array.create(256);}
+                            GROUPWITH {compute_idx}
+                            TIMEOUT {100}
+                            DETECT {syn_in(true)
+                                    .(syn_in(true))*
+                                    .synack_out(@t1 = time)
+                                    .maintenance(time - t1 > 1000)}
+                            => {count = Array.update(counts, group, incr, 1);
+                                if (count > 100) {
+                                    generate error(count);
+                                }}*/
+
 re<<1024>> handshake_close = fin_in(true)
                             .ack_out(true)
                             .fin_out(true)

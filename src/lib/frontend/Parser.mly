@@ -137,12 +137,16 @@
 %token <Span.t> SYMBOLIC
 %token <Span.t> FLOOD
 %token <Span.t> VARREGEX
+%token <Span.t> SPECREGEX
 %token <Span.t> EMPTYSET
 %token <Span.t> EMPTYSTRING
 %token <Span.t> BINDING
 %token <Span.t> UNAMBIGCONCAT
 %token <Span.t> STAR
 %token <Span.t> TRANSITIONREGEX
+%token <Span.t> DATA
+%token <Span.t> DETECT
+%token <Span.t> EFFECT_ARROW
 %token EOF
 
 %start prog
@@ -337,6 +341,10 @@ var_regex :
     | LPAREN var_regex RPAREN          { $2 }
     | var_regex UNAMBIGCONCAT var_regex { unambig_concat_sp $1 $3 (Span.extend $1.v_regex_span $3.v_regex_span) }
 
+spec_regex :
+    | DATA LBRACE GLOBAL ty ID ASSIGN exp SEMI RBRACE DETECT LBRACE var_regex RBRACE EFFECT_ARROW LBRACE statement RBRACE {detect_sp (Some (dglobal_sp (snd $5) $4 $7 (Span.extend $3 $8))) $12 $16 (Span.extend $1 $17)}
+    | DETECT LBRACE var_regex RBRACE EFFECT_ARROW LBRACE statement RBRACE {detect_sp None $3 $7 (Span.extend $1 $8)}
+
 tyname_def:
     | ID                                  { snd $1, [] }
     | ID poly                             { snd $1, snd $2}
@@ -368,6 +376,7 @@ decl:
     | GLOBAL ty ID ASSIGN exp SEMI
                                             { [dglobal_sp (snd $3) $2 $5 (Span.extend $1 $6)] }
     | VARREGEX LLEFT NUM RRIGHT ID ASSIGN var_regex SEMI            { [dvarregex_sp (snd $5) (snd $3) $7 (Span.extend $1 $8)] }
+    | SPECREGEX LLEFT NUM RRIGHT ID ASSIGN spec_regex SEMI           { [dspecregex_sp (snd $5) (snd $3) $7 (Span.extend $1 $8)] }
 
 decls:
     | decl                             { $1 }

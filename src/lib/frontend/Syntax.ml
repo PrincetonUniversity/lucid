@@ -243,6 +243,14 @@ and var_regex =
     ; v_regex_span : sp
   }
 
+and s_regex = 
+  | SRDetect of decl option * var_regex * statement
+
+and spec_regex =
+  {
+    s_regex : s_regex;
+    s_regex_span :sp
+  }
 (* declarations *)
 and d =
   | DSize of id * size option
@@ -259,6 +267,7 @@ and d =
   | DModule of id * interface * decls
   | DModuleAlias of id * exp * cid * cid
   | DVarRegex of id * z * var_regex
+  | DSpecRegex of id * z * spec_regex
 
 (* name, return type, args & body *)
 and decl =
@@ -409,6 +418,7 @@ let fun_sp id rty cs p body span = decl_sp (DFun (id, rty, cs, (p, body))) span
 let memop_sp id p body span = decl_sp (DMemop (id, p, body)) span
 let duty_sp id sizes rty span = decl_sp (DUserTy (id, sizes, rty)) span
 let dvarregex_sp id size var_regex span = decl_sp (DVarRegex (id, size, var_regex)) span
+let dspecregex_sp id size spec_regex span = decl_sp (DSpecRegex (id, size, spec_regex)) span
 
 let dconstr_sp id ty params exp span =
   decl_sp (DConstr (id, ty, params, exp)) span
@@ -480,4 +490,8 @@ let or_sp suba subb span = var_regex_sp (VROr (suba, subb)) span
 let and_sp suba subb span = var_regex_sp (VRAnd (suba, subb)) span
 let closure_sp sub span = var_regex_sp (VRClosure sub) span
 let unambig_concat_sp suba subb span = var_regex_sp (VRUnambigConcat (suba, subb)) span
+
+let spec_regex s_regex = {s_regex; s_regex_span = Span.default}
+let spec_regex_sp s_regex span = {s_regex; s_regex_span = span}
+let detect_sp data var_regex effect span = spec_regex_sp (SRDetect (data, var_regex, effect)) span
 

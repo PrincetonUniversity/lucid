@@ -517,6 +517,10 @@ and d_to_string d =
       "spec %s event %s"
       (id_to_string id)
       (var_regex_to_string var_regex)
+  | DSpecRegex (id, size, spec_regex) -> 
+    Printf.sprintf
+      "spec %s event"
+      (id_to_string id)
 
 and decl_to_string d = d_to_string d.d
 and decls_to_string ds = concat_map "\n\n" decl_to_string ds
