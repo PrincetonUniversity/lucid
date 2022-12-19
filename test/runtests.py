@@ -27,9 +27,10 @@ def interp_test(fullfile, args):
         cmd = ["./dpt", "--silent", fullfile] + args
         ret = subprocess.run(cmd, stdout=outfile, stderr=subprocess.DEVNULL)
     if ret.returncode != 0:
-        print("command returned error: "+"./dpt --silent %s"%fullfile)
+        # errors might be expected
+        # print("command returned error: "+"./dpt --silent %s"%fullfile)
         errors.append(fullfile)
-    elif not filecmp.cmp("test/output/"+outname, "test/expected/"+outname):
+    if not filecmp.cmp("test/output/"+outname, "test/expected/"+outname):
         diffs.append(shortfile)
     outfile.close()
 
@@ -59,8 +60,6 @@ def interactive_test(fullfile, args):
             diffs.append(shortfile)
         outfile.close()
 
-
-
 for file in interpfiles: interp_test(file, [])
 
 for file in libraryfiles: just_typecheck(librarydir, file)
@@ -69,11 +68,7 @@ for file in regressionfiles: just_typecheck(regressiondir, file)
 
 for file in poplfiles: just_typecheck(popldir, file)
 
-print("Errors:", errors)
-print("Diffs:", diffs)
-
 for file in interactivefiles: interactive_test(file, [])
 
-print("Errors:", errors)
 print("Diffs:", diffs)
-
+print("Errors (note: errors may be expected for some programs):", errors)

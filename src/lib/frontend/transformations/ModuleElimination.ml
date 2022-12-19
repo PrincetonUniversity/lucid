@@ -38,8 +38,16 @@ let subst =
 
       method! visit_ETableCreate env tty tactions tsize tdefault =
         let tactions = List.map (self#visit_exp env) (tactions) in
-        let tdefault = fst tdefault, List.map (self#visit_exp env) (snd tdefault) in
-        ETableCreate({tty; tactions; tsize; tdefault})
+
+        let tdefault_cid, tdefault_args = fst tdefault, List.map (self#visit_exp env) (snd tdefault) in
+        (* rename the default action cid *)
+        let tdefault_cid =
+          match CidMap.find_opt tdefault_cid env.vars with
+          | None -> tdefault_cid
+          | Some tdefault_cid' -> Id tdefault_cid'
+        in
+
+        ETableCreate({tty; tactions; tsize; tdefault=(tdefault_cid, tdefault_args)})
 
       method! visit_ECall env x args =
         let args = List.map (self#visit_exp env) args in

@@ -166,7 +166,7 @@ and e =
   | ETableCreate of {
     tty: ty;
     tactions: exp list; 
-    tsize: size;
+    tsize: exp;
     tdefault: cid * (exp list); (* ECall(default_acn_id, default_installtime_args) *)
   }  
   | ETableMatch of tbl_match
@@ -199,7 +199,7 @@ and s =
   | SMatch of exp list * branch list
   | SLoop of statement * id * size
   | STableMatch of tbl_match
-  | STableInstall of id * tbl_entry list
+  | STableInstall of exp * tbl_entry list
 
 
 and tbl_match = 

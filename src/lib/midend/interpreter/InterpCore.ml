@@ -320,6 +320,7 @@ let log_exit swid port_opt event (nst : State.network_state) =
 ;; 
 
 
+
 let partial_interp_exps nst swid env exps =
   List.map
     (fun exp -> match (interp_exp nst swid env exp) with 
@@ -429,7 +430,7 @@ let rec interp_statement nst swid locals s =
       | _ -> error "Match statement did not match any branch!"
     in
     interp_s (snd first_match)
-  | STableInstall(tbl_id, entries) -> 
+  | STableInstall(tbl, entries) -> 
     (* install entries into the pipeline *)
     (* evaluate entry patterns and install-time action args to EVals *)
     let entries = List.map 
@@ -440,7 +441,7 @@ let rec interp_statement nst swid locals s =
       entries
     in
     (* get index of table in pipeline *)
-    let tbl_pos = match (lookup_var swid nst locals (Cid.id tbl_id)) with
+    let tbl_pos = match (interp_exp tbl) with
       | V {v = VGlobal stage} -> stage
       | _ -> error "Table did not evaluate to a pipeline object reference"
     in
@@ -506,7 +507,12 @@ let rec interp_statement nst swid locals s =
 let interp_dtable (nst : State.network_state) swid id ty e =
   (* FIXME: hacked in a dtable interp that gets called from 
             interp_dglobal. *)
-
+  let extract_int exp =
+    let size_val = interp_exp  (nst : State.network_state) swid (Env.empty) exp in
+    match size_val with
+    | V ({v=VInt(n)}) ->   Integer.to_int n
+    | _ -> failwith "not an int val"
+  in
   let st = nst.switches.(swid) in
   let p = st.pipeline in
   let idx = Pipeline.length p in
@@ -521,7 +527,12 @@ let interp_dtable (nst : State.network_state) swid id ty e =
         (* construct the default entry with wildcard args *)
 (*         let def_entry_pats = List.map (fun _ -> PWild) (tbl_ty.tkey_sizes) in
         let (def_entry:tbl_entry) = {ematch=def_entry_pats; eaction=(Cid.to_id (fst t.tdefault)); eargs=def_install_args;eprio=0;} in *)
-        Pipeline.append p (Pipeline.mk_table id t.tsize (fst t.tdefault |> Cid.to_id, def_acn_args))
+        Pipeline.append 
+          p 
+          (Pipeline.mk_table 
+            id 
+            (extract_int t.tsize) 
+            (fst t.tdefault |> Cid.to_id, def_acn_args))
       | _ -> error "[interp_dtable] incorrect constructor for table")
     | _ -> error "[interp_dtable] called to create a non table type object"
   in

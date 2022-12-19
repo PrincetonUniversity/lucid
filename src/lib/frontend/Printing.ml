@@ -322,7 +322,7 @@ let rec e_to_string e =
     Printf.sprintf "table_create<%s>((%s),%s, %s(%s))" 
       (ty_to_string t.tty)
       (concat_map "," exp_to_string t.tactions)
-      (size_to_string t.tsize)
+      (exp_to_string t.tsize)
       (cid_to_string (fst t.tdefault))
       (comma_sep exp_to_string (snd t.tdefault))
   | ETableMatch(tr) -> 
@@ -441,7 +441,7 @@ and stmt_to_string s =
   | STableInstall(id, entries) -> 
     Printf.sprintf
      "table_install(%s, {\n\t%s\n\t}\n);"
-     (id_to_string id)
+     (exp_to_string id)
      (List.map entry_to_string entries |> String.concat "\n")
 ;;
 

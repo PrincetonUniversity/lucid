@@ -1,0 +1,13 @@
+{
+ "switches":2,
+ "links": {"0:0": "1:0"},  
+ "max time": 9999999,
+ "default input gap": 10000,
+ "random seed": 0,
+ "events": [
+   {"name":"do_set", "args":[1, 101]},
+   {"name":"do_set", "args":[257, 101]},
+   {"name":"do_get", "args":[1]},
+   {"name":"do_get", "args":[257]}
+ ]
+}

@@ -280,16 +280,16 @@ exp:
     | LBRACE args RBRACE                  { make_group $2 (Span.extend $1 $3) }
     | TABLE_CREATE LESS ty MORE LPAREN
         LPAREN args RPAREN COMMA 
-        size COMMA
+        exp COMMA
         cid opt_args 
         RPAREN
 
-                                         { make_create_table $3 $7 (snd $10) (snd $12, snd $13) (Span.extend $1 $14) }
+                                         { make_create_table $3 $7 ($10) (snd $12, snd $13) (Span.extend $1 $14) }
     | TABLE_MATCH
         LPAREN exp COMMA 
-        LPAREN args RPAREN COMMA
-        LPAREN args RPAREN
-        RPAREN                          { tblmatch_sp $3 $6 $10 (Span.extend $1 $12)}
+        opt_args COMMA
+        opt_args
+        RPAREN                          { tblmatch_sp $3 (snd $5) (snd $7) (Span.extend $1 $8)}
 
 
 exps:
@@ -510,10 +510,10 @@ statement1:
     | PRINTF LPAREN STRING RPAREN SEMI             { sprintf_sp (snd $3) [] (Span.extend $1 $5) }
     | PRINTF LPAREN STRING COMMA args RPAREN SEMI  { sprintf_sp (snd $3) $5 (Span.extend $1 $7) }
     | FOR LPAREN ID LESS size RPAREN LBRACE statement RBRACE { loop_sp $8 (snd $3) (snd $5) (Span.extend $1 $9) }
-    | TABLE_MULTI_INSTALL LPAREN ID COMMA
-      LBRACE entries RBRACE RPAREN SEMI                 {tblinstall_sp (snd $3) (snd $6) (Span.extend $1 $9)}
-    | TABLE_INSTALL LPAREN ID COMMA
-      LBRACE entries RBRACE RPAREN SEMI                 { mk_tblinstall_single (snd $3) (snd $6) (Span.extend $1 $9)}
+    | TABLE_MULTI_INSTALL LPAREN exp COMMA
+      LBRACE entries RBRACE RPAREN SEMI                 {tblinstall_sp ($3) (snd $6) (Span.extend $1 $9)}
+    | TABLE_INSTALL LPAREN exp COMMA
+      LBRACE entries RBRACE RPAREN SEMI                 { mk_tblinstall_single ($3) (snd $6) (Span.extend $1 $9)}
 
 
 

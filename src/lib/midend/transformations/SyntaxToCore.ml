@@ -126,7 +126,7 @@ let rec translate_exp (e : S.exp) : C.exp =
     | S.ETableCreate(e) ->  
       let tty = translate_ty e.tty in
       let tactions = List.map translate_exp e.tactions in
-      let tsize = translate_size e.tsize in
+      let tsize = translate_exp e.tsize in
       let tdefault = (fst e.tdefault), (snd e.tdefault |> List.map translate_exp) in
       C.ETableCreate({tty; tactions; tsize; tdefault})
     | S.ETableMatch _ ->
@@ -191,8 +191,8 @@ and translate_statement (s : S.statement) : C.statement =
         | None -> None
         | Some(otys) -> Some(List.map translate_ty otys);
     })
-    | S.STableInstall(tbl_id, entries) -> 
-      C.STableInstall(tbl_id, List.map translate_entry entries)
+    | S.STableInstall(tbl_exp, entries) -> 
+      C.STableInstall(translate_exp tbl_exp, List.map translate_entry entries)
     | _ -> err s.sspan (Printing.statement_to_string s)
   in
   { s = s'; sspan = s.sspan; spragma = None}

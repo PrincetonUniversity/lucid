@@ -381,13 +381,15 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
     let env, inf_e1, inf_e1ty = infer_exp env e1 |> textract in
     env, { e with e = EStmt (inf_s, inf_e1); ety = Some inf_e1ty }
   | ETableCreate(ecreate) -> 
+    let env, inf_tsize = infer_exp env ecreate.tsize in
+
     let unify_arg_tys sp msg tys1 tys2 =
       if (List.length tys1 <> List.length tys2)
-      then (error_sp sp ("wrong number of arguments "^msg));
+      then (error_sp sp ("wrong number of match-time arguments "^msg));
       List.iter2 (unify_ty e.espan) tys1 tys2
     in
 
-    (* for actions, we just check the action args and return types *)
+    (* for actions, we check the action args and return types *)
     (* expected types come from table type *)
     let exp_atys, exp_rty = match ecreate.tty.raw_ty with 
       | TTable(trec) -> 
@@ -432,7 +434,13 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
       ("default action ("^(Printing.cid_to_string def_cid)^") is not an action assigned to the table."));
 
     (* return typed table with typed action args *)
-    env, { e with e = ETableCreate( {ecreate with tactions = inf_acns; tdefault = (def_cid, inf_def_args)}  ); ety = Some ecreate.tty; }
+    env, 
+    { e with e = ETableCreate( 
+      {ecreate with 
+        tactions = inf_acns; 
+        tsize = inf_tsize; 
+        tdefault = (def_cid, inf_def_args)}); 
+      ety = Some ecreate.tty; }
   | ETableMatch(tr) -> 
     let new_env, new_tr, ret_ty = infer_tblmatch env tr e.espan in
     let ret_ty = match ret_ty with 
@@ -619,16 +627,11 @@ and infer_keys env sp inf_keysizes keys =
       | None -> error_sp key_exp.espan "Could not infer type"
       | Some(ty) -> (
         match ty.raw_ty with
-          | TInt(sz) -> extract_size(sz)
-          | TBool -> 1
+          | TInt(sz) -> sz
+          | TBool -> IConst(1)
           | _ -> error_sp key_exp.espan "key must be int or bool")
       in
-      if (keysz <> extract_size inf_keysz)
-      then (error_sp 
-        key_exp.espan 
-        ("Table key is incorrect size. expected: "
-          ^(extract_size inf_keysz |> string_of_int)
-          ^" bits, got: "^(keysz |> string_of_int)^" bits")))
+      unify_size sp keysz inf_keysz)
     inf_keys 
     inf_keysizes
   ;
@@ -642,7 +645,6 @@ and tup_of_tys tys =
 
 and infer_tblmatch (env : env) (tr : tbl_match) sp : env * tbl_match * ty list =
     let etbl = tr.tbl in
-    let keys_acn_args = tr.keys@tr.args in
     (* infer table type, which looks it up from context *)
     let _, inf_etbl = infer_exp env etbl in 
     let tblty = (Option.get inf_etbl.ety) in 
@@ -657,12 +659,7 @@ and infer_tblmatch (env : env) (tr : tbl_match) sp : env * tbl_match * ty list =
       | _ -> error_sp sp "table_match 1st arg has no type"
     in 
 
-
-    (* parse key and action arguments, using info from inferred type to split *)
-    let inf_num_keys = List.length inf_keysize in 
-    if (List.length keys_acn_args <= inf_num_keys)
-    then (error_sp sp "not enough args to table match");
-    let key_args, acn_args = List.split_at inf_num_keys keys_acn_args in 
+    let key_args, acn_args = tr.keys, tr.args in
 
     (* type check key args *)
     let inf_keys = infer_keys env sp inf_keysize key_args in 
@@ -875,9 +872,11 @@ and infer_statement (env : env) (s : statement) : env * statement =
           new_env
       in
       new_env, STableMatch(new_tm)
-    | STableInstall(id, entries) -> 
-      let env, inf_entries = infer_entries env s.sspan id entries in
-      env, STableInstall(id, inf_entries)      
+    | STableInstall(etbl, entries) -> 
+      (* infer table type, which looks it up from context *)
+      let _, inf_etbl = infer_exp env etbl in 
+      let env, inf_entries = infer_entries env s.sspan (Option.get inf_etbl.ety) entries in
+      env, STableInstall(inf_etbl, inf_entries)      
     | SLoop (s1, idx, sz) ->
       validate_size s.sspan env sz;
       let renamed_idx = Id.freshen idx in
@@ -938,9 +937,7 @@ and infer_statement (env : env) (s : statement) : env * statement =
 
 
 (* check / infer types of entries in a table install statement *)
-and infer_entries (env : env) sp tbl_id entries = 
-  (* get type of table *)
-  let tbl_ty = lookup_var sp env (Cid.id tbl_id) in 
+and infer_entries (env : env) sp tbl_ty entries = 
   (* get key sizes *)
   let key_sizes = match tbl_ty.raw_ty with
     | TTable(tbl_ty) -> tbl_ty.tkey_sizes

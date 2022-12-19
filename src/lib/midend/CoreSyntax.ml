@@ -123,7 +123,7 @@ and e =
   | ETableCreate of {
     tty: ty;
     tactions: exp list; 
-    tsize: size;
+    tsize: exp;
     tdefault : cid * exp list;
   }
 
@@ -154,7 +154,7 @@ and s =
   | SMatch of exp list * branch list
   | SRet of exp option
   | STableMatch of tbl_match
-  | STableInstall of id * tbl_entry list
+  | STableInstall of exp * tbl_entry list
 
 and tbl_match_out_param = (id * (ty option))
 
