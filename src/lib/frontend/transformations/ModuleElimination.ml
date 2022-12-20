@@ -49,6 +49,20 @@ let subst =
 
         ETableCreate({tty; tactions; tsize; tdefault=(tdefault_cid, tdefault_args)})
 
+      method! visit_STableInstall env etbl entries =
+        let etbl = self#visit_exp env etbl in
+        let entries = List.map
+          (fun entry -> 
+            {entry with 
+              ematch = List.map (self#visit_exp env) entry.ematch;
+              eaction = (match (CidMap.find_opt (Cid.id entry.eaction) env.vars) with
+                | None -> entry.eaction
+                | Some new_action_id -> new_action_id);
+              eargs = List.map (self#visit_exp env) entry.eargs;})
+          entries
+        in
+        STableInstall(etbl, entries)
+
       method! visit_ECall env x args =
         let args = List.map (self#visit_exp env) args in
         let x =
