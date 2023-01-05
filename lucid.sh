@@ -4,15 +4,22 @@
 
 # requirements: docker
 
-# usage: 
-# ./lucid.sh interp <prog.dpt> -- run lucid interpreter inside of the docker image.
-# ./lucid.sh compile <prog.dpt> -- run lucid compiler inside the docker image.
-# ./lucid.sh rebuild -- rebuild docker image with local version of source
-# ./lucid.sh pull -- pull most recently published version of docker image
-# ./lucid.sh rebuild_and_push -- rebuild docker image and publish (admin only)
+USAGE=$(cat <<-END
+Usage:
+./lucid.sh interp <prog.dpt> -- run lucid interpreter inside of the docker image.
+./lucid.sh compile <prog.dpt> -- run lucid compiler inside the docker image.
+./lucid.sh rebuild -- rebuild the lucid compiler in your docker image, from this local repo.
+./lucid.sh pull -- pull most recently published version of lucid image.
+./lucid.sh enter_dev -- enter a lucid development image where the local repo is mounted at /lucid.
+./lucid.sh pull_dev -- pull most recently published version of lucid dev image.
+./lucid.sh rebuild_and_push -- rebuild docker image and publish (admin only)
+./lucid.sh rebuild_and_push_dev -- rebuild docker image and publish (admin only)
+END
 
+)
 
 DOCKER_IMAGE="jsonch/lucid:lucid"
+DOCKER_DEV_IMAGE="jsonch/lucid:lucid_dev"
 DOCKER_CMD="docker run --rm -it"
 DOCKER_PWD="/app"
 
@@ -359,21 +366,45 @@ case $1 in
         eval "$CMD"
         ;;
     # (admin only) rebuild a new lucid binary and push to docker hub.
+    # note: this relies on the dev image, so if the dependencies have changed, 
+    # that image should be updated first.
     rebuild_and_push)
         shift 
         check_lucid_dir
         CMD="docker build -t $DOCKER_IMAGE .  && docker push $DOCKER_IMAGE"
         eval "$CMD"
         ;;        
+    # enter an instance of the lucid dev image 
+    # with the directory that this script is in mounted to /lucid
+    enter_dev)
+        # directory that this script is in
+        SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+        # directory of the lucid repo
+        mount_args="-v $SCRIPT_DIR:/lucid"
+        cmd="$DOCKER_CMD --workdir /lucid $mount_args $DOCKER_DEV_IMAGE"
+        # echo "command: $cmd"
+        eval "$cmd"
+        ;;
+    # pull the base version of the dev image. Use this if you mess up 
+    # your local copy of the dev image
+    pull_dev)
+        shift
+        CMD="docker pull $DOCKER_DEV_IMAGE"
+        eval "$CMD"
+        ;;
     # (admin only) rebuild the lucid dev image and push to public repo -- 
-    # this is for when lucid's dependencies have changed on the master branch (rare)
+    # the dev image is used to build lucid for the main image, and for 
+    # local development. It does not have a local copy of lucid, 
+    # but rather just lucid's dependencies. 
+    # So the dev image should only change when lucid's dependencies change.
     rebuild_and_push_dev)
         shift 
         check_lucid_dir
         eval "docker build --target lucid_dev --tag jsonch/lucid:lucid_dev . && docker push jsonch/lucid:lucid_dev"
         ;;
     *)
-        echo "usage: ./lucid.sh <interpret | compile> <arguments to lucid interpreter or compiler>"
+        echo "unknown command argument."
+        echo "$USAGE"
         exit 1;
         ;;
 
