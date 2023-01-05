@@ -15,8 +15,8 @@ dpt: Final State:
 Switch 0 : {
 
  Pipeline : [
-    0 : [4u32]
-    1 : [12u32]
+    c1(0) : [4u32]
+    c2(1) : [12u32]
   ]
 
  Events :   [ ]

@@ -12,6 +12,10 @@
   let mk_trecord lst =
     TRecord (List.map (fun (id, ty) -> Id.name id, ty.raw_ty) lst)
 
+  let mk_t_table tkey_sizes tparam_tys tret_tys span = 
+    Cmdline.cfg.show_tvar_links <- true;
+    ty_sp (TTable({tkey_sizes; tparam_tys; tret_tys})) span
+
   let mk_tmemop span n sizes =
     match sizes with
     | [s1] -> TMemop (n, s1)
@@ -42,6 +46,9 @@
         es
     in
     value_sp (VGroup locs) span |> value_to_exp
+
+  let make_create_table tty tactions tsize tdefault span = 
+    exp_sp (ETableCreate({tty; tactions; tsize; tdefault})) span
 
   let mk_fty tspan params =
     let start_eff = FVar (QVar (Id.fresh "eff")) in
@@ -119,6 +126,18 @@
 %token <Span.t> ARROW
 %token <Span.t> EXTERN
 %token <Span.t> TYPE
+
+%token <Span.t> TABLE_TYPE
+%token <Span.t> KEY_SIZE
+%token <Span.t> ARG_TYPES
+%token <Span.t> RET_TYPE
+%token <Span.t> ACTION
+%token <Span.t> TABLE_CREATE
+%token <Span.t> TABLE_MATCH
+%token <Span.t> TABLE_INSTALL
+%token <Span.t> TABLE_MULTI_INSTALL
+%token <Span.t> PATAND
+
 %token <Span.t> CONSTR
 %token <Span.t> PROJ
 %token <Span.t> MODULE
@@ -148,6 +167,7 @@
 %left PLUS SUB SATSUB SATPLUS
 %left CONCAT
 %left BITAND BITXOR PIPE LSHIFT RSHIFT
+%left PATAND
 %nonassoc PROJ
 %right NOT FLOOD BITNOT RPAREN
 %right LBRACKET /* highest precedence */
@@ -184,6 +204,10 @@ size:
     | AUTO                              { $1, IVar (QVar (fresh_auto ())) }
     | size PLUS size                    { Span.extend (fst $1) (fst $3), add_sizes (snd $1) (snd $3)}
 
+sizes:
+    | size                              { fst $1, [snd $1] }
+    | size COMMA sizes                  { Span.extend (fst $1) (fst $3), (snd $1)::(snd $3) }
+
 polys:
     | size                              { fst $1, [snd $1] }
     | size COMMA polys                  { Span.extend (fst $1) (fst $3), (snd $1)::(snd $3) }
@@ -217,9 +241,20 @@ binop:
     | exp CONCAT exp                      { op_sp Conc [$1; $3] (Span.extend $1.espan $3.espan) }
     | exp LSHIFT exp                      { op_sp LShift [$1; $3] (Span.extend $1.espan $3.espan) }
     | exp RSHIFT exp                      { op_sp RShift [$1; $3] (Span.extend $1.espan $3.espan) }
+    | exp PATAND exp                      { op_sp PatMask [$1; $3] (Span.extend $1.espan $3.espan) }
+
+pattern:
+    | cid                               { pat_of_cid $1 }
+    | NUM                               { PNum (snd $1) }
+    | BITPAT                            { PBit (snd $1) }
+
+patterns:
+  | pattern                             { [$1] }
+  | pattern COMMA patterns              { $1 :: $3 }
 
 exp:
-    | cid			                            { var_sp (snd $1) (fst $1) }
+    | BITPAT                              { value_to_exp (vpat_sp (snd $1) (fst $1))}
+    | cid			                      { var_sp (snd $1) (fst $1) }
     | NUM                                 { eint_sp (snd $1) None (fst $1) }
     | NUM single_poly                     { eint_sp (snd $1) (Some (snd $2)) (Span.extend (fst $1) (fst $2)) }
     | TRUE                                { value_to_exp (vbool_sp true $1) }
@@ -243,6 +278,19 @@ exp:
     | SIZECAST single_poly LPAREN size RPAREN { szcast_sp (snd $2) (snd $4) (Span.extend $1 $5) }
     | FLOOD exp                           { flood_sp $2 (Span.extend $1 $2.espan) }
     | LBRACE args RBRACE                  { make_group $2 (Span.extend $1 $3) }
+    | TABLE_CREATE LESS ty MORE LPAREN
+        LPAREN args RPAREN COMMA 
+        exp COMMA
+        cid opt_args 
+        RPAREN
+
+                                         { make_create_table $3 $7 ($10) (snd $12, snd $13) (Span.extend $1 $14) }
+    | TABLE_MATCH
+        LPAREN exp COMMA 
+        opt_args COMMA
+        opt_args
+        RPAREN                          { tblmatch_sp $3 (snd $5) (snd $7) (Span.extend $1 $8)}
+
 
 exps:
   | exp                                 { [$1] }
@@ -260,6 +308,10 @@ record_entries:
 args:
     | exp                               { [$1] }
     | exp COMMA args                    { $1::$3 }
+
+opt_args:
+    | LPAREN args RPAREN                { Span.extend $1 $3, $2}
+    | LPAREN RPAREN                { Span.extend $1 $2, []}
 
 paramsdef:
     | LPAREN RPAREN                     { [] }
@@ -315,6 +367,30 @@ tyname_def:
     | ID                                  { snd $1, [] }
     | ID poly                             { snd $1, snd $2}
 
+
+optional_sizes:
+    | LPAREN sizes RPAREN                       { (Span.extend $1 $3, snd $2) }
+    | LPAREN RPAREN                             { (Span.extend $1 $2, []) }
+
+tys:
+    | ty                                        { $1.tspan, [ $1 ] }
+    | ty COMMA tys                              { (Span.extend $1.tspan (fst $3), $1::(snd $3)) }
+
+optional_tys: 
+    | LPAREN tys RPAREN                         { (Span.extend $1 $3, snd $2) }
+    | LPAREN RPAREN                             { (Span.extend $1 $2, []) }
+
+dt_table:
+    | ID ASSIGN LBRACE
+        KEY_SIZE optional_sizes
+        ARG_TYPES optional_tys
+        RET_TYPE ty RBRACE
+                                            { duty_sp 
+                                                    (snd $1)
+                                                    []
+                                                    (mk_t_table (snd $5) (snd $7) [$9] (Span.extend $3 $10))
+                                                    (Span.extend (fst $1) $10) }
+
 decl:
     | CONST ty ID ASSIGN exp SEMI           { [dconst_sp (snd $3) $2 $5 (Span.extend $1 $6)] }
     | EXTERN ty ID SEMI                     { [dextern_sp (snd $3) $2 (Span.extend $1 $4)] }
@@ -329,6 +405,8 @@ decl:
                                             { [fun_sp (snd $3) $2 [] $4 $6 (Span.extend $1 $7)] }
     | FUN ty ID paramsdef constr_list LBRACE statement RBRACE
                                             { [fun_sp (snd $3) $2 $5 $4 $7 (Span.extend $1 $8)] }
+    | ACTION ty ID paramsdef paramsdef LBRACE statement RBRACE
+                                            { [mk_daction (snd $3) [$2] $4 $5 $7 (Span.extend $1 $8)]}
     | MEMOP ID paramsdef LBRACE statement RBRACE
                                             { [mk_dmemop (snd $2) $3 $5 (Span.extend (fst $1) $6)] }
     | SYMBOLIC SIZE ID SEMI                 { [dsize_sp (snd $3) None (Span.extend $1 $4)] }
@@ -341,6 +419,9 @@ decl:
     | CONSTR ty ID paramsdef ASSIGN exp SEMI { [dconstr_sp (snd $3) $2 $4 $6 (Span.extend $1 $7)] }
     | GLOBAL ty ID ASSIGN exp SEMI
                                             { [dglobal_sp (snd $3) $2 $5 (Span.extend $1 $6)] }
+    | TABLE_TYPE dt_table                    { [$2] }
+
+
 decls:
     | decl                             { $1 }
     | decl decls                       { $1 @ $2 }
@@ -356,14 +437,7 @@ record_def:
     | param	SEMI			                 { [ $1 ] }
     | param SEMI record_def            { $1 :: $3 }
 
-pattern:
-    | cid                               { pat_of_cid $1 }
-    | NUM                               { PNum (snd $1) }
-    | BITPAT                            { PBit (snd $1) }
 
-patterns:
-  | pattern                             { [$1] }
-  | pattern COMMA patterns              { $1 :: $3 }
 
 statement:
     | statement0			                  { $1 }
@@ -390,10 +464,36 @@ branches:
     | branch                                 { fst $1, [snd $1] }
     | branch branches                        { Span.extend (fst $1) (fst $2), (snd $1::snd $2) }
 
+
+tpat:
+    | exp                               { tpat_of_exp $1 }
+
+tpats:
+  | tpat                             { [$1] }
+  | tpat COMMA tpats              { $1 :: $3 }
+
+
+opt_tpats: 
+    | LPAREN tpats RPAREN                   { Span.extend $1 $3, $2}
+    | LPAREN RPAREN                         { Span.extend $1 $2, []}
+
+entry: 
+    (* an entry with no priority *)
+    | opt_tpats ARROW ID opt_args             { Span.extend (fst $1) (fst $4), mk_entry 0 (snd $1) (snd $3) (snd $4)}
+    (* an entry with a priority *)
+    | LBRACKET NUM RBRACKET opt_tpats ARROW ID opt_args 
+                                                    { Span.extend $1 (fst $7), mk_entry (snd $2 |> Z.to_int) (snd $4) (snd $6) (snd $7)}
+
+entries:
+    | entry                                            { fst $1, [snd $1] }
+    | entry SEMI entries                               { Span.extend (fst $1) (fst $3), (snd $1::snd $3)}
+
+
 (* Only needed to avoid a shift-reduce warning on with match statemnets.
    We'd get the same result either way, though. *)
 multiargs:
     | exp COMMA args                         { $1::$3 }
+
 
 statement1:
     | ty ID ASSIGN exp SEMI                 { slocal_sp (snd $2) $1 $4 (Span.extend $1.tspan $5) }
@@ -410,6 +510,12 @@ statement1:
     | PRINTF LPAREN STRING RPAREN SEMI             { sprintf_sp (snd $3) [] (Span.extend $1 $5) }
     | PRINTF LPAREN STRING COMMA args RPAREN SEMI  { sprintf_sp (snd $3) $5 (Span.extend $1 $7) }
     | FOR LPAREN ID LESS size RPAREN LBRACE statement RBRACE { loop_sp $8 (snd $3) (snd $5) (Span.extend $1 $9) }
+    | TABLE_MULTI_INSTALL LPAREN exp COMMA
+      LBRACE entries RBRACE RPAREN SEMI                 {tblinstall_sp ($3) (snd $6) (Span.extend $1 $9)}
+    | TABLE_INSTALL LPAREN exp COMMA
+      LBRACE entries RBRACE RPAREN SEMI                 { mk_tblinstall_single ($3) (snd $6) (Span.extend $1 $9)}
+
+
 
 includes:
     | INCLUDE STRING                        {[(snd $2)]}

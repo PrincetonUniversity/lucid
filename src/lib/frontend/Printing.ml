@@ -146,6 +146,21 @@ let rec raw_ty_to_string t =
   | TVector (ty, size) ->
     Printf.sprintf "%s[%s]" (raw_ty_to_string ty) (size_to_string size)
   | TTuple tys -> "(" ^ concat_map " * " raw_ty_to_string tys ^ ")"
+  | TTable(t) -> 
+    " table_type {"
+    ^"\n\tkey_size: "^(comma_sep size_to_string t.tkey_sizes)
+    ^"\n\targ_ty: "^(comma_sep ty_to_string t.tparam_tys)
+    ^"\n\tret_ty: "^(comma_sep ty_to_string t.tret_tys)
+    ^"}\n"
+  | TAction(a) -> 
+    Printf.sprintf 
+      "%s -> %s -> %s"
+      (concat_map " * " ty_to_string a.aconst_param_tys)
+      (concat_map " * " ty_to_string a.aparam_tys)
+      (comma_sep ty_to_string a.aret_tys)
+  | TPat(s) -> 
+    Printf.sprintf
+      "pat<<%s>>" (size_to_string s)
 
 and func_to_string func =
   let arg_tys = concat_map ", " ty_to_string func.arg_tys in
@@ -217,6 +232,17 @@ let op_to_string op =
   | Slice (n, m) ->
     Printf.sprintf "[%s : %s]" (size_to_string n) (size_to_string m)
   | TGet (n, m) -> Printf.sprintf "[%d get %d]" n m
+  | PatExact -> ""
+  | PatMask -> "&"
+;;
+
+let bs_to_string bs ="0b"
+  ^ (bs
+    |> List.map (function
+         | 0 -> '0'
+         | 1 -> '1'
+         | _ -> '*')
+    |> String.of_list)
 ;;
 
 let rec v_to_string v =
@@ -227,6 +253,7 @@ let rec v_to_string v =
   | VEvent event -> event_to_string event
   | VGlobal i -> "global_" ^ string_of_int i
   | VGroup vs -> Printf.sprintf "{%s}" (comma_sep location_to_string vs)
+  | VPat bs -> bs_to_string bs
 
 and value_to_string v = v_to_string v.v
 
@@ -291,6 +318,18 @@ let rec e_to_string e =
     Printf.sprintf "to_int<<%s>>(%s)" (size_to_string sz1) (size_to_string sz2)
   | EStmt (s, e) ->
     Printf.sprintf "{%s; return %s}" (stmt_to_string s) (exp_to_string e)
+  | ETableCreate(t) -> 
+    Printf.sprintf "table_create<%s>((%s),%s, %s(%s))" 
+      (ty_to_string t.tty)
+      (concat_map "," exp_to_string t.tactions)
+      (exp_to_string t.tsize)
+      (cid_to_string (fst t.tdefault))
+      (comma_sep exp_to_string (snd t.tdefault))
+  | ETableMatch(tr) -> 
+    Printf.sprintf "table_match(%s);"
+      (comma_sep exp_to_string tr.args)
+  | EPatWild(_) -> "_"
+
 
 and exp_to_string e = e_to_string e.e
 (* ^ Printf.sprintf "[ty:%s]"
@@ -306,6 +345,21 @@ and branch_to_string (ps, s) =
     "| %s -> {\n%s\n}"
     (comma_sep pat_to_string ps)
     (stmt_to_string s)
+
+and action_to_string (name, (ps, stmt)) =
+  Printf.sprintf 
+    "%s(%s) =\n\t{%s}"
+    name
+    (params_to_string ps)
+    (stmt_to_string stmt)
+
+and entry_to_string entry =
+  Printf.sprintf
+    "[%s](%s) -> %s(%s);"
+    (string_of_int entry.eprio)
+    (comma_sep exp_to_string entry.ematch)
+    (id_to_string entry.eaction)
+    (comma_sep exp_to_string entry.eargs)
 
 and stmt_to_string s =
   match s.s with
@@ -368,6 +422,27 @@ and stmt_to_string s =
       (id_to_string i)
       (size_to_string k)
       (stmt_to_string s)
+  | STableMatch(tbl_rec) -> 
+    if (tbl_rec.out_tys <> None)
+    then (
+    Printf.sprintf
+     "%s %s = table_match(%s, (%s), (%s));"
+      (comma_sep ty_to_string (Option.get tbl_rec.out_tys))
+      (comma_sep id_to_string tbl_rec.outs)
+      (exp_to_string tbl_rec.tbl)
+      (comma_sep exp_to_string tbl_rec.keys)
+      (comma_sep exp_to_string tbl_rec.args)
+    )
+  else (
+    Printf.sprintf
+     "%s = table_match(%s);"
+      (comma_sep id_to_string tbl_rec.outs)
+      (comma_sep exp_to_string (tbl_rec.tbl::tbl_rec.keys@tbl_rec.args)))
+  | STableInstall(id, entries) -> 
+    Printf.sprintf
+     "table_install(%s, {\n\t%s\n\t}\n);"
+     (exp_to_string id)
+     (List.map entry_to_string entries |> String.concat "\n")
 ;;
 
 let statement_to_string = stmt_to_string
@@ -501,6 +576,14 @@ and d_to_string d =
       (cid_to_string cid1)
       (exp_to_string e)
       (cid_to_string cid2)
+  | DAction(id, ret_tys, const_params, (dyn_params, acn_body)) -> 
+    Printf.sprintf 
+      "action (%s) %s(%s)(%s) {\n\taction_return (%s)\n}\n" 
+      (comma_sep ty_to_string ret_tys)
+      (id_to_string id)
+      (params_to_string const_params)
+      (params_to_string dyn_params)
+      (comma_sep exp_to_string acn_body)
 
 and decl_to_string d = d_to_string d.d
 and decls_to_string ds = concat_map "\n\n" decl_to_string ds

@@ -42,6 +42,9 @@ let process_prog builtin_tys ds =
   print_if_verbose "-----------inlining functions-----------";
   let ds = FunctionInlining.inline_prog ds in
   print_if_debug ds;
+  print_if_verbose "-----------inlining tables-----------";
+  let ds = TableInlining.eliminate_prog ds in
+  print_if_debug ds;
   print_if_verbose "---------Eliminating events with global arguments----------";
   let ds = GlobalArgElimination.eliminate_prog ds in
   print_if_debug ds;
@@ -52,6 +55,9 @@ let process_prog builtin_tys ds =
   print_if_verbose "-------Eliminating vectors-------";
   (* WARNING: Don't run the typechecker from now until records have been eliminated.
      See VectorElimination.ml for an explanation. *)
+  (* jsonch note: actually, its until tuples have been eliminated. 
+     Not sure why, but typing just before tuple elimination fails for 
+     programs with vectors. *)
   let ds = VectorElimination.eliminate_prog ds in
   print_if_debug ds;
   (* We might have duplicate variable names in EStmts that got copied during

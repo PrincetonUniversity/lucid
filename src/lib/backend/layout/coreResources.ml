@@ -75,8 +75,12 @@ let rec hashers_of_exp exp =
   | EFlood(e) -> hashers_of_exp e
   | _ -> []
 
-
+(* get the statements with hash ops in them *)
 let rec hashers_of_stmt stmt = 
+  let hashers_in_exps es = 
+    match (List.map hashers_of_exp es) with
+    | [] -> false | _ -> true
+  in 
   match stmt.s with
   | SAssign(_, exp)
   | SLocal(_, _, exp)
@@ -103,12 +107,25 @@ let rec hashers_of_stmt stmt =
   | SMatch(es, bs) -> (
     let hashers_of_branch (_, stmt) = hashers_of_stmt stmt in
     let branch_hashers = (List.map hashers_of_branch bs |> List.flatten) in 
-    let es_has_hasher = match List.map hashers_of_exp es |> List.flatten with
-      | [] -> false
-      | _ -> true
-    in 
+    let es_has_hasher = hashers_in_exps es in 
     match es_has_hasher with 
       | true -> stmt::branch_hashers
       | false -> branch_hashers
     (* (match es_has_hasher with | true -> [stmt] | false -> [])@(List.map hashers_of_branch bs |> List.flatten) *)
   )
+  | STableMatch(tm) ->
+    if (hashers_in_exps (tm.keys@tm.args))
+    then [stmt]
+    else []
+  | STableInstall(_, entries) -> 
+    let hasher_in_entry ent =
+      (hashers_in_exps ent.ematch || hashers_in_exps ent.eargs)
+    in
+    let uses_hash = List.fold_left 
+      (fun in_prev entry -> in_prev || (hasher_in_entry entry))
+      false
+      entries
+    in 
+    if (uses_hash) then [stmt] else []
+
+

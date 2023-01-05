@@ -66,6 +66,17 @@ rule token = parse
   | "match"           { MATCH (position lexbuf) }
   | "with"            { WITH (position lexbuf) }
   | "type"            { TYPE (position lexbuf) }
+
+  | "table_type"              { TABLE_TYPE (position lexbuf) }
+  | "key_size:"               { KEY_SIZE (position lexbuf) }
+  | "arg_types:"              { ARG_TYPES (position lexbuf) }
+  | "ret_type:"               { RET_TYPE (position lexbuf) }
+  | "action"                  { ACTION (position lexbuf) }
+  | "table_create"            { TABLE_CREATE (position lexbuf) }
+  | "table_match"             { TABLE_MATCH (position lexbuf) }
+  | "table_install"           { TABLE_INSTALL (position lexbuf) }
+  | "table_multi_install"     { TABLE_MULTI_INSTALL (position lexbuf) }
+
   | "constr"          { CONSTR (position lexbuf) }
   | "module"          { MODULE (position lexbuf) }
   | "end"             { END (position lexbuf) }
@@ -112,6 +123,7 @@ rule token = parse
   | "."               { DOT (position lexbuf) }
   | "|"               { PIPE (position lexbuf) }
   | "->"              { ARROW (position lexbuf) }
+  | "&&&"             { PATAND (position lexbuf) }
   | wspace            { token lexbuf }
   | '\n'              { incr_linenum lexbuf; token lexbuf}
   | str as s          { STRING (position lexbuf, extract_string s) }

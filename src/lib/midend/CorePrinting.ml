@@ -36,7 +36,19 @@ let rec raw_ty_to_string t =
   | TFun func -> func_to_string func
   | TMemop (n, size) -> Printf.sprintf "memop%d<<%s>>" n (size_to_string size)
   | TGroup -> "group"
-
+  | TTable(t) -> 
+    " table_type {"
+    ^"\n\tkey_size: "^(comma_sep size_to_string t.tkey_sizes)
+    ^"\n\targ_ty: "^(comma_sep ty_to_string t.tparam_tys)
+    ^"\n\tret_ty: "^(comma_sep ty_to_string t.tret_tys)
+    ^"}\n"
+  | TAction(a) -> 
+    Printf.sprintf 
+      "%s -> %s -> %s"
+      (concat_map " * " ty_to_string a.aconst_param_tys)
+      (concat_map " * " ty_to_string a.aparam_tys)
+      (comma_sep ty_to_string a.aret_tys)
+  | TPat(s) -> "pat<<"^ size_to_string s^">>"
 and func_to_string func =
   let arg_tys = concat_map ", " ty_to_string func.arg_tys in
   let ret_ty = ty_to_string func.ret_ty in
@@ -85,6 +97,17 @@ let op_to_string op =
   | LShift -> "<<"
   | RShift -> ">>"
   | Slice (n, m) -> Printf.sprintf "[%d : %d]" n m
+  | PatExact -> ""
+  | PatMask -> "&"
+;;
+
+let bs_to_string bs ="0b"
+  ^ (bs
+    |> List.map (function
+         | 0 -> '0'
+         | 1 -> '1'
+         | _ -> '*')
+    |> String.of_list)
 ;;
 
 let rec v_to_string v =
@@ -96,6 +119,7 @@ let rec v_to_string v =
   | VGlobal i -> "global_" ^ string_of_int i
   | VGroup vs -> Printf.sprintf "{%s}" (comma_sep location_to_string vs)
   | VTuple vs -> Printf.sprintf "(%s)" (comma_sep v_to_string vs)
+  | VPat bs -> bs_to_string bs
 
 and value_to_string v = v_to_string v.v
 
@@ -129,6 +153,13 @@ let rec e_to_string e =
   | EHash (size, es) ->
     Printf.sprintf "hash<<%s>>(%s)" (size_to_string size) (es_to_string es)
   | EFlood e -> Printf.sprintf "flood %s" (exp_to_string e)
+  | ETableCreate(t) -> 
+    Printf.sprintf "table_create<%s>((%s),%s, %s(%s))" 
+      (ty_to_string t.tty)
+      (concat_map "," exp_to_string t.tactions)
+      (exp_to_string t.tsize)
+      (cid_to_string (fst t.tdefault))
+      (comma_sep exp_to_string (snd t.tdefault))
 
 and exp_to_string e = e_to_string e.e
 and es_to_string es = comma_sep exp_to_string es
@@ -141,6 +172,21 @@ and branch_to_string (ps, s) =
     "| %s -> {\n%s\n}"
     (comma_sep pat_to_string ps)
     (stmt_to_string s)
+
+and action_to_string (name, (ps, stmt)) =
+  Printf.sprintf 
+    "%s(%s) =\n\t{%s}"
+    name
+    (params_to_string ps)
+    (stmt_to_string stmt)
+
+and entry_to_string entry =
+  Printf.sprintf
+    "[%s](%s) -> %s(%s);"
+    (string_of_int entry.eprio)
+    (comma_sep exp_to_string entry.ematch)
+    (id_to_string entry.eaction)
+    (comma_sep exp_to_string entry.eargs)
 
 and stmt_to_string s =
   match s.s with
@@ -197,6 +243,28 @@ and stmt_to_string s =
       | None -> ""
     in
     Printf.sprintf "return%s;" estr
+  | STableMatch(tbl_rec) -> 
+    if (tbl_rec.out_tys <> None)
+    then (
+    Printf.sprintf
+     "%s %s = table_match(%s, (%s), (%s));"
+      (comma_sep ty_to_string (Option.get tbl_rec.out_tys))
+      (comma_sep id_to_string tbl_rec.outs)
+      (exp_to_string tbl_rec.tbl)
+      (comma_sep exp_to_string tbl_rec.keys)
+      (comma_sep exp_to_string tbl_rec.args)
+    )
+  else (
+    Printf.sprintf
+     "%s = table_match(%s);"
+      (comma_sep id_to_string tbl_rec.outs)
+      (comma_sep exp_to_string (tbl_rec.tbl::tbl_rec.keys@tbl_rec.args))
+  ) 
+  | STableInstall(tbl_exp, entries) -> 
+    Printf.sprintf
+     "table_install(%s, {\n\t%s\n\t}\n);"
+     (exp_to_string tbl_exp)
+     (List.map entry_to_string entries |> String.concat "\n")
 ;;
 
 let statement_to_string = stmt_to_string
@@ -280,6 +348,15 @@ let d_to_string d =
       (memop_to_string mbody)
   | DExtern (id, ty) ->
     Printf.sprintf "extern %s %s;" (id_to_string id) (ty_to_string ty)
+  | DAction(acn) -> 
+  (* id, ret_tys, const_params, (dyn_params, acn_body)) ->  *)
+    Printf.sprintf 
+      "action (%s) %s(%s)(%s) {\n\taction_return (%s)\n}\n" 
+      (comma_sep ty_to_string acn.artys)
+      (id_to_string acn.aid)
+      (params_to_string acn.aconst_params)
+      (params_to_string acn.aparams)
+      (comma_sep exp_to_string acn.abody)    
 ;;
 
 let decl_to_string d = d_to_string d.d

@@ -33,9 +33,121 @@ let sequence_statements ss =
    their components. *)
 type env = (id * ty) list IdMap.t
 
+let flatten_params env params =
+  let env = ref env in
+  let rec aux params =
+    List.flatten
+    @@ List.map
+         (fun (id, ty) ->
+           match ty.raw_ty with
+           | TTuple tys ->
+             let new_params = rename_elements id tys in
+             env := IdMap.add id new_params !env;
+             aux new_params
+           | _ -> [id, ty])
+         params
+  in
+  let new_params = aux params in
+  !env, new_params
+;;
+
+
+(* completely flatten all the tuples in a type, 
+   so that a TTuple may only appear in the 
+   outermost raw type. *)
+let flatten_ty ty = 
+  let flattener = 
+    object (self)
+      inherit [_] s_map as super 
+      method! visit_raw_ty ctx raw_ty =
+        match raw_ty with
+        | TTuple(inner_tys) ->
+          (* flatten inner types *)
+          let flat_inner_tys = List.map (self#visit_raw_ty ctx) inner_tys in
+          (* concat together *)
+          let flat_inner_tys = List.map
+            (fun raw_ty -> 
+              match raw_ty with
+              | TTuple(inner_tys) -> inner_tys
+              | raw_ty -> [raw_ty])
+            flat_inner_tys
+            |> List.flatten
+          in
+          (* return flat tuple *) 
+          TTuple(flat_inner_tys)
+        | raw_ty ->
+          (* transform inner *)
+          super#visit_raw_ty ctx raw_ty    
+      end
+    in
+    flattener#visit_ty () ty
+;;
+
+(* flatten a list of types to remove all TTuples *) 
+let flatten_tys tys = 
+  List.fold_left
+    (fun tys ty -> 
+    match (flatten_ty ty).raw_ty with
+    | TTuple(raw_tys) -> tys@(List.map Syntax.ty raw_tys)
+    | _ -> tys@[ty])
+  []
+  tys
+;;
+
 let replacer =
   object (self)
     inherit [_] s_map as super
+
+    (* Table extensions -- types *)
+    method! visit_TTable _ tbl_ty = 
+      (* flatten param and return types *)    
+      let tbl_ty' = { tbl_ty with 
+        tparam_tys = flatten_tys tbl_ty.tparam_tys;
+        tret_tys = flatten_tys tbl_ty.tret_tys; }
+      in 
+      TTable(tbl_ty')
+
+    method! visit_TAction _ acn_ty =
+      let acn_ty' = {
+        aconst_param_tys = flatten_tys acn_ty.aconst_param_tys;
+        aparam_tys = flatten_tys acn_ty.aparam_tys;
+        aret_tys = flatten_tys acn_ty.aret_tys; } 
+      in 
+      TAction(acn_ty')
+    
+    (* Table extensions -- statements *)
+    method! visit_STableMatch env tblmatch =
+      (* recurse on inner components *)
+      let tblmatch = self#visit_tbl_match env tblmatch in
+      match tblmatch.out_tys with
+      (* the match table creates new variables, which 
+         we must flatten *)
+      | Some (out_tys) -> (
+        let var_defs = List.combine tblmatch.outs out_tys in
+        let env', new_var_defs = flatten_params !env var_defs in
+        let outs', out_tys' = List.split new_var_defs in
+        (* update the environment with the new ids *)
+        env := env';
+        (* return apply table statement with updates *)
+        STableMatch({tblmatch with outs=outs'; out_tys=Some(out_tys');})
+      )
+      | None -> 
+        (* the match table writes existing variables, we must 
+           find their flattened id *)
+        let rec lookup_flat_ids id : id list =
+          match (IdMap.find_opt id !env) with 
+          | None -> 
+             [id] (* not a tuple *)
+          | Some ids_tys -> 
+            List.map lookup_flat_ids (List.split ids_tys |> fst)
+            |> List.flatten
+        in 
+        let outs' = List.map lookup_flat_ids tblmatch.outs |> List.flatten in        
+        STableMatch({tblmatch with outs=outs';})
+    method! visit_ETableMatch _ tblmatch =
+      Console.error_position
+        tblmatch.tbl.espan
+        "Table apply expressions should be converted to statements before tuple elim."
 
     (* Split into a bunch of variable definitions, one for each
        tuple element. *)
@@ -138,27 +250,10 @@ let replacer =
   end
 ;;
 
-let flatten_params env params =
-  let env = ref env in
-  let rec aux params =
-    List.flatten
-    @@ List.map
-         (fun (id, ty) ->
-           match ty.raw_ty with
-           | TTuple tys ->
-             let new_params = rename_elements id tys in
-             env := IdMap.add id new_params !env;
-             aux new_params
-           | _ -> [id, ty])
-         params
-  in
-  let new_params = aux params in
-  !env, new_params
-;;
-
 let flatten env e = replacer#flatten (ref env) e
 let replace_exp env exp = replacer#visit_exp (ref env) exp
 let replace_statement env s = replacer#visit_statement (ref env) s
+let replace_ty ty = replacer#visit_ty (ref IdMap.empty) ty
 
 let rec replace_decl (env : env) d =
   match d.d with
@@ -173,22 +268,28 @@ let rec replace_decl (env : env) d =
         es
     in
     replace_decls env new_ds
-  | DGlobal (id, { raw_ty = TTuple tys }, exp) ->
-    (* Same as DConst, except we might generate either a DConst or
-       a DGlobal for each component *)
-    let es = replace_exp env exp |> extract_etuple in
-    let new_ids = rename_elements id tys in
-    let env = IdMap.add id new_ids env in
-    let new_ds =
-      List.map2
-        (fun (id, ty) exp ->
-          if is_global ty
-          then { d with d = DGlobal (id, ty, exp) }
-          else { d with d = DConst (id, ty, exp) })
-        new_ids
-        es
-    in
-    replace_decls env new_ds
+  | DGlobal (id, ty, exp) -> (
+      match ty.raw_ty with
+      (* Same as DConst, except we might generate either a DConst or
+         a DGlobal for each component *)
+      | TTuple tys -> 
+        let es = replace_exp env exp |> extract_etuple in
+        let new_ids = rename_elements id tys in
+        let env = IdMap.add id new_ids env in
+        let new_ds =
+          List.map2
+            (fun (id, ty) exp ->
+              if is_global ty
+              then { d with d = DGlobal (id, ty, exp) }
+              else { d with d = DConst (id, ty, exp) })
+            new_ids
+            es
+        in
+        replace_decls env new_ds
+      (* The tuple types inside of a table types must be flattened *)
+      | TTable(_) ->
+        env, [{ d with d = DGlobal(id, replace_ty ty, replace_exp env exp)}]
+      | _ -> env, [d])
   | DEvent (id, sort, _, params) ->
     let _, new_params = flatten_params env params in
     env, [{ d with d = DEvent (id, sort, [], new_params) }]
@@ -196,8 +297,15 @@ let rec replace_decl (env : env) d =
     let body_env, new_params = flatten_params env params in
     let body = replace_statement body_env body in
     env, [{ d with d = DHandler (id, (new_params, body)) }]
-  | DSize _ | DMemop _ | DExtern _ | DSymbolic _ | DConst _ | DGlobal _ ->
+  | DSize _ | DMemop _ | DExtern _ | DSymbolic _ | DConst _ ->
     env, [d]
+  | DAction(id, tys, const_params, (params, action_body)) -> 
+    let tys' = flatten_tys tys in 
+    let body_env, const_params' = flatten_params env const_params in
+    let body_env, params' = flatten_params body_env params in
+    (* Flatten all tuples in action body *)
+    let action_body' = List.map (flatten body_env) action_body |> List.flatten in 
+    env, [{d with d=DAction(id, tys', const_params', (params', action_body'))}]
   | DFun _ | DConstr _ | DModule _ | DUserTy _ | DModuleAlias _ ->
     Console.error_position
       d.dspan
@@ -229,6 +337,11 @@ let checker =
         ^ Printing.exp_to_string e
       | _ -> ()
   end
+;;
+
+let print_prog ds =
+  let str = Printing.decls_to_string ds in
+  Console.report str 
 ;;
 
 let eliminate_prog ds =

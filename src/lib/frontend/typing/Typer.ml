@@ -11,6 +11,12 @@ open TyperModules
 let mk_ty rty = ty_eff rty (fresh_effect ())
 let inst ty = instantiator#visit_ty (fresh_maps ()) ty
 
+let auto_count = ref (-1)
+let fresh_auto () =
+  incr auto_count;
+  Id.create ("auto" ^ string_of_int !auto_count)
+
+
 let check_constraints span err_str (env : env) end_eff constraints =
   match env.ret_ty, IdMap.is_empty env.indices with
   | None, true ->
@@ -41,6 +47,7 @@ let infer_value v =
     | VInt n -> TInt (IConst (Integer.size n))
     | VGroup _ -> TGroup
     | VGlobal _ | VEvent _ -> failwith "Cannot write values of these types"
+    | VPat bs -> TPat (IConst (List.length bs))
   in
   { v with vty = Some (mk_ty vty) }
 ;;
@@ -55,6 +62,18 @@ let infer_pattern env p =
   | PNum _ -> TInt (fresh_size ())
   | PBit ps -> TInt (IConst (List.length ps))
 ;;
+
+(* infer a pattern size, given that the pattern is 
+   used in a place where it is expected to have size s. *)
+let infer_pattern_size env sp p =
+  match p with
+  | PWild -> fresh_size ()
+  | PVar(cid, span) -> (
+    match ((lookup_var span env cid).raw_ty) with
+    | TInt(sz) -> IConst (extract_size sz)
+    | _ -> error_sp sp "Non-integer variable in a pattern")
+  | PNum z -> IConst(Z.size z)
+  | PBit ps -> IConst(List.length ps)
 
 let rec infer_exp (env : env) (e : exp) : env * exp =
   (* print_endline @@ "Inferring " ^ exp_to_string e; *)
@@ -361,6 +380,87 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
     let env, inf_s = infer_statement env s in
     let env, inf_e1, inf_e1ty = infer_exp env e1 |> textract in
     env, { e with e = EStmt (inf_s, inf_e1); ety = Some inf_e1ty }
+  | ETableCreate(ecreate) -> 
+    let env, inf_tsize = infer_exp env ecreate.tsize in
+
+    let unify_arg_tys sp msg tys1 tys2 =
+      if (List.length tys1 <> List.length tys2)
+      then (error_sp sp ("wrong number of match-time arguments "^msg));
+      List.iter2 (unify_ty e.espan) tys1 tys2
+    in
+
+    (* for actions, we check the action args and return types *)
+    (* expected types come from table type *)
+    let exp_atys, exp_rty = match ecreate.tty.raw_ty with 
+      | TTable(trec) -> 
+        trec.tparam_tys, trec.tret_tys
+      | _-> error "expected table type"
+    in
+    (* inferred types come from actions passed as arguments *)
+    let env, inf_acns = infer_exps env ecreate.tactions in 
+    let check_acn_ty e_inf_acn =
+      let inf_atys, inf_rty = match (Option.get (e_inf_acn.ety)).raw_ty with 
+        | TAction({aparam_tys=aparam_tys; aret_tys=aret_tys;}) -> 
+          aparam_tys, aret_tys
+        | _ -> error "not an action"
+      in 
+      (* unify runtime arg and return types *)
+      unify_arg_tys e_inf_acn.espan "in action assigned to table" exp_atys inf_atys;
+      unify_arg_tys e_inf_acn.espan "in return of action assigned to table" exp_rty inf_rty      
+    in 
+    List.iter check_acn_ty inf_acns;
+    (* infer types of default action args *)
+    let def_cid, def_args = ecreate.tdefault in
+    let env, inf_def_args = infer_exps env def_args in
+    (* type check the default action's const args *)
+    let expected_def_arg_tys = 
+      match (lookup_var e.espan env def_cid).raw_ty with
+      | TAction(a) -> a.aconst_param_tys
+      | _ -> error_sp  e.espan "the default action does not have type TAction"
+    in
+    let inf_def_arg_tys = List.map (fun exp -> (Option.get exp.ety)) inf_def_args in
+    unify_arg_tys e.espan ("provided to default action \""^(Printing.cid_to_string def_cid)^"\"") expected_def_arg_tys inf_def_arg_tys;
+
+    (* check that the default action is one of the table's actions *)
+    let tbl_acn_cids = List.map
+      (fun exp -> match exp.e with 
+        | EVar(cid) -> cid
+        | _ -> error_sp exp.espan "table actions must be a list of action ids")
+      inf_acns
+    in 
+    if (not (List.exists (Cid.equal def_cid) tbl_acn_cids))
+    then (error_sp 
+      e.espan 
+      ("default action ("^(Printing.cid_to_string def_cid)^") is not an action assigned to the table."));
+
+    (* return typed table with typed action args *)
+    env, 
+    { e with e = ETableCreate( 
+      {ecreate with 
+        tactions = inf_acns; 
+        tsize = inf_tsize; 
+        tdefault = (def_cid, inf_def_args)}); 
+      ety = Some ecreate.tty; }
+  | ETableMatch(tr) -> 
+    let new_env, new_tr, ret_ty = infer_tblmatch env tr e.espan in
+    let ret_ty = match ret_ty with 
+      | [ret_ty] -> ret_ty
+      | _ -> error "table apply expression has multiple return types. This should be impossible."
+    in 
+    let new_e = ETableMatch(new_tr) in 
+    new_env, {e with e = new_e; ety = Some ret_ty;}
+  | EPatWild(sz) -> 
+    ( env
+      , (match sz with
+        | None -> 
+          let new_size = fresh_size () in
+          { e with
+            e = EPatWild(Some new_size)
+          ; ety = Some (mk_ty @@ TPat new_size)
+          }
+        | Some sz -> 
+          validate_size e.espan env sz;
+          Some (mk_ty @@ TPat sz) |> wrap e))
 
 and infer_op env span op args =
   let env, ty, new_args =
@@ -446,6 +546,21 @@ and infer_op env span op args =
           (wrap_effect inf_ety.teffect [None, 0; None, idx])
       in
       env, final_ty, [inf_e]
+    | PatExact, [e] -> 
+      (* infer operand type *)
+      let env, inf_e, inf_ety = infer_exp env e |> textract in
+      (* check to make sure it is int of some size *)
+      let tsize = fresh_size () in
+      unify_raw_ty span inf_ety.raw_ty (TInt tsize);
+      (* result type is a TPat of that size, with typed operand *)
+      env, mk_ty @@ TPat tsize, [inf_e]
+    | PatMask, [e1; e2] -> 
+      let tsize = fresh_size () in
+      let env, inf_e1, inf_ety1 = infer_exp env e1 |> textract in
+      let env, inf_e2, inf_ety2 = infer_exp env e2 |> textract in
+      unify_raw_ty span inf_ety1.raw_ty (TInt tsize);
+      unify_raw_ty span inf_ety2.raw_ty (TInt tsize);
+      env, mk_ty @@ TPat tsize, [inf_e1; inf_e2]
     | ( ( Not
         | Neg
         | BitNot
@@ -469,7 +584,9 @@ and infer_op env span op args =
         | Conc
         | Cast _
         | Slice _
-        | TGet _ )
+        | TGet _ 
+        | PatExact
+        | PatMask )
       , _ ) ->
       error_sp span
       @@ "Wrong number of arguments to operator: "
@@ -487,6 +604,132 @@ and infer_exps env es =
       es
   in
   env, List.rev es'
+
+and infer_action_args env sp (acn_args: exp list) (expected_arg_tys: ty list)  = 
+  let _, inf_acn_args = infer_exps env acn_args in
+  List.iter2 
+    (fun inf_e expect_ty -> 
+      match inf_e.ety with 
+      | Some(ty) -> try_unify_ty sp ty expect_ty
+      | None -> error_sp sp "could not infer type of action argument")
+    inf_acn_args
+    expected_arg_tys
+  ;
+  inf_acn_args
+
+and infer_keys env sp inf_keysizes keys =
+  let inf_keys = List.map (infer_exp env) keys |> List.split |> snd in 
+  if (List.length inf_keysizes <> List.length keys)
+  then (error_sp sp "Key has incorrect number of fields for table_type.");
+  List.iter2 
+    (fun key_exp inf_keysz -> 
+      let keysz = match key_exp.ety with 
+      | None -> error_sp key_exp.espan "Could not infer type"
+      | Some(ty) -> (
+        match ty.raw_ty with
+          | TInt(sz) -> sz
+          | TBool -> IConst(1)
+          | _ -> error_sp key_exp.espan "key must be int or bool")
+      in
+      unify_size sp keysz inf_keysz)
+    inf_keys 
+    inf_keysizes
+  ;
+  inf_keys
+
+(* for table return types *)
+and tup_of_tys tys = 
+ match tys with
+   | [t] -> t.raw_ty
+   | _ -> TTuple(List.map (fun ty -> ty.raw_ty) tys)
+
+and infer_tblmatch (env : env) (tr : tbl_match) sp : env * tbl_match * ty list =
+    let etbl = tr.tbl in
+    (* infer table type, which looks it up from context *)
+    let _, inf_etbl = infer_exp env etbl in 
+    let tblty = (Option.get inf_etbl.ety) in 
+    (* try_unify_rty sp ((Option.get inf_etbl.ety).raw_ty) tr.tty.raw_ty; *)
+    (* get information from inferred table type *)
+    let inf_keysize, inf_arg_rtys, inf_ret_ty = match inf_etbl.ety with 
+      | Some(ty) -> (
+          match ty.raw_ty with
+          | TTable(trec) -> trec.tkey_sizes, trec.tparam_tys, (tup_of_tys trec.tret_tys)
+          | t -> error_sp sp ("table_match arg is not a table: "^(Printing.raw_ty_to_string t))
+        )
+      | _ -> error_sp sp "table_match 1st arg has no type"
+    in 
+
+    let key_args, acn_args = tr.keys, tr.args in
+
+    (* type check key args *)
+    let inf_keys = infer_keys env sp inf_keysize key_args in 
+    (* type check action args *)
+    let inf_acn_args = infer_action_args env sp acn_args inf_arg_rtys  in
+    (* the actions and case statements have already been type checked at creation time.*)
+
+    (* check effects *)
+    (* inferred type of the match statement -- 
+       a function call with:
+        1st arg is declared table type.
+        next args are key types, remaining args are action arg types. 
+       start effect is fresh, table arg effect is fresh, end effect is table arg effect+1, 
+       constraints are that start effect is equal to table arg effect.   *)
+    let base_apply_fty =
+      let tbl_eff = FVar (QVar (Id.fresh "eff")) in
+      let start_eff = FVar (QVar (Id.fresh "eff")) in
+      let base_tblty = ty_eff tblty.raw_ty tbl_eff in 
+      (* note: its okay to use inferred keys/acn args because they have been 
+         checked against inferred table, which has been checked against declared table. *)
+      let base_key_tys = List.map (fun ekey -> Option.get (ekey.ety)) inf_keys in 
+      let base_arg_tys = List.map (fun earg -> Option.get (earg.ety)) inf_acn_args in 
+      (* hack: put return types at end of arg types *)
+      { arg_tys = base_tblty::base_key_tys@base_arg_tys
+      ; ret_ty = ty inf_ret_ty
+      ; start_eff
+      ; end_eff = FSucc tbl_eff
+      ; constraints = ref [CLeq (start_eff, tbl_eff)]
+      }
+    in
+    (* the inferred type is a copy of the base type. *)
+
+    let inf_apply_fty = instantiator#visit_ty (fresh_maps ()) (ty (TFun(base_apply_fty))) in
+    (* the actual type is a call with 1st arg of INFERRED type of the table variable. 
+       This is important because the inferred type will have the concrete effect corresponding 
+       to where the variable was declared. *)
+    (* this can be cleaner. inferred type should come entirely from inferred variables. 
+       declared / expected type should come entirely (modulo key types) from declared type.
+       but this seems correct for now. *)
+      let base_key_tys = List.map (fun ekey -> Option.get (ekey.ety)) inf_keys in 
+      let base_arg_tys = List.map (fun earg -> Option.get (earg.ety)) inf_acn_args in 
+    let expected_fty = {
+      (* hack: put return types at end of arg types *)
+      arg_tys = (Option.get inf_etbl.ety)::base_key_tys@base_arg_tys;
+      ret_ty = ty inf_ret_ty;
+      start_eff = env.current_effect;
+      end_eff = fresh_effect ();
+      constraints = ref [];
+    }
+    in
+    (* unify inferred and actual types *)
+    unify_raw_ty sp (TFun expected_fty) (inf_apply_fty.raw_ty);
+    let new_env = 
+      check_constraints sp "Table match" env expected_fty.end_eff
+        @@ !(expected_fty.constraints)
+    in
+    let new_tr = {
+        tbl = inf_etbl;
+        keys = inf_keys;
+        args = inf_acn_args;
+        outs = tr.outs;
+        out_tys = tr.out_tys;
+      }
+    in
+    let ret_tys = match expected_fty.ret_ty.raw_ty with 
+      | TTuple(raw_tys) -> List.map (ty) raw_tys
+      | _ -> [expected_fty.ret_ty]
+    in
+    new_env, new_tr, ret_tys
+
 
 and infer_statement (env : env) (s : statement) : env * statement =
   (* (match s.s with
@@ -619,6 +862,21 @@ and infer_statement (env : env) (s : statement) : env * statement =
           bs
       in
       env, SMatch (inf_es, inf_bs)
+    | STableMatch(tm) ->
+      let new_env, new_tm, _ = infer_tblmatch env tm s.sspan in
+      let new_env = match new_tm.out_tys with
+        | Some(out_tys) -> 
+          (* table_match declares new locals *)
+          add_locals new_env (List.combine new_tm.outs out_tys)
+        | None -> 
+          new_env
+      in
+      new_env, STableMatch(new_tm)
+    | STableInstall(etbl, entries) -> 
+      (* infer table type, which looks it up from context *)
+      let _, inf_etbl = infer_exp env etbl in 
+      let env, inf_entries = infer_entries env s.sspan (Option.get inf_etbl.ety) entries in
+      env, STableInstall(inf_etbl, inf_entries)      
     | SLoop (s1, idx, sz) ->
       validate_size s.sspan env sz;
       let renamed_idx = Id.freshen idx in
@@ -675,6 +933,59 @@ and infer_statement (env : env) (s : statement) : env * statement =
       new_env, SLoop (inf_s1, idx, sz)
   in
   env, { s with s = stmt }
+
+
+
+(* check / infer types of entries in a table install statement *)
+and infer_entries (env : env) sp tbl_ty entries = 
+  (* get key sizes *)
+  let key_sizes = match tbl_ty.raw_ty with
+    | TTable(tbl_ty) -> tbl_ty.tkey_sizes
+    | _ -> error_sp sp "first argument to table_install is not a table."
+  in
+  let expected_pat_rawtys = List.map (fun sz -> TPat sz) key_sizes in
+  (* do inference and checks for a single entry *)
+  let infer_entry env entry = 
+    (* type the patterns *)
+    let env, inf_ematch = if (List.length entry.ematch <> List.length expected_pat_rawtys)
+      then (error_sp sp "an entry has the wrong number of patterns based on this table's key.")
+      else (
+        let env, inf_epats_rev = List.fold_left
+          (fun (env, inf_epats_rev) (epat, expected_epat_rawty) -> 
+            (* infer the expression's type *)
+            let env, inf_epat, inf_epat_ty = infer_exp env epat |> textract in
+            (* unify that type with the expected type *)
+            unify_raw_ty epat.espan expected_epat_rawty inf_epat_ty.raw_ty;
+            (* return the new environment and pat *)
+            (env, inf_epat::inf_epats_rev))
+          (env, [])
+          (List.combine entry.ematch expected_pat_rawtys)
+        in
+        env, List.rev inf_epats_rev)
+    in
+    (* type the constant action parameters *)
+    let param_tys = match (lookup_var sp env (Cid.id entry.eaction)).raw_ty with 
+      | TAction(acn_ty) -> acn_ty.aconst_param_tys
+      | _ -> error_sp sp "table entry does not refer to an action."
+    in
+    (* infer types of action args *)
+    let env, inf_eargs = infer_exps env entry.eargs in
+    let inf_arg_tys = List.map (fun arg -> (Option.get arg.ety)) inf_eargs in 
+    (* "unify", inferred args with params (make sure they are equiv) *)
+    List.iter2 (unify_ty sp) inf_arg_tys param_tys;
+    (* return new env and entry with typed patterns and args *)
+    env, {entry with ematch = inf_ematch; eargs = inf_eargs;}
+  in 
+  let env', entries_rev = List.fold_left
+    (fun (env, entries_rev) entry -> 
+      let env', entry' = infer_entry env entry in
+      env', (entry'::entries_rev))
+    (env, [])
+    entries
+  in
+  let entries = List.rev entries_rev in
+  env', entries 
+
 
 and infer_branches (env : env) s etys branches =
   let drop_constraints = drop_constraints env in
@@ -986,8 +1297,8 @@ let rec infer_declaration (builtin_tys : Builtins.builtin_tys) (env : env) (effe
       let env = define_const id (ty tmem) env in
       env, effect_count, DMemop (id, params, inf_body)
     | DUserTy (id, sizes, ty) ->
-      let new_env = define_user_ty id sizes ty env in
       let new_env =
+        let new_env = define_user_ty id sizes ty env in
         match ty.raw_ty with
         | TRecord lst ->
           let record_labels =
@@ -997,6 +1308,27 @@ let rec infer_declaration (builtin_tys : Builtins.builtin_tys) (env : env) (effe
               lst
           in
           { new_env with record_labels }
+        | TTable ttbl -> 
+          (* want to do something about the inner types ?*)
+          let inf_tparam_tys = List.map 
+            (fun stated_ty -> 
+              (* let raw_ty = stated_ty.raw_ty in *)
+              let inf_ty = inst stated_ty in
+              (* not sure what this does... *)
+              try_unify_ty stated_ty.tspan stated_ty inf_ty;
+              inf_ty)
+            ttbl.tparam_tys
+          in
+          let inf_tret_tys = List.map
+            (fun stated_ty -> 
+              let inf_ty = inst stated_ty in
+              (* not sure what this does... *)
+              try_unify_ty stated_ty.tspan stated_ty inf_ty;
+              inf_ty)
+            ttbl.tret_tys
+          in 
+          let inf_ty = {ty with raw_ty=TTable({ttbl with tparam_tys = inf_tparam_tys; tret_tys = inf_tret_tys;})} in 
+          define_user_ty id sizes inf_ty env
         | _ -> new_env
       in
       new_env, effect_count, DUserTy (id, sizes, ty)
@@ -1065,6 +1397,45 @@ let rec infer_declaration (builtin_tys : Builtins.builtin_tys) (env : env) (effe
       ( define_submodule id1 m env
       , effect_count
       , DModuleAlias (id1, inf_e, cid1, cid2) )
+(*     | DInlineAction(id, const_params) -> 
+      (* the action's body is not yet defined. We can't type check 
+         it until the inline table and its inlined actions are defined. *)
+      (* add variable to type env *)
+      (* inlined actions may not have arguments or return types *)
+      let acn_ty = TAction({
+          const_aarg_tys = List.map (fun (_, ty) -> ty) (const_params);
+          aarg_tys = [];
+          aret_ty = ty TVoid;
+        })
+      in 
+      let env = define_const id (mk_ty @@ acn_ty ) env in 
+      env, effect_count, DInlineAction(id, const_params) *)
+    | DAction (id, ret_ty, const_params, (params, action_body)) -> 
+      let check_e env expected_ty e =
+        let _, inf_e, inf_ety = infer_exp env e |> textract in
+        try_unify_ty e.espan inf_ety expected_ty;
+        inf_e        
+      in 
+      enter_level ();
+      (* add const and dynamic params to locals *)
+      let action_env = add_locals env (const_params@params) in 
+      (* check and infer action body expression types *)
+      let inf_action_body = 
+        List.map2 
+          (check_e action_env)
+          ret_ty
+          action_body
+      in
+      leave_level ();
+      (* add variable to type env *)
+      let acn_ty = TAction({
+        aconst_param_tys = List.map (fun (_, ty) -> ty) (const_params);
+        aparam_tys = List.map (fun (_, ty) -> ty) (params);
+        aret_tys = ret_ty;
+      }) 
+      in 
+      let env = define_const id (mk_ty @@ acn_ty ) env in 
+      env, effect_count, DAction (id, ret_ty, const_params, (params, inf_action_body))
   in
   let new_d = { d with d = new_d } in
   Wellformed.check_qvars new_d;
@@ -1108,5 +1479,6 @@ let infer_prog (builtin_tys : Builtins.builtin_tys) (decls : decls) : decls =
   let _, _, inf_decls = List.fold_left infer_d (env, FZero, []) decls in
   ensure_fully_typed inf_decls;
   let inf_decls = unsubst_TAbstracts inf_decls in
+  (* exit 1; *)
   List.rev inf_decls
 ;;

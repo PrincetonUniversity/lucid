@@ -27,9 +27,10 @@ def interp_test(fullfile, args):
         cmd = ["./dpt", "--silent", fullfile] + args
         ret = subprocess.run(cmd, stdout=outfile, stderr=subprocess.DEVNULL)
     if ret.returncode != 0:
-        print("command returned error: "+"./dpt --silent %s"%fullfile)
+        # errors might be expected
+        # print("command returned error: "+"./dpt --silent %s"%fullfile)
         errors.append(fullfile)
-    elif not filecmp.cmp("test/output/"+outname, "test/expected/"+outname):
+    if not filecmp.cmp("test/output/"+outname, "test/expected/"+outname):
         diffs.append(shortfile)
     outfile.close()
 
@@ -50,16 +51,14 @@ def interactive_test(fullfile, args):
         fullfile = interpdir+fullfile
         input_events_fn = "%s.input.txt"%fullfile
         cmd = ["./dpt", "-i", fullfile] + args
-        ret = subprocess.run(cmd, stdin=open(input_events_fn, "r"),stdout=outfile, stderr=subprocess.DEVNULL)
-    if ret.returncode != 0:
-        print("command returned error: "+"./dpt -i %s"%fullfile)
-        errors.append(fullfile)
-    elif not filecmp.cmp("test/output/"+outname, "test/expected/"+outname):
-        diffs.append(shortfile)
-    outfile.close()
-
-
-for file in interactivefiles: interactive_test(file, [])
+        try: 
+            # interactive mode always waits for more input, so this should timeout
+            ret = subprocess.run(cmd, stdin=open(input_events_fn, "r"),stdout=outfile, stderr=subprocess.DEVNULL, timeout=3)
+        except subprocess.TimeoutExpired:
+            pass
+        if not filecmp.cmp("test/output/"+outname, "test/expected/"+outname):
+            diffs.append(shortfile)
+        outfile.close()
 
 for file in interpfiles: interp_test(file, [])
 
@@ -69,5 +68,7 @@ for file in regressionfiles: just_typecheck(regressiondir, file)
 
 for file in poplfiles: just_typecheck(popldir, file)
 
-print("Errors:", errors)
+for file in interactivefiles: interactive_test(file, [])
+
 print("Diffs:", diffs)
+print("Errors (note: errors may be expected for some programs):", errors)
