@@ -12,7 +12,7 @@ The easiest way to use Lucid is with the Lucid docker image.
   - if you are on a laptop/desktop, just install the docker desktop app: [docker desktop](https://www.docker.com/products/docker-desktop/)
   - if you are on a server... you can probably figure out how to install docker
 
-**2. Clone this repository and pull the lucid_production docker container**
+**2. Clone this repository and pull the lucid docker container**
 
 Run this in your terminal:
 ```
@@ -23,7 +23,7 @@ cd lucid
 
 This will download about 400MB of data and should take < 5 minutes. 
 
-That's it! Once the pull is done, you are ready to run the Lucid interpreter and P4 compiler inside the `lucid_production` docker container. The `lucid.sh` script makes this easy.
+That's it! Once the pull is done, you are ready to run the Lucid interpreter and P4 compiler inside the lucid docker container. The `lucid.sh` script makes this easy.
 
 ### Run the interpreter
 
