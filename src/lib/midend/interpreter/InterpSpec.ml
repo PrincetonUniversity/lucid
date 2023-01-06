@@ -302,7 +302,9 @@ let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t 
     in
     let links =
       if num_switches = 1
-      then IntMap.empty
+      then (
+        InterpState.State.empty_topology 1
+      )
       else (
         match List.assoc_opt "links" lst with
         | Some (`Assoc links) -> parse_links num_switches links

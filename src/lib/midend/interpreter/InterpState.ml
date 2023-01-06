@@ -253,7 +253,8 @@ module State = struct
       (match IntMap.find_opt p map with
       | None -> -1, p
       | Some ret -> ret)
-    | None -> error @@ "Invalid switch id " ^ string_of_int sw
+    (* the switch ID does not exist in the topology... *)
+    | None -> error @@ "lookup_dst error -- Invalid switch id " ^ string_of_int sw
   ;;
 
   let ival_to_string v =
