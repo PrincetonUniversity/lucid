@@ -205,6 +205,21 @@ let rename prog =
         let new_x = self#freshen_var x in
         SLocal (new_x, new_ty, replaced_e)
 
+      method! visit_STableMatch dummy tm =
+        let tbl = self#visit_exp dummy tm.tbl in
+        let keys = List.map (self#visit_exp dummy) tm.keys in
+        let args = List.map (self#visit_exp dummy) tm.args in
+        (* rename if the variables are declared here *)
+        let outs, out_tys = match tm.out_tys with 
+          | None ->
+            (* must visit outs because they have been renamed too. *)
+            List.map (self#visit_id dummy) tm.outs, None
+          | Some out_tys -> 
+            List.map (self#freshen_var) tm.outs, 
+            Some(List.map (self#visit_ty dummy) out_tys)
+        in 
+        STableMatch({tbl; keys; args; outs; out_tys})
+
       method! visit_body dummy (params, body) =
         let old_env = env in
         let new_params =
@@ -230,6 +245,21 @@ let rename prog =
           let replaced_size = Option.map (self#visit_size dummy) size in
           let new_x = self#freshen_size x in
           DSize (new_x, replaced_size)
+        | DAction(x, rtys, const_params, (params, action_body)) -> 
+          let new_rtys = List.map (self#visit_ty dummy) rtys in
+          let new_const_params =
+            List.map
+              (fun (id, ty) -> self#freshen_var id, self#visit_ty dummy ty)
+              const_params
+          in
+          let new_params =
+            List.map
+              (fun (id, ty) -> self#freshen_var id, self#visit_ty dummy ty)
+              params
+          in
+          let new_action_body = List.map (self#visit_exp dummy) action_body in
+          let new_x = self#freshen_var x in
+          DAction(new_x, new_rtys, new_const_params, (new_params, new_action_body))
         | DMemop (x, params, body) ->
           let old_env = env in
           let replaced_params =

@@ -56,6 +56,21 @@ and raw_ty =
   | TVector of raw_ty * size
   | TTuple of raw_ty list
   | TVarRegex
+  | TTable of tbl_ty
+  | TAction of acn_ty 
+  | TPat of size (* number of bits *)
+
+and tbl_ty = {
+    tkey_sizes : size list;
+    tparam_tys : ty list;
+    tret_tys : ty list;
+  }
+
+and acn_ty = {
+  aconst_param_tys : tys;
+  aparam_tys : tys;
+  aret_tys : tys;
+}
 
 and func_ty =
   { arg_tys : tys
@@ -101,6 +116,8 @@ and op =
   | RShift
   | TGet of int * int (* Size of the tuple, index to get *)
   | Slice of size * size
+  | PatExact
+  | PatMask (* x && y matches z when z && y == x && y *)
 
 and pat =
   | PWild
@@ -116,6 +133,7 @@ and v =
   | VEvent of event
   | VGlobal of int (* Stage number *)
   | VGroup of location list
+  | VPat of int list (* every pattern typed expression evaluates to a VPat *)
 
 and event =
   { eid : cid
@@ -148,6 +166,14 @@ and e =
   | EIndex of exp * size
   | ETuple of exp list
   | ETransitionRegex of id * exp * exp option
+  | ETableCreate of {
+    tty: ty;
+    tactions: exp list; 
+    tsize: exp;
+    tdefault: cid * (exp list); (* ECall(default_acn_id, default_installtime_args) *)
+  }  
+  | ETableMatch of tbl_match
+  | EPatWild of size option (* Polymorphic wildcard pat, handled similar to EInt *)
 
 and exp =
   { e : e
@@ -175,6 +201,29 @@ and s =
   | SSeq of statement * statement
   | SMatch of exp list * branch list
   | SLoop of statement * id * size
+  | STableMatch of tbl_match
+  | STableInstall of exp * tbl_entry list
+
+
+and tbl_match = 
+    {tbl  : exp;
+    keys  : exp list;
+    args : exp list;
+    outs : id list; 
+    out_tys : ty list option;}
+    (* out_tys set for statements that create new vars *)
+
+(* entries are like branches in match statements, except instead of 
+   a statement there is an action id + const args *)
+(* notes on entry priorities: 
+  1. Lower priorities are checked first. 
+  2. Priorities should be a bounded size, under 24 bits for tof. *)
+and tbl_entry = {
+  eprio : int; 
+  ematch : exp list;
+  eaction : id;
+  eargs : exp list;
+}
 
 and statement =
   { s : s
@@ -188,8 +237,8 @@ and body = params * statement
 
 and event_sort =
   | EEntry of bool (* true iff "control", i.e. it can generate non-continue events *)
-  | EExit
-  | EBackground
+  | EExit       (* events that leave the lucid program *)
+  | EBackground (* standard event sort *)
 
 and ispec =
   | InSize of id
@@ -252,6 +301,9 @@ and spec_regex =
     s_regex : s_regex;
     s_regex_span :sp
   }
+(* an action is just a list of expressions to return *)
+and action_body = exp list
+
 (* declarations *)
 and d =
   | DSize of id * size option
@@ -269,6 +321,8 @@ and d =
   | DModuleAlias of id * exp * cid * cid
   | DVarRegex of id * z * var_regex
   | DSpecRegex of id * z * spec_regex
+  | DAction of id * ty list * params * (params * action_body)
+
 
 (* name, return type, args & body *)
 and decl =
@@ -344,6 +398,7 @@ let vevent event = value (VEvent event)
 let vevent_sp event span = value_sp (VEvent event) span
 let vglobal idx = value (VGlobal idx)
 let vgroup locs = value (VGroup locs)
+let vpat_sp bs span = value_sp (VPat bs) span
 
 (***********************************)
 (* Modules for manipulating tqvars *)
@@ -406,6 +461,10 @@ let szcast_sp sz1 sz2 span = exp_sp (ESizeCast (sz1, sz2)) span
 let flood_sp e span = exp_sp (EFlood e) span
 let transregex_sp id idx_expr ev_expr span = exp_sp (ETransitionRegex (id, idx_expr, ev_expr)) span
 
+let tblmatch_sp tbl keys args span =
+  let t = {tbl; keys; args; outs=[]; out_tys=None;} in
+  exp_sp (ETableMatch(t)) span
+;;
 (* declarations *)
 let decl d = { d; dspan = Span.default }
 let decl_sp d span = { d; dspan = span }
@@ -421,10 +480,16 @@ let duty_sp id sizes rty span = decl_sp (DUserTy (id, sizes, rty)) span
 let dvarregex_sp id size var_regex span = decl_sp (DVarRegex (id, size, var_regex)) span
 let dspecregex_sp id size spec_regex span = decl_sp (DSpecRegex (id, size, spec_regex)) span
 
+let action_sp id rty cp p body span = decl_sp (DAction (id, rty, cp, (p, body))) span
+
+
 let dconstr_sp id ty params exp span =
   decl_sp (DConstr (id, ty, params, exp)) span
 ;;
 
+(* let dtable_sp id ty opt_exp span = decl_sp (DTable(id, ty, opt_exp)) span
+;;
+ *)
 let module_sp id intf ds span = decl_sp (DModule (id, intf, ds)) span
 
 let module_alias_sp id1 e cid1 cid2 span =
@@ -459,6 +524,9 @@ let loop_sp e i k span = statement_sp (SLoop (e, i, k)) span
 let sexp_sp e span = statement_sp (SUnit e) span
 let scall_sp cid es span = sexp_sp (call_sp cid es span) span
 
+let tblinstall_sp tbl entries span = 
+  statement_sp (STableInstall(tbl, entries)) span
+;;
 (* Interface spefications *)
 let spec ispec = { ispec; ispan = Span.default }
 let spec_sp ispec ispan = { ispec; ispan }

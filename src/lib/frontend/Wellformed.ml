@@ -245,6 +245,9 @@ let basic_qvar_checker =
       span <- ty.tspan;
       super#visit_ty env ty
 
+    (* table types are always allowed to have QVars *)
+    method! visit_TTable _ _ = ()
+
     method! visit_exp _ _ = ()
 
     method! visit_decl env d =
@@ -336,6 +339,7 @@ let event_qvar_checker =
 let rec check_qvars d =
   match d.d with
   | DFun _ | DMemop _ | DModuleAlias _ -> (* No restrictions *) ()
+  | DAction _ -> ()
   | DGlobal _ ->
     (* None allowed at all *) basic_qvar_checker#visit_decl (true, true) d
   | DSize _ | DSymbolic _ | DConst _ | DExtern _ ->
@@ -348,7 +352,7 @@ let rec check_qvars d =
     preset_qvar_checker#visit_decl (List.map STQVar.strip_links sizes) d
   | DEvent (_, _, _, params) | DHandler (_, (params, _)) ->
     (* Effects always ok, sizes only allowed if they appear inside at least one global-type argument *)
-    event_qvar_checker#visit_params (false, ref []) params
+    event_qvar_checker#visit_params (false, ref []) params  
   | DModule (_, intf, ds) ->
     List.iter check_qvars_intf intf;
     List.iter check_qvars ds

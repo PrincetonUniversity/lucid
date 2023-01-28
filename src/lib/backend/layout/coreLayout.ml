@@ -17,7 +17,7 @@ open CoreResources
    a list of source statements (for debugging)
    and a "solitary" flag, which means no more can be added to it. *)
 type table = {
-  keys  : exp list;
+  tkeys  : exp list;
   branches : branch list; (* the "rules" of the table *)
   sources : CoreCfg.vertex_stmt list;
   solitary : bool; 
@@ -42,7 +42,7 @@ type prog_info = {
 
 
 (* initializers *)
-let empty_table = {keys =[]; branches = []; solitary = false; sources = [];}
+let empty_table = {tkeys =[]; branches = []; solitary = false; sources = [];}
 let empty_stage = {tables = [];}
 let empty_pipeline = {stages = [];}
 
@@ -53,7 +53,7 @@ let table_is_empty table =
 ;;
 
 (* deconstructors *)
-let stmt_of_table t = smatch t.keys t.branches
+let stmt_of_table t = smatch t.tkeys t.branches
   (* smatch_of_pattern_branches t.rules; *)
 ;;
 let stmt_of_stage s =  
@@ -126,7 +126,7 @@ let keywidth_of_table table =
     | TInt(sz) -> sz
     | _ -> error "[keywidth_of_table] reached table key that is not bool or int..."
   in
-  CL.fold_left (+) 0 (CL.map width_of_exp table.keys)
+  CL.fold_left (+) 0 (CL.map width_of_exp table.tkeys)
 ;;
 
 type constraints_table = {
@@ -218,7 +218,7 @@ let place_in_table cond_stmts table =
     match new_tbl_smatch.s with
     | SMatch(es, bs) ->
       Some({
-        keys=es;
+        tkeys=es;
         branches=bs;
         solitary = table.solitary || contains_usermatch;
         sources=cond_stmts@table.sources;

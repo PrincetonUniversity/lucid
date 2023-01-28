@@ -19,6 +19,8 @@ and size = int
 
 and sizes = size list
 
+and action_sig = (string * size list * size list)
+
 and raw_ty =
   | TBool
   | TGroup
@@ -27,6 +29,21 @@ and raw_ty =
   | TFun of func_ty (* Only used for Array/event functions at this point *)
   | TName of cid * sizes * bool (* Named type: e.g. "Array.t<<32>>". Bool is true if it represents a global type *)
   | TMemop of int * size
+  | TTable of tbl_ty
+  | TAction of acn_ty 
+  | TPat of size
+
+and tbl_ty = {
+    tkey_sizes : size list;
+    tparam_tys : ty list;
+    tret_tys : ty list;
+  }
+
+and acn_ty = {
+  aconst_param_tys : tys;
+  aparam_tys : tys;
+  aret_tys : tys;
+}
 
 (* Don't need effects or constraints since we passed typechecking ages ago *)
 and func_ty =
@@ -65,6 +82,8 @@ and op =
   | LShift
   | RShift
   | Slice of int * int
+  | PatExact
+  | PatMask
 
 and pat =
   | PWild
@@ -80,6 +99,7 @@ and v =
   | VGlobal of int (* Stage number *)
   | VTuple of v list (* Only used in the interpreter during complex memops *)
   | VGroup of location list
+  | VPat of int list
 
 and event =
   { eid : cid
@@ -101,6 +121,12 @@ and e =
   | ECall of cid * exp list
   | EHash of size * exp list
   | EFlood of exp
+  | ETableCreate of {
+    tty: ty;
+    tactions: exp list; 
+    tsize: exp;
+    tdefault : cid * exp list;
+  }
 
 and exp =
   { e : e
@@ -115,6 +141,7 @@ and gen_type =
   | GMulti of exp
   | GPort of exp
 
+
 (* statements *)
 and s =
   | SNoop
@@ -127,6 +154,29 @@ and s =
   | SSeq of statement * statement
   | SMatch of exp list * branch list
   | SRet of exp option
+  | STableMatch of tbl_match
+  | STableInstall of exp * tbl_entry list
+
+and tbl_match_out_param = (id * (ty option))
+
+and tbl_match = 
+    {tbl  : exp;
+    keys  : exp list;
+    args : exp list;
+    outs : id list; 
+    out_tys : ty list option;}
+    (* out_tys set for statements that create new vars *)
+
+(* table entries are patterns that point 
+   to actions, with values to be used 
+   as the install-time arguments. *)
+and tbl_entry = {
+  eprio : int;
+  ematch : exp list;
+  eaction : id;
+  eargs : exp list;
+}
+
 
 and statement =
   { s : s
@@ -160,6 +210,8 @@ and memop_body =
   | MBIf of exp * exp * exp
   | MBComplex of complex_body
 
+and action_body = exp list
+
 (* declarations *)
 and d =
   | DGlobal of id * ty * exp
@@ -167,7 +219,16 @@ and d =
   | DHandler of id * body
   | DMemop of id * params * memop_body
   | DExtern of id * ty
+  | DAction of action
+  (* id * ty list * params * (params * action_body) *)
 
+and action = {
+  aid : id; 
+  artys : ty list;
+  aconst_params : params;
+  aparams : params; 
+  abody : action_body;
+}
 
 (* name, return type, args & body *)
 and decl =
@@ -214,6 +275,7 @@ let infer_vty v =
   | VEvent _ -> TEvent
   | VGroup _ -> TGroup
   | VGlobal _ -> failwith "Cannot infer type of global value"
+  | VPat bs -> TPat(List.length bs)
   | VTuple _ ->
     failwith "Cannot infer type of tuple value (only used in complex memops)"
 ;;
@@ -223,7 +285,9 @@ let avalue v vty vspan = { v; vty; vspan }
 let value_sp v vspan = { v; vty = infer_vty v |> ty; vspan }
 let value v = { v; vty = infer_vty v |> ty; vspan = Span.default }
 let vint i size = value (VInt (Integer.create i size))
+let vwild size = value (VPat (List.init size (fun _ -> -1)))
 let vinteger i = value (VInt i)
+let vpat bs = value (VPat bs)
 let vbool b = value (VBool b)
 let default_vint size = value (VInt (Integer.create 0 size))
 let default_vbool = value (VBool false)
@@ -355,3 +419,32 @@ and equiv_branch (ps1, s1) (ps2, s2) =
 ;;
 
 
+(* bit pattern helpers, for interp *)
+let int_to_bitpat n len = 
+  let bs = Array.create len 0 in
+  for i = 0 to len - 1 
+  do
+    let pos = len - 1 - i in
+    if (n land (1 lsl i) != 0)
+      then (bs.(pos) <- 1) 
+      else (bs.(pos) <- 0)
+  done;
+  Array.to_list bs
+;;
+
+let int_mask_to_bitpat n mask len =
+  let bs = Array.create len 0 in
+  for i = 0 to len - 1 
+  do
+    let pos = len - 1 - i in
+    (* if the mask's value is 1 at pos, use value *)
+    if (mask land (1 lsl i) != 0)
+    then (
+      if (n land (1 lsl i) != 0)
+        then (bs.(pos) <- 1) 
+        else (bs.(pos) <- 0))
+    (* otherwise, use -1 *)    
+    else (bs.(pos) <- -1)
+  done;
+  Array.to_list bs
+;;  

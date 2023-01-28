@@ -118,6 +118,7 @@ let rec interp_exp env e =
     { e with e = EHash (sz, List.map (interp_exp env) args) }
   | EFlood e' -> { e with e = EFlood (interp_exp env e') }
   | EOp (op, args) -> { e with e = interp_op env op args }
+  | ETableCreate(_) -> e
 
 (* Mostly copied from InterpCore, could maybe merge the two functions *)
 and interp_op env op args =
@@ -199,6 +200,11 @@ and interp_op env op args =
   (* Regular operators on values *)
   | Plus, [{ e = EVal v1 }; { e = EVal v2 }] ->
     vinteger (Integer.add (raw_integer v1) (raw_integer v2)) |> mk_e
+  (* patterns *)
+  | PatExact, [{ e = EVal {v = VInt n} }] ->
+    vpat (int_to_bitpat (Integer.to_int n) (Integer.size n)) |> mk_e
+  | PatMask, [{ e = EVal {v = VInt n} }; { e = EVal {v = VInt m} }] ->
+    vpat (int_mask_to_bitpat (Integer.to_int n) (Integer.to_int m) (Integer.size n)) |> mk_e
   | SatPlus, [{ e = EVal v1 }; { e = EVal v2 }] ->
     let res = Integer.add (raw_integer v1) (raw_integer v2) in
     if Integer.lt res (raw_integer v1)
@@ -257,7 +263,9 @@ and interp_op env op args =
       | RShift
       | Conc
       | Cast _
-      | Slice _ )
+      | Slice _ 
+      | PatExact
+      | PatMask )
     , _ ) -> EOp (op, args)
 ;;
 
@@ -265,6 +273,18 @@ let interp_gen_ty env = function
   | GSingle eo -> GSingle (Option.map (interp_exp env) eo)
   | GMulti e -> GMulti (interp_exp env e)
   | GPort e -> GPort (interp_exp env e)
+;;
+
+
+let add_builtin_defs level vars env =
+  List.fold_left
+    (fun acc (id, _) ->
+      IdMap.add
+        id
+        { level; body = None; is_declared = true; declared_as = None }
+        acc)
+    env
+    vars
 ;;
 
 (* Partially interpret a statement. Takes an environment and the current level
@@ -344,17 +364,19 @@ let rec interp_stmt env level s : statement * env =
     in
     let base_stmt = { s with s = SMatch (es, branches) } in
     merge_branches base_stmt level env envs
-;;
-
-let add_builtin_defs level vars env =
-  List.fold_left
-    (fun acc (id, _) ->
-      IdMap.add
-        id
-        { level; body = None; is_declared = true; declared_as = None }
-        acc)
-    env
-    vars
+  | STableMatch(tm) -> 
+    let keys' = List.map interp_exp tm.keys in
+    let args' = List.map interp_exp tm.args in
+    {s with s= STableMatch({tm with keys=keys'; args=args';})}, env
+  | STableInstall(id, entries) -> 
+    let entries = List.map
+      (fun entry -> 
+        {entry with 
+          ematch = List.map interp_exp entry.ematch;
+          eargs = List.map interp_exp entry.eargs;})
+      entries
+    in
+    {s with s = STableInstall(id, entries)}, env
 ;;
 
 let interp_body builtin_tys env (params, stmt) =
@@ -391,6 +413,16 @@ let interp_decl builtin_tys env d =
   | DEvent (id, _, _) | DExtern (id, _) ->
     let env = add_dec env id in
     env, d
+  | DAction(acn) -> 
+    let env = add_dec env acn.aid in
+    let level = 1 in 
+    let acn_env = 
+      env 
+      |> add_builtin_defs level acn.aconst_params
+      |> add_builtin_defs level acn.aparams
+    in
+    let abody = List.map (interp_exp acn_env) acn.abody in
+    env, {d with d = DAction({acn with abody})}
 ;;
 
 let interp_prog ds = ds

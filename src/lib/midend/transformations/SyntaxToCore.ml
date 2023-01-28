@@ -9,9 +9,18 @@ let err span str =
   ^ " to backend syntax"
 ;;
 
+let err_unsupported span str =
+  Console.error_position span
+  @@ "cannot translate to backend syntax. the construct "
+  ^ str
+  ^ " does not exist in the backend and should have been eliminated"
+;;
+
+
 let translate_size (sz : S.size) : C.size =
   SyntaxUtils.extract_size_default sz 32
 ;;
+
 
 let rec translate_ty (ty : S.ty) : C.ty =
   let raw_ty =
@@ -28,10 +37,25 @@ let rec translate_ty (ty : S.ty) : C.ty =
         ; ret_ty = translate_ty fty.ret_ty
         }
     | S.TVoid -> C.TBool (* Dummy translation needed for foreign functions *)
+    | S.TTable(tbl) -> 
+      let tkey_sizes = List.map translate_size tbl.tkey_sizes in
+      let tparam_tys = List.map translate_ty tbl.tparam_tys in
+      let tret_tys = List.map translate_ty tbl.tret_tys in
+      C.TTable({tkey_sizes; tparam_tys; tret_tys})
+    | S.TAction(a) -> 
+      let aconst_param_tys = List.map translate_ty a.aconst_param_tys in
+      let aparam_tys = List.map translate_ty a.aparam_tys in
+      let aret_tys = List.map translate_ty a.aret_tys in
+      C.TAction({aconst_param_tys; aparam_tys; aret_tys})
+    | S.TPat(s) -> C.TPat(translate_size s)
     | _ -> err ty.tspan (Printing.ty_to_string ty)
   in
   { raw_ty; tspan = ty.tspan }
+and translate_asig asig = 
+  let (name, tys) = asig in
+  (name, List.map (fun rty -> (translate_ty (S.ty rty)).raw_ty) tys;)
 ;;
+
 
 let translate_op (op : S.op) : C.op =
   match op with
@@ -59,6 +83,8 @@ let translate_op (op : S.op) : C.op =
   | S.RShift -> C.RShift
   | S.Slice (lo, hi) -> C.Slice (translate_size lo, translate_size hi)
   | S.TGet _ -> err Span.default "tuple get operator"
+  | S.PatExact -> C.PatExact
+  | S.PatMask -> C.PatMask
 ;;
 
 let translate_pattern (p : S.pat) : C.pat =
@@ -79,6 +105,7 @@ let rec translate_value (v : S.value) : C.value =
     | S.VGroup ls -> C.VGroup ls
     | VEvent { eid; data; edelay } ->
       C.VEvent { eid; data = List.map translate_value data; edelay }
+    | S.VPat bs -> C.VPat bs
   in
   { v = v'; vty = translate_ty (Option.get v.vty); vspan = v.vspan }
 ;;
@@ -95,23 +122,52 @@ let rec translate_exp (e : S.exp) : C.exp =
     | S.ECall (cid, es) -> C.ECall (cid, List.map translate_exp es)
     | S.EHash (sz, es) -> C.EHash (translate_size sz, List.map translate_exp es)
     | S.EFlood e -> C.EFlood (translate_exp e)
-    | _ -> err e.espan (Printing.exp_to_string e)
+    | ESizeCast(_) | EStmt(_) | ERecord(_) | EWith(_) | EProj(_)
+    | EVector(_) | EComp(_) | EIndex(_) | ETuple(_) -> err_unsupported e.espan (Printing.exp_to_string e)
+    | S.ETableCreate(e) ->  
+      let tty = translate_ty e.tty in
+      let tactions = List.map translate_exp e.tactions in
+      let tsize = translate_exp e.tsize in
+      let tdefault = (fst e.tdefault), (snd e.tdefault |> List.map translate_exp) in
+      C.ETableCreate({tty; tactions; tsize; tdefault})
+    | S.ETableMatch _ ->
+        err e.espan "table match exps should have been eliminated before IR."
+    | S.EPatWild(Some(sz)) -> C.EVal (C.vwild (translate_size sz)) 
+    | S.EPatWild(None) -> err e.espan "wildcard patterns (_) should have a size before IR."
   in
   { e = e'; ety = translate_ty (Option.get e.ety); espan = e.espan }
-;;
 
-let translate_gen_type = function
+and translate_params params =
+  List.map (fun (id, ty) -> id, translate_ty ty) params
+
+and translate_body (params, stmt) =
+  translate_params params, translate_statement stmt
+
+and translate_acn acn =
+  let (name, body) = acn in
+  (name, translate_body body)
+and translate_case case =
+  let (pats, acn, args) = case in
+  (List.map translate_pattern pats, acn, List.map translate_exp args)
+
+and translate_gen_type = function
   | S.GSingle eo -> C.GSingle (Option.map translate_exp eo)
   | S.GMulti e -> C.GMulti (translate_exp e)
   | S.GPort e -> C.GPort (translate_exp e)
-;;
 
-let rec translate_statement (s : S.statement) : C.statement =
+and translate_statement (s : S.statement) : C.statement =
   (* (match s.s with
   | SSeq _ | SNoop -> ()
   | _ -> print_endline @@ "Translating " ^ Printing.statement_to_string s); *)
   let translate_branch (ps, s) =
     List.map translate_pattern ps, translate_statement s
+  in
+  let translate_entry (entry: S.tbl_entry) : C.tbl_entry = {
+      ematch = List.map translate_exp entry.ematch;
+      eprio=entry.eprio;
+      eaction=entry.eaction;
+      eargs = List.map translate_exp entry.eargs;
+    }
   in
   let s' =
     match s.s with
@@ -127,17 +183,20 @@ let rec translate_statement (s : S.statement) : C.statement =
     | S.SMatch (es, branches) ->
       C.SMatch (List.map translate_exp es, List.map translate_branch branches)
     | S.SRet eopt -> C.SRet (Option.map translate_exp eopt)
+    | S.STableMatch(tm) -> C.STableMatch({
+      C.tbl = translate_exp tm.tbl;
+      C.keys = List.map translate_exp tm.keys;
+      C.args = List.map translate_exp tm.args;
+      C.outs = tm.outs;
+      C.out_tys = match tm.out_tys with 
+        | None -> None
+        | Some(otys) -> Some(List.map translate_ty otys);
+    })
+    | S.STableInstall(tbl_exp, entries) -> 
+      C.STableInstall(translate_exp tbl_exp, List.map translate_entry entries)
     | _ -> err s.sspan (Printing.statement_to_string s)
   in
   { s = s'; sspan = s.sspan; spragma = None}
-;;
-
-let translate_params params =
-  List.map (fun (id, ty) -> id, translate_ty ty) params
-;;
-
-let translate_body (params, stmt) =
-  translate_params params, translate_statement stmt
 ;;
 
 let translate_memop body =
@@ -180,6 +239,13 @@ let translate_decl (d : S.decl) : C.decl =
     | S.DMemop (id, params, body) ->
       C.DMemop (id, translate_params params, translate_memop body)
     | S.DExtern (id, ty) -> C.DExtern (id, translate_ty ty)
+    | S.DAction(id, tys, const_params, (params, acn_body)) -> 
+      C.DAction({
+          aid = id;
+          artys = List.map translate_ty tys;
+          aconst_params = translate_params const_params;
+          aparams = translate_params params;
+        abody = List.map translate_exp acn_body;})
     | _ -> err d.dspan (Printing.decl_to_string d)
   in
   { d = d'; dspan = d.dspan }

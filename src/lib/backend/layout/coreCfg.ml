@@ -207,6 +207,11 @@ let rec cfg_of_statement_inner (st:statement) =
     | SRet(_)  
     | SGen(_) ->
         Cfg.add_vertex Cfg.empty {stmt=st; solitary = false;} 
+    | STableMatch(_) -> 
+        (* a table match remains a table match *)
+        Cfg.add_vertex Cfg.empty {stmt=st; solitary = true;}
+    | STableInstall(_) -> 
+        error "[coreCfg.cfg_of_statement_inner] table installs should be removed from tofino program by this point."
     | SIf(e, s1, s2) ->
         (* 1. compute graph of s1 and s2 *)
         let g_s1 = cfg_of_statement_inner s1 in
@@ -334,7 +339,9 @@ let statement_of_cfg cfg =
         | SAssign _ 
         | SPrintf _
         | SGen _ 
-        | SRet _ -> (
+        | SRet _
+        | STableMatch _ ->
+            (
             match (Cfg.succ cfg v) with 
             | [] -> v.stmt
             | [next_node] -> sseq (v.stmt) (stmt_of_vertex next_node)
@@ -342,6 +349,8 @@ let statement_of_cfg cfg =
         )
         | SSeq _ -> error "[stmt_of_vertex] sseq not expected"
         | SIf _ -> error "sif not expected"
+        | STableInstall(_) -> 
+            error "[coreCfg.statement_of_cfg] table installs should be removed from tofino program by this point."
         | SMatch(exps, branches) -> (
             let pats = List.split branches |> fst in
             let next_vs = Cfg.succ cfg v in

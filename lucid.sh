@@ -4,15 +4,22 @@
 
 # requirements: docker
 
-# usage: 
-# ./lucid.sh interp <prog.dpt> -- run lucid interpreter inside of the docker image.
-# ./lucid.sh compile <prog.dpt> -- run lucid compiler inside the docker image.
-# ./lucid.sh rebuild -- rebuild docker image with local version of source
-# ./lucid.sh pull -- pull most recently published version of docker image
-# ./lucid.sh rebuild_and_push -- rebuild docker image and publish (admin only)
+USAGE=$(cat <<-END
+Usage:
+./lucid.sh interp <prog.dpt> -- run lucid interpreter inside of the docker image.
+./lucid.sh compile <prog.dpt> -- run lucid compiler inside the docker image.
+./lucid.sh rebuild -- rebuild the lucid compiler in your docker image, from this local repo.
+./lucid.sh pull -- pull most recently published version of lucid image.
+./lucid.sh enter_dev -- enter a lucid development image where the local repo is mounted at /lucid.
+./lucid.sh pull_dev -- pull most recently published version of lucid dev image.
+./lucid.sh rebuild_and_push -- rebuild docker image and publish (admin only)
+./lucid.sh rebuild_and_push_dev -- rebuild docker image and publish (admin only)
+END
 
+)
 
 DOCKER_IMAGE="jsonch/lucid:lucid"
+DOCKER_DEV_IMAGE="jsonch/lucid:lucid_dev"
 DOCKER_CMD="docker run --rm -it"
 DOCKER_PWD="/app"
 
@@ -62,6 +69,8 @@ strip_whitespace()
     echo $1 | tr -d '[:space:]'
 }
 # get the first-level includes of a file
+# we can't mount all the files at once, because 
+# we don't know which files to mount yet
 get_includes()
 {
     DOCKER_UTIL="bin/dockerUtils includes"
@@ -73,13 +82,22 @@ get_includes()
     # >&2 echo "get_includes local: $local"
     # >&2 echo "get_includes remote: $remote"   
     # GICMD="$DOCKER_CMD $(mount_file_str ${next}) /bin/sh -c \"" 
+    # command to get includes of curent file
     GICMD="docker run --rm -it --mount type=bind,source=$local,target=$remote $DOCKER_IMAGE /bin/sh -c \"$DOCKER_UTIL $next\""
     # >&2 echo "GICMD:$GICMD"
     next_includes=$(eval "$GICMD")
+    rv=$?
+    if [ "$rv" -ne "0" ]; then
+        >&2 echo "*** docker wrapper error *** parse error in file: $next"
+        >&2 echo "$next_includes"
+        >&2 echo "*** end docker wrapper error ***"
+        exit $rv
+    fi
     next_includes=$(strip_whitespace $next_includes)
     # `docker run --rm -it --mount type=bind,source=$local,target=$remote $DOCKER_IMAGE /bin/sh -c "bin/dockerUtils includes $next"`
     # >&2 echo "result: $next_includes"
     echo "$next_includes"
+    return 0
 }
 
 # get included files, recursively to any depth
@@ -88,11 +106,15 @@ get_all_includes()
     src=$1
     # >&2 echo "get_all_includes is processing: $src"
     src_includes_str=$(get_includes $src)
+    rv=$?; if [ "$rv" -ne "0" ]; then return $rv; fi
+    # make sure the operation was a success.
     IFS=':' read -ra incl_arr <<< "$src_includes_str"
     for dep_src in "${incl_arr[@]}"; do
         # >&2 echo "get_all_includes is processing dependency: $dep_src"
         # get dependencies of dependent
         recursive_includes_str=$(get_all_includes $dep_src)
+        rv=$?
+        if [ "$rv" -ne "0" ]; then return $rv; fi
         # if there are any 2nd-level dependencies, add them
         if [ -z "$recursive_includes_str" ]
         then
@@ -103,6 +125,7 @@ get_all_includes()
         # >&2 echo "src_includes_str from $src-- $src_includes_str"
     done
     echo "$src_includes_str"
+    return 0
 }
 
 # get the main source file
@@ -122,12 +145,15 @@ get_all_sources()
     main=$(get_main $@)
     # 1. figure out name of main file.
     all_includes_str=$(get_all_includes $main)
+    rv=$?; if [ "$rv" -ne "0" ]; then return $rv; fi
+
     all_files_str="$main:$all_includes_str"
     IFS=':' read -ra all_files_arr <<< "$all_files_str"
 
     # unique elements of array 
     IFS=" " read -r -a all_files_arr <<< "$(echo "${all_files_arr[@]}" | tr ' ' '\n' | sort -u | tr '\n' ' ')"
     echo "${all_files_arr[@]}"
+    return 0
 }
 
 # get the docker-local filename of a file passed as an argument to this script
@@ -152,6 +178,7 @@ interpret_cmd ()
 {
     main=$(get_main $@)
     sources_str=$(get_all_sources $@)
+    rv=$?; if [ "$rv" -ne "0" ]; then return $rv; fi
     IFS=' ' read -ra sources <<< "$sources_str"
     >&2 echo "program: $main"
     >&2 echo "sources: $sources_str"
@@ -220,6 +247,7 @@ compile_cmd ()
 {
     main=$(get_main $@)
     sources_str=$(get_all_sources $@)
+    rv=$?; if [ "$rv" -ne "0" ]; then return $rv; fi
     IFS=' ' read -ra sources <<< "$sources_str"
     SPEC_FOUND=0
     ARGS=""
@@ -338,21 +366,45 @@ case $1 in
         eval "$CMD"
         ;;
     # (admin only) rebuild a new lucid binary and push to docker hub.
+    # note: this relies on the dev image, so if the dependencies have changed, 
+    # that image should be updated first.
     rebuild_and_push)
         shift 
         check_lucid_dir
         CMD="docker build -t $DOCKER_IMAGE .  && docker push $DOCKER_IMAGE"
         eval "$CMD"
         ;;        
+    # enter an instance of the lucid dev image 
+    # with the directory that this script is in mounted to /lucid
+    enter_dev)
+        # directory that this script is in
+        SCRIPT_DIR=$( cd -- "$( dirname -- "${BASH_SOURCE[0]}" )" &> /dev/null && pwd )
+        # directory of the lucid repo
+        mount_args="-v $SCRIPT_DIR:/lucid"
+        cmd="$DOCKER_CMD --workdir /lucid $mount_args $DOCKER_DEV_IMAGE"
+        # echo "command: $cmd"
+        eval "$cmd"
+        ;;
+    # pull the base version of the dev image. Use this if you mess up 
+    # your local copy of the dev image
+    pull_dev)
+        shift
+        CMD="docker pull $DOCKER_DEV_IMAGE"
+        eval "$CMD"
+        ;;
     # (admin only) rebuild the lucid dev image and push to public repo -- 
-    # this is for when lucid's dependencies have changed on the master branch (rare)
+    # the dev image is used to build lucid for the main image, and for 
+    # local development. It does not have a local copy of lucid, 
+    # but rather just lucid's dependencies. 
+    # So the dev image should only change when lucid's dependencies change.
     rebuild_and_push_dev)
         shift 
         check_lucid_dir
         eval "docker build --target lucid_dev --tag jsonch/lucid:lucid_dev . && docker push jsonch/lucid:lucid_dev"
         ;;
     *)
-        echo "usage: ./lucid.sh <interpret | compile> <arguments to lucid interpreter or compiler>"
+        echo "unknown command argument."
+        echo "$USAGE"
         exit 1;
         ;;
 

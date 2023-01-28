@@ -14,6 +14,7 @@ type t =
   ; events : (event * (int * int) list) list
   ; config : InterpState.State.config
   ; extern_funs : InterpState.State.ival Env.t
+  ; ctl_pipe_name : string option
   }
 
 let rename env err_str id_str =
@@ -301,7 +302,9 @@ let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t 
     in
     let links =
       if num_switches = 1
-      then IntMap.empty
+      then (
+        InterpState.State.empty_topology 1
+      )
       else (
         match List.assoc_opt "links" lst with
         | Some (`Assoc links) -> parse_links num_switches links
@@ -350,6 +353,10 @@ let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t 
             "Extern functions were declared but no python file was provided!"
       | _ -> error "Non-string value for python_file"
     in
+    let ctl_pipe_name = match (List.assoc_opt "control pipe" lst) with 
+      | Some(`String filename) -> Some(filename)
+      | _ -> None 
+    in
     let config : InterpState.State.config =
       { max_time
       ; default_input_gap
@@ -360,6 +367,6 @@ let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t 
       ; random_seed
       }
     in
-    { num_switches; links; externs; events; config; extern_funs }
+    { num_switches; links; externs; events; config; extern_funs; ctl_pipe_name}
   | _ -> error "Unexpected interpreter specification format"
 ;;

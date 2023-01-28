@@ -36,6 +36,33 @@ let subst =
         in
         TName (cid, sizes, b)
 
+      method! visit_ETableCreate env tty tactions tsize tdefault =
+        let tactions = List.map (self#visit_exp env) (tactions) in
+
+        let tdefault_cid, tdefault_args = fst tdefault, List.map (self#visit_exp env) (snd tdefault) in
+        (* rename the default action cid *)
+        let tdefault_cid =
+          match CidMap.find_opt tdefault_cid env.vars with
+          | None -> tdefault_cid
+          | Some tdefault_cid' -> Id tdefault_cid'
+        in
+
+        ETableCreate({tty; tactions; tsize; tdefault=(tdefault_cid, tdefault_args)})
+
+      method! visit_STableInstall env etbl entries =
+        let etbl = self#visit_exp env etbl in
+        let entries = List.map
+          (fun entry -> 
+            {entry with 
+              ematch = List.map (self#visit_exp env) entry.ematch;
+              eaction = (match (CidMap.find_opt (Cid.id entry.eaction) env.vars) with
+                | None -> entry.eaction
+                | Some new_action_id -> new_action_id);
+              eargs = List.map (self#visit_exp env) entry.eargs;})
+          entries
+        in
+        STableInstall(etbl, entries)
+
       method! visit_ECall env x args =
         let args = List.map (self#visit_exp env) args in
         let x =
@@ -68,6 +95,7 @@ let add_definitions prefix env ds =
     | DGlobal (id, _, _) -> { env with vars = add_entry env.vars id }
     | DSize (id, _) -> { env with sizes = add_entry env.sizes id }
     | DUserTy (id, _, _) -> { env with types = add_entry env.types id }
+    | DAction(id, _, _, _) -> { env with vars = add_entry env.vars id }
     | DModuleAlias _ -> failwith "Should be eliminated before this"
     | DModule (id, _, ds) ->
       let env' = List.fold_left (aux id) empty_env ds in
@@ -98,6 +126,7 @@ let rec replace_module env m_id ds =
   let env, ds' =
     List.fold_left
       (fun (env, ds) d ->
+
         let d = subst#visit_decl env d in
         let env, d =
           match d.d with
@@ -134,6 +163,9 @@ let rec replace_module env m_id ds =
           | DUserTy (id, x, y) ->
             ( { env with types = add_entry env.types id }
             , DUserTy (prefix id, x, y) |> wrap d )
+          | DAction(id, x, y, z) -> 
+            ( { env with vars = add_entry env.vars id }
+            , DAction (prefix id, x, y, z) |> wrap d )
           | DModule (id, _, ds) ->
             let _, ds = replace_module env id ds in
             replace_module env m_id ds

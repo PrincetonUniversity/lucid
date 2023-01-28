@@ -1,0 +1,13 @@
+{
+ "switches":2,
+ "links": {"0:0": "1:0"},  
+ "max time": 9999999,
+ "default input gap": 10000,
+ "random seed": 0,
+ "events": [
+   {"name":"do_match", "args":[2]},
+   {"name":"do_match", "args":[2]},
+   {"name":"do_install", "args":[3, 2]},
+   {"name":"do_match", "args":[3]}
+ ]
+}

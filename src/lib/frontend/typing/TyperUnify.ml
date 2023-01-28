@@ -59,6 +59,7 @@ let occurs_effect span tvar eff : unit =
 
 let occurs_ty span tvar raw_ty : unit =
   let rec occ tvar raw_ty =
+    let occ_ty ty = occ tvar ty.raw_ty in 
     match raw_ty with
     | TQVar tvr -> occurs_tqvar occ tvar tvr
     | TBool
@@ -75,6 +76,14 @@ let occurs_ty span tvar raw_ty : unit =
       List.iter (fun ty -> occ tvar ty.raw_ty) arg_tys;
       occ tvar ret_ty.raw_ty
     | TVector (raw_ty, _) -> occ tvar raw_ty
+    | TTable(t) -> 
+      List.iter occ_ty t.tparam_tys;
+      List.iter occ_ty t.tret_tys
+    | TAction(a) -> 
+      List.iter occ_ty a.aconst_param_tys;
+      List.iter occ_ty a.aparam_tys;
+      List.iter occ_ty a.aret_tys
+    | TPat _ -> ()
   in
   check_occurs span occ raw_ty_to_string tvar raw_ty
 ;;
@@ -219,6 +228,7 @@ and try_unify_rty span rty1 rty2 =
       ty
   | TBool, TBool | TVoid, TVoid | TGroup, TGroup | TEvent, TEvent -> ()
   | TInt size1, TInt size2 -> try_unify_size span size1 size2
+  | TPat size1, TPat size2 -> try_unify_size span size1 size2
   | TMemop (n1, size1), TMemop (n2, size2) ->
     if n1 <> n2
     then
@@ -254,6 +264,14 @@ and try_unify_rty span rty1 rty2 =
   | TVector (ty1, size1), TVector (ty2, size2) ->
     try_unify_size span size1 size2;
     unify_raw_ty ty1 ty2
+  | TTable(t1), TTable(t2) -> 
+    List.iter2 (try_unify_size span) t1.tkey_sizes t2.tkey_sizes;
+    List.iter2 (try_unify_ty span) t1.tparam_tys t2.tparam_tys;
+    List.iter2 (try_unify_ty span) t1.tret_tys t2.tret_tys
+  | TAction(a1), TAction(a2) -> 
+    List.iter2 (try_unify_ty span) a1.aconst_param_tys a2.aconst_param_tys;
+    List.iter2 (try_unify_ty span) a1.aparam_tys a2.aparam_tys;
+    List.iter2 (try_unify_ty span) a1.aret_tys a2.aret_tys
   | ( ( TVoid
       | TGroup
       | TBool
@@ -265,7 +283,10 @@ and try_unify_rty span rty1 rty2 =
       | TRecord _
       | TVector _
       | TTuple _
-      | TAbstract _ )
+      | TAbstract _ 
+      | TAction _
+      | TTable _
+      | TPat _)
     , _ ) -> raise CannotUnify
 
 and unify_ty (span : Span.t) ty1 ty2 : unit =

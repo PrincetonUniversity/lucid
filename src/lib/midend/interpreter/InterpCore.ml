@@ -29,7 +29,12 @@ let raw_group v =
   | _ -> error "not group"
 ;;
 
+
 let interp_op op vs =
+  let extract_int = function
+    | VInt n -> n
+    | _ -> failwith "No good"
+  in
   let vs = List.map extract_ival vs in
   match op, vs with
   | And, [v1; v2] -> vbool (raw_bool v1 && raw_bool v2)
@@ -77,6 +82,27 @@ let interp_op op vs =
   | Slice (hi, lo), [v] ->
     vinteger
       (Integer.shift_right (raw_integer v) lo |> Integer.set_size (hi - lo + 1))
+  | PatExact, [v] -> 
+    let vint = extract_int v.v in
+    let pat_len = Integer.size vint in
+    let pat_val = Integer.to_int vint in
+    let bs = int_to_bitpat pat_val pat_len in
+    let outv = vpat bs in 
+(*     print_endline ("[interp_op.PatExact] input: "
+      ^(CorePrinting.value_to_string v)
+      ^" output: "^(CorePrinting.value_to_string outv)); *)
+    outv
+  | PatMask, [v; m] -> 
+    let vint = extract_int v.v in
+    let pat_len = Integer.size vint in
+    let pat_val = Integer.to_int vint in
+    let pat_mask = Integer.to_int (extract_int m.v) in
+    let bs = int_mask_to_bitpat pat_val pat_mask pat_len in
+    let outv = vpat bs in 
+(*     print_endline ("[interp_op.PatMask] input: "
+      ^(CorePrinting.value_to_string v)
+      ^" output: "^(CorePrinting.value_to_string outv)); *)
+    outv
   | ( ( Not
       | Neg
       | BitNot
@@ -99,7 +125,9 @@ let interp_op op vs =
       | RShift
       | Conc
       | Cast _
-      | Slice _ )
+      | Slice _ 
+      | PatExact
+      | PatMask)
     , _ ) ->
     error
       ("bad operator: "
@@ -114,6 +142,12 @@ let lookup_var swid nst locals cid =
   | _ -> State.lookup swid cid nst
 ;;
 
+
+let interp_eval exp : State.ival =
+  match exp.e with
+  | EVal v -> V v
+  | _ -> error ("[interp_eval] expected a value expression, but got something else.")
+;;
 let rec interp_exp (nst : State.network_state) swid locals e : State.ival =
   (* print_endline @@ "Interping: " ^ CorePrinting.exp_to_string e; *)
   let interp_exps = interp_exps nst swid locals in
@@ -179,6 +213,10 @@ let rec interp_exp (nst : State.network_state) swid locals e : State.ival =
       |> Integer.to_int
     in
     V (vgroup [-(port + 1)])
+  | ETableCreate _ -> (
+    error "[InterpCore.interp_exp] got a table_create expression, which should not happen\
+    because the table creation should be interpeter in the declaration";
+  )
 
 and interp_exps nst swid locals es : State.ival list =
   List.map (interp_exp nst swid locals) es
@@ -218,6 +256,17 @@ let matches_pat vs ps =
         | _ -> false)
       vs
       ps
+;;
+
+(* updated version with pattern values *)
+let matches_pat_vals (vs : value list) (pats : value list) = 
+  List.for_all2
+    (fun v p -> 
+      match (v.v, p.v) with
+      | (VInt(n), VPat(bs)) -> bitmatch bs (Integer.value n)
+      | _ -> false)
+    vs
+    pats
 ;;
 
 let printf_replace vs (s : string) : string =
@@ -272,10 +321,21 @@ let log_exit swid port_opt event (nst : State.network_state) =
 ;; 
 
 
+
+let partial_interp_exps nst swid env exps =
+  List.map
+    (fun exp -> match (interp_exp nst swid env exp) with 
+      | V v -> {e=EVal(v); espan=Span.default; ety=v.vty}
+      | _ -> error "[partial_interp_exps] default argument evaluated to function pointer, expected value")
+    exps
+;; 
+
+
 let rec interp_statement nst swid locals s =
   (* (match s.s with
   | SSeq _ | SNoop -> () (* We'll print the sub-parts when we get to them *)
   | _ -> print_endline @@ "Interpreting " ^ CorePrinting.stmt_to_string s); *)
+  let interpret_exp = interp_exp nst swid in 
   let interp_exp = interp_exp nst swid locals in
   let interp_s = interp_statement nst swid locals in
   match s.s with
@@ -371,9 +431,118 @@ let rec interp_statement nst swid locals s =
       | _ -> error "Match statement did not match any branch!"
     in
     interp_s (snd first_match)
+  | STableInstall(tbl, entries) -> 
+    (* install entries into the pipeline *)
+    (* evaluate entry patterns and install-time action args to EVals *)
+    let entries = List.map 
+      (fun entry -> 
+        let ematch = partial_interp_exps nst swid locals entry.ematch in
+        let eargs = partial_interp_exps nst swid locals entry.eargs in
+        {entry with ematch; eargs})
+      entries
+    in
+    (* get index of table in pipeline *)
+    let tbl_pos = match (interp_exp tbl) with
+      | V {v = VGlobal stage} -> stage
+      | _ -> error "Table did not evaluate to a pipeline object reference"
+    in
+    (* call install_table_entry for each entry *)
+    List.iter (State.install_table_entry_switch swid tbl_pos nst) entries;
+    (* return unmodified locals context *)
+    locals
+  | STableMatch(tm) -> 
+    (* load the dynamic entries from the pipeline *)
+    let tbl_pos = match (interp_exp tm.tbl) with
+      | V {v = VGlobal stage} -> stage
+      | _ -> error "Table did not evaluate to a pipeline object reference"
+    in
+    let default, entries = State.get_table_entries_switch swid tbl_pos nst in 
+    (* find the first matching case *)
+    let key_vs = List.map (fun e -> interp_exp e |> extract_ival) tm.keys in    
+    let fst_match = List.fold_left 
+      (fun fst_match entry -> 
+        (* print_endline ("checking entry: "^(CorePrinting.entry_to_string entry)); *)
+        match fst_match with 
+        | None -> 
+          let pat_vs = List.map (fun e -> interp_exp e |> extract_ival) entry.ematch in
+          if (matches_pat_vals key_vs pat_vs)
+          then (Some(entry.eaction, entry.eargs))
+          else (None)
+        | Some(_) -> fst_match)
+      None
+      entries
+    in 
+    (* if there's no matching entry, use the default action. *)
+    let acnid, e_const_args = match fst_match with
+      | Some(acnid, const_args) -> acnid, const_args
+      | None -> default
+    in     
+    (* find the action in context *)
+    let action = State.lookup_action (Id acnid) nst in
+    (* extract values from const arguments *)
+    let const_args = List.map interp_eval e_const_args in 
+    (* evaluate the runtime action arguments *)   
+    let dyn_args = List.map interp_exp tm.args in
+    (* bind install- and match-time parameters in env *)
+    let inner_locals = List.fold_left2
+      (fun inner_locals v (id, _) -> 
+        Env.add (Id id) v inner_locals)
+      locals
+      (const_args@dyn_args)
+      (action.aconst_params@action.aparams)
+    in
+    (* evaluate the action's expressions *)
+    let acn_ret_vals = List.map (interpret_exp inner_locals) action.abody in
+    (* update variables set by table's output in the env *)
+    let locals = List.fold_left2
+      (fun locals v id -> 
+        Env.add (Id id) v locals)
+      locals
+      acn_ret_vals
+      tm.outs
+    in 
+    locals
 ;;
 
-let interp_dglobal (nst : State.network_state) swid id ty e =
+
+let interp_dtable (nst : State.network_state) swid id ty e =
+  (* FIXME: hacked in a dtable interp that gets called from 
+            interp_dglobal. *)
+  let extract_int exp =
+    let size_val = interp_exp  (nst : State.network_state) swid (Env.empty) exp in
+    match size_val with
+    | V ({v=VInt(n)}) ->   Integer.to_int n
+    | _ -> failwith "not an int val"
+  in
+  let st = nst.switches.(swid) in
+  let p = st.pipeline in
+  let idx = Pipeline.length p in
+
+  (* add element to pipeline *)
+  let new_p = match ty.raw_ty with 
+    | TTable(_) -> (
+      match e.e with
+      | ETableCreate(t) -> 
+        (* eval args to value expressions *)
+        let def_acn_args = partial_interp_exps nst swid (Env.empty) (snd t.tdefault) in
+        (* construct the default entry with wildcard args *)
+(*         let def_entry_pats = List.map (fun _ -> PWild) (tbl_ty.tkey_sizes) in
+        let (def_entry:tbl_entry) = {ematch=def_entry_pats; eaction=(Cid.to_id (fst t.tdefault)); eargs=def_install_args;eprio=0;} in *)
+        Pipeline.append 
+          p 
+          (Pipeline.mk_table 
+            id 
+            (extract_int t.tsize) 
+            (fst t.tdefault |> Cid.to_id, def_acn_args))
+      | _ -> error "[interp_dtable] incorrect constructor for table")
+    | _ -> error "[interp_dtable] called to create a non table type object"
+  in
+  nst.switches.(swid) <- { st with pipeline = new_p };
+  State.add_global swid (Id id) (V (vglobal idx ty)) nst;
+  nst
+;;
+
+let _interp_dglobal (nst : State.network_state) swid id ty e =
   (* FIXME: This functions is probably more complicated than it needs to be.
      We can probably do this a lot better by writing the Array.create function
      in Arrays.ml (and similarly for counters), then just calling that. But I
@@ -401,12 +570,12 @@ let interp_dglobal (nst : State.network_state) swid id ty e =
         |> raw_integer
         |> Integer.to_int
       in
-      Pipeline.append_stage size len false p
+      Pipeline.append p (Pipeline.mk_array id size len false)
     | ["Counter"; "t"], [size], [e] ->
       let init_value =
         interp_exp nst swid Env.empty e |> extract_ival |> raw_integer
       in
-      let new_p = Pipeline.append_stage size 1 false p in
+      let new_p = Pipeline.append p (Pipeline.mk_array id size 1 false) in
       ignore
         (Pipeline.update
            ~stage:idx
@@ -422,7 +591,7 @@ let interp_dglobal (nst : State.network_state) swid id ty e =
         |> raw_integer
         |> Integer.to_int
       in
-      Pipeline.append_stage size len true p
+      Pipeline.append p (Pipeline.mk_array id size len true)
     | _ ->
       error
         "Wrong number of arguments to global constructor, or user type \
@@ -432,6 +601,12 @@ let interp_dglobal (nst : State.network_state) swid id ty e =
   State.add_global swid (Id id) (V (vglobal idx ty)) nst;
   nst
 ;;
+
+let interp_dglobal (nst : State.network_state) swid id ty e =
+  match ty.raw_ty with 
+    | TTable _ -> interp_dtable nst swid id ty e
+    | _ -> _interp_dglobal nst swid id ty e
+
 
 let interp_complex_body params body nst swid args =
   let args, default = List.takedrop (List.length params) args in
@@ -528,6 +703,9 @@ let interp_decl (nst : State.network_state) swid d =
   (* print_endline @@ "Interping decl: " ^ Printing.decl_to_string d; *)
   match d.d with
   | DGlobal (id, ty, e) -> interp_dglobal nst swid id ty e
+  | DAction (acn) -> 
+    (* add the action to the environment *)
+    State.add_action (Cid.id acn.aid) acn nst
   | DHandler (id, (params, body)) ->
     let f nst swid port event =
       let builtin_env =

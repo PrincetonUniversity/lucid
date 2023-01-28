@@ -45,6 +45,7 @@ module State = struct
     ; handlers : handler Env.t
     ; links : topology
     ; switches : state array
+    ; actions  : action Env.t
     }
 
   and state =
@@ -88,6 +89,7 @@ module State = struct
     ; handlers = Env.empty
     ; switches = Array.of_list []
     ; links = empty_topology 0
+    ; actions = Env.empty
     }
   ;;
 
@@ -113,6 +115,10 @@ module State = struct
     | Not_found -> error ("missing handler: " ^ Cid.to_string cid)
   ;;
 
+  let lookup_action cid nst =
+    try (Env.find cid nst.actions) with
+    | Not_found -> error ("missing action: "^ Cid.to_string cid)
+  ;;
   let add_global swid cid v nst =
     let st = nst.switches.(swid) in
     if Env.mem cid st.global_env
@@ -134,6 +140,10 @@ module State = struct
 
   let add_handler cid lam nst =
     { nst with handlers = Env.add cid lam nst.handlers }
+  ;;
+
+  let add_action cid action nst =
+    { nst with actions = Env.add cid action nst.actions }
   ;;
 
   let log_exit swid port event nst =
@@ -222,6 +232,12 @@ module State = struct
       nst.switches
   ;;
 
+  let get_table_entries_switch swid stage nst =
+    Pipeline.get_table_entries ~stage nst.switches.(swid).pipeline
+  ;;
+  let install_table_entry_switch swid stage nst entry =
+    Pipeline.install_table_entry ~stage ~entry nst.switches.(swid).pipeline
+  ;;
   let update_switch swid stage idx getop setop nst =
     Pipeline.update ~stage ~idx ~getop ~setop nst.switches.(swid).pipeline
   ;;
@@ -237,7 +253,8 @@ module State = struct
       (match IntMap.find_opt p map with
       | None -> -1, p
       | Some ret -> ret)
-    | None -> error @@ "Invalid switch id " ^ string_of_int sw
+    (* the switch ID does not exist in the topology... *)
+    | None -> error @@ "lookup_dst error -- Invalid switch id " ^ string_of_int sw
   ;;
 
   let ival_to_string v =
