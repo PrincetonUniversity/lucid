@@ -19,6 +19,12 @@ let inliner =
       match IdMap.find_opt (Cid.to_id cid) env with
       | Some (EVal { v = VInt n }) -> PNum (Integer.value n)
       | Some (EInt (n, _)) -> PNum n
+      | Some (EVar (_)) -> Console.error_position span
+                            @@ Printing.cid_to_string cid
+                            ^ " ITS A VAR"
+      | Some (ECall (_, _)) -> Console.error_position span
+      @@ Printing.cid_to_string cid
+      ^ " ITS A CALL!!!"
       | None ->
         Console.error_position span
         @@ Printing.cid_to_string cid

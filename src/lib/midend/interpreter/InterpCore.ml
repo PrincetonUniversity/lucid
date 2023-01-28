@@ -214,6 +214,7 @@ let matches_pat vs ps =
         | PWild, _ -> true
         | PNum pn, VInt n -> Z.equal (Integer.value n) pn
         | PBit bits, VInt n -> bitmatch bits (Integer.value n)
+        | PEvent eid, VEvent ev -> Cid.equal eid ev.eid
         | _ -> false)
       vs
       ps

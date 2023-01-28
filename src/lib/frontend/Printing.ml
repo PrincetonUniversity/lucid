@@ -186,6 +186,7 @@ let pat_to_string p =
            | 1 -> '1'
            | _ -> '*')
       |> String.of_list)
+  | PEvent (e, p1) -> (cid_to_string e)
 ;;
 
 let op_to_string op =
@@ -291,8 +292,8 @@ let rec e_to_string e =
     Printf.sprintf "to_int<<%s>>(%s)" (size_to_string sz1) (size_to_string sz2)
   | EStmt (s, e) ->
     Printf.sprintf "{%s; return %s}" (stmt_to_string s) (exp_to_string e)
-  | ETransitionRegex (id, exp) ->
-    Printf.sprintf "{Transition %s with idx %s}" (id_to_string id) (exp_to_string exp)
+  | ETransitionRegex (id, idx_exp, ev_exp) ->
+    Printf.sprintf "{Transition %s with idx %s and ev %s}" (id_to_string id) (exp_to_string idx_exp) (match ev_exp with | Some e -> (exp_to_string e) | None -> "None")
 
 and exp_to_string e = e_to_string e.e
 (* ^ Printf.sprintf "[ty:%s]"

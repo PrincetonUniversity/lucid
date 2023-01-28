@@ -45,7 +45,7 @@ let infer_value v =
   { v with vty = Some (mk_ty vty) }
 ;;
 
-let infer_pattern env p =
+let rec infer_pattern env p =
   match p with
   | PWild -> (fresh_type ()).raw_ty
   | PVar (cid, span) ->
@@ -54,9 +54,9 @@ let infer_pattern env p =
     |> instantiator#visit_raw_ty (fresh_maps ())
   | PNum _ -> TInt (fresh_size ())
   | PBit ps -> TInt (IConst (List.length ps))
-;;
+  | PEvent (_) -> TEvent
 
-let rec infer_exp (env : env) (e : exp) : env * exp =
+and infer_exp (env : env) (e : exp) : env * exp =
   (* print_endline @@ "Inferring " ^ exp_to_string e; *)
   match e.e with
   | EVar cid ->

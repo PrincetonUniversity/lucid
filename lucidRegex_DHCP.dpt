@@ -1,0 +1,7 @@
+...
+
+re<<1024>> dhcp_= detect {
+    DHCK_ACK(@saved_ip=client_ip).IP(src_ip!=saved_ip)
+} => {generate dhcp_mismatch();}
+
+...

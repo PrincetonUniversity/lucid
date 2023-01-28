@@ -32,6 +32,7 @@
     | [name] when String.equal name "_" -> PWild
     | _ -> PVar (cid, span)
 
+
   let make_group es span =
     let locs = List.map
         (fun e ->
@@ -253,7 +254,9 @@ exp:
     | SIZECAST single_poly LPAREN size RPAREN { szcast_sp (snd $2) (snd $4) (Span.extend $1 $5) }
     | FLOOD exp                           { flood_sp $2 (Span.extend $1 $2.espan) }
     | LBRACE args RBRACE                  { make_group $2 (Span.extend $1 $3) }
-    | TRANSITIONREGEX LPAREN ID COMMA exp RPAREN    {transregex_sp (snd $3) $5 (Span.extend $1 $6) }
+    | TRANSITIONREGEX LPAREN ID COMMA exp RPAREN    {transregex_sp (snd $3) $5 None (Span.extend $1 $6) }
+    | TRANSITIONREGEX LPAREN ID COMMA exp COMMA exp RPAREN {transregex_sp (snd $3) $5 (Some $7) (Span.extend $1 $6) }
+
 
 exps:
   | exp                                 { [$1] }
@@ -332,6 +335,7 @@ binding_list:
 
 var_regex :
     | EMPTYSTRING                       { empty_string_sp (Span.extend $1 $1) }
+    | ID                                {letter_sp (snd $1) (value_to_exp (vbool_sp true ((fst $1)))) (fst $1) }
     | ID LPAREN exp RPAREN      { letter_sp (snd $1) $3 (Span.extend (fst $1) $4) }
     | ID LPAREN binding_list RPAREN DOT var_regex {binding_sp (snd $1) $3 $6 (Span.extend (fst $1) $6.v_regex_span) }
     | var_regex DOT var_regex        { concat_sp $1 $3 (Span.extend $1.v_regex_span $3.v_regex_span) }
@@ -397,6 +401,7 @@ pattern:
     | cid                               { pat_of_cid $1 }
     | NUM                               { PNum (snd $1) }
     | BITPAT                            { PBit (snd $1) }
+    | cid paramsdef                               { PEvent ((snd $1), $2)}
 
 patterns:
   | pattern                             { [$1] }

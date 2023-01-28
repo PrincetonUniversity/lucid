@@ -11,11 +11,12 @@ const int NULL = 0;
 // [1] : pkts size (128, 512)
 // [2] : pkts size (512, 1024)
 // [3] : pkts size (1024, MAX)
-sre<<5>> myVR2 =  DATA {global Counter.t<<32>> error_count = Counter.create(0);}
-                  DETECT {(report(true))*
-                          .report(true)} 
-                          => {int count = Counter.add(error_count, 1);
-                              generate error(count+1);};
+//sre<<5>> myVR2 =  DATA {global Counter.t<<32>> error_count = Counter.create(0);}
+//                  DETECT {(report)*
+//                          .report} 
+//                          => {int count = Counter.add(error_count, 1);
+//                              generate error(count+1);};
+
 global Array.t<<32>> hist_arr = Array.create(4);
 // total packet count.
 global Array.t<<32>> total_arr = Array.create(1);
@@ -31,6 +32,8 @@ exit event ip_out (int<<9>> egr_port, int src, int dst);
 
 exit event error(int lastIdx);
 
+
+re<<5>> myVR3 = (report)*.ip_in;
 // Helper memop functions
 memop incr(int memval, int incrval) {
     return memval + incrval;
@@ -49,6 +52,12 @@ memop checkThenSet(int memval, int newval) {
   else {
     return memval;
   }
+}
+
+fun int proof_of_concept(event e) {
+  match e with 
+  | report(int idx) -> {return 0;}
+  | ip_in(int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos) -> {return 1;}
 }
 // Handlers
 handle report(int idx){
@@ -82,4 +91,7 @@ handle ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos) 
   Array.setm(hist_arr, idx, incr, 1);
   int total_ct = Array.update(total_arr, 0, incr, 1, incr, 1);
   generate ip_out(igr_port, src, dst);
+  if(transition(myVR3, 0, this)) {
+    generate error(100000);
+  }
 }

@@ -321,12 +321,23 @@ let make_transition_statements env id idx_expr =
   let binding_defs = List.append static_defs (make_binding_defs re_info.binders env.current_handler env.params_map (make_evar (make_idx_val id))) in
   let pred_update_defs = List.append binding_defs ((counter_def id re_info env.current_handler re_info.preds) :: (make_pred_defs id re_info.preds env.current_handler)) in
   let match_def = List.append pred_update_defs ((res_def id) :: (make_match_def id re_info.alphabet re_info.synthesis_response re_info.event_order re_info.preds)) in
-  let return_def = List.append match_def ((ans_def id) :: (make_return_def id re_info.synthesis_response)) in
+  let return_def = List.append match_def (make_return_def id re_info.synthesis_response) in
   return_def
 ;;
 
+let make_trans_match env id idx_expr event_expr = 
+  let make_branch (eid, params) = 
+    let p = [PEvent (Cid.create_ids [eid], params)] in
+    let s = statement (sequence_statements (make_transition_statements {env with current_handler = Some (eid, params)} id idx_expr)) in
+    (p,s) in
+  let re_info = IdMap.find id env.re_info_map in
+  let events_list = List.map (fun eid -> (eid, IdMap.find eid env.params_map)) re_info.event_order in
+  statement (SMatch ([event_expr], ((List.map (fun ev_info -> make_branch ev_info) events_list))))
+
+
+
 let make_sr_macro id effect = 
-  statement (SIf ((exp (ETransitionRegex (id, (make_num 0)))), effect, (statement SNoop)))
+  statement (SIf ((exp (ETransitionRegex (id, (make_num 0), None))), effect, (statement SNoop)))
 
 let replacer = 
   object (self)
@@ -338,7 +349,10 @@ let replacer =
 
     method! visit_DVarRegex env id size vr = env := {(!env) with re_info_map=(IdMap.add id (re_info id vr) (!env).re_info_map)}; DVarRegex (id, size, vr)
     
-    method! visit_ETransitionRegex env id idx = make_exp_from_statements id (make_transition_statements !env id idx)
+    method! visit_ETransitionRegex env id idx ev_expr = 
+      match ev_expr with 
+      | None -> make_exp_from_statements id ((ans_def id) :: (make_transition_statements !env id idx))
+      | Some e -> make_exp_from_statements id ((ans_def id) :: [(make_trans_match !env id idx e)])
 
   end
   ;;

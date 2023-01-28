@@ -107,6 +107,7 @@ and pat =
   | PVar of cid * sp (* Span is just for easy error messaging in ConstInlining *)
   | PNum of z
   | PBit of int list
+  | PEvent of cid * params
 
 (* values *)
 and v =
@@ -146,7 +147,7 @@ and e =
   | EComp of exp * id * size (* Vector comprehension *)
   | EIndex of exp * size
   | ETuple of exp list
-  | ETransitionRegex of id * exp
+  | ETransitionRegex of id * exp * exp option
 
 and exp =
   { e : e
@@ -403,7 +404,7 @@ let comp_sp e i k span = exp_sp (EComp (e, i, k)) span
 let vector_sp es span = exp_sp (EVector es) span
 let szcast_sp sz1 sz2 span = exp_sp (ESizeCast (sz1, sz2)) span
 let flood_sp e span = exp_sp (EFlood e) span
-let transregex_sp id idx_expr span = exp_sp (ETransitionRegex (id, idx_expr)) span
+let transregex_sp id idx_expr ev_expr span = exp_sp (ETransitionRegex (id, idx_expr, ev_expr)) span
 
 (* declarations *)
 let decl d = { d; dspan = Span.default }

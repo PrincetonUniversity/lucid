@@ -1,0 +1,71 @@
+event S1() {printf("Doing nothing");}
+event S2() {printf("Doing nothing");}
+event S3() {printf("Doing nothing");}
+event S4() {printf("Doing nothing");}
+event S5() {printf("Doing nothing");}
+event S6() {printf("Doing nothing");}
+event S7() {printf("Doing nothing");}
+event S8() {printf("Doing nothing");}
+
+
+//re<SIZE> RE_fingerprint_videoB=S8(@t1=Sys.time()).S9.S1.S5.S8.S2.S3.S5(Sys.time() - t1 < 1222);
+//re<SIZE> RE_fingerprint_videoC=not(); //two Resolution
+
+
+global Array.t<<32>> arr = Array.create(256);
+re<<256>> RE_fingerprint_videoA = (S1.S5.S1.S4.S7) || (S8.S1.S2.S6.S3);
+
+memop read(int stored, int dummy){return stored;}
+memop wipe(int stored, int dummy){return 0;}
+memop incr (int stored_ct, int incr_by) {return stored_ct + incr_by;}
+
+entry event packet_in(int sip, int dip, int<<16>> sport, int<<16>> dport, int<<16>> pkt_size);
+event report_match(int type_of, int sip, int dip, int<<16>> sport, int<<16>> dport);
+exit event match_report();
+const int type_A=1;
+const int type_B=2;
+const int type_C=3;
+handle report_match(int type_of, int sip, int dip, int<<16>> sport, int<<16>> dport){
+	generate match_report();
+}
+
+handle packet_in(int sip, int dip, int<<16>> sport, int<<16>> dport, int<<16>> s){
+	int<<32>> idx = (int<<32>>)hash<<10>>(sip, dip, sport,dport);
+
+	if(s > 130){
+		Array.setm(arr, idx, incr, 1);
+	}else{
+		int r = Array.update(arr, idx, read, 0, wipe, 0);
+		event S=S1();
+
+		//since match statement can't use range yet, do naive if-else
+		if(s <=10){S=S1();}
+		else if(10<s && s <=20){S=S2();}
+		else if(20<s && s <=30){S=S3();}
+		else if(30<s && s <=40){S=S4();}
+		else if(40<s && s <=50){S=S5();}
+		else if(50<s && s <=60){S=S6();}
+		else if(60<s && s <=70){S=S7();}
+		else if(70<s && s <=80){S=S8();}
+		//else if(80<size<=90){S=S9;}
+		//else if(90<size<=100){S=S10;}
+		//else if(100<size<=110){S=S11;}
+		//else if(110<size<=120){S=S12;}
+		//else if(120<size<=130){S=S13;}
+		//else if(130<size<=140){S=S14;}
+		//else if(140<size<=150){S=S15;}
+		//else if(150<size<=160){S=S16;}
+
+		if(transition(RE_fingerprint_videoA, idx, S)){
+			generate report_match(sip,dip,sport,dport);
+		}
+
+		//if(transition(RE_fingerprint_videoB, idx, S)){
+		//	generate report_match(type_B, sip,dip,sport,dport);
+		//}
+
+		//if(transition(RE_fingerprint_videoC, idx, S)){
+		//	generate report_match(type_C, sip,dip,sport,dport);
+		//}
+	}
+}

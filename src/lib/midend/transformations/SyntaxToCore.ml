@@ -67,6 +67,7 @@ let translate_pattern (p : S.pat) : C.pat =
   | S.PNum n -> C.PNum n
   | S.PBit ns -> C.PBit ns
   | S.PVar (_, sp) -> err sp "variable pattern"
+  | S.PEvent (eid, params) -> C.PEvent eid
 ;;
 
 let rec translate_value (v : S.value) : C.value =

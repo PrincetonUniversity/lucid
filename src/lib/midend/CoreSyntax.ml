@@ -70,6 +70,7 @@ and pat =
   | PWild
   | PNum of z
   | PBit of int list
+  | PEvent of cid
 
 (* values *)
 and v =

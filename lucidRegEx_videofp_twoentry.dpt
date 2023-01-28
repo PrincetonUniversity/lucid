@@ -1,0 +1,61 @@
+
+const int SIZE = 65536;
+
+re_symbol S1,S2,S3,S4,S5,S6,S7,S8,S9,S10,S11,S12,S13,S14,S15,S16;
+re<SIZE> RE_fingerprint_videoA=S1.S5.S1.S4.S7.S8.S1.S2;
+re<SIZE> RE_fingerprint_videoB=S8.S9.S1.S5.S8.S2.S3.S5;
+re<SIZE> RE_fingerprint_videoC=(S3.S5.S3.S4.S5.S7.S4.S2)|(S9.S13.S9.S10.S13.S16.S10.S7); //two Resolution
+
+
+global Array.t<<32>> arr = Array.create(SIZE);
+memop read(int stored, int dummy){return stored;}
+memop wipe(int stored, int dummy){return 0;}
+memop incr (int stored_ct, int incr_by) {return stored_ct + incr_by;}
+
+const int type_A=1, type_B=2, type_C=3;
+handle report_match(int type, int sip, int dip, int<<16>> sport, int<<16>> dport){
+	//...
+}
+
+handle bigpacket(int sip, int dip, int<<16>> sport, int<<16>> dport){
+	int<<16>> idx = hash(sip, dip, sport,dport);
+	int size = Array.update(arr, idx, read, 0, wipe, 0);
+
+	re_symbol S=S1;
+	const int Q=10;
+	//since match statement can't use range yet, do naive if-else
+	if(size<=1*Q){S=S1;}
+	else if(1*Q<size<=2*Q){S=S2;}
+	else if(2*Q<size<=3*Q){S=S3;}
+	else if(3*Q<size<=4*Q){S=S4;}
+	else if(4*Q<size<=5*Q){S=S5;}
+	else if(5*Q<size<=6*Q){S=S6;}
+	else if(6*Q<size<=7*Q){S=S7;}
+	else if(7*Q<size<=8*Q){S=S8;}
+	else if(8*Q<size<=9*Q){S=S9;}
+	else if(9*Q<size<=10*Q){S=S10;}
+	else if(10*Q<size<=11*Q){S=S11;}
+	else if(11*Q<size<=12*Q){S=S12;}
+	else if(12*Q<size<=13*Q){S=S13;}
+	else if(13*Q<size<=14*Q){S=S14;}
+	else if(14*Q<size<=15*Q){S=S15;}
+	else if(15*Q<size<=16*Q){S=S16;}
+
+	if(transition(RE_fingerprint_videoA, idx, S)){
+		generate report_match(type_A, sip,dip,sport,dport);
+	}
+
+	if(transition(RE_fingerprint_videoB, idx, S)){
+		generate report_match(type_B, sip,dip,sport,dport);
+	}
+
+	if(transition(RE_fingerprint_videoC, idx, S)){
+		generate report_match(type_C, sip,dip,sport,dport);
+	}
+}
+
+handle smallpacket(int sip, int dip, int<<16>> sport, int<<16>> dport){
+	int<<16>> idx = hash(sip, dip, sport,dport);
+	Array.setm(arr, idx, incr, 1);
+}
+

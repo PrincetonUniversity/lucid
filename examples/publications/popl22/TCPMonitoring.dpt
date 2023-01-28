@@ -41,8 +41,7 @@ re<<1024>> handshake_open = syn_in(true)
                             .synack_out(true)
                             .ack_in(true);
 
-
-/*re<<1024>> handshake_open = DATA {global Array.t<<32>> counts = Array.create(256);}
+sre<<1024>> handshake_open = DATA {global Array.t<<32>> counts = Array.create(256);}
                             GROUPWITH {compute_idx}
                             TIMEOUT {100}
                             DETECT {syn_in(true)
@@ -52,7 +51,7 @@ re<<1024>> handshake_open = syn_in(true)
                             => {count = Array.update(counts, group, incr, 1);
                                 if (count > 100) {
                                     generate error(count);
-                                }}*/
+                                }}
 
 re<<1024>> handshake_close = fin_in(true)
                             .ack_out(true)
@@ -61,9 +60,7 @@ re<<1024>> handshake_close = fin_in(true)
 
 global Array.t<<32>> counts = Array.create(256);
 
-fun int compute_idx(int src_ip, int src_port, int dst_ip, int dst_port) {
-    return (int<<32>>)(hash<<10>>(213124214, src_ip, src_port, dst_ip, dst_port));
-}
+
 
 handle syn_in(int src_ip, int src_port, int dst_ip, int dst_port) {
     int idx = (int<<32>>)compute_idx(src_ip, src_port, dst_ip, dst_port);
