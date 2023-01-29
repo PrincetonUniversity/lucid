@@ -63,6 +63,9 @@ let rec check_var_regex id vr event_infos used vars =
       | VRClosure sub -> no_bindings sub; check_var_regex id sub event_infos used vars; used, vars
 
 
+let append_alph alph event_defs = 
+  List.append 
+
 let check_decls ds =
   let event_defs = List.filter_map (fun d -> 
     match d.d with
@@ -114,7 +117,7 @@ let check_decls ds =
               "Externs must have type int or bool, not %s"
               (ty_to_string ty))
       | DModule (_, _, decls) -> List.iter (check_decl true) decls
-      | DVarRegex (id, size, vr) -> check_var_regex id vr event_defs [] []; ()
+      (*| DVarRegex (id, size, alph, vr) -> check_var_regex id vr event_defs [] []; ()*)
       | _ -> ()
     in
     List.iter (check_decl false) ds

@@ -60,6 +60,8 @@
    plainRegex
    dFASynthesis
    regexElimination
+   specElimination
+   alphabetElimination
    replaceUserTys
    partialInterpretation
    constInlining

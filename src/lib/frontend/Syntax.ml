@@ -304,6 +304,16 @@ and spec_regex =
 (* an action is just a list of expressions to return *)
 and action_body = exp list
 
+and alph = 
+  | AName of id 
+  | AExplicit of id list
+  | AUnspecified
+
+and alphabet = 
+  {
+    alph : alph;
+    alphabet_span : sp
+  }
 (* declarations *)
 and d =
   | DSize of id * size option
@@ -319,9 +329,10 @@ and d =
   | DConstr of id * ty * params * exp
   | DModule of id * interface * decls
   | DModuleAlias of id * exp * cid * cid
-  | DVarRegex of id * z * var_regex
+  | DVarRegex of id * z * alphabet * var_regex
   | DSpecRegex of id * z * spec_regex
   | DAction of id * ty list * params * (params * action_body)
+  | DAlphabet of id * (id list)
 
 
 (* name, return type, args & body *)
@@ -477,9 +488,9 @@ let dsize_sp id size span = decl_sp (DSize (id, size)) span
 let fun_sp id rty cs p body span = decl_sp (DFun (id, rty, cs, (p, body))) span
 let memop_sp id p body span = decl_sp (DMemop (id, p, body)) span
 let duty_sp id sizes rty span = decl_sp (DUserTy (id, sizes, rty)) span
-let dvarregex_sp id size var_regex span = decl_sp (DVarRegex (id, size, var_regex)) span
+let dvarregex_sp id size alphabet var_regex span = decl_sp (DVarRegex (id, size, alphabet, var_regex)) span
 let dspecregex_sp id size spec_regex span = decl_sp (DSpecRegex (id, size, spec_regex)) span
-
+let dalphabet_sp id members span = decl_sp (DAlphabet (id, members)) span
 let action_sp id rty cp p body span = decl_sp (DAction (id, rty, cp, (p, body))) span
 
 
@@ -559,6 +570,14 @@ let or_sp suba subb span = var_regex_sp (VROr (suba, subb)) span
 let and_sp suba subb span = var_regex_sp (VRAnd (suba, subb)) span
 let closure_sp sub span = var_regex_sp (VRClosure sub) span
 let unambig_concat_sp suba subb span = var_regex_sp (VRUnambigConcat (suba, subb)) span
+
+let alphabet alph = {alph = alph; alphabet_span = Span.default}
+let alphabet_sp alph sp = {alph = alph; alphabet_span = sp}
+let alphabet_name id span = alphabet_sp (AName (id)) span
+let alphabet_explicit ids span = alphabet_sp (AExplicit (ids)) span
+let alphabet_unspecified span = alphabet_sp AUnspecified span
+
+
 
 let spec_regex s_regex = {s_regex; s_regex_span = Span.default}
 let spec_regex_sp s_regex span = {s_regex; s_regex_span = span}

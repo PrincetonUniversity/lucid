@@ -588,7 +588,7 @@ and d_to_string d =
       (cid_to_string cid1)
       (exp_to_string e)
       (cid_to_string cid2)
-  | DVarRegex (id, size, var_regex) ->
+  | DVarRegex (id, size, alph, var_regex) ->
     Printf.sprintf
       "spec %s event %s"
       (id_to_string id)

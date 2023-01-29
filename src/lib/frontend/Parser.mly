@@ -167,6 +167,8 @@
 %token <Span.t> DATA
 %token <Span.t> DETECT
 %token <Span.t> EFFECT_ARROW
+%token <Span.t> ALPHABET
+%token <Span.t> OVER
 %token EOF
 
 %start prog
@@ -457,9 +459,12 @@ decl:
     | CONSTR ty ID paramsdef ASSIGN exp SEMI { [dconstr_sp (snd $3) $2 $4 $6 (Span.extend $1 $7)] }
     | GLOBAL ty ID ASSIGN exp SEMI
                                             { [dglobal_sp (snd $3) $2 $5 (Span.extend $1 $6)] }
-    | VARREGEX LLEFT NUM RRIGHT ID ASSIGN var_regex SEMI            { [dvarregex_sp (snd $5) (snd $3) $7 (Span.extend $1 $8)] }
+    | VARREGEX LLEFT NUM RRIGHT ID ASSIGN var_regex SEMI            { [dvarregex_sp (snd $5) (snd $3) (alphabet_unspecified (Span.extend $1 $8)) $7 (Span.extend $1 $8)] }
+    | VARREGEX LLEFT NUM RRIGHT ID OVER ID ASSIGN var_regex SEMI    { [dvarregex_sp (snd $5) (snd $3) (alphabet_name (snd $7) (Span.extend $1 $10)) $9 (Span.extend $1 $10)] }
+    | VARREGEX LLEFT NUM RRIGHT ID OVER LBRACKET ids RBRACKET ASSIGN var_regex SEMI    { [dvarregex_sp (snd $5) (snd $3) (alphabet_explicit $8 (Span.extend $1 $12)) $11 (Span.extend $1 $12)] }
     | SPECREGEX LLEFT NUM RRIGHT ID ASSIGN spec_regex SEMI           { [dspecregex_sp (snd $5) (snd $3) $7 (Span.extend $1 $8)] }
     | TABLE_TYPE dt_table                    { [$2] }
+    | ALPHABET ID ASSIGN ids SEMI               { [dalphabet_sp (snd $2) $4 (Span.extend $1 $5)] }
 
 
 decls:

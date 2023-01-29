@@ -54,11 +54,6 @@ memop checkThenSet(int memval, int newval) {
   }
 }
 
-fun int proof_of_concept(event e) {
-  match e with 
-  | report(int idx) -> {return 0;}
-  | ip_in(int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos) -> {return 1;}
-}
 // Handlers
 handle report(int idx){
     // get count at index and reset.

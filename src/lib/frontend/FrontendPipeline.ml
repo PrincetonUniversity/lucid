@@ -12,6 +12,10 @@ let process_prog builtin_tys ds =
   print_if_debug ds;
   print_if_verbose "-------Checking well-formedness---------";
   Wellformed.pre_typing_checks ds;
+  print_if_verbose "----------Elim alphabet-------";
+  let ds = AlphabetElimination.process_prog ds in
+  print_if_verbose "----------Elim spec-------";
+  let ds = SpecElimination.process_prog ds in 
   print_if_verbose "----------Elim regex-------";
   let ds = RegexElimination.process_prog ds in
   print_if_debug ds;

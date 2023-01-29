@@ -1,11 +1,4 @@
-event S1() {printf("Doing nothing");}
-event S2() {printf("Doing nothing");}
-event S3() {printf("Doing nothing");}
-event S4() {printf("Doing nothing");}
-event S5() {printf("Doing nothing");}
-event S6() {printf("Doing nothing");}
-event S7() {printf("Doing nothing");}
-event S8() {printf("Doing nothing");}
+alphabet sizes = S1, S2, S3, S4, S5, S6, S7, S8;
 
 
 //re<SIZE> RE_fingerprint_videoB=S8(@t1=Sys.time()).S9.S1.S5.S8.S2.S3.S5(Sys.time() - t1 < 1222);
@@ -13,7 +6,7 @@ event S8() {printf("Doing nothing");}
 
 
 global Array.t<<32>> arr = Array.create(256);
-re<<256>> RE_fingerprint_videoA = (S1.S5.S1.S4.S7) || (S8.S1.S2.S6.S3);
+re<<256>> RE_fingerprint_videoA over sizes = (S1.S5.S1.S4.S7) || (S8.S1.S2.S6.S3);
 
 memop read(int stored, int dummy){return stored;}
 memop wipe(int stored, int dummy){return 0;}
@@ -30,7 +23,7 @@ handle report_match(int type_of, int sip, int dip, int<<16>> sport, int<<16>> dp
 }
 
 handle packet_in(int sip, int dip, int<<16>> sport, int<<16>> dport, int<<16>> s){
-	int<<32>> idx = (int<<32>>)hash<<10>>(sip, dip, sport,dport);
+	int<<32>> idx = (int<<32>>)hash<<8>>(sip, dip, sport,dport);
 
 	if(s > 130){
 		Array.setm(arr, idx, incr, 1);
@@ -57,7 +50,7 @@ handle packet_in(int sip, int dip, int<<16>> sport, int<<16>> dport, int<<16>> s
 		//else if(150<size<=160){S=S16;}
 
 		if(transition(RE_fingerprint_videoA, idx, S)){
-			generate report_match(sip,dip,sport,dport);
+			generate report_match(type_A, sip,dip,sport,dport);
 		}
 
 		//if(transition(RE_fingerprint_videoB, idx, S)){
