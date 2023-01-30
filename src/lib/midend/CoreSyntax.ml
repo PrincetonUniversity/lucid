@@ -89,7 +89,7 @@ and pat =
   | PWild
   | PNum of z
   | PBit of int list
-  | PEvent of cid
+  | PEvent of cid * params
 
 (* values *)
 and v =

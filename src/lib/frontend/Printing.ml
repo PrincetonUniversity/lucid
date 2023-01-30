@@ -605,6 +605,9 @@ and d_to_string d =
       (params_to_string const_params)
       (params_to_string dyn_params)
       (comma_sep exp_to_string acn_body)
+  |DAlphabet (id, ids) ->
+    Printf.sprintf
+    "Alphabet %s = %s" (id_to_string id) (List.fold_left (fun acc id -> (id_to_string id) ^ acc) "" ids)
 
 and decl_to_string d = d_to_string d.d
 and decls_to_string ds = concat_map "\n\n" decl_to_string ds

@@ -280,7 +280,7 @@ and v_regex =
   | VREmptySet
   | VREmptyStr
   | VRLetter of id * exp
-  | VRBinding of id * (id * id) list * var_regex
+  | VRBinding of id * (ty * id * exp) list * exp * var_regex
   | VRConcat of var_regex * var_regex
   | VRClosure of var_regex
   | VROr of var_regex * var_regex
@@ -564,7 +564,7 @@ let var_regex_sp v_regex span = {v_regex ; v_regex_span = span}
 let empty_set_sp span = var_regex_sp VREmptySet span
 let empty_string_sp span = var_regex_sp VREmptyStr span
 let letter_sp letter pred span = var_regex_sp (VRLetter (letter, pred)) span
-let binding_sp letter assigns sub span = var_regex_sp (VRBinding (letter, assigns, sub)) span
+let binding_sp letter assigns pred sub span = var_regex_sp (VRBinding (letter, assigns, pred, sub)) span
 let concat_sp suba subb span = var_regex_sp (VRConcat (suba, subb)) span
 let or_sp suba subb span = var_regex_sp (VROr (suba, subb)) span
 let and_sp suba subb span = var_regex_sp (VRAnd (suba, subb)) span

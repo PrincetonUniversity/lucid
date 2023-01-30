@@ -87,14 +87,7 @@ let translate_op (op : S.op) : C.op =
   | S.PatMask -> C.PatMask
 ;;
 
-let translate_pattern (p : S.pat) : C.pat =
-  match p with
-  | S.PWild -> C.PWild
-  | S.PNum n -> C.PNum n
-  | S.PBit ns -> C.PBit ns
-  | S.PVar (_, sp) -> err sp "variable pattern"
-  | S.PEvent (eid, params) -> C.PEvent eid
-;;
+
 
 let rec translate_value (v : S.value) : C.value =
   let v' =
@@ -139,6 +132,14 @@ let rec translate_exp (e : S.exp) : C.exp =
 
 and translate_params params =
   List.map (fun (id, ty) -> id, translate_ty ty) params
+
+and translate_pattern (p : S.pat) : C.pat =
+  match p with
+  | S.PWild -> C.PWild
+  | S.PNum n -> C.PNum n
+  | S.PBit ns -> C.PBit ns
+  | S.PVar (_, sp) -> err sp "variable pattern"
+  | S.PEvent (eid, params) -> C.PEvent (eid, (translate_params params))
 
 and translate_body (params, stmt) =
   translate_params params, translate_statement stmt

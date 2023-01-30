@@ -112,7 +112,8 @@ let rec names cid =
 
 let rec compare cid1 cid2 =
   match cid1, cid2 with
-  | Id i1, Id i2 -> Id.compare i1 i2
+  | Id i1, Id i2 -> 
+    Id.compare i1 i2
   | Compound (id1, cid1), Compound (id2, cid2) ->
     let i = Id.compare id1 id2 in
     if i = 0 then compare cid1 cid2 else i

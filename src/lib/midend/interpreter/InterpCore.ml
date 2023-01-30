@@ -252,7 +252,8 @@ let matches_pat vs ps =
         | PWild, _ -> true
         | PNum pn, VInt n -> Z.equal (Integer.value n) pn
         | PBit bits, VInt n -> bitmatch bits (Integer.value n)
-        | PEvent eid, VEvent ev -> Cid.equal eid ev.eid
+        | PEvent (eid, params), VEvent ev ->
+          (String.equal (CorePrinting.cid_to_string eid) (CorePrinting.cid_to_string ev.eid)) 
         | _ -> false)
       vs
       ps
@@ -430,7 +431,16 @@ let rec interp_statement nst swid locals s =
       try List.find (fun (pats, _) -> matches_pat vs pats) bs with
       | _ -> error "Match statement did not match any branch!"
     in
-    interp_s (snd first_match)
+    let update_local locals p v = 
+      match p,v.v with
+      | PEvent (_, params), VEvent (ev) -> (List.fold_left2
+          (fun acc v (id, _) -> Env.add (Id id) (State.V v) acc)
+          locals
+          ev.data
+          params)
+      | _,_ -> locals in
+    let locals = List.fold_left2 update_local locals (fst first_match) vs in
+    interp_statement nst swid locals (snd first_match)
   | STableInstall(tbl, entries) -> 
     (* install entries into the pipeline *)
     (* evaluate entry patterns and install-time action args to EVals *)

@@ -13,7 +13,8 @@ open DFASynthesis
 type binder = 
   {
     binding_event : id;
-    assignments : (id * id) list
+    assignments : (ty * id * exp) list; 
+    under_closure : bool
   }
 and pred_info = 
   {
@@ -22,30 +23,29 @@ and pred_info =
   };;
 
 let binders re = 
-  let rec binders_acc re acc = 
+  let rec binders_acc re acc in_closure = 
     match re.v_regex with  
     | VREmptySet -> acc
     | VREmptyStr -> acc
     | VRLetter (_, _) -> acc
-    | VRBinding (event_id, assignments, sub) -> {binding_event=event_id; assignments=assignments} :: binders_acc sub acc
-    | VRConcat (sub1, sub2) | VRUnambigConcat (sub1, sub2) -> binders_acc sub1 (binders_acc sub2 acc)
-    | VRClosure sub -> binders_acc sub acc
-    | VROr (sub1, sub2) -> binders_acc sub1 (binders_acc sub2 acc)
-    | VRAnd (sub1, sub2) -> binders_acc sub1 (binders_acc sub2 acc)
-  in binders_acc re [];;
+    | VRBinding (event_id, assignments, pred, sub) -> {binding_event=event_id; assignments=assignments; under_closure = in_closure} :: binders_acc sub acc in_closure 
+    | VRConcat (sub1, sub2) | VRUnambigConcat (sub1, sub2) | VROr (sub1, sub2) | VRAnd (sub1, sub2) -> binders_acc sub1 (binders_acc sub2 acc in_closure) in_closure
+    | VRClosure sub -> binders_acc sub acc true
+  in binders_acc re [] false;;
 
 let preds re = 
+  let check_pred event_id pred acc = 
+    match pred.e with 
+      (*If it's a value, it has to be a bool*)
+      | EVal (v) -> acc
+      | _ -> let p_rec = {pred_event=event_id; pred=pred} in 
+                if (List.exists (fun pr -> pr.pred.e = p_rec.pred.e) acc) then acc else p_rec :: acc in
   let rec preds_acc re acc = 
     match re.v_regex with  
     | VREmptySet -> acc
     | VREmptyStr -> acc
-    | VRLetter (event_id, pred) -> 
-      (match pred.e with 
-      (*If it's a value, it has to be a bool*)
-      | EVal (v) -> acc
-      | _ -> let p_rec = {pred_event=event_id; pred=pred} in 
-                if (List.exists (fun pr -> pr.pred.e = p_rec.pred.e) acc) then acc else p_rec :: acc)
-    | VRBinding (event_id, assignments, sub) -> preds_acc sub acc
+    | VRLetter (event_id, pred) -> check_pred event_id pred acc
+    | VRBinding (event_id, assignments, pred, sub) -> preds_acc sub (check_pred event_id pred acc)
     | VRConcat (sub1, sub2) | VRUnambigConcat (sub1, sub2) -> preds_acc sub1 (preds_acc sub2 acc)
     | VRClosure sub -> preds_acc sub acc
     | VROr (sub1, sub2) -> preds_acc sub1 (preds_acc sub2 acc)
@@ -59,7 +59,7 @@ let rec get_events re =
   | VREmptySet -> []
   | VREmptyStr -> []
   | VRLetter (event_id, pred) -> [event_id]
-  | VRBinding (event_id, assignments, sub) -> merge [event_id] (get_events sub)
+  | VRBinding (event_id, _, _, sub) -> merge [event_id] (get_events sub)
   | VRUnambigConcat (sub1, sub2) | VRConcat (sub1, sub2) | VROr (sub1, sub2) | VRAnd (sub1, sub2) -> merge (get_events sub1) (get_events sub2)
   | VRClosure sub -> get_events sub
 ;;
@@ -118,16 +118,16 @@ let rec big_union event_id pred alphabet =
 ;;
 (*Turn an RE into a PRE, given the alphabet*)
 let rec translate re re_alphabet = 
+    let preamble_big_union event_id pred = (match pred.e with 
+    | EVal (v) -> (match v.v with 
+      | VBool b when b-> big_union event_id None re_alphabet
+      | _ -> PREmptySet)
+    | _ -> big_union event_id (Some pred) re_alphabet) in
     match re with 
     | VREmptySet -> PREmptySet
     | VREmptyStr -> PREmptyString
-    | VRLetter (event_id, pred) -> 
-      (match pred.e with 
-      | EVal (v) -> (match v.v with 
-        | VBool b when b-> big_union event_id None re_alphabet
-        | _ -> PREmptySet)
-      | _ -> big_union event_id (Some pred) re_alphabet)
-    | VRBinding (event_id, assignments, sub) -> pre_concat (big_union event_id None re_alphabet) (translate sub.v_regex re_alphabet)
+    | VRLetter (event_id, pred) -> preamble_big_union event_id pred
+    | VRBinding (event_id, assignments, pred, sub) -> pre_concat (preamble_big_union event_id pred) (translate sub.v_regex re_alphabet)
     | VRUnambigConcat (sub1, sub2) | VRConcat (sub1, sub2) -> pre_concat (translate sub1.v_regex re_alphabet) (translate sub2.v_regex re_alphabet)
     | VRClosure sub -> pre_closure (translate sub.v_regex re_alphabet)
     | VROr (sub1, sub2) -> pre_or  (translate sub1.v_regex re_alphabet) (translate sub2.v_regex re_alphabet)
@@ -162,7 +162,7 @@ let sequence_statements ss =
   seq.s
 ;;
 
-let dgloabl_arr_type int_size = ty (TName (Arrays.t_id, [(IConst int_size)], true));;
+let dgloabl_arr_type size = ty (TName (Arrays.t_id, [size], true));;
 
 let make_id_val id = (Id.create (String.cat (fst id) "val"));;
 let make_idx_val id = Id.create (String.cat (fst id) "idx");;
@@ -183,9 +183,13 @@ let make_ans_id id =
 let make_exp_from_statements id lostatements =
   EStmt (statement (sequence_statements lostatements), (make_evar (make_ans_id id)))
 
-let make_global_def arr_size int_size id = 
-  decl (DGlobal (id, (dgloabl_arr_type int_size), exp (ECall (Arrays.array_create_id, [(make_num arr_size)]))))
+let make_global_def arr_size size id = 
+  decl (DGlobal (id, (dgloabl_arr_type size), exp (ECall (Arrays.array_create_id, [(make_num arr_size)]))))
 ;;
+
+let make_global_def_asgn arr_size (ty, id, _) = 
+  match ty.raw_ty with 
+  | TInt (size) -> make_global_def arr_size size id
 
 let get_type_of_var id be event_params_map =
   let event_params = IdMap.find be event_params_map in
@@ -208,6 +212,7 @@ type env = {
   re_info_map : reInfo IdMap.t; 
   current_handler : (Id.t * params) option;
   params_map : params IdMap.t;
+  added_cts : bool
 };;
 
 let rec check_unmabig_concat_vr vr alphabet = 
@@ -235,17 +240,18 @@ let re_info id alphabet vr =
     print_string (plain_re_to_string pre);
     {binders=re_binders; preds = re_preds; synthesis_response=synthesized;event_order=events; alphabet=(get_all_letters re_alphabet)}
 ;;
-
-let make_binding_set be params_map idx_expr assignment =
-  (statement (SLocal ((make_id_val (fst assignment)), 
-  (get_type_of_var (snd assignment) be params_map),
-  (exp (ECall (Arrays.array_setm_cid, [ (make_evar (fst assignment));idx_expr;(make_evar (Id.create "checkThenSet"));(make_evar (snd assignment))]))))))
+let check_then_set_name = Id.create("re12351sdaCheckThenSet");;
+let make_binding_set be params_map idx_expr in_closure (ty, id, eval) =
+  let e = if in_closure then (exp (ECall (Arrays.array_set_cid, [(make_evar id); idx_expr;eval]))) else 
+    (exp (ECall (Arrays.array_setm_cid, [ (make_evar id);idx_expr;(make_evar check_then_set_name);eval]))) in
+  (statement (SLocal ((make_id_val id), 
+  ty,
+  e)))
 ;;
-
-let make_binding_get be params_map idx_expr assignment = 
-  (statement (SLocal ((make_id_val (fst assignment)), 
-  (get_type_of_var (snd assignment) be params_map),
-  (exp (ECall (Arrays.array_get_cid, [ (make_evar (fst assignment)); idx_expr]))))))
+let make_binding_get be params_map idx_expr (ty, id, _) = 
+  (statement (SLocal ((make_id_val id), 
+  ty,
+  (exp (ECall (Arrays.array_get_cid, [ (make_evar id); idx_expr]))))))
 ;;
 
 let make_lshift id = (exp (EOp (LShift, [(exp (EVar (Cid.id id)));(make_num 1)])));;
@@ -255,17 +261,17 @@ let make_assign id exp = statement (SAssign (id, exp));;
 let pred_update_statement id pred = 
   let counter = (make_counter_id id) in 
     let lshift = make_lshift counter in 
-      statement (SIf (pred, (make_assign counter (exp (EOp (Plus, [lshift; (make_num 1)])))), (make_assign counter lshift)))
+      statement (SIf (pred, (make_assign counter (exp (EOp (Plus, [lshift; (make_num_size 1 DFASynthesis.bv_size)])))), (make_assign counter lshift)))
 ;;
 
 let rec make_binding_defs binders handler_eid params_map idx_expr = 
-  let def_maker be = (match handler_eid with 
+  let def_maker be in_closure = (match handler_eid with 
   | None -> make_binding_get be params_map idx_expr
-  | Some (eid, params) -> if be = eid then (make_binding_set be params_map idx_expr) else (make_binding_get be params_map idx_expr)) in
+  | Some (eid, params) -> if be = eid then (make_binding_set be params_map idx_expr in_closure) else (make_binding_get be params_map idx_expr)) in
     match List.rev binders with 
     | [] -> []
-    | {binding_event = be; assignments = assignments} :: tail -> 
-      let defs = List.map (def_maker be) assignments in 
+    | {binding_event = be; assignments = assignments; under_closure = in_closure} :: tail -> 
+      let defs = List.map (def_maker be in_closure) assignments in 
       List.append defs (make_binding_defs tail handler_eid params_map idx_expr)
 ;;
 
@@ -337,6 +343,17 @@ let make_trans_match env id idx_expr event_expr =
   let events_list = List.map (fun eid -> (eid, IdMap.find eid env.params_map)) re_info.event_order in
   statement (SMatch ([event_expr], ((List.map (fun ev_info -> make_branch ev_info) events_list))))
 
+
+
+let check_then_set_memop = 
+  let id = check_then_set_name in 
+  let memval = Id.create "memval" in 
+  let newval = Id.create "newval" in
+  let params = [(memval, (ty (TInt (IConst 32)))); (newval, (ty (TInt (IConst 32))))] in
+  let body = MBIf((exp (EOp (Eq, [(make_evar memval);(make_num 0)]))), (make_evar newval), (make_evar memval)) in
+  (decl (DMemop (id, params, body)))
+
+
 let replacer = 
   object (self)
     inherit [_] s_map as super
@@ -358,19 +375,21 @@ let replacer =
 
 
 let replace_var_regex env id size vr = 
-  let re_info = IdMap.find id env.re_info_map in
+  let re_info = IdMap.find id (!env).re_info_map in
+  let tail = 
   List.append 
-    (List.rev_map (make_global_def size 32) (List.map (fun (id1, id2) -> id1) (List.flatten (List.map (fun b -> b.assignments) (binders vr)))))
-    ((make_global_def size DFASynthesis.bv_size id) :: (List.map (fun memop_response -> decl (DMemop (memop_response.id, memop_response.params, memop_response.memop_body))) re_info.synthesis_response.memops))
+    (List.rev_map (make_global_def_asgn size) (List.flatten (List.map (fun b -> b.assignments) (binders vr))))
+    ((make_global_def size (IConst DFASynthesis.bv_size) id) :: (List.map (fun memop_response -> decl (DMemop (memop_response.id, memop_response.params, memop_response.memop_body))) re_info.synthesis_response.memops)) in
+  if ((!env).added_cts) then tail else (env := {(!env) with added_cts = true}; (check_then_set_memop) :: tail)
 ;;
 
 
 let process_prog ds = 
-  let env = (ref {re_info_map=IdMap.empty; current_handler=None; params_map=IdMap.empty}) in 
+  let env = (ref {re_info_map=IdMap.empty; current_handler=None; params_map=IdMap.empty; added_cts = false}) in 
   let ds = replacer#visit_decls env ds in
     let replace d = 
       match d.d with 
-      | DVarRegex (id, size, alph, var_regex) -> replace_var_regex !env id (Z.to_int size) var_regex
+      | DVarRegex (id, size, alph, var_regex) -> replace_var_regex env id (Z.to_int size) var_regex
       | _ -> [d] in
     List.flatten (List.map replace ds)
       

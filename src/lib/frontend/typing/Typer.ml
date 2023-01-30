@@ -1000,9 +1000,15 @@ and infer_branches (env : env) s etys branches =
     | _ ->
       List.iter2 (unify_raw_ty s.sspan) etys (List.map (infer_pattern env) pats)
   in
+  let add_pat_params env pat = 
+    match pat with 
+    | PEvent (_, params) -> (add_locals env params)
+    | _ -> env 
+  in
+  let add_pats_params env pats = (List.fold_left add_pat_params env pats) in
   let infer_branch (pats, s) =
     check_pats pats;
-    let env1, inf_s = infer_statement env s in
+    let env1, inf_s = infer_statement (add_pats_params env pats) s in
     env1, (pats, inf_s)
   in
   let returned, current_effect, constraints, ret_effects, inf_bs =

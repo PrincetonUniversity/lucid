@@ -392,6 +392,19 @@ let rename prog =
         in
         SMatch (es, branches)
 
+      method! visit_pat dummy pat = 
+        match pat with 
+        | PEvent (cid, params) -> 
+          (let new_params = List.map
+            (fun (id, ty) -> self#freshen_var id, self#visit_ty dummy ty)
+            params in PEvent (cid, new_params))
+        | _ -> pat
+
+      method! visit_branch dummy (ps, s) = 
+        let new_ps = List.map (fun p -> self#visit_pat dummy p) ps in
+        let new_s = self#visit_statement dummy s in
+        (new_ps, new_s)
+
       (*** Special Cases ***)
       method! visit_params dummy params =
         (* Don't rename parameters unless they're part of a body declaration *)

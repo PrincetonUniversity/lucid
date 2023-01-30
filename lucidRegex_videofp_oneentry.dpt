@@ -1,3 +1,16 @@
+
+
+memop read(int stored, int dummy){return stored;}
+memop wipe(int stored, int dummy){return 0;}
+memop incr (int stored_ct, int incr_by) {return stored_ct + incr_by;}
+
+entry event packet_in(int sip, int dip, int<<16>> sport, int<<16>> dport, int<<16>> pkt_size);
+event test_event(int testval) {
+	printf("doing nothings");
+}
+event report_match(int type_of, int sip, int dip, int<<16>> sport, int<<16>> dport);
+exit event match_report();
+
 alphabet sizes = S1, S2, S3, S4, S5, S6, S7, S8;
 
 
@@ -6,15 +19,8 @@ alphabet sizes = S1, S2, S3, S4, S5, S6, S7, S8;
 
 
 global Array.t<<32>> arr = Array.create(256);
-re<<256>> RE_fingerprint_videoA over sizes = (S1.S5.S1.S4.S7) || (S8.S1.S2.S6.S3);
-
-memop read(int stored, int dummy){return stored;}
-memop wipe(int stored, int dummy){return 0;}
-memop incr (int stored_ct, int incr_by) {return stored_ct + incr_by;}
-
-entry event packet_in(int sip, int dip, int<<16>> sport, int<<16>> dport, int<<16>> pkt_size);
-event report_match(int type_of, int sip, int dip, int<<16>> sport, int<<16>> dport);
-exit event match_report();
+//re<<256>> RE_fingerprint_videoA over sizes = (S1.S5.S1.S4.S7) || (S8.S1.S2.S6.S3);
+re<<256>> RE_fingerprint_videoA over [S1,packet_in, test_event] = (test_event(@int rec = testval; testval > 20)."");
 const int type_A=1;
 const int type_B=2;
 const int type_C=3;
@@ -49,7 +55,7 @@ handle packet_in(int sip, int dip, int<<16>> sport, int<<16>> dport, int<<16>> s
 		//else if(140<size<=150){S=S15;}
 		//else if(150<size<=160){S=S16;}
 
-		if(transition(RE_fingerprint_videoA, idx, S)){
+		if(transition(RE_fingerprint_videoA, idx, test_event(25))){
 			generate report_match(type_A, sip,dip,sport,dport);
 		}
 

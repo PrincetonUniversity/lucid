@@ -8,6 +8,7 @@ val constructors : (Cid.t * func_ty) list
 val defs : State.global_fun list
 val array_create_id : Cid.t
 val array_get_cid : Cid.t
+val array_set_cid : Cid.t
 val array_setm_cid : Cid.t
 val array_update_complex_cid : Cid.t
 

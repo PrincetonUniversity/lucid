@@ -69,7 +69,7 @@ let pat_to_string p =
              | _ -> '*')
       |> String.of_list)
 
-  | PEvent e -> cid_to_string e
+  | PEvent (e, _) -> cid_to_string e
 ;;
 
 let op_to_string op =

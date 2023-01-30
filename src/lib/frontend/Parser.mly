@@ -384,14 +384,14 @@ ids:
     | ID COMMA ids                      {(snd $1) :: $3}
 
 binding_list:
-    | BINDING ID ASSIGN ID                       { [(snd $2), (snd $4)] }
-    | BINDING ID ASSIGN ID COMMA binding_list     { ((snd $2),(snd $4)) :: $6}
+    | BINDING ty ID ASSIGN exp                       { [$2, (snd $3), $5] }
+    | BINDING ty ID ASSIGN exp COMMA binding_list     { ($2, (snd $3),$5) :: $7}
 
 var_regex :
     | EMPTYSTRING                       { empty_string_sp (Span.extend $1 $1) }
     | ID                                {letter_sp (snd $1) (value_to_exp (vbool_sp true ((fst $1)))) (fst $1) }
     | ID LPAREN exp RPAREN      { letter_sp (snd $1) $3 (Span.extend (fst $1) $4) }
-    | ID LPAREN binding_list RPAREN DOT var_regex {binding_sp (snd $1) $3 $6 (Span.extend (fst $1) $6.v_regex_span) }
+    | ID LPAREN binding_list SEMI exp RPAREN DOT var_regex {binding_sp (snd $1) $3 $5 $8 (Span.extend (fst $1) $8.v_regex_span) }
     | var_regex DOT var_regex        { concat_sp $1 $3 (Span.extend $1.v_regex_span $3.v_regex_span) }
     | var_regex OR var_regex        { or_sp $1 $3 (Span.extend $1.v_regex_span $3.v_regex_span) }
     | var_regex AND var_regex     { and_sp $1 $3 (Span.extend $1.v_regex_span $3.v_regex_span) }
