@@ -34,10 +34,9 @@ let make_var_names_unique ds =
         (params, new_stmt)
 
       (* Save the parameters of the current memop in the context. *)  
-      method! visit_DMemop _ id params memop_body = 
-        let param_ids = (CL.split params |> fst) in 
-        let memop_body = self#visit_memop_body param_ids memop_body in 
-        DMemop(id, params, memop_body)
+      method! visit_DMemop _ {mid=mid; mparams=mparams; mbody=mbody;} = 
+        let mbody = self#visit_memop_body (CL.split mparams |> fst) mbody in 
+        DMemop({mid; mparams; mbody})
 
       method! visit_params _ params = params     
 

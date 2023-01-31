@@ -197,16 +197,16 @@ let stage_fits prog_info stage =
 let place_in_table cond_stmts table =
   (* first, figure out if the merge is possible depending on whether the 
      conditional statement or table is a user-defined table *)
-  let contains_usermatch = List.fold_left 
+  let contains_solitary = List.fold_left 
     (fun acc (s:vertex_stmt) -> acc || s.solitary) 
     false 
     cond_stmts 
   in
-  let can_proceed = match (contains_usermatch, table_is_empty table, table.solitary) with 
-    | true, true, false -> true (* usermatch into an empty table *)
-    | true, _, _ -> false       (* usermatch into anything else *)
-    | _, _, true -> false       (* anything into a user table *)
-    | false, _, false -> true   (* non usermatch into any non user table *)
+  let can_proceed = match (contains_solitary, table_is_empty table, table.solitary) with 
+    | true, true, false -> true (* solitary into an empty table *)
+    | true, _, _ -> false       (* solitary into anything else *)
+    | _, _, true -> false       (* anything into a solitary *)
+    | false, _, false -> true   (* non solitary into non-solitary *)
   in 
   if (can_proceed) then (
     (* fold each conditional statement into the table *)
@@ -220,7 +220,7 @@ let place_in_table cond_stmts table =
       Some({
         tkeys=es;
         branches=bs;
-        solitary = table.solitary || contains_usermatch;
+        solitary = table.solitary || contains_solitary;
         sources=cond_stmts@table.sources;
         })
     | _ -> error "[merge_into_table] merge matches didn't return a match statement. What?]" 
@@ -383,7 +383,7 @@ let try_place_in_stage prog_info (prior_stages, pargs_opt) stage =
         ([], Some(pargs))
         stage.tables
       in
-      (* add a new table to the stage if no room in current tables. *)
+      (* if placement in all current tables fails, add a new table to the stage. *)
       let updated_tables = 
         if (placement_done pargs_opt)
         then (updated_tables)

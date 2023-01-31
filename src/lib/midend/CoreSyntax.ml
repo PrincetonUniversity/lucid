@@ -113,6 +113,13 @@ and value =
   }
 
 (* expressions *)
+and tbl_def = {
+    tid: id; (* for convenience *)
+    tty: ty;
+    tactions: exp list; 
+    tsize: exp;
+    tdefault : cid * exp list;
+  }
 and e =
   | EVal of value
   | EVar of cid
@@ -120,12 +127,7 @@ and e =
   | ECall of cid * exp list
   | EHash of size * exp list
   | EFlood of exp
-  | ETableCreate of {
-    tty: ty;
-    tactions: exp list; 
-    tsize: exp;
-    tdefault : cid * exp list;
-  }
+  | ETableCreate of tbl_def
 
 and exp =
   { e : e
@@ -176,11 +178,12 @@ and tbl_entry = {
   eargs : exp list;
 }
 
+and pragma = string * string list
 
 and statement =
   { s : s
   ; sspan : sp
-  ; spragma : (string * string list) option;
+  ; spragma : pragma option;
   }
 
 and params = (id * ty) list
@@ -211,12 +214,13 @@ and memop_body =
 
 and action_body = exp list
 
+and memop = {mid:id; mparams:params; mbody:memop_body;}
 (* declarations *)
 and d =
   | DGlobal of id * ty * exp
   | DEvent of id * event_sort * params
   | DHandler of id * body
-  | DMemop of id * params * memop_body
+  | DMemop of memop
   | DExtern of id * ty
   | DAction of action
   (* id * ty list * params * (params * action_body) *)
@@ -233,6 +237,7 @@ and action = {
 and decl =
   { d : d
   ; dspan : sp
+  ; dpragma : pragma option
   }
 
 (* a program is a list of declarations *)
@@ -266,6 +271,7 @@ let error s = raise (Error s)
 (* Types *)
 let ty_sp raw_ty tspan = { raw_ty; tspan }
 let ty raw_ty = { raw_ty; tspan = Span.default }
+let tint sz = ty (TInt sz)
 
 let infer_vty v =
   match v with
@@ -305,6 +311,7 @@ let var_sp cid ety span = aexp (EVar cid) ety span
 let op_sp op args ety span = aexp (EOp (op, args)) ety span
 let call_sp cid args ety span = aexp (ECall (cid, args)) ety span
 let hash_sp size args ety span = aexp (EHash (size, args)) ety span
+let vint_exp i size = value_to_exp (vint i size)
 
 (* Statements *)
 
@@ -333,12 +340,13 @@ let match_sp es bs span = statement_sp (SMatch (es, bs)) span
 let sexp_sp e span = statement_sp (SUnit e) span
 
 (* Declarations *)
-let decl d = { d; dspan = Span.default }
-let decl_sp d span = { d; dspan = span }
+let decl d = { d; dspan = Span.default; dpragma = None }
+let decl_sp d span = { d; dspan = span; dpragma = None }
+let decl_pragma d dspan dpragma = {d; dspan; dpragma}
 let dglobal_sp id ty exp span = decl_sp (DGlobal (id, ty, exp)) span
 let dextern_sp id ty span = decl_sp (DExtern (id, ty)) span
 let handler_sp id p body span = decl_sp (DHandler (id, (p, body))) span
-let memop_sp id p body span = decl_sp (DMemop (id, p, body)) span
+let memop_sp mid mparams mbody span = decl_sp (DMemop {mid; mparams; mbody}) span
 
 (*** Utility -- may split into a separate file if it gets big *)
 
@@ -417,7 +425,6 @@ and equiv_branch (ps1, s1) (ps2, s2) =
   equiv_list equiv_pat ps1 ps2 && equiv_stmt s1 s2
 ;;
 
-
 (* bit pattern helpers, for interp *)
 let int_to_bitpat n len = 
   let bs = Array.create len 0 in
@@ -447,3 +454,35 @@ let int_mask_to_bitpat n mask len =
   done;
   Array.to_list bs
 ;;  
+
+let ty_of_tbl td =
+  match td.tty.raw_ty with
+      | TTable(tbl_ty) -> tbl_ty
+      | _ -> error "[ty_of_tbl] table does not have type table."
+;;    
+
+let size_of_tint ty = 
+  match ty.raw_ty with 
+  | TInt(sz) -> sz
+  | _ -> error "[size_of_tint] not a tint"
+;;
+
+(* Turn a list of statements into an SSeq (or a SNoop, if empty) *)
+let sequence_stmts lst =
+  match lst with
+  | [] -> snoop
+  | hd :: tl -> List.fold_left (fun acc s -> sseq acc s) hd tl
+;;
+
+
+let id_of_exp exp =
+  match exp.e with
+  | EVar (Id id) -> id
+  | _ ->
+    error
+      "[id_of_exp] expression is not an evar"
+;;
+
+let exp_of_id id ty = exp (EVar(Cid.id id)) ty
+;;
+

@@ -1,8 +1,27 @@
 (* Core syntax with a few extra nodes for the Tofino. 
-    Once we converge on the additional nodes, 
-    we may want to add them to CoreSyntax. *) 
+  Core syntax with two new declarations that are 
+  useful for organizing core Lucid code into a 
+  form that is easy to translate into P4.
+  The new declarations in tofinocore are: 
+     1. a "main handler" is the union of all 
+        handlers. It is used to represent 
+        the single P4 ingress block that 
+        implements all of the handlers.
+     2. a "labeled statement" that can be 
+        executed by calling the label. 
+        It is basically an argumentless 
+        function with dynamically scoped 
+        variables. 
+        It is used to represent P4 actions
+        that are sets of statements.
+
+  Open question: do we want to add these nodes 
+  directly to coreSyntax? They are generally 
+  useful for translation into P4, but may not 
+  be useful for translation to non-P4 targets. *) 
 
 open CoreSyntax
+module Ctx = Collections.CidMap
 
 exception Error of string
 let error s = raise (Error s)
@@ -27,12 +46,13 @@ and pat = [%import: CoreSyntax.pat]
 and v = [%import: CoreSyntax.v]
 and event = [%import: CoreSyntax.event]
 and value = [%import: CoreSyntax.value]
+and pragma = [%import: CoreSyntax.pragma]
 and e = [%import: CoreSyntax.e]
 and exp = [%import: CoreSyntax.exp]
 and branch = [%import: CoreSyntax.branch]
 and gen_type = [%import: CoreSyntax.gen_type]
-(* and table_entry = [%import: CoreSyntax.table_entry] *)
 and s = [%import: CoreSyntax.s]
+and tbl_def = [%import: CoreSyntax.tbl_def]
 and tbl_match_out_param = [%import: CoreSyntax.tbl_match_out_param]
 and tbl_match = [%import: CoreSyntax.tbl_match]
 and tbl_entry = [%import: CoreSyntax.tbl_entry]
@@ -43,6 +63,7 @@ and event_sort = [%import: CoreSyntax.event_sort]
 and conditional_return = [%import: CoreSyntax.conditional_return]
 and complex_body = [%import: CoreSyntax.complex_body]
 and memop_body = [%import: CoreSyntax.memop_body]
+and memop = [%import: CoreSyntax.memop]
 and action_body = [%import: CoreSyntax.action_body]
 and action = [%import: CoreSyntax.action]
 (* multicast id space: 
@@ -50,14 +71,20 @@ and action = [%import: CoreSyntax.action]
   512 - 1024: port flooding groups
   1024 >    : user groups *)  
 
-and event_output = {
-  (* count the number of recirc / self events 
-     generated on this path *)
-  recirc_mcid_var : (id * ty);
-  (* all possible sequences of events 
-     that this program can generate. *)
-  ev_gen_seqs : (id list list);
-}
+and td =
+  | TDGlobal of id * ty * exp
+  | TDEvent of id * event_sort * params
+  | TDHandler of id * body 
+  | TDMemop of memop
+  | TDExtern of id * ty
+  | TDAction of action
+  | TDMain of main_handler
+  (* In P4, actions and tables are "open functions". 
+     they can use variables that are defined in 
+     the environment where they are _called_. The 
+     cid list is the variables it can modify *)
+  | TDOpenFunction of id * params * statement * (cid list)
+
 and main_handler = {
     main_id : id;
     hdl_selector : (id * ty);
@@ -68,18 +95,17 @@ and main_handler = {
     main_body : statement list;
     event_output : event_output;
     }
-and memop = {mid:id; mparams:params; mbody:memop_body;}
-and td =
-  | TDGlobal of id * ty * exp
-  | TDEvent of id * event_sort * params
-  | TDHandler of id * body 
-  | TDMemop of memop
-  | TDExtern of id * ty
-  | TDMain of main_handler
-  | TDLabeledBlock of id * statement
-  | TDAction of action
 
-and tdecl = {td:td; tdspan: sp;}
+and event_output = {
+  (* count the number of recirc / self events 
+     generated on this path *)
+  recirc_mcid_var : (id * ty);
+  (* all possible sequences of events 
+     that this program can generate. *)
+  ev_gen_seqs : (id list list);
+}    
+
+and tdecl = {td:td; tdspan: sp; tdpragma : pragma option;}
 and tdecls = tdecl list
 [@@deriving
   visitors
@@ -102,12 +128,12 @@ and tdecls = tdecl list
 
 let tdecl_of_decl decl = 
   match decl.d with
-  | DGlobal(id, ty, exp) -> {td=TDGlobal(id, ty, exp); tdspan=decl.dspan;}
-  | DEvent (id, es, ps) -> {td=TDEvent(id, es, ps); tdspan=decl.dspan;}
-  | DHandler(i, b) -> {td=TDHandler(i, b); tdspan=decl.dspan;}
-  | DMemop(i, p, m) -> {td=TDMemop{mid=i; mparams=p; mbody=m;}; tdspan=decl.dspan;}
-  | DExtern(i, t) -> {td=TDExtern(i, t); tdspan=decl.dspan;}
-  | DAction(a) -> {td=TDAction(a); tdspan = decl.dspan;}
+  | DGlobal(id, ty, exp) -> {td=TDGlobal(id, ty, exp); tdspan=decl.dspan; tdpragma = decl.dpragma;}
+  | DEvent (id, es, ps) -> {td=TDEvent(id, es, ps); tdspan=decl.dspan; tdpragma = decl.dpragma;}
+  | DHandler(i, b) -> {td=TDHandler(i, b); tdspan=decl.dspan; tdpragma = decl.dpragma;}
+  | DMemop(m) -> {td=TDMemop(m); tdspan=decl.dspan; tdpragma = decl.dpragma;}
+  | DExtern(i, t) -> {td=TDExtern(i, t); tdspan=decl.dspan; tdpragma = decl.dpragma;}
+  | DAction(a) -> {td=TDAction(a); tdspan = decl.dspan; tdpragma = decl.dpragma;}
 ;;
 
 module Seq = Core.Sequence
@@ -328,7 +354,7 @@ let add_main_handler decls =
   let tds =(erase_handler_bodies decls)
     @[{td=
     TDMain{main_id;hdl_selector;hdl_enum;hdl_params;default_hdl; main_body; shared_locals=[];event_output;}
-    ;tdspan=Span.default}]
+    ;tdspan=Span.default;  tdpragma = None;}]
   in
   tds 
 ;;
@@ -388,7 +414,7 @@ let add_lib_handler decls =
   let tds =(erase_handler_bodies decls)
     @[{td=
     TDMain{main_id;hdl_selector;hdl_enum;hdl_params;default_hdl; main_body=[main_body]; shared_locals=[];event_output;}
-    ;tdspan=Span.default}]
+    ;tdspan=Span.default; tdpragma = None;}]
   in
   tds 
 ;;
@@ -397,6 +423,7 @@ let tdecls_of_decl_for_control_lib decls =
   let translated_decls = List.map tdecl_of_decl decls in
   add_lib_handler translated_decls
 ;;
+
 (* get the main handler's signature *)
 let main ds =
   let main_decs = List.filter_map (fun dec -> 
@@ -466,16 +493,27 @@ let array_dimensions tds =
 (*** output ***)
 let decl_of_tdecl tdecl = 
   match tdecl.td with
-  | TDGlobal(id, ty, exp) ->  {d=DGlobal(id, ty, exp); dspan=tdecl.tdspan;}
-  | TDEvent (id, es, ps) ->  {d=DEvent(id, es, ps); dspan=tdecl.tdspan;}
-  | TDHandler(i, b) ->  {d=DHandler(i, b); dspan=tdecl.tdspan;}
-  | TDMemop{mid=mid; mparams=mparams; mbody=mbody;} ->  {d=DMemop(mid, mparams, mbody); dspan=tdecl.tdspan;}
-  | TDExtern(i, t) ->  {d=DExtern(i, t); dspan=tdecl.tdspan;}
+  | TDGlobal(id, ty, exp) -> decl_pragma (DGlobal(id, ty, exp)) tdecl.tdspan tdecl.tdpragma
+  | TDEvent (id, es, ps) ->  {d=DEvent(id, es, ps); dspan=tdecl.tdspan; dpragma = tdecl.tdpragma;}
+  | TDHandler(i, b) ->  {d=DHandler(i, b); dspan=tdecl.tdspan; dpragma = tdecl.tdpragma;}
+  | TDMemop(m) ->  {d=DMemop(m); dspan=tdecl.tdspan; dpragma = tdecl.tdpragma;}
+  | TDExtern(i, t) ->  {d=DExtern(i, t); dspan=tdecl.tdspan; dpragma = tdecl.tdpragma;}
+  | TDAction(a) -> {d=DAction(a); dspan=tdecl.tdspan; dpragma = tdecl.tdpragma;}
   | _ -> error "[decl_of_tdecl] not a directly translatable decl"
 ;;
 
-let main_to_string mainsig =
-  "// MAIN HANDLER \n"
+let main_to_string mainsig =  
+  "// shared locals:\n"
+  ^(
+    (List.map
+      (fun (id, ty) -> 
+        (CorePrinting.ty_to_string ty)
+        ^" "
+        ^(CorePrinting.id_to_string id)
+        ^";")
+      mainsig.shared_locals)
+    |> String.concat "\n")
+  ^"\n// MAIN HANDLER \n"
   ^"handler main(...){\n"
   ^((List.mapi 
         (fun i stg_stmt -> 
@@ -494,7 +532,7 @@ let tdecl_to_string tdec =
   match tdec.td with 
   | TDMain(mainsig) -> 
     main_to_string mainsig
-  | TDLabeledBlock(id, stmt) -> 
+  | TDOpenFunction(id, _, stmt, _) -> 
     "labeled_statement "^(CorePrinting.id_to_string id)^"{\n"
     ^CorePrinting.statement_to_string stmt
     ^"\n}"

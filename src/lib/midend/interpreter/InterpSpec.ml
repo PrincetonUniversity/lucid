@@ -266,11 +266,12 @@ let create_foreign_functions renaming efuns python_file =
         let f =
           InterpState.State.F
             (fun _ _ args ->
-              let _ =
+              let pyretvar =
                 Py.Callable.to_function
                   o
                   (Array.of_list @@ List.map oc_to_py args)
               in
+              let _ = pyretvar in (* this is the return from python? *)
               (* Dummy return value *)
               value (VBool false))
         in

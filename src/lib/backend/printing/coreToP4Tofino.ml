@@ -41,6 +41,7 @@ module CidMap = Collections.CidMap
 type ctx_entry =
   | CCid of CS.cid
   | CExp of CS.exp
+  | CTable of CS.tbl_def
 
 type renames = ctx_entry CidMap.t
 
@@ -54,7 +55,7 @@ let name renames x : Cid.t =
   match (CidMap.find_opt x renames) with 
   | None -> x
   | Some(CCid(y)) -> y
-  | Some(CExp(_)) -> error "[rename.name] expected cid, got exp"
+  | Some(_) -> error "[rename.name] expected cid, got exp or decl"
 ;;
 
 let bind ctx (x, y) : renames = 
@@ -69,23 +70,16 @@ let find ctx x =
    | _ -> error ("[Memop context] could not find expr for variable"^(Cid.to_string x))
 ;;
 
-
-(* memop context -- should merge with renaming context? *)
+let bind_tbl ctx (x, y) : renames =
+  CidMap.add (Cid.id x) (CTable(y)) ctx
+;;
+let find_tbl ctx x =
+  match CidMap.find_opt (Cid.id x) ctx with 
+   | Some(CTable(o)) -> o
+   | _ -> error ("[find_tbl] could not find a table for variable "^(Id.to_string x))
+;;
 type mctx = renames
-(* = CS.exp CidMap.t *)
-(* let bind ctx (x, y) : mctx = 
-  CidMap.add x y ctx
-;;
-
-let bind_lists ctx xs ys = 
-  List.fold_left bind ctx (List.combine xs ys)
-;;
-let find ctx x = 
-  match CidMap.find_opt x ctx with 
-   | Some(o) -> o
-   | _ -> error ("[Memop context] could not find expr for variable"^(Cid.to_string x))
-;;
- *)
+(* memop cell names *)
 let cell1_local = id "cell1_local" ;; (* read everywhere. *)
 let cell2_local = id "cell2_local" ;; (* *)
 let cell1_remote = id "cell1_remote" ;; (* written *)
@@ -100,7 +94,6 @@ CS.var_sp
     (CS.ty cell_ty) 
     (Span.default)
 ;;
-
 
 let translate_ty ty = match ty with 
   | CS.TBool -> T.TBool
@@ -185,7 +178,7 @@ let mk_prog_env tds =
   List.fold_left (fun prog_env tdecl -> 
     match tdecl.td with
       | TDMemop(m) -> {prog_env with memops=(m.mid, m)::prog_env.memops;}
-      | TDLabeledBlock(id, _) -> {prog_env with user_fcns=(Cid.id id, tdecl)::prog_env.user_fcns;}
+      | TDOpenFunction(id, _, _, _) -> {prog_env with user_fcns=(Cid.id id, tdecl)::prog_env.user_fcns;}
       | _ -> prog_env
     )
     empty_prog_env
@@ -216,6 +209,7 @@ let rec translate_exp (renames:renames) (prog_env:prog_env) exp : (T.decl list *
           | EVar(cid) -> [], T.EVar (name renames cid) 
           | _ -> translate_exp renames prog_env new_exp        
       )
+      | Some (CTable(_)) -> error "[translate_exp] a variable id used in an action or memop is bound to a table. This should not happen."
       | None -> [], T.EVar(cid)
   )
   | CS.EOp(op, args) -> (
@@ -679,13 +673,17 @@ let rec translate_statement (renames:renames) prev_decls hdl_enum hdl_params pro
   | STableMatch _ | STableInstall _ -> error "[coreToP4Tofino.translate_statement] tables not implemented"
 ;;
 
-(* generate an action, and other compute objects, from a labeled statement *)
-let translate_labeled_block (renames, hdl_enum,hdl_params,prog_env) p4tdecls tdecl =
+(* generate an action, and other compute objects, from an open function *)
+let translate_openfunction (renames, hdl_enum,hdl_params,prog_env) p4tdecls tdecl =
   let new_decls = match tdecl.td with 
-    | TDLabeledBlock(id, stmt) -> (
-      let decls, action_body = translate_statement renames p4tdecls hdl_enum hdl_params prog_env stmt in
-      let action_decl = decl (DAction({id=id; body=action_body;})) in 
-      decls@[action_decl]
+    | TDOpenFunction(id, const_params, stmt, _) -> (
+      let params = List.map
+        (fun (id, ty) -> (None, translate_ty ty.raw_ty, id))
+        const_params
+      in
+      let body_decls, body = translate_statement renames p4tdecls hdl_enum hdl_params prog_env stmt in
+      let action = daction id params body in
+      body_decls@[action]
     )
     | _ -> []
   in
@@ -707,11 +705,7 @@ let mk_ingress_rename_map tds =
     empty_renames
     m.hdl_params
   in
-  (* builtin renaming: 
-    ingress_port 
-    hdl_selector
-    events count
-  *)
+  (* builtin renaming: ingress_port, hdl_selector, events count *)
   rename ((Cid.id Builtins.ingr_port_id), igr_port_arg) renames |> 
   rename ((Cid.id (m.hdl_selector |> fst)), cur_ev_arg) |> 
   rename ((Cid.id (m.event_output.recirc_mcid_var |> fst)), mcast_grp_a_arg)
@@ -739,7 +733,7 @@ let translate_pat pat =
    A default statement is necessary in a table with 
    no rules. So we don't use it for now.
 *)
-let translate_branch_call stmt =
+let translate_sunit_ecall stmt =
   match stmt.s with 
   | SUnit({e=ECall(acn_id, _); _}) -> sunit (ecall acn_id [])
   | _ -> error "[translate_branch] branch statement must be a method call to a labeled block, which represents an action"
@@ -748,61 +742,85 @@ let translate_branch complete_branches
     ((pats:C.pat list),(stmt:C.statement))
     : ((T.pat list * T.statement) list) =    
 
-  complete_branches@[(List.map translate_pat pats, translate_branch_call stmt)]
+  complete_branches@[(List.map translate_pat pats, translate_sunit_ecall stmt)]
 ;;
 
-(* we use a default action when there's 1 branch with an empty pattern. *)
-let translate_default branches =
-  match branches with
-  | [([], call_stmt)] -> Some(translate_branch_call call_stmt)
-  | _ -> None
+(* translate a table object declaration into a P4 table. 
+   Note: we need the match statement that calls the table 
+   because it contains the key *)
+let translate_table renames tdef keys =
+  let tid = tdef.tid in
+  let actions = List.map CoreSyntax.id_of_exp tdef.tactions in
+  let default_aid, default_args = tdef.tdefault in 
+  let default = Some(
+    scall 
+      default_aid 
+      (translate_exps renames empty_prog_env default_args |> snd))
+  in
+  dtable tid keys actions [] default []
 ;;
 
-(* translate a match statement into a table *)
-let generate_table renames (stage_pragma:pragma) (ignore_pragmas: (id * pragma) list) (tid, stmt) : (T.decl * T.statement) = 
-  let _ = stage_pragma in (* not needed *)
+(* translate a match or if statement into a table *)
+(* An if statement always translates to calling a dynamically updateable user table. 
+   A match statement always translates to calling a static, compiler-generated table. 
+   No other statements should appear in the body of the main handler at this point. *)
+let stmt_to_table renames (_:pragma) (ignore_pragmas: (id * pragma) list) (tid, stmt) : (T.decl * T.statement) = 
+  let ignore_parallel_tbls_pragmas = ((List.remove_assoc tid ignore_pragmas |> List.split |> snd;)) in 
   let action_id_of_branch (_, stmt) =
     match stmt.s with
       | SUnit({e=ECall(acn_id, _); _}) -> Cid.to_id acn_id  
-      | _ -> error "[translate_branch] branch must be a call to a labeled block."
+      | _ -> error "[action_id_of_branch] branch must be a call to a labeled block."
   in
   match stmt.s with
+  | SIf(e, {s=STableMatch(tm);}, _) ->   
+    (* match keys are specified in the statement *)
+    let keys = translate_exps renames empty_prog_env tm.keys 
+      |> snd 
+      |> List.map tern_key_of_exp
+    in
+    let tdef = find_tbl renames tid in 
+    let tbl_decl = translate_table renames tdef keys in
+    let _, e' = translate_exp renames empty_prog_env e in
+    let tbl_call = sif e' (sunit (ecall_table tdef.tid)) in
+    tbl_decl, tbl_call
   | SMatch(exps, branches) -> 
     let _, keys = translate_exps renames empty_prog_env exps in 
     let keys = List.map tern_key_of_exp keys in 
     let actions = List.map action_id_of_branch branches |> MiscUtils.unique_list_of in 
-    let default_opt = translate_default branches in
-    (* Tables with a default action have only 1 branch -- the default. 
-       So there are no rules by definition. *)
-    let rules = match default_opt with 
-    | Some _ -> []
-    | None -> List.fold_left 
-      translate_branch
-      []
-      branches
-    in 
-
+    let rules, default_opt = match branches with
+      (* a single empty branch means there are no const rules, just a default action *)
+      | [([], call_stmt)] -> ([], Some(translate_sunit_ecall call_stmt))
+      (* anything else means there are const rules and no default *)
+      | branches -> (
+        (List.fold_left 
+          (fun branches' (pats, stmt) -> 
+            branches'
+            @[(List.map translate_pat pats, translate_sunit_ecall stmt)])
+          []
+          branches)
+        , None)
+    in
     let tbl_dec = 
-      dtable 
-        tid
-        keys
-        actions
-        rules
-        default_opt
-        ((List.remove_assoc tid ignore_pragmas |> List.split |> snd;))
-        (* (stage_pragma::(List.remove_assoc tid ignore_pragmas |> List.split |> snd;)) *)
+      dtable tid keys actions rules default_opt ignore_parallel_tbls_pragmas
     in
     let tbl_call = sunit (ecall_table tid) in 
     (tbl_dec, tbl_call)
   | _ -> error "[generate_table] not a match statement!"
 ;;
 
-(* translate a statement that represents 
+(* translate a sequence of match and if statements into 
    a vector of tables executing in the same stage. *)
-let generate_stage stage_num renames block_id stmt =
-  let table_stmts = InterpHelpers.unfold_stmts stmt in
-  let table_ids = List.map (fresh_table_id) table_stmts in 
-  let stage_pragma = {pname="//stage "^(string_of_int stage_num); pargs = [];} in 
+let sseq_to_stage stage_num renames block_id seq_stmt =
+  let stage_pragma = {pname="//stage "^(string_of_int stage_num); pargs = [];} in   
+  let stmts = InterpHelpers.unfold_stmts seq_stmt in
+  (* user tables already have ids *)
+  let table_ids = List.map 
+    (fun call_stmt -> match call_stmt.s with
+      | SIf(_, {s=STableMatch(tm);}, _) -> CoreSyntax.id_of_exp tm.tbl
+      | SMatch(_) -> fresh_table_id ()
+      | _ -> error "[sseq_to_stage] a statement in this stage is something besides a conditional table_match or an unconditional match statement.")
+    stmts
+  in
   let ignore_dep_pragmas = List.map
     (fun tbl_id ->
       (tbl_id, 
@@ -811,18 +829,20 @@ let generate_stage stage_num renames block_id stmt =
     ))
     table_ids
   in 
+  (* table declarations and calls *)
   let decls_calls = List.map 
-    (generate_table renames stage_pragma ignore_dep_pragmas) 
-    (List.combine table_ids table_stmts)
+    (stmt_to_table renames stage_pragma ignore_dep_pragmas) 
+    (List.combine table_ids stmts)
   in 
   decls_calls
 ;;
 
-let rec generate_stages stage_num renames block_id (stages:C.statement list) =
+(* generate stages from a list of sequence statements in the main handler *)
+let rec statements_to_stages stage_num renames block_id (stages:C.statement list) =
   match stages with 
   | [] -> []
   | hd_stage::stages ->
-    (generate_stage stage_num renames block_id hd_stage)@(generate_stages (stage_num + 1) renames block_id stages)
+    (sseq_to_stage stage_num renames block_id hd_stage)@(statements_to_stages (stage_num + 1) renames block_id stages)
 ;;
 
 
@@ -845,40 +865,61 @@ let mc_recirc_decls evids recirc_port =
 ;;
 
 let generate_ingress_control prog_env block_id tds =
-  let renames = mk_ingress_rename_map tds in 
-  (* declare local copies of all event parameters *)
-  (* let tds, param_decls = initialize_params tds in  *)
-  (* let init_decls = initialize_fields () in  *)
   let m = main tds in 
-  let added_var_decls = generate_added_var_decls tds in 
-  let table_decls, table_calls = generate_stages 0 renames block_id m.main_body |> List.split in 
-  let apply_body = sseq table_calls in 
-
-  let action_decls = List.fold_left
-    (translate_labeled_block 
-      (renames, m.hdl_enum,m.hdl_params,
-        prog_env
+  (* build the parameter and variable renaming map for ingress.
+     this should actually just be an update to context -- 
+     the renaming map is just another part of context. *)
+  (* parameters *)
+  let renames = List.fold_left 
+    (fun names (evid, params) -> 
+      List.fold_left
+        (fun names (param_id, _) -> 
+          rename (Cid.id param_id, ev_param_arg evid param_id) names)
+        names
+        params
       )
-    )
-    []
+    empty_renames
+    m.hdl_params
+  in
+  (* builtin renaming: ingress_port, hdl_selector, events count *)
+  let renames = 
+    rename ((Cid.id Builtins.ingr_port_id), igr_port_arg) renames |> 
+    rename ((Cid.id (m.hdl_selector |> fst)), cur_ev_arg) |> 
+    rename ((Cid.id (m.event_output.recirc_mcid_var |> fst)), mcast_grp_a_arg)
+  in
+  (* add table definitions to renaming map *)
+  let renames = List.fold_left
+    (fun renames td -> 
+      match td.td with
+      | TDGlobal(tbl_id, _, {e=ETableCreate(tbl_def);}) -> 
+        bind_tbl renames (tbl_id, tbl_def)
+      | _ -> renames)
+    renames
     tds
   in
-  let mc_decls = mcgroups_of_decls action_decls in 
-  let action_decls = non_mcgroups_of_decls action_decls in 
+  (* all decls besides tables *)
+  let decls = 
+    (generate_added_var_decls tds)
+    @(List.fold_left
+      (translate_openfunction 
+        (renames, m.hdl_enum,m.hdl_params, prog_env))
+      []
+      tds)
+  in
+  (* table decls are generated at the same time as table calls *)
+  let table_decls, table_calls = statements_to_stages 0 renames block_id m.main_body |> List.split in 
+  let apply_body = sseq table_calls in 
+  let mc_decls = mcgroups_of_decls decls in 
+  let action_decls = non_mcgroups_of_decls decls in 
   let ingress_control = decl (DControl{
     id = block_id;
     params = ingress_control_params;
-    decls = added_var_decls@action_decls@table_decls;
+    decls = action_decls@table_decls;
     body = Some(apply_body);
     })
   in
 
   ingress_control, mc_decls
-;;
-
-
-let generate_mc_config created_decls =
-  mcgroups_of_decls created_decls
 ;;
 
 (*** egress control ***)
@@ -912,7 +953,7 @@ let extract_recirc_event_action ev_enum evid =
     ]
   in
   let multi_event_reset = reset_multi_event ev_enum in 
-  daction (recirc_acn_id evid) (sseq (invalidate_other_headers@single_ev_setup@multi_event_reset))
+  daction (recirc_acn_id evid) [] (sseq (invalidate_other_headers@single_ev_setup@multi_event_reset))
 ;;
 
 let extract_recirc_event_actions ev_enum =
@@ -1049,10 +1090,12 @@ let extract_port_event_action (ev_enum:(Id.t * int) list) (evid:Id.t) =
   in
   let to_external = daction
     (port_external_action evid)
+    []
     (sseq external_port_stmts)
   in
   let to_internal = daction
     (port_internal_action evid)
+    []
     (sseq internal_port_stmts)
   in
   (to_external, to_internal)
@@ -1107,7 +1150,7 @@ let generate_egress_control block_id tds lucid_internal_ports =
   let ev_enum = (main tds).hdl_enum in 
   let t_extract_port_event = id "t_extract_port_event" in
   let t_extract_recirc_event = id "t_extract_recirc_event" in 
-  let egr_noop = [daction egr_noop_id (snoop)] in 
+  let egr_noop = [daction egr_noop_id [] (snoop)] in 
   let decls = 
     (egr_noop)
     @(extract_recirc_event_actions ev_enum)
@@ -1178,43 +1221,46 @@ let mc_flood_decls external_ports =
   List.map flood_port_decl external_ports
 ;;
 
-let translate tds (portspec:ParsePortSpec.port_config) = 
+let setup_env tds (portspec:ParsePortSpec.port_config) =
   let prog_env = mk_prog_env tds in 
   let port_defs = Caml.List.map 
     (fun (port:ParsePortSpec.port) -> decl (DPort{dpid=port.dpid; speed=port.speed;})) 
     (portspec.internal_ports@portspec.external_ports)
   in 
-  let lucid_aware_dpids = portspec.recirc_dpid::(List.map (fun (port:ParsePortSpec.port) -> port.dpid) portspec.internal_ports) in
-  let external_dpids = (List.map (fun (port:ParsePortSpec.port) -> port.dpid) portspec.external_ports) in
-  (* translate multicast groups first, 
-      because we need them for ingress control translation *)
-  (* let mcgroup_enum, mc_branches = generate_mc_config tds in  *)
-  let ingress_control, mc_decls = generate_ingress_control prog_env (id "IngressControl") tds in 
-  let mc_defs = mc_decls@mc_flood_decls external_dpids@(mc_recirc_decls ((main tds).hdl_enum |> List.split |> fst) portspec.recirc_dpid) in 
-  (*     List.map (fun port -> decl (DPort{dpid=port; speed=40;})) ports_40g
-    @(List.map (fun port -> decl (DPort{dpid=port; speed=10;})) ports_10g)
-  in   *)
+  let lucid_dpids = portspec.recirc_dpid::(List.map (fun (port:ParsePortSpec.port) -> port.dpid) portspec.internal_ports) in
+  let extern_dpids = (List.map (fun (port:ParsePortSpec.port) -> port.dpid) portspec.external_ports) in
+  (prog_env, port_defs, lucid_dpids, extern_dpids)
+;;
+
+let translate tds (portspec:ParsePortSpec.port_config) = 
+  let env, ports, lucid_dpids, extern_dpid = setup_env tds portspec in
+
+  let ingress_control, mc_decls = generate_ingress_control env (id "IngressControl") tds in 
+  let mc_defs = mc_decls
+    @(mc_flood_decls extern_dpid)
+    @(mc_recirc_decls ((main tds).hdl_enum |> List.split |> fst) portspec.recirc_dpid) 
+  in 
   let tofino_prog = {
     globals = 
       includes
       @(generate_structs tds)
       @(generate_reg_arrays tds);
     ingress = {
-      parse = generate_ingress_parser (id "IngressParser") (main tds) lucid_aware_dpids;
+      parse = generate_ingress_parser (id "IngressParser") (main tds) lucid_dpids;
       process = ingress_control;
       deparse = generate_ingress_deparser (id "IngressDeparser") tds;
       };
-    control_config = mc_defs@port_defs;
+    control_config = mc_defs@ports;
     egress = {
       parse = generate_egress_parser (id "EgressParser") tds;
-      process = generate_egress_control (id "EgressControl") tds lucid_aware_dpids;
+      process = generate_egress_control (id "EgressControl") tds lucid_dpids;
       deparse = generate_egress_deparse (id "EgressDeparse") tds;
     }
   } in
   tofino_prog
 ;;
 
-
+(*** for debugging compilation path where we generate a P4 "control" object from the lucid program  ***)
 let control_block_lib_params tds =
   let params = ((main tds).hdl_params |> List.hd |> snd) in 
   let params = List.map (fun (pid, pty) -> 
@@ -1229,10 +1275,10 @@ let generate_control_lib prog_env tds =
   let m = main tds in 
   let block_id = m.hdl_enum |> List.hd |> fst in 
   let added_var_decls = generate_added_var_decls tds in 
-  let table_decls, table_calls = generate_stages 0 renames block_id m.main_body |> List.split in 
+  let table_decls, table_calls = statements_to_stages 0 renames block_id m.main_body |> List.split in 
   let apply_body = sseq table_calls in 
   let action_decls = List.fold_left
-    (translate_labeled_block 
+    (translate_openfunction 
       (renames, m.hdl_enum,m.hdl_params,
         prog_env
       )

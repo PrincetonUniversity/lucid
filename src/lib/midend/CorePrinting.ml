@@ -340,11 +340,11 @@ let d_to_string d =
       (event_sort_to_string sort)
       (id_to_string id)
       (params_to_string params)
-  | DMemop (id, params, mbody) ->
+  | DMemop {mid=mid; mparams=mparams; mbody=mbody;} ->
     Printf.sprintf
       "memop %s(%s)\n {%s}"
-      (id_to_string id)
-      (params_to_string params)
+      (id_to_string mid)
+      (params_to_string mparams)
       (memop_to_string mbody)
   | DExtern (id, ty) ->
     Printf.sprintf "extern %s %s;" (id_to_string id) (ty_to_string ty)

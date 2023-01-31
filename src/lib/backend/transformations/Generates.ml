@@ -11,23 +11,6 @@
       3. ports generate: create multicast group and set ports_mcid
   *)
 
-(* 
-Left off here. 
-
-  There's some weirdness with data dependencies after inlining generates, 
-  because of setting parameter variables. 
-  If you match on a parameter variable, then do a generate, 
-  the generate is going to set the parameter variable, but you will 
-  keep matching on the new value. 
-  A few options: 
-    1. do the "partial single assignment" after the generate eliminator.
-    2. set parameters in the translation to P4. (still do copies in core)
-      - OPTION 2 looks good and least disruptive -- do that for now.
-
-
-
-*)
-
 open CoreSyntax
 open TofinoCore
 open CoreCfg
@@ -38,11 +21,6 @@ let orig param_id =
   Id.create ("pre_gen_copy_"^(fst param_id))
 ;;
 
-let size_of_tint ty = 
-  match ty.raw_ty with 
-  | TInt(sz) -> sz
-  | _ -> error "[size_of_tint] not a tint"
-;;
 
 (* generate statements that set the parameter 
    variables of evid to eargs *)
@@ -204,12 +182,11 @@ let replace_params evids stmt =
 
 
 (* traverse the statement, looking for a statement generating 
-   evid. When you find it: 
+   event evid. When you find it: 
     1. add copy statements before it;
     2. add invalidates on all adjacent branches;
     3. "switch" into traverse_to_replace mode *)
 
-(* bug: is this handling generates or self generates? *)
 let rec find_self_generate params_used_after tds (evid, (evparams:params)) stmt =
   let evids = evparams |> List.split |> fst in
   match stmt.s with 
@@ -318,19 +295,28 @@ let paramcopy_in_stmt stmt =
 ;;
 
 (* processing for a single branch of the handle selector statement *)
-let find_self_generate_in_hdl_branch tds rev_hdl_enum hdl_params (pats, stmt) =
-  let evnum = match pats with 
+(* if the branch that represents a single handler function doesn't 
+   generate the same kind of event, we need to invalidate that event's 
+   headers so that they don't get written out to egress. *)
+(* This method should not derive the event number from the pattern. It should, 
+   instead, take the event id and transform the statement for that event. *)
+let invalidate_event_headers_if_not_recursive tds evid evparams stmt =
+(*   let evnum = match pats with 
     | [PNum(z)] -> Z.to_int z
     | _ -> error "[process_ev_branch] pattern of handler selector should be event num"
   in
   let evid = List.assoc evnum rev_hdl_enum in
-  let evparams:params = List.assoc evid hdl_params in 
+ *)
+  (* let evparams:params = List.assoc evid hdl_params in  *)
   (* let paramids = evparams |> List.split |> fst in *)
 
   let new_stmt, self_generate_found = find_self_generate false tds (evid, evparams) stmt in 
-  (* if a generate was found, we are done processing the body. 
-     but if it was not, we haven't invalidated the header, so we 
-     do that at the end.*)
+  (* if a recursive generate was found, we are done processing the body, 
+     as invalidates are added on all paths that do not contain the self 
+     generate. But, if did not find a recursive generate, then the 
+     event's headers are still valid and will be serialized, erroneously, 
+     to output. In this case, we add an invalidate at the end of the 
+     pipeline. We can probably do this more cleverly to reduce stage count.*)
   let new_stmt = match self_generate_found with
     | true -> new_stmt
     | false -> (
@@ -343,7 +329,8 @@ let find_self_generate_in_hdl_branch tds rev_hdl_enum hdl_params (pats, stmt) =
     | true -> List.map (fun (id, ty) -> (orig id, ty)) evparams
     | false -> []
   in
-  (pats, new_stmt), new_vars
+  new_stmt, new_vars 
+  (* (pats, new_stmt), new_vars *)
 ;;
 
 let count_recirc_generates tds =
@@ -365,22 +352,41 @@ let count_recirc_generates tds =
 
 let eliminate tds =
   let m = (main tds) in 
-  let rev_hdl_enum = List.map (fun (x, y) -> (y, x)) m.hdl_enum in
+  (* let rev_hdl_enum = List.map (fun (x, y) -> (y, x)) m.hdl_enum in *)
+  (* at this point, the entire program is in the first stage. (i.e., we are pre layout) *)
   let stmt = m.main_body |> List.hd in
-  let new_stmt, new_vars = match (stmt.s) with 
+  let (stmt', new_vars) = List.fold_left
+    (fun (stmt, new_vars) (evid, evparams) -> 
+      let stmt', new_vars' = invalidate_event_headers_if_not_recursive tds evid evparams stmt in 
+      stmt', (new_vars@new_vars'))
+    (stmt, [])
+    m.hdl_params
+  in
+
+
+(*   let new_stmt, new_vars = match (stmt.s) with 
     | SMatch(es, bs) -> (
       let new_bs, new_vars = 
-        List.map (find_self_generate_in_hdl_branch tds rev_hdl_enum m.hdl_params) bs
+        List.map (invalidate_event_headers_if_not_recursive tds rev_hdl_enum m.hdl_params) bs
         |> List.split
       in
       let new_vars = List.flatten new_vars in
       {stmt with s=SMatch(es, new_bs)}, new_vars
     )
-    | _ -> error "[generate elimination] body of main handler must start with match on event id"
+    | SSeq _ -> 
+      print_endline "lol its a sseq";
+      error "lol"
+    | _ -> 
+      print_endline ("------------------ main handler ---------------");
+      print_endline (TofinoCore.tdecls_to_string tds);
+      print_endline ("------------------ main handler ---------------");
+      print_endline ("first statement in main is...");
+
+      error "[generate elimination] body of main handler must start with match on event id"
   in
-  (* update the main body and the list of shared locals. *)
+ *)  (* update the main body and the list of shared locals. *)
   let tds = update_main tds { m with 
-    main_body = [new_stmt];
+    main_body = [stmt'];
     shared_locals = m.shared_locals@new_vars;
     } 
   in

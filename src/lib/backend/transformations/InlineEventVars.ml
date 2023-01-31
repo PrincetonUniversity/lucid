@@ -3,6 +3,19 @@ open CoreSyntax
 exception Error of string
 let error s = raise (Error s)
 
+(* bug: this is broken for 
+        conditional event assignments. 
+
+  example: 
+  event foo = ev1();
+  if (bar) {
+    foo = ev2();
+  }
+  generate(foo);
+
+  bug: 
+  - generate(foo) will generate ev1
+*)
 
 (* replace location variables with their values *)
 let inline_locations ds =

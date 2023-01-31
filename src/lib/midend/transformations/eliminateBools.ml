@@ -43,7 +43,7 @@ let eliminate_complex_bool_assigns ds =
       inherit [_] s_map as super
 
       (* skip memops! *)
-      method! visit_DMemop _ id params body = DMemop (id, params, body)
+      method! visit_DMemop _ m = DMemop (m)
 
       method! visit_statement ctx statement =
         match rhs_of_stmt statement.s with
@@ -70,7 +70,7 @@ let eliminate_bool_values_and_types ds =
       inherit [_] s_map as super
 
       (* skip memops! *)
-      method! visit_DMemop _ id params body = DMemop (id, params, body)
+      method! visit_DMemop _ m = DMemop (m)
       method! visit_VBool _ b = VInt (zint_of_bool b)
       method! visit_TBool _ = TInt bool_sz
     end

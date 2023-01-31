@@ -19,6 +19,8 @@ let to_string (s, i) = s ^ delim ^ string_of_int i
 let to_string_delim d (s, i) = s ^ d ^ string_of_int i
 let prepend_string p (s, i) = p ^ s, i
 let append_string p (s, i) = s ^ p, i
+let concat_names c (s1, _) (s2, _) = fresh (s1^c^s2)
+
 let refresh (s, _) = fresh s
 let freshen = refresh
 

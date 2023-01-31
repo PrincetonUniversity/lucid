@@ -369,14 +369,6 @@ module PhiElimination = struct
     ; phi_args : Id.t list
     }
 
-  let id_of_exp exp =
-    match exp.e with
-    | EVar (Id id) -> id
-    | _ ->
-      error
-        "[NewPhiElimination@id_of_exp] expression had wrong form to convert \
-         into id"
-  ;;
 
   let rec_of_phi phi : phi_rec =
     match phi.s with

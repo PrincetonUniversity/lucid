@@ -732,9 +732,9 @@ let interp_decl (nst : State.network_state) swid d =
     in
     State.add_global swid (Id id) (State.F f) nst;
     nst
-  | DMemop (id, params, body) ->
-    let f = interp_memop params body in
-    State.add_global swid (Cid.id id) (State.F f) nst;
+  | DMemop ({mid=mid; mparams=mparams; mbody=mbody;}) ->
+    let f = interp_memop mparams mbody in
+    State.add_global swid (Cid.id mid) (State.F f) nst;
     nst
   | DExtern _ ->
     failwith "Extern declarations should be handled during preprocessing"

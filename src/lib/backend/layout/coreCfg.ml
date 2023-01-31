@@ -176,14 +176,12 @@ let pattern_of_branch es b =
 (* Some match nodes may get compiled directly into their own tables.
     User-written match statements with:
         1. many branches (>20 -- this is somewhat arbitrary)
-        2. no sequences of statements
-    remove_match_nodes keeps these match statements in the CFG. *)
+        2. no sequences of statements *)
 let is_solitary_match stmt =
     match stmt.spragma with 
     | Some("solitary", []) -> true
     | _ -> false
 ;;
-
 
 (* compute the condition statement for each branch in a match statement *)
 let conditions_of_match es bs = 
@@ -393,7 +391,6 @@ let cfg_of_main (ds:TofinoCore.tdecls) =
 (*     let entry_stmt = main_sig.main_body |> List.hd |> delete_noop_seqs |> (sseq snoop) in 
     cfg_of_statement entry_stmt *)
 ;;
-
 
 
 let test_cfg_builder () =

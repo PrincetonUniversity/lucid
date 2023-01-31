@@ -1,13 +1,25 @@
 (* coreDfg.ml -- 
-    convert a control flow graph into a data flow graph 
+    convert a control dependency graph into a data flow graph 
     (really a data dependency graph) 
-    The control flow graph should have edge constraints 
-    propagated to nodes and match statements removed.
-    Each node is a statement, annotated with its condition 
-    for execution. 
-    An edge from (s, t) represents a data dependency 
-    (read, write), (write, write), or (write, read) 
-    between s and t.
+    The control dependency graph has nodes that test 
+    the conditions necessary for their execution, and 
+    an edge (s, t) represents that s comes before t 
+    in the control flow of the program. We _could_ 
+    schedule the nodes for execution based on the CDG, 
+    but just because s comes before t doesn't mean that 
+    s must be executed before t -- they might operate 
+    on independent data. 
+    So, in the data dependency graph, nodes have the same 
+    meaning as in a control dependency graph, but 
+    an edge from (s, t) means that there is a data 
+    dependency from s to t, and so s _must_ execute 
+    before t.
+    There are three kinds of data dependencies: 
+    (read, write), (write, write), or (write, read).
+    We should be able to eliminate the 
+    (read, write) and (write, write) dependencies 
+    with future optimizations. But for now, they 
+    all matter for scheduling. 
 *)
 open Collections
 open CoreSyntax

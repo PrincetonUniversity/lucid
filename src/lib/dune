@@ -111,6 +111,8 @@
    IfToMatch
    RegularizeMemops
    ShareMemopInputs
+   SingleTableMatch
+   InlineTableActions
    MatchAlgebra
    CoreCfg
    CoreCdg

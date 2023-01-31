@@ -123,18 +123,25 @@ let rec translate_exp (e : S.exp) : C.exp =
     | S.EFlood e -> C.EFlood (translate_exp e)
     | ESizeCast(_) | EStmt(_) | ERecord(_) | EWith(_) | EProj(_)
     | EVector(_) | EComp(_) | EIndex(_) | ETuple(_) -> err_unsupported e.espan (Printing.exp_to_string e)
-    | S.ETableCreate(e) ->  
-      let tty = translate_ty e.tty in
-      let tactions = List.map translate_exp e.tactions in
-      let tsize = translate_exp e.tsize in
-      let tdefault = (fst e.tdefault), (snd e.tdefault |> List.map translate_exp) in
-      C.ETableCreate({tty; tactions; tsize; tdefault})
+    | S.ETableCreate(_) ->  
+      err e.espan "[SyntaxToCore.translate_exp] ETableCreate should be translated by special function";
     | S.ETableMatch _ ->
         err e.espan "table match exps should have been eliminated before IR."
     | S.EPatWild(Some(sz)) -> C.EVal (C.vwild (translate_size sz)) 
     | S.EPatWild(None) -> err e.espan "wildcard patterns (_) should have a size before IR."
   in
   { e = e'; ety = translate_ty (Option.get e.ety); espan = e.espan }
+
+and translate_etablecreate id (exp:S.exp) : C.exp = 
+  match exp.e with
+  | S.ETableCreate(tc) ->  
+    let tty = translate_ty tc.tty in
+    let tactions = List.map translate_exp tc.tactions in
+    let tsize = translate_exp tc.tsize in
+    let tdefault = (fst tc.tdefault), (snd tc.tdefault |> List.map translate_exp) in
+    let e' = C.ETableCreate({tid=id; tty; tactions; tsize; tdefault}) in
+    {e = e'; ety = translate_ty (Option.get exp.ety); espan = exp.espan }
+  | _ -> err exp.espan "[SyntaxToCore.translate_etablecreate] non table create expressions should be translated by translate_exp"
 
 and translate_params params =
   List.map (fun (id, ty) -> id, translate_ty ty) params
@@ -230,13 +237,17 @@ let translate_sort = function
 let translate_decl (d : S.decl) : C.decl =
   let d' =
     match d.d with
-    | S.DGlobal (id, ty, exp) ->
-      C.DGlobal (id, translate_ty ty, translate_exp exp)
+    | S.DGlobal (id, ty, inner_exp) -> (
+      match inner_exp.e with 
+      | ETableCreate(_) -> 
+        C.DGlobal (id, translate_ty ty, translate_etablecreate id inner_exp)
+      | _ -> 
+        C.DGlobal (id, translate_ty ty, translate_exp inner_exp))
     | S.DEvent (id, sort, _, params) ->
       C.DEvent (id, translate_sort sort, translate_params params)
     | S.DHandler (id, body) -> C.DHandler (id, translate_body body)
-    | S.DMemop (id, params, body) ->
-      C.DMemop (id, translate_params params, translate_memop body)
+    | S.DMemop (mid, mparams, mbody) ->
+      C.DMemop {mid; mparams=translate_params mparams; mbody=translate_memop mbody;}
     | S.DExtern (id, ty) -> C.DExtern (id, translate_ty ty)
     | S.DAction(id, tys, const_params, (params, acn_body)) -> 
       C.DAction({
@@ -247,7 +258,7 @@ let translate_decl (d : S.decl) : C.decl =
         abody = List.map translate_exp acn_body;})
     | _ -> err d.dspan (Printing.decl_to_string d)
   in
-  { d = d'; dspan = d.dspan }
+  C.decl_sp d' d.dspan
 ;;
 
 let translate_prog (ds : S.decls) : C.decls = List.map translate_decl ds

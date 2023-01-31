@@ -103,7 +103,7 @@ and key =
   | DVar of id * ty * (expr option) (* variables may be declared but not initialized... *)
   (* | DInit of cid * expr *)
   | DTable of {id:id; keys:key list; actions: id list; rules: branch list; default: statement option; }
-  | DAction of {id:id; body: statement;}
+  | DAction of {id:id; params : params; body: statement;}
   | DHash of {id:id; poly: int; out_wid:int;}
   | DRegAction of {  
       id : id; 
@@ -121,10 +121,10 @@ and key =
   | DDeparse of toplevel_block
   (* call an object constructor *)
   | DObj of expr * id (* EConstr<...>(...) id; *)  
-  (* declarations for the control plane *)
+  (* declarations for objects that get 
+     initialized by the P4 control script *)
   | DMCGroup of {gid:int; replicas : (int * int) list;}
   | DPort of {dpid:int; speed:int;}
-
 
 and decl = {d:d; dpragma:pragma list;}
 
@@ -152,6 +152,10 @@ let tbool = TBool
 let ecall fcn_id args = 
   ECall(EVar(fcn_id), Some(args))
 let ecall_table tid = ecall (Cid.create_ids [tid; id "apply"]) [] ;;
+
+let ecall_action aid const_args = 
+  ecall aid const_args
+;;
 
 let ejump label = 
   ECall(EVar(label), None)
@@ -210,7 +214,7 @@ let dstruct hid sty fields =
 ;;
 
 let dinclude str = decl (DInclude(str))
-let daction id stmt = decl (DAction{id; body=stmt;})
+let daction id params body = decl (DAction{id; params; body;})
 
 let dtable id keys actions rules default pragmas =
   {d=DTable({id; keys; actions; rules; default});

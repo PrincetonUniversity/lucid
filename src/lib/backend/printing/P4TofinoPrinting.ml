@@ -26,7 +26,6 @@ let as_flow s = flow_map
   (String.split_on_char ' ' s)
 ;;
 
-let nested_block bdy = nest 2 (braces bdy)
 let nested_block_better bdy = group (braces ((nest 2 (break 1^^bdy))^^break 1)) 
 ;;
 
@@ -321,8 +320,10 @@ let rec string_of_decl dec =
           hardline
           ^^s'"const default_action = "^^(string_of_statement default))
       )^^s'" "
-  | DAction{id=id;body=body;} -> 
-    s'"action "^^(string_of_id id)^^s'"()"^^nested_block_better (
+  | DAction{id=id;params=params;body=body;} -> 
+    s'"action "^^(string_of_id id)
+    ^^parens (string_of_params params)
+    ^^nested_block_better (
       string_of_statement body
     )
   | DHash{id=id; poly=poly; out_wid=out_wid;} ->
