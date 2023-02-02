@@ -285,6 +285,7 @@ and v_regex =
   | VRClosure of var_regex
   | VROr of var_regex * var_regex
   | VRAnd of var_regex * var_regex
+  | VRNegation of var_regex
   | VRUnambigConcat of var_regex * var_regex
 
 and var_regex = 
@@ -294,7 +295,7 @@ and var_regex =
   }
 
 and s_regex = 
-  | SRDetect of decl option * var_regex * statement
+  | SRDetect of decl option * decl option * var_regex * statement
 
 and spec_regex =
   {
@@ -569,6 +570,7 @@ let concat_sp suba subb span = var_regex_sp (VRConcat (suba, subb)) span
 let or_sp suba subb span = var_regex_sp (VROr (suba, subb)) span
 let and_sp suba subb span = var_regex_sp (VRAnd (suba, subb)) span
 let closure_sp sub span = var_regex_sp (VRClosure sub) span
+let negation_sp sub span = var_regex_sp (VRNegation sub) span
 let unambig_concat_sp suba subb span = var_regex_sp (VRUnambigConcat (suba, subb)) span
 
 let alphabet alph = {alph = alph; alphabet_span = Span.default}

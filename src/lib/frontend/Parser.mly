@@ -392,16 +392,22 @@ var_regex :
     | ID                                {letter_sp (snd $1) (value_to_exp (vbool_sp true ((fst $1)))) (fst $1) }
     | ID LPAREN exp RPAREN      { letter_sp (snd $1) $3 (Span.extend (fst $1) $4) }
     | ID LPAREN binding_list SEMI exp RPAREN DOT var_regex {binding_sp (snd $1) $3 $5 $8 (Span.extend (fst $1) $8.v_regex_span) }
+    | ID LPAREN binding_list RPAREN DOT var_regex {binding_sp (snd $1) $3 (value_to_exp (vbool_sp true ((fst $1)))) $8 (Span.extend (fst $1) $8.v_regex_span) }
     | var_regex DOT var_regex        { concat_sp $1 $3 (Span.extend $1.v_regex_span $3.v_regex_span) }
     | var_regex OR var_regex        { or_sp $1 $3 (Span.extend $1.v_regex_span $3.v_regex_span) }
     | var_regex AND var_regex     { and_sp $1 $3 (Span.extend $1.v_regex_span $3.v_regex_span) }
     | LPAREN var_regex RPAREN STAR     { closure_sp $2 (Span.extend $1 $4) }
     | LPAREN var_regex RPAREN          { $2 }
+    | NOT var_regex                     { negation_sp $2 (Span.extend $1 $2.v_regex_span)}
     | var_regex UNAMBIGCONCAT var_regex { unambig_concat_sp $1 $3 (Span.extend $1.v_regex_span $3.v_regex_span) }
+
+core_detect: 
+    | DETECT LBRACE var_regex RBRACE EFFECT_ARROW LBRACE statement RBRACE {detect_sp None $3 $7 (Span.extend $1 $8)}
 
 spec_regex :
     | DATA LBRACE GLOBAL ty ID ASSIGN exp SEMI RBRACE DETECT LBRACE var_regex RBRACE EFFECT_ARROW LBRACE statement RBRACE {detect_sp (Some (dglobal_sp (snd $5) $4 $7 (Span.extend $3 $8))) $12 $16 (Span.extend $1 $17)}
-    | DETECT LBRACE var_regex RBRACE EFFECT_ARROW LBRACE statement RBRACE {detect_sp None $3 $7 (Span.extend $1 $8)}
+    | 
+    | 
 
 tyname_def:
     | ID                                  { snd $1, [] }

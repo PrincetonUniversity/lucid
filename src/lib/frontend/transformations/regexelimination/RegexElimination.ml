@@ -30,7 +30,7 @@ let binders re =
     | VRLetter (_, _) -> acc
     | VRBinding (event_id, assignments, pred, sub) -> {binding_event=event_id; assignments=assignments; under_closure = in_closure} :: binders_acc sub acc in_closure 
     | VRConcat (sub1, sub2) | VRUnambigConcat (sub1, sub2) | VROr (sub1, sub2) | VRAnd (sub1, sub2) -> binders_acc sub1 (binders_acc sub2 acc in_closure) in_closure
-    | VRClosure sub -> binders_acc sub acc true
+    | VRClosure sub | VRNegation sub -> binders_acc sub acc true
   in binders_acc re [] false;;
 
 let preds re = 
@@ -47,7 +47,7 @@ let preds re =
     | VRLetter (event_id, pred) -> check_pred event_id pred acc
     | VRBinding (event_id, assignments, pred, sub) -> preds_acc sub (check_pred event_id pred acc)
     | VRConcat (sub1, sub2) | VRUnambigConcat (sub1, sub2) -> preds_acc sub1 (preds_acc sub2 acc)
-    | VRClosure sub -> preds_acc sub acc
+    | VRClosure sub | VRNegation sub-> preds_acc sub acc
     | VROr (sub1, sub2) -> preds_acc sub1 (preds_acc sub2 acc)
     | VRAnd (sub1, sub2) -> preds_acc sub1 (preds_acc sub2 acc)
   in preds_acc re [];;
@@ -61,7 +61,7 @@ let rec get_events re =
   | VRLetter (event_id, pred) -> [event_id]
   | VRBinding (event_id, _, _, sub) -> merge [event_id] (get_events sub)
   | VRUnambigConcat (sub1, sub2) | VRConcat (sub1, sub2) | VROr (sub1, sub2) | VRAnd (sub1, sub2) -> merge (get_events sub1) (get_events sub2)
-  | VRClosure sub -> get_events sub
+  | VRClosure sub | VRNegation sub -> get_events sub
 ;;
 
 
@@ -132,6 +132,7 @@ let rec translate re re_alphabet =
     | VRClosure sub -> pre_closure (translate sub.v_regex re_alphabet)
     | VROr (sub1, sub2) -> pre_or  (translate sub1.v_regex re_alphabet) (translate sub2.v_regex re_alphabet)
     | VRAnd (sub1, sub2) -> pre_and (translate sub1.v_regex re_alphabet) (translate sub2.v_regex re_alphabet)
+    | VRNegation (sub) -> pre_negation (translate sub.v_regex re_alphabet)
 ;;
 
 

@@ -15,6 +15,7 @@ and plain_re =
   | PRAnd of plain_re * plain_re
   | PRConcat of plain_re * plain_re
   | PRClosure of plain_re
+  | PRNegation of plain_re
 
 let rec bool_list_less_than bl1 bl2 = 
   match bl1, bl2 with
@@ -45,13 +46,23 @@ let rec pre_less_than pre1 pre2 =
   | PRAnd(_, _), _ -> true
   | _, PROr(_, _) -> false
   | PROr(_, _), _ -> true
+  | PRNegation (pre11), PRNegation(pre21)
+  | PRNegation (pre11), PRClosure (pre21)
+  | PRClosure (pre11), PRNegation (pre21)
   | PRClosure(pre11), PRClosure(pre21) -> pre_less_than pre11 pre21
 ;;
 
 (*Makes an or but applies all possible similarity rules to it*)
+let pre_negation pre = 
+  match pre with
+  | PRNegation(pre1) -> pre1
+  | _ -> PRNegation (pre)
+
 let rec pre_or pre1 pre2 = 
   match (pre1, pre2) with
   | _,_ when pre1 = pre2 -> pre1
+  | PRNegation (PREmptySet), _
+  | _, PRNegation (PREmptySet) -> pre_negation (PREmptySet)
   | PREmptySet, _ -> pre2
   | _, PREmptySet -> pre1
   | PROr(pre11, pre12), _ ->  pre_or pre11 (pre_or pre12 pre2)
@@ -61,6 +72,8 @@ let rec pre_or pre1 pre2 =
 let rec pre_and pre1 pre2 = 
   match (pre1, pre2) with
   | _,_ when pre1 = pre2 -> pre1
+  | PRNegation (PREmptySet), _ -> pre2
+  | _, PRNegation (PREmptySet) -> pre1
   | PREmptySet, _ | _, PREmptySet-> PREmptySet
   | PRAnd(pre11, pre12), _ ->  pre_and pre11 (pre_and pre12 pre2)
   | _, _ -> if pre_less_than pre2 pre1 then PRAnd(pre2, pre1) else PRAnd(pre1, pre2)
@@ -88,6 +101,7 @@ let rec make_canonical pre =
   | PRAnd (pre1, pre2) -> pre_and (make_canonical pre1) (make_canonical pre2)
   | PRConcat (pre1, pre2) -> pre_concat (make_canonical pre1) (make_canonical pre2)
   | PRClosure (pre1) -> pre_closure (make_canonical pre1)
+  | PRNegation (pre1) -> pre_negation (make_canonical pre1)
   | _ -> pre
 ;;
 
@@ -98,6 +112,7 @@ let rec nullable pre =
   | PROr (pre1, pre2) -> pre_or (nullable pre1) (nullable pre2)
   | PRAnd (pre1, pre2) | PRConcat (pre1, pre2) -> pre_and (nullable pre1) (nullable pre2)
   | PRClosure (_) -> PREmptyString
+  | PRNegation (pre1) -> (if (nullable pre1) = PREmptySet then PREmptyString else PREmptySet)
 ;;
 
 let rec pre_deriv pre prs = 
@@ -109,6 +124,7 @@ let rec pre_deriv pre prs =
   | PRAnd (pre1, pre2) -> pre_and (pre_deriv pre1 prs) (pre_deriv pre2 prs)
   | PRConcat (pre1, pre2) -> pre_or (pre_concat (pre_deriv pre1 prs) pre2) (pre_concat (nullable pre1) (pre_deriv pre2 prs))
   | PRClosure (pre1) -> pre_or (pre_deriv pre1 prs) pre
+  | PRNegation (pre1) -> pre_negation (pre_deriv pre1 prs)
 ;;
 
 let print_letter pres =
@@ -124,6 +140,7 @@ let rec plain_re_to_string pre =
     | PRAnd (pre1, pre2) -> Printf.sprintf "(%s & %s)" (plain_re_to_string pre1) (plain_re_to_string pre2)
     | PRConcat (pre1, pre2) -> Printf.sprintf "(%s . %s)" (plain_re_to_string pre1) (plain_re_to_string pre2)
     | PRClosure (pre) -> Printf.sprintf "(%s)*" (plain_re_to_string pre)
+    | PRNegation (pre) -> Printf.sprintf "!(%s)" (plain_re_to_string pre)
 ;;
 
 (*-----------------Making a DFA---------------------*)
