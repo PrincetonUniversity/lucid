@@ -1,7 +1,7 @@
 (* match statement algebra 
   This needs some refactoring. Mostly copy / pasted from 
   previous backend. Things can be simplified now. *)
-
+open CorePrinting
 open CoreSyntax
 module CL = List
 

@@ -583,5 +583,5 @@ let alphabet_unspecified span = alphabet_sp AUnspecified span
 
 let spec_regex s_regex = {s_regex; s_regex_span = Span.default}
 let spec_regex_sp s_regex span = {s_regex; s_regex_span = span}
-let detect_sp data var_regex effect span = spec_regex_sp (SRDetect (data, var_regex, effect)) span
+let detect_sp data idx var_regex effect span = spec_regex_sp (SRDetect (data, idx, var_regex, effect)) span
 

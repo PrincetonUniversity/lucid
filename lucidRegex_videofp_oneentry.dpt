@@ -21,7 +21,7 @@ alphabet sizes = S1, S2, S3, S4, S5, S6, S7, S8;
 global Array.t<<32>> arr = Array.create(256);
 //re<<256>> RE_fingerprint_videoA over sizes = (S1.S5.S1.S4.S7) || (S8.S1.S2.S6.S3);
 //re<<256>> RE_fingerprint_videoA over [S1,packet_in, test_event] = !(test_event(@int rec = testval; testval > 20)."");
-re<<16>> RE_fingerprint_videoA over [S1, packet_in, test_event] = (S1)*.packet_in(@int assigned = sip; true).(S1(sip > Sys.time()))*;
+re<<256>> RE_fingerprint_videoA over [S1, packet_in, test_event] = (S1)*.packet_in(@int assigned = sip; true).(S1(sip > Sys.time()))*;
 const int type_A=1;
 const int type_B=2;
 const int type_C=3;
@@ -56,7 +56,7 @@ handle packet_in(int sip, int dip, int<<16>> sport, int<<16>> dport, int<<16>> s
 		//else if(140<size<=150){S=S15;}
 		//else if(150<size<=160){S=S16;}
 
-		if(transition(RE_fingerprint_videoA, idx, test_event(25))){
+		if(transition(RE_fingerprint_videoA, idx, S)){
 			generate report_match(type_A, sip,dip,sport,dport);
 		}
 

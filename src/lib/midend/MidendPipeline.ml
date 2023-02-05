@@ -32,6 +32,9 @@ let process_prog ?(for_interp = false) ds =
     print_if_debug ds;
     ds
   | false ->
+    print_if_verbose "-------Eliminating events in match statements---------";
+    let ds = EliminateEventMatch.process_prog ds in 
+    print_if_debug ds;
     print_if_verbose "-------Eliminating extern calls--------";
     let ds = EliminateExterns.eliminate_externs ds in 
 

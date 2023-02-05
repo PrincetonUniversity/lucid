@@ -21,17 +21,17 @@ let insert_if_necessary h_id body infos =
 
 let replace_spec_regex env id size sr = 
   match sr.s_regex with
-  | SRDetect (Some data, vr, effect) -> 
+  | SRDetect (Some data, _, vr, effect) -> 
     let vr_decl = decl (DVarRegex (id, size, (alphabet (AUnspecified)), vr)) in 
     List.append [vr_decl] [data]
-  | SRDetect (None, vr, effect) -> [(decl (DVarRegex (id, size, (alphabet (AUnspecified)), vr)))]
+  | SRDetect (None, _, vr, effect) -> [(decl (DVarRegex (id, size, (alphabet (AUnspecified)), vr)))]
 
 let replacer = 
   object (self) 
     inherit [_] s_map as super
     method! visit_DSpecRegex env id size sr = 
       match sr.s_regex with 
-      | SRDetect(data, vr, effect) -> env := {vr_id = id; events = (get_events vr); data = data; effect = effect} :: (!env); DSpecRegex (id, size, sr)
+      | SRDetect(data, _, vr, effect) -> env := {vr_id = id; events = (get_events vr); data = data; effect = effect} :: (!env); DSpecRegex (id, size, sr)
   
     method! visit_DHandler env id body = insert_if_necessary id body (!env)
   end

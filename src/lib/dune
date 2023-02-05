@@ -90,6 +90,7 @@
    precomputeArgs
    normalizeBools
    eliminateBools
+   eliminateEventMatch
    optimizeSimpleCalls
    eliminateValueCasts
    eliminateExterns
