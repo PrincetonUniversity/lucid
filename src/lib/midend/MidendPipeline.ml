@@ -18,7 +18,36 @@ let set_no_call_optimize () =
   optimize_simple_calls := false
 ;;
 
+(* make sure that each branch 
+of a match statement has a unique pattern *)
+let unique_branches ds = 
+let open CoreSyntax in
+let rec dup_exist = function
+  | [] -> false
+  | hd::tl -> List.exists ((=) hd) tl || dup_exist tl
+in
+let v = object
+  inherit [_] s_iter as super
 
+  method! visit_statement () stmt = 
+    super#visit_statement () stmt;
+    match stmt.s with
+    | SMatch(_, branches) -> 
+      List.iter (fun b -> super#visit_branch () b) branches;
+      let pats = List.split branches |> fst in
+      if (dup_exist pats)
+      then (
+        report 
+          ("A match statement has non-unique patterns. Offending statement: "^
+            (CorePrinting.statement_to_string stmt));
+        exit 1;
+      )
+    | _ -> ()
+
+  end
+in
+v#visit_decls () ds
+;;
 let process_prog ?(for_interp = false) ds =
   print_if_verbose "-------Translating to core syntax---------";
   let ds = SyntaxToCore.translate_prog ds in
@@ -34,7 +63,6 @@ let process_prog ?(for_interp = false) ds =
   | false ->
     print_if_verbose "-------Eliminating events in match statements---------";
     let ds = EliminateEventMatch.process_prog ds in 
-    print_if_debug ds;
     print_if_verbose "-------Eliminating extern calls--------";
     let ds = EliminateExterns.eliminate_externs ds in 
 

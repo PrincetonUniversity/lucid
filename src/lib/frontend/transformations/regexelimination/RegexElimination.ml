@@ -169,6 +169,9 @@ let make_id_val id = (Id.create (String.cat (fst id) "val"));;
 let make_idx_val id = Id.create (String.cat (fst id) "idx");;
 
 
+let f_id id = Id.create ("f_synthesized_meta_var"^(fst id));;
+let g_id id = Id.create ("g_synthesized_meta_var"^(fst id));;
+let mem_id id = Id.create ("memop_synthesized_meta_var"^(fst id));;
 let make_counter_id id = 
   Id.create ("counter"^(fst id))
 ;;
@@ -294,6 +297,9 @@ let counter_def id re_info handler_eid preds =
   | Some (eid, _) -> statement (SLocal ((make_counter_id id), (ty (TInt (IConst DFASynthesis.bv_size))), (make_num_size (init_val eid re_info.event_order preds) DFASynthesis.bv_size)))
 ;;
 
+let make_local_synth_var_def varid = 
+  statement (SLocal (varid, (ty (TInt (IConst DFASynthesis.bv_size))), (make_num_size 0 DFASynthesis.bv_size)));;
+
 let res_def id = 
   statement (SLocal ((make_res_id id), (ty (TInt (IConst DFASynthesis.bv_size))), (make_num_size 0 DFASynthesis.bv_size)));;
 
@@ -301,12 +307,13 @@ let ans_def id =
   statement (SLocal ((make_ans_id id), (ty (TBool)), (exp (EVal (value (VBool true))))));;
 
 let make_row_pair id letter synthesis_response event_order preds = 
-  let memop_id = (List.nth synthesis_response.memops (LetterMap.find letter synthesis_response.whichop)).id in
-    let f = LetterMap.find letter synthesis_response.f in 
-      let g = LetterMap.find letter synthesis_response.g in 
-        let pattern = [(PNum (Z.of_int (letter_to_int letter event_order (List.length preds))))] in
-          let stmt = statement (SAssign ((make_res_id id), (exp (ECall (Arrays.array_update_complex_cid, [(make_evar id); (make_evar (make_idx_val id)); (make_evar memop_id); (make_num_size f DFASynthesis.bv_size); (make_num_size g DFASynthesis.bv_size); (make_num_size 0 DFASynthesis.bv_size)]))))) in
-            (pattern,stmt)
+  let f = LetterMap.find letter synthesis_response.f in 
+    let g = LetterMap.find letter synthesis_response.g in 
+      let pattern = [(PNum (Z.of_int (letter_to_int letter event_order (List.length preds))))] in
+        let fasgn = (make_assign (f_id id) (make_num_size f DFASynthesis.bv_size)) in
+        let gasgn = (make_assign (g_id id) (make_num_size g DFASynthesis.bv_size)) in
+        let masgn = (make_assign (mem_id id) (make_num_size (LetterMap.find letter synthesis_response.whichop) DFASynthesis.bv_size)) in
+        (pattern,statement (sequence_statements [fasgn; gasgn; masgn]))
 ;;
 
 let make_match_def id alphabet synthesized event_order preds =
@@ -321,30 +328,45 @@ let make_return_def id synthesis_response =
 ;;
 
 let make_static_defs id idx_expr = 
-  let time_def = (statement (SLocal ((Id.create "time"), (ty (TInt (IConst 32))), (exp (ECall ((Cid.create ["Sys"; "time"]), [])))))) in
   let idx_def = (statement (SLocal ((make_idx_val id), (ty (TInt (IConst 32))), idx_expr))) in
-  [time_def; idx_def]
+  [idx_def]
 
 let make_transition_statements env id idx_expr = 
   let re_info = IdMap.find id env.re_info_map in
   let static_defs = make_static_defs id idx_expr in
   let binding_defs = List.append static_defs (make_binding_defs re_info.binders env.current_handler env.params_map (make_evar (make_idx_val id))) in
-  let pred_update_defs = List.append binding_defs ((counter_def id re_info env.current_handler re_info.preds) :: (make_pred_defs id re_info.preds env.current_handler)) in
+  let pred_defs = (make_pred_defs id re_info.preds env.current_handler) in
+  let pred_update_defs = List.append binding_defs ((counter_def id re_info env.current_handler re_info.preds) :: pred_defs) in
   let match_def = List.append pred_update_defs ((res_def id) :: (make_match_def id re_info.alphabet re_info.synthesis_response re_info.event_order re_info.preds)) in
   let return_def = List.append match_def (make_return_def id re_info.synthesis_response) in
   return_def
 ;;
 
+let make_counter_branch id re_info eid params= 
+  let counter_set = (make_assign (make_counter_id id) (make_num_size (init_val eid re_info.event_order re_info.preds) DFASynthesis.bv_size)) in
+  let pred_update_defs = counter_set :: (make_pred_defs id re_info.preds (Some (eid,params))) in
+  let p = [PEvent (Cid.create_ids [eid], params)] in
+  let s = statement (sequence_statements pred_update_defs) in
+  (p,s) 
+;;
+
+
+let array_update_def id synthesis_response = 
+  let memop_id = (List.nth synthesis_response.memops 0).id in
+  statement (SAssign ((make_res_id id), (exp (ECall (Arrays.array_update_complex_cid, [(make_evar id); (make_evar (make_idx_val id)); (make_evar memop_id); (make_evar (f_id id)); (make_evar (g_id id)); (make_num_size 0 DFASynthesis.bv_size)])))))
+
 let make_trans_match env id idx_expr event_expr = 
-  let make_branch (eid, params) = 
-    let p = [PEvent (Cid.create_ids [eid], params)] in
-    let s = statement (sequence_statements (make_transition_statements {env with current_handler = Some (eid, params)} id idx_expr)) in
-    (p,s) in
   let re_info = IdMap.find id env.re_info_map in
-  let events_list = List.map (fun eid -> (eid, IdMap.find eid env.params_map)) re_info.event_order in
-  statement (SMatch ([event_expr], ((List.map (fun ev_info -> make_branch ev_info) events_list))))
-
-
+  let static_defs = make_static_defs id idx_expr in
+  let counter_def = List.append static_defs [(make_local_synth_var_def (make_counter_id id))] in 
+  let f_g_defs = List.append counter_def [(make_local_synth_var_def (f_id id)); (make_local_synth_var_def (g_id id)); (make_local_synth_var_def (mem_id id))] in
+  let match_counter_calc = 
+    let counter_update_match = statement (SMatch ([event_expr], (List.map (fun eid -> make_counter_branch id re_info eid (IdMap.find eid env.params_map)) re_info.event_order))) in
+    List.append f_g_defs [counter_update_match] in 
+  let match_character_def = List.append match_counter_calc ((res_def id) :: (make_match_def id re_info.alphabet re_info.synthesis_response re_info.event_order re_info.preds)) in
+  let match_update_def = List.append match_character_def ((res_def id) :: [(array_update_def id re_info.synthesis_response)]) in
+  let return_def = List.append match_update_def (make_return_def id re_info.synthesis_response) in
+  return_def
 
 let check_then_set_memop = 
   let id = check_then_set_name in 
@@ -368,7 +390,7 @@ let replacer =
     method! visit_ETransitionRegex env id idx ev_expr = 
       match ev_expr with 
       | None -> make_exp_from_statements id ((ans_def id) :: (make_transition_statements !env id idx))
-      | Some e -> make_exp_from_statements id ((ans_def id) :: [(make_trans_match !env id idx e)])
+      | Some e -> make_exp_from_statements id ((ans_def id) :: (make_trans_match !env id idx e))
 
   end
   ;;

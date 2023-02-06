@@ -10,7 +10,7 @@ module CL = List
 let cid_of_exp (ex : exp) : Cid.t =
   match ex.e with
   | EVar n -> n
-  | _ -> error "could not evaluate expression to a cid"
+  | _ -> error ("could not evaluate expression to a cid" ^ (exp_to_string ex))
 ;;
 let cons_uniq_eq eq xs x = if Core.List.mem xs x ~equal:eq then xs else x :: xs
 let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) [] xs)

@@ -114,7 +114,7 @@ let replacer =
     inherit [_] s_map as super
     method! visit_DEvent env id sort params = 
       let ei = (!env).event_infos in 
-      env := {(!env) with event_infos = (IdMap.add id {i = (max_int ei); id = id; params=params} ei)}; 
+      env := {(!env) with event_infos = (IdMap.add id {i = (max_int ei) + 1; id = id; params=params} ei)}; 
       DEvent((id, sort, params))
 
     method! visit_SLocal env id ty exp = 
