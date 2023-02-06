@@ -65,6 +65,8 @@ let rec pre_or pre1 pre2 =
   | _, PRNegation (PREmptySet) -> pre_negation (PREmptySet)
   | PREmptySet, _ -> pre2
   | _, PREmptySet -> pre1
+  | PREmptyString, PRClosure (_) -> pre2
+  | PRClosure (_), PREmptyString -> pre1
   | PROr(pre11, pre12), _ ->  pre_or pre11 (pre_or pre12 pre2)
   | _, _ -> if pre_less_than pre2 pre1 then PROr(pre2, pre1) else PROr(pre1, pre2)
 ;;
@@ -87,9 +89,10 @@ let rec pre_concat pre1 pre2 =
   | _, _ -> PRConcat(pre1, pre2)
 ;;
 
-let pre_closure pre = 
+let rec pre_closure pre = 
   match pre with 
   | PREmptySet | PREmptyString | PRClosure (_)-> pre
+  | PROr(PREmptyString, pre1) | PROr(pre1, PREmptyString) -> pre_closure (pre1)
   | _ -> PRClosure (pre)
 
 let pre_symbol s lob = PRSymbol {ev_id=s;bools=lob};;
@@ -123,7 +126,7 @@ let rec pre_deriv pre prs =
   | PROr (pre1, pre2) -> pre_or (pre_deriv pre1 prs) (pre_deriv pre2 prs)
   | PRAnd (pre1, pre2) -> pre_and (pre_deriv pre1 prs) (pre_deriv pre2 prs)
   | PRConcat (pre1, pre2) -> pre_or (pre_concat (pre_deriv pre1 prs) pre2) (pre_concat (nullable pre1) (pre_deriv pre2 prs))
-  | PRClosure (pre1) -> pre_or (pre_deriv pre1 prs) pre
+  | PRClosure (pre1) -> pre_concat (pre_deriv pre1 prs) pre
   | PRNegation (pre1) -> pre_negation (pre_deriv pre1 prs)
 ;;
 
@@ -164,7 +167,8 @@ let print_dfa dfa =
 
 let rec explore state acc alphabet =
   let next state acc letter = 
-    let statederiv = (pre_deriv state letter) in
+    let statederiv =   Printf.printf "Deriv of %s with %s is %s\n" (plain_re_to_string state) (print_letter letter) (plain_re_to_string (pre_deriv state letter));
+      (pre_deriv state letter) in
       let states, trans = acc in
         let trans = Transition.add (state, letter) statederiv trans in 
           if States.mem statederiv states then 

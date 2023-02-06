@@ -169,6 +169,7 @@
 %token <Span.t> EFFECT_ARROW
 %token <Span.t> ALPHABET
 %token <Span.t> OVER
+%token <Span.t> IDX
 %token EOF
 
 %start prog
@@ -398,17 +399,24 @@ var_regex :
     | var_regex AND var_regex     { and_sp $1 $3 (Span.extend $1.v_regex_span $3.v_regex_span) }
     | LPAREN var_regex RPAREN STAR     { closure_sp $2 (Span.extend $1 $4) }
     | LPAREN var_regex RPAREN          { $2 }
-    | NOT var_regex                     { negation_sp $2 (Span.extend $1 $2.v_regex_span)}
+    (*| NOT var_regex                     { negation_sp $2 (Span.extend $1 $2.v_regex_span)}*)
     | var_regex UNAMBIGCONCAT var_regex { unambig_concat_sp $1 $3 (Span.extend $1.v_regex_span $3.v_regex_span) }
 
 
-(*spec_regex_option : 
-    | DATA LBRACE GLOBAL ty ID ASSIGN exp SEMI RBRACE { (Some (dglobal_sp (snd $5) $4 $7 (Span.extend $3 $8))) } 
-    | IDX LPAREN params RPAREN ASSIGN LBRACE statement RBRACE { (Some (fun_sp ))}
-*)
+spec_regex_data : 
+    | DATA LBRACE GLOBAL ty ID ASSIGN exp SEMI RBRACE { (Some (dglobal_sp (snd $5) $4 $7 (Span.extend $3 $8))) }
+
+spec_regex_idx :
+    | ty IDX LPAREN params RPAREN ASSIGN LBRACE statement RBRACE {(Some (fun_sp (Id.create "sre_idx_fun_name") $1 [] $4 $8 (Span.extend $1.tspan $9)))}
+
+spec_regex_base :
+    | DETECT LBRACE var_regex RBRACE EFFECT_ARROW LBRACE statement RBRACE {($3,$7)}
+
 spec_regex :
-    (*| DETECT LBRACE var_regex RBRACE EFFECT_ARROW LBRACE statement RBRACE {detect_sp  $12 $16 (Span.extend $1 $17)}*)
-    | DETECT LBRACE var_regex RBRACE EFFECT_ARROW LBRACE statement RBRACE {detect_sp None None $3 $7 (Span.extend $1 $8)}
+    | spec_regex_data spec_regex_idx spec_regex_base {(detect_sp $1 $2 (fst $3) (snd $3) Span.default)}
+    | spec_regex_data spec_regex_base {(detect_sp $1 None (fst $2) (snd $2) Span.default)}
+    | spec_regex_idx spec_regex_base {(detect_sp None $1 (fst $2) (snd $2) Span.default)}
+    | spec_regex_base {(detect_sp None None (fst $1) (snd $1) Span.default)}
 
 tyname_def:
     | ID                                  { snd $1, [] }

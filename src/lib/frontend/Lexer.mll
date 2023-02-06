@@ -91,6 +91,7 @@ rule token = parse
   | "DETECT"          { DETECT (position lexbuf)}
   | "alphabet"        { ALPHABET (position lexbuf)}
   | "over"            { OVER (position lexbuf)}
+  | "IDX"             { IDX (position lexbuf)}
   | id as s           { ID (position lexbuf, Id.create s) }
   | "'"(id as s)      { QID (position lexbuf, Id.create s) }
   | num as n          { NUM (position lexbuf, Z.of_string n) }

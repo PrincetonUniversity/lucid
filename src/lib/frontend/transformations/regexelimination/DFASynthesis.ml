@@ -5,7 +5,7 @@ open Z3
 module LetterMap = Map.Make(struct type t = plain_re_symbol let compare = compare end)
 module StatesMap = Map.Make(struct type t = plain_re let compare = compare end)
 
-let bv_size = 8;;
+let bv_size = 4;;
 
 type memop_response = 
 {

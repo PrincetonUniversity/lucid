@@ -1,17 +1,22 @@
 
 
-entry event DHCP_ack(int sip, int cip, int smac, int cmac, int lease_time);
-entry event ip_packet_fwd(int sip, int cip, int smac, int cmac);
+entry event DHCP_ack(int sip, int cip, int smac, int cmac, int lease_time) {
+    printf ("Doing nothing");
+}
+entry event ip_packet_fwd(int sip, int cip, int smac, int cmac) {
+    printf ("Doing nothing");
+}
 exit event DHCP_continue();
 exit event DHCP_error();
 
-sre dhcp_errors = 
+sre<<1024>> dhcp_errors = 
 int<<10>> IDX(event incoming) = {
     match incoming with
-    | DHCP_ack (int sip, int cip, int smac, int cmac, int lease_time) -> Hash<<10>>(cmac)
-    | packet_fwd (int sip, int cip, int smac, int cmac) -> Hash<<10>>(cmac)
+    | DHCP_ack (int sip, int cip, int smac, int cmac, int lease_time) -> hash<<10>>(13,cmac)
+    | ip_packet_fwd (int sip, int cip, int smac, int cmac) -> hash<<10>>(13,smac)
 }
 DETECT {
-    !(DHCP_ack(@int assigned = cip, @int end_time = Sys.time() + lease_time)
-    .((packet_fwd(Sys.time() < end_time && sip == assigned))*))
+    (packet_fwd)*
+    .DHCP_ack(@int assigned = cip)
+    .((ip_packet_fwd(sip != assigned))*)
 } => {generate DHCP_error(); reset; }
