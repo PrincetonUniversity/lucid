@@ -9,6 +9,14 @@ type cid = [%import: Cid.t]
 
 and sp = [%import: Span.t]
 
+and tracking =
+{
+  src_id : cid option;
+  src_users : cid list;
+  cur_id : cid option;
+  cur_users : cid list;
+}
+
 and z = [%import: (Z.t[@opaque])]
 
 and zint = [%import: (Integer.t[@with Z.t := (Z.t [@opaque])])]
@@ -295,6 +303,7 @@ and d =
 and decl =
   { d : d
   ; dspan : sp
+  ; dtrack : tracking
   }
 
 (* a program is a list of declarations *)
@@ -431,9 +440,12 @@ let tblmatch_sp tbl keys args span =
   let t = {tbl; keys; args; outs=[]; out_tys=None;} in
   exp_sp (ETableMatch(t)) span
 ;;
+
+let empty_track = {src_id = None; src_users = []; cur_id = None; cur_users = [];}
+
 (* declarations *)
-let decl d = { d; dspan = Span.default }
-let decl_sp d span = { d; dspan = span }
+let decl d = { d; dspan = Span.default; dtrack = empty_track;}
+let decl_sp d span = { d; dspan = span; dtrack = empty_track;}
 let dglobal_sp id ty exp span = decl_sp (DGlobal (id, ty, exp)) span
 let dconst_sp id ty e span = decl_sp (DConst (id, ty, e)) span
 let dextern_sp id ty span = decl_sp (DExtern (id, ty)) span

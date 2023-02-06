@@ -31,8 +31,10 @@ let process_prog ?(for_interp = false) ds =
     let ds = PartialInterpretation.interp_prog ds in
     print_if_debug ds;
     ds
-  | false ->
-    print_if_verbose "-------Eliminating extern calls--------";
+  | false -> ds
+  (* compiler branch moved to target-specific backend *)
+
+(*     print_if_verbose "-------Eliminating extern calls--------";
     let ds = EliminateExterns.eliminate_externs ds in 
 
     print_if_verbose "-------Eliminating value cast ops--------";
@@ -86,6 +88,6 @@ let process_prog ?(for_interp = false) ds =
     let ds = UniqueSpans.make_unique_spans ds in
     (* make sure that all variables in the program have unique names. 
         for non-unique ids, bring the variable's number into the name *)
-    let ds = UniqueIds.make_var_names_unique ds in 
-    ds
+    let ds = UniqueIds.make_var_names_unique ds in  *)
+    (* ds *)
 ;;

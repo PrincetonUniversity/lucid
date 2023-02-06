@@ -29,6 +29,17 @@ let disable_logging () =
   PackageTofinoApp.silent := true;
   ()
 ;;
+let enable_debug () = 
+  do_logging := true;
+  TofinoPipeline.verbose := true;
+  TofinoPipeline.do_log := true;
+  Cmdline.cfg.verbose <- true;
+(*   InterpHelpers.silent := true;
+  NormalizeInts.silent := true;
+  PackageTofinoApp.silent := true; *)
+  ()
+;;
+
 
 let unmutable_report str = 
   Console.show_message str ANSITerminal.Green "compiler"
@@ -83,6 +94,7 @@ module ArgParse = struct
       ; "--nocallopt", Arg.Unit MidendPipeline.set_no_call_optimize, "Disable call optimization" 
       ; "--silent", Arg.Unit disable_logging, "Disable all logging"
       ; "-p", Arg.String set_profile_cmd, "Profile program instead of compiling."
+      ; "-d", Arg.Unit enable_debug, "Enable debug print / log"
       ]
     in
     let parse_aarg (arg : string) =

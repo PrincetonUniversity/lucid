@@ -71,7 +71,7 @@ let process_main env main_decl =
     env.tables
   in 
   let openfcn id params stmt vars span = 
-    {td=TDOpenFunction(id, params, stmt, vars); tdspan=span; tdpragma=None;}
+    {td=TDOpenFunction(id, params, stmt, vars); tdspan=span; tdpragma=None; }
   in
   let new_decls = ref [] in
   let inliner = 

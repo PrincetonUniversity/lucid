@@ -15,6 +15,7 @@ let process_prog builtin_tys ds =
   print_if_verbose "---------typing1---------";
   let ds = Typer.infer_prog builtin_tys ds in
   print_if_debug ds;
+  (* let ds = SourceTracking.init_tracking ds in  *)
   print_if_verbose "---------Concretizing symbolics-------------";
   let ds = SymbolicElimination.eliminate_prog ds in
   print_if_debug ds;

@@ -12,6 +12,7 @@ and z = [%import: (Z.t[@opaque])]
 
 and zint = [%import: (Integer.t[@with Z.t := (Z.t [@opaque])])]
 
+
 and location = int
 
 (* All sizes should be inlined and precomputed *)
@@ -20,6 +21,7 @@ and size = int
 and sizes = size list
 
 and action_sig = (string * size list * size list)
+
 
 and raw_ty =
   | TBool
@@ -340,9 +342,9 @@ let match_sp es bs span = statement_sp (SMatch (es, bs)) span
 let sexp_sp e span = statement_sp (SUnit e) span
 
 (* Declarations *)
-let decl d = { d; dspan = Span.default; dpragma = None }
-let decl_sp d span = { d; dspan = span; dpragma = None }
-let decl_pragma d dspan dpragma = {d; dspan; dpragma}
+let decl d = { d; dspan = Span.default; dpragma = None;}
+let decl_sp d span = { d; dspan = span; dpragma = None;}
+let decl_pragma d dspan dpragma = {d; dspan; dpragma;}
 let dglobal_sp id ty exp span = decl_sp (DGlobal (id, ty, exp)) span
 let dextern_sp id ty span = decl_sp (DExtern (id, ty)) span
 let handler_sp id p body span = decl_sp (DHandler (id, (p, body))) span

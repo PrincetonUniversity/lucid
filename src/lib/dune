@@ -33,6 +33,7 @@
    syntax
    syntaxUtils
    coreSyntax
+   sourceTracking
    coreZ3
    collections
    typer

@@ -9,7 +9,8 @@ exception Error of string
 let error s = raise (Error s)
 
 let verbose = ref false
-let do_log = ref false
+let do_log = ref true
+let do_const_branch_vars = ref true
 
 let cprint_endline s =
   if (!verbose)
@@ -27,9 +28,68 @@ let mk_ir_log_dirs () =
     Core.Unix.mkdir_p !BackendLogging.graphLogDir
 ;;
 
+let ir_dump_path phasename = 
+  !BackendLogging.irLogDir ^ "/" ^ phasename ^ ".dpt"
+;;
+let dbg_dump_core_prog phasename ds =
+  if (!do_log)
+  then (
+    let outf = (open_out (ir_dump_path phasename)) in 
+    Printf.fprintf outf "// after phase: %s" phasename;
+    Printf.fprintf outf "%s" (CorePrinting.decls_to_string ds);
+    flush outf)
+;;  
+
+(* run the tofino branch of MidendPipeline.ml *)
+let tofino_midend_pipeline ds =
+  let print_if_verbose = MidendPipeline.print_if_verbose in
+  print_if_verbose "-------Eliminating extern calls--------";
+  let ds = EliminateExterns.eliminate_externs ds in 
+  print_if_verbose "-------Eliminating value cast ops--------";
+  let ds = EliminateValueCasts.eliminate_value_casts ds in 
+  let ds = if (!MidendPipeline.optimize_simple_calls)
+    then (
+      print_if_verbose "-------Optimizing simple calls--------";
+      OptimizeSimpleCalls.eliminate_single_use_retvars ds
+    )
+    else (ds)
+  in 
+  print_if_verbose "-------Eliminating range relational ops--------";
+  let ds = EliminateEqRangeOps.transform ds in
+  (* temporary patches for incomplete features. *)
+  let ds = PoplPatches.eliminate_noncall_units ds in
+  let ds = PoplPatches.delete_prints ds in
+  print_if_verbose "-------Adding default branches--------";
+  let ds = AddDefaultBranches.add_default_branches ds in
+  MidendPipeline.print_if_debug ds;
+  print_if_verbose "-------Breaking down compound expressions--------";
+  let ds = if (!do_const_branch_vars)
+    then ( PartialSingleAssignment.const_branch_vars ds)
+    else (ds)
+  in
+(*   dbg_dump_core_prog "BeforeConstBranchVars" ds;
+  dbg_dump_core_prog "AfterConstBranchVars" ds; *)
+  (* MidendPipeline.print_if_debug ds; *)
+  print_if_verbose "-------Breaking down compound expressions--------";
+  (* let ds = EliminateFloods.eliminate_floods ds in  *)
+  let ds = PrecomputeArgs.precompute_args ds in
+  (* get rid of boolean expressions *)
+  let ds = EliminateBools.do_passes ds in
+  (* convert integer operations into atomic exps *)
+  let ds = NormalizeInts.do_passes ds in
+  MidendPipeline.print_if_debug ds;
+  (* give all the spans in a program unique IDs *)
+  let ds = UniqueSpans.make_unique_spans ds in
+  (* make sure that all variables in the program have unique names. 
+      for non-unique ids, bring the variable's number into the name *)
+  let ds = UniqueIds.make_var_names_unique ds in 
+  ds
+;;
+
 (* start with a few passes in CoreSyntax *)
 let core_passes ds = 
     mk_ir_log_dirs ();
+    dbg_dump_core_prog "midend" ds;
     let ds = EliminateEventCombinators.process ds in
     (* 0. make sure handlers always have the same params as their events *)
     let ds = UnifyHandlerParams.rename_event_params ds in 
@@ -108,6 +168,7 @@ let compile ds portspec build_dir =
         CoreDfg.start_logging ();
     );
 
+    let ds = tofino_midend_pipeline ds in 
     (* static analysis to see if this program is compile-able *)
     InputChecks.all_checks ds;
     cprint_endline "starting transformations";

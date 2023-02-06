@@ -495,10 +495,10 @@ let decl_of_tdecl tdecl =
   match tdecl.td with
   | TDGlobal(id, ty, exp) -> decl_pragma (DGlobal(id, ty, exp)) tdecl.tdspan tdecl.tdpragma
   | TDEvent (id, es, ps) ->  {d=DEvent(id, es, ps); dspan=tdecl.tdspan; dpragma = tdecl.tdpragma;}
-  | TDHandler(i, b) ->  {d=DHandler(i, b); dspan=tdecl.tdspan; dpragma = tdecl.tdpragma;}
-  | TDMemop(m) ->  {d=DMemop(m); dspan=tdecl.tdspan; dpragma = tdecl.tdpragma;}
-  | TDExtern(i, t) ->  {d=DExtern(i, t); dspan=tdecl.tdspan; dpragma = tdecl.tdpragma;}
-  | TDAction(a) -> {d=DAction(a); dspan=tdecl.tdspan; dpragma = tdecl.tdpragma;}
+  | TDHandler(i, b) ->  {d=DHandler(i, b); dspan=tdecl.tdspan; dpragma = tdecl.tdpragma; }
+  | TDMemop(m) ->  {d=DMemop(m); dspan=tdecl.tdspan; dpragma = tdecl.tdpragma; }
+  | TDExtern(i, t) ->  {d=DExtern(i, t); dspan=tdecl.tdspan; dpragma = tdecl.tdpragma; }
+  | TDAction(a) -> {d=DAction(a); dspan=tdecl.tdspan; dpragma = tdecl.tdpragma; }
   | _ -> error "[decl_of_tdecl] not a directly translatable decl"
 ;;
 
