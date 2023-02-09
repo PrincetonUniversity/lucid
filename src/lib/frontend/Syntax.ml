@@ -295,7 +295,7 @@ and var_regex =
   }
 
 and s_regex = 
-  | SRDetect of decl option * decl option * var_regex * statement
+  | SRDetect of decl option * (id * exp) list option * var_regex * statement
 
 and spec_regex =
   {

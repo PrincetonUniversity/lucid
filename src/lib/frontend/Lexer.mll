@@ -97,6 +97,7 @@ rule token = parse
   | num as n          { NUM (position lexbuf, Z.of_string n) }
   | bitpat as p       { BITPAT (position lexbuf, extract_bitpat p) }
   | "#"               { PROJ (position lexbuf) }
+  | "=>"              { EFFECT_ARROW (position lexbuf)}
   | "|+|"             { SATPLUS (position lexbuf) }
   | "+"               { PLUS (position lexbuf) }
   | "|-|"             { SATSUB (position lexbuf) }
@@ -135,7 +136,6 @@ rule token = parse
   | "!!"              { UNAMBIGCONCAT (position lexbuf)}
   | "*"               { STAR (position lexbuf) }
   | "\"\""            { EMPTYSTRING (position lexbuf)}
-  | "=>"              { EFFECT_ARROW (position lexbuf)}
   | "&&&"             { PATAND (position lexbuf) }
   | wspace            { token lexbuf }
   | '\n'              { incr_linenum lexbuf; token lexbuf}

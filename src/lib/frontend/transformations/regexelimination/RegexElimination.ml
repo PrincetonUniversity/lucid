@@ -349,19 +349,22 @@ let make_counter_branch id re_info eid params=
   (p,s) 
 ;;
 
-
 let array_update_def id synthesis_response = 
-  let memop_id = (List.nth synthesis_response.memops 0).id in
-  statement (SAssign ((make_res_id id), (exp (ECall (Arrays.array_update_complex_cid, [(make_evar id); (make_evar (make_idx_val id)); (make_evar memop_id); (make_evar (f_id id)); (make_evar (g_id id)); (make_num_size 0 DFASynthesis.bv_size)])))))
+  let make_branch i = 
+    let memop_id = (List.nth synthesis_response.memops i).id in
+    let st = statement (SAssign ((make_res_id id), (exp (ECall (Arrays.array_update_complex_cid, [(make_evar id); (make_evar (make_idx_val id)); (make_evar memop_id); (make_evar (f_id id)); (make_evar (g_id id)); (make_num_size 0 DFASynthesis.bv_size)]))))) in
+    let pat = PNum (Z.of_int i) in 
+    ([pat], st) in
+  statement (SMatch ([(make_evar (mem_id id))], (List.map make_branch (List.filter (fun id -> LetterMap.exists (fun _ i -> i == id) synthesis_response.whichop) DFASynthesis.regact_ids))))
 
 let make_trans_match env id idx_expr event_expr = 
   let re_info = IdMap.find id env.re_info_map in
   let static_defs = make_static_defs id idx_expr in
   let counter_def = List.append static_defs [(make_local_synth_var_def (make_counter_id id))] in 
-  let f_g_defs = List.append counter_def [(make_local_synth_var_def (f_id id)); (make_local_synth_var_def (g_id id)); (make_local_synth_var_def (mem_id id))] in
+  let op_f_g_defs = List.append counter_def [(make_local_synth_var_def (f_id id)); (make_local_synth_var_def (g_id id)); (make_local_synth_var_def (mem_id id))] in
   let match_counter_calc = 
     let counter_update_match = statement (SMatch ([event_expr], (List.map (fun eid -> make_counter_branch id re_info eid (IdMap.find eid env.params_map)) re_info.event_order))) in
-    List.append f_g_defs [counter_update_match] in 
+    List.append op_f_g_defs [counter_update_match] in 
   let match_character_def = List.append match_counter_calc ((res_def id) :: (make_match_def id re_info.alphabet re_info.synthesis_response re_info.event_order re_info.preds)) in
   let match_update_def = List.append match_character_def ((res_def id) :: [(array_update_def id re_info.synthesis_response)]) in
   let return_def = List.append match_update_def (make_return_def id re_info.synthesis_response) in
@@ -398,10 +401,14 @@ let replacer =
 
 let replace_var_regex env id size vr = 
   let re_info = IdMap.find id (!env).re_info_map in
+  let used_memops = 
+    let used regact_int = LetterMap.exists (fun _ i -> i == regact_int) re_info.synthesis_response.whichop in
+    (List.filter_map (fun memop_response -> if (used memop_response.regact_int)
+      then Some (decl (DMemop (memop_response.id, memop_response.params, memop_response.memop_body))) else None) re_info.synthesis_response.memops) in
   let tail = 
   List.append 
     (List.rev_map (make_global_def_asgn size) (List.flatten (List.map (fun b -> b.assignments) (binders vr))))
-    ((make_global_def size (IConst DFASynthesis.bv_size) id) :: (List.map (fun memop_response -> decl (DMemop (memop_response.id, memop_response.params, memop_response.memop_body))) re_info.synthesis_response.memops)) in
+    ((make_global_def size (IConst DFASynthesis.bv_size) id) :: used_memops) in
   if ((!env).added_cts) then tail else (env := {(!env) with added_cts = true}; (check_then_set_memop) :: tail)
 ;;
 

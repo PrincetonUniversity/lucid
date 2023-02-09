@@ -6,9 +6,11 @@ module LetterMap = Map.Make(struct type t = plain_re_symbol let compare = compar
 module StatesMap = Map.Make(struct type t = plain_re let compare = compare end)
 
 let bv_size = 8;;
+let regact_ids = [0;1;2;3];;
 
 type memop_response = 
 {
+  regact_int : int;
   id : id;
   params : params;
   memop_body : memop_body
@@ -40,7 +42,6 @@ let make_transition_pred_cond ctx pred pre_state f g =
   let sym_choice = Boolean.mk_ite ctx pred.psym_opt_which_sym f g in
   let sym_opt_val = Boolean.mk_ite ctx pred.psym_opt_const zero sym_choice in
   let pred_LHS = Boolean.mk_ite ctx pred.pstate_opt_const sym_opt_val (BitVector.mk_add ctx pre_state sym_opt_val) in 
-
   let pred_val = Boolean.mk_ite ctx pred.pop1 
     (Boolean.mk_ite ctx pred.pop2 (Boolean.mk_eq ctx pred_LHS pred.pconst) (BitVector.mk_ugt ctx pred_LHS pred.pconst)) 
     (Boolean.mk_ite ctx pred.pop2 (BitVector.mk_ult ctx pred_LHS pred.pconst) (Boolean.mk_not ctx (Boolean.mk_eq ctx pred_LHS pred.pconst))) in
@@ -91,11 +92,27 @@ let letter_to_sym_g letter =
   "sym_g"^(print_letter letter);;
 let state_to_state_1 pre = 
   "states_1"^(plain_re_to_string pre);;
+let letter_to_whichop_out letter = 
+  "whichop_outer"^(print_letter letter);;
+let letter_to_whichop_in letter = 
+  "whichop_inner"^(print_letter letter);;
 
-let make_transition_constraints ctx regacts pre_state f g post_state = 
-  (*TODO: update for multiple regact*)
-  List.map (fun regact -> Boolean.mk_eq ctx post_state (make_transition_regact_cond ctx regact pre_state f g)) regacts;;
-
+let make_transition_constraints ctx regacts pre_state whichop_pair f g post_state = 
+  let outer = (fst whichop_pair) in
+  let inner = (snd whichop_pair) in
+  let premise_i i = 
+    (match i with 
+    | 0 -> Boolean.mk_and ctx [(Boolean.mk_not ctx outer); (Boolean.mk_not ctx inner)]
+    | 1 -> Boolean.mk_and ctx [(Boolean.mk_not ctx outer); inner]
+    | 2 -> Boolean.mk_and ctx [outer; (Boolean.mk_not ctx inner)]
+    | 3 -> Boolean.mk_and ctx [outer; inner]) in
+  List.mapi (fun i regact -> Boolean.mk_implies ctx (premise_i i) (Boolean.mk_eq ctx post_state (make_transition_regact_cond ctx regact pre_state f g))) regacts;;
+  (*List.map (fun regact -> Boolean.mk_eq ctx post_state (make_transition_regact_cond ctx regact pre_state f g)) regacts;;*)
+  (*(*TODO: update for multiple regact*)
+  
+  let reg_list = List.map (fun regact -> make_transition_regact_cond ctx regact pre_state f g) regacts in
+  (*let lhs = Boolean.mk_ite ctx outer (Boolean.mk_ite ctx inner (List.nth reg_list 3) (List.nth reg_list 2)) (Boolean.mk_ite ctx inner (List.nth reg_list 1) (List.nth reg_list 0)) in*)
+  [Boolean.mk_eq ctx post_state (List.nth reg_list 0)];;*)
 
 let make_pred ctx regact_id pred_id = 
   {
@@ -185,6 +202,7 @@ let make_memop_connect ctx model regact =
 
 let make_memop ctx id model regact =
 {
+  regact_int = regact.regact_id;
   id = Id.create ((fst id)^"memop"^(string_of_int regact.regact_id));
   params = [((Id.create "memval"), (ty (TInt (IConst bv_size)))); ((Id.create "f"), (ty (TInt (IConst bv_size)))); ((Id.create "g"), (ty (TInt (IConst bv_size))))];
   memop_body = MBComplex({
@@ -201,6 +219,7 @@ let make_memop ctx id model regact =
 
 let mock_memop_response id = 
   {
+    regact_int = 0;
     id = Id.create ((fst id)^"memop0");
     params = [((Id.create "memval"), (ty (TInt (IConst bv_size)))); ((Id.create "f"), (ty (TInt (IConst bv_size)))); ((Id.create "g"), (ty (TInt (IConst bv_size))))];
     memop_body= MBComplex ({
@@ -213,22 +232,20 @@ let mock_memop_response id =
     })
   }
 
-let mock id dfa = 
-  {accepting=[1]; 
-  f = List.fold_left (fun map mapping -> LetterMap.add (fst mapping) (snd mapping) map) LetterMap.empty (List.mapi (fun idx letter -> (letter, idx)) dfa.alphabet); 
-  g = List.fold_left (fun map mapping -> LetterMap.add (fst mapping) (snd mapping) map) LetterMap.empty (List.mapi (fun idx letter -> (letter, idx)) dfa.alphabet); 
-  whichop=List.fold_left (fun map letter -> LetterMap.add letter 0 map) LetterMap.empty dfa.alphabet;
-  memops=[(mock_memop_response id)];
-  init=0}
+
+let int_id_of_pair model (out, inner) =
+  let out = (eval_bool model out) in
+  let inner = (eval_bool model inner) in
+  if out then (if inner then 3 else 2) else (if inner then 1 else 0)
 
 let synthesize id dfa = 
   let time = Sys.time() in
   let cfg = [("model", "true"); ("proof", "false")] in
   let ctx = mk_context cfg in
   let solver = Solver.mk_simple_solver ctx in
-  let regacts = List.map (fun id -> (make_regact ctx id)) [0] in
-  (*List.iter (fun ra -> Solver.add solver (make_dfa_conds ra)) regacts;*)
-  let symbols_whichop = LetterMap.empty in
+  let regacts = List.map (fun id -> (make_regact ctx id)) regact_ids in
+  Printf.printf "length is %i\n" (List.length regacts);
+  let symbols_whichop = List.fold_left (fun map letter -> LetterMap.add letter ((Boolean.mk_const_s ctx (letter_to_whichop_out letter)), (Boolean.mk_const_s ctx (letter_to_whichop_in letter))) map) LetterMap.empty dfa.alphabet in
   let symbols_f = List.fold_left (fun map letter -> LetterMap.add letter (BitVector.mk_const_s ctx (letter_to_sym_f letter) bv_size) map) LetterMap.empty dfa.alphabet in
   let symbols_g = List.fold_left (fun map letter -> LetterMap.add letter (BitVector.mk_const_s ctx (letter_to_sym_g letter) bv_size) map) LetterMap.empty dfa.alphabet in
   let states = States.fold (fun pre map -> StatesMap.add pre (BitVector.mk_const_s ctx (state_to_state_1 pre) bv_size) map) dfa.states StatesMap.empty in 
@@ -237,23 +254,23 @@ let synthesize id dfa =
   let add_transition key res = 
     let pre_state = StatesMap.find (fst key) states in
     let post_state = StatesMap.find res states in
+    let whichop_pair = LetterMap.find (snd key) symbols_whichop in
     let f = LetterMap.find (snd key) symbols_f in
     let g = LetterMap.find (snd key) symbols_g in 
-    Solver.add solver (make_transition_constraints ctx regacts pre_state f g post_state) in
+    Solver.add solver (make_transition_constraints ctx regacts pre_state whichop_pair f g post_state) in
   Transition.iter add_transition dfa.transition;
   let stat = (Solver.check solver []) in
   Printf.printf "Status is %s. Time spent on synthesis is %f\n" (Solver.string_of_status stat) (Sys.time() -. time);
   let model = Solver.get_model solver in
     (match model with 
-    | None -> Printf.printf "Failed to solve"; 
-      (mock id dfa)
+    | None -> Console.error "Failed to find DFA synthesis model."
     | Some model -> 
       Printf.printf "solved.";
       {
         accepting = States.fold (fun state acc -> (eval_bv ctx model (StatesMap.find state states)) :: acc) dfa.accepting []; 
         f = LetterMap.map (fun res -> (eval_bv ctx model res)) symbols_f;
         g = LetterMap.map (fun res -> (eval_bv ctx model res)) symbols_g;
-        whichop = LetterMap.map (fun res -> 0) symbols_f;
+        whichop = LetterMap.map (fun res -> (int_id_of_pair model) res) symbols_whichop;
         memops = List.map (make_memop ctx id model) regacts;
         init = 0
       })

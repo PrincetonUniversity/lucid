@@ -4,7 +4,7 @@
     "default input gap": 10000,
     "random seed": 0,
     "events": [ 
-      {"name":"packet_in", "args": [0,1,2,3,11]},
+      {"name":"packet_in", "args": [0,1,2,3,1]},
       {"name":"packet_in", "args": [0,1,2,3,41]},
       {"name":"packet_in", "args": [0,1,2,3,3]},
       {"name":"packet_in", "args": [0,1,2,3,33]},

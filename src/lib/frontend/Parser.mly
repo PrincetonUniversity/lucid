@@ -406,16 +406,23 @@ var_regex :
 spec_regex_data : 
     | DATA LBRACE GLOBAL ty ID ASSIGN exp SEMI RBRACE { (Some (dglobal_sp (snd $5) $4 $7 (Span.extend $3 $8))) }
 
+idx_branch : 
+    | PIPE ID ARROW LBRACE exp RBRACE       { ((snd $2), $5) }
+
+idx_branches :
+    | idx_branch                            {[$1]}
+    | idx_branch idx_branches               {$1 :: $2}
+
 spec_regex_idx :
-    | ty IDX LPAREN params RPAREN ASSIGN LBRACE statement RBRACE {(Some (fun_sp (Id.create "sre_idx_fun_name") $1 [] $4 $8 (Span.extend $1.tspan $9)))}
+    | IDX ASSIGN LBRACE idx_branches RBRACE {$4}
 
 spec_regex_base :
-    | DETECT LBRACE var_regex RBRACE EFFECT_ARROW LBRACE statement RBRACE {($3,$7)}
+    | DETECT LBRACE var_regex RBRACE EFFECT_ARROW LBRACE statement  RBRACE {($3,$7)}
 
 spec_regex :
-    | spec_regex_data spec_regex_idx spec_regex_base {(detect_sp $1 $2 (fst $3) (snd $3) Span.default)}
+    | spec_regex_data spec_regex_idx spec_regex_base {(detect_sp $1 (Some $2) (fst $3) (snd $3) Span.default)}
     | spec_regex_data spec_regex_base {(detect_sp $1 None (fst $2) (snd $2) Span.default)}
-    | spec_regex_idx spec_regex_base {(detect_sp None $1 (fst $2) (snd $2) Span.default)}
+    | spec_regex_idx spec_regex_base {(detect_sp None (Some $1) (fst $2) (snd $2) Span.default)}
     | spec_regex_base {(detect_sp None None (fst $1) (snd $1) Span.default)}
 
 tyname_def:

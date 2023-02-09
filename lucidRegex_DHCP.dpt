@@ -1,5 +1,3 @@
-
-
 entry event DHCP_ack(int sip, int cip, int smac, int cmac, int lease_time) {
     printf ("Doing nothing");
 }
@@ -9,14 +7,13 @@ entry event ip_packet_fwd(int sip, int cip, int smac, int cmac) {
 exit event DHCP_continue();
 exit event DHCP_error();
 
-sre<<1024>> dhcp_errors = 
-int<<10>> IDX(event incoming) = {
-    match incoming with
-    | DHCP_ack (int sip, int cip, int smac, int cmac, int lease_time) -> hash<<10>>(13,cmac)
-    | ip_packet_fwd (int sip, int cip, int smac, int cmac) -> hash<<10>>(13,smac)
+sre<<1024>> mtsre = 
+IDX = {
+    | DHCP_ack -> {hash<<10>>(13, cmac)}
+    | ip_packet_fwd -> {hash<<10>>(13, smac)}
 }
-DETECT {
-    (packet_fwd)*
+DETECT{
+    (ip_packet_fwd)*
     .DHCP_ack(@int assigned = cip)
-    .((ip_packet_fwd(sip != assigned))*)
-} => {generate DHCP_error(); reset; }
+    .(ip_packet_fwd(sip != assigned))*
+} => {printf ("Doing nothing");};
