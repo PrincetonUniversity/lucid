@@ -116,6 +116,8 @@ let propagate_edge_constraints g =
                 | (CMatch(pc_c), CMatch(e_c)) ->
                     CMatch(MatchAlgebra.and_conditions pc_c e_c)
                 | (CExp(_), _) | (_, CExp(_)) -> 
+                    print_endline "about to fail. current node: ";
+                    print_endline (CoreCfg.str_of_vertex v);
                     error "CExp constraints not implemented. Convert to match"
             in 
             !dprint_endline ("successor node: "^(CoreCfg.summarystr_of_stmt d.stmt true));

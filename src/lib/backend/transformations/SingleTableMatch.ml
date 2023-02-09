@@ -333,7 +333,9 @@ and contains_idom_branch n_calls tbl stmt =
 (* code generators: *)
 
 (* generate the table match statement -- 
-   an if statement that executes the match if its callnum var is set. *)
+   an if statement that executes the match if its callnum var is set. 
+   note: since this is placed after if statements are converted to 
+   match statements, we generate a match instead of an if. *)
 let merged_match_stmt tbldef = 
   let cnum_var, cnum_ty = callnumvar_of_table tbldef in
   let tbl_match = {
@@ -348,11 +350,20 @@ let merged_match_stmt tbldef =
     out_tys = None; (* none because the out vars are declared already. *)
     }
   in 
-  {(sifte 
+  let branches = [
+    ([PNum(Z.of_int(0))], snoop);
+    ([PWild], statement (STableMatch(tbl_match)))
+  ] in
+  let wrapper_stmt = smatch 
+    [exp_of_id cnum_var cnum_ty]
+    branches 
+  in
+  {wrapper_stmt with spragma = Some("table", [])}
+(*   {(sifte 
     (op_sp Neq [(exp_of_id cnum_var cnum_ty);(vint_exp 0 (size_of_tint cnum_ty))] cnum_ty Span.default)
     (statement (STableMatch(tbl_match)))
     (snoop)) with 
-    spragma = Some("table", [])}
+    spragma = Some("table", [])} *)
 ;;
 
 let pruned_branch_continuations tbl (pruned_branches:pruned_branch list) =

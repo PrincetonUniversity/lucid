@@ -102,6 +102,49 @@ let str_of_cond_stmt cs =
     (summarystr_of_stmt cs.stmt cs.solitary)
 ;;
 
+(* full printers for text representation of graph *)
+let rec is_noop stmt =
+  match stmt.s with
+  | SNoop -> true
+  | SSeq(s1, s2) -> (is_noop s1) && (is_noop s2)
+  | SIf(_, s1, s2) -> (is_noop s1) && (is_noop s2)
+  | SMatch(_, bs) ->
+    List.fold_left 
+      (fun acc (_, b) -> 
+        acc && (is_noop b))
+      true
+      bs
+  | _ -> false
+;;
+let str_of_vertex v =
+    (* let is_root = ((Cfg.in_degree g v) == 0) in *)
+    let is_noop = (is_noop v.stmt) in
+    Printf.sprintf 
+        "%s[%s]: %s"
+        (if is_noop then "//NOOP\n" else "")
+        (string_of_int v.stmt.sspan.spid)
+        (CorePrinting.statement_to_string v.stmt)
+;;
+
+let str_of_edge (s, _, d) =
+    Printf.sprintf 
+        "[%s] -> [%s]"
+        (string_of_int s.stmt.sspan.spid)
+        (string_of_int d.stmt.sspan.spid)
+;;
+
+let str_of_graph g =
+    let strs = 
+    Cfg.fold_vertex
+        (fun v strs -> strs@[str_of_vertex v])
+        g
+        []
+    in
+    Cfg.fold_edges_e 
+        (fun e strs -> strs@[str_of_edge e])
+        g
+        strs
+;;
 
 (* node and edge helpers functions *)
 let id_of_v (cs:vertex_stmt) =

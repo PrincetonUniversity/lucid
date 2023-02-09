@@ -41,22 +41,19 @@ let dbg_dump_core_prog phasename ds =
 ;;  
 
 (* run the tofino branch of MidendPipeline.ml *)
+(* these passes are basically about converting 
+   expressions into simpler forms, so that every 
+   expression in the program can either be 
+   1) evaluated by a single (s)ALU (for expressions over ints)
+   2) mapped directly to tcam rules (for expressions over bools) *)
 let tofino_midend_pipeline ds =
   let print_if_verbose = MidendPipeline.print_if_verbose in
   print_if_verbose "-------Eliminating extern calls--------";
   let ds = EliminateExterns.eliminate_externs ds in 
   print_if_verbose "-------Eliminating value cast ops--------";
   let ds = EliminateValueCasts.eliminate_value_casts ds in 
-  let ds = if (!MidendPipeline.optimize_simple_calls)
-    then (
-      print_if_verbose "-------Optimizing simple calls--------";
-      OptimizeSimpleCalls.eliminate_single_use_retvars ds
-    )
-    else (ds)
-  in 
   print_if_verbose "-------Eliminating range relational ops--------";
   let ds = EliminateEqRangeOps.transform ds in
-  (* temporary patches for incomplete features. *)
   let ds = PoplPatches.eliminate_noncall_units ds in
   let ds = PoplPatches.delete_prints ds in
   print_if_verbose "-------Adding default branches--------";
@@ -86,17 +83,20 @@ let tofino_midend_pipeline ds =
   ds
 ;;
 
-(* start with a few passes in CoreSyntax *)
+(* a bit of cleanup. Events are not handled well here. *)
 let core_passes ds = 
     mk_ir_log_dirs ();
     dbg_dump_core_prog "midend" ds;
     let ds = EliminateEventCombinators.process ds in
-    (* 0. make sure handlers always have the same params as their events *)
+    (* 1. make sure handlers always have the same params as their events *)
     let ds = UnifyHandlerParams.rename_event_params ds in 
     let ds = UnifyHandlerParams.unify_event_and_handler_params ds in 
     (* let ds = AlignEventParams.process ds in *)
+    (* 2. convert exit events to regular events *)
     let ds = EliminateExitEvents.process ds in 
-    (* 1. inline event variables. *)
+    (* 3. inline event variables. NOTE: this pass is broken for 
+          event variables that are changed conditionally in 
+          subsequent control flow. *)
     let ds = InlineEventVars.inline ds in 
     ds
 ;;
@@ -104,29 +104,30 @@ let core_passes ds =
    to deal with in tofinocore syntax *)
 let tofinocore_normalization full_compile tds = 
     cprint_prog "----------- initial tofinoCore program------- " tds;
-    (* 3. tag match statements with many cases as solitary, 
+    (* 1. tag match statements with many cases as solitary, 
           i.e., they compile to their own table. *)
     let tds = SolitaryMatches.process tds 20 in
-    (* 5. convert if statements to match statements. *)
+    (* 2. convert if statements to match statements. *)
     let tds = IfToMatch.process tds in 
     cprint_prog "----------- after IfToMatch ------- " tds;
-    (* 6. regularize memop and Array update call formats *)
+    (* 3. regularize memop and Array update call formats *)
     let tds = RegularizeMemops.process tds in 
     cprint_prog "----------- after RegularizeMemops ------- " tds;
-    (* 7. ensure that the memops to each register only reference two input variables *)
+    (* 4. ensure that the memops to each register only reference two input variables *)
     (* TofinoCore.dump_prog (!BackendLogging.irLogDir ^ "before_reg_alloc.tofinocore.dpt") tds; *)
     let tds = ShareMemopInputs.process tds in 
     cprint_prog "----------- after ShareMemopInputs ------- " tds;
-    (* 8. eliminate all generate statements and add invalidate calls *)
+    (* 5. eliminate all generate statements and add invalidate calls *)
     let tds = if (full_compile) then (Generates.eliminate tds) else tds in 
     cprint_prog "----------- after Generates.eliminate ------- " tds;
     TofinoCore.dump_prog (!BackendLogging.irLogDir ^ "/initial.before_layout.dpt") tds;
-    (* 4. transform code so that there is only 1 match 
+    (* 6. transform code so that there is only 1 match 
           statement per user-defined table. *)
     (* WARNING: SingleTableMatch must come after generates.eliminate, because it 
                 changes the form of the program. *)
     let tds = SingleTableMatch.process tds in
     cprint_prog "----------- after SingleTableMatch ------- " tds;
+    (* 7. create per-table copies of actions. *)
     let tds = InlineTableActions.process tds in
     cprint_prog "----------- after InlineTableActions ------- " tds;
     tds
@@ -154,11 +155,11 @@ let layout tds build_dir_opt =
     );
     cprint_prog "----------- after layout ------- " tds;
     TofinoCore.dump_prog (!BackendLogging.irLogDir ^ "/laid_out.tofinocore.dpt") tds;
-    (* 12. put branches of match statements into actions. If a match statement 
-           calls a table_match, which cannot be put inside of a table, 
-           then attempt to rewrite the match statement as an if expression.  *)
+    (* 5. put branches of match statements into actions. If a branch calls a 
+           table_match, which cannot be put into an action, then 
+           rewrite the match statement as an if expression. *)
     let tds = ActionForm.process tds in 
-    (* deduplicate certain expensive operations in the labeled statements *)
+    (* 6. deduplicate actions that contain certain expensive operations. *)
     let tds = Dedup.process tds in 
     TofinoCore.dump_prog (!BackendLogging.irLogDir ^ "/laid_out.actionform.tofinocore.dpt") tds;
     tds 
