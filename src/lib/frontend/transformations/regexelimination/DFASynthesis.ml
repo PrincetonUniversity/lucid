@@ -221,6 +221,7 @@ let mock id dfa =
   init=0}
 
 let synthesize id dfa = 
+  let time = Sys.time() in
   let cfg = [("model", "true"); ("proof", "false")] in
   let ctx = mk_context cfg in
   let solver = Solver.mk_simple_solver ctx in
@@ -239,7 +240,7 @@ let synthesize id dfa =
     let g = LetterMap.find (snd key) symbols_g in 
     Solver.add solver (make_transition_constraints ctx regacts pre_state f g post_state) in
   Transition.iter add_transition dfa.transition;
-  Printf.printf "Status is %s\n" (Solver.string_of_status (Solver.check solver []));
+  Printf.printf "Status is %s. Time spent on synthesis is %f\n" (Solver.string_of_status (Solver.check solver [])) (Sys.time() -. time);
   let model = Solver.get_model solver in
     (match model with 
     | None -> Printf.printf "Failed to solve"; 
