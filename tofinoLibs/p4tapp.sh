@@ -264,7 +264,7 @@ function start_asic_sim() {
 
 # start the bf_switchd included with sde
 function start_switchd() {
-    local CMD="sudo env SDE=$SDE SDE_INSTALL=$SDE_INSTALL PATH=$SDE_INSTALL/bin:$PATH LD_LIBRARY_PATH=/usr/local/lib:$SDE_INSTALL/lib:$LD_LIBRARY_PATH /home/opam/lucid/bf-sde-9.7.2/install/bin/bf_switchd --background --status-port 7777 --install-dir $SDE_INSTALL --conf-file $1"
+    local CMD="sudo env SDE=$SDE SDE_INSTALL=$SDE_INSTALL PATH=$SDE_INSTALL/bin:$PATH LD_LIBRARY_PATH=/usr/local/lib:$SDE_INSTALL/lib:$LD_LIBRARY_PATH $SDE_INSTALL/bin/bf_switchd --background --status-port 7777 --install-dir $SDE_INSTALL --conf-file $1"
     # local CMD="sudo $SDE_INSTALL/bin/bf_switchd --install-dir $SDE_INSTALL --conf-file $1"
     local SIG="bf_switchd: server started - listening on port 9999"
     echo "SWITCHD COMMAND: $CMD"
