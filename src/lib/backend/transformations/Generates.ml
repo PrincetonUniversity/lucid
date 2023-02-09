@@ -347,7 +347,7 @@ let count_recirc_generates tds =
 ;;
 
 let eliminate tds =
-  TofinoCoreForms.main_with_event_match tds;
+  TofinoCoreForms.main_with_event_match "Generates.eliminate@start" tds;
   let m = (main tds) in 
   let rev_hdl_enum = List.map (fun (x, y) -> (y, x)) m.hdl_enum in
   let stmt = m.main_body |> List.hd in

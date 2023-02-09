@@ -13,14 +13,14 @@
 open CoreSyntax
 open TofinoCore
 
-let main_with_event_match tds = 
+let main_with_event_match label tds = 
   (* required input form:
     a main handler whose body is a single match statement 
     that branches on event id *)
-  let estr = "[Forms.main_single_branch] the input program to this \
-        pass is not in the correct form. Either their is a bug in a \
-        previous pass, or this pass has been moved to a phase of the \
-        compiler where it was not intended to go."
+  let estr = "["^(label)^"]"^" the program IR is not in the \
+expected form. The expected form at this point in the compiler is a \
+TofinoCore program with a main handler that consists of a single statement, \
+a match statement that branches on the handler ID variable. "
   in
   let m = (main tds) in
   match m.main_body with
