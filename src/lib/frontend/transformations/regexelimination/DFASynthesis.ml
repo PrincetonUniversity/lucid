@@ -5,7 +5,7 @@ open Z3
 module LetterMap = Map.Make(struct type t = plain_re_symbol let compare = compare end)
 module StatesMap = Map.Make(struct type t = plain_re let compare = compare end)
 
-let bv_size = 4;;
+let bv_size = 8;;
 
 type memop_response = 
 {
@@ -36,13 +36,14 @@ type pred = {
 }
 
 let make_transition_pred_cond ctx pred pre_state f g =
-  let sym_choice = Boolean.mk_ite ctx pred.psym_opt_which_sym f g in
-  let sym_opt_val = Boolean.mk_ite ctx pred.psym_opt_const pred.pconst (BitVector.mk_add ctx sym_choice pred.pconst) in
-  let pred_LHS = Boolean.mk_ite ctx pred.pstate_opt_const sym_opt_val (BitVector.mk_add ctx pre_state sym_opt_val) in 
   let zero = Expr.mk_numeral_int ctx 128 (BitVector.mk_sort ctx bv_size) in
+  let sym_choice = Boolean.mk_ite ctx pred.psym_opt_which_sym f g in
+  let sym_opt_val = Boolean.mk_ite ctx pred.psym_opt_const zero sym_choice in
+  let pred_LHS = Boolean.mk_ite ctx pred.pstate_opt_const sym_opt_val (BitVector.mk_add ctx pre_state sym_opt_val) in 
+
   let pred_val = Boolean.mk_ite ctx pred.pop1 
-    (Boolean.mk_ite ctx pred.pop2 (Boolean.mk_eq ctx pred_LHS zero) (BitVector.mk_ugt ctx pred_LHS zero)) 
-    (Boolean.mk_ite ctx pred.pop2 (BitVector.mk_ult ctx pred_LHS zero) (Boolean.mk_not ctx (Boolean.mk_eq ctx pred_LHS zero))) in
+    (Boolean.mk_ite ctx pred.pop2 (Boolean.mk_eq ctx pred_LHS pred.pconst) (BitVector.mk_ugt ctx pred_LHS pred.pconst)) 
+    (Boolean.mk_ite ctx pred.pop2 (BitVector.mk_ult ctx pred_LHS pred.pconst) (Boolean.mk_not ctx (Boolean.mk_eq ctx pred_LHS pred.pconst))) in
   pred_val
 ;;
 
@@ -161,10 +162,10 @@ let make_memop_pred_exp ctx model pred =
   let state = make_evar (Id.create "memval") in
   let sym_choice = make_evar (Id.create (if (eval_bool model pred.psym_opt_which_sym) then "f" else "g")) in
   let sym_const = (make_num_size (eval_bv ctx model pred.pconst)) bv_size in
-  let sym_compound = if (eval_bool model pred.psym_opt_const) then sym_const else (exp (EOp (Plus, [sym_choice; sym_const]))) in
+  let sym_compound = if (eval_bool model pred.psym_opt_const) then (make_num_size 0 bv_size) else sym_choice in
   let lhs = if (eval_bool model pred.pstate_opt_const) then sym_compound else (exp (EOp (Plus, [state; sym_compound]))) in
   let comp = if (eval_bool model pred.pop1) then (if (eval_bool model pred.pop2) then Eq else More) else (if (eval_bool model pred.pop2) then Less else Neq) in
-  (exp (EOp (comp, [lhs; (make_num_size 128 bv_size)])))
+  (exp (EOp (comp, [lhs; sym_const])))
 ;;
 
 let make_memop_arith_exp ctx model arith = 
