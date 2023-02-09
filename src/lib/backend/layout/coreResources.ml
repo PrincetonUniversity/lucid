@@ -78,7 +78,11 @@ let rec hashers_of_exp exp =
 (* get the statements with hash ops in them *)
 let rec hashers_of_stmt stmt = 
   let hashers_in_exps es = 
-    match (List.map hashers_of_exp es) with
+    (* BUG: without flatten, 
+       a list of empty lists was getting counted as an 
+       exp with a hasher in it! oh dear lort. *)
+    (* should double check for that bug elsewhere too. *)
+    match (List.map hashers_of_exp es |> List.flatten) with
     | [] -> false | _ -> true
   in 
   match stmt.s with

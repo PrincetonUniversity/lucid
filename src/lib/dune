@@ -106,6 +106,7 @@
    EliminateEventCombinators
    EliminateExitEvents
    TofinoCore
+   TofinoCoreForms
    InlineEventVars
    SolitaryMatches
    Generates

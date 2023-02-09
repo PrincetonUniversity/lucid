@@ -107,12 +107,6 @@ let tofinocore_normalization full_compile tds =
     (* 3. tag match statements with many cases as solitary, 
           i.e., they compile to their own table. *)
     let tds = SolitaryMatches.process tds 20 in
-    (* 4. transform code so that there is only 1 match 
-          statement per user-defined table. *)
-    let tds = SingleTableMatch.process tds in
-    cprint_prog "----------- after SingleTableMatch ------- " tds;
-    let tds = InlineTableActions.process tds in
-    cprint_prog "----------- after InlineTableActions ------- " tds;
     (* 5. convert if statements to match statements. *)
     let tds = IfToMatch.process tds in 
     cprint_prog "----------- after IfToMatch ------- " tds;
@@ -127,6 +121,14 @@ let tofinocore_normalization full_compile tds =
     let tds = if (full_compile) then (Generates.eliminate tds) else tds in 
     cprint_prog "----------- after Generates.eliminate ------- " tds;
     TofinoCore.dump_prog (!BackendLogging.irLogDir ^ "/initial.before_layout.dpt") tds;
+    (* 4. transform code so that there is only 1 match 
+          statement per user-defined table. *)
+    (* WARNING: SingleTableMatch must come after generates.eliminate, because it 
+                changes the form of the program. *)
+    let tds = SingleTableMatch.process tds in
+    cprint_prog "----------- after SingleTableMatch ------- " tds;
+    let tds = InlineTableActions.process tds in
+    cprint_prog "----------- after InlineTableActions ------- " tds;
     tds
 ;;
 
