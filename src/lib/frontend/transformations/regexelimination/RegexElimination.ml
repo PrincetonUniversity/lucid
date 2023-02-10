@@ -323,7 +323,8 @@ let make_match_def id alphabet synthesized event_order preds =
 let make_return_def id synthesis_response = 
   let rows = List.map (fun accept_state -> ([(PNum (Z.of_int accept_state))], (statement (SAssign ((make_ans_id id), (exp (EVal (value (VBool true))))))))) synthesis_response.accepting in
     let last = ([(PWild)], (statement (SAssign ((make_ans_id id), (exp (EVal (value (VBool false)))))))) in
-      [statement (SMatch ([(make_evar (make_res_id id))], List.rev (last :: rows)))]
+    let print = sprintf "state machine transitioned to %d" [(make_evar (make_res_id id))] in
+      [print; statement (SMatch ([(make_evar (make_res_id id))], List.rev (last :: rows)))]
 ;;
 
 let make_static_defs id idx_expr = 

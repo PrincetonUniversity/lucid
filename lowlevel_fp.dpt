@@ -63,6 +63,7 @@ handle ip_pkt (int<<16>> plen, int<<32>> src, int<<32>> dst){
 	if(plen<128){PktSize=S1();}
   
 	if(transition(RE_fingerprint_AllSmall, idx, PktSize)){
+		
 		generate send_report(src,dst,65535);
 	}
 	if(transition(RE_fingerprint_AllBig, idx, PktSize)){
