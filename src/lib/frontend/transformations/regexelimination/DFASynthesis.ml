@@ -6,7 +6,7 @@ module LetterMap = Map.Make(struct type t = plain_re_symbol let compare = compar
 module StatesMap = Map.Make(struct type t = plain_re let compare = compare end)
 
 let bv_size = 8;;
-let regact_ids = [0];;
+let regact_ids = [0;1;2;3];;
 
 type memop_response = 
 {
@@ -98,7 +98,7 @@ let letter_to_whichop_in letter =
   "whichop_inner"^(print_letter letter);;
 
 let make_transition_constraints ctx regacts pre_state whichop_pair f g post_state = 
-  (*let outer = (fst whichop_pair) in
+  let outer = (fst whichop_pair) in
   let inner = (snd whichop_pair) in
   let premise_i i = 
     (match i with 
@@ -106,8 +106,8 @@ let make_transition_constraints ctx regacts pre_state whichop_pair f g post_stat
     | 1 -> Boolean.mk_and ctx [(Boolean.mk_not ctx outer); inner]
     | 2 -> Boolean.mk_and ctx [outer; (Boolean.mk_not ctx inner)]
     | 3 -> Boolean.mk_and ctx [outer; inner]) in
-  List.mapi (fun i regact -> Boolean.mk_implies ctx (premise_i i) (Boolean.mk_eq ctx post_state (make_transition_regact_cond ctx regact pre_state f g))) regacts;;*)
-  List.map (fun regact -> Boolean.mk_eq ctx post_state (make_transition_regact_cond ctx regact pre_state f g)) regacts;;
+  List.mapi (fun i regact -> Boolean.mk_implies ctx (premise_i i) (Boolean.mk_eq ctx post_state (make_transition_regact_cond ctx regact pre_state f g))) regacts;;
+  (*List.map (fun regact -> Boolean.mk_eq ctx post_state (make_transition_regact_cond ctx regact pre_state f g)) regacts;;*)
   (*(*TODO: update for multiple regact*)
   
   let reg_list = List.map (fun regact -> make_transition_regact_cond ctx regact pre_state f g) regacts in
@@ -233,10 +233,10 @@ let mock_memop_response id =
   }
 
 
-let int_id_of_pair model (out, inner) = 0;;
-  (*let out = (eval_bool model out) in
+let int_id_of_pair model (out, inner) =
+  let out = (eval_bool model out) in
   let inner = (eval_bool model inner) in
-  if out then (if inner then 3 else 2) else (if inner then 1 else 0)*)
+  if out then (if inner then 3 else 2) else (if inner then 1 else 0)
 
 let at_most_eight ctx bv = 
   BitVector.mk_ult ctx bv (Expr.mk_numeral_int ctx 9 (BitVector.mk_sort ctx bv_size));;

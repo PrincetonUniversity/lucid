@@ -51,9 +51,10 @@ event send_report(int<<32>> src, int<<32>> dst, int<<32>> payload){
 alphabet packet_sizes = S1, S2, S3;
 re<<16>> RE_fingerprint_AllSmall over packet_sizes = S1.S1.S1.S1;
 re<<16>> RE_fingerprint_AllBig over packet_sizes = S3.S3.S3.S3;
+re<<16>> RE_fingerprint_Camel over packet_sizes = ((S1.S3.S1.S3));
 
-entry event ip_pkt (int<<16>> plen, int<<32>> src, int<<32>> dst);
-handle ip_pkt (int<<16>> plen, int<<32>> src, int<<32>> dst){
+entry event ip_pkt (int plen, int<<32>> src, int<<32>> dst);
+handle ip_pkt (int plen, int<<32>> src, int<<32>> dst){
 	int<<32>> idx=(int<<32>>) hash<<4>>(10071,src,dst);
 
 	//int<<16>> plen = ip#len;
@@ -61,13 +62,17 @@ handle ip_pkt (int<<16>> plen, int<<32>> src, int<<32>> dst){
 	event PktSize=S3();
 	if(plen<512){PktSize=S2();}
 	if(plen<128){PktSize=S1();}
-  
+ 
 	if(transition(RE_fingerprint_AllSmall, idx, PktSize)){
-		
 		generate send_report(src,dst,65535);
 	}
+	
 	if(transition(RE_fingerprint_AllBig, idx, PktSize)){
 		generate send_report(src,dst,127);
+	}
+
+	if(transition(RE_fingerprint_Camel, idx, PktSize)){
+		generate send_report(src,dst,65536);
 	}
 
 	generate_port(ingress_port, ip_pkt(plen, src, dst));

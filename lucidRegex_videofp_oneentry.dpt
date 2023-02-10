@@ -40,14 +40,6 @@ handle packet_in(int sip, int dip, int<<16>> sport, int<<16>> dport, int<<16>> s
 		else if(50<s && s <=60){S=S6();}
 		else if(60<s && s <=70){S=S7();}
 		else if(70<s && s <=80){S=S8();}
-		//else if(80<size<=90){S=S9;}
-		//else if(90<size<=100){S=S10;}
-		//else if(100<size<=110){S=S11;}
-		//else if(110<size<=120){S=S12;}
-		//else if(120<size<=130){S=S13;}
-		//else if(130<size<=140){S=S14;}
-		//else if(140<size<=150){S=S15;}
-		//else if(150<size<=160){S=S16;}
 
 		if(transition(RE_fingerprint_videoA, idx, S)){
 			generate match_report();
