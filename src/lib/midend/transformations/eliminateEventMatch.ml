@@ -109,6 +109,7 @@ let var_replacer =
                                   | None -> EVar (cid))
 
   end 
+
 let replacer = 
   object (self) 
     inherit [_] s_map as super
@@ -134,6 +135,17 @@ let replacer =
                   env := {(!env) with var_infos = IdMap.add id ev_var_info (!env).var_infos}; 
                   sequence_statements (List.append (make_local_defs ev_var_info) [(statement (SLocal (id, ty, exp)))])
       | _ -> SLocal (id, ty, exp)
+
+    method! visit_SAssign env id exp = 
+      match (IdMap.find_opt id (!env).var_infos) with
+      | Some vi -> (match exp.e with
+                    | ECall (eid, args) ->
+                      let ev_info = (IdMap.find (Cid.to_id eid) (!env).event_infos) in
+                      let ev_int_asgn = sassign vi.ev_id_int (make_num_size ev_info.i 8) in
+                      let param_asgns = List.map2 (fun (id,_) exp -> sassign id exp) (IdMap.find (Cid.to_id eid) vi.ev_params_map) args in
+                      sequence_statements (ev_int_asgn :: param_asgns)
+                    | _ -> Console.error_position exp.espan "Not allowed to assign event vars to that expression right now")
+      | None -> SAssign (id, exp)
 
     method! visit_SMatch env exps branches = 
       let match_exp_maps = List.map (get_map (!env).var_infos (!env).event_infos) exps in
