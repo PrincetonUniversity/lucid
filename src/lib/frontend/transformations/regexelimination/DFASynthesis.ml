@@ -251,7 +251,13 @@ let synthesize id dfa =
   let time = Sys.time() in
   let cfg = [("model", "true"); ("proof", "false")] in
   let ctx = mk_context cfg in
-  let solver = Solver.mk_solver ctx None in
+  let sim = Tactic.mk_tactic ctx "simplify" in
+  let solve_eq = Tactic.mk_tactic ctx "solve-eqs" in
+  let bit_blast = Tactic.mk_tactic ctx "bit-blast" in
+  let qffd = Tactic.mk_tactic ctx "qffd" in
+  let sat = Tactic.mk_tactic ctx "sat" in
+  let tac = Tactic.and_then ctx sim solve_eq [bit_blast; qffd; sat] in 
+  let solver = Solver.mk_solver_t ctx tac in
   let regacts = List.map (fun id -> (make_regact ctx id)) regact_ids in
   List.iter (fun regact -> (Solver.add solver (make_init_constraints ctx regact))) regacts; 
   let symbols_whichop = List.fold_left (fun map letter -> LetterMap.add letter ((Boolean.mk_const_s ctx (letter_to_whichop_out letter)), (Boolean.mk_const_s ctx (letter_to_whichop_in letter))) map) LetterMap.empty dfa.alphabet in
@@ -270,9 +276,7 @@ let synthesize id dfa =
   Transition.iter add_transition dfa.transition;
   let stat = (Solver.check solver []) in
   Printf.printf "Status is %s. Time spent on synthesis is %f\n" (Solver.string_of_status stat) (Sys.time() -. time);
-
   let model = Solver.get_model solver in
-  
     (match model with 
     | None -> Console.error "Failed to find DFA synthesis model."
     | Some model -> 
