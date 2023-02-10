@@ -6,6 +6,7 @@ open Z3
 open Collections
 open PlainRegex
 open DFASynthesis
+open Printing
 
 
 
@@ -39,7 +40,7 @@ let preds re =
       (*If it's a value, it has to be a bool*)
       | EVal (v) -> acc
       | _ -> let p_rec = {pred_event=event_id; pred=pred} in 
-                if (List.exists (fun pr -> pr.pred.e = p_rec.pred.e) acc) then acc else p_rec :: acc in
+                if (List.exists (fun pr ->(exp_to_string pr.pred) = (exp_to_string p_rec.pred)) acc) then acc else p_rec :: acc in
   let rec preds_acc re acc = 
     match re.v_regex with  
     | VREmptySet -> acc
@@ -99,7 +100,7 @@ let rec big_union_helper letter_pred list_of_pred =
     [] -> [[]]
     | pred :: tail -> let new_tail = big_union_helper letter_pred tail in
       match letter_pred with
-      Some p when p = pred -> (tack_bool_front true new_tail)
+      Some p when (exp_to_string p) = (exp_to_string pred) -> (tack_bool_front true new_tail)
       | _ -> (List.append (tack_bool_front true new_tail) (tack_bool_front false new_tail))
 ;;
 
@@ -184,6 +185,8 @@ let make_ans_id id =
   Id.create ("ans"^(fst id))
 ;;
 
+let make_asgn_id reid id = 
+  Id.create ("assigned_var_"^(fst reid)^(fst id));;
 let make_exp_from_statements id lostatements =
   EStmt (statement (sequence_statements lostatements), (make_evar (make_ans_id id)))
 
@@ -191,9 +194,9 @@ let make_global_def arr_size size id =
   decl (DGlobal (id, (dgloabl_arr_type size), exp (ECall (Arrays.array_create_id, [(make_num arr_size)]))))
 ;;
 
-let make_global_def_asgn arr_size (ty, id, _) = 
+let make_global_def_asgn arr_size reid (ty, id, _) = 
   match ty.raw_ty with 
-  | TInt (size) -> make_global_def arr_size size id
+  | TInt (size) -> make_global_def arr_size size (make_asgn_id reid id)
 
 let get_type_of_var id be event_params_map =
   let event_params = IdMap.find be event_params_map in
@@ -244,17 +247,17 @@ let re_info id alphabet vr =
     {binders=re_binders; preds = re_preds; synthesis_response=synthesized;event_order=events; alphabet=(get_all_letters re_alphabet)}
 ;;
 let check_then_set_name = Id.create("re12351sdaCheckThenSet");;
-let make_binding_set be params_map idx_expr in_closure (ty, id, eval) =
+let make_binding_set reid be params_map idx_expr in_closure (ty, id, eval) =
   let e = if in_closure then (exp (ECall (Arrays.array_set_cid, [(make_evar id); idx_expr;eval]))) else 
-    (exp (ECall (Arrays.array_setm_cid, [ (make_evar id);idx_expr;(make_evar check_then_set_name);eval]))) in
-  (statement (SLocal ((make_id_val id), 
+    (exp (ECall (Arrays.array_setm_cid, [ (make_evar (make_asgn_id reid id));idx_expr;(make_evar check_then_set_name);eval]))) in
+  (statement (SLocal (id, 
   ty,
   e)))
 ;;
-let make_binding_get be params_map idx_expr (ty, id, _) = 
-  (statement (SLocal ((make_id_val id), 
+let make_binding_get reid be params_map idx_expr (ty, id, _) = 
+  (statement (SLocal (id, 
   ty,
-  (exp (ECall (Arrays.array_get_cid, [ (make_evar id); idx_expr]))))))
+  (exp (ECall (Arrays.array_get_cid, [ (make_evar (make_asgn_id reid id)); idx_expr]))))))
 ;;
 
 let make_lshift id = (exp (EOp (LShift, [(exp (EVar (Cid.id id)));(make_num 1)])));;
@@ -267,15 +270,15 @@ let pred_update_statement id pred =
       statement (SIf (pred, (make_assign counter (exp (EOp (Plus, [lshift; (make_num_size 1 DFASynthesis.bv_size)])))), (make_assign counter lshift)))
 ;;
 
-let rec make_binding_defs binders handler_eid params_map idx_expr = 
+let rec make_binding_defs reid binders handler_eid params_map idx_expr = 
   let def_maker be in_closure = (match handler_eid with 
-  | None -> make_binding_get be params_map idx_expr
-  | Some (eid, params) -> if be = eid then (make_binding_set be params_map idx_expr in_closure) else (make_binding_get be params_map idx_expr)) in
+  | None -> make_binding_get reid be params_map idx_expr
+  | Some (eid, _) -> if be = eid then (make_binding_set reid be params_map idx_expr in_closure) else (make_binding_get reid be params_map idx_expr)) in
     match List.rev binders with 
     | [] -> []
     | {binding_event = be; assignments = assignments; under_closure = in_closure} :: tail -> 
       let defs = List.map (def_maker be in_closure) assignments in 
-      List.append defs (make_binding_defs tail handler_eid params_map idx_expr)
+      List.append defs (make_binding_defs reid tail handler_eid params_map idx_expr)
 ;;
 
 let rec make_pred_defs reid preds handler_eid =
@@ -334,7 +337,7 @@ let make_static_defs id idx_expr =
 let make_transition_statements env id idx_expr = 
   let re_info = IdMap.find id env.re_info_map in
   let static_defs = make_static_defs id idx_expr in
-  let binding_defs = List.append static_defs (make_binding_defs re_info.binders env.current_handler env.params_map (make_evar (make_idx_val id))) in
+  let binding_defs = List.append static_defs (make_binding_defs id re_info.binders env.current_handler env.params_map (make_evar (make_idx_val id))) in
   let pred_defs = (make_pred_defs id re_info.preds env.current_handler) in
   let pred_update_defs = List.append binding_defs ((counter_def id re_info env.current_handler re_info.preds) :: pred_defs) in
   let match_def = List.append pred_update_defs ((res_def id) :: (make_match_def id re_info.alphabet re_info.synthesis_response re_info.event_order re_info.preds)) in
@@ -343,8 +346,9 @@ let make_transition_statements env id idx_expr =
 ;;
 
 let make_counter_branch id re_info eid params= 
-  let counter_set = (make_assign (make_counter_id id) (make_num_size (init_val eid re_info.event_order re_info.preds) DFASynthesis.bv_size)) in
-  let pred_update_defs = counter_set :: (make_pred_defs id re_info.preds (Some (eid,params))) in
+  let binding_defs = (make_binding_defs id re_info.binders (Some (eid, params)) "dummy" (make_evar (make_idx_val id))) in
+  let counter_set = (make_assign (make_counter_id id) (make_num_size (init_val eid re_info.event_order re_info.preds) DFASynthesis.bv_size)) :: binding_defs in
+  let pred_update_defs = List.append counter_set (make_pred_defs id re_info.preds (Some (eid,params))) in
   let p = [PEvent (Cid.create_ids [eid], params)] in
   let s = statement (sequence_statements pred_update_defs) in
   (p,s) 
@@ -408,7 +412,7 @@ let replace_var_regex env id size vr =
       then Some (decl (DMemop (memop_response.id, memop_response.params, memop_response.memop_body))) else None) re_info.synthesis_response.memops) in
   let tail = 
   List.append 
-    (List.rev_map (make_global_def_asgn size) (List.flatten (List.map (fun b -> b.assignments) (binders vr))))
+    (List.rev_map (make_global_def_asgn size id ) (List.flatten (List.map (fun b -> b.assignments) (binders vr))))
     ((make_global_def size (IConst DFASynthesis.bv_size) id) :: used_memops) in
   if ((!env).added_cts) then tail else (env := {(!env) with added_cts = true}; (check_then_set_memop) :: tail)
 ;;

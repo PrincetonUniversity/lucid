@@ -7,7 +7,10 @@ event test_event(int testval) {
 
 alphabet sizes = S1;
 
-re<<256>> RE_fingerprint_videoA over [S1, packet_in] = (S1)*.packet_in(@int assigned = sip).(S1(sip > Sys.time()))*;
+re<<256>> RE_fingerprint_videoA over [S1, packet_in] = (S1)*
+														.packet_in(@int assigned = sip)
+														.(S1(assigned > 2)
+														.(S1(assigned > 2))*);
 
 handle packet_in(int sip, int dip, int<<16>> sport, int<<16>> dport, int<<16>> s){
 	int<<32>> idx = (int<<32>>)hash<<8>>(13, sip, dip, sport,dport);
