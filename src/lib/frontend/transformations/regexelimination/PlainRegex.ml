@@ -167,7 +167,8 @@ let print_dfa dfa =
 
 let rec explore state acc alphabet =
   let next state acc letter = 
-    let statederiv = (pre_deriv state letter) in
+    let statederiv =   Printf.printf "Deriv of %s with %s is %s\n" (plain_re_to_string state) (print_letter letter) (plain_re_to_string (pre_deriv state letter));
+      (pre_deriv state letter) in
       let states, trans = acc in
         let trans = Transition.add (state, letter) statederiv trans in 
           if States.mem statederiv states then 

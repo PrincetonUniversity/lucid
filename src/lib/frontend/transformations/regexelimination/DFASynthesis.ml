@@ -238,13 +238,22 @@ let int_id_of_pair model (out, inner) =
   let inner = (eval_bool model inner) in
   if out then (if inner then 3 else 2) else (if inner then 1 else 0)
 
+let at_most_eight ctx bv = 
+  BitVector.mk_ult ctx bv (Expr.mk_numeral_int ctx 9 (BitVector.mk_sort ctx bv_size));;
+
+
+let make_init_constraints ctx regact = 
+  let pred_inits = List.map (fun p -> (at_most_eight ctx p.pconst)) regact.preds in
+  let arith_inits = List.flatten (List.map (fun a -> [(at_most_eight ctx a.asym_const);(at_most_eight ctx a.astate_const)]) regact.ariths) in
+  List.append pred_inits arith_inits
+
 let synthesize id dfa = 
   let time = Sys.time() in
   let cfg = [("model", "true"); ("proof", "false")] in
   let ctx = mk_context cfg in
-  let solver = Solver.mk_simple_solver ctx in
+  let solver = Solver.mk_solver ctx None in
   let regacts = List.map (fun id -> (make_regact ctx id)) regact_ids in
-  Printf.printf "length is %i\n" (List.length regacts);
+  List.iter (fun regact -> (Solver.add solver (make_init_constraints ctx regact))) regacts; 
   let symbols_whichop = List.fold_left (fun map letter -> LetterMap.add letter ((Boolean.mk_const_s ctx (letter_to_whichop_out letter)), (Boolean.mk_const_s ctx (letter_to_whichop_in letter))) map) LetterMap.empty dfa.alphabet in
   let symbols_f = List.fold_left (fun map letter -> LetterMap.add letter (BitVector.mk_const_s ctx (letter_to_sym_f letter) bv_size) map) LetterMap.empty dfa.alphabet in
   let symbols_g = List.fold_left (fun map letter -> LetterMap.add letter (BitVector.mk_const_s ctx (letter_to_sym_g letter) bv_size) map) LetterMap.empty dfa.alphabet in
@@ -261,10 +270,14 @@ let synthesize id dfa =
   Transition.iter add_transition dfa.transition;
   let stat = (Solver.check solver []) in
   Printf.printf "Status is %s. Time spent on synthesis is %f\n" (Solver.string_of_status stat) (Sys.time() -. time);
+
   let model = Solver.get_model solver in
+  
     (match model with 
     | None -> Console.error "Failed to find DFA synthesis model."
     | Some model -> 
+      Printf.printf "States map has size %d" (StatesMap.cardinal states);
+      StatesMap.iter (fun st var -> (Printf.printf "%s:%d\n") (plain_re_to_string st) (eval_bv ctx model var)) states;
       Printf.printf "solved.";
       {
         accepting = States.fold (fun state acc -> (eval_bv ctx model (StatesMap.find state states)) :: acc) dfa.accepting []; 

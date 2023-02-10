@@ -1,0 +1,12 @@
+{
+    "switches": 1,
+    "max time": 9999999,
+    "default input gap": 10000,
+    "random seed": 0,
+    "events": [ 
+      {"name":"ip_pkt", "args": [600,1,2]},
+      {"name":"ip_pkt", "args": [600,1,2]},
+      {"name":"ip_pkt", "args": [600,1,2]},
+      {"name":"ip_pkt", "args": [600,1,2]}
+    ]
+  }
