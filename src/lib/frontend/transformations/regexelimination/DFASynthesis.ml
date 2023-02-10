@@ -274,7 +274,6 @@ let synthesize id dfa =
     let g = LetterMap.find (snd key) symbols_g in 
     Solver.add solver (make_transition_constraints ctx regacts pre_state whichop_pair f g post_state) in
   Transition.iter add_transition dfa.transition;
-  print_endline (Solver.to_string solver);
   let stat = (Solver.check solver []) in
   Printf.printf "Status is %s. Time spent on synthesis is %f\n" (Solver.string_of_status stat) (Sys.time() -. time);
   let model = Solver.get_model solver in
