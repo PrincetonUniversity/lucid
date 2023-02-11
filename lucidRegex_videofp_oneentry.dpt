@@ -15,7 +15,7 @@ alphabet sizes = S1, S2, S3, S4, S5, S6, S7, S8;
 
 
 global Array.t<<32>> arr = Array.create(256);
-re<<256>> RE_fingerprint_videoA over sizes = (S1.S5.S1.S4.S7);
+re<<256>> RE_fingerprint_videoA over sizes = (S1.S5.S1.S4.S7.S2.S3.S6.S7.S2.S3.S3.S3.S5.S3);
 //re<<256>> RE_fingerprint_videoA over [S1,packet_in, test_event] = !(test_event(@int rec = testval; testval > 20)."");
 //re<<256>> RE_fingerprint_videoA over [S1, packet_in, test_event] = (S1)*.packet_in(@int assigned = sip; true).(S1(sip > Sys.time()))*;
 const int type_A=1;
