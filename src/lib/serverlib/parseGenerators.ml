@@ -79,7 +79,7 @@ let ty_to_cstring ty =
 (* toplevel -- event id enumerator *)
 let event_enum es = 
   let event_num_str e = 
-    [%string "const uint8_t %{id_to_string e.id |> String.uppercase_ascii} = %{string_of_int e.num};"]
+    [%string "#define %{id_to_string e.id |> String.uppercase_ascii} %{string_of_int e.num}"]
   in
   let event_num_strs n es = 
     line_sep event_num_str es |> indent n
@@ -327,7 +327,7 @@ let decls_to_evrecs ds =
 let generate_c ds =
   (* well formed and type checks *)
   Wellformed.pre_typing_checks ds;
-  let ds = Typer.infer_prog Builtins.interp_builtin_tys ds in
+  let ds = Typer.infer_prog Builtins.tofino_builtin_tys ds in
   (* get event info needed for compilation *)
   let evrecs = decls_to_evrecs ds in
   line_sep evrec_to_string evrecs |> print_endline;
