@@ -45,6 +45,8 @@ all:
 	cp -f _build/default/src/bin/dockerUtils.exe bin/dockerUtils
 	dune build src/bin/dfgCompiler.exe
 	cp -f _build/default/src/bin/dfgCompiler.exe bin/dfgCompiler
+	dune build src/bin/eventParsers.exe
+	cp -f _build/default/src/bin/eventParsers.exe bin/eventParsers
 
 generatedVisitors: src/lib/frontend/Syntax.processed.ml
 
