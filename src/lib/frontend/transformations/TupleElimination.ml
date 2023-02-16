@@ -293,10 +293,10 @@ let rec replace_decl (env : env) d =
   | DEvent (id, sort, _, params) ->
     let _, new_params = flatten_params env params in
     env, [{ d with d = DEvent (id, sort, [], new_params) }]
-  | DHandler (id, (params, body)) ->
+  | DHandler (id, sort, (params, body)) ->
     let body_env, new_params = flatten_params env params in
     let body = replace_statement body_env body in
-    env, [{ d with d = DHandler (id, (new_params, body)) }]
+    env, [{ d with d = DHandler (id, sort, (new_params, body)) }]
   | DSize _ | DMemop _ | DExtern _ | DSymbolic _ | DConst _ ->
     env, [d]
   | DAction(id, tys, const_params, (params, action_body)) -> 

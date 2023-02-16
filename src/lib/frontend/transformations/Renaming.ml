@@ -297,9 +297,9 @@ let rename prog =
           env <- old_env;
           let new_x = self#freshen_var x in
           DEvent (new_x, s, new_cspecs, new_params)
-        | DHandler (x, body) ->
+        | DHandler (x, hsort, body) ->
           (* Note that we require events to be declared before their handler *)
-          DHandler (self#lookup (Id x) |> Cid.to_id, self#visit_body dummy body)
+          DHandler (self#lookup (Id x) |> Cid.to_id, hsort, self#visit_body dummy body)
         | DFun (f, rty, cspecs, (params, body)) ->
           let old_env = env in
           let new_rty = self#visit_ty dummy rty in

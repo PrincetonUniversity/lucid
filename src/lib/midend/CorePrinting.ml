@@ -328,9 +328,11 @@ let d_to_string d =
       (ty_to_string ty)
       (id_to_string id)
       (exp_to_string exp)
-  | DHandler (id, (params, s)) ->
+  | DHandler (id,hsort,(params, s)) ->
     Printf.sprintf
-      "handle %s(%s) {\n%s\n}"
+      "%shandle %s(%s) {\n%s\n}"
+      (match hsort with 
+        | HControl -> "control " | HData -> "")
       (id_to_string id)
       (params_to_string params)
       (stmt_to_string s)

@@ -1204,7 +1204,7 @@ let rec infer_declaration (builtin_tys : Builtins.builtin_tys) (env : env) (effe
       in
       let env = define_const id (mk_event_ty constrs params) env in
       env, effect_count, DEvent (id, sort, constr_specs, params)
-    | DHandler (id, body) ->
+    | DHandler (id, s, body) ->
       enter_level ();
       let constraints = retrieve_constraints env d.dspan id (fst body) in
       let _, inf_body =
@@ -1217,7 +1217,7 @@ let rec infer_declaration (builtin_tys : Builtins.builtin_tys) (env : env) (effe
       in
       leave_level ();
       let inf_body = generalizer#visit_body () inf_body in
-      env, effect_count, DHandler (id, inf_body)
+      env, effect_count, DHandler (id, s, inf_body)
     | DFun (id, ret_ty, constr_specs, body) ->
       enter_level ();
       let start_eff = fresh_effect () in

@@ -7,7 +7,7 @@ let rec process ds =
     | dec::ds -> (
       match dec.d with 
       | DEvent(evid, EExit, eparams) -> (
-        let hdl = decl (DHandler(evid, (eparams, snoop))) in
+        let hdl = decl (DHandler(evid, HData, (eparams, snoop))) in
         let new_ev = {dec with d=DEvent(evid, EBackground, eparams)} in
         new_ev::hdl::(process ds)
       )

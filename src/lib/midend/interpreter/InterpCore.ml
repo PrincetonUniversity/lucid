@@ -705,7 +705,7 @@ let interp_decl (nst : State.network_state) swid d =
   | DAction (acn) -> 
     (* add the action to the environment *)
     State.add_action (Cid.id acn.aid) acn nst
-  | DHandler (id, (params, body)) ->
+  | DHandler (id, _, (params, body)) ->
     let f nst swid port event =
       let builtin_env =
         List.fold_left

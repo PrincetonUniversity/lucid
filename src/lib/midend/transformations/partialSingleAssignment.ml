@@ -162,7 +162,7 @@ let const_branch_vars ds =
       (* only visit handlers. *)
       method! visit_d ctx d =
         match d with
-        | DHandler (id, body) -> super#visit_DHandler ctx id body
+        | DHandler (id, s, body) -> super#visit_DHandler ctx id s body
         | _ -> d
 
       method! visit_statement ctx statement =

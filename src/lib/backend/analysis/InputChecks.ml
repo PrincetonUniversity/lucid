@@ -207,9 +207,9 @@ let align_decls ds =
       | DEvent(id, esort, params) ->
         let params = align_params params in
         {decl with d=DEvent(id, esort, params)}
-      | DHandler(id, (params, body)) -> 
+      | DHandler(id, hsort, (params, body)) -> 
         let params = align_params params in
-        {decl with d=DHandler(id, (params, body))}
+        {decl with d=DHandler(id, hsort, (params, body))}
       | _ -> decl
     end
   in

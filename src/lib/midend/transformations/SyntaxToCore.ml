@@ -233,6 +233,9 @@ let translate_sort = function
   | S.EExit -> C.EExit
   | S.EBackground -> C.EBackground
 ;;
+let translate_hsort = function
+  | S.HControl -> C.HControl
+  | S.HData -> C.HData
 
 let translate_decl (d : S.decl) : C.decl =
   let d' =
@@ -245,7 +248,7 @@ let translate_decl (d : S.decl) : C.decl =
         C.DGlobal (id, translate_ty ty, translate_exp inner_exp))
     | S.DEvent (id, sort, _, params) ->
       C.DEvent (id, translate_sort sort, translate_params params)
-    | S.DHandler (id, body) -> C.DHandler (id, translate_body body)
+    | S.DHandler (id, s, body) -> C.DHandler (id, translate_hsort s, translate_body body)
     | S.DMemop (mid, mparams, mbody) ->
       C.DMemop {mid; mparams=translate_params mparams; mbody=translate_memop mbody;}
     | S.DExtern (id, ty) -> C.DExtern (id, translate_ty ty)

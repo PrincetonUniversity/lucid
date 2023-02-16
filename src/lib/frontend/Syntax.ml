@@ -245,6 +245,10 @@ and event_sort =
   | EExit       (* events that leave the lucid program *)
   | EBackground (* standard event sort *)
 
+and handler_sort = 
+  | HControl (* control processor *)
+  | HData (* data processor *)
+
 and ispec =
   | InSize of id
   | InVar of id * ty
@@ -286,7 +290,7 @@ and d =
   | DSize of id * size option
   | DGlobal of id * ty * exp
   | DEvent of id * event_sort * constr_spec list * params
-  | DHandler of id * body
+  | DHandler of id * handler_sort * body
   | DFun of id * ty * constr_spec list * body
   | DMemop of id * params * memop_body
   | DConst of id * ty * exp
@@ -450,7 +454,9 @@ let dglobal_sp id ty exp span = decl_sp (DGlobal (id, ty, exp)) span
 let dconst_sp id ty e span = decl_sp (DConst (id, ty, e)) span
 let dextern_sp id ty span = decl_sp (DExtern (id, ty)) span
 let dsymbolic_sp id ty span = decl_sp (DSymbolic (id, ty)) span
-let handler_sp id p body span = decl_sp (DHandler (id, (p, body))) span
+let handler_sp id s p body span = decl_sp (DHandler (id, s, (p, body))) span
+let datahandler_sp id p body span = decl_sp (DHandler (id, HData, (p, body))) span
+let ctlhandler_sp id p body span = decl_sp (DHandler (id, HControl, (p, body))) span
 let dsize_sp id size span = decl_sp (DSize (id, size)) span
 let fun_sp id rty cs p body span = decl_sp (DFun (id, rty, cs, (p, body))) span
 let memop_sp id p body span = decl_sp (DMemop (id, p, body)) span

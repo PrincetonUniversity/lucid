@@ -55,7 +55,7 @@ let unify_event_and_handler_params ds : decls =
     (fun decl -> 
       match decl.d with
       (* for each handler *)
-      | DHandler(id, (params, _)) -> 
+      | DHandler(id, _, (params, _)) -> 
         (* look up the parameters of the event with the same name as the handler *)
         let ev_params = List.assoc (Id.name id) event_params in
         (* construct a list of (handler_param_id, event_param_id) pairs *)

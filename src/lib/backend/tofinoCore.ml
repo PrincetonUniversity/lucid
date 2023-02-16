@@ -60,6 +60,7 @@ and statement = [%import: CoreSyntax.statement]
 and params = [%import: CoreSyntax.params]
 and body = [%import: CoreSyntax.body]
 and event_sort = [%import: CoreSyntax.event_sort]
+and handler_sort = [%import: CoreSyntax.handler_sort]
 and conditional_return = [%import: CoreSyntax.conditional_return]
 and complex_body = [%import: CoreSyntax.complex_body]
 and memop_body = [%import: CoreSyntax.memop_body]
@@ -74,7 +75,7 @@ and action = [%import: CoreSyntax.action]
 and td =
   | TDGlobal of id * ty * exp
   | TDEvent of id * event_sort * params
-  | TDHandler of id * body 
+  | TDHandler of id * handler_sort * body 
   | TDMemop of memop
   | TDExtern of id * ty
   | TDAction of action
@@ -130,7 +131,7 @@ let tdecl_of_decl decl =
   match decl.d with
   | DGlobal(id, ty, exp) -> {td=TDGlobal(id, ty, exp); tdspan=decl.dspan; tdpragma = decl.dpragma;}
   | DEvent (id, es, ps) -> {td=TDEvent(id, es, ps); tdspan=decl.dspan; tdpragma = decl.dpragma;}
-  | DHandler(i, b) -> {td=TDHandler(i, b); tdspan=decl.dspan; tdpragma = decl.dpragma;}
+  | DHandler(i,s,b) -> {td=TDHandler(i,s,b); tdspan=decl.dspan; tdpragma = decl.dpragma;}
   | DMemop(m) -> {td=TDMemop(m); tdspan=decl.dspan; tdpragma = decl.dpragma;}
   | DExtern(i, t) -> {td=TDExtern(i, t); tdspan=decl.dspan; tdpragma = decl.dpragma;}
   | DAction(a) -> {td=TDAction(a); tdspan = decl.dspan; tdpragma = decl.dpragma;}
@@ -317,7 +318,7 @@ let add_main_handler decls =
   let main_body = 
     let handler_branches branches dec = 
       match dec.td with 
-      | TDHandler(hdl_id, (_, stmt)) -> (
+      | TDHandler(hdl_id, _, (_, stmt)) -> (
         let hdl_num = match List.assoc_opt hdl_id hdl_enum with 
           | None -> error "[generate_merged_handler] could not find handler id in enum. Do events and handlers have the same internal IDs?"
           | Some hdl_num -> 
@@ -340,8 +341,8 @@ let add_main_handler decls =
     | [] -> [] 
     | hd::tl -> (
       match hd with
-      | {td=TDHandler(i, (p, _));} -> (
-        {hd with td=TDHandler(i, (p, snoop));}::(erase_handler_bodies tl)
+      | {td=TDHandler(i, s, (p, _));} -> (
+        {hd with td=TDHandler(i, s, (p, snoop));}::(erase_handler_bodies tl)
       )
       | _ -> hd::(erase_handler_bodies tl)
     )
@@ -389,7 +390,7 @@ let add_lib_handler decls =
   let main_body, main_id = List.filter_map 
     (fun dec -> 
       match dec.td with 
-      | TDHandler(hdl_id, (_, stmt)) -> Some(stmt, hdl_id)
+      | TDHandler(hdl_id, _, (_, stmt)) -> Some(stmt, hdl_id)
       | _ -> None          
     )
     decls
@@ -400,8 +401,8 @@ let add_lib_handler decls =
     | [] -> [] 
     | hd::tl -> (
       match hd with
-      | {td=TDHandler(i, (p, _));} -> (
-        {hd with td=TDHandler(i, (p, snoop));}::(erase_handler_bodies tl)
+      | {td=TDHandler(i, s, (p, _));} -> (
+        {hd with td=TDHandler(i, s, (p, snoop));}::(erase_handler_bodies tl)
       )
       | _ -> hd::(erase_handler_bodies tl)
     )
@@ -495,7 +496,7 @@ let decl_of_tdecl tdecl =
   match tdecl.td with
   | TDGlobal(id, ty, exp) -> decl_pragma (DGlobal(id, ty, exp)) tdecl.tdspan tdecl.tdpragma
   | TDEvent (id, es, ps) ->  {d=DEvent(id, es, ps); dspan=tdecl.tdspan; dpragma = tdecl.tdpragma;}
-  | TDHandler(i, b) ->  {d=DHandler(i, b); dspan=tdecl.tdspan; dpragma = tdecl.tdpragma; }
+  | TDHandler(i, s, b) ->  {d=DHandler(i, s, b); dspan=tdecl.tdspan; dpragma = tdecl.tdpragma; }
   | TDMemop(m) ->  {d=DMemop(m); dspan=tdecl.tdspan; dpragma = tdecl.tdpragma; }
   | TDExtern(i, t) ->  {d=DExtern(i, t); dspan=tdecl.tdspan; dpragma = tdecl.tdpragma; }
   | TDAction(a) -> {d=DAction(a); dspan=tdecl.tdspan; dpragma = tdecl.tdpragma; }

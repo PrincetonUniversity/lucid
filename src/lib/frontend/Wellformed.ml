@@ -136,7 +136,7 @@ let rec match_handlers ?(m_cid = None) (ds : decls) =
       else if sort = EExit
       then events, handlers
       else IdSet.add id events, handlers
-    | DHandler (id, _) ->
+    | DHandler (id, _, _) ->
       if IdSet.mem id handlers
       then
         Console.error_position d.dspan
@@ -314,7 +314,7 @@ let rec check_qvars d =
   | DUserTy (_, sizes, _) ->
     (* Effects always ok, sizes only if they appear in the declared size list *)
     preset_qvar_checker#visit_decl (List.map STQVar.strip_links sizes) d
-  | DEvent (_, _, _, params) | DHandler (_, (params, _)) ->
+  | DEvent (_, _, _, params) | DHandler (_, _, (params, _)) ->
     (* Effects always ok, sizes only allowed if they appear inside at least one global-type argument *)
     event_qvar_checker#visit_params (false, ref []) params  
   | DModule (_, intf, ds) ->

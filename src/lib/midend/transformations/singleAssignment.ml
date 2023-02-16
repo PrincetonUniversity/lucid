@@ -333,11 +333,11 @@ module SSA = struct
   let to_ssa decs =
     let handler_to_ssa dec =
       match dec.d with
-      | DHandler (id, (params, statement)) ->
+      | DHandler (id, s, (params, statement)) ->
         let _, new_stmt, phi_calls =
           stmt_to_ssa (it_with_params params, statement)
         in
-        let dec = { dec with d = DHandler (id, (params, new_stmt)) } in
+        let dec = { dec with d = DHandler (id, s, (params, new_stmt)) } in
         { dec; phis = phi_calls }
       | _ -> { dec; phis = [] }
     in
@@ -554,12 +554,12 @@ module PhiElimination = struct
   (* eliminate phis from a single handler. *)
   let handler_elim_phis annotated_d =
     match annotated_d.dec.d with
-    | DHandler (id, (params, stmt)) ->
+    | DHandler (id, s, (params, stmt)) ->
       let new_stmt =
         body_elim_phis annotated_d.phis (params, stmt)
         |> body_delete_phis (CL.map rec_of_phi annotated_d.phis)
       in
-      { annotated_d.dec with d = DHandler (id, (params, new_stmt)) }
+      { annotated_d.dec with d = DHandler (id, s, (params, new_stmt)) }
     | _ ->
       error
         "[handler_elim_phis] elimination of phi statements in non-handlers is \

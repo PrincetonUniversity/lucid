@@ -363,6 +363,11 @@ event_decl:
     | event_sort ID paramsdef             { ($1, snd $2, $3, []) }
     | event_sort ID paramsdef constr_list { ($1, snd $2, $3, $4) }
 
+
+handle_sort: 
+    | HANDLE         {$1, HData}
+    | CONTROL HANDLE {$1, HControl}
+
 tyname_def:
     | ID                                  { snd $1, [] }
     | ID poly                             { snd $1, snd $2}
@@ -398,9 +403,9 @@ decl:
     | SYMBOLIC ty ID SEMI                   { [dsymbolic_sp (snd $3) $2 (Span.extend $1 $4)] }
     | event_decl SEMI                       { [event_sp (second $1) (snd (first $1)) (fourth $1) (third $1) (Span.extend (fst (first $1)) $2)] }
     | event_decl LBRACE statement RBRACE    { [event_sp (second $1) (snd (first $1)) (fourth $1) (third $1) (Span.extend (fst (first $1)) $4);
-                                               handler_sp (second $1) (third $1) $3 (Span.extend (fst (first $1)) $4)] }
-    | HANDLE ID paramsdef LBRACE statement RBRACE
-      	     	       	      	     	        { [handler_sp (snd $2) $3 $5 (Span.extend $1 $6)] }
+                                               datahandler_sp (second $1) (third $1) $3 (Span.extend (fst (first $1)) $4)] }
+    | handle_sort ID paramsdef LBRACE statement RBRACE
+      	     	       	      	     	        { [handler_sp (snd $2) (snd $1) $3 $5 (Span.extend (fst $1) $6)] }
     | FUN ty ID paramsdef LBRACE statement RBRACE
                                             { [fun_sp (snd $3) $2 [] $4 $6 (Span.extend $1 $7)] }
     | FUN ty ID paramsdef constr_list LBRACE statement RBRACE

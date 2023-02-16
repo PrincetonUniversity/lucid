@@ -90,7 +90,7 @@ let add_definitions prefix env ds =
     | DFun (id, _, _, _)
     | DMemop (id, _, _)
     | DEvent (id, _, _, _)
-    | DHandler (id, _)
+    | DHandler (id, _, _)
     | DConstr (id, _, _, _)
     | DGlobal (id, _, _) -> { env with vars = add_entry env.vars id }
     | DSize (id, _) -> { env with sizes = add_entry env.sizes id }
@@ -148,9 +148,9 @@ let rec replace_module env m_id ds =
           | DEvent (id, x, y, z) ->
             ( { env with vars = add_entry env.vars id }
             , DEvent (prefix id, x, y, z) |> wrap d )
-          | DHandler (id, x) ->
+          | DHandler (id, x, y) ->
             ( { env with vars = add_entry env.vars id }
-            , DHandler (prefix id, x) |> wrap d )
+            , DHandler (prefix id, x, y) |> wrap d )
           | DConstr (id, x, y, z) ->
             ( { env with vars = add_entry env.vars id }
             , DConstr (prefix id, x, y, z) |> wrap d )

@@ -90,7 +90,7 @@ let eliminate_this ds =
       inherit [_] s_map as super
       val mutable has_this = false
       val mutable eventv_var = None
-      method! visit_DHandler ctx hid (params, stmt) =
+      method! visit_DHandler ctx hid s (params, stmt) =
         let ev_var_id = Id.create (fst hid^"_input") in
         has_this <- false;
         eventv_var <- Some(EVar((Cid.id ev_var_id)));
@@ -101,7 +101,7 @@ let eliminate_this ds =
             sseq (scopy_event ev_var_id hid params) stmt
           | false -> stmt 
         in
-        DHandler(hid, (params, stmt))
+        DHandler(hid, s, (params, stmt))
 
       method! visit_EVar _ cid =
         if ((Cid.names cid |> List.hd) = "this")

@@ -407,9 +407,9 @@ let interp_decl builtin_tys env d =
     let env = add_dec env mid in
     (* TODO: Maybe interp in the body? Maybe that's handled later? *)
     env, { d with d = DMemop ({mid=mid; mparams=mparams; mbody=mbody;}) }
-  | DHandler (id, body) ->
+  | DHandler (id, s, body) ->
     let env = add_dec env id in
-    env, { d with d = DHandler (id, interp_body builtin_tys env body) }
+    env, { d with d = DHandler (id, s, interp_body builtin_tys env body) }
   | DEvent (id, _, _) | DExtern (id, _) ->
     let env = add_dec env id in
     env, d

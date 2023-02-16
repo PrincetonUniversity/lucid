@@ -192,6 +192,10 @@ and params = (id * ty) list
 
 and body = params * statement
 
+and handler_sort = 
+  | HControl
+  | HData
+
 and event_sort =
   | EEntry of bool (* true iff "control", i.e. it can generate non-continue events *)
   | EExit
@@ -221,7 +225,7 @@ and memop = {mid:id; mparams:params; mbody:memop_body;}
 and d =
   | DGlobal of id * ty * exp
   | DEvent of id * event_sort * params
-  | DHandler of id * body
+  | DHandler of id * handler_sort * body
   | DMemop of memop
   | DExtern of id * ty
   | DAction of action
@@ -347,7 +351,7 @@ let decl_sp d span = { d; dspan = span; dpragma = None;}
 let decl_pragma d dspan dpragma = {d; dspan; dpragma;}
 let dglobal_sp id ty exp span = decl_sp (DGlobal (id, ty, exp)) span
 let dextern_sp id ty span = decl_sp (DExtern (id, ty)) span
-let handler_sp id p body span = decl_sp (DHandler (id, (p, body))) span
+let handler_sp id p sort body span = decl_sp (DHandler (id, sort, (p, body))) span
 let memop_sp mid mparams mbody span = decl_sp (DMemop {mid; mparams; mbody}) span
 
 (*** Utility -- may split into a separate file if it gets big *)

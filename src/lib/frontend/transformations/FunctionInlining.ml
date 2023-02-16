@@ -196,14 +196,14 @@ let inline_decl env d =
   | DConstr (id, _, params, e) ->
     { env with constrs = CidMap.add (Id id) (params, e) env.constrs }, None
     (* Substitute into body with current env *)
-  | DHandler (id, body) ->
+  | DHandler (id, s, body) ->
     let body =
       TyperInstGen.instantiator#visit_body (TyperInstGen.fresh_maps ()) body
     in
     let d' =
       TyperInstGen.generalizer#visit_decl
         ()
-        { d with d = DHandler (id, inline_body env body) }
+        { d with d = DHandler (id, s, inline_body env body) }
     in
     env, Some d'
   | DGlobal (id, ty, e) ->
