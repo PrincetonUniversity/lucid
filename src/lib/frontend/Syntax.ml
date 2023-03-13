@@ -6,19 +6,10 @@ include TQVar.TQVar_tys
    deriving plugin develops a visitor for each of them. The above four types
    have a visitor already defined in TQVar.ml, so they're placed separately *)
 type cid = [%import: Cid.t]
-
+and tagval = [%import: (TaggedCid.tagval[@opqaue])]
+and tcid = [%import: TaggedCid.t]
 and sp = [%import: Span.t]
-
-and tracking =
-{
-  src_id : cid option;
-  src_users : cid list;
-  cur_id : cid option;
-  cur_users : cid list;
-}
-
 and z = [%import: (Z.t[@opaque])]
-
 and zint = [%import: (Integer.t[@with Z.t := (Z.t [@opaque])])]
 
 and location = int
@@ -307,7 +298,6 @@ and d =
 and decl =
   { d : d
   ; dspan : sp
-  ; dtrack : tracking
   }
 
 (* a program is a list of declarations *)
@@ -445,11 +435,9 @@ let tblmatch_sp tbl keys args span =
   exp_sp (ETableMatch(t)) span
 ;;
 
-let empty_track = {src_id = None; src_users = []; cur_id = None; cur_users = [];}
-
 (* declarations *)
-let decl d = { d; dspan = Span.default; dtrack = empty_track;}
-let decl_sp d span = { d; dspan = span; dtrack = empty_track;}
+let decl d = { d; dspan = Span.default; }
+let decl_sp d span = { d; dspan = span; }
 let dglobal_sp id ty exp span = decl_sp (DGlobal (id, ty, exp)) span
 let dconst_sp id ty e span = decl_sp (DConst (id, ty, e)) span
 let dextern_sp id ty span = decl_sp (DExtern (id, ty)) span

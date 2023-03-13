@@ -1,203 +1,131 @@
+(* Make per-table copies of each action *)
+
 (* 
-  Inline the actions of each table match. 
+  Input form: 
+    - no restrictions
+  Output form:
+    - each action is used by only 1 table
 
-  table foo {... actions = (bar); };
-  action int bar(int c1)(int a1, int a2) {
-    return a1 + c1;  
-  }
-  // ---> 
-  table foo {... actions = (foo_bar); };
-  action int foo_bar(int ct)() {
-    return aarg1 + c1;
-  }
-
-  ...
-
-  int outvar = table_match(foo, (k1, k2), (aarg1, aarg2));
-
-  for each table match statement:
-    - find the passed action args (exps) and the out variable (id)
-    for each action of the table:
-      - create a map from action params : passed args
-      - generate an open function that contains: 
-        - params = action's const params
-        - body with params replaced by args
-        - return expression replaced with statements to set the match statement's return vars
-        - defined_vars contain the return vars (not really needed, just for debugging) 
+  1. remove actions and move to map.
+  2. for each table t:
+    for each action a in t's declaration:
+      1. create a new action t_a = a
+      2. replace a with t_a in: 
+        1. the declaration of t
+        2. table_installs to t
  *)
 open TofinoCore
+open CoreSyntax
 
 module IdMap = Collections.IdMap
 
-type env = {
-  actions : (Id.t * action) list;
-  tables : (Id.t * tbl_def) list;
+type replace_ctx = {
+  (* actionid -> definition *)
+  actions : decl IdMap.t;
+  (* tblid -> actionid -> newactionid *)
+  local_renames : (id IdMap.t) IdMap.t;
 }
-let empty_env = {actions = []; tables = [];}
-
-
-(* (copied from FunctionInlining.ml in frontend) *)
-(* Given a mapping of variables to expressions, return the input statement
-   with each of those expressions substituted in for the corresponding
-   variable. Not context-sensitive, so make sure none of the expressions
-   include variables that might change between lines! *)
-let subst =
-  object
-    inherit [_] s_map as super
-    method! visit_exp (env : exp IdMap.t) exp =
-      match exp.e with
-      | EVar(x) -> (
-        match IdMap.find_opt (Cid.to_id x) env with
-        | Some exp' -> exp'
-        | None -> exp
-      )
-      | _ -> exp
-  end
+let empty_ctx = { 
+  actions = IdMap.empty;
+  local_renames = IdMap.empty;
+}
+let add_action id decl ctx =
+  {ctx with actions=IdMap.add id decl ctx.actions}
 ;;
-
-
-let process_main env main_decl =
-  (* find all the match statements.
-     Look up table.
-     Rebuild actions, table, and match statement. 
-     Accumulate new action and table declarations, to return 
-     with the new main. *)
-  let lookup_acn exp = List.assoc
-    (CoreSyntax.id_of_exp exp)
-    env.actions
-  in 
-  let lookup_tbl exp = List.assoc
-    (CoreSyntax.id_of_exp exp)
-    env.tables
-  in 
-  let openfcn id params stmt vars span = 
-    {td=TDOpenFunction(id, params, stmt, vars); tdspan=span; tdpragma=None; }
+let add_tableaction_renames tid aids new_aids ctx =
+  let local_renames = List.fold_left2
+    (fun map aid aid' -> IdMap.add aid aid' map)
+    IdMap.empty
+    aids
+    new_aids
   in
-  let new_decls = ref [] in
-  let inliner = 
-    object
+  {ctx with local_renames=IdMap.add tid local_renames ctx.local_renames;}
+;;
+let get_renames tid ctx =
+  IdMap.find tid ctx.local_renames
+;;
+let new_aid tid aid = (Id.concat_names "_" tid aid) ;;
+
+
+(* rename actions in an expression *)
+let rename_actionexp renames exp =
+  let evar_replacer =
+    object (_)
       inherit [_] s_map as super
-      method! visit_statement ctx stmt = 
-        let stmt = super#visit_statement ctx stmt in
-        match stmt.s with 
-        | STableMatch(tbl_match) -> (
-          let tbl = lookup_tbl tbl_match.tbl in
-          let tbl_id = CoreSyntax.id_of_exp tbl_match.tbl in 
-          (* transform all the actions into open functions *)
-          let acnfcn_map_defs = List.fold_left 
-            (fun acnfcn_map_defs eacn -> 
-              let acn = lookup_acn eacn in
-              (* map from ids (params) to expressions (args) *)
-              let subst_map =
-                List.fold_left 
-                  (fun acc (id, arg) -> 
-                    IdMap.add id arg acc) 
-                  IdMap.empty 
-                  (List.combine 
-                    (List.split acn.aparams |> fst)
-                    (tbl_match.args))
-              in
-              (* replace params with arg exps *)
-              let action_body' = List.map
-                (subst#visit_exp subst_map)
-                acn.abody
-              in
-              (* create statements to set return variables *)
-              let new_body = 
-                match tbl_match.out_tys with
-                | None -> 
-                  List.fold_left2
-                    (fun ret_stmt id exp -> 
-                      CoreSyntax.sseq ret_stmt (CoreSyntax.sassign id exp))
-                    CoreSyntax.snoop
-                    tbl_match.outs
-                    action_body'
-                | Some tys -> 
-                  List.fold_left2
-                    (fun ret_stmt (id, ty) exp -> 
-                      CoreSyntax.sseq ret_stmt (CoreSyntax.slocal id ty exp))
-                    CoreSyntax.snoop
-                    (List.combine tbl_match.outs tys)
-                    action_body'
-              in
-              (* create the open function for the action *)
-              let acn_fcn_id = (Id.concat_names "_" tbl.tid acn.aid) in
-              let f = openfcn 
-                acn_fcn_id
-                (acn.aconst_params)
-                new_body
-                []
-                Span.default
-              in              
-              acnfcn_map_defs@[((acn.aid, acn_fcn_id), f)])
-            []
-            tbl.tactions
-          in (* end definition of action_functions *)
-          (* we have the new action functions, now update the table to use them *) 
-          let acn_fcn_idmap, acn_decls = List.split acnfcn_map_defs in
-          let tty' = match tbl.tty.raw_ty with
-            | TTable(tbl_ty) -> {tbl.tty with raw_ty=TTable({tbl_ty with tparam_tys = [];})}
-            | _ -> error "[table-action inlining] table object does not have table type."
-          in
-
-          let tactions' = List.fold_left2
-            (fun tactions' id ty -> tactions'@[CoreSyntax.exp_of_id id ty])
-            []
-            (List.split acn_fcn_idmap |> snd)
-            (List.map (fun eacn -> eacn.ety) tbl.tactions)
-          in
-
-          let tbl' = {tbl with 
-            tty = tty';
-            tactions = tactions';
-            tdefault = (
-              (List.assoc (Cid.to_id (fst tbl.tdefault)) acn_fcn_idmap |> Cid.id),
-              (snd tbl.tdefault));} 
-          in 
-          let tbl_decl = tdecl_of_decl
-            (CoreSyntax.dglobal_sp 
-              tbl_id 
-              tbl'.tty 
-              (CoreSyntax.exp (ETableCreate(tbl')) tbl'.tty) 
-              Span.default)
-          in
-          (* we have the new actions and table...
-            the match statement doesn't actually need to change. 
-            The args and outs aren't really needed, but we can leave 
-            them for debugging. *)
-          new_decls := (!new_decls)@acn_decls@[tbl_decl];
-          stmt)
-        | _ -> 
-          stmt
-    end
+      method! visit_EVar renames cid =
+        match (IdMap.find_opt (Cid.to_id cid) renames) with
+        | None -> EVar(cid)
+        | Some(id') -> EVar(Cid.id id')
+      end
   in
-  let main_decl' = inliner#visit_tdecl env main_decl in
-  (!new_decls)@[main_decl']
+  evar_replacer#visit_exp renames exp
 ;;
 
-
-let rec _process env tdecls =
-  match tdecls with
-    | [] -> []
-    | tdecl::tdecls -> (
-      match tdecl.td with
-      (* process_main will generate copies of this action as needed, 
-         so delete it. *)
-      | TDAction(acn) -> 
-        let actions' = (acn.aid, acn)::env.actions in
-        (_process {env with actions=actions'} tdecls)
-      (* process_main will generate a new copy of this table, 
-         using the new actions, as needed. So delete it. *)
-      | TDGlobal(_, _, {e=ETableCreate(tbl);}) -> 
-        let tables' = (tbl.tid, tbl)::env.tables in
-        (_process {env with tables=tables'} tdecls)
-      | TDMain(_) -> 
-        (process_main env tdecl)@(_process env tdecls)
-      | _ -> 
-        tdecl::(_process env tdecls)
-    )
+(* create a table-local copy of an action *)
+let copy_action ctx aid aid' =
+  let acn_decl = IdMap.find aid ctx.actions in
+  match acn_decl.d with
+    | DAction(acn_def) -> 
+      {acn_decl with d=
+        DAction({acn_def with aid=aid';});}
+    | _ -> error "[copy_action] found a non-action in the action map"
 ;;
 
-let process tdecls =
-  _process empty_env tdecls
+(* rename actions in a statement *)
+let rename_actionvars renames decl = 
+  let evar_replacer =
+    object (_)
+      inherit [_] s_map as super
+      method! visit_STableInstall renames tbl entries =
+        let local_renames = get_renames (id_of_exp tbl) renames in
+        let entries' = List.map 
+          (fun entry -> {entry with
+            eaction = IdMap.find (entry.eaction) local_renames;})
+          entries
+        in 
+        STableInstall(tbl, entries')
+      end
+  in
+  evar_replacer#visit_decl renames decl
+;;
+
+let update_decl ctx decl : replace_ctx * decls =
+  match decl.d with
+  (* actions -- add action to context and remove from prog *)
+  | DAction({aid=aid; _}) -> 
+    add_action aid decl ctx, []
+  (* table constructors -- create bindings, update context, update local actions *)
+  | DGlobal(tid, tty, {e=ETableCreate(tdef); ety=ety; espan=espan;}) -> 
+    let aids = List.map id_of_exp tdef.tactions in
+    let new_aids = List.map (new_aid tid) aids in
+    let ctx = add_tableaction_renames tid aids new_aids ctx in
+    let tdefault' = 
+      ( IdMap.find (Cid.to_id (fst tdef.tdefault)) (get_renames tid ctx) |> Cid.id
+      , snd tdef.tdefault)
+    in
+    let tactions' = 
+      List.map (rename_actionexp (get_renames tid ctx)) tdef.tactions
+    in
+    (* new table definition *)
+    let tdef' = {tdef with 
+      tactions = tactions';
+      tdefault = tdefault';}
+    in
+    (* new action definitions -- copies of original actions, 
+       with local names.*)
+    let actions = List.map2 (copy_action ctx) aids new_aids in
+    ctx, actions@[{decl with d=DGlobal(tid, tty, {e=ETableCreate(tdef'); ety; espan})}]
+  (* everything else -- rename action vars wherever they appear (table_install, mainly) *)
+  | _ -> 
+    ctx, [rename_actionvars ctx decl]
+;;
+
+let process ds = 
+  List.fold_left 
+    (fun (ctx, new_ds) d -> 
+      let ctx', d' = update_decl ctx d in
+      ctx', new_ds@d')
+    (empty_ctx, [])
+    ds
+  |> snd
 ;;

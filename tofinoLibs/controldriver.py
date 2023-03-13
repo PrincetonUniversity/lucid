@@ -1,10 +1,10 @@
 from ctypes import *
 from pathlib import Path
 
-DEBUG=False
+DEBUG=True
 
 # example usage. note that if you wrap 
-# this in a main function, locals must change to globals
+# this in a main function, dict(locals) must change to dict(globals)
 
 ## pass a script with these contents to bf_switchd with the -b flag, 
 ## or launch it with bfshell after bf_switchd has 
@@ -18,6 +18,12 @@ DEBUG=False
 # c.add_multicast_group(611, [(129, 0), (130, 0)])
 # c.cleanup() # only cleanup if you want to delete rules
 # c.close()
+
+# updates: 
+# 2/24/23: added support for ternary keys
+# 2/24/23: changed all dictionary keys to bytes
+# 2/24/23: support adding exact entries to ternary tables
+
 
 class Controller(object):
   """ the high-level controller interface. 
@@ -46,7 +52,7 @@ class Controller(object):
   def cleanup(self):
     dprint ("deleting {0} entries".format(len(self.installed_entries)))
     for (tbl, key_hdl) in self.installed_entries:
-      dprint ("deleting entry from table: {0}".format(tbl.name))
+      dprint ("deleting entry from table: {0}".format(tbl.name.decode('ascii')))
       tbl.del_entry(key_hdl)
   def close(self):
     self.libc.close_session()
@@ -54,7 +60,7 @@ class Controller(object):
   def add_multicast_group(self, mc_gid, ports_rids):
     """Add a basic multicast group that clones to all (port, rid) in ports_rids"""
     print ("[add_multicast_group] adding mc group: {0}--> [{1}]".format(str(mc_gid), str(ports_rids)))
-    node_tbl = self.tables["$pre.node"]
+    node_tbl = self.tables[b'$pre.node']
     node_ids = []
     for i, (port, rid) in enumerate(ports_rids):    
       node_id = self.next_mc_node_id
@@ -64,7 +70,7 @@ class Controller(object):
         {b'$MULTICAST_NODE_ID':node_id}, None,
         {b'$DEV_PORT':[port], b'$MULTICAST_RID':rid})
       self.installed_entries.append(key_hdl)
-    mc_tbl = self.tables["$pre.mgid"]
+    mc_tbl = self.tables[b'$pre.mgid']
     key_hdl = mc_tbl.add_entry({b'$MGID':mc_gid}, None,
       {b'$MULTICAST_NODE_ID':node_ids,
        b'$MULTICAST_NODE_L1_XID':[0 for i in ports_rids],
@@ -83,7 +89,7 @@ class BfRtTable:
       self.bf_rt_id = self._cintf.table_id_get(self._handle).value
       self.has_const_default_action = self._cintf.table_has_const_default_action(self._handle)
 
-      dprint ("TABLE %s"%(self.name))
+      dprint ("TABLE %s"%(self.name.decode('ascii')))
       ### loading table definitions ###
       self.load_key()
       self.load_actions()
@@ -195,10 +201,23 @@ class BfRtTable:
             else:
               print ("unexpected: key field pointer")
           else:
-            print ("unexpected: key field i string")
+            print ("unexpected: key field is string")
         elif (key_type_map(field_info["type"]) == "TERNARY"):
-          # TODO: ternary matches
-          print ("UNIMPLEMENTED: ternary key fields")
+          if (data_type_map(field_info["data_type"]) != "String"):
+            if (not field_info["is_ptr"]):
+              # default mask is 2^(size) - 1 (e.g., 0xff for an 8-bit field)
+              value, mask = 0, ((1<<field_info["size"]) - 1)
+              if (type(field_val) == tuple):
+                value, mask = field_val
+              dprint ("ternary key column: (value:%s, mask%s)"%(value, mask))
+              value = c_ulonglong(value)
+              mask = c_ulonglong(mask)
+              self._cintf.key_field_set_value_and_mask(key_hdl, field_info["id"], value, mask)
+              continue
+            else:
+              print ("unexpected: key field pointer")
+          else:
+            print ("unexpected: key field is string")
         else:
           # TODO: other match types
           print ("unexpected key field type")
@@ -271,7 +290,7 @@ class BfRtTable:
       # key : dict( name_string -> match val(for exact) | match tuple(for ternary / range / etc))
       # action_name : string
       # args : dict (name_string -> arg val)
-      dprint ("add entry in %s"%self.name)
+      dprint ("add entry in %s"%self.name.decode('ascii'))
       key_hdl = self.create_key(key)
       if (action_name != None):
         succ, data_hdl = self.create_action(action_name, args)
@@ -281,9 +300,9 @@ class BfRtTable:
           self._cintf.table_data_deallocate(data_hdl)        
           return self, None
         dprint ("calling table_entry_add")
-        retcode = cintf_table_add(key_hdl, data_hdl)
+        retcode = self.cintf_table_add(key_hdl, data_hdl)
         if (retcode != 0):
-          print ("WARNING: table_entry_add failed")
+          print ("WARNING: table_entry_add failed. retcode: %i"%retcode)
           self._cintf.table_key_deallocate(key_hdl)
           self._cintf.table_data_deallocate(data_hdl)
           return self, None
@@ -404,8 +423,8 @@ class LibcInterface(object):
       tables = {}
       for table_hdl in self.tables_get_array(prog_handle):
         tbl_obj = BfRtTable(self, table_hdl)      
-        tables[tbl_obj.name.decode('ascii')] = tbl_obj
-      self.progs[name.decode('ascii')] = tables
+        tables[tbl_obj.name] = tbl_obj
+      self.progs[name] = tables
 
   def start_session(self):
     self._session = self.sess_type()
@@ -503,6 +522,7 @@ class LibcInterface(object):
     ]
     method_sigs = [
       ("key_field_set_value", self._driver.bf_rt_key_field_set_value),
+      ("key_field_set_value_and_mask", self._driver.bf_rt_key_field_set_value_and_mask),
       ("bf_rt_container_data_field_list_get", self._driver.bf_rt_container_data_field_list_get),
       ("data_field_set_value_ptr", self._driver.bf_rt_data_field_set_value_ptr),
       ("data_field_set_value", self._driver.bf_rt_data_field_set_value),

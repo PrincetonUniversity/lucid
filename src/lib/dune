@@ -22,6 +22,7 @@
    console
    id
    cid
+   taggedCid
    input
    integer
    span
@@ -31,6 +32,8 @@
    parser
    lexer
    syntax
+   globalConstructorTagging
+   globalDirectory
    syntaxUtils
    coreSyntax
    sourceTracking
@@ -107,6 +110,7 @@
    EliminateExitEvents
    TofinoCore
    TofinoCoreForms
+   TofinoControl
    InlineEventVars
    SolitaryMatches
    Generates
@@ -114,6 +118,7 @@
    RegularizeMemops
    ShareMemopInputs
    SingleTableMatch
+   ActionsToFunctions
    InlineTableActions
    MatchAlgebra
    CoreCfg
@@ -128,9 +133,12 @@
    CoreToP4TofinoHeaders
    CoreToP4Tofino
    P4TofinoPrinting
+   P4TofinoGlobalDirectory
    ControlPrinter
    ParsePortSpec
-   ParseGenerators
+   cEventLib
+   pyEventLib
+   pyControlLib
    )
  (preprocess
     (staged_pps ppx_import visitors.ppx ppx_deriving.show ppx_deriving.std ppx_string))

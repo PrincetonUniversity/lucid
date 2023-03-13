@@ -157,7 +157,7 @@ def find_file(fn):
 def check_manifest(build):
     # check the manifest from P4 -> Tofino compilation 
     # to see if it succeeded.
-    tofino_manifest = "%s/lucid/manifest.json"%build
+    tofino_manifest = "%s/lucid_tofino/manifest.json"%build
     manifest = json.load(open(tofino_manifest, "r"))
     return manifest["compilation_succeeded"]
 

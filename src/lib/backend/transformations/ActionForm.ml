@@ -121,12 +121,15 @@ let process_table_match stmt : statement option =
       match tm_stmt.s with
       | STableMatch(_) -> 
         if (nocall_val <> Z.of_int 0) then (error "[ActionForm.process_table_match] table_match doesn't test against zero.");
+        let var_sz = size_of_tint (tbl_call_var.ety) in
+        let if_exp = (op_sp Neq [tbl_call_var; (vint_exp (Z.to_int nocall_val) var_sz)]
+              tbl_call_var.ety Span.default)
+        in
         let if_stmt = 
             sifte
-              (op_sp Neq [tbl_call_var; (vint_exp (Z.to_int nocall_val) (Z.size nocall_val))]
-              tbl_call_var.ety Span.default)
-            (tm_stmt)
-            (snoop)
+              if_exp
+              (tm_stmt)
+              (snoop)
         in
         Some if_stmt
       | _ -> None

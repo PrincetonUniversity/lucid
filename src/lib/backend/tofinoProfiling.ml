@@ -11,7 +11,7 @@ let error s = raise (Error s)
 let export_dfg ds dfg_json_fn = 
   (* first, run all the transformation and optimization passes *)
   let ds = ds 
-    |> TofinoPipeline.core_passes 
+    |> TofinoPipeline.common_midend_passes 
     |> tdecls_of_decls
     |> (TofinoPipeline.tofinocore_normalization true) 
   in
@@ -23,7 +23,7 @@ let profile ds portspec output_dir profile_cmd =
 
   (* first, run all the transformation and optimization passes *)
   let ds = ds 
-    |> TofinoPipeline.core_passes 
+    |> TofinoPipeline.common_midend_passes 
     |> tdecls_of_decls
     |> (TofinoPipeline.tofinocore_normalization true) 
   in

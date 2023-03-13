@@ -25,13 +25,6 @@
            2) a match statement that branches on callnum, 
               executing the sequence of statements that 
               go after each callnum.
-
-    This is an implementation on a toy language. 
-      TODO: - port to Lucid IR. 
-            - Add code to set table input when cutting a table. 
-            - Add code to read table output after merged call -- depends on continuation.
-            - Extend lucid layout engine (and other parts?) to special case user-tables
-                -- put them in their own table and gateway them on the appropriate variable.
 *)
 
 open CoreSyntax
@@ -44,6 +37,34 @@ let rec tables_in_prog (tds:TC.tdecls) =
   | {td=TDGlobal(_, _, {e=ETableCreate(tbl_def); _}); _}::tds' -> 
     tbl_def::(tables_in_prog tds')
   | _::tds' -> tables_in_prog tds'
+
+let tables_matched_in_prog (tds:TC.tdecls) =
+  let tbl_ids = ref [] in
+  let v =
+    object
+      inherit [_] TC.s_iter as super
+      method! visit_tbl_match _ tm =
+        tbl_ids := (tm.tbl |> CoreSyntax.exp_to_id)::(!tbl_ids)
+    end
+  in
+  v#visit_tdecls () tds;
+  !tbl_ids |> MiscUtils.unique_list_of
+;;
+
+let tables_defined_and_used_in_prog tds =
+  let defined_tbls = tables_in_prog tds in
+  let used_ids = tables_matched_in_prog tds in
+  let defined_and_used_tbls = List.filter
+    (fun tdef -> List.exists (fun id -> id = tdef.tid) used_ids)
+    defined_tbls
+  in
+  defined_and_used_tbls
+(*   if (List.length defined_tbls) <> (List.length defined_and_used_tbls)
+  then (error "some declared tables are not used in the program!")
+  else (defined_and_used_tbls)
+ *)
+
+;;
 
 
 let evar_to_id exp = match exp.e with
@@ -458,15 +479,16 @@ let process_table stmt tbl =
   merge_table_matches tbl n_calls stmt, iovars_of_table tbl
 ;;
 
+(* this pass produces buggy code when tables are not used in any event *)
 let process tds =
 (*   print_endline("starting single table match transformation...");
   print_endline("----- prog -----");
   print_endline (TC.tdecls_to_string tds);
- *)  let tbls = tables_in_prog tds in 
+ *)  let tbls = tables_defined_and_used_in_prog tds in 
   let main = TC.main tds in
   if (List.length main.main_body > 1)
   then (error "[SingleTableMatch] the main handler in this program is organized into multiple stages, but this pass should be run before staging.");
-  (* for each statement, we transform the body and add the table's io and branch variables.*)
+  (* combine all the table matches for one table at a time *)
   let main_body', tbl_iovars = List.fold_left
     (fun (main_body, tbl_iovars) tbl -> 
       let main_body, new_iovars = process_table main_body tbl in

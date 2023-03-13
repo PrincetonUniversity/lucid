@@ -14,13 +14,8 @@ module StringSet = Set.Make (String)
    This transformation may not be necessary anymore. *) 
 
 let make_var_names_unique ds =
-  (* Each time we reach a function-like thing, i.e., 
-     something with parameters (an event or memop), 
-     store the parameter ids in the context. 
-     Each time we reach an id in the body of a function-like, 
-     either claim ownership of the id's name for the id, 
-     or if the name is claimed by another id, change the 
-     id's name to id.name^str_of_int(id.num) *)
+  (* to skip parameters, we store the parameter ids 
+     of actions, memops, and handlers in context. *)
   let owner_of_name = ref StringMap.empty in
   let v =
     object (self) 
@@ -37,6 +32,12 @@ let make_var_names_unique ds =
       method! visit_DMemop _ {mid=mid; mparams=mparams; mbody=mbody;} = 
         let mbody = self#visit_memop_body (CL.split mparams |> fst) mbody in 
         DMemop({mid; mparams; mbody})
+
+      (* Save the parameters of the action in the context *)
+      method! visit_DAction _ acn =
+        super#visit_DAction
+          (CL.split (acn.aconst_params@acn.aparams) |> fst)
+          acn
 
       method! visit_params _ params = params     
 

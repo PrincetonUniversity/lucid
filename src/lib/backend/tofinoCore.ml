@@ -28,6 +28,8 @@ let error s = raise (Error s)
 
 type id = [%import: (Id.t[@opaque])]
 and cid = [%import: (Cid.t[@opqaue])]
+and tagval = [%import: (TaggedCid.tagval[@opqaue])]
+and tcid = [%import: (TaggedCid.t[@opqaue])]
 and sp = [%import: Span.t]
 and z = [%import: (Z.t[@opaque])]
 and zint = [%import: (Integer.t[@with Z.t := (Z.t [@opaque])])]
@@ -91,15 +93,15 @@ and main_handler = {
     hdl_selector : (id * ty);
     hdl_enum : (id * int) list;
     hdl_params : (id * params) list;
-    default_hdl : id option;
     shared_locals : (id * ty) list;
+    default_hdl : id option;
     main_body : statement list;
     event_output : event_output;
     }
 
 and event_output = {
-  (* count the number of recirc / self events 
-     generated on this path *)
+  (* counter variable for the number 
+     of recirc / self events generated *)
   recirc_mcid_var : (id * ty);
   (* all possible sequences of events 
      that this program can generate. *)
@@ -137,11 +139,11 @@ let tdecl_of_decl decl =
   | DAction(a) -> {td=TDAction(a); tdspan = decl.dspan; tdpragma = decl.dpragma;}
 ;;
 
-module Seq = Core.Sequence
+(* module Seq = Core.Sequence *)
 
 let dbgstr_of_ids cids = List.map (Id.to_string) cids |> String.concat ", ";;
 
-let seq_eq eq s1 s2 = 
+(* let seq_eq eq s1 s2 = 
   match ((Seq.length s1) = (Seq.length s2)) with
   | true -> 
     Seq.fold
@@ -151,148 +153,110 @@ let seq_eq eq s1 s2 =
   | false -> false
 ;;
 let idseq_eq = seq_eq (Id.equal)
-
-let dprint_seqs res = 
-  Seq.iter res 
-    ~f:(fun pathseq -> 
-      let plen = Seq.length pathseq in 
-      print_endline@@"path: ("^(string_of_int plen)^") elements "^(dbgstr_of_ids (Seq.to_list pathseq)))
-;;
-
-
-(* find all the possible sequences of events that get generated *)
-let rec find_ev_gen_seqs statement : id Core.Sequence.t Core.Sequence.t = 
-  match statement.s with 
-  | SGen(_, ev_exp) -> (
-    match ev_exp.e with 
-    | ECall(ev_cid, _) -> (
-      let res = Seq.of_list [Seq.of_list [Cid.to_id ev_cid]] in 
-      res
-    )
-    | _ -> error "[find_ev_gen_seqs] event should be a call by this point"
-  )
-  | SIf(_, s1, s2) ->
-    (* make sure we only find the _unique_ paths *)
-    let res = Seq.append (find_ev_gen_seqs s1) (find_ev_gen_seqs s2) in
-    let res = MiscUtils.unique_seq_of idseq_eq res in
-    (* print_endline ("IF"); *)
-    (* dprint_seqs res; *)
-    res    
-    (* |> (MiscUtils.unique_seq_of idseq_eq) *)
-  | SMatch(_, branches) -> 
-    let res = List.fold_left 
-      (fun seqs (_, stmt) -> Seq.append seqs (find_ev_gen_seqs stmt)) 
-      Seq.empty 
-      branches 
-    in
-    let res = MiscUtils.unique_seq_of idseq_eq res in
-    (* print_endline ("MATCH"); *)
-    (* dprint_seqs res; *)
-    res    
-    (* |> (MiscUtils.unique_seq_of idseq_eq) *)
-
-  | SSeq(s1, s2) -> (
-    let seqs_s1 = find_ev_gen_seqs s1 in
-    let seqs_s2 = find_ev_gen_seqs s2 in
-    (* for each sequence in s1:
-        for each sequence in s2:
-          create a new sequence: s1@s2
-    *)
-    let res = match Seq.length seqs_s1, Seq.length seqs_s2 with
-      | (0, 0) -> seqs_s1
-      | (_, 0) -> seqs_s1
-      | (0, _) -> seqs_s2
-      | (_, _) -> (
-        (* print_endline ("seqs_s1 and seqs_s2 are both nonempty."); *)
-        Seq.fold seqs_s1
-          ~init:(Seq.of_list [Seq.empty])
-          ~f:(fun merged_seqs s1_seq -> 
-            Seq.fold seqs_s2
-            ~init:merged_seqs
-            ~f:(fun merged_seqs s2_seq -> 
-              let res = Seq.append merged_seqs (Seq.of_list [(Seq.append s1_seq s2_seq)]) in
-              (* print_endline ("inner loop result: "); *)
-              (* dprint_seqs res; *)
-              res
-            )
-          )
-        )
-    in
-    (* print_endline "AFTER FOLD"; *)
-    (* dprint_seqs res; *)
-
-(*     let update_seqs seqs seq = 
-      Seq.map seqs (fun s -> Seq.append seq s)
-    in 
  *)
-(*     let res = Seq.fold 
-      seqs_s2
-      ~init:(Seq.of_list [Seq.empty])
-      ~f:(fun new_seqs_s1 seq -> 
-        Seq.append new_seqs_s1 (update_seqs seqs_s1 seq)
-      )
-    in *)
-    let res = MiscUtils.unique_seq_of idseq_eq res in
-(*     print_endline "AFTER UNIQUE";
-    dprint_seqs res;
-    (match (s1.s, s2.s) with 
-    | SGen(_), _ -> (
-      print_endline ("SEQ");
-      print_endline ("---------");
-      print_endline (CorePrinting.stmt_to_string statement);
-      print_endline ("---------");
-      print_endline ("s1 results: ");
-      dprint_seqs seqs_s1;
-      print_endline ("s2 results: ");
-      dprint_seqs seqs_s2;
-      print_endline ("merged results: ");
-      dprint_seqs res;
-      exit 1;
-    )
-    | _, SGen(_) -> (
-      print_endline ("SEQ");
-      print_endline ("---------");
-      print_endline (CorePrinting.stmt_to_string statement);
-      print_endline ("---------");
-      print_endline ("s1 results: ");
-      dprint_seqs seqs_s1;
-      print_endline ("s2 results: ");
-      dprint_seqs seqs_s2;
-      print_endline ("merged results: ");
-      dprint_seqs res;
-      exit 1;
-    )
-    | _, _ -> ()
-    ); *)
-    (* let res = res |> (MiscUtils.unique_seq_of idseq_eq) in *)
+let printres title res = 
+  print_endline ("---at code---"^title);
+  List.iter
+    (fun gen_seq -> 
+      print_endline ("events generated: ");
+      CorePrinting.comma_sep 
+        CorePrinting.exp_to_string 
+        gen_seq |> print_endline)
+    res;
+  print_endline ("------");
+;;
+
+let rec append_to_all seqs stmt =
+  match seqs with
+  | [] -> []
+  | seq::seqs -> 
+    (seq@[stmt])::(append_to_all seqs stmt)
+;;
+
+let append_or_start seqs stmt =
+  match seqs with
+  (* if there's nothing, make a new seq *)
+  | [] -> [[stmt]]
+  (* if there's something, append to first and recurse *)
+  | seq::seqs -> 
+    (seq@[stmt])::(append_to_all seqs stmt)
+;;
+
+(* find all paths of statements that match the filter *)
+let rec find_statement_paths paths_so_far stmt_filter stmt =
+  match stmt.s with
+  | SSeq(s1, s2) -> 
+    let seqs_after_s1 = find_statement_paths paths_so_far stmt_filter s1 in
+    (* [[eva()]] *)
+    (* [[eva()]] *)
+    let res = find_statement_paths seqs_after_s1 stmt_filter s2 in
+    (* printres "seq" res; *)
     res
-
-(*     List.fold_left 
-      (fun new_seqs_s1 seq -> 
-        Seq.append new_seqs_s1 (update_seqs seqs_s1 seq)
-      )
-      Seq.of_list [Seq.empty]
-      seqs_s2
-    in *)
-    (* Seq.of_list [Seq.empty] *)
-    )
-  (* no events in rest *)
-  | _ -> Seq.of_list [Seq.empty]
-;;
-
-let find_ev_gen_lists statement = 
-  let res = Seq.map (find_ev_gen_seqs statement) 
-    ~f:(fun inner_seq -> Seq.to_list inner_seq)
-  |> Seq.to_list
-  in
-(*   print_endline ("[find_ev_gen_lists] result: ");
-  List.iter (fun idlist -> 
-    idlist |> List.map Id.to_string |> String.concat ", " |> print_endline;
+  | SIf(_, s1, s2) -> 
+    (* we get all paths for s1 + all paths for s2 *)
+    let res = (find_statement_paths paths_so_far stmt_filter s1)
+      @
+      (find_statement_paths paths_so_far stmt_filter s2)
+    in
+    (* printres "sif" res;  *)
+    res
+  | SMatch(_, ps) -> 
+    let res = List.fold_left
+      (fun seqs (_, bstmt) -> 
+        seqs@(find_statement_paths paths_so_far stmt_filter bstmt))
+      []
+      ps
+    in
+    res
+  | _ -> (
+    match (stmt_filter stmt) with
+    | Some r -> append_or_start paths_so_far r
+    | None -> paths_so_far
   )
-  res;
-  exit 1; *)
-  res
 ;;
+
+let find_generate_sequences stmt = find_statement_paths
+  []
+  (fun stmt -> match stmt.s with 
+  | SGen(_, {e=ECall(ev_cid, _)}) -> Some(Cid.to_id ev_cid)
+  | _ -> None)
+  stmt
+;;
+
+
+let test_gen_sequencer () = 
+  print_endline ("TESTING GEN SEQUENCER");
+  let eva = call_sp (Cid.create ["eva"]) [] (ty TEvent) (Span.default) in
+  let evb = call_sp (Cid.create ["evb"]) [] (ty TEvent) (Span.default) in
+  let evc = call_sp (Cid.create ["evc"]) [] (ty TEvent) (Span.default) in
+  let evd = call_sp (Cid.create ["evd"]) [] (ty TEvent) (Span.default) in
+  let stmt = 
+    sseq 
+      (gen_sp (GSingle(None)) eva Span.default)
+      (sseq 
+        (sifte
+          (eva)
+          (gen_sp (GSingle(None)) evb Span.default)
+          (gen_sp (GSingle(None)) evc Span.default))
+        (gen_sp (GSingle(None)) evd Span.default))
+  in
+  let _ = find_generate_sequences stmt in
+  ()
+  (* test... *)
+(*   List.iter
+    (fun gen_seq -> 
+      print_endline ("events generated: ");
+      CorePrinting.comma_sep 
+        CorePrinting.exp_to_string 
+        (gen_seq |> List.split |> snd) |> print_endline)
+    gen_seqs;
+  print_endline ("------");
+  let _ = find_ev_gen_lists stmt in 
+  exit 1;
+ *)
+;;
+
+(* test_gen_sequencer  ();; *)
 
 (* generate the main handler *)
 let add_main_handler decls =
@@ -349,7 +313,8 @@ let add_main_handler decls =
   in 
   let event_output = {
     recirc_mcid_var = (Id.create "recirc_mcid", (ty (TInt 16)));
-    ev_gen_seqs = find_ev_gen_lists (List.hd main_body) |> MiscUtils.unique_list_of;
+    ev_gen_seqs = find_generate_sequences (List.hd main_body) |> MiscUtils.unique_list_of;
+    (* ev_gen_seqs = find_ev_gen_lists (List.hd main_body) |> MiscUtils.unique_list_of; *)
   } 
   in
   let tds =(erase_handler_bodies decls)
@@ -409,7 +374,7 @@ let add_lib_handler decls =
   in 
   let event_output = {
     recirc_mcid_var = (Id.create "recirc_mcid", (ty (TInt 16)));
-    ev_gen_seqs = find_ev_gen_lists main_body |> MiscUtils.unique_list_of;
+    ev_gen_seqs = find_generate_sequences main_body |> MiscUtils.unique_list_of;
   } 
   in
   let tds =(erase_handler_bodies decls)
@@ -550,7 +515,18 @@ let dump_prog fn tds =
   flush outf
 ;;
 
-
+(* TODO: the two functions below can make 
+   coreToP4Tofino.extract_recirc_event_table more efficient *)
+(* how many generates are there? *)
+(* let num_plain_generates_in_program tds =
+  0
+;;
+ *)
+(* which events get used with generate_port or ports? *)
+(* let port_generate_events tds = 
+  []
+;;
+ *)
 
 (* 
   (draft)

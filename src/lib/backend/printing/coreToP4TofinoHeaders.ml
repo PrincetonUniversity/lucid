@@ -101,14 +101,21 @@ let multi_ev_arg = Cid.create_ids [hdr_t_arg; multi_ev_field]
 let port_out_event_field = id "port_event_id"
 let port_out_event_width = cur_ev_width
 let port_out_event_arg = Cid.concat multi_ev_arg (Cid.id port_out_event_field)
+let port_out_event_arg_e = T.evar_ty port_out_event_arg (T.TInt(cur_ev_width))
 
+(* this references fields in dmulti_ev_struct *)
 let handler_multi_ev_flag_arg evid = Cid.concat multi_ev_arg (Cid.id evid)
-let event_bridged_arg evid = handler_multi_ev_flag_arg evid
+let handler_multi_ev_flag_width = 1
+
+let handler_multi_ev_flag_arg_e evid = 
+  evar_ty 
+    (handler_multi_ev_flag_arg evid) 
+    (TInt handler_multi_ev_flag_width)
 
 let dmulti_ev_struct evids =
-  let flag_fields = List.map (fun (evid) -> (evid, tint 1)) evids in
+  let flag_fields = List.map (fun (evid) -> (evid, tint handler_multi_ev_flag_width)) evids in
   let multi_ev_pad_field = 
-    (Id.fresh_name "flag_pad", tint (8 - (List.length flag_fields) mod 8))
+    (Id.fresh_name "flag_pad", tint (8 - ((List.length flag_fields)*handler_multi_ev_flag_width) mod 8))
   in
   dstruct 
     multi_ev_t THdr 
@@ -281,7 +288,7 @@ let generate_ingress_parser block_id (m:main_handler) lucid_internal_ports =
     } 
   in 
   let default_setup_state = DParseState
-  (* case: packet on non-lucid port. 
+  (* case: packet arrives on non-lucid port. 
            1. enable empty ethernet header 
            2. enable single_lucid_event header 
            3. set event type to default_ev (if there's a default event)
@@ -399,7 +406,7 @@ let generate_ingress_parser block_id (m:main_handler) lucid_internal_ports =
 
   let decls = 
     List.map 
-      (fun d -> {d=d; dpragma=[];})
+      P4TofinoSyntax.decl
       ([start_state; default_setup_state; eth_state; single_ev_state]@parse_ev_states@[parse_all_events_state]) 
   in 
   decl (DParse({id=block_id; params=ingress_parser_params; decls; body=None;}))
@@ -472,7 +479,10 @@ let rid_field = id "egress_rid"
 let egress_port_field = id "egress_port"
 
 let rid_local = Cid.create_ids [eg_intr_md; rid_field]
+let rid_local_e = T.evar_ty rid_local (T.TInt(16))
+
 let egress_port_local = Cid.create_ids [eg_intr_md; egress_port_field]
+let egress_port_local_e = T.evar_ty egress_port_local (T.TInt(9))
 
 let eg_prsr_md_t = id "egress_intrinsic_metadata_from_parser_t"
 let eg_prsr_md = id "eg_prsr_md"
@@ -493,12 +503,12 @@ let egress_parser_params = [
 open Batteries
 
 
-(* assuming there is a flag for each ev in evid, 
-   generate a pattern of flag values corresponding 
-   to the generation of the subset of evids in 
-   evid_seq *)
+(* construct the pattern of flag values corresponding 
+   to generating the sequence of events in evid_seq *)
 let intpats_of_evseq evids evid_seq =
+  (* [0 for i in evids] *)
   let base_flagpat = List.map (fun _ -> 0) evids in 
+  (* [] *)
   List.fold_left (fun flagpat evid ->
       let idx = (List.index_of evid evids |> Option.get) in
       List.modify_at idx (fun _ -> 1) flagpat
@@ -510,7 +520,20 @@ let intpats_of_evseq evids evid_seq =
 (*generate the transition statement for egress *)
 let eventset_parse_tree tds =
   let evids = (main tds).hdl_enum |> List.split |> fst in 
-  let event_id_sequences = (main tds).event_output.ev_gen_seqs in 
+  let event_id_sequences = (main tds).event_output.ev_gen_seqs in
+  (* add the sequence where all events are generated, if it is not there, 
+     to prevent p4c from overlaying event headers in egress *)
+  let event_id_sets = List.map MiscUtils.unique_list_of event_id_sequences in
+  let contains_generate_all = List.fold_left
+    (fun acc event_id_seq -> 
+      acc || (MiscUtils.list_eq event_id_seq evids))
+    false
+    event_id_sets
+  in
+  let event_id_sequences = if (contains_generate_all)
+    then (event_id_sequences)
+    else (event_id_sequences@[evids])
+  in
 
   (* generate a parse state, transition statement, and pattern list *)
   let generate_objs_for_evseq (i:int) (generated_evids:Id.t list) =

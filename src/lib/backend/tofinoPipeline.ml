@@ -40,6 +40,37 @@ let dbg_dump_core_prog phasename ds =
     flush outf)
 ;;  
 
+
+(* perform midend passes that must be done before splitting 
+   the program into a control and data plane component. 
+   After this point, the ids of globals and actions 
+   should not change.  *)
+let common_midend_passes ds =
+  mk_ir_log_dirs ();
+  dbg_dump_core_prog "midend" ds;
+  let ds = EliminateEventCombinators.process ds in
+  (* 1. make sure handlers always have the same params as their events *)
+  let ds = UnifyHandlerParams.rename_event_params ds in 
+  let ds = UnifyHandlerParams.unify_event_and_handler_params ds in 
+  (* let ds = AlignEventParams.process ds in *)
+  (* 2. convert exit events to regular events *)
+  let ds = EliminateExitEvents.process ds in 
+  (* 3. inline event variables. NOTE: this pass is broken for 
+        event variables that are changed conditionally in 
+        subsequent control flow. *)
+  let ds = InlineEventVars.inline ds in 
+  InlineTableActions.process ds 
+;;
+
+let print_if_debug ds =
+  if (!verbose)
+  then (
+    print_endline "decls: ";
+    let str = CorePrinting.decls_to_string ds in
+    Console.report str)
+;;
+
+
 (* run the tofino branch of MidendPipeline.ml *)
 (* these passes are basically about converting 
    expressions into simpler forms, so that every 
@@ -50,20 +81,26 @@ let tofino_midend_pipeline ds =
   let print_if_verbose = MidendPipeline.print_if_verbose in
   print_if_verbose "-------Eliminating extern calls--------";
   let ds = EliminateExterns.eliminate_externs ds in 
+  print_if_debug ds;
   print_if_verbose "-------Eliminating value cast ops--------";
   let ds = EliminateValueCasts.eliminate_value_casts ds in 
+  print_if_debug ds;
   print_if_verbose "-------Eliminating range relational ops--------";
   let ds = EliminateEqRangeOps.transform ds in
   let ds = PoplPatches.eliminate_noncall_units ds in
   let ds = PoplPatches.delete_prints ds in
+  print_if_debug ds;
   print_if_verbose "-------Adding default branches--------";
   let ds = AddDefaultBranches.add_default_branches ds in
   MidendPipeline.print_if_debug ds;
+  print_if_debug ds;
   print_if_verbose "-------Breaking down compound expressions--------";
+  (* ! means dref lol *)
   let ds = if (!do_const_branch_vars)
-    then ( PartialSingleAssignment.const_branch_vars ds)
+    then (PartialSingleAssignment.const_branch_vars ds)
     else (ds)
   in
+  print_if_debug ds;
 (*   dbg_dump_core_prog "BeforeConstBranchVars" ds;
   dbg_dump_core_prog "AfterConstBranchVars" ds; *)
   (* MidendPipeline.print_if_debug ds; *)
@@ -79,27 +116,13 @@ let tofino_midend_pipeline ds =
   let ds = UniqueSpans.make_unique_spans ds in
   (* make sure that all variables in the program have unique names. 
       for non-unique ids, bring the variable's number into the name *)
+  (* I bet this is breaking actions args... *)
+  print_if_verbose "-------making var names unique--------";
   let ds = UniqueIds.make_var_names_unique ds in 
+  print_if_debug ds;
   ds
 ;;
 
-(* a bit of cleanup. Events are not handled well here. *)
-let core_passes ds = 
-    mk_ir_log_dirs ();
-    dbg_dump_core_prog "midend" ds;
-    let ds = EliminateEventCombinators.process ds in
-    (* 1. make sure handlers always have the same params as their events *)
-    let ds = UnifyHandlerParams.rename_event_params ds in 
-    let ds = UnifyHandlerParams.unify_event_and_handler_params ds in 
-    (* let ds = AlignEventParams.process ds in *)
-    (* 2. convert exit events to regular events *)
-    let ds = EliminateExitEvents.process ds in 
-    (* 3. inline event variables. NOTE: this pass is broken for 
-          event variables that are changed conditionally in 
-          subsequent control flow. *)
-    let ds = InlineEventVars.inline ds in 
-    ds
-;;
 (* normalize code and eliminate compile-time abstractions that are easier 
    to deal with in tofinocore syntax *)
 let tofinocore_normalization full_compile tds = 
@@ -127,9 +150,9 @@ let tofinocore_normalization full_compile tds =
                 changes the form of the program. *)
     let tds = SingleTableMatch.process tds in
     cprint_prog "----------- after SingleTableMatch ------- " tds;
-    (* 7. create per-table copies of actions. *)
-    let tds = InlineTableActions.process tds in
-    cprint_prog "----------- after InlineTableActions ------- " tds;
+    (* 7. convert actions into functions *)
+    let tds = ActionsToFunctions.process tds in
+    cprint_prog "----------- after ActionsToFunctions ------- " tds;
     tds
 ;;
 
@@ -165,42 +188,71 @@ let layout tds build_dir_opt =
     tds 
 ;;
 
+let compile_dataplane ds portspec build_dir =
+  (* compile the data plane program into a P4 program.  *)
+  let ds = tofino_midend_pipeline ds in 
+  cprint_endline "starting transformations";
+  (* translate into tofinocore -- basically just coresyntax 
+     with labeled statements, shared variables,and a main handler *)
+  let tds = tdecls_of_decls ds in 
+  (* TofinoCore.dump_prog (!BackendLogging.irLogDir ^ "/initial.tofinocore.dpt") tds; *)
+  (* some transformation passes in tofinocore syntax *)
+  let tds = tofinocore_normalization true tds in 
+  (* transform program into a layout of match statements *)
+  let tds = layout tds (Some build_dir) in 
+  (* translate to final low-level P4-ish IR *)
+  let tofino_prog = CoreToP4Tofino.translate tds portspec in 
+  tofino_prog
+;;
 let compile ds portspec build_dir = 
     if (!do_log) then (
         CoreCdg.start_logging ();
         CoreDfg.start_logging ();
     );
-
-    let ds = tofino_midend_pipeline ds in 
+    (* all passes that rename or create 
+       globals or actions must happen before the 
+       data / control plane split *)
+    let ds = common_midend_passes ds in
     (* static analysis to see if this program is compile-able *)
     InputChecks.all_checks ds;
-    cprint_endline "starting transformations";
-    (* some transformations in the core syntax *)
-    let ds = core_passes ds in 
-    (* translate into tofinocore -- basically just coresyntax 
-       with labeled statements, shared variables,and a main handler *)
-    let tds = tdecls_of_decls ds in 
-    (* TofinoCore.dump_prog (!BackendLogging.irLogDir ^ "/initial.tofinocore.dpt") tds; *)
-    (* some transformation passes in tofinocore syntax *)
-    let tds = tofinocore_normalization true tds in 
-    (* transform program into a layout of match statements *)
-    let tds = layout tds (Some build_dir) in 
-    (* translate to final low-level P4-ish IR *)
-    let tofino_prog = CoreToP4Tofino.translate tds portspec in 
-    (* print data and control plane components *)
-    let p4_str = P4TofinoPrinting.p4_of_prog tofino_prog in 
-    let py_str = ControlPrinter.pyctl_of_prog tofino_prog in
-    let cpp_str = ControlPrinter.cppctl_of_prog tofino_prog in
 
-    p4_str, cpp_str, py_str
+    (* at the beginning of the midend, we split the program 
+    into a control program, which gets compiled to C / python, 
+    and a data plane program, that gets compiled into P4. *)
+    let _, data_ds = TofinoControl.split_program 196 9 ds in
+
+    (* Left off here: generate python or C from the control 
+       program. 
+       tricky part is table / register manipulation *)
+
+
+    (* first we compile the tofino program, because it will generate 
+       some setup commands for the control plane to run *)
+    let tofino_prog = compile_dataplane data_ds portspec build_dir in
+
+    (* next, compile the control program (TODO) *)
+
+
+    (* build the globals directory *)
+    let globals_directory = P4TofinoGlobalDirectory.build_global_dir tofino_prog 
+      |> Yojson.Basic.pretty_to_string 
+    in
+(*     print_endline ("---------- globals ----------  ");
+    print_endline globals_directory; *)
+    (* print data and control plane programs *)
+    let p4 = P4TofinoPrinting.p4_of_prog tofino_prog in 
+    let py_ctl = ControlPrinter.pyctl_of_prog tofino_prog in
+    let cpp_ctl = ControlPrinter.cppctl_of_prog tofino_prog in
+    let py_eventlib = PyEventLib.coresyntax_to_pyeventlib ds in
+    p4, cpp_ctl, py_ctl, py_eventlib, globals_directory
 ;;
 
 (* compile a program with a single handler and only 1 generate 
    statement into a p4 control block, to be used as a module 
-   in other P$ programs. *)
+   in other P4 programs. *)
 let compile_handler_block ds =
     InputChecks.all_checks ds;
-    let ds = core_passes ds in
+    let ds = common_midend_passes ds in
     let tds = tdecls_of_decls ds in 
     let tds = tofinocore_normalization false tds in 
     let tds = layout tds None in 

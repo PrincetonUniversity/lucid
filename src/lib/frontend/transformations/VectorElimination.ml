@@ -39,7 +39,7 @@ let subst_index =
 
 let replacer =
   object (self)
-    inherit [_] s_map
+    inherit [_] s_map as super
 
     method! visit_TVector env rty sz =
       let length = extract_size sz in
@@ -70,6 +70,15 @@ let replacer =
       in
       let seq = List.fold_left sseq snoop bodies in
       seq.s
+
+    method! visit_exp env exp = 
+      (* re-annotate comprehensions after expansion to set proper index *)
+      match exp.e with
+      | EComp(_) -> (
+        let exp' = super#visit_exp env exp in
+        GlobalConstructorTagging.reannotate_inlined_exp exp exp'
+      )
+      | _ -> super#visit_exp env exp
 
     method! visit_EComp env body i sz =
       let length = extract_size sz in

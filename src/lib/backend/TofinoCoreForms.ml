@@ -13,6 +13,39 @@
 open CoreSyntax
 open TofinoCore
 
+(* get the source globals declared at this point in the code *)
+let source_globals tds = 
+  let global_ids = ref [] in
+  let v =
+    object
+      inherit [_] s_iter as super
+      method! visit_tdecl _ tdecl =
+        match tdecl.td with
+        | TDGlobal(id, _, _) -> 
+          print_endline (CorePrinting.decl_to_string (decl_of_tdecl tdecl));
+          global_ids := id::(!global_ids);
+        | TDAction({aid=aid; _}) -> 
+          global_ids := aid::(!global_ids);
+        | _ -> ()
+    end
+  in
+  v#visit_tdecls () tds;
+  !global_ids
+;;
+
+(* have the globals changed? *)
+let same_globals orig_globals tds =
+  let new_globals = source_globals tds in
+  if (MiscUtils.test_set_eq orig_globals new_globals)
+  then (print_endline ("globals unchanged."))
+  else (
+    print_endline ("error: globals changed. old and new:");
+    CorePrinting.comma_sep CorePrinting.id_to_string orig_globals |> print_endline;
+    CorePrinting.comma_sep CorePrinting.id_to_string new_globals|> print_endline
+  )
+;;
+
+
 let main_with_event_match label tds = 
   (* required input form:
     a main handler whose body is a single match statement 

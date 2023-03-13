@@ -18,6 +18,7 @@ open CoreToP4TofinoHeaders
 open P4TofinoPrinting
 
 let dbgstr_of_cids cids = List.map (Cid.to_string) cids |> String.concat ", ";;
+let string_of_ids ids = Caml.String.concat ", " (CL.map Id.to_string ids) ;; 
 
 (*** Generate the ingress control block. ***)
 
@@ -41,7 +42,7 @@ module CidMap = Collections.CidMap
 type ctx_entry =
   | CCid of CS.cid
   | CExp of CS.exp
-  | CTable of CS.tbl_def
+  | CTable of (CS.tbl_def * Span.t)
 
 type renames = ctx_entry CidMap.t
 
@@ -95,10 +96,12 @@ CS.var_sp
     (Span.default)
 ;;
 
-let translate_ty ty = match ty with 
+let rec translate_ty ty = match ty.raw_ty with 
   | CS.TBool -> T.TBool
   | CS.TInt (s) -> T.TInt (s)
-  | _ -> error "[translate_ty] type translation not implemented"
+  | CS.TAction(_) -> error "[translate_ty] action types should be eliminated in IR..."
+  | CS.TFun(fty) -> tfun (translate_ty fty.ret_ty) (List.map translate_ty fty.arg_tys)
+  | _ -> error "[translate_ty] translation for this type is not implemented"
 ;;
 
 let translate_value v =
@@ -169,16 +172,16 @@ let cell_struct_of_array_ty module_name cell_width rid : T.decl =
 
 type prog_env = {
   memops : (id * memop) list;
-  user_fcns : (cid * tdecl) list;
+  defined_fcns : (cid * tdecl) list;
 }
-let empty_prog_env = {memops = []; user_fcns = [];}
+let empty_prog_env = {memops = []; defined_fcns = [];}
 ;;
 
 let mk_prog_env tds = 
   List.fold_left (fun prog_env tdecl -> 
     match tdecl.td with
       | TDMemop(m) -> {prog_env with memops=(m.mid, m)::prog_env.memops;}
-      | TDOpenFunction(id, _, _, _) -> {prog_env with user_fcns=(Cid.id id, tdecl)::prog_env.user_fcns;}
+      | TDOpenFunction(id, _, _, _) -> {prog_env with defined_fcns=(Cid.id id, tdecl)::prog_env.defined_fcns;}
       | _ -> prog_env
     )
     empty_prog_env
@@ -188,32 +191,32 @@ let mk_prog_env tds =
 let rec translate_exp (renames:renames) (prog_env:prog_env) exp : (T.decl list * T.expr) =
   match exp.e with 
   | ECall(fcn_cid, args) -> (
-    (* if it is a user function, just add a call *)
-    match (CL.mem_assoc fcn_cid prog_env.user_fcns) with
+    (* assume functions not defined in the program are builtins *)
+    match (CL.mem_assoc fcn_cid prog_env.defined_fcns) with
     | true -> [], (ecall fcn_cid [])
-    (* if not a user function call, its a builtin module *)
-    | false -> translate_module_call renames prog_env.memops fcn_cid args
-  )
+    | false -> translate_module_call renames prog_env.memops fcn_cid args )
   | CS.EHash (size, args) -> translate_hash renames size args 
   | CS.EFlood _ -> error "[translate_memop_exp] flood expressions inside of memop are not supported"
-  | CS.EVal v -> [], T.EVal (translate_value v.v)
+  | CS.EVal v -> [], T.eval_ty_sp (translate_value v.v) (translate_ty exp.ety) exp.espan
   (* for variables, check renaming first *)
   | CS.EVar cid -> (
     match (CidMap.find_opt cid renames) with 
-      (* a cid might resolve to another cid *)
-      | Some (CCid (cid)) -> [], T.EVar (cid)
+      (* a cid might resolve to another cid (but the type should be the same) *)
+      | Some (CCid (cid)) -> [], T.evar_ty_sp cid (translate_ty exp.ety) exp.espan
       (* inside a memop, a cid might resolve to an exp. 
         If the exp is a var, it might itself resolve to something else. *)
       | Some (CExp(new_exp)) -> (
         match new_exp.e with 
-          | EVar(cid) -> [], T.EVar (name renames cid) 
+          | EVar(cid) -> [], T.evar_ty_sp (name renames cid) (translate_ty exp.ety) exp.espan
           | _ -> translate_exp renames prog_env new_exp        
       )
       | Some (CTable(_)) -> error "[translate_exp] a variable id used in an action or memop is bound to a table. This should not happen."
-      | None -> [], T.EVar(cid)
+      (* no renaming to do, use the given id *)
+      | None -> [], T.evar_ty_sp cid (translate_ty exp.ety) exp.espan
   )
   | CS.EOp(op, args) -> (
     let args = match op with 
+      (* cast and slice have arguments in a different form *)
       | CS.Cast(sz) -> 
         let _, exps = translate_exps renames prog_env args in 
         (eval_int sz)::(exps)
@@ -223,11 +226,10 @@ let rec translate_exp (renames:renames) (prog_env:prog_env) exp : (T.decl list *
       | _ -> translate_exps renames prog_env args |> snd
     in
     let op = translate_op op in 
-    [], eop op args
+    [], eop_ty_sp op args (translate_ty exp.ety) exp.espan
   )
-  | CS.ETableCreate(_) -> (
-    error "[coreToP4Tofino.translate_exp] tables are not supported!"
-  )
+  | CS.ETableCreate(_) ->
+    error "[coreToP4Tofino.translate_exp] got an etablecreate expression. This should have been handled by the declaration translator."
 
 and translate_exps renames (prog_env:prog_env) exps = 
   let translate_exp_wrapper exp = translate_exp renames prog_env exp in
@@ -242,7 +244,7 @@ and translate_hash renames size args =
     | _ -> error "[translate_hash] invalid arguments to hash call" 
   in
   let args = (snd (translate_exps renames empty_prog_env args)) in 
-  let arg = EList(args) in 
+  let arg = elist args in 
   let dhash = decl (DHash{
     id = hasher_id;
     poly = int_from_exp poly;
@@ -678,7 +680,7 @@ let translate_openfunction (renames, hdl_enum,hdl_params,prog_env) p4tdecls tdec
   let new_decls = match tdecl.td with 
     | TDOpenFunction(id, const_params, stmt, _) -> (
       let params = List.map
-        (fun (id, ty) -> (None, translate_ty ty.raw_ty, id))
+        (fun (id, ty) -> (None, translate_ty ty, id))
         const_params
       in
       let body_decls, body = translate_statement renames p4tdecls hdl_enum hdl_params prog_env stmt in
@@ -748,16 +750,18 @@ let translate_branch complete_branches
 (* translate a table object declaration into a P4 table. 
    Note: we need the match statement that calls the table 
    because it contains the key *)
-let translate_table renames tdef keys =
+let translate_table renames tdef tspan pragmas keys =
   let tid = tdef.tid in
-  let actions = List.map CoreSyntax.id_of_exp tdef.tactions in
+  let size = CoreSyntax.exp_to_int tdef.tsize in
+  let actions = translate_exps renames empty_prog_env tdef.tactions |> snd in
+  (* let actions = List.map CoreSyntax.id_of_exp tdef.tactions in *)
   let default_aid, default_args = tdef.tdefault in 
   let default = Some(
     scall 
       default_aid 
       (translate_exps renames empty_prog_env default_args |> snd))
   in
-  dtable tid keys actions [] default []
+  dtable_sp tid keys actions [] default (Some(size)) pragmas tspan
 ;;
 
 (* translate a match or if statement into a table *)
@@ -766,27 +770,35 @@ let translate_table renames tdef keys =
    No other statements should appear in the body of the main handler at this point. *)
 let stmt_to_table renames (_:pragma) (ignore_pragmas: (id * pragma) list) (tid, stmt) : (T.decl * T.statement) = 
   let ignore_parallel_tbls_pragmas = ((List.remove_assoc tid ignore_pragmas |> List.split |> snd;)) in 
-  let action_id_of_branch (_, stmt) =
+(*   let action_expr_of_branch (_, stmt) = 
     match stmt.s with
-      | SUnit({e=ECall(acn_id, _); _}) -> Cid.to_id acn_id  
-      | _ -> error "[action_id_of_branch] branch must be a call to a labeled block."
+    | SUnit({e=ECall(acn_id, _); _}) -> evar_noretmethod acn_id
+    | _ -> error "[action_expr_of_branch] branch should call an action function"  
+  in *)
+  let action_cid_of_branch (_, stmt) =
+    match stmt.s with
+      | SUnit({e=ECall(acn_id, _); _}) -> acn_id  
+      | _ -> error "[action_id_of_branch] branch does not call an action function"
   in
   match stmt.s with
   | SIf(e, {s=STableMatch(tm);}, _) ->   
     (* match keys are specified in the statement *)
     let keys = translate_exps renames empty_prog_env tm.keys 
       |> snd 
-      |> List.map tern_key_of_exp
+      |> List.map exp_to_ternary_key
     in
-    let tdef = find_tbl renames tid in 
-    let tbl_decl = translate_table renames tdef keys in
+    let tdef, tspan = find_tbl renames tid in 
+    let tbl_decl = translate_table renames tdef tspan ignore_parallel_tbls_pragmas keys in
     let _, e' = translate_exp renames empty_prog_env e in
     let tbl_call = sif e' (sunit (ecall_table tdef.tid)) in
     tbl_decl, tbl_call
   | SMatch(exps, branches) -> 
     let _, keys = translate_exps renames empty_prog_env exps in 
-    let keys = List.map tern_key_of_exp keys in 
-    let actions = List.map action_id_of_branch branches |> MiscUtils.unique_list_of in 
+    let keys = List.map exp_to_ternary_key keys in 
+    let actions = List.map action_cid_of_branch branches 
+      |> MiscUtils.unique_list_of 
+      |> List.map evar_noretmethod
+    in 
     let rules, default_opt = match branches with
       (* a single empty branch means there are no const rules, just a default action *)
       | [([], call_stmt)] -> ([], Some(translate_sunit_ecall call_stmt))
@@ -801,7 +813,7 @@ let stmt_to_table renames (_:pragma) (ignore_pragmas: (id * pragma) list) (tid, 
         , None)
     in
     let tbl_dec = 
-      dtable tid keys actions rules default_opt ignore_parallel_tbls_pragmas
+      dtable tid keys actions rules default_opt None ignore_parallel_tbls_pragmas
     in
     let tbl_call = sunit (ecall_table tid) in 
     (tbl_dec, tbl_call)
@@ -848,7 +860,7 @@ let rec statements_to_stages stage_num renames block_id (stages:C.statement list
 
 (* declare the compiler-added variables -- "shared globals" *)
 let generate_added_var_decls tds = List.map 
-  (fun (id, ty) -> dvar_uninit id (translate_ty ty.raw_ty))
+  (fun (id, ty) -> dvar_uninit id (translate_ty ty))
   (main tds).shared_locals
 ;;
 let includes = [dinclude "<core.p4>"; dinclude "<tna.p4>"]
@@ -891,8 +903,8 @@ let generate_ingress_control prog_env block_id tds =
   let renames = List.fold_left
     (fun renames td -> 
       match td.td with
-      | TDGlobal(tbl_id, _, {e=ETableCreate(tbl_def);}) -> 
-        bind_tbl renames (tbl_id, tbl_def)
+      | TDGlobal(tbl_id, _, {e=ETableCreate(tbl_def); espan=espan;}) -> 
+        bind_tbl renames (tbl_id, (tbl_def, espan))
       | _ -> renames)
     renames
     tds
@@ -964,32 +976,45 @@ let extract_recirc_event_actions ev_enum =
 
 (* create the table to extract recirculation events from the packet *)
 let extract_recirc_event_table noop_acn_id tbl_id tds (evids : Id.t list) =
-  let hdl_enum = (main tds).hdl_enum in 
-  let hdl_enum_rev = List.map (fun (x, y) -> (y, x)) hdl_enum in 
+  let hdl_id_to_idx = (main tds).hdl_enum in 
+  (* mapping from handler numbers to id *)
+  let hdl_idx_to_id = List.map (fun (x, y) -> (y, x)) hdl_id_to_idx in 
+  (* the sequences of generate statements that the program uses *)
   let event_seqs = (main tds).event_output.ev_gen_seqs in 
   (* keys: rid, port_event_id, event flags *)
-  let keys = Ternary(rid_local)::Ternary(port_out_event_arg)
-    ::(List.map 
-        (fun evid -> Ternary(handler_multi_ev_flag_arg evid)) 
-        evids) 
+  let keys = 
+     (List.map exp_to_ternary_key [rid_local_e; port_out_event_arg_e])
+     @(List.map 
+        (fun evid -> handler_multi_ev_flag_arg_e evid |> exp_to_ternary_key)
+        evids)
   in
   (* action ids:  one for each event, plus the noop *)
   let action_ids = noop_acn_id::(List.map recirc_acn_id evids) in  
-
+  let action_exprs = List.map
+    (fun aid -> evar_noretmethod (Cid.id aid))
+    action_ids
+  in
 
   (* let string_of_ids ids = List.map Id.to_string ids |> String.concat ", " in  *)
   (* branches: 
-    in human-friendly code, we want:
+    the algorithm is:
         for rid in rids:
           for port_out_evid in evids:
             for event_seq in event_seqs:
-              create_branch(rid, port_out_event, event_seq
+              create_branch(rid, port_out_event, event_seq)
+
+    create_branch(rid, port_out_event, event_seq):
+      event_seq = event_seq - port_out_event
+
   *)
   let branches = 
     let recirc_acn_call evid = sunit (ecall (Cid.id (recirc_acn_id evid)) []) in
+    (* replica id is the number of recirculated events, can range from 1 to number of events *)
+    (*  *)
     let possible_rids = MiscUtils.range 1 (1 + (List.length evids)) in 
     (* evnum 0 means that no recirc event was generated *)
     let possible_evnums = MiscUtils.range 0 (1 + (List.length evids)) in 
+    let port_out_evnums = possible_evnums in 
 
     let create_branch rid port_out_evnum event_seq =
       let ev_idx = rid - 1 in (* because rid starts at 1, and we may want the 0th event *)
@@ -998,9 +1023,16 @@ let extract_recirc_event_table noop_acn_id tbl_id tds (evids : Id.t list) =
       in
       let pats = (pnum rid)::(pnum port_out_evnum)::flag_pats in
       let recirc_event_seq_opt = match port_out_evnum with 
-        | 0 -> Some(event_seq) (* no port out event, all recircs*)
+        (* no port out event, every generate is a recirc *)
+        | 0 -> Some(event_seq) 
+        (* considering a case where there _is_ a port out event.
+           so... we are creating a branch where one of the 
+           events in the multi_event is a port out. 
+           the replica ID does not get incremented for a port_out 
+           event. So, we must remove that event from this sequence.*)
         | _ -> (
-          let port_out_evid = (List.assoc (port_out_evnum) hdl_enum_rev) in
+          (* the event that is being generated on a port *)
+          let port_out_evid = (List.assoc port_out_evnum hdl_idx_to_id) in
           match (MiscUtils.contains event_seq port_out_evid) with 
           (* if the generated event sequence doesn't contain the port 
              out event, then this port out event cannot occur for 
@@ -1016,12 +1048,11 @@ let extract_recirc_event_table noop_acn_id tbl_id tds (evids : Id.t list) =
 (*       print_endline (
         "[create_branch]"
         ^" rid: "^(string_of_int rid)
-        ^" seq_idx: "^(string_of_int ev_idx)
-        ^" port_out_evnum: "^(string_of_int port_out_evnum)
-        ^" event_seq: "^(string_of_ids event_seq)
-        ^" recirc_event_seq: "^(string_of_ids recirc_event_seq)
-      );
- *)
+        ^" extracting recirc event at index: "^(string_of_int ev_idx)
+        ^" port out event id: "^(string_of_int port_out_evnum)
+        ^" event generation sequence: "^(string_of_ids event_seq)
+      ); *)
+      (* the sequence of recirculation event ids *)
       match recirc_event_seq_opt with 
       | Some(recirc_event_seq) -> (
         match (List.nth_opt recirc_event_seq (ev_idx)) with 
@@ -1033,20 +1064,23 @@ let extract_recirc_event_table noop_acn_id tbl_id tds (evids : Id.t list) =
       | None -> None
     in
     (* for each rid *)
-    List.fold_left (fun branches rid -> 
-      (* for each event that may appear in a port out (all events may) *)
-      List.fold_left (fun branches port_out_evid -> 
-        (* for each event_seq in event_seqs *)
-        List.fold_left (fun branches event_seq -> 
-          match (create_branch rid port_out_evid event_seq) with
-          | None -> branches
-          | Some(b) -> branches@[b]
-        )
-        branches event_seqs
-      )
-      branches possible_evnums
-    )
-    [] possible_rids
+    List.fold_left 
+      (fun branches rid -> 
+        (* for each event that may appear in generate_port (all events may) *)
+        List.fold_left 
+          (fun branches port_out_evid -> 
+          (* for each event_seq in event_seqs *)
+            List.fold_left 
+              (fun branches event_seq -> 
+                match (create_branch rid port_out_evid event_seq) with
+                | None -> branches
+                | Some(b) -> branches@[b])
+              branches 
+              event_seqs)
+          branches 
+          port_out_evnums)
+    [] 
+    possible_rids
   in (* end let branches *)
   (* add a default noop branch if the table has 1 entry -- because 1 entry tables 
      cause a runtime failure (9.8). *)
@@ -1059,7 +1093,7 @@ let extract_recirc_event_table noop_acn_id tbl_id tds (evids : Id.t list) =
       branches
     )
   in
-  dtable tbl_id keys action_ids branches None []
+  dtable tbl_id keys action_exprs branches None None []
 ;;
 
 
@@ -1114,12 +1148,14 @@ let extract_port_event_actions ev_enum =
 
 let extract_port_event_table tbl_id ev_enum lucid_internal_ports =
   let evids = List.split ev_enum |> fst in 
-  let keys = [Ternary(port_out_event_arg); Ternary(egress_port_local)] in
-  let actions = List.fold_left
+  let keys = List.map exp_to_ternary_key [port_out_event_arg_e; egress_port_local_e] in
+  (* let keys = [Ternary(port_out_event_arg); Ternary(egress_port_local)] in *)
+  let action_ids = List.fold_left
     (fun aids evid -> aids@[port_external_action evid; port_internal_action evid])
     []
     evids
   in
+  let actions = List.map (fun aid -> evar_noretmethod (Cid.id aid)) action_ids in
   let rules = 
     let foreach_evid evid = 
       let evnum = List.assoc evid ev_enum in 
@@ -1132,7 +1168,7 @@ let extract_port_event_table tbl_id ev_enum lucid_internal_ports =
     in
     List.map foreach_evid evids |> List.flatten
   in
-  dtable tbl_id keys actions rules None []
+  dtable tbl_id keys actions rules None None []
 ;;
 
 let egress_control_params = [
@@ -1185,19 +1221,21 @@ let generate_reg_arrays tds =
           in
           match (module_name) with 
           | "Array" -> 
-            let reg_decl = (decl (DReg{
-              id=rid; 
-              cellty=tint cell_size; 
-              idxty=TAuto; 
-              len=len; 
-              def=default_opt})) 
+            (* take the span from the expression, 
+               because the constructor expression tracks source ids *)
+            let reg_decl = 
+              dreg_sp 
+                rid (tint cell_size) [cell_size] TAuto len default_opt [] exp.espan
             in
             [reg_decl]
           | "PairArray" -> 
             (* pair arrays get their own cell type struct *)
             let cell_struct = cell_struct_of_array_ty module_name cell_size rid in 
             (* id, cell ty (struct); idx ty; len; default (None) *)
-            let reg_decl = (decl (DReg{id=rid; cellty=cell_ty_of_array rid; idxty=TAuto; len=len; def=default_opt})) in
+            let reg_decl = 
+              dreg_sp 
+                rid (cell_ty_of_array rid) [cell_size;cell_size] TAuto len default_opt [] exp.espan
+            in
             [cell_struct; reg_decl]
           | _ -> []
       )
@@ -1209,7 +1247,6 @@ let generate_reg_arrays tds =
   in
   List.map generate_reg_array tds |> List.flatten
 ;;
-
 
 (* create multicast groups for flooding events out of ports *)
 let mc_flood_decls external_ports = 
@@ -1264,7 +1301,7 @@ let translate tds (portspec:ParsePortSpec.port_config) =
 let control_block_lib_params tds =
   let params = ((main tds).hdl_params |> List.hd |> snd) in 
   let params = List.map (fun (pid, pty) -> 
-    inoutparam (translate_ty pty.raw_ty) (pid))
+    inoutparam (translate_ty pty) (pid))
     params
   in
   params

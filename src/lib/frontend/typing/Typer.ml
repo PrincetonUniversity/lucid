@@ -433,6 +433,12 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
       e.espan 
       ("default action ("^(Printing.cid_to_string def_cid)^") is not an action assigned to the table."));
 
+    (* The constructor expression must have an unbound effect, or it may not 
+       unify with the type of the declaration. Note that, we cannot infer the 
+       full table type from the constructor expression, because the constructor 
+       expression doesn't know what the table keys are. *)
+    let ety = {ecreate.tty with teffect =fresh_effect ()} in
+
     (* return typed table with typed action args *)
     env, 
     { e with e = ETableCreate( 
@@ -440,7 +446,10 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
         tactions = inf_acns; 
         tsize = inf_tsize; 
         tdefault = (def_cid, inf_def_args)}); 
-      ety = Some ecreate.tty; }
+      ety = Some(ety); }
+
+
+
   | ETableMatch(tr) -> 
     let new_env, new_tr, ret_ty = infer_tblmatch env tr e.espan in
     let ret_ty = match ret_ty with 
@@ -652,7 +661,7 @@ and infer_tblmatch (env : env) (tr : tbl_match) sp : env * tbl_match * ty list =
     (* get information from inferred table type *)
     let inf_keysize, inf_arg_rtys, inf_ret_ty = match inf_etbl.ety with 
       | Some(ty) -> (
-          match ty.raw_ty with
+          match TyTQVar.strip_links ty.raw_ty with
           | TTable(trec) -> trec.tkey_sizes, trec.tparam_tys, (tup_of_tys trec.tret_tys)
           | t -> error_sp sp ("table_match arg is not a table: "^(Printing.raw_ty_to_string t))
         )

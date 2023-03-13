@@ -10,6 +10,56 @@ let libs_src_dir = "/tofinoLibs"
 let p4_fn = "lucid.p4"
 let c_fn = "lucid.cpp"
 let py_fn = "lucid.py"
+let py_eventlib_fn = "eventlib.py"
+let globals_dir_fn = "globals.json"
+
+
+let make_fn = "makefile"
+let make_str = 
+  let run_args_string = "$(RUN_ARGS)" in 
+  let make_hdr =
+    {x|
+MAKEFLAGS += -s
+# If the first argument is "test"...
+ifeq (test,$(firstword $(MAKECMDGOALS)))
+  # use the rest as arguments for "test"
+  RUN_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
+  # ...and turn them into do-nothing targets
+   $(eval $(RUN_ARGS):dummy)
+endif
+.PHONY: test
+|x}
+  in
+  (* body of makefile *)
+  let make_body =
+    [%string
+      "build: %{p4_fn} %{py_fn} %{c_fn}\n\
+       \t./libs/p4tapp.sh build_quiet %{p4_fn}\n\
+       hw:\n\
+       \t./libs/p4tapp.sh hw %{p4_fn}\n\
+       test:\n\
+       \t./libs/p4tapp.sh test %{p4_fn} %{run_args_string}\n\
+       sim:\n\
+       \t./libs/p4tapp.sh sim %{p4_fn}\n\
+       dummy:"]
+  in
+  make_hdr ^ make_body
+;;
+
+let manifest_fn = "manifest.txt"
+
+let manifest_str = [%string 
+"\
+Lucid-generated tofino project folder\
+Contents: \
+ %{p4_fn} -- P4 data plane program\
+ %{py_fn} -- Python script to install multicast rules after starting %{p4_fn}\
+ %{py_eventlib_fn} -- Python event parsing library\
+ %{globals_dir_fn} -- Globals name directory (maps lucid global variable names to names in compiled P4)\
+ %{make_fn} -- simple makefile to build and run P4 program\
+ %{c_fn} -- c control plane (currently unused)\
+"]
+;;
 
 let silent = ref false ;;
 let report str = 
@@ -44,47 +94,26 @@ let write_py builddir py_str =
   IoUtils.writef (builddir ^ "/" ^ py_fn) py_str
 ;;
 
-let write_mk builddir =
-  let makef = builddir ^ "/makefile" in
-  report (sprintf "generating makefile: %s " makef);
-  (* generic start of makefile. *)
-  let run_args_string = "$(RUN_ARGS)" in 
-  let make_str_prefix =
-    {x|
-MAKEFLAGS += -s
-# If the first argument is "test"...
-ifeq (test,$(firstword $(MAKECMDGOALS)))
-  # use the rest as arguments for "test"
-  RUN_ARGS := $(wordlist 2,$(words $(MAKECMDGOALS)),$(MAKECMDGOALS))
-  # ...and turn them into do-nothing targets
-   $(eval $(RUN_ARGS):dummy)
-endif
-.PHONY: test
-|x}
-  in
-  (* body of makefile *)
-  let make_str =
-    [%string
-      "build: %{p4_fn} %{py_fn} %{c_fn}\n\
-       \t./libs/p4tapp.sh build_quiet %{p4_fn}\n\
-       hw:\n\
-       \t./libs/p4tapp.sh hw %{p4_fn}\n\
-       test:\n\
-       \t./libs/p4tapp.sh test %{p4_fn} %{run_args_string}\n\
-       sim:\n\
-       \t./libs/p4tapp.sh sim %{p4_fn}\n\
-       dummy:"]
-  in
-  IoUtils.writef makef (make_str_prefix ^ make_str)
+let writef builddir fn str =
+  IoUtils.writef (builddir ^ "/" ^ fn) str
 ;;
 
-let generate p4_str c_str py_str builddir =
+let generate p4_str c_str py_str py_eventlib globals_dir builddir =
   report ("Packaging lucid tofino app in: " ^ builddir);
   copy_libs builddir;
-  write_p4 builddir p4_str;
-  write_cpp builddir c_str;
-  write_py builddir py_str;
-  write_mk builddir;
+  let outputs = [
+    (p4_fn, p4_str);
+    (c_fn, c_str);
+    (py_fn, py_str);
+    (py_eventlib_fn, py_eventlib);
+    (globals_dir_fn, globals_dir);
+    (manifest_fn, manifest_str);
+    (make_fn, make_str)
+  ] in
+  List.iter 
+    (fun (fn, str) -> 
+      writef builddir fn str)
+    outputs;
   report ("Lucid app generation complete in: " ^ builddir)
 ;;
 

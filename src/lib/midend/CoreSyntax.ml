@@ -3,15 +3,12 @@
 open Batteries
 
 type id = [%import: (Id.t[@opaque])]
-
 and cid = [%import: (Cid.t[@opqaue])]
-
+and tagval = [%import: (TaggedCid.tagval[@opqaue])]
+and tcid = [%import: (TaggedCid.t[@opqaue])]
 and sp = [%import: Span.t]
-
 and z = [%import: (Z.t[@opaque])]
-
 and zint = [%import: (Integer.t[@with Z.t := (Z.t [@opaque])])]
-
 
 and location = int
 
@@ -217,10 +214,17 @@ and memop_body =
   | MBReturn of exp
   | MBIf of exp * exp * exp
   | MBComplex of complex_body
+and memop = {mid:id; mparams:params; mbody:memop_body;}
 
 and action_body = exp list
+and action = {
+  aid : id; 
+  artys : ty list;
+  aconst_params : params;
+  aparams : params; 
+  abody : action_body;
+}
 
-and memop = {mid:id; mparams:params; mbody:memop_body;}
 (* declarations *)
 and d =
   | DGlobal of id * ty * exp
@@ -231,13 +235,6 @@ and d =
   | DAction of action
   (* id * ty list * params * (params * action_body) *)
 
-and action = {
-  aid : id; 
-  artys : ty list;
-  aconst_params : params;
-  aparams : params; 
-  abody : action_body;
-}
 
 (* name, return type, args & body *)
 and decl =
@@ -467,11 +464,14 @@ let ty_of_tbl td =
       | _ -> error "[ty_of_tbl] table does not have type table."
 ;;    
 
-let size_of_tint ty = 
+let ty_to_size ty = 
   match ty.raw_ty with 
+  | TBool -> 1
   | TInt(sz) -> sz
   | _ -> error "[size_of_tint] not a tint"
-;;
+;;  
+let size_of_tint = ty_to_size ;;
+
 
 (* Turn a list of statements into an SSeq (or a SNoop, if empty) *)
 let sequence_stmts lst =
@@ -488,7 +488,15 @@ let id_of_exp exp =
     error
       "[id_of_exp] expression is not an evar"
 ;;
+let exp_to_id = id_of_exp;;
 
 let exp_of_id id ty = exp (EVar(Cid.id id)) ty
 ;;
+
+let exp_to_int exp = 
+  match exp.e with
+  | EVal({v=VInt(z); _}) ->
+    Integer.to_int z
+  | _ -> error "[exp_to_int] exp is not an EVal(EInt(...))"
+;;      
 

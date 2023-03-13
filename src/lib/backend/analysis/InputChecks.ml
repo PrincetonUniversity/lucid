@@ -131,8 +131,61 @@ let port_tys ds =
   !pass
 ;;
 
+(* All tables must be used in a program to compile to P4, 
+   because if a table is not used, we have no way of 
+   creating the actions, whose bodies must be inlined with 
+   the parameters passed to the table match statement. *)
+let all_tables_used ds =
+  let pass = ref true in
+  let rec tables_in_prog (ds) = 
+    match ds with 
+    | [] -> []
+    | {d=DGlobal(_, _, {e=ETableCreate(tbl_def); espan=espan;}); dspan=dspan;}::ds' -> 
+      (tbl_def, dspan, espan)::(tables_in_prog ds')
+    | _::ds' -> tables_in_prog ds'
+  in
+
+  let tables_matched_in_prog ds =
+    let tbl_ids = ref [] in
+    let v =
+      object
+        inherit [_] CoreSyntax.s_iter as super
+        method! visit_tbl_match _ tm =
+          tbl_ids := (tm.tbl |> CoreSyntax.exp_to_id)::(!tbl_ids)
+      end
+    in
+    v#visit_decls () ds;
+    !tbl_ids |> MiscUtils.unique_list_of
+  in
+
+  let defined_tbls = tables_in_prog ds in
+  let used_ids = tables_matched_in_prog ds in
+  List.iter
+    (fun (tdef, dspan, espan) ->
+      let is_used = List.exists (fun id -> id = tdef.tid) used_ids in
+      if (not is_used)
+      then (
+        pass := false;
+        (* use source name if available *)
+        let tbl_id = match espan.global_created_in_src with
+          | Some(tcid) -> 
+            List.map 
+              (TaggedCid.to_string) 
+              ((TaggedCid.tcid_ancestors tcid)@[tcid])
+            |> String.concat "."
+          | None -> (Cid.id tdef.tid) |> CorePrinting.cid_to_string
+        in
+        let msg = "The table "^tbl_id^" was declared but never used." in
+        report_err dspan msg))
+    defined_tbls;
+  if (not !pass)
+  then (fail_report "Some tables were declared but never used (see above). The compiler cannot translate a lucid table into a p4 table if it is not used.");
+  !pass
+;;
+
+
 let all_checks ds =
-  let checks = [event_param_alignment; array_sizes; port_tys] in
+  let checks = [event_param_alignment; array_sizes; port_tys; all_tables_used] in
   let pass = List.fold_left (fun pass check -> 
       let check_pass = check ds in
       pass && check_pass

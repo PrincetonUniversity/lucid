@@ -50,16 +50,20 @@ let string_of_cid v = if (verbose_ids)
 ;;
 
 
-let string_of_ty t = match t with 
+let rec string_of_ty t = match t with 
     | TInt i -> (s'"bit<"^^(str_of_int i)^^s'">")
     | TBool -> s'"bool"
     | TStruct i -> string_of_id i
     | TVoid -> s'"void"
     | TList _ -> error "there's no list type syntax in P4?"
     | TAuto -> s'"_"
-;;
+    | TUnknown -> error "trying to print an unknown type"
+    | TObj(i) -> string_of_id i
+    | TKey(KTernary, _) -> s'"ternary"
+    | TKey(KExact, _) -> s'"exact"
+    | TFun(rty, argtys) -> s'"/*"^^(string_of_tys argtys)^^s'" -> "^^(string_of_ty rty)^^s'"*/"
 
-let string_of_tys ts = 
+and string_of_tys ts = 
   separate_map (s'", ") string_of_ty ts
 
 let string_of_value v = match v with 
@@ -70,7 +74,7 @@ let string_of_value v = match v with
   | VString _ -> error "strings are not expected in the p4 program"
 ;;
 
-let rec string_of_expr e = match e with 
+let rec string_of_expr expr = match expr.ex with 
   | EVal v -> string_of_value v
   | EVar cid -> string_of_cid cid
   | EOp (op, args) -> parens (string_of_eop op args)
@@ -134,7 +138,7 @@ and string_of_eop op args : PPrint.document =
       let wid_int = match new_wid with 
         (* we are casting to the width value, 
            _not_ the width of the width value *)
-        | EVal(VInt(v, _)) -> v
+        | {ex=EVal(VInt(v, _)); _} -> v
         | _ -> error "first argument of cast op must be an int constant"
       in
      (!^"(")^^(string_of_ty (tint wid_int))^^(!^")")^^(string_of_expr var)
@@ -181,7 +185,7 @@ let rec string_of_statement st =
 (* inside of a parse state, matches are printed differently *)
 let string_of_parse_branch (ps, stmt) = 
   let fcn_cid = match stmt with 
-    | Unit(ECall(EVar(fcn_id), _)) -> fcn_id
+    | Unit({ex=ECall({ex=EVar(fcn_id)}, _)}) -> fcn_id
     | _ -> error "[string_of_parse_branch] statement has invalid form"
   in 
 
@@ -201,7 +205,7 @@ let rec string_of_parse_statement st = match st with
   | Match(exprs, branches) -> 
     s'"transition select"^^parens (string_of_exprs exprs)
     ^^nested_block_better (separate_map hardline string_of_parse_branch branches)
-  | Unit(ECall(EVar(fcn_id), None)) ->
+  | Unit({ex=ECall({ex=EVar(fcn_id)}, None)}) ->
     s'"transition"^-^(string_of_cid fcn_id)^^s'";"    
   | Seq(s1, s2) -> 
     (string_of_parse_statement s1)
@@ -238,10 +242,13 @@ let string_of_field (id, ty) =
     (* (string_of_id id)^^s'" : "^^(string_of_ty ty)^^s'";" *)
 ;;
 
-let string_of_key k = match k with
+let string_of_key (k:expr) = 
+  (string_of_expr k)^^s'" : "^^(string_of_ty k.ety)^^s'";"
+
+(*   match k with
   | Ternary f -> (string_of_cid f)^^s'" : ternary;"
   | Exact   f -> (string_of_cid f)^^s'" : exact;"
-
+ *)
 let string_of_pats ps =
   let string_of_pat p = match p with 
   | PWild -> s'"_"
@@ -277,13 +284,13 @@ let string_of_sty sty =
 
 let rec string_of_decl dec = 
   match dec.d with
-  | DReg{id=id; cellty=cellty; idxty=idxty; len=len; def=def;} -> 
+  | DReg{id=id; slot_ty=slot_ty; idxty=idxty; len=len; def=def;} -> 
         let argstr = match def with 
           | None -> (parens (string_of_exprs [len]))
           | Some edef -> (parens (string_of_exprs [len; edef]))
         in
         s'"Register"
-          ^^(angles (separate_map (s'",") string_of_ty [cellty; idxty]))
+          ^^(angles (separate_map (s'",") string_of_ty [slot_ty; idxty]))
           ^^argstr
           ^-^(string_of_id id)^^s'";"
   | DVar(id, ty, Some(expr)) -> 
@@ -301,7 +308,7 @@ let rec string_of_decl dec =
         )
       ^^hardline
       ^^s'"actions = "^^nested_block_better (
-          separate_map hardline (fun id -> string_of_id id^^s'";") actions
+          separate_map hardline (fun eacn -> string_of_expr eacn^^s'";") actions
         )
       ^^hardline
       (* printing an empty const entries messes up the compiler... *)
@@ -407,7 +414,7 @@ let mainstring_of_tofino_prog (prog:tofino_prog) =
     (fun decl -> match decl.d with
       | DControl(o) | DParse(o) | DDeparse(o) -> 
         string_of_id (o.id) ^^ s'"()"
-      | _ -> error "[mainstring_of_tofino_prog] one of the pipeline decls is not a contro, parse, or deparse"
+      | _ -> error "[mainstring_of_tofino_prog] one of the pipeline decls is not a control, parse, or deparse"
     )
     (blocks_of_prog prog)
   ))))

@@ -33,7 +33,9 @@ let enable_debug () =
   do_logging := true;
   TofinoPipeline.verbose := true;
   TofinoPipeline.do_log := true;
+  (* Cmdline.cfg.debug <- true; *)
   Cmdline.cfg.verbose <- true;
+  Cmdline.cfg.verbose_types <- true;
 (*   InterpHelpers.silent := true;
   NormalizeInts.silent := true;
   PackageTofinoApp.silent := true; *)
@@ -67,7 +69,7 @@ module ArgParse = struct
 
   let args_default =
     { dptfn = ""
-    ; builddir = ""
+    ; builddir = "lucid_tofino_build"
     ; portspec = None
     ; interp_spec_file = ""
     ; aargs = []
@@ -155,10 +157,10 @@ let compile_to_tofino target_filename portspec build_dir =
   let portspec = ParsePortSpec.parse portspec in 
   unmutable_report@@"Starting P4-Tofino compilation. Using switch port configuration: ";
   print_endline (ParsePortSpec.string_of_portconfig portspec);
-  let p4_str, c_str, py_str = TofinoPipeline.compile core_ds portspec build_dir in 
+  let p4_str, c_str, py_str, py_eventlib, globals = TofinoPipeline.compile core_ds portspec build_dir in 
   (* finally, generate the build directory with the programs + some helpers and a makefile *)
   unmutable_report@@"Compilation to P4 finished. Writing to build directory:"^(build_dir);
-  PackageTofinoApp.generate p4_str c_str py_str build_dir
+  PackageTofinoApp.generate p4_str c_str py_str py_eventlib globals build_dir 
 
 let main () = 
   unmutable_report "Compilation to P4 started...";

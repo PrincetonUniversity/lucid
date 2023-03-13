@@ -1,5 +1,5 @@
-(* generate event parsers for endhost 
-   programs in c and python *)
+(* generate c event parsers for server programs. 
+TODO: include events bitvector and padding in lucid_meta header *)
 open Batteries
 open Syntax
 open SyntaxUtils
