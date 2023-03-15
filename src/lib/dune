@@ -74,6 +74,7 @@
    preprocess
    interpSpec
    interpState
+   interpSyntax
    arrays
    counters
    pairArrays

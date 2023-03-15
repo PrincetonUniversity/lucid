@@ -3,27 +3,20 @@ open CoreSyntax
 
 
 (*** pipeline objects ***)
-type arrobj = {sid : id; sarr : zint array; spair : bool}
-
-(* type tblobj = {sid : id; sactions : action list; scases : (tbl_entry option) array;} *)
-(* module PriorityTable = BatHeap.Make (struct
-  type t = 
-)
- *)
-type tblobj = {
-  sid : id; 
-  sactions : action list; 
-  (* sentries: tbl_entry list; *)
-  smaxlen : int;
-  sentries : tbl_entry list;
-  sdefault: (id * exp list) (* default action + value args *)
-}
-
 type obj = 
   | OArray of arrobj
   (* "None" cases are un-used entries *)
   | OTable  of tblobj
-  | ONone
+
+and arrobj = {aid : id; acells : zint array; ispair : bool}
+and tblobj = {
+  tid : id; 
+  tactions : action list; 
+  (* sentries: tbl_entry list; *)
+  tmaxlen : int;
+  tentries : tbl_entry list;
+  tdefault: (id * exp list) (* default action + value args *)
+}
 
 (*** the pipeline ***)
 type t =
@@ -31,15 +24,20 @@ type t =
   ; current_stage : int ref
   }
 
-
 (*** object operations ***)
 let copy_obj s = match s with 
-  | OArray(a) -> OArray({a with sarr=Array.copy a.sarr})
+  | OArray(a) -> OArray({a with acells=Array.copy a.acells})
   (* there is nothing mutable in a table *)
-  | OTable(t) -> OTable({t with sentries=t.sentries}) 
-  | ONone -> ONone
+  | OTable(t) -> OTable({t with tentries=t.tentries}) 
 ;;
 
+let obj_to_id o = match o with
+  | OArray{aid; _} -> aid
+  | OTable{tid; _} -> tid
+;;
+let obj_to_name o =
+  Id.name (obj_to_id o)
+;;
 let split_integer n =
   let sz = Integer.size n / 2 in
   let upper = Integer.shift_right n sz |> Integer.set_size sz in
@@ -51,7 +49,7 @@ let stage_to_string ?(pad = "") show_ids idx s =
   match s with
   | OArray(a) -> 
     let print_entry n =
-      if not a.spair
+      if not a.ispair
       then Integer.to_string n
       else (
         let upper, lower = split_integer n in
@@ -65,23 +63,22 @@ let stage_to_string ?(pad = "") show_ids idx s =
       Printf.sprintf
         "%s%s(%d) : %s\n"
         (pad ^ pad)
-        (CorePrinting.id_to_string a.sid)
+        (CorePrinting.id_to_string a.aid)
         idx
-        (Printing.list_to_string print_entry (Array.to_list a.sarr))
+        (Printing.list_to_string print_entry (Array.to_list a.acells))
     else
       (* old printer, just for testing *)
       Printf.sprintf
          "%s%d : %s\n"
          (pad ^ pad)
          idx
-         (Printing.list_to_string print_entry (Array.to_list a.sarr))
+         (Printing.list_to_string print_entry (Array.to_list a.acells))
   | OTable(t) -> 
     Printf.sprintf 
       "%s%s(%d) : Table [...]\n" 
       (pad ^ pad) 
-      (CorePrinting.id_to_string t.sid)
+      (CorePrinting.id_to_string t.tid)
       idx
-  | ONone -> ""
 ;;
 
 
@@ -90,7 +87,7 @@ let stage_to_string ?(pad = "") show_ids idx s =
 let empty () =
   { objs = Array.make 
     0 
-    ONone
+    (OArray({aid=Id.create ""; acells=(Array.make 0 (Integer.of_int 0)); ispair = false;}))
     (* (Array.make 0 (Integer.of_int 0), false) *)
   ; current_stage = ref 0
   }
@@ -156,16 +153,32 @@ let set_obj stage t obj =
   t.objs.(stage) <- obj
 ;;
 
+(* find object stage by id, for control operations *)
+let id_map t =   
+  List.mapi (fun idx obj -> obj_to_id obj, idx)
+    (Array.to_list t.objs)
+;;
+let name_map t =
+  id_map t |> List.map (fun (id, n) -> Id.name id, n)
+;;
 
+let id_to_stage id t =
+  match (List.assoc_opt id (id_map t)) with
+    | None -> error ("[pipeline error] could not find global object "^(CorePrinting.id_to_string id))
+    | Some(stage_num) -> stage_num
+;;
+let name_to_stage name t =
+  match (List.assoc_opt name (name_map t)) with
+    | None -> error ("[pipeline error] could not find global object "^(name))
+    | Some(stage_num) -> stage_num
+;;
 
 (*** array functions ***)
 let mk_array ~(id : Id.t) ~(width : int) ~(length : int) ~(pair : bool) = 
   let full_width = if pair then width * 2 else width in
-  let new_arr = Array.make length (Integer.create 0 full_width) in
-  OArray({sid=id; sarr=new_arr; spair=pair})  
+  let new_cells = Array.make length (Integer.create 0 full_width) in
+  OArray({aid=id; acells=new_cells; ispair=pair})  
 ;;
-
-
 
 let validate_arr_idx idx obj = 
   (* is an update to obj[idx] valid? *)
@@ -177,18 +190,16 @@ let validate_arr_idx idx obj =
       @@ Printf.sprintf 
           "Pipeline Error: Index %d is negative." 
           idx;
-    if (idx >= Array.length a.sarr)
+    if (idx >= Array.length a.acells)
     then
       failwith
       @@ Printf.sprintf
           "Pipeline Error: Index %d is invalid for global object %s."
           idx
-          (CorePrinting.id_to_string a.sid);
+          (CorePrinting.id_to_string a.aid);
     obj
   | OTable(_) -> 
     failwith @@ Printf.sprintf "Pipeline Error: table updates not implemented"
-  | ONone -> 
-    failwith @@ Printf.sprintf "Pipeline Error: Cannot update NoneType"
 
 let update
     ~(stage : int)
@@ -201,16 +212,14 @@ let update
 
   match obj with
   | OArray(a) ->
-    if a.spair
+    if a.ispair
       then failwith "Pipeline Error: Tried to use Array.update on a paired array";
-    let orig_val = a.sarr.(idx) in
-    a.sarr.(idx) <- setop orig_val;
+    let orig_val = a.acells.(idx) in
+    a.acells.(idx) <- setop orig_val;
     t.current_stage := stage + 1;
     getop orig_val
   | OTable(_) -> 
     failwith "Pipeline Error: Tried to use Array.update on a table"
-  | ONone -> 
-    failwith "Pipeline Error: Tried to use Array.update on none object"
 ;;
 
 let update_complex
@@ -222,9 +231,9 @@ let update_complex
   let obj = get_obj stage t |> validate_arr_idx idx in 
   match obj with
   | OArray(a) -> 
-    let orig_val = a.sarr.(idx) in
+    let orig_val = a.acells.(idx) in
     let new_val, ret = 
-      match a.spair with
+      match a.ispair with
       | true -> 
         let upper, lower = split_integer orig_val in
         let new_upper, new_lower, ret = memop upper lower in
@@ -237,22 +246,19 @@ let update_complex
         in
         new_val, ret
     in
-    a.sarr.(idx) <- new_val;
+    a.acells.(idx) <- new_val;
     t.current_stage := stage + 1;
     ret
   | OTable(_) -> 
     failwith @@ "Pipeline Error: Tried to use Array.update_complex on a table"
-  | ONone -> 
-    failwith @@ "Pipeline Error: Tried to use Array.update_complex on none object"
 ;;
-
 
 (*** table functions ***)
 
 (* allocate a table with room for n entries *)
 let mk_table ~(id : Id.t) ~(length : int) ~(def : id * exp list) =
   (* wrap in pipeline object *)
-  OTable({sid=id; sactions=[]; sdefault=def; smaxlen = length; sentries = [];})
+  OTable({tid=id; tactions=[]; tdefault=def; tmaxlen = length; tentries = [];})
 ;;
 
 let get_table_entries
@@ -267,9 +273,8 @@ let get_table_entries
     (* advance stage and return default + list of cases *)
     t.current_stage := stage + 1;
     (* print_endline ("[get_table_entries] number of entries: "^(string_of_int (List.length tbl.sentries))); *)
-    tbl.sdefault, tbl.sentries
+    tbl.tdefault, tbl.tentries
   | OArray(_) -> failwith "Pipeline Error: Expected a table obj, got array obj."
-  | ONone -> failwith "Pipeline Error: Expected array, got nonetype."
 ;;
 
 
@@ -288,9 +293,9 @@ let install_table_entry
     (* print_endline ("[install_table_entry] installing table entry.. "); *)
     (* CorePrinting.entry_to_string entry |> print_endline; *)
     (* print_endline ("[install_table_entry] ----"); *)
-    if (List.length tbl.sentries == tbl.smaxlen)
+    if (List.length tbl.tentries == tbl.tmaxlen)
     then (failwith "Pipeline Error: tried to add an entry to a full table!");
-    let entries = match tbl.sentries with 
+    let entries = match tbl.tentries with 
     | [] -> [entry]
     |  _ -> 
       let added, entries_rev = List.fold_left 
@@ -304,12 +309,108 @@ let install_table_entry
             then ((true, cur_entry::entry::entries_rev))
             else (false, cur_entry::entries_rev)))
         (false, [])
-        tbl.sentries
+        tbl.tentries
       in 
       let entries = if added then List.rev entries_rev else (List.rev (entry::entries_rev)) in
       entries
     in 
     (* update stage with new table *)
-    set_obj stage t (OTable({tbl with sentries=entries;}))
+    set_obj stage t (OTable({tbl with tentries=entries;}))
   | _ -> error "Pipeline Error: object is not a table"
+;;
+
+
+(*** control command functions.
+     note: generally, these reference objects by name rather than stage ***)
+
+let control_set
+    ~(aname : string)
+    ~(idx : int)
+    ~(newvals : zint list)
+    (t : t)
+  =
+  let stage = name_to_stage aname t in
+  let obj = get_obj_unconstrained stage t |> validate_arr_idx idx in 
+  match obj with
+    | OArray(a) ->
+      if a.ispair
+      then (
+        match (newvals) with 
+        | [upper; lower] -> (
+          let newval = Integer.concat upper lower in
+          a.acells.(idx) <- newval;)
+        | _ -> error "[control_set] wrong number of values for pair array"
+      )
+      else (
+        match (newvals) with
+        | [newval] -> (
+          a.acells.(idx) <- newval;)
+        | _ -> error "[control_set] gave wrong number of values for non-pair array"
+      )
+    | _ -> error "[control_set] tried to use on a non-array object"
+;;
+
+let control_setrange
+    ~(aname : string)
+    ~(s : int)
+    ~(e : int)
+    ~(newvals : zint list)
+    (t : t)
+  =
+  let stage = name_to_stage aname t in
+  let obj = get_obj_unconstrained stage t |> validate_arr_idx s |> validate_arr_idx (e-1) in 
+  match obj with
+    | OArray(a) ->
+      let newval = if a.ispair
+        then (
+          match (newvals) with 
+          | [upper; lower] -> (Integer.concat upper lower)
+          | _ -> error "[control_setrange] wrong number of values for pair array")
+        else (
+          match (newvals) with
+          | [newval] -> ( newval )
+          | _ -> error "[control_setrange] gave wrong number of values for non-pair array")
+      in
+      for idx = s to (e-1) do
+        a.acells.(idx) <- newval
+      done
+    | _ -> error "[control_setrange] tried to use on a non-array object"
+;;
+
+let control_get 
+    ~(aname : string)
+    ~(idx : int)
+    (t : t)
+  =
+  let stage = name_to_stage aname t in
+  let obj = get_obj_unconstrained stage t |> validate_arr_idx idx in 
+  match obj with
+    | OArray(a) ->
+      if a.ispair
+      then (
+        let upper, lower = split_integer (a.acells.(idx)) in
+        [upper; lower])
+      else ([a.acells.(idx)])
+    | _ -> error "[control_get] tried to use control_get on a non-array object"
+;;
+
+let control_getrange 
+    ~(aname : string)
+    ~(s : int)
+    ~(e : int)
+    (t : t)
+  =
+  let stage = name_to_stage aname t in
+  let obj = get_obj_unconstrained stage t |> validate_arr_idx s |> validate_arr_idx (e-1) in 
+  match obj with
+    | OArray(a) ->
+      let get_idx ispair idx =
+        if ispair
+        then (
+          let upper, lower = split_integer (a.acells.(idx)) in
+          [upper; lower])
+        else ([a.acells.(idx)])
+      in
+      List.map (get_idx a.ispair) (MiscUtils.range s e)
+    | _ -> error "[control_get] tried to use control_get on a non-array object"
 ;;
