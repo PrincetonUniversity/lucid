@@ -60,12 +60,17 @@ let stage_to_string ?(pad = "") show_ids idx s =
     in
     if show_ids
     then 
+      (* don't print long arrays (use control commands to inspect them) *)
+      let contents_str = if (Array.length a.acells > 1024)
+        then "[...]"
+        else (Printing.list_to_string print_entry (Array.to_list a.acells))
+      in
       Printf.sprintf
         "%s%s(%d) : %s\n"
         (pad ^ pad)
         (CorePrinting.id_to_string a.aid)
         idx
-        (Printing.list_to_string print_entry (Array.to_list a.acells))
+        contents_str
     else
       (* old printer, just for testing *)
       Printf.sprintf
@@ -158,18 +163,10 @@ let id_map t =
   List.mapi (fun idx obj -> obj_to_id obj, idx)
     (Array.to_list t.objs)
 ;;
-let name_map t =
-  id_map t |> List.map (fun (id, n) -> Id.name id, n)
-;;
 
 let id_to_stage id t =
   match (List.assoc_opt id (id_map t)) with
     | None -> error ("[pipeline error] could not find global object "^(CorePrinting.id_to_string id))
-    | Some(stage_num) -> stage_num
-;;
-let name_to_stage name t =
-  match (List.assoc_opt name (name_map t)) with
-    | None -> error ("[pipeline error] could not find global object "^(name))
     | Some(stage_num) -> stage_num
 ;;
 
@@ -324,12 +321,12 @@ let install_table_entry
      note: generally, these reference objects by name rather than stage ***)
 
 let control_set
-    ~(aname : string)
+    ~(id : Id.t)
     ~(idx : int)
     ~(newvals : zint list)
     (t : t)
   =
-  let stage = name_to_stage aname t in
+  let stage = id_to_stage id t in
   let obj = get_obj_unconstrained stage t |> validate_arr_idx idx in 
   match obj with
     | OArray(a) ->
@@ -351,13 +348,13 @@ let control_set
 ;;
 
 let control_setrange
-    ~(aname : string)
+    ~(id : Id.t)
     ~(s : int)
     ~(e : int)
     ~(newvals : zint list)
     (t : t)
   =
-  let stage = name_to_stage aname t in
+  let stage = id_to_stage id t in
   let obj = get_obj_unconstrained stage t |> validate_arr_idx s |> validate_arr_idx (e-1) in 
   match obj with
     | OArray(a) ->
@@ -378,11 +375,11 @@ let control_setrange
 ;;
 
 let control_get 
-    ~(aname : string)
+    ~(id : Id.t)
     ~(idx : int)
     (t : t)
   =
-  let stage = name_to_stage aname t in
+  let stage = id_to_stage id t in
   let obj = get_obj_unconstrained stage t |> validate_arr_idx idx in 
   match obj with
     | OArray(a) ->
@@ -395,12 +392,12 @@ let control_get
 ;;
 
 let control_getrange 
-    ~(aname : string)
+    ~(id : Id.t)
     ~(s : int)
     ~(e : int)
     (t : t)
   =
-  let stage = name_to_stage aname t in
+  let stage = id_to_stage id t in
   let obj = get_obj_unconstrained stage t |> validate_arr_idx s |> validate_arr_idx (e-1) in 
   match obj with
     | OArray(a) ->
@@ -413,4 +410,13 @@ let control_getrange
       in
       List.map (get_idx a.ispair) (MiscUtils.range s e)
     | _ -> error "[control_get] tried to use control_get on a non-array object"
+;;
+
+let control_install_table_entry
+    ~(id : Id.t)
+    ~(entry : tbl_entry)
+     (t : t)
+  = 
+  let stage = id_to_stage id t in
+  install_table_entry stage entry t
 ;;

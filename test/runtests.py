@@ -28,9 +28,10 @@ def interp_test(fullfile, args):
         ret = subprocess.run(cmd, stdout=outfile, stderr=subprocess.DEVNULL)
     if ret.returncode != 0:
         # errors might be expected
-        # print("command returned error: "+"./dpt --silent %s"%fullfile)
+        print("test returned error: "+"./dpt --silent %s"%fullfile)
         errors.append(fullfile)
     if not filecmp.cmp("test/output/"+outname, "test/expected/"+outname):
+        print("test returned different output than expected: "+"./dpt --silent %s"%fullfile)
         diffs.append(shortfile)
     outfile.close()
 
@@ -40,7 +41,7 @@ def just_typecheck(path, file, suffix = ""):
     cmd = ["./dpt", "--silent",  fullfile]
     ret = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     if ret.returncode != 0:
-        print("command returned error: "+"./dpt --silent %s"%fullfile)
+        print("test returned error: "+"./dpt --silent %s"%fullfile)
         errors.append(fullfile)
 
 def interactive_test(fullfile, args):

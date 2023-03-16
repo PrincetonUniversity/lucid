@@ -51,6 +51,7 @@ module State = struct
     ; links : topology
     ; switches : state array
     ; actions  : action Env.t
+    ; global_names : SyntaxGlobalDirectory.dir
     }
 
   and state =
@@ -95,6 +96,7 @@ module State = struct
     ; switches = Array.of_list []
     ; links = empty_topology 0
     ; actions = Env.empty
+    ; global_names = SyntaxGlobalDirectory.empty_dir
     }
   ;;
 

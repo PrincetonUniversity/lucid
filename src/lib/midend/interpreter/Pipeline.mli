@@ -62,7 +62,7 @@ val install_table_entry:
 
 (* control command operations *)
 val control_set:
-     aname:string
+     id:Id.t
   -> idx:int
   -> newvals: zint list
   -> t
@@ -70,7 +70,7 @@ val control_set:
 [@@ocamlformat "disable"]
 
 val control_setrange:
-     aname:string
+     id:Id.t
   -> s:int
   -> e:int
   -> newvals: zint list
@@ -79,16 +79,25 @@ val control_setrange:
 [@@ocamlformat "disable"]
 
 val control_get:
-     aname:string
+     id:Id.t
   -> idx:int
   -> t
   -> zint list
 [@@ocamlformat "disable"]
 
 val control_getrange:
-     aname:string
+     id:Id.t
   -> s:int
   -> e:int
   -> t
   -> zint list list
 [@@ocamlformat "disable"]
+
+(* just wraps the internal method *)
+val control_install_table_entry:
+     id:Id.t
+   -> entry: tbl_entry
+   -> t
+   -> unit
+[@@ocamlformat "disable"]   
+

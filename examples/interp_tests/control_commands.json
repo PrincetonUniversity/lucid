@@ -1,0 +1,18 @@
+{
+  "random seed": 0,
+  "max time": 1000,
+  "events": [
+    {"type": "command", "name":"Table.install", "args":{"table":"ftbl", "key":["2<<32>> &&& 3"], "action":"ftbl.hit_acn", "args":[20]}},
+    {"type": "command", "name":"Table.install", "args":{"table":"ftbl", "key":["_<<32>>"], "action":"ftbl.hit_acn", "args":[10]}},
+    {"type": "command", "name":"Array.set", "args":{"array":"myarr", "index":0,"value":[666]}},
+    {"type": "command", "name":"Array.setrange", "args":{"array":"myarr", "start":0, "end":8,"value":[10]}},
+    {"type": "command", "name":"Array.get", "args":{"array":"myarr", "index":0}},
+    {"name":"pktin", "args":[1, 1]},
+    {"type": "command", "name":"Array.get", "args":{"array":"myarr", "index":0}},
+    {"name":"pktin", "args":[1, 2]},
+    {"type": "command", "name":"Array.get", "args":{"array":"myarr", "index":0}},
+    {"name":"pktin", "args":[1, 3]},
+    {"type": "command", "name":"Array.get", "args":{"array":"myarr", "index":0}},
+    {"type": "command", "name":"Array.getrange", "args":{"array":"myarr", "start":0, "end":8} }
+  ]
+}

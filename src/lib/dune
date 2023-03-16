@@ -33,9 +33,10 @@
    lexer
    syntax
    globalConstructorTagging
-   globalDirectory
+   SyntaxGlobalDirectory
    syntaxUtils
    coreSyntax
+   coreSyntaxGlobalDirectory
    sourceTracking
    coreZ3
    collections
@@ -70,6 +71,7 @@
    syntaxToCore
    interp
    interpCore
+   interpControl
    pipeline
    preprocess
    interpSpec

@@ -2,17 +2,17 @@
    to the input stream, which consists of 
    events located at specific ports in the network 
    and interpreter control commands *)
-
 open CoreSyntax
 open Yojson.Basic
-
+open Str
 
 (* interpreter state events *)
 type control_e = 
-  | ArraySet of string * int * (int list)
-  | ArraySetRange of string * int * int * (int list)
-  | ArrayGet of string * int
-  | ArrayGetRange of string * int * int
+  | ArraySet of string * value * (value list)
+  | ArraySetRange of string * value * value * (value list)
+  | ArrayGet of string * value
+  | ArrayGetRange of string * value * value
+  | TableInstall of string * tbl_entry
   | Print of string
   | Noop
 
@@ -57,12 +57,55 @@ let assoc_to_vals keys lst =
     (fun aname -> List.assoc aname lst)
     keys
 ;;    
-let json_to_intval v =
-  match v with 
-    | `Int v -> v
-    | `String v -> int_of_string v        
-    | _ -> error "[json_to_intval] got a value that is not an int or string"
-;;
+
+
+module JP = struct
+  let to_size v =
+    match v with 
+      | `Int v -> v
+      | `String v -> int_of_string v        
+      | _ -> error "[json_to_intval] got a value that is not an int or string"
+  ;;
+
+  (* json parsing module *)
+  let to_vint v = 
+    match v with 
+      (* 32-bit int *)
+      | `Int v -> vint v 32
+      | `String vstr -> 
+        (* x<<size>> *)
+        let v, sz = if (String.contains vstr '<')
+          then (
+            Scanf.sscanf vstr "%d<<%d>>" (fun x y -> x,y))
+          else (
+            Scanf.sscanf vstr "%d" (fun x -> x, 32)
+          )
+        in
+        vint v sz
+      | _ -> error "[to_vint] got a value that is not an int or string"
+  ;;
+  let to_eval_int v = v |> to_vint |> value_to_exp ;;
+
+
+
+  (* parse string to value. Value may have optional size. 
+     Value may be a wildcard for table pattern (_). *)
+  let string_to_val_components str =
+    let re_val_size = Str.regexp "\\(.*\\)<<\\(.*\\)>>" in
+    let re_val = Str.regexp "\\(.*\\)" in
+    try 
+      let _ = Str.search_forward re_val_size str 0 in
+      (Str.matched_group 1 str, Str.matched_group 2 str)
+    with _ -> (
+      try 
+        let _ = Str.search_forward re_val str 0 in
+        Str.matched_group 1 str, "32"
+      with _ -> (
+        error "invalid form for pattern value string"
+      )
+    )
+  ;;
+end
 
 let parse_array_set lst = 
   let arglist = match (List.assoc "args" lst) with
@@ -72,7 +115,7 @@ let parse_array_set lst =
   in
   match arglist with
     | [`String a; idx; `List vs] -> 
-      ArraySet(a, json_to_intval idx, List.map json_to_intval vs)
+      ArraySet(a, JP.to_vint idx, List.map JP.to_vint vs)
     | _ -> error "[parse_array_set] args must be an assoc or list"
 ;;
 
@@ -84,7 +127,7 @@ let parse_array_setrange lst =
   in
   match arglist with
     | [`String a; s; e; `List vs] -> 
-      ArraySetRange(a, json_to_intval s, json_to_intval e, List.map json_to_intval vs)
+      ArraySetRange(a, JP.to_vint s, JP.to_vint e, List.map JP.to_vint vs)
     | _ -> error "[parse_array_set] args must be an assoc or list"
 
 let parse_array_get lst =
@@ -94,7 +137,7 @@ let parse_array_get lst =
     | _ -> error "[parse_array_get] args must be an assoc or list"
   in
   match arglist with
-    | [`String a; v] -> ArrayGet(a, json_to_intval v)
+    | [`String a; v] -> ArrayGet(a, JP.to_vint v)
     | _ -> error "[malformed array.get args]"
 ;;
 let parse_array_getrange lst =
@@ -104,8 +147,81 @@ let parse_array_getrange lst =
     | _ -> error "[parse_array_getrange] args must be an assoc or list"
   in
   match arglist with
-    | [`String a; s; e] -> ArrayGetRange(a, json_to_intval s, json_to_intval e)
+    | [`String a; s; e] -> ArrayGetRange(a, JP.to_vint s, JP.to_vint e)
     | _ -> error "[malformed array.get args]"
+;;
+
+let parse_pat patjson =
+  match patjson with
+  | `String s -> (
+    match Str.split (Str.regexp "&&&") s with
+    (* no mask, just base *)
+    | [b] -> (
+      let v, sz = JP.string_to_val_components b in
+      let v, sz = String.trim v, String.trim sz in 
+      let sz = int_of_string sz in
+      match v with
+        | "_" -> vwild sz
+        | vint -> vpat (int_to_bitpat (int_of_string vint) sz))
+    (* base and mask. Note: use size from base. *)
+    | [b; m] -> (
+      let v, sz = JP.string_to_val_components b in
+      let m, _  = JP.string_to_val_components m in
+      let v, sz, m = String.trim v, String.trim sz, String.trim m in 
+      vpat (int_mask_to_bitpat (int_of_string v) (int_of_string m) (int_of_string sz))      
+    )
+    (* something else -- fail. *)
+    | _ -> error "malformed pattern string";
+  )
+  (* int -- assume 32-bit *)
+  | `Int i -> vpat (int_to_bitpat i 32)
+  | _ -> error "not a pattern string"
+;;
+
+let parse_entry entrylst =
+  let key = match (List.assoc "key" entrylst) with
+    | `List patlst -> List.map parse_pat patlst |> List.map value_to_exp
+    | _ -> error "[parse_entry] key is in wrong format"
+  in
+  let action = match (List.assoc "action" entrylst) with
+    | `String acn_name -> 
+      Id.create acn_name
+    | _ -> error "[parse_entry] action name is wrong format"
+  in
+  let priority = match (List.assoc_opt "priority" entrylst) with
+    | Some(v) -> JP.to_size v
+    | _ -> 0
+  in
+  let action_args = match (List.assoc "args" entrylst) with
+    | `List argslst -> 
+      List.map JP.to_eval_int argslst
+    | _ -> error "[parse_entry] action args are in wrong format"
+  in
+  {
+    eprio= priority;
+    ematch=key;
+    eaction=action;
+    eargs = action_args;
+  }
+;;
+
+let parse_str_field lst field = match (List.assoc field lst) with
+  | `String s -> s
+  | _ -> error "[parse_str_field] not a string value"
+;;
+
+(*
+  Table.install format: 
+  {"type":"command", "name": "Table.install", 
+    "args":{"table":"mytbl", "pattern":["4<<32>> &&& 3<<32>>", "_<<32>>"], "action":"hit_acn", "args":[3], "priority":1}    
+    }*)
+let parse_table_install lst =
+  let tblname, entry = match (List.assoc "args" lst) with
+    | `Assoc entrylst -> 
+      parse_str_field entrylst "table", parse_entry entrylst
+    | _ -> error "[parse_table_install] args is wrong type"
+  in
+  TableInstall(tblname, entry)
 ;;
 
 let parse_control_e lst =
@@ -114,6 +230,7 @@ let parse_control_e lst =
     | (`String "Array.setrange") -> parse_array_setrange lst      
     | (`String "Array.get") -> parse_array_get lst
     | (`String "Array.getrange") -> parse_array_getrange lst
+    | (`String "Table.install") -> parse_table_install lst
     | _ -> error "unknown control command"
     (* | None -> error "control command has no name field" *)
 ;;
@@ -122,19 +239,19 @@ let control_event_to_string control_e =
   match control_e with
   | ArraySet(arrname, idx, newvals) -> 
     Printf.sprintf 
-      "Array.set(%s, %i, %s);" 
+      "Array.set(%s, %s, %s);" 
       arrname 
-      idx 
-      (Printf.sprintf "[%s]" (List.map string_of_int newvals |> String.concat ","))
+      (CorePrinting.value_to_string idx) 
+      (Printf.sprintf "[%s]" (List.map CorePrinting.value_to_string newvals |> String.concat ","))
   | ArraySetRange(arrname, s, e, newvals) -> 
     Printf.sprintf 
-      "Array.setrange(%s, %i, %i, %s);" 
+      "Array.setrange(%s, %s, %s, %s);" 
       arrname 
-      s
-      e 
-      (Printf.sprintf "[%s]" (List.map string_of_int newvals |> String.concat ","))
+      (CorePrinting.value_to_string s)
+      (CorePrinting.value_to_string e) 
+      (Printf.sprintf "[%s]" (List.map CorePrinting.value_to_string newvals |> String.concat ","))
   | ArrayGet(arrname, idx) -> 
-    Printf.sprintf "Array.get(%s, %i);" arrname idx
+    Printf.sprintf "Array.get(%s, %s);" arrname (CorePrinting.value_to_string idx)
   | _ -> "<control event without printer>"
 ;;
 

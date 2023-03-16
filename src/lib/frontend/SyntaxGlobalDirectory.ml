@@ -191,14 +191,24 @@ let path_to_dir path mat_global =
         (* tuple elements have names based on index *)
         let path = match path with
           | hd::tl -> (inline_idx hd)::tl
-          | _ -> path
+          | [] -> path
         in 
         Tuple{name=node.tcid; elements=[_path_to_dir path mat_global];}
       | "record" -> 
         let field = _path_to_dir path mat_global in
         Record{name=node.tcid; elements=[field]}
-      | "array" 
-      | "table" -> MatGlobal(mat_global)
+      | "array" -> (
+        let mat_global = match mat_global with
+          | Arr(t) -> Arr({t with name=node.tcid;})
+          | _ -> error "[path_to_dir] expected array, got another type of global"
+        in
+        MatGlobal(mat_global))
+      | "table" -> (
+        let mat_global = match mat_global with
+          | Tbl(t) -> Tbl({t with name=node.tcid;})
+          | _ -> error "[path_to_dir] expected table, got another type of global"
+        in
+        MatGlobal(mat_global))
       | nodename -> error ("unknown node type while building directory: "^(nodename))
     )  
   in
@@ -214,12 +224,12 @@ let rec merge_nodes n1 n2 =
 
   | Tuple({name=n1; elements=es1;}), Tuple({name=n2; elements=es2;}) -> 
     if (Cid.equals n1 n2) then (
-      let es' = merge_elements es1 es2 in
+      let es' = merge_elements es2 es1 in
       Some(Tuple({name=n1; elements=es';})))
     else (None)
   | Record({name=n1; elements=es1;}), Record({name=n2; elements=es2;}) -> 
     if (Cid.equals n1 n2) then (
-      let es' = merge_elements es1 es2 in
+      let es' = merge_elements es2 es1 in
       Some(Record({name=n1; elements=es';})))
     else (None)
   | _ -> 
@@ -227,7 +237,7 @@ let rec merge_nodes n1 n2 =
 
 (* merge two element lists *)
 and merge_elements es1 es2 = 
-  List.fold_left merge_single_element es2 es1 
+  List.fold_left merge_single_element es1 es2 
 (* merge e into es*)
 and merge_single_element (es:dir list) (e:dir) = 
   let es', merged = List.fold_left 

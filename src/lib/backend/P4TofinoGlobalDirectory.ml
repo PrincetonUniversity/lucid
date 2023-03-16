@@ -1,7 +1,7 @@
 (* build a global directory from the P4Tofino form of a program. 
    assumes that GlobalConstructorTagging.annotate has been run at the 
    start of the frontend (after first type checking) *)
-open GlobalDirectory
+open SyntaxGlobalDirectory
 open TaggedCid
 module P4 = P4TofinoSyntax
 let error = Syntax.error

@@ -2,6 +2,7 @@ open Batteries
 open Syntax
 open InterpSyntax
 open InterpState
+open CoreSyntaxGlobalDirectory
 
 let initial_state (pp : Preprocess.t) (spec : InterpSpec.t) =
   let nst =
@@ -42,74 +43,40 @@ let initialize renaming spec_file ds =
   let spec = InterpSpec.parse pp renaming spec_file in
   let nst = initial_state pp spec in
   let nst = InterpCore.process_decls nst ds in
+  (* initialize the global name directory *)
+  let nst = {nst with global_names = CoreSyntaxGlobalDirectory.build_coredirectory ds;} in
   nst, pp, spec
 ;;
 
 (*** innermost functions of interpretation loop: execute one 
      event or control op, then call a function to continue interpretation ***)
 
-let execute_event idx (nst : State.network_state) (event:CoreSyntax.event) port = 
+let execute_event print_log idx (nst : State.network_state) (event:CoreSyntax.event) port = 
   (match Env.find_opt event.eid nst.handlers with
   | None -> error @@ "No handler for event " ^ Cid.to_string event.eid
   | Some handler ->
-    Printf.printf
-      "t=%d: Handling %sevent %s at switch %d, port %d\n"
-      nst.current_time
+    if (print_log) then(
+      Printf.printf
+        "t=%d: Handling %sevent %s at switch %d, port %d\n"
+        nst.current_time
       (match Env.find event.eid nst.event_sorts with
       | EEntry _ -> "entry "
       | _ -> "")
       (CorePrinting.event_to_string event)
       idx
-      port;
+      port);
+
     handler nst idx port event);
 ;;
 
-
-
 let execute_control swidx (nst : State.network_state) (ctl_ev : control_event) =
-  (* print_endline ("executing control command: "^(InterpSyntax.control_event_to_string ctl_ev.ctl_cmd)); *)
-  match ctl_ev.ctl_cmd with
-  | ArraySet(arrname, idx, newval) -> 
-    let p = nst.switches.(swidx).pipeline in
-    Pipeline.control_set arrname idx (List.map Integer.of_int newval) p
-  | ArraySetRange(arrname, s, e, newval) -> 
-    let p = nst.switches.(swidx).pipeline in
-    Pipeline.control_setrange arrname s e (List.map Integer.of_int newval) p
-  | ArrayGet(arrname, idx) -> 
-    let p = nst.switches.(swidx).pipeline in
-    let result = Pipeline.control_get arrname idx p in
-    let result_json = 
-      `Assoc[
-        ("array", `String arrname);
-        ("index", `Int idx);
-        ("value", `List (List.map (fun z -> `Int (Integer.to_int z)) result))
-      ]
-    in
-    print_endline (Yojson.Basic.pretty_to_string result_json);
-  | ArrayGetRange(arrname, s, e) -> 
-    let p = nst.switches.(swidx).pipeline in
-    let cells = Pipeline.control_getrange arrname s e p in
-    let vals = List.map 
-      (fun cell -> `List (List.map (fun zword -> `Int (Integer.to_int zword)) cell))
-      cells
-    in
-    let result_json = 
-      `Assoc[
-        ("array", `String arrname);
-        ("start", `Int s);
-        ("end", `Int e);
-        ("values", `List vals)
-      ]
-    in
-    print_endline (Yojson.Basic.pretty_to_string result_json);
-  | _ -> 
-    error "[execute_control] unknown control command"
+  InterpControl.handle_control nst swidx ctl_ev
 ;;
 
 
-let execute_interp_event simulation_callback idx (nst: State.network_state) ievent port =
+let execute_interp_event print_log simulation_callback idx (nst: State.network_state) ievent port =
   (match ievent with
-    | IEvent(event) -> execute_event idx nst event port
+    | IEvent(event) -> execute_event print_log idx nst event port
     | IControl(ctl_ev) -> execute_control idx nst ctl_ev);
     simulation_callback ((idx + 1) mod Array.length nst.switches) nst
 ;;
@@ -136,7 +103,7 @@ let simulate (nst : State.network_state) =
         match State.next_event idx nst with
         | None -> interp_events ((idx + 1) mod Array.length nst.switches) nst
         | Some (ievent, port) ->
-          execute_interp_event interp_events idx nst ievent port)
+          execute_interp_event true interp_events idx nst ievent port)
   in
   let nst = interp_events 0 nst in
   nst
@@ -187,7 +154,7 @@ let rec interp_events event_getter_opt max_time idx nst =
       match State.next_event idx nst with
       | None -> interp_events event_getter_opt max_time ((idx + 1) mod Array.length nst.switches)  nst
       | Some (event, port) ->
-        execute_interp_event (interp_events event_getter_opt max_time) idx nst event port)
+        execute_interp_event false (interp_events event_getter_opt max_time) idx nst event port)
 ;;
 
 let sighdl s =
