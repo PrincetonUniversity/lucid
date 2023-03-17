@@ -18,6 +18,7 @@ type config =
   ; mutable show_interp_state : bool
   ; mutable interactive : bool (** Run interpreter interactively (stdin / stdout) **)
   ; mutable output : string
+  ; mutable json : bool (** Print json outputs **)
   }
 
 (* TODO: We might want to add more parameters controlling which transformations
@@ -39,6 +40,7 @@ let default () =
   ; show_interp_state = true
   ; interactive = false
   ; output = "lucid.output"
+  ; json = false
   }
 ;;
 
@@ -67,6 +69,7 @@ let parse_common () =
     set_type_names ();
     set_all_effects ()
   in
+  let set_json () = cfg.json <- true; cfg.verbose <- false in
   let speclist =
     [ ( "--silent"
       , Arg.Unit unset_verbose
@@ -106,6 +109,9 @@ let parse_common () =
       , Arg.Unit set_constraints
       , "If true, print out each set of constraints we try to solve, but not \
          the SMT query itself. Not enabled by -m." )
+    ; ( "--json"
+      , Arg.Unit (set_json)
+      , "If true, print all interpreter output as json records")
     ]
   in
   speclist

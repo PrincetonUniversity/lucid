@@ -334,7 +334,6 @@ module State = struct
       counter.entries_handled
       counter.total_handled
   ;;
-
   let st_to_string
       ?(show_vars = false)
       ?(show_pipeline = true)

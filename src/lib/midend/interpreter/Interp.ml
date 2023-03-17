@@ -1,4 +1,5 @@
 open Batteries
+open Yojson.Basic
 open Syntax
 open InterpSyntax
 open InterpState
@@ -56,15 +57,28 @@ let execute_event print_log idx (nst : State.network_state) (event:CoreSyntax.ev
   | None -> error @@ "No handler for event " ^ Cid.to_string event.eid
   | Some handler ->
     if (print_log) then(
-      Printf.printf
-        "t=%d: Handling %sevent %s at switch %d, port %d\n"
-        nst.current_time
-      (match Env.find event.eid nst.event_sorts with
-      | EEntry _ -> "entry "
-      | _ -> "")
-      (CorePrinting.event_to_string event)
-      idx
-      port);
+      if (Cmdline.cfg.json || Cmdline.cfg.interactive) then (
+        `Assoc [
+         "event_arrival", 
+          `Assoc [
+            "switch", `Int idx;
+            "port", `Int port;
+            "time", `Int nst.current_time;
+            "event", `String (CorePrinting.event_to_string event);
+          ]]
+          |> Yojson.Basic.pretty_to_string |> print_endline
+      )
+      else (
+        Printf.printf
+          "t=%d: Handling %sevent %s at switch %d, port %d\n"
+          nst.current_time
+        (match Env.find event.eid nst.event_sorts with
+        | EEntry _ -> "entry "
+        | _ -> "")
+        (CorePrinting.event_to_string event)
+        idx
+        port);
+    );
 
     handler nst idx port event);
 ;;
@@ -82,10 +96,11 @@ let execute_interp_event print_log simulation_callback idx (nst: State.network_s
 ;;
 
 let simulate (nst : State.network_state) =
+  if ((not Cmdline.cfg.json) && (not Cmdline.cfg.interactive)) then (
   Console.report
   @@ "Using random seed: "
   ^ string_of_int nst.config.random_seed
-  ^ "\n";
+  ^ "\n");
   Random.init nst.config.random_seed;
   let rec interp_events idx nst =
     match State.next_time nst with

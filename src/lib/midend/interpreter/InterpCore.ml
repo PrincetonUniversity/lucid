@@ -1,5 +1,6 @@
 (* Interpreter evaluation functions *)
 open Batteries
+open Yojson.Basic
 open CoreSyntax
 open SyntaxUtils
 open InterpState
@@ -28,7 +29,6 @@ let raw_group v =
   | VGroup ls -> ls
   | _ -> error "not group"
 ;;
-
 
 let interp_op op vs =
   let extract_int = function
@@ -279,8 +279,44 @@ let printf_replace vs (s : string) : string =
     vs
 ;;
 
+(* 
+{
+  interp_msg : {
+    "type" : "printf"
+    "value" : ...
+    "location"
+  }
+
+
+}
+
+ *)
+
+(* print message to a json record *)
+let interp_report msgty msg swid_opt = 
+  (if (Cmdline.cfg.json || Cmdline.cfg.interactive)
+  then (
+      `Assoc (
+        [msgty, `String msg]
+      (* `Assoc ["interpreter_message", `Assoc ["inter_message", `String msgty; "value", `String msg]] *)
+      @(match swid_opt with Some(swid) -> ["switch", `Int swid] | _ -> []))
+     |>  Yojson.Basic.pretty_to_string)
+  else (msg))
+  |> print_endline
+;;
+
+let print_event_arrival swid str =
+  interp_report "event_arrival" str (Some(swid))
+;;
+let print_final_state str =
+  interp_report "final_state" str None
+;;
+let print_printf swid str = 
+  interp_report "printf" str (Some(swid))
+;;
+
 (* print an exit event as a json to stdout *)
-let output_exit_event swid port_opt event time = 
+let print_exit_event swid port_opt event time = 
   let open Yojson.Basic in 
   let raw_json_val v = 
     match v.v with 
@@ -314,12 +350,10 @@ let output_exit_event swid port_opt event time =
 let log_exit swid port_opt event (nst : State.network_state) = 
   if (Cmdline.cfg.interactive) 
   then 
-    (output_exit_event swid port_opt event nst.current_time)
+    (print_exit_event swid port_opt event nst.current_time)
   else 
   (State.log_exit swid port_opt event nst)
 ;; 
-
-
 
 let partial_interp_exps nst swid env exps =
   List.map
@@ -352,11 +386,9 @@ let rec interp_statement nst swid locals s =
     Env.add (Id id) (interp_exp e) locals
   | SLocal (id, _, e) -> Env.add (Id id) (interp_exp e) locals
   | SPrintf (s, es) ->
-    let vs = List.map (fun e -> interp_exp e |> extract_ival) es in
-    if (Cmdline.cfg.interactive)
-    (* for interactive mode, print messages to stderr *)
-    then (prerr_endline (printf_replace vs s)) 
-    else (print_endline (printf_replace vs s));
+    let vs = List.map (fun e -> interp_exp e |> extract_ival) es in    
+    let strout = printf_replace vs s in
+    print_printf swid strout;
     locals
   | SIf (e, ss1, ss2) ->
     let b = interp_exp e |> extract_ival |> raw_bool in
