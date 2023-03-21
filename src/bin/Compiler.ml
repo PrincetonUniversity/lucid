@@ -64,7 +64,8 @@ module ArgParse = struct
     ; portspec : string option
     ; interp_spec_file : string
     ; aargs : string list
-    ; profile_cmd : string option 
+    ; profile_cmd : string option
+    ; ctl_fn : string option
     }
 
   let args_default =
@@ -74,6 +75,7 @@ module ArgParse = struct
     ; interp_spec_file = ""
     ; aargs = []
     ; profile_cmd = None
+    ; ctl_fn = None;
     }
   ;;
 
@@ -86,6 +88,7 @@ module ArgParse = struct
     let set_ports s = args_ref := { !args_ref with portspec = Some(s) } in
     let set_profile_cmd s = args_ref := {!args_ref with profile_cmd = Some(s)} in
     let set_build_dir s = args_ref :=  {!args_ref with builddir=s;} in 
+    let set_control ctl_fn = args_ref := {!args_ref with ctl_fn=Some(ctl_fn);} in
     let speclist =
       [ ( "--spec"
         , Arg.String set_spec
@@ -97,6 +100,8 @@ module ArgParse = struct
       ; "--silent", Arg.Unit disable_logging, "Disable all logging"
       ; "-p", Arg.String set_profile_cmd, "Profile program instead of compiling."
       ; "-d", Arg.Unit enable_debug, "Enable debug print / log"
+      ; "--control", Arg.String set_control, "Python control program"
+      ; 
       ]
     in
     let parse_aarg (arg : string) =
@@ -141,10 +146,9 @@ let profile_for_tofino target_filename portspec build_dir profile_cmd =
   let portspec = ParsePortSpec.parse portspec in 
   TofinoProfiling.profile core_ds portspec build_dir profile_cmd
 ;;
-let compile_to_tofino target_filename portspec build_dir =
-  (* parse *)
-  let ds = Input.parse target_filename in
-  (* before the "official" frontend, do temporary optimization 
+let compile_to_tofino (args:ArgParse.args_t) =
+  let ds = Input.parse args.dptfn in
+  (* before the standard frontend, do temporary optimization 
      passes that will eventually be removed once the 
      mid/back-end is better optimized. *)
   let ds = FunctionInliningSpecialCase.inline_prog_specialcase ds in
@@ -154,13 +158,13 @@ let compile_to_tofino target_filename portspec build_dir =
   let core_ds = MidendPipeline.process_prog ds in
   (* backend does tofino-specific transformations, layout, 
   then translates into p4tofino syntax and produces program strings *)
-  let portspec = ParsePortSpec.parse portspec in 
+  let portspec = ParsePortSpec.parse args.portspec in 
   unmutable_report@@"Starting P4-Tofino compilation. Using switch port configuration: ";
   print_endline (ParsePortSpec.string_of_portconfig portspec);
-  let p4_str, c_str, py_str, py_eventlib, globals = TofinoPipeline.compile core_ds portspec build_dir in 
+  let p4_str, c_str, py_str, py_eventlib, globals = TofinoPipeline.compile core_ds portspec args.builddir args.ctl_fn in 
   (* finally, generate the build directory with the programs + some helpers and a makefile *)
-  unmutable_report@@"Compilation to P4 finished. Writing to build directory:"^(build_dir);
-  PackageTofinoApp.generate p4_str c_str py_str py_eventlib globals build_dir 
+  unmutable_report@@"Compilation to P4 finished. Writing to build directory:"^(args.builddir);
+  PackageTofinoApp.generate p4_str c_str py_str py_eventlib globals args.builddir 
 
 let main () = 
   unmutable_report "Compilation to P4 started...";
@@ -172,7 +176,7 @@ let main () =
     (* todo: also copy the included files *)
     let _ = cpy_src_to_build args.dptfn args.builddir in
     (* compile lucid code to P4 / python / C *)
-    compile_to_tofino args.dptfn args.portspec args.builddir
+    compile_to_tofino args
   )
   | Some(profile_cmd) -> (
     IoUtils.setup_profile_dir args.builddir;

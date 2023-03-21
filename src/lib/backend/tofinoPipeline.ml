@@ -204,7 +204,7 @@ let compile_dataplane ds portspec build_dir =
   let tofino_prog = CoreToP4Tofino.translate tds portspec in 
   tofino_prog
 ;;
-let compile ds portspec build_dir = 
+let compile ds portspec build_dir ctl_fn_opt = 
     if (!do_log) then (
         CoreCdg.start_logging ();
         CoreDfg.start_logging ();
@@ -241,7 +241,7 @@ let compile ds portspec build_dir =
     print_endline globals_directory; *)
     (* print data and control plane programs *)
     let p4 = P4TofinoPrinting.p4_of_prog tofino_prog in 
-    let py_ctl = ControlPrinter.pyctl_of_prog tofino_prog in
+    let py_ctl = ControlPrinter.pyctl_of_prog tofino_prog ctl_fn_opt in
     let cpp_ctl = ControlPrinter.cppctl_of_prog tofino_prog in
     let py_eventlib = PyEventLib.coresyntax_to_pyeventlib ds in
     p4, cpp_ctl, py_ctl, py_eventlib, globals_directory

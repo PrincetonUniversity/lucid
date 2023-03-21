@@ -38,8 +38,11 @@ let make_var_names_unique ds =
         super#visit_DAction
           (CL.split (acn.aconst_params@acn.aparams) |> fst)
           acn
-
+      (* skip params *)
       method! visit_params _ params = params     
+
+      (* skip spans too -- source id tags must not change *)
+      method! visit_sp _ sp = sp
 
       method! visit_id parameters id = 
         match (CL.exists (Id.equals id) parameters) with 
