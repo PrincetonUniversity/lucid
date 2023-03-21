@@ -51,13 +51,13 @@ let manifest_fn = "manifest.txt"
 let manifest_str = [%string 
 "\
 Lucid-generated tofino project folder\
-Contents: \
- %{p4_fn} -- P4 data plane program\
- %{py_fn} -- Python script to install multicast rules after starting %{p4_fn}\
- %{py_eventlib_fn} -- Python event parsing library\
- %{globals_dir_fn} -- Globals name directory (maps lucid global variable names to names in compiled P4)\
- %{make_fn} -- simple makefile to build and run P4 program\
- %{c_fn} -- c control plane (currently unused)\
+Contents: \n\
+ %{p4_fn} -- P4 data plane program\n\
+ %{py_fn} -- Python script to install multicast rules after starting %{p4_fn}\n\
+ %{py_eventlib_fn} -- Python event parsing library\n\
+ %{globals_dir_fn} -- Globals name directory (maps lucid global variable names to names in compiled P4)\n\
+ %{make_fn} -- simple makefile to build and run P4 program\n\
+ %{c_fn} -- c control plane (currently unused)\n\
 "]
 ;;
 
