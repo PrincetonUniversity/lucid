@@ -32,9 +32,8 @@ let event_param_alignment ds =
       | DEvent(id, _, params) -> 
         if (((params_wid params) mod 8) <> 0)
         then (
-          report_err decl.dspan ("[Event Alignment Check] all event parameters must be byte-aligned, \
-            i.e., the total width is a multiple of 8. \
-            The event "^(fst id)^"'s parameters are not byte-aligned.");
+          report_err decl.dspan ("[Event Alignment Check] every event parameter must either start \
+            or end on a byte boundary. The event "^(fst id)^"'s parameters are not byte-aligned.");
           pass := false
         )
       | _ -> ()
@@ -61,7 +60,7 @@ let array_sizes ds : bool =
           if (not pass) then (
            report_err 
             dec.dspan 
-            ("[array sizes check] Array "^(Id.to_string id)^" is too large. An array must fit into 35 16KB blocks. This array requires "^(string_of_int (sblocks - 1)));
+            ("[array sizes check] An Array created by the above statement ( internal Array name: "^(Id.to_string id)^") is too large. An array must fit into 35 16KB blocks. This array requires "^(string_of_int (sblocks - 1)));
           );
           prev_pass && pass
         | "PairArray" -> 
@@ -72,7 +71,7 @@ let array_sizes ds : bool =
           if (not pass) then (
            report_err 
             dec.dspan 
-            ("[array sizes check] Array "^(Id.to_string id)^" is too large. An array must fit into 35 16KB blocks. This array requires "^(string_of_int (sblocks - 1)));
+            ("[array sizes check] An Array created by the above statement ( internal Array name: "^(Id.to_string id)^") is too large. An array must fit into 35 16KB blocks. This array requires "^(string_of_int (sblocks - 1)));
           );
           prev_pass && pass
         | _ -> prev_pass
