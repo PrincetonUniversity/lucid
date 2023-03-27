@@ -33,6 +33,7 @@ _opam/
 *.pyc
 *.exe
 tmp.txt
+tmp/
 
 backendTests
 test/output
