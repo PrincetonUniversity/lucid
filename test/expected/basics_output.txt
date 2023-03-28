@@ -1,11 +1,3 @@
-
-In examples/interp_tests/basics.dpt: 
-
-69|    generate count_to_10 (0); // Dangerous, because this happens at linerate
-               ~~~~~~~~~~~~~~~
-
-warning: examples/interp_tests/basics.dpt: Unconditional generation of potential non-exit event in entry handler!
-
 dpt: Auto-detected specification file examples/interp_tests/basics.json
 dpt: Simulating...
 dpt: Using random seed: 0

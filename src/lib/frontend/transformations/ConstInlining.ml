@@ -3,7 +3,9 @@ open Syntax
 open Collections
 
 (* Inline all const declarations. Expects modules to be eliminated first as
-   well as alpha-renaming. *)
+   well as alpha-renaming. We do this last because record/vector/tuple unrolling
+   can generate new EConst statements (from e.g. global records with some constant
+   fields). *)
 type env = e IdMap.t
 
 let inliner =

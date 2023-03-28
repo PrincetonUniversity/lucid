@@ -8,14 +8,13 @@ let print_if_debug ds =
 
 let print_if_verbose str = if Cmdline.cfg.verbose then Console.report str
 
-let process_prog builtin_tys ds =   
+let process_prog builtin_tys ds =
   print_if_debug ds;
   print_if_verbose "-------Checking well-formedness---------";
   Wellformed.pre_typing_checks ds;
   print_if_verbose "---------typing1---------";
   let ds = Typer.infer_prog builtin_tys ds in
   let ds = GlobalConstructorTagging.annotate ds in
-
   (* let ds = SourceTracking.init_tracking ds in  *)
   print_if_verbose "---------Concretizing symbolics-------------";
   let ds = SymbolicElimination.eliminate_prog ds in
@@ -32,14 +31,14 @@ let process_prog builtin_tys ds =
   print_if_verbose "-------Eliminating modules---------";
   let ds = ModuleElimination.eliminate_prog ds in
   print_if_debug ds;
+  print_if_verbose "-------Inlining size declarations---------";
+  let ds = SizeInlining.replace_prog ds in
+  print_if_debug ds;
   print_if_verbose "---------typing2---------";
   let ds = Typer.infer_prog builtin_tys ds in
   print_if_debug ds;
   print_if_verbose "-------Eliminating type aliases 2---------";
   let ds = ReplaceUserTys.replace_prog ds in
-  print_if_debug ds;
-  print_if_verbose "-------Inlining size declarations---------";
-  let ds = SizeInlining.replace_prog ds in
   print_if_debug ds;
   print_if_verbose "-----------inlining functions-----------";
   let ds = FunctionInlining.inline_prog ds in
@@ -52,13 +51,13 @@ let process_prog builtin_tys ds =
   print_if_debug ds;
   print_if_verbose "---------------typing3-------------";
   let ds = Typer.infer_prog builtin_tys ds in
-  print_if_verbose "------------Checking entry handlers---------------";
-  Linerate.check ds;
+  (* print_if_verbose "------------Checking entry handlers---------------";
+  Linerate.check ds; *)
   print_if_verbose "-------Eliminating vectors-------";
   (* WARNING: Don't run the typechecker from now until records have been eliminated.
      See VectorElimination.ml for an explanation. *)
-  (* jsonch note: actually, its until tuples have been eliminated. 
-     Not sure why, but typing just before tuple elimination fails for 
+  (* jsonch note: actually, its until tuples have been eliminated.
+     Not sure why, but typing just before tuple elimination fails for
      programs with vectors. *)
   let ds = VectorElimination.eliminate_prog ds in
   print_if_debug ds;
@@ -81,7 +80,6 @@ let process_prog builtin_tys ds =
   print_if_verbose "-------Inlining Constants-------";
   let ds = ConstInlining.inline_prog ds in
   print_if_debug ds;
-
   (* Not sure if this is still necessary *)
   print_if_verbose "-----------re-re-renaming-----------";
   let renaming'', ds = Renaming.rename ds in
@@ -91,6 +89,5 @@ let process_prog builtin_tys ds =
   (* Just to be safe *)
   let ds = Typer.infer_prog builtin_tys ds in
   print_if_debug ds;
-
   renaming, ds
 ;;
