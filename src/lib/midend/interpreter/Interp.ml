@@ -179,7 +179,7 @@ let sighdl s =
 
 (* this type should be refactored out *)
 type interactive_mode_input = 
-  | Process of located_event
+  | Process of (located_event list)
   | Continue
   | End
 
@@ -244,8 +244,9 @@ let run pp renaming (spec:InterpSpec.t) (nst : State.network_state) =
     then try 
         let ev_str = input_line stdin in 
         let ev_json = Yojson.Basic.from_string ev_str in 
-        let located_event = InterpSpec.parse_interp_input pp renaming num_switches current_time ev_json in 
-        Process (located_event)
+        let located_events = InterpSpec.parse_interp_event_list pp renaming num_switches current_time ev_json in
+        (* let located_event = InterpSpec.parse_interp_input pp renaming num_switches current_time ev_json in  *)
+        Process (located_events)
       with
         | _ -> End (* if reading from stdin fails, we want to exit *)
     (* if there are any other input pipes (i.e., the control pipe), read a command from it *)
@@ -254,8 +255,9 @@ let run pp renaming (spec:InterpSpec.t) (nst : State.network_state) =
         let ctl_fd = (List.nth all_fds 1) in 
         let ev_str = input_line (Unix.in_channel_of_descr ctl_fd) in 
         let ev_json = Yojson.Basic.from_string ev_str in 
-        let located_event = InterpSpec.parse_interp_input pp renaming num_switches current_time ev_json in 
-        Process (located_event)
+        let located_events = InterpSpec.parse_interp_event_list pp renaming num_switches current_time ev_json in
+        (* let located_event = InterpSpec.parse_interp_input pp renaming num_switches current_time ev_json in  *)
+        Process (located_events)
       with
         (* if reading from anything besides stdin fails, we don't want to exit because there's still stdin.. *)
         (* TODO -- lol clean that up *)
@@ -275,7 +277,7 @@ let run pp renaming (spec:InterpSpec.t) (nst : State.network_state) =
           | _ -> None)
       (MiscUtils.range 0 n)
     in 
-    located_events
+    List.flatten located_events
   in
 
   (* wait for 1 event or eof *)
@@ -298,9 +300,14 @@ let run pp renaming (spec:InterpSpec.t) (nst : State.network_state) =
     match input with
     | End -> nst (* end *)
     | Continue -> poll_loop nst        
-    | Process (loc_ev) ->
-        (* interpret the event, possibly polling for more events *)
-        State.push_interp_events loc_ev.ilocs loc_ev.ievent nst;
+    | Process (loc_evs) ->
+        (* add the events to queues in the network simulator *)
+        List.iter
+          (fun loc_ev -> 
+            State.push_interp_events loc_ev.ilocs loc_ev.ievent nst)
+          loc_evs;
+        (* interpret all the queued events, using event_getter to poll for more events 
+           in between iterations. *)
         let nst = interp_events (Some event_getter) (-1) 0 nst in
         poll_loop nst    
   in

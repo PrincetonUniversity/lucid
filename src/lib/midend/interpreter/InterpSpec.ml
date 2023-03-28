@@ -198,6 +198,23 @@ let parse_interp_input
     | None -> parse_event pp renaming num_switches cur_ts event)
   | _ -> error "Non-assoc type for interpreter input"
 ;;
+
+(* parse a line provided to the interactive mode interpreter, 
+   which may either be a single event (an assoc) or a list of 
+   multiple events (List of assocs) *)
+let parse_interp_event_list
+    (pp : Preprocess.t)
+    (renaming : Renaming.env)
+    (num_switches : int)
+    (gap : int)
+    (events : json)
+  = 
+  match events with
+  | `List lst -> 
+    List.map (parse_interp_input pp renaming num_switches gap) lst
+  | _ -> [parse_interp_input pp renaming num_switches gap events]
+;;
+
 let parse_interp_inputs 
     (pp : Preprocess.t)
     (renaming : Renaming.env)
