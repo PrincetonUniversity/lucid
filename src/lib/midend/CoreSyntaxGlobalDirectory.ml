@@ -127,12 +127,13 @@ let dir_to_string dir =
   ( dir_to_json dir |> Yojson.Basic.pretty_to_string )
 ;;
 
-(* resolve a string that names materialized global 
-   in the source program to its cid in the current program. 
-   - to reference the field bar of a record foo, the string 
-     should write: "foo.bar"
-   - to reference the nth item in a tuple foo, the string 
-     should write "foo.[n]" *)
+(* resolve the name of a materialized global 
+   in the source program to its name in the interpreted 
+   program.
+   - to reference the field bar of a record foo, 
+     the input name string should be: "foo.bar"
+   - to reference the nth item in a tuple foo, 
+     the input name string should be "foo.[n]" *)
 let rec names_to_compiled_cid dir names =
   match names with
   (* nothing left to resolve -- you should be on the node *)
