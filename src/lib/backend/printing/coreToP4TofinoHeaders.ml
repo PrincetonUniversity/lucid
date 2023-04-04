@@ -337,20 +337,20 @@ let generate_ingress_parser block_id (m:main_handler) lucid_internal_ports =
   (* This parse state is never used, we add it so that the tofino compiler doesn't try to 
      "optimize" the program by overlaying different event headers... *)
   (* 4/4/23 -- no longer needed, we now add no_overlay pragmas *)
-(*   let parse_all_events_state_id = id "parse_all_events" in 
+  let parse_all_events_state_id = id "parse_all_events" in 
   let parse_all_events_state = DParseState {
     id=parse_all_events_state_id;
     body = sseq (List.map 
       (fun evid -> extract (ev_arg evid)) 
       (List.split m.hdl_enum |> fst)@[transition_accept]);
     }
-  in *)
+  in
 
 
   let single_ev_state = 
     (* 4/4/23 -- no longer needed, we now add no_overlay pragmas *)
-    (* let branches = (255, parse_all_events_state_id)::(List.map *)
-    let branches = (List.map
+    let branches = (255, parse_all_events_state_id)::(List.map
+    (* let branches = (List.map *)
           ((fun (evid, evnum) -> (evnum, event_parse_state evid)))
           m.hdl_enum
         )
@@ -410,8 +410,8 @@ let generate_ingress_parser block_id (m:main_handler) lucid_internal_ports =
   let decls = 
     List.map 
       P4TofinoSyntax.decl
-      (* ([start_state; default_setup_state; eth_state; single_ev_state]@parse_ev_states@[parse_all_events_state])  *)
-      ([start_state; default_setup_state; eth_state; single_ev_state]@parse_ev_states) 
+      ([start_state; default_setup_state; eth_state; single_ev_state]@parse_ev_states@[parse_all_events_state]) 
+      (* ([start_state; default_setup_state; eth_state; single_ev_state]@parse_ev_states)  *)
   in 
   decl (DParse({id=block_id; params=ingress_parser_params; decls; body=None;}))
 ;;

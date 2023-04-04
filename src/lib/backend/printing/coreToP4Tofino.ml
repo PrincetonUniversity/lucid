@@ -947,7 +947,10 @@ let generate_ingress_control prog_env block_id tds =
   let ingress_control = decl (DControl{
     id = block_id;
     params = ingress_control_params;
-    decls = (overlay_pragmas "ingress" tds)@action_decls@table_decls;
+    decls = 
+    (* (overlay_pragmas "ingress" tds)@ *)
+
+    action_decls@table_decls;
     body = Some(apply_body);
     })
   in
