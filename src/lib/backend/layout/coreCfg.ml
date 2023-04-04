@@ -17,13 +17,28 @@ type edge_condition =
     | CMatch of condition
 
 type vertex_stmt = {
+    vuid : int;
     stmt : statement;
     solitary : bool; (* solitary means this statement cannot share a table with any others. *)
 }
-let empty_vertex_stmt  = {
+let cur_uid = ref 0 ;;
+
+(* let empty_vertex_stmt ()  = 
+  cur_uid := (!cur_uid) + 1;    
+{
+    vuid = 0;
+    (* vuid = (!cur_uid); *)
     stmt = snoop;
     solitary = false;
 }
+ *)
+let vertex_of_stmt stmt solitary = 
+{
+    stmt = stmt;
+    solitary = solitary;
+    vuid = stmt.sspan.spid;    
+}
+
 let cond_stmt_equal c1 c2 = 
     c1.stmt.sspan.spid = c2.stmt.sspan.spid
 ;;
@@ -240,17 +255,17 @@ let conditions_of_match es bs =
 (* main function: convert a statement into a cfg *)
 let rec cfg_of_statement_inner (st:statement) = 
     match st.s with
-    | SNoop -> Cfg.add_vertex Cfg.empty {stmt=st; solitary = false;} 
+    | SNoop -> Cfg.add_vertex Cfg.empty (vertex_of_stmt st false) 
     | SUnit(_)
     | SLocal(_)
     | SAssign(_)
     | SPrintf(_)
     | SRet(_)  
     | SGen(_) ->
-        Cfg.add_vertex Cfg.empty {stmt=st; solitary = false;} 
+        Cfg.add_vertex Cfg.empty (vertex_of_stmt st false)
     | STableMatch(_) -> 
         (* a table match remains a table match *)
-        Cfg.add_vertex Cfg.empty {stmt=st; solitary = true;}
+        Cfg.add_vertex Cfg.empty (vertex_of_stmt st true)
     | STableInstall(_) -> 
         error "[coreCfg.cfg_of_statement_inner] table installs should be removed from tofino program by this point."
     | SIf(e, s1, s2) ->
@@ -261,7 +276,7 @@ let rec cfg_of_statement_inner (st:statement) =
         let g = concat_graphs g_s1 g_s2 in 
         (* 3. add the edges from this node to root(g_s1) and root(g_s2) *)
         CL.fold_left 
-            (fun g (root, e) -> Cfg.add_edge_e g ({stmt=st; solitary = false;} , CExp(e), root))
+            (fun g (root, e) -> Cfg.add_edge_e g ((vertex_of_stmt st false) , CExp(e), root))
             g
             (
                 (List.map (fun v -> (v, e)) (roots g_s1))
@@ -283,7 +298,7 @@ let rec cfg_of_statement_inner (st:statement) =
         if (is_solitary_match st)
             (* a match statement that just stays as a match statement *)
         then (
-            Cfg.add_vertex Cfg.empty {stmt=st; solitary=true;}
+            Cfg.add_vertex Cfg.empty (vertex_of_stmt st true)
         )
         (* a match statement that gets broken apart *)
         else (
@@ -303,7 +318,7 @@ let rec cfg_of_statement_inner (st:statement) =
 (*                 print_endline ("branch condition: ");
                 print_endline (str_of_edge_condition (CMatch(edge_label))); *)
                 let g = CL.fold_left 
-                    (fun g root -> Cfg.add_edge_e g ({stmt=new_st; solitary = false;} , CMatch(edge_label), root))
+                    (fun g root -> Cfg.add_edge_e g ((vertex_of_stmt new_st false), CMatch(edge_label), root))
                     g
                     (roots branch_g)
                 in 

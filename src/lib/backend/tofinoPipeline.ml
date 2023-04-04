@@ -158,7 +158,7 @@ let tofinocore_normalization full_compile tds =
 
 (* transform the tofinocore program into a 
    straightline of match statements *)
-let layout tds build_dir_opt =
+let layout old_layout tds build_dir_opt =
     (* 1. compute control flow graph for main handler *)
     let cfg = CoreCfg.cfg_of_main tds in 
     CoreCfg.print_cfg ((!BackendLogging.graphLogDir)^"/cfg.dot") cfg;
@@ -171,7 +171,13 @@ let layout tds build_dir_opt =
     CoreDfg.print_dfg ((!BackendLogging.graphLogDir)^"/dfg.dot") dfg;
     (* 4. lay out the dfg on a pipeline of match stmt seqs *)
     print_endline "-------- layout ----------";
-    let tds = CoreLayout.process tds dfg in
+    (* let tds = CoreLayout.process tds dfg in *)
+    let tds = if (old_layout) 
+      then (CoreLayoutOld.process tds dfg)
+      else (CoreLayout.process tds dfg)
+    in
+
+    (* let tds = CoreLayoutNew.process_new tds dfg in *)
     (match build_dir_opt with 
         | Some build_dir -> CoreLayout.profile tds build_dir;
         | _ -> ()
@@ -188,7 +194,7 @@ let layout tds build_dir_opt =
     tds 
 ;;
 
-let compile_dataplane ds portspec build_dir =
+let compile_dataplane old_layout ds portspec build_dir =
   (* compile the data plane program into a P4 program.  *)
   let ds = tofino_midend_pipeline ds in 
   cprint_endline "starting transformations";
@@ -199,12 +205,12 @@ let compile_dataplane ds portspec build_dir =
   (* some transformation passes in tofinocore syntax *)
   let tds = tofinocore_normalization true tds in 
   (* transform program into a layout of match statements *)
-  let tds = layout tds (Some build_dir) in 
+  let tds = layout old_layout tds (Some build_dir) in 
   (* translate to final low-level P4-ish IR *)
   let tofino_prog = CoreToP4Tofino.translate tds portspec in 
   tofino_prog
 ;;
-let compile ds portspec build_dir ctl_fn_opt = 
+let compile old_layout ds portspec build_dir ctl_fn_opt = 
     if (!do_log) then (
         CoreCdg.start_logging ();
         CoreDfg.start_logging ();
@@ -228,7 +234,7 @@ let compile ds portspec build_dir ctl_fn_opt =
 
     (* first we compile the tofino program, because it will generate 
        some setup commands for the control plane to run *)
-    let tofino_prog = compile_dataplane data_ds portspec build_dir in
+    let tofino_prog = compile_dataplane old_layout data_ds portspec build_dir in
 
     (* next, compile the control program (TODO) *)
 
@@ -255,7 +261,7 @@ let compile_handler_block ds =
     let ds = common_midend_passes ds in
     let tds = tdecls_of_decls ds in 
     let tds = tofinocore_normalization false tds in 
-    let tds = layout tds None in 
+    let tds = layout false tds None in 
     let p4decls = CoreToP4Tofino.translate_to_control_block tds in 
     P4TofinoPrinting.string_of_decls p4decls |> P4TofinoPrinting.doc_to_string
 ;;

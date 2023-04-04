@@ -66,6 +66,7 @@ module ArgParse = struct
     ; aargs : string list
     ; profile_cmd : string option
     ; ctl_fn : string option
+    ; old_layout : bool
     }
 
   let args_default =
@@ -75,7 +76,8 @@ module ArgParse = struct
     ; interp_spec_file = ""
     ; aargs = []
     ; profile_cmd = None
-    ; ctl_fn = None;
+    ; ctl_fn = None
+    ; old_layout = false
     }
   ;;
 
@@ -89,6 +91,7 @@ module ArgParse = struct
     let set_profile_cmd s = args_ref := {!args_ref with profile_cmd = Some(s)} in
     let set_build_dir s = args_ref :=  {!args_ref with builddir=s;} in 
     let set_control ctl_fn = args_ref := {!args_ref with ctl_fn=Some(ctl_fn);} in
+    let set_old_layout () = args_ref := {!args_ref with old_layout = true;} in
     let speclist =
       [ ( "--spec"
         , Arg.String set_spec
@@ -101,7 +104,7 @@ module ArgParse = struct
       ; "-p", Arg.String set_profile_cmd, "Profile program instead of compiling."
       ; "-d", Arg.Unit enable_debug, "Enable debug print / log"
       ; "--control", Arg.String set_control, "Python control program"
-      ; 
+      ; "--oldlayout", Arg.Unit set_old_layout, "Use old layout algorithm"
       ]
     in
     let parse_aarg (arg : string) =
@@ -161,7 +164,7 @@ let compile_to_tofino (args:ArgParse.args_t) =
   let portspec = ParsePortSpec.parse args.portspec in 
   unmutable_report@@"Starting P4-Tofino compilation. Using switch port configuration: ";
   print_endline (ParsePortSpec.string_of_portconfig portspec);
-  let p4_str, c_str, py_str, py_eventlib, globals = TofinoPipeline.compile core_ds portspec args.builddir args.ctl_fn in 
+  let p4_str, c_str, py_str, py_eventlib, globals = TofinoPipeline.compile args.old_layout core_ds portspec args.builddir args.ctl_fn in 
   (* finally, generate the build directory with the programs + some helpers and a makefile *)
   unmutable_report@@"Compilation to P4 finished. Writing to build directory:"^(args.builddir);
   PackageTofinoApp.generate p4_str c_str py_str py_eventlib globals args.builddir 
@@ -184,6 +187,24 @@ let main () =
   )
 ;;
 
+(* for profiling. limit is in bytes. *)
+(* let run_with_memory_limit limit f =
+  let limit_memory () =
+    let mem = Gc.(quick_stat ()).heap_words in
+    if mem > limit / (Sys.word_size / 8) then raise Out_of_memory
+  in
+  let alarm = Gc.create_alarm limit_memory in
+  Fun.protect f ~finally:(fun () -> Gc.delete_alarm alarm ; Gc.compact ())
+
+
+let b_1gb   = 1000000000;;
+let b_100mb = 100000000;;
+
+let _ = run_with_memory_limit b_100mb main
+ *)
+
 let _ = main ()
+
+
 
 

@@ -41,10 +41,8 @@ let eliminate_value_casts ds =
         let _ = ctx in 
         match e with 
           | EOp(Cast(sz), [{e=EVal({v=VInt(i); _}); _}]) -> (   
-            print_endline ("[eliminate_value_casts] found one.");         
             EVal(vinteger (Integer.set_size sz i))
           )
-
   (* | Cast size, [v] -> vinteger (Integer.set_size size (raw_integer v)) *)
 
             (* EVal(v) *)

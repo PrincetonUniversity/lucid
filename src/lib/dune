@@ -129,6 +129,7 @@
    CoreDfg
    CoreResources
    ExternalLayout
+   CoreLayoutOld
    CoreLayout
    ActionForm
    Dedup
