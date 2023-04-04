@@ -135,6 +135,7 @@ and d =
      initialized by the P4 control script *)
   | DMCGroup of {gid:int; replicas : (int * int) list;}
   | DPort of {dpid:int; speed:int;}
+  | DPragma of pragma
 
 and decl = {d:d; dpragma:pragma list; dspan : sp;}
 
@@ -258,6 +259,11 @@ let scall_table tid =
 
 (* declarations *)
 let decl d = {d=d; dpragma=[]; dspan = Span.default}
+
+let dpragma name args =
+  decl (DPragma {pname=name; pargs=args;})
+;;
+
 let decl_full d prag span = {d=d; dpragma=prag; dspan=span;}
 
 let dstruct hid sty fields =

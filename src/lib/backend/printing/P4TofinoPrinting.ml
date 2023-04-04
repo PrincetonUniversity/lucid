@@ -397,6 +397,7 @@ let rec string_of_decl dec =
       (string_of_expr econstr)^-^(string_of_id id)^^s'";"
     | DMCGroup(_) -> s'"//multicast group"
     | DPort(_) -> s'"//port-up definition"
+    | DPragma(p) -> string_of_pragma p
 
 and string_of_decls ds =
   separate_map hardline string_of_decl ds

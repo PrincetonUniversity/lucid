@@ -336,23 +336,26 @@ let generate_ingress_parser block_id (m:main_handler) lucid_internal_ports =
   in
   (* This parse state is never used, we add it so that the tofino compiler doesn't try to 
      "optimize" the program by overlaying different event headers... *)
-  let parse_all_events_state_id = id "parse_all_events" in 
+  (* 4/4/23 -- no longer needed, we now add no_overlay pragmas *)
+(*   let parse_all_events_state_id = id "parse_all_events" in 
   let parse_all_events_state = DParseState {
     id=parse_all_events_state_id;
     body = sseq (List.map 
       (fun evid -> extract (ev_arg evid)) 
       (List.split m.hdl_enum |> fst)@[transition_accept]);
     }
-  in
+  in *)
 
 
   let single_ev_state = 
-    let branches = (255, parse_all_events_state_id)::(List.map
+    (* 4/4/23 -- no longer needed, we now add no_overlay pragmas *)
+    (* let branches = (255, parse_all_events_state_id)::(List.map *)
+    let branches = (List.map
           ((fun (evid, evnum) -> (evnum, event_parse_state evid)))
           m.hdl_enum
         )
     in
-  DParseState
+    DParseState
     {
       id=single_ev_state_id;
       body = sseq [
@@ -407,7 +410,8 @@ let generate_ingress_parser block_id (m:main_handler) lucid_internal_ports =
   let decls = 
     List.map 
       P4TofinoSyntax.decl
-      ([start_state; default_setup_state; eth_state; single_ev_state]@parse_ev_states@[parse_all_events_state]) 
+      (* ([start_state; default_setup_state; eth_state; single_ev_state]@parse_ev_states@[parse_all_events_state])  *)
+      ([start_state; default_setup_state; eth_state; single_ev_state]@parse_ev_states) 
   in 
   decl (DParse({id=block_id; params=ingress_parser_params; decls; body=None;}))
 ;;
@@ -523,17 +527,21 @@ let eventset_parse_tree tds =
   let event_id_sequences = (main tds).event_output.ev_gen_seqs in
   (* add the sequence where all events are generated, if it is not there, 
      to prevent p4c from overlaying event headers in egress *)
-  let event_id_sets = List.map MiscUtils.unique_list_of event_id_sequences in
-  let contains_generate_all = List.fold_left
+  (*  4/5/23 -- we no longer need to add a ghost parse path 
+     for all events headers because we add pragmas to force no overlays *)
+  (* let event_id_sets = List.map MiscUtils.unique_list_of event_id_sequences in *)
+(*   let contains_generate_all = List.fold_left
     (fun acc event_id_seq -> 
       acc || (MiscUtils.list_eq event_id_seq evids))
     false
     event_id_sets
-  in
-  let event_id_sequences = if (contains_generate_all)
+  in *)
+(*   let event_id_sequences = if (contains_generate_all)
     then (event_id_sequences)
-    else (event_id_sequences@[evids])
-  in
+    else (
+      print_endline ("[coreToP4Tofino] info: adding egress parse path for _all_ events, to prevent overlaying...");
+      event_id_sequences@[evids])
+  in *)
 
   (* generate a parse state, transition statement, and pattern list *)
   let generate_objs_for_evseq (i:int) (generated_evids:Id.t list) =

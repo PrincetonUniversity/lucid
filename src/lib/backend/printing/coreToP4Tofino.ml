@@ -876,6 +876,27 @@ let mc_recirc_decls evids recirc_port =
   List.map mc_group_n_recirc possible_rids
 ;;
 
+(* pragmas so that the compiler does not overlay 
+   fields from different event headers *)
+let overlay_pragmas gress tds : decl list =
+  let quoted str = "\""^str^"\"" in
+  let field_pragmas gress evid field = 
+    [dpragma "pa_no_overlay" [quoted gress; quoted (ev_param_arg evid field |> Cid.names |> String.concat ".")]]
+    (* note: 4/4/23 -- I don't think we need solitary, just no overlay *)
+    (* ;dpragma "pa_solitary" [quoted gress; quoted (ev_param_arg evid field |> Cid.names |> String.concat ".")]] *)
+  in 
+  List.fold_left 
+    (fun pragmas (evid, params) -> 
+      List.fold_left
+        (fun pragmas (param_id, _) -> 
+            pragmas@(field_pragmas gress evid param_id))
+        pragmas
+        params)
+    []
+    (main tds).hdl_params
+;;
+
+
 let generate_ingress_control prog_env block_id tds =
   let m = main tds in 
   (* build the parameter and variable renaming map for ingress.
@@ -926,7 +947,7 @@ let generate_ingress_control prog_env block_id tds =
   let ingress_control = decl (DControl{
     id = block_id;
     params = ingress_control_params;
-    decls = action_decls@table_decls;
+    decls = (overlay_pragmas "ingress" tds)@action_decls@table_decls;
     body = Some(apply_body);
     })
   in
@@ -1181,6 +1202,11 @@ let egress_control_params = [
 ] ;;
 
 
+(* pragmas so that the compiler does not overlay 
+   fields from different event headers *)
+let egress_overlay_pragmas tds = overlay_pragmas "egress" tds
+;;
+
 let generate_egress_control block_id tds lucid_internal_ports =
   let egr_noop_id = id "egr_noop" in 
   let ev_enum = (main tds).hdl_enum in 
@@ -1188,11 +1214,12 @@ let generate_egress_control block_id tds lucid_internal_ports =
   let t_extract_recirc_event = id "t_extract_recirc_event" in 
   let egr_noop = [daction egr_noop_id [] (snoop)] in 
   let decls = 
-    (egr_noop)
+    (egress_overlay_pragmas tds)
+    @(egr_noop)
     @(extract_recirc_event_actions ev_enum)
     @(extract_port_event_actions ev_enum)
     @[(extract_recirc_event_table egr_noop_id t_extract_recirc_event tds (List.split ev_enum |> fst));
-    extract_port_event_table t_extract_port_event ev_enum lucid_internal_ports]
+      extract_port_event_table t_extract_port_event ev_enum lucid_internal_ports]
   in
   let stmt = 
     sifelse (eeq rid_local 0)
