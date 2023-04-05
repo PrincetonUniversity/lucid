@@ -398,9 +398,9 @@ dt_table:
                                                     (mk_t_table (snd $5) (snd $7) [$9] (Span.extend $3 $10))
                                                     (Span.extend (fst $1) $10) }
 parser_action:
-  | READ ID COLON ty SEMI                   { PRead ((snd $2), $4) }
-  | SKIP ty SEMI                            { PSkip ($2) }
-  | cid EQ exp SEMI                         { PAssign ((snd $1), $3) }
+  | READ ID COLON ty SEMI                   { (PRead (snd $2, $4)), (Span.extend $1 $5) }
+  | SKIP ty SEMI                            { (PSkip $2), Span.extend $1 $3 }
+  | cid EQ exp SEMI                         { (PAssign (snd $1, $3)), Span.extend (fst $1) $4 }
 
 parser_branch:
   | PIPE pattern ARROW LBRACE parser_block RBRACE  { Span.extend $1 $6, ($2, $5) }
@@ -410,9 +410,9 @@ parser_branches:
   | parser_branch parser_branches           { Span.extend (fst $1) (fst $2), (snd $1::snd $2) }
 
 parser_step:
-  | GENERATE exp                            { PGen $2 }
-  | cid paren_args SEMI                     { PCall (call_sp (snd $1) (snd $2) (Span.extend (fst $1) $3)) }
-  | MATCH exp WITH parser_branches          { PMatch ($2, snd $4) }
+  | GENERATE exp                            { PGen $2, Span.extend $1 ($2.espan) }
+  | cid paren_args SEMI                     { PCall (call_sp (snd $1) (snd $2) (Span.extend (fst $1) $3)), (Span.extend (fst $1) $3) }
+  | MATCH exp WITH parser_branches          { PMatch ($2, snd $4), Span.extend $1 (fst $4) }
 
 parser_block:
   | parser_step                             { [], $1 }

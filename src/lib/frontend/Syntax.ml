@@ -120,8 +120,8 @@ and op =
 
 and pat =
   | PWild
-  | PVar of
-      cid * sp (* Span is just for easy error messaging in ConstInlining *)
+  (* Span is just for easy error messaging in ConstInlining *)
+  | PVar of cid * sp
   | PNum of z
   | PBit of int list
 
@@ -293,7 +293,8 @@ and parser_step =
   | PGen of exp
   | PCall of exp (* Call another parser *)
 
-and parser_block = parser_action list * parser_step
+(* Include span for error reporting *)
+and parser_block = (parser_action * sp) list * (parser_step * sp)
 
 (* declarations *)
 and d =

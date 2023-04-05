@@ -60,24 +60,24 @@ let check_decls ds =
                     (ty_to_string ty) *)
     | DExtern (_, ty) ->
       (match TyTQVar.strip_links ty.raw_ty with
-      | TInt _ | TBool -> ()
-      | TFun { arg_tys } ->
-        List.iter
-          (fun ty ->
-            match TyTQVar.strip_links ty.raw_ty with
-            | TInt _ | TBool -> ()
-            | _ ->
-              Console.error_position d.dspan
-              @@ Printf.sprintf
-                   "Arguments to an extern function must have type int or \
-                    bool, not %s"
-                   (ty_to_string ty))
-          arg_tys
-      | _ ->
-        Console.error_position d.dspan
-        @@ Printf.sprintf
-             "Externs must have type int or bool, not %s"
-             (ty_to_string ty))
+       | TInt _ | TBool -> ()
+       | TFun { arg_tys } ->
+         List.iter
+           (fun ty ->
+             match TyTQVar.strip_links ty.raw_ty with
+             | TInt _ | TBool -> ()
+             | _ ->
+               Console.error_position d.dspan
+               @@ Printf.sprintf
+                    "Arguments to an extern function must have type int or \
+                     bool, not %s"
+                    (ty_to_string ty))
+           arg_tys
+       | _ ->
+         Console.error_position d.dspan
+         @@ Printf.sprintf
+              "Externs must have type int or bool, not %s"
+              (ty_to_string ty))
     | DModule (_, _, decls) -> List.iter (check_decl true) decls
     | _ -> ()
   in
@@ -102,12 +102,12 @@ let check_symbolics ds =
         | DSize (id, None) -> env := IdSet.add id !env
         | DSymbolic (id, ty) ->
           (try self#visit_ty env ty with
-          | Failure s ->
-            Console.error
-            @@ "Unknown or non-symbolic size "
-            ^ s
-            ^ " appears in type of symbolic "
-            ^ Printing.id_to_string id)
+           | Failure s ->
+             Console.error
+             @@ "Unknown or non-symbolic size "
+             ^ s
+             ^ " appears in type of symbolic "
+             ^ Printing.id_to_string id)
         | _ -> ()
     end
   in
@@ -211,7 +211,6 @@ let basic_qvar_checker =
 
     (* table types are always allowed to have QVars *)
     method! visit_TTable _ _ = ()
-
     method! visit_exp _ _ = ()
 
     method! visit_decl env d =
@@ -304,7 +303,7 @@ let rec check_qvars d =
   match d.d with
   | DFun _ | DMemop _ | DModuleAlias _ -> (* No restrictions *) ()
   | DAction _ -> ()
-  | DGlobal _ ->
+  | DGlobal _ | DParser _ ->
     (* None allowed at all *) basic_qvar_checker#visit_decl (true, true) d
   | DSize _ | DSymbolic _ | DConst _ | DExtern _ ->
     (* Only allowed in effect *) basic_qvar_checker#visit_decl (false, true) d
@@ -316,7 +315,7 @@ let rec check_qvars d =
     preset_qvar_checker#visit_decl (List.map STQVar.strip_links sizes) d
   | DEvent (_, _, _, params) | DHandler (_, _, (params, _)) ->
     (* Effects always ok, sizes only allowed if they appear inside at least one global-type argument *)
-    event_qvar_checker#visit_params (false, ref []) params  
+    event_qvar_checker#visit_params (false, ref []) params
   | DModule (_, intf, ds) ->
     List.iter check_qvars_intf intf;
     List.iter check_qvars ds
