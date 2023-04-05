@@ -7,7 +7,7 @@
   exception Eof
 
   let position lexbuf =
-    Span.create 
+    Span.create
       ((lexbuf.Lexing.lex_start_p).pos_fname)
       (Lexing.lexeme_start lexbuf)
       (Lexing.lexeme_end lexbuf)
@@ -79,6 +79,10 @@ rule token = parse
   | "table_match"             { TABLE_MATCH (position lexbuf) }
   | "table_install"           { TABLE_INSTALL (position lexbuf) }
   | "table_multi_install"     { TABLE_MULTI_INSTALL (position lexbuf) }
+
+  | "parser"          { PARSER (position lexbuf) }
+  | "read"            { READ (position lexbuf) }
+  | "skip"            { SKIP (position lexbuf) }
 
   | "constr"          { CONSTR (position lexbuf) }
   | "module"          { MODULE (position lexbuf) }

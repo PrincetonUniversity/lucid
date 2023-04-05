@@ -11,7 +11,6 @@ and tcid = [%import: TaggedCid.t]
 and sp = [%import: Span.t]
 and z = [%import: (Z.t[@opaque])]
 and zint = [%import: (Integer.t[@with Z.t := (Z.t [@opaque])])]
-
 and location = int
 
 and size =
@@ -49,33 +48,35 @@ and raw_ty =
   | TEvent
   | TFun of func_ty
   | TMemop of int (* Number of arguments: 2-4 *) * size
-  | TName of cid * sizes * bool (* Named type: e.g. "Array.t<<32>>". Bool is true if it represents a global type *)
-  | TAbstract of cid * sizes * bool * raw_ty (* raw_ty is the type when it was a TName *)
+  | TName of cid * sizes * bool
+    (* Named type: e.g. "Array.t<<32>>". Bool is true if it represents a global type *)
+  | TAbstract of
+      cid * sizes * bool * raw_ty (* raw_ty is the type when it was a TName *)
   | TRecord of (string * raw_ty) list
   | TVector of raw_ty * size
   | TTuple of raw_ty list
   | TTable of tbl_ty
-  | TAction of acn_ty 
+  | TAction of acn_ty
   | TPat of size (* number of bits *)
 
-and tbl_ty = {
-    tkey_sizes : size list;
-    tparam_tys : ty list;
-    tret_tys : ty list;
+and tbl_ty =
+  { tkey_sizes : size list
+  ; tparam_tys : ty list
+  ; tret_tys : ty list
   }
 
-and acn_ty = {
-  aconst_param_tys : tys;
-  aparam_tys : tys;
-  aret_tys : tys;
-}
+and acn_ty =
+  { aconst_param_tys : tys
+  ; aparam_tys : tys
+  ; aret_tys : tys
+  }
 
 and func_ty =
   { arg_tys : tys
   ; ret_ty : ty
   ; start_eff : effect
   ; end_eff : effect
-        (* This has to be a ref to perform unification during typechecking.
+      (* This has to be a ref to perform unification during typechecking.
    Do not mutate it anywhere else! *)
   ; constraints : constr list Stdlib.ref
   }
@@ -119,7 +120,8 @@ and op =
 
 and pat =
   | PWild
-  | PVar of cid * sp (* Span is just for easy error messaging in ConstInlining *)
+  | PVar of
+      cid * sp (* Span is just for easy error messaging in ConstInlining *)
   | PNum of z
   | PBit of int list
 
@@ -147,7 +149,8 @@ and value =
 (* expressions *)
 and e =
   | EVal of value
-  | EInt of z * size option (* Differs from VInt since size may be polymorphic *)
+  | EInt of
+      z * size option (* Differs from VInt since size may be polymorphic *)
   | EVar of cid
   | EOp of op * exp list
   | ECall of cid * exp list
@@ -162,14 +165,16 @@ and e =
   | EComp of exp * id * size (* Vector comprehension *)
   | EIndex of exp * size
   | ETuple of exp list
-  | ETableCreate of {
-    tty: ty;
-    tactions: exp list; 
-    tsize: exp;
-    tdefault: cid * (exp list); (* ECall(default_acn_id, default_installtime_args) *)
-  }  
+  | ETableCreate of
+      { tty : ty
+      ; tactions : exp list
+      ; tsize : exp
+      ; tdefault : cid * exp list
+          (* ECall(default_acn_id, default_installtime_args) *)
+      }
   | ETableMatch of tbl_match
-  | EPatWild of size option (* Polymorphic wildcard pat, handled similar to EInt *)
+  | EPatWild of
+      size option (* Polymorphic wildcard pat, handled similar to EInt *)
 
 and exp =
   { e : e
@@ -200,26 +205,26 @@ and s =
   | STableMatch of tbl_match
   | STableInstall of exp * tbl_entry list
 
+and tbl_match =
+  { tbl : exp
+  ; keys : exp list
+  ; args : exp list
+  ; outs : id list
+  ; out_tys : ty list option
+  }
+(* out_tys set for statements that create new vars *)
 
-and tbl_match = 
-    {tbl  : exp;
-    keys  : exp list;
-    args : exp list;
-    outs : id list; 
-    out_tys : ty list option;}
-    (* out_tys set for statements that create new vars *)
-
-(* entries are like branches in match statements, except instead of 
+(* entries are like branches in match statements, except instead of
    a statement there is an action id + const args *)
-(* notes on entry priorities: 
-  1. Lower priorities are checked first. 
+(* notes on entry priorities:
+  1. Lower priorities are checked first.
   2. Priorities should be a bounded size, under 24 bits for tof. *)
-and tbl_entry = {
-  eprio : int; 
-  ematch : exp list;
-  eaction : id;
-  eargs : exp list;
-}
+and tbl_entry =
+  { eprio : int
+  ; ematch : exp list
+  ; eaction : id
+  ; eargs : exp list
+  }
 
 and statement =
   { s : s
@@ -228,15 +233,15 @@ and statement =
 
 (* event handler bodies *)
 and params = (id * ty) list
-
 and body = params * statement
 
 and event_sort =
-  | EEntry of bool (* true iff "control", i.e. it can generate non-continue events *)
-  | EExit       (* events that leave the lucid program *)
+  | EEntry of
+      bool (* true iff "control", i.e. it can generate non-continue events *)
+  | EExit (* events that leave the lucid program *)
   | EBackground (* standard event sort *)
 
-and handler_sort = 
+and handler_sort =
   | HControl (* control processor *)
   | HData (* data processor *)
 
@@ -276,6 +281,20 @@ and memop_body =
 (* an action is just a list of expressions to return *)
 and action_body = exp list
 
+and parser_action =
+  | PRead of id * ty
+  | PSkip of ty
+  | PAssign of cid * exp
+
+and parser_branch = pat * parser_block
+
+and parser_step =
+  | PMatch of exp * parser_branch list
+  | PGen of exp
+  | PCall of exp (* Call another parser *)
+
+and parser_block = parser_action list * parser_step
+
 (* declarations *)
 and d =
   | DSize of id * size option
@@ -292,7 +311,7 @@ and d =
   | DModule of id * interface * decls
   | DModuleAlias of id * exp * cid * cid
   | DAction of id * ty list * params * (params * action_body)
-
+  | DParser of id * params * parser_block
 
 (* name, return type, args & body *)
 and decl =
@@ -431,27 +450,36 @@ let szcast_sp sz1 sz2 span = exp_sp (ESizeCast (sz1, sz2)) span
 let flood_sp e span = exp_sp (EFlood e) span
 
 let tblmatch_sp tbl keys args span =
-  let t = {tbl; keys; args; outs=[]; out_tys=None;} in
-  exp_sp (ETableMatch(t)) span
+  let t = { tbl; keys; args; outs = []; out_tys = None } in
+  exp_sp (ETableMatch t) span
 ;;
 
 (* declarations *)
-let decl d = { d; dspan = Span.default; }
-let decl_sp d span = { d; dspan = span; }
+let decl d = { d; dspan = Span.default }
+let decl_sp d span = { d; dspan = span }
 let dglobal_sp id ty exp span = decl_sp (DGlobal (id, ty, exp)) span
 let dconst_sp id ty e span = decl_sp (DConst (id, ty, e)) span
 let dextern_sp id ty span = decl_sp (DExtern (id, ty)) span
 let dsymbolic_sp id ty span = decl_sp (DSymbolic (id, ty)) span
 let handler_sp id s p body span = decl_sp (DHandler (id, s, (p, body))) span
-let datahandler_sp id p body span = decl_sp (DHandler (id, HData, (p, body))) span
-let ctlhandler_sp id p body span = decl_sp (DHandler (id, HControl, (p, body))) span
+let dparser_sp id params p span = decl_sp (DParser (id, params, p)) span
+
+let datahandler_sp id p body span =
+  decl_sp (DHandler (id, HData, (p, body))) span
+;;
+
+let ctlhandler_sp id p body span =
+  decl_sp (DHandler (id, HControl, (p, body))) span
+;;
+
 let dsize_sp id size span = decl_sp (DSize (id, size)) span
 let fun_sp id rty cs p body span = decl_sp (DFun (id, rty, cs, (p, body))) span
 let memop_sp id p body span = decl_sp (DMemop (id, p, body)) span
 let duty_sp id sizes rty span = decl_sp (DUserTy (id, sizes, rty)) span
 
-let action_sp id rty cp p body span = decl_sp (DAction (id, rty, cp, (p, body))) span
-
+let action_sp id rty cp p body span =
+  decl_sp (DAction (id, rty, cp, (p, body))) span
+;;
 
 let dconstr_sp id ty params exp span =
   decl_sp (DConstr (id, ty, params, exp)) span
@@ -494,9 +522,10 @@ let loop_sp e i k span = statement_sp (SLoop (e, i, k)) span
 let sexp_sp e span = statement_sp (SUnit e) span
 let scall_sp cid es span = sexp_sp (call_sp cid es span) span
 
-let tblinstall_sp tbl entries span = 
-  statement_sp (STableInstall(tbl, entries)) span
+let tblinstall_sp tbl entries span =
+  statement_sp (STableInstall (tbl, entries)) span
 ;;
+
 (* Interface spefications *)
 let spec ispec = { ispec; ispan = Span.default }
 let spec_sp ispec ispan = { ispec; ispan }

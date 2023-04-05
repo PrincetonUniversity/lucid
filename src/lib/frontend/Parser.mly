@@ -12,7 +12,7 @@
   let mk_trecord lst =
     TRecord (List.map (fun (id, ty) -> Id.name id, ty.raw_ty) lst)
 
-  let mk_t_table tkey_sizes tparam_tys tret_tys span = 
+  let mk_t_table tkey_sizes tparam_tys tret_tys span =
     Cmdline.cfg.show_tvar_links <- true;
     ty_sp (TTable({tkey_sizes; tparam_tys; tret_tys})) span
 
@@ -47,7 +47,7 @@
     in
     value_sp (VGroup locs) span |> value_to_exp
 
-  let make_create_table tty tactions tsize tdefault span = 
+  let make_create_table tty tactions tsize tdefault span =
     exp_sp (ETableCreate({tty; tactions; tsize; tdefault})) span
 
   let mk_fty tspan params =
@@ -137,6 +137,10 @@
 %token <Span.t> TABLE_INSTALL
 %token <Span.t> TABLE_MULTI_INSTALL
 %token <Span.t> PATAND
+
+%token <Span.t> PARSER
+%token <Span.t> READ
+%token <Span.t> SKIP
 
 %token <Span.t> CONSTR
 %token <Span.t> PROJ
@@ -279,14 +283,14 @@ exp:
     | FLOOD exp                           { flood_sp $2 (Span.extend $1 $2.espan) }
     | LBRACE args RBRACE                  { make_group $2 (Span.extend $1 $3) }
     | TABLE_CREATE LESS ty MORE LPAREN
-        LPAREN args RPAREN COMMA 
+        LPAREN args RPAREN COMMA
         exp COMMA
-        cid opt_args 
+        cid opt_args
         RPAREN
 
                                          { make_create_table $3 $7 ($10) (snd $12, snd $13) (Span.extend $1 $14) }
     | TABLE_MATCH
-        LPAREN exp COMMA 
+        LPAREN exp COMMA
         opt_args COMMA
         opt_args
         RPAREN                          { tblmatch_sp $3 (snd $5) (snd $7) (Span.extend $1 $8)}
@@ -363,15 +367,13 @@ event_decl:
     | event_sort ID paramsdef             { ($1, snd $2, $3, []) }
     | event_sort ID paramsdef constr_list { ($1, snd $2, $3, $4) }
 
-
-handle_sort: 
+handle_sort:
     | HANDLE         {$1, HData}
     | CONTROL HANDLE {$1, HControl}
 
 tyname_def:
     | ID                                  { snd $1, [] }
     | ID poly                             { snd $1, snd $2}
-
 
 optional_sizes:
     | LPAREN sizes RPAREN                       { (Span.extend $1 $3, snd $2) }
@@ -381,7 +383,7 @@ tys:
     | ty                                        { $1.tspan, [ $1 ] }
     | ty COMMA tys                              { (Span.extend $1.tspan (fst $3), $1::(snd $3)) }
 
-optional_tys: 
+optional_tys:
     | LPAREN tys RPAREN                         { (Span.extend $1 $3, snd $2) }
     | LPAREN RPAREN                             { (Span.extend $1 $2, []) }
 
@@ -390,11 +392,31 @@ dt_table:
         KEY_SIZE optional_sizes
         ARG_TYPES optional_tys
         RET_TYPE ty RBRACE
-                                            { duty_sp 
+                                            { duty_sp
                                                     (snd $1)
                                                     []
                                                     (mk_t_table (snd $5) (snd $7) [$9] (Span.extend $3 $10))
                                                     (Span.extend (fst $1) $10) }
+parser_action:
+  | READ ID COLON ty SEMI                   { PRead ((snd $2), $4) }
+  | SKIP ty SEMI                            { PSkip ($2) }
+  | cid EQ exp SEMI                         { PAssign ((snd $1), $3) }
+
+parser_branch:
+  | PIPE pattern ARROW LBRACE parser_block RBRACE  { Span.extend $1 $6, ($2, $5) }
+
+parser_branches:
+  | parser_branch                           { fst $1, [snd $1] }
+  | parser_branch parser_branches           { Span.extend (fst $1) (fst $2), (snd $1::snd $2) }
+
+parser_step:
+  | GENERATE exp                            { PGen $2 }
+  | cid paren_args SEMI                     { PCall (call_sp (snd $1) (snd $2) (Span.extend (fst $1) $3)) }
+  | MATCH exp WITH parser_branches          { PMatch ($2, snd $4) }
+
+parser_block:
+  | parser_step                             { [], $1 }
+  | parser_action parser_block              { $1::(fst $2), (snd $2) }
 
 decl:
     | CONST ty ID ASSIGN exp SEMI           { [dconst_sp (snd $3) $2 $5 (Span.extend $1 $6)] }
@@ -425,6 +447,7 @@ decl:
     | GLOBAL ty ID ASSIGN exp SEMI
                                             { [dglobal_sp (snd $3) $2 $5 (Span.extend $1 $6)] }
     | TABLE_TYPE dt_table                    { [$2] }
+    | PARSER ID paramsdef RBRACE parser_block LBRACE { [dparser_sp (snd $2) $3 $5 (Span.extend $1 $6)] }
 
 
 decls:
@@ -441,8 +464,6 @@ params:
 record_def:
     | param	SEMI			                 { [ $1 ] }
     | param SEMI record_def            { $1 :: $3 }
-
-
 
 statement:
     | statement0			                  { $1 }
@@ -469,7 +490,6 @@ branches:
     | branch                                 { fst $1, [snd $1] }
     | branch branches                        { Span.extend (fst $1) (fst $2), (snd $1::snd $2) }
 
-
 tpat:
     | exp                               { tpat_of_exp $1 }
 
@@ -477,28 +497,25 @@ tpats:
   | tpat                             { [$1] }
   | tpat COMMA tpats              { $1 :: $3 }
 
+opt_tpats:
+  | LPAREN tpats RPAREN                   { Span.extend $1 $3, $2}
+  | LPAREN RPAREN                         { Span.extend $1 $2, []}
 
-opt_tpats: 
-    | LPAREN tpats RPAREN                   { Span.extend $1 $3, $2}
-    | LPAREN RPAREN                         { Span.extend $1 $2, []}
-
-entry: 
+entry:
     (* an entry with no priority *)
     | opt_tpats ARROW ID opt_args             { Span.extend (fst $1) (fst $4), mk_entry 0 (snd $1) (snd $3) (snd $4)}
     (* an entry with a priority *)
-    | LBRACKET NUM RBRACKET opt_tpats ARROW ID opt_args 
+    | LBRACKET NUM RBRACKET opt_tpats ARROW ID opt_args
                                                     { Span.extend $1 (fst $7), mk_entry (snd $2 |> Z.to_int) (snd $4) (snd $6) (snd $7)}
 
 entries:
     | entry                                            { fst $1, [snd $1] }
     | entry SEMI entries                               { Span.extend (fst $1) (fst $3), (snd $1::snd $3)}
 
-
 (* Only needed to avoid a shift-reduce warning on with match statemnets.
    We'd get the same result either way, though. *)
 multiargs:
     | exp COMMA args                         { $1::$3 }
-
 
 statement1:
     | ty ID ASSIGN exp SEMI                 { slocal_sp (snd $2) $1 $4 (Span.extend $1.tspan $5) }
@@ -520,12 +537,9 @@ statement1:
     | TABLE_INSTALL LPAREN exp COMMA
       LBRACE entries RBRACE RPAREN SEMI                 { mk_tblinstall_single ($3) (snd $6) (Span.extend $1 $9)}
 
-
-
 includes:
     | INCLUDE STRING                        {[(snd $2)]}
     | INCLUDE STRING includes               {(snd $2)::$3}
-
 
 prog:
     | includes decls EOF                    { ($1, $2) }
