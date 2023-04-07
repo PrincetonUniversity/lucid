@@ -1,0 +1,31 @@
+{
+    "name" : "reflect_two", 
+    "input_port": "128",
+    "packets": [
+        {
+            "ip.src" : "1.1.1.1", 
+            "ip.dst" : "2.2.2.2",
+            "ip.tos" : 0
+        },
+        {
+            "ip.src" : "2.2.2.2", 
+            "ip.dst" : "2.2.2.2",
+            "ip.tos" : 0
+        }
+    ],
+    "model-output":
+    [
+        {
+            "port" : 128,
+            "ip.src" : "1.1.1.1", 
+            "ip.dst" : "2.2.2.2",
+            "ip.tos" : 1
+        },            
+        {
+            "port" : 128,
+            "ip.src" : "2.2.2.2", 
+            "ip.dst" : "2.2.2.2",
+            "ip.tos" : 2
+        }            
+    ]
+}

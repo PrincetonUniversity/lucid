@@ -64,6 +64,7 @@ rule token = parse
   | "auto"            { AUTO (position lexbuf) }
   | "group"           { GROUP (position lexbuf) }
   | "control"         { CONTROL (position lexbuf) }
+  | "@egress"         { EGRESS (position lexbuf) }
   | "entry"           { ENTRY (position lexbuf) }
   | "exit"            { EXIT (position lexbuf) }
   | "match"           { MATCH (position lexbuf) }

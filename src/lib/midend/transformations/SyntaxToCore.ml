@@ -236,6 +236,7 @@ let translate_sort = function
 let translate_hsort = function
   | S.HControl -> C.HControl
   | S.HData -> C.HData
+  | S.HEgress -> C.HEgress
 
 let translate_decl (d : S.decl) : C.decl =
   let d' =

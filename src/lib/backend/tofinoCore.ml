@@ -88,6 +88,8 @@ and td =
      cid list is the variables it can modify *)
   | TDOpenFunction of id * params * statement * (cid list)
 
+
+
 and main_handler = {
     main_id : id;
     hdl_selector : (id * ty);
@@ -285,8 +287,7 @@ let add_main_handler decls =
       | TDHandler(hdl_id, _, (_, stmt)) -> (
         let hdl_num = match List.assoc_opt hdl_id hdl_enum with 
           | None -> error "[generate_merged_handler] could not find handler id in enum. Do events and handlers have the same internal IDs?"
-          | Some hdl_num -> 
-            hdl_num
+          | Some hdl_num -> hdl_num
         in 
         branches@[([PNum (Z.of_int(hdl_num))], stmt)]
       )

@@ -118,6 +118,7 @@
 %token <Span.t> AUTO
 %token <Span.t> GROUP
 %token <Span.t> CONTROL
+%token <Span.t> EGRESS
 %token <Span.t> ENTRY
 %token <Span.t> EXIT
 %token <Span.t> MATCH
@@ -367,6 +368,7 @@ event_decl:
 handle_sort: 
     | HANDLE         {$1, HData}
     | CONTROL HANDLE {$1, HControl}
+    | EGRESS HANDLE  {$1, HEgress}
 
 tyname_def:
     | ID                                  { snd $1, [] }

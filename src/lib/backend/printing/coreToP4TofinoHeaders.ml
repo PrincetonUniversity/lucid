@@ -15,6 +15,24 @@ let translate_rty rty =
   | _ -> error "[translate_rty] not a TInt"
 ;;
 
+type event_spec = {
+  evids : id list;
+  ev_enum : (id * int) list;
+  hdl_enum : (id * int) list;
+  hdl_params : (id * TofinoCore.params) list;
+  event_id_sequences : id list list;
+}
+
+let tds_to_event_spec tds : event_spec =
+  let evids = (main tds).hdl_enum |> List.split |> fst in 
+  let ev_enum = (main tds).hdl_enum in 
+  let hdl_enum = (main tds).hdl_enum in
+  let hdl_params = (main tds).hdl_params in
+  let event_id_sequences = (main tds).event_output.ev_gen_seqs in
+  {evids; ev_enum; hdl_enum; hdl_params; event_id_sequences;}  
+;;
+
+
 (*** structs ***)
 
 (* tofino builtins -- ingress *)
@@ -87,7 +105,7 @@ let cur_ev_width = 8
 let cur_ev_arg = Cid.concat single_ev_arg (Cid.id cur_ev_field)
 
 let wire_ev_struct = dstruct single_ev_t_id THdr
-  [cur_ev_field, tint 8]
+  [cur_ev_field, tint cur_ev_width]
 ;;
 
 
@@ -121,7 +139,6 @@ let dmulti_ev_struct evids =
     multi_ev_t THdr 
     ((port_out_event_field, tint port_out_event_width)::multi_ev_pad_field::flag_fields)
 ;;
-
 
 (* event headers -- carry event arguments. Created later. Names here. *)
 (* reference to the struct instance of event evid *)
@@ -161,16 +178,20 @@ let hdr_struct evids =
     )
 ;;
 
+(* metadata holds the current egress event identifier *)
+let egr_cur_ev_field = id "egress_event_id" ;;
+let egr_cur_ev_ty = tint cur_ev_width
+let egr_cur_ev_arg = Cid.create_ids [md_t_arg; egr_cur_ev_field]
 let meta_struct = 
-  dstruct md_t_id TMeta []
+  dstruct md_t_id TMeta [egr_cur_ev_field, egr_cur_ev_ty]
 ;;
-(* generate all ingress structures *)
-let generate_structs tds =
-  let m = main tds in 
-  let evids = m.hdl_enum |> List.split |> fst in 
 
-  let multi_ev_struct = dmulti_ev_struct (m.hdl_enum |> List.split |> fst) in
-  let ev_structs = devent_structs m.hdl_params in 
+(* generate all headers and structures *)
+let generate_structs (event_spec : event_spec) =
+  let evids = event_spec.hdl_enum |> List.split |> fst in 
+
+  let multi_ev_struct = dmulti_ev_struct (event_spec.hdl_enum |> List.split |> fst) in
+  let ev_structs = devent_structs event_spec.hdl_params in 
 
   [eth_struct; wire_ev_struct; multi_ev_struct]
   @ev_structs
@@ -199,7 +220,7 @@ let ingress_parser_params = [
 let event_parse_state id =
   Id.create (("parse_")^(fst id))
 ;;
-
+(* parse instructions *)
 let extract field_inst = 
   let extract_fcn = 
     (Cid.concat (Cid.Id pkt_arg) (Cid.create ["extract"]))
@@ -257,7 +278,9 @@ let invalidate local =
 let set_int local i =
   sassign local (eval_int i)
 ;;
-
+let set_var local v ty =
+  sassign local (evar_ty v ty)
+;;
 let dparsestate id stmt =
   decl (DParseState {id; body = stmt;})
 ;;
@@ -497,6 +520,10 @@ let eg_dprsr_md = id "eg_dprsr_md"
 let eg_oport_md_t = id "egress_intrinsic_metadata_for_output_port_t"
 let eg_oport_md = id "eg_oport_md"
 
+(* to drop packets in egress *)
+let eg_drop_ctl_field = id "drop_ctl"
+let eg_drop_ctl_arg = Cid.create_ids [eg_dprsr_md; eg_drop_ctl_field]
+
 let egress_parser_params = [
   param (tstruct pkt_t) pkt_arg;
   outparam (tstruct hdr_t_id) hdr_t_arg;
@@ -522,9 +549,9 @@ let intpats_of_evseq evids evid_seq =
 ;;
 
 (*generate the transition statement for egress *)
-let eventset_parse_tree tds =
-  let evids = (main tds).hdl_enum |> List.split |> fst in 
-  let event_id_sequences = (main tds).event_output.ev_gen_seqs in
+let eventset_parse_tree event_spec =
+  let evids = event_spec.evids in
+  let event_id_sequences = event_spec.event_id_sequences in
   (* add the sequence where all events are generated, if it is not there, 
      to prevent p4c from overlaying event headers in egress *)
   (*  4/5/23 -- we no longer need to add a ghost parse path 
@@ -572,8 +599,8 @@ let eventset_parse_tree tds =
   transition_stmt, parse_states
 ;;
 
-let generate_egress_parser block_id tds =
-  let transition_stmt, ev_parse_states = eventset_parse_tree tds in 
+let generate_egress_parser block_id event_spec =
+  let transition_stmt, ev_parse_states = eventset_parse_tree event_spec in 
   let start_state = decl (DParseState
     { id=start_state_id; 
       body=sseq ([
@@ -581,6 +608,7 @@ let generate_egress_parser block_id tds =
         extract (eth_arg);
         extract (single_ev_arg);
         extract (multi_ev_arg);
+        set_int egr_cur_ev_arg 0;
         transition_stmt
         ]
       );
@@ -603,9 +631,7 @@ let egress_deparser_params = [
 ] ;; 
 
 (* emit everything *)
-let generate_egress_deparse block_id tds =
-  let m = main tds in 
-  let _ = m in 
+let generate_egress_deparse block_id =
 (*   let emit_calls = 
     [eth_arg; single_ev_arg] (* eth and single_ev *)
     @(List.map handler_struct_arg (* events *)
