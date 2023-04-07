@@ -157,6 +157,13 @@ and s =
   | STableMatch of tbl_match
   | STableInstall of exp * tbl_entry list
 
+
+and statement =
+  { s : s
+  ; sspan : sp
+  ; spragma : pragma option;
+  }
+
 and tbl_match_out_param = (id * (ty option))
 
 and tbl_match = 
@@ -179,11 +186,6 @@ and tbl_entry = {
 
 and pragma = string * string list
 
-and statement =
-  { s : s
-  ; sspan : sp
-  ; spragma : pragma option;
-  }
 
 and params = (id * ty) list
 
@@ -192,6 +194,7 @@ and body = params * statement
 and handler_sort = 
   | HControl
   | HData
+  | HEgress
 
 and event_sort =
   | EEntry of bool (* true iff "control", i.e. it can generate non-continue events *)

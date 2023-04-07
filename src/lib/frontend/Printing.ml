@@ -508,7 +508,8 @@ and d_to_string d =
     Printf.sprintf
       "%shandle %s(%s) {\n%s\n}"
       (match hsort with 
-        | HControl -> "control " | HData -> "")
+        | HControl -> "control " | HData -> ""
+        | HEgress -> "@egress")
       (id_to_string id)
       (params_to_string params)
       (stmt_to_string s)

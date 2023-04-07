@@ -114,6 +114,7 @@
    TofinoCore
    TofinoCoreForms
    TofinoControl
+   TofinoEgress
    InlineEventVars
    SolitaryMatches
    Generates

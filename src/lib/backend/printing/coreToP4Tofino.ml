@@ -550,6 +550,45 @@ let validate_all ev_enum =
   validate_headers (List.split ev_enum |> fst)
 ;;
 
+(* generate is different in egress. To generate an event of type e:
+    1. validate header for new event e. 
+        Note: we shouldn't need to add any invalidates for 
+        the current event, those are added in the IR generate pass. 
+    2. set the parameter fields of the event header
+    3. set drop control = 0
+      TODO: egress event extractor should also 
+      set drop control = 1 at the beginning of egress. *)
+let translate_egress_generate (renames:renames) hdl_params ev_exp =
+  let evid, param_ids, args = match ev_exp.e with 
+    | ECall(ev_cid, args)  -> (
+      let evid = Cid.to_id ev_cid in 
+      let param_ids = 
+        List.assoc evid hdl_params 
+        |> CL.split 
+        |> fst 
+      in
+      evid, param_ids, args
+    )
+    | _ -> error "[translate_egress_generate] events should all be ECalls by this point"
+  in
+  let common_stmts = [
+    set_int eg_drop_ctl_arg 0; (* don't drop this packet -- there is a generate. *)
+    validate (ev_arg evid); (* validate the generated event's header *)
+    ]
+  in
+  (* set parameters *)
+  let param_assignments = 
+    let set_event_param ev_id (param_id,arg_exp) =
+      let param_arg = handler_param_arg ev_id param_id in 
+      let _, translated_arg_exps = translate_exp renames empty_prog_env arg_exp in 
+      sassign param_arg translated_arg_exps
+    in
+    List.map 
+    (set_event_param evid) 
+    (List.combine param_ids args)
+  in
+  [], sseq (common_stmts@param_assignments)
+;;
 
 let translate_generate (renames:renames) (prev_decls:T.decl list) hdl_enum hdl_params gty ev_exp =
   let evid, param_ids, args = match ev_exp.e with 
@@ -638,7 +677,7 @@ let declared_vars prev_decls = CL.filter_map (fun dec ->
 
 (* translate a statement that appears inside of an action. 
    generate a list of decls and a statement. *)
-let rec translate_statement (renames:renames) prev_decls hdl_enum hdl_params prog_env stmt =
+let rec translate_statement in_ingress (renames:renames) prev_decls hdl_enum hdl_params prog_env stmt =
   match stmt.s with
   | SNoop -> [], Noop
   | C.SUnit(e) ->
@@ -667,23 +706,25 @@ let rec translate_statement (renames:renames) prev_decls hdl_enum hdl_params pro
   | SIf _ -> error "[translate_statement] if statement cannot appear inside action body"
   | SMatch _ -> error "[translate_statement] match statement cannot appear inside action body"
   | SRet _ -> error "[translate_statement] ret statement cannot appear inside action body"
-  | SGen(gty, ev_exp) -> translate_generate renames prev_decls hdl_enum hdl_params gty ev_exp
+  | SGen(gty, ev_exp) -> 
+    if (in_ingress) then (translate_generate renames prev_decls hdl_enum hdl_params gty ev_exp)
+    else (translate_egress_generate renames hdl_params ev_exp)
   | SSeq (s1, s2) -> 
-    let s1_decls, s1_stmt = translate_statement renames prev_decls hdl_enum hdl_params prog_env s1 in
-    let s2_decls, s2_stmt = translate_statement renames prev_decls hdl_enum hdl_params prog_env s2 in
+    let s1_decls, s1_stmt = translate_statement in_ingress renames prev_decls hdl_enum hdl_params prog_env s1 in
+    let s2_decls, s2_stmt = translate_statement in_ingress renames prev_decls hdl_enum hdl_params prog_env s2 in
     s1_decls@s2_decls, sseq [s1_stmt; s2_stmt]
   | STableMatch _ | STableInstall _ -> error "[coreToP4Tofino.translate_statement] tables not implemented"
 ;;
 
 (* generate an action, and other compute objects, from an open function *)
-let translate_openfunction (renames, hdl_enum,hdl_params,prog_env) p4tdecls tdecl =
+let translate_openfunction (in_ingress, renames, hdl_enum,hdl_params,prog_env) p4tdecls tdecl =
   let new_decls = match tdecl.td with 
     | TDOpenFunction(id, const_params, stmt, _) -> (
       let params = List.map
         (fun (id, ty) -> (None, translate_ty ty, id))
         const_params
       in
-      let body_decls, body = translate_statement renames p4tdecls hdl_enum hdl_params prog_env stmt in
+      let body_decls, body = translate_statement in_ingress renames p4tdecls hdl_enum hdl_params prog_env stmt in
       let action = daction id params body in
       body_decls@[action]
     )
@@ -878,7 +919,7 @@ let mc_recirc_decls evids recirc_port =
 
 (* pragmas so that the compiler does not overlay 
    fields from different event headers *)
-let overlay_pragmas gress tds : decl list =
+let overlay_pragmas gress (event_spec:event_spec) : decl list =
   let quoted str = "\""^str^"\"" in
   let field_pragmas gress evid field = 
     [dpragma "pa_no_overlay" [quoted gress; quoted (ev_param_arg evid field |> Cid.names |> String.concat ".")]]
@@ -893,7 +934,7 @@ let overlay_pragmas gress tds : decl list =
         pragmas
         params)
     []
-    (main tds).hdl_params
+    event_spec.hdl_params
 ;;
 
 
@@ -935,7 +976,7 @@ let generate_ingress_control prog_env block_id tds =
     (generate_added_var_decls tds)
     @(List.fold_left
       (translate_openfunction 
-        (renames, m.hdl_enum,m.hdl_params, prog_env))
+        (true, renames, m.hdl_enum,m.hdl_params, prog_env))
       []
       tds)
   in
@@ -976,7 +1017,8 @@ let extract_recirc_event_action ev_enum evid =
   (* 
     1. disable all event headers except evid
     2. set single-event header.event_id = evid 
-    3. wipe multi-event header *)
+    3. wipe multi-event header 
+    4. set meta.egress_event_id = evid *)
   let evids = List.split ev_enum |> fst in 
   let other_evid = MiscUtils.remove evid evids in
   let invalidate_other_headers = 
@@ -988,8 +1030,11 @@ let extract_recirc_event_action ev_enum evid =
     sassign (cur_ev_arg) (eval_int (List.assoc evid ev_enum))
     ]
   in
+  let set_cur_egr_ev = [
+    sassign (egr_cur_ev_arg) (eval_int (List.assoc evid ev_enum))
+  ] in
   let multi_event_reset = reset_multi_event ev_enum in 
-  daction (recirc_acn_id evid) [] (sseq (invalidate_other_headers@single_ev_setup@multi_event_reset))
+  daction (recirc_acn_id evid) [] (sseq (invalidate_other_headers@single_ev_setup@set_cur_egr_ev@multi_event_reset))
 ;;
 
 let extract_recirc_event_actions ev_enum =
@@ -999,21 +1044,21 @@ let extract_recirc_event_actions ev_enum =
 ;;
 
 (* create the table to extract recirculation events from the packet *)
-let extract_recirc_event_table noop_acn_id tbl_id tds (evids : Id.t list) =
-  let hdl_id_to_idx = (main tds).hdl_enum in 
+let extract_recirc_event_table noop_acn_id tbl_id (event_spec : event_spec) =
+  let hdl_id_to_idx = event_spec.hdl_enum in 
   (* mapping from handler numbers to id *)
   let hdl_idx_to_id = List.map (fun (x, y) -> (y, x)) hdl_id_to_idx in 
   (* the sequences of generate statements that the program uses *)
-  let event_seqs = (main tds).event_output.ev_gen_seqs in 
+  let event_seqs = event_spec.event_id_sequences in 
   (* keys: rid, port_event_id, event flags *)
   let keys = 
      (List.map exp_to_ternary_key [rid_local_e; port_out_event_arg_e])
      @(List.map 
         (fun evid -> handler_multi_ev_flag_arg_e evid |> exp_to_ternary_key)
-        evids)
+        event_spec.evids)
   in
   (* action ids:  one for each event, plus the noop *)
-  let action_ids = noop_acn_id::(List.map recirc_acn_id evids) in  
+  let action_ids = noop_acn_id::(List.map recirc_acn_id event_spec.evids) in  
   let action_exprs = List.map
     (fun aid -> evar_noretmethod (Cid.id aid))
     action_ids
@@ -1035,14 +1080,14 @@ let extract_recirc_event_table noop_acn_id tbl_id tds (evids : Id.t list) =
     let recirc_acn_call evid = sunit (ecall (Cid.id (recirc_acn_id evid)) []) in
     (* replica id is the number of recirculated events, can range from 1 to number of events *)
     (*  *)
-    let possible_rids = MiscUtils.range 1 (1 + (List.length evids)) in 
+    let possible_rids = MiscUtils.range 1 (1 + (List.length event_spec.evids)) in 
     (* evnum 0 means that no recirc event was generated *)
-    let possible_evnums = MiscUtils.range 0 (1 + (List.length evids)) in 
+    let possible_evnums = MiscUtils.range 0 (1 + (List.length event_spec.evids)) in 
     let port_out_evnums = possible_evnums in 
 
     let create_branch rid port_out_evnum event_seq =
       let ev_idx = rid - 1 in (* because rid starts at 1, and we may want the 0th event *)
-      let flag_pats = intpats_of_evseq evids event_seq
+      let flag_pats = intpats_of_evseq event_spec.evids event_seq
         |> List.map pnum
       in
       let pats = (pnum rid)::(pnum port_out_evnum)::flag_pats in
@@ -1130,20 +1175,23 @@ let port_internal_action evid =
   id@@(fst evid)^"_to_internal"
 ;;
 
+(* create one action for sending the event to an non-lucid port, 
+   and another action for sending the event to a lucid port *)
 let extract_port_event_action (ev_enum:(Id.t * int) list) (evid:Id.t) =
   let evids = List.split ev_enum |> fst in 
   let other_evids = MiscUtils.remove evid evids in 
+  (* invalidate all the other events (for both internal and external) *)
   let invalidate_events = (List.map (fun evid -> invalidate (handler_struct_arg evid)) other_evids) in 
-  let external_port_stmts = [
-    invalidate eth_arg;
+  (* set the current egress event (for both internal and external) *)
+  let set_cur_egr_ev = [
+    sassign (egr_cur_ev_arg) (eval_int (List.assoc evid ev_enum))
+  ] in
+  (* to external: invalidate all the internal lucid headers *)
+  let external_port_stmts = 
+    set_cur_egr_ev
+    @[invalidate eth_arg;
     invalidate single_ev_arg;
     invalidate multi_ev_arg ]
-    @invalidate_events
-  in
-  let internal_port_stmts = [
-    (* invalidate multi_ev_arg; *)
-    sassign (cur_ev_arg) (eval_int (List.assoc evid ev_enum))]
-    @(reset_multi_event ev_enum)
     @invalidate_events
   in
   let to_external = daction
@@ -1151,6 +1199,13 @@ let extract_port_event_action (ev_enum:(Id.t * int) list) (evid:Id.t) =
     []
     (sseq external_port_stmts)
   in
+  (* to internal: set the internal lucid headers to carry a single event *)
+  let internal_port_stmts = 
+    set_cur_egr_ev
+    @[sassign (cur_ev_arg) (eval_int (List.assoc evid ev_enum))]
+    @(reset_multi_event ev_enum)
+    @invalidate_events
+  in  
   let to_internal = daction
     (port_internal_action evid)
     []
@@ -1207,21 +1262,24 @@ let egress_control_params = [
 
 (* pragmas so that the compiler does not overlay 
    fields from different event headers *)
-let egress_overlay_pragmas tds = overlay_pragmas "egress" tds
+let egress_overlay_pragmas event_spec = overlay_pragmas "egress" event_spec
 ;;
 
-let generate_egress_control block_id tds lucid_internal_ports =
+(* generate the first part of the egress control, which 
+   extracts the appropriate event header from the packet and 
+   disables all the rest. Also set the current_egress_event metadata field. *)
+let generate_egress_event_extractor (event_spec:event_spec) lucid_internal_ports =
   let egr_noop_id = id "egr_noop" in 
-  let ev_enum = (main tds).hdl_enum in 
+  let egr_noop = [daction egr_noop_id [] (snoop)] in 
+  let ev_enum = event_spec.hdl_enum in 
   let t_extract_port_event = id "t_extract_port_event" in
   let t_extract_recirc_event = id "t_extract_recirc_event" in 
-  let egr_noop = [daction egr_noop_id [] (snoop)] in 
   let decls = 
-    (egress_overlay_pragmas tds)
+    (egress_overlay_pragmas event_spec)
     @(egr_noop)
     @(extract_recirc_event_actions ev_enum)
     @(extract_port_event_actions ev_enum)
-    @[(extract_recirc_event_table egr_noop_id t_extract_recirc_event tds (List.split ev_enum |> fst));
+    @[(extract_recirc_event_table egr_noop_id t_extract_recirc_event event_spec);
       extract_port_event_table t_extract_port_event ev_enum lucid_internal_ports]
   in
   let stmt = 
@@ -1229,7 +1287,96 @@ let generate_egress_control block_id tds lucid_internal_ports =
       (scall_table t_extract_port_event)
       (scall_table t_extract_recirc_event)
   in
-  dcontrol block_id egress_control_params decls stmt
+  decls, stmt
+;;
+
+let generate_egress_handler_control block_id prog_env egress_tds =
+  (* generate the egress control after event extraction to 
+     execute egress handlers. *)
+  let tds = egress_tds in
+  let m = main tds in 
+  (* add event / handler parameters to the renaming map. 
+     This is the same as ingress, right now, because 
+     event headers have the same name in both pipes. *)
+  let renames = List.fold_left 
+    (fun names (evid, params) -> 
+      List.fold_left
+        (fun names (param_id, _) -> 
+          rename (Cid.id param_id, ev_param_arg evid param_id) names)
+        names
+        params
+      )
+    empty_renames
+    m.hdl_params
+  in
+  (* builtin renaming: the handle selector is different in egress, 
+     we use the "egress_event_id" field in metadata, set by the 
+     egress event extraction tables. 
+     we also want to rename the "drop_control" variable *)
+  (* TODO: add egress port, queue, and queue depth *)
+  let renames = 
+       renames 
+    (* |> rename ((Cid.id Builtins.ingr_port_id), igr_port_arg) *)
+    |> rename ((Cid.id (m.hdl_selector |> fst)), egr_cur_ev_arg)
+    |> rename (Cid.id TofinoEgress.egr_drop_ctl_id, eg_drop_ctl_arg)
+    (* |> rename ((Cid.id (m.event_output.recirc_mcid_var |> fst)), mcast_grp_a_arg) *)
+  in
+
+  (* add table definitions to renaming map *)
+  let renames = List.fold_left
+    (fun renames td -> 
+      match td.td with
+      | TDGlobal(tbl_id, _, {e=ETableCreate(tbl_def); espan=espan;}) -> 
+        bind_tbl renames (tbl_id, (tbl_def, espan))
+      | _ -> renames)
+    renames
+    tds
+  in
+  (* all decls besides tables *)
+  let decls = 
+    (generate_added_var_decls tds)
+    @(List.fold_left
+      (translate_openfunction 
+        (false, renames, m.hdl_enum,m.hdl_params, prog_env))
+      []
+      tds)
+  in
+  (* table decls are generated at the same time as table calls *)
+  let table_decls, table_calls = statements_to_stages 0 renames block_id m.main_body |> List.split in 
+  let apply_body = sseq table_calls in 
+  let action_decls = non_mcgroups_of_decls decls in 
+  (* just return the declarations and body to place after event extraction in egress. *)
+  let decls = action_decls@table_decls in
+  let body = apply_body in
+  decls, body
+;;
+
+let generate_egress_control prog_env (event_spec : event_spec) lucid_internal_ports block_id egress_tds = 
+  (* The egress has two components. 
+      First, some tables extract the correct event header from the 
+      packet header and set all the other headers to invalid. 
+      Second, if the lucid program has egress handlers, a pipeline 
+      of tables executes them. *)
+
+  (* so where do we set drop_ctl? 
+  
+    at beginning of egress? No. Can't do that. Because we don't know if there's a handler, 
+    and if there's no handler, we want the event to keep going, not drop. 
+    So we have to set it at the start of each handler body...*)
+
+  let decls, body = if ((List.length egress_tds) <> 0)
+    then (
+      let event_extractor_decls, event_extractor_stmt = generate_egress_event_extractor event_spec lucid_internal_ports in
+      let egress_handler_decls, egress_handler_body = generate_egress_handler_control block_id prog_env egress_tds in
+      event_extractor_decls@egress_handler_decls,
+      sseq [
+          set_int eg_drop_ctl_arg 0; (*initialize to 0 so nothing drops unless there is a handler for it. *)
+          event_extractor_stmt; 
+          egress_handler_body])
+    else (
+    generate_egress_event_extractor event_spec lucid_internal_ports)
+  in
+  dcontrol block_id egress_control_params decls body
 ;;
 
 (*** register arrays and their slot types ***)
@@ -1288,40 +1435,46 @@ let mc_flood_decls external_ports =
   List.map flood_port_decl external_ports
 ;;
 
-let setup_env tds (portspec:ParsePortSpec.port_config) =
-  let prog_env = mk_prog_env tds in 
+let mk_port_conf (portspec:ParsePortSpec.port_config) =
   let port_defs = Caml.List.map 
     (fun (port:ParsePortSpec.port) -> decl (DPort{dpid=port.dpid; speed=port.speed;})) 
     (portspec.internal_ports@portspec.external_ports)
   in 
   let lucid_dpids = portspec.recirc_dpid::(List.map (fun (port:ParsePortSpec.port) -> port.dpid) portspec.internal_ports) in
   let extern_dpids = (List.map (fun (port:ParsePortSpec.port) -> port.dpid) portspec.external_ports) in
-  (prog_env, port_defs, lucid_dpids, extern_dpids)
+  (port_defs, lucid_dpids, extern_dpids)
 ;;
 
-let translate tds (portspec:ParsePortSpec.port_config) = 
-  let env, ports, lucid_dpids, extern_dpid = setup_env tds portspec in
+type event_spec = {
+  evids : id list;
+  event_id_sequences : id list list;
+}
 
-  let ingress_control, mc_decls = generate_ingress_control env (id "IngressControl") tds in 
+let translate (portspec:ParsePortSpec.port_config) ingress_tds egress_tds =
+  let ports, lucid_dpids, extern_dpid = mk_port_conf portspec in
+  let event_spec = CoreToP4TofinoHeaders.tds_to_event_spec ingress_tds in
+
+  let ingress_control, mc_decls = generate_ingress_control (mk_prog_env ingress_tds) (id "IngressControl") ingress_tds in 
   let mc_defs = mc_decls
     @(mc_flood_decls extern_dpid)
-    @(mc_recirc_decls ((main tds).hdl_enum |> List.split |> fst) portspec.recirc_dpid) 
+    @(mc_recirc_decls (event_spec.hdl_enum |> List.split |> fst) portspec.recirc_dpid) 
   in 
+
   let tofino_prog = {
     globals = 
       includes
-      @(generate_structs tds)
-      @(generate_reg_arrays tds);
+      @(generate_structs event_spec)
+      @(generate_reg_arrays (ingress_tds@egress_tds));
     ingress = {
-      parse = generate_ingress_parser (id "IngressParser") (main tds) lucid_dpids;
+      parse = generate_ingress_parser (id "IngressParser") (main ingress_tds) lucid_dpids;
       process = ingress_control;
-      deparse = generate_ingress_deparser (id "IngressDeparser") tds;
+      deparse = generate_ingress_deparser (id "IngressDeparser") ingress_tds;
       };
     control_config = mc_defs@ports;
     egress = {
-      parse = generate_egress_parser (id "EgressParser") tds;
-      process = generate_egress_control (id "EgressControl") tds lucid_dpids;
-      deparse = generate_egress_deparse (id "EgressDeparse") tds;
+      parse = generate_egress_parser (id "EgressParser") event_spec; 
+      process = generate_egress_control (mk_prog_env egress_tds) event_spec lucid_dpids (id "EgressControl") egress_tds;
+      deparse = generate_egress_deparse (id "EgressDeparse");
     }
   } in
   tofino_prog
@@ -1338,6 +1491,7 @@ let control_block_lib_params tds =
 ;;
 
 let generate_control_lib prog_env tds =
+  (* this is a control block generator -- almost depreciated at this point *)
   let renames = empty_renames in 
   let m = main tds in 
   let block_id = m.hdl_enum |> List.hd |> fst in 
@@ -1346,7 +1500,7 @@ let generate_control_lib prog_env tds =
   let apply_body = sseq table_calls in 
   let action_decls = List.fold_left
     (translate_openfunction 
-      (renames, m.hdl_enum,m.hdl_params,
+      (true, renames, m.hdl_enum,m.hdl_params,
         prog_env
       )
     )

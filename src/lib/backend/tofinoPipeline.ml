@@ -125,7 +125,7 @@ let tofino_midend_pipeline ds =
 
 (* normalize code and eliminate compile-time abstractions that are easier 
    to deal with in tofinocore syntax *)
-let tofinocore_normalization full_compile tds = 
+let tofinocore_normalization is_ingress eliminate_generates tds = 
     cprint_prog "----------- initial tofinoCore program------- " tds;
     (* 1. tag match statements with many cases as solitary, 
           i.e., they compile to their own table. *)
@@ -141,7 +141,7 @@ let tofinocore_normalization full_compile tds =
     let tds = ShareMemopInputs.process tds in 
     cprint_prog "----------- after ShareMemopInputs ------- " tds;
     (* 5. eliminate all generate statements and add invalidate calls *)
-    let tds = if (full_compile) then (Generates.eliminate tds) else tds in 
+    let tds = if (eliminate_generates) then (Generates.eliminate is_ingress tds) else tds in 
     cprint_prog "----------- after Generates.eliminate ------- " tds;
     TofinoCore.dump_prog (!BackendLogging.irLogDir ^ "/initial.before_layout.dpt") tds;
     (* 6. transform code so that there is only 1 match 
@@ -197,17 +197,35 @@ let layout old_layout tds build_dir_opt =
 let compile_dataplane old_layout ds portspec build_dir =
   (* compile the data plane program into a P4 program.  *)
   let ds = tofino_midend_pipeline ds in 
+
+  (* egress_ds are the handlers and globals to be placed in egress *)
+  let ingress_ds, egress_ds = TofinoEgress.split_decls ds in
+
   cprint_endline "starting transformations";
   (* translate into tofinocore -- basically just coresyntax 
      with labeled statements, shared variables,and a main handler *)
-  let tds = tdecls_of_decls ds in 
+  let ingress_tds = tdecls_of_decls ingress_ds in 
   (* TofinoCore.dump_prog (!BackendLogging.irLogDir ^ "/initial.tofinocore.dpt") tds; *)
   (* some transformation passes in tofinocore syntax *)
-  let tds = tofinocore_normalization true tds in 
+  let ingress_tds = tofinocore_normalization true true ingress_tds in 
   (* transform program into a layout of match statements *)
-  let tds = layout old_layout tds (Some build_dir) in 
-  (* translate to final low-level P4-ish IR *)
-  let tofino_prog = CoreToP4Tofino.translate tds portspec in 
+  let ingress_tds = layout old_layout ingress_tds (Some build_dir) in 
+
+  (* now, if there is an egress component, package it as its 
+     own tofino program and do the same transformations. 
+     The differences are: 1) we do add_default_egr_drop, 
+     which adds a drop packet command to the beginning of every egress handler; 
+     2) the generates partial eliminator doesn't increment mcid for egress *)
+  let egress_tds = 
+    if ((List.length egress_ds) <> 0) then (
+         egress_ds
+      |> TofinoEgress.add_default_egr_drop
+      |> tdecls_of_decls  
+      |> tofinocore_normalization false true
+      |> (fun tds -> layout old_layout tds (Some build_dir)))
+    else ([])
+  in
+  let tofino_prog = CoreToP4Tofino.translate portspec ingress_tds egress_tds  in 
   tofino_prog
 ;;
 let compile old_layout ds portspec build_dir ctl_fn_opt = 
@@ -260,7 +278,7 @@ let compile_handler_block ds =
     InputChecks.all_checks ds;
     let ds = common_midend_passes ds in
     let tds = tdecls_of_decls ds in 
-    let tds = tofinocore_normalization false tds in 
+    let tds = tofinocore_normalization true false tds in 
     let tds = layout false tds None in 
     let p4decls = CoreToP4Tofino.translate_to_control_block tds in 
     P4TofinoPrinting.string_of_decls p4decls |> P4TofinoPrinting.doc_to_string

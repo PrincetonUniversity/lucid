@@ -236,9 +236,11 @@ and event_sort =
   | EExit       (* events that leave the lucid program *)
   | EBackground (* standard event sort *)
 
+(* this is really a location where the handler executes *)
 and handler_sort = 
   | HControl (* control processor *)
   | HData (* data processor *)
+  | HEgress (* egress pipeline *)
 
 and ispec =
   | InSize of id

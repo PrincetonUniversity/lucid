@@ -193,27 +193,27 @@ let replace_params evids stmt =
     3. "switch" into traverse_to_replace mode *)
 
 (* bug: is this handling generates or self generates? *)
-let rec find_self_generate params_used_after tds (evid, (evparams:params)) stmt =
+let rec find_rec_generate params_used_after tds (evid, (evparams:params)) stmt =
   let evids = evparams |> List.split |> fst in
   match stmt.s with 
   | SSeq(s1, s2) -> (
     (* traverse 1 seeking a self generate. If you find it, switch into 
        replacement mode for 2. *)
     let params_used_after_s1 = params_used_after || (used_in evids s2) in 
-    let s1_new, gen_in_s1 = find_self_generate params_used_after_s1 tds (evid, evparams) s1 in
+    let s1_new, gen_in_s1 = find_rec_generate params_used_after_s1 tds (evid, evparams) s1 in
     let s2_new, gen_in_s2 = match (gen_in_s1) with 
       | true -> (
         match params_used_after_s1 with 
           | true -> replace_params evids s2, true
           | false -> s2, true
       )
-      | false -> find_self_generate params_used_after tds (evid, evparams) s2
+      | false -> find_rec_generate params_used_after tds (evid, evparams) s2
     in
     sseq s1_new s2_new, gen_in_s2
   )
   | SMatch(es, bs) -> (
     let pats, stmts = List.split bs in    
-    let stmts_gen_elims = List.map (find_self_generate params_used_after tds (evid, evparams)) stmts in
+    let stmts_gen_elims = List.map (find_rec_generate params_used_after tds (evid, evparams)) stmts in
     let generate_found = List.fold_left (fun found_somewhere found_in -> 
       found_somewhere || found_in)
       false
@@ -243,8 +243,8 @@ let rec find_self_generate params_used_after tds (evid, (evparams:params)) stmt 
   )
   | SIf(e, s1, s2) -> (
     (* try to replace generate in each branch *)
-    let s1_new, gen_in_s1 = find_self_generate params_used_after tds (evid, evparams) s1 in
-    let s2_new, gen_in_s2 = find_self_generate params_used_after tds (evid, evparams) s2 in
+    let s1_new, gen_in_s1 = find_rec_generate params_used_after tds (evid, evparams) s1 in
+    let s2_new, gen_in_s2 = find_rec_generate params_used_after tds (evid, evparams) s2 in
     (* if there was a branch with a generate, all the branches with out the generate 
        must be traversed to add invalidates *)
     (* those branches might also need to cpy param vals, if they are ever used again. *)
@@ -300,8 +300,10 @@ let paramcopy_in_stmt stmt =
   !found
 ;;
 
-(* processing for a single branch of the handle selector statement *)
-let find_self_generate_in_hdl_branch tds rev_hdl_enum hdl_params (pats, stmt) =
+(* in every control path for the handler of event e, 
+   ensure that if another event e is not generated, 
+   then e's header is set to invalid. *)
+let invalidate_input_event_header_when_not_reused tds rev_hdl_enum hdl_params (pats, stmt) =
   let evnum = match pats with 
     | [PNum(z)] -> Z.to_int z
     | _ -> error "[process_ev_branch] pattern of handler selector should be event num"
@@ -310,18 +312,19 @@ let find_self_generate_in_hdl_branch tds rev_hdl_enum hdl_params (pats, stmt) =
   let evparams:params = List.assoc evid hdl_params in 
   (* let paramids = evparams |> List.split |> fst in *)
 
-  let new_stmt, self_generate_found = find_self_generate false tds (evid, evparams) stmt in 
-  (* if a generate was found, we are done processing the body. 
-     but if it was not, we haven't invalidated the header, so we 
-     do that at the end.*)
-  let new_stmt = match self_generate_found with
+  (* determine if this handler's body generates its own event. If there 
+     is a recursive generate statement, this function will also add 
+     statements to invalidate the event's header in all the branches 
+     that do _not_ contain a recursive generate statement.  *)
+  let new_stmt, recursive_generate_found = find_rec_generate false tds (evid, evparams) stmt in 
+  (* if a recursive generate was not found, then we need to 
+     invalidate the event's header before the pipeline ends. *)
+  let new_stmt = match recursive_generate_found with
     | true -> new_stmt
-    | false -> (
-      (* there's no self generate, so invalidate the header at the end. *)
-      append_invalidate false (evid, evparams) new_stmt
-    )
+    | false -> append_invalidate false (evid, evparams) new_stmt
   in
-  (* if the body assigned param copy variables, add their declarations. *)
+  (* we may have added copies of event header variables, 
+     which are declared outside of the statement *)
   let new_vars = match (paramcopy_in_stmt new_stmt) with 
     | true -> List.map (fun (id, ty) -> (orig id, ty)) evparams
     | false -> []
@@ -346,7 +349,8 @@ let count_recirc_generates tds =
   v#visit_tdecls () tds;    
 ;;
 
-let eliminate tds =
+
+let eliminate is_ingress tds =
   TofinoCoreForms.main_with_event_match "Generates.eliminate@start" tds;
   let m = (main tds) in 
   let rev_hdl_enum = List.map (fun (x, y) -> (y, x)) m.hdl_enum in
@@ -354,7 +358,7 @@ let eliminate tds =
   let new_stmt, new_vars = match (stmt.s) with 
     | SMatch(es, bs) -> (
       let new_bs, new_vars = 
-        List.map (find_self_generate_in_hdl_branch tds rev_hdl_enum m.hdl_params) bs
+        List.map (invalidate_input_event_header_when_not_reused tds rev_hdl_enum m.hdl_params) bs
         |> List.split
       in
       let new_vars = List.flatten new_vars in
@@ -368,7 +372,7 @@ let eliminate tds =
     shared_locals = m.shared_locals@new_vars;
     } 
   in
-  (* finally, count recirc generates *)
-  count_recirc_generates tds
+  (* finally, if this is an ingress program, increment the multicast group for recirculating generates *)
+  if (is_ingress) then (count_recirc_generates tds) else (tds)
   (* tds *)
 ;;

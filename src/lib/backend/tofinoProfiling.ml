@@ -1,4 +1,5 @@
 (* use the backend to estimate resource utilization on the tofino *)
+(* NOTE: this is only for the ingress pipeline!  *)
 open TofinoCore
 
 let info str = 
@@ -13,7 +14,7 @@ let export_dfg ds dfg_json_fn =
   let ds = ds 
     |> TofinoPipeline.common_midend_passes 
     |> tdecls_of_decls
-    |> (TofinoPipeline.tofinocore_normalization true) 
+    |> (TofinoPipeline.tofinocore_normalization true true) 
   in
   ExternalLayout.export ds dfg_json_fn;
 ;;
@@ -25,7 +26,7 @@ let profile ds portspec output_dir profile_cmd =
   let ds = ds 
     |> TofinoPipeline.common_midend_passes 
     |> tdecls_of_decls
-    |> (TofinoPipeline.tofinocore_normalization true) 
+    |> (TofinoPipeline.tofinocore_normalization true true) 
   in
   (* now profile the resulting program *)
   match profile_cmd with 
