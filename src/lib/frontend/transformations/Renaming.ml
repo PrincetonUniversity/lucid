@@ -133,24 +133,24 @@ let rename prog =
       method freshen_any active x =
         let new_x = Cid.fresh (Cid.names x) in
         (match active with
-        | 0 ->
-          env
-            <- { env with
-                 module_defs = KindSet.add (KConst, x) env.module_defs
-               ; var_map = CidMap.add x new_x env.var_map
-               }
-        | 1 ->
-          env
-            <- { env with
-                 module_defs = KindSet.add (KSize, x) env.module_defs
-               ; size_map = CidMap.add x new_x env.size_map
-               }
-        | _ ->
-          env
-            <- { env with
-                 module_defs = KindSet.add (KUserTy, x) env.module_defs
-               ; ty_map = CidMap.add x new_x env.ty_map
-               });
+         | 0 ->
+           env
+             <- { env with
+                  module_defs = KindSet.add (KConst, x) env.module_defs
+                ; var_map = CidMap.add x new_x env.var_map
+                }
+         | 1 ->
+           env
+             <- { env with
+                  module_defs = KindSet.add (KSize, x) env.module_defs
+                ; size_map = CidMap.add x new_x env.size_map
+                }
+         | _ ->
+           env
+             <- { env with
+                  module_defs = KindSet.add (KUserTy, x) env.module_defs
+                ; ty_map = CidMap.add x new_x env.ty_map
+                });
         new_x
 
       method freshen_var x = self#freshen_any 0 (Id x) |> Cid.to_id
@@ -210,15 +210,16 @@ let rename prog =
         let keys = List.map (self#visit_exp dummy) tm.keys in
         let args = List.map (self#visit_exp dummy) tm.args in
         (* rename if the variables are declared here *)
-        let outs, out_tys = match tm.out_tys with 
+        let outs, out_tys =
+          match tm.out_tys with
           | None ->
             (* must visit outs because they have been renamed too. *)
             List.map (self#visit_id dummy) tm.outs, None
-          | Some out_tys -> 
-            List.map (self#freshen_var) tm.outs, 
-            Some(List.map (self#visit_ty dummy) out_tys)
-        in 
-        STableMatch({tbl; keys; args; outs; out_tys})
+          | Some out_tys ->
+            ( List.map self#freshen_var tm.outs
+            , Some (List.map (self#visit_ty dummy) out_tys) )
+        in
+        STableMatch { tbl; keys; args; outs; out_tys }
 
       method! visit_body dummy (params, body) =
         let old_env = env in
@@ -245,7 +246,7 @@ let rename prog =
           let replaced_size = Option.map (self#visit_size dummy) size in
           let new_x = self#freshen_size x in
           DSize (new_x, replaced_size)
-        | DAction(x, rtys, const_params, (params, action_body)) -> 
+        | DAction (x, rtys, const_params, (params, action_body)) ->
           let new_rtys = List.map (self#visit_ty dummy) rtys in
           let new_const_params =
             List.map
@@ -259,7 +260,8 @@ let rename prog =
           in
           let new_action_body = List.map (self#visit_exp dummy) action_body in
           let new_x = self#freshen_var x in
-          DAction(new_x, new_rtys, new_const_params, (new_params, new_action_body))
+          DAction
+            (new_x, new_rtys, new_const_params, (new_params, new_action_body))
         | DMemop (x, params, body) ->
           let old_env = env in
           let replaced_params =
@@ -299,7 +301,8 @@ let rename prog =
           DEvent (new_x, s, new_cspecs, new_params)
         | DHandler (x, hsort, body) ->
           (* Note that we require events to be declared before their handler *)
-          DHandler (self#lookup (Id x) |> Cid.to_id, hsort, self#visit_body dummy body)
+          DHandler
+            (self#lookup (Id x) |> Cid.to_id, hsort, self#visit_body dummy body)
         | DFun (f, rty, cspecs, (params, body)) ->
           let old_env = env in
           let new_rty = self#visit_ty dummy rty in
@@ -352,6 +355,10 @@ let rename prog =
           env <- new_env;
           DModule (id, intf, body)
         | DModuleAlias _ -> failwith "Should be eliminated before this"
+        | DParser _ ->
+          (* I don't know if we have to rename inside parsers?
+             Right now I'm erring on the side of laziness *)
+          d
 
       (*** Places we enter a scope ***)
       method! visit_SIf dummy test left right =

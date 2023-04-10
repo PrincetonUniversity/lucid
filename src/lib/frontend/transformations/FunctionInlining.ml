@@ -155,8 +155,8 @@ let inliner =
               env
               { fname = cid; args = es; ret = retvar }
           in
-          { e with e = EStmt (stmt, ret_exp) })
-        (* case: cid is a constructor *)
+          { e with e = EStmt (stmt, ret_exp) }
+          (* case: cid is a constructor *))
         else if CidMap.mem cid env.constrs
         then (
           let params, body =
@@ -181,15 +181,14 @@ let inliner =
           (* create the body and re-annotate it immediately *)
           let body = GlobalConstructorTagging.reannotate_inlined_exp e body in
           (* recurse on the new body *)
-          let inner_exp = self#visit_exp env body in 
+          let inner_exp = self#visit_exp env body in
           (* do substitutions on it *)
           let inlined_exp = subst#visit_exp subst_map inner_exp in
-          inlined_exp
-        )
+          inlined_exp)
         else
           (* Not user-defined function; we don't have to inline it *)
           { e with e = ECall (cid, es) }
-      | _ -> 
+      | _ ->
         let res = super#visit_exp env e in
         res
   end
@@ -220,7 +219,13 @@ let inline_decl env d =
   | DGlobal (id, ty, e) ->
     env, Some { d with d = DGlobal (id, ty, inliner#visit_exp env e) }
     (* Other stuff is unaffected *)
-  | DUserTy _ | DExtern _ | DSymbolic _ | DEvent _ | DConst _ | DSize _ ->
+  | DUserTy _
+  | DExtern _
+  | DSymbolic _
+  | DEvent _
+  | DConst _
+  | DSize _
+  | DParser _ ->
     (* We can't inline an exp that's not part of a statement *) env, Some d
   | DMemop _ ->
     (* No function calls allowed in Memops *)

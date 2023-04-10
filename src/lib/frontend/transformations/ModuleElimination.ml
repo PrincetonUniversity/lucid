@@ -103,6 +103,7 @@ let add_definitions prefix env ds =
     | DSize (id, _) -> { env with sizes = add_entry env.sizes id }
     | DUserTy (id, _, _) -> { env with types = add_entry env.types id }
     | DAction (id, _, _, _) -> { env with vars = add_entry env.vars id }
+    | DParser (id, _, _) -> { env with vars = add_entry env.vars id }
     | DModuleAlias _ -> failwith "Should be eliminated before this"
     | DModule (id, _, ds) ->
       let env' = List.fold_left (aux id) empty_env ds in
@@ -172,6 +173,9 @@ let rec replace_module env m_id ds =
           | DAction (id, x, y, z) ->
             ( { env with vars = add_entry env.vars id }
             , DAction (prefix id, x, y, z) |> wrap d )
+          | DParser (id, x, y) ->
+            ( { env with vars = add_entry env.vars id }
+            , DParser (prefix id, x, y) |> wrap d )
           | DModule (id, _, ds) ->
             let _, ds = replace_module env id ds in
             replace_module env m_id ds
