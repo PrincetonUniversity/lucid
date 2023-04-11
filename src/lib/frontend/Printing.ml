@@ -501,8 +501,8 @@ and parser_action_to_string action =
   | PSkip ty -> Printf.sprintf "skip %s;" (ty_to_string ty)
   | PRead (id, ty) ->
     Printf.sprintf "read %s : %s;" (id_to_string id) (ty_to_string ty)
-  | PAssign (cid, exp) ->
-    Printf.sprintf "%s = %s;" (cid_to_string cid) (exp_to_string exp)
+  | PAssign (lval, exp) ->
+    Printf.sprintf "%s = %s;" (exp_to_string lval) (exp_to_string exp)
 
 and parser_branch_to_string (pat, block) =
   Printf.sprintf "| %s -> %s" (pat_to_string pat) (parser_block_to_string block)

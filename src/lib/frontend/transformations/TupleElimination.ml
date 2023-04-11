@@ -250,6 +250,86 @@ let replacer =
     method! visit_EHash env sz args =
       let args = List.map (self#flatten env) args |> List.concat in
       EHash (sz, args)
+
+    (** We also have to do things separately for parsers, since they use different syntax *)
+
+    (* Basically the same as SLocal but without the expressions. However, since we don't
+       nest actions like we do with SSeq, we need a method that returns a list of actions
+       rather than a single one. *)
+    method! visit_PRead _ id _ =
+      failwith
+      @@ "Internal error (contact a developer): Tried to visit PRead of "
+      ^ Id.to_string id
+
+    method replace_PRead env id ty span : (parser_action * sp) list =
+      match ty.raw_ty with
+      | TTuple tys ->
+        let new_ids = rename_elements id tys in
+        let new_defs =
+          List.map
+            (fun (id, ty) ->
+              (* Recursively split up each entry *)
+              let recursive_defs = self#replace_PRead env id ty span in
+              recursive_defs)
+            new_ids
+        in
+        env := IdMap.add id new_ids !env;
+        List.flatten new_defs
+      | _ ->
+        (* Other non-compound types should be eliminated by now *)
+        [PRead (id, ty), span]
+
+    method replace_PSkip env typ span : (parser_action * sp) list =
+      match typ.raw_ty with
+      | TTuple tys ->
+        let new_skips =
+          List.map
+            (fun rty ->
+              (* Recursively split up each entry *)
+              let recursive_defs = self#replace_PSkip env (ty rty) span in
+              recursive_defs)
+            tys
+        in
+        List.flatten new_skips
+      | _ ->
+        (* Other non-compound types should be eliminated by now *)
+        [PSkip typ, span]
+
+    method replace_PAssign env lexp exp span : (parser_action * sp) list =
+      let lexp = self#visit_exp env lexp in
+      match (Option.get exp.ety).raw_ty with
+      | TTuple _ ->
+        let l_id =
+          match lexp.e with
+          | EVar cid -> Cid.to_id cid
+          | _ -> failwith "Shouldn't be possible, contact a dev"
+        in
+        let entries = self#visit_exp env exp |> extract_etuple in
+        let new_ids = IdMap.find l_id !env in
+        let new_defs =
+          List.map2
+            (fun (id, _) e ->
+              let recursive_defs =
+                self#replace_PAssign env (var_sp (Id id) Span.default) e span
+              in
+              recursive_defs)
+            new_ids
+            entries
+        in
+        List.flatten new_defs
+      | _ -> [PAssign (lexp, exp), span]
+
+    method replace_action env (action, span) =
+      match action with
+      | PRead (id, ty) -> self#replace_PRead env id ty span
+      | PSkip ty -> self#replace_PSkip env ty span
+      | PAssign (lexp, rexp) -> self#replace_PAssign env lexp rexp span
+
+    method! visit_parser_block env (actions, (step, step_sp)) =
+      let actions =
+        List.map (self#replace_action env) actions |> List.flatten
+      in
+      actions, (self#visit_parser_step env step, step_sp)
   end
 ;;
 
@@ -257,6 +337,7 @@ let flatten env e = replacer#flatten (ref env) e
 let replace_exp env exp = replacer#visit_exp (ref env) exp
 let replace_statement env s = replacer#visit_statement (ref env) s
 let replace_ty ty = replacer#visit_ty (ref IdMap.empty) ty
+let replace_parser env p = replacer#visit_parser_block (ref env) p
 
 let rec replace_decl (env : env) d =
   match d.d with
@@ -312,6 +393,10 @@ let rec replace_decl (env : env) d =
     ( env
     , [{ d with d = DAction (id, tys', const_params', (params', action_body')) }]
     )
+  | DParser (id, params, body) ->
+    let body_env, new_params = flatten_params env params in
+    let body = replace_parser body_env body in
+    env, [{ d with d = DParser (id, new_params, body) }]
   | DFun _ | DConstr _ | DModule _ | DUserTy _ | DModuleAlias _ ->
     Console.error_position
       d.dspan

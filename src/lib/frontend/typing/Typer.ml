@@ -1189,46 +1189,11 @@ let infer_parser_action env (action, span) =
   match action with
   | PSkip _ -> env, (action, span)
   | PRead (id, ty) -> add_locals env [id, ty], (action, span)
-  | PAssign (cid, exp) ->
-    (* Ensure the variable exists and has the right labels of appropriate types *)
-    let base, labels =
-      let ids = Cid.to_ids cid in
-      List.hd ids, List.tl ids
-    in
-    let basety =
-      match IdMap.find_opt base env.locals with
-      | Some ty -> ty
-      | None ->
-        error_sp span
-        @@ Printf.sprintf
-             "Header %s is either undefined or constant"
-             (id_to_string base)
-    in
-    let final_ty =
-      List.fold_left
-        (fun rty label ->
-          match rty with
-          | TRecord lst ->
-            (match List.assoc_opt (Id.name label) lst with
-             | Some rty -> rty
-             | None ->
-               error_sp span
-               @@ Printf.sprintf
-                    "Type %s does not contain label %s"
-                    (raw_ty_to_string rty)
-                    (Id.name label))
-          | _ ->
-            error_sp span
-            @@ Printf.sprintf
-                 "Type %s is not a record type"
-                 (raw_ty_to_string rty))
-        basety.raw_ty
-        labels
-    in
-    (* Finally, ensure the exp matches the final type *)
+  | PAssign (lexp, exp) ->
+    let env, inf_lexp, inf_lty = infer_exp env lexp |> textract in
     let env, inf_exp, inf_ety = infer_exp env exp |> textract in
-    unify_raw_ty exp.espan final_ty inf_ety.raw_ty;
-    env, (PAssign (cid, inf_exp), span)
+    unify_ty exp.espan inf_lty inf_ety;
+    env, (PAssign (inf_lexp, inf_exp), span)
 ;;
 
 let rec infer_parser_step env (step, span) =

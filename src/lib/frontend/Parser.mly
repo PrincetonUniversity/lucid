@@ -400,7 +400,7 @@ dt_table:
 parser_action:
   | READ ID COLON ty SEMI                   { (PRead (snd $2, $4)), (Span.extend $1 $5) }
   | SKIP ty SEMI                            { (PSkip $2), Span.extend $1 $3 }
-  | cid EQ exp SEMI                         { (PAssign (snd $1, $3)), Span.extend (fst $1) $4 }
+  | exp EQ exp SEMI                         { (PAssign ($1, $3)), Span.extend $1.espan $4 }
 
 parser_branch:
   | PIPE pattern ARROW LBRACE parser_block RBRACE  { Span.extend $1 $6, ($2, $5) }

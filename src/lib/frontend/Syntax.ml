@@ -284,7 +284,9 @@ and action_body = exp list
 and parser_action =
   | PRead of id * ty
   | PSkip of ty
-  | PAssign of cid * exp
+  (* The first exp is an l-value, presumably a record projection operation.
+     We can make this explicit if we ever add l-values properly *)
+  | PAssign of exp * exp
 
 and parser_branch = pat * parser_block
 
