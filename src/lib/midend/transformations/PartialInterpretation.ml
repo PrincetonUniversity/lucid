@@ -7,7 +7,7 @@ type level = int
 type var_binding =
   { level : level (* Last level this variable was modified at *)
   ; body : exp option
-        (* This is Some e iff we know for sure the variable is bound to e *)
+      (* This is Some e iff we know for sure the variable is bound to e *)
   ; is_declared : bool
   ; declared_as : (ty * exp) option (* Original declaration value *)
   }
@@ -25,8 +25,8 @@ let print_env env =
            binding.level
            binding.is_declared
            (match binding.body with
-           | None -> "None"
-           | Some e -> CorePrinting.exp_to_string e))
+            | None -> "None"
+            | Some e -> CorePrinting.exp_to_string e))
     env;
   print_endline "}"
 ;;
@@ -38,34 +38,34 @@ let merge_branches base_stmt level prior_env branch_envs =
   let decls_to_add = ref base_stmt in
   let merge =
     IdMap.merge (fun id ao bo ->
-        match ao, bo with
-        | None, _ -> (* Variable was declared inside the branch, discard *) None
-        | _, None -> failwith "Sanity check: should be impossible"
-        | Some x, Some y ->
-          let is_declared =
-            if x.is_declared
-            then true
-            else if x.level < y.level && x.level = level
-            then (
-              (* Was originally declared on this level, and modified in the branch *)
-              let ty, body =
-                match x.body with
-                | Some e -> e.ety, e
-                | None -> Option.get x.declared_as
-              in
-              decls_to_add := sseq (slocal id ty body) !decls_to_add;
-              true)
-            else false
-          in
-          let level =
-            if x.level = y.level then (* Not modified *) x.level else level
-          in
-          let body =
-            match x.body, y.body with
-            | Some b1, Some b2 -> if equiv_exp b1 b2 then x.body else None
-            | _ -> None
-          in
-          Some { x with level; is_declared; body })
+      match ao, bo with
+      | None, _ -> (* Variable was declared inside the branch, discard *) None
+      | _, None -> failwith "Sanity check: should be impossible"
+      | Some x, Some y ->
+        let is_declared =
+          if x.is_declared
+          then true
+          else if x.level < y.level && x.level = level
+          then (
+            (* Was originally declared on this level, and modified in the branch *)
+            let ty, body =
+              match x.body with
+              | Some e -> e.ety, e
+              | None -> Option.get x.declared_as
+            in
+            decls_to_add := sseq (slocal id ty body) !decls_to_add;
+            true)
+          else false
+        in
+        let level =
+          if x.level = y.level then (* Not modified *) x.level else level
+        in
+        let body =
+          match x.body, y.body with
+          | Some b1, Some b2 -> if equiv_exp b1 b2 then x.body else None
+          | _ -> None
+        in
+        Some { x with level; is_declared; body })
   in
   let merged = List.fold_left merge prior_env branch_envs in
   !decls_to_add, merged
@@ -110,15 +110,15 @@ let rec interp_exp env e =
   | EVar cid ->
     let binding = IdMap.find (Cid.to_id cid) env in
     (match binding.body with
-    | None -> e
-    | Some e' -> e')
+     | None -> e
+     | Some e' -> e')
   | ECall (cid, args) ->
     { e with e = ECall (cid, List.map (interp_exp env) args) }
   | EHash (sz, args) ->
     { e with e = EHash (sz, List.map (interp_exp env) args) }
   | EFlood e' -> { e with e = EFlood (interp_exp env e') }
   | EOp (op, args) -> { e with e = interp_op env op args }
-  | ETableCreate(_) -> e
+  | ETableCreate _ -> e
 
 (* Mostly copied from InterpCore, could maybe merge the two functions *)
 and interp_op env op args =
@@ -201,10 +201,15 @@ and interp_op env op args =
   | Plus, [{ e = EVal v1 }; { e = EVal v2 }] ->
     vinteger (Integer.add (raw_integer v1) (raw_integer v2)) |> mk_e
   (* patterns *)
-  | PatExact, [{ e = EVal {v = VInt n} }] ->
+  | PatExact, [{ e = EVal { v = VInt n } }] ->
     vpat (int_to_bitpat (Integer.to_int n) (Integer.size n)) |> mk_e
-  | PatMask, [{ e = EVal {v = VInt n} }; { e = EVal {v = VInt m} }] ->
-    vpat (int_mask_to_bitpat (Integer.to_int n) (Integer.to_int m) (Integer.size n)) |> mk_e
+  | PatMask, [{ e = EVal { v = VInt n } }; { e = EVal { v = VInt m } }] ->
+    vpat
+      (int_mask_to_bitpat
+         (Integer.to_int n)
+         (Integer.to_int m)
+         (Integer.size n))
+    |> mk_e
   | SatPlus, [{ e = EVal v1 }; { e = EVal v2 }] ->
     let res = Integer.add (raw_integer v1) (raw_integer v2) in
     if Integer.lt res (raw_integer v1)
@@ -263,7 +268,7 @@ and interp_op env op args =
       | RShift
       | Conc
       | Cast _
-      | Slice _ 
+      | Slice _
       | PatExact
       | PatMask )
     , _ ) -> EOp (op, args)
@@ -274,7 +279,6 @@ let interp_gen_ty env = function
   | GMulti e -> GMulti (interp_exp env e)
   | GPort e -> GPort (interp_exp env e)
 ;;
-
 
 let add_builtin_defs level vars env =
   List.fold_left
@@ -344,13 +348,13 @@ let rec interp_stmt env level s : statement * env =
   | SIf (test, s1, s2) ->
     let test = interp_exp test in
     (match test with
-    | { e = EVal { v = VBool b } } ->
-      if b then interp_stmt env level s1 else interp_stmt env level s2
-    | _ ->
-      let s1, env1 = interp_stmt env (level + 1) s1 in
-      let s2, env2 = interp_stmt env (level + 1) s2 in
-      let base_stmt = { s with s = SIf (test, s1, s2) } in
-      merge_branches base_stmt level env [env1; env2])
+     | { e = EVal { v = VBool b } } ->
+       if b then interp_stmt env level s1 else interp_stmt env level s2
+     | _ ->
+       let s1, env1 = interp_stmt env (level + 1) s1 in
+       let s2, env2 = interp_stmt env (level + 1) s2 in
+       let base_stmt = { s with s = SIf (test, s1, s2) } in
+       merge_branches base_stmt level env [env1; env2])
   | SMatch (es, branches) ->
     let es = List.map interp_exp es in
     (* TODO: Precompute the match as much as possible *)
@@ -364,26 +368,30 @@ let rec interp_stmt env level s : statement * env =
     in
     let base_stmt = { s with s = SMatch (es, branches) } in
     merge_branches base_stmt level env envs
-  | STableMatch(tm) -> 
+  | STableMatch tm ->
     let keys' = List.map interp_exp tm.keys in
     let args' = List.map interp_exp tm.args in
-    {s with s= STableMatch({tm with keys=keys'; args=args';})}, env
-  | STableInstall(id, entries) -> 
-    let entries = List.map
-      (fun entry -> 
-        {entry with 
-          ematch = List.map interp_exp entry.ematch;
-          eargs = List.map interp_exp entry.eargs;})
-      entries
+    { s with s = STableMatch { tm with keys = keys'; args = args' } }, env
+  | STableInstall (id, entries) ->
+    let entries =
+      List.map
+        (fun entry ->
+          { entry with
+            ematch = List.map interp_exp entry.ematch
+          ; eargs = List.map interp_exp entry.eargs
+          })
+        entries
     in
-    {s with s = STableInstall(id, entries)}, env
+    { s with s = STableInstall (id, entries) }, env
 ;;
 
 let interp_body builtin_tys env (params, stmt) =
   let level = 1 in
   let builtins =
     let open Builtins in
-    (ingr_port_id, builtin_tys.ingr_port_ty) :: (this_id, builtin_tys.this_ty) :: builtin_vars
+    (ingr_port_id, builtin_tys.ingr_port_ty)
+    :: (this_id, builtin_tys.this_ty)
+    :: builtin_vars
   in
   let env =
     env |> add_builtin_defs level builtins |> add_builtin_defs level params
@@ -403,26 +411,27 @@ let interp_decl builtin_tys env d =
     let e = interp_exp env e in
     let env = add_dec env id in
     env, { d with d = DGlobal (id, ty, e) }
-  | DMemop ({mid=mid; mparams=mparams; mbody=mbody;}) ->
+  | DMemop { mid; mparams; mbody } ->
     let env = add_dec env mid in
     (* TODO: Maybe interp in the body? Maybe that's handled later? *)
-    env, { d with d = DMemop ({mid=mid; mparams=mparams; mbody=mbody;}) }
+    env, { d with d = DMemop { mid; mparams; mbody } }
   | DHandler (id, s, body) ->
     let env = add_dec env id in
     env, { d with d = DHandler (id, s, interp_body builtin_tys env body) }
   | DEvent (id, _, _) | DExtern (id, _) ->
     let env = add_dec env id in
     env, d
-  | DAction(acn) -> 
+  | DAction acn ->
     let env = add_dec env acn.aid in
-    let level = 1 in 
-    let acn_env = 
-      env 
+    let level = 1 in
+    let acn_env =
+      env
       |> add_builtin_defs level acn.aconst_params
       |> add_builtin_defs level acn.aparams
     in
     let abody = List.map (interp_exp acn_env) acn.abody in
-    env, {d with d = DAction({acn with abody})}
+    env, { d with d = DAction { acn with abody } }
+  | DParser _ -> env, d
 ;;
 
 let interp_prog ds = ds

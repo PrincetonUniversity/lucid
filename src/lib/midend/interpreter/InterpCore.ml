@@ -82,24 +82,24 @@ let interp_op op vs =
   | Slice (hi, lo), [v] ->
     vinteger
       (Integer.shift_right (raw_integer v) lo |> Integer.set_size (hi - lo + 1))
-  | PatExact, [v] -> 
+  | PatExact, [v] ->
     let vint = extract_int v.v in
     let pat_len = Integer.size vint in
     let pat_val = Integer.to_int vint in
     let bs = int_to_bitpat pat_val pat_len in
-    let outv = vpat bs in 
-(*     print_endline ("[interp_op.PatExact] input: "
+    let outv = vpat bs in
+    (*     print_endline ("[interp_op.PatExact] input: "
       ^(CorePrinting.value_to_string v)
       ^" output: "^(CorePrinting.value_to_string outv)); *)
     outv
-  | PatMask, [v; m] -> 
+  | PatMask, [v; m] ->
     let vint = extract_int v.v in
     let pat_len = Integer.size vint in
     let pat_val = Integer.to_int vint in
     let pat_mask = Integer.to_int (extract_int m.v) in
     let bs = int_mask_to_bitpat pat_val pat_mask pat_len in
-    let outv = vpat bs in 
-(*     print_endline ("[interp_op.PatMask] input: "
+    let outv = vpat bs in
+    (*     print_endline ("[interp_op.PatMask] input: "
       ^(CorePrinting.value_to_string v)
       ^" output: "^(CorePrinting.value_to_string outv)); *)
     outv
@@ -125,9 +125,9 @@ let interp_op op vs =
       | RShift
       | Conc
       | Cast _
-      | Slice _ 
+      | Slice _
       | PatExact
-      | PatMask)
+      | PatMask )
     , _ ) ->
     error
       ("bad operator: "
@@ -142,12 +142,13 @@ let lookup_var swid nst locals cid =
   | _ -> State.lookup swid cid nst
 ;;
 
-
 let interp_eval exp : State.ival =
   match exp.e with
   | EVal v -> V v
-  | _ -> error ("[interp_eval] expected a value expression, but got something else.")
+  | _ ->
+    error "[interp_eval] expected a value expression, but got something else."
 ;;
+
 let rec interp_exp (nst : State.network_state) swid locals e : State.ival =
   (* print_endline @@ "Interping: " ^ CorePrinting.exp_to_string e; *)
   let interp_exps = interp_exps nst swid locals in
@@ -161,18 +162,18 @@ let rec interp_exp (nst : State.network_state) swid locals e : State.ival =
   | ECall (cid, es) ->
     let vs = interp_exps es in
     (match lookup cid with
-    | V _ ->
-      error
-        (Cid.to_string cid
-        ^ " is a value identifier and cannot be used in a call")
-    | F f -> V (f nst swid vs))
+     | V _ ->
+       error
+         (Cid.to_string cid
+         ^ " is a value identifier and cannot be used in a call")
+     | F f -> V (f nst swid vs))
   | EHash (size, args) ->
     let vs = interp_exps args in
     let vs =
       List.map
         (function
-          | State.V v -> v.v
-          | _ -> failwith "What? No hashing functions!")
+         | State.V v -> v.v
+         | _ -> failwith "What? No hashing functions!")
         vs
     in
     let extract_int = function
@@ -180,31 +181,31 @@ let rec interp_exp (nst : State.network_state) swid locals e : State.ival =
       | _ -> failwith "No good"
     in
     (match vs with
-    | VInt seed :: tl ->
-      (* Special case: if the hash seed is 1 and all the arguments are integers,
+     | VInt seed :: tl ->
+       (* Special case: if the hash seed is 1 and all the arguments are integers,
           we perform an identity hash (i.e. just concatenate the arguments) *)
-      if Z.to_int (Integer.value seed) = 1
-      then (
-        try
-          let n =
-            List.fold_left
-              (fun acc v -> Integer.concat acc (extract_int v))
-              (List.hd tl |> extract_int)
-              (List.tl tl)
-          in
-          V (VInt (Integer.set_size size n) |> value)
-        with
-        | Failure _ ->
-          (* Fallback to non-special case *)
-          let hashed = Legacy.Hashtbl.seeded_hash (Integer.to_int seed) tl in
-          V (vint hashed size))
-      else (
-        (* For some reason hash would only take into account the first few elements
+       if Z.to_int (Integer.value seed) = 1
+       then (
+         try
+           let n =
+             List.fold_left
+               (fun acc v -> Integer.concat acc (extract_int v))
+               (List.hd tl |> extract_int)
+               (List.tl tl)
+           in
+           V (VInt (Integer.set_size size n) |> value)
+         with
+         | Failure _ ->
+           (* Fallback to non-special case *)
+           let hashed = Legacy.Hashtbl.seeded_hash (Integer.to_int seed) tl in
+           V (vint hashed size))
+       else (
+         (* For some reason hash would only take into account the first few elements
            of the list, so this forces all of them to have some impact on the output *)
-        let feld = List.fold_left (fun acc v -> Hashtbl.hash (acc, v)) 0 tl in
-        let hashed = Legacy.Hashtbl.seeded_hash (Integer.to_int seed) feld in
-        V (vint hashed size))
-    | _ -> failwith "Wrong arguments to hash operation")
+         let feld = List.fold_left (fun acc v -> Hashtbl.hash (acc, v)) 0 tl in
+         let hashed = Legacy.Hashtbl.seeded_hash (Integer.to_int seed) feld in
+         V (vint hashed size))
+     | _ -> failwith "Wrong arguments to hash operation")
   | EFlood e1 ->
     let port =
       interp_exp nst swid locals e1
@@ -213,15 +214,15 @@ let rec interp_exp (nst : State.network_state) swid locals e : State.ival =
       |> Integer.to_int
     in
     V (vgroup [-(port + 1)])
-  | ETableCreate _ -> (
-    error "[InterpCore.interp_exp] got a table_create expression, which should not happen\
-    because the table creation should be interpeter in the declaration";
-  )
+  | ETableCreate _ ->
+    error
+      "[InterpCore.interp_exp] got a table_create expression, which should not \
+       happenbecause the table creation should be interpeter in the \
+       declaration"
 
 and interp_exps nst swid locals es : State.ival list =
   List.map (interp_exp nst swid locals) es
 ;;
-
 
 let bitmatch bits n =
   let open Z in
@@ -234,9 +235,9 @@ let bitmatch bits n =
       aux tl (shift_right n 1)
       &&
       (match hd with
-      | 0 -> rem n two = zero
-      | 1 -> rem n two <> zero
-      | _ -> true)
+       | 0 -> rem n two = zero
+       | 1 -> rem n two <> zero
+       | _ -> true)
   in
   aux bits n
 ;;
@@ -258,11 +259,11 @@ let matches_pat vs ps =
 ;;
 
 (* updated version with pattern values *)
-let matches_pat_vals (vs : value list) (pats : value list) = 
+let matches_pat_vals (vs : value list) (pats : value list) =
   List.for_all2
-    (fun v p -> 
-      match (v.v, p.v) with
-      | (VInt(n), VPat(bs)) -> bitmatch bs (Integer.value n)
+    (fun v p ->
+      match v.v, p.v with
+      | VInt n, VPat bs -> bitmatch bs (Integer.value n)
       | _ -> false)
     vs
     pats
@@ -279,7 +280,7 @@ let printf_replace vs (s : string) : string =
     vs
 ;;
 
-(* 
+(*
 {
   interp_msg : {
     "type" : "printf"
@@ -293,82 +294,77 @@ let printf_replace vs (s : string) : string =
  *)
 
 (* print message to a json record *)
-let interp_report msgty msg swid_opt = 
-  (if (Cmdline.cfg.json || Cmdline.cfg.interactive)
-  then (
-      `Assoc (
-        [msgty, `String msg]
+let interp_report msgty msg swid_opt =
+  (if Cmdline.cfg.json || Cmdline.cfg.interactive
+  then
+    `Assoc
+      ([msgty, `String msg]
       (* `Assoc ["interpreter_message", `Assoc ["inter_message", `String msgty; "value", `String msg]] *)
-      @(match swid_opt with Some(swid) -> ["switch", `Int swid] | _ -> []))
-     |>  Yojson.Basic.pretty_to_string)
-  else (msg))
+      @
+      match swid_opt with
+      | Some swid -> ["switch", `Int swid]
+      | _ -> [])
+    |> Yojson.Basic.pretty_to_string
+  else msg)
   |> print_endline
 ;;
 
-let print_event_arrival swid str =
-  interp_report "event_arrival" str (Some(swid))
-;;
-let print_final_state str =
-  interp_report "final_state" str None
-;;
-let print_printf swid str = 
-  interp_report "printf" str (Some(swid))
-;;
+let print_event_arrival swid str = interp_report "event_arrival" str (Some swid)
+let print_final_state str = interp_report "final_state" str None
+let print_printf swid str = interp_report "printf" str (Some swid)
 
 (* print an exit event as a json to stdout *)
-let print_exit_event swid port_opt event time = 
-  let open Yojson.Basic in 
-  let raw_json_val v = 
-    match v.v with 
+let print_exit_event swid port_opt event time =
+  let open Yojson.Basic in
+  let raw_json_val v =
+    match v.v with
     | VInt i -> `Int (Integer.to_int i)
     | VBool b -> `Bool b
     | _ -> error "not an int or bool"
-  in 
-  let {eid; data; _} = event in 
-  let name = `String (CorePrinting.cid_to_string eid) in 
-  let args = `List (List.map raw_json_val data) in 
-  let port = match port_opt with
+  in
+  let { eid; data; _ } = event in
+  let name = `String (CorePrinting.cid_to_string eid) in
+  let args = `List (List.map raw_json_val data) in
+  let port =
+    match port_opt with
     | None -> -1
     | Some p -> p
-  in 
-  let locs = `List [`String (Printf.sprintf "%i:%i" swid port)] in 
-  let timestamp = `Int time in 
+  in
+  let locs = `List [`String (Printf.sprintf "%i:%i" swid port)] in
+  let timestamp = `Int time in
   (* let args = CorePrinting.value_to_string data in  *)
-  let evjson = `Assoc [
-    ("name", name);
-    ("args", args);
-    ("locations", locs);
-    ("timestamp", timestamp)
-    ]
-  in 
-  print_endline (Yojson.Basic.to_string evjson);
+  let evjson =
+    `Assoc
+      ["name", name; "args", args; "locations", locs; "timestamp", timestamp]
+  in
+  print_endline (Yojson.Basic.to_string evjson)
 ;;
 
-
-(* print event as json if interactive mode is set, 
+(* print event as json if interactive mode is set,
    else log for final report *)
-let log_exit swid port_opt event (nst : State.network_state) = 
-  if (Cmdline.cfg.interactive) 
-  then 
-    (print_exit_event swid port_opt event nst.current_time)
-  else 
-  (State.log_exit swid port_opt event nst)
-;; 
+let log_exit swid port_opt event (nst : State.network_state) =
+  if Cmdline.cfg.interactive
+  then print_exit_event swid port_opt event nst.current_time
+  else State.log_exit swid port_opt event nst
+;;
 
 let partial_interp_exps nst swid env exps =
   List.map
-    (fun exp -> match (interp_exp nst swid env exp) with 
-      | V v -> {e=EVal(v); espan=Span.default; ety=v.vty}
-      | _ -> error "[partial_interp_exps] default argument evaluated to function pointer, expected value")
+    (fun exp ->
+      match interp_exp nst swid env exp with
+      | V v -> { e = EVal v; espan = Span.default; ety = v.vty }
+      | _ ->
+        error
+          "[partial_interp_exps] default argument evaluated to function \
+           pointer, expected value")
     exps
-;; 
-
+;;
 
 let rec interp_statement nst swid locals s =
   (* (match s.s with
   | SSeq _ | SNoop -> () (* We'll print the sub-parts when we get to them *)
   | _ -> print_endline @@ "Interpreting " ^ CorePrinting.stmt_to_string s); *)
-  let interpret_exp = interp_exp nst swid in 
+  let interpret_exp = interp_exp nst swid in
   let interp_exp = interp_exp nst swid locals in
   let interp_s = interp_statement nst swid locals in
   match s.s with
@@ -386,7 +382,7 @@ let rec interp_statement nst swid locals s =
     Env.add (Id id) (interp_exp e) locals
   | SLocal (id, _, e) -> Env.add (Id id) (interp_exp e) locals
   | SPrintf (s, es) ->
-    let vs = List.map (fun e -> interp_exp e |> extract_ival) es in    
+    let vs = List.map (fun e -> interp_exp e |> extract_ival) es in
     let strout = printf_replace vs s in
     print_printf swid strout;
     locals
@@ -416,14 +412,14 @@ let rec interp_statement nst swid locals s =
       | GMulti grp ->
         let ports = interp_exp grp |> extract_ival |> raw_group in
         (match ports with
-        | [port] when port < 0 ->
-          (* Flooding: send to every connected switch *)
-          (-1, port)
-          :: (IntMap.find swid nst.links
-             |> IntMap.bindings
-             |> List.filter_map (fun (p, dst) ->
-                    if p = -(port + 1) then None else Some dst))
-        | _ -> List.map (fun port -> State.lookup_dst nst (swid, port)) ports)
+         | [port] when port < 0 ->
+           (* Flooding: send to every connected switch *)
+           (-1, port)
+           :: (IntMap.find swid nst.links
+              |> IntMap.bindings
+              |> List.filter_map (fun (p, dst) ->
+                   if p = -(port + 1) then None else Some dst))
+         | _ -> List.map (fun port -> State.lookup_dst nst (swid, port)) ports)
       | GPort port ->
         let port =
           interp_exp port |> extract_ival |> raw_integer |> Integer.to_int
@@ -437,9 +433,7 @@ let rec interp_statement nst swid locals s =
       List.iter
         (fun (dst_id, port) ->
           if dst_id = -1 (* lookup_dst failed *)
-          then (
-            log_exit swid (Some port) event nst;
-          )
+          then log_exit swid (Some port) event nst
           else State.push_event dst_id port event nst)
         locs;
     locals
@@ -462,110 +456,118 @@ let rec interp_statement nst swid locals s =
       | _ -> error "Match statement did not match any branch!"
     in
     interp_s (snd first_match)
-  | STableInstall(tbl, entries) -> 
+  | STableInstall (tbl, entries) ->
     (* install entries into the pipeline *)
     (* evaluate entry patterns and install-time action args to EVals *)
-    let entries = List.map 
-      (fun entry -> 
-        let ematch = partial_interp_exps nst swid locals entry.ematch in
-        let eargs = partial_interp_exps nst swid locals entry.eargs in
-        {entry with ematch; eargs})
-      entries
+    let entries =
+      List.map
+        (fun entry ->
+          let ematch = partial_interp_exps nst swid locals entry.ematch in
+          let eargs = partial_interp_exps nst swid locals entry.eargs in
+          { entry with ematch; eargs })
+        entries
     in
     (* get index of table in pipeline *)
-    let tbl_pos = match (interp_exp tbl) with
-      | V {v = VGlobal stage} -> stage
+    let tbl_pos =
+      match interp_exp tbl with
+      | V { v = VGlobal stage } -> stage
       | _ -> error "Table did not evaluate to a pipeline object reference"
     in
     (* call install_table_entry for each entry *)
     List.iter (State.install_table_entry_switch swid tbl_pos nst) entries;
     (* return unmodified locals context *)
     locals
-  | STableMatch(tm) -> 
+  | STableMatch tm ->
     (* load the dynamic entries from the pipeline *)
-    let tbl_pos = match (interp_exp tm.tbl) with
-      | V {v = VGlobal stage} -> stage
+    let tbl_pos =
+      match interp_exp tm.tbl with
+      | V { v = VGlobal stage } -> stage
       | _ -> error "Table did not evaluate to a pipeline object reference"
     in
-    let default, entries = State.get_table_entries_switch swid tbl_pos nst in 
+    let default, entries = State.get_table_entries_switch swid tbl_pos nst in
     (* find the first matching case *)
-    let key_vs = List.map (fun e -> interp_exp e |> extract_ival) tm.keys in    
-    let fst_match = List.fold_left 
-      (fun fst_match entry -> 
-        (* print_endline ("checking entry: "^(CorePrinting.entry_to_string entry)); *)
-        match fst_match with 
-        | None -> 
-          let pat_vs = List.map (fun e -> interp_exp e |> extract_ival) entry.ematch in
-          if (matches_pat_vals key_vs pat_vs)
-          then (Some(entry.eaction, entry.eargs))
-          else (None)
-        | Some(_) -> fst_match)
-      None
-      entries
-    in 
+    let key_vs = List.map (fun e -> interp_exp e |> extract_ival) tm.keys in
+    let fst_match =
+      List.fold_left
+        (fun fst_match entry ->
+          (* print_endline ("checking entry: "^(CorePrinting.entry_to_string entry)); *)
+          match fst_match with
+          | None ->
+            let pat_vs =
+              List.map (fun e -> interp_exp e |> extract_ival) entry.ematch
+            in
+            if matches_pat_vals key_vs pat_vs
+            then Some (entry.eaction, entry.eargs)
+            else None
+          | Some _ -> fst_match)
+        None
+        entries
+    in
     (* if there's no matching entry, use the default action. *)
-    let acnid, e_const_args = match fst_match with
-      | Some(acnid, const_args) -> acnid, const_args
+    let acnid, e_const_args =
+      match fst_match with
+      | Some (acnid, const_args) -> acnid, const_args
       | None -> default
-    in     
+    in
     (* find the action in context *)
     let action = State.lookup_action (Id acnid) nst in
     (* extract values from const arguments *)
-    let const_args = List.map interp_eval e_const_args in 
-    (* evaluate the runtime action arguments *)   
+    let const_args = List.map interp_eval e_const_args in
+    (* evaluate the runtime action arguments *)
     let dyn_args = List.map interp_exp tm.args in
     (* bind install- and match-time parameters in env *)
-    let inner_locals = List.fold_left2
-      (fun inner_locals v (id, _) -> 
-        Env.add (Id id) v inner_locals)
-      locals
-      (const_args@dyn_args)
-      (action.aconst_params@action.aparams)
+    let inner_locals =
+      List.fold_left2
+        (fun inner_locals v (id, _) -> Env.add (Id id) v inner_locals)
+        locals
+        (const_args @ dyn_args)
+        (action.aconst_params @ action.aparams)
     in
     (* evaluate the action's expressions *)
     let acn_ret_vals = List.map (interpret_exp inner_locals) action.abody in
     (* update variables set by table's output in the env *)
-    let locals = List.fold_left2
-      (fun locals v id -> 
-        Env.add (Id id) v locals)
-      locals
-      acn_ret_vals
-      tm.outs
-    in 
+    let locals =
+      List.fold_left2
+        (fun locals v id -> Env.add (Id id) v locals)
+        locals
+        acn_ret_vals
+        tm.outs
+    in
     locals
 ;;
 
-
 let interp_dtable (nst : State.network_state) swid id ty e =
-  (* FIXME: hacked in a dtable interp that gets called from 
+  (* FIXME: hacked in a dtable interp that gets called from
             interp_dglobal. *)
   let extract_int exp =
-    let size_val = interp_exp  (nst : State.network_state) swid (Env.empty) exp in
+    let size_val = interp_exp (nst : State.network_state) swid Env.empty exp in
     match size_val with
-    | V ({v=VInt(n)}) ->   Integer.to_int n
+    | V { v = VInt n } -> Integer.to_int n
     | _ -> failwith "not an int val"
   in
   let st = nst.switches.(swid) in
   let p = st.pipeline in
   let idx = Pipeline.length p in
-
   (* add element to pipeline *)
-  let new_p = match ty.raw_ty with 
-    | TTable(_) -> (
-      match e.e with
-      | ETableCreate(t) -> 
-        (* eval args to value expressions *)
-        let def_acn_args = partial_interp_exps nst swid (Env.empty) (snd t.tdefault) in
-        (* construct the default entry with wildcard args *)
-(*         let def_entry_pats = List.map (fun _ -> PWild) (tbl_ty.tkey_sizes) in
+  let new_p =
+    match ty.raw_ty with
+    | TTable _ ->
+      (match e.e with
+       | ETableCreate t ->
+         (* eval args to value expressions *)
+         let def_acn_args =
+           partial_interp_exps nst swid Env.empty (snd t.tdefault)
+         in
+         (* construct the default entry with wildcard args *)
+         (*         let def_entry_pats = List.map (fun _ -> PWild) (tbl_ty.tkey_sizes) in
         let (def_entry:tbl_entry) = {ematch=def_entry_pats; eaction=(Cid.to_id (fst t.tdefault)); eargs=def_install_args;eprio=0;} in *)
-        Pipeline.append 
-          p 
-          (Pipeline.mk_table 
-            id 
-            (extract_int t.tsize) 
-            (fst t.tdefault |> Cid.to_id, def_acn_args))
-      | _ -> error "[interp_dtable] incorrect constructor for table")
+         Pipeline.append
+           p
+           (Pipeline.mk_table
+              id
+              (extract_int t.tsize)
+              (fst t.tdefault |> Cid.to_id, def_acn_args))
+       | _ -> error "[interp_dtable] incorrect constructor for table")
     | _ -> error "[interp_dtable] called to create a non table type object"
   in
   nst.switches.(swid) <- { st with pipeline = new_p };
@@ -634,10 +636,10 @@ let _interp_dglobal (nst : State.network_state) swid id ty e =
 ;;
 
 let interp_dglobal (nst : State.network_state) swid id ty e =
-  match ty.raw_ty with 
-    | TTable _ -> interp_dtable nst swid id ty e
-    | _ -> _interp_dglobal nst swid id ty e
-
+  match ty.raw_ty with
+  | TTable _ -> interp_dtable nst swid id ty e
+  | _ -> _interp_dglobal nst swid id ty e
+;;
 
 let interp_complex_body params body nst swid args =
   let args, default = List.takedrop (List.length params) args in
@@ -734,7 +736,7 @@ let interp_decl (nst : State.network_state) swid d =
   (* print_endline @@ "Interping decl: " ^ Printing.decl_to_string d; *)
   match d.d with
   | DGlobal (id, ty, e) -> interp_dglobal nst swid id ty e
-  | DAction (acn) -> 
+  | DAction acn ->
     (* add the action to the environment *)
     State.add_action (Cid.id acn.aid) acn nst
   | DHandler (id, _, (params, body)) ->
@@ -764,10 +766,11 @@ let interp_decl (nst : State.network_state) swid d =
     in
     State.add_global swid (Id id) (State.F f) nst;
     nst
-  | DMemop ({mid=mid; mparams=mparams; mbody=mbody;}) ->
+  | DMemop { mid; mparams; mbody } ->
     let f = interp_memop mparams mbody in
     State.add_global swid (Cid.id mid) (State.F f) nst;
     nst
+  | DParser _ -> nst
   | DExtern _ ->
     failwith "Extern declarations should be handled during preprocessing"
 ;;

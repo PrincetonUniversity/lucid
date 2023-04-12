@@ -11,8 +11,7 @@ let integer_to_string n =
 ;;
 
 let location_to_string l = string_of_int l
-let id_to_string id = 
-  if cfg.verbose_types then Id.to_string id else Id.name id
+let id_to_string id = if cfg.verbose_types then Id.to_string id else Id.name id
 
 let cid_to_string cid =
   if cfg.verbose_types
@@ -36,19 +35,23 @@ let rec raw_ty_to_string t =
   | TFun func -> func_to_string func
   | TMemop (n, size) -> Printf.sprintf "memop%d<<%s>>" n (size_to_string size)
   | TGroup -> "group"
-  | TTable(t) -> 
+  | TTable t ->
     " table_type {"
-    ^"\n\tkey_size: "^(comma_sep size_to_string t.tkey_sizes)
-    ^"\n\targ_ty: "^(comma_sep ty_to_string t.tparam_tys)
-    ^"\n\tret_ty: "^(comma_sep ty_to_string t.tret_tys)
-    ^"}\n"
-  | TAction(a) -> 
-    Printf.sprintf 
+    ^ "\n\tkey_size: "
+    ^ comma_sep size_to_string t.tkey_sizes
+    ^ "\n\targ_ty: "
+    ^ comma_sep ty_to_string t.tparam_tys
+    ^ "\n\tret_ty: "
+    ^ comma_sep ty_to_string t.tret_tys
+    ^ "}\n"
+  | TAction a ->
+    Printf.sprintf
       "%s -> %s -> %s"
       (concat_map " * " ty_to_string a.aconst_param_tys)
       (concat_map " * " ty_to_string a.aparam_tys)
       (comma_sep ty_to_string a.aret_tys)
-  | TPat(s) -> "pat<<"^ size_to_string s^">>"
+  | TPat s -> "pat<<" ^ size_to_string s ^ ">>"
+
 and func_to_string func =
   let arg_tys = concat_map ", " ty_to_string func.arg_tys in
   let ret_ty = ty_to_string func.ret_ty in
@@ -64,9 +67,9 @@ let pat_to_string p =
     "0b"
     ^ (bs
       |> List.map (function
-             | 0 -> '0'
-             | 1 -> '1'
-             | _ -> '*')
+           | 0 -> '0'
+           | 1 -> '1'
+           | _ -> '*')
       |> String.of_list)
 ;;
 
@@ -101,7 +104,8 @@ let op_to_string op =
   | PatMask -> "&"
 ;;
 
-let bs_to_string bs ="0b"
+let bs_to_string bs =
+  "0b"
   ^ (bs
     |> List.map (function
          | 0 -> '0'
@@ -153,8 +157,9 @@ let rec e_to_string e =
   | EHash (size, es) ->
     Printf.sprintf "hash<<%s>>(%s)" (size_to_string size) (es_to_string es)
   | EFlood e -> Printf.sprintf "flood %s" (exp_to_string e)
-  | ETableCreate(t) -> 
-    Printf.sprintf "table_create<%s>((%s),%s, %s(%s))" 
+  | ETableCreate t ->
+    Printf.sprintf
+      "table_create<%s>((%s),%s, %s(%s))"
       (ty_to_string t.tty)
       (concat_map "," exp_to_string t.tactions)
       (exp_to_string t.tsize)
@@ -174,7 +179,7 @@ and branch_to_string (ps, s) =
     (stmt_to_string s)
 
 and action_to_string (name, (ps, stmt)) =
-  Printf.sprintf 
+  Printf.sprintf
     "%s(%s) =\n\t{%s}"
     name
     (params_to_string ps)
@@ -194,19 +199,19 @@ and stmt_to_string s =
   | SNoop -> ""
   | SGen (g, e) ->
     (match g with
-    | GSingle None -> Printf.sprintf "generate %s;" (exp_to_string e)
-    | _ ->
-      let gen_str, loc =
-        match g with
-        | GSingle eo -> "generate_switch", Option.get eo
-        | GMulti loc -> "generate_ports", loc
-        | GPort loc -> "generate_port", loc
-      in
-      Printf.sprintf
-        "%s (%s, %s);"
-        gen_str
-        (exp_to_string loc)
-        (exp_to_string e))
+     | GSingle None -> Printf.sprintf "generate %s;" (exp_to_string e)
+     | _ ->
+       let gen_str, loc =
+         match g with
+         | GSingle eo -> "generate_switch", Option.get eo
+         | GMulti loc -> "generate_ports", loc
+         | GPort loc -> "generate_port", loc
+       in
+       Printf.sprintf
+         "%s (%s, %s);"
+         gen_str
+         (exp_to_string loc)
+         (exp_to_string e))
   | SLocal (i, t, e) ->
     Printf.sprintf
       "%s %s = %s;"
@@ -243,28 +248,26 @@ and stmt_to_string s =
       | None -> ""
     in
     Printf.sprintf "return%s;" estr
-  | STableMatch(tbl_rec) -> 
-    if (tbl_rec.out_tys <> None)
-    then (
+  | STableMatch tbl_rec ->
+    if tbl_rec.out_tys <> None
+    then
+      Printf.sprintf
+        "%s %s = table_match(%s, (%s), (%s));"
+        (comma_sep ty_to_string (Option.get tbl_rec.out_tys))
+        (comma_sep id_to_string tbl_rec.outs)
+        (exp_to_string tbl_rec.tbl)
+        (comma_sep exp_to_string tbl_rec.keys)
+        (comma_sep exp_to_string tbl_rec.args)
+    else
+      Printf.sprintf
+        "%s = table_match(%s);"
+        (comma_sep id_to_string tbl_rec.outs)
+        (comma_sep exp_to_string ((tbl_rec.tbl :: tbl_rec.keys) @ tbl_rec.args))
+  | STableInstall (tbl_exp, entries) ->
     Printf.sprintf
-     "%s %s = table_match(%s, (%s), (%s));"
-      (comma_sep ty_to_string (Option.get tbl_rec.out_tys))
-      (comma_sep id_to_string tbl_rec.outs)
-      (exp_to_string tbl_rec.tbl)
-      (comma_sep exp_to_string tbl_rec.keys)
-      (comma_sep exp_to_string tbl_rec.args)
-    )
-  else (
-    Printf.sprintf
-     "%s = table_match(%s);"
-      (comma_sep id_to_string tbl_rec.outs)
-      (comma_sep exp_to_string (tbl_rec.tbl::tbl_rec.keys@tbl_rec.args))
-  ) 
-  | STableInstall(tbl_exp, entries) -> 
-    Printf.sprintf
-     "table_install(%s, {\n\t%s\n\t}\n);"
-     (exp_to_string tbl_exp)
-     (List.map entry_to_string entries |> String.concat "\n")
+      "table_install(%s, {\n\t%s\n\t}\n);"
+      (exp_to_string tbl_exp)
+      (List.map entry_to_string entries |> String.concat "\n")
 ;;
 
 let statement_to_string = stmt_to_string
@@ -320,6 +323,34 @@ let memop_to_string body =
       (print_cr @@ body.ret)
 ;;
 
+let rec parser_action_to_string action =
+  match action with
+  | PSkip ty -> Printf.sprintf "skip %s;" (ty_to_string ty)
+  | PRead (id, ty) ->
+    Printf.sprintf "read %s : %s;" (id_to_string id) (ty_to_string ty)
+  | PAssign (id, exp) ->
+    Printf.sprintf "%s = %s;" (id_to_string id) (exp_to_string exp)
+
+and parser_branch_to_string (pat, block) =
+  Printf.sprintf "| %s -> %s" (pat_to_string pat) (parser_block_to_string block)
+
+and parser_step_to_string step =
+  match step with
+  | PGen e -> Printf.sprintf "generate %s;" (exp_to_string e)
+  | PCall e -> Printf.sprintf "%s;" (exp_to_string e)
+  | PMatch (e, branches) ->
+    Printf.sprintf
+      "match %s with %s"
+      (exp_to_string e)
+      (concat_map "\n" parser_branch_to_string branches)
+
+and parser_block_to_string (actions, step) =
+  concat_map "\n" (parser_action_to_string % fst) actions
+  ^ "\n"
+  ^ (parser_step_to_string % fst) step
+
+and parser_to_string p = parser_block_to_string p
+
 let d_to_string d =
   match d with
   | DGlobal (id, ty, exp) ->
@@ -328,11 +359,12 @@ let d_to_string d =
       (ty_to_string ty)
       (id_to_string id)
       (exp_to_string exp)
-  | DHandler (id,hsort,(params, s)) ->
+  | DHandler (id, hsort, (params, s)) ->
     Printf.sprintf
       "%shandle %s(%s) {\n%s\n}"
-      (match hsort with 
-        | HControl -> "control " | HData -> "")
+      (match hsort with
+       | HControl -> "control "
+       | HData -> "")
       (id_to_string id)
       (params_to_string params)
       (stmt_to_string s)
@@ -342,7 +374,7 @@ let d_to_string d =
       (event_sort_to_string sort)
       (id_to_string id)
       (params_to_string params)
-  | DMemop {mid=mid; mparams=mparams; mbody=mbody;} ->
+  | DMemop { mid; mparams; mbody } ->
     Printf.sprintf
       "memop %s(%s)\n {%s}"
       (id_to_string mid)
@@ -350,15 +382,21 @@ let d_to_string d =
       (memop_to_string mbody)
   | DExtern (id, ty) ->
     Printf.sprintf "extern %s %s;" (id_to_string id) (ty_to_string ty)
-  | DAction(acn) -> 
-  (* id, ret_tys, const_params, (dyn_params, acn_body)) ->  *)
-    Printf.sprintf 
-      "action (%s) %s(%s)(%s) {\n\taction_return (%s)\n}\n" 
+  | DAction acn ->
+    (* id, ret_tys, const_params, (dyn_params, acn_body)) ->  *)
+    Printf.sprintf
+      "action (%s) %s(%s)(%s) {\n\taction_return (%s)\n}\n"
       (comma_sep ty_to_string acn.artys)
       (id_to_string acn.aid)
       (params_to_string acn.aconst_params)
       (params_to_string acn.aparams)
-      (comma_sep exp_to_string acn.abody)    
+      (comma_sep exp_to_string acn.abody)
+  | DParser (id, params, parser) ->
+    Printf.sprintf
+      "parser %s(%s) {\n%s\n}\n"
+      (id_to_string id)
+      (params_to_string params)
+      (parser_block_to_string parser)
 ;;
 
 let decl_to_string d = d_to_string d.d
