@@ -485,16 +485,6 @@ let rec modul_to_string ?(show_defs = true) m =
      }"
     (IdSet.fold (fun s acc -> id_to_string s ^ ", " ^ acc) m.sizes "")
     (IdMap.fold
-       (fun id params acc ->
-         let str =
-           if show_defs
-           then id_to_string id ^ " -> " ^ params_to_string params
-           else id_to_string id
-         in
-         str ^ ", " ^ acc)
-       m.parsers
-       "")
-    (IdMap.fold
        (fun id ty acc ->
          let str =
            if show_defs
@@ -503,6 +493,16 @@ let rec modul_to_string ?(show_defs = true) m =
          in
          str ^ ", " ^ acc)
        m.vars
+       "")
+    (IdMap.fold
+       (fun id params acc ->
+         let str =
+           if show_defs
+           then id_to_string id ^ " -> " ^ params_to_string params
+           else id_to_string id
+         in
+         str ^ ", " ^ acc)
+       m.parsers
        "")
     (IdMap.fold
        (fun id (_, ty) acc ->

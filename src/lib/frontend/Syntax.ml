@@ -294,6 +294,7 @@ and parser_step =
   | PMatch of exp * parser_branch list
   | PGen of exp
   | PCall of exp (* Call another parser *)
+  | PDrop
 
 (* Include span for error reporting *)
 and parser_block = (parser_action * sp) list * (parser_step * sp)

@@ -516,6 +516,7 @@ and parser_step_to_string step =
       "match %s with %s"
       (exp_to_string e)
       (concat_map "\n" parser_branch_to_string branches)
+  | PDrop -> "drop;"
 
 and parser_block_to_string (actions, step) =
   concat_map "\n" (parser_action_to_string % fst) actions

@@ -303,9 +303,9 @@ let rec check_qvars d =
   match d.d with
   | DFun _ | DMemop _ | DModuleAlias _ -> (* No restrictions *) ()
   | DAction _ -> ()
-  | DGlobal _ | DParser _ ->
+  | DGlobal _ ->
     (* None allowed at all *) basic_qvar_checker#visit_decl (true, true) d
-  | DSize _ | DSymbolic _ | DConst _ | DExtern _ ->
+  | DSize _ | DSymbolic _ | DConst _ | DExtern _ | DParser _ ->
     (* Only allowed in effect *) basic_qvar_checker#visit_decl (false, true) d
   | DConstr _ ->
     (* Allowed in both sizes and effects *)

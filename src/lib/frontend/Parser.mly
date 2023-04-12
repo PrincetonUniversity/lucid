@@ -141,6 +141,7 @@
 %token <Span.t> PARSER
 %token <Span.t> READ
 %token <Span.t> SKIP
+%token <Span.t> DROP
 
 %token <Span.t> CONSTR
 %token <Span.t> PROJ
@@ -400,7 +401,7 @@ dt_table:
 parser_action:
   | READ ID COLON ty SEMI                   { (PRead (snd $2, $4)), (Span.extend $1 $5) }
   | SKIP ty SEMI                            { (PSkip $2), Span.extend $1 $3 }
-  | exp EQ exp SEMI                         { (PAssign ($1, $3)), Span.extend $1.espan $4 }
+  | exp ASSIGN exp SEMI                     { (PAssign ($1, $3)), Span.extend $1.espan $4 }
 
 parser_branch:
   | PIPE pattern ARROW LBRACE parser_block RBRACE  { Span.extend $1 $6, ($2, $5) }
@@ -410,9 +411,10 @@ parser_branches:
   | parser_branch parser_branches           { Span.extend (fst $1) (fst $2), (snd $1::snd $2) }
 
 parser_step:
-  | GENERATE exp                            { PGen $2, Span.extend $1 ($2.espan) }
+  | GENERATE exp SEMI                       { PGen $2, Span.extend $1 ($2.espan) }
   | cid paren_args SEMI                     { PCall (call_sp (snd $1) (snd $2) (Span.extend (fst $1) $3)), (Span.extend (fst $1) $3) }
   | MATCH exp WITH parser_branches          { PMatch ($2, snd $4), Span.extend $1 (fst $4) }
+  | DROP SEMI                               { (PDrop, $1) }
 
 parser_block:
   | parser_step                             { [], $1 }
@@ -447,7 +449,7 @@ decl:
     | GLOBAL ty ID ASSIGN exp SEMI
                                             { [dglobal_sp (snd $3) $2 $5 (Span.extend $1 $6)] }
     | TABLE_TYPE dt_table                    { [$2] }
-    | PARSER ID paramsdef RBRACE parser_block LBRACE { [dparser_sp (snd $2) $3 $5 (Span.extend $1 $6)] }
+    | PARSER ID paramsdef LBRACE parser_block RBRACE { [dparser_sp (snd $2) $3 $5 (Span.extend $1 $6)] }
 
 
 decls:

@@ -1198,8 +1198,10 @@ let infer_parser_action env (action, span) =
 
 let rec infer_parser_step env (step, span) =
   match step with
+  | PDrop -> step, span
   | PGen exp ->
-    let _, inf_exp = infer_exp env exp in
+    let _, inf_exp, inf_ety = infer_exp env exp |> textract in
+    unify_raw_ty span inf_ety.raw_ty TEvent;
     PGen inf_exp, span
   | PCall exp ->
     (* Similar to checking an ECall, but we look for the function in the parser environment *)
@@ -1211,7 +1213,7 @@ let rec infer_parser_step env (step, span) =
          (fun (_, pty) arg ->
            unify_raw_ty arg.espan pty.raw_ty (Option.get arg.ety).raw_ty)
          params
-         args;
+         inf_args;
        let exp' = call_sp cid inf_args span in
        let exp' = { exp' with ety = Some (mk_ty TEvent) } in
        PCall exp', span
@@ -1221,11 +1223,12 @@ let rec infer_parser_step env (step, span) =
          "Parser bodies can only read, skip, generate, match, or call another \
           parser")
   | PMatch (exp, branches) ->
-    let env, inf_exp, _ = infer_exp env exp |> textract in
+    let env, inf_exp, inf_ety = infer_exp env exp |> textract in
     let branches =
       List.map
         (fun (pat, block) ->
-          (* Don't bother checking the pattern for now *)
+          let pty = infer_pattern env pat in
+          unify_raw_ty span inf_ety.raw_ty pty;
           pat, infer_parser_block env block)
         branches
     in
@@ -1552,7 +1555,9 @@ let rec infer_declaration
       , DAction (id, ret_ty, const_params, (params, inf_action_body)) )
     | DParser (id, params, parser) ->
       enter_level ();
-      let parser_env = add_locals env params in
+      let parser_env =
+        add_locals env params |> define_parser Builtins.lucid_parse_id []
+      in
       let inf_parser = infer_parser_block parser_env parser in
       let env = define_parser id params env in
       env, effect_count, DParser (id, params, inf_parser)

@@ -3,14 +3,15 @@ import subprocess, os, filecmp
 interpdir = "examples/interp_tests/"
 librarydir = "examples/library/"
 regressiondir = "examples/misc/regression/"
+parserdir = "examples/misc/parsers/"
 popldir = "examples/publications/popl22/"
 
 interactivefiles = [x for x in os.listdir(interpdir) if x.endswith("staticrouter.dpt")]
 interpfiles = [x for x in os.listdir(interpdir) if ((x.endswith(".dpt")) and (x not in interactivefiles))]
 libraryfiles = [x for x in os.listdir(librarydir) if x.endswith(".dpt")]
 regressionfiles = [x for x in os.listdir(regressiondir) if x.endswith(".dpt")]
+parserfiles = [x for x in os.listdir(parserdir) if x.endswith(".dpt")]
 poplfiles = [x for x in os.listdir(popldir) if x.endswith(".dpt")]
-
 
 errors = []
 diffs = []
@@ -52,7 +53,7 @@ def interactive_test(fullfile, args):
         fullfile = interpdir+fullfile
         input_events_fn = "%s.input.txt"%fullfile
         cmd = ["./dpt", "-i", fullfile] + args
-        try: 
+        try:
             # interactive mode always waits for more input, so this should timeout
             ret = subprocess.run(cmd, stdin=open(input_events_fn, "r"),stdout=outfile, stderr=subprocess.DEVNULL, timeout=3)
         except subprocess.TimeoutExpired:
@@ -66,6 +67,8 @@ for file in interpfiles: interp_test(file, [])
 for file in libraryfiles: just_typecheck(librarydir, file)
 
 for file in regressionfiles: just_typecheck(regressiondir, file)
+
+for file in parserfiles: just_typecheck(parserdir, file)
 
 for file in poplfiles: just_typecheck(popldir, file)
 

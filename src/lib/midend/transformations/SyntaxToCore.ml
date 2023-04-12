@@ -274,6 +274,7 @@ and translate_parser_step = function
   | S.PGen e -> C.PGen (translate_exp e)
   | S.PCall e -> C.PCall (translate_exp e)
   | S.PMatch (e, bs) -> C.PMatch (translate_exp e, List.map translate_branch bs)
+  | S.PDrop -> C.PDrop
 
 and translate_parser_block (actions, (step, step_span)) =
   ( List.map (fun (a, sp) -> translate_parser_action a, sp) actions

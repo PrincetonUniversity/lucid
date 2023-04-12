@@ -104,7 +104,11 @@ let rename prog =
           List.fold_left
             (fun env id -> CidMap.add (Id id) (Id id) env)
             CidMap.empty
-            (start_id :: ingr_port_id :: this_id :: List.map fst builtin_vars)
+            (start_id
+            :: ingr_port_id
+            :: this_id
+            :: lucid_parse_id
+            :: List.map fst builtin_vars)
         in
         let builtin_cids =
           List.map
@@ -204,6 +208,11 @@ let rename prog =
         let new_ty = self#visit_ty dummy ty in
         let new_x = self#freshen_var x in
         SLocal (new_x, new_ty, replaced_e)
+
+      method! visit_PRead dummy x ty =
+        let new_ty = self#visit_ty dummy ty in
+        let new_x = self#freshen_var x in
+        PRead (new_x, new_ty)
 
       method! visit_STableMatch dummy tm =
         let tbl = self#visit_exp dummy tm.tbl in
@@ -343,7 +352,7 @@ let rename prog =
           in
           let e = self#visit_exp dummy e in
           env <- orig_env;
-          let ret_ty = self#visit_ty () ret_ty in
+          let ret_ty = self#visit_ty dummy ret_ty in
           let id = self#freshen_var id in
           DConstr (id, ret_ty, params, e)
         | DModule (id, intf, body) ->
@@ -354,11 +363,18 @@ let rename prog =
           let new_env = add_module_defs id orig_env env in
           env <- new_env;
           DModule (id, intf, body)
+        | DParser (id, params, body) ->
+          let orig_env = env in
+          let params =
+            List.map
+              (fun (id, ty) -> self#freshen_var id, self#visit_ty dummy ty)
+              params
+          in
+          let body = self#visit_parser_block dummy body in
+          env <- orig_env;
+          let id = self#freshen_var id in
+          DParser (id, params, body)
         | DModuleAlias _ -> failwith "Should be eliminated before this"
-        | DParser _ ->
-          (* I don't know if we have to rename inside parsers?
-             Right now I'm erring on the side of laziness *)
-          d
 
       (*** Places we enter a scope ***)
       method! visit_SIf dummy test left right =

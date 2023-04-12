@@ -38,12 +38,15 @@ let inline_decl env d =
 ;;
 
 let inline_prog ds =
+  let start_env =
+    IdMap.singleton Builtins.lucid_ety_id (EVal Builtins.lucid_ety_value)
+  in
   let _, ds =
     List.fold_left
       (fun (env, ds) d ->
         let env, d = inline_decl env d in
         env, d @ ds)
-      (IdMap.empty, [])
+      (start_env, [])
       ds
   in
   List.rev ds

@@ -83,6 +83,7 @@ rule token = parse
   | "parser"          { PARSER (position lexbuf) }
   | "read"            { READ (position lexbuf) }
   | "skip"            { SKIP (position lexbuf) }
+  | "drop"            { DROP (position lexbuf) }
 
   | "constr"          { CONSTR (position lexbuf) }
   | "module"          { MODULE (position lexbuf) }
