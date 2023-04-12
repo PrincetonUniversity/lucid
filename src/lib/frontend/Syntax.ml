@@ -244,6 +244,7 @@ and event_sort =
 and handler_sort =
   | HControl (* control processor *)
   | HData (* data processor *)
+  | HEgress (* egress pipeline *)
 
 and ispec =
   | InSize of id

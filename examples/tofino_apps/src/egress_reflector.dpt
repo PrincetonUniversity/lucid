@@ -1,0 +1,20 @@
+/* Reflect the packet back out of ingress port */
+include "ip_default.dpt"
+
+event ip_pkt_out (eth_hdr eth, ip_hdr_prefix ip, int<<32>> src, int<<32>> dst);
+
+// ingress
+handle ip_pkt (eth_hdr eth, ip_hdr_prefix ip, int<<32>> src, int<<32>> dst){
+    generate_port (ingress_port, ip_pkt_out(eth, ip, src, dst));
+}
+
+// egress
+memop incr(int memval, int incrval) {
+    return memval + incrval;
+}
+global Array.t<<32>> my_egr_arr = Array.create(8);
+@egress handle ip_pkt_out (eth_hdr eth, ip_hdr_prefix ip, int<<32>> src, int<<32>> dst) {
+  // count and transform back into an ip_pkt event with count in ip src and dst
+  int x = Array.update(my_egr_arr, 0, incr, 1, incr, 1);
+  generate(ip_pkt_out(eth, {ip with tos = (int<<8>>)x}, src, dst));
+}

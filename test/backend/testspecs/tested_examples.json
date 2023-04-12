@@ -2,6 +2,7 @@
     "base_dir":"examples/tofino_apps",
     "builds_dir":"__testbuilds",
     "tests": [
+        {"commands":["compile", "assemble", "execute"], "prog":"src/egress_reflector.dpt","build":"egress_reflector", "testspec":"tests/egress_reflector.json"},
         {"commands":["compile", "assemble", "execute"], "prog":"src/complex_memops.dpt","build":"complex_memops", "testspec":"tests/complex_memops.json"},
         {"commands":["compile", "assemble", "execute"], "prog":"src/multi_events.dpt", "build":"multi_events", "testspec":"tests/multi_events.json"},
         {"commands":["compile", "assemble", "execute"], "prog":"src/r_after_w.dpt", "build":"r_after_w", "testspec":"tests/r_after_w.json"},
