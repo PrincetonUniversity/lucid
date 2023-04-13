@@ -319,10 +319,16 @@ let generate_ingress_parser block_id (m:main_handler) lucid_internal_ports =
     {
       id = default_setup_id;
       body = sseq ([
-        (validate eth_arg);
+        (* change 4 / 13 / 23 -- add the lucid_eth header on egress. 
+            at ingress, we: 
+              1. don't add the header to parsed events
+              2. skip the header on lucid internal events
+            at egress:
+              1. add a constant lucid eth header instead of always parsing it *)
+(*         (validate eth_arg);
         (set_int edst_arg 0);
         (set_int esrc_arg 0);
-        (set_int etype_arg lucid_etype);
+        (set_int etype_arg lucid_etype); *)
         (validate single_ev_arg)]
         (* set event arg *)
         @(match m.default_hdl with 
@@ -345,15 +351,19 @@ let generate_ingress_parser block_id (m:main_handler) lucid_internal_ports =
         ));
     }
   in
+  
   let eth_state = DParseState
     {
       id=eth_state_id;
       body = sseq [
-        extract (eth_arg);
-        transition_select 
+        (* change 4 / 13 / 23 -- parse_eth is just a skip now *)
+        advance 112;
+        transition single_ev_state_id;
+        (* extract (eth_arg); *)
+(*         transition_select 
           etype_arg 
           [lucid_etype, single_ev_state_id]
-          None (* undefined behavior when a non-lucid packet arrives on a lucid port *)
+          None (* undefined behavior when a non-lucid packet arrives on a lucid port *) *)
       ];
     }
   in
@@ -605,7 +615,13 @@ let generate_egress_parser block_id event_spec =
     { id=start_state_id; 
       body=sseq ([
         extract (Cid.id eg_intr_md);
-        extract (eth_arg);
+        (* 4 / 13 / 23 -- add a constant lucid internal ethernet header at egress, 
+           to get around parse tree depth limitation. *)
+        (validate eth_arg);
+        (set_int edst_arg 0);
+        (set_int esrc_arg 0);
+        (set_int etype_arg lucid_etype);
+        (* extract (eth_arg); *)
         extract (single_ev_arg);
         extract (multi_ev_arg);
         set_int egr_cur_ev_arg 0;

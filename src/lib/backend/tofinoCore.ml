@@ -139,6 +139,7 @@ let tdecl_of_decl decl =
   | DMemop(m) -> {td=TDMemop(m); tdspan=decl.dspan; tdpragma = decl.dpragma;}
   | DExtern(i, t) -> {td=TDExtern(i, t); tdspan=decl.dspan; tdpragma = decl.dpragma;}
   | DAction(a) -> {td=TDAction(a); tdspan = decl.dspan; tdpragma = decl.dpragma;}
+  | DParser(_) -> error "Parsers are not yet supported by the tofino backend!"
 ;;
 
 (* module Seq = Core.Sequence *)
