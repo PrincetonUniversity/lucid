@@ -1440,9 +1440,19 @@ let mk_port_conf (portspec:ParsePortSpec.port_config) =
     (fun (port:ParsePortSpec.port) -> decl (DPort{dpid=port.dpid; speed=port.speed;})) 
     (portspec.internal_ports@portspec.external_ports)
   in 
-  let lucid_dpids = portspec.recirc_dpid::(List.map (fun (port:ParsePortSpec.port) -> port.dpid) portspec.internal_ports) in
-  let extern_dpids = (List.map (fun (port:ParsePortSpec.port) -> port.dpid) portspec.external_ports) in
-  (port_defs, lucid_dpids, extern_dpids)
+  let lucid_dpids:int list = portspec.recirc_dpid::(List.map (fun (port:ParsePortSpec.port) -> port.dpid) portspec.internal_ports) in
+  let extern_dpids:int list = (List.map (fun (port:ParsePortSpec.port) -> port.dpid) portspec.external_ports) in
+  let port_events:((int * string) list) = portspec.port_events in
+
+(*   let ports_are_nonlucid : bool =
+    not (List.exists (fun (port, _) -> List.mem port lucid_dpids) port_events)
+  in
+  let ports_are_extern : bool =
+    List.for_all (fun (port, _) -> List.mem port extern_dpids) port_events
+  in
+ *)
+
+  (port_defs, lucid_dpids, extern_dpids, port_events)
 ;;
 
 type event_spec = {
@@ -1451,7 +1461,7 @@ type event_spec = {
 }
 
 let translate (portspec:ParsePortSpec.port_config) ingress_tds egress_tds =
-  let ports, lucid_dpids, extern_dpid = mk_port_conf portspec in
+  let ports, lucid_dpids, extern_dpid, port_events = mk_port_conf portspec in
   let event_spec = CoreToP4TofinoHeaders.tds_to_event_spec ingress_tds in
 
   let ingress_control, mc_decls = generate_ingress_control (mk_prog_env ingress_tds) (id "IngressControl") ingress_tds in 
@@ -1466,7 +1476,7 @@ let translate (portspec:ParsePortSpec.port_config) ingress_tds egress_tds =
       @(generate_structs event_spec)
       @(generate_reg_arrays (ingress_tds@egress_tds));
     ingress = {
-      parse = generate_ingress_parser (id "IngressParser") (main ingress_tds) lucid_dpids;
+      parse = generate_ingress_parser (id "IngressParser") (main ingress_tds) lucid_dpids port_events;
       process = ingress_control;
       deparse = generate_ingress_deparser (id "IngressDeparser") ingress_tds;
       };

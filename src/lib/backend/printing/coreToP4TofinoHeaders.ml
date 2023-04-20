@@ -206,7 +206,7 @@ let pkt_t, pkt_arg = id "packet_in", id "pkt"
 (* parse state ids *)
 let start_state_id = id "start"
 let default_setup_id = id "default_setup"
-let eth_state_id = id "parse_eth"
+let eth_state_id = id "parse_lucid_eth"
 let single_ev_state_id = id ("parse_"^(fst single_ev_field))
 
 let ingress_parser_params = [
@@ -285,14 +285,53 @@ let dparsestate id stmt =
   decl (DParseState {id; body = stmt;})
 ;;
 
-let generate_ingress_parser block_id (m:main_handler) lucid_internal_ports =
+
+let generate_bound_port_parsers (m:main_handler) (portnum, eventname) =
+  (* generate the default state and the transition branch for 
+     a packet that arrives on a port bound to an event. *)
+
+  let evname_to_evid_and_num (name : string) (ids : (id*int) list) =
+    match List.find_opt (fun ((n, _), _) -> n = name) ids with
+    | Some id -> Some id
+    | None -> None
+  in
+  let port_default_state_id = id ("port_"^(string_of_int portnum)^"_default_"^eventname) in
+  let evid, evnum = match evname_to_evid_and_num eventname m.hdl_enum with
+    | Some(evid, evnum) -> evid, evnum
+    | None -> error ("the event "^(eventname)^" was used in the ports configuration file, but could not be found in the program.")
+  in
+  let parse_state = DParseState {
+    id = port_default_state_id;
+    (* almost the same body as the "global default event", 
+       except we transition to the parser for the specified event *)
+    body = sseq (
+      [(validate single_ev_arg);
+       (validate multi_ev_arg);
+      (set_int cur_ev_arg evnum)]
+      @(List.map (fun evid -> set_int (handler_multi_ev_flag_arg evid) 0) (m.hdl_enum |> List.split |> fst) )
+      @[transition (event_parse_state evid)]);
+    } 
+  in
+  let transition_branch = (portnum, port_default_state_id) in
+  parse_state, transition_branch
+;;
+
+
+let generate_ingress_parser block_id (m:main_handler) lucid_internal_ports port_events =
   (* parse states: *)
+  let bound_port_states, bound_port_transition = (List.map 
+    (fun port_event -> 
+      generate_bound_port_parsers m port_event))
+    port_events  
+    |> List.split
+  in
+
   let start_state = DParseState
     { id=start_state_id; 
       body=sseq (
         [
-        extract (Cid.id ig_intr_md_arg);
-        advance 64;
+        extract (Cid.id ig_intr_md_arg); (* extract ingress intrinsic metadata *)
+        advance 64; (* skip resubmit info header *)
         (* validate multi_ev_arg; *)
         ]
 (*         @
@@ -302,11 +341,14 @@ let generate_ingress_parser block_id (m:main_handler) lucid_internal_ports =
         @
         [
         transition_select
-          igr_port_arg
-          (List.map 
-            (fun port -> (port, eth_state_id))
-            lucid_internal_ports)
-          (Some default_setup_id)
+          igr_port_arg (* transition based on ingress port *)
+          (
+            bound_port_transition (* packets from ports bound to events go to direct parsing states *)
+            @(List.map (* packets from internal lucid ports go to lucid eth header parsing states *)
+              (fun port -> (port, eth_state_id))
+              lucid_internal_ports)
+          )
+          (Some default_setup_id) (* packets from all other ports go to a default parsing state *)
       ]);
     } 
   in 
@@ -443,7 +485,10 @@ let generate_ingress_parser block_id (m:main_handler) lucid_internal_ports =
   let decls = 
     List.map 
       P4TofinoSyntax.decl
-      ([start_state; default_setup_state; eth_state; single_ev_state]@parse_ev_states@[parse_all_events_state]) 
+      ([start_state; default_setup_state; eth_state; single_ev_state]
+      @bound_port_states
+      @parse_ev_states
+      @[parse_all_events_state]) 
       (* ([start_state; default_setup_state; eth_state; single_ev_state]@parse_ev_states)  *)
   in 
   decl (DParse({id=block_id; params=ingress_parser_params; decls; body=None;}))
