@@ -134,6 +134,12 @@ let port_tys ds =
    because if a table is not used, we have no way of 
    creating the actions, whose bodies must be inlined with 
    the parameters passed to the table match statement. *)
+(* this can be a warning that a table was declared but not used, 
+   then we can delete the table, as the P4 compiler would.  *)
+(* technically, we could generate a P4 table from a lucid table 
+   that is never used, but it requires a bit different approach 
+   in the table inlining. (and the P4 compiler would likely 
+   delete it anyway) *)
 let all_tables_used ds =
   let pass = ref true in
   let rec tables_in_prog (ds) = 

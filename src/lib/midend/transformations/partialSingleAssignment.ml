@@ -71,12 +71,6 @@ let assigned_in_stmt (evid_params:((Id.t * Id.t list) list)) query_id stmt =
       method id_is_set = id_is_set
       method! visit_SAssign _ id _ = if query_id = id then id_is_set <- true
 
-      (* method! visit_SGen(_, ev_exp) -> ( *)
-
-      (* BUG: 
-        a generate statement sets all the parameters of its event! 
-        but generates aren't eliminated by this point!
-      *)
     end
   in
   v#visit_statement () stmt;

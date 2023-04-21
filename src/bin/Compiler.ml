@@ -61,13 +61,13 @@ type args_t =
   ; old_layout : bool
   }
 
-let mk_args cfg =
+let mk_args (cfg:Cmdline.config) dpt_fn : args_t =
   {
-    dptfn = (cfg.dpt_file);
+    dptfn = dpt_fn;
+    profile_cmd = (cfg.profile_cmd);
     builddir = (cfg.builddir);
     portspec = (cfg.portspec);
     interp_spec_file = (cfg.spec_file);
-    profile_cmd = (cfg.profile_cmd);
     ctl_fn = (cfg.ctl_fn);
     old_layout = (cfg.old_layout);
     aargs = [];
@@ -104,12 +104,12 @@ let compile_to_tofino (args:args_t) =
 
 let main () = 
   unmutable_report "Compilation to P4 started...";
-  let _ = Cmdline.parse_tofino () in
+  let dpt_fn = Cmdline.parse_tofino () in
   (if (not cfg.verbose)
   then (silent_mode ()));
   (if (cfg.debug)
     then (debug_mode ()));
-  let args = mk_args cfg in
+  let args = mk_args cfg dpt_fn in
 
   match args.profile_cmd with 
   | None -> (

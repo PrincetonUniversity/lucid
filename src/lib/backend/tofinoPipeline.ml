@@ -74,6 +74,7 @@ let common_midend_passes ds =
   let ds = InlineEventVars.inline ds in 
   (* make sure that each table uses unique actions *)
   (* form: + each action belongs to 1 table *)
+  (* Why do this? Does something break without it? *)
   UniqueTableActions.process ds 
 ;;
 
@@ -137,7 +138,7 @@ let atomic_op_form ds =
   print_if_debug ds;
   print_if_verbose "-------Making variables in if / match conditions constants--------";
   (* form: + any variable referenced in an if or match statement's 
-           condition is a constant variable. *)
+           condition is not mutated in its branches.*)
   let ds = PartialSingleAssignment.const_branch_vars ds in
 (*   let ds = if (!do_const_branch_vars)
     then (PartialSingleAssignment.const_branch_vars ds)
