@@ -19,7 +19,14 @@ type config =
   ; mutable interactive : bool (** Run interpreter interactively (stdin / stdout) **)
   ; mutable output : string
   ; mutable json : bool (** Print json outputs **)
+  (* tofino backend *)
+  ; mutable builddir : string (* build directory where p4 + other code goes *)
+  ; mutable portspec : string option (* path to port specification json *)
+  ; mutable profile_cmd : string option (* something with profiling -- probably depreciated *)
+  ; mutable ctl_fn : string option (* path to optional python control program *)
+  ; mutable old_layout : bool (* use the older, slower layout algorithm *)
   }
+
 
 (* TODO: We might want to add more parameters controlling which transformations
    are applied (if we're using the interpreter) *)
@@ -41,6 +48,11 @@ let default () =
   ; interactive = false
   ; output = "lucid.output"
   ; json = false
+  ; builddir = "lucid_tofino_build"
+  ; portspec = None
+  ; profile_cmd = None
+  ; ctl_fn = None
+  ; old_layout = false
   }
 ;;
 
@@ -148,6 +160,29 @@ let parse_interp () =
   !target_filename
 ;;
 
+let parse_tofino () = 
+  (* common options *)
+  let speclist = parse_common () in
+  (* added options for tofino backend *)
+  let set_builddir (s:string) = cfg.builddir <- s in
+  let set_portspec (s:string) = cfg.portspec <- Some(s) in
+  let set_profile_cmd (s:string) = cfg.profile_cmd <- Some(s) in
+  let set_ctl_fn (s:string) = cfg.ctl_fn <- Some(s) in
+  let set_old_layout () = cfg.old_layout <- true in
+  let speclist = speclist
+  @[
+       "-o", Arg.String set_builddir, "Output build directory."
+      ; "--ports", Arg.String set_portspec, "Path to the ports specification file"
+      ; "-p", Arg.String set_profile_cmd, "Profile program instead of compiling."
+      ; "--control", Arg.String set_ctl_fn, "Python control program."
+      ; "--oldlayout", Arg.Unit set_old_layout, "Use old layout algorithm."
+  ]
+  in
+  let target_filename = ref "" in
+  let usage_msg = "Lucid command line. Options available:" in
+  Arg.parse speclist (fun s -> target_filename := s) usage_msg;
+  !target_filename
+
 (* event parse / deparse generator for servers *)
 let parse_serverlib () = 
   let speclist = parse_common () in
@@ -166,88 +201,3 @@ let parse_serverlib () =
 ;;
 
 let parse = parse_interp ;;
-
-(* let parse () =
-  let unset_verbose () = cfg.verbose <- false in
-  let set_debug () = cfg.debug <- true in
-  let set_effects () = cfg.show_effects <- true in
-  let set_types () = cfg.verbose_types <- true in
-  let set_tvars () = cfg.show_tvar_links <- true in
-  let set_spec s = cfg.spec_file <- s in
-  let set_symb s = cfg.symb_file <- s in
-  let print_all () =
-    set_debug ();
-    set_effects ();
-    set_types ();
-    set_tvars ()
-  in
-  let set_constraints () = cfg.show_constraints <- true in
-  let set_queries () = cfg.show_queries <- true in
-  let set_type_names () = cfg.use_type_names <- false in
-  let set_all_effects () = cfg.show_all_effects <- true in
-  let really_print_all () =
-    print_all ();
-    set_type_names ();
-    set_all_effects ()
-  in
-  let set_final_state () = cfg.show_interp_state <- false in
-  let set_interactive () = cfg.interactive <- true; unset_verbose () in 
-  let speclist =
-    [ ( "--silent"
-      , Arg.Unit unset_verbose
-      , "Don't print transformation names before we do them" )
-    ; ( "--debug"
-      , Arg.Unit set_debug
-      , "Print out the whole program after each transformation" )
-    ; ( "-d"
-      , Arg.Unit set_debug
-      , "Print out the whole program after each transformation" )
-    ; "--effects", Arg.Unit set_effects, "Print out effect annotations"
-    ; "--types", Arg.Unit set_types, "Print out extra typing information"
-    ; ( "--tvars"
-      , Arg.Unit set_tvars
-      , "Print out a little more typing information" )
-    ; "-m", Arg.Unit print_all, "Enable all printing options"
-    ; ( "--spec"
-      , Arg.String set_spec
-      , "Path to the interpreter specification file" )
-    ; "--symb", Arg.String set_symb, "Path to the symbolic specification file"
-    ; ( "--queries"
-      , Arg.Unit set_queries
-      , "If true, print out SMT queries made during typechecking. Not enabled \
-         by -m." )
-    ; ( "--no-tynames"
-      , Arg.Unit set_type_names
-      , "Normally the printer tries to print user types using the user-defined \
-         name for the type. This disables that." )
-    ; ( "--all-effects"
-      , Arg.Unit set_all_effects
-      , "Show effects for all types, even non-global ones." )
-    ; ( "-mm"
-      , Arg.Unit really_print_all
-      , "Equivalent to -m --no-tynames --all-effects" )
-    ; ( "-q"
-      , Arg.Unit set_queries
-      , "If true, print out SMT queries made during typechecking. Not enabled \
-         by -m." )
-    ; ( "-c"
-      , Arg.Unit set_constraints
-      , "If true, print out each set of constraints we try to solve, but not \
-         the SMT query itself. Not enabled by -m." )
-    ; ( "--suppress-final-state"
-      , Arg.Unit set_final_state
-      , "If set, don't print the final state of the interpreter when it \
-         finishes." ) 
-    ; ( "--interactive"
-      , Arg.Unit set_interactive
-      , "Run interpreter interactively, piping events to/from stdin/stdout" )
-    ; ( "-i"
-      , Arg.Unit set_interactive
-      , "Run interpreter interactively, piping events to/from stdin/stdout" )
-    ]
-  in
-  let target_filename = ref "" in
-  let usage_msg = "Lucid command line. Options available:" in
-  Arg.parse speclist (fun s -> target_filename := s) usage_msg;
-  !target_filename
-;; *)
