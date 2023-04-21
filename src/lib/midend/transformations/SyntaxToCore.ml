@@ -245,9 +245,9 @@ let translate_memop body =
 ;;
 
 let translate_sort = function
-  | S.EEntry b -> C.EEntry b
-  | S.EExit -> C.EExit
+  | S.EEntry _ -> C.EEntry
   | S.EBackground -> C.EBackground
+  | S.EExit -> failwith "Internal Error: Extern event persisted to midend"
 ;;
 
 let translate_hsort = function

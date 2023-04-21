@@ -191,9 +191,7 @@ and handler_sort =
   | HEgress
 
 and event_sort =
-  | EEntry of
-      bool (* true iff "control", i.e. it can generate non-continue events *)
-  | EExit
+  | EEntry
   | EBackground
 
 (* For memops -- Boolean condition * return value *)

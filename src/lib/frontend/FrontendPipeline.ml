@@ -46,6 +46,10 @@ let process_prog builtin_tys ds =
   print_if_verbose "-----------inlining tables-----------";
   let ds = TableInlining.eliminate_prog ds in
   print_if_debug ds;
+  print_if_verbose
+    "-----------Assigning extern events default handlers-----------";
+  let ds = ExternEventElimination.process ds in
+  print_if_debug ds;
   print_if_verbose "---------Eliminating events with global arguments----------";
   let ds = GlobalArgElimination.eliminate_prog ds in
   print_if_debug ds;

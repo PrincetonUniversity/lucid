@@ -274,9 +274,7 @@ let statement_to_string = stmt_to_string
 
 let event_sort_to_string sort =
   match sort with
-  | EEntry true -> "entry control event"
-  | EEntry false -> "entry event"
-  | EExit -> "exit event"
+  | EEntry -> "entry event"
   | EBackground -> "event"
 ;;
 

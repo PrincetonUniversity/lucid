@@ -110,7 +110,7 @@
    InputChecks
    StandardizeEventParams
    EliminateEventCombinators
-   EliminateExitEvents
+   ExternEventElimination
    TofinoCore
    TofinoCoreForms
    TofinoControl

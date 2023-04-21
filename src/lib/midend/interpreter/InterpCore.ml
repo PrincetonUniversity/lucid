@@ -427,7 +427,10 @@ let rec interp_statement nst swid locals s =
         [State.lookup_dst nst (swid, port)]
     in
     let event = interp_exp e |> extract_ival |> raw_event in
-    if Env.find event.eid nst.event_sorts = EExit
+    if false
+       (* TODO: This should check if the destination is known to the interpreter
+                (i.e. it's going to another switch in the network, or to the user if in
+                      interactive mode). If not, simply log it. *)
     then log_exit swid None event nst
     else
       List.iter

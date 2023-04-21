@@ -8,6 +8,12 @@ t=200: Handling event in(10398247,1,2,3,4,10,19) at switch 0, port 0
 t=300: Handling event in(10398247,1,2,3,4,11,19) at switch 0, port 0
 t=400: Handling event in(10398247,1,2,5,4,10,0) at switch 0, port 0
 t=500: Handling event in(10398247,1,2,3,11,10,0) at switch 0, port 0
+t=600: Handling event out(807691391) at switch 0, port 196
+t=700: Handling event out(517672782) at switch 0, port 196
+t=800: Handling event out(572862758) at switch 0, port 196
+t=900: Handling event out(162398454) at switch 0, port 196
+t=1000: Handling event out(1002403229) at switch 0, port 196
+t=1100: Handling event out(875870293) at switch 0, port 196
 dpt: Final State:
 
 Switch 0 : {
@@ -16,16 +22,9 @@ Switch 0 : {
 
  Events :   [ ]
 
- Exits :    [
-    out(807691391) at port -1, t=0
-    out(517672782) at port -1, t=100
-    out(572862758) at port -1, t=200
-    out(162398454) at port -1, t=300
-    out(1002403229) at port -1, t=400
-    out(875870293) at port -1, t=500
-  ]
+ Exits :    [ ]
 
  entry events handled: 0
- total events handled: 6
+ total events handled: 12
 
 }

@@ -53,7 +53,7 @@ let parse_port str =
   match String.split_on_char ':' str with
   | [id; port] ->
     (try int_of_string id, int_of_string port with
-    | _ -> error "Incorrect format for link entry!")
+     | _ -> error "Incorrect format for link entry!")
   | _ -> error "Incorrect format for link entry!"
 ;;
 
@@ -66,35 +66,34 @@ let parse_delay cur_ts lst =
   | _ -> error "Event specification had non-integer delay field"
 ;;
 
-
 let parse_event
-    (pp : Preprocess.t)
-    (renaming : Renaming.env)
-    num_switches
-    (cur_ts : int)
-    (event : json)
-    : located_event
+  (pp : Preprocess.t)
+  (renaming : Renaming.env)
+  num_switches
+  (cur_ts : int)
+  (event : json)
+  : located_event
   =
-  let parse_locations num_switches lst = 
+  let parse_locations num_switches lst =
     let locations =
       match List.assoc_opt "locations" lst with
       | Some (`List lst) ->
         List.map
           (function
-            | `String str ->
-              let sw, port = parse_port str in
-              if sw < 0 || sw >= num_switches
-              then
-                error
-                @@ "Cannot specify event at nonexistent switch "
-                ^ string_of_int sw;
-              if port < 0 || port >= 255
-              then
-                error
-                @@ "Cannot specify event at nonexistent port "
-                ^ string_of_int port;
-              sw, port
-            | _ -> error "Event specification had non-string location")
+           | `String str ->
+             let sw, port = parse_port str in
+             if sw < 0 || sw >= num_switches
+             then
+               error
+               @@ "Cannot specify event at nonexistent switch "
+               ^ string_of_int sw;
+             if port < 0 || port >= 255
+             then
+               error
+               @@ "Cannot specify event at nonexistent port "
+               ^ string_of_int port;
+             sw, port
+           | _ -> error "Event specification had non-string location")
           lst
       | None -> [0, default_port]
       | _ -> error "Event specification has non-list locations field"
@@ -105,7 +104,7 @@ let parse_event
   | `Assoc lst ->
     (* Find the event name, accounting for the renaming pass, and get its
        sort and argument types *)
-    (* Determine if the record is an event or a control command. 
+    (* Determine if the record is an event or a control command.
        "type" == "command" -> command
        "type" == "event" -> event
        - if there is no type, it is an event *)
@@ -115,19 +114,18 @@ let parse_event
       | None -> error "Event specification missing name field"
       | _ -> error "Event specification had non-string type for name field"
     in
-    let sort, tys = Env.find eid pp.events in
-    if sort = EExit then error "Cannot specify exit event";
+    let _, tys = Env.find eid pp.events in
     (* Parse the arguments into values, and make sure they have the right types.
        At the moment only integer and boolean arguments are supported *)
     let data =
       match List.assoc_opt "args" lst with
       | Some (`List lst) ->
         (try List.map2 (parse_value "Event") tys lst with
-        | Invalid_argument _ ->
-          error
-          @@ Printf.sprintf
-               "Event specification for %s had wrong number of arguments"
-               (Cid.to_string eid))
+         | Invalid_argument _ ->
+           error
+           @@ Printf.sprintf
+                "Event specification for %s had wrong number of arguments"
+                (Cid.to_string eid))
       | None -> error "Event specification missing args field"
       | _ -> error "Event specification had non-list type for args field"
     in
@@ -138,26 +136,21 @@ let parse_event
   | _ -> error "Non-assoc type for event definition"
 ;;
 
-
-let parse_control_op
-    num_switches
-    (cur_ts : int)
-    (control : json)
-  = 
-  let parse_locations num_switches lst = 
+let parse_control_op num_switches (cur_ts : int) (control : json) =
+  let parse_locations num_switches lst =
     let locations =
       match List.assoc_opt "locations" lst with
       | Some (`List lst) ->
         List.map
           (function
-            | `Int sw -> 
-              if sw < 0 || sw >= num_switches
-              then
-                error
-                @@ "Cannot specify control command at nonexistent switch "
-                ^ string_of_int sw;    
-                sw  
-            | _ -> error "Control command specification had non-int location")
+           | `Int sw ->
+             if sw < 0 || sw >= num_switches
+             then
+               error
+               @@ "Cannot specify control command at nonexistent switch "
+               ^ string_of_int sw;
+             sw
+           | _ -> error "Control command specification had non-int location")
           lst
       | None -> [0]
       | _ -> error "control command specification has non-list locations field"
@@ -165,72 +158,67 @@ let parse_control_op
     locations
   in
   match control with
-  | `Assoc lst -> (
+  | `Assoc lst ->
     let edelay = parse_delay cur_ts lst in
     let locations = parse_locations num_switches lst in
-
-    let control_event = {
-      ctl_cmd = 
-      InterpSyntax.parse_control_e lst;
-      ctl_edelay =  edelay;
-    }
+    let control_event =
+      { ctl_cmd = InterpSyntax.parse_control_e lst; ctl_edelay = edelay }
     in
-    ilocated_control (control_event, (List.map (fun sw -> (sw, 0)) locations))
-  )
-  | _ -> error "Non-assoc type for control command" 
+    ilocated_control (control_event, List.map (fun sw -> sw, 0) locations)
+  | _ -> error "Non-assoc type for control command"
 ;;
 
-
-let parse_interp_input 
-    (pp : Preprocess.t)
-    (renaming : Renaming.env)
-    num_switches
-    (cur_ts : int)
-    (event : json)
+let parse_interp_input
+  (pp : Preprocess.t)
+  (renaming : Renaming.env)
+  num_switches
+  (cur_ts : int)
+  (event : json)
   =
   match event with
-  | `Assoc lst ->(
-    match List.assoc_opt "type" lst with
-    | Some(`String "event") -> parse_event pp renaming num_switches cur_ts event
-    | Some(`String "command") -> parse_control_op num_switches cur_ts event
-    | Some(_) -> error "unknown interpreter input type (expected event or command)"
-    (* default is event *)
-    | None -> parse_event pp renaming num_switches cur_ts event)
+  | `Assoc lst ->
+    (match List.assoc_opt "type" lst with
+     | Some (`String "event") ->
+       parse_event pp renaming num_switches cur_ts event
+     | Some (`String "command") -> parse_control_op num_switches cur_ts event
+     | Some _ ->
+       error "unknown interpreter input type (expected event or command)"
+     (* default is event *)
+     | None -> parse_event pp renaming num_switches cur_ts event)
   | _ -> error "Non-assoc type for interpreter input"
 ;;
 
-(* parse a line provided to the interactive mode interpreter, 
-   which may either be a single event (an assoc) or a list of 
+(* parse a line provided to the interactive mode interpreter,
+   which may either be a single event (an assoc) or a list of
    multiple events (List of assocs) *)
 let parse_interp_event_list
-    (pp : Preprocess.t)
-    (renaming : Renaming.env)
-    (num_switches : int)
-    (gap : int)
-    (events : json)
-  = 
+  (pp : Preprocess.t)
+  (renaming : Renaming.env)
+  (num_switches : int)
+  (gap : int)
+  (events : json)
+  =
   match events with
-  | `List lst -> 
-    List.map (parse_interp_input pp renaming num_switches gap) lst
+  | `List lst -> List.map (parse_interp_input pp renaming num_switches gap) lst
   | _ -> [parse_interp_input pp renaming num_switches gap events]
 ;;
 
-let parse_interp_inputs 
-    (pp : Preprocess.t)
-    (renaming : Renaming.env)
-    (num_switches : int)
-    (gap : int)
-    (events : json list)
+let parse_interp_inputs
+  (pp : Preprocess.t)
+  (renaming : Renaming.env)
+  (num_switches : int)
+  (gap : int)
+  (events : json list)
   =
   let wrapper
-      ((located_events_rev : located_event list), (current_ts : int))
-      (event_json : json)
+    ((located_events_rev : located_event list), (current_ts : int))
+    (event_json : json)
     =
     let located_event =
       parse_interp_input pp renaming num_switches current_ts event_json
     in
-    let next_ts = (located_event_delay located_event) + gap in
-    located_event::located_events_rev,next_ts
+    let next_ts = located_event_delay located_event + gap in
+    located_event :: located_events_rev, next_ts
   in
   let located_events_rev, _ = List.fold_left wrapper ([], 0) events in
   List.rev located_events_rev
@@ -260,14 +248,14 @@ let parse_interp_inputs
 
 let builtins renaming n =
   List.init n (fun i ->
-      Env.singleton (rename renaming "self" "self") (vint i 32))
+    Env.singleton (rename renaming "self" "self") (vint i 32))
 ;;
 
 let parse_externs
-    (pp : Preprocess.t)
-    (renaming : Renaming.env)
-    (num_switches : int)
-    (externs : (string * json) list)
+  (pp : Preprocess.t)
+  (renaming : Renaming.env)
+  (num_switches : int)
+  (externs : (string * json) list)
   =
   List.fold_left
     (fun acc (id, values) ->
@@ -380,7 +368,8 @@ let create_foreign_functions renaming efuns python_file =
                   o
                   (Array.of_list @@ List.map oc_to_py args)
               in
-              let _ = pyretvar in (* this is the return from python? *)
+              let _ = pyretvar in
+              (* this is the return from python? *)
               (* Dummy return value *)
               value (VBool false))
         in
@@ -412,9 +401,7 @@ let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t 
     in
     let links =
       if num_switches = 1
-      then (
-        InterpState.State.empty_topology 1
-      )
+      then InterpState.State.empty_topology 1
       else (
         match List.assoc_opt "links" lst with
         | Some (`Assoc links) -> parse_links num_switches links
@@ -425,7 +412,8 @@ let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t 
     let max_time =
       match List.assoc_opt "max time" lst with
       | Some (`Int n) -> n
-      | _ -> 0 (* a max time of 0 makes sense for interactive mode *)
+      | _ -> 0
+      (* a max time of 0 makes sense for interactive mode *)
       (* error "No value or non-int value specified for max time" *)
     in
     let externs =
@@ -464,9 +452,10 @@ let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t 
             "Extern functions were declared but no python file was provided!"
       | _ -> error "Non-string value for python_file"
     in
-    let ctl_pipe_name = match (List.assoc_opt "control pipe" lst) with 
-      | Some(`String filename) -> Some(filename)
-      | _ -> None 
+    let ctl_pipe_name =
+      match List.assoc_opt "control pipe" lst with
+      | Some (`String filename) -> Some filename
+      | _ -> None
     in
     let config : InterpState.State.config =
       { max_time
@@ -478,6 +467,6 @@ let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t 
       ; random_seed
       }
     in
-    { num_switches; links; externs; events; config; extern_funs; ctl_pipe_name}
+    { num_switches; links; externs; events; config; extern_funs; ctl_pipe_name }
   | _ -> error "Unexpected interpreter specification format"
 ;;

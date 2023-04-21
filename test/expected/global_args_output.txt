@@ -14,12 +14,14 @@ t=40000: Handling entry event in(2,1,1,5) at switch 0, port 0
 t=40600: Handling event update_arr_ctr_arr2_ctr1(1,5) at switch 0, port 196
 t=50000: Handling entry event in(5,1,1,6) at switch 0, port 0
 Invalid array or counter id
+t=50600: Handling event bad_inputs(5,1) at switch 0, port 196
 t=60000: Handling entry event in(3,2,2,7) at switch 0, port 0
 t=60600: Handling event update_arr_ctr_arr3_ctr2(2,7) at switch 0, port 196
 t=70000: Handling entry event in(3,2,3,8) at switch 0, port 0
 t=70600: Handling event update_arr_ctr_arr3_ctr2(3,8) at switch 0, port 196
 t=80000: Handling entry event in(3,7,3,9) at switch 0, port 0
 Invalid array or counter id
+t=80600: Handling event bad_inputs(3,7) at switch 0, port 196
 dpt: Final State:
 
 Switch 0 : {
@@ -34,12 +36,9 @@ Switch 0 : {
 
  Events :   [ ]
 
- Exits :    [
-    bad_inputs(5,1) at port -1, t=50000
-    bad_inputs(3,7) at port -1, t=80000
-  ]
+ Exits :    [ ]
 
  entry events handled: 9
- total events handled: 16
+ total events handled: 18
 
 }
