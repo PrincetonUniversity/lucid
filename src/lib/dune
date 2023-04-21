@@ -108,7 +108,7 @@
    TofinoPipeline
    DependencyProfiling
    InputChecks
-   UnifyHandlerParams
+   StandardizeEventParams
    EliminateEventCombinators
    EliminateExitEvents
    TofinoCore
@@ -123,7 +123,7 @@
    ShareMemopInputs
    SingleTableMatch
    ActionsToFunctions
-   InlineTableActions
+   UniqueTableActions
    MatchAlgebra
    CoreCfg
    CoreCdg

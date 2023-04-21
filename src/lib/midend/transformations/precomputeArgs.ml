@@ -1,13 +1,13 @@
 (* pre-compute every non-immediate argument of a
 function or hash expression *)
-(* 5/22 TODO: refactor this. Much of the functionality might be obsolete / incorrect. *)
+(* 5/22/22 TODO: refactor this. Much of the functionality might be obsolete / incorrect. *)
 open CoreSyntax
 open Printf
 open Batteries
 open InterpHelpers
 module CL = Caml.List
 
-(* 5/19 -- don't precompute arguments to event combinators. This is
+(* 5/19/22 -- don't precompute arguments to event combinators. This is
 temporary to support event combinators inlined with a generate statement. *)
 let exception_cids =
   [ Cid.create ["Event";"delay"] ]
@@ -45,7 +45,7 @@ let precompute_args ds =
         | EHash (size, args) ->
           let new_args = CL.map precompute_arg args in
           { exp with e = EHash (size, new_args) }
-        (* 5/22 -- The main point of this is to eliminate calls to builtins.. I think. *)
+        (* 5/22/22 -- The main point of this is to eliminate calls to builtins.. I think. *)
         | ECall (fcn_id, args) -> 
           (match CL.mem fcn_id exception_cids with
           | true -> exp (* skip event combinators *)

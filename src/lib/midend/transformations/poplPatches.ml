@@ -20,28 +20,12 @@ let eliminate_noncall_units ds =
   v#visit_decls () ds
 ;;
 
-
-(* temporary: delete print statements *)
+(* delete print statements *)
 let delete_prints ds =
   let v =
     object
       inherit [_] s_map as super
       method! visit_SPrintf _ _ _ = SNoop
-    end
-  in
-  v#visit_decls () ds
-;;
-
-(* temporary: replace gt / lt with equality *)
-let replace_ineqs ds =
-  let v =
-    object
-      inherit [_] s_map as super
-
-      method! visit_EOp ctx op exps =
-        match op with
-        | Less | More | Leq | Geq -> super#visit_EOp ctx Eq exps
-        | _ -> super#visit_EOp ctx op exps
     end
   in
   v#visit_decls () ds

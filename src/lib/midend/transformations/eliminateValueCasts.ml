@@ -1,7 +1,5 @@
 (* convert casts of values into values. 
-
   (int<<2>>)1 --> 1w2
-
 *)
 open CoreSyntax
 open Batteries

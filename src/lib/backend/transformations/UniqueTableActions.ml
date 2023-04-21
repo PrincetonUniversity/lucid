@@ -6,10 +6,10 @@
   Output form:
     - each action is used by only 1 table
 
-  1. remove actions and move to map.
+  1. build an actions context ctx and remove actions from program
   2. for each table t:
     for each action a in t's declaration:
-      1. create a new action t_a = a
+      1. create a new action t_a with the body of a
       2. replace a with t_a in: 
         1. the declaration of t
         2. table_installs to t

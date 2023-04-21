@@ -83,30 +83,35 @@ and td =
   | TDAction of action
   | TDMain of main_handler
   (* In P4, actions and tables are "open functions". 
-     they can use variables that are defined in 
-     the environment where they are _called_. The 
-     cid list is the variables it can modify *)
+     they can use variables whose values are determined 
+     by the environment that calls the table or action. *)
+  (* The cid list should be the variables the function can modify, but is not currently used. *)
   | TDOpenFunction of id * params * statement * (cid list)
 
 
 
+(* the main handler is a single function that contains 
+   all the handlers in the Lucid program. It branches 
+   on the variable "hdl_selector" to determine which 
+   event handler to execute. *)
 and main_handler = {
     main_id : id;
-    hdl_selector : (id * ty);
-    hdl_enum : (id * int) list;
-    hdl_params : (id * params) list;
-    shared_locals : (id * ty) list;
-    default_hdl : id option;
-    main_body : statement list;
-    event_output : event_output;
+    hdl_selector : (id * ty); (* the variable containing the current event's integer identifier. note: this should be a pervasive.*)
+    hdl_enum : (id * int) list; (* integer identifiers for each handler / event *)
+    hdl_params : (id * params) list; (* parameters of each handler / event *)
+    shared_locals : (id * ty) list; (* local variables that can be accessed from any event *)
+    default_hdl : id option; (* the handler to execute for packets that arrive on non-lucid ports *)
+    main_body : statement list; (* the body of the main handler. 
+                                   Each statement represents the code that goes into a single stage. *)
+    event_output : event_output; (* some metadata about generated events.*)
     }
 
 and event_output = {
   (* counter variable for the number 
-     of recirc / self events generated *)
+     of recirc / self events generated. note: this should be a pervasive. *)
   recirc_mcid_var : (id * ty);
   (* all possible sequences of events 
-     that this program can generate. *)
+     that this program can generate. Used for generating an egress parser. *)
   ev_gen_seqs : (id list list);
 }    
 
@@ -142,22 +147,9 @@ let tdecl_of_decl decl =
   | DParser(_) -> error "Parsers are not yet supported by the tofino backend!"
 ;;
 
-(* module Seq = Core.Sequence *)
 
-let dbgstr_of_ids cids = List.map (Id.to_string) cids |> String.concat ", ";;
-
-(* let seq_eq eq s1 s2 = 
-  match ((Seq.length s1) = (Seq.length s2)) with
-  | true -> 
-    Seq.fold
-      (Seq.zip s1 s2)
-      ~init:true
-      ~f:(fun a (e1, e2) -> (a && (eq e1 e2)))
-  | false -> false
-;;
-let idseq_eq = seq_eq (Id.equal)
- *)
-let printres title res = 
+(* let dbgstr_of_ids cids = List.map (Id.to_string) cids |> String.concat ", ";; *)
+(* let printres title res = 
   print_endline ("---at code---"^title);
   List.iter
     (fun gen_seq -> 
@@ -167,41 +159,40 @@ let printres title res =
         gen_seq |> print_endline)
     res;
   print_endline ("------");
-;;
+;; *)
 
-let rec append_to_all seqs stmt =
-  match seqs with
-  | [] -> []
-  | seq::seqs -> 
-    (seq@[stmt])::(append_to_all seqs stmt)
-;;
-
-let append_or_start seqs stmt =
+(* append an element to each list in the sequence and add a sequence containing just the element *)
+let append_and_new seqs e =
+  let rec append_to_all seqs e =
+    match seqs with
+    | [] -> []
+    | seq::seqs -> 
+      (seq@[e])::(append_to_all seqs e)
+  in
   match seqs with
   (* if there's nothing, make a new seq *)
-  | [] -> [[stmt]]
+  | [] -> [[e]]
   (* if there's something, append to first and recurse *)
   | seq::seqs -> 
-    (seq@[stmt])::(append_to_all seqs stmt)
+    (seq@[e])::(append_to_all seqs e)
 ;;
 
-(* find all paths of statements that match the filter *)
+(* find all paths of statements that match the filter_map  *)
 let rec find_statement_paths paths_so_far stmt_filter stmt =
   match stmt.s with
   | SSeq(s1, s2) -> 
-    let seqs_after_s1 = find_statement_paths paths_so_far stmt_filter s1 in
+    let paths_including_s1 = find_statement_paths paths_so_far stmt_filter s1 in
     (* [[eva()]] *)
     (* [[eva()]] *)
-    let res = find_statement_paths seqs_after_s1 stmt_filter s2 in
+    let paths_including_s2 = find_statement_paths paths_including_s1 stmt_filter s2 in
     (* printres "seq" res; *)
-    res
+    paths_including_s2
   | SIf(_, s1, s2) -> 
     (* we get all paths for s1 + all paths for s2 *)
     let res = (find_statement_paths paths_so_far stmt_filter s1)
       @
       (find_statement_paths paths_so_far stmt_filter s2)
     in
-    (* printres "sif" res;  *)
     res
   | SMatch(_, ps) -> 
     let res = List.fold_left
@@ -213,11 +204,12 @@ let rec find_statement_paths paths_so_far stmt_filter stmt =
     res
   | _ -> (
     match (stmt_filter stmt) with
-    | Some r -> append_or_start paths_so_far r
+    | Some r -> append_and_new paths_so_far r
     | None -> paths_so_far
   )
 ;;
 
+(* find all sequences of event ids that may be generated by the program. *)
 let find_generate_sequences stmt = find_statement_paths
   []
   (fun stmt -> match stmt.s with 
@@ -225,7 +217,6 @@ let find_generate_sequences stmt = find_statement_paths
   | _ -> None)
   stmt
 ;;
-
 
 let test_gen_sequencer () = 
   print_endline ("TESTING GEN SEQUENCER");
@@ -313,11 +304,8 @@ let add_main_handler decls =
       | _ -> hd::(erase_handler_bodies tl)
     )
   in 
-  let event_output = {
-    recirc_mcid_var = (Id.create "recirc_mcid", (ty (TInt 16)));
-    ev_gen_seqs = find_generate_sequences (List.hd main_body) |> MiscUtils.unique_list_of;
-    (* ev_gen_seqs = find_ev_gen_lists (List.hd main_body) |> MiscUtils.unique_list_of; *)
-  } 
+  let event_output = {recirc_mcid_var = (Id.create "recirc_mcid", (ty (TInt 16)));
+    ev_gen_seqs = find_generate_sequences (List.hd main_body) |> MiscUtils.unique_list_of;} 
   in
   let tds =(erase_handler_bodies decls)
     @[{td=
@@ -333,7 +321,7 @@ let tdecls_of_decls decls =
 ;;
 
 
-(* generate the main handler, for a program where 
+(* DEPRECIATED: generate the main handler, for a program where 
    the event gets compiled to a control block library *)
 let add_lib_handler decls =
   let hdl_selector = (Id.create "event_id", (ty (TInt 8))) in 

@@ -1,4 +1,4 @@
-(* Eliminate extern calls *)
+(* Delete extern calls *)
 open CoreSyntax
 open Batteries
 module CL = Caml.List
