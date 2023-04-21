@@ -101,9 +101,11 @@ let print_if_debug ds =
     + integer operations are all binary operations *)
 let atomic_op_form ds =
   let print_if_verbose = MidendPipeline.print_if_verbose in
-  (* form: + no calls to externs *)
-  print_if_verbose "-------Eliminating extern calls--------";
-  let ds = EliminateExterns.eliminate_externs ds in
+  print_if_verbose "-------Eliminating interpreter-only operations--------";
+  (* form: + no calls to extern functions *)
+  (* form: + unit statements may only be function calls *)
+  (* form: + no print statements *)
+  let ds = EliminateInterpOps.eliminate_prog ds in
   print_if_debug ds;
   print_if_verbose "-------Eliminating value cast ops--------";
   (* form: + no casts of literals *)
@@ -113,10 +115,6 @@ let atomic_op_form ds =
   print_if_verbose "-------Eliminating range relational ops--------";
   (* form: + no GTE / LTE ops *)
   let ds = EliminateEqRangeOps.transform ds in
-  (* form: + unit statements may only be function calls *)
-  let ds = PoplPatches.eliminate_noncall_units ds in
-  (* form: + no print statements *)
-  let ds = PoplPatches.delete_prints ds in
   print_if_debug ds;
   print_if_verbose "-------Adding default branches--------";
   (* form: + every match statement has a default branch *)

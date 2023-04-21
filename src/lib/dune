@@ -84,7 +84,6 @@
    events
    builtins
    TQVar
-   poplPatches
    backendLogging
    eliminateEqRangeOps
    addDefaultBranches
@@ -94,7 +93,7 @@
    eliminateBools
    optimizeSimpleCalls
    eliminateValueCasts
-   eliminateExterns
+   eliminateInterpOps
    normalizeInts
    singleAssignment
    partialSingleAssignment
