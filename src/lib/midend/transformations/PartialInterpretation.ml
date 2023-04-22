@@ -2,92 +2,149 @@ open Batteries
 open CoreSyntax
 open Collections
 
-type level = int
+(* The information we might have about the value of a variable during
+   partial interpretation. A partial value might be:
+   - A known value v
+   - An unknown value, to which we assign a unique integer identifier.
+     These represent event arguments, the result of Array/hash operations,
+     and the result of modifying a variable inside a conditional.
+   - An expression which we weren't able to fully evaluate because it
+     contains one or more variables; the partial value includes both the
+     expression itself and the value of each of those variables at the time.
+     Storing the original variable values allows us to check if they have
+     changed since the point in the program where the expression was written.
+*)
+(* TODO: We could probably make this simpler by just storing the time at
+   which each variable was last modified, rather than storing the entire partial
+   value for each dependency inside the PExp. The rule is then that we inline a
+   PExp only if all its dependencies were not modified since the PExp was created. *)
+type partial_value =
+  | PValue of value
+  | PUnknown of int
+  | PExp of exp * (id * partial_value) list
 
-type var_binding =
-  { level : level (* Last level this variable was modified at *)
-  ; body : exp option
-      (* This is Some e iff we know for sure the variable is bound to e *)
-  ; is_declared : bool
-  ; declared_as : (ty * exp) option (* Original declaration value *)
-  }
+let unknown_value_counter = ref (-1)
 
-type env = var_binding IdMap.t
+let new_unknown () =
+  incr unknown_value_counter;
+  PUnknown !unknown_value_counter
+;;
+
+let rec partial_value_to_string = function
+  | PValue v -> CorePrinting.value_to_string v
+  | PUnknown n -> "Unk" ^ string_of_int n
+  | PExp (e, pvals) ->
+    Printf.sprintf
+      "%s where %s"
+      (CorePrinting.exp_to_string e)
+      (CorePrinting.list_to_string
+         (fun (id, pval) ->
+           Id.to_string id ^ " = " ^ partial_value_to_string pval)
+         pvals)
+;;
+
+type env = partial_value IdMap.t
 
 let print_env env =
   print_endline "{";
   IdMap.iter
-    (fun id binding ->
+    (fun id pval ->
       print_endline
       @@ Printf.sprintf
-           "%s -> {l:%d; dec:%b; e:%s}"
+           "%s -> %s"
            (CorePrinting.id_to_string id)
-           binding.level
-           binding.is_declared
-           (match binding.body with
-            | None -> "None"
-            | Some e -> CorePrinting.exp_to_string e))
+           (partial_value_to_string pval))
     env;
   print_endline "}"
 ;;
 
-(* Merge the env after a branch of an if/match statement with the prior environment.
-   Discard any variables that were defined inside the branch, and add declarations for
-   any variables that were mutated *)
-let merge_branches base_stmt level prior_env branch_envs =
-  let decls_to_add = ref base_stmt in
-  let merge =
-    IdMap.merge (fun id ao bo ->
-      match ao, bo with
-      | None, _ -> (* Variable was declared inside the branch, discard *) None
-      | _, None -> failwith "Sanity check: should be impossible"
-      | Some x, Some y ->
-        let is_declared =
-          if x.is_declared
-          then true
-          else if x.level < y.level && x.level = level
-          then (
-            (* Was originally declared on this level, and modified in the branch *)
-            let ty, body =
-              match x.body with
-              | Some e -> e.ety, e
-              | None -> Option.get x.declared_as
-            in
-            decls_to_add := sseq (slocal id ty body) !decls_to_add;
-            true)
-          else false
-        in
-        let level =
-          if x.level = y.level then (* Not modified *) x.level else level
-        in
-        let body =
-          match x.body, y.body with
-          | Some b1, Some b2 -> if equiv_exp b1 b2 then x.body else None
-          | _ -> None
-        in
-        Some { x with level; is_declared; body })
-  in
-  let merged = List.fold_left merge prior_env branch_envs in
-  !decls_to_add, merged
+(* Since partial values should only be equal if they are literal copies of each
+   other, this function is probably overkill. But I'm writing it anyway just in
+   case something changes later *)
+let rec equiv_partial_value pv1 pv2 =
+  match pv1, pv2 with
+  | PValue v1, PValue v2 -> equiv_value v1 v2
+  | PUnknown n1, PUnknown n2 -> n1 = n2
+  | PExp (e1, pvs1), PExp (e2, pvs2) ->
+    equiv_exp e1 e2
+    && (* Note: This assumes the lists have the same order. We could sort beforehand.
+          but that's probably overkill since it's very unlikely we'll have two equivalent
+          expressions which only differ in list order. In fact, I think it's impossible. *)
+    equiv_list
+      (fun (id1, pv1) (id2, pv2) ->
+        Id.equal id1 id2 && equiv_partial_value pv1 pv2)
+      pvs1
+      pvs2
+  | (PValue _ | PUnknown _ | PExp _), _ -> false
 ;;
 
-(* True if it's safe to inline the variable. It's currently considered unsafe
-   if the expression contains an array or hash call *)
-let should_inline exp =
-  (* Rather inefficient but we can optimize if we need to *)
-  let v =
-    object
-      inherit [_] s_iter
+let add_builtin_defs vars env =
+  List.fold_left (fun acc (id, _) -> IdMap.add id (new_unknown ()) acc) env vars
+;;
 
-      method! visit_ECall r cid _ =
-        if Id.name (Cid.first_id cid) = "Array" then r := false
+(* Merge two environments from different branches of a program. Variables which
+   only appear in one env are local to that branch, and so are discarded. Variables
+   which have different values in the two envs are replaced with a fresh unknown
+   value *)
+let merge_two_envs env1 env2 =
+  IdMap.merge
+    (fun _ v1o v2o ->
+      match v1o, v2o with
+      | None, _ | _, None ->
+        (* Variable was declared inside only one env, discard *) None
+      | Some v1, Some v2 ->
+        if equiv_partial_value v1 v2 then Some v1 else Some (new_unknown ()))
+    env1
+    env2
+;;
 
-      method! visit_EHash r _ _ = r := false
-    end
-  in
-  let r = ref true in
-  v#visit_exp r exp;
-  !r
+let merge_envs envs = List.reduce merge_two_envs envs
+
+let variable_extractor =
+  object
+    inherit [_] s_iter as super
+
+    method! visit_EVar acc cid =
+      if not (IdSet.mem (Cid.to_id cid) !acc)
+      then acc := IdSet.add (Cid.to_id cid) !acc
+  end
+;;
+
+(* Get a list of all the variables that appear in an expression *)
+let extract_variables ?(acc = IdSet.empty) exp =
+  let acc = ref acc in
+  variable_extractor#visit_exp acc exp;
+  !acc
+;;
+
+(* Create the appropriate type of partial value to represent an expression.
+   Always return unknown for hashes and function values to avoid inlining them *)
+let extract_partial_value (env : env) exp =
+  match exp.e with
+  | EVal v -> PValue v
+  | EHash _ | ECall _ -> new_unknown ()
+  | _ ->
+    let vars = extract_variables exp in
+    let var_values =
+      List.map (fun id -> id, IdMap.find id env) (IdSet.to_list vars)
+    in
+    PExp (exp, var_values)
+;;
+
+(* Replace the variable with its definition in the environment, if allowable.
+   A variable can be inlined if its definition is either:
+   - a known value (PValue)
+   - a PExp, all of whose dependencies are unchanged since its definition *)
+let try_inline_variable env id =
+  match IdMap.find id env with
+  | PValue v -> Some (EVal v)
+  | PUnknown _ -> None
+  | PExp (e, pvs) ->
+    if List.for_all
+         (fun (id, pv) -> equiv_partial_value pv (IdMap.find id env))
+         pvs
+    then Some e.e
+    else None
 ;;
 
 let mk_e v = EVal v
@@ -108,10 +165,9 @@ let rec interp_exp env e =
   match e.e with
   | EVal _ -> e
   | EVar cid ->
-    let binding = IdMap.find (Cid.to_id cid) env in
-    (match binding.body with
-     | None -> e
-     | Some e' -> e')
+    (match try_inline_variable env (Cid.to_id cid) with
+     | Some e' -> { e with e = e' }
+     | None -> e)
   | ECall (cid, args) ->
     { e with e = ECall (cid, List.map (interp_exp env) args) }
   | EHash (sz, args) ->
@@ -280,21 +336,12 @@ let interp_gen_ty env = function
   | GPort e -> GPort (interp_exp env e)
 ;;
 
-let add_builtin_defs level vars env =
-  List.fold_left
-    (fun acc (id, _) ->
-      IdMap.add
-        id
-        { level; body = None; is_declared = true; declared_as = None }
-        acc)
-    env
-    vars
-;;
-
-(* Partially interpret a statement. Takes an environment and the current level
-   (i.e. how deeply nested the scope is. Return the interpreted statment and the
+(* Partially interpret a statement. Return the interpreted statment and the
    environment after interpreting it. *)
-let rec interp_stmt env level s : statement * env =
+let rec interp_stmt env s : statement * env =
+  (* (match s.s with
+   | SNoop | SSeq _ -> ()
+   | _ -> print_endline @@ "Interping " ^ CorePrinting.stmt_to_string s); *)
   let interp_exp = interp_exp env in
   match s.s with
   | SNoop -> s, env
@@ -303,75 +350,6 @@ let rec interp_stmt env level s : statement * env =
     { s with s = SPrintf (str, List.map interp_exp es) }, env
   | SGen (g, e) -> { s with s = SGen (interp_gen_ty env g, interp_exp e) }, env
   | SRet eopt -> { s with s = SRet (Option.map interp_exp eopt) }, env
-  | SSeq (s1, s2) ->
-    let s1, env1 = interp_stmt env level s1 in
-    let s2, env2 = interp_stmt env1 level s2 in
-    let s' =
-      if s1.s = SNoop then s2.s else if s2.s = SNoop then s1.s else SSeq (s1, s2)
-    in
-    { s with s = s' }, env2
-  (* Cases where we bind/mutate variables *)
-  | SLocal (id, ty, exp) ->
-    let exp = interp_exp exp in
-    let new_s, body, is_declared =
-      if should_inline exp
-      then snoop, Some exp, false
-      else { s with s = SLocal (id, ty, exp) }, None, true
-    in
-    let new_binding =
-      { level; body; is_declared; declared_as = Some (ty, exp) }
-    in
-    new_s, IdMap.add id new_binding env
-  | SAssign (id, exp) ->
-    let exp = interp_exp exp in
-    let old_binding = IdMap.find id env in
-    let new_s, new_binding =
-      (* Using a match instead of if because it makes the code easier to read *)
-      match should_inline exp with
-      | true ->
-        (* Can completely remove the statement if we're on the declaration level *)
-        let new_s =
-          if old_binding.level = level then SNoop else SAssign (id, exp)
-        in
-        new_s, { old_binding with level; body = Some exp }
-      | false ->
-        if old_binding.is_declared || old_binding.level <> level
-        then SAssign (id, exp), { old_binding with level; body = None }
-        else
-          (* If we're on declaration level and it hasn't been declared yet,
-             we can replace the assignment with a declaration instead *)
-          ( SLocal (id, exp.ety, exp)
-          , { old_binding with body = None; is_declared = true } )
-    in
-    { s with s = new_s }, IdMap.add id new_binding env
-  (* Cases where we branch *)
-  | SIf (test, s1, s2) ->
-    let test = interp_exp test in
-    (match test with
-     | { e = EVal { v = VBool b } } ->
-       if b then interp_stmt env level s1 else interp_stmt env level s2
-     | _ ->
-       let s1, env1 = interp_stmt env (level + 1) s1 in
-       let s2, env2 = interp_stmt env (level + 1) s2 in
-       let base_stmt = { s with s = SIf (test, s1, s2) } in
-       merge_branches base_stmt level env [env1; env2])
-  | SMatch (es, branches) ->
-    let es = List.map interp_exp es in
-    (* TODO: Precompute the match as much as possible *)
-    let branches, envs =
-      List.map
-        (fun (p, stmt) ->
-          let stmt', env' = interp_stmt env (level + 1) stmt in
-          (p, stmt'), env')
-        branches
-      |> List.split
-    in
-    let base_stmt = { s with s = SMatch (es, branches) } in
-    merge_branches base_stmt level env envs
-  | STableMatch tm ->
-    let keys' = List.map interp_exp tm.keys in
-    let args' = List.map interp_exp tm.args in
-    { s with s = STableMatch { tm with keys = keys'; args = args' } }, env
   | STableInstall (id, entries) ->
     let entries =
       List.map
@@ -383,29 +361,173 @@ let rec interp_stmt env level s : statement * env =
         entries
     in
     { s with s = STableInstall (id, entries) }, env
+  | SSeq (s1, s2) ->
+    let s1, env1 = interp_stmt env s1 in
+    let s2, env2 = interp_stmt env1 s2 in
+    let s' =
+      if s1.s = SNoop then s2.s else if s2.s = SNoop then s1.s else SSeq (s1, s2)
+    in
+    { s with s = s' }, env2
+  (* Cases where we bind/mutate variables *)
+  | SLocal (id, ty, exp) ->
+    let exp = interp_exp exp in
+    let pv = extract_partial_value env exp in
+    let new_s = { s with s = SLocal (id, ty, exp) } in
+    new_s, IdMap.add id pv env
+  | SAssign (id, exp) ->
+    let exp = interp_exp exp in
+    let pv = extract_partial_value env exp in
+    let new_s = { s with s = SAssign (id, exp) } in
+    new_s, IdMap.add id pv env
+  | STableMatch tm ->
+    let keys = List.map interp_exp tm.keys in
+    let args = List.map interp_exp tm.args in
+    let env =
+      List.fold_left
+        (fun env id -> IdMap.add id (new_unknown ()) env)
+        env
+        tm.outs
+    in
+    { s with s = STableMatch { tm with keys; args } }, env
+  (* Cases where we branch *)
+  | SIf (test, s1, s2) ->
+    let test = interp_exp test in
+    (match test with
+     | { e = EVal { v = VBool b } } ->
+       if b then interp_stmt env s1 else interp_stmt env s2
+     | _ ->
+       let s1, env1 = interp_stmt env s1 in
+       let s2, env2 = interp_stmt env s2 in
+       let base_stmt = { s with s = SIf (test, s1, s2) } in
+       base_stmt, merge_envs [env; env1; env2])
+  | SMatch (es, branches) ->
+    let es = List.map interp_exp es in
+    (* TODO: Precompute the match as much as possible *)
+    let branches, envs =
+      List.map
+        (fun (p, stmt) ->
+          let stmt', env' = interp_stmt env stmt in
+          (p, stmt'), env')
+        branches
+      |> List.split
+    in
+    let base_stmt = { s with s = SMatch (es, branches) } in
+    base_stmt, merge_envs (env :: envs)
 ;;
 
+(* After we do partial interpretation of a handler body, there will likely be many
+   variables which are now unused, because all their uses got inlined. Remove
+   definitions and mutations for such variables.
+
+   Strategy: Live variable analysis. Walk _backwards_ through the statement, keeping
+   track of which variables we see used. If we get to a mutation or definition of
+   a variable we haven't seen, we can safely remove it.
+*)
+let remove_unused_variables stmt =
+  let rec aux live_vars stmt =
+    match stmt.s with
+    | SSeq (s1, s2) ->
+      (* Visit s2 first, since we're going backwards *)
+      let live_vars, s2' = aux live_vars s2 in
+      let live_vars, s1' = aux live_vars s1 in
+      live_vars, { stmt with s = SSeq (s1', s2') }
+    (* For most statements, we just collect the variables that are used
+       inside it *)
+    | SNoop | SPrintf _ | SRet _ | SUnit _ | SGen _ | STableInstall _ ->
+      let acc = ref live_vars in
+      variable_extractor#visit_statement acc stmt;
+      !acc, stmt
+    (* When we see a variable assignment or declaration, remove it if
+       the variable it refers to is not alive. Never remove function calls
+       (or hashes?) because they might have side effects.
+    *)
+    | SLocal (id, _, e) ->
+      let cannot_remove_e = function
+        | EHash _ | ECall _ -> false
+        | _ -> true
+      in
+      let stmt' =
+        if IdSet.mem id live_vars || cannot_remove_e e.e
+        then stmt
+        else { stmt with s = SNoop }
+      in
+      (* The variable is no longer live (because we're now before it was
+         defined in the first place!) *)
+      let live_vars = IdSet.remove id live_vars in
+      let live_vars = extract_variables ~acc:live_vars e in
+      live_vars, stmt'
+    | SAssign (id, e) ->
+      (* Same as SLocal but we don't unalive the variable *)
+      let cannot_remove_e = function
+        | EHash _ | ECall _ -> false
+        | _ -> true
+      in
+      let stmt' =
+        if IdSet.mem id live_vars || cannot_remove_e e.e
+        then stmt
+        else { stmt with s = SNoop }
+      in
+      let live_vars = extract_variables ~acc:live_vars e in
+      live_vars, stmt'
+    (* We can't remove the variables that are declared as part of a table match
+         without changing semantics, so just make sure we unalive them and gather
+         any arguments to the match *)
+    | STableMatch tm ->
+      let live_vars =
+        let acc = ref live_vars in
+        variable_extractor#visit_statement acc stmt;
+        !acc
+      in
+      let live_vars =
+        List.fold_left (fun acc id -> IdSet.remove id acc) live_vars tm.outs
+      in
+      live_vars, stmt
+    (* Code inside a branch can add live variables, but it can't remove them
+       (since they were used outside the branch, and so weren't defined inside it) *)
+    | SIf (test, s1, s2) ->
+      let live_vars0 = extract_variables ~acc:live_vars test in
+      let live_vars1, s1 = aux live_vars s1 in
+      let live_vars2, s2 = aux live_vars s2 in
+      let live_vars' =
+        IdSet.union live_vars0 (IdSet.union live_vars1 live_vars2)
+      in
+      live_vars', { stmt with s = SIf (test, s1, s2) }
+    | SMatch (es, branches) ->
+      let live_vars0 =
+        List.fold_left (fun acc e -> extract_variables ~acc e) live_vars es
+      in
+      let live_varses, branches =
+        List.map
+          (fun (p, stmt) ->
+            let live_vars, stmt' = aux live_vars stmt in
+            live_vars, (p, stmt'))
+          branches
+        |> List.split
+      in
+      let live_vars' = List.fold_left IdSet.union live_vars0 live_varses in
+      live_vars', { stmt with s = SMatch (es, branches) }
+  in
+  aux IdSet.empty stmt |> snd
+;;
+
+(* Two passes:
+   1.) Normal partial interpretation, which performs constant folding, removes
+       unused if-branches, and replaces variables with their definition where possible.
+   2.) Remove any variables which are now unused (because all their uses got inlined) *)
 let interp_body builtin_tys env (params, stmt) =
-  let level = 1 in
   let builtins =
     let open Builtins in
     (ingr_port_id, builtin_tys.ingr_port_ty)
     :: (this_id, builtin_tys.this_ty)
     :: builtin_vars
   in
-  let env =
-    env |> add_builtin_defs level builtins |> add_builtin_defs level params
-  in
-  params, fst (interp_stmt env level stmt)
+  let env = env |> add_builtin_defs builtins |> add_builtin_defs params in
+  let stmt' = interp_stmt env stmt |> fst |> remove_unused_variables in
+  params, stmt'
 ;;
 
 let interp_decl builtin_tys env d =
-  let add_dec env id =
-    IdMap.add
-      id
-      { level = 0; body = None; is_declared = true; declared_as = None }
-      env
-  in
+  let add_dec env id = IdMap.add id (new_unknown ()) env in
   match d.d with
   | DGlobal (id, ty, e) ->
     let e = interp_exp env e in
@@ -416,47 +538,31 @@ let interp_decl builtin_tys env d =
     (* TODO: Maybe interp in the body? Maybe that's handled later? *)
     env, { d with d = DMemop { mid; mparams; mbody } }
   | DHandler (id, s, body) ->
-    let env = add_dec env id in
+    (* let env = add_dec env id in *)
     env, { d with d = DHandler (id, s, interp_body builtin_tys env body) }
   | DEvent (id, _, _) | DExtern (id, _) ->
     let env = add_dec env id in
     env, d
   | DAction acn ->
     let env = add_dec env acn.aid in
-    let level = 1 in
     let acn_env =
-      env
-      |> add_builtin_defs level acn.aconst_params
-      |> add_builtin_defs level acn.aparams
+      env |> add_builtin_defs acn.aconst_params |> add_builtin_defs acn.aparams
     in
     let abody = List.map (interp_exp acn_env) acn.abody in
     env, { d with d = DAction { acn with abody } }
   | DParser _ -> env, d
 ;;
 
-let interp_prog ds = ds
-(* FIXME: In addition to keeping declarations for variables which are mutated, we also
-   need to keep mutations which might or might not get overwritten later.
-   For example, the following program prints 8 when in(1,2) is called, but should
-   print 10:
-
-   event in(int<<8>> i, int<<8>> j) {
-     int<<'a>> k = 2;
-     if (j == 2) { k = 3; }
-     i = k;
-     k = 5;
-     if (j == 7) { k = 4; }
-     printf("%d", i+j + k);
-   }
-*)
-(* let builtins =
+let interp_prog ds =
+  let builtins =
     let open Builtins in
     [recirc_id, recirc_ty; self_id, self_ty]
   in
-  let env = ref (IdMap.empty |> add_builtin_defs 0 builtins) in
+  let env = ref (IdMap.empty |> add_builtin_defs builtins) in
   List.map
     (fun d ->
-      let env', d = interp_decl !env d in
+      let env', d = interp_decl Builtins.tofino_builtin_tys !env d in
       env := env';
       d)
-    ds *)
+    ds
+;;
