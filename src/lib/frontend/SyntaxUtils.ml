@@ -59,13 +59,14 @@ let wrap_effect base lst =
 
 let rec is_global_rty rty =
   match TyTQVar.strip_links rty with
-  | TBool | TVoid | TGroup | TInt _ | TEvent | TFun _ | TMemop _ | TPat _-> false
+  | TBool | TVoid | TGroup | TInt _ | TEvent | TFun _ | TMemop _ | TPat _ ->
+    false
   | TQVar _ -> false (* I think *)
   | TName (_, _, b) | TAbstract (_, _, b, _) -> b
   | TTuple lst -> List.exists is_global_rty lst
   | TRecord lst -> List.exists (fun (_, rty) -> is_global_rty rty) lst
   | TVector (t, _) -> is_global_rty t
-  | TTable (_) -> true
+  | TTable _ -> true
   | TAction _ -> false
 ;;
 
@@ -74,13 +75,14 @@ let is_global ty = is_global_rty ty.raw_ty
 (* Similar to is_global_rty, but also returns false for TQVars *)
 let rec is_not_global_rty rty =
   match TyTQVar.strip_links rty with
-  | TBool | TVoid | TGroup | TInt _ | TEvent | TFun _ | TMemop _ | TPat _ -> true
+  | TBool | TVoid | TGroup | TInt _ | TEvent | TFun _ | TMemop _ | TPat _ ->
+    true
   | TQVar _ -> false (* I think *)
   | TName (_, _, b) | TAbstract (_, _, b, _) -> not b
   | TTuple lst -> List.for_all is_not_global_rty lst
   | TRecord lst -> List.for_all (fun (_, rty) -> is_not_global_rty rty) lst
   | TVector (t, _) -> is_not_global_rty t
-  | TTable (_) -> false
+  | TTable _ -> false
   | TAction _ -> false
 ;;
 
@@ -283,10 +285,10 @@ let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
     if List.length lst1 <> List.length lst2
     then false
     else List.for_all2 equiv_raw_ty lst1 lst2
-  | TTable(t1), TTable(t2) -> 
-    (List.for_all2 equiv_size t1.tkey_sizes t2.tkey_sizes)
-    &&  (List.for_all2 equiv_ty t1.tparam_tys t2.tparam_tys)
-    &&  (List.for_all2 equiv_ty t1.tret_tys t2.tret_tys)
+  | TTable t1, TTable t2 ->
+    List.for_all2 equiv_size t1.tkey_sizes t2.tkey_sizes
+    && List.for_all2 equiv_ty t1.tparam_tys t2.tparam_tys
+    && List.for_all2 equiv_ty t1.tret_tys t2.tret_tys
   | ( ( TBool
       | TMemop _
       | TInt _
@@ -301,7 +303,7 @@ let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
       | TTuple _
       | TAbstract _
       | TAction _
-      | TTable _)
+      | TTable _ )
     , _ ) -> false
 
 and equiv_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
@@ -355,10 +357,11 @@ let rec is_compound e =
 ;;
 
 (* Turn a list of statements into an SSeq (or a SNoop, if empty) *)
-let sequence_stmts lst =
+let rec sequence_stmts lst =
   match lst with
   | [] -> snoop
-  | hd :: tl -> List.fold_left (fun acc s -> sseq acc s) hd tl
+  | { s = SNoop } :: tl -> sequence_stmts tl
+  | hd :: tl -> sseq hd (sequence_stmts tl)
 ;;
 
 (* Turn a SSeq into a list of statements. Only applies to top-level SSeqs *)
@@ -439,52 +442,52 @@ let prune_constraints ?(ignore_contradictions = false) constraints =
   aux [] constraints |> List.rev
 ;;
 
-
-let extract_action_body (body:statement) : action_body  =
-  let action_body = match flatten_stmt body with
+let extract_action_body (body : statement) : action_body =
+  let action_body =
+    match flatten_stmt body with
     | [{ s = SRet (Some e1) }] -> [e1]
-    | [{ s = SRet (None) }] -> []
-    | _ -> error "action body is not well formed, it must consist of only a return statement."
+    | [{ s = SRet None }] -> []
+    | _ ->
+      error
+        "action body is not well formed, it must consist of only a return \
+         statement."
   in
   action_body
 ;;
 
-
-let mk_daction id rty cp p body span = decl_sp (DAction (id, rty, cp, (p, extract_action_body body))) span
+let mk_daction id rty cp p body span =
+  decl_sp (DAction (id, rty, cp, (p, extract_action_body body))) span
 ;;
 
-
-let mk_entry prio pats acn args = 
-  {eprio=prio;
-  eaction = acn;
-  ematch = pats;
-  eargs = args;}
+let mk_entry prio pats acn args =
+  { eprio = prio; eaction = acn; ematch = pats; eargs = args }
 ;;
 
-(* convert something parsed as an expression into a pattern *) 
+(* convert something parsed as an expression into a pattern *)
 let tpat_of_exp exp =
   match exp.e with
   (* if we somehow get an EPatWild, keep it *)
-  | EPatWild(_) -> exp
+  | EPatWild _ -> exp
   (* _ is a builtin for wildcard *)
-  | EVar(Cid.Id("_", _)) ->
-    {exp with e=EPatWild(None)}
-  (* &&& is an operation that produces a pattern, 
-     so keep the expression as is *) 
-  | EOp(PatMask, _) -> exp
+  | EVar (Cid.Id ("_", _)) -> { exp with e = EPatWild None }
+  (* &&& is an operation that produces a pattern,
+     so keep the expression as is *)
+  | EOp (PatMask, _) -> exp
   (* pattern values are already patterns *)
-  | EVal({v=VPat(_);}) -> exp 
-  (* everything else is assumed to be an int and 
+  | EVal { v = VPat _ } -> exp
+  (* everything else is assumed to be an int and
      gets wrapped in a PatExact op *)
   | _ -> op_sp PatExact [exp] exp.espan
 ;;
 
 let mk_tblinstall_single id entries span =
-  if ((List.length entries) > 1)
-  then (Console.error_position span "table_install can only install one entry at a time.")
-  else (tblinstall_sp id entries span)
+  if List.length entries > 1
+  then
+    Console.error_position
+      span
+      "table_install can only install one entry at a time."
+  else tblinstall_sp id entries span
 ;;
-
 
 let cid_of_exp (ex : exp) : Cid.t =
   match ex.e with
@@ -494,7 +497,8 @@ let cid_of_exp (ex : exp) : Cid.t =
 
 let exp_to_cid = cid_of_exp
 
-let is_evar exp = match exp.e with
-  | EVar(_) -> true
+let is_evar exp =
+  match exp.e with
+  | EVar _ -> true
   | _ -> false
-
+;;

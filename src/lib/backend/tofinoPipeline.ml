@@ -125,7 +125,7 @@ let atomic_op_form ds =
     "-------Making variables in if / match conditions constants--------";
   (* form: + any variable referenced in an if or match statement's
            condition is not mutated in its branches.*)
-  let ds = PartialSingleAssignment.const_branch_vars ds in
+  let ds = ImmutableConditions.make_conditions_immutable ds in
   (*   let ds = if (!do_const_branch_vars)
     then (PartialSingleAssignment.const_branch_vars ds)
     else (ds)

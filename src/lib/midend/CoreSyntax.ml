@@ -489,10 +489,11 @@ let ty_to_size ty =
 let size_of_tint = ty_to_size
 
 (* Turn a list of statements into an SSeq (or a SNoop, if empty) *)
-let sequence_stmts lst =
+let rec sequence_stmts lst =
   match lst with
   | [] -> snoop
-  | hd :: tl -> List.fold_left (fun acc s -> sseq acc s) hd tl
+  | { s = SNoop } :: tl -> sequence_stmts tl
+  | hd :: tl -> sseq hd (sequence_stmts tl)
 ;;
 
 let id_of_exp exp =

@@ -96,7 +96,7 @@
    eliminateInterpOps
    normalizeInts
    singleAssignment
-   partialSingleAssignment
+   immutableConditions
    uniqueSpans
    uniqueIds
    interpHelpers
