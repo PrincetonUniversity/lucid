@@ -112,10 +112,6 @@ let atomic_op_form ds =
   (* convert casts of values into values, e.g., (int<<2>>)1 --> 1w2 *)
   let ds = EliminateValueCasts.eliminate_value_casts ds in
   print_if_debug ds;
-  print_if_verbose "-------Eliminating range relational ops--------";
-  (* form: + no GTE / LTE ops *)
-  let ds = EliminateEqRangeOps.transform ds in
-  print_if_debug ds;
   print_if_verbose "-------Adding default branches--------";
   (* form: + every match statement has a default branch *)
   let ds = AddDefaultBranches.add_default_branches ds in
@@ -126,10 +122,6 @@ let atomic_op_form ds =
   (* form: + any variable referenced in an if or match statement's
            condition is not mutated in its branches.*)
   let ds = ImmutableConditions.make_conditions_immutable ds in
-  (*   let ds = if (!do_const_branch_vars)
-    then (PartialSingleAssignment.const_branch_vars ds)
-    else (ds)
-  in *)
   print_if_debug ds;
   (*   dbg_dump_core_prog "BeforeConstBranchVars" ds;
   dbg_dump_core_prog "AfterConstBranchVars" ds; *)

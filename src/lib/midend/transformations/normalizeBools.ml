@@ -9,8 +9,7 @@ open Z3
 module Z3Int = Arithmetic.Integer
 module DBG = BackendLogging
 
-let silent = ref false;;
-
+let silent = ref false
 let outc = ref None
 let dprint_endline = ref DBG.no_printf
 
@@ -70,52 +69,39 @@ module NormalizeRelops = struct
 
   (* normalize an operation expression in an if *)
   and normalize_erelop (op : op) (args : exp list) ety espan =
-    match op with
+    let precompute_and_compare_to_zero e1 precomp_op e2 cmp_op =
+      let test_var_cid, calc_test_var =
+        create_precompute_test e1 precomp_op e2
+      in
+      let new_e1 = aexp (EVar test_var_cid) e1.ety Span.default in
+      (* new_e2 should be the same size as new_e1 *)
+      let new_e2 = value_to_exp (vint 0 (intwidth_of_exp e1)) in
+      let new_exp = aexp (EOp (cmp_op, [new_e1; new_e2])) ety espan in
+      new_exp, [calc_test_var]
+    in
+    match op, args with
     (* boolean operations -- recurse on args *)
-    | And | Or | Not | Cast _ ->
+    | (And | Or | Not | Cast _), _ ->
       let new_args, arg_precompute_stmts = normalize_exps args in
       aexp (EOp (op, new_args)) ety espan, arg_precompute_stmts
     (* relational operators -- precompute depending on form *)
-    | Eq | Neq ->
+    | (Eq | Neq), _ ->
       (match args with
-      (* var, int  --> no change *)
-      | [{ e = EVar _; _ }; { e = EVal _; _ }] ->
-        aexp (EOp (op, args)) ety espan, []
-      (* int, var  --> var, int *)
-      | [{ e = EVal _; _ }; { e = EVar _; _ }] ->
-        aexp (EOp (op, CL.rev args)) ety espan, []
-      (* expr1, expr2 --> precompute var_test = expr1 - expr2; var_test == 0; *)
-      | [e1; e2] ->
-        let test_var_cid, calc_test_var = create_precompute_test e1 Sub e2 in
-        let new_e1 = aexp (EVar test_var_cid) e1.ety Span.default in
-        (* new_e2 should be the same size as new_e1 *)
-        let new_e2 = value_to_exp (vint 0 (intwidth_of_exp e1)) in
-        let new_exp = aexp (EOp (op, [new_e1; new_e2])) ety espan in
-        new_exp, [calc_test_var]
-      (* optimization case -- int, int --> evaluate here and
-          replace with a boolean value, but int, int ops
-          should be eliminated earlier *)
-      | _ -> error "unexpected args for Eq or Neq")
-    | Less ->
-      (match args with
-      | [e1; e2] ->
-        let test_var_cid, calc_test_var = create_precompute_test e2 SatSub e1 in
-        let new_e1 = aexp (EVar test_var_cid) e1.ety Span.default in
-        let new_e2 = value_to_exp (vint 0 (intwidth_of_exp e1)) in
-        let new_exp = aexp (EOp (Neq, [new_e1; new_e2])) ety espan in
-        new_exp, [calc_test_var]
-      | _ -> error "unexpected args for Less")
-    | More ->
-      (match args with
-      | [e1; e2] ->
-        let test_var_cid, calc_test_var = create_precompute_test e1 SatSub e2 in
-        let new_e1 = aexp (EVar test_var_cid) e1.ety Span.default in
-        let new_e2 = value_to_exp (vint 0 (intwidth_of_exp e1)) in
-        let new_exp = aexp (EOp (Neq, [new_e1; new_e2])) ety espan in
-        new_exp, [calc_test_var]
-      | _ -> error "unexpected args for More")
-    | Leq | Geq ->
-      error "[normalize_erelop] Leq and Geq should have been eliminated by now"
+       (* var, int  --> no change *)
+       | [{ e = EVar _; _ }; { e = EVal _; _ }] ->
+         aexp (EOp (op, args)) ety espan, []
+       (* int, var  --> var, int *)
+       | [{ e = EVal _; _ }; { e = EVar _; _ }] ->
+         aexp (EOp (op, CL.rev args)) ety espan, []
+       (* expr1, expr2 --> precompute var_test = expr1 - expr2; var_test == 0; *)
+       | [e1; e2] -> precompute_and_compare_to_zero e1 Sub e2 op
+       | _ -> error "unexpected args for Eq or Neq")
+    | Less, [lesser; greater] | More, [greater; lesser] ->
+      precompute_and_compare_to_zero greater SatSub lesser Neq
+    | Leq, [lesser; greater] | Geq, [greater; lesser] ->
+      precompute_and_compare_to_zero lesser SatSub greater Eq
+    | (Less | More | Leq | Geq), _ ->
+      error "unexpected args for Less/More/Leq/Geq"
     (* other operators are the base case, because they cannot have rel ops as leaves *)
     | _ -> aexp (EOp (op, args)) ety espan, []
 
@@ -164,7 +150,7 @@ module NormalizeRelops = struct
         inherit [_] s_map as super
 
         (* skip memops! *)
-        method! visit_DMemop _ m = DMemop (m)
+        method! visit_DMemop _ m = DMemop m
 
         method! visit_statement ctx stmt =
           match stmt with
@@ -222,31 +208,31 @@ module NormalizeBoolExps = struct
     (* operations *)
     | EOp (op, args), _ ->
       (match op with
-      (* boolean operations *)
-      | And -> Boolean.mk_and ctx (CL.map (z3_from_expr ctx) args)
-      | Or -> Boolean.mk_or ctx (CL.map (z3_from_expr ctx) args)
-      | Not -> Boolean.mk_not ctx (z3_from_expr ctx (CL.hd args))
-      (* relational operations -- must be of the form <var> <relop> <const> *)
-      | Eq ->
-        let a1, a2 = unpack_binargs args in
-        Boolean.mk_eq ctx (z3_from_expr ctx a1) (z3_from_expr ctx a2)
-      | Neq ->
-        let a1, a2 = unpack_binargs args in
-        Boolean.mk_not
-          ctx
-          (Boolean.mk_eq ctx (z3_from_expr ctx a1) (z3_from_expr ctx a2))
-      | Less | More ->
-        error
-          "got to an less or greater than in z3_from_expr -- this probably \
-           means that the clause transformation pass has not run, or went \
-           wrong. "
-      | Cast _ ->
-        z3_from_expr ctx (CL.hd args)
-        (* we don't care about the bit width here. *)
-      | _ ->
-        error
-          "Unsupported operation in z3_from_expr -- the clause transformation \
-           pass may not have run, or failed.")
+       (* boolean operations *)
+       | And -> Boolean.mk_and ctx (CL.map (z3_from_expr ctx) args)
+       | Or -> Boolean.mk_or ctx (CL.map (z3_from_expr ctx) args)
+       | Not -> Boolean.mk_not ctx (z3_from_expr ctx (CL.hd args))
+       (* relational operations -- must be of the form <var> <relop> <const> *)
+       | Eq ->
+         let a1, a2 = unpack_binargs args in
+         Boolean.mk_eq ctx (z3_from_expr ctx a1) (z3_from_expr ctx a2)
+       | Neq ->
+         let a1, a2 = unpack_binargs args in
+         Boolean.mk_not
+           ctx
+           (Boolean.mk_eq ctx (z3_from_expr ctx a1) (z3_from_expr ctx a2))
+       | Less | More ->
+         error
+           "got to an less or greater than in z3_from_expr -- this probably \
+            means that the clause transformation pass has not run, or went \
+            wrong. "
+       | Cast _ ->
+         z3_from_expr ctx (CL.hd args)
+         (* we don't care about the bit width here. *)
+       | _ ->
+         error
+           "Unsupported operation in z3_from_expr -- the clause transformation \
+            pass may not have run, or failed.")
       (* statements that should have been eliminated by now. *)
     | EVar _, rty ->
       let expstr = Printing.exp_to_string exp in
@@ -271,7 +257,8 @@ module NormalizeBoolExps = struct
       error
         "z3_from_expr got an eflood -- there shouldn't be a flood constructor \
          inside of a boolean"
-    | ETableCreate _, _ -> error "[z3_from_expr] a create table call inside a bool"
+    | ETableCreate _, _ ->
+      error "[z3_from_expr] a create table call inside a bool"
   ;;
 
   (* tell Z3 to convert a boolean expression into disjunctive normal form *)
@@ -332,10 +319,10 @@ module NormalizeBoolExps = struct
       let arg_exps = Expr.get_args z3e |> CL.map exp_of_z3e in
       (* convert !(x == y)* --> x != y *)
       (match op, arg_exps with
-      | Not, [{ e = EOp (Eq, inner_args); espan; ety }] ->
-        { e = EOp (Neq, inner_args); espan; ety }
-      (* need to fold and / or ops into a tree *)
-      | _ -> fold_commutative_eop (eop_ty op arg_exps (ty rty)))
+       | Not, [{ e = EOp (Eq, inner_args); espan; ety }] ->
+         { e = EOp (Neq, inner_args); espan; ety }
+       (* need to fold and / or ops into a tree *)
+       | _ -> fold_commutative_eop (eop_ty op arg_exps (ty rty)))
   ;;
 
   (* convert a list of disjunctions into a lucid expression *)
@@ -378,7 +365,7 @@ module NormalizeBoolExps = struct
         inherit [_] s_map as super
 
         (* skip memops! *)
-        method! visit_DMemop _ m = DMemop (m)
+        method! visit_DMemop _ m = DMemop m
 
         method! visit_statement ctx stmt =
           match stmt with
@@ -391,8 +378,7 @@ module NormalizeBoolExps = struct
 end
 
 let do_passes ds =
-  if (not !silent)
-  then (DBG.start_mlog __FILE__ outc dprint_endline);
+  if not !silent then DBG.start_mlog __FILE__ outc dprint_endline;
   (* normalize the relational operations inside of if statements, so
      that each atomic boolean is a relational operation of the form
      <var> <!=, ==> <const> *)

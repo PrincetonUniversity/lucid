@@ -85,7 +85,6 @@
    builtins
    TQVar
    backendLogging
-   eliminateEqRangeOps
    addDefaultBranches
    eliminateFloods
    precomputeArgs
