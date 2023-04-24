@@ -343,6 +343,11 @@ let rec interp_stmt env s : statement * env =
    | SNoop | SSeq _ -> ()
    | _ -> print_endline @@ "Interping " ^ CorePrinting.stmt_to_string s); *)
   let interp_exp = interp_exp env in
+  let should_inline () =
+    match s.spragma with
+    | Some ("noinline", []) -> false
+    | _ -> true
+  in
   match s.s with
   | SNoop -> s, env
   | SUnit e -> { s with s = SUnit (interp_exp e) }, env
@@ -371,12 +376,16 @@ let rec interp_stmt env s : statement * env =
   (* Cases where we bind/mutate variables *)
   | SLocal (id, ty, exp) ->
     let exp = interp_exp exp in
-    let pv = extract_partial_value env exp in
+    let pv =
+      if should_inline () then extract_partial_value env exp else new_unknown ()
+    in
     let new_s = { s with s = SLocal (id, ty, exp) } in
     new_s, IdMap.add id pv env
   | SAssign (id, exp) ->
     let exp = interp_exp exp in
-    let pv = extract_partial_value env exp in
+    let pv =
+      if should_inline () then extract_partial_value env exp else new_unknown ()
+    in
     let new_s = { s with s = SAssign (id, exp) } in
     new_s, IdMap.add id pv env
   | STableMatch tm ->

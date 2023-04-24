@@ -127,6 +127,7 @@
 %token <Span.t> ARROW
 %token <Span.t> EXTERN
 %token <Span.t> TYPE
+%token <Span.t> NOINLINE
 
 %token <Span.t> TABLE_TYPE
 %token <Span.t> KEY_SIZE
@@ -523,7 +524,9 @@ multiargs:
 
 statement1:
     | ty ID ASSIGN exp SEMI                 { slocal_sp (snd $2) $1 $4 (Span.extend $1.tspan $5) }
+    | NOINLINE ty ID ASSIGN exp SEMI        { slocal_sp (snd $3) $2 $5 (Span.extend $1 $6) |> noinline }
     | ID ASSIGN exp SEMI	                  { sassign_sp (snd $1) $3 (Span.extend (fst $1) $4) }
+    | NOINLINE ID ASSIGN exp SEMI	          { sassign_sp (snd $2) $4 (Span.extend $1 $5) |> noinline }
     | RETURN SEMI                           { sret_sp None (Span.extend $1 $2) }
     | RETURN exp SEMI                       { sret_sp (Some $2) (Span.extend $1 $3) }
     | GENERATE exp SEMI                     { gen_sp (GSingle None) $2 (Span.extend $1 $3)}

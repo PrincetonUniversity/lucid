@@ -229,6 +229,8 @@ and tbl_entry =
 and statement =
   { s : s
   ; sspan : sp
+  ; (* Only used during partial interpretation; only appears on SLocal or SAssign *)
+    noinline : bool
   }
 
 (* event handler bodies *)
@@ -505,8 +507,8 @@ let module_alias_sp id1 e cid1 cid2 span =
 let event_sp id s cs p span = decl_sp (DEvent (id, s, cs, p)) span
 
 (* statements *)
-let statement s = { s; sspan = Span.default }
-let statement_sp s span = { s; sspan = span }
+let statement s = { s; sspan = Span.default; noinline = false }
+let statement_sp s span = { s; sspan = span; noinline = false }
 let snoop = statement SNoop
 let sseq s1 s2 = statement (SSeq (s1, s2))
 let slocal id ty e = statement (SLocal (id, ty, e))
@@ -530,6 +532,8 @@ let scall_sp cid es span = sexp_sp (call_sp cid es span) span
 let tblinstall_sp tbl entries span =
   statement_sp (STableInstall (tbl, entries)) span
 ;;
+
+let noinline stmt = { stmt with noinline = true }
 
 (* Interface spefications *)
 let spec ispec = { ispec; ispan = Span.default }

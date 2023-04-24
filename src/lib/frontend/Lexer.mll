@@ -70,6 +70,7 @@ rule token = parse
   | "match"           { MATCH (position lexbuf) }
   | "with"            { WITH (position lexbuf) }
   | "type"            { TYPE (position lexbuf) }
+  | "noinline"        { NOINLINE (position lexbuf) }
 
   | "table_type"              { TABLE_TYPE (position lexbuf) }
   | "key_size:"               { KEY_SIZE (position lexbuf) }
