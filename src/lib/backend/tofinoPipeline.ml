@@ -89,11 +89,10 @@ let print_if_debug ds =
     + each action belongs to 1 table
    output form: a CoreSyntax program with all of the above, and:
     + no casts of literals
-    + no GTE / LTE ops
     + unit statements may only be function calls
     + no print statements
     + every match statement has a default branch
-    + any variable referenced in an if or match statement's condition is a constant variable
+    + No variable referenced in an if or match statement's condition mutated before the end of its branches
     + every argument in a function call is either a variable or value
     + in handlers, boolean operations only occur in if condition expressions
     + in handlers, if condition expressions are in disjunctive normal form, with atoms of the form (<var> == | != <value>)
@@ -110,6 +109,8 @@ let atomic_op_form ds =
   print_if_verbose "-------Eliminating value cast ops--------";
   (* form: + no casts of literals *)
   (* convert casts of values into values, e.g., (int<<2>>)1 --> 1w2 *)
+  (* FIXME: Shouldn't be necessary if we get partial interpretation working, but
+            will still be needed if we allow users to disable partial interpretation *)
   let ds = EliminateValueCasts.eliminate_value_casts ds in
   print_if_debug ds;
   print_if_verbose "-------Adding default branches--------";
@@ -120,7 +121,8 @@ let atomic_op_form ds =
   print_if_verbose
     "-------Making variables in if / match conditions constants--------";
   (* form: + any variable referenced in an if or match statement's
-           condition is not mutated in its branches.*)
+           condition is not mutated in its branches, except possibly
+           as the very last statement. *)
   let ds = ImmutableConditions.make_conditions_immutable ds in
   print_if_debug ds;
   (*   dbg_dump_core_prog "BeforeConstBranchVars" ds;
@@ -133,7 +135,7 @@ let atomic_op_form ds =
   (* form:
     + in handlers, boolean operations only occur in if condition expressions
     + in handlers, if condition expressions are in disjunctive normal form,
-      with atoms of the form (<var> == | != <value>)
+      with atoms of the form (<var> == <value>) or (<var> != <value>)
     + there are no boolean variables (1-bit ints instead) *)
   let ds = EliminateBools.do_passes ds in
   (* form: + integer operations are all binary operations *)

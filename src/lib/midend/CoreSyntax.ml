@@ -493,6 +493,7 @@ let rec sequence_stmts lst =
   match lst with
   | [] -> snoop
   | { s = SNoop } :: tl -> sequence_stmts tl
+  | [hd] -> hd
   | hd :: tl -> sseq hd (sequence_stmts tl)
 ;;
 
