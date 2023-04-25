@@ -332,16 +332,27 @@ let make_return_def id synthesis_response =
 
 let make_static_defs id idx_expr = 
   let idx_def = (statement (SLocal ((make_idx_val id), (ty (TInt (IConst 32))), idx_expr))) in
-  [idx_def]
+  [idx_def;(make_local_synth_var_def (f_id id)); (make_local_synth_var_def (g_id id)); (make_local_synth_var_def (mem_id id))]
+
+
+let array_update_def id synthesis_response = 
+  let make_branch i = 
+    let memop_id = (List.nth synthesis_response.memops i).id in
+    let st = statement (SAssign ((make_res_id id), (exp (ECall (Arrays.array_update_complex_cid, [(make_evar id); (make_evar (make_idx_val id)); (make_evar memop_id); (make_evar (f_id id)); (make_evar (g_id id)); (make_num_size 0 DFASynthesis.bv_size)]))))) in
+    let pat = PNum (Z.of_int i) in 
+    ([pat], st) in
+  statement (SMatch ([(make_evar (mem_id id))], (List.map make_branch (List.filter (fun id -> LetterMap.exists (fun _ i -> i == id) synthesis_response.whichop) DFASynthesis.regact_ids))))
 
 let make_transition_statements env id idx_expr = 
+  print_endline "GOTTOOTHER HERE KJFNEDSWDKJSFNSEADJKFNWASEKDFJNASNKDJ";
   let re_info = IdMap.find id env.re_info_map in
   let static_defs = make_static_defs id idx_expr in
   let binding_defs = List.append static_defs (make_binding_defs id re_info.binders env.current_handler env.params_map (make_evar (make_idx_val id))) in
   let pred_defs = (make_pred_defs id re_info.preds env.current_handler) in
   let pred_update_defs = List.append binding_defs ((counter_def id re_info env.current_handler re_info.preds) :: pred_defs) in
   let match_def = List.append pred_update_defs ((res_def id) :: (make_match_def id re_info.alphabet re_info.synthesis_response re_info.event_order re_info.preds)) in
-  let return_def = List.append match_def (make_return_def id re_info.synthesis_response) in
+  let match_update_def = List.append match_def ((res_def id) :: [(array_update_def id re_info.synthesis_response)]) in
+  let return_def = List.append match_update_def (make_return_def id re_info.synthesis_response) in
   return_def
 ;;
 
@@ -354,22 +365,14 @@ let make_counter_branch id re_info eid params=
   (p,s) 
 ;;
 
-let array_update_def id synthesis_response = 
-  let make_branch i = 
-    let memop_id = (List.nth synthesis_response.memops i).id in
-    let st = statement (SAssign ((make_res_id id), (exp (ECall (Arrays.array_update_complex_cid, [(make_evar id); (make_evar (make_idx_val id)); (make_evar memop_id); (make_evar (f_id id)); (make_evar (g_id id)); (make_num_size 0 DFASynthesis.bv_size)]))))) in
-    let pat = PNum (Z.of_int i) in 
-    ([pat], st) in
-  statement (SMatch ([(make_evar (mem_id id))], (List.map make_branch (List.filter (fun id -> LetterMap.exists (fun _ i -> i == id) synthesis_response.whichop) DFASynthesis.regact_ids))))
 
 let make_trans_match env id idx_expr event_expr = 
   let re_info = IdMap.find id env.re_info_map in
   let static_defs = make_static_defs id idx_expr in
   let counter_def = List.append static_defs [(make_local_synth_var_def (make_counter_id id))] in 
-  let op_f_g_defs = List.append counter_def [(make_local_synth_var_def (f_id id)); (make_local_synth_var_def (g_id id)); (make_local_synth_var_def (mem_id id))] in
   let match_counter_calc = 
     let counter_update_match = statement (SMatch ([event_expr], (List.map (fun eid -> make_counter_branch id re_info eid (IdMap.find eid env.params_map)) re_info.event_order))) in
-    List.append op_f_g_defs [counter_update_match] in 
+    List.append counter_def [counter_update_match] in 
   let match_character_def = List.append match_counter_calc ((res_def id) :: (make_match_def id re_info.alphabet re_info.synthesis_response re_info.event_order re_info.preds)) in
   let match_update_def = List.append match_character_def ((res_def id) :: [(array_update_def id re_info.synthesis_response)]) in
   let return_def = List.append match_update_def (make_return_def id re_info.synthesis_response) in
@@ -383,24 +386,46 @@ let check_then_set_memop =
   let body = MBIf((exp (EOp (Eq, [(make_evar memval);(make_num 0)]))), (make_evar newval), (make_evar memval)) in
   (decl (DMemop (id, params, body)))
 
+(*RESETTING CODE*)
+let make_reset_event_id id = 
+  Id.create (String.cat (fst id) "reset")
+
+let reset_regex_event_decl id = 
+  decl (DEvent ((make_reset_event_id id), EBackground, [], [((make_idx_val id), ty (TInt (IConst 32)))]))
+
+let reset_regex_event_handler reid binders = 
+  let reset_exp size id = statement (SUnit (exp (ECall (array_set_cid, [(make_evar id);(make_evar (make_idx_val reid)); (make_num_size 0 size)])))) in
+  let resets = List.map (fun (_, id, _) -> reset_exp 32 (make_asgn_id reid id)) (List.flatten (List.map (fun b -> b.assignments) binders)) in
+  decl (DHandler ((make_reset_event_id reid), ([((make_idx_val reid), ty (TInt (IConst 32)))], statement (sequence_statements (List.append resets [(reset_exp DFASynthesis.bv_size reid)])))))
+
+let reset_regex_stmt id idx_expr = 
+  (*let eset = exp (ECall (array_set_cid, [exp (EVar (Cid.create_ids [id])); idx_expr; (make_num_size 0 DFASynthesis.bv_size)])) in
+  SUnit(eset)*)
+  SGen ((GSingle (None)), exp (ECall (Cid.create_ids [(make_reset_event_id id)], [idx_expr])))
 
 let replacer = 
   object (self)
     inherit [_] s_map as super
-
-    method! visit_DEvent env id event_sort constr_spec_list params = env := {(!env) with params_map=(IdMap.add id params (!env).params_map)}; DEvent (id, event_sort, constr_spec_list, params)
-    
-    method! visit_DHandler env id body = env := {(!env) with current_handler= (Some (id, (fst body)))}; DHandler (id, ((self#visit_body env) body))
-
-    method! visit_DVarRegex env id size alph vr = env := {(!env) with re_info_map=(IdMap.add id (re_info id alph vr) (!env).re_info_map)}; DVarRegex (id, size, alph, vr)
-    
     method! visit_ETransitionRegex env id idx ev_expr = 
       match ev_expr with 
       | None -> make_exp_from_statements id ((ans_def id) :: (make_transition_statements !env id idx))
       | Some e -> make_exp_from_statements id ((ans_def id) :: (make_trans_match !env id idx e))
 
+    method! visit_SResetRegex env id idx_expr = 
+      reset_regex_stmt id idx_expr
   end
   ;;
+
+let collector = 
+  object (self)
+    inherit [_] s_map as super
+    
+    method! visit_DEvent env id event_sort constr_spec_list params = env := {(!env) with params_map=(IdMap.add id params (!env).params_map)}; DEvent (id, event_sort, constr_spec_list, params)
+    
+    method! visit_DHandler env id body = env := {(!env) with current_handler= (Some (id, (fst body)))}; DHandler (id, ((self#visit_body env) body))
+
+    method! visit_DVarRegex env id size alph vr = env := {(!env) with re_info_map=(IdMap.add id (re_info id alph vr) (!env).re_info_map)}; DVarRegex (id, size, alph, vr)
+end;;
 
 
 
@@ -413,13 +438,16 @@ let replace_var_regex env id size vr =
   let tail = 
   List.append 
     (List.rev_map (make_global_def_asgn size id ) (List.flatten (List.map (fun b -> b.assignments) (binders vr))))
-    ((make_global_def size (IConst DFASynthesis.bv_size) id) :: used_memops) in
-  if ((!env).added_cts) then tail else (env := {(!env) with added_cts = true}; (check_then_set_memop) :: tail)
+    (List.append
+    ((make_global_def size (IConst DFASynthesis.bv_size) id) :: used_memops)
+    [(reset_regex_event_decl id); (reset_regex_event_handler id re_info.binders)]) in
+  if ((!env).added_cts) then tail else (env := {(!env) with added_cts = true}; List.append [(check_then_set_memop)] tail)
 ;;
 
 
 let process_prog ds = 
   let env = (ref {re_info_map=IdMap.empty; current_handler=None; params_map=IdMap.empty; added_cts = false}) in 
+  let ds = collector#visit_decls env ds in
   let ds = replacer#visit_decls env ds in
     let replace d = 
       match d.d with 

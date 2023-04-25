@@ -9,8 +9,8 @@ exit event DHCP_error();
 
 sre<<1024>> mtsre = 
 IDX = {
-    | DHCP_ack -> {hash<<10>>(13, cmac)}
-    | ip_packet_fwd -> {hash<<10>>(13, smac)}
+    | DHCP_ack -> {(int<<32>>) hash<<10>>(13, cmac)}
+    | ip_packet_fwd -> {(int<<32>>) hash<<10>>(13, smac)}
 }
 DETECT{
     (ip_packet_fwd)*

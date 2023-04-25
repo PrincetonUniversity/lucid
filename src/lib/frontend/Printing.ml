@@ -320,7 +320,7 @@ let rec e_to_string e =
   | EStmt (s, e) ->
     Printf.sprintf "{%s; return %s}" (stmt_to_string s) (exp_to_string e)
   | ETransitionRegex (id, idx_exp, ev_exp) ->
-    Printf.sprintf "{Transition %s with idx %s and ev %s}" (id_to_string id) (exp_to_string idx_exp) (match ev_exp with | Some e -> (exp_to_string e) | None -> "None")
+    Printf.sprintf "transition(%s, %s, %s)" (id_to_string id) (exp_to_string idx_exp) (match ev_exp with | Some e -> (exp_to_string e) | None -> "None")
   | ETableCreate(t) -> 
     Printf.sprintf "table_create<%s>((%s),%s, %s(%s))" 
       (ty_to_string t.tty)
@@ -446,6 +446,12 @@ and stmt_to_string s =
      "table_install(%s, {\n\t%s\n\t}\n);"
      (exp_to_string id)
      (List.map entry_to_string entries |> String.concat "\n")
+
+  | SResetRegex (id, idx) ->
+    Printf.sprintf 
+    "reset_regex(%s, %s);"
+    (id_to_string id)
+    (exp_to_string idx)
 ;;
 
 let statement_to_string = stmt_to_string

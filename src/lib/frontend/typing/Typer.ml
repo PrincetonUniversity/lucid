@@ -1101,6 +1101,106 @@ let infer_memop env params mbody =
     MBComplex { b1; b2; cell1; cell2; extern_calls; ret }
 ;;
 
+let rec distinct l = 
+  match l with 
+  | [] -> []
+  | hd :: tail -> if List.mem hd tail then tail else hd :: (distinct tail);;
+
+
+let get_asgn_vars asgns = distinct (List.map (fun (_, id, _) -> id) asgns);;
+
+let rec event_types vr = 
+  distinct (match vr.v_regex with
+  | VRBinding (event_id, assignments, pred, sub) -> event_id :: (event_types sub)
+  | VREmptySet | VREmptyStr -> []
+  | VRLetter (event_id, pred) -> [event_id]
+  | VRUnambigConcat (sub1, sub2) | VRAnd(sub1, sub2) | VROr(sub1, sub2) | VRConcat(sub1, sub2) -> (List.append (event_types sub1) (event_types sub2))
+  | VRClosure (sub) -> event_types sub);;
+
+let rec binding_types vr = 
+  distinct (match vr.v_regex with
+  | VRBinding (event_id, assignments, pred, sub) -> event_id :: (binding_types sub)
+  | VREmptySet | VREmptyStr | VRLetter _ -> []
+  | VRUnambigConcat (sub1, sub2) | VRAnd(sub1, sub2) | VROr(sub1, sub2) | VRConcat(sub1, sub2) -> (List.append (binding_types sub1) (binding_types sub2))
+  | VRClosure (sub) -> binding_types sub);;
+
+let rec at_most_one_true lob = 
+  match lob with 
+  | [] -> true
+  | b :: tail -> if b then (not (List.mem true tail)) else (at_most_one_true tail)
+
+let rec singleton event_type vr seen =
+  match vr.v_regex with 
+  | VREmptySet | VREmptyStr -> true
+  | VRBinding (event_id, assignments, pred, sub) -> 
+    if (event_type = event_id) then 
+      (not seen) && (singleton event_type sub true) else
+      (singleton event_type sub seen)
+  | VRLetter (event_id, pred) -> if (event_type = event_id) then (not seen) else true
+  | VRUnambigConcat (sub1, sub2) | VRAnd(sub1, sub2) | VROr(sub1, sub2) | VRConcat(sub1, sub2)  -> 
+    (at_most_one_true [(singleton event_type sub1 seen); (singleton event_type sub1 seen); seen])
+
+(*Check the typing rules for FLM patterns.*)
+let rec validate_var_regex id vr event_infos vars used unused = 
+  match vr.v_regex with
+  | VRBinding (event_id, assignments, pred, sub) -> 
+    if (List.mem event_id used) then (error_sp vr.v_regex_span "Binding of used event "^(id_to_string id)) else "";
+    if List.exists (fun id -> List.mem id vars) (get_asgn_vars assignments) then error_sp vr.v_regex_span"Var already in scope!" else "";
+  | VREmptySet | VREmptyStr | VRLetter (_, _) -> "";
+  | VRUnambigConcat (sub1, sub2) -> (validate_var_regex id vr event_infos vars used unused);
+    (validate_var_regex id vr event_infos vars [] (List.append used unused));
+  | VRAnd(sub1, sub2) | VROr(sub1, sub2) -> let new_used = List.append used unused in
+    (validate_var_regex id sub1 event_infos vars new_used []);
+    (validate_var_regex id sub2 event_infos vars new_used []);
+  | VRConcat(sub1, sub2) -> 
+    let es = (event_types sub1) in
+    let new_used = distinct (List.append es used) in 
+    let new_unused = List.filter (fun e -> not (List.mem e es)) unused in
+    (validate_var_regex id sub1 event_infos vars used unused);
+    (validate_var_regex id sub2 event_infos vars new_used new_unused);
+  | VRClosure (sub) ->  
+    if (List.exists (fun be -> (not (singleton be sub false))) (binding_types sub)) then Console.error_position vr.v_regex_span "Non-singleton binding under closure" else "";
+    (validate_var_regex id sub event_infos vars used unused);
+  ;;
+
+
+
+  (*let rec no_bindings vr = 
+      let event_defs = List.filter_map (fun d -> 
+    match d.d with
+    | DEvent (id, _, _, params) -> Some (id, params) 
+    | _ -> None) ds in 
+    match vr.v_regex with 
+    | VRBinding (event_id, assignments, pred, sub) -> 
+      Console.error_position vr.v_regex_span @@ Printf.sprintf "No bindings under connectors";
+    | VRUnambigConcat (sub1, sub2) -> 
+      Console.error_position vr.v_regex_span @@ Printf.sprintf "All Unambiguous concatenation should be at the top level";
+    | VRConcat (sub1, sub2) | VROr (sub1, sub2) | VRAnd (sub1, sub2) -> no_bindings sub1;no_bindings sub2
+    | VRClosure sub -> no_bindings sub
+    | _ -> () in 
+      match vr.v_regex with
+      | VREmptySet | VREmptyStr -> used, vars
+      | VRLetter (event_id, pred) -> if (not (List.exists (fun (id, params) -> event_id = id) event_infos)) then 
+        Console.error_position vr.v_regex_span @@ Printf.sprintf "%s: Not an event or wrong number of args" (id_to_string event_id);
+        (if (not (List.mem event_id used)) then event_id :: used else used), vars
+      | VRBinding (event_id, assignments, pred, sub) -> 
+        if (not (List.exists (fun (id, params) -> event_id = id) event_infos)) then 
+          Console.error_position vr.v_regex_span @@ Printf.sprintf "%s: Not an event or wrong number of args" (id_to_string event_id);
+        if (List.mem event_id used) then 
+          Console.error_position vr.v_regex_span @@ Printf.sprintf "%s: This binding event might not be its first occurrence" (id_to_string event_id);
+        if (List.exists (fun (_, id1, _) -> List.mem id1 vars) assignments) then
+          Console.error_position vr.v_regex_span @@ Printf.sprintf "%s: This variable has already been used" (id_to_string (List.find_map (fun (_, id1,_) -> if (List.mem id1 vars) then Some id1 else None) assignments));
+        check_var_regex id sub event_infos (event_id :: used) (List.append (List.map (fun (_, id1, _) -> id1) assignments) vars);
+        (if (not (List.mem event_id used)) then event_id :: used else used), vars
+        | VRUnambigConcat (sub1, sub2) | VRConcat (sub1, sub2) -> let used, vars = check_var_regex id sub1 event_infos used vars in 
+                                    check_var_regex id sub2 event_infos used vars
+      | VROr (sub1, sub2) | VRAnd (sub1, sub2) -> 
+        no_bindings sub1; no_bindings sub2; check_var_regex id sub1 event_infos used vars; check_var_regex id sub2 event_infos used vars; used, vars
+      | VRClosure sub -> no_bindings sub; check_var_regex id sub event_infos used vars; used, vars*)
+
+
+
+
 (* Check that the event id has already been defined, and that it has the
    expected paramters, and return an instantiated version of the constraints.
    Expects that params has already been instantiated. *)
@@ -1442,6 +1542,12 @@ let rec infer_declaration (builtin_tys : Builtins.builtin_tys) (env : env) (effe
       in 
       let env = define_const id (mk_ty @@ acn_ty ) env in 
       env, effect_count, DAction (id, ret_ty, const_params, (params, inf_action_body))
+    | DVarRegex (id, z, alphabet, vr) -> 
+      (*if (List.exists (fun ev -> (not (List.mem ev alphabet))) (event_types vr)) then Console.error_position vr.v_regex_span "Used event not in alphabet!" else "";*)
+      (validate_var_regex id vr [] [] [] []);
+      env, effect_count, d.d
+
+      
   in
   let new_d = { d with d = new_d } in
   Wellformed.check_qvars new_d;

@@ -52,7 +52,7 @@ let string_of_cid v = if (verbose_ids)
 
 
 let string_of_ty t = match t with 
-    | TInt i -> (s'"int<"^^(str_of_int i)^^s'">")
+    | TInt i -> (s'"bit<"^^(str_of_int i)^^s'">")
     | TBool -> s'"bool"
     | TStruct i -> string_of_id i
     | TVoid -> s'"void"

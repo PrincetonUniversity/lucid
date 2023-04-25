@@ -1,0 +1,3974 @@
+version:
+  version: 1.0.1
+  run_id: "db3a9a3397b84a3f"
+  target: Tofino
+phv ingress:
+  hdr.lucid_eth.dst_addr.0-31: TW5
+  hdr.lucid_eth.dst_addr.32-47: TH8
+  hdr.lucid_eth.src_addr.0-31: TW4
+  hdr.lucid_eth.src_addr.32-47: TH7
+  hdr.lucid_eth.etype: TH6
+  hdr.wire_ev.event_id: B8
+  hdr.bridge_ev.port_event_id: TB4
+  hdr.bridge_ev.flag_pad_1708: B9(4..7)
+  hdr.bridge_ev.mysrereset: B9(3)
+  hdr.bridge_ev.ttl_changes_found: B9(2)
+  hdr.bridge_ev.DNS_packet_out: B9(1)
+  hdr.bridge_ev.DNS_packet_fwd: B9(0)
+  hdr.mysrereset.mysrereset_mysreidx: W5
+  hdr.ttl_changes_found.ttl_changes_found_idx: W7
+  hdr.ttl_changes_found.ttl_changes_found_count: B1
+  hdr.DNS_packet_out.DNS_packet_out_sip: W33
+  hdr.DNS_packet_out.DNS_packet_out_cip: W14
+  hdr.DNS_packet_out.DNS_packet_out_smac: W12
+  hdr.DNS_packet_out.DNS_packet_out_cmac: W10
+  hdr.DNS_packet_out.DNS_packet_out_ttl: W2
+  hdr.DNS_packet_fwd.DNS_packet_fwd_sip: W32
+  hdr.DNS_packet_fwd.DNS_packet_fwd_cip: W13
+  hdr.DNS_packet_fwd.DNS_packet_fwd_smac: W11
+  hdr.DNS_packet_fwd.DNS_packet_fwd_cmac: W9
+  hdr.DNS_packet_fwd.DNS_packet_fwd_ttl: W0
+  const_to_phv_8w5: {  stage 1..12: B2 } 
+  mysre_idx.0-2: {  stage 1..8: W6(3..5) } 
+  mysre_idx.3-31: {  stage 1..8: W8(0..28) } 
+  ansmysre_0: {  stage 1..13: B10(7) } 
+  countermysre_0: {  stage 1..6: B6 } 
+  f_synthesized_meta_varmysre_0: {  stage 1..8: W6(6..13) } 
+  g_synthesized_meta_varmysre_0: {  stage 1..8: W6(14..21) } 
+  memop_synthesized_meta_varmysre_0: {  stage 1..8: W6(22..29) } 
+  resmysre1354_0: {  stage 1..9: B11 } 
+  pc_tmp_0: {  stage 1: W4(0..2) } 
+  mysreidx_0.0-2: {  stage 2..13: W6(0..2) } 
+  mysreidx_0.3-31: {  stage 2..13: W4(3..31) } 
+  fst_ttl_0: {  stage 3: W1 } 
+  if_precomp_0: {  stage 4..5: W3 } 
+  pc_tmp1675_0: {  stage 5: B5 } 
+  pc_tmp1676_0: {  stage 11: B0 } 
+  ig_intr_md_for_tm.mcast_grp_a: {  stage 10..15: H0 } 
+  newcount_0: {  stage 12..13: B3 } 
+  if_precomp1671_0: {  stage 13: B4 } 
+  ig_intr_md_for_dprsr.mirror_type: {  stage 15: B7(0..2) } 
+  $tmp2: {  stage 15: H1(0..9) } 
+  hdr.lucid_eth.$valid: B10(0)
+  hdr.wire_ev.$valid: B10(1)
+  hdr.bridge_ev.$valid: B10(2)
+  hdr.mysrereset.$valid: B10(3)
+  hdr.ttl_changes_found.$valid: B10(4)
+  hdr.DNS_packet_out.$valid: B10(5)
+  hdr.DNS_packet_fwd.$valid: B10(6)
+phv egress:
+  eg_intr_md.egress_port: H16(0..8)
+  eg_intr_md.egress_rid: {  stage 0: H18 } 
+  hdr.lucid_eth.dst_addr.0-31: TW1
+  hdr.lucid_eth.dst_addr.32-47: TH20
+  hdr.lucid_eth.src_addr.0-31: TW0
+  hdr.lucid_eth.src_addr.32-47: TH19
+  hdr.lucid_eth.etype: TH18
+  hdr.wire_ev.event_id: B17
+  hdr.bridge_ev.port_event_id: H17(8..15)
+  hdr.bridge_ev.flag_pad_1708: H17(4..7)
+  hdr.bridge_ev.mysrereset: H17(3)
+  hdr.bridge_ev.ttl_changes_found: H17(2)
+  hdr.bridge_ev.DNS_packet_out: H17(1)
+  hdr.bridge_ev.DNS_packet_fwd: H17(0)
+  hdr.min_parse_depth_padding_0$0.packet_payload.0-31: TW2
+  hdr.min_parse_depth_padding_0$0.packet_payload.32-63: TW3
+  hdr.min_parse_depth_padding_0$0.packet_payload.64-79: TH21
+  hdr.min_parse_depth_padding_0$0.packet_payload.80-87: TB0
+  hdr.min_parse_depth_padding_0$1.packet_payload.0-15: TH0
+  hdr.min_parse_depth_padding_0$1.packet_payload.16-31: TH1
+  hdr.min_parse_depth_padding_0$1.packet_payload.32-47: TH2
+  hdr.min_parse_depth_padding_0$1.packet_payload.48-63: TH3
+  hdr.min_parse_depth_padding_0$1.packet_payload.64-79: TH22
+  hdr.min_parse_depth_padding_0$1.packet_payload.80-87: TB1
+  hdr.DNS_packet_out.DNS_packet_out_sip: TW11
+  hdr.DNS_packet_out.DNS_packet_out_cip: TW10
+  hdr.DNS_packet_out.DNS_packet_out_smac: TW9
+  hdr.DNS_packet_out.DNS_packet_out_cmac: TW8
+  hdr.DNS_packet_out.DNS_packet_out_ttl.0-15: TH4
+  hdr.DNS_packet_out.DNS_packet_out_ttl.16-31: TH5
+  hdr.ttl_changes_found.ttl_changes_found_idx.0-15: TH12
+  hdr.ttl_changes_found.ttl_changes_found_idx.16-31: TH13
+  hdr.ttl_changes_found.ttl_changes_found_count: TB2
+  hdr.mysrereset.mysrereset_mysreidx.0-15: TH14
+  hdr.mysrereset.mysrereset_mysreidx.16-31: TH15
+  hdr.DNS_packet_fwd.DNS_packet_fwd_sip: TW14
+  hdr.DNS_packet_fwd.DNS_packet_fwd_cip: TW13
+  hdr.DNS_packet_fwd.DNS_packet_fwd_smac: TW12
+  hdr.DNS_packet_fwd.DNS_packet_fwd_cmac.0-7: TB3
+  hdr.DNS_packet_fwd.DNS_packet_fwd_cmac.8-15: TB8
+  hdr.DNS_packet_fwd.DNS_packet_fwd_cmac.16-23: TB9
+  hdr.DNS_packet_fwd.DNS_packet_fwd_cmac.24-31: TB10
+  hdr.DNS_packet_fwd.DNS_packet_fwd_ttl.0-15: TH16
+  hdr.DNS_packet_fwd.DNS_packet_fwd_ttl.16-31: TH17
+  hdr.lucid_eth.$valid: B18(0)
+  hdr.wire_ev.$valid: B18(1)
+  hdr.bridge_ev.$valid: B18(2)
+  hdr.DNS_packet_out.$valid: B18(3)
+  hdr.ttl_changes_found.$valid: B18(4)
+  hdr.mysrereset.$valid: B18(5)
+  hdr.DNS_packet_fwd.$valid: {  stage 1..15: B18(6) } 
+  hdr.min_parse_depth_padding_0.$stkvalid: B16(0..1)
+  hdr.min_parse_depth_padding_0$0.$valid: {  stage 15: B16(1) } 
+  hdr.min_parse_depth_padding_0$1.$valid: B16(0)
+parser ingress:
+  start: $entry_point
+  init_zero: [ B2, W6, W8, B10, B6, B11, W4, W1, W3, B5, B0, B3, B4, B7, H1, TB4, TH7, TH8, TW4, TW5, B9 ]
+  bitwise_or: [ B10 ]
+  hdr_len_adj: 16
+  states:
+    $entry_point:
+      *:
+        load: { half : 0..1 }
+        buf_req: 2
+        next: start
+    start:
+      match: [ half ]
+      0b*******011000100:
+        load: { half : 28..29 }
+        shift: 16
+        buf_req: 30
+        next: parse_eth
+      0x****:
+        B10: 7
+            # - value 1 -> B10 bit[0]: ingress::hdr.lucid_eth.$valid
+            # - value 1 -> B10 bit[1]: ingress::hdr.wire_ev.$valid
+            # - value 1 -> B10 bit[2]: ingress::hdr.bridge_ev.$valid
+        TH6: 1638  # value 1638 -> TH6 bit[15..0]: ingress::hdr.lucid_eth.etype
+        B8: 1  # value 1 -> B8 bit[7..0]: ingress::hdr.wire_ev.event_id
+        shift: 16
+        buf_req: 16
+        next: parse_DNS_packet_fwd
+    parse_eth:
+      match: [ half ]
+      0x0666:
+        0..1: TH8  # ingress::hdr.lucid_eth.dst_addr[47:32].32-47
+        2..5: TW5  # ingress::hdr.lucid_eth.dst_addr[31:0].0-31
+        6..7: TH7  # ingress::hdr.lucid_eth.src_addr[47:32].32-47
+        8..11: TW4  # ingress::hdr.lucid_eth.src_addr[31:0].0-31
+        12..13: TH6  # ingress::hdr.lucid_eth.etype
+        B10: 1  # value 1 -> B10 bit[0]: ingress::hdr.lucid_eth.$valid
+        load: { byte1 : 14 }
+        shift: 14
+        buf_req: 15
+        next: parse_wire_ev
+    parse_wire_ev:
+      match: [ byte1 ]
+      0xff:
+        0: B8  # ingress::hdr.wire_ev.event_id
+        1: TB4  # ingress::hdr.bridge_ev.port_event_id
+        2: B9
+            # - bit[16..19] -> B9 bit[7..4]: ingress::hdr.bridge_ev.flag_pad_1708
+            # - bit[20] -> B9 bit[3]: ingress::hdr.bridge_ev.mysrereset
+            # - bit[21] -> B9 bit[2]: ingress::hdr.bridge_ev.ttl_changes_found
+            # - bit[22] -> B9 bit[1]: ingress::hdr.bridge_ev.DNS_packet_out
+            # - bit[23] -> B9 bit[0]: ingress::hdr.bridge_ev.DNS_packet_fwd
+        B10: 6
+            # - value 1 -> B10 bit[1]: ingress::hdr.wire_ev.$valid
+            # - value 1 -> B10 bit[2]: ingress::hdr.bridge_ev.$valid
+        shift: 3
+        buf_req: 3
+        next: parse_all_events
+      0x04:
+        0: B8  # ingress::hdr.wire_ev.event_id
+        1: TB4  # ingress::hdr.bridge_ev.port_event_id
+        2: B9
+            # - bit[16..19] -> B9 bit[7..4]: ingress::hdr.bridge_ev.flag_pad_1708
+            # - bit[20] -> B9 bit[3]: ingress::hdr.bridge_ev.mysrereset
+            # - bit[21] -> B9 bit[2]: ingress::hdr.bridge_ev.ttl_changes_found
+            # - bit[22] -> B9 bit[1]: ingress::hdr.bridge_ev.DNS_packet_out
+            # - bit[23] -> B9 bit[0]: ingress::hdr.bridge_ev.DNS_packet_fwd
+        B10: 6
+            # - value 1 -> B10 bit[1]: ingress::hdr.wire_ev.$valid
+            # - value 1 -> B10 bit[2]: ingress::hdr.bridge_ev.$valid
+        shift: 3
+        buf_req: 3
+        next: parse_mysrereset
+      0x03:
+        0: B8  # ingress::hdr.wire_ev.event_id
+        1: TB4  # ingress::hdr.bridge_ev.port_event_id
+        2: B9
+            # - bit[16..19] -> B9 bit[7..4]: ingress::hdr.bridge_ev.flag_pad_1708
+            # - bit[20] -> B9 bit[3]: ingress::hdr.bridge_ev.mysrereset
+            # - bit[21] -> B9 bit[2]: ingress::hdr.bridge_ev.ttl_changes_found
+            # - bit[22] -> B9 bit[1]: ingress::hdr.bridge_ev.DNS_packet_out
+            # - bit[23] -> B9 bit[0]: ingress::hdr.bridge_ev.DNS_packet_fwd
+        B10: 6
+            # - value 1 -> B10 bit[1]: ingress::hdr.wire_ev.$valid
+            # - value 1 -> B10 bit[2]: ingress::hdr.bridge_ev.$valid
+        shift: 3
+        buf_req: 3
+        next: parse_ttl_changes_found
+      0x02:
+        0: B8  # ingress::hdr.wire_ev.event_id
+        1: TB4  # ingress::hdr.bridge_ev.port_event_id
+        2: B9
+            # - bit[16..19] -> B9 bit[7..4]: ingress::hdr.bridge_ev.flag_pad_1708
+            # - bit[20] -> B9 bit[3]: ingress::hdr.bridge_ev.mysrereset
+            # - bit[21] -> B9 bit[2]: ingress::hdr.bridge_ev.ttl_changes_found
+            # - bit[22] -> B9 bit[1]: ingress::hdr.bridge_ev.DNS_packet_out
+            # - bit[23] -> B9 bit[0]: ingress::hdr.bridge_ev.DNS_packet_fwd
+        B10: 6
+            # - value 1 -> B10 bit[1]: ingress::hdr.wire_ev.$valid
+            # - value 1 -> B10 bit[2]: ingress::hdr.bridge_ev.$valid
+        shift: 3
+        buf_req: 3
+        next: parse_DNS_packet_out
+      0x01:
+        0: B8  # ingress::hdr.wire_ev.event_id
+        1: TB4  # ingress::hdr.bridge_ev.port_event_id
+        2: B9
+            # - bit[16..19] -> B9 bit[7..4]: ingress::hdr.bridge_ev.flag_pad_1708
+            # - bit[20] -> B9 bit[3]: ingress::hdr.bridge_ev.mysrereset
+            # - bit[21] -> B9 bit[2]: ingress::hdr.bridge_ev.ttl_changes_found
+            # - bit[22] -> B9 bit[1]: ingress::hdr.bridge_ev.DNS_packet_out
+            # - bit[23] -> B9 bit[0]: ingress::hdr.bridge_ev.DNS_packet_fwd
+        B10: 6
+            # - value 1 -> B10 bit[1]: ingress::hdr.wire_ev.$valid
+            # - value 1 -> B10 bit[2]: ingress::hdr.bridge_ev.$valid
+        shift: 3
+        buf_req: 3
+        next: parse_DNS_packet_fwd
+    parse_all_events:
+      *:
+        0..3: W5  # ingress::hdr.mysrereset.mysrereset_mysreidx
+        4..7: W7  # ingress::hdr.ttl_changes_found.ttl_changes_found_idx
+        8: B1  # ingress::hdr.ttl_changes_found.ttl_changes_found_count
+        9..12: W33  # ingress::hdr.DNS_packet_out.DNS_packet_out_sip
+        13..16: W14  # ingress::hdr.DNS_packet_out.DNS_packet_out_cip
+        B10: 120
+            # - value 1 -> B10 bit[3]: ingress::hdr.mysrereset.$valid
+            # - value 1 -> B10 bit[4]: ingress::hdr.ttl_changes_found.$valid
+            # - value 1 -> B10 bit[5]: ingress::hdr.DNS_packet_out.$valid
+            # - value 1 -> B10 bit[6]: ingress::hdr.DNS_packet_fwd.$valid
+        shift: 17
+        buf_req: 17
+        next: parse_all_events.$split_0
+    parse_all_events.$split_0:
+      *:
+        0..3: W12  # ingress::hdr.DNS_packet_out.DNS_packet_out_smac
+        4..7: W10  # ingress::hdr.DNS_packet_out.DNS_packet_out_cmac
+        8..11: W2  # ingress::hdr.DNS_packet_out.DNS_packet_out_ttl
+        12..15: W32  # ingress::hdr.DNS_packet_fwd.DNS_packet_fwd_sip
+        shift: 16
+        buf_req: 16
+        next: parse_all_events.$split_1
+    parse_all_events.$split_1:
+      *:
+        0..3: W13  # ingress::hdr.DNS_packet_fwd.DNS_packet_fwd_cip
+        4..7: W11  # ingress::hdr.DNS_packet_fwd.DNS_packet_fwd_smac
+        8..11: W9  # ingress::hdr.DNS_packet_fwd.DNS_packet_fwd_cmac
+        12..15: W0  # ingress::hdr.DNS_packet_fwd.DNS_packet_fwd_ttl
+        shift: 16
+        buf_req: 16
+        next: end
+    parse_mysrereset:
+      *:
+        0..3: W5  # ingress::hdr.mysrereset.mysrereset_mysreidx
+        B10: 8  # value 1 -> B10 bit[3]: ingress::hdr.mysrereset.$valid
+        shift: 4
+        buf_req: 4
+        next: end
+    parse_ttl_changes_found:
+      *:
+        0..3: W7  # ingress::hdr.ttl_changes_found.ttl_changes_found_idx
+        4: B1  # ingress::hdr.ttl_changes_found.ttl_changes_found_count
+        B10: 16  # value 1 -> B10 bit[4]: ingress::hdr.ttl_changes_found.$valid
+        shift: 5
+        buf_req: 5
+        next: end
+    parse_DNS_packet_out:
+      *:
+        0..3: W33  # ingress::hdr.DNS_packet_out.DNS_packet_out_sip
+        4..7: W14  # ingress::hdr.DNS_packet_out.DNS_packet_out_cip
+        8..11: W12  # ingress::hdr.DNS_packet_out.DNS_packet_out_smac
+        12..15: W10  # ingress::hdr.DNS_packet_out.DNS_packet_out_cmac
+        B10: 32  # value 1 -> B10 bit[5]: ingress::hdr.DNS_packet_out.$valid
+        shift: 16
+        buf_req: 16
+        next: parse_DNS_packet_out.$split_0
+    parse_DNS_packet_out.$split_0:
+      *:
+        0..3: W2  # ingress::hdr.DNS_packet_out.DNS_packet_out_ttl
+        shift: 4
+        buf_req: 4
+        next: end
+    parse_DNS_packet_fwd:
+      *:
+        0..3: W32  # ingress::hdr.DNS_packet_fwd.DNS_packet_fwd_sip
+        4..7: W13  # ingress::hdr.DNS_packet_fwd.DNS_packet_fwd_cip
+        8..11: W11  # ingress::hdr.DNS_packet_fwd.DNS_packet_fwd_smac
+        12..15: W9  # ingress::hdr.DNS_packet_fwd.DNS_packet_fwd_cmac
+        B10: 64  # value 1 -> B10 bit[6]: ingress::hdr.DNS_packet_fwd.$valid
+        shift: 16
+        buf_req: 16
+        next: parse_DNS_packet_fwd.$split_0
+    parse_DNS_packet_fwd.$split_0:
+      *:
+        0..3: W0  # ingress::hdr.DNS_packet_fwd.DNS_packet_fwd_ttl
+        shift: 4
+        buf_req: 4
+        next: end
+deparser ingress:
+  dictionary:
+    TH8: B10(0)  # ingress::hdr.lucid_eth.dst_addr.32-47 if ingress::hdr.lucid_eth.$valid
+    TW5: B10(0)  # ingress::hdr.lucid_eth.dst_addr.0-31 if ingress::hdr.lucid_eth.$valid
+    TH7: B10(0)  # ingress::hdr.lucid_eth.src_addr.32-47 if ingress::hdr.lucid_eth.$valid
+    TW4: B10(0)  # ingress::hdr.lucid_eth.src_addr.0-31 if ingress::hdr.lucid_eth.$valid
+    TH6: B10(0)  # ingress::hdr.lucid_eth.etype if ingress::hdr.lucid_eth.$valid
+    B8: B10(1)  # ingress::hdr.wire_ev.event_id if ingress::hdr.wire_ev.$valid
+    TB4: B10(2)  # ingress::hdr.bridge_ev.port_event_id if ingress::hdr.bridge_ev.$valid
+    B9: B10(2)
+        # - bit[7..4]: ingress::hdr.bridge_ev.flag_pad_1708 if ingress::hdr.bridge_ev.$valid
+        # - bit[3]: ingress::hdr.bridge_ev.mysrereset if ingress::hdr.bridge_ev.$valid
+        # - bit[2]: ingress::hdr.bridge_ev.ttl_changes_found if ingress::hdr.bridge_ev.$valid
+        # - bit[1]: ingress::hdr.bridge_ev.DNS_packet_out if ingress::hdr.bridge_ev.$valid
+        # - bit[0]: ingress::hdr.bridge_ev.DNS_packet_fwd if ingress::hdr.bridge_ev.$valid
+    W5: B10(3)  # ingress::hdr.mysrereset.mysrereset_mysreidx if ingress::hdr.mysrereset.$valid
+    W7: B10(4)  # ingress::hdr.ttl_changes_found.ttl_changes_found_idx if ingress::hdr.ttl_changes_found.$valid
+    B1: B10(4)  # ingress::hdr.ttl_changes_found.ttl_changes_found_count if ingress::hdr.ttl_changes_found.$valid
+    W33: B10(5)  # ingress::hdr.DNS_packet_out.DNS_packet_out_sip if ingress::hdr.DNS_packet_out.$valid
+    W14: B10(5)  # ingress::hdr.DNS_packet_out.DNS_packet_out_cip if ingress::hdr.DNS_packet_out.$valid
+    W12: B10(5)  # ingress::hdr.DNS_packet_out.DNS_packet_out_smac if ingress::hdr.DNS_packet_out.$valid
+    W10: B10(5)  # ingress::hdr.DNS_packet_out.DNS_packet_out_cmac if ingress::hdr.DNS_packet_out.$valid
+    W2: B10(5)  # ingress::hdr.DNS_packet_out.DNS_packet_out_ttl if ingress::hdr.DNS_packet_out.$valid
+    W32: B10(6)  # ingress::hdr.DNS_packet_fwd.DNS_packet_fwd_sip if ingress::hdr.DNS_packet_fwd.$valid
+    W13: B10(6)  # ingress::hdr.DNS_packet_fwd.DNS_packet_fwd_cip if ingress::hdr.DNS_packet_fwd.$valid
+    W11: B10(6)  # ingress::hdr.DNS_packet_fwd.DNS_packet_fwd_smac if ingress::hdr.DNS_packet_fwd.$valid
+    W9: B10(6)  # ingress::hdr.DNS_packet_fwd.DNS_packet_fwd_cmac if ingress::hdr.DNS_packet_fwd.$valid
+    W0: B10(6)  # ingress::hdr.DNS_packet_fwd.DNS_packet_fwd_ttl if ingress::hdr.DNS_packet_fwd.$valid
+  egress_multicast_group_0:
+    - H0  # ingress::ig_intr_md_for_tm.mcast_grp_a
+  mirror:
+    select: B7(0..2)  # bit[2..0]: ingress::ig_intr_md_for_dprsr.mirror_type
+    0:
+      - H1(0..9)  # bit[9..0]: ingress::$tmp2
+parser egress:
+  start: $entry_point
+  init_zero: [ B18, B16 ]
+  bitwise_or: [ B16, B18 ]
+  hdr_len_adj: 27
+  meta_opt: 8191
+  states:
+    $entry_point:
+      *:
+        counter:
+          imm: 21
+        0..1: H16  # bit[7..15] -> H16 bit[8..0]: egress::eg_intr_md.egress_port
+        19..20: H18  # egress::eg_intr_md.egress_rid
+        27..28: TH20  # egress::hdr.lucid_eth.dst_addr[47:32].32-47
+        B18: 7
+            # - value 1 -> B18 bit[0]: egress::hdr.lucid_eth.$valid
+            # - value 1 -> B18 bit[1]: egress::hdr.wire_ev.$valid
+            # - value 1 -> B18 bit[2]: egress::hdr.bridge_ev.$valid
+        intr_md: 25
+        shift: 29
+        buf_req: 29
+        next: start.$oob_stall_0
+    start.$oob_stall_0:
+      *:
+        load: { byte1 : 14 }
+        buf_req: 15
+        next: start.$split_0
+    start.$split_0:
+      match: [ byte1 ]
+      0x*0:
+        0..3: TW1  # egress::hdr.lucid_eth.dst_addr[31:0].0-31
+        4..5: TH19  # egress::hdr.lucid_eth.src_addr[47:32].32-47
+        6..9: TW0  # egress::hdr.lucid_eth.src_addr[31:0].0-31
+        10..11: TH18  # egress::hdr.lucid_eth.etype
+        12: B17  # egress::hdr.wire_ev.event_id
+        13..14: H17
+            # - bit[104..111] -> H17 bit[15..8]: egress::hdr.bridge_ev.port_event_id
+            # - bit[112..115] -> H17 bit[7..4]: egress::hdr.bridge_ev.flag_pad_1708
+            # - bit[116] -> H17 bit[3]: egress::hdr.bridge_ev.mysrereset
+            # - bit[117] -> H17 bit[2]: egress::hdr.bridge_ev.ttl_changes_found
+            # - bit[118] -> H17 bit[1]: egress::hdr.bridge_ev.DNS_packet_out
+            # - bit[119] -> H17 bit[0]: egress::hdr.bridge_ev.DNS_packet_fwd
+        shift: 15
+        buf_req: 15
+        next: min_parse_depth_accept_initial
+      0x*2:
+        0..3: TW1  # egress::hdr.lucid_eth.dst_addr[31:0].0-31
+        4..5: TH19  # egress::hdr.lucid_eth.src_addr[47:32].32-47
+        6..9: TW0  # egress::hdr.lucid_eth.src_addr[31:0].0-31
+        10..11: TH18  # egress::hdr.lucid_eth.etype
+        12: B17  # egress::hdr.wire_ev.event_id
+        13..14: H17
+            # - bit[104..111] -> H17 bit[15..8]: egress::hdr.bridge_ev.port_event_id
+            # - bit[112..115] -> H17 bit[7..4]: egress::hdr.bridge_ev.flag_pad_1708
+            # - bit[116] -> H17 bit[3]: egress::hdr.bridge_ev.mysrereset
+            # - bit[117] -> H17 bit[2]: egress::hdr.bridge_ev.ttl_changes_found
+            # - bit[118] -> H17 bit[1]: egress::hdr.bridge_ev.DNS_packet_out
+            # - bit[119] -> H17 bit[0]: egress::hdr.bridge_ev.DNS_packet_fwd
+        shift: 15
+        buf_req: 15
+        next: parse_eventset_1
+      0x*4:
+        0..3: TW1  # egress::hdr.lucid_eth.dst_addr[31:0].0-31
+        4..5: TH19  # egress::hdr.lucid_eth.src_addr[47:32].32-47
+        6..9: TW0  # egress::hdr.lucid_eth.src_addr[31:0].0-31
+        10..11: TH18  # egress::hdr.lucid_eth.etype
+        12: B17  # egress::hdr.wire_ev.event_id
+        13..14: H17
+            # - bit[104..111] -> H17 bit[15..8]: egress::hdr.bridge_ev.port_event_id
+            # - bit[112..115] -> H17 bit[7..4]: egress::hdr.bridge_ev.flag_pad_1708
+            # - bit[116] -> H17 bit[3]: egress::hdr.bridge_ev.mysrereset
+            # - bit[117] -> H17 bit[2]: egress::hdr.bridge_ev.ttl_changes_found
+            # - bit[118] -> H17 bit[1]: egress::hdr.bridge_ev.DNS_packet_out
+            # - bit[119] -> H17 bit[0]: egress::hdr.bridge_ev.DNS_packet_fwd
+        shift: 15
+        buf_req: 15
+        next: parse_eventset_2
+      0x*6:
+        0..3: TW1  # egress::hdr.lucid_eth.dst_addr[31:0].0-31
+        4..5: TH19  # egress::hdr.lucid_eth.src_addr[47:32].32-47
+        6..9: TW0  # egress::hdr.lucid_eth.src_addr[31:0].0-31
+        10..11: TH18  # egress::hdr.lucid_eth.etype
+        12: B17  # egress::hdr.wire_ev.event_id
+        13..14: H17
+            # - bit[104..111] -> H17 bit[15..8]: egress::hdr.bridge_ev.port_event_id
+            # - bit[112..115] -> H17 bit[7..4]: egress::hdr.bridge_ev.flag_pad_1708
+            # - bit[116] -> H17 bit[3]: egress::hdr.bridge_ev.mysrereset
+            # - bit[117] -> H17 bit[2]: egress::hdr.bridge_ev.ttl_changes_found
+            # - bit[118] -> H17 bit[1]: egress::hdr.bridge_ev.DNS_packet_out
+            # - bit[119] -> H17 bit[0]: egress::hdr.bridge_ev.DNS_packet_fwd
+        shift: 15
+        buf_req: 15
+        next: parse_eventset_3
+      0x*8:
+        0..3: TW1  # egress::hdr.lucid_eth.dst_addr[31:0].0-31
+        4..5: TH19  # egress::hdr.lucid_eth.src_addr[47:32].32-47
+        6..9: TW0  # egress::hdr.lucid_eth.src_addr[31:0].0-31
+        10..11: TH18  # egress::hdr.lucid_eth.etype
+        12: B17  # egress::hdr.wire_ev.event_id
+        13..14: H17
+            # - bit[104..111] -> H17 bit[15..8]: egress::hdr.bridge_ev.port_event_id
+            # - bit[112..115] -> H17 bit[7..4]: egress::hdr.bridge_ev.flag_pad_1708
+            # - bit[116] -> H17 bit[3]: egress::hdr.bridge_ev.mysrereset
+            # - bit[117] -> H17 bit[2]: egress::hdr.bridge_ev.ttl_changes_found
+            # - bit[118] -> H17 bit[1]: egress::hdr.bridge_ev.DNS_packet_out
+            # - bit[119] -> H17 bit[0]: egress::hdr.bridge_ev.DNS_packet_fwd
+        shift: 15
+        buf_req: 15
+        next: parse_eventset_4
+      0x*a:
+        0..3: TW1  # egress::hdr.lucid_eth.dst_addr[31:0].0-31
+        4..5: TH19  # egress::hdr.lucid_eth.src_addr[47:32].32-47
+        6..9: TW0  # egress::hdr.lucid_eth.src_addr[31:0].0-31
+        10..11: TH18  # egress::hdr.lucid_eth.etype
+        12: B17  # egress::hdr.wire_ev.event_id
+        13..14: H17
+            # - bit[104..111] -> H17 bit[15..8]: egress::hdr.bridge_ev.port_event_id
+            # - bit[112..115] -> H17 bit[7..4]: egress::hdr.bridge_ev.flag_pad_1708
+            # - bit[116] -> H17 bit[3]: egress::hdr.bridge_ev.mysrereset
+            # - bit[117] -> H17 bit[2]: egress::hdr.bridge_ev.ttl_changes_found
+            # - bit[118] -> H17 bit[1]: egress::hdr.bridge_ev.DNS_packet_out
+            # - bit[119] -> H17 bit[0]: egress::hdr.bridge_ev.DNS_packet_fwd
+        shift: 15
+        buf_req: 15
+        next: parse_eventset_5
+      0x*c:
+        0..3: TW1  # egress::hdr.lucid_eth.dst_addr[31:0].0-31
+        4..5: TH19  # egress::hdr.lucid_eth.src_addr[47:32].32-47
+        6..9: TW0  # egress::hdr.lucid_eth.src_addr[31:0].0-31
+        10..11: TH18  # egress::hdr.lucid_eth.etype
+        12: B17  # egress::hdr.wire_ev.event_id
+        13..14: H17
+            # - bit[104..111] -> H17 bit[15..8]: egress::hdr.bridge_ev.port_event_id
+            # - bit[112..115] -> H17 bit[7..4]: egress::hdr.bridge_ev.flag_pad_1708
+            # - bit[116] -> H17 bit[3]: egress::hdr.bridge_ev.mysrereset
+            # - bit[117] -> H17 bit[2]: egress::hdr.bridge_ev.ttl_changes_found
+            # - bit[118] -> H17 bit[1]: egress::hdr.bridge_ev.DNS_packet_out
+            # - bit[119] -> H17 bit[0]: egress::hdr.bridge_ev.DNS_packet_fwd
+        shift: 15
+        buf_req: 15
+        next: parse_eventset_6
+      0x*e:
+        0..3: TW1  # egress::hdr.lucid_eth.dst_addr[31:0].0-31
+        4..5: TH19  # egress::hdr.lucid_eth.src_addr[47:32].32-47
+        6..9: TW0  # egress::hdr.lucid_eth.src_addr[31:0].0-31
+        10..11: TH18  # egress::hdr.lucid_eth.etype
+        12: B17  # egress::hdr.wire_ev.event_id
+        13..14: H17
+            # - bit[104..111] -> H17 bit[15..8]: egress::hdr.bridge_ev.port_event_id
+            # - bit[112..115] -> H17 bit[7..4]: egress::hdr.bridge_ev.flag_pad_1708
+            # - bit[116] -> H17 bit[3]: egress::hdr.bridge_ev.mysrereset
+            # - bit[117] -> H17 bit[2]: egress::hdr.bridge_ev.ttl_changes_found
+            # - bit[118] -> H17 bit[1]: egress::hdr.bridge_ev.DNS_packet_out
+            # - bit[119] -> H17 bit[0]: egress::hdr.bridge_ev.DNS_packet_fwd
+        shift: 15
+        buf_req: 15
+        next: parse_eventset_7
+    min_parse_depth_accept_initial:
+      match: [ ctr_neg, ctr_zero ]
+      0x0:
+        counter: dec 11
+        0: TB0  # egress::hdr.min_parse_depth_padding_0[0].packet_payload[87:80].80-87
+        1..2: TH21  # egress::hdr.min_parse_depth_padding_0[0].packet_payload[79:64].64-79
+        3..6: TW3  # egress::hdr.min_parse_depth_padding_0[0].packet_payload[63:32].32-63
+        7..10: TW2  # egress::hdr.min_parse_depth_padding_0[0].packet_payload[31:0].0-31
+        B16: 2  # value 2 -> B16 bit[1..0]: egress::hdr.min_parse_depth_padding_0.$stkvalid
+        shift: 11
+        buf_req: 11
+        next: min_parse_depth_accept_loop.$split_0
+      0b**:
+        buf_req: 0
+        next: end
+    min_parse_depth_accept_loop.$split_0:
+      match: [ ctr_neg, ctr_zero ]
+      0x0:
+        counter: dec 11
+        0: TB1  # egress::hdr.min_parse_depth_padding_0[1].packet_payload[87:80].80-87
+        1..2: TH22  # egress::hdr.min_parse_depth_padding_0[1].packet_payload[79:64].64-79
+        3..4: TH3  # egress::hdr.min_parse_depth_padding_0[1].packet_payload[63:48].48-63
+        5..6: TH2  # egress::hdr.min_parse_depth_padding_0[1].packet_payload[47:32].32-47
+        7..8: TH1  # egress::hdr.min_parse_depth_padding_0[1].packet_payload[31:16].16-31
+        B16: 1  # value 1 -> B16 bit[1..0]: egress::hdr.min_parse_depth_padding_0.$stkvalid
+        shift: 9
+        buf_req: 9
+        next: min_parse_depth_accept_loop.$it1.$split_0
+      0b**:
+        buf_req: 0
+        next: end
+    min_parse_depth_accept_loop.$it1.$split_0:
+      match: [ ctr_neg, ctr_zero ]
+      0x0:
+        0..1: TH0  # egress::hdr.min_parse_depth_padding_0[1].packet_payload[15:0].0-15
+        shift: 2
+        buf_req: 2
+        next: end
+      0b**:
+        0..1: TH0  # egress::hdr.min_parse_depth_padding_0[1].packet_payload[15:0].0-15
+        shift: 2
+        buf_req: 2
+        next: end
+    parse_eventset_1:
+      *:
+        counter: dec 20
+        0..3: TW11  # egress::hdr.DNS_packet_out.DNS_packet_out_sip
+        4..7: TW10  # egress::hdr.DNS_packet_out.DNS_packet_out_cip
+        8..11: TW9  # egress::hdr.DNS_packet_out.DNS_packet_out_smac
+        12..15: TW8  # egress::hdr.DNS_packet_out.DNS_packet_out_cmac
+        16..17: TH5  # egress::hdr.DNS_packet_out.DNS_packet_out_ttl[31:16].16-31
+        18..19: TH4  # egress::hdr.DNS_packet_out.DNS_packet_out_ttl[15:0].0-15
+        B18: 8  # value 1 -> B18 bit[3]: egress::hdr.DNS_packet_out.$valid
+        shift: 20
+        buf_req: 20
+        next: min_parse_depth_accept_initial
+    parse_eventset_2:
+      *:
+        counter: dec 5
+        0..1: TH13  # egress::hdr.ttl_changes_found.ttl_changes_found_idx[31:16].16-31
+        2..3: TH12  # egress::hdr.ttl_changes_found.ttl_changes_found_idx[15:0].0-15
+        4: TB2  # egress::hdr.ttl_changes_found.ttl_changes_found_count
+        B18: 16  # value 1 -> B18 bit[4]: egress::hdr.ttl_changes_found.$valid
+        shift: 5
+        buf_req: 5
+        next: min_parse_depth_accept_initial
+    parse_eventset_3:
+      *:
+        counter: dec 25
+        0..1: TH13  # egress::hdr.ttl_changes_found.ttl_changes_found_idx[31:16].16-31
+        2..3: TH12  # egress::hdr.ttl_changes_found.ttl_changes_found_idx[15:0].0-15
+        4: TB2  # egress::hdr.ttl_changes_found.ttl_changes_found_count
+        5..8: TW11  # egress::hdr.DNS_packet_out.DNS_packet_out_sip
+        9..12: TW10  # egress::hdr.DNS_packet_out.DNS_packet_out_cip
+        13..16: TW9  # egress::hdr.DNS_packet_out.DNS_packet_out_smac
+        17..20: TW8  # egress::hdr.DNS_packet_out.DNS_packet_out_cmac
+        21..22: TH5  # egress::hdr.DNS_packet_out.DNS_packet_out_ttl[31:16].16-31
+        23..24: TH4  # egress::hdr.DNS_packet_out.DNS_packet_out_ttl[15:0].0-15
+        B18: 24
+            # - value 1 -> B18 bit[4]: egress::hdr.ttl_changes_found.$valid
+            # - value 1 -> B18 bit[3]: egress::hdr.DNS_packet_out.$valid
+        shift: 25
+        buf_req: 25
+        next: end
+    parse_eventset_4:
+      *:
+        counter: dec 4
+        0..1: TH15  # egress::hdr.mysrereset.mysrereset_mysreidx[31:16].16-31
+        2..3: TH14  # egress::hdr.mysrereset.mysrereset_mysreidx[15:0].0-15
+        B18: 32  # value 1 -> B18 bit[5]: egress::hdr.mysrereset.$valid
+        shift: 4
+        buf_req: 4
+        next: min_parse_depth_accept_initial
+    parse_eventset_5:
+      *:
+        counter: dec 24
+        0..1: TH15  # egress::hdr.mysrereset.mysrereset_mysreidx[31:16].16-31
+        2..3: TH14  # egress::hdr.mysrereset.mysrereset_mysreidx[15:0].0-15
+        4..7: TW11  # egress::hdr.DNS_packet_out.DNS_packet_out_sip
+        8..11: TW10  # egress::hdr.DNS_packet_out.DNS_packet_out_cip
+        12..15: TW9  # egress::hdr.DNS_packet_out.DNS_packet_out_smac
+        16..19: TW8  # egress::hdr.DNS_packet_out.DNS_packet_out_cmac
+        20..21: TH5  # egress::hdr.DNS_packet_out.DNS_packet_out_ttl[31:16].16-31
+        22..23: TH4  # egress::hdr.DNS_packet_out.DNS_packet_out_ttl[15:0].0-15
+        B18: 40
+            # - value 1 -> B18 bit[5]: egress::hdr.mysrereset.$valid
+            # - value 1 -> B18 bit[3]: egress::hdr.DNS_packet_out.$valid
+        shift: 24
+        buf_req: 24
+        next: end
+    parse_eventset_6:
+      *:
+        counter: dec 9
+        0..1: TH15  # egress::hdr.mysrereset.mysrereset_mysreidx[31:16].16-31
+        2..3: TH14  # egress::hdr.mysrereset.mysrereset_mysreidx[15:0].0-15
+        4..5: TH13  # egress::hdr.ttl_changes_found.ttl_changes_found_idx[31:16].16-31
+        6..7: TH12  # egress::hdr.ttl_changes_found.ttl_changes_found_idx[15:0].0-15
+        8: TB2  # egress::hdr.ttl_changes_found.ttl_changes_found_count
+        B18: 48
+            # - value 1 -> B18 bit[5]: egress::hdr.mysrereset.$valid
+            # - value 1 -> B18 bit[4]: egress::hdr.ttl_changes_found.$valid
+        shift: 9
+        buf_req: 9
+        next: min_parse_depth_accept_initial
+    parse_eventset_7:
+      *:
+        counter: dec 29
+        0..1: TH15  # egress::hdr.mysrereset.mysrereset_mysreidx[31:16].16-31
+        2..3: TH14  # egress::hdr.mysrereset.mysrereset_mysreidx[15:0].0-15
+        4..5: TH13  # egress::hdr.ttl_changes_found.ttl_changes_found_idx[31:16].16-31
+        6..7: TH12  # egress::hdr.ttl_changes_found.ttl_changes_found_idx[15:0].0-15
+        8: TB2  # egress::hdr.ttl_changes_found.ttl_changes_found_count
+        9..12: TW11  # egress::hdr.DNS_packet_out.DNS_packet_out_sip
+        13..16: TW10  # egress::hdr.DNS_packet_out.DNS_packet_out_cip
+        17..20: TW9  # egress::hdr.DNS_packet_out.DNS_packet_out_smac
+        21..24: TW8  # egress::hdr.DNS_packet_out.DNS_packet_out_cmac
+        B18: 56
+            # - value 1 -> B18 bit[5]: egress::hdr.mysrereset.$valid
+            # - value 1 -> B18 bit[4]: egress::hdr.ttl_changes_found.$valid
+            # - value 1 -> B18 bit[3]: egress::hdr.DNS_packet_out.$valid
+        shift: 25
+        buf_req: 25
+        next: parse_eventset_7.$split_0
+    parse_eventset_7.$split_0:
+      *:
+        0..1: TH5  # egress::hdr.DNS_packet_out.DNS_packet_out_ttl[31:16].16-31
+        2..3: TH4  # egress::hdr.DNS_packet_out.DNS_packet_out_ttl[15:0].0-15
+        shift: 4
+        buf_req: 4
+        next: end
+deparser egress:
+  dictionary:
+    TH20: B18(0)  # egress::hdr.lucid_eth.dst_addr.32-47 if egress::hdr.lucid_eth.$valid
+    TW1: B18(0)  # egress::hdr.lucid_eth.dst_addr.0-31 if egress::hdr.lucid_eth.$valid
+    TH19: B18(0)  # egress::hdr.lucid_eth.src_addr.32-47 if egress::hdr.lucid_eth.$valid
+    TW0: B18(0)  # egress::hdr.lucid_eth.src_addr.0-31 if egress::hdr.lucid_eth.$valid
+    TH18: B18(0)  # egress::hdr.lucid_eth.etype if egress::hdr.lucid_eth.$valid
+    B17: B18(1)  # egress::hdr.wire_ev.event_id if egress::hdr.wire_ev.$valid
+    H17: B18(2)
+        # - bit[15..8]: egress::hdr.bridge_ev.port_event_id if egress::hdr.bridge_ev.$valid
+        # - bit[7..4]: egress::hdr.bridge_ev.flag_pad_1708 if egress::hdr.bridge_ev.$valid
+        # - bit[3]: egress::hdr.bridge_ev.mysrereset if egress::hdr.bridge_ev.$valid
+        # - bit[2]: egress::hdr.bridge_ev.ttl_changes_found if egress::hdr.bridge_ev.$valid
+        # - bit[1]: egress::hdr.bridge_ev.DNS_packet_out if egress::hdr.bridge_ev.$valid
+        # - bit[0]: egress::hdr.bridge_ev.DNS_packet_fwd if egress::hdr.bridge_ev.$valid
+    TH15: B18(5)  # egress::hdr.mysrereset.mysrereset_mysreidx.16-31 if egress::hdr.mysrereset.$valid
+    TH14: B18(5)  # egress::hdr.mysrereset.mysrereset_mysreidx.0-15 if egress::hdr.mysrereset.$valid
+    TH13: B18(4)  # egress::hdr.ttl_changes_found.ttl_changes_found_idx.16-31 if egress::hdr.ttl_changes_found.$valid
+    TH12: B18(4)  # egress::hdr.ttl_changes_found.ttl_changes_found_idx.0-15 if egress::hdr.ttl_changes_found.$valid
+    TB2: B18(4)  # egress::hdr.ttl_changes_found.ttl_changes_found_count if egress::hdr.ttl_changes_found.$valid
+    TW11: B18(3)  # egress::hdr.DNS_packet_out.DNS_packet_out_sip if egress::hdr.DNS_packet_out.$valid
+    TW10: B18(3)  # egress::hdr.DNS_packet_out.DNS_packet_out_cip if egress::hdr.DNS_packet_out.$valid
+    TW9: B18(3)  # egress::hdr.DNS_packet_out.DNS_packet_out_smac if egress::hdr.DNS_packet_out.$valid
+    TW8: B18(3)  # egress::hdr.DNS_packet_out.DNS_packet_out_cmac if egress::hdr.DNS_packet_out.$valid
+    TH5: B18(3)  # egress::hdr.DNS_packet_out.DNS_packet_out_ttl.16-31 if egress::hdr.DNS_packet_out.$valid
+    TH4: B18(3)  # egress::hdr.DNS_packet_out.DNS_packet_out_ttl.0-15 if egress::hdr.DNS_packet_out.$valid
+    TW14: B18(6)  # egress::hdr.DNS_packet_fwd.DNS_packet_fwd_sip if egress::hdr.DNS_packet_fwd.$valid
+    TW13: B18(6)  # egress::hdr.DNS_packet_fwd.DNS_packet_fwd_cip if egress::hdr.DNS_packet_fwd.$valid
+    TW12: B18(6)  # egress::hdr.DNS_packet_fwd.DNS_packet_fwd_smac if egress::hdr.DNS_packet_fwd.$valid
+    TB10: B18(6)  # egress::hdr.DNS_packet_fwd.DNS_packet_fwd_cmac.24-31 if egress::hdr.DNS_packet_fwd.$valid
+    TB9: B18(6)  # egress::hdr.DNS_packet_fwd.DNS_packet_fwd_cmac.16-23 if egress::hdr.DNS_packet_fwd.$valid
+    TB8: B18(6)  # egress::hdr.DNS_packet_fwd.DNS_packet_fwd_cmac.8-15 if egress::hdr.DNS_packet_fwd.$valid
+    TB3: B18(6)  # egress::hdr.DNS_packet_fwd.DNS_packet_fwd_cmac.0-7 if egress::hdr.DNS_packet_fwd.$valid
+    TH17: B18(6)  # egress::hdr.DNS_packet_fwd.DNS_packet_fwd_ttl.16-31 if egress::hdr.DNS_packet_fwd.$valid
+    TH16: B18(6)  # egress::hdr.DNS_packet_fwd.DNS_packet_fwd_ttl.0-15 if egress::hdr.DNS_packet_fwd.$valid
+    TB0: B16(1)  # egress::hdr.min_parse_depth_padding_0[0].packet_payload.80-87 if egress::hdr.min_parse_depth_padding_0[0].$valid
+    TH21: B16(1)  # egress::hdr.min_parse_depth_padding_0[0].packet_payload.64-79 if egress::hdr.min_parse_depth_padding_0[0].$valid
+    TW3: B16(1)  # egress::hdr.min_parse_depth_padding_0[0].packet_payload.32-63 if egress::hdr.min_parse_depth_padding_0[0].$valid
+    TW2: B16(1)  # egress::hdr.min_parse_depth_padding_0[0].packet_payload.0-31 if egress::hdr.min_parse_depth_padding_0[0].$valid
+    TB1: B16(0)  # egress::hdr.min_parse_depth_padding_0[1].packet_payload.80-87 if egress::hdr.min_parse_depth_padding_0[1].$valid
+    TH22: B16(0)  # egress::hdr.min_parse_depth_padding_0[1].packet_payload.64-79 if egress::hdr.min_parse_depth_padding_0[1].$valid
+    TH3: B16(0)  # egress::hdr.min_parse_depth_padding_0[1].packet_payload.48-63 if egress::hdr.min_parse_depth_padding_0[1].$valid
+    TH2: B16(0)  # egress::hdr.min_parse_depth_padding_0[1].packet_payload.32-47 if egress::hdr.min_parse_depth_padding_0[1].$valid
+    TH1: B16(0)  # egress::hdr.min_parse_depth_padding_0[1].packet_payload.16-31 if egress::hdr.min_parse_depth_padding_0[1].$valid
+    TH0: B16(0)  # egress::hdr.min_parse_depth_padding_0[1].packet_payload.0-15 if egress::hdr.min_parse_depth_padding_0[1].$valid
+  egress_unicast_port: H16(0..8)  # bit[8..0]: egress::eg_intr_md.egress_port
+stage 0 ingress:
+  phase0_match IngressParser.$PORT_METADATA:
+    p4:
+      name: IngressParser.$PORT_METADATA
+      size: 288
+      preferred_match_type: exact
+      match_type: exact
+    size: 288
+    p4_param_order:
+      ig_intr_md.ingress_port: { type: exact, size: 9 }
+    format: {ig_intr_md: 0..63}
+    constant_value: 0
+    actions:
+      set_port_metadata:
+      - handle: 0x20000000
+      - p4_param_order: { ig_intr_md: 64 } 
+  ternary_match table_1 0:
+    p4: { name: IngressControl.table_1701, size: 512 }
+    p4_param_order: 
+      hdr.wire_ev.event_id: { type: ternary, size: 8, full_size: 8 }
+    row: 3
+    bus: 0
+    column: 0
+    hash_dist:
+      0: { hash: 0, mask: 0x7, shift: 0 }
+    input_xbar:
+      ternary group 0: { 0: hdr.wire_ev.event_id }
+      exact group 0: { 0: hdr.DNS_packet_fwd.DNS_packet_fwd_cmac, 32: hdr.DNS_packet_fwd.DNS_packet_fwd_smac, 64: hdr.DNS_packet_fwd.DNS_packet_fwd_cip, 96: hdr.DNS_packet_fwd.DNS_packet_fwd_sip }
+      hash 0:
+        0..2: slice(stripe(crc(0x6, 0x0, 0x0, 128, { 0: hdr.DNS_packet_fwd.DNS_packet_fwd_cmac, 32: hdr.DNS_packet_fwd.DNS_packet_fwd_smac }, { })), 0..2)
+      hash 1:
+        0..2: slice(stripe(crc(0x6, 0x0, 0x0, 128, { 64: hdr.DNS_packet_fwd.DNS_packet_fwd_cip, 96: hdr.DNS_packet_fwd.DNS_packet_fwd_sip }, { })), 0..2)
+      hash group 0:
+        table: [0, 1]
+        seed: 0x0
+    match:
+    - { group: 0, byte_config: 3, dirtcam: 0x1 }
+    hit: [  table_0 ]
+    miss:  table_0
+    context_json:
+      static_entries:
+      - priority: 0
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x2"
+          mask: "0xFF"
+        action_handle: 0x20000008
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 1
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x3"
+          mask: "0xFF"
+        action_handle: 0x20000008
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 2
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x4"
+          mask: "0xFF"
+        action_handle: 0x20000008
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 3
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x1"
+          mask: "0xFF"
+        action_handle: 0x20000009
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 4
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x0"
+          mask: "0x0"
+        action_handle: 0x20000008
+        is_default_entry: false
+        action_parameters_values: []
+
+    indirect: table_1$tind
+  ternary_indirect table_1$tind:
+    row: 2
+    bus: 0
+    column: 2
+    hash_dist:
+      0: { hash: 0, mask: 0x7, shift: 0 }
+    input_xbar:
+      ternary group 0: { 0: hdr.wire_ev.event_id }
+      exact group 0: { 0: hdr.DNS_packet_fwd.DNS_packet_fwd_cmac, 32: hdr.DNS_packet_fwd.DNS_packet_fwd_smac, 64: hdr.DNS_packet_fwd.DNS_packet_fwd_cip, 96: hdr.DNS_packet_fwd.DNS_packet_fwd_sip }
+      hash 0:
+        0..2: slice(stripe(crc(0x6, 0x0, 0x0, 128, { 0: hdr.DNS_packet_fwd.DNS_packet_fwd_cmac, 32: hdr.DNS_packet_fwd.DNS_packet_fwd_smac }, { })), 0..2)
+      hash 1:
+        0..2: slice(stripe(crc(0x6, 0x0, 0x0, 128, { 64: hdr.DNS_packet_fwd.DNS_packet_fwd_cip, 96: hdr.DNS_packet_fwd.DNS_packet_fwd_sip }, { })), 0..2)
+      hash group 0:
+        table: [0, 1]
+        seed: 0x0
+    format: { action: 0..0 }
+    action_bus: { 96..99 : hash_dist(0) }
+    instruction: table_1$tind(action, $DEFAULT)
+    actions:
+      IngressControl.block_6(0, 0):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000008
+      - next_table: 0
+      IngressControl.block_7(1, 1):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000009
+      - next_table: 0
+      - set W4(0..2), hash_dist(0, 0..2)
+      NoAction(-1, 2):
+      - hit_allowed: { allowed: false, reason: user_indicated_default_only }
+      - default_only_action: { allowed: true }
+      - handle: 0x2000000a
+      - next_table: 0
+    default_only_action: NoAction
+  ternary_match table_0 1:
+    p4: { name: IngressControl.table_1700, size: 512 }
+    p4_param_order: 
+      hdr.wire_ev.event_id: { type: ternary, size: 8, full_size: 8 }
+    row: 2
+    bus: 0
+    column: 0
+    input_xbar:
+      ternary group 0: { 0: hdr.wire_ev.event_id }
+    match:
+    - { group: 0, byte_config: 3, dirtcam: 0x1 }
+    hit: [  ingress_assign_const_to_phv_0 ]
+    miss:  ingress_assign_const_to_phv_0
+    context_json:
+      static_entries:
+      - priority: 0
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x2"
+          mask: "0xFF"
+        action_handle: 0x20000002
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 1
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x3"
+          mask: "0xFF"
+        action_handle: 0x20000003
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 2
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x4"
+          mask: "0xFF"
+        action_handle: 0x20000004
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 3
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x1"
+          mask: "0xFF"
+        action_handle: 0x20000005
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 4
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x0"
+          mask: "0x0"
+        action_handle: 0x20000006
+        is_default_entry: false
+        action_parameters_values: []
+
+    indirect: table_0$tind
+  ternary_indirect table_0$tind:
+    row: 1
+    bus: 0
+    column: 2
+    input_xbar:
+      ternary group 0: { 0: hdr.wire_ev.event_id }
+    format: { action: 0..2, immediate: 3..18 }
+    action_bus: { 16 : immediate(0..7), 17 : immediate(8..15) }
+    instruction: table_0$tind(action, $DEFAULT)
+    actions:
+      IngressControl.block_1(0, 3):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000002
+      - next_table: 0
+      - {  }
+      - set hdr.DNS_packet_out.$valid, 0
+      IngressControl.block_2(1, 4):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000003
+      - next_table: 0
+      - {  }
+      - set hdr.ttl_changes_found.$valid, 0
+      IngressControl.block_3(2, 5):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000004
+      - next_table: 0
+      - {  }
+      - set mysre_idx.0-2, hdr.mysrereset.mysrereset_mysreidx(0..2)
+      - set mysre_idx.3-31, hdr.mysrereset.mysrereset_mysreidx(3..31)
+      IngressControl.block_4(3, 6):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000005
+      - next_table: 0
+      - { $data0: immediate(5..7), $constant1: $data0(0..0), $constant1: 1, $constant0: $data0(2..2), $constant0: 1, $mask0: immediate(13..15), $constant2: $mask0(0..0), $constant2: 1, $constant3: $mask0(2..2), $constant3: 1 }
+      - set countermysre_0, 0
+      - set resmysre1354_0, 0
+      - set hdr.bridge_ev.DNS_packet_out, 1
+      - set hdr.DNS_packet_out.DNS_packet_out_sip, hdr.DNS_packet_fwd.DNS_packet_fwd_sip
+      - set hdr.DNS_packet_out.DNS_packet_out_cip, hdr.DNS_packet_fwd.DNS_packet_fwd_cip
+      - set hdr.DNS_packet_out.DNS_packet_out_smac, hdr.DNS_packet_fwd.DNS_packet_fwd_smac
+      - set hdr.DNS_packet_out.DNS_packet_out_cmac, hdr.DNS_packet_fwd.DNS_packet_fwd_cmac
+      - set hdr.DNS_packet_out.DNS_packet_out_ttl, hdr.DNS_packet_fwd.DNS_packet_fwd_ttl
+      - bitmasked-set B10, $data0, B10
+      - set W6(6..29), 0
+      IngressControl.block_5(4, 0):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000006
+      - next_table: 0
+      - {  }
+      NoAction(-1, 7):
+      - hit_allowed: { allowed: false, reason: user_indicated_default_only }
+      - default_only_action: { allowed: true }
+      - handle: 0x20000007
+      - next_table: 0
+      - {  }
+    default_only_action: NoAction
+  ternary_match ingress_assign_const_to_phv_0 2:
+    p4: { name: ingress_assign_const_to_phv_0, hidden: true }
+    hit: [  table_2 ]
+    miss:  table_2
+    indirect: ingress_assign_const_to_phv_0$tind
+  ternary_indirect ingress_assign_const_to_phv_0$tind:
+    row: 0
+    bus: 1
+    format: { action: 0..0 }
+    instruction: ingress_assign_const_to_phv_0$tind(action, $DEFAULT)
+    actions:
+      __assign_const_to_phv__(0, 8):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000001
+      - next_table: 0
+      - set const_to_phv_8w5, 5
+    default_action: __assign_const_to_phv__
+stage 1 ingress:
+  dependency: action
+  ternary_match table_2 0:
+    p4: { name: IngressControl.table_1699, size: 512 }
+    p4_param_order: 
+      hdr.wire_ev.event_id: { type: ternary, size: 8, full_size: 8 }
+    row: 0
+    bus: 0
+    column: 0
+    input_xbar:
+      ternary group 0: { 0: hdr.wire_ev.event_id }
+    match:
+    - { group: 0, byte_config: 3, dirtcam: 0x1 }
+    hit: [  table_3 ]
+    miss:  table_3
+    context_json:
+      static_entries:
+      - priority: 0
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x2"
+          mask: "0xFF"
+        action_handle: 0x2000000b
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 1
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x3"
+          mask: "0xFF"
+        action_handle: 0x2000000b
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 2
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x4"
+          mask: "0xFF"
+        action_handle: 0x2000000c
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 3
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x1"
+          mask: "0xFF"
+        action_handle: 0x2000000d
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 4
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x0"
+          mask: "0x0"
+        action_handle: 0x2000000b
+        is_default_entry: false
+        action_parameters_values: []
+
+    indirect: table_2$tind
+  ternary_indirect table_2$tind:
+    row: 0
+    bus: 0
+    column: 2
+    input_xbar:
+      ternary group 0: { 0: hdr.wire_ev.event_id }
+    format: { action: 0..1 }
+    instruction: table_2$tind(action, $DEFAULT)
+    actions:
+      IngressControl.block_8(0, 0):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x2000000b
+      - next_table: 0
+      IngressControl.block_9(1, 1):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x2000000c
+      - next_table: 0
+      - set hdr.mysrereset.$valid, 0
+      IngressControl.block_10(2, 2):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x2000000d
+      - next_table: 0
+      - set mysreidx_0.3-31, 0
+      - set mysreidx_0.0-2, pc_tmp_0
+      NoAction(-1, 3):
+      - hit_allowed: { allowed: false, reason: user_indicated_default_only }
+      - default_only_action: { allowed: true }
+      - handle: 0x2000000e
+      - next_table: 0
+    default_only_action: NoAction
+stage 2 ingress:
+  dependency: match
+  ternary_match table_3 0:
+    p4: { name: IngressControl.table_1698, size: 512 }
+    p4_param_order: 
+      hdr.wire_ev.event_id: { type: ternary, size: 8, full_size: 8 }
+    row: 0
+    bus: 0
+    column: 0
+    hash_dist:
+      0: { hash: 0, mask: 0x7fffff, shift: 5, expand: 0 }
+    input_xbar:
+      ternary group 0: { 0: hdr.wire_ev.event_id }
+      exact group 0: { 3: mysreidx_0.3-31, 32: mysreidx_0.0-2 }
+      hash 0:
+        0..2: mysreidx_0.0-2
+        3..15: mysreidx_0.3-31(0..12)
+        32..38: mysreidx_0.3-31(13..19)
+      hash group 0:
+        table: [0]
+        seed: 0x0
+    match:
+    - { group: 0, byte_config: 3, dirtcam: 0x1 }
+    hit: [  table_4 ]
+    miss:  table_4
+    context_json:
+      static_entries:
+      - priority: 0
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x2"
+          mask: "0xFF"
+        action_handle: 0x2000000f
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 1
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x3"
+          mask: "0xFF"
+        action_handle: 0x2000000f
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 2
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x4"
+          mask: "0xFF"
+        action_handle: 0x2000000f
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 3
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x1"
+          mask: "0xFF"
+        action_handle: 0x20000010
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 4
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x0"
+          mask: "0x0"
+        action_handle: 0x2000000f
+        is_default_entry: false
+        action_parameters_values: []
+
+    indirect: table_3$tind
+  stateful table_3$salu.assigned_var_mysrefst_ttl:
+    p4: { name: assigned_var_mysrefst_ttl, size: 8 }
+    row: 15
+    logical_bus: S
+    column: [ 0, 1 ]
+    maprams: [ 0, 1 ]
+    home_row: 15
+    input_xbar:
+      exact group 0: { 64: hdr.DNS_packet_fwd.DNS_packet_fwd_ttl }
+    data_bytemask: 15
+    format: { lo: 32 }
+    actions:
+      assigned_var_mysrefst_ttl_regaction:
+      - equ lo, lo
+      - alu_a cmplo, hi, phv_lo
+      - alu_a !cmplo, hi, lo
+      - output alu_hi
+  ternary_indirect table_3$tind:
+    row: 0
+    bus: 0
+    column: 2
+    hash_dist:
+      0: { hash: 0, mask: 0x7fffff, shift: 5, expand: 0 }
+    input_xbar:
+      ternary group 0: { 0: hdr.wire_ev.event_id }
+      exact group 0: { 3: mysreidx_0.3-31, 32: mysreidx_0.0-2 }
+      hash 0:
+        0..2: mysreidx_0.0-2
+        3..15: mysreidx_0.3-31(0..12)
+        32..38: mysreidx_0.3-31(13..19)
+      hash group 0:
+        table: [0]
+        seed: 0x0
+    format: { action: 0..0, meter_addr: 1..10, meter_pfe: 11..11 }
+    action_bus: { 96..99 : table_3$salu.assigned_var_mysrefst_ttl(0..31) }
+    stateful: table_3$salu.assigned_var_mysrefst_ttl(hash_dist 0, meter_pfe, $DEFAULT)
+    instruction: table_3$tind(action, $DEFAULT)
+    actions:
+      IngressControl.block_11(0, 0):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x2000000f
+      - next_table: 0
+      IngressControl.block_12(1, 1):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000010
+      - next_table: 0
+      - set W1(0..31), table_3$salu.assigned_var_mysrefst_ttl
+      - table_3$salu.assigned_var_mysrefst_ttl(assigned_var_mysrefst_ttl_regaction, $hash_dist)
+      NoAction(-1, 2):
+      - hit_allowed: { allowed: false, reason: user_indicated_default_only }
+      - default_only_action: { allowed: true }
+      - handle: 0x20000011
+      - next_table: 0
+    default_only_action: NoAction
+stage 3 ingress:
+  dependency: action
+  ternary_match table_4 0:
+    p4: { name: IngressControl.table_1697, size: 512 }
+    p4_param_order: 
+      hdr.wire_ev.event_id: { type: ternary, size: 8, full_size: 8 }
+    row: 0
+    bus: 0
+    column: 0
+    input_xbar:
+      ternary group 0: { 0: hdr.wire_ev.event_id }
+    match:
+    - { group: 0, byte_config: 3, dirtcam: 0x1 }
+    hit: [  table_5 ]
+    miss:  table_5
+    context_json:
+      static_entries:
+      - priority: 0
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x2"
+          mask: "0xFF"
+        action_handle: 0x20000012
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 1
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x3"
+          mask: "0xFF"
+        action_handle: 0x20000012
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 2
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x4"
+          mask: "0xFF"
+        action_handle: 0x20000012
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 3
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x1"
+          mask: "0xFF"
+        action_handle: 0x20000013
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 4
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x0"
+          mask: "0x0"
+        action_handle: 0x20000012
+        is_default_entry: false
+        action_parameters_values: []
+
+    indirect: table_4$tind
+  ternary_indirect table_4$tind:
+    row: 0
+    bus: 0
+    column: 2
+    input_xbar:
+      ternary group 0: { 0: hdr.wire_ev.event_id }
+    format: { action: 0..0 }
+    instruction: table_4$tind(action, $DEFAULT)
+    actions:
+      IngressControl.block_13(0, 0):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000012
+      - next_table: 0
+      IngressControl.block_14(1, 1):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000013
+      - next_table: 0
+      - sub W3, W1, W0
+      NoAction(-1, 2):
+      - hit_allowed: { allowed: false, reason: user_indicated_default_only }
+      - default_only_action: { allowed: true }
+      - handle: 0x20000014
+      - next_table: 0
+    default_only_action: NoAction
+stage 4 ingress:
+  dependency: match
+  ternary_match table_5 0:
+    p4: { name: IngressControl.table_1696, size: 512 }
+    p4_param_order: 
+      if_precomp_0: { type: ternary, size: 32, full_size: 32, key_name: "if_precomp" }
+      hdr.wire_ev.event_id: { type: ternary, size: 8, full_size: 8 }
+    row: 0
+    bus: 0
+    column: 0
+    input_xbar:
+      ternary group 0: { 0: if_precomp_0, 32: hdr.wire_ev.event_id }
+    match:
+    - { group: 0, byte_config: 3, dirtcam: 0x155 }
+    hit: [  table_6 ]
+    miss:  table_6
+    context_json:
+      static_entries:
+      - priority: 0
+        match_key_fields_values:
+        - field_name: if_precomp
+          value: "0x0"
+          mask: "0xFFFFFFFF"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x2"
+          mask: "0xFF"
+        action_handle: 0x20000015
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 1
+        match_key_fields_values:
+        - field_name: if_precomp
+          value: "0x0"
+          mask: "0x0"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x2"
+          mask: "0xFF"
+        action_handle: 0x20000015
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 2
+        match_key_fields_values:
+        - field_name: if_precomp
+          value: "0x0"
+          mask: "0xFFFFFFFF"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x3"
+          mask: "0xFF"
+        action_handle: 0x20000015
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 3
+        match_key_fields_values:
+        - field_name: if_precomp
+          value: "0x0"
+          mask: "0x0"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x3"
+          mask: "0xFF"
+        action_handle: 0x20000015
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 4
+        match_key_fields_values:
+        - field_name: if_precomp
+          value: "0x0"
+          mask: "0xFFFFFFFF"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x4"
+          mask: "0xFF"
+        action_handle: 0x20000015
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 5
+        match_key_fields_values:
+        - field_name: if_precomp
+          value: "0x0"
+          mask: "0x0"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x4"
+          mask: "0xFF"
+        action_handle: 0x20000015
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 6
+        match_key_fields_values:
+        - field_name: if_precomp
+          value: "0x0"
+          mask: "0xFFFFFFFF"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x1"
+          mask: "0xFF"
+        action_handle: 0x20000016
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 7
+        match_key_fields_values:
+        - field_name: if_precomp
+          value: "0x0"
+          mask: "0x0"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x1"
+          mask: "0xFF"
+        action_handle: 0x20000017
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 8
+        match_key_fields_values:
+        - field_name: if_precomp
+          value: "0x0"
+          mask: "0x0"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x0"
+          mask: "0x0"
+        action_handle: 0x20000015
+        is_default_entry: false
+        action_parameters_values: []
+
+    indirect: table_5$tind
+  ternary_indirect table_5$tind:
+    row: 0
+    bus: 0
+    column: 2
+    input_xbar:
+      ternary group 0: { 0: if_precomp_0, 32: hdr.wire_ev.event_id }
+    format: { action: 0..1 }
+    instruction: table_5$tind(action, $DEFAULT)
+    actions:
+      IngressControl.block_15(0, 0):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000015
+      - next_table: 0
+      IngressControl.block_16(1, 1):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000016
+      - next_table: 0
+      - shl countermysre_0, countermysre_0, 1
+      - set hdr.DNS_packet_fwd.$valid, 0
+      IngressControl.block_17(2, 2):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000017
+      - next_table: 0
+      - shl pc_tmp1675_0, countermysre_0, 1
+      - set hdr.DNS_packet_fwd.$valid, 0
+      NoAction(-1, 3):
+      - hit_allowed: { allowed: false, reason: user_indicated_default_only }
+      - default_only_action: { allowed: true }
+      - handle: 0x20000018
+      - next_table: 0
+    default_only_action: NoAction
+stage 5 ingress:
+  dependency: action
+  ternary_match table_6 0:
+    p4: { name: IngressControl.table_1695, size: 512 }
+    p4_param_order: 
+      if_precomp_0: { type: ternary, size: 32, full_size: 32, key_name: "if_precomp" }
+      hdr.wire_ev.event_id: { type: ternary, size: 8, full_size: 8 }
+    row: 0
+    bus: 0
+    column: 0
+    input_xbar:
+      ternary group 0: { 0: if_precomp_0, 32: hdr.wire_ev.event_id }
+    match:
+    - { group: 0, byte_config: 3, dirtcam: 0x155 }
+    hit: [  table_7 ]
+    miss:  table_7
+    context_json:
+      static_entries:
+      - priority: 0
+        match_key_fields_values:
+        - field_name: if_precomp
+          value: "0x0"
+          mask: "0xFFFFFFFF"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x2"
+          mask: "0xFF"
+        action_handle: 0x20000019
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 1
+        match_key_fields_values:
+        - field_name: if_precomp
+          value: "0x0"
+          mask: "0xFFFFFFFF"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x3"
+          mask: "0xFF"
+        action_handle: 0x20000019
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 2
+        match_key_fields_values:
+        - field_name: if_precomp
+          value: "0x0"
+          mask: "0xFFFFFFFF"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x4"
+          mask: "0xFF"
+        action_handle: 0x20000019
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 3
+        match_key_fields_values:
+        - field_name: if_precomp
+          value: "0x0"
+          mask: "0xFFFFFFFF"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x1"
+          mask: "0xFF"
+        action_handle: 0x20000019
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 4
+        match_key_fields_values:
+        - field_name: if_precomp
+          value: "0x0"
+          mask: "0x0"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x2"
+          mask: "0xFF"
+        action_handle: 0x20000019
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 5
+        match_key_fields_values:
+        - field_name: if_precomp
+          value: "0x0"
+          mask: "0x0"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x3"
+          mask: "0xFF"
+        action_handle: 0x20000019
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 6
+        match_key_fields_values:
+        - field_name: if_precomp
+          value: "0x0"
+          mask: "0x0"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x4"
+          mask: "0xFF"
+        action_handle: 0x20000019
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 7
+        match_key_fields_values:
+        - field_name: if_precomp
+          value: "0x0"
+          mask: "0x0"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x1"
+          mask: "0xFF"
+        action_handle: 0x2000001a
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 8
+        match_key_fields_values:
+        - field_name: if_precomp
+          value: "0x0"
+          mask: "0x0"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x0"
+          mask: "0x0"
+        action_handle: 0x20000019
+        is_default_entry: false
+        action_parameters_values: []
+
+    indirect: table_6$tind
+  ternary_indirect table_6$tind:
+    row: 0
+    bus: 0
+    column: 2
+    input_xbar:
+      ternary group 0: { 0: if_precomp_0, 32: hdr.wire_ev.event_id }
+    format: { action: 0..0 }
+    instruction: table_6$tind(action, $DEFAULT)
+    actions:
+      IngressControl.block_18(0, 0):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000019
+      - next_table: 0
+      IngressControl.block_19(1, 1):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x2000001a
+      - next_table: 0
+      - add B6, 1, B5
+      NoAction(-1, 2):
+      - hit_allowed: { allowed: false, reason: user_indicated_default_only }
+      - default_only_action: { allowed: true }
+      - handle: 0x2000001b
+      - next_table: 0
+    default_only_action: NoAction
+stage 6 ingress:
+  dependency: match
+  ternary_match table_7 0:
+    p4: { name: IngressControl.table_1694, size: 512 }
+    p4_param_order: 
+      countermysre_0: { type: ternary, size: 8, full_size: 8, key_name: "countermysre" }
+      hdr.wire_ev.event_id: { type: ternary, size: 8, full_size: 8 }
+    row: 0
+    bus: 0
+    column: 0
+    input_xbar:
+      ternary group 0: { 0: countermysre_0, 8: hdr.wire_ev.event_id }
+    match:
+    - { group: 0, byte_config: 3, dirtcam: 0x5 }
+    hit: [  table_8 ]
+    miss:  table_8
+    context_json:
+      static_entries:
+      - priority: 0
+        match_key_fields_values:
+        - field_name: countermysre
+          value: "0x1"
+          mask: "0xFF"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x2"
+          mask: "0xFF"
+        action_handle: 0x2000001c
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 1
+        match_key_fields_values:
+        - field_name: countermysre
+          value: "0x1"
+          mask: "0xFF"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x3"
+          mask: "0xFF"
+        action_handle: 0x2000001c
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 2
+        match_key_fields_values:
+        - field_name: countermysre
+          value: "0x1"
+          mask: "0xFF"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x4"
+          mask: "0xFF"
+        action_handle: 0x2000001c
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 3
+        match_key_fields_values:
+        - field_name: countermysre
+          value: "0x1"
+          mask: "0xFF"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x1"
+          mask: "0xFF"
+        action_handle: 0x2000001d
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 4
+        match_key_fields_values:
+        - field_name: countermysre
+          value: "0x0"
+          mask: "0xFF"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x2"
+          mask: "0xFF"
+        action_handle: 0x2000001c
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 5
+        match_key_fields_values:
+        - field_name: countermysre
+          value: "0x0"
+          mask: "0xFF"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x3"
+          mask: "0xFF"
+        action_handle: 0x2000001c
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 6
+        match_key_fields_values:
+        - field_name: countermysre
+          value: "0x0"
+          mask: "0xFF"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x4"
+          mask: "0xFF"
+        action_handle: 0x2000001c
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 7
+        match_key_fields_values:
+        - field_name: countermysre
+          value: "0x0"
+          mask: "0xFF"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x1"
+          mask: "0xFF"
+        action_handle: 0x2000001e
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 8
+        match_key_fields_values:
+        - field_name: countermysre
+          value: "0x0"
+          mask: "0x0"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x2"
+          mask: "0xFF"
+        action_handle: 0x2000001c
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 9
+        match_key_fields_values:
+        - field_name: countermysre
+          value: "0x0"
+          mask: "0x0"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x3"
+          mask: "0xFF"
+        action_handle: 0x2000001c
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 10
+        match_key_fields_values:
+        - field_name: countermysre
+          value: "0x0"
+          mask: "0x0"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x4"
+          mask: "0xFF"
+        action_handle: 0x2000001c
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 11
+        match_key_fields_values:
+        - field_name: countermysre
+          value: "0x0"
+          mask: "0x0"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x1"
+          mask: "0xFF"
+        action_handle: 0x2000001c
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 12
+        match_key_fields_values:
+        - field_name: countermysre
+          value: "0x0"
+          mask: "0x0"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x0"
+          mask: "0x0"
+        action_handle: 0x2000001c
+        is_default_entry: false
+        action_parameters_values: []
+
+    indirect: table_7$tind
+  ternary_indirect table_7$tind:
+    row: 0
+    bus: 0
+    column: 2
+    input_xbar:
+      ternary group 0: { 0: countermysre_0, 8: hdr.wire_ev.event_id }
+    format: { action: 0..1, immediate: 2..25 }
+    action_bus: { 96..99 : immediate(0..23) }
+    instruction: table_7$tind(action, $DEFAULT)
+    actions:
+      IngressControl.block_20(0, 0):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x2000001c
+      - next_table: 0
+      - {  }
+      IngressControl.block_21(1, 1):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x2000001d
+      - next_table: 0
+      - { $data0: immediate(0..23), $constant0: $data0(0..7), $constant0: 113, $constant1: $data0(8..15), $constant1: 149, $constant2: $data0(16..23), $constant2: 0 }
+      - set W6(6..29), $data0
+      IngressControl.block_22(2, 2):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x2000001e
+      - next_table: 0
+      - { $data0: immediate(0..23), $constant0: $data0(0..7), $constant0: 236, $constant1: $data0(8..15), $constant1: 111, $constant2: $data0(16..23), $constant2: 1 }
+      - set W6(6..29), $data0
+      NoAction(-1, 3):
+      - hit_allowed: { allowed: false, reason: user_indicated_default_only }
+      - default_only_action: { allowed: true }
+      - handle: 0x2000001f
+      - next_table: 0
+      - {  }
+    default_only_action: NoAction
+stage 7 ingress:
+  dependency: match
+  ternary_match table_8 0:
+    p4: { name: IngressControl.table_1693, size: 512 }
+    p4_param_order: 
+      memop_synthesized_meta_varmysre_0: { type: ternary, size: 8, full_size: 8, key_name: "memop_synthesized_meta_varmysre" }
+      hdr.wire_ev.event_id: { type: ternary, size: 8, full_size: 8 }
+    row: 0
+    bus: 0
+    column: 0
+    input_xbar:
+      ternary group 0: { 0: hdr.wire_ev.event_id, 22: memop_synthesized_meta_varmysre_0 }
+    match:
+    - { group: 0, byte_config: 3, dirtcam: 0x51 }
+    hit: [  table_9 ]
+    miss:  table_9
+    context_json:
+      static_entries:
+      - priority: 0
+        match_key_fields_values:
+        - field_name: memop_synthesized_meta_varmysre
+          value: "0x0"
+          mask: "0xFF"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x2"
+          mask: "0xFF"
+        action_handle: 0x20000020
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 1
+        match_key_fields_values:
+        - field_name: memop_synthesized_meta_varmysre
+          value: "0x0"
+          mask: "0xFF"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x3"
+          mask: "0xFF"
+        action_handle: 0x20000020
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 2
+        match_key_fields_values:
+        - field_name: memop_synthesized_meta_varmysre
+          value: "0x0"
+          mask: "0xFF"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x4"
+          mask: "0xFF"
+        action_handle: 0x20000020
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 3
+        match_key_fields_values:
+        - field_name: memop_synthesized_meta_varmysre
+          value: "0x0"
+          mask: "0xFF"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x1"
+          mask: "0xFF"
+        action_handle: 0x20000021
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 4
+        match_key_fields_values:
+        - field_name: memop_synthesized_meta_varmysre
+          value: "0x1"
+          mask: "0xFF"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x2"
+          mask: "0xFF"
+        action_handle: 0x20000020
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 5
+        match_key_fields_values:
+        - field_name: memop_synthesized_meta_varmysre
+          value: "0x1"
+          mask: "0xFF"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x3"
+          mask: "0xFF"
+        action_handle: 0x20000020
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 6
+        match_key_fields_values:
+        - field_name: memop_synthesized_meta_varmysre
+          value: "0x1"
+          mask: "0xFF"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x4"
+          mask: "0xFF"
+        action_handle: 0x20000020
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 7
+        match_key_fields_values:
+        - field_name: memop_synthesized_meta_varmysre
+          value: "0x1"
+          mask: "0xFF"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x1"
+          mask: "0xFF"
+        action_handle: 0x20000022
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 8
+        match_key_fields_values:
+        - field_name: memop_synthesized_meta_varmysre
+          value: "0x0"
+          mask: "0x0"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x2"
+          mask: "0xFF"
+        action_handle: 0x20000020
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 9
+        match_key_fields_values:
+        - field_name: memop_synthesized_meta_varmysre
+          value: "0x0"
+          mask: "0x0"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x3"
+          mask: "0xFF"
+        action_handle: 0x20000020
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 10
+        match_key_fields_values:
+        - field_name: memop_synthesized_meta_varmysre
+          value: "0x0"
+          mask: "0x0"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x4"
+          mask: "0xFF"
+        action_handle: 0x20000020
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 11
+        match_key_fields_values:
+        - field_name: memop_synthesized_meta_varmysre
+          value: "0x0"
+          mask: "0x0"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x1"
+          mask: "0xFF"
+        action_handle: 0x20000020
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 12
+        match_key_fields_values:
+        - field_name: memop_synthesized_meta_varmysre
+          value: "0x0"
+          mask: "0x0"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x0"
+          mask: "0x0"
+        action_handle: 0x20000020
+        is_default_entry: false
+        action_parameters_values: []
+
+    indirect: table_8$tind
+  ternary_indirect table_8$tind:
+    row: 0
+    bus: 0
+    column: 2
+    input_xbar:
+      ternary group 0: { 0: hdr.wire_ev.event_id, 22: memop_synthesized_meta_varmysre_0 }
+    format: { action: 0..1 }
+    instruction: table_8$tind(action, $DEFAULT)
+    actions:
+      IngressControl.block_23(0, 0):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000020
+      - next_table: 0
+      IngressControl.block_24(1, 1):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000021
+      - next_table: 0
+      - set mysre_idx.0-2, mysreidx_0.0-2
+      - set mysre_idx.3-31, mysreidx_0.3-31
+      IngressControl.block_25(2, 2):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000022
+      - next_table: 0
+      - set mysre_idx.0-2, mysreidx_0.0-2
+      - set mysre_idx.3-31, mysreidx_0.3-31
+      NoAction(-1, 3):
+      - hit_allowed: { allowed: false, reason: user_indicated_default_only }
+      - default_only_action: { allowed: true }
+      - handle: 0x20000023
+      - next_table: 0
+    default_only_action: NoAction
+stage 8 ingress:
+  dependency: match
+  ternary_match table_9 0:
+    p4: { name: IngressControl.table_1692, size: 512 }
+    p4_param_order: 
+      hdr.wire_ev.event_id: { type: ternary, size: 8, full_size: 8 }
+      memop_synthesized_meta_varmysre_0: { type: ternary, size: 8, full_size: 8, key_name: "memop_synthesized_meta_varmysre" }
+    row: 0
+    bus: 0
+    column: 0
+    hash_dist:
+      0: { hash: 1, mask: 0x7fffff, shift: 3, expand: 0 }
+    input_xbar:
+      ternary group 0: { 0: hdr.wire_ev.event_id, 22: memop_synthesized_meta_varmysre_0 }
+      exact group 0: { 67: mysre_idx.0-2, 72: mysre_idx.3-31(8..28), 96: mysre_idx.3-31(0..7) }
+      hash 1:
+        0..2: mysre_idx.0-2
+        3..10: mysre_idx.3-31(0..7)
+        11..15: mysre_idx.3-31(8..12)
+        32..38: mysre_idx.3-31(13..19)
+      hash group 1:
+        table: [1]
+        seed: 0x0
+    match:
+    - { group: 0, byte_config: 3, dirtcam: 0x51 }
+    hit: [  table_10 ]
+    miss:  table_10
+    context_json:
+      static_entries:
+      - priority: 0
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x2"
+          mask: "0xFF"
+        - field_name: memop_synthesized_meta_varmysre
+          value: "0x0"
+          mask: "0xFF"
+        action_handle: 0x20000024
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 1
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x3"
+          mask: "0xFF"
+        - field_name: memop_synthesized_meta_varmysre
+          value: "0x0"
+          mask: "0xFF"
+        action_handle: 0x20000024
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 2
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x4"
+          mask: "0xFF"
+        - field_name: memop_synthesized_meta_varmysre
+          value: "0x0"
+          mask: "0xFF"
+        action_handle: 0x20000025
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 3
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x1"
+          mask: "0xFF"
+        - field_name: memop_synthesized_meta_varmysre
+          value: "0x0"
+          mask: "0xFF"
+        action_handle: 0x20000026
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 4
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x2"
+          mask: "0xFF"
+        - field_name: memop_synthesized_meta_varmysre
+          value: "0x1"
+          mask: "0xFF"
+        action_handle: 0x20000024
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 5
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x3"
+          mask: "0xFF"
+        - field_name: memop_synthesized_meta_varmysre
+          value: "0x1"
+          mask: "0xFF"
+        action_handle: 0x20000024
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 6
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x4"
+          mask: "0xFF"
+        - field_name: memop_synthesized_meta_varmysre
+          value: "0x1"
+          mask: "0xFF"
+        action_handle: 0x20000025
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 7
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x1"
+          mask: "0xFF"
+        - field_name: memop_synthesized_meta_varmysre
+          value: "0x1"
+          mask: "0xFF"
+        action_handle: 0x20000027
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 8
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x2"
+          mask: "0xFF"
+        - field_name: memop_synthesized_meta_varmysre
+          value: "0x0"
+          mask: "0x0"
+        action_handle: 0x20000024
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 9
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x3"
+          mask: "0xFF"
+        - field_name: memop_synthesized_meta_varmysre
+          value: "0x0"
+          mask: "0x0"
+        action_handle: 0x20000024
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 10
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x4"
+          mask: "0xFF"
+        - field_name: memop_synthesized_meta_varmysre
+          value: "0x0"
+          mask: "0x0"
+        action_handle: 0x20000025
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 11
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x0"
+          mask: "0x0"
+        - field_name: memop_synthesized_meta_varmysre
+          value: "0x0"
+          mask: "0x0"
+        action_handle: 0x20000024
+        is_default_entry: false
+        action_parameters_values: []
+
+    indirect: table_9$tind
+  stateful table_9$salu.mysre:
+    p4: { name: mysre, size: 8 }
+    row: 15
+    logical_bus: S
+    column: [ 0, 1 ]
+    maprams: [ 0, 1 ]
+    home_row: 15
+    input_xbar:
+      exact group 0: { 6: f_synthesized_meta_varmysre_0, 14: g_synthesized_meta_varmysre_0 }
+      hash 0:
+        0..7: f_synthesized_meta_varmysre_0
+        8..15: g_synthesized_meta_varmysre_0
+      hash group 0:
+        table: [0]
+        seed: 0x0
+    hash_bytemask: 3
+    format: { lo: 8 }
+    actions:
+      mysre_regaction:
+      - alu_a lo, 0
+      mysre_regaction_0:
+      - neq lo, phv_lo, -6
+      - neq hi, lo, phv_hi, -6
+      - or (cmplo & cmphi), lo, phv_lo, lo
+      - or (!cmplo | !cmphi), lo, phv_hi, 8
+      - output alu_lo
+      mysre_regaction_1:
+      - equ lo, lo
+      - equ hi, lo, phv_hi, -8
+      - add (cmplo | cmphi), lo, phv_hi, 2
+      - or (!cmplo & !cmphi), lo, phv_lo, lo
+      - output alu_lo
+  ternary_indirect table_9$tind:
+    row: 0
+    bus: 0
+    column: 2
+    hash_dist:
+      0: { hash: 1, mask: 0x7fffff, shift: 3, expand: 0 }
+    input_xbar:
+      ternary group 0: { 0: hdr.wire_ev.event_id, 22: memop_synthesized_meta_varmysre_0 }
+      exact group 0: { 67: mysre_idx.0-2, 72: mysre_idx.3-31(8..28), 96: mysre_idx.3-31(0..7) }
+      hash 1:
+        0..2: mysre_idx.0-2
+        3..10: mysre_idx.3-31(0..7)
+        11..15: mysre_idx.3-31(8..12)
+        32..38: mysre_idx.3-31(13..19)
+      hash group 1:
+        table: [1]
+        seed: 0x0
+    format: { action: 0..1, meter_addr: 2..11, meter_pfe: 12..12, meter_type: 13..15 }
+    action_bus: { 0 : table_9$salu.mysre(0..7) }
+    stateful: table_9$salu.mysre(hash_dist 0, meter_pfe, meter_type)
+    instruction: table_9$tind(action, $DEFAULT)
+    actions:
+      IngressControl.block_26(0, 0):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000024
+      - next_table: 0
+      IngressControl.block_27(1, 1):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000025
+      - next_table: 0
+      - table_9$salu.mysre(mysre_regaction, $hash_dist)
+      IngressControl.block_28(2, 2):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000026
+      - next_table: 0
+      - set B11(0..7), table_9$salu.mysre
+      - table_9$salu.mysre(mysre_regaction_0, $hash_dist)
+      IngressControl.block_29(3, 4):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000027
+      - next_table: 0
+      - set B11(0..7), table_9$salu.mysre
+      - table_9$salu.mysre(mysre_regaction_1, $hash_dist)
+      NoAction(-1, 3):
+      - hit_allowed: { allowed: false, reason: user_indicated_default_only }
+      - default_only_action: { allowed: true }
+      - handle: 0x20000028
+      - next_table: 0
+    default_only_action: NoAction
+stage 9 ingress:
+  dependency: match
+  ternary_match table_10 0:
+    p4: { name: IngressControl.table_1691, size: 512 }
+    p4_param_order: 
+      resmysre1354_0: { type: ternary, size: 8, full_size: 8, key_name: "resmysre1354" }
+      hdr.wire_ev.event_id: { type: ternary, size: 8, full_size: 8 }
+    row: 0
+    bus: 0
+    column: 0
+    input_xbar:
+      ternary group 0: { 0: hdr.wire_ev.event_id, 8: resmysre1354_0 }
+    match:
+    - { group: 0, byte_config: 3, dirtcam: 0x5 }
+    hit: [  table_11 ]
+    miss:  table_11
+    context_json:
+      static_entries:
+      - priority: 0
+        match_key_fields_values:
+        - field_name: resmysre1354
+          value: "0x9D"
+          mask: "0xFF"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x2"
+          mask: "0xFF"
+        action_handle: 0x20000029
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 1
+        match_key_fields_values:
+        - field_name: resmysre1354
+          value: "0x9D"
+          mask: "0xFF"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x3"
+          mask: "0xFF"
+        action_handle: 0x20000029
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 2
+        match_key_fields_values:
+        - field_name: resmysre1354
+          value: "0x9D"
+          mask: "0xFF"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x4"
+          mask: "0xFF"
+        action_handle: 0x20000029
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 3
+        match_key_fields_values:
+        - field_name: resmysre1354
+          value: "0x9D"
+          mask: "0xFF"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x1"
+          mask: "0xFF"
+        action_handle: 0x2000002a
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 4
+        match_key_fields_values:
+        - field_name: resmysre1354
+          value: "0x0"
+          mask: "0x0"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x2"
+          mask: "0xFF"
+        action_handle: 0x20000029
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 5
+        match_key_fields_values:
+        - field_name: resmysre1354
+          value: "0x0"
+          mask: "0x0"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x3"
+          mask: "0xFF"
+        action_handle: 0x20000029
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 6
+        match_key_fields_values:
+        - field_name: resmysre1354
+          value: "0x0"
+          mask: "0x0"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x4"
+          mask: "0xFF"
+        action_handle: 0x20000029
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 7
+        match_key_fields_values:
+        - field_name: resmysre1354
+          value: "0x0"
+          mask: "0x0"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x1"
+          mask: "0xFF"
+        action_handle: 0x2000002b
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 8
+        match_key_fields_values:
+        - field_name: resmysre1354
+          value: "0x0"
+          mask: "0x0"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x0"
+          mask: "0x0"
+        action_handle: 0x20000029
+        is_default_entry: false
+        action_parameters_values: []
+
+    indirect: table_10$tind
+  ternary_indirect table_10$tind:
+    row: 0
+    bus: 0
+    column: 2
+    input_xbar:
+      ternary group 0: { 0: hdr.wire_ev.event_id, 8: resmysre1354_0 }
+    format: { action: 0..1 }
+    instruction: table_10$tind(action, $DEFAULT)
+    actions:
+      IngressControl.block_30(0, 0):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000029
+      - next_table: 0
+      IngressControl.block_31(1, 1):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x2000002a
+      - next_table: 0
+      - set ansmysre_0, 1
+      IngressControl.block_32(2, 2):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x2000002b
+      - next_table: 0
+      - set ansmysre_0, 0
+      NoAction(-1, 3):
+      - hit_allowed: { allowed: false, reason: user_indicated_default_only }
+      - default_only_action: { allowed: true }
+      - handle: 0x2000002c
+      - next_table: 0
+    default_only_action: NoAction
+stage 10 ingress:
+  dependency: match
+  ternary_match table_11 0:
+    p4: { name: IngressControl.table_1690, size: 512 }
+    p4_param_order: 
+      ansmysre_0: { type: ternary, size: 1, full_size: 1, key_name: "ansmysre" }
+      hdr.wire_ev.event_id: { type: ternary, size: 8, full_size: 8 }
+    row: 0
+    bus: 0
+    column: 0
+    hash_dist:
+      0: { hash: 0, mask: 0x7fffff, shift: 3, expand: 0 }
+    input_xbar:
+      ternary group 0: { 0: hdr.wire_ev.event_id, 15: ansmysre_0 }
+      exact group 0: { 3: mysreidx_0.3-31, 32: mysreidx_0.0-2 }
+      hash 0:
+        0..2: mysreidx_0.0-2
+        3..15: mysreidx_0.3-31(0..12)
+        32..38: mysreidx_0.3-31(13..19)
+      hash group 0:
+        table: [0]
+        seed: 0x0
+    match:
+    - { group: 0, byte_config: 3, dirtcam: 0x5 }
+    hit: [  table_12 ]
+    miss:  table_12
+    context_json:
+      static_entries:
+      - priority: 0
+        match_key_fields_values:
+        - field_name: ansmysre
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x2"
+          mask: "0xFF"
+        action_handle: 0x2000002d
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 1
+        match_key_fields_values:
+        - field_name: ansmysre
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x3"
+          mask: "0xFF"
+        action_handle: 0x2000002d
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 2
+        match_key_fields_values:
+        - field_name: ansmysre
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x4"
+          mask: "0xFF"
+        action_handle: 0x2000002d
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 3
+        match_key_fields_values:
+        - field_name: ansmysre
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x1"
+          mask: "0xFF"
+        action_handle: 0x2000002e
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 4
+        match_key_fields_values:
+        - field_name: ansmysre
+          value: "0x0"
+          mask: "0x0"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x2"
+          mask: "0xFF"
+        action_handle: 0x2000002d
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 5
+        match_key_fields_values:
+        - field_name: ansmysre
+          value: "0x0"
+          mask: "0x0"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x3"
+          mask: "0xFF"
+        action_handle: 0x2000002d
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 6
+        match_key_fields_values:
+        - field_name: ansmysre
+          value: "0x0"
+          mask: "0x0"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x4"
+          mask: "0xFF"
+        action_handle: 0x2000002d
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 7
+        match_key_fields_values:
+        - field_name: ansmysre
+          value: "0x0"
+          mask: "0x0"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x1"
+          mask: "0xFF"
+        action_handle: 0x2000002d
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 8
+        match_key_fields_values:
+        - field_name: ansmysre
+          value: "0x0"
+          mask: "0x0"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x0"
+          mask: "0x0"
+        action_handle: 0x2000002d
+        is_default_entry: false
+        action_parameters_values: []
+
+    indirect: table_11$tind
+  stateful table_11$salu.cnt:
+    p4: { name: cnt, size: 8 }
+    row: 15
+    logical_bus: S
+    column: [ 0, 1 ]
+    maprams: [ 0, 1 ]
+    home_row: 15
+    format: { lo: 8 }
+    actions:
+      cnt_regaction:
+      - add hi, lo, 1
+      - output alu_hi
+  ternary_indirect table_11$tind:
+    row: 0
+    bus: 0
+    column: 2
+    hash_dist:
+      0: { hash: 0, mask: 0x7fffff, shift: 3, expand: 0 }
+    input_xbar:
+      ternary group 0: { 0: hdr.wire_ev.event_id, 15: ansmysre_0 }
+      exact group 0: { 3: mysreidx_0.3-31, 32: mysreidx_0.0-2 }
+      hash 0:
+        0..2: mysreidx_0.0-2
+        3..15: mysreidx_0.3-31(0..12)
+        32..38: mysreidx_0.3-31(13..19)
+      hash group 0:
+        table: [0]
+        seed: 0x0
+    format: { action: 0..0, meter_addr: 1..10, meter_pfe: 11..11 }
+    action_bus: { 0 : table_11$salu.cnt(0..7) }
+    stateful: table_11$salu.cnt(hash_dist 0, meter_pfe, $DEFAULT)
+    instruction: table_11$tind(action, $DEFAULT)
+    actions:
+      IngressControl.block_33(0, 0):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x2000002d
+      - next_table: 0
+      IngressControl.block_34(1, 1):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x2000002e
+      - next_table: 0
+      - set hdr.bridge_ev.mysrereset, 1
+      - set hdr.mysrereset.$valid, 1
+      - set B0(0..7), table_11$salu.cnt
+      - add H0, 1, H0
+      - deposit-field W5(3..31), W4(3..31), W6
+      - table_11$salu.cnt(cnt_regaction, $hash_dist)
+      NoAction(-1, 2):
+      - hit_allowed: { allowed: false, reason: user_indicated_default_only }
+      - default_only_action: { allowed: true }
+      - handle: 0x2000002f
+      - next_table: 0
+    default_only_action: NoAction
+stage 11 ingress:
+  dependency: match
+  ternary_match table_12 0:
+    p4: { name: IngressControl.table_1689, size: 512 }
+    p4_param_order: 
+      ansmysre_0: { type: ternary, size: 1, full_size: 1, key_name: "ansmysre" }
+      hdr.wire_ev.event_id: { type: ternary, size: 8, full_size: 8 }
+    row: 0
+    bus: 0
+    column: 0
+    input_xbar:
+      ternary group 0: { 0: hdr.wire_ev.event_id, 15: ansmysre_0 }
+    match:
+    - { group: 0, byte_config: 3, dirtcam: 0x5 }
+    hit: [  table_13 ]
+    miss:  table_13
+    context_json:
+      static_entries:
+      - priority: 0
+        match_key_fields_values:
+        - field_name: ansmysre
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x2"
+          mask: "0xFF"
+        action_handle: 0x20000030
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 1
+        match_key_fields_values:
+        - field_name: ansmysre
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x3"
+          mask: "0xFF"
+        action_handle: 0x20000030
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 2
+        match_key_fields_values:
+        - field_name: ansmysre
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x4"
+          mask: "0xFF"
+        action_handle: 0x20000030
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 3
+        match_key_fields_values:
+        - field_name: ansmysre
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x1"
+          mask: "0xFF"
+        action_handle: 0x20000031
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 4
+        match_key_fields_values:
+        - field_name: ansmysre
+          value: "0x0"
+          mask: "0x0"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x0"
+          mask: "0x0"
+        action_handle: 0x20000030
+        is_default_entry: false
+        action_parameters_values: []
+
+    indirect: table_12$tind
+  ternary_indirect table_12$tind:
+    row: 0
+    bus: 0
+    column: 2
+    input_xbar:
+      ternary group 0: { 0: hdr.wire_ev.event_id, 15: ansmysre_0 }
+    format: { action: 0..0 }
+    instruction: table_12$tind(action, $DEFAULT)
+    actions:
+      IngressControl.block_35(0, 0):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000030
+      - next_table: 0
+      IngressControl.block_36(1, 1):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000031
+      - next_table: 0
+      - add B3, 1, B0
+      NoAction(-1, 2):
+      - hit_allowed: { allowed: false, reason: user_indicated_default_only }
+      - default_only_action: { allowed: true }
+      - handle: 0x20000032
+      - next_table: 0
+    default_only_action: NoAction
+stage 12 ingress:
+  dependency: match
+  ternary_match table_13 0:
+    p4: { name: IngressControl.table_1688, size: 512 }
+    p4_param_order: 
+      ansmysre_0: { type: ternary, size: 1, full_size: 1, key_name: "ansmysre" }
+      hdr.wire_ev.event_id: { type: ternary, size: 8, full_size: 8 }
+    row: 0
+    bus: 0
+    column: 0
+    input_xbar:
+      ternary group 0: { 0: hdr.wire_ev.event_id, 15: ansmysre_0 }
+    match:
+    - { group: 0, byte_config: 3, dirtcam: 0x5 }
+    hit: [  table_14 ]
+    miss:  table_14
+    context_json:
+      static_entries:
+      - priority: 0
+        match_key_fields_values:
+        - field_name: ansmysre
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x2"
+          mask: "0xFF"
+        action_handle: 0x20000033
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 1
+        match_key_fields_values:
+        - field_name: ansmysre
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x3"
+          mask: "0xFF"
+        action_handle: 0x20000033
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 2
+        match_key_fields_values:
+        - field_name: ansmysre
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x4"
+          mask: "0xFF"
+        action_handle: 0x20000033
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 3
+        match_key_fields_values:
+        - field_name: ansmysre
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x1"
+          mask: "0xFF"
+        action_handle: 0x20000034
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 4
+        match_key_fields_values:
+        - field_name: ansmysre
+          value: "0x0"
+          mask: "0x0"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x0"
+          mask: "0x0"
+        action_handle: 0x20000033
+        is_default_entry: false
+        action_parameters_values: []
+
+    indirect: table_13$tind
+  ternary_indirect table_13$tind:
+    row: 0
+    bus: 0
+    column: 2
+    input_xbar:
+      ternary group 0: { 0: hdr.wire_ev.event_id, 15: ansmysre_0 }
+    format: { action: 0..0 }
+    instruction: table_13$tind(action, $DEFAULT)
+    actions:
+      IngressControl.block_37(0, 0):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000033
+      - next_table: 0
+      IngressControl.block_38(1, 1):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000034
+      - next_table: 0
+      - ssubu B4, B3, B2
+      NoAction(-1, 2):
+      - hit_allowed: { allowed: false, reason: user_indicated_default_only }
+      - default_only_action: { allowed: true }
+      - handle: 0x20000035
+      - next_table: 0
+    default_only_action: NoAction
+stage 13 ingress:
+  dependency: match
+  ternary_match table_14 0:
+    p4: { name: IngressControl.table_1687, size: 512 }
+    p4_param_order: 
+      newcount_0: { type: ternary, size: 8, full_size: 8, key_name: "newcount" }
+      if_precomp1671_0: { type: ternary, size: 8, full_size: 8, key_name: "if_precomp1671" }
+      ansmysre_0: { type: ternary, size: 1, full_size: 1, key_name: "ansmysre" }
+      hdr.wire_ev.event_id: { type: ternary, size: 8, full_size: 8 }
+    row: 0
+    bus: 0
+    column: 0
+    input_xbar:
+      ternary group 0: { 0: newcount_0, 8: if_precomp1671_0, 16: hdr.wire_ev.event_id, 31: ansmysre_0 }
+    match:
+    - { group: 0, byte_config: 3, dirtcam: 0x55 }
+    hit: [  table_15 ]
+    miss:  table_15
+    context_json:
+      static_entries:
+      - priority: 0
+        match_key_fields_values:
+        - field_name: newcount
+          value: "0x5"
+          mask: "0xFF"
+        - field_name: if_precomp1671
+          value: "0x0"
+          mask: "0xFF"
+        - field_name: ansmysre
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x2"
+          mask: "0xFF"
+        action_handle: 0x20000036
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 1
+        match_key_fields_values:
+        - field_name: newcount
+          value: "0x5"
+          mask: "0xFF"
+        - field_name: if_precomp1671
+          value: "0x0"
+          mask: "0xFF"
+        - field_name: ansmysre
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x3"
+          mask: "0xFF"
+        action_handle: 0x20000036
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 2
+        match_key_fields_values:
+        - field_name: newcount
+          value: "0x5"
+          mask: "0xFF"
+        - field_name: if_precomp1671
+          value: "0x0"
+          mask: "0xFF"
+        - field_name: ansmysre
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x4"
+          mask: "0xFF"
+        action_handle: 0x20000036
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 3
+        match_key_fields_values:
+        - field_name: newcount
+          value: "0x5"
+          mask: "0xFF"
+        - field_name: if_precomp1671
+          value: "0x0"
+          mask: "0xFF"
+        - field_name: ansmysre
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x1"
+          mask: "0xFF"
+        action_handle: 0x20000037
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 4
+        match_key_fields_values:
+        - field_name: newcount
+          value: "0x0"
+          mask: "0x0"
+        - field_name: if_precomp1671
+          value: "0x0"
+          mask: "0xFF"
+        - field_name: ansmysre
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x2"
+          mask: "0xFF"
+        action_handle: 0x20000036
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 5
+        match_key_fields_values:
+        - field_name: newcount
+          value: "0x0"
+          mask: "0x0"
+        - field_name: if_precomp1671
+          value: "0x0"
+          mask: "0xFF"
+        - field_name: ansmysre
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x3"
+          mask: "0xFF"
+        action_handle: 0x20000036
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 6
+        match_key_fields_values:
+        - field_name: newcount
+          value: "0x0"
+          mask: "0x0"
+        - field_name: if_precomp1671
+          value: "0x0"
+          mask: "0xFF"
+        - field_name: ansmysre
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x4"
+          mask: "0xFF"
+        action_handle: 0x20000036
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 7
+        match_key_fields_values:
+        - field_name: newcount
+          value: "0x0"
+          mask: "0x0"
+        - field_name: if_precomp1671
+          value: "0x0"
+          mask: "0xFF"
+        - field_name: ansmysre
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x1"
+          mask: "0xFF"
+        action_handle: 0x20000036
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 8
+        match_key_fields_values:
+        - field_name: newcount
+          value: "0x0"
+          mask: "0x0"
+        - field_name: if_precomp1671
+          value: "0x0"
+          mask: "0x0"
+        - field_name: ansmysre
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x2"
+          mask: "0xFF"
+        action_handle: 0x20000036
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 9
+        match_key_fields_values:
+        - field_name: newcount
+          value: "0x0"
+          mask: "0x0"
+        - field_name: if_precomp1671
+          value: "0x0"
+          mask: "0x0"
+        - field_name: ansmysre
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x3"
+          mask: "0xFF"
+        action_handle: 0x20000036
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 10
+        match_key_fields_values:
+        - field_name: newcount
+          value: "0x0"
+          mask: "0x0"
+        - field_name: if_precomp1671
+          value: "0x0"
+          mask: "0x0"
+        - field_name: ansmysre
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x4"
+          mask: "0xFF"
+        action_handle: 0x20000036
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 11
+        match_key_fields_values:
+        - field_name: newcount
+          value: "0x0"
+          mask: "0x0"
+        - field_name: if_precomp1671
+          value: "0x0"
+          mask: "0x0"
+        - field_name: ansmysre
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x1"
+          mask: "0xFF"
+        action_handle: 0x20000038
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 12
+        match_key_fields_values:
+        - field_name: newcount
+          value: "0x0"
+          mask: "0x0"
+        - field_name: if_precomp1671
+          value: "0x0"
+          mask: "0x0"
+        - field_name: ansmysre
+          value: "0x0"
+          mask: "0x0"
+        - field_name: hdr.wire_ev.event_id
+          value: "0x0"
+          mask: "0x0"
+        action_handle: 0x20000036
+        is_default_entry: false
+        action_parameters_values: []
+
+    indirect: table_14$tind
+  ternary_indirect table_14$tind:
+    row: 0
+    bus: 0
+    column: 2
+    input_xbar:
+      ternary group 0: { 0: newcount_0, 8: if_precomp1671_0, 16: hdr.wire_ev.event_id, 31: ansmysre_0 }
+    format: { action: 0..1 }
+    instruction: table_14$tind(action, $DEFAULT)
+    actions:
+      IngressControl.block_39(0, 0):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000036
+      - next_table: 0
+      IngressControl.block_40(1, 1):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000037
+      - next_table: 0
+      - set hdr.bridge_ev.ttl_changes_found, 1
+      - set hdr.ttl_changes_found.$valid, 1
+      - set hdr.ttl_changes_found.ttl_changes_found_count, newcount_0
+      - add H0, 1, H0
+      - deposit-field W7(3..31), W4(3..31), W6
+      IngressControl.block_41(2, 2):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000038
+      - next_table: 0
+      - set hdr.bridge_ev.ttl_changes_found, 1
+      - set hdr.ttl_changes_found.$valid, 1
+      - set hdr.ttl_changes_found.ttl_changes_found_count, newcount_0
+      - add H0, 1, H0
+      - deposit-field W7(3..31), W4(3..31), W6
+      NoAction(-1, 3):
+      - hit_allowed: { allowed: false, reason: user_indicated_default_only }
+      - default_only_action: { allowed: true }
+      - handle: 0x20000039
+      - next_table: 0
+    default_only_action: NoAction
+stage 14 ingress:
+  dependency: match
+  ternary_match table_15 0:
+    p4: { name: IngressControl.table_1686, size: 512 }
+    p4_param_order: 
+      hdr.wire_ev.event_id: { type: ternary, size: 8, full_size: 8 }
+    row: 0
+    bus: 0
+    column: 0
+    input_xbar:
+      ternary group 0: { 0: hdr.wire_ev.event_id }
+    match:
+    - { group: 0, byte_config: 3, dirtcam: 0x1 }
+    hit: [  END ]
+    miss:  END
+    context_json:
+      static_entries:
+      - priority: 0
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x2"
+          mask: "0xFF"
+        action_handle: 0x2000003a
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 1
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x3"
+          mask: "0xFF"
+        action_handle: 0x2000003a
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 2
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x4"
+          mask: "0xFF"
+        action_handle: 0x2000003a
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 3
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x1"
+          mask: "0xFF"
+        action_handle: 0x2000003b
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 4
+        match_key_fields_values:
+        - field_name: hdr.wire_ev.event_id
+          value: "0x0"
+          mask: "0x0"
+        action_handle: 0x2000003a
+        is_default_entry: false
+        action_parameters_values: []
+
+    indirect: table_15$tind
+  ternary_indirect table_15$tind:
+    row: 0
+    bus: 0
+    column: 2
+    input_xbar:
+      ternary group 0: { 0: hdr.wire_ev.event_id }
+    format: { action: 0..0 }
+    instruction: table_15$tind(action, $DEFAULT)
+    actions:
+      IngressControl.block_42(0, 0):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x2000003a
+      - next_table: 0
+      IngressControl.block_43(1, 1):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x2000003b
+      - next_table: 0
+      - add H0, 1, H0
+      NoAction(-1, 2):
+      - hit_allowed: { allowed: false, reason: user_indicated_default_only }
+      - default_only_action: { allowed: true }
+      - handle: 0x2000003c
+      - next_table: 0
+    default_only_action: NoAction
+stage 0 egress:
+  ternary_match t_extract_port_event_0 3:
+    p4: { name: EgressControl.t_extract_port_event, size: 512 }
+    p4_param_order: 
+      hdr.bridge_ev.port_event_id: { type: ternary, size: 8, full_size: 8 }
+      eg_intr_md.egress_port: { type: ternary, size: 9, full_size: 9 }
+    row: 1
+    bus: 0
+    column: 0
+    input_xbar:
+      ternary group 0: { 8: eg_intr_md.egress_port(8), 16: eg_intr_md.egress_port(0..7), 24: hdr.bridge_ev.port_event_id }
+    match:
+    - { group: 0, byte_config: 3, dirtcam: 0x54 }
+    gateway:
+      name: cond-2
+      input_xbar:
+        exact group 1: { 0: eg_intr_md.egress_rid }
+      row: 0
+      bus: 0
+      unit: 0
+      match: { 0: eg_intr_md.egress_rid(0..7), 8: eg_intr_md.egress_rid(8..15) }
+      0x0000:
+        run_table: true
+      miss:
+        next:  t_extract_recirc_event_0
+      condition: 
+        expression: "(eg_intr_md.egress_rid == 0)"
+        true:  t_extract_port_event_0
+        false:  t_extract_recirc_event_0
+    hit: [  END ]
+    miss:  END
+    context_json:
+      static_entries:
+      - priority: 0
+        match_key_fields_values:
+        - field_name: hdr.bridge_ev.port_event_id
+          value: "0x4"
+          mask: "0xFF"
+        - field_name: eg_intr_md.egress_port
+          value: "0xC4"
+          mask: "0x1FF"
+        action_handle: 0x2000003e
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 1
+        match_key_fields_values:
+        - field_name: hdr.bridge_ev.port_event_id
+          value: "0x4"
+          mask: "0xFF"
+        - field_name: eg_intr_md.egress_port
+          value: "0x0"
+          mask: "0x0"
+        action_handle: 0x2000003d
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 2
+        match_key_fields_values:
+        - field_name: hdr.bridge_ev.port_event_id
+          value: "0x3"
+          mask: "0xFF"
+        - field_name: eg_intr_md.egress_port
+          value: "0xC4"
+          mask: "0x1FF"
+        action_handle: 0x20000040
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 3
+        match_key_fields_values:
+        - field_name: hdr.bridge_ev.port_event_id
+          value: "0x3"
+          mask: "0xFF"
+        - field_name: eg_intr_md.egress_port
+          value: "0x0"
+          mask: "0x0"
+        action_handle: 0x2000003f
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 4
+        match_key_fields_values:
+        - field_name: hdr.bridge_ev.port_event_id
+          value: "0x2"
+          mask: "0xFF"
+        - field_name: eg_intr_md.egress_port
+          value: "0xC4"
+          mask: "0x1FF"
+        action_handle: 0x20000042
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 5
+        match_key_fields_values:
+        - field_name: hdr.bridge_ev.port_event_id
+          value: "0x2"
+          mask: "0xFF"
+        - field_name: eg_intr_md.egress_port
+          value: "0x0"
+          mask: "0x0"
+        action_handle: 0x20000041
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 6
+        match_key_fields_values:
+        - field_name: hdr.bridge_ev.port_event_id
+          value: "0x1"
+          mask: "0xFF"
+        - field_name: eg_intr_md.egress_port
+          value: "0xC4"
+          mask: "0x1FF"
+        action_handle: 0x20000044
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 7
+        match_key_fields_values:
+        - field_name: hdr.bridge_ev.port_event_id
+          value: "0x1"
+          mask: "0xFF"
+        - field_name: eg_intr_md.egress_port
+          value: "0x0"
+          mask: "0x0"
+        action_handle: 0x20000043
+        is_default_entry: false
+        action_parameters_values: []
+
+    indirect: t_extract_port_event_0$tind
+  ternary_indirect t_extract_port_event_0$tind:
+    row: 0
+    bus: 0
+    column: 2
+    input_xbar:
+      ternary group 0: { 8: eg_intr_md.egress_port(8), 16: eg_intr_md.egress_port(0..7), 24: hdr.bridge_ev.port_event_id }
+    format: { action: 0..5 }
+    action: t_extract_port_event_0$action_data($DIRECT, $DEFAULT)
+    instruction: t_extract_port_event_0$tind(action, $DEFAULT)
+    actions:
+      EgressControl.mysrereset_to_external(1, 1):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x2000003d
+      - next_table: 0
+      - { $data0: $adf_b0(0..6), $constant0: $data0(0..0), $constant0: 0, $constant1: $data0(1..1), $constant1: 0, $constant2: $data0(2..2), $constant2: 0, $constant4: $data0(3..3), $constant4: 0, $constant3: $data0(4..4), $constant3: 0, $constant5: $data0(6..6), $constant5: 0, $mask0: $adf_b1(0..6), $constant6: $mask0(0..4), $constant6: 31, $constant7: $mask0(6..6), $constant7: 1 }
+      - bitmasked-set B18, $data0, B18
+      EgressControl.mysrereset_to_internal(2, 2):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x2000003e
+      - next_table: 0
+      - { $data0: $adf_b0(3..6), $constant1: $data0(0..0), $constant1: 0, $constant0: $data0(1..1), $constant0: 0, $constant2: $data0(3..3), $constant2: 0, $mask0: $adf_b1(3..6), $constant3: $mask0(0..1), $constant3: 3, $constant4: $mask0(3..3), $constant4: 1, $data1: $adf_h2(0..15), $constant9: $data1(0..0), $constant9: 0, $constant8: $data1(1..1), $constant8: 0, $constant7: $data1(2..2), $constant7: 0, $constant6: $data1(3..3), $constant6: 0, $constant5: $data1(8..15), $constant5: 0, $mask1: $adf_h3(0..15), $constant10: $mask1(0..3), $constant10: 15, $constant11: $mask1(8..15), $constant11: 255 }
+      - set hdr.wire_ev.event_id, 4
+      - bitmasked-set B18, $data0, B18
+      - bitmasked-set H17, $data1, H17
+      EgressControl.ttl_changes_found_to_external(4, 4):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x2000003f
+      - next_table: 0
+      - { $data0: $adf_b0(0..6), $constant0: $data0(0..0), $constant0: 0, $constant1: $data0(1..1), $constant1: 0, $constant2: $data0(2..2), $constant2: 0, $constant4: $data0(3..3), $constant4: 0, $constant3: $data0(5..5), $constant3: 0, $constant5: $data0(6..6), $constant5: 0, $mask0: $adf_b1(0..6), $constant6: $mask0(0..3), $constant6: 15, $constant7: $mask0(5..6), $constant7: 3 }
+      - bitmasked-set B18, $data0, B18
+      EgressControl.ttl_changes_found_to_internal(6, 6):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000040
+      - next_table: 0
+      - { $data0: $adf_b0(3..6), $constant1: $data0(0..0), $constant1: 0, $constant0: $data0(2..2), $constant0: 0, $constant2: $data0(3..3), $constant2: 0, $mask0: $adf_b1(3..6), $constant3: $mask0(0..0), $constant3: 1, $constant4: $mask0(2..3), $constant4: 3, $data1: $adf_h2(0..15), $constant9: $data1(0..0), $constant9: 0, $constant8: $data1(1..1), $constant8: 0, $constant7: $data1(2..2), $constant7: 0, $constant6: $data1(3..3), $constant6: 0, $constant5: $data1(8..15), $constant5: 0, $mask1: $adf_h3(0..15), $constant10: $mask1(0..3), $constant10: 15, $constant11: $mask1(8..15), $constant11: 255 }
+      - set hdr.wire_ev.event_id, 3
+      - bitmasked-set B18, $data0, B18
+      - bitmasked-set H17, $data1, H17
+      EgressControl.DNS_packet_out_to_external(8, 8):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000041
+      - next_table: 0
+      - { $data0: $adf_b0(0..6), $constant0: $data0(0..0), $constant0: 0, $constant1: $data0(1..1), $constant1: 0, $constant2: $data0(2..2), $constant2: 0, $constant4: $data0(4..4), $constant4: 0, $constant3: $data0(5..5), $constant3: 0, $constant5: $data0(6..6), $constant5: 0, $mask0: $adf_b1(0..6), $constant6: $mask0(0..2), $constant6: 7, $constant7: $mask0(4..6), $constant7: 7 }
+      - bitmasked-set B18, $data0, B18
+      EgressControl.DNS_packet_out_to_internal(10, 10):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000042
+      - next_table: 0
+      - { $data0: $adf_h0(0..15), $constant4: $data0(0..0), $constant4: 0, $constant3: $data0(1..1), $constant3: 0, $constant2: $data0(2..2), $constant2: 0, $constant1: $data0(3..3), $constant1: 0, $constant0: $data0(8..15), $constant0: 0, $mask0: $adf_h1(0..15), $constant5: $mask0(0..3), $constant5: 15, $constant6: $mask0(8..15), $constant6: 255 }
+      - set hdr.wire_ev.event_id, 2
+      - set B18(4..6), 0
+      - bitmasked-set H17, $data0, H17
+      EgressControl.DNS_packet_fwd_to_external(12, 12):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000043
+      - next_table: 0
+      - {  }
+      - set B18(0..5), 0
+      EgressControl.DNS_packet_fwd_to_internal(14, 14):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000044
+      - next_table: 0
+      - { $data0: $adf_h0(0..15), $constant4: $data0(0..0), $constant4: 0, $constant3: $data0(1..1), $constant3: 0, $constant2: $data0(2..2), $constant2: 0, $constant1: $data0(3..3), $constant1: 0, $constant0: $data0(8..15), $constant0: 0, $mask0: $adf_h1(0..15), $constant5: $mask0(0..3), $constant5: 15, $constant6: $mask0(8..15), $constant6: 255 }
+      - set hdr.wire_ev.event_id, 1
+      - set B18(3..5), 0
+      - bitmasked-set H17, $data0, H17
+      NoAction(-1, 0):
+      - hit_allowed: { allowed: false, reason: user_indicated_default_only }
+      - default_only_action: { allowed: true }
+      - handle: 0x20000045
+      - next_table: 0
+      - {  }
+    default_only_action: NoAction
+  action t_extract_port_event_0$action_data:
+    p4: { name: EgressControl.t_extract_port_event$action }
+    row: 15
+    logical_bus: A
+    column: 0
+    vpns: [ 0 ]
+    home_row:
+    - 15
+    format EgressControl.mysrereset_to_external: { $adf_b0: 0..7, $adf_b1: 8..15 }
+    format EgressControl.mysrereset_to_internal: { $adf_b0: 0..7, $adf_b1: 8..15, $adf_h2: 32..47, $adf_h3: 48..63 }
+    format EgressControl.ttl_changes_found_to_external: { $adf_b0: 0..7, $adf_b1: 8..15 }
+    format EgressControl.ttl_changes_found_to_internal: { $adf_b0: 0..7, $adf_b1: 8..15, $adf_h2: 32..47, $adf_h3: 48..63 }
+    format EgressControl.DNS_packet_out_to_external: { $adf_b0: 0..7, $adf_b1: 8..15 }
+    format EgressControl.DNS_packet_out_to_internal: { $adf_h0: 0..15, $adf_h1: 16..31 }
+    format EgressControl.DNS_packet_fwd_to_internal: { $adf_h0: 0..15, $adf_h1: 16..31 }
+    action_bus: { 0 : $adf_b0, 1 : $adf_b1, 64..65 : $adf_h0, 66..67 : $adf_h1, 68..69 : $adf_h2, 70..71 : $adf_h3 }
+  ternary_match t_extract_recirc_event_0 4:
+    p4: { name: EgressControl.t_extract_recirc_event, size: 512 }
+    p4_param_order: 
+      eg_intr_md.egress_rid: { type: ternary, size: 16, full_size: 16 }
+      hdr.bridge_ev.port_event_id: { type: ternary, size: 8, full_size: 8 }
+      hdr.bridge_ev.mysrereset: { type: ternary, size: 1, full_size: 1 }
+      hdr.bridge_ev.ttl_changes_found: { type: ternary, size: 1, full_size: 1 }
+      hdr.bridge_ev.DNS_packet_out: { type: ternary, size: 1, full_size: 1 }
+      hdr.bridge_ev.DNS_packet_fwd: { type: ternary, size: 1, full_size: 1 }
+    row: 0
+    bus: 0
+    column: 0
+    input_xbar:
+      ternary group 1: { 0: hdr.bridge_ev.DNS_packet_fwd, 1: hdr.bridge_ev.DNS_packet_out, 2: hdr.bridge_ev.ttl_changes_found, 3: hdr.bridge_ev.mysrereset, 8: hdr.bridge_ev.port_event_id, 16: eg_intr_md.egress_rid }
+    match:
+    - { group: 1, byte_config: 3, dirtcam: 0x55 }
+    hit: [  END ]
+    miss:  END
+    context_json:
+      static_entries:
+      - priority: 0
+        match_key_fields_values:
+        - field_name: eg_intr_md.egress_rid
+          value: "0x1"
+          mask: "0xFFFF"
+        - field_name: hdr.bridge_ev.port_event_id
+          value: "0x0"
+          mask: "0xFF"
+        - field_name: hdr.bridge_ev.mysrereset
+          value: "0x0"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.ttl_changes_found
+          value: "0x0"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_out
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_fwd
+          value: "0x0"
+          mask: "0x1"
+        action_handle: 0x20000049
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 1
+        match_key_fields_values:
+        - field_name: eg_intr_md.egress_rid
+          value: "0x1"
+          mask: "0xFFFF"
+        - field_name: hdr.bridge_ev.port_event_id
+          value: "0x0"
+          mask: "0xFF"
+        - field_name: hdr.bridge_ev.mysrereset
+          value: "0x0"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.ttl_changes_found
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_out
+          value: "0x0"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_fwd
+          value: "0x0"
+          mask: "0x1"
+        action_handle: 0x20000048
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 2
+        match_key_fields_values:
+        - field_name: eg_intr_md.egress_rid
+          value: "0x1"
+          mask: "0xFFFF"
+        - field_name: hdr.bridge_ev.port_event_id
+          value: "0x0"
+          mask: "0xFF"
+        - field_name: hdr.bridge_ev.mysrereset
+          value: "0x0"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.ttl_changes_found
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_out
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_fwd
+          value: "0x0"
+          mask: "0x1"
+        action_handle: 0x20000048
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 3
+        match_key_fields_values:
+        - field_name: eg_intr_md.egress_rid
+          value: "0x1"
+          mask: "0xFFFF"
+        - field_name: hdr.bridge_ev.port_event_id
+          value: "0x0"
+          mask: "0xFF"
+        - field_name: hdr.bridge_ev.mysrereset
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.ttl_changes_found
+          value: "0x0"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_out
+          value: "0x0"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_fwd
+          value: "0x0"
+          mask: "0x1"
+        action_handle: 0x20000047
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 4
+        match_key_fields_values:
+        - field_name: eg_intr_md.egress_rid
+          value: "0x1"
+          mask: "0xFFFF"
+        - field_name: hdr.bridge_ev.port_event_id
+          value: "0x0"
+          mask: "0xFF"
+        - field_name: hdr.bridge_ev.mysrereset
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.ttl_changes_found
+          value: "0x0"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_out
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_fwd
+          value: "0x0"
+          mask: "0x1"
+        action_handle: 0x20000047
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 5
+        match_key_fields_values:
+        - field_name: eg_intr_md.egress_rid
+          value: "0x1"
+          mask: "0xFFFF"
+        - field_name: hdr.bridge_ev.port_event_id
+          value: "0x0"
+          mask: "0xFF"
+        - field_name: hdr.bridge_ev.mysrereset
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.ttl_changes_found
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_out
+          value: "0x0"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_fwd
+          value: "0x0"
+          mask: "0x1"
+        action_handle: 0x20000047
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 6
+        match_key_fields_values:
+        - field_name: eg_intr_md.egress_rid
+          value: "0x1"
+          mask: "0xFFFF"
+        - field_name: hdr.bridge_ev.port_event_id
+          value: "0x0"
+          mask: "0xFF"
+        - field_name: hdr.bridge_ev.mysrereset
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.ttl_changes_found
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_out
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_fwd
+          value: "0x0"
+          mask: "0x1"
+        action_handle: 0x20000047
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 7
+        match_key_fields_values:
+        - field_name: eg_intr_md.egress_rid
+          value: "0x1"
+          mask: "0xFFFF"
+        - field_name: hdr.bridge_ev.port_event_id
+          value: "0x2"
+          mask: "0xFF"
+        - field_name: hdr.bridge_ev.mysrereset
+          value: "0x0"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.ttl_changes_found
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_out
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_fwd
+          value: "0x0"
+          mask: "0x1"
+        action_handle: 0x20000048
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 8
+        match_key_fields_values:
+        - field_name: eg_intr_md.egress_rid
+          value: "0x1"
+          mask: "0xFFFF"
+        - field_name: hdr.bridge_ev.port_event_id
+          value: "0x2"
+          mask: "0xFF"
+        - field_name: hdr.bridge_ev.mysrereset
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.ttl_changes_found
+          value: "0x0"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_out
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_fwd
+          value: "0x0"
+          mask: "0x1"
+        action_handle: 0x20000047
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 9
+        match_key_fields_values:
+        - field_name: eg_intr_md.egress_rid
+          value: "0x1"
+          mask: "0xFFFF"
+        - field_name: hdr.bridge_ev.port_event_id
+          value: "0x2"
+          mask: "0xFF"
+        - field_name: hdr.bridge_ev.mysrereset
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.ttl_changes_found
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_out
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_fwd
+          value: "0x0"
+          mask: "0x1"
+        action_handle: 0x20000047
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 10
+        match_key_fields_values:
+        - field_name: eg_intr_md.egress_rid
+          value: "0x1"
+          mask: "0xFFFF"
+        - field_name: hdr.bridge_ev.port_event_id
+          value: "0x3"
+          mask: "0xFF"
+        - field_name: hdr.bridge_ev.mysrereset
+          value: "0x0"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.ttl_changes_found
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_out
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_fwd
+          value: "0x0"
+          mask: "0x1"
+        action_handle: 0x20000049
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 11
+        match_key_fields_values:
+        - field_name: eg_intr_md.egress_rid
+          value: "0x1"
+          mask: "0xFFFF"
+        - field_name: hdr.bridge_ev.port_event_id
+          value: "0x3"
+          mask: "0xFF"
+        - field_name: hdr.bridge_ev.mysrereset
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.ttl_changes_found
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_out
+          value: "0x0"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_fwd
+          value: "0x0"
+          mask: "0x1"
+        action_handle: 0x20000047
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 12
+        match_key_fields_values:
+        - field_name: eg_intr_md.egress_rid
+          value: "0x1"
+          mask: "0xFFFF"
+        - field_name: hdr.bridge_ev.port_event_id
+          value: "0x3"
+          mask: "0xFF"
+        - field_name: hdr.bridge_ev.mysrereset
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.ttl_changes_found
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_out
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_fwd
+          value: "0x0"
+          mask: "0x1"
+        action_handle: 0x20000047
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 13
+        match_key_fields_values:
+        - field_name: eg_intr_md.egress_rid
+          value: "0x1"
+          mask: "0xFFFF"
+        - field_name: hdr.bridge_ev.port_event_id
+          value: "0x4"
+          mask: "0xFF"
+        - field_name: hdr.bridge_ev.mysrereset
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.ttl_changes_found
+          value: "0x0"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_out
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_fwd
+          value: "0x0"
+          mask: "0x1"
+        action_handle: 0x20000049
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 14
+        match_key_fields_values:
+        - field_name: eg_intr_md.egress_rid
+          value: "0x1"
+          mask: "0xFFFF"
+        - field_name: hdr.bridge_ev.port_event_id
+          value: "0x4"
+          mask: "0xFF"
+        - field_name: hdr.bridge_ev.mysrereset
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.ttl_changes_found
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_out
+          value: "0x0"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_fwd
+          value: "0x0"
+          mask: "0x1"
+        action_handle: 0x20000048
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 15
+        match_key_fields_values:
+        - field_name: eg_intr_md.egress_rid
+          value: "0x1"
+          mask: "0xFFFF"
+        - field_name: hdr.bridge_ev.port_event_id
+          value: "0x4"
+          mask: "0xFF"
+        - field_name: hdr.bridge_ev.mysrereset
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.ttl_changes_found
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_out
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_fwd
+          value: "0x0"
+          mask: "0x1"
+        action_handle: 0x20000048
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 16
+        match_key_fields_values:
+        - field_name: eg_intr_md.egress_rid
+          value: "0x2"
+          mask: "0xFFFF"
+        - field_name: hdr.bridge_ev.port_event_id
+          value: "0x0"
+          mask: "0xFF"
+        - field_name: hdr.bridge_ev.mysrereset
+          value: "0x0"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.ttl_changes_found
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_out
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_fwd
+          value: "0x0"
+          mask: "0x1"
+        action_handle: 0x20000049
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 17
+        match_key_fields_values:
+        - field_name: eg_intr_md.egress_rid
+          value: "0x2"
+          mask: "0xFFFF"
+        - field_name: hdr.bridge_ev.port_event_id
+          value: "0x0"
+          mask: "0xFF"
+        - field_name: hdr.bridge_ev.mysrereset
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.ttl_changes_found
+          value: "0x0"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_out
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_fwd
+          value: "0x0"
+          mask: "0x1"
+        action_handle: 0x20000049
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 18
+        match_key_fields_values:
+        - field_name: eg_intr_md.egress_rid
+          value: "0x2"
+          mask: "0xFFFF"
+        - field_name: hdr.bridge_ev.port_event_id
+          value: "0x0"
+          mask: "0xFF"
+        - field_name: hdr.bridge_ev.mysrereset
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.ttl_changes_found
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_out
+          value: "0x0"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_fwd
+          value: "0x0"
+          mask: "0x1"
+        action_handle: 0x20000048
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 19
+        match_key_fields_values:
+        - field_name: eg_intr_md.egress_rid
+          value: "0x2"
+          mask: "0xFFFF"
+        - field_name: hdr.bridge_ev.port_event_id
+          value: "0x0"
+          mask: "0xFF"
+        - field_name: hdr.bridge_ev.mysrereset
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.ttl_changes_found
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_out
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_fwd
+          value: "0x0"
+          mask: "0x1"
+        action_handle: 0x20000048
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 20
+        match_key_fields_values:
+        - field_name: eg_intr_md.egress_rid
+          value: "0x2"
+          mask: "0xFFFF"
+        - field_name: hdr.bridge_ev.port_event_id
+          value: "0x2"
+          mask: "0xFF"
+        - field_name: hdr.bridge_ev.mysrereset
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.ttl_changes_found
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_out
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_fwd
+          value: "0x0"
+          mask: "0x1"
+        action_handle: 0x20000048
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 21
+        match_key_fields_values:
+        - field_name: eg_intr_md.egress_rid
+          value: "0x2"
+          mask: "0xFFFF"
+        - field_name: hdr.bridge_ev.port_event_id
+          value: "0x3"
+          mask: "0xFF"
+        - field_name: hdr.bridge_ev.mysrereset
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.ttl_changes_found
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_out
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_fwd
+          value: "0x0"
+          mask: "0x1"
+        action_handle: 0x20000049
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 22
+        match_key_fields_values:
+        - field_name: eg_intr_md.egress_rid
+          value: "0x2"
+          mask: "0xFFFF"
+        - field_name: hdr.bridge_ev.port_event_id
+          value: "0x4"
+          mask: "0xFF"
+        - field_name: hdr.bridge_ev.mysrereset
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.ttl_changes_found
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_out
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_fwd
+          value: "0x0"
+          mask: "0x1"
+        action_handle: 0x20000049
+        is_default_entry: false
+        action_parameters_values: []
+      - priority: 23
+        match_key_fields_values:
+        - field_name: eg_intr_md.egress_rid
+          value: "0x3"
+          mask: "0xFFFF"
+        - field_name: hdr.bridge_ev.port_event_id
+          value: "0x0"
+          mask: "0xFF"
+        - field_name: hdr.bridge_ev.mysrereset
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.ttl_changes_found
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_out
+          value: "0x1"
+          mask: "0x1"
+        - field_name: hdr.bridge_ev.DNS_packet_fwd
+          value: "0x0"
+          mask: "0x1"
+        action_handle: 0x20000049
+        is_default_entry: false
+        action_parameters_values: []
+
+    indirect: t_extract_recirc_event_0$tind
+  ternary_indirect t_extract_recirc_event_0$tind:
+    row: 3
+    bus: 0
+    column: 2
+    input_xbar:
+      ternary group 1: { 0: hdr.bridge_ev.DNS_packet_fwd, 1: hdr.bridge_ev.DNS_packet_out, 2: hdr.bridge_ev.ttl_changes_found, 3: hdr.bridge_ev.mysrereset, 8: hdr.bridge_ev.port_event_id, 16: eg_intr_md.egress_rid }
+    format: { action: 0..2 }
+    action: t_extract_recirc_event_0$action_data($DIRECT, $DEFAULT)
+    instruction: t_extract_recirc_event_0$tind(action, $DEFAULT)
+    actions:
+      EgressControl.egr_noop(0, 0):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000046
+      - next_table: 0
+      - {  }
+      EgressControl.mysrereset_recirc(1, 16):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000047
+      - next_table: 0
+      - { $data0: $adf_b0(3..6), $constant1: $data0(0..0), $constant1: 0, $constant0: $data0(1..1), $constant0: 0, $constant2: $data0(3..3), $constant2: 0, $mask0: $adf_b1(3..6), $constant3: $mask0(0..1), $constant3: 3, $constant4: $mask0(3..3), $constant4: 1, $data1: $adf_h2(0..15), $constant9: $data1(0..0), $constant9: 0, $constant8: $data1(1..1), $constant8: 0, $constant7: $data1(2..2), $constant7: 0, $constant6: $data1(3..3), $constant6: 0, $constant5: $data1(8..15), $constant5: 0, $mask1: $adf_h3(0..15), $constant10: $mask1(0..3), $constant10: 15, $constant11: $mask1(8..15), $constant11: 255 }
+      - set hdr.wire_ev.event_id, 4
+      - bitmasked-set B18, $data0, B18
+      - bitmasked-set H17, $data1, H17
+      EgressControl.ttl_changes_found_recirc(2, 18):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000048
+      - next_table: 0
+      - { $data0: $adf_b0(3..6), $constant1: $data0(0..0), $constant1: 0, $constant0: $data0(2..2), $constant0: 0, $constant2: $data0(3..3), $constant2: 0, $mask0: $adf_b1(3..6), $constant3: $mask0(0..0), $constant3: 1, $constant4: $mask0(2..3), $constant4: 3, $data1: $adf_h2(0..15), $constant9: $data1(0..0), $constant9: 0, $constant8: $data1(1..1), $constant8: 0, $constant7: $data1(2..2), $constant7: 0, $constant6: $data1(3..3), $constant6: 0, $constant5: $data1(8..15), $constant5: 0, $mask1: $adf_h3(0..15), $constant10: $mask1(0..3), $constant10: 15, $constant11: $mask1(8..15), $constant11: 255 }
+      - set hdr.wire_ev.event_id, 3
+      - bitmasked-set B18, $data0, B18
+      - bitmasked-set H17, $data1, H17
+      EgressControl.DNS_packet_out_recirc(3, 20):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x20000049
+      - next_table: 0
+      - { $data0: $adf_h0(0..15), $constant4: $data0(0..0), $constant4: 0, $constant3: $data0(1..1), $constant3: 0, $constant2: $data0(2..2), $constant2: 0, $constant1: $data0(3..3), $constant1: 0, $constant0: $data0(8..15), $constant0: 0, $mask0: $adf_h1(0..15), $constant5: $mask0(0..3), $constant5: 15, $constant6: $mask0(8..15), $constant6: 255 }
+      - set hdr.wire_ev.event_id, 2
+      - set B18(4..6), 0
+      - bitmasked-set H17, $data0, H17
+      EgressControl.DNS_packet_fwd_recirc(4, 22):
+      - hit_allowed: { allowed: true }
+      - default_action: { allowed: true }
+      - handle: 0x2000004a
+      - next_table: 0
+      - { $data0: $adf_h0(0..15), $constant4: $data0(0..0), $constant4: 0, $constant3: $data0(1..1), $constant3: 0, $constant2: $data0(2..2), $constant2: 0, $constant1: $data0(3..3), $constant1: 0, $constant0: $data0(8..15), $constant0: 0, $mask0: $adf_h1(0..15), $constant5: $mask0(0..3), $constant5: 15, $constant6: $mask0(8..15), $constant6: 255 }
+      - set hdr.wire_ev.event_id, 1
+      - set B18(3..5), 0
+      - bitmasked-set H17, $data0, H17
+      NoAction(-1, 3):
+      - hit_allowed: { allowed: false, reason: user_indicated_default_only }
+      - default_only_action: { allowed: true }
+      - handle: 0x2000004b
+      - next_table: 0
+      - {  }
+    default_only_action: NoAction
+  action t_extract_recirc_event_0$action_data:
+    p4: { name: EgressControl.t_extract_recirc_event$action }
+    row: 14
+    logical_bus: A
+    column: 2
+    vpns: [ 0 ]
+    home_row:
+    - 14
+    format EgressControl.mysrereset_recirc: { $adf_b0: 0..7, $adf_b1: 8..15, $adf_h2: 32..47, $adf_h3: 48..63 }
+    format EgressControl.ttl_changes_found_recirc: { $adf_b0: 0..7, $adf_b1: 8..15, $adf_h2: 32..47, $adf_h3: 48..63 }
+    format EgressControl.DNS_packet_out_recirc: { $adf_h0: 0..15, $adf_h1: 16..31 }
+    format EgressControl.DNS_packet_fwd_recirc: { $adf_h0: 0..15, $adf_h1: 16..31 }
+    action_bus: { 2 : $adf_b0, 3 : $adf_b1, 72..73 : $adf_h0, 74..75 : $adf_h1, 76..77 : $adf_h2, 78..79 : $adf_h3 }
+
+
+primitives: "lucid.prim.json"
+dynhash: "lucid.dynhash.json"

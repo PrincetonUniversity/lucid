@@ -16,6 +16,7 @@ let process_prog builtin_tys ds =
   let ds = AlphabetElimination.process_prog ds in
   print_if_verbose "----------Elim spec-------";
   let ds = SpecElimination.process_prog ds in 
+  print_if_debug ds;
   print_if_verbose "----------Elim regex-------";
   let ds = RegexElimination.process_prog ds in
   print_if_debug ds;

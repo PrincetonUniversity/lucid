@@ -1,0 +1,101 @@
+memop inc(int<<8>> src,int<<8>> unused)
+ {return src+1;}
+
+memop re12351sdaCheckThenSet(int<<32>> memval,int<<32>> newval)
+ {if (memval==0) {
+return newval;
+} else {
+return memval;
+}}
+
+event mysrereset(int<<32>> mysreidx) ;
+
+handle mysrereset(int<<32>> mysreidx) {
+Array.set(mysre,0);
+}
+
+global Array.t<<32>> assigned_var_mysrefst_ttl = Array.create(8);
+
+
+global Array.t<<8>> mysre = Array.create(8);
+
+
+memop mysrememop0(int<<8>> memval,int<<8>> f,int<<8>> g)
+ {bool b1 = f!=6;
+bool b2 = memval+g!=6;
+if (b1&&b2) {
+cell1 = f|memval;
+} else {
+if (true) {
+cell1 = g|8;
+}
+}
+if (true) {
+return cell1;
+} }
+
+memop mysrememop1(int<<8>> memval,int<<8>> f,int<<8>> g)
+ {bool b1 = memval+0==0;
+bool b2 = memval+g==8;
+if (b1||b2) {
+cell1 = g+2;
+} else {
+if (true) {
+cell1 = f|memval;
+}
+}
+if (true) {
+return cell1;
+} }
+
+global Array.t<<8>> cnt = Array.create(8);
+
+
+handle DNS_packet_fwd(int<<32>> sip,int<<32>> cip,int<<32>> smac,int<<32>> cmac,int<<32>> ttl) {
+if ({bool ansmysre = true;
+int<<32>> mysreidx = (int<<32>>)hash<<3>>(13,sip,cip,smac,cmac);
+int<<8>> f_synthesized_meta_varmysre = 0;
+int<<8>> g_synthesized_meta_varmysre = 0;
+int<<8>> memop_synthesized_meta_varmysre = 0;
+int<<32>> fst_ttl = Array.setm(assigned_var_mysrefst_ttl,mysreidx,re12351sdaCheckThenSet,ttl);
+int<<8>> countermysre = 0;
+if (fst_ttl!=ttl) {
+countermysre = countermysre<<1+1;
+} else {
+countermysre = countermysre<<1;
+}
+int<<8>> resmysre = 0;
+match countermysre with
+| 1 -> {
+f_synthesized_meta_varmysre = 113;
+g_synthesized_meta_varmysre = 149;
+memop_synthesized_meta_varmysre = 0;
+}
+| 0 -> {
+f_synthesized_meta_varmysre = 236;
+g_synthesized_meta_varmysre = 111;
+memop_synthesized_meta_varmysre = 1;
+}
+int<<8>> resmysre = 0;
+match memop_synthesized_meta_varmysre with
+| 0 -> {
+resmysre = Array.update_complex(mysre,mysreidx,mysrememop0,f_synthesized_meta_varmysre,g_synthesized_meta_varmysre,0);
+}
+| 1 -> {
+resmysre = Array.update_complex(mysre,mysreidx,mysrememop1,f_synthesized_meta_varmysre,g_synthesized_meta_varmysre,0);
+}
+printf "state machine transitioned to %d" resmysre;
+match resmysre with
+| 157 -> {
+ansmysre = true;
+}
+| _ -> {
+ansmysre = false;
+}; return ansmysre}) {
+int<<8>> newcount = Array.setm(cnt,mysreidx,inc,0);
+if (newcount>5) {
+generate mysrereset(mysreidx);
+}
+}
+printf "DOING NOTHING" ;
+}

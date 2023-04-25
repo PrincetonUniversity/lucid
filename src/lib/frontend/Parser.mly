@@ -164,6 +164,7 @@
 %token <Span.t> UNAMBIGCONCAT
 %token <Span.t> STAR
 %token <Span.t> TRANSITIONREGEX
+%token <Span.t> RESETREGEX
 %token <Span.t> DATA
 %token <Span.t> DETECT
 %token <Span.t> EFFECT_ARROW
@@ -567,6 +568,7 @@ statement1:
     | ID ASSIGN exp SEMI	                  { sassign_sp (snd $1) $3 (Span.extend (fst $1) $4) }
     | RETURN SEMI                           { sret_sp None (Span.extend $1 $2) }
     | RETURN exp SEMI                       { sret_sp (Some $2) (Span.extend $1 $3) }
+    | RESETREGEX LPAREN ID COMMA exp RPAREN SEMI { sresetregex_sp (snd $3) $5 (Span.extend $1 $7)}
     | GENERATE exp SEMI                     { gen_sp (GSingle None) $2 (Span.extend $1 $3)}
     | SGENERATE LPAREN exp COMMA exp RPAREN SEMI { gen_sp (GSingle (Some $3)) $5 (Span.extend $1 $7)}
     | MGENERATE LPAREN exp COMMA exp RPAREN SEMI { gen_sp (GMulti $3) $5 (Span.extend $1 $7)}

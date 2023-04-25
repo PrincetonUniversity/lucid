@@ -203,6 +203,7 @@ and s =
   | SLoop of statement * id * size
   | STableMatch of tbl_match
   | STableInstall of exp * tbl_entry list
+  | SResetRegex of id * exp
 
 
 and tbl_match = 
@@ -473,6 +474,7 @@ let szcast_sp sz1 sz2 span = exp_sp (ESizeCast (sz1, sz2)) span
 let flood_sp e span = exp_sp (EFlood e) span
 let transregex_sp id idx_expr ev_expr span = exp_sp (ETransitionRegex (id, idx_expr, ev_expr)) span
 
+
 let tblmatch_sp tbl keys args span =
   let t = {tbl; keys; args; outs=[]; out_tys=None;} in
   exp_sp (ETableMatch(t)) span
@@ -535,6 +537,7 @@ let match_sp es bs span = statement_sp (SMatch (es, bs)) span
 let loop_sp e i k span = statement_sp (SLoop (e, i, k)) span
 let sexp_sp e span = statement_sp (SUnit e) span
 let scall_sp cid es span = sexp_sp (call_sp cid es span) span
+let sresetregex_sp id idx_expr span = statement_sp (SResetRegex (id, idx_expr)) span
 
 let tblinstall_sp tbl entries span = 
   statement_sp (STableInstall(tbl, entries)) span

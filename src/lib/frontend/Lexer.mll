@@ -87,6 +87,7 @@ rule token = parse
   | "re"              { VARREGEX (position lexbuf) }
   | "sre"             { SPECREGEX (position lexbuf)}
   | "transition"      { TRANSITIONREGEX (position lexbuf)}
+  | "reset"           { RESETREGEX (position lexbuf)}
   | "DATA"            { DATA (position lexbuf)}
   | "DETECT"          { DETECT (position lexbuf)}
   | "alphabet"        { ALPHABET (position lexbuf)}
