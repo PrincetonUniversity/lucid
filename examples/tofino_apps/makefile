@@ -32,7 +32,7 @@ lucid:
 $(COMPILE_TARGETS): lucid
 	@mkdir -p $(BUILDDIR)
 	$(eval TARGET := $(subst compile_,,$@)) # compile_x --> x
-	../../dptc $(SOURCEDIR)/$(TARGET).dpt $(BUILDDIR)/$(TARGET)
+	../../dptc $(SOURCEDIR)/$(TARGET).dpt -o $(BUILDDIR)/$(TARGET)
 
 # p4 -> tofino
 $(ASSEMBLE_TARGETS):

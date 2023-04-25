@@ -29,6 +29,7 @@ let strip_links ty = { ty with raw_ty = TyTQVar.strip_links ty.raw_ty }
 type modul =
   { sizes : IdSet.t
   ; vars : ty IdMap.t
+  ; parsers : params IdMap.t
   ; user_tys : (sizes * ty) IdMap.t
   ; constructors : func_ty IdMap.t
   ; submodules : modul IdMap.t
@@ -37,6 +38,7 @@ type modul =
 let empty_modul =
   { sizes = IdSet.empty
   ; vars = IdMap.empty
+  ; parsers = IdMap.empty
   ; user_tys = IdMap.empty
   ; constructors = IdMap.empty
   ; submodules = IdMap.empty
@@ -45,6 +47,7 @@ let empty_modul =
 
 let lookup_modul_size id m = IdSet.find_opt id m.sizes
 let lookup_modul_var id m = IdMap.find_opt id m.vars
+let lookup_modul_parser id m = IdMap.find_opt id m.parsers
 let lookup_modul_ty id m = IdMap.find_opt id m.user_tys
 let lookup_modul_constr id m = IdMap.find_opt id m.constructors
 let lookup_modul_submodule id m = IdMap.find_opt id m.submodules
@@ -109,6 +112,15 @@ let define_user_ty id sizes ty (env : env) =
     current_modul =
       { env.current_modul with
         user_tys = IdMap.add id (sizes, ty) env.current_modul.user_tys
+      }
+  }
+;;
+
+let define_parser id params (env : env) =
+  { env with
+    current_modul =
+      { env.current_modul with
+        parsers = IdMap.add id params env.current_modul.parsers
       }
   }
 ;;
@@ -221,6 +233,15 @@ let lookup_ty span env cid =
     Console.error_position span @@ "Unknown type " ^ Printing.cid_to_string cid
 ;;
 
+let lookup_parser span env cid =
+  match lookup_any span lookup_modul_parser env cid with
+  | Some x -> x
+  | None ->
+    Console.error_position span
+    @@ "Unknown parser "
+    ^ Printing.cid_to_string cid
+;;
+
 let lookup_var span env cid =
   let local_val =
     match cid with
@@ -235,19 +256,19 @@ let lookup_var span env cid =
       | Some t -> Some t
       | None ->
         (match lookup_modul_constr id m with
-        | None -> None
-        | Some t ->
-          if env.in_global_def || not (is_global t.ret_ty)
-          then Some (ty (TFun t))
-          else
-            error_sp
-              span
-              "Cannot call global constructor except in global definitions or \
-               other constructors")
+         | None -> None
+         | Some t ->
+           if env.in_global_def || not (is_global t.ret_ty)
+           then Some (ty (TFun t))
+           else
+             error_sp
+               span
+               "Cannot call global constructor except in global definitions or \
+                other constructors")
     in
     (match lookup_any span lookup_fun env cid with
-    | Some t -> t
-    | None -> error_sp span @@ "Unbound variable " ^ Printing.cid_to_string cid)
+     | Some t -> t
+     | None -> error_sp span @@ "Unbound variable " ^ Printing.cid_to_string cid)
 ;;
 
 let lookup_module span env cid =
@@ -357,28 +378,28 @@ let spec_to_constraints (env : env) sp start_eff (params : params) specs =
     List.concat
     @@ List.map
          (function
-           | CSpec lst ->
-             let left = List.take (List.length lst - 1) lst in
-             let right = List.tl lst in
-             List.map2
-               (fun (cid1, cmp) (cid2, _) ->
-                 let left_eff =
-                   match cmp with
-                   | SpecLess -> FSucc (lookup_effect env cid1)
-                   | SpecLeq -> lookup_effect env cid1
-                 in
-                 CLeq (left_eff, lookup_effect env cid2))
-               left
-               right
-           | CEnd _ -> [])
+          | CSpec lst ->
+            let left = List.take (List.length lst - 1) lst in
+            let right = List.tl lst in
+            List.map2
+              (fun (cid1, cmp) (cid2, _) ->
+                let left_eff =
+                  match cmp with
+                  | SpecLess -> FSucc (lookup_effect env cid1)
+                  | SpecLeq -> lookup_effect env cid1
+                in
+                CLeq (left_eff, lookup_effect env cid2))
+              left
+              right
+          | CEnd _ -> [])
          specs
   in
   let end_eff =
     let ends =
       List.filter_map
         (function
-          | CEnd id -> Some (FSucc (lookup_effect env id))
-          | CSpec _ -> None)
+         | CEnd id -> Some (FSucc (lookup_effect env id))
+         | CSpec _ -> None)
         specs
     in
     match ends with
@@ -457,8 +478,9 @@ let rec modul_to_string ?(show_defs = true) m =
     "{\n\
      sizes = [%s]\n\
      vars = {%s}\n\
+     parsers = {%s}\n\
      user_tys = {%s}\n\
-     constructors = {%s};\n\
+     constructors = {%s}\n\
      submodules = {%s}\n\
      }"
     (IdSet.fold (fun s acc -> id_to_string s ^ ", " ^ acc) m.sizes "")
@@ -471,6 +493,16 @@ let rec modul_to_string ?(show_defs = true) m =
          in
          str ^ ", " ^ acc)
        m.vars
+       "")
+    (IdMap.fold
+       (fun id params acc ->
+         let str =
+           if show_defs
+           then id_to_string id ^ " -> " ^ params_to_string params
+           else id_to_string id
+         in
+         str ^ ", " ^ acc)
+       m.parsers
        "")
     (IdMap.fold
        (fun id (_, ty) acc ->
@@ -510,5 +542,5 @@ let is_const env span id =
   | Some _ -> false
   | None ->
     (match lookup_var span env (Id id) with
-    | _ -> true)
+     | _ -> true)
 ;;

@@ -11,112 +11,21 @@ let report str = Console.show_message str ANSITerminal.Green "compiler"
 let cfg = Cmdline.cfg
 let enable_compound_expressions = true
 let do_ssa = false
-
 let optimize_simple_calls = ref true
+let set_no_call_optimize () = optimize_simple_calls := false
 
-let set_no_call_optimize () = 
-  optimize_simple_calls := false
-;;
-
-(* make sure that each branch 
-of a match statement has a unique pattern *)
-let unique_branches ds = 
-let open CoreSyntax in
-let rec dup_exist = function
-  | [] -> false
-  | hd::tl -> List.exists ((=) hd) tl || dup_exist tl
-in
-let v = object
-  inherit [_] s_iter as super
-
-  method! visit_statement () stmt = 
-    super#visit_statement () stmt;
-    match stmt.s with
-    | SMatch(_, branches) -> 
-      List.iter (fun b -> super#visit_branch () b) branches;
-      let pats = List.split branches |> fst in
-      if (dup_exist pats)
-      then (
-        report 
-          ("A match statement has non-unique patterns. Offending statement: "^
-            (CorePrinting.statement_to_string stmt));
-        exit 1;
-      )
-    | _ -> ()
-
-  end
-in
-v#visit_decls () ds
-;;
-let process_prog ?(for_interp = false) ds =
+let process_prog ds =
   print_if_verbose "-------Translating to core syntax---------";
   let ds = SyntaxToCore.translate_prog ds in
   print_if_debug ds;
-  (* The rest of these transformations aren't necessary for the interpreter *)
-  match for_interp with
-  | true ->
-    (* partial interpretation is causing execution tests to fail in P4. *)
-    print_if_verbose "-------Partial interpreting---------";
-    let ds = PartialInterpretation.interp_prog ds in
-    print_if_debug ds;
-    ds
-  | false ->
-    print_if_verbose "-------Eliminating events in match statements---------";
-    let ds = EliminateEventMatch.process_prog ds in 
-    print_if_verbose "-------Eliminating extern calls--------";
-    let ds = EliminateExterns.eliminate_externs ds in 
-
-    print_if_verbose "-------Eliminating value cast ops--------";
-    let ds = EliminateValueCasts.eliminate_value_casts ds in 
-    let ds = if (!optimize_simple_calls)
-      then (
-        print_if_verbose "-------Optimizing simple calls--------";
-        OptimizeSimpleCalls.eliminate_single_use_retvars ds
-      )
-      else (ds)
-    in 
-    print_if_verbose "-------Eliminating range relational ops--------";
-    let ds = EliminateEqRangeOps.transform ds in
-    (* temporary patches for incomplete features. *)
-    let ds = PoplPatches.eliminate_noncall_units ds in
-    let ds = PoplPatches.delete_prints ds in
-    print_if_verbose "-------Adding default branches--------";
-    let ds = AddDefaultBranches.add_default_branches ds in
-    print_if_debug ds;
-    print_if_verbose
-      (if do_ssa
-      then "-------SSA Transform--------"
-      else "-------Partial SSA Transform--------");
-    let ds =
-      if do_ssa
-      then SingleAssignment.transform ds
-      else PartialSingleAssignment.const_branch_vars ds
-    in
-    print_if_debug ds;
-    let ds =
-      match enable_compound_expressions with
-      | true ->
-        print_if_verbose "-------Removing compound expressions--------";
-        (* let ds = EliminateFloods.eliminate_floods ds in  *)
-        let ds = PrecomputeArgs.precompute_args ds in
-        (* get rid of boolean expressions *)
-        let ds = EliminateBools.do_passes ds in
-        (* convert integer operations into atomic exps *)
-        let ds = NormalizeInts.do_passes ds in
-        ds
-      | false ->
-        print_if_verbose "-------Only eliminating bools--------";
-        (* get rid of boolean expressions, but don't do the other
-         transformations that normalize expression format. *)
-        let ds = EliminateBools.do_passes ds in
-        (* let ds = EliminateBools.elimination_only ds in  *)
-        ds
-    in
-    print_if_debug ds;
-    (* give all the spans in a program unique IDs. This should be a middle pass, before translate. *)
-    let ds = UniqueSpans.make_unique_spans ds in
-    (* make sure that all variables in the program have unique names. 
-        for non-unique ids, bring the variable's number into the name *)
-    let ds = UniqueIds.make_var_names_unique ds in 
-    ds
+  let ds =
+    if cfg.partial_interp
+    then (
+      print_if_verbose "-------Partial interpreting---------";
+      let ds = PartialInterpretation.interp_prog ds in
+      print_if_debug ds;
+      ds)
+    else ds
+  in
+  ds
 ;;

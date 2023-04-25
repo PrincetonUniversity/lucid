@@ -164,7 +164,7 @@ module NormalizeRelops = struct
         inherit [_] s_map as super
 
         (* skip memops! *)
-        method! visit_DMemop _ id params body = DMemop (id, params, body)
+        method! visit_DMemop _ m = DMemop (m)
 
         method! visit_statement ctx stmt =
           match stmt with
@@ -378,7 +378,7 @@ module NormalizeBoolExps = struct
         inherit [_] s_map as super
 
         (* skip memops! *)
-        method! visit_DMemop _ id params body = DMemop (id, params, body)
+        method! visit_DMemop _ m = DMemop (m)
 
         method! visit_statement ctx stmt =
           match stmt with

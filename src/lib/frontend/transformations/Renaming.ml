@@ -104,7 +104,11 @@ let rename prog =
           List.fold_left
             (fun env id -> CidMap.add (Id id) (Id id) env)
             CidMap.empty
-            (start_id :: ingr_port_id :: this_id :: List.map fst builtin_vars)
+            (start_id
+            :: ingr_port_id
+            :: this_id
+            :: lucid_parse_id
+            :: List.map fst builtin_vars)
         in
         let builtin_cids =
           List.map
@@ -133,24 +137,24 @@ let rename prog =
       method freshen_any active x =
         let new_x = Cid.fresh (Cid.names x) in
         (match active with
-        | 0 ->
-          env
-            <- { env with
-                 module_defs = KindSet.add (KConst, x) env.module_defs
-               ; var_map = CidMap.add x new_x env.var_map
-               }
-        | 1 ->
-          env
-            <- { env with
-                 module_defs = KindSet.add (KSize, x) env.module_defs
-               ; size_map = CidMap.add x new_x env.size_map
-               }
-        | _ ->
-          env
-            <- { env with
-                 module_defs = KindSet.add (KUserTy, x) env.module_defs
-               ; ty_map = CidMap.add x new_x env.ty_map
-               });
+         | 0 ->
+           env
+             <- { env with
+                  module_defs = KindSet.add (KConst, x) env.module_defs
+                ; var_map = CidMap.add x new_x env.var_map
+                }
+         | 1 ->
+           env
+             <- { env with
+                  module_defs = KindSet.add (KSize, x) env.module_defs
+                ; size_map = CidMap.add x new_x env.size_map
+                }
+         | _ ->
+           env
+             <- { env with
+                  module_defs = KindSet.add (KUserTy, x) env.module_defs
+                ; ty_map = CidMap.add x new_x env.ty_map
+                });
         new_x
 
       method freshen_var x = self#freshen_any 0 (Id x) |> Cid.to_id
@@ -205,20 +209,26 @@ let rename prog =
         let new_x = self#freshen_var x in
         SLocal (new_x, new_ty, replaced_e)
 
+      method! visit_PRead dummy x ty =
+        let new_ty = self#visit_ty dummy ty in
+        let new_x = self#freshen_var x in
+        PRead (new_x, new_ty)
+
       method! visit_STableMatch dummy tm =
         let tbl = self#visit_exp dummy tm.tbl in
         let keys = List.map (self#visit_exp dummy) tm.keys in
         let args = List.map (self#visit_exp dummy) tm.args in
         (* rename if the variables are declared here *)
-        let outs, out_tys = match tm.out_tys with 
+        let outs, out_tys =
+          match tm.out_tys with
           | None ->
             (* must visit outs because they have been renamed too. *)
             List.map (self#visit_id dummy) tm.outs, None
-          | Some out_tys -> 
-            List.map (self#freshen_var) tm.outs, 
-            Some(List.map (self#visit_ty dummy) out_tys)
-        in 
-        STableMatch({tbl; keys; args; outs; out_tys})
+          | Some out_tys ->
+            ( List.map self#freshen_var tm.outs
+            , Some (List.map (self#visit_ty dummy) out_tys) )
+        in
+        STableMatch { tbl; keys; args; outs; out_tys }
 
       method! visit_body dummy (params, body) =
         let old_env = env in
@@ -245,7 +255,7 @@ let rename prog =
           let replaced_size = Option.map (self#visit_size dummy) size in
           let new_x = self#freshen_size x in
           DSize (new_x, replaced_size)
-        | DAction(x, rtys, const_params, (params, action_body)) -> 
+        | DAction (x, rtys, const_params, (params, action_body)) ->
           let new_rtys = List.map (self#visit_ty dummy) rtys in
           let new_const_params =
             List.map
@@ -259,7 +269,8 @@ let rename prog =
           in
           let new_action_body = List.map (self#visit_exp dummy) action_body in
           let new_x = self#freshen_var x in
-          DAction(new_x, new_rtys, new_const_params, (new_params, new_action_body))
+          DAction
+            (new_x, new_rtys, new_const_params, (new_params, new_action_body))
         | DMemop (x, params, body) ->
           let old_env = env in
           let replaced_params =
@@ -297,9 +308,10 @@ let rename prog =
           env <- old_env;
           let new_x = self#freshen_var x in
           DEvent (new_x, s, new_cspecs, new_params)
-        | DHandler (x, body) ->
+        | DHandler (x, hsort, body) ->
           (* Note that we require events to be declared before their handler *)
-          DHandler (self#lookup (Id x) |> Cid.to_id, self#visit_body dummy body)
+          DHandler
+            (self#lookup (Id x) |> Cid.to_id, hsort, self#visit_body dummy body)
         | DFun (f, rty, cspecs, (params, body)) ->
           let old_env = env in
           let new_rty = self#visit_ty dummy rty in
@@ -340,7 +352,7 @@ let rename prog =
           in
           let e = self#visit_exp dummy e in
           env <- orig_env;
-          let ret_ty = self#visit_ty () ret_ty in
+          let ret_ty = self#visit_ty dummy ret_ty in
           let id = self#freshen_var id in
           DConstr (id, ret_ty, params, e)
         | DModule (id, intf, body) ->
@@ -351,6 +363,17 @@ let rename prog =
           let new_env = add_module_defs id orig_env env in
           env <- new_env;
           DModule (id, intf, body)
+        | DParser (id, params, body) ->
+          let orig_env = env in
+          let params =
+            List.map
+              (fun (id, ty) -> self#freshen_var id, self#visit_ty dummy ty)
+              params
+          in
+          let body = self#visit_parser_block dummy body in
+          env <- orig_env;
+          let id = self#freshen_var id in
+          DParser (id, params, body)
         | DModuleAlias _ -> failwith "Should be eliminated before this"
 
       (*** Places we enter a scope ***)

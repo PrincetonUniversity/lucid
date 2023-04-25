@@ -15,6 +15,24 @@ let translate_rty rty =
   | _ -> error "[translate_rty] not a TInt"
 ;;
 
+type event_spec = {
+  evids : id list;
+  ev_enum : (id * int) list;
+  hdl_enum : (id * int) list;
+  hdl_params : (id * TofinoCore.params) list;
+  event_id_sequences : id list list;
+}
+
+let tds_to_event_spec tds : event_spec =
+  let evids = (main tds).hdl_enum |> List.split |> fst in 
+  let ev_enum = (main tds).hdl_enum in 
+  let hdl_enum = (main tds).hdl_enum in
+  let hdl_params = (main tds).hdl_params in
+  let event_id_sequences = (main tds).event_output.ev_gen_seqs in
+  {evids; ev_enum; hdl_enum; hdl_params; event_id_sequences;}  
+;;
+
+
 (*** structs ***)
 
 (* tofino builtins -- ingress *)
@@ -87,7 +105,7 @@ let cur_ev_width = 8
 let cur_ev_arg = Cid.concat single_ev_arg (Cid.id cur_ev_field)
 
 let wire_ev_struct = dstruct single_ev_t_id THdr
-  [cur_ev_field, tint 8]
+  [cur_ev_field, tint cur_ev_width]
 ;;
 
 
@@ -101,20 +119,26 @@ let multi_ev_arg = Cid.create_ids [hdr_t_arg; multi_ev_field]
 let port_out_event_field = id "port_event_id"
 let port_out_event_width = cur_ev_width
 let port_out_event_arg = Cid.concat multi_ev_arg (Cid.id port_out_event_field)
+let port_out_event_arg_e = T.evar_ty port_out_event_arg (T.TInt(cur_ev_width))
 
+(* this references fields in dmulti_ev_struct *)
 let handler_multi_ev_flag_arg evid = Cid.concat multi_ev_arg (Cid.id evid)
-let event_bridged_arg evid = handler_multi_ev_flag_arg evid
+let handler_multi_ev_flag_width = 1
+
+let handler_multi_ev_flag_arg_e evid = 
+  evar_ty 
+    (handler_multi_ev_flag_arg evid) 
+    (TInt handler_multi_ev_flag_width)
 
 let dmulti_ev_struct evids =
-  let flag_fields = List.map (fun (evid) -> (evid, tint 1)) evids in
+  let flag_fields = List.map (fun (evid) -> (evid, tint handler_multi_ev_flag_width)) evids in
   let multi_ev_pad_field = 
-    (Id.fresh_name "flag_pad", tint (8 - (List.length flag_fields) mod 8))
+    (Id.fresh_name "flag_pad", tint (8 - ((List.length flag_fields)*handler_multi_ev_flag_width) mod 8))
   in
   dstruct 
     multi_ev_t THdr 
     ((port_out_event_field, tint port_out_event_width)::multi_ev_pad_field::flag_fields)
 ;;
-
 
 (* event headers -- carry event arguments. Created later. Names here. *)
 (* reference to the struct instance of event evid *)
@@ -154,16 +178,20 @@ let hdr_struct evids =
     )
 ;;
 
+(* metadata holds the current egress event identifier *)
+let egr_cur_ev_field = id "egress_event_id" ;;
+let egr_cur_ev_ty = tint cur_ev_width
+let egr_cur_ev_arg = Cid.create_ids [md_t_arg; egr_cur_ev_field]
 let meta_struct = 
-  dstruct md_t_id TMeta []
+  dstruct md_t_id TMeta [egr_cur_ev_field, egr_cur_ev_ty]
 ;;
-(* generate all ingress structures *)
-let generate_structs tds =
-  let m = main tds in 
-  let evids = m.hdl_enum |> List.split |> fst in 
 
-  let multi_ev_struct = dmulti_ev_struct (m.hdl_enum |> List.split |> fst) in
-  let ev_structs = devent_structs m.hdl_params in 
+(* generate all headers and structures *)
+let generate_structs (event_spec : event_spec) =
+  let evids = event_spec.hdl_enum |> List.split |> fst in 
+
+  let multi_ev_struct = dmulti_ev_struct (event_spec.hdl_enum |> List.split |> fst) in
+  let ev_structs = devent_structs event_spec.hdl_params in 
 
   [eth_struct; wire_ev_struct; multi_ev_struct]
   @ev_structs
@@ -178,7 +206,7 @@ let pkt_t, pkt_arg = id "packet_in", id "pkt"
 (* parse state ids *)
 let start_state_id = id "start"
 let default_setup_id = id "default_setup"
-let eth_state_id = id "parse_eth"
+let eth_state_id = id "parse_lucid_eth"
 let single_ev_state_id = id ("parse_"^(fst single_ev_field))
 
 let ingress_parser_params = [
@@ -192,7 +220,7 @@ let ingress_parser_params = [
 let event_parse_state id =
   Id.create (("parse_")^(fst id))
 ;;
-
+(* parse instructions *)
 let extract field_inst = 
   let extract_fcn = 
     (Cid.concat (Cid.Id pkt_arg) (Cid.create ["extract"]))
@@ -250,19 +278,60 @@ let invalidate local =
 let set_int local i =
   sassign local (eval_int i)
 ;;
-
+let set_var local v ty =
+  sassign local (evar_ty v ty)
+;;
 let dparsestate id stmt =
   decl (DParseState {id; body = stmt;})
 ;;
 
-let generate_ingress_parser block_id (m:main_handler) lucid_internal_ports =
+
+let generate_bound_port_parsers (m:main_handler) (portnum, eventname) =
+  (* generate the default state and the transition branch for 
+     a packet that arrives on a port bound to an event. *)
+
+  let evname_to_evid_and_num (name : string) (ids : (id*int) list) =
+    match List.find_opt (fun ((n, _), _) -> n = name) ids with
+    | Some id -> Some id
+    | None -> None
+  in
+  let port_default_state_id = id ("port_"^(string_of_int portnum)^"_default_"^eventname) in
+  let evid, evnum = match evname_to_evid_and_num eventname m.hdl_enum with
+    | Some(evid, evnum) -> evid, evnum
+    | None -> error ("the event "^(eventname)^" was used in the ports configuration file, but could not be found in the program.")
+  in
+  let parse_state = DParseState {
+    id = port_default_state_id;
+    (* almost the same body as the "global default event", 
+       except we transition to the parser for the specified event *)
+    body = sseq (
+      [(validate single_ev_arg);
+       (validate multi_ev_arg);
+      (set_int cur_ev_arg evnum)]
+      @(List.map (fun evid -> set_int (handler_multi_ev_flag_arg evid) 0) (m.hdl_enum |> List.split |> fst) )
+      @[transition (event_parse_state evid)]);
+    } 
+  in
+  let transition_branch = (portnum, port_default_state_id) in
+  parse_state, transition_branch
+;;
+
+
+let generate_ingress_parser block_id (m:main_handler) lucid_internal_ports port_events =
   (* parse states: *)
+  let bound_port_states, bound_port_transition = (List.map 
+    (fun port_event -> 
+      generate_bound_port_parsers m port_event))
+    port_events  
+    |> List.split
+  in
+
   let start_state = DParseState
     { id=start_state_id; 
       body=sseq (
         [
-        extract (Cid.id ig_intr_md_arg);
-        advance 64;
+        extract (Cid.id ig_intr_md_arg); (* extract ingress intrinsic metadata *)
+        advance 64; (* skip resubmit info header *)
         (* validate multi_ev_arg; *)
         ]
 (*         @
@@ -272,16 +341,19 @@ let generate_ingress_parser block_id (m:main_handler) lucid_internal_ports =
         @
         [
         transition_select
-          igr_port_arg
-          (List.map 
-            (fun port -> (port, eth_state_id))
-            lucid_internal_ports)
-          (Some default_setup_id)
+          igr_port_arg (* transition based on ingress port *)
+          (
+            bound_port_transition (* packets from ports bound to events go to direct parsing states *)
+            @(List.map (* packets from internal lucid ports go to lucid eth header parsing states *)
+              (fun port -> (port, eth_state_id))
+              lucid_internal_ports)
+          )
+          (Some default_setup_id) (* packets from all other ports go to a default parsing state *)
       ]);
     } 
   in 
   let default_setup_state = DParseState
-  (* case: packet on non-lucid port. 
+  (* case: packet arrives on non-lucid port. 
            1. enable empty ethernet header 
            2. enable single_lucid_event header 
            3. set event type to default_ev (if there's a default event)
@@ -289,10 +361,16 @@ let generate_ingress_parser block_id (m:main_handler) lucid_internal_ports =
     {
       id = default_setup_id;
       body = sseq ([
-        (validate eth_arg);
+        (* change 4 / 13 / 23 -- add the lucid_eth header on egress. 
+            at ingress, we: 
+              1. don't add the header to parsed events
+              2. skip the header on lucid internal events
+            at egress:
+              1. add a constant lucid eth header instead of always parsing it *)
+(*         (validate eth_arg);
         (set_int edst_arg 0);
         (set_int esrc_arg 0);
-        (set_int etype_arg lucid_etype);
+        (set_int etype_arg lucid_etype); *)
         (validate single_ev_arg)]
         (* set event arg *)
         @(match m.default_hdl with 
@@ -315,20 +393,25 @@ let generate_ingress_parser block_id (m:main_handler) lucid_internal_ports =
         ));
     }
   in
+  
   let eth_state = DParseState
     {
       id=eth_state_id;
       body = sseq [
-        extract (eth_arg);
-        transition_select 
+        (* change 4 / 13 / 23 -- parse_eth is just a skip now *)
+        advance 112;
+        transition single_ev_state_id;
+        (* extract (eth_arg); *)
+(*         transition_select 
           etype_arg 
           [lucid_etype, single_ev_state_id]
-          None (* undefined behavior when a non-lucid packet arrives on a lucid port *)
+          None (* undefined behavior when a non-lucid packet arrives on a lucid port *) *)
       ];
     }
   in
   (* This parse state is never used, we add it so that the tofino compiler doesn't try to 
      "optimize" the program by overlaying different event headers... *)
+  (* 4/4/23 -- no longer needed, we now add no_overlay pragmas *)
   let parse_all_events_state_id = id "parse_all_events" in 
   let parse_all_events_state = DParseState {
     id=parse_all_events_state_id;
@@ -340,12 +423,14 @@ let generate_ingress_parser block_id (m:main_handler) lucid_internal_ports =
 
 
   let single_ev_state = 
+    (* 4/4/23 -- no longer needed, we now add no_overlay pragmas *)
     let branches = (255, parse_all_events_state_id)::(List.map
+    (* let branches = (List.map *)
           ((fun (evid, evnum) -> (evnum, event_parse_state evid)))
           m.hdl_enum
         )
     in
-  DParseState
+    DParseState
     {
       id=single_ev_state_id;
       body = sseq [
@@ -399,8 +484,12 @@ let generate_ingress_parser block_id (m:main_handler) lucid_internal_ports =
 
   let decls = 
     List.map 
-      (fun d -> {d=d; dpragma=[];})
-      ([start_state; default_setup_state; eth_state; single_ev_state]@parse_ev_states@[parse_all_events_state]) 
+      P4TofinoSyntax.decl
+      ([start_state; default_setup_state; eth_state; single_ev_state]
+      @bound_port_states
+      @parse_ev_states
+      @[parse_all_events_state]) 
+      (* ([start_state; default_setup_state; eth_state; single_ev_state]@parse_ev_states)  *)
   in 
   decl (DParse({id=block_id; params=ingress_parser_params; decls; body=None;}))
 ;;
@@ -472,7 +561,10 @@ let rid_field = id "egress_rid"
 let egress_port_field = id "egress_port"
 
 let rid_local = Cid.create_ids [eg_intr_md; rid_field]
+let rid_local_e = T.evar_ty rid_local (T.TInt(16))
+
 let egress_port_local = Cid.create_ids [eg_intr_md; egress_port_field]
+let egress_port_local_e = T.evar_ty egress_port_local (T.TInt(9))
 
 let eg_prsr_md_t = id "egress_intrinsic_metadata_from_parser_t"
 let eg_prsr_md = id "eg_prsr_md"
@@ -482,6 +574,10 @@ let eg_dprsr_md = id "eg_dprsr_md"
 
 let eg_oport_md_t = id "egress_intrinsic_metadata_for_output_port_t"
 let eg_oport_md = id "eg_oport_md"
+
+(* to drop packets in egress *)
+let eg_drop_ctl_field = id "drop_ctl"
+let eg_drop_ctl_arg = Cid.create_ids [eg_dprsr_md; eg_drop_ctl_field]
 
 let egress_parser_params = [
   param (tstruct pkt_t) pkt_arg;
@@ -493,12 +589,12 @@ let egress_parser_params = [
 open Batteries
 
 
-(* assuming there is a flag for each ev in evid, 
-   generate a pattern of flag values corresponding 
-   to the generation of the subset of evids in 
-   evid_seq *)
+(* construct the pattern of flag values corresponding 
+   to generating the sequence of events in evid_seq *)
 let intpats_of_evseq evids evid_seq =
+  (* [0 for i in evids] *)
   let base_flagpat = List.map (fun _ -> 0) evids in 
+  (* [] *)
   List.fold_left (fun flagpat evid ->
       let idx = (List.index_of evid evids |> Option.get) in
       List.modify_at idx (fun _ -> 1) flagpat
@@ -508,9 +604,26 @@ let intpats_of_evseq evids evid_seq =
 ;;
 
 (*generate the transition statement for egress *)
-let eventset_parse_tree tds =
-  let evids = (main tds).hdl_enum |> List.split |> fst in 
-  let event_id_sequences = (main tds).event_output.ev_gen_seqs in 
+let eventset_parse_tree event_spec =
+  let evids = event_spec.evids in
+  let event_id_sequences = event_spec.event_id_sequences in
+  (* add the sequence where all events are generated, if it is not there, 
+     to prevent p4c from overlaying event headers in egress *)
+  (*  4/5/23 -- we no longer need to add a ghost parse path 
+     for all events headers because we add pragmas to force no overlays *)
+  (* let event_id_sets = List.map MiscUtils.unique_list_of event_id_sequences in *)
+(*   let contains_generate_all = List.fold_left
+    (fun acc event_id_seq -> 
+      acc || (MiscUtils.list_eq event_id_seq evids))
+    false
+    event_id_sets
+  in *)
+(*   let event_id_sequences = if (contains_generate_all)
+    then (event_id_sequences)
+    else (
+      print_endline ("[coreToP4Tofino] info: adding egress parse path for _all_ events, to prevent overlaying...");
+      event_id_sequences@[evids])
+  in *)
 
   (* generate a parse state, transition statement, and pattern list *)
   let generate_objs_for_evseq (i:int) (generated_evids:Id.t list) =
@@ -541,15 +654,22 @@ let eventset_parse_tree tds =
   transition_stmt, parse_states
 ;;
 
-let generate_egress_parser block_id tds =
-  let transition_stmt, ev_parse_states = eventset_parse_tree tds in 
+let generate_egress_parser block_id event_spec =
+  let transition_stmt, ev_parse_states = eventset_parse_tree event_spec in 
   let start_state = decl (DParseState
     { id=start_state_id; 
       body=sseq ([
         extract (Cid.id eg_intr_md);
-        extract (eth_arg);
+        (* 4 / 13 / 23 -- add a constant lucid internal ethernet header at egress, 
+           to get around parse tree depth limitation. *)
+        (validate eth_arg);
+        (set_int edst_arg 0);
+        (set_int esrc_arg 0);
+        (set_int etype_arg lucid_etype);
+        (* extract (eth_arg); *)
         extract (single_ev_arg);
         extract (multi_ev_arg);
+        set_int egr_cur_ev_arg 0;
         transition_stmt
         ]
       );
@@ -572,9 +692,7 @@ let egress_deparser_params = [
 ] ;; 
 
 (* emit everything *)
-let generate_egress_deparse block_id tds =
-  let m = main tds in 
-  let _ = m in 
+let generate_egress_deparse block_id =
 (*   let emit_calls = 
     [eth_arg; single_ev_arg] (* eth and single_ev *)
     @(List.map handler_struct_arg (* events *)

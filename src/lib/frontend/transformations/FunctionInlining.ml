@@ -139,6 +139,7 @@ let inliner =
       match e.e with
       | ECall (cid, es) ->
         let es = List.map (self#visit_exp env) es in
+        (* case: cid is a function *)
         if CidMap.mem cid env.funcs
         then (
           (* Generate a fresh retvar *)
@@ -154,7 +155,8 @@ let inliner =
               env
               { fname = cid; args = es; ret = retvar }
           in
-          { e with e = EStmt (stmt, ret_exp) })
+          { e with e = EStmt (stmt, ret_exp) }
+          (* case: cid is a constructor *))
         else if CidMap.mem cid env.constrs
         then (
           let params, body =
@@ -176,11 +178,19 @@ let inliner =
               (List.map fst params)
               (List.map (fun e -> e.e) es)
           in
-          subst#visit_exp subst_map @@ self#visit_exp env body)
+          (* create the body and re-annotate it immediately *)
+          let body = GlobalConstructorTagging.reannotate_inlined_exp e body in
+          (* recurse on the new body *)
+          let inner_exp = self#visit_exp env body in
+          (* do substitutions on it *)
+          let inlined_exp = subst#visit_exp subst_map inner_exp in
+          inlined_exp)
         else
           (* Not user-defined function; we don't have to inline it *)
           { e with e = ECall (cid, es) }
-      | _ -> super#visit_exp env e
+      | _ ->
+        let res = super#visit_exp env e in
+        res
   end
 ;;
 
@@ -196,20 +206,26 @@ let inline_decl env d =
   | DConstr (id, _, params, e) ->
     { env with constrs = CidMap.add (Id id) (params, e) env.constrs }, None
     (* Substitute into body with current env *)
-  | DHandler (id, body) ->
+  | DHandler (id, s, body) ->
     let body =
       TyperInstGen.instantiator#visit_body (TyperInstGen.fresh_maps ()) body
     in
     let d' =
       TyperInstGen.generalizer#visit_decl
         ()
-        { d with d = DHandler (id, inline_body env body) }
+        { d with d = DHandler (id, s, inline_body env body) }
     in
     env, Some d'
   | DGlobal (id, ty, e) ->
     env, Some { d with d = DGlobal (id, ty, inliner#visit_exp env e) }
     (* Other stuff is unaffected *)
-  | DUserTy _ | DExtern _ | DSymbolic _ | DEvent _ | DConst _ | DSize _ ->
+  | DUserTy _
+  | DExtern _
+  | DSymbolic _
+  | DEvent _
+  | DConst _
+  | DSize _
+  | DParser _ ->
     (* We can't inline an exp that's not part of a statement *) env, Some d
   | DMemop _ ->
     (* No function calls allowed in Memops *)

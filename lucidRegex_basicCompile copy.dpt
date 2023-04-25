@@ -1,0 +1,33 @@
+entry event DNS_packet_fwd(int sip, int cip, int smac, int cmac, int ttl);
+exit event DNS_packet_out (int sip, int cip, int smac, int cmac, int ttl);
+exit event ttl_changes_found(int idx, int<<8>> count);
+
+memop inc(int<<8>> src, int<<8>> unused) {
+    return src + 1;
+}
+
+re<<8>> myre = DNS_packet_fwd(@int<<32>> fst_ttl = ttl).(DNS_packet_fwd(fst_ttl != ttl));
+//DATA {
+global Array.t<<8>> cnt = Array.create(8);
+//}
+//IDX = {
+//    | DNS_packet_fwd -> {(int<<32>>)hash<<3>>(13, sip, cip, smac, cmac)}
+//}
+
+//    int<<8>> newcount = Array.setm(cnt, mysreidx, inc, 0)+1;
+//    if (newcount >= 5){
+
+//    }
+
+
+handle DNS_packet_fwd(int sip, int cip, int smac, int cmac, int ttl) {
+    int idx = (int<<32>>)hash<<3>>(13, sip, cip, smac, cmac);
+    if (transition(myre, idx, this)) {
+        int<<8>> newcount = Array.setm(cnt, mysreidx, inc, 0)+1;
+        if (newcount >= 5){
+            generate ttl_changes_found(0, 0);
+            reset(myre, idx)
+        }
+    }
+    generate DNS_packet_out (sip, cip, smac, cmac, ttl);
+}

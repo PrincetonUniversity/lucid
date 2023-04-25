@@ -3,7 +3,9 @@ open Syntax
 open Collections
 
 (* Inline all const declarations. Expects modules to be eliminated first as
-   well as alpha-renaming. *)
+   well as alpha-renaming. We do this last because record/vector/tuple unrolling
+   can generate new EConst statements (from e.g. global records with some constant
+   fields). *)
 type env = e IdMap.t
 
 let inliner =
@@ -42,12 +44,15 @@ let inline_decl env d =
 ;;
 
 let inline_prog ds =
+  let start_env =
+    IdMap.singleton Builtins.lucid_ety_id (EVal Builtins.lucid_ety_value)
+  in
   let _, ds =
     List.fold_left
       (fun (env, ds) d ->
         let env, d = inline_decl env d in
         env, d @ ds)
-      (IdMap.empty, [])
+      (start_env, [])
       ds
   in
   List.rev ds

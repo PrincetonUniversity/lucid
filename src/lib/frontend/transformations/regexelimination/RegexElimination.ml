@@ -217,7 +217,7 @@ type reInfo =
 
 type env = {
   re_info_map : reInfo IdMap.t; 
-  current_handler : (Id.t * params) option;
+  current_handler : (Id.t *handler_sort * params) option;
   params_map : params IdMap.t;
   added_cts : bool
 };;
@@ -273,7 +273,7 @@ let pred_update_statement id pred =
 let rec make_binding_defs reid binders handler_eid params_map idx_expr = 
   let def_maker be in_closure = (match handler_eid with 
   | None -> make_binding_get reid be params_map idx_expr
-  | Some (eid, _) -> if be = eid then (make_binding_set reid be params_map idx_expr in_closure) else (make_binding_get reid be params_map idx_expr)) in
+  | Some (eid, _, _) -> if be = eid then (make_binding_set reid be params_map idx_expr in_closure) else (make_binding_get reid be params_map idx_expr)) in
     match List.rev binders with 
     | [] -> []
     | {binding_event = be; assignments = assignments; under_closure = in_closure} :: tail -> 
@@ -285,7 +285,7 @@ let rec make_pred_defs reid preds handler_eid =
   match handler_eid, preds with 
   | None, _ -> []
   | _, [] -> []
-  | Some (eid, _), {pred_event=pred_event; pred=pred} :: tail -> 
+  | Some (eid, _, _), {pred_event=pred_event; pred=pred} :: tail -> 
     if pred_event = eid then (pred_update_statement reid pred) :: (make_pred_defs reid tail handler_eid) else (make_pred_defs reid tail handler_eid)
 ;;
 
@@ -296,7 +296,7 @@ let init_val eid event_order preds =
 let counter_def id re_info handler_eid preds = 
   match handler_eid with
   | None -> error "not in event handler"
-  | Some (eid, _) -> statement (SLocal ((make_counter_id id), (ty (TInt (IConst DFASynthesis.bv_size))), (make_num_size (init_val eid re_info.event_order preds) DFASynthesis.bv_size)))
+  | Some (eid,_, _) -> statement (SLocal ((make_counter_id id), (ty (TInt (IConst DFASynthesis.bv_size))), (make_num_size (init_val eid re_info.event_order preds) DFASynthesis.bv_size)))
 ;;
 
 let make_local_synth_var_def varid = 
@@ -357,9 +357,9 @@ let make_transition_statements env id idx_expr =
 ;;
 
 let make_counter_branch id re_info eid params= 
-  let binding_defs = (make_binding_defs id re_info.binders (Some (eid, params)) "dummy" (make_evar (make_idx_val id))) in
+  let binding_defs = (make_binding_defs id re_info.binders (Some (eid, None, params)) "dummy" (make_evar (make_idx_val id))) in
   let counter_set = (make_assign (make_counter_id id) (make_num_size (init_val eid re_info.event_order re_info.preds) DFASynthesis.bv_size)) :: binding_defs in
-  let pred_update_defs = List.append counter_set (make_pred_defs id re_info.preds (Some (eid,params))) in
+  let pred_update_defs = List.append counter_set (make_pred_defs id re_info.preds (Some (eid,None, params))) in
   let p = [PEvent (Cid.create_ids [eid], params)] in
   let s = statement (sequence_statements pred_update_defs) in
   (p,s) 
@@ -396,7 +396,7 @@ let reset_regex_event_decl id =
 let reset_regex_event_handler reid binders = 
   let reset_exp size id = statement (SUnit (exp (ECall (array_set_cid, [(make_evar id);(make_evar (make_idx_val reid)); (make_num_size 0 size)])))) in
   let resets = List.map (fun (_, id, _) -> reset_exp 32 (make_asgn_id reid id)) (List.flatten (List.map (fun b -> b.assignments) binders)) in
-  decl (DHandler ((make_reset_event_id reid), ([((make_idx_val reid), ty (TInt (IConst 32)))], statement (sequence_statements (List.append resets [(reset_exp DFASynthesis.bv_size reid)])))))
+  decl (DHandler ((make_reset_event_id reid), HData, ([((make_idx_val reid), ty (TInt (IConst 32)))], statement (sequence_statements (List.append resets [(reset_exp DFASynthesis.bv_size reid)])))))
 
 let reset_regex_stmt id idx_expr = 
   (*let eset = exp (ECall (array_set_cid, [exp (EVar (Cid.create_ids [id])); idx_expr; (make_num_size 0 DFASynthesis.bv_size)])) in
@@ -422,7 +422,7 @@ let collector =
     
     method! visit_DEvent env id event_sort constr_spec_list params = env := {(!env) with params_map=(IdMap.add id params (!env).params_map)}; DEvent (id, event_sort, constr_spec_list, params)
     
-    method! visit_DHandler env id body = env := {(!env) with current_handler= (Some (id, (fst body)))}; DHandler (id, ((self#visit_body env) body))
+    method! visit_DHandler env id sort body = env := {(!env) with current_handler= (Some (id, sort, (fst body)))}; DHandler (id, sort, ((self#visit_body env) body))
 
     method! visit_DVarRegex env id size alph vr = env := {(!env) with re_info_map=(IdMap.add id (re_info id alph vr) (!env).re_info_map)}; DVarRegex (id, size, alph, vr)
 end;;

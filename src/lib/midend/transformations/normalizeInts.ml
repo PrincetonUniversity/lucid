@@ -94,7 +94,7 @@ let rec to_immediate exp =
     (* the expression is an atomic op, so we can replace it with a precomputation. *)
     | true ->
       let ty = exp.ety in
-      let var_id = Id.fresh "pc_tmp" in
+      let var_id = Id.fresh "to_immediate_tmp" in
       let stmt = slocal var_id ty exp in
       let exp = { exp with e = EVar (Cid.id var_id) } in
       exp, [stmt]
@@ -130,7 +130,8 @@ let atomize_int_assigns ds =
       method precompute_stmts = precompute_stmts
 
       (* skip memops! *)
-      method! visit_DMemop _ id params body = DMemop (id, params, body)
+      method! visit_DMemop _ m = DMemop (m)
+
 
       method! visit_statement ctx stmt =
         match stmt.s with

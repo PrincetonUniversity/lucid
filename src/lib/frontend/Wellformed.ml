@@ -37,57 +37,56 @@ let append_alph alph event_defs =
   List.append 
 
 let check_decls ds =
-    let rec check_decl in_module d =
-      match d.d with
-      | DGlobal (id, ty, _) ->
-        if in_module
-        then
-          Console.error_position
-            d.dspan
-            "All globals must be declared at toplevel, not with in a module.";
-        if not (is_global ty)
-        then
-          Console.error_position d.dspan
-          @@ Printf.sprintf
-              "Global variable %s declared with non-global type %s"
-              (id_to_string id)
-              (ty_to_string ty)
-      | DConstr (id, ty, _, _) ->
-        ignore (id, ty)
-        (* This restriction isn't actually necessary, I don't think. *)
-        (* if not (is_global ty)
-              then
-                Console.error_position d.dspan
-                @@ Printf.sprintf
-                      "Constructor %s returns non-global type %s"
-                      (id_to_string id)
-                      (ty_to_string ty) *)
-      | DExtern (_, ty) ->
-        (match TyTQVar.strip_links ty.raw_ty with
-        | TInt _ | TBool -> ()
-        | TFun { arg_tys } ->
-          List.iter
-            (fun ty ->
-              match TyTQVar.strip_links ty.raw_ty with
-              | TInt _ | TBool -> ()
-              | _ ->
-                Console.error_position d.dspan
-                @@ Printf.sprintf
+  let rec check_decl in_module d =
+    match d.d with
+    | DGlobal (id, ty, _) ->
+      if in_module
+      then
+        Console.error_position
+          d.dspan
+          "All globals must be declared at toplevel, not with in a module.";
+      if not (is_global ty)
+      then
+        Console.error_position d.dspan
+        @@ Printf.sprintf
+             "Global variable %s declared with non-global type %s"
+             (id_to_string id)
+             (ty_to_string ty)
+    | DConstr (id, ty, _, _) ->
+      ignore (id, ty)
+      (* This restriction isn't actually necessary, I don't think. *)
+      (* if not (is_global ty)
+             then
+               Console.error_position d.dspan
+               @@ Printf.sprintf
+                    "Constructor %s returns non-global type %s"
+                    (id_to_string id)
+                    (ty_to_string ty) *)
+    | DExtern (_, ty) ->
+      (match TyTQVar.strip_links ty.raw_ty with
+       | TInt _ | TBool -> ()
+       | TFun { arg_tys } ->
+         List.iter
+           (fun ty ->
+             match TyTQVar.strip_links ty.raw_ty with
+             | TInt _ | TBool -> ()
+             | _ ->
+               Console.error_position d.dspan
+               @@ Printf.sprintf
                     "Arguments to an extern function must have type int or \
-                      bool, not %s"
+                     bool, not %s"
                     (ty_to_string ty))
-            arg_tys
-        | _ ->
-          Console.error_position d.dspan
-          @@ Printf.sprintf
+           arg_tys
+       | _ ->
+         Console.error_position d.dspan
+         @@ Printf.sprintf
               "Externs must have type int or bool, not %s"
               (ty_to_string ty))
-      | DModule (_, _, decls) -> List.iter (check_decl true) decls
-      (*| DVarRegex (id, size, alph, vr) -> check_var_regex id vr event_defs [] []; ()*)
-      | _ -> ()
-    in
-    List.iter (check_decl false) ds
-  ;;
+    | DModule (_, _, decls) -> List.iter (check_decl true) decls
+    | _ -> ()
+  in
+  List.iter (check_decl false) ds
+;;
 
 (* Next up: Check that symbolic declarations don't use any non-symbolic sizes.
    We could remove this constraint if we wanted by inlining concrete sizes immediately,
@@ -107,12 +106,12 @@ let check_symbolics ds =
         | DSize (id, None) -> env := IdSet.add id !env
         | DSymbolic (id, ty) ->
           (try self#visit_ty env ty with
-          | Failure s ->
-            Console.error
-            @@ "Unknown or non-symbolic size "
-            ^ s
-            ^ " appears in type of symbolic "
-            ^ Printing.id_to_string id)
+           | Failure s ->
+             Console.error
+             @@ "Unknown or non-symbolic size "
+             ^ s
+             ^ " appears in type of symbolic "
+             ^ Printing.id_to_string id)
         | _ -> ()
     end
   in
@@ -141,7 +140,7 @@ let rec match_handlers ?(m_cid = None) (ds : decls) =
       else if sort = EExit
       then events, handlers
       else IdSet.add id events, handlers
-    | DHandler (id, _) ->
+    | DHandler (id, _, _) ->
       if IdSet.mem id handlers
       then
         Console.error_position d.dspan
@@ -216,7 +215,6 @@ let basic_qvar_checker =
 
     (* table types are always allowed to have QVars *)
     method! visit_TTable _ _ = ()
-
     method! visit_exp _ _ = ()
 
     method! visit_decl env d =
@@ -311,7 +309,7 @@ let rec check_qvars d =
   | DAction _ -> ()
   | DGlobal _ ->
     (* None allowed at all *) basic_qvar_checker#visit_decl (true, true) d
-  | DSize _ | DSymbolic _ | DConst _ | DExtern _ ->
+  | DSize _ | DSymbolic _ | DConst _ | DExtern _ | DParser _ ->
     (* Only allowed in effect *) basic_qvar_checker#visit_decl (false, true) d
   | DConstr _ ->
     (* Allowed in both sizes and effects *)
@@ -319,9 +317,9 @@ let rec check_qvars d =
   | DUserTy (_, sizes, _) ->
     (* Effects always ok, sizes only if they appear in the declared size list *)
     preset_qvar_checker#visit_decl (List.map STQVar.strip_links sizes) d
-  | DEvent (_, _, _, params) | DHandler (_, (params, _)) ->
+  | DEvent (_, _, _, params) | DHandler (_, _, (params, _)) ->
     (* Effects always ok, sizes only allowed if they appear inside at least one global-type argument *)
-    event_qvar_checker#visit_params (false, ref []) params  
+    event_qvar_checker#visit_params (false, ref []) params
   | DModule (_, intf, ds) ->
     List.iter check_qvars_intf intf;
     List.iter check_qvars ds

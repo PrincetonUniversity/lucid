@@ -22,6 +22,7 @@
    console
    id
    cid
+   taggedCid
    input
    integer
    span
@@ -31,8 +32,12 @@
    parser
    lexer
    syntax
+   globalConstructorTagging
+   SyntaxGlobalDirectory
    syntaxUtils
    coreSyntax
+   coreSyntaxGlobalDirectory
+   sourceTracking
    coreZ3
    collections
    typer
@@ -71,10 +76,12 @@
    syntaxToCore
    interp
    interpCore
+   interpControl
    pipeline
    preprocess
    interpSpec
    interpState
+   interpSyntax
    arrays
    counters
    pairArrays
@@ -82,7 +89,6 @@
    events
    builtins
    TQVar
-   poplPatches
    backendLogging
    eliminateEqRangeOps
    addDefaultBranches
@@ -93,7 +99,7 @@
    eliminateEventMatch
    optimizeSimpleCalls
    eliminateValueCasts
-   eliminateExterns
+   eliminateInterpOps
    normalizeInts
    singleAssignment
    partialSingleAssignment
@@ -107,22 +113,29 @@
    TofinoPipeline
    DependencyProfiling
    InputChecks
-   UnifyHandlerParams
+   StandardizeEventParams
    EliminateEventCombinators
-   EliminateExitEvents
+   ExternEventElimination
    TofinoCore
+   TofinoCoreForms
+   TofinoControl
+   TofinoEgress
    InlineEventVars
    SolitaryMatches
    Generates
    IfToMatch
    RegularizeMemops
    ShareMemopInputs
+   SingleTableMatch
+   ActionsToFunctions
+   UniqueTableActions
    MatchAlgebra
    CoreCfg
    CoreCdg
    CoreDfg
    CoreResources
    ExternalLayout
+   CoreLayoutOld
    CoreLayout
    ActionForm
    Dedup
@@ -130,8 +143,12 @@
    CoreToP4TofinoHeaders
    CoreToP4Tofino
    P4TofinoPrinting
+   P4TofinoGlobalDirectory
    ControlPrinter
    ParsePortSpec
+   cEventLib
+   pyEventLib
+   pyControlLib
    )
  (preprocess
     (staged_pps ppx_import visitors.ppx ppx_deriving.show ppx_deriving.std ppx_string))

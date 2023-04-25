@@ -16,11 +16,9 @@ let err_unsupported span str =
   ^ " does not exist in the backend and should have been eliminated"
 ;;
 
-
 let translate_size (sz : S.size) : C.size =
   SyntaxUtils.extract_size_default sz 32
 ;;
-
 
 let rec translate_ty (ty : S.ty) : C.ty =
   let raw_ty =
@@ -37,25 +35,25 @@ let rec translate_ty (ty : S.ty) : C.ty =
         ; ret_ty = translate_ty fty.ret_ty
         }
     | S.TVoid -> C.TBool (* Dummy translation needed for foreign functions *)
-    | S.TTable(tbl) -> 
+    | S.TTable tbl ->
       let tkey_sizes = List.map translate_size tbl.tkey_sizes in
       let tparam_tys = List.map translate_ty tbl.tparam_tys in
       let tret_tys = List.map translate_ty tbl.tret_tys in
-      C.TTable({tkey_sizes; tparam_tys; tret_tys})
-    | S.TAction(a) -> 
+      C.TTable { tkey_sizes; tparam_tys; tret_tys }
+    | S.TAction a ->
       let aconst_param_tys = List.map translate_ty a.aconst_param_tys in
       let aparam_tys = List.map translate_ty a.aparam_tys in
       let aret_tys = List.map translate_ty a.aret_tys in
-      C.TAction({aconst_param_tys; aparam_tys; aret_tys})
-    | S.TPat(s) -> C.TPat(translate_size s)
+      C.TAction { aconst_param_tys; aparam_tys; aret_tys }
+    | S.TPat s -> C.TPat (translate_size s)
     | _ -> err ty.tspan (Printing.ty_to_string ty)
   in
   { raw_ty; tspan = ty.tspan }
-and translate_asig asig = 
-  let (name, tys) = asig in
-  (name, List.map (fun rty -> (translate_ty (S.ty rty)).raw_ty) tys;)
-;;
 
+and translate_asig asig =
+  let name, tys = asig in
+  name, List.map (fun rty -> (translate_ty (S.ty rty)).raw_ty) tys
+;;
 
 let translate_op (op : S.op) : C.op =
   match op with
@@ -115,20 +113,42 @@ let rec translate_exp (e : S.exp) : C.exp =
     | S.ECall (cid, es) -> C.ECall (cid, List.map translate_exp es)
     | S.EHash (sz, es) -> C.EHash (translate_size sz, List.map translate_exp es)
     | S.EFlood e -> C.EFlood (translate_exp e)
-    | ESizeCast(_) | EStmt(_) | ERecord(_) | EWith(_) | EProj(_)
-    | EVector(_) | EComp(_) | EIndex(_) | ETuple(_) -> err_unsupported e.espan (Printing.exp_to_string e)
-    | S.ETableCreate(e) ->  
-      let tty = translate_ty e.tty in
-      let tactions = List.map translate_exp e.tactions in
-      let tsize = translate_exp e.tsize in
-      let tdefault = (fst e.tdefault), (snd e.tdefault |> List.map translate_exp) in
-      C.ETableCreate({tty; tactions; tsize; tdefault})
+    | ESizeCast _
+    | EStmt _
+    | ERecord _
+    | EWith _
+    | EProj _
+    | EVector _
+    | EComp _
+    | EIndex _
+    | ETuple _ -> err_unsupported e.espan (Printing.exp_to_string e)
+    | S.ETableCreate _ ->
+      err
+        e.espan
+        "[SyntaxToCore.translate_exp] ETableCreate should be translated by \
+         special function"
     | S.ETableMatch _ ->
-        err e.espan "table match exps should have been eliminated before IR."
-    | S.EPatWild(Some(sz)) -> C.EVal (C.vwild (translate_size sz)) 
-    | S.EPatWild(None) -> err e.espan "wildcard patterns (_) should have a size before IR."
+      err e.espan "table match exps should have been eliminated before IR."
+    | S.EPatWild (Some sz) -> C.EVal (C.vwild (translate_size sz))
+    | S.EPatWild None ->
+      err e.espan "wildcard patterns (_) should have a size before IR."
   in
   { e = e'; ety = translate_ty (Option.get e.ety); espan = e.espan }
+
+and translate_etablecreate id (exp : S.exp) : C.exp =
+  match exp.e with
+  | S.ETableCreate tc ->
+    let tty = translate_ty tc.tty in
+    let tactions = List.map translate_exp tc.tactions in
+    let tsize = translate_exp tc.tsize in
+    let tdefault = fst tc.tdefault, snd tc.tdefault |> List.map translate_exp in
+    let e' = C.ETableCreate { tid = id; tty; tactions; tsize; tdefault } in
+    { e = e'; ety = translate_ty (Option.get exp.ety); espan = exp.espan }
+  | _ ->
+    err
+      exp.espan
+      "[SyntaxToCore.translate_etablecreate] non table create expressions \
+       should be translated by translate_exp"
 
 and translate_params params =
   List.map (fun (id, ty) -> id, translate_ty ty) params
@@ -145,11 +165,12 @@ and translate_body (params, stmt) =
   translate_params params, translate_statement stmt
 
 and translate_acn acn =
-  let (name, body) = acn in
-  (name, translate_body body)
+  let name, body = acn in
+  name, translate_body body
+
 and translate_case case =
-  let (pats, acn, args) = case in
-  (List.map translate_pattern pats, acn, List.map translate_exp args)
+  let pats, acn, args = case in
+  List.map translate_pattern pats, acn, List.map translate_exp args
 
 and translate_gen_type = function
   | S.GSingle eo -> C.GSingle (Option.map translate_exp eo)
@@ -163,11 +184,11 @@ and translate_statement (s : S.statement) : C.statement =
   let translate_branch (ps, s) =
     List.map translate_pattern ps, translate_statement s
   in
-  let translate_entry (entry: S.tbl_entry) : C.tbl_entry = {
-      ematch = List.map translate_exp entry.ematch;
-      eprio=entry.eprio;
-      eaction=entry.eaction;
-      eargs = List.map translate_exp entry.eargs;
+  let translate_entry (entry : S.tbl_entry) : C.tbl_entry =
+    { ematch = List.map translate_exp entry.ematch
+    ; eprio = entry.eprio
+    ; eaction = entry.eaction
+    ; eargs = List.map translate_exp entry.eargs
     }
   in
   let s' =
@@ -184,20 +205,22 @@ and translate_statement (s : S.statement) : C.statement =
     | S.SMatch (es, branches) ->
       C.SMatch (List.map translate_exp es, List.map translate_branch branches)
     | S.SRet eopt -> C.SRet (Option.map translate_exp eopt)
-    | S.STableMatch(tm) -> C.STableMatch({
-      C.tbl = translate_exp tm.tbl;
-      C.keys = List.map translate_exp tm.keys;
-      C.args = List.map translate_exp tm.args;
-      C.outs = tm.outs;
-      C.out_tys = match tm.out_tys with 
-        | None -> None
-        | Some(otys) -> Some(List.map translate_ty otys);
-    })
-    | S.STableInstall(tbl_exp, entries) -> 
-      C.STableInstall(translate_exp tbl_exp, List.map translate_entry entries)
+    | S.STableMatch tm ->
+      C.STableMatch
+        { C.tbl = translate_exp tm.tbl
+        ; C.keys = List.map translate_exp tm.keys
+        ; C.args = List.map translate_exp tm.args
+        ; C.outs = tm.outs
+        ; C.out_tys =
+            (match tm.out_tys with
+             | None -> None
+             | Some otys -> Some (List.map translate_ty otys))
+        }
+    | S.STableInstall (tbl_exp, entries) ->
+      C.STableInstall (translate_exp tbl_exp, List.map translate_entry entries)
     | _ -> err s.sspan (Printing.statement_to_string s)
   in
-  { s = s'; sspan = s.sspan; spragma = None}
+  { s = s'; sspan = s.sspan; spragma = None }
 ;;
 
 let translate_memop body =
@@ -224,32 +247,76 @@ let translate_memop body =
 ;;
 
 let translate_sort = function
-  | S.EEntry b -> C.EEntry b
-  | S.EExit -> C.EExit
+  | S.EEntry _ -> C.EEntry
   | S.EBackground -> C.EBackground
+  | S.EExit -> failwith "Internal Error: Extern event persisted to midend"
+;;
+
+let translate_hsort = function
+  | S.HControl -> C.HControl
+  | S.HData -> C.HData
+  | S.HEgress -> C.HEgress
+;;
+
+let translate_parser_action = function
+  | S.PRead (id, ty) -> C.PRead (id, translate_ty ty)
+  | S.PSkip ty -> C.PSkip (translate_ty ty)
+  | S.PAssign (lexp, rexp) ->
+    let id =
+      match lexp.e with
+      | EVar cid -> Cid.to_id cid
+      | _ -> failwith "Internal error: SyntaxToCore PAssign"
+    in
+    C.PAssign (id, translate_exp rexp)
+;;
+
+let rec translate_branch (pat, block) =
+  translate_pattern pat, translate_parser_block block
+
+and translate_parser_step = function
+  | S.PGen e -> C.PGen (translate_exp e)
+  | S.PCall e -> C.PCall (translate_exp e)
+  | S.PMatch (e, bs) -> C.PMatch (translate_exp e, List.map translate_branch bs)
+  | S.PDrop -> C.PDrop
+
+and translate_parser_block (actions, (step, step_span)) =
+  ( List.map (fun (a, sp) -> translate_parser_action a, sp) actions
+  , (translate_parser_step step, step_span) )
 ;;
 
 let translate_decl (d : S.decl) : C.decl =
   let d' =
     match d.d with
-    | S.DGlobal (id, ty, exp) ->
-      C.DGlobal (id, translate_ty ty, translate_exp exp)
+    | S.DGlobal (id, ty, inner_exp) ->
+      (match inner_exp.e with
+       | ETableCreate _ ->
+         C.DGlobal (id, translate_ty ty, translate_etablecreate id inner_exp)
+       | _ -> C.DGlobal (id, translate_ty ty, translate_exp inner_exp))
     | S.DEvent (id, sort, _, params) ->
       C.DEvent (id, translate_sort sort, translate_params params)
-    | S.DHandler (id, body) -> C.DHandler (id, translate_body body)
-    | S.DMemop (id, params, body) ->
-      C.DMemop (id, translate_params params, translate_memop body)
+    | S.DHandler (id, s, body) ->
+      C.DHandler (id, translate_hsort s, translate_body body)
+    | S.DMemop (mid, mparams, mbody) ->
+      C.DMemop
+        { mid
+        ; mparams = translate_params mparams
+        ; mbody = translate_memop mbody
+        }
     | S.DExtern (id, ty) -> C.DExtern (id, translate_ty ty)
-    | S.DAction(id, tys, const_params, (params, acn_body)) -> 
-      C.DAction({
-          aid = id;
-          artys = List.map translate_ty tys;
-          aconst_params = translate_params const_params;
-          aparams = translate_params params;
-        abody = List.map translate_exp acn_body;})
+    | S.DAction (id, tys, const_params, (params, acn_body)) ->
+      C.DAction
+        { aid = id
+        ; artys = List.map translate_ty tys
+        ; aconst_params = translate_params const_params
+        ; aparams = translate_params params
+        ; abody = List.map translate_exp acn_body
+        }
+    | S.DParser (id, params, parser_block) ->
+      C.DParser
+        (id, translate_params params, translate_parser_block parser_block)
     | _ -> err d.dspan (Printing.decl_to_string d)
   in
-  { d = d'; dspan = d.dspan }
+  C.decl_sp d' d.dspan
 ;;
 
 let translate_prog (ds : S.decls) : C.decls = List.map translate_decl ds

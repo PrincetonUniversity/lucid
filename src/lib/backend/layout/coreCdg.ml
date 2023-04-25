@@ -1,4 +1,24 @@
-(* Transform a control flow graph into a control dependency graph *)
+(* Transform a control flow graph into a control dependency graph.
+    The control dependency graph is a hard-to-explain intermediate 
+    step between the control flow graph and a data-dependency graph. 
+    The important difference is that, in a control flow graph, 
+    there are nodes for control flow operations 
+    (e.g., if stmt, match stmt). 
+    In a control dependency graph, there are only nodes for computation. 
+    Each node tests all the conditions necessary for its execution. 
+    The meaning of an edge (x, y) in a control dependency graph is just that, 
+    "in the control flow of the program, statement x executes before statement y".
+    But, with each statement testing the conditions for its execution, 
+    the statements can be reordered in any way, so long as data flow 
+    constraints are maintained. 
+
+    The three steps in the CFG -> CDG transformation are: 
+    1. propagate statement-execution-conditions through the CFG. 
+    2. convert each node in the CFG into a match statement that 
+       tests its execution conditions.
+    3. remove the now-unneeded control nodes from the graph
+       (i.e., if and match nodes that execute no code).
+ *)
 open Batteries
 open Printf
 open InterpHelpers
@@ -96,6 +116,8 @@ let propagate_edge_constraints g =
                 | (CMatch(pc_c), CMatch(e_c)) ->
                     CMatch(MatchAlgebra.and_conditions pc_c e_c)
                 | (CExp(_), _) | (_, CExp(_)) -> 
+                    print_endline "about to fail. current node: ";
+                    print_endline (CoreCfg.str_of_vertex v);
                     error "CExp constraints not implemented. Convert to match"
             in 
             !dprint_endline ("successor node: "^(CoreCfg.summarystr_of_stmt d.stmt true));
@@ -179,17 +201,7 @@ let remove_noop_match_nodes g =
 ;;
 
 
-(* vertex normalization: convert each vertex into a match statement that 
-   tests its complete execution conditions. Once normalized, these match 
-   statements can be executed in any order, as long as data dependencies 
-   are respected. 
 
-    - non-match statements: find precondition for execution, 
-        convert that into a match:
-        - miss rules --> noop branches
-        - hit rule --> stmt branch
-
-*)
 
 let branch_of_pattern p stmt = 
     (CL.split p |> snd, stmt)
@@ -216,6 +228,32 @@ let branch_of_pattern_branch (p, stmt) : branch =
 let default_branch keys = (CL.map (fun _ -> PWild) keys, snoop) ;;
 
 
+(* vertex normalization: convert each vertex into a match statement that 
+   tests its complete execution conditions. By this point, each node 
+   in the program knows its preconditions for execution. But those 
+   preconditions are expressed with some internal representation. 
+   This pass converts the preconditions for a node n into a match 
+   statement for node n that tests the preconditions.
+
+   After normalization, nodes in the resulting graph are 
+   valid lucid match statements that can be executed in any order, 
+   so long as data dependencies are respected. 
+
+   The algorithm iterates over nodes. 
+    Cases: 
+    - node is a solitary match statement: 
+        extend key and rules to check preconditions for execution
+    - node is a non-solitary match statement:
+        do nothing, this node will be deleted in the next pass
+    - *SPECIAL CASE* table_match statement s: 
+        - a table match statement only has to test that its 
+          callnum variable is set to != 0.
+    - non-match statement s: find precondition for execution, 
+        convert that into a match:
+        - miss rules --> execute noop
+        - hit rule --> execute s
+
+*)
 (* this pass puts each vertex into a normal form. 
     Non-solitary match nodes: do nothing.
     Operation nodes: 
@@ -226,9 +264,10 @@ let vertices_in_normal_match_form g =
     let normalize_vertex v =
         let pc = precondition_of_vertex v idom g v in 
         match v.stmt.s, v.solitary with
+            (* a non-solitary match node, at this point, is a match node that just has noop branches 
+               which point to other nodes. It doesn't execute anything, so it can be deleted in the next pass
+               and we don't have to do anything here. *)
             | SMatch(_, _), false -> v
-                (* this node will be deleted in the next pass *)
-                (* error "[normalize_vertex] a non-solitary match vertex... these should have been eliminated by now." *)
             | SMatch(keys, branches), true -> (
                 match pc with
                 | CNone -> v
@@ -271,16 +310,34 @@ let vertices_in_normal_match_form g =
                 res
                 )
             )
-            (* scenario: this is a regular statement. We are just adding the condition to it. *)
+            (* SPECIAL CASE: this is a table_match node. We can ignore _all_ the preconditions 
+               except for testing that the node's execution flag is set. So, drop all preconditions 
+               and just add that one. 
+               I don't know if we can drop preconditions for table_matches _before_ this pass, 
+               because doing so might impact condition propagation. *)
+            | STableMatch(tm), true -> 
+                (* craft the match statement *)
+                let keyvar, keyty = SingleTableMatch.callnumvar_of_tid (id_of_exp tm.tbl) in
+                let keys = [exp_of_id keyvar keyty] in                
+                let branches = [
+                    ([PNum (Z.of_int 0)], snoop);
+                    ([PWild], v.stmt)]
+                in
+                let s' = SMatch(keys, branches) in
+                let new_stmt = {v.stmt with s = s'} in
+                {v with stmt = new_stmt;}
+            (* case: this is a non-match node, which we are wrapping with a match statement 
+               that is generated from its pre-conditions. *)
+            | STableMatch(_), false ->
+                error "[vertices_in_normal_match_form] got a non-solitary table match node.. should be impossible."
             | _, _ -> ( 
                 match pc with 
+                (* the precondition is expressed as a series of match rules. *)
                 | CMatch(match_cond) -> 
                     let keys = keys_of_condition match_cond in 
                     let miss_branches = noop_branches_of_patterns match_cond.negs in 
-
-                    (* there is no hit branch on this precondition... how does that happen? *)
                     let hit_branch = match match_cond.pos with
-                        | None -> [] (* error "no hit branch on a precondition. Double check that this is possible." *)
+                        | None -> []
                             (* Note: a precondition can have no hit. Its just a branch that can never 
                                     be reached in the program. If a precondition has no hit, 
                                     then the match representation of the table also has no hit. 
@@ -311,12 +368,13 @@ let vertices_in_normal_match_form g =
                     !dprint_endline ("INPUT PC:"^(CoreCfg.str_of_edge_condition pc));
                     !dprint_endline ("NORMALIZED VERTEX:"^(CoreCfg.summarystr_of_stmt new_stmt true));
                     {v with stmt = new_stmt;}
+                (* there is no precondition on this node... so its a match with only a default rule *)
                 | CNone -> 
-                    (* there is no precondition on this node... so its a match with only a default rule *)
                     let match_s = SMatch([], [([], v.stmt)]) in 
                     let new_stmt = {v.stmt with s = match_s;} in 
                     !dprint_endline ("NORMALIZED NO CONDITION VERTEX:"^(CoreCfg.summarystr_of_stmt new_stmt true));
                     {v with stmt = new_stmt;}
+                (* the precondition is an expression, but those should not happen by this point. *)
                 | CExp(_) -> error "If path conditions not supported"
             )
     in 

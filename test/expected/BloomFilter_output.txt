@@ -1,0 +1,40 @@
+dpt: Auto-detected specification file examples/interp_tests/BloomFilter.json
+dpt: Simulating...
+dpt: Using random seed: 0
+
+t=0: Handling entry event in(false,3) at switch 0, port 0
+t=600: Handling event denied(3) at switch 0, port 196
+t=10000: Handling entry event in(true,3) at switch 0, port 0
+t=20000: Handling entry event in(false,3) at switch 0, port 0
+t=20600: Handling event allowed(3) at switch 0, port 196
+t=30000: Handling entry event in(true,7) at switch 0, port 0
+t=40000: Handling entry event in(true,8) at switch 0, port 0
+t=50000: Handling entry event in(false,3) at switch 0, port 0
+t=50600: Handling event allowed(3) at switch 0, port 196
+t=60000: Handling entry event in(false,7) at switch 0, port 0
+t=60600: Handling event allowed(7) at switch 0, port 196
+t=70000: Handling entry event in(false,8) at switch 0, port 0
+t=70600: Handling event allowed(8) at switch 0, port 196
+t=80000: Handling entry event in(false,9) at switch 0, port 0
+t=80600: Handling event denied(9) at switch 0, port 196
+t=90000: Handling entry event in(false,10) at switch 0, port 0
+t=90600: Handling event denied(10) at switch 0, port 196
+dpt: Final State:
+
+Switch 0 : {
+
+ Pipeline : [
+    bf1_0_0(0) : [1u1; 0u1; 1u1; 1u1]
+    bf1_0_1(1) : [1u1; 0u1; 0u1; 1u1]
+    bf1_0_2(2) : [0u1; 1u1; 0u1; 1u1]
+    bf1_0_3(3) : [0u1; 1u1; 1u1; 0u1]
+  ]
+
+ Events :   [ ]
+
+ Exits :    [ ]
+
+ entry events handled: 10
+ total events handled: 17
+
+}

@@ -1,4 +1,9 @@
-(* Tag match statements with many branches as solitary *)
+(* 
+  Match statements with many branches are expensive 
+  to place into shared tables during the layout phase. 
+  This pass identifies match tables with many branches
+  and annotates them as "solitary," so that they 
+  are placed in their own tables. *)
 open TofinoCore
 
 

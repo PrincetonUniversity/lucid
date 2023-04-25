@@ -1,9 +1,10 @@
 (* 
   This pass deduplicates hash and Array accessors, by 
   moving them all into their own labeled blocks. 
-  Similar to ActionForm pass, but applied to the 
-  bodies of the labeled statements created in that 
-  pass, rather than the main statement.
+  This applies only to labeled statements, not handlers. 
+  Must be used after ActionForm.ml.
+  Note: This re-uses the labeled_statement cache and process_branch 
+  code from ActionForm.ml.
 *) 
 
 open CoreSyntax
@@ -34,7 +35,7 @@ let dedup_stmt prev_cache stmt =
         match exp.e with
         | ECall(_) | EHash(_) -> (
           let new_cache, call_block, new_block_opt = 
-            dedup_branch (!blockcache) stmt
+            process_branch (!blockcache) stmt
           in
           add_decl_opt new_block_opt;
           blockcache := new_cache;
@@ -42,7 +43,7 @@ let dedup_stmt prev_cache stmt =
         )
         | _ -> (
           let new_cache, call_block, new_block_opt = 
-            dedup_branch (!blockcache) stmt
+            process_branch (!blockcache) stmt
           in
           add_decl_opt new_block_opt;
           blockcache := new_cache;
@@ -59,18 +60,19 @@ let dedup_stmt prev_cache stmt =
 
 
 let rec dedup_decls cache tds =
+  (* dedup closures that represent tables *)
   match tds with 
   | [] -> tds
   | tdecl::tds -> (
     match tdecl.td with
-    | TDLabeledBlock(id, stmt) -> 
+    | TDOpenFunction(id, [], stmt, []) -> 
       let new_decls, new_stmt, new_cache = dedup_stmt cache stmt in      
-      let tdecl = {tdecl with td=TDLabeledBlock(id, new_stmt)} in
+      let tdecl = {tdecl with td=TDOpenFunction(id, [], new_stmt, [])} in
       new_decls@[tdecl]@(dedup_decls new_cache tds)
     | _ -> tdecl::(dedup_decls cache tds)
   )
 
 let rec process tds = 
-  let tds = dedup_decls empty_blockcache tds in
+  let tds = dedup_decls empty_labeled_statement_cache tds in
   tds 
 ;;

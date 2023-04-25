@@ -17,13 +17,28 @@ type edge_condition =
     | CMatch of condition
 
 type vertex_stmt = {
+    vuid : int;
     stmt : statement;
     solitary : bool; (* solitary means this statement cannot share a table with any others. *)
 }
-let empty_vertex_stmt  = {
+let cur_uid = ref 0 ;;
+
+(* let empty_vertex_stmt ()  = 
+  cur_uid := (!cur_uid) + 1;    
+{
+    vuid = 0;
+    (* vuid = (!cur_uid); *)
     stmt = snoop;
     solitary = false;
 }
+ *)
+let vertex_of_stmt stmt solitary = 
+{
+    stmt = stmt;
+    solitary = solitary;
+    vuid = stmt.sspan.spid;    
+}
+
 let cond_stmt_equal c1 c2 = 
     c1.stmt.sspan.spid = c2.stmt.sspan.spid
 ;;
@@ -102,6 +117,49 @@ let str_of_cond_stmt cs =
     (summarystr_of_stmt cs.stmt cs.solitary)
 ;;
 
+(* full printers for text representation of graph *)
+let rec is_noop stmt =
+  match stmt.s with
+  | SNoop -> true
+  | SSeq(s1, s2) -> (is_noop s1) && (is_noop s2)
+  | SIf(_, s1, s2) -> (is_noop s1) && (is_noop s2)
+  | SMatch(_, bs) ->
+    List.fold_left 
+      (fun acc (_, b) -> 
+        acc && (is_noop b))
+      true
+      bs
+  | _ -> false
+;;
+let str_of_vertex v =
+    (* let is_root = ((Cfg.in_degree g v) == 0) in *)
+    let is_noop = (is_noop v.stmt) in
+    Printf.sprintf 
+        "%s[%s]: %s"
+        (if is_noop then "//NOOP\n" else "")
+        (string_of_int v.stmt.sspan.spid)
+        (CorePrinting.statement_to_string v.stmt)
+;;
+
+let str_of_edge (s, _, d) =
+    Printf.sprintf 
+        "[%s] -> [%s]"
+        (string_of_int s.stmt.sspan.spid)
+        (string_of_int d.stmt.sspan.spid)
+;;
+
+let str_of_graph g =
+    let strs = 
+    Cfg.fold_vertex
+        (fun v strs -> strs@[str_of_vertex v])
+        g
+        []
+    in
+    Cfg.fold_edges_e 
+        (fun e strs -> strs@[str_of_edge e])
+        g
+        strs
+;;
 
 (* node and edge helpers functions *)
 let id_of_v (cs:vertex_stmt) =
@@ -176,14 +234,12 @@ let pattern_of_branch es b =
 (* Some match nodes may get compiled directly into their own tables.
     User-written match statements with:
         1. many branches (>20 -- this is somewhat arbitrary)
-        2. no sequences of statements
-    remove_match_nodes keeps these match statements in the CFG. *)
+        2. no sequences of statements *)
 let is_solitary_match stmt =
     match stmt.spragma with 
     | Some("solitary", []) -> true
     | _ -> false
 ;;
-
 
 (* compute the condition statement for each branch in a match statement *)
 let conditions_of_match es bs = 
@@ -199,17 +255,17 @@ let conditions_of_match es bs =
 (* main function: convert a statement into a cfg *)
 let rec cfg_of_statement_inner (st:statement) = 
     match st.s with
-    | SNoop -> Cfg.add_vertex Cfg.empty {stmt=st; solitary = false;} 
+    | SNoop -> Cfg.add_vertex Cfg.empty (vertex_of_stmt st false) 
     | SUnit(_)
     | SLocal(_)
     | SAssign(_)
     | SPrintf(_)
     | SRet(_)  
     | SGen(_) ->
-        Cfg.add_vertex Cfg.empty {stmt=st; solitary = false;} 
+        Cfg.add_vertex Cfg.empty (vertex_of_stmt st false)
     | STableMatch(_) -> 
         (* a table match remains a table match *)
-        Cfg.add_vertex Cfg.empty {stmt=st; solitary = true;}
+        Cfg.add_vertex Cfg.empty (vertex_of_stmt st true)
     | STableInstall(_) -> 
         error "[coreCfg.cfg_of_statement_inner] table installs should be removed from tofino program by this point."
     | SIf(e, s1, s2) ->
@@ -220,7 +276,7 @@ let rec cfg_of_statement_inner (st:statement) =
         let g = concat_graphs g_s1 g_s2 in 
         (* 3. add the edges from this node to root(g_s1) and root(g_s2) *)
         CL.fold_left 
-            (fun g (root, e) -> Cfg.add_edge_e g ({stmt=st; solitary = false;} , CExp(e), root))
+            (fun g (root, e) -> Cfg.add_edge_e g ((vertex_of_stmt st false) , CExp(e), root))
             g
             (
                 (List.map (fun v -> (v, e)) (roots g_s1))
@@ -242,7 +298,7 @@ let rec cfg_of_statement_inner (st:statement) =
         if (is_solitary_match st)
             (* a match statement that just stays as a match statement *)
         then (
-            Cfg.add_vertex Cfg.empty {stmt=st; solitary=true;}
+            Cfg.add_vertex Cfg.empty (vertex_of_stmt st true)
         )
         (* a match statement that gets broken apart *)
         else (
@@ -262,7 +318,7 @@ let rec cfg_of_statement_inner (st:statement) =
 (*                 print_endline ("branch condition: ");
                 print_endline (str_of_edge_condition (CMatch(edge_label))); *)
                 let g = CL.fold_left 
-                    (fun g root -> Cfg.add_edge_e g ({stmt=new_st; solitary = false;} , CMatch(edge_label), root))
+                    (fun g root -> Cfg.add_edge_e g ((vertex_of_stmt new_st false), CMatch(edge_label), root))
                     g
                     (roots branch_g)
                 in 
@@ -393,7 +449,6 @@ let cfg_of_main (ds:TofinoCore.tdecls) =
 (*     let entry_stmt = main_sig.main_body |> List.hd |> delete_noop_seqs |> (sseq snoop) in 
     cfg_of_statement entry_stmt *)
 ;;
-
 
 
 let test_cfg_builder () =

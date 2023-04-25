@@ -445,6 +445,7 @@ let rec refresh_event_param_ids ds : decls =
     | DEvent (ev_id, ev_sort, ev_params) ->
       { d = DEvent (ev_id, ev_sort, CL.map refresh_param_id ev_params)
       ; dspan = dec.dspan
+      ; dpragma = dec.dpragma
       }
     | _ -> dec
   in

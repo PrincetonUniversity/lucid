@@ -146,21 +146,22 @@ let rec raw_ty_to_string t =
   | TVector (ty, size) ->
     Printf.sprintf "%s[%s]" (raw_ty_to_string ty) (size_to_string size)
   | TTuple tys -> "(" ^ concat_map " * " raw_ty_to_string tys ^ ")"
-  | TTable(t) -> 
+  | TTable t ->
     " table_type {"
-    ^"\n\tkey_size: "^(comma_sep size_to_string t.tkey_sizes)
-    ^"\n\targ_ty: "^(comma_sep ty_to_string t.tparam_tys)
-    ^"\n\tret_ty: "^(comma_sep ty_to_string t.tret_tys)
-    ^"}\n"
-  | TAction(a) -> 
-    Printf.sprintf 
+    ^ "\n\tkey_size: "
+    ^ comma_sep size_to_string t.tkey_sizes
+    ^ "\n\targ_ty: "
+    ^ comma_sep ty_to_string t.tparam_tys
+    ^ "\n\tret_ty: "
+    ^ comma_sep ty_to_string t.tret_tys
+    ^ "}\n"
+  | TAction a ->
+    Printf.sprintf
       "%s -> %s -> %s"
       (concat_map " * " ty_to_string a.aconst_param_tys)
       (concat_map " * " ty_to_string a.aparam_tys)
       (comma_sep ty_to_string a.aret_tys)
-  | TPat(s) -> 
-    Printf.sprintf
-      "pat<<%s>>" (size_to_string s)
+  | TPat s -> Printf.sprintf "pat<<%s>>" (size_to_string s)
 
 and func_to_string func =
   let arg_tys = concat_map ", " ty_to_string func.arg_tys in
@@ -237,7 +238,8 @@ let op_to_string op =
   | PatMask -> "&"
 ;;
 
-let bs_to_string bs ="0b"
+let bs_to_string bs =
+  "0b"
   ^ (bs
     |> List.map (function
          | 0 -> '0'
@@ -328,11 +330,9 @@ let rec e_to_string e =
       (exp_to_string t.tsize)
       (cid_to_string (fst t.tdefault))
       (comma_sep exp_to_string (snd t.tdefault))
-  | ETableMatch(tr) -> 
-    Printf.sprintf "table_match(%s);"
-      (comma_sep exp_to_string tr.args)
-  | EPatWild(_) -> "_"
-
+  | ETableMatch tr ->
+    Printf.sprintf "table_match(%s);" (comma_sep exp_to_string tr.args)
+  | EPatWild _ -> "_"
 
 and exp_to_string e = e_to_string e.e
 (* ^ Printf.sprintf "[ty:%s]"
@@ -350,7 +350,7 @@ and branch_to_string (ps, s) =
     (stmt_to_string s)
 
 and action_to_string (name, (ps, stmt)) =
-  Printf.sprintf 
+  Printf.sprintf
     "%s(%s) =\n\t{%s}"
     name
     (params_to_string ps)
@@ -425,23 +425,22 @@ and stmt_to_string s =
       (id_to_string i)
       (size_to_string k)
       (stmt_to_string s)
-  | STableMatch(tbl_rec) -> 
-    if (tbl_rec.out_tys <> None)
-    then (
-    Printf.sprintf
-     "%s %s = table_match(%s, (%s), (%s));"
-      (comma_sep ty_to_string (Option.get tbl_rec.out_tys))
-      (comma_sep id_to_string tbl_rec.outs)
-      (exp_to_string tbl_rec.tbl)
-      (comma_sep exp_to_string tbl_rec.keys)
-      (comma_sep exp_to_string tbl_rec.args)
-    )
-  else (
-    Printf.sprintf
-     "%s = table_match(%s);"
-      (comma_sep id_to_string tbl_rec.outs)
-      (comma_sep exp_to_string (tbl_rec.tbl::tbl_rec.keys@tbl_rec.args)))
-  | STableInstall(id, entries) -> 
+  | STableMatch tbl_rec ->
+    if tbl_rec.out_tys <> None
+    then
+      Printf.sprintf
+        "%s %s = table_match(%s, (%s), (%s));"
+        (comma_sep ty_to_string (Option.get tbl_rec.out_tys))
+        (comma_sep id_to_string tbl_rec.outs)
+        (exp_to_string tbl_rec.tbl)
+        (comma_sep exp_to_string tbl_rec.keys)
+        (comma_sep exp_to_string tbl_rec.args)
+    else
+      Printf.sprintf
+        "%s = table_match(%s);"
+        (comma_sep id_to_string tbl_rec.outs)
+        (comma_sep exp_to_string ((tbl_rec.tbl :: tbl_rec.keys) @ tbl_rec.args))
+  | STableInstall (id, entries) ->
     Printf.sprintf
      "table_install(%s, {\n\t%s\n\t}\n);"
      (exp_to_string id)
@@ -512,7 +511,34 @@ and interface_to_string specs =
 
 and memop_to_string body = stmt_to_string (memop_body_to_stmt body)
 
+and parser_action_to_string action =
+  match action with
+  | PSkip ty -> Printf.sprintf "skip %s;" (ty_to_string ty)
+  | PRead (id, ty) ->
+    Printf.sprintf "read %s : %s;" (id_to_string id) (ty_to_string ty)
+  | PAssign (lval, exp) ->
+    Printf.sprintf "%s = %s;" (exp_to_string lval) (exp_to_string exp)
 
+and parser_branch_to_string (pat, block) =
+  Printf.sprintf "| %s -> %s" (pat_to_string pat) (parser_block_to_string block)
+
+and parser_step_to_string step =
+  match step with
+  | PGen e -> Printf.sprintf "generate %s;" (exp_to_string e)
+  | PCall e -> Printf.sprintf "%s;" (exp_to_string e)
+  | PMatch (e, branches) ->
+    Printf.sprintf
+      "match %s with %s"
+      (exp_to_string e)
+      (concat_map "\n" parser_branch_to_string branches)
+  | PDrop -> "drop;"
+
+and parser_block_to_string (actions, step) =
+  concat_map "\n" (parser_action_to_string % fst) actions
+  ^ "\n"
+  ^ (parser_step_to_string % fst) step
+
+and parser_to_string p = parser_block_to_string p
 
 and d_to_string d =
   match d with
@@ -522,9 +548,13 @@ and d_to_string d =
       (ty_to_string ty)
       (id_to_string id)
       (exp_to_string exp)
-  | DHandler (id, (params, s)) ->
+  | DHandler (id, hsort, (params, s)) ->
     Printf.sprintf
-      "handle %s(%s) {\n%s\n}"
+      "%shandle %s(%s) {\n%s\n}"
+      (match hsort with
+       | HControl -> "control "
+       | HData -> ""
+       | HEgress -> "@egress")
       (id_to_string id)
       (params_to_string params)
       (stmt_to_string s)
@@ -614,6 +644,12 @@ and d_to_string d =
   |DAlphabet (id, ids) ->
     Printf.sprintf
     "Alphabet %s = %s" (id_to_string id) (List.fold_left (fun acc id -> (id_to_string id) ^ acc) "" ids)
+  | DParser (id, params, parser) ->
+    Printf.sprintf
+      "parser %s(%s) {\n%s\n}\n"
+      (id_to_string id)
+      (params_to_string params)
+      (parser_block_to_string parser)
 
 and decl_to_string d = d_to_string d.d
 and decls_to_string ds = concat_map "\n\n" decl_to_string ds
