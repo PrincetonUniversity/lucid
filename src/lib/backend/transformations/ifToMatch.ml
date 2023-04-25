@@ -11,6 +11,11 @@ a disjunction of terms,
 TODO: We should merge this with MatchAlgebra.ml.
 The two modules have similar syntaxes for patterns and 
 rules and there are many duplicated functions. 
+
+BUG: this pass breaks for if statements that have 
+multiple equality conditions on the same variable 
+(unreachable, can detect statically). 
+Either fix pass or add static analysis to simplify those if's
 *) 
 
 open Core

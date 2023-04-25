@@ -27,6 +27,34 @@
               go after each callnum.
 *)
 
+(*  
+note: 
+this pass may break type system ordering (but that might be okay for the layout algorithm -- worth checking)
+the scenario is when one branch touches the table and then a global, 
+and another branch touches the global but _does not_ touch the table.
+The branch that touches the table will have the table_match and the global op moved
+to a later part of the code. 
+The branch that does _not_ touch the table will have its global op left here, 
+before the table.
+
+This is the problematic scenario:
+  match x with 
+  | 1 -> {
+      int result_1 = table_match(t, ...);
+      int z = result_1 + 1;
+      Array.set(x);
+    }
+  | 2 -> {
+      int result_2 = table_match(t, ...);
+      int zz = result_2 + 1;
+      Array.set(x);
+    }
+  | 3 -> {
+      Array.set(x);
+  }
+
+*)
+
 open CoreSyntax
 module TC = TofinoCore
 module ZZ = Z

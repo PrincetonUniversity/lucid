@@ -192,7 +192,6 @@ let replace_params evids stmt =
     2. add invalidates on all adjacent branches;
     3. "switch" into traverse_to_replace mode *)
 
-(* bug: is this handling generates or self generates? *)
 let rec find_rec_generate params_used_after tds (evid, (evparams:params)) stmt =
   let evids = evparams |> List.split |> fst in
   match stmt.s with 
