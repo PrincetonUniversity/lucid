@@ -81,7 +81,7 @@ def compile(dptc, prog, build):
     if (os.path.isdir(build) or os.path.isfile(build)):
         print ("deleting previous build directory...")
         shutil.rmtree(build)
-    cmd = [dptc, prog, build]
+    cmd = [dptc, prog, "-o", build]
     print ("compile command: %s"%(" ".join(cmd)))
     ret = subprocess.run(cmd, stdout = subprocess.PIPE, stderr = subprocess.PIPE)   
     return (ret.returncode == 0)
@@ -157,7 +157,7 @@ def find_file(fn):
 def check_manifest(build):
     # check the manifest from P4 -> Tofino compilation 
     # to see if it succeeded.
-    tofino_manifest = "%s/lucid/manifest.json"%build
+    tofino_manifest = "%s/lucid_tofino/manifest.json"%build
     manifest = json.load(open(tofino_manifest, "r"))
     return manifest["compilation_succeeded"]
 

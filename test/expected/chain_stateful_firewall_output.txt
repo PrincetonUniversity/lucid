@@ -4,12 +4,14 @@ dpt: Using random seed: 0
 
 t=11000000: Handling entry event packetin(10,100,0) at switch 0, port 0
 Mapped (10, 100) to index 0
-t=11000600: Handling event update_last_seen(0,11000000) at switch 0, port 0
-t=11001200: Handling event update_last_seen(0,11000000) at switch 1, port 0
-t=11001800: Handling event update_last_seen(0,11000000) at switch 2, port 0
+t=11000600: Handling event continue(100) at switch 0, port 196
+t=11000601: Handling event update_last_seen(0,11000000) at switch 0, port 0
+t=11001201: Handling event update_last_seen(0,11000000) at switch 1, port 0
+t=11001801: Handling event update_last_seen(0,11000000) at switch 2, port 0
 t=11100000: Handling entry event packetin(11,101,0) at switch 1, port 1
 Mapped (11, 101) to index 1
 t=11100600: Handling event update_last_seen(1,11100000) at switch 0, port 0
+t=11100600: Handling event continue(101) at switch 1, port 196
 t=11101200: Handling event update_last_seen(1,11100000) at switch 1, port 0
 t=11101800: Handling event update_last_seen(1,11100000) at switch 2, port 0
 t=11200000: Handling entry event packetin(13,103,1) at switch 0, port 0
@@ -18,18 +20,27 @@ t=11200000: Handling entry event packetin(13,103,1) at switch 1, port 1
 Mapped (103, 13) to index 1
 t=11200000: Handling entry event packetin(13,103,1) at switch 2, port 0
 Mapped (103, 13) to index 1
+t=11200600: Handling event continue(103) at switch 0, port 196
+t=11200600: Handling event continue(103) at switch 1, port 196
+t=11200600: Handling event continue(103) at switch 2, port 196
 t=11300000: Handling entry event packetin(101,11,1) at switch 0, port 0
 Mapped (11, 101) to index 1
 t=11300000: Handling entry event packetin(101,11,1) at switch 1, port 1
 Mapped (11, 101) to index 1
 t=11300000: Handling entry event packetin(101,11,1) at switch 2, port 0
 Mapped (11, 101) to index 1
+t=11300600: Handling event continue(11) at switch 0, port 196
+t=11300600: Handling event continue(11) at switch 1, port 196
+t=11300600: Handling event continue(11) at switch 2, port 196
 t=11400000: Handling entry event packetin(100,10,1) at switch 0, port 0
 Mapped (10, 100) to index 0
 t=11400000: Handling entry event packetin(100,10,1) at switch 1, port 1
 Mapped (10, 100) to index 0
 t=11400000: Handling entry event packetin(100,10,1) at switch 2, port 0
 Mapped (10, 100) to index 0
+t=11400600: Handling event continue(10) at switch 0, port 196
+t=11400600: Handling event continue(10) at switch 1, port 196
+t=11400600: Handling event continue(10) at switch 2, port 196
 dpt: Final State:
 
 Switch 0 : {
@@ -40,15 +51,10 @@ Switch 0 : {
 
  Events :   [ ]
 
- Exits :    [
-    continue(100) at port -1, t=11000000
-    continue(103) at port -1, t=11200000
-    continue(11) at port -1, t=11300000
-    continue(10) at port -1, t=11400000
-  ]
+ Exits :    [ ]
 
  entry events handled: 4
- total events handled: 6
+ total events handled: 10
 
 }
 Switch 1 : {
@@ -59,15 +65,10 @@ Switch 1 : {
 
  Events :   [ ]
 
- Exits :    [
-    continue(101) at port -1, t=11100000
-    continue(103) at port -1, t=11200000
-    continue(11) at port -1, t=11300000
-    continue(10) at port -1, t=11400000
-  ]
+ Exits :    [ ]
 
  entry events handled: 4
- total events handled: 6
+ total events handled: 10
 
 }
 Switch 2 : {
@@ -78,13 +79,9 @@ Switch 2 : {
 
  Events :   [ ]
 
- Exits :    [
-    continue(103) at port -1, t=11200000
-    continue(11) at port -1, t=11300000
-    continue(10) at port -1, t=11400000
-  ]
+ Exits :    [ ]
 
  entry events handled: 3
- total events handled: 5
+ total events handled: 8
 
 }

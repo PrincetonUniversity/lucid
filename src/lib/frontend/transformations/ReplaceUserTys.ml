@@ -3,10 +3,8 @@ open SyntaxUtils
 open Batteries
 open Collections
 
-(*** Replace abstract types with their definitions. We expect to run
-     this twice: Once before typechecking, so the typechecker doesn't have
-     to worry about matching type names to definitions. The second time
-     is after module elimination, which eliminates all abstract types
+(*** Replace abstract types with their definitions. We run
+     this after module elimination, to eliminate all abstract types
      except the builtin ones (Arrays and Counters) ***)
 
 (* Go through raw_ty and replace the qvars corresponding to size_vars with the
@@ -17,12 +15,11 @@ let subst =
 
     method! visit_IVar (env : size IdMap.t) tqv =
       match STQVar.strip_links (IVar tqv) with
-      | IVar (QVar id) ->
-        begin
-          match IdMap.find_opt id env with
-          | Some sz -> sz
-          | None -> IVar tqv
-        end
+      | IVar (QVar id) -> begin
+        match IdMap.find_opt id env with
+        | Some sz -> sz
+        | None -> IVar tqv
+      end
       | _ -> IVar tqv
   end
 ;;
@@ -75,12 +72,12 @@ let base_env () : env ref =
 let extract_ids span sizes =
   List.map
     (function
-      | IVar (QVar id) -> id
-      | _ ->
-        Console.error_position
-          span
-          "User types must be declared with polymorphic size variables \
-           (beginning with a tick")
+     | IVar (QVar id) -> id
+     | _ ->
+       Console.error_position
+         span
+         "User types must be declared with polymorphic size variables \
+          (beginning with a tick")
     sizes
 ;;
 
@@ -128,14 +125,12 @@ let replacer =
       since that mechanism seems to do more harm than good anyway *)
     method! visit_raw_ty (env : env ref) raw_ty =
       match raw_ty with
-      | TName (cid, sizes, _) ->
-        begin
-          match CidMap.find_opt cid !env.mapping with
-          | None ->
-            Console.error @@ "Unknown type " ^ Printing.cid_to_string cid
-          | Some (raw_ty, size_vars) ->
-            subst_sizes Span.default cid raw_ty size_vars sizes
-        end
+      | TName (cid, sizes, _) -> begin
+        match CidMap.find_opt cid !env.mapping with
+        | None -> Console.error @@ "Unknown type " ^ Printing.cid_to_string cid
+        | Some (raw_ty, size_vars) ->
+          subst_sizes Span.default cid raw_ty size_vars sizes
+      end
       | _ -> super#visit_raw_ty env raw_ty
 
     method! visit_decl env d =

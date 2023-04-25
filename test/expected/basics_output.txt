@@ -1,214 +1,214 @@
-
-In examples/interp_tests/basics.dpt: 
-
-69|    generate count_to_10 (0); // Dangerous, because this happens at linerate
-               ~~~~~~~~~~~~~~~
-
-warning: examples/interp_tests/basics.dpt: Unconditional generation of potential non-exit event in entry handler!
-
 dpt: Auto-detected specification file examples/interp_tests/basics.json
 dpt: Simulating...
 dpt: Using random seed: 0
 
 t=0: Handling entry event packetin(10,100) at switch 0, port 0
-t=600: Handling event count_to_10(0) at switch 0, port 255
+t=600: Handling event continue(10,100) at switch 0, port 255
+t=601: Handling event count_to_10(0) at switch 0, port 255
 at 0
-t=1200: Handling event count_to_10(1) at switch 0, port 255
+t=1201: Handling event count_to_10(1) at switch 0, port 255
 1
-t=1800: Handling event count_to_10(2) at switch 0, port 255
+t=1801: Handling event count_to_10(2) at switch 0, port 255
 2
-t=2400: Handling event count_to_10(3) at switch 0, port 255
+t=2401: Handling event count_to_10(3) at switch 0, port 255
 3
-t=3000: Handling event count_to_10(4) at switch 0, port 255
+t=3001: Handling event count_to_10(4) at switch 0, port 255
 4
-t=3600: Handling event count_to_10(5) at switch 0, port 255
+t=3601: Handling event count_to_10(5) at switch 0, port 255
 5
-t=4200: Handling event count_to_10(6) at switch 0, port 255
+t=4201: Handling event count_to_10(6) at switch 0, port 255
 6
-t=4800: Handling event count_to_10(7) at switch 0, port 255
+t=4801: Handling event count_to_10(7) at switch 0, port 255
 7
-t=5400: Handling event count_to_10(8) at switch 0, port 255
+t=5401: Handling event count_to_10(8) at switch 0, port 255
 8
-t=6000: Handling event count_to_10(9) at switch 0, port 255
+t=6001: Handling event count_to_10(9) at switch 0, port 255
 9
-t=6600: Handling event count_to_10(10) at switch 0, port 255
+t=6601: Handling event count_to_10(10) at switch 0, port 255
 10
-t=7200: Handling event count_to_10(11) at switch 0, port 255
+t=7201: Handling event count_to_10(11) at switch 0, port 255
 got to 10
 t=10000: Handling entry event packetin(11,101) at switch 0, port 0
-t=10600: Handling event count_to_10(0) at switch 0, port 255
+t=10600: Handling event continue(11,101) at switch 0, port 255
+t=10601: Handling event count_to_10(0) at switch 0, port 255
 at 0
-t=11200: Handling event count_to_10(1) at switch 0, port 255
+t=11201: Handling event count_to_10(1) at switch 0, port 255
 1
-t=11800: Handling event count_to_10(2) at switch 0, port 255
+t=11801: Handling event count_to_10(2) at switch 0, port 255
 2
-t=12400: Handling event count_to_10(3) at switch 0, port 255
+t=12401: Handling event count_to_10(3) at switch 0, port 255
 3
-t=13000: Handling event count_to_10(4) at switch 0, port 255
+t=13001: Handling event count_to_10(4) at switch 0, port 255
 4
-t=13600: Handling event count_to_10(5) at switch 0, port 255
+t=13601: Handling event count_to_10(5) at switch 0, port 255
 5
-t=14200: Handling event count_to_10(6) at switch 0, port 255
+t=14201: Handling event count_to_10(6) at switch 0, port 255
 6
-t=14800: Handling event count_to_10(7) at switch 0, port 255
+t=14801: Handling event count_to_10(7) at switch 0, port 255
 7
-t=15400: Handling event count_to_10(8) at switch 0, port 255
+t=15401: Handling event count_to_10(8) at switch 0, port 255
 8
-t=16000: Handling event count_to_10(9) at switch 0, port 255
+t=16001: Handling event count_to_10(9) at switch 0, port 255
 9
-t=16600: Handling event count_to_10(10) at switch 0, port 255
+t=16601: Handling event count_to_10(10) at switch 0, port 255
 10
-t=17200: Handling event count_to_10(11) at switch 0, port 255
+t=17201: Handling event count_to_10(11) at switch 0, port 255
 got to 10
 t=20000: Handling entry event packetin(12,102) at switch 0, port 0
 t=20000: Handling entry event packetin(12,102) at switch 1, port 7
 t=20000: Handling entry event packetin(12,102) at switch 2, port 1
-t=20600: Handling event count_to_10(0) at switch 0, port 255
+t=20600: Handling event continue(12,102) at switch 0, port 255
+t=20600: Handling event continue(12,102) at switch 1, port 196
+t=20600: Handling event continue(12,102) at switch 2, port 3
+t=20601: Handling event count_to_10(0) at switch 0, port 255
 at 0
-t=20600: Handling event count_to_10(0) at switch 1, port 196
+t=20601: Handling event count_to_10(0) at switch 1, port 196
 at 0
-t=20600: Handling event count_to_10(0) at switch 2, port 3
+t=20601: Handling event count_to_10(0) at switch 2, port 3
 at 0
-t=21200: Handling event count_to_10(1) at switch 0, port 255
+t=21201: Handling event count_to_10(1) at switch 0, port 255
 1
-t=21200: Handling event count_to_10(1) at switch 1, port 196
+t=21201: Handling event count_to_10(1) at switch 1, port 196
 1
-t=21200: Handling event count_to_10(1) at switch 2, port 3
+t=21201: Handling event count_to_10(1) at switch 2, port 3
 1
-t=21800: Handling event count_to_10(2) at switch 0, port 255
+t=21801: Handling event count_to_10(2) at switch 0, port 255
 2
-t=21800: Handling event count_to_10(2) at switch 1, port 196
+t=21801: Handling event count_to_10(2) at switch 1, port 196
 2
-t=21800: Handling event count_to_10(2) at switch 2, port 3
+t=21801: Handling event count_to_10(2) at switch 2, port 3
 2
-t=22400: Handling event count_to_10(3) at switch 0, port 255
+t=22401: Handling event count_to_10(3) at switch 0, port 255
 3
-t=22400: Handling event count_to_10(3) at switch 1, port 196
+t=22401: Handling event count_to_10(3) at switch 1, port 196
 3
-t=22400: Handling event count_to_10(3) at switch 2, port 3
+t=22401: Handling event count_to_10(3) at switch 2, port 3
 3
-t=23000: Handling event count_to_10(4) at switch 0, port 255
+t=23001: Handling event count_to_10(4) at switch 0, port 255
 4
-t=23000: Handling event count_to_10(4) at switch 1, port 196
+t=23001: Handling event count_to_10(4) at switch 1, port 196
 4
-t=23000: Handling event count_to_10(4) at switch 2, port 3
+t=23001: Handling event count_to_10(4) at switch 2, port 3
 4
-t=23600: Handling event count_to_10(5) at switch 0, port 255
+t=23601: Handling event count_to_10(5) at switch 0, port 255
 5
-t=23600: Handling event count_to_10(5) at switch 1, port 196
+t=23601: Handling event count_to_10(5) at switch 1, port 196
 5
-t=23600: Handling event count_to_10(5) at switch 2, port 3
+t=23601: Handling event count_to_10(5) at switch 2, port 3
 5
-t=24200: Handling event count_to_10(6) at switch 0, port 255
+t=24201: Handling event count_to_10(6) at switch 0, port 255
 6
-t=24200: Handling event count_to_10(6) at switch 1, port 196
+t=24201: Handling event count_to_10(6) at switch 1, port 196
 6
-t=24200: Handling event count_to_10(6) at switch 2, port 3
+t=24201: Handling event count_to_10(6) at switch 2, port 3
 6
-t=24800: Handling event count_to_10(7) at switch 0, port 255
+t=24801: Handling event count_to_10(7) at switch 0, port 255
 7
-t=24800: Handling event count_to_10(7) at switch 1, port 196
+t=24801: Handling event count_to_10(7) at switch 1, port 196
 7
-t=24800: Handling event count_to_10(7) at switch 2, port 3
+t=24801: Handling event count_to_10(7) at switch 2, port 3
 7
-t=25400: Handling event count_to_10(8) at switch 0, port 255
+t=25401: Handling event count_to_10(8) at switch 0, port 255
 8
-t=25400: Handling event count_to_10(8) at switch 1, port 196
+t=25401: Handling event count_to_10(8) at switch 1, port 196
 8
-t=25400: Handling event count_to_10(8) at switch 2, port 3
+t=25401: Handling event count_to_10(8) at switch 2, port 3
 8
-t=26000: Handling event count_to_10(9) at switch 0, port 255
+t=26001: Handling event count_to_10(9) at switch 0, port 255
 9
-t=26000: Handling event count_to_10(9) at switch 1, port 196
+t=26001: Handling event count_to_10(9) at switch 1, port 196
 9
-t=26000: Handling event count_to_10(9) at switch 2, port 3
+t=26001: Handling event count_to_10(9) at switch 2, port 3
 9
-t=26600: Handling event count_to_10(10) at switch 0, port 255
+t=26601: Handling event count_to_10(10) at switch 0, port 255
 10
-t=26600: Handling event count_to_10(10) at switch 1, port 196
+t=26601: Handling event count_to_10(10) at switch 1, port 196
 10
-t=26600: Handling event count_to_10(10) at switch 2, port 3
+t=26601: Handling event count_to_10(10) at switch 2, port 3
 10
-t=27200: Handling event count_to_10(11) at switch 0, port 255
+t=27201: Handling event count_to_10(11) at switch 0, port 255
 got to 10
-t=27200: Handling event count_to_10(11) at switch 1, port 196
+t=27201: Handling event count_to_10(11) at switch 1, port 196
 got to 10
-t=27200: Handling event count_to_10(11) at switch 2, port 3
+t=27201: Handling event count_to_10(11) at switch 2, port 3
 got to 10
 t=40000: Handling entry event packetin(13,103) at switch 0, port 0
 t=40007: Handling entry event packetin(14,104) at switch 0, port 3
 t=40007: Handling entry event packetin(14,104) at switch 1, port 19
 t=40600: Handling event count_to_10(0) at switch 0, port 255
 at 0
-t=40607: Handling event count_to_10(0) at switch 0, port 255
+t=40601: Handling event continue(13,103) at switch 0, port 255
+t=40607: Handling event continue(14,104) at switch 0, port 255
+t=40607: Handling event continue(14,104) at switch 1, port 196
+t=40608: Handling event count_to_10(0) at switch 0, port 255
 at 0
-t=40607: Handling event count_to_10(0) at switch 1, port 196
+t=40608: Handling event count_to_10(0) at switch 1, port 196
 at 0
 t=41200: Handling event count_to_10(1) at switch 0, port 255
 1
-t=41207: Handling event count_to_10(1) at switch 0, port 255
+t=41208: Handling event count_to_10(1) at switch 0, port 255
 1
-t=41207: Handling event count_to_10(1) at switch 1, port 196
+t=41208: Handling event count_to_10(1) at switch 1, port 196
 1
 t=41800: Handling event count_to_10(2) at switch 0, port 255
 2
-t=41807: Handling event count_to_10(2) at switch 0, port 255
+t=41808: Handling event count_to_10(2) at switch 0, port 255
 2
-t=41807: Handling event count_to_10(2) at switch 1, port 196
+t=41808: Handling event count_to_10(2) at switch 1, port 196
 2
 t=42400: Handling event count_to_10(3) at switch 0, port 255
 3
-t=42407: Handling event count_to_10(3) at switch 0, port 255
+t=42408: Handling event count_to_10(3) at switch 0, port 255
 3
-t=42407: Handling event count_to_10(3) at switch 1, port 196
+t=42408: Handling event count_to_10(3) at switch 1, port 196
 3
 t=43000: Handling event count_to_10(4) at switch 0, port 255
 4
-t=43007: Handling event count_to_10(4) at switch 0, port 255
+t=43008: Handling event count_to_10(4) at switch 0, port 255
 4
-t=43007: Handling event count_to_10(4) at switch 1, port 196
+t=43008: Handling event count_to_10(4) at switch 1, port 196
 4
 t=43600: Handling event count_to_10(5) at switch 0, port 255
 5
-t=43607: Handling event count_to_10(5) at switch 0, port 255
+t=43608: Handling event count_to_10(5) at switch 0, port 255
 5
-t=43607: Handling event count_to_10(5) at switch 1, port 196
+t=43608: Handling event count_to_10(5) at switch 1, port 196
 5
 t=44200: Handling event count_to_10(6) at switch 0, port 255
 6
-t=44207: Handling event count_to_10(6) at switch 0, port 255
+t=44208: Handling event count_to_10(6) at switch 0, port 255
 6
-t=44207: Handling event count_to_10(6) at switch 1, port 196
+t=44208: Handling event count_to_10(6) at switch 1, port 196
 6
 t=44800: Handling event count_to_10(7) at switch 0, port 255
 7
-t=44807: Handling event count_to_10(7) at switch 0, port 255
+t=44808: Handling event count_to_10(7) at switch 0, port 255
 7
-t=44807: Handling event count_to_10(7) at switch 1, port 196
+t=44808: Handling event count_to_10(7) at switch 1, port 196
 7
 t=45400: Handling event count_to_10(8) at switch 0, port 255
 8
-t=45407: Handling event count_to_10(8) at switch 0, port 255
+t=45408: Handling event count_to_10(8) at switch 0, port 255
 8
-t=45407: Handling event count_to_10(8) at switch 1, port 196
+t=45408: Handling event count_to_10(8) at switch 1, port 196
 8
 t=46000: Handling event count_to_10(9) at switch 0, port 255
 9
-t=46007: Handling event count_to_10(9) at switch 0, port 255
+t=46008: Handling event count_to_10(9) at switch 0, port 255
 9
-t=46007: Handling event count_to_10(9) at switch 1, port 196
+t=46008: Handling event count_to_10(9) at switch 1, port 196
 9
 t=46600: Handling event count_to_10(10) at switch 0, port 255
 10
-t=46607: Handling event count_to_10(10) at switch 0, port 255
+t=46608: Handling event count_to_10(10) at switch 0, port 255
 10
-t=46607: Handling event count_to_10(10) at switch 1, port 196
+t=46608: Handling event count_to_10(10) at switch 1, port 196
 10
 t=47200: Handling event count_to_10(11) at switch 0, port 255
 got to 10
-t=47207: Handling event count_to_10(11) at switch 0, port 255
+t=47208: Handling event count_to_10(11) at switch 0, port 255
 got to 10
-t=47207: Handling event count_to_10(11) at switch 1, port 196
+t=47208: Handling event count_to_10(11) at switch 1, port 196
 got to 10
 dpt: Final State:
 
@@ -218,16 +218,10 @@ Switch 0 : {
 
  Events :   [ ]
 
- Exits :    [
-    continue(10,100) at port -1, t=0
-    continue(11,101) at port -1, t=10000
-    continue(12,102) at port -1, t=20000
-    continue(13,103) at port -1, t=40000
-    continue(14,104) at port -1, t=40007
-  ]
+ Exits :    [ ]
 
  entry events handled: 5
- total events handled: 65
+ total events handled: 70
 
 }
 Switch 1 : {
@@ -236,13 +230,10 @@ Switch 1 : {
 
  Events :   [ ]
 
- Exits :    [
-    continue(12,102) at port -1, t=20000
-    continue(14,104) at port -1, t=40007
-  ]
+ Exits :    [ ]
 
  entry events handled: 2
- total events handled: 26
+ total events handled: 28
 
 }
 Switch 2 : {
@@ -251,11 +242,9 @@ Switch 2 : {
 
  Events :   [ ]
 
- Exits :    [
-    continue(12,102) at port -1, t=20000
-  ]
+ Exits :    [ ]
 
  entry events handled: 1
- total events handled: 13
+ total events handled: 14
 
 }

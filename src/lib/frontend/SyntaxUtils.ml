@@ -486,3 +486,15 @@ let mk_tblinstall_single id entries span =
 ;;
 
 
+let cid_of_exp (ex : exp) : Cid.t =
+  match ex.e with
+  | EVar n -> n
+  | _ -> error "could not evaluate expression to a cid"
+;;
+
+let exp_to_cid = cid_of_exp
+
+let is_evar exp = match exp.e with
+  | EVar(_) -> true
+  | _ -> false
+

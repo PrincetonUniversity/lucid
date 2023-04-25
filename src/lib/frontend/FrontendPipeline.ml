@@ -14,7 +14,8 @@ let process_prog builtin_tys ds =
   Wellformed.pre_typing_checks ds;
   print_if_verbose "---------typing1---------";
   let ds = Typer.infer_prog builtin_tys ds in
-  print_if_debug ds;
+  let ds = GlobalConstructorTagging.annotate ds in
+  (* let ds = SourceTracking.init_tracking ds in  *)
   print_if_verbose "---------Concretizing symbolics-------------";
   let ds = SymbolicElimination.eliminate_prog ds in
   print_if_debug ds;
@@ -30,14 +31,14 @@ let process_prog builtin_tys ds =
   print_if_verbose "-------Eliminating modules---------";
   let ds = ModuleElimination.eliminate_prog ds in
   print_if_debug ds;
+  print_if_verbose "-------Inlining size declarations---------";
+  let ds = SizeInlining.replace_prog ds in
+  print_if_debug ds;
   print_if_verbose "---------typing2---------";
   let ds = Typer.infer_prog builtin_tys ds in
   print_if_debug ds;
   print_if_verbose "-------Eliminating type aliases 2---------";
   let ds = ReplaceUserTys.replace_prog ds in
-  print_if_debug ds;
-  print_if_verbose "-------Inlining size declarations---------";
-  let ds = SizeInlining.replace_prog ds in
   print_if_debug ds;
   print_if_verbose "-----------inlining functions-----------";
   let ds = FunctionInlining.inline_prog ds in
@@ -45,18 +46,22 @@ let process_prog builtin_tys ds =
   print_if_verbose "-----------inlining tables-----------";
   let ds = TableInlining.eliminate_prog ds in
   print_if_debug ds;
+  print_if_verbose
+    "-----------Assigning extern events default handlers-----------";
+  let ds = ExternEventElimination.process ds in
+  print_if_debug ds;
   print_if_verbose "---------Eliminating events with global arguments----------";
   let ds = GlobalArgElimination.eliminate_prog ds in
   print_if_debug ds;
   print_if_verbose "---------------typing3-------------";
   let ds = Typer.infer_prog builtin_tys ds in
-  print_if_verbose "------------Checking entry handlers---------------";
-  Linerate.check ds;
+  (* print_if_verbose "------------Checking entry handlers---------------";
+  Linerate.check ds; *)
   print_if_verbose "-------Eliminating vectors-------";
   (* WARNING: Don't run the typechecker from now until records have been eliminated.
      See VectorElimination.ml for an explanation. *)
-  (* jsonch note: actually, its until tuples have been eliminated. 
-     Not sure why, but typing just before tuple elimination fails for 
+  (* jsonch note: actually, its until tuples have been eliminated.
+     Not sure why, but typing just before tuple elimination fails for
      programs with vectors. *)
   let ds = VectorElimination.eliminate_prog ds in
   print_if_debug ds;

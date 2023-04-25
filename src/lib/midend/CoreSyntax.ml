@@ -3,23 +3,18 @@
 open Batteries
 
 type id = [%import: (Id.t[@opaque])]
-
 and cid = [%import: (Cid.t[@opqaue])]
-
+and tagval = [%import: (TaggedCid.tagval[@opqaue])]
+and tcid = [%import: (TaggedCid.t[@opqaue])]
 and sp = [%import: Span.t]
-
 and z = [%import: (Z.t[@opaque])]
-
 and zint = [%import: (Integer.t[@with Z.t := (Z.t [@opaque])])]
-
 and location = int
 
 (* All sizes should be inlined and precomputed *)
 and size = int
-
 and sizes = size list
-
-and action_sig = (string * size list * size list)
+and action_sig = string * size list * size list
 
 and raw_ty =
   | TBool
@@ -27,23 +22,24 @@ and raw_ty =
   | TInt of size (* Number of bits *)
   | TEvent
   | TFun of func_ty (* Only used for Array/event functions at this point *)
-  | TName of cid * sizes * bool (* Named type: e.g. "Array.t<<32>>". Bool is true if it represents a global type *)
+  | TName of cid * sizes * bool
+    (* Named type: e.g. "Array.t<<32>>". Bool is true if it represents a global type *)
   | TMemop of int * size
   | TTable of tbl_ty
-  | TAction of acn_ty 
+  | TAction of acn_ty
   | TPat of size
 
-and tbl_ty = {
-    tkey_sizes : size list;
-    tparam_tys : ty list;
-    tret_tys : ty list;
+and tbl_ty =
+  { tkey_sizes : size list
+  ; tparam_tys : ty list
+  ; tret_tys : ty list
   }
 
-and acn_ty = {
-  aconst_param_tys : tys;
-  aparam_tys : tys;
-  aret_tys : tys;
-}
+and acn_ty =
+  { aconst_param_tys : tys
+  ; aparam_tys : tys
+  ; aret_tys : tys
+  }
 
 (* Don't need effects or constraints since we passed typechecking ages ago *)
 and func_ty =
@@ -113,6 +109,14 @@ and value =
   }
 
 (* expressions *)
+and tbl_def =
+  { tid : id (* for convenience *)
+  ; tty : ty
+  ; tactions : exp list
+  ; tsize : exp
+  ; tdefault : cid * exp list
+  }
+
 and e =
   | EVal of value
   | EVar of cid
@@ -120,12 +124,7 @@ and e =
   | ECall of cid * exp list
   | EHash of size * exp list
   | EFlood of exp
-  | ETableCreate of {
-    tty: ty;
-    tactions: exp list; 
-    tsize: exp;
-    tdefault : cid * exp list;
-  }
+  | ETableCreate of tbl_def
 
 and exp =
   { e : e
@@ -139,7 +138,6 @@ and gen_type =
   | GSingle of exp option
   | GMulti of exp
   | GPort of exp
-
 
 (* statements *)
 and s =
@@ -156,40 +154,44 @@ and s =
   | STableMatch of tbl_match
   | STableInstall of exp * tbl_entry list
 
-and tbl_match_out_param = (id * (ty option))
-
-and tbl_match = 
-    {tbl  : exp;
-    keys  : exp list;
-    args : exp list;
-    outs : id list; 
-    out_tys : ty list option;}
-    (* out_tys set for statements that create new vars *)
-
-(* table entries are patterns that point 
-   to actions, with values to be used 
-   as the install-time arguments. *)
-and tbl_entry = {
-  eprio : int;
-  ematch : exp list;
-  eaction : id;
-  eargs : exp list;
-}
-
-
 and statement =
   { s : s
   ; sspan : sp
-  ; spragma : (string * string list) option;
+  ; spragma : pragma option
   }
 
-and params = (id * ty) list
+and tbl_match_out_param = id * ty option
 
+and tbl_match =
+  { tbl : exp
+  ; keys : exp list
+  ; args : exp list
+  ; outs : id list
+  ; out_tys : ty list option
+  }
+(* out_tys set for statements that create new vars *)
+
+(* table entries are patterns that point
+   to actions, with values to be used
+   as the install-time arguments. *)
+and tbl_entry =
+  { eprio : int
+  ; ematch : exp list
+  ; eaction : id
+  ; eargs : exp list
+  }
+
+and pragma = string * string list
+and params = (id * ty) list
 and body = params * statement
 
+and handler_sort =
+  | HControl
+  | HData
+  | HEgress
+
 and event_sort =
-  | EEntry of bool (* true iff "control", i.e. it can generate non-continue events *)
-  | EExit
+  | EEntry
   | EBackground
 
 (* For memops -- Boolean condition * return value *)
@@ -209,30 +211,53 @@ and memop_body =
   | MBIf of exp * exp * exp
   | MBComplex of complex_body
 
+and memop =
+  { mid : id
+  ; mparams : params
+  ; mbody : memop_body
+  }
+
 and action_body = exp list
+
+and action =
+  { aid : id
+  ; artys : ty list
+  ; aconst_params : params
+  ; aparams : params
+  ; abody : action_body
+  }
+
+and parser_action =
+  | PRead of id * ty
+  | PSkip of ty
+  | PAssign of id * exp
+
+and parser_branch = pat * parser_block
+
+and parser_step =
+  | PMatch of exp * parser_branch list
+  | PGen of exp
+  | PCall of exp (* Call another parser *)
+  | PDrop
+
+(* Include span for error reporting *)
+and parser_block = (parser_action * sp) list * (parser_step * sp)
 
 (* declarations *)
 and d =
   | DGlobal of id * ty * exp
   | DEvent of id * event_sort * params
-  | DHandler of id * body
-  | DMemop of id * params * memop_body
+  | DHandler of id * handler_sort * body
+  | DMemop of memop
   | DExtern of id * ty
   | DAction of action
-  (* id * ty list * params * (params * action_body) *)
-
-and action = {
-  aid : id; 
-  artys : ty list;
-  aconst_params : params;
-  aparams : params; 
-  abody : action_body;
-}
+  | DParser of id * params * parser_block
 
 (* name, return type, args & body *)
 and decl =
   { d : d
   ; dspan : sp
+  ; dpragma : pragma option
   }
 
 (* a program is a list of declarations *)
@@ -266,6 +291,7 @@ let error s = raise (Error s)
 (* Types *)
 let ty_sp raw_ty tspan = { raw_ty; tspan }
 let ty raw_ty = { raw_ty; tspan = Span.default }
+let tint sz = ty (TInt sz)
 
 let infer_vty v =
   match v with
@@ -274,7 +300,7 @@ let infer_vty v =
   | VEvent _ -> TEvent
   | VGroup _ -> TGroup
   | VGlobal _ -> failwith "Cannot infer type of global value"
-  | VPat bs -> TPat(List.length bs)
+  | VPat bs -> TPat (List.length bs)
   | VTuple _ ->
     failwith "Cannot infer type of tuple value (only used in complex memops)"
 ;;
@@ -305,11 +331,12 @@ let var_sp cid ety span = aexp (EVar cid) ety span
 let op_sp op args ety span = aexp (EOp (op, args)) ety span
 let call_sp cid args ety span = aexp (ECall (cid, args)) ety span
 let hash_sp size args ety span = aexp (EHash (size, args)) ety span
+let vint_exp i size = value_to_exp (vint i size)
 
 (* Statements *)
 
-let statement s = { s; sspan = Span.default ; spragma = None;}
-let statement_sp s span = { s; sspan = span ; spragma = None;}
+let statement s = { s; sspan = Span.default; spragma = None }
+let statement_sp s span = { s; sspan = span; spragma = None }
 let snoop = statement SNoop
 let sseq s1 s2 = statement (SSeq (s1, s2))
 let slocal id ty e = statement (SLocal (id, ty, e))
@@ -317,7 +344,7 @@ let sassign id e = statement (SAssign (id, e))
 let sprintf s es = statement (SPrintf (s, es))
 let sprintf_sp s es span = statement_sp (SPrintf (s, es)) span
 let sifte e s1 s2 = statement (SIf (e, s1, s2))
-let smatch es ss = statement (SMatch(es, ss))
+let smatch es ss = statement (SMatch (es, ss))
 let snoop_sp span = statement_sp SNoop span
 let slocal_sp id ty e span = statement_sp (SLocal (id, ty, e)) span
 let sassign_sp id e span = statement_sp (SAssign (id, e)) span
@@ -333,12 +360,19 @@ let match_sp es bs span = statement_sp (SMatch (es, bs)) span
 let sexp_sp e span = statement_sp (SUnit e) span
 
 (* Declarations *)
-let decl d = { d; dspan = Span.default }
-let decl_sp d span = { d; dspan = span }
+let decl d = { d; dspan = Span.default; dpragma = None }
+let decl_sp d span = { d; dspan = span; dpragma = None }
+let decl_pragma d dspan dpragma = { d; dspan; dpragma }
 let dglobal_sp id ty exp span = decl_sp (DGlobal (id, ty, exp)) span
 let dextern_sp id ty span = decl_sp (DExtern (id, ty)) span
-let handler_sp id p body span = decl_sp (DHandler (id, (p, body))) span
-let memop_sp id p body span = decl_sp (DMemop (id, p, body)) span
+
+let handler_sp id p sort body span =
+  decl_sp (DHandler (id, sort, (p, body))) span
+;;
+
+let memop_sp mid mparams mbody span =
+  decl_sp (DMemop { mid; mparams; mbody }) span
+;;
 
 (*** Utility -- may split into a separate file if it gets big *)
 
@@ -348,10 +382,10 @@ let equiv_list f lst1 lst2 =
 ;;
 
 let equiv_options f o1 o2 =
-  match (o1, o2) with 
+  match o1, o2 with
   | None, None -> true
   | Some _, None | None, Some _ -> false
-  | Some(o1), Some(o2) -> f o1 o2
+  | Some o1, Some o2 -> f o1 o2
 ;;
 
 let rec equiv_value v1 v2 =
@@ -379,71 +413,99 @@ let rec equiv_exp e1 e2 =
   | _ -> false
 ;;
 
-let equiv_pat p1 p2 = 
+let equiv_pat p1 p2 =
   match p1, p2 with
   | PWild, PWild -> true
-  | PNum(z1), PNum(z2) -> Z.equal z1 z2
-  | PBit(is1), PBit(is2) -> equiv_list Int.equal is1 is2
+  | PNum z1, PNum z2 -> Z.equal z1 z2
+  | PBit is1, PBit is2 -> equiv_list Int.equal is1 is2
   | _, _ -> false
 ;;
 
 let rec equiv_stmt s1 s2 =
   match s1.s, s2.s with
   | SNoop, SNoop -> true
-  | SUnit(e1), SUnit(e2) -> equiv_exp e1 e2
-  | SLocal(id1, _, exp1), SLocal(id2, _, exp2) 
-  | SAssign(id1, exp1), SAssign(id2, exp2) -> 
-    (Id.equal id1 id2) && (equiv_exp exp1 exp2)
-  | SPrintf(s1, es1), SPrintf(s2, es2) -> 
+  | SUnit e1, SUnit e2 -> equiv_exp e1 e2
+  | SLocal (id1, _, exp1), SLocal (id2, _, exp2)
+  | SAssign (id1, exp1), SAssign (id2, exp2) ->
+    Id.equal id1 id2 && equiv_exp exp1 exp2
+  | SPrintf (s1, es1), SPrintf (s2, es2) ->
     String.equal s1 s2 && equiv_list equiv_exp es1 es2
-  | SIf(e1, s11, s12), SIf(e2, s21, s22) -> 
+  | SIf (e1, s11, s12), SIf (e2, s21, s22) ->
     equiv_exp e1 e2 && equiv_stmt s11 s21 && equiv_stmt s12 s22
-  | SGen(GSingle(Some e1), e11), SGen(GSingle(Some e2), e22)
-  | SGen(GMulti(e1), e11), SGen(GMulti(e2), e22)
-  | SGen(GPort(e1), e11), SGen(GPort(e2), e22) -> 
+  | SGen (GSingle (Some e1), e11), SGen (GSingle (Some e2), e22)
+  | SGen (GMulti e1, e11), SGen (GMulti e2, e22)
+  | SGen (GPort e1, e11), SGen (GPort e2, e22) ->
     equiv_exp e1 e2 && equiv_exp e11 e22
-  | SGen(GSingle(None), e11), SGen(GSingle(None), e22) -> 
-    equiv_exp e11 e22
-  | SSeq(s11, s12), SSeq(s21, s22) -> 
-    equiv_stmt s11 s21 && equiv_stmt s12 s22
-  | SMatch(es1, bs1), SMatch(es2, bs2) -> 
+  | SGen (GSingle None, e11), SGen (GSingle None, e22) -> equiv_exp e11 e22
+  | SSeq (s11, s12), SSeq (s21, s22) -> equiv_stmt s11 s21 && equiv_stmt s12 s22
+  | SMatch (es1, bs1), SMatch (es2, bs2) ->
     equiv_list equiv_exp es1 es2 && equiv_list equiv_branch bs1 bs2
-  | SRet(None), SRet(None) ->
-    true
-  | SRet(Some(e1)), SRet(Some(e2)) -> 
-    equiv_exp e1 e2
+  | SRet None, SRet None -> true
+  | SRet (Some e1), SRet (Some e2) -> equiv_exp e1 e2
   | _ -> false
-and equiv_branch (ps1, s1) (ps2, s2) =  
+
+and equiv_branch (ps1, s1) (ps2, s2) =
   equiv_list equiv_pat ps1 ps2 && equiv_stmt s1 s2
 ;;
 
-
 (* bit pattern helpers, for interp *)
-let int_to_bitpat n len = 
+let int_to_bitpat n len =
   let bs = Array.create len 0 in
-  for i = 0 to len - 1 
-  do
+  for i = 0 to len - 1 do
     let pos = len - 1 - i in
-    if (n land (1 lsl i) != 0)
-      then (bs.(pos) <- 1) 
-      else (bs.(pos) <- 0)
+    if n land (1 lsl i) != 0 then bs.(pos) <- 1 else bs.(pos) <- 0
   done;
   Array.to_list bs
 ;;
 
 let int_mask_to_bitpat n mask len =
   let bs = Array.create len 0 in
-  for i = 0 to len - 1 
-  do
+  for i = 0 to len - 1 do
     let pos = len - 1 - i in
     (* if the mask's value is 1 at pos, use value *)
-    if (mask land (1 lsl i) != 0)
-    then (
-      if (n land (1 lsl i) != 0)
-        then (bs.(pos) <- 1) 
-        else (bs.(pos) <- 0))
-    (* otherwise, use -1 *)    
-    else (bs.(pos) <- -1)
+    if mask land (1 lsl i) != 0
+    then
+      if n land (1 lsl i) != 0
+      then bs.(pos) <- 1
+      else bs.(pos) <- 0 (* otherwise, use -1 *)
+    else bs.(pos) <- -1
   done;
   Array.to_list bs
-;;  
+;;
+
+let ty_of_tbl td =
+  match td.tty.raw_ty with
+  | TTable tbl_ty -> tbl_ty
+  | _ -> error "[ty_of_tbl] table does not have type table."
+;;
+
+let ty_to_size ty =
+  match ty.raw_ty with
+  | TBool -> 1
+  | TInt sz -> sz
+  | _ -> error "[size_of_tint] not a tint"
+;;
+
+let size_of_tint = ty_to_size
+
+(* Turn a list of statements into an SSeq (or a SNoop, if empty) *)
+let sequence_stmts lst =
+  match lst with
+  | [] -> snoop
+  | hd :: tl -> List.fold_left (fun acc s -> sseq acc s) hd tl
+;;
+
+let id_of_exp exp =
+  match exp.e with
+  | EVar (Id id) -> id
+  | _ -> error "[id_of_exp] expression is not an evar"
+;;
+
+let exp_to_id = id_of_exp
+let exp_of_id id ty = exp (EVar (Cid.id id)) ty
+
+let exp_to_int exp =
+  match exp.e with
+  | EVal { v = VInt z; _ } -> Integer.to_int z
+  | _ -> error "[exp_to_int] exp is not an EVal(EInt(...))"
+;;

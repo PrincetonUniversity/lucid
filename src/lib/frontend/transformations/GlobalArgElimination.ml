@@ -191,7 +191,7 @@ let filter_params params =
 
 (* Return a new handler corresponding to the given instantiation, with a new id,
    new arguments, and all globals in the inst substituted into the body *)
-let update_handler span handler_body { inst; new_id; params } =
+let update_handler span hsort handler_body { inst; new_id; params } =
   (* Instantiate both parameters so we can unify them; this ensures we update
      any type annotations in the body *)
   let handler_params, body =
@@ -216,7 +216,7 @@ let update_handler span handler_body { inst; new_id; params } =
   let new_handler_body =
     TyperInstGen.generalizer#visit_body () (new_params, body')
   in
-  decl_sp (DHandler (new_id, new_handler_body)) span
+  decl_sp (DHandler (new_id, hsort, new_handler_body)) span
 ;;
 
 let replace_decls (emap : event_mapping list IdMap.t) ds =
@@ -232,10 +232,10 @@ let replace_decls (emap : event_mapping list IdMap.t) ds =
             lst
         | None -> failwith "Impossible. I hope."
       end
-    | DHandler (eid, body) ->
+    | DHandler (eid, hsort, body) ->
       begin
         match IdMap.find_opt eid emap with
-        | Some lst -> List.map (update_handler d.dspan body) lst
+        | Some lst -> List.map (update_handler d.dspan hsort body) lst
         | None -> failwith "Impossible. I hope."
       end
     | _ -> [d]
@@ -349,7 +349,7 @@ let deduplicate (event_mapping : event_mapping list IdMap.t) ds =
   List.filter
     (fun d ->
       match d.d with
-      | DEvent (id, _, _, _) | DHandler (id, _) ->
+      | DEvent (id, _, _, _) | DHandler (id, _, _) ->
         CidSet.mem (Id id) !don't_remove
       | _ -> true)
     ds

@@ -1,5 +1,5 @@
 (executables
- (names main compiler dfgCompiler functionCompiler dockerUtils)
+ (names main compiler dfgCompiler functionCompiler dockerUtils eventParsers)
  (libraries dpt)
  (link_flags -cc g++)
  )
@@ -12,5 +12,6 @@
     (dfgCompiler.exe as dfgCompiler) 
     (functionCompiler.exe as functionCompiler)
     (dockerUtils.exe as dockerUtils)
+    (eventParsers.exe as eventParsers)
     )
     )

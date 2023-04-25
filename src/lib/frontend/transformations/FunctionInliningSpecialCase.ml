@@ -45,6 +45,7 @@ let read_only_params fcn_params fcn_stmt =
   List.fold_left (fun prev p -> prev & (read_only_var (fst p) fcn_stmt)) true fcn_params 
 ;;
 
+(* Count returns isn't considering branch statements with only a default case.  *)
 let count_returns fcn_stmt =
   let num_rets = ref 0 in 
   let finder = 
@@ -58,6 +59,25 @@ let count_returns fcn_stmt =
   finder#visit_statement () fcn_stmt;
   !num_rets
 
+(* Check the function body for a match with a return in it. 
+   If we find such a case, we cannot apply 
+   the single return optimization. *)
+let return_in_match fcn_body =
+  let ret_in_match = ref false in
+  let finder =
+    object
+      inherit [_] s_iter as super
+
+      method ! visit_SRet in_match _ =
+        ret_in_match := (!ret_in_match || in_match);
+
+      method ! visit_SMatch _ es bs =
+        super#visit_SMatch true es bs
+    end
+  in
+  finder#visit_statement false fcn_body;
+  !ret_in_match
+;;
 
 let single_return fcn_stmt = 
   (count_returns fcn_stmt) = 1
@@ -165,7 +185,7 @@ let inline_multi_return_immutable (ds:decl list) ((fcn_id:Id.t),(fcn_params : pa
 (* Inline functions that have one return statement and immutable variables 
    anywhere they appear. *)
 let inline_no_return_or_single_return_immutable (ds:decl list) ((fcn_id:Id.t),(fcn_params : params),fcn_stmt)  = 
-  match ((read_only_params fcn_params fcn_stmt) && ((single_return fcn_stmt) || (no_return fcn_stmt))) with 
+  match ((not(return_in_match fcn_stmt)) && (read_only_params fcn_params fcn_stmt) && ((single_return fcn_stmt) || (no_return fcn_stmt))) with 
   | true -> 
     let assign_subst = 
       object
@@ -189,7 +209,10 @@ let inline_no_return_or_single_return_immutable (ds:decl list) ((fcn_id:Id.t),(f
                   match (Cid.equal (Cid.id fcn_id) cid) with 
                   | true -> 
                     let fcn_stmt = replace_params_with_args fcn_stmt fcn_params args in 
-                    replace_return_with_local id ty fcn_stmt
+                    let result = replace_return_with_local id ty fcn_stmt in
+(*                     print_endline ("inlined SLocal ECall: "^(Printing.stmt_to_string (slocal id ty exp)));
+                    print_endline ("new stmt: "^(Printing.stmt_to_string (result))); *)
+                    result
                   | false -> stmt
                 )
                 | _ -> stmt
@@ -222,9 +245,23 @@ let inline_prog_specialcase ds =
      statements. To be eligible, the function call's parameters must 
      be immutable.*)
   let ds = List.fold_left inline_multi_return_immutable ds (dfuns ds) in 
-  (* all functions with 1 return statement and immutable parameters can 
+  (* next, functions with multiple returns called in local statements can be inlined 
+     with 1 stage of overhead (we have to initialize the local first). *)
+  (* all functions with 1 return statement (outside of a match) and immutable parameters can 
   be inlined with 0 overhead, regardless of where they appear. *)
   let ds = List.fold_left inline_no_return_or_single_return_immutable ds (dfuns ds) in 
+
+
+  (* finally, inline all function calls in unit statements with immutable parameters *)
+(* 
+  
+  (* try zero-overhead inlining all function calls in assignment 
+     statements. To be eligible, the function call's parameters must 
+     be immutable.*)
+  let ds = List.fold_left inline_multi_return_immutable ds (dfuns ds) in 
+  (* all functions with 1 return statement and immutable parameters can 
+  be inlined with 0 overhead, regardless of where they appear. *)
+  let ds = List.fold_left inline_no_return_or_single_return_immutable ds (dfuns ds) in  *)
   (* finally, inline all function calls in unit statements with immutable parameters *)
   ds
 ;;

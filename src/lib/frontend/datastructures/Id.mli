@@ -15,6 +15,7 @@ val append_string : string -> string * int -> string * int
 val refresh : t -> t
 val freshen : t -> t (* Alias for refresh *)
 val fresh_name : string -> t
+val concat_names : string -> t -> t -> t
 
 (* Inverse of to_string. Do not use for other values. *)
 val of_id_string : string -> t

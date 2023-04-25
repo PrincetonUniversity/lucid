@@ -13,7 +13,7 @@ installing entry for 257 into TABLE
 t=20000: Handling event do_get(1) at switch 0, port 0
 key: 1 result: 101
 t=30000: Handling event do_get(257) at switch 0, port 0
-key: 257 result: NOT FOUND
+key: 257 result: 101
 dpt: Final State:
 
 Switch 0 : {

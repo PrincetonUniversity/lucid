@@ -34,7 +34,7 @@ function strip_ext() {
 function to_build_dir() {
     local BASE_PROG=$(realpath $1)
     local BASE_PROG=${BASE_PROG%%.*}; 
-    echo "$BASE_PROG"
+    echo "${BASE_PROG}_tofino"
 }
 # source fn
 function to_switchd_fn() {
@@ -43,9 +43,10 @@ function to_switchd_fn() {
     echo "${BASE_PROG}.cpp"
 }
 function to_conf_fn() {
+    local BASE_PROG=$(strip_path $1)
+    local BASE_PROG=$(strip_ext $BASE_PROG)
     local BUILD_DIR="$(to_build_dir $1)"
-    local CONF_BASE="$(strip_path $BUILD_DIR)";
-    local CONF_FN="$BUILD_DIR/$CONF_BASE.conf"
+    local CONF_FN="$BUILD_DIR/$BASE_PROG.conf"
     echo "${CONF_FN}"
 }
 function to_vethconf_fn() {

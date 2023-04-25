@@ -59,7 +59,7 @@ let check prog =
               <- { env with linerate_entrys = VarSet.add x env.linerate_entrys }
           | EExit -> env <- { env with exit_defs = VarSet.add x env.exit_defs }
           | _ -> ())
-        | DHandler (x, body) ->
+        | DHandler (x, HData, body) ->
           if VarSet.mem x env.linerate_entrys
           then (
             let orig_env = env in

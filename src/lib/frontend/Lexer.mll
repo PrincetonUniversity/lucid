@@ -7,7 +7,10 @@
   exception Eof
 
   let position lexbuf =
-    {fname=(lexbuf.Lexing.lex_start_p).pos_fname; start=Lexing.lexeme_start lexbuf; finish=Lexing.lexeme_end lexbuf; spid=0}
+    Span.create
+      ((lexbuf.Lexing.lex_start_p).pos_fname)
+      (Lexing.lexeme_start lexbuf)
+      (Lexing.lexeme_end lexbuf)
 
   let incr_linenum lexbuf =
     let pos = lexbuf.Lexing.lex_curr_p in
@@ -61,6 +64,7 @@ rule token = parse
   | "auto"            { AUTO (position lexbuf) }
   | "group"           { GROUP (position lexbuf) }
   | "control"         { CONTROL (position lexbuf) }
+  | "@egress"         { EGRESS (position lexbuf) }
   | "entry"           { ENTRY (position lexbuf) }
   | "exit"            { EXIT (position lexbuf) }
   | "match"           { MATCH (position lexbuf) }
@@ -76,6 +80,11 @@ rule token = parse
   | "table_match"             { TABLE_MATCH (position lexbuf) }
   | "table_install"           { TABLE_INSTALL (position lexbuf) }
   | "table_multi_install"     { TABLE_MULTI_INSTALL (position lexbuf) }
+
+  | "parser"          { PARSER (position lexbuf) }
+  | "read"            { READ (position lexbuf) }
+  | "skip"            { SKIP (position lexbuf) }
+  | "drop"            { DROP (position lexbuf) }
 
   | "constr"          { CONSTR (position lexbuf) }
   | "module"          { MODULE (position lexbuf) }

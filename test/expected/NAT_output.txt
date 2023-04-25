@@ -15,8 +15,10 @@ t=300000: Handling entry event inside_packet(10,100) at switch 0, port 0
 Adding to NAT
 t=300600: Handling event add_to_nat(10,100) at switch 0, port 196
 Mapped (ip: 10, port: 100) to port 8
+t=301200: Handling event inside_continue(8) at switch 0, port 196
 t=400000: Handling entry event inside_packet(10,100) at switch 0, port 0
 IP already in NAT, maps to port 8
+t=400600: Handling event inside_continue(8) at switch 0, port 196
 t=500000: Handling entry event outside_packet(10) at switch 0, port 0
 Mapped port 10 to (ip: 0, port: 0)
 dropped
@@ -30,6 +32,7 @@ t=800000: Handling entry event inside_packet(11,101) at switch 0, port 0
 Adding to NAT
 t=800600: Handling event add_to_nat(11,101) at switch 0, port 196
 Mapped (ip: 11, port: 101) to port 9
+t=801200: Handling event inside_continue(9) at switch 0, port 196
 t=900000: Handling entry event outside_packet(10) at switch 0, port 0
 Mapped port 10 to (ip: 0, port: 0)
 dropped
@@ -50,13 +53,9 @@ Switch 0 : {
 
  Events :   [ ]
 
- Exits :    [
-    inside_continue(8) at port -1, t=300600
-    inside_continue(8) at port -1, t=400000
-    inside_continue(9) at port -1, t=800600
-  ]
+ Exits :    [ ]
 
  entry events handled: 12
- total events handled: 14
+ total events handled: 17
 
 }

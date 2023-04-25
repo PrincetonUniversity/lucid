@@ -10,7 +10,7 @@ let find_spec_file dpt_file =
     let json_name = String.rchop ~n:4 dpt_file ^ ".json" in
     if Sys.file_exists json_name
     then (
-      if not cfg.interactive
+      if (not cfg.interactive) && not cfg.json
       then Console.report @@ "Auto-detected specification file " ^ json_name;
       Some json_name)
     else None)
@@ -35,7 +35,7 @@ let main () =
   | Some spec_file ->
     let ds =
       (* Profile.time_profile "midend" @@ fun () -> *)
-      MidendPipeline.process_prog ~for_interp:true ds
+      MidendPipeline.process_prog ds
     in
     let nst, pp, spec =
       (* Profile.time_profile "initializing interpreter" @@ fun () -> *)
@@ -44,12 +44,15 @@ let main () =
     if cfg.interactive
     then ignore (Interp.run pp renaming spec nst)
     else (
-      Console.report "Simulating...";
+      if not cfg.json then Console.report "Simulating...";
       let nst = Interp.simulate nst in
       if cfg.show_interp_state
-      then (
-        Console.report "Final State:";
-        print_endline @@ InterpState.State.nst_to_string nst))
+      then
+        if cfg.json || cfg.interactive
+        then InterpCore.print_final_state (InterpState.State.nst_to_string nst)
+        else (
+          Console.report "Final State:";
+          print_endline @@ InterpState.State.nst_to_string nst))
 ;;
 
 let _ = main ()

@@ -1,5 +1,6 @@
 open CoreSyntax
-(*** unify event and handler params -- should be a separate mid-end pass ***)
+(*  for debugging, put the name of the event into each event parameter, 
+    then make sure events and handlers have the same parameter ids. *)
 
 (* replace old id with new id everywhere *)
 let replace_id decl (old_id,new_id) = 
@@ -19,7 +20,7 @@ let replace_ids ds changemap =
   List.fold_left replace_id ds changemap
 ;;
 
-let rename_event_params ds = 
+let embed_eventid_in_paramids ds = 
   let rename_event_param evid param =
     let _ = evid in 
     let param_id, param_ty = param in 
@@ -55,7 +56,7 @@ let unify_event_and_handler_params ds : decls =
     (fun decl -> 
       match decl.d with
       (* for each handler *)
-      | DHandler(id, (params, _)) -> 
+      | DHandler(id, _, (params, _)) -> 
         (* look up the parameters of the event with the same name as the handler *)
         let ev_params = List.assoc (Id.name id) event_params in
         (* construct a list of (handler_param_id, event_param_id) pairs *)
@@ -69,4 +70,8 @@ let unify_event_and_handler_params ds : decls =
       | _ -> decl
     )
     ds
+;;
+
+let process ds =
+  embed_eventid_in_paramids ds |> unify_event_and_handler_params
 ;;
