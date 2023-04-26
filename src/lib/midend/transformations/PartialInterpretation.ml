@@ -433,6 +433,19 @@ let rec interp_stmt env s : statement * env =
    a variable we haven't seen, we can safely remove it.
 *)
 let remove_unused_variables stmt =
+  (* We should never remove an expression involving a function call, even if
+     the result is unused *)
+  let cannot_remove_e e =
+    let acc = ref false in
+    let v =
+      object
+        inherit [_] s_iter
+        method! visit_ECall _ _ _ = acc := true
+      end
+    in
+    v#visit_exp () e;
+    !acc
+  in
   let rec aux live_vars stmt =
     match stmt.s with
     | SSeq (s1, s2) ->
@@ -451,33 +464,24 @@ let remove_unused_variables stmt =
        (or hashes?) because they might have side effects.
     *)
     | SLocal (id, _, e) ->
-      let cannot_remove_e = function
-        | EHash _ | ECall _ -> false
-        | _ -> true
+      let live_vars', stmt' =
+        if IdSet.mem id live_vars || cannot_remove_e e
+        then (
+          (* The variable is no longer live (because we're now before it was
+             defined in the first place!) *)
+          let live_vars = IdSet.remove id live_vars in
+          extract_variables ~acc:live_vars e, stmt)
+        else live_vars, { stmt with s = SNoop }
       in
-      let stmt' =
-        if IdSet.mem id live_vars || cannot_remove_e e.e
-        then stmt
-        else { stmt with s = SNoop }
-      in
-      (* The variable is no longer live (because we're now before it was
-         defined in the first place!) *)
-      let live_vars = IdSet.remove id live_vars in
-      let live_vars = extract_variables ~acc:live_vars e in
-      live_vars, stmt'
+      live_vars', stmt'
     | SAssign (id, e) ->
-      (* Same as SLocal but we don't unalive the variable *)
-      let cannot_remove_e = function
-        | EHash _ | ECall _ -> false
-        | _ -> true
+      (* Same as SLocal but we don't unalive the variable if it was already live *)
+      let live_vars', stmt' =
+        if IdSet.mem id live_vars || cannot_remove_e e
+        then extract_variables ~acc:live_vars e, stmt
+        else live_vars, { stmt with s = SNoop }
       in
-      let stmt' =
-        if IdSet.mem id live_vars || cannot_remove_e e.e
-        then stmt
-        else { stmt with s = SNoop }
-      in
-      let live_vars = extract_variables ~acc:live_vars e in
-      live_vars, stmt'
+      live_vars', stmt'
     (* We can't remove the variables that are declared as part of a table match
          without changing semantics, so just make sure we unalive them and gather
          any arguments to the match *)
