@@ -34,10 +34,14 @@ _opam/
 *.exe
 tmp.txt
 tmp/
+*.tar
+*.tgz
 
 backendTests
 test/output
 compilerOut
+examples/tofino_apps/__testbuilds/
+lucidCompilerOut/
 
 # Compiled binaries
 dpt
