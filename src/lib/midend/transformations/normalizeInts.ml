@@ -111,25 +111,38 @@ let balance_assign_exps ds =
       by creating intermediate variables as necessary.
  ****)
 
+let is_boolean_atom exp =
+  match exp.e with
+  | EOp (op, [e1; e2]) -> begin
+    match op, e1, e2 with
+    | (And | Or), _, _ -> true
+    | (Eq | Neq), { e = EVar _ }, { e = EVal _ } -> true
+    | _ -> false
+  end
+  | _ -> false
+;;
+
 (* convert an expression into a variable whose value is
   the evaluation result of an atomic expression *)
 let rec to_immediate exp =
   match is_immediate exp with
   | true -> exp, []
   | false ->
-    (match is_atomic exp with
-     (* the expression is an atomic op, so we can replace it with a precomputation. *)
-     | true ->
-       let ty = exp.ety in
-       let var_id = Id.fresh "to_immediate_tmp" in
-       let stmt = slocal var_id ty exp in
-       let exp = { exp with e = EVar (Cid.id var_id) } in
-       exp, [stmt]
-     (* convert the expression into an atomic expression, then an immediate *)
-     | false ->
-       let exp, stmts_a = to_atomic exp in
-       let exp, stmts_b = to_immediate exp in
-       exp, stmts_a @ stmts_b)
+    if is_boolean_atom exp
+    then exp, []
+    else if is_atomic exp
+    then (
+      (* the expression is an atomic op, so we turn it into an immediate right now. *)
+      let ty = exp.ety in
+      let var_id = Id.fresh "to_immediate_tmp" in
+      let stmt = slocal var_id ty exp in
+      let exp = { exp with e = EVar (Cid.id var_id) } in
+      exp, [stmt])
+    else (
+      (* Recursively turn the expression into an atomic, and then an immediate *)
+      let exp, stmts_a = to_atomic exp in
+      let exp, stmts_b = to_immediate exp in
+      exp, stmts_a @ stmts_b)
 
 (* convert an expression into an atomic operation. If
   any of the expressions arguments are not immediates,
@@ -161,7 +174,7 @@ let atomize_int_assigns ds =
     atomic_exp, new_precompute_stmts
   in
   let v =
-    object
+    object (self)
       inherit [_] s_map as super
       val mutable precompute = []
 
@@ -175,10 +188,28 @@ let atomize_int_assigns ds =
 
       method! visit_statement _ stmt =
         precompute <- [];
-        let stmt' = super#visit_statement () stmt in
-        let stmt' = sequence_stmts (precompute @ [stmt']) in
-        precompute <- [];
-        stmt'
+        (* Special-case statements with subordinate statements *)
+        match stmt.s with
+        | SIf (e, s1, s2) ->
+          let s1 = self#visit_statement () s1 in
+          let s2 = self#visit_statement () s2 in
+          precompute <- [];
+          let e = self#visit_exp () e in
+          sequence_stmts (precompute @ [{ stmt with s = SIf (e, s1, s2) }])
+        | SMatch (es, branches) ->
+          let branches = List.map (self#visit_branch ()) branches in
+          precompute <- [];
+          let es = List.map (self#visit_exp ()) es in
+          sequence_stmts (precompute @ [{ stmt with s = SMatch (es, branches) }])
+        | SSeq (s1, s2) ->
+          let s1 = self#visit_statement () s1 in
+          let s2 = self#visit_statement () s2 in
+          (* We never need to precompute for a sequence, since the subordinate
+           statements handle their own precomputations *)
+          { stmt with s = SSeq (s1, s2) }
+        | _ ->
+          let stmt' = super#visit_statement () stmt in
+          sequence_stmts (precompute @ [stmt'])
     end
   in
   v#visit_decls () ds

@@ -25,9 +25,9 @@ let eliminate_complex_bool_assign stmt =
   let rhs_true = Syntax.exp (EVal (vbool true)) (ty TBool) in
   match stmt.s with
   | SAssign (id, rhs) ->
-    let sinit = { stmt with s = SAssign (id, rhs_false) } in
     let set_true = sassign id rhs_true in
-    sseq sinit (sifte rhs set_true snoop)
+    let set_false = sassign id rhs_false in
+    sifte rhs set_true set_false
   | SLocal (id, ty, rhs) ->
     let sinit = { stmt with s = SLocal (id, ty, rhs_false) } in
     let set_true = sassign id rhs_true in
