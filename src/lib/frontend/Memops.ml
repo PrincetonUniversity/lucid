@@ -18,8 +18,8 @@ let check_e memvars localvars allowed_op exp =
     | Compound _ -> false
     | Id id ->
       (match List.find_opt (Id.equals id) lst with
-      | None -> false
-      | Some _ -> true)
+       | None -> false
+       | Some _ -> true)
   in
   let rec aux (seen_mem, seen_local) e =
     match e.e with
@@ -94,8 +94,8 @@ let check_conditional param_ids e =
     | Compound _ -> true
     | Id id ->
       (match List.find_opt (Id.equal id) param_ids with
-      | None -> true
-      | Some _ -> false)
+       | None -> true
+       | Some _ -> false)
   in
   let rec aux e =
     match e.e with
@@ -132,12 +132,12 @@ let extract_simple_body mem1 local1 body =
   | [{ s = SIf (e, s1, s2) }] ->
     check_bool e;
     (match flatten_stmt s1, flatten_stmt s2 with
-    | [{ s = SRet (Some e1) }], [{ s = SRet (Some e2) }] ->
-      check_int e1;
-      check_int e2;
-      MBIf (e, e1, e2)
-    | _ ->
-      error_sp body.sspan "Invalid if statement in a memop with two arguments")
+     | [{ s = SRet (Some e1) }], [{ s = SRet (Some e2) }] ->
+       check_int e1;
+       check_int e2;
+       MBIf (e, e1, e2)
+     | _ ->
+       error_sp body.sspan "Invalid if statement in a memop with two arguments")
   | _ -> error_sp body.sspan "Invalid form for a memop with two arguments"
 ;;
 
@@ -155,29 +155,28 @@ let classify_stmts (body : statement) : (complex_stmt * sp) list =
       match s.s with
       | SLocal (id, { raw_ty = TBool }, e) -> BoolDef (id, e)
       | SUnit { e = ECall (cid, es) } -> ExternCall (cid, es)
-      | SIf (test1, s1, s2) ->
+      | SIf (test1, s1, s2) -> begin
+        match flatten_stmt s1, flatten_stmt s2 with
+        | [{ s = SRet (Some ret) }], [] -> LocalRet (test1, ret)
+        | [{ s = SAssign (id1, ret1) }], [] ->
+          CellAssign (id1, Some (test1, ret1), None)
+        | [{ s = SAssign (id1, ret1) }], [{ s = SIf (test2, s1', s2') }] ->
         begin
-          match flatten_stmt s1, flatten_stmt s2 with
-          | [{ s = SRet (Some ret) }], [] -> LocalRet (test1, ret)
-          | [{ s = SAssign (id1, ret1) }], [] ->
-            CellAssign (id1, Some (test1, ret1), None)
-          | [{ s = SAssign (id1, ret1) }], [{ s = SIf (test2, s1', s2') }] ->
-            begin
-              match flatten_stmt s1', flatten_stmt s2' with
-              | [{ s = SAssign (id2, ret2) }], [] ->
-                if not (Id.equal id1 id2)
-                then
-                  error_sp s1.sspan
-                  @@ "If a complex memop has an if/else, both parts must \
-                      assign to the same cell variable, not "
-                  ^ Id.name id1
-                  ^ " and "
-                  ^ Id.name id2;
-                CellAssign (id1, Some (test1, ret1), Some (test2, ret2))
-              | _ -> error_sp s.sspan "Invalid if statement in complex memop"
-            end
+          match flatten_stmt s1', flatten_stmt s2' with
+          | [{ s = SAssign (id2, ret2) }], [] ->
+            if not (Id.equal id1 id2)
+            then
+              error_sp s1.sspan
+              @@ "If a complex memop has an if/else, both parts must assign to \
+                  the same cell variable, not "
+              ^ Id.name id1
+              ^ " and "
+              ^ Id.name id2;
+            CellAssign (id1, Some (test1, ret1), Some (test2, ret2))
           | _ -> error_sp s.sspan "Invalid if statement in complex memop"
         end
+        | _ -> error_sp s.sspan "Invalid if statement in complex memop"
+      end
       | _ -> error_sp s.sspan "Invalid statement type in complex memop"
     in
     ret, s.sspan
@@ -190,25 +189,25 @@ let check_cell_ids stmts =
   let counts = (* Seen cell1, Seen cell2 *) ref (false, false) in
   List.iter
     (function
-      | BoolDef _, _ | LocalRet _, _ | ExternCall _, _ -> ()
-      | CellAssign (id, _, _), sp when Id.equal id cell1_id ->
-        if fst !counts
-        then
-          error_sp sp
-          @@ Id.name cell1_id
-          ^ " is assigned to in multiple parts of this memop";
-        counts := true, snd !counts
-      | CellAssign (id, _, _), sp when Id.equal id cell2_id ->
-        if snd !counts
-        then
-          error_sp sp
-          @@ Id.name cell2_id
-          ^ " is assigned to in multiple parts of this memop";
-        counts := fst !counts, true
-      | CellAssign (id, _, _), sp ->
-        error_sp sp
-        @@ Id.name id
-        ^ " is not a valid cell identifier (should be cell1 or cell2)")
+     | BoolDef _, _ | LocalRet _, _ | ExternCall _, _ -> ()
+     | CellAssign (id, _, _), sp when Id.equal id cell1_id ->
+       if fst !counts
+       then
+         error_sp sp
+         @@ Id.name cell1_id
+         ^ " is assigned to in multiple parts of this memop";
+       counts := true, snd !counts
+     | CellAssign (id, _, _), sp when Id.equal id cell2_id ->
+       if snd !counts
+       then
+         error_sp sp
+         @@ Id.name cell2_id
+         ^ " is assigned to in multiple parts of this memop";
+       counts := fst !counts, true
+     | CellAssign (id, _, _), sp ->
+       error_sp sp
+       @@ Id.name id
+       ^ " is not a valid cell identifier (should be cell1 or cell2)")
     stmts
 ;;
 
@@ -226,8 +225,14 @@ let extract_complex_body mems locals body =
   let check_return_cr (cond, e) =
     check_cond cond;
     match e.e with
-    | EVar (Id id) when Id.equal id cell1_id || Id.equal id cell2_id -> ()
-    | _ -> check_int e
+    | EVar (Id id)
+      when Id.equal id cell1_id
+           || Id.equal id cell2_id
+           || List.exists (Id.equal id) mems -> ()
+    | _ ->
+      error_sp e.espan
+      @@ "The final return value of a memop may only be one of the variables \
+          'cell1', 'cell2', or one of the memory variables"
   in
   let body = classify_stmts body in
   check_cell_ids body;
@@ -243,7 +248,8 @@ let extract_complex_body mems locals body =
   let cell1, cell2, body =
     match body with
     | (CellAssign (id1, cr1_1, cr1_2), _)
-      :: (CellAssign (_, cr2_1, cr2_2), _) :: tl ->
+      :: (CellAssign (_, cr2_1, cr2_2), _)
+      :: tl ->
       List.iter check_assign_cr [cr1_1; cr1_2; cr2_1; cr2_2];
       if Id.name id1 = Id.name cell1_id
       then (cr1_1, cr1_2), (cr2_1, cr2_2), tl
@@ -258,15 +264,15 @@ let extract_complex_body mems locals body =
   let extern_calls, body =
     List.span
       (function
-        | ExternCall _, _ -> true
-        | _ -> false)
+       | ExternCall _, _ -> true
+       | _ -> false)
       body
   in
   let extern_calls =
     List.map
       (function
-        | ExternCall (cid, es), _ -> cid, es
-        | _ -> failwith "impossible")
+       | ExternCall (cid, es), _ -> cid, es
+       | _ -> failwith "impossible")
       extern_calls
   in
   let ret =

@@ -19,7 +19,7 @@ memop fourarg(int<<'a>> memval1, int<<'a>> memval2, int<<'a>> localval1, int<<'a
     if ((b1 && !b2) || b2) { cell2 = memval2 + 1; } else
   { if (!b1 || b2)         { cell2 = memval2 + localval1; } }
 
-    if (b1) { return memval1 + localval2 + 3 + 8; }
+    if (b1) { return memval2; }
 }
 
 memop threearg(int<<'a>> memval1, int<<'a>> localval1, int<<'a>> localval2) {
@@ -36,13 +36,13 @@ memop threearg(int<<'a>> memval1, int<<'a>> localval1, int<<'a>> localval2) {
 }
 
 event in(int idx, int<<16>> i, int<<16>> j) {
-  int<<16>> x = PairArray.update(g1, idx, fourarg, i, j, 0);
-  int<<8>> y = PairArray.update(g2, idx, fourarg, (int<<8>>)i, (int<<8>>)j, 0);
+  int<<16>> x = PairArray.update(g1, idx, fourarg, i, j, 1);
+  int<<8>> y = PairArray.update(g2, idx, fourarg, (int<<8>>)i, (int<<8>>)j, 2);
   int<<16>> z = 0;
   if (idx < 2) {
     z = Array.update(g3, idx, twoarg, i, twoarg, j);
   } else {
-    z = Array.update_complex(g3, idx, threearg, i, j, 0);
+    z = Array.update_complex(g3, idx, threearg, i, j, 3);
   }
 
   printf("%d, %d, %d", x, y, z);
