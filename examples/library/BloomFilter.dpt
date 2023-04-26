@@ -1,7 +1,7 @@
 // A Bloom filter with parametric k
 module BloomFilter : {
   global type t<<'key_sz, 'idx_sz, 'k>>;
-  constr t<<'a, 'b, 'k>> create(int<<'b+1>> m, int['k] seeds);
+  constr t<<'a, 'b, 'k>> create(int array_length, int['k] seeds);
 
   fun void add_to_filter(t<<'a, 'b, 'k>> filter, int<<'a>> key) [start <= filter; end filter];
   fun bool in_filter(t<<'a, 'b, 'k>> filter, int<<'a>> key) [start <= filter; end filter];
@@ -11,13 +11,13 @@ module BloomFilter : {
   type t<<'key_sz, 'idx_sz, 'k>> = {
     Array.t<<1>>['k] arrs;
     int['k] hash_seeds;
-    int<<'idx_sz+1>> m;
+    int<<'idx_sz>> max_idx;
   }
 
-  constr t<<'a, 'b, 'k>> create(int<<'b+1>> m, int['k] seeds) = {
-    arrs = [Array.create(m) for i < 'k];
+  constr t<<'a, 'b, 'k>> create(int array_length, int['k] seeds) = {
+    arrs = [Array.create(array_length) for i < 'k];
     hash_seeds = seeds;
-    m = m;
+    max_idx = (int<<'b>>) (array_length-1);
   };
 
   fun void add_to_filter(t<<'a, 'b, 'c>> filter, int<<'a>> key) {
@@ -49,7 +49,7 @@ module BloomFilter : {
 
   handle clear_helper(t<<'a, 'b, 'k>> filter, int<<'b>> idx) {
     clear_index(filter, idx);
-    if ((int<<'b+1>>) idx < filter#m - 1) {
+    if ((int<<'b>>)idx < filter#max_idx ) {
       generate clear_helper(filter, idx+1);
     }
   }

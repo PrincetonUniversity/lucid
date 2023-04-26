@@ -12,7 +12,7 @@ include "../library/BloomFilterTimeout.dpt"
 
 module BF : {
   global type t<<'key_sz, 'idx_sz, 'k>>;
-  constr t<<'key_sz, 'idx_sz, 'k>> create(int<<'idx_sz+1>> m, int['k] seeds, int timeout, int empty_time);
+  constr t<<'key_sz, 'idx_sz, 'k>> create(int array_length, int['k] seeds, int timeout, int empty_time);
 
   fun void add_to_filter(t<<'a, 'b, 'k>> filter, int<<'a>> key) [start <= filter; end filter];
   fun bool in_filter(t<<'a, 'b, 'k>> filter, int<<'a>> key) [start <= filter; end filter];
@@ -22,8 +22,8 @@ module BF : {
   type t<<'key_sz, 'idx_sz, 'k>> = BloomFilter.t<<'key_sz, 'idx_sz, 'k>>
 
   // Ignore timeout and empty_time
-  constr t<<'a, 'b, 'c>> create(int<<'b+1>> m, int['k] seeds, int timeout, int empty_time) =
-    BloomFilter.create(m, seeds);
+  constr t<<'a, 'b, 'c>> create(int array_length, int['k] seeds, int timeout, int empty_time) =
+    BloomFilter.create(array_length, seeds);
 
   fun void add_to_filter(t<<'a, 'b, 'k>> filter, int<<'a>> key) {
     BloomFilter.add_to_filter(filter, key);
