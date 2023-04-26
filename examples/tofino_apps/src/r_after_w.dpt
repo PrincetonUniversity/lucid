@@ -1,8 +1,8 @@
-/* 
-This program tests write-after-read dependency 
-correctness. It used to cause a bug in the compiler. 
+/*
+This program tests write-after-read dependency
+correctness. It used to cause a bug in the compiler.
 */
-include "ip_default.dpt"
+include "../libs/ip_default.dpt"
 
 event report(int<<32>> port, eth_hdr eth, ip_hdr_prefix ip, int x, int y);
 
@@ -16,14 +16,14 @@ handle ip_pkt (eth_hdr eth, ip_hdr_prefix ip, int<<32>> src, int<<32>> dst) {
   // expected output: report event packet with x = 3 and y = 4
 }
 
-// Make sure that generating an event, which sets 
-// the event's parameters, doesn't get placed before 
-// other statements that read the event parameters. 
-handle report(int<<32>> port, eth_hdr eth, ip_hdr_prefix ip,int x, int y){        
+// Make sure that generating an event, which sets
+// the event's parameters, doesn't get placed before
+// other statements that read the event parameters.
+handle report(int<<32>> port, eth_hdr eth, ip_hdr_prefix ip,int x, int y){
     int foo = 2;
     int bar = x + y; // test expected: 7
     if (bar == 7) {
-      generate_port ((int<<9>>)port, ip_pkt(eth, ip, 1, 1)); 
+      generate_port ((int<<9>>)port, ip_pkt(eth, ip, 1, 1));
     } else {
       generate_port ((int<<9>>)port, ip_pkt(eth, ip, 2, 2));
     }

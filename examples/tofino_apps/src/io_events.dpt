@@ -1,4 +1,0 @@
-/* input and output events */
-entry event ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos);
-exit event ip_out (int src, int dst);
-exit event raw_out ();

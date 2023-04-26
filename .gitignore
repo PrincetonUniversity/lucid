@@ -37,10 +37,12 @@ tmp/
 *.tar
 *.tgz
 
+# Backend and testing output
 backendTests
 test/output
 compilerOut
 examples/tofino_apps/__testbuilds/
+examples/tofino_apps/builds
 lucidCompilerOut/
 
 # Compiled binaries

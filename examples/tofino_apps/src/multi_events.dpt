@@ -1,7 +1,7 @@
-/* Test generating multiple events in parallel. 
-   Generate two events in parallel that each reflect the original packet 
+/* Test generating multiple events in parallel.
+   Generate two events in parallel that each reflect the original packet
    back to its source port. The two events have src and dst swapped. */
-include "ip_default.dpt"
+include "../libs/ip_default.dpt"
 
 event bg1(int<<32>> egr, eth_hdr eth, ip_hdr_prefix ip, int src, int dst);
 event bg2(int<<32>> egr, eth_hdr eth, ip_hdr_prefix ip, int src, int dst);

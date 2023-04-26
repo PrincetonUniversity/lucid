@@ -1,5 +1,5 @@
 /* Simple unoptimized IP address learner. */
-include "ip_default.dpt"
+include "../libs/ip_default.dpt"
 
 
 global Array.t<<32>> adst = Array.create(1024);
@@ -32,7 +32,7 @@ handle ip_pkt (eth_hdr eth, ip_hdr_prefix ip, int<<32>> src, int<<32>> dst) {
         generate_ports(flood ingress_port, ip_pkt(eth, ip, src, dst));
     }
 
-    // Learning: if the source address is 
+    // Learning: if the source address is
     // not in the table (and there is room)
     // generate an event to learn the address:port
     int<<10>> hsrc = hash<<10>>(3, src);

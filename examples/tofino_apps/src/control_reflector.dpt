@@ -1,7 +1,7 @@
-/* Recirculate the packet once, via a control event, 
+/* Recirculate the packet once, via a control event,
   then send it back to source port. */
 
-include "ip_default.dpt"
+include "../libs/ip_default.dpt"
 
 event my_control_event(eth_hdr e, ip_hdr_prefix i, int<<32>> port, int src, int dst);
 
@@ -9,6 +9,6 @@ handle ip_pkt (eth_hdr eth, ip_hdr_prefix ip, int<<32>> src, int<<32>> dst){
    generate my_control_event(eth, ip, (int<<32>>)ingress_port, src, dst);
 }
 
-handle my_control_event(eth_hdr e, ip_hdr_prefix i, int<<32>> port, int src, int dst) {    
+handle my_control_event(eth_hdr e, ip_hdr_prefix i, int<<32>> port, int src, int dst) {
     generate_port ((int<<9>>)port, ip_pkt(e, i, src, dst));
 }

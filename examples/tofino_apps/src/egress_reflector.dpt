@@ -1,5 +1,5 @@
 /* Reflect the packet back out of ingress port */
-include "ip_default.dpt"
+include "../libs/ip_default.dpt"
 
 event ip_pkt_out (eth_hdr eth, ip_hdr_prefix ip, int<<32>> src, int<<32>> dst);
 

@@ -1,16 +1,16 @@
 /* Testing complex memops. */
-include "ip_default.dpt"
+include "../libs/ip_default.dpt"
 
 global Array.t<<32>> arr_1 = Array.create(1024);
 global Array.t<<32>> arr_2 = Array.create(1024);
 
 const int vmax = 10;
-// rollover counter at 10, return current counter value. 
+// rollover counter at 10, return current counter value.
 memop postcount_rollover(int memval1, int localval1, int localval2) {
   bool ismax = (memval1 == vmax);
   if (ismax) { // rollover
     cell1 = 0;
-  } 
+  }
   else { // no rollover
     if (true) {
         cell1 = memval1 + 1;
