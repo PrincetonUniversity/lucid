@@ -8,8 +8,6 @@ open InterpHelpers
 module CL = Caml.List
 module DBG = BackendLogging
 
-
-let silent = ref false;;
 let outc = ref None
 let dprint_endline = ref DBG.no_printf
 let bool_sz = 1
@@ -43,14 +41,14 @@ let eliminate_complex_bool_assigns ds =
       inherit [_] s_map as super
 
       (* skip memops! *)
-      method! visit_DMemop _ m = DMemop (m)
+      method! visit_DMemop _ m = DMemop m
 
       method! visit_statement ctx statement =
         match rhs_of_stmt statement.s with
         | Some exp ->
           (match is_bool_non_immediate exp with
-          | true -> eliminate_complex_bool_assign statement
-          | false -> super#visit_statement ctx statement)
+           | true -> eliminate_complex_bool_assign statement
+           | false -> super#visit_statement ctx statement)
         | None -> super#visit_statement ctx statement
     end
   in
@@ -70,7 +68,7 @@ let eliminate_bool_values_and_types ds =
       inherit [_] s_map as super
 
       (* skip memops! *)
-      method! visit_DMemop _ m = DMemop (m)
+      method! visit_DMemop _ m = DMemop m
       method! visit_VBool _ b = VInt (zint_of_bool b)
       method! visit_TBool _ = TInt bool_sz
     end
@@ -91,28 +89,24 @@ let elimination_only ds =
 ;;
 
 let do_passes (ds : decls) : Syntax.decls =
+  let silent = not Cmdline.cfg.verbose in
   trans_info "Starting cannonization before IR...";
-  if (not !silent)
-  then (DBG.start_mlog __FILE__ outc dprint_endline);
+  if not silent then DBG.start_mlog __FILE__ outc dprint_endline;
   (* 1: transform boolean assignment rhs to always be immediates. *)
-  if (not !silent)
-  then (log_prog "before boolean elimination" ds);
+  if not silent then log_prog "before boolean elimination" ds;
   let ds = eliminate_complex_bool_assigns ds in
-  if (not !silent)
-  then (log_prog "after phase 1: non-immediate elimination" ds);
+  if not silent then log_prog "after phase 1: non-immediate elimination" ds;
   trans_info "boolean elimination complete. ";
   (* let ds = Typer.infer_prog ds in *)
   (* 2: put if expressions into a normal form
     Note -- this must never introduce any new boolean variables. *)
   let ds = NormalizeBools.do_passes ds in
-  if (not !silent)
-  then (log_prog "after phase 2: if expression cannonization" ds);
+  if not silent then log_prog "after phase 2: if expression cannonization" ds;
   trans_info "if-else cannonization complete.";
   (* let ds = Typer.infer_prog ds in *)
   (* 3: eliminate boolean values, variables, and types *)
   let ds = eliminate_bool_values_and_types ds in
-  if (not !silent)
-  then (log_prog "after phase 3: immediate elimination" ds);
+  if not silent then log_prog "after phase 3: immediate elimination" ds;
   trans_info "immediate elimination complete.";
   (* let ds = Typer.infer_prog ds in *)
   (* 4: future improvement: convert directly into a match statement *)

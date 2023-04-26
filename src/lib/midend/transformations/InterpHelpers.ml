@@ -6,10 +6,9 @@ open Batteries
 module CL = Caml.List
 
 let trans_err msg ex = error (msg ^ " " ^ Printing.exp_to_string ex)
-let silent = ref false
 
 let trans_info str =
-  if not !silent
+  if Cmdline.cfg.verbose
   then Console.show_message str ANSITerminal.Green "Tofino translation"
 ;;
 

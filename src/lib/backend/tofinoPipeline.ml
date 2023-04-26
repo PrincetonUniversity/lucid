@@ -6,10 +6,9 @@ let fail_report str = Console.show_message str ANSITerminal.Red "Tofino Checker"
 exception Error of string
 
 let error s = raise (Error s)
-let verbose = ref false
 let do_log = ref true
 let do_const_branch_vars = ref true
-let cprint_endline s = if !verbose then print_endline s
+let cprint_endline s = if Cmdline.cfg.verbose then print_endline s
 
 let cprint_prog label tds =
   cprint_endline label;
@@ -68,7 +67,7 @@ let common_midend_passes ds =
 ;;
 
 let print_if_debug ds =
-  if !verbose
+  if Cmdline.cfg.debug
   then (
     print_endline "decls: ";
     let str = CorePrinting.decls_to_string ds in

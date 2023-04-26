@@ -14,7 +14,7 @@ let error s = raise (Error s)
 let err msg ex = error (msg ^ " " ^ Printing.exp_to_string ex)
 
 let info str =
-  if not !silent
+  if Cmdline.cfg.verbose
   then Console.show_message str ANSITerminal.Green "normalizeIntOps"
 ;;
 
@@ -57,7 +57,7 @@ let dprint_eop exp =
 
 let rec balance_op_list op lst =
   match lst with
-  | [] -> error "Tried to balance an empty op list"
+  | [] -> []
   | [e] -> [e]
   | e1 :: e2 :: tl ->
     let balanced_hd = eop_ty op [balance_exp e1; balance_exp e2] e1.ety in
@@ -185,7 +185,7 @@ let atomize_int_assigns ds =
 ;;
 
 let do_passes ds =
-  if not !silent then DBG.start_mlog __FILE__ outc dprint_endline;
+  if Cmdline.cfg.verbose then DBG.start_mlog __FILE__ outc dprint_endline;
   let orig_ds = ds in
   let ds = balance_assign_exps ds in
   info "assignments transformed to balanced exps";
