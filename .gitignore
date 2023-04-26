@@ -40,6 +40,7 @@ tmp/
 # Backend and testing output
 backendTests
 test/output
+test/backend/results/*
 compilerOut
 examples/tofino_apps/__testbuilds/
 examples/tofino_apps/builds
