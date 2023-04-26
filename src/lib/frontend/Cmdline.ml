@@ -42,7 +42,7 @@ let default () =
   ; show_constraints = false
   ; use_type_names = true
   ; show_all_effects = false
-  ; partial_interp = false
+  ; partial_interp = true
   ; spec_file = ""
   ; symb_file = ""
   ; dpt_file = ""
@@ -83,7 +83,7 @@ let parse_common () =
     set_type_names ();
     set_all_effects ()
   in
-  let set_partial_interp () = cfg.partial_interp <- true in
+  let set_partial_interp () = cfg.partial_interp <- false in
   let set_json () =
     cfg.json <- true;
     cfg.verbose <- false
@@ -130,10 +130,9 @@ let parse_common () =
     ; ( "--json"
       , Arg.Unit set_json
       , "If true, print all interpreter output as json records" )
-    ; ( "-pi"
+    ; ( "--no-partial-interp"
       , Arg.Unit set_partial_interp
-      , "If true, enable partial interpretation for the program, which should \
-         remove unnecessary intermediate variables and some dead code" ) ]
+      , "If true, disable partial interpretation for the program" ) ]
   in
   speclist
 ;;
