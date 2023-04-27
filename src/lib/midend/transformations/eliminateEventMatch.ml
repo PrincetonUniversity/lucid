@@ -120,7 +120,7 @@ let replacer =
 
     method! visit_SLocal env id ty exp = 
       match ty.raw_ty with 
-      | TEvent -> let initial_val = 
+      | TEvent -> print_endline "REPLACED LOCAL DEF"; let initial_val = 
                     match exp.e with
                     | ECall (cid, params) -> (match IdMap.find_opt (Cid.to_id cid) (!env).event_infos with 
                                               | Some ev_info -> ev_info.i
@@ -138,7 +138,7 @@ let replacer =
 
     method! visit_SAssign env id exp = 
       match (IdMap.find_opt id (!env).var_infos) with
-      | Some vi -> (match exp.e with
+      | Some vi -> print_endline ("REPLACED LOCAL ASSIGN"); (match exp.e with
                     | ECall (eid, args) ->
                       let ev_info = (IdMap.find (Cid.to_id eid) (!env).event_infos) in
                       let ev_int_asgn = sassign vi.ev_id_int (make_num_size ev_info.i 8) in

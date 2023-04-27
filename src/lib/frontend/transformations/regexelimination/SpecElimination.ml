@@ -23,7 +23,7 @@ let make_sr_macro vrid hid effect idx_exp_list =
   
 let insert_if_necessary h_id sort body infos = 
   let insertions = List.filter_map (fun info -> if (List.mem h_id info.events) then Some (make_sr_macro info.vr_id h_id info.effect info.idx_exp_list) else None) infos in
-  decl (DHandler (h_id, sort, ((fst body), statement (sequence_statements (List.rev ((snd body) :: insertions))))))
+  decl (DHandler (h_id, sort, ((fst body), statement (sequence_statements (List.append [(snd body)] insertions)))))
 
 let replace_spec_regex env id size sr = 
   let vr_decl vr = decl (DVarRegex (id, size, (alphabet (AUnspecified)), vr)) in

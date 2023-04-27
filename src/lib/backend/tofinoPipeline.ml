@@ -33,6 +33,13 @@ let dbg_dump_core_prog phasename ds =
     flush outf)
 ;;
 
+let print_if_debug ds =
+  if !verbose
+  then (
+    print_endline "decls: ";
+    let str = CorePrinting.decls_to_string ds in
+    Console.report str)
+;;
 (* perform midend passes that must be done before splitting
    the program into a control and data plane component.
    After this point, the ids of globals and actions
@@ -45,6 +52,9 @@ let dbg_dump_core_prog phasename ds =
     + no event variables
     + each action belongs to 1 table *)
 let common_midend_passes ds =
+  print_endline "-------Eliminating events in match statements---------";
+  let ds = EliminateEventMatch.process_prog ds in 
+  print_if_debug ds;
   mk_ir_log_dirs ();
   dbg_dump_core_prog "midend" ds;
   (* delete Event.delay calls and warn the user *)
@@ -67,13 +77,7 @@ let common_midend_passes ds =
   UniqueTableActions.process ds
 ;;
 
-let print_if_debug ds =
-  if !verbose
-  then (
-    print_endline "decls: ";
-    let str = CorePrinting.decls_to_string ds in
-    Console.report str)
-;;
+
 
 (* these passes are basically about converting
    expressions into simpler forms, so that every
@@ -107,6 +111,7 @@ let atomic_op_form ds =
   (* form: + no print statements *)
   let ds = EliminateInterpOps.eliminate_prog ds in
   print_if_debug ds;
+
   print_if_verbose "-------Eliminating value cast ops--------";
   (* form: + no casts of literals *)
   (* convert casts of values into values, e.g., (int<<2>>)1 --> 1w2 *)

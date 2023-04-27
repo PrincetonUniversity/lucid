@@ -154,6 +154,7 @@ module Z3Helpers = struct
         let z3_lhs = Z3Bit.mk_and ctx z3_vid z3_m in 
         let term = Z3Bool.mk_eq ctx z3_lhs z3_v in
         ctx, terms @ [term]
+      | var_exp, PEvent (_) -> Console.error_position Span.default "AN EVENT MATCH GOT THROUGH!"
     in
     let ctx, terms = CL.fold_left fold_f (ctx, []) m_exp in
     let eqn = Z3Bool.mk_and ctx terms in

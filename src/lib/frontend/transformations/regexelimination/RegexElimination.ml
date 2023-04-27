@@ -237,14 +237,15 @@ let re_info id alphabet vr =
                 | AUnspecified -> (get_events vr)
                 | AName _ -> Console.error_position alphabet.alphabet_span "Alphabets should have been eliminated") in 
   let re_alphabet = alphabet_def re_preds events in 
+  let all_letters = (get_all_letters re_alphabet) in
   let pre = translate vr.v_regex re_alphabet in
-  let dfa = (plain_re_to_dfa pre (get_all_letters re_alphabet)) in
+  let dfa = (plain_re_to_dfa pre all_letters) in
   let synthesized = synthesize id dfa in
     if not (check_unmabig_concat_vr vr re_alphabet) then Console.error_position vr.v_regex_span @@ Printf.sprintf "That concatenation may not be unambiguous";
-    List.iter (fun letter -> (Printf.printf "%s: %d\n" (print_letter letter) (letter_to_int letter events (List.length re_preds)))) (get_all_letters re_alphabet);
+    List.iter (fun letter -> (Printf.printf "%s: %d\n" (print_letter letter) (letter_to_int letter events (List.length re_preds)))) all_letters;
     print_dfa dfa;
     print_string (plain_re_to_string pre);
-    {binders=re_binders; preds = re_preds; synthesis_response=synthesized;event_order=events; alphabet=(get_all_letters re_alphabet)}
+    {binders=re_binders; preds = re_preds; synthesis_response=synthesized;event_order=events; alphabet=all_letters}
 ;;
 let check_then_set_name = Id.create("re12351sdaCheckThenSet");;
 let make_binding_set reid be params_map idx_expr in_closure (ty, id, eval) =
@@ -269,6 +270,11 @@ let pred_update_statement id pred =
     let lshift = make_lshift counter in 
       statement (SIf (pred, (make_assign counter (exp (EOp (Plus, [lshift; (make_num_size 1 DFASynthesis.bv_size)])))), (make_assign counter lshift)))
 ;;
+(*
+let single_pred_update id eid pred preds event_order = 
+  let counter = (make_counter_id id) in
+  let init_val = (init_val eid re_info.event_order preds) in
+  statement (SIf (pred, ))*)
 
 let rec make_binding_defs reid binders handler_eid params_map idx_expr = 
   let def_maker be in_closure = (match handler_eid with 
@@ -323,6 +329,65 @@ let make_match_def id alphabet synthesized event_order preds =
     [statement (SMatch ([(make_evar (make_counter_id id))], rows))]
 ;;
 
+let make_pred_var_id id pred preds = 
+  let idx = (get_index_of pred preds 0 (fun p1 p2 -> p1 = p2)) in
+  Id.create ("pred"^(string_of_int idx)^(fst id))
+;;
+
+
+(*
+   letter_event, (s11 - s12), (s21 - s22), ... -> *)
+let make_row_stmt_inline_preds id letter synthesis_response = 
+  let fasgn = (make_assign (f_id id) (make_num_size (LetterMap.find letter synthesis_response.f) DFASynthesis.bv_size)) in
+  let gasgn = (make_assign (g_id id) (make_num_size (LetterMap.find letter synthesis_response.g) DFASynthesis.bv_size)) in
+  let masgn = (make_assign (mem_id id) (make_num_size (LetterMap.find letter synthesis_response.whichop) DFASynthesis.bv_size)) in
+  statement (sequence_statements [fasgn; gasgn; masgn])
+;;
+
+let make_row_pat_inline_preds letter pred_tuples = 
+  let rec make_row_pat_inline_preds_acc bools pred_tuples acc = 
+    (match bools, pred_tuples with
+    | [], [] -> acc
+    | (b :: btail), ((t_pat, f_pat, _) :: ttail) -> (if b then t_pat else f_pat) :: (make_row_pat_inline_preds_acc btail ttail acc)
+    | _ -> (Console.error_position Span.default "The list of bools and preds should be the same size!")) in
+  match letter.bools, pred_tuples with
+  | [], [] -> (Console.error_position Span.default "Shouldn't be making this match statement at all!")
+  | _ -> make_row_pat_inline_preds_acc letter.bools pred_tuples []
+
+
+let extract_sub_exp pred = 
+  let sub_exp args = exp (EOp (Sub, args)) in
+  match pred.pred.e with
+  | EOp(Eq, args)-> (sub_exp args)
+  | EOp(Neq, args) -> (sub_exp args)
+  | _ -> error "Can only do == and != preds right now!"
+
+let extract_t_f_cid id all_preds pred  = 
+  let pzero = PNum (Z.of_int 0) in
+  let pvid = (make_pred_var_id id pred all_preds) in
+  match pred.pred.e with
+  | EOp(Eq, args)-> (pzero, PWild, pvid)
+  | EOp(Neq, args) -> (PWild, pzero, pvid)
+  | _ -> error "Can only do == and != preds right now!"
+
+(*Should put all the wildcards at the bottom so they don't step on above rows.*)
+let sort_rows_by_wildcards rows = 
+  let rem_nonwilds l = List.filter (fun p -> (match p with | PWild -> true | _ -> false)) l in
+  let comp (ps1, _) (ps2,_) = List.compare_lengths (rem_nonwilds ps1) (rem_nonwilds ps2) in
+  List.sort comp rows
+
+let make_match_def_inline_preds id handler alphabet synthesis_response event_order preds = 
+  let eid = (match handler with 
+  | None -> error "Not in a handler, but trying to inline preds for a specific event!"
+  | Some (eid, _, _) -> eid) in
+  let letters_this_event = List.filter (fun c -> c.ev_id = (fst eid)) alphabet in
+  let preds_this_event = List.filter (fun p -> p.pred_event = eid) preds in
+  let pred_tuples = List.map (extract_t_f_cid id preds) preds_this_event in
+  let exps = List.map (fun (_, _, pvid) -> make_evar pvid) pred_tuples in
+  let rows = List.map (fun letter -> ((make_row_pat_inline_preds letter pred_tuples), (make_row_stmt_inline_preds id letter synthesis_response))) alphabet in
+  [statement (SMatch (exps, (sort_rows_by_wildcards rows)))]
+;;
+
 let make_return_def id synthesis_response = 
   let rows = List.map (fun accept_state -> ([(PNum (Z.of_int accept_state))], (statement (SAssign ((make_ans_id id), (exp (EVal (value (VBool true))))))))) synthesis_response.accepting in
     let last = ([(PWild)], (statement (SAssign ((make_ans_id id), (exp (EVal (value (VBool false)))))))) in
@@ -344,7 +409,6 @@ let array_update_def id synthesis_response =
   statement (SMatch ([(make_evar (mem_id id))], (List.map make_branch (List.filter (fun id -> LetterMap.exists (fun _ i -> i == id) synthesis_response.whichop) DFASynthesis.regact_ids))))
 
 let make_transition_statements env id idx_expr = 
-  print_endline "GOTTOOTHER HERE KJFNEDSWDKJSFNSEADJKFNWASEKDFJNASNKDJ";
   let re_info = IdMap.find id env.re_info_map in
   let static_defs = make_static_defs id idx_expr in
   let binding_defs = List.append static_defs (make_binding_defs id re_info.binders env.current_handler env.params_map (make_evar (make_idx_val id))) in
@@ -355,6 +419,19 @@ let make_transition_statements env id idx_expr =
   let return_def = List.append match_update_def (make_return_def id re_info.synthesis_response) in
   return_def
 ;;
+
+let make_pred_ids id preds = 
+  List.map (fun p -> (statement (SLocal ((make_pred_var_id id p preds), (ty (TInt (IConst 32))), (extract_sub_exp p))))) preds
+
+let make_transition_statements_inline_preds env id idx_expr = 
+  let re_info = IdMap.find id env.re_info_map in
+  let static_defs = make_static_defs id idx_expr in
+  let binding_defs = List.append static_defs (make_binding_defs id re_info.binders env.current_handler env.params_map (make_evar (make_idx_val id))) in
+  let pred_ids_defs = List.append binding_defs (make_pred_ids id re_info.preds) in
+  let match_counter_replacement = List.append pred_ids_defs (make_match_def_inline_preds id env.current_handler re_info.alphabet re_info.synthesis_response re_info.event_order re_info.preds) in
+  let match_update_def = List.append match_counter_replacement ((res_def id) :: [(array_update_def id re_info.synthesis_response)]) in
+  let return_def = List.append match_update_def (make_return_def id re_info.synthesis_response) in
+  return_def
 
 let make_counter_branch id re_info eid params= 
   let binding_defs = (make_binding_defs id re_info.binders (Some (eid, None, params)) "dummy" (make_evar (make_idx_val id))) in
@@ -408,7 +485,7 @@ let replacer =
     inherit [_] s_map as super
     method! visit_ETransitionRegex env id idx ev_expr = 
       match ev_expr with 
-      | None -> make_exp_from_statements id ((ans_def id) :: (make_transition_statements !env id idx))
+      | None -> make_exp_from_statements id ((ans_def id) :: (make_transition_statements_inline_preds !env id idx))
       | Some e -> make_exp_from_statements id ((ans_def id) :: (make_trans_match !env id idx e))
 
     method! visit_SResetRegex env id idx_expr = 

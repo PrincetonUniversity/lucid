@@ -1,11 +1,11 @@
 
 
-memop read(int stored, int dummy){return stored;}
-memop wipe(int stored, int dummy){return 0;}
-memop incr (int stored_ct, int incr_by) {return stored_ct + incr_by;}
-
 entry event packet_in(int sip, int dip, int<<16>> sport, int<<16>> dport, int<<16>> pkt_size);
 exit event match_report();
+
+memop get_stored (int stored, int dummy){return stored;}
+memop wipe(int stored, int dummy){return 0;}
+memop incr (int stored_ct, int incr_by) {return stored_ct + incr_by;}
 
 alphabet sizes = S1, S2, S3, S4, S5, S6, S7, S8;
 
@@ -15,7 +15,7 @@ alphabet sizes = S1, S2, S3, S4, S5, S6, S7, S8;
 
 
 global Array.t<<32>> arr = Array.create(256);
-re<<256>> RE_fingerprint_videoA over sizes = (S1.S5.S1.S4.S7.S2.S3.S6.S7.S2.S3.S3.S3.S5.S3);
+re<<256>> RE_fingerprint_videoA over sizes = (S1.S5.S1.S4.S7.S8.S1.S2);
 //re<<256>> RE_fingerprint_videoA over [S1,packet_in, test_event] = !(test_event(@int rec = testval; testval > 20)."");
 //re<<256>> RE_fingerprint_videoA over [S1, packet_in, test_event] = (S1)*.packet_in(@int assigned = sip; true).(S1(sip > Sys.time()))*;
 const int type_A=1;
@@ -28,18 +28,18 @@ handle packet_in(int sip, int dip, int<<16>> sport, int<<16>> dport, int<<16>> s
 	if(s > 130){
 		Array.setm(arr, idx, incr, 1);
 	}else{
-		int r = Array.update(arr, idx, read, 0, wipe, 0);
+		int r = Array.update(arr, idx, get_stored, 0, wipe, 0);
 		event S=S1();
 
-		//since match statement can't use range yet, do naive if-else
-		if(s <=10){S=S1();}
-		else if(10<s && s <=20){S=S2();}
-		else if(20<s && s <=30){S=S3();}
-		else if(30<s && s <=40){S=S4();}
-		else if(40<s && s <=50){S=S5();}
-		else if(50<s && s <=60){S=S6();}
-		else if(60<s && s <=70){S=S7();}
-		else if(70<s && s <=80){S=S8();}
+		match s with 
+		| 0b00000000000000** -> {S = S1();}
+		| 0b000000000000**** -> {S = S2();}
+		| 0b0000000000****** -> {S = S3();}
+		| 0b00000000******** -> {S = S4();}
+		| 0b000000********** -> {S = S5();}
+		| 0b0000************ -> {S = S6();}
+		| 0b00************** -> {S = S7();}
+		| _ -> {S = S8();}
 
 		if(transition(RE_fingerprint_videoA, idx, S)){
 			generate match_report();
