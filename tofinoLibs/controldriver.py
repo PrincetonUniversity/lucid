@@ -26,7 +26,7 @@ DEBUG=True
 # 2/24/23: support adding exact entries to ternary tables
 # 3/20/23: all keys are strings, get entry method, array set and get functions in Controller
 # 3/21/23: table_install and table_get functions in Controller
-
+# 4/26/23: added pktgen support, boolean fields
 
 # helper for globals.json: given a node from globals.json, resolve 
 # name of a lucid global to a P4 object
@@ -59,6 +59,9 @@ def resolve_global_name(name, node):
       else:
         return None
 
+def local_port_to_global_dpid(local_port, pipe):
+  return pipe << 7 | local_port
+
 
 class Controller(object):
   """ the high-level controller interface. 
@@ -83,6 +86,8 @@ class Controller(object):
     # handles that should be destroyed on cleanup.
     # (table, entry_hdl pairs)
     self.installed_entries = []
+
+    self.pktgen_app_hdl = None
 
   def cleanup(self):
     dprint ("deleting {0} entries".format(len(self.installed_entries)))
@@ -143,7 +148,57 @@ class Controller(object):
     acn_id, acn_args = tbl.get_entry(key)
     return acn_id, acn_args
 
+  ### pktgen helpers
+  def start_periodic_pktgen(self, pkt, timer_ns=1_000_000_000, pktgen_port=196, generator_id=1):
+    """start the packet generater on port pktgen_port, 
+       with id generator_id, sending pkt every timer_ns ns"""
+    # notes: pktgen pkts have a mandatory 6-byte header prepended to them.
+    # the parser has to adjust for this, by skipping the first 6 bytes of packets from the pktgen port
 
+    # for now, we assume that the pktgen port is either 196 or 68. 
+    # These are the two pktgen capable ports on a 2-pipeline tofino1.
+    # Different chip models will support other pktgen ports.
+    if (pktgen_port not in [196, 68]):
+      raise ValueError("pktgen port must be either 196 or 68")
+    # 1. put the port into pktgen mode
+    port_cfg_tbl = self.tables['tf1.pktgen.port_cfg']
+    dprint("loaded port_cfg tbl")
+    port_cfg_key = {'dev_port':pktgen_port}
+    port_cfg_acn = {'pktgen_enable':True}
+    port_cfg_tbl.add_entry(port_cfg_key, None, port_cfg_acn)
+    dprint("added entry to port_cfg tbl")
+    # 2. load the packet into the pktgen buffer
+    pkt_len = len(pkt)
+    pkt_buf_tbl = self.tables['tf1.pktgen.pkt_buffer']
+    pkt_buf_key = {"pkt_buffer_offset":0, "pkt_buffer_size":pkt_len}
+    pkt_buf_val = {"buffer":bytearray(pkt)}
+    pkt_buf_tbl.add_entry(pkt_buf_key, None, pkt_buf_val)
+    dprint("added packet to pkt_buffer tbl")
+    # 3. configure the pktgen app ("app_cfg" table) and start pktgen. 
+    # note: to start pktgen later, you add a configuration with app_enable=False
+    # and then modify the entry later and set app_enable=True
+    app_cfg_tbl = self.tables['tf1.pktgen.app_cfg']
+    app_cfg_key = {"app_id":generator_id}
+    app_cfg_acn_params = {
+      "app_enable":True,
+      "timer_nanosec":timer_ns, 
+      "pkt_len":pkt_len, 
+      "pkt_buffer_offset":0, 
+      "pipe_local_source_port":68, # I think always 68 on tofino1
+      "increment_source_port":False,
+      "batch_count_cfg":0, # number of packets per batch + 1
+      "packets_per_batch_cfg":0 # number of batches + 1
+      }
+      # other parameters that we don't need for a simple periodic packetgen:
+      # "ibg":1,"ibg_jitter":0,"ipg":2_000_000_000,"ipg_jitter":0,"batch_counter":0,"pkt_counter":0,"trigger_counter":0}
+    app_cfg_tbl.add_entry(app_cfg_key, "trigger_timer_periodic", app_cfg_acn_params)
+
+  def stop_periodic_pktgen(self, generator_id):
+    """stop the pktgen generator_id Note: packet buffer is not reset."""
+    app_cfg_tbl = self.tables['tf1.pktgen.app_cfg']
+    app_cfg_key = {"app_id":generator_id}
+    app_cfg_acn_params = {"app_enable":False}
+    app_cfg_tbl.add_entry(app_cfg_key, "trigger_timer_periodic", app_cfg_acn_params)
 
 class BfRtTable:
     """Class to operate on tables, both defined in P4 and also 
@@ -350,12 +405,27 @@ class BfRtTable:
             value, n_bytes = self.to_c_byte_arr(field_val, field_info["size"])
             self._cintf.data_field_set_value_ptr(data_hdl, field_info["id"], value, n_bytes)
         elif (data_type == "INT_ARR"):
-          arrlen = len(field_val)
-          arrty = c_uint * arrlen
-          value = arrty()
-          for idx, v in enumerate(field_val):
-            value[idx] = v
-          self._cintf.data_field_set_value_array(data_hdl, field_info["id"], value, arrlen)
+          # handle 8-bit integer arrays as a byte stream -- 
+          # this is how bf_rt_pktgen_table_data_impl.cpp is implemented
+          if(field_info["size"] == 8):
+            if (type(field_val) == bytearray):
+              n_bytes = len(field_val)
+              value_type = c_ubyte * n_bytes
+              value = value_type()
+              for i in range(0, len(field_val)):
+                value[i] = field_val[i]
+              self._cintf.data_field_set_value_ptr(data_hdl, field_info["id"], value, n_bytes)
+            else:
+              print ("ERROR: a data field of type INT_ARR with size 8 must be a bytearray")
+              exit(1)              
+          # untested, and no idea what to do with arrays of integers of other sizes -- 
+          # this is consistent with BfTableEntry, but seems to assume 32-bit integers...
+          else:
+            arrlen = len(field_val)
+            arrty = c_uint * arrlen
+            value = arrty()
+            for idx, v in enumerate(field_val):
+              value[idx] = v
         elif (data_type == "BOOL_ARR"):
           arrlen = len(field_val)
           arrty = c_uint * arrlen
@@ -363,6 +433,9 @@ class BfRtTable:
           for idx, v in enumerate(field_val):
             value[idx] = v
           self._cintf.data_field_set_value_bool_array(data_hdl, field_info["id"], value, arrlen)
+        elif (data_type == "BOOL"):
+          c_value = c_bool(field_val)          
+          self._cintf.data_field_set_bool(data_hdl, field_info["id"], c_value)
         else:
           # TODO: other field types 
           print ("unhandled field data type: %s"%(data_type))
@@ -468,7 +541,8 @@ class BfRtTable:
         return res
 
     def add_entry(self, key, action_name, args, ret_hdl=False):
-      """ add or set a table entry by key. Returns the table (TODO: why???) and the entries handle, if added """
+      """ add or update a table entry by key. 
+          Returns the key handle if ret_hdl=True and the install succeeded """
       # key : dict( name_string -> match val(for exact) | match tuple(for ternary / range / etc))
       # action_name : string
       # args : dict (name_string -> arg val)
@@ -732,6 +806,7 @@ class LibcInterface(object):
       ("table_data_deallocate", self._driver.bf_rt_table_data_deallocate),
       ("data_field_set_value_array", self._driver.bf_rt_data_field_set_value_array),
       ("data_field_set_value_bool_array", self._driver.bf_rt_data_field_set_value_bool_array),
+      ("data_field_set_bool", self._driver.bf_rt_data_field_set_bool),
       ("table_entry_key_get", self._driver.bf_rt_table_entry_key_get),
       ("data_field_is_active", self._driver.bf_rt_data_field_is_active),
     ]
@@ -798,6 +873,7 @@ class BfRtHandle(Structure):
 
 
 def to_c_byte_arr(py_value, size):
+    """Converts an array of python ints into a c byte array of the given size in bits"""
     n_bytes = (size + 7) // 8
     value_type = c_ubyte * n_bytes
     value = value_type()
