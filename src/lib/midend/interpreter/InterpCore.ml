@@ -40,7 +40,10 @@ let interp_op op vs =
   | And, [v1; v2] -> vbool (raw_bool v1 && raw_bool v2)
   | Or, [v1; v2] -> vbool (raw_bool v1 || raw_bool v2)
   | Not, [v] -> vbool (not (raw_bool v))
-  | Neg, [_] -> failwith "Not actually supported since all ints are unsigned"
+  | Neg, [v1] ->
+    (* Compute 0 - v1 *)
+    let v1 = raw_integer v1 in
+    vinteger (Integer.sub (Integer.create ~value:0 ~size:(Integer.size v1)) v1)
   | Cast size, [v] -> vinteger (Integer.set_size size (raw_integer v))
   | Eq, [v1; v2] -> vbool (v1.v = v2.v)
   | Neq, [v1; v2] ->

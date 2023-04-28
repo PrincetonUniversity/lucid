@@ -209,7 +209,11 @@ and interp_op env op args =
     vbool (Integer.geq (raw_integer v1) (raw_integer v2)) |> mk_e
   (* Arithmetic ops *)
   | Neg, [{ e = EOp (Neg, [e]) }] -> e.e
-  | Neg, [_] -> failwith "Not actually supported since all ints are unsigned"
+  | Neg, [{ e = EVal v1 }] ->
+    (* Compute 0 - v1 *)
+    let v1 = raw_integer v1 in
+    vinteger (Integer.sub (Integer.create ~value:0 ~size:(Integer.size v1)) v1)
+    |> mk_e
   | Cast size, [{ e = EVal v }] ->
     vinteger (Integer.set_size size (raw_integer v)) |> mk_e
   | Conc, [{ e = EVal v1 }; { e = EVal v2 }] ->
