@@ -349,7 +349,7 @@ let make_row_pat_inline_preds letter pred_tuples =
     (match bools, pred_tuples with
     | [], [] -> acc
     | (b :: btail), ((t_pat, f_pat, _) :: ttail) -> (if b then t_pat else f_pat) :: (make_row_pat_inline_preds_acc btail ttail acc)
-    | _ -> (Console.error_position Span.default "The list of bools and preds should be the same size!")) in
+    | _ -> (Console.error_position Span.default (Printf.sprintf "The list of bools and preds should be the same size! Letter: %s, Preds: %d" (print_letter letter) (List.length pred_tuples))) ) in
   match letter.bools, pred_tuples with
   | [], [] -> (Console.error_position Span.default "Shouldn't be making this match statement at all!")
   | _ -> make_row_pat_inline_preds_acc letter.bools pred_tuples []
@@ -382,9 +382,12 @@ let make_match_def_inline_preds id handler alphabet synthesis_response event_ord
   | Some (eid, _, _) -> eid) in
   let letters_this_event = List.filter (fun c -> c.ev_id = (fst eid)) alphabet in
   let preds_this_event = List.filter (fun p -> p.pred_event = eid) preds in
+  Printf.printf "Handler: %s\n" (id_to_string eid);
+  List.iter (fun p -> Printf.printf "Pred: %s" (exp_to_string p.pred)) preds_this_event;
   let pred_tuples = List.map (extract_t_f_cid id preds) preds_this_event in
   let exps = List.map (fun (_, _, pvid) -> make_evar pvid) pred_tuples in
-  let rows = List.map (fun letter -> ((make_row_pat_inline_preds letter pred_tuples), (make_row_stmt_inline_preds id letter synthesis_response))) alphabet in
+  let filter_alph = List.filter (fun l -> (fst eid) = l.ev_id) alphabet in 
+  let rows = List.map (fun letter -> ((make_row_pat_inline_preds letter pred_tuples), (make_row_stmt_inline_preds id letter synthesis_response))) filter_alph in
   [statement (SMatch (exps, (sort_rows_by_wildcards rows)))]
 ;;
 
