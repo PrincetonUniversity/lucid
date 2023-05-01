@@ -360,14 +360,20 @@ let extract_sub_exp pred =
   match pred.pred.e with
   | EOp(Eq, args)-> (sub_exp args)
   | EOp(Neq, args) -> (sub_exp args)
+  | EOp(Less, args) -> (sub_exp args)
+  | EOp (More, args) -> (sub_exp args)
   | _ -> error "Can only do == and != preds right now!"
 
 let extract_t_f_cid id all_preds pred  = 
   let pzero = PNum (Z.of_int 0) in
   let pvid = (make_pred_var_id id pred all_preds) in
+  let ppos = PBit ([0; -1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1]) in
+  let pneg = PBit ([1; -1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1;-1]) in
   match pred.pred.e with
   | EOp(Eq, args)-> (pzero, PWild, pvid)
   | EOp(Neq, args) -> (PWild, pzero, pvid)
+  | EOp(Less, args) -> (pneg, PWild, pvid)
+  | EOp (More, args) -> (ppos, PWild, pvid)
   | _ -> error "Can only do == and != preds right now!"
 
 (*Should put all the wildcards at the bottom so they don't step on above rows.*)

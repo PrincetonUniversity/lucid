@@ -11,7 +11,7 @@ IDX = {
 DETECT{
     (ip_packet_fwd)*
     .DHCP_ack(@int assigned = cip)
-    .(ip_packet_fwd(sip != assigned))*
+    .(ip_packet_fwd(sip < assigned))*
 } => {printf ("Doing nothing");};
 
 handle DHCP_ack(int sip, int cip, int smac, int cmac, int lease_time) {
