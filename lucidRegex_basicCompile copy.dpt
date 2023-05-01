@@ -6,7 +6,7 @@ memop inc(int<<8>> src, int<<8>> unused) {
     return src + 1;
 }
 
-re<<8>> myre = DNS_packet_fwd(@int<<32>> fst_ttl = ttl).(DNS_packet_fwd(fst_ttl != ttl));
+re<<8>> myre = DNS_packet_fwd(@int<<32>> fst_ttl = ttl).(DNS_packet_fwd(fst_ttl != ttl).DNS_packet_fwd(fst_ttl < ttl));
 //DATA {
 global Array.t<<8>> cnt = Array.create(8);
 //}

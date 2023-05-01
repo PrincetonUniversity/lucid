@@ -1,6 +1,7 @@
 
 
 entry event packet_in(int sip, int dip, int<<16>> sport, int<<16>> dport, int<<16>> pkt_size);
+exit event packet_out(int sip, int dip, int<<16>> sport, int<<16>> dport, int<<16>> pkt_size);
 exit event match_report();
 
 memop get_stored (int stored, int dummy){return stored;}
@@ -9,20 +10,12 @@ memop incr (int stored_ct, int incr_by) {return stored_ct + incr_by;}
 
 alphabet sizes = S1, S2, S3, S4, S5, S6, S7, S8;
 
-
-//re<SIZE> RE_fingerprint_videoB=S8(@t1=Sys.time()).S9.S1.S5.S8.S2.S3.S5(Sys.time() - t1 < 1222);
-//re<SIZE> RE_fingerprint_videoC=not(); //two Resolution
-
-
 global Array.t<<32>> arr = Array.create(256);
 re<<256>> RE_fingerprint_videoA over sizes = (S1.S5.S1.S4.S7.S8.S1.S2);
-//re<<256>> RE_fingerprint_videoA over [S1,packet_in, test_event] = !(test_event(@int rec = testval; testval > 20)."");
-//re<<256>> RE_fingerprint_videoA over [S1, packet_in, test_event] = (S1)*.packet_in(@int assigned = sip; true).(S1(sip > Sys.time()))*;
-const int type_A=1;
-const int type_B=2;
-const int type_C=3;
+
 
 handle packet_in(int sip, int dip, int<<16>> sport, int<<16>> dport, int<<16>> s){
+	generate packet_out(sip, dip, sport, dport, s);
 	int<<32>> idx = (int<<32>>)hash<<8>>(13, sip, dip, sport,dport);
 
 	if(s > 130){
@@ -44,13 +37,5 @@ handle packet_in(int sip, int dip, int<<16>> sport, int<<16>> dport, int<<16>> s
 		if(transition(RE_fingerprint_videoA, idx, S)){
 			generate match_report();
 		}
-
-		//if(transition(RE_fingerprint_videoB, idx, S)){
-		//	generate report_match(type_B, sip,dip,sport,dport);
-		//}
-
-		//if(transition(RE_fingerprint_videoC, idx, S)){
-		//	generate report_match(type_C, sip,dip,sport,dport);
-		//}
 	}
 }
