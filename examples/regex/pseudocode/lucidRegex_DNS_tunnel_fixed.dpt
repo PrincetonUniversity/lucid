@@ -1,0 +1,38 @@
+entry event DNS_resp(int cip, int dip, int dip2, int dip3, int dip4);
+entry event ip_packet(int sip, int dip);
+exit event DNS_tunnel_detected(int dip);
+
+sre<<1024>> msre = 
+IDX = {
+    | DNS_resp -> {(int<<32>>) hash<<10>>(13, cip)}
+    | ip_packet -> {(int<<32>>) hash<<10>>(13, sip)}
+}
+DETECT{
+	
+	DNS_resp(@int d1=dip, @int d2=dip2)
+    .(  (ip_packet(dip!=d1) && ip_packet(dip!=d2))
+        .(ip_packet(dip!=d1) && ip_packet(dip!=d2))
+        .(ip_packet(dip!=d1) && ip_packet(dip!=d2))
+        .(ip_packet(dip!=d1) && ip_packet(dip!=d2))
+        .(ip_packet(dip!=d1) && ip_packet(dip!=d2))
+        .(ip_packet(dip!=d1) && ip_packet(dip!=d2))
+        .(ip_packet(dip!=d1) && ip_packet(dip!=d2))
+        .(ip_packet(dip!=d1) && ip_packet(dip!=d2))
+        .(ip_packet(dip!=d1) && ip_packet(dip!=d2))
+        .(ip_packet(dip!=d1) && ip_packet(dip!=d2)))
+        
+	
+} => {
+	printf ("Detected tunneling"); generate DNS_tunnel_detected(dip);
+	//TODO: add counter, only generate if repeated >5 times
+};
+
+//CHEAT: No way to say that response should only be generated in ip_packet handler, so I name a field dip in this handler to remove error from unused name.
+
+handle DNS_resp(int cip, int dip, int dip2, int dip3, int dip4) {
+    printf ("Doing nothing");
+}
+
+handle ip_packet(int sip, int dip) {
+    printf ("Doing nothing");
+}

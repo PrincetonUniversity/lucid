@@ -389,14 +389,18 @@ let make_match_def_inline_preds id handler alphabet synthesis_response event_ord
   | None -> error "Not in a handler, but trying to inline preds for a specific event!"
   | Some (eid, _, _) -> eid) in
   let letters_this_event = List.filter (fun c -> c.ev_id = (fst eid)) alphabet in
-  let preds_this_event = List.filter (fun p -> p.pred_event = eid) preds in
-  Printf.printf "Handler: %s\n" (id_to_string eid);
-  List.iter (fun p -> Printf.printf "Pred: %s" (exp_to_string p.pred)) preds_this_event;
-  let pred_tuples = List.map (extract_t_f_cid id preds) preds_this_event in
-  let exps = List.map (fun (_, _, pvid) -> make_evar pvid) pred_tuples in
-  let filter_alph = List.filter (fun l -> (fst eid) = l.ev_id) alphabet in 
-  let rows = List.map (fun letter -> ((make_row_pat_inline_preds letter pred_tuples), (make_row_stmt_inline_preds id letter synthesis_response))) filter_alph in
-  [statement (SMatch (exps, (sort_rows_by_wildcards rows)))]
+  match letters_this_event with
+  | [] -> Console.error "Something wrong-transition in handler with no letters!"
+  | l1 :: [] -> [(make_row_stmt_inline_preds id l1 synthesis_response)]
+  | _ -> (
+    let preds_this_event = List.filter (fun p -> p.pred_event = eid) preds in
+    Printf.printf "Handler: %s\n" (id_to_string eid);
+    List.iter (fun p -> Printf.printf "Pred: %s" (exp_to_string p.pred)) preds_this_event;
+    let pred_tuples = List.map (extract_t_f_cid id preds) preds_this_event in
+    let exps = List.map (fun (_, _, pvid) -> make_evar pvid) pred_tuples in
+    let filter_alph = List.filter (fun l -> (fst eid) = l.ev_id) alphabet in 
+    let rows = List.map (fun letter -> ((make_row_pat_inline_preds letter pred_tuples), (make_row_stmt_inline_preds id letter synthesis_response))) filter_alph in
+    [statement (SMatch (exps, (sort_rows_by_wildcards rows)))])
 ;;
 
 let make_return_def id synthesis_response = 
@@ -435,10 +439,13 @@ let make_pred_ids id preds =
   List.mapi (fun i p -> (statement (SLocal ((make_pred_var_id id p preds), (ty (inferred_size ("predsizeval"^(string_of_int i)))), (extract_sub_exp p))))) preds
 
 let make_transition_statements_inline_preds env id idx_expr = 
+  let eid = (match env.current_handler with 
+  | None -> error "Not in a handler, but trying to inline preds for a specific event!"
+  | Some (eid, _, _) -> eid) in
   let re_info = IdMap.find id env.re_info_map in
   let static_defs = make_static_defs id idx_expr in
   let binding_defs = List.append static_defs (make_binding_defs id re_info.binders env.current_handler env.params_map (make_evar (make_idx_val id))) in
-  let pred_ids_defs = List.append binding_defs (make_pred_ids id re_info.preds) in
+  let pred_ids_defs = List.append binding_defs (make_pred_ids id (List.filter (fun p -> p.pred_event = eid) re_info.preds)) in
   let match_counter_replacement = List.append pred_ids_defs (make_match_def_inline_preds id env.current_handler re_info.alphabet re_info.synthesis_response re_info.event_order re_info.preds) in
   let match_update_def = List.append match_counter_replacement ((res_def id) :: [(array_update_def id re_info.synthesis_response)]) in
   let return_def = List.append match_update_def (make_return_def id re_info.synthesis_response) in
@@ -494,6 +501,8 @@ let reset_regex_stmt id idx_expr =
 let replacer = 
   object (self)
     inherit [_] s_map as super
+    method! visit_DHandler env id sort body = env := {(!env) with current_handler= (Some (id, sort, (fst body)))}; DHandler (id, sort, ((self#visit_body env) body))
+
     method! visit_ETransitionRegex env id idx ev_expr = 
       match ev_expr with 
       | None -> make_exp_from_statements id ((ans_def id) :: (make_transition_statements_inline_preds !env id idx))
@@ -525,7 +534,7 @@ let replace_var_regex env id size vr =
       then Some (decl (DMemop (memop_response.id, memop_response.params, memop_response.memop_body))) else None) re_info.synthesis_response.memops) in
   let tail = 
   List.append 
-    (List.rev_map (make_global_def_asgn size id ) (List.flatten (List.map (fun b -> b.assignments) (binders vr))))
+    (List.map (make_global_def_asgn size id ) (List.flatten (List.map (fun b -> b.assignments) (binders vr))))
     (List.append
     ((make_global_def size (IConst DFASynthesis.bv_size) id) :: used_memops)
     [(reset_regex_event_decl id); (reset_regex_event_handler id re_info.binders)]) in

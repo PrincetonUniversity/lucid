@@ -1,0 +1,18 @@
+entry event ViewChange(int idx, int<<8>> ty, int x);
+const int<<8>> type_VIEWCHANGE=0;
+const int<<8>> type_PREPARE=1;
+
+exit event Consensus_error(int idx, int x);
+
+sre<<1024>> msre = 
+IDX = {
+    | ViewChange -> { idx }
+}
+DETECT{
+	ViewChange(@int v=x; ty==type_VIEWCHANGE)
+	.(ViewChange(x < v) && ViewChange(ty==type_PREPARE))
+} => {printf ("bug detected!"); generate Consensus_error(idx, x);};
+
+handle ViewChange(int idx, int<<8>> ty, int x){
+    printf ("Doing nothing");
+}
