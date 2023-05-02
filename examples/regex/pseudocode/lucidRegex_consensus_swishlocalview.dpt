@@ -5,11 +5,12 @@ entry event swish_update(int sip, int dip, int<<16>> sport, int<<16>> dport, int
 
 exit event error_report();
 
-alphabet which_update = S1, S2, S3, SNAN;
+alphabet which_update = S1, S2, S3; //, SNAN;
 
 global Array.t<<32>> arr = Array.create(256);
-re<<256>> RE_update_sequence over which_update = ((S1)*.(S2)*.(S3)*)*; 
-
+//re<<256>> RE_update_sequence over which_update = (S1.(S1)*.S2.(S2)*.S3.(S3)*)*; 
+//manual negation for deviation...
+re<<256>> RE_update_sequence over which_update = (S1||S2||S3)*.((S2.S1)||(S3.S2)||(S1.S3));
 
 handle swish_update(int sip, int dip, int<<16>> sport, int<<16>> dport, int<<8>> update_idx){
 	int<<32>> idx = (int<<32>>)hash<<8>>(13, sip, dip, sport,dport);
