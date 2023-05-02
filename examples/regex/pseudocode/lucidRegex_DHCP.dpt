@@ -1,6 +1,7 @@
-entry event DHCP_ack(int sip, int cip, int smac, int cmac, int lease_time);
-entry event ip_packet_fwd(int sip, int cip, int smac, int cmac);
-exit event DHCP_continue();
+entry event ip_packet_generic(int smac, int dmac, int sip, int cip, int udp_dport, int<<8>> payload_1, int payload_2);
+
+event DHCP_ack(int sip, int cip, int smac, int cmac, int lease_time);
+event ip_packet_fwd(int sip, int cip, int smac, int cmac);
 exit event DHCP_error();
 
 sre<<1024>> msre = 
@@ -12,7 +13,18 @@ DETECT{
     (ip_packet_fwd)*
     .DHCP_ack(@int assigned = cip)
     .(ip_packet_fwd(sip < assigned))*
-} => {printf ("Doing nothing");};
+} => {
+	printf ("Doing nothing");
+	generate DHCP_error();
+};
+
+handle ip_packet_generic(int smac, int dmac, int sip, int cip, int udp_dport, int<<8>> payload_1, int payload_2){
+	if((udp_dport==1234) && (payload_1 == 56)){
+		generate DHCP_ack(sip, cip, smac, dmac, 1234);
+	}else{
+		generate ip_packet_fwd(sip,cip,smac,dmac);	
+	}
+}
 
 handle DHCP_ack(int sip, int cip, int smac, int cmac, int lease_time) {
     printf ("Doing nothing");
