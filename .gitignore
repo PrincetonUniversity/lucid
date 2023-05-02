@@ -10,6 +10,7 @@ test/*
 *.cmxa
 .vscode/
 basicCompile/*
+lucid_tofino_build/*
 
 # ocamlbuild working directory
 _build/

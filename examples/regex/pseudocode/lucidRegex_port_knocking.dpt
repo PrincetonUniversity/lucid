@@ -7,8 +7,7 @@ global Array.t<<8>> cnt = Array.create(4096);
 
 handle ip_in(int sip, int cip, int<<16>> sport, int<<16>> dport) {
     int idx = (int<<32>>)hash<<12>>(13, sip, cip);
-
-    if (transition(myre, idx, this)) {    
+    if (transition(myre, idx)) {    
         generate port_knocking_matched(sip, cip);
         reset(myre, idx);
     }
