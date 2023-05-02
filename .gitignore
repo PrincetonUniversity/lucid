@@ -11,6 +11,7 @@ test/*
 .vscode/
 basicCompile/*
 lucid_tofino_build/*
+testCompile
 
 # ocamlbuild working directory
 _build/

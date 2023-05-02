@@ -8,7 +8,7 @@ IDX = {
 }
 DETECT{
 	(
-		(ATP_ADD(@int saved_jobid=jobid; @int x=cnt; (cnt==x+1 && (jobid==saved_jobid || saved_jobid==0)))*
+		(ATP_ADD(@int saved_jobid=jobid, @int x=cnt; (cnt==x+1 && (jobid==saved_jobid || saved_jobid==0)))."")*
 		.ATP_release(jobid==saved_jobid && x==16)
 	)
 } => {printf ("Checked continuous 16 add events.");};

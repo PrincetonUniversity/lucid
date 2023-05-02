@@ -7,13 +7,12 @@ IDX = {
 	| ATP_release -> {idx}
 }
 DETECT{
-	(
-		(ATP_ADD(@int x=cnt; (cnt==x+1) ))*
-		.ATP_ADD(cnt==16)
-	)
+	(ATP_add(@int x = cnt; cnt==x+1)."")*
+		.ATP_add(cnt==16)
+	
 } => {printf ("Checked continuous 16 add events.");};
 
-handle ATP_add(int idx, int jobid, int clientid, int val) {
+handle ATP_add(int idx, int jobid, int cnt, int val) {
     printf ("Doing nothing");
 }
 

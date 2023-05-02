@@ -36,11 +36,14 @@ let binders re =
 
 let preds re = 
   let check_pred event_id pred acc = 
+    (let make_rec pred = 
+      (let p_rec = {pred_event=event_id; pred=pred} in 
+                if (List.exists (fun pr ->(exp_to_string pr.pred) = (exp_to_string p_rec.pred)) acc) then acc else p_rec :: acc) in
     match pred.e with 
       (*If it's a value, it has to be a bool*)
-      | EVal (v) -> acc
-      | _ -> let p_rec = {pred_event=event_id; pred=pred} in 
-                if (List.exists (fun pr ->(exp_to_string pr.pred) = (exp_to_string p_rec.pred)) acc) then acc else p_rec :: acc in
+      | EVal (_) -> acc
+      | EOp (Not, [sub]) -> make_rec sub
+      | _ -> make_rec pred) in 
   let rec preds_acc re acc = 
     match re.v_regex with  
     | VREmptySet -> acc
@@ -94,11 +97,11 @@ let rec get_all_letters alphabet =
 
 (*----------translate from RE to PRE--------------*)
 (*Make a list of list of booleans to represent the letters to be "Or" together *)
-let rec big_union_helper letter_pred list_of_pred =
-  let tack_bool_front b lolob = List.map (function lob -> b::lob) lolob in
+let rec big_union_helper letter_pred list_of_pred flip =
+  let tack_bool_front b lolob = List.map (function lob -> (if flip then (not b) else b)::lob) lolob in
     match list_of_pred with 
     [] -> [[]]
-    | pred :: tail -> let new_tail = big_union_helper letter_pred tail in
+    | pred :: tail -> let new_tail = big_union_helper letter_pred tail flip in
       match letter_pred with
       Some p when (exp_to_string p) = (exp_to_string pred) -> (tack_bool_front true new_tail)
       | _ -> (List.append (tack_bool_front true new_tail) (tack_bool_front false new_tail))
@@ -110,20 +113,21 @@ let rec big_union_make_or ev_name lolob =
   | lob :: tail -> pre_or (PRSymbol({ev_id = ev_name; bools = lob})) (big_union_make_or ev_name tail)
 ;;
 
-let rec big_union event_id pred alphabet = 
+let rec big_union event_id pred alphabet flip = 
   match alphabet with
   [] -> PRSymbol({ev_id=(fst event_id); bools=[]})
   | {letter_id=letter_id; preds=preds} :: tail -> if letter_id = event_id 
-    then (big_union_make_or (fst event_id) (big_union_helper pred preds))
-    else big_union event_id pred tail
+    then (big_union_make_or (fst event_id) (big_union_helper pred preds flip))
+    else big_union event_id pred tail flip
 ;;
 (*Turn an RE into a PRE, given the alphabet*)
 let rec translate re re_alphabet = 
     let preamble_big_union event_id pred = (match pred.e with 
     | EVal (v) -> (match v.v with 
-      | VBool b when b-> big_union event_id None re_alphabet
+      | VBool b when b-> big_union event_id None re_alphabet false
       | _ -> PREmptySet)
-    | _ -> big_union event_id (Some pred) re_alphabet) in
+    | EOp (Not, [sub]) -> (big_union event_id (Some sub) re_alphabet true)
+    | _ -> big_union event_id (Some pred) re_alphabet false) in
     match re with 
     | VREmptySet -> PREmptySet
     | VREmptyStr -> PREmptyString
@@ -221,7 +225,9 @@ type env = {
   re_info_map : reInfo IdMap.t; 
   current_handler : (Id.t *handler_sort * params) option;
   params_map : params IdMap.t;
-  added_cts : bool
+  added_cts : bool;
+  added_reset : bool;
+  needs_reset : bool
 };;
 
 let rec check_unmabig_concat_vr vr alphabet = 
@@ -242,6 +248,7 @@ let re_info id alphabet vr =
   let all_letters = (get_all_letters re_alphabet) in
   let pre = translate vr.v_regex re_alphabet in
   let dfa = (plain_re_to_dfa pre all_letters) in
+  Printf.printf "Alphabet size %d\n" (List.length dfa.alphabet);
   let synthesized = synthesize id dfa in
     if not (check_unmabig_concat_vr vr re_alphabet) then Console.error_position vr.v_regex_span @@ Printf.sprintf "That concatenation may not be unambiguous";
     List.iter (fun letter -> (Printf.printf "%s: %d\n" (print_letter letter) (letter_to_int letter events (List.length re_preds)))) all_letters;
@@ -251,7 +258,7 @@ let re_info id alphabet vr =
 ;;
 let check_then_set_name = Id.create("re12351sdaCheckThenSet");;
 let make_binding_set reid be params_map idx_expr in_closure (ty, id, eval) =
-  let e = if in_closure then (exp (ECall (Arrays.array_set_cid, [(make_evar id); idx_expr;eval]))) else 
+  let e = if in_closure then (exp (ECall (Arrays.array_set_cid, [(make_evar (make_asgn_id reid id)); idx_expr;eval]))) else 
     (exp (ECall (Arrays.array_setm_cid, [ (make_evar (make_asgn_id reid id));idx_expr;(make_evar check_then_set_name);eval]))) in
   (statement (SLocal (id, 
   ty,
@@ -522,6 +529,8 @@ let collector =
     method! visit_DHandler env id sort body = env := {(!env) with current_handler= (Some (id, sort, (fst body)))}; DHandler (id, sort, ((self#visit_body env) body))
 
     method! visit_DVarRegex env id size alph vr = env := {(!env) with re_info_map=(IdMap.add id (re_info id alph vr) (!env).re_info_map)}; DVarRegex (id, size, alph, vr)
+
+    method! visit_SResetRegex env id idx_expr = (env := {(!env) with needs_reset = true});  SResetRegex (id, idx_expr)
 end;;
 
 
@@ -532,18 +541,18 @@ let replace_var_regex env id size vr =
     let used regact_int = LetterMap.exists (fun _ i -> i == regact_int) re_info.synthesis_response.whichop in
     (List.filter_map (fun memop_response -> if (used memop_response.regact_int)
       then Some (decl (DMemop (memop_response.id, memop_response.params, memop_response.memop_body))) else None) re_info.synthesis_response.memops) in
-  let tail = 
-  List.append 
+  let def = List.append
     (List.map (make_global_def_asgn size id ) (List.flatten (List.map (fun b -> b.assignments) (binders vr))))
-    (List.append
-    ((make_global_def size (IConst DFASynthesis.bv_size) id) :: used_memops)
-    [(reset_regex_event_decl id); (reset_regex_event_handler id re_info.binders)]) in
-  if ((!env).added_cts) then tail else (env := {(!env) with added_cts = true}; List.append [(check_then_set_memop)] tail)
+    ((make_global_def size (IConst DFASynthesis.bv_size) id) :: used_memops) in
+  let tail = if ((!env).added_cts) then def else (env := {(!env) with added_cts = true}; List.append [(check_then_set_memop)] def) in
+  if ((!env).added_reset) or (not ((!env).needs_reset)) then tail else (env := {(!env) with added_reset = true};(List.append [(reset_regex_event_decl id); (reset_regex_event_handler id re_info.binders)] tail))
+  
+
 ;;
 
 
 let process_prog ds = 
-  let env = (ref {re_info_map=IdMap.empty; current_handler=None; params_map=IdMap.empty; added_cts = false}) in 
+  let env = (ref {re_info_map=IdMap.empty; current_handler=None; params_map=IdMap.empty; added_cts = false; added_reset= false; needs_reset = false}) in 
   let ds = collector#visit_decls env ds in
   let ds = replacer#visit_decls env ds in
     let replace d = 
