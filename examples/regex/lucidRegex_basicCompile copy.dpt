@@ -6,7 +6,7 @@ memop inc(int<<8>> src, int<<8>> unused) {
     return src + 1;
 }
 
-re<<8>> myre = DNS_packet_fwd(@int<<32>> fst_ttl = ttl).(DNS_packet_fwd(fst_ttl != ttl).DNS_packet_fwd(fst_ttl < ttl));
+re<<8>> myre = DNS_packet_fwd(@int<<32>> fst_ttl = ttl).(DNS_packet_fwd(fst_ttl != ttl));
 //DATA {
 global Array.t<<8>> cnt = Array.create(8);
 //}
@@ -24,10 +24,10 @@ handle DNS_packet_fwd(int sip, int cip, int smac, int cmac, int ttl) {
     int idx = (int<<32>>)hash<<3>>(13, sip, cip, smac, cmac);
     //generate DNS_packet_out (sip, cip, smac, cmac, ttl);
     if (transition(myre, idx, this)) {
-        int<<8>> newcount = Array.setm(cnt, mysreidx, inc, 0)+1;
+        int<<8>> newcount = Array.setm(cnt, idx, inc, 0)+1;
         if (newcount >= 5){
             generate ttl_changes_found(0, 0);
-            reset(myre, idx)
+            reset(myre, idx);
         }
     }
     

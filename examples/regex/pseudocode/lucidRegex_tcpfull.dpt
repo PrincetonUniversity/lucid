@@ -1,0 +1,70 @@
+//Note: TCP Full DFA is too complex to be synthesized on HW. 
+// Hence, this Regex/DFA is just for demonstrating syntax.
+
+const int SIZE = 65536;
+
+re_symbol SYN_in,SYN_out,SYNACK_in,SYNACK_out,ACK_in,ACK_out,FIN_in,FIN_out,RST_in,RST_out,OTHER;
+re<SIZE> RE_tcp_open1=SYN_in.SYNACK_out.ACK_in;
+re<SIZE> RE_tcp_open2=SYN_out.SYNACK_in.ACK_out;
+re<SIZE> RE_tcp_close1=FIN_in.ACK_out.FIN_out;
+re<SIZE> RE_tcp_close2=FIN_out.ACK_in.FIN_in;
+re<SIZE> RE_tcp_close3=(RST_in.(ACK_IN|ACK_OUT){0,2}.RST_out);
+re<SIZE> RE_tcp_close4=(RST_out.(ACK_IN|ACK_OUT){0,2}.RST_in);
+
+re<SIZE> RE_tcp_normal= (RE_tcp_open1 | RE_tcp_open2).
+						(ACK_in|ACK_out)*.
+						(RE_tcp_close1|RE_tcp_close2|RE_tcp_close3|RE_tcp_close4);
+//Note 2: we actually want to report non-normal, not report normal.
+// But there's no easy syntax to negate a RE.
+
+handle report(int sip, int dip, int<<16>> sport, int<<16>> dport){
+	//...
+}
+
+handle packet_in(int sip, int dip, int<<16>> sport, int<<16>> dport, int<<6>> flags){
+	int<<16>> idx;
+	bool is_incoming;
+
+	if(sip & 0xffff0000 == 0xf0010000){
+		is_incoming=true;
+		idx=hash(sip, dip, sport, dport);
+	}else{
+		is_incoming=false;
+		idx=hash(dip, sip, dport, sport);
+	}
+
+
+	re_symbol S=OTHER;
+
+	if(incoming && flags==2){
+		S=SYN_IN;
+	}else if(incoming && flags==16){
+		S=ACK_IN;
+	}else if(incoming && flags==16+2){
+		S=SYNACK_IN;
+	}else if(incoming && flags==4){
+		S=RST_IN;
+	}else if(incoming && flags==1){
+		S=FIN_IN;
+	}
+	////////
+	else if(!incoming && flags==2){
+		S=SYN_OUT;
+	}else if(!incoming && flags==16){
+		S=ACK_OUT;
+	}else if(!incoming && flags==16+2){
+		S=SYNACK_OUT;
+	}else if(!incoming && flags==4){
+		S=RST_OUT;
+	}else if(!incoming && flags==1){
+		S=FIN_OUT;
+	}
+
+	if(transition(RE_tcp_normal, idx, S)){
+		if(incoming){
+			generate report(sip,dip,sport,dport);
+		}else{
+			generate report(dip,sip,dport,sport);
+		}
+	}
+}
