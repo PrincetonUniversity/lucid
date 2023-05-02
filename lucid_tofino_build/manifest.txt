@@ -1,7 +1,0 @@
-Lucid-generated tofino project folderContents: 
-lucid.p4 -- P4 data plane program
-lucid.py -- Python script to install multicast rules after starting lucid.p4
-eventlib.py -- Python event parsing library
-globals.json -- Globals name directory (maps lucid global variable names to names in compiled P4)
-makefile -- simple makefile to build and run P4 program
-lucid.cpp -- c control plane (currently unused)
