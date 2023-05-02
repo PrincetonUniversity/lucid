@@ -8,6 +8,7 @@ IDX = {
 }
 DETECT{
 	ATP_add(@int saved_jobid=jobid)
+	.(ATP_add(jobid==saved_jobid)
 	.ATP_add(jobid==saved_jobid)
 	.ATP_add(jobid==saved_jobid)
 	.ATP_add(jobid==saved_jobid)
@@ -22,8 +23,7 @@ DETECT{
 	.ATP_add(jobid==saved_jobid)
 	.ATP_add(jobid==saved_jobid)
 	.ATP_add(jobid==saved_jobid)
-	.ATP_add(jobid==saved_jobid)
-	.ATP_release(jobid==saved_jobid)
+	.ATP_release(jobid==saved_jobid))
 } => {printf ("Checked continuous 16 add events.");};
 
 handle ATP_add(int idx, int jobid, int clientid, int val) {

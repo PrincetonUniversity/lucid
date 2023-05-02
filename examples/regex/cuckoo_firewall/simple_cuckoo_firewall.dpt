@@ -3,7 +3,6 @@
     Note that in this version, we use simpler hash functions 
     to simplify collisions in test cases. */
 // include "io_events.dpt"
-include "ip_default.dpt"
 
 
 
@@ -13,11 +12,35 @@ const int NULL = 0;
 const int TRUE = 1; 
 const int FALSE = 0;
 const int<<8>> TOS_TRUSTED = 1;
-
-
+/* IP packet handling */
+type eth_hdr = {
+    int<<48>> dmac; 
+    int<<48>> smac; 
+    int<<16>> etype;
+}
+type ip_hdr_prefix = {
+    int<<8>> v_ihl; 
+    int<<8>> tos;
+    int<<16>> len;
+    int<<16>> id;
+    int<<16>> flags_frag;
+    int<<8>> ttl;
+    int<<8>> proto;
+    int<<16>> csum;
+}
+entry event ip_pkt (eth_hdr eth, ip_hdr_prefix ip, int<<32>> src, int<<32>> dst);
 event cuckoo_insert(eth_hdr eth, ip_hdr_prefix ip, 
     int<<32>> src, int<<32>> dst, int port, int fst_src, int fst_dst);
 
+
+
+
+global Array.t<<32>> key_src_1 = Array.create(1024);
+global Array.t<<32>> key_dst_1 = Array.create(1024);
+global Array.t<<32>> key_src_2 = Array.create(1024);
+global Array.t<<32>> key_dst_2 = Array.create(1024);
+
+global Array.t<<32>> cuckoo_inflight = Array.create(1);
 
 // high-level syntax for checking global correctness
 sre<<1>> msre = 
@@ -30,28 +53,18 @@ DETECT{
         ip_pkt(@int saved_src=src, @int saved_dst=dst)
         .(
             ( (cuckoo_insert(fst_src==saved_src) && cuckoo_insert(fst_dst==saved_dst))* 
-              .(cuckoo_insert(fst_src!=saved_src) || cuckoo_insert(fst_dst!=saved_dst))
+              .(cuckoo_insert(!(fst_src==saved_src)) || cuckoo_insert(!(fst_dst==saved_dst)))
             )
             ||
             ( 
-            cuckoo_insert(fst_src==saved_src && fst_dst==saved_dst)
-            .cuckoo_insert(fst_src==saved_src && fst_dst==saved_dst)
-            .cuckoo_insert(fst_src==saved_src && fst_dst==saved_dst)
-            .cuckoo_insert(fst_src==saved_src && fst_dst==saved_dst)
+            (cuckoo_insert(fst_src==saved_src) && cuckoo_insert(fst_dst==saved_dst))
+            .(cuckoo_insert(fst_src==saved_src) && cuckoo_insert(fst_dst==saved_dst))
+            .(cuckoo_insert(fst_src==saved_src) && cuckoo_insert(fst_dst==saved_dst))
+            .(cuckoo_insert(fst_src==saved_src) && cuckoo_insert(fst_dst==saved_dst))
             )
         )
     )
 } => {printf ("Found error, either repeated more than 4 times, or mismatched saved fst");};
-
-
-
-global Array.t<<32>> key_src_1 = Array.create(1024);
-global Array.t<<32>> key_dst_1 = Array.create(1024);
-global Array.t<<32>> key_src_2 = Array.create(1024);
-global Array.t<<32>> key_dst_2 = Array.create(1024);
-
-global Array.t<<32>> cuckoo_inflight = Array.create(1);
-
 
 memop incr(int memval, int incrval) {
     return memval + incrval;
