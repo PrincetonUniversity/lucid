@@ -144,6 +144,8 @@ let rec translate re re_alphabet =
 
 (*---------------Making the statements---------------*)
 
+let inferred_size s = TInt (IVar (QVar (Id.create s)))
+
 let rec get_index_of elem loe start comp = 
   match loe with
   | [] -> -1
@@ -405,7 +407,7 @@ let make_return_def id synthesis_response =
 ;;
 
 let make_static_defs id idx_expr = 
-  let idx_def = (statement (SLocal ((make_idx_val id), (ty (TInt (IConst 32))), idx_expr))) in
+  let idx_def = (statement (SLocal ((make_idx_val id), (ty (inferred_size "idxvalsize")), idx_expr))) in
   [idx_def;(make_local_synth_var_def (f_id id)); (make_local_synth_var_def (g_id id)); (make_local_synth_var_def (mem_id id))]
 
 
@@ -430,7 +432,7 @@ let make_transition_statements env id idx_expr =
 ;;
 
 let make_pred_ids id preds = 
-  List.map (fun p -> (statement (SLocal ((make_pred_var_id id p preds), (ty (TInt (IConst 32))), (extract_sub_exp p))))) preds
+  List.mapi (fun i p -> (statement (SLocal ((make_pred_var_id id p preds), (ty (inferred_size ("predsizeval"^(string_of_int i)))), (extract_sub_exp p))))) preds
 
 let make_transition_statements_inline_preds env id idx_expr = 
   let re_info = IdMap.find id env.re_info_map in
@@ -468,7 +470,7 @@ let check_then_set_memop =
   let id = check_then_set_name in 
   let memval = Id.create "memval" in 
   let newval = Id.create "newval" in
-  let params = [(memval, (ty (TInt (IConst 32)))); (newval, (ty (TInt (IConst 32))))] in
+  let params = [(memval, (ty (inferred_size "memvalsize"))); (newval, (ty (inferred_size "newvalsize")))] in
   let body = MBIf((exp (EOp (Eq, [(make_evar memval);(make_num 0)]))), (make_evar newval), (make_evar memval)) in
   (decl (DMemop (id, params, body)))
 

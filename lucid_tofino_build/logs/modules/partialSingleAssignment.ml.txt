@@ -1,3 +1,0 @@
----partialSingleAssignment.ml log---
-number of local variables before partial ssa: 9
-number of local variables after partial ssa: 9

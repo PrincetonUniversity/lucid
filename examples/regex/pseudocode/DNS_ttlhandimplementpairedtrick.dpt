@@ -1,0 +1,106 @@
+event DNS_packet_fwd(int<<32>> sip,int<<32>> cip,int<<32>> smac,int<<32>> cmac,int<<8>> ttl);
+exit event DNS_packet_out(int<<32>> sip,int<<32>> cip,int<<32>> smac,int<<32>> cmac,int<<8>> ttl) ;
+
+exit event ttl_changes_found(int<<32>> idx,int<<8>> count) ;
+
+memop inc(int<<8>> src,int<<8>> unused)
+ {return src+1<<8>>;}
+
+memop re12351sdaCheckThenSet(int<<8>> memval1, int<<8>> memval2, int<<8>> arg1, int<<8>> arg2)
+ {  
+    bool b1 = memval2==0;
+    if (true){
+        cell1 = arg1 - memval2;
+    }
+    if (b1) {
+        cell2 = arg1;
+    } 
+
+    if (true){return cell1;}
+
+}
+
+memop zeropaired(int<<8>> memval1, int<<8>> memval2, int<<8>> arg1, int<<8>> arg2) {
+    if (true) {cell1 = 0;}
+    if (true) {cell2 = 0;}
+}
+
+global PairArray.t<<8>> assigned_var_myrefst_ttl = PairArray.create(8);
+
+
+global Array.t<<8>> myre = Array.create(8);
+
+
+memop myrememop0(int<<8>> memval,int<<8>> f,int<<8>> g)
+ {bool b1 = f!=6;
+bool b2 = memval+g!=6;
+if (b1&&b2) {
+cell1 = f|memval;
+} else {
+if (true) {
+cell1 = g|8;
+}
+}
+if (true) {
+return cell1;
+} }
+
+memop myrememop1(int<<8>> memval,int<<8>> f,int<<8>> g)
+ {bool b1 = memval+0==0;
+bool b2 = memval+g==8;
+if (b1||b2) {
+cell1 = g+2;
+} else {
+if (true) {
+cell1 = f|memval;
+}
+}
+if (true) {
+return cell1;
+} }
+
+event myrereset(int<<32>> myreidx) ;
+
+handle myrereset(int<<32>> myreidx) {
+PairArray.update(assigned_var_myrefst_ttl,myreidx,zeropaired, 0, 0, 0);
+Array.set(myre,myreidx,0);
+}
+
+global Array.t<<8>> cnt = Array.create(8);
+
+
+handle DNS_packet_fwd(int<<32>> sip,int<<32>> cip,int<<32>> smac,int<<32>> cmac,int<<8>> ttl) {
+    generate DNS_packet_out(sip,cip,smac,cmac,ttl);
+    int<<32>> myreidx = (int<<32>>)hash<<3>>(13,sip,cip,smac,cmac);
+    int<<8>> f_synthesized_meta_varmyre = 0;
+    int<<8>> g_synthesized_meta_varmyre = 0;
+    int<<8>> memop_synthesized_meta_varmyre = 0;
+    int<<8>> pred0myre = PairArray.update(assigned_var_myrefst_ttl, myreidx, re12351sdaCheckThenSet, ttl, 0, 0);
+    match pred0myre with
+    | 0 -> {
+    f_synthesized_meta_varmyre = 236;
+    g_synthesized_meta_varmyre = 111;
+    memop_synthesized_meta_varmyre = 1;
+    }
+    | _ -> {
+    f_synthesized_meta_varmyre = 113;
+    g_synthesized_meta_varmyre = 149;
+    memop_synthesized_meta_varmyre = 0;
+    }
+    int<<8>> resmyre = 0;
+    match memop_synthesized_meta_varmyre with
+    | 0 -> {
+    resmyre = Array.update_complex(myre,myreidx,myrememop0,f_synthesized_meta_varmyre,g_synthesized_meta_varmyre,0);
+    }
+    | 1 -> {
+    resmyre = Array.update_complex(myre,myreidx,myrememop1,f_synthesized_meta_varmyre,g_synthesized_meta_varmyre,0);
+    }
+    match resmyre with
+    | 157 -> {
+    int<<8>> newcount = Array.setm(cnt,myreidx,inc,0<<8>>);
+    if (newcount>3<<8>>) {
+    generate ttl_changes_found(0,0<<8>>);
+    generate myrereset(myreidx);
+    }}
+    | _ -> {printf ("doing nothing");}
+}
