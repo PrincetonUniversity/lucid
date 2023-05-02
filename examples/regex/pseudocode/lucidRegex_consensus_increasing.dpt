@@ -1,0 +1,16 @@
+entry event NetChainUpdate(int idx, int version, int value);
+
+exit event Consensus_error(int idx, int version, int value);
+
+sre<<1024>> msre = 
+IDX = {
+    | NetChainUpdate -> { idx }
+}
+DETECT{
+	NetChainUpdate(@int v=version)
+	.NetChainUpdate(version < v)
+} => {printf ("bug detected!"); generate Consensus_error(idx, version, value);};
+
+handle NetChainUpdate(int idx, int version, int value){
+    printf ("Doing nothing");
+}
