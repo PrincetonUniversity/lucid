@@ -497,6 +497,12 @@ let rec sequence_stmts lst =
   | hd :: tl -> sseq hd (sequence_stmts tl)
 ;;
 
+let exp_to_cid exp =
+  match exp.e with
+  | EVar (cid) -> cid
+  | _ -> error "[id_of_exp] expression is not an evar"
+;;
+
 let id_of_exp exp =
   match exp.e with
   | EVar (Id id) -> id

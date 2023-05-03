@@ -503,7 +503,7 @@ let match_of_if exp s1 s2 =
     res
 ;;
 
-let rec process tds = 
+let rec process_old tds = 
     let v = 
         object
             inherit [_] s_map as super
@@ -515,6 +515,167 @@ let rec process tds =
     in
     v#visit_tdecls () tds
 ;;
+
+
+(*** new match_of_if that uses MatchAlgebra ***)
+(* convert an atom in a if expression into a (var id, pattern) tuple *)
+let atom_exp_to_var_pat exp : (Cid.t * pat) =
+    match exp.e with
+    | EOp (Eq, [evar; eval]) | EOp (Neq, [evar; eval]) ->
+      ( name_from_exp evar
+      , CoreSyntax.PNum (Z.of_int (int_from_exp eval)))
+    | _ -> error "unexpected form of expression to convert into a pattern. "
+;;
+
+let atoms_to_pats keys atoms : pat list =
+  (* convert a list of atoms into a list of patterns, 
+     where any key tested in an atom is converted 
+     into an exact match pattern, and any key not 
+     tested in an atom is converted into a wildcard pattern *)
+  (* note: this function should be used with either: 
+     - 1 neq atom of an and expression
+     - all the eq atoms of an and expression  *)
+    let varid_pat_assoc = CL.map (atom_exp_to_var_pat) atoms in
+    let pat_of_key key =
+      match CL.assoc_opt key varid_pat_assoc with
+      | Some cond -> cond
+      | None -> PWild
+    in
+    CL.map pat_of_key keys
+;;
+
+(* 
+  A new algorithm for converting an if statement into a match statement. 
+  Assumptions: 
+    - the if statement's expression is in DNF form, with atomic operations 
+      that are either equality or inequality tests of variables against values.
+  Approach: 
+  The if statement's expression is a disjunction of conjunctions. That means 
+  if any conjunction is satisfied, we should take the true branch. So: 
+  1) given an SIf(exp, s1, s2), extract a list of conjunctions from exp.
+  2) create a match statement for each conjunction. The branches 
+     of the match statement are: 
+      1) Neq branches: 
+        for each Neq rule (x != C) in the conjunction, construct a 
+        branch that executes s2 if x == C. 
+        These branches handle the case where the conjunction evaluates 
+        to false because any one of its Neq atoms evaluates to false. 
+      2) Eq branch: 
+        for the Eq rules in the conjunction (y == D, ...), construct a 
+        single branch that executes s1 if (y = D, ...). This handles 
+        the case where the conjunction evaluates to true because: 
+          1) all of its Neq atoms evaluate to true (due to Neq branches)
+          2) all of its Eq atoms evaluate to true
+      3) "miss" branch: 
+        finally, construct a branch that executes s2 if none of the 
+        previous branches match. This handles the case where all of 
+        the Neq atoms evaluate to true, but at least one of the 
+        Eq atoms evaluates to false. 
+  3) Merge all of the atomic (i.e., per-conjunction) match statements together
+     into 1 match statement, using MatchAlgbra from the layout algorithm.
+  4) Finally, clean up the branches of the merged match statement. 
+     The branches need to be cleaned up because some of them may 
+     contain _both_ s1 and s2, if the branch represents a case where 
+     one of the atomic tables would branch to s1 and the other would 
+     branch to s2. Recall that each atomic match statement represents a 
+     conjunction, and all of the atomic tables together represent 
+     a disjunction. Because they represent a disjunction, only 
+     one atomic match has to "vote" to execute s1. Thus, we 
+     resolve branches that contain both s1 and s2 by replacing 
+     them with s1.
+ *)
+let match_of_if_new exp s1 s2 =
+  (* placeholders for true and false branches *)
+  let true_branch_call =  scall_sp (Cid.create ["if_branch"]) [value_to_exp (vbool true)] (ty TBool) (Span.default) in
+  let false_branch_call = scall_sp (Cid.create ["if_branch"]) [value_to_exp (vbool false)] (ty TBool) (Span.default) in
+  let s1_orig, s2_orig = s1, s2 in
+  let s1 = true_branch_call in
+  let s2 = false_branch_call in 
+  (* convert the exp into a list of and expressions *)
+  let and_expressions = flatten_disjunction exp in
+  (* get the keys of the expression *)
+  let ekeys = evars_in_exp exp |> MatchAlgebra.unique_list_of_eq (CoreSyntax.equiv_exp) in
+  let keys = CL.map CoreSyntax.exp_to_cid ekeys in
+  (* now make a match statement for each and expression. *)
+  let smatch_from_conjunction and_expression =
+    let atom_exps = flatten_conjunction and_expression in
+    let eqs = CL.filter (filter_eop_kind Eq) atom_exps in
+    let neqs = CL.filter (filter_eop_kind Neq) atom_exps in
+    (* get patterns annotated with variable ids *)
+    (* a pattern for each negative branch *)
+    let inequality_hit_pats = CL.map (fun neq -> atoms_to_pats keys [neq]) neqs in
+    (* one pattern for the positive branch *)
+    let equality_hit_pat = atoms_to_pats keys eqs in
+    (* one pattern for if the positive branch misses *)
+    let nothing_hit_pat = atoms_to_pats keys [] in
+
+    let inequality_branches = CL.map
+      (fun pats -> (pats, s2))
+      inequality_hit_pats
+    in
+    let equality_branch = equality_hit_pat, s1 in
+    let miss_branch = nothing_hit_pat, s2 in
+    (* build the match statement *)
+    smatch ekeys (inequality_branches@[equality_branch; miss_branch])
+  in 
+  let atomic_match_statements = CL.map smatch_from_conjunction and_expressions in
+  (* now merge all the atomic match statements together *)
+  let smatch = match atomic_match_statements with
+    | [] -> error "[match_of_if_new] empty expression in if statement?"
+    | stmt::[] -> stmt (* just one statement, return it *)
+    | stmt::stmts -> CL.fold_left MatchAlgebra.merge_matches stmt stmts (* multiple statements, must fold. *)
+  in 
+  (* finally, we have to replace the true / false placeholders in each branch with the 
+     original statements. 
+     How we deal with branches that have multiple statements: 
+     If a branch contains at least one true_branch instruction, then we branch to s1.
+     Why? Each statement in the merged table comes from a single atomic table. And each 
+     atomic table represents one component of a disjunction. So, if we are in a branch 
+     where there is at least one true_branch, that means at least one table's conditions 
+     are satisfied in that branch ==> at least one component of the disjunction is true. *)
+  let unify_branch (pats, stmt) = 
+    let stmt_list = unfold_stmts stmt in
+    let branch_votes = CL.map 
+      (fun stmt -> (match stmt.s with
+        | SUnit({e=ECall(_, [{e=EVal({v=VBool branch_bool})}])}) -> branch_bool
+        | _ -> error "[match_of_if_new] unexpected statement in branch of merged match"))
+      stmt_list
+    in
+    match (CL.exists (fun b -> b) branch_votes) with
+    | true -> (pats, s1_orig)
+    | false -> (pats, s2_orig)
+  in
+  match smatch.s with
+    | SMatch(exps, branches) -> {smatch with s=SMatch(exps, CL.map unify_branch branches)}
+    | _ -> error "[match_of_if_new] constructed a non smatch in the process of merging smatches..."
+;;
+
+(* a new algorithm: convert each conjunction of the if expression 
+   into a match statement, then merge all the match statements together.  *)
+let rec process_new tds =
+    let v = 
+        object
+            inherit [_] s_map as super
+            method! visit_SIf ctx exp s1 s2 = 
+            (match_of_if_new exp 
+              (super#visit_statement ctx s1) 
+              (super#visit_statement ctx s2)).s
+        end
+    in
+    v#visit_tdecls () tds
+;;
+
+let process tds =
+  let old_result = process_old tds in
+  let new_result = process_new tds in
+  print_endline ("[IfToMatch] OLD RESULT");
+  print_endline (tdecls_to_string old_result);
+  print_endline ("[IfToMatch] NEW RESULT");
+  print_endline (tdecls_to_string new_result);
+  print_endline ("[IfToMatch] END");
+  new_result
+;;
+
 
 (* does the output program have the right form? *)
 let no_ifs_form ds = 
