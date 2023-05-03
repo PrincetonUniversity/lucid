@@ -1,0 +1,187 @@
+
+//Siphash constants
+const int key0 = 0x33323130;
+const int key1 = 0x42413938;
+const int c0 = 0x70736575;
+const int c1 = 0x6e646f6d;
+const int c2 = 0x6e657261;
+const int c3 = 0x79746573;
+const int s0 = 0x43415445;
+const int s1 = 0x2C255655;
+const int s2 = 0x5D574351;
+const int s3 = 0x3B355C4B;
+
+const int <<9>> SERVER_PORT = 128; //jc5
+
+//Callback types: different things to do after hash is calculated
+const int<<8>> Callback_SYNACK = 0; 
+const int<<8>> Callback_TAGACK = 1; 
+const int <<32>> MAX_SYNCOOKIE_AGE = 3; 
+
+//Bloom Filter arrays 
+//NOTE: it seems the interpreter has a hard time with array lengths of 2^16, use 2^10 for now 
+global Array.t<<1>> bf_arr1 = Array.create(1024); 
+global Array.t<<1>> bf_arr2 = Array.create(1024); 
+
+//Timestamp delta array 
+global Array.t<<32>> ts_delta_arr = Array.create(1);
+
+
+entry event iptcp_to_server_syn(int<<32>> src, int<<32>> dst, int<<16>> src_port, int<<16>> dst_port, int<<32>> seq_no);
+
+//Local events 
+event siphash_intermediate(int<<32>> src, int<<32>> dst, int<<16>> src_port, int<<16>> dst_port, int<<32>> _seq_no, int<<32>> _ack_no, int<<32>> cookie_time,  
+	int<<32>> v0, int<<32>> v1, int<<32>> v2, int<<32>> v3, 
+	int<<32>> a0, int<<32>> a1, int<<32>> a2, int<<32>> a3,
+	int<<8>> round, int<<8>> callback_type, int<<8>> egr_port);
+
+//Exit events 
+exit event iptcp_craft_out(
+        int<<32>> src, int<<32>> dst, int<<16>> src_port, int<<16>> dst_port,
+        int<<32>> seq_no, int<<32>> ack_no);
+
+//Handlers
+handle iptcp_craft_out_dummy(
+        int<<32>> src, int<<32>> dst, int<<16>> src_port, int<<16>> dst_port,
+        int<<32>> seq_no, int<<32>> ack_no){
+    printf("Dummy.");
+}
+
+handle  siphash_intermediate(int<<32>> src, int<<32>> dst, int<<16>> src_port, int<<16>> dst_port, int<<32>> _seq_no, int<<32>> _ack_no, int<<32>> cookie_time, 
+	int<<32>> v0, int<<32>> v1, int<<32>> v2, int<<32>> v3, 
+	int<<32>> a0, int<<32>> a1, int<<32>> a2, int<<32>> a3,
+	int<<8>> round, int<<8>> callback_type, int<<8>> egr_port){
+
+	//first time through, initialize internal variables and get timestamp count  
+	if(round==0){
+		v0 = key0 ^^ c0;
+		v1 = key1 ^^ c1;
+		v2 = key0 ^^ c2;
+		v3 = key1 ^^ c3; 	
+	}
+
+	if(round==0||round==1){
+		a0=hash<<32>>(1, src);
+	}else if(round==2||round==3){
+		a0=hash<<32>>(1,dst);
+	}else if (round==4||round==5){
+		a0=hash<<32>>(1,src_port, dst_port);
+	}else if (round==6||round==7){
+		a0=hash<<32>>(1,_seq_no);
+	}
+	int msg_var=a0;
+        
+	int<<32>> r_ack_no = hash<<32>>(1,_ack_no);
+
+
+	if(round==13 && callback_type==Callback_TAGACK && (cookie_time==0 ||cookie_time==1)){//send tagged ACK
+                generate iptcp_craft_out(
+                                src,dst,src_port,dst_port,
+                                //simply pass along seq_no and ack_no
+                                _seq_no, _ack_no);
+                generate iptcp_craft_out_dummy(
+                                src,dst,src_port,dst_port,
+                                //simply pass along seq_no and ack_no
+                                _seq_no, _ack_no);
+	}
+	else if(round==13 && callback_type==Callback_SYNACK){
+
+        	int seq_no_plus1 = _seq_no + 1;
+                int<<32>> cookie_out = hash<<32>>(1, cookie_time);
+
+                //reflect syn-ack back to client at port 9
+                generate iptcp_craft_out(
+                dst,src,dst_port,src_port,
+                cookie_out, seq_no_plus1);
+                generate iptcp_craft_out_dummy(
+                dst,src,dst_port,src_port,
+                cookie_out, seq_no_plus1);
+	}
+	else if(round==12){
+                a1 = v0^^v1;
+                a2 = v2^^v3;
+                a3 = a1^^a2;
+                int hash_value=hash<<32>>(1, a3);
+                cookie_time=hash_value+cookie_time;
+	}
+	else if(1==1){ //sipround processing for rounds 0 - 11
+
+        	if(round==0||round==2||round==4||round==6){
+                	v3=v3 ^^ a0;
+        	}
+        	else if(round==8){
+                	v2 = v2 ^^ 0xff;
+        	}
+
+                //one sipround
+                //sip_1
+                a0 = v0 + v1;
+                a2 = v2 + v3;
+                a1 = hash<<32>>(1, v1[26:0], v1[31:27]);
+                a3 = hash<<32>>(1, v1[23:0], v1[31:24]);
+                //sip_2
+                v1 = a1 ^^ a0; v3 = a3 ^^ a2; v0 = hash<<32>>(1, a0[15:0], a0[31:16]); v2 = a2;
+                //sip_3
+                a2 = v2 + v1; a0 = v0 + v3; a1 = hash<<32>>(1, v1[18:0], v1[31:19]); a3 = hash<<32>>(1,v3[24:0], v3[31:25]);
+        	//sip_4
+        	v1 = a1 ^^ a2; v3 = a3 ^^ a0; v2 = hash<<32>>(1, a2[15:0], a2[31:16]); //v0 = a0;//deferred with next xor
+	}
+
+        if(round==12 && callback_type==Callback_TAGACK){
+                cookie_time=r_ack_no - cookie_time; //NOTE new cookie subtracted from old cookie
+        }else
+        if(round==1||round==3||round==5||round==7){
+                v0=a0 ^^ msg_var;
+        }
+        else if(1==1){
+                v0=a0;
+        }
+
+    	if(round!=13){ // when round == 12, finalization calculation in round==12 (round==11 is last sip round)
+                generate siphash_intermediate(src,dst,src_port, dst_port,_seq_no,_ack_no,cookie_time,
+                        v0,v1,v2,v3,a0,a1,a2,a3,
+                        round+1,callback_type, egr_port);
+    	}
+}
+
+fun int read_c_time(){
+			int stored_d = Array.get(ts_delta_arr, 0);
+			int t  = (Sys.time() - stored_d);
+			//need to make upper bits zero
+			//int c_time = hash<<32>>(1, time[31:12]); 
+			return  t >>> 12;
+}
+
+
+handle iptcp_to_server_syn(int<<32>> src, int<<32>> dst, int<<16>> src_port, int<<16>> dst_port, int<<32>> seq_no){
+
+	int cookie_time = hash<<32>>(1, read_c_time() ); 
+
+		generate siphash_intermediate(src,dst,src_port,dst_port,
+			//seq_no, ack_no, time, v0,v1,v2,v3,a0,a1,a2,a3, round, callback  
+			seq_no, 0, cookie_time, 
+			0,0,0,0,0,0,0,0,
+			//return syn-ack through the port it arrived 
+			0, Callback_SYNACK, 0);
+}
+
+
+//Internal Bloom Filter helper functions 
+fun void add_to_filter (int<<10>> index1, int<<10>> index2){
+        //add to bf and then drop packet 
+        Array.set(bf_arr1, index1, 1); 
+        Array.set(bf_arr2, index2, 1);  
+}
+
+fun bool in_filter(int<<10>> index1, int<<10>> index2){
+        bool is_member = false; 
+        int<<1>> check1 = Array.get(bf_arr1, index1);
+        int<<1>> check2 = Array.get(bf_arr2, index2); 
+        
+	//element is not in BF if at least one index is 0, otherwise probably in BF     
+	is_member = (check1==1) && (check2==1);         
+
+	return is_member;     
+}
+
+
