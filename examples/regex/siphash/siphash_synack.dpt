@@ -26,45 +26,27 @@ global Array.t<<1>> bf_arr2 = Array.create(1024);
 //Timestamp delta array 
 global Array.t<<32>> ts_delta_arr = Array.create(1);
 
-//Entry events 
-entry event udp_from_server_time(int<<9>> igr_port, int server_time);
 
-entry event iptcp_to_server_syn(int<<9>> igr_port, int<<32>> src, int<<32>> dst, int<<16>> src_port, int<<16>> dst_port, int<<32>> seq_no);
-
-entry event iptcp_to_server_non_syn(int<<9>> igr_port, int<<32>> src, int<<32>> dst, int<<16>> src_port, int<<16>> dst_port, int<<32>> seq_no, int<<32>> ack_no, int<<1>> flag_ack);
-
-entry event iptcp_from_server_tagged(int<<9>> igr_port, int<<32>> src, int<<32>> dst, int<<16>> src_port, int<<16>> dst_port);
-
-entry event iptcp_from_server_non_tagged(int<<32>> dst);
-
-entry event non_tcp_in(int<<32>> dst); 
+entry event iptcp_to_server_syn(int<<32>> src, int<<32>> dst, int<<16>> src_port, int<<16>> dst_port, int<<32>> seq_no);
 
 //Local events 
 event siphash_intermediate(int<<32>> src, int<<32>> dst, int<<16>> src_port, int<<16>> dst_port, int<<32>> _seq_no, int<<32>> _ack_no, int<<32>> cookie_time,  
 	int<<32>> v0, int<<32>> v1, int<<32>> v2, int<<32>> v3, 
 	int<<32>> a0, int<<32>> a1, int<<32>> a2, int<<32>> a3,
-	int<<8>> round, int<<8>> callback_type, int<<9>> egr_port);
+	int<<8>> round, int<<8>> callback_type, int<<8>> egr_port);
 
 //Exit events 
 
-exit event iptcp_craft_out(int<<9>> egr_port,
+exit event iptcp_craft_out(
         int<<32>> src, int<<32>> dst, int<<16>> src_port, int<<16>> dst_port,
-        int<<32>> seq_no, int<<32>> ack_no, int<<4>> doff, int<<4>> res,
-        int<<1>>flag_cwr, int<<1>>flag_ece, int<<1>>flag_urg, int<<1>>flag_ack,
-        int<<1>>flag_psh, int<<1>>flag_rst, int<<1>>flag_syn, int<<1>>flag_fin,
-        int<<16>> urgent_ptr, int<<16>> tcp_total_len,
-        int<<4>> ip_version, int<<4>> ip_ihl, int<<8>> ip_tos, int<<16>> ip_total_len,
-        int<<16>> ip_id, int<<3>> ip_flags, int<<13>> ip_frag_offset, int<<8>> ip_ttl, int<<8>> ip_protocol);
-
-
-exit event forward_out(int<<9>> egr_port); 
+        int<<32>> seq_no, int<<32>> ack_no);
 
 //Handlers
 
 handle  siphash_intermediate(int<<32>> src, int<<32>> dst, int<<16>> src_port, int<<16>> dst_port, int<<32>> _seq_no, int<<32>> _ack_no, int<<32>> cookie_time, 
 	int<<32>> v0, int<<32>> v1, int<<32>> v2, int<<32>> v3, 
 	int<<32>> a0, int<<32>> a1, int<<32>> a2, int<<32>> a3,
-	int<<8>> round, int<<8>> callback_type, int<<9>> egr_port){
+	int<<8>> round, int<<8>> callback_type, int<<8>> egr_port){
 
 	//first time through, initialize internal variables and get timestamp count  
 	if(round==0){
@@ -89,14 +71,10 @@ handle  siphash_intermediate(int<<32>> src, int<<32>> dst, int<<16>> src_port, i
 
 
 	if(round==13 && callback_type==Callback_TAGACK && (cookie_time==0 ||cookie_time==1)){//send tagged ACK
-                generate iptcp_craft_out(SERVER_PORT,
+                generate iptcp_craft_out(
                                 src,dst,src_port,dst_port,
                                 //simply pass along seq_no and ack_no
-                                _seq_no, _ack_no,
-                                //doff, res, cwr,ece=1,urg,ack=1,psh,rst,syn,fin,urg_ptr, tcp_total_len
-                                5, 0, 0, 1, 0, 1, 0, 0, 0, 0, 0, 20,
-                                //ip_vers, ip_ihl, ip_tos, ip_total_len, ip_id, ip_flags, ip_frag_offset, ip_ttl, ip_prot
-                                4, 5, 0, 40, 1, 0, 0, 64, 6);
+                                _seq_no, _ack_no);
 	}
 	else if(round==13 && callback_type==Callback_SYNACK){
 
@@ -104,13 +82,9 @@ handle  siphash_intermediate(int<<32>> src, int<<32>> dst, int<<16>> src_port, i
                 int<<32>> cookie_out = hash<<32>>(1, cookie_time);
 
                 //reflect syn-ack back to client at port 9
-                generate iptcp_craft_out(egr_port,
+                generate iptcp_craft_out(
                 dst,src,dst_port,src_port,
-                cookie_out, seq_no_plus1,
-                //doff, res, cwr,ece,urg,ack=1,psh,rst,syn=1,fin,urg_ptr, tcp_total_len
-                5, 0, 0, 0, 0, 1, 0, 0, 1, 0, 0, 20,
-                //ip_vers, ip_ihl, ip_tos, ip_total_len, ip_id, ip_flags, ip_frag_offset, ip_ttl, ip_prot
-                4, 5, 0, 40, 1, 0, 0, 64, 6);
+                cookie_out, seq_no_plus1);
 	}
 	else if(round==12){
                 a1 = v0^^v1;
@@ -159,17 +133,6 @@ handle  siphash_intermediate(int<<32>> src, int<<32>> dst, int<<16>> src_port, i
     	}
 }
 
-handle udp_from_server_time(int<<9>> igr_port, int server_time){
-
-        //get delta between local time since prog started running, in nanoseconds, and server_time 
-        int delta_val = Sys.time() - server_time;
-
-        //save delta in register array to apply to future packets
-        Array.set(ts_delta_arr, 0, delta_val);
-
-}
-
-
 fun int read_c_time(){
 			int stored_d = Array.get(ts_delta_arr, 0);
 			int t  = (Sys.time() - stored_d);
@@ -179,7 +142,7 @@ fun int read_c_time(){
 }
 
 
-handle iptcp_to_server_syn(int<<9>> igr_port, int<<32>> src, int<<32>> dst, int<<16>> src_port, int<<16>> dst_port, int<<32>> seq_no){
+handle iptcp_to_server_syn(int<<32>> src, int<<32>> dst, int<<16>> src_port, int<<16>> dst_port, int<<32>> seq_no){
 
 	int cookie_time = hash<<32>>(1, read_c_time() ); 
 
@@ -188,7 +151,7 @@ handle iptcp_to_server_syn(int<<9>> igr_port, int<<32>> src, int<<32>> dst, int<
 			seq_no, 0, cookie_time, 
 			0,0,0,0,0,0,0,0,
 			//return syn-ack through the port it arrived 
-			0, Callback_SYNACK, igr_port);
+			0, Callback_SYNACK, 0);
 }
 
 
@@ -211,48 +174,3 @@ fun bool in_filter(int<<10>> index1, int<<10>> index2){
 }
 
 
-
-handle iptcp_to_server_non_syn(int<<9>> igr_port, int<<32>> src, int<<32>> dst, int<<16>> src_port, int<<16>> dst_port, int<<32>> seq_no, int<<32>> ack_no, int<<1>> flag_ack){
-	
-
-	//check if in BF, if yes, forward to server 
-        int<<10>> i1 = hash<<10>>(1, src, dst, src_port, dst_port); 
-        int<<10>> i2 = hash<<10>>(1, src, dst, src_port, dst_port); 
-        bool is_ongoing = in_filter(i1, i2); 
-
-	int c_time = hash<<32>>(1, read_c_time()); 
-        int _seq_no_minus1 = seq_no - 1;
-
-	if(is_ongoing){
-	  	generate forward_out(SERVER_PORT); 	
-	}
-	else if(flag_ack==1){
-		//otherwise for ACK packets not in BF: check cookie, drop or pass ACK' 	
-			generate siphash_intermediate(src,dst,src_port,dst_port, 
-                	        //seq_no, ack_no, time,v0,v1,v2,v3,a0,a1,a2,a3, round, callback
-                        	_seq_no_minus1, ack_no, c_time,0,0,0,0,0,0,0,0,0, Callback_TAGACK, SERVER_PORT);
-	}
-}
-
-handle iptcp_from_server_tagged(int<<9>> igr_port, int<<32>> src, int<<32>> dst, int<<16>> src_port, int<<16>> dst_port){
-        //tagged packet from server, add to BF
-        //note: original src/dest were already swapped by server module, so lookup in other direction is correct
-        int<<10>> index1 = hash<<10>>(1, src, dst, src_port, dst_port);
-        int<<10>> index2 = hash<<10>>(1, src, dst, src_port, dst_port);
-        add_to_filter(index1, index2); 
-        
-}
-
-handle iptcp_from_server_non_tagged(int<<32>> dst){
-	//handle routing 
-	int<<9>> e_port  = (int<<9>>) hash<<8>>(1, dst[31:24]); 
-	generate forward_out(e_port);
-}
-
-
-handle non_tcp_in(int<<32>> dst){
-     	//handle routing 
-	int<<9>> e_port  = (int<<9>>) hash<<8>>(1, dst[31:24]); 
-	generate forward_out(e_port);
-
-} 
