@@ -12,6 +12,7 @@ let process_prog builtin_tys ds =
   print_if_debug ds;
   print_if_verbose "-------Checking well-formedness---------";
   Wellformed.pre_typing_checks ds;
+  let time = Sys.time() in
   print_if_verbose "----------Elim alphabet-------";
   let ds = AlphabetElimination.process_prog ds in
   print_if_verbose "----------Elim spec-------";
@@ -19,6 +20,7 @@ let process_prog builtin_tys ds =
   print_if_debug ds;
   print_if_verbose "----------Elim regex-------";
   let ds = RegexElimination.process_prog ds in
+  Printf.printf "Time spent on synthesis is %f\n" (Sys.time() -. time);
   print_if_debug ds;
   print_if_verbose "---------typing1---------";
   let ds = Typer.infer_prog builtin_tys ds in

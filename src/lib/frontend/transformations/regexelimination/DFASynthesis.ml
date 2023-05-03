@@ -248,7 +248,6 @@ let make_init_constraints ctx regact =
   List.append pred_inits arith_inits
 
 let synthesize id dfa = 
-  let time = Sys.time() in
   let cfg = [("model", "true"); ("proof", "false")] in
   let ctx = mk_context cfg in
   let sim = Tactic.mk_tactic ctx "simplify" in
@@ -275,7 +274,7 @@ let synthesize id dfa =
     Solver.add solver (make_transition_constraints ctx regacts pre_state whichop_pair f g post_state) in
   Transition.iter add_transition dfa.transition;
   let stat = (Solver.check solver []) in
-  Printf.printf "Status is %s. Time spent on synthesis is %f\n" (Solver.string_of_status stat) (Sys.time() -. time);
+  Printf.printf "Status is %s." (Solver.string_of_status stat);
   let model = Solver.get_model solver in
     (match model with 
     | None -> Console.error "Failed to find DFA synthesis model."
