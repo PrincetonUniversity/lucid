@@ -1,0 +1,194 @@
+entry event ip_in(int<<32>> sip,int<<32>> cip,int<<16>> sport,int<<16>> dport) ;
+
+exit event port_knocking_matched(int<<32>> sip,int<<32>> dip) ;
+
+memop re12351sdaCheckThenSet(int<<'memvalsize~0>> memval,int<<'newvalsize~0>> newval)
+ {if (memval==0) {
+return newval;
+} else {
+return memval;
+}}
+
+global Array.t<<8>> mysre = Array.create(1024);
+
+
+memop mysrememop0(int<<8>> memval,int<<8>> f,int<<8>> g)
+ {bool b1 = memval+f==2;
+bool b2 = memval+0>5;
+if (b1||b2) {
+cell1 = g^^8;
+} else {
+if (true) {
+cell1 = f+8;
+} 
+}
+if (true) {
+return cell1;
+} }
+
+memop mysrememop1(int<<8>> memval,int<<8>> f,int<<8>> g)
+ {bool b1 = memval+f<8;
+bool b2 = memval+g<7;
+if (b1||b2) {
+cell1 = 5+memval;
+} else {
+if (true) {
+cell1 = g|7;
+} 
+}
+if (true) {
+return cell1;
+} }
+
+memop mysrememop2(int<<8>> memval,int<<8>> f,int<<8>> g)
+ {bool b1 = memval+0>8;
+bool b2 = memval+g>8;
+if (b1&&b2) {
+cell1 = f+1;
+} else {
+if (true) {
+cell1 = 5+memval;
+} 
+}
+if (true) {
+return cell1;
+} }
+
+memop mysrememop3(int<<8>> memval,int<<8>> f,int<<8>> g)
+ {bool b1 = memval+g!=1;
+bool b2 = memval+f>7;
+if (b1&&b2) {
+cell1 = g+0;
+} else {
+if (true) {
+cell1 = 5+memval;
+} 
+}
+if (true) {
+return cell1;
+} }
+
+event mysrereset(int<<32>> mysreidx) ;
+
+handle mysrereset(int<<32>> mysreidx) {
+Array.set(mysre,mysreidx,0);
+}
+
+handle ip_in(int<<32>> sip,int<<32>> cip,int<<16>> sport,int<<16>> dport) {
+printf "Doing nothing!" ;
+if ({bool ansmysre = true;
+int<<'idxvalsize~0>> mysreidx = (int<<32>>)hash<<10>>(13,sip,cip);
+int<<8>> f_synthesized_meta_varmysre = 0;
+int<<8>> g_synthesized_meta_varmysre = 0;
+int<<8>> memop_synthesized_meta_varmysre = 0;
+int<<'predsizeval0~0>> pred0mysre = sport-1234;
+int<<'predsizeval1~0>> pred1mysre = sport-5678;
+int<<'predsizeval2~0>> pred2mysre = sport-9012;
+int<<'predsizeval3~0>> pred3mysre = sport-3456;
+match (pred0mysre,pred1mysre,pred2mysre,pred3mysre) with 
+| 0,0,0,0 -> {
+f_synthesized_meta_varmysre = 246;
+g_synthesized_meta_varmysre = 247;
+memop_synthesized_meta_varmysre = 2;
+}
+| 0,0,0,_ -> {
+f_synthesized_meta_varmysre = 255;
+g_synthesized_meta_varmysre = 246;
+memop_synthesized_meta_varmysre = 1;
+}
+| 0,0,_,0 -> {
+f_synthesized_meta_varmysre = 7;
+g_synthesized_meta_varmysre = 247;
+memop_synthesized_meta_varmysre = 1;
+}
+| 0,_,0,0 -> {
+f_synthesized_meta_varmysre = 0;
+g_synthesized_meta_varmysre = 244;
+memop_synthesized_meta_varmysre = 1;
+}
+| _,0,0,0 -> {
+f_synthesized_meta_varmysre = 246;
+g_synthesized_meta_varmysre = 252;
+memop_synthesized_meta_varmysre = 2;
+}
+| 0,0,_,_ -> {
+f_synthesized_meta_varmysre = 250;
+g_synthesized_meta_varmysre = 243;
+memop_synthesized_meta_varmysre = 1;
+}
+| 0,_,0,_ -> {
+f_synthesized_meta_varmysre = 255;
+g_synthesized_meta_varmysre = 245;
+memop_synthesized_meta_varmysre = 1;
+}
+| 0,_,_,0 -> {
+f_synthesized_meta_varmysre = 7;
+g_synthesized_meta_varmysre = 245;
+memop_synthesized_meta_varmysre = 1;
+}
+| _,0,0,_ -> {
+f_synthesized_meta_varmysre = 252;
+g_synthesized_meta_varmysre = 247;
+memop_synthesized_meta_varmysre = 3;
+}
+| _,0,_,0 -> {
+f_synthesized_meta_varmysre = 4;
+g_synthesized_meta_varmysre = 247;
+memop_synthesized_meta_varmysre = 3;
+}
+| _,_,0,0 -> {
+f_synthesized_meta_varmysre = 246;
+g_synthesized_meta_varmysre = 33;
+memop_synthesized_meta_varmysre = 2;
+}
+| 0,_,_,_ -> {
+f_synthesized_meta_varmysre = 89;
+g_synthesized_meta_varmysre = 244;
+memop_synthesized_meta_varmysre = 1;
+}
+| _,0,_,_ -> {
+f_synthesized_meta_varmysre = 119;
+g_synthesized_meta_varmysre = 247;
+memop_synthesized_meta_varmysre = 3;
+}
+| _,_,0,_ -> {
+f_synthesized_meta_varmysre = 2;
+g_synthesized_meta_varmysre = 255;
+memop_synthesized_meta_varmysre = 0;
+}
+| _,_,_,0 -> {
+f_synthesized_meta_varmysre = 253;
+g_synthesized_meta_varmysre = 255;
+memop_synthesized_meta_varmysre = 0;
+}
+| _,_,_,_ -> {
+f_synthesized_meta_varmysre = 239;
+g_synthesized_meta_varmysre = 255;
+memop_synthesized_meta_varmysre = 0;
+}
+int<<8>> resmysre = 0;
+match memop_synthesized_meta_varmysre with 
+| 0 -> {
+resmysre = Array.update_complex(mysre,mysreidx,mysrememop0,f_synthesized_meta_varmysre,g_synthesized_meta_varmysre,0);
+}
+| 1 -> {
+resmysre = Array.update_complex(mysre,mysreidx,mysrememop1,f_synthesized_meta_varmysre,g_synthesized_meta_varmysre,0);
+}
+| 2 -> {
+resmysre = Array.update_complex(mysre,mysreidx,mysrememop2,f_synthesized_meta_varmysre,g_synthesized_meta_varmysre,0);
+}
+| 3 -> {
+resmysre = Array.update_complex(mysre,mysreidx,mysrememop3,f_synthesized_meta_varmysre,g_synthesized_meta_varmysre,0);
+}
+printf "state machine transitioned to %d" resmysre;
+match resmysre with 
+| 20 -> {
+ansmysre = true;
+}
+| _ -> {
+ansmysre = false;
+}; return ansmysre}) {
+generate port_knocking_matched(sip,cip);
+generate mysrereset(mysreidx);
+} 
+}

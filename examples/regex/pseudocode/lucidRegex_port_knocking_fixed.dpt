@@ -11,7 +11,7 @@ DETECT {
 } =>
 {
     generate port_knocking_matched(sip, cip);
-    reset(mysre, mysreidx);
+    //reset(mysre, mysreidx);
 };
 
 handle ip_in(int sip, int cip, int<<16>> sport, int<<16>> dport) {
