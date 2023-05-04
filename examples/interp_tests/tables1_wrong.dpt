@@ -23,7 +23,7 @@ global ftbl_t ftbl = table_create<ftbl_t>((hit_acn, miss_acn), 1024, miss_acn())
 
 event do_match(int<<32>> s) {
   int a = 1000;
-  res_t tbl_out = table_match(ftbl, (s), (a)); 
+  res_t tbl_out = table_match(ftbl, (s), (a));
 
   printf("return of table match: %d", tbl_out#val);
   if (tbl_out#is_hit) {
@@ -31,7 +31,7 @@ event do_match(int<<32>> s) {
     res_t tbl_out2 = table_match(ftbl, (1), (2));
   }
   else {
-    printf ("table MISS. Installing hit_acn(3) for current key. ");    
+    printf ("table MISS. Installing hit_acn(3) for current key. ");
     table_install(ftbl, {(s) -> hit_acn(3)});
   }
 }
