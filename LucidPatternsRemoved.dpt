@@ -1,0 +1,119 @@
+entry event DHCP_ack(int<<32>> sip,int<<32>> cip,int<<32>> smac,int<<32>> cmac,int<<32>> lease_time) ;
+
+entry event ip_packet_fwd(int<<32>> sip,int<<32>> cip,int<<32>> smac,int<<32>> cmac) ;
+
+exit event DHCP_continue() ;
+
+exit event DHCP_error() ;
+
+memop re12351sdaCheckThenSet(int<<'memvalsize~0>> memval,int<<'newvalsize~0>> newval)
+ {if (memval==0) {
+return newval;
+} else {
+return memval;
+}}
+
+global Array.t<<32>> assigned_var_msreassigned = Array.create(1024);
+
+
+global Array.t<<8>> msre = Array.create(1024);
+
+
+memop msrememop2(int<<8>> memval,int<<8>> f,int<<8>> g)
+ {bool b1 = memval+f<4;
+bool b2 = f!=1;
+if (b1||b2) {
+cell1 = 0+memval;
+} else {
+if (true) {
+cell1 = g+7;
+} 
+}
+if (true) {
+return cell1;
+} }
+
+memop msrememop3(int<<8>> memval,int<<8>> f,int<<8>> g)
+ {bool b1 = memval+g>2;
+bool b2 = memval+f>7;
+if (b1&&b2) {
+cell1 = g+1;
+} else {
+if (true) {
+cell1 = 4+1;
+} 
+}
+if (true) {
+return cell1;
+} }
+
+handle DHCP_ack(int<<32>> sip,int<<32>> cip,int<<32>> smac,int<<32>> cmac,int<<32>> lease_time) {
+printf "Doing nothing" ;
+if ({bool ansmsre = true;
+int<<'idxvalsize~0>> msreidx = (int<<32>>)hash<<10>>(13,cmac);
+int<<8>> f_synthesized_meta_varmsre = 0;
+int<<8>> g_synthesized_meta_varmsre = 0;
+int<<8>> memop_synthesized_meta_varmsre = 0;
+int<<32>> assigned = Array.setm(assigned_var_msreassigned,msreidx,re12351sdaCheckThenSet,cip);
+f_synthesized_meta_varmsre = 8;
+g_synthesized_meta_varmsre = 253;
+memop_synthesized_meta_varmsre = 3;
+int<<8>> resmsre = 0;
+match memop_synthesized_meta_varmsre with 
+| 2 -> {
+resmsre = Array.update_complex(msre,msreidx,msrememop2,f_synthesized_meta_varmsre,g_synthesized_meta_varmsre,0);
+}
+| 3 -> {
+resmsre = Array.update_complex(msre,msreidx,msrememop3,f_synthesized_meta_varmsre,g_synthesized_meta_varmsre,0);
+}
+printf "state machine transitioned to %d" resmsre;
+match resmsre with 
+| 254 -> {
+ansmsre = true;
+}
+| _ -> {
+ansmsre = false;
+}; return ansmsre}) {
+printf "Doing nothing" ;
+} 
+}
+
+handle ip_packet_fwd(int<<32>> sip,int<<32>> cip,int<<32>> smac,int<<32>> cmac) {
+printf "Doing nothing" ;
+if ({bool ansmsre = true;
+int<<'idxvalsize~0>> msreidx = (int<<32>>)hash<<10>>(13,smac);
+int<<8>> f_synthesized_meta_varmsre = 0;
+int<<8>> g_synthesized_meta_varmsre = 0;
+int<<8>> memop_synthesized_meta_varmsre = 0;
+int<<32>> assigned = Array.get(assigned_var_msreassigned,msreidx);
+int<<'predsizeval0~0>> pred0msre = sip-assigned;
+match pred0msre with 
+| 0b1******************************* -> {
+f_synthesized_meta_varmsre = 0;
+g_synthesized_meta_varmsre = 177;
+memop_synthesized_meta_varmsre = 2;
+}
+| _ -> {
+f_synthesized_meta_varmsre = 1;
+g_synthesized_meta_varmsre = 254;
+memop_synthesized_meta_varmsre = 2;
+}
+int<<8>> resmsre = 0;
+match memop_synthesized_meta_varmsre with 
+| 2 -> {
+resmsre = Array.update_complex(msre,msreidx,msrememop2,f_synthesized_meta_varmsre,g_synthesized_meta_varmsre,0);
+}
+| 3 -> {
+resmsre = Array.update_complex(msre,msreidx,msrememop3,f_synthesized_meta_varmsre,g_synthesized_meta_varmsre,0);
+}
+printf "state machine transitioned to %d" resmsre;
+match resmsre with 
+| 254 -> {
+ansmsre = true;
+}
+| _ -> {
+ansmsre = false;
+}; return ansmsre}) {
+printf "Doing nothing" ;
+} 
+}

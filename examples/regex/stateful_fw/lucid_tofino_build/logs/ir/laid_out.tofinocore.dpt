@@ -1,0 +1,194 @@
+entry event ip_pkt(int<<48>> ip_pkt_eth_0,int<<48>> ip_pkt_eth_1,int<<16>> ip_pkt_eth_2,int<<8>> ip_pkt_ip_0,int<<8>> ip_pkt_ip_1,int<<16>> ip_pkt_ip_2,int<<16>> ip_pkt_ip_3,int<<16>> ip_pkt_ip_4,int<<8>> ip_pkt_ip_5,int<<8>> ip_pkt_ip_6,int<<16>> ip_pkt_ip_7,int<<32>> ip_pkt_src,int<<32>> ip_pkt_dst);
+global Array.t<<32>> assigned_var_allowedstart_time = Array.create(4096);
+
+global Array.t<<8>> allowed = Array.create(4096);
+
+memop allowedmemop0(int<<8>> memval,int<<8>> f,int<<8>> g)
+ {{
+b1=(b1,0<0);
+b2=(b2,memval+f>8)
+cell1=(b1&&b2 -> 0|0), (!b1&&b2 -> g|8)
+cell2=None, None
+
+ret=(true -> cell1)
+}}
+memop allowedmemop1(int<<8>> memval,int<<8>> f,int<<8>> g)
+ {{
+b1=(b1,memval+f<8);
+b2=(b2,memval+g==8)
+cell1=(b1||b2 -> f|0), (!b1&&!b2 -> 0|memval)
+cell2=None, None
+
+ret=(true -> cell1)
+}}
+handle ip_pkt(int<<48>> ip_pkt_eth_0,int<<48>> ip_pkt_eth_1,int<<16>> ip_pkt_eth_2,int<<8>> ip_pkt_ip_0,int<<8>> ip_pkt_ip_1,int<<16>> ip_pkt_ip_2,int<<16>> ip_pkt_ip_3,int<<16>> ip_pkt_ip_4,int<<8>> ip_pkt_ip_5,int<<8>> ip_pkt_ip_6,int<<16>> ip_pkt_ip_7,int<<32>> ip_pkt_src,int<<32>> ip_pkt_dst) {
+
+}
+// shared locals:
+int<<48>> pre_gen_copy_ip_pkt_eth_0;
+int<<48>> pre_gen_copy_ip_pkt_eth_1;
+int<<16>> pre_gen_copy_ip_pkt_eth_2;
+int<<8>> pre_gen_copy_ip_pkt_ip_0;
+int<<8>> pre_gen_copy_ip_pkt_ip_1;
+int<<16>> pre_gen_copy_ip_pkt_ip_2;
+int<<16>> pre_gen_copy_ip_pkt_ip_3;
+int<<16>> pre_gen_copy_ip_pkt_ip_4;
+int<<8>> pre_gen_copy_ip_pkt_ip_5;
+int<<8>> pre_gen_copy_ip_pkt_ip_6;
+int<<16>> pre_gen_copy_ip_pkt_ip_7;
+int<<32>> pre_gen_copy_ip_pkt_src;
+int<<32>> pre_gen_copy_ip_pkt_dst;
+// MAIN HANDLER 
+handler main(...){
+// Stage 0
+match event_id with 
+| 1 -> {
+int<<48>> ip_pkt_input_arg_0 = ip_pkt_eth_0;
+int<<48>> ip_pkt_input_arg_1 = ip_pkt_eth_1;
+int<<16>> ip_pkt_input_arg_2 = ip_pkt_eth_2;
+int<<8>> ip_pkt_input_arg_3 = ip_pkt_ip_0;
+int<<8>> ip_pkt_input_arg_4 = ip_pkt_ip_1;
+int<<16>> ip_pkt_input_arg_5 = ip_pkt_ip_2;
+int<<16>> ip_pkt_input_arg_6 = ip_pkt_ip_3;
+int<<16>> ip_pkt_input_arg_7 = ip_pkt_ip_4;
+int<<8>> ip_pkt_input_arg_8 = ip_pkt_ip_5;
+int<<8>> ip_pkt_input_arg_9 = ip_pkt_ip_6;
+int<<16>> ip_pkt_input_arg_10 = ip_pkt_ip_7;
+int<<32>> ip_pkt_input_arg_11 = ip_pkt_src;
+int<<32>> ip_pkt_input_arg_12 = ip_pkt_dst;
+int<<12>> to_immediate_tmp = hash<<12>>(19,ip_pkt_src,ip_pkt_dst);
+int<<1>> ansallowed = 1;
+int<<8>> f_synthesized_meta_varallowed = 0;
+int<<8>> g_synthesized_meta_varallowed = 0;
+int<<8>> memop_synthesized_meta_varallowed = 0;
+int<<32>> precompute = Sys.time();
+int<<32>> to_immediate_tmp1452 = Sys.time();
+int<<8>> pred1allowed = ip_pkt_ip_1-1;
+int<<8>> resallowed = 0;
+}
+| _ -> {
+
+}
+// Stage 1
+match event_id with 
+| 1 -> {
+int<<32>> idx = (int<<32>>)to_immediate_tmp;
+}
+| _ -> {
+
+}
+// Stage 2
+match event_id with 
+| 1 -> {
+int<<32>> allowedidx = idx;
+}
+| _ -> {
+
+}
+// Stage 3
+match event_id with 
+| 1 -> {
+int<<32>> start_time = Array.update_complex(assigned_var_allowedstart_time,allowedidx,re12351sdaCheckThenSet,precompute,0,0);
+}
+| _ -> {
+
+}
+// Stage 4
+match event_id with 
+| 1 -> {
+int<<32>> to_immediate_tmp1453 = to_immediate_tmp1452-start_time;
+}
+| _ -> {
+
+}
+// Stage 5
+match event_id with 
+| 1 -> {
+int<<32>> pred0allowed = to_immediate_tmp1453-10000;
+}
+| _ -> {
+
+}
+// Stage 6
+match (pred1allowed,pred0allowed,event_id) with 
+| 0,0b1*******************************,1 -> {
+memop_synthesized_meta_varallowed = 1;
+g_synthesized_meta_varallowed = 27;
+f_synthesized_meta_varallowed = 1;
+}
+| _,0b1*******************************,1 -> {
+memop_synthesized_meta_varallowed = 1;
+g_synthesized_meta_varallowed = 213;
+f_synthesized_meta_varallowed = 1;
+}
+| 0,_,1 -> {
+memop_synthesized_meta_varallowed = 1;
+g_synthesized_meta_varallowed = 8;
+f_synthesized_meta_varallowed = 62;
+}
+| _,_,1 -> {
+memop_synthesized_meta_varallowed = 0;
+g_synthesized_meta_varallowed = 54;
+f_synthesized_meta_varallowed = 56;
+}
+| _,_,_ -> {
+
+}
+// Stage 7
+match (memop_synthesized_meta_varallowed,event_id) with 
+| 0,1 -> {
+resallowed = Array.update_complex(allowed,allowedidx,allowedmemop0,f_synthesized_meta_varallowed,g_synthesized_meta_varallowed,0);
+}
+| 1,1 -> {
+resallowed = Array.update_complex(allowed,allowedidx,allowedmemop1,f_synthesized_meta_varallowed,g_synthesized_meta_varallowed,0);
+}
+| _,1 -> {
+
+}
+| _,_ -> {
+
+}
+// Stage 8
+match (resallowed,event_id) with 
+| 1,1 -> {
+ansallowed = 1;
+}
+| _,1 -> {
+ansallowed = 0;
+}
+| _,_ -> {
+
+}
+// Stage 9
+match (ansallowed,event_id) with 
+| 1,1 -> {
+generate_port (100, ip_pkt(ip_pkt_input_arg_0,ip_pkt_input_arg_1,ip_pkt_input_arg_2,ip_pkt_input_arg_3,ip_pkt_input_arg_4,ip_pkt_input_arg_5,ip_pkt_input_arg_6,ip_pkt_input_arg_7,ip_pkt_input_arg_8,ip_pkt_input_arg_9,ip_pkt_input_arg_10,ip_pkt_input_arg_11,ip_pkt_input_arg_12));
+pre_gen_copy_ip_pkt_dst = ip_pkt_dst;
+pre_gen_copy_ip_pkt_src = ip_pkt_src;
+pre_gen_copy_ip_pkt_ip_7 = ip_pkt_ip_7;
+pre_gen_copy_ip_pkt_ip_6 = ip_pkt_ip_6;
+pre_gen_copy_ip_pkt_ip_5 = ip_pkt_ip_5;
+pre_gen_copy_ip_pkt_ip_4 = ip_pkt_ip_4;
+pre_gen_copy_ip_pkt_ip_3 = ip_pkt_ip_3;
+pre_gen_copy_ip_pkt_ip_2 = ip_pkt_ip_2;
+pre_gen_copy_ip_pkt_ip_1 = ip_pkt_ip_1;
+pre_gen_copy_ip_pkt_ip_0 = ip_pkt_ip_0;
+pre_gen_copy_ip_pkt_eth_2 = ip_pkt_eth_2;
+pre_gen_copy_ip_pkt_eth_1 = ip_pkt_eth_1;
+pre_gen_copy_ip_pkt_eth_0 = ip_pkt_eth_0;
+}
+| _,1 -> {
+Sys.invalidate.ip_pkt(ip_pkt_eth_0,ip_pkt_eth_1,ip_pkt_eth_2,ip_pkt_ip_0,ip_pkt_ip_1,ip_pkt_ip_2,ip_pkt_ip_3,ip_pkt_ip_4,ip_pkt_ip_5,ip_pkt_ip_6,ip_pkt_ip_7,ip_pkt_src,ip_pkt_dst);
+}
+| _,_ -> {
+
+}}
+memop re12351sdaCheckThenSet(int<<32>> memval,int<<32>> newval,int<<32>> unused_1455)
+ {{
+b1=None;
+b2=(mbool_1454,memval==0)
+cell1=None, None
+cell2=(mbool_1454 -> newval), (!mbool_1454 -> memval)
+
+ret=(true -> cell2)
+}}

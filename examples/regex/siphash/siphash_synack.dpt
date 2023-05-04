@@ -45,10 +45,6 @@ exit event iptcp_craft_out(
 event iptcp_craft_out_dummy(
         int<<32>> src, int<<32>> dst, int<<16>> src_port, int<<16>> dst_port,
         int<<32>> seq_no, int<<32>> ack_no);
-
-
-
-
 //====== Added RegEx ======
 sre<<4096>> re_check = 
 IDX = {

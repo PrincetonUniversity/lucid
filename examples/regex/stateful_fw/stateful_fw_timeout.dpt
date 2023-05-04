@@ -14,9 +14,6 @@ const int FALSE = 0;
 const int seed1_val = 10398247;
 const int seed2_val = 1295981879;
 
-// entry events
-entry event ip_packet_generic(int smac, int dmac, int sip, int cip, int udp_dport, int<<8>> payload_1, int payload_2);
-
 event request_packet (int client_ip, int server_ip);
 event response_packet (int server_ip, int client_ip);
 // exit events
@@ -24,44 +21,39 @@ exit event request_continue (int src_ip, int dst_ip);
 exit event response_continue (int src_ip, int dst_ip);
 // Event to kick off background threads
 event init ();
-
+alphabet alph = request_packet, response_packet;
+re<<1024>> no_timeout over alph = 
+            request_packet(@int start_time=Sys.time())
+            .(request_packet 
+              || response_packet(Sys.time() - start_time < 10000))*
+            .response_packet(!(Sys.time() - start_time < 10000));
 // persistent state
 // Stores client, server ip pairs in two stages
 global CuckooTimeout.t<<2, 10, 2>> firewall = CuckooTimeout.create(num_entries, [seed1_val; seed2_val]);
 
-alphabet drop_checking = request_continue, response_continue;
-re<<1024>> no_drop_legit over drop_checking = request_continue;
-exit event bugDetected(int client_ip, int server_ip);
 
-handle ip_packet_generic(int smac, int dmac, int sip, int cip, int udp_dport, int<<8>> payload_1, int payload_2){
-	if((udp_dport==1234) && (payload_1 == 56)){
-		generate request_packet(cip, sip);
-	}else{
-		generate response_packet(sip,cip);	
-	}
-}
 // Packet from local client to remote server
 // Add the flow to the firewall if it's not already there
 handle request_packet(int client_ip, int server_ip) {
+  int idx = (int<<32>>)hash<<10>>(123, client_ip, server_ip);
+  if (transition(no_timeout, idx)) {
+    printf ("Bug detected!");
+  }
   int time = Sys.time();
 	if (CuckooTimeout.mem_touch(firewall, [client_ip; server_ip], time) == false) {
     generate CuckooTimeout.insert(firewall, [client_ip; server_ip], time);
   }
   generate request_continue(client_ip, server_ip);
-  int idx = (int<<32>>)hash<<10>>(123, client_ip, server_ip);
-  if (transition(no_drop_legit, idx, request_continue(client_ip, server_ip))) {
-    generate bugDetected(client_ip, server_ip);
-  }
 }
 
 // packet from remote server to local client
 handle response_packet(int server_ip, int client_ip) {
+  int idx = (int<<32>>)hash<<10>>(123, client_ip, server_ip);
+  if (transition(no_timeout, idx)) {
+    printf ("Bug detected!");
+  }
   if (CuckooTimeout.mem(firewall, [client_ip; server_ip])) {
-    generate response_continue(client_ip, server_ip); // Or maybe the other way around?
-    int idx = (int<<32>>)hash<<10>>(123, client_ip, server_ip);
-    if (transition(no_drop_legit, idx, response_continue(client_ip, server_ip))) {
-      generate bugDetected(client_ip, server_ip);
-    }
+    generate response_continue(client_ip, server_ip); // Or maybe the other way around? 
   }
 }
 

@@ -1,0 +1,31 @@
+type eth_hdr = {
+    int<<48>> dmac; 
+    int<<48>> smac; 
+    int<<16>> etype;
+}
+type ip_hdr_prefix = {
+    int<<8>> v_ihl; 
+    int<<8>> tos;
+    int<<16>> len;
+    int<<16>> id;
+    int<<16>> flags_frag;
+    int<<8>> ttl;
+    int<<8>> proto;
+    int<<16>> csum;
+}
+entry event ip_pkt (eth_hdr eth, ip_hdr_prefix ip, int<<32>> src, int<<32>> dst);
+
+const int<<8>> TOS_TRUSTED = 1;
+const int<<9>> out_port = 100;
+
+re<<4096>> allowed = ip_pkt (@int start_time = Sys.time(); ip#tos == TOS_TRUSTED)
+    .(ip_pkt(ip#tos == TOS_TRUSTED) 
+        || ((ip_pkt(!(ip#tos == TOS_TRUSTED)) 
+            && ip_pkt(Sys.time() - start_time < 10000))))*;
+
+handle ip_pkt (eth_hdr eth, ip_hdr_prefix ip, int<<32>> src, int<<32>> dst) {
+    int idx = (int<<32>>)hash<<12>>(19, src, dst);
+    if (transition(allowed, idx)) {
+        generate_port(out_port, this);
+    }
+}

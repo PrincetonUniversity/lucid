@@ -1,0 +1,437 @@
+entry event ip_pkt(int<<48>> ip_pkt_eth_0,int<<48>> ip_pkt_eth_1,int<<16>> ip_pkt_eth_2,int<<8>> ip_pkt_ip_0,int<<8>> ip_pkt_ip_1,int<<16>> ip_pkt_ip_2,int<<16>> ip_pkt_ip_3,int<<16>> ip_pkt_ip_4,int<<8>> ip_pkt_ip_5,int<<8>> ip_pkt_ip_6,int<<16>> ip_pkt_ip_7,int<<32>> ip_pkt_src,int<<32>> ip_pkt_dst);
+global Array.t<<32>> assigned_var_allowedstart_time = Array.create(4096);
+
+global Array.t<<8>> allowed = Array.create(4096);
+
+memop allowedmemop0(int<<8>> memval,int<<8>> f,int<<8>> g)
+ {{
+b1=(b1,0<0);
+b2=(b2,memval+f>8)
+cell1=(b1&&b2 -> 0|0), (!b1&&b2 -> g|8)
+cell2=None, None
+
+ret=(true -> cell1)
+}}
+memop allowedmemop1(int<<8>> memval,int<<8>> f,int<<8>> g)
+ {{
+b1=(b1,memval+f<8);
+b2=(b2,memval+g==8)
+cell1=(b1||b2 -> f|0), (!b1&&!b2 -> 0|memval)
+cell2=None, None
+
+ret=(true -> cell1)
+}}
+handle ip_pkt(int<<48>> ip_pkt_eth_0,int<<48>> ip_pkt_eth_1,int<<16>> ip_pkt_eth_2,int<<8>> ip_pkt_ip_0,int<<8>> ip_pkt_ip_1,int<<16>> ip_pkt_ip_2,int<<16>> ip_pkt_ip_3,int<<16>> ip_pkt_ip_4,int<<8>> ip_pkt_ip_5,int<<8>> ip_pkt_ip_6,int<<16>> ip_pkt_ip_7,int<<32>> ip_pkt_src,int<<32>> ip_pkt_dst) {
+
+}
+// shared locals:
+int<<48>> pre_gen_copy_ip_pkt_eth_0;
+int<<48>> pre_gen_copy_ip_pkt_eth_1;
+int<<16>> pre_gen_copy_ip_pkt_eth_2;
+int<<8>> pre_gen_copy_ip_pkt_ip_0;
+int<<8>> pre_gen_copy_ip_pkt_ip_1;
+int<<16>> pre_gen_copy_ip_pkt_ip_2;
+int<<16>> pre_gen_copy_ip_pkt_ip_3;
+int<<16>> pre_gen_copy_ip_pkt_ip_4;
+int<<8>> pre_gen_copy_ip_pkt_ip_5;
+int<<8>> pre_gen_copy_ip_pkt_ip_6;
+int<<16>> pre_gen_copy_ip_pkt_ip_7;
+int<<32>> pre_gen_copy_ip_pkt_src;
+int<<32>> pre_gen_copy_ip_pkt_dst;
+// MAIN HANDLER 
+handler main(...){
+// Stage 0
+match event_id with 
+| 1 -> {
+labeledstmt_1();
+}
+| _ -> {
+labeledstmt_2();
+}
+// Stage 1
+match event_id with 
+| 1 -> {
+labeledstmt_3();
+}
+| _ -> {
+labeledstmt_4();
+}
+// Stage 2
+match event_id with 
+| 1 -> {
+labeledstmt_5();
+}
+| _ -> {
+labeledstmt_6();
+}
+// Stage 3
+match event_id with 
+| 1 -> {
+labeledstmt_7();
+}
+| _ -> {
+labeledstmt_8();
+}
+// Stage 4
+match event_id with 
+| 1 -> {
+labeledstmt_9();
+}
+| _ -> {
+labeledstmt_10();
+}
+// Stage 5
+match event_id with 
+| 1 -> {
+labeledstmt_11();
+}
+| _ -> {
+labeledstmt_12();
+}
+// Stage 6
+match (pred1allowed,pred0allowed,event_id) with 
+| 0,0b1*******************************,1 -> {
+labeledstmt_13();
+}
+| _,0b1*******************************,1 -> {
+labeledstmt_14();
+}
+| 0,_,1 -> {
+labeledstmt_15();
+}
+| _,_,1 -> {
+labeledstmt_16();
+}
+| _,_,_ -> {
+labeledstmt_17();
+}
+// Stage 7
+match (memop_synthesized_meta_varallowed,event_id) with 
+| 0,1 -> {
+labeledstmt_18();
+}
+| 1,1 -> {
+labeledstmt_19();
+}
+| _,1 -> {
+labeledstmt_20();
+}
+| _,_ -> {
+labeledstmt_21();
+}
+// Stage 8
+match (resallowed,event_id) with 
+| 1,1 -> {
+labeledstmt_22();
+}
+| _,1 -> {
+labeledstmt_23();
+}
+| _,_ -> {
+labeledstmt_24();
+}
+// Stage 9
+match (ansallowed,event_id) with 
+| 1,1 -> {
+labeledstmt_25();
+}
+| _,1 -> {
+labeledstmt_26();
+}
+| _,_ -> {
+labeledstmt_27();
+}}
+memop re12351sdaCheckThenSet(int<<32>> memval,int<<32>> newval,int<<32>> unused_1455)
+ {{
+b1=None;
+b2=(mbool_1454,memval==0)
+cell1=None, None
+cell2=(mbool_1454 -> newval), (!mbool_1454 -> memval)
+
+ret=(true -> cell2)
+}}
+labeled_statement labeledstmt_49{
+int<<8>> resallowed = 0;
+}
+labeled_statement labeledstmt_48{
+int<<8>> pred1allowed = ip_pkt_ip_1-1;
+}
+labeled_statement labeledstmt_47{
+int<<32>> to_immediate_tmp1452 = Sys.time();
+}
+labeled_statement labeledstmt_46{
+int<<32>> precompute = Sys.time();
+}
+labeled_statement labeledstmt_45{
+int<<8>> memop_synthesized_meta_varallowed = 0;
+}
+labeled_statement labeledstmt_44{
+int<<8>> g_synthesized_meta_varallowed = 0;
+}
+labeled_statement labeledstmt_43{
+int<<8>> f_synthesized_meta_varallowed = 0;
+}
+labeled_statement labeledstmt_42{
+int<<1>> ansallowed = 1;
+}
+labeled_statement labeledstmt_41{
+int<<12>> to_immediate_tmp = hash<<12>>(19,ip_pkt_src,ip_pkt_dst);
+}
+labeled_statement labeledstmt_40{
+int<<32>> ip_pkt_input_arg_12 = ip_pkt_dst;
+}
+labeled_statement labeledstmt_39{
+int<<32>> ip_pkt_input_arg_11 = ip_pkt_src;
+}
+labeled_statement labeledstmt_38{
+int<<16>> ip_pkt_input_arg_10 = ip_pkt_ip_7;
+}
+labeled_statement labeledstmt_37{
+int<<8>> ip_pkt_input_arg_9 = ip_pkt_ip_6;
+}
+labeled_statement labeledstmt_36{
+int<<8>> ip_pkt_input_arg_8 = ip_pkt_ip_5;
+}
+labeled_statement labeledstmt_35{
+int<<16>> ip_pkt_input_arg_7 = ip_pkt_ip_4;
+}
+labeled_statement labeledstmt_34{
+int<<16>> ip_pkt_input_arg_6 = ip_pkt_ip_3;
+}
+labeled_statement labeledstmt_33{
+int<<16>> ip_pkt_input_arg_5 = ip_pkt_ip_2;
+}
+labeled_statement labeledstmt_32{
+int<<8>> ip_pkt_input_arg_4 = ip_pkt_ip_1;
+}
+labeled_statement labeledstmt_31{
+int<<8>> ip_pkt_input_arg_3 = ip_pkt_ip_0;
+}
+labeled_statement labeledstmt_30{
+int<<16>> ip_pkt_input_arg_2 = ip_pkt_eth_2;
+}
+labeled_statement labeledstmt_29{
+int<<48>> ip_pkt_input_arg_1 = ip_pkt_eth_1;
+}
+labeled_statement labeledstmt_28{
+int<<48>> ip_pkt_input_arg_0 = ip_pkt_eth_0;
+}
+labeled_statement labeledstmt_1{
+labeledstmt_28();
+labeledstmt_29();
+labeledstmt_30();
+labeledstmt_31();
+labeledstmt_32();
+labeledstmt_33();
+labeledstmt_34();
+labeledstmt_35();
+labeledstmt_36();
+labeledstmt_37();
+labeledstmt_38();
+labeledstmt_39();
+labeledstmt_40();
+labeledstmt_41();
+labeledstmt_42();
+labeledstmt_43();
+labeledstmt_44();
+labeledstmt_45();
+labeledstmt_46();
+labeledstmt_47();
+labeledstmt_48();
+labeledstmt_49();
+}
+labeled_statement labeledstmt_2{
+
+}
+labeled_statement labeledstmt_50{
+int<<32>> idx = (int<<32>>)to_immediate_tmp;
+}
+labeled_statement labeledstmt_3{
+labeledstmt_50();
+}
+labeled_statement labeledstmt_4{
+
+}
+labeled_statement labeledstmt_51{
+int<<32>> allowedidx = idx;
+}
+labeled_statement labeledstmt_5{
+labeledstmt_51();
+}
+labeled_statement labeledstmt_6{
+
+}
+labeled_statement labeledstmt_52{
+int<<32>> start_time = Array.update_complex(assigned_var_allowedstart_time,allowedidx,re12351sdaCheckThenSet,precompute,0,0);
+}
+labeled_statement labeledstmt_7{
+labeledstmt_52();
+}
+labeled_statement labeledstmt_8{
+
+}
+labeled_statement labeledstmt_53{
+int<<32>> to_immediate_tmp1453 = to_immediate_tmp1452-start_time;
+}
+labeled_statement labeledstmt_9{
+labeledstmt_53();
+}
+labeled_statement labeledstmt_10{
+
+}
+labeled_statement labeledstmt_54{
+int<<32>> pred0allowed = to_immediate_tmp1453-10000;
+}
+labeled_statement labeledstmt_11{
+labeledstmt_54();
+}
+labeled_statement labeledstmt_12{
+
+}
+labeled_statement labeledstmt_57{
+f_synthesized_meta_varallowed = 1;
+}
+labeled_statement labeledstmt_56{
+g_synthesized_meta_varallowed = 27;
+}
+labeled_statement labeledstmt_55{
+memop_synthesized_meta_varallowed = 1;
+}
+labeled_statement labeledstmt_13{
+labeledstmt_55();
+labeledstmt_56();
+labeledstmt_57();
+}
+labeled_statement labeledstmt_58{
+g_synthesized_meta_varallowed = 213;
+}
+labeled_statement labeledstmt_14{
+labeledstmt_55();
+labeledstmt_58();
+labeledstmt_57();
+}
+labeled_statement labeledstmt_60{
+f_synthesized_meta_varallowed = 62;
+}
+labeled_statement labeledstmt_59{
+g_synthesized_meta_varallowed = 8;
+}
+labeled_statement labeledstmt_15{
+labeledstmt_55();
+labeledstmt_59();
+labeledstmt_60();
+}
+labeled_statement labeledstmt_63{
+f_synthesized_meta_varallowed = 56;
+}
+labeled_statement labeledstmt_62{
+g_synthesized_meta_varallowed = 54;
+}
+labeled_statement labeledstmt_61{
+memop_synthesized_meta_varallowed = 0;
+}
+labeled_statement labeledstmt_16{
+labeledstmt_61();
+labeledstmt_62();
+labeledstmt_63();
+}
+labeled_statement labeledstmt_17{
+
+}
+labeled_statement labeledstmt_64{
+resallowed = Array.update_complex(allowed,allowedidx,allowedmemop0,f_synthesized_meta_varallowed,g_synthesized_meta_varallowed,0);
+}
+labeled_statement labeledstmt_18{
+labeledstmt_64();
+}
+labeled_statement labeledstmt_65{
+resallowed = Array.update_complex(allowed,allowedidx,allowedmemop1,f_synthesized_meta_varallowed,g_synthesized_meta_varallowed,0);
+}
+labeled_statement labeledstmt_19{
+labeledstmt_65();
+}
+labeled_statement labeledstmt_20{
+
+}
+labeled_statement labeledstmt_21{
+
+}
+labeled_statement labeledstmt_66{
+ansallowed = 1;
+}
+labeled_statement labeledstmt_22{
+labeledstmt_66();
+}
+labeled_statement labeledstmt_67{
+ansallowed = 0;
+}
+labeled_statement labeledstmt_23{
+labeledstmt_67();
+}
+labeled_statement labeledstmt_24{
+
+}
+labeled_statement labeledstmt_80{
+pre_gen_copy_ip_pkt_eth_0 = ip_pkt_eth_0;
+}
+labeled_statement labeledstmt_79{
+pre_gen_copy_ip_pkt_eth_1 = ip_pkt_eth_1;
+}
+labeled_statement labeledstmt_78{
+pre_gen_copy_ip_pkt_eth_2 = ip_pkt_eth_2;
+}
+labeled_statement labeledstmt_77{
+pre_gen_copy_ip_pkt_ip_0 = ip_pkt_ip_0;
+}
+labeled_statement labeledstmt_76{
+pre_gen_copy_ip_pkt_ip_1 = ip_pkt_ip_1;
+}
+labeled_statement labeledstmt_75{
+pre_gen_copy_ip_pkt_ip_2 = ip_pkt_ip_2;
+}
+labeled_statement labeledstmt_74{
+pre_gen_copy_ip_pkt_ip_3 = ip_pkt_ip_3;
+}
+labeled_statement labeledstmt_73{
+pre_gen_copy_ip_pkt_ip_4 = ip_pkt_ip_4;
+}
+labeled_statement labeledstmt_72{
+pre_gen_copy_ip_pkt_ip_5 = ip_pkt_ip_5;
+}
+labeled_statement labeledstmt_71{
+pre_gen_copy_ip_pkt_ip_6 = ip_pkt_ip_6;
+}
+labeled_statement labeledstmt_70{
+pre_gen_copy_ip_pkt_ip_7 = ip_pkt_ip_7;
+}
+labeled_statement labeledstmt_69{
+pre_gen_copy_ip_pkt_src = ip_pkt_src;
+}
+labeled_statement labeledstmt_68{
+pre_gen_copy_ip_pkt_dst = ip_pkt_dst;
+}
+labeled_statement labeledstmt_25{
+generate_port (100, ip_pkt(ip_pkt_input_arg_0,ip_pkt_input_arg_1,ip_pkt_input_arg_2,ip_pkt_input_arg_3,ip_pkt_input_arg_4,ip_pkt_input_arg_5,ip_pkt_input_arg_6,ip_pkt_input_arg_7,ip_pkt_input_arg_8,ip_pkt_input_arg_9,ip_pkt_input_arg_10,ip_pkt_input_arg_11,ip_pkt_input_arg_12));
+labeledstmt_68();
+labeledstmt_69();
+labeledstmt_70();
+labeledstmt_71();
+labeledstmt_72();
+labeledstmt_73();
+labeledstmt_74();
+labeledstmt_75();
+labeledstmt_76();
+labeledstmt_77();
+labeledstmt_78();
+labeledstmt_79();
+labeledstmt_80();
+}
+labeled_statement labeledstmt_81{
+Sys.invalidate.ip_pkt(ip_pkt_eth_0,ip_pkt_eth_1,ip_pkt_eth_2,ip_pkt_ip_0,ip_pkt_ip_1,ip_pkt_ip_2,ip_pkt_ip_3,ip_pkt_ip_4,ip_pkt_ip_5,ip_pkt_ip_6,ip_pkt_ip_7,ip_pkt_src,ip_pkt_dst);
+}
+labeled_statement labeledstmt_26{
+labeledstmt_81();
+}
+labeled_statement labeledstmt_27{
+
+}
