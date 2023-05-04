@@ -392,11 +392,7 @@ let sort_rows_by_wildcards rows =
   let comp (ps1, _) (ps2,_) = List.compare_lengths (rem_nonwilds ps1) (rem_nonwilds ps2) in
   List.sort comp rows
 
-let make_match_def_inline_preds id handler alphabet synthesis_response event_order preds = 
-  let eid = (match handler with 
-  | None -> error "Not in a handler, but trying to inline preds for a specific event!"
-  | Some (eid, _, _) -> eid) in
-  let letters_this_event = List.filter (fun c -> c.ev_id = (fst eid)) alphabet in
+let make_match_def_inline_preds id handler alphabet synthesis_response event_order preds letters_this_event eid= 
   match letters_this_event with
   | [] -> Console.error "Something wrong-transition in handler with no letters!"
   | l1 :: [] -> [(make_row_stmt_inline_preds id l1 synthesis_response)]
@@ -422,6 +418,14 @@ let make_static_defs id idx_expr =
   let idx_def = (statement (SLocal ((make_idx_val id), (ty (inferred_size "idxvalsize")), idx_expr))) in
   [idx_def;(make_local_synth_var_def (f_id id)); (make_local_synth_var_def (g_id id)); (make_local_synth_var_def (mem_id id))]
 
+let array_update_def_filter id synthesis_response letters = 
+  let make_branch i = 
+    let memop_id = (List.nth synthesis_response.memops i).id in
+    let st = statement (SAssign ((make_res_id id), (exp (ECall (Arrays.array_update_complex_cid, [(make_evar id); (make_evar (make_idx_val id)); (make_evar memop_id); (make_evar (f_id id)); (make_evar (g_id id)); (make_num_size 0 DFASynthesis.bv_size)]))))) in
+    let pat = PNum (Z.of_int i) in 
+    ([pat], st) in
+  let filt id = LetterMap.exists (fun letter i -> (List.mem letter letters) && (i == id)) synthesis_response.whichop in
+  statement (SMatch ([(make_evar (mem_id id))], (List.map make_branch (List.filter filt DFASynthesis.regact_ids))))
 
 let array_update_def id synthesis_response = 
   let make_branch i = 
@@ -454,8 +458,10 @@ let make_transition_statements_inline_preds env id idx_expr =
   let static_defs = make_static_defs id idx_expr in
   let binding_defs = List.append static_defs (make_binding_defs id re_info.binders env.current_handler env.params_map (make_evar (make_idx_val id))) in
   let pred_ids_defs = List.append binding_defs (make_pred_ids id (List.filter (fun p -> p.pred_event = eid) re_info.preds)) in
-  let match_counter_replacement = List.append pred_ids_defs (make_match_def_inline_preds id env.current_handler re_info.alphabet re_info.synthesis_response re_info.event_order re_info.preds) in
-  let match_update_def = List.append match_counter_replacement ((res_def id) :: [(array_update_def id re_info.synthesis_response)]) in
+  let letters_this_event = List.filter (fun c -> c.ev_id = (fst eid)) re_info.alphabet in
+  let def_inlined = (make_match_def_inline_preds id env.current_handler re_info.alphabet re_info.synthesis_response re_info.event_order re_info.preds letters_this_event eid) in
+  let match_counter_replacement = List.append pred_ids_defs  def_inlined in
+  let match_update_def = List.append match_counter_replacement ((res_def id) :: [(array_update_def_filter id re_info.synthesis_response letters_this_event)]) in
   let return_def = List.append match_update_def (make_return_def id re_info.synthesis_response) in
   return_def
 
