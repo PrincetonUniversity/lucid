@@ -13,11 +13,12 @@ global Array.t<<8>> cnt = Array.create(8);
 IDX = {
     | DNS_packet_fwd -> {(int<<32>>)hash<<3>>(13, sip, cip, smac, cmac)}
 }
-DETECT {DNS_packet_fwd(@int<<32>> fst_ttl = ttl).(DNS_packet_fwd(fst_ttl != ttl))} => {
-    int<<8>> newcount = Array.setm(cnt, myreidx, inc, 0);
-    if (newcount >= 4){
+DETECT {
+    DNS_packet_fwd(@int<<32>> fst_ttl = ttl)
+    .(DNS_packet_fwd(fst_ttl != ttl))} => 
+    {int<<8>> newcount = Array.setm(cnt, myreidx, inc, 0);
+    if (newcount > 3){
         generate ttl_changes_found(0, 0);
-        reset(myre, myreidx);
     }
 };
 

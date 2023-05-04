@@ -21,6 +21,8 @@ let process_prog builtin_tys ds =
   print_if_verbose "----------Elim regex-------";
   let ds = RegexElimination.process_prog ds in
   Printf.printf "Time spent on synthesis is %f\n" (Sys.time() -. time);
+  let oc = open_out "LucidPatternsRemoved.dpt" in 
+  Printf.fprintf oc  "%s" (Printing.decls_to_string ds);
   print_if_debug ds;
   print_if_verbose "---------typing1---------";
   let ds = Typer.infer_prog builtin_tys ds in

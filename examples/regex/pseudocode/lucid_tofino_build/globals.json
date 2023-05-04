@@ -1,0 +1,14 @@
+{
+  "msre": {
+    "type": "array",
+    "compiled_name": "pipe.msre",
+    "length": 1024,
+    "cell_size": [ 8 ]
+  },
+  "assigned_var_msresaved_jobid": {
+    "type": "array",
+    "compiled_name": "pipe.assigned_var_msresaved_jobid",
+    "length": 1024,
+    "cell_size": [ 32 ]
+  }
+}

@@ -546,7 +546,7 @@ let replace_var_regex env id size vr =
     (List.map (make_global_def_asgn size id ) (List.flatten (List.map (fun b -> b.assignments) (binders vr))))
     ((make_global_def size (IConst DFASynthesis.bv_size) id) :: used_memops) in
   let tail = if ((!env).added_cts) then def else (env := {(!env) with added_cts = true}; List.append [(check_then_set_memop)] def) in
-  if ((!env).added_reset) or (not ((!env).needs_reset)) then tail else (env := {(!env) with added_reset = true};(List.append [(reset_regex_event_decl id); (reset_regex_event_handler id re_info.binders)] tail))
+  if ((!env).added_reset) or (not ((!env).needs_reset)) then tail else (env := {(!env) with added_reset = true};(List.append tail [(reset_regex_event_decl id); (reset_regex_event_handler id re_info.binders)]))
   
 
 ;;

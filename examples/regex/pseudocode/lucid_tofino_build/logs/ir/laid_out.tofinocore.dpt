@@ -1,0 +1,216 @@
+event ATP_add(int<<32>> ATP_add_idx,int<<32>> ATP_add_jobid,int<<32>> ATP_add_clientid,int<<32>> ATP_add_val);
+event ATP_release(int<<32>> ATP_release_idx,int<<32>> ATP_release_jobid);
+global Array.t<<32>> assigned_var_msresaved_jobid = Array.create(1024);
+
+global Array.t<<8>> msre = Array.create(1024);
+
+memop msrememop1(int<<8>> memval,int<<8>> f,int<<8>> g)
+ {{
+b1=(b1,memval+g<8);
+b2=(b2,memval+f<7)
+cell1=(b1||b2 -> 2|memval), (!b1&&!b2 -> 2|1)
+cell2=None, None
+
+ret=(true -> cell1)
+}}
+memop msrememop2(int<<8>> memval,int<<8>> f,int<<8>> g)
+ {{
+b1=(b1,memval+f>2);
+b2=(b2,memval+0!=3)
+cell1=(b1&&b2 -> f+memval), (!b1&&b2 -> g+8)
+cell2=None, None
+
+ret=(true -> cell1)
+}}
+handle ATP_add(int<<32>> ATP_add_idx,int<<32>> ATP_add_jobid,int<<32>> ATP_add_clientid,int<<32>> ATP_add_val) {
+
+}
+handle ATP_release(int<<32>> ATP_release_idx,int<<32>> ATP_release_jobid) {
+
+}
+// shared locals:
+int<<8>> merged_var_g_synthesized_meta_varmsre1206_g_synthesized_meta_varmsre1206_g_synthesized_meta_varmsre_g_synthesized_meta_varmsre_1498;
+int<<8>> merged_var_f_synthesized_meta_varmsre1205_f_synthesized_meta_varmsre1205_f_synthesized_meta_varmsre_f_synthesized_meta_varmsre_1497;
+int<<32>> merged_var_msreidx1204_msreidx_1496;
+// MAIN HANDLER 
+handler main(...){
+// Stage 0
+match event_id with 
+| 1 -> {
+int<<1>> ansmsre = 1;
+merged_var_msreidx1204_msreidx_1496 = ATP_add_idx;
+merged_var_f_synthesized_meta_varmsre1205_f_synthesized_meta_varmsre1205_f_synthesized_meta_varmsre_f_synthesized_meta_varmsre_1497 = 0;
+merged_var_g_synthesized_meta_varmsre1206_g_synthesized_meta_varmsre1206_g_synthesized_meta_varmsre_g_synthesized_meta_varmsre_1498 = 0;
+int<<8>> memop_synthesized_meta_varmsre = 0;
+int<<8>> resmsre = 0;
+}
+| 2 -> {
+int<<1>> ansmsre1203 = 1;
+merged_var_msreidx1204_msreidx_1496 = ATP_release_idx;
+merged_var_f_synthesized_meta_varmsre1205_f_synthesized_meta_varmsre1205_f_synthesized_meta_varmsre_f_synthesized_meta_varmsre_1497 = 0;
+merged_var_g_synthesized_meta_varmsre1206_g_synthesized_meta_varmsre1206_g_synthesized_meta_varmsre_g_synthesized_meta_varmsre_1498 = 0;
+int<<8>> memop_synthesized_meta_varmsre1207 = 0;
+int<<8>> resmsre1210 = 0;
+}
+| _ -> {
+
+}
+// Stage 1
+match event_id with 
+| 1 -> {
+merged_var_f_synthesized_meta_varmsre1205_f_synthesized_meta_varmsre1205_f_synthesized_meta_varmsre_f_synthesized_meta_varmsre_1497 = 241;
+merged_var_g_synthesized_meta_varmsre1206_g_synthesized_meta_varmsre1206_g_synthesized_meta_varmsre_g_synthesized_meta_varmsre_1498 = 251;
+memop_synthesized_meta_varmsre = 2;
+int<<32>> saved_jobid = Array.update_complex(assigned_var_msresaved_jobid,merged_var_msreidx1204_msreidx_1496,re12351sdaCheckThenSet,ATP_add_jobid,0,0);
+}
+| 2 -> {
+int<<32>> saved_jobid1208 = Array.update_complex(assigned_var_msresaved_jobid,merged_var_msreidx1204_msreidx_1496,get_1495,0,0,0);
+}
+| _ -> {
+
+}
+// Stage 2
+match (memop_synthesized_meta_varmsre,event_id) with 
+| 1,1 -> {
+Sys.invalidate.ATP_add(ATP_add_idx,ATP_add_jobid,ATP_add_clientid,ATP_add_val);
+}
+| 2,1 -> {
+Sys.invalidate.ATP_add(ATP_add_idx,ATP_add_jobid,ATP_add_clientid,ATP_add_val);
+}
+| _,1 -> {
+Sys.invalidate.ATP_add(ATP_add_idx,ATP_add_jobid,ATP_add_clientid,ATP_add_val);
+}
+| _,2 -> {
+int<<32>> pred0msre = ATP_release_jobid-saved_jobid1208;
+}
+| _,_ -> {
+
+}
+// Stage 3
+match (event_id,pred0msre) with 
+| 1,0 -> {
+
+}
+| 2,0 -> {
+Sys.invalidate.ATP_release(ATP_release_idx,ATP_release_jobid);
+memop_synthesized_meta_varmsre1207 = 1;
+merged_var_g_synthesized_meta_varmsre1206_g_synthesized_meta_varmsre1206_g_synthesized_meta_varmsre_g_synthesized_meta_varmsre_1498 = 23;
+merged_var_f_synthesized_meta_varmsre1205_f_synthesized_meta_varmsre1205_f_synthesized_meta_varmsre_f_synthesized_meta_varmsre_1497 = 246;
+}
+| 1,_ -> {
+
+}
+| 2,_ -> {
+Sys.invalidate.ATP_release(ATP_release_idx,ATP_release_jobid);
+memop_synthesized_meta_varmsre1207 = 1;
+merged_var_g_synthesized_meta_varmsre1206_g_synthesized_meta_varmsre1206_g_synthesized_meta_varmsre_g_synthesized_meta_varmsre_1498 = 129;
+merged_var_f_synthesized_meta_varmsre1205_f_synthesized_meta_varmsre1205_f_synthesized_meta_varmsre_f_synthesized_meta_varmsre_1497 = 29;
+}
+| _,_ -> {
+
+}
+// Stage 4
+match (memop_synthesized_meta_varmsre1207,event_id,memop_synthesized_meta_varmsre) with 
+| 1,1,1 -> {
+resmsre = Array.update_complex(msre,merged_var_msreidx1204_msreidx_1496,msrememop1,merged_var_f_synthesized_meta_varmsre1205_f_synthesized_meta_varmsre1205_f_synthesized_meta_varmsre_f_synthesized_meta_varmsre_1497,merged_var_g_synthesized_meta_varmsre1206_g_synthesized_meta_varmsre1206_g_synthesized_meta_varmsre_g_synthesized_meta_varmsre_1498,0);
+}
+| 1,1,2 -> {
+resmsre = Array.update_complex(msre,merged_var_msreidx1204_msreidx_1496,msrememop2,merged_var_f_synthesized_meta_varmsre1205_f_synthesized_meta_varmsre1205_f_synthesized_meta_varmsre_f_synthesized_meta_varmsre_1497,merged_var_g_synthesized_meta_varmsre1206_g_synthesized_meta_varmsre1206_g_synthesized_meta_varmsre_g_synthesized_meta_varmsre_1498,0);
+}
+| 1,1,_ -> {
+
+}
+| 1,2,_ -> {
+resmsre1210 = Array.update_complex(msre,merged_var_msreidx1204_msreidx_1496,msrememop1,merged_var_f_synthesized_meta_varmsre1205_f_synthesized_meta_varmsre1205_f_synthesized_meta_varmsre_f_synthesized_meta_varmsre_1497,merged_var_g_synthesized_meta_varmsre1206_g_synthesized_meta_varmsre1206_g_synthesized_meta_varmsre_g_synthesized_meta_varmsre_1498,0);
+}
+| 2,1,1 -> {
+resmsre = Array.update_complex(msre,merged_var_msreidx1204_msreidx_1496,msrememop1,merged_var_f_synthesized_meta_varmsre1205_f_synthesized_meta_varmsre1205_f_synthesized_meta_varmsre_f_synthesized_meta_varmsre_1497,merged_var_g_synthesized_meta_varmsre1206_g_synthesized_meta_varmsre1206_g_synthesized_meta_varmsre_g_synthesized_meta_varmsre_1498,0);
+}
+| 2,1,2 -> {
+resmsre = Array.update_complex(msre,merged_var_msreidx1204_msreidx_1496,msrememop2,merged_var_f_synthesized_meta_varmsre1205_f_synthesized_meta_varmsre1205_f_synthesized_meta_varmsre_f_synthesized_meta_varmsre_1497,merged_var_g_synthesized_meta_varmsre1206_g_synthesized_meta_varmsre1206_g_synthesized_meta_varmsre_g_synthesized_meta_varmsre_1498,0);
+}
+| 2,1,_ -> {
+
+}
+| 2,2,_ -> {
+resmsre1210 = Array.update_complex(msre,merged_var_msreidx1204_msreidx_1496,msrememop2,merged_var_f_synthesized_meta_varmsre1205_f_synthesized_meta_varmsre1205_f_synthesized_meta_varmsre_f_synthesized_meta_varmsre_1497,merged_var_g_synthesized_meta_varmsre1206_g_synthesized_meta_varmsre1206_g_synthesized_meta_varmsre_g_synthesized_meta_varmsre_1498,0);
+}
+| _,1,1 -> {
+resmsre = Array.update_complex(msre,merged_var_msreidx1204_msreidx_1496,msrememop1,merged_var_f_synthesized_meta_varmsre1205_f_synthesized_meta_varmsre1205_f_synthesized_meta_varmsre_f_synthesized_meta_varmsre_1497,merged_var_g_synthesized_meta_varmsre1206_g_synthesized_meta_varmsre1206_g_synthesized_meta_varmsre_g_synthesized_meta_varmsre_1498,0);
+}
+| _,1,2 -> {
+resmsre = Array.update_complex(msre,merged_var_msreidx1204_msreidx_1496,msrememop2,merged_var_f_synthesized_meta_varmsre1205_f_synthesized_meta_varmsre1205_f_synthesized_meta_varmsre_f_synthesized_meta_varmsre_1497,merged_var_g_synthesized_meta_varmsre1206_g_synthesized_meta_varmsre1206_g_synthesized_meta_varmsre_g_synthesized_meta_varmsre_1498,0);
+}
+| _,1,_ -> {
+
+}
+| _,2,_ -> {
+
+}
+| _,_,_ -> {
+
+}
+// Stage 5
+match (resmsre1210,event_id,resmsre) with 
+| 18,1,18 -> {
+ansmsre = 1;
+}
+| _,1,18 -> {
+ansmsre = 1;
+}
+| 18,1,_ -> {
+ansmsre = 0;
+}
+| _,1,_ -> {
+ansmsre = 0;
+}
+| 18,2,_ -> {
+ansmsre1203 = 1;
+}
+| _,2,_ -> {
+ansmsre1203 = 0;
+}
+| _,_,_ -> {
+
+}
+// Stage 6
+match (ansmsre1203,event_id,ansmsre) with 
+| 1,1,1 -> {
+
+}
+| _,1,1 -> {
+
+}
+| 1,1,_ -> {
+
+}
+| _,1,_ -> {
+
+}
+| 1,2,_ -> {
+
+}
+| _,2,_ -> {
+
+}
+| _,_,_ -> {
+
+}}
+memop get_1495(int<<32>> mem_val_1492,int<<32>> unused_1494,int<<32>> unused_1493)
+ {{
+b1=None;
+b2=None
+cell1=None, None
+cell2=None, None
+
+ret=(true -> mem_val_1492)
+}}
+memop re12351sdaCheckThenSet(int<<32>> memval,int<<32>> newval,int<<32>> unused_1491)
+ {{
+b1=None;
+b2=(mbool_1490,memval==0)
+cell1=None, None
+cell2=(mbool_1490 -> newval), (!mbool_1490 -> memval)
+
+ret=(true -> cell2)
+}}

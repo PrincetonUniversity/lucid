@@ -1,0 +1,105 @@
+// after phase: midendevent ATP_add(int<<32>> idx,int<<32>> jobid,int<<32>> clientid,int<<32>> val);
+
+event ATP_release(int<<32>> idx,int<<32>> jobid);
+
+memop re12351sdaCheckThenSet(int<<32>> memval,int<<32>> newval)
+ {if memval==0 then newval else memval}
+
+global Array.t<<32>> assigned_var_msresaved_jobid = Array.create(1024);
+
+
+global Array.t<<8>> msre = Array.create(1024);
+
+
+memop msrememop1(int<<8>> memval,int<<8>> f,int<<8>> g)
+ {{
+b1=(b1,memval+g<8);
+b2=(b2,memval+f<7)
+cell1=(b1||b2 -> 2|memval), (true -> 2|1)
+cell2=None, None
+
+ret=(true -> cell1)
+}}
+
+memop msrememop2(int<<8>> memval,int<<8>> f,int<<8>> g)
+ {{
+b1=(b1,memval+f>2);
+b2=(b2,memval+0!=3)
+cell1=(b1&&b2 -> f+memval), (true -> g+8)
+cell2=None, None
+
+ret=(true -> cell1)
+}}
+
+handle ATP_add(int<<32>> idx,int<<32>> jobid,int<<32>> clientid,int<<32>> val) {
+printf "Doing nothing" ;
+bool ansmsre = true;
+int<<32>> msreidx = idx;
+int<<8>> f_synthesized_meta_varmsre = 0;
+int<<8>> g_synthesized_meta_varmsre = 0;
+int<<8>> memop_synthesized_meta_varmsre = 0;
+int<<32>> saved_jobid = Array.setm(assigned_var_msresaved_jobid,msreidx,re12351sdaCheckThenSet,jobid);
+f_synthesized_meta_varmsre = 241;
+g_synthesized_meta_varmsre = 251;
+memop_synthesized_meta_varmsre = 2;
+int<<8>> resmsre = 0;
+match memop_synthesized_meta_varmsre with 
+| 1 -> {
+resmsre = Array.update_complex(msre,msreidx,msrememop1,f_synthesized_meta_varmsre,g_synthesized_meta_varmsre,0);
+}
+| 2 -> {
+resmsre = Array.update_complex(msre,msreidx,msrememop2,f_synthesized_meta_varmsre,g_synthesized_meta_varmsre,0);
+}
+printf "state machine transitioned to %d" resmsre;
+match resmsre with 
+| 18 -> {
+ansmsre = true;
+}
+| _ -> {
+ansmsre = false;
+}
+if (ansmsre) {
+printf "Checked continuous 16 add events." ;
+} 
+}
+
+handle ATP_release(int<<32>> idx,int<<32>> jobid) {
+printf "Doing nothing" ;
+bool ansmsre = true;
+int<<32>> msreidx = idx;
+int<<8>> f_synthesized_meta_varmsre = 0;
+int<<8>> g_synthesized_meta_varmsre = 0;
+int<<8>> memop_synthesized_meta_varmsre = 0;
+int<<32>> saved_jobid = Array.get(assigned_var_msresaved_jobid,msreidx);
+int<<32>> pred0msre = jobid-saved_jobid;
+match pred0msre with 
+| 0 -> {
+f_synthesized_meta_varmsre = 246;
+g_synthesized_meta_varmsre = 23;
+memop_synthesized_meta_varmsre = 1;
+}
+| _ -> {
+f_synthesized_meta_varmsre = 29;
+g_synthesized_meta_varmsre = 129;
+memop_synthesized_meta_varmsre = 1;
+}
+int<<8>> resmsre = 0;
+match memop_synthesized_meta_varmsre with 
+| 1 -> {
+resmsre = Array.update_complex(msre,msreidx,msrememop1,f_synthesized_meta_varmsre,g_synthesized_meta_varmsre,0);
+}
+| 2 -> {
+resmsre = Array.update_complex(msre,msreidx,msrememop2,f_synthesized_meta_varmsre,g_synthesized_meta_varmsre,0);
+}
+printf "state machine transitioned to %d" resmsre;
+match resmsre with 
+| 18 -> {
+ansmsre = true;
+}
+| _ -> {
+ansmsre = false;
+}
+if (ansmsre) {
+printf "Checked continuous 16 add events." ;
+} 
+}

@@ -1,0 +1,49 @@
+---normalizeBools.ml log---
+original if statement: 
+if (ansmsre) {
+
+} 
+new if statement: 
+if (ansmsre==true) {
+
+} 
+original if statement: 
+if (ansmsre) {
+
+} 
+new if statement: 
+if (ansmsre==true) {
+
+} 
+converting expression to dnf form: ansmsre==true
+
+converted expression into a disjunction of 1 exprs
+
+converting: (= ansmsre~1194 tmp_val_id~1488)
+
+converting: ansmsre~1194
+
+converting: tmp_val_id~1488
+
+old expression:  ansmsre==true
+
+new expression:  ansmsre==true
+
+new expression show: ansmsre==true
+
+converting expression to dnf form: ansmsre==true
+
+converted expression into a disjunction of 1 exprs
+
+converting: (= ansmsre~1203 tmp_val_id~1489)
+
+converting: ansmsre~1203
+
+converting: tmp_val_id~1489
+
+old expression:  ansmsre==true
+
+new expression:  ansmsre==true
+
+new expression show: ansmsre==true
+

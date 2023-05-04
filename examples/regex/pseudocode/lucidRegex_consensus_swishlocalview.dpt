@@ -1,15 +1,9 @@
-//TODO: what is the syntax to match a reject (deviate from pattern)?
-
-
 entry event swish_update(int sip, int dip, int<<16>> sport, int<<16>> dport, int<<8>> update_idx);
 
 exit event error_report();
 
 alphabet which_update = S1, S2, S3; //, SNAN;
-
-global Array.t<<32>> arr = Array.create(256);
 //re<<256>> RE_update_sequence over which_update = (S1.(S1)*.S2.(S2)*.S3.(S3)*)*; 
-//manual negation for deviation...
 re<<256>> RE_update_sequence over which_update = (S1||S2||S3)*.((S2.S1)||(S3.S2)||(S1.S3));
 
 handle swish_update(int sip, int dip, int<<16>> sport, int<<16>> dport, int<<8>> update_idx){
@@ -19,7 +13,6 @@ handle swish_update(int sip, int dip, int<<16>> sport, int<<16>> dport, int<<8>>
 	| 1 -> {S=S1();}
 	| 2 -> {S=S2();}
 	| 3 -> {S=S3();}
-	| _ -> {S=SNAN();}
 
 	if(!transition(RE_update_sequence, idx, S)){
 		generate error_report();
