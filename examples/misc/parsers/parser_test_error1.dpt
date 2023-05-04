@@ -3,6 +3,7 @@ type ip =  { int srcIp; int dstIp; int srcPort; int dstPort; }
 
 event background(int x) { printf("%d", x); }
 event eth(eth e) { generate background(e#srcMac); }
+event etheth(eth e, eth e') { generate background(e#srcMac); }
 event eth_ip(eth e, ip ip) { generate background(ip#srcIp); }
 
 parser parse_ip(eth e) {
@@ -10,15 +11,13 @@ parser parse_ip(eth e) {
   generate eth_ip(e, ip);
 }
 
-// LUCID_ETHERTY is builtin
-const int IP_ETHERTY = 0x8000;
-
 parser main() {
   read e : eth;
   match e#etherTy with
   | LUCID_ETHERTY -> { do_lucid_parsing(); }
-  | IP_ETHERTY -> { parse_ip(e); }
-  | 0 -> { drop; }
+  | 7 -> { parse_ip(e); }
+  | 0 -> { read e2: eth;
+           parse_ip(e2); } // ERROR: e and e2 share a slot
   | _ -> {
       e#etherTy = 0x9999;
       generate eth(e);

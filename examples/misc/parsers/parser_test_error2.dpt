@@ -2,13 +2,7 @@ type eth = { int srcMac; int dstMac; int etherTy; }
 type ip =  { int srcIp; int dstIp; int srcPort; int dstPort; }
 
 event background(int x) { printf("%d", x); }
-event eth(eth e) { generate background(e#srcMac); }
-event eth_ip(eth e, ip ip) { generate background(ip#srcIp); }
-
-parser parse_ip(eth e) {
-  read ip : ip;
-  generate eth_ip(e, ip);
-}
+event etheth(eth e, eth e2) { generate background(e#srcMac); }
 
 // LUCID_ETHERTY is builtin
 const int IP_ETHERTY = 0x8000;
@@ -17,10 +11,5 @@ parser main() {
   read e : eth;
   match e#etherTy with
   | LUCID_ETHERTY -> { do_lucid_parsing(); }
-  | IP_ETHERTY -> { parse_ip(e); }
-  | 0 -> { drop; }
-  | _ -> {
-      e#etherTy = 0x9999;
-      generate eth(e);
-  }
+  | IP_ETHERTY -> { generate etheth(e, e); } // ERROR: Unifies both arguments of etheth
 }
