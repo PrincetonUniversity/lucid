@@ -66,6 +66,7 @@
    partialInterpretation
    constInlining
    linerate
+   slotAnalysis
    frontendPipeline
    midendPipeline
    syntaxToCore
