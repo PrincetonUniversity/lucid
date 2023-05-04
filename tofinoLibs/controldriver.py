@@ -418,14 +418,15 @@ class BfRtTable:
             else:
               print ("ERROR: a data field of type INT_ARR with size 8 must be a bytearray")
               exit(1)              
-          # untested, and no idea what to do with arrays of integers of other sizes -- 
-          # this is consistent with BfTableEntry, but seems to assume 32-bit integers...
+          # this seems to work correctly for 16 and 32-bit arrays. 
+          # I'm not sure why you can use c_uint as the cell type for a 16-bit array, though...
           else:
             arrlen = len(field_val)
             arrty = c_uint * arrlen
             value = arrty()
             for idx, v in enumerate(field_val):
               value[idx] = v
+            self._cintf.data_field_set_value_array(data_hdl, field_info["id"], value, arrlen)
         elif (data_type == "BOOL_ARR"):
           arrlen = len(field_val)
           arrty = c_uint * arrlen
