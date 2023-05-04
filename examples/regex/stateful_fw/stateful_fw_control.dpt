@@ -18,11 +18,6 @@ entry event ip_pkt (eth_hdr eth, ip_hdr_prefix ip, int<<32>> src, int<<32>> dst)
 const int<<8>> TOS_TRUSTED = 1;
 const int<<9>> out_port = 100;
 
-re<<4096>> allowed = ip_pkt (@int start_time = Sys.time(); ip#tos == TOS_TRUSTED)
-    .(ip_pkt(ip#tos == TOS_TRUSTED) 
-        || ((ip_pkt(!(ip#tos == TOS_TRUSTED)) 
-            && ip_pkt(Sys.time() - start_time < 10000))))*;
-
 global Array.t<<32>> times = Array.create(4096);
 memop set_m(int memval, int input) {
     return input;
