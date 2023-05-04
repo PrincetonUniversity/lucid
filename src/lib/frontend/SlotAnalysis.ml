@@ -173,19 +173,19 @@ type slot_map = slot SlotMap.t
 
 (* During the analysis, we maintain an environment containing:
    - The current slot map
-   - The set of variables which are currently alive (empty unless
-     we're inside a parser)
+   - The set of variables which are currently alive, and their associated
+     slotted_object (this is empty unless we're inside a parser)
    - A map from each event/parser's name to the names of its
      arguments (for use when printing error messages)
 *)
 type env =
   { slots : slot_map
-  ; live_vars : IdSet.t
+  ; live_vars : slotted_object IdMap.t
   ; params : id list CidMap.t
   }
 
 let empty_env =
-  { slots = SlotMap.empty; live_vars = IdSet.empty; params = CidMap.empty }
+  { slots = SlotMap.empty; live_vars = IdMap.empty; params = CidMap.empty }
 ;;
 
 (* Printing functions for error messages and debugging *)
@@ -218,8 +218,13 @@ let slot_to_string env slot =
 let env_to_string env =
   Printf.sprintf
     "{live_vars: {\n%s\n}\nslot_map: {\n%s\n}\n}"
-    (IdSet.fold
-       (fun id acc -> acc ^ Printing.id_to_string id ^ ";\n")
+    (IdMap.fold
+       (fun id obj acc ->
+         Printf.sprintf
+           "%s%s -> %s;\n"
+           acc
+           (Printing.id_to_string id)
+           (slotted_object_to_string env obj))
        env.live_vars
        "")
     (SlotMap.fold
@@ -255,23 +260,31 @@ let validate_unification env set obj =
          of a parser with a variable in that parser *)
       search_set (fun obj ->
         match obj with
-        | Param (cid', n') -> Cid.equal cid cid' && n = n'
+        | Param (cid', n') -> Cid.equal cid cid' && n <> n'
         | Var (cid', _) -> Cid.equal cid cid')
-    | Var (cid, _) ->
+    | Var (cid, id) ->
       (* Ensure we haven't unified two variables on the same control path of a
          parser, or a variable in a parser with one of its parameters *)
       search_set (fun obj ->
         match obj with
         | Param (cid', _) -> Cid.equal cid cid'
-        | Var (cid', id') -> Cid.equal cid cid' && IdSet.mem id' env.live_vars)
+        | Var (cid', id') ->
+          Cid.equal cid cid'
+          && (not (Id.equal id id'))
+          && IdMap.mem id' env.live_vars)
   in
   match bad_object with
   | None -> ()
   | Some bad_obj ->
-    error
+    Console.error
     @@ Printf.sprintf
-         "Slot Analysis: determined that %s and %s must share the same slot.\n\
-          Variables and parameters assigned to this slot: %s."
+         "Slot Analysis determined that \n\
+          %s \n\
+          and \n\
+          %s \n\
+          must share the same slot.\n\
+          Variables and parameters assigned to this slot:\n\
+          %s."
          (slotted_object_to_string env obj)
          (slotted_object_to_string env bad_obj)
          (slot_to_string env (Set set))
@@ -299,35 +312,43 @@ let add_slotted_obj env obj =
 
 (* Create new slotted objects for each parameter of an event or parser, and
    store the argument ids in the environment so we can look them up when printing. *)
-let create_param_slots env cid params =
+let create_param_slots env cid params in_parser =
   let env =
     List.fold_lefti
-      (fun env n _ -> add_slotted_obj env (Param (cid, n)))
+      (fun env n (id, _) ->
+        let obj = Param (cid, n) in
+        let env = add_slotted_obj env obj in
+        if in_parser
+        then { env with live_vars = IdMap.add id obj env.live_vars }
+        else env)
       env
       params
   in
   { env with params = CidMap.add cid (List.map fst params) env.params }
 ;;
 
-(* Create a new slotted object for a variable defined inside a parser *)
-let create_var_slot env cid id = add_slotted_obj env (Var (cid, id))
+(* Create a new slotted object for a variable defined inside a parser, and add
+   it to the live variable map *)
+let create_var_slot env cid id =
+  let obj = Var (cid, id) in
+  let env = add_slotted_obj env obj in
+  { env with live_vars = IdMap.add id obj env.live_vars }
+;;
 
 (* The actual analysis: walk through each parser, adding variables to the
    environment when they are defined (i.e. read), and unifying them with
    event/parser arguments when those are called *)
 let rec analyze_parser_action env cid action =
-  print_endline @@ "ANALYZING " ^ Printing.parser_action_to_string action;
-  print_endline @@ env_to_string env;
+  (* print_endline @@ "ANALYZING " ^ Printing.parser_action_to_string action;
+  print_endline @@ env_to_string env; *)
   match action with
-  | PRead (id, _) ->
-    let env = create_var_slot env cid id in
-    { env with live_vars = IdSet.add id env.live_vars }
+  | PRead (id, _) -> create_var_slot env cid id
   | PAssign _ -> (* FIXME: Not sure what to do here *) env
   | PSkip _ -> env
 
 and analyze_parser_step env cid step =
-  print_endline @@ "ANALYZING " ^ Printing.parser_step_to_string step;
-  print_endline @@ env_to_string env;
+  (* print_endline @@ "ANALYZING " ^ Printing.parser_step_to_string step;
+  print_endline @@ env_to_string env; *)
   match step with
   | PMatch (_, branches) ->
     List.fold_left
@@ -345,9 +366,9 @@ and analyze_parser_step env cid step =
     let env =
       List.fold_lefti
         (fun env n arg ->
-          let param_slot = Param (f_cid, n) in
-          let arg_slot = Var (cid, arg) in
-          unify env param_slot arg_slot)
+          let param_obj = Param (f_cid, n) in
+          let arg_obj = IdMap.find arg env.live_vars in
+          unify env param_obj arg_obj)
         env
         args
     in
@@ -366,9 +387,9 @@ and analyze_parser_block env cid (actions, (step, _)) =
 ;;
 
 let analyze_parser env cid params parser_block =
-  let env = create_param_slots env cid params in
+  let env = create_param_slots env cid params true in
   let env = analyze_parser_block env cid parser_block in
-  { env with live_vars = IdSet.empty }
+  { env with live_vars = IdMap.empty }
 ;;
 
 (* Once we've finished our analysis, if we didn't get any errors, we can turn
@@ -409,7 +430,7 @@ let analyze_prog ds =
 
       method! visit_DEvent env id _ _ params =
         let new_env =
-          create_param_slots !env (Cid.create_ids (prefix @ [id])) params
+          create_param_slots !env (Cid.create_ids (prefix @ [id])) params false
         in
         env := new_env
 
