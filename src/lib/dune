@@ -78,6 +78,7 @@
    interpSpec
    interpState
    interpSyntax
+   libraryInterface
    arrays
    counters
    pairArrays
