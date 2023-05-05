@@ -17,4 +17,6 @@ module type TypeInterface = sig
 
   val t_id : Cid.t
   val constructors : (Cid.t * func_ty) list
+  val sizes : int (* Number of polymorphic size arguments the type takes *)
+  val global : bool (* Whether this type is global or not *)
 end

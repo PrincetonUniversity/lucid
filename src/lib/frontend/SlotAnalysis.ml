@@ -93,11 +93,17 @@ open Batteries
 open Collections
 
 (* Syntax helper function: we expect every PGen or PCall to to be
-   a call to the event/parser whose arguments are variables. *)
+   a call to the event/parser whose arguments are variables, or
+   a call to Payload.parse. Somewhat hacky, but in the latter case
+   we just return a special id to represent the parse call. *)
+let payload_parse_id = Id.fresh "payload_parse"
+
 let extract_call e =
   let extract_var e =
     match e.e with
     | EVar cid -> Cid.to_id cid
+    | ECall (cid, []) when Cid.equal cid Payloads.payload_parse_cid ->
+      payload_parse_id
     | _ -> failwith "slotAnalysis: expected a variable in event/parser argument"
   in
   match e.e with
@@ -388,6 +394,7 @@ and analyze_parser_block env cid (actions, (step, _)) =
 
 let analyze_parser env cid params parser_block =
   let env = create_param_slots env cid params true in
+  let env = create_var_slot env cid payload_parse_id in
   let env = analyze_parser_block env cid parser_block in
   { env with live_vars = IdMap.empty }
 ;;

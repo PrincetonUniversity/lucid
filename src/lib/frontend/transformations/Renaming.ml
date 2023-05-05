@@ -98,39 +98,40 @@ let rename prog =
       inherit [_] s_map as super
 
       val mutable env : env =
-        let open Builtins in
         (* Builtin stuff doesn't get renamed *)
-        let var_map =
-          List.fold_left
-            (fun env id -> CidMap.add (Id id) (Id id) env)
-            CidMap.empty
-            (start_id
-            :: ingr_port_id
-            :: this_id
-            :: lucid_parse_id
-            :: List.map fst builtin_vars)
+        let open Builtins in
+        let builtin_vars =
+          start_id
+          :: ingr_port_id
+          :: this_id
+          :: lucid_parse_id
+          :: List.map fst Builtins.builtin_vars
+          |> List.map Cid.id
         in
-        let builtin_cids =
+        let builtin_funs =
           List.map
-            fst
-            (Arrays.constructors
-            @ Counters.constructors
-            @ PairArrays.constructors)
-          @ List.map
-              (fun (gf : InterpState.State.global_fun) -> gf.cid)
-              builtin_defs
+            (fun (_, _, global_funs, constructors) ->
+              let fun_cids =
+                List.map
+                  (fun (gf : InterpState.State.global_fun) -> gf.cid)
+                  global_funs
+              in
+              let constructor_cids = List.map fst constructors in
+              fun_cids @ constructor_cids)
+            builtin_modules
+          |> List.flatten
         in
         let var_map =
           List.fold_left
             (fun env cid -> CidMap.add cid cid env)
-            var_map
-            builtin_cids
+            CidMap.empty
+            (builtin_vars @ builtin_funs)
         in
         let ty_map =
           List.fold_left
-            (fun env cid -> CidMap.add cid cid env)
+            (fun env (cid, _, _) -> CidMap.add cid cid env)
             CidMap.empty
-            [Arrays.t_id; Counters.t_id; PairArrays.t_id]
+            builtin_type_info
         in
         { empty_env with var_map; ty_map }
 

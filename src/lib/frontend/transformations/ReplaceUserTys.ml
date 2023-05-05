@@ -55,16 +55,17 @@ type env =
   }
 
 let base_env () : env ref =
-  let mk_entry id =
-    let q_id = Id.fresh "sz" in
-    let sz = IVar (QVar q_id) in
-    TName (id, [sz], true), [q_id]
+  let mk_entry t_id sizes global =
+    let size_ids = List.init sizes (fun _ -> Id.fresh "sz") in
+    let sizes = List.map (fun id -> IVar (QVar id)) size_ids in
+    TName (t_id, sizes, global), size_ids
   in
   let mapping =
     List.fold_left
-      (fun acc t_id -> CidMap.add t_id (mk_entry t_id) acc)
+      (fun acc (t_id, sizes, global) ->
+        CidMap.add t_id (mk_entry t_id sizes global) acc)
       CidMap.empty
-      Builtins.builtin_type_ids
+      Builtins.builtin_type_info
   in
   ref { mapping; module_defs = CidSet.empty }
 ;;

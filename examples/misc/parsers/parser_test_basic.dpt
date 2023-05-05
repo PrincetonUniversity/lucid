@@ -3,11 +3,11 @@ type ip =  { int srcIp; int dstIp; int srcPort; int dstPort; }
 
 event background(int x) { printf("%d", x); }
 event eth(eth e) { generate background(e#srcMac); }
-event eth_ip(eth e, ip ip) { generate background(ip#srcIp); }
+event eth_ip(eth e, ip ip, Payload.t payload) { generate background(ip#srcIp); }
 
 parser parse_ip(eth e) {
   read ip : ip;
-  generate eth_ip(e, ip);
+  generate eth_ip(e, ip, Payload.parse());
 }
 
 // LUCID_ETHERTY is builtin

@@ -28,8 +28,8 @@ let rec partition_map (f : 'a -> 'b option) (lst : 'a list) : 'b list * 'a list 
   | hd :: tl ->
     let bs, ays = partition_map f tl in
     (match f hd with
-    | None -> bs, hd :: ays
-    | Some b -> b :: bs, ays)
+     | None -> bs, hd :: ays
+     | Some b -> b :: bs, ays)
 ;;
 
 (* Maps to tell us the effect of each global id, and the ids & concrete types
@@ -40,8 +40,8 @@ let collect_globals ds : global_info =
   let gs =
     List.filter_map
       (function
-        | { d = DGlobal (id, ty, _) } -> Some (id, ty)
-        | _ -> None)
+       | { d = DGlobal (id, ty, _) } -> Some (id, ty)
+       | _ -> None)
       ds
   in
   let start_id = Id.create "start" in
@@ -73,22 +73,22 @@ let possible_instantiations ((effect_map, gmap) : global_info) spec gparams =
   let satisfies_spec inst =
     List.for_all
       (function
-        | CSpec lst ->
-          fst
-          @@ List.fold_left
-               (fun (b, prev) curr ->
-                 if not b
-                 then false, curr
-                 else (
-                   let left, right =
-                     get_effect inst (fst prev), get_effect inst (fst curr)
-                   in
-                   match snd prev with
-                   | SpecLess -> left < right, curr
-                   | SpecLeq -> left <= right, curr))
-               (true, List.hd lst)
-               (List.tl lst)
-        | CEnd _ -> true)
+       | CSpec lst ->
+         fst
+         @@ List.fold_left
+              (fun (b, prev) curr ->
+                if not b
+                then false, curr
+                else (
+                  let left, right =
+                    get_effect inst (fst prev), get_effect inst (fst curr)
+                  in
+                  match snd prev with
+                  | SpecLess -> left < right, curr
+                  | SpecLeq -> left <= right, curr))
+              (true, List.hd lst)
+              (List.tl lst)
+       | CEnd _ -> true)
       spec
   in
   let rec all_insts lst =
@@ -116,7 +116,7 @@ type event_mapping =
   { inst : inst (* An instantiation of the event *)
   ; new_id : id (* The event id corresponding to this instantiation *)
   ; params : params
-        (* The original parameters of the event, with any polymorphism eliminated *)
+      (* The original parameters of the event, with any polymorphism eliminated *)
   }
 
 (* Given the list of existing globals and an event declaration, return several
@@ -124,7 +124,7 @@ type event_mapping =
    that could be passed in. Also return the instantiation that led to each
    copy *)
 let duplicate_event_decl global_info (eid, constr_specs, params)
-    : event_mapping list
+  : event_mapping list
   =
   let gparams = List.filter (is_global % snd) params in
   let possibles = possible_instantiations global_info constr_specs gparams in
@@ -222,22 +222,20 @@ let update_handler span hsort handler_body { inst; new_id; params } =
 let replace_decls (emap : event_mapping list IdMap.t) ds =
   let replace_decl d =
     match d.d with
-    | DEvent (eid, sort, _, _) ->
-      begin
-        match IdMap.find_opt eid emap with
-        | Some lst ->
-          List.map
-            (fun { new_id; params } ->
-              decl_sp (DEvent (new_id, sort, [], filter_params params)) d.dspan)
-            lst
-        | None -> failwith "Impossible. I hope."
-      end
-    | DHandler (eid, hsort, body) ->
-      begin
-        match IdMap.find_opt eid emap with
-        | Some lst -> List.map (update_handler d.dspan hsort body) lst
-        | None -> failwith "Impossible. I hope."
-      end
+    | DEvent (eid, sort, _, _) -> begin
+      match IdMap.find_opt eid emap with
+      | Some lst ->
+        List.map
+          (fun { new_id; params } ->
+            decl_sp (DEvent (new_id, sort, [], filter_params params)) d.dspan)
+          lst
+      | None -> failwith "Impossible. I hope."
+    end
+    | DHandler (eid, hsort, body) -> begin
+      match IdMap.find_opt eid emap with
+      | Some lst -> List.map (update_handler d.dspan hsort body) lst
+      | None -> failwith "Impossible. I hope."
+    end
     | _ -> [d]
   in
   List.concat @@ List.map replace_decl ds
@@ -257,43 +255,43 @@ let replace_uses (event_mappings : event_mapping list IdMap.t) ds =
         | Compound _ -> ECall (cid, List.map (self#visit_exp dummy) args)
         | Id id ->
           (match IdMap.find_opt id event_mappings with
-          (* Check to see if we've replaced this event *)
-          | None -> ECall (cid, List.map (self#visit_exp dummy) args)
-          | Some mappings ->
-            let global_arg_values, other_args =
-              partition_map
-                (fun e ->
-                  if is_global (Option.get e.ety)
-                  then begin
-                    match e.e with
-                    | EVar cid -> Some (Cid.to_id cid)
-                    | _ ->
-                      Console.error
-                      @@ "This expression doesn't look like a global id: "
-                      ^ Printing.exp_to_string e
-                  end
-                  else None)
-                args
-            in
-            (* It's rather hacky to be doing this via string manipulation; a
+           (* Check to see if we've replaced this event *)
+           | None -> ECall (cid, List.map (self#visit_exp dummy) args)
+           | Some mappings ->
+             let global_arg_values, other_args =
+               partition_map
+                 (fun e ->
+                   if is_global (Option.get e.ety)
+                   then begin
+                     match e.e with
+                     | EVar cid -> Some (Cid.to_id cid)
+                     | _ ->
+                       Console.error
+                       @@ "This expression doesn't look like a global id: "
+                       ^ Printing.exp_to_string e
+                   end
+                   else None)
+                 args
+             in
+             (* It's rather hacky to be doing this via string manipulation; a
                better alternative (which I'm too lazy to implement right now)
                would be to construct the inst we get from this call, and search
                through the list for an equivalent one. But names should be
                deterministic, so I expect this implementation won't cause problems
                for a long time, if ever *)
-            let expected_name =
-              List.fold_left
-                (fun acc id -> acc ^ "_" ^ Id.name id)
-                (Id.name id)
-                global_arg_values
-            in
-            let new_id =
-              List.find_map
-                (fun { new_id } ->
-                  if Id.name new_id = expected_name then Some new_id else None)
-                mappings
-            in
-            ECall (Id new_id, List.map (self#visit_exp dummy) other_args))
+             let expected_name =
+               List.fold_left
+                 (fun acc id -> acc ^ "_" ^ Id.name id)
+                 (Id.name id)
+                 global_arg_values
+             in
+             let new_id =
+               List.find_map
+                 (fun { new_id } ->
+                   if Id.name new_id = expected_name then Some new_id else None)
+                 mappings
+             in
+             ECall (Id new_id, List.map (self#visit_exp dummy) other_args))
     end
   in
   v#visit_decls () ds

@@ -15,8 +15,11 @@ let builtin_vars =
   [self_id, self_ty; recirc_id, recirc_ty; lucid_ety_id, lucid_ety_ty]
 ;;
 
-let builtin_type_ids =
-  [Arrays.t_id; Counters.t_id; PairArrays.t_id; Payloads.t_id]
+let builtin_type_info =
+  [ Arrays.t_id, Arrays.sizes, Arrays.global
+  ; Counters.t_id, Counters.sizes, Counters.global
+  ; PairArrays.t_id, PairArrays.sizes, PairArrays.global
+  ; Payloads.t_id, Payloads.sizes, Payloads.global ]
 ;;
 
 (* Building modules *)
