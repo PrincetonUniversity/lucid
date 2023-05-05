@@ -172,6 +172,8 @@ let parse_interp () =
 ;;
 
 let parse_tofino () =
+  (* verbose mode off by default for tofino backend *)
+  cfg.verbose <- false;
   (* common options *)
   let speclist = parse_common () in
   (* added options for tofino backend *)

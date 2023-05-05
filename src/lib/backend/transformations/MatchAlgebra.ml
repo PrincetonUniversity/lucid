@@ -832,9 +832,9 @@ let delete_unreachable bs =
         match result_opt with 
         | Some(_) -> result_opt
         | None -> (
-          (* print_endline ("[is_pattern_branch_redundant] branch:\n" ^ (string_of_pattern pb.pattern));
-          print_endline ("[is_pattern_branch_redundant] successor branch:\n" ^ (string_of_pattern q.pattern)); *)
-
+(*           print_endline ("[is_pattern_branch_redundant] branch:\n" ^ (string_of_pattern pb.pattern));
+          print_endline ("[is_pattern_branch_redundant] successor branch:\n" ^ (string_of_pattern q.pattern));
+ *)
         (* if pb is a subset of q, and pb has the same stmt as q, then pb is redundant *)
           if (Z3Helpers.is_p_subset_of_q pb.pattern q.pattern) then (
             (* print_endline("[is_pattern_branch_redundant] p is a subset of successor."); *)
@@ -843,7 +843,8 @@ let delete_unreachable bs =
               Some(true)
             (* case: pb is a subset of later rule q, but q has a different statement... *)
             ) else (
-              None
+                (* print_endline("[is_pattern_branch_redundant] p is necessary because of successor."); *)
+                Some(false)
             )
           ) else (
             (* if pb and q overlap, and pb has a different stmt than q, then pb is necessary *)
@@ -928,9 +929,14 @@ let merge_matches m1 m2 =
 
 (* delete the redundant branches in a match statement *)
 let delete_redundant_branches m = 
-  pattern_branches_of_match m
-  |> delete_redundant
-  |> smatch_of_pattern_branches
+  (* print_endline ("[delete_redundant_branches] starting statement"^(CorePrinting.statement_to_string m)); *)
+  let res = pattern_branches_of_match m
+    |> delete_redundant
+    |> smatch_of_pattern_branches
+  in
+  (* print_endline ("[delete_redundant_branches] final statement"^(CorePrinting.statement_to_string res)); *)
+
+  res
 ;;
 
 (* update pattern branch list bs1, folding in the match statement m2 *)

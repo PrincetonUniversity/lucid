@@ -117,7 +117,7 @@ let dfg_to_sgdfg dfg =
     dfg;
   (* got all the statement groups, i.e., nodes. Now fill in the edges? *)
   let statement_groups = (!atomic_statement_groups)@(!array_statement_groups |> List.split |> snd) in
-  print_endline ("[dfg_to_sgdfg] number of vertex_stmts in statement_groups before constructing dfg: "^(vertex_stmts_of_stmt_groups statement_groups |> List.length |> string_of_int));
+  (* print_endline ("[dfg_to_sgdfg] number of vertex_stmts in statement_groups before constructing dfg: "^(vertex_stmts_of_stmt_groups statement_groups |> List.length |> string_of_int)); *)
 
   (* print_endline ("number of statement groups: "^(List.length (statement_groups) |> string_of_int)); *)
   (* sguid -> sg *)
@@ -146,11 +146,11 @@ let dfg_to_sgdfg dfg =
     sgdfg_with_nodes
     statement_groups
   in
-  let nodes = SgDfg.fold_vertex (fun v acc -> v :: acc) g [] in
-  print_endline (
+  (* let nodes = SgDfg.fold_vertex (fun v acc -> v :: acc) g [] in *)
+(*   print_endline (
     "[dfg_to_sgdfg] number of statement group nodes in dfg: "^
     (nodes |> List.length |> string_of_int ));
-  print_endline ("[dfg_to_sgdfg] number of vertex_stmts in dfg: "^(vertex_stmts_of_stmt_groups nodes |> List.length |> string_of_int));
+  print_endline ("[dfg_to_sgdfg] number of vertex_stmts in dfg: "^(vertex_stmts_of_stmt_groups nodes |> List.length |> string_of_int)); *)
   g
 ;;
 
@@ -404,7 +404,7 @@ let place_in_table stmt_group table =
 
     (* fold each conditional statement into the table *)
     let new_tbl_smatch = List.fold_left 
-      (fun m1 m2 -> merge_matches m1 m2 |> delete_redundant_branches)
+      (fun m1 m2 -> merge_matches m1 m2 (* |> delete_redundant_branches *))
       (stmt_of_table table)
       (List.map (fun s -> s.stmt) cond_stmts)
     in
@@ -582,7 +582,7 @@ let try_place_in_stage prog_info (prior_stages, stmt_group_opt) stage =
         if (placement_done pargs_opt)
         then (updated_tables)
         else (
-          print_endline ("[try_place_in_stage] attempting to create new table in stage.");
+          (* print_endline ("[try_place_in_stage] attempting to create new table in stage."); *)
           updated_tables@
           (
             match (place_in_table stmt_group empty_table) with 
