@@ -15,7 +15,9 @@ let builtin_vars =
   [self_id, self_ty; recirc_id, recirc_ty; lucid_ety_id, lucid_ety_ty]
 ;;
 
-let builtin_type_ids = [Arrays.t_id; Counters.t_id; PairArrays.t_id]
+let builtin_type_ids =
+  [Arrays.t_id; Counters.t_id; PairArrays.t_id; Payloads.t_id]
+;;
 
 (* Building modules *)
 let builtin_modules =
@@ -23,11 +25,17 @@ let builtin_modules =
   ; Counters.signature
   ; Events.signature
   ; System.signature
-  ; PairArrays.signature ]
+  ; PairArrays.signature
+  ; Payloads.signature ]
 ;;
 
 let builtin_defs =
-  Arrays.defs @ Counters.defs @ Events.defs @ System.defs @ PairArrays.defs
+  Arrays.defs
+  @ Counters.defs
+  @ Events.defs
+  @ System.defs
+  @ PairArrays.defs
+  @ Payloads.defs
 ;;
 
 (* Builtin local vars with

@@ -16,6 +16,5 @@ module type TypeInterface = sig
   include BasicInterface
 
   val t_id : Cid.t
-  val sizes_labels : Id.t list * params
   val constructors : (Cid.t * func_ty) list
 end

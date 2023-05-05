@@ -13,7 +13,6 @@ let array_id = Id.create array_name
 let array_error fun_name msg = error (array_name ^ ": " ^ fun_name ^ ": " ^ msg)
 let module_id = array_id
 let t_id = Cid.create_ids [array_id; Id.create "t"]
-let sizes_labels = [Id.create "dummy_sz"], []
 
 (* Constructor *)
 let array_create_id = Cid.create_ids [array_id; Id.create "create"]
