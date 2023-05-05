@@ -192,6 +192,30 @@ module Z3Helpers = struct
       error "unknown sat..."    
   ;;
 
+
+
+  let is_p_subset_of_q (p : pattern) (q:pattern) : bool = 
+    (* p is a subset of q if you cannot reach p after q. 
+        that is, if !q && p is satisfiable, then p is not a subset of q. *)
+    not (is_pattern_matchable p [q])
+  ;;
+  let patterns_overlap (p : pattern) (q : pattern) : bool = 
+    (* do p and q overlap? that is equivalent to asking if p /\ q is satisfiable *)
+    let ctx = mk_context ["model", "true"; "proof", "true"] in
+    let ctx, p_eqn = eqn_of_core_pat ctx p in 
+    let ctx, q_eqn = eqn_of_core_pat ctx q in 
+    let and_eqn = Z3Bool.mk_and ctx [p_eqn; q_eqn] in
+    let solver = Solver.mk_simple_solver ctx in
+    Solver.add solver [and_eqn];
+    let is_sat = Solver.check solver [] in
+    match is_sat with
+    | SATISFIABLE ->true
+    | UNSATISFIABLE -> false
+    | UNKNOWN ->
+      Printf.printf "unknown\n";
+      error "unknown sat..."
+  ;;
+
   (* is rule r feasible given ~(qs) *)
   let new_is_r_still_feasible (r : rule) (qs : rule list) =
     let ctx = mk_context ["model", "true"; "proof", "true"] in
@@ -777,6 +801,96 @@ let delete_unreachable bs =
   res
 ;;
 
+
+    (* ***deleting redundant branches ***
+    we have a statement like this: 
+      match (a, b) with 
+      | (_, 0) -> x();
+      | (_, _) -> x();
+  
+    the first rule is not needed, because: 
+      1) it is a subset of the second rule;
+      2) it has the same action as the second rule;
+      3) there are no intersecting rules with different actions between the two rules
+    
+    we want to detect and remove rules like the first rule.
+  *)
+
+  
+  let is_pattern_branch_redundant (pb :pattern_branch) (pbs : pattern_branch list) =
+  (* for each pattern_branch q in pbs:
+      # if pb is a subset of q, and pb has the same action as q, then pb is redundant
+      if (is_subset(pb, q)):
+        if (pb.action == q.action):
+          return true
+      # if pb and q overlap, and pb has a different action than q, then pb is necessary
+      if (intersect(pb, q) != empty):
+        if (pb.action != q.action):
+          return false *)
+    let is_redundant_opt = CL.fold_left
+      (fun result_opt q -> (
+        match result_opt with 
+        | Some(_) -> result_opt
+        | None -> (
+          (* print_endline ("[is_pattern_branch_redundant] branch:\n" ^ (string_of_pattern pb.pattern));
+          print_endline ("[is_pattern_branch_redundant] successor branch:\n" ^ (string_of_pattern q.pattern)); *)
+
+        (* if pb is a subset of q, and pb has the same stmt as q, then pb is redundant *)
+          if (Z3Helpers.is_p_subset_of_q pb.pattern q.pattern) then (
+            (* print_endline("[is_pattern_branch_redundant] p is a subset of successor."); *)
+            if (CoreSyntax.equiv_stmt pb.bstmt q.bstmt) then (
+              (* print_endline("[is_pattern_branch_redundant] p is redundant becuase of successor."); *)
+              Some(true)
+            (* case: pb is a subset of later rule q, but q has a different statement... *)
+            ) else (
+              None
+            )
+          ) else (
+            (* if pb and q overlap, and pb has a different stmt than q, then pb is necessary *)
+            if (Z3Helpers.patterns_overlap pb.pattern q.pattern) then (
+              (* print_endline("[is_pattern_branch_redundant] p and successor overlap."); *)
+              if (not (CoreSyntax.equiv_stmt pb.bstmt q.bstmt)) then (
+                (* print_endline("[is_pattern_branch_redundant] p is necessary because of successor."); *)
+                Some(false)
+              ) else (
+                None
+              )
+            ) 
+            (* case: pb and q do not overlap, so we are not yet sure if pb is necessary or redundant. *)
+            else (
+              None
+            )
+          )
+        )
+      )
+      )
+      None
+      pbs
+    in
+    (* if we did not find any rules in pbs that makes pb redundant, then pb is necessary.*)
+    match is_redundant_opt with
+    | Some(b) -> b
+    | None -> false
+  ;;
+
+(* delete the pattern branches that are not redundant, because 
+   anything that matches them would match a subsequent branch 
+   with the same statement. *)
+let delete_redundant bs = 
+  let rec delete_redundant_rec bs = 
+    match bs with 
+    | [] -> []
+    | b::bs -> (
+      if (is_pattern_branch_redundant b bs) then (
+        delete_redundant_rec bs
+      ) else (
+        b::(delete_redundant_rec bs)
+      )
+    )
+  in 
+  delete_redundant_rec bs
+;;
+
 let combine_pattern_branches bs1 bs2 = 
   (* first, make sure bs1 and bs2 are over the same fields. *)
   let bs1, bs2 = align_keys bs1 bs2 in 
@@ -809,6 +923,13 @@ let merge_matches m1 m2 =
   combine_pattern_branches
     (pattern_branches_of_match m1)
     (pattern_branches_of_match m2)
+  |> smatch_of_pattern_branches
+;;
+
+(* delete the redundant branches in a match statement *)
+let delete_redundant_branches m = 
+  pattern_branches_of_match m
+  |> delete_redundant
   |> smatch_of_pattern_branches
 ;;
 

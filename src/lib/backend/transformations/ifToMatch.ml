@@ -623,7 +623,18 @@ let match_of_if_new exp s1 s2 =
   let smatch = match atomic_match_statements with
     | [] -> error "[match_of_if_new] empty expression in if statement?"
     | stmt::[] -> stmt (* just one statement, return it *)
-    | stmt::stmts -> CL.fold_left MatchAlgebra.merge_matches stmt stmts (* multiple statements, must fold. *)
+    | stmt::stmts -> 
+      (* multiple statements, must fold. *)
+      (* let unoptimized =  *)
+        CL.fold_left MatchAlgebra.merge_matches stmt stmts
+      (* in   *)
+      (* let optimized =
+        CL.fold_left MatchAlgebra.merge_matches_deleting_redundant stmt stmts
+      in
+      let _ = Printf.printf "without redundant rules deleted:\n%s\n" (CorePrinting.stmt_to_string unoptimized) in
+      let _ = Printf.printf "with redundant rules deleted:\n%s\n" (CorePrinting.statement_to_string optimized) in
+      exit 1;
+      optimized *)
   in 
   (* finally, we have to replace the true / false placeholders in each branch with the 
      original statements. 
@@ -645,9 +656,12 @@ let match_of_if_new exp s1 s2 =
     | true -> (pats, s1_orig)
     | false -> (pats, s2_orig)
   in
-  match smatch.s with
+  (* finally, eliminate the redundant branches.  *)
+  let smatch' = match smatch.s with
     | SMatch(exps, branches) -> {smatch with s=SMatch(exps, CL.map unify_branch branches)}
     | _ -> error "[match_of_if_new] constructed a non smatch in the process of merging smatches..."
+  in
+  MatchAlgebra.delete_redundant_branches smatch'
 ;;
 
 (* a new algorithm: convert each conjunction of the if expression 

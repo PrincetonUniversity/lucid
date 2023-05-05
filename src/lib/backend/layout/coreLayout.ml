@@ -404,7 +404,7 @@ let place_in_table stmt_group table =
 
     (* fold each conditional statement into the table *)
     let new_tbl_smatch = List.fold_left 
-      merge_matches 
+      (fun m1 m2 -> merge_matches m1 m2 |> delete_redundant_branches)
       (stmt_of_table table)
       (List.map (fun s -> s.stmt) cond_stmts)
     in
