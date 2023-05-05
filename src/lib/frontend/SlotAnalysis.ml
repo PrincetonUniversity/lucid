@@ -104,7 +104,10 @@ let extract_call e =
     | EVar cid -> Cid.to_id cid
     | ECall (cid, []) when Cid.equal cid Payloads.payload_parse_cid ->
       payload_parse_id
-    | _ -> failwith "slotAnalysis: expected a variable in event/parser argument"
+    | _ ->
+      failwith
+        "slotAnalysis: expected event/parser argument to be a variable or a \
+         call to Payload.parse "
   in
   match e.e with
   | ECall (cid, es) -> cid, List.map extract_var es
@@ -421,6 +424,8 @@ let assign_int_slotids env =
     SlotMap.empty
 ;;
 
+(* FIXME: The way this handles modules is just wrong, it needs to add prefixes
+   to stuff when leaving the module, not when first adding them. Man, modules suck. *)
 let analyze_prog ds =
   let v =
     object (self)

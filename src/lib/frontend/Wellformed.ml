@@ -17,8 +17,13 @@ open Printing
 
    Checks we do during typechecking:
    - No dynamic global creation
-   - QVars should only sometimes be allowed in declarations (defined in this file) -- TODO
+   - QVars should only sometimes be allowed in declarations (defined in this file)
    - Constraint specifications only reference global types
+
+  Checks we do after typechecking:
+   - Payload restrictions:
+     - At most one parameter to each event has (or contains) type Payload.t
+     - Payload.parse() is only called inside parsers, and Payload.empty() inside handlers
 
    Checks we should do at some point (TODO):
    - Check for accidental unification of different user-declared QVars
@@ -172,10 +177,98 @@ let rec match_handlers ?(m_cid = None) (ds : decls) =
   | None, None -> ()
 ;;
 
+(* Checking restrictions on Payloads
+   TODO: Maybe we need to add a restriction that payloads can't be conditionally
+   assigned to? Like events, we really want to inline all of them during compilation,
+   since they're not "really" first-class values. Maybe even that you can't declare
+   local variables or function arguments of type payload.
+ *)
+
+(* FIXME: This doesn't account for things happening inside modules *)
+let check_payloads ds =
+  let v =
+    object (self)
+      inherit [_] s_iter as super
+
+      (** Since payloads might appear in compount types, we track those that do
+          so we can detect multiple payload parameters to events **)
+      val mutable saw_payload = false
+
+      val mutable user_payload_tys = CidSet.empty
+
+      method! visit_raw_ty () rty =
+        match TyTQVar.strip_links rty with
+        | TName (cid, _, _)
+          when Cid.equal cid Payloads.t_id || CidSet.mem cid user_payload_tys ->
+          saw_payload <- true
+        | rty -> super#visit_raw_ty () rty
+
+      method contains_payload ty =
+        match TyTQVar.strip_links ty.raw_ty with
+        | TName (cid, _, _) ->
+          Cid.equal cid Payloads.t_id || CidSet.mem cid user_payload_tys
+        | rty ->
+          saw_payload <- false;
+          self#visit_raw_ty () rty;
+          saw_payload
+
+      method! visit_DUserTy () id _ ty =
+        if self#contains_payload ty
+        then user_payload_tys <- CidSet.add (Cid.id id) user_payload_tys
+
+      (** Ensure that Payload.parse is only called inside parsers, and
+          Payload.empty is only called outside parsers *)
+      val mutable in_parser = false
+
+      method! visit_exp () e =
+        match e.e with
+        | ECall (cid, args) ->
+          List.iter (self#visit_exp ()) args;
+          if in_parser && Cid.equal cid Payloads.payload_empty_cid
+          then
+            Console.error_position e.espan
+            @@ "Payload.empty should only be called outside parsers";
+          if (not in_parser) && Cid.equal cid Payloads.payload_parse_cid
+          then
+            Console.error_position e.espan
+            @@ "Payload.parse should only be called inside parsers"
+        | _ -> super#visit_exp () e
+
+      method! visit_decl () d =
+        match d.d with
+        | DEvent (id, _, _, params) ->
+          (* Ensure the event has at most one payload-type argument *)
+          let params_containing_payload =
+            List.fold_left
+              (fun acc (id, ty) ->
+                if self#contains_payload ty then id :: acc else acc)
+              []
+              params
+          in
+          if List.length params_containing_payload > 1
+          then
+            Console.error_position d.dspan
+            @@ Printf.sprintf
+                 "Multiple parameters to event %s have or contain the type \
+                  Payload.t: %s"
+                 (Printing.id_to_string id)
+                 (Printing.list_to_string Printing.id_to_string
+                 @@ List.rev params_containing_payload)
+        | DParser _ ->
+          in_parser <- true;
+          super#visit_decl () d;
+          in_parser <- false
+        | _ -> super#visit_decl () d
+    end
+  in
+  v#visit_decls () ds
+;;
+
 let pre_typing_checks ds =
   check_decls ds;
   match_handlers ds;
-  check_symbolics ds
+  check_symbolics ds;
+  check_payloads ds
 ;;
 
 (*** QVar checking. This is run on each decl after its type is inferred, and makes
