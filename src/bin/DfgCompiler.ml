@@ -16,7 +16,7 @@ let do_logging = ref true ;;
 let disable_logging () = 
   do_logging := false;
   Cmdline.cfg.verbose <- false;
-  InterpHelpers.silent := true;
+  (* InterpHelpers.silent := true; *)
   NormalizeInts.silent := true;
   PackageTofinoApp.silent := true;
   ()
