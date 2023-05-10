@@ -42,16 +42,16 @@ group NEIGHBORS = {1};
 
 // state 
 // map dst --> (shortest known pathlen, next hop)
-global Array.t<<32>> nexthop_pathlen  = Array.create(tbl_sz);
-global Array.t<<32>> nexthop_nid  = Array.create(tbl_sz);
+global Array.t<32> nexthop_pathlen  = Array.create(tbl_sz);
+global Array.t<32> nexthop_nid  = Array.create(tbl_sz);
 
 // map neighbor --> (last pinged time, port)
-global Array.t<<32>> last_seen = Array.create(neighbor_ct);
-global Array.t<<32>> nid_port = Array.create(neighbor_ct);
+global Array.t<32> last_seen = Array.create(neighbor_ct);
+global Array.t<32> nid_port = Array.create(neighbor_ct);
 
 // routing failure counters
-global Array.t<<32>> noroute_ct = Array.create(tbl_sz);
-global Array.t<<32>> linkdown_ct = Array.create(tbl_sz);
+global Array.t<32> noroute_ct = Array.create(tbl_sz);
+global Array.t<32> linkdown_ct = Array.create(tbl_sz);
 
 // ---- events ----
 

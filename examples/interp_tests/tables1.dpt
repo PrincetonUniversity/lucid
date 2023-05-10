@@ -42,7 +42,7 @@ table_type ftbl_t = {
 // table_create<"table type">("actions bound to table", "table size", "default action");
 global ftbl_t ftbl = table_create<ftbl_t>((hit_acn, miss_acn), 1024, miss_acn(false));
 
-event do_match(int<<32>> s) {
+event do_match(int<32> s) {
   int a = 1000;
   // table_match takes a table (ftbl), a tuple of keys (s), and a tuple of arguments (a) to pass to the matching 
   // action. The return value is the return of the action.
@@ -69,7 +69,7 @@ event do_match(int<<32>> s) {
 
 
 
-event do_install(int<<32>> v, int<<32>> m) {
+event do_install(int<32> v, int<32> m) {
   printf("installing entry: (%d &&& %d)", v, m);
   table_multi_install(ftbl, 
     {(v) -> hit_acn(2); 

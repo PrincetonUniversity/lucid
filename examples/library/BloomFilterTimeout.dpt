@@ -3,35 +3,35 @@ include "BloomFilter.dpt"
 // It guarantees that entries will be in the filter for between one and two
 // timeout periods.
 module BloomFilterTimeout : {
-  global type t<<'key_sz, 'idx_sz, 'k>>;
-  constr t<<'key_sz, 'idx_sz, 'k>> create(int array_length, int['k] seeds, int timeout, int empty_time);
+  global type t<'key_sz, 'idx_sz, 'k>;
+  constr t<'key_sz, 'idx_sz, 'k> create(int array_length, int['k] seeds, int timeout, int empty_time);
 
-  fun void add_to_filter(t<<'a, 'b, 'k>> filter, int<<'a>> key) [start <= filter; end filter];
-  fun bool in_filter(t<<'a, 'b, 'k>> filter, int<<'a>> key) [start <= filter; end filter];
+  fun void add_to_filter(t<'a, 'b, 'k> filter, int<'a> key) [start <= filter; end filter];
+  fun bool in_filter(t<'a, 'b, 'k> filter, int<'a> key) [start <= filter; end filter];
 
-  event init(t<<'a, 'b, 'k>> filter);
+  event init(t<'a, 'b, 'k> filter);
 } {
-  type t<<'key_sz, 'idx_sz, 'k>> = {
-    Array.t<<2>> active; // Tells us which filter is active
-    BloomFilter.t<<'key_sz, 'idx_sz, 'k>> filter1;
-    BloomFilter.t<<'key_sz, 'idx_sz, 'k>> filter2;
-    BloomFilter.t<<'key_sz, 'idx_sz, 'k>> filter3;
-    int<<'idx_sz>> max_idx_;
+  type t<'key_sz, 'idx_sz, 'k> = {
+    Array.t<2> active; // Tells us which filter is active
+    BloomFilter.t<'key_sz, 'idx_sz, 'k> filter1;
+    BloomFilter.t<'key_sz, 'idx_sz, 'k> filter2;
+    BloomFilter.t<'key_sz, 'idx_sz, 'k> filter3;
+    int<'idx_sz> max_idx_;
     int rotate_period;
     int empty_period; // We require that empty_time is significantly less than timeout/m
   }
 
-  constr t<<'a, 'b, 'k>> create(int array_length, int['k] seeds, int timeout, int empty_time) = {
+  constr t<'a, 'b, 'k> create(int array_length, int['k] seeds, int timeout, int empty_time) = {
     active = Array.create(1);
     filter1 = BloomFilter.create(array_length, seeds);
     filter2 = BloomFilter.create(array_length, seeds);
     filter3 = BloomFilter.create(array_length, seeds);
-    max_idx_ = (int<<'b>>) (array_length-1);
+    max_idx_ = (int<'b>) (array_length-1);
     rotate_period = timeout;
     empty_period = empty_time; // Could theoretically compute this if we have division
   };
 
-  fun void add_to_filter(t<<'a, 'b, 'k>> filter, int<<'a>> key) {
+  fun void add_to_filter(t<'a, 'b, 'k> filter, int<'a> key) {
     auto active = Array.get(filter#active, 0);
     if (active == 0)        { BloomFilter.add_to_filter(filter#filter1, key);
                               BloomFilter.add_to_filter(filter#filter2, key); }
@@ -41,7 +41,7 @@ module BloomFilterTimeout : {
                               BloomFilter.add_to_filter(filter#filter3, key); } }
   }
 
-  fun bool in_filter(t<<'a, 'b, 'k>> filter, int<<'a>> key) {
+  fun bool in_filter(t<'a, 'b, 'k> filter, int<'a> key) {
     auto active = Array.get(filter#active, 0);
     if (active == 0)        { return BloomFilter.in_filter(filter#filter1, key); }
     else { if (active == 1) { return BloomFilter.in_filter(filter#filter2, key); }
@@ -49,7 +49,7 @@ module BloomFilterTimeout : {
   }
 
   // Increment by 1 and mod by 3
-  memop rotate_m (int<<2>> x, int<<2>> dummy) {
+  memop rotate_m (int<2> x, int<2> dummy) {
     if (x == 2) {
       return 0;
     } else {
@@ -57,30 +57,30 @@ module BloomFilterTimeout : {
     }
   }
 
-  event rotate(t<<'a, 'b, 'k>> filter);
+  event rotate(t<'a, 'b, 'k> filter);
 
-  handle rotate(t<<'a, 'b, 'k>> filter) {
+  handle rotate(t<'a, 'b, 'k> filter) {
     Array.setm(filter#active, 0, rotate_m, 0);
     generate Event.delay(this, filter#rotate_period);
   }
 
-  event clear(t<<'a, 'b, 'k>> filter, int<<'b>> idx);
+  event clear(t<'a, 'b, 'k> filter, int<'b> idx);
 
-  handle clear(t<<'a, 'b, 'k>> filter, int<<'b>> idx) {
+  handle clear(t<'a, 'b, 'k> filter, int<'b> idx) {
     auto active = Array.get(filter#active, 0);
     if (active == 0)        { BloomFilter.clear_index(filter#filter3, idx); }
     else { if (active == 1) { BloomFilter.clear_index(filter#filter1, idx); }
     else                    { BloomFilter.clear_index(filter#filter2, idx); } }
     auto next_idx = idx + 1;
-    if ((int<<'b>>)idx == filter#max_idx_) {
+    if ((int<'b>)idx == filter#max_idx_) {
       next_idx = 0;
     }
     generate Event.delay(clear(filter, next_idx), filter#empty_period);
   }
 
-  event init(t<<'a, 'b, 'k>> filter);
+  event init(t<'a, 'b, 'k> filter);
 
-  handle init(t<<'a, 'b, 'k>> filter) {
+  handle init(t<'a, 'b, 'k> filter) {
     generate Event.delay(rotate(filter), filter#rotate_period);
     generate clear(filter, 0);
   }

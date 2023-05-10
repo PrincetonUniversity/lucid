@@ -17,7 +17,7 @@ extern int tail;
 extern int succ;
 
 /* Time we last saw a packet for this flow coming from inside */
-global Array.t<<32>> last_seen = Array.create(NUM_REGISTERS);
+global Array.t<32> last_seen = Array.create(NUM_REGISTERS);
 
 event update_last_seen(int idx, int time);
 
@@ -35,7 +35,7 @@ handle update_last_seen(int idx, int time) {
 handle packetin(int src, int dst, int port) {
   if (port == INSIDE_PORT) {
     // Coming from inside -- update the firewall
-    int idx = (int<<32>>)hash<<2>>(HASH_SEED, src, dst);
+    int idx = (int<32>)hash<2>(HASH_SEED, src, dst);
     printf("Mapped (%d, %d) to index %d", src, dst, idx);
 
     int last_seen_time = Array.get(last_seen, idx);
@@ -50,7 +50,7 @@ handle packetin(int src, int dst, int port) {
     generate continue(dst);
   } else {
     // Coming from outside -- drop if not in firewall
-    int idx = (int<<32>>)hash<<2>>(HASH_SEED, dst, src);
+    int idx = (int<32>)hash<2>(HASH_SEED, dst, src);
     printf("Mapped (%d, %d) to index %d", dst, src, idx);
     int last_seen_time = Array.get(last_seen, idx);
 

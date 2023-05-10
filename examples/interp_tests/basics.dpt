@@ -17,7 +17,7 @@ handle count_to_10 (int count) {
 	/* integers have a polymorphic argument: their width in bits.
 	If the argument is omitted, the default is 32 bits. */
 	/*	integers are currently unsigned. */
-	int<<32>> next_count = count + 1;
+	int<32> next_count = count + 1;
 	if (count > 10){
 		/* Print functions are for debugging.
 		   Currently, only integer printing

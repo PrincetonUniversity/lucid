@@ -18,7 +18,7 @@ const int tail = 0;
 const int succ = 0;
 
 /* Time we last saw a packet for this flow coming from inside */
-global last_seen = new Array<<32>>(NUM_REGISTERS);
+global last_seen = new Array<32>(NUM_REGISTERS);
 
 event update_last_seen(int idx, int time);
 
@@ -36,7 +36,7 @@ handle update_last_seen(int idx, int time) {
 handle packetin(int src, int dst, int port) {
   if (port == INSIDE_PORT) {
     // Coming from inside -- update the firewall
-    int idx = hash<<32>>(HASH_SEED, src, dst);
+    int idx = hash<32>(HASH_SEED, src, dst);
 
     int last_seen_time = Array.get(last_seen, idx);
     int now = Sys.time();
@@ -50,7 +50,7 @@ handle packetin(int src, int dst, int port) {
     generate continue(dst);
   } else {
     // Coming from outside -- drop if not in firewall
-    int idx = hash<<32>>(HASH_SEED, dst, src);
+    int idx = hash<32>(HASH_SEED, dst, src);
     int last_seen_time = Array.get(last_seen, idx);
 
     if ((Sys.time() - last_seen_time) < TIME_THRESH) {

@@ -1,11 +1,11 @@
 module PacketTable : {
-    type PTRecord<<'wsz>> = {
-        int<<'wsz>>[6] ptr_items;
+    type PTRecord<'wsz> = {
+        int<'wsz>[6] ptr_items;
     }
 }
 {
-    type PTRecord<<'wsz>> = {
-        int<<'wsz>>[6] ptr_items;
+    type PTRecord<'wsz> = {
+        int<'wsz>[6] ptr_items;
     }
 }
 

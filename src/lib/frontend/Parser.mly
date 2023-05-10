@@ -68,6 +68,7 @@
 %token <Span.t * Id.t> ID
 %token <Span.t * Id.t> QID
 %token <Span.t * Z.t> NUM
+%token <Span.t * (Z.t * int)> NUMWITDH
 %token <Span.t * int list> BITPAT
 %token <Span.t * string> STRING
 %token <Span.t> INCLUDE
@@ -79,8 +80,6 @@
 %token <Span.t> OR
 %token <Span.t> CONCAT
 %token <Span.t> NOT
-%token <Span.t> LLEFT
-%token <Span.t> RRIGHT
 %token <Span.t> LESS
 %token <Span.t> MORE
 %token <Span.t> PLUS
@@ -220,10 +219,10 @@ polys:
     | size COMMA polys                  { Span.extend (fst $1) (fst $3), (snd $1)::(snd $3) }
 
 poly:
-    | LLEFT polys RRIGHT                { Span.extend $1 $3, snd $2 }
+    | LESS polys MORE                { Span.extend $1 $3, snd $2 }
 
 single_poly:
-    | LLEFT size RRIGHT                 { Span.extend $1 $3, snd $2 }
+    | LESS size MORE                 { Span.extend $1 $3, snd $2 }
 
 paren_args:
     | LPAREN RPAREN                     { Span.extend $1 $2, [] }
@@ -261,9 +260,9 @@ patterns:
 
 exp:
     | BITPAT                              { value_to_exp (vpat_sp (snd $1) (fst $1))}
-    | cid			                      { var_sp (snd $1) (fst $1) }
+    | cid			                            { var_sp (snd $1) (fst $1) }
+    | NUMWITDH                            { eint_sp (fst (snd $1)) (Some (IConst (snd (snd $1)))) (fst $1) }
     | NUM                                 { eint_sp (snd $1) None (fst $1) }
-    | NUM single_poly                     { eint_sp (snd $1) (Some (snd $2)) (Span.extend (fst $1) (fst $2)) }
     | TRUE                                { value_to_exp (vbool_sp true $1) }
     | FALSE                               { value_to_exp (vbool_sp false $1) }
     | cid paren_args                      { call_sp (snd $1) (snd $2) (Span.extend (fst $1) (fst $2)) }

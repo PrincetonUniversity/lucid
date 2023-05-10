@@ -1,14 +1,14 @@
 // Simple test to check that global argument elimination is working
 
-global Array.t<<32>> arr1 = Array.create(6);
-global Array.t<<32>> arr2 = Array.create(6);
-global Counter.t<<32>> ctr1 = Counter.create(0);
-global Array.t<<32>> arr3 = Array.create(6);
-global Counter.t<<32>> ctr2 = Counter.create(0);
+global Array.t<32> arr1 = Array.create(6);
+global Array.t<32> arr2 = Array.create(6);
+global Counter.t<32> ctr1 = Counter.create(0);
+global Array.t<32> arr3 = Array.create(6);
+global Counter.t<32> ctr2 = Counter.create(0);
 
-event update_arr_ctr(Array.t<<32>> a, Counter.t<<32>> c, int idx, int val) [a < c];
+event update_arr_ctr(Array.t<32> a, Counter.t<32> c, int idx, int val) [a < c];
 
-handle update_arr_ctr(Array.t<<32>> a, Counter.t<<32>> c, int idx, int val) {
+handle update_arr_ctr(Array.t<32> a, Counter.t<32> c, int idx, int val) {
 	Array.set(a, idx, val);
 	Counter.add(c, val);
 }

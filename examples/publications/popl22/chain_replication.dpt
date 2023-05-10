@@ -19,9 +19,9 @@ const int tail = 0;
 const int succ = 0;
 
 /* Global data: the registers which we're replicating, plus metadata about each of them */
-global Array.t<<32>> pending = Array.create(NUM_REGISTERS);
-global Array.t<<32>> sequence_nums = Array.create(NUM_REGISTERS);
-global Array.t<<32>> registers = Array.create(NUM_REGISTERS);
+global Array.t<32> pending = Array.create(NUM_REGISTERS);
+global Array.t<32> sequence_nums = Array.create(NUM_REGISTERS);
+global Array.t<32> registers = Array.create(NUM_REGISTERS);
 
 event write(int idx, int seq, int data);
 event ack(int idx);
@@ -115,7 +115,7 @@ handle pktin(int src, int dst) {
   }
 
   // Actually do the processing
-  int idx = hash<<32>>(0, src, dst); // Or whatever
+  int idx = hash<32>(0, src, dst); // Or whatever
   int r = Array.get(pending, idx);
   if (r == TRUE) {
     // If we're in the middle of a write, send it to the tail, since that has

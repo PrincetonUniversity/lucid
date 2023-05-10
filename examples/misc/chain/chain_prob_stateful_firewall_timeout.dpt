@@ -10,8 +10,8 @@ const int HASH_SEED_2 = 33;
 const int ROTATE_PERIOD = 1000;
 const int EMPTY_PERIOD = 50;
 
-const int<<1>> TRUE = 1;
-const int<<1>> FALSE = 0;
+const int<1> TRUE = 1;
+const int<1> FALSE = 0;
 
 /* Information about the chain. */
 /* I want this to read "extern location foo;" but we don't have that syntax yet */
@@ -24,18 +24,18 @@ const int succ = 0;
 
 // Basically a counter, but we need to be able to read and write simultaneously
 // in order to to mod it by 3
-global active = new Array<<2>>(1);
+global active = new Array<2>(1);
 
-global filter0_1 = new Array<<1>>(NUM_REGISTERS);
-global filter0_2 = new Array<<1>>(NUM_REGISTERS);
-global filter1_1 = new Array<<1>>(NUM_REGISTERS);
-global filter1_2 = new Array<<1>>(NUM_REGISTERS);
-global filter2_1 = new Array<<1>>(NUM_REGISTERS);
-global filter2_2 = new Array<<1>>(NUM_REGISTERS);
+global filter0_1 = new Array<1>(NUM_REGISTERS);
+global filter0_2 = new Array<1>(NUM_REGISTERS);
+global filter1_1 = new Array<1>(NUM_REGISTERS);
+global filter1_2 = new Array<1>(NUM_REGISTERS);
+global filter2_1 = new Array<1>(NUM_REGISTERS);
+global filter2_2 = new Array<1>(NUM_REGISTERS);
 
 event add_to_filter(int idx1, int idx2);
 event rotate_active();
-event write_empty(int<<32>> idx);
+event write_empty(int<32> idx);
 
 // Request_x is for packets coming from inside, response_x is for packets coming from outside
 // entry events
@@ -46,7 +46,7 @@ event request_continue (int src_ip, int dst_ip);
 event response_continue (int src_ip, int dst_ip);
 
 handle add_to_filter(int idx1, int idx2) {
-  int<<2>> curr = Array.get(active, 0);
+  int<2> curr = Array.get(active, 0);
   // Add only to active and warmup filters
   if (curr == 0) {
     Array.set(filter0_1, idx1, TRUE);
@@ -72,7 +72,7 @@ handle add_to_filter(int idx1, int idx2) {
 }
 
 // Increment by 1 and mod by 3
-memop rotate (int<<2>> x, int<<2>> dummy) {
+memop rotate (int<2> x, int<2> dummy) {
   if (x == 2) {
     return 0;
   } else {
@@ -85,8 +85,8 @@ handle rotate_active() {
   generate Event.delay(rotate_active(), ROTATE_PERIOD);
 }
 
-handle write_empty (int<<32>> idx) {
-  int<<2>> curr = Array.get(active, 0);
+handle write_empty (int<32> idx) {
+  int<2> curr = Array.get(active, 0);
   if (curr == 0) {
     Array.set(filter2_1, idx, FALSE);
     Array.set(filter2_2, idx, FALSE);
@@ -97,14 +97,14 @@ handle write_empty (int<<32>> idx) {
     Array.set(filter1_1, idx, FALSE);
     Array.set(filter1_2, idx, FALSE);
   }}
-  int<<32>> next_index = idx+1;
+  int<32> next_index = idx+1;
   if (next_index == 16) { next_index = 0; }
   generate Event.delay(write_empty(next_index), EMPTY_PERIOD);
 }
 
 fun bool in_filter(int idx1, int idx2) {
   bool ret = false;
-  int<<2>> curr = Array.get(active, 0);
+  int<2> curr = Array.get(active, 0);
   if (curr == 0) {
     ret = Array.get(filter0_1, idx1) == TRUE &&
           Array.get(filter0_2, idx2) == TRUE;
@@ -119,8 +119,8 @@ fun bool in_filter(int idx1, int idx2) {
 }
 
 handle request_packet(int src, int dst) {
-  int idx1 = hash<<32>>(HASH_SEED_1, src, dst);
-  int idx2 = hash<<32>>(HASH_SEED_2, src, dst);
+  int idx1 = hash<32>(HASH_SEED_1, src, dst);
+  int idx2 = hash<32>(HASH_SEED_2, src, dst);
   bool in_filter = in_filter(idx1, idx2);
   if (!in_filter) {
     generate Event.sslocate(add_to_filter(idx1, idx2), head);
@@ -129,8 +129,8 @@ handle request_packet(int src, int dst) {
 }
 
 handle response_packet(int src, int dst) {
-  int idx1 = hash<<32>>(HASH_SEED_1, src, dst);
-  int idx2 = hash<<32>>(HASH_SEED_2, src, dst);
+  int idx1 = hash<32>(HASH_SEED_1, src, dst);
+  int idx2 = hash<32>(HASH_SEED_2, src, dst);
   bool in_filter = in_filter(idx1, idx2);
   if (in_filter) {
     generate request_continue(src, dst);

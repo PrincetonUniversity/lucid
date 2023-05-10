@@ -5,22 +5,22 @@ const int HASH_SEED = 1234;
 const int NUM_PORTS = 16;
 
 // Maps NAT ports to src IP
-global Array.t<<32>> nat_to_ip = Array.create(NUM_PORTS);
+global Array.t<32> nat_to_ip = Array.create(NUM_PORTS);
 // Maps NAT ports to src port
-global Array.t<<32>> nat_to_port = Array.create(NUM_PORTS);
+global Array.t<32> nat_to_port = Array.create(NUM_PORTS);
 
 // Handle packets coming from behind the NAT
-entry event inside_packet(int src_ip, int<<32>> src_port);
-exit event inside_continue(int<<32>> src_port);
+entry event inside_packet(int src_ip, int<32> src_port);
+exit event inside_continue(int<32> src_port);
 
 // Handle packets coming from outside the NAT
-entry event outside_packet(int<<32>> dst_port);
-exit event outside_continue(int dst_ip, int<<32>> dst_port);
+entry event outside_packet(int<32> dst_port);
+exit event outside_continue(int dst_ip, int<32> dst_port);
 
-event add_to_nat(int src_ip, int<<32>> src_port);
+event add_to_nat(int src_ip, int<32> src_port);
 
-handle add_to_nat(int src_ip, int<<32>> src_port) {
-    int NAT_port = (int<<32>>)hash<<4>>(HASH_SEED, src_ip, src_port);
+handle add_to_nat(int src_ip, int<32> src_port) {
+    int NAT_port = (int<32>)hash<4>(HASH_SEED, src_ip, src_port);
     printf("Mapped (ip: %d, port: %d) to port %d", src_ip, src_port, NAT_port);
     Array.set(nat_to_ip, NAT_port, src_ip);
     Array.set(nat_to_port, NAT_port, src_port);
@@ -30,11 +30,11 @@ handle add_to_nat(int src_ip, int<<32>> src_port) {
     generate inside_continue(NAT_port);
 }
 
-fun bool in_nat(int src_ip, int<<32>> src_port) {
+fun bool in_nat(int src_ip, int<32> src_port) {
     bool ret = false;
-    int idx = (int<<32>>)hash<<4>>(HASH_SEED, src_ip, src_port);
+    int idx = (int<32>)hash<4>(HASH_SEED, src_ip, src_port);
     int ip = Array.get(nat_to_ip, idx);
-    int<<32>> port = Array.get(nat_to_port, idx);
+    int<32> port = Array.get(nat_to_port, idx);
     if (ip == src_ip) {
         if (port == src_port) {
             ret = true;
@@ -43,10 +43,10 @@ fun bool in_nat(int src_ip, int<<32>> src_port) {
     return ret;
 }
 
-handle inside_packet(int src_ip, int<<32>> src_port) {
+handle inside_packet(int src_ip, int<32> src_port) {
     bool in = in_nat(src_ip, src_port);
     if(in == true) {
-        int<<32>> NAT_port = (int<<32>>)hash<<4>>(HASH_SEED, src_ip, src_port);
+        int<32> NAT_port = (int<32>)hash<4>(HASH_SEED, src_ip, src_port);
         printf("IP already in NAT, maps to port %d", NAT_port);
         generate inside_continue(NAT_port);
     } else {
@@ -55,7 +55,7 @@ handle inside_packet(int src_ip, int<<32>> src_port) {
     }
 }
 
-handle outside_packet(int<<32>> dst_port) {
+handle outside_packet(int<32> dst_port) {
     int ip = Array.get(nat_to_ip, dst_port);
     int port = Array.get(nat_to_port, dst_port);
     printf("Mapped port %d to (ip: %d, port: %d)", dst_port, ip, port);

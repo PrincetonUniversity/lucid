@@ -1,58 +1,58 @@
 /** A bunch of generically useful memop definitions **/
 
 // Return the first argument
-memop fst(int<<'a>> x, int<<'a>> y) { return x; }
+memop fst(int<'a> x, int<'a> y) { return x; }
 
 // Return the second argument
-memop snd(int<<'a>> x, int<<'a>> y) { return y; }
+memop snd(int<'a> x, int<'a> y) { return y; }
 
 // Add the arguments
-memop sum(int<<'a>> x, int<<'a>> y) { return x + y; }
+memop sum(int<'a> x, int<'a> y) { return x + y; }
 
 // Subtract the second argument from the first
-memop diff(int<<'a>> x, int<<'a>> y) { return x - y; }
+memop diff(int<'a> x, int<'a> y) { return x - y; }
 
 // Return the larger argument
-memop max(int<<'a>> x, int<<'a>> y) {
+memop max(int<'a> x, int<'a> y) {
   if (x < y) { return y; }
   else       { return x; }
 }
 
 // Return the smaller argument
-memop min(int<<'a>> x, int<<'a>> y) {
+memop min(int<'a> x, int<'a> y) {
   if (x < y) { return x; }
   else       { return y; }
 }
 
-memop eq(int<<'a>> x, int<<'a>> y) {
+memop eq(int<'a> x, int<'a> y) {
   if (x == y) { return 1; }
   else        { return 0; }
 }
 
-memop gt(int<<'a>> x, int<<'a>> y) {
+memop gt(int<'a> x, int<'a> y) {
   if (x > y) { return 1; }
   else       { return 0; }
 }
 
-memop lt(int<<'a>> x, int<<'a>> y) {
+memop lt(int<'a> x, int<'a> y) {
   if (x < y) { return 1; }
   else       { return 0; }
 }
 
 // TODO: Are these allowed?
 /*
-memop geq(int<<'a>> x, int<<'a>> y) {
+memop geq(int<'a> x, int<'a> y) {
   if (x >= y) { return 1; }
   else       { return 0; }
 }
 
-memop leq(int<<'a>> x, int<<'a>> y) {
+memop leq(int<'a> x, int<'a> y) {
   if (x <= y) { return 1; }
   else       { return 0; }
 }
 */
 
 // Add 1 to the first argument
-memop incr(int<<'a>> x, int<<'a>> y) {
+memop incr(int<'a> x, int<'a> y) {
   return x + 1;
 }

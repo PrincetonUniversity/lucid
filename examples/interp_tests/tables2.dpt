@@ -13,15 +13,15 @@ type res_t = {
 
 module WriteCacheTable : {
 
-  global type ct<<'i>>;
+  global type ct<'i>;
 
-  constr ct<<'i>> create(int cache_sz, int tbl_eles, int<<'i>> poly);
+  constr ct<'i> create(int cache_sz, int tbl_eles, int<'i> poly);
 
   // get a value from a cache table
-  fun res_t get(ct<<'i>> cachetbl, int k)[start <= cachetbl; end cachetbl];
+  fun res_t get(ct<'i> cachetbl, int k)[start <= cachetbl; end cachetbl];
 
   // set a value in a cache table
-  fun void set(ct<<'i>> cachetbl, int k, int v)[start <= cachetbl; end cachetbl];
+  fun void set(ct<'i> cachetbl, int k, int v)[start <= cachetbl; end cachetbl];
 }
 {
   // types for data stored by the table
@@ -39,24 +39,24 @@ module WriteCacheTable : {
   }
 
   // main module type
-  type ct<<'i>> = {
-    Array.t<<32>> ct_keys;
-    Array.t<<32>> ct_vals;
+  type ct<'i> = {
+    Array.t<32> ct_keys;
+    Array.t<32> ct_vals;
     cttbl_t ct_tbl;
-    int<<'i>> p;
+    int<'i> p;
   }
 
   // Create a cache table with cache_sz cache 
   // elements and tbl_sz table elements
-  constr ct<<'i>> create(int cache_sz, int tbl_eles, int<<'i>> poly) = {
+  constr ct<'i> create(int cache_sz, int tbl_eles, int<'i> poly) = {
     ct_keys = Array.create(cache_sz);
     ct_vals = Array.create(cache_sz);
     ct_tbl  = table_create<cttbl_t>((hit_acn, miss_acn), tbl_eles, miss_acn());
     p = poly;
   };
 
-  fun res_t get(ct<<'i>> cachetbl, int k) {
-    int<<'i>> idx = hash<<'i>>(1, k);
+  fun res_t get(ct<'i> cachetbl, int k) {
+    int<'i> idx = hash<'i>(1, k);
     int stored_key = Array.get(cachetbl#ct_keys, idx);
     if (stored_key == k) { // cache hit
       int stored_val = Array.get(cachetbl#ct_vals, idx);
@@ -71,8 +71,8 @@ module WriteCacheTable : {
     else { return memval; }
   }
 
-  fun void set(ct<<'i>> cachetbl, int k, int v){
-    int<<'i>> idx = hash<<'i>>(cachetbl#p, k);
+  fun void set(ct<'i> cachetbl, int k, int v){
+    int<'i> idx = hash<'i>(cachetbl#p, k);
     printf ("hash size arg: %d", (size_to_int('i)));
     printf ("[set] index: %d", idx);
     int cache_key = Array.update(cachetbl#ct_keys, idx, set_if_empty, k, set_if_empty, k);
@@ -88,7 +88,7 @@ module WriteCacheTable : {
 
 // create a cached table with a 256 element cache (index is 8 wide)
 // and a backing table with 1024 elements
-global WriteCacheTable.ct<<8>> global_cached_table = WriteCacheTable.create(256, 1024, 1);
+global WriteCacheTable.ct<8> global_cached_table = WriteCacheTable.create(256, 1024, 1);
 
 event do_set(int k, int v) {
   WriteCacheTable.set(global_cached_table, k, v);

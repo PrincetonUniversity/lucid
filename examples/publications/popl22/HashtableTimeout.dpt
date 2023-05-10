@@ -6,40 +6,40 @@ Same as Hashtable, but also includes the time each entry was added
 */
 
 module Hashtable {
-  type t<<'k, 'key_sz>> = {
-    Array.t<<32>>['k] hash_arrs;
-    Array.t<<32>> timestamps;
+  type t<'k, 'key_sz> = {
+    Array.t<32>['k] hash_arrs;
+    Array.t<32> timestamps;
     int seed;
   }
 
   // Just a tuple of args * timestamp. But don't have tuples in the surface
   // language yet.
-  type arg<<'k>> = {
+  type arg<'k> = {
     int['k] vals;
     int timestamp;
   }
 
   // Requires that length >= 2^key_sz
-  constr t<<'k, 'key_sz>> create(int length, int seed) = {
+  constr t<'k, 'key_sz> create(int length, int seed) = {
     hash_arrs = [Array.create(length) for i < 'k];
     timestamps = Array.create(length);
     seed = seed;
   };
 
   // Add args to the table, and return the previous value if there's a collision
-  fun arg<<'k>> add_arg(t<<'k, 'key_sz>> tbl, arg<<'k>>  arg) {
-    int idx = hash<<'key_sz>>(tbl#seed, arg#vals);
+  fun arg<'k> add_arg(t<'k, 'key_sz> tbl, arg<'k>  arg) {
+    int idx = hash<'key_sz>(tbl#seed, arg#vals);
     int['k] ret = [Array.update(tbl#hash_arrs[i], idx, fst, 0, snd, arg#vals[i]) for i < 'k];
     int timestamp = Array.update(tbl#timestamps, idx, fst, 0, snd, arg#timestamp);
     return {vals = ret; timestamp = timestamp};
   }
 
-  fun arg<<'k>> add(t<<'k, 'key_sz>> tbl, int['k] args, int timestamp) {
+  fun arg<'k> add(t<'k, 'key_sz> tbl, int['k] args, int timestamp) {
     return add_arg(tbl, {vals = args; timestamp = timestamp});
   }
 
-  fun bool mem(t<<'k, 'key_sz>> tbl, int['k] args) {
-    int idx = hash<<'key_sz>>(tbl#seed, args);
+  fun bool mem(t<'k, 'key_sz> tbl, int['k] args) {
+    int idx = hash<'key_sz>(tbl#seed, args);
     bool ret = true;
     for (i < 'k) {
       // bool tmp = (Array.getm(tbl#hash_arrs[i], idx, eq, args[i]) == 1);
@@ -49,13 +49,13 @@ module Hashtable {
     return ret;
   }
 
-  fun bool mem_arg(t<<'k, 'key_sz>> tbl, arg<<'k>> arg) {
+  fun bool mem_arg(t<'k, 'key_sz> tbl, arg<'k> arg) {
     return mem(tbl, arg#vals);
   }
 
   // Check if args is in the table, and update its timestamp if so
-  fun bool mem_touch(t<<'k, 'key_sz>> tbl, int['k] args, int timestamp) {
-    int idx = hash<<'key_sz>>(tbl#seed, args);
+  fun bool mem_touch(t<'k, 'key_sz> tbl, int['k] args, int timestamp) {
+    int idx = hash<'key_sz>(tbl#seed, args);
     bool ret = true;
     for (i < 'k) {
       // bool tmp = (Array.getm(tbl#hash_arrs[i], idx, eq, args[i]) == 1);
@@ -67,13 +67,13 @@ module Hashtable {
   }
 
   // Update just the timestamp
-  fun void touch(t<<'k, 'key_sz>> tbl, int['k] args, int timestamp) {
-    int idx = hash<<'key_sz>>(tbl#seed, args);
+  fun void touch(t<'k, 'key_sz> tbl, int['k] args, int timestamp) {
+    int idx = hash<'key_sz>(tbl#seed, args);
     Array.set(tbl#timestamps, idx, timestamp);
   }
 
   // Zeros out an index
-  fun void clear_idx(t<<'k, 'key_sz>> tbl, int idx) {
+  fun void clear_idx(t<'k, 'key_sz> tbl, int idx) {
     for(i < 'k) {
       Array.set(tbl#hash_arrs[i], idx, 0);
     }
@@ -85,15 +85,15 @@ module Hashtable {
 // Multi-stage hash table which attempts to reinsert entries in case of collision.
 // Uses events instead of functions because it requires recirculation.
 module CuckooTimeout {
-  type t<<'k, 'key_sz, 'stages>> = {
-    Hashtable.t<<'k, 'key_sz>>['stages] arrs;
+  type t<'k, 'key_sz, 'stages> = {
+    Hashtable.t<'k, 'key_sz>['stages] arrs;
   }
 
-  constr t<<'k, 'key_sz, 'stages>> create(int length, int['stages] seeds) = {
+  constr t<'k, 'key_sz, 'stages> create(int length, int['stages] seeds) = {
     arrs = [Hashtable.create(length, seeds[i]) for i < 'stages];
   };
 
-  fun Hashtable.arg<<'k>> null_arg() {
+  fun Hashtable.arg<'k> null_arg() {
     return {
             vals = [0 for i < 'k];
             timestamp = 0;
@@ -108,9 +108,9 @@ module CuckooTimeout {
     return acc;
   }
 
-  event insert_internal(t<<'k, 'key_sz, 'stages>> tbl, int['k] args, int timestamp, int['k] orig_args, int retry_count) {
-    Hashtable.arg<<'k>> victims = {vals = args; timestamp = timestamp};
-    Hashtable.arg<<'k>> orig_victims = victims;
+  event insert_internal(t<'k, 'key_sz, 'stages> tbl, int['k] args, int timestamp, int['k] orig_args, int retry_count) {
+    Hashtable.arg<'k> victims = {vals = args; timestamp = timestamp};
+    Hashtable.arg<'k> orig_victims = victims;
     for (i < 'k) {
       if (all_null(victims#vals) == false) {
         // Add to the next stage and evict whatever's there currently
@@ -137,12 +137,12 @@ module CuckooTimeout {
     }
   }
 
-  event insert(t<<'k, 'key_sz, 'stages>> tbl, int['k] args, int timestamp) {
+  event insert(t<'k, 'key_sz, 'stages> tbl, int['k] args, int timestamp) {
     generate insert_internal(tbl, args, timestamp, args, 0);
   }
 
   // Return true if args is in the hash table
-  fun bool mem(t<<'k, 'key_sz, 'stages>> tbl, int['k] args) {
+  fun bool mem(t<'k, 'key_sz, 'stages> tbl, int['k] args) {
     for (i < 'k) {
       if(Hashtable.mem(tbl#arrs[i], args)) { return true; }
     }
@@ -150,7 +150,7 @@ module CuckooTimeout {
   }
 
   // Return true if args is in the hash table, and update its timestamp if it is
-  fun bool mem_touch(t<<'k, 'key_sz, 'stages>> tbl, int['k] args, int timestamp) {
+  fun bool mem_touch(t<'k, 'key_sz, 'stages> tbl, int['k] args, int timestamp) {
     for (i < 'k) {
       if(Hashtable.mem_touch(tbl#arrs[i], args, timestamp)) { return true; }
     }
@@ -160,12 +160,12 @@ module CuckooTimeout {
   // Need this to be an event since we only generate it after accessing the timestamp
   /* Simple, but doesn't work until we extend global arg elimination to handle
      vector index arguments.
-  event delete(Hashtable.t<<'k, 'key_sz>> hashtbl, int idx) {
+  event delete(Hashtable.t<'k, 'key_sz> hashtbl, int idx) {
     Hashtable.clear_idx(hashtbl, idx);
   }
   */
 
-  event delete(t<<'k, 'key_sz, 'stages>> tbl, int stage, int idx) {
+  event delete(t<'k, 'key_sz, 'stages> tbl, int stage, int idx) {
     for (i < 'k) {
       if (stage == size_to_int(i)) {
         Hashtable.clear_idx(tbl#arrs[i], idx);
@@ -174,7 +174,7 @@ module CuckooTimeout {
   }
 
   // Background event for clearing out old entries in the table
-  event scan(t<<'k, 'key_sz, 'stages>> tbl, int idx, int thresh, int period) {
+  event scan(t<'k, 'key_sz, 'stages> tbl, int idx, int thresh, int period) {
     for(i < 'k) {
       // Sacrificing abstraction for convenience by accessing timestamps directly
       bool timed_out = (Array.getm(tbl#arrs[i]#timestamps, idx, gt, thresh) == 1);

@@ -23,12 +23,12 @@ handle ip_pkt(int src, int dst) {
 }
 
 // component: basic packet counting
-global Array.t<<32>> src_cts = Array.create(16);
+global Array.t<32> src_cts = Array.create(16);
 memop incr(int mv, int lv) {
 	return mv + 1;
 }
 handle count_src(int src) {
-	int<<4>> h = hash<<4>>(7, src);
+	int<4> h = hash<4>(7, src);
 	printf("counting packet with src=%d at switch %d", src, self);
 	Array.setm(src_cts, h, incr, 0);
 }

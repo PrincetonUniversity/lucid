@@ -3,19 +3,19 @@ include "Memops.dpt"
 // A module implementing an Array with automatic bounds checking
 module SafeArray {
 
-  type t<<'a>> = {
-    Array.t<<'a>> arr;
+  type t<'a> = {
+    Array.t<'a> arr;
     int sz;
   }
 
-  constr t<<'a>> create(int sz) = {
+  constr t<'a> create(int sz) = {
     arr = Array.create(sz);
     sz = sz;
   };
 
-  fun int<<'b>> update(t<<'a>> arr, int idx,
-                       memop2<<'a>> getop, int<<'a>> getarg,
-                       memop2<<'a>> setop, int<<'a>> setarg)
+  fun int<'b> update(t<'a> arr, int idx,
+                       memop2<'a> getop, int<'a> getarg,
+                       memop2<'a> setop, int<'a> setarg)
   {
     if (idx >= 0 && idx < arr#sz) {
       return Array.update(arr#arr, idx, getop, getarg, setop, setarg);
@@ -23,19 +23,19 @@ module SafeArray {
     return 0;
   }
 
-  fun int<<'a>> get(t<<'a>> arr, int idx) {
+  fun int<'a> get(t<'a> arr, int idx) {
     return update(arr, idx, fst, 0, fst, 0);
   }
 
-  fun void set(t<<'a>> arr, int idx, int<<'a>> v) {
+  fun void set(t<'a> arr, int idx, int<'a> v) {
     update(arr, idx, fst, 0, snd, v);
   }
 
-  fun int<<'b>> getm(t<<'a>> arr, int idx, memop2<<'a>> getop, int<<'b>> getarg) {
+  fun int<'b> getm(t<'a> arr, int idx, memop2<'a> getop, int<'b> getarg) {
     return update(arr, idx, getop, getarg, fst, 0);
   }
 
-  fun void setm(t<<'a>> arr, int idx, memop2<<'a>> setop, int<<'a>> setarg) {
+  fun void setm(t<'a> arr, int idx, memop2<'a> setop, int<'a> setarg) {
     update(arr, idx, fst, 0, setop, setarg);
   }
 

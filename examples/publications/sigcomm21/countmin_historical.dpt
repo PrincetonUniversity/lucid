@@ -2,8 +2,8 @@
 
 */
 
-const int<<1>> TRUE = 1;
-const int<<1>> FALSE = 0;
+const int<1> TRUE = 1;
+const int<1> FALSE = 0;
 const int T_INTERVAL = 1000; // How long between rotations. 
 
 const int h1_poly = 10398247;
@@ -22,18 +22,18 @@ const int collector = 101;
 event export(int idx, int ts, int val1, int val2);
 
 
-global Array.t<<32>> iid = Array.create(1);
+global Array.t<32> iid = Array.create(1);
 
 const int countmin_slots = 1024;
 /* Arrays are mutable data structures that persist across packets. */
-global Array.t<<32>> cm1 = Array.create(countmin_slots);
-global Array.t<<32>> cm2 = Array.create(countmin_slots);
+global Array.t<32> cm1 = Array.create(countmin_slots);
+global Array.t<32> cm2 = Array.create(countmin_slots);
 
-global Array.t<<32>> cm3 = Array.create(countmin_slots);
-global Array.t<<32>> cm4 = Array.create(countmin_slots);
+global Array.t<32> cm3 = Array.create(countmin_slots);
+global Array.t<32> cm4 = Array.create(countmin_slots);
 
-global Array.t<<32>> cm5 = Array.create(countmin_slots);
-global Array.t<<32>> cm6 = Array.create(countmin_slots);
+global Array.t<32> cm5 = Array.create(countmin_slots);
+global Array.t<32> cm6 = Array.create(countmin_slots);
 
 
 memop read(int stored, int dummy){
@@ -98,8 +98,8 @@ memop incr (int stored_ct, int incr_by) {
 handle pktin(int src, int dst) {
   int rot_id = Array.get(iid, 0);
 
-  int h1 = hash<<32>>(h1_poly, dst);
-  int h2 = hash<<32>>(h2_poly, dst);
+  int h1 = hash<32>(h1_poly, dst);
+  int h2 = hash<32>(h2_poly, dst);
 
   // 1 active, 2 warming
   if (rot_id == 0) {    

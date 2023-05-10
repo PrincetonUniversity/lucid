@@ -1,26 +1,26 @@
 // Simple dpt program for testing match statements
 
-global Array.t<<32>> counts = Array.create(5);
-global Array.t<<32>> counts2 = Array.create(5);
+global Array.t<32> counts = Array.create(5);
+global Array.t<32> counts2 = Array.create(5);
 
 
-entry event packetin(int<<3>> idx);
+entry event packetin(int<3> idx);
 
 memop incr(int x, int y) {
   return x + y;
 }
 
-fun void increment1(int<<3>> idx) {
+fun void increment1(int<3> idx) {
   printf("Incrementing index %d", idx);
   Array.setm(counts, idx, incr, 1);
 }
 
-fun void increment2(int<<3>> idx) {
+fun void increment2(int<3> idx) {
   printf("Incrementing index %d", idx);
   Array.setm(counts2, idx, incr, 1);
 }
 
-const int<<3>> five = 5;
+const int<3> five = 5;
 
 /*
 Write the same match statement two ways; the two arrays should always be the same
@@ -30,7 +30,7 @@ Write the same match statement two ways; the two arrays should always be the sam
   If at least 4 and odd, update index 3
   Otherwise (i.e. if 3), update index 4
 */
-handle packetin(int<<3>> idx) {
+handle packetin(int<3> idx) {
   match idx with
   | 0 -> { increment1(0); }
   | 1 -> { increment1(1); }

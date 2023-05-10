@@ -3,14 +3,14 @@ include "CountMinSketchTimeout.dpt"
 Use three rotating count-min sketches to measure the frequency of events
 */
 
-const int<<1>> TRUE = 1;
-const int<<1>> FALSE = 0;
+const int<1> TRUE = 1;
+const int<1> FALSE = 0;
 const int T_INTERVAL = 1000; // How long between rotations.
 const int SLOTS = 1024; // Size of each CMS
 
 const int[2] hash_seeds = [10398247; 1295981879];
 
-type CMS = CMSTimeout.t<<32, 10, 2>>
+type CMS = CMSTimeout.t<32, 10, 2>
 
 global CMS sketch = CMSTimeout.create(SLOTS, hash_seeds, T_INTERVAL);
 

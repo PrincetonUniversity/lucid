@@ -27,8 +27,8 @@ Todo:
   - add background tasks
 */
 
-const int<<1>> TRUE = 1;
-const int<<1>> FALSE = 0;
+const int<1> TRUE = 1;
+const int<1> FALSE = 0;
 
 const int DNS_REQ = 0;
 const int DNS_RES = 1;
@@ -43,7 +43,7 @@ entry event dnsrequest_in(int src, int dst, int req_id);
 entry event dnsresponse_in(int src, int dst, int req_id);
 // Exit point back to the P4 program. Generated when a packet is allowed to 
 // proceed.
-exit event dnspkt_out (int<<1>> packet_allowed);
+exit event dnspkt_out (int<1> packet_allowed);
 
 event clear(int idx);
 event rotate();
@@ -52,28 +52,28 @@ event rotate();
 =            count-min sketch            =
 ========================================*/
 
-global Array.t<<32>> iid = Array.create(1);
+global Array.t<32> iid = Array.create(1);
 
 const int countmin_slots = 1024;
 /* Arrays are mutable data structures that persist across packets. */
-global Array.t<<32>> cm1 = Array.create(countmin_slots);
-global Array.t<<32>> cm2 = Array.create(countmin_slots);
+global Array.t<32> cm1 = Array.create(countmin_slots);
+global Array.t<32> cm2 = Array.create(countmin_slots);
 
-global Array.t<<32>> cm3 = Array.create(countmin_slots);
-global Array.t<<32>> cm4 = Array.create(countmin_slots);
+global Array.t<32> cm3 = Array.create(countmin_slots);
+global Array.t<32> cm4 = Array.create(countmin_slots);
 
-global Array.t<<32>> cm5 = Array.create(countmin_slots);
-global Array.t<<32>> cm6 = Array.create(countmin_slots);
+global Array.t<32> cm5 = Array.create(countmin_slots);
+global Array.t<32> cm6 = Array.create(countmin_slots);
 
 const int sfw_slots = 1024;
-global Array.t<<1>> sfw1 = Array.create(sfw_slots);
-global Array.t<<1>> sfw2 = Array.create(sfw_slots);
+global Array.t<1> sfw1 = Array.create(sfw_slots);
+global Array.t<1> sfw2 = Array.create(sfw_slots);
 
-global Array.t<<1>> sfw3 = Array.create(sfw_slots);
-global Array.t<<1>> sfw4 = Array.create(sfw_slots);
+global Array.t<1> sfw3 = Array.create(sfw_slots);
+global Array.t<1> sfw4 = Array.create(sfw_slots);
 
-global Array.t<<1>> sfw5 = Array.create(sfw_slots);
-global Array.t<<1>> sfw6 = Array.create(sfw_slots);
+global Array.t<1> sfw5 = Array.create(sfw_slots);
+global Array.t<1> sfw6 = Array.create(sfw_slots);
 
 // zero out a position in all the arrays.
 handle clear(int idx) {  
@@ -155,8 +155,8 @@ handle dnsrequest_in(int src, int dst, int req_id) {
 
   int rot_id = Array.get(iid, 0);
 
-  int h1 = hash<<32>>(h1_poly, src);
-  int h2 = hash<<32>>(h2_poly, src);
+  int h1 = hash<32>(h1_poly, src);
+  int h2 = hash<32>(h2_poly, src);
 
   int ct1_gt_thresh = 0;
   int ct2_gt_thresh = 0;
@@ -180,8 +180,8 @@ handle dnsrequest_in(int src, int dst, int req_id) {
   // if count > thresh, the host is protected.
   if (ct1_gt_thresh == 1 && ct2_gt_thresh == 1) { //ct1 and ct2 gt thresh
     // this handler just writes here. So rot_id --> which replicas to write. 
-    int sfwh1 = hash<<32>>(h1_poly, src, dst, req_id);
-    int sfwh2 = hash<<32>>(h2_poly, src, dst, req_id);
+    int sfwh1 = hash<32>(h1_poly, src, dst, req_id);
+    int sfwh2 = hash<32>(h2_poly, src, dst, req_id);
     if (rot_id == 0) {
       // 1 is active, 2 is warming.
       Array.set(sfw1, sfwh1, TRUE);
@@ -213,8 +213,8 @@ handle dnsresponse_in(int src, int dst, int req_id) {
   int rot_id = Array.get(iid, 0);
 
   // countmin 
-  int h1 = hash<<32>>(h1_poly, dst);
-  int h2 = hash<<32>>(h2_poly, dst);
+  int h1 = hash<32>(h1_poly, dst);
+  int h2 = hash<32>(h2_poly, dst);
   int ct1_gt_thresh = 0;
   int ct2_gt_thresh = 0;
 
@@ -246,10 +246,10 @@ handle dnsresponse_in(int src, int dst, int req_id) {
   // if count > thresh, the host is protected.
   if (ct1_gt_thresh == 1 && ct2_gt_thresh == 1) { //ct1 and ct2 gt thresh
     // stateful firewall.
-    int sfwh1 = hash<<32>>(h1_poly, src, dst, req_id);
-    int sfwh2 = hash<<32>>(h2_poly, src, dst, req_id);
-    int<<1>> in_1 = FALSE;
-    int<<1>> in_2 = FALSE;
+    int sfwh1 = hash<32>(h1_poly, src, dst, req_id);
+    int sfwh2 = hash<32>(h2_poly, src, dst, req_id);
+    int<1> in_1 = FALSE;
+    int<1> in_2 = FALSE;
     // This thread only reads. 
     if (rot_id == 0) {
       in_1 = Array.get(sfw1, sfwh1);

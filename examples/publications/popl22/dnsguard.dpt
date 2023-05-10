@@ -12,8 +12,8 @@ This program protects client againt DNS reflection attacks.
 5.  Background threads, periodically reset the count min sketches and bloom filters.
 */
 
-const int<<1>> TRUE = 1;
-const int<<1>> FALSE = 0;
+const int<1> TRUE = 1;
+const int<1> FALSE = 0;
 
 const int DNS_REQ = 0;
 const int DNS_RES = 1;
@@ -40,8 +40,8 @@ exit event dnspkt_out ();
 =            count-min sketch            =
 ========================================*/
 
-global CMSTimeout.t<<32, 10, 2>> sketch = CMSTimeout.create(countmin_slots, seeds, T_INTERVAL);
-global BloomFilterTimeout.t<<10, 2>> firewall = BloomFilterTimeout.create(firewall_slots, seeds, T_INTERVAL, T_EMPTY);
+global CMSTimeout.t<32, 10, 2> sketch = CMSTimeout.create(countmin_slots, seeds, T_INTERVAL);
+global BloomFilterTimeout.t<10, 2> firewall = BloomFilterTimeout.create(firewall_slots, seeds, T_INTERVAL, T_EMPTY);
 
 /* a DNS request. We assume its
 from a monitored host to some DNS server. */

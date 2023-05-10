@@ -21,7 +21,7 @@ table_type ftbl_t = {
 }
 global ftbl_t ftbl = table_create<ftbl_t>((hit_acn, miss_acn), 1024, miss_acn());
 
-event do_match(int<<32>> s) {
+event do_match(int<32> s) {
   int a = 1000;
   res_t tbl_out = table_match(ftbl, (s), (a));
 
@@ -36,7 +36,7 @@ event do_match(int<<32>> s) {
   }
 }
 
-event do_install(int<<32>> v, int<<32>> m) {
+event do_install(int<32> v, int<32> m) {
   printf("installing entry: (%d &&& %d)", v, m);
   table_multi_install(ftbl, {(v) -> hit_acn(2); (v &&& m) -> hit_acn(3)});
  }

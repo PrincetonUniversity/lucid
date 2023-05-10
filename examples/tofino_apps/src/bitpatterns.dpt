@@ -3,7 +3,7 @@
 
 include "../libs/ip_default.dpt"
 
-handle ip_pkt (eth_hdr eth, ip_hdr_prefix ip, int<<32>> src, int<<32>> dst){
+handle ip_pkt (eth_hdr eth, ip_hdr_prefix ip, int<32> src, int<32> dst){
     int new_src = 0;
     int new_dst = 0;
     match src with

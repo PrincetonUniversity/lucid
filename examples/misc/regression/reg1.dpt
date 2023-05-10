@@ -1,6 +1,6 @@
 type foo = {
   int foo1;
-  Array.t<<1>> foo2;
+  Array.t<1> foo2;
 }
 
 constr foo mk_foo(int x) = {

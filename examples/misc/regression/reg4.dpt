@@ -1,10 +1,10 @@
-event foo(Array.t<<32>> a);
+event foo(Array.t<32> a);
 
-handle foo (Array.t<<32>> arrg) {
+handle foo (Array.t<32> arrg) {
     printf("");
 }
 
-fun void bar (Array.t<<32>> fa) {
+fun void bar (Array.t<32> fa) {
     generate foo(fa);
     return;
 }

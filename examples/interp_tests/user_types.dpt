@@ -1,31 +1,31 @@
 // An array type that keeps track of its size, and logs the number of
 // access attempts that fell out-of-bounds
-type safe_array<<'a>> = {
-  Array.t<<'a>> arr;
-  Counter.t<<'a>> bad_accesses;
+type safe_array<'a> = {
+  Array.t<'a> arr;
+  Counter.t<'a> bad_accesses;
   int sz;
 }
 
 // To test record creation syntax
-type int_record<<'a>> = {
+type int_record<'a> = {
   int x;
-  int<<'a>> y;
+  int<'a> y;
 }
 
 // How to create a t
-constr safe_array<<'a>> create_safe_array(int sz, int<<'a>> start) = {
+constr safe_array<'a> create_safe_array(int sz, int<'a> start) = {
   arr = Array.create(sz);
   bad_accesses = Counter.create(start);
   sz = sz;
 };
 
 // Actually creating some t values
-global safe_array<<32>> arr1 = create_safe_array(4, 0);
-global safe_array<<32>> arr2 = create_safe_array(2, 0);
+global safe_array<32> arr1 = create_safe_array(4, 0);
+global safe_array<32> arr2 = create_safe_array(2, 0);
 
 memop plus(int x, int y) { return x + y; }
 
-fun void update_safe_array(safe_array<<'a>> t, int idx, int v) {
+fun void update_safe_array(safe_array<'a> t, int idx, int v) {
   auto sz = t#sz;
   if (idx < 0 || idx >= sz) {
     Counter.add(t#bad_accesses, 1);
@@ -39,13 +39,13 @@ event update_both(int idx, int v) {
   update_safe_array(arr2, idx, v);
 }
 
-event update_one(safe_array<<32>> t, int idx, int v) {
+event update_one(safe_array<32> t, int idx, int v) {
   update_safe_array(t, idx, v);
 }
 
 event foo() {
-  int_record<<16>> r1 = { x = 5; y = 12; };
-  int<<16>> bar = r1#y;
-  int_record<<16>> r2 = { r1 with x = 7 };
+  int_record<16> r1 = { x = 5; y = 12; };
+  int<16> bar = r1#y;
+  int_record<16> r2 = { r1 with x = 7 };
   generate update_one(arr1, 0, 0);
 }

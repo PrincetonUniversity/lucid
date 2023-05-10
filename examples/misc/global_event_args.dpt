@@ -2,19 +2,19 @@
 Quick tests to make sure events with global args and constraints work properly
 */
 
-global Array.t<<32>> a1 = Array.create(3);
-global Array.t<<32>> a2 = Array.create(3);
-global Array.t<<32>> a3 = Array.create(3);
-global Array.t<<32>> a4 = Array.create(3);
-global Array.t<<32>> a5 = Array.create(3);
+global Array.t<32> a1 = Array.create(3);
+global Array.t<32> a2 = Array.create(3);
+global Array.t<32> a3 = Array.create(3);
+global Array.t<32> a4 = Array.create(3);
+global Array.t<32> a5 = Array.create(3);
 
 // ----------------------------------------------------------------------------
 
 // Constraints for events cannot be (easily) inferred, so you must specify
 // _all_ relevant constraints when you write the event.
-event update_two_arrays(Array.t<<32>> a, Array.t<<32>> b) [a < b];
+event update_two_arrays(Array.t<32> a, Array.t<32> b) [a < b];
 
-handle update_two_arrays(Array.t<<32>> a, Array.t<<32>> b) {
+handle update_two_arrays(Array.t<32> a, Array.t<32> b) {
 	Array.set(a, 0, 0);
 	Array.set(b, 0, 0);
 }
@@ -26,7 +26,7 @@ handle update_two_arrays(Array.t<<32>> a, Array.t<<32>> b) {
 // (as in this case) to artificially restrict the constraints.
 // In this case, we will infer the implicit constraints a1 < b, and b < c.
 
-fun void update_three_arrays(Array.t<<32>> b, Array.t<<32>> c) [b < a3; c < a5] {
+fun void update_three_arrays(Array.t<32> b, Array.t<32> c) [b < a3; c < a5] {
 	Array.set(a1, 0, 0);
 	Array.set(b, 0, 0);
 	Array.set(c, 0, 0);

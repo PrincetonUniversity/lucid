@@ -2,10 +2,10 @@
    reflect all other packets back to sender. */
 
 // Events
-entry event ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos);
-exit event ip_out (int<<9>> egr_port, int src, int dst);
+entry event ip_in (int<9> igr_port, int src, int dst, int<16> len, int<8> tos);
+exit event ip_out (int<9> egr_port, int src, int dst);
 // Handlers
-handle ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos) {
+handle ip_in (int<9> igr_port, int src, int dst, int<16> len, int<8> tos) {
   match igr_port with 
     | 128 -> {generate ip_out(130, src, dst);}
     | 130 -> {generate ip_out(128, src, dst);}

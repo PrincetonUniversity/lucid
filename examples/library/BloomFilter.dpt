@@ -1,55 +1,55 @@
 // A Bloom filter with parametric k
 module BloomFilter : {
-  global type t<<'key_sz, 'idx_sz, 'k>>;
-  constr t<<'a, 'b, 'k>> create(int array_length, int['k] seeds);
+  global type t<'key_sz, 'idx_sz, 'k>;
+  constr t<'a, 'b, 'k> create(int array_length, int['k] seeds);
 
-  fun void add_to_filter(t<<'a, 'b, 'k>> filter, int<<'a>> key) [start <= filter; end filter];
-  fun bool in_filter(t<<'a, 'b, 'k>> filter, int<<'a>> key) [start <= filter; end filter];
-  fun void clear_index(t<<'a, 'b, 'k>> filter, int<<'b>> idx) [start <= filter; end filter];
+  fun void add_to_filter(t<'a, 'b, 'k> filter, int<'a> key) [start <= filter; end filter];
+  fun bool in_filter(t<'a, 'b, 'k> filter, int<'a> key) [start <= filter; end filter];
+  fun void clear_index(t<'a, 'b, 'k> filter, int<'b> idx) [start <= filter; end filter];
 }
 {
-  type t<<'key_sz, 'idx_sz, 'k>> = {
-    Array.t<<1>>['k] arrs;
+  type t<'key_sz, 'idx_sz, 'k> = {
+    Array.t<1>['k] arrs;
     int['k] hash_seeds;
-    int<<'idx_sz>> max_idx;
+    int<'idx_sz> max_idx;
   }
 
-  constr t<<'a, 'b, 'k>> create(int array_length, int['k] seeds) = {
+  constr t<'a, 'b, 'k> create(int array_length, int['k] seeds) = {
     arrs = [Array.create(array_length) for i < 'k];
     hash_seeds = seeds;
-    max_idx = (int<<'b>>) (array_length-1);
+    max_idx = (int<'b>) (array_length-1);
   };
 
-  fun void add_to_filter(t<<'a, 'b, 'c>> filter, int<<'a>> key) {
+  fun void add_to_filter(t<'a, 'b, 'c> filter, int<'a> key) {
     for (i < 'k) {
-      Array.set(filter#arrs[i], hash<<'b>>(filter#hash_seeds[i], key), 1);
+      Array.set(filter#arrs[i], hash<'b>(filter#hash_seeds[i], key), 1);
     }
   }
 
-  fun bool in_filter(t<<'a, 'b, 'k>> filter, int<<'a>> key) {
+  fun bool in_filter(t<'a, 'b, 'k> filter, int<'a> key) {
     bool acc = true;
     for (i < 'k) {
-      int<<1>> x = Array.get(filter#arrs[i], hash<<'b>>(filter#hash_seeds[i], key));
+      int<1> x = Array.get(filter#arrs[i], hash<'b>(filter#hash_seeds[i], key));
       acc = acc && x == 1;
     }
     return acc;
   }
 
   // Can be used to clean out the array, one index at a time.
-  fun void clear_index(t<<'a, 'b, 'k>> filter, int<<'b>> idx) {
+  fun void clear_index(t<'a, 'b, 'k> filter, int<'b> idx) {
     for (i < 'k) {
       Array.set(filter#arrs[i], idx, 0);
     }
   }
 
-  event clear_all(t<<'a, 'b, 'k>> filter); // Zero all entries in the filter
-  event clear_helper(t<<'a, 'b, 'k>> filter, int<<'b>> idx);
+  event clear_all(t<'a, 'b, 'k> filter); // Zero all entries in the filter
+  event clear_helper(t<'a, 'b, 'k> filter, int<'b> idx);
 
-  handle clear_all(t<<'a, 'b, 'k>> filter) { generate clear_helper(filter, 0); }
+  handle clear_all(t<'a, 'b, 'k> filter) { generate clear_helper(filter, 0); }
 
-  handle clear_helper(t<<'a, 'b, 'k>> filter, int<<'b>> idx) {
+  handle clear_helper(t<'a, 'b, 'k> filter, int<'b> idx) {
     clear_index(filter, idx);
-    if ((int<<'b>>)idx < filter#max_idx ) {
+    if ((int<'b>)idx < filter#max_idx ) {
       generate clear_helper(filter, idx+1);
     }
   }

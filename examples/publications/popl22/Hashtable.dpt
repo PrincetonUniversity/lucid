@@ -5,26 +5,26 @@ Similar to "Bimap.dpt", but simpler because it's a set instead of a map.
 */
 
 module Hashtable {
-  type t<<'k, 'key_sz>> = {
-    Array.t<<32>>['k] arrs;
+  type t<'k, 'key_sz> = {
+    Array.t<32>['k] arrs;
     int seed;
   }
 
   // Requires that length >= 2^key_sz
-  constr t<<'k, 'key_sz>> create(int length, int seed) = {
+  constr t<'k, 'key_sz> create(int length, int seed) = {
     arrs = [Array.create(length) for i < 'k];
     seed = seed;
   };
 
   // Add args to the table, and return the previous value if there's a collision
-  fun int['k] add(t<<'k, 'key_sz>> tbl, int['k] args) {
-    int idx = hash<<'key_sz>>(tbl#seed, args);
+  fun int['k] add(t<'k, 'key_sz> tbl, int['k] args) {
+    int idx = hash<'key_sz>(tbl#seed, args);
     int['k] ret = [Array.update(tbl#arrs[i], idx, fst, 0, snd, args[i]) for i < 'k];
     return ret;
   }
 
-  fun bool mem(t<<'k, 'key_sz>> tbl, int['k] args) {
-    int idx = hash<<'key_sz>>(tbl#seed, args);
+  fun bool mem(t<'k, 'key_sz> tbl, int['k] args) {
+    int idx = hash<'key_sz>(tbl#seed, args);
     bool ret = true;
     for (i < 'k) {
       ret = ret && (Array.get(tbl#arrs[i], idx) == args[i]);
@@ -37,11 +37,11 @@ module Hashtable {
 // Uses events instead of functions because it requires recirculation.
 // From the stateful_fw example: do we need a stash? If not, seems like we don't need a separate reinsert event?
 module CuckooHash {
-  type t<<'k, 'key_sz, 'stages>> = {
-    Hashtable.t<<'k, 'key_sz>>['stages] arrs;
+  type t<'k, 'key_sz, 'stages> = {
+    Hashtable.t<'k, 'key_sz>['stages] arrs;
   }
 
-  constr t<<'k, 'key_sz, 'stages>> create(int length, int['stages] seeds) = {
+  constr t<'k, 'key_sz, 'stages> create(int length, int['stages] seeds) = {
     arrs = [Hashtable.create(length, seeds[i]) for i < 'stages];
   };
 
@@ -53,7 +53,7 @@ module CuckooHash {
     return acc;
   }
 
-  event insert_internal(t<<'k, 'key_sz, 'stages>> tbl, int['k] args, int['k] orig_args, int retry_count) {
+  event insert_internal(t<'k, 'key_sz, 'stages> tbl, int['k] args, int['k] orig_args, int retry_count) {
     int['k] victims = args;
     for (i < 'k) {
       if (!all_null(victims)) {
@@ -74,12 +74,12 @@ module CuckooHash {
     }
   }
 
-  event insert(t<<'k, 'key_sz, 'stages>> tbl, int['k] args) {
+  event insert(t<'k, 'key_sz, 'stages> tbl, int['k] args) {
     generate insert_internal(tbl, args, args, 0);
   }
 
   // Return true if args is in the hash table
-  fun bool mem(t<<'k, 'key_sz, 'stages>> tbl, int['k] args) {
+  fun bool mem(t<'k, 'key_sz, 'stages> tbl, int['k] args) {
     for (i < 'k) {
       if(Hashtable.mem(tbl#arrs[i], args)) { return true; }
     }

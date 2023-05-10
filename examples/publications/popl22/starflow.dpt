@@ -25,15 +25,15 @@ exit event long_record(int src, int len, int[8] recs);
 // free a "long slot" by pushing it's index back onto the stack.
 event free_block(int block_id);
 
-global Array.t<<32>> srcarr = Array.create(H_SLOTS);
-global Array.t<<32>> ctarr = Array.create(H_SLOTS);
-global Array.t<<32>> idxarr = Array.create(H_SLOTS);
+global Array.t<32> srcarr = Array.create(H_SLOTS);
+global Array.t<32> ctarr = Array.create(H_SLOTS);
+global Array.t<32> idxarr = Array.create(H_SLOTS);
 
-global Array.t<<32>> stack_top = Array.create(1);
-global Array.t<<32>> longblock_stack = Array.create(L_SLOTS);
-global Array.t<<32>> block_map = Array.create(H_SLOTS);
+global Array.t<32> stack_top = Array.create(1);
+global Array.t<32> longblock_stack = Array.create(L_SLOTS);
+global Array.t<32> block_map = Array.create(H_SLOTS);
 
-global Array.t<<32>>[8] rec = [Array.create(H_SLOTS) for i < 8];
+global Array.t<32>[8] rec = [Array.create(H_SLOTS) for i < 8];
 
 // increment index with rollover.
 memop incr_idx (int stored, int nothingval) {
@@ -55,7 +55,7 @@ memop decr_sat (int stored, int nothingval) {
 
 // Helper function for monitor_pkt. Could be replaced with a ternary if expression
 // if we add it
-fun int update_or_get(Array.t<<32>> rec, int h1, int len, bool update) {
+fun int update_or_get(Array.t<32> rec, int h1, int len, bool update) {
   if (update) {
     return Array.update(rec, h1, fst, 0, snd, len);
   } else {
@@ -68,7 +68,7 @@ handle monitor_pkt(int src, int len) {
   int[8] stored_recs = [0; 0; 0; 0; 0; 0; 0; 0];
   int blk_id = 0;
   // update the key.
-  int h1 = hash<<32>>(h1_poly, src);
+  int h1 = hash<32>(h1_poly, src);
   int stored_src = Array.update(srcarr, h1, fst, 0, snd, src);
   // update the count and index (if its a hit).
   int mtch = src - stored_src;

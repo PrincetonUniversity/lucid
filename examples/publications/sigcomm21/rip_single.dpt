@@ -11,10 +11,10 @@ const int self = 1; //(This switch)
 group neighbors = {2, 3, 4}; //(Multicast group for all neighbors of this switch)
 
 const int num_neighbors = 3;
-global Array.t<<32>> edge_lengths = Array.create(num_neighbors); // Initialized by the control plane, or at compile time
-global Array.t<<32>> neighbor_dists = Array.create(num_neighbors);
-global Array.t<<32>> best_dist = Array.create(1);
-global Array.t<<32>> best_neighbor = Array.create(1);
+global Array.t<32> edge_lengths = Array.create(num_neighbors); // Initialized by the control plane, or at compile time
+global Array.t<32> neighbor_dists = Array.create(num_neighbors);
+global Array.t<32> best_dist = Array.create(1);
+global Array.t<32> best_neighbor = Array.create(1);
 
 const int ADVERTISE_PERIOD = 1000;
 const int SCAN_PERIOD = 100;

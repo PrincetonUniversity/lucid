@@ -1,7 +1,7 @@
 // example program that uses control from the 
 // interpreter to read and modify arrays and tables.
 
-global Array.t<<32>> myarr = Array.create(8);
+global Array.t<32> myarr = Array.create(8);
 
 type res_t = {
   int val;

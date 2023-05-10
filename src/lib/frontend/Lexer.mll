@@ -24,9 +24,15 @@
   let extract_bitpat s =
     s |> String.lchop ~n:2 |> String.to_list
     |> List.map (function | '0' -> 0 | '1' -> 1 | _ -> (-1))
+
+  let extract_numwidth s =
+    match String.split_on_char 'w' s with
+    | [hd; tl] -> Z.of_string hd, Int.of_string tl
+    | _ -> failwith "PARSING ERROR: Bad number with width?"
 }
 
 let num = ['0'-'9']+|'0''b'['0' '1']+|'0''x'['0'-'9''a'-'f''A'-'F']+
+let width = 'w'num
 let bitpat = '0''b'['0' '1' '*']+
 let id = ['a'-'z' 'A'-'Z' '_']['a'-'z' 'A'-'Z' '_' '0'-'9']*
 let wspace = [' ' '\t']
@@ -96,6 +102,7 @@ rule token = parse
   | "flood"           { FLOOD (position lexbuf) }
   | id as s           { ID (position lexbuf, Id.create s) }
   | "'"(id as s)      { QID (position lexbuf, Id.create s) }
+  | num width as w    { NUMWITDH (position lexbuf, extract_numwidth w) }
   | num as n          { NUM (position lexbuf, Z.of_string n) }
   | bitpat as p       { BITPAT (position lexbuf, extract_bitpat p) }
   | "#"               { PROJ (position lexbuf) }
@@ -109,10 +116,8 @@ rule token = parse
   | "&"               { BITAND (position lexbuf) }
   | "=="              { EQ (position lexbuf) }
   | "!="              { NEQ (position lexbuf)}
-  | "<<<"             { LSHIFT (position lexbuf) }
-  | ">>>"             { RSHIFT (position lexbuf) }
-  | "<<"              { LLEFT (position lexbuf) }
-  | ">>"              { RRIGHT (position lexbuf) }
+  | "<<"              { LSHIFT (position lexbuf) }
+  | ">>"              { RSHIFT (position lexbuf) }
   | "<="              { LEQ (position lexbuf) }
   | ">="              { GEQ (position lexbuf) }
   | "<"               { LESS (position lexbuf) }

@@ -2,78 +2,78 @@ include "Memops.dpt"
 // A fully parametric count-min sketch. Here, 'k is the number of arrays,
 // and CMS_len (the argument to the constructor) is the length of each array.
 module CountMinSketch : {
-  global type t<<'val_sz, 'idx_sz, 'k>>;
-  constr t<<'a, 'b, 'k>> create(int len, int['k] seeds);
+  global type t<'val_sz, 'idx_sz, 'k>;
+  constr t<'a, 'b, 'k> create(int len, int['k] seeds);
 
-  fun void add(t<<'a, 'b, 'k>> cms, 'any_ty any) [start <= cms; end cms];
-  fun int<<'a>> query(t<<'a, 'b, 'k>> cms, 'any_ty any) [start <= cms; end cms];
-  fun int<<'a>> add_query(t<<'a, 'b, 'k>> cms, 'any_ty any) [start <= cms; end cms];
-  fun void clear_index(t<<'a, 'b, 'k>> cms, int<<'b>> idx) [start <= cms; end cms];
+  fun void add(t<'a, 'b, 'k> cms, 'any_ty any) [start <= cms; end cms];
+  fun int<'a> query(t<'a, 'b, 'k> cms, 'any_ty any) [start <= cms; end cms];
+  fun int<'a> add_query(t<'a, 'b, 'k> cms, 'any_ty any) [start <= cms; end cms];
+  fun void clear_index(t<'a, 'b, 'k> cms, int<'b> idx) [start <= cms; end cms];
 }
 {
-  type t<<'val_sz, 'idx_sz, 'k>> = {
-    Array.t<<'val_sz>>['k] CMS_arrs;
+  type t<'val_sz, 'idx_sz, 'k> = {
+    Array.t<'val_sz>['k] CMS_arrs;
     int['k] CMS_seeds;
-    int<<'idx_sz>> CMS_len;
+    int<'idx_sz> CMS_len;
   }
 
-  constr t<<'a, 'b, 'k>> create(int CMS_len, int['k] seeds) = {
+  constr t<'a, 'b, 'k> create(int CMS_len, int['k] seeds) = {
     CMS_arrs = [Array.create(CMS_len) for i < 'k];
     CMS_seeds = seeds;
-    CMS_len = (int <<'b>>) CMS_len;
+    CMS_len = (int <'b>) CMS_len;
   };
 
   // Add the entry to the CM sketch
-  fun void add(t<<'a, 'b, 'k>> cms, auto any) {
+  fun void add(t<'a, 'b, 'k> cms, auto any) {
     for (i < 'k) {
       // Increment the appropriate index of each array by 1
-      Array.setm(cms#CMS_arrs[i], hash<<'b>>(cms#CMS_seeds[i], any), incr, 1);
+      Array.setm(cms#CMS_arrs[i], hash<'b>(cms#CMS_seeds[i], any), incr, 1);
     }
   }
 
   // Query the CMS to get the count for a particular any
-  fun int<<'a>> query(t<<'a, 'b, 'k>> cms, auto any) {
-    int<<'a>> best = 0;
+  fun int<'a> query(t<'a, 'b, 'k> cms, auto any) {
+    int<'a> best = 0;
     for (i < 'k) {
       if (size_to_int(i) == 0) {
         // On the first iteration just grab the first any
-        best = Array.get(cms#CMS_arrs[i], hash<<'b>>(cms#CMS_seeds[i], any));
+        best = Array.get(cms#CMS_arrs[i], hash<'b>(cms#CMS_seeds[i], any));
       } else {
         // On each subsequent iteration, take the min of the any and the current best
-        best = Array.getm(cms#CMS_arrs[i], hash<<'b>>(cms#CMS_seeds[i], any), min, best);
+        best = Array.getm(cms#CMS_arrs[i], hash<'b>(cms#CMS_seeds[i], any), min, best);
       }
     }
     return best;
   }
 
   // Update counts, and return the current value
-  fun int<<'a>> add_query(t<<'a, 'b, 'k>> cms, auto any) {
-    int<<'a>> best = 0;
+  fun int<'a> add_query(t<'a, 'b, 'k> cms, auto any) {
+    int<'a> best = 0;
     for (i < 'k) {
       if (size_to_int(i) == 0) {
         // On the first iteration just grab the first any
-        best = Array.update(cms#CMS_arrs[i], hash<<'b>>(cms#CMS_seeds[i], any), fst, 0, incr, 1);
+        best = Array.update(cms#CMS_arrs[i], hash<'b>(cms#CMS_seeds[i], any), fst, 0, incr, 1);
       } else {
         // On each subsequent iteration, take the min of the any and the current best
-        best = Array.update(cms#CMS_arrs[i], hash<<'b>>(cms#CMS_seeds[i], any), min, best, incr, 1);
+        best = Array.update(cms#CMS_arrs[i], hash<'b>(cms#CMS_seeds[i], any), min, best, incr, 1);
       }
     }
     return best;
   }
 
   // Can be used to clean out the array, one index at a time.
-  fun void clear_index(t<<'a, 'b, 'k>> cms, int<<'b>> idx) {
+  fun void clear_index(t<'a, 'b, 'k> cms, int<'b> idx) {
     for (i < 'k) {
       Array.set(cms#CMS_arrs[i], idx, 0);
     }
   }
 
-  event clear_all(t<<'a, 'b, 'k>> cms); // Zero all entries in the cms
-  event clear_helper(t<<'a, 'b, 'k>> cms, int<<'b>> idx);
+  event clear_all(t<'a, 'b, 'k> cms); // Zero all entries in the cms
+  event clear_helper(t<'a, 'b, 'k> cms, int<'b> idx);
 
-  handle clear_all(t<<'a, 'b, 'k>> cms) { generate clear_helper(cms, 0); }
+  handle clear_all(t<'a, 'b, 'k> cms) { generate clear_helper(cms, 0); }
 
-  handle clear_helper(t<<'a, 'b, 'k>> cms, int<<'b>> idx) {
+  handle clear_helper(t<'a, 'b, 'k> cms, int<'b> idx) {
     clear_index(cms, idx);
     if (idx < cms#CMS_len - 1) {
       generate clear_helper(cms, idx+1);

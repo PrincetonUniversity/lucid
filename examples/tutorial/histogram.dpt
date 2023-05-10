@@ -3,7 +3,7 @@
 // report cumulative size every 4 packets.
 // (in real deployment, this would be much much higher)
 const int pktct_interval = 4;
-const int<<9>> collector_port = 0x84;
+const int<9> collector_port = 0x84;
 const int NULL = 0;
 
 // histogram of packet sizes.
@@ -11,15 +11,15 @@ const int NULL = 0;
 // [1] : pkts size (128, 512)
 // [2] : pkts size (512, 1024)
 // [3] : pkts size (1024, MAX)
-global Array.t<<32>> hist_arr = Array.create(4);
+global Array.t<32> hist_arr = Array.create(4);
 // total packet count.
-global Array.t<<32>> total_arr = Array.create(1);
+global Array.t<32> total_arr = Array.create(1);
 
 
 // Events
-entry event ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos);
+entry event ip_in (int<9> igr_port, int src, int dst, int<16> len, int<8> tos);
 event report(int idx);
-exit event ip_out (int<<9>> egr_port, int src, int dst);
+exit event ip_out (int<9> egr_port, int src, int dst);
 
 // Helper memop functions
 memop incr(int memval, int incrval) {
@@ -49,7 +49,7 @@ handle report(int idx){
     }
 }
 
-handle ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len, int<<8>> tos) {
+handle ip_in (int<9> igr_port, int src, int dst, int<16> len, int<8> tos) {
   int idx = 0;
   if (len <= 128) {
     idx = 0;

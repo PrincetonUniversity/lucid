@@ -5,21 +5,21 @@ used as an argument to a memop. But instead of catching this and reporting the e
 the constraint checker gets confused and either reports unknown or unsatisfactory constraints
 The fix: Add a check that ensures all parts of the function declaration in interface
          are sufficiently general, not just the constraints
-memop keyupdate(int<<'a>> memval, int<<'a>> keyval) {
+memop keyupdate(int<'a> memval, int<'a> keyval) {
     return keyval;
 }
 
 module HashTable : {
-    global type t<<'idx_sz, 'k, 'a>>;
+    global type t<'idx_sz, 'k, 'a>;
 
     // funs to match bloom and cms
-    fun void add_to_struct_count(t<<'idx_sz, 'k, 'a>> struct, 'any key) [start <= struct; end struct];
+    fun void add_to_struct_count(t<'idx_sz, 'k, 'a> struct, 'any key) [start <= struct; end struct];
 } {
-    type t<<'idx_sz, 'k, 'a>> = {
-        Array.t<<'a>> keys;
+    type t<'idx_sz, 'k, 'a> = {
+        Array.t<'a> keys;
     }
 
-    fun void add_to_struct_count(t<<'idx_sz, 'k, 'a>> struct, 'any key) {
+    fun void add_to_struct_count(t<'idx_sz, 'k, 'a> struct, 'any key) {
 	     Array.update(struct#keys, 0, keyupdate, key, keyupdate, key);
     }
 }

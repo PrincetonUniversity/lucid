@@ -24,23 +24,23 @@ exit event long_record(int src, int len, int rec0, int rec1, int rec2, int rec3,
 // free a "long slot" by pushing it's index back onto the stack. 
 event free_block(int block_id);
 
-global Array.t<<32>> srcarr = Array.create(H_SLOTS);
-global Array.t<<32>> ctarr = Array.create(H_SLOTS);
-global Array.t<<32>> idxarr = Array.create(H_SLOTS);
+global Array.t<32> srcarr = Array.create(H_SLOTS);
+global Array.t<32> ctarr = Array.create(H_SLOTS);
+global Array.t<32> idxarr = Array.create(H_SLOTS);
 
-global Array.t<<32>> stack_top = Array.create(1);
-global Array.t<<32>> longblock_stack = Array.create(L_SLOTS);
-global Array.t<<32>> block_map = Array.create(H_SLOTS);
+global Array.t<32> stack_top = Array.create(1);
+global Array.t<32> longblock_stack = Array.create(L_SLOTS);
+global Array.t<32> block_map = Array.create(H_SLOTS);
 
-global Array.t<<32>> rec0 = Array.create(H_SLOTS);
-global Array.t<<32>> rec1 = Array.create(H_SLOTS);
+global Array.t<32> rec0 = Array.create(H_SLOTS);
+global Array.t<32> rec1 = Array.create(H_SLOTS);
 
-global Array.t<<32>> rec2 = Array.create(L_SLOTS);
-global Array.t<<32>> rec3 = Array.create(L_SLOTS);
-global Array.t<<32>> rec4 = Array.create(L_SLOTS);
-global Array.t<<32>> rec5 = Array.create(L_SLOTS);
-global Array.t<<32>> rec6 = Array.create(L_SLOTS);
-global Array.t<<32>> rec7 = Array.create(L_SLOTS);
+global Array.t<32> rec2 = Array.create(L_SLOTS);
+global Array.t<32> rec3 = Array.create(L_SLOTS);
+global Array.t<32> rec4 = Array.create(L_SLOTS);
+global Array.t<32> rec5 = Array.create(L_SLOTS);
+global Array.t<32> rec6 = Array.create(L_SLOTS);
+global Array.t<32> rec7 = Array.create(L_SLOTS);
 
 memop read (int stored, int nothingval) { 
   return stored;
@@ -81,7 +81,7 @@ handle monitor_pkt(int src, int len) {
   int stored_rec6 = 0; int stored_rec7 = 0;
   int blk_id = 0;
   // update the key. 
-  int h1 = hash<<32>>(h1_poly, src);
+  int h1 = hash<32>(h1_poly, src);
   int stored_src = Array.update(srcarr, h1, read, 0, write, src);
   // update the count and index (if its a hit). 
   int is_match = src - stored_src;

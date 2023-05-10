@@ -1,9 +1,9 @@
-type foo<<'a>> = Array.t<<32>>['a]
+type foo<'a> = Array.t<32>['a]
 
-global foo<<4>> f1 = [Array.create(1) for i < 4];
-global foo<<8>> f2 = [Array.create(1) for i < 8];
+global foo<4> f1 = [Array.create(1) for i < 4];
+global foo<8> f2 = [Array.create(1) for i < 8];
 
-event bar(foo<<'a>> x) {
+event bar(foo<'a> x) {
   for (i < 'a) {
     Array.set(x[i], 0, 0);
   }

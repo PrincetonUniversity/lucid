@@ -21,7 +21,7 @@ const int succ = 0;
 const int self = 0;
 
 
-global BloomFilterTimeout.t<<4, 2>> filter = BloomFilterTimeout.create(NUM_REGISTERS, HASH_SEEDS, TIMEOUT, EMPTY_PERIOD);
+global BloomFilterTimeout.t<4, 2> filter = BloomFilterTimeout.create(NUM_REGISTERS, HASH_SEEDS, TIMEOUT, EMPTY_PERIOD);
 
 // Request_X is for packets coming from inside, reponse_x is for packets coming from outside
 // entry events

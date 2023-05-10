@@ -1,6 +1,6 @@
 /* Reflect the packet back out of ingress port */
 include "../libs/ip_default.dpt"
 
-handle ip_pkt (eth_hdr eth, ip_hdr_prefix ip, int<<32>> src, int<<32>> dst){
+handle ip_pkt (eth_hdr eth, ip_hdr_prefix ip, int<32> src, int<32> dst){
     generate_port (ingress_port, ip_pkt(eth, ip, src, dst));
 }

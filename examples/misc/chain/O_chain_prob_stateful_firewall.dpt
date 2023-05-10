@@ -14,7 +14,7 @@ const int HASH_SEED_2 = 33;
 const int HASH_SEED_3 = 44;
 const int HASH_SEED_4 = 55;
 
-const int<<1>> TRUE = 1;
+const int<1> TRUE = 1;
 
 /* Information about the chain. */
 /* I want this to read "extern location foo;" but we don't have that syntax yet */
@@ -22,10 +22,10 @@ const int head = 0;
 const int tail = 0;
 const int succ = 0;
 
-global filter1 = new Array<<1>>(NUM_REGISTERS);
-global filter2 = new Array<<1>>(NUM_REGISTERS);
-global filter3 = new Array<<1>>(NUM_REGISTERS);
-global filter4 = new Array<<1>>(NUM_REGISTERS);
+global filter1 = new Array<1>(NUM_REGISTERS);
+global filter2 = new Array<1>(NUM_REGISTERS);
+global filter3 = new Array<1>(NUM_REGISTERS);
+global filter4 = new Array<1>(NUM_REGISTERS);
 
 event add_to_filter(int idx1, int idx2, int idx3, int idx4);
 
@@ -58,10 +58,10 @@ fun bool in_filter(int idx1, int idx2, int idx3, int idx4) {
   //            Array.get(filter4, idx4) == TRUE;
   // return ret;
   bool ret = false;
-  int<<1>> r1 = Array.get(filter1, idx1);
-  int<<1>> r2 = Array.get(filter2, idx2);
-  int<<1>> r3 = Array.get(filter3, idx3);
-  int<<1>> r4 = Array.get(filter4, idx4);
+  int<1> r1 = Array.get(filter1, idx1);
+  int<1> r2 = Array.get(filter2, idx2);
+  int<1> r3 = Array.get(filter3, idx3);
+  int<1> r4 = Array.get(filter4, idx4);
   if (r1 == 1 && r2 == 1 && r3 == 1 && r4 == 1){
     ret = true;
   }
@@ -69,10 +69,10 @@ fun bool in_filter(int idx1, int idx2, int idx3, int idx4) {
 }
 
 handle request_packet(int src, int dst) {
-  int idx1 = hash<<32>>(HASH_SEED_1, src, dst);
-  int idx2 = hash<<32>>(HASH_SEED_2, src, dst);
-  int idx3 = hash<<32>>(HASH_SEED_3, src, dst);
-  int idx4 = hash<<32>>(HASH_SEED_4, src, dst);
+  int idx1 = hash<32>(HASH_SEED_1, src, dst);
+  int idx2 = hash<32>(HASH_SEED_2, src, dst);
+  int idx3 = hash<32>(HASH_SEED_3, src, dst);
+  int idx4 = hash<32>(HASH_SEED_4, src, dst);
   bool in_filter = in_filter(idx1, idx2, idx3, idx4);
   // backend bug: negation not implemented on bools.
   // if (!in_filter) {
@@ -83,10 +83,10 @@ handle request_packet(int src, int dst) {
 }
 
 handle response_packet(int src, int dst) {
-  int idx1 = hash<<32>>(HASH_SEED_1, src, dst);
-  int idx2 = hash<<32>>(HASH_SEED_2, src, dst);
-  int idx3 = hash<<32>>(HASH_SEED_3, src, dst);
-  int idx4 = hash<<32>>(HASH_SEED_4, src, dst);
+  int idx1 = hash<32>(HASH_SEED_1, src, dst);
+  int idx2 = hash<32>(HASH_SEED_2, src, dst);
+  int idx3 = hash<32>(HASH_SEED_3, src, dst);
+  int idx4 = hash<32>(HASH_SEED_4, src, dst);
   bool in_filter = in_filter(idx1, idx2, idx3, idx4);
   if (in_filter) {
     generate request_continue(src, dst);

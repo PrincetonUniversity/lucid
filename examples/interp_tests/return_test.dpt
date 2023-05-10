@@ -1,5 +1,5 @@
-global Counter.t<<32>> c1 = Counter.create(0);
-global Counter.t<<32>> c2 = Counter.create(0);
+global Counter.t<32> c1 = Counter.create(0);
+global Counter.t<32> c2 = Counter.create(0);
 
 fun bool foo(bool b1, bool b2, bool b3) {
   if (b1) {

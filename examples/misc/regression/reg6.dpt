@@ -4,7 +4,7 @@ type foo = {
 
 constr foo mk_foo(int x) = { x = x };
 
-global Array.t<<32>> arr = Array.create(1);
+global Array.t<32> arr = Array.create(1);
 
 event bar() {
   foo f = mk_foo(7);

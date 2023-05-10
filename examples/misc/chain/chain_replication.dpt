@@ -16,9 +16,9 @@ const int tail = 0;
 const int succ = 0;
 
 /* Global data: the registers, plus metadata about each of them */
-global pending = new Array<<32>>(NUM_REGISTERS);
-global sequence_nums = new Array<<32>>(NUM_REGISTERS);
-global registers = new Array<<32>>(NUM_REGISTERS);
+global pending = new Array<32>(NUM_REGISTERS);
+global sequence_nums = new Array<32>(NUM_REGISTERS);
+global registers = new Array<32>(NUM_REGISTERS);
 
 event write(int idx, int seq, int data);
 event ack(int idx);
@@ -119,7 +119,7 @@ handle packetin(int src, int dst) {
   }
 
   // Actually do the processing
-  int idx = hash<<32>>(0, src, dst); // Or whatever
+  int idx = hash<32>(0, src, dst); // Or whatever
   if (Array.get(pending, idx) == TRUE) {
     // If we're in the middle of a write, send it to the tail, since that has
     // the last fully consistent data

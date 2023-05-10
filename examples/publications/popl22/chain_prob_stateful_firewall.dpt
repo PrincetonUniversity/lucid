@@ -35,7 +35,7 @@ const int succ = 0;
 // ADDED: self
 const int self = 0;
 
-global BloomFilter.t<<4, 4>> filter = BloomFilter.create(NUM_REGISTERS, HASH_SEEDS);
+global BloomFilter.t<4, 4> filter = BloomFilter.create(NUM_REGISTERS, HASH_SEEDS);
 
 // Request_X is for packets coming from inside, reponse_x is for packets coming from outside
 // entry events

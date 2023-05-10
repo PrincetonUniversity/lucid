@@ -13,14 +13,14 @@ const int HASH_SEED = 1234;
 const int NUM_PORTS = 1024; 
 
 // Maps NAT ports to src IP
-global Array.t<<32>> nat_to_ip  = Array.create(NUM_PORTS);
+global Array.t<32> nat_to_ip  = Array.create(NUM_PORTS);
 // Maps NAT ports to src port
-global Array.t<<32>> nat_to_port  = Array.create(NUM_PORTS);
+global Array.t<32> nat_to_port  = Array.create(NUM_PORTS);
 
 // note: lucid-tofino currently limits the program to 1 entry event. 
 // so, we combine the inside_packet and outside_packet events, and 
 // use port numbers to differentiate between the two.
-fun bool outside_port(int<<16>> port) {
+fun bool outside_port(int<16> port) {
     // port 128 is outside, all others are inside. 
     match port with
     | 128 -> {return true;}
@@ -38,17 +38,17 @@ entry event pkt(int ip, int port);
 // note: to work on real eth/ip packets, 
 // the exit events also must be updated to carry 
 // eth/ip headers.
-exit event inside_continue(int<<32>> src_port);
-exit event outside_continue(int dst_ip, int<<32>> dst_port);
+exit event inside_continue(int<32> src_port);
+exit event outside_continue(int dst_ip, int<32> dst_port);
 
 
 // note: events that do not represent packets
 // in some externally-defined format (e.g. eth/ip), 
 // can be used as normal.
-event add_to_nat(int src_ip, int<<32>> src_port);
+event add_to_nat(int src_ip, int<32> src_port);
 
-handle add_to_nat(int src_ip, int<<32>> src_port) {
-    int NAT_port = hash<<32>>(HASH_SEED, src_ip, src_port);
+handle add_to_nat(int src_ip, int<32> src_port) {
+    int NAT_port = hash<32>(HASH_SEED, src_ip, src_port);
     Array.set(nat_to_ip, NAT_port, src_ip);
     Array.set(nat_to_port, NAT_port, src_port);
 
@@ -57,11 +57,11 @@ handle add_to_nat(int src_ip, int<<32>> src_port) {
     generate inside_continue(NAT_port);
 }
 
-fun bool in_nat(int src_ip, int<<32>> src_port) {
+fun bool in_nat(int src_ip, int<32> src_port) {
     bool ret = false;
-    int idx =  hash<<32>>(HASH_SEED, src_ip, src_port);
+    int idx =  hash<32>(HASH_SEED, src_ip, src_port);
     int ip = Array.get(nat_to_ip, idx);
-    int<<32>> port = Array.get(nat_to_port, idx);
+    int<32> port = Array.get(nat_to_port, idx);
     if (ip == src_ip) {
         if (port == src_port) {
             ret = true;
@@ -74,18 +74,18 @@ fun bool in_nat(int src_ip, int<<32>> src_port) {
 // entry handlers into functions, so that we can have 
 // only 1 entry event, as required by the current 
 // version of the lucid-tofino compiler. 
-fun void inside_packet(int src_ip, int<<32>> src_port) {
+fun void inside_packet(int src_ip, int<32> src_port) {
     if(in_nat(src_ip, src_port) == true) {
-        int<<32>> NAT_port = hash<<32>>(HASH_SEED, src_ip, src_port);
+        int<32> NAT_port = hash<32>(HASH_SEED, src_ip, src_port);
         generate inside_continue(NAT_port);
     } else {
         generate add_to_nat(src_ip, src_port); // Will generate the continue for us
     }
 }
 
-fun void outside_packet(int<<32>> dst_port) {
+fun void outside_packet(int<32> dst_port) {
     int ip = Array.get(nat_to_ip, dst_port);
-    int<<32>> port = Array.get(nat_to_port, dst_port);
+    int<32> port = Array.get(nat_to_port, dst_port);
     generate outside_continue(ip, port);
 }
 
@@ -93,7 +93,7 @@ handle pkt(int ip, int port) {
     // note: ingress_port is a lucid builtin that 
     // contains the ingress port of the event. 
     // it is a 9-bit value in the tofino.
-    if (outside_port((int<<16>>)ingress_port)) {
+    if (outside_port((int<16>)ingress_port)) {
         // packet is coming from the outside world, 
         // assume the port is the destination port.
         outside_packet(port);

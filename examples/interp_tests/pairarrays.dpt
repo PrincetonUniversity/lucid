@@ -1,15 +1,15 @@
 // Note: All logic in this file is completely made up, don't try to figure out
 // what it's trying to do
 
-global PairArray.t<<16>> g1 = PairArray.create(4);
-global PairArray.t<<8>>  g2 = PairArray.create(4);
-global Array.t<<16>>     g3 = Array.create(4);
+global PairArray.t<16> g1 = PairArray.create(4);
+global PairArray.t<8>  g2 = PairArray.create(4);
+global Array.t<16>     g3 = Array.create(4);
 
-memop twoarg(int<<'a>> memval1, int<<'a>> localval1) {
+memop twoarg(int<'a> memval1, int<'a> localval1) {
   return memval1 + localval1 + 1;
 }
 
-memop fourarg(int<<'a>> memval1, int<<'a>> memval2, int<<'a>> localval1, int<<'a>> localval2) {
+memop fourarg(int<'a> memval1, int<'a> memval2, int<'a> localval1, int<'a> localval2) {
   bool b1 = memval1 + localval1 < 3;
   bool b2 = memval2 > localval1 + 7;
 
@@ -22,7 +22,7 @@ memop fourarg(int<<'a>> memval1, int<<'a>> memval2, int<<'a>> localval1, int<<'a
     if (b1) { return memval2; }
 }
 
-memop threearg(int<<'a>> memval1, int<<'a>> localval1, int<<'a>> localval2) {
+memop threearg(int<'a> memval1, int<'a> localval1, int<'a> localval2) {
   bool b1 = memval1 + localval1 < 3;
   bool b2 = memval1 > localval1 + 7;
 
@@ -35,10 +35,10 @@ memop threearg(int<<'a>> memval1, int<<'a>> localval1, int<<'a>> localval2) {
     if (b1 || !b2) { return cell2; }
 }
 
-event in(int idx, int<<16>> i, int<<16>> j) {
-  int<<16>> x = PairArray.update(g1, idx, fourarg, i, j, 1);
-  int<<8>> y = PairArray.update(g2, idx, fourarg, (int<<8>>)i, (int<<8>>)j, 2);
-  int<<16>> z = 0;
+event in(int idx, int<16> i, int<16> j) {
+  int<16> x = PairArray.update(g1, idx, fourarg, i, j, 1);
+  int<8> y = PairArray.update(g2, idx, fourarg, (int<8>)i, (int<8>)j, 2);
+  int<16> z = 0;
   if (idx < 2) {
     z = Array.update(g3, idx, twoarg, i, twoarg, j);
   } else {
