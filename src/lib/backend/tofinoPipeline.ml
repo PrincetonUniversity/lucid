@@ -8,7 +8,7 @@ exception Error of string
 let error s = raise (Error s)
 let do_log = ref true
 let do_const_branch_vars = ref true
-let cprint_endline s = if Cmdline.cfg.verbose then print_endline s
+let cprint_endline s = if Cmdline.cfg.debug then print_endline s
 
 let cprint_prog label tds =
   cprint_endline label;
