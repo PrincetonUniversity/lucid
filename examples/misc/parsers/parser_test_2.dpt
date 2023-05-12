@@ -9,15 +9,15 @@ event etheth(eth e, eth e') { generate background(e#srcMac); }
 const int IP_ETHERTY = 0x8000;
 
 parser main() {
-  read e : eth;
+  read eth e;
   match e#etherTy with
-  | 0 -> { read e1 : eth;
-         read e2 : eth;
+  | 0 -> { read eth e1;
+         read eth e2;
          match e1#etherTy with
          | 1 -> { generate eth(e1); }
          | 2 -> { generate etheth(e1, e2); } }
-  | 3 -> { read e3: eth;
-         read e4: eth;
+  | 3 -> { read eth e3;
+         read eth e4;
          match e3#etherTy with
          | 4 -> { generate eth(e3); } }
 }

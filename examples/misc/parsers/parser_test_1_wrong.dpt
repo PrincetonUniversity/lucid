@@ -7,16 +7,16 @@ event etheth(eth e, eth e') { generate background(e#srcMac); }
 event eth_ip(eth e, ip ip) { generate background(ip#srcIp); }
 
 parser parse_ip(eth e) {
-  read ip : ip;
+  read ip ip;
   generate eth_ip(e, ip);
 }
 
 parser main() {
-  read e : eth;
+  read eth e;
   match e#etherTy with
   | LUCID_ETHERTY -> { do_lucid_parsing(); }
   | 7 -> { parse_ip(e); }
-  | 0 -> { read e2: eth;
+  | 0 -> { read eth e2;
            parse_ip(e2); } // ERROR: e and e2 share a slot
   | _ -> {
       e#etherTy = 0x9999;

@@ -6,7 +6,7 @@ event eth(eth e) { generate background(e#srcMac); }
 event eth_ip(eth e, ip ip, Payload.t payload) { generate background(ip#srcIp); }
 
 parser parse_ip(eth e) {
-  read ip : ip;
+  read ip ip;
   generate eth_ip(e, ip, Payload.parse());
 }
 
@@ -14,7 +14,7 @@ parser parse_ip(eth e) {
 const int IP_ETHERTY = 0x8000;
 
 parser main() {
-  read e : eth;
+  read eth e;
   match e#etherTy with
   | LUCID_ETHERTY -> { do_lucid_parsing(); }
   | IP_ETHERTY -> { parse_ip(e); }

@@ -10,18 +10,18 @@ const int IP_ETHERTY = 0x8000;
 
 // ERROR: Transitively unifies args of etheth
 parser main() {
-  read e : eth;
+  read eth e;
   match e#etherTy with
   | 0 -> {
-         read e1 : eth;
-         read e2 : eth;
+         read eth e1;
+         read eth e2;
          match e1#etherTy with
          | 1 -> { generate eth(e1); }
          | 2 -> { generate etheth(e1, e2); }
          }
   | 3 -> {
-         read e3: eth;
-         read e4: eth;
+         read eth e3;
+         read eth e4;
          match e3#etherTy with
          | 4 -> { generate eth(e3); }
          | 5 -> { generate etheth(e4, e3); }

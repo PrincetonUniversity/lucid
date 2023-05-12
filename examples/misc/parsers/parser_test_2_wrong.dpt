@@ -8,7 +8,7 @@ event etheth(eth e, eth e2) { generate background(e#srcMac); }
 const int IP_ETHERTY = 0x8000;
 
 parser main() {
-  read e : eth;
+  read eth e;
   match e#etherTy with
   | LUCID_ETHERTY -> { do_lucid_parsing(); }
   | IP_ETHERTY -> { generate etheth(e, e); } // ERROR: Unifies both arguments of etheth

@@ -401,7 +401,7 @@ dt_table:
                                                     (mk_t_table (snd $5) (snd $7) [$9] (Span.extend $3 $10))
                                                     (Span.extend (fst $1) $10) }
 parser_action:
-  | READ ID COLON ty SEMI                   { (PRead (snd $2, $4)), (Span.extend $1 $5) }
+  | READ ty ID SEMI                         { (PRead (snd $3, $2)), (Span.extend $1 $4) }
   | SKIP ty SEMI                            { (PSkip $2), Span.extend $1 $3 }
   | exp ASSIGN exp SEMI                     { (PAssign ($1, $3)), Span.extend $1.espan $4 }
 

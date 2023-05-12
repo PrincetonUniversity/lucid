@@ -9,15 +9,15 @@ whenever the parser reads from the packet it puts the data in the appropriate sl
 e.g. in the code below, e1 is read directly into the slot assigned to the first
 argument of foo:
 ```
-read e1 : eth;
+read eth e1;
 generate foo(e1);
 ```
 
 However, this can cause problems if we need to store multiple variables in the same
 slot, as below:
 ```
-read e1 : eth;
-read e2 : eth;
+read eth e1;
+read eth e2;
 match ... with
 | 0 -> generate foo(e1);
 | 1 -> generate foo(e2);
@@ -31,14 +31,14 @@ the problem by moving the reads inside the match, so that e1 and e2 don't appear
 the same control path.
 ```
 match ... with
-| 0 -> read e1 : eth; generate foo(e1);
-| 1 -> skip eth; read e2 : eth; generate foo(e2);
+| 0 -> read eth e1; generate foo(e1);
+| 1 -> skip eth; read eth e2; generate foo(e2);
 ```
 
 The other thing that can go wrong is trying to use the same variable as different
 arguments to the same event:
 ```
-read e1 : eth;
+read eth e1;
 match ... with
 | 0 -> generate foo(e1, ...);
 | 1 -> generate foo(..., e1);
@@ -49,11 +49,11 @@ same slot, which is impossible: we need both to be alive at the same time.
 These sorts of errors can also happen transitively:
 ```
 match ... with
-| 0 -> read e1 : eth;
+| 0 -> read eth e1;
        match ... with
       | 1 -> generate foo(e1);
       | 2 -> generate bar(e1, ...);
-| 3 -> read e2: eth;
+| 3 -> read eth e2;
        match ... with
       | 4 -> generate foo(e2);
       | 5 -> generate bar(..., e2);
