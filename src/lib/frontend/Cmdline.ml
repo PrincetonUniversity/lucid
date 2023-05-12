@@ -29,6 +29,7 @@ type config =
   ; mutable old_layout : bool (* use the older, slower layout algorithm *)
   ; mutable serverlib : bool
       (* If false, disable the python event library generation *)
+  ; mutable old_ifelim : bool (* use the old if to match translation pass, which has a different set of bugs! *)
   }
 
 (* TODO: We might want to add more parameters controlling which transformations
@@ -58,6 +59,7 @@ let default () =
   ; ctl_fn = None
   ; old_layout = false
   ; serverlib = false
+  ; old_ifelim = false
   }
 ;;
 
@@ -189,6 +191,7 @@ let parse_tofino () =
   let set_profile_cmd (s : string) = cfg.profile_cmd <- Some s in
   let set_ctl_fn (s : string) = cfg.ctl_fn <- Some s in
   let set_old_layout () = cfg.old_layout <- true in
+  let set_old_ifelim () = cfg.old_ifelim <- true in
   let speclist =
     speclist
     @ [ "-o", Arg.String set_builddir, "Output build directory."
@@ -199,7 +202,9 @@ let parse_tofino () =
         , Arg.String set_profile_cmd
         , "Profile program instead of compiling." )
       ; "--control", Arg.String set_ctl_fn, "Python control program."
-      ; "--oldlayout", Arg.Unit set_old_layout, "Use old layout algorithm." ]
+      ; "--oldlayout", Arg.Unit set_old_layout, "Use old layout algorithm." 
+      ; "--oldifelim", Arg.Unit set_old_ifelim, "Use old if to match elimination algorithm."
+      ]
   in
   let target_filename = ref "" in
   let usage_msg = "Lucid command line. Options available:" in

@@ -680,14 +680,10 @@ let rec process_new tds =
 ;;
 
 let process tds =
-  (* let old_result = process_old tds in *)
-  let new_result = process_new tds in
-(*   print_endline ("[IfToMatch] OLD RESULT");
-  print_endline (tdecls_to_string old_result);
-  print_endline ("[IfToMatch] NEW RESULT");
-  print_endline (tdecls_to_string new_result);
-  print_endline ("[IfToMatch] END"); *)
-  new_result
+  let result =
+    if Cmdline.cfg.old_ifelim then process_old tds else process_new tds
+  in
+  result
 ;;
 
 
