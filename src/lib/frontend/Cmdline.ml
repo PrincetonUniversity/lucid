@@ -27,6 +27,8 @@ type config =
       string option (* something with profiling -- probably depreciated *)
   ; mutable ctl_fn : string option (* path to optional python control program *)
   ; mutable old_layout : bool (* use the older, slower layout algorithm *)
+  ; mutable serverlib : bool
+      (* If false, disable the python event library generation *)
   }
 
 (* TODO: We might want to add more parameters controlling which transformations
@@ -55,6 +57,7 @@ let default () =
   ; profile_cmd = None
   ; ctl_fn = None
   ; old_layout = false
+  ; serverlib = false
   }
 ;;
 
@@ -88,6 +91,7 @@ let parse_common () =
     cfg.json <- true;
     cfg.verbose <- false
   in
+  let set_serverlib () = cfg.serverlib <- true in
   let speclist =
     [ ( "--silent"
       , Arg.Unit unset_verbose
@@ -132,7 +136,10 @@ let parse_common () =
       , "If true, print all interpreter output as json records" )
     ; ( "--no-partial-interp"
       , Arg.Unit set_partial_interp
-      , "If true, disable partial interpretation for the program" ) ]
+      , "If true, disable partial interpretation for the program" )
+    ; ( "--serverlib"
+      , Arg.Unit set_serverlib
+      , "If true, generate the python event library generator" ) ]
   in
   speclist
 ;;

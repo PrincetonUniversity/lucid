@@ -304,7 +304,9 @@ let compile old_layout ds portspec build_dir ctl_fn_opt =
   (* compile to a low level p4 program *)
   let tofino_prog = compile_dataplane old_layout ds portspec build_dir in
   (* generate the python event library *)
-  let py_eventlib = PyEventLib.coresyntax_to_pyeventlib ds in
+  let py_eventlib =
+    if Cmdline.cfg.serverlib then PyEventLib.coresyntax_to_pyeventlib ds else ""
+  in
   (* build the globals name directory json *)
   let globals_directory =
     P4TofinoGlobalDirectory.build_global_dir tofino_prog
