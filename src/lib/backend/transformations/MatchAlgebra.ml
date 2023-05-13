@@ -935,8 +935,16 @@ let delete_redundant_branches m =
     |> smatch_of_pattern_branches
   in
   (* print_endline ("[delete_redundant_branches] final statement"^(CorePrinting.statement_to_string res)); *)
-
   res
+;;
+
+(* clean up a match statement, ensuring that 
+   there are no unreachable or redundant branches. *)
+let optimize_smatch m =
+  pattern_branches_of_match m
+  |> delete_unreachable
+  |> delete_redundant
+  |> smatch_of_pattern_branches
 ;;
 
 (* update pattern branch list bs1, folding in the match statement m2 *)

@@ -599,8 +599,8 @@ let match_of_if_new exp s1 s2 =
   (* now make a match statement for each and expression. *)
   let smatch_from_conjunction and_expression =
     let atom_exps = flatten_conjunction and_expression in
-    let eqs = CL.filter (filter_eop_kind Eq) atom_exps in
     let neqs = CL.filter (filter_eop_kind Neq) atom_exps in
+    let eqs = CL.filter (filter_eop_kind Eq) atom_exps in
     (* get patterns annotated with variable ids *)
     (* a pattern for each negative branch *)
     let inequality_hit_pats = CL.map (fun neq -> atoms_to_pats keys [neq]) neqs in
@@ -622,7 +622,10 @@ let match_of_if_new exp s1 s2 =
   (* now merge all the atomic match statements together *)
   let smatch = match atomic_match_statements with
     | [] -> error "[match_of_if_new] empty expression in if statement?"
-    | stmt::[] -> stmt (* just one statement, return it *)
+    | stmt::[] -> 
+      (* smatch_to_conjunction may return an unreachable 
+         "false" branch, which then messes up subsequent phases *)
+      MatchAlgebra.optimize_smatch stmt
     | stmt::stmts -> 
       (* multiple statements, must fold. *)
       (* let unoptimized =  *)
