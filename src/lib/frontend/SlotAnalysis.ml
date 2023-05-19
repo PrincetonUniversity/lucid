@@ -440,7 +440,7 @@ let analyze_prog ds =
         self#visit_decls env body;
         prefix <- old_prefix
 
-      method! visit_DEvent env id _ _ params =
+      method! visit_DEvent env id _ _ _ params =
         let new_env =
           create_param_slots !env (Cid.create_ids (prefix @ [id])) params false
         in

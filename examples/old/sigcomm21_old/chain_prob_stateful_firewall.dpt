@@ -44,9 +44,9 @@ global filter4 = new Array<<1>>(NUM_REGISTERS);
 event add_to_filter(int idx1, int idx2, int idx3, int idx4);
 
 // Request_X is for packets coming from inside, reponse_x is for packets coming from outside
-// entry events
-entry event request_packet (int client_ip, int server_ip);
-entry event response_packet (int server_ip, int client_ip);
+// packet events
+packet event request_packet (int client_ip, int server_ip);
+packet event response_packet (int server_ip, int client_ip);
 // exit events
 exit event request_continue (int src_ip, int dst_ip);
 exit event response_continue (int src_ip, int dst_ip);

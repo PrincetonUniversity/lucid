@@ -274,7 +274,7 @@ let statement_to_string = stmt_to_string
 
 let event_sort_to_string sort =
   match sort with
-  | EEntry -> "entry event"
+  | EPacket -> "packet event"
   | EBackground -> "event"
 ;;
 
@@ -368,11 +368,12 @@ let d_to_string d =
       (id_to_string id)
       (params_to_string params)
       (stmt_to_string s)
-  | DEvent (id, sort, params) ->
+  | DEvent (id, annot, sort, params) ->
     Printf.sprintf
-      "%s %s(%s);"
+      "%s %s%s(%s);"
       (event_sort_to_string sort)
       (id_to_string id)
+      (Option.map_default (fun n -> "@" ^ string_of_int n) "" annot)
       (params_to_string params)
   | DMemop { mid; mparams; mbody } ->
     Printf.sprintf

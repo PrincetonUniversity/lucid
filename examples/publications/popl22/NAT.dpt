@@ -86,12 +86,12 @@ const int HASH_SEED = 1234;
 global Nat.t nat = Nat.create(NUM_PORTS, HASH_SEED);
 
 // Handle packets coming from behind the NAT
-entry event inside_packet(int src_ip, int<4> src_port);
-exit event inside_continue(int<4> src_port);
+packet event inside_packet(int src_ip, int<4> src_port);
+event inside_continue(int<4> src_port) { skip; }
 
 // Handle packets coming from outside the NAT
-entry event outside_packet(int<4> dst_port);
-exit event outside_continue(int dst_ip, int<4> dst_port);
+packet event outside_packet(int<4> dst_port);
+event outside_continue(int dst_ip, int<4> dst_port) { skip; }
 
 event add_to_nat(int src_ip, int<4> src_port) {
   Nat.add(nat, src_ip, src_port);

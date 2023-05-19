@@ -4,10 +4,11 @@
   open SyntaxUtils
   open Collections
 
-  let first (x, _, _, _) = x
-  let second (_, x, _, _) = x
-  let third (_, _, x, _) = x
-  let fourth (_, _, _, x) = x
+  let first (x, _, _, _, _) = x
+  let second (_, x, _, _, _) = x
+  let third (_, _, x, _, _) = x
+  let fourth (_, _, _, x, _) = x
+  let fifth (_, _, _, _, x) = x
 
   let mk_trecord lst =
     TRecord (List.map (fun (id, ty) -> Id.name id, ty.raw_ty) lst)
@@ -118,8 +119,8 @@
 %token <Span.t> GROUP
 %token <Span.t> CONTROL
 %token <Span.t> EGRESS
-%token <Span.t> ENTRY
-%token <Span.t> EXIT
+%token <Span.t> PACKET
+%token <Span.t * int> ANNOT
 %token <Span.t> MATCH
 %token <Span.t> WITH
 %token <Span.t> PIPE
@@ -325,9 +326,7 @@ paramsdef:
 
 event_sort:
     | EVENT                             { ($1, EBackground) }
-    | ENTRY EVENT                       { ($1, EEntry false) }
-    | ENTRY CONTROL EVENT               { ($1, EEntry true) }
-    | EXIT EVENT                        { ($1, EExit) }
+    | PACKET EVENT                      { ($1, EPacket) }
 
 speclist:
     | cid LESS cid                     { (snd $1, SpecLess) :: [snd $3, SpecLess] }
@@ -366,8 +365,10 @@ interface:
     | interface_spec interface          { $1::$2 }
 
 event_decl:
-    | event_sort ID paramsdef             { ($1, snd $2, $3, []) }
-    | event_sort ID paramsdef constr_list { ($1, snd $2, $3, $4) }
+    | event_sort ID paramsdef                   { ($1, None, snd $2, $3, []) }
+    | event_sort ID paramsdef constr_list       { ($1, None, snd $2, $3, $4) }
+    | event_sort ID ANNOT paramsdef             { ($1, Some (snd $3), snd $2, $4, []) }
+    | event_sort ID ANNOT paramsdef constr_list { ($1, Some (snd $3), snd $2, $4, $5) }
 
 handle_sort:
     | HANDLE         {$1, HData}
@@ -427,9 +428,9 @@ decl:
     | EXTERN ty ID SEMI                     { [dextern_sp (snd $3) $2 (Span.extend $1 $4)] }
     | EXTERN ID paramsdef SEMI              { [dextern_sp (snd $2) (mk_fty (fst $2) $3) (Span.extend $1 $4)] }
     | SYMBOLIC ty ID SEMI                   { [dsymbolic_sp (snd $3) $2 (Span.extend $1 $4)] }
-    | event_decl SEMI                       { [event_sp (second $1) (snd (first $1)) (fourth $1) (third $1) (Span.extend (fst (first $1)) $2)] }
-    | event_decl LBRACE statement RBRACE    { [event_sp (second $1) (snd (first $1)) (fourth $1) (third $1) (Span.extend (fst (first $1)) $4);
-                                               datahandler_sp (second $1) (third $1) $3 (Span.extend (fst (first $1)) $4)] }
+    | event_decl SEMI                       { [event_sp (third $1) (second $1) (snd (first $1)) (fifth $1) (fourth $1) (Span.extend (fst (first $1)) $2)] }
+    | event_decl LBRACE statement RBRACE    { [event_sp (third $1) (second $1) (snd (first $1)) (fifth $1) (fourth $1) (Span.extend (fst (first $1)) $4);
+                                               datahandler_sp (third $1) (fourth $1) $3 (Span.extend (fst (first $1)) $4)] }
     | handle_sort ID paramsdef LBRACE statement RBRACE
       	     	       	      	     	        { [handler_sp (snd $2) (snd $1) $3 $5 (Span.extend (fst $1) $6)] }
     | FUN ty ID paramsdef LBRACE statement RBRACE
@@ -522,6 +523,7 @@ multiargs:
     | exp COMMA args                         { $1::$3 }
 
 statement1:
+    | SKIP SEMI                             { snoop_sp (Span.extend $1 $2) }
     | ty ID ASSIGN exp SEMI                 { slocal_sp (snd $2) $1 $4 (Span.extend $1.tspan $5) }
     | NOINLINE ty ID ASSIGN exp SEMI        { slocal_sp (snd $3) $2 $5 (Span.extend $1 $6) |> noinline }
     | ID ASSIGN exp SEMI	                  { sassign_sp (snd $1) $3 (Span.extend (fst $1) $4) }

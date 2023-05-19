@@ -25,7 +25,7 @@ Switch 0 : {
 
  Exits :    [ ]
 
- entry events handled: 0
+ packet events handled: 0
  total events handled: 4
 
 }
@@ -39,7 +39,7 @@ Switch 1 : {
 
  Exits :    [ ]
 
- entry events handled: 0
+ packet events handled: 0
  total events handled: 0
 
 }

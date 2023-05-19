@@ -24,12 +24,12 @@ const int self = 0;
 global BloomFilterTimeout.t<4, 2> filter = BloomFilterTimeout.create(NUM_REGISTERS, HASH_SEEDS, TIMEOUT, EMPTY_PERIOD);
 
 // Request_X is for packets coming from inside, reponse_x is for packets coming from outside
-// entry events
-entry event request_packet (int client_ip, int server_ip);
-entry event response_packet (int server_ip, int client_ip);
+// packet events
+packet event request_packet (int client_ip, int server_ip);
+packet event response_packet (int server_ip, int client_ip);
 // exit events
-exit event request_continue (int src_ip, int dst_ip);
-exit event response_continue (int src_ip, int dst_ip);
+event request_continue (int src_ip, int dst_ip) { skip; }
+event response_continue (int src_ip, int dst_ip) { skip; }
 
 event add_to_firewall(int[2] args) {
   BloomFilterTimeout.add_to_filter(filter, args);

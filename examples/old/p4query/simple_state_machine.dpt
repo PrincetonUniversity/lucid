@@ -35,7 +35,7 @@ global last_tses     	= new Array<<32>>(1024);
 global interval_pktct   = new Array<<32>>(1024);
 global interval_iat    	= new Array<<32>>(1024);
 
-entry event pkt_in(int flow_key);
+packet event pkt_in(int flow_key);
 exit event pkt_out(int flow_key);
 event change_state(int flow_key, int new_state);
 

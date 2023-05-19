@@ -25,7 +25,7 @@ memop incr(int counter_val, int incr_by) {
 }
 
 
-entry event pktin (int<<8>> flow_id, int<<32>> sz, int<<1>> syn_flag, int<<1>> fin_flag);
+packet event pktin (int<<8>> flow_id, int<<32>> sz, int<<1>> syn_flag, int<<1>> fin_flag);
 exit event pktct_report (int<<8>> flow_id, int pktct);
 
 

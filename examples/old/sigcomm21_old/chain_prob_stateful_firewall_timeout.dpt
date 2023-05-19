@@ -38,9 +38,9 @@ event rotate_active();
 event write_empty(int<<32>> i, int<<8>> curr);
 
 // Request_x is for packets coming from inside, response_x is for packets coming from outside
-// entry events
-entry event request_packet (int client_ip, int server_ip);
-entry event response_packet (int server_ip, int client_ip);
+// packet events
+packet event request_packet (int client_ip, int server_ip);
+packet event response_packet (int server_ip, int client_ip);
 // exit events
 exit event request_continue (int src_ip, int dst_ip);
 exit event response_continue (int src_ip, int dst_ip);

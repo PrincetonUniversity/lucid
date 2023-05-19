@@ -71,8 +71,8 @@ rule token = parse
   | "group"           { GROUP (position lexbuf) }
   | "control"         { CONTROL (position lexbuf) }
   | "@egress"         { EGRESS (position lexbuf) }
-  | "entry"           { ENTRY (position lexbuf) }
-  | "exit"            { EXIT (position lexbuf) }
+  | "@"(num as n)     { ANNOT (position lexbuf, Int.of_string n) }
+  | "packet"          { PACKET (position lexbuf) }
   | "match"           { MATCH (position lexbuf) }
   | "with"            { WITH (position lexbuf) }
   | "type"            { TYPE (position lexbuf) }

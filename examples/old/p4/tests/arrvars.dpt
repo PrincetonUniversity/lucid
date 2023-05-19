@@ -1,6 +1,6 @@
 // Array.get, getm, set, setm tests
 
-// entry events
+// packet events
 event packetin (int client_ip, int server_ip);
 // exit events
 event continue (int src_ip, int dst_ip);

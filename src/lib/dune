@@ -65,7 +65,6 @@
    replaceUserTys
    partialInterpretation
    constInlining
-   linerate
    slotAnalysis
    frontendPipeline
    midendPipeline
@@ -111,7 +110,6 @@
    InputChecks
    StandardizeEventParams
    EliminateEventCombinators
-   ExternEventElimination
    TofinoCore
    TofinoCoreForms
    TofinoControl

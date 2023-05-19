@@ -13,7 +13,7 @@ fun int print_when_not_11() {
 	printf("this packet does NOT have src == 11");
 }
 
-entry event packetin(int src, int dst);
+packet event packetin(int src, int dst);
 
 handle packetin (int src, int dst) {
 	if (src == 11) {

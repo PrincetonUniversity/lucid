@@ -21,8 +21,8 @@ module M : {
         t = t1;
     };
 }
-entry event entry_event (int a);
-exit event exit_event (int a);
+packet event entry_event (int a);
+event exit_event (int a) { skip; }
 handle entry_event (int a) {
     M.T t2 = M.create(a);
     generate exit_event(a);

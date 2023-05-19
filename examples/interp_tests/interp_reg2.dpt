@@ -1,4 +1,4 @@
-exit event out(int x);
+event out(int x) { skip; }
 
 event in(int a, int b, int c, int d, int e, int f, int g) {
   // int pkt_signature = hash<32>(10398247, 1, 2, 3, 4, 4294967295);

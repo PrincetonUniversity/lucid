@@ -15,8 +15,8 @@ handle update_arr_ctr(Array.t<32> a, Counter.t<32> c, int idx, int val) {
 
 // The interpreter can't directly generate events which take global arguments,
 // so we're using this as a workaround
-entry event in(int array_id, int counter_id, int idx, int val);
-exit event bad_inputs(int array_id, int counter_id);
+packet event in(int array_id, int counter_id, int idx, int val);
+event bad_inputs(int array_id, int counter_id) { skip; }
 
 handle in(int array_id, int counter_id, int idx, int val) {
 	match (array_id, counter_id) with

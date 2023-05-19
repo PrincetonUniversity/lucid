@@ -152,7 +152,7 @@ let tdecl_of_decl decl =
     ; tdspan = decl.dspan
     ; tdpragma = decl.dpragma
     }
-  | DEvent (id, es, ps) ->
+  | DEvent (id, _, es, ps) ->
     { td = TDEvent (id, es, ps); tdspan = decl.dspan; tdpragma = decl.dpragma }
   | DHandler (i, s, b) ->
     { td = TDHandler (i, s, b); tdspan = decl.dspan; tdpragma = decl.dpragma }
@@ -281,8 +281,8 @@ let add_main_handler decls =
       | TDEvent (id, ev_sort, params) ->
         let default_hdl =
           match ev_sort, default_hdl with
-          | EEntry, None -> Some id
-          | EEntry, Some _ ->
+          | EPacket, None -> Some id
+          | EPacket, Some _ ->
             error "[add_main_handler] only 1 entry event is supported"
           | _, _ -> default_hdl
         in
@@ -366,8 +366,8 @@ let add_lib_handler decls =
       | TDEvent (id, ev_sort, params) ->
         let default_hdl =
           match ev_sort, default_hdl with
-          | EEntry, None -> Some id
-          | EEntry, Some _ ->
+          | EPacket, None -> Some id
+          | EPacket, Some _ ->
             error "[add_main_handler] only 1 entry event is supported"
           | _, _ -> default_hdl
         in
@@ -503,7 +503,10 @@ let decl_of_tdecl tdecl =
   | TDGlobal (id, ty, exp) ->
     decl_pragma (DGlobal (id, ty, exp)) tdecl.tdspan tdecl.tdpragma
   | TDEvent (id, es, ps) ->
-    { d = DEvent (id, es, ps); dspan = tdecl.tdspan; dpragma = tdecl.tdpragma }
+    { d = DEvent (id, None, es, ps)
+    ; dspan = tdecl.tdspan
+    ; dpragma = tdecl.tdpragma
+    }
   | TDHandler (i, s, b) ->
     { d = DHandler (i, s, b); dspan = tdecl.tdspan; dpragma = tdecl.tdpragma }
   | TDMemop m ->

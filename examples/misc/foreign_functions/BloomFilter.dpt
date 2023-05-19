@@ -58,13 +58,13 @@ module BloomFilter : {
 
 global BloomFilter.t<32, 2, 4> bf1 = BloomFilter.create(4, [0; 1; 2; 3]);
 
-exit event allowed(int x);
-exit event denied(int x);
+event allowed(int x) { skip; }
+event denied(int x) { skip; }
 
 extern add_to_filter(int x);
 extern record_query(int x, bool b);
 
-entry event in(bool add, int x) {
+packet event in(bool add, int x) {
   if (add) {
     BloomFilter.add_to_filter(bf1, x);
     add_to_filter(x);

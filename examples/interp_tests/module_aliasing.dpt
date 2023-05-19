@@ -46,10 +46,10 @@ module Filter = BF if b else BloomFilterTimeout;
 
 global Filter.t<32, 2, 4> bf1 = Filter.create(4, [0; 1; 2; 3], 2000, 10);
 
-exit event allowed(int x);
-exit event denied(int x);
+event allowed(int x) { skip; }
+event denied(int x) { skip; }
 
-entry event in(bool add, int x) {
+packet event in(bool add, int x) {
   if (add) {
     Filter.add_to_filter(bf1, x);
   } else {

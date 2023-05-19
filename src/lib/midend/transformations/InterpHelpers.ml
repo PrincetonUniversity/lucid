@@ -348,8 +348,8 @@ let refresh_param_id (i, ty) = Id.refresh i, ty
 let rec refresh_event_param_ids ds : decls =
   let map_f dec =
     match dec.d with
-    | DEvent (ev_id, ev_sort, ev_params) ->
-      { d = DEvent (ev_id, ev_sort, CL.map refresh_param_id ev_params)
+    | DEvent (ev_id, ev_annot, ev_sort, ev_params) ->
+      { d = DEvent (ev_id, ev_annot, ev_sort, CL.map refresh_param_id ev_params)
       ; dspan = dec.dspan
       ; dpragma = dec.dpragma
       }

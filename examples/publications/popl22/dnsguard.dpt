@@ -29,11 +29,11 @@ const int firewall_slots = 0x400;
 
 event init();
 
-entry event dnsrequest_in(int src, int dst, int req_id);
-entry event dnsresponse_in(int src, int dst, int req_id);
+packet event dnsrequest_in(int src, int dst, int req_id);
+packet event dnsresponse_in(int src, int dst, int req_id);
 // Exit point back to the P4 program. Generated when a packet is allowed to
 // proceed.
-exit event dnspkt_out ();
+event dnspkt_out () { skip; }
 
 
 /*========================================

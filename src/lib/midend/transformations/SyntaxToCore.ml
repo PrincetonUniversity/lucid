@@ -246,9 +246,8 @@ let translate_memop body =
 ;;
 
 let translate_sort = function
-  | S.EEntry _ -> C.EEntry
+  | S.EPacket -> C.EPacket
   | S.EBackground -> C.EBackground
-  | S.EExit -> failwith "Internal Error: Extern event persisted to midend"
 ;;
 
 let translate_hsort = function
@@ -291,8 +290,8 @@ let translate_decl (d : S.decl) : C.decl =
        | ETableCreate _ ->
          C.DGlobal (id, translate_ty ty, translate_etablecreate id inner_exp)
        | _ -> C.DGlobal (id, translate_ty ty, translate_exp inner_exp))
-    | S.DEvent (id, sort, _, params) ->
-      C.DEvent (id, translate_sort sort, translate_params params)
+    | S.DEvent (id, annot, sort, _, params) ->
+      C.DEvent (id, annot, translate_sort sort, translate_params params)
     | S.DHandler (id, s, body) ->
       C.DHandler (id, translate_hsort s, translate_body body)
     | S.DMemop (mid, mparams, mbody) ->

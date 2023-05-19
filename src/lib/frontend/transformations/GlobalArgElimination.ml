@@ -115,6 +115,8 @@ let possible_instantiations ((effect_map, gmap) : global_info) spec gparams =
 type event_mapping =
   { inst : inst (* An instantiation of the event *)
   ; new_id : id (* The event id corresponding to this instantiation *)
+  ; new_annot : int option
+      (* The event's compiled id annotation. Only Some if we didn't duplicate this event. *)
   ; params : params
       (* The original parameters of the event, with any polymorphism eliminated *)
   }
@@ -123,22 +125,23 @@ type event_mapping =
    copies of the declaration, one for each possible combination of globals
    that could be passed in. Also return the instantiation that led to each
    copy *)
-let duplicate_event_decl global_info (eid, constr_specs, params)
+let duplicate_event_decl global_info (eid, annot, constr_specs, params)
   : event_mapping list
   =
   let gparams = List.filter (is_global % snd) params in
   let possibles = possible_instantiations global_info constr_specs gparams in
-  let new_id inst =
+  let new_id_annot inst =
     (* Don't rename if there were no global args *)
     if List.length gparams = 0
-    then eid
+    then eid, annot
     else
-      Id.fresh
-      @@ Id.name eid
-      ^ List.fold_left
-          (fun acc (id, _) -> acc ^ "_" ^ Id.name (fst @@ IdMap.find id inst))
-          ""
-          gparams
+      ( Id.fresh
+        @@ Id.name eid
+        ^ List.fold_left
+            (fun acc (id, _) -> acc ^ "_" ^ Id.name (fst @@ IdMap.find id inst))
+            ""
+            gparams
+      , None )
   in
   List.map
     (fun inst ->
@@ -151,7 +154,8 @@ let duplicate_event_decl global_info (eid, constr_specs, params)
           TyperUnify.unify_ty ty.tspan ty (snd @@ IdMap.find id inst))
         gparams;
       let params = TyperInstGen.generalizer#visit_params () params in
-      { inst; new_id = new_id inst; params })
+      let new_id, new_annot = new_id_annot inst in
+      { inst; new_id; new_annot; params })
     possibles
 ;;
 
@@ -160,8 +164,11 @@ let duplicate_all_events global_info ds : event_mapping list IdMap.t =
   List.fold_left
     (fun acc d ->
       match d.d with
-      | DEvent (eid, _, spec, params) ->
-        IdMap.add eid (duplicate_event_decl global_info (eid, spec, params)) acc
+      | DEvent (eid, annot, _, spec, params) ->
+        IdMap.add
+          eid
+          (duplicate_event_decl global_info (eid, annot, spec, params))
+          acc
       | _ -> acc)
     IdMap.empty
     ds
@@ -222,12 +229,14 @@ let update_handler span hsort handler_body { inst; new_id; params } =
 let replace_decls (emap : event_mapping list IdMap.t) ds =
   let replace_decl d =
     match d.d with
-    | DEvent (eid, sort, _, _) -> begin
+    | DEvent (eid, _, sort, _, _) -> begin
       match IdMap.find_opt eid emap with
       | Some lst ->
         List.map
-          (fun { new_id; params } ->
-            decl_sp (DEvent (new_id, sort, [], filter_params params)) d.dspan)
+          (fun { new_id; new_annot; params } ->
+            decl_sp
+              (DEvent (new_id, new_annot, sort, [], filter_params params))
+              d.dspan)
           lst
       | None -> failwith "Impossible. I hope."
     end
@@ -301,11 +310,12 @@ let mapping_to_string m =
   idmap_to_string
     (fun lst ->
       Printing.list_to_string
-        (fun { inst; new_id; params } ->
+        (fun { inst; new_id; new_annot; params } ->
           Printf.sprintf
-            "inst: %s, %s(%s)\n"
+            "inst: %s, %s%s(%s)\n"
             (idmap_to_string (Id.to_string % fst) inst)
             (Id.to_string new_id)
+            (Option.map_default (fun n -> "@" ^ string_of_int n) "" new_annot)
             (Printing.comma_sep
                (fun (id, ty) ->
                  Printing.ty_to_string ty ^ " " ^ Id.to_string id)
@@ -347,7 +357,7 @@ let deduplicate (event_mapping : event_mapping list IdMap.t) ds =
   List.filter
     (fun d ->
       match d.d with
-      | DEvent (id, _, _, _) | DHandler (id, _, _) ->
+      | DEvent (id, _, _, _, _) | DHandler (id, _, _) ->
         CidSet.mem (Id id) !don't_remove
       | _ -> true)
     ds

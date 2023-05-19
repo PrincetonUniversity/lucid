@@ -21,8 +21,8 @@ global Array.t<32> last_seen = Array.create(NUM_REGISTERS);
 
 event update_last_seen(int idx, int time);
 
-entry event packetin(int src, int dst, int port);
-exit event continue(int dst);
+packet event packetin(int src, int dst, int port);
+event continue(int dst) { skip; }
 
 handle update_last_seen(int idx, int time) {
   event this = update_last_seen(idx, time);

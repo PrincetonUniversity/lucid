@@ -130,7 +130,7 @@ let rec match_handlers ?(m_cid = None) (ds : decls) =
   in
   let aux (events, handlers) d =
     match d.d with
-    | DEvent (id, sort, _, _) ->
+    | DEvent (id, _, _, _, _) ->
       if IdSet.mem id events
       then
         Console.error_position d.dspan
@@ -138,8 +138,6 @@ let rec match_handlers ?(m_cid = None) (ds : decls) =
         ^ m_str
         ^ id_to_string id
         ^ " is declared twice in this scope."
-      else if sort = EExit
-      then events, handlers
       else IdSet.add id events, handlers
     | DHandler (id, _, _) ->
       if IdSet.mem id handlers
@@ -236,7 +234,7 @@ let check_payloads ds =
 
       method! visit_decl () d =
         match d.d with
-        | DEvent (id, _, _, params) ->
+        | DEvent (id, _, _, _, params) ->
           (* Ensure the event has at most one payload-type argument *)
           let params_containing_payload =
             List.fold_left
@@ -406,7 +404,7 @@ let rec check_qvars d =
   | DUserTy (_, sizes, _) ->
     (* Effects always ok, sizes only if they appear in the declared size list *)
     preset_qvar_checker#visit_decl (List.map STQVar.strip_links sizes) d
-  | DEvent (_, _, _, params) | DHandler (_, _, (params, _)) ->
+  | DEvent (_, _, _, _, params) | DHandler (_, _, (params, _)) ->
     (* Effects always ok, sizes only allowed if they appear inside at least one global-type argument *)
     event_qvar_checker#visit_params (false, ref []) params
   | DModule (_, intf, ds) ->

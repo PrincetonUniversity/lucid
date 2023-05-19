@@ -17,7 +17,7 @@ global Array.t<32> total_arr = Array.create(1);
 
 
 // Events
-entry event ip_in (int<9> igr_port, int src, int dst, int<16> len, int<8> tos);
+packet event ip_in (int<9> igr_port, int src, int dst, int<16> len, int<8> tos);
 event report(int idx);
 exit event ip_out (int<9> egr_port, int src, int dst);
 

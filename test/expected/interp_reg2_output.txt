@@ -24,7 +24,7 @@ Switch 0 : {
 
  Exits :    [ ]
 
- entry events handled: 0
+ packet events handled: 0
  total events handled: 12
 
 }

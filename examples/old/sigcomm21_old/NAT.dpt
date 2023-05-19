@@ -10,11 +10,11 @@ global nat_to_ip = new Array<<32>>(NUM_PORTS);
 global nat_to_port = new Array<<32>>(NUM_PORTS);
 
 // Handle packets coming from behind the NAT
-entry event inside_packet(int src_ip, int<<32>> src_port);
+packet event inside_packet(int src_ip, int<<32>> src_port);
 exit event inside_continue(int<<32>> src_port);
 
 // Handle packets coming from outside the NAT
-entry event outside_packet(int<<32>> dst_port);
+packet event outside_packet(int<<32>> dst_port);
 exit event outside_continue(int dst_ip, int<<32>> dst_port);
 
 event add_to_nat(int src_ip, int<<32>> src_port);

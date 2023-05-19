@@ -39,8 +39,8 @@ const int T_INTERVAL = 1000; // How long between rotations.
 const int h1_poly = 10398247;
 const int h2_poly = 1295981879;
 
-entry event dnsrequest_in(int src, int dst, int req_id);
-entry event dnsresponse_in(int src, int dst, int req_id);
+packet event dnsrequest_in(int src, int dst, int req_id);
+packet event dnsresponse_in(int src, int dst, int req_id);
 // Exit point back to the P4 program. Generated when a packet is allowed to 
 // proceed.
 exit event dnspkt_out (int<1> packet_allowed);

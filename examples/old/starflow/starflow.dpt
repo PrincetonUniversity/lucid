@@ -38,7 +38,7 @@ and compile-time loops to calculate the modulo. Something like this:
 */
 
 
-entry event ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len_short, int<<8>> tos);
+packet event ip_in (int<<9>> igr_port, int src, int dst, int<<16>> len_short, int<<8>> tos);
 exit event ip_out (int<<9>> egr_port, int src, int dst);
 
 

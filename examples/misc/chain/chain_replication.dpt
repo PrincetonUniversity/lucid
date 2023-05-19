@@ -25,8 +25,8 @@ event ack(int idx);
 
 event process(int src, int dst, int idx);
 
-entry event packetin(int src, int dst);
-exit event continue(int src, int dst);
+packet event packetin(int src, int dst);
+event continue(int src, int dst) { skip; }
 
 memop id (int x, int dummy) {
   return x;

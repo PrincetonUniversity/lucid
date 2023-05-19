@@ -107,7 +107,7 @@ handle scan(int idx) {
 	generate Event.delay(scan(next_idx), SCAN_PERIOD);
 }
 
-entry event packetin(int dst);
+packet event packetin(int dst);
 exit event continue(int dst);
 
 handle packetin(int dst) {

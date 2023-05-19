@@ -2,7 +2,7 @@ dpt: Auto-detected specification file examples/interp_tests/basics.json
 dpt: Simulating...
 dpt: Using random seed: 0
 
-t=0: Handling entry event packetin(10,100) at switch 0, port 0
+t=0: Handling packet event packetin(10,100) at switch 0, port 0
 t=600: Handling event continue(10,100) at switch 0, port 255
 t=601: Handling event count_to_10(0) at switch 0, port 255
 at 0
@@ -28,7 +28,7 @@ t=6601: Handling event count_to_10(10) at switch 0, port 255
 10
 t=7201: Handling event count_to_10(11) at switch 0, port 255
 got to 10
-t=10000: Handling entry event packetin(11,101) at switch 0, port 0
+t=10000: Handling packet event packetin(11,101) at switch 0, port 0
 t=10600: Handling event continue(11,101) at switch 0, port 255
 t=10601: Handling event count_to_10(0) at switch 0, port 255
 at 0
@@ -54,9 +54,9 @@ t=16601: Handling event count_to_10(10) at switch 0, port 255
 10
 t=17201: Handling event count_to_10(11) at switch 0, port 255
 got to 10
-t=20000: Handling entry event packetin(12,102) at switch 0, port 0
-t=20000: Handling entry event packetin(12,102) at switch 1, port 7
-t=20000: Handling entry event packetin(12,102) at switch 2, port 1
+t=20000: Handling packet event packetin(12,102) at switch 0, port 0
+t=20000: Handling packet event packetin(12,102) at switch 1, port 7
+t=20000: Handling packet event packetin(12,102) at switch 2, port 1
 t=20600: Handling event continue(12,102) at switch 0, port 255
 t=20600: Handling event continue(12,102) at switch 1, port 196
 t=20600: Handling event continue(12,102) at switch 2, port 3
@@ -132,9 +132,9 @@ t=27201: Handling event count_to_10(11) at switch 1, port 196
 got to 10
 t=27201: Handling event count_to_10(11) at switch 2, port 3
 got to 10
-t=40000: Handling entry event packetin(13,103) at switch 0, port 0
-t=40007: Handling entry event packetin(14,104) at switch 0, port 3
-t=40007: Handling entry event packetin(14,104) at switch 1, port 19
+t=40000: Handling packet event packetin(13,103) at switch 0, port 0
+t=40007: Handling packet event packetin(14,104) at switch 0, port 3
+t=40007: Handling packet event packetin(14,104) at switch 1, port 19
 t=40600: Handling event count_to_10(0) at switch 0, port 255
 at 0
 t=40601: Handling event continue(13,103) at switch 0, port 255
@@ -220,7 +220,7 @@ Switch 0 : {
 
  Exits :    [ ]
 
- entry events handled: 5
+ packet events handled: 5
  total events handled: 70
 
 }
@@ -232,7 +232,7 @@ Switch 1 : {
 
  Exits :    [ ]
 
- entry events handled: 2
+ packet events handled: 2
  total events handled: 28
 
 }
@@ -244,7 +244,7 @@ Switch 2 : {
 
  Exits :    [ ]
 
- entry events handled: 1
+ packet events handled: 1
  total events handled: 14
 
 }

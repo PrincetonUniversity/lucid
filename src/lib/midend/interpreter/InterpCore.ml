@@ -766,7 +766,7 @@ let interp_decl (nst : State.network_state) swid d =
       ignore @@ interp_statement nst swid locals body
     in
     State.add_handler (Cid.id id) f nst
-  | DEvent (id, _, _) ->
+  | DEvent (id, _, _, _) ->
     let f _ _ args =
       vevent { eid = Id id; data = List.map extract_ival args; edelay = 0 }
     in

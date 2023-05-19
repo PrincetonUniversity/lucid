@@ -15,11 +15,11 @@ type CMS = CMSTimeout.t<32, 10, 2>
 global CMS sketch = CMSTimeout.create(SLOTS, hash_seeds, T_INTERVAL);
 
 // measure count.
-entry event pktin(int src, int dst);
-entry event query(int src, int dst, int response_loc);
+packet event pktin(int src, int dst);
+packet event query(int src, int dst, int response_loc);
 
-exit event forward(int src, int dst);
-exit event query_response(int src, int dst, int val);
+event forward(int src, int dst) { skip; }
+event query_response(int src, int dst, int val) { skip; }
 
 // packet in is dead simple: just write to the active and warming up sketches.
 handle pktin(int src, int dst) {

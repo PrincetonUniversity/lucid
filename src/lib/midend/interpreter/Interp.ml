@@ -80,7 +80,7 @@ let execute_event
           "t=%d: Handling %sevent %s at switch %d, port %d\n"
           nst.current_time
           (match Env.find event.eid nst.event_sorts with
-           | EEntry -> "entry "
+           | EPacket -> "packet "
            | _ -> "")
           (CorePrinting.event_to_string event)
           idx

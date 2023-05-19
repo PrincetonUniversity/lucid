@@ -15,12 +15,12 @@ const int SIZE_SHORT = 2;
 const int MAX_IDX = 7;
 const int MMATCH = 0;
 
-entry event monitor_pkt(int src, int len);
+packet event monitor_pkt(int src, int len);
 
 // records that the cache emits when something gets evicted.
 const int COLLECTION_SERVER = 1234;
-exit event short_record(int src, int len, int[2] recs);
-exit event long_record(int src, int len, int[8] recs);
+event short_record(int src, int len, int[2] recs) { skip; }
+event long_record(int src, int len, int[8] recs) { skip; }
 
 // free a "long slot" by pushing it's index back onto the stack.
 event free_block(int block_id);

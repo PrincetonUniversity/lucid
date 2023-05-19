@@ -1,7 +1,7 @@
 // Use a recursive event to count to 10 for
 // each packet.
 
-entry event packetin (int<<32>> src, int<<32>> dst);
+packet event packetin (int<<32>> src, int<<32>> dst);
 exit event continue (int<<32>> src, int<<32>> dst);
 event loop (int<<32>> src, int<<32>> cur_idx);
 

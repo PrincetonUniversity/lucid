@@ -1,49 +1,49 @@
 /* 
-    Updated NAT implementation for current (5/2023) lucid-tofino compiler. 
-    The main difference in this version, vs. the original sigcomm version, 
-    is that this version uses a single entry event and does not 
-    require a "p4 harness". The current lucid compiler generates 
-    the entire P4 program without a harness, but requires that 
-    a program have at most 1 entry event. This limitation will be 
-    removed in a future update when the tofino backend is updated 
-    to support parsers. 
+    Updated NAT implementation for current (5/2023) lucid-tofino compiler.
+    The main difference in this version, vs. the original sigcomm version,
+    is that this version uses a single packet event and does not
+    require a "p4 harness". The current lucid compiler generates
+    the entire P4 program without a harness, but requires that
+    a program have at most 1 packet event. This limitation will be
+    removed in a future update when the tofino backend is updated
+    to support parsers.
 */
 
 const int HASH_SEED = 1234;
-const int NUM_PORTS = 1024; 
+const int NUM_PORTS = 1024;
 
 // Maps NAT ports to src IP
 global Array.t<32> nat_to_ip  = Array.create(NUM_PORTS);
 // Maps NAT ports to src port
 global Array.t<32> nat_to_port  = Array.create(NUM_PORTS);
 
-// note: lucid-tofino currently limits the program to 1 entry event. 
-// so, we combine the inside_packet and outside_packet events, and 
+// note: lucid-tofino currently limits the program to 1 packet event.
+// so, we combine the inside_packet and outside_packet events, and
 // use port numbers to differentiate between the two.
 fun bool outside_port(int<16> port) {
-    // port 128 is outside, all others are inside. 
+    // port 128 is outside, all others are inside.
     match port with
     | 128 -> {return true;}
     | _ -> {return false;}
 }
 
-// note: in lucid-tofino, entry event arguments are parsed 
-// directly from the start of the packet. If you want this 
-// program to work on eth / ip packets, you need to add 
-// eth and ip headers as arguments to the event. See the 
+// note: in lucid-tofino, packet event arguments are parsed
+// directly from the start of the packet. If you want this
+// program to work on eth / ip packets, you need to add
+// eth and ip headers as arguments to the event. See the
 // examples in examples/tofino_apps.
-entry event pkt(int ip, int port);
+packet event pkt(int ip, int port);
 
 
-// note: to work on real eth/ip packets, 
-// the exit events also must be updated to carry 
+// note: to work on real eth/ip packets,
+// the events also must be updated to carry
 // eth/ip headers.
-exit event inside_continue(int<32> src_port);
-exit event outside_continue(int dst_ip, int<32> dst_port);
+exit event inside_continue(int<32> src_port) { skip; }
+event outside_continue(int dst_ip, int<32> dst_port) { skip; }
 
 
 // note: events that do not represent packets
-// in some externally-defined format (e.g. eth/ip), 
+// in some externally-defined format (e.g. eth/ip),
 // can be used as normal.
 event add_to_nat(int src_ip, int<32> src_port);
 
@@ -71,9 +71,9 @@ fun bool in_nat(int src_ip, int<32> src_port) {
 }
 
 // note: we have turned the inside_packet and outside_packet
-// entry handlers into functions, so that we can have 
-// only 1 entry event, as required by the current 
-// version of the lucid-tofino compiler. 
+// entry handlers into functions, so that we can have
+// only 1 packet event, as required by the current
+// version of the lucid-tofino compiler.
 fun void inside_packet(int src_ip, int<32> src_port) {
     if(in_nat(src_ip, src_port) == true) {
         int<32> NAT_port = hash<32>(HASH_SEED, src_ip, src_port);
@@ -90,16 +90,16 @@ fun void outside_packet(int<32> dst_port) {
 }
 
 handle pkt(int ip, int port) {
-    // note: ingress_port is a lucid builtin that 
-    // contains the ingress port of the event. 
+    // note: ingress_port is a lucid builtin that
+    // contains the ingress port of the event.
     // it is a 9-bit value in the tofino.
     if (outside_port((int<16>)ingress_port)) {
-        // packet is coming from the outside world, 
+        // packet is coming from the outside world,
         // assume the port is the destination port.
         outside_packet(port);
     } else {
-        // packet is coming from internal network, 
-        // assume the ip and port are the sources. 
+        // packet is coming from internal network,
+        // assume the ip and port are the sources.
         inside_packet(ip, port);
     }
 }

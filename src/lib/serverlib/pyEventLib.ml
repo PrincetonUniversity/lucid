@@ -5,67 +5,67 @@ open SyntaxUtils
 open Printing
 
 (* input type for many printers *)
-type eventsig = {
-  id : id;
-  num : int;
-  params : (id * CoreSyntax.ty) list;
-}
+type eventsig =
+  { id : id
+  ; num : int
+  ; params : (id * CoreSyntax.ty) list
+  }
+
 type eventsigs = eventsig list
-let null_event = {id=Id.fresh "NONE"; num=0; params=[]}
+
+let null_event = { id = Id.fresh "NONE"; num = 0; params = [] }
 
 (* printing helpers *)
 
-
-
-
 let evrec_to_string evrec =
-  Printf.sprintf "event %s(%s);" 
+  Printf.sprintf
+    "event %s(%s);"
     (CorePrinting.id_to_string evrec.id)
     (CorePrinting.params_to_string evrec.params)
 ;;
 
-
 let sp n = String.make n ' '
 let ln_sep ls = String.concat "\n" ls
 let comma_sep f ls = List.map f ls |> String.concat ", "
-let line_sep f ls =
-  List.map f ls |> String.concat "\n"
-let sp_sep f ls = 
-  List.map f ls |> String.concat " "
+let line_sep f ls = List.map f ls |> String.concat "\n"
+let sp_sep f ls = List.map f ls |> String.concat " "
 
-let indent n str = 
-  String.split_on_char '\n' str 
-  |> List.map (fun s -> (sp n)^s)
+let indent n str =
+  String.split_on_char '\n' str
+  |> List.map (fun s -> sp n ^ s)
   |> String.concat "\n"
 ;;
 
-let indenttl n str = 
-  match (String.split_on_char '\n' str) with 
+let indenttl n str =
+  match String.split_on_char '\n' str with
   | [] -> ""
-  | hd::tl -> hd::List.map (fun s -> (sp n)^s) tl |> String.concat "\n"
+  | hd :: tl -> hd :: List.map (fun s -> sp n ^ s) tl |> String.concat "\n"
 ;;
 
-let imports = [%string {|
+let imports =
+  [%string
+    {|
 import socket, time, os, struct
 from collections import namedtuple
 |}]
-
-let bits_to_padded_bytes bits = 
-  if ((bits mod 8) == 0)
-  then (bits / 8)
-  else ((bits / 8) + 1)
 ;;
 
-let bridge_header_fmt evsigs = 
-  (* bitfields padded to byte aligned field, plus 
+let bits_to_padded_bytes bits =
+  if bits mod 8 == 0 then bits / 8 else (bits / 8) + 1
+;;
+
+let bridge_header_fmt evsigs =
+  (* bitfields padded to byte aligned field, plus
      1 byte for another event id *)
-  let len = (bits_to_padded_bytes (List.length evsigs)) in
-  "B"^(string_of_int len)^"s"
+  let len = bits_to_padded_bytes (List.length evsigs) in
+  "B" ^ string_of_int len ^ "s"
 ;;
 
-(* headers for lucid ethernet packets. The wireevent's 
+(* headers for lucid ethernet packets. The wireevent's
    size depends on the number of events. *)
-let lucid_pkt_hdrs evsigs = [%string {| 
+let lucid_pkt_hdrs evsigs =
+  [%string
+    {|
 lucid_etype = 0x666
 EthHdr = namedtuple("EthHdr", "dst_addr src_addr etype")
 EthHdr.fmt = "!6s6sH"
@@ -74,7 +74,9 @@ WireEvHdr.fmt = "!B%{bridge_header_fmt evsigs}"
 |}]
 ;;
 
-let parsers = [%string {|
+let parsers =
+  [%string
+    {|
 # static
 def parse_header(data, HdrDef):
     # return parsed fields and remaining data.
@@ -99,7 +101,7 @@ def parse_eventpacket(pktbuf):
 def deparse_eventpacket(event, payload):
   # smac and dmac are fixed for now
   smac = b'\x01'*6
-  dmac = b'\x02'*6 
+  dmac = b'\x02'*6
   # deparse event header
   for HdrDef in events:
     if (event.id == HdrDef.id):
@@ -115,30 +117,33 @@ def deparse_eventpacket(event, payload):
   # if we got here, its an unknown event type
   return None
 |}]
-
+;;
 
 (* lucid type to a struct format specifier in python *)
-let ty_to_fmt (ty:CoreSyntax.ty) =
+let ty_to_fmt (ty : CoreSyntax.ty) =
   match ty.raw_ty with
-  | TInt(8) -> "B"
-  | TInt(16) -> "H"
-  | TInt(32) -> "I"
-  | TInt(n_bits) -> (
-    (* anything larger than 32-bits is a byte string *)
-    if ((n_bits mod 8) == 0)
-    then ((string_of_int (n_bits / 8))^"s")
-    else (error "all parameters in events with a server library must have sizes that are multiples of 8 bits"))
+  | TInt 8 -> "B"
+  | TInt 16 -> "H"
+  | TInt 32 -> "I"
+  | TInt n_bits ->
+    if (* anything larger than 32-bits is a byte string *)
+       n_bits mod 8 == 0
+    then string_of_int (n_bits / 8) ^ "s"
+    else
+      error
+        "all parameters in events with a server library must have sizes that \
+         are multiples of 8 bits"
   | _ -> error "all parameters in events for servers must be integers"
 ;;
-let tys_to_fmt tys =
-  List.map ty_to_fmt tys |> String.concat ""
-;;
 
-let event_name es = fst (es.id) ;;
-let param_name (id, _) = fst id ;;
+let tys_to_fmt tys = List.map ty_to_fmt tys |> String.concat ""
+let event_name es = fst es.id
+let param_name (id, _) = fst id
 
-let event_tuples (ess:eventsigs) : string =
-  let event_tuple es = [%string {|
+let event_tuples (ess : eventsigs) : string =
+  let event_tuple es =
+    [%string
+      {|
 %{event_name es} = namedtuple("%{event_name es}", "%{sp_sep param_name es.params}")
 %{event_name es}.fmt = "!%{tys_to_fmt (List.split es.params |> snd)}"
 %{event_name es}.id  = %{string_of_int es.num}
@@ -147,12 +152,16 @@ let event_tuples (ess:eventsigs) : string =
   in
   line_sep event_tuple ess
 ;;
-let event_tuple_list ess = [%string {|
+
+let event_tuple_list ess =
+  [%string {|
 events = [%{comma_sep event_name ess}]
 |}]
 ;;
 
-let socket_helpers = [%string {|
+let socket_helpers =
+  [%string
+    {|
 ############ raw socket helpers ############
 def open_socket(iface):
   s = socket.socket(socket.PF_PACKET, socket.SOCK_RAW, socket.htons(0x0003))
@@ -177,52 +186,50 @@ def close_socket(s):
 |}]
 ;;
 
-let dpid_helper = [%string {|
+let dpid_helper =
+  [%string
+    {|
 # mapping based on p4tapp assignment
 def dpid_to_veth(dpid):
   return ("veth%i"%(dpid * 2 + 1))
 |}]
 ;;
 
-let lib es = [
-  imports;
-  lucid_pkt_hdrs es;
-  parsers;
-  event_tuples es;
-  event_tuple_list es;
-  socket_helpers;
-  dpid_helper
-]
+let lib es =
+  [ imports
+  ; lucid_pkt_hdrs es
+  ; parsers
+  ; event_tuples es
+  ; event_tuple_list es
+  ; socket_helpers
+  ; dpid_helper ]
   |> String.concat "\n"
 ;;
 
 let syntax_decls_to_evrecs ds =
-  let rec f num ds = 
+  let rec f num ds =
     match ds with
     | [] -> []
-    | d::ds -> (
-      match d.d with
-      | DEvent(id, _, _, params) -> 
-      (* use coresyntax types for params *)
-      let params = SyntaxToCore.translate_params params in
-      {id=id; num=num; params=params}::(f (num +1) ds)
-      | _ -> f num ds
-    )
+    | d :: ds ->
+      (match d.d with
+       | DEvent (id, _, _, _, params) ->
+         (* use coresyntax types for params *)
+         let params = SyntaxToCore.translate_params params in
+         { id; num; params } :: f (num + 1) ds
+       | _ -> f num ds)
   in
   List.rev (f 1 ds)
 ;;
 
-let coresyntax_decls_to_evrecs (ds:CoreSyntax.decls) = 
-  let rec f num (ds:CoreSyntax.decls) = 
+let coresyntax_decls_to_evrecs (ds : CoreSyntax.decls) =
+  let rec f num (ds : CoreSyntax.decls) =
     match ds with
     | [] -> []
-    | d::ds -> (
-      match d.d with
-      | CoreSyntax.DEvent(id, _, params) -> 
-
-        {id=id; num=num; params=params}::(f (num +1) ds)
-      | _ -> f num ds
-    )
+    | d :: ds ->
+      (match d.d with
+       | CoreSyntax.DEvent (id, _, _, params) ->
+         { id; num; params } :: f (num + 1) ds
+       | _ -> f num ds)
   in
   List.rev (f 1 ds)
 ;;
@@ -237,7 +244,7 @@ let syntax_to_pyeventlib ds =
   lib evrecs
 ;;
 
-let coresyntax_to_pyeventlib cds = 
+let coresyntax_to_pyeventlib cds =
   let evrecs = coresyntax_decls_to_evrecs cds in
   lib evrecs
 ;;

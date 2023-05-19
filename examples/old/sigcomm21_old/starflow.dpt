@@ -14,7 +14,7 @@ const int SIZE_SHORT = 2;
 const int MAX_IDX = 7;
 const int MMATCH = 0;
 
-entry event monitor_pkt(int src, int len);
+packet event monitor_pkt(int src, int len);
 
 // records that the cache emits when something gets evicted. 
 const int COLLECTION_SERVER = 1234;

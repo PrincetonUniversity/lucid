@@ -30,11 +30,11 @@ global filter4 = new Array<1>(NUM_REGISTERS);
 event add_to_filter(int idx1, int idx2, int idx3, int idx4);
 
 // Request_X is for packets coming from inside, reponse_x is for packets coming from outside
-// entry events
+// packet events
 event request_packet (int client_ip, int server_ip);
 event response_packet (int server_ip, int client_ip);
-// exit events
-event request_continue (int src_ip, int dst_ip);
+// events
+event request_continue (int src_ip, int dst_ip) { skip; }
 event response_continue (int src_ip, int dst_ip);
 
 handle add_to_filter(int idx1, int idx2, int idx3, int idx4) {
@@ -51,7 +51,7 @@ handle add_to_filter(int idx1, int idx2, int idx3, int idx4) {
 
 fun bool in_filter(int idx1, int idx2, int idx3, int idx4) {
   // backend bugs: compiler doesn't break down boolean operations or implement &&.
-  // original code: 
+  // original code:
   // bool ret = Array.get(filter1, idx1) == TRUE &&
   //            Array.get(filter2, idx2) == TRUE &&
   //            Array.get(filter3, idx3) == TRUE &&

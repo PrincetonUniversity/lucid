@@ -238,10 +238,8 @@ and params = (id * ty) list
 and body = params * statement
 
 and event_sort =
-  | EEntry of
-      bool (* true iff "control", i.e. it can generate non-continue events *)
-  | EExit (* events that leave the lucid program *)
-  | EBackground (* standard event sort *)
+  | EPacket (* Traffic packet *)
+  | EBackground (* Lucid-generated event packet *)
 
 and handler_sort =
   | HControl (* control processor *)
@@ -306,7 +304,7 @@ and parser_block = (parser_action * sp) list * (parser_step * sp)
 and d =
   | DSize of id * size option
   | DGlobal of id * ty * exp
-  | DEvent of id * event_sort * constr_spec list * params
+  | DEvent of id * int option * event_sort * constr_spec list * params
   | DHandler of id * handler_sort * body
   | DFun of id * ty * constr_spec list * body
   | DMemop of id * params * memop_body
@@ -504,7 +502,7 @@ let module_alias_sp id1 e cid1 cid2 span =
 (* let func_sp id p body span =
    decl_sp (DProc (id, (p,body))) span *)
 
-let event_sp id s cs p span = decl_sp (DEvent (id, s, cs, p)) span
+let event_sp id opt s cs p span = decl_sp (DEvent (id, opt, s, cs, p)) span
 
 (* statements *)
 let statement s = { s; sspan = Span.default; noinline = false }

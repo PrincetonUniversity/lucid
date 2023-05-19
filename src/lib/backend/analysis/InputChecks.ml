@@ -28,7 +28,7 @@ let event_param_alignment ds =
       method! visit_decl ctx decl =
         super#visit_decl ctx decl;
         match decl.d with
-        | DEvent (id, _, params) ->
+        | DEvent (id, _, _, params) ->
           if params_wid params mod 8 <> 0
           then (
             report_err
@@ -268,9 +268,9 @@ let align_decls ds =
 
       method! visit_decl _ decl =
         match decl.d with
-        | DEvent (id, esort, params) ->
+        | DEvent (id, annot, esort, params) ->
           let params = align_params params in
-          { decl with d = DEvent (id, esort, params) }
+          { decl with d = DEvent (id, annot, esort, params) }
         | DHandler (id, hsort, (params, body)) ->
           let params = align_params params in
           { decl with d = DHandler (id, hsort, (params, body)) }

@@ -14,4 +14,4 @@ type ip_hdr_prefix = {
     int<8> proto;
     int<16> csum;
 }
-entry event ip_pkt (eth_hdr eth, ip_hdr_prefix ip, int<32> src, int<32> dst);
+packet event ip_pkt (eth_hdr eth, ip_hdr_prefix ip, int<32> src, int<32> dst);

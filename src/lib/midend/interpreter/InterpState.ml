@@ -162,7 +162,7 @@ module State = struct
     let st = nst.switches.(swid) in
     let new_counter =
       match Env.find event.eid nst.event_sorts with
-      | EEntry ->
+      | EPacket ->
         { entries_handled = !(st.counter).entries_handled + 1
         ; total_handled = !(st.counter).total_handled + 1
         }
@@ -337,7 +337,7 @@ module State = struct
 
   let stats_counter_to_string counter =
     Printf.sprintf
-      "\n entry events handled: %d\n total events handled: %d\n"
+      "\n packet events handled: %d\n total events handled: %d\n"
       counter.entries_handled
       counter.total_handled
   ;;

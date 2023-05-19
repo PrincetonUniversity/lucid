@@ -298,7 +298,7 @@ let rename prog =
           env <- old_env;
           let new_x = self#freshen_var x in
           DMemop (new_x, replaced_params, replaced_body)
-        | DEvent (x, s, cspecs, params) ->
+        | DEvent (x, a, s, cspecs, params) ->
           let old_env = env in
           let new_params =
             List.map
@@ -308,7 +308,7 @@ let rename prog =
           let new_cspecs = List.map (self#visit_constr_spec dummy) cspecs in
           env <- old_env;
           let new_x = self#freshen_var x in
-          DEvent (new_x, s, new_cspecs, new_params)
+          DEvent (new_x, a, s, new_cspecs, new_params)
         | DHandler (x, hsort, body) ->
           (* Note that we require events to be declared before their handler *)
           DHandler

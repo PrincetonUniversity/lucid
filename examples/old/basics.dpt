@@ -63,7 +63,7 @@ can call other types of events as well (for example, a packetin event
 that is specific to a TCP packet and has extra arguments)
 */
 
-entry event packetin (int src, int dst);
+packet event packetin (int src, int dst);
 exit event continue (int src, int dst);
 
 handle packetin (int src, int dst){

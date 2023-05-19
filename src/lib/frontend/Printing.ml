@@ -365,7 +365,7 @@ and entry_to_string entry =
 and stmt_to_string s =
   match s.s with
   | SAssign (i, e) -> id_to_string i ^ " = " ^ exp_to_string e ^ ";"
-  | SNoop -> ""
+  | SNoop -> "skip;"
   | SGen (g, e) ->
     (match g with
      | GSingle None -> Printf.sprintf "generate %s;" (exp_to_string e)
@@ -449,9 +449,7 @@ let statement_to_string = stmt_to_string
 
 let event_sort_to_string sort =
   match sort with
-  | EEntry true -> "entry control event"
-  | EEntry false -> "entry event"
-  | EExit -> "exit event"
+  | EPacket -> "entry event"
   | EBackground -> "event"
 ;;
 
@@ -543,11 +541,12 @@ and d_to_string d =
       (id_to_string id)
       (params_to_string params)
       (stmt_to_string s)
-  | DEvent (id, sort, cspecs, params) ->
+  | DEvent (id, annot, sort, cspecs, params) ->
     Printf.sprintf
-      "%s %s(%s) %s;"
+      "%s %s%s(%s) %s;"
       (event_sort_to_string sort)
       (id_to_string id)
+      (Option.map_default (fun n -> "@" ^ string_of_int n) "" annot)
       (params_to_string params)
       (cspecs_to_string cspecs)
   | DFun (id, rty, cspecs, (params, s)) ->

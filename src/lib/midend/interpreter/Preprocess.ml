@@ -27,18 +27,16 @@ let preprocess ds =
     List.fold_left
       (fun (pp, ds) d ->
         match d.d with
-        | DEvent (id, sort, params) ->
+        | DEvent (id, _, sort, params) ->
           ( { pp with
               events = Env.add (Id id) (sort, List.map snd params) pp.events
             }
           , d :: ds )
-        | DExtern (id, ty) ->
-          begin
-            match ty.raw_ty with
-            | TFun _ ->
-              { pp with extern_funs = IdSet.add id pp.extern_funs }, ds
-            | _ -> { pp with externs = Env.add (Id id) ty pp.externs }, ds
-          end
+        | DExtern (id, ty) -> begin
+          match ty.raw_ty with
+          | TFun _ -> { pp with extern_funs = IdSet.add id pp.extern_funs }, ds
+          | _ -> { pp with externs = Env.add (Id id) ty pp.externs }, ds
+        end
         | _ -> pp, d :: ds)
       (empty, [])
       ds

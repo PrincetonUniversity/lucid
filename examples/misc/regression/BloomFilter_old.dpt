@@ -57,10 +57,10 @@ module BloomFilter : {
 
 global BloomFilter.t<32, 2> bf1 = BloomFilter.create(0x04, 0, 1);
 
-exit event allowed(int x);
-exit event denied(int x);
+event allowed(int x) { skip; }
+event denied(int x) { skip; }
 
-entry event packet_in(bool add, int x) {
+packet event packet_in(bool add, int x) {
   if (add) {
     BloomFilter.add_to_filter(bf1, x);
   } else {

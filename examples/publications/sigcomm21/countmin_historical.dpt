@@ -11,7 +11,7 @@ const int h2_poly = 1295981879;
 
 
 // measure count. 
-entry event pktin(int src, int dst);
+packet event pktin(int src, int dst);
 
 // clear a slice of the sketch and export.
 event clear(int idx, int ts);

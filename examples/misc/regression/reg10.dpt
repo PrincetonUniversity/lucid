@@ -9,7 +9,7 @@ constr foo<'a> mk_foo() = {
 };
 
 global foo<32>[1] arrs = [mk_foo() for i < 1];
-entry event in();
+packet event in();
 
 handle in() {
     for (i < 1) {

@@ -4,7 +4,7 @@ global Array.t<32> counts = Array.create(5);
 global Array.t<32> counts2 = Array.create(5);
 
 
-entry event packetin(int<3> idx);
+packet event packetin(int<3> idx);
 
 memop incr(int x, int y) {
   return x + y;

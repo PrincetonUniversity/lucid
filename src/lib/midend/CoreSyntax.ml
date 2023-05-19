@@ -191,7 +191,7 @@ and handler_sort =
   | HEgress
 
 and event_sort =
-  | EEntry
+  | EPacket
   | EBackground
 
 (* For memops -- Boolean condition * return value *)
@@ -246,7 +246,7 @@ and parser_block = (parser_action * sp) list * (parser_step * sp)
 (* declarations *)
 and d =
   | DGlobal of id * ty * exp
-  | DEvent of id * event_sort * params
+  | DEvent of id * int option * event_sort * params
   | DHandler of id * handler_sort * body
   | DMemop of memop
   | DExtern of id * ty
@@ -499,7 +499,7 @@ let rec sequence_stmts lst =
 
 let exp_to_cid exp =
   match exp.e with
-  | EVar (cid) -> cid
+  | EVar cid -> cid
   | _ -> error "[id_of_exp] expression is not an evar"
 ;;
 

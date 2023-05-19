@@ -48,7 +48,7 @@ Switch 0 : {
     eth(0,2) at port -8, t=30000
   ]
 
- entry events handled: 0
+ packet events handled: 0
  total events handled: 5
 
 }
@@ -67,7 +67,7 @@ Switch 1 : {
     eth(0,2) at port -1, t=30600
   ]
 
- entry events handled: 0
+ packet events handled: 0
  total events handled: 5
 
 }
@@ -85,7 +85,7 @@ Switch 2 : {
     eth(0,1) at port -2, t=1200
   ]
 
- entry events handled: 0
+ packet events handled: 0
  total events handled: 7
 
 }
@@ -104,7 +104,7 @@ Switch 3 : {
     eth(2,1) at port 9, t=21200
   ]
 
- entry events handled: 0
+ packet events handled: 0
  total events handled: 6
 
 }
@@ -124,7 +124,7 @@ Switch 4 : {
     eth(0,2) at port 42, t=31800
   ]
 
- entry events handled: 0
+ packet events handled: 0
  total events handled: 5
 
 }

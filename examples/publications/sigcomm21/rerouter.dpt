@@ -60,7 +60,7 @@ global Array.t<32> linkdown_ct = Array.create(tbl_sz);
 // Assume that dst is an integer in the range 0 - (tbl_sz-1)
 // (the native P4 can have a static table that does this 
 // mapping)
-entry event packetin(int dst);
+packet event packetin(int dst);
 exit event packetout(int outport);
 
 // routing 

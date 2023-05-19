@@ -1,5 +1,5 @@
 // wire.dpt -- route packets based on input port. 
-entry event pktin(int ip);
+packet event pktin(int ip);
 event extra_processing(int ip);
 exit event continue(int ip);
 

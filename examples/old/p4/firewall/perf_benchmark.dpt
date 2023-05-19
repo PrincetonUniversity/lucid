@@ -1,5 +1,5 @@
 // A stateful firewall with the same functionality as sfw.dpt, 
-// but with two entry events: 
+// but with two packet events: 
 // request_packet -- a packet from a local client to a remote server. 
 // response_packet -- a packet from a remote client to a local server. 
 
@@ -11,7 +11,7 @@ const int FALSE = 0;
 const int seed1_val = 10398247;
 const int seed2_val = 1295981879;
 
-// entry events
+// packet events
 event request_packet (int client_ip, int server_ip);
 event response_packet (int server_ip, int client_ip);
 // exit events

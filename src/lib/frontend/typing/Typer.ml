@@ -1304,12 +1304,12 @@ let rec infer_declaration
         ^ " is global and cannot be declared symbolic";
       let env = define_const id ty env in
       env, effect_count, DSymbolic (id, ty)
-    | DEvent (id, sort, constr_specs, params) ->
+    | DEvent (id, annot, sort, constr_specs, params) ->
       let constrs, _ =
         spec_to_constraints env d.dspan FZero params constr_specs
       in
       let env = define_const id (mk_event_ty constrs params) env in
-      env, effect_count, DEvent (id, sort, constr_specs, params)
+      env, effect_count, DEvent (id, annot, sort, constr_specs, params)
     | DHandler (id, s, body) ->
       enter_level ();
       let constraints = retrieve_constraints env d.dspan id (fst body) in

@@ -13,7 +13,7 @@ const int seed2_val = 1295981879;
 // No syntax for this yet in DPT, so we might need to modify the P4.
 
 
-entry event pktin(int ip);
+packet event pktin(int ip);
 exit event continue(int status);
 event install(int ip);
 

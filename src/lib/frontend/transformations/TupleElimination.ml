@@ -374,9 +374,9 @@ let rec replace_decl (env : env) d =
      | TTable _ ->
        env, [{ d with d = DGlobal (id, replace_ty ty, replace_exp env exp) }]
      | _ -> env, [d])
-  | DEvent (id, sort, _, params) ->
+  | DEvent (id, annot, sort, _, params) ->
     let _, new_params = flatten_params env params in
-    env, [{ d with d = DEvent (id, sort, [], new_params) }]
+    env, [{ d with d = DEvent (id, annot, sort, [], new_params) }]
   | DHandler (id, sort, (params, body)) ->
     let body_env, new_params = flatten_params env params in
     let body = replace_statement body_env body in
