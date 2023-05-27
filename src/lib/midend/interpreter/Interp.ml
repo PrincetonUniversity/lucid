@@ -51,7 +51,6 @@ let initialize renaming spec_file ds =
 
 (*** innermost functions of interpretation loop: execute one
      event or control op, then call a function to continue interpretation ***)
-
 let execute_event
   print_log
   idx

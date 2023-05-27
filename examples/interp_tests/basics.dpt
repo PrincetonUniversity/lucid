@@ -5,7 +5,7 @@ Basic DPT primitives: events, handlers, and local variables
 
 /* an event is a data record.
 An event declaration defines the record type and fields. */
-event count_to_10 (int count);
+event count_to_10@2 (int count);
 
 /* Each event has a handler that executes when a new event
 of that type arrives.*/
@@ -63,7 +63,7 @@ can call other types of events as well (for example, a packetin event
 that is specific to a TCP packet and has extra arguments)
 */
 
-packet event packetin (int src, int dst);
+packet event packetin@5 (int src, int dst);
 event continue (int src, int dst) { skip; }
 
 handle packetin (int src, int dst){

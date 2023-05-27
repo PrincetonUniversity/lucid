@@ -25,6 +25,8 @@ Switch 0 : {
 
  Exits :    [ ]
 
+ Drops :    [ ]
+
  packet events handled: 0
  total events handled: 4
 
@@ -38,6 +40,8 @@ Switch 1 : {
  Events :   [ ]
 
  Exits :    [ ]
+
+ Drops :    [ ]
 
  packet events handled: 0
  total events handled: 0

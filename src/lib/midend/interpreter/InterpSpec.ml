@@ -384,12 +384,15 @@ let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t 
   match json with
   | `Assoc lst ->
     let parse_int_entry = parse_int_entry lst in
-    let num_switches = parse_int_entry "switches" 1 in
-    let default_input_gap = parse_int_entry "default input gap" 1 in
-    let generate_delay = parse_int_entry "generate delay" 600 in
-    let propagate_delay = parse_int_entry "propagate delay" 0 in
-    let random_delay_range = parse_int_entry "random delay range" 1 in
-    let random_propagate_range = parse_int_entry "random propagate range" 1 in
+    let num_switches = parse_int_entry "switches" 1 |> max 1 in
+    let default_input_gap = parse_int_entry "default input gap" 1 |> max 1 in
+    let generate_delay = parse_int_entry "generate delay" 600 |> max 0 in
+    let drop_chance = parse_int_entry "drop chance" 0 |> max 0 in
+    let propagate_delay = parse_int_entry "propagate delay" 0 |> max 0 in
+    let random_delay_range = parse_int_entry "random delay range" 1 |> max 1 in
+    let random_propagate_range =
+      parse_int_entry "random propagate range" 1 |> max 1
+    in
     let random_seed =
       parse_int_entry "random seed" (int_of_float @@ Unix.time ())
     in
@@ -466,6 +469,7 @@ let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t 
       ; random_delay_range
       ; random_propagate_range
       ; random_seed
+      ; drop_chance
       }
     in
     { num_switches; links; externs; events; config; extern_funs; ctl_pipe_name }

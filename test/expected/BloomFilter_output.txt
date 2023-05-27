@@ -34,6 +34,8 @@ Switch 0 : {
 
  Exits :    [ ]
 
+ Drops :    [ ]
+
  packet events handled: 10
  total events handled: 17
 
