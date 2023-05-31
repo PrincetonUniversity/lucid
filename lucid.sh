@@ -1,3 +1,5 @@
+#!/bin/bash
+
 #### Dockerize lucid build environment ####
 # This script compiles and executes Lucid in a docker image, 
 # then prints or copies the output back to your machine. 
