@@ -12,8 +12,6 @@ Before running the example, it is useful to understand some basics about the luc
 **Core Lucid abstractions**
 First, please read through the `monitor.dpt` file. The comments describe the general processing model of lucid and the two most basic lucid abstractions: *events* and *handlers*. 
 
-*A note on syntax highlighting: lucid source files render decently with `c` syntax highlighters. If you are using visual studio, there is a custom lucid syntax highlighter here: https://github.com/benherber/Lucid-DPT-VSCode-Extension*
-
 **The Lucid interpreter**
 
 The Lucid interpreter type checks a lucid program and optionally runs the program in a simulated network. You configure the simulation with the *interpreter specification file*, which is typically defined in `<progname>.dpt`. So, for this example `monitor.dpt`, the interpreter runs on `monitor.json`. 
