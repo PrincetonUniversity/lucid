@@ -73,7 +73,11 @@ If you are using visual studio, there is a nice custom lucid syntax highlighter 
 **5. Look at the example applications**
 
 Finally, take a look at the examples applications. 
-- Start with `langsec/examples/01monitor/readme.md`.
+
+1. `langsec/examples/01monitor/`. A simple packet monitoring application. Introduces Lucid events and handlers. 
+2. `langsec/examples/02filter/`. Builds on monitor, introduces match statements and tables. 
+3. `langsec/examples/03counter/`. Builds on monitor, introduces arrays to count packets.
+4. `langsec/examples/04anon/`. **TODO** Builds on counter, introduces hash operations to scramble flow keys.  
 - For more advanced applications, look at the programs in `examples/interp_tests` and `examples/tofino_apps/src`.
 - For documentation on most language features, look at the wiki: [lucid wiki](https://github.com/PrincetonUniversity/lucid/wiki)
 
