@@ -1,0 +1,25 @@
+{
+  "switches": 1,
+  "max time": 9999999,
+  "events": [
+    {
+      "type": "command", 
+      "name":"Table.install", 
+      "args":{
+        "table":"filter_table", 
+        "key":[1, 2], 
+        "action":"filter_table.result", 
+        "args":["true"]}},
+    {
+      "type": "command", 
+      "name":"Table.install", 
+      "args":{
+        "table":"filter_table", 
+        "key":[3, 4], 
+        "action":"filter_table.result", 
+        "args":["true"]}},
+    {"name":"eth_ip", "args": [11, 22, 2048, 1, 2, 128]},
+    {"name":"eth_ip", "args": [11, 22, 2048, 3, 4, 128]},
+    {"name":"eth_ip", "args": [11, 22, 2048, 5, 6, 128]}
+  ]
+}

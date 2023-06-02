@@ -1,0 +1,94 @@
+const int OUT_PORT = 1;
+const int SERVER_PORT = 2;
+
+type eth_t = {
+	int<48> dmac;
+	int<48> smac;
+	int<16> etype;
+}
+type ip_t = {
+	int src;
+	int dst;
+	int<16> len; 
+}
+
+/********** Events *********/
+packet event eth_ip(eth_t eth, ip_t ip);
+
+event prepare_report(eth_t eth, ip_t ip);
+
+packet event report(int src, int dst, int<16> len) {skip;}
+
+/********** Tables *********/
+// When you call a table, it will execute an 
+// action that returns a value. 
+action bool result(bool b)() {
+	return b;
+}
+
+// Tables have types. A table's type 
+// specifies the size of its keys, 
+// the types of the arguments to actions
+// and the type of the action's return value. 
+table_type filter_table_t = {
+	key_size: (32, 32)
+	arg_types: ()
+	ret_type: bool
+}
+
+global filter_table_t filter_table = 
+	table_create<filter_table_t>(
+		(result), 
+		1024, 
+		result(false)
+	);
+
+
+/********** Filtering functions *********/
+
+fun bool filter_with_if(ip_t ip) {
+	if (ip#src == 1 && ip#dst == 2) {
+		return true;
+	} 
+	else {
+		if (ip#src == 3 && ip#dst == 4) {
+			return true;
+		}
+		else {
+			return false;
+		}
+	}
+}
+
+fun bool filter_with_match(ip_t ip) {
+	match (ip#src, ip#dst) with 
+	| 1, 2 -> {return true;}
+	| 3, 4 -> {return true;}
+	|	   _ -> {return false;}
+}
+
+
+fun bool filter_with_table(ip_t ip) {
+	bool r = table_match(
+		filter_table, 
+		(ip#src, ip#dst), 
+		());
+	return r;
+}
+
+/********** Handlers *********/
+handle eth_ip(eth_t eth, ip_t ip) {
+	generate_port(OUT_PORT, eth_ip(eth, ip));
+
+	// if (filter_with_if(ip)) {
+	// if (filter_with_match(ip)) {
+	if (filter_with_table(ip)) {
+		generate(prepare_report(eth, ip));
+	}
+}
+
+handle prepare_report(eth_t eth, ip_t ip) {
+	printf("sending report about packet {src=%d; dst=%d; len=%d} to monitor on port %d", ip#src, ip#dst, ip#len, SERVER_PORT);
+	event r = report(ip#src, ip#dst, ip#len);
+	generate_port(SERVER_PORT, r);
+}

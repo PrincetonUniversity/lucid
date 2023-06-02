@@ -72,7 +72,11 @@ module JP = struct
     match v with 
       (* 32-bit int *)
       | `Int v -> vint v 32
-      | `String vstr -> 
+      | `String vstr -> (
+        match vstr with
+        | "true" -> vbool true
+        | "false" -> vbool false
+        | _ -> (
         (* x<<size>> *)
         let v, sz = if (String.contains vstr '<')
           then (
@@ -82,7 +86,9 @@ module JP = struct
           )
         in
         vint v sz
-      | _ -> error "[to_vint] got a value that is not an int or string"
+        )
+      )
+        | _ -> error "[to_vint] got a value that is not an int or string"
   ;;
   let to_eval_int v = v |> to_vint |> value_to_exp ;;
 
