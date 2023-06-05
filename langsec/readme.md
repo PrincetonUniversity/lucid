@@ -81,3 +81,13 @@ Finally, take a look at the examples applications.
 - For more advanced applications, look at the programs in `examples/interp_tests` and `examples/tofino_apps/src`.
 - For documentation on most language features, look at the wiki: [lucid wiki](https://github.com/PrincetonUniversity/lucid/wiki)
 
+
+**6. Relevant reading**
+Below are some research papers that you will need to understand the code you are writing. They are placed loosely in order of relevance.
+
+1. Here is some high-level reading about "how to read" computer science research papers, as we assume little experience with that. (https://dl.acm.org/doi/10.1145/1595453.1595493) https://dl.acm.org/doi/10.1145/1273445.1273458
+2. The introduction to the Lucid programming language. Some things have changed, but it still motivates the setting nicely. https://dl.acm.org/doi/10.1145/3452296.3472903
+3. A very readable introduction to what "SDN" is: https://www.cs.princeton.edu/courses/archive/fall13/cos597E/papers/sdnhistory.pdf
+4. A paper by Joon Kim about ONTAS, a system for on-line traffic anonymization: https://www.cs.princeton.edu/~hyojoonk/publication/ontas_kim.pdf
+5. If you are interested in the architecture (which gets a lot of mentions in the Lucid paper), the original RMT paper is really not too bad. You can probably get away with skimming the Chip Design section. https://cos561.princeton.systems/papers/rmt.pdf
+
