@@ -8,9 +8,10 @@ open BackendLogging
 (* context for this transformation pass: a list of events *)
 module Ctx = Collections.IdMap
 type ctx = {
+  is_egress : bool;
   events : event Ctx.t;
 }
-let empty_ctx = {events = Ctx.empty;}
+let empty_ctx = { is_egress = false; events = Ctx.empty;}
 
 (* find the generates in a statement *)
 let rec find_generates (stmt : statement) : (gen_type * exp) list =
@@ -43,13 +44,17 @@ let derive_output_event (ctx:ctx) (hdl_id : id) (hdl_body:statement) : event =
     | None -> error "[addHandlerTypes.derive_output_type] could not find event with same ID as generate expression") 
     event_ids
   in
-  (* now we create an event _SET_ for this handler's output, 
-     which is an event that can hold one instance of each of its member events, 
-     simultaneously. *)
-  let eventset = EventSet({
-    evid = Id.append_string "_output" hdl_id;
-    members = List.mapi (fun i e -> (i, e)) events;
-  })
+  (* now we create an event set or union for the output. Ingress 
+     is a set, because it may generate multiple events that are encoded 
+     as one event. Whereas egress produces a union, because it only 
+     generates one event. *)
+  let eventset = if (ctx.is_egress)
+    then EventUnion({
+      evid = Id.append_string "_egress_output" hdl_id;
+      members = List.mapi (fun i e -> (i, e)) events;})
+    else EventSet({
+      evid = Id.append_string "_ingress_output" hdl_id;
+      members = List.mapi (fun i e -> (i+1, e)) events;})
   in
   eventset
 ;;
@@ -87,14 +92,21 @@ let rec type_handlers_in_tdecls ctx tdecls : tdecl list =
       hdl_out_event :: td' :: type_handlers_in_tdecls ctx tdecls'
     (* add events to the context *)
     | TDEvent(e) ->     
-      let ctx' = {events=(Ctx.add (id_of_event e) e ctx.events);} in
+      let ctx' = {ctx with events=(Ctx.add (id_of_event e) e ctx.events);} in
       td :: type_handlers_in_tdecls ctx' tdecls
     (* leave all the other decls alone *)
     | _ -> td :: type_handlers_in_tdecls ctx tdecls'
 ;;
 
-let type_handlers prog : prog =
+let type_handlers prog : prog =  
   List.map (fun component -> 
-    { component with comp_decls = type_handlers_in_tdecls empty_ctx component.comp_decls })
+    match (Id.name component.comp_id) with
+    | "ingress" -> 
+      let ctx = { empty_ctx with is_egress = false } in
+      { component with comp_decls = type_handlers_in_tdecls ctx component.comp_decls }
+    | "egress" ->
+      let ctx = { empty_ctx with is_egress = true } in
+      { component with comp_decls = type_handlers_in_tdecls ctx component.comp_decls }
+    | _ -> component)
     prog
 ;;

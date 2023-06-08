@@ -267,6 +267,7 @@ let tofinocore_prep ds =
 let to_tofinocore ingress_ds egress_ds =
   let core_prog = TofinoCoreNew.core_to_tofinocore ingress_ds egress_ds in
   let core_prog = AddHandlerTypes.type_handlers core_prog in
+  let core_prog = MergeHandlers.merge_handlers core_prog in
   let ingress_tds, egress_tds = TofinoCoreNew.prog_to_ingress_egress_decls core_prog in
 
   print_endline ("--- done running new tofinocore translator ---");
