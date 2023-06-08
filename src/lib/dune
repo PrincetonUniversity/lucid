@@ -106,11 +106,15 @@
    ioUtils
    TofinoProfiling
    TofinoPipeline
+   TofinoPipelineNew
    DependencyProfiling
    InputChecks
    StandardizeEventParams
    EliminateEventCombinators
    TofinoCore
+   TofinoCoreNew
+   AddHandlerTypes
+   MergeHandlers
    TofinoCoreForms
    TofinoControl
    TofinoEgress

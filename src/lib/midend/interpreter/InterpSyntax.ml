@@ -22,7 +22,7 @@ type control_event = {
 }
 
 type interp_event =
-  | IEvent of event
+  | IEvent of event_val
   | IControl of control_event
 
 (* event queued for execution at a switch *)

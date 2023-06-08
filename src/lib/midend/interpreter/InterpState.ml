@@ -60,8 +60,8 @@ module State = struct
     { global_env : ival Env.t
     ; event_queue : EventQueue.t
     ; pipeline : Pipeline.t
-    ; exits : (event * int option * int) Queue.t
-    ; drops : (event * int) Queue.t
+    ; exits : (event_val * int option * int) Queue.t
+    ; drops : (event_val * int) Queue.t
     ; retval : value option ref
     ; counter : stats_counter ref
     }
@@ -74,7 +74,7 @@ module State = struct
   and memop
 
   and handler =
-    network_state -> int (* switch *) -> int (* port *) -> event -> unit
+    network_state -> int (* switch *) -> int (* port *) -> event_val -> unit
 
   type global_fun =
     { cid : Cid.t

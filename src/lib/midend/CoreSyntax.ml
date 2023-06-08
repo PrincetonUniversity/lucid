@@ -90,13 +90,13 @@ and pat =
 and v =
   | VBool of bool
   | VInt of zint
-  | VEvent of event
+  | VEvent of event_val
   | VGlobal of int (* Stage number *)
   | VTuple of v list (* Only used in the interpreter during complex memops *)
   | VGroup of location list
   | VPat of int list
 
-and event =
+and event_val =
   { eid : cid
   ; data : value list
   ; edelay : int

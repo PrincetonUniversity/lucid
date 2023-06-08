@@ -64,3 +64,19 @@ let dbg_print_example () =
 ;;
 
 (* dbg_print_example () ;; *)
+
+
+(* misc helpers used in tofinoPipeline *)
+
+let fail_report str = Console.show_message str ANSITerminal.Red "Tofino Checker"
+let cprint_endline s = if Cmdline.cfg.debug then print_endline s
+
+
+
+let mk_ir_log_dirs () =
+  Core.Unix.mkdir_p !irLogDir;
+  Core.Unix.mkdir_p !graphLogDir
+;;
+
+
+let ir_dump_path phasename = !irLogDir ^ "/" ^ phasename ^ ".dpt"

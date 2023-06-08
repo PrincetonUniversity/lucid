@@ -117,3 +117,5 @@ let rec find_first_dup l =
     | true -> Some hd
     | false -> find_first_dup tl)
 ;;
+
+let id i = Id.create i
