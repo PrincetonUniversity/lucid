@@ -113,6 +113,8 @@
    EliminateEventCombinators
    TofinoCore
    TofinoCoreNew
+   TofinoCorePrinting
+   RescopeHandlerParams
    AddHandlerTypes
    MergeHandlers
    TofinoCoreForms

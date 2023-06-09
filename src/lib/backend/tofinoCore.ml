@@ -230,7 +230,6 @@ let rec find_statement_paths paths_so_far stmt_filter stmt =
 
 (* find all paths of statements that match stmt_filter and 
    transform matching statements according to stmt_transformer *) 
-   (* left off here. *)
 let rec transform_statement_paths paths_so_far stmt_filter stmt_transformer stmt =
   match stmt.s with
   | SSeq (s1, s2) ->

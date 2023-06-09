@@ -1,4 +1,11 @@
-(* add types to handlers in TofinoCore, changing all handlers from HParams to HEvent *)
+(* Transforms handlers from having parameters to having 
+input and output events. (HParams to HEvent) *)
+
+(*
+  Also quantifies the names of:
+    - parameter variables used in the body (prepend the input event's id)
+    - event names in event assignments and generates (prepend the output event's id)
+*)
 
 open CoreSyntax
 open TofinoCoreNew
@@ -12,6 +19,38 @@ type ctx = {
   events : event Ctx.t;
 }
 let empty_ctx = { is_egress = false; events = Ctx.empty;}
+
+(***find all the generate paths ***)
+let find_generate_sequences stmt =
+  let stmt_filter stmt = match stmt.s with
+    | SGen (_, _) -> Some(stmt)
+    | _ -> None
+  in
+  find_statement_paths [] stmt_filter stmt
+;;
+
+
+(* takes the body of a handler and its output eventset
+   and computes the possible bitvectors for the output eventset *)
+let generated_eventid_subsets (hdl_body:statement) =
+  let generate_sequences = find_generate_sequences hdl_body in
+  (* convert the generate sequences into sets of event ids *)
+  let event_id_sequences = List.map
+    (fun generate_sequence ->
+      List.map id_of_generate generate_sequence)
+    generate_sequences 
+  in
+  (* remove duplicate event id sequences *)
+  let compare_id_seqs id_seq1 id_seq2 =
+    let compare_ids id1 id2 = Id.compare id1 id2 in
+    List.compare compare_ids id_seq1 id_seq2
+  in
+
+  let event_id_sequences = List.sort_uniq compare_id_seqs event_id_sequences in
+  event_id_sequences
+;;
+
+
 
 (* find the generates in a statement *)
 let rec find_generates (stmt : statement) : (gen_type * exp) list =
@@ -27,7 +66,8 @@ let rec find_generates (stmt : statement) : (gen_type * exp) list =
   | SMatch (_, branch_list) ->
       List.concat (List.map (fun (_, stmt) -> find_generates stmt) branch_list)
 ;;
-  
+
+
 (* derive the output event for this handler based on the generate statements *)
 let derive_output_event (ctx:ctx) (hdl_id : id) (hdl_body:statement) : event =
   let generates = find_generates hdl_body in
@@ -38,6 +78,8 @@ let derive_output_event (ctx:ctx) (hdl_id : id) (hdl_body:statement) : event =
     | _ -> error "[addHandlerTypes.derive_output_type] generate expression should be an ecall") 
     generates 
   in
+  (* now make the list of event ids unique *)
+  let event_ids = List.sort_uniq Id.compare event_ids in
   (* now we look up the event ids in the context to get events *)
   let events = List.map (fun id -> match Ctx.find_opt id ctx.events with
     | Some e -> e
@@ -51,10 +93,11 @@ let derive_output_event (ctx:ctx) (hdl_id : id) (hdl_body:statement) : event =
   let eventset = if (ctx.is_egress)
     then EventUnion({
       evid = Id.append_string "_egress_output" hdl_id;
-      members = List.mapi (fun i e -> (i, e)) events;})
+      members = events;})
     else EventSet({
       evid = Id.append_string "_ingress_output" hdl_id;
-      members = List.mapi (fun i e -> (i+1, e)) events;})
+      members = events;
+      subsets = generated_eventid_subsets hdl_body;})
   in
   eventset
 ;;
@@ -73,7 +116,7 @@ let type_handler (ctx:ctx) hdl : handler * tdecl =
     HEvent({hdl_id; 
       hdl_sort; 
       hdl_body=[hdl_body]; 
-      hdl_input=input_event; 
+      hdl_input=input_event;
       hdl_output=output_event; 
       hdl_inparams=[]; 
       hdl_outparams=[];})

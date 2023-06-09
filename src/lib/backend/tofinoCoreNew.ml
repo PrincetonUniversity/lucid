@@ -67,13 +67,16 @@ and event =
   (* an event union is a union of events, with each event having a tag. *)
   | EventUnion  of {
     evid:id;
-    members: (int * event) list;
+    members: event list;
   }
   (* an event set is a set of events, with each event having an index *)
   (* one of each *)
   | EventSet of {
     evid:id;
-    members: (int * event) list;
+    members: event list;
+    subsets: (id list) list;
+    (*optional metadata for optimization: 
+      the subsets of members that the eventset may hold.  *)
   }
 
 and handler = 
@@ -90,8 +93,8 @@ and handler =
     hdl_id : id;
     hdl_sort : handler_sort;
     hdl_body : statement list;  
-    hdl_input : event;
-    hdl_output : event;
+    hdl_input : (event); (* input event name * type *)
+    hdl_output : (event); (* output event name * type *)
     (* a handler might also need to io params for externs or something? *)
     hdl_inparams : params;
     hdl_outparams : params;
@@ -147,9 +150,6 @@ and prog = component list
       ; nude = false
       }]
   
-
-    
-
 (* translate decl and add to a component *)
 let decl_to_tdecl (decl:decl) = 
   match decl.d with
@@ -205,11 +205,110 @@ let prog_to_ingress_egress_decls prog =
   (find_component_by_id prog (id "ingress")).comp_decls
   , (find_component_by_id prog (id "egress")).comp_decls
 ;;
-
-
 let id_of_event event = 
   match event with
   | EventSingle {evid;} -> evid
   | EventUnion {evid;} -> evid
   | EventSet {evid;} -> evid
 ;;
+
+let eventset_flag_id_of_member event = 
+  Id.prepend_string "flag_" (id_of_event event) 
+;;
+
+let id_of_generate statement = 
+  match statement.s with
+  | SGen(_, exp) -> (
+    match exp.e with
+    | ECall(cid, _) -> Cid.to_id cid
+    | _ -> error "[id_of_generate] event variables are not yet supported in generates."
+  )
+  | _ -> error "[id_of_generate] expected generate statement."
+;;
+
+(* helper: find all the paths in the program containing statements that match 
+           the filter map function. *)
+let append_and_new seqs e =
+  let rec append_to_all seqs e =
+    match seqs with
+    | [] -> []
+    | seq :: seqs -> (seq @ [e]) :: append_to_all seqs e
+  in
+  match seqs with
+  (* if there's nothing, make a new seq *)
+  | [] -> [[e]]
+  (* if there's something, append to first and recurse *)
+  | seq :: seqs -> (seq @ [e]) :: append_to_all seqs e
+;;
+(* find all paths of statements that match the filter_map  *)
+let rec find_statement_paths paths_so_far stmt_filter stmt =
+  match stmt.s with
+  | SSeq (s1, s2) ->
+    let paths_including_s1 = find_statement_paths paths_so_far stmt_filter s1 in
+    (* [[eva()]] *)
+    (* [[eva()]] *)
+    let paths_including_s2 =
+      find_statement_paths paths_including_s1 stmt_filter s2
+    in
+    (* printres "seq" res; *)
+    paths_including_s2
+  | SIf (_, s1, s2) ->
+    (* we get all paths for s1 + all paths for s2 *)
+    let res =
+      find_statement_paths paths_so_far stmt_filter s1
+      @ find_statement_paths paths_so_far stmt_filter s2
+    in
+    res
+  | SMatch (_, ps) ->
+    let res =
+      List.fold_left
+        (fun seqs (_, bstmt) ->
+          seqs @ find_statement_paths paths_so_far stmt_filter bstmt)
+        []
+        ps
+    in
+    res
+  | _ ->
+    (match stmt_filter stmt with
+     | Some r -> append_and_new paths_so_far r
+     | None -> paths_so_far)
+;;          
+
+
+
+(* find all paths of statements that match stmt_filter and 
+   transform matching statements according to stmt_transformer *) 
+let rec transform_statement_paths paths_so_far stmt_filter stmt_transformer stmt =
+  match stmt.s with
+  | SSeq (s1, s2) ->
+    let s1', paths_including_s1 = transform_statement_paths paths_so_far stmt_filter stmt_transformer s1 in
+    (* [[eva()]] *)
+    (* [[eva()]] *)
+    let s2', paths_including_s2 =
+      transform_statement_paths paths_including_s1 stmt_filter stmt_transformer s2
+    in
+    (* printres "seq" res; *)
+    (* transform the substatements and return paths *)
+    {stmt with s=SSeq(s1', s2')}, paths_including_s2
+  | SIf (e, s1, s2) ->
+    (* we get all paths for s1 + all paths for s2 *)
+    let s1', s1paths = transform_statement_paths paths_so_far stmt_filter stmt_transformer s1 in
+    let s2', s2paths = transform_statement_paths paths_so_far stmt_filter stmt_transformer s2 in
+    {stmt with s=SIf(e, s1', s2')}, s1paths @ s2paths
+  | SMatch (es, ps) ->
+    let ps', ps_paths =
+      List.fold_left
+        (fun (ps', ps_paths) (p, bstmt) ->
+          let bstmt', bstmt_paths = transform_statement_paths paths_so_far stmt_filter stmt_transformer bstmt in
+          (ps' @ [(p, bstmt')], ps_paths @ bstmt_paths))
+        ([], [])
+        ps
+    in
+    {stmt with s=SMatch(es, ps')}, ps_paths
+  | _ ->
+    (match stmt_filter stmt with
+     | Some r -> stmt_transformer stmt, append_and_new paths_so_far r
+     | None -> stmt, paths_so_far)
+;;
+
+
