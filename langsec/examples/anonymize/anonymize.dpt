@@ -1,0 +1,53 @@
+const int OUT_PORT = 1;
+const int SERVER_PORT = 2;
+const int SEED = 7;
+
+// ethernet and ip packet headers
+type eth_t = {
+	int<48> dmac;
+	int<48> smac;
+	int<16> etype;
+}
+type ip_t = {
+	int src;
+	int dst;
+	int<16> len; 
+}
+
+/********** Events *********/
+packet event eth_ip(eth_t eth, ip_t ip);
+
+event anonymize_info(eth_t eth, ip_t ip);
+
+/********** Handlers *********/
+handle eth_ip(eth_t eth, ip_t ip) {
+	// 1. forward an event representing the packet out of port 1.
+	generate_port(OUT_PORT, eth_ip(eth, ip));
+	// 2. anonymize packet info before sending to the monitoring server.
+	generate(anonymize_info(eth, ip));
+}
+
+handle anonymize_info(eth_t eth, ip_t ip) {
+    // anonymize source MAC OUI and/or ID (comment out lines that you don't want to apply)
+    int<24> smac_oui = eth#smac[47:24];
+    int<24> smac_id = eth#smac[23:0];
+
+    smac_oui = hash<24>(SEED, smac_oui);
+    smac_id = hash<24>(SEED, smac_id);
+
+    int<48> smac = (((int<48>)smac_oui) << 24) + ((int<48>)smac_id); 
+   
+    // anonymize destination MAC OUI and/or ID (comment out lines that you don't want to apply)
+    int<24> dmac_oui = eth#dmac[47:24];
+    int<24> dmac_id = eth#dmac[23:0];
+
+    dmac_oui = hash<24>(SEED, dmac_oui);
+    dmac_id = hash<24>(SEED, dmac_id);
+
+    int<48> dmac = (((int<48>)dmac_oui) << 24) + ((int<48>)dmac_id); 
+
+    eth_t anonymized_eth = {eth with dmac = dmac; smac = smac};
+
+	// send anonymized packet to monitoring server
+	generate_port(SERVER_PORT, eth_ip(anonymized_eth, ip));
+}
