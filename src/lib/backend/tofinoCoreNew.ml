@@ -198,14 +198,24 @@ let core_to_tofinocore ingress_ds egress_ds : prog =
 
 
 
-(* extract the ingress component. 
-   The ingress component consists of: 
-   1.  *)
+(*
+  There are some design questions about ingress and egress.
+
+  1. What happens to an event with an ingress handler but no egress handler?
+     (I think we just generate an egress handler that generates the input event)
+  2. What happens to an event with an egress handler but no ingress handler?
+    (I think its almost the same -- just add an ingress handler that generates the input event to the recirc port)
+  - We should add these two handlers to the program as we split it into ingress and egress components.  
+    - We will also have to do something similar for control handlers.
+*)
 let extract_ingress (decls:decl list) : decl list =
   decls
 
 ;;
 
+let extract_egress (decls : decl list) : decl list = 
+  decls
+;;
 (* this is the final constructor -- a program with both 
 ingress and egress definitions.  *)
 (* let core_to_tofinocore decls : prog =  *)
