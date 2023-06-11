@@ -195,7 +195,7 @@ and entry_to_string entry =
 
 and stmt_to_string s =
   match s.s with
-  | SAssign (i, e) -> id_to_string i ^ " = " ^ exp_to_string e ^ ";"
+  | SAssign (i, e) -> cid_to_string i ^ " = " ^ exp_to_string e ^ ";"
   | SNoop -> ""
   | SGen (g, e) ->
     (match g with

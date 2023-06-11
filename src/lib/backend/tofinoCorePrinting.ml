@@ -2,6 +2,16 @@
 open TofinoCoreNew
 open CorePrinting
 
+
+let line_sep f itms = 
+  List.map f itms |> String.concat "\n"
+;;
+
+let indent_body s = 
+  String.split_on_char '\n' s
+  |> List.map (fun s -> "  " ^ s)
+  |> String.concat "\n"
+
 (* print event types *)
 let rec event_to_string (event:TofinoCoreNew.event) =
   match event with
@@ -15,18 +25,17 @@ let rec event_to_string (event:TofinoCoreNew.event) =
   )
   | EventUnion({evid; members}) -> (
     Printf.sprintf
-      "%s { %s };"
+      "eventunion %s { %s };"
       (id_to_string evid)
-      (Batteries.String.join " | " (Batteries.List.map event_to_string members))
+      (Batteries.String.join " " (Batteries.List.map event_to_string members))
   )
   | EventSet({evid; members}) -> (
     Printf.sprintf
-      "%s { %s };"
+      "eventset %s { %s };"
       (id_to_string evid)
-      (Batteries.String.join ", " (Batteries.List.map event_to_string members))
+      (Batteries.String.join " " (Batteries.List.map event_to_string members))
   )
-  | _ -> failwith "not done!"
-
+;;
 
 (* print handler types *)
 let handler_to_string (handler:TofinoCoreNew.handler) = 
@@ -39,7 +48,7 @@ let handler_to_string (handler:TofinoCoreNew.handler) =
        | HEgress -> "@egress ")
       (id_to_string hdl_id)
       (params_to_string hdl_params)
-      (stmt_to_string hdl_body)
+      (stmt_to_string hdl_body |> indent_body)
   )
   | HEvent({hdl_id; hdl_sort; hdl_body; hdl_input; hdl_output}) -> (
     Printf.sprintf
@@ -49,12 +58,12 @@ let handler_to_string (handler:TofinoCoreNew.handler) =
        | HData -> ""
        | HEgress -> "@egress ")
       (id_to_string hdl_id)
-      (event_to_string hdl_input)
-      (event_to_string hdl_output)
+      (id_of_event hdl_input |> id_to_string)
+      (id_of_event hdl_output |> id_to_string)
       (match hdl_body with 
       | [] -> ""
-      | [stmt] -> stmt_to_string stmt
-      | stmts -> String.concat "\n" (List.map stmt_to_string stmts))
+      | [stmt] -> stmt_to_string stmt |> indent_body
+      | stmts -> String.concat "\n" (List.map stmt_to_string stmts) |> indent_body)
   )
 ;;
 
@@ -75,7 +84,7 @@ let td_to_string (td:td)=
       "memop %s(%s)\n {%s}"
       (id_to_string mid)
       (params_to_string mparams)
-      (memop_to_string mbody)
+      (memop_to_string mbody |> indent_body)
   | TDExtern (id, ty) ->
     Printf.sprintf "extern %s %s;" (id_to_string id) (ty_to_string ty)
   | TDAction acn ->
@@ -86,13 +95,13 @@ let td_to_string (td:td)=
       (id_to_string acn.aid)
       (params_to_string acn.aconst_params)
       (params_to_string acn.aparams)
-      (comma_sep exp_to_string acn.abody)
+      (comma_sep exp_to_string acn.abody |> indent_body)
   | TDParser (id, params, parser) ->
     Printf.sprintf
       "parser %s(%s) {\n%s\n}\n"
       (id_to_string id)
       (params_to_string params)
-      (parser_block_to_string parser)
+      (parser_block_to_string parser |> indent_body)
   | TDVar (id, ty) ->
     Printf.sprintf "sharedlocal %s %s;" (ty_to_string ty) (id_to_string id)
   | TDOpenFunction(id, params, statement) -> 
@@ -100,7 +109,7 @@ let td_to_string (td:td)=
       "method %s(%s) {\n%s\n}\n"
       (id_to_string id)
       (params_to_string params)
-      (stmt_to_string statement)    
+      (stmt_to_string statement |> indent_body)    
 ;;
 
 let tdecl_to_string td = td_to_string td.td
@@ -112,7 +121,7 @@ let component_to_string component =
     "component %s(successors = [%s]) {\n%s\n}\n"
     (id_to_string component.comp_id)
     (String.concat " , " (List.map id_to_string component.comp_succ))
-    (tdecls_to_string component.comp_decls)
+    (tdecls_to_string component.comp_decls |> indent_body)
 ;;
 
 let prog_to_string components = 
@@ -130,9 +139,6 @@ let param_to_p4field (id, ty) =
     (ty_to_string ty)
 ;;
 
-let line_sep f itms = 
-  List.map f itms |> String.concat "\n"
-;;
 
 let params_to_p4fields params = line_sep param_to_p4field params
 

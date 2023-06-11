@@ -163,13 +163,7 @@ let tofinocore_normalization is_ingress eliminate_generates tds =
   let tds = ShareMemopInputs.process tds in
   cprint_prog "----------- after ShareMemopInputs ------- " tds;
   (* 5. partially eliminate generate statements. Unclear if this could be done in CoreSyntax. *)
-  let tds =
-    let tds_old = Generates.eliminate is_ingress tds in
-    print_endline ("Generate.eliminate tds output: " ^ tdecls_to_string tds_old);
-    let tds_new = GeneratesNew.eliminate is_ingress tds in
-    print_endline ("GenerateNew.eliminate tds output: " ^ tdecls_to_string tds_old);
-    if eliminate_generates then tds_new else tds
-  in
+  let tds = Generates.eliminate is_ingress tds in
   cprint_prog "----------- after Generates.eliminate ------- " tds;
   TofinoCore.dump_prog
     (!BackendLogging.irLogDir ^ "/initial.before_layout.dpt")

@@ -31,9 +31,9 @@ let assigned_in_stmt stmt =
   let v =
     object
       inherit [_] s_iter as super
-      val mutable assigned = IdSet.empty
+      val mutable assigned = CidSet.empty
       method assigned = assigned
-      method! visit_SAssign _ id _ = assigned <- IdSet.add id assigned
+      method! visit_SAssign _ id _ = assigned <- CidSet.add id assigned
     end
   in
   v#visit_statement () (chop_last stmt);
@@ -44,9 +44,9 @@ let vars e =
   let v =
     object
       inherit [_] s_iter as super
-      val mutable vars = IdSet.empty
+      val mutable vars = CidSet.empty
       method vars = vars
-      method! visit_EVar _ cid = vars <- IdSet.add (Cid.to_id cid) vars
+      method! visit_EVar _ cid = vars <- CidSet.add (cid) vars
     end
   in
   v#visit_exp () e;
@@ -64,8 +64,8 @@ let make_conditions_immutable ds =
 
       method replace_exp mutated e =
         let e_vars = vars e in
-        let mutated_e_vars = IdSet.inter e_vars mutated in
-        if IdSet.is_empty mutated_e_vars
+        let mutated_e_vars = CidSet.inter e_vars mutated in
+        if CidSet.is_empty mutated_e_vars
         then snoop, e
         else (
           (* If any variables in the exp were mutated, store the original
@@ -78,7 +78,7 @@ let make_conditions_immutable ds =
       method! visit_SIf _ test s1 s2 =
         let s1 = self#visit_statement () s1 in
         let s2 = self#visit_statement () s2 in
-        let mutated = IdSet.union (assigned_in_stmt s1) (assigned_in_stmt s2) in
+        let mutated = CidSet.union (assigned_in_stmt s1) (assigned_in_stmt s2) in
         let preamble, new_test = self#replace_exp mutated test in
         let sequenced = sequence_stmts [preamble; sifte new_test s1 s2] in
         sequenced.s
@@ -90,8 +90,8 @@ let make_conditions_immutable ds =
         let branches = List.map (self#visit_branch ()) branches in
         let mutated =
           List.fold_left
-            (fun acc (_, s) -> IdSet.union acc (assigned_in_stmt s))
-            IdSet.empty
+            (fun acc (_, s) -> CidSet.union acc (assigned_in_stmt s))
+            CidSet.empty
             branches
         in
         let preamble, new_es =

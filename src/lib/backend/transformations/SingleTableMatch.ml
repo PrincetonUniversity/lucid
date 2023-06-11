@@ -165,18 +165,18 @@ let iovars_of_table td : (id * ty) list =
 let cut_tbl_match td tbl_match branchnum =
   let set_id, set_ty = callnumvar_of_table td in
   let set_callnum = sassign 
-    set_id
+    (Cid.id set_id)
     (vint_exp branchnum (size_of_tint set_ty))
   in 
   let set_keys = List.map2
     (fun (key_id, _) keyarg -> 
-      sassign key_id keyarg)
+      sassign (Cid.id key_id) keyarg)
     (keyvars_of_table td)
     tbl_match.keys
   in
   let set_args = List.map2
     (fun (arg_id, _) arg -> 
-      sassign arg_id arg)
+      sassign (Cid.id arg_id) arg)
     (argvars_of_table td)
     tbl_match.args
   in
@@ -430,7 +430,7 @@ let pruned_branch_continuations tbl (pruned_branches:pruned_branch list) =
         | None -> (
           List.map2
             (fun branch_id (tbl_id, tbl_ty) -> 
-              sassign branch_id (exp_of_id tbl_id tbl_ty))
+              sassign (Cid.id branch_id) (exp_of_id tbl_id tbl_ty))
             (tbl_match.outs)
             (retvars_of_table tbl))
         | Some(_) -> (

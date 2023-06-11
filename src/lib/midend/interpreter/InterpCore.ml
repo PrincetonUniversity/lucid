@@ -373,16 +373,16 @@ let rec interp_statement nst swid locals s =
   match s.s with
   | SNoop -> locals
   | SAssign (id, e) ->
-    if not (Env.mem (Id id) locals)
+    if not (Env.mem id locals)
     then
-      if State.mem_env swid (Id id) nst
+      if State.mem_env swid (id) nst
       then
         error
           (Printf.sprintf
              "Variable %s is global and cannot be assigned to"
-             (Id.name id))
-      else error (Printf.sprintf "Unbound variable %s" (Id.name id));
-    Env.add (Id id) (interp_exp e) locals
+             (Cid.to_id id |> Id.name))
+      else error (Printf.sprintf "Unbound variable %s" (Id.name (Cid.to_id id)));
+    Env.add (id) (interp_exp e) locals
   | SLocal (id, _, e) -> Env.add (Id id) (interp_exp e) locals
   | SPrintf (s, es) ->
     let vs = List.map (fun e -> interp_exp e |> extract_ival) es in

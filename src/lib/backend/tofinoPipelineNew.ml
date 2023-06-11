@@ -156,13 +156,7 @@ let tofinocore_normalization is_ingress eliminate_generates tds =
   let tds = ShareMemopInputs.process tds in
   cprint_prog "----------- after ShareMemopInputs ------- " tds;
   (* 5. partially eliminate generate statements. Unclear if this could be done in CoreSyntax. *)
-  let tds =
-    let tds_old = Generates.eliminate is_ingress tds in
-    print_endline ("Generate.eliminate tds output: " ^ tdecls_to_string tds_old);
-    let tds_new = GeneratesNew.eliminate is_ingress tds in
-    print_endline ("GenerateNew.eliminate tds output: " ^ tdecls_to_string tds_old);
-    if eliminate_generates then tds_new else tds
-  in
+  let tds = Generates.eliminate is_ingress tds in
   cprint_prog "----------- after Generates.eliminate ------- " tds;
   TofinoCore.dump_prog
     (!BackendLogging.irLogDir ^ "/initial.before_layout.dpt")
@@ -266,13 +260,16 @@ let tofinocore_prep ds =
 (* transform into tofinocore, but don't layout yet *)
 let to_tofinocore ingress_ds egress_ds =
   let core_prog = TofinoCoreNew.core_to_tofinocore ingress_ds egress_ds in
+  print_endline ("--- initial tofinocore program ---");
+  print_endline (TofinoCorePrinting.prog_to_string core_prog);
   let core_prog = AddHandlerTypes.type_handlers core_prog in
-  (* left off here  *)
-  let core_prog = RescopeHandlerParams.update_scopes core_prog in
-  let core_prog = MergeHandlers.merge_handlers core_prog in
-  let ingress_tds, egress_tds = TofinoCoreNew.prog_to_ingress_egress_decls core_prog in
+  (* let core_prog = MergeHandlers.merge_handlers core_prog in *)
 
   print_endline ("--- done running new tofinocore translator ---");
+  print_endline (TofinoCorePrinting.prog_to_string core_prog);
+
+
+  let ingress_tds, egress_tds = TofinoCoreNew.prog_to_ingress_egress_decls core_prog in
   exit 0;
   let _, _ = ingress_tds, egress_tds in
   let ingress_tds = [] in let egress_tds = [] in 

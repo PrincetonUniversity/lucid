@@ -391,7 +391,7 @@ let rec interp_stmt env s : statement * env =
       if should_inline () then extract_partial_value env exp else new_unknown ()
     in
     let new_s = { s with s = SAssign (id, exp) } in
-    new_s, IdMap.add id pv env
+    new_s, IdMap.add (Cid.to_id id) pv env
   | STableMatch tm ->
     let keys = List.map interp_exp tm.keys in
     let args = List.map interp_exp tm.args in
@@ -481,7 +481,7 @@ let remove_unused_variables stmt =
     | SAssign (id, e) ->
       (* Same as SLocal but we don't unalive the variable if it was already live *)
       let live_vars', stmt' =
-        if IdSet.mem id live_vars || cannot_remove_e e
+        if IdSet.mem (Cid.to_id id) live_vars || cannot_remove_e e
         then extract_variables ~acc:live_vars e, stmt
         else live_vars, { stmt with s = SNoop }
       in

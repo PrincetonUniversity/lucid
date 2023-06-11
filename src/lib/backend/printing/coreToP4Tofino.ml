@@ -701,7 +701,7 @@ let rec translate_statement in_ingress (renames:renames) prev_decls hdl_enum hdl
   | C.SAssign(id, e) -> 
     let decls, expr = translate_exp renames prog_env e in 
     (* use the new name, if there is one *)
-    decls, sassign (name renames (Cid.id id)) expr 
+    decls, sassign (name renames ( id)) expr 
   | SPrintf _ -> error "[translate_statement] printf should be removed by now"
   | SIf _ -> error "[translate_statement] if statement cannot appear inside action body"
   | SMatch _ -> error "[translate_statement] match statement cannot appear inside action body"
@@ -1318,7 +1318,7 @@ let generate_egress_handler_control block_id prog_env egress_tds =
        renames 
     (* |> rename ((Cid.id Builtins.ingr_port_id), igr_port_arg) *)
     |> rename ((Cid.id (m.hdl_selector |> fst)), egr_cur_ev_arg)
-    |> rename (Cid.id TofinoEgress.egr_drop_ctl_id, eg_drop_ctl_arg)
+    |> rename (TofinoEgress.egr_drop_ctl_id, eg_drop_ctl_arg)
     (* |> rename ((Cid.id (m.event_output.recirc_mcid_var |> fst)), mcast_grp_a_arg) *)
   in
 

@@ -10,6 +10,7 @@ input and output events. (HParams to HEvent) *)
 open CoreSyntax
 open TofinoCoreNew
 open BackendLogging
+open Collections
 
 
 (* context for this transformation pass: a list of events *)
@@ -102,7 +103,167 @@ let derive_output_event (ctx:ctx) (hdl_id : id) (hdl_body:statement) : event =
   eventset
 ;;
 
-(* set the handler input and output events *)
+
+(* make sure the event constructor is defined in the given event. 
+   for example, given: 
+    - event_union bar { event foo(int a, int b); event baz(int c) }
+    - bar.baz
+    - we want to make sure that bar defines baz, 
+      and thus bar.baz is a valid constructor id.   
+   *)
+let rec ensure_event_defines_econs event econs_cid : bool = 
+  match econs_cid with
+  | Cid.Id(id) -> (
+    match event with 
+    | EventSingle({evid;}) ->
+      if (Id.equal evid id)
+        then true
+        else false
+    | EventUnion _ | EventSet _ -> false
+  )
+  | Cid.Compound(id, cid) -> (
+    match event with
+    | EventSingle _ -> false
+    | EventUnion({evid; members;})
+    | EventSet({evid; members;}) -> (
+      (* first, make sure the id is the event id *)
+      if (Id.equal evid id)
+        then (
+          (* second, recurse on the remaining cid on all the members *)
+          let member_results = List.map (fun e -> ensure_event_defines_econs e cid) members in
+          (* third, exactly one member should have returned true *)
+          let num_true = List.fold_left (fun acc b -> if b then acc + 1 else acc) 0 member_results in
+          match num_true with
+          | 1 -> true
+          | 0 -> false
+          | _ -> error "[addHandlerTypes.ensure_event_defines_econs] event id uniqueness violated: multiple sub-events with the same name."
+          )
+        else false
+    )
+  )
+;;
+(* derive the type of a parameter named cid in the event. 
+   The event may be a compound event, in which case the 
+   cid has a compound component. *)
+let rec get_event_param_ty event cid : ty option = 
+  match cid with 
+  | Cid.Id(id) -> (
+    match event with 
+    | EventSingle({evparams;}) -> (
+      match List.assoc_opt id evparams with 
+      | None -> None
+      | Some(ty) -> Some(ty)
+    )
+    (* non-compound ids cannot be parameters of union or set events. *)
+    | EventUnion _ | EventSet _ -> error "[get_event_param_ty] non-compound ids cannot be parameters of union or set events."
+  )
+  | Cid.Compound(id, cid) -> (
+    match event with
+    | EventSingle _ -> error "[get_event_param_ty] compound ids cannot be parameters of single events."    
+    | EventUnion({evid; members;})
+    | EventSet({evid; members;}) -> (
+      (* first, make sure the id is the event id *)
+      if (not (Id.equal evid id))
+        then None
+        else (          
+          (* second, try recursing on every member event. Only one should resolve. *)
+          let ty_opts = List.filter_map (fun e -> get_event_param_ty e cid) members in
+          match ty_opts with
+          | [] -> None
+          | [ty] -> Some(ty)
+          | _ -> error "[get_event_param_ty] compound id should resolve to exactly one parameter type."
+        )
+    )
+  )
+;;
+
+(* rename variables given a map from old cids -> new cids *)
+let rename =
+  object
+    inherit [_] s_map as super
+
+    method! visit_EVar (env : Cid.t CidMap.t) x =
+      match CidMap.find_opt (x) env with
+      | Some e -> EVar e
+      | None -> EVar x
+  end
+;;
+
+(* generic visitor to transform an expression. Arguments: 
+   1) transformer function 
+   2) statement or whatever node to start traversal on *)
+let transform_exp =
+  object
+  inherit [_] s_map as super
+    method! visit_exp (env : exp -> exp) exp =
+      (* transform subexpressions, then the outer expression *)
+      env (super#visit_exp env exp)
+    end
+;;
+
+(* scope the parameters of the handler by renaming them from foo to input_event.foo *)
+let scope_params (hdl_params: params) (hdl_body: statement) (input_event : event) =
+  (* check if the parameters are all members of the input event by getting their types. *)
+  let derived_param_tys = List.map (fun (id, _) -> get_event_param_ty input_event (Cid.id id)) hdl_params in
+  (* if any of the param types are none, its an error *)
+  let _ = List.iter (fun ty_opt -> match ty_opt with
+    | None -> error "[addHandlerTypes.scope_params] could not find parameter type in input event."
+    | Some _ -> ()) derived_param_tys
+  in
+  (* make sure the inferred parameter types are equal to the listed parameter types *)
+  let listed_tys = List.split hdl_params |> snd in
+  let inferred_tys = List.filter_map (fun ty_opt -> ty_opt) derived_param_tys in
+  let _ = if (not (equiv_list equiv_ty listed_tys inferred_tys))
+    then error 
+      "[addHandlerTypes.scope_params] parameter types inferred from input event do not match listed parameter types."
+  in
+  (* now we can scope the parameters, by just prepending the event name *)
+  let scoped_params = List.map (fun (id, ty) -> 
+    (Cid.create_ids [id_of_event input_event; id], ty)) hdl_params 
+  in
+  (* now build a map from old parameter cids to new parameter cids *)
+  let hdl_param_cids = List.map (fun p -> fst p |> Cid.id) hdl_params in
+  let (cid_tuples : (cid * cid) list) = List.combine hdl_param_cids (List.map fst scoped_params) in
+  let rename_map = List.fold_left
+    (fun acc (old_cid, new_cid) -> CidMap.add old_cid new_cid acc)
+    CidMap.empty
+    cid_tuples
+  in
+  let hdl_body' = rename#visit_statement rename_map hdl_body in
+  hdl_body'
+;;
+
+let scope_event_constructors (output_event : event) (hdl_body : statement) =
+  (* scope event constructor expressions wherever they appear in the statement, 
+     so that the event id in the expression is prefixed with the event that 
+     contains it in the output event. For example: 
+      generate (foo(1, 2));
+      --> 
+      generate (output_event.foo(1, 2)); *)
+
+      (* transform event constructor expressions
+         (type: event; variant: ECall(evcid, evargs)); *)
+      let econs_transformer exp = 
+        match exp.e, exp.ety.raw_ty with
+        | (ECall(evcid, evargs), TEvent) -> (
+          (* this is an event constructor. The new name is 
+             the old name, with the output event id prefixed. *)
+          let evcid' = Cid.compound (id_of_event output_event) evcid in
+          (* check to make sure the new name is valid *)
+          if (ensure_event_defines_econs output_event evcid')
+            then {exp with e=ECall(evcid', evargs)}
+            else error "[addHandlerTypes.scope_event_constructors] event constructor not defined in output event."
+        )
+        (* non-event-constructor expressions: do nothing. *)
+        | _ -> exp 
+      in
+      transform_exp#visit_statement econs_transformer hdl_body
+;;
+
+
+(* set the handler input and output events, 
+   update all the parameter variable ids used in the body (scope input), 
+   update all the event ids used in generates (scope output) *)
 let type_handler (ctx:ctx) hdl : handler * tdecl =  
   let _ = ctx in 
   match hdl with 
@@ -113,9 +274,12 @@ let type_handler (ctx:ctx) hdl : handler * tdecl =
       | None -> error "[addHandlerTypes.type_handler] could not find event with same ID as user-defined handler"  
     in
     let output_event = derive_output_event ctx hdl_id hdl_body in
+    let hdl_body' = scope_params hdl_params hdl_body input_event 
+      |> scope_event_constructors output_event
+  in
     HEvent({hdl_id; 
       hdl_sort; 
-      hdl_body=[hdl_body]; 
+      hdl_body=[hdl_body']; 
       hdl_input=input_event;
       hdl_output=output_event; 
       hdl_inparams=[]; 
@@ -126,19 +290,19 @@ let type_handler (ctx:ctx) hdl : handler * tdecl =
 let rec type_handlers_in_tdecls ctx tdecls : tdecl list =
   match tdecls with
   | [] -> []
-  | td :: tdecls' ->
+  | td :: tdecls ->
     match td.td with
     (* type the handlers, possibly adding new decls for event types *)
     | TDHandler (hdl) -> 
       let hdl', hdl_out_event = type_handler ctx hdl in
       let td' = { td with td = TDHandler (hdl') } in
-      hdl_out_event :: td' :: type_handlers_in_tdecls ctx tdecls'
+      hdl_out_event :: td' :: type_handlers_in_tdecls ctx tdecls
     (* add events to the context *)
     | TDEvent(e) ->     
       let ctx' = {ctx with events=(Ctx.add (id_of_event e) e ctx.events);} in
       td :: type_handlers_in_tdecls ctx' tdecls
     (* leave all the other decls alone *)
-    | _ -> td :: type_handlers_in_tdecls ctx tdecls'
+    | _ -> td :: type_handlers_in_tdecls ctx tdecls
 ;;
 
 let type_handlers prog : prog =  

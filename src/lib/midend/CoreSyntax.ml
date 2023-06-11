@@ -144,7 +144,7 @@ and s =
   | SNoop
   | SUnit of exp
   | SLocal of id * ty * exp
-  | SAssign of id * exp
+  | SAssign of cid * exp
   | SPrintf of string * exp list
   | SIf of exp * statement * statement
   | SGen of gen_type * exp
@@ -381,6 +381,16 @@ let equiv_list f lst1 lst2 =
   | Invalid_argument _ -> false
 ;;
 
+let equiv_ty t1 t2 =
+  match t1.raw_ty, t2.raw_ty with
+  | TBool, TBool -> true
+  | TInt sz1, TInt sz2 -> sz1 = sz2
+  | TEvent, TEvent -> true
+  | TGroup, TGroup -> true
+  | TPat sz1, TPat sz2 -> sz1 = sz2
+  | _ -> false
+;;
+
 let equiv_options f o1 o2 =
   match o1, o2 with
   | None, None -> true
@@ -425,9 +435,10 @@ let rec equiv_stmt s1 s2 =
   match s1.s, s2.s with
   | SNoop, SNoop -> true
   | SUnit e1, SUnit e2 -> equiv_exp e1 e2
-  | SLocal (id1, _, exp1), SLocal (id2, _, exp2)
-  | SAssign (id1, exp1), SAssign (id2, exp2) ->
+  | SLocal (id1, _, exp1), SLocal (id2, _, exp2) -> 
     Id.equal id1 id2 && equiv_exp exp1 exp2
+  | SAssign (id1, exp1), SAssign (id2, exp2) ->
+    Cid.equal id1 id2 && equiv_exp exp1 exp2
   | SPrintf (s1, es1), SPrintf (s2, es2) ->
     String.equal s1 s2 && equiv_list equiv_exp es1 es2
   | SIf (e1, s11, s12), SIf (e2, s21, s22) ->

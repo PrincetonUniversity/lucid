@@ -453,16 +453,16 @@ let cfg_of_main (ds:TofinoCore.tdecls) =
 
 let test_cfg_builder () =
     let st1 = sassign 
-        (Id.create "a")
+        (Cid.create ["a"])
         (eval_bool false)
     in
     let st2 = sassign 
-        (Id.create "b")
+        (Cid.create ["b"])
         (eval_bool false)
     in
 
     let st3 = sassign 
-        (Id.create "c")
+        (Cid.create ["c"])
         (eval_bool false)
     in
 

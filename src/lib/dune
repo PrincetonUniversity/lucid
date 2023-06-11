@@ -92,11 +92,9 @@
    precomputeArgs
    normalizeBools
    eliminateBools
-   optimizeSimpleCalls
    eliminateValueCasts
    eliminateInterpOps
    normalizeInts
-   singleAssignment
    immutableConditions
    uniqueSpans
    uniqueIds
@@ -114,7 +112,7 @@
    TofinoCore
    TofinoCoreNew
    TofinoCorePrinting
-   RescopeHandlerParams
+   AddEgressHandlers
    AddHandlerTypes
    MergeHandlers
    TofinoCoreForms
@@ -123,7 +121,6 @@
    InlineEventVars
    SolitaryMatches
    Generates
-   GeneratesNew
    IfToMatch
    RegularizeMemops
    ShareMemopInputs

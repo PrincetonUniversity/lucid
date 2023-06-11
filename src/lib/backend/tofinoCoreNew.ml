@@ -196,6 +196,22 @@ let core_to_tofinocore ingress_ds egress_ds : prog =
   [ingress; egress]
 ;;
 
+
+
+(* extract the ingress component. 
+   The ingress component consists of: 
+   1.  *)
+let extract_ingress (decls:decl list) : decl list =
+  decls
+
+;;
+
+(* this is the final constructor -- a program with both 
+ingress and egress definitions.  *)
+(* let core_to_tofinocore decls : prog =  *)
+
+
+
 (* destructors -- get back to the decl lists form that 
    the current pipeline expects. *)
 let find_component_by_id prog id = 
@@ -275,7 +291,6 @@ let rec find_statement_paths paths_so_far stmt_filter stmt =
 ;;          
 
 
-
 (* find all paths of statements that match stmt_filter and 
    transform matching statements according to stmt_transformer *) 
 let rec transform_statement_paths paths_so_far stmt_filter stmt_transformer stmt =
@@ -311,4 +326,13 @@ let rec transform_statement_paths paths_so_far stmt_filter stmt_transformer stmt
      | None -> stmt, paths_so_far)
 ;;
 
+(* find the component in the program with the given id *)
+let find_component_by_id prog id = 
+  match (List.find_opt (fun c -> c.comp_id = id) prog) with
+  | Some c -> c
+  | None -> error ("[find_component_by_id] could not find program component with id " ^ (Id.to_string id))
+;;
 
+let transform_component_by_id (f:component -> component) prog id : prog =
+  List.map (fun c -> if c.comp_id = id then f c else c) prog
+;;

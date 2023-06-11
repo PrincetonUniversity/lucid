@@ -87,7 +87,7 @@ let eliminate_floods ds =
         | SAssign(groupvar, floodexp) -> (
           match floodexp.e with 
           | EFlood(floodarg) -> 
-            flood_match groupvar floodarg
+            flood_match (groupvar) floodarg
           | _ -> statement
         )
         | SLocal(groupvar, groupty, floodexp) -> (
@@ -96,7 +96,7 @@ let eliminate_floods ds =
             sseq 
               (* initialize to all active ports *)
               (slocal groupvar groupty (vgroup !active_ports |> value_to_exp)) 
-              (flood_match groupvar floodarg)
+              (flood_match (Cid.id groupvar) floodarg)
           | _ -> statement
         )
         | _ -> super#visit_statement ctx statement
