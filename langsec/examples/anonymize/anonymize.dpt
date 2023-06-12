@@ -2,6 +2,19 @@ const int OUT_PORT = 1;
 const int SERVER_PORT = 2;
 const int SEED = 7;
 
+// Useful for annotation language:
+// -Indexing into integer, i.e. x[m] gives mth bit of x
+// -Need header fields to calculate IP checksum
+// -User needs to provide length of IP address prefix?
+// -User needs to provide list of IP address prefixes to anonymize
+//      -Could probably rewrite IP anonymization using tables + filtering instead
+// -Way to represent hex/binary values more easily
+
+// Things to ask:
+// -How to calculate/update IP checksum
+// -How are prefix lengths of IP addresses indicated?
+// -Should seed for hash function be randomized?
+
 // ethernet and ip packet headers
 type eth_t = {
 	int<48> dmac;
@@ -24,30 +37,61 @@ handle eth_ip(eth_t eth, ip_t ip) {
 	// 1. forward an event representing the packet out of port 1.
 	generate_port(OUT_PORT, eth_ip(eth, ip));
 	// 2. anonymize packet info before sending to the monitoring server.
-	generate(anonymize_info(eth, ip));
+    if (eth#dmac[40:40] == 0) { // don't anonymize multicast/broadcast traffic
+        generate(anonymize_info(eth, ip));
+    } else {
+        generate_port(SERVER_PORT, eth_ip(eth, ip));
+    }
 }
 
 handle anonymize_info(eth_t eth, ip_t ip) {
-    // anonymize source MAC OUI and/or ID (comment out lines that you don't want to apply)
+    // anonymize source MAC OUI and/or ID
     int<24> smac_oui = eth#smac[47:24];
     int<24> smac_id = eth#smac[23:0];
 
     smac_oui = hash<24>(SEED, smac_oui);
     smac_id = hash<24>(SEED, smac_id);
 
-    int<48> smac = (((int<48>)smac_oui) << 24) + ((int<48>)smac_id); 
+    int<48> smac = smac_oui ^ smac_id;
    
-    // anonymize destination MAC OUI and/or ID (comment out lines that you don't want to apply)
+    // anonymize destination MAC OUI and/or ID
     int<24> dmac_oui = eth#dmac[47:24];
     int<24> dmac_id = eth#dmac[23:0];
 
     dmac_oui = hash<24>(SEED, dmac_oui);
     dmac_id = hash<24>(SEED, dmac_id);
 
-    int<48> dmac = (((int<48>)dmac_oui) << 24) + ((int<48>)dmac_id); 
+    int<48> dmac = dmac_oui ^ dmac_id;
 
     eth_t anonymized_eth = {eth with dmac = dmac; smac = smac};
 
-	// send anonymized packet to monitoring server
-	generate_port(SERVER_PORT, eth_ip(anonymized_eth, ip));
+    // anonymize src + dst IPv4 addresses w/ 10.4.0.0/16 prefix
+    int<16> PREFIX = 2564;
+    if (ip#len == 32) { // if not IPv6
+        int<16> srcip_prefix = ip#src[31:16]; // assume prefix length is 16 bits
+        int<16> srcip_id = ip#src[15:0];
+
+        if (srcip_prefix == PREFIX) {
+            // comment out to preserve prefix
+            // srcip_prefix = hash<16>(SEED, srcip_prefix);
+            srcip_id = hash<16>(SEED, srcip_id);
+        }
+
+        int<32> srcip = srcip_prefix ^ srcip_id;
+
+        int<16> dstip_prefix = ip#dst[31:16]; // assume prefix length is 16 bits
+        int<16> dstip_id = ip#dst[15:0];
+
+        if (dstip_prefix == PREFIX) {
+            // dstip_prefix = hash<16>(SEED, dstip_prefix);
+            dstip_id = hash<16>(SEED, dstip_id);
+        }
+
+        int<32> dstip = dstip_prefix ^ dstip_id;
+
+        ip_t anonymized_ip = {ip with src = srcip; dst = dstip};
+        generate_port(SERVER_PORT, eth_ip(anonymized_eth, anonymized_ip));
+    } else {
+        generate_port(SERVER_PORT, eth_ip(anonymized_eth, ip));
+    }
 }
