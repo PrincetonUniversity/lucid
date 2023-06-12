@@ -7,8 +7,6 @@ open TofinoCoreNew
 open BackendLogging
 open Collections
 
-
-
 let add_egress_handler prog : prog =
   (* get the ingress events *)
   let ingress_events = List.filter_map 

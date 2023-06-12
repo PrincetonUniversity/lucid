@@ -244,22 +244,12 @@ let tofinocore_prep ds =
     let ds = UniqueSpans.make_unique_spans ds in
     let ds = UniqueIds.make_var_names_unique ds in
     print_if_debug ds;
-    (* at this point, we split the program into ingress and egress programs.
-      The egress program contains all handlers tagged as egress, and all
-      globals that they reference. The ingress program contains all other
-      handlers and globals. Both programs receive copies of all other
-      declarations. *)
-    let ingress_ds, egress_ds = TofinoEgress.split_decls ds in
-    (* now we are ready to put ingress_ds and egress_ds into the new tofinocore *)
-    let egress_ds = if List.length egress_ds <> 0
-      then  TofinoEgress.add_default_egr_drop egress_ds
-      else [] in
-    ingress_ds, egress_ds
+    ds
 ;;
 
 (* transform into tofinocore, but don't layout yet *)
-let to_tofinocore ingress_ds egress_ds =
-  let core_prog = TofinoCoreNew.core_to_tofinocore ingress_ds egress_ds in
+let to_tofinocore ds =
+  let core_prog = TofinoCoreNew.core_to_tofinocore ds  in
   print_endline ("--- initial tofinocore program ---");
   print_endline (TofinoCorePrinting.prog_to_string core_prog);
   let core_prog = AddHandlerTypes.type_handlers core_prog in
@@ -267,17 +257,12 @@ let to_tofinocore ingress_ds egress_ds =
 
   print_endline ("--- done running new tofinocore translator ---");
   print_endline (TofinoCorePrinting.prog_to_string core_prog);
-
-
-  let ingress_tds, egress_tds = TofinoCoreNew.prog_to_ingress_egress_decls core_prog in
   exit 0;
+  let ingress_tds, egress_tds = TofinoCoreNew.prog_to_ingress_egress_decls core_prog in
   let _, _ = ingress_tds, egress_tds in
   let ingress_tds = [] in let egress_tds = [] in 
   let ingress_tds = tofinocore_normalization true true ingress_tds in
-  let egress_tds = if List.length egress_ds <> 0
-    then  tofinocore_normalization false true egress_tds
-    else [] 
-  in
+  let egress_tds = tofinocore_normalization false true egress_tds in 
   ingress_tds, egress_tds
 ;;
 
@@ -312,10 +297,10 @@ let compile old_layout ds portspec build_dir ctl_fn_opt =
 
   (* do final preparation for tofinocore: split into ingress / egress, 
      atomize expressions. *)
-  let ingress_ds, egress_ds = tofinocore_prep ds in
+  let ds = tofinocore_prep ds in
 
   (* translate into TofinoCore IR *)
-  let ingress_tds, egress_tds = to_tofinocore ingress_ds egress_ds in
+  let ingress_tds, egress_tds = to_tofinocore ds in
 
   (* layout the program then translate into p4 IR. *)
   let tofino_prog = compile_dataplane old_layout ingress_tds egress_tds portspec build_dir in
