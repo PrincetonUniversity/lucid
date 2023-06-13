@@ -304,7 +304,10 @@ let add_continue_handlers ctx : ctx =
   add_handlers ctx all_events
 ;;
 
-(* Implicit semantics: add a command to set the drop flag 
+(* 
+TODO: put this somewhere, in a pass after we add the 
+intrinsics for each component. 
+Implicit semantics: add a command to set the drop flag 
    to the beginning of every egress handler. *)
 let egr_drop_ctl_id = Cid.create ["drop_ctl"];;
 let egr_drop_ctl_sz = 3
@@ -361,7 +364,7 @@ let core_to_tofinocore decls : prog =
   in
 
   let ingress_decls = ctx.ingress in
-  let egress_decls = add_default_egr_drop ctx.egress in
+  let egress_decls = ctx.egress in
   (* two components: ingress and egress *)
   let ingress = {
     comp_id = id "ingress"; 
