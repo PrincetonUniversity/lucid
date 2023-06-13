@@ -69,16 +69,31 @@ and event =
   | EventUnion  of {
     evid:id;
     members: event list;
+    tag : (id * ty);
   }
-  (* an event set is a set of events, with each event having an index *)
-  (* one of each *)
+  (* an event set is a set of optional events *)
   | EventSet of {
     evid:id;
     members: event list;
     subsets: (id list) list;
     (*optional metadata for optimization: 
       the subsets of members that the eventset may hold.  *)
+    flags : (id * ty) list;
   }
+
+and hbody = 
+  | SFlat of statement
+  | SPipeline of statement list
+
+(* definition of a handler using input and output events *)
+and hevent = {    
+  hdl_id : id;
+  hdl_sort : handler_sort;
+  hdl_body : hbody;  
+  hdl_input : event; 
+  hdl_output : event;
+  hdl_intrinsics : params;
+}
 
 and handler = 
   (* a handler with parameters -- basically just copied from input. *) 
@@ -90,17 +105,13 @@ and handler =
   }
   (* a handler that operates on events instead of parameters -- 
      all handlers are tranformed into this form then merged together *)
-  | HEvent of {
-    hdl_id : id;
-    hdl_sort : handler_sort;
-    hdl_body : statement list;  
-    hdl_input : (event); (* input event name * type *)
-    hdl_output : (event); (* output event name * type *)
-    (* a handler might also need to io params for externs or something? *)
-    hdl_inparams : params;
-    hdl_outparams : params;
+  | HEvent of hevent
+  and parser = {
+    parser_id : id;
+    parser_params : params;
+    parser_body : parser_block;
+    prs_intrinsics : params;
   }
-
 and td =
   | TDGlobal of id * ty * exp
   | TDMemop of memop
@@ -112,6 +123,7 @@ and td =
   | TDHandler of handler
   | TDVar of id * ty (* a variable used by multiple functions and handlers *)
   | TDOpenFunction of id * params * statement (* not an open function anymore *)
+  | TDUserTy of id * (id * ty) list (* a user-defined record type *)
 
 and tdecl =
   { td : td
@@ -129,7 +141,9 @@ and tdecls = tdecl list
 and component = {
   comp_id   : id;
   comp_succ : id list; 
-  comp_decls : tdecls; }
+  comp_sort : handler_sort;
+  comp_decls : tdecls; 
+  }
 
 and prog = component list
 
@@ -168,6 +182,10 @@ let empty_ctx = {
   ingress = [];
   egress = [];
 }
+
+let no_span = Span.default;;
+let tdecl td = {td; tdspan = no_span; tdpragma = None}
+
 
 (* get the set of globals referenced in the statement *)
 let globals_refd (global_ids : IdSet.t) stmt = 
@@ -348,17 +366,17 @@ let core_to_tofinocore decls : prog =
   let ingress = {
     comp_id = id "ingress"; 
     comp_succ = [id "egress"]; 
-    comp_decls = decls_to_tdecls [] ingress_decls
+    comp_decls = decls_to_tdecls [] ingress_decls;
+    comp_sort = HData;
     } in
   let egress = {
     comp_id = id "egress"; 
     comp_succ = []; 
-    comp_decls = decls_to_tdecls [] egress_decls} in
+    comp_sort = HEgress;
+    comp_decls = decls_to_tdecls [] egress_decls;
+    } in
   [ingress; egress]
 ;;
-
-
-
 
 (* destructors -- get back to the decl lists form that 
    the current pipeline expects. *)

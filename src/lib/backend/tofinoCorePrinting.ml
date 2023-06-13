@@ -25,15 +25,17 @@ let rec event_to_string (event:TofinoCoreNew.event) =
   )
   | EventUnion({evid; members}) -> (
     Printf.sprintf
-      "eventunion %s { %s };"
+      "eventunion %s {\n%s\n};"
       (id_to_string evid)
-      (Batteries.String.join " " (Batteries.List.map event_to_string members))
+      (line_sep event_to_string members |> indent_body)
+      (* (Batteries.String.join " " (Batteries.List.map event_to_string members)) *)
   )
   | EventSet({evid; members}) -> (
     Printf.sprintf
-      "eventset %s { %s };"
+      "eventset %s {\n%s\n};"
       (id_to_string evid)
-      (Batteries.String.join " " (Batteries.List.map event_to_string members))
+      (line_sep event_to_string members |> indent_body)
+      (* (Batteries.String.join " " (Batteries.List.map event_to_string members)) *)
   )
 ;;
 
@@ -61,9 +63,8 @@ let handler_to_string (handler:TofinoCoreNew.handler) =
       (id_of_event hdl_input |> id_to_string)
       (id_of_event hdl_output |> id_to_string)
       (match hdl_body with 
-      | [] -> ""
-      | [stmt] -> stmt_to_string stmt |> indent_body
-      | stmts -> String.concat "\n" (List.map stmt_to_string stmts) |> indent_body)
+      | SFlat stmt -> stmt_to_string stmt |> indent_body
+      | SPipeline stmts -> String.concat "\n" (List.map stmt_to_string stmts) |> indent_body)
   )
 ;;
 
@@ -110,6 +111,11 @@ let td_to_string (td:td)=
       (id_to_string id)
       (params_to_string params)
       (stmt_to_string statement |> indent_body)    
+  | TDUserTy(id, field_list) -> 
+    Printf.sprintf
+      "type %s {\n%s\n}\n"
+      (id_to_string id)
+      (line_sep (fun (id, ty) -> Printf.sprintf "%s: %s;" (id_to_string id) (ty_to_string ty)) field_list)
 ;;
 
 let tdecl_to_string td = td_to_string td.td
@@ -191,7 +197,7 @@ let event_to_p4flagfield event : string =
 let rec event_to_p4tystr event : string = 
   match event with
   (* an event declaration is a type declaration *)
-  | EventSingle({evid; evnum; evsort; evparams}) -> (
+  | EventSingle({evid; evparams}) -> (
     (* a single event -- just a struct or header *)
     Printf.sprintf 
       "struct %s_t {\n%s\n}"
@@ -218,5 +224,4 @@ let rec event_to_p4tystr event : string =
         (line_sep event_to_p4fieldstr members) (*the member fields *)    
     )
   )
-
-(**)
+;;

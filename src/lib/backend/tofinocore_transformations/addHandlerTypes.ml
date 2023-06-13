@@ -94,11 +94,17 @@ let derive_output_event (ctx:ctx) (hdl_id : id) (hdl_body:statement) : event =
   let eventset = if (ctx.is_egress)
     then EventUnion({
       evid = Id.append_string "_egress_output" hdl_id;
-      members = events;})
+      members = events;
+      tag = (Id.create "tag", ty (TInt(16))  );
+      })
     else EventSet({
       evid = Id.append_string "_ingress_output" hdl_id;
       members = events;
-      subsets = generated_eventid_subsets hdl_body;})
+      subsets = generated_eventid_subsets hdl_body; 
+      flags = List.map 
+        (fun event -> 
+          (Id.prepend_string "flag_" (id_of_event event), ty (TInt(1)))) events;
+      })
   in
   eventset
 ;;
@@ -160,18 +166,45 @@ let rec get_event_param_ty event cid : ty option =
   | Cid.Compound(id, cid) -> (
     match event with
     | EventSingle _ -> error "[get_event_param_ty] compound ids cannot be parameters of single events."    
-    | EventUnion({evid; members;})
-    | EventSet({evid; members;}) -> (
+    | EventUnion({evid; members;tag;}) -> (
       (* first, make sure the id is the event id *)
       if (not (Id.equal evid id))
         then None
         else (          
-          (* second, try recursing on every member event. Only one should resolve. *)
-          let ty_opts = List.filter_map (fun e -> get_event_param_ty e cid) members in
-          match ty_opts with
-          | [] -> None
-          | [ty] -> Some(ty)
-          | _ -> error "[get_event_param_ty] compound id should resolve to exactly one parameter type."
+          (* second, check if the tail cid is the event union's tag *)
+          if (Id.equal (Cid.to_id cid) (fst tag))
+            then Some(snd tag)
+          else 
+            (* finally, try recursing on every member event. Only one should resolve. *)
+            let ty_opts = List.filter_map (fun e -> get_event_param_ty e cid) members in
+            match ty_opts with
+            | [] -> None
+            | [ty] -> Some(ty)
+            | _ -> error "[get_event_param_ty] compound id should resolve to exactly one parameter type."
+        )      
+    )
+    | EventSet({evid; members; flags;}) -> (
+      (* first, make sure the id is the event id *)
+      if (not (Id.equal evid id))
+        then None
+        else (          
+          (* second, check if the tail cid is one of the event union's flags *)
+          let flagty_opts = List.filter_map (fun (flagid, flagty) -> 
+            if (Id.equal (Cid.to_id cid) flagid)
+              then Some(flagty)
+              else None
+          ) flags in
+          match flagty_opts with 
+          | ty::[] -> Some(ty)
+          | ty::_ -> error "[get_event_param_ty] compound id should resolve to exactly one parameter type."
+          | [] -> (
+            (* finally, try recursing on every member event. Only one should resolve. *)
+            let ty_opts = List.filter_map (fun e -> get_event_param_ty e cid) members in
+            match ty_opts with
+            | [] -> None
+            | [ty] -> Some(ty)
+            | _ -> error "[get_event_param_ty] compound id should resolve to exactly one parameter type."
+          )
         )
     )
   )
@@ -279,11 +312,10 @@ let type_handler (ctx:ctx) hdl : handler * tdecl =
   in
     HEvent({hdl_id; 
       hdl_sort; 
-      hdl_body=[hdl_body']; 
+      hdl_body=SFlat(hdl_body');
       hdl_input=input_event;
       hdl_output=output_event; 
-      hdl_inparams=[]; 
-      hdl_outparams=[];})
+      hdl_intrinsics = [];})
     , {td=TDEvent(output_event); tdspan = Span.default; tdpragma = None;}
   | _ -> error "[addHandlerTypes.type_handler] there shouldn't be any HEvent handlers at this point"
 
@@ -292,12 +324,12 @@ let rec type_handlers_in_tdecls ctx tdecls : tdecl list =
   | [] -> []
   | td :: tdecls ->
     match td.td with
-    (* type the handlers, possibly adding new decls for event types *)
+    (* type the handlers, adding new decls for output events *)
     | TDHandler (hdl) -> 
       let hdl', hdl_out_event = type_handler ctx hdl in
       let td' = { td with td = TDHandler (hdl') } in
       hdl_out_event :: td' :: type_handlers_in_tdecls ctx tdecls
-    (* add events to the context *)
+    (* add existing events to the context *)
     | TDEvent(e) ->     
       let ctx' = {ctx with events=(Ctx.add (id_of_event e) e ctx.events);} in
       td :: type_handlers_in_tdecls ctx' tdecls

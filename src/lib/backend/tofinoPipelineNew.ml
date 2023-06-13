@@ -252,11 +252,16 @@ let to_tofinocore ds =
   let core_prog = TofinoCoreNew.core_to_tofinocore ds  in
   print_endline ("--- initial tofinocore program ---");
   print_endline (TofinoCorePrinting.prog_to_string core_prog);
-  let core_prog = AddHandlerTypes.type_handlers core_prog in
-  (* let core_prog = MergeHandlers.merge_handlers core_prog in *)
 
-  print_endline ("--- done running new tofinocore translator ---");
+  let core_prog = AddHandlerTypes.type_handlers core_prog in
+  print_endline ("--- transformed handlers into event-function form ---");
   print_endline (TofinoCorePrinting.prog_to_string core_prog);
+
+  let core_prog = MergeHandlers.merge_handlers core_prog in
+  print_endline ("--- merged component handlers ---");
+  print_endline (TofinoCorePrinting.prog_to_string core_prog);
+
+
   exit 0;
   let ingress_tds, egress_tds = TofinoCoreNew.prog_to_ingress_egress_decls core_prog in
   let _, _ = ingress_tds, egress_tds in

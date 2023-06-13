@@ -328,6 +328,7 @@ let exp e ety = { e; ety; espan = Span.default }
 let aexp e ety espan = { e; ety; espan }
 let value_to_exp v = aexp (EVal v) v.vty v.vspan
 let var_sp cid ety span = aexp (EVar cid) ety span
+let var cid ety = var_sp cid ety Span.default
 let op_sp op args ety span = aexp (EOp (op, args)) ety span
 let call_sp cid args ety span = aexp (ECall (cid, args)) ety span
 let hash_sp size args ety span = aexp (EHash (size, args)) ety span
