@@ -358,9 +358,12 @@ let compile old_layout ds portspec build_dir ctl_fn_opt =
   let core_prog = layout_new old_layout core_prog in
 
   (* finally, translate into the P4 ir *)
+  (* <<left off here>> 
+    TODO: 
+      1. update translation.
+      2. rewrite parser in tofinoCore and translate that instead of generating new. *)
   let tofino_prog = CoreToP4TofinoNew.translate_core portspec core_prog in
   let _ = tofino_prog in 
-  (* <<left off here>> *)
 
   error "not done"
 
