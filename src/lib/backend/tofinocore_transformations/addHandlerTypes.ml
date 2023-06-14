@@ -104,12 +104,47 @@ let derive_output_event (ctx:ctx) (hdl_id : id) (hdl_body:statement) : event =
       flags = List.map 
         (fun event -> 
           (Id.prepend_string "flag_" (id_of_event event), ty (TInt(1)))) events;
+      active_member_ct = (Id.create "num_active", ty (TInt 16));
       })
   in
   eventset
 ;;
 
 
+let rec base_event event econs_cid : event option = 
+  (* extract the base event.
+     for example, given:  
+    - event = event_union bar { event foo(int a, int b); event baz(int c) }
+    - event_cid = bar.baz
+    get back the event baz(...);    
+  *)
+  match econs_cid with
+  | Cid.Id(id) -> (
+    match event with 
+    | EventSingle({evid;}) ->
+      if (Id.equal evid id)
+        then Some(event)
+        else None
+    | EventUnion _ | EventSet _ -> None
+  )
+  | Cid.Compound(id, cid) -> (
+    match event with
+    | EventSingle _ -> None
+    | EventUnion({evid; members;})
+    | EventSet({evid; members;}) -> (
+      (* first, make sure the id is the event id *)
+      if (Id.equal evid id)
+        then (
+          (* second, recurse on the remaining cid on all the members *)
+          let resolved_events = List.filter_map (fun e -> base_event e cid) members in
+          (* only one member should have resolved the event *)
+          match resolved_events with
+            | [] -> None
+            | [e] -> Some(e)
+            | _ -> error "[base_event] event id is ambiguous")
+        else None)
+    )  
+;;
 (* make sure the event constructor is defined in the given event. 
    for example, given: 
     - event_union bar { event foo(int a, int b); event baz(int c) }
@@ -118,35 +153,9 @@ let derive_output_event (ctx:ctx) (hdl_id : id) (hdl_body:statement) : event =
       and thus bar.baz is a valid constructor id.   
    *)
 let rec ensure_event_defines_econs event econs_cid : bool = 
-  match econs_cid with
-  | Cid.Id(id) -> (
-    match event with 
-    | EventSingle({evid;}) ->
-      if (Id.equal evid id)
-        then true
-        else false
-    | EventUnion _ | EventSet _ -> false
-  )
-  | Cid.Compound(id, cid) -> (
-    match event with
-    | EventSingle _ -> false
-    | EventUnion({evid; members;})
-    | EventSet({evid; members;}) -> (
-      (* first, make sure the id is the event id *)
-      if (Id.equal evid id)
-        then (
-          (* second, recurse on the remaining cid on all the members *)
-          let member_results = List.map (fun e -> ensure_event_defines_econs e cid) members in
-          (* third, exactly one member should have returned true *)
-          let num_true = List.fold_left (fun acc b -> if b then acc + 1 else acc) 0 member_results in
-          match num_true with
-          | 1 -> true
-          | 0 -> false
-          | _ -> error "[addHandlerTypes.ensure_event_defines_econs] event id uniqueness violated: multiple sub-events with the same name."
-          )
-        else false
-    )
-  )
+  match base_event event econs_cid with 
+  | None -> false
+  | Some _ -> true 
 ;;
 (* derive the type of a parameter named cid in the event. 
    The event may be a compound event, in which case the 
@@ -315,7 +324,6 @@ let type_handler (ctx:ctx) hdl : handler * tdecl =
       hdl_body=SFlat(hdl_body');
       hdl_input=input_event;
       hdl_output=output_event; 
-      hdl_intrinsics = [];
       hdl_preallocated_vars = [];})
     , {td=TDEvent(output_event); tdspan = Span.default; tdpragma = None;}
   | _ -> error "[addHandlerTypes.type_handler] there shouldn't be any HEvent handlers at this point"

@@ -330,9 +330,16 @@ let value_to_exp v = aexp (EVal v) v.vty v.vspan
 let var_sp cid ety span = aexp (EVar cid) ety span
 let var cid ety = var_sp cid ety Span.default
 let op_sp op args ety span = aexp (EOp (op, args)) ety span
+let op op args ety = op_sp op args ety Span.default
 let call_sp cid args ety span = aexp (ECall (cid, args)) ety span
 let hash_sp size args ety span = aexp (EHash (size, args)) ety span
 let vint_exp i size = value_to_exp (vint i size)
+let vint_exp_ty i (ty:ty) = 
+  match ty.raw_ty with
+  | TInt(sz) -> 
+    value_to_exp (vint i sz)
+  | _ -> error "[vint_exp_ty] type mismatch"
+;;
 
 (* Statements *)
 

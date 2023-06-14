@@ -63,23 +63,38 @@ and parser_step = [%import: CoreSyntax.parser_step]
 and parser_block = [%import: CoreSyntax.parser_block]
 
 (*NEW 6/2023 -- event types / definitions *)
+
 and event =
-  | EventSingle of {evid:id; evnum : int option; evsort : event_sort; evparams : params}
+  | EventSingle of {
+    evid:id; 
+    evnum : int option; 
+    evsort : event_sort; 
+    evparams : params;
+    (* internal fields: where is the event going. 
+       outport should be a TInt, 
+       outgroup should be a TGroup*)
+    evoutport : (id * ty); 
+    evoutgroup : (id * ty);
+    }
   (* an event union is a union of events, with each event having a tag. *)
   | EventUnion  of {
     evid:id;
     members: event list;
+    (* tag is an internal field of type TEvent that holds the active event's id *)
     tag : (id * ty);
   }
   (* an event set is a set of optional events *)
   | EventSet of {
     evid:id;
     members: event list;
-    subsets: (id list) list;
-    (*optional metadata for optimization: 
-      the subsets of members that the eventset may hold.  *)
+    (* active members: an internal field listing the subset of members that are active *)
     flags : (id * ty) list;
+    (* active member ct: internal field, incremented by generate. *)
+    active_member_ct : (id * ty); (* number of active members in the eventset *)
+    subsets: (id list) list; (*optional metadata for optimization: 
+      the subsets of members that the eventset may hold.  *)
   }
+
 
 and hbody = 
   | SFlat of statement
@@ -89,6 +104,12 @@ and hbody =
 (* the string is direction specifier *)
 and intrinsic_params = (id * ty * string option) list
 
+and hctl_params = {
+  out_port : (id * ty);
+  gen_ct : (id * ty);
+  out_group : (id * ty);
+}
+
 (* definition of a handler using input and output events *)
 and hevent = {    
   hdl_id : id;
@@ -96,7 +117,15 @@ and hevent = {
   hdl_body : hbody;  
   hdl_input : event; 
   hdl_output : event;
-  hdl_intrinsics : intrinsic_params;
+  (* hdl_intrinsics : intrinsic_params;  *)
+    (* hdl_intrinsics are polluting the IR and have no semantic meaning.
+        We should just have fixed fields for relevant output: 
+        - output port
+        - number of self generates
+        - output group 
+        Then let the lower p4-ish layer worry about mapping 
+        those fields to the appropriate intrinsics.
+        *)
   hdl_preallocated_vars : params; 
   (*variables that the handler can assume are allocated, but not set*)
 }
@@ -174,6 +203,7 @@ and prog = component list
       ; nude = false
       }]
  
+
 
 (** core -> tofinocore translation: splitting into ingress and egress **)
 type ctx = {
@@ -349,7 +379,14 @@ let decl_to_tdecl (decl:decl) =
   | DAction a ->
     { td = TDAction a; tdspan = decl.dspan; tdpragma = decl.dpragma }
    | DEvent (evid, evnum, evsort, evparams) ->
-    let event = EventSingle{evid; evnum; evsort; evparams} in
+    let event = EventSingle{
+      evid; 
+      evnum; 
+      evsort; 
+      evparams; 
+      evoutgroup=(Id.create "out_group", ty TGroup);
+      evoutport = (Id.create "out_port", ty (TInt 9));
+      } in
     { td = TDEvent event; tdspan = decl.dspan; tdpragma = decl.dpragma }
   | DHandler (hdl_id, hdl_sort, (hdl_params, hdl_body)) ->
     let handler = HParams {hdl_id; hdl_sort; hdl_params; hdl_body} in

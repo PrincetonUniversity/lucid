@@ -18,5 +18,4 @@ let add_egress_handler prog : prog =
   (* add all the ingress events to egress, if they aren't already there. 
      Then ensure that there is an egress handler for every event and add one if not.  *)
   prog
-
 ;;

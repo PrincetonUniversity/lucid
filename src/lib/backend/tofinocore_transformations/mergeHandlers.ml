@@ -140,7 +140,6 @@ let merge_handlers_in_component (c:component) : component =
       hdl_input = input_event;
       hdl_output = output_event;
       hdl_body = SFlat(merged_hdl_stmt);
-      hdl_intrinsics = [];
       hdl_preallocated_vars = [];
     }  
   in

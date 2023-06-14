@@ -6,7 +6,8 @@
 
 open TofinoCore
 open BackendLogging
-
+(* Disable warnings 21, 27, and 26 *)
+[@@@ocaml.warning "-21-27-26"]
 let do_log = ref true
 let do_const_branch_vars = ref true
 
@@ -255,6 +256,7 @@ let tofinocore_normalization_new core_prog =
   let core_prog = IfToMatch.process_core core_prog in 
   let core_prog = RegularizeMemopsNew.process_core core_prog in
   let core_prog = ShareMemopInputsNew.process_core core_prog in
+  let core_prog = GeneratesNew.eliminate_generates core_prog in
   core_prog
 ;;
 
@@ -273,7 +275,7 @@ let to_tofinocore ds =
   print_endline (TofinoCorePrinting.prog_to_string core_prog);
 
   (* next, add the intrinsic metadata headers to the main handler in each component *)
-  let core_prog = AddIntrinsics.add_intrinsic_metadata core_prog in
+  (* let core_prog = AddIntrinsics.add_intrinsic_metadata core_prog in *)
   print_endline ("--- merged handlers with intrinsics ---");
   print_endline (TofinoCorePrinting.prog_to_string core_prog);
   (* <<left off here>> next: 
@@ -281,7 +283,7 @@ let to_tofinocore ds =
     2. hook back into layout 
     3. update translation to p4 ir *)
   (* tofinocore passes (from tofinocore_normalization) *)
-
+  let core_prog = tofinocore_normalization_new core_prog in
   exit 0;
   let ingress_tds, egress_tds = TofinoCoreNew.prog_to_ingress_egress_decls core_prog in
   let _, _ = ingress_tds, egress_tds in

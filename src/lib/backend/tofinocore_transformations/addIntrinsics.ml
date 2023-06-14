@@ -157,7 +157,10 @@ let egress_handler_intrinsics = [
 ;;
 
 (* add intrinsics to ingress and egress handlers and parsers *)
-let rec add_intrinsic_metadata prog = match prog with
+let rec add_intrinsic_metadata prog = 
+  prog 
+
+  (* match prog with
   | [] -> []
   | {comp_id; comp_succ; comp_decls; comp_sort}::prog -> 
     match comp_sort with
@@ -181,6 +184,6 @@ let rec add_intrinsic_metadata prog = match prog with
         comp_decls
       in
       {comp_id; comp_succ; comp_decls; comp_sort}::(add_intrinsic_metadata prog)
-    | _ -> {comp_id; comp_succ; comp_decls; comp_sort}::(add_intrinsic_metadata prog)
+    | _ -> {comp_id; comp_succ; comp_decls; comp_sort}::(add_intrinsic_metadata prog) *)
 ;;
 

@@ -55,15 +55,14 @@ let handler_to_string (handler:TofinoCoreNew.handler) =
       (params_to_string hdl_params)
       (stmt_to_string hdl_body |> indent_body)
   )
-  | HEvent({hdl_id; hdl_sort; hdl_body; hdl_input; hdl_output; hdl_intrinsics}) -> (
+  | HEvent({hdl_id; hdl_sort; hdl_body; hdl_input; hdl_output;}) -> (
     Printf.sprintf
-      "%shandle %s(intrinsics=%s) : %s -> %s \n {\n%s\n}"
+      "%shandle %s : %s -> %s \n {\n%s\n}"
       (match hdl_sort with
        | HControl -> "control "
        | HData -> ""
        | HEgress -> "@egress ")
       (id_to_string hdl_id)
-      (comma_sep intrinsic_param_to_string hdl_intrinsics)
       (id_of_event hdl_input |> id_to_string)
       (id_of_event hdl_output |> id_to_string)
       (match hdl_body with 

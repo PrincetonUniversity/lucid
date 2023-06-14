@@ -114,6 +114,7 @@
    TofinoCorePrinting
    AddEgressHandlers
    AddHandlerTypes
+   AddIntrinsics
    MergeHandlers
    TofinoCoreForms
    TofinoControl
@@ -121,9 +122,12 @@
    InlineEventVars
    SolitaryMatches
    Generates
+   GeneratesNew
    IfToMatch
    RegularizeMemops
+   RegularizeMemopsNew
    ShareMemopInputs
+   ShareMemopInputsNew
    SingleTableMatch
    ActionsToFunctions
    UniqueTableActions
