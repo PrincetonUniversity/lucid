@@ -11,7 +11,8 @@ open Collections
 open CoreSyntax
 open TofinoCoreNew
 
-(* get the ids of all event parameters with proper scoping *)
+(* get the ids of all event parameters as they would appear 
+    in the body of this event's handler *)
 let rec localids_of_event_params event = 
   match event with 
   | EventSingle({evid; evparams;}) -> 
@@ -140,6 +141,7 @@ let merge_handlers_in_component (c:component) : component =
       hdl_output = output_event;
       hdl_body = SFlat(merged_hdl_stmt);
       hdl_intrinsics = [];
+      hdl_preallocated_vars = [];
     }  
   in
   (* the new declarations are:

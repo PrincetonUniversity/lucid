@@ -247,6 +247,17 @@ let tofinocore_prep ds =
     ds
 ;;
 
+let tofinocore_normalization_new core_prog =
+  (* the final transformations before layout *)
+  (* SolitaryMatch; IfToMatch; RegularizeMemops; ShareMemopInputs;
+     Generates.eliminate; SingleTableMatch; ActionsToFunctions *)
+  let core_prog = SolitaryMatches.process_core 20 core_prog in
+  let core_prog = IfToMatch.process_core core_prog in 
+  let core_prog = RegularizeMemopsNew.process_core core_prog in
+  let core_prog = ShareMemopInputsNew.process_core core_prog in
+  core_prog
+;;
+
 (* transform into tofinocore, but don't layout yet *)
 let to_tofinocore ds =
   let core_prog = TofinoCoreNew.core_to_tofinocore ds  in
@@ -261,6 +272,15 @@ let to_tofinocore ds =
   print_endline ("--- merged component handlers ---");
   print_endline (TofinoCorePrinting.prog_to_string core_prog);
 
+  (* next, add the intrinsic metadata headers to the main handler in each component *)
+  let core_prog = AddIntrinsics.add_intrinsic_metadata core_prog in
+  print_endline ("--- merged handlers with intrinsics ---");
+  print_endline (TofinoCorePrinting.prog_to_string core_prog);
+  (* <<left off here>> next: 
+    1. eliminate generates and 
+    2. hook back into layout 
+    3. update translation to p4 ir *)
+  (* tofinocore passes (from tofinocore_normalization) *)
 
   exit 0;
   let ingress_tds, egress_tds = TofinoCoreNew.prog_to_ingress_egress_decls core_prog in

@@ -39,6 +39,9 @@ let rec event_to_string (event:TofinoCoreNew.event) =
   )
 ;;
 
+let intrinsic_param_to_string (id, ty, dirstr_opt) = 
+  Printf.sprintf "%s %s %s" (Batteries.Option.default "" dirstr_opt) (ty_to_string ty) (id_to_string id) 
+;;
 (* print handler types *)
 let handler_to_string (handler:TofinoCoreNew.handler) = 
   match handler with HParams({hdl_id; hdl_sort; hdl_params; hdl_body}) -> (
@@ -52,14 +55,15 @@ let handler_to_string (handler:TofinoCoreNew.handler) =
       (params_to_string hdl_params)
       (stmt_to_string hdl_body |> indent_body)
   )
-  | HEvent({hdl_id; hdl_sort; hdl_body; hdl_input; hdl_output}) -> (
+  | HEvent({hdl_id; hdl_sort; hdl_body; hdl_input; hdl_output; hdl_intrinsics}) -> (
     Printf.sprintf
-      "%shandle %s : %s -> %s \n {\n%s\n}"
+      "%shandle %s(intrinsics=%s) : %s -> %s \n {\n%s\n}"
       (match hdl_sort with
        | HControl -> "control "
        | HData -> ""
        | HEgress -> "@egress ")
       (id_to_string hdl_id)
+      (comma_sep intrinsic_param_to_string hdl_intrinsics)
       (id_of_event hdl_input |> id_to_string)
       (id_of_event hdl_output |> id_to_string)
       (match hdl_body with 
@@ -111,11 +115,12 @@ let td_to_string (td:td)=
       (id_to_string id)
       (params_to_string params)
       (stmt_to_string statement |> indent_body)    
-  | TDUserTy(id, field_list) -> 
+  | TDUserTy({tyid; tyfields; tyextern;}) -> 
     Printf.sprintf
-      "type %s {\n%s\n}\n"
-      (id_to_string id)
-      (line_sep (fun (id, ty) -> Printf.sprintf "%s: %s;" (id_to_string id) (ty_to_string ty)) field_list)
+      "%s type %s {\n%s\n}\n"
+      (if tyextern then "extern" else "")
+      (id_to_string tyid)
+      (line_sep (fun (id, ty) -> Printf.sprintf "%s: %s;" (id_to_string id) (ty_to_string ty)) tyfields)
 ;;
 
 let tdecl_to_string td = td_to_string td.td

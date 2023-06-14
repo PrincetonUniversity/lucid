@@ -196,7 +196,7 @@ let rec get_event_param_ty event cid : ty option =
           ) flags in
           match flagty_opts with 
           | ty::[] -> Some(ty)
-          | ty::_ -> error "[get_event_param_ty] compound id should resolve to exactly one parameter type."
+          | _::_ -> error "[get_event_param_ty] compound id should resolve to exactly one parameter type."
           | [] -> (
             (* finally, try recursing on every member event. Only one should resolve. *)
             let ty_opts = List.filter_map (fun e -> get_event_param_ty e cid) members in
@@ -315,7 +315,8 @@ let type_handler (ctx:ctx) hdl : handler * tdecl =
       hdl_body=SFlat(hdl_body');
       hdl_input=input_event;
       hdl_output=output_event; 
-      hdl_intrinsics = [];})
+      hdl_intrinsics = [];
+      hdl_preallocated_vars = [];})
     , {td=TDEvent(output_event); tdspan = Span.default; tdpragma = None;}
   | _ -> error "[addHandlerTypes.type_handler] there shouldn't be any HEvent handlers at this point"
 

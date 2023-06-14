@@ -85,6 +85,10 @@ and hbody =
   | SFlat of statement
   | SPipeline of statement list
 
+
+(* the string is direction specifier *)
+and intrinsic_params = (id * ty * string option) list
+
 (* definition of a handler using input and output events *)
 and hevent = {    
   hdl_id : id;
@@ -92,7 +96,9 @@ and hevent = {
   hdl_body : hbody;  
   hdl_input : event; 
   hdl_output : event;
-  hdl_intrinsics : params;
+  hdl_intrinsics : intrinsic_params;
+  hdl_preallocated_vars : params; 
+  (*variables that the handler can assume are allocated, but not set*)
 }
 
 and handler = 
@@ -110,7 +116,7 @@ and handler =
     parser_id : id;
     parser_params : params;
     parser_body : parser_block;
-    prs_intrinsics : params;
+    prs_intrinsics : intrinsic_params
   }
 and td =
   | TDGlobal of id * ty * exp
@@ -123,8 +129,11 @@ and td =
   | TDHandler of handler
   | TDVar of id * ty (* a variable used by multiple functions and handlers *)
   | TDOpenFunction of id * params * statement (* not an open function anymore *)
-  | TDUserTy of id * (id * ty) list (* a user-defined record type *)
-
+  | TDUserTy of {
+      tyid : id;
+      tyfields : (id * ty) list (* a user-defined record type *);
+      tyextern : bool; (* when printing p4, do we assume that this type is defined somewhere else? *)
+  }
 and tdecl =
   { td : td
   ; tdspan : sp
@@ -386,6 +395,20 @@ let core_to_tofinocore decls : prog =
 let find_component_by_id prog id = 
   List.find (fun c -> c.comp_id = id) prog
 ;;
+
+let handlers tdecls = 
+  List.filter_map 
+    (fun td -> 
+      match td.td with 
+      | TDHandler _ -> Some(td) 
+      | _ -> None) 
+  tdecls
+  ;;
+
+let handlers_of_component comp = 
+  handlers comp.comp_decls
+;;
+
 let prog_to_ingress_egress_decls prog = 
   (find_component_by_id prog (id "ingress")).comp_decls
   , (find_component_by_id prog (id "egress")).comp_decls
@@ -410,6 +433,78 @@ let id_of_generate statement =
   )
   | _ -> error "[id_of_generate] expected generate statement."
 ;;
+
+let memops tds = 
+  List.filter_map
+  (fun dec ->
+    match dec.td with 
+    | TDMemop m -> Some(m.mid, m)
+    | _ -> None)
+  tds
+;;
+
+let main_handler_of_decls decls : hevent = 
+  let handlers = handlers decls in
+  (* if there is a main handler, there should only be 1 *)
+  match handlers with 
+  | [] -> error "[main_handler_of_decls] no main handler found."
+  | [{td=TDHandler(HEvent(handler))}] -> handler
+  | _ -> error "[main_handler_of_decls] decls not in single-handler form."
+let main_handler_of_component component : hevent = 
+  let handlers = handlers_of_component component in
+  (* if there is a main handler, there should only be 1 *)
+  match handlers with 
+  | [] -> error "[main_handler_of_component] no main handler found."
+  | [{td=TDHandler(HEvent(handler))}] -> handler
+  | _ -> error "[main_handler_of_component] component not in single-handler form."
+;;
+
+let replace_main_handler_of_decls tdecls new_handler = 
+  List.map (fun tdecl -> 
+    match tdecl.td with
+    | TDHandler (HEvent _) -> 
+      {tdecl with td = TDHandler((HEvent(new_handler)))}      
+    | _ -> tdecl)
+    tdecls
+    ;;
+let replace_main_handler_of_component component (new_handler:hevent) = 
+  (* make sure there's a single main handler *)
+  let _ = main_handler_of_component component in
+  (* then replace *)
+  {component with 
+    comp_decls = List.map 
+    (fun tdecl -> 
+      match tdecl.td with
+      | TDHandler (HEvent _) -> 
+        {tdecl with td = TDHandler((HEvent(new_handler)))}      
+      | _ -> tdecl)
+    component.comp_decls}
+;;
+
+let main_of_decls tds =
+  match (main_handler_of_decls tds).hdl_body with
+  | SFlat s -> s
+  | SPipeline _ -> error "[main_of_decls] main handler is not flat."
+;;
+
+let add_shared_local component tmp_id tmp_ty = 
+  let tmp_e = var_sp (Cid.id tmp_id) tmp_ty Span.default in
+  let main_handler = main_handler_of_component component in
+  tmp_e, replace_main_handler_of_component
+    component
+    ({main_handler with 
+      hdl_preallocated_vars = 
+        main_handler.hdl_preallocated_vars @ [(tmp_id, tmp_ty)]})
+;;
+let add_shared_local tds tmp_id tmp_ty =
+  let tmp_e = var_sp (Cid.id tmp_id) tmp_ty Span.default in
+  let main_handler = main_handler_of_decls tds in
+  tmp_e, replace_main_handler_of_decls
+    tds
+    ({main_handler with 
+      hdl_preallocated_vars = 
+        main_handler.hdl_preallocated_vars @ [(tmp_id, tmp_ty)]})
+
 
 (* helper: find all the paths in the program containing statements that match 
            the filter map function. *)
