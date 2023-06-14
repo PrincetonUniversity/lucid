@@ -120,11 +120,12 @@ let enable_member_event (outer_event_prefix: id list) (outer_event : event) (inn
   | EventSingle _ -> error "[enable_member_event] single events do not have members"
 ;;
 
-(* 
-enable_member_rec [] ingress_out : (union )
-   
-*)
 let rec enable_member_rec event_prefix event member_event_cid = 
+  (* 1. enable the first component of member_event_cid in event, 
+     2. move the events id to event_prefix
+     3. 
+     
+  *)
   match member_event_cid with
   | Cid.Id(event_id) -> (
 
