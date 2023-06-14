@@ -1,40 +1,26 @@
 (* 
-
-  After this pass, generate statements only need to set multicast ID and egress port. 
-
-
-    - All event parameters are set in this pass. 
-    - event count is set (really: mc_group_a)
-    - After this pass, to translate a generate statement, you must: 
-      1. all events: set event_generated flag
-      2. port generate: set egress_port and port_evid
-      3. ports generate: create multicast group and set ports_mcid
-  *)
-
-(* 
-   the new generate elimination pass is different. It does not need to 
-invalidate any headers, because there are separate input and output events. 
-Generate elimination is now a local transformation -- you can translate a 
-generate statement by itself into a sequence of assign operations to set:
-1) output event arguments
-2) output event tag
-3) output port
-4) output multicast group
-
-ah.. but a tricky part: we need to know which input event branch we are in 
-  to properly set the output event tag.
-no. you can figure that out from the constructor used in the generate event.
-*)
-
-
+  The new generate elimination pass completely eliminates generate statements. 
+  It transforms every generate statement into assign statements that 
+  set fields in the output event of each component's main handler, 
+  and also builtin parameters of each component's main handler.
+  
+  handle ingress : ingress_in -> ingress_out {
+    case (ingress_in.tag == ingress_in.foo.num):
+        generate(ingress_out.foo_out.bar(1, 2)); 
+          --> 
+        ingress_out.tag = foo_out.num;
+        ingress_out.foo_out.bar_flag = 1;
+        ingress_out.foo_out.bar.a = 1;
+        ingress_out.foo_out.bar.b = 2;
+        ingress.internal_params.gen_ct = ingress.internal_params.gen_ct + 1;    
+  }
+  if it was a generate_port or generate_ports, gen_ct would not 
+  be incremented, but rather out_port or out_group would be set. *)
 open Batteries
 open Collections
 open CoreSyntax
 open TofinoCoreNew
 open AddHandlerTypes
-
-(* Disable warnings 21, 27, and 26 *)
-[@@@ocaml.warning "-21-27-26"]
 
 
 (* given an event constructor cid, get the cids of the event's parameters as 
@@ -56,6 +42,25 @@ let rec assigns cids args : statement =
     args 
 ;;
 
+(* get a member event *)
+let member_event event member_id =
+  let rec member_event_rec events member_id =
+    match events with
+    | [] -> None
+    | event::events -> 
+      let evid = id_of_event event in
+      if (Id.equal evid member_id)
+        then Some(event)
+        else member_event_rec events member_id        
+  in 
+  match event with
+  | EventSingle _ -> error "[member_event] a base event has no member events"
+  | EventUnion({members;})
+  | EventSet({members;}) -> (
+    match member_event_rec members member_id with
+    | None -> error "[member_event] no member with that id"
+    | Some(member_event) -> member_event)
+;;  
 
 (* get the position of the event with id eventid in the list of events *)
 let pos_of_event events eventid = 
@@ -85,29 +90,15 @@ let full_event_cid (prefix : id list) event =
 let enable_member_event (outer_event_prefix: id list) (outer_event : event) (inner_event_id : id) =
   let outer_event_cid = full_event_cid outer_event_prefix outer_event in
   match outer_event with
-  | EventSet{members; flags; active_member_ct;} -> (
+  | EventSet{members; flags;} -> (
     (* get the index of the member *)
     let member_pos = pos_of_event members inner_event_id in
     (* set the appropriate flag variable *)
     let (flag_id, flag_ty) = List.nth flags member_pos in
-    let active_member_ct_cid = Cid.concat 
-      outer_event_cid 
-      (Cid.id (fst active_member_ct)) 
-    in
-    let active_member_ct_ty = snd active_member_ct in
     let full_flag_id = Cid.concat outer_event_cid (Cid.id flag_id) in
-    let eincr_ct = 
-      op
-      Plus
-      [(var active_member_ct_cid active_member_ct_ty);
-        (vint_exp_ty 1 active_member_ct_ty)]
-      (active_member_ct_ty)  
-    in
-    sseq 
-      (sassign 
-        full_flag_id
-        (vint_exp_ty 1 flag_ty))
-      (sassign active_member_ct_cid eincr_ct)
+    (sassign 
+      full_flag_id
+      (vint_exp_ty 1 flag_ty))
   )
   | EventUnion{members; tag} -> 
     let tag_id, tag_ty = tag in
@@ -120,18 +111,34 @@ let enable_member_event (outer_event_prefix: id list) (outer_event : event) (inn
   | EventSingle _ -> error "[enable_member_event] single events do not have members"
 ;;
 
-let rec enable_member_rec event_prefix event member_event_cid = 
-  (* 1. enable the first component of member_event_cid in event, 
-     2. move the events id to event_prefix
-     3. 
-     
-  *)
-  match member_event_cid with
-  | Cid.Id(event_id) -> (
+(* enable a member of an event, recursively. 
+  so enable_member_rec [] (union outer (set foo (event inner))) foo.inner 
+  will enable foo in outer and inner in foo
+  note: member_cid should have the event's id stripped from its identifier. *)
+let rec enable_member_rec prefix event member_cid = 
+  match member_cid with
+  | Cid.Id(member_id) -> 
+    enable_member_event prefix event member_id
+  | Cid.Compound(member_id, member_cid') ->
+    let enable_outer = enable_member_event prefix event member_id in
+    let prefix' = prefix@[member_id] in
+    let event' = member_event event member_id in
+    let enable_inner = enable_member_rec prefix' event' member_cid' in
+    sseq enable_outer enable_inner 
+;;
 
-  )  
-  (*  *)
-
+(* generate a sassign to increment a variable *)
+let sincr (var_id,var_ty) = 
+  let incr_exp = 
+    op 
+      Plus
+      [
+        var (Cid.id var_id) var_ty;
+        vint_exp_ty 1 var_ty
+      ]
+      var_ty
+  in
+  sassign (Cid.id var_id) incr_exp
 ;;
 
 let eliminate = 
@@ -139,10 +146,12 @@ let eliminate =
     inherit [_] s_map as super
 
     method! visit_component _ component =
-      let output_event_opt = Some ((main_handler_of_component component).hdl_output) in 
-      super#visit_component output_event_opt component
+      (* when visiting a component, save the output event and internal params to context *)
+      let main_hdl = (main_handler_of_component component) in
+      let output_event_and_internal_params = Some(main_hdl.hdl_output, main_hdl.hdl_internal_params) in
+      super#visit_component output_event_and_internal_params component
 
-    method! visit_statement output_event_opt stmt = 
+    method! visit_statement output_event_and_internal_params_opt stmt = 
       match stmt.s with 
       | SGen(gty, exp) -> 
         print_endline ("---- [eliminate] generate statement: ----"); 
@@ -151,14 +160,23 @@ let eliminate =
           | ECall(cid, args) -> cid, args
           | _ -> error "[GeneratesNew.eliminate] event expression inside of a generate must be a constructor expression"
         in
-        let output_event = match output_event_opt with
-          | Some(output_event) -> output_event
-          | None -> error "[eliminate_generates] no output event was set. This method may have been called incorrectly."
+        let output_event, internal_params = match output_event_and_internal_params_opt with
+          | Some(output_event, internal_params) -> output_event, internal_params
+          | None -> error "[eliminate_generates] no context. visit_component must not have been called."
         in
         let event = match (base_event output_event ctor_cid) with 
           | None -> error "[eliminate_generates] could not find event constructor in output event" 
           | Some(event) -> event
         in
+        (* replace the generate statement with a sequence of assignments: *)
+        (* example: generate(ingress_out.foo_out.bar); *)
+        (* 1. enable the event *)
+        let member_cid_without_outer = match ctor_cid with
+         | Cid.Id _ -> error "[GeneratesNew.eliminate] unexpected: single event constructor"
+         | Cid.Compound(_, cid) -> cid
+        in 
+        let senable = enable_member_rec [] output_event member_cid_without_outer in
+        (* 2. set the event parameters: ingress_out.foo_out.bar.a = ...; ...*)
         (* params with full cids *)
         let params = List.map
           (fun (id, ty) -> 
@@ -166,20 +184,24 @@ let eliminate =
             )
           (params_of_single_event event)
         in
-        (* replace the generate statement with a sequence of assignments: *)
-        (* example: generate(ingress_out.foo_out.bar); *)
-        (* 1. enable the event 
-                enable_member [] ingress_out foo_out;
-                enable_member [ingress_out; foo_out] bar
-        
-        *)
-        (* 1. set the output event's tag: ingress_out.foo_out.tag = get_num ingress_out.foo_out.tag *)
-        (* 2. set the event parameters: ingress_out.foo_out.bar.a = ...; ...*)
+        let sparams = assigns (List.split params |> fst) args in
+        (* 3. [case: generate default] 
+                increment the handler's internal param: gen_ct *)
         (* 3. [case: generate_port] set the egress port: ingress_out.foo_out.bar.port = ...;*)
-        (* 3. [case: generate default and out event is set] increment the output event's active members counter: ingress_out.foo_out.active_ct += 1; *)
         (* 3. [case: generate_ports] set the group builtin: ingress_out.foo_out.bar.group = ...; *)
-        stmt
-      | _ -> super#visit_statement output_event_opt stmt
+        let sloc_ctl = match gty with
+          | GSingle(None) -> 
+            sincr internal_params.gen_ct
+          | GMulti(exp) -> 
+            sassign (Cid.id (fst internal_params.out_group)) exp
+          | GPort(exp) -> 
+            sassign (Cid.id (fst internal_params.out_port)) exp 
+          | GSingle(Some(_)) -> error "[Generates.eliminate] not sure what to do with a generate of type GSingle(Some(_))"
+        in 
+        sseq
+          (sseq senable sparams)
+          (sloc_ctl)
+      | _ -> super#visit_statement output_event_and_internal_params_opt stmt
   end
 ;;
 
@@ -189,6 +211,4 @@ let eliminate_generates (prog : prog) : prog =
   print_endline "[eliminate_generates] pass started";
   let prog = eliminate#visit_prog None prog in
   print_endline "[eliminate_generates] pass finished";
-  exit 1;
-
   prog

@@ -141,6 +141,11 @@ let merge_handlers_in_component (c:component) : component =
       hdl_output = output_event;
       hdl_body = SFlat(merged_hdl_stmt);
       hdl_preallocated_vars = [];
+      hdl_internal_params = {
+        out_port = Id.create "out_port", ty (TInt 9);
+        gen_ct  = (Id.create "gen_ct", ty (TInt 16));
+        out_group = (Id.create "out_group", ty TGroup); 
+      };      
     }  
   in
   (* the new declarations are:

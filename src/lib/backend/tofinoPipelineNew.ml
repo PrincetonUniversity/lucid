@@ -176,6 +176,106 @@ let tofinocore_normalization is_ingress eliminate_generates tds =
   tds
 ;;
 
+
+(* Translate the program into the new TofinoCore. This: 
+   - splits the program (ingress, egress, parser(s), control program (eventually))
+   - puts the data plane components (ingress and egress) into atomic operation form *)
+let tofinocore_prep ds = 
+  (* 1. split into control and data plane components. *)
+  let control_component_support = false in
+  let _, data_ds = if (control_component_support)
+    then TofinoControl.split_program 196 9 ds
+    else ([], ds) 
+  in
+  (* 2. put all data plane code into atomic op form. *)
+  let data_ds = atomic_op_form data_ds in
+  let ds = data_ds in
+  (* at this point:
+      1. all the non-control flow statements in the program are
+         either table_matches or atomic operations that can
+         fit into a single ALU or SALU.
+      2. all the control flow statements are either:
+          1) match statements
+          2) if statements where the expression is in a
+             DNF form that is easy to convert into a match statement. *)
+
+  (* Statements and variable names don't change much beyond this point,
+     so we give everything a unique identifier. *)
+    let ds = UniqueSpans.make_unique_spans ds in
+    let ds = UniqueIds.make_var_names_unique ds in
+    print_if_debug ds;
+    ds
+;;
+
+(* transform into tofinocore, but don't layout yet *)
+let to_tofinocore ds =
+  let core_prog = TofinoCoreNew.core_to_tofinocore ds  in
+  print_endline ("--- initial tofinocore program ---");
+  print_endline (TofinoCorePrinting.prog_to_string core_prog);
+
+  let core_prog = AddHandlerTypes.type_handlers core_prog in
+  print_endline ("--- transformed handlers into event-function form ---");
+  print_endline (TofinoCorePrinting.prog_to_string core_prog);
+
+  let core_prog = MergeHandlers.merge_handlers core_prog in
+  print_endline ("--- merged component handlers ---");
+  print_endline (TofinoCorePrinting.prog_to_string core_prog);
+
+  core_prog
+;;
+(* do a few more transformations in tofinocore. 
+   most of these could be done earlier, except: 
+    - ShareMemopInputs needs shared locals
+    - SingleTableMatch needs a merged / main event handler *)
+let tofinocore_normalization_new core_prog =
+  (* the final transformations before layout *)
+  (* SolitaryMatch; IfToMatch; RegularizeMemops; ShareMemopInputs;
+     Generates.eliminate; SingleTableMatch; ActionsToFunctions *)
+  let core_prog = SolitaryMatches.process_core 20 core_prog in
+  let core_prog = IfToMatch.process_core core_prog in 
+  let core_prog = RegularizeMemopsNew.process_core core_prog in
+  let core_prog = ShareMemopInputsNew.process_core core_prog in
+  let core_prog = GeneratesNew.eliminate_generates core_prog in
+  let core_prog = SingleTableMatch.process_core core_prog in
+  let core_prog = ActionsToFunctionsNew.process_core core_prog in
+  core_prog
+;;
+
+
+(* layout the components of a tofinocore prog *)
+let layout_new old_layout (prog : TofinoCoreNew.prog) build_dir_opt = 
+  (* we want to do the layout pipeline for each component *)
+  let layout_component (comp:TofinoCoreNew.component) = 
+    let cn = comp.comp_id |> Id.name in
+    let logging_prefix = !BackendLogging.graphLogDir ^ "/" ^ cn in 
+    (* 1. compute control flow graph for main handler *)
+    let cfg = CoreCfg.cfg_of_component_main comp.comp_decls in
+    CoreCfg.print_cfg ( logging_prefix ^ "_cfg.dot") cfg;
+    (* 2. compute control dependency graph *)
+    let cdg = CoreCdg.to_control_dependency_graph cfg in
+    CoreCfg.print_cfg ( logging_prefix ^ "_cdg.dot") cfg;
+    (* 3. compute data flow / dependency graph *)
+    let dfg = CoreDfg.process cdg in
+    CoreDfg.print_dfg (logging_prefix ^ "/dfg.dot") dfg;
+    (* 4. lay out the dfg on a pipeline of match stmt seqs *)
+    print_endline "-------- layout ----------";
+    let hdl_body = if old_layout
+      then CoreLayoutOld.process_new comp.comp_decls dfg 
+      else CoreLayout.process_new comp.comp_decls dfg 
+    in
+    let main_handler = TofinoCoreNew.main_handler_of_decls comp.comp_decls in
+    let main_handler' = {main_handler with hdl_body = TofinoCoreNew.SPipeline(hdl_body);} in
+    let comp = TofinoCoreNew.replace_main_handler_of_component comp main_handler' in 
+    (* TODO: missing some IR dumps here *)
+    (* finally, run the actionform and dedup transformation passes *)
+    let comp = ActionFormNew.process_comp comp in
+    (* 6. deduplicate actions that contain certain expensive operations. *)
+    let comp = DedupNew.process_comp comp in
+    comp 
+  in
+  List.map layout_component prog
+;;
+
 (* transform the tofinocore program into a
    straightline of match statements *)
 let layout old_layout tds build_dir_opt =
@@ -217,82 +317,6 @@ let layout old_layout tds build_dir_opt =
   tds
 ;;
 
-
-(* Translate the program into the new TofinoCore. This: 
-   - splits the program (ingress, egress, parser(s), control program (eventually))
-   - puts the data plane components (ingress and egress) into atomic operation form *)
-let tofinocore_prep ds = 
-  (* 1. split into control and data plane components. *)
-  let control_component_support = false in
-  let _, data_ds = if (control_component_support)
-    then TofinoControl.split_program 196 9 ds
-    else ([], ds) 
-  in
-  (* 2. put all data plane code into atomic op form. *)
-  let data_ds = atomic_op_form data_ds in
-  let ds = data_ds in
-  (* at this point:
-      1. all the non-control flow statements in the program are
-         either table_matches or atomic operations that can
-         fit into a single ALU or SALU.
-      2. all the control flow statements are either:
-          1) match statements
-          2) if statements where the expression is in a
-             DNF form that is easy to convert into a match statement. *)
-
-  (* Statements and variable names don't change much beyond this point,
-     so we give everything a unique identifier. *)
-    let ds = UniqueSpans.make_unique_spans ds in
-    let ds = UniqueIds.make_var_names_unique ds in
-    print_if_debug ds;
-    ds
-;;
-
-let tofinocore_normalization_new core_prog =
-  (* the final transformations before layout *)
-  (* SolitaryMatch; IfToMatch; RegularizeMemops; ShareMemopInputs;
-     Generates.eliminate; SingleTableMatch; ActionsToFunctions *)
-  let core_prog = SolitaryMatches.process_core 20 core_prog in
-  let core_prog = IfToMatch.process_core core_prog in 
-  let core_prog = RegularizeMemopsNew.process_core core_prog in
-  let core_prog = ShareMemopInputsNew.process_core core_prog in
-  let core_prog = GeneratesNew.eliminate_generates core_prog in
-  core_prog
-;;
-
-(* transform into tofinocore, but don't layout yet *)
-let to_tofinocore ds =
-  let core_prog = TofinoCoreNew.core_to_tofinocore ds  in
-  print_endline ("--- initial tofinocore program ---");
-  print_endline (TofinoCorePrinting.prog_to_string core_prog);
-
-  let core_prog = AddHandlerTypes.type_handlers core_prog in
-  print_endline ("--- transformed handlers into event-function form ---");
-  print_endline (TofinoCorePrinting.prog_to_string core_prog);
-
-  let core_prog = MergeHandlers.merge_handlers core_prog in
-  print_endline ("--- merged component handlers ---");
-  print_endline (TofinoCorePrinting.prog_to_string core_prog);
-
-  (* next, add the intrinsic metadata headers to the main handler in each component *)
-  (* let core_prog = AddIntrinsics.add_intrinsic_metadata core_prog in *)
-  print_endline ("--- merged handlers with intrinsics ---");
-  print_endline (TofinoCorePrinting.prog_to_string core_prog);
-  (* <<left off here>> next: 
-    1. eliminate generates and 
-    2. hook back into layout 
-    3. update translation to p4 ir *)
-  (* tofinocore passes (from tofinocore_normalization) *)
-  let core_prog = tofinocore_normalization_new core_prog in
-  exit 0;
-  let ingress_tds, egress_tds = TofinoCoreNew.prog_to_ingress_egress_decls core_prog in
-  let _, _ = ingress_tds, egress_tds in
-  let ingress_tds = [] in let egress_tds = [] in 
-  let ingress_tds = tofinocore_normalization true true ingress_tds in
-  let egress_tds = tofinocore_normalization false true egress_tds in 
-  ingress_tds, egress_tds
-;;
-
 (* layout the program then translate into p4 IR. *)
 let compile_dataplane old_layout ingress_tds egress_tds portspec build_dir =
   let ingress_tds = layout old_layout ingress_tds (Some build_dir) in
@@ -327,12 +351,20 @@ let compile old_layout ds portspec build_dir ctl_fn_opt =
   let ds = tofinocore_prep ds in
 
   (* translate into TofinoCore IR *)
-  let ingress_tds, egress_tds = to_tofinocore ds in
+  let core_prog = to_tofinocore ds in
+  (* some more transformations *)
+  let core_prog = tofinocore_normalization_new core_prog in
+  (* now do layout, then put code into actionform and dedup actions *)
+  let core_prog = layout_new old_layout core_prog in
 
-  (* layout the program then translate into p4 IR. *)
-  let tofino_prog = compile_dataplane old_layout ingress_tds egress_tds portspec build_dir in
+  (* finally, translate into the P4 ir *)
+  let tofino_prog = CoreToP4TofinoNew.translate_core portspec core_prog in
+  let _ = tofino_prog in 
+  (* <<left off here>> *)
 
-  (* generate the python event library *)
+  error "not done"
+
+(*   (* generate the python event library *)
   let py_eventlib =
     if Cmdline.cfg.serverlib then PyEventLib.coresyntax_to_pyeventlib ds else ""
   in
@@ -345,7 +377,7 @@ let compile old_layout ds portspec build_dir ctl_fn_opt =
   let p4 = P4TofinoPrinting.p4_of_prog tofino_prog in
   let py_ctl = ControlPrinter.pyctl_of_prog tofino_prog ctl_fn_opt in
   let cpp_ctl = ControlPrinter.cppctl_of_prog tofino_prog in
-  p4, cpp_ctl, py_ctl, py_eventlib, globals_directory
+  p4, cpp_ctl, py_ctl, py_eventlib, globals_directory *)
 ;;
 
 (* DEPRECIATED compile a program with a single handler and only 1 generate

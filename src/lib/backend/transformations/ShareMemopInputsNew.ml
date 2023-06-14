@@ -27,6 +27,7 @@ let error s = raise (Error s)
 
 (* get the subset of variables that are parameters of the program *)
 
+(* TODO: what about shared locals?  *)
 let var_params ds (vars : Cid.t list) = 
   let params = 
     (main_handler_of_decls ds).hdl_input

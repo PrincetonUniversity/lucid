@@ -130,6 +130,7 @@
    ShareMemopInputsNew
    SingleTableMatch
    ActionsToFunctions
+   ActionsToFunctionsNew
    UniqueTableActions
    MatchAlgebra
    CoreCfg
@@ -140,10 +141,14 @@
    CoreLayoutOld
    CoreLayout
    ActionForm
+   ActionFormNew
    Dedup
+   DedupNew
    P4TofinoSyntax
    CoreToP4TofinoHeaders
+   CoreToP4TofinoHeadersNew
    CoreToP4Tofino
+   CoreToP4TofinoNew
    P4TofinoPrinting
    P4TofinoGlobalDirectory
    ControlPrinter

@@ -104,7 +104,6 @@ let derive_output_event (ctx:ctx) (hdl_id : id) (hdl_body:statement) : event =
       flags = List.map 
         (fun event -> 
           (Id.prepend_string "flag_" (id_of_event event), ty (TInt(1)))) events;
-      active_member_ct = (Id.create "num_active", ty (TInt 16));
       })
   in
   eventset
@@ -324,7 +323,13 @@ let type_handler (ctx:ctx) hdl : handler * tdecl =
       hdl_body=SFlat(hdl_body');
       hdl_input=input_event;
       hdl_output=output_event; 
-      hdl_preallocated_vars = [];})
+      hdl_preallocated_vars = [];
+      hdl_internal_params = {
+        out_port = Id.create "out_port", ty (TInt 9);
+        gen_ct  = (Id.create "gen_ct", ty (TInt 16));
+        out_group = (Id.create "out_group", ty TGroup); 
+      };
+    })
     , {td=TDEvent(output_event); tdspan = Span.default; tdpragma = None;}
   | _ -> error "[addHandlerTypes.type_handler] there shouldn't be any HEvent handlers at this point"
 

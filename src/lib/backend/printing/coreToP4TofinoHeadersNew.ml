@@ -1,10 +1,10 @@
 (* tofinoCore --> P4 Tofino Syntax
   headers and parsing *)
-open TofinoCoreNew
+open TofinoCore
 open InterpHelpers
 open P4TofinoSyntax
 module T = P4TofinoSyntax 
-module C = TofinoCoreNew
+module C = TofinoCore
 module CS = CoreSyntax
 (* open P4TofinoParsing *)
 open P4TofinoPrinting

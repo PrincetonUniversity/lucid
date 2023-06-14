@@ -537,3 +537,77 @@ let process tds =
 ;;
 
 (**** end new table call code ****)
+
+(* updated methods for new tofinocore *)
+open TofinoCoreNew
+
+
+let rec tables_in_prog (tds:tdecls) = 
+  match tds with 
+  | [] -> []
+  | {td=TDGlobal(_, _, {e=ETableCreate(tbl_def); _}); _}::tds' -> 
+    tbl_def::(tables_in_prog tds')
+  | _::tds' -> tables_in_prog tds'
+
+let tables_matched_in_prog (tds:tdecls) =
+  let tbl_ids = ref [] in
+  let v =
+    object
+      inherit [_] s_iter as super
+      method! visit_tbl_match _ tm =
+        tbl_ids := (tm.tbl |> CoreSyntax.exp_to_id)::(!tbl_ids)
+    end
+  in
+  v#visit_tdecls () tds;
+  !tbl_ids |> MiscUtils.unique_list_of
+;;
+
+
+let tables_defined_and_used_in_prog (tds : tdecls) =
+  let defined_tbls = tables_in_prog tds in
+  let used_ids = tables_matched_in_prog tds in
+  let defined_and_used_tbls = List.filter
+    (fun tdef -> List.exists (fun id -> id = tdef.tid) used_ids)
+    defined_tbls
+  in
+  defined_and_used_tbls
+(*   if (List.length defined_tbls) <> (List.length defined_and_used_tbls)
+  then (error "some declared tables are not used in the program!")
+  else (defined_and_used_tbls)
+ *)
+
+;;
+(* this pass produces buggy code when tables are not used in any event *)
+let process_core_tds (tds:tdecls) =
+(*   print_endline("starting single table match transformation...");
+  print_endline("----- prog -----");
+  print_endline (TC.tdecls_to_string tds);
+ *)  
+  let tbls = tables_defined_and_used_in_prog tds in 
+  let main = main_handler_of_decls tds in
+  let main_body = match main.hdl_body with
+    | SFlat(stmt) -> stmt
+    | _ -> error "[SingleTableMatch] this should be run before layout"
+  in  
+  (* combine all the table matches for one table at a time *)
+  let main_body', tbl_iovars = List.fold_left
+    (fun (main_body, tbl_iovars) tbl -> 
+      let main_body, new_iovars = process_table main_body tbl in
+      main_body, tbl_iovars@new_iovars)
+    (main_body, [])
+    tbls
+  in
+  let main' =  {main with 
+    hdl_body = SFlat(main_body');
+    hdl_preallocated_vars = (main.hdl_preallocated_vars@tbl_iovars);
+    } 
+  in
+  let tds' = replace_main_handler_of_decls tds main'  in
+  tds'
+;;
+
+let process_core core_prog = 
+  List.map 
+    (fun comp -> {comp with comp_decls = process_core_tds comp.comp_decls})
+    core_prog
+;;

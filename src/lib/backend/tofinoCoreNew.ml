@@ -70,11 +70,6 @@ and event =
     evnum : int option; 
     evsort : event_sort; 
     evparams : params;
-    (* internal fields: where is the event going. 
-       outport should be a TInt, 
-       outgroup should be a TGroup*)
-    evoutport : (id * ty); 
-    evoutgroup : (id * ty);
     }
   (* an event union is a union of events, with each event having a tag. *)
   | EventUnion  of {
@@ -89,8 +84,6 @@ and event =
     members: event list;
     (* active members: an internal field listing the subset of members that are active *)
     flags : (id * ty) list;
-    (* active member ct: internal field, incremented by generate. *)
-    active_member_ct : (id * ty); (* number of active members in the eventset *)
     subsets: (id list) list; (*optional metadata for optimization: 
       the subsets of members that the eventset may hold.  *)
   }
@@ -104,7 +97,7 @@ and hbody =
 (* the string is direction specifier *)
 and intrinsic_params = (id * ty * string option) list
 
-and hctl_params = {
+and hinternal_params = {
   out_port : (id * ty);
   gen_ct : (id * ty);
   out_group : (id * ty);
@@ -117,6 +110,7 @@ and hevent = {
   hdl_body : hbody;  
   hdl_input : event; 
   hdl_output : event;
+  hdl_internal_params : hinternal_params;
   (* hdl_intrinsics : intrinsic_params;  *)
     (* hdl_intrinsics are polluting the IR and have no semantic meaning.
         We should just have fixed fields for relevant output: 
@@ -384,8 +378,6 @@ let decl_to_tdecl (decl:decl) =
       evnum; 
       evsort; 
       evparams; 
-      evoutgroup=(Id.create "out_group", ty TGroup);
-      evoutport = (Id.create "out_port", ty (TInt 9));
       } in
     { td = TDEvent event; tdspan = decl.dspan; tdpragma = decl.dpragma }
   | DHandler (hdl_id, hdl_sort, (hdl_params, hdl_body)) ->
@@ -480,6 +472,28 @@ let memops tds =
   tds
 ;;
 
+(* returns assoc list: (arrayid : (slot width, num slots)) list *)
+let array_dimensions tds =
+  List.filter_map
+    (fun dec ->
+      match dec.td with
+      | TDGlobal
+          ( id
+          , { raw_ty = TName (ty_cid, sizes, true); _ }
+          , { e = ECall (_, num_slots :: _) } ) ->
+        (match Cid.names ty_cid |> List.hd with
+         | "Array" ->
+           let num_slots = InterpHelpers.int_from_exp num_slots in
+           Some (id, (List.hd sizes, num_slots))
+         | "PairArray" ->
+           let num_slots = InterpHelpers.int_from_exp num_slots in
+           Some (id, (2 * List.hd sizes, num_slots))
+         | _ -> None)
+      | _ -> None)
+    tds
+;;
+
+
 let main_handler_of_decls decls : hevent = 
   let handlers = handlers decls in
   (* if there is a main handler, there should only be 1 *)
@@ -487,6 +501,7 @@ let main_handler_of_decls decls : hevent =
   | [] -> error "[main_handler_of_decls] no main handler found."
   | [{td=TDHandler(HEvent(handler))}] -> handler
   | _ -> error "[main_handler_of_decls] decls not in single-handler form."
+
 let main_handler_of_component component : hevent = 
   let handlers = handlers_of_component component in
   (* if there is a main handler, there should only be 1 *)
@@ -496,6 +511,11 @@ let main_handler_of_component component : hevent =
   | _ -> error "[main_handler_of_component] component not in single-handler form."
 ;;
 
+let main_body_of_decls decls : hbody = 
+  (main_handler_of_decls decls).hdl_body
+;;
+
+
 let replace_main_handler_of_decls tdecls new_handler = 
   List.map (fun tdecl -> 
     match tdecl.td with
@@ -503,7 +523,8 @@ let replace_main_handler_of_decls tdecls new_handler =
       {tdecl with td = TDHandler((HEvent(new_handler)))}      
     | _ -> tdecl)
     tdecls
-    ;;
+;;
+
 let replace_main_handler_of_component component (new_handler:hevent) = 
   (* make sure there's a single main handler *)
   let _ = main_handler_of_component component in
