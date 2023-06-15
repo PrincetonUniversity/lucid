@@ -96,6 +96,7 @@ let derive_output_event (ctx:ctx) (hdl_id : id) (hdl_body:statement) : event =
       evid = Id.append_string "_egress_output" hdl_id;
       members = events;
       tag = (Id.create "tag", ty (TInt(16))  );
+      member_nums = List.mapi (fun i _ -> 1+i) events;
       })
     else EventSet({
       evid = Id.append_string "_ingress_output" hdl_id;

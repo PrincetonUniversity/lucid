@@ -71,47 +71,63 @@ let merge_handlers_in_component (c:component) : component =
     )
   in
   let (handlers, non_handler_decls) = extract_handlers c.comp_decls [] [] in
+  let handlers = List.rev handlers in 
   (* construct the input and output events *)
   let input_evid = Id.append_string "_input" c.comp_id in
   let output_evid = Id.append_string "_output" c.comp_id in
   let hdl_evid = Id.append_string "_hdl" c.comp_id in
   let selector_tag = Id.create "tag" in
   
+  (* generate input and output events. Members are the 
+     inputs and outputs of each event *)
+  let input_members, output_members = 
+    List.map (fun h -> h.hdl_input, h.hdl_output) handlers
+    |> List.split
+  in 
   let input_event = EventUnion({
     evid = input_evid;
-    members = List.map 
-      (fun h -> 
-        if h.hdl_sort = c.comp_sort 
-          then h.hdl_input 
-          else error "[merge_handlers_in_tdecls] handler sort mismatch]") 
-      handlers;
+    (* the members of the merged input event are all the 
+       input events of the non-merged handlers. *)
+    members = input_members;
     tag = (selector_tag, ty (TInt 16));
+    member_nums = List.mapi (fun i _ -> 1+i) input_members;
     }) 
   in
   let output_event = EventUnion({
     evid = output_evid;
-    members = List.map
-      (fun h -> 
-        if h.hdl_sort = c.comp_sort 
-          then h.hdl_output
-          else error "[merge_handlers_in_tdecls] handler sort mismatch]")
-      handlers; 
+    members = output_members; 
     tag = (selector_tag, ty (TInt 16));
+    member_nums = List.mapi (fun i _ -> 1+i) output_members;
     })
   in
   (* construct the new handler's body -- a match statement
-     that branches on the input event's selector tag. *)
+     that branches on the input event's selector tag.
+     The first statement sets the output event's selector tag. 
+     As an optimization, we might only want to do that if the 
+     body of that branch has a generate. *)
   let merged_hdl_stmt = smatch
     [var (Cid.id selector_tag) (ty (TInt 16))] 
     (
       List.mapi
       (fun i h -> 
-        let tag_val = Z.of_int (i + 1) in
+        let tag_val = i + 1 in 
+        (* the first statement of this branch sets the tag of 
+           the output event to match the input event. *)
+        let tag_param = match output_event with
+          | EventUnion({tag}) -> tag
+          | _ -> error "[mergeHandlers] output event is not a union"
+        in
+        let tag_cid = Cid.create_ids [output_evid; (fst tag_param)] in
+        let tag_val_exp = vint_exp_ty (i + 1) (snd tag_param) in
+        let tag_stmt = 
+          sassign tag_cid tag_val_exp 
+        in
+        
         let stmt = match h.hdl_body with
-          | SFlat(stmt) -> stmt
+          | SFlat(stmt) -> sseq tag_stmt stmt
           | _ -> error "[merge_handlers_in_tdecls] cannot merge handlers after pipelining"        
         in
-        ([PNum (tag_val)], stmt))
+        ([PNum (Z.of_int tag_val)], stmt))
       handlers      
     )
   in

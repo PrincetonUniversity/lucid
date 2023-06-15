@@ -77,6 +77,7 @@ and event =
     members: event list;
     (* tag is an internal field of type TEvent that holds the active event's id *)
     tag : (id * ty);
+    member_nums : int list; (*store the tag values of the members *)
   }
   (* an event set is a set of optional events *)
   | EventSet of {
@@ -135,12 +136,12 @@ and handler =
   (* a handler that operates on events instead of parameters -- 
      all handlers are tranformed into this form then merged together *)
   | HEvent of hevent
-  and parser = {
-    parser_id : id;
-    parser_params : params;
-    parser_body : parser_block;
-    prs_intrinsics : intrinsic_params
-  }
+
+(* the events are the events that the parser may generate *)
+(* and parser = 
+  | PMain of parser_block * event list
+  | PCalled of parser_block * event list *)
+
 and td =
   | TDGlobal of id * ty * exp
   | TDMemop of memop
@@ -447,6 +448,18 @@ let id_of_event event =
   | EventSingle {evid;} -> evid
   | EventUnion {evid;} -> evid
   | EventSet {evid;} -> evid
+;;
+let etag event = 
+  match event with 
+  | EventUnion{tag;} -> tag
+  | _ -> error "[etag] not a union event, so no tag"
+;;
+
+let etagged_members event = 
+  match event with 
+  | EventUnion{members; member_nums;} -> 
+    List.combine member_nums members
+  | _ -> error "[etagged_members] not a union, so no tagged members"
 ;;
 
 let eventset_flag_id_of_member event = 

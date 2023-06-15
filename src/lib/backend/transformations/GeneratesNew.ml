@@ -62,6 +62,11 @@ let member_event event member_id =
     | Some(member_event) -> member_event)
 ;;  
 
+let strip_outer_id cid = 
+  match cid with
+  | Cid.Id(id) -> Cid.Id(id)
+  | Cid.Compound(_, cid') -> cid'
+;;
 (* get the position of the event with id eventid in the list of events *)
 let pos_of_event events eventid = 
   let rec pos_of_event' events eventid pos = 
@@ -96,18 +101,20 @@ let enable_member_event (outer_event_prefix: id list) (outer_event : event) (inn
     (* set the appropriate flag variable *)
     let (flag_id, flag_ty) = List.nth flags member_pos in
     let full_flag_id = Cid.concat outer_event_cid (Cid.id flag_id) in
-    (sassign 
+    let res = (sassign 
       full_flag_id
-      (vint_exp_ty 1 flag_ty))
+      (vint_exp_ty 1 flag_ty)) in
+    res
   )
   | EventUnion{members; tag} -> 
     let tag_id, tag_ty = tag in
     let full_tag_id = Cid.concat outer_event_cid (Cid.id tag_id) in
     let enewtagval = (vint_exp_ty (num_of_event members inner_event_id) (tag_ty)) in
-    sassign
+    let res = sassign
       full_tag_id
       enewtagval
-
+    in
+    res
   | EventSingle _ -> error "[enable_member_event] single events do not have members"
 ;;
 
@@ -118,12 +125,14 @@ let enable_member_event (outer_event_prefix: id list) (outer_event : event) (inn
 let rec enable_member_rec prefix event member_cid = 
   match member_cid with
   | Cid.Id(member_id) -> 
-    enable_member_event prefix event member_id
+    let res = enable_member_event prefix event member_id in
+    res
   | Cid.Compound(member_id, member_cid') ->
     let enable_outer = enable_member_event prefix event member_id in
-    let prefix' = prefix@[member_id] in
+    let prefix' = prefix@[id_of_event event] in
     let event' = member_event event member_id in
     let enable_inner = enable_member_rec prefix' event' member_cid' in
+    (* print_endline ("[enable_member_rec] inner statement:"); *)
     sseq enable_outer enable_inner 
 ;;
 
@@ -154,8 +163,8 @@ let eliminate =
     method! visit_statement output_event_and_internal_params_opt stmt = 
       match stmt.s with 
       | SGen(gty, exp) -> 
-        print_endline ("---- [eliminate] generate statement: ----"); 
-        print_endline (CorePrinting.statement_to_string stmt);
+        (* print_endline ("---- [eliminate] generate statement: ----");  *)
+        (* print_endline (CorePrinting.statement_to_string stmt); *)
         let ctor_cid, args = match exp.e with
           | ECall(cid, args) -> cid, args
           | _ -> error "[GeneratesNew.eliminate] event expression inside of a generate must be a constructor expression"
@@ -171,13 +180,19 @@ let eliminate =
         (* replace the generate statement with a sequence of assignments: *)
         (* example: generate(ingress_out.foo_out.bar); *)
         (* 1. enable the event *)
-        let member_cid_without_outer = match ctor_cid with
-         | Cid.Id _ -> error "[GeneratesNew.eliminate] unexpected: single event constructor"
-         | Cid.Compound(_, cid) -> cid
-        in 
-        let senable = enable_member_rec [] output_event member_cid_without_outer in
+        let member_cid_without_outer = strip_outer_id ctor_cid in
+        (* let senable = enable_member_rec [] output_event member_cid_without_outer in *)
+        (* actually, the outermost member has already been enabled (e.g., ingress_out.foo_out)
+           when events / handlers were merged. So we want to start 1 level deeper. *)
+        let prefix = [id_of_event output_event] in
+        let event_id, member_cid = match member_cid_without_outer with
+          | Cid.Id(_) -> error "cid for event constructor used in generate has fewer ids than expected"
+          | Cid.Compound(id, cid) -> id, cid
+        in
+        let inner_event = member_event output_event event_id in
+        let senable = enable_member_rec prefix inner_event member_cid in
         (* 2. set the event parameters: ingress_out.foo_out.bar.a = ...; ...*)
-        (* params with full cids *)
+        (* note we go back to the _outer_ event! *)
         let params = List.map
           (fun (id, ty) -> 
             Cid.concat ctor_cid (Cid.id id), ty
@@ -195,6 +210,12 @@ let eliminate =
           | GMulti(exp) -> 
             sassign (Cid.id (fst internal_params.out_group)) exp
           | GPort(exp) -> 
+            (* when we generate a port event, we want to set the replica id
+               to the index of the event in the output eventset... *)
+            (* okay... so wait... at a generate, how do we know 
+               all the possible indices? Its because an index corresponds to 
+               an event type. So... find the index for this event type 
+               in this set and assign that value to RID. *)
             sassign (Cid.id (fst internal_params.out_port)) exp 
           | GSingle(Some(_)) -> error "[Generates.eliminate] not sure what to do with a generate of type GSingle(Some(_))"
         in 
@@ -208,7 +229,7 @@ let eliminate =
 
 
 let eliminate_generates (prog : prog) : prog = 
-  print_endline "[eliminate_generates] pass started";
+  (* print_endline "[eliminate_generates] pass started"; *)
   let prog = eliminate#visit_prog None prog in
-  print_endline "[eliminate_generates] pass finished";
+  (* print_endline "[eliminate_generates] pass finished"; *)
   prog

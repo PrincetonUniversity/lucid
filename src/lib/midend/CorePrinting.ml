@@ -321,16 +321,24 @@ let memop_to_string body =
       (print_cr @@ body.ret)
 ;;
 
+let indent_body s = 
+  String.split_on_char '\n' s
+  |> List.map (fun s -> "  " ^ s)
+  |> String.concat "\n"
+;;
+
 let rec parser_action_to_string action =
   match action with
   | PSkip ty -> Printf.sprintf "skip %s;" (ty_to_string ty)
   | PRead (id, ty) ->
-    Printf.sprintf "read %s : %s;" (id_to_string id) (ty_to_string ty)
+    Printf.sprintf "read %s : %s;" (cid_to_string id) (ty_to_string ty)
   | PAssign (id, exp) ->
-    Printf.sprintf "%s = %s;" (id_to_string id) (exp_to_string exp)
+    Printf.sprintf "%s = %s;" (cid_to_string id) (exp_to_string exp)
+  | PPeek (id, ty) -> 
+    Printf.sprintf "peek %s : %s;" (cid_to_string id) (ty_to_string ty)
 
 and parser_branch_to_string (pat, block) =
-  Printf.sprintf "| %s -> %s" (pat_to_string pat) (parser_block_to_string block)
+  Printf.sprintf "| %s -> {\n%s}" (comma_sep pat_to_string pat) (parser_block_to_string block |> indent_body)
 
 and parser_step_to_string step =
   match step with
@@ -338,8 +346,8 @@ and parser_step_to_string step =
   | PCall e -> Printf.sprintf "%s;" (exp_to_string e)
   | PMatch (e, branches) ->
     Printf.sprintf
-      "match %s with %s"
-      (exp_to_string e)
+      "match %s with\n%s"
+      (comma_sep exp_to_string e)
       (concat_map "\n" parser_branch_to_string branches)
   | PDrop -> "drop"
 

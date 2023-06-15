@@ -137,46 +137,6 @@ let atomic_op_form ds =
   ds
 ;;
 
-(* normalize code and eliminate compile-time abstractions that are easier
-   to deal with in tofinocore syntax *)
-let tofinocore_normalization is_ingress eliminate_generates tds =
-  cprint_prog "----------- initial tofinoCore program------- " tds;
-  (* 1. tag match statements with many cases as solitary,
-          which means they get placed into their own table.
-          This could just as well be in coreSyntax.  *)
-  let tds = SolitaryMatches.process tds 20 in
-  (* 2. convert if statements to match statements -- this could just as well be in coreSyntax *)
-  let tds = IfToMatch.process tds in
-  cprint_prog "----------- after IfToMatch ------- " tds;
-  (* 3. regularize memop and Array update call formats -- could be in CoreSyntax *)
-  let tds = RegularizeMemops.process tds in
-  cprint_prog "----------- after RegularizeMemops ------- " tds;
-  (* 4. ensure that the memops to each register only reference two input variables.
-          We do this in TofinoCore because CoreSyntax doesn't have "locals" that can be globally scoped. *)
-  (* TofinoCore.dump_prog (!BackendLogging.irLogDir ^ "before_reg_alloc.tofinocore.dpt") tds; *)
-  let tds = ShareMemopInputs.process tds in
-  cprint_prog "----------- after ShareMemopInputs ------- " tds;
-  (* 5. partially eliminate generate statements. Unclear if this could be done in CoreSyntax. *)
-  let tds = Generates.eliminate is_ingress tds in
-  cprint_prog "----------- after Generates.eliminate ------- " tds;
-  TofinoCore.dump_prog
-    (!BackendLogging.irLogDir ^ "/initial.before_layout.dpt")
-    tds;
-  (* 6. transform code so that there is only 1 match
-          statement in the entire program for each table.
-          This has to be in TofinoCore because it is an operation on a merged control flow. *)
-  let tds = SingleTableMatch.process tds in
-  (* WARNING: SingleTableMatch must come after generates.eliminate, because it
-                changes the form of the program. *)
-  cprint_prog "----------- after SingleTableMatch ------- " tds;
-  (* 7. convert actions into functions --
-          this has to be in TofinoCore because there are no functions in coreSyntax =(  *)
-  let tds = ActionsToFunctions.process tds in
-  cprint_prog "----------- after ActionsToFunctions ------- " tds;
-  tds
-;;
-
-
 (* Translate the program into the new TofinoCore. This: 
    - splits the program (ingress, egress, parser(s), control program (eventually))
    - puts the data plane components (ingress and egress) into atomic operation form *)
@@ -231,11 +191,16 @@ let tofinocore_normalization_new core_prog =
   (* the final transformations before layout *)
   (* SolitaryMatch; IfToMatch; RegularizeMemops; ShareMemopInputs;
      Generates.eliminate; SingleTableMatch; ActionsToFunctions *)
+  let core_prog = GeneratesNew.eliminate_generates core_prog in
+  print_endline ("----- after generate elimination -----");
+  TofinoCorePrinting.prog_to_string core_prog |> print_endline;
   let core_prog = SolitaryMatches.process_core 20 core_prog in
   let core_prog = IfToMatch.process_core core_prog in 
   let core_prog = RegularizeMemopsNew.process_core core_prog in
   let core_prog = ShareMemopInputsNew.process_core core_prog in
-  let core_prog = GeneratesNew.eliminate_generates core_prog in
+
+
+
   let core_prog = SingleTableMatch.process_core core_prog in
   let core_prog = ActionsToFunctionsNew.process_core core_prog in
   core_prog
@@ -256,7 +221,7 @@ let layout_new old_layout (prog : TofinoCoreNew.prog) build_dir_opt =
     CoreCfg.print_cfg ( logging_prefix ^ "_cdg.dot") cfg;
     (* 3. compute data flow / dependency graph *)
     let dfg = CoreDfg.process cdg in
-    CoreDfg.print_dfg (logging_prefix ^ "/dfg.dot") dfg;
+    CoreDfg.print_dfg (logging_prefix ^ "_dfg.dot") dfg;
     (* 4. lay out the dfg on a pipeline of match stmt seqs *)
     print_endline "-------- layout ----------";
     let hdl_body = if old_layout
@@ -274,58 +239,6 @@ let layout_new old_layout (prog : TofinoCoreNew.prog) build_dir_opt =
     comp 
   in
   List.map layout_component prog
-;;
-
-(* transform the tofinocore program into a
-   straightline of match statements *)
-let layout old_layout tds build_dir_opt =
-  (* 1. compute control flow graph for main handler *)
-  let cfg = CoreCfg.cfg_of_main tds in
-  CoreCfg.print_cfg (!BackendLogging.graphLogDir ^ "/cfg.dot") cfg;
-  (* 2. compute control dependency graph *)
-  let cdg = CoreCdg.to_control_dependency_graph cfg in
-  CoreCfg.print_cfg (!BackendLogging.graphLogDir ^ "/cdg.dot") cdg;
-  (* 3. compute data flow / dependency graph *)
-  let dfg = CoreDfg.process cdg in
-  CoreDfg.print_dfg (!BackendLogging.graphLogDir ^ "/dfg.dot") dfg;
-  (* 4. lay out the dfg on a pipeline of match stmt seqs *)
-  print_endline "-------- layout ----------";
-  (* let tds = CoreLayout.process tds dfg in *)
-  let tds =
-    if old_layout
-    then CoreLayoutOld.process tds dfg
-    else CoreLayout.process tds dfg
-  in
-  (* let tds = CoreLayoutNew.process_new tds dfg in *)
-  (match build_dir_opt with
-   | Some build_dir -> CoreLayout.profile tds build_dir
-   | _ -> ());
-  cprint_prog "----------- after layout ------- " tds;
-  TofinoCore.dump_prog
-    (!BackendLogging.irLogDir ^ "/laid_out.tofinocore.dpt")
-    tds;
-  (* 5. Take the statements in each match statement branch and put them into
-          functions that represent actions. If a branch does a table_match,
-          which cannot be executed in an action, we transform the outer match
-        statement into an if statement that calls the table_match. *)
-  let tds = ActionForm.process tds in
-  (* 6. deduplicate actions that contain certain expensive operations. *)
-  let tds = Dedup.process tds in
-  TofinoCore.dump_prog
-    (!BackendLogging.irLogDir ^ "/laid_out.actionform.tofinocore.dpt")
-    tds;
-  tds
-;;
-
-(* layout the program then translate into p4 IR. *)
-let compile_dataplane old_layout ingress_tds egress_tds portspec build_dir =
-  let ingress_tds = layout old_layout ingress_tds (Some build_dir) in
-  let egress_tds = if List.length egress_tds <> 0
-    then layout old_layout egress_tds (Some build_dir)
-    else [] 
-  in
-  let tofino_prog = CoreToP4Tofino.translate portspec ingress_tds egress_tds in
-  tofino_prog
 ;;
 
 (* main compilation function *)
@@ -355,17 +268,28 @@ let compile old_layout ds portspec build_dir ctl_fn_opt =
   (* some more transformations *)
   let core_prog = tofinocore_normalization_new core_prog in
   (* now do layout, then put code into actionform and dedup actions *)
-  let core_prog = layout_new old_layout core_prog in
+  let core_prog = layout_new old_layout core_prog None in
+
+  print_endline ("----- final tofinocore program -----");
+  TofinoCorePrinting.prog_to_string core_prog |> print_endline;
+
+  let core_prog = AddEgressParser.add_parser core_prog in
 
   (* finally, translate into the P4 ir *)
   (* <<left off here>> 
     TODO: 
+      1. generate egress parser. 
+      2. update ingress parser. 
+      3. translate to P4-ir or print
+          - tables?
+          - registeractions?
       1. update translation.
       2. rewrite parser in tofinoCore and translate that instead of generating new. *)
-  let tofino_prog = CoreToP4TofinoNew.translate_core portspec core_prog in
-  let _ = tofino_prog in 
-
-  error "not done"
+  (* let tofino_prog = CoreToP4TofinoNew.translate_core portspec core_prog in *)
+  (* let _ = tofino_prog in  *)
+  print_endline ("----- next step: translate to p4-tofino ir -----");
+  exit 1;
+  (* error "not done" *)
 
 (*   (* generate the python event library *)
   let py_eventlib =
@@ -386,12 +310,3 @@ let compile old_layout ds portspec build_dir ctl_fn_opt =
 (* DEPRECIATED compile a program with a single handler and only 1 generate
    statement into a p4 control block, to be used as a module
    in other P4 programs. *)
-let compile_handler_block ds =
-  InputChecks.all_checks ds;
-  let ds = common_midend_passes ds in
-  let tds = tdecls_of_decls ds in
-  let tds = tofinocore_normalization true false tds in
-  let tds = layout false tds None in
-  let p4decls = CoreToP4Tofino.translate_to_control_block tds in
-  P4TofinoPrinting.string_of_decls p4decls |> P4TofinoPrinting.doc_to_string
-;;

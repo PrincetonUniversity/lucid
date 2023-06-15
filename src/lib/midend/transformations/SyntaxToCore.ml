@@ -257,7 +257,7 @@ let translate_hsort = function
 ;;
 
 let translate_parser_action = function
-  | S.PRead (id, ty) -> C.PRead (id, translate_ty ty)
+  | S.PRead (id, ty) -> C.PRead (Cid.id id, translate_ty ty)
   | S.PSkip ty -> C.PSkip (translate_ty ty)
   | S.PAssign (lexp, rexp) ->
     let id =
@@ -265,16 +265,16 @@ let translate_parser_action = function
       | EVar cid -> Cid.to_id cid
       | _ -> failwith "Internal error: SyntaxToCore PAssign"
     in
-    C.PAssign (id, translate_exp rexp)
+    C.PAssign (Cid.id id, translate_exp rexp)
 ;;
 
 let rec translate_branch (pat, block) =
-  translate_pattern pat, translate_parser_block block
+  [translate_pattern pat], translate_parser_block block
 
 and translate_parser_step = function
   | S.PGen e -> C.PGen (translate_exp e)
   | S.PCall e -> C.PCall (translate_exp e)
-  | S.PMatch (e, bs) -> C.PMatch (translate_exp e, List.map translate_branch bs)
+  | S.PMatch (e, bs) -> C.PMatch ([translate_exp e], List.map translate_branch bs)
   | S.PDrop -> C.PDrop
 
 and translate_parser_block (actions, (step, step_span)) =

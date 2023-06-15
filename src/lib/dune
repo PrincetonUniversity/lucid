@@ -111,6 +111,7 @@
    EliminateEventCombinators
    TofinoCore
    TofinoCoreNew
+   AddEgressParser
    TofinoCorePrinting
    AddEgressHandlers
    AddHandlerTypes

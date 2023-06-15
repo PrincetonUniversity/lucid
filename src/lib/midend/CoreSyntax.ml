@@ -228,14 +228,15 @@ and action =
   }
 
 and parser_action =
-  | PRead of id * ty
+  | PRead of cid * ty
+  | PPeek of cid * ty
   | PSkip of ty
-  | PAssign of id * exp
+  | PAssign of cid * exp
 
-and parser_branch = pat * parser_block
+and parser_branch = pat list * parser_block
 
 and parser_step =
-  | PMatch of exp * parser_branch list
+  | PMatch of exp list * parser_branch list
   | PGen of exp
   | PCall of exp (* Call another parser *)
   | PDrop
@@ -332,6 +333,7 @@ let var cid ety = var_sp cid ety Span.default
 let op_sp op args ety span = aexp (EOp (op, args)) ety span
 let op op args ety = op_sp op args ety Span.default
 let call_sp cid args ety span = aexp (ECall (cid, args)) ety span
+let call cid args ety = call_sp cid args ety Span.default
 let hash_sp size args ety span = aexp (EHash (size, args)) ety span
 let vint_exp i size = value_to_exp (vint i size)
 let vint_exp_ty i (ty:ty) = 

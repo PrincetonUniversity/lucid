@@ -8,11 +8,13 @@
   - support event values
 *)
 (* open TofinoCore *)
+[@@@ocaml.warning "-21-27-26"]
+
 open TofinoCoreNew
 open InterpHelpers
 open P4TofinoSyntax
 module T = P4TofinoSyntax 
-module C = TofinoCore
+module C = TofinoCoreNew
 module CS = CoreSyntax
 (* open P4TofinoParsing *)
 open CoreToP4TofinoHeadersNew
@@ -183,7 +185,7 @@ let mk_prog_env tds =
   List.fold_left (fun prog_env tdecl -> 
     match tdecl.td with
       | TDMemop(m) -> {prog_env with memops=(m.mid, m)::prog_env.memops;}
-      | TDOpenFunction(id, _, _, _) -> {prog_env with defined_fcns=(Cid.id id, tdecl)::prog_env.defined_fcns;}
+      | TDOpenFunction(id, _, _) -> {prog_env with defined_fcns=(Cid.id id, tdecl)::prog_env.defined_fcns;}
       | _ -> prog_env
     )
     empty_prog_env
@@ -679,7 +681,7 @@ let declared_vars prev_decls = CL.filter_map (fun dec ->
 
 (* translate a statement that appears inside of an action. 
    generate a list of decls and a statement. *)
-let rec translate_statement in_ingress (renames:renames) prev_decls hdl_enum hdl_params prog_env stmt =
+let rec translate_statement in_ingress (renames:renames) prev_decls prog_env stmt =
   match stmt.s with
   | SNoop -> [], Noop
   | C.SUnit(e) ->
@@ -708,25 +710,26 @@ let rec translate_statement in_ingress (renames:renames) prev_decls hdl_enum hdl
   | SIf _ -> error "[translate_statement] if statement cannot appear inside action body"
   | SMatch _ -> error "[translate_statement] match statement cannot appear inside action body"
   | SRet _ -> error "[translate_statement] ret statement cannot appear inside action body"
-  | SGen(gty, ev_exp) -> 
-    if (in_ingress) then (translate_generate renames prev_decls hdl_enum hdl_params gty ev_exp)
-    else (translate_egress_generate renames hdl_params ev_exp)
+  | SGen(_) -> 
+      error "[translate_statement] generates should have been eliminated"
+    (* if (in_ingress) then (translate_generate renames prev_decls hdl_enum hdl_params gty ev_exp)
+    else (translate_egress_generate renames hdl_params ev_exp) *)
   | SSeq (s1, s2) -> 
-    let s1_decls, s1_stmt = translate_statement in_ingress renames prev_decls hdl_enum hdl_params prog_env s1 in
-    let s2_decls, s2_stmt = translate_statement in_ingress renames prev_decls hdl_enum hdl_params prog_env s2 in
+    let s1_decls, s1_stmt = translate_statement in_ingress renames prev_decls prog_env s1 in
+    let s2_decls, s2_stmt = translate_statement in_ingress renames prev_decls prog_env s2 in
     s1_decls@s2_decls, sseq [s1_stmt; s2_stmt]
   | STableMatch _ | STableInstall _ -> error "[coreToP4Tofino.translate_statement] tables not implemented"
 ;;
 
 (* generate an action, and other compute objects, from an open function *)
-let translate_openfunction (in_ingress, renames, hdl_enum,hdl_params,prog_env) p4tdecls tdecl =
+let translate_openfunction (in_ingress, renames,prog_env) p4tdecls tdecl =
   let new_decls = match tdecl.td with 
-    | TDOpenFunction(id, const_params, stmt, _) -> (
+    | TDOpenFunction(id, const_params, stmt) -> (
       let params = List.map
         (fun (id, ty) -> (None, translate_ty ty, id))
         const_params
       in
-      let body_decls, body = translate_statement in_ingress renames p4tdecls hdl_enum hdl_params prog_env stmt in
+      let body_decls, body = translate_statement in_ingress renames p4tdecls prog_env stmt in
       let action = daction id params body in
       body_decls@[action]
     )
@@ -737,23 +740,10 @@ let translate_openfunction (in_ingress, renames, hdl_enum,hdl_params,prog_env) p
 
 (* the variable renaming map for ingress *)
 let mk_ingress_rename_map tds =  
-  let m = main tds in 
-  (* parameter renaming *)
-  let renames = List.fold_left 
-    (fun names (evid, params) -> 
-      List.fold_left
-        (fun names (param_id, _) -> 
-          rename (Cid.id param_id, ev_param_arg evid param_id) names)
-        names
-        params
-      )
-    empty_renames
-    m.hdl_params
-  in
+  let _ = tds in 
+  (* TODO: different things need to get renamed. Not parameters, though! *)
   (* builtin renaming: ingress_port, hdl_selector, events count *)
-  rename ((Cid.id Builtins.ingr_port_id), igr_port_arg) renames |> 
-  rename ((Cid.id (m.hdl_selector |> fst)), cur_ev_arg) |> 
-  rename ((Cid.id (m.event_output.recirc_mcid_var |> fst)), mcast_grp_a_arg)
+  rename ((Cid.id Builtins.ingr_port_id), igr_port_arg)
 ;;
 
 (** table generation **)
@@ -904,7 +894,7 @@ let rec statements_to_stages stage_num renames block_id (stages:C.statement list
 (* declare the compiler-added variables -- "shared globals" *)
 let generate_added_var_decls tds = List.map 
   (fun (id, ty) -> dvar_uninit id (translate_ty ty))
-  (main tds).shared_locals
+  (main_handler_of_decls tds).hdl_preallocated_vars
 ;;
 let includes = [dinclude "<core.p4>"; dinclude "<tna.p4>"]
 
@@ -941,27 +931,21 @@ let overlay_pragmas gress (event_spec:event_spec) : decl list =
 
 
 let generate_ingress_control prog_env block_id tds =
-  let m = main tds in 
+  let m = main_handler_of_decls tds in 
   (* build the parameter and variable renaming map for ingress.
      this should actually just be an update to context -- 
      the renaming map is just another part of context. *)
-  (* parameters *)
-  let renames = List.fold_left 
-    (fun names (evid, params) -> 
-      List.fold_left
-        (fun names (param_id, _) -> 
-          rename (Cid.id param_id, ev_param_arg evid param_id) names)
-        names
-        params
-      )
-    empty_renames
-    m.hdl_params
-  in
+
   (* builtin renaming: ingress_port, hdl_selector, events count *)
-  let renames = 
-    rename ((Cid.id Builtins.ingr_port_id), igr_port_arg) renames |> 
-    rename ((Cid.id (m.hdl_selector |> fst)), cur_ev_arg) |> 
-    rename ((Cid.id (m.event_output.recirc_mcid_var |> fst)), mcast_grp_a_arg)
+  let rename_tuples = [
+    (Cid.id (fst m.hdl_internal_params.out_port)), egr_port_arg;
+    (Cid.id (fst m.hdl_internal_params.gen_ct)), mcast_grp_a_arg;
+    (Cid.id (fst m.hdl_internal_params.out_group)), mcast_grp_b_arg
+  ]
+  in
+  let renames = List.fold_left (fun r tup -> rename tup r)
+    CidMap.empty
+    rename_tuples
   in
   (* add table definitions to renaming map *)
   let renames = List.fold_left
@@ -973,17 +957,21 @@ let generate_ingress_control prog_env block_id tds =
     renames
     tds
   in
-  (* all decls besides tables *)
+  (* translate all declarations besides the tables *)
   let decls = 
     (generate_added_var_decls tds)
     @(List.fold_left
       (translate_openfunction 
-        (true, renames, m.hdl_enum,m.hdl_params, prog_env))
+        (true, renames, prog_env))
       []
       tds)
   in
   (* table decls are generated at the same time as table calls *)
-  let table_decls, table_calls = statements_to_stages 0 renames block_id m.main_body |> List.split in 
+  let main_body = match m.hdl_body with 
+    | SPipeline(stmts) -> stmts
+    | _ -> error "shoulda been pipeliend by now"
+  in
+  let table_decls, table_calls = statements_to_stages 0 renames block_id main_body |> List.split in 
   let apply_body = sseq table_calls in 
   let mc_decls = mcgroups_of_decls decls in 
   let action_decls = non_mcgroups_of_decls decls in 
@@ -1296,32 +1284,15 @@ let generate_egress_handler_control block_id prog_env egress_tds =
   (* generate the egress control after event extraction to 
      execute egress handlers. *)
   let tds = egress_tds in
-  let m = main tds in 
-  (* add event / handler parameters to the renaming map. 
-     This is the same as ingress, right now, because 
-     event headers have the same name in both pipes. *)
-  let renames = List.fold_left 
-    (fun names (evid, params) -> 
-      List.fold_left
-        (fun names (param_id, _) -> 
-          rename (Cid.id param_id, ev_param_arg evid param_id) names)
-        names
-        params
-      )
-    empty_renames
-    m.hdl_params
-  in
+  let m = main_handler_of_decls tds in 
   (* builtin renaming: the handle selector is different in egress, 
      we use the "egress_event_id" field in metadata, set by the 
      egress event extraction tables. 
      we also want to rename the "drop_control" variable *)
   (* TODO: add egress port, queue, and queue depth *)
-  let renames = 
-       renames 
-    (* |> rename ((Cid.id Builtins.ingr_port_id), igr_port_arg) *)
-    |> rename ((Cid.id (m.hdl_selector |> fst)), egr_cur_ev_arg)
-    |> rename (TofinoEgress.egr_drop_ctl_id, eg_drop_ctl_arg)
-    (* |> rename ((Cid.id (m.event_output.recirc_mcid_var |> fst)), mcast_grp_a_arg) *)
+  (* TODO: must add drop contrl, at least *)
+  let renames = CidMap.empty
+    (* |> rename (TofinoEgress.egr_drop_ctl_id, eg_drop_ctl_arg) *)
   in
 
   (* add table definitions to renaming map *)
@@ -1339,12 +1310,16 @@ let generate_egress_handler_control block_id prog_env egress_tds =
     (generate_added_var_decls tds)
     @(List.fold_left
       (translate_openfunction 
-        (false, renames, m.hdl_enum,m.hdl_params, prog_env))
+        (false, renames, prog_env))
       []
       tds)
   in
   (* table decls are generated at the same time as table calls *)
-  let table_decls, table_calls = statements_to_stages 0 renames block_id m.main_body |> List.split in 
+  let main_body = match m.hdl_body with 
+    | SPipeline(stmt) -> stmt
+    | _ -> error "please pipeline before p4 ir"
+  in
+  let table_decls, table_calls = statements_to_stages 0 renames block_id main_body |> List.split in 
   let apply_body = sseq table_calls in 
   let action_decls = non_mcgroups_of_decls decls in 
   (* just return the declarations and body to place after event extraction in egress. *)
@@ -1463,16 +1438,16 @@ type event_spec = {
 }
 
 let translate (portspec:ParsePortSpec.port_config) ingress_tds egress_tds =
-  let ports, lucid_dpids, extern_dpid, port_events = mk_port_conf portspec in
+  error "not done"
+  (* let ports, lucid_dpids, extern_dpid, port_events = mk_port_conf portspec in
   let event_spec = CoreToP4TofinoHeaders.tds_to_event_spec ingress_tds in
 
   let ingress_control, mc_decls = generate_ingress_control (mk_prog_env ingress_tds) (id "IngressControl") ingress_tds in 
   let mc_defs = mc_decls
     @(mc_flood_decls extern_dpid)
     @(mc_recirc_decls (event_spec.hdl_enum |> List.split |> fst) portspec.recirc_dpid) 
-  in 
-
-  let tofino_prog = {
+  in  *)
+  (* let tofino_prog = {
     globals = 
       includes
       @(generate_structs event_spec)
@@ -1489,7 +1464,7 @@ let translate (portspec:ParsePortSpec.port_config) ingress_tds egress_tds =
       deparse = generate_egress_deparse (id "EgressDeparse");
     }
   } in
-  tofino_prog
+  tofino_prog *)
 ;;
 
 let translate_core portspec core = 
@@ -1499,17 +1474,19 @@ let translate_core portspec core =
 
 (*** for debugging compilation path where we generate a P4 "control" object from the lucid program  ***)
 let control_block_lib_params tds =
-  let params = ((main tds).hdl_params |> List.hd |> snd) in 
+  error "not done"
+  (* let params = ((main tds).hdl_params |> List.hd |> snd) in 
   let params = List.map (fun (pid, pty) -> 
     inoutparam (translate_ty pty) (pid))
     params
   in
-  params
+  params *)
 ;;
 
 let generate_control_lib prog_env tds =
+  error "not done"
   (* this is a control block generator -- almost depreciated at this point *)
-  let renames = empty_renames in 
+  (* let renames = empty_renames in 
   let m = main tds in 
   let block_id = m.hdl_enum |> List.hd |> fst in 
   let added_var_decls = generate_added_var_decls tds in 
@@ -1532,7 +1509,7 @@ let generate_control_lib prog_env tds =
     body = Some(apply_body);
     })
   in
-  includes@[control_block]
+  includes@[control_block] *)
 ;;
 
 
