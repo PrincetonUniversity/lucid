@@ -174,45 +174,30 @@ let rec get_event_param_ty event cid : ty option =
   | Cid.Compound(id, cid) -> (
     match event with
     | EventSingle _ -> error "[get_event_param_ty] compound ids cannot be parameters of single events."    
-    | EventUnion({evid; members;tag;}) -> (
+    | EventUnion({evid; members;}) -> (
       (* first, make sure the id is the event id *)
       if (not (Id.equal evid id))
         then None
         else (          
-          (* second, check if the tail cid is the event union's tag *)
-          if (Id.equal (Cid.to_id cid) (fst tag))
-            then Some(snd tag)
-          else 
-            (* finally, try recursing on every member event. Only one should resolve. *)
-            let ty_opts = List.filter_map (fun e -> get_event_param_ty e cid) members in
-            match ty_opts with
-            | [] -> None
-            | [ty] -> Some(ty)
-            | _ -> error "[get_event_param_ty] compound id should resolve to exactly one parameter type."
+          (* finally, try recursing on every member event. Only one should resolve. *)
+          let ty_opts = List.filter_map (fun e -> get_event_param_ty e cid) members in
+          match ty_opts with
+          | [] -> None
+          | [ty] -> Some(ty)
+          | _ -> error "[get_event_param_ty] compound id should resolve to exactly one parameter type."
         )      
     )
-    | EventSet({evid; members; flags;}) -> (
+    | EventSet({evid; members;}) -> (
       (* first, make sure the id is the event id *)
       if (not (Id.equal evid id))
         then None
         else (          
-          (* second, check if the tail cid is one of the event union's flags *)
-          let flagty_opts = List.filter_map (fun (flagid, flagty) -> 
-            if (Id.equal (Cid.to_id cid) flagid)
-              then Some(flagty)
-              else None
-          ) flags in
-          match flagty_opts with 
-          | ty::[] -> Some(ty)
-          | _::_ -> error "[get_event_param_ty] compound id should resolve to exactly one parameter type."
-          | [] -> (
-            (* finally, try recursing on every member event. Only one should resolve. *)
-            let ty_opts = List.filter_map (fun e -> get_event_param_ty e cid) members in
-            match ty_opts with
-            | [] -> None
-            | [ty] -> Some(ty)
-            | _ -> error "[get_event_param_ty] compound id should resolve to exactly one parameter type."
-          )
+          (* finally, try recursing on every member event. Only one should resolve. *)
+          let ty_opts = List.filter_map (fun e -> get_event_param_ty e cid) members in
+          match ty_opts with
+          | [] -> None
+          | [ty] -> Some(ty)
+          | _ -> error "[get_event_param_ty] compound id should resolve to exactly one parameter type."
         )
     )
   )

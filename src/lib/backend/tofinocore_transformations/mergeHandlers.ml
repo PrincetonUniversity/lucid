@@ -54,6 +54,13 @@ let ids_of_event_params event =
 (* let scope_params (hdl_body : statement) (input_event : event) =
 ;; *)
 
+let rec is_union_of_unions event = 
+  match event with 
+  | EventUnion({members;}) -> 
+    List.for_all is_union_of_unions members
+  | _ -> false
+;;
+
 (* merge the handlers in the tdecls from one component *)
 let merge_handlers_in_component (c:component) : component =
   (* remove all the handlers from the list of decls -- we are making new ones *)
@@ -111,23 +118,46 @@ let merge_handlers_in_component (c:component) : component =
       List.mapi
       (fun i h -> 
         let tag_val = i + 1 in 
-        (* the first statement of this branch sets the tag of 
-           the output event to match the input event. *)
-        let tag_param = match output_event with
-          | EventUnion({tag}) -> tag
-          | _ -> error "[mergeHandlers] output event is not a union"
+        let handler_body = match h.hdl_body with
+          | SFlat(stmt) -> stmt
+          | _ -> error "[merge_handlers_in_tdecls] can't merge after pieplineing"
         in
-        let tag_cid = Cid.create_ids [output_evid; (fst tag_param)] in
-        let tag_val_exp = vint_exp_ty (i + 1) (snd tag_param) in
-        let tag_stmt = 
-          sassign tag_cid tag_val_exp 
-        in
-        
-        let stmt = match h.hdl_body with
-          | SFlat(stmt) -> sseq tag_stmt stmt
-          | _ -> error "[merge_handlers_in_tdecls] cannot merge handlers after pipelining"        
-        in
-        ([PNum (Z.of_int tag_val)], stmt))
+        if (is_union_of_unions output_event) 
+        then 
+            (* we don't need to serialize the tag of a union of unions. 
+               this is an optimization that we do in egress, 
+               so that the ingress parser can just parse a flat union. 
+               NOTE: for this to work, we need to make sure all the 
+               unions agree on tag values. That is, tag values 
+               have to be pinned to events ahead of time. 
+               (But that is how it should be anyways, for external / 
+               server interfaces)
+               <<left off here>> -- 
+               next: 
+                1. use eventnum based tags in all unions
+                2. generate basic ingress parser for programs with 1 packet event.
+                3. translate to P4IR
+                4. add support for user-written parsers
+               *)
+            [PNum (Z.of_int tag_val)], handler_body
+        else 
+          (* the first statement of this branch enables the tag in the 
+            output header and then sets it to match the input event tag.*)
+          let tag_param = match output_event with
+            | EventUnion({tag}) -> tag
+            | _ -> error "[mergeHandlers] output event is not a union"
+          in
+          let tag_hdr_cid = Cid.create_ids [output_evid; Id.create "tag"] in
+          let tag_hdr_val_exp = call (Cid.create ["enable"]) [] (ty (TInt(1))) in
+          let tag_enable_stmt = sassign tag_hdr_cid tag_hdr_val_exp in
+          let tag_cid = Cid.concat tag_hdr_cid (Cid.id (fst tag_param)) in
+          let tag_val_exp = vint_exp_ty (i + 1) (snd tag_param) in
+          let tag_set_stmt = 
+            sassign tag_cid tag_val_exp 
+          in
+          let tag_stmt = sseq tag_enable_stmt tag_set_stmt in  
+          let stmt = sseq tag_stmt handler_body in
+          ([PNum (Z.of_int tag_val)], stmt))
       handlers      
     )
   in

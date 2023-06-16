@@ -205,29 +205,128 @@ let make_egr_parser
       )
     )
   in
-  print_endline ("---- egress parser ----");
-  print_endline (TofinoCorePrinting.td_to_string egr_parser);
-  print_endline ("-----------------------");
   egr_parser
   (* 
       <<left off here>> egress parser looks right-ish.
       next: 
-        - think about how we encode flags. is it right? 
-          the flags of an eventset have to go into a header. 
-          for output, we have to put them in their own header...
-            (in which case, the "eventset" is really a struct 
-            of events with a flags event and then a set event...)
-            we also have to do something like this to serialize an 
-            event union...
-        - add "enable" commands when serializing output
-          from ingress / egress. 
         - add generate elimination and speculative parser passes
         - translate to P4 ir  
         - generate / translate user-written ingress parser
   *)
 ;;
 
+(*** generate elimination -- this will apply to the ingress parser too ***)
 
+(* given a list of events, find the one that matches cid *)
+let rec cid_to_eventconstr prefix_ids events cid =
+  match cid with 
+  | Cid.Id(id) -> (
+    match (List.find_opt (fun event -> Id.equal id (id_of_event event)) events) with
+    | Some(event) -> prefix_ids, event
+    | None -> error "[cid_to_event] outer component of cid did not match any event"
+  )
+  | Cid.Compound(id, cid) -> (
+    (* the outer component must match one of the events *)
+    let outer_event = match (List.find_opt (fun event -> Id.equal id (id_of_event event)) events) with
+    | Some(event) -> event
+    | None -> error "[cid_to_event] outer component of cid did not match any event"
+    in
+    cid_to_eventconstr (prefix_ids@[id]) (members_of_event outer_event) cid
+  )      
+;;
+
+let eliminate_parser_generates to_egress_event parser = 
+  (* eliminate generate statements in the parser by replacing them with 
+     assignments to the parameters of the event. *)
+  let v = object
+    inherit [_] s_map as super
+    method! visit_parser_block () (parser_actions_spans_list, (parser_step, sp))= 
+      match parser_step with 
+      | PGen(gen_exp) -> (
+        (* this is a generate. So now we need to find the constructor for 
+           the event, get its parameters, append assign statements to 
+           set the parameters, and finally replace the PGen with an exit, 
+           (perhaps something like PCall continue()) *)
+        match gen_exp.e with 
+        | ECall(evconstr_cid, eargs) -> 
+          (* find the base event being generated *)
+          let event_prefix, base_event = cid_to_eventconstr [] [to_egress_event] evconstr_cid in
+          (* get the parameters, fully scoped *)
+          let prefix_cid = Cid.create_ids event_prefix in
+          let params = params_of_event base_event in
+          let params = List.map 
+            (fun (id, ty) -> 
+              Cid.concat 
+                prefix_cid 
+                (Cid.create_ids [id_of_event base_event; id]),
+              ty) 
+            params 
+          in
+
+          (* optimized: make peek / skip actions to set all the params, 
+             then replace the actions in the generate block with the new ones. *)
+
+          let peek_skip_actions = List.fold_left
+            (fun actions (cid,ty) -> 
+              actions@[
+                PPeek(cid, ty), Span.default;
+                PSkip(ty), Span.default                
+                ]
+              )
+            []
+            params
+          in
+          let parser_actions_spans_list = peek_skip_actions in 
+          (* make assign actions to set all the params *)
+          (* let assign_actions = List.map2
+            (fun cid earg -> PAssign(cid, earg), Span.default)
+            params
+            eargs
+          in *)
+          (* update the actions list *)
+          (* let parser_actions_spans_list = parser_actions_spans_list@assign_actions in *)
+          (* replace the PGen with an exit call*)
+          let exit_call = call (Cid.create ["exit"]) [] (ty TEvent) in
+          let parser_step = PCall(exit_call) in
+          (super#visit_parser_block () (parser_actions_spans_list, (parser_step, sp)) : (parser_action * sp) list * (parser_step * sp))
+        | _ -> error "parser generate should take an expression of variant ECall"
+      )
+      | _ ->  
+      super#visit_parser_block () (parser_actions_spans_list, (parser_step, sp))
+    end
+  in
+  v#visit_td () parser
+;;
+
+(*** speculative parsing -- this is now just for ingress ***)
+
+(* 
+  given an assign action where the right hand side is a variable created 
+  by a previous read action, add a peek action before the read action 
+  and delete the assign action.
+
+  e.g.: 
+
+  {
+      read foo_a : int<<32>>;
+      read foo_b : int<<32>>;
+      egress_input.foo.foo_a = foo_a;
+      egress_input.foo.foo_b = foo_b;
+      exit();}
+  --> 
+  {
+      peek egress_input.foo.foo_a : int<<32>>;
+      read foo_a : int<<32>>;
+      peek egress_input.foo.foo_b : int<<32>>;
+      read foo_b : int<<32>>;
+      exit();}
+*)
+let speculative_parsing parser = 
+  error "todo"
+(* this optimization will be important for the ingress parser, 
+   but not for egress because we generate optimized code. *)
+
+;;
 
 let add_parser core_prog : prog =   
   print_endline ("---- next up.... PARSING! ----");
@@ -249,8 +348,13 @@ let add_parser core_prog : prog =
     core_prog
   |> List.hd
   in
-  let _ = make_egr_parser ingress_output_event egress_input_event in 
-  exit 0;  
+  let egr_parser = make_egr_parser ingress_output_event egress_input_event in 
+  print_endline ("---- egress parser ----");
+  print_endline (TofinoCorePrinting.td_to_string egr_parser);
+  print_endline ("-----------------------");
+  let egr_parser = eliminate_parser_generates egress_input_event egr_parser in 
+  print_endline ("---- egress parser after generate elimination ----");
+  print_endline (TofinoCorePrinting.td_to_string egr_parser);
+  print_endline ("-----------------------");
   core_prog
-
 ;;

@@ -8,18 +8,22 @@
     case (ingress_in.tag == ingress_in.foo.num):
         generate(ingress_out.foo_out.bar(1, 2)); 
           --> 
-        ingress_out.tag = foo_out.num; (note: actually added with the branch in prior pass)
-        ingress_out.foo_out.bar_flag = 1;
+        ingress_out.tag.tag = foo_out.num; (note: actually added with the branch in prior pass)
+        ingress_out.foo_out.flags.bar_flag = 1;
         ingress_out.foo_out.bar.a = 1;
         ingress_out.foo_out.bar.b = 2;
         ingress.internal_params.gen_ct = ingress.internal_params.gen_ct + 1;    
-
+        
         we also need to validate the specific headers that need to be 
         serialized. 
-
+        and note that a union's tag is in tag.tag -- 
+        the outer id is a header that can be enabled. 
+        ingress
         enable_header(ingress_out.tag);
+        ingress_out.tag.enable = 1;
         enable_header(ingress_out.foo_out.flags);
         enable_header(ingress_out.foo_out.bar);
+
   }
   if it was a generate_port or generate_ports, gen_ct would not 
   be incremented, but rather out_port or out_group would be set. *)
@@ -105,23 +109,38 @@ let enable_member_event (outer_event_prefix: id list) (outer_event : event) (inn
   | EventSet{members; flags;} -> (
     (* get the index of the member *)
     let member_pos = pos_of_event members inner_event_id in
-    (* set the appropriate flag variable *)
+    (* enable the "flags" header field. *)
+    let full_hdr_cid = Cid.concat outer_event_cid (Cid.create ["flags"]) in
+    let ecall_enable = call (Cid.create ["enable"]) [] (ty (TInt(1))) in
+    let enable_hdr = sassign (full_hdr_cid) ecall_enable in
+    (* set the appropriate flag field *)
     let (flag_id, flag_ty) = List.nth flags member_pos in
-    let full_flag_id = Cid.concat outer_event_cid (Cid.id flag_id) in
-    let res = (sassign 
+    let full_flag_id = Cid.concat full_hdr_cid (Cid.id flag_id) in
+    let set_flag = (sassign 
       full_flag_id
-      (vint_exp_ty 1 flag_ty)) in
-    res
+      (vint_exp_ty 1 flag_ty)) 
+    in
+    (* finally, enable the field for the member event *)
+    let member_hdr_cid = Cid.concat outer_event_cid (Cid.id inner_event_id) in
+    let enable_member_hdr = sassign member_hdr_cid ecall_enable in
+    sseq (sseq enable_hdr set_flag) enable_member_hdr
   )
   | EventUnion{members; tag} -> 
     let tag_id, tag_ty = tag in
-    let full_tag_id = Cid.concat outer_event_cid (Cid.id tag_id) in
+    (* enable the "tag" field *)
+    let full_hdr_cid = Cid.concat outer_event_cid (Cid.create ["tag"]) in
+    let ecall_enable = call (Cid.create ["enable"]) [] (ty (TInt(1))) in
+    let enable_hdr = sassign (full_hdr_cid) ecall_enable in
+    let full_tag_id = Cid.concat full_hdr_cid (Cid.id tag_id) in 
     let enewtagval = (vint_exp_ty (num_of_event members inner_event_id) (tag_ty)) in
-    let res = sassign
+    let set_tag = sassign
       full_tag_id
       enewtagval
     in
-    res
+    (* finally, enable the field for the member event *)
+    let member_hdr_cid = Cid.concat outer_event_cid (Cid.id inner_event_id) in
+    let enable_member_hdr = sassign member_hdr_cid ecall_enable in
+    sseq (sseq enable_hdr set_tag) enable_member_hdr
   | EventSingle _ -> error "[enable_member_event] single events do not have members"
 ;;
 
