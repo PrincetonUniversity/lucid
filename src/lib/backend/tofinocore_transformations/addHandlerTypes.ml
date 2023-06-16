@@ -110,7 +110,6 @@ let derive_output_event (ctx:ctx) (hdl_id : id) (hdl_body:statement) : event =
   eventset
 ;;
 
-
 let rec base_event event econs_cid : event option = 
   (* extract the base event.
      for example, given:  

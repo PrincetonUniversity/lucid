@@ -62,7 +62,7 @@ and parser_branch = [%import: CoreSyntax.parser_branch]
 and parser_step = [%import: CoreSyntax.parser_step]
 and parser_block = [%import: CoreSyntax.parser_block]
 
-(*NEW 6/2023 -- event types / definitions *)
+(* NEW 6/2023 -- event types / definitions *)
 
 and event =
   | EventSingle of {
@@ -72,7 +72,7 @@ and event =
     evparams : params;
     }
   (* an event union is a union of events, with each event having a tag. *)
-  | EventUnion  of {
+  | EventUnion of {
     evid:id;
     members: event list;
     (* tag is an internal field of type TEvent that holds the active event's id *)
@@ -88,7 +88,6 @@ and event =
     subsets: (id list) list; (*optional metadata for optimization: 
       the subsets of members that the eventset may hold.  *)
   }
-
 
 and hbody = 
   | SFlat of statement
@@ -197,8 +196,6 @@ and prog = component list
       ; concrete = true
       ; nude = false
       }]
- 
-
 
 (** core -> tofinocore translation: splitting into ingress and egress **)
 type ctx = {
@@ -219,7 +216,6 @@ let empty_ctx = {
 
 let no_span = Span.default;;
 let tdecl td = {td; tdspan = no_span; tdpragma = None}
-
 
 (* get the set of globals referenced in the statement *)
 let globals_refd (global_ids : IdSet.t) stmt = 

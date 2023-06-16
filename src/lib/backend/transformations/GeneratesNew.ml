@@ -8,11 +8,18 @@
     case (ingress_in.tag == ingress_in.foo.num):
         generate(ingress_out.foo_out.bar(1, 2)); 
           --> 
-        ingress_out.tag = foo_out.num;
+        ingress_out.tag = foo_out.num; (note: actually added with the branch in prior pass)
         ingress_out.foo_out.bar_flag = 1;
         ingress_out.foo_out.bar.a = 1;
         ingress_out.foo_out.bar.b = 2;
         ingress.internal_params.gen_ct = ingress.internal_params.gen_ct + 1;    
+
+        we also need to validate the specific headers that need to be 
+        serialized. 
+
+        enable_header(ingress_out.tag);
+        enable_header(ingress_out.foo_out.flags);
+        enable_header(ingress_out.foo_out.bar);
   }
   if it was a generate_port or generate_ports, gen_ct would not 
   be incremented, but rather out_port or out_group would be set. *)

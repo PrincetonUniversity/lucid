@@ -41,47 +41,23 @@ let empty_block () :parser_block =
 ;;
 
 (*  *)
-let rec _idxof idx id events = 
-  match events with 
-  | [] -> error "[id_to_pos] event with this id not found"
-  | event::events ->     
-    if (Id.equal (id_of_event event) id)
-      then idx
-      else (_idxof (idx+1) id events)
 ;;
-let idxof = _idxof 0
+let idxof = 
+  let rec _idxof idx id events = 
+    match events with 
+    | [] -> error "[id_to_pos] event with this id not found"
+    | event::events ->     
+      if (Id.equal (id_of_event event) id)
+        then idx
+        else (_idxof (idx+1) id events)
+  in
+  _idxof 0  
+;;
 
-(**)
-(* return an integer list of length |events| that
-   contains a 1 for each event in events that is 
-   in subset. Use "idxof events id" to get the 
-  index of "id" in the event list *)
-let subset_to_bitvec 
-  (events : event list) 
-  (subset : id list) : int list =
-  (* make a bitvector of length events with all 0's. *)
-  let bitvec = List.map (fun _ -> 0) events in
-  (* for each event in subset, set the corresponding bit to 1 *)
-  List.fold_left 
-    (fun bitvec id -> 
-      let idx = idxof id events in
-      List.mapi (fun i bit -> if (i = idx) then 1 else bit) bitvec
-    )
-    bitvec
-    subset
-;;
-(* [1, 0, 1, 1, 1] ->  *)
-(* count the number of 1's in a bitvec *)
-let ones_in_bitvec bitvec = 
-  List.fold_left (fun acc bit -> if (bit = 1) then acc+1 else acc) 0 bitvec
-;;
 (* given a bitvec of length k with n 1's, 
    generate an associative list (n, idx)
-   where idx is the index of the nth 1 in the 
-   bitvec 
-   
-  e.g.: [1; 0; 1; 1] -> [(0, 0); (1, 2); (2, 3); (3, 4)]   
-*)
+   where idx is the index of the nth 1 in the bitvec    
+  e.g.: [1; 0; 1; 1] -> [(0, 0); (1, 2); (2, 3); (3, 4)] *)
 let get_n_to_idx_map bitvec : (int * int) list = 
   let assoc, _, _ = List.fold_left
     (fun (assoc, pos, n_ones) bit ->  
@@ -122,8 +98,23 @@ let block_of_nth_member out_ctor_base (members : event list) n =
    event_ctor_cid is the fully qualified cid 
    of the event to generate. *)
 let branches_of_subsets out_ctor_base members subsets = 
+  (* return an integer list of length |events| that
+     contains a 1 for each event in events that is 
+     in subset. Use "idxof events id" to get the 
+    index of "id" in the event list *)
+  let subset_to_bitvec (subset : id list) : int list =
+    (* make a bitvector of length events with all 0's. *)
+    (* for each event in subset, set the corresponding bit to 1 *)
+    List.fold_left 
+      (fun bitvec id -> 
+        let idx = idxof id members in
+        List.mapi (fun i bit -> if (i = idx) then 1 else bit) bitvec
+      )
+      (List.map (fun _ -> 0) members)
+      subset
+  in
   (* each bitvec indicates which members are active *)
-  let subset_bitvecs = List.map (subset_to_bitvec members) subsets in
+  let subset_bitvecs = List.map subset_to_bitvec subsets in
   let branches = List.fold_left 
     (fun branches bitvec -> 
       let n_to_idx = get_n_to_idx_map bitvec in
@@ -140,7 +131,6 @@ let branches_of_subsets out_ctor_base members subsets =
   in
   branches
 ;;
-
 
 (* make a block to parse a serialized eventset, 
    extract the nth_var event in the set, 
@@ -164,9 +154,7 @@ let eventset_block evset (nth_var : (cid * ty)) (out_ctor_base : cid) =
   | _ -> error "not an eventset"
 ;;
 
-let tname id = 
-  ty (TName(id, [], false))
-;;
+let tname id = ty (TName(id, [], false)) ;;
 
 let id = Id.create
 (* make a parser that reads a serialized version of 
