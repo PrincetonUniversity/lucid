@@ -96,7 +96,7 @@ let derive_output_event (ctx:ctx) (hdl_id : id) (hdl_body:statement) : event =
       evid = Id.append_string "_egress_output" hdl_id;
       members = events;
       tag = (Id.create "tag", ty (TInt(16))  );
-      member_nums = List.mapi (fun i _ -> 1+i) events;
+      member_nums = List.map num_of_event events;
       })
     else EventSet({
       evid = Id.append_string "_ingress_output" hdl_id;
@@ -285,7 +285,6 @@ let scope_event_constructors (output_event : event) (hdl_body : statement) =
       in
       transform_exp#visit_statement econs_transformer hdl_body
 ;;
-
 
 (* set the handler input and output events, 
    update all the parameter variable ids used in the body (scope input), 

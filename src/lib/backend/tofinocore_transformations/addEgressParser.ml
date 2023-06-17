@@ -206,13 +206,6 @@ let make_egr_parser
     )
   in
   egr_parser
-  (* 
-      <<left off here>> egress parser looks right-ish.
-      next: 
-        - add generate elimination and speculative parser passes
-        - translate to P4 ir  
-        - generate / translate user-written ingress parser
-  *)
 ;;
 
 (*** generate elimination -- this will apply to the ingress parser too ***)

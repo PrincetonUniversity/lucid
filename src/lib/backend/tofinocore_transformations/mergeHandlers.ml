@@ -84,7 +84,6 @@ let merge_handlers_in_component (c:component) : component =
   let output_evid = Id.append_string "_output" c.comp_id in
   let hdl_evid = Id.append_string "_hdl" c.comp_id in
   let selector_tag = Id.create "tag" in
-  
   (* generate input and output events. Members are the 
      inputs and outputs of each event *)
   let input_members, output_members = 
@@ -97,14 +96,17 @@ let merge_handlers_in_component (c:component) : component =
        input events of the non-merged handlers. *)
     members = input_members;
     tag = (selector_tag, ty (TInt 16));
-    member_nums = List.mapi (fun i _ -> 1+i) input_members;
+    member_nums = List.map num_of_event input_members;
     }) 
   in
   let output_event = EventUnion({
     evid = output_evid;
     members = output_members; 
     tag = (selector_tag, ty (TInt 16));
-    member_nums = List.mapi (fun i _ -> 1+i) output_members;
+    (* important: the output events have the same tags 
+    as the input events. Later stages of the compiler 
+    assume that. Can we improve? *)
+    member_nums = List.map num_of_event input_members;
     })
   in
   (* construct the new handler's body -- a match statement
@@ -134,7 +136,8 @@ let merge_handlers_in_component (c:component) : component =
                server interfaces)
                <<left off here>> -- 
                next: 
-                1. use eventnum based tags in all unions
+                X 1. use eventnum based tags in all unions
+                1.A test!
                 2. generate basic ingress parser for programs with 1 packet event.
                 3. translate to P4IR
                 4. add support for user-written parsers
