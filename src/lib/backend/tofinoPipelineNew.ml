@@ -65,7 +65,8 @@ let common_midend_passes ds =
   (* make sure that each table uses unique actions *)
   (* form: + each action belongs to 1 table *)
   (* Why do this? Does something break without it? *)
-  UniqueTableActions.process ds
+  let ds = UniqueTableActions.process ds in
+  ds
 ;;
 
 (* these passes are basically about converting
@@ -248,8 +249,20 @@ let compile old_layout ds portspec build_dir ctl_fn_opt =
     CoreCdg.start_logging ();
     CoreDfg.start_logging ());
   let ds = common_midend_passes ds in
+  (* add extern record type definitions -- 
+     these records represent tofino intrinsic 
+     metadata structures defined in the tofino's
+     p4 architectural specification files. 
+     An "extern record type" means a record type 
+     that the compiler knows the name and definition of, 
+     but does not serialize to P4 because it is 
+     included elsewhere. *)
+  let ds = AddIntrinsics.add_intrinsics ds in
+  let ds = AddIngressParser.add_parser ds in
+
   (* static analysis to see if this program is compile-able *)
   InputChecks.all_checks ds;
+
   (* after this point, there should not be any changes
        to the globals, actions, event, or handlers defined
        in the program.

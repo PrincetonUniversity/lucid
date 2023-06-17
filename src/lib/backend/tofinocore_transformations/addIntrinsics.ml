@@ -1,9 +1,9 @@
-(* add target-specific intrinsics to each component. 
-   These intrinsics are the P4-tofino intrinsic headers *)
+(* Add target-specific intrinsics types to the program. 
+   These intrinsics are defined in the tofino 
+   architectural specification, and used in placed like 
+   the ingress parser. *)
 
-open Angstrom
 open CoreSyntax
-open TofinoCoreNew
 
 (* tofino intrinsics -- should match tofino1_base.p4 *)
 
@@ -30,16 +30,8 @@ let ty_to_param pty dir =
     pty = pty;
   }
 ;;
-let p4_header_to_usertydecl h = 
-  TDUserTy({
-    tyid = h.tyid;
-    tyfields = List.map 
-      (fun (w, f) -> 
-        (f, ty (TInt w))) 
-        h.tyfields;
-    tyextern = true;
-  })
-;;
+
+  
 
 let p4header_to_tname h =
   let cid = Cid.create_ids [h.tyid] in
@@ -198,4 +190,25 @@ let param_to_cidty intr_param field_name : (cid * ty) =
   match field_info with 
   | Some((width, id)) -> Cid.id id, tint width
   | None -> error "[intrinsic.param_to_cidty] this field is not a member of the param"
+;;
+
+
+(* CLEANUP: this should be the only way we use the 
+intrinsics. As extern user types in the program. 
+All other accessor functions above should be deleted. *)
+(* convert a P4 intrinsic into an extern type in Core IR *)
+let ty_to_dextern p4_intr =
+  let fields = List.map 
+    (fun (i, id) -> 
+      (id,TInt(i))) 
+    p4_intr.tyfields
+  in
+  let record_ty = ty (TRecord(fields)) in
+  decl (DExtern(p4_intr.tyid, record_ty))
+;;
+
+(* add extern types for necessary p4 intrinsics. 
+   This will grow as the backend functionality fills in. *)
+let add_intrinsics ds = 
+  (ty_to_dextern ingress_intrinsic_metadata_t)::ds
 ;;

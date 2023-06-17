@@ -109,6 +109,7 @@
    InputChecks
    StandardizeEventParams
    EliminateEventCombinators
+   AddIngressParser
    TofinoCore
    TofinoCoreNew
    AddEgressParser

@@ -28,6 +28,7 @@ and raw_ty =
   | TTable of tbl_ty
   | TAction of acn_ty
   | TPat of size
+  | TRecord of (id * raw_ty) list
 
 and tbl_ty =
   { tkey_sizes : size list
@@ -232,6 +233,7 @@ and parser_action =
   | PPeek of cid * ty
   | PSkip of ty
   | PAssign of cid * exp
+
 
 and parser_branch = pat list * parser_block
 
