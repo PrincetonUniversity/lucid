@@ -277,6 +277,7 @@ let compile old_layout ds portspec build_dir ctl_fn_opt =
           1. when typing handlers, update the parser so that it 
              references the full variable name in parameters (e.g., bar_c -> bar.bar_c)
           2. do the speculative parsing optimization
+          3. translate to P4 ir
   *)
   (* static analysis to see if this program is compile-able *)
   InputChecks.all_checks ds;
