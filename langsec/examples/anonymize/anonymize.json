@@ -7,25 +7,43 @@
         "name":"Table.install", 
         "args":{
           "table":"src_prefix_table_v4", 
-          "key":[168034304], 
+          "key":[10, 4, 1, "_"], 
           "action":"src_prefix_table_v4.result", 
-          "args":["true"]}
+          "args":[24]}
+      },
+      {
+        "type": "command", 
+        "name":"Table.install", 
+        "args":{
+          "table":"src_prefix_table_v4", 
+          "key":[10, 4, "_", "_"], 
+          "action":"src_prefix_table_v4.result", 
+          "args":[16]}
       },
       {
         "type": "command", 
         "name":"Table.install", 
         "args":{
           "table":"dst_prefix_table_v4", 
-          "key":[2886795520], 
+          "key":[172, 17, 1, "_"], 
           "action":"dst_prefix_table_v4.result", 
-          "args":["true"]}
+          "args":[24]}
       },
-      {"name":"eth_ip", "args": [11, 22, 2048, 1, 2, 128, 16]},
-      {"name":"eth_ip", "args": [20, 21, 2048, 3, 4, 128, 16]},
-      {"name":"eth_ip", "args": [1099511627776, 22, 2048, 5, 6, 128, 16]},
-      {"name":"eth_ip", "args": [11, 22, 2048, 168034815, 6, 128, 16]}, 
-      {"name":"eth_ip", "args": [11, 22, 2048, 7, 168034384, 128, 16]},
-      {"name":"eth_ip", "args": [11, 22, 2048, 9, 2886795742, 128, 24]}
+      {
+        "type": "command", 
+        "name":"Table.install", 
+        "args":{
+          "table":"dst_prefix_table_v4", 
+          "key":[10, 4, "_", "_"], 
+          "action":"dst_prefix_table_v4.result", 
+          "args":[16]}
+      },
+      {"name":"eth_ip", "args": [11, 22, 2048, 1, 2, 128]},
+      {"name":"eth_ip", "args": [20, 21, 2048, 3, 4, 128]},
+      {"name":"eth_ip", "args": [1099511627776, 22, 2048, 5, 6, 128]},
+      {"name":"eth_ip", "args": [11, 22, 2048, 168034815, 8, 128]}, 
+      {"name":"eth_ip", "args": [11, 22, 2048, 9, 168034384, 128]},
+      {"name":"eth_ip", "args": [11, 22, 2048, 11, 2886795742, 128]}
     ]
   }
   

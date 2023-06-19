@@ -2,12 +2,6 @@ const int OUT_PORT = 1;
 const int SERVER_PORT = 2;
 const int SEED = 7;
 
-// Example anonymization policy:
-// -Don't anonymize multicast/broadcast
-// -Anonymize source + dst MAC OUI + ID
-// -Anonymize IP addresses w/ prefixes 172.17.1.0/24, 10.4.0.0/16
-//      -Preserve prefixes
-
 // ethernet and ip packet headers
 type eth_t = {
 	int<48> dmac;
@@ -18,14 +12,36 @@ type ip_t = {
 	int src;
 	int dst;
 	int<16> len;
-    int<16> prefix_len;
 }
 
 // prefix lengths of source/dst IP addresses
-type ip_prefix_matches = {
-    bool src_prefix;
-    bool dst_prefix;
+type ip_prefix_lengths = {
+    int src_prefix;
+    int dst_prefix;
 }
+
+type anonymization_policy = {
+    bool multicast_broadcast;
+    bool srcmac_oui;
+    bool srcmac_id;
+    bool dstmac_oui;
+    bool dstmac_id;
+    bool srcip;
+    bool dstip;
+    bool preserve_prefix;
+}
+
+/********** Anonymization Policy *********/
+global anonymization_policy anon_policy = {
+    multicast_broadcast = true;
+    srcmac_oui = false;
+    srcmac_id = false;
+    dstmac_oui = false;
+    dstmac_id = true;
+    srcip = false;
+    dstip = false;
+    preserve_prefix = false;
+};
 
 /********** Events *********/
 packet event eth_ip(eth_t eth, ip_t ip);
@@ -33,33 +49,33 @@ packet event eth_ip(eth_t eth, ip_t ip);
 event anonymize_info(eth_t eth, ip_t ip);
 
 /********** Tables *********/
-action bool result(bool b)() {
-	return b;
+action int result(int prefix_len)() {
+	return prefix_len;
 }
 
 table_type prefix_table_v4_t = {
-    key_size: (32)
+    key_size: (32, 32, 32, 32)
     arg_types: ()
-    ret_type: bool
+    ret_type: int
 }
 
 global prefix_table_v4_t src_prefix_table_v4 = 
     table_create<prefix_table_v4_t>(
         (result),
         1024,
-        result(false)
+        result(0)
     );
 
 global prefix_table_v4_t dst_prefix_table_v4 = 
     table_create<prefix_table_v4_t>(
         (result),
         1024,
-        result(false)
+        result(0)
     );
 
 /********** Functions *********/
-fun bool should_anonymize(eth_t eth, ip_t ip) {
-    if (eth#dmac[40:40] == 1) { // if multicast/broadcast traffic
+fun bool should_anonymize(eth_t eth, ip_t ip, bool multicast_broadcast) {
+    if (!multicast_broadcast && eth#dmac[40:40] == 1) { // if policy says don't anonymize multicast/broadcast
         return false;
     } else {
         return true;
@@ -81,38 +97,54 @@ fun int<auto> zero_n_bits(int<auto> num, int<auto> first_bit, int<auto> num_bits
     return num - bits_to_zero;
 }
 
-fun ip_prefix_matches matches_prefix(ip_t ip) {
-    int src_ip_prefix = zero_n_bits(ip#src, 0, 32 - ip#prefix_len);
-    int dst_ip_prefix = zero_n_bits(ip#dst, 0, 32 - ip#prefix_len);
-    
-    bool src_prefix_match = table_match(
-		src_prefix_table_v4, 
-		(src_ip_prefix), 
-		());
-    bool dst_prefix_match = table_match(
-		dst_prefix_table_v4, 
-		(dst_ip_prefix), 
-		());
-
-    return {src_prefix = src_prefix_match; dst_prefix = dst_prefix_match;};
+fun int<8>[4] extract_ip_v4_octets(int ip_addr) {
+    return [ip_addr[31:24]; ip_addr[23:16]; ip_addr[15:8]; ip_addr[7:0]];
 }
 
-fun int<24> anonymize_24_bits(int<48> address, bool first_half) {
-    if (first_half) {
-        return hash<24>(SEED, address[23:0]);
+fun ip_prefix_lengths matches_prefix(ip_t ip) {
+    int<8>[4] src_ip_octets = extract_ip_v4_octets(ip#src);
+    int<8>[4] dst_ip_octets = extract_ip_v4_octets(ip#dst);
+    
+    int src_prefix_length = table_match(
+		src_prefix_table_v4, 
+		((int<32>)src_ip_octets[0], (int<32>)src_ip_octets[1], (int<32>)src_ip_octets[2], (int<32>)src_ip_octets[3]), 
+		());
+    int dst_prefix_length = table_match(
+		dst_prefix_table_v4, 
+		((int<32>)dst_ip_octets[0], (int<32>)dst_ip_octets[1], (int<32>)dst_ip_octets[2], (int<32>)dst_ip_octets[3]), 
+		());
+    
+    return {src_prefix = src_prefix_length; dst_prefix = dst_prefix_length;};
+}
+
+fun int<24> anonymize_24_bits(int<24> num, bool anonymize) {
+    if (anonymize) {
+        return hash<24>(SEED, num);
     } else {
-        return hash<24>(SEED, address[47:24]);
+        return num;
     }
 }
 
-fun int anonymize_ip_prefix_16(int ip) {
+fun int<48> anonymize_mac(int<48> address, bool anonymize_oui, bool anonymize_id) {
+    int<24> oui = address[47:24];
+    int<24> id = address[23:0];
+    return anonymize_24_bits(oui, anonymize_oui) ^ anonymize_24_bits(id, anonymize_id);
+}
+
+fun int anonymize_ip_prefix_16(int ip, bool preserve_prefix) {
     int<16> prefix = ip[31:16];
+    if (!preserve_prefix) {
+        prefix = hash<16>(SEED, prefix);
+    }
     int<16> rest = hash<16>(SEED, ip[15:0]);
     return prefix ^ rest;
 }
 
-fun int anonymize_ip_prefix_24(int ip) {
+fun int anonymize_ip_prefix_24(int ip, bool preserve_prefix) {
     int<24> prefix = ip[31:8];
+    if (!preserve_prefix) {
+        prefix = hash<24>(SEED, prefix);
+    }
     int<8> rest = hash<8>(SEED, ip[7:0]);
     return prefix ^ rest;
 }
@@ -126,30 +158,33 @@ handle eth_ip(eth_t eth, ip_t ip) {
 }
 
 handle anonymize_info(eth_t eth, ip_t ip) {
-    if (!should_anonymize(eth, ip)) {
+    anonymization_policy policy = anon_policy;
+    if (!should_anonymize(eth, ip, policy#multicast_broadcast)) {
         generate_port(SERVER_PORT, eth_ip(eth, ip));
     } else {
-        // anonymize source + destination MAC addresses
-        int<48> smac = anonymize_24_bits(eth#smac, false) ^ anonymize_24_bits(eth#smac, true);
-        int<48> dmac = anonymize_24_bits(eth#dmac, false) ^ anonymize_24_bits(eth#dmac, true);
+        // anonymize MAC addresses
+        int<48> smac = anonymize_mac(eth#smac, policy#srcmac_oui, policy#srcmac_id);
+        int<48> dmac = anonymize_mac(eth#dmac, policy#dstmac_oui, policy#dstmac_id);
         eth_t anonymized_eth = {eth with dmac = dmac; smac = smac};
 
-        // anonymize src + dst IPv4 addresses
-        ip_prefix_matches ip_matches = matches_prefix(ip);
+        // anonymize IPv4 addresses
         int src_ip = ip#src;
-        if (ip_matches#src_prefix) {
-            match (ip#prefix_len) with
-            | 16 -> {src_ip = anonymize_ip_prefix_16(ip#src);}
-            | 24 -> {src_ip = anonymize_ip_prefix_24(ip#src);}
-            | _ -> {src_ip = 0;}
-        }
         int dst_ip = ip#dst;
-        if (ip_matches#dst_prefix) {
-            match (ip#prefix_len) with
-            | 16 -> {dst_ip = anonymize_ip_prefix_16(ip#dst);}
-            | 24 -> {dst_ip = anonymize_ip_prefix_24(ip#dst);}
-            | _ -> {dst_ip = 0;}
+
+        if (policy#srcip || policy#dstip) {
+            ip_prefix_lengths prefix_matches = matches_prefix(ip);
+
+            match (prefix_matches#src_prefix) with
+            | 16 -> {src_ip = anonymize_ip_prefix_16(ip#src, policy#preserve_prefix);}
+            | 24 -> {src_ip = anonymize_ip_prefix_24(ip#src, policy#preserve_prefix);}
+            | _ -> {src_ip = src_ip;}
+
+            match (prefix_matches#dst_prefix) with
+            | 16 -> {dst_ip = anonymize_ip_prefix_16(ip#dst, policy#preserve_prefix);}
+            | 24 -> {dst_ip = anonymize_ip_prefix_24(ip#dst, policy#preserve_prefix);}
+            | _ -> {dst_ip = dst_ip;}
         }
+
         ip_t anonymized_ip = {ip with src = src_ip; dst = dst_ip};
 
         generate_port(SERVER_PORT, eth_ip(anonymized_eth, anonymized_ip));
