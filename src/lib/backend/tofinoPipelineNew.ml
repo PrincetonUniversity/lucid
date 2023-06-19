@@ -258,11 +258,26 @@ let compile old_layout ds portspec build_dir ctl_fn_opt =
      but does not serialize to P4 because it is 
      included elsewhere. *)
   let ds = AddIntrinsics.add_intrinsics ds in
+  (* first, fix event numbers for all events *)
+  let ds = AddIngressParser.set_event_nums ds in 
   let ds = AddIngressParser.add_parser portspec ds in
   print_endline "coresyntax after ingress parser addition";
   print_endline (CorePrinting.decls_to_string ds);
   print_endline "----------";
-  exit 1;
+  (*  Can we move egr parser up into the coresyntax?
+      Not in a very meaningful way. The egress parser: 
+        1. match on tag (okay)
+        2. read flags (not defined until tofinocore and merge)
+        3. match on flags and generate (don't know paths until merge)
+        - so we could move it up, and maybe its worth doing later, but 
+          for now just leave it after tofinocore.
+  
+      <<left off here>> todo: 
+        transformation / optimization passes to ingress parser
+          1. when typing handlers, update the parser so that it 
+             references the full variable name in parameters (e.g., bar_c -> bar.bar_c)
+          2. do the speculative parsing optimization
+  *)
   (* static analysis to see if this program is compile-able *)
   InputChecks.all_checks ds;
 

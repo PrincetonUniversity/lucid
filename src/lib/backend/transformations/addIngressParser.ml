@@ -26,6 +26,10 @@ let is_pktev decl = match decl.d with
    | DEvent(_, _, EPacket, _) -> true
    | _ -> false
 ;;
+let is_bgev decl = match decl.d with
+   | DEvent(_, _, EBackground, _) -> true
+   | _ -> false
+;;
 let is_parser decl = match decl.d with
    | DParser(_) -> true 
    | _ -> false
@@ -36,10 +40,6 @@ let name_of_event eventdecl = match eventdecl.d with
    | _ -> error "[name of event] not an event decl"
 ;;
 
-(* call the parser for background events, which is not built yet. *)
-let call_lucid_block = block [] 
-   (pcall (call (Cid.id Builtins.lucid_parse_id) [] (ty TEvent)))
-;;
 
 (* create a parse block to parse and generate a single packet event. *)
 let packetevent_parse_block event = match event.d with
@@ -57,9 +57,31 @@ let packetevent_parse_block event = match event.d with
 ;;
 
 
+(* call the parser for background events. *)
+let call_lucid_block bg_events = 
+   let (branches : parser_branch list) = List.map 
+      (fun bg_ev -> match bg_ev.d with 
+         | DEvent(_, Some(num), _,_) -> 
+            pbranch [num] (packetevent_parse_block bg_ev)
+         | DEvent(_, None, _, _) -> error "event has no number"
+         | _ -> error "not an event?")
+      bg_events
+   in
+   let tag_id = Cid.create ["tag"] in
+   let tag_ty = ty (TInt(16)) in   
+   let etag = var tag_id tag_ty in
+   block 
+      [
+         read (Cid.create ["tag"]) (ty (TInt(16))) (* this tag has to be read by the merged ingress? Not really.*)
+      ]
+      (pmatch [etag] branches)
+      
+;;
+
+
 (* create a full parser from a portspec file, 
    if there are packet events but no parser. *)
-let portspec_to_parser portspec pkt_events = 
+let portspec_to_parser portspec pkt_events bg_events = 
    (* 1. generate a parse block from each event. *)
    (* 2. generate branches from the portspec *)
    let synthesized_parser actions (step:parser_step) = decl (parser (id "main") [] (block actions step)) in
@@ -78,10 +100,10 @@ let portspec_to_parser portspec pkt_events =
             else (bound_ports := dpid::(!bound_ports))
       in
       let background_branches =        
-         (pbranch [portspec.recirc_dpid] call_lucid_block)
+         (pbranch [portspec.recirc_dpid] (call_lucid_block bg_events))
          ::(List.map (fun port ->          
             bind_port port.dpid;
-            pbranch [port.dpid] call_lucid_block) portspec.internal_ports)
+            pbranch [port.dpid] (call_lucid_block bg_events)) portspec.internal_ports)
       in
       let external_packet_branches = match events with 
          (* one event -- we can use external ports *)
@@ -125,22 +147,46 @@ let pcalls_to_lucid_parser parser =
          | _ -> ()
       end
    in
+   v#visit_decl () parser;
    !call_ct
 ;;
 
+let set_event_nums decls =
+   let event_nums = List.filter_map 
+     (fun decl -> match decl.d with
+       | DEvent(_, nopt, _, _) -> nopt
+       | _ -> None)
+     decls
+   in
+   let rec set_event_nums' num decls = 
+     if (List.exists (fun v -> v = num) event_nums)
+     then set_event_nums' (num+1) decls
+     else 
+       match decls with
+       | [] -> []
+       | decl::decls -> (
+         match decl.d with
+         | DEvent(a, None, b, c) -> 
+           {decl with d = DEvent(a, Some(num), b, c)}::(set_event_nums' (num+1) decls)
+         | _ -> set_event_nums' num decls
+       )
+   in
+   set_event_nums' 1 decls
+ ;;
 
 let add_parser (portspec:port_config) ds =
    let pkt_events = List.filter is_pktev ds in
+   let bg_events = List.filter is_bgev ds in 
    let parsers = List.filter is_parser ds in
    match (pkt_events, parsers) with
    | ([], []) -> 
       (* case 1: no packet events and no parsers -- so make a parser for the bg events. *)
-      (decl (parser (id "main") [] call_lucid_block))::ds
+      (decl (parser (id "main") [] (call_lucid_block bg_events)))::ds
    | (pkt_events, []) -> 
       (* case 2: packet events declared, but no parser -- 
          so make a parser that branches on ingress port 
          according to the portspec provided. *)
-      (portspec_to_parser portspec pkt_events)::ds
+      (portspec_to_parser portspec pkt_events bg_events)::ds
    | (pkt_events, [parser]) -> 
       (* case 3: packet events and a single parser -- 
          just make sure the parser eventually calls the builtin for background events. *)

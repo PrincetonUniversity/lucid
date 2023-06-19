@@ -359,28 +359,7 @@ let rec add_default_egr_drop ds =
   List.map update_handler ds
 ;;
 
-let set_event_nums decls =
-  let event_nums = List.filter_map 
-    (fun decl -> match decl.d with
-      | DEvent(_, nopt, _, _) -> nopt
-      | _ -> None)
-    decls
-  in
-  let rec set_event_nums' num decls = 
-    if (List.exists (fun v -> v = num) event_nums)
-    then set_event_nums' (num+1) decls
-    else 
-      match decls with
-      | [] -> []
-      | decl::decls -> (
-        match decl.d with
-        | DEvent(a, None, b, c) -> 
-          {decl with d = DEvent(a, Some(num), b, c)}::(set_event_nums' (num+1) decls)
-        | _ -> set_event_nums' num decls
-      )
-  in
-  set_event_nums' 1 decls
-;;
+
 
 (** core -> tofinocore translation: building components **)
 (* translate decl and add to a component *)
@@ -407,7 +386,9 @@ let decl_to_tdecl (decl:decl) =
   | DHandler (hdl_id, hdl_sort, (hdl_params, hdl_body)) ->
     let handler = HParams {hdl_id; hdl_sort; hdl_params; hdl_body} in
     { td = TDHandler (handler); tdspan = decl.dspan; tdpragma = decl.dpragma }
-  | DParser _ -> error "Parsers are not yet supported by the tofino backend!"  
+  | DParser(a, b, c) -> {td = TDParser(a, b, c); tdspan = decl.dspan; tdpragma = decl.dpragma} 
+    
+    (* error "Parsers are not yet supported by the tofino backend!"   *)
   ;;
 
 (* raw translation pass -- just split program into ingress and egress components *)
@@ -421,8 +402,6 @@ let rec decls_to_tdecls tdecls ds : tdecls =
 
 (* translate the program into a tofinocore program *)
 let core_to_tofinocore decls : prog = 
-  (* first, fix event numbers for all events *)
-  let decls = set_event_nums decls in 
   (* split the decls and add handlers to direct 
      events that are handled, but at a different component
      (e.g., an event arrives at ingress but there's only 
