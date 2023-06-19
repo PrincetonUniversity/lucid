@@ -3,6 +3,7 @@
 open CoreSyntax
 open TofinoCoreNew
 open AddIntrinsics
+open AddIngressParser
 [@@@ocaml.warning "-21-27-26"]
 (*  
 
@@ -15,29 +16,8 @@ a union
     of events
 *)
 
-
-let block actions step : parser_block = 
-  List.map (fun a -> a, Span.default) actions, (step, Span.default)
-;;
-
-let read cid ty = PRead(cid, ty)
-let read_id (id, ty) = read (Cid.id id) ty
-let peek cid ty = PPeek(cid, ty)
-let skip ty = PSkip(ty)
-let assign cid exp = PAssign(cid, exp)
-
-let pbranch ints block : parser_branch  = (List.map (fun i -> PNum (Z.of_int i)) ints), block
-let pmatch exps branches = PMatch(exps, branches)
-let pgen exp = PGen(exp)
-let pdrop = PDrop
-let pcall exp = PCall(exp)
-
 let parser id params block = 
   TDParser(id, params, block)
-;;
-
-let empty_block () :parser_block = 
-  block [] pdrop
 ;;
 
 (*  *)

@@ -16,11 +16,14 @@ and size = int
 and sizes = size list
 and action_sig = string * size list * size list
 
+
+
 and raw_ty =
   | TBool
   | TGroup
   | TInt of size (* Number of bits *)
   | TEvent
+  (* an event type carries a list of the variants it may contain *)
   | TFun of func_ty (* Only used for Array/event functions at this point *)
   | TName of cid * sizes * bool
     (* Named type: e.g. "Array.t<<32>>". Bool is true if it represents a global type *)
@@ -233,7 +236,6 @@ and parser_action =
   | PPeek of cid * ty
   | PSkip of ty
   | PAssign of cid * exp
-
 
 and parser_branch = pat list * parser_block
 

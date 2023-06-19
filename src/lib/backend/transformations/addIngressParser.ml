@@ -1,28 +1,40 @@
 (* add an ingress parser to programs with a single packet event, 
    which can be treated as a "default". *)
 open CoreSyntax
+open MiscUtils
 
-
-
-
-
-let find_one_in_list fcn lst =
-   let rec loop acc = function
-      (* at the end of lst, so check if we have found something *)
-     | [] -> (match acc with
-              | [] -> None
-              | [x] -> Some x
-              | _ -> failwith "Multiple matches found")
-     (* processing the list, so update the accumulator *)
-     | x::xs -> if fcn x then loop (x::acc) xs else loop acc xs
-   in loop [] lst
+let block actions step : parser_block = 
+  List.map (fun a -> a, Span.default) actions, (step, Span.default)
 ;;
+
+let read cid ty = PRead(cid, ty)
+let read_id (id, ty) = read (Cid.id id) ty
+let peek cid ty = PPeek(cid, ty)
+let skip ty = PSkip(ty)
+let assign cid exp = PAssign(cid, exp)
+
+let pbranch ints block : parser_branch  = (List.map (fun i -> PNum (Z.of_int i)) ints), block
+let pmatch exps branches = PMatch(exps, branches)
+let pgen exp = PGen(exp)
+let pdrop = PDrop
+let pcall exp = PCall(exp)
+
+let parser id params block = 
+  DParser(id, params, block)
+;;
+
+let empty_block () :parser_block = 
+  block [] pdrop
+;;
+
 
 let default_event_opt = find_one_in_list 
    (fun decl -> match decl.d with 
       | DEvent(_,_,EPacket, _) -> true
       | _ -> false)
 ;;
+
+
 
 (* sketch of the generated parser 
    for a program with a single default event: 
