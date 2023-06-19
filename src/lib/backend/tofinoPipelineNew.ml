@@ -258,8 +258,11 @@ let compile old_layout ds portspec build_dir ctl_fn_opt =
      but does not serialize to P4 because it is 
      included elsewhere. *)
   let ds = AddIntrinsics.add_intrinsics ds in
-  let ds = AddIngressParser.add_parser ds in
-
+  let ds = AddIngressParser.add_parser portspec ds in
+  print_endline "coresyntax after ingress parser addition";
+  print_endline (CorePrinting.decls_to_string ds);
+  print_endline "----------";
+  exit 1;
   (* static analysis to see if this program is compile-able *)
   InputChecks.all_checks ds;
 

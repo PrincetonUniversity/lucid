@@ -388,6 +388,38 @@ let memop_sp mid mparams mbody span =
   decl_sp (DMemop { mid; mparams; mbody }) span
 ;;
 
+
+(* parser constructors *)
+let block actions step : parser_block = 
+  List.map (fun a -> a, Span.default) actions, (step, Span.default)
+;;
+
+(* actions *)
+let read cid ty = PRead(cid, ty)
+let read_id (id, ty) = read (Cid.id id) ty
+let peek cid ty = PPeek(cid, ty)
+let skip ty = PSkip(ty)
+let assign cid exp = PAssign(cid, exp)
+
+(* steps *)
+let pgen exp = PGen(exp)
+let pdrop = PDrop
+let pcall exp = PCall(exp)
+let pmatch exps branches = PMatch(exps, branches)
+(* match branches *)
+let pbranch ints block : parser_branch  = (List.map (fun i -> PNum (Z.of_int i)) ints), block
+
+
+let parser id params block = 
+  DParser(id, params, block)
+;;
+
+let empty_block () :parser_block = 
+  block [] pdrop
+;;
+
+
+
 (*** Utility -- may split into a separate file if it gets big *)
 
 let equiv_list f lst1 lst2 =
