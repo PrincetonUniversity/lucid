@@ -100,12 +100,12 @@ let td_to_string (td:td)=
       (params_to_string acn.aconst_params)
       (params_to_string acn.aparams)
       (comma_sep exp_to_string acn.abody |> indent_body)
-  | TDParser (id, params, parser) ->
+  | TDParser ({pid; pparams; pblock; _;}) ->
     Printf.sprintf
       "parser %s(%s) {\n%s\n}\n"
-      (id_to_string id)
-      (params_to_string params)
-      (parser_block_to_string parser |> indent_body)
+      (id_to_string pid)
+      (params_to_string pparams)
+      (parser_block_to_string pblock |> indent_body)
   | TDVar (id, ty) ->
     Printf.sprintf "sharedlocal %s %s;" (ty_to_string ty) (id_to_string id)
   | TDOpenFunction(id, params, statement) -> 

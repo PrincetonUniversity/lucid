@@ -137,6 +137,13 @@ and handler =
      all handlers are tranformed into this form then merged together *)
   | HEvent of hevent
 
+and parser = {
+  pid : id;
+  pparams : params;
+  pblock : parser_block;
+  poutput : event option;
+}
+
 (* the events are the events that the parser may generate *)
 (* and parser = 
   | PMain of parser_block * event list
@@ -147,7 +154,7 @@ and td =
   | TDMemop of memop
   | TDExtern of id * ty
   | TDAction of action
-  | TDParser of id * params * parser_block
+  | TDParser of parser
   (* new / changed decls *)
   | TDEvent of event
   | TDHandler of handler
@@ -386,9 +393,11 @@ let decl_to_tdecl (decl:decl) =
   | DHandler (hdl_id, hdl_sort, (hdl_params, hdl_body)) ->
     let handler = HParams {hdl_id; hdl_sort; hdl_params; hdl_body} in
     { td = TDHandler (handler); tdspan = decl.dspan; tdpragma = decl.dpragma }
-  | DParser(a, b, c) -> {td = TDParser(a, b, c); tdspan = decl.dspan; tdpragma = decl.dpragma} 
-    
-    (* error "Parsers are not yet supported by the tofino backend!"   *)
+  | DParser(pid, pparams, pblock) -> {
+    td = TDParser({pid; pparams; pblock; poutput=None;});
+    tdspan = decl.dspan;
+    tdpragma = decl.dpragma;
+  }
   ;;
 
 (* raw translation pass -- just split program into ingress and egress components *)

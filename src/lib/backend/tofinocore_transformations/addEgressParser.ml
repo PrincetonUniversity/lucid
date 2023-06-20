@@ -16,8 +16,8 @@ a union
     of events
 *)
 
-let parser id params block = 
-  TDParser(id, params, block)
+let parser pid pparams pblock = 
+  TDParser({pid; pparams; pblock; poutput=None;})
 ;;
 
 (*  *)
