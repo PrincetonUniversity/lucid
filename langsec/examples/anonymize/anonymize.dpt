@@ -13,65 +13,89 @@ type ip_t = {
 	int dst;
 	int<16> len;
 }
-
-// prefix lengths of source/dst IP addresses
-type ip_prefix_lengths = {
-    int src_prefix;
-    int dst_prefix;
+type eth_ip_t = {
+    eth_t eth;
+    ip_t ip;
 }
-
-type anonymization_policy = {
-    bool multicast_broadcast;
-    bool srcmac_oui;
-    bool srcmac_id;
-    bool dstmac_oui;
-    bool dstmac_id;
-    bool srcip;
-    bool dstip;
-    bool preserve_prefix;
-}
-
-/********** Anonymization Policy *********/
-global anonymization_policy anon_policy = {
-    multicast_broadcast = true;
-    srcmac_oui = false;
-    srcmac_id = false;
-    dstmac_oui = false;
-    dstmac_id = true;
-    srcip = false;
-    dstip = false;
-    preserve_prefix = false;
-};
 
 /********** Events *********/
 packet event eth_ip(eth_t eth, ip_t ip);
-
-event anonymize_info(eth_t eth, ip_t ip);
 
 /********** Tables *********/
 action int result(int prefix_len)() {
 	return prefix_len;
 }
 
-table_type prefix_table_v4_t = {
+table_type prefix_table_t = {
     key_size: (32, 32, 32, 32)
     arg_types: ()
     ret_type: int
 }
 
-global prefix_table_v4_t src_prefix_table_v4 = 
-    table_create<prefix_table_v4_t>(
-        (result),
-        1024,
-        result(0)
-    );
+/********** Modules *********/
+// module implementing a table to match prefixes of IPv4 addresses
+module PrefixTable {
+    type t = {
+        prefix_table_t prefix_table;
+    }
 
-global prefix_table_v4_t dst_prefix_table_v4 = 
-    table_create<prefix_table_v4_t>(
-        (result),
-        1024,
-        result(0)
-    );
+    constr t create() = {
+        prefix_table = table_create<prefix_table_t>(
+            (result),
+            1024,
+            result(0)
+        );
+    };
+
+    fun int prefix_match(t table, int ip_addr) {
+        int<8>[4] ip_octets = [ip_addr[31:24]; ip_addr[23:16]; ip_addr[15:8]; ip_addr[7:0]];
+        int prefix_length = table_match(
+            table#prefix_table, 
+            ((int<32>)ip_octets[0], (int<32>)ip_octets[1], (int<32>)ip_octets[2], (int<32>)ip_octets[3]), 
+            ());
+        return prefix_length;
+    }
+}
+
+global PrefixTable.t src_prefix_table = PrefixTable.create();
+global PrefixTable.t dst_prefix_table = PrefixTable.create();
+
+// module implementing policy to use when anonymizing ethernet and ip packets
+module AnonPolicy {
+    type t = {
+        bool[6] policy;
+    }
+
+    constr t create(bool[6] policy) = {
+        policy = policy;
+    };
+
+    fun bool get_multicast_broadcast(t anon_policy) {
+        return anon_policy#policy[0];
+    }
+
+    fun bool get_srcmac_oui(t anon_policy) {
+        return anon_policy#policy[1];
+    }
+
+    fun bool get_srcmac_id(t anon_policy) {
+        return anon_policy#policy[2];
+    }
+
+    fun bool get_dstmac_oui(t anon_policy) {
+        return anon_policy#policy[3];
+    }
+
+    fun bool get_dstmac_id(t anon_policy) {
+        return anon_policy#policy[4];
+    }
+
+    fun bool get_preserve_prefix(t anon_policy) {
+        return anon_policy#policy[5];
+    }
+}
+
+global AnonPolicy.t anon_policy = AnonPolicy.create([false; true; true; true; true; true]);
 
 /********** Functions *********/
 fun bool should_anonymize(eth_t eth, ip_t ip, bool multicast_broadcast) {
@@ -80,41 +104,6 @@ fun bool should_anonymize(eth_t eth, ip_t ip, bool multicast_broadcast) {
     } else {
         return true;
     }
-}
-
-fun int<auto> get_n_bits(int<auto> num, int<auto> first_bit, int<auto> num_bits) {
-    int<auto> shifted_to_first_bit = num >> first_bit;
-    int<auto> wanted_bits_removed = shifted_to_first_bit >> num_bits;
-    if (wanted_bits_removed != 0) {
-        wanted_bits_removed = wanted_bits_removed << num_bits;
-    }
-    int<auto> wanted_bits = (int<auto>)(shifted_to_first_bit - wanted_bits_removed);
-    return wanted_bits;
-}
-
-fun int<auto> zero_n_bits(int<auto> num, int<auto> first_bit, int<auto> num_bits) {
-    int<auto> bits_to_zero = (get_n_bits(num, first_bit, num_bits)) << first_bit;
-    return num - bits_to_zero;
-}
-
-fun int<8>[4] extract_ip_v4_octets(int ip_addr) {
-    return [ip_addr[31:24]; ip_addr[23:16]; ip_addr[15:8]; ip_addr[7:0]];
-}
-
-fun ip_prefix_lengths matches_prefix(ip_t ip) {
-    int<8>[4] src_ip_octets = extract_ip_v4_octets(ip#src);
-    int<8>[4] dst_ip_octets = extract_ip_v4_octets(ip#dst);
-    
-    int src_prefix_length = table_match(
-		src_prefix_table_v4, 
-		((int<32>)src_ip_octets[0], (int<32>)src_ip_octets[1], (int<32>)src_ip_octets[2], (int<32>)src_ip_octets[3]), 
-		());
-    int dst_prefix_length = table_match(
-		dst_prefix_table_v4, 
-		((int<32>)dst_ip_octets[0], (int<32>)dst_ip_octets[1], (int<32>)dst_ip_octets[2], (int<32>)dst_ip_octets[3]), 
-		());
-    
-    return {src_prefix = src_prefix_length; dst_prefix = dst_prefix_length;};
 }
 
 fun int<24> anonymize_24_bits(int<24> num, bool anonymize) {
@@ -149,44 +138,64 @@ fun int anonymize_ip_prefix_24(int ip, bool preserve_prefix) {
     return prefix ^ rest;
 }
 
+fun int anonymize_ip(int ip_addr, PrefixTable.t table, bool preserve_prefix) {
+    int prefix_len = PrefixTable.prefix_match(table, ip_addr);
+    match (prefix_len) with
+    | 16 -> {return anonymize_ip_prefix_16(ip_addr, preserve_prefix);}
+    | 24 -> {return anonymize_ip_prefix_24(ip_addr, preserve_prefix);}
+    | _ -> {return ip_addr;}
+}
+
+fun eth_ip_t anonymize_packet(eth_t eth, ip_t ip) {
+    if (!should_anonymize(eth, ip, AnonPolicy.get_multicast_broadcast(anon_policy))) {
+        return {eth = eth; ip = ip;};
+    } else {
+        // anonymize MAC addresses
+        int<48> smac = anonymize_mac(
+            eth#smac, AnonPolicy.get_srcmac_oui(anon_policy), AnonPolicy.get_srcmac_id(anon_policy));
+        int<48> dmac = anonymize_mac(
+            eth#dmac, AnonPolicy.get_dstmac_oui(anon_policy), AnonPolicy.get_dstmac_id(anon_policy));
+        eth_t anonymized_eth = {eth with dmac = dmac; smac = smac};
+
+        // anonymize IPv4 addresses
+        bool preserve_prefix = AnonPolicy.get_preserve_prefix(anon_policy);
+        int src_ip = anonymize_ip(ip#src, src_prefix_table, preserve_prefix);
+        int dst_ip = anonymize_ip(ip#dst, dst_prefix_table, preserve_prefix);
+        ip_t anonymized_ip = {ip with src = src_ip; dst = dst_ip};
+
+        return {eth = anonymized_eth; ip = anonymized_ip;};
+    }
+}
+
 /********** Handlers *********/
 handle eth_ip(eth_t eth, ip_t ip) {
 	// 1. forward an event representing the packet out of port 1.
 	generate_port(OUT_PORT, eth_ip(eth, ip));
 	// 2. anonymize packet info before sending to the monitoring server.
-    generate(anonymize_info(eth, ip));
+    eth_ip_t anonymized_packet = anonymize_packet(eth, ip);
+    generate_port(SERVER_PORT, eth_ip(anonymized_packet#eth, anonymized_packet#ip));
 }
 
-handle anonymize_info(eth_t eth, ip_t ip) {
-    anonymization_policy policy = anon_policy;
-    if (!should_anonymize(eth, ip, policy#multicast_broadcast)) {
-        generate_port(SERVER_PORT, eth_ip(eth, ip));
-    } else {
-        // anonymize MAC addresses
-        int<48> smac = anonymize_mac(eth#smac, policy#srcmac_oui, policy#srcmac_id);
-        int<48> dmac = anonymize_mac(eth#dmac, policy#dstmac_oui, policy#dstmac_id);
-        eth_t anonymized_eth = {eth with dmac = dmac; smac = smac};
 
-        // anonymize IPv4 addresses
-        int src_ip = ip#src;
-        int dst_ip = ip#dst;
+/*******************/
 
-        if (policy#srcip || policy#dstip) {
-            ip_prefix_lengths prefix_matches = matches_prefix(ip);
 
-            match (prefix_matches#src_prefix) with
-            | 16 -> {src_ip = anonymize_ip_prefix_16(ip#src, policy#preserve_prefix);}
-            | 24 -> {src_ip = anonymize_ip_prefix_24(ip#src, policy#preserve_prefix);}
-            | _ -> {src_ip = src_ip;}
-
-            match (prefix_matches#dst_prefix) with
-            | 16 -> {dst_ip = anonymize_ip_prefix_16(ip#dst, policy#preserve_prefix);}
-            | 24 -> {dst_ip = anonymize_ip_prefix_24(ip#dst, policy#preserve_prefix);}
-            | _ -> {dst_ip = dst_ip;}
-        }
-
-        ip_t anonymized_ip = {ip with src = src_ip; dst = dst_ip};
-
-        generate_port(SERVER_PORT, eth_ip(anonymized_eth, anonymized_ip));
+/********** Extra Unused Functions *********/
+fun int<auto> get_n_bits(int<auto> num, int<auto> first_bit, int<auto> num_bits) {
+    int<auto> shifted_to_first_bit = num >> first_bit;
+    int<auto> wanted_bits_removed = shifted_to_first_bit >> num_bits;
+    if (wanted_bits_removed != 0) {
+        wanted_bits_removed = wanted_bits_removed << num_bits;
     }
+    int<auto> wanted_bits = (int<auto>)(shifted_to_first_bit - wanted_bits_removed);
+    return wanted_bits;
+}
+
+fun int<auto> zero_n_bits(int<auto> num, int<auto> first_bit, int<auto> num_bits) {
+    int<auto> bits_to_zero = (get_n_bits(num, first_bit, num_bits)) << first_bit;
+    return num - bits_to_zero;
+}
+
+fun int<8>[4] extract_ip_v4_octets(int ip_addr) {
+    return [ip_addr[31:24]; ip_addr[23:16]; ip_addr[15:8]; ip_addr[7:0]];
 }
