@@ -1,6 +1,7 @@
 const int OUT_PORT = 1;
 const int SERVER_PORT = 2;
 const int SEED = 7;
+const int<48> FULL_MASK = 0xffffffffffff;
 
 // ethernet and ip packet headers
 type eth_t = {
@@ -16,6 +17,10 @@ type ip_t = {
 type eth_ip_t = {
     eth_t eth;
     ip_t ip;
+}
+type split_int_t<'sz> = {
+    int prefix;
+    int<'sz> suffix;
 }
 
 /********** Events *********/
@@ -106,43 +111,36 @@ fun bool should_anonymize(eth_t eth, ip_t ip, bool multicast_broadcast) {
     }
 }
 
-fun int<24> anonymize_24_bits(int<24> num, bool anonymize) {
-    if (anonymize) {
-        return hash<24>(SEED, num);
-    } else {
-        return num;
+fun split_int_t<'sz> anonymize_num(int<'a> num, bool anonymize_prefix, bool anonymize_suffix) {
+    int<'a> prefix_mask = (int<'a>)(FULL_MASK << size_to_int('sz));
+    int<'a> prefix = num & prefix_mask;
+    int<'sz> suffix = (int<'sz>)(num - prefix);
+
+    if (anonymize_prefix) {
+        prefix = hash<'a>(SEED, prefix);
     }
+    prefix = prefix >> size_to_int('sz);
+    if (anonymize_suffix) {
+        suffix = hash<'sz>(SEED, suffix);
+    }
+
+    return {prefix = (int<32>)prefix; suffix = suffix;};
 }
 
 fun int<48> anonymize_mac(int<48> address, bool anonymize_oui, bool anonymize_id) {
-    int<24> oui = address[47:24];
-    int<24> id = address[23:0];
-    return anonymize_24_bits(oui, anonymize_oui) ^ anonymize_24_bits(id, anonymize_id);
-}
-
-fun int anonymize_ip_prefix_16(int ip, bool preserve_prefix) {
-    int<16> prefix = ip[31:16];
-    if (!preserve_prefix) {
-        prefix = hash<16>(SEED, prefix);
-    }
-    int<16> rest = hash<16>(SEED, ip[15:0]);
-    return prefix ^ rest;
-}
-
-fun int anonymize_ip_prefix_24(int ip, bool preserve_prefix) {
-    int<24> prefix = ip[31:8];
-    if (!preserve_prefix) {
-        prefix = hash<24>(SEED, prefix);
-    }
-    int<8> rest = hash<8>(SEED, ip[7:0]);
-    return prefix ^ rest;
+    split_int_t<24> split_mac = anonymize_num(address, anonymize_oui, anonymize_id);
+    return (int<24>)(split_mac#prefix) ^ split_mac#suffix;
 }
 
 fun int anonymize_ip(int ip_addr, PrefixTable.t table, bool preserve_prefix) {
     int prefix_len = PrefixTable.prefix_match(table, ip_addr);
     match (prefix_len) with
-    | 16 -> {return anonymize_ip_prefix_16(ip_addr, preserve_prefix);}
-    | 24 -> {return anonymize_ip_prefix_24(ip_addr, preserve_prefix);}
+    | 16 -> {
+        split_int_t<16> split_ip = anonymize_num(ip_addr, !preserve_prefix, true);
+        return (int<16>)(split_ip#prefix) ^ split_ip#suffix;}
+    | 24 -> {
+        split_int_t<8> split_ip = anonymize_num(ip_addr, !preserve_prefix, true);
+        return (int<24>)(split_ip#prefix) ^ split_ip#suffix;}
     | _ -> {return ip_addr;}
 }
 
