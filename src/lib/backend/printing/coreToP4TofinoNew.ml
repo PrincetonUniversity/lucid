@@ -935,14 +935,13 @@ let generate_ingress_control prog_env block_id tds =
   (* build the parameter and variable renaming map for ingress.
      this should actually just be an update to context -- 
      the renaming map is just another part of context. *)
-
+  error "nope ";
   (* builtin renaming: ingress_port, hdl_selector, events count *)
-  let rename_tuples = [
-    (Cid.id (fst m.hdl_internal_params.out_port)), egr_port_arg;
+  let rename_tuples = [] in
+    (* (Cid.id (fst m.hdl_internal_params.out_port)), egr_port_arg;
     (Cid.id (fst m.hdl_internal_params.gen_ct)), mcast_grp_a_arg;
-    (Cid.id (fst m.hdl_internal_params.out_group)), mcast_grp_b_arg
-  ]
-  in
+    (Cid.id (fst m.hdl_internal_params.out_group)), mcast_grp_b_arg *)
+  
   let renames = List.fold_left (fun r tup -> rename tup r)
     CidMap.empty
     rename_tuples

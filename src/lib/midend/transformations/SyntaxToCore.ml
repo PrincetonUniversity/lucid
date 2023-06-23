@@ -278,8 +278,8 @@ and translate_parser_step = function
   | S.PDrop -> C.PDrop
 
 and translate_parser_block (actions, (step, step_span)) =
-  ( List.map (fun (a, sp) -> translate_parser_action a, sp) actions
-  , (translate_parser_step step, step_span) )
+  {pactions=List.map (fun (a, sp) -> translate_parser_action a, sp) actions;
+   pstep=(translate_parser_step step, step_span);}
 ;;
 
 let translate_decl (d : S.decl) : C.decl =

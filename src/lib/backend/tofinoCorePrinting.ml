@@ -71,6 +71,24 @@ let handler_to_string (handler:TofinoCoreNew.handler) =
   )
 ;;
 
+let parser_to_string p = 
+  match p.pret_event with 
+  | Some(pret_event) -> 
+    Printf.sprintf
+      "parser %s(%s) returns(event %s, %s)\n{\n%s\n}\n"
+      (id_to_string p.pid)
+      (params_to_string p.pparams)
+      (id_of_event pret_event |> id_to_string)
+      (params_to_string p.pret_params)
+      (parser_block_to_string p.pblock |> indent_body)
+  | None -> 
+    Printf.sprintf
+      "parser %s(%s)\n{\n%s\n}\n"
+      (id_to_string p.pid)
+      (params_to_string p.pparams)
+      (parser_block_to_string p.pblock |> indent_body)
+;;
+
 let td_to_string (td:td)= 
   match td with
   | TDGlobal (id, ty, exp) ->
@@ -100,12 +118,7 @@ let td_to_string (td:td)=
       (params_to_string acn.aconst_params)
       (params_to_string acn.aparams)
       (comma_sep exp_to_string acn.abody |> indent_body)
-  | TDParser ({pid; pparams; pblock; _;}) ->
-    Printf.sprintf
-      "parser %s(%s) {\n%s\n}\n"
-      (id_to_string pid)
-      (params_to_string pparams)
-      (parser_block_to_string pblock |> indent_body)
+  | TDParser (p) -> parser_to_string p
   | TDVar (id, ty) ->
     Printf.sprintf "sharedlocal %s %s;" (ty_to_string ty) (id_to_string id)
   | TDOpenFunction(id, params, statement) -> 

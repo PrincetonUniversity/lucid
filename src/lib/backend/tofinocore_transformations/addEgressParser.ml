@@ -5,19 +5,9 @@ open TofinoCoreNew
 open AddIntrinsics
 open AddIngressParser
 [@@@ocaml.warning "-21-27-26"]
-(*  
 
-What does the final egress parser look like? 
-we are parsing the ingress's output: 
-a union
-  (with tag)
-  of sets
-    (with each set having flag fields)
-    of events
-*)
-
-let parser pid pparams pblock = 
-  TDParser({pid; pparams; pblock; poutput=None;})
+let parser pid pparams pblock pevent outparams = 
+  TDParser({pid; pparams; pblock; pret_event=Some(pevent); pret_params = outparams;})
 ;;
 
 (*  *)
@@ -75,7 +65,7 @@ let block_of_nth_member out_ctor_base (members : event list) n =
    subsets of those members that are active, 
    generate the parser branches to extract the 
    parameters and generate the event for each case. 
-   event_ctor_cid is the fully qualified cid 
+   out_ctor_base is the fully qualified cid 
    of the event to generate. *)
 let branches_of_subsets out_ctor_base members subsets = 
   (* return an integer list of length |events| that
@@ -93,17 +83,19 @@ let branches_of_subsets out_ctor_base members subsets =
       (List.map (fun _ -> 0) members)
       subset
   in
-  (* each bitvec indicates which members are active *)
+  (* each bitvec indicates which members are active in the given eventset *)
   let subset_bitvecs = List.map subset_to_bitvec subsets in
+  (* create parse branches for each bitvec / eventset form *)
   let branches = List.fold_left 
     (fun branches bitvec -> 
-      let n_to_idx = get_n_to_idx_map bitvec in
+      (* a mapping from each replica id to... ???  *)
+      let (rid_to_bitvec_idx : (int * int) list) = get_n_to_idx_map bitvec in
       let new_branches = List.map 
         (fun (copy_num, event_idx) -> 
           pbranch
             (copy_num::bitvec)
             (block_of_nth_member out_ctor_base members event_idx))
-        n_to_idx
+        rid_to_bitvec_idx
       in
       branches@new_branches)
     []
@@ -112,21 +104,151 @@ let branches_of_subsets out_ctor_base members subsets =
   branches
 ;;
 
+(* 
+
+foo, port; bar, self
+
+
+*)
+
+let flag_val_of_event gen_seq event =
+  match (List.assoc_opt (id_of_event event) gen_seq) with
+  | None -> 0
+  | Some(GPort(_)) -> 2
+  | Some(GMulti(_)) -> 2
+  | Some(GSingle(None)) -> 1
+  | _ -> error "[flag_val_of_event] not sure what to do with a generate type GSingle(Some(...))"
+;;
+
+
+(* write a command to skip an event's parameters *)
+let pskip_event_params event = 
+  let event_size = List.fold_left 
+    (fun sz (_, param_ty) -> 
+      sz + size_of_tint param_ty)
+    0
+    (params_of_event event)
+  in
+  [PSkip(ty (TInt(event_size)))];
+;;
+(* write a command to read an event's parameters *)
+let pread_event_params event = 
+  let read_cmds = List.map read_id (params_of_event event) in
+  read_cmds
+;;
+(* write a command to generate an event, assuming that 
+   its parameters were read in the saem block by pread_event *)
+let pgen_event out_ctor_base event = pgen (
+  call 
+  (Cid.concat out_ctor_base (Cid.id (id_of_event event))) 
+  (List.map (fun (id, ty) -> var (Cid.id id) ty) (params_of_event event))
+  (ty TEvent)  
+)
+;;
+
+let pblock_nope actions step = 
+  {
+    pactions = List.map (fun a -> (a, Span.default)) actions;
+    pstep = step, Span.default;  
+  }
+;;
+
+(* construct a parser block to read active event params, 
+   skip other events, then generate the event. *)
+let make_extract_event_block out_ctor_base members active_event_id = 
+
+  let param_actions = List.fold_left 
+    (fun param_actions member -> 
+      if (Id.equal (id_of_event member) active_event_id)
+        then (param_actions@(pread_event_params member))
+        else (param_actions@(pskip_event_params member)))
+    []
+    members
+  in
+  let active_event = List.find 
+    (fun e -> Id.equal (id_of_event e) active_event_id)
+    members
+  in
+  pblock_nope param_actions (pgen_event out_ctor_base active_event)
+;;
+
+
+
+type generate_seq = (id * gen_type) list
+let branches_of_generated_events out_ctor_base (members : event list) (gen_seqs : generate_seq list) : parser_branch list = 
+  (* each generate sequence turns into n rules -- one rule for each member *)
+    (*
+    here's roughly what we'd do in a friendly programming language 
+    like python or c or assembly:
+      flag_values = []
+      for evid in members:
+        gen_ty = gen_seq.get(evid, None)
+        if (gen_ty == local):
+          flag_values.append(1)
+        elif (gen_ty == port):
+          flag_values.append(2)
+        else:
+          flag_values.append(0)
+      
+      replica_id = 1
+      replica_ids = []
+      actions = []
+      for event_id, gen_type in gen_seq:
+        if (gen_type == port):
+          replica_ids.append(0)
+          actions.append([skip e for e in members if e != event_id else read e])
+        else:
+          replica_ids.append(replica_id)
+          replica_id += 1
+    *)
+    let branches_of_gen_seq gen_seq = 
+    (* there is 1 branch for each event in the sequence, because there's one branch for each replica. *)
+    (* flag vals tells us which events are in the packet, so its the same for all rules *)
+    let flag_vals = List.map (flag_val_of_event gen_seq) members in 
+    (* now, we make a rule to extract each event in the sequence, 
+        for the replica corresponding to this event.  *)        
+    let mutable_suck_it_ocaml = ref 0 in 
+    let branch_of_gen (event_id, gen_ty) = 
+      let block = make_extract_event_block out_ctor_base members event_id in 
+      let replica_val = match (gen_ty) with 
+        | GSingle(None)-> (
+          (* I guess this might start at 1 and increment every
+             time there's a recirc event (conveniently named GSingle(None)!) *)
+          mutable_suck_it_ocaml := (!mutable_suck_it_ocaml) + 1;
+          !mutable_suck_it_ocaml
+        )
+        | GSingle(Some(_)) -> error "idk"
+        | _ -> 0 (* this is a port or ports generate *)
+      in
+      let pattern = List.map 
+        (fun p -> PNum(Z.of_int p))
+        (flag_vals@[replica_val])
+      in
+      pattern, block
+    in
+    List.map branch_of_gen gen_seq
+  in
+
+  List.map branches_of_gen_seq gen_seqs |> List.flatten
+;;
+
+
 (* make a block to parse a serialized eventset, 
    extract the nth_var event in the set, 
    and generate the event evout.members[idxof(nth_var)]...
    oof this is complicated. *)
-let eventset_block evset (nth_var : (cid * ty)) (out_ctor_base : cid) = 
+let eventset_block evset (rid_var : (cid * ty)) (out_ctor_base : cid) = 
   match evset with 
-  | EventSet({flags;members; subsets;}) -> (
+  | EventSet({flags;members; generated_events;}) -> (
     (* match on replica_id::flags *)
     let match_exps = List.map 
       (fun (cid, ty) -> var cid ty)
-      ([nth_var]@(List.map (fun (id, ty) -> Cid.id id, ty) flags))
+      ((List.map (fun (id, ty) -> Cid.id id, ty) flags)@[rid_var])
     in
     (* for each subset in subsets, make per-replica_id rules.
         for each rule, make a block that read the parameters and generates the event *)  
-    let branches = branches_of_subsets out_ctor_base members subsets in
+    (* let branches = branches_of_subsets out_ctor_base members subsets in *)
+    let branches = branches_of_generated_events out_ctor_base members generated_events in
     block
       (List.map read_id flags)
       (pmatch match_exps branches)  
@@ -145,28 +267,28 @@ let make_egr_parser
   (from_ingress : event) 
   (to_egress : event) = 
     (* first, produce 
-      egr_start(egr_intr_md_t egr_intr_md) {
-        read egr_intr_md : egr_intr_md_t;
-        egr_main(egr_intr_md.rid);
-      } 
+
+      parser main() returns(event egress_input, egress_intrinsic_metadata_t egress_intrinsic_metadata) {
+        read egress_intrinsic_metadata : egress_intrinsic_metadata_t;
+        read tag : int<16>;
+        match tag with 
+        // ...
+      }
     *)
-  print_endline ("members of from_ingress: ");
-  (match from_ingress with 
-    | EventUnion({members;}) -> 
-      TofinoCorePrinting.line_sep (TofinoCorePrinting.event_to_string) (members) |> print_endline
-    | _ -> error "nope"
-  );
-  let egr_intrinsic = List.hd egress_parser_intrinsics in
-  let egress_intr_param = egr_intrinsic.pid, tname (Cid.id egr_intrinsic.pty.tyid) in 
+  let egr_intr_id, egr_intr_ty = intrinsic_to_param egress_intrinsic_metadata_t in 
 
   let tagid, tagty = etag from_ingress in
 
-  let read_intr_cmd = read (fst egress_intr_param |> Cid.id) (snd egress_intr_param) in
+  let read_intr_cmd = read (Cid.id egr_intr_id) egr_intr_ty in
   let read_event_tag = read (Cid.id tagid) tagty in
-  let current_set_member_cidty = param_to_cidty egr_intrinsic "egress_rid" in 
+  let egress_replica_id = field_of_intrinsic 
+    egress_intrinsic_metadata_t 
+    (Cid.id egr_intr_id)
+    (Cid.create ["egress_rid"])
+  in    
   let egr_parser = parser
     (id "main")
-    ([egress_intr_param])
+    ([])
     (block
       [
         read_intr_cmd;
@@ -178,131 +300,21 @@ let make_egr_parser
             [tagval] 
             (eventset_block 
               event 
-              current_set_member_cidty 
+              egress_replica_id 
               (id_of_event to_egress |> Cid.id)))  
           (etagged_members from_ingress) 
         )      
       )
     )
+    to_egress
+    [egr_intr_id, egr_intr_ty]
   in
   egr_parser
 ;;
 
-(*** generate elimination -- this will apply to the ingress parser too ***)
 
-(* given a list of events, find the one that matches cid *)
-let rec cid_to_eventconstr prefix_ids events cid =
-  match cid with 
-  | Cid.Id(id) -> (
-    match (List.find_opt (fun event -> Id.equal id (id_of_event event)) events) with
-    | Some(event) -> prefix_ids, event
-    | None -> error "[cid_to_event] outer component of cid did not match any event"
-  )
-  | Cid.Compound(id, cid) -> (
-    (* the outer component must match one of the events *)
-    let outer_event = match (List.find_opt (fun event -> Id.equal id (id_of_event event)) events) with
-    | Some(event) -> event
-    | None -> error "[cid_to_event] outer component of cid did not match any event"
-    in
-    cid_to_eventconstr (prefix_ids@[id]) (members_of_event outer_event) cid
-  )      
-;;
-
-let eliminate_parser_generates to_egress_event parser = 
-  (* eliminate generate statements in the parser by replacing them with 
-     assignments to the parameters of the event. *)
-  let v = object
-    inherit [_] s_map as super
-    method! visit_parser_block () (parser_actions_spans_list, (parser_step, sp))= 
-      match parser_step with 
-      | PGen(gen_exp) -> (
-        (* this is a generate. So now we need to find the constructor for 
-           the event, get its parameters, append assign statements to 
-           set the parameters, and finally replace the PGen with an exit, 
-           (perhaps something like PCall continue()) *)
-        match gen_exp.e with 
-        | ECall(evconstr_cid, eargs) -> 
-          (* find the base event being generated *)
-          let event_prefix, base_event = cid_to_eventconstr [] [to_egress_event] evconstr_cid in
-          (* get the parameters, fully scoped *)
-          let prefix_cid = Cid.create_ids event_prefix in
-          let params = params_of_event base_event in
-          let params = List.map 
-            (fun (id, ty) -> 
-              Cid.concat 
-                prefix_cid 
-                (Cid.create_ids [id_of_event base_event; id]),
-              ty) 
-            params 
-          in
-
-          (* optimized: make peek / skip actions to set all the params, 
-             then replace the actions in the generate block with the new ones. *)
-
-          let peek_skip_actions = List.fold_left
-            (fun actions (cid,ty) -> 
-              actions@[
-                PPeek(cid, ty), Span.default;
-                PSkip(ty), Span.default                
-                ]
-              )
-            []
-            params
-          in
-          let parser_actions_spans_list = peek_skip_actions in 
-          (* make assign actions to set all the params *)
-          (* let assign_actions = List.map2
-            (fun cid earg -> PAssign(cid, earg), Span.default)
-            params
-            eargs
-          in *)
-          (* update the actions list *)
-          (* let parser_actions_spans_list = parser_actions_spans_list@assign_actions in *)
-          (* replace the PGen with an exit call*)
-          let exit_call = call (Cid.create ["exit"]) [] (ty TEvent) in
-          let parser_step = PCall(exit_call) in
-          (super#visit_parser_block () (parser_actions_spans_list, (parser_step, sp)) : (parser_action * sp) list * (parser_step * sp))
-        | _ -> error "parser generate should take an expression of variant ECall"
-      )
-      | _ ->  
-      super#visit_parser_block () (parser_actions_spans_list, (parser_step, sp))
-    end
-  in
-  v#visit_td () parser
-;;
-
-(*** speculative parsing -- this is now just for ingress ***)
-
-(* 
-  given an assign action where the right hand side is a variable created 
-  by a previous read action, add a peek action before the read action 
-  and delete the assign action.
-
-  e.g.: 
-
-  {
-      read foo_a : int<<32>>;
-      read foo_b : int<<32>>;
-      egress_input.foo.foo_a = foo_a;
-      egress_input.foo.foo_b = foo_b;
-      exit();}
-  --> 
-  {
-      peek egress_input.foo.foo_a : int<<32>>;
-      read foo_a : int<<32>>;
-      peek egress_input.foo.foo_b : int<<32>>;
-      read foo_b : int<<32>>;
-      exit();}
-*)
-let speculative_parsing parser = 
-  error "todo"
-(* this optimization will be important for the ingress parser, 
-   but not for egress because we generate optimized code. *)
-
-;;
 
 let add_parser core_prog : prog =   
-  print_endline ("---- next up.... PARSING! ----");
   (* we are generating a parser that read the ingress output 
      event and generates the egress input event *)
   let ingress_output_event = List.filter_map
@@ -322,12 +334,8 @@ let add_parser core_prog : prog =
   |> List.hd
   in
   let egr_parser = make_egr_parser ingress_output_event egress_input_event in 
-  print_endline ("---- egress parser ----");
-  print_endline (TofinoCorePrinting.td_to_string egr_parser);
-  print_endline ("-----------------------");
-  let egr_parser = eliminate_parser_generates egress_input_event egr_parser in 
-  print_endline ("---- egress parser after generate elimination ----");
-  print_endline (TofinoCorePrinting.td_to_string egr_parser);
-  print_endline ("-----------------------");
+  let egr_parser = {td=egr_parser; tdspan = Span.default; tdpragma = None} in 
+  let core_prog = List.map (fun comp -> if (fst comp.comp_id = "egress") then 
+    {comp with comp_decls = egr_parser::comp.comp_decls} else comp) core_prog in
   core_prog
 ;;

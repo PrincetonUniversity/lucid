@@ -51,7 +51,26 @@ let generated_eventid_subsets (hdl_body:statement) =
   event_id_sequences
 ;;
 
+let typed_generate_seqs (hdl_body:statement) : (id * gen_type) list list =
+  let generate_sequences = find_generate_sequences hdl_body in
+  (* convert the generate sequences into sets of event ids *)
+  let event_id_sequences = List.map
+    (fun generate_sequence ->
+      List.map 
+        (fun statement -> 
+          id_of_generate statement, sort_of_generate statement)
+      generate_sequence)
+    generate_sequences
+  in
+  (* remove duplicate event id sequences *)
+  let compare_id_seqs (id_seq1: (id * gen_type) list) (id_seq2 : (id * gen_type) list) =
+    let compare_ids id1 id2 = Id.compare id1 id2 in
+    List.compare (fun (id1, _) (id2, _) -> compare_ids id1 id2) id_seq1 id_seq2
+  in
 
+  let event_id_sequences = List.sort_uniq compare_id_seqs event_id_sequences in
+  event_id_sequences
+;;
 
 (* find the generates in a statement *)
 let rec find_generates (stmt : statement) : (gen_type * exp) list =
@@ -101,7 +120,7 @@ let derive_output_event (ctx:ctx) (hdl_id : id) (hdl_body:statement) : event =
     else EventSet({
       evid = Id.append_string "_ingress_output" hdl_id;
       members = events;
-      subsets = generated_eventid_subsets hdl_body; 
+      generated_events = typed_generate_seqs hdl_body;
       flags = List.map 
         (fun event -> 
           (Id.prepend_string "flag_" (id_of_event event), ty (TInt(1)))) events;
@@ -307,12 +326,9 @@ let type_handler (ctx:ctx) hdl : handler * tdecl =
       hdl_body=SFlat(hdl_body');
       hdl_input=input_event;
       hdl_output=output_event; 
+      hdl_params = [];
+      hdl_retparams = [];
       hdl_preallocated_vars = [];
-      hdl_internal_params = {
-        out_port = Id.create "out_port", ty (TInt 9);
-        gen_ct  = (Id.create "gen_ct", ty (TInt 16));
-        out_group = (Id.create "out_group", ty TGroup); 
-      };
     })
     , {td=TDEvent(output_event); tdspan = Span.default; tdpragma = None;}
   | _ -> error "[addHandlerTypes.type_handler] there shouldn't be any HEvent handlers at this point"

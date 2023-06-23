@@ -215,8 +215,6 @@ let stage_fits prog_info stage =
   let c_hashers = ((hashers_of_stage stage |> CL.length) <= stage_constraints.max_hashers) in 
   let n_blocks = sblocks_of_stmt prog_info.arr_dimensions (stmt_of_stage stage) in
   let c_blocks = (n_blocks <= stage_constraints.max_array_blocks) in
-  (* left off here. Check additional constraint: all the arrays 
-     that the stage uses fit into the stage's memory *)
   (* print_endline@@"[stage_fits] c1: "^(string_of_bool c1)^" c2: "^(string_of_bool c2)^" c3: "^(string_of_bool c3); *)
   if ( c_tbls && c_arrays && c_hashers && c_blocks)
   then (

@@ -18,6 +18,12 @@ let cprint_prog label tds =
   cprint_endline label
 ;;
 
+let dump_prog fn comment prog = 
+  let outf = open_out fn in
+  Printf.fprintf outf "// %s" comment;
+  Printf.fprintf outf "%s" (TofinoCorePrinting.prog_to_string prog);
+;;
+
 let dbg_dump_core_prog phasename ds =
   if !do_log
   then (
@@ -192,9 +198,6 @@ let tofinocore_normalization_new core_prog =
   (* the final transformations before layout *)
   (* SolitaryMatch; IfToMatch; RegularizeMemops; ShareMemopInputs;
      Generates.eliminate; SingleTableMatch; ActionsToFunctions *)
-  let core_prog = GeneratesNew.eliminate_generates core_prog in
-  print_endline ("----- after generate elimination -----");
-  TofinoCorePrinting.prog_to_string core_prog |> print_endline;
   let core_prog = SolitaryMatches.process_core 20 core_prog in
   let core_prog = IfToMatch.process_core core_prog in 
   let core_prog = RegularizeMemopsNew.process_core core_prog in
@@ -244,11 +247,15 @@ let layout_new old_layout (prog : TofinoCoreNew.prog) build_dir_opt =
 
 (* main compilation function *)
 let compile old_layout ds portspec build_dir ctl_fn_opt =
+
+
   if !do_log
   then (
     CoreCdg.start_logging ();
     CoreDfg.start_logging ());
   let ds = common_midend_passes ds in
+
+
   (* add extern record type definitions -- 
      these records represent tofino intrinsic 
      metadata structures defined in the tofino's
@@ -258,27 +265,10 @@ let compile old_layout ds portspec build_dir ctl_fn_opt =
      but does not serialize to P4 because it is 
      included elsewhere. *)
   let ds = AddIntrinsics.add_intrinsics ds in
-  (* first, fix event numbers for all events *)
+  (* assign each event a number, if it is not already set *)
   let ds = AddIngressParser.set_event_nums ds in 
+  (* generate the ingress parser or add background event parsing *)
   let ds = AddIngressParser.add_parser portspec ds in
-  print_endline "coresyntax after ingress parser addition";
-  print_endline (CorePrinting.decls_to_string ds);
-  print_endline "----------";
-  (*  Can we move egr parser up into the coresyntax?
-      Not in a very meaningful way. The egress parser: 
-        1. match on tag (okay)
-        2. read flags (not defined until tofinocore and merge)
-        3. match on flags and generate (don't know paths until merge)
-        - so we could move it up, and maybe its worth doing later, but 
-          for now just leave it after tofinocore.
-  
-      <<left off here>> todo: 
-        transformation / optimization passes to ingress parser
-          1. when typing handlers, update the parser so that it 
-             references the full variable name in parameters (e.g., bar_c -> bar.bar_c)
-          2. do the speculative parsing optimization
-          3. translate to P4 ir
-  *)
   (* static analysis to see if this program is compile-able *)
   InputChecks.all_checks ds;
 
@@ -286,10 +276,7 @@ let compile old_layout ds portspec build_dir ctl_fn_opt =
        to the globals, actions, event, or handlers defined
        in the program.
      The program should be in a form where:
-      - each action is used by at most 1 table
-      - event variables have been eliminated *)
-  (* new IR change: event variables should still remain. *)
-  (* new IR change: unwind / refactor all the complicated generate elimination *)
+      - each action is used by at most 1 table *)
 
   (* do final preparation for tofinocore: split into ingress / egress, 
      atomize expressions. *)
@@ -297,6 +284,23 @@ let compile old_layout ds portspec build_dir ctl_fn_opt =
 
   (* translate into TofinoCore IR *)
   let core_prog = to_tofinocore ds in
+
+  (* add the egress parser. This could go anywhere in tofinocore
+     passes. *)
+  let core_prog = AddEgressParser.add_parser core_prog in  
+
+  let core_prog = GeneratesNew.eliminate_generates core_prog in
+  dump_prog 
+    "parsers_added_generates_eliminated.dpt" 
+    "after parsers have been added and generates have been eliminated in handlers"
+    core_prog;
+  (* <<left off here>> optimize the parsers, then translate to P4 ir. *)
+  print_endline ("exiting after GeneratesNew and before PArseOptimizer.");
+  exit 0;
+  (* optimize parsers to read headers directly into event parameters.
+    This should reduce phv constraints. *)
+  let core_prog = ParseOptimizer.parser_passes core_prog in 
+
   (* some more transformations *)
   let core_prog = tofinocore_normalization_new core_prog in
   (* now do layout, then put code into actionform and dedup actions *)
@@ -305,19 +309,8 @@ let compile old_layout ds portspec build_dir ctl_fn_opt =
   print_endline ("----- final tofinocore program -----");
   TofinoCorePrinting.prog_to_string core_prog |> print_endline;
 
-  let core_prog = AddEgressParser.add_parser core_prog in
-
   (* finally, translate into the P4 ir *)
-  (* <<left off here>> 
-    TODO: 
-      1. generate egress parser. 
-      2. update ingress parser. 
-      3. translate to P4-ir or print
-          - tables?
-          - registeractions?
-      1. update translation.
-      2. rewrite parser in tofinoCore and translate that instead of generating new. *)
-  (* let tofino_prog = CoreToP4TofinoNew.translate_core portspec core_prog in *)
+ (* let tofino_prog = CoreToP4TofinoNew.translate_core portspec core_prog in *)
   (* let _ = tofino_prog in  *)
   print_endline ("----- next step: translate to p4-tofino ir -----");
   exit 1;

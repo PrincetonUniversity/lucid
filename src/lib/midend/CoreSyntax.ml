@@ -246,7 +246,11 @@ and parser_step =
   | PDrop
 
 (* Include span for error reporting *)
-and parser_block = (parser_action * sp) list * (parser_step * sp)
+and parser_block = {
+  pactions : (parser_action * sp) list;
+  pstep : parser_step * sp;
+}
+(* and parser_block = (parser_action * sp) list * (parser_step * sp) *)
 
 (* declarations *)
 and d =
@@ -391,7 +395,7 @@ let memop_sp mid mparams mbody span =
 
 (* parser constructors *)
 let block actions step : parser_block = 
-  List.map (fun a -> a, Span.default) actions, (step, Span.default)
+  {pactions=List.map (fun a -> a, Span.default) actions; pstep=(step, Span.default)}
 ;;
 
 (* actions *)
@@ -434,6 +438,7 @@ let equiv_ty t1 t2 =
   | TEvent, TEvent -> true
   | TGroup, TGroup -> true
   | TPat sz1, TPat sz2 -> sz1 = sz2
+  | TName(n1, [], false), TName(n2, [], false) -> Cid.equal n1 n2
   | _ -> false
 ;;
 

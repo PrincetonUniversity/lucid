@@ -182,15 +182,6 @@ let ensure_field intr_param field_name : bool =
   List.exists (fun id -> (fst id) = field_name) fields_of_param
 ;;
 
-let param_to_cidty intr_param field_name : (cid * ty) = 
-  let field_info = (List.find_opt
-    (fun (_, id) -> (fst id) = field_name)
-    intr_param.pty.tyfields) 
-  in
-  match field_info with 
-  | Some((width, id)) -> Cid.id id, tint width
-  | None -> error "[intrinsic.param_to_cidty] this field is not a member of the param"
-;;
 
 
 (* CLEANUP: this should be the only way we use the 
@@ -210,5 +201,42 @@ let ty_to_dextern p4_intr =
 (* add extern types for necessary p4 intrinsics. 
    This will grow as the backend functionality fills in. *)
 let add_intrinsics ds = 
-  (ty_to_dextern ingress_intrinsic_metadata_t)::ds
+  (ty_to_dextern ingress_intrinsic_metadata_t)
+  ::(ty_to_dextern egress_intrinsic_metadata_t)
+  ::(ty_to_dextern ingress_intrinsic_metadata_for_tm_t)
+  ::ds
+;;
+
+let intrinsic_to_param intrinsic =
+  intrinsic.tyid |> Id.name |> remove_trailing_t |> Id.create, 
+  ty (TName(Cid.id intrinsic.tyid, [], false))
+;;  
+
+
+let field_of_intrinsic_opt intrinsic varcid fieldcid =
+  (* check to see that fieldcid is defined in the intrinsic, 
+     return the full name (varcid.fieldcid) and the type. *)
+  let fields = List.map 
+    (fun (i, id) -> 
+      (id,TInt(i))) 
+      intrinsic.tyfields
+  in
+  match (List.assoc_opt (Cid.to_id fieldcid) fields) with
+    | Some(t) -> Some(Cid.concat varcid fieldcid, ty t)
+    | None -> None
+;;
+let field_of_intrinsic intrinsic varcid fieldcid =
+  match field_of_intrinsic_opt intrinsic varcid fieldcid with 
+    | Some(t) -> t
+    | None -> error "[intrinsic.field_of_intrinsic] field not found in intrinsic"
+;;
+
+let param_to_cidty intr_param field_name : (cid * ty) = 
+  let field_info = (List.find_opt
+    (fun (_, id) -> (fst id) = field_name)
+    intr_param.pty.tyfields) 
+  in
+  match field_info with 
+  | Some((width, id)) -> Cid.id id, tint width
+  | None -> error "[intrinsic.param_to_cidty] this field is not a member of the param"
 ;;

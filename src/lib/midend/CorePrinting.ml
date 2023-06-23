@@ -355,10 +355,10 @@ and parser_step_to_string step =
       (concat_map "\n" parser_branch_to_string branches)
   | PDrop -> "drop"
 
-and parser_block_to_string (actions, step) =
-  concat_map "\n" (parser_action_to_string % fst) actions
+and parser_block_to_string {pactions;pstep} =
+  concat_map "\n" (parser_action_to_string % fst) pactions
   ^ "\n"
-  ^ (parser_step_to_string % fst) step
+  ^ (parser_step_to_string % fst) pstep
 
 and parser_to_string p = parser_block_to_string p
 

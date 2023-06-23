@@ -17,9 +17,85 @@
            the parser. 
 
 *)
+open Collections
 open ParsePortSpec
 open CoreSyntax
 open MiscUtils
+
+
+type inline_ctx = (params * parser_block) CidMap.t
+
+(* what can i inline? 
+   parser_block = {actions; step=PCall(id, args)}
+   what does it change to? 
+   let inlined_block = ctx[id] in
+   let inlined_block' = subst params args inlined_block in
+   parser_block.actions += inlined_block'.actions
+   parser_block.step = inlined_block'.step
+*)
+(* inline all the calls in a single parser *)
+
+let subst = object (_)
+   inherit [_] s_map as super
+   method! visit_EVar param_map cid = 
+      (* check if cid is in param_map *)
+      match (CidMap.find_opt cid param_map) with
+      | None -> super#visit_EVar param_map cid
+      | Some(new_exp) -> new_exp
+   end
+;;
+
+let inline_parser = object (_)
+      inherit [_] s_map as super
+      method! visit_parser_block (ctx : inline_ctx) parser_block = 
+         let parser_block = super#visit_parser_block ctx parser_block in
+         match parser_block.pstep with
+         | (PCall(exp), _) -> (
+            match exp.e with 
+            | ECall(called_cid, eargs) -> (
+               (* first replace params with args *)
+               let params, called_body_block = CidMap.find called_cid ctx in
+               let (subst_map: e CidMap.t) = List.fold_left2
+                  (fun cidmap (param, _) earg -> CidMap.add (Cid.id param) earg.e cidmap)
+                  CidMap.empty
+                  params eargs
+               in 
+               let called_body_block' = subst#visit_parser_block subst_map called_body_block in
+               (* next, inline called block's actions and step *)
+               let pactions = parser_block.pactions@called_body_block'.pactions in 
+               let pstep = called_body_block'.pstep in
+               {pactions; pstep;}
+            )
+            | _ -> error "[inline_parser] PCall(!ECall)?"
+         )
+         | _ -> 
+         parser_block
+   end      
+;;
+
+let rec inline_parsers_rec (ctx:inline_ctx) (decls:decls) = 
+   match decls with 
+   | [] -> []
+   | decl::decls -> (
+      match decl.d with 
+      | DParser(id, params, parser_block) -> 
+         (* inline calls in the body *)
+         let parser_block' = inline_parser#visit_parser_block ctx parser_block in
+         (* update the context *)
+         let ctx' = CidMap.add (Cid.id id) (params, parser_block') ctx in
+         (* drop all parsers except main *)
+         if (fst id = "main") then 
+            let decl' = {decl with d=DParser(id, params, parser_block')} in
+            decl'::(inline_parsers_rec ctx' decls)
+         else
+            inline_parsers_rec ctx' decls
+      | _ -> decl::(inline_parsers_rec ctx decls)
+   )
+;;
+let inline_parsers lucid_bg_event_block decls = 
+   let ctx = CidMap.add (Cid.id Builtins.lucid_parse_id) ([], lucid_bg_event_block) CidMap.empty in
+   inline_parsers_rec ctx decls
+;;
 
 
 let is_pktev decl = match decl.d with 
@@ -132,23 +208,156 @@ let portspec_to_parser portspec pkt_events bg_events =
    synthesized_parser [] step
 ;;
 
-let pcalls_to_lucid_parser parser = 
-   let call_ct = ref 0 in
-   let v = object
+
+
+(* this is a block that has no actions and a step that just calls the 
+   lucid parser *)
+let direct_call_parser_block parser_block =
+   let {pactions=acns_spans; pstep=(step, _);} = parser_block in
+   let acns, _ = List.split acns_spans in
+   match acns, step with 
+   | [], PCall({e=ECall(cid, []); _}) when (Id.equal Builtins.lucid_parse_id (Cid.to_id cid)) -> true
+   | _ -> false 
+;;
+(* a direct call parser branch is one that matches a single variable and 
+   does nothing but call the lucid parser. *)
+let direct_call_parser_branch (parser_branch:parser_branch) = match parser_branch with
+   | (_::[], parser_block) when direct_call_parser_block parser_block -> true
+   | _ -> false
+;;
+
+let never_calls_lucid_parser branch =
+   let call_found = ref false in
+   let v = object (_)
       inherit [_] s_iter as super
-      method! visit_PCall () exp = 
+      method! visit_PCall _ exp = 
          match exp.e with 
-         | EVar(cid) -> (
-            if (Id.equal (Cid.to_id cid) (Builtins.lucid_parse_id))
-            then (call_ct := !call_ct + 1);)
-         | ECall(cid, _) -> (
-            if (Id.equal (Cid.to_id cid) (Builtins.lucid_parse_id))
-               then (call_ct := !call_ct + 1);)   
-         | _ -> ()
+            | ECall(cid, _)
+               when (Id.equal Builtins.lucid_parse_id (Cid.to_id cid)) -> 
+                  call_found := true
+            | _ -> ()
+   end
+   in
+   v#visit_parser_branch () branch;
+   not (!call_found)
+;;
+let cid_is_ingress_port cid = 
+   Id.equal Builtins.ingr_port_id (Cid.to_id cid)
+;;
+
+let bytes_read_by_action action =
+   match action with 
+   | PRead(_, ty) -> size_of_tint ty
+   | PSkip(ty) -> size_of_tint ty
+   | _ -> 0   
+;;
+let bits_read_by_actions actions = 
+   List.fold_left (fun acc action -> acc + (bytes_read_by_action action)) 0 actions
+;;
+
+let size_of_exp exp = size_of_tint exp.ety ;;
+
+let last_ele ls = 
+   List.rev ls |> List.hd
+;;
+
+let exp_refs_last_read actions exp = 
+   let read_cids = List.filter_map (fun action -> 
+      match action with 
+      | PRead(cid, _) -> Some(cid)
+      | _ -> None) actions
+   in
+   match read_cids with
+   | [] -> false 
+   | _ -> (
+      let last_read_cid = last_ele read_cids in
+      match exp.e with 
+      | EVar(cid') -> Cid.equal last_read_cid cid'
+      | _ -> false)
+;;
+
+
+let is_lucid_etherty_pat pat = match pat with 
+   | PNum(z) -> Z.equal z (Z.of_int Builtins.lucid_ety_int)
+   | _ -> false
+
+let at_least_one lst f =
+   let matches = List.filter f lst in
+   List.length matches >0
+;;
+(* check to see if the entry block of the user-defined 
+   parser has a valid form.  *)
+let check_valid_entry_parse_block parse_block =
+   let acns_spans, (step, _) = parse_block.pactions, parse_block.pstep in
+   let acns, _ = List.split acns_spans in 
+   match acns, step with
+   (* parser main() { do_lucid_parsing(); } *)
+   | [], PCall({e=ECall(cid, _); _}) when cid_is_ingress_port cid -> 
+      true
+   (* parser main() { match ingress_port with <branches>, where branches 
+      either directly call the lucid parser or never call the lucid parser } *)
+   | [], PMatch([{e=EVar(cid); _}], branches) 
+      when (cid_is_ingress_port cid)
+      && (at_least_one branches direct_call_parser_branch)
+      && (List.for_all
+            (fun branch -> 
+               direct_call_parser_branch branch || never_calls_lucid_parser branch)
+            branches) -> 
+               true
+   (* parser main() {read 14 bytes (eth hdr); match v : int16 with | LUCID_ETHERTY -> do_lucid_parsing(); | <never call lucid parse branches>} *)
+   | actions, PMatch([exp], ([fst_pat], fst_block)::rest_branches) -> (
+      let bits_read_check = bits_read_by_actions actions = 14 * 8 in 
+      let size_check = size_of_exp exp = 16 in
+      let exp_ref_check = exp_refs_last_read actions exp in
+      let lucid_etherty_pat_check = is_lucid_etherty_pat fst_pat in
+      let direct_call_check = direct_call_parser_block fst_block in
+      let rest_branches_check = List.for_all never_calls_lucid_parser rest_branches in
+      (* if not bits_read_check then Printf.printf "main parser reads wrong number of bytes before branch to lucid internal.\n";
+      if not size_check then Printf.printf "main parser does not match on a 16-bit field (the size of ethertype)\n";
+      if not exp_ref_check then Printf.printf "main parser does not match on the last variable read. \n";
+      if not lucid_etherty_pat_check then Printf.printf "parser does not contain a first branch that matches LUCID_ETHERTY\n";
+      if not direct_call_check then Printf.printf "parser's first branch does not call lucid parser directly.\n";
+      if not rest_branches_check then Printf.printf "branches besides the parser's first branch call lucid's parser.\n"; *)
+      if (bits_read_check && size_check && exp_ref_check && lucid_etherty_pat_check && direct_call_check && rest_branches_check)
+         then true
+         else false)
+   | _ -> false
+
+;;
+
+let check_user_parser decls = 
+   let v = object
+      inherit [_] s_map as super
+      method! visit_DParser () id params parser_block = 
+         (* check *)
+         if (check_valid_entry_parse_block parser_block)
+            then (
+               let acns_sps, (step, sp) = parser_block.pactions, parser_block.pstep in
+               let acns, sps = List.split acns_sps in
+               (* inline calls to background event parser *)
+               (* reassemble *)
+               let acns_sps' = List.combine acns sps in
+               super#visit_DParser () id params {pactions=acns_sps'; pstep=(step, sp);}
+            )
+            else (
+               error "Invalid start for user-defined parser"
+            )
       end
    in
-   v#visit_decl () parser;
-   !call_ct
+   v#visit_decls () decls
+;;
+
+let main_parser_opt ds = 
+   let main_parsers = List.filter (fun decl -> match decl.d with | DParser(id, _,_) when (fst id = "main") -> true | _ ->false) ds in
+   match main_parsers with 
+   | [] -> None
+   | [main_parser] -> Some(main_parser)
+   | _ -> error "multiple main parsers!"
+;;
+let check_main_user_parser ds = 
+   match main_parser_opt ds with
+   | None -> ()
+   | Some(p) -> let _ = check_user_parser [p] in ()
 ;;
 
 let set_event_nums decls =
@@ -168,30 +377,36 @@ let set_event_nums decls =
          match decl.d with
          | DEvent(a, None, b, c) -> 
            {decl with d = DEvent(a, Some(num), b, c)}::(set_event_nums' (num+1) decls)
-         | _ -> set_event_nums' num decls
+         | _ -> decl::(set_event_nums' num decls)
        )
    in
    set_event_nums' 1 decls
  ;;
 
+
+
 let add_parser (portspec:port_config) ds =
+   (* separate packet and background events *)
    let pkt_events = List.filter is_pktev ds in
    let bg_events = List.filter is_bgev ds in 
-   let parsers = List.filter is_parser ds in
-   match (pkt_events, parsers) with
-   | ([], []) -> 
-      (* case 1: no packet events and no parsers -- so make a parser for the bg events. *)
-      (decl (parser (id "main") [] (call_lucid_block bg_events)))::ds
-   | (pkt_events, []) -> 
+   (* construct the background event parsing block *)
+   let bg_block = call_lucid_block bg_events in
+   match main_parser_opt ds with 
+   | Some(_) -> 
+      (* if there's a main parser, check the user parser to make sure it's well-formed, 
+         then inline parsers, including the background block which 
+         replaces the call_lucid_parser builtin *)
+      check_main_user_parser ds;
+      inline_parsers bg_block ds
+   (* if there's no main parser, attempt to generate one *)
+   | None -> (
+      match pkt_events with 
+      | [] -> 
+         (* case 1: no packet events and no parsers -- so make a parser for the bg events. *)
+         (decl (parser (id "main") [] bg_block))::ds
+      | _ -> 
       (* case 2: packet events declared, but no parser -- 
-         so make a parser that branches on ingress port 
-         according to the portspec provided. *)
-      (portspec_to_parser portspec pkt_events bg_events)::ds
-   | (pkt_events, [parser]) -> 
-      (* case 3: packet events and a single parser -- 
-         just make sure the parser eventually calls the builtin for background events. *)
-      if (pcalls_to_lucid_parser parser <> 1)
-         then (error "[addIngressParser] this program has an invalid ingress parser for the tofino, because it either does not call the lucid internal parser, or calls it more than once.")
-         else ds 
-   | (_, _) -> error "user-defined parser should be inlined by now"
+         so make a parser that parses packet or background events 
+         according to the portspec. *)
+         (portspec_to_parser portspec pkt_events bg_events)::ds)
 ;;

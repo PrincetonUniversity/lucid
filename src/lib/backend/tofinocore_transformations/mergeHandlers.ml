@@ -4,12 +4,16 @@
   The output event type becomes and event union of all the handler output events.
   The handler's body is merged by adding a match statement, with a case for 
   each input event's tag in the input event union.
+
+  This pass also renames event constructors in the ingress parser to contain 
+  the merged ingress event name.
 *)
 
 open Batteries
 open Collections
 open CoreSyntax
 open TofinoCoreNew
+open AddIntrinsics
 
 (* get the ids of all event parameters as they would appear 
     in the body of this event's handler *)
@@ -48,6 +52,25 @@ let ids_of_event_params event =
 ;;
 
 
+(* scope event constructors in a parser
+   (should only be applied to the ingress component) *)
+let scope_pgen = 
+  object 
+    inherit [_] s_map as super
+    method !visit_parser merged_hdl_event parser = 
+      let parser = super#visit_parser merged_hdl_event parser in
+      {parser with pret_event = Some(merged_hdl_event)}
+    method !visit_PGen merged_hdl_event exp =
+      let exp' = match exp.e with 
+        | ECall(ev_cid, ev_params) -> 
+          {exp with e = ECall (
+            Cid.compound (id_of_event merged_hdl_event) ev_cid, 
+            ev_params)}
+        | _ -> exp
+      in
+      PGen(exp')
+  end
+;;
 
 (* scope all the undeclared evars in program as parameters of the input event, 
    then make sure that they can be resolved by type checking them *)
@@ -61,7 +84,9 @@ let rec is_union_of_unions event =
   | _ -> false
 ;;
 
-(* merge the handlers in the tdecls from one component *)
+(* merge the events and handlers in the tdecls from one component and update 
+   the parser so that generate statements use constructors of 
+   the merged event. *)
 let merge_handlers_in_component (c:component) : component =
   (* remove all the handlers from the list of decls -- we are making new ones *)
   let rec extract_handlers tdecls handlers other = 
@@ -183,6 +208,16 @@ let merge_handlers_in_component (c:component) : component =
     merged_hdl_stmt
   in
 
+  (* finally, set the input and output parameters of the handler that carry metadata. *)
+  let hdl_params, hdl_retparams = match c.comp_sort with 
+  | HData -> (* ingress*)
+    [intrinsic_to_param ingress_intrinsic_metadata_t],
+    [intrinsic_to_param ingress_intrinsic_metadata_for_tm_t]
+  | HEgress -> 
+    [intrinsic_to_param egress_intrinsic_metadata_t],
+    []
+  | _ -> [], []
+  in
   let merged_hdl = {
       hdl_id = hdl_evid;
       hdl_sort = c.comp_sort;
@@ -190,11 +225,8 @@ let merge_handlers_in_component (c:component) : component =
       hdl_output = output_event;
       hdl_body = SFlat(merged_hdl_stmt);
       hdl_preallocated_vars = [];
-      hdl_internal_params = {
-        out_port = Id.create "out_port", ty (TInt 9);
-        gen_ct  = (Id.create "gen_ct", ty (TInt 16));
-        out_group = (Id.create "out_group", ty TGroup); 
-      };      
+      hdl_params;
+      hdl_retparams;
     }  
   in
   (* the new declarations are:
@@ -206,8 +238,12 @@ let merge_handlers_in_component (c:component) : component =
     tdecl (TDEvent(output_event));
     tdecl (TDHandler(HEvent(merged_hdl)));
   ] in
+  let tdecls' = non_handler_decls @ tdecls in
+  (* finally, scope event constructors in the parser. At this point, 
+     there should only be 1 parser: the ingress parser.*)
+  let tdecls' = scope_pgen#visit_tdecls input_event tdecls' in
   { c with
-    comp_decls = non_handler_decls @ tdecls;
+    comp_decls = tdecls';
   }    
 ;;
 

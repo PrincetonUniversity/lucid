@@ -27,235 +27,300 @@
   }
   if it was a generate_port or generate_ports, gen_ct would not 
   be incremented, but rather out_port or out_group would be set. *)
-open Batteries
-open Collections
-open CoreSyntax
-open TofinoCoreNew
-open AddHandlerTypes
+  open Batteries
+  open Collections
+  open CoreSyntax
+  open TofinoCoreNew
+  open AddIntrinsics
+  open AddHandlerTypes
+  
 
-
-(* given an event constructor cid, get the cids of the event's parameters as 
-   locally scoped variables *)
-let params_of_single_event event =
-  match event with 
-  | EventSingle({evparams;}) -> evparams
-  | _ -> error "[params_of_event] must provide a single evetn"
-;;
-
-let rec assigns cids args : statement = 
-  List.fold_left2
-    (fun stmt cid arg  -> 
-      match stmt.s with
-      | SNoop -> sassign cid arg
-      | _ -> sseq stmt (sassign cid arg))
-    snoop
-    cids
-    args 
-;;
-
-(* get a member event *)
-let member_event event member_id =
-  let rec member_event_rec events member_id =
-    match events with
-    | [] -> None
-    | event::events -> 
-      let evid = id_of_event event in
-      if (Id.equal evid member_id)
-        then Some(event)
-        else member_event_rec events member_id        
-  in 
-  match event with
-  | EventSingle _ -> error "[member_event] a base event has no member events"
-  | EventUnion({members;})
-  | EventSet({members;}) -> (
-    match member_event_rec members member_id with
-    | None -> error "[member_event] no member with that id"
-    | Some(member_event) -> member_event)
-;;  
-
-let strip_outer_id cid = 
-  match cid with
-  | Cid.Id(id) -> Cid.Id(id)
-  | Cid.Compound(_, cid') -> cid'
-;;
-(* get the position of the event with id eventid in the list of events *)
-let pos_of_event events eventid = 
-  let rec pos_of_event' events eventid pos = 
-    match events with
-    | [] -> None
-    | event::events' -> 
-      let evid = id_of_event event in
-      if (Id.equal evid eventid)
-        then Some(pos)
-        else pos_of_event' events' eventid (pos+1)
-  in
-  match pos_of_event' events eventid 0 with
-  | Some(pos) -> pos
-  | None -> error "[pos_of_event] could not find event in members list"
-;;
-
-let num_of_event events eventid = 
-  (* pos_of_event + 1. TODO: use evnum *)
-  1 + pos_of_event events eventid
-;;
-
-let full_event_cid (prefix : id list) event = 
-  Cid.create_ids (prefix@[id_of_event event])
-;;
-
-let enable_member_event (outer_event_prefix: id list) (outer_event : event) (inner_event_id : id) =
-  let outer_event_cid = full_event_cid outer_event_prefix outer_event in
-  match outer_event with
-  | EventSet{members; flags;} -> (
-    (* get the index of the member *)
-    let member_pos = pos_of_event members inner_event_id in
-    (* enable the "flags" header field. *)
-    let full_hdr_cid = Cid.concat outer_event_cid (Cid.create ["flags"]) in
-    let ecall_enable = call (Cid.create ["enable"]) [] (ty (TInt(1))) in
-    let enable_hdr = sassign (full_hdr_cid) ecall_enable in
-    (* set the appropriate flag field *)
-    let (flag_id, flag_ty) = List.nth flags member_pos in
-    let full_flag_id = Cid.concat full_hdr_cid (Cid.id flag_id) in
-    let set_flag = (sassign 
-      full_flag_id
-      (vint_exp_ty 1 flag_ty)) 
+  (* get a member event *)
+  let member_event event member_id =
+    let rec member_event_rec events member_id =
+      match events with
+      | [] -> None
+      | event::events -> 
+        let evid = id_of_event event in
+        if (Id.equal evid member_id)
+          then Some(event)
+          else member_event_rec events member_id        
+    in 
+    match event with
+    | EventSingle _ -> error "[member_event] a base event has no member events"
+    | EventUnion({members;})
+    | EventSet({members;}) -> (
+      match member_event_rec members member_id with
+      | None -> error "[member_event] no member with that id"
+      | Some(member_event) -> member_event)
+  ;;  
+  
+  (* get the position of the event with id eventid in the list of events *)
+  let pos_of_event events eventid = 
+    let rec pos_of_event' events eventid pos = 
+      match events with
+      | [] -> None
+      | event::events' -> 
+        let evid = id_of_event event in
+        if (Id.equal evid eventid)
+          then Some(pos)
+          else pos_of_event' events' eventid (pos+1)
     in
-    (* finally, enable the field for the member event *)
-    let member_hdr_cid = Cid.concat outer_event_cid (Cid.id inner_event_id) in
-    let enable_member_hdr = sassign member_hdr_cid ecall_enable in
-    sseq (sseq enable_hdr set_flag) enable_member_hdr
-  )
-  | EventUnion{members; tag} -> 
-    let tag_id, tag_ty = tag in
-    (* enable the "tag" field *)
-    let full_hdr_cid = Cid.concat outer_event_cid (Cid.create ["tag"]) in
-    let ecall_enable = call (Cid.create ["enable"]) [] (ty (TInt(1))) in
-    let enable_hdr = sassign (full_hdr_cid) ecall_enable in
-    let full_tag_id = Cid.concat full_hdr_cid (Cid.id tag_id) in 
-    let enewtagval = (vint_exp_ty (num_of_event members inner_event_id) (tag_ty)) in
-    let set_tag = sassign
-      full_tag_id
-      enewtagval
+    match pos_of_event' events eventid 0 with
+    | Some(pos) -> pos
+    | None -> error "[pos_of_event] could not find event in members list"
+  ;;
+
+  (* generate a sassign to increment a variable *)
+  let sincr_var evar = 
+    match evar.e, evar.ety with 
+    | EVar(var_cid), var_ty ->
+      sassign
+        var_cid
+        (
+          op
+            Plus
+            [
+              evar;
+              vint_exp_ty 1 var_ty
+            ]
+            var_ty)
+    | _ -> error "[sincr] expected evar"
+  ;;
+  
+  (* statement to assign a var to new value *)
+  let sassign_var evar enew = 
+    match evar.e with 
+    | EVar(var_cid) ->
+      sassign var_cid enew
+    | _ -> error "[sassign_var] expected evar"
+  ;;
+  
+  (* enable a field of an event  *)
+  let enable_event_field ev_parents ev field = 
+    let full_param_cid = (Cid.create_ids
+      ((List.map id_of_event (ev_parents@[ev]))@[field]))
     in
-    (* finally, enable the field for the member event *)
-    let member_hdr_cid = Cid.concat outer_event_cid (Cid.id inner_event_id) in
-    let enable_member_hdr = sassign member_hdr_cid ecall_enable in
-    sseq (sseq enable_hdr set_tag) enable_member_hdr
-  | EventSingle _ -> error "[enable_member_event] single events do not have members"
-;;
-
-(* enable a member of an event, recursively. 
-  so enable_member_rec [] (union outer (set foo (event inner))) foo.inner 
-  will enable foo in outer and inner in foo
-  note: member_cid should have the event's id stripped from its identifier. *)
-let rec enable_member_rec prefix event member_cid = 
-  match member_cid with
-  | Cid.Id(member_id) -> 
-    let res = enable_member_event prefix event member_id in
-    res
-  | Cid.Compound(member_id, member_cid') ->
-    let enable_outer = enable_member_event prefix event member_id in
-    let prefix' = prefix@[id_of_event event] in
-    let event' = member_event event member_id in
-    let enable_inner = enable_member_rec prefix' event' member_cid' in
-    (* print_endline ("[enable_member_rec] inner statement:"); *)
-    sseq enable_outer enable_inner 
-;;
-
-(* generate a sassign to increment a variable *)
-let sincr (var_id,var_ty) = 
-  let incr_exp = 
-    op 
-      Plus
-      [
-        var (Cid.id var_id) var_ty;
-        vint_exp_ty 1 var_ty
-      ]
-      var_ty
-  in
-  sassign (Cid.id var_id) incr_exp
-;;
-
-let eliminate = 
-  object
-    inherit [_] s_map as super
-
-    method! visit_component _ component =
-      (* when visiting a component, save the output event and internal params to context *)
-      let main_hdl = (main_handler_of_component component) in
-      let output_event_and_internal_params = Some(main_hdl.hdl_output, main_hdl.hdl_internal_params) in
-      super#visit_component output_event_and_internal_params component
-
-    method! visit_statement output_event_and_internal_params_opt stmt = 
-      match stmt.s with 
-      | SGen(gty, exp) -> 
-        (* print_endline ("---- [eliminate] generate statement: ----");  *)
-        (* print_endline (CorePrinting.statement_to_string stmt); *)
-        let ctor_cid, args = match exp.e with
-          | ECall(cid, args) -> cid, args
-          | _ -> error "[GeneratesNew.eliminate] event expression inside of a generate must be a constructor expression"
-        in
-        let output_event, internal_params = match output_event_and_internal_params_opt with
-          | Some(output_event, internal_params) -> output_event, internal_params
-          | None -> error "[eliminate_generates] no context. visit_component must not have been called."
-        in
-        let event = match (base_event output_event ctor_cid) with 
-          | None -> error "[eliminate_generates] could not find event constructor in output event" 
-          | Some(event) -> event
-        in
-        (* replace the generate statement with a sequence of assignments: *)
-        (* example: generate(ingress_out.foo_out.bar); *)
-        (* 1. enable the event *)
-        let member_cid_without_outer = strip_outer_id ctor_cid in
-        (* let senable = enable_member_rec [] output_event member_cid_without_outer in *)
-        (* actually, the outermost member has already been enabled (e.g., ingress_out.foo_out)
-           when events / handlers were merged. So we want to start 1 level deeper. *)
-        let prefix = [id_of_event output_event] in
-        let event_id, member_cid = match member_cid_without_outer with
-          | Cid.Id(_) -> error "cid for event constructor used in generate has fewer ids than expected"
-          | Cid.Compound(id, cid) -> id, cid
-        in
-        let inner_event = member_event output_event event_id in
-        let senable = enable_member_rec prefix inner_event member_cid in
-        (* 2. set the event parameters: ingress_out.foo_out.bar.a = ...; ...*)
-        (* note we go back to the _outer_ event! *)
-        let params = List.map
-          (fun (id, ty) -> 
-            Cid.concat ctor_cid (Cid.id id), ty
-            )
-          (params_of_single_event event)
-        in
-        let sparams = assigns (List.split params |> fst) args in
-        (* 3. [case: generate default] 
-                increment the handler's internal param: gen_ct *)
-        (* 3. [case: generate_port] set the egress port: ingress_out.foo_out.bar.port = ...;*)
-        (* 3. [case: generate_ports] set the group builtin: ingress_out.foo_out.bar.group = ...; *)
-        let sloc_ctl = match gty with
-          | GSingle(None) -> 
-            sincr internal_params.gen_ct
-          | GMulti(exp) -> 
-            sassign (Cid.id (fst internal_params.out_group)) exp
-          | GPort(exp) -> 
-            (* when we generate a port event, we want to set the replica id
-               to the index of the event in the output eventset... *)
-            (* okay... so wait... at a generate, how do we know 
-               all the possible indices? Its because an index corresponds to 
-               an event type. So... find the index for this event type 
-               in this set and assign that value to RID. *)
-            sassign (Cid.id (fst internal_params.out_port)) exp 
-          | GSingle(Some(_)) -> error "[Generates.eliminate] not sure what to do with a generate of type GSingle(Some(_))"
-        in 
-        sseq
-          (sseq senable sparams)
-          (sloc_ctl)
-      | _ -> super#visit_statement output_event_and_internal_params_opt stmt
-  end
-;;
+    full_param_cid, (call (Cid.create ["enable"]) [] (ty (TInt(1))))
+  ;;
 
 
+  (* get an evar referencing a field with name field_name from a 
+     parameter of type intrinsic_paramty in the paramters hdl_ret_params *)
+  let evar_from_paramty_field intrinsic_paramty field_name hdl_ret_params =
+    (* find the handler param with type ingress_intrinsic_metadata_for_tm_t *)
+    let param_ty = snd (intrinsic_to_param intrinsic_paramty) in
+    let param_id = match (List.find_opt
+      (fun (_, ty) -> equiv_ty ty param_ty)
+      hdl_ret_params) with
+    | Some(id, _) -> id 
+    | None -> error "[evar_from_paramty_field] handler does not contain an output parameter of correct type"
+    in
+    (* get the field mcast_grp_a from it *)
+    let field_id = Cid.create [field_name] in
+    let cid, ty = AddIntrinsics.field_of_intrinsic
+      ingress_intrinsic_metadata_for_tm_t
+      (Cid.id param_id)
+      (field_id)
+    in
+    var cid ty
+  ;;
+  (* helpers for specific fields *)
+  let genct_evar = (evar_from_paramty_field ingress_intrinsic_metadata_for_tm_t "mcast_grp_a") ;;
+  let egressport_evar = (evar_from_paramty_field ingress_intrinsic_metadata_for_tm_t "ucast_egress_port") ;;
+  let group_evar = (evar_from_paramty_field ingress_intrinsic_metadata_for_tm_t "mcast_grp_b") ;;
+  (* let rid_evar = (evar_from_paramty_field ingress_intrinsic_metadata_for_tm_t "rid");; *)
 
-let eliminate_generates (prog : prog) : prog = 
-  (* print_endline "[eliminate_generates] pass started"; *)
-  let prog = eliminate#visit_prog None prog in
-  (* print_endline "[eliminate_generates] pass finished"; *)
-  prog
+  type ingress_ctx = {
+    ctx_output_event : event;
+    ctx_genct_evar : exp;
+    ctx_egressport_evar : exp;
+    ctx_group_evar : exp;
+    (* ctx_rid_evar : exp; *)
+  }
+  
+  let ingress_ctx (igr:component) = 
+    let main_hdl = (main_handler_of_component igr) in
+    let ctx = {
+      ctx_output_event = main_hdl.hdl_output;
+      ctx_genct_evar = genct_evar main_hdl.hdl_retparams;
+      ctx_egressport_evar = egressport_evar main_hdl.hdl_retparams;
+      ctx_group_evar = group_evar main_hdl.hdl_retparams;
+      (* ctx_rid_evar = rid_evar main_hdl.hdl_retparams; *)
+    }
+    in
+    ctx
+  ;;
+
+  let egress_ctx (egr:component) = 
+    (main_handler_of_component egr).hdl_output
+  ;;
+
+  (* given a constructor x.y.z, and a root event x,
+     return a list of event defs [event x; event y; event z]  *)
+  let event_path ctor_cid root_event : event list = 
+    let rec idpath_to_eventpath event id_path = 
+      match id_path with 
+      | [] -> []
+      | _::[] -> [event]
+      | _::id'::id_path' -> 
+        let event' = member_event event id' in
+        event::(idpath_to_eventpath event' (id'::id_path'))            
+    in
+    idpath_to_eventpath root_event (Cid.to_ids ctor_cid)
+  ;;
+  (* function to transform generate statements in an ingress *)
+  let ingress_transformer ctx stmt = 
+    match stmt.s with 
+    (* generate (ingress_out.foo.bar(1, 2, 3)); *)
+    | SGen(gty, exp) -> (
+      (* ingress_out.foo.bar, [1, 2, 3] *)
+      let ctor_cid, args = match exp.e with
+        | ECall(cid, args) -> cid, args
+        | _ -> error "[GeneratesNew] event expression inside of a generate must be a constructor expression"
+      in    
+      (* replace the generate statement with a sequence of assignments. *)
+      (* at this point, the event id should have three components: 
+          <ingress_event_id>.<handler_out_event_id>.<base_event_id> *)
+      let main_event, handler_out_event, base_event = match event_path ctor_cid ctx.ctx_output_event with 
+        | [m; h; b] -> m, h, b
+        | _ -> error "[GeneratesNew.ingress_transformer] could not resolve event constructor in the given output event"
+      in      
+      (* 1. enable all the headers necessary to decode the base event. 
+         the main_event's tag header is already enabled and set to handler_out_event.
+         So we need to enable handler_out_event's flags header, set it, and enable 
+         handler_out_event's header for base_event. *)
+      let enable_hdrs_stmts = match handler_out_event with 
+        | EventSet{members; flags;} -> 
+          (* 1. enable the flags header of the handler event *)
+          let flags_cid, enable_exp = enable_event_field [main_event] handler_out_event (Id.create"flag") in
+          let enable_flags = sassign flags_cid enable_exp in          
+          (* let stmt = enable_builtin_params [main_event] handler_out_event "flags" 1 in *)
+          (* 2. set the appropriate flag field for base_event in handler  *)
+          let flag_id, flag_ty = List.nth flags (pos_of_event members (id_of_event base_event)) in
+          let set_flag = sassign
+            (Cid.concat (flags_cid) (Cid.id flag_id))
+            (vint_exp_ty 1 flag_ty)
+          in
+          (* 3. enable the field holding the member event parameters. *)
+          let base_event_cid, enable_exp = enable_event_field [main_event] handler_out_event (id_of_event base_event) in
+          let enable_base_event = sassign base_event_cid enable_exp in
+          [enable_flags; set_flag; enable_base_event]
+        | _ -> error "[GeneratesNew.ingress_transformer] at an ingress, handler output should be an eventset"
+      in
+      (* 2. then set the event parameters: ingress_out.foo_out.bar.a = ...; ...*)
+      let enable_params_stmts = List.map2
+        (fun (id, _) arg -> 
+          let param_cid = Cid.create_ids ([id_of_event main_event; id_of_event handler_out_event]@[id]) in
+          sassign param_cid arg)
+        (params_of_event base_event)
+        args
+      in
+      (* 3. finally, update some of the handler's control parameters. *)
+      (* 3. [case: generate default] 
+              increment the handler's internal param: gen_ct *)
+      (* 3. [case: generate_port] set the egress port: ingress_out.foo_out.bar.port = ...;*)
+      (* 3. [case: generate_ports] set the group builtin: ingress_out.foo_out.bar.group = ...; *)
+      let update_control_param_stmt = match gty with
+        | GSingle(None) -> 
+          sincr_var ctx.ctx_genct_evar
+        | GMulti(exp) -> 
+          sassign_var ctx.ctx_group_evar exp
+        | GPort(exp) -> 
+          (* nope, no more rid -- rid = 0 means its a port event! *)
+          (* port events set the egress port var, and also the base replica id *)
+          (* let evnum = num_of_event base_event in *)
+          (* let evnum_exp = vint_exp evnum 16 in  *)
+          (* sseq 
+            (sassign_var ctx.ctx_rid_evar evnum_exp) *)
+            (sassign_var ctx.ctx_egressport_evar exp)
+        | GSingle(Some(_)) -> error "[Generates.eliminate] not sure what to do with a generate of type GSingle(Some(_))"
+      in 
+      List.fold_left sseq update_control_param_stmt (enable_hdrs_stmts@enable_params_stmts)
+    )
+    | _ -> stmt
+  ;;
+  (* function to transform generate statements in an egress *)
+  let egress_transformer output_event stmt = 
+    match stmt.s with 
+    (* generate (ingress_out.foo.bar(1, 2, 3)); *)
+    | SGen(_, exp) -> (
+      (* ingress_out.foo.bar, [1, 2, 3] *)
+      let ctor_cid, args = match exp.e with
+        | ECall(cid, args) -> cid, args
+        | _ -> error "[GeneratesNew] event expression inside of a generate must be a constructor expression"
+      in    
+      (* replace the generate statement with a sequence of assignments. *)
+      (* at this point, the event id should have three components: 
+          <ingress_event_id>.<handler_out_event_id>.<base_event_id> *)
+      let main_event, handler_out_event, base_event = match event_path ctor_cid output_event with 
+        | [m; h; b] -> m, h, b
+        | _ -> error "[GeneratesNew.egress_transformer] could not resolve event constructor in the given output event"
+      in      
+      (* 1. enable all the headers necessary to decode the base event. 
+         the main_event's tag header is already enabled and set to handler_out_event.
+         So we need to enable handler_out_event's flags header, set it, and enable 
+         handler_out_event's header for base_event. *)
+      let enable_hdrs_stmts = match handler_out_event with 
+        | EventUnion{tag} -> 
+          (* 1. enable the tag header of the handler event *)
+          let tag_cid, enable_exp = enable_event_field [main_event] handler_out_event (fst tag) in
+          let enable_tag = sassign tag_cid enable_exp in          
+          (* 2. set the tag to the appropriate event id 
+              note that we are setting foo.bar.tag.tag = tagval -- tag is a record with a field named tag...*)
+          let tagval = (vint_exp_ty (num_of_event base_event) (snd tag)) in
+          let set_tag = sassign (Cid.concat tag_cid (Cid.id (fst tag))) tagval in
+          (* 3. enable the field holding the member event parameters. *)
+          let base_event_cid, enable_exp = enable_event_field [main_event] handler_out_event (id_of_event base_event) in
+          let enable_base_event = sassign base_event_cid enable_exp in
+          [enable_tag; set_tag; enable_base_event]
+        | _ -> error "[GeneratesNew.ingress_transformer] at an ingress, handler output should be an eventset"
+      in
+      (* 2. then set the event parameters: ingress_out.foo_out.bar.a = ...; ...*)
+      let enable_params_stmts = List.map2
+        (fun (id, _) arg -> 
+          let param_cid = Cid.create_ids ([id_of_event main_event; id_of_event handler_out_event]@[id]) in
+          sassign param_cid arg)
+        (params_of_event base_event)
+        args
+      in
+      let sseq_opt s1_opt s2 = match s1_opt with 
+        | None -> Some(s2) 
+        | Some(s1) -> Some(sseq s1 s2)
+      in
+      List.fold_left sseq_opt None (enable_hdrs_stmts@enable_params_stmts)
+      |> Option.get
+    )
+    | _ -> stmt
+  ;;
+(* passes to run within ingress and egress components *)
+  let eliminate_ingress = 
+    object
+      inherit [_] s_map as super  
+      method! visit_statement ctx stmt = 
+        let stmt=super#visit_statement ctx stmt in 
+        ingress_transformer ctx stmt
+      end
+  ;;
+  let eliminate_egress = 
+    object
+      inherit [_] s_map as super  
+      method! visit_statement output_event stmt = 
+        let stmt=super#visit_statement output_event stmt in 
+        egress_transformer output_event stmt
+      end
+  ;;
+  (* main pass *)
+  let eliminate_generates (prog : prog) : prog = 
+    (* print_endline "[eliminate_generates] pass started"; *)
+    let prog = List.map
+      (fun component -> match component.comp_sort with
+        | HData -> 
+          eliminate_ingress#visit_component (ingress_ctx component) component
+        | HEgress -> 
+          eliminate_egress#visit_component (egress_ctx component) component
+        | _ -> component)
+      prog
+    in
+    prog
+  ;;

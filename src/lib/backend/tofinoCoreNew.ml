@@ -83,10 +83,8 @@ and event =
   | EventSet of {
     evid:id;
     members: event list;
-    (* active members: an internal field listing the subset of members that are active *)
-    flags : (id * ty) list;
-    subsets: (id list) list; (*optional metadata for optimization: 
-      the subsets of members that the eventset may hold.  *)
+    flags : (id * ty) list; (*a 2-bit flag for each member *)
+    generated_events : (id * gen_type) list list;
   }
 
 
@@ -98,12 +96,6 @@ and hbody =
 (* the string is direction specifier *)
 and intrinsic_params = (id * ty * string option) list
 
-and hinternal_params = {
-  out_port : (id * ty);
-  gen_ct : (id * ty);
-  out_group : (id * ty);
-}
-
 (* definition of a handler using input and output events *)
 and hevent = {    
   hdl_id : id;
@@ -111,16 +103,9 @@ and hevent = {
   hdl_body : hbody;  
   hdl_input : event; 
   hdl_output : event;
-  hdl_internal_params : hinternal_params;
-  (* hdl_intrinsics : intrinsic_params;  *)
-    (* hdl_intrinsics are polluting the IR and have no semantic meaning.
-        We should just have fixed fields for relevant output: 
-        - output port
-        - number of self generates
-        - output group 
-        Then let the lower p4-ish layer worry about mapping 
-        those fields to the appropriate intrinsics.
-        *)
+  hdl_params : params; (*parser output that is not wrapped in 
+     an event. timestamp, ingress port, queue depth, etc *)
+  hdl_retparams : params; (* multicast group, egress port, etc *)
   hdl_preallocated_vars : params; 
   (*variables that the handler can assume are allocated, but not set*)
 }
@@ -141,7 +126,8 @@ and parser = {
   pid : id;
   pparams : params;
   pblock : parser_block;
-  poutput : event option;
+  pret_event : event option;
+  pret_params : params;
 }
 
 (* the events are the events that the parser may generate *)
@@ -394,7 +380,7 @@ let decl_to_tdecl (decl:decl) =
     let handler = HParams {hdl_id; hdl_sort; hdl_params; hdl_body} in
     { td = TDHandler (handler); tdspan = decl.dspan; tdpragma = decl.dpragma }
   | DParser(pid, pparams, pblock) -> {
-    td = TDParser({pid; pparams; pblock; poutput=None;});
+    td = TDParser({pid; pparams; pblock; pret_event=None; pret_params = [];});
     tdspan = decl.dspan;
     tdpragma = decl.dpragma;
   }
@@ -512,6 +498,12 @@ let id_of_generate statement =
   | _ -> error "[id_of_generate] expected generate statement."
 ;;
 
+let sort_of_generate statement = 
+  match statement.s with
+  | SGen(gty, _) -> ( gty )
+  | _ -> error "[sort_of_generate] expected generate statement."
+;;
+
 let memops tds = 
   List.filter_map
   (fun dec ->
@@ -558,6 +550,19 @@ let main_handler_of_component component : hevent =
   | [] -> error "[main_handler_of_component] no main handler found."
   | [{td=TDHandler(HEvent(handler))}] -> handler
   | _ -> error "[main_handler_of_component] component not in single-handler form."
+;;
+
+let main_parser_of_component component : parser = 
+  let opt_things = List.filter_map (fun tdecl -> 
+    match tdecl.td with 
+    | TDParser(p) -> (
+      if (fst p.pid = "main")
+        then (Some(p))
+        else None)
+    | _ -> None)
+  component.comp_decls
+      in
+  List.hd opt_things
 ;;
 
 let main_body_of_decls decls : hbody = 
