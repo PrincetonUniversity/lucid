@@ -42,7 +42,28 @@ let rec event_to_string (event:TofinoCoreNew.event) =
 let intrinsic_param_to_string (id, ty, dirstr_opt) = 
   Printf.sprintf "%s %s %s" (Batteries.Option.default "" dirstr_opt) (ty_to_string ty) (id_to_string id) 
 ;;
-(* print handler types *)
+
+let hevent_to_string h = 
+  let hdl_sort_str = match h.hdl_sort with
+    | HControl -> "control"
+    | HData -> ""
+    | HEgress -> "@egress"
+  in
+  let params = (id_of_event h.hdl_input, {raw_ty=TEvent; tspan=Span.default})::h.hdl_params in 
+  let out_params = (id_of_event h.hdl_output, {raw_ty=TEvent; tspan=Span.default})::h.hdl_retparams in 
+  let body_str = match h.hdl_body with 
+    | SFlat stmt -> stmt_to_string stmt |> indent_body
+    | SPipeline stmts -> String.concat "\n" (List.map stmt_to_string stmts) |> indent_body
+  in
+  Printf.sprintf
+    "%shandle %s(%s) returns (%s)\n{%s\n}"
+    hdl_sort_str
+    (id_to_string h.hdl_id)
+    (params_to_string params)
+    (params_to_string out_params)
+    body_str
+;;
+    (* print handler types *)
 let handler_to_string (handler:TofinoCoreNew.handler) = 
   match handler with HParams({hdl_id; hdl_sort; hdl_params; hdl_body}) -> (
     Printf.sprintf
@@ -55,20 +76,7 @@ let handler_to_string (handler:TofinoCoreNew.handler) =
       (params_to_string hdl_params)
       (stmt_to_string hdl_body |> indent_body)
   )
-  | HEvent({hdl_id; hdl_sort; hdl_body; hdl_input; hdl_output;}) -> (
-    Printf.sprintf
-      "%shandle %s : %s -> %s \n {\n%s\n}"
-      (match hdl_sort with
-       | HControl -> "control "
-       | HData -> ""
-       | HEgress -> "@egress ")
-      (id_to_string hdl_id)
-      (id_of_event hdl_input |> id_to_string)
-      (id_of_event hdl_output |> id_to_string)
-      (match hdl_body with 
-      | SFlat stmt -> stmt_to_string stmt |> indent_body
-      | SPipeline stmts -> String.concat "\n" (List.map stmt_to_string stmts) |> indent_body)
-  )
+  | HEvent(h) -> hevent_to_string h
 ;;
 
 let parser_to_string p = 

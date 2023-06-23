@@ -307,7 +307,7 @@ let make_egr_parser
       )
     )
     to_egress
-    [egr_intr_id, egr_intr_ty]
+    (List.map intrinsic_to_param [egress_intrinsic_metadata_t; egress_intrinsic_metadata_from_parser_t; egress_intrinsic_metadata_for_deparser_t])
   in
   egr_parser
 ;;

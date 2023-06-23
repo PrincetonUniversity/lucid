@@ -11,6 +11,7 @@ open Collections
 open CoreSyntax
 open BackendLogging
 open MiscUtils
+open AddIntrinsics
 
 
 (* most of the tofinocore syntax tree is 
@@ -353,7 +354,6 @@ let rec add_default_egr_drop ds =
 ;;
 
 
-
 (** core -> tofinocore translation: building components **)
 (* translate decl and add to a component *)
 let decl_to_tdecl (decl:decl) = 
@@ -380,7 +380,18 @@ let decl_to_tdecl (decl:decl) =
     let handler = HParams {hdl_id; hdl_sort; hdl_params; hdl_body} in
     { td = TDHandler (handler); tdspan = decl.dspan; tdpragma = decl.dpragma }
   | DParser(pid, pparams, pblock) -> {
-    td = TDParser({pid; pparams; pblock; pret_event=None; pret_params = [];});
+    td = TDParser({pid; pparams; pblock; 
+      pret_event=None; (* filled later, when parsers are constructed / updated *) 
+      pret_params = if (fst pid = "main") 
+        (* all parser declarations before tofinoCoreNew are ingress parsers.
+           The egress parser is not user-programmable. *)
+        then (List.map intrinsic_to_param 
+          [ingress_intrinsic_metadata_t; 
+          ingress_intrinsic_metadata_for_tm_t;
+          ingress_intrinsic_metadata_from_parser_t])
+        else [];
+      }
+      );
     tdspan = decl.dspan;
     tdpragma = decl.dpragma;
   }

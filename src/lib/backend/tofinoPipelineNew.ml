@@ -178,15 +178,12 @@ let tofinocore_prep ds =
 let to_tofinocore ds =
   let core_prog = TofinoCoreNew.core_to_tofinocore ds  in
   print_endline ("--- initial tofinocore program ---");
-  print_endline (TofinoCorePrinting.prog_to_string core_prog);
 
   let core_prog = AddHandlerTypes.type_handlers core_prog in
   print_endline ("--- transformed handlers into event-function form ---");
-  print_endline (TofinoCorePrinting.prog_to_string core_prog);
 
   let core_prog = MergeHandlers.merge_handlers core_prog in
   print_endline ("--- merged component handlers ---");
-  print_endline (TofinoCorePrinting.prog_to_string core_prog);
 
   core_prog
 ;;
@@ -294,9 +291,6 @@ let compile old_layout ds portspec build_dir ctl_fn_opt =
     "parsers_added_generates_eliminated.dpt" 
     "after parsers have been added and generates have been eliminated in handlers"
     core_prog;
-  (* <<left off here>> optimize the parsers, then translate to P4 ir. *)
-  print_endline ("exiting after GeneratesNew and before PArseOptimizer.");
-  exit 0;
   (* optimize parsers to read headers directly into event parameters.
     This should reduce phv constraints. *)
   let core_prog = ParseOptimizer.parser_passes core_prog in 
@@ -313,6 +307,13 @@ let compile old_layout ds portspec build_dir ctl_fn_opt =
  (* let tofino_prog = CoreToP4TofinoNew.translate_core portspec core_prog in *)
   (* let _ = tofino_prog in  *)
   print_endline ("----- next step: translate to p4-tofino ir -----");
+  (* <<left off here>> new IR with parsers is complete. Most optimizations are done. 
+    Final steps:
+    1. perform final parser optimization: eliminate_direct_copies (when a variable 
+    is read, then used in an assign somewhere, we can just read the lhs of assign)
+    2. update elim_dead_reads to NOT eliminate out parameter reads
+    3. translate to P4-tofino IR
+    4. test. *)
   exit 1;
   (* error "not done" *)
 
