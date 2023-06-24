@@ -6,36 +6,45 @@
         "type": "command", 
         "name":"Table.install", 
         "args":{
-          "table":"src_prefix_table.prefix_table", 
+          "table":"anonymizer.policy_table", 
+          "key":[1], 
+          "action":"anonymizer.policy_table.get_policy", 
+          "args":["false", "true", "true", "true", "true", "true"]}
+      },
+      {
+        "type": "command", 
+        "name":"Table.install", 
+        "args":{
+          "table":"anonymizer.src_prefix_table.prefix_table", 
           "key":[10, 4, 1, "_"], 
-          "action":"src_prefix_table.prefix_table.result", 
+          "action":"anonymizer.src_prefix_table.prefix_table.result", 
           "args":[24]}
       },
       {
         "type": "command", 
         "name":"Table.install", 
         "args":{
-          "table":"src_prefix_table.prefix_table", 
+          "table":"anonymizer.src_prefix_table.prefix_table", 
           "key":[10, 4, "_", "_"], 
-          "action":"src_prefix_table.prefix_table.result", 
+          "action":"anonymizer.src_prefix_table.prefix_table.result", 
           "args":[16]}
       },
       {
         "type": "command", 
         "name":"Table.install", 
         "args":{
-          "table":"dst_prefix_table.prefix_table", 
+          "table":"anonymizer.dst_prefix_table.prefix_table", 
           "key":[172, 17, 1, "_"], 
-          "action":"dst_prefix_table.prefix_table.result", 
+          "action":"anonymizer.dst_prefix_table.prefix_table.result", 
           "args":[24]}
       },
       {
         "type": "command", 
         "name":"Table.install", 
         "args":{
-          "table":"dst_prefix_table.prefix_table", 
+          "table":"anonymizer.dst_prefix_table.prefix_table", 
           "key":[10, 4, "_", "_"], 
-          "action":"dst_prefix_table.prefix_table.result", 
+          "action":"anonymizer.dst_prefix_table.prefix_table.result", 
           "args":[16]}
       },
       {"name":"eth_ip", "args": [11, 22, 2048, 1, 2, 128]},
