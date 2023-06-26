@@ -152,6 +152,7 @@
    CoreToP4TofinoHeadersNew
    CoreToP4Tofino
    CoreToP4TofinoNew
+   TofinoCoreToP4
    P4TofinoPrinting
    P4TofinoGlobalDirectory
    ControlPrinter
