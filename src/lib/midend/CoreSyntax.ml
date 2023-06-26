@@ -261,7 +261,6 @@ and d =
   | DExtern of id * ty
   | DAction of action
   | DParser of id * params * parser_block
-
 (* name, return type, args & body *)
 and decl =
   { d : d

@@ -309,11 +309,8 @@ let compile old_layout ds portspec build_dir ctl_fn_opt =
   print_endline ("----- next step: translate to p4-tofino ir -----");
   (* <<left off here>> new IR with parsers is complete. Most optimizations are done. 
     Final steps:
-    1. perform final parser optimization: eliminate_direct_copies (when a variable 
-    is read, then used in an assign somewhere, we can just read the lhs of assign)
-    2. update elim_dead_reads to NOT eliminate out parameter reads
-    3. translate to P4-tofino IR
-    4. test. *)
+    1. translate to P4-tofino IR
+    2. test. *)
   exit 1;
   (* error "not done" *)
 
