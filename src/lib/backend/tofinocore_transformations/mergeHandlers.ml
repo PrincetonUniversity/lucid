@@ -119,14 +119,14 @@ let merge_handlers_in_component (c:component) : component =
     (* the members of the merged input event are all the 
        input events of the non-merged handlers. *)
     members = input_members;
-    tag = (selector_tag, ty (TInt 16));
+    tag = (Id.prepend_string (fst input_evid) selector_tag, ty (TInt 16));
     member_nums = List.map num_of_event input_members;
     }) 
   in
   let output_event = EventUnion({
     evid = output_evid;
     members = output_members; 
-    tag = (selector_tag, ty (TInt 16));
+    tag = (Id.prepend_string (fst input_evid) selector_tag, ty (TInt 16));
     (* important: the output events have the same tags 
     as the input events. Later stages of the compiler 
     assume that. Can we improve? *)

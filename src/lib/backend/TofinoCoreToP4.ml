@@ -149,13 +149,11 @@ CoreSyntax.var_sp
 
 let rec translate_exp (prog_env:prog_env) exp : (T.decl list * T.expr) =
   match exp.e with 
-  | ECall(fcn_cid, args) -> (
-    (* at this point, all call expressions are to builtin modules *)
-    translate_module_call prog_env fcn_cid args )
+  | ECall(fcn_cid, args) ->  translate_ecall prog_env fcn_cid args
   | CS.EHash (size, args) -> translate_hash prog_env size args 
+  | CS.EVal v -> 
+    [], T.eval_ty_sp (translate_value v.v) (translate_ty exp.ety) exp.espan
   | CS.EFlood _ -> error "[translate_memop_exp] flood expressions inside of memop are not supported"
-  | CS.EVal v -> [], T.eval_ty_sp (translate_value v.v) (translate_ty exp.ety) exp.espan
-  (* for variables, check renaming first *)
   | CS.EVar cid -> (
     match (CidMap.find_opt cid prog_env.vars) with 
       | Some (new_exp) -> translate_exp prog_env new_exp
@@ -205,43 +203,33 @@ and translate_hash prog_env size args =
   in
   [dhash], hasher_call
 
-
-
-and translate_sys_call fcn_id _ = 
-  (* TODO: renaming pass before translation *)
-  let e_ts = eop 
-    (Slice) 
-    [eval_int 47; eval_int 16; T.evar (Cid.create ["ig_intr_md"; "ingress_mac_tstamp"])]
-  in 
-  let fcn_name = List.nth (Cid.names fcn_id) 1 in 
-  match fcn_name with
-  | "time" -> [], e_ts
-  | "random" -> (
-    (* declare rng_###, call rng_###.get(); *)
-    let rng_id = Id.fresh_name "rng" in
-    let decl = drandom 32 rng_id in
-    let expr = ecall (Cid.create_ids [rng_id; id "get"]) [] in
-    [decl], expr
-  )
-  | s -> error ("[translate_sys_call] unknown sys function: "^s)
-
-and translate_module_call (env:prog_env) fcn_id args = 
-  match (List.hd (Cid.names fcn_id)) with 
-      | "Array" -> 
-        let regacn_id, decl = translate_array_call env fcn_id args in
-        let idx_arg = translate_memop_exp env
-          (List.hd (List.tl args))
-        in        
-        [decl], ecall (Cid.create_ids [regacn_id; (id "execute")]) [idx_arg]
-      | "PairArray" -> 
-        let regacn_id, decl = translate_pairarray_call env fcn_id args in 
-        let idx_arg = translate_memop_exp env
-          (List.hd (List.tl args))
-        in        
-        [decl], ecall (Cid.create_ids [regacn_id; (id "execute")]) [idx_arg]
-      | "Sys" -> translate_sys_call fcn_id args
-      | s -> error ("[translate_memop_call] unknown module: "^s)
-
+and translate_ecall env fcn_cid args = 
+  match (Cid.names fcn_cid) with
+    | ["Sys"; "time"] -> 
+      [], 
+      eop 
+        (Slice) 
+        [eval_int 47; eval_int 16; T.evar (Cid.create ["ingress_intrinsic_metadata"; "ingress_mac_tstamp"])]    
+    | ["Sys"; "random"] ->
+      (* declare rng_###, call rng_###.get(); *)
+      let rng_id = Id.fresh_name "rng" in
+      let decl = drandom 32 rng_id in
+      let expr = ecall (Cid.create_ids [rng_id; id "get"]) [] in
+      [decl], expr      
+  (* Array stuff *)
+  | "Array"::_ -> 
+    let regacn_id, decl = translate_array_call env fcn_cid args in
+    let idx_arg = translate_memop_exp env
+      (List.hd (List.tl args))
+    in        
+    [decl], ecall (Cid.create_ids [regacn_id; (id "execute")]) [idx_arg]
+  | "PairArray"::_ -> 
+    let regacn_id, decl = translate_pairarray_call env fcn_cid args in 
+    let idx_arg = translate_memop_exp env
+      (List.hd (List.tl args))
+    in        
+    [decl], ecall (Cid.create_ids [regacn_id; (id "execute")]) [idx_arg]
+  | _ -> error "[translate_ecall] unknown function"
 
 (*** array calls and memop exps ***)
 
@@ -702,13 +690,47 @@ let rec constr_env env tdecls =
   1. first two parameters are egress_output and egress input, derived from events
   2. next, the input params, verbatim
   3. finally, the output params, verbatim
-
-  what needs to happen in the body? 
-    - just rename builtins. One more pass in the IR 
-
 *)
+(* generate the struct type for an event. 
+   output events are headers, input events are metadata *)
+let rec event_to_hdrtys event : T.decl list =
+  let hdrty_id evid = ((fst evid)^"_t", snd evid) in
+  match event with
+  | EventSingle({evid;evparams;}) -> 
+    (* header with name evid^"_t" and fields from params *)
+    let decl = dstruct (hdrty_id evid) THdr 
+      (List.map (fun (pid, pty) -> pid, translate_ty pty) evparams)
+    in
+    [decl]  
+  | EventUnion({evid; members; tag}) -> 
+  (* a union is a struct with fields: 
+      tag : evid_tag_t; 
+      ev : ev_t; for ev in members
+      in addition to the union type, return the struct for tag and evs*)
+    let tag_decl = dstruct (fst tag |> hdrty_id) THdr
+      [Id.create "tag", snd tag|> translate_ty]
+    in
+    let ev_decls = List.map event_to_hdrtys members in
+    let ev_decls = List.flatten ev_decls in
+    (* fields of the union type *)
+    let (union_fields: (id * ty) list) = List.map
+      (fun (field_id,field_ty_id) -> 
+        (field_id, tstruct field_ty_id))
+      ((fst tag, fst tag |> hdrty_id)
+        ::(List.map (fun event -> (id_of_event event, id_of_event event |> hdrty_id)) members))
+    in
+    let union_decl = dstruct 
+      (hdrty_id evid) 
+      TMeta
+      union_fields
+    in
+    tag_decl::ev_decls@[union_decl]
+  (* <<left off here>> event set -- similar to union, but has flags *)
+  | _ -> error "not done"
+;;
 
-let params_of_main (_:hevent) =
+
+let translate_params (main_hdl:hevent) =
   (*  
 control IngressControl(
     inout hdr_t hdr,   // derived from "egress_output"
@@ -719,23 +741,24 @@ control IngressControl(
     // out params
     inout ingress_intrinsic_metadata_for_deparser_t ig_dprsr_md,
     inout ingress_intrinsic_metadata_for_tm_t ig_tm_md)
-
-
-
     {
 
 
   *)
-  (* TODO *)
   error "[params_of_main] TODO: parameters of a main handler "
+  
 ;;
 
 let translate_ingress comp = 
   print_endline ("translate_ingress");
   let hmain = (main_handler_of_component comp) in
-  let params = params_of_main hmain in
+  let params = translate_params hmain in
   (* set up the environment for main *)
-  let env = constr_env empty_env comp.comp_decls in
+  let full_ingr_port_cid = Cid.create ["ingress_intrinsic_metadata"; "ingress_port"] in
+  let ingr_env = bind_var empty_env
+     ((Builtins.ingr_port_id |> Cid.id), CoreSyntax.var_sp full_ingr_port_cid (SyntaxToCore.translate_ty Builtins.tofino_builtin_tys.ingr_port_ty) Span.default)
+  in
+  let env = constr_env ingr_env comp.comp_decls in
   (* declarations for added variables and open functions *)
   let decls = 
     (generate_added_var_decls comp.comp_decls)
@@ -757,7 +780,7 @@ let translate_ingress comp =
   let action_decls = non_mcgroups_of_decls decls in 
   let ingress_control = decl (DControl{
     id = hmain.hdl_id;
-    params = params_of_main hmain;
+    params = translate_params hmain;
     decls = action_decls@table_decls;
     body = Some(apply_body);
     })

@@ -306,12 +306,11 @@ let compile old_layout ds portspec build_dir ctl_fn_opt =
   (* finally, translate into the P4 ir *)
  (* let tofino_prog = CoreToP4TofinoNew.translate_core portspec core_prog in *)
   (* let _ = tofino_prog in  *)
-  print_endline ("----- next step: translate to p4-tofino ir -----");
+  print_endline ("----- translating to p4-tofino ir -----");
   (* <<left off here>> new IR with parsers is complete. Most optimizations are done. 
     Final steps:
     1. translate to P4-tofino IR
     2. test. *)
-  print_endline ("what?");
   let foo = TofinoCoreToP4.translate_prog core_prog in
   exit 1;
   let _ = foo in 
