@@ -697,36 +697,45 @@ let rec constr_env env tdecls =
     constr_env env' tdecls')
 ;;
 
+let params_of_main (_:hevent) =
+  (* TODO *)
+  error "[params_of_main] TODO: parameters of a main handler "
+;;
+
 let translate_ingress comp = 
   (* set up the environment for main *)
   let env = constr_env empty_env comp.comp_decls in
-  (* translate all declarations besides the tables *)
+  (* declarations for added variables and open functions *)
   let decls = 
     (generate_added_var_decls comp.comp_decls)
     @(List.fold_left
-      (translate_openfunction 
-        (true, renames, prog_env))
+      (translate_openfunction env)
       []
-      tds)
+      comp.comp_decls)
   in
-  (* get main  *)
+  (* declarations and statements from main handler *)
   let hmain = (main_handler_of_component comp) in
+  let main_body = match hmain.hdl_body with 
+    | SPipeline(stmts) -> stmts
+    | _ -> error "shoulda been pipeliend by now"
+  in
+  let table_decls, table_calls = statements_to_stages 0 env hmain.hdl_id main_body |> List.split in 
+  let apply_body = sseq table_calls in 
+
+  (* why all this separation? *)
+  let mc_decls = mcgroups_of_decls decls in 
+  let action_decls = non_mcgroups_of_decls decls in 
+  let ingress_control = decl (DControl{
+    id = hmain.hdl_id;
+    params = params_of_main hmain;
+    decls = action_decls@table_decls;
+    body = Some(apply_body);
+    })
+  in
+  []
 
 ;;
 
-
-
-
-let mk_prog_env tds = 
-  List.fold_left (fun prog_env tdecl -> 
-    match tdecl.td with
-      | TDMemop(m) -> {prog_env with memops=(m.mid, m)::prog_env.memops;}
-      | TDOpenFunction(id, _, _) -> {prog_env with defined_fcns=(Cid.id id, tdecl)::prog_env.defined_fcns;}
-      | _ -> prog_env
-    )
-    empty_prog_env
-    tds
-;;
 
 
 (* given a context of previous tdecls and a 
