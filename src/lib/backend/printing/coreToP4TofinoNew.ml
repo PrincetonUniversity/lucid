@@ -144,7 +144,6 @@ let translate_op o = match o with
   | CS.PatMask -> error "[coreToP4Tofino.translate_op] patterns are not implemented!"
 ;;
 
-
 let dotstring_of_cid cid = 
     Caml.String.concat "." @@ Cid.names cid
 ;;

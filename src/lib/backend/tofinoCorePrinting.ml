@@ -127,20 +127,12 @@ let td_to_string (td:td)=
       (params_to_string acn.aparams)
       (comma_sep exp_to_string acn.abody |> indent_body)
   | TDParser (p) -> parser_to_string p
-  | TDVar (id, ty) ->
-    Printf.sprintf "sharedlocal %s %s;" (ty_to_string ty) (id_to_string id)
   | TDOpenFunction(id, params, statement) -> 
     Printf.sprintf
       "method %s(%s) {\n%s\n}\n"
       (id_to_string id)
       (params_to_string params)
       (stmt_to_string statement |> indent_body)    
-  | TDUserTy({tyid; tyfields; tyextern;}) -> 
-    Printf.sprintf
-      "%s type %s {\n%s\n}\n"
-      (if tyextern then "extern" else "")
-      (id_to_string tyid)
-      (line_sep (fun (id, ty) -> Printf.sprintf "%s: %s;" (id_to_string id) (ty_to_string ty)) tyfields)
 ;;
 
 let tdecl_to_string td = td_to_string td.td

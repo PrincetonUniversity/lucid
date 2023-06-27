@@ -16,8 +16,6 @@ and size = int
 and sizes = size list
 and action_sig = string * size list * size list
 
-
-
 and raw_ty =
   | TBool
   | TGroup

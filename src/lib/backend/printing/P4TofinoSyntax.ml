@@ -136,6 +136,7 @@ and d =
   | DMCGroup of {gid:int; replicas : (int * int) list;}
   | DPort of {dpid:int; speed:int;}
   | DPragma of pragma
+  | DNone
 
 and decl = {d:d; dpragma:pragma list; dspan : sp;}
 

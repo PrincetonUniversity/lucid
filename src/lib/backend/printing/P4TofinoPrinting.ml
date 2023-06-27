@@ -398,6 +398,7 @@ let rec string_of_decl dec =
     | DMCGroup(_) -> s'"//multicast group"
     | DPort(_) -> s'"//port-up definition"
     | DPragma(p) -> string_of_pragma p
+    | DNone -> s'""
 
 and string_of_decls ds =
   separate_map hardline string_of_decl ds

@@ -145,13 +145,8 @@ and td =
   (* new / changed decls *)
   | TDEvent of event
   | TDHandler of handler
-  | TDVar of id * ty (* a variable used by multiple functions and handlers *)
   | TDOpenFunction of id * params * statement (* not an open function anymore *)
-  | TDUserTy of {
-      tyid : id;
-      tyfields : (id * ty) list (* a user-defined record type *);
-      tyextern : bool; (* when printing p4, do we assume that this type is defined somewhere else? *)
-  }
+
 and tdecl =
   { td : td
   ; tdspan : sp
