@@ -114,6 +114,7 @@
    TofinoCoreNew
    AddEgressParser
    ParseOptimizer
+   RenameBuiltins
    TofinoCorePrinting
    AddEgressHandlers
    AddHandlerTypes

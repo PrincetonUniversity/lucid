@@ -241,6 +241,5 @@ let parser_passes core_prog =
   let core_prog = List.map elim_dead_reads core_prog in
   print_endline "---- parsers after elim_dead_reads ----";
   print_parsers core_prog;
-  exit 0;
   core_prog
 ;;

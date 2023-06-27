@@ -697,12 +697,43 @@ let rec constr_env env tdecls =
     constr_env env' tdecls')
 ;;
 
+(* 
+  constructing the main ingress's arguments: 
+  1. first two parameters are egress_output and egress input, derived from events
+  2. next, the input params, verbatim
+  3. finally, the output params, verbatim
+
+  what needs to happen in the body? 
+    - just rename builtins. One more pass in the IR 
+
+*)
+
 let params_of_main (_:hevent) =
+  (*  
+control IngressControl(
+    inout hdr_t hdr,   // derived from "egress_output"
+    inout meta_t meta, // derived from "egress input"
+    // in params
+    in ingress_intrinsic_metadata_t ig_intr_md,
+    in ingress_intrinsic_metadata_from_parser_t ig_prsr_md,
+    // out params
+    inout ingress_intrinsic_metadata_for_deparser_t ig_dprsr_md,
+    inout ingress_intrinsic_metadata_for_tm_t ig_tm_md)
+
+
+
+    {
+
+
+  *)
   (* TODO *)
   error "[params_of_main] TODO: parameters of a main handler "
 ;;
 
 let translate_ingress comp = 
+  print_endline ("translate_ingress");
+  let hmain = (main_handler_of_component comp) in
+  let params = params_of_main hmain in
   (* set up the environment for main *)
   let env = constr_env empty_env comp.comp_decls in
   (* declarations for added variables and open functions *)
@@ -714,7 +745,6 @@ let translate_ingress comp =
       comp.comp_decls)
   in
   (* declarations and statements from main handler *)
-  let hmain = (main_handler_of_component comp) in
   let main_body = match hmain.hdl_body with 
     | SPipeline(stmts) -> stmts
     | _ -> error "shoulda been pipeliend by now"
@@ -733,50 +763,21 @@ let translate_ingress comp =
     })
   in
   []
-
 ;;
 
 
-
-(* given a context of previous tdecls and a 
-   tdecl, translate the tdecl into a decl and optionally 
-   update the context.  *)
-let translate_decl tdecls tdecl : (tdecl list * decl list) = 
-  match tdecl.td with 
-  | TDAction _ -> error "there should be no decls by now"
-  (* these just get saved *)
-  | TDEvent _
-  | TDMemop _
-  | TDExtern _ -> tdecls@[tdecl], []
-  (* these should be translated  *)
-  | TDGlobal _ -> tdecls@[tdecl], []
-  | TDOpenFunction _ -> tdecls@[tdecl], []
-  | TDHandler _ -> tdecls@[tdecl], []
-  | TDParser _ -> tdecls@[tdecl], []
-;;
-
-(*   | TDAction _ 
-  | TDVar _
-  | 
- *)  
-;;
-
-(* core task: translate a component into a 
-  list of p4 declarations... (or is that 1 p4 declaration? UGH) *)
-let translate_component component : decl list = 
-  let (_, p4decls) = List.fold_left 
-    (fun (ldecls, p4decls) ldecl -> 
-      let ldecls_new, p4decls_new = translate_decl ldecls ldecl in
-      ldecls@ldecls_new,
-      p4decls@p4decls_new)
-    ([], [])
-    component.comp_decls
-  in
-  p4decls
-;;
 
 let translate_prog prog =
-  List.map translate_component prog
+  print_endline ("ukay");
+  let p4t_components = List.filter_map 
+    (fun component -> 
+      print_endline ("translating component: "^(fst component.comp_id));
+      match (fst component.comp_id) with 
+      | "ingress" -> Some("ingress", translate_ingress component)
+      | _ -> None)
+    prog 
+  in
+  p4t_components
 ;;
 
 

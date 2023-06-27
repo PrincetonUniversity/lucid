@@ -210,11 +210,19 @@ let merge_handlers_in_component (c:component) : component =
   (* finally, set the input and output parameters of the handler that carry metadata. *)
   let hdl_params, hdl_retparams = match c.comp_sort with 
   | HData -> (* ingress*)
-    (List.map intrinsic_to_param [ingress_intrinsic_metadata_t; ingress_intrinsic_metadata_from_parser_t;]),
-    (List.map intrinsic_to_param [ingress_intrinsic_metadata_for_deparser_t; ingress_intrinsic_metadata_for_tm_t;])
+    (List.map intrinsic_to_param [
+      ingress_intrinsic_metadata_t; 
+      ingress_intrinsic_metadata_from_parser_t;]),
+    (List.map intrinsic_to_param [
+      ingress_intrinsic_metadata_for_deparser_t; 
+      ingress_intrinsic_metadata_for_tm_t;])
   | HEgress -> 
-    (List.map intrinsic_to_param [egress_intrinsic_metadata_t; egress_intrinsic_metadata_from_parser_t]),
-    (List.map intrinsic_to_param [egress_intrinsic_metadata_for_deparser_t; egress_intrinsic_metadata_for_output_port_t])
+    (List.map intrinsic_to_param [
+      egress_intrinsic_metadata_t; 
+      egress_intrinsic_metadata_from_parser_t]),
+    (List.map intrinsic_to_param [
+      egress_intrinsic_metadata_for_deparser_t; 
+      egress_intrinsic_metadata_for_output_port_t])
   | _ -> [], []
   in
   let merged_hdl = {

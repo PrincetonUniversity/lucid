@@ -311,7 +311,11 @@ let compile old_layout ds portspec build_dir ctl_fn_opt =
     Final steps:
     1. translate to P4-tofino IR
     2. test. *)
+  print_endline ("what?");
+  let foo = TofinoCoreToP4.translate_prog core_prog in
   exit 1;
+  let _ = foo in 
+  error "not done"
   (* error "not done" *)
 
 (*   (* generate the python event library *)
