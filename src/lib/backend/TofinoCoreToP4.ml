@@ -883,11 +883,137 @@ let dw fcn denv arg =
   {denv with penv = (fcn denv.penv arg); }
 
 
-let translate_parser parser = 
-  (* okaayy... *)
-  let _ = parser in 
-  []
+let last_block_id = ref 0
+let fresh_blockid () = 
+  last_block_id := (!last_block_id) +1;
+  ("block_"^(string_of_int (!last_block_id)), 0)
 ;;
+(* some helpers for constructing the parser *)
+let transition id = sunit (ejump (Cid.create_ids [id]))
+let transition_accept = transition (id "accept")
+let dparsestate id stmt =
+  decl (DParseState {id; body = stmt;})
+;;
+
+let pkt_arg = id "pkt"
+let extract field_inst = 
+  let extract_fcn = 
+    (Cid.concat (Cid.Id pkt_arg) (Cid.create ["extract"]))
+  in
+  sunit (ecall extract_fcn [T.evar field_inst])
+;;
+let sadvance nbits =
+  let advance_fcn = 
+    (Cid.concat (Cid.Id pkt_arg) (Cid.create ["advance"]))
+  in
+  sunit (ecall advance_fcn [T.eval_int nbits])
+;;
+let lookahead ty = 
+  etycall (Cid.create ["lookahead"]) [ty] []
+;;
+let slocal_lookahead (cid) ty =
+  slocal (Cid.to_id cid) ty (lookahead ty)
+;;
+let sassign_lookahead cid ty = 
+  sassign cid (lookahead ty)
+;;
+
+let size_of_tint ty = 
+  match ty.raw_ty with 
+  | TInt(sz) -> sz
+  | _ -> error "[size_of_tint] not a tint"
+;;
+
+(* parse translation *)
+let translate_parser parser = 
+  let is_param cid : bool = 
+    let param_cids = List.map (fun (id, _) -> Cid.id id) parser.pret_params in
+    List.exists (Cid.equal cid) param_cids
+  in
+  let is_event_field cid : bool = 
+    let fst_id = Cid.to_ids cid |> List.hd in
+    let out_ev_id = parser.pret_event |> Option.get |> id_of_event in
+    Id.equal fst_id out_ev_id
+  in
+  let parse_states = ref [] in
+  let start_block = ref true in 
+  let rec translate_parser_block parser_block :id =
+    (* a parse block is roughly a parse state, except...
+        1. it doesn't have a name...
+        2. steps: 
+            - PMatch -- this one's okay
+            - PGen -- eliminated
+            - PCall -- eliminated, except for the exit call
+            - PDrop -- drop;
+    *)
+    let block_id = if (!start_block)
+      then (start_block := false; id "start")
+      else (fresh_blockid ()) 
+    in
+    (* actions can't jump to new blocks, so okay to map *)
+    let stmts = List.map fst parser_block.pactions |> 
+      List.map translate_parse_action
+    in
+    let sstep = translate_parser_step (fst parser_block.pstep) in 
+    (* let step =  *)
+    parse_states := (!parse_states)@[dparsestate block_id (sseq (stmts@[sstep]))];
+    block_id
+  and translate_parse_action parser_action = 
+    match parser_action with 
+    | PRead(cid, ty) -> (
+      (* case -- cid is param -> read is an extract
+         case -- cid is not param -> read is a slocal lookahead; advance *)
+      match (is_param cid) with
+      | true -> extract cid
+      | false -> sseq [slocal_lookahead cid (translate_ty ty); sadvance (size_of_tint ty)]
+    )
+    | PPeek(cid, ty) -> (
+      (* case -- cid is an event field (first id is name of output event param) sassign lookahead -> 
+         case -- cis is not a param -> slocal lookahead *)
+      match (is_event_field cid) with 
+      | true -> sassign_lookahead cid (translate_ty ty)
+      | false -> slocal_lookahead cid (translate_ty ty)
+    )
+    | PSkip(ty) -> sadvance (size_of_tint ty)
+      (* always an advance  *)
+    | PAssign(cid, exp) -> 
+      (* I guess just an assign? not sure *)
+      print_endline ("WARNING: assign action in parser -- untested");
+      sassign cid (translate_exp empty_env exp |> snd)
+  and translate_parser_branch (pats, block) = 
+    let pats' = List.map translate_pat pats in
+    let block_id = translate_parser_block block in
+    pats', transition block_id
+
+  and translate_parser_step parser_step = 
+    match parser_step with
+    | PMatch(exps, parser_branches) -> (
+      let exps' = translate_exps empty_env exps |> snd in
+      let branches' = List.map translate_parser_branch parser_branches in
+      smatch exps' branches'
+    )
+    | PGen _ -> error "[translate_parser_step] pgens should have been elminiateasd"
+    | PCall({e=CS.ECall(fcid, _)}) -> 
+      if ((Cid.names fcid |> List.hd) = "exit")
+        then transition_accept
+        else error "[translate_parser_step] the only supported call is to exit/accept"
+    | PCall _ -> error "[translate_parser_step] the only supported call is to exit/accept"
+    | PDrop -> transition (id "drop")
+  in
+  print_endline ("------ translating parser ------");
+  TofinoCorePrinting.parser_to_string parser |> print_endline;
+  print_endline ("------------");
+  let _ = translate_parser_block parser.pblock in
+  let parse_states = !parse_states in
+  (* <<left off here>> TODO: parser params, including the packet *)
+  let res = dparse parser.pid [] parse_states in
+  let out_str = P4TofinoPrinting.string_of_decl res |> P4TofinoPrinting.doc_to_string in
+  print_endline ("-----------p4 parser-------");
+  print_endline out_str;
+  error "translating parser not done";
+  res 
+;;
+
 
 let translate_tdecl (denv : translate_decl_env) tdecl : (translate_decl_env) = 
   match tdecl.td with
@@ -984,7 +1110,7 @@ let translate_tdecl (denv : translate_decl_env) tdecl : (translate_decl_env) =
       (* update globals and previously generated events *)
       {denv with globals; locals; prev_events}
   )
-  | TDParser _ -> print_endline ("warning: parser translation not implemented!"); denv
+  | TDParser(p) -> let globals = denv.globals@[translate_parser p] in {denv with globals}
   | TDHandler(HParams(_)) -> error "param-based handles should have been eliminated"
   | TDAction _ -> error "[translate_tdecl] actions should have been converted into functions"
   (* | TDOpenFunction(id, _, _) -> {prog_env with defined_fcns=(Cid.id id, tdecl)::prog_env.defined_fcns;} *)
@@ -998,7 +1124,6 @@ let translate_ingress comp =
   in
   let denv = new_denv ingr_env in
   let penv = List.fold_left translate_tdecl denv comp.comp_decls in
-  (* we want the globals from here. *)
   (* TODO: multicast group rules? *)
   print_endline "program after translate_ingress:";
   print_endline 

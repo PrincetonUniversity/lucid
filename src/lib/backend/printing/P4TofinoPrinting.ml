@@ -85,6 +85,11 @@ let rec string_of_expr expr = match expr.ex with
       | None -> s'""
     in 
     (string_of_expr fcn_expr)^^(parens args_str)
+  | ETyCall(fcn_expr, tys, args) -> (
+    (string_of_expr fcn_expr)
+    ^^(s'"<")^^(string_of_tys tys)^^s'(">")
+    ^^(parens (string_of_exprs args))
+  )
   | EConstr(id, tys, args) -> (
     (string_of_id id)
     ^^(s'"<")^^(string_of_tys tys)^^s'(">")
