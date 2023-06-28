@@ -76,8 +76,8 @@ and event =
   | EventUnion  of {
     evid:id;
     members: event list;
-    (* tag is an internal field of type TEvent that holds the active event's id *)
-    tag : (id * ty);
+    (* outer id is a struct id, inner id is struct's field. *)
+    tag : id * (id * ty);
     member_nums : int list; (*store the tag values of the members *)
   }
   (* an event set is a set of optional events *)
@@ -717,4 +717,15 @@ let find_component_by_id prog id =
 
 let transform_component_by_id (f:component -> component) prog id : prog =
   List.map (fun c -> if c.comp_id = id then f c else c) prog
+;;
+
+(* add a call to enable a header field. 
+   This call has no semantic meaning in this ir, 
+   but is translated to an isValid call in p4, which 
+   inlines event serialization. *)
+let enable_call var_cid var_ty = 
+  SUnit(
+    call (Cid.create ["Sys"; "enable"])
+    [var (var_cid) var_ty] (ty TBool))
+  |> statement
 ;;

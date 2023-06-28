@@ -277,10 +277,10 @@ let make_egr_parser
     *)
   let egr_intr_id, egr_intr_ty = intrinsic_to_param egress_intrinsic_metadata_t in 
 
-  let tagid, tagty = etag from_ingress in
+  let tagstructid, (tagid, tagty) = etag from_ingress in
 
   let read_intr_cmd = read (Cid.id egr_intr_id) egr_intr_ty in
-  let read_event_tag = read (Cid.id tagid) tagty in
+  let read_event_tag = read (Cid.id tagstructid) tagty in
   let egress_replica_id = field_of_intrinsic 
     egress_intrinsic_metadata_t 
     (Cid.id egr_intr_id)

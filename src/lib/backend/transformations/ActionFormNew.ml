@@ -206,6 +206,5 @@ let rec process_comp comp  =
   let added_tds, m' = process_stages m in
   let mhdl' = {mhdl with hdl_body = SPipeline(m');} in
   let tds = replace_main_handler_of_decls comp.comp_decls mhdl' in
-  {comp with comp_decls = tds@added_tds}
-  (* the actions come after the handler? woof. *)
+  {comp with comp_decls = added_tds@tds}
 ;;

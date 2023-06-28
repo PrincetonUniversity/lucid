@@ -107,26 +107,30 @@ let merge_handlers_in_component (c:component) : component =
   let input_evid = Id.append_string "_input" c.comp_id in
   let output_evid = Id.append_string "_output" c.comp_id in
   let hdl_evid = Id.append_string "_hdl" c.comp_id in
-  let selector_tag = Id.create "tag" in
+  (* input_event.tag.tag *)
   (* generate input and output events. Members are the 
      inputs and outputs of each event *)
   let input_members, output_members = 
     List.map (fun h -> h.hdl_input, h.hdl_output) handlers
     |> List.split
   in 
+  let tag_of_evid evid = 
+    Id.create ((fst evid)^"_tag"), (Id.create "tag", ty (TInt(16))  )
+  in
   let input_event = EventUnion({
     evid = input_evid;
     (* the members of the merged input event are all the 
        input events of the non-merged handlers. *)
     members = input_members;
-    tag = (Id.prepend_string (fst input_evid) selector_tag, ty (TInt 16));
+    (* tag is the FIELD NAME *)
+    tag = tag_of_evid input_evid;
     member_nums = List.map num_of_event input_members;
     }) 
   in
   let output_event = EventUnion({
     evid = output_evid;
     members = output_members; 
-    tag = (Id.prepend_string (fst input_evid) selector_tag, ty (TInt 16));
+    tag = tag_of_evid output_evid;
     (* important: the output events have the same tags 
     as the input events. Later stages of the compiler 
     assume that. Can we improve? *)
@@ -138,8 +142,14 @@ let merge_handlers_in_component (c:component) : component =
      The first statement sets the output event's selector tag. 
      As an optimization, we might only want to do that if the 
      body of that branch has a generate. *)
+  let input_tag_full_cid = Cid.create_ids [
+    input_evid;
+    fst (tag_of_evid input_evid);
+    fst (snd (tag_of_evid input_evid))    
+    ] 
+  in
   let merged_hdl_stmt = smatch
-    [var (Cid.id selector_tag) (ty (TInt 16))] 
+    [var input_tag_full_cid (ty (TInt 16))] 
     (
       List.mapi
       (fun i h -> 
@@ -170,15 +180,17 @@ let merge_handlers_in_component (c:component) : component =
         else 
           (* the first statement of this branch enables the tag in the 
             output header and then sets it to match the input event tag.*)
-          let tag_param = match output_event with
+          let out_tag_outer, (out_tag_inner, out_tag_inner_ty) = match output_event with
             | EventUnion({tag}) -> tag
             | _ -> error "[mergeHandlers] output event is not a union"
           in
-          let tag_hdr_cid = Cid.create_ids [output_evid; Id.create "tag"] in
-          let tag_hdr_val_exp = call (Cid.create ["enable"]) [] (ty (TInt(1))) in
-          let tag_enable_stmt = sassign tag_hdr_cid tag_hdr_val_exp in
-          let tag_cid = Cid.concat tag_hdr_cid (Cid.id (fst tag_param)) in
-          let tag_val_exp = vint_exp_ty (i + 1) (snd tag_param) in
+          let out_tag_cid = Cid.create_ids [output_evid; out_tag_outer] in
+          let out_tag_ty_cid = Cid.create_ids [output_evid; (Id.create ((fst out_tag_outer)^"_t"))] in
+          let out_tag_outer_ty  = ty (TName(out_tag_ty_cid, [], false)) in 
+          let tag_enable_stmt = enable_call out_tag_cid out_tag_outer_ty in 
+          (* let tag_enable_stmt = sassign tag_hdr_cid tag_hdr_val_exp in *)
+          let tag_cid = Cid.concat out_tag_cid (Cid.id out_tag_inner) in
+          let tag_val_exp = vint_exp_ty (i + 1) out_tag_inner_ty in
           let tag_set_stmt = 
             sassign tag_cid tag_val_exp 
           in

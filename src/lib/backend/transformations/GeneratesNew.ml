@@ -34,7 +34,6 @@
   open AddIntrinsics
   open AddHandlerTypes
   
-
   (* get a member event *)
   let member_event event member_id =
     let rec member_event_rec events member_id =
@@ -95,13 +94,15 @@
       sassign var_cid enew
     | _ -> error "[sassign_var] expected evar"
   ;;
-  
+    
   (* enable a field of an event  *)
   let enable_event_field ev_parents ev field = 
     let full_param_cid = (Cid.create_ids
       ((List.map id_of_event (ev_parents@[ev]))@[field]))
     in
-    full_param_cid, (call (Cid.create ["enable"]) [] (ty (TInt(1))))
+    let full_param_ty = ty TBool in
+    let scall = enable_call full_param_cid full_param_ty in
+    full_param_cid, scall
   ;;
 
 
@@ -178,7 +179,7 @@
       let ctor_cid, args = match exp.e with
         | ECall(cid, args) -> cid, args
         | _ -> error "[GeneratesNew] event expression inside of a generate must be a constructor expression"
-      in    
+      in
       (* replace the generate statement with a sequence of assignments. *)
       (* at this point, the event id should have three components: 
           <ingress_event_id>.<handler_out_event_id>.<base_event_id> *)
@@ -193,8 +194,7 @@
       let enable_hdrs_stmts = match handler_out_event with 
         | EventSet{members; flags;} -> 
           (* 1. enable the flags header of the handler event *)
-          let flags_cid, enable_exp = enable_event_field [main_event] handler_out_event (Id.create"flag") in
-          let enable_flags = sassign flags_cid enable_exp in          
+          let flags_cid, enable_flags = enable_event_field [main_event] handler_out_event (Id.create"flag") in      
           (* let stmt = enable_builtin_params [main_event] handler_out_event "flags" 1 in *)
           (* 2. set the appropriate flag field for base_event in handler  *)
           let flag_id, flag_ty = List.nth flags (pos_of_event members (id_of_event base_event)) in
@@ -203,15 +203,14 @@
             (vint_exp_ty 1 flag_ty)
           in
           (* 3. enable the field holding the member event parameters. *)
-          let base_event_cid, enable_exp = enable_event_field [main_event] handler_out_event (id_of_event base_event) in
-          let enable_base_event = sassign base_event_cid enable_exp in
+          let _, enable_base_event = enable_event_field [main_event] handler_out_event (id_of_event base_event) in
           [enable_flags; set_flag; enable_base_event]
         | _ -> error "[GeneratesNew.ingress_transformer] at an ingress, handler output should be an eventset"
       in
       (* 2. then set the event parameters: ingress_out.foo_out.bar.a = ...; ...*)
       let enable_params_stmts = List.map2
         (fun (id, _) arg -> 
-          let param_cid = Cid.create_ids ([id_of_event main_event; id_of_event handler_out_event]@[id]) in
+          let param_cid = Cid.create_ids ([id_of_event main_event; id_of_event handler_out_event; id_of_event base_event]@[id]) in
           sassign param_cid arg)
         (params_of_event base_event)
         args
@@ -264,22 +263,20 @@
       let enable_hdrs_stmts = match handler_out_event with 
         | EventUnion{tag} -> 
           (* 1. enable the tag header of the handler event *)
-          let tag_cid, enable_exp = enable_event_field [main_event] handler_out_event (fst tag) in
-          let enable_tag = sassign tag_cid enable_exp in          
+          let tag_cid, enable_tag = enable_event_field [main_event] handler_out_event (fst tag) in
           (* 2. set the tag to the appropriate event id 
               note that we are setting foo.bar.tag.tag = tagval -- tag is a record with a field named tag...*)
-          let tagval = (vint_exp_ty (num_of_event base_event) (snd tag)) in
+          let tagval = (vint_exp_ty (num_of_event base_event) (snd (snd tag))) in
           let set_tag = sassign (Cid.concat tag_cid (Cid.id (fst tag))) tagval in
           (* 3. enable the field holding the member event parameters. *)
-          let base_event_cid, enable_exp = enable_event_field [main_event] handler_out_event (id_of_event base_event) in
-          let enable_base_event = sassign base_event_cid enable_exp in
+          let _, enable_base_event = enable_event_field [main_event] handler_out_event (id_of_event base_event) in
           [enable_tag; set_tag; enable_base_event]
         | _ -> error "[GeneratesNew.ingress_transformer] at an ingress, handler output should be an eventset"
       in
       (* 2. then set the event parameters: ingress_out.foo_out.bar.a = ...; ...*)
       let enable_params_stmts = List.map2
         (fun (id, _) arg -> 
-          let param_cid = Cid.create_ids ([id_of_event main_event; id_of_event handler_out_event]@[id]) in
+          let param_cid = Cid.create_ids ([id_of_event main_event; id_of_event handler_out_event; id_of_event base_event]@[id]) in
           sassign param_cid arg)
         (params_of_event base_event)
         args

@@ -17,6 +17,7 @@ let rec translate_ty ty = match ty.raw_ty with
   | CS.TInt (s) -> T.TInt (s)
   | CS.TAction(_) -> error "[translate_ty] action types should be eliminated in IR..."
   | CS.TFun(fty) -> tfun (translate_ty fty.ret_ty) (List.map translate_ty fty.arg_tys)
+  | CS.TName(cid, _, _) -> tstruct (Cid.to_id cid)
   | _ -> error "[translate_ty] translation for this type is not implemented"
 ;;
 
@@ -96,18 +97,41 @@ let cell_ty_of_array rid : T.ty =
     tstruct (cell_struct_id rid)
 ;;
 
+let cell_struct_of_array_ty module_name cell_width rid : T.decl =
+  decl (match module_name with
+      | "Array" -> DStructTy{
+        id=cell_struct_id rid; 
+        sty=TMeta;
+        fields=[id "lo", tint cell_width];
+        } 
+      | "PairArray" -> DStructTy{
+        id=cell_struct_id rid; 
+        sty=TMeta;
+        fields=[id "lo", tint cell_width; id "hi", tint cell_width];
+        } 
+      | _ -> error "[cell_struct_of_array_ty] unsupported module -- expected Array or PairArray")
+;;
+
+
+
 module CidMap = Collections.CidMap
 module IdMap = Collections.IdMap
+module CidSet = Collections.CidSet
+
+
+(*** helper functions ***)
 
 (*** environment  ***)
 type prog_env = {
   memops : memop IdMap.t;
+  actions : CidSet.t;
   (* defined_fcns : tdecl CidMap.t; *)
   tables : (CS.tbl_def * Span.t) CidMap.t;
   vars   : exp CidMap.t;
 }
 
 let empty_env = {memops = IdMap.empty; 
+actions = CidSet.empty;
 (* defined_fcns = CidMap.empty;  *)
 tables = CidMap.empty; vars=CidMap.empty}
 ;;
@@ -204,7 +228,19 @@ and translate_hash prog_env size args =
   [dhash], hasher_call
 
 and translate_ecall env fcn_cid args = 
-  match (Cid.names fcn_cid) with
+  (* first, check if its an action *)
+  if (CidSet.mem fcn_cid env.actions) then 
+    ([], ecall_action fcn_cid [])
+  else (
+    match (Cid.names fcn_cid) with
+    | ["Sys"; "enable"] -> 
+      (* make a header valid, used to serialize egress *)
+      let method_cid = match (List.hd args) with
+        | {e=CS.EVar(cid)} -> (Cid.names cid)@["setValid"] |> Cid.create
+        | _ -> error "[translate_ecall] invalid argument to enable"
+      in
+      [], ecall_method method_cid
+    (* system functions *)
     | ["Sys"; "time"] -> 
       [], 
       eop 
@@ -216,20 +252,20 @@ and translate_ecall env fcn_cid args =
       let decl = drandom 32 rng_id in
       let expr = ecall (Cid.create_ids [rng_id; id "get"]) [] in
       [decl], expr      
-  (* Array stuff *)
-  | "Array"::_ -> 
-    let regacn_id, decl = translate_array_call env fcn_cid args in
-    let idx_arg = translate_memop_exp env
-      (List.hd (List.tl args))
-    in        
-    [decl], ecall (Cid.create_ids [regacn_id; (id "execute")]) [idx_arg]
-  | "PairArray"::_ -> 
-    let regacn_id, decl = translate_pairarray_call env fcn_cid args in 
-    let idx_arg = translate_memop_exp env
-      (List.hd (List.tl args))
-    in        
-    [decl], ecall (Cid.create_ids [regacn_id; (id "execute")]) [idx_arg]
-  | _ -> error "[translate_ecall] unknown function"
+    (* Array stuff *)
+    | "Array"::_ -> 
+      let regacn_id, decl = translate_array_call env fcn_cid args in
+      let idx_arg = translate_memop_exp env
+        (List.hd (List.tl args))
+      in        
+      [decl], ecall (Cid.create_ids [regacn_id; (id "execute")]) [idx_arg]
+    | "PairArray"::_ -> 
+      let regacn_id, decl = translate_pairarray_call env fcn_cid args in 
+      let idx_arg = translate_memop_exp env
+        (List.hd (List.tl args))
+      in        
+      [decl], ecall (Cid.create_ids [regacn_id; (id "execute")]) [idx_arg]
+    | _ -> error "[translate_ecall] unknown function")
 
 (*** array calls and memop exps ***)
 
@@ -518,20 +554,22 @@ let rec translate_statement env prev_decls stmt =
 ;;
 
 (* generate an action, and other compute objects, from an open function *)
-let translate_openfunction env p4tdecls tdecl =
-  let new_decls = match tdecl.td with 
+let translate_openfunction env tdecl =
+  let new_env, new_decls = match tdecl.td with 
     | TDOpenFunction(id, const_params, stmt) -> (
       let params = List.map
         (fun (id, ty) -> (None, translate_ty ty, id))
         const_params
       in
-      let body_decls, body = translate_statement env p4tdecls stmt in
+      let body_decls, body = translate_statement env [] stmt in
       let action = daction id params body in
-      body_decls@[action]
+      (* add the open function to the actions context *)
+      let env = {env with actions = CidSet.add (Cid.id id) env.actions} in
+      env, body_decls@[action]
     )
-    | _ -> []
+    | _ -> env, []
   in
-  p4tdecls@new_decls
+  new_env, new_decls
 ;;
 
 
@@ -671,7 +709,7 @@ let mc_recirc_decls evids recirc_port =
   List.map mc_group_n_recirc possible_rids
 ;;
 
-
+(* 
 let rec constr_env env tdecls = 
   match tdecls with
   | [] -> env
@@ -683,58 +721,129 @@ let rec constr_env env tdecls =
       | _ -> env
     in
     constr_env env' tdecls')
+;; *)
+
+let tyid_of_fieldid struct_ty fieldid = 
+  let hdrty_id evid = ((fst evid)^"_h", snd evid) in
+  let structty_id evid = ((fst evid)^"_s", snd evid) in
+  match struct_ty with 
+  | THdr -> hdrty_id fieldid
+  | TMeta -> structty_id fieldid
 ;;
 
-(* 
-  constructing the main ingress's arguments: 
-  1. first two parameters are egress_output and egress input, derived from events
-  2. next, the input params, verbatim
-  3. finally, the output params, verbatim
-*)
+
+let tyid_of_event struct_ty event = 
+  let evid = id_of_event event in 
+  match (event) with 
+    | EventSingle(_) -> tyid_of_fieldid struct_ty evid
+    | (_) -> tyid_of_fieldid TMeta evid
+;;
+
 (* generate the struct type for an event. 
    output events are headers, input events are metadata *)
-let rec event_to_hdrtys event : T.decl list =
-  let hdrty_id evid = ((fst evid)^"_t", snd evid) in
-  match event with
-  | EventSingle({evid;evparams;}) -> 
-    (* header with name evid^"_t" and fields from params *)
-    let decl = dstruct (hdrty_id evid) THdr 
-      (List.map (fun (pid, pty) -> pid, translate_ty pty) evparams)
-    in
-    [decl]  
-  | EventUnion({evid; members; tag}) -> 
-  (* a union is a struct with fields: 
-      tag : evid_tag_t; 
-      ev : ev_t; for ev in members
-      in addition to the union type, return the struct for tag and evs*)
-    let tag_decl = dstruct (fst tag |> hdrty_id) THdr
-      [Id.create "tag", snd tag|> translate_ty]
-    in
-    let ev_decls = List.map event_to_hdrtys members in
-    let ev_decls = List.flatten ev_decls in
-    (* fields of the union type *)
-    let (union_fields: (id * ty) list) = List.map
-      (fun (field_id,field_ty_id) -> 
-        (field_id, tstruct field_ty_id))
-      ((fst tag, fst tag |> hdrty_id)
-        ::(List.map (fun event -> (id_of_event event, id_of_event event |> hdrty_id)) members))
-    in
-    let union_decl = dstruct 
-      (hdrty_id evid) 
-      TMeta
-      union_fields
-    in
-    tag_decl::ev_decls@[union_decl]
-  (* <<left off here>> event set -- similar to union, but has flags *)
-  | _ -> error "not done"
+(* we need to avoid creating multiple copies of the same event... 
+   and, we need to create different structs for single events depending on 
+   whether they are encoded as headers or structs *)
+   
+(* update previously translated while recursing on inner *)
+let rec translate_members struct_ty prevs members = 
+  let (prevs, new_member_decls) = List.fold_left
+    (fun (prevs, new_ev_decls) event -> 
+      let prevs', new_decls = translate_event prevs struct_ty event in
+      prevs', new_ev_decls@new_decls)
+    (prevs, [])
+    members
+  in
+  prevs, new_member_decls
+
+and translate_event (prevs:id list) struct_ty event : id list * T.decl list =
+  (* let hdrty_id evid = ((fst evid)^"_h", snd evid) in
+  let structty_id evid = ((fst evid)^"_s", snd evid) in *)
+  (* if we haven't generated the header or struct for this event yet, then do it. *)
+  let this_event_struct_id = tyid_of_event struct_ty event in 
+  (* print_endline ("translating event:"^(this_event_struct_id |> fst )^" prevs: "^(String.concat ", " (List.map fst prevs))); *)
+  let in_prevs = List.exists (fun prev_evid -> Id.equal this_event_struct_id prev_evid) prevs in
+  if (in_prevs) 
+    then (prevs, [])
+    else (
+    match event with
+    | EventSingle({evparams;}) -> 
+      (* declare as header or struct depending on encoding type *)
+      let decl = dstruct (tyid_of_event struct_ty event) struct_ty 
+        (List.map (fun (pid, pty) -> pid, translate_ty pty) evparams)
+      in
+      prevs@[this_event_struct_id], [decl]  
+    | EventUnion({members; tag}) -> 
+    (* a union is a struct with fields: 
+        tag : evid_tag_t; 
+        ev : ev_t; for ev in members
+        in addition to the union type, return the struct for tag and evs*)
+      (* type of the tag header: outer_tag *)
+      let tag_outer, (tag_inner, tag_ty) = tag in 
+
+      let tag_outer_ty_id = tyid_of_fieldid struct_ty tag_outer in
+      let tagty_decl = dstruct tag_outer_ty_id struct_ty
+        [tag_inner, translate_ty tag_ty]
+      in
+
+      let prevs, member_decls = translate_members struct_ty prevs members in 
+      (* fields of the union type are all other structs. *)
+      (* tricky: are those fields header types or struct types? 
+        if the members are events, then it depends on struct_ty. 
+        if the members are event containers, then it is always TMeta *)
+      let member_to_field_param event = 
+        id_of_event event, tyid_of_event struct_ty event
+      in
+      let field_params = (tag_outer, tag_outer_ty_id)::List.map member_to_field_param members in
+      let (union_fields: (id * ty) list) = 
+        List.map
+          (fun (field_id,field_ty_id) -> 
+            (field_id, tstruct field_ty_id))
+          field_params
+      in
+      let union_decl = dstruct 
+        (tyid_of_event struct_ty event) 
+        TMeta
+        union_fields
+      in
+      prevs@[this_event_struct_id], tagty_decl::(member_decls@[union_decl])
+    | EventSet({evid; members; flags;}) -> 
+      (* an event set is a structure with fields:
+        flags : evid_flags_t;
+        ev : ev_t; for ev in members *)
+      let flagrec_tyid = Id.create ("flags_"^(fst evid)) |> tyid_of_fieldid THdr in
+      let flag_decl = dstruct flagrec_tyid struct_ty
+        (List.map (fun (i, t) -> (i, translate_ty t)) flags)
+      in
+      let prevs, member_decls = translate_members struct_ty prevs members in
+      (* fields of the set type *)
+      let field_params = (Id.create "flags", flagrec_tyid)
+        ::(List.map (fun event -> (id_of_event event, tyid_of_event struct_ty event)) members)
+      in
+      let (union_fields: (id * ty) list) = List.map
+        (fun (field_id,field_ty_id) -> 
+          (field_id, tstruct field_ty_id))
+        field_params
+      in
+      let set_decl = dstruct 
+        (tyid_of_event struct_ty event) 
+        TMeta
+        union_fields
+      in
+      prevs@[this_event_struct_id], flag_decl::member_decls@[set_decl]
+    )  
 ;;
 
+let tyid_of_event event = 
+  (id_of_event event |> fst)^"_t" |> Id.create
+;;
 
 let translate_params (main_hdl:hevent) =
-  (*  
+  (*  construct parameters for the main control flow of a 
+      component. 
 control IngressControl(
-    inout hdr_t hdr,   // derived from "egress_output"
-    inout meta_t meta, // derived from "egress input"
+    inout hdr_t hdr,   // derived from "ingress_output"
+    inout meta_t meta, // derived from "ingress_input"
     // in params
     in ingress_intrinsic_metadata_t ig_intr_md,
     in ingress_intrinsic_metadata_from_parser_t ig_prsr_md,
@@ -742,13 +851,162 @@ control IngressControl(
     inout ingress_intrinsic_metadata_for_deparser_t ig_dprsr_md,
     inout ingress_intrinsic_metadata_for_tm_t ig_tm_md)
     {
-
-
   *)
-  error "[params_of_main] TODO: parameters of a main handler "
-  
+  let event_params = [
+    inoutparam (tstruct (tyid_of_event main_hdl.hdl_output)) (id_of_event main_hdl.hdl_output);
+    inoutparam (tstruct (tyid_of_event main_hdl.hdl_input)) (id_of_event main_hdl.hdl_input);
+  ] in
+  let in_params = List.map 
+    (fun (i, t) -> inparam (translate_ty t) i) 
+    main_hdl.hdl_params
+  in
+  let out_params = List.map 
+    (fun (i, t) -> inoutparam (translate_ty t) i) 
+    main_hdl.hdl_retparams
+  in
+  event_params@in_params@out_params  
 ;;
 
+type translate_decl_env = {
+  penv : prog_env;
+  (* some declarations end up going outside of the control block, 
+     others end up going inside the control block...  *)
+  globals : T.decl list;
+  locals  : T.decl list;
+  prev_events : id list;
+}
+let new_denv penv = 
+  {penv; globals = []; locals = []; prev_events = [];}
+;;
+(* dw bind_memop penv ... *)
+let dw fcn denv arg = 
+  {denv with penv = (fcn denv.penv arg); }
+
+
+let translate_parser parser = 
+  (* okaayy... *)
+  let _ = parser in 
+  []
+;;
+
+let translate_tdecl (denv : translate_decl_env) tdecl : (translate_decl_env) = 
+  match tdecl.td with
+  (* memops just go into the context *)
+  | TDMemop(m) -> (dw bind_memop denv (m.mid, m))
+  (* tables just go into context *)
+  | TDGlobal(tbl_id, _, {e=ETableCreate(tbl_def); espan=espan;}) -> 
+    dw bind_tbl denv ((Cid.id tbl_id), (tbl_def, espan))
+  (* arrays get translated into registerarrays, which are global. *)
+  | TDGlobal(rid, ty, exp) -> (
+    match ty.raw_ty with 
+    | TName(tcid, [cell_size], true) -> (
+        let module_name = List.hd (Cid.names tcid) in 
+        let len, default_opt = match exp.e with 
+          | ECall(_, args) -> (
+            match (translate_exps denv.penv args |> snd) with 
+            | [elen; edefault] -> elen, Some(edefault)
+            | [elen] -> elen, None
+            | _ -> error "[generate_reg_array] expected 1 or 2 arguments in global constructor"
+          )
+          | _ -> error "[generate_reg_array] right hand side of global mutable declaration must be a constructor call";
+        in
+        match (module_name) with 
+        | "Array" -> 
+          (* take the span from the expression, 
+             because the constructor expression tracks source ids *)
+          let reg_decl = 
+            dreg_sp 
+              rid (tint cell_size) [cell_size] TAuto len default_opt [] exp.espan
+          in
+          let globals = denv.globals @ [reg_decl] in
+          {denv with globals}
+        | "PairArray" -> 
+          (* pair arrays get their own cell type struct *)
+          let cell_struct = cell_struct_of_array_ty module_name cell_size rid in 
+          (* id, cell ty (struct); idx ty; len; default (None) *)
+          let reg_decl = 
+            dreg_sp 
+              rid (cell_ty_of_array rid) [cell_size;cell_size] TAuto len default_opt [] exp.espan
+          in
+          let globals = denv.globals @ [cell_struct; reg_decl] in
+          {denv with globals}
+        | _ -> denv)
+    | _ -> error "[translate_array_decl] wrong type"
+  )
+  (* open functions get translated into actions, and their names go into the context *)
+  | TDOpenFunction(id, const_params, stmt) ->
+    let params = List.map
+      (fun (id, ty) -> (None, translate_ty ty, id))
+      const_params
+    in
+    let body_decls, body = translate_statement denv.penv [] stmt in
+    let action = daction id params body in
+    (* add the open function to the actions context *)
+    let penv = {denv.penv with actions = CidSet.add (Cid.id id) denv.penv.actions} in
+    let locals = denv.locals@body_decls@[action] in
+    {denv with penv; locals}
+  | TDEvent(_) -> denv
+    (* we do nothing with events, because we don't know whether to encode 
+       them as a header or as a struct without knowing whether they are 
+      input or output parameters to the handler. Instead, we translate the 
+      events used in handler declarations. *)
+  | TDExtern _ -> denv (* externs are declared elsewhere *)
+  | TDHandler(HEvent(hevent)) -> (
+      (* note: we assume there's only 1 handler per list of declarations! *)
+      (* make some decls for the variables created after handler merging. *)
+      let added_var_decls = (List.map 
+        (fun (id, ty) -> dvar_uninit id (translate_ty ty))
+        hevent.hdl_preallocated_vars)
+      in
+      (* translate the body, which makes some more local decls for tables *)
+      let main_body = match hevent.hdl_body with 
+        | SPipeline(stmts) -> stmts
+        | _ -> error "shoulda been pipeliend by now"
+      in      
+      let table_decls, table_calls = statements_to_stages 0 denv.penv hevent.hdl_id main_body |> List.split in 
+      let apply_body = sseq table_calls in 
+      (* put together the control decl *)
+      let control_decl = decl (DControl{
+        id = hevent.hdl_id;
+        params = translate_params hevent;
+        (* local_decls are: variables; actions; tables *)
+        decls = added_var_decls@denv.locals@table_decls;
+        body = Some(apply_body);
+        })
+      in
+      let prev_events, in_event_decls = translate_event denv.prev_events TMeta hevent.hdl_input in
+      let prev_events, out_event_decls = translate_event prev_events THdr hevent.hdl_output in
+      let globals =
+        denv.globals@in_event_decls@out_event_decls@[control_decl]
+      in
+      (* consume all the locals! *)
+      let locals = [] in
+      (* update globals and previously generated events *)
+      {denv with globals; locals; prev_events}
+  )
+  | TDParser _ -> print_endline ("warning: parser translation not implemented!"); denv
+  | TDHandler(HParams(_)) -> error "param-based handles should have been eliminated"
+  | TDAction _ -> error "[translate_tdecl] actions should have been converted into functions"
+  (* | TDOpenFunction(id, _, _) -> {prog_env with defined_fcns=(Cid.id id, tdecl)::prog_env.defined_fcns;} *)
+;;
+
+let translate_ingress comp = 
+  (* the only ingress-specific environment we need is the p4 name of the ingress_port builtin *)
+  let full_ingr_port_cid = Cid.create ["ingress_intrinsic_metadata"; "ingress_port"] in
+  let ingr_env = bind_var empty_env
+     ((Builtins.ingr_port_id |> Cid.id), CoreSyntax.var_sp full_ingr_port_cid (SyntaxToCore.translate_ty Builtins.tofino_builtin_tys.ingr_port_ty) Span.default)
+  in
+  let denv = new_denv ingr_env in
+  let penv = List.fold_left translate_tdecl denv comp.comp_decls in
+  (* we want the globals from here. *)
+  (* TODO: multicast group rules? *)
+  print_endline "program after translate_ingress:";
+  print_endline 
+    (P4TofinoPrinting.string_of_decls penv.globals 
+      |> P4TofinoPrinting.doc_to_string);
+  penv.globals
+;;
+(* 
 let translate_ingress comp = 
   print_endline ("translate_ingress");
   let hmain = (main_handler_of_component comp) in
@@ -760,13 +1018,16 @@ let translate_ingress comp =
   in
   let env = constr_env ingr_env comp.comp_decls in
   (* declarations for added variables and open functions *)
-  let decls = 
-    (generate_added_var_decls comp.comp_decls)
-    @(List.fold_left
-      (translate_openfunction env)
-      []
-      comp.comp_decls)
+  let added_var_decls = generate_added_var_decls comp.comp_decls in 
+  let env, acn_decls = 
+    List.fold_left 
+      (fun (env, decls) decl -> 
+        let env, new_decls = translate_openfunction env decl in
+        env, decls@new_decls)
+      (env, [])
+      comp.comp_decls
   in
+  let decls = added_var_decls@acn_decls in
   (* declarations and statements from main handler *)
   let main_body = match hmain.hdl_body with 
     | SPipeline(stmts) -> stmts
@@ -785,13 +1046,17 @@ let translate_ingress comp =
     body = Some(apply_body);
     })
   in
+  (* <<left off here>> TODO: event header decls, parser *)
+  print_endline (
+    "ingress:\n"^
+    (P4TofinoPrinting.string_of_decl ingress_control 
+      |> P4TofinoPrinting.doc_to_string));
   []
-;;
+;; *)
 
 
 
 let translate_prog prog =
-  print_endline ("ukay");
   let p4t_components = List.filter_map 
     (fun component -> 
       print_endline ("translating component: "^(fst component.comp_id));

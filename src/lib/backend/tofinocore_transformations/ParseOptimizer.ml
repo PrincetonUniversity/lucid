@@ -145,8 +145,8 @@ let generate_to_tagset out_event pstep : (parser_action * parser_step) option =
     | ECall(evconstr_cid, eargs) -> (
       (* find the base event being generated *)
       let event_prefix, base_event = cid_to_eventconstr [] [out_event] evconstr_cid in
-      let tag_id, tag_ty = etag out_event in
-      let tag_cid = Cid.create_ids (event_prefix@[tag_id]) in
+      let tagouterfield_id, (taginnerfield_id, tag_ty) = etag out_event in
+      let tag_cid = Cid.create_ids (event_prefix@[tagouterfield_id; taginnerfield_id]) in
       (* let tag_cid = tag_id in  *)
       let tag_width = size_of_tint tag_ty in
       let tag_val = vint_exp (num_of_event base_event) tag_width in

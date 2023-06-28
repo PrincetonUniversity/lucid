@@ -18,7 +18,7 @@ let error s = raise (Error s)
 let dedup_stmt prev_cache stmt =  
   let new_decls = ref [] in
   let add_decl_opt d_opt = match d_opt with 
-    | Some(d) -> new_decls := d::(!new_decls)
+    | Some(d) -> new_decls := (!new_decls)@[d]
     | _ -> ()
   in
 
