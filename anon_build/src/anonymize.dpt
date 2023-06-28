@@ -190,4 +190,5 @@ handle eth_ip(Anonymizer.eth_t eth, Anonymizer.ip_t ip) {
     Anonymizer.eth_ip_t original_packet = {eth = eth; ip = ip;};
     Anonymizer.eth_ip_t anonymized_packet = Anonymizer.anonymize_packet(anonymizer, original_packet);
     generate_port(SERVER_PORT, eth_ip(anonymized_packet#eth, anonymized_packet#ip));
+    // generate_port(SERVER_PORT, eth_ip(original_packet#eth, original_packet#ip));
 }

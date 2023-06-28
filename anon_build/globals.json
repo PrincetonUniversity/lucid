@@ -1,0 +1,110 @@
+{
+  "anonymizer": {
+    "policy_table": {
+      "type": "table",
+      "compiled_name": "pipe.IngressControl.anonymizer_0",
+      "length": 1,
+      "keys": [
+        {
+          "compiled_name": "anonymizer_0_0_key",
+          "size": 32,
+          "matchtype": "ternary"
+        },
+        {
+          "compiled_name": "$MATCH_PRIORITY",
+          "size": 32,
+          "matchtype": "exact"
+        }
+      ],
+      "actions": [
+        {
+          "name": "Anonymizer_get_policy",
+          "compiled_name": "IngressControl.anonymizer_0_Anonymizer_get_policy",
+          "install_arg_sizes": [ 1, 1, 1, 1, 1, 1 ]
+        }
+      ]
+    },
+    "src_prefix_table": {
+      "prefix_table": {
+        "type": "table",
+        "compiled_name": "pipe.IngressControl.anonymizer_1_0",
+        "length": 1024,
+        "keys": [
+          {
+            "compiled_name": "anonymizer_1_0_0_key",
+            "size": 32,
+            "matchtype": "ternary"
+          },
+          {
+            "compiled_name": "anonymizer_1_0_1_key",
+            "size": 32,
+            "matchtype": "ternary"
+          },
+          {
+            "compiled_name": "anonymizer_1_0_2_key",
+            "size": 32,
+            "matchtype": "ternary"
+          },
+          {
+            "compiled_name": "anonymizer_1_0_3_key",
+            "size": 32,
+            "matchtype": "ternary"
+          },
+          {
+            "compiled_name": "$MATCH_PRIORITY",
+            "size": 32,
+            "matchtype": "exact"
+          }
+        ],
+        "actions": [
+          {
+            "name": "PrefixTable_result",
+            "compiled_name": "IngressControl.anonymizer_1_0_PrefixTable_result",
+            "install_arg_sizes": [ 32 ]
+          }
+        ]
+      }
+    },
+    "dst_prefix_table": {
+      "prefix_table": {
+        "type": "table",
+        "compiled_name": "pipe.IngressControl.anonymizer_2_0",
+        "length": 1024,
+        "keys": [
+          {
+            "compiled_name": "anonymizer_2_0_0_key",
+            "size": 32,
+            "matchtype": "ternary"
+          },
+          {
+            "compiled_name": "anonymizer_2_0_1_key",
+            "size": 32,
+            "matchtype": "ternary"
+          },
+          {
+            "compiled_name": "anonymizer_2_0_2_key",
+            "size": 32,
+            "matchtype": "ternary"
+          },
+          {
+            "compiled_name": "anonymizer_2_0_3_key",
+            "size": 32,
+            "matchtype": "ternary"
+          },
+          {
+            "compiled_name": "$MATCH_PRIORITY",
+            "size": 32,
+            "matchtype": "exact"
+          }
+        ],
+        "actions": [
+          {
+            "name": "PrefixTable_result",
+            "compiled_name": "IngressControl.anonymizer_2_0_PrefixTable_result",
+            "install_arg_sizes": [ 32 ]
+          }
+        ]
+      }
+    }
+  }
+}

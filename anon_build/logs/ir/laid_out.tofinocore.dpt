@@ -1,0 +1,2749 @@
+global  table_type {
+	key_size: 32
+	arg_ty: 
+	ret_ty: int<<1>>,int<<1>>,int<<1>>,int<<1>>,int<<1>>,int<<1>>}
+ anonymizer_0 = table_create< table_type {
+	key_size: 32
+	arg_ty: 
+	ret_ty: int<<1>>,int<<1>>,int<<1>>,int<<1>>,int<<1>>,int<<1>>}
+>((anonymizer_0_Anonymizer_get_policy),1, anonymizer_0_Anonymizer_get_policy(0,0,0,0,0,0));
+
+global  table_type {
+	key_size: 32,32,32,32
+	arg_ty: 
+	ret_ty: int<<32>>}
+ anonymizer_1_0 = table_create< table_type {
+	key_size: 32,32,32,32
+	arg_ty: 
+	ret_ty: int<<32>>}
+>((anonymizer_1_0_PrefixTable_result),1024, anonymizer_1_0_PrefixTable_result(0));
+
+global  table_type {
+	key_size: 32,32,32,32
+	arg_ty: 
+	ret_ty: int<<32>>}
+ anonymizer_2_0 = table_create< table_type {
+	key_size: 32,32,32,32
+	arg_ty: 
+	ret_ty: int<<32>>}
+>((anonymizer_2_0_PrefixTable_result),1024, anonymizer_2_0_PrefixTable_result(0));
+
+packet event eth_ip(int<<48>> eth_ip_eth_0,int<<48>> eth_ip_eth_1,int<<16>> eth_ip_eth_2,int<<32>> eth_ip_ip_0,int<<32>> eth_ip_ip_1,int<<16>> eth_ip_ip_2);
+handle eth_ip(int<<48>> eth_ip_eth_0,int<<48>> eth_ip_eth_1,int<<16>> eth_ip_eth_2,int<<32>> eth_ip_ip_0,int<<32>> eth_ip_ip_1,int<<16>> eth_ip_ip_2) {
+
+}
+labeled_statement anonymizer_0_Anonymizer_get_policy{
+anonymizer_0_0_ret = multicast_broadcast;
+anonymizer_0_1_ret = srcmac_oui;
+anonymizer_0_2_ret = srcmac_id;
+anonymizer_0_3_ret = dstmac_oui;
+anonymizer_0_4_ret = dstmac_id;
+anonymizer_0_5_ret = preserve_prefix;
+}
+labeled_statement anonymizer_1_0_PrefixTable_result{
+anonymizer_1_0_0_ret = prefix_len;
+}
+labeled_statement anonymizer_2_0_PrefixTable_result{
+anonymizer_2_0_0_ret = prefix_len;
+}
+// shared locals:
+int<<48>> pre_gen_copy_eth_ip_eth_0;
+int<<48>> pre_gen_copy_eth_ip_eth_1;
+int<<16>> pre_gen_copy_eth_ip_eth_2;
+int<<32>> pre_gen_copy_eth_ip_ip_0;
+int<<32>> pre_gen_copy_eth_ip_ip_1;
+int<<16>> pre_gen_copy_eth_ip_ip_2;
+int<<32>> anonymizer_0_callnum;
+int<<32>> anonymizer_0_0_key;
+int<<1>> anonymizer_0_0_ret;
+int<<1>> anonymizer_0_1_ret;
+int<<1>> anonymizer_0_2_ret;
+int<<1>> anonymizer_0_3_ret;
+int<<1>> anonymizer_0_4_ret;
+int<<1>> anonymizer_0_5_ret;
+int<<32>> anonymizer_1_0_callnum;
+int<<32>> anonymizer_1_0_0_key;
+int<<32>> anonymizer_1_0_1_key;
+int<<32>> anonymizer_1_0_2_key;
+int<<32>> anonymizer_1_0_3_key;
+int<<32>> anonymizer_1_0_0_ret;
+int<<32>> anonymizer_2_0_callnum;
+int<<32>> anonymizer_2_0_0_key;
+int<<32>> anonymizer_2_0_1_key;
+int<<32>> anonymizer_2_0_2_key;
+int<<32>> anonymizer_2_0_3_key;
+int<<32>> anonymizer_2_0_0_ret;
+// MAIN HANDLER 
+handler main(...){
+// Stage 0
+match event_id with 
+| 1 -> {
+pre_gen_copy_eth_ip_eth_0 = eth_ip_eth_0;
+pre_gen_copy_eth_ip_eth_1 = eth_ip_eth_1;
+pre_gen_copy_eth_ip_eth_2 = eth_ip_eth_2;
+pre_gen_copy_eth_ip_ip_0 = eth_ip_ip_0;
+pre_gen_copy_eth_ip_ip_1 = eth_ip_ip_1;
+pre_gen_copy_eth_ip_ip_2 = eth_ip_ip_2;
+generate_port (1, eth_ip(eth_ip_eth_0,eth_ip_eth_1,eth_ip_eth_2,eth_ip_ip_0,eth_ip_ip_1,eth_ip_ip_2));
+int<<48>> Anonymizer_anonymize_packet_ret_0_0 = 32;
+int<<48>> Anonymizer_anonymize_packet_ret_0_1 = 32;
+int<<16>> Anonymizer_anonymize_packet_ret_0_2 = 32;
+int<<32>> Anonymizer_anonymize_packet_ret_1_0 = 32;
+int<<32>> Anonymizer_anonymize_packet_ret_1_1 = 32;
+int<<16>> Anonymizer_anonymize_packet_ret_1_2 = 32;
+anonymizer_0_callnum = 1;
+anonymizer_0_0_key = 1;
+}
+| _ -> {
+
+}
+// Stage 1
+match (event_id,anonymizer_0_callnum) with 
+| 1,0 -> {
+int<<48>> original_packet_0_0 = pre_gen_copy_eth_ip_eth_0;
+int<<48>> original_packet_0_1 = pre_gen_copy_eth_ip_eth_1;
+int<<16>> original_packet_0_2 = pre_gen_copy_eth_ip_eth_2;
+int<<32>> original_packet_1_0 = pre_gen_copy_eth_ip_ip_0;
+int<<32>> original_packet_1_1 = pre_gen_copy_eth_ip_ip_1;
+int<<16>> original_packet_1_2 = pre_gen_copy_eth_ip_ip_2;
+}
+| 1,1 -> {
+int<<48>> original_packet_0_0 = pre_gen_copy_eth_ip_eth_0;
+int<<48>> original_packet_0_1 = pre_gen_copy_eth_ip_eth_1;
+int<<16>> original_packet_0_2 = pre_gen_copy_eth_ip_eth_2;
+int<<32>> original_packet_1_0 = pre_gen_copy_eth_ip_ip_0;
+int<<32>> original_packet_1_1 = pre_gen_copy_eth_ip_ip_1;
+int<<16>> original_packet_1_2 = pre_gen_copy_eth_ip_ip_2;
+int<<1>> Anonymizer_should_anonymize_ret = 0;
+}
+| 1,_ -> {
+int<<48>> original_packet_0_0 = pre_gen_copy_eth_ip_eth_0;
+int<<48>> original_packet_0_1 = pre_gen_copy_eth_ip_eth_1;
+int<<16>> original_packet_0_2 = pre_gen_copy_eth_ip_eth_2;
+int<<32>> original_packet_1_0 = pre_gen_copy_eth_ip_ip_0;
+int<<32>> original_packet_1_1 = pre_gen_copy_eth_ip_ip_1;
+int<<16>> original_packet_1_2 = pre_gen_copy_eth_ip_ip_2;
+}
+| _,_ -> {
+
+}
+match anonymizer_0_callnum with 
+| 0 -> {
+
+}
+| _ -> {
+anonymizer_0_0_ret,anonymizer_0_1_ret,anonymizer_0_2_ret,anonymizer_0_3_ret,anonymizer_0_4_ret,anonymizer_0_5_ret = table_match(anonymizer_0,anonymizer_0_0_key);
+}
+// Stage 2
+match (event_id,anonymizer_0_callnum) with 
+| 1,1 -> {
+int<<48>> eth_0 = original_packet_0_0;
+int<<48>> eth_1 = original_packet_0_1;
+int<<16>> eth_2 = original_packet_0_2;
+int<<32>> ip_0 = original_packet_1_0;
+int<<32>> ip_1 = original_packet_1_1;
+int<<16>> ip_2 = original_packet_1_2;
+int<<1>> policy_5 = anonymizer_0_5_ret;
+int<<1>> policy_4 = anonymizer_0_4_ret;
+int<<1>> policy_3 = anonymizer_0_3_ret;
+int<<1>> policy_2 = anonymizer_0_2_ret;
+int<<1>> policy_1 = anonymizer_0_1_ret;
+int<<1>> policy_0 = anonymizer_0_0_ret;
+}
+| 1,_ -> {
+int<<48>> eth_0 = original_packet_0_0;
+int<<48>> eth_1 = original_packet_0_1;
+int<<16>> eth_2 = original_packet_0_2;
+int<<32>> ip_0 = original_packet_1_0;
+int<<32>> ip_1 = original_packet_1_1;
+int<<16>> ip_2 = original_packet_1_2;
+}
+| _,_ -> {
+
+}
+// Stage 3
+match (anonymizer_0_callnum,event_id) with 
+| 1,1 -> {
+int<<1>> if_precomp = [40 : 40]eth_0-1;
+}
+| _,_ -> {
+
+}
+// Stage 4
+match (if_precomp,policy_0,anonymizer_0_callnum,event_id) with 
+| _,1,1,1 -> {
+Anonymizer_should_anonymize_ret = 1;
+}
+| 0,_,1,1 -> {
+Anonymizer_should_anonymize_ret = 0;
+}
+| _,_,1,1 -> {
+Anonymizer_should_anonymize_ret = 1;
+}
+| _,_,_,_ -> {
+
+}
+// Stage 5
+match (Anonymizer_should_anonymize_ret,anonymizer_0_callnum,event_id) with 
+| 1,1,1 -> {
+anonymizer_1_0_callnum = 1;
+int<<8>> ip_octets_3 = [7 : 0]ip_0;
+int<<8>> ip_octets_2 = [15 : 8]ip_0;
+int<<8>> ip_octets_1 = [23 : 16]ip_0;
+int<<8>> ip_octets_0 = [31 : 24]ip_0;
+int<<32>> PrefixTable_prefix_match_ret = 32;
+int<<32>> Anonymizer_anonymize_ip_ret = 32;
+int<<16>> anonymized_eth_2 = eth_2;
+int<<1>> should_anonymize_suffix3096 = policy_4;
+int<<1>> should_anonymize_prefix3095 = policy_3;
+int<<48>> to_immediate_tmp3888 = 281474976710655<<24;
+int<<24>> Anonymizer_anonymize_num_ret_13091 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03090 = 32;
+int<<48>> Anonymizer_anonymize_mac_ret3089 = 32;
+int<<1>> should_anonymize_suffix = policy_2;
+int<<1>> should_anonymize_prefix = policy_1;
+int<<48>> to_immediate_tmp = 281474976710655<<24;
+int<<24>> Anonymizer_anonymize_num_ret_1 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_0 = 32;
+int<<48>> Anonymizer_anonymize_mac_ret = 32;
+}
+| _,1,1 -> {
+Anonymizer_anonymize_packet_ret_1_2 = ip_2;
+Anonymizer_anonymize_packet_ret_1_1 = ip_1;
+Anonymizer_anonymize_packet_ret_1_0 = ip_0;
+Anonymizer_anonymize_packet_ret_0_2 = eth_2;
+Anonymizer_anonymize_packet_ret_0_1 = eth_1;
+Anonymizer_anonymize_packet_ret_0_0 = eth_0;
+}
+| _,_,_ -> {
+
+}
+// Stage 6
+match (anonymizer_1_0_callnum,anonymizer_0_callnum,event_id,Anonymizer_should_anonymize_ret,should_anonymize_suffix3096,should_anonymize_prefix3095,should_anonymize_suffix,should_anonymize_prefix) with 
+| 0,1,1,1,1,1,1,1 -> {
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| 1,1,1,1,1,1,1,1 -> {
+anonymizer_2_0_callnum = 1;
+int<<8>> ip_octets_33138 = [7 : 0]ip_1;
+int<<8>> ip_octets_23137 = [15 : 8]ip_1;
+int<<8>> ip_octets_13136 = [23 : 16]ip_1;
+int<<8>> ip_octets_03135 = [31 : 24]ip_1;
+int<<32>> PrefixTable_prefix_match_ret3134 = 32;
+int<<32>> Anonymizer_anonymize_ip_ret3133 = 32;
+int<<1>> should_preserve_prefix = policy_5;
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| _,1,1,1,1,1,1,1 -> {
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| 0,1,1,1,_,1,1,1 -> {
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| 1,1,1,1,_,1,1,1 -> {
+anonymizer_2_0_callnum = 1;
+int<<8>> ip_octets_33138 = [7 : 0]ip_1;
+int<<8>> ip_octets_23137 = [15 : 8]ip_1;
+int<<8>> ip_octets_13136 = [23 : 16]ip_1;
+int<<8>> ip_octets_03135 = [31 : 24]ip_1;
+int<<32>> PrefixTable_prefix_match_ret3134 = 32;
+int<<32>> Anonymizer_anonymize_ip_ret3133 = 32;
+int<<1>> should_preserve_prefix = policy_5;
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| _,1,1,1,_,1,1,1 -> {
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| 0,1,1,1,1,_,1,1 -> {
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| 1,1,1,1,1,_,1,1 -> {
+anonymizer_2_0_callnum = 1;
+int<<8>> ip_octets_33138 = [7 : 0]ip_1;
+int<<8>> ip_octets_23137 = [15 : 8]ip_1;
+int<<8>> ip_octets_13136 = [23 : 16]ip_1;
+int<<8>> ip_octets_03135 = [31 : 24]ip_1;
+int<<32>> PrefixTable_prefix_match_ret3134 = 32;
+int<<32>> Anonymizer_anonymize_ip_ret3133 = 32;
+int<<1>> should_preserve_prefix = policy_5;
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| _,1,1,1,1,_,1,1 -> {
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| 0,1,1,1,_,_,1,1 -> {
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| 1,1,1,1,_,_,1,1 -> {
+anonymizer_2_0_callnum = 1;
+int<<8>> ip_octets_33138 = [7 : 0]ip_1;
+int<<8>> ip_octets_23137 = [15 : 8]ip_1;
+int<<8>> ip_octets_13136 = [23 : 16]ip_1;
+int<<8>> ip_octets_03135 = [31 : 24]ip_1;
+int<<32>> PrefixTable_prefix_match_ret3134 = 32;
+int<<32>> Anonymizer_anonymize_ip_ret3133 = 32;
+int<<1>> should_preserve_prefix = policy_5;
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| _,1,1,1,_,_,1,1 -> {
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| 0,1,1,1,1,1,_,1 -> {
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| 1,1,1,1,1,1,_,1 -> {
+anonymizer_2_0_callnum = 1;
+int<<8>> ip_octets_33138 = [7 : 0]ip_1;
+int<<8>> ip_octets_23137 = [15 : 8]ip_1;
+int<<8>> ip_octets_13136 = [23 : 16]ip_1;
+int<<8>> ip_octets_03135 = [31 : 24]ip_1;
+int<<32>> PrefixTable_prefix_match_ret3134 = 32;
+int<<32>> Anonymizer_anonymize_ip_ret3133 = 32;
+int<<1>> should_preserve_prefix = policy_5;
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| _,1,1,1,1,1,_,1 -> {
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| 0,1,1,1,_,1,_,1 -> {
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| 1,1,1,1,_,1,_,1 -> {
+anonymizer_2_0_callnum = 1;
+int<<8>> ip_octets_33138 = [7 : 0]ip_1;
+int<<8>> ip_octets_23137 = [15 : 8]ip_1;
+int<<8>> ip_octets_13136 = [23 : 16]ip_1;
+int<<8>> ip_octets_03135 = [31 : 24]ip_1;
+int<<32>> PrefixTable_prefix_match_ret3134 = 32;
+int<<32>> Anonymizer_anonymize_ip_ret3133 = 32;
+int<<1>> should_preserve_prefix = policy_5;
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| _,1,1,1,_,1,_,1 -> {
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| 0,1,1,1,1,_,_,1 -> {
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| 1,1,1,1,1,_,_,1 -> {
+anonymizer_2_0_callnum = 1;
+int<<8>> ip_octets_33138 = [7 : 0]ip_1;
+int<<8>> ip_octets_23137 = [15 : 8]ip_1;
+int<<8>> ip_octets_13136 = [23 : 16]ip_1;
+int<<8>> ip_octets_03135 = [31 : 24]ip_1;
+int<<32>> PrefixTable_prefix_match_ret3134 = 32;
+int<<32>> Anonymizer_anonymize_ip_ret3133 = 32;
+int<<1>> should_preserve_prefix = policy_5;
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| _,1,1,1,1,_,_,1 -> {
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| 0,1,1,1,_,_,_,1 -> {
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| 1,1,1,1,_,_,_,1 -> {
+anonymizer_2_0_callnum = 1;
+int<<8>> ip_octets_33138 = [7 : 0]ip_1;
+int<<8>> ip_octets_23137 = [15 : 8]ip_1;
+int<<8>> ip_octets_13136 = [23 : 16]ip_1;
+int<<8>> ip_octets_03135 = [31 : 24]ip_1;
+int<<32>> PrefixTable_prefix_match_ret3134 = 32;
+int<<32>> Anonymizer_anonymize_ip_ret3133 = 32;
+int<<1>> should_preserve_prefix = policy_5;
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| _,1,1,1,_,_,_,1 -> {
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| 0,1,1,1,1,1,1,_ -> {
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| 1,1,1,1,1,1,1,_ -> {
+anonymizer_2_0_callnum = 1;
+int<<8>> ip_octets_33138 = [7 : 0]ip_1;
+int<<8>> ip_octets_23137 = [15 : 8]ip_1;
+int<<8>> ip_octets_13136 = [23 : 16]ip_1;
+int<<8>> ip_octets_03135 = [31 : 24]ip_1;
+int<<32>> PrefixTable_prefix_match_ret3134 = 32;
+int<<32>> Anonymizer_anonymize_ip_ret3133 = 32;
+int<<1>> should_preserve_prefix = policy_5;
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| _,1,1,1,1,1,1,_ -> {
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| 0,1,1,1,_,1,1,_ -> {
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| 1,1,1,1,_,1,1,_ -> {
+anonymizer_2_0_callnum = 1;
+int<<8>> ip_octets_33138 = [7 : 0]ip_1;
+int<<8>> ip_octets_23137 = [15 : 8]ip_1;
+int<<8>> ip_octets_13136 = [23 : 16]ip_1;
+int<<8>> ip_octets_03135 = [31 : 24]ip_1;
+int<<32>> PrefixTable_prefix_match_ret3134 = 32;
+int<<32>> Anonymizer_anonymize_ip_ret3133 = 32;
+int<<1>> should_preserve_prefix = policy_5;
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| _,1,1,1,_,1,1,_ -> {
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| 0,1,1,1,1,_,1,_ -> {
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| 1,1,1,1,1,_,1,_ -> {
+anonymizer_2_0_callnum = 1;
+int<<8>> ip_octets_33138 = [7 : 0]ip_1;
+int<<8>> ip_octets_23137 = [15 : 8]ip_1;
+int<<8>> ip_octets_13136 = [23 : 16]ip_1;
+int<<8>> ip_octets_03135 = [31 : 24]ip_1;
+int<<32>> PrefixTable_prefix_match_ret3134 = 32;
+int<<32>> Anonymizer_anonymize_ip_ret3133 = 32;
+int<<1>> should_preserve_prefix = policy_5;
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| _,1,1,1,1,_,1,_ -> {
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| 0,1,1,1,_,_,1,_ -> {
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| 1,1,1,1,_,_,1,_ -> {
+anonymizer_2_0_callnum = 1;
+int<<8>> ip_octets_33138 = [7 : 0]ip_1;
+int<<8>> ip_octets_23137 = [15 : 8]ip_1;
+int<<8>> ip_octets_13136 = [23 : 16]ip_1;
+int<<8>> ip_octets_03135 = [31 : 24]ip_1;
+int<<32>> PrefixTable_prefix_match_ret3134 = 32;
+int<<32>> Anonymizer_anonymize_ip_ret3133 = 32;
+int<<1>> should_preserve_prefix = policy_5;
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| _,1,1,1,_,_,1,_ -> {
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| 0,1,1,1,1,1,_,_ -> {
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| 1,1,1,1,1,1,_,_ -> {
+anonymizer_2_0_callnum = 1;
+int<<8>> ip_octets_33138 = [7 : 0]ip_1;
+int<<8>> ip_octets_23137 = [15 : 8]ip_1;
+int<<8>> ip_octets_13136 = [23 : 16]ip_1;
+int<<8>> ip_octets_03135 = [31 : 24]ip_1;
+int<<32>> PrefixTable_prefix_match_ret3134 = 32;
+int<<32>> Anonymizer_anonymize_ip_ret3133 = 32;
+int<<1>> should_preserve_prefix = policy_5;
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| _,1,1,1,1,1,_,_ -> {
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| 0,1,1,1,_,1,_,_ -> {
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| 1,1,1,1,_,1,_,_ -> {
+anonymizer_2_0_callnum = 1;
+int<<8>> ip_octets_33138 = [7 : 0]ip_1;
+int<<8>> ip_octets_23137 = [15 : 8]ip_1;
+int<<8>> ip_octets_13136 = [23 : 16]ip_1;
+int<<8>> ip_octets_03135 = [31 : 24]ip_1;
+int<<32>> PrefixTable_prefix_match_ret3134 = 32;
+int<<32>> Anonymizer_anonymize_ip_ret3133 = 32;
+int<<1>> should_preserve_prefix = policy_5;
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| _,1,1,1,_,1,_,_ -> {
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| 0,1,1,1,1,_,_,_ -> {
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| 1,1,1,1,1,_,_,_ -> {
+anonymizer_2_0_callnum = 1;
+int<<8>> ip_octets_33138 = [7 : 0]ip_1;
+int<<8>> ip_octets_23137 = [15 : 8]ip_1;
+int<<8>> ip_octets_13136 = [23 : 16]ip_1;
+int<<8>> ip_octets_03135 = [31 : 24]ip_1;
+int<<32>> PrefixTable_prefix_match_ret3134 = 32;
+int<<32>> Anonymizer_anonymize_ip_ret3133 = 32;
+int<<1>> should_preserve_prefix = policy_5;
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| _,1,1,1,1,_,_,_ -> {
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| 0,1,1,1,_,_,_,_ -> {
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| 1,1,1,1,_,_,_,_ -> {
+anonymizer_2_0_callnum = 1;
+int<<8>> ip_octets_33138 = [7 : 0]ip_1;
+int<<8>> ip_octets_23137 = [15 : 8]ip_1;
+int<<8>> ip_octets_13136 = [23 : 16]ip_1;
+int<<8>> ip_octets_03135 = [31 : 24]ip_1;
+int<<32>> PrefixTable_prefix_match_ret3134 = 32;
+int<<32>> Anonymizer_anonymize_ip_ret3133 = 32;
+int<<1>> should_preserve_prefix = policy_5;
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| _,1,1,1,_,_,_,_ -> {
+anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;
+anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;
+anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;
+anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;
+int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;
+int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;
+}
+| 0,1,1,_,_,_,_,_ -> {
+
+}
+| 1,1,1,_,_,_,_,_ -> {
+anonymizer_2_0_callnum = 1;
+int<<8>> ip_octets_33138 = [7 : 0]ip_1;
+int<<8>> ip_octets_23137 = [15 : 8]ip_1;
+int<<8>> ip_octets_13136 = [23 : 16]ip_1;
+int<<8>> ip_octets_03135 = [31 : 24]ip_1;
+int<<32>> PrefixTable_prefix_match_ret3134 = 32;
+int<<32>> Anonymizer_anonymize_ip_ret3133 = 32;
+int<<1>> should_preserve_prefix = policy_5;
+}
+| _,_,_,_,_,_,_,_ -> {
+
+}
+// Stage 7
+match (anonymizer_2_0_callnum,anonymizer_1_0_callnum,anonymizer_0_callnum,event_id,Anonymizer_should_anonymize_ret) with 
+| 0,1,1,1,1 -> {
+anonymizer_2_0_3_key = (int<<32>>)ip_octets_33138;
+anonymizer_2_0_2_key = (int<<32>>)ip_octets_23137;
+anonymizer_2_0_1_key = (int<<32>>)ip_octets_13136;
+anonymizer_2_0_0_key = (int<<32>>)ip_octets_03135;
+int<<48>> prefix3093 = eth_0&prefix_mask3092;
+int<<48>> prefix = eth_1&prefix_mask;
+}
+| 1,1,1,1,1 -> {
+Anonymizer_anonymize_packet_ret_0_2 = anonymized_eth_2;
+int<<16>> anonymized_ip_2 = ip_2;
+int<<1>> should_preserve_prefix3141 = policy_5;
+anonymizer_2_0_3_key = (int<<32>>)ip_octets_33138;
+anonymizer_2_0_2_key = (int<<32>>)ip_octets_23137;
+anonymizer_2_0_1_key = (int<<32>>)ip_octets_13136;
+anonymizer_2_0_0_key = (int<<32>>)ip_octets_03135;
+int<<48>> prefix3093 = eth_0&prefix_mask3092;
+int<<48>> prefix = eth_1&prefix_mask;
+}
+| _,1,1,1,1 -> {
+anonymizer_2_0_3_key = (int<<32>>)ip_octets_33138;
+anonymizer_2_0_2_key = (int<<32>>)ip_octets_23137;
+anonymizer_2_0_1_key = (int<<32>>)ip_octets_13136;
+anonymizer_2_0_0_key = (int<<32>>)ip_octets_03135;
+int<<48>> prefix3093 = eth_0&prefix_mask3092;
+int<<48>> prefix = eth_1&prefix_mask;
+}
+| _,_,1,1,1 -> {
+int<<48>> prefix3093 = eth_0&prefix_mask3092;
+int<<48>> prefix = eth_1&prefix_mask;
+}
+| 0,1,1,1,_ -> {
+anonymizer_2_0_3_key = (int<<32>>)ip_octets_33138;
+anonymizer_2_0_2_key = (int<<32>>)ip_octets_23137;
+anonymizer_2_0_1_key = (int<<32>>)ip_octets_13136;
+anonymizer_2_0_0_key = (int<<32>>)ip_octets_03135;
+}
+| 1,1,1,1,_ -> {
+Anonymizer_anonymize_packet_ret_0_2 = anonymized_eth_2;
+int<<16>> anonymized_ip_2 = ip_2;
+int<<1>> should_preserve_prefix3141 = policy_5;
+anonymizer_2_0_3_key = (int<<32>>)ip_octets_33138;
+anonymizer_2_0_2_key = (int<<32>>)ip_octets_23137;
+anonymizer_2_0_1_key = (int<<32>>)ip_octets_13136;
+anonymizer_2_0_0_key = (int<<32>>)ip_octets_03135;
+}
+| _,1,1,1,_ -> {
+anonymizer_2_0_3_key = (int<<32>>)ip_octets_33138;
+anonymizer_2_0_2_key = (int<<32>>)ip_octets_23137;
+anonymizer_2_0_1_key = (int<<32>>)ip_octets_13136;
+anonymizer_2_0_0_key = (int<<32>>)ip_octets_03135;
+}
+| _,_,_,_,_ -> {
+
+}
+match anonymizer_1_0_callnum with 
+| 0 -> {
+
+}
+| _ -> {
+anonymizer_1_0_0_ret = table_match(anonymizer_1_0,anonymizer_1_0_0_key,anonymizer_1_0_1_key,anonymizer_1_0_2_key,anonymizer_1_0_3_key);
+}
+// Stage 8
+match (anonymizer_2_0_callnum,anonymizer_1_0_callnum,anonymizer_0_callnum,event_id,Anonymizer_should_anonymize_ret) with 
+| 1,1,1,1,1 -> {
+int<<16>> anonymized_packet_0_2 = Anonymizer_anonymize_packet_ret_0_2;
+Anonymizer_anonymize_packet_ret_1_2 = anonymized_ip_2;
+int<<32>> prefix_length = anonymizer_1_0_0_ret;
+int<<48>> to_immediate_tmp3889 = eth_0-prefix3093;
+int<<48>> to_immediate_tmp3887 = eth_1-prefix;
+}
+| _,1,1,1,1 -> {
+int<<32>> prefix_length = anonymizer_1_0_0_ret;
+int<<48>> to_immediate_tmp3889 = eth_0-prefix3093;
+int<<48>> to_immediate_tmp3887 = eth_1-prefix;
+}
+| _,_,1,1,1 -> {
+int<<48>> to_immediate_tmp3889 = eth_0-prefix3093;
+int<<48>> to_immediate_tmp3887 = eth_1-prefix;
+}
+| 1,1,1,1,_ -> {
+int<<16>> anonymized_packet_0_2 = Anonymizer_anonymize_packet_ret_0_2;
+Anonymizer_anonymize_packet_ret_1_2 = anonymized_ip_2;
+int<<32>> prefix_length = anonymizer_1_0_0_ret;
+}
+| _,1,1,1,_ -> {
+int<<32>> prefix_length = anonymizer_1_0_0_ret;
+}
+| _,_,_,_,_ -> {
+
+}
+match anonymizer_2_0_callnum with 
+| 0 -> {
+
+}
+| _ -> {
+anonymizer_2_0_0_ret = table_match(anonymizer_2_0,anonymizer_2_0_0_key,anonymizer_2_0_1_key,anonymizer_2_0_2_key,anonymizer_2_0_3_key);
+}
+// Stage 9
+match (anonymizer_2_0_callnum,anonymizer_1_0_callnum,anonymizer_0_callnum,event_id,should_anonymize_prefix3095,Anonymizer_should_anonymize_ret) with 
+| 1,1,1,1,1,1 -> {
+int<<16>> anonymized_packet_1_2 = Anonymizer_anonymize_packet_ret_1_2;
+int<<32>> prefix_length3139 = anonymizer_2_0_0_ret;
+PrefixTable_prefix_match_ret = prefix_length;
+prefix3093 = hash<<48>>(7,prefix3093);
+int<<24>> suffix3094 = (int<<24>>)to_immediate_tmp3889;
+int<<24>> suffix = (int<<24>>)to_immediate_tmp3887;
+}
+| _,1,1,1,1,1 -> {
+PrefixTable_prefix_match_ret = prefix_length;
+prefix3093 = hash<<48>>(7,prefix3093);
+int<<24>> suffix3094 = (int<<24>>)to_immediate_tmp3889;
+int<<24>> suffix = (int<<24>>)to_immediate_tmp3887;
+}
+| _,_,1,1,1,1 -> {
+prefix3093 = hash<<48>>(7,prefix3093);
+int<<24>> suffix3094 = (int<<24>>)to_immediate_tmp3889;
+int<<24>> suffix = (int<<24>>)to_immediate_tmp3887;
+}
+| 1,1,1,1,_,1 -> {
+int<<16>> anonymized_packet_1_2 = Anonymizer_anonymize_packet_ret_1_2;
+int<<32>> prefix_length3139 = anonymizer_2_0_0_ret;
+PrefixTable_prefix_match_ret = prefix_length;
+int<<24>> suffix3094 = (int<<24>>)to_immediate_tmp3889;
+int<<24>> suffix = (int<<24>>)to_immediate_tmp3887;
+}
+| _,1,1,1,_,1 -> {
+PrefixTable_prefix_match_ret = prefix_length;
+int<<24>> suffix3094 = (int<<24>>)to_immediate_tmp3889;
+int<<24>> suffix = (int<<24>>)to_immediate_tmp3887;
+}
+| _,_,1,1,_,1 -> {
+int<<24>> suffix3094 = (int<<24>>)to_immediate_tmp3889;
+int<<24>> suffix = (int<<24>>)to_immediate_tmp3887;
+}
+| 1,1,1,1,_,_ -> {
+int<<16>> anonymized_packet_1_2 = Anonymizer_anonymize_packet_ret_1_2;
+int<<32>> prefix_length3139 = anonymizer_2_0_0_ret;
+PrefixTable_prefix_match_ret = prefix_length;
+}
+| _,1,1,1,_,_ -> {
+PrefixTable_prefix_match_ret = prefix_length;
+}
+| _,_,_,_,_,_ -> {
+
+}
+match (should_anonymize_prefix,Anonymizer_should_anonymize_ret,anonymizer_0_callnum,event_id) with 
+| 1,1,1,1 -> {
+prefix = hash<<48>>(7,prefix);
+}
+| _,_,_,_ -> {
+
+}
+// Stage 10
+match (anonymizer_2_0_callnum,anonymizer_1_0_callnum,anonymizer_0_callnum,event_id,Anonymizer_should_anonymize_ret,should_anonymize_suffix3096) with 
+| 1,1,1,1,1,1 -> {
+PrefixTable_prefix_match_ret3134 = prefix_length3139;
+int<<32>> prefix_len = PrefixTable_prefix_match_ret;
+prefix3093 = prefix3093>>24;
+suffix3094 = hash<<24>>(7,suffix3094);
+prefix = prefix>>24;
+}
+| _,1,1,1,1,1 -> {
+int<<32>> prefix_len = PrefixTable_prefix_match_ret;
+prefix3093 = prefix3093>>24;
+suffix3094 = hash<<24>>(7,suffix3094);
+prefix = prefix>>24;
+}
+| _,_,1,1,1,1 -> {
+prefix3093 = prefix3093>>24;
+suffix3094 = hash<<24>>(7,suffix3094);
+prefix = prefix>>24;
+}
+| 1,1,1,1,1,_ -> {
+PrefixTable_prefix_match_ret3134 = prefix_length3139;
+int<<32>> prefix_len = PrefixTable_prefix_match_ret;
+prefix3093 = prefix3093>>24;
+prefix = prefix>>24;
+}
+| _,1,1,1,1,_ -> {
+int<<32>> prefix_len = PrefixTable_prefix_match_ret;
+prefix3093 = prefix3093>>24;
+prefix = prefix>>24;
+}
+| _,_,1,1,1,_ -> {
+prefix3093 = prefix3093>>24;
+prefix = prefix>>24;
+}
+| 1,1,1,1,_,_ -> {
+PrefixTable_prefix_match_ret3134 = prefix_length3139;
+int<<32>> prefix_len = PrefixTable_prefix_match_ret;
+}
+| _,1,1,1,_,_ -> {
+int<<32>> prefix_len = PrefixTable_prefix_match_ret;
+}
+| _,_,_,_,_,_ -> {
+
+}
+match (should_anonymize_suffix,Anonymizer_should_anonymize_ret,anonymizer_0_callnum,event_id) with 
+| 1,1,1,1 -> {
+suffix = hash<<24>>(7,suffix);
+}
+| _,_,_,_ -> {
+
+}
+// Stage 11
+match (anonymizer_2_0_callnum,anonymizer_1_0_callnum,anonymizer_0_callnum,event_id,prefix_len,should_preserve_prefix,Anonymizer_should_anonymize_ret) with 
+| 1,1,1,1,16,_,1 -> {
+int<<32>> prefix_len3140 = PrefixTable_prefix_match_ret3134;
+int<<1>> should_anonymize_suffix3119 = 1;
+int<<48>> to_immediate_tmp3890 = 281474976710655<<16;
+int<<16>> Anonymizer_anonymize_num_ret_13114 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03113 = 32;
+int<<1>> anonymize_prefix = 0;
+Anonymizer_anonymize_num_ret_03090 = (int<<32>>)prefix3093;
+Anonymizer_anonymize_num_ret_13091 = suffix3094;
+Anonymizer_anonymize_num_ret_0 = (int<<32>>)prefix;
+Anonymizer_anonymize_num_ret_1 = suffix;
+}
+| _,1,1,1,16,_,1 -> {
+int<<1>> should_anonymize_suffix3119 = 1;
+int<<48>> to_immediate_tmp3890 = 281474976710655<<16;
+int<<16>> Anonymizer_anonymize_num_ret_13114 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03113 = 32;
+int<<1>> anonymize_prefix = 0;
+Anonymizer_anonymize_num_ret_03090 = (int<<32>>)prefix3093;
+Anonymizer_anonymize_num_ret_13091 = suffix3094;
+Anonymizer_anonymize_num_ret_0 = (int<<32>>)prefix;
+Anonymizer_anonymize_num_ret_1 = suffix;
+}
+| 1,1,1,1,24,_,1 -> {
+int<<32>> prefix_len3140 = PrefixTable_prefix_match_ret3134;
+int<<1>> should_anonymize_suffix3129 = 1;
+int<<48>> to_immediate_tmp3892 = 281474976710655<<8;
+int<<8>> Anonymizer_anonymize_num_ret_13124 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03123 = 32;
+int<<1>> anonymize_prefix3122 = 0;
+Anonymizer_anonymize_num_ret_03090 = (int<<32>>)prefix3093;
+Anonymizer_anonymize_num_ret_13091 = suffix3094;
+Anonymizer_anonymize_num_ret_0 = (int<<32>>)prefix;
+Anonymizer_anonymize_num_ret_1 = suffix;
+}
+| _,1,1,1,24,_,1 -> {
+int<<1>> should_anonymize_suffix3129 = 1;
+int<<48>> to_immediate_tmp3892 = 281474976710655<<8;
+int<<8>> Anonymizer_anonymize_num_ret_13124 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03123 = 32;
+int<<1>> anonymize_prefix3122 = 0;
+Anonymizer_anonymize_num_ret_03090 = (int<<32>>)prefix3093;
+Anonymizer_anonymize_num_ret_13091 = suffix3094;
+Anonymizer_anonymize_num_ret_0 = (int<<32>>)prefix;
+Anonymizer_anonymize_num_ret_1 = suffix;
+}
+| 1,1,1,1,_,_,1 -> {
+int<<32>> prefix_len3140 = PrefixTable_prefix_match_ret3134;
+Anonymizer_anonymize_ip_ret = ip_0;
+Anonymizer_anonymize_num_ret_03090 = (int<<32>>)prefix3093;
+Anonymizer_anonymize_num_ret_13091 = suffix3094;
+Anonymizer_anonymize_num_ret_0 = (int<<32>>)prefix;
+Anonymizer_anonymize_num_ret_1 = suffix;
+}
+| _,1,1,1,_,_,1 -> {
+Anonymizer_anonymize_ip_ret = ip_0;
+Anonymizer_anonymize_num_ret_03090 = (int<<32>>)prefix3093;
+Anonymizer_anonymize_num_ret_13091 = suffix3094;
+Anonymizer_anonymize_num_ret_0 = (int<<32>>)prefix;
+Anonymizer_anonymize_num_ret_1 = suffix;
+}
+| _,_,1,1,_,_,1 -> {
+Anonymizer_anonymize_num_ret_03090 = (int<<32>>)prefix3093;
+Anonymizer_anonymize_num_ret_13091 = suffix3094;
+Anonymizer_anonymize_num_ret_0 = (int<<32>>)prefix;
+Anonymizer_anonymize_num_ret_1 = suffix;
+}
+| 1,1,1,1,16,_,_ -> {
+int<<32>> prefix_len3140 = PrefixTable_prefix_match_ret3134;
+int<<1>> should_anonymize_suffix3119 = 1;
+int<<48>> to_immediate_tmp3890 = 281474976710655<<16;
+int<<16>> Anonymizer_anonymize_num_ret_13114 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03113 = 32;
+int<<1>> anonymize_prefix = 0;
+}
+| _,1,1,1,16,_,_ -> {
+int<<1>> should_anonymize_suffix3119 = 1;
+int<<48>> to_immediate_tmp3890 = 281474976710655<<16;
+int<<16>> Anonymizer_anonymize_num_ret_13114 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03113 = 32;
+int<<1>> anonymize_prefix = 0;
+}
+| 1,1,1,1,24,_,_ -> {
+int<<32>> prefix_len3140 = PrefixTable_prefix_match_ret3134;
+int<<1>> should_anonymize_suffix3129 = 1;
+int<<48>> to_immediate_tmp3892 = 281474976710655<<8;
+int<<8>> Anonymizer_anonymize_num_ret_13124 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03123 = 32;
+int<<1>> anonymize_prefix3122 = 0;
+}
+| _,1,1,1,24,_,_ -> {
+int<<1>> should_anonymize_suffix3129 = 1;
+int<<48>> to_immediate_tmp3892 = 281474976710655<<8;
+int<<8>> Anonymizer_anonymize_num_ret_13124 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03123 = 32;
+int<<1>> anonymize_prefix3122 = 0;
+}
+| 1,1,1,1,_,_,_ -> {
+int<<32>> prefix_len3140 = PrefixTable_prefix_match_ret3134;
+Anonymizer_anonymize_ip_ret = ip_0;
+}
+| _,1,1,1,_,_,_ -> {
+Anonymizer_anonymize_ip_ret = ip_0;
+}
+| _,_,_,_,_,_,_ -> {
+
+}
+// Stage 12
+match (prefix_len3140,anonymizer_2_0_callnum,anonymizer_1_0_callnum,anonymizer_0_callnum,event_id,should_preserve_prefix3141,should_anonymize_suffix3129,should_preserve_prefix,prefix_len,should_anonymize_suffix3119,Anonymizer_should_anonymize_ret) with 
+| 16,1,1,1,1,_,1,_,16,1,1 -> {
+int<<1>> should_anonymize_suffix3149 = 1;
+int<<48>> to_immediate_tmp3894 = 281474976710655<<16;
+int<<16>> Anonymizer_anonymize_num_ret_13144 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03143 = 32;
+int<<1>> anonymize_prefix3142 = 0;
+int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;
+anonymize_prefix = 1;
+int<<32>> split_mac_03097 = Anonymizer_anonymize_num_ret_03090;
+int<<24>> split_mac_13098 = Anonymizer_anonymize_num_ret_13091;
+int<<32>> split_mac_0 = Anonymizer_anonymize_num_ret_0;
+int<<24>> split_mac_1 = Anonymizer_anonymize_num_ret_1;
+}
+| 24,1,1,1,1,_,1,_,16,1,1 -> {
+int<<1>> should_anonymize_suffix3159 = 1;
+int<<48>> to_immediate_tmp3896 = 281474976710655<<8;
+int<<8>> Anonymizer_anonymize_num_ret_13154 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03153 = 32;
+int<<1>> anonymize_prefix3152 = 0;
+int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;
+anonymize_prefix = 1;
+int<<32>> split_mac_03097 = Anonymizer_anonymize_num_ret_03090;
+int<<24>> split_mac_13098 = Anonymizer_anonymize_num_ret_13091;
+int<<32>> split_mac_0 = Anonymizer_anonymize_num_ret_0;
+int<<24>> split_mac_1 = Anonymizer_anonymize_num_ret_1;
+}
+| _,1,1,1,1,_,1,_,16,1,1 -> {
+Anonymizer_anonymize_ip_ret3133 = ip_1;
+int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;
+anonymize_prefix = 1;
+int<<32>> split_mac_03097 = Anonymizer_anonymize_num_ret_03090;
+int<<24>> split_mac_13098 = Anonymizer_anonymize_num_ret_13091;
+int<<32>> split_mac_0 = Anonymizer_anonymize_num_ret_0;
+int<<24>> split_mac_1 = Anonymizer_anonymize_num_ret_1;
+}
+| _,_,1,1,1,_,1,_,16,1,1 -> {
+int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;
+anonymize_prefix = 1;
+int<<32>> split_mac_03097 = Anonymizer_anonymize_num_ret_03090;
+int<<24>> split_mac_13098 = Anonymizer_anonymize_num_ret_13091;
+int<<32>> split_mac_0 = Anonymizer_anonymize_num_ret_0;
+int<<24>> split_mac_1 = Anonymizer_anonymize_num_ret_1;
+}
+| 16,1,1,1,1,_,_,_,16,1,1 -> {
+int<<1>> should_anonymize_suffix3149 = 1;
+int<<48>> to_immediate_tmp3894 = 281474976710655<<16;
+int<<16>> Anonymizer_anonymize_num_ret_13144 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03143 = 32;
+int<<1>> anonymize_prefix3142 = 0;
+int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;
+anonymize_prefix = 1;
+int<<32>> split_mac_03097 = Anonymizer_anonymize_num_ret_03090;
+int<<24>> split_mac_13098 = Anonymizer_anonymize_num_ret_13091;
+int<<32>> split_mac_0 = Anonymizer_anonymize_num_ret_0;
+int<<24>> split_mac_1 = Anonymizer_anonymize_num_ret_1;
+}
+| 24,1,1,1,1,_,_,_,16,1,1 -> {
+int<<1>> should_anonymize_suffix3159 = 1;
+int<<48>> to_immediate_tmp3896 = 281474976710655<<8;
+int<<8>> Anonymizer_anonymize_num_ret_13154 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03153 = 32;
+int<<1>> anonymize_prefix3152 = 0;
+int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;
+anonymize_prefix = 1;
+int<<32>> split_mac_03097 = Anonymizer_anonymize_num_ret_03090;
+int<<24>> split_mac_13098 = Anonymizer_anonymize_num_ret_13091;
+int<<32>> split_mac_0 = Anonymizer_anonymize_num_ret_0;
+int<<24>> split_mac_1 = Anonymizer_anonymize_num_ret_1;
+}
+| _,1,1,1,1,_,_,_,16,1,1 -> {
+Anonymizer_anonymize_ip_ret3133 = ip_1;
+int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;
+anonymize_prefix = 1;
+int<<32>> split_mac_03097 = Anonymizer_anonymize_num_ret_03090;
+int<<24>> split_mac_13098 = Anonymizer_anonymize_num_ret_13091;
+int<<32>> split_mac_0 = Anonymizer_anonymize_num_ret_0;
+int<<24>> split_mac_1 = Anonymizer_anonymize_num_ret_1;
+}
+| _,_,1,1,1,_,_,_,16,1,1 -> {
+int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;
+anonymize_prefix = 1;
+int<<32>> split_mac_03097 = Anonymizer_anonymize_num_ret_03090;
+int<<24>> split_mac_13098 = Anonymizer_anonymize_num_ret_13091;
+int<<32>> split_mac_0 = Anonymizer_anonymize_num_ret_0;
+int<<24>> split_mac_1 = Anonymizer_anonymize_num_ret_1;
+}
+| 16,1,1,1,1,_,1,_,16,_,1 -> {
+int<<1>> should_anonymize_suffix3149 = 1;
+int<<48>> to_immediate_tmp3894 = 281474976710655<<16;
+int<<16>> Anonymizer_anonymize_num_ret_13144 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03143 = 32;
+int<<1>> anonymize_prefix3142 = 0;
+int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;
+anonymize_prefix = 1;
+int<<32>> split_mac_03097 = Anonymizer_anonymize_num_ret_03090;
+int<<24>> split_mac_13098 = Anonymizer_anonymize_num_ret_13091;
+int<<32>> split_mac_0 = Anonymizer_anonymize_num_ret_0;
+int<<24>> split_mac_1 = Anonymizer_anonymize_num_ret_1;
+}
+| 24,1,1,1,1,_,1,_,16,_,1 -> {
+int<<1>> should_anonymize_suffix3159 = 1;
+int<<48>> to_immediate_tmp3896 = 281474976710655<<8;
+int<<8>> Anonymizer_anonymize_num_ret_13154 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03153 = 32;
+int<<1>> anonymize_prefix3152 = 0;
+int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;
+anonymize_prefix = 1;
+int<<32>> split_mac_03097 = Anonymizer_anonymize_num_ret_03090;
+int<<24>> split_mac_13098 = Anonymizer_anonymize_num_ret_13091;
+int<<32>> split_mac_0 = Anonymizer_anonymize_num_ret_0;
+int<<24>> split_mac_1 = Anonymizer_anonymize_num_ret_1;
+}
+| _,1,1,1,1,_,1,_,16,_,1 -> {
+Anonymizer_anonymize_ip_ret3133 = ip_1;
+int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;
+anonymize_prefix = 1;
+int<<32>> split_mac_03097 = Anonymizer_anonymize_num_ret_03090;
+int<<24>> split_mac_13098 = Anonymizer_anonymize_num_ret_13091;
+int<<32>> split_mac_0 = Anonymizer_anonymize_num_ret_0;
+int<<24>> split_mac_1 = Anonymizer_anonymize_num_ret_1;
+}
+| _,_,1,1,1,_,1,_,16,_,1 -> {
+int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;
+anonymize_prefix = 1;
+int<<32>> split_mac_03097 = Anonymizer_anonymize_num_ret_03090;
+int<<24>> split_mac_13098 = Anonymizer_anonymize_num_ret_13091;
+int<<32>> split_mac_0 = Anonymizer_anonymize_num_ret_0;
+int<<24>> split_mac_1 = Anonymizer_anonymize_num_ret_1;
+}
+| 16,1,1,1,1,_,_,_,16,_,1 -> {
+int<<1>> should_anonymize_suffix3149 = 1;
+int<<48>> to_immediate_tmp3894 = 281474976710655<<16;
+int<<16>> Anonymizer_anonymize_num_ret_13144 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03143 = 32;
+int<<1>> anonymize_prefix3142 = 0;
+int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;
+anonymize_prefix = 1;
+int<<32>> split_mac_03097 = Anonymizer_anonymize_num_ret_03090;
+int<<24>> split_mac_13098 = Anonymizer_anonymize_num_ret_13091;
+int<<32>> split_mac_0 = Anonymizer_anonymize_num_ret_0;
+int<<24>> split_mac_1 = Anonymizer_anonymize_num_ret_1;
+}
+| 24,1,1,1,1,_,_,_,16,_,1 -> {
+int<<1>> should_anonymize_suffix3159 = 1;
+int<<48>> to_immediate_tmp3896 = 281474976710655<<8;
+int<<8>> Anonymizer_anonymize_num_ret_13154 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03153 = 32;
+int<<1>> anonymize_prefix3152 = 0;
+int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;
+anonymize_prefix = 1;
+int<<32>> split_mac_03097 = Anonymizer_anonymize_num_ret_03090;
+int<<24>> split_mac_13098 = Anonymizer_anonymize_num_ret_13091;
+int<<32>> split_mac_0 = Anonymizer_anonymize_num_ret_0;
+int<<24>> split_mac_1 = Anonymizer_anonymize_num_ret_1;
+}
+| _,1,1,1,1,_,_,_,16,_,1 -> {
+Anonymizer_anonymize_ip_ret3133 = ip_1;
+int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;
+anonymize_prefix = 1;
+int<<32>> split_mac_03097 = Anonymizer_anonymize_num_ret_03090;
+int<<24>> split_mac_13098 = Anonymizer_anonymize_num_ret_13091;
+int<<32>> split_mac_0 = Anonymizer_anonymize_num_ret_0;
+int<<24>> split_mac_1 = Anonymizer_anonymize_num_ret_1;
+}
+| _,_,1,1,1,_,_,_,16,_,1 -> {
+int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;
+anonymize_prefix = 1;
+int<<32>> split_mac_03097 = Anonymizer_anonymize_num_ret_03090;
+int<<24>> split_mac_13098 = Anonymizer_anonymize_num_ret_13091;
+int<<32>> split_mac_0 = Anonymizer_anonymize_num_ret_0;
+int<<24>> split_mac_1 = Anonymizer_anonymize_num_ret_1;
+}
+| 16,1,1,1,1,_,1,_,24,_,1 -> {
+int<<1>> should_anonymize_suffix3149 = 1;
+int<<48>> to_immediate_tmp3894 = 281474976710655<<16;
+int<<16>> Anonymizer_anonymize_num_ret_13144 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03143 = 32;
+int<<1>> anonymize_prefix3142 = 0;
+int<<32>> prefix_mask3125 = (int<<32>>)to_immediate_tmp3892;
+anonymize_prefix3122 = 1;
+int<<32>> split_mac_03097 = Anonymizer_anonymize_num_ret_03090;
+int<<24>> split_mac_13098 = Anonymizer_anonymize_num_ret_13091;
+int<<32>> split_mac_0 = Anonymizer_anonymize_num_ret_0;
+int<<24>> split_mac_1 = Anonymizer_anonymize_num_ret_1;
+}
+| 24,1,1,1,1,_,1,_,24,_,1 -> {
+int<<1>> should_anonymize_suffix3159 = 1;
+int<<48>> to_immediate_tmp3896 = 281474976710655<<8;
+int<<8>> Anonymizer_anonymize_num_ret_13154 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03153 = 32;
+int<<1>> anonymize_prefix3152 = 0;
+int<<32>> prefix_mask3125 = (int<<32>>)to_immediate_tmp3892;
+anonymize_prefix3122 = 1;
+int<<32>> split_mac_03097 = Anonymizer_anonymize_num_ret_03090;
+int<<24>> split_mac_13098 = Anonymizer_anonymize_num_ret_13091;
+int<<32>> split_mac_0 = Anonymizer_anonymize_num_ret_0;
+int<<24>> split_mac_1 = Anonymizer_anonymize_num_ret_1;
+}
+| _,1,1,1,1,_,1,_,24,_,1 -> {
+Anonymizer_anonymize_ip_ret3133 = ip_1;
+int<<32>> prefix_mask3125 = (int<<32>>)to_immediate_tmp3892;
+anonymize_prefix3122 = 1;
+int<<32>> split_mac_03097 = Anonymizer_anonymize_num_ret_03090;
+int<<24>> split_mac_13098 = Anonymizer_anonymize_num_ret_13091;
+int<<32>> split_mac_0 = Anonymizer_anonymize_num_ret_0;
+int<<24>> split_mac_1 = Anonymizer_anonymize_num_ret_1;
+}
+| _,_,1,1,1,_,1,_,24,_,1 -> {
+int<<32>> prefix_mask3125 = (int<<32>>)to_immediate_tmp3892;
+anonymize_prefix3122 = 1;
+int<<32>> split_mac_03097 = Anonymizer_anonymize_num_ret_03090;
+int<<24>> split_mac_13098 = Anonymizer_anonymize_num_ret_13091;
+int<<32>> split_mac_0 = Anonymizer_anonymize_num_ret_0;
+int<<24>> split_mac_1 = Anonymizer_anonymize_num_ret_1;
+}
+| 16,1,1,1,1,_,_,_,24,_,1 -> {
+int<<1>> should_anonymize_suffix3149 = 1;
+int<<48>> to_immediate_tmp3894 = 281474976710655<<16;
+int<<16>> Anonymizer_anonymize_num_ret_13144 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03143 = 32;
+int<<1>> anonymize_prefix3142 = 0;
+int<<32>> prefix_mask3125 = (int<<32>>)to_immediate_tmp3892;
+anonymize_prefix3122 = 1;
+int<<32>> split_mac_03097 = Anonymizer_anonymize_num_ret_03090;
+int<<24>> split_mac_13098 = Anonymizer_anonymize_num_ret_13091;
+int<<32>> split_mac_0 = Anonymizer_anonymize_num_ret_0;
+int<<24>> split_mac_1 = Anonymizer_anonymize_num_ret_1;
+}
+| 24,1,1,1,1,_,_,_,24,_,1 -> {
+int<<1>> should_anonymize_suffix3159 = 1;
+int<<48>> to_immediate_tmp3896 = 281474976710655<<8;
+int<<8>> Anonymizer_anonymize_num_ret_13154 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03153 = 32;
+int<<1>> anonymize_prefix3152 = 0;
+int<<32>> prefix_mask3125 = (int<<32>>)to_immediate_tmp3892;
+anonymize_prefix3122 = 1;
+int<<32>> split_mac_03097 = Anonymizer_anonymize_num_ret_03090;
+int<<24>> split_mac_13098 = Anonymizer_anonymize_num_ret_13091;
+int<<32>> split_mac_0 = Anonymizer_anonymize_num_ret_0;
+int<<24>> split_mac_1 = Anonymizer_anonymize_num_ret_1;
+}
+| _,1,1,1,1,_,_,_,24,_,1 -> {
+Anonymizer_anonymize_ip_ret3133 = ip_1;
+int<<32>> prefix_mask3125 = (int<<32>>)to_immediate_tmp3892;
+anonymize_prefix3122 = 1;
+int<<32>> split_mac_03097 = Anonymizer_anonymize_num_ret_03090;
+int<<24>> split_mac_13098 = Anonymizer_anonymize_num_ret_13091;
+int<<32>> split_mac_0 = Anonymizer_anonymize_num_ret_0;
+int<<24>> split_mac_1 = Anonymizer_anonymize_num_ret_1;
+}
+| _,_,1,1,1,_,_,_,24,_,1 -> {
+int<<32>> prefix_mask3125 = (int<<32>>)to_immediate_tmp3892;
+anonymize_prefix3122 = 1;
+int<<32>> split_mac_03097 = Anonymizer_anonymize_num_ret_03090;
+int<<24>> split_mac_13098 = Anonymizer_anonymize_num_ret_13091;
+int<<32>> split_mac_0 = Anonymizer_anonymize_num_ret_0;
+int<<24>> split_mac_1 = Anonymizer_anonymize_num_ret_1;
+}
+| 16,1,1,1,1,_,_,_,_,_,1 -> {
+int<<1>> should_anonymize_suffix3149 = 1;
+int<<48>> to_immediate_tmp3894 = 281474976710655<<16;
+int<<16>> Anonymizer_anonymize_num_ret_13144 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03143 = 32;
+int<<1>> anonymize_prefix3142 = 0;
+int<<32>> split_mac_03097 = Anonymizer_anonymize_num_ret_03090;
+int<<24>> split_mac_13098 = Anonymizer_anonymize_num_ret_13091;
+int<<32>> split_mac_0 = Anonymizer_anonymize_num_ret_0;
+int<<24>> split_mac_1 = Anonymizer_anonymize_num_ret_1;
+}
+| 24,1,1,1,1,_,_,_,_,_,1 -> {
+int<<1>> should_anonymize_suffix3159 = 1;
+int<<48>> to_immediate_tmp3896 = 281474976710655<<8;
+int<<8>> Anonymizer_anonymize_num_ret_13154 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03153 = 32;
+int<<1>> anonymize_prefix3152 = 0;
+int<<32>> split_mac_03097 = Anonymizer_anonymize_num_ret_03090;
+int<<24>> split_mac_13098 = Anonymizer_anonymize_num_ret_13091;
+int<<32>> split_mac_0 = Anonymizer_anonymize_num_ret_0;
+int<<24>> split_mac_1 = Anonymizer_anonymize_num_ret_1;
+}
+| _,1,1,1,1,_,_,_,_,_,1 -> {
+Anonymizer_anonymize_ip_ret3133 = ip_1;
+int<<32>> split_mac_03097 = Anonymizer_anonymize_num_ret_03090;
+int<<24>> split_mac_13098 = Anonymizer_anonymize_num_ret_13091;
+int<<32>> split_mac_0 = Anonymizer_anonymize_num_ret_0;
+int<<24>> split_mac_1 = Anonymizer_anonymize_num_ret_1;
+}
+| _,_,_,1,1,_,_,_,_,_,1 -> {
+int<<32>> split_mac_03097 = Anonymizer_anonymize_num_ret_03090;
+int<<24>> split_mac_13098 = Anonymizer_anonymize_num_ret_13091;
+int<<32>> split_mac_0 = Anonymizer_anonymize_num_ret_0;
+int<<24>> split_mac_1 = Anonymizer_anonymize_num_ret_1;
+}
+| 16,1,1,1,1,_,1,_,16,1,_ -> {
+int<<1>> should_anonymize_suffix3149 = 1;
+int<<48>> to_immediate_tmp3894 = 281474976710655<<16;
+int<<16>> Anonymizer_anonymize_num_ret_13144 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03143 = 32;
+int<<1>> anonymize_prefix3142 = 0;
+int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;
+anonymize_prefix = 1;
+}
+| 24,1,1,1,1,_,1,_,16,1,_ -> {
+int<<1>> should_anonymize_suffix3159 = 1;
+int<<48>> to_immediate_tmp3896 = 281474976710655<<8;
+int<<8>> Anonymizer_anonymize_num_ret_13154 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03153 = 32;
+int<<1>> anonymize_prefix3152 = 0;
+int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;
+anonymize_prefix = 1;
+}
+| _,1,1,1,1,_,1,_,16,1,_ -> {
+Anonymizer_anonymize_ip_ret3133 = ip_1;
+int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;
+anonymize_prefix = 1;
+}
+| _,_,1,1,1,_,1,_,16,1,_ -> {
+int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;
+anonymize_prefix = 1;
+}
+| 16,1,1,1,1,_,_,_,16,1,_ -> {
+int<<1>> should_anonymize_suffix3149 = 1;
+int<<48>> to_immediate_tmp3894 = 281474976710655<<16;
+int<<16>> Anonymizer_anonymize_num_ret_13144 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03143 = 32;
+int<<1>> anonymize_prefix3142 = 0;
+int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;
+anonymize_prefix = 1;
+}
+| 24,1,1,1,1,_,_,_,16,1,_ -> {
+int<<1>> should_anonymize_suffix3159 = 1;
+int<<48>> to_immediate_tmp3896 = 281474976710655<<8;
+int<<8>> Anonymizer_anonymize_num_ret_13154 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03153 = 32;
+int<<1>> anonymize_prefix3152 = 0;
+int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;
+anonymize_prefix = 1;
+}
+| _,1,1,1,1,_,_,_,16,1,_ -> {
+Anonymizer_anonymize_ip_ret3133 = ip_1;
+int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;
+anonymize_prefix = 1;
+}
+| _,_,1,1,1,_,_,_,16,1,_ -> {
+int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;
+anonymize_prefix = 1;
+}
+| 16,1,1,1,1,_,1,_,16,_,_ -> {
+int<<1>> should_anonymize_suffix3149 = 1;
+int<<48>> to_immediate_tmp3894 = 281474976710655<<16;
+int<<16>> Anonymizer_anonymize_num_ret_13144 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03143 = 32;
+int<<1>> anonymize_prefix3142 = 0;
+int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;
+anonymize_prefix = 1;
+}
+| 24,1,1,1,1,_,1,_,16,_,_ -> {
+int<<1>> should_anonymize_suffix3159 = 1;
+int<<48>> to_immediate_tmp3896 = 281474976710655<<8;
+int<<8>> Anonymizer_anonymize_num_ret_13154 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03153 = 32;
+int<<1>> anonymize_prefix3152 = 0;
+int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;
+anonymize_prefix = 1;
+}
+| _,1,1,1,1,_,1,_,16,_,_ -> {
+Anonymizer_anonymize_ip_ret3133 = ip_1;
+int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;
+anonymize_prefix = 1;
+}
+| _,_,1,1,1,_,1,_,16,_,_ -> {
+int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;
+anonymize_prefix = 1;
+}
+| 16,1,1,1,1,_,_,_,16,_,_ -> {
+int<<1>> should_anonymize_suffix3149 = 1;
+int<<48>> to_immediate_tmp3894 = 281474976710655<<16;
+int<<16>> Anonymizer_anonymize_num_ret_13144 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03143 = 32;
+int<<1>> anonymize_prefix3142 = 0;
+int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;
+anonymize_prefix = 1;
+}
+| 24,1,1,1,1,_,_,_,16,_,_ -> {
+int<<1>> should_anonymize_suffix3159 = 1;
+int<<48>> to_immediate_tmp3896 = 281474976710655<<8;
+int<<8>> Anonymizer_anonymize_num_ret_13154 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03153 = 32;
+int<<1>> anonymize_prefix3152 = 0;
+int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;
+anonymize_prefix = 1;
+}
+| _,1,1,1,1,_,_,_,16,_,_ -> {
+Anonymizer_anonymize_ip_ret3133 = ip_1;
+int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;
+anonymize_prefix = 1;
+}
+| _,_,1,1,1,_,_,_,16,_,_ -> {
+int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;
+anonymize_prefix = 1;
+}
+| 16,1,1,1,1,_,1,_,24,_,_ -> {
+int<<1>> should_anonymize_suffix3149 = 1;
+int<<48>> to_immediate_tmp3894 = 281474976710655<<16;
+int<<16>> Anonymizer_anonymize_num_ret_13144 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03143 = 32;
+int<<1>> anonymize_prefix3142 = 0;
+int<<32>> prefix_mask3125 = (int<<32>>)to_immediate_tmp3892;
+anonymize_prefix3122 = 1;
+}
+| 24,1,1,1,1,_,1,_,24,_,_ -> {
+int<<1>> should_anonymize_suffix3159 = 1;
+int<<48>> to_immediate_tmp3896 = 281474976710655<<8;
+int<<8>> Anonymizer_anonymize_num_ret_13154 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03153 = 32;
+int<<1>> anonymize_prefix3152 = 0;
+int<<32>> prefix_mask3125 = (int<<32>>)to_immediate_tmp3892;
+anonymize_prefix3122 = 1;
+}
+| _,1,1,1,1,_,1,_,24,_,_ -> {
+Anonymizer_anonymize_ip_ret3133 = ip_1;
+int<<32>> prefix_mask3125 = (int<<32>>)to_immediate_tmp3892;
+anonymize_prefix3122 = 1;
+}
+| _,_,1,1,1,_,1,_,24,_,_ -> {
+int<<32>> prefix_mask3125 = (int<<32>>)to_immediate_tmp3892;
+anonymize_prefix3122 = 1;
+}
+| 16,1,1,1,1,_,_,_,24,_,_ -> {
+int<<1>> should_anonymize_suffix3149 = 1;
+int<<48>> to_immediate_tmp3894 = 281474976710655<<16;
+int<<16>> Anonymizer_anonymize_num_ret_13144 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03143 = 32;
+int<<1>> anonymize_prefix3142 = 0;
+int<<32>> prefix_mask3125 = (int<<32>>)to_immediate_tmp3892;
+anonymize_prefix3122 = 1;
+}
+| 24,1,1,1,1,_,_,_,24,_,_ -> {
+int<<1>> should_anonymize_suffix3159 = 1;
+int<<48>> to_immediate_tmp3896 = 281474976710655<<8;
+int<<8>> Anonymizer_anonymize_num_ret_13154 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03153 = 32;
+int<<1>> anonymize_prefix3152 = 0;
+int<<32>> prefix_mask3125 = (int<<32>>)to_immediate_tmp3892;
+anonymize_prefix3122 = 1;
+}
+| _,1,1,1,1,_,_,_,24,_,_ -> {
+Anonymizer_anonymize_ip_ret3133 = ip_1;
+int<<32>> prefix_mask3125 = (int<<32>>)to_immediate_tmp3892;
+anonymize_prefix3122 = 1;
+}
+| _,_,1,1,1,_,_,_,24,_,_ -> {
+int<<32>> prefix_mask3125 = (int<<32>>)to_immediate_tmp3892;
+anonymize_prefix3122 = 1;
+}
+| 16,1,1,1,1,_,_,_,_,_,_ -> {
+int<<1>> should_anonymize_suffix3149 = 1;
+int<<48>> to_immediate_tmp3894 = 281474976710655<<16;
+int<<16>> Anonymizer_anonymize_num_ret_13144 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03143 = 32;
+int<<1>> anonymize_prefix3142 = 0;
+}
+| 24,1,1,1,1,_,_,_,_,_,_ -> {
+int<<1>> should_anonymize_suffix3159 = 1;
+int<<48>> to_immediate_tmp3896 = 281474976710655<<8;
+int<<8>> Anonymizer_anonymize_num_ret_13154 = 32;
+int<<32>> Anonymizer_anonymize_num_ret_03153 = 32;
+int<<1>> anonymize_prefix3152 = 0;
+}
+| _,1,1,1,1,_,_,_,_,_,_ -> {
+Anonymizer_anonymize_ip_ret3133 = ip_1;
+}
+| _,_,_,_,_,_,_,_,_,_,_ -> {
+
+}
+// Stage 13
+match (should_anonymize_suffix3159,should_preserve_prefix3141,prefix_len3140,anonymizer_2_0_callnum,anonymizer_1_0_callnum,anonymizer_0_callnum,event_id,should_anonymize_suffix3149,should_preserve_prefix,prefix_len,Anonymizer_should_anonymize_ret) with 
+| 1,_,16,1,1,1,1,1,_,16,1 -> {
+int<<32>> prefix_mask3145 = (int<<32>>)to_immediate_tmp3894;
+anonymize_prefix3142 = 1;
+int<<32>> prefix3116 = ip_0&prefix_mask3115;
+int<<1>> should_anonymize_prefix3118 = anonymize_prefix;
+Anonymizer_anonymize_mac_ret3089 = (int<<24>>)split_mac_03097^split_mac_13098;
+Anonymizer_anonymize_mac_ret = (int<<24>>)split_mac_0^split_mac_1;
+}
+| _,_,16,1,1,1,1,1,_,16,1 -> {
+int<<32>> prefix_mask3145 = (int<<32>>)to_immediate_tmp3894;
+anonymize_prefix3142 = 1;
+int<<32>> prefix3116 = ip_0&prefix_mask3115;
+int<<1>> should_anonymize_prefix3118 = anonymize_prefix;
+Anonymizer_anonymize_mac_ret3089 = (int<<24>>)split_mac_03097^split_mac_13098;
+Anonymizer_anonymize_mac_ret = (int<<24>>)split_mac_0^split_mac_1;
+}
+| 1,_,16,1,1,1,1,_,_,16,1 -> {
+int<<32>> prefix_mask3145 = (int<<32>>)to_immediate_tmp3894;
+anonymize_prefix3142 = 1;
+int<<32>> prefix3116 = ip_0&prefix_mask3115;
+int<<1>> should_anonymize_prefix3118 = anonymize_prefix;
+Anonymizer_anonymize_mac_ret3089 = (int<<24>>)split_mac_03097^split_mac_13098;
+Anonymizer_anonymize_mac_ret = (int<<24>>)split_mac_0^split_mac_1;
+}
+| _,_,16,1,1,1,1,_,_,16,1 -> {
+int<<32>> prefix_mask3145 = (int<<32>>)to_immediate_tmp3894;
+anonymize_prefix3142 = 1;
+int<<32>> prefix3116 = ip_0&prefix_mask3115;
+int<<1>> should_anonymize_prefix3118 = anonymize_prefix;
+Anonymizer_anonymize_mac_ret3089 = (int<<24>>)split_mac_03097^split_mac_13098;
+Anonymizer_anonymize_mac_ret = (int<<24>>)split_mac_0^split_mac_1;
+}
+| 1,_,24,1,1,1,1,_,_,16,1 -> {
+int<<32>> prefix_mask3155 = (int<<32>>)to_immediate_tmp3896;
+anonymize_prefix3152 = 1;
+int<<32>> prefix3116 = ip_0&prefix_mask3115;
+int<<1>> should_anonymize_prefix3118 = anonymize_prefix;
+Anonymizer_anonymize_mac_ret3089 = (int<<24>>)split_mac_03097^split_mac_13098;
+Anonymizer_anonymize_mac_ret = (int<<24>>)split_mac_0^split_mac_1;
+}
+| _,_,24,1,1,1,1,_,_,16,1 -> {
+int<<32>> prefix_mask3155 = (int<<32>>)to_immediate_tmp3896;
+anonymize_prefix3152 = 1;
+int<<32>> prefix3116 = ip_0&prefix_mask3115;
+int<<1>> should_anonymize_prefix3118 = anonymize_prefix;
+Anonymizer_anonymize_mac_ret3089 = (int<<24>>)split_mac_03097^split_mac_13098;
+Anonymizer_anonymize_mac_ret = (int<<24>>)split_mac_0^split_mac_1;
+}
+| _,_,_,_,1,1,1,_,_,16,1 -> {
+int<<32>> prefix3116 = ip_0&prefix_mask3115;
+int<<1>> should_anonymize_prefix3118 = anonymize_prefix;
+Anonymizer_anonymize_mac_ret3089 = (int<<24>>)split_mac_03097^split_mac_13098;
+Anonymizer_anonymize_mac_ret = (int<<24>>)split_mac_0^split_mac_1;
+}
+| 1,_,16,1,1,1,1,1,_,24,1 -> {
+int<<32>> prefix_mask3145 = (int<<32>>)to_immediate_tmp3894;
+anonymize_prefix3142 = 1;
+int<<32>> prefix3126 = ip_0&prefix_mask3125;
+int<<1>> should_anonymize_prefix3128 = anonymize_prefix3122;
+Anonymizer_anonymize_mac_ret3089 = (int<<24>>)split_mac_03097^split_mac_13098;
+Anonymizer_anonymize_mac_ret = (int<<24>>)split_mac_0^split_mac_1;
+}
+| _,_,16,1,1,1,1,1,_,24,1 -> {
+int<<32>> prefix_mask3145 = (int<<32>>)to_immediate_tmp3894;
+anonymize_prefix3142 = 1;
+int<<32>> prefix3126 = ip_0&prefix_mask3125;
+int<<1>> should_anonymize_prefix3128 = anonymize_prefix3122;
+Anonymizer_anonymize_mac_ret3089 = (int<<24>>)split_mac_03097^split_mac_13098;
+Anonymizer_anonymize_mac_ret = (int<<24>>)split_mac_0^split_mac_1;
+}
+| 1,_,16,1,1,1,1,_,_,24,1 -> {
+int<<32>> prefix_mask3145 = (int<<32>>)to_immediate_tmp3894;
+anonymize_prefix3142 = 1;
+int<<32>> prefix3126 = ip_0&prefix_mask3125;
+int<<1>> should_anonymize_prefix3128 = anonymize_prefix3122;
+Anonymizer_anonymize_mac_ret3089 = (int<<24>>)split_mac_03097^split_mac_13098;
+Anonymizer_anonymize_mac_ret = (int<<24>>)split_mac_0^split_mac_1;
+}
+| _,_,16,1,1,1,1,_,_,24,1 -> {
+int<<32>> prefix_mask3145 = (int<<32>>)to_immediate_tmp3894;
+anonymize_prefix3142 = 1;
+int<<32>> prefix3126 = ip_0&prefix_mask3125;
+int<<1>> should_anonymize_prefix3128 = anonymize_prefix3122;
+Anonymizer_anonymize_mac_ret3089 = (int<<24>>)split_mac_03097^split_mac_13098;
+Anonymizer_anonymize_mac_ret = (int<<24>>)split_mac_0^split_mac_1;
+}
+| 1,_,24,1,1,1,1,_,_,24,1 -> {
+int<<32>> prefix_mask3155 = (int<<32>>)to_immediate_tmp3896;
+anonymize_prefix3152 = 1;
+int<<32>> prefix3126 = ip_0&prefix_mask3125;
+int<<1>> should_anonymize_prefix3128 = anonymize_prefix3122;
+Anonymizer_anonymize_mac_ret3089 = (int<<24>>)split_mac_03097^split_mac_13098;
+Anonymizer_anonymize_mac_ret = (int<<24>>)split_mac_0^split_mac_1;
+}
+| _,_,24,1,1,1,1,_,_,24,1 -> {
+int<<32>> prefix_mask3155 = (int<<32>>)to_immediate_tmp3896;
+anonymize_prefix3152 = 1;
+int<<32>> prefix3126 = ip_0&prefix_mask3125;
+int<<1>> should_anonymize_prefix3128 = anonymize_prefix3122;
+Anonymizer_anonymize_mac_ret3089 = (int<<24>>)split_mac_03097^split_mac_13098;
+Anonymizer_anonymize_mac_ret = (int<<24>>)split_mac_0^split_mac_1;
+}
+| _,_,_,_,1,1,1,_,_,24,1 -> {
+int<<32>> prefix3126 = ip_0&prefix_mask3125;
+int<<1>> should_anonymize_prefix3128 = anonymize_prefix3122;
+Anonymizer_anonymize_mac_ret3089 = (int<<24>>)split_mac_03097^split_mac_13098;
+Anonymizer_anonymize_mac_ret = (int<<24>>)split_mac_0^split_mac_1;
+}
+| 1,_,16,1,1,1,1,1,_,_,1 -> {
+int<<32>> prefix_mask3145 = (int<<32>>)to_immediate_tmp3894;
+anonymize_prefix3142 = 1;
+Anonymizer_anonymize_mac_ret3089 = (int<<24>>)split_mac_03097^split_mac_13098;
+Anonymizer_anonymize_mac_ret = (int<<24>>)split_mac_0^split_mac_1;
+}
+| _,_,16,1,1,1,1,1,_,_,1 -> {
+int<<32>> prefix_mask3145 = (int<<32>>)to_immediate_tmp3894;
+anonymize_prefix3142 = 1;
+Anonymizer_anonymize_mac_ret3089 = (int<<24>>)split_mac_03097^split_mac_13098;
+Anonymizer_anonymize_mac_ret = (int<<24>>)split_mac_0^split_mac_1;
+}
+| 1,_,16,1,1,1,1,_,_,_,1 -> {
+int<<32>> prefix_mask3145 = (int<<32>>)to_immediate_tmp3894;
+anonymize_prefix3142 = 1;
+Anonymizer_anonymize_mac_ret3089 = (int<<24>>)split_mac_03097^split_mac_13098;
+Anonymizer_anonymize_mac_ret = (int<<24>>)split_mac_0^split_mac_1;
+}
+| _,_,16,1,1,1,1,_,_,_,1 -> {
+int<<32>> prefix_mask3145 = (int<<32>>)to_immediate_tmp3894;
+anonymize_prefix3142 = 1;
+Anonymizer_anonymize_mac_ret3089 = (int<<24>>)split_mac_03097^split_mac_13098;
+Anonymizer_anonymize_mac_ret = (int<<24>>)split_mac_0^split_mac_1;
+}
+| 1,_,24,1,1,1,1,_,_,_,1 -> {
+int<<32>> prefix_mask3155 = (int<<32>>)to_immediate_tmp3896;
+anonymize_prefix3152 = 1;
+Anonymizer_anonymize_mac_ret3089 = (int<<24>>)split_mac_03097^split_mac_13098;
+Anonymizer_anonymize_mac_ret = (int<<24>>)split_mac_0^split_mac_1;
+}
+| _,_,24,1,1,1,1,_,_,_,1 -> {
+int<<32>> prefix_mask3155 = (int<<32>>)to_immediate_tmp3896;
+anonymize_prefix3152 = 1;
+Anonymizer_anonymize_mac_ret3089 = (int<<24>>)split_mac_03097^split_mac_13098;
+Anonymizer_anonymize_mac_ret = (int<<24>>)split_mac_0^split_mac_1;
+}
+| _,_,_,_,_,1,1,_,_,_,1 -> {
+Anonymizer_anonymize_mac_ret3089 = (int<<24>>)split_mac_03097^split_mac_13098;
+Anonymizer_anonymize_mac_ret = (int<<24>>)split_mac_0^split_mac_1;
+}
+| 1,_,16,1,1,1,1,1,_,16,_ -> {
+int<<32>> prefix_mask3145 = (int<<32>>)to_immediate_tmp3894;
+anonymize_prefix3142 = 1;
+int<<32>> prefix3116 = ip_0&prefix_mask3115;
+int<<1>> should_anonymize_prefix3118 = anonymize_prefix;
+}
+| _,_,16,1,1,1,1,1,_,16,_ -> {
+int<<32>> prefix_mask3145 = (int<<32>>)to_immediate_tmp3894;
+anonymize_prefix3142 = 1;
+int<<32>> prefix3116 = ip_0&prefix_mask3115;
+int<<1>> should_anonymize_prefix3118 = anonymize_prefix;
+}
+| 1,_,16,1,1,1,1,_,_,16,_ -> {
+int<<32>> prefix_mask3145 = (int<<32>>)to_immediate_tmp3894;
+anonymize_prefix3142 = 1;
+int<<32>> prefix3116 = ip_0&prefix_mask3115;
+int<<1>> should_anonymize_prefix3118 = anonymize_prefix;
+}
+| _,_,16,1,1,1,1,_,_,16,_ -> {
+int<<32>> prefix_mask3145 = (int<<32>>)to_immediate_tmp3894;
+anonymize_prefix3142 = 1;
+int<<32>> prefix3116 = ip_0&prefix_mask3115;
+int<<1>> should_anonymize_prefix3118 = anonymize_prefix;
+}
+| 1,_,24,1,1,1,1,_,_,16,_ -> {
+int<<32>> prefix_mask3155 = (int<<32>>)to_immediate_tmp3896;
+anonymize_prefix3152 = 1;
+int<<32>> prefix3116 = ip_0&prefix_mask3115;
+int<<1>> should_anonymize_prefix3118 = anonymize_prefix;
+}
+| _,_,24,1,1,1,1,_,_,16,_ -> {
+int<<32>> prefix_mask3155 = (int<<32>>)to_immediate_tmp3896;
+anonymize_prefix3152 = 1;
+int<<32>> prefix3116 = ip_0&prefix_mask3115;
+int<<1>> should_anonymize_prefix3118 = anonymize_prefix;
+}
+| _,_,_,_,1,1,1,_,_,16,_ -> {
+int<<32>> prefix3116 = ip_0&prefix_mask3115;
+int<<1>> should_anonymize_prefix3118 = anonymize_prefix;
+}
+| 1,_,16,1,1,1,1,1,_,24,_ -> {
+int<<32>> prefix_mask3145 = (int<<32>>)to_immediate_tmp3894;
+anonymize_prefix3142 = 1;
+int<<32>> prefix3126 = ip_0&prefix_mask3125;
+int<<1>> should_anonymize_prefix3128 = anonymize_prefix3122;
+}
+| _,_,16,1,1,1,1,1,_,24,_ -> {
+int<<32>> prefix_mask3145 = (int<<32>>)to_immediate_tmp3894;
+anonymize_prefix3142 = 1;
+int<<32>> prefix3126 = ip_0&prefix_mask3125;
+int<<1>> should_anonymize_prefix3128 = anonymize_prefix3122;
+}
+| 1,_,16,1,1,1,1,_,_,24,_ -> {
+int<<32>> prefix_mask3145 = (int<<32>>)to_immediate_tmp3894;
+anonymize_prefix3142 = 1;
+int<<32>> prefix3126 = ip_0&prefix_mask3125;
+int<<1>> should_anonymize_prefix3128 = anonymize_prefix3122;
+}
+| _,_,16,1,1,1,1,_,_,24,_ -> {
+int<<32>> prefix_mask3145 = (int<<32>>)to_immediate_tmp3894;
+anonymize_prefix3142 = 1;
+int<<32>> prefix3126 = ip_0&prefix_mask3125;
+int<<1>> should_anonymize_prefix3128 = anonymize_prefix3122;
+}
+| 1,_,24,1,1,1,1,_,_,24,_ -> {
+int<<32>> prefix_mask3155 = (int<<32>>)to_immediate_tmp3896;
+anonymize_prefix3152 = 1;
+int<<32>> prefix3126 = ip_0&prefix_mask3125;
+int<<1>> should_anonymize_prefix3128 = anonymize_prefix3122;
+}
+| _,_,24,1,1,1,1,_,_,24,_ -> {
+int<<32>> prefix_mask3155 = (int<<32>>)to_immediate_tmp3896;
+anonymize_prefix3152 = 1;
+int<<32>> prefix3126 = ip_0&prefix_mask3125;
+int<<1>> should_anonymize_prefix3128 = anonymize_prefix3122;
+}
+| _,_,_,_,1,1,1,_,_,24,_ -> {
+int<<32>> prefix3126 = ip_0&prefix_mask3125;
+int<<1>> should_anonymize_prefix3128 = anonymize_prefix3122;
+}
+| 1,_,16,1,1,1,1,1,_,_,_ -> {
+int<<32>> prefix_mask3145 = (int<<32>>)to_immediate_tmp3894;
+anonymize_prefix3142 = 1;
+}
+| _,_,16,1,1,1,1,1,_,_,_ -> {
+int<<32>> prefix_mask3145 = (int<<32>>)to_immediate_tmp3894;
+anonymize_prefix3142 = 1;
+}
+| 1,_,16,1,1,1,1,_,_,_,_ -> {
+int<<32>> prefix_mask3145 = (int<<32>>)to_immediate_tmp3894;
+anonymize_prefix3142 = 1;
+}
+| _,_,16,1,1,1,1,_,_,_,_ -> {
+int<<32>> prefix_mask3145 = (int<<32>>)to_immediate_tmp3894;
+anonymize_prefix3142 = 1;
+}
+| 1,_,24,1,1,1,1,_,_,_,_ -> {
+int<<32>> prefix_mask3155 = (int<<32>>)to_immediate_tmp3896;
+anonymize_prefix3152 = 1;
+}
+| _,_,24,1,1,1,1,_,_,_,_ -> {
+int<<32>> prefix_mask3155 = (int<<32>>)to_immediate_tmp3896;
+anonymize_prefix3152 = 1;
+}
+| _,_,_,_,_,_,_,_,_,_,_ -> {
+
+}
+// Stage 14
+match (should_preserve_prefix3141,prefix_len3140,anonymizer_2_0_callnum,anonymizer_1_0_callnum,anonymizer_0_callnum,event_id,should_preserve_prefix,prefix_len,should_anonymize_prefix3128,should_anonymize_prefix3118,Anonymizer_should_anonymize_ret) with 
+| _,16,1,1,1,1,_,16,1,1,1 -> {
+int<<32>> prefix3146 = ip_1&prefix_mask3145;
+int<<1>> should_anonymize_prefix3148 = anonymize_prefix3142;
+int<<32>> to_immediate_tmp3891 = ip_0-prefix3116;
+int<<48>> dmac = Anonymizer_anonymize_mac_ret3089;
+int<<48>> smac = Anonymizer_anonymize_mac_ret;
+}
+| _,24,1,1,1,1,_,16,1,1,1 -> {
+int<<32>> prefix3156 = ip_1&prefix_mask3155;
+int<<1>> should_anonymize_prefix3158 = anonymize_prefix3152;
+int<<32>> to_immediate_tmp3891 = ip_0-prefix3116;
+int<<48>> dmac = Anonymizer_anonymize_mac_ret3089;
+int<<48>> smac = Anonymizer_anonymize_mac_ret;
+}
+| _,_,_,1,1,1,_,16,1,1,1 -> {
+int<<32>> to_immediate_tmp3891 = ip_0-prefix3116;
+int<<48>> dmac = Anonymizer_anonymize_mac_ret3089;
+int<<48>> smac = Anonymizer_anonymize_mac_ret;
+}
+| _,16,1,1,1,1,_,16,_,1,1 -> {
+int<<32>> prefix3146 = ip_1&prefix_mask3145;
+int<<1>> should_anonymize_prefix3148 = anonymize_prefix3142;
+int<<32>> to_immediate_tmp3891 = ip_0-prefix3116;
+int<<48>> dmac = Anonymizer_anonymize_mac_ret3089;
+int<<48>> smac = Anonymizer_anonymize_mac_ret;
+}
+| _,24,1,1,1,1,_,16,_,1,1 -> {
+int<<32>> prefix3156 = ip_1&prefix_mask3155;
+int<<1>> should_anonymize_prefix3158 = anonymize_prefix3152;
+int<<32>> to_immediate_tmp3891 = ip_0-prefix3116;
+int<<48>> dmac = Anonymizer_anonymize_mac_ret3089;
+int<<48>> smac = Anonymizer_anonymize_mac_ret;
+}
+| _,_,_,1,1,1,_,16,_,1,1 -> {
+int<<32>> to_immediate_tmp3891 = ip_0-prefix3116;
+int<<48>> dmac = Anonymizer_anonymize_mac_ret3089;
+int<<48>> smac = Anonymizer_anonymize_mac_ret;
+}
+| _,16,1,1,1,1,_,16,1,_,1 -> {
+int<<32>> prefix3146 = ip_1&prefix_mask3145;
+int<<1>> should_anonymize_prefix3148 = anonymize_prefix3142;
+int<<32>> to_immediate_tmp3891 = ip_0-prefix3116;
+int<<48>> dmac = Anonymizer_anonymize_mac_ret3089;
+int<<48>> smac = Anonymizer_anonymize_mac_ret;
+}
+| _,24,1,1,1,1,_,16,1,_,1 -> {
+int<<32>> prefix3156 = ip_1&prefix_mask3155;
+int<<1>> should_anonymize_prefix3158 = anonymize_prefix3152;
+int<<32>> to_immediate_tmp3891 = ip_0-prefix3116;
+int<<48>> dmac = Anonymizer_anonymize_mac_ret3089;
+int<<48>> smac = Anonymizer_anonymize_mac_ret;
+}
+| _,_,_,1,1,1,_,16,1,_,1 -> {
+int<<32>> to_immediate_tmp3891 = ip_0-prefix3116;
+int<<48>> dmac = Anonymizer_anonymize_mac_ret3089;
+int<<48>> smac = Anonymizer_anonymize_mac_ret;
+}
+| _,16,1,1,1,1,_,16,_,_,1 -> {
+int<<32>> prefix3146 = ip_1&prefix_mask3145;
+int<<1>> should_anonymize_prefix3148 = anonymize_prefix3142;
+int<<32>> to_immediate_tmp3891 = ip_0-prefix3116;
+int<<48>> dmac = Anonymizer_anonymize_mac_ret3089;
+int<<48>> smac = Anonymizer_anonymize_mac_ret;
+}
+| _,24,1,1,1,1,_,16,_,_,1 -> {
+int<<32>> prefix3156 = ip_1&prefix_mask3155;
+int<<1>> should_anonymize_prefix3158 = anonymize_prefix3152;
+int<<32>> to_immediate_tmp3891 = ip_0-prefix3116;
+int<<48>> dmac = Anonymizer_anonymize_mac_ret3089;
+int<<48>> smac = Anonymizer_anonymize_mac_ret;
+}
+| _,_,_,1,1,1,_,16,_,_,1 -> {
+int<<32>> to_immediate_tmp3891 = ip_0-prefix3116;
+int<<48>> dmac = Anonymizer_anonymize_mac_ret3089;
+int<<48>> smac = Anonymizer_anonymize_mac_ret;
+}
+| _,16,1,1,1,1,_,24,1,_,1 -> {
+int<<32>> prefix3146 = ip_1&prefix_mask3145;
+int<<1>> should_anonymize_prefix3148 = anonymize_prefix3142;
+int<<32>> to_immediate_tmp3893 = ip_0-prefix3126;
+int<<48>> dmac = Anonymizer_anonymize_mac_ret3089;
+int<<48>> smac = Anonymizer_anonymize_mac_ret;
+}
+| _,24,1,1,1,1,_,24,1,_,1 -> {
+int<<32>> prefix3156 = ip_1&prefix_mask3155;
+int<<1>> should_anonymize_prefix3158 = anonymize_prefix3152;
+int<<32>> to_immediate_tmp3893 = ip_0-prefix3126;
+int<<48>> dmac = Anonymizer_anonymize_mac_ret3089;
+int<<48>> smac = Anonymizer_anonymize_mac_ret;
+}
+| _,_,_,1,1,1,_,24,1,_,1 -> {
+int<<32>> to_immediate_tmp3893 = ip_0-prefix3126;
+int<<48>> dmac = Anonymizer_anonymize_mac_ret3089;
+int<<48>> smac = Anonymizer_anonymize_mac_ret;
+}
+| _,16,1,1,1,1,_,24,_,_,1 -> {
+int<<32>> prefix3146 = ip_1&prefix_mask3145;
+int<<1>> should_anonymize_prefix3148 = anonymize_prefix3142;
+int<<32>> to_immediate_tmp3893 = ip_0-prefix3126;
+int<<48>> dmac = Anonymizer_anonymize_mac_ret3089;
+int<<48>> smac = Anonymizer_anonymize_mac_ret;
+}
+| _,24,1,1,1,1,_,24,_,_,1 -> {
+int<<32>> prefix3156 = ip_1&prefix_mask3155;
+int<<1>> should_anonymize_prefix3158 = anonymize_prefix3152;
+int<<32>> to_immediate_tmp3893 = ip_0-prefix3126;
+int<<48>> dmac = Anonymizer_anonymize_mac_ret3089;
+int<<48>> smac = Anonymizer_anonymize_mac_ret;
+}
+| _,_,_,1,1,1,_,24,_,_,1 -> {
+int<<32>> to_immediate_tmp3893 = ip_0-prefix3126;
+int<<48>> dmac = Anonymizer_anonymize_mac_ret3089;
+int<<48>> smac = Anonymizer_anonymize_mac_ret;
+}
+| _,16,1,1,1,1,_,_,_,_,1 -> {
+int<<32>> prefix3146 = ip_1&prefix_mask3145;
+int<<1>> should_anonymize_prefix3148 = anonymize_prefix3142;
+int<<48>> dmac = Anonymizer_anonymize_mac_ret3089;
+int<<48>> smac = Anonymizer_anonymize_mac_ret;
+}
+| _,24,1,1,1,1,_,_,_,_,1 -> {
+int<<32>> prefix3156 = ip_1&prefix_mask3155;
+int<<1>> should_anonymize_prefix3158 = anonymize_prefix3152;
+int<<48>> dmac = Anonymizer_anonymize_mac_ret3089;
+int<<48>> smac = Anonymizer_anonymize_mac_ret;
+}
+| _,_,_,_,1,1,_,_,_,_,1 -> {
+int<<48>> dmac = Anonymizer_anonymize_mac_ret3089;
+int<<48>> smac = Anonymizer_anonymize_mac_ret;
+}
+| _,16,1,1,1,1,_,16,1,1,_ -> {
+int<<32>> prefix3146 = ip_1&prefix_mask3145;
+int<<1>> should_anonymize_prefix3148 = anonymize_prefix3142;
+int<<32>> to_immediate_tmp3891 = ip_0-prefix3116;
+}
+| _,24,1,1,1,1,_,16,1,1,_ -> {
+int<<32>> prefix3156 = ip_1&prefix_mask3155;
+int<<1>> should_anonymize_prefix3158 = anonymize_prefix3152;
+int<<32>> to_immediate_tmp3891 = ip_0-prefix3116;
+}
+| _,_,_,1,1,1,_,16,1,1,_ -> {
+int<<32>> to_immediate_tmp3891 = ip_0-prefix3116;
+}
+| _,16,1,1,1,1,_,16,_,1,_ -> {
+int<<32>> prefix3146 = ip_1&prefix_mask3145;
+int<<1>> should_anonymize_prefix3148 = anonymize_prefix3142;
+int<<32>> to_immediate_tmp3891 = ip_0-prefix3116;
+}
+| _,24,1,1,1,1,_,16,_,1,_ -> {
+int<<32>> prefix3156 = ip_1&prefix_mask3155;
+int<<1>> should_anonymize_prefix3158 = anonymize_prefix3152;
+int<<32>> to_immediate_tmp3891 = ip_0-prefix3116;
+}
+| _,_,_,1,1,1,_,16,_,1,_ -> {
+int<<32>> to_immediate_tmp3891 = ip_0-prefix3116;
+}
+| _,16,1,1,1,1,_,16,1,_,_ -> {
+int<<32>> prefix3146 = ip_1&prefix_mask3145;
+int<<1>> should_anonymize_prefix3148 = anonymize_prefix3142;
+int<<32>> to_immediate_tmp3891 = ip_0-prefix3116;
+}
+| _,24,1,1,1,1,_,16,1,_,_ -> {
+int<<32>> prefix3156 = ip_1&prefix_mask3155;
+int<<1>> should_anonymize_prefix3158 = anonymize_prefix3152;
+int<<32>> to_immediate_tmp3891 = ip_0-prefix3116;
+}
+| _,_,_,1,1,1,_,16,1,_,_ -> {
+int<<32>> to_immediate_tmp3891 = ip_0-prefix3116;
+}
+| _,16,1,1,1,1,_,16,_,_,_ -> {
+int<<32>> prefix3146 = ip_1&prefix_mask3145;
+int<<1>> should_anonymize_prefix3148 = anonymize_prefix3142;
+int<<32>> to_immediate_tmp3891 = ip_0-prefix3116;
+}
+| _,24,1,1,1,1,_,16,_,_,_ -> {
+int<<32>> prefix3156 = ip_1&prefix_mask3155;
+int<<1>> should_anonymize_prefix3158 = anonymize_prefix3152;
+int<<32>> to_immediate_tmp3891 = ip_0-prefix3116;
+}
+| _,_,_,1,1,1,_,16,_,_,_ -> {
+int<<32>> to_immediate_tmp3891 = ip_0-prefix3116;
+}
+| _,16,1,1,1,1,_,24,1,_,_ -> {
+int<<32>> prefix3146 = ip_1&prefix_mask3145;
+int<<1>> should_anonymize_prefix3148 = anonymize_prefix3142;
+int<<32>> to_immediate_tmp3893 = ip_0-prefix3126;
+}
+| _,24,1,1,1,1,_,24,1,_,_ -> {
+int<<32>> prefix3156 = ip_1&prefix_mask3155;
+int<<1>> should_anonymize_prefix3158 = anonymize_prefix3152;
+int<<32>> to_immediate_tmp3893 = ip_0-prefix3126;
+}
+| _,_,_,1,1,1,_,24,1,_,_ -> {
+int<<32>> to_immediate_tmp3893 = ip_0-prefix3126;
+}
+| _,16,1,1,1,1,_,24,_,_,_ -> {
+int<<32>> prefix3146 = ip_1&prefix_mask3145;
+int<<1>> should_anonymize_prefix3148 = anonymize_prefix3142;
+int<<32>> to_immediate_tmp3893 = ip_0-prefix3126;
+}
+| _,24,1,1,1,1,_,24,_,_,_ -> {
+int<<32>> prefix3156 = ip_1&prefix_mask3155;
+int<<1>> should_anonymize_prefix3158 = anonymize_prefix3152;
+int<<32>> to_immediate_tmp3893 = ip_0-prefix3126;
+}
+| _,_,_,1,1,1,_,24,_,_,_ -> {
+int<<32>> to_immediate_tmp3893 = ip_0-prefix3126;
+}
+| _,16,1,1,1,1,_,_,_,_,_ -> {
+int<<32>> prefix3146 = ip_1&prefix_mask3145;
+int<<1>> should_anonymize_prefix3148 = anonymize_prefix3142;
+}
+| _,24,1,1,1,1,_,_,_,_,_ -> {
+int<<32>> prefix3156 = ip_1&prefix_mask3155;
+int<<1>> should_anonymize_prefix3158 = anonymize_prefix3152;
+}
+| _,_,_,_,_,_,_,_,_,_,_ -> {
+
+}
+// Stage 15
+match (should_preserve_prefix3141,prefix_len3140,anonymizer_2_0_callnum,anonymizer_1_0_callnum,anonymizer_0_callnum,event_id,should_anonymize_prefix3158,should_anonymize_prefix3148,should_anonymize_prefix3128,should_preserve_prefix,prefix_len,Anonymizer_should_anonymize_ret) with 
+| _,16,1,1,1,1,1,1,1,_,16,1 -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+int<<16>> suffix3117 = (int<<16>>)to_immediate_tmp3891;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,16,1,1,1,1,_,1,1,_,16,1 -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+int<<16>> suffix3117 = (int<<16>>)to_immediate_tmp3891;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,16,1,1,1,1,1,_,1,_,16,1 -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+int<<16>> suffix3117 = (int<<16>>)to_immediate_tmp3891;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,16,1,1,1,1,_,_,1,_,16,1 -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+int<<16>> suffix3117 = (int<<16>>)to_immediate_tmp3891;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,24,1,1,1,1,1,_,1,_,16,1 -> {
+int<<32>> to_immediate_tmp3897 = ip_1-prefix3156;
+int<<16>> suffix3117 = (int<<16>>)to_immediate_tmp3891;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,24,1,1,1,1,_,_,1,_,16,1 -> {
+int<<32>> to_immediate_tmp3897 = ip_1-prefix3156;
+int<<16>> suffix3117 = (int<<16>>)to_immediate_tmp3891;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,_,_,1,1,1,_,_,1,_,16,1 -> {
+int<<16>> suffix3117 = (int<<16>>)to_immediate_tmp3891;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,16,1,1,1,1,1,1,_,_,16,1 -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+int<<16>> suffix3117 = (int<<16>>)to_immediate_tmp3891;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,16,1,1,1,1,_,1,_,_,16,1 -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+int<<16>> suffix3117 = (int<<16>>)to_immediate_tmp3891;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,16,1,1,1,1,1,_,_,_,16,1 -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+int<<16>> suffix3117 = (int<<16>>)to_immediate_tmp3891;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,16,1,1,1,1,_,_,_,_,16,1 -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+int<<16>> suffix3117 = (int<<16>>)to_immediate_tmp3891;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,24,1,1,1,1,1,_,_,_,16,1 -> {
+int<<32>> to_immediate_tmp3897 = ip_1-prefix3156;
+int<<16>> suffix3117 = (int<<16>>)to_immediate_tmp3891;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,24,1,1,1,1,_,_,_,_,16,1 -> {
+int<<32>> to_immediate_tmp3897 = ip_1-prefix3156;
+int<<16>> suffix3117 = (int<<16>>)to_immediate_tmp3891;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,_,_,1,1,1,_,_,_,_,16,1 -> {
+int<<16>> suffix3117 = (int<<16>>)to_immediate_tmp3891;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,16,1,1,1,1,1,1,1,_,24,1 -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+prefix3126 = hash<<32>>(7,prefix3126);
+int<<8>> suffix3127 = (int<<8>>)to_immediate_tmp3893;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,16,1,1,1,1,_,1,1,_,24,1 -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+prefix3126 = hash<<32>>(7,prefix3126);
+int<<8>> suffix3127 = (int<<8>>)to_immediate_tmp3893;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,16,1,1,1,1,1,_,1,_,24,1 -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+prefix3126 = hash<<32>>(7,prefix3126);
+int<<8>> suffix3127 = (int<<8>>)to_immediate_tmp3893;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,16,1,1,1,1,_,_,1,_,24,1 -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+prefix3126 = hash<<32>>(7,prefix3126);
+int<<8>> suffix3127 = (int<<8>>)to_immediate_tmp3893;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,24,1,1,1,1,1,_,1,_,24,1 -> {
+int<<32>> to_immediate_tmp3897 = ip_1-prefix3156;
+prefix3126 = hash<<32>>(7,prefix3126);
+int<<8>> suffix3127 = (int<<8>>)to_immediate_tmp3893;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,24,1,1,1,1,_,_,1,_,24,1 -> {
+int<<32>> to_immediate_tmp3897 = ip_1-prefix3156;
+prefix3126 = hash<<32>>(7,prefix3126);
+int<<8>> suffix3127 = (int<<8>>)to_immediate_tmp3893;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,_,_,1,1,1,_,_,1,_,24,1 -> {
+prefix3126 = hash<<32>>(7,prefix3126);
+int<<8>> suffix3127 = (int<<8>>)to_immediate_tmp3893;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,16,1,1,1,1,1,1,_,_,24,1 -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+int<<8>> suffix3127 = (int<<8>>)to_immediate_tmp3893;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,16,1,1,1,1,_,1,_,_,24,1 -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+int<<8>> suffix3127 = (int<<8>>)to_immediate_tmp3893;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,16,1,1,1,1,1,_,_,_,24,1 -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+int<<8>> suffix3127 = (int<<8>>)to_immediate_tmp3893;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,16,1,1,1,1,_,_,_,_,24,1 -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+int<<8>> suffix3127 = (int<<8>>)to_immediate_tmp3893;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,24,1,1,1,1,1,_,_,_,24,1 -> {
+int<<32>> to_immediate_tmp3897 = ip_1-prefix3156;
+int<<8>> suffix3127 = (int<<8>>)to_immediate_tmp3893;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,24,1,1,1,1,_,_,_,_,24,1 -> {
+int<<32>> to_immediate_tmp3897 = ip_1-prefix3156;
+int<<8>> suffix3127 = (int<<8>>)to_immediate_tmp3893;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,_,_,1,1,1,_,_,_,_,24,1 -> {
+int<<8>> suffix3127 = (int<<8>>)to_immediate_tmp3893;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,16,1,1,1,1,1,1,_,_,_,1 -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,16,1,1,1,1,_,1,_,_,_,1 -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,16,1,1,1,1,1,_,_,_,_,1 -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,16,1,1,1,1,_,_,_,_,_,1 -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,24,1,1,1,1,1,_,_,_,_,1 -> {
+int<<32>> to_immediate_tmp3897 = ip_1-prefix3156;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,24,1,1,1,1,_,_,_,_,_,1 -> {
+int<<32>> to_immediate_tmp3897 = ip_1-prefix3156;
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,_,_,_,1,1,_,_,_,_,_,1 -> {
+int<<48>> anonymized_eth_0 = dmac;
+int<<48>> anonymized_eth_1 = smac;
+}
+| _,16,1,1,1,1,1,1,1,_,16,_ -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+int<<16>> suffix3117 = (int<<16>>)to_immediate_tmp3891;
+}
+| _,16,1,1,1,1,_,1,1,_,16,_ -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+int<<16>> suffix3117 = (int<<16>>)to_immediate_tmp3891;
+}
+| _,16,1,1,1,1,1,_,1,_,16,_ -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+int<<16>> suffix3117 = (int<<16>>)to_immediate_tmp3891;
+}
+| _,16,1,1,1,1,_,_,1,_,16,_ -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+int<<16>> suffix3117 = (int<<16>>)to_immediate_tmp3891;
+}
+| _,24,1,1,1,1,1,_,1,_,16,_ -> {
+int<<32>> to_immediate_tmp3897 = ip_1-prefix3156;
+int<<16>> suffix3117 = (int<<16>>)to_immediate_tmp3891;
+}
+| _,24,1,1,1,1,_,_,1,_,16,_ -> {
+int<<32>> to_immediate_tmp3897 = ip_1-prefix3156;
+int<<16>> suffix3117 = (int<<16>>)to_immediate_tmp3891;
+}
+| _,_,_,1,1,1,_,_,1,_,16,_ -> {
+int<<16>> suffix3117 = (int<<16>>)to_immediate_tmp3891;
+}
+| _,16,1,1,1,1,1,1,_,_,16,_ -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+int<<16>> suffix3117 = (int<<16>>)to_immediate_tmp3891;
+}
+| _,16,1,1,1,1,_,1,_,_,16,_ -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+int<<16>> suffix3117 = (int<<16>>)to_immediate_tmp3891;
+}
+| _,16,1,1,1,1,1,_,_,_,16,_ -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+int<<16>> suffix3117 = (int<<16>>)to_immediate_tmp3891;
+}
+| _,16,1,1,1,1,_,_,_,_,16,_ -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+int<<16>> suffix3117 = (int<<16>>)to_immediate_tmp3891;
+}
+| _,24,1,1,1,1,1,_,_,_,16,_ -> {
+int<<32>> to_immediate_tmp3897 = ip_1-prefix3156;
+int<<16>> suffix3117 = (int<<16>>)to_immediate_tmp3891;
+}
+| _,24,1,1,1,1,_,_,_,_,16,_ -> {
+int<<32>> to_immediate_tmp3897 = ip_1-prefix3156;
+int<<16>> suffix3117 = (int<<16>>)to_immediate_tmp3891;
+}
+| _,_,_,1,1,1,_,_,_,_,16,_ -> {
+int<<16>> suffix3117 = (int<<16>>)to_immediate_tmp3891;
+}
+| _,16,1,1,1,1,1,1,1,_,24,_ -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+prefix3126 = hash<<32>>(7,prefix3126);
+int<<8>> suffix3127 = (int<<8>>)to_immediate_tmp3893;
+}
+| _,16,1,1,1,1,_,1,1,_,24,_ -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+prefix3126 = hash<<32>>(7,prefix3126);
+int<<8>> suffix3127 = (int<<8>>)to_immediate_tmp3893;
+}
+| _,16,1,1,1,1,1,_,1,_,24,_ -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+prefix3126 = hash<<32>>(7,prefix3126);
+int<<8>> suffix3127 = (int<<8>>)to_immediate_tmp3893;
+}
+| _,16,1,1,1,1,_,_,1,_,24,_ -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+prefix3126 = hash<<32>>(7,prefix3126);
+int<<8>> suffix3127 = (int<<8>>)to_immediate_tmp3893;
+}
+| _,24,1,1,1,1,1,_,1,_,24,_ -> {
+int<<32>> to_immediate_tmp3897 = ip_1-prefix3156;
+prefix3126 = hash<<32>>(7,prefix3126);
+int<<8>> suffix3127 = (int<<8>>)to_immediate_tmp3893;
+}
+| _,24,1,1,1,1,_,_,1,_,24,_ -> {
+int<<32>> to_immediate_tmp3897 = ip_1-prefix3156;
+prefix3126 = hash<<32>>(7,prefix3126);
+int<<8>> suffix3127 = (int<<8>>)to_immediate_tmp3893;
+}
+| _,_,_,1,1,1,_,_,1,_,24,_ -> {
+prefix3126 = hash<<32>>(7,prefix3126);
+int<<8>> suffix3127 = (int<<8>>)to_immediate_tmp3893;
+}
+| _,16,1,1,1,1,1,1,_,_,24,_ -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+int<<8>> suffix3127 = (int<<8>>)to_immediate_tmp3893;
+}
+| _,16,1,1,1,1,_,1,_,_,24,_ -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+int<<8>> suffix3127 = (int<<8>>)to_immediate_tmp3893;
+}
+| _,16,1,1,1,1,1,_,_,_,24,_ -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+int<<8>> suffix3127 = (int<<8>>)to_immediate_tmp3893;
+}
+| _,16,1,1,1,1,_,_,_,_,24,_ -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+int<<8>> suffix3127 = (int<<8>>)to_immediate_tmp3893;
+}
+| _,24,1,1,1,1,1,_,_,_,24,_ -> {
+int<<32>> to_immediate_tmp3897 = ip_1-prefix3156;
+int<<8>> suffix3127 = (int<<8>>)to_immediate_tmp3893;
+}
+| _,24,1,1,1,1,_,_,_,_,24,_ -> {
+int<<32>> to_immediate_tmp3897 = ip_1-prefix3156;
+int<<8>> suffix3127 = (int<<8>>)to_immediate_tmp3893;
+}
+| _,_,_,1,1,1,_,_,_,_,24,_ -> {
+int<<8>> suffix3127 = (int<<8>>)to_immediate_tmp3893;
+}
+| _,16,1,1,1,1,1,1,_,_,_,_ -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+}
+| _,16,1,1,1,1,_,1,_,_,_,_ -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+}
+| _,16,1,1,1,1,1,_,_,_,_,_ -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+}
+| _,16,1,1,1,1,_,_,_,_,_,_ -> {
+int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;
+}
+| _,24,1,1,1,1,1,_,_,_,_,_ -> {
+int<<32>> to_immediate_tmp3897 = ip_1-prefix3156;
+}
+| _,24,1,1,1,1,_,_,_,_,_,_ -> {
+int<<32>> to_immediate_tmp3897 = ip_1-prefix3156;
+}
+| _,_,_,_,_,_,_,_,_,_,_,_ -> {
+
+}
+match (should_anonymize_prefix3118,should_preserve_prefix,prefix_len,anonymizer_1_0_callnum,anonymizer_0_callnum,event_id) with 
+| 1,_,16,1,1,1 -> {
+prefix3116 = hash<<32>>(7,prefix3116);
+}
+| _,_,_,_,_,_ -> {
+
+}
+// Stage 16
+match (should_anonymize_prefix3158,should_preserve_prefix3141,prefix_len3140,anonymizer_2_0_callnum,anonymizer_1_0_callnum,anonymizer_0_callnum,event_id,should_preserve_prefix,prefix_len) with 
+| 1,_,16,1,1,1,1,_,16 -> {
+int<<16>> suffix3147 = (int<<16>>)to_immediate_tmp3895;
+prefix3116 = prefix3116>>16;
+Anonymizer_anonymize_packet_ret_0_0 = anonymized_eth_0;
+Anonymizer_anonymize_packet_ret_0_1 = anonymized_eth_1;
+}
+| _,_,16,1,1,1,1,_,16 -> {
+int<<16>> suffix3147 = (int<<16>>)to_immediate_tmp3895;
+prefix3116 = prefix3116>>16;
+Anonymizer_anonymize_packet_ret_0_0 = anonymized_eth_0;
+Anonymizer_anonymize_packet_ret_0_1 = anonymized_eth_1;
+}
+| 1,_,24,1,1,1,1,_,16 -> {
+prefix3156 = hash<<32>>(7,prefix3156);
+int<<8>> suffix3157 = (int<<8>>)to_immediate_tmp3897;
+prefix3116 = prefix3116>>16;
+Anonymizer_anonymize_packet_ret_0_0 = anonymized_eth_0;
+Anonymizer_anonymize_packet_ret_0_1 = anonymized_eth_1;
+}
+| _,_,24,1,1,1,1,_,16 -> {
+int<<8>> suffix3157 = (int<<8>>)to_immediate_tmp3897;
+prefix3116 = prefix3116>>16;
+Anonymizer_anonymize_packet_ret_0_0 = anonymized_eth_0;
+Anonymizer_anonymize_packet_ret_0_1 = anonymized_eth_1;
+}
+| _,_,_,1,1,1,1,_,16 -> {
+prefix3116 = prefix3116>>16;
+Anonymizer_anonymize_packet_ret_0_0 = anonymized_eth_0;
+Anonymizer_anonymize_packet_ret_0_1 = anonymized_eth_1;
+}
+| 1,_,16,1,1,1,1,_,24 -> {
+int<<16>> suffix3147 = (int<<16>>)to_immediate_tmp3895;
+prefix3126 = prefix3126>>8;
+Anonymizer_anonymize_packet_ret_0_0 = anonymized_eth_0;
+Anonymizer_anonymize_packet_ret_0_1 = anonymized_eth_1;
+}
+| _,_,16,1,1,1,1,_,24 -> {
+int<<16>> suffix3147 = (int<<16>>)to_immediate_tmp3895;
+prefix3126 = prefix3126>>8;
+Anonymizer_anonymize_packet_ret_0_0 = anonymized_eth_0;
+Anonymizer_anonymize_packet_ret_0_1 = anonymized_eth_1;
+}
+| 1,_,24,1,1,1,1,_,24 -> {
+prefix3156 = hash<<32>>(7,prefix3156);
+int<<8>> suffix3157 = (int<<8>>)to_immediate_tmp3897;
+prefix3126 = prefix3126>>8;
+Anonymizer_anonymize_packet_ret_0_0 = anonymized_eth_0;
+Anonymizer_anonymize_packet_ret_0_1 = anonymized_eth_1;
+}
+| _,_,24,1,1,1,1,_,24 -> {
+int<<8>> suffix3157 = (int<<8>>)to_immediate_tmp3897;
+prefix3126 = prefix3126>>8;
+Anonymizer_anonymize_packet_ret_0_0 = anonymized_eth_0;
+Anonymizer_anonymize_packet_ret_0_1 = anonymized_eth_1;
+}
+| _,_,_,1,1,1,1,_,24 -> {
+prefix3126 = prefix3126>>8;
+Anonymizer_anonymize_packet_ret_0_0 = anonymized_eth_0;
+Anonymizer_anonymize_packet_ret_0_1 = anonymized_eth_1;
+}
+| 1,_,16,1,1,1,1,_,_ -> {
+int<<16>> suffix3147 = (int<<16>>)to_immediate_tmp3895;
+Anonymizer_anonymize_packet_ret_0_0 = anonymized_eth_0;
+Anonymizer_anonymize_packet_ret_0_1 = anonymized_eth_1;
+}
+| _,_,16,1,1,1,1,_,_ -> {
+int<<16>> suffix3147 = (int<<16>>)to_immediate_tmp3895;
+Anonymizer_anonymize_packet_ret_0_0 = anonymized_eth_0;
+Anonymizer_anonymize_packet_ret_0_1 = anonymized_eth_1;
+}
+| 1,_,24,1,1,1,1,_,_ -> {
+prefix3156 = hash<<32>>(7,prefix3156);
+int<<8>> suffix3157 = (int<<8>>)to_immediate_tmp3897;
+Anonymizer_anonymize_packet_ret_0_0 = anonymized_eth_0;
+Anonymizer_anonymize_packet_ret_0_1 = anonymized_eth_1;
+}
+| _,_,24,1,1,1,1,_,_ -> {
+int<<8>> suffix3157 = (int<<8>>)to_immediate_tmp3897;
+Anonymizer_anonymize_packet_ret_0_0 = anonymized_eth_0;
+Anonymizer_anonymize_packet_ret_0_1 = anonymized_eth_1;
+}
+| _,_,_,1,1,1,1,_,_ -> {
+Anonymizer_anonymize_packet_ret_0_0 = anonymized_eth_0;
+Anonymizer_anonymize_packet_ret_0_1 = anonymized_eth_1;
+}
+| _,_,_,_,1,1,1,_,16 -> {
+prefix3116 = prefix3116>>16;
+}
+| _,_,_,_,1,1,1,_,24 -> {
+prefix3126 = prefix3126>>8;
+}
+| _,_,_,_,_,_,_,_,_ -> {
+
+}
+match (should_anonymize_prefix3148,should_preserve_prefix3141,prefix_len3140,anonymizer_2_0_callnum,anonymizer_1_0_callnum,anonymizer_0_callnum,event_id) with 
+| 1,_,16,1,1,1,1 -> {
+prefix3146 = hash<<32>>(7,prefix3146);
+}
+| _,_,_,_,_,_,_ -> {
+
+}
+match (should_anonymize_suffix3129,should_preserve_prefix,prefix_len,anonymizer_1_0_callnum,anonymizer_0_callnum,event_id) with 
+| 1,_,16,1,1,1 -> {
+
+}
+| 1,_,24,1,1,1 -> {
+suffix3127 = hash<<8>>(7,suffix3127);
+}
+| _,_,_,_,_,_ -> {
+
+}
+match (should_anonymize_suffix3119,should_preserve_prefix,prefix_len,anonymizer_1_0_callnum,anonymizer_0_callnum,event_id) with 
+| 1,_,16,1,1,1 -> {
+suffix3117 = hash<<16>>(7,suffix3117);
+}
+| _,_,_,_,_,_ -> {
+
+}
+// Stage 17
+match (should_preserve_prefix3141,prefix_len3140,anonymizer_2_0_callnum,anonymizer_1_0_callnum,anonymizer_0_callnum,event_id,should_anonymize_suffix3159,should_preserve_prefix,prefix_len) with 
+| _,16,1,1,1,1,1,_,16 -> {
+prefix3146 = prefix3146>>16;
+Anonymizer_anonymize_num_ret_03113 = (int<<32>>)prefix3116;
+Anonymizer_anonymize_num_ret_13114 = suffix3117;
+int<<48>> anonymized_packet_0_0 = Anonymizer_anonymize_packet_ret_0_0;
+int<<48>> anonymized_packet_0_1 = Anonymizer_anonymize_packet_ret_0_1;
+}
+| _,16,1,1,1,1,_,_,16 -> {
+prefix3146 = prefix3146>>16;
+Anonymizer_anonymize_num_ret_03113 = (int<<32>>)prefix3116;
+Anonymizer_anonymize_num_ret_13114 = suffix3117;
+int<<48>> anonymized_packet_0_0 = Anonymizer_anonymize_packet_ret_0_0;
+int<<48>> anonymized_packet_0_1 = Anonymizer_anonymize_packet_ret_0_1;
+}
+| _,24,1,1,1,1,1,_,16 -> {
+prefix3156 = prefix3156>>8;
+suffix3157 = hash<<8>>(7,suffix3157);
+Anonymizer_anonymize_num_ret_03113 = (int<<32>>)prefix3116;
+Anonymizer_anonymize_num_ret_13114 = suffix3117;
+int<<48>> anonymized_packet_0_0 = Anonymizer_anonymize_packet_ret_0_0;
+int<<48>> anonymized_packet_0_1 = Anonymizer_anonymize_packet_ret_0_1;
+}
+| _,24,1,1,1,1,_,_,16 -> {
+prefix3156 = prefix3156>>8;
+Anonymizer_anonymize_num_ret_03113 = (int<<32>>)prefix3116;
+Anonymizer_anonymize_num_ret_13114 = suffix3117;
+int<<48>> anonymized_packet_0_0 = Anonymizer_anonymize_packet_ret_0_0;
+int<<48>> anonymized_packet_0_1 = Anonymizer_anonymize_packet_ret_0_1;
+}
+| _,_,1,1,1,1,_,_,16 -> {
+Anonymizer_anonymize_num_ret_03113 = (int<<32>>)prefix3116;
+Anonymizer_anonymize_num_ret_13114 = suffix3117;
+int<<48>> anonymized_packet_0_0 = Anonymizer_anonymize_packet_ret_0_0;
+int<<48>> anonymized_packet_0_1 = Anonymizer_anonymize_packet_ret_0_1;
+}
+| _,16,1,1,1,1,1,_,24 -> {
+prefix3146 = prefix3146>>16;
+Anonymizer_anonymize_num_ret_03123 = (int<<32>>)prefix3126;
+Anonymizer_anonymize_num_ret_13124 = suffix3127;
+int<<48>> anonymized_packet_0_0 = Anonymizer_anonymize_packet_ret_0_0;
+int<<48>> anonymized_packet_0_1 = Anonymizer_anonymize_packet_ret_0_1;
+}
+| _,16,1,1,1,1,_,_,24 -> {
+prefix3146 = prefix3146>>16;
+Anonymizer_anonymize_num_ret_03123 = (int<<32>>)prefix3126;
+Anonymizer_anonymize_num_ret_13124 = suffix3127;
+int<<48>> anonymized_packet_0_0 = Anonymizer_anonymize_packet_ret_0_0;
+int<<48>> anonymized_packet_0_1 = Anonymizer_anonymize_packet_ret_0_1;
+}
+| _,24,1,1,1,1,1,_,24 -> {
+prefix3156 = prefix3156>>8;
+suffix3157 = hash<<8>>(7,suffix3157);
+Anonymizer_anonymize_num_ret_03123 = (int<<32>>)prefix3126;
+Anonymizer_anonymize_num_ret_13124 = suffix3127;
+int<<48>> anonymized_packet_0_0 = Anonymizer_anonymize_packet_ret_0_0;
+int<<48>> anonymized_packet_0_1 = Anonymizer_anonymize_packet_ret_0_1;
+}
+| _,24,1,1,1,1,_,_,24 -> {
+prefix3156 = prefix3156>>8;
+Anonymizer_anonymize_num_ret_03123 = (int<<32>>)prefix3126;
+Anonymizer_anonymize_num_ret_13124 = suffix3127;
+int<<48>> anonymized_packet_0_0 = Anonymizer_anonymize_packet_ret_0_0;
+int<<48>> anonymized_packet_0_1 = Anonymizer_anonymize_packet_ret_0_1;
+}
+| _,_,1,1,1,1,_,_,24 -> {
+Anonymizer_anonymize_num_ret_03123 = (int<<32>>)prefix3126;
+Anonymizer_anonymize_num_ret_13124 = suffix3127;
+int<<48>> anonymized_packet_0_0 = Anonymizer_anonymize_packet_ret_0_0;
+int<<48>> anonymized_packet_0_1 = Anonymizer_anonymize_packet_ret_0_1;
+}
+| _,16,1,1,1,1,1,_,_ -> {
+prefix3146 = prefix3146>>16;
+int<<48>> anonymized_packet_0_0 = Anonymizer_anonymize_packet_ret_0_0;
+int<<48>> anonymized_packet_0_1 = Anonymizer_anonymize_packet_ret_0_1;
+}
+| _,16,1,1,1,1,_,_,_ -> {
+prefix3146 = prefix3146>>16;
+int<<48>> anonymized_packet_0_0 = Anonymizer_anonymize_packet_ret_0_0;
+int<<48>> anonymized_packet_0_1 = Anonymizer_anonymize_packet_ret_0_1;
+}
+| _,24,1,1,1,1,1,_,_ -> {
+prefix3156 = prefix3156>>8;
+suffix3157 = hash<<8>>(7,suffix3157);
+int<<48>> anonymized_packet_0_0 = Anonymizer_anonymize_packet_ret_0_0;
+int<<48>> anonymized_packet_0_1 = Anonymizer_anonymize_packet_ret_0_1;
+}
+| _,24,1,1,1,1,_,_,_ -> {
+prefix3156 = prefix3156>>8;
+int<<48>> anonymized_packet_0_0 = Anonymizer_anonymize_packet_ret_0_0;
+int<<48>> anonymized_packet_0_1 = Anonymizer_anonymize_packet_ret_0_1;
+}
+| _,_,1,1,1,1,_,_,_ -> {
+int<<48>> anonymized_packet_0_0 = Anonymizer_anonymize_packet_ret_0_0;
+int<<48>> anonymized_packet_0_1 = Anonymizer_anonymize_packet_ret_0_1;
+}
+| _,_,_,1,1,1,_,_,16 -> {
+Anonymizer_anonymize_num_ret_03113 = (int<<32>>)prefix3116;
+Anonymizer_anonymize_num_ret_13114 = suffix3117;
+}
+| _,_,_,1,1,1,_,_,24 -> {
+Anonymizer_anonymize_num_ret_03123 = (int<<32>>)prefix3126;
+Anonymizer_anonymize_num_ret_13124 = suffix3127;
+}
+| _,_,_,_,_,_,_,_,_ -> {
+
+}
+match (should_anonymize_suffix3149,should_preserve_prefix3141,prefix_len3140,anonymizer_2_0_callnum,anonymizer_1_0_callnum,anonymizer_0_callnum,event_id) with 
+| 1,_,16,1,1,1,1 -> {
+suffix3147 = hash<<16>>(7,suffix3147);
+}
+| _,_,_,_,_,_,_ -> {
+
+}
+// Stage 18
+match (should_preserve_prefix3141,prefix_len3140,anonymizer_2_0_callnum,anonymizer_1_0_callnum,anonymizer_0_callnum,event_id,should_preserve_prefix,prefix_len) with 
+| _,16,1,1,1,1,_,16 -> {
+Anonymizer_anonymize_num_ret_03143 = (int<<32>>)prefix3146;
+Anonymizer_anonymize_num_ret_13144 = suffix3147;
+int<<32>> split_ip_0 = Anonymizer_anonymize_num_ret_03113;
+int<<16>> split_ip_1 = Anonymizer_anonymize_num_ret_13114;
+}
+| _,24,1,1,1,1,_,16 -> {
+Anonymizer_anonymize_num_ret_03153 = (int<<32>>)prefix3156;
+Anonymizer_anonymize_num_ret_13154 = suffix3157;
+int<<32>> split_ip_0 = Anonymizer_anonymize_num_ret_03113;
+int<<16>> split_ip_1 = Anonymizer_anonymize_num_ret_13114;
+}
+| _,_,_,1,1,1,_,16 -> {
+int<<32>> split_ip_0 = Anonymizer_anonymize_num_ret_03113;
+int<<16>> split_ip_1 = Anonymizer_anonymize_num_ret_13114;
+}
+| _,16,1,1,1,1,_,24 -> {
+Anonymizer_anonymize_num_ret_03143 = (int<<32>>)prefix3146;
+Anonymizer_anonymize_num_ret_13144 = suffix3147;
+int<<32>> split_ip_03130 = Anonymizer_anonymize_num_ret_03123;
+int<<8>> split_ip_13131 = Anonymizer_anonymize_num_ret_13124;
+}
+| _,24,1,1,1,1,_,24 -> {
+Anonymizer_anonymize_num_ret_03153 = (int<<32>>)prefix3156;
+Anonymizer_anonymize_num_ret_13154 = suffix3157;
+int<<32>> split_ip_03130 = Anonymizer_anonymize_num_ret_03123;
+int<<8>> split_ip_13131 = Anonymizer_anonymize_num_ret_13124;
+}
+| _,_,_,1,1,1,_,24 -> {
+int<<32>> split_ip_03130 = Anonymizer_anonymize_num_ret_03123;
+int<<8>> split_ip_13131 = Anonymizer_anonymize_num_ret_13124;
+}
+| _,16,1,1,1,1,_,_ -> {
+Anonymizer_anonymize_num_ret_03143 = (int<<32>>)prefix3146;
+Anonymizer_anonymize_num_ret_13144 = suffix3147;
+}
+| _,24,1,1,1,1,_,_ -> {
+Anonymizer_anonymize_num_ret_03153 = (int<<32>>)prefix3156;
+Anonymizer_anonymize_num_ret_13154 = suffix3157;
+}
+| _,_,_,_,_,_,_,_ -> {
+
+}
+// Stage 19
+match (should_preserve_prefix3141,prefix_len3140,anonymizer_2_0_callnum,anonymizer_1_0_callnum,anonymizer_0_callnum,event_id,should_preserve_prefix,prefix_len) with 
+| _,16,1,1,1,1,_,16 -> {
+int<<32>> split_ip_03150 = Anonymizer_anonymize_num_ret_03143;
+int<<16>> split_ip_13151 = Anonymizer_anonymize_num_ret_13144;
+Anonymizer_anonymize_ip_ret = (int<<16>>)split_ip_0^split_ip_1;
+}
+| _,24,1,1,1,1,_,16 -> {
+int<<32>> split_ip_03160 = Anonymizer_anonymize_num_ret_03153;
+int<<8>> split_ip_13161 = Anonymizer_anonymize_num_ret_13154;
+Anonymizer_anonymize_ip_ret = (int<<16>>)split_ip_0^split_ip_1;
+}
+| _,_,_,1,1,1,_,16 -> {
+Anonymizer_anonymize_ip_ret = (int<<16>>)split_ip_0^split_ip_1;
+}
+| _,16,1,1,1,1,_,24 -> {
+int<<32>> split_ip_03150 = Anonymizer_anonymize_num_ret_03143;
+int<<16>> split_ip_13151 = Anonymizer_anonymize_num_ret_13144;
+Anonymizer_anonymize_ip_ret = (int<<24>>)split_ip_03130^split_ip_13131;
+}
+| _,24,1,1,1,1,_,24 -> {
+int<<32>> split_ip_03160 = Anonymizer_anonymize_num_ret_03153;
+int<<8>> split_ip_13161 = Anonymizer_anonymize_num_ret_13154;
+Anonymizer_anonymize_ip_ret = (int<<24>>)split_ip_03130^split_ip_13131;
+}
+| _,_,_,1,1,1,_,24 -> {
+Anonymizer_anonymize_ip_ret = (int<<24>>)split_ip_03130^split_ip_13131;
+}
+| _,16,1,1,1,1,_,_ -> {
+int<<32>> split_ip_03150 = Anonymizer_anonymize_num_ret_03143;
+int<<16>> split_ip_13151 = Anonymizer_anonymize_num_ret_13144;
+}
+| _,24,1,1,1,1,_,_ -> {
+int<<32>> split_ip_03160 = Anonymizer_anonymize_num_ret_03153;
+int<<8>> split_ip_13161 = Anonymizer_anonymize_num_ret_13154;
+}
+| _,_,_,_,_,_,_,_ -> {
+
+}
+// Stage 20
+match (should_preserve_prefix3141,prefix_len3140,anonymizer_2_0_callnum,anonymizer_1_0_callnum,anonymizer_0_callnum,event_id) with 
+| _,16,1,1,1,1 -> {
+Anonymizer_anonymize_ip_ret3133 = (int<<16>>)split_ip_03150^split_ip_13151;
+int<<32>> src_ip = Anonymizer_anonymize_ip_ret;
+}
+| _,24,1,1,1,1 -> {
+Anonymizer_anonymize_ip_ret3133 = (int<<24>>)split_ip_03160^split_ip_13161;
+int<<32>> src_ip = Anonymizer_anonymize_ip_ret;
+}
+| _,_,_,1,1,1 -> {
+int<<32>> src_ip = Anonymizer_anonymize_ip_ret;
+}
+| _,_,_,_,_,_ -> {
+
+}
+// Stage 21
+match (anonymizer_2_0_callnum,anonymizer_1_0_callnum,anonymizer_0_callnum,event_id) with 
+| 1,1,1,1 -> {
+int<<32>> dst_ip = Anonymizer_anonymize_ip_ret3133;
+int<<32>> anonymized_ip_0 = src_ip;
+}
+| _,_,_,_ -> {
+
+}
+// Stage 22
+match (anonymizer_2_0_callnum,anonymizer_1_0_callnum,anonymizer_0_callnum,event_id) with 
+| 1,1,1,1 -> {
+int<<32>> anonymized_ip_1 = dst_ip;
+Anonymizer_anonymize_packet_ret_1_0 = anonymized_ip_0;
+}
+| _,_,_,_ -> {
+
+}
+// Stage 23
+match (anonymizer_2_0_callnum,anonymizer_1_0_callnum,anonymizer_0_callnum,event_id) with 
+| 1,1,1,1 -> {
+Anonymizer_anonymize_packet_ret_1_1 = anonymized_ip_1;
+int<<32>> anonymized_packet_1_0 = Anonymizer_anonymize_packet_ret_1_0;
+}
+| _,_,_,_ -> {
+
+}
+// Stage 24
+match (anonymizer_2_0_callnum,anonymizer_1_0_callnum,anonymizer_0_callnum,event_id) with 
+| 1,1,1,1 -> {
+int<<32>> anonymized_packet_1_1 = Anonymizer_anonymize_packet_ret_1_1;
+}
+| _,_,_,_ -> {
+
+}
+// Stage 25
+match (anonymizer_2_0_callnum,anonymizer_1_0_callnum,anonymizer_0_callnum,event_id) with 
+| 1,1,1,1 -> {
+generate_port (2, eth_ip(anonymized_packet_0_0,anonymized_packet_0_1,anonymized_packet_0_2,anonymized_packet_1_0,anonymized_packet_1_1,anonymized_packet_1_2));
+}
+| _,_,_,_ -> {
+
+}}

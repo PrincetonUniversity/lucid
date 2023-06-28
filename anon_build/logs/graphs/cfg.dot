@@ -1,0 +1,1027 @@
+digraph G {
+  "1: " [shape=box, ];
+  "6: pre_gen_copy_eth_ip_eth_0 = eth_ip_eth_0;" [shape=box, ];
+  "9: pre_gen_copy_eth_ip_eth_1 = eth_ip_eth_1;" [shape=box, ];
+  "12: pre_gen_copy_eth_ip_eth_2 = eth_ip_eth_2;" [shape=box, ];
+  "15: pre_gen_copy_eth_ip_ip_0 = eth_ip_ip_0;" [shape=box, ];
+  "18: pre_gen_copy_eth_ip_ip_1 = eth_ip_ip_1;" [shape=box, ];
+  "21: pre_gen_copy_eth_ip_ip_2 = eth_ip_ip_2;" [shape=box, ];
+  "40: generate_port (1, eth_ip(eth_ip_eth_0,eth_ip_eth_1,eth_ip_eth_2,eth_ip_ip_0,eth_ip_ip_1,eth_ip_ip_2));" [
+  shape=box, ];
+  "50: int<<48>> original_packet_0_0 = pre_gen_copy_eth_ip_eth_0;" [shape=box,
+                                                                    ];
+  "54: int<<48>> original_packet_0_1 = pre_gen_copy_eth_ip_eth_1;" [shape=box,
+                                                                    ];
+  "59: int<<16>> original_packet_0_2 = pre_gen_copy_eth_ip_eth_2;" [shape=box,
+                                                                    ];
+  "64: int<<32>> original_packet_1_0 = pre_gen_copy_eth_ip_ip_0;" [shape=box, ];
+  "68: int<<32>> original_packet_1_1 = pre_gen_copy_eth_ip_ip_1;" [shape=box, ];
+  "73: int<<16>> original_packet_1_2 = pre_gen_copy_eth_ip_ip_2;" [shape=box, ];
+  "76: " [shape=box, ];
+  "82: int<<48>> Anonymizer_anonymize_packet_ret_0_0 = 32;" [shape=box, ];
+  "88: int<<48>> Anonymizer_anonymize_packet_ret_0_1 = 32;" [shape=box, ];
+  "95: int<<16>> Anonymizer_anonymize_packet_ret_0_2 = 32;" [shape=box, ];
+  "102: int<<32>> Anonymizer_anonymize_packet_ret_1_0 = 32;" [shape=box, ];
+  "108: int<<32>> Anonymizer_anonymize_packet_ret_1_1 = 32;" [shape=box, ];
+  "115: int<<16>> Anonymizer_anonymize_packet_ret_1_2 = 32;" [shape=box, ];
+  "122: int<<48>> eth_0 = original_packet_0_0;" [shape=box, ];
+  "126: int<<48>> eth_1 = original_packet_0_1;" [shape=box, ];
+  "131: int<<16>> eth_2 = original_packet_0_2;" [shape=box, ];
+  "136: int<<32>> ip_0 = original_packet_1_0;" [shape=box, ];
+  "140: int<<32>> ip_1 = original_packet_1_1;" [shape=box, ];
+  "145: int<<16>> ip_2 = original_packet_1_2;" [shape=box, ];
+  "151: anonymizer_0_callnum = 1;" [shape=box, ];
+  "156: anonymizer_0_0_key = 1;" [shape=box, ];
+  "163: match (event_id) ...
+" [shape=box, ];
+  "166: " [shape=box, ];
+  "177: anonymizer_0_0_ret,anonymizer_0_1_ret,anonymizer_0_2_ret,anonymizer_0_3_ret,anonymizer_0_4_ret,anonymizer_0_5_ret = table_match(anonymizer_0,anonymizer_0_0_key);" [
+  shape=box, ];
+  "178: match (anonymizer_0_callnum) ...
+" [shape=box, ];
+  "184: int<<1>> policy_0 = anonymizer_0_0_ret;" [shape=box, ];
+  "188: int<<1>> policy_1 = anonymizer_0_1_ret;" [shape=box, ];
+  "192: int<<1>> policy_2 = anonymizer_0_2_ret;" [shape=box, ];
+  "196: int<<1>> policy_3 = anonymizer_0_3_ret;" [shape=box, ];
+  "200: int<<1>> policy_4 = anonymizer_0_4_ret;" [shape=box, ];
+  "204: int<<1>> policy_5 = anonymizer_0_5_ret;" [shape=box, ];
+  "210: int<<1>> Anonymizer_should_anonymize_ret = 0;" [shape=box, ];
+  "211: " [shape=box, ];
+  "223: int<<1>> if_precomp = [40 : 40]eth_0-1;" [shape=box, ];
+  "232: Anonymizer_should_anonymize_ret = 1;" [shape=box, ];
+  "237: Anonymizer_should_anonymize_ret = 0;" [shape=box, ];
+  "242: Anonymizer_should_anonymize_ret = 1;" [shape=box, ];
+  "243: match (policy_0,if_precomp) ...
+" [shape=box, ];
+  "254: int<<48>> Anonymizer_anonymize_mac_ret = 32;" [shape=box, ];
+  "260: int<<32>> Anonymizer_anonymize_num_ret_0 = 32;" [shape=box, ];
+  "266: int<<24>> Anonymizer_anonymize_num_ret_1 = 32;" [shape=box, ];
+  "279: int<<48>> to_immediate_tmp = 281474976710655<<24;" [shape=box, ];
+  "285: int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;" [shape=box, ];
+  "294: int<<48>> prefix = eth_1&prefix_mask;" [shape=box, ];
+  "302: int<<48>> to_immediate_tmp3887 = eth_1-prefix;" [shape=box, ];
+  "308: int<<24>> suffix = (int<<24>>)to_immediate_tmp3887;" [shape=box, ];
+  "313: int<<1>> should_anonymize_prefix = policy_1;" [shape=box, ];
+  "324: prefix = hash<<48>>(7,prefix);" [shape=box, ];
+  "325: " [shape=box, ];
+  "326: match (should_anonymize_prefix) ...
+" [shape=box, ];
+  "335: prefix = prefix>>24;" [shape=box, ];
+  "339: int<<1>> should_anonymize_suffix = policy_2;" [shape=box, ];
+  "350: suffix = hash<<24>>(7,suffix);" [shape=box, ];
+  "351: " [shape=box, ];
+  "352: match (should_anonymize_suffix) ...
+" [shape=box, ];
+  "353: " [shape=box, ];
+  "358: Anonymizer_anonymize_num_ret_0 = (int<<32>>)prefix;" [shape=box, ];
+  "361: Anonymizer_anonymize_num_ret_1 = suffix;" [shape=box, ];
+  "376: int<<32>> split_mac_0 = Anonymizer_anonymize_num_ret_0;" [shape=box, ];
+  "380: int<<24>> split_mac_1 = Anonymizer_anonymize_num_ret_1;" [shape=box, ];
+  "383: " [shape=box, ];
+  "392: Anonymizer_anonymize_mac_ret = (int<<24>>)split_mac_0^split_mac_1;" [
+  shape=box, ];
+  "399: int<<48>> smac = Anonymizer_anonymize_mac_ret;" [shape=box, ];
+  "406: int<<48>> Anonymizer_anonymize_mac_ret3089 = 32;" [shape=box, ];
+  "412: int<<32>> Anonymizer_anonymize_num_ret_03090 = 32;" [shape=box, ];
+  "418: int<<24>> Anonymizer_anonymize_num_ret_13091 = 32;" [shape=box, ];
+  "431: int<<48>> to_immediate_tmp3888 = 281474976710655<<24;" [shape=box, ];
+  "437: int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;" [
+  shape=box, ];
+  "446: int<<48>> prefix3093 = eth_0&prefix_mask3092;" [shape=box, ];
+  "454: int<<48>> to_immediate_tmp3889 = eth_0-prefix3093;" [shape=box, ];
+  "460: int<<24>> suffix3094 = (int<<24>>)to_immediate_tmp3889;" [shape=box, ];
+  "465: int<<1>> should_anonymize_prefix3095 = policy_3;" [shape=box, ];
+  "476: prefix3093 = hash<<48>>(7,prefix3093);" [shape=box, ];
+  "477: " [shape=box, ];
+  "478: match (should_anonymize_prefix3095) ...
+" [shape=box, ];
+  "487: prefix3093 = prefix3093>>24;" [shape=box, ];
+  "491: int<<1>> should_anonymize_suffix3096 = policy_4;" [shape=box, ];
+  "502: suffix3094 = hash<<24>>(7,suffix3094);" [shape=box, ];
+  "503: " [shape=box, ];
+  "504: match (should_anonymize_suffix3096) ...
+" [shape=box, ];
+  "505: " [shape=box, ];
+  "510: Anonymizer_anonymize_num_ret_03090 = (int<<32>>)prefix3093;" [
+  shape=box, ];
+  "513: Anonymizer_anonymize_num_ret_13091 = suffix3094;" [shape=box, ];
+  "528: int<<32>> split_mac_03097 = Anonymizer_anonymize_num_ret_03090;" [
+  shape=box, ];
+  "532: int<<24>> split_mac_13098 = Anonymizer_anonymize_num_ret_13091;" [
+  shape=box, ];
+  "535: " [shape=box, ];
+  "544: Anonymizer_anonymize_mac_ret3089 = (int<<24>>)split_mac_03097^split_mac_13098;" [
+  shape=box, ];
+  "551: int<<48>> dmac = Anonymizer_anonymize_mac_ret3089;" [shape=box, ];
+  "556: int<<48>> anonymized_eth_0 = dmac;" [shape=box, ];
+  "560: int<<48>> anonymized_eth_1 = smac;" [shape=box, ];
+  "565: int<<16>> anonymized_eth_2 = eth_2;" [shape=box, ];
+  "572: int<<32>> Anonymizer_anonymize_ip_ret = 32;" [shape=box, ];
+  "578: int<<32>> PrefixTable_prefix_match_ret = 32;" [shape=box, ];
+  "579: " [shape=box, ];
+  "585: int<<8>> ip_octets_0 = [31 : 24]ip_0;" [shape=box, ];
+  "591: int<<8>> ip_octets_1 = [23 : 16]ip_0;" [shape=box, ];
+  "598: int<<8>> ip_octets_2 = [15 : 8]ip_0;" [shape=box, ];
+  "605: int<<8>> ip_octets_3 = [7 : 0]ip_0;" [shape=box, ];
+  "608: " [shape=box, ];
+  "613: anonymizer_1_0_callnum = 1;" [shape=box, ];
+  "618: anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;" [shape=box, ];
+  "623: anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;" [shape=box, ];
+  "628: anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;" [shape=box, ];
+  "633: anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;" [shape=box, ];
+  "647: Anonymizer_anonymize_packet_ret_0_0 = eth_0;" [shape=box, ];
+  "650: Anonymizer_anonymize_packet_ret_0_1 = eth_1;" [shape=box, ];
+  "654: Anonymizer_anonymize_packet_ret_0_2 = eth_2;" [shape=box, ];
+  "658: Anonymizer_anonymize_packet_ret_1_0 = ip_0;" [shape=box, ];
+  "661: Anonymizer_anonymize_packet_ret_1_1 = ip_1;" [shape=box, ];
+  "665: Anonymizer_anonymize_packet_ret_1_2 = ip_2;" [shape=box, ];
+  "668: match (Anonymizer_should_anonymize_ret) ...
+" [shape=box, ];
+  "671: " [shape=box, ];
+  "683: anonymizer_1_0_0_ret = table_match(anonymizer_1_0,anonymizer_1_0_0_key,anonymizer_1_0_1_key,anonymizer_1_0_2_key,anonymizer_1_0_3_key);" [
+  shape=box, ];
+  "684: match (anonymizer_1_0_callnum) ...
+" [shape=box, ];
+  "690: int<<32>> prefix_length = anonymizer_1_0_0_ret;" [shape=box, ];
+  "693: PrefixTable_prefix_match_ret = prefix_length;" [shape=box, ];
+  "697: int<<32>> prefix_len = PrefixTable_prefix_match_ret;" [shape=box, ];
+  "701: int<<1>> should_preserve_prefix = policy_5;" [shape=box, ];
+  "709: int<<1>> anonymize_prefix = 0;" [shape=box, ];
+  "716: anonymize_prefix = 1;" [shape=box, ];
+  "717: match (should_preserve_prefix) ...
+" [shape=box, ];
+  "724: int<<32>> Anonymizer_anonymize_num_ret_03113 = 32;" [shape=box, ];
+  "730: int<<16>> Anonymizer_anonymize_num_ret_13114 = 32;" [shape=box, ];
+  "743: int<<48>> to_immediate_tmp3890 = 281474976710655<<16;" [shape=box, ];
+  "749: int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;" [
+  shape=box, ];
+  "758: int<<32>> prefix3116 = ip_0&prefix_mask3115;" [shape=box, ];
+  "766: int<<32>> to_immediate_tmp3891 = ip_0-prefix3116;" [shape=box, ];
+  "772: int<<16>> suffix3117 = (int<<16>>)to_immediate_tmp3891;" [shape=box, ];
+  "777: int<<1>> should_anonymize_prefix3118 = anonymize_prefix;" [shape=box, ];
+  "788: prefix3116 = hash<<32>>(7,prefix3116);" [shape=box, ];
+  "789: " [shape=box, ];
+  "790: match (should_anonymize_prefix3118) ...
+" [shape=box, ];
+  "799: prefix3116 = prefix3116>>16;" [shape=box, ];
+  "805: int<<1>> should_anonymize_suffix3119 = 1;" [shape=box, ];
+  "816: suffix3117 = hash<<16>>(7,suffix3117);" [shape=box, ];
+  "817: " [shape=box, ];
+  "818: match (should_anonymize_suffix3119) ...
+" [shape=box, ];
+  "819: " [shape=box, ];
+  "824: Anonymizer_anonymize_num_ret_03113 = (int<<32>>)prefix3116;" [
+  shape=box, ];
+  "827: Anonymizer_anonymize_num_ret_13114 = suffix3117;" [shape=box, ];
+  "843: int<<32>> split_ip_0 = Anonymizer_anonymize_num_ret_03113;" [
+  shape=box, ];
+  "847: int<<16>> split_ip_1 = Anonymizer_anonymize_num_ret_13114;" [
+  shape=box, ];
+  "850: " [shape=box, ];
+  "859: Anonymizer_anonymize_ip_ret = (int<<16>>)split_ip_0^split_ip_1;" [
+  shape=box, ];
+  "867: int<<1>> anonymize_prefix3122 = 0;" [shape=box, ];
+  "874: anonymize_prefix3122 = 1;" [shape=box, ];
+  "875: match (should_preserve_prefix) ...
+" [shape=box, ];
+  "882: int<<32>> Anonymizer_anonymize_num_ret_03123 = 32;" [shape=box, ];
+  "888: int<<8>> Anonymizer_anonymize_num_ret_13124 = 32;" [shape=box, ];
+  "901: int<<48>> to_immediate_tmp3892 = 281474976710655<<8;" [shape=box, ];
+  "907: int<<32>> prefix_mask3125 = (int<<32>>)to_immediate_tmp3892;" [
+  shape=box, ];
+  "916: int<<32>> prefix3126 = ip_0&prefix_mask3125;" [shape=box, ];
+  "924: int<<32>> to_immediate_tmp3893 = ip_0-prefix3126;" [shape=box, ];
+  "930: int<<8>> suffix3127 = (int<<8>>)to_immediate_tmp3893;" [shape=box, ];
+  "935: int<<1>> should_anonymize_prefix3128 = anonymize_prefix3122;" [
+  shape=box, ];
+  "946: prefix3126 = hash<<32>>(7,prefix3126);" [shape=box, ];
+  "947: " [shape=box, ];
+  "948: match (should_anonymize_prefix3128) ...
+" [shape=box, ];
+  "957: prefix3126 = prefix3126>>8;" [shape=box, ];
+  "963: int<<1>> should_anonymize_suffix3129 = 1;" [shape=box, ];
+  "974: suffix3127 = hash<<8>>(7,suffix3127);" [shape=box, ];
+  "975: " [shape=box, ];
+  "976: match (should_anonymize_suffix3129) ...
+" [shape=box, ];
+  "977: " [shape=box, ];
+  "982: Anonymizer_anonymize_num_ret_03123 = (int<<32>>)prefix3126;" [
+  shape=box, ];
+  "985: Anonymizer_anonymize_num_ret_13124 = suffix3127;" [shape=box, ];
+  "1001: int<<32>> split_ip_03130 = Anonymizer_anonymize_num_ret_03123;" [
+  shape=box, ];
+  "1005: int<<8>> split_ip_13131 = Anonymizer_anonymize_num_ret_13124;" [
+  shape=box, ];
+  "1008: " [shape=box, ];
+  "1017: Anonymizer_anonymize_ip_ret = (int<<24>>)split_ip_03130^split_ip_13131;" [
+  shape=box, ];
+  "1022: Anonymizer_anonymize_ip_ret = ip_0;" [shape=box, ];
+  "1023: match (prefix_len) ...
+" [shape=box, ];
+  "1028: int<<32>> src_ip = Anonymizer_anonymize_ip_ret;" [shape=box, ];
+  "1034: int<<32>> Anonymizer_anonymize_ip_ret3133 = 32;" [shape=box, ];
+  "1040: int<<32>> PrefixTable_prefix_match_ret3134 = 32;" [shape=box, ];
+  "1041: " [shape=box, ];
+  "1047: int<<8>> ip_octets_03135 = [31 : 24]ip_1;" [shape=box, ];
+  "1053: int<<8>> ip_octets_13136 = [23 : 16]ip_1;" [shape=box, ];
+  "1060: int<<8>> ip_octets_23137 = [15 : 8]ip_1;" [shape=box, ];
+  "1067: int<<8>> ip_octets_33138 = [7 : 0]ip_1;" [shape=box, ];
+  "1070: " [shape=box, ];
+  "1075: anonymizer_2_0_callnum = 1;" [shape=box, ];
+  "1080: anonymizer_2_0_0_key = (int<<32>>)ip_octets_03135;" [shape=box, ];
+  "1085: anonymizer_2_0_1_key = (int<<32>>)ip_octets_13136;" [shape=box, ];
+  "1090: anonymizer_2_0_2_key = (int<<32>>)ip_octets_23137;" [shape=box, ];
+  "1095: anonymizer_2_0_3_key = (int<<32>>)ip_octets_33138;" [shape=box, ];
+  "1109: match (anonymizer_1_0_callnum) ...
+" [shape=box, ];
+  "1112: " [shape=box, ];
+  "1124: anonymizer_2_0_0_ret = table_match(anonymizer_2_0,anonymizer_2_0_0_key,anonymizer_2_0_1_key,anonymizer_2_0_2_key,anonymizer_2_0_3_key);" [
+  shape=box, ];
+  "1125: match (anonymizer_2_0_callnum) ...
+" [shape=box, ];
+  "1131: int<<32>> prefix_length3139 = anonymizer_2_0_0_ret;" [shape=box, ];
+  "1134: PrefixTable_prefix_match_ret3134 = prefix_length3139;" [shape=box, ];
+  "1138: int<<32>> prefix_len3140 = PrefixTable_prefix_match_ret3134;" [
+  shape=box, ];
+  "1142: int<<1>> should_preserve_prefix3141 = policy_5;" [shape=box, ];
+  "1150: int<<1>> anonymize_prefix3142 = 0;" [shape=box, ];
+  "1157: anonymize_prefix3142 = 1;" [shape=box, ];
+  "1158: match (should_preserve_prefix3141) ...
+" [shape=box, ];
+  "1165: int<<32>> Anonymizer_anonymize_num_ret_03143 = 32;" [shape=box, ];
+  "1171: int<<16>> Anonymizer_anonymize_num_ret_13144 = 32;" [shape=box, ];
+  "1184: int<<48>> to_immediate_tmp3894 = 281474976710655<<16;" [shape=box, ];
+  "1190: int<<32>> prefix_mask3145 = (int<<32>>)to_immediate_tmp3894;" [
+  shape=box, ];
+  "1199: int<<32>> prefix3146 = ip_1&prefix_mask3145;" [shape=box, ];
+  "1207: int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;" [shape=box, ];
+  "1213: int<<16>> suffix3147 = (int<<16>>)to_immediate_tmp3895;" [shape=box, ];
+  "1218: int<<1>> should_anonymize_prefix3148 = anonymize_prefix3142;" [
+  shape=box, ];
+  "1229: prefix3146 = hash<<32>>(7,prefix3146);" [shape=box, ];
+  "1230: " [shape=box, ];
+  "1231: match (should_anonymize_prefix3148) ...
+" [shape=box, ];
+  "1240: prefix3146 = prefix3146>>16;" [shape=box, ];
+  "1246: int<<1>> should_anonymize_suffix3149 = 1;" [shape=box, ];
+  "1257: suffix3147 = hash<<16>>(7,suffix3147);" [shape=box, ];
+  "1258: " [shape=box, ];
+  "1259: match (should_anonymize_suffix3149) ...
+" [shape=box, ];
+  "1260: " [shape=box, ];
+  "1265: Anonymizer_anonymize_num_ret_03143 = (int<<32>>)prefix3146;" [
+  shape=box, ];
+  "1268: Anonymizer_anonymize_num_ret_13144 = suffix3147;" [shape=box, ];
+  "1284: int<<32>> split_ip_03150 = Anonymizer_anonymize_num_ret_03143;" [
+  shape=box, ];
+  "1288: int<<16>> split_ip_13151 = Anonymizer_anonymize_num_ret_13144;" [
+  shape=box, ];
+  "1291: " [shape=box, ];
+  "1300: Anonymizer_anonymize_ip_ret3133 = (int<<16>>)split_ip_03150^split_ip_13151;" [
+  shape=box, ];
+  "1308: int<<1>> anonymize_prefix3152 = 0;" [shape=box, ];
+  "1315: anonymize_prefix3152 = 1;" [shape=box, ];
+  "1316: match (should_preserve_prefix3141) ...
+" [shape=box, ];
+  "1323: int<<32>> Anonymizer_anonymize_num_ret_03153 = 32;" [shape=box, ];
+  "1329: int<<8>> Anonymizer_anonymize_num_ret_13154 = 32;" [shape=box, ];
+  "1342: int<<48>> to_immediate_tmp3896 = 281474976710655<<8;" [shape=box, ];
+  "1348: int<<32>> prefix_mask3155 = (int<<32>>)to_immediate_tmp3896;" [
+  shape=box, ];
+  "1357: int<<32>> prefix3156 = ip_1&prefix_mask3155;" [shape=box, ];
+  "1365: int<<32>> to_immediate_tmp3897 = ip_1-prefix3156;" [shape=box, ];
+  "1371: int<<8>> suffix3157 = (int<<8>>)to_immediate_tmp3897;" [shape=box, ];
+  "1376: int<<1>> should_anonymize_prefix3158 = anonymize_prefix3152;" [
+  shape=box, ];
+  "1387: prefix3156 = hash<<32>>(7,prefix3156);" [shape=box, ];
+  "1388: " [shape=box, ];
+  "1389: match (should_anonymize_prefix3158) ...
+" [shape=box, ];
+  "1398: prefix3156 = prefix3156>>8;" [shape=box, ];
+  "1404: int<<1>> should_anonymize_suffix3159 = 1;" [shape=box, ];
+  "1415: suffix3157 = hash<<8>>(7,suffix3157);" [shape=box, ];
+  "1416: " [shape=box, ];
+  "1417: match (should_anonymize_suffix3159) ...
+" [shape=box, ];
+  "1418: " [shape=box, ];
+  "1423: Anonymizer_anonymize_num_ret_03153 = (int<<32>>)prefix3156;" [
+  shape=box, ];
+  "1426: Anonymizer_anonymize_num_ret_13154 = suffix3157;" [shape=box, ];
+  "1442: int<<32>> split_ip_03160 = Anonymizer_anonymize_num_ret_03153;" [
+  shape=box, ];
+  "1446: int<<8>> split_ip_13161 = Anonymizer_anonymize_num_ret_13154;" [
+  shape=box, ];
+  "1449: " [shape=box, ];
+  "1458: Anonymizer_anonymize_ip_ret3133 = (int<<24>>)split_ip_03160^split_ip_13161;" [
+  shape=box, ];
+  "1463: Anonymizer_anonymize_ip_ret3133 = ip_1;" [shape=box, ];
+  "1464: match (prefix_len3140) ...
+" [shape=box, ];
+  "1469: int<<32>> dst_ip = Anonymizer_anonymize_ip_ret3133;" [shape=box, ];
+  "1473: int<<32>> anonymized_ip_0 = src_ip;" [shape=box, ];
+  "1477: int<<32>> anonymized_ip_1 = dst_ip;" [shape=box, ];
+  "1482: int<<16>> anonymized_ip_2 = ip_2;" [shape=box, ];
+  "1486: Anonymizer_anonymize_packet_ret_0_0 = anonymized_eth_0;" [shape=box, ];
+  "1489: Anonymizer_anonymize_packet_ret_0_1 = anonymized_eth_1;" [shape=box, ];
+  "1493: Anonymizer_anonymize_packet_ret_0_2 = anonymized_eth_2;" [shape=box, ];
+  "1497: Anonymizer_anonymize_packet_ret_1_0 = anonymized_ip_0;" [shape=box, ];
+  "1500: Anonymizer_anonymize_packet_ret_1_1 = anonymized_ip_1;" [shape=box, ];
+  "1504: Anonymizer_anonymize_packet_ret_1_2 = anonymized_ip_2;" [shape=box, ];
+  "1513: match (anonymizer_2_0_callnum) ...
+" [shape=box, ];
+  "1522: int<<48>> anonymized_packet_0_0 = Anonymizer_anonymize_packet_ret_0_0;" [
+  shape=box, ];
+  "1526: int<<48>> anonymized_packet_0_1 = Anonymizer_anonymize_packet_ret_0_1;" [
+  shape=box, ];
+  "1531: int<<16>> anonymized_packet_0_2 = Anonymizer_anonymize_packet_ret_0_2;" [
+  shape=box, ];
+  "1536: int<<32>> anonymized_packet_1_0 = Anonymizer_anonymize_packet_ret_1_0;" [
+  shape=box, ];
+  "1540: int<<32>> anonymized_packet_1_1 = Anonymizer_anonymize_packet_ret_1_1;" [
+  shape=box, ];
+  "1545: int<<16>> anonymized_packet_1_2 = Anonymizer_anonymize_packet_ret_1_2;" [
+  shape=box, ];
+  "1566: generate_port (2, eth_ip(anonymized_packet_0_0,anonymized_packet_0_1,anonymized_packet_0_2,anonymized_packet_1_0,anonymized_packet_1_1,anonymized_packet_1_2));" [
+  shape=box, ];
+  "1575: match (anonymizer_0_callnum) ...
+" [shape=box, ];
+  
+  
+  "1: " -> "163: match (event_id) ...
+" [label="", ];
+  "6: pre_gen_copy_eth_ip_eth_0 = eth_ip_eth_0;" -> "9: pre_gen_copy_eth_ip_eth_1 = eth_ip_eth_1;" [
+  label="", ];
+  "9: pre_gen_copy_eth_ip_eth_1 = eth_ip_eth_1;" -> "12: pre_gen_copy_eth_ip_eth_2 = eth_ip_eth_2;" [
+  label="", ];
+  "12: pre_gen_copy_eth_ip_eth_2 = eth_ip_eth_2;" -> "15: pre_gen_copy_eth_ip_ip_0 = eth_ip_ip_0;" [
+  label="", ];
+  "15: pre_gen_copy_eth_ip_ip_0 = eth_ip_ip_0;" -> "18: pre_gen_copy_eth_ip_ip_1 = eth_ip_ip_1;" [
+  label="", ];
+  "18: pre_gen_copy_eth_ip_ip_1 = eth_ip_ip_1;" -> "21: pre_gen_copy_eth_ip_ip_2 = eth_ip_ip_2;" [
+  label="", ];
+  "21: pre_gen_copy_eth_ip_ip_2 = eth_ip_ip_2;" -> "40: generate_port (1, eth_ip(eth_ip_eth_0,eth_ip_eth_1,eth_ip_eth_2,eth_ip_ip_0,eth_ip_ip_1,eth_ip_ip_2));" [
+  label="", ];
+  "40: generate_port (1, eth_ip(eth_ip_eth_0,eth_ip_eth_1,eth_ip_eth_2,eth_ip_ip_0,eth_ip_ip_1,eth_ip_ip_2));" -> "50: int<<48>> original_packet_0_0 = pre_gen_copy_eth_ip_eth_0;" [
+  label="", ];
+  "50: int<<48>> original_packet_0_0 = pre_gen_copy_eth_ip_eth_0;" -> "54: int<<48>> original_packet_0_1 = pre_gen_copy_eth_ip_eth_1;" [
+  label="", ];
+  "54: int<<48>> original_packet_0_1 = pre_gen_copy_eth_ip_eth_1;" -> "59: int<<16>> original_packet_0_2 = pre_gen_copy_eth_ip_eth_2;" [
+  label="", ];
+  "59: int<<16>> original_packet_0_2 = pre_gen_copy_eth_ip_eth_2;" -> "64: int<<32>> original_packet_1_0 = pre_gen_copy_eth_ip_ip_0;" [
+  label="", ];
+  "64: int<<32>> original_packet_1_0 = pre_gen_copy_eth_ip_ip_0;" -> "68: int<<32>> original_packet_1_1 = pre_gen_copy_eth_ip_ip_1;" [
+  label="", ];
+  "68: int<<32>> original_packet_1_1 = pre_gen_copy_eth_ip_ip_1;" -> "73: int<<16>> original_packet_1_2 = pre_gen_copy_eth_ip_ip_2;" [
+  label="", ];
+  "73: int<<16>> original_packet_1_2 = pre_gen_copy_eth_ip_ip_2;" -> "76: " [
+  label="", ];
+  "76: " -> "82: int<<48>> Anonymizer_anonymize_packet_ret_0_0 = 32;" [
+  label="", ];
+  "82: int<<48>> Anonymizer_anonymize_packet_ret_0_0 = 32;" -> "88: int<<48>> Anonymizer_anonymize_packet_ret_0_1 = 32;" [
+  label="", ];
+  "88: int<<48>> Anonymizer_anonymize_packet_ret_0_1 = 32;" -> "95: int<<16>> Anonymizer_anonymize_packet_ret_0_2 = 32;" [
+  label="", ];
+  "95: int<<16>> Anonymizer_anonymize_packet_ret_0_2 = 32;" -> "102: int<<32>> Anonymizer_anonymize_packet_ret_1_0 = 32;" [
+  label="", ];
+  "102: int<<32>> Anonymizer_anonymize_packet_ret_1_0 = 32;" -> "108: int<<32>> Anonymizer_anonymize_packet_ret_1_1 = 32;" [
+  label="", ];
+  "108: int<<32>> Anonymizer_anonymize_packet_ret_1_1 = 32;" -> "115: int<<16>> Anonymizer_anonymize_packet_ret_1_2 = 32;" [
+  label="", ];
+  "115: int<<16>> Anonymizer_anonymize_packet_ret_1_2 = 32;" -> "122: int<<48>> eth_0 = original_packet_0_0;" [
+  label="", ];
+  "122: int<<48>> eth_0 = original_packet_0_0;" -> "126: int<<48>> eth_1 = original_packet_0_1;" [
+  label="", ];
+  "126: int<<48>> eth_1 = original_packet_0_1;" -> "131: int<<16>> eth_2 = original_packet_0_2;" [
+  label="", ];
+  "131: int<<16>> eth_2 = original_packet_0_2;" -> "136: int<<32>> ip_0 = original_packet_1_0;" [
+  label="", ];
+  "136: int<<32>> ip_0 = original_packet_1_0;" -> "140: int<<32>> ip_1 = original_packet_1_1;" [
+  label="", ];
+  "140: int<<32>> ip_1 = original_packet_1_1;" -> "145: int<<16>> ip_2 = original_packet_1_2;" [
+  label="", ];
+  "145: int<<16>> ip_2 = original_packet_1_2;" -> "151: anonymizer_0_callnum = 1;" [
+  label="", ];
+  "151: anonymizer_0_callnum = 1;" -> "156: anonymizer_0_0_key = 1;" [
+  label="", ];
+  "156: anonymizer_0_0_key = 1;" -> "178: match (anonymizer_0_callnum) ...
+" [
+  label="", ];
+  "163: match (event_id) ...
+" -> "6: pre_gen_copy_eth_ip_eth_0 = eth_ip_eth_0;" [
+  label="HIT{event_id~0==1;}", ];
+  "166: " -> "1575: match (anonymizer_0_callnum) ...
+" [label="", ];
+  "177: anonymizer_0_0_ret,anonymizer_0_1_ret,anonymizer_0_2_ret,anonymizer_0_3_ret,anonymizer_0_4_ret,anonymizer_0_5_ret = table_match(anonymizer_0,anonymizer_0_0_key);" -> "1575: match (anonymizer_0_callnum) ...
+" [
+  label="", ];
+  "178: match (anonymizer_0_callnum) ...
+" -> "166: " [label="HIT{anonymizer_0_callnum~3037==0;}",
+                                                       ];
+  "178: match (anonymizer_0_callnum) ...
+" -> "177: anonymizer_0_0_ret,anonymizer_0_1_ret,anonymizer_0_2_ret,anonymizer_0_3_ret,anonymizer_0_4_ret,anonymizer_0_5_ret = table_match(anonymizer_0,anonymizer_0_0_key);" [
+  label="MISS{anonymizer_0_callnum~3037==0;}
+HIT{anonymizer_0_callnum~3037==_;}",
+  ];
+  "184: int<<1>> policy_0 = anonymizer_0_0_ret;" -> "188: int<<1>> policy_1 = anonymizer_0_1_ret;" [
+  label="", ];
+  "188: int<<1>> policy_1 = anonymizer_0_1_ret;" -> "192: int<<1>> policy_2 = anonymizer_0_2_ret;" [
+  label="", ];
+  "192: int<<1>> policy_2 = anonymizer_0_2_ret;" -> "196: int<<1>> policy_3 = anonymizer_0_3_ret;" [
+  label="", ];
+  "196: int<<1>> policy_3 = anonymizer_0_3_ret;" -> "200: int<<1>> policy_4 = anonymizer_0_4_ret;" [
+  label="", ];
+  "200: int<<1>> policy_4 = anonymizer_0_4_ret;" -> "204: int<<1>> policy_5 = anonymizer_0_5_ret;" [
+  label="", ];
+  "204: int<<1>> policy_5 = anonymizer_0_5_ret;" -> "210: int<<1>> Anonymizer_should_anonymize_ret = 0;" [
+  label="", ];
+  "210: int<<1>> Anonymizer_should_anonymize_ret = 0;" -> "211: " [label="", ];
+  "211: " -> "223: int<<1>> if_precomp = [40 : 40]eth_0-1;" [label="", ];
+  "223: int<<1>> if_precomp = [40 : 40]eth_0-1;" -> "243: match (policy_0,if_precomp) ...
+" [
+  label="", ];
+  "232: Anonymizer_should_anonymize_ret = 1;" -> "668: match (Anonymizer_should_anonymize_ret) ...
+" [
+  label="", ];
+  "237: Anonymizer_should_anonymize_ret = 0;" -> "668: match (Anonymizer_should_anonymize_ret) ...
+" [
+  label="", ];
+  "242: Anonymizer_should_anonymize_ret = 1;" -> "668: match (Anonymizer_should_anonymize_ret) ...
+" [
+  label="", ];
+  "243: match (policy_0,if_precomp) ...
+" -> "232: Anonymizer_should_anonymize_ret = 1;" [
+  label="HIT{policy_0~3071==1,if_precomp~3882==_;}", ];
+  "243: match (policy_0,if_precomp) ...
+" -> "237: Anonymizer_should_anonymize_ret = 0;" [
+  label="MISS{policy_0~3071==1,if_precomp~3882==_;}
+HIT{policy_0~3071==_,if_precomp~3882==0;}",
+  ];
+  "243: match (policy_0,if_precomp) ...
+" -> "242: Anonymizer_should_anonymize_ret = 1;" [
+  label="MISS{policy_0~3071==1,if_precomp~3882==_;
+policy_0~3071==_,if_precomp~3882==0;}
+HIT{policy_0~3071==_,if_precomp~3882==_;}",
+  ];
+  "254: int<<48>> Anonymizer_anonymize_mac_ret = 32;" -> "260: int<<32>> Anonymizer_anonymize_num_ret_0 = 32;" [
+  label="", ];
+  "260: int<<32>> Anonymizer_anonymize_num_ret_0 = 32;" -> "266: int<<24>> Anonymizer_anonymize_num_ret_1 = 32;" [
+  label="", ];
+  "266: int<<24>> Anonymizer_anonymize_num_ret_1 = 32;" -> "279: int<<48>> to_immediate_tmp = 281474976710655<<24;" [
+  label="", ];
+  "279: int<<48>> to_immediate_tmp = 281474976710655<<24;" -> "285: int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;" [
+  label="", ];
+  "285: int<<48>> prefix_mask = (int<<48>>)to_immediate_tmp;" -> "294: int<<48>> prefix = eth_1&prefix_mask;" [
+  label="", ];
+  "294: int<<48>> prefix = eth_1&prefix_mask;" -> "302: int<<48>> to_immediate_tmp3887 = eth_1-prefix;" [
+  label="", ];
+  "302: int<<48>> to_immediate_tmp3887 = eth_1-prefix;" -> "308: int<<24>> suffix = (int<<24>>)to_immediate_tmp3887;" [
+  label="", ];
+  "308: int<<24>> suffix = (int<<24>>)to_immediate_tmp3887;" -> "313: int<<1>> should_anonymize_prefix = policy_1;" [
+  label="", ];
+  "313: int<<1>> should_anonymize_prefix = policy_1;" -> "326: match (should_anonymize_prefix) ...
+" [
+  label="", ];
+  "324: prefix = hash<<48>>(7,prefix);" -> "335: prefix = prefix>>24;" [
+  label="", ];
+  "325: " -> "335: prefix = prefix>>24;" [label="", ];
+  "326: match (should_anonymize_prefix) ...
+" -> "324: prefix = hash<<48>>(7,prefix);" [
+  label="HIT{should_anonymize_prefix~3084==1;}", ];
+  "326: match (should_anonymize_prefix) ...
+" -> "325: " [label="MISS{should_anonymize_prefix~3084==1;}
+HIT{should_anonymize_prefix~3084==_;}",
+                                                          ];
+  "335: prefix = prefix>>24;" -> "339: int<<1>> should_anonymize_suffix = policy_2;" [
+  label="", ];
+  "339: int<<1>> should_anonymize_suffix = policy_2;" -> "352: match (should_anonymize_suffix) ...
+" [
+  label="", ];
+  "350: suffix = hash<<24>>(7,suffix);" -> "353: " [label="", ];
+  "351: " -> "353: " [label="", ];
+  "352: match (should_anonymize_suffix) ...
+" -> "350: suffix = hash<<24>>(7,suffix);" [
+  label="HIT{should_anonymize_suffix~3085==1;}", ];
+  "352: match (should_anonymize_suffix) ...
+" -> "351: " [label="MISS{should_anonymize_suffix~3085==1;}
+HIT{should_anonymize_suffix~3085==_;}",
+                                                          ];
+  "353: " -> "358: Anonymizer_anonymize_num_ret_0 = (int<<32>>)prefix;" [
+  label="", ];
+  "358: Anonymizer_anonymize_num_ret_0 = (int<<32>>)prefix;" -> "361: Anonymizer_anonymize_num_ret_1 = suffix;" [
+  label="", ];
+  "361: Anonymizer_anonymize_num_ret_1 = suffix;" -> "376: int<<32>> split_mac_0 = Anonymizer_anonymize_num_ret_0;" [
+  label="", ];
+  "376: int<<32>> split_mac_0 = Anonymizer_anonymize_num_ret_0;" -> "380: int<<24>> split_mac_1 = Anonymizer_anonymize_num_ret_1;" [
+  label="", ];
+  "380: int<<24>> split_mac_1 = Anonymizer_anonymize_num_ret_1;" -> "383: " [
+  label="", ];
+  "383: " -> "392: Anonymizer_anonymize_mac_ret = (int<<24>>)split_mac_0^split_mac_1;" [
+  label="", ];
+  "392: Anonymizer_anonymize_mac_ret = (int<<24>>)split_mac_0^split_mac_1;" -> "399: int<<48>> smac = Anonymizer_anonymize_mac_ret;" [
+  label="", ];
+  "399: int<<48>> smac = Anonymizer_anonymize_mac_ret;" -> "406: int<<48>> Anonymizer_anonymize_mac_ret3089 = 32;" [
+  label="", ];
+  "406: int<<48>> Anonymizer_anonymize_mac_ret3089 = 32;" -> "412: int<<32>> Anonymizer_anonymize_num_ret_03090 = 32;" [
+  label="", ];
+  "412: int<<32>> Anonymizer_anonymize_num_ret_03090 = 32;" -> "418: int<<24>> Anonymizer_anonymize_num_ret_13091 = 32;" [
+  label="", ];
+  "418: int<<24>> Anonymizer_anonymize_num_ret_13091 = 32;" -> "431: int<<48>> to_immediate_tmp3888 = 281474976710655<<24;" [
+  label="", ];
+  "431: int<<48>> to_immediate_tmp3888 = 281474976710655<<24;" -> "437: int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;" [
+  label="", ];
+  "437: int<<48>> prefix_mask3092 = (int<<48>>)to_immediate_tmp3888;" -> "446: int<<48>> prefix3093 = eth_0&prefix_mask3092;" [
+  label="", ];
+  "446: int<<48>> prefix3093 = eth_0&prefix_mask3092;" -> "454: int<<48>> to_immediate_tmp3889 = eth_0-prefix3093;" [
+  label="", ];
+  "454: int<<48>> to_immediate_tmp3889 = eth_0-prefix3093;" -> "460: int<<24>> suffix3094 = (int<<24>>)to_immediate_tmp3889;" [
+  label="", ];
+  "460: int<<24>> suffix3094 = (int<<24>>)to_immediate_tmp3889;" -> "465: int<<1>> should_anonymize_prefix3095 = policy_3;" [
+  label="", ];
+  "465: int<<1>> should_anonymize_prefix3095 = policy_3;" -> "478: match (should_anonymize_prefix3095) ...
+" [
+  label="", ];
+  "476: prefix3093 = hash<<48>>(7,prefix3093);" -> "487: prefix3093 = prefix3093>>24;" [
+  label="", ];
+  "477: " -> "487: prefix3093 = prefix3093>>24;" [label="", ];
+  "478: match (should_anonymize_prefix3095) ...
+" -> "476: prefix3093 = hash<<48>>(7,prefix3093);" [
+  label="HIT{should_anonymize_prefix3095~3095==1;}", ];
+  "478: match (should_anonymize_prefix3095) ...
+" -> "477: " [label="MISS{should_anonymize_prefix3095~3095==1;}
+HIT{should_anonymize_prefix3095~3095==_;}",
+                                                              ];
+  "487: prefix3093 = prefix3093>>24;" -> "491: int<<1>> should_anonymize_suffix3096 = policy_4;" [
+  label="", ];
+  "491: int<<1>> should_anonymize_suffix3096 = policy_4;" -> "504: match (should_anonymize_suffix3096) ...
+" [
+  label="", ];
+  "502: suffix3094 = hash<<24>>(7,suffix3094);" -> "505: " [label="", ];
+  "503: " -> "505: " [label="", ];
+  "504: match (should_anonymize_suffix3096) ...
+" -> "502: suffix3094 = hash<<24>>(7,suffix3094);" [
+  label="HIT{should_anonymize_suffix3096~3096==1;}", ];
+  "504: match (should_anonymize_suffix3096) ...
+" -> "503: " [label="MISS{should_anonymize_suffix3096~3096==1;}
+HIT{should_anonymize_suffix3096~3096==_;}",
+                                                              ];
+  "505: " -> "510: Anonymizer_anonymize_num_ret_03090 = (int<<32>>)prefix3093;" [
+  label="", ];
+  "510: Anonymizer_anonymize_num_ret_03090 = (int<<32>>)prefix3093;" -> "513: Anonymizer_anonymize_num_ret_13091 = suffix3094;" [
+  label="", ];
+  "513: Anonymizer_anonymize_num_ret_13091 = suffix3094;" -> "528: int<<32>> split_mac_03097 = Anonymizer_anonymize_num_ret_03090;" [
+  label="", ];
+  "528: int<<32>> split_mac_03097 = Anonymizer_anonymize_num_ret_03090;" -> "532: int<<24>> split_mac_13098 = Anonymizer_anonymize_num_ret_13091;" [
+  label="", ];
+  "532: int<<24>> split_mac_13098 = Anonymizer_anonymize_num_ret_13091;" -> "535: " [
+  label="", ];
+  "535: " -> "544: Anonymizer_anonymize_mac_ret3089 = (int<<24>>)split_mac_03097^split_mac_13098;" [
+  label="", ];
+  "544: Anonymizer_anonymize_mac_ret3089 = (int<<24>>)split_mac_03097^split_mac_13098;" -> "551: int<<48>> dmac = Anonymizer_anonymize_mac_ret3089;" [
+  label="", ];
+  "551: int<<48>> dmac = Anonymizer_anonymize_mac_ret3089;" -> "556: int<<48>> anonymized_eth_0 = dmac;" [
+  label="", ];
+  "556: int<<48>> anonymized_eth_0 = dmac;" -> "560: int<<48>> anonymized_eth_1 = smac;" [
+  label="", ];
+  "560: int<<48>> anonymized_eth_1 = smac;" -> "565: int<<16>> anonymized_eth_2 = eth_2;" [
+  label="", ];
+  "565: int<<16>> anonymized_eth_2 = eth_2;" -> "572: int<<32>> Anonymizer_anonymize_ip_ret = 32;" [
+  label="", ];
+  "572: int<<32>> Anonymizer_anonymize_ip_ret = 32;" -> "578: int<<32>> PrefixTable_prefix_match_ret = 32;" [
+  label="", ];
+  "578: int<<32>> PrefixTable_prefix_match_ret = 32;" -> "579: " [label="", ];
+  "579: " -> "585: int<<8>> ip_octets_0 = [31 : 24]ip_0;" [label="", ];
+  "585: int<<8>> ip_octets_0 = [31 : 24]ip_0;" -> "591: int<<8>> ip_octets_1 = [23 : 16]ip_0;" [
+  label="", ];
+  "591: int<<8>> ip_octets_1 = [23 : 16]ip_0;" -> "598: int<<8>> ip_octets_2 = [15 : 8]ip_0;" [
+  label="", ];
+  "598: int<<8>> ip_octets_2 = [15 : 8]ip_0;" -> "605: int<<8>> ip_octets_3 = [7 : 0]ip_0;" [
+  label="", ];
+  "605: int<<8>> ip_octets_3 = [7 : 0]ip_0;" -> "608: " [label="", ];
+  "608: " -> "613: anonymizer_1_0_callnum = 1;" [label="", ];
+  "613: anonymizer_1_0_callnum = 1;" -> "618: anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;" [
+  label="", ];
+  "618: anonymizer_1_0_0_key = (int<<32>>)ip_octets_0;" -> "623: anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;" [
+  label="", ];
+  "623: anonymizer_1_0_1_key = (int<<32>>)ip_octets_1;" -> "628: anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;" [
+  label="", ];
+  "628: anonymizer_1_0_2_key = (int<<32>>)ip_octets_2;" -> "633: anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;" [
+  label="", ];
+  "633: anonymizer_1_0_3_key = (int<<32>>)ip_octets_3;" -> "684: match (anonymizer_1_0_callnum) ...
+" [
+  label="", ];
+  "647: Anonymizer_anonymize_packet_ret_0_0 = eth_0;" -> "650: Anonymizer_anonymize_packet_ret_0_1 = eth_1;" [
+  label="", ];
+  "650: Anonymizer_anonymize_packet_ret_0_1 = eth_1;" -> "654: Anonymizer_anonymize_packet_ret_0_2 = eth_2;" [
+  label="", ];
+  "654: Anonymizer_anonymize_packet_ret_0_2 = eth_2;" -> "658: Anonymizer_anonymize_packet_ret_1_0 = ip_0;" [
+  label="", ];
+  "658: Anonymizer_anonymize_packet_ret_1_0 = ip_0;" -> "661: Anonymizer_anonymize_packet_ret_1_1 = ip_1;" [
+  label="", ];
+  "661: Anonymizer_anonymize_packet_ret_1_1 = ip_1;" -> "665: Anonymizer_anonymize_packet_ret_1_2 = ip_2;" [
+  label="", ];
+  "665: Anonymizer_anonymize_packet_ret_1_2 = ip_2;" -> "684: match (anonymizer_1_0_callnum) ...
+" [
+  label="", ];
+  "668: match (Anonymizer_should_anonymize_ret) ...
+" -> "254: int<<48>> Anonymizer_anonymize_mac_ret = 32;" [
+  label="HIT{Anonymizer_should_anonymize_ret~3077==1;}", ];
+  "668: match (Anonymizer_should_anonymize_ret) ...
+" -> "647: Anonymizer_anonymize_packet_ret_0_0 = eth_0;" [
+  label="MISS{Anonymizer_should_anonymize_ret~3077==1;}
+HIT{Anonymizer_should_anonymize_ret~3077==_;}",
+  ];
+  "671: " -> "1109: match (anonymizer_1_0_callnum) ...
+" [label="", ];
+  "683: anonymizer_1_0_0_ret = table_match(anonymizer_1_0,anonymizer_1_0_0_key,anonymizer_1_0_1_key,anonymizer_1_0_2_key,anonymizer_1_0_3_key);" -> "1109: match (anonymizer_1_0_callnum) ...
+" [
+  label="", ];
+  "684: match (anonymizer_1_0_callnum) ...
+" -> "671: " [label="HIT{anonymizer_1_0_callnum~3038==0;}",
+                                                         ];
+  "684: match (anonymizer_1_0_callnum) ...
+" -> "683: anonymizer_1_0_0_ret = table_match(anonymizer_1_0,anonymizer_1_0_0_key,anonymizer_1_0_1_key,anonymizer_1_0_2_key,anonymizer_1_0_3_key);" [
+  label="MISS{anonymizer_1_0_callnum~3038==0;}
+HIT{anonymizer_1_0_callnum~3038==_;}",
+  ];
+  "690: int<<32>> prefix_length = anonymizer_1_0_0_ret;" -> "693: PrefixTable_prefix_match_ret = prefix_length;" [
+  label="", ];
+  "693: PrefixTable_prefix_match_ret = prefix_length;" -> "697: int<<32>> prefix_len = PrefixTable_prefix_match_ret;" [
+  label="", ];
+  "697: int<<32>> prefix_len = PrefixTable_prefix_match_ret;" -> "701: int<<1>> should_preserve_prefix = policy_5;" [
+  label="", ];
+  "701: int<<1>> should_preserve_prefix = policy_5;" -> "1023: match (prefix_len) ...
+" [
+  label="", ];
+  "709: int<<1>> anonymize_prefix = 0;" -> "717: match (should_preserve_prefix) ...
+" [
+  label="", ];
+  "716: anonymize_prefix = 1;" -> "724: int<<32>> Anonymizer_anonymize_num_ret_03113 = 32;" [
+  label="", ];
+  "717: match (should_preserve_prefix) ...
+" -> "716: anonymize_prefix = 1;" [
+  label="HIT{should_preserve_prefix~3111==_;}", ];
+  "724: int<<32>> Anonymizer_anonymize_num_ret_03113 = 32;" -> "730: int<<16>> Anonymizer_anonymize_num_ret_13114 = 32;" [
+  label="", ];
+  "730: int<<16>> Anonymizer_anonymize_num_ret_13114 = 32;" -> "743: int<<48>> to_immediate_tmp3890 = 281474976710655<<16;" [
+  label="", ];
+  "743: int<<48>> to_immediate_tmp3890 = 281474976710655<<16;" -> "749: int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;" [
+  label="", ];
+  "749: int<<32>> prefix_mask3115 = (int<<32>>)to_immediate_tmp3890;" -> "758: int<<32>> prefix3116 = ip_0&prefix_mask3115;" [
+  label="", ];
+  "758: int<<32>> prefix3116 = ip_0&prefix_mask3115;" -> "766: int<<32>> to_immediate_tmp3891 = ip_0-prefix3116;" [
+  label="", ];
+  "766: int<<32>> to_immediate_tmp3891 = ip_0-prefix3116;" -> "772: int<<16>> suffix3117 = (int<<16>>)to_immediate_tmp3891;" [
+  label="", ];
+  "772: int<<16>> suffix3117 = (int<<16>>)to_immediate_tmp3891;" -> "777: int<<1>> should_anonymize_prefix3118 = anonymize_prefix;" [
+  label="", ];
+  "777: int<<1>> should_anonymize_prefix3118 = anonymize_prefix;" -> "790: match (should_anonymize_prefix3118) ...
+" [
+  label="", ];
+  "788: prefix3116 = hash<<32>>(7,prefix3116);" -> "799: prefix3116 = prefix3116>>16;" [
+  label="", ];
+  "789: " -> "799: prefix3116 = prefix3116>>16;" [label="", ];
+  "790: match (should_anonymize_prefix3118) ...
+" -> "788: prefix3116 = hash<<32>>(7,prefix3116);" [
+  label="HIT{should_anonymize_prefix3118~3118==1;}", ];
+  "790: match (should_anonymize_prefix3118) ...
+" -> "789: " [label="MISS{should_anonymize_prefix3118~3118==1;}
+HIT{should_anonymize_prefix3118~3118==_;}",
+                                                              ];
+  "799: prefix3116 = prefix3116>>16;" -> "805: int<<1>> should_anonymize_suffix3119 = 1;" [
+  label="", ];
+  "805: int<<1>> should_anonymize_suffix3119 = 1;" -> "818: match (should_anonymize_suffix3119) ...
+" [
+  label="", ];
+  "816: suffix3117 = hash<<16>>(7,suffix3117);" -> "819: " [label="", ];
+  "817: " -> "819: " [label="", ];
+  "818: match (should_anonymize_suffix3119) ...
+" -> "816: suffix3117 = hash<<16>>(7,suffix3117);" [
+  label="HIT{should_anonymize_suffix3119~3119==1;}", ];
+  "818: match (should_anonymize_suffix3119) ...
+" -> "817: " [label="MISS{should_anonymize_suffix3119~3119==1;}
+HIT{should_anonymize_suffix3119~3119==_;}",
+                                                              ];
+  "819: " -> "824: Anonymizer_anonymize_num_ret_03113 = (int<<32>>)prefix3116;" [
+  label="", ];
+  "824: Anonymizer_anonymize_num_ret_03113 = (int<<32>>)prefix3116;" -> "827: Anonymizer_anonymize_num_ret_13114 = suffix3117;" [
+  label="", ];
+  "827: Anonymizer_anonymize_num_ret_13114 = suffix3117;" -> "843: int<<32>> split_ip_0 = Anonymizer_anonymize_num_ret_03113;" [
+  label="", ];
+  "843: int<<32>> split_ip_0 = Anonymizer_anonymize_num_ret_03113;" -> "847: int<<16>> split_ip_1 = Anonymizer_anonymize_num_ret_13114;" [
+  label="", ];
+  "847: int<<16>> split_ip_1 = Anonymizer_anonymize_num_ret_13114;" -> "850: " [
+  label="", ];
+  "850: " -> "859: Anonymizer_anonymize_ip_ret = (int<<16>>)split_ip_0^split_ip_1;" [
+  label="", ];
+  "859: Anonymizer_anonymize_ip_ret = (int<<16>>)split_ip_0^split_ip_1;" -> "1028: int<<32>> src_ip = Anonymizer_anonymize_ip_ret;" [
+  label="", ];
+  "867: int<<1>> anonymize_prefix3122 = 0;" -> "875: match (should_preserve_prefix) ...
+" [
+  label="", ];
+  "874: anonymize_prefix3122 = 1;" -> "882: int<<32>> Anonymizer_anonymize_num_ret_03123 = 32;" [
+  label="", ];
+  "875: match (should_preserve_prefix) ...
+" -> "874: anonymize_prefix3122 = 1;" [
+  label="HIT{should_preserve_prefix~3111==_;}", ];
+  "882: int<<32>> Anonymizer_anonymize_num_ret_03123 = 32;" -> "888: int<<8>> Anonymizer_anonymize_num_ret_13124 = 32;" [
+  label="", ];
+  "888: int<<8>> Anonymizer_anonymize_num_ret_13124 = 32;" -> "901: int<<48>> to_immediate_tmp3892 = 281474976710655<<8;" [
+  label="", ];
+  "901: int<<48>> to_immediate_tmp3892 = 281474976710655<<8;" -> "907: int<<32>> prefix_mask3125 = (int<<32>>)to_immediate_tmp3892;" [
+  label="", ];
+  "907: int<<32>> prefix_mask3125 = (int<<32>>)to_immediate_tmp3892;" -> "916: int<<32>> prefix3126 = ip_0&prefix_mask3125;" [
+  label="", ];
+  "916: int<<32>> prefix3126 = ip_0&prefix_mask3125;" -> "924: int<<32>> to_immediate_tmp3893 = ip_0-prefix3126;" [
+  label="", ];
+  "924: int<<32>> to_immediate_tmp3893 = ip_0-prefix3126;" -> "930: int<<8>> suffix3127 = (int<<8>>)to_immediate_tmp3893;" [
+  label="", ];
+  "930: int<<8>> suffix3127 = (int<<8>>)to_immediate_tmp3893;" -> "935: int<<1>> should_anonymize_prefix3128 = anonymize_prefix3122;" [
+  label="", ];
+  "935: int<<1>> should_anonymize_prefix3128 = anonymize_prefix3122;" -> "948: match (should_anonymize_prefix3128) ...
+" [
+  label="", ];
+  "946: prefix3126 = hash<<32>>(7,prefix3126);" -> "957: prefix3126 = prefix3126>>8;" [
+  label="", ];
+  "947: " -> "957: prefix3126 = prefix3126>>8;" [label="", ];
+  "948: match (should_anonymize_prefix3128) ...
+" -> "946: prefix3126 = hash<<32>>(7,prefix3126);" [
+  label="HIT{should_anonymize_prefix3128~3128==1;}", ];
+  "948: match (should_anonymize_prefix3128) ...
+" -> "947: " [label="MISS{should_anonymize_prefix3128~3128==1;}
+HIT{should_anonymize_prefix3128~3128==_;}",
+                                                              ];
+  "957: prefix3126 = prefix3126>>8;" -> "963: int<<1>> should_anonymize_suffix3129 = 1;" [
+  label="", ];
+  "963: int<<1>> should_anonymize_suffix3129 = 1;" -> "976: match (should_anonymize_suffix3129) ...
+" [
+  label="", ];
+  "974: suffix3127 = hash<<8>>(7,suffix3127);" -> "977: " [label="", ];
+  "975: " -> "977: " [label="", ];
+  "976: match (should_anonymize_suffix3129) ...
+" -> "974: suffix3127 = hash<<8>>(7,suffix3127);" [
+  label="HIT{should_anonymize_suffix3129~3129==1;}", ];
+  "976: match (should_anonymize_suffix3129) ...
+" -> "975: " [label="MISS{should_anonymize_suffix3129~3129==1;}
+HIT{should_anonymize_suffix3129~3129==_;}",
+                                                              ];
+  "977: " -> "982: Anonymizer_anonymize_num_ret_03123 = (int<<32>>)prefix3126;" [
+  label="", ];
+  "982: Anonymizer_anonymize_num_ret_03123 = (int<<32>>)prefix3126;" -> "985: Anonymizer_anonymize_num_ret_13124 = suffix3127;" [
+  label="", ];
+  "985: Anonymizer_anonymize_num_ret_13124 = suffix3127;" -> "1001: int<<32>> split_ip_03130 = Anonymizer_anonymize_num_ret_03123;" [
+  label="", ];
+  "1001: int<<32>> split_ip_03130 = Anonymizer_anonymize_num_ret_03123;" -> "1005: int<<8>> split_ip_13131 = Anonymizer_anonymize_num_ret_13124;" [
+  label="", ];
+  "1005: int<<8>> split_ip_13131 = Anonymizer_anonymize_num_ret_13124;" -> "1008: " [
+  label="", ];
+  "1008: " -> "1017: Anonymizer_anonymize_ip_ret = (int<<24>>)split_ip_03130^split_ip_13131;" [
+  label="", ];
+  "1017: Anonymizer_anonymize_ip_ret = (int<<24>>)split_ip_03130^split_ip_13131;" -> "1028: int<<32>> src_ip = Anonymizer_anonymize_ip_ret;" [
+  label="", ];
+  "1022: Anonymizer_anonymize_ip_ret = ip_0;" -> "1028: int<<32>> src_ip = Anonymizer_anonymize_ip_ret;" [
+  label="", ];
+  "1023: match (prefix_len) ...
+" -> "709: int<<1>> anonymize_prefix = 0;" [
+  label="HIT{prefix_len~3110==16;}", ];
+  "1023: match (prefix_len) ...
+" -> "867: int<<1>> anonymize_prefix3122 = 0;" [
+  label="MISS{prefix_len~3110==16;}
+HIT{prefix_len~3110==24;}", ];
+  "1023: match (prefix_len) ...
+" -> "1022: Anonymizer_anonymize_ip_ret = ip_0;" [
+  label="MISS{prefix_len~3110==16;
+prefix_len~3110==24;}
+HIT{prefix_len~3110==_;}",
+  ];
+  "1028: int<<32>> src_ip = Anonymizer_anonymize_ip_ret;" -> "1034: int<<32>> Anonymizer_anonymize_ip_ret3133 = 32;" [
+  label="", ];
+  "1034: int<<32>> Anonymizer_anonymize_ip_ret3133 = 32;" -> "1040: int<<32>> PrefixTable_prefix_match_ret3134 = 32;" [
+  label="", ];
+  "1040: int<<32>> PrefixTable_prefix_match_ret3134 = 32;" -> "1041: " [
+  label="", ];
+  "1041: " -> "1047: int<<8>> ip_octets_03135 = [31 : 24]ip_1;" [label="", ];
+  "1047: int<<8>> ip_octets_03135 = [31 : 24]ip_1;" -> "1053: int<<8>> ip_octets_13136 = [23 : 16]ip_1;" [
+  label="", ];
+  "1053: int<<8>> ip_octets_13136 = [23 : 16]ip_1;" -> "1060: int<<8>> ip_octets_23137 = [15 : 8]ip_1;" [
+  label="", ];
+  "1060: int<<8>> ip_octets_23137 = [15 : 8]ip_1;" -> "1067: int<<8>> ip_octets_33138 = [7 : 0]ip_1;" [
+  label="", ];
+  "1067: int<<8>> ip_octets_33138 = [7 : 0]ip_1;" -> "1070: " [label="", ];
+  "1070: " -> "1075: anonymizer_2_0_callnum = 1;" [label="", ];
+  "1075: anonymizer_2_0_callnum = 1;" -> "1080: anonymizer_2_0_0_key = (int<<32>>)ip_octets_03135;" [
+  label="", ];
+  "1080: anonymizer_2_0_0_key = (int<<32>>)ip_octets_03135;" -> "1085: anonymizer_2_0_1_key = (int<<32>>)ip_octets_13136;" [
+  label="", ];
+  "1085: anonymizer_2_0_1_key = (int<<32>>)ip_octets_13136;" -> "1090: anonymizer_2_0_2_key = (int<<32>>)ip_octets_23137;" [
+  label="", ];
+  "1090: anonymizer_2_0_2_key = (int<<32>>)ip_octets_23137;" -> "1095: anonymizer_2_0_3_key = (int<<32>>)ip_octets_33138;" [
+  label="", ];
+  "1095: anonymizer_2_0_3_key = (int<<32>>)ip_octets_33138;" -> "1125: match (anonymizer_2_0_callnum) ...
+" [
+  label="", ];
+  "1109: match (anonymizer_1_0_callnum) ...
+" -> "690: int<<32>> prefix_length = anonymizer_1_0_0_ret;" [
+  label="HIT{anonymizer_1_0_callnum~3038==1;}", ];
+  "1112: " -> "1513: match (anonymizer_2_0_callnum) ...
+" [label="", ];
+  "1124: anonymizer_2_0_0_ret = table_match(anonymizer_2_0,anonymizer_2_0_0_key,anonymizer_2_0_1_key,anonymizer_2_0_2_key,anonymizer_2_0_3_key);" -> "1513: match (anonymizer_2_0_callnum) ...
+" [
+  label="", ];
+  "1125: match (anonymizer_2_0_callnum) ...
+" -> "1112: " [label="HIT{anonymizer_2_0_callnum~3039==0;}",
+                                                           ];
+  "1125: match (anonymizer_2_0_callnum) ...
+" -> "1124: anonymizer_2_0_0_ret = table_match(anonymizer_2_0,anonymizer_2_0_0_key,anonymizer_2_0_1_key,anonymizer_2_0_2_key,anonymizer_2_0_3_key);" [
+  label="MISS{anonymizer_2_0_callnum~3039==0;}
+HIT{anonymizer_2_0_callnum~3039==_;}",
+  ];
+  "1131: int<<32>> prefix_length3139 = anonymizer_2_0_0_ret;" -> "1134: PrefixTable_prefix_match_ret3134 = prefix_length3139;" [
+  label="", ];
+  "1134: PrefixTable_prefix_match_ret3134 = prefix_length3139;" -> "1138: int<<32>> prefix_len3140 = PrefixTable_prefix_match_ret3134;" [
+  label="", ];
+  "1138: int<<32>> prefix_len3140 = PrefixTable_prefix_match_ret3134;" -> "1142: int<<1>> should_preserve_prefix3141 = policy_5;" [
+  label="", ];
+  "1142: int<<1>> should_preserve_prefix3141 = policy_5;" -> "1464: match (prefix_len3140) ...
+" [
+  label="", ];
+  "1150: int<<1>> anonymize_prefix3142 = 0;" -> "1158: match (should_preserve_prefix3141) ...
+" [
+  label="", ];
+  "1157: anonymize_prefix3142 = 1;" -> "1165: int<<32>> Anonymizer_anonymize_num_ret_03143 = 32;" [
+  label="", ];
+  "1158: match (should_preserve_prefix3141) ...
+" -> "1157: anonymize_prefix3142 = 1;" [
+  label="HIT{should_preserve_prefix3141~3141==_;}", ];
+  "1165: int<<32>> Anonymizer_anonymize_num_ret_03143 = 32;" -> "1171: int<<16>> Anonymizer_anonymize_num_ret_13144 = 32;" [
+  label="", ];
+  "1171: int<<16>> Anonymizer_anonymize_num_ret_13144 = 32;" -> "1184: int<<48>> to_immediate_tmp3894 = 281474976710655<<16;" [
+  label="", ];
+  "1184: int<<48>> to_immediate_tmp3894 = 281474976710655<<16;" -> "1190: int<<32>> prefix_mask3145 = (int<<32>>)to_immediate_tmp3894;" [
+  label="", ];
+  "1190: int<<32>> prefix_mask3145 = (int<<32>>)to_immediate_tmp3894;" -> "1199: int<<32>> prefix3146 = ip_1&prefix_mask3145;" [
+  label="", ];
+  "1199: int<<32>> prefix3146 = ip_1&prefix_mask3145;" -> "1207: int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;" [
+  label="", ];
+  "1207: int<<32>> to_immediate_tmp3895 = ip_1-prefix3146;" -> "1213: int<<16>> suffix3147 = (int<<16>>)to_immediate_tmp3895;" [
+  label="", ];
+  "1213: int<<16>> suffix3147 = (int<<16>>)to_immediate_tmp3895;" -> "1218: int<<1>> should_anonymize_prefix3148 = anonymize_prefix3142;" [
+  label="", ];
+  "1218: int<<1>> should_anonymize_prefix3148 = anonymize_prefix3142;" -> "1231: match (should_anonymize_prefix3148) ...
+" [
+  label="", ];
+  "1229: prefix3146 = hash<<32>>(7,prefix3146);" -> "1240: prefix3146 = prefix3146>>16;" [
+  label="", ];
+  "1230: " -> "1240: prefix3146 = prefix3146>>16;" [label="", ];
+  "1231: match (should_anonymize_prefix3148) ...
+" -> "1229: prefix3146 = hash<<32>>(7,prefix3146);" [
+  label="HIT{should_anonymize_prefix3148~3148==1;}", ];
+  "1231: match (should_anonymize_prefix3148) ...
+" -> "1230: " [label="MISS{should_anonymize_prefix3148~3148==1;}
+HIT{should_anonymize_prefix3148~3148==_;}",
+                                                                ];
+  "1240: prefix3146 = prefix3146>>16;" -> "1246: int<<1>> should_anonymize_suffix3149 = 1;" [
+  label="", ];
+  "1246: int<<1>> should_anonymize_suffix3149 = 1;" -> "1259: match (should_anonymize_suffix3149) ...
+" [
+  label="", ];
+  "1257: suffix3147 = hash<<16>>(7,suffix3147);" -> "1260: " [label="", ];
+  "1258: " -> "1260: " [label="", ];
+  "1259: match (should_anonymize_suffix3149) ...
+" -> "1257: suffix3147 = hash<<16>>(7,suffix3147);" [
+  label="HIT{should_anonymize_suffix3149~3149==1;}", ];
+  "1259: match (should_anonymize_suffix3149) ...
+" -> "1258: " [label="MISS{should_anonymize_suffix3149~3149==1;}
+HIT{should_anonymize_suffix3149~3149==_;}",
+                                                                ];
+  "1260: " -> "1265: Anonymizer_anonymize_num_ret_03143 = (int<<32>>)prefix3146;" [
+  label="", ];
+  "1265: Anonymizer_anonymize_num_ret_03143 = (int<<32>>)prefix3146;" -> "1268: Anonymizer_anonymize_num_ret_13144 = suffix3147;" [
+  label="", ];
+  "1268: Anonymizer_anonymize_num_ret_13144 = suffix3147;" -> "1284: int<<32>> split_ip_03150 = Anonymizer_anonymize_num_ret_03143;" [
+  label="", ];
+  "1284: int<<32>> split_ip_03150 = Anonymizer_anonymize_num_ret_03143;" -> "1288: int<<16>> split_ip_13151 = Anonymizer_anonymize_num_ret_13144;" [
+  label="", ];
+  "1288: int<<16>> split_ip_13151 = Anonymizer_anonymize_num_ret_13144;" -> "1291: " [
+  label="", ];
+  "1291: " -> "1300: Anonymizer_anonymize_ip_ret3133 = (int<<16>>)split_ip_03150^split_ip_13151;" [
+  label="", ];
+  "1300: Anonymizer_anonymize_ip_ret3133 = (int<<16>>)split_ip_03150^split_ip_13151;" -> "1469: int<<32>> dst_ip = Anonymizer_anonymize_ip_ret3133;" [
+  label="", ];
+  "1308: int<<1>> anonymize_prefix3152 = 0;" -> "1316: match (should_preserve_prefix3141) ...
+" [
+  label="", ];
+  "1315: anonymize_prefix3152 = 1;" -> "1323: int<<32>> Anonymizer_anonymize_num_ret_03153 = 32;" [
+  label="", ];
+  "1316: match (should_preserve_prefix3141) ...
+" -> "1315: anonymize_prefix3152 = 1;" [
+  label="HIT{should_preserve_prefix3141~3141==_;}", ];
+  "1323: int<<32>> Anonymizer_anonymize_num_ret_03153 = 32;" -> "1329: int<<8>> Anonymizer_anonymize_num_ret_13154 = 32;" [
+  label="", ];
+  "1329: int<<8>> Anonymizer_anonymize_num_ret_13154 = 32;" -> "1342: int<<48>> to_immediate_tmp3896 = 281474976710655<<8;" [
+  label="", ];
+  "1342: int<<48>> to_immediate_tmp3896 = 281474976710655<<8;" -> "1348: int<<32>> prefix_mask3155 = (int<<32>>)to_immediate_tmp3896;" [
+  label="", ];
+  "1348: int<<32>> prefix_mask3155 = (int<<32>>)to_immediate_tmp3896;" -> "1357: int<<32>> prefix3156 = ip_1&prefix_mask3155;" [
+  label="", ];
+  "1357: int<<32>> prefix3156 = ip_1&prefix_mask3155;" -> "1365: int<<32>> to_immediate_tmp3897 = ip_1-prefix3156;" [
+  label="", ];
+  "1365: int<<32>> to_immediate_tmp3897 = ip_1-prefix3156;" -> "1371: int<<8>> suffix3157 = (int<<8>>)to_immediate_tmp3897;" [
+  label="", ];
+  "1371: int<<8>> suffix3157 = (int<<8>>)to_immediate_tmp3897;" -> "1376: int<<1>> should_anonymize_prefix3158 = anonymize_prefix3152;" [
+  label="", ];
+  "1376: int<<1>> should_anonymize_prefix3158 = anonymize_prefix3152;" -> "1389: match (should_anonymize_prefix3158) ...
+" [
+  label="", ];
+  "1387: prefix3156 = hash<<32>>(7,prefix3156);" -> "1398: prefix3156 = prefix3156>>8;" [
+  label="", ];
+  "1388: " -> "1398: prefix3156 = prefix3156>>8;" [label="", ];
+  "1389: match (should_anonymize_prefix3158) ...
+" -> "1387: prefix3156 = hash<<32>>(7,prefix3156);" [
+  label="HIT{should_anonymize_prefix3158~3158==1;}", ];
+  "1389: match (should_anonymize_prefix3158) ...
+" -> "1388: " [label="MISS{should_anonymize_prefix3158~3158==1;}
+HIT{should_anonymize_prefix3158~3158==_;}",
+                                                                ];
+  "1398: prefix3156 = prefix3156>>8;" -> "1404: int<<1>> should_anonymize_suffix3159 = 1;" [
+  label="", ];
+  "1404: int<<1>> should_anonymize_suffix3159 = 1;" -> "1417: match (should_anonymize_suffix3159) ...
+" [
+  label="", ];
+  "1415: suffix3157 = hash<<8>>(7,suffix3157);" -> "1418: " [label="", ];
+  "1416: " -> "1418: " [label="", ];
+  "1417: match (should_anonymize_suffix3159) ...
+" -> "1415: suffix3157 = hash<<8>>(7,suffix3157);" [
+  label="HIT{should_anonymize_suffix3159~3159==1;}", ];
+  "1417: match (should_anonymize_suffix3159) ...
+" -> "1416: " [label="MISS{should_anonymize_suffix3159~3159==1;}
+HIT{should_anonymize_suffix3159~3159==_;}",
+                                                                ];
+  "1418: " -> "1423: Anonymizer_anonymize_num_ret_03153 = (int<<32>>)prefix3156;" [
+  label="", ];
+  "1423: Anonymizer_anonymize_num_ret_03153 = (int<<32>>)prefix3156;" -> "1426: Anonymizer_anonymize_num_ret_13154 = suffix3157;" [
+  label="", ];
+  "1426: Anonymizer_anonymize_num_ret_13154 = suffix3157;" -> "1442: int<<32>> split_ip_03160 = Anonymizer_anonymize_num_ret_03153;" [
+  label="", ];
+  "1442: int<<32>> split_ip_03160 = Anonymizer_anonymize_num_ret_03153;" -> "1446: int<<8>> split_ip_13161 = Anonymizer_anonymize_num_ret_13154;" [
+  label="", ];
+  "1446: int<<8>> split_ip_13161 = Anonymizer_anonymize_num_ret_13154;" -> "1449: " [
+  label="", ];
+  "1449: " -> "1458: Anonymizer_anonymize_ip_ret3133 = (int<<24>>)split_ip_03160^split_ip_13161;" [
+  label="", ];
+  "1458: Anonymizer_anonymize_ip_ret3133 = (int<<24>>)split_ip_03160^split_ip_13161;" -> "1469: int<<32>> dst_ip = Anonymizer_anonymize_ip_ret3133;" [
+  label="", ];
+  "1463: Anonymizer_anonymize_ip_ret3133 = ip_1;" -> "1469: int<<32>> dst_ip = Anonymizer_anonymize_ip_ret3133;" [
+  label="", ];
+  "1464: match (prefix_len3140) ...
+" -> "1150: int<<1>> anonymize_prefix3142 = 0;" [
+  label="HIT{prefix_len3140~3140==16;}", ];
+  "1464: match (prefix_len3140) ...
+" -> "1308: int<<1>> anonymize_prefix3152 = 0;" [
+  label="MISS{prefix_len3140~3140==16;}
+HIT{prefix_len3140~3140==24;}", ];
+  "1464: match (prefix_len3140) ...
+" -> "1463: Anonymizer_anonymize_ip_ret3133 = ip_1;" [
+  label="MISS{prefix_len3140~3140==16;
+prefix_len3140~3140==24;}
+HIT{prefix_len3140~3140==_;}",
+  ];
+  "1469: int<<32>> dst_ip = Anonymizer_anonymize_ip_ret3133;" -> "1473: int<<32>> anonymized_ip_0 = src_ip;" [
+  label="", ];
+  "1473: int<<32>> anonymized_ip_0 = src_ip;" -> "1477: int<<32>> anonymized_ip_1 = dst_ip;" [
+  label="", ];
+  "1477: int<<32>> anonymized_ip_1 = dst_ip;" -> "1482: int<<16>> anonymized_ip_2 = ip_2;" [
+  label="", ];
+  "1482: int<<16>> anonymized_ip_2 = ip_2;" -> "1486: Anonymizer_anonymize_packet_ret_0_0 = anonymized_eth_0;" [
+  label="", ];
+  "1486: Anonymizer_anonymize_packet_ret_0_0 = anonymized_eth_0;" -> "1489: Anonymizer_anonymize_packet_ret_0_1 = anonymized_eth_1;" [
+  label="", ];
+  "1489: Anonymizer_anonymize_packet_ret_0_1 = anonymized_eth_1;" -> "1493: Anonymizer_anonymize_packet_ret_0_2 = anonymized_eth_2;" [
+  label="", ];
+  "1493: Anonymizer_anonymize_packet_ret_0_2 = anonymized_eth_2;" -> "1497: Anonymizer_anonymize_packet_ret_1_0 = anonymized_ip_0;" [
+  label="", ];
+  "1497: Anonymizer_anonymize_packet_ret_1_0 = anonymized_ip_0;" -> "1500: Anonymizer_anonymize_packet_ret_1_1 = anonymized_ip_1;" [
+  label="", ];
+  "1500: Anonymizer_anonymize_packet_ret_1_1 = anonymized_ip_1;" -> "1504: Anonymizer_anonymize_packet_ret_1_2 = anonymized_ip_2;" [
+  label="", ];
+  "1504: Anonymizer_anonymize_packet_ret_1_2 = anonymized_ip_2;" -> "1522: int<<48>> anonymized_packet_0_0 = Anonymizer_anonymize_packet_ret_0_0;" [
+  label="", ];
+  "1513: match (anonymizer_2_0_callnum) ...
+" -> "1131: int<<32>> prefix_length3139 = anonymizer_2_0_0_ret;" [
+  label="HIT{anonymizer_2_0_callnum~3039==1;}", ];
+  "1522: int<<48>> anonymized_packet_0_0 = Anonymizer_anonymize_packet_ret_0_0;" -> "1526: int<<48>> anonymized_packet_0_1 = Anonymizer_anonymize_packet_ret_0_1;" [
+  label="", ];
+  "1526: int<<48>> anonymized_packet_0_1 = Anonymizer_anonymize_packet_ret_0_1;" -> "1531: int<<16>> anonymized_packet_0_2 = Anonymizer_anonymize_packet_ret_0_2;" [
+  label="", ];
+  "1531: int<<16>> anonymized_packet_0_2 = Anonymizer_anonymize_packet_ret_0_2;" -> "1536: int<<32>> anonymized_packet_1_0 = Anonymizer_anonymize_packet_ret_1_0;" [
+  label="", ];
+  "1536: int<<32>> anonymized_packet_1_0 = Anonymizer_anonymize_packet_ret_1_0;" -> "1540: int<<32>> anonymized_packet_1_1 = Anonymizer_anonymize_packet_ret_1_1;" [
+  label="", ];
+  "1540: int<<32>> anonymized_packet_1_1 = Anonymizer_anonymize_packet_ret_1_1;" -> "1545: int<<16>> anonymized_packet_1_2 = Anonymizer_anonymize_packet_ret_1_2;" [
+  label="", ];
+  "1545: int<<16>> anonymized_packet_1_2 = Anonymizer_anonymize_packet_ret_1_2;" -> "1566: generate_port (2, eth_ip(anonymized_packet_0_0,anonymized_packet_0_1,anonymized_packet_0_2,anonymized_packet_1_0,anonymized_packet_1_1,anonymized_packet_1_2));" [
+  label="", ];
+  "1575: match (anonymizer_0_callnum) ...
+" -> "184: int<<1>> policy_0 = anonymizer_0_0_ret;" [
+  label="HIT{anonymizer_0_callnum~3037==1;}", ];
+  
+  }
