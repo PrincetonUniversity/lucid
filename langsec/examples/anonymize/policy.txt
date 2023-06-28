@@ -1,0 +1,8 @@
+anonymize_multicast_broadcast: no
+anonymize_srcmac_oui: yes
+anonymize_srcmac_id: yes
+anonymize_dstmac_oui: yes
+anonymize_dstmac_id: yes
+anonymize_srcipv4: [172.17.1.0/24, 10.4.0.0/16]
+anonymize_dstipv4: [172.17.1.0/24, 10.4.0.0/16]
+preserve_prefix: yes

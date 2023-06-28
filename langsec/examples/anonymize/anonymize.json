@@ -1,58 +1,6 @@
 {
     "switches": 1,
     "max time": 9999999,
-    "events": [
-      {
-        "type": "command", 
-        "name":"Table.install", 
-        "args":{
-          "table":"anonymizer.policy_table", 
-          "key":[1], 
-          "action":"anonymizer.policy_table.Anonymizer_get_policy", 
-          "args":["false", "true", "true", "true", "true", "true"]}
-      },
-      {
-        "type": "command", 
-        "name":"Table.install", 
-        "args":{
-          "table":"anonymizer.src_prefix_table.prefix_table", 
-          "key":[10, 4, 1, "_"], 
-          "action":"anonymizer.src_prefix_table.prefix_table.PrefixTable_result", 
-          "args":[24]}
-      },
-      {
-        "type": "command", 
-        "name":"Table.install", 
-        "args":{
-          "table":"anonymizer.src_prefix_table.prefix_table", 
-          "key":[10, 4, "_", "_"], 
-          "action":"anonymizer.src_prefix_table.prefix_table.PrefixTable_result", 
-          "args":[16]}
-      },
-      {
-        "type": "command", 
-        "name":"Table.install", 
-        "args":{
-          "table":"anonymizer.dst_prefix_table.prefix_table", 
-          "key":[172, 17, 1, "_"], 
-          "action":"anonymizer.dst_prefix_table.prefix_table.PrefixTable_result", 
-          "args":[24]}
-      },
-      {
-        "type": "command", 
-        "name":"Table.install", 
-        "args":{
-          "table":"anonymizer.dst_prefix_table.prefix_table", 
-          "key":[10, 4, "_", "_"], 
-          "action":"anonymizer.dst_prefix_table.prefix_table.PrefixTable_result", 
-          "args":[16]}
-      },
-      {"name":"eth_ip", "args": [11, 22, 2048, 1, 2, 128]},
-      {"name":"eth_ip", "args": [20, 21, 2048, 3, 4, 128]},
-      {"name":"eth_ip", "args": [1099511627776, 22, 2048, 5, 6, 128]},
-      {"name":"eth_ip", "args": [11, 22, 2048, 168034815, 8, 128]},
-      {"name":"eth_ip", "args": [11, 22, 2048, 9, 168034384, 128]},
-      {"name":"eth_ip", "args": [11, 22, 2048, 11, 2886795742, 128]}
-    ]
-  }
+    "events": []
+}
   
