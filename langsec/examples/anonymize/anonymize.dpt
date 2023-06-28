@@ -1,72 +1,19 @@
 const int OUT_PORT = 1;
 const int SERVER_PORT = 2;
-const int SEED = 7;
-const int<48> FULL_MASK = 0xffffffffffff;
-
-// ethernet and ip packet headers
-type eth_t = {
-	int<48> dmac;
-	int<48> smac;
-	int<16> etype;
-}
-type ip_t = {
-	int src;
-	int dst;
-	int<16> len;
-}
-type eth_ip_t = {
-    eth_t eth;
-    ip_t ip;
-}
-type split_int_t<'sz> = {
-    int prefix;
-    int<'sz> suffix;
-}
-type policy_t = {
-    bool multicast_broadcast;
-    bool srcmac_oui;
-    bool srcmac_id;
-    bool dstmac_oui;
-    bool dstmac_id;
-    bool preserve_prefix;
-}
-
-/********** Events *********/
-packet event eth_ip(eth_t eth, ip_t ip);
-
-/********** Tables *********/
-action int result(int prefix_len)() {
-	return prefix_len;
-}
-
-table_type prefix_table_t = {
-    key_size: (32, 32, 32, 32)
-    arg_types: ()
-    ret_type: int
-}
-
-action policy_t get_policy(
-                bool multicast_broadcast, 
-                bool srcmac_oui, bool srcmac_id, 
-                bool dstmac_oui, bool dstmac_id, 
-                bool preserve_prefix)() {
-    return {
-        multicast_broadcast = multicast_broadcast;
-        srcmac_oui = srcmac_oui; srcmac_id = srcmac_id;
-        dstmac_oui = dstmac_oui; dstmac_id = dstmac_id;
-        preserve_prefix = preserve_prefix;
-    };
-}
-
-table_type policy_table_t = {
-    key_size: (32)
-    arg_types: ()
-    ret_type: policy_t
-}
 
 /********** Modules *********/
 // module implementing a table to match prefixes of IPv4 addresses
 module PrefixTable {
+    action int result(int prefix_len)() {
+        return prefix_len;
+    }
+
+    table_type prefix_table_t = {
+        key_size: (32, 32, 32, 32)
+        arg_types: ()
+        ret_type: int
+    }
+
     type t = {
         prefix_table_t prefix_table;
     }
@@ -91,11 +38,64 @@ module PrefixTable {
 
 // module implementing an anonymizer that anonymizes packet info based on the provided policy
 module Anonymizer {
+    type eth_t = {
+        int<48> dmac;
+        int<48> smac;
+        int<16> etype;
+    }
+
+    type ip_t = {
+        int src;
+        int dst;
+        int<16> len;
+    }
+
+    type eth_ip_t = {
+        eth_t eth;
+        ip_t ip;
+    }
+
+    type split_int_t<'sz> = {
+        int prefix;
+        int<'sz> suffix;
+    }
+
+    type policy_t = {
+        bool multicast_broadcast;
+        bool srcmac_oui;
+        bool srcmac_id;
+        bool dstmac_oui;
+        bool dstmac_id;
+        bool preserve_prefix;
+    }
+
+    action policy_t get_policy(
+                    bool multicast_broadcast, 
+                    bool srcmac_oui, bool srcmac_id, 
+                    bool dstmac_oui, bool dstmac_id, 
+                    bool preserve_prefix)() {
+        return {
+            multicast_broadcast = multicast_broadcast;
+            srcmac_oui = srcmac_oui; srcmac_id = srcmac_id;
+            dstmac_oui = dstmac_oui; dstmac_id = dstmac_id;
+            preserve_prefix = preserve_prefix;
+        };
+    }
+
+    table_type policy_table_t = {
+        key_size: (32)
+        arg_types: ()
+        ret_type: policy_t
+    }
+
     type t = {
         policy_table_t policy_table;
         PrefixTable.t src_prefix_table;
         PrefixTable.t dst_prefix_table;
     }
+
+    const int SEED = 7;
+    const int<48> FULL_MASK = 0xffffffffffff;
 
     constr t create() = {
         policy_table = table_create<policy_table_t>(
@@ -119,7 +119,7 @@ module Anonymizer {
         int<'a> prefix_mask = (int<'a>)(FULL_MASK << size_to_int('sz));
         int<'a> prefix = num & prefix_mask;
         int<'sz> suffix = (int<'sz>)(num - prefix);
-
+       
         if (anonymize_prefix) {
             prefix = hash<'a>(SEED, prefix);
         }
@@ -148,7 +148,9 @@ module Anonymizer {
         | _ -> {return ip_addr;}
     }
 
-    fun eth_ip_t anonymize_packet(t anonymizer, eth_t eth, ip_t ip) {
+    fun eth_ip_t anonymize_packet(t anonymizer, eth_ip_t eth_ip) {
+        eth_t eth = eth_ip#eth;
+        ip_t ip = eth_ip#ip;
         policy_t policy = table_match(anonymizer#policy_table, (1), ());
         if (!should_anonymize(eth, policy#multicast_broadcast)) {
             return {eth = eth; ip = ip;};
@@ -174,11 +176,15 @@ module Anonymizer {
 
 global Anonymizer.t anonymizer = Anonymizer.create();
 
+/********** Events *********/
+packet event eth_ip(Anonymizer.eth_t eth, Anonymizer.ip_t ip);
+
 /********** Handlers *********/
-handle eth_ip(eth_t eth, ip_t ip) {
+handle eth_ip(Anonymizer.eth_t eth, Anonymizer.ip_t ip) {
 	// 1. forward an event representing the packet out of port 1.
 	generate_port(OUT_PORT, eth_ip(eth, ip));
 	// 2. anonymize packet info before sending to the monitoring server.
-    eth_ip_t anonymized_packet = Anonymizer.anonymize_packet(anonymizer, eth, ip);
+    Anonymizer.eth_ip_t original_packet = {eth = eth; ip = ip;};
+    Anonymizer.eth_ip_t anonymized_packet = Anonymizer.anonymize_packet(anonymizer, original_packet);
     generate_port(SERVER_PORT, eth_ip(anonymized_packet#eth, anonymized_packet#ip));
 }
