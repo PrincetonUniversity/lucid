@@ -963,22 +963,52 @@ let translate_parser next_hdl_out_event parser =
     let out_ev_id = parser.pret_event |> Option.get |> id_of_event in
     Id.equal fst_id out_ev_id
   in
+  let translated_parser_blocks = ref [] in
   let parse_states = ref [] in
   let start_block = ref true in 
   let rec translate_parser_block parser_block :id =
+    (* first, check if there is an already-translated 
+       parser block that is equivalant. To test equivalence
+       of two parser blocks b1, b2, we just check if the 
+       string representations are equal using
+       CorePrinting.parser_block_to_string *)
+    let block_str = CorePrinting.parser_block_to_string parser_block in
+    let cached_block_id_opt = 
+        List.find_map (fun (id, str) -> 
+          if (String.equal str block_str) 
+            then Some(id) 
+            else None) 
+        (!translated_parser_blocks)
+    in
+    let am_start = !start_block in
+    start_block := false;
     (* a parse block is basically an anonymous parse state, 
        with actions and steps both translating into statements. *)
-    let block_id = if (!start_block)
-      then (start_block := false; id "start")
-      else (fresh_blockid ()) 
-    in
+
     (* translate the actions *)
     let stmts = List.map fst parser_block.pactions |> 
       List.map translate_parse_action
     in
     let sstep = translate_parser_step (fst parser_block.pstep) in 
-    parse_states := (!parse_states)@[dparsestate block_id (sseq (stmts@[sstep]))];
+    let block_id = if (am_start)
+      then (id "start")
+      else (
+        match cached_block_id_opt with 
+        | Some(id) -> id
+        | None -> fresh_blockid ()
+      ) 
+    in  
+    (* add the block to the cache, and the parser states list if 
+       it gets added to the cache *)
+    (match (cached_block_id_opt) with
+    | Some(_) -> ()
+    | None -> 
+      translated_parser_blocks := (!translated_parser_blocks)@[(block_id, block_str)];
+      parse_states := (!parse_states)@[dparsestate block_id (sseq (stmts@[sstep]))];  
+    );
+    
     block_id
+
   and translate_parse_action parser_action = 
     match parser_action with 
     | PRead(cid, ty) -> (
@@ -1129,6 +1159,9 @@ let translate_tdecl (denv : translate_decl_env) tdecl : (translate_decl_env) =
   | TDParser(p) -> let globals = denv.globals@[translate_parser (Option.get denv.main_out_event )p] in {denv with globals}
   | TDHandler(HParams(_)) -> error "param-based handles should have been eliminated"
   | TDAction _ -> error "[translate_tdecl] actions should have been converted into functions"
+  | TDMulticastGroup(group) -> 
+    let decl = T.decl_full (DMCGroup{gid=group.gnum; replicas =group.gcopies;}) [] tdecl.tdspan in 
+    {denv with globals = denv.globals@[decl]}
 ;;
 
 (* move parsers to the end of the decls *)
@@ -1142,21 +1175,31 @@ let rec sort_globals parsers decls =
     )
 ;;
 
+let build_gress_ctx comp = 
+  match (comp.comp_sort) with 
+  | HData -> 
+    let full_ingr_port_cid = Cid.create ["ingress_intrinsic_metadata"; "ingress_port"] in
+    let ingr_env = bind_var empty_env
+       ((Builtins.ingr_port_id |> Cid.id), CoreSyntax.var_sp full_ingr_port_cid (SyntaxToCore.translate_ty Builtins.tofino_builtin_tys.ingr_port_ty) Span.default)
+    in
+    let denv = new_denv ingr_env in
+    let main_hdl = main_handler_of_component comp in
+    let denv = {denv with main_out_event=Some(main_hdl.hdl_output)} in
+    denv
+  | HEgress -> 
+    let denv = new_denv empty_env in
+    let main_hdl = main_handler_of_component comp in
+    let denv = {denv with main_out_event=Some(main_hdl.hdl_output)} in
+    denv
+  | HControl -> 
+    let denv = new_denv empty_env in
+    denv
+;;
+
 let translate_ingress comp = 
-  (* the only ingress-specific environment we need is the p4 name of the ingress_port builtin *)
-  let full_ingr_port_cid = Cid.create ["ingress_intrinsic_metadata"; "ingress_port"] in
-  let ingr_env = bind_var empty_env
-     ((Builtins.ingr_port_id |> Cid.id), CoreSyntax.var_sp full_ingr_port_cid (SyntaxToCore.translate_ty Builtins.tofino_builtin_tys.ingr_port_ty) Span.default)
-  in
-  let denv = new_denv ingr_env in
-  let main_hdl = main_handler_of_component comp in
-  (* set the input and output events of the component's handler -- needed 
-     to construct the parser's arguments. *)
-  let denv = {denv with main_out_event=Some(main_hdl.hdl_output)} in
-  (* do the translation, the p4 decls are in penv.globals *)
+  let denv = build_gress_ctx comp in
   let penv = List.fold_left translate_tdecl denv comp.comp_decls in
   let component_global_decls = sort_globals [] penv.globals in 
-  (* TODO: multicast group rules? *)
   print_endline "program after translate_ingress:";
   print_endline 
     (P4TofinoPrinting.string_of_decls component_global_decls 
@@ -1172,12 +1215,19 @@ let p4str_of_decls decls =
 let translate_prog prog =
   let p4t_components = List.filter_map 
     (fun component -> 
-      print_endline ("translating component: "^(fst component.comp_id));
-      match (fst component.comp_id) with 
-      | "ingress" -> Some("ingress", translate_ingress component)
-      | _ -> None)
+      let denv = build_gress_ctx component in
+      let penv = List.fold_left translate_tdecl denv component.comp_decls in
+      let component_global_decls = sort_globals [] penv.globals in
+      (* print_endline "program after translate_ingress:";
+      print_endline 
+        (P4TofinoPrinting.string_of_decls component_global_decls 
+          |> P4TofinoPrinting.doc_to_string); *)
+      Some(component.comp_id |> fst, component_global_decls))   
     prog 
   in
+  (* <<left off here>> last steps: 
+     1) put things back together for the printers and directory builder.
+     2) adjust for event parse generator. *)
   List.iter 
     (fun (comp_name, comp_p4decls) -> 
       print_endline ("----- component: "^(comp_name)^" -----");
