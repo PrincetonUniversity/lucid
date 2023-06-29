@@ -208,10 +208,13 @@ let tofinocore_normalization_new core_prog =
 ;;
 
 
-(* layout the components of a tofinocore prog *)
+(* layout the ingress and egress components of a tofinocore prog *)
 let layout_new old_layout (prog : TofinoCoreNew.prog) build_dir_opt = 
   (* we want to do the layout pipeline for each component *)
   let layout_component (comp:TofinoCoreNew.component) = 
+    (* skip component with sort HControl -- it does not need layout *)
+    if (comp.comp_sort = TofinoCoreNew.HControl) then comp
+    else
     let cn = comp.comp_id |> Id.name in
     let logging_prefix = !BackendLogging.graphLogDir ^ "/" ^ cn in 
     (* 1. compute control flow graph for main handler *)
@@ -286,8 +289,7 @@ let compile old_layout ds portspec build_dir ctl_fn_opt =
      passes. *)
   let core_prog = AddEgressParser.add_parser core_prog in  
 
-  let core_prog = GeneratesNew.eliminate_generates core_prog in
-  let core_prog = GeneratesNew.low_level_groups portspec core_prog in
+  let core_prog = GeneratesNew.eliminate_generates portspec.recirc_dpid core_prog in
   dump_prog 
     "parsers_added_generates_eliminated.dpt" 
     "after parsers have been added and generates have been eliminated in handlers"

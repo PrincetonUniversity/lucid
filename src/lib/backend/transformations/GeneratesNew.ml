@@ -26,7 +26,24 @@
 
   }
   if it was a generate_port or generate_ports, gen_ct would not 
-  be incremented, but rather out_port or out_group would be set. *)
+  be incremented, but rather out_port or out_group would be set. 
+  
+  
+  inline with generate elimination, we generate groups declarations 
+  for constant groups and recirculation
+    1. eliminate group type expressions: 
+      1. create a multicast group for each constant group. 
+      2. replace the group expression with the new mc group's number.
+    2. construct groups for plain / self generates -- 1 group for each possible 
+       value of mc_group_a. This is just one group per number of events, since 
+       there can only be 1 copy of each handler generated for now. 
+
+  TODO: flood elimination (floods are not supported currently)
+  1. make a single flood group with all the defined port
+  2. when we see a generate with a flood, set the multicast group to the "all" group 
+     and set the exclusion id to flood's argument  *)
+
+  
   open Batteries
   open Collections
   open CoreSyntax
@@ -130,14 +147,13 @@
   let genct_evar = (evar_from_paramty_field ingress_intrinsic_metadata_for_tm_t "mcast_grp_a") ;;
   let egressport_evar = (evar_from_paramty_field ingress_intrinsic_metadata_for_tm_t "ucast_egress_port") ;;
   let group_evar = (evar_from_paramty_field ingress_intrinsic_metadata_for_tm_t "mcast_grp_b") ;;
-  (* let rid_evar = (evar_from_paramty_field ingress_intrinsic_metadata_for_tm_t "rid");; *)
 
   type ingress_ctx = {
     ctx_output_event : event;
     ctx_genct_evar : exp;
     ctx_egressport_evar : exp;
     ctx_group_evar : exp;
-    (* ctx_rid_evar : exp; *)
+    ctx_groups : group list;
   }
   
   let ingress_ctx (igr:component) = 
@@ -147,7 +163,7 @@
       ctx_genct_evar = genct_evar main_hdl.hdl_retparams;
       ctx_egressport_evar = egressport_evar main_hdl.hdl_retparams;
       ctx_group_evar = group_evar main_hdl.hdl_retparams;
-      (* ctx_rid_evar = rid_evar main_hdl.hdl_retparams; *)
+      ctx_groups = [];
     }
     in
     ctx
@@ -171,31 +187,35 @@
     idpath_to_eventpath root_event (Cid.to_ids ctor_cid)
   ;;
 
-  (* create a mutlicast group for a constant group *)
-  let mc_group_decl current_groups exp : (group option * exp) = 
+  (* create a mutlicast group for a constant group, 
+     if an identical group does not already exist in context. 
+      Return an expression with the group's number. *)
+  let mc_group_decl ctx exp : (group list * exp) = 
     let mc_group_equiv gcopies mcg2 = 
+      (* first, test if gcopies and mcg2.copies have the same length *)
+      if (List.length gcopies) <> (List.length mcg2.gcopies) then false else
+      (* then, test if gcopies and mcg2.copies have the same elements *)
       List.map2 (fun (a1, b1) (a2, b2) -> 
         a1 = b1 & a2 = b2)
       gcopies
       mcg2.gcopies
       |> List.exists (fun b -> b)
     in
-    let find_mc gcopies = List.find_opt (mc_group_equiv gcopies) current_groups in
+    let find_mc gcopies = List.find_opt (mc_group_equiv gcopies) ctx.ctx_groups in
     match exp.e with 
     | EFlood _ -> error "flood groups are not supported"
     | EVal({v=VGroup(ports)}) -> (
       let gcopies = List.map (fun port -> (port, 0)) ports in 
       match (find_mc gcopies) with
       | None -> (
-        (* convention: 1 - 128 are for recirc groups *)
-        let gnum = List.length current_groups + 129 in
+        let gnum = List.length (ctx.ctx_groups) in
         (* one copy to each port, all copies get rid = 0 
           because they are the "forwarded event" *)
         let gcopies = List.map (fun port -> (port, 0)) ports in 
         let exp' = vint_exp gnum 16 in
-        (Some{gnum; gcopies}, exp')
+        ([{gnum; gcopies}], exp')
       )
-      | Some(mcgroup) -> None, vint_exp mcgroup.gnum 16
+      | Some(mcgroup) -> [], vint_exp mcgroup.gnum 16
       )
     | _ -> 
       print_endline (CorePrinting.exp_to_string exp);
@@ -203,10 +223,7 @@
   ;;
 
   (* function to transform generate statements in an ingress *)
-  let ingress_transformer ctx stmt = 
-    let mc_groups = ref [] in 
-    (* <<LEFT OFF HERE>> todo: return the multicast groups, make a control component out of them, 
-                               translate the control component to python or whatever. *)
+  let ingress_transformer ctx stmt : group list * statement = 
     match stmt.s with 
     (* generate (ingress_out.foo.bar(1, 2, 3)); *)
     | SGen(gty, exp) -> (
@@ -255,24 +272,21 @@
               increment the handler's internal param: gen_ct *)
       (* 3. [case: generate_port] set the egress port: ingress_out.foo_out.bar.port = ...;*)
       (* 3. [case: generate_ports] set the group builtin: ingress_out.foo_out.bar.group = ...; *)
-      let update_control_param_stmt = match gty with
+      let (groups_created:group list), update_control_param_stmt = match gty with
         | GSingle(None) -> 
-          sincr_var ctx.ctx_genct_evar
+          [], sincr_var ctx.ctx_genct_evar
         | GMulti(exp) -> 
           (* create a new group if it does not exist, and replace the 
-             group expression with an int. *)
-          let new_mc_group, exp' = mc_group_decl (!mc_groups) exp in 
-          (match new_mc_group with 
-            | Some(n) -> mc_groups := (!mc_groups)@[n];
-            | _ -> (););
-          sassign_var ctx.ctx_group_evar exp'
+             group expression with an int. update context.*)
+          let (groups_created:group list), exp' = mc_group_decl ctx exp in 
+          groups_created, sassign_var ctx.ctx_group_evar exp'
         | GPort(exp) -> 
-            (sassign_var ctx.ctx_egressport_evar exp)
+            [], (sassign_var ctx.ctx_egressport_evar exp)
         | GSingle(Some(_)) -> error "[Generates.eliminate] not sure what to do with a generate of type GSingle(Some(_))"
       in 
-      List.fold_left sseq update_control_param_stmt (enable_hdrs_stmts@enable_params_stmts)
+      groups_created, List.fold_left sseq update_control_param_stmt (enable_hdrs_stmts@enable_params_stmts)
     )
-    | _ -> stmt
+    | _ -> [], stmt
   ;;
   (* function to transform generate statements in an egress *)
   let egress_transformer output_event stmt = 
@@ -325,14 +339,26 @@
     )
     | _ -> stmt
   ;;
+
 (* passes to run within ingress and egress components *)
-  let eliminate_ingress = 
+  let eliminate_ingress ctx component =
+    let groups_created = ref ctx.ctx_groups in 
+    let v =  
     object
-      inherit [_] s_map as super  
+      inherit [_] s_map as super       
       method! visit_statement ctx stmt = 
-        let stmt=super#visit_statement ctx stmt in 
-        ingress_transformer ctx stmt
+        (* set already existing groups *)
+        let ctx = {ctx with ctx_groups = !groups_created} in
+        (* visit this statement *)
+        let new_groups, stmt = ingress_transformer ctx stmt in
+        (* add new groups to groups created *)
+        groups_created := !groups_created@new_groups;
+        (* visit next statement *)
+        super#visit_statement ctx stmt 
       end
+    in
+    let component' = v#visit_component ctx component in
+    !groups_created, component'
   ;;
   let eliminate_egress = 
     object
@@ -343,54 +369,81 @@
       end
   ;;
 
-  (* main pass *)
-  let eliminate_generates (prog : prog) : prog = 
+let events_of_component component = 
+  let v = 
+    object
+      inherit [_] s_iter as super
+      val mutable events = []
+      method events = events
+      method! visit_event ctx event = 
+        (* only add an event if it is a variant EventSingle *)
+        match event with
+        | EventSingle(_) -> (
+        (* only add the event if an event with the same id is not in the list *)
+        if not (List.exists (fun e -> (id_of_event e) = (id_of_event event)) events) 
+        then events <- event::events;
+        )
+        | _ -> ();
+        super#visit_event ctx event
+    end
+  in
+  v#visit_component () component;
+  v#events
+;;
+
+let construct_initial_groups recirc_port (max_num_events : int) = 
+(* psuedocode 
+  groups = []
+  for num_copies in range(1, max_num_events+1):
+    gnum = num_copies
+    gcopies = [(recirc_port, j) for j in range(1, num_copies)]
+    groups.append({gnum; gcopies})
+  return groups
+*)
+  (* translate the psuedocode into ocaml *)
+  let groups = ref [] in
+  for num_copies = 1 to max_num_events do
+    let gnum = num_copies in
+    let gcopies = ref [] in
+    for j = 1 to num_copies do
+      gcopies := (recirc_port, j)::!gcopies
+    done;
+    groups := {gnum; gcopies=List.rev !gcopies}::!groups
+  done;
+  List.rev !groups
+;;
+
+
+
+
+    (* main pass *)
+  let eliminate_generates recirc_port (prog : prog) : prog = 
     (* print_endline "[eliminate_generates] pass started"; *)
-    let prog = List.map
-      (fun component -> match component.comp_sort with
+    let mcgroups, prog = List.fold_left
+      (fun (mcgroups, prog) component -> 
+        match component.comp_sort with
         | HData -> 
-          eliminate_ingress#visit_component (ingress_ctx component) component
+          let ctx = ingress_ctx component in
+          let events = events_of_component component in
+          let initial_groups = construct_initial_groups recirc_port (List.length events) in
+          let ctx = {ctx with ctx_groups = initial_groups} in 
+          let new_groups, component = eliminate_ingress (ctx) component in
+          (mcgroups@new_groups), prog@[component]
         | HEgress -> 
-          eliminate_egress#visit_component (egress_ctx component) component
-        | _ -> component)
+          mcgroups, (prog@[eliminate_egress#visit_component (egress_ctx component) component])
+        | _ -> 
+          mcgroups, prog@[component]
+      )
+      ([], [])
       prog
     in
+    (* add declarations for the multicast groups to the controller component -- 
+       the component with comp_id = id "control" 
+       use decl (TDMulticastGroup(group)) to declare a multicast group *)
+    let control_component = List.find (fun c -> fst c.comp_id = "control") prog in
+    let mcgroup_decls = List.map (fun g -> tdecl (TDMulticastGroup(g))) mcgroups in
+    let control_component = {control_component with comp_decls = control_component.comp_decls@mcgroup_decls} in
+    let prog = List.map (fun c -> if fst c.comp_id = "control" then control_component else c) prog in
     prog
   ;;
 
-
-  (* after eliminating generates, we have some group transformations to do. 
-    1. eliminate group type expressions: 
-      1. create a multicast group for each constant group. 
-      2. replace the group expression with the new mc group's number.
-    2. construct groups for plain / self generates -- 1 group for each possible 
-       value of mc_group_a. This is just one group per number of events, since 
-       there can only be 1 copy of each handler generated for now. *)
-
-(* TODO: better flood elimination (floods are not supported currently)
-  1. make a single flood group with all the defined port
-  2. when we see a generate with a flood, set the multicast group to the "all" group 
-     and set the exclusion id to flood's argument  *)
-
-  let eliminate_groups = 
-    object
-      inherit [_] s_map as super  
-
-      method! visit_exp (portspec:ParsePortSpec.port_config) exp = 
-        match exp.e with 
-        | EFlood(port_exp) -> 
-          let _ = port_exp in
-          print_endline ("flood:"^(CorePrinting.exp_to_string exp));
-          super#visit_exp portspec exp 
-        | _ -> 
-          super#visit_exp portspec exp 
-      end
-  ;;
-
-  let low_level_groups portspec core_prog = 
-    (* let core_prog = eliminate_floods#visit_prog portspec core_prog in 
-    let _ = portspec in  *)
-    print_endline ("low_level_groups pass done.");
-    exit 0;
-    core_prog
-  ;;

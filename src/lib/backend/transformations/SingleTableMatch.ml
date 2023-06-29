@@ -608,6 +608,6 @@ let process_core_tds (tds:tdecls) =
 
 let process_core core_prog = 
   List.map 
-    (fun comp -> {comp with comp_decls = process_core_tds comp.comp_decls})
+    (skip_control (fun comp -> {comp with comp_decls = process_core_tds comp.comp_decls}))
     core_prog
 ;;

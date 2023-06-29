@@ -266,6 +266,7 @@ let rec split_decls ctx decls : ctx =
       let globals_refd = globals_refd all_global_ids body in
       (* add the referenced globals to the egress set *)
       let egress_globals = IdSet.union ctx.egress_globals globals_refd in
+
       let ctx = { ctx with egress_globals; egress = ctx.egress @ [d] } in 
       split_decls ctx ds
     (* everything else goes to both *)
@@ -437,7 +438,14 @@ let core_to_tofinocore decls : prog =
     comp_sort = HEgress;
     comp_decls = decls_to_tdecls [] egress_decls;
     } in
-  [ingress; egress]
+  (* 6/29/23 -- the control component just holds multicast group declarations for now. *)
+  let control = {
+    comp_id = id "control";
+    comp_succ = [id "ingress"];
+    comp_decls = [];
+    comp_sort = HControl;
+  } in
+  [ingress; egress; control]
 ;;
 
 (* helpers (TODO: find / delete unused) *)
@@ -613,6 +621,7 @@ let main_of_decls tds =
   | SPipeline _ -> error "[main_of_decls] main handler is not flat."
 ;;
 
+
 let add_shared_local component tmp_id tmp_ty = 
   let tmp_e = var_sp (Cid.id tmp_id) tmp_ty Span.default in
   let main_handler = main_handler_of_component component in
@@ -737,3 +746,11 @@ let enable_call var_cid var_ty =
     [var (var_cid) var_ty] (ty TBool))
   |> statement
 ;;
+
+
+(* if comp is sort HControl, return comp, else return fcn comp *)
+  let skip_control fcn comp = 
+    match comp.comp_sort with 
+    | HControl -> comp
+    | _ -> fcn comp
+  ;;

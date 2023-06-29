@@ -97,6 +97,17 @@ let parser_to_string p =
       (parser_block_to_string p.pblock |> indent_body)
 ;;
 
+(* group type: 
+and group = {
+  gnum : int; (* group number *)
+  gcopies : (int * int) list; (* port, replica id *)
+}  
+*)
+let group_to_string (group : group) = 
+  Printf.sprintf
+    "group %d {\n%s\n}"
+    group.gnum
+    (List.map (fun (port, replica) -> Printf.sprintf "  %d %d;" port replica) group.gcopies |> String.concat "\n")
 let td_to_string (td:td)= 
   match td with
   | TDGlobal (id, ty, exp) ->
@@ -132,7 +143,8 @@ let td_to_string (td:td)=
       "method %s(%s) {\n%s\n}\n"
       (id_to_string id)
       (params_to_string params)
-      (stmt_to_string statement |> indent_body)    
+      (stmt_to_string statement |> indent_body)  
+  | TDMulticastGroup (group) -> group_to_string group  
 ;;
 
 let tdecl_to_string td = td_to_string td.td

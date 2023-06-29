@@ -82,7 +82,7 @@ let elim_dead_reads component =
   match p with 
   | Some(p) -> 
     v#visit_component p.pret_params component
-  | None -> error "no parser in component"
+  | None -> component
   
 ;;
 
@@ -216,13 +216,16 @@ let eliminate_generates_with_direct_reads component =
 let print_parsers core_prog = 
   List.iter
     (fun component -> 
-      Printf.printf "-- component %s --\n" (fst component.comp_id);
-      Printf.printf 
-        "%s" 
-        (TofinoCorePrinting.parser_to_string (main_parser_of_component component) );
-    )
+      Printf.printf "-- component %s --\n" (fst component.comp_id);      
+      try
+        Printf.printf 
+          "%s" 
+          (TofinoCorePrinting.parser_to_string (main_parser_of_component component) );
+      with Failure f when f = "hd"->
+        Printf.printf "no parser\n")
     core_prog
 ;;
+
 
 (* public functions *)
 let parser_passes core_prog = 
@@ -230,7 +233,7 @@ let parser_passes core_prog =
   print_endline "---- parsers before optimizations ----";
   print_parsers core_prog;
   (* eliminate generates, adding peek reads to set event parameter variables *)
-  let core_prog = List.map eliminate_generates_with_direct_reads core_prog in
+  let core_prog = List.map (skip_control eliminate_generates_with_direct_reads) core_prog in
   print_endline "---- parsers after eliminate_generates ----";
   print_parsers core_prog;
   (* replace reads that are never used in the parser with skips -- 
@@ -238,7 +241,7 @@ let parser_passes core_prog =
      variables used in parser matches. And those variables should 
      not be used as event generation arguments, because of the previous 
      generate elimination pass. *)
-  let core_prog = List.map elim_dead_reads core_prog in
+  let core_prog = List.map (skip_control elim_dead_reads) core_prog in
   print_endline "---- parsers after elim_dead_reads ----";
   print_parsers core_prog;
   core_prog

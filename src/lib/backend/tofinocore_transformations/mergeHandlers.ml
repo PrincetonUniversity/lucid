@@ -270,7 +270,6 @@ let merge_handlers_in_component (c:component) : component =
    just like we did after transforming handlers into event functions *)
 
 let merge_handlers prog : prog = 
-  List.map merge_handlers_in_component prog
-;;
+  List.map (skip_control merge_handlers_in_component) prog 
 
 
