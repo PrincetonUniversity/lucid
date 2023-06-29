@@ -23,17 +23,9 @@ open CoreSyntax
 open MiscUtils
 
 
-type inline_ctx = (params * parser_block) CidMap.t
-
-(* what can i inline? 
-   parser_block = {actions; step=PCall(id, args)}
-   what does it change to? 
-   let inlined_block = ctx[id] in
-   let inlined_block' = subst params args inlined_block in
-   parser_block.actions += inlined_block'.actions
-   parser_block.step = inlined_block'.step
-*)
 (* inline all the calls in a single parser *)
+
+type inline_ctx = (params * parser_block) CidMap.t
 
 let subst = object (_)
    inherit [_] s_map as super
@@ -175,11 +167,13 @@ let portspec_to_parser portspec pkt_events bg_events =
             then (error "[portspec_to_pbranches] the given portspec tries to bind a single port to multiple events")
             else (bound_ports := dpid::(!bound_ports))
       in
-      let background_branches =        
+      let background_branches = if (List.length bg_events > 0)
+         then (     
          (pbranch [portspec.recirc_dpid] (call_lucid_block bg_events))
          ::(List.map (fun port ->          
             bind_port port.dpid;
-            pbranch [port.dpid] (call_lucid_block bg_events)) portspec.internal_ports)
+            pbranch [port.dpid] (call_lucid_block bg_events)) portspec.internal_ports))
+         else ([])
       in
       let external_packet_branches = match events with 
          (* one event -- we can use external ports *)

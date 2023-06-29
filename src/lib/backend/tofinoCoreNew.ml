@@ -131,10 +131,10 @@ and parser = {
   pret_params : params;
 }
 
-(* the events are the events that the parser may generate *)
-(* and parser = 
-  | PMain of parser_block * event list
-  | PCalled of parser_block * event list *)
+and group = {
+  gnum : int; (* group number *)
+  gcopies : (int * int) list; (* port, replica id *)
+}
 
 and td =
   | TDGlobal of id * ty * exp
@@ -145,8 +145,8 @@ and td =
   (* new / changed decls *)
   | TDEvent of event
   | TDHandler of handler
-  | TDOpenFunction of id * params * statement (* not an open function anymore *)
-
+  | TDOpenFunction of id * params * statement (*accessible variables should be tracked*)
+  | TDMulticastGroup of group (* used by the control component *)
 and tdecl =
   { td : td
   ; tdspan : sp
@@ -372,27 +372,39 @@ let decl_to_tdecl (decl:decl) =
       } in
     { td = TDEvent event; tdspan = decl.dspan; tdpragma = decl.dpragma }
   | DHandler (hdl_id, hdl_sort, (hdl_params, hdl_body)) ->
+    (* handlers are initially of variant "HParams", and translated to 
+       "HEvent" in the "addhandlertypes" pass. *)
     let handler = HParams {hdl_id; hdl_sort; hdl_params; hdl_body} in
     { td = TDHandler (handler); tdspan = decl.dspan; tdpragma = decl.dpragma }
+  (* the main parse block is the entry point of the ingress parser.
+     we add the return parameters (intrinsic metadata) and an action 
+     at the beginning of the parser to read that parameter *)
+  | DParser(pid, pparams, pblock) when ((fst pid) = "main") -> 
+    let actions, spans = List.split pblock.pactions in
+    let intr_id, intr_ty = intrinsic_to_param ingress_intrinsic_metadata_t in 
+    let read_intr_acn = read (Cid.id intr_id) intr_ty in
+    let skip_resubmit_intr_acn = skip (tint 64) in 
+    let pblock = {pblock with
+      pactions=
+      [read_intr_acn, Span.default; skip_resubmit_intr_acn, Span.default]
+        @(List.combine actions spans);}
+    in
+    {
+    td = TDParser({pid; pparams; pblock;
+      pret_event=None; (*the return event of the ingress parser 
+                         is set when events are merged*)
+      pret_params=[intr_id, intr_ty];});
+    tdspan=decl.dspan;
+    tdpragma=decl.dpragma;}
+  (* other parsers are also ingress parsers that will be inlined later *)
   | DParser(pid, pparams, pblock) -> {
     td = TDParser({pid; pparams; pblock; 
-      pret_event=None; (* filled later, when parsers are constructed / updated *) 
-      pret_params = if (fst pid = "main") 
-        (* all parser declarations before tofinoCoreNew are ingress parsers.
-           The egress parser is not user-programmable. *)
-        then (List.map intrinsic_to_param 
-          [ingress_intrinsic_metadata_t; 
-          ingress_intrinsic_metadata_for_tm_t;
-          ingress_intrinsic_metadata_from_parser_t])
-        else [];
-      }
-      );
+        pret_event=None;
+        pret_params = [];});
     tdspan = decl.dspan;
-    tdpragma = decl.dpragma;
-  }
-  ;;
+    tdpragma = decl.dpragma;}
+;;
 
-(* raw translation pass -- just split program into ingress and egress components *)
 let rec decls_to_tdecls tdecls ds : tdecls = 
   match ds with
   | [] -> tdecls
@@ -403,10 +415,10 @@ let rec decls_to_tdecls tdecls ds : tdecls =
 
 (* translate the program into a tofinocore program *)
 let core_to_tofinocore decls : prog = 
-  (* split the decls and add handlers to direct 
-     events that are handled, but at a different component
-     (e.g., an event arrives at ingress but there's only 
-     an egress handler) *)
+  (* split the decls and add handlers to redirect 
+     events that are handled at a different component from where 
+     they arrive (e.g., an event arrives at ingress 
+     but there's only an egress handler) *)
   let ctx = split_decls empty_ctx decls
     |> add_continue_handlers 
   in
@@ -428,8 +440,7 @@ let core_to_tofinocore decls : prog =
   [ingress; egress]
 ;;
 
-(* destructors -- get back to the decl lists form that 
-   the current pipeline expects. *)
+(* helpers (TODO: find / delete unused) *)
 let find_component_by_id prog id = 
   List.find (fun c -> c.comp_id = id) prog
 ;;
@@ -473,9 +484,6 @@ let num_of_event event =
     | EventSingle {evnum=Some(n);} -> n
     | _ -> error "[num_of_event] not a numbered event!"
 ;;
-
-
-
 
 let etag event = 
   match event with 

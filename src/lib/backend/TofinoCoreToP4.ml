@@ -834,9 +834,6 @@ and translate_event (prevs:id list) struct_ty event : id list * T.decl list =
     )  
 ;;
 
-let tyid_of_event event = 
-  (id_of_event event |> fst)^"_t" |> Id.create
-;;
 
 let translate_params (main_hdl:hevent) =
   (*  construct parameters for the main control flow of a 
@@ -853,8 +850,8 @@ control IngressControl(
     {
   *)
   let event_params = [
-    inoutparam (tstruct (tyid_of_event main_hdl.hdl_output)) (id_of_event main_hdl.hdl_output);
-    inoutparam (tstruct (tyid_of_event main_hdl.hdl_input)) (id_of_event main_hdl.hdl_input);
+    inoutparam (tstruct (tyid_of_event TMeta main_hdl.hdl_output)) (id_of_event main_hdl.hdl_output);
+    inoutparam (tstruct (tyid_of_event TMeta main_hdl.hdl_input)) (id_of_event main_hdl.hdl_input);
   ] in
   let in_params = List.map 
     (fun (i, t) -> inparam (translate_ty t) i) 
@@ -874,11 +871,12 @@ type translate_decl_env = {
   globals : T.decl list;
   locals  : T.decl list;
   prev_events : id list;
+  main_out_event : event option;
 }
 let new_denv penv = 
-  {penv; globals = []; locals = []; prev_events = [];}
+  {penv; globals = []; locals = []; prev_events = []; main_out_event = None;}
 ;;
-(* dw bind_memop penv ... *)
+(* usage: dw bind_memop penv ... *)
 let dw fcn denv arg = 
   {denv with penv = (fcn denv.penv arg); }
 
@@ -895,27 +893,28 @@ let dparsestate id stmt =
   decl (DParseState {id; body = stmt;})
 ;;
 
-let pkt_arg = id "pkt"
-let extract field_inst = 
+(* let pkt_arg = id "pkt" *)
+let extract pkt_arg field_inst = 
   let extract_fcn = 
-    (Cid.concat (Cid.Id pkt_arg) (Cid.create ["extract"]))
+    Cid.create_ids [pkt_arg; id"extract"]
   in
   sunit (ecall extract_fcn [T.evar field_inst])
 ;;
-let sadvance nbits =
-  let advance_fcn = 
-    (Cid.concat (Cid.Id pkt_arg) (Cid.create ["advance"]))
+let sadvance pkt_arg nbits =
+  let advance_fcn =
+    Cid.create_ids [pkt_arg; id"advance"] 
   in
   sunit (ecall advance_fcn [T.eval_int nbits])
 ;;
-let lookahead ty = 
-  etycall (Cid.create ["lookahead"]) [ty] []
+let lookahead pkt_arg ty = 
+  (* notice its a tycall *)
+  etycall (Cid.create_ids [pkt_arg; id"lookahead"]) [ty] []
 ;;
-let slocal_lookahead (cid) ty =
-  slocal (Cid.to_id cid) ty (lookahead ty)
+let slocal_lookahead pkt_arg cid ty =
+  slocal (Cid.to_id cid) ty (lookahead pkt_arg ty)
 ;;
-let sassign_lookahead cid ty = 
-  sassign cid (lookahead ty)
+let sassign_lookahead pkt_arg cid ty = 
+  sassign cid (lookahead pkt_arg ty)
 ;;
 
 let size_of_tint ty = 
@@ -924,8 +923,37 @@ let size_of_tint ty =
   | _ -> error "[size_of_tint] not a tint"
 ;;
 
-(* parse translation *)
-let translate_parser parser = 
+(* construct parameters for the parser that feeds given handler *)
+let translate_parser_params (handler_out_event : event) (parser:parser) = 
+(* P4 params: 
+
+  directionless packet_in pkt *implicit*
+  out hdr_t hdr               *_handler's_ out event...*
+  out meta_t meta             *parser's out event*
+  out ingress_intrinsic_metadata_t ig_intr_md   *parser's out param*
+*)
+  let pkt_t, pkt_arg = id"packet_in", id"pkt" in 
+  let pkt_param = param (tstruct pkt_t) pkt_arg in
+  let hdr_param = outparam 
+    (tstruct (tyid_of_event TMeta handler_out_event)) 
+    (id_of_event handler_out_event) 
+  in 
+  let meta_param = outparam
+    (tstruct (tyid_of_event TMeta (Option.get parser.pret_event)))
+    (id_of_event (Option.get parser.pret_event))
+  in
+  let out_params = List.map 
+    (fun (i, t) -> outparam (translate_ty t) i) 
+    parser.pret_params
+  in
+  pkt_arg, [pkt_param; hdr_param; meta_param]@out_params
+;;
+
+let translate_parser next_hdl_out_event parser = 
+  (* we need to know the output event of the handler that this 
+     parser feeds, because one of the parser's output parameters 
+     is the handler's output event. *)
+  let pkt_arg, params = translate_parser_params next_hdl_out_event parser in 
   let is_param cid : bool = 
     let param_cids = List.map (fun (id, _) -> Cid.id id) parser.pret_params in
     List.exists (Cid.equal cid) param_cids
@@ -938,24 +966,17 @@ let translate_parser parser =
   let parse_states = ref [] in
   let start_block = ref true in 
   let rec translate_parser_block parser_block :id =
-    (* a parse block is roughly a parse state, except...
-        1. it doesn't have a name...
-        2. steps: 
-            - PMatch -- this one's okay
-            - PGen -- eliminated
-            - PCall -- eliminated, except for the exit call
-            - PDrop -- drop;
-    *)
+    (* a parse block is basically an anonymous parse state, 
+       with actions and steps both translating into statements. *)
     let block_id = if (!start_block)
       then (start_block := false; id "start")
       else (fresh_blockid ()) 
     in
-    (* actions can't jump to new blocks, so okay to map *)
+    (* translate the actions *)
     let stmts = List.map fst parser_block.pactions |> 
       List.map translate_parse_action
     in
     let sstep = translate_parser_step (fst parser_block.pstep) in 
-    (* let step =  *)
     parse_states := (!parse_states)@[dparsestate block_id (sseq (stmts@[sstep]))];
     block_id
   and translate_parse_action parser_action = 
@@ -964,21 +985,18 @@ let translate_parser parser =
       (* case -- cid is param -> read is an extract
          case -- cid is not param -> read is a slocal lookahead; advance *)
       match (is_param cid) with
-      | true -> extract cid
-      | false -> sseq [slocal_lookahead cid (translate_ty ty); sadvance (size_of_tint ty)]
+      | true -> extract pkt_arg cid
+      | false -> sseq [slocal_lookahead pkt_arg cid (translate_ty ty); sadvance pkt_arg (size_of_tint ty)]
     )
     | PPeek(cid, ty) -> (
       (* case -- cid is an event field (first id is name of output event param) sassign lookahead -> 
          case -- cis is not a param -> slocal lookahead *)
       match (is_event_field cid) with 
-      | true -> sassign_lookahead cid (translate_ty ty)
-      | false -> slocal_lookahead cid (translate_ty ty)
+      | true -> sassign_lookahead pkt_arg cid (translate_ty ty)
+      | false -> slocal_lookahead pkt_arg cid (translate_ty ty)
     )
-    | PSkip(ty) -> sadvance (size_of_tint ty)
-      (* always an advance  *)
+    | PSkip(ty) -> sadvance pkt_arg (size_of_tint ty)
     | PAssign(cid, exp) -> 
-      (* I guess just an assign? not sure *)
-      print_endline ("WARNING: assign action in parser -- untested");
       sassign cid (translate_exp empty_env exp |> snd)
   and translate_parser_branch (pats, block) = 
     let pats' = List.map translate_pat pats in
@@ -1000,17 +1018,15 @@ let translate_parser parser =
     | PCall _ -> error "[translate_parser_step] the only supported call is to exit/accept"
     | PDrop -> transition (id "drop")
   in
-  print_endline ("------ translating parser ------");
-  TofinoCorePrinting.parser_to_string parser |> print_endline;
-  print_endline ("------------");
+  (* print_endline ("------ translating parser ------"); *)
+  (* TofinoCorePrinting.parser_to_string parser |> print_endline; *)
+  (* print_endline ("------------"); *)
   let _ = translate_parser_block parser.pblock in
   let parse_states = !parse_states in
-  (* <<left off here>> TODO: parser params, including the packet *)
-  let res = dparse parser.pid [] parse_states in
-  let out_str = P4TofinoPrinting.string_of_decl res |> P4TofinoPrinting.doc_to_string in
-  print_endline ("-----------p4 parser-------");
-  print_endline out_str;
-  error "translating parser not done";
+  let res = dparse parser.pid params parse_states in
+  (* let out_str = P4TofinoPrinting.string_of_decl res |> P4TofinoPrinting.doc_to_string in *)
+  (* print_endline ("-----------p4 parser-------");
+  print_endline out_str; *)
   res 
 ;;
 
@@ -1110,10 +1126,20 @@ let translate_tdecl (denv : translate_decl_env) tdecl : (translate_decl_env) =
       (* update globals and previously generated events *)
       {denv with globals; locals; prev_events}
   )
-  | TDParser(p) -> let globals = denv.globals@[translate_parser p] in {denv with globals}
+  | TDParser(p) -> let globals = denv.globals@[translate_parser (Option.get denv.main_out_event )p] in {denv with globals}
   | TDHandler(HParams(_)) -> error "param-based handles should have been eliminated"
   | TDAction _ -> error "[translate_tdecl] actions should have been converted into functions"
-  (* | TDOpenFunction(id, _, _) -> {prog_env with defined_fcns=(Cid.id id, tdecl)::prog_env.defined_fcns;} *)
+;;
+
+(* move parsers to the end of the decls *)
+let rec sort_globals parsers decls = 
+  match decls with 
+    | [] -> parsers
+    | decl::decls -> (
+      match decl.d with 
+      | DParse _ -> sort_globals (parsers@[decl]) decls
+      | _ -> decl::(sort_globals parsers decls)
+    )
 ;;
 
 let translate_ingress comp = 
@@ -1123,63 +1149,25 @@ let translate_ingress comp =
      ((Builtins.ingr_port_id |> Cid.id), CoreSyntax.var_sp full_ingr_port_cid (SyntaxToCore.translate_ty Builtins.tofino_builtin_tys.ingr_port_ty) Span.default)
   in
   let denv = new_denv ingr_env in
+  let main_hdl = main_handler_of_component comp in
+  (* set the input and output events of the component's handler -- needed 
+     to construct the parser's arguments. *)
+  let denv = {denv with main_out_event=Some(main_hdl.hdl_output)} in
+  (* do the translation, the p4 decls are in penv.globals *)
   let penv = List.fold_left translate_tdecl denv comp.comp_decls in
+  let component_global_decls = sort_globals [] penv.globals in 
   (* TODO: multicast group rules? *)
   print_endline "program after translate_ingress:";
   print_endline 
-    (P4TofinoPrinting.string_of_decls penv.globals 
+    (P4TofinoPrinting.string_of_decls component_global_decls 
       |> P4TofinoPrinting.doc_to_string);
-  penv.globals
+      component_global_decls
 ;;
-(* 
-let translate_ingress comp = 
-  print_endline ("translate_ingress");
-  let hmain = (main_handler_of_component comp) in
-  let params = translate_params hmain in
-  (* set up the environment for main *)
-  let full_ingr_port_cid = Cid.create ["ingress_intrinsic_metadata"; "ingress_port"] in
-  let ingr_env = bind_var empty_env
-     ((Builtins.ingr_port_id |> Cid.id), CoreSyntax.var_sp full_ingr_port_cid (SyntaxToCore.translate_ty Builtins.tofino_builtin_tys.ingr_port_ty) Span.default)
-  in
-  let env = constr_env ingr_env comp.comp_decls in
-  (* declarations for added variables and open functions *)
-  let added_var_decls = generate_added_var_decls comp.comp_decls in 
-  let env, acn_decls = 
-    List.fold_left 
-      (fun (env, decls) decl -> 
-        let env, new_decls = translate_openfunction env decl in
-        env, decls@new_decls)
-      (env, [])
-      comp.comp_decls
-  in
-  let decls = added_var_decls@acn_decls in
-  (* declarations and statements from main handler *)
-  let main_body = match hmain.hdl_body with 
-    | SPipeline(stmts) -> stmts
-    | _ -> error "shoulda been pipeliend by now"
-  in
-  let table_decls, table_calls = statements_to_stages 0 env hmain.hdl_id main_body |> List.split in 
-  let apply_body = sseq table_calls in 
 
-  (* why all this separation? *)
-  let mc_decls = mcgroups_of_decls decls in 
-  let action_decls = non_mcgroups_of_decls decls in 
-  let ingress_control = decl (DControl{
-    id = hmain.hdl_id;
-    params = translate_params hmain;
-    decls = action_decls@table_decls;
-    body = Some(apply_body);
-    })
-  in
-  (* <<left off here>> TODO: event header decls, parser *)
-  print_endline (
-    "ingress:\n"^
-    (P4TofinoPrinting.string_of_decl ingress_control 
-      |> P4TofinoPrinting.doc_to_string));
-  []
-;; *)
-
-
+let p4str_of_decls decls = 
+  P4TofinoPrinting.string_of_decls decls
+  |> P4TofinoPrinting.doc_to_string
+;;
 
 let translate_prog prog =
   let p4t_components = List.filter_map 
@@ -1190,6 +1178,11 @@ let translate_prog prog =
       | _ -> None)
     prog 
   in
+  List.iter 
+    (fun (comp_name, comp_p4decls) -> 
+      print_endline ("----- component: "^(comp_name)^" -----");
+      print_endline (p4str_of_decls comp_p4decls);)
+    p4t_components;
   p4t_components
 ;;
 

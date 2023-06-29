@@ -170,8 +170,43 @@
     in
     idpath_to_eventpath root_event (Cid.to_ids ctor_cid)
   ;;
+
+  (* create a mutlicast group for a constant group *)
+  let mc_group_decl current_groups exp : (group option * exp) = 
+    let mc_group_equiv gcopies mcg2 = 
+      List.map2 (fun (a1, b1) (a2, b2) -> 
+        a1 = b1 & a2 = b2)
+      gcopies
+      mcg2.gcopies
+      |> List.exists (fun b -> b)
+    in
+    let find_mc gcopies = List.find_opt (mc_group_equiv gcopies) current_groups in
+    match exp.e with 
+    | EFlood _ -> error "flood groups are not supported"
+    | EVal({v=VGroup(ports)}) -> (
+      let gcopies = List.map (fun port -> (port, 0)) ports in 
+      match (find_mc gcopies) with
+      | None -> (
+        (* convention: 1 - 128 are for recirc groups *)
+        let gnum = List.length current_groups + 129 in
+        (* one copy to each port, all copies get rid = 0 
+          because they are the "forwarded event" *)
+        let gcopies = List.map (fun port -> (port, 0)) ports in 
+        let exp' = vint_exp gnum 16 in
+        (Some{gnum; gcopies}, exp')
+      )
+      | Some(mcgroup) -> None, vint_exp mcgroup.gnum 16
+      )
+    | _ -> 
+      print_endline (CorePrinting.exp_to_string exp);
+      error "[mc_group_decl] not a valid group declaration"
+  ;;
+
   (* function to transform generate statements in an ingress *)
   let ingress_transformer ctx stmt = 
+    let mc_groups = ref [] in 
+    (* <<LEFT OFF HERE>> todo: return the multicast groups, make a control component out of them, 
+                               translate the control component to python or whatever. *)
     match stmt.s with 
     (* generate (ingress_out.foo.bar(1, 2, 3)); *)
     | SGen(gty, exp) -> (
@@ -224,14 +259,14 @@
         | GSingle(None) -> 
           sincr_var ctx.ctx_genct_evar
         | GMulti(exp) -> 
-          sassign_var ctx.ctx_group_evar exp
+          (* create a new group if it does not exist, and replace the 
+             group expression with an int. *)
+          let new_mc_group, exp' = mc_group_decl (!mc_groups) exp in 
+          (match new_mc_group with 
+            | Some(n) -> mc_groups := (!mc_groups)@[n];
+            | _ -> (););
+          sassign_var ctx.ctx_group_evar exp'
         | GPort(exp) -> 
-          (* nope, no more rid -- rid = 0 means its a port event! *)
-          (* port events set the egress port var, and also the base replica id *)
-          (* let evnum = num_of_event base_event in *)
-          (* let evnum_exp = vint_exp evnum 16 in  *)
-          (* sseq 
-            (sassign_var ctx.ctx_rid_evar evnum_exp) *)
             (sassign_var ctx.ctx_egressport_evar exp)
         | GSingle(Some(_)) -> error "[Generates.eliminate] not sure what to do with a generate of type GSingle(Some(_))"
       in 
@@ -307,6 +342,7 @@
         egress_transformer output_event stmt
       end
   ;;
+
   (* main pass *)
   let eliminate_generates (prog : prog) : prog = 
     (* print_endline "[eliminate_generates] pass started"; *)
@@ -320,4 +356,41 @@
       prog
     in
     prog
+  ;;
+
+
+  (* after eliminating generates, we have some group transformations to do. 
+    1. eliminate group type expressions: 
+      1. create a multicast group for each constant group. 
+      2. replace the group expression with the new mc group's number.
+    2. construct groups for plain / self generates -- 1 group for each possible 
+       value of mc_group_a. This is just one group per number of events, since 
+       there can only be 1 copy of each handler generated for now. *)
+
+(* TODO: better flood elimination (floods are not supported currently)
+  1. make a single flood group with all the defined port
+  2. when we see a generate with a flood, set the multicast group to the "all" group 
+     and set the exclusion id to flood's argument  *)
+
+  let eliminate_groups = 
+    object
+      inherit [_] s_map as super  
+
+      method! visit_exp (portspec:ParsePortSpec.port_config) exp = 
+        match exp.e with 
+        | EFlood(port_exp) -> 
+          let _ = port_exp in
+          print_endline ("flood:"^(CorePrinting.exp_to_string exp));
+          super#visit_exp portspec exp 
+        | _ -> 
+          super#visit_exp portspec exp 
+      end
+  ;;
+
+  let low_level_groups portspec core_prog = 
+    (* let core_prog = eliminate_floods#visit_prog portspec core_prog in 
+    let _ = portspec in  *)
+    print_endline ("low_level_groups pass done.");
+    exit 0;
+    core_prog
   ;;

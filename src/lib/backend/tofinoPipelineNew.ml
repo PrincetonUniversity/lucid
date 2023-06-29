@@ -287,6 +287,7 @@ let compile old_layout ds portspec build_dir ctl_fn_opt =
   let core_prog = AddEgressParser.add_parser core_prog in  
 
   let core_prog = GeneratesNew.eliminate_generates core_prog in
+  let core_prog = GeneratesNew.low_level_groups portspec core_prog in
   dump_prog 
     "parsers_added_generates_eliminated.dpt" 
     "after parsers have been added and generates have been eliminated in handlers"
@@ -307,8 +308,7 @@ let compile old_layout ds portspec build_dir ctl_fn_opt =
  (* let tofino_prog = CoreToP4TofinoNew.translate_core portspec core_prog in *)
   (* let _ = tofino_prog in  *)
   print_endline ("----- translating to p4-tofino ir -----");
-  (* <<left off here>> new IR with parsers is complete. Most optimizations are done. 
-    Final steps:
+  (* Final steps:
     1. translate to P4-tofino IR
     2. test. *)
   let foo = TofinoCoreToP4.translate_prog core_prog in

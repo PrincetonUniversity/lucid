@@ -207,15 +207,15 @@ let branches_of_generated_events out_ctor_base (members : event list) (gen_seqs 
     let flag_vals = List.map (flag_val_of_event gen_seq) members in 
     (* now, we make a rule to extract each event in the sequence, 
         for the replica corresponding to this event.  *)        
-    let mutable_suck_it_ocaml = ref 0 in 
+    let new_evnum = ref 0 in 
     let branch_of_gen (event_id, gen_ty) = 
       let block = make_extract_event_block out_ctor_base members event_id in 
       let replica_val = match (gen_ty) with 
         | GSingle(None)-> (
-          (* I guess this might start at 1 and increment every
-             time there's a recirc event (conveniently named GSingle(None)!) *)
-          mutable_suck_it_ocaml := (!mutable_suck_it_ocaml) + 1;
-          !mutable_suck_it_ocaml
+          (* start at 1 and increment every
+             time there's a recirc event (...conveniently named GSingle(None)...) *)
+             new_evnum := (!new_evnum) + 1;
+          !new_evnum
         )
         | GSingle(Some(_)) -> error "idk"
         | _ -> 0 (* this is a port or ports generate *)
@@ -307,7 +307,8 @@ let make_egr_parser
       )
     )
     to_egress
-    (List.map intrinsic_to_param [egress_intrinsic_metadata_t; egress_intrinsic_metadata_from_parser_t; egress_intrinsic_metadata_for_deparser_t])
+    (List.map intrinsic_to_param [egress_intrinsic_metadata_t;]) 
+      (* egress_intrinsic_metadata_from_parser_t; egress_intrinsic_metadata_for_deparser_t]) *)
   in
   egr_parser
 ;;
