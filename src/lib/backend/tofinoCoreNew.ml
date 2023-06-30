@@ -227,17 +227,20 @@ let globals_refd (global_ids : IdSet.t) stmt =
 let rec split_decls ctx decls : ctx =
   match decls with
   | [] -> 
-    (* make sure that no globals overlap *)
-    let ensure_no_globals_overlap ctx = 
+    (* make sure that no globals overlap, and copy all the 
+      ingress and egress globals over to the ingress and egress decl lists *)
+    let ensure_no_shared_globals ctx = 
       let overlap = IdSet.inter ctx.ingress_globals ctx.egress_globals in
       if not (IdSet.is_empty overlap) then
         error (
           Printf.sprintf 
           "Global variables are used in both ingress and egress: %s" 
           (CorePrinting.comma_sep (CorePrinting.id_to_string) (IdSet.to_list overlap)))
-      else ctx
     in
-    ensure_no_globals_overlap ctx
+    ensure_no_shared_globals ctx;
+    let full_ingress = IdSet.fold (fun id decls -> decls @ [IdMap.find id ctx.globals]) ctx.ingress_globals ctx.ingress in
+    let full_egress = IdSet.fold (fun id decls -> decls @ [IdMap.find id ctx.globals]) ctx.egress_globals ctx.egress in
+    { ctx with ingress = full_ingress; egress = full_egress; }
   | d :: ds ->
     match d.d with
     (* we don't know whether a global is in ingress or egress yet *)

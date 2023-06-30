@@ -220,6 +220,8 @@ let merge_handlers_in_component (c:component) : component =
   in
 
   (* finally, set the input and output parameters of the handler that carry metadata. *)
+  (* NOTE: make sure these intrinsics are added to the tofinocore program 
+      in AddIntrinsics.addIntrinsics!  *)
   let hdl_params, hdl_retparams = match c.comp_sort with 
   | HData -> (* ingress*)
     (List.map intrinsic_to_param [

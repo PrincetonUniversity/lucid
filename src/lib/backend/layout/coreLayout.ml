@@ -687,7 +687,6 @@ let profile tds build_dir =
 open TofinoCoreNew
 
 
-
 let process_new (tds : tdecls) dfg =
   let num_dfg_nodes = Dfg.fold_vertex (fun v acc -> v :: acc) dfg [] |> List.length in
   print_endline ("number of nodes in dfg: "^(num_dfg_nodes |> string_of_int));

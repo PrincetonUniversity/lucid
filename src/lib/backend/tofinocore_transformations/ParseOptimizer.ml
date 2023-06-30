@@ -229,20 +229,20 @@ let print_parsers core_prog =
 
 (* public functions *)
 let parser_passes core_prog = 
-  print_endline ("starting final parser passes");
+  (* print_endline ("starting final parser passes");
   print_endline "---- parsers before optimizations ----";
-  print_parsers core_prog;
+  print_parsers core_prog; *)
   (* eliminate generates, adding peek reads to set event parameter variables *)
   let core_prog = List.map (skip_control eliminate_generates_with_direct_reads) core_prog in
-  print_endline "---- parsers after eliminate_generates ----";
-  print_parsers core_prog;
+  (* print_endline "---- parsers after eliminate_generates ----";
+  print_parsers core_prog; *)
   (* replace reads that are never used in the parser with skips -- 
      after this, the only reads that remain should be reads to 
      variables used in parser matches. And those variables should 
      not be used as event generation arguments, because of the previous 
      generate elimination pass. *)
   let core_prog = List.map (skip_control elim_dead_reads) core_prog in
-  print_endline "---- parsers after elim_dead_reads ----";
-  print_parsers core_prog;
+  (* print_endline "---- parsers after elim_dead_reads ----";
+  print_parsers core_prog; *)
   core_prog
 ;;

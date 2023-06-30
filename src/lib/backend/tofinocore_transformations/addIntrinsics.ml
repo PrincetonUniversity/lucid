@@ -200,11 +200,17 @@ let ty_to_dextern p4_intr =
 
 (* add extern types for necessary p4 intrinsics. 
    This will grow as the backend functionality fills in. *)
-let add_intrinsics ds = 
-  (ty_to_dextern ingress_intrinsic_metadata_t)
-  ::(ty_to_dextern egress_intrinsic_metadata_t)
-  ::(ty_to_dextern ingress_intrinsic_metadata_for_tm_t)
-  ::ds
+let add_intrinsics ds = List.map ty_to_dextern 
+  [
+    ingress_intrinsic_metadata_t;
+    ingress_intrinsic_metadata_from_parser_t;
+    ingress_intrinsic_metadata_for_deparser_t;
+    ingress_intrinsic_metadata_for_tm_t;
+    egress_intrinsic_metadata_t;
+    egress_intrinsic_metadata_from_parser_t;
+    egress_intrinsic_metadata_for_deparser_t;
+    egress_intrinsic_metadata_for_output_port_t
+  ]@ds
 ;;
 
 let intrinsic_to_param intrinsic =

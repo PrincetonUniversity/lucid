@@ -149,11 +149,21 @@ let atomic_op_form ds =
    - puts the data plane components (ingress and egress) into atomic operation form *)
 let tofinocore_prep ds = 
   (* 1. split into control and data plane components. *)
-  let control_component_support = false in
+  (* TODO: figure out how to only apply atomic_op_form passes to 
+           handlers in the data plane (HData or HEgress). 
+           Probably the easiest way is to just extend the 
+            atomic_op_form passes, but there are a lot of passes...
+          or maybe we could split the 
+            declarations here and then re-merge them...
+          or maybe we could delay atomic_op_form until 
+            after the split? But the split happens in tofinocore, 
+            which is a bit later...*)
+  (* let control_component_support = false in
   let _, data_ds = if (control_component_support)
     then TofinoControl.split_program 196 9 ds
     else ([], ds) 
-  in
+  in *)
+  let data_ds = ds in
   (* 2. put all data plane code into atomic op form. *)
   let data_ds = atomic_op_form data_ds in
   let ds = data_ds in
@@ -199,8 +209,6 @@ let tofinocore_normalization_new core_prog =
   let core_prog = IfToMatch.process_core core_prog in 
   let core_prog = RegularizeMemopsNew.process_core core_prog in
   let core_prog = ShareMemopInputsNew.process_core core_prog in
-
-
 
   let core_prog = SingleTableMatch.process_core core_prog in
   let core_prog = ActionsToFunctionsNew.process_core core_prog in
@@ -278,8 +286,9 @@ let compile old_layout ds portspec build_dir ctl_fn_opt =
      The program should be in a form where:
       - each action is used by at most 1 table *)
 
-  (* do final preparation for tofinocore: split into ingress / egress, 
-     atomize expressions. *)
+  (* do final preparation for tofinocore: atomize expressions. *)
+  (* NOTE: this currently removes any control-tagged 
+     handlers, which are not supported. *)
   let ds = tofinocore_prep ds in
 
   (* translate into TofinoCore IR *)
@@ -300,39 +309,40 @@ let compile old_layout ds portspec build_dir ctl_fn_opt =
 
   (* some more transformations *)
   let core_prog = tofinocore_normalization_new core_prog in
+  print_endline ("----- before layout -----");
+  TofinoCorePrinting.prog_to_string core_prog |> print_endline;
+
+
   (* now do layout, then put code into actionform and dedup actions *)
   let core_prog = layout_new old_layout core_prog None in
 
-  print_endline ("----- final tofinocore program -----");
-  TofinoCorePrinting.prog_to_string core_prog |> print_endline;
+  (* print_endline ("----- final tofinocore program -----");
+  TofinoCorePrinting.prog_to_string core_prog |> print_endline; *)
 
   (* finally, translate into the P4 ir *)
  (* let tofino_prog = CoreToP4TofinoNew.translate_core portspec core_prog in *)
   (* let _ = tofino_prog in  *)
   print_endline ("----- translating to p4-tofino ir -----");
-  (* Final steps:
-    1. translate to P4-tofino IR
-    2. test. *)
-  let foo = TofinoCoreToP4.translate_prog core_prog in
-  exit 1;
-  let _ = foo in 
-  error "not done"
+  let tofino_prog = TofinoCoreToP4.translate_prog core_prog in
   (* error "not done" *)
 
-(*   (* generate the python event library *)
+   (* generate the python event library *)
   let py_eventlib =
     if Cmdline.cfg.serverlib then PyEventLib.coresyntax_to_pyeventlib ds else ""
   in
+  print_endline ("python eventlib processing complete...");
   (* build the globals name directory json *)
   let globals_directory =
     P4TofinoGlobalDirectory.build_global_dir tofino_prog
     |> Yojson.Basic.pretty_to_string
   in
+  print_endline ("global directory processing complete...");
+  print_endline ("globals directory:\n" ^ globals_directory);
   (* print everything to strings *)
   let p4 = P4TofinoPrinting.p4_of_prog tofino_prog in
   let py_ctl = ControlPrinter.pyctl_of_prog tofino_prog ctl_fn_opt in
   let cpp_ctl = ControlPrinter.cppctl_of_prog tofino_prog in
-  p4, cpp_ctl, py_ctl, py_eventlib, globals_directory *)
+  p4, cpp_ctl, py_ctl, py_eventlib, globals_directory
 ;;
 
 (* DEPRECIATED compile a program with a single handler and only 1 generate

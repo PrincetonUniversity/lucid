@@ -436,9 +436,31 @@ let rec regularize_memop_conditions tds =
   )
 ;;
 
+(* correct ordering of declarations in the program to ensure that all memop declarations 
+   come before any handler declarations. *)
+let correct_decl_ordering tds = 
+  let memops_decls, other_decls = List.fold_left 
+    (fun (memop_decls, other_decls) decl -> 
+      match decl.td with 
+      | TDMemop(_) -> (memop_decls@[decl], other_decls)
+      | _ -> (memop_decls, other_decls@[decl]))
+    ([], [])
+    tds
+  in
+  List.fold_left (fun decls decl -> 
+    match decl.td with
+    | TDHandler(_) -> decls@memops_decls@[decl]
+    | _ -> decls@[decl])
+  []
+  other_decls
+;;
 
-let process tds = regularize_array_calls tds |> delete_non_complex_memops |> regularize_memop_conditions
-
+let process tds = 
+  regularize_array_calls tds 
+  |> delete_non_complex_memops 
+  |> regularize_memop_conditions 
+  |> correct_decl_ordering
+;;
 let process_core prog =
   List.map
     (fun component -> 

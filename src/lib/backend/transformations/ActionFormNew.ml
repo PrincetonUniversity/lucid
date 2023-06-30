@@ -205,6 +205,24 @@ let rec process_comp comp  =
 
   let added_tds, m' = process_stages m in
   let mhdl' = {mhdl with hdl_body = SPipeline(m');} in
-  let tds = replace_main_handler_of_decls comp.comp_decls mhdl' in
-  {comp with comp_decls = added_tds@tds}
+  (* let tds = replace_main_handler_of_decls comp.comp_decls mhdl' in *)
+  let is_main_handler tdecl = match tdecl with
+    | {td = TDHandler(HEvent(hdl)); _} -> hdl.hdl_id = mhdl.hdl_id
+    | _ -> false
+  in
+  (* the added decls should come right before the main handler, not append
+     to the beginning or end, because they may reference things declared before 
+     the handler, and the handler references them. *)
+  let comp_decls' = List.fold_left 
+    (fun tds td -> 
+      if is_main_handler td 
+        then 
+          let td = {td with td = TDHandler(HEvent(mhdl'));} in
+          tds@added_tds@[td] 
+        else 
+          tds@[td])
+    []
+    comp.comp_decls
+  in
+  {comp with comp_decls = comp_decls'}
 ;;

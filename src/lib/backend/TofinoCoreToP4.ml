@@ -864,22 +864,57 @@ control IngressControl(
   event_params@in_params@out_params  
 ;;
 
+(*** declaration translation, starting with an outer context / env 
+    that includes an inner "program" environment (for statements) ***)
 type translate_decl_env = {
+  component_id : id;
   penv : prog_env;
   (* some declarations end up going outside of the control block, 
      others end up going inside the control block...  *)
-  globals : T.decl list;
-  locals  : T.decl list;
+  globals : T.decl list; (* global wrt main handler *)
+  locals  : T.decl list; (* local wrt main handler *)
   prev_events : id list;
+  extern_tdecls : tdecls; 
+  (*tofinocore declarations that are deleted because they are externs, 
+    but we need to keep track of them for field names and types. *)
   main_out_event : event option;
 }
-let new_denv penv = 
-  {penv; globals = []; locals = []; prev_events = []; main_out_event = None;}
+
+(* context helpers *)
+let new_denv component_id penv = 
+  {component_id; penv; globals = []; locals = []; prev_events = []; extern_tdecls = []; main_out_event = None;}
 ;;
-(* usage: dw bind_memop penv ... *)
+(* _d_env  _w_rapper -- apply a function that expects a 
+   penv to a denv -- usage: dw bind_memop penv ... *)
 let dw fcn denv arg = 
   {denv with penv = (fcn denv.penv arg); }
 
+
+(* find the id of the extern type that is declared to contain 
+   the field with the given field_id *)
+let find_extern_tys_with_field denv field_id = 
+  let externs = denv.extern_tdecls in
+  let matching_extern_ty_ids = List.filter_map
+    (fun tdecl -> 
+      print_endline ("find_extern_ty_with_field checking extern: "^(TofinoCorePrinting.tdecl_to_string tdecl));
+      
+      match tdecl.td with 
+      | TDExtern(ty_id, ty) -> (
+        match ty.raw_ty with 
+        | TRecord(fields) -> (
+          if List.exists (fun (fid, _) -> (fst fid) = (fst field_id)) fields 
+            then Some(ty_id) 
+          else None
+        )
+        | _ -> None)
+      | _ -> None)
+    externs
+  in
+  matching_extern_ty_ids
+;;
+
+
+(*** parsing translators ***)
 
 let last_block_id = ref 0
 let fresh_blockid () = 
@@ -949,10 +984,11 @@ let translate_parser_params (handler_out_event : event) (parser:parser) =
   pkt_arg, [pkt_param; hdr_param; meta_param]@out_params
 ;;
 
-let translate_parser next_hdl_out_event parser = 
+let translate_parser denv parser = 
   (* we need to know the output event of the handler that this 
      parser feeds, because one of the parser's output parameters 
      is the handler's output event. *)
+  let next_hdl_out_event = Option.get denv.main_out_event in
   let pkt_arg, params = translate_parser_params next_hdl_out_event parser in 
   let is_param cid : bool = 
     let param_cids = List.map (fun (id, _) -> Cid.id id) parser.pret_params in
@@ -1053,11 +1089,75 @@ let translate_parser next_hdl_out_event parser =
   (* print_endline ("------------"); *)
   let _ = translate_parser_block parser.pblock in
   let parse_states = !parse_states in
-  let res = dparse parser.pid params parse_states in
+  let parser_id = (fst denv.component_id)^"_"^(fst parser.pid) |> Id.create in 
+  let res = dparse parser_id params parse_states in
   (* let out_str = P4TofinoPrinting.string_of_decl res |> P4TofinoPrinting.doc_to_string in *)
   (* print_endline ("-----------p4 parser-------");
   print_endline out_str; *)
   res 
+;;
+
+(* construct a deparser for a handler *)
+let construct_deparser ctx hevent : decl = 
+  let deparser_id = (fst ctx.component_id)^"_deparser" |> Id.create in
+  (* P4 params: 
+
+  directionless packet_out pkt *implicit*
+  inout hdr_t hdr               *handlers out event*
+  in meta_t meta             *handlers _in_ event... (is this really necessary in P4?)*
+  in intrinsic_metadata_for_deparser_t ... *first out parameter of handler*
+*)
+  let pkt_t, pkt_arg = id"packet_in", id"pkt" in 
+  (* the header holds the output event *)
+  let hdr_param_id = id_of_event hevent.hdl_output in
+  let hdr_param_ty = (tstruct (tyid_of_event TMeta hevent.hdl_output)) in
+  let params = 
+    let pkt_param = param (tstruct pkt_t) pkt_arg in
+    let hdr_param = inoutparam 
+      hdr_param_ty 
+      (hdr_param_id) 
+    in 
+    let meta_param = inparam
+      (tstruct (tyid_of_event TMeta hevent.hdl_input))
+      (id_of_event (hevent.hdl_input))
+    in
+    (* the deparser metadata parameter's type name may vary, but its always 
+      the one with the "drop_ctl" field. *)
+    let possible_intrinsic_param_ty_ids = find_extern_tys_with_field ctx (id"drop_ctl") in
+    let possible_intrinsic_param_ty_names = List.map fst possible_intrinsic_param_ty_ids in
+    (* go through the list of out parameters in the handler (hevent.hdl_outparams), find the out parameter 
+      that is of type TName(cid, _, _) where (hd (Cid.names cid)) = fst intrinsic_param_ty_id *)
+    let intrinsic_param = List.find_map (fun (id, ty) -> 
+      match ty.raw_ty with 
+      | TName(tcid, _, _) -> (
+        match (Cid.names tcid) with 
+        | [name] -> (
+          let (matching_ty_names : string list) = List.filter (String.equal name) possible_intrinsic_param_ty_names in
+          (* if we found exactly 1 matching name, then this is the intrinsic parameter, else error *)
+          if (List.length matching_ty_names) = 1 
+            then Some(id, ty) 
+          else (error "[construct_deparser] could not find the intrinsic metadata parameter")          
+        )
+          (* if (name = (fst intrinsic_param_ty_id)) then Some(id, ty) else None *)
+        | _ -> None
+      )
+      | _ -> None
+      ) hevent.hdl_retparams
+    in
+    let intrinsic_param = match intrinsic_param with 
+      | Some(ip) -> ip
+      | None -> error "[construct_deparser] could not find the intrinsic metadata parameter"
+    in
+    let intrinsic_param = inparam (translate_ty (snd intrinsic_param)) (fst intrinsic_param) in
+    [pkt_param; hdr_param; meta_param; intrinsic_param]
+  in
+  let emit_call = T.ecall (Cid.create_ids [pkt_arg; id"emit"]) [T.evar (Cid.id hdr_param_id)] in
+  decl (DDeparse{
+    id=deparser_id;
+    params=params;
+    decls=[];
+    body=Some(sunit emit_call);
+  })
 ;;
 
 
@@ -1122,7 +1222,9 @@ let translate_tdecl (denv : translate_decl_env) tdecl : (translate_decl_env) =
        them as a header or as a struct without knowing whether they are 
       input or output parameters to the handler. Instead, we translate the 
       events used in handler declarations. *)
-  | TDExtern _ -> denv (* externs are declared elsewhere *)
+  | TDExtern _ -> {denv with extern_tdecls = denv.extern_tdecls @ [tdecl]} 
+    (* externs are declared elsewhere, but we keep track of them for identifying
+       parameters based on their extern types *)
   | TDHandler(HEvent(hevent)) -> (
       (* note: we assume there's only 1 handler per list of declarations! *)
       (* make some decls for the variables created after handler merging. *)
@@ -1153,10 +1255,15 @@ let translate_tdecl (denv : translate_decl_env) tdecl : (translate_decl_env) =
       in
       (* consume all the locals! *)
       let locals = [] in
+      (* finally, construct the deparser that goes along with this control block. 
+         The deparser simply emits the packet, but we have to include it in the p4 anyway, 
+         and the deparser's parameters are a subset of the control's parameters. *)
       (* update globals and previously generated events *)
+      let deparser = construct_deparser denv hevent in 
+      let globals = globals@[deparser] in
       {denv with globals; locals; prev_events}
   )
-  | TDParser(p) -> let globals = denv.globals@[translate_parser (Option.get denv.main_out_event )p] in {denv with globals}
+  | TDParser(p) -> let globals = denv.globals@[translate_parser denv p] in {denv with globals}
   | TDHandler(HParams(_)) -> error "param-based handles should have been eliminated"
   | TDAction _ -> error "[translate_tdecl] actions should have been converted into functions"
   | TDMulticastGroup(group) -> 
@@ -1182,58 +1289,106 @@ let build_gress_ctx comp =
     let ingr_env = bind_var empty_env
        ((Builtins.ingr_port_id |> Cid.id), CoreSyntax.var_sp full_ingr_port_cid (SyntaxToCore.translate_ty Builtins.tofino_builtin_tys.ingr_port_ty) Span.default)
     in
-    let denv = new_denv ingr_env in
+    let denv = new_denv comp.comp_id ingr_env in
     let main_hdl = main_handler_of_component comp in
     let denv = {denv with main_out_event=Some(main_hdl.hdl_output)} in
     denv
   | HEgress -> 
-    let denv = new_denv empty_env in
+    let denv = new_denv comp.comp_id empty_env in
     let main_hdl = main_handler_of_component comp in
     let denv = {denv with main_out_event=Some(main_hdl.hdl_output)} in
     denv
   | HControl -> 
-    let denv = new_denv empty_env in
+    let denv = new_denv comp.comp_id empty_env in
     denv
 ;;
 
-let translate_ingress comp = 
-  let denv = build_gress_ctx comp in
-  let penv = List.fold_left translate_tdecl denv comp.comp_decls in
-  let component_global_decls = sort_globals [] penv.globals in 
-  print_endline "program after translate_ingress:";
-  print_endline 
-    (P4TofinoPrinting.string_of_decls component_global_decls 
-      |> P4TofinoPrinting.doc_to_string);
-      component_global_decls
-;;
+
+(* we can represent a p4 program as a map of components. 
+   Eventually, this will be the output of this pass, 
+   because it is simlper and more flexible. For now, 
+   we convert into a "tofino_prog", which has 
+   hard-coded fields for ingress and egress pipes and control 
+   commands. *)
+type p4_prog = (decl list) IdMap.t
 
 let p4str_of_decls decls = 
   P4TofinoPrinting.string_of_decls decls
   |> P4TofinoPrinting.doc_to_string
 ;;
+let p4_prog_to_string (p4_prog:p4_prog) = 
+  IdMap.bindings p4_prog
+  |> List.map (fun (id, decls) -> 
+    Printf.sprintf "component %s {\n%s\n}\n" (fst id) (p4str_of_decls decls)
+  )
+  |> String.concat "\n"
+;;
 
-let translate_prog prog =
-  let p4t_components = List.filter_map 
-    (fun component -> 
+(* convert a tofinocore program into a 
+   dictionary of p4 program components *)
+let prog_to_p4_prog (prog : prog) : p4_prog = 
+  List.fold_left
+    (fun p4_prog component -> 
+      (* the contexts for ingress and egress are slightly different *)
       let denv = build_gress_ctx component in
       let penv = List.fold_left translate_tdecl denv component.comp_decls in
-      let component_global_decls = sort_globals [] penv.globals in
-      (* print_endline "program after translate_ingress:";
-      print_endline 
-        (P4TofinoPrinting.string_of_decls component_global_decls 
-          |> P4TofinoPrinting.doc_to_string); *)
-      Some(component.comp_id |> fst, component_global_decls))   
-    prog 
-  in
-  (* <<left off here>> last steps: 
-     1) put things back together for the printers and directory builder.
-     2) adjust for event parse generator. *)
-  List.iter 
-    (fun (comp_name, comp_p4decls) -> 
-      print_endline ("----- component: "^(comp_name)^" -----");
-      print_endline (p4str_of_decls comp_p4decls);)
-    p4t_components;
-  p4t_components
+      let decls = sort_globals [] penv.globals in
+      IdMap.add component.comp_id decls p4_prog)
+    IdMap.empty
+    prog
+;;
+
+
+(* convert the declarations of a component into a pipe. 
+   basically, extact the parser, control, and deparser, 
+   put them into a pipe, and return the rest of the decls 
+   as the globals *)
+   let component_decls_to_pipe decls : (decl list * pipe) = 
+    let (globals, parser, control, deparser) = List.fold_left 
+      (fun (gs, p, c, d) decl -> 
+        match decl.d with
+        | DParse _ -> (gs, Some(decl), c, d)
+        | DControl _ -> (gs, p, Some(decl), d)
+        | DDeparse _ -> (gs, p, c, Some(decl))
+        | _ -> (gs@[decl], p, c, d))
+      ([], None, None, None) 
+      decls
+    in
+    match (parser, control, deparser) with
+      | (Some(p), Some(c), Some(d)) -> (globals, {parse=p; process=c; deparse=d;})
+      | _ -> error "component_decls_to_pipe: missing parser, control, or deparser"
+  ;;
+  
+  (* convert a dictionary of p4 program components into a "tofino_prog" *)
+  let p4_prog_to_tofino_prog (p4_prog : p4_prog) : tofino_prog =
+  
+    let ingress = IdMap.find (id "ingress") p4_prog in
+    let egress = IdMap.find (id "egress") p4_prog in
+    let control_decls = IdMap.find (id "control") p4_prog in
+    let (ingress_globals, ingress_pipe) = component_decls_to_pipe ingress in
+    let (egress_globals, egress_pipe) = component_decls_to_pipe egress in
+    let control_config = control_decls in
+  
+    let decl_to_string d = P4TofinoPrinting.string_of_decl d |> P4TofinoPrinting.doc_to_string in
+    let global_exists d ds = List.exists (fun d' -> (decl_to_string d) = (decl_to_string d')) ds in
+    (* for the globals, we make sure not do add duplicate declarations, e.g., for type definitions. 
+       For now, instead of writing equivalence testers, we just use the output from the P4 printer. *)
+    let globals = List.fold_left 
+      (fun gs d -> if global_exists d gs then gs else gs@[d])
+      []
+      (ingress_globals@egress_globals)
+    in
+    {globals; ingress=ingress_pipe; control_config; egress=egress_pipe;}
+  ;;
+
+let translate_prog prog =
+  (* print_endline ("translating prog: " ^ (TofinoCorePrinting.prog_to_string prog)); *)
+  let p4_prog = prog_to_p4_prog prog in
+  (* print_endline "----- p4_prog -----";
+  print_endline (p4_prog_to_string p4_prog);
+  print_endline "-------------------"; *)
+  let tofino_prog = p4_prog_to_tofino_prog p4_prog in
+  tofino_prog
 ;;
 
 
