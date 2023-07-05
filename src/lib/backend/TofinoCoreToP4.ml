@@ -21,6 +21,12 @@ let rec translate_ty ty = match ty.raw_ty with
   | _ -> error "[translate_ty] translation for this type is not implemented"
 ;;
 
+let size_of_tint ty = 
+  match ty.raw_ty with 
+  | TInt(sz) -> sz
+  | _ -> error "[size_of_tint] not a tint"
+;;
+
 let translate_rty rty =
   match rty with 
   | CS.TInt(s) -> T.TInt(s)
@@ -807,17 +813,24 @@ and translate_event (prevs:id list) struct_ty event : id list * T.decl list =
         union_fields
       in
       prevs@[this_event_struct_id], tagty_decl::(member_decls@[union_decl])
-    | EventSet({evid; members; flags;}) -> 
-      (* an event set is a structure with fields:
-        flags : evid_flags_t;
-        ev : ev_t; for ev in members *)
-      let flagrec_tyid = Id.create ("flags_"^(fst evid)) |> tyid_of_fieldid THdr in
-      let flag_decl = dstruct flagrec_tyid struct_ty
-        (List.map (fun (i, t) -> (i, translate_ty t)) flags)
+    | EventSet({members; flags;}) -> 
+      let flag_struct_id, flag_fields, flag_pad = flags in
+
+      (* flags header with padding *)
+      let flag_outer_ty_id = tyid_of_fieldid struct_ty flag_struct_id in
+      let flag_pad_field = match flag_pad with
+        | None -> []
+        | Some(id, ty) -> [id, ty]
       in
-      let prevs, member_decls = translate_members struct_ty prevs members in
+      let flag_field_decls = List.map 
+        (fun (pid, pty) -> pid, translate_ty pty) 
+        (flag_fields@flag_pad_field) 
+      in
+      let flagty_decl = dstruct flag_outer_ty_id struct_ty flag_field_decls in 
       (* fields of the set type *)
-      let field_params = (Id.create "flags", flagrec_tyid)
+      let prevs, member_decls = translate_members struct_ty prevs members in
+      let field_params = 
+        (flag_struct_id, flag_outer_ty_id) (* first field is the flags header *)
         ::(List.map (fun event -> (id_of_event event, tyid_of_event struct_ty event)) members)
       in
       let (union_fields: (id * ty) list) = List.map
@@ -830,7 +843,7 @@ and translate_event (prevs:id list) struct_ty event : id list * T.decl list =
         TMeta
         union_fields
       in
-      prevs@[this_event_struct_id], flag_decl::member_decls@[set_decl]
+      prevs@[this_event_struct_id], flagty_decl::member_decls@[set_decl]
     )  
 ;;
 
@@ -952,11 +965,6 @@ let sassign_lookahead pkt_arg cid ty =
   sassign cid (lookahead pkt_arg ty)
 ;;
 
-let size_of_tint ty = 
-  match ty.raw_ty with 
-  | TInt(sz) -> sz
-  | _ -> error "[size_of_tint] not a tint"
-;;
 
 (* construct parameters for the parser that feeds given handler *)
 let translate_parser_params (handler_out_event : event) (parser:parser) = 
@@ -1063,7 +1071,7 @@ let translate_parser denv parser =
     )
     | PSkip(ty) -> sadvance pkt_arg (size_of_tint ty)
     | PAssign(cid, exp) -> 
-      sassign cid (translate_exp empty_env exp |> snd)
+      sassign cid (translate_exp denv.penv exp |> snd)
   and translate_parser_branch (pats, block) = 
     let pats' = List.map translate_pat pats in
     let block_id = translate_parser_block block in
@@ -1072,7 +1080,7 @@ let translate_parser denv parser =
   and translate_parser_step parser_step = 
     match parser_step with
     | PMatch(exps, parser_branches) -> (
-      let exps' = translate_exps empty_env exps |> snd in
+      let exps' = translate_exps denv.penv exps |> snd in
       let branches' = List.map translate_parser_branch parser_branches in
       smatch exps' branches'
     )
@@ -1107,7 +1115,7 @@ let construct_deparser ctx hevent : decl =
   in meta_t meta             *handlers _in_ event... (is this really necessary in P4?)*
   in intrinsic_metadata_for_deparser_t ... *first out parameter of handler*
 *)
-  let pkt_t, pkt_arg = id"packet_in", id"pkt" in 
+  let pkt_t, pkt_arg = id"packet_out", id"pkt" in 
   (* the header holds the output event *)
   let hdr_param_id = id_of_event hevent.hdl_output in
   let hdr_param_ty = (tstruct (tyid_of_event TMeta hevent.hdl_output)) in
@@ -1333,6 +1341,8 @@ let prog_to_p4_prog (prog : prog) : p4_prog =
       let denv = build_gress_ctx component in
       let penv = List.fold_left translate_tdecl denv component.comp_decls in
       let decls = sort_globals [] penv.globals in
+      let includes = [dinclude "<core.p4>"; dinclude "<tna.p4>"] in 
+      let decls = includes@decls in
       IdMap.add component.comp_id decls p4_prog)
     IdMap.empty
     prog

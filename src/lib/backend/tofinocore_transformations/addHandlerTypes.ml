@@ -110,16 +110,34 @@ let derive_output_event (ctx:ctx) (hdl_id : id) (hdl_body:statement) : event =
      is a set, because it may generate multiple events that are encoded 
      as one event. Whereas egress produces a union, because it only 
      generates one event. *)
-  let tag_of_evid evid = 
+  let ev_tag evid = 
     Id.create ((fst evid)^"_tag"), (Id.create "tag", ty (TInt(16))  )
   in
+  let ev_flag evid events = 
+    let flag_wid = 2 in
+    let flags = List.map 
+    (fun event -> 
+      (Id.prepend_string "flag_" (id_of_event event), ty (TInt(flag_wid)))) events
+    in    
+    let flags_len = (List.length flags) * flag_wid in
+    let flag_padding = if (flags_len mod 8 = 0) then None
+      else (
+        let pad_len = 8 - (flags_len mod 8) in
+        Some(Id.create "_flag_padding", ty (TInt(pad_len)))
+      )
+    in
+    Id.create ((fst evid)^"_flag"), (* struct id *)
+    flags,                          (* flags *)
+    flag_padding
+  in
+
   let eventset = if (ctx.is_egress)
     then 
       let evid = Id.append_string "_egress_output" hdl_id in 
       EventUnion({
       evid = evid;
       members = events;
-      tag = tag_of_evid evid;
+      tag = ev_tag evid;
       member_nums = List.map num_of_event events;
       })
     else 
@@ -128,9 +146,7 @@ let derive_output_event (ctx:ctx) (hdl_id : id) (hdl_body:statement) : event =
       evid = evid;
       members = events;
       generated_events = typed_generate_seqs hdl_body;
-      flags = List.map 
-        (fun event -> 
-          (Id.prepend_string "flag_" (id_of_event event), ty (TInt(2)))) events;
+      flags = ev_flag evid events;
       })
   in
   eventset

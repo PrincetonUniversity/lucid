@@ -240,17 +240,25 @@ let branches_of_generated_events out_ctor_base (members : event list) (gen_seqs 
 let eventset_block evset (rid_var : (cid * ty)) (out_ctor_base : cid) = 
   match evset with 
   | EventSet({flags;members; generated_events;}) -> (
+    let _, flag_fields, pad_opt = flags in 
+    (* read the flags to locals, skip the padding *)
+    let flag_actions = List.map read_id flag_fields in 
+    let actions = match pad_opt with 
+      | None -> flag_actions
+      | Some(pad) -> flag_actions@[skip (snd pad)]
+    in
+        
     (* match on replica_id::flags *)
     let match_exps = List.map 
       (fun (cid, ty) -> var cid ty)
-      ((List.map (fun (id, ty) -> Cid.id id, ty) flags)@[rid_var])
+      ((List.map (fun (id, ty) -> Cid.id id, ty) flag_fields)@[rid_var])
     in
     (* for each subset in subsets, make per-replica_id rules.
         for each rule, make a block that read the parameters and generates the event *)  
     (* let branches = branches_of_subsets out_ctor_base members subsets in *)
     let branches = branches_of_generated_events out_ctor_base members generated_events in
     block
-      (List.map read_id flags)
+      actions
       (pmatch match_exps branches)  
   )
   | _ -> error "not an eventset"
@@ -277,10 +285,12 @@ let make_egr_parser
     *)
   let egr_intr_id, egr_intr_ty = intrinsic_to_param egress_intrinsic_metadata_t in 
 
-  let tagstructid, (tagid, tagty) = etag from_ingress in
+  (* note_ tagid does not matter. *)
+  let local_tag_id = Id.create "ingress_union_tag" in
+  let _, (_, tagty) = etag from_ingress in
 
   let read_intr_cmd = read (Cid.id egr_intr_id) egr_intr_ty in
-  let read_event_tag = read (Cid.id tagstructid) tagty in
+  let read_event_tag = read (Cid.id local_tag_id) tagty in
   let egress_replica_id = field_of_intrinsic 
     egress_intrinsic_metadata_t 
     (Cid.id egr_intr_id)
@@ -294,7 +304,7 @@ let make_egr_parser
         read_intr_cmd;
         read_event_tag
       ]
-      (pmatch [(var (Cid.id tagid) tagty)]
+      (pmatch [(var (Cid.id local_tag_id) tagty)]
         (List.map (fun (tagval, event) ->  
           pbranch 
             [tagval] 
@@ -312,8 +322,6 @@ let make_egr_parser
   in
   egr_parser
 ;;
-
-
 
 let add_parser core_prog : prog =   
   (* we are generating a parser that read the ingress output 

@@ -84,10 +84,11 @@ and event =
   | EventSet of {
     evid:id;
     members: event list;
-    flags : (id * ty) list; (*a 2-bit flag for each member *)
+    flags : id * (id * ty) list * (id * ty) option;
+      (* struct id, flag field ids and tys, optional padding id and ty*)
+    (* flags : (id * ty) list; a 2-bit flag for each member *)
     generated_events : (id * gen_type) list list;
   }
-
 
 and hbody = 
   | SFlat of statement

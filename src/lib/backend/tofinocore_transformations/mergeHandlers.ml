@@ -29,7 +29,8 @@ let rec localids_of_event_params event =
     let param_ids = List.map (localids_of_event_params) members in
     let param_ids = List.flatten param_ids in
     let param_ids = List.map (fun id -> Cid.compound evid id) param_ids in
-    (* now add the tag var *)
+    (* now add the tag struct field (note: we don't add the struct's subfields
+       is that okay? Do we even need to have the tag field here? ) *)
     let tag_id = Cid.create_ids [evid; (fst tag)] in
     tag_id :: param_ids
   | EventSet({evid; members; flags;}) -> 
@@ -37,8 +38,11 @@ let rec localids_of_event_params event =
     let param_ids = List.flatten param_ids in
     let param_ids = List.map (fun id -> Cid.compound evid id) param_ids in
     (* now add all the flags *)
-    let flag_ids = List.map (fun (flag, _) -> Cid.create_ids [evid; flag]) flags in
-    flag_ids @ param_ids
+    let flag_struct_id, _, _ = flags in 
+    let flag_id = Cid.create_ids [evid; (flag_struct_id )] in 
+    (* let flag_ids = List.map (fun (flag, _) -> Cid.create_ids [evid; flag]) flags in *)
+    flag_id::param_ids
+    (* flag_ids @ param_ids *)
 ;;
 
 (* get all the event parameters as though you are inside the event *)
@@ -167,15 +171,7 @@ let merge_handlers_in_component (c:component) : component =
                unions agree on tag values. That is, tag values 
                have to be pinned to events ahead of time. 
                (But that is how it should be anyways, for external / 
-               server interfaces)
-               <<left off here>> -- 
-               next: 
-                X 1. use eventnum based tags in all unions
-                1.A test!
-                2. generate basic ingress parser for programs with 1 packet event.
-                3. translate to P4IR
-                4. add support for user-written parsers
-               *)
+               server interfaces) *)
             [PNum (Z.of_int tag_val)], handler_body
         else 
           (* the first statement of this branch enables the tag in the 

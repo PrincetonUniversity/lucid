@@ -245,11 +245,12 @@
          handler_out_event's header for base_event. *)
       let enable_hdrs_stmts = match handler_out_event with 
         | EventSet{members; flags;} -> 
+          let flags_struct_id, flag_fields, _ = flags in 
           (* 1. enable the flags header of the handler event *)
-          let flags_cid, enable_flags = enable_event_field [main_event] handler_out_event (Id.create"flag") in      
+          let flags_cid, enable_flags = enable_event_field [main_event] handler_out_event flags_struct_id in      
           (* let stmt = enable_builtin_params [main_event] handler_out_event "flags" 1 in *)
           (* 2. set the appropriate flag field for base_event in handler  *)
-          let flag_id, flag_ty = List.nth flags (pos_of_event members (id_of_event base_event)) in
+          let flag_id, flag_ty = List.nth flag_fields (pos_of_event members (id_of_event base_event)) in
           let set_flag = sassign
             (Cid.concat (flags_cid) (Cid.id flag_id))
             (vint_exp_ty 1 flag_ty)
@@ -312,11 +313,12 @@
       let enable_hdrs_stmts = match handler_out_event with 
         | EventUnion{tag} -> 
           (* 1. enable the tag header of the handler event *)
-          let tag_cid, enable_tag = enable_event_field [main_event] handler_out_event (fst tag) in
+          let tag_outer, (tag_inner, _) = tag in
+          let full_tag_outer, enable_tag = enable_event_field [main_event] handler_out_event (tag_outer) in
           (* 2. set the tag to the appropriate event id 
               note that we are setting foo.bar.tag.tag = tagval -- tag is a record with a field named tag...*)
           let tagval = (vint_exp_ty (num_of_event base_event) (snd (snd tag))) in
-          let set_tag = sassign (Cid.concat tag_cid (Cid.id (fst tag))) tagval in
+          let set_tag = sassign (Cid.concat full_tag_outer (Cid.id (tag_inner))) tagval in
           (* 3. enable the field holding the member event parameters. *)
           let _, enable_base_event = enable_event_field [main_event] handler_out_event (id_of_event base_event) in
           [enable_tag; set_tag; enable_base_event]

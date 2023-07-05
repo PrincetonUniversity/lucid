@@ -297,6 +297,10 @@ let compile old_layout ds portspec build_dir ctl_fn_opt =
   (* add the egress parser. This could go anywhere in tofinocore
      passes. *)
   let core_prog = AddEgressParser.add_parser core_prog in  
+  dump_prog 
+    "addegressparser.dpt" 
+    "after adding egress parser"
+    core_prog;
 
   let core_prog = GeneratesNew.eliminate_generates portspec.recirc_dpid core_prog in
   dump_prog 
