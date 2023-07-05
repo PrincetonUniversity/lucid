@@ -246,8 +246,7 @@ let eventset_block evset (rid_var : (cid * ty)) (out_ctor_base : cid) =
     let actions = match pad_opt with 
       | None -> flag_actions
       | Some(pad) -> flag_actions@[skip (snd pad)]
-    in
-        
+    in  
     (* match on replica_id::flags *)
     let match_exps = List.map 
       (fun (cid, ty) -> var cid ty)

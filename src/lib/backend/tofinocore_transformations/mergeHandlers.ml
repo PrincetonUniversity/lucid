@@ -83,7 +83,11 @@ let scope_pgen =
 let rec is_union_of_unions event = 
   match event with 
   | EventUnion({members;}) -> 
-    List.for_all is_union_of_unions members
+    List.for_all 
+      (fun event -> 
+        (is_union_of_unions event) 
+        || (match event with | EventSingle(_) -> true | _ -> false))
+      members
   | _ -> false
 ;;
 
@@ -106,7 +110,14 @@ let merge_handlers_in_component (c:component) : component =
     )
   in
   let (handlers, non_handler_decls) = extract_handlers c.comp_decls [] [] in
-  let handlers = List.rev handlers in 
+
+  (* order handlers by the eventnum of their input events *)
+  let num_of_handler hevent = num_of_event hevent.hdl_input in
+  let sort_handlers (handlers : hevent list) = 
+    List.sort (fun h1 h2 -> compare (num_of_handler h1) (num_of_handler h2)) handlers
+  in
+  let handlers = sort_handlers handlers in 
+  (* let handlers = List.rev handlers in  *)
   (* construct the input and output events *)
   let input_evid = Id.append_string "_input" c.comp_id in
   let output_evid = Id.append_string "_output" c.comp_id in
@@ -155,27 +166,28 @@ let merge_handlers_in_component (c:component) : component =
   let merged_hdl_stmt = smatch
     [var input_tag_full_cid (ty (TInt 16))] 
     (
-      List.mapi
-      (fun i h -> 
-        let tag_val = i + 1 in 
+      List.map
+      (fun h -> 
+        (* let tag_val = i + 1 in should not be using index of handler as the tag value! *)
+        let hdl_tag_val = num_of_event h.hdl_input in 
+        let tag_val = hdl_tag_val in 
         let handler_body = match h.hdl_body with
           | SFlat(stmt) -> stmt
           | _ -> error "[merge_handlers_in_tdecls] can't merge after pieplineing"
         in
+        print_endline ("[mergeHandlers.merged_hdl_stmt] output event is "^(TofinoCorePrinting.event_to_string output_event));
         if (is_union_of_unions output_event) 
-        then 
-            (* we don't need to serialize the tag of a union of unions. 
-               this is an optimization that we do in egress, 
-               so that the ingress parser can just parse a flat union. 
-               NOTE: for this to work, we need to make sure all the 
-               unions agree on tag values. That is, tag values 
-               have to be pinned to events ahead of time. 
-               (But that is how it should be anyways, for external / 
-               server interfaces) *)
+        then (
+            (* if the output is a union of unions (which happens for 
+               packets from egress -> ingress, we don't serialize the 
+               outer tag... somehow this should be more explicit...) *)
+            print_endline ("[mergeHandlers] not serializing union of unions tag");
             [PNum (Z.of_int tag_val)], handler_body
+        )
         else 
           (* the first statement of this branch enables the tag in the 
             output header and then sets it to match the input event tag.*)
+          (* in this else branch, the first 16 bits of packet indicate which handler fired *)
           let out_tag_outer, (out_tag_inner, out_tag_inner_ty) = match output_event with
             | EventUnion({tag}) -> tag
             | _ -> error "[mergeHandlers] output event is not a union"
@@ -184,9 +196,9 @@ let merge_handlers_in_component (c:component) : component =
           let out_tag_ty_cid = Cid.create_ids [output_evid; (Id.create ((fst out_tag_outer)^"_t"))] in
           let out_tag_outer_ty  = ty (TName(out_tag_ty_cid, [], false)) in 
           let tag_enable_stmt = enable_call out_tag_cid out_tag_outer_ty in 
-          (* let tag_enable_stmt = sassign tag_hdr_cid tag_hdr_val_exp in *)
+          (* let tag_enable_stmt = sassign tag_hdr_cid tag_hdr_val_exp in *)          
           let tag_cid = Cid.concat out_tag_cid (Cid.id out_tag_inner) in
-          let tag_val_exp = vint_exp_ty (i + 1) out_tag_inner_ty in
+          let tag_val_exp = vint_exp_ty tag_val out_tag_inner_ty in
           let tag_set_stmt = 
             sassign tag_cid tag_val_exp 
           in

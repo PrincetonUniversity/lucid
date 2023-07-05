@@ -333,10 +333,19 @@ let add_continue_handlers ctx : ctx =
 ;;
 
 (* 
-TODO: put this somewhere, in a pass after we add the 
-intrinsics for each component. 
+TODO: 
+
+1. make sure the egress handlers drop the output packet on all control flows without a generate. 
 Implicit semantics: add a command to set the drop flag 
-   to the beginning of every egress handler. *)
+   to the beginning of every egress handler.
+  - This should be unset by a generate command. 
+  - as an optimization, we can only add it if there is a user-defined egress handler...
+
+2. change struct format of  union of unions (egress output type) to not contain outer tag. 
+  - or, better, don't generate a union of unions, have a flattening method when you 
+    produce the merged egress output event... 
+
+   *)
 let egr_drop_ctl_id = Cid.create ["drop_ctl"];;
 let egr_drop_ctl_sz = 3
 let rec add_default_egr_drop ds = 

@@ -188,7 +188,10 @@ let tofinocore_prep ds =
 let to_tofinocore ds =
   let core_prog = TofinoCoreNew.core_to_tofinocore ds  in
   print_endline ("--- initial tofinocore program ---");
-
+  dump_prog 
+    "initial_tofinocore.dpt" 
+    "initial tofinocore prog \n"
+    core_prog;  
   let core_prog = AddHandlerTypes.type_handlers core_prog in
   print_endline ("--- transformed handlers into event-function form ---");
 
@@ -313,8 +316,8 @@ let compile old_layout ds portspec build_dir ctl_fn_opt =
 
   (* some more transformations *)
   let core_prog = tofinocore_normalization_new core_prog in
-  print_endline ("----- before layout -----");
-  TofinoCorePrinting.prog_to_string core_prog |> print_endline;
+  (* print_endline ("----- before layout -----");
+  TofinoCorePrinting.prog_to_string core_prog |> print_endline; *)
 
 
   (* now do layout, then put code into actionform and dedup actions *)
