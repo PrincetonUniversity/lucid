@@ -186,7 +186,8 @@ let tofinocore_prep ds =
 
 (* transform into tofinocore, but don't layout yet *)
 let to_tofinocore ds =
-  let core_prog = TofinoCoreNew.core_to_tofinocore ds  in
+  let split_prog = SplitDataplane.split ds in 
+  let core_prog = TofinoCoreNew.core_to_tofinocore split_prog  in
   print_endline ("--- initial tofinocore program ---");
   dump_prog 
     "initial_tofinocore.dpt" 

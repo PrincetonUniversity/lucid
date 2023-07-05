@@ -126,7 +126,7 @@
   (* get an evar referencing a field with name field_name from a 
      parameter of type intrinsic_paramty in the paramters hdl_ret_params *)
   let evar_from_paramty_field intrinsic_paramty field_name hdl_ret_params =
-    (* find the handler param with type ingress_intrinsic_metadata_for_tm_t *)
+    (* find the handler param with type intrinsic_paramty *)
     let param_ty = snd (intrinsic_to_param intrinsic_paramty) in
     let param_id = match (List.find_opt
       (fun (_, ty) -> equiv_ty ty param_ty)
@@ -134,19 +134,23 @@
     | Some(id, _) -> id 
     | None -> error "[evar_from_paramty_field] handler does not contain an output parameter of correct type"
     in
-    (* get the field mcast_grp_a from it *)
+    (* get the field field_name from it *)
     let field_id = Cid.create [field_name] in
     let cid, ty = AddIntrinsics.field_of_intrinsic
-      ingress_intrinsic_metadata_for_tm_t
+      intrinsic_paramty
       (Cid.id param_id)
       (field_id)
     in
     var cid ty
   ;;
-  (* helpers for specific fields *)
+  (* create expressions from builtins referenced by the code that generate statements 
+     compile into. 
+     These helper functions take a list of the handler's output parameters, and find the 
+     first parameter with a type that has the given builtin field.*)
   let genct_evar = (evar_from_paramty_field ingress_intrinsic_metadata_for_tm_t "mcast_grp_a") ;;
   let egressport_evar = (evar_from_paramty_field ingress_intrinsic_metadata_for_tm_t "ucast_egress_port") ;;
   let group_evar = (evar_from_paramty_field ingress_intrinsic_metadata_for_tm_t "mcast_grp_b") ;;
+  let drop_evar = (evar_from_paramty_field egress_intrinsic_metadata_for_deparser_t "drop_ctl") ;;
 
   type ingress_ctx = {
     ctx_output_event : event;
@@ -169,8 +173,16 @@
     ctx
   ;;
 
+  type egress_ctx = {
+    ectx_output_event : event; 
+    ectx_drop_evar : exp;
+  }
   let egress_ctx (egr:component) = 
-    (main_handler_of_component egr).hdl_output
+    let main_hdl = (main_handler_of_component egr) in
+    {
+      ectx_output_event = main_hdl.hdl_output; 
+      ectx_drop_evar = drop_evar main_hdl.hdl_retparams;
+    }
   ;;
 
   (* given a constructor x.y.z, and a root event x,
@@ -289,8 +301,30 @@
     )
     | _ -> [], stmt
   ;;
+
+  (* passes to run within ingress and egress components *)
+  let eliminate_ingress ctx component =
+    let groups_created = ref ctx.ctx_groups in 
+    let v =  
+    object
+      inherit [_] s_map as super       
+      method! visit_statement ctx stmt = 
+        (* set already existing groups *)
+        let ctx = {ctx with ctx_groups = !groups_created} in
+        (* visit this statement *)
+        let new_groups, stmt = ingress_transformer ctx stmt in
+        (* add new groups to groups created *)
+        groups_created := !groups_created@new_groups;
+        (* visit next statement *)
+        super#visit_statement ctx stmt 
+      end
+    in
+    let component' = v#visit_component ctx component in
+    !groups_created, component'
+  ;;
+
   (* function to transform generate statements in an egress *)
-  let egress_transformer output_event stmt = 
+  let egress_transformer ctx stmt = 
     match stmt.s with 
     (* generate (ingress_out.foo.bar(1, 2, 3)); *)
     | SGen(_, exp) -> (
@@ -302,7 +336,7 @@
       (* replace the generate statement with a sequence of assignments. *)
       (* at this point, the event id should have three components: 
           <ingress_event_id>.<handler_out_event_id>.<base_event_id> *)
-      let main_event, handler_out_event, base_event = match event_path ctor_cid output_event with 
+      let main_event, handler_out_event, base_event = match event_path ctor_cid ctx.ectx_output_event with 
         | [m; h; b] -> m, h, b
         | _ -> error "[GeneratesNew.egress_transformer] could not resolve event constructor in the given output event"
       in      
@@ -312,6 +346,11 @@
          handler_out_event's header for base_event. *)
       let enable_hdrs_stmts = match handler_out_event with 
         | EventUnion{tag} -> 
+          (* 0. unset the drop control bit -- there is now output from the egress *)
+          let unset_drop = 
+            sassign_var ctx.ectx_drop_evar
+              (vint_exp_ty 0 (ctx.ectx_drop_evar.ety))
+          in
           (* 1. enable the tag header of the handler event *)
           let tag_outer, (tag_inner, _) = tag in
           let full_tag_outer, enable_tag = enable_event_field [main_event] handler_out_event (tag_outer) in
@@ -321,7 +360,7 @@
           let set_tag = sassign (Cid.concat full_tag_outer (Cid.id (tag_inner))) tagval in
           (* 3. enable the field holding the member event parameters. *)
           let _, enable_base_event = enable_event_field [main_event] handler_out_event (id_of_event base_event) in
-          [enable_tag; set_tag; enable_base_event]
+          [unset_drop; enable_tag; set_tag; enable_base_event]
         | _ -> error "[GeneratesNew.ingress_transformer] at an ingress, handler output should be an eventset"
       in
       (* 2. then set the event parameters: ingress_out.foo_out.bar.a = ...; ...*)
@@ -342,32 +381,33 @@
     | _ -> stmt
   ;;
 
-(* passes to run within ingress and egress components *)
-  let eliminate_ingress ctx component =
-    let groups_created = ref ctx.ctx_groups in 
-    let v =  
-    object
-      inherit [_] s_map as super       
-      method! visit_statement ctx stmt = 
-        (* set already existing groups *)
-        let ctx = {ctx with ctx_groups = !groups_created} in
-        (* visit this statement *)
-        let new_groups, stmt = ingress_transformer ctx stmt in
-        (* add new groups to groups created *)
-        groups_created := !groups_created@new_groups;
-        (* visit next statement *)
-        super#visit_statement ctx stmt 
-      end
-    in
-    let component' = v#visit_component ctx component in
-    !groups_created, component'
-  ;;
+
   let eliminate_egress = 
     object
       inherit [_] s_map as super  
-      method! visit_statement output_event stmt = 
-        let stmt=super#visit_statement output_event stmt in 
-        egress_transformer output_event stmt
+      method! visit_hevent ctx hevent = 
+        (* when visiting a handler, set the drop flag to 1. Then, when visiting 
+           a generate within the handler, set the drop flag back to 0. *)
+        let set_drop_stmt = 
+          sassign_var ctx.ectx_drop_evar
+            (vint_exp_ty 1 (ctx.ectx_drop_evar.ety))
+        in
+        let hdl_body = match hevent.hdl_body with
+          | SFlat(statement) -> SFlat(sseq set_drop_stmt statement)
+          | SPipeline(statements) -> (
+            match statements with 
+            | [] -> SPipeline([])
+            | stage1::statements -> (
+              SPipeline((sseq set_drop_stmt stage1)::statements)
+            )
+          )
+        in
+        let hevent = {hevent with hdl_body} in
+        super#visit_hevent ctx hevent
+
+      method! visit_statement ctx stmt = 
+        let stmt=super#visit_statement ctx stmt in 
+        egress_transformer ctx stmt
       end
   ;;
 

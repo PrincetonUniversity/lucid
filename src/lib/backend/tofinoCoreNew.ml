@@ -12,7 +12,7 @@ open CoreSyntax
 open BackendLogging
 open MiscUtils
 open AddIntrinsics
-
+open SplitDataplane
 
 (* most of the tofinocore syntax tree is 
    directly from coreSyntax *)
@@ -190,180 +190,9 @@ and prog = component list
  
 
 
-(** core -> tofinocore translation: splitting into ingress and egress **)
-type ctx = {
-  globals : decl IdMap.t;
-  ingress_globals : IdSet.t;
-  egress_globals : IdSet.t;
-  ingress : decl list;
-  egress : decl list;
-}
-
-let empty_ctx = {
-  globals = IdMap.empty;
-  ingress_globals = IdSet.empty;
-  egress_globals = IdSet.empty;
-  ingress = [];
-  egress = [];
-}
-
 let no_span = Span.default;;
 let tdecl td = {td; tdspan = no_span; tdpragma = None}
 
-
-(* get the set of globals referenced in the statement *)
-let globals_refd (global_ids : IdSet.t) stmt = 
-  let globals = ref IdSet.empty in
-  let v = object
-    inherit [_] CoreSyntax.s_iter
-    method! visit_EVar _ (c:cid) =
-      if IdSet.mem (Cid.to_id c) global_ids then
-        globals := IdSet.add (Cid.to_id c) !globals
-    end
-  in
-  v#visit_statement () stmt;
-  !globals
-;;
-
-let rec split_decls ctx decls : ctx =
-  match decls with
-  | [] -> 
-    (* make sure that no globals overlap, and copy all the 
-      ingress and egress globals over to the ingress and egress decl lists *)
-    let ensure_no_shared_globals ctx = 
-      let overlap = IdSet.inter ctx.ingress_globals ctx.egress_globals in
-      if not (IdSet.is_empty overlap) then
-        error (
-          Printf.sprintf 
-          "Global variables are used in both ingress and egress: %s" 
-          (CorePrinting.comma_sep (CorePrinting.id_to_string) (IdSet.to_list overlap)))
-    in
-    ensure_no_shared_globals ctx;
-    let full_ingress = IdSet.fold (fun id decls -> decls @ [IdMap.find id ctx.globals]) ctx.ingress_globals ctx.ingress in
-    let full_egress = IdSet.fold (fun id decls -> decls @ [IdMap.find id ctx.globals]) ctx.egress_globals ctx.egress in
-    { ctx with ingress = full_ingress; egress = full_egress; }
-  | d :: ds ->
-    match d.d with
-    (* we don't know whether a global is in ingress or egress yet *)
-    | DGlobal (id, _, _) ->
-      let ctx' = { ctx with 
-        globals = IdMap.add id d ctx.globals; } 
-      in
-      split_decls ctx' ds
-    (* parsers are always ingress *)
-    | DParser _ -> let ctx = { ctx with ingress = ctx.ingress @ [d] } in
-      split_decls ctx ds
-    (* handlers go to either ingress or egress, and take all the globals 
-       that they reference with them. *)
-    | DHandler(_, HData, (_, body)) -> 
-      (* convert the globals map into a set of all globals *)
-      let all_global_ids = IdMap.fold (fun id _ ids -> IdSet.add id ids) ctx.globals IdSet.empty in
-      let globals_refd = globals_refd all_global_ids body in
-      (* add the referenced globals to the ingress set *)
-      let ingress_globals = IdSet.union ctx.ingress_globals globals_refd in
-      print_endline ("adding DHandler to ingress");
-      let ctx = {ctx with ingress_globals; ingress = ctx.ingress @ [d]} in
-      split_decls ctx ds
-    | DHandler(_, HEgress, (_, body)) -> 
-      (* convert the globals map into a set of all globals *)
-      let all_global_ids = IdMap.fold (fun id _ ids -> IdSet.add id ids) ctx.globals IdSet.empty in
-      let globals_refd = globals_refd all_global_ids body in
-      (* add the referenced globals to the egress set *)
-      let egress_globals = IdSet.union ctx.egress_globals globals_refd in
-
-      let ctx = { ctx with egress_globals; egress = ctx.egress @ [d] } in 
-      split_decls ctx ds
-    (* everything else goes to both *)
-    | _ -> split_decls {ctx with ingress = ctx.ingress @ [d]; egress = ctx.egress @ [d]} ds
-;;
-
-(* add handlers that route the event from ingress -> egress and vice versa. 
-   This is for events that do not have both an ingress and an egress handler declared. *)
-let add_continue_handlers ctx : ctx =
-  let continue_handler hdl_sort (evid : Id.t) evparams : decl =
-    let eparams = List.map (fun (id, ty) -> CoreSyntax.exp_of_id id ty) evparams in
-    let body = 
-      gen_sp 
-        (GSingle(None))
-        (call_sp (Cid.id evid) eparams (ty TEvent) Span.default)
-        Span.default
-    in
-    handler_sp evid evparams hdl_sort body Span.default
-  in
-  let eventmap = IdMap.empty in
-  (* get all the events *)
-  let eventmap =
-    List.fold_left (fun eventmap decl -> 
-      match decl.d with
-      | DEvent(id, _, _, _) -> (
-        (* if the event isnt already in the map *)
-        match IdMap.find_opt id eventmap with
-        | None -> IdMap.add id decl eventmap
-        | Some _ -> eventmap)
-      | _ -> eventmap)
-      eventmap 
-      (ctx.ingress @ ctx.egress)
-  in
-  let all_events = IdMap.fold (fun _ v l -> v :: l) eventmap [] in
-  (* we need a unique list of events by event id*)
-  let ingress_handler_ids = List.filter_map (fun d -> match d.d with DHandler(hid, HData, _) -> Some(hid) | _ -> None) ctx.ingress in
-  let egress_handler_ids = List.filter_map (fun d -> match d.d with DHandler(hid, HEgress, _) -> Some(hid) | _ -> None) ctx.egress in
-  (* For each event that does not have a handler in ingress or egress,
-      construct a new handler that generates the event with its input parameters. *) 
-  let rec add_handlers ctx (events : decls) : ctx = 
-    match events with 
-    | [] -> ctx
-    | d :: ds -> 
-      match d.d with
-      | DEvent(eid, _, _, params) -> 
-        (* add ingress handler if it doesnt exist *)
-        let ctx = if (not (List.mem eid ingress_handler_ids)) then 
-          {ctx with ingress = ctx.ingress@[continue_handler HData eid params];}
-        else ctx 
-        in
-        (* add egress handler if it doesn't exist *)
-        let ctx = if (not (List.mem eid egress_handler_ids)) then 
-          {ctx with egress = ctx.egress@[continue_handler HEgress eid params];}
-        else ctx 
-        in        
-        add_handlers ctx ds
-      | _ -> add_handlers ctx ds
-  in   
-  add_handlers ctx all_events
-;;
-
-(* 
-TODO: 
-
-1. make sure the egress handlers drop the output packet on all control flows without a generate. 
-Implicit semantics: add a command to set the drop flag 
-   to the beginning of every egress handler.
-  - This should be unset by a generate command. 
-  - as an optimization, we can only add it if there is a user-defined egress handler...
-
-2. change struct format of  union of unions (egress output type) to not contain outer tag. 
-  - or, better, don't generate a union of unions, have a flattening method when you 
-    produce the merged egress output event... 
-
-   *)
-let egr_drop_ctl_id = Cid.create ["drop_ctl"];;
-let egr_drop_ctl_sz = 3
-let rec add_default_egr_drop ds = 
-  let set_drop_ctl = sassign egr_drop_ctl_id (vint_exp 1 egr_drop_ctl_sz) in
-  let prepend_set_drop_ctl body =
-    match body with
-    | (params, stmt) -> (params, { stmt with s = SSeq(set_drop_ctl, stmt) })
-  in
-  let update_handler handler =
-    match handler.d with
-    | DHandler(id, HEgress, body) -> { handler with d = DHandler(id, HEgress, prepend_set_drop_ctl body) }
-    | _ -> handler
-  in
-  List.map update_handler ds
-;;
-
-
-(** core -> tofinocore translation: building components **)
 (* translate decl and add to a component *)
 let decl_to_tdecl (decl:decl) = 
   match decl.d with
@@ -428,16 +257,10 @@ let rec decls_to_tdecls tdecls ds : tdecls =
   ;;
 
 (* translate the program into a tofinocore program *)
-let core_to_tofinocore decls : prog = 
-  (* split the decls and add handlers to redirect 
-     events that are handled at a different component from where 
-     they arrive (e.g., an event arrives at ingress 
-     but there's only an egress handler) *)
-  let ctx = split_decls empty_ctx decls
-    |> add_continue_handlers 
-  in
-  let ingress_decls = ctx.ingress in
-  let egress_decls = ctx.egress in
+let core_to_tofinocore split_prog : prog = 
+  (* the input is a split_prog from splitDataplane *)
+  let ingress_decls = split_prog.ingress in
+  let egress_decls = split_prog.egress in
   (* two components: ingress and egress *)
   let ingress = {
     comp_id = id "ingress"; 

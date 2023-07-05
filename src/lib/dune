@@ -111,6 +111,7 @@
    EliminateEventCombinators
    AddIngressParser
    TofinoCore
+   SplitDataplane
    TofinoCoreNew
    AddEgressParser
    ParseOptimizer
