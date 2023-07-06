@@ -80,16 +80,6 @@ let scope_pgen =
 (* let scope_params (hdl_body : statement) (input_event : event) =
 ;; *)
 
-let rec is_union_of_unions event = 
-  match event with 
-  | EventUnion({members;}) -> 
-    List.for_all 
-      (fun event -> 
-        (is_union_of_unions event) 
-        || (match event with | EventSingle(_) -> true | _ -> false))
-      members
-  | _ -> false
-;;
 
 (* merge the events and handlers in the tdecls from one component and update 
    the parser so that generate statements use constructors of 
@@ -140,16 +130,37 @@ let merge_handlers_in_component (c:component) : component =
     (* tag is the FIELD NAME *)
     tag = tag_of_evid input_evid;
     member_nums = List.map num_of_event input_members;
+    hdrs = []; 
     }) 
   in
+  (* the merged event of the egress component gets headers 
+     for serialization across the wire. *)
+  let hdrs = match c.comp_sort with 
+    | HEgress -> 
+      let id = Id.create in
+      let eth_hdr_v = vint_tups
+        [1, 48; 2, 48; Builtins.lucid_ety_int, 16]
+      in
+      let const_lucid_eth_hdr = hdr
+        (id "eth")
+        (id "eth_h")
+        (ty (TRecord([
+          (id "dst",  (TInt(48)));
+          (id "src",  (TInt(48)));
+          (id "ety",  (TInt(16)));
+        ])))
+        (Some(eth_hdr_v))
+      in
+      [const_lucid_eth_hdr]
+    | _ -> []
+  in
+
   let output_event = EventUnion({
     evid = output_evid;
     members = output_members; 
     tag = tag_of_evid output_evid;
-    (* important: the output events have the same tags 
-    as the input events. Later stages of the compiler 
-    assume that. Can we improve? *)
     member_nums = List.map num_of_event input_members;
+    hdrs;
     })
   in
   (* construct the new handler's body -- a match statement
@@ -179,8 +190,8 @@ let merge_handlers_in_component (c:component) : component =
         if (is_union_of_unions output_event) 
         then (
             (* if the output is a union of unions (which happens for 
-               packets from egress -> ingress, we don't serialize the 
-               outer tag... somehow this should be more explicit...) *)
+               packets from egress -> ingress), don't serialize the 
+               outer tag. Could this be more explicit? *)
             print_endline ("[mergeHandlers] not serializing union of unions tag");
             [PNum (Z.of_int tag_val)], handler_body
         )

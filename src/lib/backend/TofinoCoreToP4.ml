@@ -762,12 +762,37 @@ let rec translate_members struct_ty prevs members =
   in
   prevs, new_member_decls
 
+
+(* given an event's header, generate a p4 struct or header type *)
+and translate_header struct_ty (prevs : id list) header =  
+  let in_prevs = List.exists (Id.equal header.header_id) prevs in
+  if (not in_prevs)
+    then (
+      let fields = match header.header_ty.raw_ty with
+        | TRecord(fields) -> (List.map (fun (x, y) -> x, CoreSyntax.ty y |> translate_ty ) fields) 
+        | _ -> error "expected a TRecord for a header struct"
+      in      
+      let p4struct = dstruct header.header_tyid struct_ty fields in 
+    
+      (header.header_id::prevs, [p4struct])
+    )
+  else (prevs, [])
+and translate_headers evid prevs hdrs struct_ty = 
+  print_endline ("[translate_headers] start in "^(fst evid));
+  let res = List.fold_left 
+    (fun (prevs, p4hdrs) hdr -> 
+      let prevs', p4hdrs' = translate_header struct_ty prevs hdr in
+      print_endline ("translating header"^(Id.to_string hdr.header_id));
+      prevs', (p4hdrs@p4hdrs'))
+    (prevs, [])
+    hdrs
+  in
+  print_endline ("[translate_headers] stop in "^(fst evid));
+  res
+
 and translate_event (prevs:id list) struct_ty event : id list * T.decl list =
-  (* let hdrty_id evid = ((fst evid)^"_h", snd evid) in
-  let structty_id evid = ((fst evid)^"_s", snd evid) in *)
-  (* if we haven't generated the header or struct for this event yet, then do it. *)
   let this_event_struct_id = tyid_of_event struct_ty event in 
-  (* print_endline ("translating event:"^(this_event_struct_id |> fst )^" prevs: "^(String.concat ", " (List.map fst prevs))); *)
+  (* check if this event's struct declarations have already been generated *)
   let in_prevs = List.exists (fun prev_evid -> Id.equal this_event_struct_id prev_evid) prevs in
   if (in_prevs) 
     then (prevs, [])
@@ -778,20 +803,48 @@ and translate_event (prevs:id list) struct_ty event : id list * T.decl list =
       let decl = dstruct (tyid_of_event struct_ty event) struct_ty 
         (List.map (fun (pid, pty) -> pid, translate_ty pty) evparams)
       in
-      prevs@[this_event_struct_id], [decl]  
-    | EventUnion({members; tag}) -> 
+      prevs@[this_event_struct_id], [decl]
+    (* special case: the event union's members are all unions. This happens for 
+    the egress's output event. In this case, we don't give this outer event a tag *)
+    | EventUnion({evid; hdrs; members;}) when (is_union_of_unions event) -> 
+
+    (* translate the event's headers and make fields *)
+    let prevs, header_decls = translate_headers evid prevs hdrs struct_ty in
+    let hdr_fields = 
+      (List.map (fun hdr -> (hdr.header_id, hdr.header_tyid |> tstruct)) hdrs)
+    in
+    (* translate the members headers and make fields *)
+    let member_to_field_param event = 
+      id_of_event event, tyid_of_event struct_ty event
+    in
+    let field_params = List.map member_to_field_param members in
+    let (member_fields: (id * ty) list) = 
+      List.map
+        (fun (field_id,field_ty_id) -> 
+          (field_id, tstruct field_ty_id))
+        field_params
+    in
+    let union_decl = dstruct 
+      (tyid_of_event struct_ty event) 
+      TMeta
+      (hdr_fields@member_fields)
+    in
+    (* translate the members *)
+    let prevs, member_decls = translate_members struct_ty prevs members in 
+    prevs@[this_event_struct_id], (header_decls@member_decls@[union_decl])    
+
+
+    | EventUnion({members; tag;}) -> 
     (* a union is a struct with fields: 
         tag : evid_tag_t; 
         ev : ev_t; for ev in members
         in addition to the union type, return the struct for tag and evs*)
       (* type of the tag header: outer_tag *)
       let tag_outer, (tag_inner, tag_ty) = tag in 
-
       let tag_outer_ty_id = tyid_of_fieldid struct_ty tag_outer in
       let tagty_decl = dstruct tag_outer_ty_id struct_ty
         [tag_inner, translate_ty tag_ty]
       in
-
       let prevs, member_decls = translate_members struct_ty prevs members in 
       (* fields of the union type are all other structs. *)
       (* tricky: are those fields header types or struct types? 
@@ -800,7 +853,10 @@ and translate_event (prevs:id list) struct_ty event : id list * T.decl list =
       let member_to_field_param event = 
         id_of_event event, tyid_of_event struct_ty event
       in
-      let field_params = (tag_outer, tag_outer_ty_id)::List.map member_to_field_param members in
+      let field_params =
+        [tag_outer, tag_outer_ty_id] (* first field is the tag header (todo: put into headers) *)
+        @List.map member_to_field_param members (* last fields are the members *)
+      in
       let (union_fields: (id * ty) list) = 
         List.map
           (fun (field_id,field_ty_id) -> 
@@ -812,8 +868,8 @@ and translate_event (prevs:id list) struct_ty event : id list * T.decl list =
         TMeta
         union_fields
       in
-      prevs@[this_event_struct_id], tagty_decl::(member_decls@[union_decl])
-    | EventSet({members; flags;}) -> 
+      prevs@[this_event_struct_id], [tagty_decl]@member_decls@[union_decl]
+      | EventSet({members; flags;}) -> 
       let flag_struct_id, flag_fields, flag_pad = flags in
 
       (* flags header with padding *)

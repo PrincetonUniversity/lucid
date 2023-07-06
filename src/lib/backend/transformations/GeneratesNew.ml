@@ -104,23 +104,75 @@
     | _ -> error "[sincr] expected evar"
   ;;
   
-  (* statement to assign a var to new value *)
-  let sassign_var evar enew = 
-    match evar.e with 
-    | EVar(var_cid) ->
-      sassign var_cid enew
-    | _ -> error "[sassign_var] expected evar"
-  ;;
-    
+(* statement to assign a var to new value *)
+let sassign_var evar enew = 
+  match evar.e with 
+  | EVar(var_cid) ->
+    sassign var_cid enew
+  | _ -> error "[sassign_var] expected evar"
+;;
+  
   (* enable a field of an event  *)
-  let enable_event_field ev_parents ev field = 
-    let full_param_cid = (Cid.create_ids
-      ((List.map id_of_event (ev_parents@[ev]))@[field]))
+let enable_event_field ev_parents ev field = 
+  let full_param_cid = (Cid.create_ids
+    ((List.map id_of_event (ev_parents@[ev]))@[field]))
+  in
+  let full_param_ty = ty TBool in
+  let scall = enable_call full_param_cid full_param_ty in
+  full_param_cid, scall
+;;
+
+
+let enable_event_header ev hdr = 
+  (* enable the header field of the even t *)
+  (* $(ev.name).$(hdr.header_id).enable(); *)
+  let hdr_cid, shdr_enable = enable_event_field [] ev (hdr.header_id) in
+  (* $(ev.name).$(hdr.header_id).$(field) = $(value) *)
+  match hdr.header_const with
+  | None -> shdr_enable
+  | Some(const_val) -> (
+    let fields = match hdr.header_ty.raw_ty with 
+      | TRecord(field_params) -> field_params
+      | _ -> error "expected header's type to be a record"
     in
-    let full_param_ty = ty TBool in
-    let scall = enable_call full_param_cid full_param_ty in
-    full_param_cid, scall
-  ;;
+    let values = match const_val.v with
+      | VTuple(values) -> values
+      | _ -> error "expected header's constant value to be a tuple value"
+    in
+    let sassign_hdr_field base_cid ((field, _), value) = 
+      let field_cid = Cid.create_ids ((Cid.to_ids base_cid)@[field]) in 
+      let value_exp = value_to_exp value in 
+      sassign field_cid value_exp
+    in
+    (* $(hdr_cid).$(field_id) = $value *)
+    let hdr_enable_stmt = 
+      let hdrs_ref = ref shdr_enable in 
+      ListLabels.iter2 fields values 
+        ~f:(fun field v -> 
+        hdrs_ref := sseq !hdrs_ref (sassign_hdr_field hdr_cid (field, value v)));
+      !hdrs_ref
+    in
+    hdr_enable_stmt
+  )
+;;
+let o2l opt = 
+  match opt with
+  | Some(x) -> [x]
+  | None -> []
+;;
+let enable_event_headers ev = 
+  match ev with 
+  | EventUnion{hdrs} ->
+    ListLabels.fold_left hdrs
+      ~init:(None)
+      ~f:(fun stmt_opt hdr -> 
+        let stmt_hdr = enable_event_header ev hdr in
+        match stmt_opt with
+        | None -> Some(stmt_hdr)
+        | Some(stmt) -> Some(sseq stmt stmt_hdr))
+    |> o2l
+  | _ -> error "[enable_event_headers] expected union event"
+;;
 
 
   (* get an evar referencing a field with name field_name from a 
@@ -263,9 +315,15 @@
           (* let stmt = enable_builtin_params [main_event] handler_out_event "flags" 1 in *)
           (* 2. set the appropriate flag field for base_event in handler  *)
           let flag_id, flag_ty = List.nth flag_fields (pos_of_event members (id_of_event base_event)) in
+          let flag_num = match gty with 
+            | GPort _ -> 2
+            | GMulti _ -> 2
+            | _ -> 1
+          in
+
           let set_flag = sassign
             (Cid.concat (flags_cid) (Cid.id flag_id))
-            (vint_exp_ty 1 flag_ty)
+            (vint_exp_ty flag_num flag_ty)
           in
           (* 3. enable the field holding the member event parameters. *)
           let _, enable_base_event = enable_event_field [main_event] handler_out_event (id_of_event base_event) in
@@ -323,6 +381,7 @@
     !groups_created, component'
   ;;
 
+
   (* function to transform generate statements in an egress *)
   let egress_transformer ctx stmt = 
     match stmt.s with 
@@ -351,17 +410,31 @@
             sassign_var ctx.ectx_drop_evar
               (vint_exp_ty 0 (ctx.ectx_drop_evar.ety))
           in
-          (* 1. enable the tag header of the handler event *)
-          let tag_outer, (tag_inner, _) = tag in
-          let full_tag_outer, enable_tag = enable_event_field [main_event] handler_out_event (tag_outer) in
-          (* 2. set the tag to the appropriate event id 
-              note that we are setting foo.bar.tag.tag = tagval -- tag is a record with a field named tag...*)
-          let tagval = (vint_exp_ty (num_of_event base_event) (snd (snd tag))) in
-          let set_tag = sassign (Cid.concat full_tag_outer (Cid.id (tag_inner))) tagval in
+          (* <<left off here>> TODO: the logic below varies depending on whether its a 
+             packet or background event *)
+          let header_enable_statements = 
+            match (sort_of_event base_event) with
+            | EPacket -> (* for a packet event, we dont serialize any headers *)
+              []
+            | EBackground -> 
+              (* for a background event, we serialize all the headers of the _main event_ and then the tag *)
+              (* Its a bit weird to serialize the headers of the main event here, but 
+                 it is okay because there's only 1 generate in an egress control flow. *)
+            (* 0. enable the event header fields and set their values *)
+            let fill_headers = enable_event_headers main_event in
+            (* 1. enable the tag header of the handler event *)
+            let tag_outer, (tag_inner, _) = tag in
+            let full_tag_outer, enable_tag = enable_event_field [main_event] handler_out_event (tag_outer) in
+            (* 2. set the tag to the appropriate event id 
+                note that we are setting foo.bar.tag.tag = tagval -- tag is a record with a field named tag...*)
+            let tagval = (vint_exp_ty (num_of_event base_event) (snd (snd tag))) in
+            let set_tag = sassign (Cid.concat full_tag_outer (Cid.id (tag_inner))) tagval in
+            fill_headers@[enable_tag; set_tag]
+          in
           (* 3. enable the field holding the member event parameters. *)
           let _, enable_base_event = enable_event_field [main_event] handler_out_event (id_of_event base_event) in
-          [unset_drop; enable_tag; set_tag; enable_base_event]
-        | _ -> error "[GeneratesNew.ingress_transformer] at an ingress, handler output should be an eventset"
+          [unset_drop]@header_enable_statements@[enable_base_event]
+        | _ -> error "[GeneratesNew.ingress_transformer] at an egress, handler output should be an eventunion"
       in
       (* 2. then set the event parameters: ingress_out.foo_out.bar.a = ...; ...*)
       let enable_params_stmts = List.map2

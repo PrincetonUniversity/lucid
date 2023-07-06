@@ -136,6 +136,7 @@ let derive_output_event (ctx:ctx) (hdl_id : id) (hdl_body:statement) : event =
       let evid = Id.append_string "_egress_output" hdl_id in 
       EventUnion({
       evid = evid;
+      hdrs = [];
       members = events;
       tag = ev_tag evid;
       member_nums = List.map num_of_event events;

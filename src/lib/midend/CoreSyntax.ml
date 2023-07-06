@@ -30,6 +30,7 @@ and raw_ty =
   | TAction of acn_ty
   | TPat of size
   | TRecord of (id * raw_ty) list
+  | TTuple of raw_ty list
 
 and tbl_ty =
   { tkey_sizes : size list
@@ -328,6 +329,12 @@ let vevent event = value (VEvent event)
 let vevent_sp event span = value_sp (VEvent event) span
 let vglobal idx ty = avalue (VGlobal idx) ty Span.default
 let vgroup locs = value (VGroup locs)
+let vtup vs = avalue (VTuple vs) (ty (TTuple(List.map infer_vty vs)))
+
+(* int, size tups -> vtup(sized_ints) *)
+let vint_tups i_s =
+  vtup (List.map (fun (i, s) -> VInt(Integer.create i s)) i_s) (Span.default)
+;;  
 
 (* Expressions *)
 let exp e ety = { e; ety; espan = Span.default }
@@ -576,3 +583,4 @@ let exp_to_int exp =
   | EVal { v = VInt z; _ } -> Integer.to_int z
   | _ -> error "[exp_to_int] exp is not an EVal(EInt(...))"
 ;;
+

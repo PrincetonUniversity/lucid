@@ -65,6 +65,13 @@ and parser_block = [%import: CoreSyntax.parser_block]
 
 (*NEW 6/2023 -- event types / definitions *)
 
+and header = {
+  header_id : id;
+  header_tyid : id;
+  header_ty : ty;
+  header_const : value option;
+}
+
 and event =
   | EventSingle of {
     evid:id; 
@@ -78,6 +85,8 @@ and event =
     members: event list;
     (* outer id is a struct id, inner id is struct's field. *)
     tag : id * (id * ty);
+    hdrs : header list; 
+      (* headers to put in front of the packet when serialized *)
     member_nums : int list; (*store the tag values of the members *)
   }
   (* an event set is a set of optional events *)
@@ -85,7 +94,7 @@ and event =
     evid:id;
     members: event list;
     flags : id * (id * ty) list * (id * ty) option;
-      (* struct id, flag field ids and tys, optional padding id and ty*)
+      (* struct id, flag field ids and tys, optional padding id and ty *)
     (* flags : (id * ty) list; a 2-bit flag for each member *)
     generated_events : (id * gen_type) list list;
   }
@@ -111,7 +120,15 @@ and hevent = {
   hdl_preallocated_vars : params; 
   (*variables that the handler can assume are allocated, but not set*)
 }
+(* 
+handler to ingress translation summary: 
 
+control $hdl_id (out $hdl_output, inout $hdl_input, inout $hdl_params, inout $hdl_retparams) {
+  $hdl_body
+}
+
+
+*)
 and handler = 
   (* a handler with parameters -- basically just copied from input. *) 
   | HParams of {
@@ -329,6 +346,11 @@ let num_of_event event =
     | _ -> error "[num_of_event] not a numbered event!"
 ;;
 
+let sort_of_event event = 
+  match event with 
+  | EventSingle {evsort} -> evsort
+  | _ -> error "cant get the sort of a compound event"
+;;
 let etag event = 
   match event with 
   | EventUnion{tag;} -> tag
@@ -585,8 +607,25 @@ let enable_call var_cid var_ty =
 
 
 (* if comp is sort HControl, return comp, else return fcn comp *)
-  let skip_control fcn comp = 
-    match comp.comp_sort with 
-    | HControl -> comp
-    | _ -> fcn comp
-  ;;
+let skip_control fcn comp = 
+  match comp.comp_sort with 
+  | HControl -> comp
+  | _ -> fcn comp
+;;
+
+
+let is_union_of_unions event = 
+  match event with 
+  | EventUnion({members;}) -> 
+    List.for_all 
+      (fun event -> match event with 
+      | EventUnion(_) -> true
+      | _ -> false)
+      members
+  | _ -> false
+;;
+
+
+let hdr header_id header_tyid header_ty header_const = 
+  {header_id; header_tyid; header_ty; header_const}
+;;
