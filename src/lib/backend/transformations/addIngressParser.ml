@@ -126,7 +126,7 @@ let packetevent_parse_block event = match event.d with
 
 
 (* call the parser for background events. *)
-let call_lucid_block bg_events = 
+let lucid_background_event_parser bg_events = 
    let (branches : parser_branch list) = List.map 
       (fun bg_ev -> match bg_ev.d with 
          | DEvent(_, Some(num), _,_) -> 
@@ -139,8 +139,9 @@ let call_lucid_block bg_events =
    let tag_ty = ty (TInt(16)) in   
    let etag = var tag_id tag_ty in
    block 
-      [
-         read (Cid.create ["tag"]) (ty (TInt(16))) (* this tag has to be read by the merged ingress? Not really.*)
+      [ (* skip the lucid ethernet header. If we want to be safer, we can read it and check correctness. *)
+         skip (ty (TInt(14*8)));
+         read (Cid.create ["tag"]) (ty (TInt(16))) (* read the event tag *)
       ]
       (pmatch [etag] branches)
       
@@ -169,10 +170,10 @@ let portspec_to_parser portspec pkt_events bg_events =
       in
       let background_branches = if (List.length bg_events > 0)
          then (     
-         (pbranch [portspec.recirc_dpid] (call_lucid_block bg_events))
+         (pbranch [portspec.recirc_dpid] (lucid_background_event_parser bg_events))
          ::(List.map (fun port ->          
             bind_port port.dpid;
-            pbranch [port.dpid] (call_lucid_block bg_events)) portspec.internal_ports))
+            pbranch [port.dpid] (lucid_background_event_parser bg_events)) portspec.internal_ports))
          else ([])
       in
       let external_packet_branches = match events with 
@@ -384,7 +385,7 @@ let add_parser (portspec:port_config) ds =
    let pkt_events = List.filter is_pktev ds in
    let bg_events = List.filter is_bgev ds in 
    (* construct the background event parsing block *)
-   let bg_block = call_lucid_block bg_events in
+   let bg_block = lucid_background_event_parser bg_events in
    match main_parser_opt ds with 
    | Some(_) -> 
       (* if there's a main parser, check the user parser to make sure it's well-formed, 

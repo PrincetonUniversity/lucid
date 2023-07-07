@@ -629,3 +629,29 @@ let is_union_of_unions event =
 let hdr header_id header_tyid header_ty header_const = 
   {header_id; header_tyid; header_ty; header_const}
 ;;
+
+
+
+
+let events_of_component component = 
+  let v = 
+    object
+      inherit [_] s_iter as super
+      val mutable events = []
+      method events = events
+      method! visit_event ctx event = 
+        (* only add an event if it is a variant EventSingle *)
+        match event with
+        | EventSingle(_) -> (
+        (* only add the event if an event with the same id is not in the list *)
+        if not (List.exists (fun e -> (id_of_event e) = (id_of_event event)) events) 
+        then events <- event::events;
+        )
+        | _ -> ();
+        super#visit_event ctx event
+    end
+  in
+  v#visit_component () component;
+  v#events
+;;
+

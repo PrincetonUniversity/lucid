@@ -1314,8 +1314,28 @@ let translate_tdecl (denv : translate_decl_env) tdecl : (translate_decl_env) =
       in
       let prev_events, in_event_decls = translate_event denv.prev_events TMeta hevent.hdl_input in
       let prev_events, out_event_decls = translate_event prev_events THdr hevent.hdl_output in
+      (* HACK: add a solitary pragma for the input event's tag. <<left off here>> todo: 
+         we might want to add solitary tags for _all_ the variables in the program. 
+         Stuff gets glitchy with an overly-eager backend that slices to optimize... *)
+      let solitary_input_tag_pragma = match (hevent.hdl_input) with
+        | EventUnion({tag;}) -> (
+          let tag_cid = Cid.create_ids [id_of_event hevent.hdl_input; fst tag; fst (snd tag)] in 
+          let gress_string = match hevent.hdl_sort with 
+            | HData -> "ingress"
+            | HEgress -> "egress"
+            | HControl -> error "trying to translate a control component to p4?"
+          in
+          let pragma = {
+            pname = "pa_solitary";
+            pargs = ["\""^gress_string^"\""; "\""^CorePrinting.cid_to_string tag_cid^"\""];
+          }
+          in
+          {d=DPragma(pragma); dpragma = []; dspan = Span.default}
+        )
+        | _ -> error "the input event to a handler should always be a unions..."
+      in 
       let globals =
-        denv.globals@in_event_decls@out_event_decls@[control_decl]
+        denv.globals@in_event_decls@out_event_decls@[solitary_input_tag_pragma; control_decl]
       in
       (* consume all the locals! *)
       let locals = [] in
@@ -1327,8 +1347,8 @@ let translate_tdecl (denv : translate_decl_env) tdecl : (translate_decl_env) =
       let globals = globals@[deparser] in
       {denv with globals; locals; prev_events}
   )
-  | TDParser(p) -> let globals = denv.globals@[translate_parser denv p] in {denv with globals}
   | TDHandler(HParams(_)) -> error "param-based handles should have been eliminated"
+  | TDParser(p) -> let globals = denv.globals@[translate_parser denv p] in {denv with globals}
   | TDAction _ -> error "[translate_tdecl] actions should have been converted into functions"
   | TDMulticastGroup(group) -> 
     let decl = T.decl_full (DMCGroup{gid=group.gnum; replicas =group.gcopies;}) [] tdecl.tdspan in 

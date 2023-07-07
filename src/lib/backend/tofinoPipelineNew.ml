@@ -51,12 +51,15 @@ let print_if_debug ds =
     + no exit events
     + no event variables
     + each action belongs to 1 table *)
-let common_midend_passes ds =
+let common_midend_passes portspec ds =
   mk_ir_log_dirs ();
   dbg_dump_core_prog "midend" ds;
   (* delete Event.delay calls and warn the user *)
   (* form: + no Event.delay calls *)
   let ds = EliminateEventCombinators.process ds in
+  (* form: + no flood expressions *)
+  (* let ds = EliminateFloods.eliminate_floods portspec ds in  *)
+
   (*  for debugging, put the name of the event into each event parameter,
       then make sure events and handlers have the same parameter ids. *)
   (* form: + events and handlers have same parameter ids *)
@@ -129,7 +132,6 @@ let atomic_op_form ds =
   dbg_dump_core_prog "AfterConstBranchVars" ds; *)
   (* MidendPipeline.print_if_debug ds; *)
   print_if_verbose "-------Breaking down compound expressions--------";
-  (* let ds = EliminateFloods.eliminate_floods ds in  *)
   (* form: + every argument in a function call is either a variable or value *)
   let ds = PrecomputeArgs.precompute_args ds in
   (* form:
@@ -265,7 +267,7 @@ let compile old_layout ds portspec build_dir ctl_fn_opt =
   then (
     CoreCdg.start_logging ();
     CoreDfg.start_logging ());
-  let ds = common_midend_passes ds in
+  let ds = common_midend_passes portspec ds in
 
 
   (* add extern record type definitions -- 
@@ -306,7 +308,7 @@ let compile old_layout ds portspec build_dir ctl_fn_opt =
     "after adding egress parser"
     core_prog;
 
-  let core_prog = GeneratesNew.eliminate_generates portspec.recirc_dpid core_prog in
+  let core_prog = GeneratesNew.eliminate_generates portspec core_prog in
   dump_prog 
     "parsers_added_generates_eliminated.dpt" 
     "after parsers have been added and generates have been eliminated in handlers"

@@ -50,6 +50,7 @@
   open TofinoCoreNew
   open AddIntrinsics
   open AddHandlerTypes
+  open ParsePortSpec
   
   (* get a member event *)
   let member_event event member_id =
@@ -202,24 +203,50 @@ let enable_event_headers ev =
   let genct_evar = (evar_from_paramty_field ingress_intrinsic_metadata_for_tm_t "mcast_grp_a") ;;
   let egressport_evar = (evar_from_paramty_field ingress_intrinsic_metadata_for_tm_t "ucast_egress_port") ;;
   let group_evar = (evar_from_paramty_field ingress_intrinsic_metadata_for_tm_t "mcast_grp_b") ;;
+  let flood_skip_evar = (evar_from_paramty_field ingress_intrinsic_metadata_for_tm_t "level1_exclusion_id") ;;
   let drop_evar = (evar_from_paramty_field egress_intrinsic_metadata_for_deparser_t "drop_ctl") ;;
+  let broadcast_groupnum = 1000
+  let construct_initial_groups (portspec:port_config) (max_num_events : int) = 
+      (* the first group is the broadcast group, which 
+         sends to every external port defined in the config. *)
+      let broadcast_group = {
+        gnum = broadcast_groupnum;
+        gcopies = List.map (fun p -> p.dpid, 0) portspec.external_ports;
+        }
+      in
+      let groups = ref [broadcast_group] in
+      for num_copies = 1 to max_num_events do
+        let gnum = num_copies in
+        let gcopies = ref [] in
+        for j = 1 to num_copies do
+          gcopies := (portspec.recirc_dpid, j)::!gcopies
+        done;
+        groups := {gnum; gcopies=List.rev !gcopies}::!groups
+      done;
+      List.rev !groups
+    ;;
+    
+    
 
   type ingress_ctx = {
     ctx_output_event : event;
     ctx_genct_evar : exp;
     ctx_egressport_evar : exp;
     ctx_group_evar : exp;
+    ctx_flood_source_evar : exp;
     ctx_groups : group list;
   }
   
-  let ingress_ctx (igr:component) = 
+  let ingress_ctx portspec (igr:component) = 
     let main_hdl = (main_handler_of_component igr) in
+    let events = events_of_component igr in
     let ctx = {
       ctx_output_event = main_hdl.hdl_output;
       ctx_genct_evar = genct_evar main_hdl.hdl_retparams;
       ctx_egressport_evar = egressport_evar main_hdl.hdl_retparams;
       ctx_group_evar = group_evar main_hdl.hdl_retparams;
-      ctx_groups = [];
+      ctx_flood_source_evar = flood_skip_evar main_hdl.hdl_retparams;
+      ctx_groups = construct_initial_groups portspec (List.length events) ;
     }
     in
     ctx
@@ -272,7 +299,8 @@ let enable_event_headers ev =
       let gcopies = List.map (fun port -> (port, 0)) ports in 
       match (find_mc gcopies) with
       | None -> (
-        let gnum = List.length (ctx.ctx_groups) in
+        (* +1 because group numbers start at 1 *)
+        let gnum =2 +  List.length (ctx.ctx_groups) in
         (* one copy to each port, all copies get rid = 0 
           because they are the "forwarded event" *)
         let gcopies = List.map (fun port -> (port, 0)) ports in 
@@ -346,11 +374,23 @@ let enable_event_headers ev =
       let (groups_created:group list), update_control_param_stmt = match gty with
         | GSingle(None) -> 
           [], sincr_var ctx.ctx_genct_evar
-        | GMulti(exp) -> 
-          (* create a new group if it does not exist, and replace the 
-             group expression with an int. update context.*)
-          let (groups_created:group list), exp' = mc_group_decl ctx exp in 
-          groups_created, sassign_var ctx.ctx_group_evar exp'
+        | GMulti(exp) -> (
+          match exp.e with 
+          | EFlood(skip_port) -> 
+            (* set group_evar to the flood group and the l2 exclusion id to skipped_port *)
+            let stmt = 
+              sseq
+                (* multicast group b is the broadcast group *)
+                (sassign_var ctx.ctx_group_evar (vint broadcast_groupnum 16|> value_to_exp))
+                (* exclude the ingress port from the output ports *)
+                (sassign_var ctx.ctx_flood_source_evar (op (Cast(size_of_tint ctx.ctx_flood_source_evar.ety)) [skip_port] (ctx.ctx_flood_source_evar.ety)))
+            in
+            [], stmt
+          | _ -> 
+            (* create a new group if it does not exist, and set the group evar to the groups num *)
+            let (groups_created:group list), exp' = mc_group_decl ctx exp in 
+            groups_created, sassign_var ctx.ctx_group_evar exp'
+        )
         | GPort(exp) -> 
             [], (sassign_var ctx.ctx_egressport_evar exp)
         | GSingle(Some(_)) -> error "[Generates.eliminate] not sure what to do with a generate of type GSingle(Some(_))"
@@ -484,64 +524,14 @@ let enable_event_headers ev =
       end
   ;;
 
-let events_of_component component = 
-  let v = 
-    object
-      inherit [_] s_iter as super
-      val mutable events = []
-      method events = events
-      method! visit_event ctx event = 
-        (* only add an event if it is a variant EventSingle *)
-        match event with
-        | EventSingle(_) -> (
-        (* only add the event if an event with the same id is not in the list *)
-        if not (List.exists (fun e -> (id_of_event e) = (id_of_event event)) events) 
-        then events <- event::events;
-        )
-        | _ -> ();
-        super#visit_event ctx event
-    end
-  in
-  v#visit_component () component;
-  v#events
-;;
-
-let construct_initial_groups recirc_port (max_num_events : int) = 
-(* psuedocode 
-  groups = []
-  for num_copies in range(1, max_num_events+1):
-    gnum = num_copies
-    gcopies = [(recirc_port, j) for j in range(1, num_copies)]
-    groups.append({gnum; gcopies})
-  return groups
-*)
-  (* translate the psuedocode into ocaml *)
-  let groups = ref [] in
-  for num_copies = 1 to max_num_events do
-    let gnum = num_copies in
-    let gcopies = ref [] in
-    for j = 1 to num_copies do
-      gcopies := (recirc_port, j)::!gcopies
-    done;
-    groups := {gnum; gcopies=List.rev !gcopies}::!groups
-  done;
-  List.rev !groups
-;;
-
-
-
-
     (* main pass *)
-  let eliminate_generates recirc_port (prog : prog) : prog = 
+  let eliminate_generates (portspec:ParsePortSpec.port_config) (prog : prog) : prog = 
     (* print_endline "[eliminate_generates] pass started"; *)
     let mcgroups, prog = List.fold_left
       (fun (mcgroups, prog) component -> 
         match component.comp_sort with
         | HData -> 
-          let ctx = ingress_ctx component in
-          let events = events_of_component component in
-          let initial_groups = construct_initial_groups recirc_port (List.length events) in
-          let ctx = {ctx with ctx_groups = initial_groups} in 
+          let ctx = ingress_ctx portspec component in
           let new_groups, component = eliminate_ingress (ctx) component in
           (mcgroups@new_groups), prog@[component]
         | HEgress -> 
@@ -561,4 +551,3 @@ let construct_initial_groups recirc_port (max_num_events : int) =
     let prog = List.map (fun c -> if fst c.comp_id = "control" then control_component else c) prog in
     prog
   ;;
-
