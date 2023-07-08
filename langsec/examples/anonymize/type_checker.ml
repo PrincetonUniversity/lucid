@@ -66,12 +66,12 @@ let rec join (t1: t) (t2: t): t =
         | (Arr (targ1, tresult1, s1), Arr (targ2, tresult2, s2)) -> (
             let targ = join targ1 targ2 in 
             let tresult = meet tresult1 tresult2 in 
-            let slevel = smeet s1 s2 in 
+            let slevel = sjoin s1 s2 in 
             Arr (targ, tresult, slevel))
         | (_, _) -> raise (TypeError "Types do not match") in
       let targ = meet targ1 targ2 in 
       let tresult = join tresult1 tresult2 in 
-      let slevel = sjoin s1 s2 in 
+      let slevel = smeet s1 s2 in 
       Arr (targ, tresult, slevel))
   | (_, _) -> raise (TypeError "Types do not match") 
 
@@ -193,7 +193,14 @@ let pretty_print (env: 'a Env.t): unit =
   iter bindings
 
 let env = update env "x" (Int Low)
-let _ = print_endline (print_type (typecheck env (Var "x")))
+let env = update env "y" (Int High)
+let env = update env "true" (Bool High)
+let env = update env "false" (Bool Low)
+let env = update env "fizz" (Arr (Int High, Bool Low, Low))
+let env = update env "buzz" (Arr (Int High, Bool Low, High))
+let e1 = (If (Var "true", Var "fizz", Var "buzz"))
+let e2 = Call (Var "z", Var "y")
+let _ = print_endline (print_type (typecheck env (Let ("z", e1, e2))))
     
 (* Type inferencing notes *)
 (* fun x -> fun y -> x + 2 + (if x then 3 else 4) *)
