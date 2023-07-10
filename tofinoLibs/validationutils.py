@@ -1,20 +1,34 @@
 #!/usr/bin/env python3
 
+""" 
+    Utilities for analyzing the output of the tofino compiler and 
+    asic model, including checking if output packets match expected 
+    output packets based on our test spec.
+"""
+
 import sys, time, random, socket, os, struct, json, copy, re, socket, string
 import binascii
 import dpkt
 from collections import namedtuple
 
-""" 
-    Analyze the tofino-model's output log to see if the test spec passed. 
-"""
+
 def main():
-    if (len(sys.argv) != 3):
-        print ("usage: check_testspec.py testspec.json model_output.log")
-        return
-    # 1. load the test spec. 
-    specfn = sys.argv[1]
-    modellog_fn = sys.argv[2]
+    cmd = sys.argv[1]
+    if (cmd == "check"):     
+        # check is used by p4tapp.sh, which will break if the check command 
+        # prints anything besides a single boolean!
+        if (len(sys.argv) != 4):
+            print ("usage: validation_tools.py check testspec.json model_output.log")
+            return
+        specfn = sys.argv[2]
+        modellog_fn = sys.argv[3]
+        check(specfn, modellog_fn)
+    elif(cmd == "txpkts"):
+        log_fn = sys.argv[2]
+        txpkts(log_fn)
+
+
+def check(specfn, modellog_fn):
     traceJson = json.load(open(specfn, "r"))
     specRecs = traceJson["model-output"]
     # print (specRecs)    
@@ -24,6 +38,14 @@ def main():
     match = compare_recs(specRecs, modelRecs)
     print (match)
     return
+
+def txpkts(log_fn):
+    pktrecs = parse_tx_pkts_from_model_log(log_fn)
+    print ("--- tx packets --- ")
+    for p in pktrecs:
+        print (p)
+    print ("-------------------")
+
 
 
 def parse_tx_pkts_from_model_log(log_fn):
