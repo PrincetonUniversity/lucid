@@ -51,7 +51,7 @@ let generated_eventid_subsets (hdl_body:statement) =
   event_id_sequences
 ;;
 
-let typed_generate_seqs (hdl_body:statement) : (id * gen_type) list list =
+let typed_generate_seqs evid (hdl_body:statement) : (id * gen_type) list list =
   let generate_sequences = find_generate_sequences hdl_body in
   (* convert the generate sequences into sets of event ids *)
   let event_id_sequences = List.map
@@ -69,6 +69,15 @@ let typed_generate_seqs (hdl_body:statement) : (id * gen_type) list list =
   in
 
   let event_id_sequences = List.sort_uniq compare_id_seqs event_id_sequences in
+  (* print_endline ("[typed_generate_seqs] event: "^ (fst evid));
+  List.iter (fun seq -> 
+    let outstr = ref "seq: " in
+    List.iter (fun (id, _) -> 
+      outstr := !outstr ^ (fst id) ^ ", ") 
+      seq;
+    print_endline !outstr)    
+  event_id_sequences
+  ; *)
   event_id_sequences
 ;;
 
@@ -146,7 +155,7 @@ let derive_output_event (ctx:ctx) (hdl_id : id) (hdl_body:statement) : event =
       EventSet({
       evid = evid;
       members = events;
-      generated_events = typed_generate_seqs hdl_body;
+      generated_events = typed_generate_seqs evid hdl_body;
       flags = ev_flag evid events;
       })
   in

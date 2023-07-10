@@ -26,7 +26,59 @@ def main():
     elif(cmd == "txpkts"):
         log_fn = sys.argv[2]
         txpkts(log_fn)
+    elif(cmd == "tx"):
+        txpkts(find_model_log())
+    elif(cmd == "greplog"):
+        greplog(find_model_log(), sys.argv[2], sys.argv[3])        
 
+# find the path of this script
+def mypath():
+    script_path = os.path.realpath(__file__)
+    script_path = os.path.dirname(script_path)
+    print (script_path)
+    return script_path
+
+# find the full path name of  ../run_logs/model_*.log
+def find_model_log():
+    modellog_fn = ""
+    # start at the path of this script, not pwd
+    run_logs_dir = mypath()+"/../run_logs/"
+    print ("run_logs_dir:"+run_logs_dir)
+    for fn in os.listdir(run_logs_dir):
+        if (fn.startswith("model_")):
+            # make sure fn ends with .log
+            if (fn.endswith(".log")):
+                modellog_fn = run_logs_dir+fn
+    return modellog_fn
+
+# find all blocks in text that start with 
+# start_str and end with end_str -- find the shortest
+# possible matches
+def find_substrs(s, e, string):
+    substrings = []
+    start = 0
+    while True:
+        start = string.find(s, start)
+        if start == -1:
+            break
+        end = string.find(e, start + len(s))
+        if end == -1:
+            break
+        substrings.append(string[start:end + len(e)])
+        start = end + len(e)
+    return substrings
+
+def greplog(log_fn, start_str, end_str):
+    """ find all the substrings in the log that start with start_str and end with end_str """
+    logstr = open(log_fn, "r").read()
+    substrs = find_substrs(start_str, end_str, logstr)
+    for s in substrs:
+        print (s)
+        print ("-------------------")
+
+def grep_after(log_fn, start_str, n):
+    cmd = "grep -A %s %s %s"%(n, start_str, log_fn)
+    print (cmd)
 
 def check(specfn, modellog_fn):
     traceJson = json.load(open(specfn, "r"))
@@ -46,6 +98,10 @@ def txpkts(log_fn):
         print (p)
     print ("-------------------")
 
+def overlays(stuff):
+    """get all the variables overlaid in the compiled program """
+    print ("overlaid variables:")
+    print ("TODO")
 
 
 def parse_tx_pkts_from_model_log(log_fn):

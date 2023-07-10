@@ -96,6 +96,11 @@ and event =
     flags : id * (id * ty) list * (id * ty) option;
       (* struct id, flag field ids and tys, optional padding id and ty *)
     (* flags : (id * ty) list; a 2-bit flag for each member *)
+    (* this is a list of the generate sequences that occur in the program.
+        each inner list is a subset of members that are generated together, 
+        in the same control flow. Each member in the inner list is a tuple, 
+        where the first element is the id of the generated event and the secon 
+        element is the type of generate statement that produced it. *)
     generated_events : (id * gen_type) list list;
   }
 

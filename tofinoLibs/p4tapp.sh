@@ -442,7 +442,7 @@ function test() {
     stopsim
     echo "**** checking test spec against model log ****"
     MODEL_LOG_FN="$(to_model_log $1)"
-    result=$(python3 $SCRIPT_DIR/model_log_utils.py check "$jsonfn" "$MODEL_LOG_FN")
+    result=$(python3 $SCRIPT_DIR/validationutils.py check "$jsonfn" "$MODEL_LOG_FN")
     if [ $result = "True" ]; then
         echo "PASS"
         exit 0

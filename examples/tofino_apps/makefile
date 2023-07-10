@@ -50,7 +50,7 @@ $(ASSEMBLE_TARGETS):
 $(TEST_TARGETS):
 	$(eval TARGET = $(subst test_,,$@)) # test_x --> x
 	cd $(BUILDDIR)/$(TARGET); make test $(TESTDIR)/$(TARGET).json
-	builds/$(TARGET)/libs/validationutils.py check txpkts builds/$(TARGET)/run_logs/model_*	
+	builds/$(TARGET)/libs/validationutils.py txpkts builds/$(TARGET)/run_logs/model_*	
 
 $(INFO_TARGETS):
 	$(eval TARGET = $(subst info_,,$@)) # info_x --> x	

@@ -146,18 +146,38 @@ let pgen_event out_ctor_base event = pgen (
 )
 ;;
 
-let pblock_nope actions step = 
-  {
-    pactions = List.map (fun a -> (a, Span.default)) actions;
-    pstep = step, Span.default;  
-  }
-;;
 
 (* construct a parser block to read active event params, 
    skip other events, then generate the event. *)
-let make_extract_event_block out_ctor_base members active_event_id = 
-
-  let param_actions = List.fold_left 
+let make_extract_event_block out_ctor_base members gen_seq active_event_id = 
+  let pblock_egr actions step = 
+    {
+      pactions = List.map (fun a -> (a, Span.default)) actions;
+      pstep = step, Span.default;  
+    }
+  in
+  
+  let active_event = List.find 
+    (fun e -> Id.equal (id_of_event e) active_event_id)
+    members
+  in
+  (* for each member: 
+      if it is the active event, read its params
+      else, if it is in gen_seq, skip its params
+      else, ignore its params totally *)
+  let actions = List.fold_left (fun actions member -> 
+    if (Id.equal (id_of_event member) active_event_id)
+      then (actions@(pread_event_params member))
+      else if (List.mem_assoc (id_of_event member) gen_seq)
+        then (actions@(pskip_event_params member))
+        else actions
+    )
+    []
+    members
+  in
+  pblock_egr actions (pgen_event out_ctor_base active_event)
+    
+  (* let param_actions = List.fold_left 
     (fun param_actions member -> 
       if (Id.equal (id_of_event member) active_event_id)
         then (param_actions@(pread_event_params member))
@@ -165,16 +185,25 @@ let make_extract_event_block out_ctor_base members active_event_id =
     []
     members
   in
-  let active_event = List.find 
-    (fun e -> Id.equal (id_of_event e) active_event_id)
-    members
-  in
-  pblock_nope param_actions (pgen_event out_ctor_base active_event)
+  pblock_egr param_actions (pgen_event out_ctor_base active_event) *)
 ;;
 
 
 
 type generate_seq = (id * gen_type) list
+let string_of_generate_seq gs = 
+  let string_of_gen_type = function
+    | GPort(_) -> "port"
+    | GMulti(_) -> "multi"
+    | GSingle(None) -> "local"
+    | GSingle(Some(_)) -> "self"
+  in
+  let string_of_gen_seq = function
+    | (id, gen_type) -> 
+      "generate_"^(string_of_gen_type gen_type)^"("^(fst id)^")"
+  in
+  String.concat ", " (List.map string_of_gen_seq gs)
+;;
 let branches_of_generated_events out_ctor_base (members : event list) (gen_seqs : generate_seq list) : parser_branch list = 
   (* each generate sequence turns into n rules -- one rule for each member *)
     (*
@@ -201,15 +230,22 @@ let branches_of_generated_events out_ctor_base (members : event list) (gen_seqs 
           replica_ids.append(replica_id)
           replica_id += 1
     *)
-    let branches_of_gen_seq gen_seq = 
+  (*construct the branches to parse a single generate sequence (each sequence has 1 branch for each replica) *)
+  (* print_endline ("[branches_of_generated_events] out_ctor_base: "^(Cid.to_string out_ctor_base));
+  print_endline ("[branches_of_generated_events] members: "^(String.concat ", " (List.map (fun m -> id_of_event m |> fst) members))); *)
+  let branches_of_gen_seq (gen_seq : generate_seq) = 
+    (* print_endline ("[branches_of_gen_seq] gen_seq: "^(string_of_generate_seq gen_seq)); *)
     (* there is 1 branch for each event in the sequence, because there's one branch for each replica. *)
     (* flag vals tells us which events are in the packet, so its the same for all rules *)
     let flag_vals = List.map (flag_val_of_event gen_seq) members in 
+    (* print_endline ("[branches_of_gen_seq] initial flag_vals: "^(String.concat ", " (List.map string_of_int flag_vals))); *)
     (* now, we make a rule to extract each event in the sequence, 
-        for the replica corresponding to this event.  *)        
+        for the replica corresponding to this event.  *)
     let new_evnum = ref 0 in 
+    (* make a single branch, for a single replica of the event event_id in a set of events "members" 
+        where "gen_seq" tells you the other members in the current value of the set... *)
     let branch_of_gen (event_id, gen_ty) = 
-      let block = make_extract_event_block out_ctor_base members event_id in 
+      let block = make_extract_event_block out_ctor_base members gen_seq event_id in 
       let replica_val = match (gen_ty) with 
         | GSingle(None)-> (
           (* start at 1 and increment every
@@ -238,6 +274,7 @@ let branches_of_generated_events out_ctor_base (members : event list) (gen_seqs 
    and generate the event evout.members[idxof(nth_var)]...
    oof this is complicated. *)
 let eventset_block evset (rid_var : (cid * ty)) (out_ctor_base : cid) = 
+  (* print_endline ("[eventset_block] evset id: "^(id_of_event evset |> fst)); *)
   match evset with 
   | EventSet({flags;members; generated_events;}) -> (
     let _, flag_fields, pad_opt = flags in 
@@ -307,7 +344,7 @@ let make_egr_parser
         (List.map (fun (tagval, event) ->  
           pbranch 
             [tagval] 
-            (eventset_block 
+            (eventset_block (* one block for each handler that may have run in ingress *)
               event 
               egress_replica_id 
               (id_of_event to_egress |> Cid.id)))  
@@ -345,5 +382,6 @@ let add_parser core_prog : prog =
   let egr_parser = {td=egr_parser; tdspan = Span.default; tdpragma = None} in 
   let core_prog = List.map (fun comp -> if (fst comp.comp_id = "egress") then 
     {comp with comp_decls = egr_parser::comp.comp_decls} else comp) core_prog in
+  (* print_endline ("----- done with egress parser -----"); *)
   core_prog
 ;;

@@ -186,13 +186,13 @@ let merge_handlers_in_component (c:component) : component =
           | SFlat(stmt) -> stmt
           | _ -> error "[merge_handlers_in_tdecls] can't merge after pieplineing"
         in
-        print_endline ("[mergeHandlers.merged_hdl_stmt] output event is "^(TofinoCorePrinting.event_to_string output_event));
+        (* print_endline ("[mergeHandlers.merged_hdl_stmt] output event is "^(TofinoCorePrinting.event_to_string output_event)); *)
         if (is_union_of_unions output_event) 
         then (
             (* if the output is a union of unions (which happens for 
                packets from egress -> ingress), don't serialize the 
                outer tag. Could this be more explicit? *)
-            print_endline ("[mergeHandlers] not serializing union of unions tag");
+            (* print_endline ("[mergeHandlers] not serializing union of unions tag"); *)
             [PNum (Z.of_int tag_val)], handler_body
         )
         else 

@@ -903,6 +903,35 @@ and translate_event (prevs:id list) struct_ty event : id list * T.decl list =
     )  
 ;;
 
+let rec qualified_params_of_event (prefix : Id.t list) event = 
+  match event with 
+  | EventSingle({evid; evparams;}) -> (
+    List.map (fun (id, _) -> Cid.create_ids (prefix@[evid; id])) evparams
+  )
+  | EventUnion({evid; members;})
+  | EventSet({evid; members;}) -> (
+      let prefix = prefix@[evid] in
+    List.map (qualified_params_of_event prefix) members
+    |> List.flatten
+  )
+;;
+let param_pragma pname gress_string param_cid = 
+  let pragma = {
+    pname;
+    pargs = ["\""^gress_string^"\""; "\""^CorePrinting.cid_to_string param_cid^"\""];
+    }
+  in
+  {d=DPragma(pragma); dpragma=[]; dspan = Span.default}
+;;
+
+let no_overlay_pragma = param_pragma "pa_no_overlay" ;;
+let solitary_pragma = param_pragma "solitary" ;;
+
+(* will it help? *)
+let rec pragmas_of_event gress event =   
+  List.map (no_overlay_pragma gress) (qualified_params_of_event [] event)
+
+;;
 
 let translate_params (main_hdl:hevent) =
   (*  construct parameters for the main control flow of a 
@@ -965,7 +994,7 @@ let find_extern_tys_with_field denv field_id =
   let externs = denv.extern_tdecls in
   let matching_extern_ty_ids = List.filter_map
     (fun tdecl -> 
-      print_endline ("find_extern_ty_with_field checking extern: "^(TofinoCorePrinting.tdecl_to_string tdecl));
+      (* print_endline ("find_extern_ty_with_field checking extern: "^(TofinoCorePrinting.tdecl_to_string tdecl)); *)
       
       match tdecl.td with 
       | TDExtern(ty_id, ty) -> (
@@ -1334,8 +1363,12 @@ let translate_tdecl (denv : translate_decl_env) tdecl : (translate_decl_env) =
         )
         | _ -> error "the input event to a handler should always be a unions..."
       in 
+      let overlay_pragmas = match hevent.hdl_sort with
+      | HEgress -> pragmas_of_event "egress" hevent.hdl_input
+      | _ -> []
+      in 
       let globals =
-        denv.globals@in_event_decls@out_event_decls@[solitary_input_tag_pragma; control_decl]
+        denv.globals@in_event_decls@out_event_decls@overlay_pragmas@[solitary_input_tag_pragma; control_decl]
       in
       (* consume all the locals! *)
       let locals = [] in

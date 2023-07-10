@@ -80,7 +80,6 @@ let rec split_decls split_prog decls : split_prog =
       let globals_refd = globals_refd all_global_ids body in
       (* add the referenced globals to the ingress set *)
       let ingress_globals = IdSet.union split_prog.ingress_globals globals_refd in
-      print_endline ("adding DHandler to ingress");
       let split_prog = {split_prog with ingress_globals; ingress = split_prog.ingress @ [d]} in
       split_decls split_prog ds
     | DHandler(_, HEgress, (_, body)) -> 
