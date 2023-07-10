@@ -1343,7 +1343,7 @@ let translate_tdecl (denv : translate_decl_env) tdecl : (translate_decl_env) =
       in
       let prev_events, in_event_decls = translate_event denv.prev_events TMeta hevent.hdl_input in
       let prev_events, out_event_decls = translate_event prev_events THdr hevent.hdl_output in
-      (* HACK: add a solitary pragma for the input event's tag. <<left off here>> todo: 
+      (* hack: add a solitary pragma for the input event's tag. <<left off here>> todo: 
          we might want to add solitary tags for _all_ the variables in the program. 
          Stuff gets glitchy with an overly-eager backend that slices to optimize... *)
       let solitary_input_tag_pragma = match (hevent.hdl_input) with
@@ -1363,10 +1363,13 @@ let translate_tdecl (denv : translate_decl_env) tdecl : (translate_decl_env) =
         )
         | _ -> error "the input event to a handler should always be a unions..."
       in 
-      let overlay_pragmas = match hevent.hdl_sort with
+      (* another hack: in the egress pipeline, make sure no event parameter variables get put into the same containers, 
+         either by slicing or overlay.*)
+      (* let overlay_pragmas = match hevent.hdl_sort with
       | HEgress -> pragmas_of_event "egress" hevent.hdl_input
       | _ -> []
-      in 
+      in  *)
+      let overlay_pragmas = [] in 
       let globals =
         denv.globals@in_event_decls@out_event_decls@overlay_pragmas@[solitary_input_tag_pragma; control_decl]
       in

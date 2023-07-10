@@ -30,7 +30,7 @@ type config =
   ; mutable serverlib : bool
       (* If false, disable the python event library generation *)
   ; mutable old_ifelim : bool (* use the old if to match translation pass, which has a different set of bugs! *)
-  ; mutable new_tofinocore : bool;
+  ; mutable new_tofino : bool;
   }
 
 (* TODO: We might want to add more parameters controlling which transformations
@@ -61,7 +61,7 @@ let default () =
   ; old_layout = false
   ; serverlib = false
   ; old_ifelim = false
-  ; new_tofinocore = false
+  ; new_tofino = false
   }
 ;;
 
@@ -208,8 +208,9 @@ let parse_tofino () =
       ; "--oldlayout", Arg.Unit set_old_layout, "Use old layout algorithm." 
       ; "--oldifelim", Arg.Unit set_old_ifelim, "Use old if to match elimination algorithm."
       ; ( "--new-tofinocore"
-      , Arg.Unit (fun () -> cfg.new_tofinocore <- true)
-      , "If true, use the new tofino core IR and backend" )
+      , Arg.Unit (fun () -> cfg.new_tofino <- true)
+      , "If true, use the new tofino core IR and backend, which features parsers, 
+        egress blocks, and optimizations to reduce phv pressure and stage utilization." )
       ]
   in
   let target_filename = ref "" in

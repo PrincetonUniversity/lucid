@@ -58,7 +58,7 @@ type args_t =
   ; aargs : string list
   ; profile_cmd : string option
   ; ctl_fn : string option
-  ; new_tofinocore : bool
+  ; new_tofino : bool
   ; old_layout : bool
   }
 
@@ -70,7 +70,7 @@ let mk_args (cfg : Cmdline.config) dpt_fn : args_t =
   ; interp_spec_file = cfg.spec_file
   ; ctl_fn = cfg.ctl_fn
   ; old_layout = cfg.old_layout
-  ; new_tofinocore = cfg.new_tofinocore
+  ; new_tofino = cfg.new_tofino
   ; aargs = []
   }
 ;;
@@ -100,7 +100,7 @@ let compile_to_tofino (args : args_t) =
   let core_ds = SyntaxToCore.translate_prog ds in
   (* tofino backend *)
   let p4_str, c_str, py_str, py_eventlib, globals =
-    if (args.new_tofinocore)
+    if (args.new_tofino)
     then
       TofinoPipelineNew.compile
         args.old_layout
