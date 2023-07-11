@@ -55,6 +55,7 @@ let rec raw_ty_to_string t =
     "{"
     ^ concat_map "; " (fun (id, ty) -> raw_ty_to_string ty ^ " " ^ id_to_string id) lst
     ^ "}"
+  | TTuple lst -> "(" ^ concat_map ", " raw_ty_to_string lst ^ ")"
 
 and func_to_string func =
   let arg_tys = concat_map ", " ty_to_string func.arg_tys in

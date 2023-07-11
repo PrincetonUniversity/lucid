@@ -36,7 +36,7 @@ check_lucid_dir()
 {
     if [ -f "./dpt.opam" ]; 
     then
-        continue
+        echo 1 > /dev/null
     else
         echo "error: you must run this command in the root of the lucid repo."
         exit 1
@@ -362,6 +362,8 @@ case $1 in
     rebuild)
         shift 
         check_lucid_dir
+        # note: this command builds the final image defined in the local dockerfile (.) and tags it as
+        # $DOCKER_IMAGE. _even if the dockerfile does not name the final image $DOCKER_IMAGE_.
         CMD="docker build -t $DOCKER_IMAGE ."
         eval "$CMD"
         ;;

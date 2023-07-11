@@ -56,4 +56,4 @@ COPY --from=builder /home/opam/lucid/libz3.so /usr/lib/libz3.so
 COPY --from=builder /home/opam/lucid/dpt dpt
 COPY --from=builder /home/opam/lucid/dptc dptc
 COPY --from=builder /home/opam/lucid/bin bin
-ADD  tofinoLibs ./tofinoLibs
+ADD  scripts ./scripts

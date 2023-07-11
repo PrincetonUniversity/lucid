@@ -55,8 +55,8 @@ let sblocks_of_arr cell_sz num_cells =
 let sblocks_of_stmt arr_info stmt =
   (* List.iter (fun (cid, (cell_sz, num_cells)) -> 
     print_endline ("  " ^ (fst cid) ^ ": " ^ (string_of_int cell_sz) ^ " " ^ (string_of_int num_cells)))  *)
-  arr_info
-  ;
+  (* arr_info
+  ; *)
 
   List.fold_left (fun total arr_id -> 
     let cell_sz, num_cells = List.assoc arr_id arr_info in

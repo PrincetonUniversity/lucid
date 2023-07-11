@@ -146,6 +146,7 @@ let atomic_op_form ds =
 (* normalize code and eliminate compile-time abstractions that are easier
    to deal with in tofinocore syntax *)
 let tofinocore_normalization is_ingress eliminate_generates tds =
+  let _ = eliminate_generates in 
   cprint_prog "----------- initial tofinoCore program------- " tds;
   (* 1. tag match statements with many cases as solitary,
           which means they get placed into their own table.

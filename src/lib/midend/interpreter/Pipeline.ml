@@ -15,7 +15,6 @@ and arrobj =
 
 and tblobj =
   { tid : id
-  ; tactions : action list
   ; (* sentries: tbl_entry list; *)
     tmaxlen : int
   ; tentries : tbl_entry list
@@ -251,7 +250,7 @@ let update_complex
 let mk_table ~(id : Id.t) ~(length : int) ~(def : id * exp list) =
   (* wrap in pipeline object *)
   OTable
-    { tid = id; tactions = []; tdefault = def; tmaxlen = length; tentries = [] }
+    { tid = id; tdefault = def; tmaxlen = length; tentries = [] }
 ;;
 
 let get_table_entries

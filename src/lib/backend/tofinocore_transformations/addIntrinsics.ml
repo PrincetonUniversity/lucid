@@ -13,7 +13,7 @@ type p4_intrinsic_t = {
 }
 
 type p4_intrinsic_param = {
-  pid : id;
+  ipid : id;
   pdir : string option;
   pty : p4_intrinsic_t;
 }
@@ -25,7 +25,7 @@ let remove_trailing_t str =
   else
     str
 let ty_to_param pty dir = 
-  { pid =  Id.name pty.tyid |> remove_trailing_t |> Id.create;
+  { ipid =  Id.name pty.tyid |> remove_trailing_t |> Id.create;
     pdir = dir;
     pty = pty;
   }

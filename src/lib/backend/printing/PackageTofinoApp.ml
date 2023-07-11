@@ -6,7 +6,7 @@ open FileUtil
 
 (* these are all the artifacts in a package, that this 
 module generates from a P4 and manager program string. *)
-let libs_src_dir = "/tofinoLibs"
+let libs_src_dir = "/scripts/tofino"
 let p4_fn = "lucid.p4"
 let c_fn = "lucid.cpp"
 let py_fn = "lucid.py"

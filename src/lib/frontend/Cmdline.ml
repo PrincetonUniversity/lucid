@@ -209,7 +209,7 @@ let parse_tofino () =
       ; "--oldifelim", Arg.Unit set_old_ifelim, "Use old if to match elimination algorithm."
       ; ( "--new-tofino"
       , Arg.Unit (fun () -> cfg.new_tofino <- true)
-      , "If true, use the new tofino core IR and backend, which features parsers, 
+      , "If true, use the new tofino core IR and backend, which features parsers,\
         egress blocks, and optimizations to reduce phv pressure and stage utilization." )
       ]
   in
