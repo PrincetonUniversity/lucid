@@ -28,8 +28,20 @@ let inline_locations ds =
       (* binding *)
       method! visit_statement ctx stmt =
         match stmt.s with 
-        | SLocal(id, _, exp)
-        | SAssign(id, exp) -> (
+        | SLocal(id, _, exp) -> (
+          let exp = super#visit_exp ctx exp in
+          match exp.ety.raw_ty with 
+          | TGroup -> (
+            match exp.e with 
+            | EVal _ ->
+              (* bind id *)
+              loc_vars := (Cid.id id, exp)::(!loc_vars);
+              snoop (* delete the statement *)
+            | _ -> error "[inline_locations] a group exp that is not a value."          
+          )
+          | _ -> stmt
+        )
+        | SAssign(cid, exp) -> (
           (* get the value of the expression, if not already a value *)
           let exp = super#visit_exp ctx exp in
           match exp.ety.raw_ty with 
@@ -37,7 +49,7 @@ let inline_locations ds =
             match exp.e with 
             | EVal _ ->
               (* bind id *)
-              loc_vars := (id, exp)::(!loc_vars);
+              loc_vars := (cid, exp)::(!loc_vars);
               snoop (* delete the statement *)
             | _ -> error "[inline_locations] a group exp that is not a value."
           )
@@ -53,7 +65,7 @@ let inline_locations ds =
         | TGroup -> (
           match exp.e with 
             | EVar(var_cid) -> (
-              match List.assoc_opt (Cid.to_id var_cid) (!loc_vars) with 
+              match List.assoc_opt (var_cid) (!loc_vars) with 
               | Some(eval) -> eval
               | None -> error "[inline_locations] location variable not found"
             )
@@ -138,8 +150,46 @@ let inline_event_vars (ds:decls) =
         (* var_id = evar (vid)--> add binding (var_id:ev_calls[vid]) *)
         (* gen(var_id) --> replace var_id *)
         match stmt.s with 
-        | SAssign(id, exp)
+        | SAssign(cid, exp) -> (
+          match exp.ety.raw_ty with 
+          | TEvent -> (
+            match exp.e with 
+            (* set event var to value --  bind *)
+            | ECall(ev_cid, ev_args) -> (
+              (* create new variables that are copies of args 
+                 at event var decl time. Create var exps and assign stmts. *)
+              let ev_args, arg_assignments = List.mapi
+                (fun i exp -> 
+                  let var_id = Id.create (fst (Cid.to_id cid)^"_arg_"^(string_of_int i)) in 
+                  let var_exp = {exp with e=EVar(Cid.id var_id)} in 
+                  let var_stmt = slocal_exp var_id exp in
+                  var_exp, var_stmt                  
+                )
+                ev_args
+              |> List.split
+              in
+              (* use copy variables as event arguments *)
+              let exp = {exp with e=ECall(ev_cid, ev_args)} in 
+              (* bind the updated event exp *)
+              ev_calls := (cid, exp)::(!ev_calls);
+              (* return statements to set copy variables instead of setting event*)
+              let stmt = InterpHelpers.fold_stmts arg_assignments in 
+              stmt
+            )
+            (* case: event foo = bar; bar should already be declared. Just bind foo to var's exp *)
+            | EVar(ev_cid) -> (
+              match (List.assoc_opt ( ev_cid) (!ev_calls)) with 
+              | Some exp -> 
+                ev_calls := (cid, exp)::(!ev_calls);
+                snoop
+              | _ -> error "[inline_event_vars] the event variable on the rhs is not bound."
+            )
+            | _ -> error "[inline_event_vars] reached an event assign or declaration that has a rhs which is not a call or a variable."
+          )
+          | _ -> stmt
+        )
         | SLocal(id, _, exp) -> (
+          let cid = Cid.id id in 
           match exp.ety.raw_ty with 
           | TEvent -> (
             match exp.e with 
@@ -160,16 +210,16 @@ let inline_event_vars (ds:decls) =
               (* use copy variables as event arguments *)
               let exp = {exp with e=ECall(ev_cid, ev_args)} in 
               (* bind the updated event exp *)
-              ev_calls := (id, exp)::(!ev_calls);
+              ev_calls := (cid, exp)::(!ev_calls);
               (* return statements to set copy variables instead of setting event*)
               let stmt = InterpHelpers.fold_stmts arg_assignments in 
               stmt
             )
             (* case: event foo = bar; bar should already be declared. Just bind foo to var's exp *)
             | EVar(ev_cid) -> (
-              match (List.assoc_opt (Cid.to_id ev_cid) (!ev_calls)) with 
+              match (List.assoc_opt (ev_cid) (!ev_calls)) with 
               | Some exp -> 
-                ev_calls := (id, exp)::(!ev_calls);
+                ev_calls := (cid, exp)::(!ev_calls);
                 snoop
               | _ -> error "[inline_event_vars] the event variable on the rhs is not bound."
             )
@@ -183,7 +233,7 @@ let inline_event_vars (ds:decls) =
             | TEvent -> (
               match exp.e with 
               | EVar(cid) -> (
-                match (List.assoc_opt (Cid.to_id cid) (!ev_calls)) with
+                match (List.assoc_opt (cid) (!ev_calls)) with
                 | Some ev_call -> ev_call
                 | None -> error "[inline_event_vars] event variable not found in context"
               )

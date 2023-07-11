@@ -165,18 +165,18 @@ let iovars_of_table td : (id * ty) list =
 let cut_tbl_match td tbl_match branchnum =
   let set_id, set_ty = callnumvar_of_table td in
   let set_callnum = sassign 
-    set_id
+    (Cid.id set_id)
     (vint_exp branchnum (size_of_tint set_ty))
   in 
   let set_keys = List.map2
     (fun (key_id, _) keyarg -> 
-      sassign key_id keyarg)
+      sassign (Cid.id key_id) keyarg)
     (keyvars_of_table td)
     tbl_match.keys
   in
   let set_args = List.map2
     (fun (arg_id, _) arg -> 
-      sassign arg_id arg)
+      sassign (Cid.id arg_id) arg)
     (argvars_of_table td)
     tbl_match.args
   in
@@ -430,7 +430,7 @@ let pruned_branch_continuations tbl (pruned_branches:pruned_branch list) =
         | None -> (
           List.map2
             (fun branch_id (tbl_id, tbl_ty) -> 
-              sassign branch_id (exp_of_id tbl_id tbl_ty))
+              sassign (Cid.id branch_id) (exp_of_id tbl_id tbl_ty))
             (tbl_match.outs)
             (retvars_of_table tbl))
         | Some(_) -> (
@@ -537,3 +537,77 @@ let process tds =
 ;;
 
 (**** end new table call code ****)
+
+(* updated methods for new tofinocore *)
+open TofinoCoreNew
+
+
+let rec tables_in_prog (tds:tdecls) = 
+  match tds with 
+  | [] -> []
+  | {td=TDGlobal(_, _, {e=ETableCreate(tbl_def); _}); _}::tds' -> 
+    tbl_def::(tables_in_prog tds')
+  | _::tds' -> tables_in_prog tds'
+
+let tables_matched_in_prog (tds:tdecls) =
+  let tbl_ids = ref [] in
+  let v =
+    object
+      inherit [_] s_iter as super
+      method! visit_tbl_match _ tm =
+        tbl_ids := (tm.tbl |> CoreSyntax.exp_to_id)::(!tbl_ids)
+    end
+  in
+  v#visit_tdecls () tds;
+  !tbl_ids |> MiscUtils.unique_list_of
+;;
+
+
+let tables_defined_and_used_in_prog (tds : tdecls) =
+  let defined_tbls = tables_in_prog tds in
+  let used_ids = tables_matched_in_prog tds in
+  let defined_and_used_tbls = List.filter
+    (fun tdef -> List.exists (fun id -> id = tdef.tid) used_ids)
+    defined_tbls
+  in
+  defined_and_used_tbls
+(*   if (List.length defined_tbls) <> (List.length defined_and_used_tbls)
+  then (error "some declared tables are not used in the program!")
+  else (defined_and_used_tbls)
+ *)
+
+;;
+(* this pass produces buggy code when tables are not used in any event *)
+let process_core_tds (tds:tdecls) =
+(*   print_endline("starting single table match transformation...");
+  print_endline("----- prog -----");
+  print_endline (TC.tdecls_to_string tds);
+ *)  
+  let tbls = tables_defined_and_used_in_prog tds in 
+  let main = main_handler_of_decls tds in
+  let main_body = match main.hdl_body with
+    | SFlat(stmt) -> stmt
+    | _ -> error "[SingleTableMatch] this should be run before layout"
+  in  
+  (* combine all the table matches for one table at a time *)
+  let main_body', tbl_iovars = List.fold_left
+    (fun (main_body, tbl_iovars) tbl -> 
+      let main_body, new_iovars = process_table main_body tbl in
+      main_body, tbl_iovars@new_iovars)
+    (main_body, [])
+    tbls
+  in
+  let main' =  {main with 
+    hdl_body = SFlat(main_body');
+    hdl_preallocated_vars = (main.hdl_preallocated_vars@tbl_iovars);
+    } 
+  in
+  let tds' = replace_main_handler_of_decls tds main'  in
+  tds'
+;;
+
+let process_core core_prog = 
+  List.map 
+    (skip_control (fun comp -> {comp with comp_decls = process_core_tds comp.comp_decls}))
+    core_prog
+;;

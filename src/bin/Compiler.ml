@@ -27,6 +27,7 @@ let silent_mode () =
   PackageTofinoApp.silent := true;
   Cmdline.cfg.debug <- false;
   TofinoPipeline.do_log := false;
+  TofinoPipelineNew.do_log := false;
   ()
 ;;
 
@@ -37,6 +38,7 @@ let debug_mode () =
   PackageTofinoApp.silent := false;
   Cmdline.cfg.debug <- true;
   TofinoPipeline.do_log := true;
+  TofinoPipelineNew.do_log := true;
   ()
 ;;
 
@@ -56,6 +58,7 @@ type args_t =
   ; aargs : string list
   ; profile_cmd : string option
   ; ctl_fn : string option
+  ; new_tofino : bool
   ; old_layout : bool
   }
 
@@ -67,6 +70,7 @@ let mk_args (cfg : Cmdline.config) dpt_fn : args_t =
   ; interp_spec_file = cfg.spec_file
   ; ctl_fn = cfg.ctl_fn
   ; old_layout = cfg.old_layout
+  ; new_tofino = cfg.new_tofino
   ; aargs = []
   }
 ;;
@@ -96,12 +100,21 @@ let compile_to_tofino (args : args_t) =
   let core_ds = SyntaxToCore.translate_prog ds in
   (* tofino backend *)
   let p4_str, c_str, py_str, py_eventlib, globals =
-    TofinoPipeline.compile
-      args.old_layout
-      core_ds
-      portspec
-      args.builddir
-      args.ctl_fn
+    if (args.new_tofino)
+    then
+      TofinoPipelineNew.compile
+        args.old_layout
+        core_ds
+        portspec
+        args.builddir
+        args.ctl_fn
+    else
+      TofinoPipeline.compile
+        args.old_layout
+        core_ds
+        portspec
+        args.builddir
+        args.ctl_fn        
   in
   (* package the program with some helper makefiles *)
   unmutable_report

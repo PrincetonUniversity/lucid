@@ -102,7 +102,9 @@ class Controller(object):
     print ("[add_multicast_group] adding mc group: {0}--> [{1}]".format(str(mc_gid), str(ports_rids)))
     node_tbl = self.tables['$pre.node']
     node_ids = []
+    ports = []
     for i, (port, rid) in enumerate(ports_rids):    
+      ports.append(port)
       node_id = self.next_mc_node_id
       node_ids.append(node_id)
       self.next_mc_node_id += 1
@@ -113,8 +115,10 @@ class Controller(object):
     mc_tbl = self.tables['$pre.mgid']
     key_hdl = mc_tbl.add_entry({'$MGID':mc_gid}, None,
       {'$MULTICAST_NODE_ID':node_ids,
-       '$MULTICAST_NODE_L1_XID':[0 for i in ports_rids],
-       '$MULTICAST_NODE_L1_XID_VALID':[False for i in ports_rids]}, ret_hdl=True)
+      #  '$MULTICAST_NODE_L1_XID':[0 for i in ports_rids],
+      #  '$MULTICAST_NODE_L1_XID_VALID':[False for i in ports_rids]}, ret_hdl=True)
+       '$MULTICAST_NODE_L1_XID':ports,
+       '$MULTICAST_NODE_L1_XID_VALID':[True for i in ports]}, ret_hdl=True)
     self.installed_entries.append((mc_tbl, key_hdl))
     print ("[add_multicast_group] done")
 

@@ -145,7 +145,7 @@ let replace_assignments_to ds tgt_id new_id =
       inherit [_] s_map as super
 
       method! visit_SAssign _ id exp = 
-        if (Id.equals id tgt_id)
+        if (Cid.equals id tgt_id)
         then (SAssign(new_id, exp))
         else (SAssign(id, exp))
     end

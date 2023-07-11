@@ -68,6 +68,8 @@ and ex =
   (* ECall args are optional so that a call 
      can represent things like parse state transitions, 
      which never have arguments and don't get ()'s.*)
+  (* a call with type arguments *)
+  | ETyCall of expr * ty list * expr list
   | EList of expr list
 
 and expr = {ex : ex; espan : sp; ety : ty;}
@@ -136,6 +138,7 @@ and d =
   | DMCGroup of {gid:int; replicas : (int * int) list;}
   | DPort of {dpid:int; speed:int;}
   | DPragma of pragma
+  | DNone
 
 and decl = {d:d; dpragma:pragma list; dspan : sp;}
 
@@ -194,6 +197,13 @@ let eval_int i = eval_int_ty i TUnknown
 let ecall_ty fcn_id args ty = 
   {ex=ECall(evar fcn_id, Some(args)); espan = Span.default; ety = ty;}
 let ecall fcn_id args = ecall_ty fcn_id args TUnknown
+
+let etycall_ty fcn_id tys args ty = 
+  {ex=ETyCall(evar fcn_id, tys, args); espan = Span.default; ety=ty;}
+;;
+let etycall fcn_id tys args = 
+  etycall_ty fcn_id tys args TUnknown
+;;
 let ecall_method fcn_id = 
   {ex=ECall(evar fcn_id, None); espan = Span.default; ety=TVoid;}
 let ejump = ecall_method 

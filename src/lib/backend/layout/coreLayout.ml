@@ -683,3 +683,24 @@ let profile tds build_dir =
   let stages_fn = "num_stages.txt" in
   IoUtils.writef (build_dir ^ "/" ^ stages_fn) num_stages
 ;;
+
+open TofinoCoreNew
+
+
+let process_new (tds : tdecls) dfg =
+  let num_dfg_nodes = Dfg.fold_vertex (fun v acc -> v :: acc) dfg [] |> List.length in
+  print_endline ("number of nodes in dfg: "^(num_dfg_nodes |> string_of_int));
+  let layout_args = {
+    num_nodes_to_place = num_dfg_nodes;
+    dfg = dfg_to_sgdfg dfg;
+    arr_dimensions = array_dimensions tds;}
+  in 
+  ensure_all_statements_placed dfg layout_args.dfg;
+  (* exit 1; *)
+  let pipe = SgDfgTopo.fold (place_in_pipe layout_args) layout_args.dfg empty_pipeline in
+  print_endline ("[coreLayoutNew] final pipeline");
+  print_endline (summarystr_of_pipeline pipe);
+  let pipe_stmts = stmts_of_pipe pipe in
+  pipe_stmts 
+;;
+

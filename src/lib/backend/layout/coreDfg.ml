@@ -91,9 +91,9 @@ let preds_of_vertices dfg vs =
 ;;
 
 (** dependency helpers **)
-let rec read_ids_of_exp exp = 
+let rec read_ids_of_exp exp : Cid.t list = 
   match exp.e with 
-  | EVar(cid) -> [Cid.to_id cid]
+  | EVar(cid) -> [cid]
   | EOp(_, args)
   | ECall(_, args)
   | EHash(_, args) ->
@@ -106,7 +106,7 @@ let rec read_ids_of_exp exp =
 let read_ids_of_exps exps = List.map read_ids_of_exp exps |> List.flatten
 ;;
 
-let rec read_ids_of_stmt (stmt:CoreSyntax.statement) = 
+let rec read_ids_of_stmt (stmt:CoreSyntax.statement) : Cid.t list = 
   match stmt.s with 
   | SNoop -> []
   | SRet(None) -> []
@@ -155,13 +155,13 @@ let rec read_ids_of_stmt (stmt:CoreSyntax.statement) =
 ;;
 
 (* return the IDs that a statement writes to *)
-let rec write_ids_of_stmt (stmt:CoreSyntax.statement) : (Id.t list) = 
+let rec write_ids_of_stmt (stmt:CoreSyntax.statement) : (Cid.t list) = 
   match stmt.s with 
   | SNoop
   | SRet(_)
   | SGen(_, _)
   | SPrintf(_) -> [] 
-  | SLocal(id, _, _) 
+  | SLocal(id, _, _) -> [Cid.id id]
   | SAssign(id, _) -> [id]
   | SIf(_, s1, s2)
   | SSeq(s1, s2) -> 
@@ -179,7 +179,7 @@ let rec write_ids_of_stmt (stmt:CoreSyntax.statement) : (Id.t list) =
       | "Sys"::"invalidate"::_ -> (
         List.map (fun arg_exp -> 
           match arg_exp.e with
-          | EVar(cid) -> Cid.to_id cid
+          | EVar(cid) -> cid
           | _ -> error "sys.invalidate with an arg that is not an evar?"
         )
         args
@@ -189,7 +189,7 @@ let rec write_ids_of_stmt (stmt:CoreSyntax.statement) : (Id.t list) =
     | _ -> []
   )  
   | STableInstall _ -> []
-  | STableMatch(tm) -> tm.outs
+  | STableMatch(tm) -> CL.map Cid.id tm.outs
 ;;
 
 let rec read_ids_of_pattern pattern =
@@ -227,21 +227,21 @@ let write_ids_of_vertex v =
 
 (* a map from an id to a list of statements that read / write that id *)
 type usemap = {
-  reads : (vertex_stmt list) IdMap.t;
-  writes : (vertex_stmt list) IdMap.t;
+  reads : (vertex_stmt list) CidMap.t;
+  writes : (vertex_stmt list) CidMap.t;
 }
-let empty_usemap = {reads = IdMap.empty; writes = IdMap.empty} ;;
+let empty_usemap = {reads = CidMap.empty; writes = CidMap.empty} ;;
 
 (* does cs read id *)
 let is_reader usemap cs id = 
-  match IdMap.find_opt id usemap.reads with 
+  match CidMap.find_opt id usemap.reads with 
   | None -> false
   | Some (css) -> 
       MiscUtils.contains css cs 
 ;;
 
 let is_writer usemap cs id = 
-  match IdMap.find_opt id usemap.writes with 
+  match CidMap.find_opt id usemap.writes with 
   | None -> false
   | Some (css) -> 
       MiscUtils.contains css cs 
@@ -296,16 +296,16 @@ let get_dwws usemap v descs =
 
 let print_usemap usemap =
   !dprint_endline ("----read map----");
-  let ids = IdMap.keys usemap.reads in 
+  let ids = CidMap.keys usemap.reads in 
   BatEnum.iter (fun id -> 
     !dprint_endline ("------------");
-    !dprint_endline("id: "^(Id.to_string id));
+    !dprint_endline("id: "^(Cid.to_string id));
     List.iter (fun v -> 
       !dprint_endline ("----");
       !dprint_endline (CorePrinting.stmt_to_string v.stmt);
       !dprint_endline ("----");
       )
-      (IdMap.find id usemap.reads)
+      (CidMap.find id usemap.reads)
   )
   ids;
   !dprint_endline ("------------");
@@ -315,12 +315,12 @@ let process cfg =
 
   (* compute the variable : read / write maps *)
   let update_usemap  (v:vertex_stmt) (m:usemap) : usemap = 
-    let update m id = match (IdMap.find_opt id m) with 
+    let update m id = match (CidMap.find_opt id m) with 
       | Some current_users -> (
-        let new_m = IdMap.remove id m in
-        IdMap.add id (v::current_users) new_m
+        let new_m = CidMap.remove id m in
+        CidMap.add id (v::current_users) new_m
       )
-      | None -> IdMap.add id [v] m
+      | None -> CidMap.add id [v] m
     in 
     {
       reads = List.fold_left update m.reads (read_ids_of_vertex v);

@@ -30,7 +30,7 @@ let eliminate_complex_bool_assign stmt =
     sifte rhs set_true set_false
   | SLocal (id, ty, rhs) ->
     let sinit = { stmt with s = SLocal (id, ty, rhs_false) } in
-    let set_true = sassign id rhs_true in
+    let set_true = sassign (Cid.id id) rhs_true in
     sseq sinit (sifte rhs set_true snoop)
   | _ -> stmt
 ;;

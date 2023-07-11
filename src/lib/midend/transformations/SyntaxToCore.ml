@@ -194,7 +194,7 @@ and translate_statement (s : S.statement) : C.statement =
     | S.SNoop -> C.SNoop
     | S.SUnit e -> C.SUnit (translate_exp e)
     | S.SLocal (id, ty, e) -> C.SLocal (id, translate_ty ty, translate_exp e)
-    | S.SAssign (id, e) -> C.SAssign (id, translate_exp e)
+    | S.SAssign (id, e) -> C.SAssign (Cid.id id, translate_exp e)
     | S.SPrintf (str, es) -> C.SPrintf (str, List.map translate_exp es)
     | S.SIf (e, s1, s2) ->
       C.SIf (translate_exp e, translate_statement s1, translate_statement s2)
@@ -257,7 +257,7 @@ let translate_hsort = function
 ;;
 
 let translate_parser_action = function
-  | S.PRead (id, ty) -> C.PRead (id, translate_ty ty)
+  | S.PRead (id, ty) -> C.PRead (Cid.id id, translate_ty ty)
   | S.PSkip ty -> C.PSkip (translate_ty ty)
   | S.PAssign (lexp, rexp) ->
     let id =
@@ -265,21 +265,21 @@ let translate_parser_action = function
       | EVar cid -> Cid.to_id cid
       | _ -> failwith "Internal error: SyntaxToCore PAssign"
     in
-    C.PAssign (id, translate_exp rexp)
+    C.PAssign (Cid.id id, translate_exp rexp)
 ;;
 
 let rec translate_branch (pat, block) =
-  translate_pattern pat, translate_parser_block block
+  [translate_pattern pat], translate_parser_block block
 
 and translate_parser_step = function
   | S.PGen e -> C.PGen (translate_exp e)
   | S.PCall e -> C.PCall (translate_exp e)
-  | S.PMatch (e, bs) -> C.PMatch (translate_exp e, List.map translate_branch bs)
+  | S.PMatch (e, bs) -> C.PMatch ([translate_exp e], List.map translate_branch bs)
   | S.PDrop -> C.PDrop
 
 and translate_parser_block (actions, (step, step_span)) =
-  ( List.map (fun (a, sp) -> translate_parser_action a, sp) actions
-  , (translate_parser_step step, step_span) )
+  {pactions=List.map (fun (a, sp) -> translate_parser_action a, sp) actions;
+   pstep=(translate_parser_step step, step_span);}
 ;;
 
 let translate_decl (d : S.decl) : C.decl =

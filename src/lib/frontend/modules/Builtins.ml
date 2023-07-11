@@ -8,8 +8,9 @@ let recirc_ty = ty (TInt (IConst 32))
 let lucid_ety_id = Id.create "LUCID_ETHERTY"
 
 (* FIXME: Just guessing: we should probably have this be configurable *)
-let lucid_ety_ty = ty (TInt (IConst 32))
-let lucid_ety_value = vint 42 32
+let lucid_ety_ty = ty (TInt (IConst 16))
+let lucid_ety_int = 666
+let lucid_ety_value = vint lucid_ety_int 16
 
 let builtin_vars =
   [self_id, self_ty; recirc_id, recirc_ty; lucid_ety_id, lucid_ety_ty]

@@ -73,7 +73,7 @@ let action_to_function env tmatch acn_exp =
     | None -> 
       List.fold_left2
         (fun ret_stmt id exp -> 
-          CoreSyntax.sseq ret_stmt (CoreSyntax.sassign id exp))
+          CoreSyntax.sseq ret_stmt (CoreSyntax.sassign (Cid.id id) exp))
         CoreSyntax.snoop
         tmatch.outs
         action_body'

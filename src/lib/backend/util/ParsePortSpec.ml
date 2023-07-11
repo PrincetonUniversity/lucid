@@ -37,6 +37,7 @@ let string_of_port p =
   (string_of_int p.dpid)^"@"^(string_of_int p.speed)^"Gb/s"
 ;;
 
+
 let string_of_portconfig ps =
   "recirc dpid: "^(string_of_int ps.recirc_dpid)^"\n"
   ^"lucid internal ports: "^((Caml.List.map string_of_port ps.internal_ports) |> Caml.String.concat ", ")^"\n"

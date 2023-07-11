@@ -117,3 +117,18 @@ let rec find_first_dup l =
     | true -> Some hd
     | false -> find_first_dup tl)
 ;;
+
+let find_one_in_list fcn lst =
+   let rec loop acc = function
+      (* at the end of lst, so check if we have found something *)
+     | [] -> (match acc with
+              | [] -> None
+              | [x] -> Some x
+              | _ -> failwith "Multiple matches found")
+     (* processing the list, so update the accumulator *)
+     | x::xs -> if fcn x then loop (x::acc) xs else loop acc xs
+   in loop [] lst
+;;
+
+
+let id i = Id.create i

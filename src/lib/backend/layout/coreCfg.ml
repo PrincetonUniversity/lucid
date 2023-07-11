@@ -440,29 +440,19 @@ let statement_of_cfg cfg =
         | _ -> error "[statement_of_cfg] expected exactly 1 root vertex"
 ;;
 
-(* generate the control flow graph starting at an 
-entry statement that branches to all of the handler bodies *)
-let cfg_of_main (ds:TofinoCore.tdecls) = 
-    let main_sig = main ds in 
-    let main_stmt = main_sig.main_body |> List.hd in
-    cfg_of_statement main_stmt
-(*     let entry_stmt = main_sig.main_body |> List.hd |> delete_noop_seqs |> (sseq snoop) in 
-    cfg_of_statement entry_stmt *)
-;;
-
 
 let test_cfg_builder () =
     let st1 = sassign 
-        (Id.create "a")
+        (Cid.create ["a"])
         (eval_bool false)
     in
     let st2 = sassign 
-        (Id.create "b")
+        (Cid.create ["b"])
         (eval_bool false)
     in
 
     let st3 = sassign 
-        (Id.create "c")
+        (Cid.create ["c"])
         (eval_bool false)
     in
 
@@ -483,3 +473,26 @@ let descendents g v =
     Dfs.fold_component List.cons [] g v |> List.rev |> List.tl
     (* rev |> tl removes v itself from the list *)
 ;;
+
+
+(* generate the control flow graph starting at an 
+entry statement that branches to all of the handler bodies *)
+let cfg_of_main (ds:TofinoCore.tdecls) = 
+    let main_sig = main ds in 
+    let main_stmt = main_sig.main_body |> List.hd in
+    cfg_of_statement main_stmt
+(*     let entry_stmt = main_sig.main_body |> List.hd |> delete_noop_seqs |> (sseq snoop) in 
+    cfg_of_statement entry_stmt *)
+;;
+
+(* new cfg for updated tofinocore *)
+open TofinoCoreNew
+let cfg_of_component_main (ds:TofinoCoreNew.tdecls) = 
+    let main_hdl = main_handler_of_decls ds in
+    let main_stmt = match main_hdl.hdl_body with
+        | SFlat(stmt) -> stmt
+        | SPipeline _ -> error "[cfg_of_main] handler is already laid out!"
+    in
+    cfg_of_statement main_stmt
+;;
+

@@ -109,13 +109,6 @@ let rhs_of_stmt s =
   | _ -> None
 ;;
 
-let id_of_stmt s =
-  match s with
-  | SAssign (id, _) -> Some id
-  | SLocal (id, _, _) -> Some id
-  | _ -> None
-;;
-
 (* destructors and filters *)
 let unpack_eop exp =
   match exp with

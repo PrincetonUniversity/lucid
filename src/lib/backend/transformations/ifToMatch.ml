@@ -21,7 +21,9 @@ Either fix pass or add static analysis to simplify those if's
 open Core
 
 open CoreSyntax
-open TofinoCore
+open TofinoCoreNew
+module TCOld = TofinoCore
+(* open TofinoCore *)
 open InterpHelpers
 
 exception Error of string
@@ -506,7 +508,7 @@ let match_of_if exp s1 s2 =
 let rec process_old tds = 
     let v = 
         object
-            inherit [_] s_map as super
+            inherit [_] TCOld.s_map as super
             method! visit_SIf ctx exp s1 s2 = 
             match_of_if exp 
               (super#visit_statement ctx s1) 
@@ -672,7 +674,7 @@ let match_of_if_new exp s1 s2 =
 let rec process_new tds =
     let v = 
         object
-            inherit [_] s_map as super
+            inherit [_] TCOld.s_map as super
             method! visit_SIf ctx exp s1 s2 = 
             (match_of_if_new exp 
               (super#visit_statement ctx s1) 
@@ -690,10 +692,47 @@ let process tds =
 ;;
 
 
+(* 6/23 -- new tofinocore *)
+let rec process_core_old prog = 
+  let v = 
+      object
+          inherit [_] s_map as super
+          method! visit_SIf ctx exp s1 s2 = 
+          match_of_if exp 
+            (super#visit_statement ctx s1) 
+            (super#visit_statement ctx s2)
+      end
+  in
+  v#visit_prog () prog
+;;
+
+let process_core_new (prog : prog) : prog = 
+  let v = 
+    object
+        inherit [_] s_map as super
+        method! visit_SIf ctx exp s1 s2 = 
+        (match_of_if_new exp 
+          (super#visit_statement ctx s1) 
+          (super#visit_statement ctx s2)).s
+    end
+in
+v#visit_prog () prog
+;;
+let process_core prog =
+  let result =
+    if Cmdline.cfg.old_ifelim then process_core_old prog else process_core_new prog
+  in
+  result
+;;
+
+
+
+
+
 (* does the output program have the right form? *)
 let no_ifs_form ds = 
     let v = object 
-        inherit [_] s_iter as super
+        inherit [_] TCOld.s_iter as super
         val mutable pass = true
         method pass = pass          
         method! visit_SIf _ _ _ _ = 

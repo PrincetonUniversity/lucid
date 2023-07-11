@@ -289,7 +289,6 @@ module SSA = struct
       let exp = update_exp it exp in
       let it1, stmt1, phi_calls1 = stmt_to_ssa (it, stmt1) in
       let it2, stmt2, phi_calls2 = stmt_to_ssa (it, stmt2) in
-      (* Left off here, considering giving info about the dominating variable: the merged table could use the original table too? *)
       let merged_it = merge_branch_idtbls it [it1; it2] in
       (* create phi calls for all the variables set
         in multiple paths and update the table. *)

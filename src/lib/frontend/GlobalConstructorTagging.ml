@@ -232,9 +232,6 @@ let annotate decls =
       let m = super#visit_DModule module_path id interface decls in
       (* for each constructor in the module's interface, 
          add the module's id to its name in the constructors map. 
-        LEFT OFF HERE. note: inside the module, the constructor has the right type... 
-        so the type naming problem might go away if we just bind constructors to the 
-        appropriate names. 
        *)
       user_constrs := original_user_constrs;
       (* module should be unchanged -- no globals inside a module *)

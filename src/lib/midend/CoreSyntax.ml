@@ -21,6 +21,7 @@ and raw_ty =
   | TGroup
   | TInt of size (* Number of bits *)
   | TEvent
+  (* an event type carries a list of the variants it may contain *)
   | TFun of func_ty (* Only used for Array/event functions at this point *)
   | TName of cid * sizes * bool
     (* Named type: e.g. "Array.t<<32>>". Bool is true if it represents a global type *)
@@ -28,6 +29,8 @@ and raw_ty =
   | TTable of tbl_ty
   | TAction of acn_ty
   | TPat of size
+  | TRecord of (id * raw_ty) list
+  | TTuple of raw_ty list
 
 and tbl_ty =
   { tkey_sizes : size list
@@ -90,13 +93,13 @@ and pat =
 and v =
   | VBool of bool
   | VInt of zint
-  | VEvent of event
+  | VEvent of event_val
   | VGlobal of int (* Stage number *)
   | VTuple of v list (* Only used in the interpreter during complex memops *)
   | VGroup of location list
   | VPat of int list
 
-and event =
+and event_val =
   { eid : cid
   ; data : value list
   ; edelay : int
@@ -144,7 +147,7 @@ and s =
   | SNoop
   | SUnit of exp
   | SLocal of id * ty * exp
-  | SAssign of id * exp
+  | SAssign of cid * exp
   | SPrintf of string * exp list
   | SIf of exp * statement * statement
   | SGen of gen_type * exp
@@ -228,20 +231,25 @@ and action =
   }
 
 and parser_action =
-  | PRead of id * ty
+  | PRead of cid * ty
+  | PPeek of cid * ty
   | PSkip of ty
-  | PAssign of id * exp
+  | PAssign of cid * exp
 
-and parser_branch = pat * parser_block
+and parser_branch = pat list * parser_block
 
 and parser_step =
-  | PMatch of exp * parser_branch list
+  | PMatch of exp list * parser_branch list
   | PGen of exp
   | PCall of exp (* Call another parser *)
   | PDrop
 
 (* Include span for error reporting *)
-and parser_block = (parser_action * sp) list * (parser_step * sp)
+and parser_block = {
+  pactions : (parser_action * sp) list;
+  pstep : parser_step * sp;
+}
+(* and parser_block = (parser_action * sp) list * (parser_step * sp) *)
 
 (* declarations *)
 and d =
@@ -252,7 +260,6 @@ and d =
   | DExtern of id * ty
   | DAction of action
   | DParser of id * params * parser_block
-
 (* name, return type, args & body *)
 and decl =
   { d : d
@@ -322,16 +329,31 @@ let vevent event = value (VEvent event)
 let vevent_sp event span = value_sp (VEvent event) span
 let vglobal idx ty = avalue (VGlobal idx) ty Span.default
 let vgroup locs = value (VGroup locs)
+let vtup vs = avalue (VTuple vs) (ty (TTuple(List.map infer_vty vs)))
+
+(* int, size tups -> vtup(sized_ints) *)
+let vint_tups i_s =
+  vtup (List.map (fun (i, s) -> VInt(Integer.create i s)) i_s) (Span.default)
+;;  
 
 (* Expressions *)
 let exp e ety = { e; ety; espan = Span.default }
 let aexp e ety espan = { e; ety; espan }
 let value_to_exp v = aexp (EVal v) v.vty v.vspan
 let var_sp cid ety span = aexp (EVar cid) ety span
+let var cid ety = var_sp cid ety Span.default
 let op_sp op args ety span = aexp (EOp (op, args)) ety span
+let op op args ety = op_sp op args ety Span.default
 let call_sp cid args ety span = aexp (ECall (cid, args)) ety span
+let call cid args ety = call_sp cid args ety Span.default
 let hash_sp size args ety span = aexp (EHash (size, args)) ety span
 let vint_exp i size = value_to_exp (vint i size)
+let vint_exp_ty i (ty:ty) = 
+  match ty.raw_ty with
+  | TInt(sz) -> 
+    value_to_exp (vint i sz)
+  | _ -> error "[vint_exp_ty] type mismatch"
+;;
 
 (* Statements *)
 
@@ -374,11 +396,54 @@ let memop_sp mid mparams mbody span =
   decl_sp (DMemop { mid; mparams; mbody }) span
 ;;
 
+
+(* parser constructors *)
+let block actions step : parser_block = 
+  {pactions=List.map (fun a -> a, Span.default) actions; pstep=(step, Span.default)}
+;;
+
+(* actions *)
+let read cid ty = PRead(cid, ty)
+let read_id (id, ty) = read (Cid.id id) ty
+let peek cid ty = PPeek(cid, ty)
+let skip ty = PSkip(ty)
+let assign cid exp = PAssign(cid, exp)
+
+(* steps *)
+let pgen exp = PGen(exp)
+let pdrop = PDrop
+let pcall exp = PCall(exp)
+let pmatch exps branches = PMatch(exps, branches)
+(* match branches *)
+let pbranch ints block : parser_branch  = (List.map (fun i -> PNum (Z.of_int i)) ints), block
+
+
+let parser id params block = 
+  DParser(id, params, block)
+;;
+
+let empty_block () :parser_block = 
+  block [] pdrop
+;;
+
+
+
 (*** Utility -- may split into a separate file if it gets big *)
 
 let equiv_list f lst1 lst2 =
   try List.for_all2 f lst1 lst2 with
   | Invalid_argument _ -> false
+;;
+
+let equiv_ty t1 t2 =
+  match t1.raw_ty, t2.raw_ty with
+  | TBool, TBool -> true
+  | TInt sz1, TInt sz2 -> sz1 = sz2
+  | TEvent, TEvent -> true
+  | TGroup, TGroup -> true
+  | TPat sz1, TPat sz2 -> sz1 = sz2
+  | TName(n1, [], false), TName(n2, [], false) -> Cid.equal n1 n2
+  | _ -> false
 ;;
 
 let equiv_options f o1 o2 =
@@ -425,9 +490,10 @@ let rec equiv_stmt s1 s2 =
   match s1.s, s2.s with
   | SNoop, SNoop -> true
   | SUnit e1, SUnit e2 -> equiv_exp e1 e2
-  | SLocal (id1, _, exp1), SLocal (id2, _, exp2)
-  | SAssign (id1, exp1), SAssign (id2, exp2) ->
+  | SLocal (id1, _, exp1), SLocal (id2, _, exp2) -> 
     Id.equal id1 id2 && equiv_exp exp1 exp2
+  | SAssign (id1, exp1), SAssign (id2, exp2) ->
+    Cid.equal id1 id2 && equiv_exp exp1 exp2
   | SPrintf (s1, es1), SPrintf (s2, es2) ->
     String.equal s1 s2 && equiv_list equiv_exp es1 es2
   | SIf (e1, s11, s12), SIf (e2, s21, s22) ->

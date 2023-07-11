@@ -12,7 +12,8 @@ open Printing
    - No globals declared inside modules
    - No constructors/global declarations for non-global types
    - Only certain types allowed as externs (just ints? I guess bools too?)
-   - All events have exactly one handler declared, which must be in the same scope as them.
+   - All events have either one or two handlers declared: one in ingress and one in egress, 
+     which must be in the same scope as them.
    - All sizes in symbolic declarations are either concrete or symbolic themselves
 
    Checks we do during typechecking:
@@ -121,14 +122,17 @@ let check_symbolics ds =
 
 (* Next up: make sure each event has exactly one handler defined, which must be
    in the same scope. Also ensure that we don't have two events with the same
-   name in a given scope *)
+   name in a given scope.
+   To support egress handlers, we check that each event has a handler defined in 
+   either ingress or egress, and that every handler has an event.
+    *)
 let rec match_handlers ?(m_cid = None) (ds : decls) =
   let m_str =
     match m_cid with
     | None -> ""
     | Some cid -> Cid.to_string cid ^ "."
   in
-  let aux (events, handlers) d =
+  let aux (events, handlers, egress_handlers) d =
     match d.d with
     | DEvent (id, _, _, _, _) ->
       if IdSet.mem id events
@@ -138,7 +142,16 @@ let rec match_handlers ?(m_cid = None) (ds : decls) =
         ^ m_str
         ^ id_to_string id
         ^ " is declared twice in this scope."
-      else IdSet.add id events, handlers
+      else IdSet.add id events, handlers, egress_handlers
+    | DHandler(id, HEgress, _) ->
+      if IdSet.mem id egress_handlers
+      then
+        Console.error_position d.dspan
+        @@ "Egress handler "
+        ^ m_str
+        ^ id_to_string id
+        ^ " is declared twice in this scope."
+      else events, handlers, IdSet.add id egress_handlers
     | DHandler (id, _, _) ->
       if IdSet.mem id handlers
       then
@@ -147,7 +160,7 @@ let rec match_handlers ?(m_cid = None) (ds : decls) =
         ^ m_str
         ^ id_to_string id
         ^ " is declared twice in this scope."
-      else events, IdSet.add id handlers
+      else events, IdSet.add id handlers, egress_handlers
     | DModule (id, _, ds) ->
       let m_cid =
         match m_cid with
@@ -155,24 +168,32 @@ let rec match_handlers ?(m_cid = None) (ds : decls) =
         | Some cid -> Some (Compound (id, cid))
       in
       match_handlers ~m_cid ds;
-      events, handlers
-    | _ -> events, handlers
+      events, handlers, egress_handlers
+    | _ -> events, handlers, egress_handlers
   in
-  let events, handlers = List.fold_left aux (IdSet.empty, IdSet.empty) ds in
-  let eminush = IdSet.diff events handlers in
-  let hminuse = IdSet.diff handlers events in
-  match IdSet.choose_opt eminush, IdSet.choose_opt hminuse with
-  | Some id, _ ->
+  let events, handlers, egress_handlers = List.fold_left aux (IdSet.empty, IdSet.empty, IdSet.empty) ds in
+  (* make sure that every event has a handler (in either ingress or egress)
+     and every handler has an event *)
+  let eminush = IdSet.diff events (IdSet.union handlers egress_handlers) in
+  let h_minus_e = IdSet.diff handlers events in
+  let h_egr_minus_e = IdSet.diff egress_handlers events in
+  match IdSet.choose_opt eminush, IdSet.choose_opt h_minus_e, IdSet.choose_opt h_egr_minus_e with
+  | Some id, _, _ ->
     Console.error
     @@ Printf.sprintf
          "Event %s has no corresponding handler definition"
          (m_str ^ id_to_string id)
-  | _, Some id ->
+  | _, Some id, _ ->
     Console.error
     @@ Printf.sprintf
          "Handler %s has no corresponding event definition"
          (m_str ^ id_to_string id)
-  | None, None -> ()
+  | _, _, Some id ->
+    Console.error
+    @@ Printf.sprintf
+         "Egress Handler %s has no corresponding event definition"
+         (m_str ^ id_to_string id)
+  | None, None, None -> ()
 ;;
 
 (* Checking restrictions on Payloads

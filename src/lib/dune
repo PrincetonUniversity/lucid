@@ -92,11 +92,9 @@
    precomputeArgs
    normalizeBools
    eliminateBools
-   optimizeSimpleCalls
    eliminateValueCasts
    eliminateInterpOps
    normalizeInts
-   singleAssignment
    immutableConditions
    uniqueSpans
    uniqueIds
@@ -106,22 +104,37 @@
    ioUtils
    TofinoProfiling
    TofinoPipeline
+   TofinoPipelineNew
    DependencyProfiling
    InputChecks
    StandardizeEventParams
    EliminateEventCombinators
+   AddIngressParser
    TofinoCore
+   SplitDataplane
+   TofinoCoreNew
+   AddEgressParser
+   ParseOptimizer
+   RenameBuiltins
+   TofinoCorePrinting
+   AddHandlerTypes
+   AddIntrinsics
+   MergeHandlers
    TofinoCoreForms
    TofinoControl
    TofinoEgress
    InlineEventVars
    SolitaryMatches
    Generates
+   GeneratesNew
    IfToMatch
    RegularizeMemops
+   RegularizeMemopsNew
    ShareMemopInputs
+   ShareMemopInputsNew
    SingleTableMatch
    ActionsToFunctions
+   ActionsToFunctionsNew
    UniqueTableActions
    MatchAlgebra
    CoreCfg
@@ -132,10 +145,15 @@
    CoreLayoutOld
    CoreLayout
    ActionForm
+   ActionFormNew
    Dedup
+   DedupNew
    P4TofinoSyntax
    CoreToP4TofinoHeaders
+   CoreToP4TofinoHeadersNew
    CoreToP4Tofino
+   CoreToP4TofinoNew
+   TofinoCoreToP4
    P4TofinoPrinting
    P4TofinoGlobalDirectory
    ControlPrinter

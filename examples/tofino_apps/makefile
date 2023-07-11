@@ -17,6 +17,7 @@ SOURCES := $(shell find $(SOURCEDIR) -name '*.dpt')
 
 HARNESS := $(SOURCEDIR)/ip_harness.p4
 
+COMPILE_OLD_TARGETS := $(addprefix old_compile_,$(strip $(basename $(notdir $(SOURCES)))))
 COMPILE_TARGETS := $(addprefix compile_,$(strip $(basename $(notdir $(SOURCES)))))
 ASSEMBLE_TARGETS := $(addprefix assemble_,$(strip $(basename $(notdir $(SOURCES)))))
 TEST_TARGETS := $(addprefix test_,$(strip $(basename $(notdir $(SOURCES)))))
@@ -28,11 +29,17 @@ lucid:
 	make ;\
 	cd - ;\
 	}
+
+$(COMPILE_OLD_TARGETS): lucid
+	@mkdir -p $(BUILDDIR)
+	$(eval TARGET := $(subst old_compile_,,$@)) # compile_x --> x
+	../../dptc $(SOURCEDIR)/$(TARGET).dpt -o $(BUILDDIR)/$(TARGET)
+
 # lucid -> P4
 $(COMPILE_TARGETS): lucid
 	@mkdir -p $(BUILDDIR)
 	$(eval TARGET := $(subst compile_,,$@)) # compile_x --> x
-	../../dptc $(SOURCEDIR)/$(TARGET).dpt -o $(BUILDDIR)/$(TARGET)
+	../../dptc --new-tofino $(SOURCEDIR)/$(TARGET).dpt -o $(BUILDDIR)/$(TARGET)
 
 # p4 -> tofino
 $(ASSEMBLE_TARGETS):
@@ -43,11 +50,11 @@ $(ASSEMBLE_TARGETS):
 $(TEST_TARGETS):
 	$(eval TARGET = $(subst test_,,$@)) # test_x --> x
 	cd $(BUILDDIR)/$(TARGET); make test $(TESTDIR)/$(TARGET).json
-	builds/$(TARGET)/libs/analyze_model_log.py txpkts builds/$(TARGET)/run_logs/model_*	
+	builds/$(TARGET)/libs/validationutils.py txpkts builds/$(TARGET)/run_logs/model_*	
 
 $(INFO_TARGETS):
 	$(eval TARGET = $(subst info_,,$@)) # info_x --> x	
-	builds/$(TARGET)/libs/analyze_model_log.py txpkts builds/$(TARGET)/run_logs/model_*	
+	builds/$(TARGET)/libs/validationutils.py txpkts builds/$(TARGET)/run_logs/model_*	
 
 compile_all : $(COMPILE_TARGETS)
 	@echo "all compiles completed"

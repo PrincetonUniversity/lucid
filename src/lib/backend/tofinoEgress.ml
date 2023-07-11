@@ -101,11 +101,11 @@ let split_decls decls : (decl list * decl list ) =
       ([], []) 
       decls
     in
-    igr_decls, egr_decls)
+    List.rev igr_decls, List.rev egr_decls)
 ;;
 
 (* Add a command to set the drop flag to the beginning of every egress handler. *)
-let egr_drop_ctl_id = Id.create "drop_ctl";;
+let egr_drop_ctl_id = Cid.create ["drop_ctl"];;
 let egr_drop_ctl_sz = 3
 let rec add_default_egr_drop ds = 
   let set_drop_ctl = sassign egr_drop_ctl_id (vint_exp 1 egr_drop_ctl_sz) in

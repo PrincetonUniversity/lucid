@@ -79,14 +79,14 @@ let ids_to_string ids = CL.map Id.to_string ids |> Caml.String.concat " , "
 *)
 
 (* which variables are used, i.e., read, in the statement? *)
-let read_vars statement =
+let read_vars statement : cid list =
   let vars = ref [] in 
   let v =
     object
       inherit [_] TofinoCore.s_iter as super
 
       method! visit_EVar _ var_cid = 
-        vars := (Cid.to_id var_cid)::(!vars);
+        vars := var_cid::(!vars);
     end
   in
   v#visit_statement () statement;
@@ -94,14 +94,14 @@ let read_vars statement =
 ;;
 (* which variables are written, i.e., 
    declared or assigned, in the statement? *)
-let assigned_vars statement = 
+let assigned_vars statement : cid list = 
   let vars = ref [] in 
   let v =
     object
       inherit [_] TofinoCore.s_iter as super
 
       method! visit_SLocal  _ id _ _ = 
-        vars := (id)::(!vars);
+        vars := (Cid.id id)::(!vars);
       method! visit_SAssign  _ id _ = 
         vars := (id)::(!vars);
     end
@@ -119,13 +119,14 @@ let intersection l1 l2 =
 ;;
 
 (* build the conflict graph for the statement *)
-let rec conflict_graph declared_before used_after statement =
+let rec conflict_graph (declared_before : cid list) (used_after : cid list) statement : (cid * cid) list =
   match statement.s with
   | SLocal(var_id, _, _) -> (
+    let var_cid = Cid.id var_id in
     (* if the var is used later, add conflicts with all the live vars *)
     let live_vars = CL.filter (fun dec_id -> MiscUtils.contains used_after dec_id) declared_before in
-    if (MiscUtils.contains used_after var_id)
-      then (CL.map (fun live_var -> (var_id, live_var)) live_vars)
+    if (MiscUtils.contains used_after (var_cid))
+      then (CL.map (fun live_var -> (var_cid, live_var)) live_vars)
       (* if its not used later, we don't add any conflicts at this point *)
       else ([])
   )
@@ -172,13 +173,14 @@ let rec conflict_graph declared_before used_after statement =
 
 
 let pairwise_conflict ds x y =
-  let res = match (Id.equal x y) with 
+  let res = match (Cid.equal x y) with 
     | true -> false
     | false -> (
     (* build a conflict graph for main, check if (x, y) or (y, x) are there. *)
     let main_param_ids = (main ds).hdl_params |> CL.split |> snd |> CL.flatten  |> CL.split |> fst in 
+    let main_param_cids = CL.map Cid.id main_param_ids in 
     let main_stmt = (main ds).main_body |> CL.hd in
-    let conflict_pairs = conflict_graph main_param_ids [] main_stmt |> MiscUtils.unique_list_of in
+    let conflict_pairs = conflict_graph main_param_cids [] main_stmt |> MiscUtils.unique_list_of in
     (MiscUtils.contains conflict_pairs (x, y)) || (MiscUtils.contains conflict_pairs (y, x))
     )
   in
@@ -268,16 +270,16 @@ let replace_evar ds cid new_exp =
 ;;  
 (* replace all local assignments to 
    old_id with assignments to new_id *)
-let replace_slocal ds old_id new_id = 
+let replace_slocal ds (old_id : cid) new_id = 
   let v = 
     object
       inherit [_] s_map as super
       method! visit_SLocal _ id ty exp = 
-        if (Id.equal id old_id)
+        if (Cid.equal (Cid.id id) old_id)
         then (SAssign(new_id, exp))
         else (SLocal(id, ty, exp))
       method! visit_SAssign _ id exp =
-        if (Id.equal id old_id)
+        if (Cid.equal id old_id)
         then (SAssign(new_id, exp))
         else (SAssign(id, exp))
       end
@@ -301,7 +303,7 @@ let merge_vars ds (vars: cid list) argty =
   let ds = 
     let merge_var ds var_cid = 
       let ds = replace_evar ds var_cid tmp_e in 
-      let ds = replace_slocal ds (Cid.to_id var_cid) tmp_id in
+      let ds = replace_slocal ds ( var_cid) (Cid.id tmp_id) in
       ds
     in 
     CL.fold_left merge_var ds vars
@@ -320,7 +322,7 @@ let merge_vars_into_param ds (vars: cid list) argty param_var_id =
       (* replace every expression using var with the new var *)
       let ds = replace_evar ds var_cid tmp_e in 
       (* replace every declaration and assignment to this var with an assignment to new var *)
-      let ds = replace_slocal ds (Cid.to_id var_cid) tmp_id in
+      let ds = replace_slocal ds ( var_cid) (Cid.id tmp_id) in
       ds
     in 
     CL.fold_left merge_var ds vars
@@ -508,7 +510,7 @@ let replace_var_arg_with_tmp arr_id nth tmp_id exp =
       let arg_ty = (CL.hd (memop_args_of_array_call exp)).ety in 
       (* replace all instances of that variable with tmp_cid *)
         let args = CL.map (replace_cid_in_exp tgt_cid tmp_cid) args in
-        let set_stmt = sassign tmp_id (var_sp tgt_cid arg_ty Span.default) in 
+        let set_stmt = sassign tmp_cid (var_sp tgt_cid arg_ty Span.default) in 
         Some(set_stmt, {exp with e=ECall(fid, args)})
       )
     )
@@ -529,7 +531,7 @@ let replace_idx_var_with_tmp arr_id tmp_id exp =
       match eidx.e with 
       | EVar(tgt_cid) -> (
         let args = CL.map (replace_cid_in_exp tgt_cid tmp_cid) args in
-        let set_stmt = sassign tmp_id eidx in 
+        let set_stmt = sassign tmp_cid eidx in 
         Some(set_stmt, {exp with e=ECall(fid, args)})
       )
       | _ -> None
@@ -646,7 +648,7 @@ let setup_nth_var_arg tds arr_id nth args argty =
       (* case: there is 1 parameter variable and no conflicts -- merge *)
       (* case: more than 1 parameter variable -- make tmp *)
       (* case: conflicts -- make tmp *)
-      if (any_pairs_conflict tds arg_ids)
+      if (any_pairs_conflict tds args)
       then (create_memop_input_var tds arr_id nth argty)
       else (
         match (var_params tds arg_ids) with
@@ -676,7 +678,7 @@ let update_idx_vars tds arrid =
     match (CL.length (unique_list_of_eq Cid.equal idx_vars)) with 
     | 0 | 1 -> tds
     | _ -> (
-      if ((any_pairs_conflict tds idx_ids) || (some_var_is_param tds idx_ids))
+      if ((any_pairs_conflict tds idx_vars) || (some_var_is_param tds idx_ids))
       (* if there are any conflicts between the variables, or 
          one of the arguments is an event parameter, 
          then we must make an input arg var *)

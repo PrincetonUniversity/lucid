@@ -55,7 +55,7 @@ let execute_event
   print_log
   idx
   (nst : State.network_state)
-  (event : CoreSyntax.event)
+  (event : CoreSyntax.event_val)
   port
   =
   match Env.find_opt event.eid nst.handlers with

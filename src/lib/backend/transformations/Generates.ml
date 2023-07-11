@@ -35,7 +35,7 @@ let set_event_params tds ev_cid arg_exps =
     (* hack to work around data dependency graph. *)
     (* scall_sp (Cid.concat scopy_fcn (Cid.id param_id)) [] param_ty Span.default *)
 
-    (sassign param_id arg_exp)
+    (sassign (Cid.id param_id) arg_exp)
   in
   let res = List.map set_event_param (List.combine param_ids arg_exps) in
   let _ = res in 
@@ -58,13 +58,13 @@ let sassign_incr id ty e i =
 
 let incr_recirc_mcid tds =
   let ct_var, ct_ty = (main tds).event_output.recirc_mcid_var in 
-  sassign_incr ct_var ct_ty (var_sp (Cid.id ct_var) ct_ty Span.default) 1
+  sassign_incr (Cid.id ct_var) ct_ty (var_sp (Cid.id ct_var) ct_ty Span.default) 1
 ;;
 
 let scopy_fcn = Cid.create ["Sys"; "copy"]
 
 let scopy_to_orig (param_id, param_ty) = 
-  sassign (orig param_id) (var_sp (Cid.id param_id) param_ty Span.default)
+  sassign (Cid.id (orig param_id)) (var_sp (Cid.id param_id) param_ty Span.default)
 ;;
 
 let scopy_to_origs params = 

@@ -85,6 +85,11 @@ let rec string_of_expr expr = match expr.ex with
       | None -> s'""
     in 
     (string_of_expr fcn_expr)^^(parens args_str)
+  | ETyCall(fcn_expr, tys, args) -> (
+    (string_of_expr fcn_expr)
+    ^^(s'"<")^^(string_of_tys tys)^^s'(">")
+    ^^(parens (string_of_exprs args))
+  )
   | EConstr(id, tys, args) -> (
     (string_of_id id)
     ^^(s'"<")^^(string_of_tys tys)^^s'(">")
@@ -398,6 +403,7 @@ let rec string_of_decl dec =
     | DMCGroup(_) -> s'"//multicast group"
     | DPort(_) -> s'"//port-up definition"
     | DPragma(p) -> string_of_pragma p
+    | DNone -> s'""
 
 and string_of_decls ds =
   separate_map hardline string_of_decl ds
@@ -424,12 +430,12 @@ let mainstring_of_tofino_prog (prog:tofino_prog) =
   ^^(s'"Switch(pipe) main; ")
 ;;
 let p4_of_prog (prog:tofino_prog) =
-   s'"//Global declarations"^/^s'"//(includes, headers, structs, constants, register arrays)"
+   s'"/*****Global declarations"^/^s'"(includes, headers, structs, constants, register arrays)*****/"
   ^/^(separate_map hardline string_of_decl prog.globals)
-  ^/^s'"//Main program components (ingress/egress parser, control, deparser)"
+  ^/^s'"/*****Main program components (ingress/egress parser, control, deparser)*****/"
   ^/^(separate_map hardline string_of_decl (blocks_of_prog prog))
  ^^hardline
-  ^^s'"//Pipeline and main declarations"
+  ^^s'"/*****Pipeline and main declarations*****/"
   ^^hardline
   ^^(mainstring_of_tofino_prog prog)
   |> doc_to_string

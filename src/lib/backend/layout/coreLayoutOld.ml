@@ -215,8 +215,6 @@ let stage_fits prog_info stage =
   let c_hashers = ((hashers_of_stage stage |> CL.length) <= stage_constraints.max_hashers) in 
   let n_blocks = sblocks_of_stmt prog_info.arr_dimensions (stmt_of_stage stage) in
   let c_blocks = (n_blocks <= stage_constraints.max_array_blocks) in
-  (* left off here. Check additional constraint: all the arrays 
-     that the stage uses fit into the stage's memory *)
   (* print_endline@@"[stage_fits] c1: "^(string_of_bool c1)^" c2: "^(string_of_bool c2)^" c3: "^(string_of_bool c3); *)
   if ( c_tbls && c_arrays && c_hashers && c_blocks)
   then (
@@ -573,3 +571,41 @@ let compare_layouts tds_old tds_new =
     error "[compare_layouts] layout changed in new algo!"
   )
 ;;
+
+open TofinoCoreNew
+
+
+let prog_info tds dfg = {
+  dfg = dfg;
+  arr_users = build_array_map dfg;
+  arr_dimensions = array_dimensions tds;
+}
+;;
+
+(* find a layout based on dfg, update main body in tds, replacing 
+   it with the laid-out version. *)
+let process_new (tds:TofinoCoreNew.tdecls) dfg = 
+  (* extract information from program that is important for layout *)
+  let prog_info = prog_info tds dfg in
+  (* 2. get list of statements to schedule. *)
+  let unscheduled_nodes = Dfg.fold_vertex 
+    (fun v vs -> 
+      match v.stmt.s with 
+      | SNoop -> vs
+      | _ -> vs@[v]
+    )
+    dfg
+    []
+  in 
+  (* 3. schedule everything *)
+  let result_pipe_opt = schedule prog_info (empty_pipeline) [] unscheduled_nodes 0 in 
+  match result_pipe_opt with 
+  | Some(pipe) -> 
+    print_endline "---- layout summary ----";
+    print_endline (summarystr_of_pipeline pipe);
+(*     print_endline ("resulting pipeline: ");
+    print_endline (string_of_pipe pipe); *)
+    stmts_of_pipe pipe
+  | None -> error "[coreLayout] pipeline could not be laid out."
+;;
+

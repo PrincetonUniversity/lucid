@@ -422,12 +422,12 @@ function test() {
     local jsonfn="$2"
     local pcapfn="trace.pcap"
     # figure out port to send packets out of
-    local dpid_in=$(python3 $SCRIPT_DIR/testspec_utils.py input_port "$jsonfn")   
+    local dpid_in=$(python3 $SCRIPT_DIR/testutils.py input_port "$jsonfn")   
     local port_in=$(dpid_to_host_veth $dpid_in)
-    local num_pkts_in=$(python3 $SCRIPT_DIR/testspec_utils.py len_packets "$jsonfn")
+    local num_pkts_in=$(python3 $SCRIPT_DIR/testutils.py len_packets "$jsonfn")
     # # generate the pcap
     echo "**** generating test pcap with $num_pkts_in pkts from test spec ****"
-    python3 $SCRIPT_DIR/testspec_utils.py gen_pcap "$jsonfn" "$pcapfn"
+    python3 $SCRIPT_DIR/testutils.py gen_pcap "$jsonfn" "$pcapfn"
     # start the simulator
     echo "**** starting tofino model and p4 program ****"
     startsim "$p4fn"
@@ -442,7 +442,7 @@ function test() {
     stopsim
     echo "**** checking test spec against model log ****"
     MODEL_LOG_FN="$(to_model_log $1)"
-    result=$(python3 $SCRIPT_DIR/check_testspec.py "$jsonfn" "$MODEL_LOG_FN")
+    result=$(python3 $SCRIPT_DIR/validationutils.py check "$jsonfn" "$MODEL_LOG_FN")
     if [ $result = "True" ]; then
         echo "PASS"
         exit 0
