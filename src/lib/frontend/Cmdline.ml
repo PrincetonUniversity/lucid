@@ -207,7 +207,7 @@ let parse_tofino () =
       ; "--control", Arg.String set_ctl_fn, "Python control program."
       ; "--oldlayout", Arg.Unit set_old_layout, "Use old layout algorithm." 
       ; "--oldifelim", Arg.Unit set_old_ifelim, "Use old if to match elimination algorithm."
-      ; ( "--new-tofinocore"
+      ; ( "--new-tofino"
       , Arg.Unit (fun () -> cfg.new_tofino <- true)
       , "If true, use the new tofino core IR and backend, which features parsers, 
         egress blocks, and optimizations to reduce phv pressure and stage utilization." )
