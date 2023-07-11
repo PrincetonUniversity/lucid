@@ -190,11 +190,11 @@ let tofinocore_prep ds =
 let to_tofinocore ds =
   let split_prog = SplitDataplane.split ds in 
   let core_prog = TofinoCoreNew.core_to_tofinocore split_prog  in
-  print_endline ("--- initial tofinocore program ---");
+  (* print_endline ("--- initial tofinocore program ---");
   dump_prog 
     "initial_tofinocore.dpt" 
     "initial tofinocore prog \n"
-    core_prog;  
+    core_prog;   *)
   let core_prog = AddHandlerTypes.type_handlers core_prog in
   print_endline ("--- transformed handlers into event-function form ---");
 
@@ -303,16 +303,16 @@ let compile old_layout ds portspec build_dir ctl_fn_opt =
   (* add the egress parser. This could go anywhere in tofinocore
      passes. *)
   let core_prog = AddEgressParser.add_parser core_prog in  
-  dump_prog 
+  (* dump_prog 
     "addegressparser.dpt" 
     "after adding egress parser"
-    core_prog;
+    core_prog; *)
 
   let core_prog = GeneratesNew.eliminate_generates portspec core_prog in
-  dump_prog 
+  (* dump_prog 
     "parsers_added_generates_eliminated.dpt" 
     "after parsers have been added and generates have been eliminated in handlers"
-    core_prog;
+    core_prog; *)
   (* optimize parsers to read headers directly into event parameters.
     This should reduce phv constraints. *)
   let core_prog = ParseOptimizer.parser_passes core_prog in 
