@@ -5,9 +5,14 @@ open MatchAlgebra
 open CoreCfg
 open CoreDfg
 open CoreResources
-(****  updated layout algorithm based on 
+(****  greedy layout algorithm based on 
        a single topological traversal 
-       of a statement group dag ****)
+       of a statement group data dependency dag. ****)
+
+let debug_print_endline str = 
+  if (Cmdline.cfg.debug)
+  then print_endline str
+;;
 
 (* a statement group is a group of statements that should be scheduled together. *)
 type statement_group = {
@@ -47,10 +52,8 @@ module SgDfgNode = struct
   let equal = ( = )
 end
 
-
 module SgDfg = Graph.Persistent.Digraph.Concrete(SgDfgNode)
 module SgDfgTopo = Graph.Topological.Make(SgDfg)
-
 
 (*** mapping arrays <--> caller statements ***)
 type array_users_map = (vertex_stmt list) CidMap.t
@@ -117,9 +120,9 @@ let dfg_to_sgdfg dfg =
     dfg;
   (* got all the statement groups, i.e., nodes. Now fill in the edges? *)
   let statement_groups = (!atomic_statement_groups)@(!array_statement_groups |> List.split |> snd) in
-  (* print_endline ("[dfg_to_sgdfg] number of vertex_stmts in statement_groups before constructing dfg: "^(vertex_stmts_of_stmt_groups statement_groups |> List.length |> string_of_int)); *)
+  (* debug_print_endline ("[dfg_to_sgdfg] number of vertex_stmts in statement_groups before constructing dfg: "^(vertex_stmts_of_stmt_groups statement_groups |> List.length |> string_of_int)); *)
 
-  (* print_endline ("number of statement groups: "^(List.length (statement_groups) |> string_of_int)); *)
+  (* debug_print_endline ("number of statement groups: "^(List.length (statement_groups) |> string_of_int)); *)
   (* sguid -> sg *)
   let sg_assoc = List.map (fun sg -> (sg.sguid, sg)) statement_groups in
   let add_edges_from_ts_to_s g s ts =
@@ -135,7 +138,7 @@ let dfg_to_sgdfg dfg =
        all of its unique predecessor statement groups *)
     (fun g stmt_group ->
       let preds = preds_of_vertices dfg stmt_group.vertex_stmts in
-      (* print_endline ("number of preds:"^(List.length preds |> string_of_int)); *)
+      (* debug_print_endline ("number of preds:"^(List.length preds |> string_of_int)); *)
       let pred_stmt_groups = List.map 
           (fun stmt_v -> List.assoc (stmt_v.vuid) (!vertex_id_to_group_id))
           preds
@@ -147,10 +150,10 @@ let dfg_to_sgdfg dfg =
     statement_groups
   in
   (* let nodes = SgDfg.fold_vertex (fun v acc -> v :: acc) g [] in *)
-(*   print_endline (
+(*   debug_print_endline (
     "[dfg_to_sgdfg] number of statement group nodes in dfg: "^
     (nodes |> List.length |> string_of_int ));
-  print_endline ("[dfg_to_sgdfg] number of vertex_stmts in dfg: "^(vertex_stmts_of_stmt_groups nodes |> List.length |> string_of_int)); *)
+  debug_print_endline ("[dfg_to_sgdfg] number of vertex_stmts in dfg: "^(vertex_stmts_of_stmt_groups nodes |> List.length |> string_of_int)); *)
   g
 ;;
 
@@ -350,8 +353,8 @@ let table_fits table =
   )
   then (true)
   else (
-    print_endline "[table_fits] FAIL!";
-  print_endline@@
+    debug_print_endline "[table_fits] FAIL!";
+  debug_print_endline@@
     "[table_fits] c_stmts: "^(string_of_bool c_stmts)
     ^" c_keywidth: "^(string_of_bool c_keywidth)
     ^" c_hashers: "^(string_of_bool c_hashers)
@@ -359,7 +362,7 @@ let table_fits table =
     ;
   if (not c_arrays)
   then (
-    print_endline (Printf.sprintf "arrays: [%s]"
+    debug_print_endline (Printf.sprintf "arrays: [%s]"
       (arrays_of_table table |> CorePrinting.comma_sep CorePrinting.cid_to_string)
     )
   );
@@ -372,13 +375,13 @@ let stage_fits prog_info stage =
   let c_hashers = ((hashers_of_stage stage |> CL.length) <= stage_constraints.max_hashers) in 
   let n_blocks = sblocks_of_stmt prog_info.arr_dimensions (stmt_of_stage stage) in
   let c_blocks = (n_blocks <= stage_constraints.max_array_blocks) in
-  (* print_endline@@"[stage_fits] c1: "^(string_of_bool c1)^" c2: "^(string_of_bool c2)^" c3: "^(string_of_bool c3); *)
+  (* debug_print_endline@@"[stage_fits] c1: "^(string_of_bool c1)^" c2: "^(string_of_bool c2)^" c3: "^(string_of_bool c3); *)
   if ( c_tbls && c_arrays && c_hashers && c_blocks)
   then (
-    (* print_endline "[stage_fits] TRUE";  *)
+    (* debug_print_endline "[stage_fits] TRUE";  *)
     true)
   else (
-    (* print_endline "[stage_fits] FALSE";  *)
+    (* debug_print_endline "[stage_fits] FALSE";  *)
     false)
 ;;  
 
@@ -409,7 +412,7 @@ let place_in_table stmt_group table =
       (List.map (fun s -> s.stmt) cond_stmts)
     in
     (* let tend = Unix.gettimeofday () in *)
-    (* print_endline("[place_in_table] innermost table merge took "^(string_of_float (tend -. tstart))); *)
+    (* debug_print_endline("[place_in_table] innermost table merge took "^(string_of_float (tend -. tstart))); *)
     match new_tbl_smatch.s with
     | SMatch(es, bs) ->
       Some({
@@ -482,7 +485,7 @@ let try_place_in_table (prior_tables, stmt_group_opt) (table:table) =
   in 
 (*   let tend = Unix.gettimeofday () in
   if (success) then (
-    print_endline ("[try_place_in_table] took "^(tend -. tstart |> string_of_float)^(" and SUCCEEDED."))); *)
+    debug_print_endline ("[try_place_in_table] took "^(tend -. tstart |> string_of_float)^(" and SUCCEEDED."))); *)
   result
 ;;
 
@@ -506,8 +509,8 @@ let table_fits table =
   )
   then (true)
   else (
-    print_endline "[table_fits] FAIL!";
-  print_endline@@
+    debug_print_endline "[table_fits] FAIL!";
+  debug_print_endline@@
     "[table_fits] c_stmts: "^(string_of_bool c_stmts)
     ^" c_keywidth: "^(string_of_bool c_keywidth)
     ^" c_hashers: "^(string_of_bool c_hashers)
@@ -515,7 +518,7 @@ let table_fits table =
     ;
   if (not c_arrays)
   then (
-    print_endline (Printf.sprintf "arrays: [%s]"
+    debug_print_endline (Printf.sprintf "arrays: [%s]"
       (arrays_of_table table |> CorePrinting.comma_sep CorePrinting.cid_to_string)
     )
   );
@@ -528,13 +531,13 @@ let stage_fits (prog_info:layout_args) stage =
   let c_hashers = ((hashers_of_stage stage |> CL.length) <= stage_constraints.max_hashers) in 
   let n_blocks = sblocks_of_stmt prog_info.arr_dimensions (stmt_of_stage stage) in
   let c_blocks = (n_blocks <= stage_constraints.max_array_blocks) in
-  (* print_endline@@"[stage_fits] c1: "^(string_of_bool c1)^" c2: "^(string_of_bool c2)^" c3: "^(string_of_bool c3); *)
+  (* debug_print_endline@@"[stage_fits] c1: "^(string_of_bool c1)^" c2: "^(string_of_bool c2)^" c3: "^(string_of_bool c3); *)
   if ( c_tbls && c_arrays && c_hashers && c_blocks)
   then (
-    (* print_endline "[stage_fits] TRUE";  *)
+    (* debug_print_endline "[stage_fits] TRUE";  *)
     true)
   else (
-    (* print_endline "[stage_fits] FALSE";  *)
+    (* debug_print_endline "[stage_fits] FALSE";  *)
     false)
 ;;  
 
@@ -568,7 +571,7 @@ let try_place_in_stage prog_info (prior_stages, stmt_group_opt) stage =
     (* make sure that all the dependencies are placed *)
     if (dependencies_ready prog_info prior_stages stmt_group)
     then (       
-(*       print_endline ("[try_place_in_stage] attempting placement in stage...");
+(*       debug_print_endline ("[try_place_in_stage] attempting placement in stage...");
       let tstart = Unix.gettimeofday () in *)
       let updated_tables, pargs_opt = CL.fold_left 
         try_place_in_table 
@@ -582,7 +585,7 @@ let try_place_in_stage prog_info (prior_stages, stmt_group_opt) stage =
         if (placement_done pargs_opt)
         then (updated_tables)
         else (
-          (* print_endline ("[try_place_in_stage] attempting to create new table in stage."); *)
+          (* debug_print_endline ("[try_place_in_stage] attempting to create new table in stage."); *)
           updated_tables@
           (
             match (place_in_table stmt_group empty_table) with 
@@ -597,33 +600,33 @@ let try_place_in_stage prog_info (prior_stages, stmt_group_opt) stage =
       then (
 (*         let tend = Unix.gettimeofday() in
         let t = (tend -. tstart) in
-        print_endline ("[try_place_in_stage] placement failed and took "^(string_of_float t)); *)
+        debug_print_endline ("[try_place_in_stage] placement failed and took "^(string_of_float t)); *)
         not_placed_result)
       else (
 (*         let tend = Unix.gettimeofday() in
         let t = (tend -. tstart) in
-        print_endline ("[try_place_in_stage] placement succeeded and took "^(string_of_float t)); *)
+        debug_print_endline ("[try_place_in_stage] placement succeeded and took "^(string_of_float t)); *)
         prior_stages@[updated_stage], None)
     )
   else ( not_placed_result )
   )
 ;;
 
-(* 
-  TODO: the new layout algorithm causes test applications to fail. 
-        they also lay out to fewer stages... what's going on? 
-        something with dependencies, maybe? *)
-
 (* place a statement group into the pipe *)
 let place_in_pipe prog_info stmt_group pipe : pipeline =
-  (* print_endline ("[place_in_pipe] trying to place statement group: "^(stmt_group.sguid |> string_of_int)); *)
-  print_endline 
-    (Printf.sprintf 
-    "placing IR statement %i / %i into current pipeline:" 
-    ((List.length (src_stmts_in_pipe pipe) + 1))
-    (prog_info.num_nodes_to_place));
-  print_endline (summarystr_of_pipeline pipe);
-
+  (* debug_print_endline ("[place_in_pipe] trying to place statement group: "^(stmt_group.sguid |> string_of_int)); *)
+  if (Cmdline.cfg.debug)
+  then (
+    debug_print_endline 
+      (Printf.sprintf 
+      "placing IR statement %i / %i into current pipeline:" 
+      ((List.length (src_stmts_in_pipe pipe) + 1))
+      (prog_info.num_nodes_to_place));
+    debug_print_endline (summarystr_of_pipeline pipe);
+  )
+  else (
+    print_string "."; flush stdout;
+  );
   (* try to place in existing stage *)
   let updated_stages, stmt_group_opt = CL.fold_left 
     (try_place_in_stage prog_info)
@@ -642,17 +645,15 @@ let place_in_pipe prog_info stmt_group pipe : pipeline =
       ({stages = updated_stages;}))
 ;;
 
-
 (* lay out the program tds given the data dependency graph dfg. 
    This optimized pass converts the dfg into a dfg of statement 
    groups, then does a single topological 
    traversal of the statement group dfg and inserts one at a time. 
    Since we traverse statement groups, we are guaranteed that 
    all the dependencies of node v have been added before v. 
-
  *)
 
-let ensure_all_statements_placed dfg sgdfg =
+let ensure_all_statements_in_groupdfg dfg sgdfg =
   let num_dfg_nodes = Dfg.fold_vertex (fun v acc -> v :: acc) dfg [] |> List.length in
   let num_sg_dfg_nodes = SgDfg.fold_vertex (fun v acc -> v :: acc) sgdfg [] |> vertex_stmts_of_stmt_groups |> List.length in
   if (num_dfg_nodes <> num_sg_dfg_nodes)
@@ -661,16 +662,17 @@ let ensure_all_statements_placed dfg sgdfg =
 
 let process tds dfg = 
   let num_dfg_nodes = Dfg.fold_vertex (fun v acc -> v :: acc) dfg [] |> List.length in
-  print_endline ("number of nodes in dfg: "^(num_dfg_nodes |> string_of_int));
+  debug_print_endline ("number of nodes in dfg: "^(num_dfg_nodes |> string_of_int));
   let layout_args = {
     num_nodes_to_place = num_dfg_nodes;
     dfg = dfg_to_sgdfg dfg;
     arr_dimensions = array_dimensions tds;}
   in 
-  ensure_all_statements_placed dfg layout_args.dfg;
+  ensure_all_statements_in_groupdfg dfg layout_args.dfg;
   (* exit 1; *)
+  print_endline ("placing "^(string_of_int num_dfg_nodes)^(" atomic statement groups into pipeline"));
   let pipe = SgDfgTopo.fold (place_in_pipe layout_args) layout_args.dfg empty_pipeline in
-  print_endline ("[coreLayoutNew] final pipeline");
+  print_endline ("[coreLayout] final pipeline");
   print_endline (summarystr_of_pipeline pipe);
 
   update_main tds {(main tds) with main_body=stmts_of_pipe pipe;}
@@ -689,18 +691,21 @@ open TofinoCoreNew
 
 let process_new (tds : tdecls) dfg =
   let num_dfg_nodes = Dfg.fold_vertex (fun v acc -> v :: acc) dfg [] |> List.length in
-  print_endline ("number of nodes in dfg: "^(num_dfg_nodes |> string_of_int));
+  debug_print_endline ("number of nodes in dfg: "^(num_dfg_nodes |> string_of_int));
   let layout_args = {
     num_nodes_to_place = num_dfg_nodes;
     dfg = dfg_to_sgdfg dfg;
     arr_dimensions = array_dimensions tds;}
   in 
-  ensure_all_statements_placed dfg layout_args.dfg;
-  (* exit 1; *)
+  ensure_all_statements_in_groupdfg dfg layout_args.dfg;
+
+  print_endline ("[coreLayout] placing "^(string_of_int num_dfg_nodes)^(" atomic statement groups into pipeline"));
   let pipe = SgDfgTopo.fold (place_in_pipe layout_args) layout_args.dfg empty_pipeline in
-  print_endline ("[coreLayoutNew] final pipeline");
+  print_endline("");
+  print_endline ("[coreLayout] final pipeline");
   print_endline (summarystr_of_pipeline pipe);
   let pipe_stmts = stmts_of_pipe pipe in
+  
   pipe_stmts 
 ;;
 

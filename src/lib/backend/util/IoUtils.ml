@@ -79,10 +79,19 @@ let load_format_1 infn =
   Scanf.format_from_string instr "%s"
 ;;
 
-let outDir = ref "./LucidCompileLogs"
+
+
+(* build directory (TODO: this should move to packageTofinoApp) *)
+
+let outDir = ref "./LucidP4Build"
 let srcDir = ref (!outDir ^ "/src")
 let logDir = ref (!outDir ^ "/logs")
 let scriptsDir = ref (!outDir ^ "/scripts")
+
+let moduleLogDir = ref (!outDir ^ "/modules")
+let irLogDir = ref (!outDir ^"/ir")
+let graphLogDir = ref (!outDir^"/graphs")
+
 
 (* Prepare the build directory. *)
 let setup_build_dir out_dir =
@@ -95,24 +104,29 @@ let setup_build_dir out_dir =
   ensure_dir !srcDir;
   scriptsDir := !outDir ^ "/scripts";
   ensure_dir !scriptsDir;
-  BackendLogging.moduleLogDir := !logDir ^ "/modules";
-  BackendLogging.irLogDir := !logDir ^ "/ir";
-  BackendLogging.graphLogDir := !logDir ^ "/graphs";
-  ensure_dir !BackendLogging.irLogDir;
-  ensure_dir !BackendLogging.moduleLogDir;
-  ensure_dir !BackendLogging.graphLogDir
+  moduleLogDir := !logDir ^ "/modules";
+  irLogDir := !logDir ^ "/ir";
+  graphLogDir := !logDir ^ "/graphs";
+  ensure_dir !irLogDir;
+  ensure_dir !moduleLogDir;
+  ensure_dir !graphLogDir
 ;;
+
+let ir_dump_path phasename = !irLogDir ^ "/" ^ phasename ^ ".dpt"
 
 let setup_profile_dir out_dir = 
   outDir := out_dir;
   (* print_endline (sprintf "clearing build directory: %s\n" !outDir); *)
   clear_dir_recursive !outDir;
+
   logDir := !outDir ^ "/logs";
   ensure_dir !logDir;
-  BackendLogging.moduleLogDir := !logDir ^ "/modules";
-  BackendLogging.irLogDir := !logDir ^ "/ir";
-  BackendLogging.graphLogDir := !logDir ^ "/graphs";
-  ensure_dir !BackendLogging.irLogDir;
-  ensure_dir !BackendLogging.moduleLogDir;
-  ensure_dir !BackendLogging.graphLogDir
+
+  moduleLogDir := !logDir ^ "/modules";
+  irLogDir := !logDir ^ "/ir";
+  graphLogDir := !logDir ^ "/graphs";
+
+  ensure_dir !irLogDir;
+  ensure_dir !moduleLogDir;
+  ensure_dir !graphLogDir
 ;;

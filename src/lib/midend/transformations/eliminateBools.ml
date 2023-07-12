@@ -89,25 +89,24 @@ let elimination_only ds =
 ;;
 
 let do_passes (ds : decls) : Syntax.decls =
-  let silent = not Cmdline.cfg.verbose in
-  trans_info "Starting cannonization before IR...";
-  if not silent then DBG.start_mlog __FILE__ outc dprint_endline;
+  (* trans_info "Starting cannonization before IR..."; *)
+  if (Cmdline.cfg.debug) then DBG.start_mlog (!IoUtils.irLogDir) __FILE__ outc dprint_endline;
   (* 1: transform boolean assignment rhs to always be immediates. *)
-  if not silent then log_prog "before boolean elimination" ds;
+  (* if not silent then log_prog "before boolean elimination" ds; *)
   let ds = eliminate_complex_bool_assigns ds in
-  if not silent then log_prog "after phase 1: non-immediate elimination" ds;
-  trans_info "boolean elimination complete. ";
+  (* if not silent then log_prog "after phase 1: non-immediate elimination" ds; *)
+  (* trans_info "boolean elimination complete. "; *)
   (* let ds = Typer.infer_prog ds in *)
   (* 2: put if expressions into a normal form
     Note -- this must never introduce any new boolean variables. *)
   let ds = NormalizeBools.do_passes ds in
-  if not silent then log_prog "after phase 2: if expression cannonization" ds;
-  trans_info "if-else cannonization complete.";
+  (* if not silent then log_prog "after phase 2: if expression cannonization" ds; *)
+  (* trans_info "if-else cannonization complete."; *)
   (* let ds = Typer.infer_prog ds in *)
   (* 3: eliminate boolean values, variables, and types *)
   let ds = eliminate_bool_values_and_types ds in
-  if not silent then log_prog "after phase 3: immediate elimination" ds;
-  trans_info "immediate elimination complete.";
+  (* if not silent then log_prog "after phase 3: immediate elimination" ds; *)
+  (* trans_info "immediate elimination complete."; *)
   (* let ds = Typer.infer_prog ds in *)
   (* 4: future improvement: convert directly into a match statement *)
   ds

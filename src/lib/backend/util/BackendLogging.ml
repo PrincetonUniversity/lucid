@@ -7,10 +7,7 @@ exception Error of string
 
 let error s = raise (Error s)
 
-(* output directories *)
-let moduleLogDir = ref "./lucidCompilerOut/modules"
-let irLogDir = ref "./lucidCompilerOut/ir"
-let graphLogDir = ref "./lucidCompilerOut/graphs"
+
 let dopen f out = out := Some (CF.formatter_of_out_channel f)
 let null_out = CF.formatter_of_out_channel (Caml.open_out "/dev/null")
 let no_printf (_ : string) = ()
@@ -28,10 +25,10 @@ let dclose f out =
   Caml.close_out f
 ;;
 
-let start_mlog module_name outc logfcn_ref =
-  Core.Unix.mkdir_p !moduleLogDir;
+let start_mlog moduleLogDir module_name outc logfcn_ref =
+
   let module_name = Filename.basename module_name in
-  let out_fn = !moduleLogDir ^ "/" ^ module_name ^ ".txt" in
+  let out_fn = moduleLogDir ^ "/" ^ module_name ^ ".txt" in
   (* print_endline (sprintf "logging for %s: %s" module_name out_fn); *)
   let outf = Caml.open_out out_fn in
   dopen outf outc;
@@ -41,10 +38,9 @@ let start_mlog module_name outc logfcn_ref =
 ;;
 
 (* open the output file reference, get a debug printline function. *)
-let start_module_log module_name outc =
-  Core.Unix.mkdir_p !moduleLogDir;
+let start_module_log moduleLogDir module_name outc =
   let module_name = Filename.basename module_name in
-  let out_fn = !moduleLogDir ^ module_name ^ ".txt" in
+  let out_fn = moduleLogDir ^ module_name ^ ".txt" in
   (* print_endline (sprintf "logging for %s: %s" module_name out_fn); *)
   let outf = Caml.open_out out_fn in
   dopen outf outc;
@@ -72,11 +68,19 @@ let fail_report str = Console.show_message str ANSITerminal.Red "Tofino Checker"
 let cprint_endline s = if Cmdline.cfg.debug then print_endline s
 
 
-
-let mk_ir_log_dirs () =
-  Core.Unix.mkdir_p !irLogDir;
-  Core.Unix.mkdir_p !graphLogDir
+let cprint_label label str = 
+  cprint_endline label;
+  cprint_endline str;
+  cprint_endline label
 ;;
 
+let fprintf fn str = 
+  Printf.fprintf (open_out fn) "%s" str
+;;
 
-let ir_dump_path phasename = !irLogDir ^ "/" ^ phasename ^ ".dpt"
+let dump fn comment str =
+  let outf = open_out fn in
+  Printf.fprintf outf "// %s" comment;
+  Printf.fprintf outf "%s" (str);
+;;
+

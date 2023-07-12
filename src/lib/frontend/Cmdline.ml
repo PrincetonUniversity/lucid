@@ -1,8 +1,11 @@
+
 type config =
   { mutable verbose : bool
       (* Print out each transformation name before we do it *)
   ; mutable debug : bool
       (** Print out the whole program after each transformation *)
+  ; mutable logging : bool 
+      (* enable logging to files (for tofino backend) *)
   ; mutable show_effects : bool (** Print out effect annotations *)
   ; mutable verbose_types : bool (** Print out extra typing information *)
   ; mutable show_tvar_links : bool
@@ -39,6 +42,7 @@ type config =
 let default () =
   { verbose = true
   ; debug = false
+  ; logging = true
   ; show_effects = false
   ; verbose_types = false
   ; show_tvar_links = false
@@ -64,7 +68,6 @@ let default () =
   ; new_tofino = false
   }
 ;;
-
 let cfg = default ()
 let set_dpt_file fname = cfg.dpt_file <- fname
 
@@ -153,11 +156,10 @@ let parse_interp () =
   (* common options *)
   let speclist = parse_common () in
   (* added options for interp *)
-  let unset_verbose () = cfg.verbose <- false in
   let set_final_state () = cfg.show_interp_state <- false in
   let set_interactive () =
     cfg.interactive <- true;
-    unset_verbose ()
+    cfg.verbose <- false;
   in
   let set_spec s = cfg.spec_file <- s in
   let speclist =
@@ -184,8 +186,6 @@ let parse_interp () =
 ;;
 
 let parse_tofino () =
-  (* verbose mode off by default for tofino backend *)
-  cfg.verbose <- false;
   (* common options *)
   let speclist = parse_common () in
   (* added options for tofino backend *)

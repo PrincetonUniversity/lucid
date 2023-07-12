@@ -2,7 +2,7 @@ from ctypes import *
 from pathlib import Path
 import json
 
-DEBUG=True
+DEBUG=False
 
 # example usage. note that if you wrap 
 # this in a main function, dict(locals) must change to dict(globals)

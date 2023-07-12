@@ -4,7 +4,6 @@ open CoreSyntax
 open InterpHelpers
 module DBG = BackendLogging
 
-let silent = ref false
 let outc = ref None
 let dprint_endline = ref DBG.no_printf
 
@@ -216,13 +215,13 @@ let atomize_int_assigns ds =
 ;;
 
 let do_passes ds =
-  if Cmdline.cfg.verbose then DBG.start_mlog __FILE__ outc dprint_endline;
+  if Cmdline.cfg.debug then DBG.start_mlog (!IoUtils.irLogDir) __FILE__ outc dprint_endline;
   let orig_ds = ds in
   let ds = balance_assign_exps ds in
-  info "assignments transformed to balanced exps";
+  (* info "assignments transformed to balanced exps"; *)
   let balanced_ds = ds in
   let ds = atomize_int_assigns ds in
-  info "expressions atomized";
+  (* info "expressions atomized"; *)
   (* exit 1; *)
   !dprint_endline "original program: ";
   !dprint_endline (Printing.decls_to_string orig_ds);

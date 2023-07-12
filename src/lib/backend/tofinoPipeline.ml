@@ -6,7 +6,6 @@ let fail_report str = Console.show_message str ANSITerminal.Red "Tofino Checker"
 exception Error of string
 
 let error s = raise (Error s)
-let do_log = ref true
 let do_const_branch_vars = ref true
 let cprint_endline s = if Cmdline.cfg.debug then print_endline s
 
@@ -16,15 +15,10 @@ let cprint_prog label tds =
   cprint_endline label
 ;;
 
-let mk_ir_log_dirs () =
-  Core.Unix.mkdir_p !BackendLogging.irLogDir;
-  Core.Unix.mkdir_p !BackendLogging.graphLogDir
-;;
-
-let ir_dump_path phasename = !BackendLogging.irLogDir ^ "/" ^ phasename ^ ".dpt"
+let ir_dump_path phasename = !IoUtils.irLogDir ^ "/" ^ phasename ^ ".dpt"
 
 let dbg_dump_core_prog phasename ds =
-  if !do_log
+  if (Cmdline.cfg.logging)
   then (
     let outf = open_out (ir_dump_path phasename) in
     Printf.fprintf outf "// after phase: %s" phasename;
@@ -44,7 +38,6 @@ let dbg_dump_core_prog phasename ds =
     + no event variables
     + each action belongs to 1 table *)
 let common_midend_passes ds =
-  mk_ir_log_dirs ();
   dbg_dump_core_prog "midend" ds;
   (* delete Event.delay calls and warn the user *)
   (* form: + no Event.delay calls *)
@@ -167,7 +160,7 @@ let tofinocore_normalization is_ingress eliminate_generates tds =
   let tds = Generates.eliminate is_ingress tds in
   cprint_prog "----------- after Generates.eliminate ------- " tds;
   TofinoCore.dump_prog
-    (!BackendLogging.irLogDir ^ "/initial.before_layout.dpt")
+    (!IoUtils.irLogDir ^ "/initial.before_layout.dpt")
     tds;
   (* 6. transform code so that there is only 1 match
           statement in the entire program for each table.
@@ -188,13 +181,13 @@ let tofinocore_normalization is_ingress eliminate_generates tds =
 let layout old_layout tds build_dir_opt =
   (* 1. compute control flow graph for main handler *)
   let cfg = CoreCfg.cfg_of_main tds in
-  CoreCfg.print_cfg (!BackendLogging.graphLogDir ^ "/cfg.dot") cfg;
+  CoreCfg.print_cfg (!IoUtils.graphLogDir ^ "/cfg.dot") cfg;
   (* 2. compute control dependency graph *)
   let cdg = CoreCdg.to_control_dependency_graph cfg in
-  CoreCfg.print_cfg (!BackendLogging.graphLogDir ^ "/cdg.dot") cdg;
+  CoreCfg.print_cfg (!IoUtils.graphLogDir ^ "/cdg.dot") cdg;
   (* 3. compute data flow / dependency graph *)
   let dfg = CoreDfg.process cdg in
-  CoreDfg.print_dfg (!BackendLogging.graphLogDir ^ "/dfg.dot") dfg;
+  CoreDfg.print_dfg (!IoUtils.graphLogDir ^ "/dfg.dot") dfg;
   (* 4. lay out the dfg on a pipeline of match stmt seqs *)
   print_endline "-------- layout ----------";
   (* let tds = CoreLayout.process tds dfg in *)
@@ -209,7 +202,7 @@ let layout old_layout tds build_dir_opt =
    | _ -> ());
   cprint_prog "----------- after layout ------- " tds;
   TofinoCore.dump_prog
-    (!BackendLogging.irLogDir ^ "/laid_out.tofinocore.dpt")
+    (!IoUtils.irLogDir ^ "/laid_out.tofinocore.dpt")
     tds;
   (* 5. Take the statements in each match statement branch and put them into
           functions that represent actions. If a branch does a table_match,
@@ -219,7 +212,7 @@ let layout old_layout tds build_dir_opt =
   (* 6. deduplicate actions that contain certain expensive operations. *)
   let tds = Dedup.process tds in
   TofinoCore.dump_prog
-    (!BackendLogging.irLogDir ^ "/laid_out.actionform.tofinocore.dpt")
+    (!IoUtils.irLogDir ^ "/laid_out.actionform.tofinocore.dpt")
     tds;
   tds
 ;;
@@ -277,7 +270,7 @@ let compile_dataplane old_layout ds portspec build_dir =
 ;;
 
 let compile old_layout ds portspec build_dir ctl_fn_opt =
-  if !do_log
+  if Cmdline.cfg.logging
   then (
     CoreCdg.start_logging ();
     CoreDfg.start_logging ());

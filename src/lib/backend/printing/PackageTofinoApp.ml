@@ -51,7 +51,7 @@ let manifest_fn = "manifest.txt"
 let manifest_str = [%string 
 "\
 Lucid-generated tofino project folder\
-Contents: \n\
+ Contents: \n\
  %{p4_fn} -- P4 data plane program\n\
  %{py_fn} -- Python script to install multicast rules after starting %{p4_fn}\n\
  %{py_eventlib_fn} -- Python event parsing library\n\
@@ -61,12 +61,11 @@ Contents: \n\
 "]
 ;;
 
-let silent = ref false ;;
 let report str = 
-  if (not !silent) then (
+  if (not (Cmdline.cfg.verbose)) then (
   Console.show_message str ANSITerminal.Green "Packager"
   )
-
+;;
 (* runtime libraries + launcher *)
 let copy_libs builddir =
   let rtLibs =

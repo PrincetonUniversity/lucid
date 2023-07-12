@@ -61,6 +61,19 @@ generatedVisitors: src/lib/frontend/Syntax.processed.ml
 test: default
 	python3 ./test/runtests.py
 
+EXPECTED_SDE_VER := bf-sde-9.13.0
+# cd into test/backend and then call ./runtests.sh
+test_tofino: default
+	@if [ -z "$$SDE" ]; then \
+		echo "Error: P4studio SDE directory environment variable (\$$SDE) is not set"; \
+		exit 1; \
+	fi
+	@if [ ! -f "$$SDE/$(EXPECTED_SDE_VER).manifest" ]; then \
+		echo "Error: The Lucid-Tofino backend is only tested on SDE $(EXPECTED_SDE_VER), and your \$$SDE directory ($$SDE) does not have a manifest file indicating that the correct version is installed."; \
+		exit 1; \
+	fi
+	cd test/backend && ./runtests.sh
+
 promote:
 	cp test/output/* test/expected/
 

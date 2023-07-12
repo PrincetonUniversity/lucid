@@ -54,10 +54,7 @@ let check recirc_dpid internal_dpids external_dpids (bound_dpids : int list) =
 
 let parse fn_opt =
   match fn_opt with 
-  | None -> 
-    print_endline "------- port configuration -------";
-    print_endline (string_of_portconfig default_port_config);
-    default_port_config
+  | None -> default_port_config
   | Some(fn) -> (    
     let json = In_channel.read_all fn 
       |> Yojson.Basic.from_string (* parse from string *)

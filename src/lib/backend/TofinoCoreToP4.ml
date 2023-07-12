@@ -777,17 +777,17 @@ and translate_header struct_ty (prevs : id list) header =
       (header.header_id::prevs, [p4struct])
     )
   else (prevs, [])
-and translate_headers evid prevs hdrs struct_ty = 
-  print_endline ("[translate_headers] start in "^(fst evid));
+and translate_headers prevs hdrs struct_ty = 
+  (* print_endline ("[translate_headers] start in "^(fst evid)); *)
   let res = List.fold_left 
     (fun (prevs, p4hdrs) hdr -> 
       let prevs', p4hdrs' = translate_header struct_ty prevs hdr in
-      print_endline ("translating header"^(Id.to_string hdr.header_id));
+      (* print_endline ("translating header"^(Id.to_string hdr.header_id)); *)
       prevs', (p4hdrs@p4hdrs'))
     (prevs, [])
     hdrs
   in
-  print_endline ("[translate_headers] stop in "^(fst evid));
+  (* print_endline ("[translate_headers] stop in "^(fst evid)); *)
   res
 
 and translate_event (prevs:id list) struct_ty event : id list * T.decl list =
@@ -806,10 +806,10 @@ and translate_event (prevs:id list) struct_ty event : id list * T.decl list =
       prevs@[this_event_struct_id], [decl]
     (* special case: the event union's members are all unions. This happens for 
     the egress's output event. In this case, we don't give this outer event a tag *)
-    | EventUnion({evid; hdrs; members;}) when (is_union_of_unions event) -> 
+    | EventUnion({hdrs; members;}) when (is_union_of_unions event) -> 
 
     (* translate the event's headers and make fields *)
-    let prevs, header_decls = translate_headers evid prevs hdrs struct_ty in
+    let prevs, header_decls = translate_headers prevs hdrs struct_ty in
     let hdr_fields = 
       (List.map (fun hdr -> (hdr.header_id, hdr.header_tyid |> tstruct)) hdrs)
     in

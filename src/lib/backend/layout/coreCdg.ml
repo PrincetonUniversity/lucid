@@ -35,7 +35,7 @@ let error s = raise (Error s)
 module DBG = BackendLogging
 let outc = ref None
 let dprint_endline = ref DBG.no_printf
-let start_logging () = DBG.start_mlog __FILE__ outc dprint_endline
+let start_logging () = DBG.start_mlog (!IoUtils.irLogDir) __FILE__ outc dprint_endline
 
 
 
