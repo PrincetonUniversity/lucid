@@ -43,6 +43,7 @@ let filename = "\""(['a'-'z' 'A'-'Z' '0'-'9' '_' '\\' '/' '.' '-'])+"\""
 rule token = parse
   | "/*"              { comments 0 lexbuf }
   | "//"              { comments (-1) lexbuf }
+  | "HIGH"            { HIGH (position lexbuf) }
   | "include"         { INCLUDE (position lexbuf) }
   | "false"           { FALSE (position lexbuf) }
   | "true"            { TRUE (position lexbuf) }

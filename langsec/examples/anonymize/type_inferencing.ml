@@ -323,20 +323,42 @@ let rec generalize (t: t): t =
   | typ -> typ 
 
 (* fun x -> let y = fun z -> z in y *)
-let _ = print_endline (print_type (typecheck env (Func ("x", Let ("y", Func ("z", Var "z"), Var "y")))))
+let _ = print_endline ("1. " ^ (print_type (typecheck env (Func ("x", Let ("y", Func ("z", Var "z"), Var "y"))))))
 (* fun x -> let y = x in y *)
-let _ = print_endline (print_type (typecheck env (Func ("x", Let ("y", Var "x", Var "y")))))
+let _ = print_endline ("2. " ^ (print_type (typecheck env (Func ("x", Let ("y", Var "x", Var "y"))))))
 (* fun x -> let y = fun z -> x in y *)
-let _ = print_endline (print_type (typecheck env (Func ("x", Let ("y", Func ("z", Var "x"), Var "y")))))
+let _ = print_endline ("3. " ^ (print_type (typecheck env (Func ("x", Let ("y", Func ("z", Var "x"), Var "y"))))))
 
 (* Ascription *)
-(* fun x -> let y = fun z -> z at High in y *)
-let _ = print_endline (print_type (typecheck env (Func ("x", Let ("y", Func ("z", At (Var "z", High)), Var "y")))))
+(* fun x -> let y = fun z -> (z at High) in y *)
+let _ = print_endline ("4. " ^ (print_type (typecheck env (Func ("x", Let ("y", Func ("z", At (Var "z", High)), Var "y"))))))
 
 let env = update env "x" (Bool High)
 let env = update env "y" (Bool Low)
 let t = typecheck env (Func ("y", Var "x"))
 let env = update env "fizz" t
-let _ = print_endline (print_type (typecheck env (Call (Var "fizz", Var "y"))))
+let _ = print_endline ("5. " ^ (print_type (typecheck env (Call (Var "fizz", Var "y")))))
 let env = update env "fizz" (typecheck env (Call (Var "fizz", Var "y")))
-let _ = print_endline (print_type (typecheck env (Call (Var "fizz", Var "x"))))
+let _ = print_endline ("6. " ^ (print_type (typecheck env (Call (Var "fizz", Var "x")))))
+
+1. (('a1 U) -> (('a2 U) -> ('a2 U), U), U)
+2. (('a3 U) -> ('a3 U), U)
+3. (('a4 U) -> (('a5 U) -> ('a4 U), U), U)
+4. (('a6 U) -> (('a7 U) -> ('a7 H), U), U)
+    (('a6 U) -> (('a7 H) -> ('a7 H), 's7), U)
+5. ((Bool H))
+Fatal error: exception Type_inferencing.UnificationError("Cannot unify types")
+
+fun x: High -> y: Low -> x + y
+x: 'sx, y: 'sy
+'sx = High, 'sy = Low
+'s(x + y) = High = join 'sx 'sy
+
+if (x: High) then (fun y -> true): High 
+              else (fun y -> false): High
+
+fun z -> z at High
+z: 's1
+'s1 = High
+
+(* Switch security levels to ref cells *)

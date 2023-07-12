@@ -81,10 +81,13 @@ and func_ty =
   ; constraints : constr list Stdlib.ref
   }
 
+and sec = High | Low
+
 and ty =
   { raw_ty : raw_ty
   ; teffect : effect
   ; tspan : sp
+  ; tsec : sec
   ; tprint_as : raw_ty option ref [@opaque] (* Only used for pretty-printing *)
   }
 
@@ -361,6 +364,16 @@ let ty_sp raw_ty tspan =
   { raw_ty
   ; teffect = FVar (QVar (Id.fresh "eff"))
   ; tspan
+  ; tsec = Low
+  ; tprint_as = ref None
+  }
+;;
+
+let ty_sp_high raw_ty tspan =
+  { raw_ty
+  ; teffect = FVar (QVar (Id.fresh "eff"))
+  ; tspan
+  ; tsec = High
   ; tprint_as = ref None
   }
 ;;

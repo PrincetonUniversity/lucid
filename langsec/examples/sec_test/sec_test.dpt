@@ -1,0 +1,5 @@
+packet event ip(int dst)
+
+handle ip(int dst) {
+    generate_port(1, ip(dst))
+}

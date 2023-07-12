@@ -72,6 +72,7 @@
 %token <Span.t * (Z.t * int)> NUMWITDH
 %token <Span.t * int list> BITPAT
 %token <Span.t * string> STRING
+%token <Span.t> HIGH
 %token <Span.t> INCLUDE
 %token <Span.t> TRUE
 %token <Span.t> FALSE
@@ -188,6 +189,7 @@
 ty:
     | TINT single_poly                  { ty_sp (TInt (snd $2)) (Span.extend $1 (fst $2)) }
     | TINT                              { ty_sp (TInt (IConst 32)) $1 }
+    | HIGH ty                           { ty_sp_high $2.raw_ty $2.tspan }
     | TBOOL				                      { ty_sp TBool $1 }
     | QID                               { ty_sp (TQVar (QVar (snd $1))) (fst $1) }
     | AUTO                              { ty_sp (TQVar (QVar (fresh_auto ()))) $1 }
