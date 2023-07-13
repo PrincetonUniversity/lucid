@@ -379,13 +379,14 @@ let ty_sp_high raw_ty tspan =
 ;;
 
 let ty_eff raw_ty teffect =
-  { raw_ty; teffect; tspan = Span.default; tprint_as = ref None }
+  { raw_ty; teffect; tspan = Span.default; tsec = Low; tprint_as = ref None }
 ;;
 
 let ty raw_ty =
   { raw_ty
   ; teffect = FVar (QVar (Id.fresh "eff"))
   ; tspan = Span.default
+  ; tsec = Low
   ; tprint_as = ref None
   }
 ;;

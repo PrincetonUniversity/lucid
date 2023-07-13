@@ -185,8 +185,13 @@ and ty_to_string t =
   in
   match !(t.tprint_as) with
   | Some raw_ty when cfg.use_type_names && false ->
-    raw_ty_to_string raw_ty ^ eff_str
-  | _ -> raw_ty_to_string t.raw_ty ^ eff_str
+    raw_ty_to_string raw_ty ^ eff_str ^ sec_to_string t.tsec
+  | _ -> raw_ty_to_string t.raw_ty ^ eff_str ^ sec_to_string t.tsec
+
+and sec_to_string tsec = 
+  match tsec with 
+  | High -> "HIGH"
+  | Low -> "LOW"
 ;;
 
 let pat_to_string p =

@@ -33,9 +33,9 @@ let sequence_statements ss =
    their components. *)
 type env = (id * ty) list IdMap.t
 
-let flatten_params env params =
+let flatten_params (env: env) (params: (id * ty) list) =
   let env = ref env in
-  let rec aux params =
+  let rec aux (params: (id * ty) list) =
     List.flatten
     @@ List.map
          (fun (id, ty) ->
