@@ -636,11 +636,11 @@ and get_sec exp =
   | None -> sfresh ()
   | Some ty -> ty.tsec
 
-(* and is_high_sec sec = 
+and is_high_sec sec = 
   match sec with 
   | SVar {contents = Bound s} -> is_high_sec s
   | High -> true
-  | _ -> false *)
+  | _ -> false
 
 and infer_exps env es =
   let env, es' =
@@ -882,7 +882,9 @@ and infer_statement (env : env) (s : statement) : env * statement =
       { env with current_effect }, SIf (inf_e, inf_s1, inf_s2)
     | SGen (g, e) ->
       let env, inf_e, ety = infer_exp env e |> textract in
-      unify_raw_ty s.sspan ety.raw_ty TEvent;
+      let sec = get_sec inf_e in 
+      if is_high_sec sec then raise (SecError "High security information being leaked") 
+      else unify_raw_ty s.sspan ety.raw_ty TEvent;
       let env, inf_g =
         match g with
         | GSingle None -> env, g
