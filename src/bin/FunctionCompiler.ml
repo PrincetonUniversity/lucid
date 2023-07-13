@@ -5,6 +5,8 @@ open IoUtils
 open Yojson.Basic
 module CL = List
 
+(* DEPRECIATED (7/2023) *)
+
 exception Error of string
 let error s = raise (Error s)
 let report str = Console.show_message str ANSITerminal.Green "function compiler"
