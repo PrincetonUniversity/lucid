@@ -202,6 +202,8 @@ let unify_effect (span : Span.t) eff1 eff2 : unit =
   check_unify span (try_unify_effect span) effect_to_string eff1 eff2
 ;;
 
+exception SecError of string
+
 let rec try_unify_ty span ty1 ty2 =
   let ty1, ty2 = strip_links ty1, strip_links ty2 in
   if ty1.raw_ty == ty2.raw_ty && ty1.teffect == ty2.teffect && (sequal ty1.tsec ty2.tsec)
@@ -243,6 +245,14 @@ and sequal s1 s2 =
   | (High, High) | (Low, Low) -> true
   | (SVar secref1, SVar secref2) -> sref_equal secref1 secref2
   | (_, _) -> false
+
+and sjoin s1 s2 = 
+  if sequal s1 s2 then s1
+  else match (s1, s2) with
+  | (High, _) | (_, High) -> High
+  | (SVar {contents = Bound sec}, s) | (s, SVar {contents = Bound sec}) -> sjoin s sec
+  | (SVar {contents = Free _}, s) | (s, SVar {contents = Free _}) -> s
+  | (_, _) -> raise (SecError "Shouldn't get here")
 
 and try_unify_rty span rty1 rty2 =
   let unify_raw_ty = unify_raw_ty span in

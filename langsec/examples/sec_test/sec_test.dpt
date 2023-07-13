@@ -1,4 +1,4 @@
-packet event ip(HIGH int dst);
+packet event ip(int dst);
 
 handle ip(HIGH int dst) {
     int x = dst + 1;

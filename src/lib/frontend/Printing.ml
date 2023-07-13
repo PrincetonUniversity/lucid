@@ -341,9 +341,14 @@ let rec e_to_string e =
     Printf.sprintf "table_match(%s);" (comma_sep exp_to_string tr.args)
   | EPatWild _ -> "_"
 
-and exp_to_string e = e_to_string e.e
+and exp_to_string e = e_to_string e.e ^ "(" ^ get_t e ^ ")"
 (* ^ Printf.sprintf "[ty:%s]"
-  @@ Option.map_default ty_to_string "" e.ety *)
+  @@ Option.map_default ty_to_string "" e.ety *) 
+
+and get_t e = 
+  match e.ety with 
+  | None -> "UNTYPED"
+  | Some ty -> ty_to_string ty
 
 and es_to_string es = comma_sep exp_to_string es
 
@@ -393,7 +398,8 @@ and stmt_to_string s =
   | SLocal (i, t, e) ->
     Printf.sprintf
       "%s %s = %s;"
-      (raw_ty_to_string t.raw_ty)
+      (* (raw_ty_to_string t.raw_ty) *)
+      (ty_to_string t)      (* use ty_to_string to print security annotations *)
       (id_to_string i)
       (exp_to_string e)
   | SPrintf (s, es) ->

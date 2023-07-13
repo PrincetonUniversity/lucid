@@ -133,7 +133,7 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
       check_constraints e.espan "Function call" env fty.end_eff
       @@ !(fty.constraints)
     in
-    new_env, { e with e = ECall (f, inferred_args); ety = Some fty.ret_ty }
+    new_env, { e with e = ECall (f, inferred_args); ety = Some (infer_sec fty.ret_ty inferred_args) }
   | EProj (e, label) ->
     let env, inf_e = infer_exp env e in
     let expected_ty, entries =
@@ -621,7 +621,26 @@ and infer_op env span op args =
       @@ "Wrong number of arguments to operator: "
       ^ e_to_string (EOp (op, args))
   in
-  env, { e = EOp (op, new_args); ety = Some ty; espan = span }
+  env, { e = EOp (op, new_args); ety = Some (infer_sec ty new_args); espan = span }
+
+and infer_sec ty args = 
+  match args with 
+  | [] -> ty
+  | hd :: tl -> 
+    let arg_sec = get_sec hd in
+    let new_ty = { ty with tsec = sjoin arg_sec ty.tsec} in 
+    infer_sec new_ty tl
+  
+and get_sec exp = 
+  match exp.ety with 
+  | None -> sfresh ()
+  | Some ty -> ty.tsec
+
+(* and is_high_sec sec = 
+  match sec with 
+  | SVar {contents = Bound s} -> is_high_sec s
+  | High -> true
+  | _ -> false *)
 
 and infer_exps env es =
   let env, es' =
