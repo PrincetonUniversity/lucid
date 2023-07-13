@@ -204,16 +204,45 @@ let unify_effect (span : Span.t) eff1 eff2 : unit =
 
 let rec try_unify_ty span ty1 ty2 =
   let ty1, ty2 = strip_links ty1, strip_links ty2 in
-  if ty1.raw_ty == ty2.raw_ty && ty1.teffect == ty2.teffect
+  if ty1.raw_ty == ty2.raw_ty && ty1.teffect == ty2.teffect && (sequal ty1.tsec ty2.tsec)
   then ()
   else (
     unify_raw_ty span ty1.raw_ty ty2.raw_ty;
+    unify_sec ty1.tsec ty2.tsec;
     (* Don't unify effects for things which definitely aren't global *)
     if not (SyntaxUtils.is_not_global_rty ty1.raw_ty)
     then try_unify_effect span ty1.teffect ty2.teffect;
     match !(ty1.tprint_as) with
     | None -> ty1.tprint_as := !(ty2.tprint_as)
     | Some x -> ty2.tprint_as := Some x)
+
+and unify_sec s1 s2 = 
+  if sequal s1 s2 then ()
+  else match (s1, s2) with 
+  | (SVar {contents = Bound sec1}, sec2) | (sec1, SVar {contents = Bound sec2}) -> 
+    unify_sec sec1 sec2
+  | (SVar ({contents = Free _} as tsec), sec) | (sec, SVar ({contents = Free _} as tsec)) ->
+    soccurs tsec sec;
+    tsec := Bound sec
+  | (_, _) -> raise CannotUnify
+
+and soccurs tsec sec = 
+  match sec with 
+  | SVar ({contents = Free _} as secref) -> if sref_equal tsec secref then raise CannotUnify
+  | SVar ({contents = Bound s} as secref) -> soccurs secref s
+  | _ -> ()
+
+and sref_equal tsec1 tsec2 = 
+  match (!tsec1, !tsec2) with
+  | (Free x, Free y) -> String.equal x y
+  | (Bound s1, Bound s2) -> sequal s1 s2
+  | (_, _) -> false
+
+and sequal s1 s2 = 
+  match (s1, s2) with 
+  | (High, High) | (Low, Low) -> true
+  | (SVar secref1, SVar secref2) -> sref_equal secref1 secref2
+  | (_, _) -> false
 
 and try_unify_rty span rty1 rty2 =
   let unify_raw_ty = unify_raw_ty span in

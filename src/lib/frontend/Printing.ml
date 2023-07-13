@@ -192,6 +192,10 @@ and sec_to_string tsec =
   match tsec with 
   | High -> "HIGH"
   | Low -> "LOW"
+  | SVar secref -> 
+      match !secref with 
+      | Free _ -> "LOW(U)"
+      | Bound sec -> sec_to_string sec
 ;;
 
 let pat_to_string p =

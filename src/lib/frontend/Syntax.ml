@@ -81,7 +81,8 @@ and func_ty =
   ; constraints : constr list Stdlib.ref
   }
 
-and sec = High | Low
+and sec = High | Low | SVar of tsec ref
+and tsec = Free of string | Bound of sec
 
 and ty =
   { raw_ty : raw_ty
@@ -359,12 +360,22 @@ exception Error of string
 
 let error s = raise (Error s)
 
+(* security helper functions *)
+let gensym_counter = ref 0
+let reset_gensym (): unit = gensym_counter := 0
+let gensym (): string = 
+  incr gensym_counter; 
+  "'s" ^ string_of_int !gensym_counter
+
+let sfresh () = 
+  SVar (ref (Free (gensym ())))
+
 (* types *)
 let ty_sp raw_ty tspan =
   { raw_ty
   ; teffect = FVar (QVar (Id.fresh "eff"))
   ; tspan
-  ; tsec = Low
+  ; tsec = sfresh ()
   ; tprint_as = ref None
   }
 ;;
@@ -379,14 +390,14 @@ let ty_sp_high raw_ty tspan =
 ;;
 
 let ty_eff raw_ty teffect =
-  { raw_ty; teffect; tspan = Span.default; tsec = Low; tprint_as = ref None }
+  { raw_ty; teffect; tspan = Span.default; tsec = sfresh (); tprint_as = ref None }
 ;;
 
 let ty raw_ty =
   { raw_ty
   ; teffect = FVar (QVar (Id.fresh "eff"))
   ; tspan = Span.default
-  ; tsec = Low
+  ; tsec = sfresh ()
   ; tprint_as = ref None
   }
 ;;

@@ -1,5 +1,6 @@
 packet event ip(HIGH int dst);
 
 handle ip(HIGH int dst) {
+    int x = dst + 1;
     generate_port(1, ip(dst)); // get ECall to propagate HIGH security of dst
 }
