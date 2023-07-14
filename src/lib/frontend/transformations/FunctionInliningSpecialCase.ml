@@ -1,15 +1,18 @@
-(* An inlining pass for certain kinds of functions / 
-   calls that are easy to inline with zero overhead. 
-   To be inlined with no overhead, there are two requirements: 
-    1. the function never writes to its parameters
-    2. the function call appears in an assignment statement, 
-       OR the function has only one return statement.
-   This pass runs before the general inlining pass and does not 
-   remove any function definitions from the program.
-   This pass will eventually be removed when either function 
-   inlining is improved or partial interpretation is complete and 
-   optimized away the overhead added by inlining. 
-   - jps 1/18/22
+(* This is a best effort zero-overhead inlining pass. 
+  It should be able to inline all calls to functions 
+  in which parameters are not written. 
+  The main transformer inlines each function
+  one at a time with "inline_single_function".
+
+  NOTES: 
+  1.this pass creates slocal statements that have 
+    the "PNoInitLocal" pragma, which indicates to 
+    optimization passes in the backend that it is safe 
+    to allocate the variable without initializing it.
+  2.this pass is not aware of modules. If it is run 
+    before module elimination, it may produce invalid 
+    code when two modules have functions with the 
+    same name but different bodies.
 *)
 
 open Syntax
@@ -45,49 +48,6 @@ let read_only_params fcn_params fcn_stmt =
   List.fold_left (fun prev p -> prev & (read_only_var (fst p) fcn_stmt)) true fcn_params 
 ;;
 
-(* Count returns isn't considering branch statements with only a default case.  *)
-let count_returns fcn_stmt =
-  let num_rets = ref 0 in 
-  let finder = 
-    object
-      inherit [_] s_iter as super
-
-      method ! visit_SRet () _ = 
-        num_rets := !num_rets + 1;
-    end
-  in 
-  finder#visit_statement () fcn_stmt;
-  !num_rets
-
-(* Check the function body for a match with a return in it. 
-   If we find such a case, we cannot apply 
-   the single return optimization. *)
-let return_in_match fcn_body =
-  let ret_in_match = ref false in
-  let finder =
-    object
-      inherit [_] s_iter as super
-
-      method ! visit_SRet in_match _ =
-        ret_in_match := (!ret_in_match || in_match);
-
-      method ! visit_SMatch _ es bs =
-        super#visit_SMatch true es bs
-    end
-  in
-  finder#visit_statement false fcn_body;
-  !ret_in_match
-;;
-
-let single_return fcn_stmt = 
-  (count_returns fcn_stmt) = 1
-;;
-
-let no_return fcn_stmt = 
-  (count_returns fcn_stmt) = 0
-;;
-
-
 (* replace each parameter with its argument. This should only be caled 
    for functions with read_only_params! *)
 let replace_params_with_args stmt (params:(id * ty) list) (args: exp list) = 
@@ -112,8 +72,7 @@ let replace_params_with_args stmt (params:(id * ty) list) (args: exp list) =
   subst#visit_statement id_exp_map stmt
 ;;
 
-(* replace return statements with assignments and delete expression-less returns. 
-   This should only be called for function call assignments! *)
+(* replace return statements with assignments and delete expression-less returns. *)
 let replace_return_with_assign id stmt = 
   let ret_subst =
     object
@@ -142,126 +101,151 @@ let replace_return_with_local id ty stmt =
   in
   ret_subst#visit_statement id stmt
 ;;
-(* Inline functions that have multiple return statements 
-   and immutable variables wherever possible. *)
-let inline_multi_return_immutable (ds:decl list) ((fcn_id:Id.t),(fcn_params : params),fcn_stmt)  = 
+(* Inline calls to 1 function in a declaration
+   Case stmt = assign(id, call(...)) -> 
+    1. replace each parameter in the function body with the appropriate argument.
+    2. replace each return statement with an assignment to id.
+    3. return the transformed function body instead of stmt
+   Case stmt = local(id, call(...)) ->
+    0. construct a declaration statement for the return variable
+    1. replace each parameter in the function body with the appropriate argument.
+    2. replace each return statement with an assignment to the caller's variable.
+    3. return the declaration statement + the transformed function body instead of stmt
+   Case return(call(...)) ->
+    * return statements might actually be the easiest to handle? *
+    1. replace each parameter in the function body with the appropriate argument.
+    2. return the transformed function body instead of the return statement.
+   *)
+let inline_single_fcn (decl:decl) ((fcn_id:Id.t),(fcn_params : params),fcn_stmt)  = 
+  print_endline ("[inline_single_function] inlining function: "^(Id.to_string fcn_id));
   match (read_only_params fcn_params fcn_stmt) with 
   | true -> 
-    (* print_endline (("[inline_multi_return_immutable] all parameters immutable for function:"^(Id.to_string fcn_id))); *)
+    print_endline (("[inline_single_function] all parameters immutable for function:"^(Id.to_string fcn_id)));
     let assign_subst = 
       object
         inherit [_] s_map as super
-        method! visit_SAssign (fcn_id, fcn_params, fcn_stmt) id exp = 
-          (* print_endline ("[inline_multi_return_immutable] visiting assign."); *)
-          (* Printing.exp_to_string exp |> print_endline; *)
-          match exp.e with 
-          | ECall(cid, args) -> (
-            (* print_endline ("[inline_multi_return_immutable] call in assign: "^(Cid.to_string cid)); *)
-            match (Cid.equal (Cid.id fcn_id) cid) with 
-            | true ->
-              (* an assignment that calls a function with read only params. 
-                we can inline this with zero overhead. *)
-              (* step 1: replace each parameter in the function body with 
-                         the appropriate argument. *)
-              let fcn_stmt = replace_params_with_args fcn_stmt fcn_params args in 
-              (* step 2: replace each return statement with an assignment to 
-                         the caller's variable. *)
-              let fcn_stmt = replace_return_with_assign id fcn_stmt in 
-              (* step 3: return the transformed function body instead of the 
-                         call. *)
-              fcn_stmt.s
-            | false -> SAssign(id, exp) (* call to different function *)
+
+        method! visit_statement (fcn_id, fcn_params, fcn_stmt) stmt = 
+          match stmt.s with 
+          | SAssign(id, exp) -> (
+            match exp.e with 
+            | ECall(cid, args) when (Cid.equal (Cid.id fcn_id) cid) -> 
+                print_endline ("[inline_single_function] inlining call: "^(Printing.stmt_to_string stmt));
+                let fcn_stmt = replace_params_with_args fcn_stmt fcn_params args in 
+                let fcn_stmt = replace_return_with_assign id fcn_stmt in 
+                {stmt with s = fcn_stmt.s}
+            | _ -> stmt
           )
-          (* not a call *)
-          | _ -> SAssign(id, exp)      
+          | SLocal(id, ty, exp) -> (
+            match exp.e with 
+            | ECall(cid, args) when (Cid.equal (Cid.id fcn_id) cid) -> 
+                print_endline ("[inline_single_function] inlining call: "^(Printing.stmt_to_string stmt));
+                let decl_stmt =  slocal_sp id ty (SyntaxUtils.default_expression ty) stmt.sspan in 
+                let decl_stmt = {decl_stmt with spragmas = [PNoInitLocal]} in 
+                let fcn_stmt = replace_params_with_args fcn_stmt fcn_params args in 
+                let fcn_stmt = replace_return_with_assign id fcn_stmt in 
+                let inlined_stmt = sseq decl_stmt fcn_stmt in 
+                {stmt with s = inlined_stmt.s}
+            | _ -> stmt
+          )
+          | SRet(Some(exp)) -> (
+            match exp.e with 
+            | ECall(cid, args) when (Cid.equal (Cid.id fcn_id) cid) -> 
+                print_endline ("[inline_single_function] inlining call: "^(Printing.stmt_to_string stmt));
+                let fcn_stmt = replace_params_with_args fcn_stmt fcn_params args in 
+                {stmt with s = fcn_stmt.s}
+            | _ -> stmt
+          )
+          (* other statements *)
+          | _ -> super#visit_statement (fcn_id, fcn_params, fcn_stmt) stmt
+      end
+    in 
+    assign_subst#visit_decl (fcn_id, fcn_params, fcn_stmt) decl
+  | false -> 
+    decl
+;;
+
+
+(* zero-overhead inlining pass for a certain subset of functions / calls. *)
+
+let inline_prog_specialcase ds = 
+  (* this is a wildly inefficient way to do this, but oh well optimize later. *)
+  let ds' = List.fold_left
+    (fun prev_decls decl -> 
+      (* get the previous functions *)
+      let prev_fcns = dfuns prev_decls in 
+      (* inline each call to a previous function in this decl... *)
+      let decl' = List.fold_left inline_single_fcn decl prev_fcns in
+      (* thats it *)
+      prev_decls@[decl']
+      )
+    []
+    ds
+  in
+  ds'
+
+
+
+(* older incorrect pass  *)
+
+
+let inline_single_function (ds:decl list) ((fcn_id:Id.t),(fcn_params : params),fcn_stmt)  = 
+  print_endline ("[inline_single_function] inlining function: "^(Id.to_string fcn_id));
+  match (read_only_params fcn_params fcn_stmt) with 
+  | true -> 
+    print_endline (("[inline_single_function] all parameters immutable for function:"^(Id.to_string fcn_id)));
+    let assign_subst = 
+      object
+        inherit [_] s_map as super
+
+        method! visit_statement (fcn_id, fcn_params, fcn_stmt) stmt = 
+          match stmt.s with 
+          | SAssign(id, exp) -> (
+            match exp.e with 
+            | ECall(cid, args) when (Cid.equal (Cid.id fcn_id) cid) -> 
+                print_endline ("[inline_single_function] inlining call: "^(Printing.stmt_to_string stmt));
+                let fcn_stmt = replace_params_with_args fcn_stmt fcn_params args in 
+                let fcn_stmt = replace_return_with_assign id fcn_stmt in 
+                {stmt with s = fcn_stmt.s}
+            | _ -> stmt
+          )
+          | SLocal(id, ty, exp) -> (
+            match exp.e with 
+            | ECall(cid, args) when (Cid.equal (Cid.id fcn_id) cid) -> 
+                print_endline ("[inline_single_function] inlining call: "^(Printing.stmt_to_string stmt));
+                let decl_stmt =  slocal_sp id ty (SyntaxUtils.default_expression ty) stmt.sspan in 
+                let decl_stmt = {decl_stmt with spragmas = [PNoInitLocal]} in 
+                let fcn_stmt = replace_params_with_args fcn_stmt fcn_params args in 
+                let fcn_stmt = replace_return_with_assign id fcn_stmt in 
+                let inlined_stmt = sseq decl_stmt fcn_stmt in 
+                {stmt with s = inlined_stmt.s}
+            | _ -> stmt
+          )
+          | SRet(Some(exp)) -> (
+            match exp.e with 
+            | ECall(cid, args) when (Cid.equal (Cid.id fcn_id) cid) -> 
+                print_endline ("[inline_single_function] inlining call: "^(Printing.stmt_to_string stmt));
+                let fcn_stmt = replace_params_with_args fcn_stmt fcn_params args in 
+                {stmt with s = fcn_stmt.s}
+            | _ -> stmt
+          )
+          (* other statements *)
+          | _ -> super#visit_statement (fcn_id, fcn_params, fcn_stmt) stmt
       end
     in 
     assign_subst#visit_decls (fcn_id, fcn_params, fcn_stmt) ds
   | false -> 
-    (* print_endline ("[inline_multi_return_immutable] cannot inline -- mutable parameter."); *)
   ds (* some of the parameters in the function are written *)
 ;;
 
-(* Inline functions that have one return statement and immutable variables 
-   anywhere they appear. *)
-let inline_no_return_or_single_return_immutable (ds:decl list) ((fcn_id:Id.t),(fcn_params : params),fcn_stmt)  = 
-  match ((not(return_in_match fcn_stmt)) && (read_only_params fcn_params fcn_stmt) && ((single_return fcn_stmt) || (no_return fcn_stmt))) with 
-  | true -> 
-    let assign_subst = 
-      object
-        inherit [_] s_map as super
-        method! visit_statement (fcn_id, fcn_params, fcn_stmt) stmt = 
-          let stmt = match stmt.s with 
-            | SAssign(id, exp) -> (
-              match exp.e with 
-                | ECall(cid, args) -> (
-                  match (Cid.equal (Cid.id fcn_id) cid) with 
-                  | true -> 
-                    let fcn_stmt = replace_params_with_args fcn_stmt fcn_params args in 
-                    replace_return_with_assign id fcn_stmt
-                  | false -> stmt
-                )
-                | _ -> stmt
-              )
-            | SLocal(id, ty, exp) -> (
-              match exp.e with 
-                | ECall(cid, args) -> (
-                  match (Cid.equal (Cid.id fcn_id) cid) with 
-                  | true -> 
-                    let fcn_stmt = replace_params_with_args fcn_stmt fcn_params args in 
-                    let result = replace_return_with_local id ty fcn_stmt in
-(*                     print_endline ("inlined SLocal ECall: "^(Printing.stmt_to_string (slocal id ty exp)));
-                    print_endline ("new stmt: "^(Printing.stmt_to_string (result))); *)
-                    result
-                  | false -> stmt
-                )
-                | _ -> stmt
-              )
-            (* for unit calls to functions with read only params, we can just 
-               replace params and be done. *)
-            | SUnit(exp) -> (
-              match exp.e with 
-                | ECall(cid, args) -> (
-                  match (Cid.equal (Cid.id fcn_id) cid) with 
-                  | true -> 
-                    let fcn_stmt = replace_params_with_args fcn_stmt fcn_params args in 
-                    fcn_stmt
-                  | false -> stmt
-                )
-                | _ -> stmt
-            )
-            | _ -> stmt
-          in 
-          super#visit_statement (fcn_id, fcn_params, fcn_stmt) stmt
-      end
-    in 
-    assign_subst#visit_decls (fcn_id, fcn_params, fcn_stmt) ds
-  | false -> ds (* some of the parameters in the function are written *)
-;;
 
-(* zero-overhead inlining pass for a certain subset of functions / calls. *)
-let inline_prog_specialcase ds =
-  (* try zero-overhead inlining all function calls in assignment 
-     statements. To be eligible, the function call's parameters must 
-     be immutable.*)
-  let ds = List.fold_left inline_multi_return_immutable ds (dfuns ds) in 
-  (* next, functions with multiple returns called in local statements can be inlined 
-     with 1 stage of overhead (we have to initialize the local first). *)
-  (* all functions with 1 return statement (outside of a match) and immutable parameters can 
-  be inlined with 0 overhead, regardless of where they appear. *)
-  let ds = List.fold_left inline_no_return_or_single_return_immutable ds (dfuns ds) in 
-
-
-  (* finally, inline all function calls in unit statements with immutable parameters *)
-(* 
-  
-  (* try zero-overhead inlining all function calls in assignment 
-     statements. To be eligible, the function call's parameters must 
-     be immutable.*)
-  let ds = List.fold_left inline_multi_return_immutable ds (dfuns ds) in 
-  (* all functions with 1 return statement and immutable parameters can 
-  be inlined with 0 overhead, regardless of where they appear. *)
-  let ds = List.fold_left inline_no_return_or_single_return_immutable ds (dfuns ds) in  *)
-  (* finally, inline all function calls in unit statements with immutable parameters *)
+let inline_prog_specialcase_old ds =
+  (* bug: function bodies are not updated in the context. So this doesn't work for functions that 
+     call functions! actually, its worse than that. Probably straight up broken. *)
+  let ds = List.fold_left inline_single_function ds (dfuns ds) in 
+  print_endline ("---- function inlining special case pass done ----");
+  print_endline (Printing.decls_to_string ds);
+  print_endline ("---- function inlining special case pass done ----");
+  exit 0;
   ds
 ;;

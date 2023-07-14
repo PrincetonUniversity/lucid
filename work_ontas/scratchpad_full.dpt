@@ -1,0 +1,148 @@
+const int SEED = 7;
+const int<48> FULL_MASK = 0xffffffffffff;
+type split_int_t<'sz> = {
+    int prefix;
+    int<'sz> suffix;
+}
+fun split_int_t<'sz> anonymize_num(int<'a> num, bool anonymize_prefix, bool anonymize_suffix) {
+    int <'a> prefix_mask = (int<'a>)(FULL_MASK << size_to_int('sz));
+    int<'a> prefix = num & prefix_mask;
+    int<'sz> suffix = (int<'sz>)(num - prefix);
+
+    if (anonymize_prefix) {
+        prefix = hash<'a>(SEED, prefix);
+    } 
+    prefix = prefix >> size_to_int('sz);
+    if (anonymize_suffix) {
+        suffix = hash<'sz>(SEED, suffix);
+    }
+
+    return {prefix = (int<32>)prefix; suffix = suffix;};
+}
+
+
+
+// anonymize the entire int -- 1 stage
+fun int anonymize_full(int x) {
+    return hash<32>(SEED, x);
+}
+
+
+// anonymize just the prefix -- 2 stages. No obvious optimization. Need 1 for hash, 1 for reassembly
+size pref_len = 16;
+fun int anonymize_prefix(int x) {
+    return hash<16>(SEED, x[15:0]) ^ x[31:16];
+}
+// anonymize suffix -- same thing
+fun int anonymize_suffix(int x) {
+    return x[15:0] ^ hash<16>(SEED, x[31:16]);
+}
+
+// anonymize prefix, suffix, or both
+// 3 stages... somehow the function call adds a stage here!
+fun int anonymize_part(int x, int<1> pre, int<1> suf) {
+    match pre, suf with 
+    | 1, 1 -> {
+        return anonymize_full(x);
+    }
+    | 1, 0 -> {
+        return anonymize_prefix(x);
+    }
+    | 0, 1 -> {
+        return anonymize_suffix(x);
+    }
+}
+
+// back down to 2 stages when we inline everything ourselves. 
+fun int anonymize_part_inline(int x, int<1> pre, int<1> suf) {
+    match pre, suf with 
+    | 1, 1 -> {
+        return hash<32>(SEED, x);
+    }
+    | 1, 0 -> {
+        return hash<16>(SEED, x[15:0]) ^ x[31:16];        
+    }
+    | 0, 1 -> {
+        return x[15:0] ^ hash<16>(SEED, x[31:16]);
+    }
+}
+
+
+
+event bar(int y){skip;}
+
+// 1 stage -- just a copy
+// handle foo(int x) {
+//     generate(bar(x));
+// }
+
+
+// 2 stages -- 1 hash, 1 copy
+// handle foo(int x) {
+//     int x_anon = anonymize_full(x);
+//     generate(bar(x_anon));
+// }
+
+
+// 3 stages -- 1 hash, 1 concat, 1 copy
+// handle foo(int x) {
+//     // int x_anon = anonymize_prefix(x);
+//     int x_anon = anonymize_suffix(x);
+//     generate(bar(x_anon));
+// }
+
+
+// 4 stages... why?
+// event foo(int x, int<1> do_pre, int<1> do_suf, int<6> _pad) {
+//     int x_anon = anonymize_part(x, do_pre, do_suf);
+//     generate(bar(x_anon));
+// }
+
+// back down to 3 stages when we inline the return statements of 
+// anonymize part. 
+// hmmmmm
+// event foo(int x, int<1> do_pre, int<1> do_suf, int<6> _pad) {
+//     int x_anon = anonymize_part_inline(x, do_pre, do_suf);
+//     generate(bar(x_anon));
+// }
+
+
+fun int fa(int a) {
+    return a + a;
+}
+// fb takes 2 stages. Should it?
+// the problem is inline optimization only works when 
+// when the call is used in an assign statement!
+// (why not a local?!)
+fun int fb(int b) {
+    if (b == 1) {
+        return fa(b);
+    } else {
+        return b;
+    }
+}
+
+/*
+expect it to compile into 1 stage:
+match b with 
+    | 1 -> b + b;
+    | _ -> b;
+*/
+
+
+
+event foo(int x){
+    int res = fb(x);
+    generate(bar(res));
+}
+
+
+
+
+// 6 stages
+// handle foo(int x) {
+//     split_int_t<16> x_split = anonymize_num(x, true, true); // 4 stages
+//     int x_anon = hash<32>(1, (int<16>)(x_split#prefix), x_split#suffix); // 1 stage
+//     generate(bar(x_anon)); // 1 stage
+// }
+

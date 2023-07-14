@@ -11,6 +11,7 @@ and tcid = [%import: TaggedCid.t]
 and sp = [%import: Span.t]
 and z = [%import: (Z.t[@opaque])]
 and zint = [%import: (Integer.t[@with Z.t := (Z.t [@opaque])])]
+and pragma = [%import: Pragma.t]
 and location = int
 
 and size =
@@ -229,8 +230,10 @@ and tbl_entry =
 and statement =
   { s : s
   ; sspan : sp
-  ; (* Only used during partial interpretation; only appears on SLocal or SAssign *)
-    noinline : bool
+   (* Only used during partial interpretation; only appears on SLocal or SAssign *)
+    (* noinline : bool *)
+  ; spragmas : pragma list;
+    (*  *)
   }
 
 (* event handler bodies *)
@@ -382,6 +385,8 @@ let avalue v vty vspan = { v; vty; vspan }
 let value_sp v vspan = { v; vty = None; vspan }
 let value v = { v; vty = None; vspan = Span.default }
 let vint i size = value (VInt (Integer.create i size))
+
+
 let vinteger i = value (VInt i)
 let vbool b = value (VBool b)
 let default_vint size = value (VInt (Integer.create 0 size))
@@ -505,8 +510,10 @@ let module_alias_sp id1 e cid1 cid2 span =
 let event_sp id opt s cs p span = decl_sp (DEvent (id, opt, s, cs, p)) span
 
 (* statements *)
-let statement s = { s; sspan = Span.default; noinline = false }
-let statement_sp s span = { s; sspan = span; noinline = false }
+let statement s = { s; sspan = Span.default; spragmas = []; }
+let statement_sp s span = { s; sspan = span; spragmas = []; }
+
+let statement_pragma s sspan spragmas = {s; sspan; spragmas; }
 let snoop = statement SNoop
 let sseq s1 s2 = statement (SSeq (s1, s2))
 let slocal id ty e = statement (SLocal (id, ty, e))
@@ -531,7 +538,7 @@ let tblinstall_sp tbl entries span =
   statement_sp (STableInstall (tbl, entries)) span
 ;;
 
-let noinline stmt = { stmt with noinline = true }
+let noinline stmt = { stmt with spragmas = (Pragma.sprag "noinline" [])::stmt.spragmas }
 
 (* Interface spefications *)
 let spec ispec = { ispec; ispan = Span.default }

@@ -198,81 +198,90 @@ and entry_to_string entry =
     (id_to_string entry.eaction)
     (comma_sep exp_to_string entry.eargs)
 
-and stmt_to_string s =
-  match s.s with
-  | SAssign (i, e) -> cid_to_string i ^ " = " ^ exp_to_string e ^ ";"
-  | SNoop -> ""
-  | SGen (g, e) ->
-    (match g with
-     | GSingle None -> Printf.sprintf "generate %s;" (exp_to_string e)
-     | _ ->
-       let gen_str, loc =
-         match g with
-         | GSingle eo -> "generate_switch", Option.get eo
-         | GMulti loc -> "generate_ports", loc
-         | GPort loc -> "generate_port", loc
-       in
-       Printf.sprintf
-         "%s (%s, %s);"
-         gen_str
-         (exp_to_string loc)
-         (exp_to_string e))
-  | SLocal (i, t, e) ->
+and s_to_string s = 
+match s with
+| SAssign (i, e) -> cid_to_string i ^ " = " ^ exp_to_string e ^ ";"
+| SNoop -> ""
+| SGen (g, e) ->
+  (match g with
+   | GSingle None -> Printf.sprintf "generate %s;" (exp_to_string e)
+   | _ ->
+     let gen_str, loc =
+       match g with
+       | GSingle eo -> "generate_switch", Option.get eo
+       | GMulti loc -> "generate_ports", loc
+       | GPort loc -> "generate_port", loc
+     in
+     Printf.sprintf
+       "%s (%s, %s);"
+       gen_str
+       (exp_to_string loc)
+       (exp_to_string e))
+| SLocal (i, t, e) ->
+  Printf.sprintf
+    "%s %s = %s;"
+    (raw_ty_to_string t.raw_ty)
+    (id_to_string i)
+    (exp_to_string e)
+| SPrintf (s, es) ->
+  Printf.sprintf "printf \"%s\" %s;" s (comma_sep exp_to_string es)
+| SUnit e -> exp_to_string e ^ ";"
+| SIf (e, s1, s2) ->
+  let s2_str =
+    match s2.s with
+    | SNoop -> ""
+    | _ -> "else {\n" ^ stmt_to_string s2 ^ "\n}"
+  in
+  Printf.sprintf
+    "if (%s) {\n%s\n} %s"
+    (exp_to_string e)
+    (stmt_to_string s1)
+    s2_str
+| SSeq (s1, s2) ->
+  let str1, str2 = stmt_to_string s1, stmt_to_string s2 in
+  if str1 = "" then str2 else if str2 = "" then str1 else str1 ^ "\n" ^ str2
+| SMatch (es, branches) ->
+  let estr =
+    let s = comma_sep exp_to_string es in
+    if List.length es = 1 then s else "(" ^ s ^ ")"
+  in
+  "match " ^ estr ^ " with \n" ^ concat_map "\n" branch_to_string branches
+| SRet eopt ->
+  let estr =
+    match eopt with
+    | Some e -> " " ^ exp_to_string e
+    | None -> ""
+  in
+  Printf.sprintf "return%s;" estr
+| STableMatch tbl_rec ->
+  if tbl_rec.out_tys <> None
+  then
     Printf.sprintf
-      "%s %s = %s;"
-      (raw_ty_to_string t.raw_ty)
-      (id_to_string i)
-      (exp_to_string e)
-  | SPrintf (s, es) ->
-    Printf.sprintf "printf \"%s\" %s;" s (comma_sep exp_to_string es)
-  | SUnit e -> exp_to_string e ^ ";"
-  | SIf (e, s1, s2) ->
-    let s2_str =
-      match s2.s with
-      | SNoop -> ""
-      | _ -> "else {\n" ^ stmt_to_string s2 ^ "\n}"
-    in
+      "%s %s = table_match(%s, (%s), (%s));"
+      (comma_sep ty_to_string (Option.get tbl_rec.out_tys))
+      (comma_sep id_to_string tbl_rec.outs)
+      (exp_to_string tbl_rec.tbl)
+      (comma_sep exp_to_string tbl_rec.keys)
+      (comma_sep exp_to_string tbl_rec.args)
+  else
     Printf.sprintf
-      "if (%s) {\n%s\n} %s"
-      (exp_to_string e)
-      (stmt_to_string s1)
-      s2_str
-  | SSeq (s1, s2) ->
-    let str1, str2 = stmt_to_string s1, stmt_to_string s2 in
-    if str1 = "" then str2 else if str2 = "" then str1 else str1 ^ "\n" ^ str2
-  | SMatch (es, branches) ->
-    let estr =
-      let s = comma_sep exp_to_string es in
-      if List.length es = 1 then s else "(" ^ s ^ ")"
-    in
-    "match " ^ estr ^ " with \n" ^ concat_map "\n" branch_to_string branches
-  | SRet eopt ->
-    let estr =
-      match eopt with
-      | Some e -> " " ^ exp_to_string e
-      | None -> ""
-    in
-    Printf.sprintf "return%s;" estr
-  | STableMatch tbl_rec ->
-    if tbl_rec.out_tys <> None
-    then
-      Printf.sprintf
-        "%s %s = table_match(%s, (%s), (%s));"
-        (comma_sep ty_to_string (Option.get tbl_rec.out_tys))
-        (comma_sep id_to_string tbl_rec.outs)
-        (exp_to_string tbl_rec.tbl)
-        (comma_sep exp_to_string tbl_rec.keys)
-        (comma_sep exp_to_string tbl_rec.args)
-    else
-      Printf.sprintf
-        "%s = table_match(%s);"
-        (comma_sep id_to_string tbl_rec.outs)
-        (comma_sep exp_to_string ((tbl_rec.tbl :: tbl_rec.keys) @ tbl_rec.args))
-  | STableInstall (tbl_exp, entries) ->
-    Printf.sprintf
-      "table_install(%s, {\n\t%s\n\t}\n);"
-      (exp_to_string tbl_exp)
-      (List.map entry_to_string entries |> String.concat "\n")
+      "%s = table_match(%s);"
+      (comma_sep id_to_string tbl_rec.outs)
+      (comma_sep exp_to_string ((tbl_rec.tbl :: tbl_rec.keys) @ tbl_rec.args))
+| STableInstall (tbl_exp, entries) ->
+  Printf.sprintf
+    "table_install(%s, {\n\t%s\n\t}\n);"
+    (exp_to_string tbl_exp)
+    (List.map entry_to_string entries |> String.concat "\n")
+  
+
+and stmt_to_string stmt =
+  let s_str = s_to_string stmt.s in
+  let prag_str = match stmt.spragmas with
+    (* | [] -> "" *)
+    | _ -> " //" ^ (Pragma.to_strings stmt.spragmas)
+  in
+  s_str ^ prag_str
 ;;
 
 let statement_to_string = stmt_to_string

@@ -348,8 +348,8 @@ let rec interp_stmt env s : statement * env =
    | _ -> print_endline @@ "Interping " ^ CorePrinting.stmt_to_string s); *)
   let interp_exp = interp_exp env in
   let should_inline () =
-    match s.spragma with
-    | Some ("noinline", []) -> false
+    match (Pragma.find_sprag "noinline" [] s.spragmas) with
+    | Some(_) -> false
     | _ -> true
   in
   match s.s with
@@ -384,6 +384,7 @@ let rec interp_stmt env s : statement * env =
       if should_inline () then extract_partial_value env exp else new_unknown ()
     in
     let new_s = { s with s = SLocal (id, ty, exp) } in
+    print_endline ("[interp_stmt] SLocal output: "^(CorePrinting.stmt_to_string new_s));
     new_s, IdMap.add id pv env
   | SAssign (id, exp) ->
     let exp = interp_exp exp in
@@ -468,6 +469,7 @@ let remove_unused_variables stmt =
        (or hashes?) because they might have side effects.
     *)
     | SLocal (id, _, e) ->
+      print_endline ("[remove_unused_variables.aux] SLocal input: "^(CorePrinting.stmt_to_string stmt));
       let live_vars', stmt' =
         if IdSet.mem id live_vars || cannot_remove_e e
         then (
@@ -475,8 +477,12 @@ let remove_unused_variables stmt =
              defined in the first place!) *)
           let live_vars = IdSet.remove id live_vars in
           extract_variables ~acc:live_vars e, stmt)
-        else live_vars, { stmt with s = SNoop }
+        else (
+          print_endline "[remove_unused_variables.aux] else branch";
+          live_vars, { stmt with s = SNoop })
       in
+      print_endline ("[remove_unused_variables.aux] SLocal output: "^(CorePrinting.stmt_to_string stmt'));
+
       live_vars', stmt'
     | SAssign (id, e) ->
       (* Same as SLocal but we don't unalive the variable if it was already live *)
@@ -524,6 +530,7 @@ let remove_unused_variables stmt =
       let live_vars' = List.fold_left IdSet.union live_vars0 live_varses in
       live_vars', { stmt with s = SMatch (es, branches) }
   in
+  print_endline ("[remove_unused_variables] statement input: "^(CorePrinting.stmt_to_string stmt));
   aux IdSet.empty stmt |> snd
 ;;
 

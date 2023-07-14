@@ -407,7 +407,7 @@ let merged_match_stmt tbldef =
     [exp_of_id cnum_var cnum_ty]
     branches 
   in
-  {wrapper_stmt with spragma = Some("table", [])}
+  {wrapper_stmt with spragmas = [Pragma.sprag "table" []]}
 (*   {(sifte 
     (op_sp Neq [(exp_of_id cnum_var cnum_ty);(vint_exp 0 (size_of_tint cnum_ty))] cnum_ty Span.default)
     (statement (STableMatch(tbl_match)))

@@ -23,6 +23,7 @@
    id
    cid
    taggedCid
+   pragma
    input
    integer
    span
@@ -113,6 +114,7 @@
    TofinoCore
    SplitDataplane
    TofinoCoreNew
+   RemoveInitOnlyStmts
    AddEgressParser
    ParseOptimizer
    RenameBuiltins

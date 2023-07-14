@@ -450,8 +450,6 @@ let enable_event_headers ev =
             sassign_var ctx.ectx_drop_evar
               (vint_exp_ty 0 (ctx.ectx_drop_evar.ety))
           in
-          (* <<left off here>> TODO: the logic below varies depending on whether its a 
-             packet or background event *)
           let header_enable_statements = 
             match (sort_of_event base_event) with
             | EPacket -> (* for a packet event, we dont serialize any headers *)

@@ -531,6 +531,8 @@ let rec translate_statement env prev_decls stmt =
     (* variables can't be declared inside of an action, so produce a global declaration 
        with a default value and return an assign statement. *)
     match (List.exists (fun idb -> Id.equals id idb) (declared_vars prev_decls)) with
+    (* I think this case should be an error -- if the variable is already declared, 
+       we shouldn't see another declaration statement. *)
     | true -> (
       (* let vardecl = dvar_uninit id (translate_rty ty.raw_ty) in  *)
       let decls, expr = translate_exp env e in 

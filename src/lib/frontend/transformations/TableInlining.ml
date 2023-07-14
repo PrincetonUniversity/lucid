@@ -20,7 +20,8 @@ let rec eliminate_exp e =
       { tr with outs = [outvar]; out_tys = Some [outvar_ty]; args = args' }
     in
     let sapply =
-      { s = STableMatch new_tr; sspan = Span.default; noinline = false }
+      statement_sp (STableMatch(new_tr)) Span.default
+      (* { s = STableMatch new_tr; sspan = Span.default; noinline = false } *)
     in
     sseq args_pre_stmt sapply, { e with e = EVar (Cid.id outvar) }
   (* all other cases just recurse *)

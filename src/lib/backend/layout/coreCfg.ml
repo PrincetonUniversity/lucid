@@ -236,8 +236,8 @@ let pattern_of_branch es b =
         1. many branches (>20 -- this is somewhat arbitrary)
         2. no sequences of statements *)
 let is_solitary_match stmt =
-    match stmt.spragma with 
-    | Some("solitary", []) -> true
+    match Pragma.find_sprag "solitary" [] stmt.spragmas with
+    | Some(_) -> true
     | _ -> false
 ;;
 

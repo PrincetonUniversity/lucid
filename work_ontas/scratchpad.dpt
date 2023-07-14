@@ -1,0 +1,19 @@
+event bar(int y){skip;}
+
+fun int fa(int a) {
+    return a + a;
+}
+
+fun int fb(int b) {
+    if (b == 1) {
+        return fa(b);
+    } else {
+        return b;
+    }
+}
+
+
+event foo(int x){
+    int res = fb(x);
+    generate(bar(res));
+}

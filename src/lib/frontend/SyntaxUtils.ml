@@ -324,7 +324,7 @@ let max_effect e1 e2 =
 let default_expression ty =
   let rec aux rty =
     match TyTQVar.strip_links rty with
-    | TInt size -> eint (Z.of_int 32) (Some size)
+    | TInt size -> eint (Z.of_int 0) (Some size)
     | TBool -> value_to_exp (vbool false)
     | TVector (raw_ty, size) -> begin
       match size with

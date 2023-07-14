@@ -28,8 +28,14 @@ let report_if_verbose str =
 ;;
 
 
-let printprog_if_debug ds = print_if_debug (CorePrinting.decls_to_string ds);;
+let printprog_if_debug ds =
+  print_endline (CorePrinting.decls_to_string ds);
+  print_endline "[debug] press enter key to continue";
+  ignore (read_line ());
+;;
+let printtofcoreprog_if_debug prog = print_if_debug (TofinoCorePrinting.prog_to_string prog);;
 
+(* transform into a form where each statement is atomic *)
 let atomic_op_form ds =
   report_if_verbose "-------Eliminating interpreter-only operations--------";
   let ds = EliminateInterpOps.eliminate_prog ds in
@@ -123,16 +129,19 @@ let compile ds portspec =
 
   report_if_verbose "-------Translating to Midend IR---------";
   let core_ds = SyntaxToCore.translate_prog ds in
+  printprog_if_debug core_ds;
   let ds = core_ds in 
 
   dbg_dump_core_prog "midend" ds;
   let ds = if partial_interp
     then (
       report_if_verbose "-------Partial interpreting---------";
-      PartialInterpretation.interp_prog ds)
+      let res = PartialInterpretation.interp_prog ds in 
+      printprog_if_debug res;
+      res
+      )
     else ds 
   in
-  
   let ds = EliminateEventCombinators.process ds in
   report_if_verbose "-------Unifying event and handler parameter ids---------";
   let ds = StandardizeEventParams.process ds in
@@ -179,6 +188,11 @@ let compile ds portspec =
 
   report_if_verbose "-------Tagging large match statements as solitary-------";
   let core_prog = SolitaryMatches.process_core 20 core_prog in
+  printtofcoreprog_if_debug core_prog;
+  report_if_verbose "-------Transforming certain declarations to no-init declarations-------";
+  let core_prog = RemoveInitOnlyStmts.process core_prog in 
+  printtofcoreprog_if_debug core_prog;
+  exit 0;
   report_if_verbose "-------Eliminating if statements-------";
   let core_prog = IfToMatch.process_core core_prog in 
   report_if_verbose "-------Converting all memops to complex form-------";
