@@ -62,6 +62,7 @@
    vectorElimination
    eStmtElimination
    symbolicElimination
+   secElimination
    replaceUserTys
    partialInterpretation
    constInlining

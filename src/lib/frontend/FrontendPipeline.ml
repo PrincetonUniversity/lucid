@@ -14,6 +14,7 @@ let process_prog builtin_tys ds =
   Wellformed.pre_typing_checks ds;
   print_if_verbose "---------typing1---------";
   let ds = Typer.infer_prog builtin_tys ds in
+  (* ADD MY PASS *)
   let ds = GlobalConstructorTagging.annotate ds in
   (* let ds = SourceTracking.init_tracking ds in  *)
   print_if_verbose "---------Concretizing symbolics-------------";

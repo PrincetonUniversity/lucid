@@ -107,7 +107,8 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
     let env, inf_es = infer_exps env es in
     let hd = List.hd inf_es in
     unify_ty hd.espan (Option.get hd.ety) (mk_ty @@ TInt (fresh_size ()));
-    env, { e with e = EHash (size, inf_es); ety = Some (mk_ty @@ TInt size) }
+    let new_ty = mk_ty @@ TInt size in 
+    env, { e with e = EHash (size, inf_es); ety = Some (infer_sec new_ty inf_es) }
   | EFlood e1 ->
     let env, inf_e, inf_ety = infer_exp env e1 |> textract in
     unify_ty e.espan inf_ety (mk_ty @@ TInt (fresh_size ()));
@@ -883,7 +884,8 @@ and infer_statement (env : env) (s : statement) : env * statement =
     | SGen (g, e) ->
       let env, inf_e, ety = infer_exp env e |> textract in
       let sec = get_sec inf_e in 
-      if is_high_sec sec then raise (SecError "High security information being leaked") 
+      (* if is_high_sec sec then raise (SecError "High security information being leaked")  *)
+      if is_high_sec sec then print_endline "HIGH SECURITY THING BEING LEAKED"
       else unify_raw_ty s.sspan ety.raw_ty TEvent;
       let env, inf_g =
         match g with
