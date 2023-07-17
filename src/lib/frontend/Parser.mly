@@ -200,6 +200,7 @@ ty:
     | GROUP                             { ty_sp (TGroup) $1 }
     | MEMOP poly                        { ty_sp (mk_tmemop (fst $2) (snd $1) (snd $2)) (Span.extend (fst $1) (fst $2)) }
     | LBRACE record_def RBRACE          { ty_sp (mk_trecord $2) (Span.extend $1 $3) }
+    | HIGH ty LBRACKET size RBRACKET    { ty_sp_high (TVector ($2.raw_ty, snd $4)) (Span.extend $2.tspan $5) }
     | ty LBRACKET size RBRACKET         { ty_sp (TVector ($1.raw_ty, snd $3)) (Span.extend $1.tspan $4) }
 
 cid:

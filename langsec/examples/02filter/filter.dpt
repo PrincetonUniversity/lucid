@@ -22,7 +22,7 @@ packet event report(int src, int dst, int<16> len) {skip;}
 /********** Tables *********/
 // When you call a table, it will execute an 
 // action that returns a value. 
-action bool result(bool b)() {
+action HIGH bool result(HIGH bool b)() {
 	return b;
 }
 
@@ -36,7 +36,7 @@ table_type filter_table_t = {
 	ret_type: bool
 }
 
-global filter_table_t filter_table = 
+global HIGH filter_table_t filter_table = 
 	table_create<filter_table_t>(
 		(result), 
 		1024, 

@@ -7,15 +7,19 @@ global Array.t<32> arr = Array.create(10);
 
 packet event ip(int dst);
 
-fun int test(int in) {
+fun int test(HIGH int i) {
     return 5;
 }
 
 handle ip(HIGH int dst) {
     int x = dst+1;
     HIGH bool y = true;
-    ip_t ip_addr = { src = 1; dst = 2 };
-    int w = ip_addr#src;
+    // ip_t ip_addr = { src = 1; dst = 2 };
+    // ip_addr = { ip_addr with src = x };
+    // int w = ip_addr#src;
+    int i = test(4);
+    HIGH int[4] vec = [0; 1; 2; 3];
+    int w = vec[0];
     if (y) {
         generate_port(1, ip(1)); 
     }

@@ -757,7 +757,7 @@ and infer_tblmatch (env : env) (tr : tbl_match) sp : env * tbl_match * ty list =
   let expected_fty =
     { (* hack: put return types at end of arg types *)
       arg_tys = (Option.get inf_etbl.ety :: base_key_tys) @ base_arg_tys
-    ; ret_ty = ty inf_ret_ty
+    ; ret_ty = infer_sec (ty inf_ret_ty) inf_acn_args
     ; start_eff = env.current_effect
     ; end_eff = fresh_effect ()
     ; constraints = ref []
@@ -919,7 +919,7 @@ and infer_statement (env : env) (s : statement) : env * statement =
       in
       env, SMatch (inf_es, inf_bs)
     | STableMatch tm ->
-      let new_env, new_tm, _ = infer_tblmatch env tm s.sspan in
+      let new_env, new_tm, _ = infer_tblmatch env tm s.sspan in  
       let new_env =
         match new_tm.out_tys with
         | Some out_tys ->
@@ -1573,6 +1573,7 @@ let rec infer_declaration
           }
       in
       let env = define_const id (mk_ty @@ acn_ty) env in
+      let ret_ty = List.map (fun typ -> infer_sec typ inf_action_body) ret_ty in
       ( env
       , effect_count
       , DAction (id, ret_ty, const_params, (params, inf_action_body)) )
