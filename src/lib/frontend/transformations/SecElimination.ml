@@ -3,71 +3,26 @@ open Syntax
 open SyntaxUtils
 open Collections
 
-(* Transform all records in the program into tuples, and remove all user type
-   declarations because we don't need them anymore. This has the unfortunate
-   effect of removing the label names from the syntax, which can make it harder
-   to debug problems during later transformations. *)
-
-(* Selection sort, basically *)
-let sort_by_label sorted_lst lst =
-  List.map (fun (str, _) -> str, List.assoc str lst) sorted_lst
-;;
+exception AnonymizerError of string
 
 let replacer =
   object (self)
     inherit [_] s_map as super
 
-    method! visit_TRecord env lst =
-      let lst =
-        lst
-        (* |> sort_by_label *)
-        |> List.map (fun (_, raw_ty) -> self#visit_raw_ty env raw_ty)
-      in
-      TTuple lst
-
     method! visit_exp env exp =
-      let extract_tys e =
-        match e.ety with
-        | Some { raw_ty = TRecord lst } -> lst
-        | _ -> failwith "Internal error: record elimination"
-      in
-      let e =
-        match exp.e with
-        | ERecord lst ->
-          let lst =
-            lst
-            |> sort_by_label (extract_tys exp)
-            |> List.map (fun (_, e) -> self#visit_exp env e)
-          in
-          ETuple lst
-        | EWith (exp, lst) ->
-          let labels =
-            match (Option.get exp.ety).raw_ty with
-            | TRecord lst -> lst |> sort_by_label (extract_tys exp)
-            | _ -> failwith "Impossible"
-          in
-          let entries =
-            List.map
-              (fun (l, rty) ->
-                match List.assoc_opt l lst with
-                | Some e -> e
-                | None -> aexp (EProj (exp, l)) (Some (ty rty)) exp.espan)
-              labels
-          in
-          ETuple (List.map (self#visit_exp env) entries)
-        | EProj (exp, label) ->
-          let labels =
-            match (Option.get exp.ety).raw_ty with
-            | TRecord lst ->
-              lst |> sort_by_label (extract_tys exp) |> List.map fst
-            | _ -> failwith "Impossible"
-          in
-          let idx = List.index_of label labels |> Option.get in
-          EOp (TGet (List.length labels, idx), [self#visit_exp env exp])
-        | _ -> super#visit_e env exp.e
-      in
-      { exp with e; ety = Option.map (self#visit_ty env) exp.ety }
+      match exp.e with 
+      | ECall (cid, lst) -> 
+        (match cid with 
+        | Id ("Anonymizer.create", _) -> 
+          if (List.length lst) <> 0 then raise (AnonymizerError "Wrong number of arguments to Anonymizer module")
+          else let new_exp_ty = 
+            match exp.ety with 
+            | Some ty -> { ty with tsec = Declassify } 
+            | None -> raise (AnonymizerError "Hopefully shouldn't get here") in 
+            { exp with ety = Some new_exp_ty }
+        | Id (_, _) | _ -> exp)
+      | _ -> exp
   end
 ;;
 
-let eliminate_prog ds = replacer#visit_decls () ds
+let set_declassifiers ds = replacer#visit_decls () ds

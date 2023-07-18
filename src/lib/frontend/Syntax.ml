@@ -81,7 +81,7 @@ and func_ty =
   ; constraints : constr list Stdlib.ref
   }
 
-and sec = High | Low | SVar of tsec ref
+and sec = High | Low | Declassify | SVar of tsec ref
 and tsec = Free of string | Bound of sec
 
 and ty =

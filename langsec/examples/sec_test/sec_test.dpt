@@ -5,25 +5,47 @@ type ip_t = {
 
 global Array.t<32> arr = Array.create(10);
 
-packet event ip(int dst);
+packet event ip(HIGH int dst);
 
-fun int test(HIGH int i) {
+fun HIGH int test(int i) {
     return 5;
 }
 
-handle ip(HIGH int dst) {
-    int x = dst+1;
+fun int test2(HIGH int i) {
+    return 4;
+}
+
+fun int test3(int i) {
+    return 3;
+}
+
+handle ip(int dst) {                                    // HIGH propagates to dst in handler
+    int x = dst+1;                                      // HIGH propagates to x
+    
+    int i = test(4);                                    // HIGH propagates to i
+    int j = test2(4);                                   // HIGH propagates to j
+    int k = test3(x);                                   // HIGH propagates to k
+    
+    ip_t ip_addr = { src = 1; dst = 2 };
+    ip_addr = { ip_addr with src = x };
+    int w = ip_addr#src;                                // HIGH propagates to w
+    int v = ip_addr#dst;                                // but v is not HIGH (as expected)
+    // Propagation also works for size casting, hashing, polymorphism, and getting values from HIGH array
+
+    // But doesn't work for...
+    HIGH ip_t ip_addr2 = { src = 3; dst = 4; };         // src + dst both marked LOW
+    int a = ip_addr2#src;                               // a + b both marked LOW        
+    int b = ip_addr2#dst;
+
+    HIGH int[4] vec = [0; 1; 2; 3];                     // all values in vector marked LOW still
+    int w = vec[0];                                     // w is marked LOW
+
     HIGH bool y = true;
-    // ip_t ip_addr = { src = 1; dst = 2 };
-    // ip_addr = { ip_addr with src = x };
-    // int w = ip_addr#src;
-    int i = test(4);
-    HIGH int[4] vec = [0; 1; 2; 3];
-    int w = vec[0];
     if (y) {
-        generate_port(1, ip(1)); 
+        generate_port(1, ip(1));                        // doesn't throw error
     }
     else {
-        generate_port(1, ip(2));
+        generate_port(1, ip(2));                        // doesn't throw error
     }
+    // Tables also don't work
 }
