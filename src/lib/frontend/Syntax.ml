@@ -81,6 +81,8 @@ and func_ty =
   ; constraints : constr list Stdlib.ref
   }
  
+(* Low true = Actual low value *)
+(* Low false = Declassified from a high value *)
 and sec = High | Low | SVar of tsec ref
 and tsec = Free of string | Bound of sec
 

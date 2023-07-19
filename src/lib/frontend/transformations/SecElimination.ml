@@ -2,6 +2,7 @@ open Batteries
 open Syntax
 open SyntaxUtils
 open Collections
+open Typer
 
 exception AnonymizerError of string
 

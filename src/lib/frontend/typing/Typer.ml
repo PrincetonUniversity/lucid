@@ -127,17 +127,28 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
       ; constraints = ref []
       }
     in
-    let expected_arg_tys = 
+    (* security of event depends only on security of its arguments *)
+    let is_event =
+      (match inferred_fty.raw_ty with 
+      | TFun ty -> 
+        (match ty.ret_ty.raw_ty with 
+        | TEvent -> true
+        | _ -> false)
+      | _ -> raise (SecError "Trying to call something that's not a function")) in
+    if is_event then
+    (List.iter (fun typ -> if is_high_sec typ.tsec then raise (SecError "No HIGH args to events")) fty.arg_tys)
+    (* check that all inferred arguments and parameters have equal security levels *)
+    else 
+    (let expected_arg_tys = 
       (match inferred_fty.raw_ty with 
       | TFun ty -> ty.arg_tys
       | _ -> raise (SecError "Trying to call something that's not a function")) in
-    (* check that all inferred arguments and parameters have equal security levels *)
     let check_arg_sec expected_arg actual_arg = 
       if is_high_sec expected_arg.tsec && not (is_high_sec actual_arg.tsec)
       then raise (SecError "Sec level of argument does not match sec level of function param")
       else ()
     in
-    List.iter2 check_arg_sec expected_arg_tys fty.arg_tys;
+    List.iter2 check_arg_sec expected_arg_tys fty.arg_tys);
     (* print_endline @@ "Inferred_fty: " ^ Printing.ty_to_string inferred_fty;
     print_endline @@ "fty: " ^ Printing.func_to_string fty; *)
     unify_raw_ty e.espan (TFun fty) inferred_fty.raw_ty;
@@ -509,7 +520,7 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
     let new_ety = { inf_ety with tsec = Low } in 
     let low_exp = { inf_exp with ety = Some new_ety } in
     (* let low_exp = { exp with ety = Some exp_ty } in  *)
-    env, { e with e = EDown low_exp; ety = Some new_ety }
+    env, low_exp
 
 and infer_op env span op args =
   let env, ty, new_args =
@@ -876,7 +887,8 @@ and infer_statement (env : env) (s : statement) : env * statement =
       env, SPrintf (str, inf_es)
     | SIf (e, s1, s2) ->
       let env, inf_e, inf_ety = infer_exp env e |> textract in
-      unify_raw_ty e.espan TBool inf_ety.raw_ty;
+      if is_high_sec inf_ety.tsec then raise (SecError "Cannot branch on a HIGH expression")
+      else unify_raw_ty e.espan TBool inf_ety.raw_ty;
       let env1, inf_s1 = infer_statement env s1 in
       let env2, inf_s2 = infer_statement env s2 in
       let env =
@@ -908,8 +920,8 @@ and infer_statement (env : env) (s : statement) : env * statement =
     | SGen (g, e) ->
       let env, inf_e, ety = infer_exp env e |> textract in
       let sec = get_sec inf_e in 
-      (* if is_high_sec sec then raise (SecError "High security information being leaked")  *)
-      if is_high_sec sec then print_endline "HIGH SECURITY THING BEING LEAKED"
+      if is_high_sec sec then raise (SecError "HIGH SECURITY THING BEING LEAKED") 
+      (* if is_high_sec sec then print_endline "HIGH SECURITY THING BEING LEAKED" *)
       else unify_raw_ty s.sspan ety.raw_ty TEvent;
       let env, inf_g =
         match g with
@@ -934,6 +946,10 @@ and infer_statement (env : env) (s : statement) : env * statement =
       env, SSeq (inf_s1, inf_s2)
     | SMatch (es, bs) ->
       let env, inf_es = infer_exps env es in
+      let test_high_branch exp = 
+        if is_high_sec (get_sec exp) then raise (SecError "Cannot match on HIGH expressions") else ()
+      in 
+      List.iter test_high_branch inf_es;
       let env, inf_bs =
         infer_branches
           env

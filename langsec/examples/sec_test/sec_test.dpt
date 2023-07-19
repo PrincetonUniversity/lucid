@@ -22,18 +22,19 @@ fun int test3(int i) {
 
 handle ip(int dst) {                                    // HIGH propagates to dst in handler
     int x = dst + 1;
+    x = 3;
     LOW int y = 2;
-    int z = down(x);
+    // int z = down(x);
     // int x = dst+1;                                      // HIGH propagates to x
     
     // int i = test(4);                                    // HIGH propagates to i
     // int j = test2(4);                                   // HIGH propagates to j
     // int k = test3(x);                                   // HIGH propagates to k
     
-    // ip_t ip_addr = { src = 1; dst = 2 };
+    ip_t ip_addr = { src = 1; dst = 2 };
     // ip_addr = { ip_addr with src = x };
-    // int w = ip_addr#src;                                // HIGH propagates to w
-    // int v = ip_addr#dst;                                // but v is not HIGH (as expected)
+    int w = ip_addr#src;                                // HIGH propagates to w
+    int v = ip_addr#dst;                                // but v is not HIGH (as expected)
     // // Propagation also works for size casting, hashing, polymorphism, and getting values from HIGH array
 
     // // But doesn't work for...

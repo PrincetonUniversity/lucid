@@ -192,9 +192,11 @@ and sec_to_string tsec =
   match tsec with 
   | High -> "HIGH"
   | Low -> "LOW"
+    (* if x then "LOW"
+    else "LOW(D)" declassified low value *)
   | SVar secref -> 
       match !secref with 
-      | Free _ -> "LOW(U)"
+      | Free _ -> "LOW(U)" (* unspecified so automatically assumed to be low *)
       | Bound sec -> sec_to_string sec
 ;;
 
