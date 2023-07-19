@@ -82,8 +82,8 @@ and func_ty =
   }
  
 (* Low true = Actual low value *)
-(* Low false = Declassified from a high value *)
-and sec = High | Low | SVar of tsec ref
+(* Low false = Value that has been declassified to low *)
+and sec = High | Low of bool | SVar of tsec ref
 and tsec = Free of string | Bound of sec
 
 and ty =

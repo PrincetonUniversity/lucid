@@ -191,9 +191,9 @@ and ty_to_string t =
 and sec_to_string tsec = 
   match tsec with 
   | High -> "HIGH"
-  | Low -> "LOW"
-    (* if x then "LOW"
-    else "LOW(D)" declassified low value *)
+  | Low x -> 
+    if x then "LOW"
+    else "LOW(D)" 
   | SVar secref -> 
       match !secref with 
       | Free _ -> "LOW(U)" (* unspecified so automatically assumed to be low *)

@@ -27,9 +27,10 @@ handle ip(int dst) {                                    // HIGH propagates to ds
     x = 3;
     LOW int y = 2;
 
-    Array.set(arr, 1, x);
-    generate(arr_test(1));
-    // int z = down(x);
+    // Array.set(arr, 1, x);
+    // generate(arr_test(1));
+    int z = down(2);
+    int w = x + z;
     // int x = dst+1;                                      // HIGH propagates to x
     
     // int i = test(4);                                    // HIGH propagates to i

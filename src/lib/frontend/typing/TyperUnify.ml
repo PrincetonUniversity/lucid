@@ -225,7 +225,13 @@ and unify_sec s1 s2 =
     unify_sec sec1 sec2
   | (SVar ({contents = Free _} as tsec), sec) | (sec, SVar ({contents = Free _} as tsec)) ->
     soccurs tsec sec;
-    tsec := Bound sec
+    tsec := Bound sec 
+  | (Low x, sec) | (sec, Low x) -> if x then raise CannotUnify
+    else let is_free = 
+      match sec with 
+      | SVar {contents = Free _} -> true 
+      | _ -> false in 
+    if is_free then unify_sec s1 s2
   | (_, _) -> raise CannotUnify
 
 and soccurs tsec sec = 
@@ -242,7 +248,8 @@ and sref_equal tsec1 tsec2 =
 
 and sequal s1 s2 = 
   match (s1, s2) with 
-  | (High, High) | (Low, Low) -> true
+  | (High, High) -> true
+  | (Low _, Low _) -> true
   | (SVar secref1, SVar secref2) -> sref_equal secref1 secref2
   | (_, _) -> false
 
