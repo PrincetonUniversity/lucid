@@ -9,7 +9,10 @@ let replacer =
   object (self)
     inherit [_] s_map as super
 
-    method! visit_exp env exp =
+    (* method! visit_EDown env e =
+      e *)
+
+    (* method! visit_exp env exp =
       match exp.e with 
       | ECall (cid, lst) -> 
         (match cid with 
@@ -21,7 +24,7 @@ let replacer =
             | None -> raise (AnonymizerError "Hopefully shouldn't get here") in 
             { exp with ety = Some new_exp_ty }
         | Id (_, _) | _ -> exp)
-      | _ -> exp
+      | _ -> exp *)
   end
 ;;
 

@@ -242,14 +242,13 @@ and sref_equal tsec1 tsec2 =
 
 and sequal s1 s2 = 
   match (s1, s2) with 
-  | (High, High) | (Low, Low) | (Declassify, Declassify) -> true
+  | (High, High) | (Low, Low) -> true
   | (SVar secref1, SVar secref2) -> sref_equal secref1 secref2
   | (_, _) -> false
 
 and sjoin s1 s2 = 
   if sequal s1 s2 then s1
   else match (s1, s2) with
-  | (Declassify, _) | (_, Declassify) -> Low
   | (High, _) | (_, High) -> High
   | (SVar {contents = Bound sec}, s) | (s, SVar {contents = Bound sec}) -> sjoin s sec
   | (SVar {contents = Free _}, s) | (s, SVar {contents = Free _}) -> s

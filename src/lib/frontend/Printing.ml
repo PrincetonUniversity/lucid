@@ -192,7 +192,6 @@ and sec_to_string tsec =
   match tsec with 
   | High -> "HIGH"
   | Low -> "LOW"
-  | Declassify -> "DECLASSIFY"
   | SVar secref -> 
       match !secref with 
       | Free _ -> "LOW(U)"

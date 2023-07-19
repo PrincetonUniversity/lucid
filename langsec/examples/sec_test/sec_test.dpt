@@ -1,6 +1,6 @@
 type ip_t = {
-    int src;
-    int dst;
+    HIGH int src;
+    HIGH int dst;
 }
 
 global Array.t<32> arr = Array.create(10);
@@ -11,7 +11,8 @@ fun HIGH int test(int i) {
     return 5;
 }
 
-fun int test2(HIGH int i) {
+// generalize type to: HIGH int -> 'a int
+fun int test2(HIGH int i) { // check that arguments are equal to HIGH int
     return 4;
 }
 
@@ -36,16 +37,18 @@ handle ip(int dst) {                                    // HIGH propagates to ds
     HIGH ip_t ip_addr2 = { src = 3; dst = 4; };         // src + dst both marked LOW
     int a = ip_addr2#src;                               // a + b both marked LOW        
     int b = ip_addr2#dst;
-
+    ip_t ip_addr3 = { src = a; dst = b; };
+    
     HIGH int[4] vec = [0; 1; 2; 3];                     // all values in vector marked LOW still
     int w = vec[0];                                     // w is marked LOW
 
-    HIGH bool y = true;
-    if (y) {
-        generate_port(1, ip(1));                        // doesn't throw error
-    }
-    else {
-        generate_port(1, ip(2));                        // doesn't throw error
-    }
+    generate_port(1, ip(x));
+    // HIGH bool y = true;
+    // if (y) {
+    //     generate_port(1, ip(1));                        // doesn't throw error
+    // }
+    // else {
+    //     generate_port(1, ip(2));                        // doesn't throw error
+    // }
     // Tables also don't work
 }

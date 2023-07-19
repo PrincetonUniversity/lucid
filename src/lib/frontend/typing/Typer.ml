@@ -82,8 +82,7 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
   | EVar cid ->
     let inst t = instantiator#visit_ty (fresh_maps ()) t in
     let t = lookup_var e.espan env cid in
-    let joined_sec = sjoin t.tsec (get_sec e) in
-    env, Some { (inst t) with tsec = joined_sec } |> wrap e
+    env, Some (inst t) |> wrap e
   | EVal v ->
     let v = infer_value v in
     env, { e with e = EVal v; ety = v.vty }
@@ -454,21 +453,18 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
     (* The constructor expression must have an unbound effect, or it may not
        unify with the type of the declaration. Note that, we cannot infer the
        full table type from the constructor expression, because the constructor
-       expression doesn't know what the table keys are. *)
-    let joined_sec = sjoin (ecreate.tty.tsec) (get_sec e) in 
-    let ety = { ecreate.tty with teffect = fresh_effect ()
-              ; tsec = joined_sec } in
+       expression doesn't know what the table keys are. *) 
+    let ety = { ecreate.tty with teffect = fresh_effect () } in
     (* return typed table with typed action args *)
-    let inf_acns = List.map (fun acn -> { acn with ety = Some (replace_sec acn.ety joined_sec) }) inf_acns in
     ( env
     , { e with
         e =
           ETableCreate
-            { 
-              tty = { ecreate.tty with tsec = sjoin ecreate.tty.tsec (get_sec e) }
-            ; tactions = inf_acns
+            { ecreate with
+              tactions = inf_acns
             ; tsize = inf_tsize
             ; tdefault = def_cid, inf_def_args
+            ; 
             }
       ; ety = Some ety
       } )
@@ -639,7 +635,7 @@ and infer_sec ty args =
   
 and get_sec exp = 
   match exp.ety with 
-  | None -> sfresh ()
+  | None -> raise (SecError "No type")
   | Some ty -> ty.tsec
 
 and replace_sec (ty: ty option) sec = 
@@ -746,7 +742,7 @@ and infer_tblmatch (env : env) (tr : tbl_match) sp : env * tbl_match * ty list =
     in
     (* hack: put return types at end of arg types *)
     { arg_tys = (base_tblty :: base_key_tys) @ base_arg_tys
-    ; ret_ty = infer_sec (ty inf_ret_ty) inf_acn_args
+    ; ret_ty = ty inf_ret_ty
     ; start_eff
     ; end_eff = FSucc tbl_eff
     ; constraints = ref [CLeq (start_eff, tbl_eff)]
@@ -767,7 +763,7 @@ and infer_tblmatch (env : env) (tr : tbl_match) sp : env * tbl_match * ty list =
   let expected_fty =
     { (* hack: put return types at end of arg types *)
       arg_tys = (Option.get inf_etbl.ety :: base_key_tys) @ base_arg_tys
-    ; ret_ty = infer_sec (ty inf_ret_ty) inf_acn_args
+    ; ret_ty = ty inf_ret_ty
     ; start_eff = env.current_effect
     ; end_eff = fresh_effect ()
     ; constraints = ref []
@@ -779,17 +775,12 @@ and infer_tblmatch (env : env) (tr : tbl_match) sp : env * tbl_match * ty list =
     check_constraints sp "Table match" env expected_fty.end_eff
     @@ !(expected_fty.constraints)
   in
-  let out_tys = 
-    match tr.out_tys with
-    | None -> tr.out_tys
-    | Some lst -> Some (List.map (fun typ -> infer_sec typ inf_acn_args) lst)
-  in 
   let new_tr =
     { tbl = inf_etbl
     ; keys = inf_keys
     ; args = inf_acn_args
     ; outs = tr.outs
-    ; out_tys = out_tys
+    ; out_tys = tr.out_tys
     }
   in
   let ret_tys =
@@ -839,7 +830,7 @@ and infer_statement (env : env) (s : statement) : env * statement =
          ^ stmt_to_string s
        | _ -> ());
       let env = add_locals env [id, ty] in
-      env, SLocal (id, (infer_sec ty [inf_e]), inf_e)
+      env, SLocal (id, ty, inf_e)
     | SAssign (id, e) ->
       let env, inf_e, ety = infer_exp env e |> textract in
       (match IdMap.find_opt id env.locals with
@@ -1309,7 +1300,7 @@ let rec infer_declaration
       unify_ty d.dspan inf_ety ty;
       let ty = generalizer#visit_ty () ty in
       let env = define_const id ty env in
-      env, FSucc effect_count, DGlobal (id, (infer_sec ty [inf_e]), inf_e)
+      env, FSucc effect_count, DGlobal (id, ty, inf_e)
     | DConst (id, ty, e) ->
       enter_level ();
       let _, inf_e, inf_ety = infer_exp env e |> textract in
@@ -1323,7 +1314,7 @@ let rec infer_declaration
         ^ ty_to_string ty
         ^ " is global and must be created via a global declaration";
       let env = define_const id ty env in
-      env, effect_count, DConst (id, (infer_sec ty [inf_e]), inf_e)
+      env, effect_count, DConst (id, ty, inf_e)
     | DExtern (id, ty) ->
       if is_global ty
       then
@@ -1588,7 +1579,6 @@ let rec infer_declaration
           }
       in
       let env = define_const id (mk_ty @@ acn_ty) env in
-      let ret_ty = List.map (fun typ -> infer_sec typ inf_action_body) ret_ty in
       ( env
       , effect_count
       , DAction (id, ret_ty, const_params, (params, inf_action_body)) )

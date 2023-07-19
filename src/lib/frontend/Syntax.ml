@@ -69,7 +69,7 @@ and acn_ty =
   { aconst_param_tys : tys
   ; aparam_tys : tys
   ; aret_tys : tys
-  }
+  } 
 
 and func_ty =
   { arg_tys : tys
@@ -80,8 +80,8 @@ and func_ty =
    Do not mutate it anywhere else! *)
   ; constraints : constr list Stdlib.ref
   }
-
-and sec = High | Low | Declassify | SVar of tsec ref
+ 
+and sec = High | Low | SVar of tsec ref
 and tsec = Free of string | Bound of sec
 
 and ty =
@@ -179,6 +179,7 @@ and e =
   | ETableMatch of tbl_match
   | EPatWild of
       size option (* Polymorphic wildcard pat, handled similar to EInt *)
+  | EDown of exp  (* Cast exp from security 's to security LOW *)
 
 and exp =
   { e : e
@@ -478,6 +479,7 @@ let comp_sp e i k span = exp_sp (EComp (e, i, k)) span
 let vector_sp es span = exp_sp (EVector es) span
 let szcast_sp sz1 sz2 span = exp_sp (ESizeCast (sz1, sz2)) span
 let flood_sp e span = exp_sp (EFlood e) span
+let down_sp e span = exp_sp (EDown e) span  
 
 let tblmatch_sp tbl keys args span =
   let t = { tbl; keys; args; outs = []; out_tys = None } in
