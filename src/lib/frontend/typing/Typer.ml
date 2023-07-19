@@ -157,6 +157,27 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
       @@ !(fty.constraints)
     in
     let ret_sec = sjoin fty.ret_ty.tsec inferred_fty.tsec in 
+    (* Array operations depend on sec levels of actual array + any values being added to array *)
+    let extract_name cid =
+      match cid with 
+      | Id (name, _) -> name
+      | Compound ((name, _), _) -> name
+    in 
+    let fname = extract_name f in
+    let inferred_args, ret_sec =
+      if (String.equal fname "Array") || (String.equal fname "PairArray") then
+        let arg_sec_lst = List.map (fun typ -> typ.tsec) fty.arg_tys in
+        let joined_sec = sjoin (List.fold_left sjoin (List.hd arg_sec_lst) arg_sec_lst) ret_sec in
+        let arr = List.hd inferred_args in
+        let new_arr = { arr with ety = Some (replace_sec arr.ety joined_sec) } in
+        (match (Option.get arr.ety).raw_ty with 
+        | TName (cid, _, _) -> if String.equal (extract_name cid) "Array"
+          then let inferred_args = List.mapi (fun i x -> if i == 0 then new_arr else x) inferred_args in
+          inferred_args, joined_sec
+          else inferred_args, joined_sec
+        | _ -> inferred_args, joined_sec)
+      else inferred_args, ret_sec
+    in
     new_env, { e with e = ECall (f, inferred_args); ety = Some { fty.ret_ty with tsec = ret_sec } }
   | EProj (e, label) ->
     let env, inf_e = infer_exp env e in

@@ -1,11 +1,13 @@
 type ip_t = {
-    HIGH int src;
-    HIGH int dst;
+    int src;
+    int dst;
 }
 
 global Array.t<32> arr = Array.create(10);
 
 packet event ip(HIGH int dst);
+
+packet event arr_test(int idx); 
 
 fun HIGH int test(int i) {
     return 5;
@@ -24,6 +26,9 @@ handle ip(int dst) {                                    // HIGH propagates to ds
     int x = dst + 1;
     x = 3;
     LOW int y = 2;
+
+    Array.set(arr, 1, x);
+    generate(arr_test(1));
     // int z = down(x);
     // int x = dst+1;                                      // HIGH propagates to x
     
@@ -31,10 +36,10 @@ handle ip(int dst) {                                    // HIGH propagates to ds
     // int j = test2(4);                                   // HIGH propagates to j
     // int k = test3(x);                                   // HIGH propagates to k
     
-    ip_t ip_addr = { src = 1; dst = 2 };
+    // ip_t ip_addr = { src = x; dst = 2 };
     // ip_addr = { ip_addr with src = x };
-    int w = ip_addr#src;                                // HIGH propagates to w
-    int v = ip_addr#dst;                                // but v is not HIGH (as expected)
+    // int w = ip_addr#src;                                // HIGH propagates to w
+    // int v = ip_addr#dst;                                // but v is not HIGH (as expected)
     // // Propagation also works for size casting, hashing, polymorphism, and getting values from HIGH array
 
     // // But doesn't work for...
@@ -55,4 +60,8 @@ handle ip(int dst) {                                    // HIGH propagates to ds
     //     generate_port(1, ip(2));                        // doesn't throw error
     // }
     // Tables also don't work
+}
+
+handle arr_test(int idx) {
+    int y = Array.get(arr, idx);
 }
