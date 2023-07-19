@@ -75,6 +75,7 @@
 %token <Span.t> HIGH
 %token <Span.t> LOW
 %token <Span.t> DOWN
+%token <Span.t> UP
 %token <Span.t> INCLUDE
 %token <Span.t> TRUE
 %token <Span.t> FALSE
@@ -191,7 +192,7 @@
 ty:
     | TINT single_poly                  { ty_sp (TInt (snd $2)) (Span.extend $1 (fst $2)) }
     | TINT                              { ty_sp (TInt (IConst 32)) $1 }
-    | HIGH ty                           { ty_sp_sec $2.raw_ty High $2.tspan }
+    | HIGH ty                           { ty_sp_sec $2.raw_ty (High true) $2.tspan }
     | LOW ty                            { ty_sp_sec $2.raw_ty (Low true) $2.tspan }
     | TBOOL				                      { ty_sp TBool $1 }
     | QID                               { ty_sp (TQVar (QVar (snd $1))) (fst $1) }
@@ -266,6 +267,7 @@ patterns:
 
 exp:
     | DOWN LPAREN exp RPAREN              { down_sp $3 (Span.extend $1 $4) }
+    | UP LPAREN exp RPAREN                { up_sp $3 (Span.extend $1 $4) }
     | BITPAT                              { value_to_exp (vpat_sp (snd $1) (fst $1))}
     | cid			                            { var_sp (snd $1) (fst $1) }
     | NUMWITDH                            { eint_sp (fst (snd $1)) (Some (IConst (snd (snd $1)))) (fst $1) }

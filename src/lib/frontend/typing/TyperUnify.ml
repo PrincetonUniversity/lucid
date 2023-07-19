@@ -221,17 +221,23 @@ let rec try_unify_ty span ty1 ty2 =
 and unify_sec s1 s2 = 
   if sequal s1 s2 then ()
   else match (s1, s2) with 
+  | (Low false, sec) | (sec, Low false) ->
+    let is_free = 
+      match sec with 
+      | SVar {contents = Free _} -> true 
+      | _ -> false in 
+    if is_free then unify_sec (Low true) sec
+  | (High false, sec) | (sec, High false) ->
+    let is_free = 
+      match sec with 
+      | SVar {contents = Free _} -> true 
+      | _ -> false in 
+    if is_free then unify_sec (High true) sec
   | (SVar {contents = Bound sec1}, sec2) | (sec1, SVar {contents = Bound sec2}) -> 
     unify_sec sec1 sec2
   | (SVar ({contents = Free _} as tsec), sec) | (sec, SVar ({contents = Free _} as tsec)) ->
     soccurs tsec sec;
     tsec := Bound sec 
-  | (Low x, sec) | (sec, Low x) -> if x then raise CannotUnify
-    else let is_free = 
-      match sec with 
-      | SVar {contents = Free _} -> true 
-      | _ -> false in 
-    if is_free then unify_sec s1 s2
   | (_, _) -> raise CannotUnify
 
 and soccurs tsec sec = 
@@ -248,7 +254,7 @@ and sref_equal tsec1 tsec2 =
 
 and sequal s1 s2 = 
   match (s1, s2) with 
-  | (High, High) -> true
+  | (High _, High _) -> true
   | (Low _, Low _) -> true
   | (SVar secref1, SVar secref2) -> sref_equal secref1 secref2
   | (_, _) -> false
@@ -256,7 +262,7 @@ and sequal s1 s2 =
 and sjoin s1 s2 = 
   if sequal s1 s2 then s1
   else match (s1, s2) with
-  | (High, _) | (_, High) -> High
+  | (High _, _) | (_, High _) -> High true
   | (SVar {contents = Bound sec}, s) | (s, SVar {contents = Bound sec}) -> sjoin s sec
   | (SVar {contents = Free _}, s) | (s, SVar {contents = Free _}) -> s
   | (_, _) -> raise (SecError "Shouldn't get here")

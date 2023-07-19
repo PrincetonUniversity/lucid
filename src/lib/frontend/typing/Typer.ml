@@ -542,6 +542,12 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
     let low_exp = { inf_exp with ety = Some new_ety } in
     (* let low_exp = { exp with ety = Some exp_ty } in  *)
     env, { e with e = EDown low_exp; ety = Some new_ety }
+  | EUp exp -> 
+    let env, inf_exp, inf_ety = infer_exp env exp |> textract in
+    let new_ety = { inf_ety with tsec = High false } in 
+    let high_exp = { inf_exp with ety = Some new_ety } in
+    (* let low_exp = { exp with ety = Some exp_ty } in  *)
+    env, { e with e = EUp high_exp; ety = Some new_ety }
 
 and infer_op env span op args =
   let env, ty, new_args =
@@ -696,7 +702,7 @@ and replace_sec (ty: ty option) sec =
 and is_high_sec sec = 
   match sec with 
   | SVar {contents = Bound s} -> is_high_sec s
-  | High -> true
+  | High _ -> true
   | _ -> false
 
 and infer_exps env es =

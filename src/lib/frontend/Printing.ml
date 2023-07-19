@@ -190,7 +190,9 @@ and ty_to_string t =
 
 and sec_to_string tsec = 
   match tsec with 
-  | High -> "HIGH"
+  | High x -> 
+    if x then "HIGH"
+    else "HIGH(C)"
   | Low x -> 
     if x then "LOW"
     else "LOW(D)" 
@@ -343,6 +345,7 @@ let rec e_to_string e =
     Printf.sprintf "table_match(%s);" (comma_sep exp_to_string tr.args)
   | EPatWild _ -> "_"
   | EDown e -> "down(" ^ exp_to_string e ^ ")"
+  | EUp e -> "up(" ^ exp_to_string e ^ ")"
 
 and exp_to_string e = e_to_string e.e ^ "(" ^ get_t e ^ ")"
 (* ^ Printf.sprintf "[ty:%s]"

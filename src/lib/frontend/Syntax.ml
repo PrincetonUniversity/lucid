@@ -81,9 +81,9 @@ and func_ty =
   ; constraints : constr list Stdlib.ref
   }
  
-(* Low true = Actual low value *)
-(* Low false = Value that has been declassified to low *)
-and sec = High | Low of bool | SVar of tsec ref
+(* Low true = Natively low value, Low false = Value that has been declassified to low *)
+(* High true = Natively high value, High false = Value that has been classified to high *)
+and sec = High of bool | Low of bool | SVar of tsec ref
 and tsec = Free of string | Bound of sec
 
 and ty =
@@ -182,6 +182,7 @@ and e =
   | EPatWild of
       size option (* Polymorphic wildcard pat, handled similar to EInt *)
   | EDown of exp  (* Cast exp from security 's to security LOW *)
+  | EUp of exp    (* Cast exp from security 's to security HIGH *)
 
 and exp =
   { e : e
@@ -482,6 +483,7 @@ let vector_sp es span = exp_sp (EVector es) span
 let szcast_sp sz1 sz2 span = exp_sp (ESizeCast (sz1, sz2)) span
 let flood_sp e span = exp_sp (EFlood e) span
 let down_sp e span = exp_sp (EDown e) span  
+let up_sp e span = exp_sp (EUp e) span  
 
 let tblmatch_sp tbl keys args span =
   let t = { tbl; keys; args; outs = []; out_tys = None } in

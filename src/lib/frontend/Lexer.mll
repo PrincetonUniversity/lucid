@@ -46,6 +46,7 @@ rule token = parse
   | "HIGH"            { HIGH (position lexbuf) }
   | "LOW"             { LOW (position lexbuf) }
   | "down"            { DOWN (position lexbuf) }
+  | "up"              { UP (position lexbuf) }
   | "include"         { INCLUDE (position lexbuf) }
   | "false"           { FALSE (position lexbuf) }
   | "true"            { TRUE (position lexbuf) }

@@ -13,6 +13,7 @@ let replacer =
     method! visit_exp env exp =
       match exp.e with 
       | EDown e -> e
+      | EUp e -> e
       | _ -> exp
   end
 ;;
