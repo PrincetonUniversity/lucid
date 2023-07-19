@@ -340,6 +340,7 @@ let rec e_to_string e =
   | ETableMatch tr ->
     Printf.sprintf "table_match(%s);" (comma_sep exp_to_string tr.args)
   | EPatWild _ -> "_"
+  | EDown e -> "down(" ^ exp_to_string e ^ ")"
 
 and exp_to_string e = e_to_string e.e ^ "(" ^ get_t e ^ ")"
 (* ^ Printf.sprintf "[ty:%s]"

@@ -44,6 +44,8 @@ rule token = parse
   | "/*"              { comments 0 lexbuf }
   | "//"              { comments (-1) lexbuf }
   | "HIGH"            { HIGH (position lexbuf) }
+  | "LOW"             { LOW (position lexbuf) }
+  | "down"            { DOWN (position lexbuf) }
   | "include"         { INCLUDE (position lexbuf) }
   | "false"           { FALSE (position lexbuf) }
   | "true"            { TRUE (position lexbuf) }

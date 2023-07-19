@@ -381,11 +381,11 @@ let ty_sp raw_ty tspan =
   }
 ;;
 
-let ty_sp_high raw_ty tspan =
+let ty_sp_sec raw_ty sec tspan =
   { raw_ty
   ; teffect = FVar (QVar (Id.fresh "eff"))
   ; tspan
-  ; tsec = High
+  ; tsec = sec
   ; tprint_as = ref None
   }
 ;;

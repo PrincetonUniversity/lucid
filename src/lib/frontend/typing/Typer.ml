@@ -127,6 +127,17 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
       ; constraints = ref []
       }
     in
+    let expected_arg_tys = 
+      (match inferred_fty.raw_ty with 
+      | TFun ty -> ty.arg_tys
+      | _ -> raise (SecError "Trying to call something that's not a function")) in
+    (* check that all inferred arguments and parameters have equal security levels *)
+    let check_arg_sec expected_arg actual_arg = 
+      if is_high_sec expected_arg.tsec && not (is_high_sec actual_arg.tsec)
+      then raise (SecError "Sec level of argument does not match sec level of function param")
+      else ()
+    in
+    List.iter2 check_arg_sec expected_arg_tys fty.arg_tys;
     (* print_endline @@ "Inferred_fty: " ^ Printing.ty_to_string inferred_fty;
     print_endline @@ "fty: " ^ Printing.func_to_string fty; *)
     unify_raw_ty e.espan (TFun fty) inferred_fty.raw_ty;
@@ -134,7 +145,8 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
       check_constraints e.espan "Function call" env fty.end_eff
       @@ !(fty.constraints)
     in
-    new_env, { e with e = ECall (f, inferred_args); ety = Some (infer_sec fty.ret_ty inferred_args) }
+    let ret_sec = sjoin fty.ret_ty.tsec inferred_fty.tsec in 
+    new_env, { e with e = ECall (f, inferred_args); ety = Some { fty.ret_ty with tsec = ret_sec } }
   | EProj (e, label) ->
     let env, inf_e = infer_exp env e in
     let expected_ty, entries =
@@ -492,6 +504,12 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
        | Some sz ->
          validate_size e.espan env sz;
          Some (mk_ty @@ TPat sz) |> wrap e) )
+  | EDown exp -> 
+    let env, inf_exp, inf_ety = infer_exp env exp |> textract in
+    let new_ety = { inf_ety with tsec = Low } in 
+    let low_exp = { inf_exp with ety = Some new_ety } in
+    (* let low_exp = { exp with ety = Some exp_ty } in  *)
+    env, { e with e = EDown low_exp; ety = Some new_ety }
 
 and infer_op env span op args =
   let env, ty, new_args =

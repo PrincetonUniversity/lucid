@@ -13,8 +13,7 @@ let process_prog builtin_tys ds =
   print_if_verbose "-------Checking well-formedness---------";
   Wellformed.pre_typing_checks ds;
   print_if_verbose "---------typing1---------";
-  let ds = Typer.infer_prog builtin_tys ds in
-  let ds = SecElimination.set_declassifiers ds in 
+  let ds = Typer.infer_prog builtin_tys ds in 
   let ds = GlobalConstructorTagging.annotate ds in
   (* let ds = SourceTracking.init_tracking ds in  *)
   print_if_verbose "---------Concretizing symbolics-------------";
@@ -48,6 +47,7 @@ let process_prog builtin_tys ds =
   print_if_verbose "-----------inlining functions-----------";
   let ds = FunctionInlining.inline_prog ds in
   print_if_debug ds;
+  let ds = SecElimination.elim_sec_casts ds in
   print_if_verbose "-----------inlining tables-----------";
   let ds = TableInlining.eliminate_prog ds in
   print_if_debug ds;
