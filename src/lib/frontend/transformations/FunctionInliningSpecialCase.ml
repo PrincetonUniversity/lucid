@@ -117,10 +117,10 @@ let replace_return_with_local id ty stmt =
     2. return the transformed function body instead of the return statement.
    *)
 let inline_single_fcn (decl:decl) ((fcn_id:Id.t),(fcn_params : params),fcn_stmt)  = 
-  print_endline ("[inline_single_function] inlining function: "^(Id.to_string fcn_id));
+  (* print_endline ("[inline_single_function] inlining function: "^(Id.to_string fcn_id)); *)
   match (read_only_params fcn_params fcn_stmt) with 
   | true -> 
-    print_endline (("[inline_single_function] all parameters immutable for function:"^(Id.to_string fcn_id)));
+    (* print_endline (("[inline_single_function] all parameters immutable for function:"^(Id.to_string fcn_id))); *)
     let assign_subst = 
       object
         inherit [_] s_map as super
@@ -130,7 +130,7 @@ let inline_single_fcn (decl:decl) ((fcn_id:Id.t),(fcn_params : params),fcn_stmt)
           | SAssign(id, exp) -> (
             match exp.e with 
             | ECall(cid, args) when (Cid.equal (Cid.id fcn_id) cid) -> 
-                print_endline ("[inline_single_function] inlining call: "^(Printing.stmt_to_string stmt));
+                (* print_endline ("[inline_single_function] inlining call: "^(Printing.stmt_to_string stmt)); *)
                 let fcn_stmt = replace_params_with_args fcn_stmt fcn_params args in 
                 let fcn_stmt = replace_return_with_assign id fcn_stmt in 
                 {stmt with s = fcn_stmt.s}
@@ -139,7 +139,7 @@ let inline_single_fcn (decl:decl) ((fcn_id:Id.t),(fcn_params : params),fcn_stmt)
           | SLocal(id, ty, exp) -> (
             match exp.e with 
             | ECall(cid, args) when (Cid.equal (Cid.id fcn_id) cid) -> 
-                print_endline ("[inline_single_function] inlining call: "^(Printing.stmt_to_string stmt));
+                (* print_endline ("[inline_single_function] inlining call: "^(Printing.stmt_to_string stmt)); *)
                 let decl_stmt =  slocal_sp id ty (SyntaxUtils.default_expression ty) stmt.sspan in 
                 let decl_stmt = {decl_stmt with spragmas = [PNoInitLocal]} in 
                 let fcn_stmt = replace_params_with_args fcn_stmt fcn_params args in 
@@ -151,7 +151,7 @@ let inline_single_fcn (decl:decl) ((fcn_id:Id.t),(fcn_params : params),fcn_stmt)
           | SRet(Some(exp)) -> (
             match exp.e with 
             | ECall(cid, args) when (Cid.equal (Cid.id fcn_id) cid) -> 
-                print_endline ("[inline_single_function] inlining call: "^(Printing.stmt_to_string stmt));
+                (* print_endline ("[inline_single_function] inlining call: "^(Printing.stmt_to_string stmt)); *)
                 let fcn_stmt = replace_params_with_args fcn_stmt fcn_params args in 
                 {stmt with s = fcn_stmt.s}
             | _ -> stmt
@@ -188,7 +188,7 @@ let inline_prog_specialcase ds =
 
 (* older incorrect pass  *)
 
-
+(* 
 let inline_single_function (ds:decl list) ((fcn_id:Id.t),(fcn_params : params),fcn_stmt)  = 
   print_endline ("[inline_single_function] inlining function: "^(Id.to_string fcn_id));
   match (read_only_params fcn_params fcn_stmt) with 
@@ -248,4 +248,5 @@ let inline_prog_specialcase_old ds =
   print_endline ("---- function inlining special case pass done ----");
   exit 0;
   ds
-;;
+;; *)
+

@@ -24,7 +24,13 @@ let report str =
 
 let profile_for_tofino target_filename portspec build_dir profile_cmd =
   let ds = Input.parse target_filename in
+  (* we just want to do function inlining special case for the tofino, 
+     but before that can run successfully, we need to do type inference. 
+     So we add a round of that here.  *)
+  Wellformed.pre_typing_checks ds;
+  let ds = Typer.infer_prog Builtins.tofino_builtin_tys ds in
   let ds = FunctionInliningSpecialCase.inline_prog_specialcase ds in
+
   let _, ds = FrontendPipeline.process_prog Builtins.tofino_builtin_tys ds in
   let core_ds = MidendPipeline.process_prog ds in
   let portspec = ParsePortSpec.parse portspec in
@@ -40,6 +46,8 @@ let compile_to_tofino dptfn =
   (* before the standard frontend, do temporary optimization
      passes that will eventually be removed once the
      mid/back-end is better optimized. *)
+  let ds = ReplaceUserTys.replace_prog ds in
+  print_endline ("running inline_prog_specialcase");
   let ds = FunctionInliningSpecialCase.inline_prog_specialcase ds in
   (* frontend type checks and eliminates most abstractions (modules, functions) *)
   let _, ds = FrontendPipeline.process_prog Builtins.tofino_builtin_tys ds in

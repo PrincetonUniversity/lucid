@@ -130,8 +130,7 @@ match b with
 */
 
 
-
-event foo(int x){
+event foo(int x) {
     int res = fb(x);
     generate(bar(res));
 }

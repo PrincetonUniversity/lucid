@@ -12,7 +12,10 @@ DPT := $(shell $(FIND_DPT) || echo "-" )
 # SRC is the lucid source program. It can be passed 
 # as an argument to this makefile, or as a default 
 # value the first .dpt file found is used.
-SRC := scratchpad.dpt
+# SRC := scratchpad.dpt
+# SRC := optimized.dpt
+
+SRC := scratchpad_full_inlining.dpt
 
 # ifndef SRC
 # SRC := $(firstword $(wildcard *.dpt))
@@ -51,7 +54,7 @@ DPTC := $(shell $(FIND_DPTC) || echo "-" )
 build_p4: $(P4_OUTPUT)
 
 $(P4_OUTPUT): $(SRC)
-	$(DPTC) $< --new-tofino --debug -o $(DPT_BUILD_DIR)
+	$(DPTC) $< --new-tofino -o $(DPT_BUILD_DIR)
 
 clean:
 	rm -rf $(DPT_BUILD_DIR)

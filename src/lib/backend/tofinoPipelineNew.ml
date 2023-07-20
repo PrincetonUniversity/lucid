@@ -27,12 +27,18 @@ let report_if_verbose str =
     then Console.show_message str ANSITerminal.Green "Tofino backend"
 ;;
 
-
+let print_pause = false ;;
 let printprog_if_debug ds =
-  print_endline (CorePrinting.decls_to_string ds);
-  print_endline "[debug] press enter key to continue";
-  ignore (read_line ());
+  if (Cmdline.cfg.debug)
+    then 
+      print_endline (CorePrinting.decls_to_string ds);
+      if (print_pause)
+        then (
+          print_endline "[debug] press enter key to continue";
+          ignore (read_line ())
+        )
 ;;
+
 let printtofcoreprog_if_debug prog = print_if_debug (TofinoCorePrinting.prog_to_string prog);;
 
 (* transform into a form where each statement is atomic *)
@@ -192,7 +198,6 @@ let compile ds portspec =
   report_if_verbose "-------Transforming certain declarations to no-init declarations-------";
   let core_prog = RemoveInitOnlyStmts.process core_prog in 
   printtofcoreprog_if_debug core_prog;
-  exit 0;
   report_if_verbose "-------Eliminating if statements-------";
   let core_prog = IfToMatch.process_core core_prog in 
   report_if_verbose "-------Converting all memops to complex form-------";
