@@ -14,7 +14,6 @@ let process_prog builtin_tys ds =
   Wellformed.pre_typing_checks ds;
   print_if_verbose "---------typing1---------";
   let ds = Typer.infer_prog builtin_tys ds in 
-  let ds = SecElimination.elim_sec_casts ds in
   let ds = GlobalConstructorTagging.annotate ds in
   (* let ds = SourceTracking.init_tracking ds in  *)
   print_if_verbose "---------Concretizing symbolics-------------";
@@ -41,6 +40,7 @@ let process_prog builtin_tys ds =
   print_if_debug ds;
   print_if_verbose "---------typing2---------";
   let ds = Typer.infer_prog builtin_tys ds in
+  let ds = SecElimination.elim_sec_casts ds in
   print_if_debug ds;
   print_if_verbose "-------Eliminating type aliases 2---------";
   let ds = ReplaceUserTys.replace_prog ds in

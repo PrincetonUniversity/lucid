@@ -163,20 +163,32 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
       | Id (name, _) -> name
       | Compound ((name, _), _) -> name
     in 
+    let rec extract_lvl cid =
+      match cid with 
+      | Id (_, lvl) -> lvl 
+      | Compound ((_, lvl), _) -> lvl
+    in
     let fname = extract_name f in
-    let inferred_args, ret_sec =
+    let new_env, ret_sec =
       if (String.equal fname "Array") || (String.equal fname "PairArray") then
         let arg_sec_lst = List.map (fun typ -> typ.tsec) fty.arg_tys in
-        let joined_sec = sjoin (List.fold_left sjoin (List.hd arg_sec_lst) arg_sec_lst) ret_sec in
+        let arr_sec = List.hd arg_sec_lst in
+        let joined_sec = sjoin (List.fold_left sjoin arr_sec arg_sec_lst) ret_sec in
         let arr = List.hd inferred_args in
-        let new_arr = { arr with ety = Some (replace_sec arr.ety joined_sec) } in
         (match (Option.get arr.ety).raw_ty with 
-        | TName (cid, _, _) -> if String.equal (extract_name cid) "Array"
-          then let inferred_args = List.mapi (fun i x -> if i == 0 then new_arr else x) inferred_args in
-          inferred_args, joined_sec
-          else inferred_args, joined_sec
-        | _ -> inferred_args, joined_sec)
-      else inferred_args, ret_sec
+        | TName (cid, _, _) -> let typ_name = extract_name cid in 
+          if (String.equal typ_name "Array") && is_high_sec joined_sec & not (is_high_sec arr_sec)
+          then let arr_str, lvl = 
+            match arr.e with 
+            | EVar cid -> Printing.cid_to_string cid, extract_lvl cid
+            | _ -> raise (SecError "Array name should be a variable") in
+          let new_ty = replace_sec arr.ety (High true) in
+          let new_env = add_locals env [(arr_str, lvl), new_ty]
+          in
+          new_env, joined_sec
+          else new_env, joined_sec
+        | _ -> new_env, joined_sec)
+      else new_env, ret_sec
     in
     new_env, { e with e = ECall (f, inferred_args); ety = Some { fty.ret_ty with tsec = ret_sec } }
   | EProj (e, label) ->
