@@ -5,7 +5,7 @@ type ip_t = {
 
 global Array.t<32> arr = Array.create(10);
 
-global Array.t<32> arr2 = Array.create(10);
+global PairArray.t<32> pair_arr = PairArray.create(10);
 
 packet event ip(HIGH int dst);
 
@@ -24,16 +24,29 @@ fun int test3(int i) {
     return 3;
 }
 
+memop foo(int memval, int localval) { 
+    if (true) { return localval; } else { return localval; }
+}
+
+memop foo4(int memval1, int memval2, int localval1, int localval2) {
+  // May be omitted entirely, or just the else branch may be omitted
+  if (true) { cell1 = localval1; }
+  
+  // May be omitted entirely, or just the else branch may be omitted 
+  if (true) { cell2 = localval2; }
+
+  // Default return value is passed as a parameter to PairArray.update
+}
+
 handle ip(int dst) {                                    // HIGH propagates to dst in handler
     int x = dst + 1;
     // x = 3;
     // LOW int y = 2;
 
-    //Array.set(arr, 1, x);
-    //int a = Array.get(arr2, dst);
-    //generate(arr_test(1));
-    int z = up(2);
-    int w = x + 1;
+    Array.set(arr, 1, 0);
+    generate(arr_test(1));
+    // int z = up(2);
+    // int w = x + 1;
     // int x = dst+1;                                      // HIGH propagates to x
     
     // int i = test(4);                                    // HIGH propagates to i

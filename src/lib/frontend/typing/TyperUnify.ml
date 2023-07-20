@@ -221,18 +221,6 @@ let rec try_unify_ty span ty1 ty2 =
 and unify_sec s1 s2 = 
   if sequal s1 s2 then ()
   else match (s1, s2) with 
-  (* | (Low false, sec) | (sec, Low false) ->
-    let is_free = 
-      match sec with 
-      | SVar {contents = Free _} -> true 
-      | _ -> false in 
-    if is_free then unify_sec (Low true) sec
-  | (High false, sec) | (sec, High false) ->
-    let is_free = 
-      match sec with 
-      | SVar {contents = Free _} -> true 
-      | _ -> false in 
-    if is_free then unify_sec (High true) sec *)
   | (SVar {contents = Bound sec1}, sec2) | (sec1, SVar {contents = Bound sec2}) -> 
     unify_sec sec1 sec2
   | (SVar ({contents = Free _} as tsec), sec) | (sec, SVar ({contents = Free _} as tsec)) ->

@@ -163,13 +163,8 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
       | Id (name, _) -> name
       | Compound ((name, _), _) -> name
     in 
-    let rec extract_lvl cid =
-      match cid with 
-      | Id (_, lvl) -> lvl 
-      | Compound ((_, lvl), _) -> lvl
-    in
     let fname = extract_name f in
-    let new_env, ret_sec =
+    let inferred_args, ret_sec =
       if (String.equal fname "Array") || (String.equal fname "PairArray") then
         let arg_sec_lst = List.map (fun typ -> typ.tsec) fty.arg_tys in
         let arr_sec = List.hd arg_sec_lst in
@@ -177,19 +172,30 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
         let arr = List.hd inferred_args in
         (match (Option.get arr.ety).raw_ty with 
         | TName (cid, _, _) -> let typ_name = extract_name cid in 
-          if (String.equal typ_name "Array") && is_high_sec joined_sec && not (is_high_sec arr_sec)
-          then let arr_str, lvl = 
+          if ((String.equal typ_name "Array") || (String.equal typ_name "PairArray"))
+            && (is_high_sec joined_sec && not (is_high_sec arr_sec))
+          then
+            raise (SecError "Cannot put HIGH security values into a LOW array")
+            (* let arr_str, _ = 
             match arr.e with 
-            | EVar cid -> Printing.cid_to_string cid, extract_lvl cid
+            | EVar cid -> Cid.to_id cid
             | _ -> raise (SecError "Array name should be a variable") in
           let new_ty = replace_sec arr.ety High in
-          let new_env = add_locals env [(arr_str, lvl), new_ty]
+          let new_arr = { arr with e = EUp arr } in
+          let inferred_args = List.mapi 
+            (fun i arg -> if i == 0 then let _, new_exp = infer_exp new_env new_arr in new_exp else arg)
+            inferred_args
+          in *)
+          (* let new_env = add_locals new_env [(arr_str, 0), new_ty]
           in 
-          Printf.printf "ARRAY NAME: %s" (arr_str); 
-          new_env, joined_sec
-          else new_env, joined_sec
-        | _ -> new_env, joined_sec)
-      else new_env, ret_sec
+          new_env, joined_sec *)
+          (* inferred_args, joined_sec *)
+          (* else new_env, joined_sec *)
+          else inferred_args, joined_sec
+        (* | _ -> new_env, joined_sec) *)
+        | _ -> inferred_args, joined_sec)
+      (* else new_env, ret_sec *)
+      else inferred_args, ret_sec
     in
     new_env, { e with e = ECall (f, inferred_args); ety = Some { fty.ret_ty with tsec = ret_sec } }
   | EProj (e, label) ->
