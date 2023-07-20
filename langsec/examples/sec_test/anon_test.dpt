@@ -1,0 +1,24 @@
+include "../anonymize/anonymize.dpt"
+
+global Anonymizer.t anonymizer = Anonymizer.create();
+
+// global Anonymizer.t anonymizer = Anonymizer.create();
+
+// /********** Events *********/
+// packet event eth_ip(Anonymizer.eth_t eth, Anonymizer.ip_t ip);
+
+// /********** Handlers *********/
+// handle eth_ip(Anonymizer.eth_t eth, Anonymizer.ip_t ip) {
+// 	// 1. forward an event representing the packet out of port 1.
+// 	generate_port(OUT_PORT, eth_ip(eth, ip));
+// 	// 2. anonymize packet info before sending to the monitoring server.
+//     Anonymizer.eth_ip_t original_packet = {eth = eth; ip = ip;};
+//     Anonymizer.eth_ip_t anonymized_packet = Anonymizer.anonymize_packet(anonymizer, original_packet);
+//     generate_port(SERVER_PORT, eth_ip(anonymized_packet#eth, anonymized_packet#ip));
+// }
+
+packet event eth_ip(int<48> dmac, int<48> smac, int<16> etype, int src, int dst, int<16> len);
+
+handle eth_ip(HIGH int<48> dmac, HIGH int<48> smac, HIGH int<16> etype, HIGH int src, HIGH int dst, HIGH int<16> len) {
+    int x = (int<32>)dmac;
+}
