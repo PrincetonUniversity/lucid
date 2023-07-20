@@ -40,7 +40,6 @@ let process_prog builtin_tys ds =
   print_if_debug ds;
   print_if_verbose "---------typing2---------";
   let ds = Typer.infer_prog builtin_tys ds in
-  let ds = SecElimination.elim_sec_casts ds in
   print_if_debug ds;
   print_if_verbose "-------Eliminating type aliases 2---------";
   let ds = ReplaceUserTys.replace_prog ds in
@@ -93,6 +92,7 @@ let process_prog builtin_tys ds =
   print_if_verbose "---------------typing again-------------";
   (* Just to be safe *)
   let ds = Typer.infer_prog builtin_tys ds in
+  let ds = SecElimination.elim_sec_casts ds in
   print_if_debug ds;
   (* TODO: Return these, maybe apply renaming to them or something *)
   ignore slot_assignments;

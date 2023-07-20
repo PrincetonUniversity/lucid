@@ -57,6 +57,10 @@ let rec inline_exp e =
     let stmt, tm' = inline_tbl_match tm in
     stmt, {e with e = ETableMatch(tm')}
   | EPatWild _ -> snoop, e
+  | EDown e -> let stmt, e' = inline_exp e in 
+    stmt, { e with e = EDown e' }
+  | EUp e -> let stmt, e' = inline_exp e in 
+    stmt, { e with e = EUp e' } 
 
 and inline_tbl_match tm =
     let tbl_stmt, tbl = inline_exp tm.tbl in

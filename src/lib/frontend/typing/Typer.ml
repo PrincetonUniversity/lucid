@@ -177,14 +177,15 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
         let arr = List.hd inferred_args in
         (match (Option.get arr.ety).raw_ty with 
         | TName (cid, _, _) -> let typ_name = extract_name cid in 
-          if (String.equal typ_name "Array") && is_high_sec joined_sec & not (is_high_sec arr_sec)
+          if (String.equal typ_name "Array") && is_high_sec joined_sec && not (is_high_sec arr_sec)
           then let arr_str, lvl = 
             match arr.e with 
             | EVar cid -> Printing.cid_to_string cid, extract_lvl cid
             | _ -> raise (SecError "Array name should be a variable") in
           let new_ty = replace_sec arr.ety (High true) in
           let new_env = add_locals env [(arr_str, lvl), new_ty]
-          in
+          in 
+          Printf.printf "ARRAY NAME: %s" (arr_str); 
           new_env, joined_sec
           else new_env, joined_sec
         | _ -> new_env, joined_sec)
