@@ -210,6 +210,9 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
   | ERecord entries ->
     let labels, es = List.split entries in
     let env, inf_es = infer_exps env es in
+    List.iter 
+      (fun exp -> if is_high_sec (get_sec exp) then raise (SecError "Can't put HIGH security values into a record"))
+      inf_es;
     let expected_ty =
       match StringMap.find_opt (List.hd labels) env.record_labels with
       | Some ty ->
@@ -241,6 +244,9 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
     let env, inf_base, inf_basety = infer_exp env base |> textract in
     unify_raw_ty e.espan expected_ty.raw_ty inf_basety.raw_ty;
     let env, inf_es = infer_exps env es in
+    List.iter 
+      (fun exp -> if is_high_sec (get_sec exp) then raise (SecError "Can't put HIGH security values into a record"))
+      inf_es;
     let inf_entries = List.combine labels inf_es in
     let expected_entries =
       match TyTQVar.strip_links expected_ty.raw_ty with
@@ -263,6 +269,9 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
     env, { e with e = EWith (inf_base, inf_entries); ety = Some expected_ty }
   | ETuple es ->
     let env, inf_es = infer_exps env es in
+    List.iter 
+      (fun exp -> if is_high_sec (get_sec exp) then raise (SecError "Can't put HIGH security values into a tuple"))
+      inf_es;
     let eff = fresh_effect () in
     List.iteri
       (fun i e' ->
@@ -281,6 +290,9 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
     env, { e with e = ETuple inf_es; ety = Some final_ety }
   | EVector es ->
     let env, inf_es = infer_exps env es in
+    List.iter 
+      (fun exp -> if is_high_sec (get_sec exp) then raise (SecError "Can't put HIGH security values into a vector"))
+      inf_es;
     let ety = fresh_type () in
     List.iteri
       (fun i e' ->

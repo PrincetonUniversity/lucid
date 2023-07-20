@@ -40,7 +40,7 @@ handle ip(int dst) {                                    // HIGH propagates to ds
     // int j = test2(4);                                   // HIGH propagates to j
     // int k = test3(x);                                   // HIGH propagates to k
     
-    //ip_t ip_addr = { src = x; dst = 2 };
+    // ip_t ip_addr = { src = x; dst = 2 };
     // ip_addr = { ip_addr with src = x };
     //int w = ip_addr#src;                                // HIGH propagates to w
     //int v = ip_addr#dst;                                // but v is not HIGH (as expected)
@@ -52,7 +52,7 @@ handle ip(int dst) {                                    // HIGH propagates to ds
     // int b = ip_addr2#dst;
     // ip_t ip_addr3 = { src = a; dst = b; };
     
-    // HIGH int[4] vec = [0; 1; 2; 3];                     // all values in vector marked LOW still
+    // int[4] vec = [0; 1; 2; 3];                     // all values in vector marked LOW still
     // int w = vec[0];                                     // w is marked LOW
 
     // generate_port(1, ip(x));
