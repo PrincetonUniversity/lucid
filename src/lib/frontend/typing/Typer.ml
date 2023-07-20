@@ -182,7 +182,7 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
             match arr.e with 
             | EVar cid -> Printing.cid_to_string cid, extract_lvl cid
             | _ -> raise (SecError "Array name should be a variable") in
-          let new_ty = replace_sec arr.ety (High true) in
+          let new_ty = replace_sec arr.ety High in
           let new_env = add_locals env [(arr_str, lvl), new_ty]
           in 
           Printf.printf "ARRAY NAME: %s" (arr_str); 
@@ -551,15 +551,13 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
          Some (mk_ty @@ TPat sz) |> wrap e) )
   | EDown exp -> 
     let env, inf_exp, inf_ety = infer_exp env exp |> textract in
-    let new_ety = { inf_ety with tsec = Low false } in 
+    let new_ety = { inf_ety with tsec = Low } in 
     let low_exp = { inf_exp with ety = Some new_ety } in
-    (* let low_exp = { exp with ety = Some exp_ty } in  *)
     env, { e with e = EDown low_exp; ety = Some new_ety }
   | EUp exp -> 
     let env, inf_exp, inf_ety = infer_exp env exp |> textract in
-    let new_ety = { inf_ety with tsec = High false } in 
+    let new_ety = { inf_ety with tsec = High } in 
     let high_exp = { inf_exp with ety = Some new_ety } in
-    (* let low_exp = { exp with ety = Some exp_ty } in  *)
     env, { e with e = EUp high_exp; ety = Some new_ety }
 
 and infer_op env span op args =
@@ -715,7 +713,7 @@ and replace_sec (ty: ty option) sec =
 and is_high_sec sec = 
   match sec with 
   | SVar {contents = Bound s} -> is_high_sec s
-  | High _ -> true
+  | High -> true
   | _ -> false
 
 and infer_exps env es =

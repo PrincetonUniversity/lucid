@@ -25,15 +25,15 @@ fun int test3(int i) {
 }
 
 handle ip(int dst) {                                    // HIGH propagates to dst in handler
-    //int x = dst + 1;
+    int x = dst + 1;
     // x = 3;
     // LOW int y = 2;
 
     //Array.set(arr, 1, x);
-    int a = Array.get(arr2, dst);
+    //int a = Array.get(arr2, dst);
     //generate(arr_test(1));
-    //int z = down(x);
-    //int w = z + 1;
+    int z = up(2);
+    int w = x + 1;
     // int x = dst+1;                                      // HIGH propagates to x
     
     // int i = test(4);                                    // HIGH propagates to i

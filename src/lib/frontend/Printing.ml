@@ -190,12 +190,8 @@ and ty_to_string t =
 
 and sec_to_string tsec = 
   match tsec with 
-  | High x -> 
-    if x then "HIGH"
-    else "HIGH(C)"
-  | Low x -> 
-    if x then "LOW"
-    else "LOW(D)" 
+  | High -> "HIGH"
+  | Low -> "LOW"
   | SVar secref -> 
       match !secref with 
       | Free _ -> "LOW(U)" (* unspecified so automatically assumed to be low *)

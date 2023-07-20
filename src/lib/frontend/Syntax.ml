@@ -81,9 +81,7 @@ and func_ty =
   ; constraints : constr list Stdlib.ref
   }
  
-(* Low true = Natively low value, Low false = Value that has been declassified to low *)
-(* High true = Natively high value, High false = Value that has been classified to high *)
-and sec = High of bool | Low of bool | SVar of tsec ref
+and sec = High | Low | SVar of tsec ref
 and tsec = Free of string | Bound of sec
 
 and ty =
