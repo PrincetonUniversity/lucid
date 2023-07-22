@@ -40,18 +40,19 @@ memop foo4(int memval1, int memval2, int localval1, int localval2) {
 
 handle ip(int dst) {                                    // HIGH propagates to dst in handler
     int x = dst + 1;
+    generate_port(1, ip(up(1)));
     // x = 3;
     // LOW int y = 2;
 
-    Array.set(arr, 1, 0);
-    generate(arr_test(1));
+    // Array.set(arr, 1, 0);
+    // generate(arr_test(1));
     // int z = up(2);
     // int w = x + 1;
     // int x = dst+1;                                      // HIGH propagates to x
     
     // int i = test(4);                                    // HIGH propagates to i
-    // int j = test2(4);                                   // HIGH propagates to j
-    // int k = test3(x);                                   // HIGH propagates to k
+    // int j = test2(up(4));                                   // HIGH propagates to j
+    // int k = test3(down(x));                                   // HIGH propagates to k
     
     // ip_t ip_addr = { src = x; dst = 2 };
     // ip_addr = { ip_addr with src = x };

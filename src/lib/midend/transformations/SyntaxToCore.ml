@@ -138,6 +138,8 @@ let rec translate_exp (e : S.exp) : C.exp =
     | S.EPatWild (Some sz) -> C.EVal (C.vwild (translate_size sz))
     | S.EPatWild None ->
       err e.espan "wildcard patterns (_) should have a size before IR."
+    | S.EDown _ -> err e.espan (Printing.exp_to_string e)
+    | S.EUp _ -> err e.espan (Printing.exp_to_string e)
   in
   { e = e'; ety = translate_ty (Option.get e.ety); espan = e.espan }
 

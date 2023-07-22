@@ -354,6 +354,7 @@ let rec is_compound e =
   | ERecord entries -> List.exists (is_compound % snd) entries
   | EWith (base, entries) ->
     is_compound base || List.exists (is_compound % snd) entries
+  | EDown e | EUp e -> is_compound e
 ;;
 
 (* Turn a list of statements into an SSeq (or a SNoop, if empty) *)

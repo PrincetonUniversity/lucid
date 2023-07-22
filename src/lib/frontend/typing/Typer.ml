@@ -127,28 +127,15 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
       ; constraints = ref []
       }
     in
-    (* security of event depends only on security of its arguments *)
-    let is_event =
-      (match inferred_fty.raw_ty with 
-      | TFun ty -> 
-        (match ty.ret_ty.raw_ty with 
-        | TEvent -> true
-        | _ -> false)
-      | _ -> raise (SecError "Trying to call something that's not a function")) in
-    if is_event then
-    (List.iter (fun typ -> if is_high_sec typ.tsec then raise (SecError "No HIGH args to events")) fty.arg_tys)
-    (* check that all inferred arguments and parameters have equal security levels *)
-    else 
-    (let expected_arg_tys = 
-      (match inferred_fty.raw_ty with 
-      | TFun ty -> ty.arg_tys
-      | _ -> raise (SecError "Trying to call something that's not a function")) in
     let check_arg_sec expected_arg actual_arg = 
       if is_high_sec expected_arg.tsec && not (is_high_sec actual_arg.tsec)
       then raise (SecError "Sec level of argument does not match sec level of function param")
       else ()
     in
-    List.iter2 check_arg_sec expected_arg_tys fty.arg_tys);
+    (match inferred_fty.raw_ty with 
+    | TFun ty -> List.iter2 check_arg_sec ty.arg_tys fty.arg_tys
+    | TEvent -> ()
+    | _ -> raise (SecError ("Trying to call a " ^ (Printing.ty_to_string inferred_fty))));
     (* print_endline @@ "Inferred_fty: " ^ Printing.ty_to_string inferred_fty;
     print_endline @@ "fty: " ^ Printing.func_to_string fty; *)
     unify_raw_ty e.espan (TFun fty) inferred_fty.raw_ty;
@@ -157,6 +144,19 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
       @@ !(fty.constraints)
     in
     let ret_sec = sjoin fty.ret_ty.tsec inferred_fty.tsec in 
+    (* security of event depends only on security of its arguments *)
+    let is_event =
+      (match inferred_fty.raw_ty with 
+      | TFun ty -> 
+        (match ty.ret_ty.raw_ty with 
+        | TEvent -> true
+        | _ -> false)
+      | _ -> raise (SecError "Trying to call something that's not a function")) in
+    let ret_sec =
+      if is_event then List.fold_left (fun sec typ -> sjoin sec typ.tsec) ret_sec fty.arg_tys
+      else ret_sec 
+    in
+    (* check that all inferred arguments and parameters have equal security levels *)
     (* Array operations depend on sec levels of actual array + any values being added to array *)
     let extract_name cid =
       match cid with 
@@ -976,8 +976,7 @@ and infer_statement (env : env) (s : statement) : env * statement =
     | SGen (g, e) ->
       let env, inf_e, ety = infer_exp env e |> textract in
       let sec = get_sec inf_e in 
-      if is_high_sec sec then raise (SecError "HIGH SECURITY THING BEING LEAKED") 
-      (* if is_high_sec sec then print_endline "HIGH SECURITY THING BEING LEAKED" *)
+      if is_high_sec sec then print_endline "HIGH SECURITY THING BEING LEAKED"
       else unify_raw_ty s.sspan ety.raw_ty TEvent;
       let env, inf_g =
         match g with

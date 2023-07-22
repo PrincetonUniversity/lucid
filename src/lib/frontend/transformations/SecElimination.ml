@@ -14,6 +14,9 @@ let replacer =
       match exp.e with 
       | EDown e -> e
       | EUp e -> e
+      | ECall (f, args) -> 
+        let args = List.map (fun arg -> self#visit_exp env arg) args in 
+        { exp with e = ECall (f, args) }
       | _ -> exp
   end
 ;;
