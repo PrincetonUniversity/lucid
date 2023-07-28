@@ -1,0 +1,5 @@
+const LOW int SERVER_PORT = 0;
+const HIGH int OUT_PORT = 1;
+
+packet event packet_in(HIGH int<48> dest);
+packet event server_info(LOW int<48> dest);

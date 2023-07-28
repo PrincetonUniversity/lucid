@@ -1,0 +1,53 @@
+
+
+// // third example program - security annotations!
+// include "../anonymize/anonymize.dpt"
+
+// const LOW int SERVER_PORT = ...;
+// const HIGH int OUT_PORT = ...;
+
+// packet event packet_in(HIGH int dest);
+// packet event server_info(LOW int dest);
+
+// handle packet_in(int dest) {
+
+// }
+
+// global Anonymizer.t anonymizer = Anonymizer.create();
+
+// handle packet_in(HIGH int dest) {
+//     generate_port(OUT_PORT, packet_in(dest));
+//     LOW int anon = Anonymizer.anonymize(anonymizer, dest);
+//     generate_port(SERVER_PORT, server_info(anon));
+// } // server_info(dest) will throw an error
+
+
+
+// second example program - using the anonymizer!
+include "../anonymize/anonymize.dpt"
+
+global Anonymizer.t anonymizer = Anonymizer.create();
+
+const int SERVER_PORT = ...;
+const int OUT_PORT = ...;
+
+packet event packet_in(int dest);
+
+handle packet_in(int dest) {
+    generate_port(OUT_PORT, packet_in(dest));
+    int anon = Anonymizer.anonymize(anonymizer, dest);
+    generate_port(SERVER_PORT, packet_in(anon));
+}
+
+
+// first example program - bare bones intro to lucid
+const int SERVER_PORT = ...;
+const int OUT_PORT = ...;
+
+packet event packet_in(int dest);
+packet event server_info(int dest);
+
+handle packet_in(int dest) {
+    generate_port(OUT_PORT, packet_in(dest));
+    generate_port(SERVER_PORT, server_info(dest));
+}

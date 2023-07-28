@@ -975,9 +975,8 @@ and infer_statement (env : env) (s : statement) : env * statement =
       { env with current_effect }, SIf (inf_e, inf_s1, inf_s2)
     | SGen (g, e) ->
       let env, inf_e, ety = infer_exp env e |> textract in
-      let sec = get_sec inf_e in 
-      if is_high_sec sec then print_endline "HIGH SECURITY THING BEING LEAKED"
-      else unify_raw_ty s.sspan ety.raw_ty TEvent;
+      (* let e_sec = get_sec inf_e in  *)
+      unify_raw_ty s.sspan ety.raw_ty TEvent;
       let env, inf_g =
         match g with
         | GSingle None -> env, g
