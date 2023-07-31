@@ -24,13 +24,6 @@ let report str =
 
 let profile_for_tofino target_filename portspec build_dir profile_cmd =
   let ds = Input.parse target_filename in
-  (* we just want to do function inlining special case for the tofino, 
-     but before that can run successfully, we need to do type inference. 
-     So we add a round of that here.  *)
-  Wellformed.pre_typing_checks ds;
-  let ds = Typer.infer_prog Builtins.tofino_builtin_tys ds in
-  let ds = FunctionInliningSpecialCase.inline_prog_specialcase ds in
-
   let _, ds = FrontendPipeline.process_prog Builtins.tofino_builtin_tys ds in
   let core_ds = MidendPipeline.process_prog ds in
   let portspec = ParsePortSpec.parse portspec in
@@ -43,18 +36,15 @@ let compile_to_tofino dptfn =
   @@ "Starting P4-Tofino compilation. Using switch port configuration: ";
   print_endline (ParsePortSpec.string_of_portconfig portspec);
   let ds = Input.parse dptfn in
-  (* before the standard frontend, do temporary optimization
-     passes that will eventually be removed once the
-     mid/back-end is better optimized. *)
-  let ds = ReplaceUserTys.replace_prog ds in
-  (* print_endline ("running inline_prog_specialcase"); *)
-  (* let ds = FunctionInliningSpecialCase.inline_prog_specialcase ds in *)
-  (* frontend type checks and eliminates most abstractions (modules, functions) *)
   let _, ds = FrontendPipeline.process_prog Builtins.tofino_builtin_tys ds in
-  (* tofino backend *)
+  (* tofino midend / backend *)
   let p4_str, c_str, py_str, py_eventlib, globals =
     if (Cmdline.cfg.new_tofino)
     then
+      (* the new pipeline has an updated tofino ir and 
+         many optimizations. It should be used unless 
+         there is a specific bug that has not yet been
+         resolved. *)
       TofinoPipelineNew.compile
         ds
         portspec

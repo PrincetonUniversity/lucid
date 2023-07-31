@@ -50,7 +50,6 @@
    memops
    wellformed
    functionInlining
-   functionInliningSpecialCase
    tableInlining
    sizeInlining
    renaming

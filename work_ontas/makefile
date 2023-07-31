@@ -17,8 +17,8 @@ DPT := $(shell $(FIND_DPT) || echo "-" )
 # SRC := scratchpad_full_inlining.dpt
 # SRC := anonymize.dpt
 # SRC := ontaslib.dpt
-# SRC := using_ontaslib.dpt
-SRC := scratchpad.dpt
+SRC := using_ontaslib.dpt
+# SRC := scratchpad.dpt
 
 # ifndef SRC
 # SRC := $(firstword $(wildcard *.dpt))
