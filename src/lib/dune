@@ -114,6 +114,7 @@
    TofinoCore
    SplitDataplane
    TofinoCoreNew
+   RemoveLocalInits
    RemoveInitOnlyStmts
    AddEgressParser
    ParseOptimizer
@@ -129,6 +130,7 @@
    SolitaryMatches
    Generates
    GeneratesNew
+   PropagateEvars
    IfToMatch
    RegularizeMemops
    RegularizeMemopsNew

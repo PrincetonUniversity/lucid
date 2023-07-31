@@ -4,6 +4,15 @@
    continuation block that executes all the code 
    in each control path that had a table call to t.
 
+   If a table is only called/matched once in a program, 
+   we can do something a bit more efficient, and 
+   replace the table call with a set callnum, then an 
+   execution conditioned on callnum. We still have to 
+   set the callnum, because the path constraints of 
+   the table match can only be evaluated by a 
+   previous table. (they may be too complex 
+   to embed in an if statement of P4).
+
    Core algorithm:
     to convert table t:
       traverse the syntax tree until you reach the 
@@ -26,6 +35,8 @@
               executing the sequence of statements that 
               go after each callnum.
 *)
+
+
 
 (*  
 note: 
@@ -407,7 +418,7 @@ let merged_match_stmt tbldef =
     [exp_of_id cnum_var cnum_ty]
     branches 
   in
-  {wrapper_stmt with spragmas = [Pragma.sprag "table" []]}
+  {wrapper_stmt with spragmas = [Pragma.sprag "ignore_path_conditions" []; Pragma.sprag "solitary" []]}
 (*   {(sifte 
     (op_sp Neq [(exp_of_id cnum_var cnum_ty);(vint_exp 0 (size_of_tint cnum_ty))] cnum_ty Span.default)
     (statement (STableMatch(tbl_match)))
@@ -501,10 +512,67 @@ let rec merge_table_matches tbl n_calls stmt =
     stmt
   | _ -> stmt
 ;;
+
+(* more efficient special case, for tables that are only used once in the program. 
+if a table is only used once, we can use a simpler / more efficient transformation 
+         where we just transform the table match into a sequence of: 
+          1) set call num and table inputs / args;
+          2) use table conditionally based on call num 
+        More optimization may be possible, but we need to be careful about how 
+        we encode the conditions on the table match's execution -- they 
+        must go into an if statement and layout must respect that. *)
+let gate_table_match = object
+  inherit [_] s_map as super
+  method! visit_statement tbl stmt = 
+    match stmt.s with
+    | STableMatch(tbl_match) -> 
+      let tbl_match_cid = exp_to_cid tbl_match.tbl in
+      let tbl_cid = Cid.id tbl.tid in
+      (* only process the specified table *)
+      if (Cid.equal tbl_cid tbl_match_cid) then (
+        (* first, we have to set the key and arg variables of the table *)
+        let setup_stmts = cut_tbl_match tbl tbl_match 1 in
+        (* now, update the table_match so that it uses the key and arg variables *)
+        let tbl_match = {
+          tbl_match with 
+          keys = List.map 
+            (fun (id, ty) -> exp_of_id id ty)
+            (keyvars_of_table tbl);
+          args = List.map 
+            (fun (id, ty) -> exp_of_id id ty)
+            (argvars_of_table tbl);    
+          }
+        in
+        (* construct the wrapper / match statement that calls the table 
+           if the flag is set. *)
+        let branches = [
+          ([PNum(Z.of_int(0))], snoop);
+          ([PWild], {stmt with s = STableMatch(tbl_match)})
+          ] 
+        in
+        let cnum_var, cnum_ty = callnumvar_of_table tbl in
+        let wrapper_stmt = smatch 
+          [exp_of_id cnum_var cnum_ty]
+          branches 
+        in
+        sseq 
+          setup_stmts 
+          {wrapper_stmt with spragmas = [Pragma.sprag "ignore_path_conditions" []; Pragma.sprag "solitary" []]}
+      )
+      else (stmt)
+    | _ -> super#visit_statement tbl stmt
+  end
+;;
+
 let process_table stmt tbl =
   (* Process a single table. *)
   let n_calls = count_tbl_matches tbl stmt in
-  merge_table_matches tbl n_calls stmt, iovars_of_table tbl
+  match n_calls with
+  | 1 -> 
+    gate_table_match#visit_statement tbl stmt, iovars_of_table tbl
+    (* merge_table_matches tbl n_calls stmt, iovars_of_table tbl *)
+  | _ -> 
+    merge_table_matches tbl n_calls stmt, iovars_of_table tbl
 ;;
 
 (* this pass produces buggy code when tables are not used in any event *)

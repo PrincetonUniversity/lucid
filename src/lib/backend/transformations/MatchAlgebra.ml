@@ -7,10 +7,12 @@ module CL = List
 
 
 (* helpers to put somewhere else! *)
-let cid_of_exp (ex : exp) : Cid.t =
+let rec cid_of_exp (ex : exp) : Cid.t =
   match ex.e with
   | EVar n -> n
-  | _ -> error "could not evaluate expression to a cid"
+  (* casts are atomic expressions that must be carried to P4. *)
+  | EOp(Cast _, [inner_ex]) -> cid_of_exp inner_ex
+  | _ -> error (Printf.sprintf "could not evaluate expression (%s) to a cid" (CorePrinting.exp_to_string ex))
 ;;
 let cons_uniq_eq eq xs x = if Core.List.mem xs x ~equal:eq then xs else x :: xs
 let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) [] xs)
@@ -59,11 +61,10 @@ type conditioned_rule = {
 
 let string_of_pattern p = 
   CL.map 
-    (fun (exp, p) -> ((cid_of_exp exp |> Cid.to_string)^"=="^(CorePrinting.pat_to_string p)))
+    (fun (exp, p) -> ((CorePrinting.exp_to_string exp)^"=="^(CorePrinting.pat_to_string p)))
     p
   |> String.concat ","  
 ;;
-
 
 let string_of_negs ns = 
   match ns with 
@@ -147,6 +148,9 @@ module Z3Helpers = struct
         let term = Z3Bool.mk_eq ctx z3_lhs z3_v in
         ctx, terms @ [term]
       )
+      (* to encode a wildcard, var = *, we construct 
+         an equation that is always true and involves var. 
+         we use (var && 0) == 0 *)
       | var_exp, PWild -> 
         let z3_vid = Z3Bit.mk_const_s ctx (cid_of_exp var_exp |> Cid.to_string) var_bw in 
         let z3_v   = Z3Bit.mk_numeral   ctx (string_of_int 0) var_bw in 

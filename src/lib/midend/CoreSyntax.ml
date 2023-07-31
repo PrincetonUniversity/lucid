@@ -465,8 +465,9 @@ let rec equiv_value v1 v2 =
   | _ -> false
 ;;
 
-let rec equiv_exp e1 e2 =
-  match e1.e, e2.e with
+
+let rec equiv_e e1 e2 = 
+  match e1, e2 with
   | EVal v1, EVal v2 -> equiv_value v1 v2
   | EVar cid1, EVar cid2 -> Cid.equal cid1 cid2
   | ECall (cid1, es1), ECall (cid2, es2) ->
@@ -475,6 +476,9 @@ let rec equiv_exp e1 e2 =
     sz1 = sz2 && equiv_list equiv_exp es1 es2
   | EOp (op1, es1), EOp (op2, es2) -> op1 = op2 && equiv_list equiv_exp es1 es2
   | _ -> false
+
+and equiv_exp e1 e2 =
+  equiv_e e1.e e2.e
 ;;
 
 let equiv_pat p1 p2 =

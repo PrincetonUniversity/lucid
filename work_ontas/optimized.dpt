@@ -133,6 +133,7 @@ module Anonymizer {
         return {prefix = (int<32>)prefix; suffix = suffix;};
     }
 
+    // anonymize mac conditionally anonymizes each part and then concats the outputs.
     fun int<48> anonymize_mac(int<48> address, bool anonymize_oui, bool anonymize_id) {
         split_int_t<24> split_mac = anonymize_num(address, anonymize_oui, anonymize_id);
         return (int<24>)(split_mac#prefix) ^ split_mac#suffix;
@@ -166,11 +167,11 @@ module Anonymizer {
             eth_t anonymized_eth = {eth with dmac = dmac; smac = smac};
 
             // anonymize IPv4 addresses
-            // int src_ip = anonymize_ip(
-            //     ip#src, anonymizer#src_prefix_table, policy#preserve_prefix);
-            // int dst_ip = anonymize_ip(
-            //     ip#dst, anonymizer#dst_prefix_table, policy#preserve_prefix);
-            // ip_t anonymized_ip = {ip with src = src_ip; dst = dst_ip};
+            int src_ip = anonymize_ip(
+                 ip#src, anonymizer#src_prefix_table, policy#preserve_prefix);
+             int dst_ip = anonymize_ip(
+                 ip#dst, anonymizer#dst_prefix_table, policy#preserve_prefix);
+             ip_t anonymized_ip = {ip with src = src_ip; dst = dst_ip};
 
             return {eth = anonymized_eth; ip = ip;};
         }
@@ -189,8 +190,6 @@ handle eth_ip(Anonymizer.eth_t eth, Anonymizer.ip_t ip) {
 	// generate_port(OUT_PORT, eth_ip(eth, ip));
 	// 2. anonymize packet info before sending to the monitoring server.
     Anonymizer.eth_ip_t anonymized_packet = Anonymizer.anonymize_packet(anonymizer, {eth=eth; ip=ip});
-    // why does adding generate_port cause the program to go from 9 stages -> 15 stages? 6 stages to copy the parameters? 
-    // no way. Must be some dead code stuff.
     generate_port(SERVER_PORT, eth_ip(anonymized_packet#eth, anonymized_packet#ip));
 }
 

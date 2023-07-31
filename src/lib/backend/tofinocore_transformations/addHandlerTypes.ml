@@ -257,13 +257,19 @@ let rec get_event_param_ty event cid : ty option =
 
 (* rename variables given a map from old cids -> new cids *)
 let rename =
-  object
+  object (self)
     inherit [_] s_map as super
-
     method! visit_EVar (env : Cid.t CidMap.t) x =
       match CidMap.find_opt (x) env with
       | Some e -> EVar e
       | None -> EVar x
+    (* tricky! we also want to rename cids that 
+       appear in assignment statements. *)
+    method! visit_SAssign env x exp =
+      let exp' = self#visit_exp env exp in
+      match CidMap.find_opt (x) env with
+      | Some x' ->  SAssign(x', exp')
+      | _ -> SAssign(x, exp')
   end
 ;;
 

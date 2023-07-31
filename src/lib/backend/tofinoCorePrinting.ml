@@ -53,10 +53,17 @@ let hevent_to_string h =
   let out_params = (id_of_event h.hdl_output, {raw_ty=TEvent; tspan=Span.default})::h.hdl_retparams in 
   let body_str = match h.hdl_body with 
     | SFlat stmt -> stmt_to_string stmt |> indent_body
-    | SPipeline stmts -> String.concat "\n" (List.map stmt_to_string stmts) |> indent_body
+    | SPipeline stmts -> 
+      let stage_strs = List.map stmt_to_string stmts in
+      let stage_strs = List.mapi
+        (fun stage_num stage_str  -> 
+          ("// Stage "^(string_of_int stage_num)^(" \n")^stage_str))
+        stage_strs
+      in
+      String.concat "\n" stage_strs |> indent_body
   in
   Printf.sprintf
-    "%shandle %s(%s) returns (%s)\n{%s\n}"
+    "%shandle %s(%s) returns (%s) {\n%s\n}"
     hdl_sort_str
     (id_to_string h.hdl_id)
     (params_to_string params)

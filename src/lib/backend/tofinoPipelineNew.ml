@@ -7,18 +7,13 @@
 open TofinoCore
 open BackendLogging
 
-let dump_prog fn comment prog = 
-  dump fn comment (TofinoCorePrinting.prog_to_string prog)
+let dump_ir_prog comment fn prog = 
+  dump (IoUtils.ir_dump_path fn) comment (CorePrinting.decls_to_string prog)
+;;
+let dump_prog comment fn prog = 
+  dump (IoUtils.ir_dump_path fn) comment (TofinoCorePrinting.prog_to_string prog)
 ;;
 
-let dbg_dump_core_prog phasename ds =
-  if (Cmdline.cfg.debug)
-  then (
-    let outf = open_out (IoUtils.ir_dump_path phasename) in
-    Printf.fprintf outf "// after phase: %s" phasename;
-    Printf.fprintf outf "%s" (CorePrinting.decls_to_string ds);
-    flush outf)
-;;
 
 let print_if_debug str = if Cmdline.cfg.debug then Console.report str
 
@@ -107,6 +102,8 @@ let layout old_layout (prog : TofinoCoreNew.prog) =
     let main_handler = TofinoCoreNew.main_handler_of_decls comp.comp_decls in
     let main_handler' = {main_handler with hdl_body = TofinoCoreNew.SPipeline(pipeline_stmts);} in
     let comp = TofinoCoreNew.replace_main_handler_of_component comp main_handler' in 
+    dump_prog "tofinocore after layout (final)" (Printf.sprintf "tofinocore_%s_layout_pre_actionform" cn) [comp];
+
     report_if_verbose (Printf.sprintf "-------Layout for %s: wrapping table branches in functions-------" cn);
     let comp = ActionFormNew.process_comp comp in
     report_if_verbose (Printf.sprintf "-------Layout for %s: deduplicating table branch functions-------" cn);
@@ -131,14 +128,14 @@ let compile ds portspec =
   if (Cmdline.cfg.debug)
   then (
     CoreCdg.start_logging ();
-    CoreDfg.start_logging ());
-
+    CoreDfg.start_logging ();
+    PropagateEvars.start_logging());
   report_if_verbose "-------Translating to Midend IR---------";
   let core_ds = SyntaxToCore.translate_prog ds in
   printprog_if_debug core_ds;
   let ds = core_ds in 
 
-  dbg_dump_core_prog "midend" ds;
+  dump_ir_prog "midend before partial interp (initial prog)" "midend_pre_partial_interp.dpt" ds;
   let ds = if partial_interp
     then (
       report_if_verbose "-------Partial interpreting---------";
@@ -148,6 +145,7 @@ let compile ds portspec =
       )
     else ds 
   in
+  dump_ir_prog "midend after partial interp" "midend_post_partial_interp.dpt" ds;
   let ds = EliminateEventCombinators.process ds in
   report_if_verbose "-------Unifying event and handler parameter ids---------";
   let ds = StandardizeEventParams.process ds in
@@ -182,6 +180,7 @@ let compile ds portspec =
 
   (* translate into TofinoCore IR *)
   let core_prog = to_tofinocore ds in
+  dump_prog "tofinocore initial program" "tofinocore_initial.dpt" core_prog;
 
   (* add the egress parser. This could go anywhere in tofinocore
      passes. *)
@@ -195,8 +194,13 @@ let compile ds portspec =
   report_if_verbose "-------Tagging large match statements as solitary-------";
   let core_prog = SolitaryMatches.process_core 20 core_prog in
   printtofcoreprog_if_debug core_prog;
-  report_if_verbose "-------Transforming certain declarations to no-init declarations-------";
+  report_if_verbose "-------Eliminating local initializations wherever possible -------";
+  let core_prog = RemoveLocalInits.process core_prog in 
+  dump_prog "tofinocore local inits removed" "tofinocore_nolocalinit.dpt" core_prog;
+
+(*   report_if_verbose "-------Transforming certain declarations to no-init declarations-------";
   let core_prog = RemoveInitOnlyStmts.process core_prog in 
+ *)
   printtofcoreprog_if_debug core_prog;
   report_if_verbose "-------Eliminating if statements-------";
   let core_prog = IfToMatch.process_core core_prog in 
@@ -210,8 +214,11 @@ let compile ds portspec =
   report_if_verbose "-------Transforming actions into functions-------";
   let core_prog = ActionsToFunctionsNew.process_core core_prog in
 
+  let core_prog = PropagateEvars.process core_prog in
+  (* exit 1; *)
+  dump_prog "tofinocore right before layout" "tofinocore_pre_layout.dpt" core_prog;
   let core_prog = layout old_layout core_prog in
-
+  dump_prog "tofinocore after layout (final)" "tofinocore_post_layout.dpt" core_prog;
   report_if_verbose "-------Translating to final P4-tofino-lite IR-------";
   let tofino_prog = TofinoCoreToP4.translate_prog core_prog in
   (* generate the python event library *)
@@ -223,7 +230,7 @@ let compile ds portspec =
   in
   (* build the globals name directory json *)
   report_if_verbose "-------generating Lucid name => P4 name directory-------";
-  let globals_directory =
+  let globals_directory = 
     P4TofinoGlobalDirectory.build_global_dir tofino_prog
     |> Yojson.Basic.pretty_to_string
   in

@@ -1,19 +1,38 @@
 event bar(int y){skip;}
+// event baz(int z){skip;}
 
-fun int fa(int a) {
-    return a + a;
-}
+// fun int fa(int a) {
+//     return a + a;
+// }
 
-fun int fb(int b) {
-    if (b == 1) {
-        return fa(b);
+// fun int fb(int b) {
+//     match b with
+//     | 1 -> {return fa(b);}
+//     | _ -> {return fa(b);}
+//     // this is a function that doesn't always return!
+// }
+
+
+event foo(int x) {
+    int b = x;
+    int c = 0;
+    if (x == 5) {
+        c = b;
     } else {
-        return b;
+        c = 1;
     }
-}
+    generate(bar(c));
 
-
-event foo(int x){
-    int res = fb(x);
-    generate(bar(res));
+    // int res = fb(x);
+    // int res2 = res;
+    // // match x with
+    // //     | 0 -> {skip; }
+    // //     | _ -> {x = 1;}
+    // if (x == 1) { 
+    //     int res3 = res2;
+    //     generate(bar(res3));
+    // } else {
+    //     int res4 = res2;
+    //     generate(baz(res4));
+    // }
 }

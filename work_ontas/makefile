@@ -14,8 +14,11 @@ DPT := $(shell $(FIND_DPT) || echo "-" )
 # value the first .dpt file found is used.
 # SRC := scratchpad.dpt
 # SRC := optimized.dpt
-
-SRC := scratchpad_full_inlining.dpt
+# SRC := scratchpad_full_inlining.dpt
+# SRC := anonymize.dpt
+# SRC := ontaslib.dpt
+# SRC := using_ontaslib.dpt
+SRC := scratchpad.dpt
 
 # ifndef SRC
 # SRC := $(firstword $(wildcard *.dpt))
@@ -43,7 +46,7 @@ interp_local:
 
 # DPT_BUILD_DIR is the directory where the lucid
 # compiler will place its output files.
-DPT_BUILD_DIR := build_$(basename $(SRC))]
+DPT_BUILD_DIR := build_$(basename $(SRC))
 
 # P4_OUTPUT is the lucid-generate p4 program. 
 P4_OUTPUT := $(DPT_BUILD_DIR)/lucid.p4
@@ -54,7 +57,7 @@ DPTC := $(shell $(FIND_DPTC) || echo "-" )
 build_p4: $(P4_OUTPUT)
 
 $(P4_OUTPUT): $(SRC)
-	$(DPTC) $< --new-tofino -o $(DPT_BUILD_DIR)
+	$(DPTC) $< --new-tofino -o  $(DPT_BUILD_DIR)
 
 clean:
 	rm -rf $(DPT_BUILD_DIR)

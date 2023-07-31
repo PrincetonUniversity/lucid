@@ -385,6 +385,12 @@ let stage_fits prog_info stage =
     false)
 ;;  
 
+let string_of_statement_group stmt_group = 
+  let string_of_vertex_statement (vs : vertex_stmt) =
+    CorePrinting.statement_to_string vs.stmt
+  in 
+  String.concat "\n" (List.map string_of_vertex_statement stmt_group.vertex_stmts)
+;;
 
 (*****  the new layout algorithm, based on statement groups *****)
 let place_in_table stmt_group table =
@@ -415,12 +421,19 @@ let place_in_table stmt_group table =
     (* debug_print_endline("[place_in_table] innermost table merge took "^(string_of_float (tend -. tstart))); *)
     match new_tbl_smatch.s with
     | SMatch(es, bs) ->
-      Some({
+     let tbl = {
         tkeys=es;
         branches=bs;
         solitary = table.solitary || contains_solitary;
         stmt_groups=table.stmt_groups@[stmt_group];
-        })
+        }
+      in
+    (*       print_endline ("-----------[place_in_table] report------------");
+      print_endline ("input table:\n"^(string_of_table table));
+      print_endline ("input stmt group:\n"^(string_of_statement_group stmt_group));
+      print_endline ("output table:\n"^(string_of_table tbl));
+      print_endline ("-----------[place_in_table] report------------"); *)
+      Some(tbl)
     | _ -> error "[merge_into_table] merge matches didn't return a match statement. What?]" 
   )
   else (None)  

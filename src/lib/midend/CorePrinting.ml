@@ -6,6 +6,13 @@ let concat_map sep f lst = lst |> List.map f |> String.concat sep
 let list_to_string f lst = Printf.sprintf "[%s]" (concat_map "; " f lst)
 let comma_sep f xs = concat_map "," f xs
 
+
+let indent_body s = 
+  String.split_on_char '\n' s
+  |> List.map (fun s -> "  " ^ s)
+  |> String.concat "\n"
+;;
+
 let integer_to_string n =
   if cfg.verbose_types then Integer.to_string n else Integer.value_string n
 ;;
@@ -230,12 +237,12 @@ match s with
   let s2_str =
     match s2.s with
     | SNoop -> ""
-    | _ -> "else {\n" ^ stmt_to_string s2 ^ "\n}"
+    | _ -> "else {\n" ^ (stmt_to_string s2 |> indent_body) ^ "\n}"
   in
   Printf.sprintf
     "if (%s) {\n%s\n} %s"
     (exp_to_string e)
-    (stmt_to_string s1)
+    (stmt_to_string s1 |> indent_body)
     s2_str
 | SSeq (s1, s2) ->
   let str1, str2 = stmt_to_string s1, stmt_to_string s2 in
@@ -245,7 +252,7 @@ match s with
     let s = comma_sep exp_to_string es in
     if List.length es = 1 then s else "(" ^ s ^ ")"
   in
-  "match " ^ estr ^ " with \n" ^ concat_map "\n" branch_to_string branches
+  "match " ^ estr ^ " with \n" ^ ((concat_map "\n" branch_to_string branches) |> indent_body)
 | SRet eopt ->
   let estr =
     match eopt with
@@ -278,7 +285,7 @@ match s with
 and stmt_to_string stmt =
   let s_str = s_to_string stmt.s in
   let prag_str = match stmt.spragmas with
-    (* | [] -> "" *)
+    | [] -> ""
     | _ -> " //" ^ (Pragma.to_strings stmt.spragmas)
   in
   s_str ^ prag_str
@@ -335,12 +342,6 @@ let memop_to_string body =
       (print_cr @@ body.ret)
 ;;
 
-let indent_body s = 
-  String.split_on_char '\n' s
-  |> List.map (fun s -> "  " ^ s)
-  |> String.concat "\n"
-;;
-
 let rec parser_action_to_string action =
   match action with
   | PSkip ty -> Printf.sprintf "skip %s;" (ty_to_string ty)
@@ -389,7 +390,7 @@ let d_to_string d =
        | HEgress -> "@egress ")
       (id_to_string id)
       (params_to_string params)
-      (stmt_to_string s)
+      (stmt_to_string s |> indent_body)
   | DEvent (id, annot, sort, params) ->
     Printf.sprintf
       "%s %s%s(%s);"

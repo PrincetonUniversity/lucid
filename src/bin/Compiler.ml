@@ -47,8 +47,8 @@ let compile_to_tofino dptfn =
      passes that will eventually be removed once the
      mid/back-end is better optimized. *)
   let ds = ReplaceUserTys.replace_prog ds in
-  print_endline ("running inline_prog_specialcase");
-  let ds = FunctionInliningSpecialCase.inline_prog_specialcase ds in
+  (* print_endline ("running inline_prog_specialcase"); *)
+  (* let ds = FunctionInliningSpecialCase.inline_prog_specialcase ds in *)
   (* frontend type checks and eliminates most abstractions (modules, functions) *)
   let _, ds = FrontendPipeline.process_prog Builtins.tofino_builtin_tys ds in
   (* tofino backend *)

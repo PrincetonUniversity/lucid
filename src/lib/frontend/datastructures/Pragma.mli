@@ -24,6 +24,8 @@ val find_sprag : string -> string list -> t list -> t option
 
 val exists_pnolocal : t list -> bool
 
+val exists_sprag : string -> string list -> t list -> bool
+
 val to_string : t -> string
 
 val to_strings : t list -> string

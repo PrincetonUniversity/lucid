@@ -19,7 +19,11 @@ type edge_condition =
 type vertex_stmt = {
     vuid : int;
     stmt : statement;
-    solitary : bool; (* solitary means this statement cannot share a table with any others. *)
+    solitary : bool;
+    (* solitary means this statement cannot share a table with any others. *)
+    (* <<refactor>> now that there are pragmas, 
+       we should use the solitary pragma for this instead 
+       of adding a new field.  *)
 }
 let cur_uid = ref 0 ;;
 
@@ -81,6 +85,9 @@ module Dfs = Graph.Traverse.Dfs(Cfg)
 let vertex_num v = v.stmt.sspan.spid
 ;;
 
+let vertex_prags v = v.stmt.spragmas
+;;
+
 (*** graph printing ***)
 (* statement --> graph node string *)
 let summarystr_of_branch (pats, stmt) =
@@ -98,7 +105,10 @@ let summarystr_of_stmt (stmt) is_solitary_match =
             (* ": match ("^(CorePrinting.es_to_string es)^") ..." *)        
         ) else (
             (string_of_int stmt.sspan.spid)^": "
-            ^"match ("^(CorePrinting.es_to_string es)^") ...\n"
+            ^"match ("^(CorePrinting.es_to_string es)^") with\n"
+            ^(CL.map summarystr_of_branch bs |> (String.concat "\n"))
+(*             (string_of_int stmt.sspan.spid)^": "
+            ^"match ("^(CorePrinting.es_to_string es)^") ...\n" *)
         )
 
     | SIf(e, _, _) -> 
@@ -131,8 +141,8 @@ let rec is_noop stmt =
       bs
   | _ -> false
 ;;
-let str_of_vertex v =
-    (* let is_root = ((Cfg.in_degree g v) == 0) in *)
+
+let vertex_to_string v =
     let is_noop = (is_noop v.stmt) in
     Printf.sprintf 
         "%s[%s]: %s"
@@ -140,6 +150,7 @@ let str_of_vertex v =
         (string_of_int v.stmt.sspan.spid)
         (CorePrinting.statement_to_string v.stmt)
 ;;
+let str_of_vertex = vertex_to_string
 
 let str_of_edge (s, _, d) =
     Printf.sprintf 
@@ -147,6 +158,9 @@ let str_of_edge (s, _, d) =
         (string_of_int s.stmt.sspan.spid)
         (string_of_int d.stmt.sspan.spid)
 ;;
+
+
+
 
 let str_of_graph g =
     let strs = 
@@ -186,6 +200,35 @@ module CfgDot = Graph.Graphviz.Dot (CfgDotConfig)
 let print_cfg fn g =
     CfgDot.output_graph (Caml.open_out_bin fn) g
 ;;
+
+
+(* more debugging...  really have to clean up the helpers in this file, 
+   and the graph-based IRs in general. They are getting too complicated 
+   to be so add-hoc, and now need a little more structure for maintainability. *)
+let vertex_to_debugstr g vertex = 
+    [vertex_to_string vertex]
+    @["----predecessors----"]
+    @(List.map vertex_to_string (Cfg.pred g vertex))
+    @["----successors----"]
+    @(List.map vertex_to_string (Cfg.succ g vertex))
+    |> String.concat "\n"
+;;
+
+let debug_vertex g num node =
+    if ((vertex_num node) == num)
+    then (
+        print_endline ("found node "^(string_of_int num));
+        vertex_to_debugstr g node |> print_endline;
+        exit 0;
+    )
+
+let debug_graph tagstr g num =
+    print_endline ("checking for problem node "^(tagstr));
+    Cfg.iter_vertex (debug_vertex g num) g;
+    print_endline ("didn't find node "^(string_of_int num)^" in "^(tagstr))
+;;
+
+
 
 (*** graph building ***)
 
@@ -234,7 +277,8 @@ let pattern_of_branch es b =
 (* Some match nodes may get compiled directly into their own tables.
     User-written match statements with:
         1. many branches (>20 -- this is somewhat arbitrary)
-        2. no sequences of statements *)
+        2. no sequences of statements 
+    Also, the match statements that wrap table_matchs are solitary. *)
 let is_solitary_match stmt =
     match Pragma.find_sprag "solitary" [] stmt.spragmas with
     | Some(_) -> true
@@ -265,7 +309,8 @@ let rec cfg_of_statement_inner (st:statement) =
         Cfg.add_vertex Cfg.empty (vertex_of_stmt st false)
     | STableMatch(_) -> 
         (* a table match remains a table match *)
-        Cfg.add_vertex Cfg.empty (vertex_of_stmt st true)
+        error "coreCfg.cfg_of_statement_inner] table match statements should be wrapped in solitary matches"
+        (* Cfg.add_vertex Cfg.empty (vertex_of_stmt st true) *)
     | STableInstall(_) -> 
         error "[coreCfg.cfg_of_statement_inner] table installs should be removed from tofino program by this point."
     | SIf(e, s1, s2) ->
@@ -385,7 +430,10 @@ let cfg_of_statement statement =
     |> cfg_of_statement_inner
 ;;
 
-(* convert back into a single statement *)
+(*  convert back into a single statement 
+    unused and out of date (7/25/23)
+    (definitely doesn't handle table matches correctly. or solitary statements)
+    depreciated for now *)
 let statement_of_cfg cfg =
     let rec stmt_of_vertex v = 
         match v.stmt.s with

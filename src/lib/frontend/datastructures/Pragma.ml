@@ -19,13 +19,18 @@ type t =
      
 let sprag name args = PStringPrag(name, args)
 
-let is_sprag pname pargs prag = 
+let sprag_equal pname pargs prag = 
   match prag with 
   | PStringPrag(name, args) -> 
       (pname = name) & (List.for_all2 (=) pargs args)
   | _ -> false
+
 let find_sprag pname pargs prags =
-  List.find_opt (is_sprag pname pargs) prags
+  List.find_opt (sprag_equal pname pargs) prags
+;;
+
+let exists_sprag pname pargs = 
+  List.exists (sprag_equal pname pargs)
 ;;
 
 let exists_pnolocal = 
