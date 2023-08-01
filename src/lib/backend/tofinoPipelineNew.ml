@@ -180,7 +180,7 @@ let compile ds portspec =
 
   (* translate into TofinoCore IR *)
   let core_prog = to_tofinocore ds in
-  dump_prog "tofinocore initial program" "tofinocore_initial.dpt" core_prog;
+  dump_prog "tofinocore initial program" "tofinocore_initial" core_prog;
 
   (* add the egress parser. This could go anywhere in tofinocore
      passes. *)
@@ -196,7 +196,7 @@ let compile ds portspec =
   printtofcoreprog_if_debug core_prog;
   report_if_verbose "-------Eliminating local initializations wherever possible -------";
   let core_prog = RemoveLocalInits.process core_prog in 
-  dump_prog "tofinocore local inits removed" "tofinocore_nolocalinit.dpt" core_prog;
+  dump_prog "tofinocore local inits removed" "tofinocore_nolocalinit" core_prog;
 
 (*   report_if_verbose "-------Transforming certain declarations to no-init declarations-------";
   let core_prog = RemoveInitOnlyStmts.process core_prog in 
@@ -209,16 +209,18 @@ let compile ds portspec =
   report_if_verbose "-------Allocating memop input variables-------";
   let core_prog = ShareMemopInputsNew.process_core core_prog in
 
+  dump_prog "IfToMatch; RegularizeMemopsNew; ShareMemopInputsNew" "tofinocore_regularized_memops" core_prog;
   report_if_verbose "-------Transforming table matches into single-call form-------";
   let core_prog = SingleTableMatch.process_core core_prog in
   report_if_verbose "-------Transforming actions into functions-------";
   let core_prog = ActionsToFunctionsNew.process_core core_prog in
+  dump_prog "SingleTableMatch; ActionsToFunctions" "tofinocore_single_table_match" core_prog;
 
   let core_prog = PropagateEvars.process core_prog in
   (* exit 1; *)
-  dump_prog "tofinocore right before layout" "tofinocore_pre_layout.dpt" core_prog;
+  dump_prog "PropagateEvars; (tofinocore right before layout)" "tofinocore_pre_layout" core_prog;
   let core_prog = layout old_layout core_prog in
-  dump_prog "tofinocore after layout (final)" "tofinocore_post_layout.dpt" core_prog;
+  dump_prog "tofinocore after layout (final)" "tofinocore_post_layout" core_prog;
   report_if_verbose "-------Translating to final P4-tofino-lite IR-------";
   let tofino_prog = TofinoCoreToP4.translate_prog core_prog in
   (* generate the python event library *)

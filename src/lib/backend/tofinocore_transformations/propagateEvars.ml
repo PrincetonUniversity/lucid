@@ -39,6 +39,8 @@
   }
 *)
 
+(* bug: this pass is dropping Array ops? *)
+
 open TofinoCoreNew
 module Ht = Caml.Hashtbl
 open Batteries
@@ -287,7 +289,7 @@ let compute_optimizations dfg =
 let do_optimization stmt (inter_var, output_var) = 
   (* do one optimization in the body of a handler
      1. replace all assignments to inter_var with assignments to output var. 
-     2. delete the declaration of inter_var
+     2. replace declaration of inter_var with an assignment to output var.
      3. delete all statements with rhs expressions that contain inter_var -- 
         by definition, these should all be EVar expressions.*)
   let v = object (_)
@@ -309,7 +311,11 @@ let do_optimization stmt (inter_var, output_var) =
       | _ ->
         (* 2. *)
         if (Cid.equal (Cid.id id) inter_var) 
-        then (SNoop)
+        then (
+          !dprint_endline ("replacing SLocal with noop");
+          !dprint_endline (CorePrinting.s_to_string (SLocal(id, ty, exp)));  
+          SAssign(output_var, exp))
+          (* SNoop) *)
         else (SLocal(id, ty, exp))
     end
   in
@@ -357,5 +363,6 @@ let process_comp comp =
 ;;
 
 let process core_prog =
+  start_logging ();
   List.map process_comp core_prog
 ;;
