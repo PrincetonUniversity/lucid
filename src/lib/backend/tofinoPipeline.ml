@@ -123,7 +123,7 @@ let atomic_op_form ds =
   print_if_verbose "-------Breaking down compound expressions--------";
   (* let ds = EliminateFloods.eliminate_floods ds in  *)
   (* form: + every argument in a function call is either a variable or value *)
-  let ds = PrecomputeArgs.precompute_args ds in
+  let ds = PrecomputeArgs.precompute_args false ds in
   (* form:
     + in handlers, boolean operations only occur in if condition expressions
     + in handlers, if condition expressions are in disjunctive normal form,

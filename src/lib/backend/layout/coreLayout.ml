@@ -14,7 +14,8 @@ let debug_print_endline str =
   then print_endline str
 ;;
 
-(* a statement group is a group of statements that should be scheduled together. *)
+(* a statement group is a group of statements that must be placed in the same stage
+   (because the access the same array) *)
 type statement_group = {
   sguid : int;
   (* vertices to place *)
@@ -158,7 +159,6 @@ let dfg_to_sgdfg dfg =
 ;;
 
 
-(**** from CoreLayout.ml ****)
 type layout_args = {
   num_nodes_to_place : int;
   dfg : SgDfg.t;
@@ -169,9 +169,8 @@ type layout_args = {
 type table = {
   tkeys  : exp list;
   branches : branch list; (* the "rules" of the table *)
-  stmt_groups : statement_group list;
   solitary : bool; 
-}
+  stmts : vertex_stmt list;}
 
 type stage = {
   tables : table list;
@@ -182,12 +181,12 @@ type pipeline = {
 }
 
 (* constructots *)
-let empty_table = {tkeys =[]; branches = []; solitary = false; stmt_groups = [];}
+let empty_table = {tkeys =[]; branches = []; solitary = false; stmts = [];}
 let empty_stage = {tables = [];}
 let empty_pipeline = {stages = [];}
 
 let table_is_empty table =
-  match table.stmt_groups with
+  match table.stmts with
   | [] -> true
   | _ -> false
 ;;
@@ -203,9 +202,9 @@ let tbls_in_pipe p =
   List.map (fun stage -> stage.tables) p.stages |> List.flatten
 ;;
 
-let src_stmts_in_table t =
-  List.map (fun sg -> sg.vertex_stmts) t.stmt_groups
-    |> List.flatten
+let src_stmts_in_table t = t.stmts
+  (* List.map (fun sg -> sg.vertex_stmts) t.stmts
+    |> List.flatten *)
 ;;
 let src_stmts_in_stage s =
   List.map src_stmts_in_table s.tables |> List.flatten
@@ -222,7 +221,7 @@ let stmts_of_pipe p =
 let summarystr_of_table t = 
   "(branches: "^(CL.length t.branches |> string_of_int)
   ^", IR statements: "^(CL.length (src_stmts_in_table t) |> string_of_int)
-  ^", statement groups: "^(CL.length t.stmt_groups |> string_of_int)^")"
+  ^", statements: "^(CL.length t.stmts |> string_of_int)^")"
 ;;
 
 let summarystr_of_stage s = 
@@ -249,7 +248,7 @@ let string_of_rules rs = (smatch_of_pattern_branches rs
 
 let string_of_table t =
   "// #branches/rules in table: "^(CL.length t.branches |> string_of_int)^"\n"^
-  "// #statement groups in table: "^(CL.length t.stmt_groups |> string_of_int)^"\n"^
+  "// #statements in table: "^(CL.length t.stmts |> string_of_int)^"\n"^
   (CorePrinting.statement_to_string (stmt_of_table t))
 ;;
 
@@ -271,13 +270,13 @@ let string_of_pipe p =
 let statements_of_table table = 
   CL.map (fun (_, bstmt) -> bstmt) table.branches |> MatchAlgebra.unique_stmt_list
 
-let statement_groups_of_table table = table.stmt_groups
-let statement_groups_of_stage s = List.map statement_groups_of_table s.tables |> List.flatten
+let statements_of_table table = table.stmts
+let statements_of_stage s = List.map statements_of_table s.tables |> List.flatten
 ;;
-let statement_groups_of_stages ss = List.map statement_groups_of_stage ss |> List.flatten
+let statements_of_stages ss = List.map statements_of_stage ss |> List.flatten
 ;;
 
-let vertices_of_table (t:table) = CL.map (fun sg -> sg.vertex_stmts) t.stmt_groups |> CL.flatten
+let vertices_of_table (t:table) = t.stmts
 let vertices_of_stage s = CL.map vertices_of_table s.tables |> CL.flatten
 let vertices_of_stages ss = CL.map vertices_of_stage ss |> CL.flatten
 let vertices_of_pipe  p = vertices_of_stages p.stages
@@ -289,7 +288,7 @@ type constraints_table = {
   max_matchbits : int;  
   max_arrays : int;
   max_hashers : int;
-
+  max_array_addrs : int; (* how many expressions can be used as array addresses? *)
 }
 type constraints_stage = {
   max_tables : int;
@@ -303,6 +302,7 @@ let table_constraints = {
   max_matchbits = 512;
   max_arrays = 1;
   max_hashers = 1;
+  max_array_addrs = 1;
 }
 
 let stage_constraints = {
@@ -313,17 +313,11 @@ let stage_constraints = {
 }
 (* calculate resources used by program components *)
 let arrays_of_vertex v = arrays_of_stmt v.stmt
-let arrays_of_table (t:table) = arrays_of_stmt (stmt_of_table t)
-let arrays_of_stage s = CL.map arrays_of_table s.tables |> CL.flatten |> (MatchAlgebra.unique_list_of_eq Cid.equal)
 
+let arrays_of_table (t:table) = arrays_of_stmt (stmt_of_table t)
 let hashers_of_table table =
   hashers_of_stmt (stmt_of_table table) |> unique_stmt_list
 ;;
-
-let hashers_of_stage stage =
-  CL.map hashers_of_table stage.tables |> CL.flatten |> unique_stmt_list
-;;
-
 let keywidth_of_table table = 
   let width_of_exp exp =
     match exp.ety.raw_ty with
@@ -334,15 +328,18 @@ let keywidth_of_table table =
   CL.fold_left (+) 0 (CL.map width_of_exp table.tkeys)
 ;;
 
+let array_addrs_of_table (t:table) = 
+  stmt_of_table t |> CoreResources.array_addrs_of_stmt
+;;
 (* does the table fit in the target? *)
 let table_fits table = 
   let c_stmts = (statements_of_table table |> CL.length) <= table_constraints.max_statements in
   let c_keywidth = (keywidth_of_table table) <= table_constraints.max_matchbits in
   let c_hashers = (hashers_of_table table |> CL.length) <= table_constraints.max_hashers in
   let c_arrays = (arrays_of_table table |> CL.length) <= table_constraints.max_arrays in
-
+  let c_addrs = (array_addrs_of_table table |> CL.length) <= table_constraints.max_array_addrs in
   if (
-    c_stmts && c_keywidth && c_hashers && c_arrays
+    c_stmts && c_keywidth && c_hashers && c_arrays && c_addrs
 (*     ((statements_of_table table |> CL.length) <= table_constraints.max_statements)
     && 
     ((keywidth_of_table table) <= table_constraints.max_matchbits)
@@ -359,6 +356,7 @@ let table_fits table =
     ^" c_keywidth: "^(string_of_bool c_keywidth)
     ^" c_hashers: "^(string_of_bool c_hashers)
     ^" c_arrays: "^(string_of_bool c_arrays)
+    ^" c_addrs: "^(string_of_bool c_addrs)
     ;
   if (not c_arrays)
   then (
@@ -368,7 +366,13 @@ let table_fits table =
   );
   false)
 ;;
+
 (* does the stage fit in the target? *)
+let arrays_of_stage s = CL.map arrays_of_table s.tables |> CL.flatten |> (MatchAlgebra.unique_list_of_eq Cid.equal)
+
+let hashers_of_stage stage =
+  CL.map hashers_of_table stage.tables |> CL.flatten |> unique_stmt_list
+;;
 let stage_fits prog_info stage =
   let c_tbls = (CL.length stage.tables <= stage_constraints.max_tables) in
   let c_arrays = ((arrays_of_stage stage |> CL.length) <= stage_constraints.max_arrays) in
@@ -393,7 +397,34 @@ let string_of_statement_group stmt_group =
 ;;
 
 (*****  the new layout algorithm, based on statement groups *****)
-let place_in_table stmt_group table =
+(* place_in_table operates on a stmt, not a stmt_group, 
+   because stmt_groups have to be in the same stage -- not 
+   necessarily the same table. *)
+let place_in_table (vertex_stmt: vertex_stmt) table = 
+  let can_proceed = match(vertex_stmt.solitary, table_is_empty table, table.solitary) with 
+    | true, true, false -> true (* solitary into an empty table *)
+    | true, _, _ -> false       (* solitary into anything else *)
+    | _, _, true -> false       (* anything into a solitary *)
+    | false, _, false -> true   (* non solitary into non-solitary *)
+  in 
+  if can_proceed then (
+    (* construct the new table. *)
+    let new_tbl_smatch = merge_matches (stmt_of_table table) (vertex_stmt.stmt) in
+    match new_tbl_smatch.s with
+    | SMatch(es, bs) ->
+     let tbl = {
+        tkeys=es;
+        branches=bs;
+        solitary = table.solitary || vertex_stmt.solitary;
+        stmts=table.stmts@[vertex_stmt];
+        }
+      in
+      Some(tbl)
+    | _ -> error "[merge_into_table] merge matches didn't return a match statement. What?]" 
+  )
+  else (None)  
+;;
+let old_place_in_table stmt_group table =
   let cond_stmts = stmt_group.vertex_stmts in
   (* first, figure out if the merge is possible depending on whether the 
      conditional statement or table is a user-defined table *)
@@ -425,7 +456,7 @@ let place_in_table stmt_group table =
         tkeys=es;
         branches=bs;
         solitary = table.solitary || contains_solitary;
-        stmt_groups=table.stmt_groups@[stmt_group];
+        stmts=table.stmts@stmt_group.vertex_stmts;
         }
       in
     (*       print_endline ("-----------[place_in_table] report------------");
@@ -441,7 +472,7 @@ let place_in_table stmt_group table =
 
 (* check that the table created by merging stmts into table 
    will satisfy as many of the table constraints as possible. *)
-let table_placement_precheck table (stmt_group:statement_group) = 
+let table_placement_precheck table (stmt:vertex_stmt) = 
   (* note: not sure what the right metric for statements should be, 
      (unique statements or not? 
      based on source statements or what is in the table branches?) *)
@@ -453,15 +484,10 @@ let table_placement_precheck table (stmt_group:statement_group) =
   (* estimating the keywidth is a bit more complex, can add if needed. *)
   (* let c_keywidth = (keywidth_of_table table) + ... in *)
   let hash_stmts = 
-    (hashers_of_table table)
-    @((List.map 
-        (fun (v:vertex_stmt) -> v.stmt |> hashers_of_stmt)
-          stmt_group.vertex_stmts)
-      |> List.flatten)
+    (hashers_of_table table)@(hashers_of_stmt stmt.stmt)
     |> MatchAlgebra.unique_stmt_list
   in
-  let arrays = (arrays_of_table table)@(stmt_group.arr |> Option.to_list) |> unique_list_of_eq Cid.equal in
-
+  let arrays = (arrays_of_table table)@(arrays_of_stmt stmt.stmt) |> unique_list_of_eq Cid.equal in
   (not table.solitary) 
   && (List.length table.branches <= 100) (* put an upper bound on number of rules in table, for now.*)
   (* && ((List.length all_stmts) <= table_constraints.max_statements) *)
@@ -470,18 +496,18 @@ let table_placement_precheck table (stmt_group:statement_group) =
 ;;
 
 (* try to place the statement group into the table. *)
-let try_place_in_table (prior_tables, stmt_group_opt) (table:table) =
+let try_place_in_table (prior_tables, (stmt_opt:vertex_stmt option)) (table:table) =
 (*   let tstart = Unix.gettimeofday () in *)
-  let not_placed_result = (prior_tables@[table], stmt_group_opt) in 
-  let result = match stmt_group_opt with 
+  let not_placed_result = (prior_tables@[table], stmt_opt) in 
+  let result = match stmt_opt with 
   | None -> not_placed_result
-  | Some(stmt_group) -> (
+  | Some(stmt) -> (
       (* does the table have room for this statement group? *)
-      let precheck_success = table_placement_precheck table stmt_group in
+      let precheck_success = table_placement_precheck table stmt in
       if (not (precheck_success))
       then (not_placed_result)
       else (        
-        let new_table_opt = place_in_table stmt_group table in
+        let new_table_opt = place_in_table stmt table in
         (* table placement may still fail, because 
            placement precheck doesn't check everything. *)
         match new_table_opt with 
@@ -500,42 +526,6 @@ let try_place_in_table (prior_tables, stmt_group_opt) (table:table) =
   if (success) then (
     debug_print_endline ("[try_place_in_table] took "^(tend -. tstart |> string_of_float)^(" and SUCCEEDED."))); *)
   result
-;;
-
-
-
-let table_fits table = 
-  let c_stmts = (statements_of_table table |> CL.length) <= table_constraints.max_statements in
-  let c_keywidth = (keywidth_of_table table) <= table_constraints.max_matchbits in
-  let c_hashers = (hashers_of_table table |> CL.length) <= table_constraints.max_hashers in
-  let c_arrays = (arrays_of_table table |> CL.length) <= table_constraints.max_arrays in
-
-  if (
-    c_stmts && c_keywidth && c_hashers && c_arrays
-(*     ((statements_of_table table |> CL.length) <= table_constraints.max_statements)
-    && 
-    ((keywidth_of_table table) <= table_constraints.max_matchbits)
-    && 
-    ((hashers_of_table table |> CL.length) <= table_constraints.max_hashers)
-    && 
-    ((arrays_of_table table |> CL.length) <= table_constraints.max_arrays) *)
-  )
-  then (true)
-  else (
-    debug_print_endline "[table_fits] FAIL!";
-  debug_print_endline@@
-    "[table_fits] c_stmts: "^(string_of_bool c_stmts)
-    ^" c_keywidth: "^(string_of_bool c_keywidth)
-    ^" c_hashers: "^(string_of_bool c_hashers)
-    ^" c_arrays: "^(string_of_bool c_arrays)
-    ;
-  if (not c_arrays)
-  then (
-    debug_print_endline (Printf.sprintf "arrays: [%s]"
-      (arrays_of_table table |> CorePrinting.comma_sep CorePrinting.cid_to_string)
-    )
-  );
-  false)
 ;;
 
 let stage_fits (prog_info:layout_args) stage =
@@ -571,59 +561,68 @@ let sort_tables_by_nbranches tbls =
 (* have all the dependencies of the 
    statement group been placed in stages? *)
 let dependencies_ready prog_info stages stmt_group =
-  let deps = SgDfg.pred prog_info.dfg stmt_group in
-  let placed = statement_groups_of_stages stages in
+  (* deps are all the statements in the predecessor statement groups. *)
+  let deps = SgDfg.pred prog_info.dfg stmt_group |> List.fold_left (fun ss stmt_group -> ss@stmt_group.vertex_stmts) [] in
+  let placed = statements_of_stages stages in
   List.for_all (fun dep -> List.mem dep placed) deps
 ;;
 
+
+(* place a single statement into the tables in a stage.
+   Always succeed, by adding a new table if necessary.*)
+let rec place_in_tables stmt tables =   
+  match tables with  
+  (* if we reach the end of the tables without 
+      placing, add a new table *)
+  | [] -> (
+    match (place_in_table stmt empty_table) with
+    | Some(table') -> [table']
+    | None -> error "[coreLayout.place_one_in_current] could not place statement into an empty table... should be impossible."
+  )
+  | table::tables -> (
+    if (table_placement_precheck table stmt)
+    then (
+      match place_in_table stmt table with
+      | Some(table') -> (
+        (* make sure the generated table isn't too big *)
+        if (table_fits table')
+          then 
+            (table'::tables)
+          else 
+            (table::(place_in_tables stmt tables))
+      )
+      | None -> table::(place_in_tables stmt tables))
+    (* precheck failed, no room in table *)
+    else (
+      table::(place_in_tables stmt tables))
+  )
+;;
+    
 let try_place_in_stage prog_info (prior_stages, stmt_group_opt) stage = 
   let not_placed_result = (prior_stages@[stage], stmt_group_opt) in 
   match stmt_group_opt with 
   | None -> not_placed_result (* already placed in a prior stage *)
   | Some(stmt_group) -> (
-    (* make sure that all the dependencies are placed *)
+    (* make sure that all the dependencies are placed for all the stmts in this group *)
     if (dependencies_ready prog_info prior_stages stmt_group)
-    then (       
-(*       debug_print_endline ("[try_place_in_stage] attempting placement in stage...");
-      let tstart = Unix.gettimeofday () in *)
-      let updated_tables, pargs_opt = CL.fold_left 
-        try_place_in_table 
-        ([], Some(stmt_group))
-        (stage.tables) (* place into tables in whatever order the tables are created *)
-        (* (stage.tables |> sort_tables_by_nbranches)  *)
-        (* try to place in tables with fewer branches first *)
+    then (
+      (* place each statement from this group into a table from this stage. *)
+      let tables' = List.fold_left
+        (fun tables' stmt -> 
+          place_in_tables stmt tables')
+        stage.tables
+        stmt_group.vertex_stmts
       in
-      (* if placement in all current tables fails, add a new table to the stage. *)
-      let updated_tables = 
-        if (placement_done pargs_opt)
-        then (updated_tables)
-        else (
-          (* debug_print_endline ("[try_place_in_stage] attempting to create new table in stage."); *)
-          updated_tables@
-          (
-            match (place_in_table stmt_group empty_table) with 
-          | None -> error "[try_place_in_stage] placement in this stage failed: no room in current tables, and no room for a new table.";
-          | Some (tbl) -> [tbl]
-          )
-        )
-      in
-      let updated_stage = {tables = updated_tables;} in
-      (* if the placement makes the stage full, placement fails.*)
+      let updated_stage = {tables = tables';} in
       if (not (stage_fits prog_info updated_stage)) 
-      then (
-(*         let tend = Unix.gettimeofday() in
-        let t = (tend -. tstart) in
-        debug_print_endline ("[try_place_in_stage] placement failed and took "^(string_of_float t)); *)
-        not_placed_result)
-      else (
-(*         let tend = Unix.gettimeofday() in
-        let t = (tend -. tstart) in
-        debug_print_endline ("[try_place_in_stage] placement succeeded and took "^(string_of_float t)); *)
-        prior_stages@[updated_stage], None)
+        then (not_placed_result)
+        else (prior_stages@[updated_stage], None)
     )
   else ( not_placed_result )
   )
 ;;
+(* <<TODO:refactor>> replace try_place_in_stage with a recursive place_in_stages, 
+                     similar to place_in_tables *)
 
 (* place a statement group into the pipe *)
 let place_in_pipe prog_info stmt_group pipe : pipeline =

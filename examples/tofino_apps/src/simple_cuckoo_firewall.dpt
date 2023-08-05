@@ -68,19 +68,19 @@ handle ip_pkt (eth_hdr eth, ip_hdr_prefix ip, int<32> src, int<32> dst) {
 // handle ip_in (int<9> igr_port, int src, int dst, int<16> len, int<8> tos) {
     // case: flow from trusted source.
     if (ip#tos == TOS_TRUSTED) {
-        int<8> idx_1 = hash<8>(seed_1, src);
+        // int<8> idx_1 = hash<8>(seed_1, src);
         // put this flow's key in the table if the slot is empty, return the previous value.
-        int stg_1_src = Array.update(key_src_1, idx_1, null_if_eq, src, new_if_null, src);
-        int stg_1_dst = Array.update(key_dst_1, idx_1, null_if_eq, dst, new_if_null, dst);
+        int stg_1_src = Array.update(key_src_1, hash<8>(seed_1, src), null_if_eq, src, new_if_null, src);
+        int stg_1_dst = Array.update(key_dst_1, hash<8>(seed_1, src), null_if_eq, dst, new_if_null, dst);
         // if the stage 1 record was null or the flow's key, this flow is stored
         // and we can safely emit the packet.
         if ((stg_1_src == NULL) && (stg_1_dst == NULL)) {
             generate_port(ingress_port, ip_pkt(eth, ip, src, dst));
         // else, repeat for stage 2.
         } else {
-            /* stage 1 */ int<8> idx_2 = hash<8>(seed_2, dst);
-            /* stage 2 */ int stg_2_src = Array.update(key_src_2, idx_2, null_if_eq, src, new_if_null, src);
-            /* stage 3 */ int stg_2_dst = Array.update(key_dst_2, idx_2, null_if_eq, dst, new_if_null, dst);
+            // /* stage 1 */ int<8> idx_2 = hash<8>(seed_2, dst);
+            /* stage 2 */ int stg_2_src = Array.update(key_src_2, hash<8>(seed_2, dst), null_if_eq, src, new_if_null, src);
+            /* stage 3 */ int stg_2_dst = Array.update(key_dst_2, hash<8>(seed_2, dst), null_if_eq, dst, new_if_null, dst);
             if ((stg_2_src == NULL) && (stg_2_dst == NULL)) {
                 generate_port(ingress_port, ip_pkt(eth, ip, src, dst));
             // Two collisions! If no cuckoo-installations are in-flight,
@@ -95,12 +95,12 @@ handle ip_pkt (eth_hdr eth, ip_hdr_prefix ip, int<32> src, int<32> dst) {
     // case: flow from untrusted source. This is only allowed
     // if the reverse direction flow has been seen.
     } else {
-        int<8> idx_1 = hash<8>(seed_1, dst);
-        int src_match_1 = Array.update(key_src_1, idx_1, mem_eq_search, dst, always_mem, 0);
-        int dst_match_1 = Array.update(key_dst_1, idx_1, mem_eq_search, src, always_mem, NULL);
-        int<8> idx_2 = hash<8>(seed_2, src);
-        int src_match_2 = Array.update(key_src_2, idx_2, mem_eq_search, dst, always_mem, 0);
-        int dst_match_2 = Array.update(key_dst_2, idx_2, mem_eq_search, src, always_mem, NULL);
+        // int<8> idx_1 = hash<8>(seed_1, dst);
+        int src_match_1 = Array.update(key_src_1, hash<8>(seed_1, dst), mem_eq_search, dst, always_mem, 0);
+        int dst_match_1 = Array.update(key_dst_1, hash<8>(seed_1, dst), mem_eq_search, src, always_mem, NULL);
+        // int<8> idx_2 = hash<8>(seed_2, src);
+        int src_match_2 = Array.update(key_src_2, hash<8>(seed_2, src), mem_eq_search, dst, always_mem, 0);
+        int dst_match_2 = Array.update(key_dst_2, hash<8>(seed_2, src), mem_eq_search, src, always_mem, NULL);
         // if the flow is found in either stage, the packet is permitted to exit.
         if (((src_match_1 == TRUE) && (dst_match_1 == TRUE)) ||
             ((src_match_2 == TRUE) && (dst_match_2 == TRUE))) {
@@ -117,19 +117,19 @@ handle cuckoo_insert(eth_hdr eth, ip_hdr_prefix ip,
     bool insert_fail = false;
     int victim_src = NULL;
     int victim_dst = NULL;
-    int<8> idx_1 = hash<8>(seed_1, src);
+    // int<8> idx_1 = hash<8>(seed_1, src);
     // replace whatever is in the first stage.
-    int stg_1_src  = Array.update(key_src_1, idx_1, null_if_eq, NULL, always_new, src);
-    int stg_1_dst  = Array.update(key_dst_1, idx_1, null_if_eq, NULL, always_new, dst);
+    int stg_1_src  = Array.update(key_src_1, hash<8>(seed_1, src), null_if_eq, NULL, always_new, src);
+    int stg_1_dst  = Array.update(key_dst_1, hash<8>(seed_1, src), null_if_eq, NULL, always_new, dst);
     // If both slots were null, the insert has succeeded.
     if ((stg_1_src == NULL) && (stg_1_dst == NULL)) {
         insert_success = true;
     }
     // Otherwise, move the victim to stage 2.
     else {
-        int<8> idx_2 = hash<8>(seed_2, stg_1_dst);
-        int stg_2_src = Array.update(key_src_2, idx_2, null_if_eq, stg_1_src, always_new, stg_1_src);
-        int stg_2_dst = Array.update(key_dst_2, idx_2, null_if_eq, stg_1_dst, always_new, stg_1_dst);
+        // int<8> idx_2 = hash<8>(seed_2, stg_1_dst);
+        int stg_2_src = Array.update(key_src_2, hash<8>(seed_2, stg_1_dst), null_if_eq, stg_1_src, always_new, stg_1_src);
+        int stg_2_dst = Array.update(key_dst_2, hash<8>(seed_2, stg_1_dst), null_if_eq, stg_1_dst, always_new, stg_1_dst);
         if ((stg_2_src == NULL) && (stg_2_dst == NULL)) {
             insert_success = true;
         }

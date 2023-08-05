@@ -37,7 +37,7 @@ let printprog_if_debug ds =
 let printtofcoreprog_if_debug prog = print_if_debug (TofinoCorePrinting.prog_to_string prog);;
 
 (* transform into a form where each statement is atomic *)
-let atomic_op_form ds =
+let atomic_op_form inline_array_addrs ds =
   report_if_verbose "-------Eliminating interpreter-only operations--------";
   let ds = EliminateInterpOps.eliminate_prog ds in
   printprog_if_debug ds;
@@ -53,9 +53,12 @@ let atomic_op_form ds =
   let ds = ImmutableConditions.make_conditions_immutable ds in
   printprog_if_debug ds;
   report_if_verbose "-------Breaking down compound expressions--------";
-  let ds = PrecomputeArgs.precompute_args ds in
+  let ds = PrecomputeArgs.precompute_args inline_array_addrs ds in
+  dump_ir_prog "midend after precompute args" "midend_precompute" ds;
   let ds = EliminateBools.do_passes ds in
+  dump_ir_prog "midend after EliminateBools" "midend_elim_bools" ds;
   let ds = NormalizeInts.do_passes ds in
+  dump_ir_prog "midend after NormalizeInts" "midend_norm_ints" ds;
   MidendPipeline.print_if_debug ds;
   ds
 ;;
@@ -146,13 +149,17 @@ let compile ds portspec =
     else ds 
   in
   dump_ir_prog "midend after partial interp" "midend_post_partial_interp.dpt" ds;
+  (* these passes are misc transformations that can happen in any order. 
+     In a refactored backend, EliminateEventCombinators, StandardizeEventParams, and InlineEventVars
+     should be removable. *)
   let ds = EliminateEventCombinators.process ds in
   report_if_verbose "-------Unifying event and handler parameter ids---------";
   let ds = StandardizeEventParams.process ds in
   report_if_verbose "-------Inlining event variables---------";
   let ds = InlineEventVars.inline ds in
-  report_if_verbose "-------Inlining actions into tables---------";
+  report_if_verbose "-------Creating unique per-table actions---------";
   let ds = UniqueTableActions.process ds in
+
   report_if_verbose "-------Adding declarations for P4Tofino intrinsics---------";
   let ds = AddIntrinsics.add_intrinsics ds in
   report_if_verbose "-------Numbering events---------";
@@ -169,8 +176,12 @@ let compile ds portspec =
        in the program.
      The program should be in a form where:
       - each action is used by at most 1 table *)
+  (* atomic op form breaks down statements so that each statement can 
+     map to a single ALU operation or a single match table invocation. *)
+  
+  let ds = atomic_op_form Cmdline.cfg.inline_array_addrs ds in
+  dump_ir_prog "midend in atomic op form" "midend_atomic_op.dpt" ds;
 
-  let ds = atomic_op_form ds in
   (* Statements and variable names don't change much beyond this point,
      so we give everything a unique identifier. *)
   report_if_verbose "-------Assigning spans with unique IDs---------";

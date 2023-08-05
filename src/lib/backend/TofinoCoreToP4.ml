@@ -261,16 +261,13 @@ and translate_ecall env fcn_cid args =
     (* Array stuff *)
     | "Array"::_ -> 
       let regacn_id, decl = translate_array_call env fcn_cid args in
-      let idx_arg = translate_memop_exp env
-        (List.hd (List.tl args))
-      in        
-      [decl], ecall (Cid.create_ids [regacn_id; (id "execute")]) [idx_arg]
+      (* idx_decls are produced if the arg is a hash op *)
+      let idx_decls, idx_arg = translate_exp env (List.hd (List.tl args)) in
+      idx_decls@[decl], ecall (Cid.create_ids [regacn_id; (id "execute")]) [idx_arg]
     | "PairArray"::_ -> 
       let regacn_id, decl = translate_pairarray_call env fcn_cid args in 
-      let idx_arg = translate_memop_exp env
-        (List.hd (List.tl args))
-      in        
-      [decl], ecall (Cid.create_ids [regacn_id; (id "execute")]) [idx_arg]
+      let idx_decls, idx_arg = translate_exp env (List.hd (List.tl args)) in
+      idx_decls@[decl], ecall (Cid.create_ids [regacn_id; (id "execute")]) [idx_arg]
     | _ -> error "[translate_ecall] unknown function")
 
 (*** array calls and memop exps ***)

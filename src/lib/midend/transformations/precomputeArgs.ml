@@ -11,7 +11,20 @@ module CL = Caml.List
 temporary to support event combinators inlined with a generate statement. *)
 let exception_cids = [Cid.create ["Event"; "delay"]]
 
-let precompute_args ds =
+let array_method_cids = 
+  let open InterpState in
+  List.map 
+    (fun (def: InterpState.State.global_fun ) -> def.cid) 
+    (Arrays.defs@PairArrays.defs)
+;;
+
+let is_hash exp = 
+  match exp.e with
+  | EHash _ -> true
+  | _ -> false 
+;;
+
+let precompute_args inline_array_addrs ds =
   let v =
     object
       inherit [_] s_map as super
@@ -41,7 +54,27 @@ let precompute_args ds =
         | EHash (size, args) ->
           let new_args = CL.map precompute_arg args in
           { exp with e = EHash (size, new_args) }
-        (* 5/22/22 -- The main point of this is to eliminate calls to builtins.. I think. *)
+        | ECall (fcn_id, args) 
+            when (inline_array_addrs & (List.exists 
+              (fun fcid -> Cid.equal_names fcn_id fcid)
+              array_method_cids)) -> (
+            (* array methods are special -- we allow hash expressions 
+            in the index argument, which is always the 2nd arg (at pos 1) *)
+            match args with
+            | arr::addr::rest ->
+              let arr' = precompute_arg arr in
+              (* first, make sure the address exp itself is simplified *)
+              (* now, the address exp can be either an immediate or a hash *)
+              let addr' = super#visit_exp () addr in
+              let addr' = if (is_immediate addr' or is_hash addr') 
+                then addr' 
+                else precompute_arg addr' 
+              in
+              (* print_endline ("addr': " ^ (CorePrinting.exp_to_string addr')); *)
+              let rest' = CL.map precompute_arg rest in
+              {exp with e = ECall (fcn_id, arr'::addr'::rest')}
+            | _ -> error "[precompute_args] array method call with < 3 args"
+        )        
         | ECall (fcn_id, args) ->
           (match CL.mem fcn_id exception_cids with
            | true -> exp (* skip event combinators *)

@@ -694,7 +694,9 @@ let rec process tds =
       (* update each possible argument variable index *)
       let tds = CL.fold_left update_by_nth tds [0; 1; 2] in
       (* now update for index arg *)
-      update_idx_vars tds arr_id
+      (* [8/23 jsonch] no longer need to merge index variables as array ops can use separate tables. *)
+      tds 
+      (* update_idx_vars tds arr_id *)
     in
     CL.fold_left update_by_array tds arrs
   in

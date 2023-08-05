@@ -83,7 +83,7 @@ let rec hashers_of_exp exp =
 (* get the statements with hash ops in them *)
 let rec hashers_of_stmt stmt = 
   let hashers_in_exps es = 
-    (* BUG: without flatten, 
+    (* FIXED BUG: without flatten, 
        a list of empty lists was getting counted as an 
        exp with a hasher in it! oh dear lort. *)
     (* should double check for that bug elsewhere too. *)
@@ -138,3 +138,58 @@ let rec hashers_of_stmt stmt =
     if (uses_hash) then [stmt] else []
 
 
+(* array address expressions *)
+let array_addrs_of_exp exp = 
+  match exp.e with 
+  | ECall(fid, args) -> (
+    match (Cid.names fid) with
+    (* for any array function, get the index/address expression,
+       which is always the 2nd argument *)
+    | ["Array"; "get"]
+    | ["Array"; "getm"]
+    | ["Array"; "set"]
+    | ["Array"; "setm"]
+    | ["Array"; "update"]
+    | ["Array"; "update_complex"]
+    | ["PairArray"; "update"] -> 
+      [List.nth args 1]
+    | _ -> []
+  )
+  | _ -> []
+;;
+
+let rec array_addrs_of_stmt stmt : exp list = 
+  (* collect all the index/address expressions in the statement *)
+  let all_addr_exprs = match stmt.s with
+  | SLocal(_, _, exp)
+  | SAssign(_, exp)
+  | SUnit(exp) -> array_addrs_of_exp exp
+  | SIf(exp, s1, s2) -> 
+      (array_addrs_of_exp exp)
+      @(array_addrs_of_stmt s1)
+      @(array_addrs_of_stmt s2)
+  | SMatch(es, bs) ->
+    (List.map array_addrs_of_exp es |> List.flatten)
+    @(List.map 
+        (fun (_, stmt) -> array_addrs_of_stmt stmt)
+        bs
+      |> List.flatten
+    )
+  | SSeq(s1, s2) -> 
+    (array_addrs_of_stmt s1)@(array_addrs_of_stmt s2)
+  | _ -> []
+  in 
+  (* now make the list unique with structurally equal exps *)
+  let res = all_addr_exprs |> (MatchAlgebra.unique_list_of_eq (CoreSyntax.equiv_exp)) in
+  (* if (List.length res > 1) then 
+    (
+    print_endline ("--------------");
+    print_endline 
+      ("[array_addrs_of_stmt] stmt:" 
+      ^ (CorePrinting.stmt_to_string stmt));
+    print_endline
+      ("[array_addrs_of_stmt] all_addr_exprs:"^(Caml.String.concat ", " @@ List.map CorePrinting.exp_to_string all_addr_exprs));
+    print_endline ("--------------");
+    ); *)
+  res
+;;
