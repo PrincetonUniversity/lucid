@@ -45,6 +45,21 @@ let rec localids_of_event_params event =
     (* flag_ids @ param_ids *)
 ;;
 
+(* get a list of event parameter ids, grouped by base event *)
+let grouped_localids_of_event_params event : (cid list) list= 
+  match event with
+  | EventUnion({evid; members; _}) -> (
+    let param_ids = List.map 
+      (fun member -> 
+        let member_param_ids = localids_of_event_params member in
+        let member_param_ids = List.map (fun id -> Cid.compound evid id) member_param_ids in
+        member_param_ids
+      ) members
+    in
+    param_ids
+  )
+  | _ -> error "[grouped_localids_of_event_params] not a union event"
+;;
 (* get all the event parameters as though you are inside the event *)
 let ids_of_event_params event =
   let param_cids = localids_of_event_params event in

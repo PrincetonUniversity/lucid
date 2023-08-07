@@ -5,11 +5,16 @@
   inlining puts on a local variable declaration that 
   indicates it is safe to not initialize that variable 
   when translating to P4 or C. *)
-type t = 
+  open Cid
+  type cid = [%import: (Cid.t[@opqaue])]
+
+  type t = 
   | PNoInitLocal 
     (* this statement declares 
        a local variable that does not need to be 
        initialized.  *)
+  | POverlay of Cid.t * Cid.t
+    (* two variables declared in this handler should be overlaid *)
   | PStringPrag of string * string list
   (* PStringPrag holds a pragma name string and 
     a list of string arguments. This is mainly 
@@ -41,6 +46,10 @@ let exists_pnolocal =
 let to_string prag = 
   match prag with
   | PNoInitLocal -> "@pnoinitlocal"
+  | POverlay(cid1, cid2) -> Printf.sprintf 
+    "@overlay(%s, %s)"
+    (Cid.to_string cid1)
+    (Cid.to_string cid2)
   | PStringPrag(name, args) -> Printf.sprintf 
     "@%s(%s)"
     name

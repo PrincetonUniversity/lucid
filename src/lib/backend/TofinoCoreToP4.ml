@@ -1252,6 +1252,9 @@ let construct_deparser ctx hevent : decl =
   })
 ;;
 
+(* let translate_pragma (tpragma : Pragma.t) : pragma option = 
+  match tpragma with
+  | POverlay(cida, cidb) ->  *)
 
 let translate_tdecl (denv : translate_decl_env) tdecl : (translate_decl_env) = 
   match tdecl.td with
@@ -1368,6 +1371,7 @@ let translate_tdecl (denv : translate_decl_env) tdecl : (translate_decl_env) =
       | HEgress -> pragmas_of_event "egress" hevent.hdl_input
       | _ -> []
       in  *)
+      (* if there are any overlay pragmas attached to the handler's decl, translate them *)
       let overlay_pragmas = [] in 
       let globals =
         denv.globals@in_event_decls@out_event_decls@overlay_pragmas@[solitary_input_tag_pragma; control_decl]

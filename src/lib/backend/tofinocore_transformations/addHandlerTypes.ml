@@ -369,7 +369,7 @@ let type_handler (ctx:ctx) hdl : handler * tdecl =
       hdl_retparams = [];
       hdl_preallocated_vars = [];
     })
-    , {td=TDEvent(output_event); tdspan = Span.default; tdpragma = None;}
+    , {td=TDEvent(output_event); tdspan = Span.default; tdpragma = [];}
   | _ -> error "[addHandlerTypes.type_handler] there shouldn't be any HEvent handlers at this point"
 
 let rec type_handlers_in_tdecls ctx tdecls : tdecl list =

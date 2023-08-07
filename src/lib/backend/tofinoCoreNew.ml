@@ -173,7 +173,7 @@ and td =
 and tdecl =
   { td : td
   ; tdspan : sp
-  ; tdpragma : pragma option
+  ; tdpragma : pragma list
   }
 
 and tdecls = tdecl list
@@ -213,21 +213,21 @@ and prog = component list
 
 
 let no_span = Span.default;;
-let tdecl td = {td; tdspan = no_span; tdpragma = None}
-
+let tdecl td = {td; tdspan = no_span; tdpragma = []}
+let opt_to_list opt = match opt with | None -> [] | Some x -> [x];;
 (* translate decl and add to a component *)
 let decl_to_tdecl (decl:decl) = 
   match decl.d with
   | DGlobal (id, ty, exp) ->
     { td = TDGlobal (id, ty, exp)
     ; tdspan = decl.dspan
-    ; tdpragma = decl.dpragma
+    ; tdpragma = opt_to_list decl.dpragma
     }
-  | DMemop m -> { td = TDMemop m; tdspan = decl.dspan; tdpragma = decl.dpragma }
+  | DMemop m -> { td = TDMemop m; tdspan = decl.dspan; tdpragma = opt_to_list decl.dpragma }
   | DExtern (i, t) ->
-    { td = TDExtern (i, t); tdspan = decl.dspan; tdpragma = decl.dpragma }
+    { td = TDExtern (i, t); tdspan = decl.dspan; tdpragma = opt_to_list decl.dpragma }
   | DAction a ->
-    { td = TDAction a; tdspan = decl.dspan; tdpragma = decl.dpragma }
+    { td = TDAction a; tdspan = decl.dspan; tdpragma = opt_to_list decl.dpragma }
    | DEvent (evid, evnum, evsort, evparams) ->
     let event = EventSingle{
       evid; 
@@ -235,12 +235,12 @@ let decl_to_tdecl (decl:decl) =
       evsort; 
       evparams; 
       } in
-    { td = TDEvent event; tdspan = decl.dspan; tdpragma = decl.dpragma }
+    { td = TDEvent event; tdspan = decl.dspan; tdpragma = opt_to_list decl.dpragma }
   | DHandler (hdl_id, hdl_sort, (hdl_params, hdl_body)) ->
     (* handlers are initially of variant "HParams", and translated to 
        "HEvent" in the "addhandlertypes" pass. *)
     let handler = HParams {hdl_id; hdl_sort; hdl_params; hdl_body} in
-    { td = TDHandler (handler); tdspan = decl.dspan; tdpragma = decl.dpragma }
+    { td = TDHandler (handler); tdspan = decl.dspan; tdpragma = opt_to_list decl.dpragma }
   (* the main parse block is the entry point of the ingress parser.
      we add the return parameters (intrinsic metadata) and an action 
      at the beginning of the parser to read that parameter *)
@@ -260,14 +260,14 @@ let decl_to_tdecl (decl:decl) =
                          is set when events are merged*)
       pret_params=[intr_id, intr_ty];});
     tdspan=decl.dspan;
-    tdpragma=decl.dpragma;}
+    tdpragma=opt_to_list decl.dpragma;}
   (* other parsers are also ingress parsers that will be inlined later *)
   | DParser(pid, pparams, pblock) -> {
     td = TDParser({pid; pparams; pblock; 
         pret_event=None;
         pret_params = [];});
     tdspan = decl.dspan;
-    tdpragma = decl.dpragma;}
+    tdpragma = opt_to_list decl.dpragma;}
 ;;
 
 let rec decls_to_tdecls tdecls ds : tdecls = 
@@ -462,6 +462,17 @@ let replace_main_handler_of_decls tdecls new_handler =
       {tdecl with td = TDHandler((HEvent(new_handler)))}      
     | _ -> tdecl)
     tdecls
+;;
+
+let rec add_pragma_to_main_handler pragma tdecls  = 
+  match tdecls with
+  | [] -> []
+  | tdecl::tdecls -> (
+    match tdecl.td with
+    | TDHandler(_) -> 
+      {tdecl with tdpragma = pragma::tdecl.tdpragma}::tdecls
+    | _ -> tdecl::(add_pragma_to_main_handler pragma tdecls)
+  )
 ;;
 
 let replace_main_handler_of_component component (new_handler:hevent) = 

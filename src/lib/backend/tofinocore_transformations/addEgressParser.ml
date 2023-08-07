@@ -379,7 +379,7 @@ let add_parser core_prog : prog =
   |> List.hd
   in
   let egr_parser = make_egr_parser ingress_output_event egress_input_event in 
-  let egr_parser = {td=egr_parser; tdspan = Span.default; tdpragma = None} in 
+  let egr_parser = {td=egr_parser; tdspan = Span.default; tdpragma = []} in 
   let core_prog = List.map (fun comp -> if (fst comp.comp_id = "egress") then 
     {comp with comp_decls = egr_parser::comp.comp_decls} else comp) core_prog in
   (* print_endline ("----- done with egress parser -----"); *)

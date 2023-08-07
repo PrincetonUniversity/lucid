@@ -93,7 +93,8 @@ function build_p4() {
     fi
 
     local P4C_ARGS="" # useful p4c args: --listFrontendPasses --help
-    local P4C_ARGS="--table-placement-in-order"
+    # must disable in order placement for registerarrays shared across tables in stage
+    # local P4C_ARGS="--table-placement-in-order"
     if [ -z "$P4C_ARGS" ] ; then 
         P4C_ARGS=""
     else

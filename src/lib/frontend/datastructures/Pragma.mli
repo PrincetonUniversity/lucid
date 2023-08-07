@@ -5,12 +5,14 @@
   inlining puts on a local variable declaration that 
   indicates it is safe to not initialize that variable 
   when translating to P4 or C. *)
-
+open Cid
+type cid = [%import: (Cid.t[@opqaue])]
 type t = 
 | PNoInitLocal 
   (* this statement declares 
       a local variable that does not need to be 
       initialized.  *)
+| POverlay of cid * cid
 | PStringPrag of string * string list
   (* PStringPrag holds a pragma name string and 
      a list of string arguments. This is mainly 

@@ -347,7 +347,7 @@ let regularize_array_calls tds =
         in
         match results with 
         | Some(new_exp, new_memop, old_memop_ids) -> 
-          new_memops := {td=TDMemop(new_memop); tdspan=Span.default; tdpragma=None}::(!new_memops); 
+          new_memops := {td=TDMemop(new_memop); tdspan=Span.default; tdpragma=[]}::(!new_memops); 
           memops_to_delete := (!memops_to_delete)@old_memop_ids;
           new_exp
         | None -> exp
