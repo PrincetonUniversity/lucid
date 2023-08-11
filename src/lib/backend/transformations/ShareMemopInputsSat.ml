@@ -447,7 +447,6 @@ let conflict_graph_of_handler (var_map:(cid * var) list) ds =
   conflict_varpairs
 ;;
 
-
 (* variable conflicts in the parser *)
 
 let used_in_exp exp = 
@@ -565,6 +564,66 @@ let conflict_graph_of_parser var_map ds =
 ;;
 
 
+let var_uid = ref 1 ;;
+let update_varmap_cid var_map cid ty = 
+  match List.assoc_opt cid var_map with
+  | Some(_) -> var_map
+  | None ->
+    let var = {vcid = cid; vuid = !var_uid; vty = ty;} in
+    var_uid := !var_uid + 1;
+    let var_map = (cid, var)::var_map in 
+    var_map
+;;
+let update_varmap_id var_map id ty = 
+  let cid = Cid.id id in
+  update_varmap_cid var_map cid ty
+;;
+
+
+(* get the conflict graph from decls, where the conflict graph is 
+   edges between vars. Vars are just cids with unique id tags. *)
+let conflict_graph_of_decls tds = 
+let arrs_tys = arrs_in_prog tds in
+(* the var_map has all the array ids and array users in it *)
+let var_map = List.fold_left (fun var_map (arr, ty) -> update_varmap_id var_map arr ty) [] arrs_tys in
+let var_map, array_users = List.fold_left
+  (fun (var_map, array_users) arr_id -> 
+    let users, arg_ty = array_user_vars tds arr_id in
+    match arg_ty with 
+    | None -> var_map, array_users
+    | Some(arg_ty) -> 
+      let var_map' = List.fold_left
+        (fun var_map' cid -> update_varmap_cid var_map' cid arg_ty)
+        var_map
+        users
+      in
+      (* convert everything to a var with a uid at this point *)
+      let arr_var = List.assoc (Cid.id arr_id) var_map' in
+      let users_vars = List.map (fun cid -> List.assoc cid var_map') users in
+
+      var_map',array_users@[arr_var, users_vars]
+    )
+  (var_map, [])
+  (List.split arrs_tys |> fst)
+in
+let parser_conflict_pairs = conflict_graph_of_parser var_map tds in
+let handler_conflict_pairs = conflict_graph_of_handler var_map tds in
+let conflict_pairs = parser_conflict_pairs@handler_conflict_pairs in
+conflict_pairs, array_users
+;;  
+
+(* conflict graph with cids instead of vars -- for when you are not 
+   doing constraint-based stuff with z3. *)
+let cid_conflict_graph_of_decls tds = 
+  let conflict_graph, array_users = conflict_graph_of_decls tds in
+  let cid_conflict_graph = List.map (fun (v1, v2) -> v1.vcid, v2.vcid) conflict_graph in
+  let cid_array_users = List.map
+    (fun (v1, v2s) -> v1.vcid, 
+      List.map (fun v2 -> v2.vcid) v2s)
+    array_users
+  in
+  cid_conflict_graph, cid_array_users
+;;
 
 (*** convert the conflict graph to an associative list that maps each variable to 
     all of its conflicts ***)
@@ -585,22 +644,6 @@ let rec conflict_pairs_to_assoc conflict_pairs =
     let base = assoc_append y x base in
     base
 ;;
-
-let var_uid = ref 1 ;;
-let update_varmap_cid var_map cid ty = 
-  match List.assoc_opt cid var_map with
-  | Some(_) -> var_map
-  | None ->
-    let var = {vcid = cid; vuid = !var_uid; vty = ty;} in
-    var_uid := !var_uid + 1;
-    let var_map = (cid, var)::var_map in 
-    var_map
-;;
-let update_varmap_id var_map id ty = 
-  let cid = Cid.id id in
-  update_varmap_cid var_map cid ty
-;;
-
 
 (**** mapping to / from Z3 equations ****)
 
@@ -897,6 +940,7 @@ let overlay_aliases tds (vars, varty) =
 ;;
 
 
+
 (* The old memop -> sALU register allocator -- used when the sat version 
    cannot find an allocation, creates intermediate variables with copies. 
    Very similar to the code in "ShareMemopInputsNew", with a few tweaks. *)
@@ -1073,9 +1117,6 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
    
    (* construct the conflict graph for a handler *)
    let conflict_graph alias_list main_hdl : (cid * cid) list =
-     let params_by_event = main_hdl.hdl_input 
-     |> grouped_localids_of_event_params 
-     in
      let shared_params = main_hdl.hdl_preallocated_vars |> (List.map ~f:(fun (x, _) -> Cid.id x)) in 
      let statement = match main_hdl.hdl_body with
        | SFlat s -> s
@@ -1086,8 +1127,11 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
        | Some(aliases) -> aliases |> CL.filter (fun alias -> not (Cid.equal cid alias))
        | None -> []
      in
-     (* build the base conflict graph, which includes edges between all parameters in the same event (and their aliases) *)
-     let param_conflicts = List.fold_left params_by_event
+     (* build the base conflict graph, which includes edges between all parameters in the same event *)
+     let params_by_event = main_hdl.hdl_input 
+     |> grouped_localids_of_event_params 
+     in
+     (* let param_conflicts = List.fold_left params_by_event
        ~init:[]
        ~f:(fun base_conflicts params -> 
            let param_pairs = MiscUtils.get_unique_unordered_pairs params params
@@ -1095,7 +1139,11 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
            in
            base_conflicts
            @param_pairs)
-     in
+     in *)
+     (* actually, since this version of the code doesn't identify conflicts due to the parser, 
+        we have to consider all the parameters of all the events to conflict. *)
+     let all_params = List.concat params_by_event in
+     let param_conflicts = MiscUtils.get_unique_unordered_pairs all_params all_params in
      (* let param_alias_conflicts =
        List.concat_map param_conflicts
          ~f:(fun (x, y) ->
@@ -1107,7 +1155,7 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
          )      
      in   *)
      (* parameters are declared before and nothing is used after the root statement *)
-     let declared_before = (Caml.List.flatten params_by_event)@shared_params in
+     let declared_before = (List.concat params_by_event)@shared_params in
      (* reset op counter *)
      let var_conflicts = build_conflict_graph alias_list declared_before [] statement in
      (* now that we got the base variable conflicts, add edges due to aliases *)
@@ -1181,12 +1229,7 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
    ;;
    
    let check_one_conflict conflict_pairs (x, y) =
-     (* print_endline ("\t[check_one_conflict] checking for conflict between"^(CorePrinting.cid_to_string x)^" and "^(CorePrinting.cid_to_string y)); *)
      let conflict_exists = MiscUtils.contains conflict_pairs (x, y) or  MiscUtils.contains conflict_pairs (x, y) in
-     if conflict_exists then
-       print_endline ("\t[check_one_conflict] conflict between: "^(CorePrinting.cid_to_string x)^" and "^(CorePrinting.cid_to_string y));
-     (* else
-       print_endline ("\t[check_one_conflict] no conflict between"^(CorePrinting.cid_to_string x)^" and "^(CorePrinting.cid_to_string y)); *)
      conflict_exists
    ;;
    
@@ -1390,7 +1433,7 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
            let statement = super#visit_statement ctx statement in 
            match statement.s with 
            | SAssign(id, exp) -> (
-             match (replace_var_arg_with_tmp arr_id nth tmp_id exp) with 
+            match (replace_var_arg_with_tmp arr_id nth tmp_id exp) with 
              | None -> statement
              | Some(tmp_assign, new_ecall) -> (
                sseq
@@ -1399,7 +1442,7 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
              )
            )
            | SLocal(id, ty, exp) -> (
-             match (replace_var_arg_with_tmp arr_id nth tmp_id exp) with 
+            match (replace_var_arg_with_tmp arr_id nth tmp_id exp) with 
              | None -> statement
              | Some(tmp_assign, new_ecall) -> (
                sseq
@@ -1435,13 +1478,13 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
          if (any_pairs_conflict tds args (List.map ~f:fst overlaid_pairs))
          then (
            let msg = Printf.sprintf "[SALU input overlaying] variables passed to an array operation on array %s conflict, so an intermediate needs to be created. This may add a stage of overhead." (CorePrinting.id_to_string arr_id) in
-           let msg = msg ^ "\nvariables: " ^ (CorePrinting.comma_sep CorePrinting.cid_to_string args) in
+           let msg = msg ^ "\nconflicting variables: " ^ (CorePrinting.comma_sep CorePrinting.cid_to_string args) in
            print_endline msg;
            (overlaid_pairs, create_memop_input_var tds arr_id nth argty))
          else (
-           let msg = Printf.sprintf "[SALU input overlaying] variables passed to an array operation on array %s do not conflict, so they can be overlaid." (CorePrinting.id_to_string arr_id) in
+           (* let msg = Printf.sprintf "[SALU input overlaying] variables passed to an array operation on array %s do not conflict, so they can be overlaid." (CorePrinting.id_to_string arr_id) in
            let msg = msg ^ "\nvariables: " ^ (CorePrinting.comma_sep CorePrinting.cid_to_string args) in
-           print_endline msg;
+           print_endline msg; *)
            let overlaid_pairs' = MiscUtils.get_unique_unordered_pairs args args
              |> List.filter ~f:(fun (x, y) -> not (Cid.equal x y))
            in
@@ -1487,7 +1530,6 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
            (* if there are >=2 args, overlay / merge, else do nothing *)
            if ((List.length all_args) >= 2)
            then (
-             print_endline ("[process_arrs] register-allocation based overlaying for array "^(CorePrinting.id_to_string arr)^" failed");
              let overlaid_pairs, tds' = process_arr overlaid_pairs arr tds [0;1;2] in
              process_arrs overlaid_pairs arrs tds'
            )
@@ -1735,53 +1777,104 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
 end
 
 
-let process_component tds = 
-  let arrs_tys = arrs_in_prog tds in
-  (* the var_map has all the array ids and array users in it *)
-  let var_map = List.fold_left (fun var_map (arr, ty) -> update_varmap_id var_map arr ty) [] arrs_tys in
-  let var_map, array_users = List.fold_left
-    (fun (var_map, array_users) arr_id -> 
-      let users, arg_ty = array_user_vars tds arr_id in
-      match arg_ty with 
-      | None -> var_map, array_users
-      | Some(arg_ty) -> 
-        let var_map' = List.fold_left
-          (fun var_map' cid -> update_varmap_cid var_map' cid arg_ty)
-          var_map
-          users
-        in
-        (* convert everything to a var with a uid at this point *)
-        let arr_var = List.assoc (Cid.id arr_id) var_map' in
-        let users_vars = List.map (fun cid -> List.assoc cid var_map') users in
-
-        var_map',array_users@[arr_var, users_vars]
-      )
-    (var_map, [])
-    (List.split arrs_tys |> fst)
-  in
-  let parser_conflict_pairs = conflict_graph_of_parser var_map tds in
-  let handler_conflict_pairs = conflict_graph_of_handler var_map tds in
-  let conflict_pairs = parser_conflict_pairs@handler_conflict_pairs in
-  (* convert conflict pairs to a list mapping from var -> [all conflicting vars] *)
+let solve_overlay_opt conflict_pairs array_users = 
   let conflict_assoc = conflict_pairs_to_assoc conflict_pairs in
-
   let constraints = generate_constraints conflict_assoc array_users 2 in
 
   let success, assignment = run_solver constraints in
-  if (success) then 
+  if success then 
     let alias_pairs = assignment_to_alias_pairs assignment |> MiscUtils.unique_list_of in
-    (* print_endline (cidpairs_to_string (List.split alias_pairs |> fst)); *)
-    (* re-use some old code for now... *)
     let alias_grps = alias_groups alias_pairs in
+    Some(alias_grps)
+else
+  None
+;;
+
+
+
+module ShareMemopInputsGreedy = struct
+  (* heuristic based memop input allocator that 
+     processes one array at a time. If it can overlay the variables
+     passed to the array's sALU, it does. Else, it creates 
+     intermediate variables and adds copy operations to break 
+     the conflicts, which adds stage overhead. *)
+  
+  let create_memop_input_var  = ShareMemopInputsBaseline.create_memop_input_var
+
+  let process_array component (arr : Cid.t) = 
+    (* note: we have to take a cid, not a var, because vars from different conflict graphs 
+       will have different uids! *)
+    (* get the conflict graph and users of each array. *)
+    let conflict_graph, array_users = conflict_graph_of_decls (component.comp_decls) in
+    (* filter array users for this array *)
+    let arr_users_opt = List.find_opt 
+    (fun (arr_var, _) -> Cid.equal arr_var.vcid arr)
+      array_users
+    in
+    match arr_users_opt with
+    | None -> component
+    | Some(_, users) when (List.length users) <= 2 -> 
+      (* if there are 2 or fewer variables, we don't need to do anything. *)
+      component
+    | Some(arr, users) -> 
+      (* filter conflict graph so its only about conflicts between users of this array. *)
+      let conflict_graph = List.filter
+        (fun (x, y) -> 
+          (List.exists (fun n -> n.vuid = x.vuid) users)
+          &&
+          (List.exists (fun n -> n.vuid = y.vuid) users)
+        )
+        conflict_graph
+      in
+      (* now see if there is an overlay solution for just this array *)
+      let alias_groups_opt = solve_overlay_opt conflict_graph [arr, users] in 
+      match alias_groups_opt with
+      (* there's a solution, so for this array we can just overlay. *)
+      | Some(alias_grps) ->
+        let comp_decls' = List.fold_left overlay_aliases component.comp_decls alias_grps in 
+        {component with comp_decls = comp_decls'}
+      | _ ->
+        (* there's no overlay solution! create intermediate variables -- 1 intermediate 
+          variable for each argument position of the array. *)
+        let intermediate_ty = (List.hd users).vty in
+        let nths = [0; 1] in
+        (* for each argument position in all calls to this array, 
+          create an intermediate, replace the nth positional argument with 
+          the intermediate, and create a copy operation to set the intermediate 
+          before the array call. *)
+        let comp_decls' = List.fold_left
+          (fun comp_decls nth -> 
+            create_memop_input_var comp_decls (Cid.to_id arr.vcid) nth intermediate_ty)
+          component.comp_decls
+          nths
+        in
+        {component with comp_decls = comp_decls'}
+
+  ;;
+  let process_component component = 
+    let _, array_users = conflict_graph_of_decls (component.comp_decls) in
+    let arrs = List.map (fun (arrvar, _) -> arrvar.vcid) array_users in
+    let component = List.fold_left process_array component arrs in  
+    component
+  ;;
+
+end
+
+
+let process_component component = 
+  let tds = component.comp_decls in
+  let conflict_pairs, array_users = conflict_graph_of_decls tds in
+  let alias_groups_opt = solve_overlay_opt conflict_pairs array_users in
+  match alias_groups_opt with
+  | Some(alias_grps) -> 
     (* print_endline ("---[alias groups]---");
     List.iter ~f:(fun aliases -> print_endline (CorePrinting.comma_sep CorePrinting.cid_to_string (fst aliases))) alias_grps;
     print_endline ("----------------------"); *)
     let tds = List.fold_left overlay_aliases tds alias_grps in 
-    tds 
-  else 
-  (* if there's no way to overlay the variables, fall back to the code that 
-     uses a heuristic and spills over to intermediates *)
-  ShareMemopInputsBaseline.process_component tds
+    {component with comp_decls = tds} 
+  | None -> 
+    print_endline ("[sALU input allocator] failed to find a global aliasing for variables to fit all sALU input registers. Using greedy allocator with possible stage overhead.");
+    ShareMemopInputsGreedy.process_component component
 ;;
 
 let process_core core_prog = 
@@ -1789,7 +1882,7 @@ let process_core core_prog =
     then (
       List.map (fun component -> 
         if (component.comp_sort != HControl) then
-          {component with comp_decls = process_component component.comp_decls}
+          process_component component
         else
           component
         )
@@ -1797,6 +1890,7 @@ let process_core core_prog =
     )
     (* use old allocator *)
     else (
+      print_endline ("[optimal_memop_input_alloc] using baseline allocator due to command line option.");
       List.map (fun component -> 
         if (component.comp_sort != HControl) then
           {component with comp_decls = ShareMemopInputsBaseline.process_component component.comp_decls}
