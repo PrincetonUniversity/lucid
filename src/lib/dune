@@ -135,6 +135,7 @@
    RegularizeMemopsNew
    ShareMemopInputs
    ShareMemopInputsNew
+   ShareMemopInputsSat
    SingleTableMatch
    ActionsToFunctions
    ActionsToFunctionsNew

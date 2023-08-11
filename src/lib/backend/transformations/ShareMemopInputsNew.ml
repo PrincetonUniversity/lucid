@@ -1,4 +1,7 @@
-(* ShareMemopInputs
+(* ShareMemopInputsNew
+  This is depreciated, ShareMemopSat should be used. 
+  This module will be deleted when we have sufficient confidence that 
+  ShareMemopInputSat is bug free and performs adequately.
 
   In the Tofino, each global "array" is attached to 1 sALU. 
   Each sALU only has two input ports and one output port from/to the
@@ -13,11 +16,9 @@
     2. if that is not possible, create a new temporary variable 
        for the position of the array call and add statements 
        to load data before the array call. 
-  Question:
-    - what about output variable? Is that not limited?
 *) 
 
-(* open Core *)
+open Core
 open CoreSyntax
 open TofinoCoreNew
 open InterpHelpers
@@ -25,9 +26,8 @@ open MergeHandlers
 exception Error of string
 let error s = raise (Error s)
 
-module List = Core.List
+(* get the subset of variables that are parameters of the program *)
 
-(* get the variables that are parameters of the program *)
 let var_params ds (vars : Cid.t list) = 
   let params = 
     (main_handler_of_decls ds).hdl_input
@@ -111,40 +111,9 @@ let intersection l1 l2 =
   l1
 ;;
 
-(* convert a list of pairs of variables that are overlaid into a 
-   list of aliases for each variable *)
-type alias_list = (cid * (cid list)) list
-let overlaid_pairs_to_alias_list (overlaid_pairs : (cid * cid) list) : alias_list = 
-  let add_to_aliases (aliases:(cid * (cid list)) list) (x, y) = 
-    (* add y to the aliases of x *)
-    let x_aliases = match (Core.List.Assoc.find aliases x ~equal:Cid.equal) with
-      | Some(x_aliases) -> y::x_aliases
-      | None -> [y]
-    in
-    (* add x to the aliases of y *)
-    let y_aliases = match (Core.List.Assoc.find aliases y ~equal:Cid.equal) with
-      | Some(y_aliases) -> x::y_aliases
-      | None -> [x]
-    in
-    (* update the entries for x and y in aliases *)
-    let aliases = Core.List.Assoc.add aliases x x_aliases ~equal:Cid.equal in
-    let aliases = Core.List.Assoc.add aliases y y_aliases ~equal:Cid.equal in
-    aliases
-  in
-  let res = Core.List.fold overlaid_pairs
-    ~init:[]
-    ~f:add_to_aliases
-  in
-  res
-;;
 (* build the conflict graph for the statement *)
-let rec build_conflict_graph (alias_list :alias_list) (declared_before : cid list) (used_after : cid list) statement : (cid * cid) list =
-  let get_aliases cid = match (Core.List.Assoc.find alias_list cid ~equal:Cid.equal) with
-    | Some(aliases) -> aliases |> CL.filter (fun alias -> not (Cid.equal cid alias))
-    | None -> []
-  in
-  (* first, find the new edges without considering any aliases *)
-  let base_conflicts = match statement.s with
+let rec conflict_graph (declared_before : cid list) (used_after : cid list) statement : (cid * cid) list =
+  match statement.s with
   | SLocal(var_id, _, _) -> (
     let var_cid = Cid.id var_id in
     (* if the var is used later, add conflicts with all the live vars *)
@@ -170,13 +139,13 @@ let rec build_conflict_graph (alias_list :alias_list) (declared_before : cid lis
   )
   | SIf(_, s1, s2) -> (
     (* recurse in s1, s2 -- nothing changes about declared before or used after *)
-    let edges_from_s1 = build_conflict_graph alias_list declared_before used_after s1 in
-    let edges_from_s2 = build_conflict_graph alias_list declared_before used_after s2 in
+    let edges_from_s1 = conflict_graph declared_before used_after s1 in
+    let edges_from_s2 = conflict_graph declared_before used_after s2 in
     edges_from_s1@edges_from_s2
   )
   | SMatch(_, bs) -> (
     CL.map 
-      (fun (_, stmt) -> build_conflict_graph alias_list declared_before used_after stmt) 
+      (fun (_, stmt) -> conflict_graph declared_before used_after stmt) 
       bs
     |> CL.flatten
   )
@@ -187,85 +156,27 @@ let rec build_conflict_graph (alias_list :alias_list) (declared_before : cid lis
       s1 needs to know everything used in s2.
       s2 needs to know everything declared in s1.
     *)
-    let s1_edges = build_conflict_graph alias_list (declared_before) (used_after@used_in_s2) s1 in
-    let s2_edges = build_conflict_graph alias_list (declared_before@declared_in_s1) used_after s2 in
+    let s1_edges = conflict_graph (declared_before) (used_after@used_in_s2) s1 in
+    let s2_edges = conflict_graph (declared_before@declared_in_s1) used_after s2 in
     s1_edges@s2_edges
   )
   (* no other statements add conflicts. Just update the declared before / used after sets *)
   | _ -> []
-  in
-  (* now, add alias edges *)
-  (* for every edge (x, y) in base_conflicts:
-      for every alias x' of x:
-        for every alias y' of y:
-          add (x', y') to conflicts *)
-  let alias_conflicts =
-    List.concat_map base_conflicts
-      ~f:(fun (x, y) ->
-        List.concat_map (get_aliases x)
-          ~f:(fun x' ->
-            List.map (get_aliases y)
-              ~f:(fun y' -> (x', y'))
-          )
-      )      
-  in
-  base_conflicts@alias_conflicts
-;;
-
-(* construct the conflict graph *)
-let conflict_graph alias_list params_by_event statement : (cid * cid) list =
-  let get_aliases cid = match (List.Assoc.find alias_list cid ~equal:Cid.equal) with
-    | Some(aliases) -> aliases |> CL.filter (fun alias -> not (Cid.equal cid alias))
-    | None -> []
-  in
-  (* build the base conflict graph, which includes edges between all parameters in the same event (and their aliases) *)
-  let param_conflicts = List.fold_left params_by_event
-    ~init:[]
-    ~f:(fun base_conflicts params -> 
-        let param_pairs = MiscUtils.get_unique_unordered_pairs params params
-         |> List.filter ~f:(fun (x, y) -> not (Cid.equal x y))
-        in
-        base_conflicts
-        @param_pairs)
-  in
-  let param_alias_conflicts =
-    List.concat_map param_conflicts
-      ~f:(fun (x, y) ->
-        List.concat_map (get_aliases x)
-          ~f:(fun x' ->
-            List.map (get_aliases y)
-              ~f:(fun y' -> (x', y'))
-          )
-      )      
-  in  
-  let declared_before = Caml.List.flatten params_by_event in
-  let used_after = read_vars statement in
-  let var_conflicts = build_conflict_graph alias_list declared_before used_after statement in
-  param_conflicts@param_alias_conflicts@var_conflicts
-
 ;;
 
 
-
-let cids_to_string cids = CorePrinting.comma_sep CorePrinting.cid_to_string cids ;;
-
-(* check if x and y conflict in the decls ds *)
-let pairwise_conflict ds x y overlaid_pairs =
+let pairwise_conflict ds x y =
   let res = match (Cid.equal x y) with 
-    | true -> error "[pairwise_conflict] x and y are the same -- should have been filtered out before"
+    | true -> false
     | false -> (
-    (* print_endline ("[pairwise_conflict] checking for conflict between "^(cids_to_string [x; y])); *)
     (* build a conflict graph for main, check if (x, y) or (y, x) are there. *)
     (* let main_param_ids = (main ds).hdl_params |> CL.split |> snd |> CL.flatten  |> CL.split |> fst in  *)
     let main_param_cids = (main_handler_of_decls ds).hdl_input 
-      |> grouped_localids_of_event_params 
+      |> localids_of_event_params 
     in
-    (* print_endline ("[pairwise_conflict] main_param_cids: "^(cids_to_string main_param_cids)); *)
     let main_stmt = main_of_decls ds in
-    let conflict_pairs = conflict_graph (overlaid_pairs_to_alias_list overlaid_pairs) main_param_cids main_stmt |> MiscUtils.unique_list_of in    
-    let res = (MiscUtils.contains conflict_pairs (x, y)) || (MiscUtils.contains conflict_pairs (y, x)) in
-    (* print_endline ("[pairwise_conflict] conflict for: "^(cids_to_string [x; y])^" = "^ (string_of_bool res)); *)
-    res
+    let conflict_pairs = conflict_graph main_param_cids [] main_stmt |> MiscUtils.unique_list_of in
+    (MiscUtils.contains conflict_pairs (x, y)) || (MiscUtils.contains conflict_pairs (y, x))
     )
   in
   (* print_endline@@"[pairwise_conflict] ("^(Id.to_string x)^" , "^(Id.to_string y)^" ) : "^(string_of_bool res); *)
@@ -277,15 +188,15 @@ let pairwise_conflict ds x y overlaid_pairs =
 (* are there any pairwise conflicts in vars? *)
 let string_of_ids ids = Caml.String.concat ", " (CL.map Id.to_string ids) ;; 
 
-(* do any of the pairs conflict? *)
-let any_pairs_conflict ds vars overlay_pairs = 
-  let var_pairs = MiscUtils.get_unique_unordered_pairs vars vars
-    |> List.filter ~f:(fun (x, y) -> not (Cid.equal x y))
+let any_pairs_conflict ds vars = 
+  let var_pairs = MiscUtils.get_unique_unordered_pairs vars vars in
+  let conflict_exists = 
+    let test_pair prior_conflict (x, y) =
+      let res = prior_conflict || (pairwise_conflict ds x y) in
+      res
+    in
+    CL.fold_left test_pair false var_pairs
   in
-  let conflict_exists =
-    List.exists var_pairs (fun (x, y) -> pairwise_conflict ds x y overlay_pairs) 
-  in
-
   conflict_exists
 ;;
 
@@ -718,6 +629,8 @@ let create_memop_input_var tds arr_id nth argty =
   tds
 ;;
 
+
+
 let setup_nth_var_arg tds arr_id nth args argty = 
   match (CL.length (unique_list_of_eq Cid.equal args)) with 
     (* there are 0 or 1 unique vars -- that is fine *)
@@ -727,7 +640,7 @@ let setup_nth_var_arg tds arr_id nth args argty =
       (* case: there is 1 parameter variable and no conflicts -- merge *)
       (* case: more than 1 parameter variable -- make tmp *)
       (* case: conflicts -- make tmp *)
-      if (any_pairs_conflict tds args [])
+      if (any_pairs_conflict tds args)
       then (create_memop_input_var tds arr_id nth argty)
       else (
         match (var_params tds args) with
@@ -735,8 +648,7 @@ let setup_nth_var_arg tds arr_id nth args argty =
         | [] -> merge_vars tds args argty
         (* 1 param -- merge into that param *)
         | [param_var] -> merge_vars_into_param tds args argty param_var
-        (* multiple params -- make a new var. But note, this var 
-           *)
+        (* multiple params -- make a new var *)
         | _ -> create_memop_input_var tds arr_id nth argty
       )
 (* 
@@ -757,7 +669,7 @@ let update_idx_vars tds arrid =
     match (CL.length (unique_list_of_eq Cid.equal idx_vars)) with 
     | 0 | 1 -> tds
     | _ -> (
-      if ((any_pairs_conflict tds idx_vars []) || (some_var_is_param tds idx_vars))
+      if ((any_pairs_conflict tds idx_vars) || (some_var_is_param tds idx_vars))
       (* if there are any conflicts between the variables, or 
          one of the arguments is an event parameter, 
          then we must make an input arg var *)
@@ -782,9 +694,7 @@ let rec process tds =
       (* update each possible argument variable index *)
       let tds = CL.fold_left update_by_nth tds [0; 1; 2] in
       (* now update for index arg *)
-      (* [8/23 jsonch] no longer need to merge index variables as array ops can use separate tables. *)
-      tds 
-      (* update_idx_vars tds arr_id *)
+      update_idx_vars tds arr_id
     in
     CL.fold_left update_by_array tds arrs
   in
@@ -796,298 +706,6 @@ let process_core core_prog =
     (fun component -> 
       {component with comp_decls = process component.comp_decls})
 ;;
-
-
-(* 8/23 partial refactor -- only the functions used in the below code 
-   should be kept *)
-
-
-let merge_nth_arg (overlaid_pairs: ((cid * cid) * ty) list) (tds:tdecl list) arr_id nth args argty : ((cid * cid) * ty) list * tdecl list = 
-  match (CL.length (unique_list_of_eq Cid.equal args)) with 
-    (* there are 0 or 1 unique vars -- no need to do anything *)
-    | 0 | 1 -> overlaid_pairs, tds
-    (* >= 2 vars -- we need to get it down to 1 var, by either overlaying the variables or creating an intermediate *)
-    | _ -> (
-      (* print_endline("[merge_nth_arg] merging Array method args: "^(CorePrinting.comma_sep CorePrinting.cid_to_string args)); *)
-      (* if any of the variables conflict, we have to create an intermediate *)
-      if (any_pairs_conflict tds args (List.map ~f:fst overlaid_pairs))
-      then (overlaid_pairs, create_memop_input_var tds arr_id nth argty)
-      else (
-        (* print_endline("[merge_nth_arg] no conflicts (including intra-event params) -- safe to overlay"); *)
-        let overlaid_pairs' = MiscUtils.get_unique_unordered_pairs args args
-          |> List.filter ~f:(fun (x, y) -> not (Cid.equal x y))
-        in
-        let overlaid_pairs' = List.map ~f:(fun (x, y) -> ((x, y), argty)) overlaid_pairs' in
-        (overlaid_pairs@overlaid_pairs'), tds
-        (* add overlaid pairs for all the args *)
-      )
-    )
-;;
-
-(* merge all variables that appear as nth argument to a memop in 
-   an array method on arr *)
-let rec process_arr overlaid_pairs arr tds nths =
-  match nths with
-  | [] -> overlaid_pairs, tds
-  | nth::nths -> (
-    match nth_memop_var_args_of_array_calls tds arr nth with
-    | Some(args, argty) -> 
-      (* concat for this index and go on *)
-      let overlaid_pairs, tds' = merge_nth_arg overlaid_pairs tds arr nth args argty in
-      process_arr overlaid_pairs arr tds' nths
-    | None -> overlaid_pairs, tds
-      (* no more args, done *)
-  )
-;;
-
-let rec process_arrs overlaid_pairs arrs tds = 
-  match arrs with
-  | [] -> overlaid_pairs, tds
-  | arr::arrs -> 
-    let overlaid_pairs, tds' = process_arr overlaid_pairs arr tds [0;1;2] in
-    process_arrs overlaid_pairs arrs tds'
-;;
-
-let cidtup_to_string (a, b) = 
-  "("^(CorePrinting.cid_to_string a)^" , "^(CorePrinting.cid_to_string b)^")"
-;;
-
-let cidtups_to_string cidtups =
-  CorePrinting.comma_sep cidtup_to_string cidtups
-;;
-
-(* compute a minimal set of overlay pairs. 
-1. construct a graph
-2. find all the cliques
-3. get a spanning tree from each clique 
-
-
-(ingress_input.bar.bar_y , ingress_input.baz.baz_z),
-(ingress_input.foo.foo_x , ingress_input.baz.baz_z),
-(ingress_input.foo.foo_x , ingress_input.bar.bar_y) *)
-
-(* generic undirected graph *)
-module GenericGraph (T : sig type t end) : sig
-  include Graph.Sig.P with 
-    type V.t = T.t
-end = struct
-  include Graph.Persistent.Graph.Concrete(struct
-    type t = T.t
-    let compare = Pervasives.compare
-    let hash = Hashtbl.hash
-    let equal = (=)
-  end)
-end
-
-(* cid <-> cid graph *)
-module G = GenericGraph(Cid)
-let check_path g a b = 
-  (* print_endline ("checking for path from "^(cidtup_to_string (a, b))); *)
-  let module GPath = Graph.Path.Check(G) in
-  if G.mem_vertex g a && G.mem_vertex g b then
-    (GPath.check_path (GPath.create g) a b)
-  else
-    false
-;;
-let find_connected_components g =
-  let module GConn = Graph.Components.Make(G) in
-  GConn.scc_list g
-;;
-let rec list_to_pairs xs = 
-  match xs with
-  | [] | _::[] -> []
-  | x::y::xs -> (x, y)::(list_to_pairs (y::xs))
-;;
-
-
-(* get a minimal set of overlay pairs, that is, n-1 overlay commands for n variables  *)
-let minimal_overlay_pairs (overlay_pairs: (Cid.t * Cid.t) list) = 
-  (* construct a graph with no un-necessary edges *)
-  let rec mk_graph edges = 
-    match edges with
-    | [] -> G.empty
-    | (a, b)::edges -> 
-      (* build the rest of the graph *)
-      let g = mk_graph edges in
-      (* add this edge to the graph if a path doesn't exist in the 
-         rest of the graph *)
-      if (check_path g a b) then g else (G.add_edge g a b)
-  in
-  let g = mk_graph overlay_pairs in
-  (* find all the connected components *)
-  let connected_components = find_connected_components g in
-  (* make a pair list for each CC and concat together *)
-  List.concat_map connected_components ~f:list_to_pairs
- ;;
-
-let alias_groups (overlay_pairs : ((cid * cid) * ty) list) =  
-  let rec mk_graph edges = 
-    match edges with
-    | [] -> G.empty
-    | (a, b)::edges -> 
-      (* build the rest of the graph *)
-      let g = mk_graph edges in
-      (* add this edge to the graph if a path doesn't exist in the 
-         rest of the graph *)
-      if (check_path g a b) then g else (G.add_edge g a b)
-  in
-  let cidpairs = List.map ~f:fst overlay_pairs in
-  let g = mk_graph cidpairs in
-  let ty_assoc = List.fold overlay_pairs ~init:[] ~f:(fun acc ((a, b), ty) -> 
-    (a, ty)::(b, ty)::acc
-  ) 
-  in
-  (* each connected component has a type.. *)
-  (* find all the connected components *)
-  let connected_components = find_connected_components g in
-  (* get the type of each connected component, based on first var *)
-  let ty_of_cc cc = 
-    let cid = List.hd_exn cc in
-    List.Assoc.find_exn ty_assoc cid ~equal:Cid.equal
-  in
-  let cc_tys = List.map ~f:ty_of_cc connected_components in
-  (* make a pair list for each CC and concat together *)
-  List.zip_exn connected_components cc_tys
-;;
-
-(* now, we have to implement the overlaying.  *)
-
-(* is cid a parameter of the input event? *)
-
-type vloc = | Param | Prealloc | Local
-let is_param input_event cid = 
-  List.exists (grouped_localids_of_event_params input_event |> Caml.List.flatten) ~f:(fun x -> Cid.equal x cid)
-;;
-let is_prealloc main cid =
-  List.exists main.hdl_preallocated_vars ~f:(fun (x, _) -> (Cid.equal (Cid.id x) cid))
-;;
-let cid_to_loc main cid =
-  if is_param (main.hdl_input) cid then Param
-  else if (is_prealloc main cid) then Prealloc
-  else Local
-;;
-
-
-let replace_cid tds cids cid' = 
-  (* replace any cid in cids with cid' everywhere they appear (including the parser) *)
-  let is_tgt_cid cidq = List.exists cids ~f:(fun x -> Cid.equal x cidq) in
-  let v = 
-    object
-      inherit [_] s_map as super
-      (* expressions *)
-      method! visit_EVar _ cid = 
-        if (is_tgt_cid cid) 
-        then (EVar(cid'))
-        else (EVar(cid))
-      (* parser actions *)
-      method! visit_PAssign ctx lcid rexp = 
-        if (is_tgt_cid lcid) 
-        then (PAssign(cid', (super#visit_exp ctx rexp)))
-        else (PAssign(lcid, (super#visit_exp ctx rexp)))
-      method! visit_PRead _ lcid lty = 
-        if (is_tgt_cid lcid) 
-        then (PRead(cid', lty))
-        else (PRead(lcid, lty))
-      method! visit_PPeek _ lcid lty = 
-        if (is_tgt_cid lcid) 
-        then (PPeek(cid', lty))
-        else (PPeek(lcid, lty))
-      (* statements *)
-      method! visit_SAssign ctx lcid rexp = 
-        if (is_tgt_cid lcid) 
-        then (SAssign(cid', (super#visit_exp ctx rexp)))
-        else (SAssign(lcid, (super#visit_exp ctx rexp)))
-      method! visit_SLocal ctx id ty exp =
-        (* if this cid is the target, we replace the declaration with an assign *)
-        if (is_tgt_cid (Cid.id id)) 
-        then (SAssign(cid', (super#visit_exp ctx exp)))
-        else (SLocal(id, ty, (super#visit_exp ctx exp)))
-    end
-  in 
-  v#visit_tdecls () tds
-;;  
-
-
-(* to overlay a group of aliases where at least one is a param, 
-   we choose a param to be the name of all the vars and rename 
-   them all to that master. *)
-let overlay_param_aliases tds vars var_locs = 
-  (* find the first param *)
-  let master_cid = List.find_exn 
-    (List.zip_exn vars var_locs) 
-    ~f:(fun (_, loc) -> loc = Param) |> fst 
-  in
-  replace_cid tds vars master_cid
-;;
-(* to overlay a bunch of locals, we create a new preallocated 
-   variable and rename all the vars to that. *)
-
-(* remove a preallocated var from tds *)
-let remove_preallocated_var tds cid = 
-  let main = main_handler_of_decls tds in
-  let new_preallocated_vars = List.filter main.hdl_preallocated_vars ~f:(fun (x, _) -> not (Cid.equal (Cid.id x) cid)) in
-  replace_main_handler_of_decls tds {main with hdl_preallocated_vars = new_preallocated_vars}
-;;
-let overlay_local_aliases tds vars var_ty = 
-  let tmp_id = Id.fresh ("aliased_var")  in 
-  let master_cid = Cid.create_ids [tmp_id] in
-  let master_ty = var_ty in
-  (* replace all the variables *)
-  let tds = replace_cid tds vars master_cid in
-  (*  add the shared local *)
-  let _, tds = add_shared_local tds (Cid.to_id master_cid) master_ty in 
-  (* if any of the variables were shared locals, remove them *)
-  List.fold vars 
-    ~init:tds 
-    ~f:(fun tds cid -> 
-      match cid_to_loc (main_handler_of_decls tds) cid with
-      | Local -> tds
-      | Param -> tds
-      | Prealloc -> remove_preallocated_var tds cid
-    )
-;;
-
-(* overlay all the variables in vars in the program tds *)
-let overlay_aliases tds (vars, varty) = 
-  print_endline("[overlay_aliases] overlaying variables");
-  print_endline(CorePrinting.comma_sep CorePrinting.cid_to_string vars);
-  print_endline("[overlay_aliases] in program:");
-  print_endline(TofinoCorePrinting.tdecls_to_string tds);
-  let main = main_handler_of_decls tds in
-  let var_locs = List.map vars ~f:(cid_to_loc main) in
-  (* if any of the variables are parameters, we have to update the parser and 
-     also we use one of the existing variables as the "master" *)
-  let has_param = List.exists var_locs ~f:(fun x -> x = Param) in
-  if (has_param) then
-    overlay_param_aliases tds vars var_locs
-  (* if there are no params, we create a new shared local and 
-     replace all the uses of the variables with the shared local. 
-      We also delete the declarations for all the variables. *)
-  else
-    overlay_local_aliases tds vars varty
-;;
-
-let process_component tds = 
-  let overlaid_pairs, tds = process_arrs [] (arrs_in_prog tds) tds in
-  (* print_endline ("---[overlaid pairs]---");
-  print_endline (cidtups_to_string overlaid_pairs);
-  print_endline ("----------------------"); *)
-  (* let min_pairs = minimal_overlay_pairs overlaid_pairs in *)
-  (* print_endline ("---[min_pairs pairs]---");
-  print_endline (cidtups_to_string min_pairs);
-  print_endline ("----------------------"); *)
-  (* attach all the pragmas to the main handler *)
-  let alias_grps = alias_groups overlaid_pairs in
-  let tds = List.fold alias_grps ~f:overlay_aliases ~init:tds in
-  tds
-;;
-
-let process_core core_prog = 
-  List.map core_prog
-    (fun component -> 
-      {component with comp_decls = process_component component.comp_decls})
-;;
-
 
 
 (* 
@@ -1109,10 +727,10 @@ let process_core core_prog =
     Algorithm: 
       for each array a:
         for each Array method call (m) with a as the first arg:
-          0. merge the index argument of all calls
-          1. merge the first input argument of all calls
-          2. merge the second input argument of all calls
-    Algorithm merge(array, vars):
+          0. unify the index argument of all calls
+          1. unify the first input argument of all calls
+          2. unify the second input argument of all calls
+    Algorithm unify(array, vars):
       - if any var is a parameter: add_intermediate(array, vars)
       - elif there are any pairwise conflicts between vars: add_intermediate(array, vars)
       - else: replace_vars_with_intermediate(vars)

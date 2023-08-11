@@ -36,6 +36,9 @@ type config =
   ; mutable new_tofino : bool
   ; mutable inline_array_addrs : bool 
     (* inline array address calculation into array call (enabled with new_tofino) *)
+  ; mutable optimal_memop_input_alloc : bool
+    (* find an allocation of memop inputs to sALU input register that requires no extra copy operations.
+       In some cases, this may create larger PHV clusters. *)
   }
 
 (* TODO: We might want to add more parameters controlling which transformations
@@ -69,6 +72,7 @@ let default () =
   ; old_ifelim = false
   ; new_tofino = false
   ; inline_array_addrs = false
+  ; optimal_memop_input_alloc = true
   }
 ;;
 let cfg = default ()
@@ -214,6 +218,11 @@ let parse_tofino () =
       , Arg.Unit (fun () -> cfg.new_tofino <- true; cfg.inline_array_addrs <- true)
       , "If true, use the new tofino core IR and backend, which features parsers,\
         egress blocks, and optimizations to reduce phv pressure and stage utilization." )
+      ; ( "--old_memop_alloc"
+      , Arg.Unit (fun () -> cfg.optimal_memop_input_alloc <- false)
+      , "If true, use the old memop argument to sALU register allocator, which may \
+        add extra copy operations, but is more extensively tested and might produce allocations \
+        with smaller phv cluster sizes.")
       ]
   in
   let target_filename = ref "" in

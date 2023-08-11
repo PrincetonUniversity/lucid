@@ -44,7 +44,7 @@ let generated_eventid_subsets (hdl_body:statement) =
   (* remove duplicate event id sequences *)
   let compare_id_seqs id_seq1 id_seq2 =
     let compare_ids id1 id2 = Id.compare id1 id2 in
-    List.compare compare_ids id_seq1 id_seq2
+    Batteries.List.compare compare_ids id_seq1 id_seq2
   in
 
   let event_id_sequences = List.sort_uniq compare_id_seqs event_id_sequences in
@@ -65,7 +65,7 @@ let typed_generate_seqs (hdl_body:statement) : (id * gen_type) list list =
   (* remove duplicate event id sequences *)
   let compare_id_seqs (id_seq1: (id * gen_type) list) (id_seq2 : (id * gen_type) list) =
     let compare_ids id1 id2 = Id.compare id1 id2 in
-    List.compare (fun (id1, _) (id2, _) -> compare_ids id1 id2) id_seq1 id_seq2
+    Batteries.List.compare (fun (id1, _) (id2, _) -> compare_ids id1 id2) id_seq1 id_seq2
   in
 
   let event_id_sequences = List.sort_uniq compare_id_seqs event_id_sequences in

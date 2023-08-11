@@ -437,6 +437,19 @@ let main_handler_of_component component : hevent =
   | _ -> error "[main_handler_of_component] component not in single-handler form."
 ;;
 
+
+let main_parser_of_tds tds = 
+  let opt_things = List.filter_map (fun tdecl -> 
+    match tdecl.td with 
+    | TDParser(p) -> (
+      if (fst p.pid = "main")
+        then (Some(p))
+        else None)
+    | _ -> None)
+  tds
+      in
+  List.hd opt_things
+;;
 let main_parser_of_component component : parser = 
   let opt_things = List.filter_map (fun tdecl -> 
     match tdecl.td with 

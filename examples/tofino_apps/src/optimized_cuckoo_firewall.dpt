@@ -1,0 +1,194 @@
+/* Cuckoo firewall with separate events for 
+   incoming / outgoing traffic. Allows 
+   a bit more variable overlaying and hence 
+   should take fewer stages than the functionally 
+   equivalent "simple_cuckoo_firewall.dpt" */
+include "../libs/ip_default.dpt"
+
+const int seed_1 = 1;
+const int seed_2 = 1;
+const int NULL = 0;
+const int TRUE = 1;
+const int FALSE = 0;
+const int<8> TOS_TRUSTED = 1;
+
+packet event from_internal(eth_hdr eth, ip_hdr_prefix ip, int<32> src, int<32> dst);
+packet event from_external(eth_hdr eth, ip_hdr_prefix ip, int<32> src, int<32> dst); 
+
+parser parse_ip(eth_hdr e) {
+    read ip_hdr_prefix ip;
+    read int ip_src;
+    read int ip_dst;
+    match ip#tos with
+    | 1 -> {generate(from_internal(e, ip, ip_src, ip_dst));}
+    | 0 -> {generate(from_external(e, ip, ip_src, ip_dst));}
+}
+
+parser main() {
+    read eth_hdr e;
+    match e#etype with
+    | LUCID_ETHERTY -> {do_lucid_parsing();}
+    | 0x0800 -> {parse_ip(e);}
+}
+
+event cuckoo_insert(eth_hdr eth, ip_hdr_prefix ip,
+    int<32> src, int<32> dst, int port, int fst_src, int fst_dst);
+
+global Array.t<32> key_src_1 = Array.create(1024);
+global Array.t<32> key_dst_1 = Array.create(1024);
+global Array.t<32> key_src_2 = Array.create(1024);
+global Array.t<32> key_dst_2 = Array.create(1024);
+
+global Array.t<32> cuckoo_inflight = Array.create(1);
+
+
+memop incr(int memval, int incrval) {
+    return memval + incrval;
+}
+memop always_mem(int memval, int newval) {
+    return memval;
+}
+memop always_new(int memval, int newval){
+    return newval;
+}
+memop mem_eq_search(int memval, int searchval){
+    if (memval == searchval){
+        return TRUE;
+    } else {
+        return FALSE;
+    }
+}
+memop new_if_null(int memval, int newval){
+    if (memval == NULL){
+        return newval;
+    } else {
+        return memval;
+    }
+}
+// if memval is null or searchval, return null.
+// otherwise, return memval.
+// memval == null -> null
+// memval == searchval --> null
+// (memval != null) && (memval != searchval) --> memval
+memop null_if_eq(int memval, int searchval){
+    if (memval == searchval) {
+        return NULL;
+    } else {
+        return memval;
+    }
+}
+
+// hmm... if we just overlaid internal.src and external.dst, and not stg_1_src, we might not need 
+// an intermediate variable?
+// so is the trick that we are trying to overlay to 2, not 1 slots? Interesting... Overlaying to 1 
+// is certainly a tighter constraint than we need to enforce!
+handle from_internal(eth_hdr eth, ip_hdr_prefix ip, int<32> src, int<32> dst) {
+    // int<8> idx_1 = hash<8>(seed_1, src);
+    // put this flow's key in the table if the slot is empty, return the previous value.
+    int stg_1_src = Array.update(key_src_1, hash<8>(seed_1, src), null_if_eq, src, new_if_null, src);
+    int stg_1_dst = Array.update(key_dst_1, hash<8>(seed_1, src), null_if_eq, dst, new_if_null, dst);
+    // if the stage 1 record was null or the flow's key, this flow is stored
+    // and we can safely emit the packet.
+    if ((stg_1_src == NULL) && (stg_1_dst == NULL)) {
+        generate_port(ingress_port, ip_pkt(eth, ip, src, dst));
+    // else, repeat for stage 2.
+    } else {
+        // /* stage 1 */ int<8> idx_2 = hash<8>(seed_2, dst);
+        /* stage 2 */ int stg_2_src = Array.update(key_src_2, hash<8>(seed_2, dst), null_if_eq, src, new_if_null, src);
+        /* stage 3 */ int stg_2_dst = Array.update(key_dst_2, hash<8>(seed_2, dst), null_if_eq, dst, new_if_null, dst);
+        if ((stg_2_src == NULL) && (stg_2_dst == NULL)) {
+            generate_port(ingress_port, ip_pkt(eth, ip, src, dst));
+        // Two collisions! If no cuckoo-installations are in-flight,
+        // we can try to do one to find room.
+        } else {
+            int ingress_port32 = hash<32>(0, ingress_port);
+            /* stage 8 (!!) */ int cuckoo_used = Array.update(cuckoo_inflight, 0, always_mem, NULL, always_new, TRUE);
+            if (cuckoo_used == FALSE) {
+                generate cuckoo_insert(eth, ip, src, dst, ingress_port32, src, dst);
+            }
+        }
+    }
+}
+
+handle from_external(eth_hdr eth, ip_hdr_prefix ip, int<32> src, int<32> dst) {
+    // int<8> idx_1 = hash<8>(seed_1, dst);
+    int src_match_1 = Array.update(key_src_1, hash<8>(seed_1, dst), mem_eq_search, dst, always_mem, 0);
+    int dst_match_1 = Array.update(key_dst_1, hash<8>(seed_1, dst), mem_eq_search, src, always_mem, NULL);
+    // int<8> idx_2 = hash<8>(seed_2, src);
+    int src_match_2 = Array.update(key_src_2, hash<8>(seed_2, src), mem_eq_search, dst, always_mem, 0);
+    int dst_match_2 = Array.update(key_dst_2, hash<8>(seed_2, src), mem_eq_search, src, always_mem, NULL);
+    // if the flow is found in either stage, the packet is permitted to exit.
+    if (((src_match_1 == TRUE) && (dst_match_1 == TRUE)) ||
+        ((src_match_2 == TRUE) && (dst_match_2 == TRUE))) {
+        generate_port(ingress_port, ip_pkt(eth, ip, src, dst));
+    }
+}
+
+// The cuckoo operation.
+handle cuckoo_insert(eth_hdr eth, ip_hdr_prefix ip,
+    int<32> src, int<32> dst, int port, int fst_src, int fst_dst){
+    int<9> port9 = 0;
+    bool insert_success = false;
+    bool insert_fail = false;
+    int victim_src = NULL;
+    int victim_dst = NULL;
+    // int<8> idx_1 = hash<8>(seed_1, src);
+    // replace whatever is in the first stage.
+    int stg_1_src  = Array.update(key_src_1, hash<8>(seed_1, src), null_if_eq, NULL, always_new, src);
+    int stg_1_dst  = Array.update(key_dst_1, hash<8>(seed_1, src), null_if_eq, NULL, always_new, dst);
+    // If both slots were null, the insert has succeeded.
+    if ((stg_1_src == NULL) && (stg_1_dst == NULL)) {
+        insert_success = true;
+    }
+    // Otherwise, move the victim to stage 2.
+    else {
+        // int<8> idx_2 = hash<8>(seed_2, stg_1_dst);
+        int stg_2_src = Array.update(key_src_2, hash<8>(seed_2, stg_1_dst), null_if_eq, stg_1_src, always_new, stg_1_src);
+        int stg_2_dst = Array.update(key_dst_2, hash<8>(seed_2, stg_1_dst), null_if_eq, stg_1_dst, always_new, stg_1_dst);
+        if ((stg_2_src == NULL) && (stg_2_dst == NULL)) {
+            insert_success = true;
+        }
+        else {
+            victim_src = stg_2_src;
+            victim_dst = stg_2_dst;
+        }
+    }
+    // After the two stages, we are in one of three cases:
+    // case 1: there is a victim, and that victim is the same as the first
+    // flow key we tried to install. This means that we have reached
+    // a cycle, and it is unlikely that we will find room in the cuckoo
+    // hash table (without rehashing, which we haven't tried to implemented yet).
+    // case 2: there is a victim, but its not the first flow. We will
+    // perform another cuckoo operation to try and find room for that victim.
+    // case 3: there is no victim -- the insert succeeded, yay!
+
+    // If we reached a cycle, we cannot find room and must give up.
+    if ((victim_src == fst_src) && (victim_dst == fst_dst)) {
+        insert_fail = true;
+        port9 = hash<9>(0, port);
+        // stick the port9 assignment here so it doesn't get moved to an earlier stage
+        // and take hash stages there...
+    }
+    else {
+        port9 = hash<9>(0, port);        
+    }
+
+    // If the insert has definitively succeeded or failed, release the cuckoo lock.
+    if ((insert_success == true) || (insert_fail == true)) {
+        Array.set(cuckoo_inflight, 0, FALSE);
+        // If the insert has succeeded, its now okay to send the original packet.
+        if (insert_success == true) {
+            generate_port(port9, ip_pkt(eth, ip, src, dst));
+        }
+    }
+    // If the insert has neither succeeded nor failed, perform
+    // another cuckoo operation on the victim from stage 2.
+    else {
+        generate cuckoo_insert(eth, ip, port, victim_src, victim_dst, fst_src, fst_dst);
+    }
+}
+
+
+// ip_pkt is now just a generic "exit" event. Can be deleted and 
+// replace the remaining usages with either from_internal or from_external.
+handle ip_pkt (eth_hdr eth, ip_hdr_prefix ip, int<32> src, int<32> dst) {skip;}

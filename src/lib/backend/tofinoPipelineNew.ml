@@ -218,9 +218,9 @@ let compile ds portspec =
   report_if_verbose "-------Converting all memops to complex form-------";
   let core_prog = RegularizeMemopsNew.process_core core_prog in
   report_if_verbose "-------Allocating memop input variables-------";
-  let core_prog = ShareMemopInputsNew.process_core core_prog in
+  let core_prog = ShareMemopInputsSat.process_core core_prog in
 
-  dump_prog "IfToMatch; RegularizeMemopsNew; ShareMemopInputsNew" "tofinocore_regularized_memops" core_prog;
+  dump_prog "IfToMatch; RegularizeMemopsNew; ShareMemopInputsSat" "tofinocore_regularized_memops" core_prog;
   report_if_verbose "-------Transforming table matches into single-call form-------";
   let core_prog = SingleTableMatch.process_core core_prog in
   report_if_verbose "-------Transforming actions into functions-------";

@@ -373,21 +373,6 @@ let arrays_of_stage s = CL.map arrays_of_table s.tables |> CL.flatten |> (MatchA
 let hashers_of_stage stage =
   CL.map hashers_of_table stage.tables |> CL.flatten |> unique_stmt_list
 ;;
-let stage_fits prog_info stage =
-  let c_tbls = (CL.length stage.tables <= stage_constraints.max_tables) in
-  let c_arrays = ((arrays_of_stage stage |> CL.length) <= stage_constraints.max_arrays) in
-  let c_hashers = ((hashers_of_stage stage |> CL.length) <= stage_constraints.max_hashers) in 
-  let n_blocks = sblocks_of_stmt prog_info.arr_dimensions (stmt_of_stage stage) in
-  let c_blocks = (n_blocks <= stage_constraints.max_array_blocks) in
-  (* debug_print_endline@@"[stage_fits] c1: "^(string_of_bool c1)^" c2: "^(string_of_bool c2)^" c3: "^(string_of_bool c3); *)
-  if ( c_tbls && c_arrays && c_hashers && c_blocks)
-  then (
-    (* debug_print_endline "[stage_fits] TRUE";  *)
-    true)
-  else (
-    (* debug_print_endline "[stage_fits] FALSE";  *)
-    false)
-;;  
 
 let string_of_statement_group stmt_group = 
   let string_of_vertex_statement (vs : vertex_stmt) =
@@ -528,20 +513,19 @@ let try_place_in_table (prior_tables, (stmt_opt:vertex_stmt option)) (table:tabl
   result
 ;;
 
-let stage_fits (prog_info:layout_args) stage =
+let stage_fits_verbose (prog_info:layout_args) stage =
   let c_tbls = (CL.length stage.tables <= stage_constraints.max_tables) in
   let c_arrays = ((arrays_of_stage stage |> CL.length) <= stage_constraints.max_arrays) in
   let c_hashers = ((hashers_of_stage stage |> CL.length) <= stage_constraints.max_hashers) in 
   let n_blocks = sblocks_of_stmt prog_info.arr_dimensions (stmt_of_stage stage) in
   let c_blocks = (n_blocks <= stage_constraints.max_array_blocks) in
-  (* debug_print_endline@@"[stage_fits] c1: "^(string_of_bool c1)^" c2: "^(string_of_bool c2)^" c3: "^(string_of_bool c3); *)
-  if ( c_tbls && c_arrays && c_hashers && c_blocks)
-  then (
-    (* debug_print_endline "[stage_fits] TRUE";  *)
-    true)
-  else (
-    (* debug_print_endline "[stage_fits] FALSE";  *)
-    false)
+  (c_tbls, c_arrays, c_hashers, c_blocks)
+;;  
+
+
+let stage_fits (prog_info:layout_args) stage =
+  let a, b, c, d = stage_fits_verbose prog_info stage in
+  a && b && c && d
 ;;  
 
 
@@ -558,6 +542,11 @@ let sort_tables_by_nbranches tbls =
   List.sort (fun t1 t2 -> (List.length t1.branches) - (List.length t2.branches)) tbls
 ;;
 
+let unplaced_dependencies prog_info stages stmt_group = 
+  let deps = SgDfg.pred prog_info.dfg stmt_group |> List.fold_left (fun ss stmt_group -> ss@stmt_group.vertex_stmts) [] in
+  let placed = statements_of_stages stages in
+  List.filter (fun dep -> not (List.mem dep placed)) deps
+;;
 (* have all the dependencies of the 
    statement group been placed in stages? *)
 let dependencies_ready prog_info stages stmt_group =
@@ -599,9 +588,33 @@ let rec place_in_tables stmt tables =
 ;;
     
 let try_place_in_stage prog_info (prior_stages, stmt_group_opt) stage = 
-  let not_placed_result = (prior_stages@[stage], stmt_group_opt) in 
+  let not_placed_result reason = 
+    match stmt_group_opt with
+    | Some(stmt_group) -> (
+      (match stmt_group.arr with
+      | Some(arr) -> (
+        let stage_num = List.length prior_stages in      
+        print_endline 
+          ("[try_place_in_stage] failed to place array "
+          ^(CorePrinting.cid_to_string arr)
+          ^" in stage "^string_of_int stage_num^"."
+          ^" Reason: "^reason^".");
+        (* if (reason = "dependencies")          
+          then (
+            print_endline "---Unplaced dependencies---";
+            let deps = unplaced_dependencies prog_info prior_stages stmt_group in
+            List.iter (fun dep -> print_endline (CorePrinting.statement_to_string dep.stmt)) deps;
+            print_endline "-----------------------------";
+          ) *)
+      )
+      | _ -> ());
+      (prior_stages@[stage], stmt_group_opt) 
+    )
+    | _ -> 
+      (prior_stages@[stage], stmt_group_opt) 
+  in 
   match stmt_group_opt with 
-  | None -> not_placed_result (* already placed in a prior stage *)
+  | None -> not_placed_result "already placed" (* already placed in a prior stage *)
   | Some(stmt_group) -> (
     (* make sure that all the dependencies are placed for all the stmts in this group *)
     if (dependencies_ready prog_info prior_stages stmt_group)
@@ -615,10 +628,18 @@ let try_place_in_stage prog_info (prior_stages, stmt_group_opt) stage =
       in
       let updated_stage = {tables = tables';} in
       if (not (stage_fits prog_info updated_stage)) 
-        then (not_placed_result)
+        then (
+          let (c_tbls, c_arrays, c_hashers, c_blocks) = stage_fits_verbose prog_info updated_stage in
+          let dbg_msg = 
+            Printf.sprintf 
+              "stage %i would be too big: c_tbls=%b, c_arrays=%b, c_hashers=%b, c_blocks=%b"
+              (List.length prior_stages)
+              c_tbls c_arrays c_hashers c_blocks
+          in
+          not_placed_result dbg_msg)
         else (prior_stages@[updated_stage], None)
     )
-  else ( not_placed_result )
+    else ( not_placed_result "dependencies" )
   )
 ;;
 (* <<TODO:refactor>> replace try_place_in_stage with a recursive place_in_stages, 
