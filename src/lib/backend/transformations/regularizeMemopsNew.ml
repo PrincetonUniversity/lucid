@@ -455,6 +455,9 @@ let correct_decl_ordering tds =
   other_decls
 ;;
 
+
+(* make sure that  *)
+
 let process tds = 
   regularize_array_calls tds 
   |> delete_non_complex_memops 

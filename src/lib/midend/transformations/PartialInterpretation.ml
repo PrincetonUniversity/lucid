@@ -479,6 +479,30 @@ let rec interp_stmt env s : statement * env =
     in
     { s with s = STableMatch { tm with keys; args } }, env
   (* Cases where we branch *)
+
+  (* jsonch 8/23 -- for now, don't inline into certain if expressions. 
+      Inlining, in combination with sub-optimal placement of 
+      precompute statements in the tofino backend 
+      can add significant overheads to programs 
+      where if expressions are explicitly precomputed.
+      We don't inline into if expression that test a variable 
+      against 0, to give users a workaround. *)
+  | SIf (test, s1, s2) 
+      when (match test.e with 
+        | EOp(Eq, [{e=EVar(_)}; {e=EVal(_)}]) -> true
+        | _ -> false
+      ) ->
+    (* only inline if it results in a compile-time 
+       delete-able branch. *)
+    let test' = interp_exp test in
+    (match test' with
+      | { e = EVal { v = VBool b } } ->
+        if b then interp_stmt env s1 else interp_stmt env s2
+      | _ ->
+        let s1, env1 = interp_stmt env s1 in
+        let s2, env2 = interp_stmt env s2 in
+        let base_stmt = { s with s = SIf (test, s1, s2) } in
+        base_stmt, merge_envs [env; env1; env2])    
   | SIf (test, s1, s2) ->
     let test = interp_exp test in
     (match test with

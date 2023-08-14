@@ -179,7 +179,8 @@ let compile ds portspec =
   (* atomic op form breaks down statements so that each statement can 
      map to a single ALU operation or a single match table invocation. *)
   
-  let ds = atomic_op_form Cmdline.cfg.inline_array_addrs ds in
+     dump_ir_prog "midend in atomic op form" "midend_pre_atomic_op.dpt" ds;
+     let ds = atomic_op_form Cmdline.cfg.inline_array_addrs ds in
   dump_ir_prog "midend in atomic op form" "midend_atomic_op.dpt" ds;
 
   (* Statements and variable names don't change much beyond this point,

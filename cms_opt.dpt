@@ -1,0 +1,128 @@
+// largest fit pre-optimization: 3 (memory utilization: 12/48)
+// largest fit post-optimization: 10 (memory utilization: 40/48)
+
+size n_stages = 3;
+
+global Array.t<32>[4][n_stages] arrs = [
+  [Array.create(1024) for i < 4] 
+  for j < n_stages];
+
+
+// replace with unique polys for each stage
+const int[4][n_stages] seeds = [
+  [7; 31; 37; 19] for j < n_stages
+];
+
+
+
+// compare 4 values in 2 stages (1 precompute, 1 table)
+fun int max4_opt(int vals_0, int vals_1, int vals_2, int vals_3) {
+      int if_precomp = vals_0|-|vals_1;
+      int if_precomp762 = vals_2|-|vals_3;
+      int if_precomp7630 = vals_1|-|vals_3;
+      int if_precomp7631 = vals_1|-|vals_2;
+      int if_precomp7632 = vals_0|-|vals_3;
+      int if_precomp7633 = vals_0|-|vals_2;
+      if (if_precomp == 0) {
+        if (if_precomp762 == 0) {
+          if (if_precomp7630 == 0) {
+            return vals_3;
+          } else {
+            return vals_1;
+          }
+        }
+        else {
+          if (if_precomp7631 == 0) {
+            return vals_2;
+          } else {
+            return vals_1;
+          }
+        }
+      }
+      else {
+        if (if_precomp762 == 0) {
+          if (if_precomp7632 == 0) {
+            return vals_3; 
+          } else {
+            return vals_0;
+          }
+        }
+        else {
+          if (if_precomp7633 == 0) {
+            return vals_2;
+          } else {
+            return vals_0;
+          }
+        }
+      }
+  }
+
+fun int max_vec4(int[4] vals) {
+      int if_precomp = vals[0]|-|vals[1];
+      int if_precomp762 = vals[2]|-|vals[3];
+      int if_precomp7630 = vals[1]|-|vals[3];
+      int if_precomp7631 = vals[1]|-|vals[2];
+      int if_precomp7632 = vals[0]|-|vals[3];
+      int if_precomp7633 = vals[0]|-|vals[2];
+      if (if_precomp == 0) {
+        if (if_precomp762 == 0) {
+          if (if_precomp7630 == 0) {
+            return vals[3];
+          } else {
+            return vals[1];
+          }
+        }
+        else {
+          if (if_precomp7631 == 0) {
+            return vals[2];
+          } else {
+            return vals[1];
+          }
+        }
+      }
+      else {
+        if (if_precomp762 == 0) {
+          if (if_precomp7632 == 0) {
+            return vals[3]; 
+          } else {
+            return vals[0];
+          }
+        }
+        else {
+          if (if_precomp7633 == 0) {
+            return vals[2];
+          } else {
+            return vals[0];
+          }
+        }
+      }
+  }
+
+
+
+
+memop get_max(int memval, int minval) {
+  if (memval > minval) {return minval;}
+  else {return memval;}
+}
+
+event report(int s, int d, int ct) {skip;}
+
+event update(int s, int d) {
+  int[4] mins = [666 for i < 4];
+  for (j < n_stages) {
+    mins = [Array.getm(arrs[j][i], hash<32>(seeds[j][i], s, d), get_max, mins[i]) for i < 4];
+  }
+  int max_first = max_vec4(mins);
+  generate_port(128w9, report(s, d, max_first));
+}
+
+
+// event shit(int s, int d) {
+//   int v = s - d;
+//   // bug. not dealing with aggressive inlining correctly.
+//   match (v) with
+//   | 0 -> {generate(shit(1, 1));}
+//   | _ -> {generate(shit(2, 2));}
+// }
+
