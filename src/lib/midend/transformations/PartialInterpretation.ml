@@ -487,6 +487,8 @@ let rec interp_stmt env s : statement * env =
       where if expressions are explicitly precomputed.
       We don't inline into if expression that test a variable 
       against 0, to give users a workaround. *)
+  (* jsonch 8/23 -- with the hoisting pass added, we should 
+     be able to re-enable this. *)
   (* | SIf (test, s1, s2) 
       when (match test.e with 
         | EOp(Eq, [{e=EVar(_)}; {e=EVal(_)}]) -> true

@@ -693,6 +693,31 @@ let ensure_all_statements_in_groupdfg dfg sgdfg =
   then (error "[coreLayout] some statements are missing from the statement group dependency graph.")
 ;;
 
+(* layout is a single pass over the graph, 
+   but it is a topologically sorted pass. *)
+let ordered_topo_fold (cmp) (f) g acc = 
+  let outer_f node (inner_acc, visited, pending) = 
+      (* check if all of pendings predecessors are in visited *)
+      let can_place = List.for_all (fun p -> List.mem p visited) (Dfg.pred g node)  in
+      (* if we can place it, add to pending *)
+      if (can_place)
+      (* otherwise, sort pending, fold over them to update inner acc, 
+         and start a new pending *)
+      then (inner_acc, visited, node::pending)
+      else ( 
+          let pending_ordered = List.sort cmp pending in
+          let inner_acc' = List.fold_left
+              (fun a b -> f b a)
+              inner_acc
+              pending_ordered
+          in
+          inner_acc',[], [node]
+      )
+  in
+  DfgTopo.fold outer_f g acc
+;;
+
+
 let process tds dfg = 
   let num_dfg_nodes = Dfg.fold_vertex (fun v acc -> v :: acc) dfg [] |> List.length in
   debug_print_endline ("number of nodes in dfg: "^(num_dfg_nodes |> string_of_int));
