@@ -647,7 +647,7 @@ let try_place_in_stage prog_info (prior_stages, stmt_group_opt) stage =
 
 (* place a statement group into the pipe *)
 let place_in_pipe prog_info stmt_group pipe : pipeline =
-  (* debug_print_endline ("[place_in_pipe] trying to place statement group: "^(stmt_group.sguid |> string_of_int)); *)
+  debug_print_endline ("[place_in_pipe] trying to place statement group: "^(stmt_group.sguid |> string_of_int));
   if (Cmdline.cfg.debug)
   then (
     debug_print_endline 
@@ -693,30 +693,90 @@ let ensure_all_statements_in_groupdfg dfg sgdfg =
   then (error "[coreLayout] some statements are missing from the statement group dependency graph.")
 ;;
 
-(* layout is a single pass over the graph, 
-   but it is a topologically sorted pass. *)
-let ordered_topo_fold (cmp) (f) g acc = 
-  let outer_f node (inner_acc, visited, pending) = 
+let statement_group_directory_string sgdfg = 
+  let str = SgDfg.fold_vertex
+    (fun sg st -> 
+      let stmt_group_str = List.map (fun s -> vertex_to_string s) sg.vertex_stmts |> String.concat "\n" in
+      let str' = "{"^(string_of_int sg.sguid)^" : "^stmt_group_str^"}" in
+      st^"\n"^str')
+    sgdfg
+    ""
+  in
+  str
+;;
+
+
+
+(* layout is a topological fold over the statement groups, 
+   where ties between nodes are broken based on the length of the 
+   longest dependency chain (node with longer chain gets placed first) *)
+module DfsMemo = Map.Make(SgDfg.V)
+let max_path_len (g:SgDfg.t) (node : SgDfg.V.t) =
+  (* length of maximum path in g starting at node *)
+  (* Use a memoization table to store already computed results *)
+  let rec dfs memo v =
+    (* Check if result for this vertex is already computed *)
+    match DfsMemo.find_opt v memo with
+    | Some length -> (memo, length)
+    | None ->
+        (* Find successors of the vertex *)
+        let successors = SgDfg.succ g v in
+        (* If no successors, length is 1 *)
+        if List.length successors = 0 then
+          (DfsMemo.add v 1 memo, 1)
+        else
+          let (memo', max_len) = 
+            List.fold_left (fun (m, len) succ ->
+              let (m', len') = dfs m succ in
+              (m', max len (len' + 1))
+            ) (memo, 0) successors
+          in
+          (* Store the result in the memoization table *)
+          (DfsMemo.add v max_len memo', max_len)
+  in
+  let (_, result) = dfs DfsMemo.empty node in
+  result
+;;
+
+let path_cmp g n1 n2 = 
+  (max_path_len g n1) - (max_path_len g n2)
+;;
+let ordered_topo_fold (cmp : SgDfg.vertex -> SgDfg.vertex -> int) (f) (g:SgDfg.t) acc = 
+  let outer_f node (inner_acc, visited, pending) =     
       (* check if all of pendings predecessors are in visited *)
-      let can_place = List.for_all (fun p -> List.mem p visited) (Dfg.pred g node)  in
+      let can_place = List.for_all (fun p -> List.mem p visited) (SgDfg.pred g node)  in
       (* if we can place it, add to pending *)
       if (can_place)
-      (* otherwise, sort pending, fold over them to update inner acc, 
-         and start a new pending *)
       then (inner_acc, visited, node::pending)
-      else ( 
-          let pending_ordered = List.sort cmp pending in
+      (* otherwise, sort pending, fold over them to update inner acc, 
+         update the visited list, and start a new pending *)
+        else ( 
+          let pending_ordered = List.sort cmp pending |> List.rev in
+          (* let pending_deplens = List.map (fun p -> max_path_len g p) pending_ordered in *)
+          (* print_endline ("laying out batch of statement groups with dependency lengths:");
+          print_endline (String.concat " , " (List.map string_of_int pending_deplens)); *)
           let inner_acc' = List.fold_left
-              (fun a b -> f b a)
+              (fun a b -> 
+                f b a)
               inner_acc
               pending_ordered
           in
-          inner_acc',[], [node]
+          inner_acc',visited@pending, [node]
       )
   in
-  DfgTopo.fold outer_f g acc
+  let acc, _, pending = SgDfgTopo.fold outer_f g (acc, [], []) in
+  (* now make sure to place the last ones! *)
+  let pending_ordered = List.sort cmp pending |> List.rev in
+  (* let pending_deplens = List.map (fun p -> max_path_len g p) pending_ordered in
+  print_endline ("laying out FINAL BATCH OF STATEMENTS:");
+  print_endline (String.concat " , " (List.map string_of_int pending_deplens)); *)
+  List.fold_left (fun a b -> f b a) acc pending_ordered
 ;;
 
+let layout_fold f g acc = 
+  let cmp = (path_cmp g) in
+  ordered_topo_fold cmp f g acc
+;;
 
 let process tds dfg = 
   let num_dfg_nodes = Dfg.fold_vertex (fun v acc -> v :: acc) dfg [] |> List.length in
@@ -756,9 +816,13 @@ let process_new (tds : tdecls) dfg =
     arr_dimensions = array_dimensions tds;}
   in 
   ensure_all_statements_in_groupdfg dfg layout_args.dfg;
+  debug_print_endline ("------- statement groups to be placed -------");
+  debug_print_endline (statement_group_directory_string layout_args.dfg);
+  debug_print_endline ("------  starting layout               -------");
 
   print_endline ("[coreLayout] placing "^(string_of_int num_dfg_nodes)^(" atomic statement groups into pipeline"));
-  let pipe = SgDfgTopo.fold (place_in_pipe layout_args) layout_args.dfg empty_pipeline in
+  let pipe = layout_fold (place_in_pipe layout_args) layout_args.dfg empty_pipeline in
+  (* let pipe = SgDfgTopo.fold (place_in_pipe layout_args) layout_args.dfg empty_pipeline in *)
   print_endline("");
   print_endline ("[coreLayout] final pipeline");
   print_endline (summarystr_of_pipeline pipe);

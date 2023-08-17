@@ -31,6 +31,7 @@ let assigned_in_stmt stmt =
       val mutable assigned = CidSet.empty
       method assigned = assigned
       method! visit_SAssign _ id _ = assigned <- CidSet.add id assigned
+      method! visit_SLocal  _ id _ _ = assigned <- CidSet.add (Cid.id id) assigned
     end
   in
   v#visit_statement () (stmt);
@@ -98,31 +99,69 @@ let unmutated_stmts mut_vars stmts =
 ;;
 
 
+
 (* figure out which statements can be placed before 
    the src_stmt (because the src_statement doesn't
    mutate any variables in it) *)
-let split_by_change src_stmt stmts_to_place = 
-  let stmts_before, stmts_after = List.fold_left
-  (fun (stmts_before, stmts_here) stmt_to_place -> 
+let stmt_to_deps src_stmt (stmts_to_place: statement list) = 
+  let non_deps, deps = List.fold_left
+  (fun (non_deps, deps) stmt_to_place -> 
     if (CidSet.is_empty (CidSet.inter (assigned_in_stmt src_stmt) (stmt_vars stmt_to_place)))
       (* if the cidset is empty... nothing in the statment was modified, and 
          we can place before *)
-      then (stmts_before@[stmt_to_place], stmts_here)
-      else (stmts_before, stmts_here@[stmt_to_place]))
+      then (non_deps@[stmt_to_place], deps)
+      else (non_deps, deps@[stmt_to_place]))
   ([], [])
   stmts_to_place
   in
-  stmts_before, stmts_after
+  non_deps, deps
 ;;
+
+
+(* deps depend on some previous statement s.
+   non_deps do not. 
+   some of non_deps may depend on something in deps. 
+   we want to add those to deps. 
+   so its kind of a transitive operation   *)
+let rec transitive_deps (non_deps, deps) =
+  let non_deps, new_deps = List.fold_left
+    (fun (non_deps, new_deps) dependee -> 
+      (* update non deps, possibly taking some out, and new_deps, possibly adding some *)
+      let non_deps, new_deps' = stmt_to_deps (dependee) non_deps in
+      non_deps, new_deps@new_deps'    
+      )
+    (non_deps, [])
+    deps
+  in
+  non_deps, (deps@new_deps)
+;;
+
+(* get the dependees of stmt, and the dependees of those statements, and so on *)
+let stmt_to_transitive_deps stmt stmts_to_place = 
+  stmt_to_deps stmt stmts_to_place |> transitive_deps
+;;
+
 
 (* traverse the program in reverse. Every time you reach an slocal, 
    remember it and try to move it earlier in the program, 
    to immediately after the last modification of a variable in the slocal's rhs *)
-let rec hoist stmts_to_place stmt = 
+let rec hoist (stmts_to_place : statement list) stmt = 
   match stmt.s with
-  | SLocal(_, _, _) -> 
-    (* always try to hoist *)
-    snoop, stmt::stmts_to_place
+  | SLocal(_, _, exp) -> (
+    (* before hoisting, get all the statements that depend on this one. *)
+    (* only hoist atomic operation and hashes *)
+    match exp.e with 
+    | EOp _ when InterpHelpers.is_atomic exp -> 
+      snoop, ( stmt)::stmts_to_place
+    | EHash _ when InterpHelpers.is_atomic exp -> 
+      snoop, ( stmt)::stmts_to_place
+    (* if we are _not_ hoisting this statement, we need to 
+       see if any statements to place must be placed after it. *)
+    | _ ->       
+      let non_deps, deps = stmt_to_transitive_deps stmt stmts_to_place in
+      sequence_stmts (stmt::(deps)), non_deps
+      
+  ) 
   | SSeq(s1, s2) -> 
     (* walk backwards *)
     let s2, s2_stmts_to_place = hoist stmts_to_place s2 in
@@ -138,25 +177,17 @@ let rec hoist stmts_to_place stmt =
        trying to place is modified in the sif, then we have to place 
        the statement right after. Its because SIf is something that 
        can mutate. *)
-    let stmts_before, stmts_after = split_by_change stmt stmts_to_place in
-    sequence_stmts ({stmt with s = SIf(e, s1, s2)}::stmts_after), (stmts_before@stmts_from_s1@stmts_from_s2)
-  | SAssign(cid, _) -> (
+    let non_deps, deps = stmt_to_transitive_deps stmt stmts_to_place in
+    sequence_stmts ({stmt with s = SIf(e, s1, s2)}::( deps)), (non_deps@stmts_from_s1@stmts_from_s2)
+  | SAssign(_, _) -> (
     (* we are walking backwards. If cid is in a statement to place, 
        then cid is the last undefined variable in it -- i.e., no mutations 
        to any cid in the statement happen between here and the original 
        statement's spot. If they did, we would have run into them and 
        removed the statement from the statements_to_place *)
-    let stmts_before, stmts_here = List.fold_left
-      (fun (stmts_before, stmts_here) stmt_to_place -> 
-        if (CidSet.mem cid (stmt_vars stmt_to_place))
-          (* cid, which is modified by this assign, is in the statement.
-             So the statement must go here. *)
-          then (stmts_before, stmts_here@[stmt_to_place])
-          else (stmts_before@[stmt_to_place], stmts_here))
-      ([], [])
-      stmts_to_place
+    let non_deps, deps = stmt_to_transitive_deps stmt stmts_to_place 
     in
-    sequence_stmts (stmt::stmts_here), stmts_before
+    sequence_stmts (stmt::( deps)), non_deps
   )
   | SMatch(es, bs) -> (
     let bs, stmts_to_place_branches = List.fold_left 
@@ -166,8 +197,8 @@ let rec hoist stmts_to_place stmt =
       ([], [])
       bs
     in
-    let stmts_before, stmts_after = split_by_change stmt stmts_to_place in
-    sequence_stmts ({stmt with s=SMatch(es, bs)}::stmts_after), (stmts_before@stmts_to_place_branches@stmts_to_place_branches)
+    let stmts_before, stmts_after = stmt_to_transitive_deps stmt stmts_to_place in
+    sequence_stmts ({stmt with s=SMatch(es, bs)}::( stmts_after)), (stmts_before@stmts_to_place_branches@stmts_to_place_branches)
   )
   (* nothing else changes *)
   | SNoop | SUnit _ | SPrintf _ | SGen _ | SRet _ | STableInstall _ | STableMatch _ -> stmt, stmts_to_place
@@ -180,7 +211,7 @@ let rec process decls =
     match decl.d with
     | DHandler(id, sort, (params, stmt)) ->
       let stmt, pre_stmts = hoist [] stmt in
-      let stmt = sequence_stmts (stmt::pre_stmts) in 
+      let stmt = sequence_stmts (( pre_stmts)@[stmt]) in 
       {decl with d=DHandler(id, sort, (params, stmt))}::(process decls)
     | _ -> decl::(process decls)
   )
