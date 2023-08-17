@@ -487,7 +487,7 @@ let rec interp_stmt env s : statement * env =
       where if expressions are explicitly precomputed.
       We don't inline into if expression that test a variable 
       against 0, to give users a workaround. *)
-  | SIf (test, s1, s2) 
+  (* | SIf (test, s1, s2) 
       when (match test.e with 
         | EOp(Eq, [{e=EVar(_)}; {e=EVal(_)}]) -> true
         | _ -> false
@@ -502,7 +502,7 @@ let rec interp_stmt env s : statement * env =
         let s1, env1 = interp_stmt env s1 in
         let s2, env2 = interp_stmt env s2 in
         let base_stmt = { s with s = SIf (test, s1, s2) } in
-        base_stmt, merge_envs [env; env1; env2])    
+        base_stmt, merge_envs [env; env1; env2])     *)
   | SIf (test, s1, s2) ->
     let test = interp_exp test in
     (match test with

@@ -178,11 +178,14 @@ let compile ds portspec =
       - each action is used by at most 1 table *)
   (* atomic op form breaks down statements so that each statement can 
      map to a single ALU operation or a single match table invocation. *)
-  
-     dump_ir_prog "midend in atomic op form" "midend_pre_atomic_op.dpt" ds;
-     let ds = atomic_op_form Cmdline.cfg.inline_array_addrs ds in
+  dump_ir_prog "midend in atomic op form" "midend_pre_atomic_op.dpt" ds;
+  let ds = atomic_op_form Cmdline.cfg.inline_array_addrs ds in
   dump_ir_prog "midend in atomic op form" "midend_atomic_op.dpt" ds;
-
+  (* the final coreSyntax transformation is hoisting local declarations 
+     out of conditional branches, moving them as early in the code as 
+     possible. This breaks false dependencies that arise in nested branches *)
+  let ds = Hoisting.process ds in 
+  dump_ir_prog "midend after hoisting" "midend_hoisting.dpt" ds;
   (* Statements and variable names don't change much beyond this point,
      so we give everything a unique identifier. *)
   report_if_verbose "-------Assigning spans with unique IDs---------";
