@@ -1,0 +1,93 @@
+/* 
+
+A simple flow cache with controller polling.
+
+Data plane
+  1. Reads eth/ip packets. 
+  2. Hashes ip (src, dst) to flow ids.
+  3. Counts packets per flow. 
+Control plane
+  1. Polls counters
+  2. Resets counters
+  3. Periodically prints out (flow id, packet count) pairs
+  
+
+##### Steps to deployment #####
+
+1) type check
+2) simple tests in interpreter
+3) compile to p4
+4) compile to tofino
+5) write the control plane script
+6) run test in ASIC model
+
+  --- handoff to Joon ---
+  1. p4 program to compile
+  2. control plane script
+  3. instructions to run on ASIC and deployment
+
+7) run it against campus trace
+8) sanity check by looking at distribution of output
+
+*/
+
+type eth_hdr = {
+    int<48> dmac; 
+    int<48> smac; 
+    int<16> etype;
+}
+type ip_hdr = {
+    int<8> v_ihl; 
+    int<8> tos;
+    int<16> len;
+    int<16> id;
+    int<16> flags_frag;
+    int<8> ttl;
+    int<8> proto;
+    int<16> csum;
+    int<32> src;
+    int<32> dst;
+}
+
+const int<9> COLLECTOR_PORT = 128;
+packet event pkt_in(eth_hdr e, ip_hdr ip);
+packet event record_out(int<32> flow_id, int<32> ct) { skip; }
+
+parser main() {
+  read eth_hdr ehdr;
+  match ehdr#etype with
+  // for non-packet events, which this program has none of.
+  | LUCID_ETHERTY -> { do_lucid_parsing(); }
+  | 0x0800 -> {
+    read ip_hdr iphdr;
+    generate(pkt_in(ehdr, iphdr));
+  }
+}
+
+global Array.t<32> arr_flow_ids = Array.create(1024);
+global Array.t<32> arr_cts = Array.create(1024);
+
+memop get_mem(int stored_val, int unused) {
+    return stored_val;
+}
+memop set_mem(int stored_val, int new_val) { 
+    return new_val;
+}
+
+memop incr(int stored_val, int ct) {
+  return stored_val + ct;
+}
+
+handle pkt_in(eth_hdr e, ip_hdr ip) {
+  int flow_id = hash<32>(13, ip#src, ip#dst);
+  int<10> idx = hash<10>(91, flow_id);
+  int prev_id = Array.update(arr_flow_ids, idx, get_mem, 0, set_mem, flow_id);
+  if (prev_id == flow_id) {
+    Array.setm(arr_cts, idx, incr, 1);
+  } else {
+    Array.setm(arr_cts, idx, incr, 1);
+    // int prev_ct = Array.update(arr_cts, idx, get_mem, 0, set_mem, 0);
+    // generate_port(COLLECTOR_PORT, record_out(prev_id, prev_ct));
+  }
+
+}
