@@ -254,7 +254,7 @@ let regularize_array_calls tds =
                     (InterpHelpers.name_from_exp set_memop |> Cid.to_id )
                     memops
                 in 
-                let complex_memop = to_complex_memop (Some(set_memop)) (None) in 
+                let complex_memop = to_complex_memop (None) (Some(set_memop)) in 
                 let complex_memop_exp = CS.exp (EVar(Cid.id complex_memop.mid)) (ty (TMemop(3, memop_size))) in
                 let old_memop_ids = [set_memop.mid] in 
                 let complex_args = [
