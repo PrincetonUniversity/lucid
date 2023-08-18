@@ -50,7 +50,7 @@ type ip_hdr = {
 }
 
 const int<9> COLLECTOR_PORT = 128;
-packet event pkt_in(eth_hdr e, ip_hdr ip);
+packet event pktin(eth_hdr e, ip_hdr ip);
 packet event record_out(int<32> flow_id, int<32> ct) { skip; }
 
 parser main() {
@@ -60,7 +60,7 @@ parser main() {
   | LUCID_ETHERTY -> { do_lucid_parsing(); }
   | 0x0800 -> {
     read ip_hdr iphdr;
-    generate(pkt_in(ehdr, iphdr));
+    generate(pktin(ehdr, iphdr));
   }
 }
 
@@ -78,16 +78,11 @@ memop incr(int stored_val, int ct) {
   return stored_val + ct;
 }
 
-handle pkt_in(eth_hdr e, ip_hdr ip) {
+handle pktin(eth_hdr e, ip_hdr ip) {
   int flow_id = hash<32>(13, ip#src, ip#dst);
   int<10> idx = hash<10>(91, flow_id);
   int prev_id = Array.update(arr_flow_ids, idx, get_mem, 0, set_mem, flow_id);
-  if (prev_id == flow_id) {
-    Array.setm(arr_cts, idx, incr, 1);
-  } else {
-    Array.setm(arr_cts, idx, incr, 1);
-    // int prev_ct = Array.update(arr_cts, idx, get_mem, 0, set_mem, 0);
-    // generate_port(COLLECTOR_PORT, record_out(prev_id, prev_ct));
-  }
+  int unused = Array.update(arr_cts, idx, incr, 1, incr, 1);
+  // Array.setm(arr_cts, idx, incr, 1);
 
 }
