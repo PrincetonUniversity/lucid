@@ -261,7 +261,7 @@ let matches_pat vs ps =
       ps
 ;;
 
-(* updated version with pattern values *)
+(* for tables (matches_pat is for match statements) *)
 let matches_pat_vals (vs : value list) (pats : value list) =
   List.for_all2
     (fun v p ->

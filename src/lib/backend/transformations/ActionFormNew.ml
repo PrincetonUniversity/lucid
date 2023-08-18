@@ -83,7 +83,7 @@ type lscache = Id.t LSCache.t
 let empty_labeled_statement_cache : lscache = LSCache.empty
 
 let dblock id stmt =
-  {td=TDOpenFunction(id, [], stmt); tdspan=Span.default; tdpragma = None;}
+  {td=TDOpenFunction(id, [], stmt); tdspan=Span.default; tdpragma = [];}
 ;;
 
 let counter = ref 0

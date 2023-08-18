@@ -340,6 +340,72 @@ let interp_gen_ty env = function
   | GPort e -> GPort (interp_exp env e)
 ;;
 
+(* interpet constant match statements *)
+let bitmatch bits n =
+  let open Z in
+  let bits = List.rev bits in
+  let two = Z.of_int 2 in
+  let rec aux bits n =
+    match bits with
+    | [] -> n = zero
+    | hd :: tl ->
+      aux tl (shift_right n 1)
+      &&
+      (match hd with
+       | 0 -> rem n two = zero
+       | 1 -> rem n two <> zero
+       | _ -> true)
+  in
+  aux bits n
+;;
+let matches_pat vs ps =
+  if ps = [PWild]
+  then true
+  else
+    List.for_all2
+      (fun v p ->
+        let v = v.v in
+        match p, v with
+        | PWild, _ -> true
+        | PNum pn, VInt n -> Z.equal (Integer.value n) pn
+        | PBit bits, VInt n -> bitmatch bits (Integer.value n)
+        | _ -> false)
+      vs
+      ps
+;;
+
+let exp_to_value_opt exp = match exp.e with 
+  | EVal(value) -> Some (value)
+  | _ -> None
+;;
+let rec exp_to_values exps =
+  match exps with 
+  | [] -> Some([])
+  | exp::exps -> 
+    let value = exp_to_value_opt exp in
+    let values = exp_to_values exps in
+    match (value, values) with 
+    | (Some(value), Some(values)) -> Some(value::values)
+    | _ -> None
+;;
+
+let elim_const_smatch stmt = 
+  match stmt.s with
+  | SMatch(es, bs) -> (
+    let v_opts = exp_to_values es in
+    match v_opts with 
+      | None -> stmt
+      | Some(vs) ->       
+        let first_match =
+          try List.find (fun (pats, _) -> matches_pat vs pats) bs with
+          | _ -> error "[PartialInterpretation.elim_const_smatch] Match statement did not match any branch!"
+        in
+        let stmt' = snd first_match in
+        stmt'
+  )
+  | _ -> stmt
+;;
+
 (* Partially interpret a statement. Return the interpreted statment and the
    environment after interpreting it. *)
 let rec interp_stmt env s : statement * env =
@@ -348,9 +414,8 @@ let rec interp_stmt env s : statement * env =
    | _ -> print_endline @@ "Interping " ^ CorePrinting.stmt_to_string s); *)
   let interp_exp = interp_exp env in
   let should_inline () =
-    match s.spragma with
-    | Some ("noinline", []) -> false
-    | _ -> true
+    match (Pragma.find_sprag "noinline" [] s.spragmas) with
+    | Some(_) -> false    | _ -> true
   in
   match s.s with
   | SNoop -> s, env
@@ -373,10 +438,21 @@ let rec interp_stmt env s : statement * env =
   | SSeq (s1, s2) ->
     let s1, env1 = interp_stmt env s1 in
     let s2, env2 = interp_stmt env1 s2 in
-    let s' =
+    (* make sure to carry the pragmas and other annotations on statements *)
+    let stmt' = 
+      if (s1.s = SNoop) 
+        then 
+          s2 
+        else 
+          if (s2.s = SNoop) 
+          then s1 
+          else { s with s = SSeq (s1, s2)}
+    in
+    stmt', env2
+    (* let s' =
       if s1.s = SNoop then s2.s else if s2.s = SNoop then s1.s else SSeq (s1, s2)
     in
-    { s with s = s' }, env2
+    { s with s = s' }, env2 *)
   (* Cases where we bind/mutate variables *)
   | SLocal (id, ty, exp) ->
     let exp = interp_exp exp in
@@ -403,6 +479,32 @@ let rec interp_stmt env s : statement * env =
     in
     { s with s = STableMatch { tm with keys; args } }, env
   (* Cases where we branch *)
+
+  (* jsonch 8/23 -- for now, don't inline into certain if expressions. 
+      Inlining, in combination with sub-optimal placement of 
+      precompute statements in the tofino backend 
+      can add significant overheads to programs 
+      where if expressions are explicitly precomputed.
+      We don't inline into if expression that test a variable 
+      against 0, to give users a workaround. *)
+  (* jsonch 8/23 -- with the hoisting pass added, we should 
+     be able to re-enable this. *)
+  (* | SIf (test, s1, s2) 
+      when (match test.e with 
+        | EOp(Eq, [{e=EVar(_)}; {e=EVal(_)}]) -> true
+        | _ -> false
+      ) ->
+    (* only inline if it results in a compile-time 
+       delete-able branch. *)
+    let test' = interp_exp test in
+    (match test' with
+      | { e = EVal { v = VBool b } } ->
+        if b then interp_stmt env s1 else interp_stmt env s2
+      | _ ->
+        let s1, env1 = interp_stmt env s1 in
+        let s2, env2 = interp_stmt env s2 in
+        let base_stmt = { s with s = SIf (test, s1, s2) } in
+        base_stmt, merge_envs [env; env1; env2])     *)
   | SIf (test, s1, s2) ->
     let test = interp_exp test in
     (match test with
@@ -415,7 +517,6 @@ let rec interp_stmt env s : statement * env =
        base_stmt, merge_envs [env; env1; env2])
   | SMatch (es, branches) ->
     let es = List.map interp_exp es in
-    (* TODO: Precompute the match as much as possible *)
     let branches, envs =
       List.map
         (fun (p, stmt) ->
@@ -425,7 +526,9 @@ let rec interp_stmt env s : statement * env =
       |> List.split
     in
     let base_stmt = { s with s = SMatch (es, branches) } in
-    base_stmt, merge_envs (env :: envs)
+    (* if the match statement's key expression is a constant, 
+       compute the branch and replace the match statement with it *)
+    elim_const_smatch base_stmt, merge_envs (env :: envs)
 ;;
 
 (* After we do partial interpretation of a handler body, there will likely be many

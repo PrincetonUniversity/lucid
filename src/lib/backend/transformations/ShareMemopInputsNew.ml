@@ -1,4 +1,7 @@
-(* ShareMemopInputs
+(* ShareMemopInputsNew
+  This is depreciated, ShareMemopSat should be used. 
+  This module will be deleted when we have sufficient confidence that 
+  ShareMemopInputSat is bug free and performs adequately.
 
   In the Tofino, each global "array" is attached to 1 sALU. 
   Each sALU only has two input ports and one output port from/to the
@@ -13,8 +16,6 @@
     2. if that is not possible, create a new temporary variable 
        for the position of the array call and add statements 
        to load data before the array call. 
-  Question:
-    - what about output variable? Is that not limited?
 *) 
 
 open Core
@@ -27,7 +28,6 @@ let error s = raise (Error s)
 
 (* get the subset of variables that are parameters of the program *)
 
-(* TODO: what about shared locals?  *)
 let var_params ds (vars : Cid.t list) = 
   let params = 
     (main_handler_of_decls ds).hdl_input

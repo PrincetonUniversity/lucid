@@ -165,7 +165,7 @@ let print_node_in_edges lbl g v =
 ;;
 
 let remove_noop_match_nodes g =  
-    (* CfgTopo.iter (print_node_in_edges "[BEFORE REMOVE NOOP]" g) g; *)
+    CfgTopo.iter (print_node_in_edges "[BEFORE REMOVE NOOP]" g) g;
 
     let update_for_node v g =
         let add_new_pred_edges pred_v g = 
@@ -254,20 +254,23 @@ let default_branch keys = (CL.map (fun _ -> PWild) keys, snoop) ;;
         - hit rule --> execute s
 
 *)
-(* this pass puts each vertex into a normal form. 
-    Non-solitary match nodes: do nothing.
-    Operation nodes: 
-
-*)
 let vertices_in_normal_match_form g =
     let idom = idom_of_cfg g in 
     let normalize_vertex v =
         let pc = precondition_of_vertex v idom g v in 
+        (* if a statement is annotated with ignore_path_conditions, 
+           that means it already tests all the conditions necessary for 
+           execution. Currently, this is just for table_match statements. *)
+        if (Pragma.exists_sprag "ignore_path_conditions" [] (vertex_prags v))
+        then v
+        else (
         match v.stmt.s, v.solitary with
             (* a non-solitary match node, at this point, is a match node that just has noop branches 
                which point to other nodes. It doesn't execute anything, so it can be deleted in the next pass
                and we don't have to do anything here. *)
             | SMatch(_, _), false -> v
+            (* a solitary (i.e., large user-written) match node 
+              must still be augmented with preconditions, just like any other node. *)
             | SMatch(keys, branches), true -> (
                 match pc with
                 | CNone -> v
@@ -310,26 +313,18 @@ let vertices_in_normal_match_form g =
                 res
                 )
             )
-            (* SPECIAL CASE: this is a table_match node. We can ignore _all_ the preconditions 
-               except for testing that the node's execution flag is set. So, drop all preconditions 
-               and just add that one. 
-               I don't know if we can drop preconditions for table_matches _before_ this pass, 
-               because doing so might impact condition propagation. *)
-            | STableMatch(tm), true -> 
-                (* craft the match statement *)
+            | STableMatch(_), _ -> 
+                error "[vertices_in_normal_match_form] processing an stablematch, which should be wrapped in a match table _already_ in normal match form"
+(*                 (* craft the match statement *)
                 let keyvar, keyty = SingleTableMatch.callnumvar_of_tid (id_of_exp tm.tbl) in
-                let keys = [exp_of_id keyvar keyty] in                
+                let keys = [exp_of_id keyvar keyty] in
                 let branches = [
                     ([PNum (Z.of_int 0)], snoop);
                     ([PWild], v.stmt)]
                 in
                 let s' = SMatch(keys, branches) in
                 let new_stmt = {v.stmt with s = s'} in
-                {v with stmt = new_stmt;}
-            (* case: this is a non-match node, which we are wrapping with a match statement 
-               that is generated from its pre-conditions. *)
-            | STableMatch(_), false ->
-                error "[vertices_in_normal_match_form] got a non-solitary table match node.. should be impossible."
+                {v with stmt = new_stmt;} *)
             | _, _ -> ( 
                 match pc with 
                 (* the precondition is expressed as a series of match rules. *)
@@ -377,16 +372,20 @@ let vertices_in_normal_match_form g =
                 (* the precondition is an expression, but those should not happen by this point. *)
                 | CExp(_) -> error "If path conditions not supported"
             )
+        )
     in 
     Cfg.map_vertex normalize_vertex g
 ;;
 
 
 let to_control_dependency_graph g =
-    let g = propagate_edge_constraints g 
-    |> vertices_in_normal_match_form
-    |> remove_noop_match_nodes 
-    in  
-    (* CoreCfg.print_cfg ((!BackendLogging.graphLogDir)^"/cdg_noops_gone.dot") g; *)
+    (* start_logging (); *)
+    (* debug_graph "[control flow input graph]" g 76; *)
+    let g = propagate_edge_constraints g in
+    (* debug_graph "[propagate_edge_constraints]" g 76; *)
+    let g = vertices_in_normal_match_form g in
+    (* debug_graph "[vertices_in_normal_match_form]" g 76; *)
+    let g = remove_noop_match_nodes g in
+    (* debug_graph "[remove_noop_match_nodes]" g 76; *)
     g
 ;;

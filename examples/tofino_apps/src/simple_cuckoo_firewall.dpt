@@ -14,6 +14,19 @@ const int TRUE = 1;
 const int FALSE = 0;
 const int<8> TOS_TRUSTED = 1;
 
+parser parse_ip(eth_hdr e) {
+    read ip_hdr_prefix ip;
+    read int ip_src;
+    read int ip_dst;
+    generate(ip_pkt(e, ip, ip_src, ip_dst));
+}
+
+parser main() {
+    read eth_hdr e;
+    match e#etype with
+    | LUCID_ETHERTY -> {do_lucid_parsing();}
+    | 0x0800 -> {parse_ip(e);}
+}
 
 event cuckoo_insert(eth_hdr eth, ip_hdr_prefix ip,
     int<32> src, int<32> dst, int port, int fst_src, int fst_dst);

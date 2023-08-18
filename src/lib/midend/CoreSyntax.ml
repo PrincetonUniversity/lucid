@@ -8,6 +8,7 @@ and tagval = [%import: (TaggedCid.tagval[@opqaue])]
 and tcid = [%import: (TaggedCid.t[@opqaue])]
 and sp = [%import: Span.t]
 and z = [%import: (Z.t[@opaque])]
+and pragma = [%import: Pragma.t]
 and zint = [%import: (Integer.t[@with Z.t := (Z.t [@opaque])])]
 and location = int
 
@@ -160,7 +161,7 @@ and s =
 and statement =
   { s : s
   ; sspan : sp
-  ; spragma : pragma option
+  ; spragmas : pragma list
   }
 
 and tbl_match_out_param = id * ty option
@@ -183,8 +184,6 @@ and tbl_entry =
   ; eaction : id
   ; eargs : exp list
   }
-
-and pragma = string * string list
 and params = (id * ty) list
 and body = params * statement
 
@@ -357,8 +356,8 @@ let vint_exp_ty i (ty:ty) =
 
 (* Statements *)
 
-let statement s = { s; sspan = Span.default; spragma = None }
-let statement_sp s span = { s; sspan = span; spragma = None }
+let statement s = { s; sspan = Span.default; spragmas = [] }
+let statement_sp s span = { s; sspan = span; spragmas = [] }
 let snoop = statement SNoop
 let sseq s1 s2 = statement (SSeq (s1, s2))
 let slocal id ty e = statement (SLocal (id, ty, e))
@@ -466,8 +465,9 @@ let rec equiv_value v1 v2 =
   | _ -> false
 ;;
 
-let rec equiv_exp e1 e2 =
-  match e1.e, e2.e with
+
+let rec equiv_e e1 e2 = 
+  match e1, e2 with
   | EVal v1, EVal v2 -> equiv_value v1 v2
   | EVar cid1, EVar cid2 -> Cid.equal cid1 cid2
   | ECall (cid1, es1), ECall (cid2, es2) ->
@@ -476,6 +476,9 @@ let rec equiv_exp e1 e2 =
     sz1 = sz2 && equiv_list equiv_exp es1 es2
   | EOp (op1, es1), EOp (op2, es2) -> op1 = op2 && equiv_list equiv_exp es1 es2
   | _ -> false
+
+and equiv_exp e1 e2 =
+  equiv_e e1.e e2.e
 ;;
 
 let equiv_pat p1 p2 =

@@ -23,6 +23,76 @@ open CoreSyntax
 open MiscUtils
 
 
+(* bug: 
+      when we inline the lucid ethernet parser, we need to make sure we don't skip the ethernet header, which has already been skipped.   
+
+*)
+
+
+(* create a parse block to parse and generate a single packet event. *)
+let packetevent_parse_block event = match event.d with
+| DEvent(id,_, _, params) -> 
+   let read_cmds = List.map read_id params in
+   let gen_cmd = pgen 
+      (call
+         (Cid.id id)
+         (List.map (fun (id, ty) -> var (Cid.id id) ty) params)
+         (ty TEvent))
+   in
+   block read_cmds gen_cmd
+| _ -> 
+   error "[packetevent_parse_block] not an event declaration"
+;;
+
+
+
+type lucid_entry_block_ty = 
+   | CallFromPortNum
+   | CallFromEth
+   | CallAlways
+   | CallInvalid
+
+(* call the parser for background events. *)
+let lucid_background_event_parser bg_events = 
+   let (branches : parser_branch list) = List.map 
+      (fun bg_ev -> match bg_ev.d with 
+         | DEvent(_, Some(num), _,_) -> 
+            pbranch [num] (packetevent_parse_block bg_ev)
+         | DEvent(_, None, _, _) -> error "event has no number"
+         | _ -> error "not an event?")
+      bg_events
+   in
+   let tag_id = Cid.create ["tag"] in
+   let tag_ty = ty (TInt(16)) in   
+   let etag = var tag_id tag_ty in
+   block 
+      [ (* skip the lucid ethernet header. If we want to be safer, we can read it and check correctness. *)
+         skip (ty (TInt(14*8)));
+         read (Cid.create ["tag"]) (ty (TInt(16))) (* read the event tag *)
+      ]
+      (pmatch [etag] branches)
+      
+;;
+(* a parser that starts after the ethernet header (it doesn't skip ethernet header) *)
+let lucid_background_event_parser_from_eth bg_events = 
+   let (branches : parser_branch list) = List.map 
+      (fun bg_ev -> match bg_ev.d with 
+         | DEvent(_, Some(num), _,_) -> 
+            pbranch [num] (packetevent_parse_block bg_ev)
+         | DEvent(_, None, _, _) -> error "event has no number"
+         | _ -> error "not an event?")
+      bg_events
+   in
+   let tag_id = Cid.create ["tag"] in
+   let tag_ty = ty (TInt(16)) in   
+   let etag = var tag_id tag_ty in
+   block 
+      [
+         read (Cid.create ["tag"]) (ty (TInt(16))) (* read the event tag *)
+      ]
+      (pmatch [etag] branches)      
+;;
+
 (* inline all the calls in a single parser *)
 
 type inline_ctx = (params * parser_block) CidMap.t
@@ -84,7 +154,13 @@ let rec inline_parsers_rec (ctx:inline_ctx) (decls:decls) =
       | _ -> decl::(inline_parsers_rec ctx decls)
    )
 ;;
-let inline_parsers lucid_bg_event_block decls = 
+let inline_parsers parser_entry_ty bg_events decls = 
+   let lucid_bg_event_block = match parser_entry_ty with
+      | CallFromPortNum -> lucid_background_event_parser bg_events
+      | CallFromEth -> lucid_background_event_parser_from_eth bg_events
+      | CallAlways -> lucid_background_event_parser bg_events
+      | CallInvalid -> error "[inline_parsers] invalid parser entry type -- this should have been caught earlier"
+   in
    let ctx = CidMap.add (Cid.id Builtins.lucid_parse_id) ([], lucid_bg_event_block) CidMap.empty in
    inline_parsers_rec ctx decls
 ;;
@@ -109,43 +185,6 @@ let name_of_event eventdecl = match eventdecl.d with
 ;;
 
 
-(* create a parse block to parse and generate a single packet event. *)
-let packetevent_parse_block event = match event.d with
-| DEvent(id,_, _, params) -> 
-   let read_cmds = List.map read_id params in
-   let gen_cmd = pgen 
-      (call
-         (Cid.id id)
-         (List.map (fun (id, ty) -> var (Cid.id id) ty) params)
-         (ty TEvent))
-   in
-   block read_cmds gen_cmd
-| _ -> 
-   error "[packetevent_parse_block] not an event declaration"
-;;
-
-
-(* call the parser for background events. *)
-let lucid_background_event_parser bg_events = 
-   let (branches : parser_branch list) = List.map 
-      (fun bg_ev -> match bg_ev.d with 
-         | DEvent(_, Some(num), _,_) -> 
-            pbranch [num] (packetevent_parse_block bg_ev)
-         | DEvent(_, None, _, _) -> error "event has no number"
-         | _ -> error "not an event?")
-      bg_events
-   in
-   let tag_id = Cid.create ["tag"] in
-   let tag_ty = ty (TInt(16)) in   
-   let etag = var tag_id tag_ty in
-   block 
-      [ (* skip the lucid ethernet header. If we want to be safer, we can read it and check correctness. *)
-         skip (ty (TInt(14*8)));
-         read (Cid.create ["tag"]) (ty (TInt(16))) (* read the event tag *)
-      ]
-      (pmatch [etag] branches)
-      
-;;
 
 
 (* create a full parser from a portspec file, 
@@ -280,15 +319,16 @@ let at_least_one lst f =
    let matches = List.filter f lst in
    List.length matches >0
 ;;
+
 (* check to see if the entry block of the user-defined 
    parser has a valid form.  *)
-let check_valid_entry_parse_block parse_block =
+let check_valid_entry_parse_block parse_block : lucid_entry_block_ty =
    let acns_spans, (step, _) = parse_block.pactions, parse_block.pstep in
    let acns, _ = List.split acns_spans in 
    match acns, step with
    (* parser main() { do_lucid_parsing(); } *)
    | [], PCall({e=ECall(cid, _); _}) when cid_is_ingress_port cid -> 
-      true
+      CallAlways
    (* parser main() { match ingress_port with <branches>, where branches 
       either directly call the lucid parser or never call the lucid parser } *)
    | [], PMatch([{e=EVar(cid); _}], branches) 
@@ -298,7 +338,7 @@ let check_valid_entry_parse_block parse_block =
             (fun branch -> 
                direct_call_parser_branch branch || never_calls_lucid_parser branch)
             branches) -> 
-               true
+               CallFromPortNum
    (* parser main() {read 14 bytes (eth hdr); match v : int16 with | LUCID_ETHERTY -> do_lucid_parsing(); | <never call lucid parse branches>} *)
    | actions, PMatch([exp], ([fst_pat], fst_block)::rest_branches) -> (
       let bits_read_check = bits_read_by_actions actions = 14 * 8 in 
@@ -314,19 +354,22 @@ let check_valid_entry_parse_block parse_block =
       if not direct_call_check then Printf.printf "parser's first branch does not call lucid parser directly.\n";
       if not rest_branches_check then Printf.printf "branches besides the parser's first branch call lucid's parser.\n"; *)
       if (bits_read_check && size_check && exp_ref_check && lucid_etherty_pat_check && direct_call_check && rest_branches_check)
-         then true
-         else false)
-   | _ -> false
+         then CallFromEth
+         else CallInvalid)
+   | _ -> CallInvalid
 
 ;;
 
-let check_user_parser decls = 
+let check_user_parser main_parser = 
+   let entry_ty = ref CallInvalid in
    let v = object
       inherit [_] s_map as super
       method! visit_DParser () id params parser_block = 
-         (* check *)
-         if (check_valid_entry_parse_block parser_block)
+         (* check how the parser enters the lucid parser *)
+         entry_ty := check_valid_entry_parse_block parser_block;
+         if ((!entry_ty) <> CallInvalid)
             then (
+               (* refactor: this is just a noop that does not halt the compiler *)
                let acns_sps, (step, sp) = parser_block.pactions, parser_block.pstep in
                let acns, sps = List.split acns_sps in
                (* inline calls to background event parser *)
@@ -339,7 +382,8 @@ let check_user_parser decls =
             )
       end
    in
-   v#visit_decls () decls
+   let _ = v#visit_decl () main_parser in 
+   !entry_ty
 ;;
 
 let main_parser_opt ds = 
@@ -348,11 +392,6 @@ let main_parser_opt ds =
    | [] -> None
    | [main_parser] -> Some(main_parser)
    | _ -> error "multiple main parsers!"
-;;
-let check_main_user_parser ds = 
-   match main_parser_opt ds with
-   | None -> ()
-   | Some(p) -> let _ = check_user_parser [p] in ()
 ;;
 
 let set_event_nums decls =
@@ -385,19 +424,22 @@ let add_parser (portspec:port_config) ds =
    let pkt_events = List.filter is_pktev ds in
    let bg_events = List.filter is_bgev ds in 
    (* construct the background event parsing block *)
-   let bg_block = lucid_background_event_parser bg_events in
+   (* note: we need to construct a slightly different parser depending on whether the user calls the lucid parser before or after eth *)
    match main_parser_opt ds with 
-   | Some(_) -> 
+   | Some(main_parser_decl) -> 
       (* if there's a main parser, check the user parser to make sure it's well-formed, 
          then inline parsers, including the background block which 
          replaces the call_lucid_parser builtin *)
-      check_main_user_parser ds;
-      inline_parsers bg_block ds
+      let parser_entry_ty = check_user_parser main_parser_decl in
+      (* bg_block depends on where it is.  *)
+      inline_parsers parser_entry_ty bg_events ds
    (* if there's no main parser, attempt to generate one *)
    | None -> (
       match pkt_events with 
       | [] -> 
          (* case 1: no packet events and no parsers -- so make a parser for the bg events. *)
+         let bg_block = lucid_background_event_parser bg_events in
+
          (decl (parser (id "main") [] bg_block))::ds
       | _ -> 
       (* case 2: packet events declared, but no parser -- 

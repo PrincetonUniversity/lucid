@@ -47,7 +47,7 @@ let lookup_tbl env exp = List.assoc
 ;; 
 let openfcn id params stmt vars span = 
   let _ = vars in 
-  {td=TDOpenFunction(id, params, stmt); tdspan=span; tdpragma=None; }
+  {td=TDOpenFunction(id, params, stmt); tdspan=span; tdpragma=[]; }
 ;;
 
 (* convert an action into a function *)

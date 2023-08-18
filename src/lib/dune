@@ -23,6 +23,7 @@
    id
    cid
    taggedCid
+   pragma
    input
    integer
    span
@@ -49,7 +50,6 @@
    memops
    wellformed
    functionInlining
-   functionInliningSpecialCase
    tableInlining
    sizeInlining
    renaming
@@ -109,10 +109,13 @@
    InputChecks
    StandardizeEventParams
    EliminateEventCombinators
+   Hoisting
    AddIngressParser
    TofinoCore
    SplitDataplane
    TofinoCoreNew
+   RemoveLocalInits
+   RemoveInitOnlyStmts
    AddEgressParser
    ParseOptimizer
    RenameBuiltins
@@ -127,11 +130,13 @@
    SolitaryMatches
    Generates
    GeneratesNew
+   PropagateEvars
    IfToMatch
    RegularizeMemops
    RegularizeMemopsNew
    ShareMemopInputs
    ShareMemopInputsNew
+   ShareMemopInputsSat
    SingleTableMatch
    ActionsToFunctions
    ActionsToFunctionsNew

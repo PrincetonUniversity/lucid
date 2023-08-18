@@ -35,7 +35,7 @@ let rec process (tds: TCOld.tdecl list) thresh_len : TCOld.tdecl list=
                 if (is_solitary bs
                   & ((List.length bs) >= thresh_len))
                 then (
-                  {stmt with spragma = Some("solitary", [])}
+                  {stmt with spragmas = [Pragma.sprag "solitary" []]}
                 )
                 else (stmt)
               )
@@ -56,7 +56,7 @@ let process_core thresh_len (core_prog:prog) =
             if (is_solitary bs
               & ((List.length bs) >= thresh_len))
             then (
-              {stmt with spragma = Some("solitary", [])}
+              {stmt with spragmas = [Pragma.sprag "solitary" []]}
             )
             else (stmt)
           )

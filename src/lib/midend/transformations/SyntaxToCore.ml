@@ -218,8 +218,7 @@ and translate_statement (s : S.statement) : C.statement =
       C.STableInstall (translate_exp tbl_exp, List.map translate_entry entries)
     | _ -> err s.sspan (Printing.statement_to_string s)
   in
-  let spragma = if s.noinline then Some ("noinline", []) else None in
-  { s = s'; sspan = s.sspan; spragma }
+  { s = s'; sspan = s.sspan; spragmas = s.spragmas }
 ;;
 
 let translate_memop body =

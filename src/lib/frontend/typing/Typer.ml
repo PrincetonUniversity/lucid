@@ -498,9 +498,14 @@ and infer_op env span op args =
       let env, inf_e, inf_ety = infer_exp env e |> textract in
       unify_raw_ty span inf_ety.raw_ty TBool;
       env, mk_ty TBool, [inf_e]
-    | (Neg | BitNot), [e] ->
+    | Neg, [e] ->
       let env, inf_e, inf_ety = infer_exp env e |> textract in
       unify_raw_ty span inf_ety.raw_ty TBool;
+      env, mk_ty (TInt (fresh_size ())), [inf_e]
+    | BitNot, [e] ->
+      let tsize = fresh_size () in
+      let env, inf_e, inf_ety = infer_exp env e |> textract in
+      unify_raw_ty span inf_ety.raw_ty (TInt tsize);
       env, mk_ty (TInt (fresh_size ())), [inf_e]
     | (And | Or), [e1; e2] ->
       let env, inf_e1, inf_ety1 = infer_exp env e1 |> textract in

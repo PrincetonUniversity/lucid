@@ -11,7 +11,12 @@ module CL = Caml.List
 module CS = TofinoCoreNew
 module T = P4TofinoSyntax
 
-(*** basic syntax ***)
+module CidMap = Collections.CidMap
+module IdMap = Collections.IdMap
+module CidSet = Collections.CidSet
+
+
+(*** basic syntax translation ***)
 let rec translate_ty ty = match ty.raw_ty with 
   | CS.TBool -> T.TBool
   | CS.TInt (s) -> T.TInt (s)
@@ -120,11 +125,6 @@ let cell_struct_of_array_ty module_name cell_width rid : T.decl =
 
 
 
-module CidMap = Collections.CidMap
-module IdMap = Collections.IdMap
-module CidSet = Collections.CidSet
-
-
 (*** helper functions ***)
 
 (*** environment  ***)
@@ -176,6 +176,75 @@ CoreSyntax.var_sp
     (Span.default)
 ;;
 
+(* inside of register actions, we need to fold constants in relational 
+   operations. These constants do not show up until this pass, 
+   because we don't generate register actions until this point, and we 
+   generate them from memops which have unbound parameters in their bodies. 
+    e.g.: if (mem - 1 < 10) needs to be converted into if (mem < 9)     
+      
+   to fold these constants, the translate_exp_in_memop function does:
+   1. bind parameter (with evar_replacer)
+   2. do const folding (with relation_const_folding)
+   3. translate resulting expression normally (with translate_exp)
+   - typically, we would bind parameters inline with the translation, 
+     but the expressions with the consts only show up after binding, 
+     so we do it in its own step first.*)
+    
+let evar_replacer = 
+  object 
+  inherit [_] CoreSyntax.s_map as super
+  method! visit_exp prog_env exp = 
+    let exp = super#visit_exp prog_env exp in 
+    match exp.e with
+    | EVar(cid) -> (
+      match (CidMap.find_opt cid prog_env.vars) with
+      | Some(exp') -> super#visit_exp prog_env exp'
+      | _ -> exp
+    )
+    | _ -> exp
+  end
+;;
+
+(* constant folding across relationals *)
+let rec relation_const_folding exp = 
+  (* this handles a few cases of const folding across relational operations. 
+     For inside of memops. *)
+  let empty_ctx = IdMap.empty in
+  match exp.e with
+  (* vleft + eleft <relop> vright *)
+  | EOp(op, [{e=EOp(Plus, [{e=EVal(vleft)}; eleft])}; {e=EVal(vright); ety=ety;}])
+  | EOp(op, [{e=EOp(Plus, [eleft; {e=EVal(vleft)}])}; {e=EVal(vright); ety=ety;}]) -> (
+    match op with 
+    | Less | More | Leq | Geq | Eq | Neq -> (
+      let new_right = CoreSyntax.op Sub [eval vright ety; eval vleft ety] ety in 
+      let eright' = PartialInterpretation.interp_exp empty_ctx new_right in 
+      let res = {exp with e = EOp(op, [eleft; eright'])} in
+      res
+    )
+    | _ -> exp
+  )
+  (* eleft - vleft <relop> vright *)
+  | EOp(op, [{e=EOp(Sub, [eleft; {e=EVal(vleft)}])}; {e=EVal(vright); ety=ety;}]) -> (
+    match op with 
+    | Less | More | Leq | Geq | Eq | Neq -> (
+      let new_right = CoreSyntax.op Plus [eval vright ety; eval vleft ety] ety in 
+      let eright' = PartialInterpretation.interp_exp empty_ctx new_right in 
+      let res = {exp with e = EOp(op, [eleft; eright'])} in
+      res
+    )
+    | _-> exp
+  )
+  (* relationals nested in booleans.. *)
+  | EOp(boolop, args) -> (
+    match boolop with 
+    | And | Or | Not -> (
+      let args' = List.map relation_const_folding args in
+      {exp with e=EOp(boolop, args')}
+    )
+    | _ -> exp
+  )
+  | _ -> exp
+;;
 
 let rec translate_exp (prog_env:prog_env) exp : (T.decl list * T.expr) =
   match exp.e with 
@@ -186,6 +255,7 @@ let rec translate_exp (prog_env:prog_env) exp : (T.decl list * T.expr) =
   | CS.EFlood _ -> error "[translate_memop_exp] flood expressions inside of memop are not supported"
   | CS.EVar cid -> (
     match (CidMap.find_opt cid prog_env.vars) with 
+      (* we may have just replaced a var with a val, which could add a constant that needs to be folded.. *)
       | Some (new_exp) -> translate_exp prog_env new_exp
       (* no renaming to do, use the given id *)
       | None -> [], T.evar_ty_sp cid (translate_ty exp.ety) exp.espan
@@ -261,25 +331,30 @@ and translate_ecall env fcn_cid args =
     (* Array stuff *)
     | "Array"::_ -> 
       let regacn_id, decl = translate_array_call env fcn_cid args in
-      let idx_arg = translate_memop_exp env
-        (List.hd (List.tl args))
-      in        
-      [decl], ecall (Cid.create_ids [regacn_id; (id "execute")]) [idx_arg]
+      (* idx_decls are produced if the arg is a hash op *)
+      let idx_decls, idx_arg = translate_exp env (List.hd (List.tl args)) in
+      idx_decls@[decl], ecall (Cid.create_ids [regacn_id; (id "execute")]) [idx_arg]
     | "PairArray"::_ -> 
       let regacn_id, decl = translate_pairarray_call env fcn_cid args in 
-      let idx_arg = translate_memop_exp env
-        (List.hd (List.tl args))
-      in        
-      [decl], ecall (Cid.create_ids [regacn_id; (id "execute")]) [idx_arg]
+      let idx_decls, idx_arg = translate_exp env (List.hd (List.tl args)) in
+      idx_decls@[decl], ecall (Cid.create_ids [regacn_id; (id "execute")]) [idx_arg]
     | _ -> error "[translate_ecall] unknown function")
 
 (*** array calls and memop exps ***)
 
+
 (* translate exp in a memop -- this used to be its own method, 
    but now we re-use the rename context *)
 and translate_memop_exp env exp = 
-  translate_exp env exp |> snd 
-and translate_memop_exps env exps =
+  (* replace param evars with arguments first, so we can fold constants *)
+  let folded_exp = 
+    evar_replacer#visit_exp env exp
+    |> relation_const_folding
+  in
+  (* translate the expression. This shouldn't do any other replacements *)
+  translate_exp env folded_exp |> snd
+
+  and translate_memop_exps env exps =
   List.map (translate_memop_exp env) exps
 
 
@@ -531,6 +606,8 @@ let rec translate_statement env prev_decls stmt =
     (* variables can't be declared inside of an action, so produce a global declaration 
        with a default value and return an assign statement. *)
     match (List.exists (fun idb -> Id.equals id idb) (declared_vars prev_decls)) with
+    (* I think this case should be an error -- if the variable is already declared, 
+       we shouldn't see another declaration statement. *)
     | true -> (
       (* let vardecl = dvar_uninit id (translate_rty ty.raw_ty) in  *)
       let decls, expr = translate_exp env e in 
@@ -1253,6 +1330,9 @@ let construct_deparser ctx hevent : decl =
   })
 ;;
 
+(* let translate_pragma (tpragma : Pragma.t) : pragma option = 
+  match tpragma with
+  | POverlay(cida, cidb) ->  *)
 
 let translate_tdecl (denv : translate_decl_env) tdecl : (translate_decl_env) = 
   match tdecl.td with
@@ -1369,6 +1449,7 @@ let translate_tdecl (denv : translate_decl_env) tdecl : (translate_decl_env) =
       | HEgress -> pragmas_of_event "egress" hevent.hdl_input
       | _ -> []
       in  *)
+      (* if there are any overlay pragmas attached to the handler's decl, translate them *)
       let overlay_pragmas = [] in 
       let globals =
         denv.globals@in_event_decls@out_event_decls@overlay_pragmas@[solitary_input_tag_pragma; control_decl]

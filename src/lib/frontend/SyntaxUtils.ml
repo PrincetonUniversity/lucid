@@ -324,7 +324,7 @@ let max_effect e1 e2 =
 let default_expression ty =
   let rec aux rty =
     match TyTQVar.strip_links rty with
-    | TInt size -> eint (Z.of_int 32) (Some size)
+    | TInt size -> eint (Z.of_int 0) (Some size)
     | TBool -> value_to_exp (vbool false)
     | TVector (raw_ty, size) -> begin
       match size with
@@ -333,10 +333,24 @@ let default_expression ty =
     end
     | TRecord lst ->
       record_sp (List.map (fun (s, raw_ty) -> s, aux raw_ty) lst) Span.default
-    | _ ->
-      failwith
+    | TTuple _ -> failwith "Cannot create default expression for tuple"
+    | TName(cid, _, _) -> failwith ("Cannot create default expression for user type "^(Cid.to_string cid))
+    | TMemop _ -> failwith "Cannot create default expression for memop"
+    | TPat _ -> failwith "Cannot create default expression for pattern"
+    | TEvent -> failwith "Cannot create default expression for event"
+    | TGroup -> failwith "Cannot create default expression for group"
+    | TVoid -> failwith "Cannot create default expression for void"
+    | TAbstract _ -> failwith "Cannot create default expression for abstract"
+    | TFun _ -> failwith "Cannot create default expression for function"
+    | TAction _ -> failwith "Cannot create default expression for action"
+    | TTable _ -> failwith "Cannot create default expression for table"
+    | TQVar _ -> failwith "Cannot create default expression for type variable"
+
+
+
+      (* failwith
       @@ "Can only create default expression for types int or bool, or records \
-          and vectors of such"
+          and vectors of such" *)
   in
   aux ty.raw_ty
 ;;

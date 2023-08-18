@@ -44,7 +44,7 @@ let generated_eventid_subsets (hdl_body:statement) =
   (* remove duplicate event id sequences *)
   let compare_id_seqs id_seq1 id_seq2 =
     let compare_ids id1 id2 = Id.compare id1 id2 in
-    List.compare compare_ids id_seq1 id_seq2
+    Batteries.List.compare compare_ids id_seq1 id_seq2
   in
 
   let event_id_sequences = List.sort_uniq compare_id_seqs event_id_sequences in
@@ -65,7 +65,7 @@ let typed_generate_seqs (hdl_body:statement) : (id * gen_type) list list =
   (* remove duplicate event id sequences *)
   let compare_id_seqs (id_seq1: (id * gen_type) list) (id_seq2 : (id * gen_type) list) =
     let compare_ids id1 id2 = Id.compare id1 id2 in
-    List.compare (fun (id1, _) (id2, _) -> compare_ids id1 id2) id_seq1 id_seq2
+    Batteries.List.compare (fun (id1, _) (id2, _) -> compare_ids id1 id2) id_seq1 id_seq2
   in
 
   let event_id_sequences = List.sort_uniq compare_id_seqs event_id_sequences in
@@ -257,13 +257,19 @@ let rec get_event_param_ty event cid : ty option =
 
 (* rename variables given a map from old cids -> new cids *)
 let rename =
-  object
+  object (self)
     inherit [_] s_map as super
-
     method! visit_EVar (env : Cid.t CidMap.t) x =
       match CidMap.find_opt (x) env with
       | Some e -> EVar e
       | None -> EVar x
+    (* tricky! we also want to rename cids that 
+       appear in assignment statements. *)
+    method! visit_SAssign env x exp =
+      let exp' = self#visit_exp env exp in
+      match CidMap.find_opt (x) env with
+      | Some x' ->  SAssign(x', exp')
+      | _ -> SAssign(x, exp')
   end
 ;;
 
@@ -363,7 +369,7 @@ let type_handler (ctx:ctx) hdl : handler * tdecl =
       hdl_retparams = [];
       hdl_preallocated_vars = [];
     })
-    , {td=TDEvent(output_event); tdspan = Span.default; tdpragma = None;}
+    , {td=TDEvent(output_event); tdspan = Span.default; tdpragma = [];}
   | _ -> error "[addHandlerTypes.type_handler] there shouldn't be any HEvent handlers at this point"
 
 let rec type_handlers_in_tdecls ctx tdecls : tdecl list =

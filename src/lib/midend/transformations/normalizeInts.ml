@@ -181,9 +181,13 @@ let atomize_int_assigns ds =
       method! visit_DMemop _ m = DMemop m
 
       method! visit_exp _ exp =
-        let new_exp, precompute_stmts = transform_exp exp in
-        precompute <- precompute_stmts @ precompute;
-        new_exp
+        match exp.e with 
+        (* skip calls (which should all be atomic by now) but recurse on arguments *)
+        | ECall _ -> super#visit_exp () exp
+        | _ -> 
+          let new_exp, precompute_stmts = transform_exp exp in
+          precompute <- precompute_stmts @ precompute;
+          new_exp
 
       method! visit_statement _ stmt =
         precompute <- [];

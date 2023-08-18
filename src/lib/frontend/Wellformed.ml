@@ -283,11 +283,81 @@ let check_payloads ds =
   v#visit_decls () ds
 ;;
 
+
+(* basic return-match coverage check: make sure that every 
+   match statement that has a return in some branch 
+   ends with a default branch that also returns. 
+   An example of what we are checking for: 
+    fun int foo() {
+      match (x, y, z) with 
+      | 1, 2, 3 -> {return 1;}
+      | _, 2, 2 -> {return 2;}
+    }
+   here, foo may not return, which is not semantically defined. *)
+let check_match_returns ds = 
+  let match_return_checker = 
+    (* some helper methods  *)
+    let returns stmt =
+      let has_return = ref false in
+      let v = object (_)
+        inherit [_] s_iter as super
+        method! visit_SRet _ _ = 
+          has_return := true
+        end
+      in
+      v#visit_statement () stmt;
+      !has_return
+    in
+
+    let is_default_branch branch = 
+      let is_default_pats pats =
+        let is_wild pat =
+          match pat with
+          | PWild -> true
+          | _ -> false
+        in
+        List.map is_wild pats |> List.fold_left ( & ) true
+      in
+      let (pats, _) = branch in
+      is_default_pats pats
+    in
+
+    let has_default_branch branches =
+      List.exists is_default_branch branches
+    in
+
+    object (_)
+      inherit [_] s_iter as super
+      method! visit_statement _ stmt = 
+        match stmt.s with 
+          | SMatch(_, branches) -> 
+            let some_branch_returns = List.exists
+              (fun (_, bstmt) -> returns bstmt)
+              branches
+            in
+            (* if one branch has a return statement in it, 
+               then make sure there's a default *)
+            if (some_branch_returns)
+            then (
+              if (has_default_branch branches)
+              then ()
+              else 
+                Console.error_position stmt.sspan
+                @@ "A match statement with branches that return must have a default branch."   
+            )
+          | _ -> super#visit_statement () stmt
+    end
+  in
+  match_return_checker#visit_decls () ds
+;;
+
+
 let pre_typing_checks ds =
   check_decls ds;
   match_handlers ds;
   check_symbolics ds;
-  check_payloads ds
+  check_payloads ds;
+  check_match_returns ds
 ;;
 
 (*** QVar checking. This is run on each decl after its type is inferred, and makes

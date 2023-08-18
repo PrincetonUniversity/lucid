@@ -362,8 +362,8 @@ and entry_to_string entry =
     (id_to_string entry.eaction)
     (comma_sep exp_to_string entry.eargs)
 
-and stmt_to_string s =
-  match s.s with
+and s_to_string s = 
+  match s with 
   | SAssign (i, e) -> id_to_string i ^ " = " ^ exp_to_string e ^ ";"
   | SNoop -> "skip;"
   | SGen (g, e) ->
@@ -443,6 +443,13 @@ and stmt_to_string s =
       "table_install(%s, {\n\t%s\n\t}\n);"
       (exp_to_string id)
       (List.map entry_to_string entries |> String.concat "\n")
+and stmt_to_string stmt =
+  let s_str = s_to_string stmt.s in
+  let prag_str = match stmt.spragmas with
+    | [] -> ""
+    | _ -> " //" ^ (Pragma.to_strings stmt.spragmas)
+  in
+  s_str ^ prag_str
 ;;
 
 let statement_to_string = stmt_to_string
