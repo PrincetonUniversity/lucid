@@ -30,6 +30,7 @@ You MUST have bfrt enabled in your SDE install. YMMV if you don't have the other
 2. start the python control plane, `artifact/lucid.py`, with this command: 
 
 ```$(SDE)/run_bfshell.sh -b lucid.py```
+
 **NOTE: I think it is important to run this command from the directory where lucid.py lives**
 
 ### Files
@@ -47,4 +48,4 @@ You MUST have bfrt enabled in your SDE install. YMMV if you don't have the other
 - artifact/globals.json -- a json directory mapping from lucid objects to p4 objects
 
 ### Other notes
-the control script only polls register arrays on pipeline number 0. If you want to use a different pipeline, please change the argument to `poll_flowtable` in `lucid.py`
+the control script only polls register arrays on pipeline number 1. If you want to use a different pipeline, please change the argument to `poll_flowtable` in `lucid.py`
