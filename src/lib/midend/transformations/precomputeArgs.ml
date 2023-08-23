@@ -1,6 +1,5 @@
 (* pre-compute every non-immediate argument of a
-function or hash expression *)
-(* 5/22/22 TODO: refactor this. Much of the functionality might be obsolete / incorrect. *)
+function call, hash call, or match expression list *)
 open CoreSyntax
 open Printf
 open Batteries
@@ -26,33 +25,62 @@ let is_hash exp =
 
 let precompute_args inline_array_addrs ds =
   let v =
-    object
+    object (self)
       inherit [_] s_map as super
       val mutable pre_stmts : statement list = []
-
+      (* precompute a single argument in a statement.
+        add the statement to the pre_statements and
+        return the new argument. *)
+      method precompute_arg arg = 
+        match is_immediate arg with
+        | true -> arg
+        | false ->
+          let pre_stmt, new_arg = precompute arg in
+          pre_stmts <- pre_stmts @ [pre_stmt];
+          new_arg
       method! visit_statement ctx statement =
-        let new_stmt = super#visit_statement ctx statement in
-        (* integrate any precompute statements generated
-           while transforming the tree. *)
-        let all_stmts = pre_stmts @ [new_stmt] in
-        pre_stmts <- [];
-        fold_stmts all_stmts
+        match statement.s with
+        | SMatch(exps, branches) -> (
+          (* first, recurse on the branches *)
+          let branches' = List.map 
+            (fun (p, stmt) -> 
+              let stmt' = super#visit_statement () stmt in
+              (p, stmt'))
+            branches
+          in
+          (* then, precompute the branch expressions *)
+          let exps' = List.map (self#precompute_arg) exps in
+          (* while building exps, pre_stmts has accumulated *)
+          (* put together the statement and all the pre statements *)
+          let new_stmt = {statement with s=SMatch(exps', branches')} in
+          let all_stmts = pre_stmts @[new_stmt] in
+          pre_stmts <- [];
+          fold_stmts all_stmts
+        )
+        (* TODO: I think there is another special case for table matches! *)
+        | _ -> 
+          let new_stmt = super#visit_statement ctx statement in
+          (* integrate any precompute statements generated
+            while transforming the tree. *)
+          let all_stmts = pre_stmts @ [new_stmt] in
+          pre_stmts <- [];
+          fold_stmts all_stmts
 
       method! visit_exp _ exp =
         (* precompute a single argument in a statement.
           add the statement to the pre_statements and
           return the new argument. *)
-        let precompute_arg arg =
+        (* let precompute_arg arg =
           match is_immediate arg with
           | true -> arg
           | false ->
             let pre_stmt, new_arg = precompute arg in
             pre_stmts <- pre_stmts @ [pre_stmt];
             new_arg
-        in
+        in *)
         match exp.e with
         | EHash (size, args) ->
-          let new_args = CL.map precompute_arg args in
+          let new_args = CL.map self#precompute_arg args in
           { exp with e = EHash (size, new_args) }
         | ECall (fcn_id, args) 
             when (inline_array_addrs & (List.exists 
@@ -62,16 +90,16 @@ let precompute_args inline_array_addrs ds =
             in the index argument, which is always the 2nd arg (at pos 1) *)
             match args with
             | arr::addr::rest ->
-              let arr' = precompute_arg arr in
+              let arr' = self#precompute_arg arr in
               (* first, make sure the address exp itself is simplified *)
               (* now, the address exp can be either an immediate or a hash *)
               let addr' = super#visit_exp () addr in
               let addr' = if (is_immediate addr' or is_hash addr') 
                 then addr' 
-                else precompute_arg addr' 
+                else self#precompute_arg addr' 
               in
               (* print_endline ("addr': " ^ (CorePrinting.exp_to_string addr')); *)
-              let rest' = CL.map precompute_arg rest in
+              let rest' = CL.map self#precompute_arg rest in
               {exp with e = ECall (fcn_id, arr'::addr'::rest')}
             | _ -> error "[precompute_args] array method call with < 3 args"
         )        
@@ -80,7 +108,7 @@ let precompute_args inline_array_addrs ds =
            | true -> exp (* skip event combinators *)
            | false ->
              (* pull out the argument if it is not an immediate *)
-             let new_args = CL.map precompute_arg args in
+             let new_args = CL.map self#precompute_arg args in
              { exp with e = ECall (fcn_id, new_args) })
         | _ -> exp
     end

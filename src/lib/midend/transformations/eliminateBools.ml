@@ -1,4 +1,4 @@
-(* convert all booleans into 1-bit ints *)
+(* convert all booleans into 1-bit ints and normalize if expressions.  *)
 module Syntax = CoreSyntax
 open Syntax
 module Printing = CorePrinting

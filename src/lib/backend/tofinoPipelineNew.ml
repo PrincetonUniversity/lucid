@@ -218,6 +218,8 @@ let compile ds portspec =
  *)
   printtofcoreprog_if_debug core_prog;
   report_if_verbose "-------Eliminating if statements-------";
+  (* ideally, iftomatch would be a transformation on the plain CoreSyntax, rather 
+     than the tofino specific one. The only reason it is not is non-refactored code. *)
   let core_prog = IfToMatch.process_core core_prog in 
   report_if_verbose "-------Converting all memops to complex form-------";
   let core_prog = RegularizeMemopsNew.process_core core_prog in
