@@ -57,6 +57,40 @@ let precompute_args inline_array_addrs ds =
           pre_stmts <- [];
           fold_stmts all_stmts
         )
+        (* subsequent if transformation stages are sub-optimal 
+           when exp has a compound expression on 1 side and a constant 
+        on the other. (in that case, all we have to do is precompute the 
+        compound expression, so we pull it out here) *)
+        | SIf(exp, s1, s2) -> (
+          let s1' = self#visit_statement () s1 in
+          let s2' = self#visit_statement () s2 in
+          match exp.e with 
+          | EOp(Eq, [e1; e2]) -> (
+            (* if one side is a val, precompute the other side if needed. *)
+            let e1', e2' = match (e1.e, e2.e) with 
+              | (_, EVal(_)) -> (
+                let e1' = self#precompute_arg e1 in
+                e1', e2)
+              | (EVal(_), _) -> (
+                let e2' = self#precompute_arg e2 in
+                e1, e2')
+              | _ -> (e1, e2)            
+            in
+            (* build the new expression and statement *)
+            let exp' = {exp with e=EOp(Eq, [e1'; e2'])} in
+            let new_stmt = {statement with s=SIf(exp', s1', s2')} in            
+            (* handle precompute statements if there are any *)
+            match ((pre_stmts)) with
+            | [] -> new_stmt
+            | _ -> (
+              let all_stmts = pre_stmts @[new_stmt] in
+              pre_stmts <- [];
+              fold_stmts all_stmts
+            )
+          )
+          | _ -> {statement with s=SIf(exp, s1', s2')}
+
+        )
         (* TODO: I think there is another special case for table matches! *)
         | _ -> 
           let new_stmt = super#visit_statement ctx statement in

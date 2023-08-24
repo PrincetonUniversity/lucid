@@ -202,7 +202,10 @@ let compile ds portspec =
   report_if_verbose "-------Adding egress parser-------";
   let core_prog = AddEgressParser.add_parser core_prog in
   report_if_verbose "-------Eliminating generates-------";
+  dump_prog "tofinocore pre generate elimination" "tofinocore_pre_genelim" core_prog;
   let core_prog = GeneratesNew.eliminate_generates portspec core_prog in
+  dump_prog "tofinocore post generate elimination" "tofinocore_post_genelim" core_prog;
+  dump_prog "tofinocore local inits removed" "tofinocore_nolocalinit" core_prog;
   report_if_verbose "-------Optimizing parsers (speculative peeking)-------";
   let core_prog = ParseOptimizer.parser_passes core_prog in 
 
