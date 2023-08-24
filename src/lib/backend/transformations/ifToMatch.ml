@@ -666,7 +666,21 @@ let match_of_if_new exp s1 s2 =
     | SMatch(exps, branches) -> {smatch with s=SMatch(exps, CL.map unify_branch branches)}
     | _ -> error "[match_of_if_new] constructed a non smatch in the process of merging smatches..."
   in
-  MatchAlgebra.delete_redundant_branches smatch'
+  (* print_endline ("-----iftomatch-----");
+  print_endline ("match statement before deleting redundant branches");
+  print_endline (CorePrinting.statement_to_string smatch');
+  print_endline ("match statement after deleting redundants"); *)
+  let smatch'' = MatchAlgebra.delete_redundant_branches smatch' in
+  (* sometimes, we may end up with a match statement with nothing but an unconditional branch. 
+     (for example, "if (x == 1) {skip;}" becomes "match x with | _ -> {skip;} ") 
+     in such a case, just return the inner statement.
+      *)
+  match smatch''.s with
+  | SMatch(_, [pats, inner_stmt]) 
+    when (List.for_all ~f:(fun p -> (match p with | PWild -> true | _ -> false)) pats) ->
+    inner_stmt
+  | _ -> 
+    smatch''
 ;;
 
 (* a new algorithm: convert each conjunction of the if expression 

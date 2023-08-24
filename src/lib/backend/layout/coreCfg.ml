@@ -112,8 +112,8 @@ let summarystr_of_stmt (stmt) is_solitary_match =
         )
 
     | SIf(e, _, _) -> 
-        (string_of_int stmt.sspan.spid)^": if ("^(CorePrinting.exp_to_string e)^")..."
-    | _ -> (string_of_int stmt.sspan.spid)^": "^(CorePrinting.statement_to_string stmt)
+        "{"^(string_of_int stmt.sspan.spid)^": if ("^(CorePrinting.exp_to_string e)^")..."^"}"
+    | _ -> "{"^(string_of_int stmt.sspan.spid)^": "^(CorePrinting.statement_to_string stmt)^"}"
 ;;
 
 let str_of_edge_condition e = 

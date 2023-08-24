@@ -35,7 +35,7 @@ let error s = raise (Error s)
 module DBG = BackendLogging
 let outc = ref None
 let dprint_endline = ref DBG.no_printf
-let start_logging () = DBG.start_mlog (!IoUtils.irLogDir) __FILE__ outc dprint_endline
+let start_logging () = DBG.start_mlog (!IoUtils.moduleLogDir) __FILE__ outc dprint_endline
 
 
 
@@ -69,15 +69,20 @@ let print_node_in_edges lbl g v =
 let rec precondition_of_vertex orig_v idom g v =
     match (Cfg.pred_e g v) with        
     | [] -> CNone (* no precondition *)
-    | [(_, e, _)] -> e (* single predecessor -- the precondition is the edge from pred --> v *)
-    | _ -> 
+    | [(_, e, _)] -> 
+        !dprint_endline ("[precondition of vertex] finding precondition for vertex with 1 in edge:");
+        !dprint_endline (CoreCfg.summarystr_of_stmt orig_v.stmt true);
+        !dprint_endline ("[precondition_of_vertex] in edges:");
+        print_node_in_edges "" g v;
 
+        e (* single predecessor -- the precondition is the edge from pred --> v *)
+    | _ -> 
         let d = idom v in 
-        !dprint_endline@@"[precondition_of_vertex] FINDING PRECONDITION FOR:"^(CoreCfg.summarystr_of_stmt orig_v.stmt true);
-        print_node_in_edges "[precondition_of_vertex] INEDGE:" g v;
+        !dprint_endline@@"[precondition_of_vertex] finding precondition for vertex with multiple in edges:"^(CoreCfg.summarystr_of_stmt orig_v.stmt true);
+        print_node_in_edges "" g v;
         !dprint_endline@@"[precondition_of_vertex] recursing FROM:"^(CoreCfg.summarystr_of_stmt v.stmt true);
         !dprint_endline@@"[precondition_of_vertex] recursing TO:"^(CoreCfg.summarystr_of_stmt d.stmt true);
-    precondition_of_vertex orig_v idom g (idom v)
+        precondition_of_vertex orig_v idom g (idom v)
         (* multiple predecessors -- join node. Look 
            at preconditions of the corresponding 
            branch node, ie, the idom. *) 
