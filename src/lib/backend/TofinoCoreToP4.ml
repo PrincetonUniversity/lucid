@@ -706,31 +706,79 @@ let stmt_to_table env (_:pragma) (ignore_pragmas: (id * pragma) list) (tid, stmt
     let _, e' = translate_exp env e in
     let tbl_call = sif e' (sunit (ecall_table tdef.tid)) in
     tbl_decl, tbl_call
-  | SMatch(exps, branches) -> 
+  | SMatch(exps, branches) -> (
     let _, keys = translate_exps env exps in 
-    let keys = List.map exp_to_ternary_key keys in 
-    let actions = List.map action_cid_of_branch branches 
-      |> MiscUtils.unique_list_of 
-      |> List.map evar_noretmethod
-    in 
-    let rules, default_opt = match branches with
-      (* a single empty branch means there are no const rules, just a default action *)
-      | [([], call_stmt)] -> ([], Some(translate_sunit_ecall call_stmt))
-      (* anything else means there are const rules and no default *)
-      | branches -> (
-        (List.fold_left 
-          (fun branches' (pats, stmt) -> 
-            branches'
-            @[(List.map translate_pat pats, translate_sunit_ecall stmt)])
-          []
-          branches)
-        , None)
+    (* small optimization: if there's only 1 key and all the patterns matching that key are exact (except for a final default case) emit an exact table. Otherwise, a ternary table. *)      
+    let patses = List.map fst branches in
+    let last_pats = List.rev patses |> List.hd in
+    let fst_patses = List.rev patses |> List.tl in
+    let is_exact = 
+      (List.for_all 
+        (fun pats -> 
+          match pats with
+          | [TofinoCoreNew.PNum _] -> true
+          | _ -> false)
+        fst_patses)
+      &&
+      (match last_pats with 
+      | [TofinoCoreNew.PWild] -> true | _ -> false)
     in
-    let tbl_dec = 
-      dtable tid keys actions rules default_opt None ignore_parallel_tbls_pragmas
-    in
-    let tbl_call = sunit (ecall_table tid) in 
-    (tbl_dec, tbl_call)
+
+
+    match is_exact with
+    | true -> (
+      let keys = List.map exp_to_exact_key keys in 
+      let actions = List.map action_cid_of_branch branches 
+        |> MiscUtils.unique_list_of 
+        |> List.map evar_noretmethod
+      in 
+      let rec branches_to_rules branches = 
+        match branches with
+        | [] -> [], None
+        (* expect the last branch to be a wildcard *)
+        | [([TofinoCoreNew.PWild], call_stmt)] -> (
+          [], Some(translate_sunit_ecall call_stmt)
+        )
+        | _::[] -> (error "[stmt_to_table] invalid final branch in table")
+        | (pats, call_stmt)::branches -> (
+          let pats' = List.map translate_pat pats in
+          let call_stmt' = translate_sunit_ecall call_stmt in
+          let rules, default = branches_to_rules branches in
+          (pats', call_stmt')::rules, default
+        )
+      in
+      let rules, default_opt = branches_to_rules branches in 
+      let tbl_dec = 
+        dtable tid keys actions rules default_opt None ignore_parallel_tbls_pragmas
+      in
+      let tbl_call = sunit (ecall_table tid) in 
+      (tbl_dec, tbl_call)
+    )
+    | false -> 
+      let keys = List.map exp_to_ternary_key keys in 
+      let actions = List.map action_cid_of_branch branches 
+        |> MiscUtils.unique_list_of 
+        |> List.map evar_noretmethod
+      in 
+      let rules, default_opt = match branches with
+        (* a single empty branch means there are no const rules, just a default action *)
+        | [([], call_stmt)] -> ([], Some(translate_sunit_ecall call_stmt))
+        (* anything else means there are const rules and no default *)
+        | branches -> (
+          (List.fold_left 
+            (fun branches' (pats, stmt) -> 
+              branches'
+              @[(List.map translate_pat pats, translate_sunit_ecall stmt)])
+            []
+            branches)
+          , None)
+      in
+      let tbl_dec = 
+        dtable tid keys actions rules default_opt None ignore_parallel_tbls_pragmas
+      in
+      let tbl_call = sunit (ecall_table tid) in 
+      (tbl_dec, tbl_call)
+  )
   | _ -> error "[generate_table] not a match statement!"
 ;;
 

@@ -198,7 +198,7 @@ let rec hoist (stmts_to_place : statement list) stmt =
       bs
     in
     let stmts_before, stmts_after = stmt_to_transitive_deps stmt stmts_to_place in
-    sequence_stmts ({stmt with s=SMatch(es, bs)}::( stmts_after)), (stmts_before@stmts_to_place_branches@stmts_to_place_branches)
+    sequence_stmts ({stmt with s=SMatch(es, bs)}::( stmts_after)), (stmts_before@stmts_to_place_branches)
   )
   (* nothing else changes *)
   | SNoop | SUnit _ | SPrintf _ | SGen _ | SRet _ | STableInstall _ | STableMatch _ -> stmt, stmts_to_place

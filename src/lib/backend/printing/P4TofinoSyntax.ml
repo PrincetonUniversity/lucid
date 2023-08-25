@@ -236,6 +236,15 @@ let exp_to_ternary_key expr =
   {expr with ety}
 ;;
 
+let exp_to_exact_key expr = 
+  let ety = match expr.ety with
+    | TInt(sz) -> TKey(KExact, sz)
+    | _ -> error "[exp_to_exact_key] keys must be integer variables"
+  in
+  {expr with ety}
+;;
+
+
 let param ty id = 
     (None, ty, id)
 let inparam ty id = 
