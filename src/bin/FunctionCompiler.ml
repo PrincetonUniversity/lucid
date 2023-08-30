@@ -124,7 +124,7 @@ let compile_to_tofino target_filename =
   (* before the "official" frontend, do temporary optimization 
      passes that will eventually be removed once the 
      mid/back-end is better optimized. *)
-  let ds = FunctionInliningSpecialCase.inline_prog_specialcase ds in
+  (* let ds = FunctionInliningSpecialCase.inline_prog_specialcase ds in *)
   (* frontend type checks and eliminates most abstractions (modules, functions) *)
   let _, ds = FrontendPipeline.process_prog Builtins.tofino_builtin_tys ds in
   (* middle passes do regularization over simplified syntax *)
