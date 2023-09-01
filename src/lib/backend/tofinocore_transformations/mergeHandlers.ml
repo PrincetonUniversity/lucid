@@ -42,7 +42,10 @@ let rec localids_of_event_params event =
     let flag_id = Cid.create_ids [evid; (flag_struct_id )] in 
     (* let flag_ids = List.map (fun (flag, _) -> Cid.create_ids [evid; flag]) flags in *)
     flag_id::param_ids
-    (* flag_ids @ param_ids *)
+  | EventWithMetaParams({event; params;}) ->
+    let inner_param_ids = localids_of_event_params event in
+    let meta_param_ids = List.map (fun (id, _) -> Cid.create_ids [id_of_event event; id]) params in
+    inner_param_ids @ meta_param_ids
 ;;
 
 (* get a list of event parameter ids, grouped by base event *)
@@ -279,6 +282,8 @@ let merge_handlers_in_component (c:component) : component =
       hdl_input = input_event;
       hdl_output = output_event;
       hdl_body = SFlat(merged_hdl_stmt);
+      hdl_deparse_params = [];
+      hdl_deparse = snoop;
       hdl_preallocated_vars = [];
       hdl_params;
       hdl_retparams;

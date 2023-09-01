@@ -7,6 +7,16 @@
 open TofinoCore
 open BackendLogging
 
+
+let start_backend_logging () = 
+  if (Cmdline.cfg.debug)
+    then (
+      CoreCdg.start_logging ();
+      CoreDfg.start_logging ();
+      PropagateEvars.start_logging();
+      CoreDeparse.start_logging();
+      );
+;;  
 let dump_ir_prog comment fn prog = 
   dump (IoUtils.ir_dump_path fn) comment (CorePrinting.decls_to_string prog)
 ;;
@@ -106,7 +116,6 @@ let layout old_layout (prog : TofinoCoreNew.prog) =
     let main_handler' = {main_handler with hdl_body = TofinoCoreNew.SPipeline(pipeline_stmts);} in
     let comp = TofinoCoreNew.replace_main_handler_of_component comp main_handler' in 
     dump_prog "tofinocore after layout (final)" (Printf.sprintf "tofinocore_%s_layout_pre_actionform" cn) [comp];
-
     report_if_verbose (Printf.sprintf "-------Layout for %s: wrapping table branches in functions-------" cn);
     let comp = ActionFormNew.process_comp comp in
     report_if_verbose (Printf.sprintf "-------Layout for %s: deduplicating table branch functions-------" cn);
@@ -128,11 +137,7 @@ let compile ds portspec =
   let old_layout = Cmdline.cfg.old_layout in 
   let ctl_fn_opt = Cmdline.cfg.ctl_fn in 
   let partial_interp = Cmdline.cfg.partial_interp in
-  if (Cmdline.cfg.debug)
-  then (
-    CoreCdg.start_logging ();
-    CoreDfg.start_logging ();
-    PropagateEvars.start_logging());
+
   report_if_verbose "-------Translating to Midend IR---------";
   let core_ds = SyntaxToCore.translate_prog ds in
   printprog_if_debug core_ds;
@@ -205,7 +210,7 @@ let compile ds portspec =
   dump_prog "tofinocore pre generate elimination" "tofinocore_pre_genelim" core_prog;
   let core_prog = GeneratesNew.eliminate_generates portspec core_prog in
   dump_prog "tofinocore post generate elimination" "tofinocore_post_genelim" core_prog;
-  dump_prog "tofinocore local inits removed" "tofinocore_nolocalinit" core_prog;
+
   report_if_verbose "-------Optimizing parsers (speculative peeking)-------";
   let core_prog = ParseOptimizer.parser_passes core_prog in 
 
@@ -235,10 +240,17 @@ let compile ds portspec =
   report_if_verbose "-------Transforming actions into functions-------";
   let core_prog = ActionsToFunctionsNew.process_core core_prog in
   dump_prog "SingleTableMatch; ActionsToFunctions" "tofinocore_single_table_match" core_prog;
-
+  (* propagateEvars is another hoisting pass that benefits control flows with 
+     match tables that are declared and used once. *)
   let core_prog = PropagateEvars.process core_prog in
-  (* exit 1; *)
   dump_prog "PropagateEvars; (tofinocore right before layout)" "tofinocore_pre_layout" core_prog;
+  (* this moves checksums over event outputs to the deparser. It has to come 
+     after propagateEvars because it requires that the checksum statement be inlined. *)
+  report_if_verbose "-------Moving output checksum operations to deparser-------";
+  let core_prog = CoreDeparse.process core_prog in
+  dump_prog "tofinocore post deparser generation" "tofinocore_post_deparser" core_prog;
+
+
   let core_prog = layout old_layout core_prog in
   dump_prog "tofinocore after layout (final)" "tofinocore_post_layout" core_prog;
   report_if_verbose "-------Translating to final P4-tofino-lite IR-------";

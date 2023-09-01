@@ -12,8 +12,13 @@ let lucid_ety_ty = ty (TInt (IConst 16))
 let lucid_ety_int = 666
 let lucid_ety_value = vint lucid_ety_int 16
 
+(* used as first argument to hash, for checksum in deparser *)
+let checksum_id = Id.create "checksum"
+let checksum_ty = TInt (IConst 32) |> ty
+
+
 let builtin_vars =
-  [self_id, self_ty; recirc_id, recirc_ty; lucid_ety_id, lucid_ety_ty]
+  [self_id, self_ty; recirc_id, recirc_ty; lucid_ety_id, lucid_ety_ty; checksum_id, checksum_ty]
 ;;
 
 let builtin_type_info =
@@ -70,3 +75,4 @@ let start_id = Id.create "start"
 let cell1_id = SyntaxUtils.cell1_id
 let cell2_id = SyntaxUtils.cell2_id
 let lucid_parse_id = Id.create "do_lucid_parsing"
+

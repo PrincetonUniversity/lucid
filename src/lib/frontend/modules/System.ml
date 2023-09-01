@@ -32,6 +32,8 @@ let sys_time_fun (nst : State.network_state) _ args =
   | _ -> sys_time_error "takes no parameters"
 ;;
 
+
+
 (* Sys.random *)
 let sys_random_name = "random"
 let sys_random_id = Id.create sys_random_name
@@ -67,9 +69,38 @@ let sys_random_fun _ _ args =
   | _ -> sys_random_error "takes no parameters"
 ;;
 
+(* Sys.checksum *)
+(* let sys_checksum_name = "checksum"
+let sys_checksum_id = Id.create sys_checksum_name
+let sys_checksum_cid = Cid.create_ids [sys_id; sys_checksum_id]
+let sys_checksum_error msg = sys_error sys_checksum_name msg
+let sys_checksum_ty =
+  let start_eff = FVar (QVar (Id.fresh "eff")) in
+  ty
+  @@ TFun
+       { arg_tys = [ty @@ TInt (IConst 16)]
+       ; ret_ty = ty @@ TInt (IConst 16)
+       ; start_eff
+       ; end_eff = start_eff
+       ; constraints = ref []
+       }
+;;
+let sys_checksum_fun _ _ args =
+  (* TODO: implement checksum. Placeholder for now: 0 *)
+  let _ = args in 
+  let open CoreSyntax in
+  vinteger (Integer.create_z ~value:(Z.of_int 0) ~size:16)
+;; *)
+
+
+
+(* directory of Sys methods *)
 let defs : State.global_fun list =
   [ { cid = sys_time_cid; body = sys_time_fun; ty = sys_time_ty }
-  ; { cid = sys_random_cid; body = sys_random_fun; ty = sys_random_ty } ]
+  ; { cid = sys_random_cid; body = sys_random_fun; ty = sys_random_ty } 
+  (* ; { cid = sys_checksum_cid; body = sys_checksum_fun; ty = sys_checksum_ty}  *)
+  
+  ]
 ;;
 
 let signature = module_id, [], defs, []

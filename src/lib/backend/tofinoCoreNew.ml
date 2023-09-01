@@ -103,27 +103,32 @@ and event =
         element is the type of generate statement that produced it. *)
     generated_events : (id * gen_type) list list;
   }
+  | EventWithMetaParams of {
+    event : event;
+    params : params;
+  }
 
 and hbody = 
   | SFlat of statement
   | SPipeline of statement list
-
-
-(* the string is direction specifier *)
-and intrinsic_params = (id * ty * string option) list
 
 (* definition of a handler using input and output events *)
 and hevent = {    
   hdl_id : id;
   hdl_sort : handler_sort;
   hdl_body : hbody;  
-  hdl_input : event; 
+  hdl_deparse_params : params; (* parameters of the handler's deparser *)
+  hdl_deparse : statement; (* the deparser, if there is one *)
+  hdl_input : event;
   hdl_output : event;
+  
+  hdl_preallocated_vars : params;(*variables that are pre allocated, but not set*)
+  
+  (* params and retparams are builtins of the underlying hardware *)
   hdl_params : params; (*parser output that is not wrapped in 
      an event. timestamp, ingress port, queue depth, etc *)
   hdl_retparams : params; (* multicast group, egress port, etc *)
-  hdl_preallocated_vars : params; 
-  (*variables that the handler can assume are allocated, but not set*)
+  
 }
 (* 
 handler to ingress translation summary: 
@@ -328,22 +333,24 @@ let prog_to_ingress_egress_decls prog =
   (find_component_by_id prog (id "ingress")).comp_decls
   , (find_component_by_id prog (id "egress")).comp_decls
 ;;
-let id_of_event event = 
+let rec id_of_event event = 
   match event with
   | EventSingle {evid;} -> evid
   | EventUnion {evid;} -> evid
   | EventSet {evid;} -> evid
+  | EventWithMetaParams {event; params=_;} -> id_of_event event
 ;;
 let params_of_event event =
   match event with 
   | EventSingle {evparams;} -> evparams
   | _ -> error "[params_of_event] only base events (EventSingle) have parameters"
 ;;
-let members_of_event event = 
+let rec members_of_event event = 
   match event with 
   | EventSingle _ -> error "[members_of_event] single event has no event menbers"
   | EventUnion{members;}
   | EventSet{members;} -> members
+  | EventWithMetaParams{event; params=_;} -> members_of_event event
 ;;
 let num_of_event event =
   match event with
@@ -463,6 +470,19 @@ let main_parser_of_component component : parser =
   List.hd opt_things
 ;;
 
+let replace_main_parser_of_component parser component  = 
+  let new_decls = List.map (fun tdecl -> 
+    match tdecl.td with 
+    | TDParser(p) -> (
+      if (fst p.pid = "main")
+        then {tdecl with td = TDParser(parser)}
+        else tdecl)
+    | _ -> tdecl)
+  component.comp_decls
+      in
+  {component with comp_decls = new_decls}
+;;
+
 let main_body_of_decls decls : hbody = 
   (main_handler_of_decls decls).hdl_body
 ;;
@@ -509,24 +529,33 @@ let main_of_decls tds =
 ;;
 
 
-let add_shared_local component tmp_id tmp_ty = 
-  let tmp_e = var_sp (Cid.id tmp_id) tmp_ty Span.default in
-  let main_handler = main_handler_of_component component in
-  tmp_e, replace_main_handler_of_component
-    component
-    ({main_handler with 
-      hdl_preallocated_vars = 
-        main_handler.hdl_preallocated_vars @ [(tmp_id, tmp_ty)]})
+
+let add_preallocated_locals pvars params = 
+  pvars@params
 ;;
+
+
+
 let add_shared_local tds tmp_id tmp_ty =
   let tmp_e = var_sp (Cid.id tmp_id) tmp_ty Span.default in
   let main_handler = main_handler_of_decls tds in
-  tmp_e, replace_main_handler_of_decls
+  let new_preallocated_vars =  
+    main_handler.hdl_preallocated_vars@ 
+    [(tmp_id, tmp_ty)]
+  in
+  tmp_e, replace_main_handler_of_decls tds
+    {main_handler with
+      hdl_preallocated_vars=new_preallocated_vars}
+
+
+  (* tmp_e, replace_main_handler_of_decls
     tds
     ({main_handler with 
       hdl_preallocated_vars = 
-        main_handler.hdl_preallocated_vars @ [(tmp_id, tmp_ty)]})
+        main_handler.hdl_preallocated_vars @ [(tmp_id, tmp_ty)]}) *)
 
+
+        
 
 (* helper: find all the paths in the program containing statements that match 
            the filter map function. *)

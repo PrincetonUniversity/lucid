@@ -92,7 +92,11 @@ let rec string_of_expr expr = match expr.ex with
   )
   | EConstr(id, tys, args) -> (
     (string_of_id id)
-    ^^(s'"<")^^(string_of_tys tys)^^s'(">")
+    (* if there are no type arguments, don't print the brackets. 
+       Some objects don't have them... *)
+    ^^(match tys with 
+      | [] -> s'""
+      | _ -> (s'"<")^^(string_of_tys tys)^^s'(">"))
     ^^(parens (string_of_exprs args))
   )
   | EList(args) -> braces (separate_map (s'", ") string_of_expr args)

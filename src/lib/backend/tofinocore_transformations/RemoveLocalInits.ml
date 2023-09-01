@@ -245,7 +245,7 @@ let process (core_prog : prog) =
               in
               let h' = HEvent({h with 
                 hdl_body = hdl_body'; 
-                hdl_preallocated_vars = h.hdl_preallocated_vars@(!new_declared_locals)}) 
+                hdl_preallocated_vars = add_preallocated_locals h.hdl_preallocated_vars (!new_declared_locals)}) 
               in
               let td' = TDHandler(h') in
               { decl with td = td'; }

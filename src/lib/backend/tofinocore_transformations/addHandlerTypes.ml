@@ -177,6 +177,7 @@ let rec base_event event econs_cid : event option =
         then Some(event)
         else None
     | EventUnion _ | EventSet _ -> None
+    | EventWithMetaParams({event}) -> base_event event econs_cid
   )
   | Cid.Compound(id, cid) -> (
     match event with
@@ -194,7 +195,7 @@ let rec base_event event econs_cid : event option =
             | [e] -> Some(e)
             | _ -> error "[base_event] event id is ambiguous")
         else None)
-    )  
+    | EventWithMetaParams({event}) -> base_event event econs_cid)  
 ;;
 (* make sure the event constructor is defined in the given event. 
    for example, given: 
@@ -222,6 +223,7 @@ let rec get_event_param_ty event cid : ty option =
     )
     (* non-compound ids cannot be parameters of union or set events. *)
     | EventUnion _ | EventSet _ -> error "[get_event_param_ty] non-compound ids cannot be parameters of union or set events."
+    | EventWithMetaParams({event}) -> get_event_param_ty event cid
   )
   | Cid.Compound(id, cid) -> (
     match event with
@@ -252,6 +254,7 @@ let rec get_event_param_ty event cid : ty option =
           | _ -> error "[get_event_param_ty] compound id should resolve to exactly one parameter type."
         )
     )
+    | EventWithMetaParams({event}) -> get_event_param_ty event cid
   )
 ;;
 
@@ -363,11 +366,13 @@ let type_handler (ctx:ctx) hdl : handler * tdecl =
     HEvent({hdl_id; 
       hdl_sort; 
       hdl_body=SFlat(hdl_body');
+      hdl_deparse_params = [];
+      hdl_deparse = snoop;
       hdl_input=input_event;
       hdl_output=output_event; 
       hdl_params = [];
       hdl_retparams = [];
-      hdl_preallocated_vars = [];
+      hdl_preallocated_vars =[];
     })
     , {td=TDEvent(output_event); tdspan = Span.default; tdpragma = [];}
   | _ -> error "[addHandlerTypes.type_handler] there shouldn't be any HEvent handlers at this point"

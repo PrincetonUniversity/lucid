@@ -149,15 +149,14 @@
    ExternalLayout
    CoreLayoutOld
    CoreLayout
+   CoreDeparse
    ActionForm
    ActionFormNew
    Dedup
    DedupNew
    P4TofinoSyntax
    CoreToP4TofinoHeaders
-   CoreToP4TofinoHeadersNew
    CoreToP4Tofino
-   CoreToP4TofinoNew
    TofinoCoreToP4
    P4TofinoPrinting
    P4TofinoGlobalDirectory

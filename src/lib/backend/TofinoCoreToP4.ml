@@ -1,11 +1,8 @@
-(* translate new tofinocore (6/24) into p4tofino syntax -- hopefully more direct... *)
+(* translate new tofinocore (6/24/23) into p4tofino syntax *)
 
 open TofinoCoreNew
 open P4TofinoSyntax
 open InterpHelpers
-(* strategy:
-    convert each component separately, then do a small pass 
-    to wire the components up (basically, generate the main call) *)
 
 module CL = Caml.List
 module CS = TofinoCoreNew
@@ -14,6 +11,12 @@ module T = P4TofinoSyntax
 module CidMap = Collections.CidMap
 module IdMap = Collections.IdMap
 module CidSet = Collections.CidSet
+
+let fresh_numbered_id s =
+  let id = Id.fresh_name s in
+  let id = Id.create ((fst id)^(string_of_int (snd id))) in 
+  id
+;;
 
 
 (*** basic syntax translation ***)
@@ -283,25 +286,41 @@ and translate_exps (prog_env:prog_env) exps =
   List.flatten decls, exps
 
 and translate_hash prog_env size args = 
-  let hasher_id = Id.fresh_name ("hash") in
-  let hasher_id = Id.create ((fst hasher_id)^(string_of_int (snd hasher_id))) in 
-  let poly, args = match args with
-    | poly::args -> poly, args
-    | _ -> error "[translate_hash] invalid arguments to hash call" 
+  match (List.hd args).e with 
+  (* special case: checksum hash, which may appear in the deparser *)
+  | EVar(cid) when (Cid.equal (Cid.id Builtins.checksum_id) cid) -> 
+    translate_checksum prog_env (List.tl args)
+  (* base case: just a hash *)
+  | _ -> 
+    let hasher_id = fresh_numbered_id "hash" in
+    let poly, args = match args with
+      | poly::args -> poly, args
+      | _ -> error "[translate_hash] invalid arguments to hash call" 
+    in
+    let args = (snd (translate_exps prog_env args)) in 
+    let arg = elist args in 
+    let dhash = decl (DHash{
+      id = hasher_id;
+      poly = int_from_exp poly;
+      out_wid = size;
+      })
+    in
+    let hasher_call = ecall 
+      (Cid.create_ids [hasher_id; id "get"]) 
+      [arg]
+    in
+    [dhash], hasher_call
+
+and translate_checksum prog_env args =
+  (* translate a checksum. Should only happen in a deparser.  *)
+  let checksum_obj_id = fresh_numbered_id "checksum" in
+  let checksum_obj = dobj (id "Checksum") [] [] checksum_obj_id (Span.default) in
+  let arglist = elist (snd (translate_exps prog_env args)) in 
+  let checksum_call = ecall
+    (Cid.create_ids [checksum_obj_id; id "update"])
+    [arglist]
   in
-  let args = (snd (translate_exps prog_env args)) in 
-  let arg = elist args in 
-  let dhash = decl (DHash{
-    id = hasher_id;
-    poly = int_from_exp poly;
-    out_wid = size;
-    })
-  in
-  let hasher_call = ecall 
-    (Cid.create_ids [hasher_id; id "get"]) 
-    [arg]
-  in
-  [dhash], hasher_call
+  [checksum_obj], checksum_call
 
 and translate_ecall env fcn_cid args = 
   (* first, check if its an action *)
@@ -309,25 +328,11 @@ and translate_ecall env fcn_cid args =
     ([], ecall_action fcn_cid [])
   else (
     match (Cid.names fcn_cid) with
-    | ["Sys"; "enable"] -> 
-      (* make a header valid, used to serialize egress *)
-      let method_cid = match (List.hd args) with
-        | {e=CS.EVar(cid)} -> (Cid.names cid)@["setValid"] |> Cid.create
-        | _ -> error "[translate_ecall] invalid argument to enable"
-      in
-      [], ecall_method method_cid
     (* system functions *)
-    | ["Sys"; "time"] -> 
-      [], 
-      eop 
-        (Slice) 
-        [eval_int 47; eval_int 16; T.evar (Cid.create ["ingress_intrinsic_metadata"; "ingress_mac_tstamp"])]    
+    | ["Sys"; "enable"]
+    | ["Sys"; "time"]
     | ["Sys"; "random"] ->
-      (* declare rng_###, call rng_###.get(); *)
-      let rng_id = Id.fresh_name "rng" in
-      let decl = drandom 32 rng_id in
-      let expr = ecall (Cid.create_ids [rng_id; id "get"]) [] in
-      [decl], expr      
+      translate_sys_call (List.hd (List.tl (Cid.to_ids fcn_cid))) args
     (* Array stuff *)
     | "Array"::_ -> 
       let regacn_id, decl = translate_array_call env fcn_cid args in
@@ -340,7 +345,91 @@ and translate_ecall env fcn_cid args =
       idx_decls@[decl], ecall (Cid.create_ids [regacn_id; (id "execute")]) [idx_arg]
     | _ -> error "[translate_ecall] unknown function")
 
+and translate_sys_call fcn_id args = 
+      match (Id.name fcn_id) with
+      | "enable" -> 
+      (* make a header valid, used to serialize egress *)
+      let method_cid = match (List.hd args) with
+        | {e=CS.EVar(cid)} -> (Cid.names cid)@["setValid"] |> Cid.create
+        | _ -> error "[translate_ecall] invalid argument to enable"
+      in
+      [], ecall_method method_cid
+      | "time" -> 
+        [], 
+        eop 
+          (Slice) 
+          [eval_int 47; eval_int 16; T.evar (Cid.create ["ingress_intrinsic_metadata"; "ingress_mac_tstamp"])]  
+      | "random" -> 
+        (* declare rng_###, call rng_###.get(); *)
+        let rng_id = Id.fresh_name "rng" in
+        let decl = drandom 32 rng_id in
+        let expr = ecall (Cid.create_ids [rng_id; id "get"]) [] in
+        [decl], expr      
+      | _ -> error "[translate_sys_call] unknown lucid system call"
+
+
 (*** array calls and memop exps ***)
+(* translate an array call expression into an object that can be called in an assign or local *)
+and translate_array_call env fcn_id args =
+  let reg = name_from_exp (List.hd args) in 
+  let idx = List.hd (List.tl args) in 
+  let reg_id =  reg |> Cid.to_id in 
+  let reg_acn_id = Id.fresh_name ((fst reg_id)^"_regaction") in 
+  let memop, args, cell_ty, returns = match (string_of_fcncid fcn_id) with 
+    | "Array.update_complex" -> (
+      let  memop, arg1, arg2 = match args with
+        | [_; _; memop; arg1; arg2; _] -> memop, arg1, arg2
+        | _ -> error "[translate_array_call] unexpected arguments for array.update_complex"
+      in 
+      let memop = IdMap.find 
+        (InterpHelpers.name_from_exp memop |> Cid.to_id )
+        env.memops 
+      in
+      let cell_ty = raw_ty_of_exp arg1 in 
+      memop, [arg1; arg2], cell_ty, true
+    )
+    | "Array.update" 
+    | "Array.getm"
+    | "Array.setm"
+    | "Array.get"
+    | "Array.set" -> error "[coreToP4Tofino] All array method calls should have been converted to Array.update_complex by this point."
+    | s -> error ("[translate_array_call] unknown array method: "^s)
+  in
+  reg_acn_id, decl (DRegAction{
+    id = reg_acn_id;
+    reg = reg_id;
+    idx_ty = InterpHelpers.raw_ty_of_exp idx |> translate_rty;
+    mem_fcn = translate_array_memop_complex env returns cell_ty args memop;
+    })
+
+and translate_pairarray_call env fcn_id (args:CS.exp list) =
+  let reg = name_from_exp (List.hd args) in 
+  let slot_ty = cell_ty_of_array (Cid.to_id reg) in 
+  let idx = List.hd (List.tl args) in 
+  let reg_id =  reg |> Cid.to_id in 
+  let reg_acn_id = Id.fresh_name ((fst reg_id)^"_regaction") in 
+  let memop, args, cell_ty = match (string_of_fcncid fcn_id) with 
+    | "PairArray.update" -> (
+      let  memop, arg1, arg2 = match args with
+        | [_; _; memop; arg1; arg2; _] -> memop, arg1, arg2
+        | _ -> error "[translate_pairarray_call] unexpected arguments for array.update"
+      in 
+      let memop = IdMap.find 
+        (InterpHelpers.name_from_exp memop |> Cid.to_id )
+        env.memops 
+      in
+      let cell_ty = raw_ty_of_exp arg1 in 
+      memop, [arg1; arg2], cell_ty
+    )
+    | s -> error ("[translate_pairarray_call] unknown pairarray method: "^s)
+  in
+  reg_acn_id, decl (DRegAction{
+    id = reg_acn_id;
+    reg = reg_id;
+    idx_ty = InterpHelpers.raw_ty_of_exp idx |> translate_rty;
+    mem_fcn = translate_pairarray_memop_complex env slot_ty cell_ty args memop;
+    })
+
 
 
 (* translate exp in a memop -- this used to be its own method, 
@@ -522,69 +611,7 @@ and translate_pairarray_memop_complex env slot_ty cell_ty (args: exp list) (memo
     in 
     (params, sseq statements)
   )
-
-(* translate an array call expression into an object that can be called in an assign or local *)
-and translate_array_call env fcn_id args =
-  let reg = name_from_exp (List.hd args) in 
-  let idx = List.hd (List.tl args) in 
-  let reg_id =  reg |> Cid.to_id in 
-  let reg_acn_id = Id.fresh_name ((fst reg_id)^"_regaction") in 
-  let memop, args, cell_ty, returns = match (string_of_fcncid fcn_id) with 
-    | "Array.update_complex" -> (
-      let  memop, arg1, arg2 = match args with
-        | [_; _; memop; arg1; arg2; _] -> memop, arg1, arg2
-        | _ -> error "[translate_array_call] unexpected arguments for array.update_complex"
-      in 
-      let memop = IdMap.find 
-        (InterpHelpers.name_from_exp memop |> Cid.to_id )
-        env.memops 
-      in
-      let cell_ty = raw_ty_of_exp arg1 in 
-      memop, [arg1; arg2], cell_ty, true
-    )
-    | "Array.update" 
-    | "Array.getm"
-    | "Array.setm"
-    | "Array.get"
-    | "Array.set" -> error "[coreToP4Tofino] All array method calls should have been converted to Array.update_complex by this point."
-    | s -> error ("[translate_array_call] unknown array method: "^s)
-  in
-  reg_acn_id, decl (DRegAction{
-    id = reg_acn_id;
-    reg = reg_id;
-    idx_ty = InterpHelpers.raw_ty_of_exp idx |> translate_rty;
-    mem_fcn = translate_array_memop_complex env returns cell_ty args memop;
-    })
-
-and translate_pairarray_call env fcn_id (args:CS.exp list) =
-  let reg = name_from_exp (List.hd args) in 
-  let slot_ty = cell_ty_of_array (Cid.to_id reg) in 
-  let idx = List.hd (List.tl args) in 
-  let reg_id =  reg |> Cid.to_id in 
-  let reg_acn_id = Id.fresh_name ((fst reg_id)^"_regaction") in 
-  let memop, args, cell_ty = match (string_of_fcncid fcn_id) with 
-    | "PairArray.update" -> (
-      let  memop, arg1, arg2 = match args with
-        | [_; _; memop; arg1; arg2; _] -> memop, arg1, arg2
-        | _ -> error "[translate_pairarray_call] unexpected arguments for array.update"
-      in 
-      let memop = IdMap.find 
-        (InterpHelpers.name_from_exp memop |> Cid.to_id )
-        env.memops 
-      in
-      let cell_ty = raw_ty_of_exp arg1 in 
-      memop, [arg1; arg2], cell_ty
-    )
-    | s -> error ("[translate_pairarray_call] unknown pairarray method: "^s)
-  in
-  reg_acn_id, decl (DRegAction{
-    id = reg_acn_id;
-    reg = reg_id;
-    idx_ty = InterpHelpers.raw_ty_of_exp idx |> translate_rty;
-    mem_fcn = translate_pairarray_memop_complex env slot_ty cell_ty args memop;
-    })
 ;;
-
 (*** statements ***)
 
 let declared_vars prev_decls = CL.filter_map (fun dec -> 
@@ -603,7 +630,8 @@ let rec translate_statement env prev_decls stmt =
     let decls, expr = translate_exp env e in 
     decls, sunit expr
   | CS.SLocal(id, ty, e) -> (
-    (* variables can't be declared inside of an action, so produce a global declaration 
+    (* variables can't be declared inside of an action, so if a variable has not been 
+      declared yet, produce a global declaration 
        with a default value and return an assign statement. *)
     match (List.exists (fun idb -> Id.equals id idb) (declared_vars prev_decls)) with
     (* I think this case should be an error -- if the variable is already declared, 
@@ -624,7 +652,17 @@ let rec translate_statement env prev_decls stmt =
     (* use the new name, if there is one *)
     decls, sassign id expr
   | SPrintf _ -> error "[translate_statement] printf should be removed by now"
-  | SIf _ -> error "[translate_statement] if statement cannot appear inside action body"
+  | CS.SIf(exp, s1, s2) -> (
+    (* this is used in the deparser block for checksum ops *)
+    let exp_decls, expr = translate_exp env exp in
+    let s1_decls, s1_stmt = translate_statement env prev_decls s1 in
+    match s2.s with 
+    | CS.SNoop -> 
+      exp_decls@s1_decls, sif expr s1_stmt
+    | _ -> 
+      let s2_decls, s2_stmt = translate_statement env prev_decls s2 in
+      exp_decls@s1_decls@s2_decls, sifelse expr s1_stmt s2_stmt
+  )
   | SMatch _ -> error "[translate_statement] match statement cannot appear inside action body"
   | SRet _ -> error "[translate_statement] ret statement cannot appear inside action body"
   | SGen(_) -> 
@@ -822,10 +860,10 @@ let rec statements_to_stages stage_num env block_id (stages:CS.statement list) =
 ;;
 
 (*** unsorted translators / constructors ***)
-let generate_added_var_decls tds = List.map 
+(* let generate_added_var_decls tds = List.map 
   (fun (id, ty) -> dvar_uninit id (translate_ty ty))
-  (main_handler_of_decls tds).hdl_preallocated_vars
-;;
+  (main_handler_of_decls tds).hdl_preallocated_vars.
+;; *)
 
 let includes = [dinclude "<core.p4>"; dinclude "<tna.p4>"]
 
@@ -840,19 +878,6 @@ let mc_recirc_decls evids recirc_port =
   List.map mc_group_n_recirc possible_rids
 ;;
 
-(* 
-let rec constr_env env tdecls = 
-  match tdecls with
-  | [] -> env
-  | tdecl::tdecls' -> (
-    let env' = match tdecl.td with
-      | TDMemop(m) -> bind_memop env (m.mid, m)
-      | TDGlobal(tbl_id, _, {e=ETableCreate(tbl_def); espan=espan;}) -> bind_tbl env ((Cid.id tbl_id), (tbl_def, espan))
-      (* | TDOpenFunction(id, _, _) -> {prog_env with defined_fcns=(Cid.id id, tdecl)::prog_env.defined_fcns;} *)
-      | _ -> env
-    in
-    constr_env env' tdecls')
-;; *)
 
 let tyid_of_fieldid struct_ty fieldid = 
   let hdrty_id evid = ((fst evid)^"_h", snd evid) in
@@ -880,8 +905,11 @@ let tyid_of_event struct_ty event =
 let rec translate_members struct_ty prevs members = 
   let (prevs, new_member_decls) = List.fold_left
     (fun (prevs, new_ev_decls) event -> 
-      let prevs', new_decls = translate_event prevs struct_ty event in
-      prevs', new_ev_decls@new_decls)
+      let prevs', new_decls, outer_decl_opt = translate_event prevs struct_ty event in
+      match outer_decl_opt with 
+      | Some(outer_decl) -> 
+        prevs', new_ev_decls@new_decls@[outer_decl]
+      | None -> prevs, new_ev_decls@new_decls)
     (prevs, [])
     members
   in
@@ -915,12 +943,12 @@ and translate_headers prevs hdrs struct_ty =
   (* print_endline ("[translate_headers] stop in "^(fst evid)); *)
   res
 
-and translate_event (prevs:id list) struct_ty event : id list * T.decl list =
+and translate_event (prevs:id list) struct_ty event : id list * T.decl list * (T.decl option) =
   let this_event_struct_id = tyid_of_event struct_ty event in 
   (* check if this event's struct declarations have already been generated *)
   let in_prevs = List.exists (fun prev_evid -> Id.equal this_event_struct_id prev_evid) prevs in
-  if (in_prevs) 
-    then (prevs, [])
+  let (ret:id list * T.decl list * T.decl option ) = if (in_prevs) 
+    then (prevs, [], None)
     else (
     match event with
     | EventSingle({evparams;}) -> 
@@ -928,7 +956,7 @@ and translate_event (prevs:id list) struct_ty event : id list * T.decl list =
       let decl = dstruct (tyid_of_event struct_ty event) struct_ty 
         (List.map (fun (pid, pty) -> pid, translate_ty pty) evparams)
       in
-      prevs@[this_event_struct_id], [decl]
+      prevs@[this_event_struct_id], [], Some(decl)
     (* special case: the event union's members are all unions. This happens for 
     the egress's output event. In this case, we don't give this outer event a tag *)
     | EventUnion({hdrs; members;}) when (is_union_of_unions event) -> 
@@ -956,8 +984,7 @@ and translate_event (prevs:id list) struct_ty event : id list * T.decl list =
     in
     (* translate the members *)
     let prevs, member_decls = translate_members struct_ty prevs members in 
-    prevs@[this_event_struct_id], (header_decls@member_decls@[union_decl])    
-
+    prevs@[this_event_struct_id], (header_decls@member_decls), Some(union_decl)
 
     | EventUnion({members; tag;}) -> 
     (* a union is a struct with fields: 
@@ -993,42 +1020,70 @@ and translate_event (prevs:id list) struct_ty event : id list * T.decl list =
         TMeta
         union_fields
       in
-      prevs@[this_event_struct_id], [tagty_decl]@member_decls@[union_decl]
+      prevs@[this_event_struct_id], ([tagty_decl]@member_decls), Some(union_decl)
       | EventSet({members; flags;}) -> 
-      let flag_struct_id, flag_fields, flag_pad = flags in
+        let flag_struct_id, flag_fields, flag_pad = flags in
 
-      (* flags header with padding *)
-      let flag_outer_ty_id = tyid_of_fieldid struct_ty flag_struct_id in
-      let flag_pad_field = match flag_pad with
-        | None -> []
-        | Some(id, ty) -> [id, ty]
-      in
-      let flag_field_decls = List.map 
-        (fun (pid, pty) -> pid, translate_ty pty) 
-        (flag_fields@flag_pad_field) 
-      in
-      let flagty_decl = dstruct flag_outer_ty_id struct_ty flag_field_decls in 
-      (* fields of the set type *)
-      let prevs, member_decls = translate_members struct_ty prevs members in
-      let field_params = 
-        (flag_struct_id, flag_outer_ty_id) (* first field is the flags header *)
-        ::(List.map (fun event -> (id_of_event event, tyid_of_event struct_ty event)) members)
-      in
-      let (union_fields: (id * ty) list) = List.map
-        (fun (field_id,field_ty_id) -> 
-          (field_id, tstruct field_ty_id))
-        field_params
-      in
-      let set_decl = dstruct 
-        (tyid_of_event struct_ty event) 
-        TMeta
-        union_fields
-      in
-      prevs@[this_event_struct_id], flagty_decl::member_decls@[set_decl]
-    )  
+        (* flags header with padding *)
+        let flag_outer_ty_id = tyid_of_fieldid struct_ty flag_struct_id in
+        let flag_pad_field = match flag_pad with
+          | None -> []
+          | Some(id, ty) -> [id, ty]
+        in
+        let flag_field_decls = List.map 
+          (fun (pid, pty) -> pid, translate_ty pty) 
+          (flag_fields@flag_pad_field) 
+        in
+        let flagty_decl = dstruct flag_outer_ty_id struct_ty flag_field_decls in 
+        (* fields of the set type *)
+        let prevs, member_decls = translate_members struct_ty prevs members in
+        let field_params = 
+          (flag_struct_id, flag_outer_ty_id) (* first field is the flags header *)
+          ::(List.map (fun event -> (id_of_event event, tyid_of_event struct_ty event)) members)
+        in
+        let (union_fields: (id * ty) list) = List.map
+          (fun (field_id,field_ty_id) -> 
+            (field_id, tstruct field_ty_id))
+          field_params
+        in
+        let set_decl = dstruct 
+          (tyid_of_event struct_ty event) 
+          TMeta
+          union_fields
+        in
+        prevs@[this_event_struct_id], flagty_decl::member_decls, Some(set_decl)
+      | EventWithMetaParams({event; params;}) -> (
+        (* translate the inner event *)
+        let prevs, event_decls, event_decl_opt = translate_event prevs struct_ty event in
+        (* add the params to the declaration for the outer event (event_decl_opt) *)
+        let event_decl_opt = match event_decl_opt with
+          | None -> None
+          | Some(in_event) -> 
+          begin 
+            let in_event = match in_event.d with 
+              | DStructTy{id=id; sty=sty; fields=fields;} ->
+              begin
+                {in_event with 
+                  d = DStructTy({id; sty; 
+                    fields = fields@(List.map 
+                      (fun (id, ty) -> id, translate_ty ty)
+                      params);})}
+              end
+              | _ -> in_event
+            in
+            Some(in_event)
+          end
+        in
+        prevs, event_decls, event_decl_opt
+        
+        
+      )
+    )
+    in
+    ret
 ;;
 
-let rec qualified_params_of_event (prefix : Id.t list) event = 
+(* let rec qualified_params_of_event (prefix : Id.t list) event = 
   match event with 
   | EventSingle({evid; evparams;}) -> (
     List.map (fun (id, _) -> Cid.create_ids (prefix@[evid; id])) evparams
@@ -1039,24 +1094,23 @@ let rec qualified_params_of_event (prefix : Id.t list) event =
     List.map (qualified_params_of_event prefix) members
     |> List.flatten
   )
-;;
-let param_pragma pname gress_string param_cid = 
+;; *)
+(* let param_pragma pname gress_string param_cid = 
   let pragma = {
     pname;
     pargs = ["\""^gress_string^"\""; "\""^CorePrinting.cid_to_string param_cid^"\""];
     }
   in
   {d=DPragma(pragma); dpragma=[]; dspan = Span.default}
-;;
-
+;; *)
+(* 
 let no_overlay_pragma = param_pragma "pa_no_overlay" ;;
-let solitary_pragma = param_pragma "solitary" ;;
+let solitary_pragma = param_pragma "solitary" ;; *)
 
-(* will it help? *)
-let rec pragmas_of_event gress event =   
+(* let rec pragmas_of_event gress event =   
   List.map (no_overlay_pragma gress) (qualified_params_of_event [] event)
 
-;;
+;; *)
 
 let translate_params (main_hdl:hevent) =
   (*  construct parameters for the main control flow of a 
@@ -1369,12 +1423,16 @@ let construct_deparser ctx hevent : decl =
     let intrinsic_param = inparam (translate_ty (snd intrinsic_param)) (fst intrinsic_param) in
     [pkt_param; hdr_param; meta_param; intrinsic_param]
   in
-  let emit_call = T.ecall (Cid.create_ids [pkt_arg; id"emit"]) [T.evar (Cid.id hdr_param_id)] in
+  (* finally, translate the body of the deparser *)
+  let decls, stmt = translate_statement ctx.penv [] hevent.hdl_deparse in
+  (* the emit call is the final statement. *)
+  let emit_call = sunit (T.ecall (Cid.create_ids [pkt_arg; id"emit"]) [T.evar (Cid.id hdr_param_id)]) in
+
   decl (DDeparse{
     id=deparser_id;
     params=params;
-    decls=[];
-    body=Some(sunit emit_call);
+    decls=decls;
+    body=Some(P4TofinoSyntax.sseq (stmt::emit_call::[]));
   })
 ;;
 
@@ -1469,13 +1527,19 @@ let translate_tdecl (denv : translate_decl_env) tdecl : (translate_decl_env) =
         body = Some(apply_body);
         })
       in
-      let prev_events, in_event_decls = translate_event denv.prev_events TMeta hevent.hdl_input in
-      let prev_events, out_event_decls = translate_event prev_events THdr hevent.hdl_output in
-      (* hack: add a solitary pragma for the input event's tag. <<left off here>> todo: 
-         we might want to add solitary tags for _all_ the variables in the program. 
-         Stuff gets glitchy with an overly-eager backend that slices to optimize... *)
+      let prev_events, in_event_decls, main_in_opt = translate_event denv.prev_events TMeta hevent.hdl_input in
+      let prev_events, out_event_decls, main_out_opt = translate_event prev_events THdr hevent.hdl_output in
+      let in_event_decls = match main_in_opt with
+        | Some(in_event) -> in_event_decls@[in_event]
+        | None -> in_event_decls
+      in
+      let out_event_decls = match main_out_opt with
+        | Some(out_event) -> out_event_decls@[out_event]
+        | None -> out_event_decls
+      in
       let solitary_input_tag_pragma = match (hevent.hdl_input) with
-        | EventUnion({tag;}) -> (
+        | EventUnion({tag;}) 
+        | EventWithMetaParams({event=EventUnion({tag;})}) -> (
           let tag_cid = Cid.create_ids [id_of_event hevent.hdl_input; fst tag; fst (snd tag)] in 
           let gress_string = match hevent.hdl_sort with 
             | HData -> "ingress"

@@ -37,6 +37,12 @@ let rec event_to_string (event:TofinoCoreNew.event) =
       (line_sep event_to_string members |> indent_body)
       (* (Batteries.String.join " " (Batteries.List.map event_to_string members)) *)
   )
+  | EventWithMetaParams({event=event; params=params;}) -> (
+    Printf.sprintf
+      "%s(%s);"
+      (event_to_string event)
+      (params_to_string params)
+  )
 ;;
 
 let intrinsic_param_to_string (id, ty, dirstr_opt) = 
@@ -63,12 +69,15 @@ let hevent_to_string h =
       String.concat "\n" stage_strs |> indent_body
   in
   Printf.sprintf
-    "%shandle %s(%s) returns (%s) {\n%s\n}"
+    "%shandle %s(%s)\ndeparse_locals(%s)\nundefined_locals(%s)\nreturns (%s)\nbody = {\n%s\n}\ndeparse={\n%s\n}"
     hdl_sort_str
     (id_to_string h.hdl_id)
     (params_to_string params)
+    (params_to_string h.hdl_deparse_params)
+    (params_to_string h.hdl_preallocated_vars)
     (params_to_string out_params)
     body_str
+    (stmt_to_string h.hdl_deparse |> indent_body)
 ;;
     (* print handler types *)
 let handler_to_string (handler:TofinoCoreNew.handler) = 
@@ -186,7 +195,7 @@ let params_to_p4fields params = line_sep param_to_p4field params
 
 
 (* the event's variable name is the events name *)
-let   event_to_p4varname event : string =
+let rec  event_to_p4varname event : string =
   match event with
     | EventSingle({evid;}) -> (
       (Id.to_string evid)
@@ -196,9 +205,12 @@ let   event_to_p4varname event : string =
     )
     | EventSet({evid;}) -> (
       (Id.to_string evid)
+    )
+    | EventWithMetaParams({event;}) -> (
+      event_to_p4varname event
     )
 ;;  
-let event_to_p4tyname event : string = 
+let rec event_to_p4tyname event : string = 
   match event with
     | EventSingle({evid;}) -> (
       (Id.to_string evid) ^ "_t"
@@ -208,6 +220,9 @@ let event_to_p4tyname event : string =
     )
     | EventSet({evid;}) -> (
       (Id.to_string evid) ^ "_t"
+    )
+    | EventWithMetaParams({event;}) -> (
+      event_to_p4tyname event
     )
 ;;
 
@@ -217,7 +232,7 @@ let event_to_p4fieldstr event : string =
     (event_to_p4tyname event)
 ;;
 
-let event_to_p4flag event : string = 
+let rec event_to_p4flag event : string = 
   match event with
   | EventSingle{evid;} -> 
     Id.prepend_string "flag_" (evid) |> Id.to_string
@@ -225,39 +240,61 @@ let event_to_p4flag event : string =
     Id.prepend_string "flag_" (evid) |> Id.to_string
   | EventSet{evid;} -> 
     Id.prepend_string "flag_" (evid) |> Id.to_string
+  | EventWithMetaParams{event;} -> 
+    event_to_p4flag event
   ;;
+
 let event_to_p4flagfield event : string =
   event_to_p4flag event ^ " : " ^ "int<1>;"
 ;;
 
+let rec event_to_struct_body event : string = 
+  match event with
+  | EventSingle({evparams}) -> 
+    Printf.sprintf "%s" (params_to_p4fields evparams)
+  | EventUnion({members}) -> 
+    Printf.sprintf "%s\n%s"
+      ("tag : int<8>;")
+      (line_sep event_to_p4fieldstr members)
+  | EventSet({members}) -> 
+    Printf.sprintf "%s\n%s"
+      (line_sep event_to_p4flagfield members)
+      (line_sep event_to_p4fieldstr members)
+  | EventWithMetaParams({event; params;}) -> 
+    event_to_struct_body event^"\n"^(params_to_p4fields params)
+
 let rec event_to_p4tystr event : string = 
   match event with
   (* an event declaration is a type declaration *)
-  | EventSingle({evid; evparams}) -> (
+  | EventSingle({evid;}) -> (
     (* a single event -- just a struct or header *)
     Printf.sprintf 
       "struct %s_t {\n%s\n}"
       (Id.to_string evid)
-      (params_to_p4fields evparams)
+      (event_to_struct_body event)
   )
   (* an event union... we have to print out the members, then 
      print a union of those members... and thhe tag? *)
   | EventUnion({evid; members}) -> (
     (line_sep event_to_p4tystr members) ^ "\n"
-    ^ (Printf.sprintf
-        "struct %s_t {\n%s\n%s\n}"
-        (Id.to_string evid)
-        ("tag : int<8>;") (*the tag and its type -- global*)
-        (line_sep event_to_p4fieldstr members) (*the member fields *)    
-    )
+    ^ 
+    Printf.sprintf 
+      "struct %s_t {\n%s\n}"
+      (Id.to_string evid)
+      (event_to_struct_body event)
   )
   | EventSet({evid; members}) -> (    
     (line_sep event_to_p4tystr members) ^ "\n"
-    ^ (Printf.sprintf
-        "struct %s_t {\n%s\n%s\n}"
-        (Id.to_string evid)
-        (line_sep event_to_p4flagfield members)
-        (line_sep event_to_p4fieldstr members) (*the member fields *)    
-    )
+    ^ 
+    Printf.sprintf 
+      "struct %s_t {\n%s\n}"
+      (Id.to_string evid)
+      (event_to_struct_body event)
+  )
+  | EventWithMetaParams({event; _;}) -> (
+    Printf.sprintf 
+      "struct %s_t {\n%s\n}"
+      (Id.to_string (id_of_event event))
+      (event_to_struct_body event)
   )
 ;;

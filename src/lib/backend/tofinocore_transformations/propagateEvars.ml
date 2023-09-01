@@ -49,7 +49,7 @@ open Batteries
 module DBG = BackendLogging
 let outc = ref None
 let dprint_endline = ref DBG.no_printf
-let start_logging () = DBG.start_mlog (!IoUtils.irLogDir) __FILE__ outc dprint_endline
+let start_logging () = DBG.start_mlog (!IoUtils.moduleLogDir) __FILE__ outc dprint_endline
 
 let str_comp to_str a b =
   String.compare (to_str a) (to_str b)
@@ -363,6 +363,5 @@ let process_comp comp =
 ;;
 
 let process core_prog =
-  start_logging ();
   List.map process_comp core_prog
 ;;

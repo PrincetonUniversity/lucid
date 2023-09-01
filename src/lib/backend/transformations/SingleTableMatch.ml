@@ -667,7 +667,7 @@ let process_core_tds (tds:tdecls) =
   in
   let main' =  {main with 
     hdl_body = SFlat(main_body');
-    hdl_preallocated_vars = (main.hdl_preallocated_vars@tbl_iovars);
+    hdl_preallocated_vars = add_preallocated_locals main.hdl_preallocated_vars tbl_iovars
     } 
   in
   let tds' = replace_main_handler_of_decls tds main'  in

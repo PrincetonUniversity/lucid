@@ -53,7 +53,7 @@
   open ParsePortSpec
   
   (* get a member event *)
-  let member_event event member_id =
+  let rec member_event event member_id =
     let rec member_event_rec events member_id =
       match events with
       | [] -> None
@@ -70,6 +70,7 @@
       match member_event_rec members member_id with
       | None -> error "[member_event] no member with that id"
       | Some(member_event) -> member_event)
+    | EventWithMetaParams({event}) -> member_event event member_id
   ;;  
   
   (* get the position of the event with id eventid in the list of events *)
