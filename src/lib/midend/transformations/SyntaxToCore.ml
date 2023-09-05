@@ -265,6 +265,8 @@ let translate_parser_action = function
       | _ -> failwith "Internal error: SyntaxToCore PAssign"
     in
     C.PAssign (Cid.id id, translate_exp rexp)
+  | S.PLocal(id, ty, exp) ->
+    C.PLocal (Cid.id id, translate_ty ty, translate_exp exp) 
 ;;
 
 let rec translate_branch (pat, block) =

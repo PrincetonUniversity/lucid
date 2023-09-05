@@ -502,6 +502,7 @@ let rec conflicts_of_parser_actions declared_before used_after pas =
     match pa with
     | PRead(cid, _) 
     | PPeek(cid, _)
+    | PLocal(cid, _, _)
     | PAssign(cid, _) -> (
       let used_after_local = used_after@(List.map assigned_in_action pas |> List.flatten) |> MiscUtils.unique_list_of in 
       let live_vars = List.filter (fun cid -> MiscUtils.contains used_after_local cid) declared_before in

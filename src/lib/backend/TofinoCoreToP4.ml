@@ -1202,7 +1202,7 @@ let fresh_blockid () =
 let transition id = sunit (ejump (Cid.create_ids [id]))
 let transition_accept = transition (id "accept")
 let dparsestate id stmt =
-  decl (DParseState {id; body = stmt;})
+  decl (DParseState {id; body = stmt})
 ;;
 
 (* let pkt_arg = id "pkt" *)
@@ -1272,8 +1272,10 @@ let translate_parser denv parser =
     Id.equal fst_id out_ev_id
   in
   let translated_parser_blocks = ref [] in
+  let compute_decls = ref [] in
   let parse_states = ref [] in
   let start_block = ref true in 
+
   let rec translate_parser_block parser_block :id =
     (* first, check if there is an already-translated 
        parser block that is equivalant. To test equivalence
@@ -1294,9 +1296,12 @@ let translate_parser denv parser =
        with actions and steps both translating into statements. *)
 
     (* translate the actions *)
-    let stmts = List.map fst parser_block.pactions |> 
+    let decls_stmts = List.map fst parser_block.pactions |> 
       List.map translate_parse_action
     in
+    let decls, stmts = List.split decls_stmts in 
+    let decls = List.flatten decls in 
+
     let sstep = translate_parser_step (fst parser_block.pstep) in 
     let block_id = if (am_start)
       then (id "start")
@@ -1311,31 +1316,43 @@ let translate_parser denv parser =
     (match (cached_block_id_opt) with
     | Some(_) -> ()
     | None -> 
+      (* construct new parser state and update mutables *)
+      let new_parser_state = dparsestate
+        block_id
+        (sseq (stmts@[sstep]))
+      in
+      compute_decls := (!compute_decls)@decls;
       translated_parser_blocks := (!translated_parser_blocks)@[(block_id, block_str)];
-      parse_states := (!parse_states)@[dparsestate block_id (sseq (stmts@[sstep]))];  
+      parse_states := (!parse_states)@[new_parser_state];  
     );
     
     block_id
 
-  and translate_parse_action parser_action = 
+  and translate_parse_action parser_action : (T.decl list * T.statement) = 
     match parser_action with 
     | PRead(cid, ty) -> (
       (* case -- cid is param -> read is an extract
          case -- cid is not param -> read is a slocal lookahead; advance *)
       match (is_param cid) with
-      | true -> extract pkt_arg cid
-      | false -> sseq [slocal_lookahead pkt_arg cid (translate_ty ty); sadvance pkt_arg (size_of_tint ty)]
+      | true -> [], extract pkt_arg cid
+      | false -> [], sseq [slocal_lookahead pkt_arg cid (translate_ty ty); sadvance pkt_arg (size_of_tint ty)]
     )
     | PPeek(cid, ty) -> (
       (* case -- cid is an event field (first id is name of output event param) sassign lookahead -> 
          case -- cis is not a param -> slocal lookahead *)
       match (is_event_field cid) with 
-      | true -> sassign_lookahead pkt_arg cid (translate_ty ty)
-      | false -> slocal_lookahead pkt_arg cid (translate_ty ty)
+      | true -> [], sassign_lookahead pkt_arg cid (translate_ty ty)
+      | false -> [], slocal_lookahead pkt_arg cid (translate_ty ty)
     )
-    | PSkip(ty) -> sadvance pkt_arg (size_of_tint ty)
+    | PSkip(ty) -> [], sadvance pkt_arg (size_of_tint ty)
     | PAssign(cid, exp) -> 
-      sassign cid (translate_exp denv.penv exp |> snd)
+      let decls, expr = translate_exp denv.penv exp in
+      (* TODO: have to give decls back *)
+      decls, sassign cid expr
+    | PLocal(cid, ty, exp) -> 
+      let decls, expr = translate_exp denv.penv exp in
+      decls, slocal (Cid.to_id cid) (translate_ty ty) expr
+  
   and translate_parser_branch (pats, block) = 
     let pats' = List.map translate_pat pats in
     let block_id = translate_parser_block block in
@@ -1356,13 +1373,15 @@ let translate_parser denv parser =
     | PCall _ -> error "[translate_parser_step] the only supported call is to exit/accept"
     | PDrop -> transition (id "drop")
   in
+  (* back in outer translate_parser *)
   (* print_endline ("------ translating parser ------"); *)
   (* TofinoCorePrinting.parser_to_string parser |> print_endline; *)
   (* print_endline ("------------"); *)
   let _ = translate_parser_block parser.pblock in
   let parse_states = !parse_states in
+  let compute_decls = !compute_decls in 
   let parser_id = (fst denv.component_id)^"_"^(fst parser.pid) |> Id.create in 
-  let res = dparse parser_id params parse_states in
+  let res = dparse parser_id params (compute_decls@parse_states) in
   (* let out_str = P4TofinoPrinting.string_of_decl res |> P4TofinoPrinting.doc_to_string in *)
   (* print_endline ("-----------p4 parser-------");
   print_endline out_str; *)

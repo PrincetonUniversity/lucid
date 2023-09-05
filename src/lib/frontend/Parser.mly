@@ -259,6 +259,7 @@ patterns:
   | pattern                             { [$1] }
   | pattern COMMA patterns              { $1 :: $3 }
 
+
 exp:
     | BITPAT                              { value_to_exp (vpat_sp (snd $1) (fst $1))}
     | cid			                            { var_sp (snd $1) (fst $1) }
@@ -401,10 +402,18 @@ dt_table:
                                                     []
                                                     (mk_t_table (snd $5) (snd $7) [$9] (Span.extend $3 $10))
                                                     (Span.extend (fst $1) $10) }
+
+// an expression that can appear as the lhs of an assign in the parser
+lexp:
+    | cid			                            { var_sp (snd $1) (fst $1) }
+    | lexp PROJ ID                         { proj_sp $1 (Id.name (snd $3)) (Span.extend $1.espan (fst $3)) }
+
 parser_action:
   | READ ty ID SEMI                         { (PRead (snd $3, $2)), (Span.extend $1 $4) }
   | SKIP ty SEMI                            { (PSkip $2), Span.extend $1 $3 }
-  | exp ASSIGN exp SEMI                     { (PAssign ($1, $3)), Span.extend $1.espan $4 }
+  | ty ID ASSIGN exp SEMI                   { PLocal(snd $2, $1, $4), Span.extend ($1.tspan) $5 }
+  | lexp ASSIGN exp SEMI                     { (PAssign ($1, $3)), Span.extend $1.espan $4 }
+
 
 parser_branch:
   | PIPE pattern ARROW LBRACE parser_block RBRACE  { Span.extend $1 $6, ($2, $5) }

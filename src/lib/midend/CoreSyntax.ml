@@ -234,6 +234,7 @@ and parser_action =
   | PPeek of cid * ty
   | PSkip of ty
   | PAssign of cid * exp
+  | PLocal of cid * ty * exp
 
 and parser_branch = pat list * parser_block
 

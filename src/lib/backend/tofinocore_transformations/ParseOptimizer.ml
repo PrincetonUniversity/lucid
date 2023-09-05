@@ -23,6 +23,25 @@ let rec cid_to_eventconstr prefix_ids events cid =
   )      
 ;;
 
+(* get the fully scoped parameters of evconstr in output event *)
+let scoped_params_of_evconstr output_event evconstr_cid = 
+  (* find the base event being generated *)
+  let event_prefix, base_event = cid_to_eventconstr [] [output_event] evconstr_cid in
+  (* get the parameters, fully scoped *)
+  let prefix_cid = Cid.create_ids event_prefix in
+  let params = params_of_event base_event in
+  let params = List.map 
+    (fun (id, ty) -> 
+      Cid.concat 
+        prefix_cid 
+        (Cid.create_ids [id_of_event base_event; id]),
+      ty) 
+    params 
+  in
+  params
+;;
+
+
 
 (* optimization pass: if a variable is read but never used, replace the read with a skip *)
 
@@ -86,80 +105,6 @@ let elim_dead_reads component =
   
 ;;
 
-(* optimized generate elimination pass *)
-let generates_using_cid output_event cid pactions pstep : cid list = 
-  (* find all the generate statements that generate an event using a 
-     constructor defined by out_event. Return a list of 
-     _event parameters_ that get set to cid -- one parameter per 
-     event constructor / generate. *)
-  let ev_params = ref [] in
-  let v = object
-    inherit [_] s_iter as super
-    method! visit_PGen () exp = 
-      match exp.e with
-      | ECall(evconstr_cid, eargs) -> (
-          (* find the base event being generated *)
-          let event_prefix, base_event = cid_to_eventconstr [] [output_event] evconstr_cid in
-          (* get the parameters, fully scoped *)
-          let prefix_cid = Cid.create_ids event_prefix in
-          let params = params_of_event base_event in
-          let params = List.map 
-            (fun (id, ty) -> 
-              Cid.concat 
-                prefix_cid 
-                (Cid.create_ids [id_of_event base_event; id]),
-              ty) 
-            params 
-          in
-          (* return the parameter whose argument matches cid, if any. 
-             If there is more than 1, it is an error that should have been 
-          caught by the slot analysis (and compiler shouldn't have generated 
-          slot-unsafe code) *)
-          let param_matches = List.filter_map
-            (fun (param_cid, earg) -> match earg.e with
-              | EVar(cid') -> (
-                if (Cid.equal cid cid')
-                then (Some(param_cid))
-                else (None)
-              )
-              | _ -> None)
-            (List.combine params eargs)
-          in
-          match param_matches with
-          | [] -> ()
-          | [matching_param] -> ev_params := (!ev_params)@[matching_param]
-          | _ -> error "a variable read in the parser was written to multiple parameters of a single event constructor -- this is not legal"
-      )
-      | _ -> ()
-    end
-  in
-  List.iter (v#visit_parser_action ()) pactions;
-  v#visit_parser_step () pstep;
-  !ev_params |> List.split |> fst
-;;
-
-let generate_to_tagset out_event pstep : (parser_action * parser_step) option =
-  match pstep with
-  | PGen(gen_exp) -> (
-    match gen_exp.e with 
-    | ECall(evconstr_cid, eargs) -> (
-      (* find the base event being generated *)
-      let event_prefix, base_event = cid_to_eventconstr [] [out_event] evconstr_cid in
-      let tagouterfield_id, (taginnerfield_id, tag_ty) = etag out_event in
-      let tag_cid = Cid.create_ids (event_prefix@[tagouterfield_id; taginnerfield_id]) in
-      (* let tag_cid = tag_id in  *)
-      let tag_width = size_of_tint tag_ty in
-      let tag_val = vint_exp (num_of_event base_event) tag_width in
-      let assign_tag_action = PAssign(tag_cid, tag_val) in
-      (* okay now where do we put the action ugh *)
-    (* replace the PGen with an exit call*)
-    let exit_call = call (Cid.create ["exit"]) [] (ty TEvent) in
-    let parser_step = PCall(exit_call) in
-    Some(assign_tag_action, parser_step))
-   | _ -> None
-  )
-  | _ -> None
-;;
 
 (* Eliminate generates in an optimized way: 
   instead of reading packet data to a parser variable x, then copying the 
@@ -176,38 +121,159 @@ example:
   ...
   generate(foo(a, ...));
   *)
+
+(* update: 
+    This transformation is basically hoisting for event parameters that 
+    are set to parse variables that are read directly from the header. 
+    For each parse statement read x, look at the rest of the code. 
+    Find each generate statement that passes x to an event and, if 
+    x is not modified between its read point and its use, replace 
+    "read x" with "peek event_arg; read x;". That is, read directly to 
+    the event param, eliminating the copy from x -> event_arg *)
+let del xs x = 
+  (* remove x from xs *)
+  List.filter (fun y -> not (x = y)) xs
+;;
+
+(* generates ultimately get replaced by a call to "exit" that 
+   represents the end of the parser. *)
+let exit_call = call (Cid.create ["exit"]) [] (ty TEvent) ;;
+let exit_step = PCall(exit_call) 
+;;
+
+
+type pstep_sp = parser_step * sp
+type paction_sps = (parser_action * sp) list
+type hoist_cmds = (cid * (cid * ty)) list
+type cids = cid list
+let rec elim_parser_block output_event vars_read parser_block = 
+  let hoist_cmds, (pactions, pstep) = elim_parser_inner output_event vars_read parser_block.pactions parser_block.pstep in
+  hoist_cmds, {pactions; pstep}
+and elim_parser_inner output_event (vars_read : cids) (pactions : paction_sps) (pstep : pstep_sp) 
+    : hoist_cmds * (paction_sps * pstep_sp) = (* returns commands to hoist and the updated parser block *)
+  (* hoist all possible generate parameters up to here *)
+  (* let hoisted_params, pactions' = hoist_reads output_event parser_block.pactions parser_block.pstep in *)
+  match pactions with 
+  | [] -> (
+    (* done processing the actions, now move on to the step *)
+    match pstep with
+    | PGen(exp), step_sp -> (
+      (* a generate step. We want to replace this generate with assign statements as necessary
+         for all the variables in the arguments that will not be hoisted. *)
+      match exp.e with 
+      | ECall(base_event_cid, eargs) -> (
+        (* build an assoc list from args to parameters *)
+        let params = scoped_params_of_evconstr output_event base_event_cid in 
+        let hoist_cmds, gen_assigns = List.fold_left2
+          (fun (hoist_cmds, gen_assigns) arg param -> 
+            (* if arg is in vars_read *)
+            match arg.e with 
+            | EVar(argcid) when (List.mem argcid vars_read) ->
+              (* a variable that is read and never updated on this control flow 
+                 is the arg. That means the corresponding parameter can be hoisted
+                 and no new command is necessary. *)
+                 (argcid, param)::hoist_cmds, gen_assigns
+            | _ -> 
+              (* the parameter can't be hoisted, we need to add an assign. *)
+              let assign = PAssign(fst param, arg), step_sp  in
+              hoist_cmds, (assign::gen_assigns)
+          )
+          ([], [])
+          eargs 
+          params
+        in
+        (* return hoist commands and updated (actions, step) *)
+        (* we need one more command! to set the generate tag. *)
+        let event_prefix, base_event = cid_to_eventconstr [] [output_event] base_event_cid in
+        let tagouterfield_id, (taginnerfield_id, tag_ty) = etag output_event in
+        let tag_cid = Cid.create_ids (event_prefix@[tagouterfield_id; taginnerfield_id]) in
+        let tag_width = size_of_tint tag_ty in
+        let tag_val = vint_exp (num_of_event base_event) tag_width in
+        let assign_tag_action = PAssign(tag_cid, tag_val) in
+        print_endline ("generate step: "^(CorePrinting.parser_step_to_string (fst pstep)));
+        if (List.length gen_assigns > 0) then 
+        print_endline ("adding generate-specific assignment statements");
+        List.iter
+          (fun (pa, _) -> CorePrinting.parser_action_to_string pa |> print_endline)
+          gen_assigns
+        ;
+        hoist_cmds, ((assign_tag_action, step_sp)::gen_assigns, (exit_step, step_sp))
+      )
+      | _ -> error "generate step does not call an event constructor"
+    )
+    | (PCall(_), _) -> error "calls should have been eliminated in parser steps"
+    | PDrop, _ -> [], ([], pstep) (* no new hoist commands or actions *)
+    | PMatch(exps, branches), match_sp -> 
+      (* match: recurse and merge the hoist commands lists *)
+      let hoist_cmds, branches' = List.fold_left
+        (fun (hoist_cmds, branches') (pats, parser_block) -> 
+          let hoist_cmds', parser_block' = elim_parser_block output_event vars_read parser_block in          
+          hoist_cmds@hoist_cmds', (branches'@[(pats, parser_block')])
+        )
+        ([], [])
+        branches
+      in
+      (* hoist commands from successors, no new assignments 
+         (those are all in the successors) and updated successor branches *)
+      hoist_cmds, ([], (PMatch(exps, branches'), match_sp))
+  )
+  (* if a variable is set by a read or peek, add it to 
+     the list and recurse. When we return, we will add 
+     hoisting statements for params set to the variable. *)
+  | (paction, sp)::pactions -> (
+    match paction with 
+    | PRead(cid, _) 
+    | PPeek(cid, _) -> (
+      let vars_read = cid::vars_read in
+      (* the result does not include this action. So we need to add it. 
+         But also, we want to add all the hoist commands related to cid. *)
+      let hoist_cmds, (subseq_actions, subseq_step) = elim_parser_inner output_event vars_read pactions pstep in
+      (* print_endline ("on a read of variable "^(CorePrinting.cid_to_string cid)); *)
+      let remaining_hoist_cmds, pactions = List.fold_left
+        (fun (remaining_hoist_cmds, pactions) hoist_cmd -> 
+          let (argcid, (paramcid, paramty)) = hoist_cmd in
+          (* downstream processing has commanded us to set 
+             paramcid with a peek at the point where this argcid is read. *)
+          if (Cid.equal argcid cid) then 
+            let peek_action = PPeek(paramcid, paramty) in
+            remaining_hoist_cmds, pactions@[(peek_action, sp)]          
+          else 
+            (* this command has nothing to do with us, propagate it *)
+            remaining_hoist_cmds@[hoist_cmd], pactions)
+        ([], [])
+        hoist_cmds
+      in
+      let pactions = MiscUtils.unique_list_of pactions in 
+      hoist_cmds, ((pactions@[(paction, sp)]@subseq_actions), subseq_step)
+    )
+    (* if a variable is updated by assign, we don't want to 
+       hoist param assignments that use it. *)
+    | PAssign(cid, _) -> (
+      let vars_read' = del vars_read cid in
+      (* so we update vars_read and then recurse *)
+      let hoist_cmds, (subseq_actions, subseq_step) = 
+        elim_parser_inner output_event vars_read' (pactions) pstep
+      in
+      hoist_cmds, (((paction, sp)::subseq_actions), subseq_step)
+    )
+    (* do nothing for remaining cases. *)
+    | PLocal _ 
+    | PSkip _ -> 
+      let hoist_cmds, (subseq_actions, subseq_step) = 
+        elim_parser_inner output_event vars_read (pactions) pstep
+      in
+      hoist_cmds, (((paction, sp)::subseq_actions), subseq_step)
+  )
+;;
+
 let eliminate_generates_with_direct_reads component = 
   let v = object
-  inherit [_] s_map as super
-  method! visit_parser_block output_event parser_block = 
-    let rec update_actions (pactions:(parser_action * sp) list) = 
-      match pactions with
-      | [] -> []
-      | (paction, sp)::pactions -> (
-        match paction with
-        | PRead(cid, ty) -> (
-          let params_set_to_cid = generates_using_cid 
-            output_event 
-            cid 
-            (List.split pactions |> fst) 
-            (fst parser_block.pstep)
-          in
-          (* add a peek statement for each param before the read action. *)
-          let peek_actions = List.map (fun param_cid -> (PPeek(param_cid, ty), sp)) params_set_to_cid in 
-          peek_actions@[paction, sp]@(update_actions pactions)
-        )
-        | _ -> (paction, sp)::(update_actions pactions)
-      )
-    in
-    let new_actions = update_actions parser_block.pactions in
-    let new_step = (super#visit_parser_step output_event (fst parser_block.pstep)), snd parser_block.pstep in 
-    (* {pactions=new_actions; pstep=new_step;}    now we do a second transformation on the block -- eliminate the generate, if there is one. *)
-    match generate_to_tagset output_event (fst new_step) with
-      | None -> {pactions=new_actions; pstep=new_step;}
-      | Some(tagset_action, exit_step) ->
-          {pactions = new_actions@[tagset_action, Span.default];
-          pstep = exit_step, Span.default;}     
-  end
+    inherit [_] s_map as super
+      (* just visit the main parser block *)
+      method! visit_parser_block output_event parser_block = 
+        let _, res = elim_parser_block output_event [] parser_block in
+        res
+    end
   in
   let output_event = (main_handler_of_component component).hdl_input in
   v#visit_component output_event component
@@ -226,23 +292,19 @@ let print_parsers core_prog =
     core_prog
 ;;
 
-
-(* public functions *)
 let parser_passes core_prog = 
   (* print_endline ("starting final parser passes");
   print_endline "---- parsers before optimizations ----";
   print_parsers core_prog; *)
-  (* eliminate generates, adding peek reads to set event parameter variables *)
+  (* replace generates with peek reads and assign statements. For event arguments that are variables 
+     which are read and not updated before the generate, hoist the setting of the event parameter by 
+     adding a peek immediately after the initial read.*)
   let core_prog = List.map (skip_control eliminate_generates_with_direct_reads) core_prog in
-  (* print_endline "---- parsers after eliminate_generates ----";
-  print_parsers core_prog; *)
   (* replace reads that are never used in the parser with skips -- 
      after this, the only reads that remain should be reads to 
      variables used in parser matches. And those variables should 
      not be used as event generation arguments, because of the previous 
      generate elimination pass. *)
   let core_prog = List.map (skip_control elim_dead_reads) core_prog in
-  (* print_endline "---- parsers after elim_dead_reads ----";
-  print_parsers core_prog; *)
   core_prog
 ;;

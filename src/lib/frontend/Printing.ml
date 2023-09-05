@@ -508,7 +508,9 @@ and parser_action_to_string action =
     Printf.sprintf "read %s : %s;" (id_to_string id) (ty_to_string ty)
   | PAssign (lval, exp) ->
     Printf.sprintf "%s = %s;" (exp_to_string lval) (exp_to_string exp)
-
+  | PLocal (id, ty, exp) ->
+    Printf.sprintf "%s %s = %s;" (ty_to_string ty) (id_to_string id) (exp_to_string exp)
+  
 and parser_branch_to_string (pat, block) =
   Printf.sprintf "| %s -> %s" (pat_to_string pat) (parser_block_to_string block)
 
