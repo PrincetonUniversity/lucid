@@ -15,46 +15,14 @@ open CoreSyntax
 open TofinoCoreNew
 open AddIntrinsics
 
-(* get the ids of all event parameters as they would appear 
-    in the body of this event's handler *)
-let rec localids_of_event_params event = 
-  match event with 
-  | EventSingle({evid; evparams;}) -> 
-    let param_ids = List.split evparams |> fst in 
-    let param_ids = List.map (fun id -> Cid.create_ids [evid; id]) param_ids in
-    param_ids
-  | EventUnion({evid; members; tag;}) -> 
-    (* get the parameters of all the members, then prefix them with 
-       this event's name.  *)
-    let param_ids = List.map (localids_of_event_params) members in
-    let param_ids = List.flatten param_ids in
-    let param_ids = List.map (fun id -> Cid.compound evid id) param_ids in
-    (* now add the tag struct field (note: we don't add the struct's subfields
-       is that okay? Do we even need to have the tag field here? ) *)
-    let tag_id = Cid.create_ids [evid; (fst tag)] in
-    tag_id :: param_ids
-  | EventSet({evid; members; flags;}) -> 
-    let param_ids = List.map (localids_of_event_params) members in
-    let param_ids = List.flatten param_ids in
-    let param_ids = List.map (fun id -> Cid.compound evid id) param_ids in
-    (* now add all the flags *)
-    let flag_struct_id, _, _ = flags in 
-    let flag_id = Cid.create_ids [evid; (flag_struct_id )] in 
-    (* let flag_ids = List.map (fun (flag, _) -> Cid.create_ids [evid; flag]) flags in *)
-    flag_id::param_ids
-  | EventWithMetaParams({event; params;}) ->
-    let inner_param_ids = localids_of_event_params event in
-    let meta_param_ids = List.map (fun (id, _) -> Cid.create_ids [id_of_event event; id]) params in
-    inner_param_ids @ meta_param_ids
-;;
 
 (* get a list of event parameter ids, grouped by base event *)
-let grouped_localids_of_event_params event : (cid list) list= 
+let grouped_fields_of_event event : (cid list) list= 
   match event with
   | EventUnion({evid; members; _}) -> (
     let param_ids = List.map 
       (fun member -> 
-        let member_param_ids = localids_of_event_params member in
+        let member_param_ids = fields_of_event member in
         let member_param_ids = List.map (fun id -> Cid.compound evid id) member_param_ids in
         member_param_ids
       ) members
@@ -63,16 +31,6 @@ let grouped_localids_of_event_params event : (cid list) list=
   )
   | _ -> error "[grouped_localids_of_event_params] not a union event"
 ;;
-(* get all the event parameters as though you are inside the event *)
-let ids_of_event_params event =
-  let param_cids = localids_of_event_params event in
-  List.map 
-    (fun param_cid -> match param_cid with
-      | Cid.Compound(_, param_id) -> param_id
-      | Cid.Id(_) -> failwith "ids_of_event_params: not a compound id")
-    param_cids
-;;
-
 
 (* scope event constructors in a parser *)
 let scope_pgen = 
@@ -237,14 +195,14 @@ let merge_handlers_in_component (c:component) : component =
       handlers      
     )
   in
-  (* scope local uses of event parameters *)
+  (* prefix local uses of event parameters *)
   let rename_map = 
     List.fold_left2
       (fun rename_map unscoped_cid scoped_cid -> 
         CidMap.add unscoped_cid scoped_cid rename_map)
       (CidMap.empty)
-      (ids_of_event_params input_event)
-      (localids_of_event_params input_event)
+      (fields_of_event input_event |> List.map Cid.tl)
+      (fields_of_event input_event)
   in
   let merged_hdl_stmt = AddHandlerTypes.rename#visit_statement
     rename_map  

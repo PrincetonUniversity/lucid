@@ -350,10 +350,7 @@ let replacer =
       | PRead (id, ty) -> self#replace_PRead env id ty span
       | PSkip ty -> self#replace_PSkip env ty span
       | PAssign (lexp, rexp) -> self#replace_PAssign env lexp rexp span
-      | PLocal(id, ty, exp) -> 
-        print_endline ("calling replace_plocal");
-        print_endline (Printing.parser_action_to_string action);
-        self#replace_PLocal env id ty exp span
+      | PLocal(id, ty, exp) -> self#replace_PLocal env id ty exp span
 
     method! visit_parser_block env (actions, (step, step_sp)) =
       let actions =

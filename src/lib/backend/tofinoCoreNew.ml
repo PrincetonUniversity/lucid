@@ -713,3 +713,47 @@ let events_of_component component =
   v#events
 ;;
 
+(* list all the fields of the event, fully prefixed *)
+let rec tyfields_of_event event : cid_params = 
+  match event with 
+  | EventSingle({evid; evparams;}) -> 
+    List.map (fun (id, ty) -> (Cid.create_ids [evid; id], ty)) evparams
+  | EventUnion({evid; members; tag;}) -> 
+    let user_params = tyfields_of_members evid members in
+    let tag_outer, (tag_inner, tag_ty) = tag in 
+    (Cid.create_ids [evid;tag_outer; tag_inner], tag_ty)::user_params
+  | EventSet({evid; members; flags;}) -> (
+    let user_params = tyfields_of_members evid members in
+    (* now add all the flags *)
+    let flag_struct_id, flag_fields, pad_field = flags in 
+    let flag_fields = List.map 
+      (fun (flag_id, flag_ty) -> 
+        Cid.create_ids [evid; flag_struct_id; flag_id], flag_ty)
+      flag_fields
+    in
+    match pad_field with
+    | None -> user_params@flag_fields
+    | Some(pad_id, pad_ty) -> 
+      user_params
+      @flag_fields
+      @[Cid.create_ids [evid; flag_struct_id; pad_id], pad_ty]
+  )
+  | EventWithMetaParams({event; params;}) ->
+    let inner_param_ids = tyfields_of_event event in
+    let meta_param_ids = List.map 
+      (fun (id, ty) -> Cid.create_ids [id_of_event event; id], ty) 
+      params 
+    in
+    inner_param_ids @ meta_param_ids
+and tyfields_of_members evid members = 
+  List.fold_left
+    (fun params member -> 
+      let member_params = tyfields_of_event member in
+      params@
+      (List.map 
+        (fun (cid, ty) -> Cid.compound evid cid, ty)
+        member_params))
+    []
+    members
+
+let fields_of_event event = tyfields_of_event event |> List.split |> fst ;;

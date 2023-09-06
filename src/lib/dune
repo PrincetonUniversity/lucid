@@ -117,7 +117,7 @@
    RemoveLocalInits
    RemoveInitOnlyStmts
    AddEgressParser
-   ParseOptimizer
+   ParserHoisting
    RenameBuiltins
    TofinoCorePrinting
    AddHandlerTypes

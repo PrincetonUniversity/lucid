@@ -409,7 +409,7 @@ let rec conflict_graph_of_statement (declared_before : cid list) (used_after : c
 let conflict_graph_of_handler (var_map:(cid * var) list) ds = 
   let main_hdl = (main_handler_of_decls ds) in
   let params_by_event = main_hdl.hdl_input 
-  |> grouped_localids_of_event_params 
+  |> grouped_fields_of_event 
   in
   let shared_params = 
     (main_hdl.hdl_preallocated_vars
@@ -543,7 +543,7 @@ let conflict_graph_of_parser var_map ds =
   let parser = main_parser_of_tds ds  in  
   match parser.pret_event with
   | Some(ret_event) -> 
-    let out_params = grouped_localids_of_event_params (ret_event) |> List.flatten in
+    let out_params = grouped_fields_of_event (ret_event) |> List.flatten in
     (* print_endline ("output parameters of event");
     CorePrinting.comma_sep CorePrinting.cid_to_string out_params |> print_endline; *)
     let conflict_pairs = conflict_graph_of_parse_block [] out_params parser.pblock |> 
@@ -824,7 +824,7 @@ let alias_groups (overlay_pairs : ((cid * cid) * ty) list) =
 
 type vloc = | Param | Prealloc | Local
 let is_param input_event cid = 
-  List.exists (fun x -> Cid.equal x cid) (grouped_localids_of_event_params input_event |> Caml.List.flatten) 
+  List.exists (fun x -> Cid.equal x cid) (grouped_fields_of_event input_event |> Caml.List.flatten) 
 ;;
 let is_prealloc main cid =
   List.exists (fun (x, _) -> (Cid.equal (Cid.id x) cid)) 
@@ -967,7 +967,7 @@ module ShareMemopInputsBaseline = struct
 let var_params ds (vars : Cid.t list) = 
   let params = 
     (main_handler_of_decls ds).hdl_input
-    |> localids_of_event_params
+    |> fields_of_event
   in
   let var_params = 
     let folder var_params var =
@@ -1147,7 +1147,7 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
      in
      (* build the base conflict graph, which includes edges between all parameters in the same event *)
      let params_by_event = main_hdl.hdl_input 
-     |> grouped_localids_of_event_params 
+     |> grouped_fields_of_event 
      in
      (* let param_conflicts = List.fold_left params_by_event
        ~init:[]
@@ -1658,7 +1658,7 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
    (* is cid a parameter of the input event? *)
    
    let is_param input_event cid = 
-     List.exists (grouped_localids_of_event_params input_event |> Caml.List.flatten) ~f:(fun x -> Cid.equal x cid)
+     List.exists (grouped_fields_of_event input_event |> Caml.List.flatten) ~f:(fun x -> Cid.equal x cid)
    ;;
    let is_prealloc main cid =
      List.exists 

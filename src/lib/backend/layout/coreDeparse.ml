@@ -160,7 +160,7 @@ let process_component comp =
   | HControl -> comp 
   | _ -> 
     let main = main_handler_of_component (comp) in
-    let output_cids = MergeHandlers.localids_of_event_params main.hdl_output in 
+    let output_cids = fields_of_event main.hdl_output in 
     (* extract deparser statements, replace with flag setting statements *)
     let main', flag_params, deparser_stmts, arg_cids = match main.hdl_body with
       | SPipeline(stmts) -> 
@@ -183,7 +183,7 @@ let process_component comp =
     (*param is an input: no change
       param is a shared local: remove from shared local and put into meta params
       param is a local: put into meta params and change the local declaration to an assignment *)
-    let param_cids = MergeHandlers.localids_of_event_params main.hdl_input in 
+    let param_cids = fields_of_event main.hdl_input in 
     let prealloc_local_cids = main'.hdl_preallocated_vars |> List.map (fun (id, _) -> Cid.id id) in 
     let arg_kinds = List.map (fun (cid, _) -> var_sort param_cids prealloc_local_cids cid) arg_cids in
     let main' = List.fold_left

@@ -27,6 +27,7 @@ val to_ids : t -> Id.t list
 val to_ids_prefix : t -> Id.t * Id.t list
 val first_id : t -> Id.t
 val last_id : t -> Id.t
+val tl : t -> t
 
 (* Operations *)
 

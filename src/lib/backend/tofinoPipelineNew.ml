@@ -211,8 +211,8 @@ let compile ds portspec =
   let core_prog = GeneratesNew.eliminate_generates portspec core_prog in
   dump_prog "tofinocore post generate elimination" "tofinocore_post_genelim" core_prog;
 
-  report_if_verbose "-------Optimizing parsers (speculative peeking)-------";
-  let core_prog = ParseOptimizer.parser_passes core_prog in 
+  report_if_verbose "-------Eliminating event generations in parser (and hoisting)-------";
+  let core_prog = ParserHoisting.parser_passes core_prog in 
 
   report_if_verbose "-------Tagging large match statements as solitary-------";
   let core_prog = SolitaryMatches.process_core 20 core_prog in

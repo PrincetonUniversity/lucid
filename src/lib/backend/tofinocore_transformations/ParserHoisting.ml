@@ -1,8 +1,34 @@
-(* parser optimization and final preparation for p4 ir *)
+(* 
+    This transformation is hoisting for event parameters that 
+    are set to parse variables that are read directly from the header. 
+    For each parse statement read x, look at the rest of the code. 
+    Find each generate statement that passes x to an event and, if 
+    x is not modified between its read point and its use, replace 
+    "read x" with "peek event_arg; read x;". That is, read directly to 
+    the event param, eliminating the copy from x -> event_arg 
+    
+    This transformation also handles local and assignment operations in 
+    the parser the same way, so ultimately an output parameter set to 
+    x will be written to at the last statement that updated x in its 
+    control flow.
+*)
+
+(* example:
+  read int a;
+  ...
+  generate(foo(a, ...)); 
+  ==> 
+  peek foo.param0;
+  read a;
+  ...
+  generate(foo(a, ...));
+  *)
+
+
 open CoreSyntax
 open TofinoCoreNew
 open AddIntrinsics
-[@@@ocaml.warning "-21-27-26"]
+(* [@@@ocaml.warning "-21-27-26"] *)
 
 
 (* given a list of events, find the one that matches cid *)
@@ -42,94 +68,6 @@ let scoped_params_of_evconstr output_event evconstr_cid =
 ;;
 
 
-
-(* optimization pass: if a variable is read but never used, replace the read with a skip *)
-
-(* do we use cid in the parser block before it is read again? *)
-let used_in cid out_params pactions pstep  =   
-  if (List.exists
-    (fun (pid, _) -> Cid.equal (Cid.id pid) cid)
-    out_params)
-    then true
-  else 
-    let used = ref false in
-    let v = object
-    inherit [_] s_iter as super
-    method! visit_PRead () cid' _ = 
-      if (Cid.equal cid cid')
-        then error "[used_in] while checking to see if a parser variable is ever used, it was found to be read. That means its read twice, which should be impossible."
-    method! visit_EVar () cid' = 
-      if (Cid.equal cid cid') then (used := true)
-    end
-    in
-    List.iter (v#visit_parser_action ()) pactions;
-    v#visit_parser_step () pstep;
-    !used  
-;;
-
-(* replace reads that are never used with skips. *)
-let elim_dead_reads component = 
-  let v = object
-  inherit [_] s_map as super
-  method! visit_parser_block (out_params: params) parser_block = 
-    let rec update_actions (pactions:(parser_action * sp) list) = 
-      match pactions with 
-      | [] -> []
-      | (paction, sp)::pactions -> (
-        (* we can delete paction if it reads something that is not 
-           used in the other pactions or the step, or an out param. *)
-        match paction with 
-        | PRead(cid, ty) -> (
-          let used_later = used_in cid out_params (List.split pactions |> fst) (fst parser_block.pstep) in
-          if (used_later)
-            then (paction, sp)::(update_actions pactions)
-            else (PSkip(ty) ,sp)::(update_actions pactions)
-        )
-        | _ -> (paction, sp)::(update_actions pactions)
-      )
-    in
-    let new_actions = update_actions parser_block.pactions in
-    let new_step = (super#visit_parser_step out_params (fst parser_block.pstep)), snd parser_block.pstep in 
-    {pactions=new_actions; pstep=new_step;}
-  end
-  in
-  let p = List.find_map
-    (fun decl -> match decl.td with 
-      | TDParser(p) -> Some(p) | _ -> None)
-    component.comp_decls
-  in
-  match p with 
-  | Some(p) -> 
-    v#visit_component p.pret_params component
-  | None -> component
-  
-;;
-
-
-(* Eliminate generates in an optimized way: 
-  instead of reading packet data to a parser variable x, then copying the 
-  variable to an event parameter y (which is what a generate does), 
-  just add code that peeks to y (reads without advancing read pointer) 
-  immediately before reading to x. 
-example:
-  read int a;
-  ...
-  generate(foo(a, ...)); 
-  ==> 
-  peek foo.param0;
-  read a;
-  ...
-  generate(foo(a, ...));
-  *)
-
-(* update: 
-    This transformation is basically hoisting for event parameters that 
-    are set to parse variables that are read directly from the header. 
-    For each parse statement read x, look at the rest of the code. 
-    Find each generate statement that passes x to an event and, if 
-    x is not modified between its read point and its use, replace 
-    "read x" with "peek event_arg; read x;". That is, read directly to 
-    the event param, eliminating the copy from x -> event_arg *)
 let del xs x = 
   (* remove x from xs *)
   List.filter (fun y -> not (x = y)) xs
@@ -190,13 +128,13 @@ and elim_parser_inner output_event (vars_read : cids) (pactions : paction_sps) (
         let tag_width = size_of_tint tag_ty in
         let tag_val = vint_exp (num_of_event base_event) tag_width in
         let assign_tag_action = PAssign(tag_cid, tag_val) in
-        print_endline ("generate step: "^(CorePrinting.parser_step_to_string (fst pstep)));
-        if (List.length gen_assigns > 0) then 
+        (* print_endline ("generate step: "^(CorePrinting.parser_step_to_string (fst pstep))); *)
+        (* if (List.length gen_assigns > 0) then 
         print_endline ("adding generate-specific assignment statements");
         List.iter
           (fun (pa, _) -> CorePrinting.parser_action_to_string pa |> print_endline)
           gen_assigns
-        ;
+        ; *)
         hoist_cmds, ((assign_tag_action, step_sp)::gen_assigns, (exit_step, step_sp))
       )
       | _ -> error "generate step does not call an event constructor"
@@ -244,20 +182,30 @@ and elim_parser_inner output_event (vars_read : cids) (pactions : paction_sps) (
         hoist_cmds
       in
       let pactions = MiscUtils.unique_list_of pactions in 
-      hoist_cmds, ((pactions@[(paction, sp)]@subseq_actions), subseq_step)
+      remaining_hoist_cmds, ((pactions@[(paction, sp)]@subseq_actions), subseq_step)
     )
-    (* if a variable is updated by assign, we don't want to 
-       hoist param assignments that use it. *)
-    | PAssign(cid, _) -> (
-      let vars_read' = del vars_read cid in
-      (* so we update vars_read and then recurse *)
-      let hoist_cmds, (subseq_actions, subseq_step) = 
-        elim_parser_inner output_event vars_read' (pactions) pstep
+    (* locals and assigns are treated the same as reads, but it may be better to inline them? *)
+    | PAssign(cid, exp)
+    | PLocal(cid, _, exp) -> (
+      let vars_read = cid::(del vars_read cid) in
+      let hoist_cmds, (subseq_actions, subseq_step) = elim_parser_inner output_event vars_read pactions pstep in
+      let remaining_hoist_cmds, hoisted_actions = List.fold_left
+        (fun (remaining_hoist_cmds, pactions) hoist_cmd -> 
+          let (argcid, (paramcid, _)) = hoist_cmd in
+          (* downstream processing has commanded us to set 
+             paramcid with a peek at the point where this argcid is read. *)
+          if (Cid.equal argcid cid) then 
+            let assign_action = PAssign(paramcid, exp) in
+            remaining_hoist_cmds, pactions@[(assign_action, sp)]          
+          else 
+            (* this command has nothing to do with us, propagate it *)
+            remaining_hoist_cmds@[hoist_cmd], pactions)
+        ([], [])
+        hoist_cmds
       in
-      hoist_cmds, (((paction, sp)::subseq_actions), subseq_step)
+      let hoisted_actions = MiscUtils.unique_list_of hoisted_actions in 
+      remaining_hoist_cmds, ((hoisted_actions@[(paction, sp)]@subseq_actions), subseq_step)
     )
-    (* do nothing for remaining cases. *)
-    | PLocal _ 
     | PSkip _ -> 
       let hoist_cmds, (subseq_actions, subseq_step) = 
         elim_parser_inner output_event vars_read (pactions) pstep
@@ -279,6 +227,88 @@ let eliminate_generates_with_direct_reads component =
   v#visit_component output_event component
 ;;
 
+(* do we use cid in the parser block before it is read again? *)
+let used_in cid out_params pactions pstep  =   
+  if (List.exists
+    (fun (pid, _) -> Cid.equal pid cid)
+    out_params)
+    then true
+  else 
+    let used = ref false in
+    let v = object
+    inherit [_] s_iter as super
+    method! visit_PRead () cid' _ = 
+      if (Cid.equal cid cid')
+        then error "[used_in] while checking to see if a parser variable is ever used, it was found to be read. That means its read twice, which should be impossible."
+    method! visit_EVar () cid' = 
+      if (Cid.equal cid cid') then (used := true)
+    end
+    in
+    List.iter (v#visit_parser_action ()) pactions;
+    v#visit_parser_step () pstep;
+    !used  
+;;
+
+(* eliminate variables that are dead after hoisting. 
+   (never used in an expression)
+   replace reads to those variables with skips, delete declarations and assignments. *)   
+let elim_dead_reads component = 
+  let v = object
+  inherit [_] s_map as super
+  method! visit_parser_block (out_params: cid_params) parser_block = 
+    let rec update_actions (pactions:(parser_action * sp) list) = 
+      match pactions with 
+      | [] -> []
+      | (paction, sp)::pactions -> (
+        (* we can delete paction if it reads something that is not 
+           used in the other pactions or the step, or an out param. *)
+        match paction with 
+        | PLocal(cid, _, _)
+        | PAssign(cid, _) -> (
+          (* for locals and assigns, we don't add a skip, we just delete the statement. *)
+          let used_later = used_in cid out_params (List.split pactions |> fst) (fst parser_block.pstep) in
+          if (used_later)
+            then (paction, sp)::(update_actions pactions)
+            else (update_actions pactions)
+        )
+        | PRead(cid, ty) -> (
+          let used_later = used_in cid out_params (List.split pactions |> fst) (fst parser_block.pstep) in
+          if (used_later)
+            then (paction, sp)::(update_actions pactions)
+            else (PSkip(ty) ,sp)::(update_actions pactions)
+        )
+        | _ -> (paction, sp)::(update_actions pactions)
+      )
+    in
+    let new_actions = update_actions parser_block.pactions in
+    let new_step = (super#visit_parser_step out_params (fst parser_block.pstep)), snd parser_block.pstep in 
+    {pactions=new_actions; pstep=new_step;}
+  end
+  in
+  let p = List.find_map
+    (fun decl -> match decl.td with 
+      | TDParser(p) -> Some(p) | _ -> None)
+    component.comp_decls
+  in
+  match p with 
+  | Some(p) -> 
+    (* the builtin params are read in their entirety, not broken 
+      into components, so we need the names of the structs not their fields. *)
+    let builtin_params = (List.map (fun (i, t) -> Cid.id i, t) p.pret_params) in
+    let out_params = match p.pret_event with 
+    | None -> builtin_params
+    | Some pret_event -> 
+        let event_field_params = tyfields_of_event pret_event in
+        builtin_params
+        @event_field_params
+    in
+    v#visit_component out_params component
+  | None -> component
+  
+;;
+
+
+
 let print_parsers core_prog = 
   List.iter
     (fun component -> 
@@ -292,10 +322,9 @@ let print_parsers core_prog =
     core_prog
 ;;
 
+
 let parser_passes core_prog = 
-  (* print_endline ("starting final parser passes");
-  print_endline "---- parsers before optimizations ----";
-  print_parsers core_prog; *)
+  (* print_endline ("starting final parser passes"); *)
   (* replace generates with peek reads and assign statements. For event arguments that are variables 
      which are read and not updated before the generate, hoist the setting of the event parameter by 
      adding a peek immediately after the initial read.*)

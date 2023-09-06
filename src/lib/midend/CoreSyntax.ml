@@ -185,6 +185,7 @@ and tbl_entry =
   ; eargs : exp list
   }
 and params = (id * ty) list
+and cid_params = (cid * ty) list
 and body = params * statement
 
 and handler_sort =
