@@ -72,6 +72,21 @@ and header = {
   header_const : value option;
 }
 
+(* 
+  params = [
+    outer_id, TRecord([parser_local_var_a, int<32>; ...])
+    // then how do we translate this? 
+    // we need to generate a named type... 
+    // okay. No problem. Just give it whatever name, 
+    // at the point in time that you generate the struct. 
+    // and use the whatever ty name in the definition of 
+    // the struct (e.g., outer_id : fresh_ty_name ())
+    // when you are referencing the field, you don't need 
+    // to know the type. Its just outer_id.parser_local_var_a
+  ]   
+
+*)
+
 and event =
   | EventSingle of {
     evid:id; 
@@ -119,8 +134,10 @@ and hevent = {
   hdl_body : hbody;  
   hdl_deparse_params : params; (* parameters of the handler's deparser *)
   hdl_deparse : statement; (* the deparser, if there is one *)
-  hdl_input : event;
-  hdl_output : event;
+  hdl_input : id; 
+  hdl_output : id; 
+    (*input and output are event ids, for merged events that should be 
+     constructed at the same time as the handler. *)
   
   hdl_preallocated_vars : params;(*variables that are pre allocated, but not set*)
   
@@ -130,15 +147,7 @@ and hevent = {
   hdl_retparams : params; (* multicast group, egress port, etc *)
   
 }
-(* 
-handler to ingress translation summary: 
 
-control $hdl_id (out $hdl_output, inout $hdl_input, inout $hdl_params, inout $hdl_retparams) {
-  $hdl_body
-}
-
-
-*)
 and handler = 
   (* a handler with parameters -- basically just copied from input. *) 
   | HParams of {
@@ -155,7 +164,10 @@ and parser = {
   pid : id;
   pparams : params;
   pblock : parser_block;
-  pret_event : event option;
+  pret_event : id option;
+  phdlret_event : id option; 
+    (* P4's semantics force the parser to know about 
+       the header that the proceeding handler emits... *)
   pret_params : params;
 }
 
@@ -263,6 +275,7 @@ let decl_to_tdecl (decl:decl) =
     td = TDParser({pid; pparams; pblock;
       pret_event=None; (*the return event of the ingress parser 
                          is set when events are merged*)
+      phdlret_event=None;
       pret_params=[intr_id, intr_ty];});
     tdspan=decl.dspan;
     tdpragma=opt_to_list decl.dpragma;}
@@ -270,6 +283,7 @@ let decl_to_tdecl (decl:decl) =
   | DParser(pid, pparams, pblock) -> {
     td = TDParser({pid; pparams; pblock; 
         pret_event=None;
+        phdlret_event=None;
         pret_params = [];});
     tdspan = decl.dspan;
     tdpragma = opt_to_list decl.dpragma;}
@@ -363,16 +377,18 @@ let sort_of_event event =
   | EventSingle {evsort} -> evsort
   | _ -> error "cant get the sort of a compound event"
 ;;
-let etag event = 
+let rec etag event = 
   match event with 
   | EventUnion{tag;} -> tag
+  | EventWithMetaParams{event; params=_;} -> etag event
   | _ -> error "[etag] not a union event, so no tag"
 ;;
 
-let etagged_members event = 
+let rec etagged_members event = 
   match event with 
   | EventUnion{members; member_nums;} -> 
     List.combine member_nums members
+  | EventWithMetaParams{event; params=_;} -> etagged_members event
   | _ -> error "[etagged_members] not a union, so no tagged members"
 ;;
 
@@ -528,13 +544,9 @@ let main_of_decls tds =
   | SPipeline _ -> error "[main_of_decls] main handler is not flat."
 ;;
 
-
-
 let add_preallocated_locals pvars params = 
   pvars@params
 ;;
-
-
 
 let add_shared_local tds tmp_id tmp_ty =
   let tmp_e = var_sp (Cid.id tmp_id) tmp_ty Span.default in
@@ -672,7 +684,7 @@ let skip_control fcn comp =
 ;;
 
 
-let is_union_of_unions event = 
+let rec is_union_of_unions event = 
   match event with 
   | EventUnion({members;}) -> 
     List.for_all 
@@ -680,6 +692,7 @@ let is_union_of_unions event =
       | EventUnion(_) -> true
       | _ -> false)
       members
+  | EventWithMetaParams({event; params=_;}) -> is_union_of_unions event
   | _ -> false
 ;;
 
@@ -757,3 +770,39 @@ and tyfields_of_members evid members =
     members
 
 let fields_of_event event = tyfields_of_event event |> List.split |> fst ;;
+
+
+(* event update helpers. So that we don't have to use refs. *)
+(* look through the declarations in comp and find the event with id evid *)
+let get_event_tds tds evid = 
+  let events = List.filter_map (fun tdecl -> 
+    match tdecl.td with 
+    | TDEvent(e) -> Some(e)
+    | _ -> None)
+  tds in
+  List.find (fun e -> (id_of_event e) = evid) events
+;;
+
+let get_event comp evid = get_event_tds comp.comp_decls evid
+
+(* replace the event in the component *)
+let set_event_tds tds event = 
+  let evid = id_of_event event in
+  List.map (fun tdecl -> 
+    match tdecl.td with 
+    | TDEvent(e) -> 
+      if (id_of_event e) = evid then {tdecl with td = TDEvent(event)}
+      else tdecl
+    | _ -> tdecl)
+  tds
+
+let set_event comp event = 
+  {comp with comp_decls=set_event_tds comp.comp_decls event}
+
+let main_input_event tds = 
+  let main_handler = main_handler_of_decls tds in
+  get_event_tds tds main_handler.hdl_input
+
+let main_output_event tds = 
+  let main_handler = main_handler_of_decls tds in
+  get_event_tds tds main_handler.hdl_output

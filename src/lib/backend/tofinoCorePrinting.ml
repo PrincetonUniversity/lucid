@@ -55,8 +55,8 @@ let hevent_to_string h =
     | HData -> ""
     | HEgress -> "@egress"
   in
-  let params = (id_of_event h.hdl_input, {raw_ty=TEvent; tspan=Span.default})::h.hdl_params in 
-  let out_params = (id_of_event h.hdl_output, {raw_ty=TEvent; tspan=Span.default})::h.hdl_retparams in 
+  let params = ( h.hdl_input, {raw_ty=TEvent; tspan=Span.default})::h.hdl_params in 
+  let out_params = ( h.hdl_output, {raw_ty=TEvent; tspan=Span.default})::h.hdl_retparams in 
   let body_str = match h.hdl_body with 
     | SFlat stmt -> stmt_to_string stmt |> indent_body
     | SPipeline stmts -> 
@@ -102,7 +102,7 @@ let parser_to_string p =
       "parser %s(%s) returns(event %s, %s)\n{\n%s\n}\n"
       (id_to_string p.pid)
       (params_to_string p.pparams)
-      (id_of_event pret_event |> id_to_string)
+      ( (pret_event) |> id_to_string)
       (params_to_string p.pret_params)
       (parser_block_to_string p.pblock |> indent_body)
   | None -> 

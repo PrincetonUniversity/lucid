@@ -6,8 +6,8 @@ open AddIntrinsics
 open AddIngressParser
 [@@@ocaml.warning "-21-27-26"]
 
-let parser pid pparams pblock pevent outparams = 
-  TDParser({pid; pparams; pblock; pret_event=Some(pevent); pret_params = outparams;})
+let parser pid pparams pblock pret_event phdlret_event outparams = 
+  TDParser({pid; pparams; pblock; pret_event=Some(pret_event); phdlret_event = Some(phdlret_event); pret_params = outparams;})
 ;;
 
 (*  *)
@@ -309,7 +309,9 @@ let id = Id.create
    and generates the to_egress event. *)
 let make_egr_parser 
   (from_ingress : event) 
-  (to_egress : event) = 
+  (to_egress : event) 
+  (from_egress : event)
+  = 
     (* first, produce 
 
       parser main() returns(event egress_input, egress_intrinsic_metadata_t egress_intrinsic_metadata) {
@@ -352,7 +354,8 @@ let make_egr_parser
         )      
       )
     )
-    to_egress
+    (id_of_event to_egress)
+    (id_of_event from_egress)
     (List.map intrinsic_to_param [egress_intrinsic_metadata_t;]) 
       (* egress_intrinsic_metadata_from_parser_t; egress_intrinsic_metadata_for_deparser_t]) *)
   in
@@ -365,20 +368,23 @@ let add_parser core_prog : prog =
   let ingress_output_event = List.filter_map
     (fun comp -> 
       if (comp.comp_sort = HData)
-        then Some((main_handler_of_component comp).hdl_output)
+        then Some(get_event comp (main_handler_of_component comp).hdl_output)
         else None  )
     core_prog
   |> List.hd
   in
-  let egress_input_event = List.filter_map
+  let egress_input_event, egress_output_event = List.filter_map
   (fun comp -> 
     if (comp.comp_sort = HEgress)
-      then Some((main_handler_of_component comp).hdl_input)
+      then 
+        let inp_ev = get_event comp (main_handler_of_component comp).hdl_input in
+        let oup_ev = get_event comp (main_handler_of_component comp).hdl_output in
+        Some(inp_ev, oup_ev)
       else None  )
     core_prog
   |> List.hd
   in
-  let egr_parser = make_egr_parser ingress_output_event egress_input_event in 
+  let egr_parser = make_egr_parser (ingress_output_event) egress_input_event egress_output_event in 
   let egr_parser = {td=egr_parser; tdspan = Span.default; tdpragma = []} in 
   let core_prog = List.map (fun comp -> if (fst comp.comp_id = "egress") then 
     {comp with comp_decls = egr_parser::comp.comp_decls} else comp) core_prog in

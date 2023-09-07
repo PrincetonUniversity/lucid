@@ -312,7 +312,8 @@ and translate_hash prog_env size args =
     [dhash], hasher_call
 
 and translate_checksum prog_env args =
-  (* translate a checksum. Should only happen in a deparser.  *)
+  (* translate a checksum. This version should only be called for the deparser.  *)
+  (* ah. and the way that we translate checksums is different in each. Of course it is. *)
   let checksum_obj_id = fresh_numbered_id "checksum" in
   let checksum_obj = dobj (id "Checksum") [] [] checksum_obj_id (Span.default) in
   let arglist = elist (snd (translate_exps prog_env args)) in 
@@ -943,6 +944,28 @@ and translate_headers prevs hdrs struct_ty =
   (* print_endline ("[translate_headers] stop in "^(fst evid)); *)
   res
 
+(* translate a parameter, whose type may be an anonymous record *)
+and translate_param_with_anon_recty struct_kind (id, ty) = 
+  match ty.raw_ty with
+  | TRecord(fields) -> (
+    (* first, we need a name for this type. *)
+    let ty_id = Id.fresh_name ((fst id)^"_t") in
+    (* now we can build the struct *)
+    let struct_decl = dstruct
+      ty_id
+      struct_kind
+      (List.map (fun (id, rty) -> id, translate_ty (CoreSyntax.ty rty)) fields)
+    in
+    let ref_ty = translate_ty (CoreSyntax.ty (CoreSyntax.TName(Cid.id ty_id, [], false))) in
+    (* give back the translated param and the struct declaration *)
+    (id, ref_ty), [struct_decl]
+  )
+  (* for everything else, just translate the type directly *)
+  | _ -> (id, translate_ty ty), []
+
+
+
+
 and translate_event (prevs:id list) struct_ty event : id list * T.decl list * (T.decl option) =
   let this_event_struct_id = tyid_of_event struct_ty event in 
   (* check if this event's struct declarations have already been generated *)
@@ -1055,26 +1078,31 @@ and translate_event (prevs:id list) struct_ty event : id list * T.decl list * (T
       | EventWithMetaParams({event; params;}) -> (
         (* translate the inner event *)
         let prevs, event_decls, event_decl_opt = translate_event prevs struct_ty event in
+        (* if any of the parameters have anonymous record types, generate named record 
+           types for them now. *)
+        let translated_params = List.map (translate_param_with_anon_recty struct_ty) params in
+        let translated_params, param_anon_hdr_decls = List.split translated_params in
+        let param_anon_hdr_decls = List.flatten param_anon_hdr_decls in 
         (* add the params to the declaration for the outer event (event_decl_opt) *)
         let event_decl_opt = match event_decl_opt with
           | None -> None
           | Some(in_event) -> 
           begin 
             let in_event = match in_event.d with 
-              | DStructTy{id=id; sty=sty; fields=fields;} ->
+              | DStructTy{id; sty; fields;} ->
               begin
                 {in_event with 
-                  d = DStructTy({id; sty; 
-                    fields = fields@(List.map 
-                      (fun (id, ty) -> id, translate_ty ty)
-                      params);})}
+                  d = DStructTy({id; sty; fields = fields@translated_params;})}
               end
               | _ -> in_event
             in
             Some(in_event)
           end
         in
-        prevs, event_decls, event_decl_opt
+        (* the declarations returned are all the new inner event declarations, 
+           plus any declarations generated for the anonymous types in 
+           in the parameters (which, at the time of writing, was just checksum arguments)*)
+        prevs, event_decls@param_anon_hdr_decls, event_decl_opt
         
         
       )
@@ -1112,7 +1140,7 @@ let solitary_pragma = param_pragma "solitary" ;; *)
 
 ;; *)
 
-let translate_params (main_hdl:hevent) =
+let translate_params (comp : CS.component) (main_hdl:hevent) =
   (*  construct parameters for the main control flow of a 
       component. 
 control IngressControl(
@@ -1126,9 +1154,11 @@ control IngressControl(
     inout ingress_intrinsic_metadata_for_tm_t ig_tm_md)
     {
   *)
+  let ein = CS.get_event comp main_hdl.hdl_input in
+  let eout = CS.get_event comp main_hdl.hdl_output in
   let event_params = [
-    inoutparam (tstruct (tyid_of_event TMeta main_hdl.hdl_output)) (id_of_event main_hdl.hdl_output);
-    inoutparam (tstruct (tyid_of_event TMeta main_hdl.hdl_input)) (id_of_event main_hdl.hdl_input);
+    inoutparam (tstruct (tyid_of_event TMeta eout)) (id_of_event eout);
+    inoutparam (tstruct (tyid_of_event TMeta ein)) (id_of_event ein);
   ] in
   let in_params = List.map 
     (fun (i, t) -> inparam (translate_ty t) i) 
@@ -1144,22 +1174,21 @@ control IngressControl(
 (*** declaration translation, starting with an outer context / env 
     that includes an inner "program" environment (for statements) ***)
 type translate_decl_env = {
-  component_id : id;
+  component : CS.component;
   penv : prog_env;
   (* some declarations end up going outside of the control block, 
      others end up going inside the control block...  *)
   globals : T.decl list; (* global wrt main handler *)
   locals  : T.decl list; (* local wrt main handler *)
-  prev_events : id list;
+  prev_events : id list; (* ids of events that have already been translated *)
   extern_tdecls : tdecls; 
   (*tofinocore declarations that are deleted because they are externs, 
     but we need to keep track of them for field names and types. *)
-  main_out_event : event option;
 }
 
 (* context helpers *)
-let new_denv component_id penv = 
-  {component_id; penv; globals = []; locals = []; prev_events = []; extern_tdecls = []; main_out_event = None;}
+let new_denv component penv = 
+  {component; penv; globals = []; locals = []; prev_events = []; extern_tdecls = [];}
 ;;
 (* _d_env  _w_rapper -- apply a function that expects a 
    penv to a denv -- usage: dw bind_memop penv ... *)
@@ -1231,7 +1260,7 @@ let sassign_lookahead pkt_arg cid ty =
 
 
 (* construct parameters for the parser that feeds given handler *)
-let translate_parser_params (handler_out_event : event) (parser:parser) = 
+let translate_parser_params (comp : component) (parser:parser) = 
 (* P4 params: 
 
   directionless packet_in pkt *implicit*
@@ -1241,13 +1270,15 @@ let translate_parser_params (handler_out_event : event) (parser:parser) =
 *)
   let pkt_t, pkt_arg = id"packet_in", id"pkt" in 
   let pkt_param = param (tstruct pkt_t) pkt_arg in
+  let parser_out_event = get_event comp (parser.pret_event |> Option.get) in
+  let handler_out_event = get_event comp (parser.phdlret_event |> Option.get) in
   let hdr_param = outparam 
     (tstruct (tyid_of_event TMeta handler_out_event)) 
     (id_of_event handler_out_event) 
   in 
   let meta_param = outparam
-    (tstruct (tyid_of_event TMeta (Option.get parser.pret_event)))
-    (id_of_event (Option.get parser.pret_event))
+    (tstruct (tyid_of_event TMeta parser_out_event))
+    (id_of_event parser_out_event)
   in
   let out_params = List.map 
     (fun (i, t) -> outparam (translate_ty t) i) 
@@ -1256,19 +1287,91 @@ let translate_parser_params (handler_out_event : event) (parser:parser) =
   pkt_arg, [pkt_param; hdr_param; meta_param]@out_params
 ;;
 
+(* translate a checksum expression that appears in a parser. 
+   These have to be converted to a sequence of "subtract" 
+   checksum operations, each followed by an invalidate operation 
+   to make sure the header doesn't propagate to egress, and finally 
+   at the end a checksum.get that replaces the exp *)
+let translate_parser_checksum penv exp = 
+  let args = match exp.e with 
+    | EHash(_, _::args) -> args
+    | _ -> error "[translate_parser_checksum] expected hash exp"
+  in
+  let checksum_obj_id = fresh_numbered_id "checksum" in
+  let checksum_obj = dobj (id "Checksum") [] [] checksum_obj_id (Span.default) in
+  let arg_exprs = snd (translate_exps penv args) in
+  let arg_cids = List.map (CoreSyntax.exp_to_cid) args in
+  (* let arglist = elist (snd (translate_exps penv args)) in  *)
+  (* now... one subtract and invalidate for each arg *)
+  let pre_stmts, post_stmts = List.fold_left2
+    (fun (pre_stmts, post_stmts) arg_expr arg_cid -> 
+      let arglist = elist [arg_expr] in
+      let sub_call = scall (Cid.create_ids [checksum_obj_id; id "subtract"]) [arglist] in
+      let arg_hdr_cid = Cid.to_ids arg_cid |> List.rev |> List.tl |> List.rev |> Cid.create_ids  in 
+      let invalidate_call = 
+        scall
+        (Cid.concat arg_hdr_cid (Cid.create ["setInvalid"]))
+        []
+      in
+
+      (pre_stmts@[sub_call], post_stmts@[invalidate_call]))
+    ([], [])
+    arg_exprs
+    arg_cids
+  in
+  let pre_stmt = sseq pre_stmts in
+  let post_stmt = sseq post_stmts in 
+  (* finally, a get call for the expression *)
+  let get_call = ecall
+    (Cid.create_ids [checksum_obj_id; id "get"])
+    []
+  in
+  [checksum_obj], pre_stmt, get_call, post_stmt
+;;
+
+let is_checksum exp = match exp.e with 
+  | EHash(_, poly::_) -> (
+    match poly.e with 
+    | EVar(cid) -> Cid.equal cid (Cid.id Builtins.checksum_id)
+    | _ -> false
+  )
+  | _ -> false
+;;
+
 let translate_parser denv parser = 
-  (* we need to know the output event of the handler that this 
-     parser feeds, because one of the parser's output parameters 
-     is the handler's output event. *)
-  let next_hdl_out_event = Option.get denv.main_out_event in
-  let pkt_arg, params = translate_parser_params next_hdl_out_event parser in 
+  let parser_out_event = get_event denv.component (parser.pret_event |> Option.get) in
+  let handler_out_event = get_event denv.component (parser.phdlret_event |> Option.get) in
+  (* vars declared in the handler's output as headers (checksum args) *)
+  let handler_out_cids = match handler_out_event with
+    | EventWithMetaParams{params} -> 
+      List.map (fun param -> 
+        let param_cid, _ = ParserHoisting.recwrap_extract param in
+        (* if recwrap_extract returned, it is a header *)
+        let hdr_field_only_cid = 
+          Cid.to_ids param_cid |> List.rev |> List.tl |> List.rev |> Cid.create_ids 
+        in 
+        Cid.compound 
+          (id_of_event handler_out_event)
+          hdr_field_only_cid
+        ) 
+        params
+    | _ -> []
+  in
+
+  (* header parameters are all the intrinsics in pret_params, plus all the 
+     params in handler_out_event *)
+  let param_cids = 
+    (List.map (fun (id, _) -> Cid.id id) parser.pret_params)
+    @handler_out_cids
+  in
+
+  let pkt_arg, params = translate_parser_params denv.component parser in 
   let is_param cid : bool = 
-    let param_cids = List.map (fun (id, _) -> Cid.id id) parser.pret_params in
     List.exists (Cid.equal cid) param_cids
   in
   let is_event_field cid : bool = 
     let fst_id = Cid.to_ids cid |> List.hd in
-    let out_ev_id = parser.pret_event |> Option.get |> id_of_event in
+    let out_ev_id = parser_out_event |> id_of_event in
     Id.equal fst_id out_ev_id
   in
   let translated_parser_blocks = ref [] in
@@ -1345,11 +1448,17 @@ let translate_parser denv parser =
       | false -> [], slocal_lookahead pkt_arg cid (translate_ty ty)
     )
     | PSkip(ty) -> [], sadvance pkt_arg (size_of_tint ty)
-    | PAssign(cid, exp) -> 
+    | PAssign(cid, exp) when (is_checksum exp) -> 
+      (* invalidate statements come after the use of the headers *)
+      let decls, sub_stmt, get_expr, invalid_stmt = translate_parser_checksum denv.penv exp in
+      decls, (sseq [sub_stmt;(sassign cid get_expr); invalid_stmt])
+    | PLocal(cid, ty, exp) when (is_checksum exp) ->
+      let decls, sub_stmt, get_expr, invalid_stmt = translate_parser_checksum denv.penv exp in
+      decls, (sseq [sub_stmt;(slocal (Cid.to_id cid) (translate_ty ty) get_expr); invalid_stmt])
+    | PAssign(cid, exp) ->         
       let decls, expr = translate_exp denv.penv exp in
-      (* TODO: have to give decls back *)
       decls, sassign cid expr
-    | PLocal(cid, ty, exp) -> 
+    | PLocal(cid, ty, exp) ->
       let decls, expr = translate_exp denv.penv exp in
       decls, slocal (Cid.to_id cid) (translate_ty ty) expr
   
@@ -1380,7 +1489,7 @@ let translate_parser denv parser =
   let _ = translate_parser_block parser.pblock in
   let parse_states = !parse_states in
   let compute_decls = !compute_decls in 
-  let parser_id = (fst denv.component_id)^"_"^(fst parser.pid) |> Id.create in 
+  let parser_id = (fst denv.component.comp_id)^"_"^(fst parser.pid) |> Id.create in 
   let res = dparse parser_id params (compute_decls@parse_states) in
   (* let out_str = P4TofinoPrinting.string_of_decl res |> P4TofinoPrinting.doc_to_string in *)
   (* print_endline ("-----------p4 parser-------");
@@ -1389,8 +1498,8 @@ let translate_parser denv parser =
 ;;
 
 (* construct a deparser for a handler *)
-let construct_deparser ctx hevent : decl = 
-  let deparser_id = (fst ctx.component_id)^"_deparser" |> Id.create in
+let construct_deparser denv hevent : decl = 
+  let deparser_id = (fst denv.component.comp_id)^"_deparser" |> Id.create in
   (* P4 params: 
 
   directionless packet_out pkt *implicit*
@@ -1400,8 +1509,10 @@ let construct_deparser ctx hevent : decl =
 *)
   let pkt_t, pkt_arg = id"packet_out", id"pkt" in 
   (* the header holds the output event *)
-  let hdr_param_id = id_of_event hevent.hdl_output in
-  let hdr_param_ty = (tstruct (tyid_of_event TMeta hevent.hdl_output)) in
+  let hdl_output = CS.get_event denv.component hevent.hdl_output in
+  let hdl_input = CS.get_event denv.component hevent.hdl_input in
+  let hdr_param_id = id_of_event hdl_output in
+  let hdr_param_ty = (tstruct (tyid_of_event TMeta hdl_output)) in
   let params = 
     let pkt_param = param (tstruct pkt_t) pkt_arg in
     let hdr_param = inoutparam 
@@ -1409,12 +1520,12 @@ let construct_deparser ctx hevent : decl =
       (hdr_param_id) 
     in 
     let meta_param = inparam
-      (tstruct (tyid_of_event TMeta hevent.hdl_input))
-      (id_of_event (hevent.hdl_input))
+      (tstruct (tyid_of_event TMeta hdl_input))
+      (id_of_event (hdl_input))
     in
     (* the deparser metadata parameter's type name may vary, but its always 
       the one with the "drop_ctl" field. *)
-    let possible_intrinsic_param_ty_ids = find_extern_tys_with_field ctx (id"drop_ctl") in
+    let possible_intrinsic_param_ty_ids = find_extern_tys_with_field denv (id"drop_ctl") in
     let possible_intrinsic_param_ty_names = List.map fst possible_intrinsic_param_ty_ids in
     (* go through the list of out parameters in the handler (hevent.hdl_outparams), find the out parameter 
       that is of type TName(cid, _, _) where (hd (Cid.names cid)) = fst intrinsic_param_ty_id *)
@@ -1443,7 +1554,7 @@ let construct_deparser ctx hevent : decl =
     [pkt_param; hdr_param; meta_param; intrinsic_param]
   in
   (* finally, translate the body of the deparser *)
-  let decls, stmt = translate_statement ctx.penv [] hevent.hdl_deparse in
+  let decls, stmt = translate_statement denv.penv [] hevent.hdl_deparse in
   (* the emit call is the final statement. *)
   let emit_call = sunit (T.ecall (Cid.create_ids [pkt_arg; id"emit"]) [T.evar (Cid.id hdr_param_id)]) in
 
@@ -1540,14 +1651,17 @@ let translate_tdecl (denv : translate_decl_env) tdecl : (translate_decl_env) =
       (* put together the control decl *)
       let control_decl = decl (DControl{
         id = hevent.hdl_id;
-        params = translate_params hevent;
+        params = translate_params denv.component hevent;
         (* local_decls are: variables; actions; tables *)
         decls = added_var_decls@denv.locals@table_decls;
         body = Some(apply_body);
         })
       in
-      let prev_events, in_event_decls, main_in_opt = translate_event denv.prev_events TMeta hevent.hdl_input in
-      let prev_events, out_event_decls, main_out_opt = translate_event prev_events THdr hevent.hdl_output in
+      let hdl_input = CS.get_event denv.component hevent.hdl_input in
+      let hdl_output = CS.get_event denv.component hevent.hdl_output in
+      (* translate the input and output events *)
+      let prev_events, in_event_decls, main_in_opt = translate_event denv.prev_events TMeta hdl_input in
+      let prev_events, out_event_decls, main_out_opt = translate_event prev_events THdr hdl_output in
       let in_event_decls = match main_in_opt with
         | Some(in_event) -> in_event_decls@[in_event]
         | None -> in_event_decls
@@ -1556,10 +1670,10 @@ let translate_tdecl (denv : translate_decl_env) tdecl : (translate_decl_env) =
         | Some(out_event) -> out_event_decls@[out_event]
         | None -> out_event_decls
       in
-      let solitary_input_tag_pragma = match (hevent.hdl_input) with
+      let solitary_input_tag_pragma = match (hdl_input) with
         | EventUnion({tag;}) 
         | EventWithMetaParams({event=EventUnion({tag;})}) -> (
-          let tag_cid = Cid.create_ids [id_of_event hevent.hdl_input; fst tag; fst (snd tag)] in 
+          let tag_cid = Cid.create_ids [id_of_event hdl_input; fst tag; fst (snd tag)] in 
           let gress_string = match hevent.hdl_sort with 
             | HData -> "ingress"
             | HEgress -> "egress"
@@ -1621,17 +1735,13 @@ let build_gress_ctx comp =
     let ingr_env = bind_var empty_env
        ((Builtins.ingr_port_id |> Cid.id), CoreSyntax.var_sp full_ingr_port_cid (SyntaxToCore.translate_ty Builtins.tofino_builtin_tys.ingr_port_ty) Span.default)
     in
-    let denv = new_denv comp.comp_id ingr_env in
-    let main_hdl = main_handler_of_component comp in
-    let denv = {denv with main_out_event=Some(main_hdl.hdl_output)} in
+    let denv = new_denv comp ingr_env in
     denv
   | HEgress -> 
-    let denv = new_denv comp.comp_id empty_env in
-    let main_hdl = main_handler_of_component comp in
-    let denv = {denv with main_out_event=Some(main_hdl.hdl_output)} in
+    let denv = new_denv comp empty_env in
     denv
   | HControl -> 
-    let denv = new_denv comp.comp_id empty_env in
+    let denv = new_denv comp empty_env in
     denv
 ;;
 

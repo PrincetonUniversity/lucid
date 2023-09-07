@@ -128,17 +128,22 @@ let renamer =
 end
 ;;
 
-let scope_deparser_params main = 
+let scope_deparser_params comp = 
+  (* here, we have to change an event defined in the component and return the updated component *)
+  let main = main_handler_of_component comp in
+  let hdl_input = get_event comp main.hdl_input in
+
   (* change the input event to an event with meta params that includes the deparser params
      and correct the scope of all the params when used in the body of the handler or its deparser. *)
   let hdl_input' = EventWithMetaParams({
-    event = main.hdl_input;
+    event = hdl_input;
     params = main.hdl_deparse_params;
   })
   in
+  (* rename all the event parameters when used in the handler and deparser *)
   let rename_map = List.map 
     (fun (param_id, _) -> 
-      Cid.id param_id, Cid.create_ids [id_of_event main.hdl_input; param_id]) 
+      Cid.id param_id, Cid.create_ids [id_of_event hdl_input; param_id]) 
     main.hdl_deparse_params 
   in
   let hdl_body' = match main.hdl_body with
@@ -146,12 +151,15 @@ let scope_deparser_params main =
     | SFlat(stmt) -> SFlat(renamer#visit_statement rename_map stmt)
   in
   let hdl_deparse' = renamer#visit_statement rename_map main.hdl_deparse in
-  {main with 
-    hdl_input = hdl_input';
+  (* update main *)
+  let main' = {main with 
     hdl_body = hdl_body';
     hdl_deparse = hdl_deparse';
     hdl_deparse_params = [];
-  }
+  } in
+  let comp' = replace_main_handler_of_component comp main' in
+  (* finally, update the input event, setting it to the created one *)
+  set_event comp' hdl_input'
 ;;
 
 let process_component comp = 
@@ -160,7 +168,8 @@ let process_component comp =
   | HControl -> comp 
   | _ -> 
     let main = main_handler_of_component (comp) in
-    let output_cids = fields_of_event main.hdl_output in 
+    let hdl_output = get_event comp main.hdl_output in
+    let output_cids = fields_of_event hdl_output in 
     (* extract deparser statements, replace with flag setting statements *)
     let main', flag_params, deparser_stmts, arg_cids = match main.hdl_body with
       | SPipeline(stmts) -> 
@@ -183,7 +192,9 @@ let process_component comp =
     (*param is an input: no change
       param is a shared local: remove from shared local and put into meta params
       param is a local: put into meta params and change the local declaration to an assignment *)
-    let param_cids = fields_of_event main.hdl_input in 
+    let hdl_input = get_event comp main.hdl_input in
+
+    let param_cids = fields_of_event hdl_input in 
     let prealloc_local_cids = main'.hdl_preallocated_vars |> List.map (fun (id, _) -> Cid.id id) in 
     let arg_kinds = List.map (fun (cid, _) -> var_sort param_cids prealloc_local_cids cid) arg_cids in
     let main' = List.fold_left
@@ -218,7 +229,7 @@ let process_component comp =
     let init_actions = List.map
       (fun (cid, ty) -> 
         PAssign(cid, vint_exp_ty 0 ty))
-      (List.map (fun (id, ty) -> Cid.create_ids [id_of_event main'.hdl_input; id], ty) main'.hdl_deparse_params)
+      (List.map (fun (id, ty) -> Cid.create_ids [id_of_event hdl_input; id], ty) main'.hdl_deparse_params)
     in
     let parser_block' = {parser.pblock with
       pactions= parser.pblock.pactions@(List.map (fun a -> (a, Span.default)) init_actions);
@@ -226,7 +237,10 @@ let process_component comp =
     let parser' = {parser with pblock = parser_block'} in
 
     (* 5. move the deparser params into the event (that means we can remove the deparser params..)*)
-    let main' = scope_deparser_params main' in
+    let comp' = replace_main_handler_of_component comp main' in
+    let comp' = replace_main_parser_of_component parser' comp' in
+    let comp' = scope_deparser_params comp' in
+    (* let main' = scope_deparser_params main' in *)
       
     (* 5. replace the main handler and parser *)
     !dprint_endline (Printf.sprintf "----- initial main handler for %s -----" (CorePrinting.id_to_string comp.comp_id));
@@ -234,8 +248,10 @@ let process_component comp =
     !dprint_endline (Printf.sprintf "----- updated main handler for %s -----" (CorePrinting.id_to_string comp.comp_id));
     !dprint_endline (TofinoCorePrinting.hevent_to_string main');
     !dprint_endline ("-------------------------------------------");
-    replace_main_handler_of_component comp main'
-    |> replace_main_parser_of_component parser'
+    comp'
+    (* replace_main_handler_of_component comp main'
+    |> replace_main_parser_of_component parser' *)
+
 ;;
 
 let process core_prog = 

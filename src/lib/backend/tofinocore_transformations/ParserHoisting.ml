@@ -224,6 +224,7 @@ let eliminate_generates_with_direct_reads component =
     end
   in
   let output_event = (main_handler_of_component component).hdl_input in
+  let output_event = get_event component output_event in 
   v#visit_component output_event component
 ;;
 
@@ -249,8 +250,7 @@ let used_in cid out_params pactions pstep  =
     !used  
 ;;
 
-(* eliminate variables that are dead after hoisting. 
-   (never used in an expression)
+(* eliminate variables that are dead after hoisting. (never used in an expression)
    replace reads to those variables with skips, delete declarations and assignments. *)   
 let elim_dead_reads component = 
   let v = object
@@ -298,7 +298,7 @@ let elim_dead_reads component =
     let out_params = match p.pret_event with 
     | None -> builtin_params
     | Some pret_event -> 
-        let event_field_params = tyfields_of_event pret_event in
+        let event_field_params = tyfields_of_event (get_event component pret_event) in
         builtin_params
         @event_field_params
     in
@@ -307,6 +307,123 @@ let elim_dead_reads component =
   
 ;;
 
+(* Okay. So. Apparently p4 or p4-tofino doesn't like 
+   checksum operations over local parser variables. 
+   So, we have to find all the local parser variables and 
+   move them into the header. 
+   This is super annoying for IR semantics because 
+   the header represents the output of the handler function 
+   that follows the parser. So really, the parser has no reason 
+   to even be _aware_ of the header, besides this annoyance.
+   The basic algorithm is: 
+   1) find all the variables passed as arguments to checksums
+   2) create a header for each variable, the header is a struct
+      with a single field that holds the variable's name.
+   3) replace all instances of the variable's cid with the 
+      header field's cid.
+   4) add the header declarations to the output event of the component's handler.
+
+
+  The part that requires the most design is naming the header struct and 
+  deciding how to represent it in the IR. 
+
+
+   *)
+
+
+(* convert a parameter (id, ty) to a single-field record. 
+   return the name of the record and the type *)
+let recwrap (id, ty) = 
+  Id.fresh_name ((fst id)^"_rec"), CoreSyntax.ty (TRecord([id, ty.raw_ty]))
+;;
+
+(* get the (full cid, ty) of a recwrap'd parameter *)
+let recwrap_extract (id, ty) = 
+  match ty.raw_ty with 
+  | TRecord([inner_id, inner_rawty]) -> 
+    Cid.create_ids [id; inner_id],  (CoreSyntax.ty inner_rawty)
+  | _ -> error "[recwrap_extract] invalid input. Expected rec with 1 field."
+
+let move_checksum_args_into_header component = 
+  let parser =  main_parser_of_component component in
+  let outp_event = get_event component (parser.phdlret_event|> Option.get) in
+  (* 1. get the checksum arguments *)
+  let csum_args = ref [] in
+  let v = object
+    inherit [_] s_iter as super
+
+    method! visit_EHash () _ args = 
+      match args with 
+      (* checksum call *)
+      | {e=EVar(cid)}::args when (Cid.equal cid (Cid.id Builtins.checksum_id)) -> (
+        csum_args := 
+          (!csum_args)
+          @(List.filter_map 
+            (fun earg -> match earg.e with EVar(arg_cid) -> Some(Cid.to_id arg_cid, earg.ety) | _ -> None)
+            args)
+      )
+      | _ -> ()
+    end
+  in  
+  v#visit_parser () parser;
+  let csum_args = !csum_args |> MiscUtils.unique_list_of in
+  (* 2. construct a wrapping header record for each argument *)
+  let wrapped_csum_args = List.map recwrap csum_args in
+  (* 3. replace each use of the argument in the parser with the header record field. *)
+  let replace_map = List.map2
+    (fun (base_id, _) hdr_rec -> 
+      let event_field_cid = recwrap_extract hdr_rec |> fst in
+      (* have to prepend the name of the outer event *)
+      let full_cid = Cid.compound (id_of_event outp_event) event_field_cid in
+      Cid.id base_id, full_cid)  
+    csum_args
+    wrapped_csum_args
+  in
+  let replacer = object
+    inherit [_] s_map as super
+    method! visit_parser_action () pa = 
+      match pa with
+        | PPeek(cid, ty) when (List.mem_assoc cid replace_map) ->
+          PPeek(List.assoc cid replace_map, ty)
+        (* TRICKY: read event_param.hdr_var_param.hdr_var translates into:
+           read event_param.hdr_var_param; invalidate(event_param.hdr_var_param);
+            (we read the header, not the field within it, and we also need to 
+              invalidate the field as soon as its read)
+            However, since the parser syntax can't support a unit call, 
+            we add the invalidate in the final translation... *)
+        | PRead(cid, ty) when (List.mem_assoc cid replace_map) ->
+          let full_cid = List.assoc cid replace_map in 
+          let hdr_field_only_cid = 
+            Cid.to_ids full_cid |> List.rev |> List.tl |> List.rev |> Cid.create_ids 
+          in 
+          PRead(hdr_field_only_cid, ty)
+        | PAssign(cid, exp) when (List.mem_assoc cid replace_map) -> 
+          PAssign(List.assoc cid replace_map, super#visit_exp () exp)
+        | PLocal(cid, ty, exp) when (List.mem_assoc cid replace_map) -> 
+          PLocal(List.assoc cid replace_map, ty, super#visit_exp () exp)
+        | _ -> super#visit_parser_action () pa
+
+    method! visit_EVar () cid = 
+      if (List.mem_assoc cid replace_map) 
+        then EVar(List.assoc cid replace_map)
+        else EVar(cid)
+    end
+  in
+  let parser' = replacer#visit_parser () parser in
+  (* 4. add the header records to the output event's parameters *)
+  
+
+  let outp_event' = match outp_event with 
+    | EventWithMetaParams{event; params} -> 
+      EventWithMetaParams{event; params=params@wrapped_csum_args}
+    | event -> EventWithMetaParams{event; params=wrapped_csum_args}
+  in
+  (* 5. update the parser and event declarations in the component. *)
+  let component = set_event component outp_event' in
+  let component = replace_main_parser_of_component parser' component in
+  (* 6. that might just be it? *)
+  component
+;;
 
 
 let print_parsers core_prog = 
@@ -335,5 +452,6 @@ let parser_passes core_prog =
      not be used as event generation arguments, because of the previous 
      generate elimination pass. *)
   let core_prog = List.map (skip_control elim_dead_reads) core_prog in
+  let core_prog = List.map (skip_control move_checksum_args_into_header) core_prog in 
   core_prog
 ;;

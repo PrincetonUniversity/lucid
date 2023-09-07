@@ -337,7 +337,9 @@ let process_comp comp =
         | _ -> failwith "error -- program must be in flat form (pre layout)"
       in
       (* 1. get the dfg *)
-      let g = var_dfg main.hdl_input main.hdl_output main_stmt in
+      let ein = get_event comp main.hdl_input in
+      let eout = get_event comp main.hdl_output in
+      let g = var_dfg ein eout main_stmt in
       (* some debugging *)
       g_to_dotfile g ((comp.comp_id |> CorePrinting.id_to_string)^"_var_dataflow.dot");
 
@@ -353,7 +355,7 @@ let process_comp comp =
       (* 3. perform the replacements *)
       let main_stmt' = do_optimizations main_stmt optimizations in
       (* 4. see how the optimized dfg looks *)
-      let g = var_dfg main.hdl_input main.hdl_output main_stmt' in
+      let g = var_dfg ein eout main_stmt' in
       g_to_dotfile g ((comp.comp_id |> CorePrinting.id_to_string)^"_var_dataflow_OPTIMIZED.dot");
 
       (* 5. done, reinsert updated stuff *)
