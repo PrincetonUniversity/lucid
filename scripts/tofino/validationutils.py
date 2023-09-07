@@ -147,9 +147,15 @@ def parse_single_packet(port, pkt):
         ip_src = socket.inet_ntoa(pkt.ip.src)
         ip_dst = socket.inet_ntoa(pkt.ip.dst)
         ip_tos = int(pkt.ip.tos)
+        ip_sum = pkt.ip.sum
+        # print ("ip fields")
+        # print (dir(pkt.ip))
+        # print (pkt.ip.pprint())
+
         rec["ip.src"] = ip_src    
         rec["ip.dst"] = ip_dst   
         rec["ip.tos"] = ip_tos    
+        rec["ip.sum"] = ip_sum
     # print ("--- packet --- ")
     # for (k, v) in rec.items():
     #     print ("%s : %s"%(k, v))

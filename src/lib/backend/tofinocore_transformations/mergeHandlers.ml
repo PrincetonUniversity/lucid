@@ -143,7 +143,8 @@ let merge_handlers_in_component (c:component) : component =
     hdrs;
     })
   in
-  (* TEST: is it safe to change the output event to an EventWithMetaParams? *)
+  (* the output event holds parameters for checksum op 
+     args *)
   let output_event = EventWithMetaParams({
     event=output_event;
     params = [];

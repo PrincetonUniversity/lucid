@@ -15,6 +15,8 @@ Applications are in the `./src/` subdirectory. Some applications include:
 
 **multi_events** -- generate two background events from a handler. 
 
+**checksum** -- compute checksums in parser and deparser of packet events.
+
 #### Adding new cases
 
 To add a new test case: 

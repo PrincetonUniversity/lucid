@@ -453,6 +453,39 @@ function test() {
     fi
 }
 
+# run a test by sending a pcap into the veth interface for dpid_in and 
+# collecting the output on the veth interface for dpid_out.
+function pcap_test() {
+    local p4fn="$1"
+    local tx_pcapfn="$2"
+    local rx_pcapfn="$3"
+    local dpid_in="$4"
+    local dpid_out="$5"
+    local port_in="$(dpid_to_host_veth $dpid_in)"
+    local port_out="$(dpid_to_host_veth $dpid_out)"
+    # make sure that tx_pcapfn exists
+    if [ ! -f "$tx_pcapfn" ]; then
+        echo "error: pcap $tx_pcapfn does not exist"
+        exit 1
+    fi
+    # figure out port to send packets out of
+    # start the simulator
+    echo "**** starting tofino model and p4 program ****"
+    startsim "$p4fn"
+    trap 'stopsim' 9
+    echo "running test src: $tx_pcapfn -> $port_in -> program -> $port_out -> $rx_pcapfn"
+    echo "**** sending pcap ****"
+    echo "starting tcpdump..."
+    tcpdump_pid=$(capture_pcap "$rx_pcapfn" "$port_in")
+    sleep 1
+    send_pcap "$tx_pcapfn" "$port_out"
+    sleep 2
+    echo "killing tcpdump (pid $tcpdump_pid)..."
+    sudo kill -9 $tcpdump_pid
+    sleep 5
+    echo "**** cleaning up ****"
+    stopsim
+}
 
 # ======  End of testing  =======
 
@@ -470,6 +503,8 @@ function main() {
         ;;
         "send_and_collect_pcap") shift; send_and_collect_pcap $@
         ;;
+        "pcap_test") shift; pcap_test $@
+        ;;
         "test") shift; test $@
         ;;
         "simtest") shift; simtest $@
@@ -481,7 +516,7 @@ function main() {
            echo "p4tapp.sh send_and_collect_pcap trace.pcap dpid_in dpid_out"
            echo "p4tapp.sh simtest prog.p4 trace.pcap dpid_in dpid_out"
            echo "p4tapp.sh test prog.p4 testspec.json"
-
+           echo "p4tapp.sh pcap_test prog.p4 input.pcap output.pcap dpid_in dpid_out"
            echo "p4tall.sh killsim"
         ;;
     esac
