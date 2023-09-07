@@ -408,10 +408,14 @@ let rec conflict_graph_of_statement (declared_before : cid list) (used_after : c
 
 let conflict_graph_of_handler (var_map:(cid * var) list) ds = 
   let main_hdl = (main_handler_of_decls ds) in
-  let params_by_event = main_hdl.hdl_input 
-  |> grouped_localids_of_event_params 
+  let params_by_event = (main_input_event ds)
+  |> grouped_fields_of_event 
   in
-  let shared_params = main_hdl.hdl_preallocated_vars |> (List.map (fun (x, _) -> Cid.id x)) in 
+  let shared_params = 
+    (main_hdl.hdl_preallocated_vars
+    @main_hdl.hdl_deparse_params)
+    |> (List.map (fun (x, _) -> Cid.id x)) 
+  in 
   let statement = match main_hdl.hdl_body with
     | SFlat s -> s
     | SPipeline _ -> failwith "[conflict graph] expected handler body before layout" 
@@ -498,6 +502,7 @@ let rec conflicts_of_parser_actions declared_before used_after pas =
     match pa with
     | PRead(cid, _) 
     | PPeek(cid, _)
+    | PLocal(cid, _, _)
     | PAssign(cid, _) -> (
       let used_after_local = used_after@(List.map assigned_in_action pas |> List.flatten) |> MiscUtils.unique_list_of in 
       let live_vars = List.filter (fun cid -> MiscUtils.contains used_after_local cid) declared_before in
@@ -538,7 +543,7 @@ let conflict_graph_of_parser var_map ds =
   let parser = main_parser_of_tds ds  in  
   match parser.pret_event with
   | Some(ret_event) -> 
-    let out_params = grouped_localids_of_event_params (ret_event) |> List.flatten in
+    let out_params = grouped_fields_of_event (get_event_tds ds ret_event) |> List.flatten in
     (* print_endline ("output parameters of event");
     CorePrinting.comma_sep CorePrinting.cid_to_string out_params |> print_endline; *)
     let conflict_pairs = conflict_graph_of_parse_block [] out_params parser.pblock |> 
@@ -819,17 +824,18 @@ let alias_groups (overlay_pairs : ((cid * cid) * ty) list) =
 
 type vloc = | Param | Prealloc | Local
 let is_param input_event cid = 
-  List.exists (fun x -> Cid.equal x cid) (grouped_localids_of_event_params input_event |> Caml.List.flatten) 
+  List.exists (fun x -> Cid.equal x cid) (grouped_fields_of_event input_event |> Caml.List.flatten) 
 ;;
 let is_prealloc main cid =
-  List.exists (fun (x, _) -> (Cid.equal (Cid.id x) cid)) main.hdl_preallocated_vars 
+  List.exists (fun (x, _) -> (Cid.equal (Cid.id x) cid)) 
+    (main.hdl_preallocated_vars@main.hdl_deparse_params)
 ;;
-let cid_to_loc main cid =
-  if is_param (main.hdl_input) cid then Param
+let cid_to_loc tds main cid =
+  let hdl_input = get_event_tds tds main.hdl_input in
+  if is_param hdl_input cid then Param
   else if (is_prealloc main cid) then Prealloc
   else Local
 ;;
-
 
 
 let replace_cid tds cids cid' = 
@@ -886,9 +892,19 @@ let replace_cid tds cids cid' =
 
 let remove_preallocated_var tds cid = 
   let main = main_handler_of_decls tds in
-  let new_preallocated_vars = List.filter (fun (x, _) -> not (Cid.equal (Cid.id x) cid)) main.hdl_preallocated_vars  in
-  replace_main_handler_of_decls tds {main with hdl_preallocated_vars = new_preallocated_vars}
-;;
+  let hdl_preallocated_vars' = 
+    List.filter (fun (x, _) -> not (Cid.equal (Cid.id x) cid)) 
+    main.hdl_preallocated_vars 
+  in
+  let hdl_deparse_params' = 
+    List.filter (fun (x, _) -> not (Cid.equal (Cid.id x) cid)) 
+    main.hdl_deparse_params 
+  in
+  let main' = { main with 
+    hdl_preallocated_vars = hdl_preallocated_vars';
+    hdl_deparse_params = hdl_deparse_params'; }
+  in
+  replace_main_handler_of_decls tds main'
 
 (* to overlay a group of aliases where at least one is a param, 
    we choose a param to be the name of all the vars and rename 
@@ -914,7 +930,7 @@ let overlay_local_aliases tds vars var_ty =
   (* if any of the variables were shared locals, remove them *)
   List.fold_left  
     (fun tds cid -> 
-      match cid_to_loc (main_handler_of_decls tds) cid with
+      match cid_to_loc tds (main_handler_of_decls tds) cid with
       | Local -> tds
       | Param -> tds
       | Prealloc -> remove_preallocated_var tds cid
@@ -926,7 +942,7 @@ let overlay_local_aliases tds vars var_ty =
 
 let overlay_aliases tds (vars, varty) = 
   let main = main_handler_of_decls tds in
-  let var_locs = List.map (cid_to_loc main) vars  in
+  let var_locs = List.map (cid_to_loc tds main) vars  in
   (* if any of the variables are parameters, we have to update the parser and 
      also we use one of the existing variables as the "master" *)
   let has_param = List.exists (fun x -> x = Param) var_locs  in
@@ -951,8 +967,8 @@ module ShareMemopInputsBaseline = struct
 (* get the variables that are parameters of the program *)
 let var_params ds (vars : Cid.t list) = 
   let params = 
-    (main_handler_of_decls ds).hdl_input
-    |> localids_of_event_params
+    (main_input_event ds)
+    |> fields_of_event
   in
   let var_params = 
     let folder var_params var =
@@ -964,6 +980,7 @@ let var_params ds (vars : Cid.t list) =
   in 
   var_params
 ;;
+
 
 
 let constructor_cids = 
@@ -1116,8 +1133,11 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
    ;;
    
    (* construct the conflict graph for a handler *)
-   let conflict_graph alias_list main_hdl : (cid * cid) list =
-     let shared_params = main_hdl.hdl_preallocated_vars |> (List.map ~f:(fun (x, _) -> Cid.id x)) in 
+   let conflict_graph ds alias_list main_hdl : (cid * cid) list =
+     let shared_params = 
+      (main_hdl.hdl_preallocated_vars
+      @main_hdl.hdl_deparse_params) 
+      |> (List.map ~f:(fun (x, _) -> Cid.id x)) in 
      let statement = match main_hdl.hdl_body with
        | SFlat s -> s
        | SPipeline _ -> error "[conflict graph] expected handler body before layout" 
@@ -1128,8 +1148,8 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
        | None -> []
      in
      (* build the base conflict graph, which includes edges between all parameters in the same event *)
-     let params_by_event = main_hdl.hdl_input 
-     |> grouped_localids_of_event_params 
+     let params_by_event = (get_event_tds ds main_hdl.hdl_input)
+     |> grouped_fields_of_event 
      in
      (* let param_conflicts = List.fold_left params_by_event
        ~init:[]
@@ -1220,6 +1240,7 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
      print_endline alias_list_string;
      print_endline ("----end alias list----"); *)
      let conflict_pairs = conflict_graph 
+       ds
        aliases 
        main_hdl 
        |> MiscUtils.unique_list_of     
@@ -1635,23 +1656,7 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
      List.zip_exn connected_components cc_tys
    ;;
    
-   (* now, we have to implement the overlaying.  *)
-   
-   (* is cid a parameter of the input event? *)
-   
-   let is_param input_event cid = 
-     List.exists (grouped_localids_of_event_params input_event |> Caml.List.flatten) ~f:(fun x -> Cid.equal x cid)
-   ;;
-   let is_prealloc main cid =
-     List.exists main.hdl_preallocated_vars ~f:(fun (x, _) -> (Cid.equal (Cid.id x) cid))
-   ;;
-   let cid_to_loc main cid =
-     if is_param (main.hdl_input) cid then Param
-     else if (is_prealloc main cid) then Prealloc
-     else Local
-   ;;
-   
-   
+   (* now, we have to implement the overlaying.  *)   
    let replace_cid tds cids cid' = 
      (* replace any cid in cids with cid' everywhere they appear (including the parser) *)
      let is_tgt_cid cidq = List.exists cids ~f:(fun x -> Cid.equal x cidq) in
@@ -1718,13 +1723,7 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
    ;;
    (* to overlay a bunch of locals, we create a new preallocated 
       variable and rename all the vars to that. *)
-   
-   (* remove a preallocated var from tds *)
-   let remove_preallocated_var tds cid = 
-     let main = main_handler_of_decls tds in
-     let new_preallocated_vars = List.filter main.hdl_preallocated_vars ~f:(fun (x, _) -> not (Cid.equal (Cid.id x) cid)) in
-     replace_main_handler_of_decls tds {main with hdl_preallocated_vars = new_preallocated_vars}
-   ;;
+
    let overlay_local_aliases tds vars var_ty = 
      let tmp_id = Id.fresh ("aliased_var")  in 
      let master_cid = Cid.create_ids [tmp_id] in
@@ -1737,7 +1736,7 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
      List.fold vars 
        ~init:tds 
        ~f:(fun tds cid -> 
-         match cid_to_loc (main_handler_of_decls tds) cid with
+         match cid_to_loc tds (main_handler_of_decls tds) cid with
          | Local -> tds
          | Param -> tds
          | Prealloc -> remove_preallocated_var tds cid
@@ -1751,7 +1750,7 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
      print_endline("[overlay_aliases] in program:");
      print_endline(TofinoCorePrinting.tdecls_to_string tds); *)
      let main = main_handler_of_decls tds in
-     let var_locs = List.map vars ~f:(cid_to_loc main) in
+     let var_locs = List.map vars ~f:(cid_to_loc tds main) in
      (* if any of the variables are parameters, we have to update the parser and 
         also we use one of the existing variables as the "master" *)
      let has_param = List.exists var_locs ~f:(fun x -> x = Param) in
@@ -1763,9 +1762,7 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
      else
        overlay_local_aliases tds vars varty
    ;;
-   
-   (* global_allocation ?hint:(hint_allocation = []) (arrs : id list) (tds : tdecls) (overlaid_pairs : ((cid * cid) * ty) list) previous_allocations *)
-   
+      
    let process_component tds = 
      (* first, calculate the overlaid pairs and also create new intermediates whenever local overlaying is not possible *)
      let overlaid_pairs, tds = process_arrs [] (arrs_in_prog tds) tds in
@@ -1775,7 +1772,6 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
      tds
    ;;   
 end
-
 
 let solve_overlay_opt conflict_pairs array_users = 
   let conflict_assoc = conflict_pairs_to_assoc conflict_pairs in
@@ -1789,8 +1785,6 @@ let solve_overlay_opt conflict_pairs array_users =
 else
   None
 ;;
-
-
 
 module ShareMemopInputsGreedy = struct
   (* heuristic based memop input allocator that 

@@ -30,8 +30,8 @@ let error s = raise (Error s)
 
 let var_params ds (vars : Cid.t list) = 
   let params = 
-    (main_handler_of_decls ds).hdl_input
-    |> localids_of_event_params
+    (main_input_event ds)
+    |> fields_of_event
   in
   let var_params = 
     let folder var_params var =
@@ -47,8 +47,8 @@ let var_params ds (vars : Cid.t list) =
 (* is a variable in the list a parameter of some event? *)
 let some_var_is_param ds vars = 
   let params = 
-    (main_handler_of_decls ds).hdl_input
-    |> localids_of_event_params
+    (main_input_event ds)
+    |> fields_of_event
   in
   let param_present = 
     let folder acc var =
@@ -171,8 +171,8 @@ let pairwise_conflict ds x y =
     | false -> (
     (* build a conflict graph for main, check if (x, y) or (y, x) are there. *)
     (* let main_param_ids = (main ds).hdl_params |> CL.split |> snd |> CL.flatten  |> CL.split |> fst in  *)
-    let main_param_cids = (main_handler_of_decls ds).hdl_input 
-      |> localids_of_event_params 
+    let main_param_cids = main_input_event ds
+      |> fields_of_event 
     in
     let main_stmt = main_of_decls ds in
     let conflict_pairs = conflict_graph main_param_cids [] main_stmt |> MiscUtils.unique_list_of in

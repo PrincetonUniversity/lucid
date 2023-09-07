@@ -10,6 +10,7 @@
         {"commands":["compile", "assemble", "execute"], "prog":"src/identity_hash.dpt","build":"identity_hash", "testspec":"tests/identity_hash.json"},
         {"commands":["compile", "assemble", "execute"], "prog":"src/control_reflector.dpt","build":"control_reflector", "testspec":"tests/control_reflector.json"},
         {"commands":["compile", "assemble", "execute"], "prog":"src/simple_cuckoo_firewall.dpt","build":"simple_cuckoo_firewall", "testspec":"tests/simple_cuckoo_firewall.json"},
-        {"commands":["compile", "assemble", "execute"], "prog":"src/learner.dpt","build":"learner", "testspec":"tests/learner.json"}
+        {"commands":["compile", "assemble", "execute"], "prog":"src/learner.dpt","build":"learner", "testspec":"tests/learner.json"},
+        {"commands":["compile", "assemble", "execute"], "prog":"src/checksum.dpt","build":"checksum", "testspec":"tests/checksum.json"}
     ]
 }

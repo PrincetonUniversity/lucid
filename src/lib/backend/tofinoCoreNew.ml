@@ -72,6 +72,21 @@ and header = {
   header_const : value option;
 }
 
+(* 
+  params = [
+    outer_id, TRecord([parser_local_var_a, int<32>; ...])
+    // then how do we translate this? 
+    // we need to generate a named type... 
+    // okay. No problem. Just give it whatever name, 
+    // at the point in time that you generate the struct. 
+    // and use the whatever ty name in the definition of 
+    // the struct (e.g., outer_id : fresh_ty_name ())
+    // when you are referencing the field, you don't need 
+    // to know the type. Its just outer_id.parser_local_var_a
+  ]   
+
+*)
+
 and event =
   | EventSingle of {
     evid:id; 
@@ -103,37 +118,36 @@ and event =
         element is the type of generate statement that produced it. *)
     generated_events : (id * gen_type) list list;
   }
+  | EventWithMetaParams of {
+    event : event;
+    params : params;
+  }
 
 and hbody = 
   | SFlat of statement
   | SPipeline of statement list
-
-
-(* the string is direction specifier *)
-and intrinsic_params = (id * ty * string option) list
 
 (* definition of a handler using input and output events *)
 and hevent = {    
   hdl_id : id;
   hdl_sort : handler_sort;
   hdl_body : hbody;  
-  hdl_input : event; 
-  hdl_output : event;
+  hdl_deparse_params : params; (* parameters of the handler's deparser *)
+  hdl_deparse : statement; (* the deparser, if there is one *)
+  hdl_input : id; 
+  hdl_output : id; 
+    (*input and output are event ids, for merged events that should be 
+     constructed at the same time as the handler. *)
+  
+  hdl_preallocated_vars : params;(*variables that are pre allocated, but not set*)
+  
+  (* params and retparams are builtins of the underlying hardware *)
   hdl_params : params; (*parser output that is not wrapped in 
      an event. timestamp, ingress port, queue depth, etc *)
   hdl_retparams : params; (* multicast group, egress port, etc *)
-  hdl_preallocated_vars : params; 
-  (*variables that the handler can assume are allocated, but not set*)
-}
-(* 
-handler to ingress translation summary: 
-
-control $hdl_id (out $hdl_output, inout $hdl_input, inout $hdl_params, inout $hdl_retparams) {
-  $hdl_body
+  
 }
 
-
-*)
 and handler = 
   (* a handler with parameters -- basically just copied from input. *) 
   | HParams of {
@@ -150,7 +164,10 @@ and parser = {
   pid : id;
   pparams : params;
   pblock : parser_block;
-  pret_event : event option;
+  pret_event : id option;
+  phdlret_event : id option; 
+    (* P4's semantics force the parser to know about 
+       the header that the proceeding handler emits... *)
   pret_params : params;
 }
 
@@ -258,6 +275,7 @@ let decl_to_tdecl (decl:decl) =
     td = TDParser({pid; pparams; pblock;
       pret_event=None; (*the return event of the ingress parser 
                          is set when events are merged*)
+      phdlret_event=None;
       pret_params=[intr_id, intr_ty];});
     tdspan=decl.dspan;
     tdpragma=opt_to_list decl.dpragma;}
@@ -265,6 +283,7 @@ let decl_to_tdecl (decl:decl) =
   | DParser(pid, pparams, pblock) -> {
     td = TDParser({pid; pparams; pblock; 
         pret_event=None;
+        phdlret_event=None;
         pret_params = [];});
     tdspan = decl.dspan;
     tdpragma = opt_to_list decl.dpragma;}
@@ -328,22 +347,24 @@ let prog_to_ingress_egress_decls prog =
   (find_component_by_id prog (id "ingress")).comp_decls
   , (find_component_by_id prog (id "egress")).comp_decls
 ;;
-let id_of_event event = 
+let rec id_of_event event = 
   match event with
   | EventSingle {evid;} -> evid
   | EventUnion {evid;} -> evid
   | EventSet {evid;} -> evid
+  | EventWithMetaParams {event; params=_;} -> id_of_event event
 ;;
 let params_of_event event =
   match event with 
   | EventSingle {evparams;} -> evparams
   | _ -> error "[params_of_event] only base events (EventSingle) have parameters"
 ;;
-let members_of_event event = 
+let rec members_of_event event = 
   match event with 
   | EventSingle _ -> error "[members_of_event] single event has no event menbers"
   | EventUnion{members;}
   | EventSet{members;} -> members
+  | EventWithMetaParams{event; params=_;} -> members_of_event event
 ;;
 let num_of_event event =
   match event with
@@ -356,16 +377,18 @@ let sort_of_event event =
   | EventSingle {evsort} -> evsort
   | _ -> error "cant get the sort of a compound event"
 ;;
-let etag event = 
+let rec etag event = 
   match event with 
   | EventUnion{tag;} -> tag
+  | EventWithMetaParams{event; params=_;} -> etag event
   | _ -> error "[etag] not a union event, so no tag"
 ;;
 
-let etagged_members event = 
+let rec etagged_members event = 
   match event with 
   | EventUnion{members; member_nums;} -> 
     List.combine member_nums members
+  | EventWithMetaParams{event; params=_;} -> etagged_members event
   | _ -> error "[etagged_members] not a union, so no tagged members"
 ;;
 
@@ -463,6 +486,19 @@ let main_parser_of_component component : parser =
   List.hd opt_things
 ;;
 
+let replace_main_parser_of_component parser component  = 
+  let new_decls = List.map (fun tdecl -> 
+    match tdecl.td with 
+    | TDParser(p) -> (
+      if (fst p.pid = "main")
+        then {tdecl with td = TDParser(parser)}
+        else tdecl)
+    | _ -> tdecl)
+  component.comp_decls
+      in
+  {component with comp_decls = new_decls}
+;;
+
 let main_body_of_decls decls : hbody = 
   (main_handler_of_decls decls).hdl_body
 ;;
@@ -508,25 +544,30 @@ let main_of_decls tds =
   | SPipeline _ -> error "[main_of_decls] main handler is not flat."
 ;;
 
-
-let add_shared_local component tmp_id tmp_ty = 
-  let tmp_e = var_sp (Cid.id tmp_id) tmp_ty Span.default in
-  let main_handler = main_handler_of_component component in
-  tmp_e, replace_main_handler_of_component
-    component
-    ({main_handler with 
-      hdl_preallocated_vars = 
-        main_handler.hdl_preallocated_vars @ [(tmp_id, tmp_ty)]})
+let add_preallocated_locals pvars params = 
+  pvars@params
 ;;
+
 let add_shared_local tds tmp_id tmp_ty =
   let tmp_e = var_sp (Cid.id tmp_id) tmp_ty Span.default in
   let main_handler = main_handler_of_decls tds in
-  tmp_e, replace_main_handler_of_decls
+  let new_preallocated_vars =  
+    main_handler.hdl_preallocated_vars@ 
+    [(tmp_id, tmp_ty)]
+  in
+  tmp_e, replace_main_handler_of_decls tds
+    {main_handler with
+      hdl_preallocated_vars=new_preallocated_vars}
+
+
+  (* tmp_e, replace_main_handler_of_decls
     tds
     ({main_handler with 
       hdl_preallocated_vars = 
-        main_handler.hdl_preallocated_vars @ [(tmp_id, tmp_ty)]})
+        main_handler.hdl_preallocated_vars @ [(tmp_id, tmp_ty)]}) *)
 
+
+        
 
 (* helper: find all the paths in the program containing statements that match 
            the filter map function. *)
@@ -643,7 +684,7 @@ let skip_control fcn comp =
 ;;
 
 
-let is_union_of_unions event = 
+let rec is_union_of_unions event = 
   match event with 
   | EventUnion({members;}) -> 
     List.for_all 
@@ -651,6 +692,7 @@ let is_union_of_unions event =
       | EventUnion(_) -> true
       | _ -> false)
       members
+  | EventWithMetaParams({event; params=_;}) -> is_union_of_unions event
   | _ -> false
 ;;
 
@@ -684,3 +726,83 @@ let events_of_component component =
   v#events
 ;;
 
+(* list all the fields of the event, fully prefixed *)
+let rec tyfields_of_event event : cid_params = 
+  match event with 
+  | EventSingle({evid; evparams;}) -> 
+    List.map (fun (id, ty) -> (Cid.create_ids [evid; id], ty)) evparams
+  | EventUnion({evid; members; tag;}) -> 
+    let user_params = tyfields_of_members evid members in
+    let tag_outer, (tag_inner, tag_ty) = tag in 
+    (Cid.create_ids [evid;tag_outer; tag_inner], tag_ty)::user_params
+  | EventSet({evid; members; flags;}) -> (
+    let user_params = tyfields_of_members evid members in
+    (* now add all the flags *)
+    let flag_struct_id, flag_fields, pad_field = flags in 
+    let flag_fields = List.map 
+      (fun (flag_id, flag_ty) -> 
+        Cid.create_ids [evid; flag_struct_id; flag_id], flag_ty)
+      flag_fields
+    in
+    match pad_field with
+    | None -> user_params@flag_fields
+    | Some(pad_id, pad_ty) -> 
+      user_params
+      @flag_fields
+      @[Cid.create_ids [evid; flag_struct_id; pad_id], pad_ty]
+  )
+  | EventWithMetaParams({event; params;}) ->
+    let inner_param_ids = tyfields_of_event event in
+    let meta_param_ids = List.map 
+      (fun (id, ty) -> Cid.create_ids [id_of_event event; id], ty) 
+      params 
+    in
+    inner_param_ids @ meta_param_ids
+and tyfields_of_members evid members = 
+  List.fold_left
+    (fun params member -> 
+      let member_params = tyfields_of_event member in
+      params@
+      (List.map 
+        (fun (cid, ty) -> Cid.compound evid cid, ty)
+        member_params))
+    []
+    members
+
+let fields_of_event event = tyfields_of_event event |> List.split |> fst ;;
+
+
+(* event update helpers. So that we don't have to use refs. *)
+(* look through the declarations in comp and find the event with id evid *)
+let get_event_tds tds evid = 
+  let events = List.filter_map (fun tdecl -> 
+    match tdecl.td with 
+    | TDEvent(e) -> Some(e)
+    | _ -> None)
+  tds in
+  List.find (fun e -> (id_of_event e) = evid) events
+;;
+
+let get_event comp evid = get_event_tds comp.comp_decls evid
+
+(* replace the event in the component *)
+let set_event_tds tds event = 
+  let evid = id_of_event event in
+  List.map (fun tdecl -> 
+    match tdecl.td with 
+    | TDEvent(e) -> 
+      if (id_of_event e) = evid then {tdecl with td = TDEvent(event)}
+      else tdecl
+    | _ -> tdecl)
+  tds
+
+let set_event comp event = 
+  {comp with comp_decls=set_event_tds comp.comp_decls event}
+
+let main_input_event tds = 
+  let main_handler = main_handler_of_decls tds in
+  get_event_tds tds main_handler.hdl_input
+
+let main_output_event tds = 
+  let main_handler = main_handler_of_decls tds in
+  get_event_tds tds main_handler.hdl_output

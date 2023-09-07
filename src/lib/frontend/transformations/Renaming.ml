@@ -215,6 +215,12 @@ let rename prog =
         let new_x = self#freshen_var x in
         PRead (new_x, new_ty)
 
+        method! visit_PLocal dummy x ty exp = 
+        let new_ty = self#visit_ty dummy ty in
+        let new_x = self#freshen_var x in
+        let new_exp = self#visit_exp dummy exp in
+        PLocal (new_x, new_ty, new_exp)
+
       method! visit_STableMatch dummy tm =
         let tbl = self#visit_exp dummy tm.tbl in
         let keys = List.map (self#visit_exp dummy) tm.keys in

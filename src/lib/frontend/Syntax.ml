@@ -290,7 +290,9 @@ and parser_action =
   | PSkip of ty
   (* The first exp is an l-value, presumably a record projection operation.
      We can make this explicit if we ever add l-values properly *)
-  | PAssign of exp * exp
+  | PAssign of exp * exp  
+  (* Sorry but we also have to declare/init local variables in parsers... *)
+  | PLocal of id * ty * exp
 
 and parser_branch = pat * parser_block
 

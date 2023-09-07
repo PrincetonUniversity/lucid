@@ -351,6 +351,8 @@ let rec parser_action_to_string action =
     Printf.sprintf "%s = %s;" (cid_to_string id) (exp_to_string exp)
   | PPeek (id, ty) -> 
     Printf.sprintf "peek %s : %s;" (cid_to_string id) (ty_to_string ty)
+  | PLocal (id, ty, exp) -> 
+    Printf.sprintf "%s %s = %s;" (ty_to_string ty) (cid_to_string id) (exp_to_string exp)
 
 and parser_branch_to_string (pat, block) =
   Printf.sprintf "| %s -> {\n%s}" (comma_sep pat_to_string pat) (parser_block_to_string block |> indent_body)

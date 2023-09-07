@@ -53,7 +53,7 @@
   open ParsePortSpec
   
   (* get a member event *)
-  let member_event event member_id =
+  let rec member_event event member_id =
     let rec member_event_rec events member_id =
       match events with
       | [] -> None
@@ -70,6 +70,7 @@
       match member_event_rec members member_id with
       | None -> error "[member_event] no member with that id"
       | Some(member_event) -> member_event)
+    | EventWithMetaParams({event}) -> member_event event member_id
   ;;  
   
   (* get the position of the event with id eventid in the list of events *)
@@ -161,7 +162,7 @@ let o2l opt =
   | Some(x) -> [x]
   | None -> []
 ;;
-let enable_event_headers ev = 
+let rec enable_event_headers ev = 
   match ev with 
   | EventUnion{hdrs} ->
     ListLabels.fold_left hdrs
@@ -172,6 +173,7 @@ let enable_event_headers ev =
         | None -> Some(stmt_hdr)
         | Some(stmt) -> Some(sseq stmt stmt_hdr))
     |> o2l
+  | EventWithMetaParams{event} -> enable_event_headers event
   | _ -> error "[enable_event_headers] expected union event"
 ;;
 
@@ -241,7 +243,7 @@ let enable_event_headers ev =
     let main_hdl = (main_handler_of_component igr) in
     let events = events_of_component igr in
     let ctx = {
-      ctx_output_event = main_hdl.hdl_output;
+      ctx_output_event = (get_event igr main_hdl.hdl_output);
       ctx_genct_evar = genct_evar main_hdl.hdl_retparams;
       ctx_egressport_evar = egressport_evar main_hdl.hdl_retparams;
       ctx_group_evar = group_evar main_hdl.hdl_retparams;
@@ -259,7 +261,7 @@ let enable_event_headers ev =
   let egress_ctx (egr:component) = 
     let main_hdl = (main_handler_of_component egr) in
     {
-      ectx_output_event = main_hdl.hdl_output; 
+      ectx_output_event = get_event egr main_hdl.hdl_output; 
       ectx_drop_evar = drop_evar main_hdl.hdl_retparams;
     }
   ;;
@@ -444,6 +446,7 @@ let enable_event_headers ev =
          So we need to enable handler_out_event's flags header, set it, and enable 
          handler_out_event's header for base_event. *)
       let enable_hdrs_stmts = match handler_out_event with 
+        | EventWithMetaParams{event=EventUnion{tag}}
         | EventUnion{tag} -> 
           (* 0. unset the drop control bit -- there is now output from the egress *)
           let unset_drop = 

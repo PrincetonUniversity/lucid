@@ -15,43 +15,14 @@ open CoreSyntax
 open TofinoCoreNew
 open AddIntrinsics
 
-(* get the ids of all event parameters as they would appear 
-    in the body of this event's handler *)
-let rec localids_of_event_params event = 
-  match event with 
-  | EventSingle({evid; evparams;}) -> 
-    let param_ids = List.split evparams |> fst in 
-    let param_ids = List.map (fun id -> Cid.create_ids [evid; id]) param_ids in
-    param_ids
-  | EventUnion({evid; members; tag;}) -> 
-    (* get the parameters of all the members, then prefix them with 
-       this event's name.  *)
-    let param_ids = List.map (localids_of_event_params) members in
-    let param_ids = List.flatten param_ids in
-    let param_ids = List.map (fun id -> Cid.compound evid id) param_ids in
-    (* now add the tag struct field (note: we don't add the struct's subfields
-       is that okay? Do we even need to have the tag field here? ) *)
-    let tag_id = Cid.create_ids [evid; (fst tag)] in
-    tag_id :: param_ids
-  | EventSet({evid; members; flags;}) -> 
-    let param_ids = List.map (localids_of_event_params) members in
-    let param_ids = List.flatten param_ids in
-    let param_ids = List.map (fun id -> Cid.compound evid id) param_ids in
-    (* now add all the flags *)
-    let flag_struct_id, _, _ = flags in 
-    let flag_id = Cid.create_ids [evid; (flag_struct_id )] in 
-    (* let flag_ids = List.map (fun (flag, _) -> Cid.create_ids [evid; flag]) flags in *)
-    flag_id::param_ids
-    (* flag_ids @ param_ids *)
-;;
 
 (* get a list of event parameter ids, grouped by base event *)
-let grouped_localids_of_event_params event : (cid list) list= 
+let grouped_fields_of_event event : (cid list) list= 
   match event with
   | EventUnion({evid; members; _}) -> (
     let param_ids = List.map 
       (fun member -> 
-        let member_param_ids = localids_of_event_params member in
+        let member_param_ids = fields_of_event member in
         let member_param_ids = List.map (fun id -> Cid.compound evid id) member_param_ids in
         member_param_ids
       ) members
@@ -60,29 +31,23 @@ let grouped_localids_of_event_params event : (cid list) list=
   )
   | _ -> error "[grouped_localids_of_event_params] not a union event"
 ;;
-(* get all the event parameters as though you are inside the event *)
-let ids_of_event_params event =
-  let param_cids = localids_of_event_params event in
-  List.map 
-    (fun param_cid -> match param_cid with
-      | Cid.Compound(_, param_id) -> param_id
-      | Cid.Id(_) -> failwith "ids_of_event_params: not a compound id")
-    param_cids
-;;
 
-
-(* scope event constructors in a parser *)
+(* scope event constructors in a parser and set the io events *)
 let scope_pgen = 
   object 
     inherit [_] s_map as super
-    method !visit_parser merged_hdl_event parser = 
-      let parser = super#visit_parser merged_hdl_event parser in
-      {parser with pret_event = Some(merged_hdl_event)}
-    method !visit_PGen merged_hdl_event exp =
+    method !visit_parser (merged_hdl_event, merged_hdl_out_event) parser = 
+      let parser = super#visit_parser (merged_hdl_event, merged_hdl_out_event) parser in
+      {parser with 
+        pret_event = Some(merged_hdl_event);
+        phdlret_event = Some(merged_hdl_out_event);
+        }
+    method !visit_PGen (merged_hdl_event, _) exp =
+      (* generates set parameters in the hdl input / parser output event *)
       let exp' = match exp.e with 
         | ECall(ev_cid, ev_params) -> 
           {exp with e = ECall (
-            Cid.compound (id_of_event merged_hdl_event) ev_cid, 
+            Cid.compound (merged_hdl_event) ev_cid, 
             ev_params)}
         | _ -> exp
       in
@@ -117,7 +82,7 @@ let merge_handlers_in_component (c:component) : component =
   let (handlers, non_handler_decls) = extract_handlers c.comp_decls [] [] in
 
   (* order handlers by the eventnum of their input events *)
-  let num_of_handler hevent = num_of_event hevent.hdl_input in
+  let num_of_handler hevent = num_of_event (get_event c hevent.hdl_input) in
   let sort_handlers (handlers : hevent list) = 
     List.sort (fun h1 h2 -> compare (num_of_handler h1) (num_of_handler h2)) handlers
   in
@@ -131,7 +96,7 @@ let merge_handlers_in_component (c:component) : component =
   (* generate input and output events. Members are the 
      inputs and outputs of each event *)
   let input_members, output_members = 
-    List.map (fun h -> h.hdl_input, h.hdl_output) handlers
+    List.map (fun h -> (get_event c h.hdl_input), (get_event c h.hdl_output)) handlers
     |> List.split
   in 
   let tag_of_evid evid = 
@@ -178,6 +143,13 @@ let merge_handlers_in_component (c:component) : component =
     hdrs;
     })
   in
+  (* the output event holds parameters for checksum op 
+     args *)
+  let output_event = EventWithMetaParams({
+    event=output_event;
+    params = [];
+    })
+  in
   (* construct the new handler's body -- a match statement
      that branches on the input event's selector tag.
      The first statement sets the output event's selector tag. 
@@ -195,7 +167,7 @@ let merge_handlers_in_component (c:component) : component =
       List.map
       (fun h -> 
         (* let tag_val = i + 1 in should not be using index of handler as the tag value! *)
-        let hdl_tag_val = num_of_event h.hdl_input in 
+        let hdl_tag_val = num_of_event (get_event c h.hdl_input) in 
         let tag_val = hdl_tag_val in 
         let handler_body = match h.hdl_body with
           | SFlat(stmt) -> stmt
@@ -216,6 +188,7 @@ let merge_handlers_in_component (c:component) : component =
           (* in this else branch, the first 16 bits of packet indicate which handler fired *)
           let out_tag_outer, (out_tag_inner, out_tag_inner_ty) = match output_event with
             | EventUnion({tag}) -> tag
+            | EventWithMetaParams({event=EventUnion({tag})}) -> tag
             | _ -> error "[mergeHandlers] output event is not a union"
           in
           let out_tag_cid = Cid.create_ids [output_evid; out_tag_outer] in
@@ -234,14 +207,14 @@ let merge_handlers_in_component (c:component) : component =
       handlers      
     )
   in
-  (* scope local uses of event parameters *)
+  (* prefix local uses of event parameters *)
   let rename_map = 
     List.fold_left2
       (fun rename_map unscoped_cid scoped_cid -> 
         CidMap.add unscoped_cid scoped_cid rename_map)
       (CidMap.empty)
-      (ids_of_event_params input_event)
-      (localids_of_event_params input_event)
+      (fields_of_event input_event |> List.map Cid.tl)
+      (fields_of_event input_event)
   in
   let merged_hdl_stmt = AddHandlerTypes.rename#visit_statement
     rename_map  
@@ -276,9 +249,11 @@ let merge_handlers_in_component (c:component) : component =
   let merged_hdl = {
       hdl_id = hdl_evid;
       hdl_sort = c.comp_sort;
-      hdl_input = input_event;
-      hdl_output = output_event;
+      hdl_input = id_of_event input_event;
+      hdl_output = id_of_event output_event;
       hdl_body = SFlat(merged_hdl_stmt);
+      hdl_deparse_params = [];
+      hdl_deparse = snoop;
       hdl_preallocated_vars = [];
       hdl_params;
       hdl_retparams;
@@ -296,7 +271,7 @@ let merge_handlers_in_component (c:component) : component =
   let tdecls' = non_handler_decls @ tdecls in
   (* finally, scope event constructors in the parser. At this point, 
      there should only be 1 parser: the ingress parser.*)
-  let tdecls' = scope_pgen#visit_tdecls input_event tdecls' in
+  let tdecls' = scope_pgen#visit_tdecls ((id_of_event input_event), (id_of_event output_event)) tdecls' in
   { c with
     comp_decls = tdecls';
   }    

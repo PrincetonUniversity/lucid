@@ -154,12 +154,22 @@ let rec extract_set slot =
   | Set s -> s
 ;;
 
+
+let pointer_equal s1 s2 = 
+  let s1_addr = (string_of_int (Obj.magic (Obj.repr s1))) in
+  let s2_addr = (string_of_int (Obj.magic (Obj.repr s2))) in
+  s1_addr = s2_addr
+;;
+
 (* Update the last ref in the chain *)
 (* TODO: We could also get rid of the other refs, since we only
    ever care about the last one. *)
 let rec set_last_ref slot v =
   match slot with
-  | Ref { contents = Ref _ as slot } -> set_last_ref slot v
+  | Ref { contents = Ref _ as inner_slot } -> 
+  (* if the slot already points to v, then we are done *)
+    if (not (pointer_equal inner_slot v)) then 
+      (set_last_ref inner_slot v)      
   | Ref ({ contents = _ } as r) -> r := v
   | Set _ -> failwith "slotAnalysis: Should always have ref chains"
 ;;
@@ -352,6 +362,7 @@ let rec analyze_parser_action env cid action =
   print_endline @@ env_to_string env; *)
   match action with
   | PRead (id, _) -> create_var_slot env cid id
+  | PLocal(id, _, _) -> create_var_slot env cid id (* FIXME: declaring a local isn't exactly the same as reading it...*)
   | PAssign _ -> (* FIXME: Not sure what to do here *) env
   | PSkip _ -> env
 

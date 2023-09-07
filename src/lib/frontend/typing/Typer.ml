@@ -1199,6 +1199,11 @@ let infer_parser_action env (action, span) =
     let env, inf_exp, inf_ety = infer_exp env exp |> textract in
     unify_ty exp.espan inf_lty inf_ety;
     env, (PAssign (inf_lexp, inf_exp), span)
+  | PLocal(id, ty, exp) -> 
+    let env, inf_exp, inf_ety = infer_exp env exp |> textract in
+    unify_ty exp.espan ty inf_ety;
+    let env = add_locals env [id, ty] in
+    env, (PLocal(id, ty, inf_exp), span)
 ;;
 
 let rec infer_parser_step env (step, span) =

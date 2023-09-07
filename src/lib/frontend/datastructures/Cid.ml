@@ -108,6 +108,10 @@ let rec names cid =
   | Compound (id, cid) -> Id.name id :: names cid
 ;;
 
+let tl cid = match cid with 
+| Compound(_, cid) -> cid
+| Id(_) -> failwith ("[Cid.tl] cid "^(to_string cid)^" has no tail")
+
 (* Operations *)
 
 let rec compare cid1 cid2 =

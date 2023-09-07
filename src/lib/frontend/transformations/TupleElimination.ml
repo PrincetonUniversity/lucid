@@ -295,6 +295,28 @@ let replacer =
         (* Other non-compound types should be eliminated by now *)
         [PSkip typ, span]
 
+    method replace_PLocal env id ty exp span  : (parser_action * sp) list = 
+      match ty.raw_ty with
+      | TTuple tys ->
+        print_endline ("replacing a tuple type..");
+        let entries = self#visit_exp env exp |> extract_etuple in
+        let new_ids = rename_elements id tys in
+        let new_defs =
+          List.map2
+            (fun (id, ty) e ->
+              (* Recursively split up each entry *)
+              let recursive_defs = self#replace_PLocal env id ty e span in
+              recursive_defs)
+            new_ids
+            entries
+        in
+        env := IdMap.add id new_ids !env;
+        List.flatten new_defs
+      | _ ->
+        (* Other non-compound types should be eliminated by now, but perhaps not in the exp... *)
+        let exp' = super#visit_exp env exp in
+        [PLocal (id, ty, exp'), span]      
+
     method replace_PAssign env lexp exp span : (parser_action * sp) list =
       let lexp = self#visit_exp env lexp in
       match (Option.get exp.ety).raw_ty with
@@ -302,7 +324,9 @@ let replacer =
         let l_id =
           match lexp.e with
           | EVar cid -> Cid.to_id cid
-          | _ -> failwith "Shouldn't be possible, contact a dev"
+          | _ -> 
+            print_endline (Printing.exp_to_string lexp);
+            failwith "Shouldn't be possible, contact a dev"
         in
         let entries = self#visit_exp env exp |> extract_etuple in
         let new_ids = IdMap.find l_id !env in
@@ -317,13 +341,16 @@ let replacer =
             entries
         in
         List.flatten new_defs
-      | _ -> [PAssign (lexp, exp), span]
+      | _ -> 
+        let exp' = super#visit_exp env exp in        
+        [PAssign (lexp, exp'), span]
 
     method replace_action env (action, span) =
       match action with
       | PRead (id, ty) -> self#replace_PRead env id ty span
       | PSkip ty -> self#replace_PSkip env ty span
       | PAssign (lexp, rexp) -> self#replace_PAssign env lexp rexp span
+      | PLocal(id, ty, exp) -> self#replace_PLocal env id ty exp span
 
     method! visit_parser_block env (actions, (step, step_sp)) =
       let actions =
