@@ -103,7 +103,6 @@
    packageTofinoApp
    ioUtils
    TofinoProfiling
-   TofinoPipeline
    TofinoPipelineNew
    DependencyProfiling
    InputChecks
@@ -111,7 +110,6 @@
    EliminateEventCombinators
    Hoisting
    AddIngressParser
-   TofinoCore
    SplitDataplane
    TofinoCoreNew
    RemoveLocalInits
@@ -128,17 +126,12 @@
    TofinoEgress
    InlineEventVars
    SolitaryMatches
-   Generates
    GeneratesNew
    PropagateEvars
    IfToMatch
-   RegularizeMemops
    RegularizeMemopsNew
-   ShareMemopInputs
-   ShareMemopInputsNew
    ShareMemopInputsSat
    SingleTableMatch
-   ActionsToFunctions
    ActionsToFunctionsNew
    UniqueTableActions
    MatchAlgebra
@@ -150,13 +143,9 @@
    CoreLayoutOld
    CoreLayout
    CoreDeparse
-   ActionForm
    ActionFormNew
-   Dedup
    DedupNew
    P4TofinoSyntax
-   CoreToP4TofinoHeaders
-   CoreToP4Tofino
    TofinoCoreToP4
    P4TofinoPrinting
    P4TofinoGlobalDirectory

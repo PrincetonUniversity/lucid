@@ -14,7 +14,7 @@ OUTPUT_FILE := $(DPT_BUILD_DIR)/lucid.p4
 
 build: src/$(SRC)
 	sudo rm -rf $(DPT_BUILD_DIR)
-	$(DPTC) src/$(SRC) --new-tofino -o $(DPT_BUILD_DIR)
+	$(DPTC) src/$(SRC) -o $(DPT_BUILD_DIR)
 	cat src/custom_tofino_control.py $(DPT_BUILD_DIR)/lucid.py > $(DPT_BUILD_DIR)/lucid_with_ctl.py
 	mv $(DPT_BUILD_DIR)/lucid_with_ctl.py $(DPT_BUILD_DIR)/lucid.py
 copy_p4:

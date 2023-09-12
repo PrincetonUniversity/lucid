@@ -34,6 +34,11 @@ let sum xs = CL.fold_left ( + ) 0 xs
 let cons_uniq xs x = if List.mem x xs then xs else x :: xs
 let unique_list_of xs = List.rev (List.fold_left cons_uniq [] xs)
 
+let cons_uniq_eq eq xs x = let open Core in if List.mem xs x ~equal:eq then xs else x :: xs
+let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) [] xs)
+
+
+
 module Seq = Core.Sequence
 let seq_cons_unique eq xs x = 
   let found = (Seq.mem ~equal:eq xs x) in

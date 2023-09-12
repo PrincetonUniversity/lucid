@@ -81,7 +81,7 @@ def compile(dptc, prog, build):
     if (os.path.isdir(build) or os.path.isfile(build)):
         print ("deleting previous build directory...")
         shutil.rmtree(build)
-    cmd = [dptc, prog, "--new-tofino", "-o", build]
+    cmd = [dptc, prog, "-o", build]
     print ("compile command: %s"%(" ".join(cmd)))
     ret = subprocess.run(cmd, stdout = subprocess.PIPE, stderr = subprocess.PIPE)   
     return (ret.returncode == 0)

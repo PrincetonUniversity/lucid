@@ -4,7 +4,7 @@
    architectural model to encode the way a program is split across 
    multiple components in the switch. *)
 
-open TofinoCore
+open TofinoCoreNew
 open BackendLogging
 
 

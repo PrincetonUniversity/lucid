@@ -117,7 +117,7 @@ let to_single_handler_progs (ds:Syntax.decls) =
     (CL.combine handlers events)
   |> CL.map delete_unused_globals
 ;;
-
+(* 
 let compile_to_tofino target_filename =
   (* parse *)
   let ds = Input.parse target_filename in
@@ -134,12 +134,10 @@ let compile_to_tofino target_filename =
   let p4_str = TofinoPipeline.compile_handler_block core_ds in 
   IoUtils.writef 
     (target_filename^".temp.p4") 
-    (p4_str)
+    (p4_str) *)
 
 let new_main () = 
-  let args = ArgParse.parse_args () in
-  setup_build_dir "LucidCompilerLogs";
-  compile_to_tofino args.dptfn
+  error "the functioncompiler has not yet been updated for the new tofino backend."
 ;;
 
 let _ = new_main ()

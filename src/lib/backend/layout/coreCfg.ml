@@ -4,7 +4,7 @@ open Printf
 open InterpHelpers
 module CL = Caml.List
 open CoreSyntax
-open TofinoCore
+open TofinoCoreNew
 open MatchAlgebra
 
 exception Error of string
@@ -522,16 +522,6 @@ let descendents g v =
     (* rev |> tl removes v itself from the list *)
 ;;
 
-
-(* generate the control flow graph starting at an 
-entry statement that branches to all of the handler bodies *)
-let cfg_of_main (ds:TofinoCore.tdecls) = 
-    let main_sig = main ds in 
-    let main_stmt = main_sig.main_body |> List.hd in
-    cfg_of_statement main_stmt
-(*     let entry_stmt = main_sig.main_body |> List.hd |> delete_noop_seqs |> (sseq snoop) in 
-    cfg_of_statement entry_stmt *)
-;;
 
 (* new cfg for updated tofinocore *)
 open TofinoCoreNew

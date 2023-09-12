@@ -22,7 +22,6 @@ open Core
 
 open CoreSyntax
 open TofinoCoreNew
-module TCOld = TofinoCore
 (* open TofinoCore *)
 open InterpHelpers
 
@@ -496,7 +495,7 @@ let match_of_if exp s1 s2 =
     print_endline ("----"); *)
 
     (* get keys *)
-    let key_exps = evars_in_exp exp |> ShareMemopInputs.unique_list_of_eq CoreSyntax.equiv_exp in 
+    let key_exps = evars_in_exp exp |> MiscUtils.unique_list_of_eq CoreSyntax.equiv_exp in 
     (* construct branches from rules and keys *)
     let branches = CL.map (binary_rule_to_branch s1 s2) rules in 
     let res = SMatch(key_exps, branches) in
@@ -504,20 +503,6 @@ let match_of_if exp s1 s2 =
     (* print_endline (CorePrinting.statement_to_string (statement res)); *)
     res
 ;;
-
-let rec process_old tds = 
-    let v = 
-        object
-            inherit [_] TCOld.s_map as super
-            method! visit_SIf ctx exp s1 s2 = 
-            match_of_if exp 
-              (super#visit_statement ctx s1) 
-              (super#visit_statement ctx s2)
-        end
-    in
-    v#visit_tdecls () tds
-;;
-
 
 (*** new match_of_if that uses MatchAlgebra ***)
 (* convert an atom in a if expression into a (var id, pattern) tuple *)
@@ -683,28 +668,6 @@ let match_of_if_new exp s1 s2 =
     smatch''
 ;;
 
-(* a new algorithm: convert each conjunction of the if expression 
-   into a match statement, then merge all the match statements together.  *)
-let rec process_new tds =
-    let v = 
-        object
-            inherit [_] TCOld.s_map as super
-            method! visit_SIf ctx exp s1 s2 = 
-            (match_of_if_new exp 
-              (super#visit_statement ctx s1) 
-              (super#visit_statement ctx s2)).s
-        end
-    in
-    v#visit_tdecls () tds
-;;
-
-let process tds =
-  let result =
-    if Cmdline.cfg.old_ifelim then process_old tds else process_new tds
-  in
-  result
-;;
-
 
 (* 6/23 -- new tofinocore *)
 let rec process_core_old prog = 
@@ -746,7 +709,7 @@ let process_core prog =
 (* does the output program have the right form? *)
 let no_ifs_form ds = 
     let v = object 
-        inherit [_] TCOld.s_iter as super
+        inherit [_] TofinoCoreNew.s_iter as super
         val mutable pass = true
         method pass = pass          
         method! visit_SIf _ _ _ _ = 

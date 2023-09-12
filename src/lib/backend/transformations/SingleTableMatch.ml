@@ -67,7 +67,7 @@ This is the problematic scenario:
 *)
 
 open CoreSyntax
-module TC = TofinoCore
+module TC = TofinoCoreNew
 module ZZ = Z
 
 let rec tables_in_prog (tds:TC.tdecls) = 
@@ -573,35 +573,6 @@ let process_table stmt tbl =
     (* merge_table_matches tbl n_calls stmt, iovars_of_table tbl *)
   | _ -> 
     merge_table_matches tbl n_calls stmt, iovars_of_table tbl
-;;
-
-(* this pass produces buggy code when tables are not used in any event *)
-let process tds =
-(*   print_endline("starting single table match transformation...");
-  print_endline("----- prog -----");
-  print_endline (TC.tdecls_to_string tds);
- *)  let tbls = tables_defined_and_used_in_prog tds in 
-  let main = TC.main tds in
-  if (List.length main.main_body > 1)
-  then (error "[SingleTableMatch] the main handler in this program is organized into multiple stages, but this pass should be run before staging.");
-  (* combine all the table matches for one table at a time *)
-  let main_body', tbl_iovars = List.fold_left
-    (fun (main_body, tbl_iovars) tbl -> 
-      let main_body, new_iovars = process_table main_body tbl in
-      main_body, tbl_iovars@new_iovars)
-    ((List.hd main.main_body), [])
-    tbls
-  in 
-  let res = TC.update_main 
-    tds 
-    {main with 
-      main_body=[main_body']; 
-      shared_locals=main.shared_locals@tbl_iovars} 
-  in
-(*   print_endline ("finished single table match transformation");
-  print_endline("----- prog -----");
-  print_endline (TC.tdecls_to_string res); *)
-  res
 ;;
 
 (**** end new table call code ****)

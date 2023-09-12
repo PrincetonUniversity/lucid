@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 
-# compile and assemble example applications with and without 
-# --new-tofinocore to compare resource usage
+# depreciated. There is no more old tofinocore. So to compare resource 
+# usage, we have to pull the old tofinocore checkpoint from the git.
 
 import os, sys, errno, shutil, subprocess, re, json, itertools
 from sys import path
@@ -84,7 +84,7 @@ def compile(dptc, prog, build, use_new_tofino):
         shutil.rmtree(build)
     cmd = []
     if (use_new_tofino):
-        cmd = [dptc, prog, "--new-tofino", "-o", build]
+        cmd = [dptc, prog, "-o", build]
     else: 
         cmd = [dptc, prog, "-o", build]        
     # print ("compile command: %s"%(" ".join(cmd)))

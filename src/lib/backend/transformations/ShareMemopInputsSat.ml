@@ -66,6 +66,8 @@ open Solver
 module Z3Bool = Boolean
 module Z3Int = Arithmetic.Integer
 
+
+
 exception Error of string
 let error s = raise (Error s)
 
@@ -323,7 +325,7 @@ let read_vars statement : cid list =
   let vars = ref [] in 
   let v =
     object
-      inherit [_] TofinoCore.s_iter as super
+      inherit [_] TofinoCoreNew.s_iter as super
 
       method! visit_EVar _ var_cid = 
         vars := var_cid::(!vars);
@@ -338,7 +340,7 @@ let assigned_vars statement : cid list =
   let vars = ref [] in 
   let v =
     object
-      inherit [_] TofinoCore.s_iter as super
+      inherit [_] TofinoCoreNew.s_iter as super
 
       method! visit_SLocal  _ id _ _ = 
         vars := (Cid.id id)::(!vars);
@@ -1047,7 +1049,7 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
      let vars = ref [] in 
      let v =
        object
-         inherit [_] TofinoCore.s_iter as super
+         inherit [_] TofinoCoreNew.s_iter as super
    
          method! visit_EVar _ var_cid = 
            vars := var_cid::(!vars);
@@ -1062,7 +1064,7 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
      let vars = ref [] in 
      let v =
        object
-         inherit [_] TofinoCore.s_iter as super
+         inherit [_] TofinoCoreNew.s_iter as super
    
          method! visit_SLocal  _ id _ _ = 
            vars := (Cid.id id)::(!vars);

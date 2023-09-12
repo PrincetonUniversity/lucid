@@ -1,6 +1,5 @@
 open Collections
 open CoreSyntax
-open TofinoCore
 open MatchAlgebra
 open CoreCfg
 open CoreDfg
@@ -776,32 +775,6 @@ let ordered_topo_fold (cmp : SgDfg.vertex -> SgDfg.vertex -> int) (f) (g:SgDfg.t
 let layout_fold f g acc = 
   let cmp = (path_cmp g) in
   ordered_topo_fold cmp f g acc
-;;
-
-let process tds dfg = 
-  let num_dfg_nodes = Dfg.fold_vertex (fun v acc -> v :: acc) dfg [] |> List.length in
-  debug_print_endline ("number of nodes in dfg: "^(num_dfg_nodes |> string_of_int));
-  let layout_args = {
-    num_nodes_to_place = num_dfg_nodes;
-    dfg = dfg_to_sgdfg dfg;
-    arr_dimensions = array_dimensions tds;}
-  in 
-  ensure_all_statements_in_groupdfg dfg layout_args.dfg;
-  (* exit 1; *)
-  print_endline ("placing "^(string_of_int num_dfg_nodes)^(" atomic statement groups into pipeline"));
-  let pipe = SgDfgTopo.fold (place_in_pipe layout_args) layout_args.dfg empty_pipeline in
-  print_endline ("[coreLayout] final pipeline");
-  print_endline (summarystr_of_pipeline pipe);
-
-  update_main tds {(main tds) with main_body=stmts_of_pipe pipe;}
-;;
-
-
-(* print the number of stages to a file in the build directory *)
-let profile tds build_dir = 
-  let num_stages = string_of_int ((main tds).main_body |> CL.length) in 
-  let stages_fn = "num_stages.txt" in
-  IoUtils.writef (build_dir ^ "/" ^ stages_fn) num_stages
 ;;
 
 open TofinoCoreNew

@@ -211,7 +211,7 @@ let rec read_ids_of_condition (c:edge_condition) =
         | None -> []
         | Some pattern -> read_ids_of_pattern pattern
       in 
-      ShareMemopInputs.unique_list_of_eq Id.equals (negs_read_ids@pos_read_ids)
+      MiscUtils.unique_list_of_eq Id.equals (negs_read_ids@pos_read_ids)
     | CNone -> []
     | CExp(_) -> 
       error "[coreDfg] CExp edge conditions not supported"

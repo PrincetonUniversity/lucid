@@ -71,19 +71,15 @@ end
 
 let profile_for_tofino target_filename portspec build_dir profile_cmd = 
   let ds = Input.parse target_filename in
-  (* let ds = FunctionInliningSpecialCase.inline_prog_specialcase ds in *)
   let _, ds = FrontendPipeline.process_prog Builtins.tofino_builtin_tys ds in
-  let core_ds = MidendPipeline.process_prog ds in
   let portspec = ParsePortSpec.parse portspec in 
-  TofinoProfiling.profile core_ds portspec build_dir profile_cmd
+  TofinoProfiling.profile ds portspec build_dir profile_cmd
 ;;
 let compile_to_dfg target_filename json_fn =
-  (* parse *)
   let ds = Input.parse target_filename in
-  (* let ds = FunctionInliningSpecialCase.inline_prog_specialcase ds in *)
   let _, ds = FrontendPipeline.process_prog Builtins.tofino_builtin_tys ds in
-  let core_ds = MidendPipeline.process_prog ds in
-  TofinoProfiling.export_dfg core_ds json_fn;
+  let portspec = ParsePortSpec.parse Cmdline.cfg.portspec in
+  TofinoProfiling.export_dfg ds portspec json_fn;
 ;;
 let main () = 
   disable_logging ();

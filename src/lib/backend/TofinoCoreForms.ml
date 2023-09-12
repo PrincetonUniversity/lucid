@@ -11,7 +11,7 @@
     This module has checks that passes use to verify 
     that the form of their input is as expected. *)
 open CoreSyntax
-open TofinoCore
+open TofinoCoreNew
 
 (* get the source globals declared at this point in the code *)
 let source_globals tds = 
@@ -22,7 +22,7 @@ let source_globals tds =
       method! visit_tdecl _ tdecl =
         match tdecl.td with
         | TDGlobal(id, _, _) -> 
-          print_endline (CorePrinting.decl_to_string (decl_of_tdecl tdecl));
+          print_endline (TofinoCorePrinting.tdecl_to_string tdecl);
           global_ids := id::(!global_ids);
         | TDAction({aid=aid; _}) -> 
           global_ids := aid::(!global_ids);
@@ -47,15 +47,17 @@ let same_globals orig_globals tds =
 
 
 let main_with_event_match label tds = 
+  let _, _ = label, tds in 
+  error "form check not implemented"
   (* required input form:
     a main handler whose body is a single match statement 
     that branches on event id *)
-  let estr = "["^(label)^"]"^" the program IR is not in the \
+  (* let estr = "["^(label)^"]"^" the program IR is not in the \
 expected form. The expected form at this point in the compiler is a \
 TofinoCore program with a main handler that consists of a single statement, \
 a match statement that branches on the handler ID variable. "
   in
-  let m = (main tds) in
+  let m = (main_handler_of_decls tds) in
   match m.main_body with
   | [stmt] -> (
     match stmt.s with 
@@ -64,5 +66,5 @@ a match statement that branches on the handler ID variable. "
       then ()
       else (error estr))
     | _ -> (error estr))
-  | _ -> (error estr)
+  | _ -> (error estr) *)
 ;;

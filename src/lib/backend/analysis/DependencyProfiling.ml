@@ -1,6 +1,5 @@
 (* use the backend to estimate resource utilization on the tofino *)
 open Yojson.Basic.Util
-open TofinoCore
 open CoreCfg
 open CoreDfg
 open CorePrinting
@@ -100,14 +99,11 @@ let dump_symbol_table_json f_fold_vertex fn g =
 ;;
 
 (* dump the data dependency graph *)
-let dump_dep_graphs tds output_dir = 
+let dump_dep_graphs (cdg, dfg) output_dir = 
   let cdg_fn = output_dir^"/control_dependency_graph.dot" in
   let cdg_symbols_fn = output_dir^"/control_dependency_graph.json" in
   let ddg_fn = output_dir^"/data_dependency_graph.dot" in
   let ddg_symbols_fn = output_dir^"/data_dependency_graph.json" in
-  let cfg = CoreCfg.cfg_of_main tds in 
-  let cdg = CoreCdg.to_control_dependency_graph cfg in        
-  let dfg = CoreDfg.process cdg in 
   info@@"Writing control dependency graph to: "^(cdg_fn)^" with symbols defs in: "^(cdg_symbols_fn);
   info@@"Writing data dependency graph to: "^(ddg_fn)^" with symbols defs in: "^(ddg_symbols_fn);
   print_cfg (cdg_fn) cdg;
@@ -117,7 +113,7 @@ let dump_dep_graphs tds output_dir =
   ()
  ;;
 
-let dump_layout_data tds output_dir =
+(* let dump_layout_data tds output_dir =
   let _, _ = tds, output_dir in 
   (* dump everything needed to do layout externally. *)
   (* 
@@ -133,10 +129,9 @@ let dump_layout_data tds output_dir =
       2. locals: width (bits)
   *)
   ()
-;;
+;; *)
 
-let profile ds output_dir = 
-  let _, _ = ds, output_dir in
-  dump_dep_graphs ds output_dir
+let profile (cdg, dfg) output_dir = 
+  dump_dep_graphs (cdg, dfg) output_dir
 ;;
 

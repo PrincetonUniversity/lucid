@@ -7,7 +7,6 @@
 
 open Collections
 open CoreSyntax
-open TofinoCore
 open MatchAlgebra
 open CoreCfg
 open CoreDfg
@@ -518,60 +517,6 @@ let rec schedule prog_info pipeline scheduled_nodes unscheduled_nodes n_failures
     )
   )
 ;;
-
-let prog_info tds dfg = {
-  dfg = dfg;
-  arr_users = build_array_map dfg;
-  arr_dimensions = array_dimensions tds;
-}
-;;
-(* find a layout based on dfg, update main body in tds, replacing 
-   it with the laid-out version. *)
-let process tds dfg = 
-  (* extract information from program that is important for layout *)
-  let prog_info = prog_info tds dfg in
-  (* 2. get list of statements to schedule. *)
-  let unscheduled_nodes = Dfg.fold_vertex 
-    (fun v vs -> 
-      match v.stmt.s with 
-      | SNoop -> vs
-      | _ -> vs@[v]
-    )
-    dfg
-    []
-  in 
-  (* 3. schedule everything *)
-  let result_pipe_opt = schedule prog_info (empty_pipeline) [] unscheduled_nodes 0 in 
-  match result_pipe_opt with 
-  | Some(pipe) -> 
-    print_endline "---- layout summary ----";
-    print_endline (summarystr_of_pipeline pipe);
-(*     print_endline ("resulting pipeline: ");
-    print_endline (string_of_pipe pipe); *)
-    update_main tds {(main tds) with main_body=stmts_of_pipe pipe;}
-  | None -> error "[coreLayout] pipeline could not be laid out."
-;;
-
-(* print the number of stages to a file in the build directory *)
-let profile tds build_dir = 
-  let num_stages = string_of_int ((main tds).main_body |> CL.length) in 
-  let stages_fn = "num_stages.txt" in
-  IoUtils.writef (build_dir ^ "/" ^ stages_fn) num_stages
-;;
-
-let compare_layouts tds_old tds_new = 
-  let stmt_old = (main tds_old).main_body in
-  let stmt_new = (main tds_new).main_body in
-  let len_old = (CL.length stmt_old) in
-  let len_new = (CL.length stmt_new) in 
-  if (len_old = len_new) then (
-    print_endline ("old and new layouts both have "^(string_of_int len_old)^" statements");
-  ) else (
-    print_endline ("LAYOUTS DIFFER. OLD STAGES: " ^ (string_of_int len_old) ^ " NEW STAGES: "^(string_of_int len_new));
-    error "[compare_layouts] layout changed in new algo!"
-  )
-;;
-
 open TofinoCoreNew
 
 

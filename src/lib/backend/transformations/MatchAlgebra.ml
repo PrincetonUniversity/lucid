@@ -330,10 +330,10 @@ let e_eq exp1 exp2 = CoreSyntax.equiv_exp exp1 exp2
 
 
 let unique_exp_list exps = 
-  ShareMemopInputs.unique_list_of_eq e_eq exps
+  MiscUtils.unique_list_of_eq e_eq exps
 ;;
 let check_key_uniqueness exps =
- let unique_exps = ShareMemopInputs.unique_list_of_eq e_eq exps in
+ let unique_exps = MiscUtils.unique_list_of_eq e_eq exps in
  if (CL.length exps <> CL.length unique_exps)
  then (error ("[check_key_uniqueness] failed in: "^(CorePrinting.es_to_string exps)))
  else ()

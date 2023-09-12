@@ -1,7 +1,7 @@
 (* export/import all the data 
    necessary to do layout externally. *)
 open Yojson.Basic.Util
-open TofinoCore
+open TofinoCoreNew
 open CoreCfg
 open CoreDfg
 open CorePrinting
@@ -71,7 +71,7 @@ let json_of_locals tds =
   (* format: {"id" : string; "ty" : string; "size" : int *)
   let json_of_local id ty =
     `Assoc [
-      "id", `String (Id.to_string id);
+      "id", `String (Cid.to_string id);
       "ty", `String (CorePrinting.ty_to_string ty);
       "size", `Int (InterpHelpers.width_from_ty ty)
     ]
@@ -81,33 +81,34 @@ let json_of_locals tds =
   let v = object 
     inherit [_] s_iter as super    
     method! visit_SLocal _ id ty _ =
-      local_specs := (json_of_local id ty)::!local_specs;
+      local_specs := (json_of_local (Cid.id id) ty)::!local_specs;
     end
   in
   v#visit_tdecls () tds;
   let local_specs = !local_specs in
   (* locals declared globally *)
+  let mainh = main_handler_of_decls tds in 
+  let shared_locals = mainh.hdl_preallocated_vars in
   let shared_local_specs = 
-    List.map (fun (id, ty) -> json_of_local id ty)
-    (((main tds).hdl_selector)::(main tds).shared_locals)
+    List.map (fun (id, ty) -> json_of_local (Cid.id id) ty)
+    shared_locals
   in
   (* locals declared as parameters *)
-  let param_specs = 
-    List.split (main tds).hdl_params 
-    |> snd 
-    |> List.flatten
-    |> List.map (fun (id, ty) -> json_of_local id ty)
+  let main_input = get_event_tds tds mainh.hdl_input in
+  let params = tyfields_of_event main_input in
+  let param_specs = List.map (fun (id, ty) -> 
+      json_of_local id ty) params
   in
 
   `List (shared_local_specs@local_specs@param_specs)
 ;;
 
-let export tds json_fn =
+(* takes the declarations of a component and its 
+   dataflow graph and exports it to a json for 
+   python analysis. *)
+let export tds dfg json_fn = 
   let old_verbose_types = Cmdline.cfg.verbose_types in
   Cmdline.cfg.verbose_types <- true;
-  let cfg = CoreCfg.cfg_of_main tds in 
-  let cdg = CoreCdg.to_control_dependency_graph cfg in        
-  let dfg = CoreDfg.process cdg in   
   let json = `Assoc [
     "arrays", json_of_globals tds;
     "vars", json_of_locals tds;

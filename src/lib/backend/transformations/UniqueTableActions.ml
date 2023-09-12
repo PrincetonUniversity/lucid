@@ -14,7 +14,7 @@
         1. the declaration of t
         2. table_installs to t
  *)
-open TofinoCore
+open TofinoCoreNew
 open CoreSyntax
 
 module IdMap = Collections.IdMap

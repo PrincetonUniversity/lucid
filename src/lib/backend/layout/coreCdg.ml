@@ -24,7 +24,6 @@ open Printf
 open InterpHelpers
 module CL = Caml.List
 open CoreSyntax
-open TofinoCore
 open MatchAlgebra
 open CoreCfg
 
