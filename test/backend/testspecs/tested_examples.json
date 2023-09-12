@@ -11,6 +11,7 @@
         {"commands":["compile", "assemble", "execute"], "prog":"src/control_reflector.dpt","build":"control_reflector", "testspec":"tests/control_reflector.json"},
         {"commands":["compile", "assemble", "execute"], "prog":"src/simple_cuckoo_firewall.dpt","build":"simple_cuckoo_firewall", "testspec":"tests/simple_cuckoo_firewall.json"},
         {"commands":["compile", "assemble", "execute"], "prog":"src/learner.dpt","build":"learner", "testspec":"tests/learner.json"},
-        {"commands":["compile", "assemble", "execute"], "prog":"src/checksum.dpt","build":"checksum", "testspec":"tests/checksum.json"}
+        {"commands":["compile", "assemble", "execute"], "prog":"src/checksum.dpt","build":"checksum", "testspec":"tests/checksum.json"},
+        {"commands":["compile", "assemble", "execute"], "prog":"src/event_copies.dpt","build":"event_copies", "testspec":"tests/event_copies.json"}
     ]
 }

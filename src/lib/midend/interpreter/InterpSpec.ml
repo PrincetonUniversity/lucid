@@ -393,8 +393,10 @@ let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t 
     let random_propagate_range =
       parse_int_entry "random propagate range" 1 |> max 1
     in
-    let random_seed =
-      parse_int_entry "random seed" (int_of_float @@ Unix.time ())
+    let random_seed =      
+      (* "random seed" or just "seed" *)
+      parse_int_entry "random seed"       
+        (parse_int_entry "seed" (int_of_float @@ Unix.time ()))
     in
     let _ =
       (* Initialize Python env *)

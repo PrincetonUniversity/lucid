@@ -160,6 +160,8 @@ let compile ds portspec =
   let ds = EliminateEventCombinators.process ds in
   report_if_verbose "-------Unifying event and handler parameter ids---------";
   let ds = StandardizeEventParams.process ds in
+  report_if_verbose "-------Numbering events---------";
+  let ds = InlineEventVars.set_event_nums ds in 
   report_if_verbose "-------Inlining event variables---------";
   let ds = InlineEventVars.inline ds in
   report_if_verbose "-------Creating unique per-table actions---------";
@@ -167,8 +169,6 @@ let compile ds portspec =
 
   report_if_verbose "-------Adding declarations for P4Tofino intrinsics---------";
   let ds = AddIntrinsics.add_intrinsics ds in
-  report_if_verbose "-------Numbering events---------";
-  let ds = AddIngressParser.set_event_nums ds in 
   (* generate the ingress parser or add background event parsing *)
   report_if_verbose "-------Adding background event parser---------";
   let ds = AddIngressParser.add_parser portspec ds in

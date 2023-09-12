@@ -394,30 +394,6 @@ let main_parser_opt ds =
    | _ -> error "multiple main parsers!"
 ;;
 
-let set_event_nums decls =
-   let event_nums = List.filter_map 
-     (fun decl -> match decl.d with
-       | DEvent(_, nopt, _, _) -> nopt
-       | _ -> None)
-     decls
-   in
-   let rec set_event_nums' num decls = 
-     if (List.exists (fun v -> v = num) event_nums)
-     then set_event_nums' (num+1) decls
-     else 
-       match decls with
-       | [] -> []
-       | decl::decls -> (
-         match decl.d with
-         | DEvent(a, None, b, c) -> 
-           {decl with d = DEvent(a, Some(num), b, c)}::(set_event_nums' (num+1) decls)
-         | _ -> decl::(set_event_nums' num decls)
-       )
-   in
-   set_event_nums' 1 decls
- ;;
-
-
 
 let add_parser (portspec:port_config) ds =
    (* separate packet and background events *)
