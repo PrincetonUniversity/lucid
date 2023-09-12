@@ -31,7 +31,7 @@ let partial_backend_pipeline ds portspec =
   let ds = AddIntrinsics.add_intrinsics ds in
   let ds = AddIngressParser.add_parser portspec ds in
   InputChecks.all_checks ds;
-  let ds = TofinoPipelineNew.atomic_op_form Cmdline.cfg.inline_array_addrs ds in
+  let ds = TofinoPipelineNew.atomic_op_form ds in
   let ds = Hoisting.process ds in 
   let ds = UniqueSpans.make_unique_spans ds in
   let ds = UniqueIds.make_var_names_unique ds in

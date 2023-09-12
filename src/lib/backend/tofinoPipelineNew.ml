@@ -47,7 +47,7 @@ let printprog_if_debug ds =
 let printtofcoreprog_if_debug prog = print_if_debug (TofinoCorePrinting.prog_to_string prog);;
 
 (* transform into a form where each statement is atomic *)
-let atomic_op_form inline_array_addrs ds =
+let atomic_op_form ds =
   report_if_verbose "-------Eliminating interpreter-only operations--------";
   let ds = EliminateInterpOps.eliminate_prog ds in
   printprog_if_debug ds;
@@ -63,7 +63,7 @@ let atomic_op_form inline_array_addrs ds =
   let ds = ImmutableConditions.make_conditions_immutable ds in
   printprog_if_debug ds;
   report_if_verbose "-------Breaking down compound expressions--------";
-  let ds = PrecomputeArgs.precompute_args inline_array_addrs ds in
+  let ds = PrecomputeArgs.precompute_args ds in
   dump_ir_prog "midend after precompute args" "midend_precompute" ds;
   let ds = EliminateBools.do_passes ds in
   dump_ir_prog "midend after EliminateBools" "midend_elim_bools" ds;
@@ -87,7 +87,7 @@ let to_tofinocore ds =
 ;;
 
 (* layout the ingress and egress components of a tofinocore prog *)
-let layout old_layout (prog : TofinoCoreNew.prog) = 
+let layout (prog : TofinoCoreNew.prog) = 
   let layout_info = ref [] in
   (* we want to do the layout pipeline for each component *)
   let layout_component (comp:TofinoCoreNew.component) = 
@@ -106,10 +106,7 @@ let layout old_layout (prog : TofinoCoreNew.prog) =
     let dfg = CoreDfg.process cdg in
     CoreDfg.print_dfg (logging_prefix ^ "_dfg.dot") dfg;
     report_if_verbose (Printf.sprintf "-------Layout for %s: scheduling data dependency graph to pipeline-------" cn);
-    let pipeline_stmts = if old_layout
-      then CoreLayoutOld.process_new comp.comp_decls dfg 
-      else CoreLayout.process_new comp.comp_decls dfg 
-    in
+    let pipeline_stmts = CoreLayout.process_new comp.comp_decls dfg in
     let num_stages = List.length(pipeline_stmts) in
     layout_info := (!layout_info)@[(cn, (string_of_int num_stages))];
     let main_handler = TofinoCoreNew.main_handler_of_decls comp.comp_decls in
@@ -134,7 +131,6 @@ let layout old_layout (prog : TofinoCoreNew.prog) =
 
 (* main compilation function *)
 let compile ds portspec =  
-  let old_layout = Cmdline.cfg.old_layout in 
   let ctl_fn_opt = Cmdline.cfg.ctl_fn in 
   let partial_interp = Cmdline.cfg.partial_interp in
 
@@ -184,7 +180,7 @@ let compile ds portspec =
   (* atomic op form breaks down statements so that each statement can 
      map to a single ALU operation or a single match table invocation. *)
   dump_ir_prog "midend in atomic op form" "midend_pre_atomic_op.dpt" ds;
-  let ds = atomic_op_form Cmdline.cfg.inline_array_addrs ds in
+  let ds = atomic_op_form ds in
   dump_ir_prog "midend in atomic op form" "midend_atomic_op.dpt" ds;
   (* the final coreSyntax transformation is hoisting local declarations 
      out of conditional branches, moving them as early in the code as 
@@ -251,7 +247,7 @@ let compile ds portspec =
   dump_prog "tofinocore post deparser generation" "tofinocore_post_deparser" core_prog;
 
 
-  let core_prog = layout old_layout core_prog in
+  let core_prog = layout core_prog in
   dump_prog "tofinocore after layout (final)" "tofinocore_post_layout" core_prog;
   report_if_verbose "-------Translating to final P4-tofino-lite IR-------";
   let tofino_prog = TofinoCoreToP4.translate_prog core_prog in

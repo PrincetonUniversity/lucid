@@ -683,7 +683,7 @@ let rec process_core_old prog =
   v#visit_prog () prog
 ;;
 
-let process_core_new (prog : prog) : prog = 
+let process_core (prog : prog) : prog = 
   let v = 
     object
         inherit [_] s_map as super
@@ -694,12 +694,6 @@ let process_core_new (prog : prog) : prog =
     end
 in
 v#visit_prog () prog
-;;
-let process_core prog =
-  let result =
-    if Cmdline.cfg.old_ifelim then process_core_old prog else process_core_new prog
-  in
-  result
 ;;
 
 

@@ -30,11 +30,7 @@ type config =
       string option (* something with profiling -- probably depreciated *)
   ; mutable ctl_fn : string option (* path to optional python control program *)
   ; mutable serverlib : bool
-  ; mutable old_layout : bool (* use the older, slower layout algorithm *)
       (* If false, disable the python event library generation *)
-  ; mutable old_ifelim : bool (* use the old if to match translation pass, which has a different set of bugs! *)
-  ; mutable inline_array_addrs : bool 
-    (* inline array address calculation into array call *)
   ; mutable optimal_memop_input_alloc : bool
     (* find an allocation of memop inputs to sALU input register that requires no extra copy operations.
        In some cases, this may create larger PHV clusters. *)
@@ -66,10 +62,7 @@ let default () =
   ; portspec = None
   ; profile_cmd = None
   ; ctl_fn = None
-  ; old_layout = false
   ; serverlib = false
-  ; old_ifelim = false
-  ; inline_array_addrs = false
   ; optimal_memop_input_alloc = true
   }
 ;;
@@ -198,8 +191,6 @@ let parse_tofino () =
   let set_portspec (s : string) = cfg.portspec <- Some s in
   let set_profile_cmd (s : string) = cfg.profile_cmd <- Some s in
   let set_ctl_fn (s : string) = cfg.ctl_fn <- Some s in
-  let set_old_layout () = cfg.old_layout <- true in
-  let set_old_ifelim () = cfg.old_ifelim <- true in
   let speclist =
     speclist
     @ [ "-o", Arg.String set_builddir, "Output build directory."
@@ -210,8 +201,6 @@ let parse_tofino () =
         , Arg.String set_profile_cmd
         , "Profile program instead of compiling." )
       ; "--control", Arg.String set_ctl_fn, "Python control program."
-      ; "--oldlayout", Arg.Unit set_old_layout, "Use old layout algorithm." 
-      ; "--oldifelim", Arg.Unit set_old_ifelim, "Use old if to match elimination algorithm."
       ; ( "--old_memop_alloc"
       , Arg.Unit (fun () -> cfg.optimal_memop_input_alloc <- false)
       , "If true, use the old memop argument to sALU register allocator, which may \

@@ -23,7 +23,7 @@ let is_hash exp =
   | _ -> false 
 ;;
 
-let precompute_args inline_array_addrs ds =
+let precompute_args ds =
   let v =
     object (self)
       inherit [_] s_map as super
@@ -117,9 +117,9 @@ let precompute_args inline_array_addrs ds =
           let new_args = CL.map self#precompute_arg args in
           { exp with e = EHash (size, new_args) }
         | ECall (fcn_id, args) 
-            when (inline_array_addrs & (List.exists 
+            when (List.exists 
               (fun fcid -> Cid.equal_names fcn_id fcid)
-              array_method_cids)) -> (
+              array_method_cids) -> (
             (* array methods are special -- we allow hash expressions 
             in the index argument, which is always the 2nd arg (at pos 1) *)
             match args with
