@@ -51,6 +51,7 @@ let common_midend_passes ds =
         event variables that are changed conditionally in
         subsequent control flow. To fix, we should integrate
         the solution from Andrew's fork. *)
+  let ds = InlineEventVars.set_event_nums ds in
   (* form: + no event variables *)
   let ds = InlineEventVars.inline ds in
   (* make sure that each table uses unique actions *)
