@@ -1,0 +1,24 @@
+dpt: Auto-detected specification file examples/interp_tests/event_mutate.json
+dpt: Simulating...
+dpt: Using random seed: 0
+
+t=0: Handling event mutate(1) at switch 0, port 0
+t=1: Handling event mutate(2) at switch 0, port 0
+t=600: Handling event baz(3) at switch 0, port 196
+t=601: Handling event bar(1,2) at switch 0, port 196
+dpt: Final State:
+
+Switch 0 : {
+
+ Pipeline : [ ]
+
+ Events :   [ ]
+
+ Exits :    [ ]
+
+ Drops :    [ ]
+
+ packet events handled: 0
+ total events handled: 4
+
+}

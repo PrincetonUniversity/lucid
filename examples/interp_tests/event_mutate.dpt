@@ -1,0 +1,13 @@
+
+event bar(int y, int z){skip;}
+
+event baz(int<16> a){skip;}
+
+event mutate(int x) {
+	event e = bar(1, 2);
+	if (x == 1) {
+		e = baz(3);
+	}
+	generate(e);
+}
+

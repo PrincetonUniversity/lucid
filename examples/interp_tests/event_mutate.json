@@ -1,0 +1,8 @@
+{
+	"random seed":0,
+	"max time": 100000,
+	"events": [
+		{"name":"mutate", "args":[1]},
+		{"name":"mutate", "args":[2]}
+	]
+}

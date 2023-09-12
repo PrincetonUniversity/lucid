@@ -1,0 +1,15 @@
+
+event bar(int y, int z){skip;}
+
+event baz(int<16> a){skip;}
+
+event copies(int x) {
+	event b1 = bar(1, 2);
+	event b2 = baz(2);
+	event e = b1;
+	if (x == 1) {
+		e = b2;
+	}
+	generate(e);
+}
+
