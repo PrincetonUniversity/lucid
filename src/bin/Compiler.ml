@@ -38,7 +38,7 @@ let compile_to_tofino dptfn =
   let _, ds = FrontendPipeline.process_prog Builtins.tofino_builtin_tys ds in
   (* tofino midend / backend *)
   let p4_str, c_str, py_str, py_eventlib, globals =
-    TofinoPipelineNew.compile
+    TofinoPipeline.compile
       ds
       portspec
   in
