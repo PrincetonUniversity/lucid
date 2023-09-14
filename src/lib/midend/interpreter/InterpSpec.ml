@@ -418,9 +418,12 @@ let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t 
     let max_time =
       match List.assoc_opt "max time" lst with
       | Some (`Int n) -> n
-      | _ -> 0
-      (* a max time of 0 makes sense for interactive mode *)
-      (* error "No value or non-int value specified for max time" *)
+      | _ -> (
+        (* for interactive mode, max_time is the start timestamp for incoming events *)
+        if (Cmdline.cfg.interactive)
+          then 0
+          else 10000
+      )
     in
     let externs =
       let externs =
