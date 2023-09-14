@@ -6,7 +6,7 @@ open CoreSyntax
 open Yojson.Basic
 open Str
 
-(* interpreter state events *)
+(* control events are interpreter builtins -- state update commands *)
 type control_e = 
   | ArraySet of string * value * (value list)
   | ArraySetRange of string * value * value * (value list)
@@ -21,25 +21,35 @@ type control_event = {
   ctl_edelay : int;
 }
 
+(* a packet event is an unparsed event, 
+   which gets transformed into an event_val 
+   by a parser. *)
+type packet_event = {
+  pkt_bytes : string;
+  pkt_edelay : int;
+}
+
 type interp_event =
   | IEvent of event_val
   | IControl of control_event
-
-(* event queued for execution at a switch *)
-type switch_event = {
-  sevent : interp_event;
-  stime : int;
-  sport : int;
-}
+  | IPacket of packet_event
 
 type loc = {
   switch : int;
   port : int;
 }
-(* input to the interpreter from the user *)
+(* a located event represents an event on input, 
+   after parsing but before queueing *)
 type located_event = {
   ievent : interp_event;
   ilocs : loc list;
+}
+
+(* a switch_event is how we represent the event in a queue at a switch *)
+type switch_event = {
+  sevent : interp_event;
+  stime : int;
+  sport : int;
 }
 
 (* constructors *)
@@ -58,6 +68,7 @@ let assoc_to_vals keys lst =
     keys
 ;;    
 
+(*** parsing json event inputs ***)
 
 module JP = struct
   let to_size v =
@@ -240,6 +251,187 @@ let parse_control_e lst =
     | _ -> error "unknown control command"
     (* | None -> error "control command has no name field" *)
 ;;
+
+
+(*** event parsing (plus helpers ripped out of InterpSpec)***)
+(*** these are parsing helper functions that have been ripped out
+    of InterpSpec.ml and butchered to remove CiRcULar DePENdencIeS!1!! *)
+
+
+let rename env err_str id_str =
+  match Collections.CidMap.find_opt (Cid.from_string id_str) env with
+  | Some id -> id
+  | None -> error @@ Printf.sprintf "Unknown %s %s" err_str id_str
+;;
+    
+
+let parse_port str =
+  match String.split_on_char ':' str with
+  | [id; port] ->
+    (try int_of_string id, int_of_string port with
+     | _ -> error "Incorrect format for link entry!")
+  | _ -> error "Incorrect format for link entry!"
+;;
+
+let parse_int err_str (j) =
+  match j with
+  | `Int n -> n
+  | _ -> error @@ "Non-integer value for " ^ err_str
+;;
+
+let rec parse_value payloads_t_id err_str ty j =
+  match j, ty.raw_ty with
+  | `Int n, TInt size -> vint n size
+  | `Int n, TName (cid, _, _) when Cid.equal cid payloads_t_id -> vint n 32
+  | `Bool b, TBool -> vbool b
+  | `List lst, TGroup ->
+    vgroup (List.map (fun n -> parse_int "group value definition" n) lst)
+  | _ ->
+    error
+    @@ err_str
+    ^ " specification had wrong or unexpected argument "
+    ^ to_string j
+;;
+
+
+let parse_locations default_port num_switches lst =
+  let locations =
+    match List.assoc_opt "locations" lst with
+    | Some (`List lst) ->
+      List.map
+        (function
+         | `String str ->
+           let sw, port = parse_port str in
+           if sw < 0 || sw >= num_switches
+           then
+             error
+             @@ "Cannot specify event at nonexistent switch "
+             ^ string_of_int sw;
+           if port < 0 || port >= 255
+           then
+             error
+             @@ "Cannot specify event at nonexistent port "
+             ^ string_of_int port;
+           sw, port
+         | _ -> error "Event specification had non-string location")
+        lst
+    | None -> [0, default_port]
+    | _ -> error "Event specification has non-list locations field"
+  in
+  locations
+;;
+
+(* control locations are just a switch number, no port *)
+let parse_control_locations num_switches lst = 
+  let locations =
+    match List.assoc_opt "locations" lst with
+    | Some (`List lst) ->
+      List.map
+        (function
+        | `Int sw ->
+          if sw < 0 || sw >= num_switches
+          then
+            error
+            @@ "Cannot specify control command at nonexistent switch "
+            ^ string_of_int sw;
+          sw
+        | _ -> error "Control command specification had non-int location")
+        lst
+    | None -> [0]
+    | _ -> error "control command specification has non-list locations field"
+  in
+  locations
+;;
+
+
+let parse_delay cur_ts lst =
+  match List.assoc_opt "timestamp" lst with
+  | Some (`Int n) -> n
+  | None -> cur_ts
+  | _ -> error "Event specification had non-integer delay field"
+;;
+
+
+
+(* get the name of the event, given a renaming function that I am not allowed to know. *)
+let get_eid var_map lst =
+  match List.assoc_opt "name" lst with
+  | Some (`String id) -> rename var_map "event" id
+  | None -> error "Event specification missing name field"
+  | _ -> error "Event specification had non-string type for name field"
+;;
+
+(* get event data  *)
+let get_data (payloads_t_id, var_map) event_json events = 
+  let eid = get_eid var_map event_json in
+  let data =
+    match List.assoc_opt "args" event_json with
+    | Some (`List lst) -> 
+      (* let _, tys = InterpSyntax.get_event_tys eid pp.events in *)
+      let _, tys = Collections.CidMap.find eid events in
+      (try List.map2 (parse_value payloads_t_id "Event") tys lst with
+      | Invalid_argument _ ->
+        error
+        @@ Printf.sprintf
+             "Event specification for %s had wrong number of arguments"
+             (Cid.to_string eid))
+    | None -> error "Event specification missing args field"
+    | _ -> error "Event specification had non-list type for args field"
+  in
+  data
+;;
+
+(* outermost parser... *)
+    (* Find the event name, accounting for the renaming pass, and get its
+       sort and argument types *)
+    (* Determine if the record is an event or a control command.
+       "type" == "command" -> command
+       "type" == "event" -> event
+       - if there is no type, it is an event *)
+    (* Parse the arguments into values, and make sure they have the right types.
+       At the moment only integer and boolean arguments are supported *)
+
+let parse_located_event 
+  payloads_t_id
+  var_map
+  events
+  num_switches
+  cur_ts
+  default_port
+  event : located_event = 
+  match event with
+  | `Assoc event_json ->
+    (match List.assoc_opt "type" event_json with
+     | Some (`String "event") ->
+      (* located user event event *)
+      let eid = get_eid var_map event_json in
+      let data = get_data (payloads_t_id, var_map) event_json events in
+      let edelay = parse_delay cur_ts event_json in
+      let locations = parse_locations default_port num_switches event_json in
+      ilocated_event ({ eid; data; edelay }, locations)
+  
+     | Some (`String "command") -> 
+      (* located control/command event *)
+      let edelay = parse_delay cur_ts event_json in
+      let locations = parse_control_locations num_switches event_json in
+      let control_event =
+        { ctl_cmd = parse_control_e event_json; ctl_edelay = edelay }
+      in
+      ilocated_control (control_event, List.map (fun sw -> sw, 0) locations)
+    (* left off here. Parse a packet event into a packet event. *)
+     | Some _ ->
+       error "unknown interpreter input type (expected event or command)"
+     (* default is an event*)
+     | None -> 
+      let eid = get_eid var_map event_json in
+      let data = get_data (payloads_t_id, var_map) event_json events in
+      let edelay = parse_delay cur_ts event_json in
+      let locations = parse_locations default_port num_switches event_json in
+      ilocated_event ({ eid; data; edelay }, locations)
+      )
+  | _ -> error "Non-assoc type for interpreter input"
+;;
+
 (* printing *)
 let control_event_to_string control_e =
   match control_e with
@@ -268,6 +460,7 @@ let locs_to_tups = List.map loc_to_tup
 let interp_event_delay (iev : interp_event) = match iev with
   | IEvent(ev) -> ev.edelay
   | IControl(ev) -> ev.ctl_edelay
+  | IPacket(ev) -> ev.pkt_edelay
 ;;
 
 let located_event_delay (lev:located_event) = 
@@ -277,4 +470,5 @@ let interp_event_to_string ievent =
   match ievent with
   | IEvent(e) -> CorePrinting.event_to_string e
   | IControl(_) -> "(Control event (printer not implemented))"
+  | IPacket(_) -> "(Packet event (printer not implemented))"
 ;;

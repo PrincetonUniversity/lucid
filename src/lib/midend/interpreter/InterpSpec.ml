@@ -18,12 +18,6 @@ type t =
   ; ctl_pipe_name : string option
   }
 
-let rename env err_str id_str =
-  match Collections.CidMap.find_opt (Cid.from_string id_str) env with
-  | Some id -> id
-  | None -> error @@ Printf.sprintf "Unknown %s %s" err_str id_str
-;;
-
 let parse_int err_str (j : json) =
   match j with
   | `Int n -> n
@@ -60,135 +54,6 @@ let parse_port str =
 
 let default_port = 0
 
-let parse_delay cur_ts lst =
-  match List.assoc_opt "timestamp" lst with
-  | Some (`Int n) -> n
-  | None -> cur_ts
-  | _ -> error "Event specification had non-integer delay field"
-;;
-
-let parse_event
-  (pp : Preprocess.t)
-  (renaming : Renaming.env)
-  num_switches
-  (cur_ts : int)
-  (event : json)
-  : located_event
-  =
-  let parse_locations num_switches lst =
-    let locations =
-      match List.assoc_opt "locations" lst with
-      | Some (`List lst) ->
-        List.map
-          (function
-           | `String str ->
-             let sw, port = parse_port str in
-             if sw < 0 || sw >= num_switches
-             then
-               error
-               @@ "Cannot specify event at nonexistent switch "
-               ^ string_of_int sw;
-             if port < 0 || port >= 255
-             then
-               error
-               @@ "Cannot specify event at nonexistent port "
-               ^ string_of_int port;
-             sw, port
-           | _ -> error "Event specification had non-string location")
-          lst
-      | None -> [0, default_port]
-      | _ -> error "Event specification has non-list locations field"
-    in
-    locations
-  in
-  match event with
-  | `Assoc lst ->
-    (* Find the event name, accounting for the renaming pass, and get its
-       sort and argument types *)
-    (* Determine if the record is an event or a control command.
-       "type" == "command" -> command
-       "type" == "event" -> event
-       - if there is no type, it is an event *)
-    let eid =
-      match List.assoc_opt "name" lst with
-      | Some (`String id) -> rename renaming.var_map "event" id
-      | None -> error "Event specification missing name field"
-      | _ -> error "Event specification had non-string type for name field"
-    in
-    let _, tys = Env.find eid pp.events in
-    (* Parse the arguments into values, and make sure they have the right types.
-       At the moment only integer and boolean arguments are supported *)
-    let data =
-      match List.assoc_opt "args" lst with
-      | Some (`List lst) ->
-        (try List.map2 (parse_value "Event") tys lst with
-         | Invalid_argument _ ->
-           error
-           @@ Printf.sprintf
-                "Event specification for %s had wrong number of arguments"
-                (Cid.to_string eid))
-      | None -> error "Event specification missing args field"
-      | _ -> error "Event specification had non-list type for args field"
-    in
-    (* Parse the delay and location fields, if they exist *)
-    let edelay = parse_delay cur_ts lst in
-    let locations = parse_locations num_switches lst in
-    ilocated_event ({ eid; data; edelay }, locations)
-  | _ -> error "Non-assoc type for event definition"
-;;
-
-let parse_control_op num_switches (cur_ts : int) (control : json) =
-  let parse_locations num_switches lst =
-    let locations =
-      match List.assoc_opt "locations" lst with
-      | Some (`List lst) ->
-        List.map
-          (function
-           | `Int sw ->
-             if sw < 0 || sw >= num_switches
-             then
-               error
-               @@ "Cannot specify control command at nonexistent switch "
-               ^ string_of_int sw;
-             sw
-           | _ -> error "Control command specification had non-int location")
-          lst
-      | None -> [0]
-      | _ -> error "control command specification has non-list locations field"
-    in
-    locations
-  in
-  match control with
-  | `Assoc lst ->
-    let edelay = parse_delay cur_ts lst in
-    let locations = parse_locations num_switches lst in
-    let control_event =
-      { ctl_cmd = InterpSyntax.parse_control_e lst; ctl_edelay = edelay }
-    in
-    ilocated_control (control_event, List.map (fun sw -> sw, 0) locations)
-  | _ -> error "Non-assoc type for control command"
-;;
-
-let parse_interp_input
-  (pp : Preprocess.t)
-  (renaming : Renaming.env)
-  num_switches
-  (cur_ts : int)
-  (event : json)
-  =
-  match event with
-  | `Assoc lst ->
-    (match List.assoc_opt "type" lst with
-     | Some (`String "event") ->
-       parse_event pp renaming num_switches cur_ts event
-     | Some (`String "command") -> parse_control_op num_switches cur_ts event
-     | Some _ ->
-       error "unknown interpreter input type (expected event or command)"
-     (* default is event *)
-     | None -> parse_event pp renaming num_switches cur_ts event)
-  | _ -> error "Non-assoc type for interpreter input"
-;;
-
 (* parse a line provided to the interactive mode interpreter,
    which may either be a single event (an assoc) or a list of
    multiple events (List of assocs) *)
@@ -197,11 +62,15 @@ let parse_interp_event_list
   (renaming : Renaming.env)
   (num_switches : int)
   (gap : int)
-  (events : json)
+  (input_json : json)
   =
-  match events with
-  | `List lst -> List.map (parse_interp_input pp renaming num_switches gap) lst
-  | _ -> [parse_interp_input pp renaming num_switches gap events]
+  let parse_f =
+    (parse_located_event 
+      Payloads.t_id renaming.var_map pp.events num_switches gap default_port)
+  in
+  match input_json with
+  | `List lst -> List.map parse_f lst
+  | _ -> [parse_f input_json]
 ;;
 
 let parse_interp_inputs
@@ -211,12 +80,16 @@ let parse_interp_inputs
   (gap : int)
   (events : json list)
   =
+  let parse_f =
+    (parse_located_event 
+      Payloads.t_id renaming.var_map pp.events num_switches)
+  in
   let wrapper
     ((located_events_rev : located_event list), (current_ts : int))
     (event_json : json)
     =
     let located_event =
-      parse_interp_input pp renaming num_switches current_ts event_json
+      parse_f current_ts default_port event_json
     in
     let next_ts = located_event_delay located_event + gap in
     located_event :: located_events_rev, next_ts
@@ -224,28 +97,6 @@ let parse_interp_inputs
   let located_events_rev, _ = List.fold_left wrapper ([], 0) events in
   List.rev located_events_rev
 ;;
-
-(* DEPRECIATED *)
-(* let parse_events
-    (pp : Preprocess.t)
-    (renaming : Renaming.env)
-    (num_switches : int)
-    (gap : int)
-    (events : json list)
-  =
-  let wrapper
-      ((located_events_rev : located_event list), (current_ts : int))
-      (event_json : json)
-    =
-    let located_event =
-      parse_event pp renaming num_switches current_ts event_json
-    in
-    let next_ts = (fst located_event).edelay + gap in
-    located_event::located_events_rev,next_ts
-  in
-  let located_events_rev, _ = List.fold_left wrapper ([], 0) events in
-  List.rev located_events_rev
-;; *)
 
 let builtins renaming n =
   List.init n (fun i ->
