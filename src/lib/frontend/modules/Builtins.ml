@@ -12,6 +12,8 @@ let lucid_ety_ty = ty (TInt (IConst 16))
 let lucid_ety_int = 666
 let lucid_ety_value = vint lucid_ety_int 16
 
+let lucid_parse_id = Id.create "do_lucid_parsing"
+
 (* used as first argument to hash, for checksum in deparser *)
 let checksum_id = Id.create "checksum"
 let checksum_ty = TInt (IConst 32) |> ty
@@ -74,5 +76,4 @@ let start_id = Id.create "start"
 (* Used in memops *)
 let cell1_id = SyntaxUtils.cell1_id
 let cell2_id = SyntaxUtils.cell2_id
-let lucid_parse_id = Id.create "do_lucid_parsing"
 

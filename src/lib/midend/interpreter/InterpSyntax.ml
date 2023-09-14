@@ -61,6 +61,9 @@ let ilocated_event (ev, locs) =
 let ilocated_control (ctl_ev, locs) = 
   {ievent = IControl(ctl_ev); ilocs = List.map loc locs}
 ;;
+let ilocated_packet (pkt_ev, locs) = 
+  {ievent = IPacket(pkt_ev); ilocs = List.map loc locs}
+;;
 
 let assoc_to_vals keys lst =
   List.map
@@ -402,7 +405,8 @@ let parse_located_event
   match event with
   | `Assoc event_json ->
     (match List.assoc_opt "type" event_json with
-     | Some (`String "event") ->
+     | Some (`String "event")
+     | None -> 
       (* located user event event *)
       let eid = get_eid var_map event_json in
       let data = get_data (payloads_t_id, var_map) event_json events in
@@ -418,17 +422,20 @@ let parse_located_event
         { ctl_cmd = parse_control_e event_json; ctl_edelay = edelay }
       in
       ilocated_control (control_event, List.map (fun sw -> sw, 0) locations)
-    (* left off here. Parse a packet event into a packet event. *)
+     | Some (`String "packet") -> 
+       let pkt_edelay = parse_delay cur_ts event_json in
+       let locations = parse_locations default_port num_switches event_json in
+       let pkt_bytes = match List.assoc_opt "bytes" event_json with
+        | Some (`String s) -> s
+        | _ -> error "packet event must have a bytes field"
+       in
+       let pkt_event = 
+          {pkt_bytes; pkt_edelay}
+       in
+       ilocated_packet (pkt_event, locations)
      | Some _ ->
        error "unknown interpreter input type (expected event or command)"
-     (* default is an event*)
-     | None -> 
-      let eid = get_eid var_map event_json in
-      let data = get_data (payloads_t_id, var_map) event_json events in
-      let edelay = parse_delay cur_ts event_json in
-      let locations = parse_locations default_port num_switches event_json in
-      ilocated_event ({ eid; data; edelay }, locations)
-      )
+    )
   | _ -> error "Non-assoc type for interpreter input"
 ;;
 

@@ -77,7 +77,6 @@
    interpSpec
    interpState
    interpSyntax
-   interpEvents
    libraryInterface
    arrays
    counters

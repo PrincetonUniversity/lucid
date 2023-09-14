@@ -732,6 +732,9 @@ let interp_memop params body nst swid args =
     else interp_exp nst swid locals e3 |> extract_ival
 ;;
 
+(* <<left off here>> writing the lucid parse builtin function and type. Figure out where to put it. *)
+
+
 let interp_decl (nst : State.network_state) swid d =
   (* print_endline @@ "Interping decl: " ^ Printing.decl_to_string d; *)
   match d.d with
@@ -760,6 +763,21 @@ let interp_decl (nst : State.network_state) swid d =
       ignore @@ interp_statement nst swid locals body
     in
     State.add_handler (Cid.id id) f nst
+  | DParser(id, params, parser_block) -> 
+    let _, _ = params, parser_block in
+    let f nst swid port pktstr = 
+      let builtin_env = 
+        List.fold_left
+          (fun acc (k, v) -> Env.add k v acc)
+          Env.empty
+          [ Id Builtins.lucid_ety_id, State.V(Builtins.lucid_ety_value |> SyntaxToCore.translate_value) ]
+          (* <<left off here>> add do_lucid_parsing *)
+      in
+      let _, _, _, _ = nst, swid, port, pktstr in 
+      ()
+    in
+    State.add_parser (Cid.id id) f nst
+
   | DEvent (id, _, _, _) ->
     let f _ _ args =
       vevent { eid = Id id; data = List.map extract_ival args; edelay = 0 }
@@ -770,7 +788,6 @@ let interp_decl (nst : State.network_state) swid d =
     let f = interp_memop mparams mbody in
     State.add_global swid (Cid.id mid) (State.F f) nst;
     nst
-  | DParser _ -> nst
   | DExtern _ ->
     failwith "Extern declarations should be handled during preprocessing"
 ;;

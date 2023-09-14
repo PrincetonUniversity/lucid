@@ -50,6 +50,7 @@ module State = struct
     ; config : config
     ; event_sorts : event_sort Env.t
     ; handlers : handler Env.t
+    ; parsers  : parser Env.t
     ; links : topology
     ; switches : state array
     ; actions : action Env.t
@@ -69,12 +70,17 @@ module State = struct
   and ival =
     | V of value
     | F of code
+    | P of string (*packet value *)
 
   and code = network_state -> int (* switch *) -> ival list -> value
   and memop
 
   and handler =
     network_state -> int (* switch *) -> int (* port *) -> event_val -> unit
+
+  and parser = 
+    network_state -> int (* switch *) -> int (* port *) -> string (* packet *) -> unit
+
 
   type global_fun =
     { cid : Cid.t
@@ -95,6 +101,7 @@ module State = struct
     ; config
     ; event_sorts = Env.empty
     ; handlers = Env.empty
+    ; parsers = Env.empty
     ; switches = Array.of_list []
     ; links = empty_topology 0
     ; actions = Env.empty
@@ -125,6 +132,10 @@ module State = struct
     | Not_found -> error ("missing handler: " ^ Cid.to_string cid)
   ;;
 
+  let lookup_parser cid nst =
+    try Some (Env.find cid nst.parsers) with
+    | Not_found -> error ("missing parser: " ^ Cid.to_string cid)
+  ;;
   let lookup_action cid nst =
     try Env.find cid nst.actions with
     | Not_found -> error ("missing action: " ^ Cid.to_string cid)
@@ -152,6 +163,8 @@ module State = struct
   let add_handler cid lam nst =
     { nst with handlers = Env.add cid lam nst.handlers }
   ;;
+  let add_parser cid lam nst = 
+    { nst with parsers = Env.add cid lam nst.parsers }
 
   let add_action cid action nst =
     { nst with actions = Env.add cid action nst.actions }
@@ -303,6 +316,7 @@ module State = struct
     match v with
     | V v -> CorePrinting.value_to_string v
     | F _ -> "<function>"
+    | P s -> s
   ;;
 
   let env_to_string env =
@@ -426,4 +440,5 @@ let extract_ival iv =
   match iv with
   | State.V v -> v
   | State.F _ -> failwith "IVal not a regular value"
+  | State.P _ -> failwith "IVal not a regular value"
 ;;
