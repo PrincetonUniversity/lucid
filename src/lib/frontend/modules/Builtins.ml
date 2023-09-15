@@ -13,6 +13,8 @@ let lucid_ety_int = 666
 let lucid_ety_value = vint lucid_ety_int 16
 
 let lucid_parse_id = Id.create "do_lucid_parsing"
+let packet_arg_id = Id.create "packet"
+let main_parse_id = Id.create "main"
 
 (* used as first argument to hash, for checksum in deparser *)
 let checksum_id = Id.create "checksum"
@@ -27,7 +29,9 @@ let builtin_type_info =
   [ Arrays.t_id, Arrays.sizes, Arrays.global
   ; Counters.t_id, Counters.sizes, Counters.global
   ; PairArrays.t_id, PairArrays.sizes, PairArrays.global
-  ; Payloads.t_id, Payloads.sizes, Payloads.global ]
+  ; Payloads.t_id, Payloads.sizes, Payloads.global
+  ; Packet.t_id, Packet.sizes, Packet.global
+  ]
 ;;
 
 (* Building modules *)
@@ -37,7 +41,10 @@ let builtin_modules =
   ; Events.signature
   ; System.signature
   ; PairArrays.signature
-  ; Payloads.signature ]
+  ; Payloads.signature
+  ; Packet.signature 
+
+  ]
 ;;
 
 let builtin_defs =
@@ -47,6 +54,7 @@ let builtin_defs =
   @ System.defs
   @ PairArrays.defs
   @ Payloads.defs
+  @ Packet.defs
 ;;
 
 (* Builtin local vars with

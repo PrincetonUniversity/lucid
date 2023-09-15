@@ -165,11 +165,13 @@ let rec interp_exp (nst : State.network_state) swid locals e : State.ival =
   | ECall (cid, es) ->
     let vs = interp_exps es in
     (match lookup cid with
+     | P _ 
      | V _ ->
        error
          (Cid.to_string cid
          ^ " is a value identifier and cannot be used in a call")
-     | F f -> V (f nst swid vs))
+     | F f -> V (f nst swid vs)
+   )
   | EHash (size, args) ->
     let vs = interp_exps args in
     let vs =
@@ -732,8 +734,17 @@ let interp_memop params body nst swid args =
     else interp_exp nst swid locals e3 |> extract_ival
 ;;
 
-(* <<left off here>> writing the lucid parse builtin function and type. Figure out where to put it. *)
+(* <<left off here>> interpet methods for parsers, with the convention 
+   that locals[Builtins.packet_arg_id] is the current packet buffer
+   and locals[Builtins.igr_port_id] is the input port. 
+   Note that calls to parser besides main must have their args modified to 
+   prepend the current packet buffer and input port!*)
 
+let interp_parser_block nst swid locals parser_block =
+  let _, _, _, _ = nst, swid, locals, parser_block in
+  print_endline ("interpreting parser block!");
+  exit 1
+;;
 
 let interp_decl (nst : State.network_state) swid d =
   (* print_endline @@ "Interping decl: " ^ Printing.decl_to_string d; *)
@@ -763,20 +774,47 @@ let interp_decl (nst : State.network_state) swid d =
       ignore @@ interp_statement nst swid locals body
     in
     State.add_handler (Cid.id id) f nst
-  | DParser(id, params, parser_block) -> 
-    let _, _ = params, parser_block in
-    let f nst swid port pktstr = 
-      let builtin_env = 
-        List.fold_left
-          (fun acc (k, v) -> Env.add k v acc)
-          Env.empty
-          [ Id Builtins.lucid_ety_id, State.V(Builtins.lucid_ety_value |> SyntaxToCore.translate_value) ]
-          (* <<left off here>> add do_lucid_parsing *)
+
+  (* parsers: 
+    - add the main parser into the parsers list, 
+    with port and args passed in from interp runtime, 
+    but not declared in the params. 
+    - add all other parsers as global functions, where 
+    port value is added to arguments list by 
+    interpretation of ECalls in the parser. *)
+  | DParser(id, params, parser_block) when (Id.equal id (Builtins.main_parse_id)) -> 
+    let runtime_parser nst swid port pkt args = 
+      let builtin_locals = Env.empty 
+        |> Env.add (Id Builtins.ingr_port_id) (State.V (vint port 32)) 
+        |> Env.add (Id Builtins.packet_arg_id) (pkt)
       in
-      let _, _, _, _ = nst, swid, port, pktstr in 
-      ()
+      let locals = 
+        List.fold_left2
+          (fun acc v id -> Env.add (Id id) v acc)
+          builtin_locals
+          args
+          ((Builtins.ingr_port_id)::(List.split params |> fst))
+      in
+      interp_parser_block nst swid locals parser_block
     in
-    State.add_parser (Cid.id id) f nst
+    State.add_parser (Cid.id id) runtime_parser nst
+  | DParser(id, params, parser_block) -> 
+    let _, _, _ = id, params, parser_block in
+    (* note that non-main parsers are added to the _function_ 
+       context, not the _parser_ context, so that we can re-use 
+       call interpretation. *)
+    let runtime_function nst swid args = 
+      let locals = 
+        List.fold_left2
+          (fun acc v id -> Env.add (Id id) v acc)
+          Env.empty
+          args
+          ((Builtins.ingr_port_id)::(Builtins.packet_arg_id)::(List.split params |> fst))
+      in
+      interp_parser_block nst swid locals parser_block
+    in
+    State.add_global swid (Cid.id id) (F runtime_function) nst;
+    nst
 
   | DEvent (id, _, _, _) ->
     let f _ _ args =

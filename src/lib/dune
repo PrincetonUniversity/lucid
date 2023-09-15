@@ -84,6 +84,7 @@
    system
    events
    payloads
+   packet
    builtins
    TQVar
    backendLogging

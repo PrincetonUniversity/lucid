@@ -90,13 +90,15 @@ let execute_event
 let execute_control swidx (nst : State.network_state) (ctl_ev : control_event) =
   InterpControl.handle_control nst swidx ctl_ev
 ;;
-(* left off here. Follow the execute_control design pattern for execute_parse. 
+(* left off here. Follow the execute_control / execute_event design pattern for execute_parse. 
    execute_parse should then call execute_event. Perhaps with a callback? 
    or perhaps the parse function will be constructed in such a way that 
    it already can find a pointer to the event handler, and it just 
    calls that handler directly, which modifies the state appropriately. 
    Either way is fine.
    *)
+
+   
 let execute_interp_event
   print_log
   simulation_callback
@@ -110,7 +112,7 @@ let execute_interp_event
    | IControl ctl_ev -> execute_control idx nst ctl_ev   
    | IPacket pkt_ev -> 
     let _ = pkt_ev in
-    print_endline ("processing packet event: "^(pkt_ev.pkt_bytes));
+    print_endline ("processing packet event: "^(packet_event_to_string pkt_ev));
     exit 1;
    );
   simulation_callback ((idx + 1) mod Array.length nst.switches) nst

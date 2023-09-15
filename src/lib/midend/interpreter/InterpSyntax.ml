@@ -24,26 +24,62 @@ type control_event = {
 (* a packet event is an unparsed event, 
    which gets transformed into an event_val 
    by a parser. *)
+
+(* packet values are used in other places, e.g., 
+   ivals in InterpState. *)
+type packet_val = {
+  pbuf : string;  (* hex string *)
+  plen : int; (* length of buf *)
+  ppos : int; (* current offset in buf *)
+}
+
+let packet_val str = {
+  pbuf = str;
+  plen = String.length str;
+  ppos = 0;
+}
+
 type packet_event = {
-  pkt_bytes : string;
+  pkt_val : packet_val;
   pkt_edelay : int;
 }
+
+let packet_event pkt_val pkt_edelay = 
+  {pkt_val; pkt_edelay}
+;;
 
 type interp_event =
   | IEvent of event_val
   | IControl of control_event
   | IPacket of packet_event
 
+let ievent ev = IEvent(ev)
+let icontrol ev = IControl(ev)
+let ipacket ev = IPacket(ev)
+
 type loc = {
   switch : int;
   port : int;
 }
+let loc (switch, port) = {switch; port}
+
 (* a located event represents an event on input, 
    after parsing but before queueing *)
 type located_event = {
   ievent : interp_event;
   ilocs : loc list;
 }
+
+let located_event (ev, locs) =
+  {ievent = IEvent(ev); ilocs = List.map loc locs}
+;;
+let located_control (ctl_ev, locs) = 
+  {ievent = IControl(ctl_ev); ilocs = List.map loc locs}
+;;
+let located_packet (pkt_ev, locs) = 
+  {ievent = IPacket(pkt_ev); ilocs = List.map loc locs}
+;;
+
 
 (* a switch_event is how we represent the event in a queue at a switch *)
 type switch_event = {
@@ -52,18 +88,9 @@ type switch_event = {
   sport : int;
 }
 
+
+
 (* constructors *)
-let loc (switch, port) = {switch; port}
-let ievent ev = IEvent(ev)
-let ilocated_event (ev, locs) =
-  {ievent = IEvent(ev); ilocs = List.map loc locs}
-;;
-let ilocated_control (ctl_ev, locs) = 
-  {ievent = IControl(ctl_ev); ilocs = List.map loc locs}
-;;
-let ilocated_packet (pkt_ev, locs) = 
-  {ievent = IPacket(pkt_ev); ilocs = List.map loc locs}
-;;
 
 let assoc_to_vals keys lst =
   List.map
@@ -412,7 +439,7 @@ let parse_located_event
       let data = get_data (payloads_t_id, var_map) event_json events in
       let edelay = parse_delay cur_ts event_json in
       let locations = parse_locations default_port num_switches event_json in
-      ilocated_event ({ eid; data; edelay }, locations)
+      located_event ({ eid; data; edelay }, locations)
   
      | Some (`String "command") -> 
       (* located control/command event *)
@@ -421,7 +448,7 @@ let parse_located_event
       let control_event =
         { ctl_cmd = parse_control_e event_json; ctl_edelay = edelay }
       in
-      ilocated_control (control_event, List.map (fun sw -> sw, 0) locations)
+      located_control (control_event, List.map (fun sw -> sw, 0) locations)
      | Some (`String "packet") -> 
        let pkt_edelay = parse_delay cur_ts event_json in
        let locations = parse_locations default_port num_switches event_json in
@@ -429,10 +456,11 @@ let parse_located_event
         | Some (`String s) -> s
         | _ -> error "packet event must have a bytes field"
        in
-       let pkt_event = 
-          {pkt_bytes; pkt_edelay}
+       let pkt_event = packet_event
+          (packet_val pkt_bytes)
+          pkt_edelay
        in
-       ilocated_packet (pkt_event, locations)
+       located_packet (pkt_event, locations)
      | Some _ ->
        error "unknown interpreter input type (expected event or command)"
     )
@@ -458,6 +486,14 @@ let control_event_to_string control_e =
   | ArrayGet(arrname, idx) -> 
     Printf.sprintf "Array.get(%s, %s);" arrname (CorePrinting.value_to_string idx)
   | _ -> "<control event without printer>"
+;;
+
+let packet_val_to_string packet_val = packet_val.pbuf
+;;
+
+
+let packet_event_to_string packet_event = 
+  packet_val_to_string (packet_event.pkt_val)
 ;;
 
 (* destructors *)
