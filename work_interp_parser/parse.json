@@ -1,6 +1,5 @@
 {
   	"events":[
-	    {"name":"eth", "args":[1, 2, 3]},
-	    {"type":"packet", "bytes":"deadbeef"}
+	    {"type":"packet", "bytes":"0000000000010000000000208000"}
 	]
 }

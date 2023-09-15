@@ -70,8 +70,8 @@
         if ((Id.name id) = (Id.name Builtins.main_parse_id))
         then 
             dparser_sp Builtins.main_parse_id params p span
-        else
-            dparser_sp id params p span
+        else(
+            dparser_sp id params p span) 
 ;;
 
 %}

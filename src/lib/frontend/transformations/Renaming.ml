@@ -379,7 +379,11 @@ let rename prog =
           in
           let body = self#visit_parser_block dummy body in
           env <- orig_env;
-          let id = self#freshen_var id in
+          (* don't freshen the id if it is the main parser. 
+             We don't add main_parser to the builtins, because this is 
+             different from a builtin. A builtin never gets "assigned" 
+             in the program. However, the main parser does. *)
+          let id = if (Id.equal id (Builtins.main_parse_id)) then id else self#freshen_var id in
           DParser (id, params, body)
         | DModuleAlias _ -> failwith "Should be eliminated before this"
 

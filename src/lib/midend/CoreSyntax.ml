@@ -554,7 +554,7 @@ let ty_to_size ty =
   match ty.raw_ty with
   | TBool -> 1
   | TInt sz -> sz
-  | _ -> error "[size_of_tint] not a tint"
+  | _ -> error "[ty_to_size] can only get size of ints or bools"
 ;;
 
 let size_of_tint = ty_to_size

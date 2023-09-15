@@ -3,7 +3,22 @@
 event foo(int<48> dmac, int<48> smac, int<16> etype, int x, int y);
 
 // packet 
-event eth(int<48> dmac, int<48> smac, int<16> etype);
+packet event eth(int<48> dmac, int<48> smac, int<16> etype);
+// TODO: should not be able to generate non-packet events in the parser.
+
+// input test:
+/*
+
+packet = 
+
+dmac 11 22 33 44 55 66 
+smac 77 88 99 10 11 12
+etyp 08 00
+
+1122334455667788991011120800
+
+
+*/
 
 
 parser main() {

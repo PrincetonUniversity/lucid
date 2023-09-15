@@ -740,11 +740,131 @@ let interp_memop params body nst swid args =
    Note that calls to parser besides main must have their args modified to 
    prepend the current packet buffer and input port!*)
 
-let interp_parser_block nst swid locals parser_block =
-  let _, _, _, _ = nst, swid, locals, parser_block in
-  print_endline ("interpreting parser: "^(CorePrinting.parser_block_to_string parser_block));
-  exit 1
+
+
+let cur_pkt locals = 
+  let (pkt:InterpSyntax.packet_val) = match Env.find (Id Builtins.packet_arg_id) locals with 
+    | State.P(packet_val) -> packet_val
+    | _ -> error "could not find current packet buffer while interpreting parser!"
+  in
+  pkt
 ;;
+
+let port_arg locals = 
+  let (port:CoreSyntax.value) = match Env.find (Id Builtins.ingr_port_id) locals with 
+    | State.V(port_val) -> port_val
+    | _ -> error "could not find input port while interpreting parser!"
+  in
+  port
+;;
+
+(* read something of the given type from the packet. Return a CoreSyntax value. *)
+let pread pkt ty : (CoreSyntax.value * InterpSyntax.packet_val) = 
+  match ty.raw_ty with
+  | TInt(size) -> 
+    let (i, pkt) = InterpSyntax.packet_read pkt size in
+    (vint i size), pkt
+  | TBool -> (
+    let (i, pkt) = InterpSyntax.packet_read pkt 1 in
+    match i with 
+    | 0 -> (vbool false), pkt
+    | 1 -> (vbool true), pkt
+    | _ -> error "[pread] invalid result from packet_read"
+  )
+  | _ -> error "[pread] unsupported type"
+;;
+let ppeek pkt ty = 
+  match ty.raw_ty with 
+  | TInt(size) -> vint (InterpSyntax.packet_peek pkt size) size
+  | TBool -> (
+    match (InterpSyntax.packet_peek pkt 1) with 
+    | 0 -> vbool false
+    | 1 -> vbool true
+    | _ -> error "[ppeek] invalid result from packet_peek"
+  )
+  | _ -> error "[ppeek] unsupported type"
+;;
+let padvance pkt ty =
+  match ty.raw_ty with
+  | TInt(size) -> InterpSyntax.packet_skip pkt size
+  | TBool -> InterpSyntax.packet_skip pkt 1
+  | _ -> error "[padvance] unsupported type"
+;;
+
+let rec interp_parser_block nst swid locals parser_block =
+  (* let (pkt:InterpSyntax.packet_val) = cur_pkt locals in 
+  let port = port_arg locals in *)
+  (* print_endline@@Printf.sprintf "interpreting parser block with args=(ingress_port = %s, packet = %s)"
+    (CorePrinting.value_to_string port)
+    (InterpSyntax.packet_val_to_string pkt)    
+  ; *)
+  (* interpret the actions, updating locals *)
+  let locals = List.fold_left (interp_parser_action nst swid) locals (List.split parser_block.pactions |> fst) in
+  (* now interpret the step *)
+  interp_parser_step nst swid locals (fst parser_block.pstep)
+  
+and interp_parser_action (nst : State.network_state) swid locals parser_action = 
+  match parser_action with 
+  | PRead(cid, ty) -> 
+    let parsed_val, remaining_pkt = pread (cur_pkt locals) ty in
+    (* add the new local, remove old packet, add new packet *)
+    locals
+    |> Env.add (cid) (State.V(parsed_val))
+    |> Env.remove (Id Builtins.packet_arg_id)
+    |> Env.add (Id Builtins.packet_arg_id) (State.P(remaining_pkt)) 
+  | PPeek(cid, ty) -> 
+    let peeked_val = ppeek (cur_pkt locals) ty in
+    locals |> Env.add (cid) (State.V(peeked_val))
+  | PSkip(ty) ->
+    let remaining_pkt = padvance (cur_pkt locals) ty in
+    locals |> Env.remove (Id Builtins.packet_arg_id) |> Env.add (Id Builtins.packet_arg_id) (State.P(remaining_pkt))
+  | PAssign(cid, exp) ->
+    let assigned_ival = interp_exp nst swid locals exp in
+    locals
+    |> Env.remove cid
+    |> Env.add (cid) (assigned_ival)
+  | PLocal(cid, _, exp) -> 
+    let assigned_ival = interp_exp nst swid locals exp in
+    Env.add (cid) (assigned_ival) locals
+
+and interp_parser_step nst swid locals parser_step = 
+    match parser_step with
+    | PMatch(es, branches) ->
+      let vs = List.map (fun e -> interp_exp nst swid locals e |> extract_ival) es in
+      let first_match =
+        try List.find (fun (pats, _) -> matches_pat vs pats) branches with
+        | _ -> error "[interp_parser_step] parser match did not match any branch!"
+      in
+      interp_parser_block nst swid locals (snd first_match)
+    | PGen(exp) -> (
+      match exp.e with 
+      | ECall(cid, args) -> 
+        (* a call is the end of parsing. So pack the args into an event value and return it!*)
+        let args = List.map (fun e -> interp_exp nst swid locals e |> extract_ival) args in
+        vevent { eid = cid; data = args; edelay = nst.current_time }
+      | _ -> error "[parser generate] expected an event constructor"
+    )
+    | PCall(exp) -> (
+        match exp.e with 
+        | ECall(cid, args) -> (
+          (* a call to another parser. *)
+          (* construct ival arguments *)
+          let args = (State.P(cur_pkt locals))
+            ::(State.V(port_arg locals))
+            ::(List.map (fun e -> interp_exp nst swid locals e) args) 
+          in
+          (* call the parser function and that's it! *)
+          match State.lookup swid cid nst with 
+            | F(parser_f) -> parser_f nst swid args
+            | _ -> error "[parser call] could not find parser function"
+        )
+        | _ -> error "[parser call] expected a call expression"
+
+    )
+    (* halt processing *)
+    | PDrop -> CoreSyntax.vbool false
+;;
+
 
 let interp_decl (nst : State.network_state) swid d =
   (* print_endline @@ "Interping decl: " ^ Printing.decl_to_string d; *)
@@ -782,7 +902,7 @@ let interp_decl (nst : State.network_state) swid d =
     - add all other parsers as global functions, where 
     port value is added to arguments list by 
     interpretation of ECalls in the parser. *)
-  | DParser(id, params, parser_block) when (Id.equal id (Builtins.main_parse_id)) -> 
+  (* | DParser(id, params, parser_block) when (Id.equal id (Builtins.main_parse_id)) -> 
     let runtime_parser nst swid port pkt args = 
       let builtin_locals = Env.empty 
         |> Env.add (Id Builtins.ingr_port_id) (State.V (vint port 32)) 
@@ -793,15 +913,12 @@ let interp_decl (nst : State.network_state) swid d =
           (fun acc v id -> Env.add (Id id) v acc)
           builtin_locals
           args
-          ((Builtins.ingr_port_id)::(List.split params |> fst))
+          (List.split params |> fst)
       in
       interp_parser_block nst swid locals parser_block
     in
-    print_endline ("adding MAIN parser: "^(Id.to_string id));
-    State.add_parser (Cid.id id) runtime_parser nst
+    State.add_parser (Cid.id id) runtime_parser nst *)
   | DParser(id, params, parser_block) -> 
-    print_endline ("adding non main parser: "^(Id.to_string id));
-    let _, _, _ = id, params, parser_block in
     (* note that non-main parsers are added to the _function_ 
        context, not the _parser_ context, so that we can re-use 
        call interpretation. *)

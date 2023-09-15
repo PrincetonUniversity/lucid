@@ -27,17 +27,155 @@ type control_event = {
 
 (* packet values are used in other places, e.g., 
    ivals in InterpState. *)
+module Bitstring = struct
+  type bit = |B0|B1
+  type bits = bit list
+
+  let char_to_bits c =
+    match c with
+    | '0' -> [B0; B0; B0; B0]
+    | '1' -> [B0; B0; B0; B1]
+    | '2' -> [B0; B0; B1; B0]
+    | '3' -> [B0; B0; B1; B1]
+    | '4' -> [B0; B1; B0; B0]
+    | '5' -> [B0; B1; B0; B1]
+    | '6' -> [B0; B1; B1; B0]
+    | '7' -> [B0; B1; B1; B1]
+    | '8' -> [B1; B0; B0; B0]
+    | '9' -> [B1; B0; B0; B1]
+    | 'a' | 'A' -> [B1; B0; B1; B0]
+    | 'b' | 'B' -> [B1; B0; B1; B1]
+    | 'c' | 'C' -> [B1; B1; B0; B0]
+    | 'd' | 'D' -> [B1; B1; B0; B1]
+    | 'e' | 'E' -> [B1; B1; B1; B0]
+    | 'f' | 'F' -> [B1; B1; B1; B1]
+    | _ -> failwith "[hex_to_bits] Invalid hex character"
+  ;;
+  (* take a string of hex numbers with no delimiters and 
+     convert it into a bit list. *)
+  let rec hexstr_to_bits (str:String.t) : bits = 
+    match str with 
+    | "" -> []    
+    | _ -> 
+      let c = String.get str 0 in
+      let remaining_str = String.sub str 1 ((String.length str)-1) in
+      (char_to_bits c) @ (hexstr_to_bits remaining_str)
+  ;;
+  
+(* 
+  let rec hexstr_to_bits ermsg (str:String.t) : bits = 
+    match str with 
+    | "" -> []
+    | _ -> 
+      let len = String.length str in
+      if len mod 2 <> 0 then failwith@@ermsg
+      else 
+        let c1 = String.get str 0 in
+        let c2 = String.get str 1 in
+        let remaining_str = String.sub str 2 (len-2) in
+        (char_to_bits c1) @ (char_to_bits c2) @ (hexstr_to_bits ermsg remaining_str)
+  ;; *)
+
+  let rec bits_to_hexstr (bits:bits) : string = 
+    match bits with 
+    | [] -> ""
+    | b1::b2::b3::b4::bs -> 
+      let c = match (b1,b2,b3,b4) with 
+        | (B0,B0,B0,B0) -> '0'
+        | (B0,B0,B0,B1) -> '1'
+        | (B0,B0,B1,B0) -> '2'
+        | (B0,B0,B1,B1) -> '3'
+        | (B0,B1,B0,B0) -> '4'
+        | (B0,B1,B0,B1) -> '5'
+        | (B0,B1,B1,B0) -> '6'
+        | (B0,B1,B1,B1) -> '7'
+        | (B1,B0,B0,B0) -> '8'
+        | (B1,B0,B0,B1) -> '9'
+        | (B1,B0,B1,B0) -> 'a'
+        | (B1,B0,B1,B1) -> 'b'
+        | (B1,B1,B0,B0) -> 'c'
+        | (B1,B1,B0,B1) -> 'd'
+        | (B1,B1,B1,B0) -> 'e'
+        | (B1,B1,B1,B1) -> 'f'
+      in
+      String.make 1 c ^ (bits_to_hexstr bs)
+    | _ -> failwith "[bits_to_hexstr] bits must be a multiple of 4"
+  ;;
+  (* print as a bitstring *)
+  let rec to_string bits : string = 
+    match bits with 
+    | [] -> ""
+    | B1::bits -> "1" ^ (to_string bits)
+    | B0::bits -> "0" ^ (to_string bits)
+  ;;
+
+  (* read n most significant bits into an unsigned int *)
+  let rec read_msb n bits: int = 
+    match bits with 
+    | [] -> 0
+    | b::bs -> 
+      if (n = 0) then 0
+      else 
+      let v = match b with 
+        | B1 -> 1 lsl ((n-1))
+        | B0 -> 0
+      in
+      v lor (read_msb (n-1) bs )
+  ;; 
+
+  (* advance to the nth bit *)
+  let rec advance n bits : bits option =
+    match n with
+    | 0 -> Some(bits)
+    | _ -> (
+      match bits with
+      | [] -> None
+      | _::bs -> advance (n-1) bs
+    )    
+  ;;
+
+end
+
+
 type packet_val = {
-  pbuf : string;  (* hex string *)
+  porig : Bitstring.bits;
+  pbits : Bitstring.bits;
+  (* the parser operates over bits, not bytes. So the easiest 
+     implementation is with a bitstring *)
   plen : int; (* length of buf *)
   ppos : int; (* current offset in buf *)
 }
 
-let packet_val str = {
-  pbuf = str;
-  plen = String.length str;
+let packet_val str = 
+  let pbits = Bitstring.hexstr_to_bits str in
+  {
+  porig = pbits;
+  pbits = pbits;
+  plen = List.length pbits;
   ppos = 0;
 }
+;;
+(*** Parsing primitives. Should eventually go into a module of their own. ***)
+let packet_read pv n : (int * packet_val) = 
+  let i = Bitstring.read_msb n pv.pbits in
+  let pbits = match Bitstring.advance n pv.pbits with
+    | Some(bs) -> bs
+    | None -> failwith "[packet_read] attempted to read past end of packet"
+  in
+  (i, {pv with pbits; ppos = pv.ppos + n})
+;;
+let packet_peek pv n : int = 
+  Bitstring.read_msb n pv.pbits
+;;
+
+let packet_skip pv n : packet_val = 
+  let pbits = match Bitstring.advance n pv.pbits with
+    | Some(bs) -> bs
+    | None -> failwith "[packet_skip] attempted to read past end of packet"
+  in
+  {pv with pbits; ppos = pv.ppos + n}
+;;
+
 
 type packet_event = {
   pkt_val : packet_val;
@@ -488,7 +626,8 @@ let control_event_to_string control_e =
   | _ -> "<control event without printer>"
 ;;
 
-let packet_val_to_string packet_val = packet_val.pbuf
+let packet_val_to_string packet_val = 
+  Printf.sprintf "%s[%d:%d]" (Bitstring.to_string packet_val.pbits) packet_val.ppos packet_val.plen
 ;;
 
 

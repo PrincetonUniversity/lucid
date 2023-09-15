@@ -98,14 +98,19 @@ let execute_control swidx (nst : State.network_state) (ctl_ev : control_event) =
    Either way is fine.
    *)
 let execute_main_parser swidx port (nst: State.network_state) (pkt_ev : packet_event) = 
-  let packet_ival = State.P pkt_ev.pkt_val in
-  match Env.find_opt (Cid.id Builtins.main_parse_id)  nst.parsers with 
-  | None -> error "No main parser found to handle unparsed packet!" 
-  | Some parser -> parser nst swidx port packet_ival []
-    (* main parsers currently have no arguments... Wait... we could just add packet_ival and port to the 
-       arguments list here, and handle all the parsers the same way? *)
-  
-   
+  (* construct the arguments to main. Convention is that each call has 
+     two implicit arguments: port and packet. *)
+  let main_args = [State.V (C.vint port 32); State.P pkt_ev.pkt_val] in
+  let parser_val = State.lookup swidx (Cid.id Builtins.main_parse_id) nst in
+  match parser_val with 
+    | F parser_f -> (
+      let event_val = parser_f nst swidx main_args in
+      match event_val.v with 
+      | VEvent(event_val) -> execute_event true swidx nst event_val port
+      | VBool(false) -> error "main parser did not generate an event"
+      | _ -> error "main parser did not return an event or a no event signal")
+    | _ -> error "the global named 'main' is not a parser"
+;;   
 
 let execute_interp_event
   print_log
