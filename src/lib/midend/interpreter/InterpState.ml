@@ -71,8 +71,6 @@ module State = struct
     | V of value
     | F of code
     | P of packet_val
-    | FParse of parser
-    (* parser is different from code because it takes an input port too... *)
 
   and code = network_state -> int (* switch *) -> ival list -> value
   and memop
@@ -319,7 +317,6 @@ module State = struct
     | V v -> CorePrinting.value_to_string v
     | F _ -> "<function>"
     | P pv -> packet_val_to_string pv
-    | FParse _ -> "<parse function>"
   ;;
 
   let env_to_string env =
@@ -443,6 +440,5 @@ let extract_ival iv =
   match iv with
   | State.V v -> v
   | State.P _ 
-  | State.FParse _ 
   | State.F _ -> failwith "IVal not a regular value"
 ;;

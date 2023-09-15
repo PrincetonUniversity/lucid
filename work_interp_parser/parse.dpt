@@ -1,0 +1,26 @@
+// simple example with parser for packet events
+
+event foo(int<48> dmac, int<48> smac, int<16> etype, int x, int y);
+
+// packet 
+event eth(int<48> dmac, int<48> smac, int<16> etype);
+
+
+parser main() {
+	read int<48> d;
+	read int<48> s;
+	read int<16> t;
+	match t with
+	| LUCID_ETHERTY -> {do_lucid_parsing();}
+	| _ -> {generate(eth(d, s, t));	}
+}
+
+handle foo(int<48> dmac, int<48> smac, int<16> etype, int x, int y){
+	printf("in foo");
+	// generate_port(99, eth(dmac, smac, etype));
+}
+
+handle eth(int<48> dmac, int<48> smac, int<16> etype){
+	printf("in eth");
+	generate(foo(dmac, smac, etype, 1, 2));
+}

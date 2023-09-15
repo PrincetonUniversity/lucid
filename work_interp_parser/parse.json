@@ -1,0 +1,6 @@
+{
+  	"events":[
+	    {"name":"eth", "args":[1, 2, 3]},
+	    {"type":"packet", "bytes":"deadbeef"}
+	]
+}

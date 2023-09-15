@@ -64,6 +64,16 @@
     in
     ty_sp (TFun fty) tspan
 
+
+    let mk_dparser id params p span = 
+     (* adjust the id of a "main" parser *)
+        if ((Id.name id) = (Id.name Builtins.main_parse_id))
+        then 
+            dparser_sp Builtins.main_parse_id params p span
+        else
+            dparser_sp id params p span
+;;
+
 %}
 
 %token <Span.t * Id.t> ID
@@ -461,7 +471,7 @@ decl:
     | GLOBAL ty ID ASSIGN exp SEMI
                                             { [dglobal_sp (snd $3) $2 $5 (Span.extend $1 $6)] }
     | TABLE_TYPE dt_table                    { [$2] }
-    | PARSER ID paramsdef LBRACE parser_block RBRACE { [dparser_sp (snd $2) $3 $5 (Span.extend $1 $6)] }
+    | PARSER ID paramsdef LBRACE parser_block RBRACE { [mk_dparser (snd $2) $3 $5 (Span.extend $1 $6)] }
 
 
 decls:

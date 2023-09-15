@@ -742,7 +742,7 @@ let interp_memop params body nst swid args =
 
 let interp_parser_block nst swid locals parser_block =
   let _, _, _, _ = nst, swid, locals, parser_block in
-  print_endline ("interpreting parser block!");
+  print_endline ("interpreting parser: "^(CorePrinting.parser_block_to_string parser_block));
   exit 1
 ;;
 
@@ -797,8 +797,10 @@ let interp_decl (nst : State.network_state) swid d =
       in
       interp_parser_block nst swid locals parser_block
     in
+    print_endline ("adding MAIN parser: "^(Id.to_string id));
     State.add_parser (Cid.id id) runtime_parser nst
   | DParser(id, params, parser_block) -> 
+    print_endline ("adding non main parser: "^(Id.to_string id));
     let _, _, _ = id, params, parser_block in
     (* note that non-main parsers are added to the _function_ 
        context, not the _parser_ context, so that we can re-use 

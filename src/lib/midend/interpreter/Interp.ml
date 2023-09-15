@@ -97,8 +97,16 @@ let execute_control swidx (nst : State.network_state) (ctl_ev : control_event) =
    calls that handler directly, which modifies the state appropriately. 
    Either way is fine.
    *)
-
+let execute_main_parser swidx port (nst: State.network_state) (pkt_ev : packet_event) = 
+  let packet_ival = State.P pkt_ev.pkt_val in
+  match Env.find_opt (Cid.id Builtins.main_parse_id)  nst.parsers with 
+  | None -> error "No main parser found to handle unparsed packet!" 
+  | Some parser -> parser nst swidx port packet_ival []
+    (* main parsers currently have no arguments... Wait... we could just add packet_ival and port to the 
+       arguments list here, and handle all the parsers the same way? *)
+  
    
+
 let execute_interp_event
   print_log
   simulation_callback
@@ -110,10 +118,7 @@ let execute_interp_event
   (match ievent with
    | IEvent event -> execute_event print_log idx nst event port
    | IControl ctl_ev -> execute_control idx nst ctl_ev   
-   | IPacket pkt_ev -> 
-    let _ = pkt_ev in
-    print_endline ("processing packet event: "^(packet_event_to_string pkt_ev));
-    exit 1;
+   | IPacket pkt_ev -> execute_main_parser idx port nst pkt_ev
    );
   simulation_callback ((idx + 1) mod Array.length nst.switches) nst
 ;;
