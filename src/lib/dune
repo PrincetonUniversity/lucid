@@ -24,6 +24,7 @@
    cid
    taggedCid
    pragma
+   BitString
    input
    integer
    span
@@ -76,6 +77,7 @@
    preprocess
    interpSpec
    interpState
+   interpPayload
    interpSyntax
    libraryInterface
    arrays

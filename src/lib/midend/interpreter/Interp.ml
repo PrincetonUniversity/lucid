@@ -8,7 +8,17 @@ open CoreSyntaxGlobalDirectory
 let initial_state (pp : Preprocess.t) (spec : InterpSpec.t) =
   let nst =
     { (State.create spec.config) with
-      event_sorts = Env.map fst pp.events
+      event_sorts = Env.map (fun (a, _, _) -> a) pp.events
+    ; event_signatures  = List.fold_left
+        (fun acc (evid, event) -> 
+          let (_, num_opt, arg_tys) = event in
+          (match num_opt with 
+          | None -> print_endline ("event has no number: " ^ (Cid.to_string evid)); 
+          | _ -> ());
+          let num = Option.get num_opt in
+          IntMap.add num (evid, arg_tys) acc)
+        IntMap.empty
+        (Env.bindings pp.events)
     ; switches = Array.init spec.num_switches (fun _ -> State.empty_state ())
     ; links = spec.links
     }
@@ -26,10 +36,17 @@ let initial_state (pp : Preprocess.t) (spec : InterpSpec.t) =
     (fun cid fval ->
       Array.iteri (fun i _ -> State.add_global i cid fval nst) nst.switches)
     spec.extern_funs;
+  (* Add error-raising function for background event parser *)
+  let bg_parse_cid = Cid.id Builtins.lucid_parse_id in 
+  let bg_parse_fun = InterpPayload.lucid_parse_fun in
+  Array.iteri
+    (fun swid _ -> State.add_global swid bg_parse_cid (F bg_parse_fun) nst)
+    nst.switches
+  ;
   (* push located events to switch queues *)
   List.iter
     (fun { ievent = event; ilocs = locs } ->
-      List.iter (fun loc -> State.push_interp_event loc event nst) locs)
+      List.iter (fun loc -> State.push_input_event loc event nst) locs)
     (*         (fun loc  -> let (loc, port) = loc_to_tup loc in State.push_input_event loc port event nst)
         locs) *)
     spec.events;
@@ -90,13 +107,7 @@ let execute_event
 let execute_control swidx (nst : State.network_state) (ctl_ev : control_event) =
   InterpControl.handle_control nst swidx ctl_ev
 ;;
-(* left off here. Follow the execute_control / execute_event design pattern for execute_parse. 
-   execute_parse should then call execute_event. Perhaps with a callback? 
-   or perhaps the parse function will be constructed in such a way that 
-   it already can find a pointer to the event handler, and it just 
-   calls that handler directly, which modifies the state appropriately. 
-   Either way is fine.
-   *)
+
 let execute_main_parser swidx port (nst: State.network_state) (pkt_ev : packet_event) = 
   (* construct the arguments to main. Convention is that each call has 
      two implicit arguments: port and packet. *)

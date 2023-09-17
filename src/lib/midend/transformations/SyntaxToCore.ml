@@ -101,7 +101,7 @@ let rec translate_value (v : S.value) : C.value =
     | S.VGlobal n -> C.VGlobal n
     | S.VGroup ls -> C.VGroup ls
     | VEvent { eid; data; edelay } ->
-      C.VEvent { eid; data = List.map translate_value data; edelay }
+      C.VEvent { eid; data = List.map translate_value data; edelay; epayload=None; evnum = None }
     | S.VPat bs -> C.VPat bs
   in
   { v = v'; vty = translate_ty (Option.get v.vty); vspan = v.vspan }

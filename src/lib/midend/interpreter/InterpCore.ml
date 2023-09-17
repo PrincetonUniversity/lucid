@@ -319,17 +319,13 @@ let print_final_state str = interp_report "final_state" str None
 let print_printf swid str = interp_report "printf" str (Some swid)
 
 (* print an exit event as a json to stdout *)
-let print_exit_event swid port_opt event time =
-  let open Yojson.Basic in
-  let raw_json_val v =
-    match v.v with
-    | VInt i -> `Int (Integer.to_int i)
-    | VBool b -> `Bool b
-    | _ -> error "not an int or bool"
+let print_exit_event swid port_opt (event:InterpSyntax.interp_event) time =
+  let base_out_tups = match event with 
+    | IEvent(v) -> InterpSyntax.event_val_to_json v
+    | IPacket(p) -> InterpSyntax.packet_event_to_json p
+    | IControl _ -> error "attempting to send a control event out of a network port"
   in
-  let { eid; data; _ } = event in
-  let name = `String (CorePrinting.cid_to_string eid) in
-  let args = `List (List.map raw_json_val data) in
+  (* add location and timestamp metadata *)
   let port =
     match port_opt with
     | None -> -1
@@ -337,20 +333,29 @@ let print_exit_event swid port_opt event time =
   in
   let locs = `List [`String (Printf.sprintf "%i:%i" swid port)] in
   let timestamp = `Int time in
-  (* let args = CorePrinting.value_to_string data in  *)
   let evjson =
     `Assoc
-      ["name", name; "args", args; "locations", locs; "timestamp", timestamp]
+      (base_out_tups@["locations", locs; "timestamp", timestamp])
   in
   print_endline (Yojson.Basic.to_string evjson)
 ;;
 
 (* print event as json if interactive mode is set,
    else log for final report *)
-let log_exit swid port_opt event (nst : State.network_state) =
+let log_exit swid port_opt (event:InterpSyntax.interp_event) (nst : State.network_state) =
   if Cmdline.cfg.interactive
   then print_exit_event swid port_opt event nst.current_time
   else State.log_exit swid port_opt event nst
+;;
+
+
+(* get the implicit payload argument when inside of a parser or handler.  *)
+let implicit_payload locals = 
+  let (pkt:InterpSyntax.payload_val) = match Env.find (Id Builtins.packet_arg_id) locals with 
+    | State.P(packet_val) -> packet_val
+    | _ -> error "could not find current packet buffer while interpreting parser!"
+  in
+  pkt
 ;;
 
 let partial_interp_exps nst swid env exps =
@@ -400,10 +405,32 @@ let rec interp_statement nst swid locals s =
     if !(nst.switches.(swid).retval) <> None
     then locals
     else interp_statement nst swid locals ss2
-  | SGen (g, e) ->
-    (* TODO: Right now, port numbers for generate_single are
-       arbitrary (always 0). We could do better by e.g. finding a path through
-       the graph and figuring out which port number it ends at *)
+
+  | SGen (g, e) -> (
+    (* first, get the event value, without any payload *)
+    let event = interp_exp e |> extract_ival |> raw_event in
+    let sort = Env.find event.eid nst.event_sorts in
+    (* we would use the lucid header if we were serializing packet events, too *)
+    (* let lucid_hdr = 
+      List.map 
+        SyntaxToCore.translate_value
+        [ Builtins.lucid_eth_dmac_value; 
+          Builtins.lucid_eth_smac_value; 
+          Builtins.lucid_ety_value] 
+    in
+    let lucid_hdr = lucid_hdr@[num] in  *)
+    (* now, we process differently depending on whether it is a packet event 
+       or background event. Packet events get serialized into packets, 
+       background events do not. *)
+    (* next, append the current event's payload to the event *)
+    let event = {event with epayload = Some((implicit_payload locals).pbits);} in
+    (* serialize packet events *)
+    let event = match sort with 
+      | EBackground -> InterpSyntax.ievent event (* background events stay as events *)
+      | EPacket -> (* packet events get serialized into packets *)
+        let pkt = InterpPayload.serialize_packet_event event in
+        InterpSyntax.ipacket {pkt_val=pkt; pkt_edelay=event.edelay}
+    in
     let locs =
       match g with
       | GSingle None ->
@@ -431,14 +458,15 @@ let rec interp_statement nst swid locals s =
         in
         [State.lookup_dst nst (swid, port)]
     in
-    let event = interp_exp e |> extract_ival |> raw_event in
+    (* push the event to all the appropriate queues *)
     List.iter
       (fun (dst_id, port) ->
         if dst_id = -1 (* lookup_dst failed *)
         then log_exit swid (Some port) event nst
-        else State.push_event swid dst_id port event nst)
+        else State.push_generated_event swid dst_id port event nst)
       locs;
     locals
+  )
   | SRet (Some e) ->
     let v = interp_exp e |> extract_ival in
     (* Computation stops if retval is Some *)
@@ -734,21 +762,6 @@ let interp_memop params body nst swid args =
     else interp_exp nst swid locals e3 |> extract_ival
 ;;
 
-(* <<left off here>> interpet methods for parsers, with the convention 
-   that locals[Builtins.packet_arg_id] is the current packet buffer
-   and locals[Builtins.igr_port_id] is the input port. 
-   Note that calls to parser besides main must have their args modified to 
-   prepend the current packet buffer and input port!*)
-
-
-
-let cur_pkt locals = 
-  let (pkt:InterpSyntax.packet_val) = match Env.find (Id Builtins.packet_arg_id) locals with 
-    | State.P(packet_val) -> packet_val
-    | _ -> error "could not find current packet buffer while interpreting parser!"
-  in
-  pkt
-;;
 
 let port_arg locals = 
   let (port:CoreSyntax.value) = match Env.find (Id Builtins.ingr_port_id) locals with 
@@ -758,46 +771,8 @@ let port_arg locals =
   port
 ;;
 
-(* read something of the given type from the packet. Return a CoreSyntax value. *)
-let pread pkt ty : (CoreSyntax.value * InterpSyntax.packet_val) = 
-  match ty.raw_ty with
-  | TInt(size) -> 
-    let (i, pkt) = InterpSyntax.packet_read pkt size in
-    (vint i size), pkt
-  | TBool -> (
-    let (i, pkt) = InterpSyntax.packet_read pkt 1 in
-    match i with 
-    | 0 -> (vbool false), pkt
-    | 1 -> (vbool true), pkt
-    | _ -> error "[pread] invalid result from packet_read"
-  )
-  | _ -> error "[pread] unsupported type"
-;;
-let ppeek pkt ty = 
-  match ty.raw_ty with 
-  | TInt(size) -> vint (InterpSyntax.packet_peek pkt size) size
-  | TBool -> (
-    match (InterpSyntax.packet_peek pkt 1) with 
-    | 0 -> vbool false
-    | 1 -> vbool true
-    | _ -> error "[ppeek] invalid result from packet_peek"
-  )
-  | _ -> error "[ppeek] unsupported type"
-;;
-let padvance pkt ty =
-  match ty.raw_ty with
-  | TInt(size) -> InterpSyntax.packet_skip pkt size
-  | TBool -> InterpSyntax.packet_skip pkt 1
-  | _ -> error "[padvance] unsupported type"
-;;
 
 let rec interp_parser_block nst swid locals parser_block =
-  (* let (pkt:InterpSyntax.packet_val) = cur_pkt locals in 
-  let port = port_arg locals in *)
-  (* print_endline@@Printf.sprintf "interpreting parser block with args=(ingress_port = %s, packet = %s)"
-    (CorePrinting.value_to_string port)
-    (InterpSyntax.packet_val_to_string pkt)    
-  ; *)
   (* interpret the actions, updating locals *)
   let locals = List.fold_left (interp_parser_action nst swid) locals (List.split parser_block.pactions |> fst) in
   (* now interpret the step *)
@@ -806,17 +781,17 @@ let rec interp_parser_block nst swid locals parser_block =
 and interp_parser_action (nst : State.network_state) swid locals parser_action = 
   match parser_action with 
   | PRead(cid, ty) -> 
-    let parsed_val, remaining_pkt = pread (cur_pkt locals) ty in
+    let parsed_val, remaining_pkt = InterpPayload.pread (implicit_payload locals) ty in
     (* add the new local, remove old packet, add new packet *)
     locals
     |> Env.add (cid) (State.V(parsed_val))
     |> Env.remove (Id Builtins.packet_arg_id)
     |> Env.add (Id Builtins.packet_arg_id) (State.P(remaining_pkt)) 
   | PPeek(cid, ty) -> 
-    let peeked_val = ppeek (cur_pkt locals) ty in
+    let peeked_val = InterpPayload.ppeek (implicit_payload locals) ty in
     locals |> Env.add (cid) (State.V(peeked_val))
   | PSkip(ty) ->
-    let remaining_pkt = padvance (cur_pkt locals) ty in
+    let remaining_pkt = InterpPayload.padvance (implicit_payload locals) ty in
     locals |> Env.remove (Id Builtins.packet_arg_id) |> Env.add (Id Builtins.packet_arg_id) (State.P(remaining_pkt))
   | PAssign(cid, exp) ->
     let assigned_ival = interp_exp nst swid locals exp in
@@ -837,20 +812,23 @@ and interp_parser_step nst swid locals parser_step =
       in
       interp_parser_block nst swid locals (snd first_match)
     | PGen(exp) -> (
-      match exp.e with 
-      | ECall(cid, args) -> 
-        (* a call is the end of parsing. So pack the args into an event value and return it!*)
-        let args = List.map (fun e -> interp_exp nst swid locals e |> extract_ival) args in
-        vevent { eid = cid; data = args; edelay = nst.current_time }
-      | _ -> error "[parser generate] expected an event constructor"
+      (* a call is the end of parsing. We just want to return the event value *)
+      let event_val = interp_exp nst swid locals exp |> extract_ival in
+      (* however, we want to give the event an implicit payload of whatever was unparsed *)
+      match event_val.v with 
+        | VEvent(event) -> 
+          let event = {event with epayload = Some((implicit_payload locals).pbits);} in
+          {event_val with v = VEvent(event)}
+        | _ -> error "argument to generate is not an event"
     )
     | PCall(exp) -> (
         match exp.e with 
         | ECall(cid, args) -> (
           (* a call to another parser. *)
           (* construct ival arguments *)
-          let args = (State.P(cur_pkt locals))
-            ::(State.V(port_arg locals))
+          let args = 
+            (State.V(port_arg locals))
+            ::(State.P(implicit_payload locals))
             ::(List.map (fun e -> interp_exp nst swid locals e) args) 
           in
           (* call the parser function and that's it! *)
@@ -882,12 +860,18 @@ let interp_decl (nst : State.network_state) swid d =
           [ Id Builtins.this_id, State.V (vevent { event with edelay = 0 })
           ; Id Builtins.ingr_port_id, State.V (vint port 32) ]
       in
+      (* add event parameters to locals *)
       let locals =
         List.fold_left2
           (fun acc v (id, _) -> Env.add (Id id) (State.V v) acc)
           builtin_env
           event.data
           params
+      in
+      (* add the implicit payload argument TODO: make explicit *)
+      let locals = match event.epayload with 
+        | None -> locals
+        | Some(payload) -> Env.add (Id Builtins.packet_arg_id) (State.P(InterpPayload.from_bits payload)) locals
       in
       State.update_counter swid event nst;
       Pipeline.reset_stage nst.switches.(swid).pipeline;
@@ -923,6 +907,7 @@ let interp_decl (nst : State.network_state) swid d =
        context, not the _parser_ context, so that we can re-use 
        call interpretation. *)
     let runtime_function nst swid args = 
+      print_endline ("in runtime function for parser "^(CorePrinting.id_to_string id));
       let locals = 
         List.fold_left2
           (fun acc v id -> Env.add (Id id) v acc)
@@ -935,9 +920,23 @@ let interp_decl (nst : State.network_state) swid d =
     State.add_global swid (Cid.id id) (F runtime_function) nst;
     nst
 
-  | DEvent (id, _, _, _) ->
+  | DEvent (id, num_opt, _, _) ->
+    (* the expression inside a generate just constructs an event value. *)
+    (* the generate statement adds the payload, however *)
     let f _ _ args =
-      vevent { eid = Id id; data = List.map extract_ival args; edelay = 0 }
+      let event_num_val = match num_opt with
+      | None -> None 
+      | Some(num) -> Some(vint (size_of_tint (
+        SyntaxToCore.translate_ty  
+        Builtins.lucid_eventnum_ty)) num)
+      in
+      vevent { 
+        eid = Id id; 
+        data = List.map extract_ival args; 
+        edelay = 0;
+        epayload = None;
+        evnum = event_num_val;
+    }
     in
     State.add_global swid (Id id) (State.F f) nst;
     nst

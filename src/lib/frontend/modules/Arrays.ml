@@ -2,7 +2,6 @@
 open Syntax
 open Batteries
 open InterpState
-
 let rec create_ls size buckets =
   List.init buckets (fun _ -> Integer.create ~value:0 ~size)
 ;;

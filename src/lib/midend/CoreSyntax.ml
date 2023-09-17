@@ -11,6 +11,8 @@ and z = [%import: (Z.t[@opaque])]
 and pragma = [%import: Pragma.t]
 and zint = [%import: (Integer.t[@with Z.t := (Z.t [@opaque])])]
 and location = int
+and bit = [%import: (BitString.bit[@opaque])]
+and bits = [%import: (BitString.bits[@opaque])]
 
 (* All sizes should be inlined and precomputed *)
 and size = int
@@ -102,8 +104,10 @@ and v =
 
 and event_val =
   { eid : cid
+  ; evnum : value option
   ; data : value list
   ; edelay : int
+  ; epayload : bits option
   }
 
 and value =

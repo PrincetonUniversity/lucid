@@ -6,6 +6,15 @@ open CoreSyntax
 open Yojson.Basic
 open Str
 
+type payload_val = {
+  porig : BitString.bits;
+  pbits : BitString.bits;
+  (* the parser operates over bits, not bytes. So the easiest 
+     implementation is with a bitstring *)
+  (* plen : int; length of buf *)
+  ppos : int; (* current offset in buf. Not needed anymore. *)
+}
+
 (* control events are interpreter builtins -- state update commands *)
 type control_e = 
   | ArraySet of string * value * (value list)
@@ -21,185 +30,22 @@ type control_event = {
   ctl_edelay : int;
 }
 
-(* a packet event is an unparsed event, 
-   which gets transformed into an event_val 
-   by a parser. *)
-
-(* packet values are used in other places, e.g., 
-   ivals in InterpState. *)
-module Bitstring = struct
-  type bit = |B0|B1
-  type bits = bit list
-
-  let char_to_bits c =
-    match c with
-    | '0' -> [B0; B0; B0; B0]
-    | '1' -> [B0; B0; B0; B1]
-    | '2' -> [B0; B0; B1; B0]
-    | '3' -> [B0; B0; B1; B1]
-    | '4' -> [B0; B1; B0; B0]
-    | '5' -> [B0; B1; B0; B1]
-    | '6' -> [B0; B1; B1; B0]
-    | '7' -> [B0; B1; B1; B1]
-    | '8' -> [B1; B0; B0; B0]
-    | '9' -> [B1; B0; B0; B1]
-    | 'a' | 'A' -> [B1; B0; B1; B0]
-    | 'b' | 'B' -> [B1; B0; B1; B1]
-    | 'c' | 'C' -> [B1; B1; B0; B0]
-    | 'd' | 'D' -> [B1; B1; B0; B1]
-    | 'e' | 'E' -> [B1; B1; B1; B0]
-    | 'f' | 'F' -> [B1; B1; B1; B1]
-    | _ -> failwith "[hex_to_bits] Invalid hex character"
-  ;;
-  (* take a string of hex numbers with no delimiters and 
-     convert it into a bit list. *)
-  let rec hexstr_to_bits (str:String.t) : bits = 
-    match str with 
-    | "" -> []    
-    | _ -> 
-      let c = String.get str 0 in
-      let remaining_str = String.sub str 1 ((String.length str)-1) in
-      (char_to_bits c) @ (hexstr_to_bits remaining_str)
-  ;;
-  
-(* 
-  let rec hexstr_to_bits ermsg (str:String.t) : bits = 
-    match str with 
-    | "" -> []
-    | _ -> 
-      let len = String.length str in
-      if len mod 2 <> 0 then failwith@@ermsg
-      else 
-        let c1 = String.get str 0 in
-        let c2 = String.get str 1 in
-        let remaining_str = String.sub str 2 (len-2) in
-        (char_to_bits c1) @ (char_to_bits c2) @ (hexstr_to_bits ermsg remaining_str)
-  ;; *)
-
-  let rec bits_to_hexstr (bits:bits) : string = 
-    match bits with 
-    | [] -> ""
-    | b1::b2::b3::b4::bs -> 
-      let c = match (b1,b2,b3,b4) with 
-        | (B0,B0,B0,B0) -> '0'
-        | (B0,B0,B0,B1) -> '1'
-        | (B0,B0,B1,B0) -> '2'
-        | (B0,B0,B1,B1) -> '3'
-        | (B0,B1,B0,B0) -> '4'
-        | (B0,B1,B0,B1) -> '5'
-        | (B0,B1,B1,B0) -> '6'
-        | (B0,B1,B1,B1) -> '7'
-        | (B1,B0,B0,B0) -> '8'
-        | (B1,B0,B0,B1) -> '9'
-        | (B1,B0,B1,B0) -> 'a'
-        | (B1,B0,B1,B1) -> 'b'
-        | (B1,B1,B0,B0) -> 'c'
-        | (B1,B1,B0,B1) -> 'd'
-        | (B1,B1,B1,B0) -> 'e'
-        | (B1,B1,B1,B1) -> 'f'
-      in
-      String.make 1 c ^ (bits_to_hexstr bs)
-    | _ -> failwith "[bits_to_hexstr] bits must be a multiple of 4"
-  ;;
-  (* print as a bitstring *)
-  let rec to_string bits : string = 
-    match bits with 
-    | [] -> ""
-    | B1::bits -> "1" ^ (to_string bits)
-    | B0::bits -> "0" ^ (to_string bits)
-  ;;
-
-  (* read n most significant bits into an unsigned int *)
-  let rec read_msb n bits: int = 
-    match bits with 
-    | [] -> 0
-    | b::bs -> 
-      if (n = 0) then 0
-      else 
-      let v = match b with 
-        | B1 -> 1 lsl ((n-1))
-        | B0 -> 0
-      in
-      v lor (read_msb (n-1) bs )
-  ;; 
-
-  (* advance to the nth bit *)
-  let rec advance n bits : bits option =
-    match n with
-    | 0 -> Some(bits)
-    | _ -> (
-      match bits with
-      | [] -> None
-      | _::bs -> advance (n-1) bs
-    )    
-  ;;
-
-end
-
-
-type packet_val = {
-  porig : Bitstring.bits;
-  pbits : Bitstring.bits;
-  (* the parser operates over bits, not bytes. So the easiest 
-     implementation is with a bitstring *)
-  plen : int; (* length of buf *)
-  ppos : int; (* current offset in buf *)
-}
-
-let packet_val str = 
-  let pbits = Bitstring.hexstr_to_bits str in
-  {
-  porig = pbits;
-  pbits = pbits;
-  plen = List.length pbits;
-  ppos = 0;
-}
-;;
-(*** Parsing primitives. Should eventually go into a module of their own. ***)
-let packet_read pv n : (int * packet_val) = 
-  let i = Bitstring.read_msb n pv.pbits in
-  let pbits = match Bitstring.advance n pv.pbits with
-    | Some(bs) -> bs
-    | None -> failwith "[packet_read] attempted to read past end of packet"
-  in
-  (i, {pv with pbits; ppos = pv.ppos + n})
-;;
-let packet_peek pv n : int = 
-  Bitstring.read_msb n pv.pbits
-;;
-
-let packet_skip pv n : packet_val = 
-  let pbits = match Bitstring.advance n pv.pbits with
-    | Some(bs) -> bs
-    | None -> failwith "[packet_skip] attempted to read past end of packet"
-  in
-  {pv with pbits; ppos = pv.ppos + n}
-;;
-
 
 type packet_event = {
-  pkt_val : packet_val;
+  pkt_val : payload_val;
   pkt_edelay : int;
 }
 
-let packet_event pkt_val pkt_edelay = 
-  {pkt_val; pkt_edelay}
-;;
-
 type interp_event =
-  | IEvent of event_val
+  | IEvent of (event_val)
   | IControl of control_event
   | IPacket of packet_event
-
-let ievent ev = IEvent(ev)
-let icontrol ev = IControl(ev)
-let ipacket ev = IPacket(ev)
+;;
 
 type loc = {
   switch : int;
   port : int;
 }
-let loc (switch, port) = {switch; port}
 
 (* a located event represents an event on input, 
    after parsing but before queueing *)
@@ -207,6 +53,41 @@ type located_event = {
   ievent : interp_event;
   ilocs : loc list;
 }
+
+
+(* a switch_event is how we represent the event in a queue at a switch *)
+type switch_event = {
+  sevent : interp_event;
+  stime : int;
+  sport : int;
+}
+(* constructors *)
+
+let delay (ev : interp_event) = 
+  match ev with 
+  | IEvent(ev) -> ev.edelay
+  | IControl(ev) -> ev.ctl_edelay
+  | IPacket(ev) -> ev.pkt_edelay
+;;
+let packet_val str = 
+  let pbits = BitString.hexstr_to_bits str in
+  {
+  porig = pbits;
+  pbits = pbits;
+  (* plen = List.length pbits; *)
+  ppos = 0;
+}
+;;
+
+let packet_event pkt_val pkt_edelay = 
+  {pkt_val; pkt_edelay}
+;;
+
+let ievent ev = IEvent(ev)
+let icontrol ev = IControl(ev)
+let ipacket ev = IPacket(ev)
+
+let loc (switch, port) = {switch; port}
 
 let located_event (ev, locs) =
   {ievent = IEvent(ev); ilocs = List.map loc locs}
@@ -218,17 +99,6 @@ let located_packet (pkt_ev, locs) =
   {ievent = IPacket(pkt_ev); ilocs = List.map loc locs}
 ;;
 
-
-(* a switch_event is how we represent the event in a queue at a switch *)
-type switch_event = {
-  sevent : interp_event;
-  stime : int;
-  sport : int;
-}
-
-
-
-(* constructors *)
 
 let assoc_to_vals keys lst =
   List.map
@@ -425,14 +295,12 @@ let parse_control_e lst =
 (*** these are parsing helper functions that have been ripped out
     of InterpSpec.ml and butchered to remove CiRcULar DePENdencIeS!1!! *)
 
-
 let rename env err_str id_str =
   match Collections.CidMap.find_opt (Cid.from_string id_str) env with
   | Some id -> id
   | None -> error @@ Printf.sprintf "Unknown %s %s" err_str id_str
 ;;
     
-
 let parse_port str =
   match String.split_on_char ':' str with
   | [id; port] ->
@@ -519,9 +387,6 @@ let parse_delay cur_ts lst =
   | _ -> error "Event specification had non-integer delay field"
 ;;
 
-
-
-(* get the name of the event, given a renaming function that I am not allowed to know. *)
 let get_eid var_map lst =
   match List.assoc_opt "name" lst with
   | Some (`String id) -> rename var_map "event" id
@@ -536,7 +401,7 @@ let get_data (payloads_t_id, var_map) event_json events =
     match List.assoc_opt "args" event_json with
     | Some (`List lst) -> 
       (* let _, tys = InterpSyntax.get_event_tys eid pp.events in *)
-      let _, tys = Collections.CidMap.find eid events in
+      let _, _, tys = Collections.CidMap.find eid events in
       (try List.map2 (parse_value payloads_t_id "Event") tys lst with
       | Invalid_argument _ ->
         error
@@ -549,6 +414,10 @@ let get_data (payloads_t_id, var_map) event_json events =
   data
 ;;
 
+let get_num events eid = 
+  let _, num, _ = Collections.CidMap.find eid events in
+  num
+;;
 (* outermost parser... *)
     (* Find the event name, accounting for the renaming pass, and get its
        sort and argument types *)
@@ -561,7 +430,8 @@ let get_data (payloads_t_id, var_map) event_json events =
 
 let parse_located_event 
   payloads_t_id
-  var_map
+  lucid_eventnum_ty
+  ev_renames
   events
   num_switches
   cur_ts
@@ -573,11 +443,16 @@ let parse_located_event
      | Some (`String "event")
      | None -> 
       (* located user event event *)
-      let eid = get_eid var_map event_json in
-      let data = get_data (payloads_t_id, var_map) event_json events in
+      let eid = get_eid ev_renames event_json in
+      let data = get_data (payloads_t_id, ev_renames) event_json events in
       let edelay = parse_delay cur_ts event_json in
       let locations = parse_locations default_port num_switches event_json in
-      located_event ({ eid; data; edelay }, locations)
+      let num = get_num events eid in
+      let evnum = match num with 
+      | None -> None
+      | Some(n) -> Some(CoreSyntax.vint n (size_of_tint lucid_eventnum_ty))
+       in
+      located_event ({ eid; data; edelay; epayload=None; evnum;}, locations)
   
      | Some (`String "command") -> 
       (* located control/command event *)
@@ -626,14 +501,14 @@ let control_event_to_string control_e =
   | _ -> "<control event without printer>"
 ;;
 
-let packet_val_to_string packet_val = 
-  Printf.sprintf "%s[%d:%d]" (Bitstring.to_string packet_val.pbits) packet_val.ppos packet_val.plen
-;;
 
+let payload_to_string t = BitString.bits_to_hexstr t.pbits
 
 let packet_event_to_string packet_event = 
-  packet_val_to_string (packet_event.pkt_val)
+  payload_to_string (packet_event.pkt_val)
 ;;
+
+
 
 (* destructors *)
 let loc_to_tup loc = (loc.switch, loc.port)
@@ -652,5 +527,34 @@ let interp_event_to_string ievent =
   match ievent with
   | IEvent(e) -> CorePrinting.event_to_string e
   | IControl(_) -> "(Control event (printer not implemented))"
-  | IPacket(_) -> "(Packet event (printer not implemented))"
+  | IPacket(p) -> "[unparsed_packet: " ^ packet_event_to_string p ^ "]"
+;;
+
+
+(* print to json *)
+let event_val_to_json event = 
+  let raw_json_val v =
+    match v.v with
+    | VInt i -> `Int (Integer.to_int i)
+    | VBool b -> `Bool b
+    | _ -> error "not an int or bool"
+  in  
+  let {eid; data; epayload;} = event in
+  let name = `String (CorePrinting.cid_to_string eid) in
+  let args = `List (List.map raw_json_val data) in
+  (* the implicit payload does not get printed for an event val. *)
+  let _ = epayload in 
+  [("name", name); ("args", args)]
+;;
+
+let packet_event_to_json event = 
+  ["type", `String "packet";   
+  "bytes", `String (event.pkt_val.pbits |> BitString.bits_to_hexstr)]
+;;
+
+let interp_event_to_json ievent = 
+  match ievent with 
+  | IEvent(e) -> event_val_to_json e
+  | IPacket(p) -> packet_event_to_json p
+  | _ -> error "IControl json"
 ;;

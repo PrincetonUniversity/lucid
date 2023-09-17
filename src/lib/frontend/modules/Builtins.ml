@@ -5,13 +5,23 @@ let self_id = Id.create "self"
 let self_ty = ty (TInt (IConst 32))
 let recirc_id = Id.create "recirculation_port"
 let recirc_ty = ty (TInt (IConst 32))
-let lucid_ety_id = Id.create "LUCID_ETHERTY"
 
-(* FIXME: Just guessing: we should probably have this be configurable *)
+(* the lucid ethernet header is the tag for background events *)
+let lucid_ety_id = Id.create "LUCID_ETHERTY"
 let lucid_ety_ty = ty (TInt (IConst 16))
 let lucid_ety_int = 666
 let lucid_ety_value = vint lucid_ety_int 16
 
+let lucid_eth_smac_int = 0x000000000777
+let lucid_eth_smac_ty = ty (TInt (IConst 48))
+let lucid_eth_smac_value = vint lucid_eth_smac_int 48
+let lucid_eth_dmac_int = 0x000000000888
+let lucid_eth_dmac_ty = ty (TInt (IConst 48))
+let lucid_eth_dmac_value = vint lucid_eth_dmac_int 48
+
+let lucid_eventnum_ty = ty (TInt (IConst 16))
+
+(* used in the parser *) 
 let lucid_parse_id = Id.create "do_lucid_parsing"
 let packet_arg_id = Id.create "packet"
 let main_parse_id = Id.create "main"

@@ -66,7 +66,9 @@ let parse_interp_event_list
   =
   let parse_f =
     (parse_located_event 
-      Payloads.t_id renaming.var_map pp.events num_switches gap default_port)
+      Payloads.t_id 
+      (Builtins.lucid_eventnum_ty |> SyntaxToCore.translate_ty)
+      renaming.var_map pp.events num_switches gap default_port)
   in
   match input_json with
   | `List lst -> List.map parse_f lst
@@ -82,7 +84,7 @@ let parse_interp_inputs
   =
   let parse_f =
     (parse_located_event 
-      Payloads.t_id renaming.var_map pp.events num_switches)
+      Payloads.t_id (Builtins.lucid_eventnum_ty |> SyntaxToCore.translate_ty) renaming.var_map pp.events num_switches)
   in
   let wrapper
     ((located_events_rev : located_event list), (current_ts : int))
