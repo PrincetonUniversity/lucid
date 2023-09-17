@@ -1,7 +1,10 @@
 (* syntax extensions for the interpreter, mainly related 
    to the input stream, which consists of 
-   events located at specific ports in the network 
-   and interpreter control commands *)
+   events located at specific ports in the network, 
+   interpreter control commands, and payload values.
+   It would be nice to move payload values to interpPayload, 
+   but I can't figure out how to resolve dependency cycles 
+  in the current architecture. *)
 open CoreSyntax
 open Yojson.Basic
 open Str
@@ -30,7 +33,6 @@ type control_event = {
   ctl_edelay : int;
 }
 
-
 type packet_event = {
   pkt_val : payload_val;
   pkt_edelay : int;
@@ -53,7 +55,6 @@ type located_event = {
   ievent : interp_event;
   ilocs : loc list;
 }
-
 
 (* a switch_event is how we represent the event in a queue at a switch *)
 type switch_event = {

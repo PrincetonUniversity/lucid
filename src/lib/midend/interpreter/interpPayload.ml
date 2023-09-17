@@ -117,7 +117,6 @@ packet
 ;;
 
 let lucid_parse_fun (nst: State.network_state) swid args = 
-  print_endline ("in runtime function for lucid builtin parser");
   let _, _, _ = nst, swid, args in
   let payload = match args with
     | [_; payload] -> payload

@@ -54,8 +54,9 @@ parser main() {
 handle foo(int<48> dmac, int<48> smac, int<16> etype, int x, int y){
 	printf("in foo");
 	printf("ingress port, %d", ingress_port);
-	// generate(eth(dmac, smac, etype));
-	generate(eth(dmac, smac, 1));
+	generate(eth(dmac, smac, etype));
+	// generate(this);
+	// generate(eth(dmac, smac, 1));
 }
 
 handle eth(int<48> dmac, int<48> smac, int<16> etype){

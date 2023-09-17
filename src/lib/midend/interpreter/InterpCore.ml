@@ -907,7 +907,6 @@ let interp_decl (nst : State.network_state) swid d =
        context, not the _parser_ context, so that we can re-use 
        call interpretation. *)
     let runtime_function nst swid args = 
-      print_endline ("in runtime function for parser "^(CorePrinting.id_to_string id));
       let locals = 
         List.fold_left2
           (fun acc v id -> Env.add (Id id) v acc)

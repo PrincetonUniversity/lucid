@@ -215,7 +215,7 @@ let rec interp_events event_getter_opt max_time idx nst =
           nst
       | Some (event, port) ->
         execute_interp_event
-          false
+          true
           (interp_events event_getter_opt max_time)
           idx
           nst

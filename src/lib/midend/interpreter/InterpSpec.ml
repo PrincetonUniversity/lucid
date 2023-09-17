@@ -273,6 +273,9 @@ let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t 
       | Some (`Int n) -> n
       | _ -> (
         (* for interactive mode, max_time is the start timestamp for incoming events *)
+        (* TODO: this isn't quite right. A max_time of 0 in interactive mode 
+           prevents any recirculated events from running until the simulation starts. 
+           That might be what we want, but it also might not be. Hmm... *)
         if (Cmdline.cfg.interactive)
           then 0
           else 10000
