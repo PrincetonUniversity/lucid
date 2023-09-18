@@ -882,7 +882,11 @@ and infer_statement (env : env) (s : statement) : env * statement =
           env, GMulti inf_loc
         | GPort loc ->
           let env, inf_loc, lty = infer_exp env loc |> textract in
-          unify_raw_ty s.sspan lty.raw_ty (TInt (fresh_size ()));
+          (* the egress port expression should be the same type as the 
+            ingress port builtin *)
+          let inst t = instantiator#visit_ty (fresh_maps ()) t in
+          let t = inst (lookup_var e.espan env (Cid.id Builtins.ingr_port_id)) in
+          unify_raw_ty s.sspan lty.raw_ty t.raw_ty;
           env, GPort inf_loc
       in
       env, SGen (inf_g, inf_e)

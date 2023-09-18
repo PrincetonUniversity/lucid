@@ -155,7 +155,10 @@ let inline_parsers parser_entry_ty bg_events decls =
       | CallAlways -> lucid_background_event_parser bg_events
       | CallInvalid -> error "[inline_parsers] invalid parser entry type -- this should have been caught earlier"
    in
-   let ctx = CidMap.add (Cid.id Builtins.lucid_parse_id) ([(Id.create "pkt", Payloads.payload_ty |> SyntaxToCore.translate_ty)], lucid_bg_event_block) CidMap.empty in
+   (* note that the builtin lucid parser has its payload argument removed in tofino backend. *)
+   let ctx = CidMap.add (Cid.id Builtins.lucid_parse_id) ([], lucid_bg_event_block) CidMap.empty in
+
+   (* let ctx = CidMap.add (Cid.id Builtins.lucid_parse_id) ([(Id.create "pkt", Payloads.payload_ty |> SyntaxToCore.translate_ty)], lucid_bg_event_block) CidMap.empty in *)
    inline_parsers_rec ctx decls
 ;;
 

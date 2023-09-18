@@ -110,6 +110,7 @@
    DependencyProfiling
    InputChecks
    StandardizeEventParams
+   EliminatePayloads
    EliminateEventCombinators
    Hoisting
    AddIngressParser

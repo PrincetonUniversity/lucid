@@ -134,7 +134,7 @@ let execute_main_parser print_log swidx port (nst: State.network_state) (pkt_ev 
             Printf.printf
               "t=%d: Parsing packet %s at switch %d, port %d\n"
               nst.current_time
-              (BitString.bits_to_hexstr pkt_ev.pkt_val)
+              (CorePrinting.value_to_string (CoreSyntax.payload_to_vpat pkt_ev.pkt_val))
               swidx
               port;
       let event_val = parser_f nst swidx main_args in

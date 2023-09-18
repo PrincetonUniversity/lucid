@@ -301,7 +301,13 @@ let parse_int err_str (j) =
 let rec parse_value payloads_t_id err_str ty j =
   match j, ty.raw_ty with
   | `Int n, TInt size -> vint n size
-  | `Int n, TName (cid, _, _) when Cid.equal cid payloads_t_id -> vint n 32
+  (* payloads should be hex strings, but we graciously read ints as 32-bit uints *)
+  | `Int n, TName (cid, _, _) when Cid.equal cid payloads_t_id -> (
+    BitString.int_to_bits 32 n |> CoreSyntax.payload_to_vpat
+  )
+  | `String s, TName (cid, _, _) when Cid.equal cid payloads_t_id -> (
+    BitString.hexstr_to_bits s |> CoreSyntax.payload_to_vpat
+  )
   | `Bool b, TBool -> vbool b
   | `List lst, TGroup ->
     vgroup (List.map (fun n -> parse_int "group value definition" n) lst)
@@ -510,7 +516,7 @@ let interp_event_to_string ievent =
   match ievent with
   | IEvent(e) -> CorePrinting.event_to_string e
   | IControl(_) -> "(Control event (printer not implemented))"
-  | IPacket(p) -> "[unparsed_packet: " ^ packet_event_to_string p ^ "]"
+  | IPacket(p) -> CoreSyntax.payload_to_vpat p.pkt_val |> CorePrinting.value_to_string
 ;;
 
 

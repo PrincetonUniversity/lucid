@@ -151,7 +151,7 @@ and value_to_string v =
         then String.sub payload_hex_string 0 128 ^ "...("^(string_of_int (len - 128))^" B truncated)..."
         else payload_hex_string
       in
-      Printf.sprintf "<<%iB payload=0x%s>>" len payload_hex_string
+      Printf.sprintf "<<%iB unparsed bytestring=0x%s>>" (len/2) payload_hex_string
   | _ -> v_to_string v.v
 
 and event_to_string { eid; data; edelay } =
