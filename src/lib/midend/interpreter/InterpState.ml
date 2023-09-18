@@ -70,7 +70,7 @@ module State = struct
   and ival =
     | V of value
     | F of code
-    | P of InterpSyntax.payload_val
+    | P of BitString.bits
 
   and code = network_state -> int (* switch *) -> ival list -> value
 

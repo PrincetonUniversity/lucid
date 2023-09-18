@@ -350,12 +350,16 @@ let log_exit swid port_opt (event:InterpSyntax.interp_event) (nst : State.networ
 
 
 (* get the implicit payload argument when inside of a parser or handler.  *)
-let implicit_payload locals = 
-  let (pkt:InterpSyntax.payload_val) = match Env.find (Id Builtins.packet_arg_id) locals with 
+let implicit_payload locals : BitString.bits = 
+  let (pkt) = match Env.find (Id Builtins.packet_arg_id) locals with 
     | State.P(packet_val) -> packet_val
     | _ -> error "could not find current packet buffer while interpreting parser!"
   in
   pkt
+;;
+let implicit_payload_opt locals = 
+  try Some (implicit_payload locals) with
+  | _ -> None
 ;;
 
 let partial_interp_exps nst swid env exps =
@@ -423,7 +427,11 @@ let rec interp_statement nst swid locals s =
        or background event. Packet events get serialized into packets, 
        background events do not. *)
     (* next, append the current event's payload to the event *)
-    let event = {event with epayload = Some((implicit_payload locals).pbits);} in
+    let event = {event with epayload = 
+      match (implicit_payload_opt locals) with
+      | Some payload -> Some (payload)
+      | None -> None}
+    in
     (* serialize packet events *)
     let event = match sort with 
       | EBackground -> InterpSyntax.ievent event (* background events stay as events *)
@@ -817,7 +825,7 @@ and interp_parser_step nst swid locals parser_step =
       (* however, we want to give the event an implicit payload of whatever was unparsed *)
       match event_val.v with 
         | VEvent(event) -> 
-          let event = {event with epayload = Some((implicit_payload locals).pbits);} in
+          let event = {event with epayload = Some((implicit_payload locals));} in
           {event_val with v = VEvent(event)}
         | _ -> error "argument to generate is not an event"
     )
@@ -871,7 +879,7 @@ let interp_decl (nst : State.network_state) swid d =
       (* add the implicit payload argument TODO: make explicit *)
       let locals = match event.epayload with 
         | None -> locals
-        | Some(payload) -> Env.add (Id Builtins.packet_arg_id) (State.P(InterpPayload.from_bits payload)) locals
+        | Some(payload) -> Env.add (Id Builtins.packet_arg_id) (State.P(payload)) locals
       in
       State.update_counter swid event nst;
       Pipeline.reset_stage nst.switches.(swid).pipeline;

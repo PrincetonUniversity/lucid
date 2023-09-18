@@ -102,6 +102,9 @@ and v =
   | VGroup of location list
   | VPat of int list
 
+(* and event_val = 
+  | EvParsed of  *)
+
 and event_val =
   { eid : cid
   ; evnum : value option

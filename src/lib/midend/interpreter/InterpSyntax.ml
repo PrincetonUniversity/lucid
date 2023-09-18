@@ -9,15 +9,6 @@ open CoreSyntax
 open Yojson.Basic
 open Str
 
-type payload_val = {
-  porig : BitString.bits;
-  pbits : BitString.bits;
-  (* the parser operates over bits, not bytes. So the easiest 
-     implementation is with a bitstring *)
-  (* plen : int; length of buf *)
-  ppos : int; (* current offset in buf. Not needed anymore. *)
-}
-
 (* control events are interpreter builtins -- state update commands *)
 type control_e = 
   | ArraySet of string * value * (value list)
@@ -34,7 +25,7 @@ type control_event = {
 }
 
 type packet_event = {
-  pkt_val : payload_val;
+  pkt_val : BitString.bits;
   pkt_edelay : int;
 }
 
@@ -69,15 +60,6 @@ let delay (ev : interp_event) =
   | IEvent(ev) -> ev.edelay
   | IControl(ev) -> ev.ctl_edelay
   | IPacket(ev) -> ev.pkt_edelay
-;;
-let packet_val str = 
-  let pbits = BitString.hexstr_to_bits str in
-  {
-  porig = pbits;
-  pbits = pbits;
-  (* plen = List.length pbits; *)
-  ppos = 0;
-}
 ;;
 
 let packet_event pkt_val pkt_edelay = 
@@ -471,7 +453,7 @@ let parse_located_event
         | _ -> error "packet event must have a bytes field"
        in
        let pkt_event = packet_event
-          (packet_val pkt_bytes)
+          (BitString.hexstr_to_bits pkt_bytes)
           pkt_edelay
        in
        located_packet (pkt_event, locations)
@@ -503,7 +485,7 @@ let control_event_to_string control_e =
 ;;
 
 
-let payload_to_string t = BitString.bits_to_hexstr t.pbits
+let payload_to_string t = BitString.bits_to_hexstr t
 
 let packet_event_to_string packet_event = 
   payload_to_string (packet_event.pkt_val)
@@ -550,7 +532,7 @@ let event_val_to_json event =
 
 let packet_event_to_json event = 
   ["type", `String "packet";   
-  "bytes", `String (event.pkt_val.pbits |> BitString.bits_to_hexstr)]
+  "bytes", `String (event.pkt_val |> BitString.bits_to_hexstr)]
 ;;
 
 let interp_event_to_json ievent = 

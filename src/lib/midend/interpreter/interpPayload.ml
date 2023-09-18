@@ -3,40 +3,32 @@ open CoreSyntax
 open InterpSyntax
 open InterpState
 
-let empty = {porig = BitString.empty; pbits = BitString.empty; ppos = 0}
-let from_bits bs = {porig = bs; pbits = bs; ppos = 0}
-let to_bits pv = pv.pbits
 
-let payload_to_string t = BitString.bits_to_hexstr t.pbits
-
-
-(*** Parsing primitives. Should eventually go into a module of their own. ***)
-
-
-let read pv n : (int * payload_val) = 
-  let i = BitString.read_msb n pv.pbits in
-  let pbits = match BitString.advance n pv.pbits with
+(* bitstring helpers *)
+let read (pv:BitString.bits) n : (int * BitString.bits) = 
+  let i = BitString.read_msb n pv in
+  let pbits = match BitString.advance n pv with
     | Some(bs) -> bs
     | None -> failwith "[parser packet_read] attempted to read past end of packet"
   in
-  (i, {pv with pbits; ppos = pv.ppos + n})
+  (i, pbits)
 ;;
 let peek pv n : int = 
-  BitString.read_msb n pv.pbits
+  BitString.read_msb n pv
 ;;
 
-let skip pv n : payload_val = 
-  let pbits = match BitString.advance n pv.pbits with
+let skip pv n : BitString.bits = 
+  let pbits = match BitString.advance n pv with
     | Some(bs) -> bs
     | None -> failwith "[parser packet_skip] attempted to advance past end of packet"
   in
-  {pv with pbits; ppos = pv.ppos + n}
+  pbits
 ;;
 
 (*** parser action implementations ***)
 
 (* read something of the given type from the packet. Return a CoreSyntax value. *)
-let pread pkt ty : (CoreSyntax.value * payload_val) = 
+let pread pkt ty : (CoreSyntax.value * BitString.bits) = 
   match ty.raw_ty with
   | TInt(size) -> 
     let (i, pkt) = read pkt size in
@@ -71,26 +63,24 @@ let padvance pkt ty =
 
 (*** deparse / serialization ***)
 (* append a single value to a payload *)
-let pwrite (pkt:payload_val) (v:value) : payload_val = 
+let pwrite (pkt:BitString.bits) (v:value) : BitString.bits = 
   match v.v with
   | VInt(z) -> 
     let vval = Z.to_int z.value in
     let size = Z.to_int z.size in
     let pbits = BitString.int_to_bits size vval in
-    {pkt with 
-      pbits=BitString.concat pkt.pbits pbits}
+    BitString.concat pkt pbits
   | VBool(b) -> 
     let i = match b with | true -> 1 | false -> 0 in
-    {pkt with
-      pbits=BitString.concat pkt.pbits (BitString.int_to_bits 1 i)}
+    BitString.concat pkt (BitString.int_to_bits 1 i)
   | _ -> error "[pwrite] unsupported type"
 ;;
 
 (* serialize a packet event to a payload *)
 let serialize_packet_event event_val = 
-  let header = List.fold_left pwrite empty event_val.data in 
+  let header = List.fold_left pwrite [] event_val.data in 
   let packet = match event_val.epayload with
-    | Some(p) -> {header with pbits = BitString.concat header.pbits p}
+    | Some(p) -> BitString.concat header p
     | None -> header
   in
   packet
@@ -107,10 +97,10 @@ let serialize_background_event lucid_hdrs event_val =
     @event_val.data
     @[evnum]
   in
-  let header = List.fold_left pwrite empty all_data in 
+  let header = List.fold_left pwrite [] all_data in 
   (* finally add the payload *)
   let packet = match event_val.epayload with
-  | Some(p) -> {header with pbits = (BitString.concat header.pbits p)}
+  | Some(p) -> (BitString.concat header p)
   | None -> header
 in
 packet
@@ -154,7 +144,7 @@ let lucid_parse_fun (nst: State.network_state) swid args =
       eid = event_cid;
       data = args;
       edelay = 0;
-      epayload = Some(payload.pbits);
+      epayload = Some(payload);
       evnum = Some(event_num);
     }
   | _ -> error "lucid builtin background event parser called without payload arg"
