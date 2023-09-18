@@ -6,18 +6,18 @@ event eth(eth e) { generate background(e#srcMac); }
 event etheth(eth e, eth e') { generate background(e#srcMac); }
 event eth_ip(eth e, ip ip) { generate background(ip#srcIp); }
 
-parser parse_ip(eth e) {
+parser parse_ip(Payload.t p, eth e) {
   read ip ip;
   generate eth_ip(e, ip);
 }
 
-parser main() {
+parser main(Payload.t p) {
   read eth e;
   match e#etherTy with
-  | LUCID_ETHERTY -> { do_lucid_parsing(); }
-  | 7 -> { parse_ip(e); }
+  | LUCID_ETHERTY -> { do_lucid_parsing(p); }
+  | 7 -> { parse_ip(p, e); }
   | 0 -> { read eth e2;
-           parse_ip(e2); } // ERROR: e and e2 share a slot
+           parse_ip(p, e2); } // ERROR: e and e2 share a slot
   | _ -> {
       e#etherTy = 0x9999;
       generate eth(e);

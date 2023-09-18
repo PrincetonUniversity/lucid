@@ -101,18 +101,16 @@ let payload_parse_id = Id.fresh "payload_parse"
 let extract_call e =
   let extract_var e =
     match e.e with
-    | EVar _ when (SyntaxUtils.equiv_ty (Option.get e.ety) (Payloads.payload_ty)) -> 
-      None
-    | EVar cid -> Some(Cid.to_id cid)
+    | EVar cid -> Cid.to_id cid
     | ECall (cid, []) when Cid.equal cid Payloads.payload_parse_cid ->
-      Some(payload_parse_id)
+      payload_parse_id
     | _ ->
       failwith
         "slotAnalysis: expected event/parser argument to be a variable or a \
          call to Payload.parse "
   in
   match e.e with
-  | ECall (cid, es) -> cid, List.filter_map extract_var es
+  | ECall (cid, es) -> cid, List.map extract_var es
   | _ -> failwith "slotAnalysis: expected a call in parser"
 ;;
 
@@ -336,16 +334,12 @@ let add_slotted_obj env obj =
 let create_param_slots env cid params in_parser =
   let env =
     List.fold_lefti
-      (fun env n (id, ty) ->        
-        (* skip payloads! *)
-        if ((SyntaxUtils.equiv_ty ty (Payloads.payload_ty)))
-          then env
-          else (
-            let obj = Param (cid, n) in
-            let env = add_slotted_obj env obj in
-            if in_parser
-            then { env with live_vars = IdMap.add id obj env.live_vars }
-            else env))
+      (fun env n (id, _) ->
+        let obj = Param (cid, n) in
+        let env = add_slotted_obj env obj in
+        if in_parser
+        then { env with live_vars = IdMap.add id obj env.live_vars }
+        else env)
       env
       params
   in
@@ -471,6 +465,9 @@ let analyze_prog ds =
     end
   in
   let env = ref empty_env in
+  (* add the lucid builtin parser to the environment. *)
+  let new_env = create_param_slots !env (Cid.id (Builtins.lucid_parse_id)) [(Id.create "pkt",Payloads.payload_ty)] false in
+  env := new_env;
   v#visit_decls env ds;
   assign_int_slotids !env
 ;;
