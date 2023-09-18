@@ -20,9 +20,9 @@ deadbeef
 
 // what _should_ happen?
 
-packet event eth(int<48> dmac, int<48> smac, int<16> etype);
+packet event eth(int<48> dmac, int<48> smac, int<16> etype, Payload.t pkt);
 
-event foo(int<48> dmac, int<48> smac, int<16> etype, int x, int y);
+event foo(int<48> dmac, int<48> smac, int<16> etype, int x, int y, Payload.t pkt);
 
 // TODO: should not be able to generate non-packet events in the parser.
 
@@ -70,24 +70,25 @@ parser main(Payload.t pkt) {
 	read int<16> t;
 	match t with
 	| LUCID_ETHERTY -> {do_lucid_parsing(pkt);}
-	| _ -> {generate(eth(d, s, t));	}
+	| _ -> {generate(eth(d, s, t, pkt));	} // we _need_ to know what pkt is to interpret the generate.
 }
 
-handle foo(int<48> dmac, int<48> smac, int<16> etype, int x, int y){
+handle foo(int<48> dmac, int<48> smac, int<16> etype, int x, int y, Payload.t pkt){
 	printf("in foo");
 	printf("ingress port, %d", ingress_port);
-	generate(eth(dmac, smac, etype));
+	generate(eth(dmac, smac, etype, pkt));
 	// generate(this);
 	// generate(eth(dmac, smac, 1));
 }
 
-handle eth(int<48> dmac, int<48> smac, int<16> etype){
+handle eth(int<48> dmac, int<48> smac, int<16> etype, Payload.t pkt){
 	printf("in eth");
 	printf("ingress port, %d", ingress_port);
 	if (ingress_port == 0) {
-		generate(foo(dmac, smac, etype, 1, 2));
+		generate(foo(dmac, smac, etype, 1, 2, pkt));
 	} else {
-		generate_port(99, eth(dmac, smac, etype));
+		// generate_port(99, eth(dmac, smac, etype, Payload.empty()));
+		generate_port(99, eth(dmac, smac, etype, pkt));
 	}
 
 }
