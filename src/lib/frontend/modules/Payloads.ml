@@ -40,9 +40,12 @@ let payload_empty_ty =
 
 (* Just use ints to represent payloads in the interpreter. We could make a new
    type if we really wanted to distinguish them better *)
+(* Lets use a pattern value for now. *)
 let payload_empty_fun _ _ args =
   match args with
-  | [] -> CoreSyntax.vint_sp (Integer.create ~size:32 ~value:0) Span.default
+  | [] -> {(CoreSyntax.vpat []) with vty = (SyntaxToCore.translate_ty payload_ty)}
+    
+    (* CoreSyntax.vint_sp (Integer.create ~size:32 ~value:0) Span.default *)
   | _ ->
     payload_empty_error "Incorrect number or type of arguments to Payload.empty"
 ;;

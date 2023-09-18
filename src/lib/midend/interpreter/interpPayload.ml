@@ -3,6 +3,7 @@ open CoreSyntax
 open InterpSyntax
 open InterpState
 
+let is_payload_ty ty = equiv_ty ty (Payloads.payload_ty |> SyntaxToCore.translate_ty)
 
 
 (*** parser action implementations ***)
@@ -11,7 +12,7 @@ open InterpState
 let pread p ty : (CoreSyntax.value * BitString.bits) = 
   let size = match ty.raw_ty with 
     | TInt(size) -> size | TBool -> 1
-    | _ -> error "[pread] unsupported type"
+    | _ -> error ("[pread] unsupported type ("^(CorePrinting.ty_to_string ty)^")")
   in
   match (BitString.pop_msb size p) with
   | Some(i, bits) -> (vint i size, bits)
@@ -50,17 +51,16 @@ let pwrite (p:BitString.bits) (v:value) : BitString.bits =
   | VBool(b) -> 
     let i = match b with | true -> 1 | false -> 0 in
     BitString.concat p (BitString.int_to_bits 1 i)
+  (* payload value -- ignore for now, we use implicit *)
+  | VPat(_) when (is_payload_ty v.vty) -> 
+    BitString.concat p (CoreSyntax.vpat_to_payload v)
   | _ -> error "[pwrite] unsupported type"
 ;;
 
 (* serialize a packet event to a payload *)
 let serialize_packet_event event_val = 
   let header = List.fold_left pwrite [] event_val.data in 
-  let packet = match event_val.epayload with
-    | Some(p) -> BitString.concat header p
-    | None -> header
-  in
-  packet
+  header
 ;;
 
 (* Serialize a background event into a payload *)
@@ -75,12 +75,7 @@ let serialize_background_event lucid_hdrs event_val =
     @[evnum]
   in
   let header = List.fold_left pwrite [] all_data in 
-  (* finally add the payload *)
-  let packet = match event_val.epayload with
-  | Some(p) -> (BitString.concat header p)
-  | None -> header
-in
-packet
+  header
 ;;
 
 (* the lucid parser for background events *)
@@ -90,40 +85,44 @@ let lucid_parse_fun (nst: State.network_state) swid args =
     | [_; payload] -> payload
     | _ -> error "unexpected args"
   in
-  match payload with 
-  | InterpState.State.P(p) -> 
-    let event_num, payload = pread 
-      p 
-      (Builtins.lucid_eventnum_ty |> SyntaxToCore.translate_ty) 
-    in
-    let event_num_int = match event_num.v with 
-      | VInt(v) -> v.value |> Z.to_int
-      | _ -> error "event number is not a value?"
-    in
-    
-    (* look up the event signature *)
-    let event_cid, param_tys = match IntMap.find_opt event_num_int nst.event_signatures with
-    | Some(cid, tys) -> cid, tys
-    | None ->
-      print_endline ("----event number directory----");
-      IntMap.iter (fun k v -> print_endline ("event num: "^(string_of_int k)^" event id: "^(Cid.to_string (fst v))   )) nst.event_signatures;
-      error ("parsed an event tag int that doesn't correspond to a known event: "^(string_of_int event_num_int));
-    in
-    (* now parse all the arguments in order *)
-    let payload, args = List.fold_left 
-      (fun (payload, args) ty ->
-        let arg, payload = pread payload ty in
-        payload, args@[arg])
-      (payload, [])
-      param_tys
-    in
-    (* now construct the event value *)
-    vevent {
-      eid = event_cid;
-      data = args;
-      edelay = 0;
-      epayload = Some(payload);
-      evnum = Some(event_num);
-    }
-  | _ -> error "lucid builtin background event parser called without payload arg"
+  let payload = match payload with 
+    | InterpState.State.V(vpat) -> CoreSyntax.vpat_to_payload vpat
+    | _ -> error "lucid builtin background event parser called without payload arg"
+  in
+  let event_num, payload = pread payload
+    (Builtins.lucid_eventnum_ty |> SyntaxToCore.translate_ty) 
+  in
+  let event_num_int = match event_num.v with 
+    | VInt(v) -> v.value |> Z.to_int
+    | _ -> error "event number is not a value?"
+  in
+
+  (* look up the event signature *)
+  let event_cid, param_tys = match IntMap.find_opt event_num_int nst.event_signatures with
+  | Some(cid, tys) -> cid, tys
+  | None ->
+    print_endline ("----event number directory----");
+    IntMap.iter (fun k v -> print_endline ("event num: "^(string_of_int k)^" event id: "^(Cid.to_string (fst v))   )) nst.event_signatures;
+    error ("parsed an event tag int that doesn't correspond to a known event: "^(string_of_int event_num_int));
+  in
+  let _, args = List.fold_left
+    (fun (payload, argvs) ty ->
+      if (is_payload_ty ty) then
+        (* when we reach the payload argument, put the entire rest of the payload in it. *)
+        [], argvs@[payload_to_vpat payload]
+      else 
+      let arg, payload = pread payload ty in
+      payload, argvs@[arg])
+    (payload, [])
+    param_tys
+  in
+  (* now construct the event value, only passing it a payload if it has a payload arg *)
+  let res = vevent {
+    eid = event_cid;
+    data = args;
+    edelay = 0;
+    evnum = Some(event_num);
+  }
+  in 
+  res
 ;;

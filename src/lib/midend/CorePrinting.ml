@@ -137,7 +137,22 @@ let rec v_to_string v =
   | VTuple vs -> Printf.sprintf "(%s)" (comma_sep v_to_string vs)
   | VPat bs -> bs_to_string bs
 
-and value_to_string v = v_to_string v.v
+and value_to_string v = 
+  (* special cases for payloads *)
+  match (v.v, v.vty.raw_ty) with 
+  | (VPat(_), TName(tcid, _, _)) when (
+    Cid.equal tcid (Cid.create (["Payload"; "t"])))  
+    -> 
+      let payload_hex_string = CoreSyntax.vpat_to_payload v |> BitString.bits_to_hexstr in
+      (* truncate the hex string after 64 bytes, if its longer than that put ... at the end *)
+      let len = String.length payload_hex_string in
+      let payload_hex_string = 
+        if len > 128
+        then String.sub payload_hex_string 0 128 ^ "...("^(string_of_int (len - 128))^" B truncated)..."
+        else payload_hex_string
+      in
+      Printf.sprintf "<<%iB payload=0x%s>>" len payload_hex_string
+  | _ -> v_to_string v.v
 
 and event_to_string { eid; data; edelay } =
   let delaystr =
@@ -154,7 +169,7 @@ and event_to_string { eid; data; edelay } =
 
 let rec e_to_string e =
   match e with
-  | EVal v -> v_to_string v.v
+  | EVal v -> value_to_string v
   | EVar cid -> cid_to_string cid
   | EOp (op, [e]) -> op_to_string op ^ exp_to_string e
   | EOp (op, [e1; e2]) -> exp_to_string e1 ^ op_to_string op ^ exp_to_string e2

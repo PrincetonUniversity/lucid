@@ -26,7 +26,7 @@ let initial_state (pp : Preprocess.t) (spec : InterpSpec.t) =
   (* Add builtins *)
   List.iter
     (fun f -> State.add_global_function f nst)
-    (System.defs @ Events.defs @ Counters.defs @ Arrays.defs @ PairArrays.defs);
+    (System.defs @ Events.defs @ Counters.defs @ Arrays.defs @ PairArrays.defs @Payloads.defs);
   (* Add externs *)
   List.iteri
     (fun i exs -> Env.iter (fun cid v -> State.add_global i cid (V v) nst) exs)
@@ -109,9 +109,10 @@ let execute_control swidx (nst : State.network_state) (ctl_ev : control_event) =
 ;;
 
 let execute_main_parser print_log swidx port (nst: State.network_state) (pkt_ev : packet_event) = 
-  (* construct the arguments to main. Convention is that each call has 
-     two implicit arguments: port and packet. *)
-  let main_args = [State.V (C.vint port 32); State.P pkt_ev.pkt_val] in
+
+  let payload_val = CoreSyntax.payload_to_vpat pkt_ev.pkt_val in
+  (* main takes 2 arguments, port and payload. Port is implicit. *)
+  let main_args = [State.V (C.vint port 32); State.V payload_val] in
   let main_parser = State.lookup swidx (Cid.id Builtins.main_parse_id) nst in
 
   match main_parser with 

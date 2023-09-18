@@ -11,8 +11,6 @@ and z = [%import: (Z.t[@opaque])]
 and pragma = [%import: Pragma.t]
 and zint = [%import: (Integer.t[@with Z.t := (Z.t [@opaque])])]
 and location = int
-and bit = [%import: (BitString.bit[@opaque])]
-and bits = [%import: (BitString.bits[@opaque])]
 
 (* All sizes should be inlined and precomputed *)
 and size = int
@@ -116,7 +114,6 @@ and event_val =
   ; evnum : value option
   ; data : value list
   ; edelay : int
-  ; epayload : bits option
   }
 
 and value =
@@ -601,3 +598,32 @@ let exp_to_int exp =
   | EVal { v = VInt z; _ } -> Integer.to_int z
   | _ -> error "[exp_to_int] exp is not an EVal(EInt(...))"
 ;;
+
+open BitString
+let payload_to_vpat bits = 
+
+  let rec bits_to_pat bits = 
+    match bits with 
+    | [] -> []
+    | B0::tl -> 0::(bits_to_pat tl)
+    | B1::tl -> 1::(bits_to_pat tl)
+  in
+  {(vpat (bits_to_pat bits)) with vty = ty@@TName(Cid.create ["Payload"; "t"], [], false);}
+;;
+
+let vpat_to_payload vpat = 
+  if (vpat.vty.raw_ty = TName(Cid.create ["Payload"; "t"], [], false)) then (
+  match vpat.v with 
+  | VPat bs -> 
+    let rec bits_of_pat bs = 
+      match bs with 
+      | [] -> []
+      | 0::tl -> B0::(bits_of_pat tl)
+      | 1::tl -> B1::(bits_of_pat tl)
+      | _ -> error "[vpat_to_payload] vpat has a digit other than 0 or 1, cannot be converted to binary payload"
+    in
+    (bits_of_pat bs)
+  | _ -> error "[vpat_to_payload] vpat is not a payload"
+  )
+  else 
+    error "[vpat_to_payload] vpat is not a payload"

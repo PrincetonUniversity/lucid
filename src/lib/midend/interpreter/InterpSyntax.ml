@@ -30,7 +30,7 @@ type packet_event = {
 }
 
 type interp_event =
-  | IEvent of (event_val)
+  | IEvent of event_val
   | IControl of control_event
   | IPacket of packet_event
 ;;
@@ -435,7 +435,7 @@ let parse_located_event
       | None -> None
       | Some(n) -> Some(CoreSyntax.vint n (size_of_tint lucid_eventnum_ty))
        in
-      located_event ({ eid; data; edelay; epayload=None; evnum;}, locations)
+      located_event ({ eid; data; edelay; evnum;}, locations)
   
      | Some (`String "command") -> 
       (* located control/command event *)
@@ -522,11 +522,9 @@ let event_val_to_json event =
     | VBool b -> `Bool b
     | _ -> error "not an int or bool"
   in  
-  let {eid; data; epayload;} = event in
+  let {eid; data;} = event in
   let name = `String (CorePrinting.cid_to_string eid) in
   let args = `List (List.map raw_json_val data) in
-  (* the implicit payload does not get printed for an event val. *)
-  let _ = epayload in 
   [("name", name); ("args", args)]
 ;;
 
