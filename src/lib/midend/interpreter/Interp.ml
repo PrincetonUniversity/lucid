@@ -108,16 +108,37 @@ let execute_control swidx (nst : State.network_state) (ctl_ev : control_event) =
   InterpControl.handle_control nst swidx ctl_ev
 ;;
 
-let execute_main_parser swidx port (nst: State.network_state) (pkt_ev : packet_event) = 
+let execute_main_parser print_log swidx port (nst: State.network_state) (pkt_ev : packet_event) = 
   (* construct the arguments to main. Convention is that each call has 
      two implicit arguments: port and packet. *)
   let main_args = [State.V (C.vint port 32); State.P pkt_ev.pkt_val] in
-  let parser_val = State.lookup swidx (Cid.id Builtins.main_parse_id) nst in
-  match parser_val with 
+  let main_parser = State.lookup swidx (Cid.id Builtins.main_parse_id) nst in
+
+  match main_parser with 
     | F parser_f -> (
+      if print_log
+        then
+          if Cmdline.cfg.json || Cmdline.cfg.interactive
+          then
+            `Assoc
+              [ ( "packet_arrival"
+                , `Assoc
+                    [ "switch", `Int swidx
+                    ; "port", `Int port
+                    ; "time", `Int nst.current_time
+                    ; "bytes", `String (BitString.bits_to_hexstr pkt_ev.pkt_val) ] ) ]
+            |> Yojson.Basic.pretty_to_string
+            |> print_endline
+          else
+            Printf.printf
+              "t=%d: Parsing packet %s at switch %d, port %d\n"
+              nst.current_time
+              (BitString.bits_to_hexstr pkt_ev.pkt_val)
+              swidx
+              port;
       let event_val = parser_f nst swidx main_args in
       match event_val.v with 
-      | VEvent(event_val) -> execute_event true swidx nst event_val port
+      | VEvent(event_val) -> execute_event print_log swidx nst event_val port
       | VBool(false) -> error "main parser did not generate an event"
       | _ -> error "main parser did not return an event or a no event signal")
     | _ -> error "the global named 'main' is not a parser"
@@ -134,7 +155,7 @@ let execute_interp_event
   (match ievent with
    | IEvent event -> execute_event print_log idx nst event port
    | IControl ctl_ev -> execute_control idx nst ctl_ev   
-   | IPacket pkt_ev -> execute_main_parser idx port nst pkt_ev
+   | IPacket pkt_ev -> execute_main_parser print_log idx port nst pkt_ev
    );
   simulation_callback ((idx + 1) mod Array.length nst.switches) nst
 ;;

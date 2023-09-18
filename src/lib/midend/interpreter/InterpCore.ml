@@ -6,6 +6,8 @@ open SyntaxUtils
 open InterpState
 module Printing = CorePrinting
 
+
+
 let raw_integer v =
   match v.v with
   | VInt i -> i
@@ -295,7 +297,6 @@ let printf_replace vs (s : string) : string =
 
 
 }
-
  *)
 
 (* print message to a json record *)
@@ -414,19 +415,9 @@ let rec interp_statement nst swid locals s =
     (* first, get the event value, without any payload *)
     let event = interp_exp e |> extract_ival |> raw_event in
     let sort = Env.find event.eid nst.event_sorts in
-    (* we would use the lucid header if we were serializing packet events, too *)
-    (* let lucid_hdr = 
-      List.map 
-        SyntaxToCore.translate_value
-        [ Builtins.lucid_eth_dmac_value; 
-          Builtins.lucid_eth_smac_value; 
-          Builtins.lucid_ety_value] 
-    in
-    let lucid_hdr = lucid_hdr@[num] in  *)
     (* now, we process differently depending on whether it is a packet event 
        or background event. Packet events get serialized into packets, 
        background events do not. *)
-    (* next, append the current event's payload to the event *)
     let event = {event with epayload = 
       match (implicit_payload_opt locals) with
       | Some payload -> Some (payload)
@@ -837,9 +828,13 @@ and interp_parser_step nst swid locals parser_step =
           let args = 
             (State.V(port_arg locals))
             ::(State.P(implicit_payload locals))
-            ::(List.map (fun e -> interp_exp nst swid locals e) args) 
+            ::(List.filter_map 
+              (fun e -> 
+                (* skip the payload parameter because we use the implicit payload param *)
+                if (CoreSyntax.equiv_ty (e.ety) (SyntaxToCore.translate_ty Payloads.payload_ty)) then None
+                else Some(interp_exp nst swid locals e)) args)
           in
-          (* call the parser function and that's it! *)
+          (* call the parser function as you would any other function *)
           match State.lookup swid cid nst with 
             | F(parser_f) -> parser_f nst swid args
             | _ -> error "[parser call] could not find parser function"
@@ -887,34 +882,18 @@ let interp_decl (nst : State.network_state) swid d =
     in
     State.add_handler (Cid.id id) f nst
 
-  (* parsers: 
-    - add the main parser into the parsers list, 
-    with port and args passed in from interp runtime, 
-    but not declared in the params. 
-    - add all other parsers as global functions, where 
-    port value is added to arguments list by 
-    interpretation of ECalls in the parser. *)
-  (* | DParser(id, params, parser_block) when (Id.equal id (Builtins.main_parse_id)) -> 
-    let runtime_parser nst swid port pkt args = 
-      let builtin_locals = Env.empty 
-        |> Env.add (Id Builtins.ingr_port_id) (State.V (vint port 32)) 
-        |> Env.add (Id Builtins.packet_arg_id) (pkt)
-      in
-      let locals = 
-        List.fold_left2
-          (fun acc v id -> Env.add (Id id) v acc)
-          builtin_locals
-          args
-          (List.split params |> fst)
-      in
-      interp_parser_block nst swid locals parser_block
-    in
-    State.add_parser (Cid.id id) runtime_parser nst *)
+  (* parsers: convention is for first two arguments to be 
+  ingress port and unparsed packet / payload. *)
   | DParser(id, params, parser_block) -> 
-    (* note that non-main parsers are added to the _function_ 
-       context, not the _parser_ context, so that we can re-use 
-       call interpretation. *)
     let runtime_function nst swid args = 
+      (* if the first parameter is the payload, delete it *)
+      let _, stuff, _, _ = Payloads.signature in
+      let _, _, payload_ty = List.hd stuff in 
+      let params = match params with 
+        | (_, ty)::tl when (CoreSyntax.equiv_ty (payload_ty|> SyntaxToCore.translate_ty) ty) -> 
+          tl
+        | _ -> params    
+      in
       let locals = 
         List.fold_left2
           (fun acc v id -> Env.add (Id id) v acc)

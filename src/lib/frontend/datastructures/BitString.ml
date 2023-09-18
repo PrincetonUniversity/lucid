@@ -118,6 +118,12 @@ let rec advance n bits : bits option =
   )    
 ;;
 
+let pop_msb n bits : (int * bits) option = 
+  match advance n bits with 
+  | None -> None
+  | Some(bits') -> Some(read_msb n bits, bits')
+;;
+
 (* concat 2 bitstrings *)
 let rec concat bits1 bits2 : bits = 
   match bits1 with 

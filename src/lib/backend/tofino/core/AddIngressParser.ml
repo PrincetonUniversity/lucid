@@ -23,12 +23,6 @@ open CoreSyntax
 open MiscUtils
 
 
-(* bug: 
-      when we inline the lucid ethernet parser, we need to make sure we don't skip the ethernet header, which has already been skipped.   
-
-*)
-
-
 (* create a parse block to parse and generate a single packet event. *)
 let packetevent_parse_block event = match event.d with
 | DEvent(id,_, _, params) -> 
@@ -161,7 +155,7 @@ let inline_parsers parser_entry_ty bg_events decls =
       | CallAlways -> lucid_background_event_parser bg_events
       | CallInvalid -> error "[inline_parsers] invalid parser entry type -- this should have been caught earlier"
    in
-   let ctx = CidMap.add (Cid.id Builtins.lucid_parse_id) ([], lucid_bg_event_block) CidMap.empty in
+   let ctx = CidMap.add (Cid.id Builtins.lucid_parse_id) ([(Id.create "pkt", Payloads.payload_ty |> SyntaxToCore.translate_ty)], lucid_bg_event_block) CidMap.empty in
    inline_parsers_rec ctx decls
 ;;
 
@@ -250,7 +244,7 @@ let direct_call_parser_block parser_block =
    let {pactions=acns_spans; pstep=(step, _);} = parser_block in
    let acns, _ = List.split acns_spans in
    match acns, step with 
-   | [], PCall({e=ECall(cid, []); _}) when (Id.equal Builtins.lucid_parse_id (Cid.to_id cid)) -> true
+   | [], PCall({e=ECall(cid, _); _}) when (Id.equal Builtins.lucid_parse_id (Cid.to_id cid)) -> true
    | _ -> false 
 ;;
 (* a direct call parser branch is one that matches a single variable and 
@@ -347,12 +341,12 @@ let check_valid_entry_parse_block parse_block : lucid_entry_block_ty =
       let lucid_etherty_pat_check = is_lucid_etherty_pat fst_pat in
       let direct_call_check = direct_call_parser_block fst_block in
       let rest_branches_check = List.for_all never_calls_lucid_parser rest_branches in
-      (* if not bits_read_check then Printf.printf "main parser reads wrong number of bytes before branch to lucid internal.\n";
+      if not bits_read_check then Printf.printf "main parser reads wrong number of bytes before branch to lucid internal.\n";
       if not size_check then Printf.printf "main parser does not match on a 16-bit field (the size of ethertype)\n";
       if not exp_ref_check then Printf.printf "main parser does not match on the last variable read. \n";
       if not lucid_etherty_pat_check then Printf.printf "parser does not contain a first branch that matches LUCID_ETHERTY\n";
       if not direct_call_check then Printf.printf "parser's first branch does not call lucid parser directly.\n";
-      if not rest_branches_check then Printf.printf "branches besides the parser's first branch call lucid's parser.\n"; *)
+      if not rest_branches_check then Printf.printf "branches besides the parser's first branch call lucid's parser.\n";
       if (bits_read_check && size_check && exp_ref_check && lucid_etherty_pat_check && direct_call_check && rest_branches_check)
          then CallFromEth
          else CallInvalid)

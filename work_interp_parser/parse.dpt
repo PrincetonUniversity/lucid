@@ -1,6 +1,25 @@
 // simple example with parser for packet events
 
 // packet 
+
+// what happens if you send an unparsed packet that has 
+// the lucid header and then a packet event?
+
+/*
+
+for example, this is a serialized foo:
+000000000001000000000002029A000200000000000100000000000208001122334455667788
+
+
+deadbeef
+
+
+
+*/ 
+
+
+// what _should_ happen?
+
 packet event eth(int<48> dmac, int<48> smac, int<16> etype);
 
 event foo(int<48> dmac, int<48> smac, int<16> etype, int x, int y);
@@ -41,13 +60,16 @@ So merge packet and payload.
 
 */
 
-
-parser main() {
-	read int<48> d;
+// main must take a Payload.t object
+// parser main(Payload.t pkt) {
+parser main(Payload.t pkt) {
+	// locals = {ingress_port : ...; pkt : ...}
+	// int<48> d =  Payload.read(pkt);
+	read int<48> d; // how do i know what bitstring to pass to read? You have to tell me!
 	read int<48> s;
 	read int<16> t;
 	match t with
-	| LUCID_ETHERTY -> {do_lucid_parsing();}
+	| LUCID_ETHERTY -> {do_lucid_parsing(pkt);}
 	| _ -> {generate(eth(d, s, t));	}
 }
 

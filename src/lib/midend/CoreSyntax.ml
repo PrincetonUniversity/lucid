@@ -105,6 +105,12 @@ and v =
 (* and event_val = 
   | EvParsed of  *)
 
+(*
+Events may or may not have a payload
+packet events have _only_ a payload   
+
+*)
+
 and event_val =
   { eid : cid
   ; evnum : value option

@@ -1568,7 +1568,8 @@ let rec infer_declaration
       (* a parser may branch on the ingress port *)
       let ingress_port_param = (Builtins.ingr_port_id, builtin_tys.ingr_port_ty) in
       let parser_env =
-        add_locals env (ingress_port_param::params) |> define_parser Builtins.lucid_parse_id []
+        add_locals env (ingress_port_param::params) 
+        |> define_parser Builtins.lucid_parse_id [(Id.create "pkt", Payloads.payload_ty)]
       in
       let inf_parser = infer_parser_block parser_env parser in
       let env = define_parser id params env in

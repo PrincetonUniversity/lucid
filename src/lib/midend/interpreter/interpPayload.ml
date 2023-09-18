@@ -4,75 +4,52 @@ open InterpSyntax
 open InterpState
 
 
-(* bitstring helpers *)
-let read (pv:BitString.bits) n : (int * BitString.bits) = 
-  let i = BitString.read_msb n pv in
-  let pbits = match BitString.advance n pv with
-    | Some(bs) -> bs
-    | None -> failwith "[parser packet_read] attempted to read past end of packet"
-  in
-  (i, pbits)
-;;
-let peek pv n : int = 
-  BitString.read_msb n pv
-;;
-
-let skip pv n : BitString.bits = 
-  let pbits = match BitString.advance n pv with
-    | Some(bs) -> bs
-    | None -> failwith "[parser packet_skip] attempted to advance past end of packet"
-  in
-  pbits
-;;
 
 (*** parser action implementations ***)
 
 (* read something of the given type from the packet. Return a CoreSyntax value. *)
-let pread pkt ty : (CoreSyntax.value * BitString.bits) = 
-  match ty.raw_ty with
-  | TInt(size) -> 
-    let (i, pkt) = read pkt size in
-    (vint i size), pkt
-  | TBool -> (
-    let (i, pkt) = read pkt 1 in
-    match i with 
-    | 0 -> (vbool false), pkt
-    | 1 -> (vbool true), pkt
-    | _ -> error "[pread] invalid result from packet_read"
-  )
-  | _ -> error "[pread] unsupported type"
-;;
-let ppeek pkt ty = 
-  match ty.raw_ty with 
-  | TInt(size) -> vint (peek pkt size) size
-  | TBool -> (
-    match (peek pkt 1) with 
-    | 0 -> vbool false
-    | 1 -> vbool true
-    | _ -> error "[ppeek] invalid result from packet_peek"
-  )
-  | _ -> error "[ppeek] unsupported type"
+let pread p ty : (CoreSyntax.value * BitString.bits) = 
+  let size = match ty.raw_ty with 
+    | TInt(size) -> size | TBool -> 1
+    | _ -> error "[pread] unsupported type"
+  in
+  match (BitString.pop_msb size p) with
+  | Some(i, bits) -> (vint i size, bits)
+  | None -> error "[pread] attempted to read past end of packet"
 ;;
 
-let padvance pkt ty =
-  match ty.raw_ty with
-  | TInt(size) -> skip pkt size
-  | TBool -> skip pkt 1
-  | _ -> error "[padvance] unsupported type"
+let ppeek p ty = 
+  let size = match ty.raw_ty with 
+    | TInt(size) -> size | TBool -> 1
+    | _ -> error "[ppeek] unsupported type"
+  in
+  match (BitString.pop_msb size p) with
+  | Some(i, _) -> vint i size
+  | None -> error "[ppeek] attempted to read past end of packet"
+;;
+
+let padvance p ty =
+  let size = match ty.raw_ty with 
+    | TInt(size) -> size | TBool -> 1
+    | _ -> error "[padvance] unsupported type"
+  in
+  match (BitString.pop_msb size p) with
+  | Some(_, bits) -> bits
+  | None -> error "[padvance] attempted to read past end of packet"
 ;;
 
 (*** deparse / serialization ***)
 (* append a single value to a payload *)
-let pwrite (pkt:BitString.bits) (v:value) : BitString.bits = 
+let pwrite (p:BitString.bits) (v:value) : BitString.bits = 
   match v.v with
   | VInt(z) -> 
     let vval = Z.to_int z.value in
     let size = Z.to_int z.size in
     let pbits = BitString.int_to_bits size vval in
-    BitString.concat pkt pbits
+    BitString.concat p pbits
   | VBool(b) -> 
     let i = match b with | true -> 1 | false -> 0 in
-    BitString.concat pkt (BitString.int_to_bits 1 i)
+    BitString.concat p (BitString.int_to_bits 1 i)
   | _ -> error "[pwrite] unsupported type"
 ;;
 
@@ -86,7 +63,7 @@ let serialize_packet_event event_val =
   packet
 ;;
 
-(* Serialize a background event into a payload. *)
+(* Serialize a background event into a payload *)
 let serialize_background_event lucid_hdrs event_val = 
   let evnum = match event_val.evnum with 
     | None -> error "cannot serialize a background event with no number"
@@ -106,6 +83,7 @@ in
 packet
 ;;
 
+(* the lucid parser for background events *)
 let lucid_parse_fun (nst: State.network_state) swid args = 
   let _, _, _ = nst, swid, args in
   let payload = match args with
