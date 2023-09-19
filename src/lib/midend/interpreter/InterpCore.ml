@@ -362,13 +362,13 @@ let partial_interp_exps nst swid env exps =
     exps
 ;;
 
-let rec interp_statement nst swid locals s =
+let rec interp_statement nst hdl_sort swid locals s =
   (* (match s.s with
   | SSeq _ | SNoop -> () (* We'll print the sub-parts when we get to them *)
   | _ -> print_endline @@ "Interpreting " ^ CorePrinting.stmt_to_string s); *)
   let interpret_exp = interp_exp nst swid in
   let interp_exp = interp_exp nst swid locals in
-  let interp_s = interp_statement nst swid locals in
+  let interp_s = interp_statement nst hdl_sort swid locals in
   match s.s with
   | SNoop -> locals
   | SAssign (id, e) ->
@@ -396,10 +396,11 @@ let rec interp_statement nst swid locals s =
     (* Stop evaluating after hitting a return statement *)
     if !(nst.switches.(swid).retval) <> None
     then locals
-    else interp_statement nst swid locals ss2
+    else interp_statement nst hdl_sort swid locals ss2
 
   | SGen (g, e) -> (
-    (* payload manipulation point 1/n *)
+
+
     (* first, get the event value, without any payload *)
     let event = interp_exp e |> extract_ival |> raw_event in
     let sort = Env.find event.eid nst.event_sorts in
@@ -414,7 +415,44 @@ let rec interp_statement nst swid locals s =
         let pkt = InterpPayload.serialize_packet_event event in
         InterpSyntax.ipacket {pkt_val=pkt; pkt_edelay=event.edelay}
     in
-    let locs =
+    (* let ingress_next_locs = match g with *)
+
+    (* left off here. Right now, all the processing is in ingress and it sends it directly to the next ingress. 
+       However, output_ports are _OUR_ output ports. What we need to do next is send the event to 
+       the egress queue with that port. Then, in a separate step, dequeue from the egress port and do 
+       another lookup to send it to the final destination. *)
+    let output_ports = match g with
+      | GSingle None ->
+        [ State.Port(State.lookup swid (Cid.from_string "recirculation_port") nst
+        |> extract_ival
+        |> raw_integer
+        |> Integer.to_int )  ]
+      | GSingle (Some exp) -> 
+        let swid = interp_exp exp |> extract_ival |> raw_integer |> Integer.to_int in
+        [(State.Switch(swid))]
+      | GPort port -> [State.Port(interp_exp port |> extract_ival |> raw_integer |> Integer.to_int)]
+      | GMulti grp -> 
+        let ports = interp_exp grp |> extract_ival |> raw_group in
+        (match ports with
+        | [port] when port < 0 ->
+          (* flooding *)
+          let tl = (IntMap.find swid nst.links (*get a tuple list of (local_port, (remote_switch, remote_port))*)
+            |> IntMap.bindings
+            |> List.filter_map (fun (p, (dst, _)) ->
+                (* if the port in the bindings (p) is equal to the negation of the port argument + 1, 
+                    then send to this output port. We have to be careful: do not want to flood to recirculation port! *)
+                if ((p = -(port + 1)) || (dst = swid)) then None else Some (  
+                State.Port(p)))) in
+          (* this is just here for logging... switch -1 at port with number of the group.  *)
+          let hd = State.PExit(port) in
+          hd::tl
+            
+        | _ -> 
+          List.map (fun port -> State.Port(port)) ports)
+    in
+    (* push all the events to output ports *)
+    State.push_generated_event_to_ports swid output_ports event nst;
+    (* let locs =
       match g with
       | GSingle None ->
         [ ( swid
@@ -429,11 +467,14 @@ let rec interp_statement nst swid locals s =
         (match ports with
          | [port] when port < 0 ->
            (* Flooding: send to every connected switch *)
-           (-1, port)
-           :: (IntMap.find swid nst.links
+           let hd = (-1, port) in
+           let tl = 
+            (IntMap.find swid nst.links
               |> IntMap.bindings
-              |> List.filter_map (fun (p, dst) ->
-                   if p = -(port + 1) then None else Some dst))
+              |> List.filter_map (fun (p, (dst, dport)) ->
+                   if ((p = -(port + 1))|| (dst = swid) ) then None else Some (dst, dport)))
+           in
+           hd::tl
          | _ -> List.map (fun port -> State.lookup_dst nst (swid, port)) ports)
       | GPort port ->
         let port =
@@ -441,13 +482,15 @@ let rec interp_statement nst swid locals s =
         in
         [State.lookup_dst nst (swid, port)]
     in
+     *)
     (* push the event to all the appropriate queues *)
-    List.iter
+    (* List.iter
       (fun (dst_id, port) ->
         if dst_id = -1 (* lookup_dst failed *)
         then log_exit swid (Some port) event nst
         else State.push_generated_event swid dst_id port event nst)
-      locs;
+      locs; *)
+      
     locals
   )
   | SRet (Some e) ->
@@ -487,7 +530,7 @@ let rec interp_statement nst swid locals s =
       | _ -> error "Table did not evaluate to a pipeline object reference"
     in
     (* call install_table_entry for each entry *)
-    List.iter (State.install_table_entry_switch swid tbl_pos nst) entries;
+    List.iter (fun entry -> InterpSwitch.install_table_entry tbl_pos entry (State.sw nst swid)) entries;
     (* return unmodified locals context *)
     locals
   | STableMatch tm ->
@@ -497,7 +540,7 @@ let rec interp_statement nst swid locals s =
       | V { v = VGlobal stage } -> stage
       | _ -> error "Table did not evaluate to a pipeline object reference"
     in
-    let default, entries = State.get_table_entries_switch swid tbl_pos nst in
+    let default, entries = InterpSwitch.get_table_entries tbl_pos (State.sw nst swid) in
     (* find the first matching case *)
     let key_vs = List.map (fun e -> interp_exp e |> extract_ival) tm.keys in
     let fst_match =
@@ -845,7 +888,7 @@ let interp_decl (nst : State.network_state) swid d =
   | DAction acn ->
     (* add the action to the environment *)
     State.add_action (Cid.id acn.aid) acn nst
-  | DHandler (id, _, (params, body)) ->
+  | DHandler (id, hdl_sort, (params, body)) ->
     (* print_endline@@"Adding handler"^(CorePrinting.id_to_string id);
     print_endline@@"handler sort: "^(match hdl_sort with | HData -> "ingress" | HEgress -> "egress" | _ ->""); *)
     let f nst swid port event =
@@ -864,9 +907,9 @@ let interp_decl (nst : State.network_state) swid d =
           event.data
           params
       in
-      State.update_counter swid event nst;
+      State.update_counter swid event nst; (*TODO: fix counters for egress. *)
       Pipeline.reset_stage nst.switches.(swid).pipeline;
-      ignore @@ interp_statement nst swid locals body
+      ignore @@ interp_statement nst hdl_sort swid locals body
     in
     State.add_handler (Cid.id id) f nst
 

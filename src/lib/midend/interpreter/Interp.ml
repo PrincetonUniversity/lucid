@@ -70,13 +70,25 @@ let initialize renaming spec_file ds =
      event or control op, then call a function to continue interpretation ***)
 let execute_event
   print_log
-  idx
+  swid
   (nst : State.network_state)
   (event : CoreSyntax.event_val)
   port
+  gress
   =
-  match Env.find_opt event.eid nst.handlers with
-  | None -> error @@ "No handler for event " ^ Cid.to_string event.eid
+  let handlers = match gress with 
+    | InterpSwitch.Ingress -> nst.handlers
+    | InterpSwitch.Egress -> nst.egress_handlers
+  in
+  match Env.find_opt event.eid handlers with
+  | None -> (
+    (* if its an egress handler... we want to just push it to its destination. 
+        *)
+    match gress with
+    | InterpSwitch.Egress -> error "egress time"
+    | InterpSwitch.Ingress ->
+    
+      error @@ "No handler for event " ^ Cid.to_string event.eid )
   | Some handler ->
     if print_log
     then
@@ -85,7 +97,7 @@ let execute_event
         `Assoc
           [ ( "event_arrival"
             , `Assoc
-                [ "switch", `Int idx
+                [ "switch", `Int swid
                 ; "port", `Int port
                 ; "time", `Int nst.current_time
                 ; "event", `String (CorePrinting.event_to_string event) ] ) ]
@@ -99,9 +111,9 @@ let execute_event
            | EPacket -> "packet "
            | _ -> "")
           (CorePrinting.event_to_string event)
-          idx
+          swid
           port;
-    handler nst idx port event
+    handler nst swid port event
 ;;
 
 let execute_control swidx (nst : State.network_state) (ctl_ev : control_event) =
@@ -139,7 +151,7 @@ let execute_main_parser print_log swidx port (nst: State.network_state) (pkt_ev 
               port;
       let event_val = parser_f nst swidx main_args in
       match event_val.v with 
-      | VEvent(event_val) -> execute_event print_log swidx nst event_val port
+      | VEvent(event_val) -> execute_event print_log swidx nst event_val port (InterpSwitch.Ingress)
       | VBool(false) -> error "main parser did not generate an event"
       | _ -> error "main parser did not return an event or a no event signal")
     | _ -> error "the global named 'main' is not a parser"
@@ -152,9 +164,10 @@ let execute_interp_event
   (nst : State.network_state)
   ievent
   port
+  gress
   =
   (match ievent with
-   | IEvent event -> execute_event print_log idx nst event port
+   | IEvent event -> execute_event print_log idx nst event port gress
    | IControl ctl_ev -> execute_control idx nst ctl_ev   
    | IPacket pkt_ev -> execute_main_parser print_log idx port nst pkt_ev
    );
@@ -184,8 +197,8 @@ let simulate (nst : State.network_state) =
       else (
         match State.next_event idx nst with
         | None -> interp_events ((idx + 1) mod Array.length nst.switches) nst
-        | Some (ievent, port) ->
-          execute_interp_event true interp_events idx nst ievent port)
+        | Some (ievent, port, gress) ->
+          execute_interp_event true interp_events idx nst ievent port gress)
   in
   let nst = interp_events 0 nst in
   nst
@@ -235,14 +248,16 @@ let rec interp_events event_getter_opt max_time idx nst =
           max_time
           ((idx + 1) mod Array.length nst.switches)
           nst
-      | Some (event, port) ->
+      | Some (event, port, gress) ->
         execute_interp_event
           true
           (interp_events event_getter_opt max_time)
           idx
           nst
           event
-          port)
+          port
+          gress
+          )
 ;;
 
 let sighdl s =

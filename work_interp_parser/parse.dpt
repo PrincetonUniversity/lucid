@@ -79,8 +79,8 @@ handle foo(int<48> dmac, int<48> smac, int<16> etype, int x, int y, Payload.t pk
 	printf("in foo");
 	printf("ingress port, %d", ingress_port);
 	generate(eth(dmac, smac, etype, pkt));
-	// generate(this);
-	// generate(eth(dmac, smac, 1));
+	// its actually wrong. passing 196 SHOULD be fine. 
+	// generate_port(196, eth(dmac, smac, etype, pkt));
 }
 
 handle eth(int<48> dmac, int<48> smac, int<16> etype, Payload.t pkt){
@@ -89,8 +89,9 @@ handle eth(int<48> dmac, int<48> smac, int<16> etype, Payload.t pkt){
 	if (ingress_port == 0) {
 		generate(foo(dmac, smac, etype, 1, 2, pkt));
 	} else {
+		skip;
 		// generate_port(99, eth(dmac, smac, etype, Payload.empty()));
-		generate_port(99, eth(dmac, smac, etype, pkt));
+		// generate_ports(flood(ingress_port), eth(dmac, smac, etype, pkt));
 	}
 
 }

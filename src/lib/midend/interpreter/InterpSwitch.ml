@@ -24,9 +24,14 @@ type stats_counter =
 ; total_handled : int
 }
 
+type gress = 
+  | Ingress
+  | Egress
+
 type 'nst state = 
   { global_env : 'nst InterpSyntax.ival Env.t
-  ; event_queue : EventQueue.t
+  ; ingress_queue : EventQueue.t
+  ; egress_queue : EventQueue.t
   ; pipeline : Pipeline.t
   ; exits : (InterpSyntax.interp_event * int option * int) Queue.t
   ; drops : (interp_event * int) Queue.t
@@ -37,21 +42,23 @@ type 'nst state =
 
 let empty_counter = { entries_handled = 0; total_handled = 0 }
 
-let copy_state st =
-  { st with
-    pipeline = Pipeline.copy st.pipeline
-  ; exits = Queue.copy st.exits
-  }
-;;
 
 let empty_state () =
   { global_env = Env.empty
   ; pipeline = Pipeline.empty ()
-  ; event_queue = EventQueue.empty
+  ; ingress_queue = EventQueue.empty
+  ; egress_queue = EventQueue.empty
   ; exits = Queue.create ()
   ; drops = Queue.create ()
   ; retval = ref None
   ; counter = ref empty_counter
+  }
+;;
+
+let copy_state st =
+  { st with
+    pipeline = Pipeline.copy st.pipeline
+  ; exits = Queue.copy st.exits
   }
 ;;
 
@@ -68,14 +75,14 @@ let add_global cid v st =
     { st with global_env = Env.add cid v st.global_env }
 ;;
 
-let log_exit st port event current_time = 
+let log_exit port event current_time st = 
   Queue.push (event, port, current_time) st.exits
 ;;
-let log_drop st event current_time = 
+let log_drop event current_time st = 
   Queue.push (event, current_time) st.drops
 ;;
 
-let update_counter st event_sort = 
+let update_counter event_sort st= 
   let new_counter = match event_sort with
   | EPacket -> 
     {entries_handled = !(st.counter).entries_handled + 1;
@@ -86,12 +93,18 @@ let update_counter st event_sort =
   st.counter := new_counter
 ;;
 
-let push_event st sevent stime sport =
-  {st with event_queue=EventQueue.add {sevent; stime; sport} st.event_queue}
+(* push an event from an ingress queue to an egress queue. Here, sport is the output port of the switch *)
+let push_to_egress sevent stime sport st =
+  {st with egress_queue=EventQueue.add {sevent; stime; sport} st.ingress_queue}
 ;;
 
-let next_event st current_time = 
-  let q = st.event_queue in
+let push_event sevent stime sport st=
+  {st with ingress_queue=EventQueue.add {sevent; stime; sport} st.ingress_queue}
+;;
+
+(* find the next event to execute at the switch *)
+(* let next_event current_time st = 
+  let q = st.ingress_queue in
   if EventQueue.size q = 0
   then None
   else (
@@ -101,33 +114,77 @@ let next_event st current_time =
     then None
     else (
       let q = EventQueue.del_min q in
-      Some ({st with event_queue = q;}, event, port)
+      Some ({st with ingress_queue = q;}, event, port)
+    )
+  )
+;; *)
+
+let next_ingress_event current_time st = 
+  let q = st.ingress_queue in
+  if EventQueue.size q = 0
+  then None
+  else (
+    let switch_ev = EventQueue.find_min q in
+    let t, event, port = switch_ev.stime, switch_ev.sevent, switch_ev.sport in
+    if t > current_time
+    then None
+    else (
+      let q = EventQueue.del_min q in
+      Some ({st with ingress_queue = q;}, event, port, t)
+    )
+  )
+;;
+let next_egress_event current_time st = 
+  let q = st.egress_queue in
+  if EventQueue.size q = 0
+  then None
+  else (
+    let switch_ev = EventQueue.find_min q in
+    let t, event, port = switch_ev.stime, switch_ev.sevent, switch_ev.sport in
+    if t > current_time
+    then None
+    else (
+      let q = EventQueue.del_min q in
+      Some ({st with egress_queue = q;}, event, port, t)
     )
   )
 ;;
 
-let next_time st = 
-  let q = st.event_queue in
-  if EventQueue.size q = 0
-  then None
-  else (
-    let { stime = t; _ } = EventQueue.find_min q in
-    Some t)
+let next_event current_time st = 
+  let igr_result, egr_result = next_ingress_event current_time st, next_egress_event current_time st in
+  match igr_result, egr_result with
+  | Some (st, event, port, _), None -> Some (st, event, port, Ingress)
+  | None, Some (st, event, port, _) -> Some (st, event, port, Egress)
+  | Some (st1, event1, port1, t1), Some (st2, event2, port2, t2) -> (
+    if (t1 < t2)
+    then Some (st1, event1, port1, Ingress)
+    else Some (st2, event2, port2, Egress) )
+  | None, None -> None
 ;;
 
-let get_table_entries st stage =
+let next_time st = 
+  let next_time_ingress = if (EventQueue.size st.ingress_queue = 0) then None else Some (EventQueue.find_min st.ingress_queue).stime in
+  let next_time_egress  = if (EventQueue.size st.egress_queue = 0) then None else Some (EventQueue.find_min st.egress_queue).stime in
+  match next_time_ingress, next_time_egress with
+  | Some t1, Some t2 -> if (t1 < t2) then Some t1 else Some t2
+  | Some t1, None -> Some t1
+  | None, Some t2 -> Some t2
+  | None, None -> None
+;;
+
+let get_table_entries stage st=
   Pipeline.get_table_entries ~stage st.pipeline
 ;;
 
-let install_table_entry st stage entry =
+let install_table_entry  stage entry st =
   Pipeline.install_table_entry ~stage ~entry st.pipeline
 ;;
 
-let update st stage idx getop setop =
+let update  stage idx getop setop st  =
   Pipeline.update ~stage ~idx ~getop ~setop st.pipeline
 ;;
 
-let update_complex st stage idx memop =
+let update_complex stage idx memop st=
   Pipeline.update_complex ~stage ~idx ~memop st.pipeline
 ;;
 
@@ -227,7 +284,7 @@ let pipeline =
   show show_pipeline "Pipeline" @@ Pipeline.to_string ~pad:"  " st.pipeline
 in
 let queue =
-  show show_queue "Events" @@ event_queue_to_string st.event_queue
+  show show_queue "Events" @@ event_queue_to_string st.ingress_queue
 in
 let exits = show show_exits "Exits" @@ exits_to_string st.exits in
 let drops = show show_exits "Drops" @@ drops_to_string st.drops in

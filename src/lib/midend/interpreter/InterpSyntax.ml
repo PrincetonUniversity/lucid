@@ -9,7 +9,7 @@ open CoreSyntax
 open Yojson.Basic
 open Str
 
-(* values used in interpreter contexts *)
+(* values used in interpreter contexts. 'nst is network state *)
 type 'nst ival =
   | V of value
   | F of 'nst code
@@ -28,10 +28,6 @@ let extract_ival iv =
   | P _ 
   | F _ -> failwith "IVal not a regular value"
 ;;
-
-
-
-
 
 (* control events are interpreter builtins -- state update commands *)
 type control_e = 

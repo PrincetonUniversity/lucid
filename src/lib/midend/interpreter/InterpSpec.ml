@@ -131,7 +131,7 @@ let parse_externs
     externs
 ;;
 
-let parse_links num_switches links =
+let parse_links num_switches links recirc_ports =
   let add_link id port dst acc =
     try
       IntMap.modify
@@ -162,25 +162,26 @@ let parse_links num_switches links =
     |> add_link src_id src_port (dst_id, dst_port)
     |> add_link dst_id dst_port (src_id, src_port)
   in
-  List.fold_left add_links (InterpState.State.empty_topology num_switches) links
+  List.fold_left add_links (InterpState.State.empty_topology num_switches recirc_ports) links
 ;;
 
 (* Make a full mesh with arbitrary port numbers.
    Specifically, we map 1:2 to 2:1, and 3:4 to 4:3, etc. *)
-let make_full_mesh num_switches =
+let make_full_mesh num_switches recirc_ports =
   let switch_ids = List.init num_switches (fun n -> n) in
-  List.fold_left
-    (fun acc id ->
+  List.fold_left2
+    (fun acc id recirc_port ->
       let port_map =
         List.fold_left
           (fun acc port ->
             if id = port then acc else IntMap.add port (port, id) acc)
-          IntMap.empty
+          (IntMap.add recirc_port (id, recirc_port) IntMap.empty)
           switch_ids
       in
       IntMap.add id port_map acc)
     IntMap.empty
     switch_ids
+    recirc_ports
 ;;
 
 (*   and code = network_state -> int (* switch *) -> ival list -> value
@@ -258,13 +259,40 @@ let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t 
       | Some _ -> error "Python path entry must be a string!"
       | None -> Py.initialize ()
     in
+    let externs, recirc_port_ints =
+      let externs =
+        match List.assoc_opt "externs" lst with
+        | Some (`Assoc lst) -> lst
+        | None -> []
+        | Some _ -> error "Non-assoc type for extern definitions"
+      in
+      let recirc_ports_def =
+        (* This is an extern under the hood, but users don't see it that way *)
+        match List.assoc_opt "recirculation_ports" lst with
+        | Some (`List lst) -> "recirculation_port", `List lst
+        | None ->
+          ( "recirculation_port"
+          , `List (List.init num_switches (fun _ -> `Int 196)) )
+        | Some _ -> error "Non-list type for recirculation port definitions"
+      in
+      (* each switch may have a different recirc port, for some reason *)
+      let recirc_ports_ints = match (snd recirc_ports_def) with
+        | `List lst -> List.map (fun j -> parse_int "recirculation port" j) lst
+        | _ -> error "Non-list type for recirculation port definitions"
+      in
+      parse_externs pp renaming num_switches (recirc_ports_def :: externs), recirc_ports_ints
+    in
+    if ((List.length recirc_port_ints) <> num_switches)
+    then
+      error
+      @@ "Number of recirculation ports does not match number of switches!";
     let links =
       if num_switches = 1
-      then InterpState.State.empty_topology 1
+      then InterpState.State.empty_topology 1 recirc_port_ints
       else (
         match List.assoc_opt "links" lst with
-        | Some (`Assoc links) -> parse_links num_switches links
-        | Some (`String "full mesh") -> make_full_mesh num_switches
+        | Some (`Assoc links) -> parse_links num_switches links recirc_port_ints
+        | Some (`String "full mesh") -> make_full_mesh num_switches recirc_port_ints
         | None -> error "No links field in network with multiple switches"
         | _ -> error "Unexpected format for links field")
     in
@@ -280,24 +308,6 @@ let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t 
           then 0
           else 10000
       )
-    in
-    let externs =
-      let externs =
-        match List.assoc_opt "externs" lst with
-        | Some (`Assoc lst) -> lst
-        | None -> []
-        | Some _ -> error "Non-assoc type for extern definitions"
-      in
-      let recirc_ports =
-        (* This is an extern under the hood, but users don't see it that way *)
-        match List.assoc_opt "recirculation_ports" lst with
-        | Some (`List lst) -> "recirculation_port", `List lst
-        | None ->
-          ( "recirculation_port"
-          , `List (List.init num_switches (fun _ -> `Int 196)) )
-        | Some _ -> error "Non-list type for recirculation port definitions"
-      in
-      parse_externs pp renaming num_switches (recirc_ports :: externs)
     in
     let events =
       match List.assoc_opt "events" lst with
