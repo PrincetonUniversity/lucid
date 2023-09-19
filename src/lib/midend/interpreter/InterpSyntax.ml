@@ -9,6 +9,30 @@ open CoreSyntax
 open Yojson.Basic
 open Str
 
+(* values used in interpreter contexts *)
+type 'nst ival =
+  | V of value
+  | F of 'nst code
+  | P of BitString.bits
+
+and 'nst code = 'nst -> int (* switch *) -> 'nst ival list -> value
+
+and memop
+
+and 'nst handler =
+'nst -> int (* switch *) -> int (* port *) -> event_val -> unit
+
+let extract_ival iv =
+  match iv with
+  | V v -> v
+  | P _ 
+  | F _ -> failwith "IVal not a regular value"
+;;
+
+
+
+
+
 (* control events are interpreter builtins -- state update commands *)
 type control_e = 
   | ArraySet of string * value * (value list)

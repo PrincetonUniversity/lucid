@@ -19,7 +19,7 @@ let initial_state (pp : Preprocess.t) (spec : InterpSpec.t) =
           IntMap.add num (evid, arg_tys) acc)
         IntMap.empty
         (Env.bindings pp.events)
-    ; switches = Array.init spec.num_switches (fun _ -> State.empty_state ())
+    ; switches = Array.init spec.num_switches (fun _ -> InterpSwitch.empty_state ())
     ; links = spec.links
     }
   in
@@ -112,7 +112,7 @@ let execute_main_parser print_log swidx port (nst: State.network_state) (pkt_ev 
 
   let payload_val = CoreSyntax.payload_to_vpat pkt_ev.pkt_val in
   (* main takes 2 arguments, port and payload. Port is implicit. *)
-  let main_args = [State.V (C.vint port 32); State.V payload_val] in
+  let main_args = [InterpSyntax.V (C.vint port 32); InterpSyntax.V payload_val] in
   let main_parser = State.lookup swidx (Cid.id Builtins.main_parse_id) nst in
 
   match main_parser with 

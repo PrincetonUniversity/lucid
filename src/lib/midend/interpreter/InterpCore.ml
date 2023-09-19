@@ -147,14 +147,14 @@ let lookup_var swid nst locals cid =
   | _ -> State.lookup swid cid nst
 ;;
 
-let interp_eval exp : State.ival =
+let interp_eval exp : 'a InterpSyntax.ival =
   match exp.e with
   | EVal v -> V v
   | _ ->
     error "[interp_eval] expected a value expression, but got something else."
 ;;
 
-let rec interp_exp (nst : State.network_state) swid locals e : State.ival =
+let rec interp_exp (nst : State.network_state) swid locals e : 'a InterpSyntax.ival =
   let interp_exps = interp_exps nst swid locals in
   let lookup cid = lookup_var swid nst locals cid in
   match e.e with
@@ -180,7 +180,7 @@ let rec interp_exp (nst : State.network_state) swid locals e : State.ival =
     let vs =
       List.map
         (function
-         | State.V v -> v.v
+         | InterpSyntax.V v -> v.v
          | _ -> failwith "What? No hashing functions!")
         vs
     in
@@ -228,7 +228,7 @@ let rec interp_exp (nst : State.network_state) swid locals e : State.ival =
        happenbecause the table creation should be interpeter in the \
        declaration"
 
-and interp_exps nst swid locals es : State.ival list =
+and interp_exps nst swid locals es : 'a InterpSyntax.ival list =
   List.map (interp_exp nst swid locals) es
 ;;
 
@@ -748,7 +748,7 @@ let interp_memop params body nst swid args =
 
 let port_arg locals = 
   let (port:CoreSyntax.value) = match Env.find (Id Builtins.ingr_port_id) locals with 
-    | State.V(port_val) -> port_val
+    | InterpSyntax.V(port_val) -> port_val
     | _ -> error "could not find input port while interpreting parser!"
   in
   port
@@ -756,13 +756,13 @@ let port_arg locals =
 
 let get_payload payload_id locals = 
   match Env.find (Id payload_id) locals with 
-  | State.V(payload) -> CoreSyntax.vpat_to_payload payload
+  | InterpSyntax.V(payload) -> CoreSyntax.vpat_to_payload payload
   | _ -> error "could not find current packet buffer while interpreting parser!"
 ;;
 
 let update_payload payload_id payload locals = 
   let payload = CoreSyntax.payload_to_vpat payload in
-  Env.add (Id payload_id) (State.V(payload)) (Env.remove (Id payload_id) locals)
+  Env.add (Id payload_id) (InterpSyntax.V(payload)) (Env.remove (Id payload_id) locals)
 ;;
 
 
@@ -781,11 +781,11 @@ and interp_parser_action (nst : State.network_state) swid payload_id locals pars
     let parsed_val, payload' = InterpPayload.pread (payload) ty in
     (* add the new local, remove old packet, add new packet *)
     locals
-    |> Env.add (cid) (State.V(parsed_val))
+    |> Env.add (cid) (InterpSyntax.V(parsed_val))
     |> update_payload payload_id payload'
   | PPeek(cid, ty) -> 
     let peeked_val = InterpPayload.ppeek (get_payload payload_id locals) ty in
-    locals |> Env.add (cid) (State.V(peeked_val))
+    locals |> Env.add (cid) (InterpSyntax.V(peeked_val))
   | PSkip(ty) ->
     let payload' = InterpPayload.padvance (get_payload payload_id locals) ty in
     update_payload payload_id payload' locals
@@ -817,7 +817,7 @@ and interp_parser_step nst swid payload_id locals parser_step =
           (* a call to another parser. *)
           (* construct ival arguments *)
           let args = 
-            (State.V(port_arg locals))::(List.map (interp_exp nst swid locals) args)
+            (InterpSyntax.V(port_arg locals))::(List.map (interp_exp nst swid locals) args)
           in
           (* call the parser function as you would any other function *)
           match State.lookup swid cid nst with 
@@ -846,18 +846,20 @@ let interp_decl (nst : State.network_state) swid d =
     (* add the action to the environment *)
     State.add_action (Cid.id acn.aid) acn nst
   | DHandler (id, _, (params, body)) ->
+    (* print_endline@@"Adding handler"^(CorePrinting.id_to_string id);
+    print_endline@@"handler sort: "^(match hdl_sort with | HData -> "ingress" | HEgress -> "egress" | _ ->""); *)
     let f nst swid port event =
       let builtin_env =
         List.fold_left
           (fun acc (k, v) -> Env.add k v acc)
           Env.empty
-          [ Id Builtins.this_id, State.V (vevent { event with edelay = 0 })
-          ; Id Builtins.ingr_port_id, State.V (vint port 32) ]
+          [ Id Builtins.this_id, InterpSyntax.V (vevent { event with edelay = 0 })
+          ; Id Builtins.ingr_port_id, InterpSyntax.V (vint port 32) ]
       in
       (* add event parameters to locals *)
       let locals =
         List.fold_left2
-          (fun acc v (id, _) -> Env.add (Id id) (State.V v) acc)
+          (fun acc v (id, _) -> Env.add (Id id) (InterpSyntax.V v) acc)
           builtin_env
           event.data
           params
@@ -914,11 +916,11 @@ let interp_decl (nst : State.network_state) swid d =
         evnum = event_num_val;
     }
     in
-    State.add_global swid (Id id) (State.F f) nst;
+    State.add_global swid (Id id) (InterpSyntax.F f) nst;
     nst
   | DMemop { mid; mparams; mbody } ->
     let f = interp_memop mparams mbody in
-    State.add_global swid (Cid.id mid) (State.F f) nst;
+    State.add_global swid (Cid.id mid) (InterpSyntax.F f) nst;
     nst
   | DExtern _ ->
     failwith "Extern declarations should be handled during preprocessing"

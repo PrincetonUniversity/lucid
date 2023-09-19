@@ -86,7 +86,7 @@ let lucid_parse_fun (nst: State.network_state) swid args =
     | _ -> error "unexpected args"
   in
   let payload = match payload with 
-    | InterpState.State.V(vpat) -> CoreSyntax.vpat_to_payload vpat
+    | InterpSyntax.V(vpat) -> CoreSyntax.vpat_to_payload vpat
     | _ -> error "lucid builtin background event parser called without payload arg"
   in
   let event_num, payload = pread payload

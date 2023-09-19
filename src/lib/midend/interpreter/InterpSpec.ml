@@ -14,7 +14,7 @@ type t =
   ; externs : value Env.t list
   ; events : located_event list
   ; config : InterpState.State.config
-  ; extern_funs : InterpState.State.ival Env.t
+  ; extern_funs : (InterpState.State.network_state InterpSyntax.ival) Env.t
   ; ctl_pipe_name : string option
   }
 
@@ -215,7 +215,7 @@ let create_foreign_functions renaming efuns python_file =
         ^ " is not a function in the python file!"
       | Some o ->
         let f =
-          InterpState.State.F
+          InterpSyntax.F
             (fun _ _ args ->
               let pyretvar =
                 Py.Callable.to_function
