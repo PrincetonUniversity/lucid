@@ -12,8 +12,13 @@ module EventQueue = BatHeap.Make (struct
   (* time, event, port *)
   type t = switch_event
 
-  let compare t1 t2 = Pervasives.compare t1.stime t2.stime
-
+  let compare t1 t2 = 
+    (* compare stime and use squeue_order as a tiebreaker *)
+    if t1.stime = t2.stime 
+      then Pervasives.compare t1.squeue_order t2.squeue_order
+      else
+        
+        Pervasives.compare t1.stime t2.stime
   (* type t = int * event * int *)
   (* let compare (t1, _, _) (t2, _, _) = Pervasives.compare t1 t2 *)
 end)
@@ -95,11 +100,25 @@ let update_counter event_sort st=
 
 (* push an event from an ingress queue to an egress queue. Here, sport is the output port of the switch *)
 let push_to_egress sevent stime sport st =
-  {st with egress_queue=EventQueue.add {sevent; stime; sport} st.ingress_queue}
+  (* if there's already an event in the queue with the same time, we want to 
+     make sure this one gets popped after it. So we increment the queue_spot. *)
+  let squeue_order = 
+    List.length (
+      EventQueue.elems st.egress_queue
+      |> List.filter (fun e -> e.stime = stime)
+    )
+  in    
+    {st with egress_queue=EventQueue.add {sevent; stime; sport; squeue_order;} st.egress_queue}
 ;;
 
-let push_event sevent stime sport st=
-  {st with ingress_queue=EventQueue.add {sevent; stime; sport} st.ingress_queue}
+let push_event sevent stime sport st =
+  let squeue_order = 
+    List.length (
+      EventQueue.elems st.ingress_queue
+      |> List.filter (fun e -> e.stime = stime)
+    )
+  in    
+  {st with ingress_queue=EventQueue.add {sevent; stime; sport; squeue_order;} st.ingress_queue}
 ;;
 
 (* find the next event to execute at the switch *)
@@ -150,15 +169,48 @@ let next_egress_event current_time st =
   )
 ;;
 
+let drain_egress current_time st = 
+  (* pop events out of the queue for current time *)
+  let rec _all_egress_events st = 
+    match next_egress_event current_time st with
+    | Some (st, event, port, _) -> 
+      let st', rest = _all_egress_events st in
+      st', (event, port, Egress) :: rest
+    | None -> st, []
+  in
+  _all_egress_events st
+;;
+
+let really_drain_egress st = 
+  let all_elems = EventQueue.elems st.egress_queue in
+  let all_elems = List.map 
+    (fun switch_ev -> 
+      (switch_ev.sevent, switch_ev.sport, switch_ev.stime, Egress))
+      all_elems
+  in
+  {st with egress_queue = EventQueue.empty}, all_elems
+
+let queue_sizes st = 
+  Printf.sprintf "ingress: %d, egress: %d"
+  (EventQueue.size st.ingress_queue) (EventQueue.size st.egress_queue)
+;;
+
 let next_event current_time st = 
   let igr_result, egr_result = next_ingress_event current_time st, next_egress_event current_time st in
   match igr_result, egr_result with
-  | Some (st, event, port, _), None -> Some (st, event, port, Ingress)
-  | None, Some (st, event, port, _) -> Some (st, event, port, Egress)
+  | Some (st, event, port, _), None -> Some (st, [event, port, Ingress])
+  | None, Some (st, event, port, _) -> Some (st, [event, port, Egress])
   | Some (st1, event1, port1, t1), Some (st2, event2, port2, t2) -> (
+    if (t1 = t2) then 
+      (
+        (* taking from both ingress and egress *)
+        let st = {st1 with egress_queue = st2.egress_queue} in
+        Some (st, [event1, port1, Ingress; event2, port2, Egress])
+    )
+    else
     if (t1 < t2)
-    then Some (st1, event1, port1, Ingress)
-    else Some (st2, event2, port2, Egress) )
+      then Some (st1, [event1, port1, Ingress])
+      else Some (st2, [event2, port2, Egress] ))
   | None, None -> None
 ;;
 

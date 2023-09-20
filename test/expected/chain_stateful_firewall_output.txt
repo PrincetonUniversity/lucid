@@ -4,10 +4,10 @@ dpt: Using random seed: 0
 
 t=11000000: Handling packet event packetin(10,100,0) at switch 0, port 0
 Mapped (10, 100) to index 0
-t=11000600: Handling event continue(100) at switch 0, port 196
-t=11000601: Handling event update_last_seen(0,11000000) at switch 0, port 0
-t=11001201: Handling event update_last_seen(0,11000000) at switch 1, port 0
-t=11001801: Handling event update_last_seen(0,11000000) at switch 2, port 0
+t=11000600: Handling event update_last_seen(0,11000000) at switch 0, port 0
+t=11000601: Handling event continue(100) at switch 0, port 196
+t=11001200: Handling event update_last_seen(0,11000000) at switch 1, port 0
+t=11001800: Handling event update_last_seen(0,11000000) at switch 2, port 0
 t=11100000: Handling packet event packetin(11,101,0) at switch 1, port 1
 Mapped (11, 101) to index 1
 t=11100600: Handling event update_last_seen(1,11100000) at switch 0, port 0

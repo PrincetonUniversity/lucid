@@ -108,6 +108,9 @@ module State = struct
   let add_handler cid lam nst =
     { nst with handlers = Env.add cid lam nst.handlers }
   ;;
+  let add_egress_handler cid lam nst =
+    { nst with egress_handlers = Env.add cid lam nst.egress_handlers }
+  ;;
 
   let add_action cid action nst =
     { nst with actions = Env.add cid action nst.actions }
@@ -133,7 +136,6 @@ module State = struct
     | Some map ->
       (match IntMap.find_opt p map with
        | None -> 
-        (* print_endline ("could not find port "^string_of_int p^" in switch "^string_of_int sw);         *)
         -1, p
        | Some ret -> ret)
     (* the switch ID does not exist in the topology... *)
@@ -141,6 +143,14 @@ module State = struct
       error @@ "lookup_dst error -- Invalid switch id " ^ string_of_int sw
   ;;
 
+
+
+  let queue_sizes nst = 
+    let size_strs = Array.mapi (fun i st -> "switch:"^(string_of_int i)^" "^InterpSwitch.queue_sizes st) nst.switches in
+    "------\n"^
+    String.concat "\n"  (Array.to_list size_strs)
+    ^"\n------"
+  ;;
   type push_loc = 
   | Port of int
   | Switch of int
@@ -172,23 +182,87 @@ module State = struct
   (* given an event generated at swid to local output ports, find the 
      destination switch for each port and push all events to the 
      appropriate queues. *)
-     let push_generated_event_to_ports src_id out_ports ievent nst = 
-      let dsts = List.map 
-        (fun push_loc -> 
-          match push_loc with
-          | Port port -> lookup_dst nst (src_id, port)
-          | Switch sw -> (sw, 0)  (*an event located at the switch zoops right over there as if by magic.*)
-          | PExit port -> (-1, port)
-        ) 
-        out_ports 
-      in
-        List.iter (fun (dst_id, dst_port) -> 
-        if (dst_id = -1) then log_exit src_id (Some dst_port) ievent nst
-        else        
-          push_generated_event src_id dst_id dst_port ievent nst) dsts
-     ;;
-   
+  let push_generated_event_to_ports src_id out_ports ievent nst = 
+  let dsts = List.map 
+    (fun push_loc -> 
+      match push_loc with
+      | Port port -> lookup_dst nst (src_id, port)
+      | Switch sw -> (sw, 0)  (*an event located at the switch zoops right over there as if by magic.*)
+      | PExit port -> (-1, port)
+    ) 
+    out_ports 
+  in
+    List.iter (fun (dst_id, dst_port) -> 
+    if (dst_id = -1) then log_exit src_id (Some dst_port) ievent nst
+    else        
+      push_generated_event src_id dst_id dst_port ievent nst) dsts
+  ;;
+  
+  (* push one event out from an ingress pipeline *)
+  let push_event_from_ingress src_id out_port ievent nst = 
+    (* (match ievent with 
+    | IEvent(eval) -> 
+      print_endline ("pushing out of ingress: "^(CorePrinting.event_to_string eval));
+    | _ -> ());  *)
+    match out_port with
+      (* "generate directly to a switch" skips egress.
+         Its a depreciated feature. *)
+      | Switch sw -> 
+        let dst_id, dst_port = sw, 0 in
+        push_generated_event src_id dst_id dst_port ievent nst
+      (* "generate some negative number port" prints an exit events. 
+         Its just a hacky way of logging floods. *)
+      | PExit port -> 
+        (* print_endline ("\tits an exit event with port "^(string_of_int port)); *)
+        log_exit src_id (Some port) ievent nst
+      (* port locations go to egress. 
+         Port locations are the only type of location that should exist once the interp is cleaned up *)
+      | Port port -> 
+        let delay = InterpSyntax.delay ievent in
+        let st = nst.switches.(src_id) in
+        (* currently, we add all the delays between ingress and egress. Egress is basically 
+           "instant". For better fidelity, we would add a realistic small propagation delay _after_ egress. *)
+        let eventual_dst, _ = lookup_dst nst (src_id, port) in 
+        (* if (eventual_dst = -1) then 
+          log_exit src_id (Some port) ievent nst
+        else *)
+          let propagate_delay =          
+            if src_id = eventual_dst
+            then
+              nst.config.propagate_delay
+              + Random.int nst.config.random_propagate_range
+            else 0
+          in
+          let t =
+            nst.current_time
+            + max delay nst.config.generate_delay
+            + propagate_delay
+            + Random.int nst.config.random_delay_range
+          in  
+          (* print_endline ("\tmoved event to egress with port="^(string_of_int port)^" and time "^(string_of_int t)); *)
+          nst.switches.(src_id) <- InterpSwitch.push_to_egress ievent t port st;
+  ;;
+  (* push one event out from an egress pipeline to an ingress pipeline's input queue *)
+  let push_event_from_egress src_id out_port ievent nst = 
+    (* print_endline@@"pushing event out of egress: "
+    ^(match ievent with 
+    | IEvent(eval) -> 
+      CorePrinting.event_to_string eval
+      | _ -> "<control or packet event>"); *)
 
+    
+    let dst_id, dst_port = lookup_dst nst (src_id, out_port) in
+    (* dst -1 means "somewhere outside of the lucid network" *)
+    if (dst_id = -1) then 
+      log_exit src_id (Some out_port) ievent nst
+    else
+
+    (* print_endline@@"\tsrc_id="
+    ^(string_of_int src_id)^"out_port="^(string_of_int out_port)
+    ^"dst_id="^(string_of_int dst_id)^" dst_port="^(string_of_int dst_port); *)
+    let t = nst.current_time in
+    nst.switches.(dst_id) <- InterpSwitch.push_event  ievent t dst_port (nst.switches.(dst_id));
+  ;;
 
   (* push an event from the user, which may be a program event
      or a control event. Doesn't add delays. *)
@@ -215,9 +289,31 @@ module State = struct
     let st = nst.switches.(swid) in
     match InterpSwitch.next_event nst.current_time st with
       | None -> None
-      | Some(st, event, port, gress) -> 
-        nst.switches.(swid) <- st;
-        Some(event, port, gress)
+      | Some(st', epgs) -> 
+        (* print_endline ("-----");
+        print_endline@@"[next_event] got "^(string_of_int (List.length epgs));
+        print_endline@@"queues before:\n"^
+        (queue_sizes nst); *)
+        nst.switches.(swid) <- st';
+        (* print_endline ("-----");
+        print_endline@@"queues after:\n"^
+        (queue_sizes nst);
+        print_endline ("-----"); *)
+        Some(epgs)
+  ;;
+
+  let drain_egress swid nst = 
+    let st = nst.switches.(swid) in
+    let st', evs = InterpSwitch.drain_egress nst.current_time st in
+    nst.switches.(swid) <- st';
+    evs
+  ;;
+
+  let really_drain_egress swid nst = 
+    let st = nst.switches.(swid) in
+    let st', evs = InterpSwitch.really_drain_egress st in
+    nst.switches.(swid) <- st';
+    evs
   ;;
 
   let next_time nst =
@@ -229,7 +325,6 @@ module State = struct
       None
       nst.switches
   ;;
-
 
   let ival_to_string v =
     match v with

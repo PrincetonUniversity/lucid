@@ -7,7 +7,7 @@ event learn_mac(int<2> mac, int<8> out_port) {
   Array.set(learned_macs_2, mac, 1);
   Array.set(mac_table, mac, out_port);
 }
-
+  
 event eth(int<2> src_mac, int<2> dst_mac) {
   // Learn src_mac if necessary
   if (Array.get(learned_macs_1, src_mac) == 0) {

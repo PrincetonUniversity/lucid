@@ -76,19 +76,12 @@ let execute_event
   port
   gress
   =
-  let handlers = match gress with 
-    | InterpSwitch.Ingress -> nst.handlers
-    | InterpSwitch.Egress -> nst.egress_handlers
+  let handlers, gress_str = match gress with 
+  | InterpSwitch.Egress -> nst.egress_handlers, " egress "
+  | InterpSwitch.Ingress -> nst.handlers, ""
   in
   match Env.find_opt event.eid handlers with
-  | None -> (
-    (* if its an egress handler... we want to just push it to its destination. 
-        *)
-    match gress with
-    | InterpSwitch.Egress -> error "egress time"
-    | InterpSwitch.Ingress ->
-    
-      error @@ "No handler for event " ^ Cid.to_string event.eid )
+  (* if we found a handler, run it *)
   | Some handler ->
     if print_log
     then
@@ -105,15 +98,32 @@ let execute_event
         |> print_endline
       else
         Printf.printf
-          "t=%d: Handling %sevent %s at switch %d, port %d\n"
+          "t=%d: Handling %s%sevent %s at switch %d, port %d\n"
           nst.current_time
+          gress_str
           (match Env.find event.eid nst.event_sorts with
-           | EPacket -> "packet "
-           | _ -> "")
+          | EPacket -> "packet "
+          | _ -> "")
           (CorePrinting.event_to_string event)
           swid
           port;
-    handler nst swid port event
+    handler nst swid port event  
+  (* if we didn't find a handler, that's an error for ingress but okay for egress. *)
+  | None -> (
+    match gress with
+    | InterpSwitch.Egress -> 
+      (* add propagation delay and push to destination *)
+      (* run a default handling statement that re-serializes the event and 
+         pushes it to the next switch.*)
+      let builtin_env = Env.add (Id (Builtins.ingr_port_id)) (InterpSyntax.V (C.vint port 32)) Env.empty in
+      (* print_endline@@"t="^(string_of_int nst.current_time)^" running default egress handler for event " ^ Cid.to_string event.eid ^ " at switch " ^ (string_of_int swid) ^ " port " ^ (string_of_int port); *)
+      let default_handler_body = 
+        C.SGen(C.GPort(C.vint_exp port 32), C.value_to_exp {v=C.VEvent(event); vty=C.ty TEvent; vspan=Span.default})
+      in      
+      ignore@@InterpCore.interp_statement nst HEgress swid builtin_env (C.statement default_handler_body)
+    | InterpSwitch.Ingress ->    
+      error @@ "No handler for event " ^ Cid.to_string event.eid )
+
 ;;
 
 let execute_control swidx (nst : State.network_state) (ctl_ev : control_event) =
@@ -157,21 +167,69 @@ let execute_main_parser print_log swidx port (nst: State.network_state) (pkt_ev 
     | _ -> error "the global named 'main' is not a parser"
 ;;   
 
+let run_event_tup print_log idx nst (ievent, port, gress) = 
+  (* print_endline@@"\texecuting event: " ^ (
+  match ievent with 
+  | IEvent event -> CorePrinting.event_to_string event
+  | _ -> "<special event>")
+  ^" at gress: "
+  ^ (match gress with 
+    | InterpSwitch.Ingress -> "ingress"
+    | InterpSwitch.Egress -> "egress"); *)
+  match ievent with
+  | IEvent event -> execute_event print_log idx nst event port gress
+  | IControl ctl_ev -> execute_control idx nst ctl_ev   
+  | IPacket pkt_ev -> execute_main_parser print_log idx port nst pkt_ev
+;;
+
 let execute_interp_event
   print_log
   simulation_callback
   idx
   (nst : State.network_state)
-  ievent
+  epgs (*execute an ingress event or an ingress and egress event, if there are parallel pipes *)
+  (* ievents 
   port
-  gress
+  gress *)
   =
-  (match ievent with
-   | IEvent event -> execute_event print_log idx nst event port gress
-   | IControl ctl_ev -> execute_control idx nst ctl_ev   
-   | IPacket pkt_ev -> execute_main_parser print_log idx port nst pkt_ev
-   );
+  (* run the events you got *)
+  List.iter (run_event_tup print_log idx nst) epgs;
+  (* then run the simulation callback *)  
   simulation_callback ((idx + 1) mod Array.length nst.switches) nst
+;;
+
+(* run all the egress events from all of the switches *)
+let run_egress_events print_log (nst:State.network_state) = 
+  Array.iteri 
+    (fun swid _ -> 
+        let egr_evs = State.drain_egress swid nst in
+        List.iter (run_event_tup print_log swid nst) egr_evs;
+    )
+  nst.switches
+;;
+
+let run_timed_event_tup print_log idx nst (ievent, port, event_time, gress) = 
+  (* print_endline@@"\texecuting event: " ^ (
+  match ievent with 
+  | IEvent event -> CorePrinting.event_to_string event
+  | _ -> "<special event>")
+  ^" at gress: "
+  ^ (match gress with 
+    | InterpSwitch.Ingress -> "ingress"
+    | InterpSwitch.Egress -> "egress");   *)
+  match ievent with
+  | IEvent event -> execute_event print_log idx {nst with current_time=event_time} event port gress
+  | IControl ctl_ev -> execute_control idx {nst with current_time=event_time} ctl_ev   
+  | IPacket pkt_ev -> execute_main_parser print_log idx port {nst with current_time=event_time} pkt_ev
+;;
+
+let finish_egress_events print_log (nst:State.network_state) = 
+  Array.iteri 
+    (fun swid _ -> 
+        let egr_evs = State.really_drain_egress swid nst in
+        List.iter (run_timed_event_tup print_log swid nst) egr_evs;
+    )
+  nst.switches
 ;;
 
 let simulate (nst : State.network_state) =
@@ -186,21 +244,27 @@ let simulate (nst : State.network_state) =
     match State.next_time nst with
     | None -> nst
     | Some t ->
-      (* Increment the current time *)
+      (* Increment the current time*)
       let nst =
         if idx = 0
-        then { nst with current_time = max t (nst.current_time + 1) }
-        else nst
+        then (
+          let nst' = { nst with current_time = max t (nst.current_time + 1) } in
+          (* clear out all the egress events at the start of each time unit *)
+          run_egress_events true nst';
+          nst')
+      else (nst)
       in
       if nst.current_time > nst.config.max_time
       then nst
       else (
         match State.next_event idx nst with
         | None -> interp_events ((idx + 1) mod Array.length nst.switches) nst
-        | Some (ievent, port, gress) ->
-          execute_interp_event true interp_events idx nst ievent port gress)
+        | Some (epgs) ->
+          execute_interp_event true interp_events idx nst epgs)
   in
   let nst = interp_events 0 nst in
+  (* drain all the egresses one last time to get everything into an ingress queue for logging *)
+  finish_egress_events true nst;
   nst
 ;;
 
@@ -248,15 +312,13 @@ let rec interp_events event_getter_opt max_time idx nst =
           max_time
           ((idx + 1) mod Array.length nst.switches)
           nst
-      | Some (event, port, gress) ->
+      | Some (epgs) ->
         execute_interp_event
           true
           (interp_events event_getter_opt max_time)
           idx
           nst
-          event
-          port
-          gress
+          epgs
           )
 ;;
 

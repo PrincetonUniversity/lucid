@@ -71,6 +71,7 @@ type located_event = {
 type switch_event = {
   sevent : interp_event;
   stime : int;
+  squeue_order : int; (* tiebreaker for two events queued at the same time *)
   sport : int;
 }
 (* constructors *)

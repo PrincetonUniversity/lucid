@@ -147,6 +147,29 @@ let lookup_var swid nst locals cid =
   | _ -> State.lookup swid cid nst
 ;;
 
+
+let port_arg locals = 
+  let (port:CoreSyntax.value) = match Env.find (Id Builtins.ingr_port_id) locals with 
+    | InterpSyntax.V(port_val) -> port_val
+    | _ -> error "could not find input port while interpreting parser!"
+  in
+  port
+;;
+
+let get_payload payload_id locals = 
+  match Env.find (Id payload_id) locals with 
+  | InterpSyntax.V(payload) -> CoreSyntax.vpat_to_payload payload
+  | _ -> error "could not find current packet buffer while interpreting parser!"
+;;
+
+let update_payload payload_id payload locals = 
+  let payload = CoreSyntax.payload_to_vpat payload in
+  Env.add (Id payload_id) (InterpSyntax.V(payload)) (Env.remove (Id payload_id) locals)
+;;
+
+
+
+
 let interp_eval exp : 'a InterpSyntax.ival =
   match exp.e with
   | EVal v -> V v
@@ -403,17 +426,18 @@ let rec interp_statement nst hdl_sort swid locals s =
 
     (* first, get the event value, without any payload *)
     let event = interp_exp e |> extract_ival |> raw_event in
-    let sort = Env.find event.eid nst.event_sorts in
+    let ev_sort = Env.find event.eid nst.event_sorts in
     (* now, we process differently depending on whether it is a packet event 
        or background event. Packet events get serialized into packets, 
        background events do not. *)
     (* serialize packet events *)
-    let event = match sort with 
-      | EBackground -> InterpSyntax.ievent event (* background events stay as events *)
-      | EPacket -> (* packet events get serialized into a packet, which is just a 
+    let event = match ev_sort, hdl_sort with 
+      | EBackground, _ -> InterpSyntax.ievent event (* background events stay as events *)
+      | EPacket, HEgress -> (* packet events get serialized into a packet, which is just a 
          bitstring with a location. The payload is included via arguments. *)
         let pkt = InterpPayload.serialize_packet_event event in
         InterpSyntax.ipacket {pkt_val=pkt; pkt_edelay=event.edelay}
+      | EPacket, _ -> InterpSyntax.ievent event (* ingress packet events stay as events *)
     in
     (* let ingress_next_locs = match g with *)
 
@@ -421,37 +445,54 @@ let rec interp_statement nst hdl_sort swid locals s =
        However, output_ports are _OUR_ output ports. What we need to do next is send the event to 
        the egress queue with that port. Then, in a separate step, dequeue from the egress port and do 
        another lookup to send it to the final destination. *)
-    let output_ports = match g with
-      | GSingle None ->
-        [ State.Port(State.lookup swid (Cid.from_string "recirculation_port") nst
-        |> extract_ival
-        |> raw_integer
-        |> Integer.to_int )  ]
-      | GSingle (Some exp) -> 
-        let swid = interp_exp exp |> extract_ival |> raw_integer |> Integer.to_int in
-        [(State.Switch(swid))]
-      | GPort port -> [State.Port(interp_exp port |> extract_ival |> raw_integer |> Integer.to_int)]
-      | GMulti grp -> 
-        let ports = interp_exp grp |> extract_ival |> raw_group in
-        (match ports with
-        | [port] when port < 0 ->
-          (* flooding *)
-          let tl = (IntMap.find swid nst.links (*get a tuple list of (local_port, (remote_switch, remote_port))*)
-            |> IntMap.bindings
-            |> List.filter_map (fun (p, (dst, _)) ->
-                (* if the port in the bindings (p) is equal to the negation of the port argument + 1, 
-                    then send to this output port. We have to be careful: do not want to flood to recirculation port! *)
-                if ((p = -(port + 1)) || (dst = swid)) then None else Some (  
-                State.Port(p)))) in
-          (* this is just here for logging... switch -1 at port with number of the group.  *)
-          let hd = State.PExit(port) in
-          hd::tl
-            
-        | _ -> 
-          List.map (fun port -> State.Port(port)) ports)
-    in
-    (* push all the events to output ports *)
-    State.push_generated_event_to_ports swid output_ports event nst;
+    if (hdl_sort = HData) then (
+      (* ingress case *)
+      let output_ports = match g with
+        | GSingle None ->
+          [ State.Port(State.lookup swid (Cid.from_string "recirculation_port") nst
+          |> extract_ival
+          |> raw_integer
+          |> Integer.to_int )  ]
+        | GSingle (Some exp) -> 
+          let swid = interp_exp exp |> extract_ival |> raw_integer |> Integer.to_int in
+          [(State.Switch(swid))]
+        | GPort port -> [State.Port(interp_exp port |> extract_ival |> raw_integer |> Integer.to_int)]
+        | GMulti grp -> 
+          let ports = interp_exp grp |> extract_ival |> raw_group in
+          (match ports with
+          | [port] when port < 0 ->
+            (* flooding *)
+            let tl = (IntMap.find swid nst.links (*get a tuple list of (local_port, (remote_switch, remote_port))*)
+              |> IntMap.bindings
+              |> List.filter_map (fun (p, (dst, _)) ->
+                  (* if the port in the bindings (p) is equal to the negation of the port argument + 1, 
+                      then send to this output port. We have to be careful: do not want to flood to recirculation port! *)
+                  if ((p = -(port + 1)) || (dst = swid)) then None else Some (  
+                  State.Port(p)))) in
+            (* this is just here for logging... switch -1 at port with number of the group.  *)
+            let hd = State.PExit(port) in
+            hd::tl
+              
+          | _ -> 
+            List.map (fun port -> State.Port(port)) ports)
+      in
+      (* push all the events to output ports *)
+      List.iter (fun out_port -> 
+        State.push_event_from_ingress swid out_port event nst) 
+        output_ports;
+      locals 
+    )
+    else (
+      let extract_int = function
+        | VInt n -> n
+        | _ -> failwith "No good"
+      in      
+      (* egress case -- always just push the event to the other side of the port *)
+      let port = ((port_arg locals).v |> extract_int ).value |> Z.to_int in 
+      State.push_event_from_egress swid port event nst;
+      locals
+    )
+
     (* let locs =
       match g with
       | GSingle None ->
@@ -491,7 +532,6 @@ let rec interp_statement nst hdl_sort swid locals s =
         else State.push_generated_event swid dst_id port event nst)
       locs; *)
       
-    locals
   )
   | SRet (Some e) ->
     let v = interp_exp e |> extract_ival in
@@ -789,27 +829,6 @@ let interp_memop params body nst swid args =
 ;;
 
 
-let port_arg locals = 
-  let (port:CoreSyntax.value) = match Env.find (Id Builtins.ingr_port_id) locals with 
-    | InterpSyntax.V(port_val) -> port_val
-    | _ -> error "could not find input port while interpreting parser!"
-  in
-  port
-;;
-
-let get_payload payload_id locals = 
-  match Env.find (Id payload_id) locals with 
-  | InterpSyntax.V(payload) -> CoreSyntax.vpat_to_payload payload
-  | _ -> error "could not find current packet buffer while interpreting parser!"
-;;
-
-let update_payload payload_id payload locals = 
-  let payload = CoreSyntax.payload_to_vpat payload in
-  Env.add (Id payload_id) (InterpSyntax.V(payload)) (Env.remove (Id payload_id) locals)
-;;
-
-
-
 let rec interp_parser_block nst swid payload_id locals parser_block =
   (* interpret the actions, updating locals *)
   let locals = List.fold_left (interp_parser_action nst swid payload_id) locals (List.split parser_block.pactions |> fst) in
@@ -888,10 +907,13 @@ let interp_decl (nst : State.network_state) swid d =
   | DAction acn ->
     (* add the action to the environment *)
     State.add_action (Cid.id acn.aid) acn nst
-  | DHandler (id, hdl_sort, (params, body)) ->
+  | DHandler (id, hdl_sort, (params, body)) ->(
     (* print_endline@@"Adding handler"^(CorePrinting.id_to_string id);
     print_endline@@"handler sort: "^(match hdl_sort with | HData -> "ingress" | HEgress -> "egress" | _ ->""); *)
     let f nst swid port event =
+      if (hdl_sort = HEgress) then 
+        print_endline@@"interping egress handler";
+      (* add the event to the environment *)
       let builtin_env =
         List.fold_left
           (fun acc (k, v) -> Env.add k v acc)
@@ -911,7 +933,11 @@ let interp_decl (nst : State.network_state) swid d =
       Pipeline.reset_stage nst.switches.(swid).pipeline;
       ignore @@ interp_statement nst hdl_sort swid locals body
     in
-    State.add_handler (Cid.id id) f nst
+    match hdl_sort with
+    | HData -> State.add_handler (Cid.id id) f nst
+    | HEgress -> State.add_egress_handler (Cid.id id) f nst
+    | _ -> error "control handlers not supported"
+    )
 
   (* parsers: convention is for first two arguments to be 
   ingress port and unparsed packet / payload. *)
