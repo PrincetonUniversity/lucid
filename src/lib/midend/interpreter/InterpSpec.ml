@@ -79,7 +79,7 @@ let parse_interp_inputs
   (pp : Preprocess.t)
   (renaming : Renaming.env)
   (num_switches : int)
-  (gap : int)
+  (inter_event_gap : int)
   (events : json list)
   =
   let parse_f =
@@ -87,13 +87,13 @@ let parse_interp_inputs
       Payloads.t_id (Builtins.lucid_eventnum_ty |> SyntaxToCore.translate_ty) renaming.var_map pp.events num_switches)
   in
   let wrapper
-    ((located_events_rev : internal_event list), (current_ts : int))
+    ((located_events_rev : internal_event list), (default_next_event_time : int))
     (event_json : json)
     =
     let located_event =
-      parse_f current_ts default_port event_json
+      parse_f default_next_event_time default_port event_json
     in
-    let next_ts = located_event_delay located_event + gap in
+    let next_ts = internal_event_time located_event + inter_event_gap in
     located_event :: located_events_rev, next_ts
   in
   let located_events_rev, _ = List.fold_left wrapper ([], 0) events in

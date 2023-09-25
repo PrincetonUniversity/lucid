@@ -344,7 +344,7 @@ let print_final_state str = interp_report "final_state" str None
 let print_printf swid str = interp_report "printf" str (Some swid)
 
 (* print an exit event as a json to stdout *)
-let print_exit_event swid port_opt (event:InterpSyntax.interp_event) time =
+let print_exit_event swid port_opt (event:InterpSyntax.internal_event_val) time =
   let base_out_tups = match event with 
     | IEvent(v) -> InterpSyntax.event_val_to_json v
     | IPacket(p) -> InterpSyntax.packet_event_to_json p
@@ -367,7 +367,7 @@ let print_exit_event swid port_opt (event:InterpSyntax.interp_event) time =
 
 (* print event as json if interactive mode is set,
    else log for final report *)
-let log_exit swid port_opt (event:InterpSyntax.interp_event) (nst : State.network_state) =
+let log_exit swid port_opt (event:InterpSyntax.internal_event_val) (nst : State.network_state) =
   if Cmdline.cfg.interactive
   then print_exit_event swid port_opt event nst.current_time
   else State.log_exit swid port_opt event nst
@@ -478,7 +478,7 @@ let rec interp_statement nst hdl_sort swid locals s =
       in
       (* push all the events to output ports *)
       List.iter (fun out_port -> 
-        State.push_event_from_ingress swid out_port event nst) 
+        State.ingress_send swid out_port event nst) 
         output_ports;
       locals 
     )
@@ -489,49 +489,9 @@ let rec interp_statement nst hdl_sort swid locals s =
       in      
       (* egress case -- always just push the event to the other side of the port *)
       let port = ((port_arg locals).v |> extract_int ).value |> Z.to_int in 
-      State.push_event_from_egress swid port event nst;
+      State.egress_send swid port event nst;
       locals
-    )
-
-    (* let locs =
-      match g with
-      | GSingle None ->
-        [ ( swid
-          , State.lookup swid (Cid.from_string "recirculation_port") nst
-            |> extract_ival
-            |> raw_integer
-            |> Integer.to_int ) ]
-      | GSingle (Some e) ->
-        [interp_exp e |> extract_ival |> raw_integer |> Integer.to_int, 0]
-      | GMulti grp ->
-        let ports = interp_exp grp |> extract_ival |> raw_group in
-        (match ports with
-         | [port] when port < 0 ->
-           (* Flooding: send to every connected switch *)
-           let hd = (-1, port) in
-           let tl = 
-            (IntMap.find swid nst.links
-              |> IntMap.bindings
-              |> List.filter_map (fun (p, (dst, dport)) ->
-                   if ((p = -(port + 1))|| (dst = swid) ) then None else Some (dst, dport)))
-           in
-           hd::tl
-         | _ -> List.map (fun port -> State.lookup_dst nst (swid, port)) ports)
-      | GPort port ->
-        let port =
-          interp_exp port |> extract_ival |> raw_integer |> Integer.to_int
-        in
-        [State.lookup_dst nst (swid, port)]
-    in
-     *)
-    (* push the event to all the appropriate queues *)
-    (* List.iter
-      (fun (dst_id, port) ->
-        if dst_id = -1 (* lookup_dst failed *)
-        then log_exit swid (Some port) event nst
-        else State.push_generated_event swid dst_id port event nst)
-      locs; *)
-      
+    ) 
   )
   | SRet (Some e) ->
     let v = interp_exp e |> extract_ival in

@@ -14,11 +14,10 @@ module EventQueue = BatHeap.Make (struct
 
   let compare t1 t2 = 
     (* compare stime and use squeue_order as a tiebreaker *)
-    if t1.stime = t2.stime 
+    if (timestamp t1) = (timestamp t2)
       then Pervasives.compare t1.squeue_order t2.squeue_order
-      else
-        
-        Pervasives.compare t1.stime t2.stime
+      else        
+        Pervasives.compare (timestamp t1) (timestamp t2)
   (* type t = int * event * int *)
   (* let compare (t1, _, _) (t2, _, _) = Pervasives.compare t1 t2 *)
 end)
@@ -38,8 +37,8 @@ type 'nst state =
   ; ingress_queue : EventQueue.t
   ; egress_queue : EventQueue.t
   ; pipeline : Pipeline.t
-  ; exits : (InterpSyntax.interp_event * int option * int) Queue.t
-  ; drops : (interp_event * int) Queue.t
+  ; exits : (InterpSyntax.internal_event_val * int option * int) Queue.t
+  ; drops : (internal_event_val * int) Queue.t
   ; retval : value option ref
   ; counter : stats_counter ref
   }
@@ -98,30 +97,26 @@ let update_counter event_sort st=
   st.counter := new_counter
 ;;
 
-(* push an event from an ingress queue to an egress queue. Here, sport is the output port of the switch *)
-let push_to_egress interp_event stime sport st =
-  (* if there's already an event in the queue with the same time, we want to 
-     make sure this one gets popped after it. So we increment the queue_spot. *)
-  let squeue_order = 
-    List.length (
-      EventQueue.elems st.egress_queue
-      |> List.filter (fun e -> e.stime = stime)
-    )
-  in    
-  let internal_event = {stime; sevent = interp_event; sloc = [loc (None,sport)]; squeue_order} in
-  {st with egress_queue=EventQueue.add internal_event st.egress_queue}
+let n_queued_for_time queued_events stime = 
+  List.length (List.filter (fun e -> (timestamp e) = stime) queued_events)
 ;;
 
+
 (* push an event to an ingress at a different switch *)
-let push_event interp_event stime sport st =
-  let squeue_order = 
-    List.length (
-      EventQueue.elems st.ingress_queue
-      |> List.filter (fun e -> e.stime = stime)
-    )
-  in
-  let internal_event = {stime; sevent = interp_event; sloc = [loc (None,sport)]; squeue_order} in
+let push_to_ingress interp_event stime sport st =
+  let squeue_order = n_queued_for_time (EventQueue.elems st.ingress_queue) stime in
+  let internal_event = {sevent = interp_event; sloc = [loc (None,sport)]; squeue_order} in
+  let internal_event = set_timestamp internal_event stime in
   {st with ingress_queue=EventQueue.add internal_event st.ingress_queue}
+;;
+(* push an event from an ingress queue to an egress queue. Here, sport is the output port of the switch *)
+let push_to_egress sevent stime sport st =
+  (* if there's already an event in the queue with the same time, we want to 
+     make sure this one gets popped after it. So we increment the queue_spot. *)
+  let squeue_order = n_queued_for_time (EventQueue.elems st.egress_queue) stime in
+  let internal_event = {sevent; squeue_order; sloc = [loc (None,sport)]} in
+  let internal_event = set_timestamp internal_event stime in
+  {st with egress_queue=EventQueue.add internal_event st.egress_queue}
 ;;
 
 let next_ingress_event current_time st = 
@@ -130,7 +125,7 @@ let next_ingress_event current_time st =
   then None
   else (
     let switch_ev = EventQueue.find_min q in
-    let t, event, port = switch_ev.stime, switch_ev.sevent, get_port switch_ev in
+    let t, event, port = timestamp switch_ev, switch_ev.sevent, get_port switch_ev in
     if t > current_time
     then None
     else (
@@ -145,7 +140,7 @@ let next_egress_event current_time st =
   then None
   else (
     let switch_ev = EventQueue.find_min q in
-    let t, event, port = switch_ev.stime, switch_ev.sevent, get_port switch_ev in
+    let t, event, port = timestamp switch_ev, switch_ev.sevent, get_port switch_ev in
     if t > current_time
     then None
     else (
@@ -155,31 +150,6 @@ let next_egress_event current_time st =
   )
 ;;
 
-let drain_egress current_time st = 
-  (* pop events out of the queue for current time *)
-  let rec _all_egress_events st = 
-    match next_egress_event current_time st with
-    | Some (st, event, port, _) -> 
-      let st', rest = _all_egress_events st in
-      st', (event, port, Egress) :: rest
-    | None -> st, []
-  in
-  _all_egress_events st
-;;
-
-let final_egress_drain st = 
-  let all_elems = EventQueue.elems st.egress_queue in
-  let all_elems = List.map 
-    (fun switch_ev -> 
-      (switch_ev.sevent, get_port switch_ev, switch_ev.stime |> Option.get, Egress))
-      all_elems
-  in
-  {st with egress_queue = EventQueue.empty}, all_elems
-
-let queue_sizes st = 
-  Printf.sprintf "ingress: %d, egress: %d"
-  (EventQueue.size st.ingress_queue) (EventQueue.size st.egress_queue)
-;;
 
 let next_event current_time st = 
   let igr_result, egr_result = next_ingress_event current_time st, next_egress_event current_time st in
@@ -200,9 +170,10 @@ let next_event current_time st =
   | None, None -> None
 ;;
 
+
 let next_time st = 
-  let next_time_ingress = if (EventQueue.size st.ingress_queue = 0) then None else Some (EventQueue.find_min st.ingress_queue).stime in
-  let next_time_egress  = if (EventQueue.size st.egress_queue = 0) then None else Some (EventQueue.find_min st.egress_queue).stime in
+  let next_time_ingress = if (EventQueue.size st.ingress_queue = 0) then None else Some (EventQueue.find_min st.ingress_queue |>timestamp) in
+  let next_time_egress  = if (EventQueue.size st.egress_queue = 0) then None else Some (EventQueue.find_min st.egress_queue|> timestamp) in
   match next_time_ingress, next_time_egress with
   | Some t1, Some t2 -> if (t1 < t2) then Some t1 else Some t2
   | Some t1, None -> Some t1
@@ -210,6 +181,32 @@ let next_time st =
   | None, None -> None
 ;;
 
+(* we need a few more egress helpers to keep event arrival times the same 
+in the new (9/2023) version of the interpreter with the egress queues. *)
+let drain_egress current_time st = 
+  (* pop events out of the queue for current time *)
+  let rec _all_egress_events st = 
+    match next_egress_event current_time st with
+    | Some (st, event, port, _) -> 
+      let st', rest = _all_egress_events st in
+      st', (event, port, Egress) :: rest
+    | None -> st, []
+  in
+  _all_egress_events st
+;;
+
+let final_egress_drain st = 
+  let all_elems = EventQueue.elems st.egress_queue in
+  let all_elems = List.map 
+    (fun switch_ev -> 
+      (switch_ev.sevent, get_port switch_ev, timestamp switch_ev, Egress))
+      all_elems
+  in
+  {st with egress_queue = EventQueue.empty}, all_elems
+
+
+
+(* pipeline wrappers *)
 let get_table_entries stage st=
   Pipeline.get_table_entries ~stage st.pipeline
 ;;
@@ -226,7 +223,11 @@ let update_complex stage idx memop st=
   Pipeline.update_complex ~stage ~idx ~memop st.pipeline
 ;;
 
-
+(* printers *)
+let queue_sizes st = 
+  Printf.sprintf "ingress: %d, egress: %d"
+  (EventQueue.size st.ingress_queue) (EventQueue.size st.egress_queue)
+;;
 
 let stats_counter_to_string counter =
   Printf.sprintf
@@ -247,7 +248,7 @@ let event_queue_to_string q =
               Printf.sprintf
                 "%s    %dns: %s at port %d\n"
                 acc
-                (internal_event.stime |> Option.get)
+                (timestamp internal_event)
                 (interp_event_to_string internal_event.sevent)
                 (get_port internal_event))
             "")

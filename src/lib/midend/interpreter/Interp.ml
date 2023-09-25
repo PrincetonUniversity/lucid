@@ -44,12 +44,7 @@ let initial_state (pp : Preprocess.t) (spec : InterpSpec.t) =
     nst.switches
   ;
   (* push located events to switch queues *)
-  List.iter
-    (fun { sevent = event; sloc = locs } ->
-      List.iter (fun loc -> State.push_input_event loc event nst) locs)
-    (*         (fun loc  -> let (loc, port) = loc_to_tup loc in State.push_input_event loc port event nst)
-        locs) *)
-    spec.events;
+  State.push_multiloc_events nst spec.events;
   nst
 ;;
 
@@ -248,7 +243,7 @@ let simulate (nst : State.network_state) =
       let nst =
         if idx = 0
         then (
-          let nst' = { nst with current_time = max (Option.get t) (nst.current_time + 1) } in
+          let nst' = { nst with current_time = max (t) (nst.current_time + 1) } in
           (* clear out all the egress events at the start of each time unit *)
           run_egress_events true nst';
           nst')
@@ -295,11 +290,11 @@ let rec interp_events event_getter_opt max_time idx nst =
       then (
         (* when index is 0, poll for new events *)
         match event_getter_opt with
-        | None -> { nst with current_time = max (Option.get t) (nst.current_time + 1) }
+        | None -> { nst with current_time = max ( t) (nst.current_time + 1) }
         | Some (event_getter : event_getter) ->
-          (* if there's an event getter, check for new events *)
-          State.push_located_events (event_getter nst.current_time) nst;
-          { nst with current_time = max (Option.get t) (nst.current_time + 1) })
+          (* if there's an event getter, check for new events and push them *)
+          State.push_multiloc_events nst (event_getter nst.current_time) ;
+          { nst with current_time = max (t) (nst.current_time + 1) })
       else nst
     in
     if max_time > -1 && nst.current_time > max_time
@@ -467,11 +462,8 @@ let run pp renaming (spec : InterpSpec.t) (nst : State.network_state) =
     match input with
     | End -> nst (* end *)
     | Continue -> poll_loop nst
-    | Process loc_evs ->
-      (* add the events to queues in the network simulator *)
-      List.iter
-        (fun loc_ev -> State.push_interp_events loc_ev.sloc loc_ev.sevent nst)
-        loc_evs;
+    | Process evs -> 
+      State.push_multiloc_events nst evs;
       (* interpret all the queued events, using event_getter to poll for more events
            in between iterations. *)
       let nst = interp_events (Some event_getter) (-1) 0 nst in
