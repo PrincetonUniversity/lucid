@@ -12,7 +12,7 @@ type t =
   { num_switches : int
   ; links : InterpState.State.topology
   ; externs : value Env.t list
-  ; events : located_event list
+  ; events : internal_event list
   ; config : InterpState.State.config
   ; extern_funs : (InterpState.State.network_state InterpSyntax.ival) Env.t
   ; ctl_pipe_name : string option
@@ -87,7 +87,7 @@ let parse_interp_inputs
       Payloads.t_id (Builtins.lucid_eventnum_ty |> SyntaxToCore.translate_ty) renaming.var_map pp.events num_switches)
   in
   let wrapper
-    ((located_events_rev : located_event list), (current_ts : int))
+    ((located_events_rev : internal_event list), (current_ts : int))
     (event_json : json)
     =
     let located_event =

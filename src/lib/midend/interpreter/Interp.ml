@@ -45,7 +45,7 @@ let initial_state (pp : Preprocess.t) (spec : InterpSpec.t) =
   ;
   (* push located events to switch queues *)
   List.iter
-    (fun { ievent = event; ilocs = locs } ->
+    (fun { sevent = event; sloc = locs } ->
       List.iter (fun loc -> State.push_input_event loc event nst) locs)
     (*         (fun loc  -> let (loc, port) = loc_to_tup loc in State.push_input_event loc port event nst)
         locs) *)
@@ -226,7 +226,7 @@ let run_timed_event_tup print_log idx nst (ievent, port, event_time, gress) =
 let finish_egress_events print_log (nst:State.network_state) = 
   Array.iteri 
     (fun swid _ -> 
-        let egr_evs = State.really_drain_egress swid nst in
+        let egr_evs = State.final_egress_drain swid nst in
         List.iter (run_timed_event_tup print_log swid nst) egr_evs;
     )
   nst.switches
@@ -248,7 +248,7 @@ let simulate (nst : State.network_state) =
       let nst =
         if idx = 0
         then (
-          let nst' = { nst with current_time = max t (nst.current_time + 1) } in
+          let nst' = { nst with current_time = max (Option.get t) (nst.current_time + 1) } in
           (* clear out all the egress events at the start of each time unit *)
           run_egress_events true nst';
           nst')
@@ -282,7 +282,7 @@ let simulate (nst : State.network_state) =
       - all printfs in the program print to stderr
 **)
 
-type event_getter = int -> InterpSyntax.located_event list
+type event_getter = int -> InterpSyntax.internal_event list
 
 (* interp events until max_time is reached
    or there are no more events to interpret *)
@@ -295,11 +295,11 @@ let rec interp_events event_getter_opt max_time idx nst =
       then (
         (* when index is 0, poll for new events *)
         match event_getter_opt with
-        | None -> { nst with current_time = max t (nst.current_time + 1) }
+        | None -> { nst with current_time = max (Option.get t) (nst.current_time + 1) }
         | Some (event_getter : event_getter) ->
           (* if there's an event getter, check for new events *)
           State.push_located_events (event_getter nst.current_time) nst;
-          { nst with current_time = max t (nst.current_time + 1) })
+          { nst with current_time = max (Option.get t) (nst.current_time + 1) })
       else nst
     in
     if max_time > -1 && nst.current_time > max_time
@@ -329,7 +329,7 @@ let sighdl s =
 
 (* this type should be refactored out *)
 type interactive_mode_input =
-  | Process of located_event list
+  | Process of internal_event list
   | Continue
   | End
 
@@ -470,7 +470,7 @@ let run pp renaming (spec : InterpSpec.t) (nst : State.network_state) =
     | Process loc_evs ->
       (* add the events to queues in the network simulator *)
       List.iter
-        (fun loc_ev -> State.push_interp_events loc_ev.ilocs loc_ev.ievent nst)
+        (fun loc_ev -> State.push_interp_events loc_ev.sloc loc_ev.sevent nst)
         loc_evs;
       (* interpret all the queued events, using event_getter to poll for more events
            in between iterations. *)

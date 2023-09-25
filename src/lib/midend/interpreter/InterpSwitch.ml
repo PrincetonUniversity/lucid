@@ -10,7 +10,7 @@ module IntMap = Map.Make (Int)
 (* input queue for a single switch *)
 module EventQueue = BatHeap.Make (struct
   (* time, event, port *)
-  type t = switch_event
+  type t = internal_event
 
   let compare t1 t2 = 
     (* compare stime and use squeue_order as a tiebreaker *)
@@ -99,7 +99,7 @@ let update_counter event_sort st=
 ;;
 
 (* push an event from an ingress queue to an egress queue. Here, sport is the output port of the switch *)
-let push_to_egress sevent stime sport st =
+let push_to_egress interp_event stime sport st =
   (* if there's already an event in the queue with the same time, we want to 
      make sure this one gets popped after it. So we increment the queue_spot. *)
   let squeue_order = 
@@ -108,35 +108,21 @@ let push_to_egress sevent stime sport st =
       |> List.filter (fun e -> e.stime = stime)
     )
   in    
-    {st with egress_queue=EventQueue.add {sevent; stime; sport; squeue_order;} st.egress_queue}
+  let internal_event = {stime; sevent = interp_event; sloc = [loc (None,sport)]; squeue_order} in
+  {st with egress_queue=EventQueue.add internal_event st.egress_queue}
 ;;
 
-let push_event sevent stime sport st =
+(* push an event to an ingress at a different switch *)
+let push_event interp_event stime sport st =
   let squeue_order = 
     List.length (
       EventQueue.elems st.ingress_queue
       |> List.filter (fun e -> e.stime = stime)
     )
-  in    
-  {st with ingress_queue=EventQueue.add {sevent; stime; sport; squeue_order;} st.ingress_queue}
+  in
+  let internal_event = {stime; sevent = interp_event; sloc = [loc (None,sport)]; squeue_order} in
+  {st with ingress_queue=EventQueue.add internal_event st.ingress_queue}
 ;;
-
-(* find the next event to execute at the switch *)
-(* let next_event current_time st = 
-  let q = st.ingress_queue in
-  if EventQueue.size q = 0
-  then None
-  else (
-    let switch_ev = EventQueue.find_min q in
-    let t, event, port = switch_ev.stime, switch_ev.sevent, switch_ev.sport in
-    if t > current_time
-    then None
-    else (
-      let q = EventQueue.del_min q in
-      Some ({st with ingress_queue = q;}, event, port)
-    )
-  )
-;; *)
 
 let next_ingress_event current_time st = 
   let q = st.ingress_queue in
@@ -144,7 +130,7 @@ let next_ingress_event current_time st =
   then None
   else (
     let switch_ev = EventQueue.find_min q in
-    let t, event, port = switch_ev.stime, switch_ev.sevent, switch_ev.sport in
+    let t, event, port = switch_ev.stime, switch_ev.sevent, get_port switch_ev in
     if t > current_time
     then None
     else (
@@ -159,7 +145,7 @@ let next_egress_event current_time st =
   then None
   else (
     let switch_ev = EventQueue.find_min q in
-    let t, event, port = switch_ev.stime, switch_ev.sevent, switch_ev.sport in
+    let t, event, port = switch_ev.stime, switch_ev.sevent, get_port switch_ev in
     if t > current_time
     then None
     else (
@@ -181,11 +167,11 @@ let drain_egress current_time st =
   _all_egress_events st
 ;;
 
-let really_drain_egress st = 
+let final_egress_drain st = 
   let all_elems = EventQueue.elems st.egress_queue in
   let all_elems = List.map 
     (fun switch_ev -> 
-      (switch_ev.sevent, switch_ev.sport, switch_ev.stime, Egress))
+      (switch_ev.sevent, get_port switch_ev, switch_ev.stime |> Option.get, Egress))
       all_elems
   in
   {st with egress_queue = EventQueue.empty}, all_elems
@@ -257,13 +243,13 @@ let event_queue_to_string q =
     @@ (q
        |> EventQueue.to_list (* No BatHeap.fold :( *)
        |> List.fold_left
-            (fun acc { stime = t; sevent = event; sport = port } ->
+            (fun acc internal_event ->
               Printf.sprintf
                 "%s    %dns: %s at port %d\n"
                 acc
-                t
-                (interp_event_to_string event)
-                port)
+                (internal_event.stime |> Option.get)
+                (interp_event_to_string internal_event.sevent)
+                (get_port internal_event))
             "")
 ;;
 

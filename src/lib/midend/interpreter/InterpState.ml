@@ -176,7 +176,7 @@ module State = struct
     in    
     if Random.int 100 < nst.config.drop_chance
     then (InterpSwitch.log_drop  ievent nst.current_time st)
-    else (nst.switches.(dst_id) <- InterpSwitch.push_event  ievent t port st;)
+    else (nst.switches.(dst_id) <- InterpSwitch.push_event  ievent (Some t) port st;)
   ;;
 
   (* given an event generated at swid to local output ports, find the 
@@ -240,7 +240,7 @@ module State = struct
             + Random.int nst.config.random_delay_range
           in  
           (* print_endline ("\tmoved event to egress with port="^(string_of_int port)^" and time "^(string_of_int t)); *)
-          nst.switches.(src_id) <- InterpSwitch.push_to_egress ievent t port st;
+          nst.switches.(src_id) <- InterpSwitch.push_to_egress ievent (Some t) port st;
   ;;
   (* push one event out from an egress pipeline to an ingress pipeline's input queue *)
   let push_event_from_egress src_id out_port ievent nst = 
@@ -261,14 +261,19 @@ module State = struct
     ^(string_of_int src_id)^"out_port="^(string_of_int out_port)
     ^"dst_id="^(string_of_int dst_id)^" dst_port="^(string_of_int dst_port); *)
     let t = nst.current_time in
-    nst.switches.(dst_id) <- InterpSwitch.push_event  ievent t dst_port (nst.switches.(dst_id));
+    nst.switches.(dst_id) <- InterpSwitch.push_event  ievent (Some t) dst_port (nst.switches.(dst_id));
   ;;
 
   (* push an event from the user, which may be a program event
      or a control event. Doesn't add delays. *)
   let push_input_event (loc : loc) (event : interp_event) nst =
-    let st = nst.switches.(loc.switch) in
-    nst.switches.(loc.switch) <- InterpSwitch.push_event  event (interp_event_delay event) loc.port st
+    let switch_id = match loc.switch with
+      | Some sw -> sw
+      | None -> error "push_input_event: no switch id"
+    in
+    let sws = nst.switches in
+    sws.(switch_id) <- InterpSwitch.push_event 
+      event (Some(interp_event_delay event)) loc.port (sws.(switch_id))
   ;;
 
   (* Push an event to a list of entry points *)
@@ -278,16 +283,16 @@ module State = struct
   ;;
 
   (* push a located event to multiple switches where it should appear *)
-  let push_located_events (located_events : located_event list) nst =
+  let push_located_events (located_events : internal_event list) nst =
     let wrapper located_event =
-      push_interp_events located_event.ilocs located_event.ievent nst
+      push_interp_events located_event.sloc located_event.sevent nst
     in
     List.iter wrapper located_events
   ;;
 
   let next_event swid nst =
     let st = nst.switches.(swid) in
-    match InterpSwitch.next_event nst.current_time st with
+    match InterpSwitch.next_event (Some nst.current_time) st with
       | None -> None
       | Some(st', epgs) -> 
         (* print_endline ("-----");
@@ -304,14 +309,14 @@ module State = struct
 
   let drain_egress swid nst = 
     let st = nst.switches.(swid) in
-    let st', evs = InterpSwitch.drain_egress nst.current_time st in
+    let st', evs = InterpSwitch.drain_egress (Some nst.current_time) st in
     nst.switches.(swid) <- st';
     evs
   ;;
 
-  let really_drain_egress swid nst = 
+  let final_egress_drain swid nst = 
     let st = nst.switches.(swid) in
-    let st', evs = InterpSwitch.really_drain_egress st in
+    let st', evs = InterpSwitch.final_egress_drain st in
     nst.switches.(swid) <- st';
     evs
   ;;

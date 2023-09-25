@@ -56,25 +56,35 @@ type interp_event =
 ;;
 
 type loc = {
-  switch : int;
+  switch : int option;
   port : int;
 }
 
-(* a located event represents an event on input, 
-   after parsing but before queueing *)
-type located_event = {
-  ievent : interp_event;
-  ilocs : loc list;
-}
-
-(* a switch_event is how we represent the event in a queue at a switch *)
-type switch_event = {
+(* An event hanging out somewhere in the system, waiting to be processed. 
+   After parsing, there is a list of locations but no time. 
+   Once queued, there is a single location, a time, and a squeue_order *)
+type internal_event = {
   sevent : interp_event;
-  stime : int;
+  stime : int option;
+  sloc : loc list;
   squeue_order : int; (* tiebreaker for two events queued at the same time *)
-  sport : int;
 }
 (* constructors *)
+
+let get_loc (ev : internal_event) = match ev.sloc with
+  | [loc] -> loc
+  | _ -> error "[get_loc] event has multiple locations"
+;;
+let update_port (ev : internal_event) port' = 
+  let loc = get_loc ev in
+  {ev with sloc = [{loc with port = port'}]}
+;;
+
+let get_port (ev : internal_event) = 
+  match ev.sloc with
+  | [loc] -> loc.port
+  | _ -> error "[get_port] event has multiple locations"
+;;
 
 let delay (ev : interp_event) = 
   match ev with 
@@ -94,13 +104,13 @@ let ipacket ev = IPacket(ev)
 let loc (switch, port) = {switch; port}
 
 let located_event (ev, locs) =
-  {ievent = IEvent(ev); ilocs = List.map loc locs}
+  {sevent = IEvent(ev); sloc = List.map loc locs; stime = None; squeue_order = 0}
 ;;
 let located_control (ctl_ev, locs) = 
-  {ievent = IControl(ctl_ev); ilocs = List.map loc locs}
+  {sevent = IControl(ctl_ev); sloc = List.map loc locs; stime = None; squeue_order = 0}
 ;;
 let located_packet (pkt_ev, locs) = 
-  {ievent = IPacket(pkt_ev); ilocs = List.map loc locs}
+  {sevent = IPacket(pkt_ev); sloc = List.map loc locs; stime = None; squeue_order = 0}
 ;;
 
 
@@ -358,10 +368,10 @@ let parse_locations default_port num_switches lst =
              error
              @@ "Cannot specify event at nonexistent port "
              ^ string_of_int port;
-           sw, port
+           Some(sw), port
          | _ -> error "Event specification had non-string location")
         lst
-    | None -> [0, default_port]
+    | None -> [Some(0), default_port]
     | _ -> error "Event specification has non-list locations field"
   in
   locations
@@ -380,10 +390,10 @@ let parse_control_locations num_switches lst =
             error
             @@ "Cannot specify control command at nonexistent switch "
             ^ string_of_int sw;
-          sw
+          Some(sw)
         | _ -> error "Control command specification had non-int location")
         lst
-    | None -> [0]
+    | None -> [Some(0)]
     | _ -> error "control command specification has non-list locations field"
   in
   locations
@@ -446,7 +456,7 @@ let parse_located_event
   num_switches
   cur_ts
   default_port
-  event : located_event = 
+  event : internal_event = 
   match event with
   | `Assoc event_json ->
     (match List.assoc_opt "type" event_json with
@@ -518,8 +528,6 @@ let packet_event_to_string packet_event =
   payload_to_string (packet_event.pkt_val)
 ;;
 
-
-
 (* destructors *)
 let loc_to_tup loc = (loc.switch, loc.port)
 let locs_to_tups = List.map loc_to_tup
@@ -530,8 +538,8 @@ let interp_event_delay (iev : interp_event) = match iev with
   | IPacket(ev) -> ev.pkt_edelay
 ;;
 
-let located_event_delay (lev:located_event) = 
-  interp_event_delay lev.ievent
+let located_event_delay (lev:internal_event) = 
+  interp_event_delay lev.sevent
 ;;
 let interp_event_to_string ievent =
   match ievent with
