@@ -39,10 +39,7 @@ type control_e =
   | Print of string
   | Noop
 
-type control_event = {
-  ctl_cmd : control_e;
-  ctl_edelay : int;
-}
+type control_event = {ctl_cmd : control_e;}
 
 type packet_event = {
   pkt_val : BitString.bits;
@@ -68,6 +65,7 @@ type loc = {
 type internal_event = {
   sevent : internal_event_val;
   sloc : loc list;
+  stime : int;
   squeue_order : int; (* tiebreaker for two events queued at the same time *)
 }
 (* constructors *)
@@ -90,26 +88,16 @@ let get_port (ev : internal_event) =
 let delay (ev : internal_event_val) = 
   match ev with 
   | IEvent(ev) -> ev.edelay
-  | IControl(ev) -> ev.ctl_edelay
+  | IControl(_) -> error "[delay] control events cannot have delays"
   | IPacket(ev) -> ev.pkt_edelay
 ;;
 
-let ievent_timestamp (ev : internal_event_val) = 
-  match ev with 
-  | IEvent(ev) -> ev.edelay
-  | IControl(ev) -> ev.ctl_edelay
-  | IPacket(ev) -> ev.pkt_edelay
-;;
 
-let timestamp internal_event = 
-  ievent_timestamp internal_event.sevent
+let timestamp internal_event = internal_event.stime
 ;;
 
 let set_timestamp internal_event ts = 
-  match internal_event.sevent with
-  | IEvent(ev) -> {internal_event with sevent = IEvent({ev with edelay = ts})}
-  | IControl(ev) -> {internal_event with sevent = IControl({ev with ctl_edelay = ts})}
-  | IPacket(ev) -> {internal_event with sevent = IPacket({ev with pkt_edelay = ts})}
+  {internal_event with stime = ts}
 ;;
 let packet_event pkt_val pkt_edelay = 
   {pkt_val; pkt_edelay}
@@ -121,18 +109,12 @@ let ipacket ev = IPacket(ev)
 
 let loc (switch, port) = {switch; port}
 
-let located_event (ev, locs) =
-  {sevent = IEvent(ev); sloc = List.map loc locs; 
-  squeue_order = 0}
+let ievent ev sloc stime = {sevent=IEvent(ev); sloc; stime; squeue_order = 0}
 ;;
-let located_control (ctl_ev, locs) = 
-  {sevent = IControl(ctl_ev); sloc = List.map loc locs; 
-  squeue_order = 0}
-;;
-let located_packet (pkt_ev, locs) = 
-  {sevent = IPacket(pkt_ev); sloc = List.map loc locs; 
-  squeue_order = 0}
-;;
+
+let icontrol ev sloc stime = {sevent=IControl(ev); sloc; stime; squeue_order = 0}
+
+let ipacket ev sloc stime = {sevent=IPacket(ev); sloc; stime; squeue_order = 0}
 
 
 let assoc_to_vals keys lst =
@@ -389,10 +371,10 @@ let parse_locations default_port num_switches lst =
              error
              @@ "Cannot specify event at nonexistent port "
              ^ string_of_int port;
-           Some(sw), port
+           {switch=Some(sw);port}
          | _ -> error "Event specification had non-string location")
         lst
-    | None -> [Some(0), default_port]
+    | None -> [{switch=Some(0); port=default_port}]
     | _ -> error "Event specification has non-list locations field"
   in
   locations
@@ -411,10 +393,10 @@ let parse_control_locations num_switches lst =
             error
             @@ "Cannot specify control command at nonexistent switch "
             ^ string_of_int sw;
-          Some(sw)
+          {switch=Some(sw); port=0}
         | _ -> error "Control command specification had non-int location")
         lst
-    | None -> [Some(0)]
+    | None -> [{switch=Some(0); port=0}]
     | _ -> error "control command specification has non-list locations field"
   in
   locations
@@ -486,25 +468,25 @@ let parse_located_event
       (* located user event event *)
       let eid = get_eid ev_renames event_json in
       let data = get_data (payloads_t_id, ev_renames) event_json events in
-      let edelay = parse_timestamp default_next_ts event_json in
+      let timestamp = parse_timestamp default_next_ts event_json in
       let locations = parse_locations default_port num_switches event_json in
       let num = get_num events eid in
       let evnum = match num with 
       | None -> None
       | Some(n) -> Some(CoreSyntax.vint n (size_of_tint lucid_eventnum_ty))
        in
-      located_event ({ eid; data; edelay; evnum;}, locations)
+      ievent { eid; data; edelay=0; evnum;} locations timestamp
   
      | Some (`String "command") -> 
       (* located control/command event *)
-      let edelay = parse_timestamp default_next_ts event_json in
+      let timestamp = parse_timestamp default_next_ts event_json in
       let locations = parse_control_locations num_switches event_json in
       let control_event =
-        { ctl_cmd = parse_control_e event_json; ctl_edelay = edelay }
+        { ctl_cmd = parse_control_e event_json;}
       in
-      located_control (control_event, List.map (fun sw -> sw, 0) locations)
+      icontrol control_event locations timestamp
      | Some (`String "packet") -> 
-       let pkt_edelay = parse_timestamp default_next_ts event_json in
+       let timestamp = parse_timestamp default_next_ts event_json in
        let locations = parse_locations default_port num_switches event_json in
        let pkt_bytes = match List.assoc_opt "bytes" event_json with
         | Some (`String s) -> s
@@ -512,9 +494,9 @@ let parse_located_event
        in
        let pkt_event = packet_event
           (BitString.hexstr_to_bits pkt_bytes)
-          pkt_edelay
+          0 (*default delay*)
        in
-       located_packet (pkt_event, locations)
+       ipacket pkt_event locations timestamp
      | Some _ ->
        error "unknown interpreter input type (expected event or command)"
     )
@@ -553,15 +535,6 @@ let packet_event_to_string packet_event =
 let loc_to_tup loc = (loc.switch, loc.port)
 let locs_to_tups = List.map loc_to_tup
 
-let interp_event_time (iev : internal_event_val) = match iev with
-  | IEvent(ev) -> ev.edelay
-  | IControl(ev) -> ev.ctl_edelay
-  | IPacket(ev) -> ev.pkt_edelay
-;;
-
-let internal_event_time (lev:internal_event) = 
-  interp_event_time lev.sevent
-;;
 let interp_event_to_string ievent =
   match ievent with
   | IEvent(e) -> CorePrinting.event_to_string e

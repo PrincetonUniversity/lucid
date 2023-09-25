@@ -105,8 +105,8 @@ let n_queued_for_time queued_events stime =
 (* push an event to an ingress at a different switch *)
 let push_to_ingress interp_event stime sport st =
   let squeue_order = n_queued_for_time (EventQueue.elems st.ingress_queue) stime in
-  let internal_event = {sevent = interp_event; sloc = [loc (None,sport)]; squeue_order} in
-  let internal_event = set_timestamp internal_event stime in
+  let internal_event = {sevent = interp_event; sloc = [loc (None,sport)]; squeue_order; stime} in
+  (* let internal_event = set_timestamp internal_event stime in *)
   {st with ingress_queue=EventQueue.add internal_event st.ingress_queue}
 ;;
 (* push an event from an ingress queue to an egress queue. Here, sport is the output port of the switch *)
@@ -114,8 +114,8 @@ let push_to_egress sevent stime sport st =
   (* if there's already an event in the queue with the same time, we want to 
      make sure this one gets popped after it. So we increment the queue_spot. *)
   let squeue_order = n_queued_for_time (EventQueue.elems st.egress_queue) stime in
-  let internal_event = {sevent; squeue_order; sloc = [loc (None,sport)]} in
-  let internal_event = set_timestamp internal_event stime in
+  let internal_event = {sevent; squeue_order; sloc = [loc (None,sport)]; stime} in
+  (* let internal_event = set_timestamp internal_event stime in *)
   {st with egress_queue=EventQueue.add internal_event st.egress_queue}
 ;;
 

@@ -431,13 +431,13 @@ let rec interp_statement nst hdl_sort swid locals s =
        or background event. Packet events get serialized into packets, 
        background events do not. *)
     (* serialize packet events *)
-    let event = match ev_sort, hdl_sort with 
-      | EBackground, _ -> InterpSyntax.ievent event (* background events stay as events *)
+    let event_val = match ev_sort, hdl_sort with 
+      | EBackground, _ -> InterpSyntax.IEvent(event) (* background events stay as events *)
       | EPacket, HEgress -> (* packet events get serialized into a packet, which is just a 
          bitstring with a location. The payload is included via arguments. *)
         let pkt = InterpPayload.serialize_packet_event event in
-        InterpSyntax.ipacket {pkt_val=pkt; pkt_edelay=event.edelay}
-      | EPacket, _ -> InterpSyntax.ievent event (* ingress packet events stay as events *)
+        InterpSyntax.IPacket {pkt_val=pkt; pkt_edelay=event.edelay}
+      | EPacket, _ -> InterpSyntax.IEvent(event) (* ingress packet events stay as events *)
     in
     (* let ingress_next_locs = match g with *)
 
@@ -478,7 +478,7 @@ let rec interp_statement nst hdl_sort swid locals s =
       in
       (* push all the events to output ports *)
       List.iter (fun out_port -> 
-        State.ingress_send swid out_port event nst) 
+        State.ingress_send swid out_port event_val nst) 
         output_ports;
       locals 
     )
@@ -489,7 +489,7 @@ let rec interp_statement nst hdl_sort swid locals s =
       in      
       (* egress case -- always just push the event to the other side of the port *)
       let port = ((port_arg locals).v |> extract_int ).value |> Z.to_int in 
-      State.egress_send swid port event nst;
+      State.egress_send swid port event_val nst;
       locals
     ) 
   )

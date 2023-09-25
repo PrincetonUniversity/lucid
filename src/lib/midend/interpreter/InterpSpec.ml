@@ -93,7 +93,7 @@ let parse_interp_inputs
     let located_event =
       parse_f default_next_event_time default_port event_json
     in
-    let next_ts = internal_event_time located_event + inter_event_gap in
+    let next_ts = located_event.stime + inter_event_gap in
     located_event :: located_events_rev, next_ts
   in
   let located_events_rev, _ = List.fold_left wrapper ([], 0) events in
