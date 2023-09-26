@@ -7,8 +7,10 @@ IDX = {
 	| ATP_release -> {idx}
 }
 DETECT{
-	(ATP_add(@int x = cnt; cnt==x+1)."")*
-		.ATP_add(cnt==16)
+	ATP_add(@int x = cnt)
+	.ATP_add(cnt==x+2)
+	.ATP_add(cnt==x+3)
+	.ATP_add(cnt==x+4)
 	
 } => {printf ("Checked continuous 16 add events.");};
 

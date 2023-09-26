@@ -1,4 +1,4 @@
-entry event ip_packet_generic(int smac, int dmac, int sip, int cip, int udp_dport, int payload_1, int payload_2, int payload_3);
+event ip_packet_generic(int smac, int dmac, int sip, int cip, int udp_dport, int payload_1, int payload_2, int payload_3);
 event DNS_resp(int cip, int dip, int dip2, int dip3, int dip4);
 event ip_packet(int sip, int dip, int smac, int dmac);
 exit event DNS_tunnel_detected(int dip);

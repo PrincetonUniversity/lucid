@@ -1,0 +1,10 @@
+examples/regex/rip_added/lucidRegex_DHCP.dpt
+examples/regex/rip_added/lucidRegex_videofp_oneentry.dpt
+examples/regex/rip_added/lucidRegex_port_knocking_fixed.dpt
+examples/regex/rip_added/lucidRegex_DNS_ttlChange.dpt
+examples/regex/rip_added/lucidRegex_DNS_tunnel_fixed.dpt
+examples/regex/rip_added/lucidRegex_consensus_swishlocalview.dpt
+examples/regex/rip_added/lucidRegex_consensus_increasing.dpt
+examples/regex/rip_added/lucidRegex_consensus_jpaxosrecovery_fixed.dpt
+examples/regex/rip_added/lucidRegex_ATPaggregate_checksequential.dpt
+examples/regex/rip_added/lucidRegex_ATPaggregate_checkjobid.dpt

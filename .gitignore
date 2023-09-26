@@ -13,6 +13,8 @@ basicCompile/*
 lucid_tofino_build/*
 testCompile
 LucidPatternsRemoved.dpt
+results.txt
+output.txt
 
 # ocamlbuild working directory
 _build/
