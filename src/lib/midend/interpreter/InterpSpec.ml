@@ -1,6 +1,7 @@
 open Batteries
 open CoreSyntax
 open InterpSyntax
+open InterpJson
 open Yojson.Basic
 open Preprocess
 module Env = InterpState.Env
@@ -14,7 +15,7 @@ type t =
   { num_switches : int
   ; links : InterpState.State.topology
   ; externs : value Env.t list
-  ; events : internal_event list
+  ; events : interp_input list
   ; config : InterpState.State.config
   ; extern_funs : (InterpState.State.network_state InterpSyntax.ival) Env.t
   ; ctl_pipe_name : string option
@@ -67,7 +68,7 @@ let parse_interp_event_list
   (input_json : json)
   =
   let parse_f =
-    (parse_located_event 
+    (parse_interp_input 
       Payloads.t_id 
       (Builtins.lucid_eventnum_ty |> SyntaxToCore.translate_ty)
       renaming.var_map pp.events num_switches gap default_port)
@@ -85,17 +86,17 @@ let parse_interp_inputs
   (events : json list)
   =
   let parse_f =
-    (parse_located_event 
+    (parse_interp_input 
       Payloads.t_id (Builtins.lucid_eventnum_ty |> SyntaxToCore.translate_ty) renaming.var_map pp.events num_switches)
   in
   let wrapper
-    ((located_events_rev : internal_event list), (default_next_event_time : int))
+    ((located_events_rev : interp_input list), (default_next_event_time : int))
     (event_json : json)
     =
     let located_event =
       parse_f default_next_event_time default_port event_json
     in
-    let next_ts = located_event.stime + inter_event_gap in
+    let next_ts = (interp_input_to_time located_event) + inter_event_gap in
     located_event :: located_events_rev, next_ts
   in
   let located_events_rev, _ = List.fold_left wrapper ([], 0) events in
@@ -192,8 +193,8 @@ let create_foreign_functions renaming efuns python_file =
   let open InterpState.State in
   let oc_to_py v =
     match v with
-    | V { v = VBool b } -> Py.Bool.of_bool b
-    | V { v = VInt n } -> Py.Int.of_int (Integer.to_int n)
+    | InterpSyntax.V { v = VBool b } -> Py.Bool.of_bool b
+    | InterpSyntax.V { v = VInt n } -> Py.Int.of_int (Integer.to_int n)
     | _ -> error "Can only call external functions with int/bool arguments"
   in
   let obj =

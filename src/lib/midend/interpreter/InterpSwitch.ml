@@ -11,15 +11,17 @@ module IntMap = Map.Make (Int)
 module EventQueue = BatHeap.Make (struct
   (* time, event, port *)
   type t = internal_event
-
   let compare t1 t2 = 
     (* compare stime and use squeue_order as a tiebreaker *)
     if (timestamp t1) = (timestamp t2)
       then Pervasives.compare t1.squeue_order t2.squeue_order
       else        
         Pervasives.compare (timestamp t1) (timestamp t2)
-  (* type t = int * event * int *)
-  (* let compare (t1, _, _) (t2, _, _) = Pervasives.compare t1 t2 *)
+end)
+
+module CommandQueue = BatHeap.Make (struct
+  type t = (control_val * int)
+  let compare t1 t2 = Pervasives.compare (snd t1) (snd t2)
 end)
 
 (* stats counter for a switch *)
@@ -34,11 +36,12 @@ type gress =
 
 type 'nst state = 
   { global_env : 'nst InterpSyntax.ival Env.t
+  ; command_queue : CommandQueue.t
   ; ingress_queue : EventQueue.t
   ; egress_queue : EventQueue.t
   ; pipeline : Pipeline.t
-  ; exits : (InterpSyntax.internal_event_val * int option * int) Queue.t
-  ; drops : (internal_event_val * int) Queue.t
+  ; exits : (InterpSyntax.internal_event * int option * int) Queue.t
+  ; drops : (internal_event * int) Queue.t
   ; retval : value option ref
   ; counter : stats_counter ref
   }
@@ -50,6 +53,7 @@ let empty_counter = { entries_handled = 0; total_handled = 0 }
 let empty_state () =
   { global_env = Env.empty
   ; pipeline = Pipeline.empty ()
+  ; command_queue = CommandQueue.empty
   ; ingress_queue = EventQueue.empty
   ; egress_queue = EventQueue.empty
   ; exits = Queue.create ()
@@ -101,54 +105,68 @@ let n_queued_for_time queued_events stime =
   List.length (List.filter (fun e -> (timestamp e) = stime) queued_events)
 ;;
 
-
 (* push an event to an ingress at a different switch *)
-let push_to_ingress interp_event stime sport st =
+let push_to_ingress internal_event stime sport st =
   let squeue_order = n_queued_for_time (EventQueue.elems st.ingress_queue) stime in
-  let internal_event = {sevent = interp_event; sloc = [loc (None,sport)]; squeue_order; stime} in
+  let internal_event = {
+    internal_event with   
+    sloc = loc (None,sport);
+    squeue_order;
+    stime
+  } in
+  
   (* let internal_event = set_timestamp internal_event stime in *)
   {st with ingress_queue=EventQueue.add internal_event st.ingress_queue}
 ;;
 (* push an event from an ingress queue to an egress queue. Here, sport is the output port of the switch *)
-let push_to_egress sevent stime sport st =
+let push_to_egress internal_event stime sport st =
   (* if there's already an event in the queue with the same time, we want to 
      make sure this one gets popped after it. So we increment the queue_spot. *)
   let squeue_order = n_queued_for_time (EventQueue.elems st.egress_queue) stime in
-  let internal_event = {sevent; squeue_order; sloc = [loc (None,sport)]; stime} in
+  let internal_event = {internal_event with squeue_order; sloc = loc (None,sport); stime} in
   (* let internal_event = set_timestamp internal_event stime in *)
   {st with egress_queue=EventQueue.add internal_event st.egress_queue}
 ;;
 
+let push_to_commands control_val stime st = 
+  {st with command_queue=CommandQueue.add (control_val, stime) st.command_queue}
+;;
+
+let next_q_ele (fsize, fmin, fdel, ftime) q cur_time = 
+  let sz = fsize q in
+  if sz = 0
+    then None
+    else (
+      let ele = fmin q in
+      if (ftime ele) > cur_time
+        then None
+        else (
+          Some (fdel q, ele)
+        )
+    )
+;;
+let command_queue_fs = (CommandQueue.size, CommandQueue.find_min, CommandQueue.del_min, snd)
+
+let next_command current_time st = 
+  match (next_q_ele command_queue_fs st.command_queue current_time) with
+  | None -> None
+  | Some (q, (control_val, time)) -> Some ({st with command_queue = q;}, control_val, time)
+;;
+
+
+let event_queue_fs = (EventQueue.size, EventQueue.find_min, EventQueue.del_min, timestamp)
+
 let next_ingress_event current_time st = 
-  let q = st.ingress_queue in
-  if EventQueue.size q = 0
-  then None
-  else (
-    let switch_ev = EventQueue.find_min q in
-    let t, event, port = timestamp switch_ev, switch_ev.sevent, get_port switch_ev in
-    if t > current_time
-    then None
-    else (
-      let q = EventQueue.del_min q in
-      Some ({st with ingress_queue = q;}, event, port, t)
-    )
-  )
+  match (next_q_ele event_queue_fs st.ingress_queue current_time) with
+  | None -> None
+  | Some (q, (iev)) -> Some ({st with ingress_queue = q;}, iev.sevent, get_port iev, timestamp iev)
 ;;
+
 let next_egress_event current_time st = 
-  let q = st.egress_queue in
-  if EventQueue.size q = 0
-  then None
-  else (
-    let switch_ev = EventQueue.find_min q in
-    let t, event, port = timestamp switch_ev, switch_ev.sevent, get_port switch_ev in
-    if t > current_time
-    then None
-    else (
-      let q = EventQueue.del_min q in
-      Some ({st with egress_queue = q;}, event, port, t)
-    )
-  )
-;;
+  match (next_q_ele event_queue_fs st.egress_queue current_time) with
+  | None -> None
+  | Some (q, (iev)) -> Some ({st with egress_queue = q;}, iev.sevent, get_port iev, timestamp iev)
+
 
 
 let next_event current_time st = 
@@ -170,20 +188,19 @@ let next_event current_time st =
   | None, None -> None
 ;;
 
-
 let next_time st = 
   let next_time_ingress = if (EventQueue.size st.ingress_queue = 0) then None else Some (EventQueue.find_min st.ingress_queue |>timestamp) in
   let next_time_egress  = if (EventQueue.size st.egress_queue = 0) then None else Some (EventQueue.find_min st.egress_queue|> timestamp) in
-  match next_time_ingress, next_time_egress with
-  | Some t1, Some t2 -> if (t1 < t2) then Some t1 else Some t2
-  | Some t1, None -> Some t1
-  | None, Some t2 -> Some t2
-  | None, None -> None
+  let next_time_command = if (CommandQueue.size st.command_queue = 0) then None else Some (CommandQueue.find_min st.command_queue |> snd) in
+  let next_times = List.filter_map (fun x -> x) [next_time_ingress; next_time_egress; next_time_command] in
+  match next_times with 
+  | [] -> None
+  | _ -> Some(List.min next_times)
 ;;
 
 (* we need a few more egress helpers to keep event arrival times the same 
 in the new (9/2023) version of the interpreter with the egress queues. *)
-let drain_egress current_time st = 
+let ready_egress_events current_time st = 
   (* pop events out of the queue for current time *)
   let rec _all_egress_events st = 
     match next_egress_event current_time st with
@@ -195,7 +212,20 @@ let drain_egress current_time st =
   _all_egress_events st
 ;;
 
-let final_egress_drain st = 
+let ready_control_commands current_time st = 
+  (* pop events out of the queue for current time *)
+  let rec _all_control_commands st = 
+    match next_command current_time st with
+    | Some (st, event, _) -> 
+      let st', rest = _all_control_commands st in
+      st', event :: rest
+    | None -> st, []
+  in
+  _all_control_commands st
+;;
+
+
+let all_egress_events st = 
   let all_elems = EventQueue.elems st.egress_queue in
   let all_elems = List.map 
     (fun switch_ev -> 
@@ -203,6 +233,10 @@ let final_egress_drain st =
       all_elems
   in
   {st with egress_queue = EventQueue.empty}, all_elems
+;;
+
+
+  
 
 
 
@@ -249,7 +283,7 @@ let event_queue_to_string q =
                 "%s    %dns: %s at port %d\n"
                 acc
                 (timestamp internal_event)
-                (interp_event_to_string internal_event.sevent)
+                (CorePrinting.event_to_string internal_event.sevent)
                 (get_port internal_event))
             "")
 ;;
@@ -264,7 +298,7 @@ let exits_to_string s =
            Printf.sprintf
              "%s    %s at port %d, t=%d\n"
              acc
-             (InterpSyntax.interp_event_to_string event)
+             (CorePrinting.event_to_string  event.sevent)
              (Option.default (-1) port)
              time)
          ""
@@ -281,7 +315,7 @@ let drops_to_string s =
            Printf.sprintf
              "%s    %s, t=%d\n"
              acc
-             (InterpSyntax.interp_event_to_string event)
+             (CorePrinting.event_to_string event.sevent)
              time)
          ""
          s

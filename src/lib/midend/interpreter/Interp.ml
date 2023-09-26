@@ -43,8 +43,8 @@ let initial_state (pp : Preprocess.t) (spec : InterpSpec.t) =
     (fun swid _ -> State.add_global swid bg_parse_cid (F bg_parse_fun) nst)
     nst.switches
   ;
-  (* push located events to switch queues *)
-  State.push_multiloc_events nst spec.events;
+  (* push interpreter inputs to ingress and control command queues *)
+  State.load_interp_inputs nst spec.events;
   nst
 ;;
 
@@ -120,10 +120,6 @@ let execute_event
       error @@ "No handler for event " ^ Cid.to_string event.eid )
 ;;
 
-let execute_control swidx (nst : State.network_state) (ctl_ev : control_val) =
-  InterpControl.handle_control nst swidx ctl_ev
-;;
-
 let execute_main_parser print_log swidx port (nst: State.network_state) (pkt_ev : (CoreSyntax.event_val)) = 
   let payload_val = List.hd pkt_ev.data in
   (* main takes 2 arguments, port and payload. Port is implicit. *)
@@ -160,48 +156,16 @@ let execute_main_parser print_log swidx port (nst: State.network_state) (pkt_ev 
     | _ -> error "the global named 'main' is not a parser"
 ;;   
 
-let run_event_tup print_log idx nst (ievent, port, gress) = 
-  (* print_endline@@"\texecuting event: " ^ (
-  match ievent with 
-  | IEvent event -> CorePrinting.event_to_string event
-  | _ -> "<special event>")
-  ^" at gress: "
-  ^ (match gress with 
-    | InterpSwitch.Ingress -> "ingress"
-    | InterpSwitch.Egress -> "egress"); *)
-  match ievent with
-  | IEvent event -> 
-      if (not event.eserialized) then 
-        execute_event print_log idx nst event port gress
-      else 
-      execute_main_parser print_log idx port nst event
-  | IControl ctl_ev -> execute_control idx nst ctl_ev   
+let execute_control swidx (nst : State.network_state) (ctl_ev : control_val) =
+  InterpControl.handle_control nst swidx ctl_ev
 ;;
 
-let execute_interp_event
-  print_log
-  simulation_callback
-  idx
-  (nst : State.network_state)
-  epgs (*execute an ingress event or an ingress and egress event, if there are parallel pipes *)
-  (* ievents 
-  port
-  gress *)
-  =
-  (* run the events you got *)
-  List.iter (run_event_tup print_log idx nst) epgs;
-  (* then run the simulation callback *)  
-  simulation_callback ((idx + 1) mod Array.length nst.switches) nst
-;;
 
-(* run all the egress events from all of the switches *)
-let run_egress_events print_log (nst:State.network_state) = 
-  Array.iteri 
-    (fun swid _ -> 
-        let egr_evs = State.drain_egress swid nst in
-        List.iter (run_event_tup print_log swid nst) egr_evs;
-    )
-  nst.switches
+let run_event_tup print_log idx nst ((event:CoreSyntax.event_val), port, gress) = 
+  if (not event.eserialized) then 
+    execute_event print_log idx nst event port gress
+  else 
+  execute_main_parser print_log idx port nst event
 ;;
 
 let run_event_at_time print_log idx nst (ievent, port, event_time, gress) = 
@@ -209,13 +173,78 @@ let run_event_at_time print_log idx nst (ievent, port, event_time, gress) =
   run_event_tup print_log idx nst (ievent, port, gress)
 ;;
 
+let execute_interp_event
+  print_log
+  simulation_callback
+  idx
+  (nst : State.network_state)
+  events
+  =
+  List.iter (run_event_tup print_log idx nst) events;
+  simulation_callback ((idx + 1) mod Array.length nst.switches) nst
+;;
+
+(* run all the egress events from all of the switches *)
+let run_egress_events print_log (nst:State.network_state) = 
+  Array.iteri 
+    (fun swid _ -> 
+        let egr_evs = State.ready_egress_events swid nst in
+        List.iter (run_event_tup print_log swid nst) egr_evs;
+    )
+  nst.switches
+;;
+
 let finish_egress_events print_log (nst:State.network_state) = 
   Array.iteri 
     (fun swid _ -> 
-        let egr_evs = State.final_egress_drain swid nst in
+        let egr_evs = State.all_egress_events swid nst in
         List.iter (run_event_at_time print_log swid nst) egr_evs;
     )
   nst.switches
+;;
+
+(* execute all the control commands at the switch *)
+let execute_ready_controls swid (nst : State.network_state) =
+  List.iter 
+    (execute_control swid nst) 
+    (State.ready_control_commands swid nst)
+;;
+
+let advance_current_time next_event_time (nst: State.network_state) = 
+  (* advance the current time of the network to the time of the
+     next queued event, unless the event is queued at the 
+     current time, in which case we advance the current time 
+     by 1.
+     If you run this at the start of processing an event from each 
+     switch, it models being able to process 1 event per time unit. *)
+  {nst with current_time = max next_event_time (nst.current_time + 1)}
+;;
+
+let rec execute_sim_step idx nst = 
+  (* execute a step of the simulation *)
+  match State.next_time nst with
+  (* no time at which some switch has a thing to do? then nothing will ever change. *)
+  | None -> nst
+  | Some next_event_time -> (
+    (* special processing when you are at the first switch *)
+    let nst = if (idx = 0) 
+      then (
+        let nst = advance_current_time next_event_time nst in
+        run_egress_events true nst;
+        nst)
+      else nst
+    in
+    if nst.current_time > nst.config.max_time
+      then nst
+      else (
+        (* run any control events *)
+        execute_ready_controls idx nst;
+        (* check for ingress and egress events with time < nst.current_time *)
+        match State.next_ready_event idx nst with
+        | Some (epgs) -> execute_interp_event true execute_sim_step idx nst epgs
+        | None -> execute_sim_step ((idx + 1) mod Array.length nst.switches) nst
+      )    
+  )
 ;;
 
 let simulate (nst : State.network_state) =
@@ -226,29 +255,7 @@ let simulate (nst : State.network_state) =
     ^ string_of_int nst.config.random_seed
     ^ "\n";
   Random.init nst.config.random_seed;
-  let rec interp_events idx nst =
-    match State.next_time nst with
-    | None -> nst
-    | Some t ->
-      (* Increment the current time*)
-      let nst =
-        if idx = 0
-        then (
-          let nst' = { nst with current_time = max (t) (nst.current_time + 1) } in
-          (* clear out all the egress events at the start of each time unit *)
-          run_egress_events true nst';
-          nst')
-      else (nst)
-      in
-      if nst.current_time > nst.config.max_time
-      then nst
-      else (
-        match State.next_event idx nst with
-        | None -> interp_events ((idx + 1) mod Array.length nst.switches) nst
-        | Some (epgs) ->
-          execute_interp_event true interp_events idx nst epgs)
-  in
-  let nst = interp_events 0 nst in
+  let nst = execute_sim_step 0 nst in
   (* drain all the egresses one last time to get everything into an ingress queue for logging *)
   finish_egress_events true nst;
   nst
@@ -268,44 +275,39 @@ let simulate (nst : State.network_state) =
       - all printfs in the program print to stderr
 **)
 
-type event_getter = int -> InterpSyntax.internal_event list
+type event_getter = int -> InterpSyntax.interp_input list
 
 (* interp events until max_time is reached
    or there are no more events to interpret *)
-let rec interp_events event_getter_opt max_time idx nst =
+
+let load_new_events nst event_getter_opt = 
+  match event_getter_opt with
+  | None -> ()
+  | Some(event_getter) -> 
+    State.load_interp_inputs nst (event_getter nst.current_time) ;
+;;
+(* execute a step of the simulation running in interactive mode *)
+let rec execute_interactive_sim_step event_getter_opt max_time idx nst = 
+  let next_step_continuation = execute_interactive_sim_step event_getter_opt max_time in
   match State.next_time nst with
+  (* no time at which some switch has a thing to do? then nothing will ever change. *)
   | None -> nst
-  | Some t ->
-    let nst =
-      if idx = 0
+  | Some t -> 
+    let nst = if (idx = 0)
       then (
-        (* when index is 0, poll for new events *)
-        match event_getter_opt with
-        | None -> { nst with current_time = max ( t) (nst.current_time + 1) }
-        | Some (event_getter : event_getter) ->
-          (* if there's an event getter, check for new events and push them *)
-          State.push_multiloc_events nst (event_getter nst.current_time) ;
-          { nst with current_time = max (t) (nst.current_time + 1) })
+        load_new_events nst event_getter_opt;
+        advance_current_time t nst)
       else nst
     in
     if max_time > -1 && nst.current_time > max_time
-    then nst
-    else (
-      match State.next_event idx nst with
-      | None ->
-        interp_events
-          event_getter_opt
-          max_time
-          ((idx + 1) mod Array.length nst.switches)
-          nst
+      then nst
+    else 
+      match State.next_ready_event idx nst with
       | Some (epgs) ->
-        execute_interp_event
-          true
-          (interp_events event_getter_opt max_time)
-          idx
-          nst
-          epgs
-          )
+        execute_ready_controls idx nst;
+        execute_interp_event true next_step_continuation idx nst epgs
+      (* if there's no next event, move to the next switch *)
+      | None -> next_step_continuation ((idx + 1) mod Array.length nst.switches) nst
 ;;
 
 let sighdl s =
@@ -315,7 +317,7 @@ let sighdl s =
 
 (* this type should be refactored out *)
 type interactive_mode_input =
-  | Process of internal_event list
+  | Process of interp_input list
   | Continue
   | End
 
@@ -454,14 +456,14 @@ let run pp renaming (spec : InterpSpec.t) (nst : State.network_state) =
     | End -> nst (* end *)
     | Continue -> poll_loop nst
     | Process evs -> 
-      State.push_multiloc_events nst evs;
+      State.load_interp_inputs nst evs;
       (* interpret all the queued events, using event_getter to poll for more events
            in between iterations. *)
-      let nst = interp_events (Some event_getter) (-1) 0 nst in
+      let nst = execute_interactive_sim_step (Some event_getter) (-1) 0 nst in
       poll_loop nst
   in
   Random.init nst.config.random_seed;
-  (* interp events with no event getter to initialize network *)
-  let nst = interp_events None nst.config.max_time 0 nst in
+  (* interp events with no event getter to initialize network, then run the polling loop *)
+  let nst = execute_interactive_sim_step None nst.config.max_time 0 nst in
   poll_loop nst
 ;;

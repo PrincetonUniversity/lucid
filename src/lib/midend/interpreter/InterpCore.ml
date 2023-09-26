@@ -351,13 +351,11 @@ let print_final_state str = interp_report "final_state" str None
 let print_printf swid str = interp_report "printf" str (Some swid)
 
 (* print an exit event as a json to stdout *)
-let print_exit_event swid port_opt (event:InterpSyntax.internal_event_val) time =
-  let base_out_tups = match event with 
-    | IEvent(v) -> 
-      if (v.eserialized = false)
-        then InterpSyntax.event_val_to_json v
-        else InterpSyntax.packet_event_to_json v
-    | IControl _ -> error "attempting to send a control event out of a network port"
+let print_exit_event swid port_opt (event:InterpSyntax.internal_event) time =
+  let base_out_json =
+      if (event.sevent.eserialized = false)
+        then InterpJson.event_val_to_json event.sevent
+        else InterpJson.packet_event_to_json event.sevent
   in
   (* add location and timestamp metadata *)
   let port =
@@ -369,14 +367,14 @@ let print_exit_event swid port_opt (event:InterpSyntax.internal_event_val) time 
   let timestamp = `Int time in
   let evjson =
     `Assoc
-      (base_out_tups@["locations", locs; "timestamp", timestamp])
+      (base_out_json@["locations", locs; "timestamp", timestamp])
   in
   print_endline (Yojson.Basic.to_string evjson)
 ;;
 
 (* print event as json if interactive mode is set,
    else log for final report *)
-let log_exit swid port_opt (event:InterpSyntax.internal_event_val) (nst : State.network_state) =
+let log_exit swid port_opt (event:InterpSyntax.internal_event) (nst : State.network_state) =
   if Cmdline.cfg.interactive
   then print_exit_event swid port_opt event nst.current_time
   else State.log_exit swid port_opt event nst
@@ -446,8 +444,6 @@ let rec interp_statement nst hdl_sort swid locals s =
 
     match hdl_sort with 
     | HData -> (
-      (* ingress doesn't serialize events *)
-      let event_val = InterpSyntax.IEvent event in
       (*  
         event routing is overly complicated.
         cases:
@@ -489,7 +485,7 @@ let rec interp_statement nst hdl_sort swid locals s =
       in
       (* push all the events to output ports *)
       List.iter (fun out_port -> 
-        State.ingress_send swid out_port event_val nst) 
+        State.ingress_send swid out_port event nst) 
         output_ports;
       locals       
     )
@@ -506,8 +502,8 @@ let rec interp_statement nst hdl_sort swid locals s =
       let ev_sort = Env.find event.eid nst.event_sorts in
       (* serialize packet events *)
       let event_val = match ev_sort with 
-        | EBackground -> InterpSyntax.IEvent(event) (* background events stay as events *)
-        | EPacket -> InterpSyntax.IEvent(InterpPayload.serialize_packet_event event)
+        | EBackground -> event (* background events stay as events *)
+        | EPacket -> InterpPayload.serialize_packet_event event
       in
       State.egress_send swid port event_val nst;
       locals

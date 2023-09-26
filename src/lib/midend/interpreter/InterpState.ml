@@ -158,6 +158,12 @@ module State = struct
   ;;
 
   (*** moving events around ***)
+  let to_internal_event ev loc time = 
+    { sevent = ev
+    ; sloc = loc
+    ; stime = time
+    ; squeue_order = 0;
+    }
 
 
   (* calculate when an event should arrive at the next switch's ingress. 
@@ -178,16 +184,16 @@ module State = struct
       + Random.int nst.config.random_delay_range
   ;;
 
-  let ingress_receive arrival_time swid port (ievent : internal_event_val) nst =
+  let ingress_receive arrival_time swid port (ievent : internal_event) nst =
     let st = nst.switches.(swid) in
     if Random.int 100 < nst.config.drop_chance
     then (InterpSwitch.log_drop  ievent nst.current_time st)
-    else (nst.switches.(swid) <- InterpSwitch.push_to_ingress  ievent arrival_time port st;)
+    else (nst.switches.(swid) <- InterpSwitch.push_to_ingress ievent arrival_time port st;)
   ;;
 
   (* push a single event to the switch's egress queue. Called by local methods 
      moving events from ingress to egress.*)
-  let egress_receive arrival_time swid port (ievent : internal_event_val) nst =
+  let egress_receive arrival_time swid port (ievent : internal_event) nst =
     let st = nst.switches.(swid) in
     nst.switches.(swid) <- InterpSwitch.push_to_egress ievent arrival_time port st;
   ;;
@@ -196,60 +202,72 @@ module State = struct
   | Port of int
   | Switch of int
   | PExit of int
-  let ingress_send src_id ingress_destination ievent nst = 
+  let ingress_send src_id ingress_destination event_val nst = 
     match ingress_destination with
       | Switch sw -> 
-        let timestamp = next_ingress_arrival_time src_id sw (InterpSyntax.delay ievent) nst in
+        let timestamp = next_ingress_arrival_time src_id sw (event_val.edelay) nst in
+        let ievent = to_internal_event event_val {switch = Some sw; port = 0} timestamp in
         ingress_receive timestamp sw 0 ievent nst
-      | PExit port -> log_exit src_id (Some port) ievent nst
+      | PExit port -> 
+        let ievent = to_internal_event event_val {switch = Some src_id; port = port} nst.current_time in
+        log_exit src_id (Some port) ievent nst
       | Port port -> 
         let dst_id, _ = lookup_dst nst (src_id, port) in 
-        let timestamp = next_ingress_arrival_time src_id dst_id (InterpSyntax.delay ievent) nst in
+        let timestamp = next_ingress_arrival_time src_id dst_id (event_val.edelay) nst in
+        let ievent = to_internal_event event_val {switch = Some src_id; port = port} timestamp in
         egress_receive timestamp src_id port ievent nst
   ;;
 
   (* send out of an egress. We model an egress that is 
      instant -- it queues at the next ingress immediately. *)
-  let egress_send src_id out_port ievent nst = 
+  let egress_send src_id out_port event_val nst = 
     let dst_id, dst_port = lookup_dst nst (src_id, out_port) in
     (* dst -1 means "somewhere outside of the lucid network" *)
     if (dst_id = -1) 
-      then log_exit src_id (Some out_port) ievent nst
-      else ingress_receive nst.current_time dst_id dst_port ievent nst
+      then 
+        let ievent = to_internal_event event_val {switch = Some src_id; port = out_port} nst.current_time in
+        log_exit src_id (Some out_port) ievent nst
+      else 
+        let ievent = to_internal_event event_val {switch = Some dst_id; port = dst_port} nst.current_time in        
+        ingress_receive nst.current_time dst_id dst_port ievent nst
   ;;
 
 
   (*** pushing input events into the network ***)
-  (* push an event to one switch *)
-  let push_singleloc_event nst internal_event = 
-    let switch_id, port = match internal_event.sloc with
-      | [loc] -> (
-        match loc.switch with
-        | Some sw -> sw, loc.port
-        | None -> error "push_singleloc_event: no switch id") 
-      | _ -> error "push_singleloc_event: multiple locations"
-    in
-    let time = internal_event.stime in
+
+  (* load an interpreter input into the network environment *)
+  let load_interp_input nst interp_input = 
     let sws = nst.switches in
-    sws.(switch_id) <- InterpSwitch.push_to_ingress 
-      internal_event.sevent time port (sws.(switch_id))
-  ;;
-  (* Push an event to a list of entry points *)
-  let push_multiloc_event nst internal_event =
-    let single_switch_events = 
-      List.map (fun loc -> {internal_event with sloc = [loc]}) internal_event.sloc 
-    in
-    List.iter (push_singleloc_event nst) single_switch_events
+    match interp_input with 
+    | IEvent({iev; ilocs; itime}) -> 
+      List.iter 
+        (fun loc -> 
+          let switch = match loc.switch with 
+            | None -> error "input event not associated with a switch"
+            | Some(switch) -> switch
+          in
+          let internal_event = to_internal_event iev loc itime in
+          sws.(switch) <- InterpSwitch.push_to_ingress 
+          internal_event itime loc.port (sws.(switch))
+          )
+        ilocs      
+    | IControl({ictl; ilocs; itime}) -> 
+      List.iter 
+        (fun loc -> 
+          let switch = match loc.switch with 
+            | None -> error "input event not associated with a switch"
+            | Some(switch) -> switch
+          in
+          sws.(switch) <- InterpSwitch.push_to_commands ictl itime (sws.(switch))
+          )
+        ilocs
   ;;
 
-  (* push a located event to multiple switches where it should appear *)
-  let push_multiloc_events nst (located_events : internal_event list)  =
-    List.iter (push_multiloc_event nst) located_events 
-  ;;
-
+  let load_interp_inputs nst interp_inputs = 
+    List.iter (load_interp_input nst) interp_inputs
 
   (*** some other helpers ***)
-  let next_event swid nst =
+  let next_ready_event swid nst =
     let st = nst.switches.(swid) in
     match InterpSwitch.next_event ( nst.current_time) st with
       | None -> None
@@ -266,16 +284,22 @@ module State = struct
         Some(epgs)
   ;;
 
-  let drain_egress swid nst = 
+  let ready_egress_events swid nst = 
     let st = nst.switches.(swid) in
-    let st', evs = InterpSwitch.drain_egress ( nst.current_time) st in
+    let st', evs = InterpSwitch.ready_egress_events nst.current_time st in
     nst.switches.(swid) <- st';
     evs
   ;;
 
-  let final_egress_drain swid nst = 
+  let ready_control_commands swid nst = 
     let st = nst.switches.(swid) in
-    let st', evs = InterpSwitch.final_egress_drain st in
+    let st', evs = InterpSwitch.ready_control_commands nst.current_time st in
+    nst.switches.(swid) <- st';
+    evs
+
+  let all_egress_events swid nst = 
+    let st = nst.switches.(swid) in
+    let st', evs = InterpSwitch.all_egress_events st in
     nst.switches.(swid) <- st';
     evs
   ;;
