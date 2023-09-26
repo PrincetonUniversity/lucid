@@ -1,0 +1,19 @@
+{
+    "switches": 1,
+    "max time": 9999999,
+    "default input gap": 10000,
+    "random seed": 0,
+    "events": [ 
+      {"name":"DNS_packet_fwd", "args": [0,1,2,3, 1]},
+      {"name":"DNS_packet_fwd", "args": [0,1,2,3, 2]},
+      {"name":"DNS_packet_fwd", "args": [0,1,2,3, 3]},
+      {"name":"DNS_packet_fwd", "args": [0,1,2,3, 4]},
+      {"name":"DNS_packet_fwd", "args": [0,1,2,3, 5]},
+      {"name":"DNS_packet_fwd", "args": [0,1,2,3, 6]},
+      {"name":"DNS_packet_fwd", "args": [0,1,2,3, 7]},
+      {"name":"DNS_packet_fwd", "args": [0,1,2,3, 8]},
+      {"name":"DNS_packet_fwd", "args": [0,1,2,3, 9]},
+      {"name":"DNS_packet_fwd", "args": [0,1,2,3, 10]}
+
+    ]
+  }

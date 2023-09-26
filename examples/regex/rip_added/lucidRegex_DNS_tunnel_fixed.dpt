@@ -1,0 +1,38 @@
+entry event ip_packet_generic(int smac, int dmac, int sip, int cip, int udp_dport, int payload_1, int payload_2, int payload_3);
+event DNS_resp(int cip, int dip, int dip2, int dip3, int dip4);
+event ip_packet(int sip, int dip, int smac, int dmac);
+exit event DNS_tunnel_detected(int dip);
+
+sre<<1024>> msre = 
+IDX = {
+    | DNS_resp -> {(int<<32>>) hash<<10>>(13, cip)}
+    | ip_packet -> {(int<<32>>) hash<<10>>(13, sip)}
+}
+DETECT{
+	DNS_resp(@int d1=dip, @int d2=dip2)
+    .(  (ip_packet(dip!=d1) && ip_packet(dip!=d2))
+        .(ip_packet(dip!=d1) && ip_packet(dip!=d2))
+        .(ip_packet(dip!=d1) && ip_packet(dip!=d2))
+        .(ip_packet(dip!=d1) && ip_packet(dip!=d2))
+        .(ip_packet(dip!=d1) && ip_packet(dip!=d2))
+        .(ip_packet(dip!=d1) && ip_packet(dip!=d2))
+        .(ip_packet(dip!=d1) && ip_packet(dip!=d2))
+        .(ip_packet(dip!=d1) && ip_packet(dip!=d2))
+        .(ip_packet(dip!=d1) && ip_packet(dip!=d2))
+        .(ip_packet(dip!=d1) && ip_packet(dip!=d2)))
+} => {
+	printf ("Detected tunneling"); generate DNS_tunnel_detected(dip);};
+handle ip_packet_generic(int smac, int dmac, int sip, int cip, int udp_dport, int payload_1, int payload_2, int payload_3){
+	if((udp_dport==1234) && (payload_1 == 56)){
+		generate DNS_resp(sip, cip, payload_1, payload_2, payload_3);
+	}else{
+		generate ip_packet(sip,cip,smac,dmac);	
+	}
+}
+handle DNS_resp(int cip, int dip, int dip2, int dip3, int dip4) {
+    printf ("Doing nothing");
+}
+
+handle ip_packet(int sip, int dip, int smac, int dmac) {
+    printf ("Doing nothing");
+}

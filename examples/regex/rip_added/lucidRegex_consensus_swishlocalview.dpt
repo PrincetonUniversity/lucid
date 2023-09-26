@@ -1,0 +1,20 @@
+entry event swish_update(int sip, int dip, int<<16>> sport, int<<16>> dport, int<<8>> update_idx);
+
+exit event error_report();
+
+alphabet which_update = S1, S2, S3; //, SNAN;
+//re<<256>> RE_update_sequence over which_update = (S1.(S1)*.S2.(S2)*.S3.(S3)*)*; 
+re<<256>> RE_update_sequence over which_update = (S1||S2||S3)*.((S2.S1)||(S3.S2)||(S1.S3));
+
+handle swish_update(int sip, int dip, int<<16>> sport, int<<16>> dport, int<<8>> update_idx){
+	int<<32>> idx = (int<<32>>)hash<<8>>(13, sip, dip, sport,dport);
+	event S=S1();
+	match update_idx with
+	| 1 -> {S=S1();}
+	| 2 -> {S=S2();}
+	| 3 -> {S=S3();}
+
+	if(!transition(RE_update_sequence, idx, S)){
+		generate error_report();
+	}
+}

@@ -1,0 +1,19 @@
+entry event ip_in(int sip, int cip, int<<16>> sport, int<<16>> dport);
+exit event port_knocking_matched(int sip, int dip);
+
+
+sre<<1024>> mysre = 
+IDX ={
+    | ip_in -> {(int<<32>>)hash<<10>>(13, sip, cip)    }
+}
+DETECT {
+    ip_in(sport==1234).ip_in(sport==5678).ip_in(sport==9012).ip_in(sport==3456)
+} =>
+{
+    generate port_knocking_matched(sip, cip);
+    //reset(mysre, mysreidx);
+};
+
+handle ip_in(int sip, int cip, int<<16>> sport, int<<16>> dport) {
+    printf ("Doing nothing!");
+}

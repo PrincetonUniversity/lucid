@@ -1,0 +1,29 @@
+//this is from jpaxos/recover.invar:
+
+entry event Paxos(int idx, int<<1>> ty, int l1, int l2, int l3, int src);
+const int<<1>> RECOVER=0;
+const int<<1>> RECOVERED=1;
+
+exit event Consensus_success(int idx);
+
+sre<<1024>> msre = 
+IDX = {
+    | Paxos -> { idx }
+}
+DETECT{
+	Paxos(ty==RECOVER, @int a=l1,@int c=l2,@int e=l3,@int x=src).
+    Paxos(ty==RECOVER, @int b=l1,@int d=l2,@int f=l3,@int y=src).
+    (
+        Paxos(ty==RECOVER, l1<a) ||
+        Paxos(ty==RECOVER, l1<b) ||
+        Paxos(ty==RECOVER, l2<c) ||
+        Paxos(ty==RECOVER, l2<d) ||
+        Paxos(ty==RECOVER, l3<e) ||
+        Paxos(ty==RECOVER, l3<f) ||
+    ).
+    Paxos(ty==RECOVERED)
+} => {printf ("sequence success!"); generate Consensus_success(idx);};
+
+handle Paxos(int idx, int<<1>> ty, int l1, int l2, int l3, int src){
+    printf ("Doing nothing");
+}

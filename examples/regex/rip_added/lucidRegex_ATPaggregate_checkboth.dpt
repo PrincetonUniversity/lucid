@@ -1,0 +1,22 @@
+event ATP_add(int idx, int jobid, int cnt, int val);
+event ATP_release(int idx, int jobid);
+
+sre<<1024>> msre = 
+IDX = {
+	| ATP_add -> {idx}
+	| ATP_release -> {idx}
+}
+DETECT{
+	(
+		(ATP_ADD(@int saved_jobid=jobid, @int x=cnt; (cnt==x+1 && (jobid==saved_jobid || saved_jobid==0)))."")*
+		.ATP_release(jobid==saved_jobid && x==16)
+	)
+} => {printf ("Checked continuous 16 add events.");};
+
+handle ATP_add(int idx, int jobid, int clientid, int val) {
+    printf ("Doing nothing");
+}
+
+handle ATP_release(int idx, int jobid) {
+    printf ("Doing nothing");
+}
