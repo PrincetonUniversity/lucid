@@ -21,6 +21,13 @@ module State = struct
       (List.init num_switches (fun n -> n))
       recirc_ports
   ;;
+  let ports_to_neighbors topology sw = 
+    match IntMap.find_opt sw topology with
+    | Some map ->       
+      IntMap.fold (fun port (dst_sw, _) acc -> (port, dst_sw)::acc) map []
+    | None -> []
+  ;;
+
 
   type config =
     { max_time : int
@@ -143,31 +150,20 @@ module State = struct
       error @@ "lookup_dst error -- Invalid switch id " ^ string_of_int sw
   ;;
 
-
-
   let queue_sizes nst = 
     let size_strs = Array.mapi (fun i st -> "switch:"^(string_of_int i)^" "^InterpSwitch.queue_sizes st) nst.switches in
     "------\n"^
     String.concat "\n"  (Array.to_list size_strs)
     ^"\n------"
   ;;
-  type push_loc = 
-  | Port of int
-  | Switch of int
-  | PExit of int
-
 
   (*** moving events around ***)
-  (* this is currently (9/2023) more complicated than it should be, because 
-     right now we are trying to preserve the same timing behavior as the 
-     interpreter had before there were egress queues. 
-     Also, this push_loc stuff needs to be refactored. *)
 
-  (* push a single event to a single switch's queue. Called by interpCore for 
-     events that the program itself generates. *)
 
-  (* for now, we just model delay from ingress to ingress, and apply it 
-     when the packet leaves the ingress pipeline. *)
+  (* calculate when an event should arrive at the next switch's ingress. 
+     The calculation should be improved to add ingres -> egress queue time and then 
+      propagation time in two separate steps. Also, the names are confusing and why 
+     would propagation delay only apply to recirculating events? *)
   let next_ingress_arrival_time src_id dst_id desired_delay nst = 
     let propagate_delay =
       if src_id = dst_id
@@ -182,11 +178,11 @@ module State = struct
       + Random.int nst.config.random_delay_range
   ;;
 
-  let ingress_receive arrival_time dst_id port (ievent : internal_event_val) nst =
-    let st = nst.switches.(dst_id) in
+  let ingress_receive arrival_time swid port (ievent : internal_event_val) nst =
+    let st = nst.switches.(swid) in
     if Random.int 100 < nst.config.drop_chance
     then (InterpSwitch.log_drop  ievent nst.current_time st)
-    else (nst.switches.(dst_id) <- InterpSwitch.push_to_ingress  ievent arrival_time port st;)
+    else (nst.switches.(swid) <- InterpSwitch.push_to_ingress  ievent arrival_time port st;)
   ;;
 
   (* push a single event to the switch's egress queue. Called by local methods 
@@ -196,52 +192,30 @@ module State = struct
     nst.switches.(swid) <- InterpSwitch.push_to_egress ievent arrival_time port st;
   ;;
   (* send out of an ingress *)
-  let ingress_send src_id out_port ievent nst = 
-    (* (match ievent with 
-    | IEvent(eval) -> 
-      print_endline ("pushing out of ingress: "^(CorePrinting.event_to_string eval));
-    | _ -> ());  *)
-    match out_port with
-      (* "generate directly to a switch" skips egress.
-         Its a depreciated feature. *)
+  type ingress_destination = 
+  | Port of int
+  | Switch of int
+  | PExit of int
+  let ingress_send src_id ingress_destination ievent nst = 
+    match ingress_destination with
       | Switch sw -> 
-        let dst_id, dst_port = sw, 0 in
-        let timestamp = next_ingress_arrival_time src_id dst_id (InterpSyntax.delay ievent) nst in
-        ingress_receive timestamp dst_id dst_port ievent nst
-      (* "generate some negative number port" prints an exit events. 
-         Its just a hacky way of logging floods. *)
-      | PExit port -> 
-        (* print_endline ("\tits an exit event with port "^(string_of_int port)); *)
-        log_exit src_id (Some port) ievent nst
-      (* port locations go to egress. 
-         Port locations are the only type of location that should exist once the interp is cleaned up *)
+        let timestamp = next_ingress_arrival_time src_id sw (InterpSyntax.delay ievent) nst in
+        ingress_receive timestamp sw 0 ievent nst
+      | PExit port -> log_exit src_id (Some port) ievent nst
       | Port port -> 
         let dst_id, _ = lookup_dst nst (src_id, port) in 
         let timestamp = next_ingress_arrival_time src_id dst_id (InterpSyntax.delay ievent) nst in
         egress_receive timestamp src_id port ievent nst
   ;;
 
-  (* send out of an egress. Note that we don't call egress_send, because 
-     we don't want to compute another arrival time. We model an egress that is 
+  (* send out of an egress. We model an egress that is 
      instant -- it queues at the next ingress immediately. *)
   let egress_send src_id out_port ievent nst = 
-    (* print_endline@@"pushing event out of egress: "
-    ^(match ievent with 
-    | IEvent(eval) -> 
-      CorePrinting.event_to_string eval
-      | _ -> "<control or packet event>"); *)
-
     let dst_id, dst_port = lookup_dst nst (src_id, out_port) in
     (* dst -1 means "somewhere outside of the lucid network" *)
-    if (dst_id = -1) then 
-      log_exit src_id (Some out_port) ievent nst
-    else
-
-    (* print_endline@@"\tsrc_id="
-    ^(string_of_int src_id)^"out_port="^(string_of_int out_port)
-    ^"dst_id="^(string_of_int dst_id)^" dst_port="^(string_of_int dst_port); *)
-    let t = nst.current_time in
-    nst.switches.(dst_id) <- InterpSwitch.push_to_ingress  ievent ( t) dst_port (nst.switches.(dst_id));
+    if (dst_id = -1) 
+      then log_exit src_id (Some out_port) ievent nst
+      else ingress_receive nst.current_time dst_id dst_port ievent nst
   ;;
 
 

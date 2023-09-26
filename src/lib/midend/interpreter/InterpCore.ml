@@ -385,6 +385,17 @@ let partial_interp_exps nst swid env exps =
     exps
 ;;
 
+
+(* convert a flood port into a list of declared ports *)
+let expand_flood_port nst swid flood_port =
+  List.filter_map
+    (fun (port, dst_swid) -> 
+      if (port <> (-(flood_port + 1))) && (dst_swid <> swid) 
+        then Some(port)
+        else None)
+    (State.ports_to_neighbors nst.State.links swid)
+;;
+
 let rec interp_statement nst hdl_sort swid locals s =
   (* (match s.s with
   | SSeq _ | SNoop -> () (* We'll print the sub-parts when we get to them *)
@@ -422,57 +433,48 @@ let rec interp_statement nst hdl_sort swid locals s =
     else interp_statement nst hdl_sort swid locals ss2
 
   | SGen (g, e) -> (
-
-
-    (* first, get the event value, without any payload *)
     let event = interp_exp e |> extract_ival |> raw_event in
-    let ev_sort = Env.find event.eid nst.event_sorts in
-    (* now, we process differently depending on whether it is a packet event 
-       or background event. Packet events get serialized into packets, 
-       background events do not. *)
-    (* serialize packet events *)
-    let event_val = match ev_sort, hdl_sort with 
-      | EBackground, _ -> InterpSyntax.IEvent(event) (* background events stay as events *)
-      | EPacket, HEgress -> (* packet events get serialized into a packet, which is just a 
-         bitstring with a location. The payload is included via arguments. *)
-        let pkt = InterpPayload.serialize_packet_event event in
-        InterpSyntax.IPacket {pkt_val=pkt; pkt_edelay=event.edelay}
-      | EPacket, _ -> InterpSyntax.IEvent(event) (* ingress packet events stay as events *)
-    in
-    (* let ingress_next_locs = match g with *)
 
-    (* left off here. Right now, all the processing is in ingress and it sends it directly to the next ingress. 
-       However, output_ports are _OUR_ output ports. What we need to do next is send the event to 
-       the egress queue with that port. Then, in a separate step, dequeue from the egress port and do 
-       another lookup to send it to the final destination. *)
-    if (hdl_sort = HData) then (
-      (* ingress case *)
+    match hdl_sort with 
+    | HData -> (
+      (* ingress doesn't serialize events *)
+      let event_val = InterpSyntax.IEvent event in
+      (*  
+        event routing is overly complicated.
+        cases:
+        generate_switch -- send directly to switch ingress
+        generate_port -- send to local egress port
+        generate -- send to local egress recirculation port
+        generate_ports -- send to multiple local egress ports
+
+        ports are either: 
+        1. connected to another switch
+        2. not connected to another switch, in which case an exit event happens
+
+        todo: 
+        1. an explicit exit port for each switch
+        2. generate_switch should be depreciated
+      *)
       let output_ports = match g with
+        (* recirculation *)
         | GSingle None ->
           [ State.Port(State.lookup swid (Cid.from_string "recirculation_port") nst
           |> extract_ival
           |> raw_integer
           |> Integer.to_int )  ]
+        (* teleport to switch ingress. should be depreciated *)
         | GSingle (Some exp) -> 
           let swid = interp_exp exp |> extract_ival |> raw_integer |> Integer.to_int in
           [(State.Switch(swid))]
+        (* generate to a port in the switch *)
         | GPort port -> [State.Port(interp_exp port |> extract_ival |> raw_integer |> Integer.to_int)]
+        (* generate to multiple ports *)
         | GMulti grp -> 
           let ports = interp_exp grp |> extract_ival |> raw_group in
           (match ports with
-          | [port] when port < 0 ->
-            (* flooding *)
-            let tl = (IntMap.find swid nst.links (*get a tuple list of (local_port, (remote_switch, remote_port))*)
-              |> IntMap.bindings
-              |> List.filter_map (fun (p, (dst, _)) ->
-                  (* if the port in the bindings (p) is equal to the negation of the port argument + 1, 
-                      then send to this output port. We have to be careful: do not want to flood to recirculation port! *)
-                  if ((p = -(port + 1)) || (dst = swid)) then None else Some (  
-                  State.Port(p)))) in
-            (* this is just here for logging... switch -1 at port with number of the group.  *)
-            let hd = State.PExit(port) in
-            hd::tl
-              
+          | [port] when port < 0 -> (* flood to all ports except: -(port + 1) *)
+            (* if we're flooding, we should also generate an event to the "exit" node in the network.  *)
+              State.PExit(port)::(List.map (fun p-> State.Port(p)) (expand_flood_port nst swid port))              
           | _ -> 
             List.map (fun port -> State.Port(port)) ports)
       in
@@ -480,18 +482,30 @@ let rec interp_statement nst hdl_sort swid locals s =
       List.iter (fun out_port -> 
         State.ingress_send swid out_port event_val nst) 
         output_ports;
-      locals 
+      locals       
     )
-    else (
+    | HEgress -> (
       let extract_int = function
         | VInt n -> n
         | _ -> failwith "No good"
-      in      
+      in
       (* egress case -- always just push the event to the other side of the port *)
+      (* note that we ignore any location arguments and treat all 
+         egress generate variants the same! *)
       let port = ((port_arg locals).v |> extract_int ).value |> Z.to_int in 
+      (* egress serializes packet events *)
+      let ev_sort = Env.find event.eid nst.event_sorts in
+      (* serialize packet events *)
+      let event_val = match ev_sort with 
+        | EBackground -> InterpSyntax.IEvent(event) (* background events stay as events *)
+        | EPacket -> 
+          let pkt = InterpPayload.serialize_packet_event event in
+          InterpSyntax.IPacket {pkt_val=pkt; pkt_edelay=event.edelay}
+      in      
       State.egress_send swid port event_val nst;
       locals
-    ) 
+    )
+    | HControl -> (error "control events are not implemented")
   )
   | SRet (Some e) ->
     let v = interp_exp e |> extract_ival in

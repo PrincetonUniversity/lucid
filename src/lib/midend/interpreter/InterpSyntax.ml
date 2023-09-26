@@ -92,7 +92,6 @@ let delay (ev : internal_event_val) =
   | IPacket(ev) -> ev.pkt_edelay
 ;;
 
-
 let timestamp internal_event = internal_event.stime
 ;;
 
@@ -103,17 +102,10 @@ let packet_event pkt_val pkt_edelay =
   {pkt_val; pkt_edelay}
 ;;
 
-let ievent ev = IEvent(ev)
-let icontrol ev = IControl(ev)
-let ipacket ev = IPacket(ev)
-
 let loc (switch, port) = {switch; port}
 
 let ievent ev sloc stime = {sevent=IEvent(ev); sloc; stime; squeue_order = 0}
-;;
-
 let icontrol ev sloc stime = {sevent=IControl(ev); sloc; stime; squeue_order = 0}
-
 let ipacket ev sloc stime = {sevent=IPacket(ev); sloc; stime; squeue_order = 0}
 
 
