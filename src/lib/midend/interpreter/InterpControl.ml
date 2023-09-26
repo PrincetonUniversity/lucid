@@ -17,9 +17,9 @@ let extract_zint v =
   | _ -> error "[extract_zint] not an int"
 ;;
 
-let handle_control (nst : State.network_state) swidx ctl_ev =
+let handle_control (nst : State.network_state) swidx ctl_val =
   let p = nst.switches.(swidx).pipeline in
-  match ctl_ev.ctl_cmd with
+  match ctl_val with
   | ArraySet (arrname, idx, newval) ->
     let id = name_to_compiled_cid nst.global_names arrname |> Cid.to_id in
     Pipeline.control_set id (extract_int idx) (List.map extract_zint newval) p

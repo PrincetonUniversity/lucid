@@ -75,6 +75,7 @@
    interpControl
    pipeline
    preprocess
+   InterpJson
    interpSpec
    interpState
    InterpSwitch

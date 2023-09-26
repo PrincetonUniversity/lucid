@@ -51,8 +51,8 @@ let payload_empty_fun _ _ args =
 ;;
 
 (* Payload.parse *)
-(* No actual implementation of this since parsing isn't modeled in the interpreter.
-   But we'll include the name and type for the typechecker *)
+(* Right now, parsing is a builtin. But it would be nice to move it out to a 
+   module like this. Requires some refactoring of the core ir. *)
 let payload_parse_name = "parse"
 let payload_parse_id = Id.create payload_parse_name
 let payload_parse_cid = Cid.create_ids [payload_id; payload_parse_id]

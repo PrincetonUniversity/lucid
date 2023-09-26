@@ -156,18 +156,26 @@ let port_arg locals =
   port
 ;;
 
-let get_payload payload_id locals = 
+let get_local id locals = match Env.find (Id id) locals with
+  | InterpSyntax.V(v) -> v
+  | _ -> error "not a value"
+;;
+let update_local local_id v locals = 
+  Env.add (Id local_id) (InterpSyntax.V(v)) (Env.remove (Id local_id) locals)
+;;
+(* let get_payload payload_id locals = 
   match Env.find (Id payload_id) locals with 
-  | InterpSyntax.V(payload) -> CoreSyntax.vpat_to_payload payload
+  | InterpSyntax.V(payload) -> (
+    match payload.v with 
+    | VBits(bs) -> bs
+    | _ -> error "[InterpCore.get_payload] local payload variable should be a bit string"
+  )
   | _ -> error "could not find current packet buffer while interpreting parser!"
 ;;
 
 let update_payload payload_id payload locals = 
-  let payload = CoreSyntax.payload_to_vpat payload in
   Env.add (Id payload_id) (InterpSyntax.V(payload)) (Env.remove (Id payload_id) locals)
-;;
-
-
+;; *)
 
 
 let interp_eval exp : 'a InterpSyntax.ival =
@@ -191,7 +199,6 @@ let rec interp_exp (nst : State.network_state) swid locals e : 'a InterpSyntax.i
   | ECall (cid, es) ->
     let vs = interp_exps es in
     (match lookup cid with
-     | P _ 
      | V _ ->
        error
          (Cid.to_string cid
@@ -346,8 +353,10 @@ let print_printf swid str = interp_report "printf" str (Some swid)
 (* print an exit event as a json to stdout *)
 let print_exit_event swid port_opt (event:InterpSyntax.internal_event_val) time =
   let base_out_tups = match event with 
-    | IEvent(v) -> InterpSyntax.event_val_to_json v
-    | IPacket(p) -> InterpSyntax.packet_event_to_json p
+    | IEvent(v) -> 
+      if (v.eserialized = false)
+        then InterpSyntax.event_val_to_json v
+        else InterpSyntax.packet_event_to_json v
     | IControl _ -> error "attempting to send a control event out of a network port"
   in
   (* add location and timestamp metadata *)
@@ -498,10 +507,8 @@ let rec interp_statement nst hdl_sort swid locals s =
       (* serialize packet events *)
       let event_val = match ev_sort with 
         | EBackground -> InterpSyntax.IEvent(event) (* background events stay as events *)
-        | EPacket -> 
-          let pkt = InterpPayload.serialize_packet_event event in
-          InterpSyntax.IPacket {pkt_val=pkt; pkt_edelay=event.edelay}
-      in      
+        | EPacket -> InterpSyntax.IEvent(InterpPayload.serialize_packet_event event)
+      in
       State.egress_send swid port event_val nst;
       locals
     )
@@ -812,19 +819,19 @@ let rec interp_parser_block nst swid payload_id locals parser_block =
 and interp_parser_action (nst : State.network_state) swid payload_id locals parser_action = 
   match parser_action with 
   | PRead(cid, ty) -> 
-    let payload = get_payload payload_id locals in
+    let payload = get_local payload_id locals in
     (* semantically, a read creates a new variable and also updates the payload variable *)
-    let parsed_val, payload' = InterpPayload.pread (payload) ty in
-    (* add the new local, remove old packet, add new packet *)
+    let parsed_val, payload' = InterpPayload.pread payload ty in
+    (* add the new local and update payload variable *)
     locals
-    |> Env.add (cid) (InterpSyntax.V(parsed_val))
-    |> update_payload payload_id payload'
+      |> Env.add (cid) (InterpSyntax.V(parsed_val))
+      |> update_local payload_id payload'
   | PPeek(cid, ty) -> 
-    let peeked_val = InterpPayload.ppeek (get_payload payload_id locals) ty in
+    let peeked_val = InterpPayload.ppeek (get_local payload_id locals) ty in
     locals |> Env.add (cid) (InterpSyntax.V(peeked_val))
   | PSkip(ty) ->
-    let payload' = InterpPayload.padvance (get_payload payload_id locals) ty in
-    update_payload payload_id payload' locals
+    let payload' = InterpPayload.padvance (get_local payload_id locals) ty in
+    update_local payload_id payload' locals
   | PAssign(cid, exp) ->
     let assigned_ival = interp_exp nst swid locals exp in
     locals
@@ -916,7 +923,8 @@ let interp_decl (nst : State.network_state) swid d =
   (* parsers: convention is for first two arguments to be 
   ingress port and unparsed packet / payload. *)
   | DParser(id, params, parser_block) -> 
-    (* figure out whether to use the implicit payload argument *)
+    (* figure out whether to use the implicit payload argument. if there is an explicit 
+        payload for the parser, it must be the first argument. *)
     let payload_id_opt = find_payload_param params in
     let runtime_function nst swid args = 
       (* if there is no payload parameter, put one in the front *)
@@ -957,6 +965,7 @@ let interp_decl (nst : State.network_state) swid d =
         data = List.map extract_ival args; 
         edelay = 0;
         evnum = event_num_val;
+        eserialized = false;
     }
     in
     State.add_global swid (Id id) (InterpSyntax.F f) nst;

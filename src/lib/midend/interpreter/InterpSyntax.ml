@@ -13,7 +13,6 @@ open Str
 type 'nst ival =
   | V of value
   | F of 'nst code
-  | P of BitString.bits
 
 and 'nst code = 'nst -> int (* switch *) -> 'nst ival list -> value
 
@@ -25,12 +24,11 @@ and 'nst handler =
 let extract_ival iv =
   match iv with
   | V v -> v
-  | P _ 
   | F _ -> failwith "IVal not a regular value"
 ;;
 
-(* control events are interpreter builtins -- state update commands *)
-type control_e = 
+(* control commands from the user *)
+type control_val = 
   | ArraySet of string * value * (value list)
   | ArraySetRange of string * value * value * (value list)
   | ArrayGet of string * value
@@ -39,27 +37,21 @@ type control_e =
   | Print of string
   | Noop
 
-type control_event = {ctl_cmd : control_e;}
-
-type packet_event = {
-  pkt_val : BitString.bits;
-  pkt_edelay : int;
-}
-
-(* events in the interpreter can be plain events, 
-   but they can also be control commands or 
-   unparsed packets. *)
-type internal_event_val =
-  | IEvent of event_val
-  | IControl of control_event
-  | IPacket of packet_event
-;;
+(* type control_event = {ctl_cmd : control_val;} *)
 
 (* events in the interpreter have locations *)
 type loc = {
   switch : int option;
   port : int;
 }
+
+
+(* can we call this a "message" or "message value"? *)
+type internal_event_val =
+  | IEvent of event_val
+  | IControl of control_val
+;;
+
 
 (*  *)
 type internal_event = {
@@ -89,7 +81,6 @@ let delay (ev : internal_event_val) =
   match ev with 
   | IEvent(ev) -> ev.edelay
   | IControl(_) -> error "[delay] control events cannot have delays"
-  | IPacket(ev) -> ev.pkt_edelay
 ;;
 
 let timestamp internal_event = internal_event.stime
@@ -98,15 +89,14 @@ let timestamp internal_event = internal_event.stime
 let set_timestamp internal_event ts = 
   {internal_event with stime = ts}
 ;;
-let packet_event pkt_val pkt_edelay = 
-  {pkt_val; pkt_edelay}
+let packet_event bits_val edelay = 
+  {eid=Cid.create ["packet"]; evnum=None; data=[bits_val]; edelay; eserialized=true}
 ;;
 
 let loc (switch, port) = {switch; port}
 
 let ievent ev sloc stime = {sevent=IEvent(ev); sloc; stime; squeue_order = 0}
 let icontrol ev sloc stime = {sevent=IControl(ev); sloc; stime; squeue_order = 0}
-let ipacket ev sloc stime = {sevent=IPacket(ev); sloc; stime; squeue_order = 0}
 
 
 let assoc_to_vals keys lst =
@@ -301,8 +291,6 @@ let parse_control_e lst =
 
 
 (*** event parsing (plus helpers ripped out of InterpSpec)***)
-(*** these are parsing helper functions that have been ripped out
-    of InterpSpec.ml and butchered to remove CiRcULar DePENdencIeS!1!! *)
 
 let rename env err_str id_str =
   match Collections.CidMap.find_opt (Cid.from_string id_str) env with
@@ -329,10 +317,10 @@ let rec parse_value payloads_t_id err_str ty j =
   | `Int n, TInt size -> vint n size
   (* payloads should be hex strings, but we graciously read ints as 32-bit uints *)
   | `Int n, TName (cid, _, _) when Cid.equal cid payloads_t_id -> (
-    BitString.int_to_bits 32 n |> CoreSyntax.payload_to_vpat
+    BitString.int_to_bits 32 n |> CoreSyntax.vbits
   )
   | `String s, TName (cid, _, _) when Cid.equal cid payloads_t_id -> (
-    BitString.hexstr_to_bits s |> CoreSyntax.payload_to_vpat
+    BitString.hexstr_to_bits s |> CoreSyntax.vbits
   )
   | `Bool b, TBool -> vbool b
   | `List lst, TGroup ->
@@ -343,7 +331,6 @@ let rec parse_value payloads_t_id err_str ty j =
     ^ " specification had wrong or unexpected argument "
     ^ to_string j
 ;;
-
 
 let parse_locations default_port num_switches lst =
   let locations =
@@ -467,15 +454,13 @@ let parse_located_event
       | None -> None
       | Some(n) -> Some(CoreSyntax.vint n (size_of_tint lucid_eventnum_ty))
        in
-      ievent { eid; data; edelay=0; evnum;} locations timestamp
+      ievent { eid; data; edelay=0; evnum; eserialized=false} locations timestamp
   
      | Some (`String "command") -> 
       (* located control/command event *)
       let timestamp = parse_timestamp default_next_ts event_json in
       let locations = parse_control_locations num_switches event_json in
-      let control_event =
-        { ctl_cmd = parse_control_e event_json;}
-      in
+      let control_event =parse_control_e event_json in
       icontrol control_event locations timestamp
      | Some (`String "packet") -> 
        let timestamp = parse_timestamp default_next_ts event_json in
@@ -484,11 +469,11 @@ let parse_located_event
         | Some (`String s) -> s
         | _ -> error "packet event must have a bytes field"
        in
-       let pkt_event = packet_event
-          (BitString.hexstr_to_bits pkt_bytes)
+       let pkt_event = packet_event 
+          (hexstr_to_vbits pkt_bytes)
           0 (*default delay*)
        in
-       ipacket pkt_event locations timestamp
+       ievent pkt_event locations timestamp
      | Some _ ->
        error "unknown interpreter input type (expected event or command)"
     )
@@ -516,22 +501,18 @@ let control_event_to_string control_e =
   | _ -> "<control event without printer>"
 ;;
 
-
-let payload_to_string t = BitString.bits_to_hexstr t
-
-let packet_event_to_string packet_event = 
-  payload_to_string (packet_event.pkt_val)
-;;
-
 (* destructors *)
 let loc_to_tup loc = (loc.switch, loc.port)
 let locs_to_tups = List.map loc_to_tup
 
 let interp_event_to_string ievent =
   match ievent with
-  | IEvent(e) -> CorePrinting.event_to_string e
+  | IEvent(e) -> 
+    if (not e.eserialized) then
+      CorePrinting.event_to_string e
+    else
+      CorePrinting.value_to_string (List.hd e.data)
   | IControl(_) -> "(Control event (printer not implemented))"
-  | IPacket(p) -> CoreSyntax.payload_to_vpat p.pkt_val |> CorePrinting.value_to_string
 ;;
 
 
@@ -551,12 +532,15 @@ let event_val_to_json event =
 
 let packet_event_to_json event = 
   ["type", `String "packet";   
-  "bytes", `String (event.pkt_val |> BitString.bits_to_hexstr)]
+  "bytes", `String (List.hd event.data |> CorePrinting.value_to_string)]
 ;;
 
 let interp_event_to_json ievent = 
   match ievent with 
-  | IEvent(e) -> event_val_to_json e
-  | IPacket(p) -> packet_event_to_json p
+  | IEvent(e) -> 
+    if (not e.eserialized) then
+      event_val_to_json e
+    else
+      packet_event_to_json e
   | _ -> error "IControl json"
 ;;

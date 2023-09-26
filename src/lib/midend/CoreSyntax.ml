@@ -11,6 +11,8 @@ and z = [%import: (Z.t[@opaque])]
 and pragma = [%import: Pragma.t]
 and zint = [%import: (Integer.t[@with Z.t := (Z.t [@opaque])])]
 and location = int
+and bit = [%import: (BitString.bit[@opaque])]
+and bits = [%import: (BitString.bits[@opaque])]
 
 (* All sizes should be inlined and precomputed *)
 and size = int
@@ -32,6 +34,7 @@ and raw_ty =
   | TPat of size
   | TRecord of (id * raw_ty) list
   | TTuple of raw_ty list
+  | TBits of size
 
 and tbl_ty =
   { tkey_sizes : size list
@@ -99,21 +102,14 @@ and v =
   | VTuple of v list (* Only used in the interpreter during complex memops *)
   | VGroup of location list
   | VPat of int list
-
-(* and event_val = 
-  | EvParsed of  *)
-
-(*
-Events may or may not have a payload
-packet events have _only_ a payload   
-
-*)
+  | VBits of bits
 
 and event_val =
   { eid : cid
   ; evnum : value option
   ; data : value list
   ; edelay : int
+  ; eserialized : bool
   }
 
 and value =
@@ -311,6 +307,8 @@ let ty_sp raw_ty tspan = { raw_ty; tspan }
 let ty raw_ty = { raw_ty; tspan = Span.default }
 let tint sz = ty (TInt sz)
 
+let payload_ty = ty@@TName(Cid.create ["Payload"; "t"], [], false)
+
 let infer_vty v =
   match v with
   | VBool _ -> TBool
@@ -321,6 +319,7 @@ let infer_vty v =
   | VPat bs -> TPat (List.length bs)
   | VTuple _ ->
     failwith "Cannot infer type of tuple value (only used in complex memops)"
+  | VBits bits -> TBits (List.length bits)
 ;;
 
 (* Values *)
@@ -346,6 +345,8 @@ let vtup vs = avalue (VTuple vs) (ty (TTuple(List.map infer_vty vs)))
 let vint_tups i_s =
   vtup (List.map (fun (i, s) -> VInt(Integer.create i s)) i_s) (Span.default)
 ;;  
+let vbits bits = value (VBits bits)
+
 
 (* Expressions *)
 let exp e ety = { e; ety; espan = Span.default }
@@ -599,31 +600,11 @@ let exp_to_int exp =
   | _ -> error "[exp_to_int] exp is not an EVal(EInt(...))"
 ;;
 
-open BitString
-let payload_to_vpat bits = 
+(* bitstrings *)
+let hexstr_to_vbits hexstr = vbits@@BitString.hexstr_to_bits hexstr
 
-  let rec bits_to_pat bits = 
-    match bits with 
-    | [] -> []
-    | B0::tl -> 0::(bits_to_pat tl)
-    | B1::tl -> 1::(bits_to_pat tl)
-  in
-  {(vpat (bits_to_pat bits)) with vty = ty@@TName(Cid.create ["Payload"; "t"], [], false);}
+let extract_bits value = 
+  match value.v with
+  | VBits bits -> bits
+  | _ -> error "[extract_bits] value is not a VBits"
 ;;
-
-let vpat_to_payload vpat = 
-  if (vpat.vty.raw_ty = TName(Cid.create ["Payload"; "t"], [], false)) then (
-  match vpat.v with 
-  | VPat bs -> 
-    let rec bits_of_pat bs = 
-      match bs with 
-      | [] -> []
-      | 0::tl -> B0::(bits_of_pat tl)
-      | 1::tl -> B1::(bits_of_pat tl)
-      | _ -> error "[vpat_to_payload] vpat has a digit other than 0 or 1, cannot be converted to binary payload"
-    in
-    (bits_of_pat bs)
-  | _ -> error "[vpat_to_payload] vpat is not a payload"
-  )
-  else 
-    error "[vpat_to_payload] vpat is not a payload"

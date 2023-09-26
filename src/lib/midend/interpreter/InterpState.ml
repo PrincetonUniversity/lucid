@@ -294,7 +294,6 @@ module State = struct
     match v with
     | V v -> CorePrinting.value_to_string v
     | F _ -> "<function>"
-    | P pv -> InterpSyntax.payload_to_string pv
   ;;
 
 

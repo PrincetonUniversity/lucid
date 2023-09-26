@@ -118,16 +118,14 @@ let execute_event
       ignore@@InterpCore.interp_statement nst HEgress swid builtin_env (C.statement default_handler_body)
     | InterpSwitch.Ingress ->    
       error @@ "No handler for event " ^ Cid.to_string event.eid )
-
 ;;
 
-let execute_control swidx (nst : State.network_state) (ctl_ev : control_event) =
+let execute_control swidx (nst : State.network_state) (ctl_ev : control_val) =
   InterpControl.handle_control nst swidx ctl_ev
 ;;
 
-let execute_main_parser print_log swidx port (nst: State.network_state) (pkt_ev : packet_event) = 
-
-  let payload_val = CoreSyntax.payload_to_vpat pkt_ev.pkt_val in
+let execute_main_parser print_log swidx port (nst: State.network_state) (pkt_ev : (CoreSyntax.event_val)) = 
+  let payload_val = List.hd pkt_ev.data in
   (* main takes 2 arguments, port and payload. Port is implicit. *)
   let main_args = [InterpSyntax.V (C.vint port 32); InterpSyntax.V payload_val] in
   let main_parser = State.lookup swidx (Cid.id Builtins.main_parse_id) nst in
@@ -144,14 +142,14 @@ let execute_main_parser print_log swidx port (nst: State.network_state) (pkt_ev 
                     [ "switch", `Int swidx
                     ; "port", `Int port
                     ; "time", `Int nst.current_time
-                    ; "bytes", `String (BitString.bits_to_hexstr pkt_ev.pkt_val) ] ) ]
+                    ; "bytes", `String (CorePrinting.value_to_string payload_val) ] ) ]
             |> Yojson.Basic.pretty_to_string
             |> print_endline
           else
             Printf.printf
               "t=%d: Parsing packet %s at switch %d, port %d\n"
               nst.current_time
-              (CorePrinting.value_to_string (CoreSyntax.payload_to_vpat pkt_ev.pkt_val))
+              (CorePrinting.value_to_string payload_val)
               swidx
               port;
       let event_val = parser_f nst swidx main_args in
@@ -172,9 +170,12 @@ let run_event_tup print_log idx nst (ievent, port, gress) =
     | InterpSwitch.Ingress -> "ingress"
     | InterpSwitch.Egress -> "egress"); *)
   match ievent with
-  | IEvent event -> execute_event print_log idx nst event port gress
+  | IEvent event -> 
+      if (not event.eserialized) then 
+        execute_event print_log idx nst event port gress
+      else 
+      execute_main_parser print_log idx port nst event
   | IControl ctl_ev -> execute_control idx nst ctl_ev   
-  | IPacket pkt_ev -> execute_main_parser print_log idx port nst pkt_ev
 ;;
 
 let execute_interp_event
@@ -203,26 +204,16 @@ let run_egress_events print_log (nst:State.network_state) =
   nst.switches
 ;;
 
-let run_timed_event_tup print_log idx nst (ievent, port, event_time, gress) = 
-  (* print_endline@@"\texecuting event: " ^ (
-  match ievent with 
-  | IEvent event -> CorePrinting.event_to_string event
-  | _ -> "<special event>")
-  ^" at gress: "
-  ^ (match gress with 
-    | InterpSwitch.Ingress -> "ingress"
-    | InterpSwitch.Egress -> "egress");   *)
-  match ievent with
-  | IEvent event -> execute_event print_log idx {nst with current_time=event_time} event port gress
-  | IControl ctl_ev -> execute_control idx {nst with current_time=event_time} ctl_ev   
-  | IPacket pkt_ev -> execute_main_parser print_log idx port {nst with current_time=event_time} pkt_ev
+let run_event_at_time print_log idx nst (ievent, port, event_time, gress) = 
+  let nst = {nst with State.current_time=event_time} in
+  run_event_tup print_log idx nst (ievent, port, gress)
 ;;
 
 let finish_egress_events print_log (nst:State.network_state) = 
   Array.iteri 
     (fun swid _ -> 
         let egr_evs = State.final_egress_drain swid nst in
-        List.iter (run_timed_event_tup print_log swid nst) egr_evs;
+        List.iter (run_event_at_time print_log swid nst) egr_evs;
     )
   nst.switches
 ;;

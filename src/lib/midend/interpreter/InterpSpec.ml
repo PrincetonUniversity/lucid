@@ -6,6 +6,8 @@ open Preprocess
 module Env = InterpState.Env
 module IntMap = InterpState.IntMap
 
+module IC = InterpControl
+
 type json = Yojson.Basic.t
 
 type t =
