@@ -3,21 +3,6 @@ event DHCP_ack(int sip, int cip, int smac, int cmac, int lease_time);
 event ip_packet_fwd(int sip, int cip, int smac, int cmac);
 exit event DHCP_error();
 
-sre<<1024>> msre = 
-IDX = {
-    | DHCP_ack -> {(int<<32>>) hash<<10>>(13, cmac)}
-    | ip_packet_fwd -> {(int<<32>>) hash<<10>>(13, smac)}
-}
-DETECT{
-    (ip_packet_fwd)*
-    .DHCP_ack(@int assigned = cip)
-    .(ip_packet_fwd(sip == assigned))*
-    .(ip_packet_fwd(!(sip==assigned)))
-} => {
-	printf ("Doing nothing");
-	generate DHCP_error();
-};
-
 // Data-plane implementation of single-destination RIP, with possibility of
 // route retraction
 
@@ -38,6 +23,22 @@ global Array.t<<32>> best_neighbor = Array.create(1);
 
 const int ADVERTISE_PERIOD = 1000;
 const int SCAN_PERIOD = 100;
+
+
+sre<<1024>> msre = 
+IDX = {
+    | DHCP_ack -> {(int<<32>>) hash<<10>>(13, cmac)}
+    | ip_packet_fwd -> {(int<<32>>) hash<<10>>(13, smac)}
+}
+DETECT{
+    (ip_packet_fwd)*
+    .DHCP_ack(@int assigned = cip)
+    .(ip_packet_fwd(sip == assigned))*
+    .(ip_packet_fwd(!(sip==assigned)))
+} => {
+	printf ("Doing nothing");
+	generate DHCP_error();
+};
 
 // Represents your neighbor telling you their distance to the target
 event advertise(int neighbor, int dist);
