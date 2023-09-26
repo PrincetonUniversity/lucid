@@ -14,9 +14,7 @@ DETECT {
     //reset(mysre, mysreidx);
 };
 
-handle ip_in(int sip, int cip, int<<16>> sport, int<<16>> dport) {
-    printf ("Doing nothing!");
-}
+
 
 // Data-plane implementation of single-destination RIP, with possibility of
 // route retraction
@@ -130,10 +128,9 @@ handle scan(int idx) {
     generate Event.delay(scan(next_idx), SCAN_PERIOD);
 }
 
-entry event packetin(int dst);
 exit event continue(int dst);
 
-handle packetin(int dst) {
+handle ip_in(int sip, int cip, int<<16>> sport, int<<16>> dport) {
     if (dst == dst_ip) {
         int best = Array.get(best_neighbor, 0);
         generate continue(best);

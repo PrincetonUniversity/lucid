@@ -4,6 +4,7 @@ entry event packet_in(int sip, int dip, int<<16>> sport, int<<16>> dport, int<<1
 exit event packet_out(int sip, int dip, int<<16>> sport, int<<16>> dport, int<<16>> pkt_size);
 exit event match_report();
 
+
 memop get_stored (int stored, int dummy){return stored;}
 memop wipe(int stored, int dummy){return 0;}
 memop incr (int stored_ct, int incr_by) {return stored_ct + incr_by;}
@@ -13,7 +14,25 @@ alphabet sizes = S1, S2, S3, S4, S5, S6, S7, S8;
 global Array.t<<32>> arr = Array.create(256);
 re<<256>> RE_fingerprint_videoA over sizes = (S1.S5.S1.S4.S7.S8.S1.S2);
 
+// Data-plane implementation of single-destination RIP, with possibility of
+// route retraction
 
+const int TRUE = 1;
+const int FALSE = 0;
+
+const int dst_ip = 1234; // The single destination
+
+// Recall that we have two builtin variables representing locations:
+const group neighbors = {2, 3, 4}; //(Multicast group for all neighbors of this switch)
+
+const int num_neighbors = 3;
+global Array.t<<32>> edge_lengths = Array.create(num_neighbors); // Initialized by the control plane, or at compile time
+global Array.t<<32>> neighbor_dists = Array.create(num_neighbors);
+global Array.t<<32>> best_dist = Array.create(1);
+global Array.t<<32>> best_neighbor = Array.create(1);
+
+const int ADVERTISE_PERIOD = 1000;
+const int SCAN_PERIOD = 100;
 handle packet_in(int sip, int dip, int<<16>> sport, int<<16>> dport, int<<16>> s){
 	generate packet_out(sip, dip, sport, dport, s);
 	int<<32>> idx = (int<<32>>)hash<<8>>(13, sip, dip, sport,dport);
@@ -38,28 +57,13 @@ handle packet_in(int sip, int dip, int<<16>> sport, int<<16>> dport, int<<16>> s
 			generate match_report();
 		}
 	}
+    if (dip == dst_ip) {
+        int best = Array.get(best_neighbor, 0);
+        generate_port(best, packet_out(sip, dip, sport, dport, s));
+    }
 }
 
-// Data-plane implementation of single-destination RIP, with possibility of
-// route retraction
 
-const int TRUE = 1;
-const int FALSE = 0;
-
-const int dst_ip = 1234; // The single destination
-
-// Recall that we have two builtin variables representing locations:
-const int self = 1; //(This switch)
-const group neighbors = {2, 3, 4}; //(Multicast group for all neighbors of this switch)
-
-const int num_neighbors = 3;
-global Array.t<<32>> edge_lengths = Array.create(num_neighbors); // Initialized by the control plane, or at compile time
-global Array.t<<32>> neighbor_dists = Array.create(num_neighbors);
-global Array.t<<32>> best_dist = Array.create(1);
-global Array.t<<32>> best_neighbor = Array.create(1);
-
-const int ADVERTISE_PERIOD = 1000;
-const int SCAN_PERIOD = 100;
 
 // Represents your neighbor telling you their distance to the target
 event advertise(int neighbor, int dist);
@@ -150,14 +154,4 @@ handle scan(int idx) {
     int next_idx = idx + 1;
     if (next_idx == num_neighbors) {next_idx = 0;}
     generate Event.delay(scan(next_idx), SCAN_PERIOD);
-}
-
-entry event packetin(int dst);
-exit event continue(int dst);
-
-handle packetin(int dst) {
-    if (dst == dst_ip) {
-        int best = Array.get(best_neighbor, 0);
-        generate continue(best);
-    }
 }
