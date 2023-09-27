@@ -44,7 +44,7 @@ Switch 0 : {
 
  Exits :    [
     eth(0,1) at port -8, t=0
-    eth(1,0) at port 7, t=11800
+    eth(1,0) at port 7, t=12400
     eth(0,2) at port -8, t=30000
   ]
 
@@ -107,7 +107,7 @@ Switch 3 : {
 
  Exits :    [
     eth(0,1) at port -3, t=1800
-    eth(2,1) at port 9, t=21200
+    eth(2,1) at port 9, t=21800
   ]
 
  Drops :    [ ]
@@ -129,7 +129,7 @@ Switch 4 : {
  Exits :    [
     eth(0,1) at port -3, t=1800
     eth(2,1) at port -43, t=20000
-    eth(0,2) at port 42, t=31800
+    eth(0,2) at port 42, t=32400
   ]
 
  Drops :    [ ]

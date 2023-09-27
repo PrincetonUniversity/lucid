@@ -5,34 +5,29 @@ open Batteries
 module Env = Collections.CidMap
 module IntMap = Map.Make (Int)
 
+open InterpSwitch
+
 module State = struct
-  (* input queue for a single switch *)
-  module EventQueue = BatHeap.Make (struct
-    (* time, event, port *)
-    type t = switch_event
-
-    let compare t1 t2 = Pervasives.compare t1.stime t2.stime
-
-    (* type t = int * event * int *)
-    (* let compare (t1, _, _) (t2, _, _) = Pervasives.compare t1 t2 *)
-  end)
-
-  type stats_counter =
-    { entries_handled : int
-    ; total_handled : int
-    }
-
-  let empty_counter = { entries_handled = 0; total_handled = 0 }
 
   (* Maps switch -> port -> (switch * port) *)
   type topology = (int * int) IntMap.t IntMap.t
 
-  let empty_topology num_switches =
-    List.fold_left
-      (fun acc n -> IntMap.add n IntMap.empty acc)
+  let empty_topology num_switches (recirc_ports : int list) =
+    List.fold_left2
+      (fun acc swid recirc_port -> IntMap.add swid 
+        (* add the recirculation port mapping *)
+        (IntMap.add recirc_port (swid, recirc_port) IntMap.empty) acc)
       IntMap.empty
       (List.init num_switches (fun n -> n))
+      recirc_ports
   ;;
+  let ports_to_neighbors topology sw = 
+    match IntMap.find_opt sw topology with
+    | Some map ->       
+      IntMap.fold (fun port (dst_sw, _) acc -> (port, dst_sw)::acc) map []
+    | None -> []
+  ;;
+
 
   type config =
     { max_time : int
@@ -49,108 +44,79 @@ module State = struct
     { current_time : int
     ; config : config
     ; event_sorts : event_sort Env.t
+    ; event_signatures  : (Cid.t * CoreSyntax.ty list) IntMap.t
     ; handlers : handler Env.t
+    ; egress_handlers : handler Env.t
     ; links : topology
-    ; switches : state array
+    ; switches : switch array
     ; actions : action Env.t
     ; global_names : SyntaxGlobalDirectory.dir
     }
-
-  and state =
-    { global_env : ival Env.t
-    ; event_queue : EventQueue.t
-    ; pipeline : Pipeline.t
-    ; exits : (event_val * int option * int) Queue.t
-    ; drops : (event_val * int) Queue.t
-    ; retval : value option ref
-    ; counter : stats_counter ref
-    }
-
-  and ival =
-    | V of value
-    | F of code
-
-  and code = network_state -> int (* switch *) -> ival list -> value
-  and memop
-
-  and handler =
-    network_state -> int (* switch *) -> int (* port *) -> event_val -> unit
-
+    and handler = network_state InterpSyntax.handler
+    and switch = network_state InterpSwitch.state
+  
   type global_fun =
     { cid : Cid.t
-    ; body : code
+    ; body : network_state InterpSyntax.code
     ; ty : Syntax.ty
         (* Not CoreSyntax.ty, since this is needed only for type inference *)
     }
-
-  let copy_state st =
-    { st with
-      pipeline = Pipeline.copy st.pipeline
-    ; exits = Queue.copy st.exits
-    }
-  ;;
 
   let create config : network_state =
     { current_time = -1
     ; config
     ; event_sorts = Env.empty
+    ; event_signatures = IntMap.empty
     ; handlers = Env.empty
+    ; egress_handlers = Env.empty
     ; switches = Array.of_list []
-    ; links = empty_topology 0
+    ; links = empty_topology 0 []
     ; actions = Env.empty
     ; global_names = SyntaxGlobalDirectory.empty_dir
     }
   ;;
 
-  let empty_state () =
-    { global_env = Env.empty
-    ; pipeline = Pipeline.empty ()
-    ; event_queue = EventQueue.empty
-    ; exits = Queue.create ()
-    ; drops = Queue.create ()
-    ; retval = ref None
-    ; counter = ref empty_counter
-    }
+  (* switch wrappers *)
+
+  let sw nst swid = nst.switches.(swid)
+
+  let mem_env swid cid nst = InterpSwitch.mem_env cid nst.switches.(swid)
+  let lookup swid k nst = InterpSwitch.lookup k nst.switches.(swid)
+
+
+  let sw_update nst swid update_f = 
+    nst.switches.(swid) <- update_f nst.switches.(swid)
   ;;
 
-  let mem_env swid cid nst = Env.mem cid nst.switches.(swid).global_env
-
-  let lookup swid k nst =
-    try Env.find k nst.switches.(swid).global_env with
-    | Not_found -> error ("missing variable: " ^ Cid.to_string k)
+  
+  let add_global swid cid v nst = sw_update nst swid (InterpSwitch.add_global cid v)
   ;;
 
-  let lookup_handler cid nst =
+  let add_global_function (g : global_fun) nst =
+    Array.modify
+      (fun st ->
+        if InterpSwitch.mem_env g.cid st
+        then
+          error ("global variable " ^ Cid.to_string g.cid ^ "  already defined")
+        else InterpSwitch.add_global g.cid (F g.body) st)
+      nst.switches
+  ;;
+
+  (* let lookup_handler cid nst =
     try Some (Env.find cid nst.handlers) with
     | Not_found -> error ("missing handler: " ^ Cid.to_string cid)
-  ;;
+  ;; *)
 
   let lookup_action cid nst =
     try Env.find cid nst.actions with
     | Not_found -> error ("missing action: " ^ Cid.to_string cid)
   ;;
 
-  let add_global swid cid v nst =
-    let st = nst.switches.(swid) in
-    if Env.mem cid st.global_env
-    then error ("global variable " ^ Cid.to_string cid ^ "  already defined")
-    else
-      nst.switches.(swid)
-        <- { st with global_env = Env.add cid v st.global_env }
-  ;;
-
-  let add_global_function (g : global_fun) nst =
-    Array.modify
-      (fun st ->
-        if Env.mem g.cid st.global_env
-        then
-          error ("global variable " ^ Cid.to_string g.cid ^ "  already defined")
-        else { st with global_env = Env.add g.cid (F g.body) st.global_env })
-      nst.switches
-  ;;
-
   let add_handler cid lam nst =
     { nst with handlers = Env.add cid lam nst.handlers }
+  ;;
+  let add_egress_handler cid lam nst =
+    { nst with egress_handlers = Env.add cid lam nst.egress_handlers }
   ;;
 
   let add_action cid action nst =
@@ -158,133 +124,17 @@ module State = struct
   ;;
 
   let log_exit swid port event nst =
-    Queue.push (event, port, nst.current_time) nst.switches.(swid).exits
+    InterpSwitch.log_exit  port event nst.current_time (sw nst swid)
   ;;
 
   let log_drop swid event nst =
-    Queue.push (event, nst.current_time) nst.switches.(swid).drops
+    InterpSwitch.log_drop  event nst.current_time (sw nst swid)
   ;;
 
   let update_counter swid event nst =
     let st = nst.switches.(swid) in
-    let new_counter =
-      match Env.find event.eid nst.event_sorts with
-      | EPacket ->
-        { entries_handled = !(st.counter).entries_handled + 1
-        ; total_handled = !(st.counter).total_handled + 1
-        }
-      | _ ->
-        { !(st.counter) with total_handled = !(st.counter).total_handled + 1 }
-    in
-    st.counter := new_counter
-  ;;
-
-  (* push a single event to a single switch's queue, used for
-     events generated by the program itself. *)
-  let push_event src_id dst_id port event nst =
-    if Random.int 100 < nst.config.drop_chance
-    then log_drop dst_id event nst
-    else (
-      let propagate_delay =
-        if src_id = dst_id
-        then
-          nst.config.propagate_delay
-          + Random.int nst.config.random_propagate_range
-        else 0
-      in
-      let st = nst.switches.(dst_id) in
-      let t =
-        nst.current_time
-        + max event.edelay nst.config.generate_delay
-        + propagate_delay
-        + Random.int nst.config.random_delay_range
-      in
-      let event_queue =
-        EventQueue.add
-          { sevent = ievent event; stime = t; sport = port }
-          st.event_queue
-      in
-      nst.switches.(dst_id) <- { st with event_queue })
-  ;;
-
-  (* push an event from the user, which may be a program event
-     or a control event. Doesn't add delays. *)
-  let push_interp_event (loc : loc) (event : interp_event) nst =
-    let st = nst.switches.(loc.switch) in
-    let sw_ev =
-      { sevent = event; stime = interp_event_delay event; sport = loc.port }
-    in
-    let event_queue = EventQueue.add sw_ev st.event_queue in
-    nst.switches.(loc.switch) <- { st with event_queue }
-  ;;
-
-  (* Push an event to a list of entry points *)
-  let push_interp_events locs event nst =
-    let push_wrapper loc = push_interp_event loc event nst in
-    List.iter push_wrapper locs
-  ;;
-
-  (* push a located event to multiple switches where it should appear *)
-  let push_located_events (located_events : located_event list) nst =
-    let wrapper located_event =
-      push_interp_events located_event.ilocs located_event.ievent nst
-    in
-    List.iter wrapper located_events
-  ;;
-
-  let next_event swid nst =
-    let q = nst.switches.(swid).event_queue in
-    if EventQueue.size q = 0
-    then None
-    else (
-      let switch_ev = EventQueue.find_min q in
-      let t, event, port = switch_ev.stime, switch_ev.sevent, switch_ev.sport in
-      (*       let event = match event with
-        | IEvent(ev) -> ev
-        | _ -> error "[next_event] tried to dequeue something that's not an event"
-      in *)
-      (* let t, event, port = EventQueue.find_min q in *)
-      if t > nst.current_time
-      then None
-      else (
-        nst.switches.(swid)
-          <- { (nst.switches.(swid)) with event_queue = EventQueue.del_min q };
-        Some (event, port)))
-  ;;
-
-  let next_time_st st =
-    let q = st.event_queue in
-    if EventQueue.size q = 0
-    then None
-    else (
-      let { stime = t; _ } = EventQueue.find_min q in
-      Some t)
-  ;;
-
-  let next_time nst =
-    Array.fold_left
-      (fun acc st ->
-        match acc, next_time_st st with
-        | None, x | x, None -> x
-        | Some x, Some y -> Some (min x y))
-      None
-      nst.switches
-  ;;
-
-  let get_table_entries_switch swid stage nst =
-    Pipeline.get_table_entries ~stage nst.switches.(swid).pipeline
-  ;;
-
-  let install_table_entry_switch swid stage nst entry =
-    Pipeline.install_table_entry ~stage ~entry nst.switches.(swid).pipeline
-  ;;
-
-  let update_switch swid stage idx getop setop nst =
-    Pipeline.update ~stage ~idx ~getop ~setop nst.switches.(swid).pipeline
-  ;;
-
-  let update_switch_complex swid stage idx memop nst =
-    Pipeline.update_complex ~stage ~idx ~memop nst.switches.(swid).pipeline
+    let event_sort = Env.find event.eid nst.event_sorts in
+    InterpSwitch.update_counter event_sort st
   ;;
 
   (* Maps switch * port -> switch * port according to the topology *)
@@ -292,11 +142,176 @@ module State = struct
     match IntMap.find_opt sw nst.links with
     | Some map ->
       (match IntMap.find_opt p map with
-       | None -> -1, p
+       | None -> 
+        -1, p
        | Some ret -> ret)
     (* the switch ID does not exist in the topology... *)
     | None ->
       error @@ "lookup_dst error -- Invalid switch id " ^ string_of_int sw
+  ;;
+
+  let queue_sizes nst = 
+    let size_strs = Array.mapi (fun i st -> "switch:"^(string_of_int i)^" "^InterpSwitch.queue_sizes st) nst.switches in
+    "------\n"^
+    String.concat "\n"  (Array.to_list size_strs)
+    ^"\n------"
+  ;;
+
+  (*** moving events around ***)
+  let to_internal_event ev loc time = 
+    { sevent = ev
+    ; sloc = loc
+    ; stime = time
+    ; squeue_order = 0;
+    }
+
+
+  (* calculate when an event should arrive at the next switch's ingress. 
+     The calculation should be improved to add ingres -> egress queue time and then 
+      propagation time in two separate steps. Also, the names are confusing and why 
+     would propagation delay only apply to recirculating events? *)
+  let next_ingress_arrival_time src_id dst_id desired_delay nst = 
+    let propagate_delay =
+      if src_id = dst_id
+      then
+        nst.config.propagate_delay
+        + Random.int nst.config.random_propagate_range
+      else 0
+    in
+    nst.current_time
+      + max desired_delay nst.config.generate_delay
+      + propagate_delay
+      + Random.int nst.config.random_delay_range
+  ;;
+
+  let ingress_receive arrival_time swid port (ievent : internal_event) nst =
+    let st = nst.switches.(swid) in
+    if Random.int 100 < nst.config.drop_chance
+    then (InterpSwitch.log_drop  ievent nst.current_time st)
+    else (nst.switches.(swid) <- InterpSwitch.push_to_ingress ievent arrival_time port st;)
+  ;;
+
+  (* push a single event to the switch's egress queue. Called by local methods 
+     moving events from ingress to egress.*)
+  let egress_receive arrival_time swid port (ievent : internal_event) nst =
+    let st = nst.switches.(swid) in
+    nst.switches.(swid) <- InterpSwitch.push_to_egress ievent arrival_time port st;
+  ;;
+  (* send out of an ingress *)
+  type ingress_destination = 
+  | Port of int
+  | Switch of int
+  | PExit of int
+  let ingress_send src_id ingress_destination event_val nst = 
+    match ingress_destination with
+      | Switch sw -> 
+        let timestamp = next_ingress_arrival_time src_id sw (event_val.edelay) nst in
+        let ievent = to_internal_event event_val {switch = Some sw; port = 0} timestamp in
+        ingress_receive timestamp sw 0 ievent nst
+      | PExit port -> 
+        let ievent = to_internal_event event_val {switch = Some src_id; port = port} nst.current_time in
+        log_exit src_id (Some port) ievent nst
+      | Port port -> 
+        let dst_id, _ = lookup_dst nst (src_id, port) in 
+        let timestamp = next_ingress_arrival_time src_id dst_id (event_val.edelay) nst in
+        let ievent = to_internal_event event_val {switch = Some src_id; port = port} timestamp in
+        egress_receive timestamp src_id port ievent nst
+  ;;
+
+  (* send out of an egress. We model an egress that is 
+     instant -- it queues at the next ingress immediately. *)
+  let egress_send src_id out_port event_val nst = 
+    let dst_id, dst_port = lookup_dst nst (src_id, out_port) in
+    (* dst -1 means "somewhere outside of the lucid network" *)
+    if (dst_id = -1) 
+      then 
+        let ievent = to_internal_event event_val {switch = Some src_id; port = out_port} nst.current_time in
+        log_exit src_id (Some out_port) ievent nst
+      else 
+        let ievent = to_internal_event event_val {switch = Some dst_id; port = dst_port} nst.current_time in        
+        ingress_receive nst.current_time dst_id dst_port ievent nst
+  ;;
+
+
+  (*** pushing input events into the network ***)
+
+  (* load an interpreter input into the network environment *)
+  let load_interp_input nst interp_input = 
+    let sws = nst.switches in
+    match interp_input with 
+    | IEvent({iev; ilocs; itime}) -> 
+      List.iter 
+        (fun loc -> 
+          let switch = match loc.switch with 
+            | None -> error "input event not associated with a switch"
+            | Some(switch) -> switch
+          in
+          let internal_event = to_internal_event iev loc itime in
+          sws.(switch) <- InterpSwitch.push_to_ingress 
+          internal_event itime loc.port (sws.(switch))
+          )
+        ilocs      
+    | IControl({ictl; ilocs; itime}) -> 
+      List.iter 
+        (fun loc -> 
+          let switch = match loc.switch with 
+            | None -> error "input event not associated with a switch"
+            | Some(switch) -> switch
+          in
+          sws.(switch) <- InterpSwitch.push_to_commands ictl itime (sws.(switch))
+          )
+        ilocs
+  ;;
+
+  let load_interp_inputs nst interp_inputs = 
+    List.iter (load_interp_input nst) interp_inputs
+
+  (*** some other helpers ***)
+  let next_ready_event swid nst =
+    let st = nst.switches.(swid) in
+    match InterpSwitch.next_event ( nst.current_time) st with
+      | None -> None
+      | Some(st', epgs) -> 
+        (* print_endline ("-----");
+        print_endline@@"[next_event] got "^(string_of_int (List.length epgs));
+        print_endline@@"queues before:\n"^
+        (queue_sizes nst); *)
+        nst.switches.(swid) <- st';
+        (* print_endline ("-----");
+        print_endline@@"queues after:\n"^
+        (queue_sizes nst);
+        print_endline ("-----"); *)
+        Some(epgs)
+  ;;
+
+  let ready_egress_events swid nst = 
+    let st = nst.switches.(swid) in
+    let st', evs = InterpSwitch.ready_egress_events nst.current_time st in
+    nst.switches.(swid) <- st';
+    evs
+  ;;
+
+  let ready_control_commands swid nst = 
+    let st = nst.switches.(swid) in
+    let st', evs = InterpSwitch.ready_control_commands nst.current_time st in
+    nst.switches.(swid) <- st';
+    evs
+
+  let all_egress_events swid nst = 
+    let st = nst.switches.(swid) in
+    let st', evs = InterpSwitch.all_egress_events st in
+    nst.switches.(swid) <- st';
+    evs
+  ;;
+
+  let next_time nst =
+    Array.fold_left
+      (fun acc st ->
+        match acc, InterpSwitch.next_time st with
+        | None, x | x, None -> x
+        | Some x, Some y -> Some (min x y))
+      None
+      nst.switches
   ;;
 
   let ival_to_string v =
@@ -304,6 +319,7 @@ module State = struct
     | V v -> CorePrinting.value_to_string v
     | F _ -> "<function>"
   ;;
+
 
   let env_to_string env =
     if Env.is_empty env
@@ -317,94 +333,12 @@ module State = struct
            env
            ""
   ;;
+  let event_queue_to_string = InterpSwitch.event_queue_to_string 
+  let exits_to_string = InterpSwitch.exits_to_string 
+  let drops_to_string = InterpSwitch.drops_to_string
+  let stats_counter_to_string = InterpSwitch.stats_counter_to_string
 
-  let event_queue_to_string q =
-    if EventQueue.size q = 0
-    then "[ ]"
-    else
-      Printf.sprintf "[\n%s  ]"
-      @@ (q
-         |> EventQueue.to_list (* No BatHeap.fold :( *)
-         |> List.fold_left
-              (fun acc { stime = t; sevent = event; sport = port } ->
-                Printf.sprintf
-                  "%s    %dns: %s at port %d\n"
-                  acc
-                  t
-                  (interp_event_to_string event)
-                  port)
-              "")
-  ;;
-
-  let exits_to_string s =
-    if Queue.is_empty s
-    then "[ ]"
-    else
-      Printf.sprintf "[\n%s  ]"
-      @@ Queue.fold
-           (fun acc (event, port, time) ->
-             Printf.sprintf
-               "%s    %s at port %d, t=%d\n"
-               acc
-               (CorePrinting.event_to_string event)
-               (Option.default (-1) port)
-               time)
-           ""
-           s
-  ;;
-
-  let drops_to_string s =
-    if Queue.is_empty s
-    then "[ ]"
-    else
-      Printf.sprintf "[\n%s  ]"
-      @@ Queue.fold
-           (fun acc (event, time) ->
-             Printf.sprintf
-               "%s    %s, t=%d\n"
-               acc
-               (CorePrinting.event_to_string event)
-               time)
-           ""
-           s
-  ;;
-
-  let stats_counter_to_string counter =
-    Printf.sprintf
-      "\n packet events handled: %d\n total events handled: %d\n"
-      counter.entries_handled
-      counter.total_handled
-  ;;
-
-  let st_to_string
-    ?(show_vars = false)
-    ?(show_pipeline = true)
-    ?(show_queue = true)
-    ?(show_exits = true)
-    st
-    =
-    let show b title str =
-      if not b
-      then ""
-      else
-        Printf.sprintf
-          "\n %s : %s%s\n"
-          title
-          (String.make (8 - String.length title) ' ')
-          str
-    in
-    let vars = show show_vars "Env" @@ env_to_string st.global_env in
-    let pipeline =
-      show show_pipeline "Pipeline" @@ Pipeline.to_string ~pad:"  " st.pipeline
-    in
-    let queue =
-      show show_queue "Events" @@ event_queue_to_string st.event_queue
-    in
-    let exits = show show_exits "Exits" @@ exits_to_string st.exits in
-    let drops = show show_exits "Drops" @@ drops_to_string st.drops in
-    let stats = stats_counter_to_string !(st.counter) in
-    "{\n" ^ vars ^ pipeline ^ queue ^ exits ^ drops ^ stats ^ "\n}"
-  ;;
+  let st_to_string = (InterpSwitch.to_string ival_to_string)
 
   let nst_to_string
     ?(show_vars = false)
@@ -422,8 +356,5 @@ module State = struct
   ;;
 end
 
-let extract_ival iv =
-  match iv with
-  | State.V v -> v
-  | State.F _ -> failwith "IVal not a regular value"
+let extract_ival iv =InterpSyntax.extract_ival iv
 ;;

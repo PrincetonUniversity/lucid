@@ -63,6 +63,7 @@ let rec raw_ty_to_string t =
     ^ concat_map "; " (fun (id, ty) -> raw_ty_to_string ty ^ " " ^ id_to_string id) lst
     ^ "}"
   | TTuple lst -> "(" ^ concat_map ", " raw_ty_to_string lst ^ ")"
+  | TBits sz -> "unparsed_bits<" ^ size_to_string sz ^ ">"
 
 and func_to_string func =
   let arg_tys = concat_map ", " ty_to_string func.arg_tys in
@@ -136,6 +137,17 @@ let rec v_to_string v =
   | VGroup vs -> Printf.sprintf "{%s}" (comma_sep location_to_string vs)
   | VTuple vs -> Printf.sprintf "(%s)" (comma_sep v_to_string vs)
   | VPat bs -> bs_to_string bs
+  | VBits bs -> 
+    let bs = BitString.bits_to_hexstr bs in
+    (* truncate the hex string after 64 bytes, if its longer than that put ... at the end *)
+    let len = String.length bs in
+    let bs = 
+      if len > 128
+      then String.sub bs 0 128 ^ "...("^(string_of_int (len - 128))^" B truncated)..."
+      else bs
+    in
+    Printf.sprintf "<<%iB unparsed bytestring=0x%s>>" (len/2) bs 
+    
 
 and value_to_string v = v_to_string v.v
 
@@ -154,7 +166,7 @@ and event_to_string { eid; data; edelay } =
 
 let rec e_to_string e =
   match e with
-  | EVal v -> v_to_string v.v
+  | EVal v -> value_to_string v
   | EVar cid -> cid_to_string cid
   | EOp (op, [e]) -> op_to_string op ^ exp_to_string e
   | EOp (op, [e1; e2]) -> exp_to_string e1 ^ op_to_string op ^ exp_to_string e2

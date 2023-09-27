@@ -24,6 +24,7 @@
    cid
    taggedCid
    pragma
+   BitString
    input
    integer
    span
@@ -74,8 +75,11 @@
    interpControl
    pipeline
    preprocess
+   InterpJson
    interpSpec
    interpState
+   InterpSwitch
+   interpPayload
    interpSyntax
    libraryInterface
    arrays
@@ -84,6 +88,7 @@
    system
    events
    payloads
+   packet
    builtins
    TQVar
    backendLogging
@@ -107,6 +112,7 @@
    DependencyProfiling
    InputChecks
    StandardizeEventParams
+   EliminatePayloads
    EliminateEventCombinators
    Hoisting
    AddIngressParser

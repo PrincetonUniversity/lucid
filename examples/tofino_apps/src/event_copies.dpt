@@ -1,0 +1,27 @@
+/* Test event mutation and copying */
+include "../libs/ip_default.dpt"
+
+event bg1(int<32> egr, eth_hdr eth, ip_hdr_prefix ip, int src, int dst);
+event bg2(int<32> egr, eth_hdr eth, ip_hdr_prefix ip, int src, int dst);
+
+handle ip_pkt (eth_hdr eth, ip_hdr_prefix ip, int<32> src, int<32> dst) {
+  event x = bg1((int<32>)ingress_port, eth, ip, (src + 1), 99);
+  event y = bg2((int<32>)ingress_port, eth, ip, (src + 2), 99);
+  event z = x;
+  if (src == dst) {
+    z = y;
+  }
+  generate(z);
+}
+handle bg1(int<32> egr, eth_hdr eth, ip_hdr_prefix ip, int src, int dst) {
+  generate_port ((int<9>)egr, ip_pkt(eth, ip, src, src));
+}
+handle bg2(int<32> egr, eth_hdr eth, ip_hdr_prefix ip, int src, int dst) {
+  generate_port ((int<9>)egr, ip_pkt(eth, ip, src, (src - 2)));
+}
+
+// include "io_events.dpt"
+// handle ip_in(int<9> igr_port, int src, int dst, int<16> len, int<8> tos) {
+//   generate bg1(igr_port, src, dst);
+//   generate bg2(igr_port, dst, src);
+// }

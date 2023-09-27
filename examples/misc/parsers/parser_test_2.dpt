@@ -3,12 +3,12 @@ type ip =  { int srcIp; int dstIp; int srcPort; int dstPort; }
 
 event background(int x) { printf("%d", x); }
 event eth(eth e) { generate background(e#srcMac); }
-event etheth(eth e, eth e') { generate background(e#srcMac); }
+event etheth(eth e, eth em) { generate background(e#srcMac); }
 
 // LUCID_ETHERTY is builtin
 const int IP_ETHERTY = 0x8000;
 
-parser main() {
+parser main(Payload.t pkt) {
   read eth e;
   match e#etherTy with
   | 0 -> { read eth e1;

@@ -1,0 +1,97 @@
+// simple example with parser for packet events
+
+// packet 
+
+// what happens if you send an unparsed packet that has 
+// the lucid header and then a packet event?
+
+/*
+
+for example, this is a serialized foo:
+000000000001000000000002029A000200000000000100000000000208001122334455667788
+
+
+deadbeef
+
+
+
+*/ 
+
+
+// what _should_ happen?
+
+packet event eth(int<48> dmac, int<48> smac, int<16> etype, Payload.t pkt);
+
+event foo(int<48> dmac, int<48> smac, int<16> etype, int x, int y, Payload.t pkt);
+
+// TODO: should not be able to generate non-packet events in the parser.
+
+// input test:
+/*
+
+packet = 
+
+dmac 11 22 33 44 55 66 
+smac 77 88 99 10 11 12
+etyp 08 00
+msg  de ad be ef
+
+0000000000010000000000020800deadbeef
+112233445566 778899101112 0800
+
+
+*/
+
+
+/*
+
+Desired generate semantics: 
+
+
+generate packet event -> 
+
+	create a bitstring of: 
+		event header + payload
+
+- Where does the payload come from? We have to keep it around. 
+And it is basically a "packet" object.
+So merge packet and payload.
+
+
+*/
+
+
+
+// main must take a Payload.t object
+// parser main(Payload.t pkt) {
+parser main(Payload.t pkt) {
+	// locals = {ingress_port : ...; pkt : ...}
+	// int<48> d =  Payload.read(pkt);
+	read int<48> d; // how do i know what bitstring to pass to read? You have to tell me!
+	read int<48> s;
+	read int<16> t;
+	match t with
+	| LUCID_ETHERTY -> {do_lucid_parsing(pkt);}
+	| _ -> {generate(eth(d, s, t, pkt));	} // we _need_ to know what pkt is to interpret the generate.
+}
+
+handle foo(int<48> dmac, int<48> smac, int<16> etype, int x, int y, Payload.t pkt){
+	printf("in foo");
+	printf("ingress port, %d", ingress_port);
+	generate(eth(dmac, smac, etype, pkt));
+	// its actually wrong. passing 196 SHOULD be fine. 
+	// generate_port(196, eth(dmac, smac, etype, pkt));
+}
+
+handle eth(int<48> dmac, int<48> smac, int<16> etype, Payload.t pkt){
+	printf("in eth");
+	printf("ingress port, %d", ingress_port);
+	if (ingress_port == 0) {
+		generate(foo(dmac, smac, etype, 1, 2, pkt));
+	} else {
+		skip;
+		// generate_port(99, eth(dmac, smac, etype, Payload.empty()));
+		// generate_ports(flood(ingress_port), eth(dmac, smac, etype, pkt));
+	}
+
+}

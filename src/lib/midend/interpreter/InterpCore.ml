@@ -6,6 +6,8 @@ open SyntaxUtils
 open InterpState
 module Printing = CorePrinting
 
+
+
 let raw_integer v =
   match v.v with
   | VInt i -> i
@@ -145,20 +147,52 @@ let lookup_var swid nst locals cid =
   | _ -> State.lookup swid cid nst
 ;;
 
-let interp_eval exp : State.ival =
+
+let port_arg locals = 
+  let (port:CoreSyntax.value) = match Env.find (Id Builtins.ingr_port_id) locals with 
+    | InterpSyntax.V(port_val) -> port_val
+    | _ -> error "could not find input port while interpreting parser!"
+  in
+  port
+;;
+
+let get_local id locals = match Env.find (Id id) locals with
+  | InterpSyntax.V(v) -> v
+  | _ -> error "not a value"
+;;
+let update_local local_id v locals = 
+  Env.add (Id local_id) (InterpSyntax.V(v)) (Env.remove (Id local_id) locals)
+;;
+(* let get_payload payload_id locals = 
+  match Env.find (Id payload_id) locals with 
+  | InterpSyntax.V(payload) -> (
+    match payload.v with 
+    | VBits(bs) -> bs
+    | _ -> error "[InterpCore.get_payload] local payload variable should be a bit string"
+  )
+  | _ -> error "could not find current packet buffer while interpreting parser!"
+;;
+
+let update_payload payload_id payload locals = 
+  Env.add (Id payload_id) (InterpSyntax.V(payload)) (Env.remove (Id payload_id) locals)
+;; *)
+
+
+let interp_eval exp : 'a InterpSyntax.ival =
   match exp.e with
   | EVal v -> V v
   | _ ->
     error "[interp_eval] expected a value expression, but got something else."
 ;;
 
-let rec interp_exp (nst : State.network_state) swid locals e : State.ival =
-  (* print_endline @@ "Interping: " ^ CorePrinting.exp_to_string e; *)
+let rec interp_exp (nst : State.network_state) swid locals e : 'a InterpSyntax.ival =
   let interp_exps = interp_exps nst swid locals in
   let lookup cid = lookup_var swid nst locals cid in
   match e.e with
   | EVal v -> V v
-  | EVar cid -> lookup cid
+  | EVar cid -> 
+    let res = lookup cid in
+    res
   | EOp (op, es) ->
     let vs = interp_exps es in
     V (interp_op op vs)
@@ -169,13 +203,14 @@ let rec interp_exp (nst : State.network_state) swid locals e : State.ival =
        error
          (Cid.to_string cid
          ^ " is a value identifier and cannot be used in a call")
-     | F f -> V (f nst swid vs))
+     | F f -> V (f nst swid vs)
+   )
   | EHash (size, args) ->
     let vs = interp_exps args in
     let vs =
       List.map
         (function
-         | State.V v -> v.v
+         | InterpSyntax.V v -> v.v
          | _ -> failwith "What? No hashing functions!")
         vs
     in
@@ -223,7 +258,7 @@ let rec interp_exp (nst : State.network_state) swid locals e : State.ival =
        happenbecause the table creation should be interpeter in the \
        declaration"
 
-and interp_exps nst swid locals es : State.ival list =
+and interp_exps nst swid locals es : 'a InterpSyntax.ival list =
   List.map (interp_exp nst swid locals) es
 ;;
 
@@ -293,7 +328,6 @@ let printf_replace vs (s : string) : string =
 
 
 }
-
  *)
 
 (* print message to a json record *)
@@ -317,17 +351,13 @@ let print_final_state str = interp_report "final_state" str None
 let print_printf swid str = interp_report "printf" str (Some swid)
 
 (* print an exit event as a json to stdout *)
-let print_exit_event swid port_opt event time =
-  let open Yojson.Basic in
-  let raw_json_val v =
-    match v.v with
-    | VInt i -> `Int (Integer.to_int i)
-    | VBool b -> `Bool b
-    | _ -> error "not an int or bool"
+let print_exit_event swid port_opt (event:InterpSyntax.internal_event) time =
+  let base_out_json =
+      if (event.sevent.eserialized = false)
+        then InterpJson.event_val_to_json event.sevent
+        else InterpJson.packet_event_to_json event.sevent
   in
-  let { eid; data; _ } = event in
-  let name = `String (CorePrinting.cid_to_string eid) in
-  let args = `List (List.map raw_json_val data) in
+  (* add location and timestamp metadata *)
   let port =
     match port_opt with
     | None -> -1
@@ -335,17 +365,16 @@ let print_exit_event swid port_opt event time =
   in
   let locs = `List [`String (Printf.sprintf "%i:%i" swid port)] in
   let timestamp = `Int time in
-  (* let args = CorePrinting.value_to_string data in  *)
   let evjson =
     `Assoc
-      ["name", name; "args", args; "locations", locs; "timestamp", timestamp]
+      (base_out_json@["locations", locs; "timestamp", timestamp])
   in
   print_endline (Yojson.Basic.to_string evjson)
 ;;
 
 (* print event as json if interactive mode is set,
    else log for final report *)
-let log_exit swid port_opt event (nst : State.network_state) =
+let log_exit swid port_opt (event:InterpSyntax.internal_event) (nst : State.network_state) =
   if Cmdline.cfg.interactive
   then print_exit_event swid port_opt event nst.current_time
   else State.log_exit swid port_opt event nst
@@ -363,13 +392,24 @@ let partial_interp_exps nst swid env exps =
     exps
 ;;
 
-let rec interp_statement nst swid locals s =
+
+(* convert a flood port into a list of declared ports *)
+let expand_flood_port nst swid flood_port =
+  List.filter_map
+    (fun (port, dst_swid) -> 
+      if (port <> (-(flood_port + 1))) && (dst_swid <> swid) 
+        then Some(port)
+        else None)
+    (State.ports_to_neighbors nst.State.links swid)
+;;
+
+let rec interp_statement nst hdl_sort swid locals s =
   (* (match s.s with
   | SSeq _ | SNoop -> () (* We'll print the sub-parts when we get to them *)
   | _ -> print_endline @@ "Interpreting " ^ CorePrinting.stmt_to_string s); *)
   let interpret_exp = interp_exp nst swid in
   let interp_exp = interp_exp nst swid locals in
-  let interp_s = interp_statement nst swid locals in
+  let interp_s = interp_statement nst hdl_sort swid locals in
   match s.s with
   | SNoop -> locals
   | SAssign (id, e) ->
@@ -397,46 +437,79 @@ let rec interp_statement nst swid locals s =
     (* Stop evaluating after hitting a return statement *)
     if !(nst.switches.(swid).retval) <> None
     then locals
-    else interp_statement nst swid locals ss2
-  | SGen (g, e) ->
-    (* TODO: Right now, port numbers for generate_single are
-       arbitrary (always 0). We could do better by e.g. finding a path through
-       the graph and figuring out which port number it ends at *)
-    let locs =
-      match g with
-      | GSingle None ->
-        [ ( swid
-          , State.lookup swid (Cid.from_string "recirculation_port") nst
-            |> extract_ival
-            |> raw_integer
-            |> Integer.to_int ) ]
-      | GSingle (Some e) ->
-        [interp_exp e |> extract_ival |> raw_integer |> Integer.to_int, 0]
-      | GMulti grp ->
-        let ports = interp_exp grp |> extract_ival |> raw_group in
-        (match ports with
-         | [port] when port < 0 ->
-           (* Flooding: send to every connected switch *)
-           (-1, port)
-           :: (IntMap.find swid nst.links
-              |> IntMap.bindings
-              |> List.filter_map (fun (p, dst) ->
-                   if p = -(port + 1) then None else Some dst))
-         | _ -> List.map (fun port -> State.lookup_dst nst (swid, port)) ports)
-      | GPort port ->
-        let port =
-          interp_exp port |> extract_ival |> raw_integer |> Integer.to_int
-        in
-        [State.lookup_dst nst (swid, port)]
-    in
+    else interp_statement nst hdl_sort swid locals ss2
+
+  | SGen (g, e) -> (
     let event = interp_exp e |> extract_ival |> raw_event in
-    List.iter
-      (fun (dst_id, port) ->
-        if dst_id = -1 (* lookup_dst failed *)
-        then log_exit swid (Some port) event nst
-        else State.push_event swid dst_id port event nst)
-      locs;
-    locals
+
+    match hdl_sort with 
+    | HData -> (
+      (*  
+        event routing is overly complicated.
+        cases:
+        generate_switch -- send directly to switch ingress
+        generate_port -- send to local egress port
+        generate -- send to local egress recirculation port
+        generate_ports -- send to multiple local egress ports
+
+        ports are either: 
+        1. connected to another switch
+        2. not connected to another switch, in which case an exit event happens
+
+        todo: 
+        1. an explicit exit port for each switch
+        2. generate_switch should be depreciated
+      *)
+      let output_ports = match g with
+        (* recirculation *)
+        | GSingle None ->
+          [ State.Port(State.lookup swid (Cid.from_string "recirculation_port") nst
+          |> extract_ival
+          |> raw_integer
+          |> Integer.to_int )  ]
+        (* teleport to switch ingress. should be depreciated *)
+        | GSingle (Some exp) -> 
+          let swid = interp_exp exp |> extract_ival |> raw_integer |> Integer.to_int in
+          [(State.Switch(swid))]
+        (* generate to a port in the switch *)
+        | GPort port -> [State.Port(interp_exp port |> extract_ival |> raw_integer |> Integer.to_int)]
+        (* generate to multiple ports *)
+        | GMulti grp -> 
+          let ports = interp_exp grp |> extract_ival |> raw_group in
+          (match ports with
+          | [port] when port < 0 -> (* flood to all ports except: -(port + 1) *)
+            (* if we're flooding, we should also generate an event to the "exit" node in the network.  *)
+              State.PExit(port)::(List.map (fun p-> State.Port(p)) (expand_flood_port nst swid port))              
+          | _ -> 
+            List.map (fun port -> State.Port(port)) ports)
+      in
+      (* push all the events to output ports *)
+      List.iter (fun out_port -> 
+        State.ingress_send swid out_port event nst) 
+        output_ports;
+      locals       
+    )
+    | HEgress -> (
+      let extract_int = function
+        | VInt n -> n
+        | _ -> failwith "No good"
+      in
+      (* egress case -- always just push the event to the other side of the port *)
+      (* note that we ignore any location arguments and treat all 
+         egress generate variants the same! *)
+      let port = ((port_arg locals).v |> extract_int ).value |> Z.to_int in 
+      (* egress serializes packet events *)
+      let ev_sort = Env.find event.eid nst.event_sorts in
+      (* serialize packet events *)
+      let event_val = match ev_sort with 
+        | EBackground -> event (* background events stay as events *)
+        | EPacket -> InterpPayload.serialize_packet_event event
+      in
+      State.egress_send swid port event_val nst;
+      locals
+    )
+    | HControl -> (error "control events are not implemented")
+  )
   | SRet (Some e) ->
     let v = interp_exp e |> extract_ival in
     (* Computation stops if retval is Some *)
@@ -474,7 +547,7 @@ let rec interp_statement nst swid locals s =
       | _ -> error "Table did not evaluate to a pipeline object reference"
     in
     (* call install_table_entry for each entry *)
-    List.iter (State.install_table_entry_switch swid tbl_pos nst) entries;
+    List.iter (fun entry -> InterpSwitch.install_table_entry tbl_pos entry (State.sw nst swid)) entries;
     (* return unmodified locals context *)
     locals
   | STableMatch tm ->
@@ -484,7 +557,7 @@ let rec interp_statement nst swid locals s =
       | V { v = VGlobal stage } -> stage
       | _ -> error "Table did not evaluate to a pipeline object reference"
     in
-    let default, entries = State.get_table_entries_switch swid tbl_pos nst in
+    let default, entries = InterpSwitch.get_table_entries tbl_pos (State.sw nst swid) in
     (* find the first matching case *)
     let key_vs = List.map (fun e -> interp_exp e |> extract_ival) tm.keys in
     let fst_match =
@@ -732,6 +805,78 @@ let interp_memop params body nst swid args =
     else interp_exp nst swid locals e3 |> extract_ival
 ;;
 
+
+let rec interp_parser_block nst swid payload_id locals parser_block =
+  (* interpret the actions, updating locals *)
+  let locals = List.fold_left (interp_parser_action nst swid payload_id) locals (List.split parser_block.pactions |> fst) in
+  (* now interpret the step *)
+  interp_parser_step nst swid payload_id locals (fst parser_block.pstep)
+  
+and interp_parser_action (nst : State.network_state) swid payload_id locals parser_action = 
+  match parser_action with 
+  | PRead(cid, ty) -> 
+    let payload = get_local payload_id locals in
+    (* semantically, a read creates a new variable and also updates the payload variable *)
+    let parsed_val, payload' = InterpPayload.pread payload ty in
+    (* add the new local and update payload variable *)
+    locals
+      |> Env.add (cid) (InterpSyntax.V(parsed_val))
+      |> update_local payload_id payload'
+  | PPeek(cid, ty) -> 
+    let peeked_val = InterpPayload.ppeek (get_local payload_id locals) ty in
+    locals |> Env.add (cid) (InterpSyntax.V(peeked_val))
+  | PSkip(ty) ->
+    let payload' = InterpPayload.padvance (get_local payload_id locals) ty in
+    update_local payload_id payload' locals
+  | PAssign(cid, exp) ->
+    let assigned_ival = interp_exp nst swid locals exp in
+    locals
+    |> Env.remove cid
+    |> Env.add (cid) (assigned_ival)
+  | PLocal(cid, _, exp) -> 
+    let assigned_ival = interp_exp nst swid locals exp in
+    Env.add (cid) (assigned_ival) locals
+
+and interp_parser_step nst swid payload_id locals parser_step = 
+    match parser_step with
+    | PMatch(es, branches) ->
+      let vs = List.map (fun e -> interp_exp nst swid locals e |> extract_ival) es in
+      let first_match =
+        try List.find (fun (pats, _) -> matches_pat vs pats) branches with
+        | _ -> error "[interp_parser_step] parser match did not match any branch!"
+      in
+      interp_parser_block nst swid payload_id locals (snd first_match)
+    | PGen(exp) -> (
+      let event_val = interp_exp nst swid locals exp |> extract_ival in
+      event_val      
+    )
+    | PCall(exp) -> (
+        match exp.e with 
+        | ECall(cid, args) -> (
+          (* a call to another parser. *)
+          (* construct ival arguments *)
+          let args = 
+            (InterpSyntax.V(port_arg locals))::(List.map (interp_exp nst swid locals) args)
+          in
+          (* call the parser function as you would any other function *)
+          match State.lookup swid cid nst with 
+            | F(parser_f) -> parser_f nst swid args
+            | _ -> error "[parser call] could not find parser function"
+        )
+        | _ -> error "[parser call] expected a call expression"
+
+    )
+    (* halt processing *)
+    | PDrop -> CoreSyntax.vbool false
+;;
+
+let rec find_payload_param params = 
+  match params with 
+  | [] -> None
+  | (id, ty)::_ when InterpPayload.is_payload_ty ty -> Some(id)
+  | _::tl -> find_payload_param tl
+;;
+
 let interp_decl (nst : State.network_state) swid d =
   (* print_endline @@ "Interping decl: " ^ Printing.decl_to_string d; *)
   match d.d with
@@ -739,38 +884,92 @@ let interp_decl (nst : State.network_state) swid d =
   | DAction acn ->
     (* add the action to the environment *)
     State.add_action (Cid.id acn.aid) acn nst
-  | DHandler (id, _, (params, body)) ->
+  | DHandler (id, hdl_sort, (params, body)) ->(
+    (* print_endline@@"Adding handler"^(CorePrinting.id_to_string id);
+    print_endline@@"handler sort: "^(match hdl_sort with | HData -> "ingress" | HEgress -> "egress" | _ ->""); *)
     let f nst swid port event =
+      if (hdl_sort = HEgress) then 
+        print_endline@@"interping egress handler";
+      (* add the event to the environment *)
       let builtin_env =
         List.fold_left
           (fun acc (k, v) -> Env.add k v acc)
           Env.empty
-          [ Id Builtins.this_id, State.V (vevent { event with edelay = 0 })
-          ; Id Builtins.ingr_port_id, State.V (vint port 32) ]
+          [ Id Builtins.this_id, InterpSyntax.V (vevent { event with edelay = 0 })
+          ; Id Builtins.ingr_port_id, InterpSyntax.V (vint port 32) ]
       in
+      (* add event parameters to locals *)
       let locals =
         List.fold_left2
-          (fun acc v (id, _) -> Env.add (Id id) (State.V v) acc)
+          (fun acc v (id, _) -> Env.add (Id id) (InterpSyntax.V v) acc)
           builtin_env
           event.data
           params
       in
-      State.update_counter swid event nst;
+      State.update_counter swid event nst; (*TODO: fix counters for egress. *)
       Pipeline.reset_stage nst.switches.(swid).pipeline;
-      ignore @@ interp_statement nst swid locals body
+      ignore @@ interp_statement nst hdl_sort swid locals body
     in
-    State.add_handler (Cid.id id) f nst
-  | DEvent (id, _, _, _) ->
+    match hdl_sort with
+    | HData -> State.add_handler (Cid.id id) f nst
+    | HEgress -> State.add_egress_handler (Cid.id id) f nst
+    | _ -> error "control handlers not supported"
+    )
+
+  (* parsers: convention is for first two arguments to be 
+  ingress port and unparsed packet / payload. *)
+  | DParser(id, params, parser_block) -> 
+    (* figure out whether to use the implicit payload argument. if there is an explicit 
+        payload for the parser, it must be the first argument. *)
+    let payload_id_opt = find_payload_param params in
+    let runtime_function nst swid args = 
+      (* if there is no payload parameter, put one in the front *)
+      let param_ids, payload_id = match payload_id_opt with
+        | None -> ((Builtins.ingr_port_id)::(Builtins.packet_arg_id)::(List.split params |> fst), Builtins.packet_arg_id)
+        | Some(payload_id) -> (Builtins.ingr_port_id)::(List.split params |> fst), payload_id
+      in
+      (* construct the locals table *)
+      let locals = 
+        List.fold_left2
+          (fun acc v id -> Env.add (Id id) v acc)
+          Env.empty
+          args
+          param_ids
+      in
+      interp_parser_block nst swid payload_id locals parser_block
+    in
+    State.add_global swid (Cid.id id) (F runtime_function) nst;
+    nst
+
+  | DEvent (id, num_opt, _, _) ->
+    (* the expression inside a generate just constructs an event value. *)
+    (* the generate statement adds the payload, however *)
     let f _ _ args =
-      vevent { eid = Id id; data = List.map extract_ival args; edelay = 0 }
+      let event_num_val = match num_opt with
+      | None -> None 
+      | Some(num) -> Some(vint (size_of_tint (
+        SyntaxToCore.translate_ty  
+        Builtins.lucid_eventnum_ty)) num)
+      in
+      (* let extract_ival_pkt_placeholder ival = 
+        match ival with
+        | State.P(_) -> {v=VPat([]); vty=Payloads.payload_ty |> SyntaxToCore.translate_ty; vspan=Span.default}
+        | _ -> extract_ival ival
+      in *)
+      vevent { 
+        eid = Id id; 
+        data = List.map extract_ival args; 
+        edelay = 0;
+        evnum = event_num_val;
+        eserialized = false;
+    }
     in
-    State.add_global swid (Id id) (State.F f) nst;
+    State.add_global swid (Id id) (InterpSyntax.F f) nst;
     nst
   | DMemop { mid; mparams; mbody } ->
     let f = interp_memop mparams mbody in
-    State.add_global swid (Cid.id mid) (State.F f) nst;
+    State.add_global swid (Cid.id mid) (InterpSyntax.F f) nst;
     nst
-  | DParser _ -> nst
   | DExtern _ ->
     failwith "Extern declarations should be handled during preprocessing"
 ;;
