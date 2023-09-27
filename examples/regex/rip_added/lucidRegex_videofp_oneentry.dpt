@@ -58,7 +58,7 @@ handle packet_in(int sip, int dip, int<<16>> sport, int<<16>> dport, int<<16>> s
 		}
 	}
     if (dip == dst_ip) {
-        int<<9>> best = Array.get(best_neighbor, 0);
+        int<<9>> best = (int<<9>>) Array.get(best_neighbor, 0);
         generate_port(best, packet_out(sip, dip, sport, dport, s));
     }
 }

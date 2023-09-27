@@ -1,21 +1,5 @@
 entry event ip_in(int sip, int cip, int<<16>> sport, int<<16>> dport);
 exit event port_knocking_matched(int sip, int dip);
-
-
-sre<<1024>> mysre = 
-IDX ={
-    | ip_in -> {(int<<32>>)hash<<10>>(13, sip, cip)    }
-}
-DETECT {
-    ip_in(sport==1234).ip_in(sport==5678).ip_in(sport==9012).ip_in(sport==3456)
-} =>
-{
-    generate port_knocking_matched(sip, cip);
-    //reset(mysre, mysreidx);
-};
-
-
-
 // Data-plane implementation of single-destination RIP, with possibility of
 // route retraction
 
@@ -36,6 +20,22 @@ global Array.t<<32>> best_neighbor = Array.create(1);
 
 const int ADVERTISE_PERIOD = 1000;
 const int SCAN_PERIOD = 100;
+
+sre<<1024>> mysre = 
+IDX ={
+    | ip_in -> {(int<<32>>)hash<<10>>(13, sip, cip)    }
+}
+DETECT {
+    ip_in(sport==1234).ip_in(sport==5678).ip_in(sport==9012).ip_in(sport==3456)
+} =>
+{
+    generate port_knocking_matched(sip, cip);
+    //reset(mysre, mysreidx);
+};
+
+
+
+
 
 // Represents your neighbor telling you their distance to the target
 event advertise(int neighbor, int dist);
@@ -131,7 +131,7 @@ handle scan(int idx) {
 exit event continue(int dst);
 
 handle ip_in(int sip, int cip, int<<16>> sport, int<<16>> dport) {
-    if (dst == dst_ip) {
+    if (cip == dst_ip) {
         int best = Array.get(best_neighbor, 0);
         generate continue(best);
     }
