@@ -12,12 +12,15 @@ while IFS= read -r filename; do
     synthesis_time=$(grep -oE "Time spent on synthesis is ([0-9.]+)" output.txt | sed 's/Time spent on synthesis is //')
     alphabet_size=$(grep -oE "Alphabet size ([0-9]+)" output.txt | sed 's/Alphabet size //')
     states_size=$(grep -oE "States size ([0-9]+)" output.txt | sed 's/States size //')
+    ir_length=$(sed -n '$=' lucid_tofino_build/logs/ir/initial.before_layout.dpt)
 
     # Append results to results.txt
     echo "File: $filename" >> results.txt
     echo "Synthesis Time: $synthesis_time" >> results.txt
     echo "Alphabet Size: $alphabet_size" >> results.txt
     echo "States Size: $states_size" >> results.txt
+    echo "IR Length: $ir_length" >> results.txt
+    
     dptc_time=$(grep "real" output.txt | awk '{print $2}')
 
     # Append bf-p4c runtime to results.txt
@@ -25,7 +28,8 @@ while IFS= read -r filename; do
 
     # Time the bf-p4c command and run it
     { time ~/p4c-9.13.0.x86_64/bin/bf-p4c -g "./lucid_tofino_build/lucid.p4"; } > bf-p4c_time.txt 2>&1
-
+    p4_length=$(sed -n '$=' lucid_tofino_build/lucid.p4)
+    echo "P4 length: $p4_length" >> results.txt
     # Extract the real time from the time command output
     bf_p4c_real_time=$(grep "real" bf-p4c_time.txt | awk '{print $2}')
 
