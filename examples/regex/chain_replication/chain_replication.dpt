@@ -18,12 +18,6 @@ const int FALSE = 0;
 const int<<9>> head = 0;
 const int<<9>> tail = 2;
 const int<<9>> succ = 1;
-
-
-/* Global data: the registers which we're replicating, plus metadata about each of them */
-global Array.t<<32>> pending = Array.create(NUM_REGISTERS);
-global Array.t<<32>> sequence_nums = Array.create(NUM_REGISTERS);
-global Array.t<<32>> registers = Array.create(NUM_REGISTERS);
 //====== Added RegEx ======
 // check #1: seq monotinic
 sre<<4096>> re_check1 = 
@@ -35,6 +29,11 @@ DETECT{
       write(@int saved_seq=seq).write(seq<saved_seq)
     )
 } => {printf ("Error");};
+
+/* Global data: the registers which we're replicating, plus metadata about each of them */
+global Array.t<<32>> pending = Array.create(NUM_REGISTERS);
+global Array.t<<32>> sequence_nums = Array.create(NUM_REGISTERS);
+global Array.t<<32>> registers = Array.create(NUM_REGISTERS);
 
 event write(int idx, int seq, int data);
 event ack(int idx);

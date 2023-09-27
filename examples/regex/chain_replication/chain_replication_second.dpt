@@ -52,7 +52,9 @@ IDX = {
     | ack   -> {(int<<32>>) hash<<12>>(2, idx)}
 }
 DETECT{
-    write(true).write(true).ack(true)
+    (
+      write(true).write(true).ack(true)
+    )
 } => {printf ("Error");};
 
 
