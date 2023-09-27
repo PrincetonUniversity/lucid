@@ -18,17 +18,6 @@ const int FALSE = 0;
 const int<<9>> head = 0;
 const int<<9>> tail = 2;
 const int<<9>> succ = 1;
-//====== Added RegEx ======
-// check #1: seq monotinic
-sre<<4096>> re_check1 = 
-IDX = {
-    | write -> {(int<<32>>) hash<<12>>(1, idx)}
-}
-DETECT{
-    (
-      write(@int saved_seq=seq).write(seq<saved_seq)
-    )
-} => {printf ("Error");};
 
 /* Global data: the registers which we're replicating, plus metadata about each of them */
 global Array.t<<32>> pending = Array.create(NUM_REGISTERS);
