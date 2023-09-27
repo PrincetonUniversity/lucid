@@ -48,13 +48,11 @@ exit event continue(int src, int dst);
 // check #2: two write to same index, before ack
 sre<<4096>> re_check2 = 
 IDX = {
-    | write -> {(int<<32>>) hash<<12>>(1, idx)}
-    | ack   -> {(int<<32>>) hash<<12>>(1, idx)}
+    | write -> {(int<<32>>) hash<<12>>(2, idx)}
+    | ack   -> {(int<<32>>) hash<<12>>(2, idx)}
 }
 DETECT{
-    (
-      write().write().ack()
-    )
+    write(true).write(true).ack(true)
 } => {printf ("Error");};
 
 
