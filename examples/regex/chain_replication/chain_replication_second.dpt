@@ -18,7 +18,17 @@ const int FALSE = 0;
 const int head = 0;
 const int tail = 0;
 const int succ = 0;
-
+// check #2: two write to same index, before ack
+sre<<4096>> re_check2 = 
+IDX = {
+    | write -> {(int<<32>>) hash<<12>>(2, idx)}
+    | ack   -> {(int<<32>>) hash<<12>>(2, idx)}
+}
+DETECT{
+    (
+      write(true).write(true).ack(true)
+    )
+} => {printf ("Error");};
 /* Global data: the registers which we're replicating, plus metadata about each of them */
 global Array.t<<32>> pending = Array.create(NUM_REGISTERS);
 global Array.t<<32>> sequence_nums = Array.create(NUM_REGISTERS);
@@ -45,17 +55,7 @@ exit event continue(int src, int dst);
 //     )
 // } => {printf ("Error");};
 
-// check #2: two write to same index, before ack
-sre<<4096>> re_check2 = 
-IDX = {
-    | write -> {(int<<32>>) hash<<12>>(2, idx)}
-    | ack   -> {(int<<32>>) hash<<12>>(2, idx)}
-}
-DETECT{
-    (
-      write(true).write(true).ack(true)
-    )
-} => {printf ("Error");};
+
 
 
 // // check #3: normal pattern seen at tail switch, write-process-ack
