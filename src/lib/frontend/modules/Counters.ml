@@ -53,18 +53,19 @@ let counter_add_ty =
        }
 ;;
 
-let dummy_memop = State.F (fun _ _ args -> extract_ival (List.hd args))
-let setop = State.F (fun _ _ args -> extract_ival (List.nth args 1))
-let dummy_int = State.V (CoreSyntax.vinteger (Integer.of_int 0))
+let dummy_memop = InterpSyntax.F (fun _ _ args -> extract_ival (List.hd args))
+let setop = InterpSyntax.F (fun _ _ args -> extract_ival (List.nth args 1))
+let dummy_int = InterpSyntax.V (CoreSyntax.vinteger (Integer.of_int 0))
 
 let counter_add_fun nst swid args =
   let open State in
+  let open InterpSyntax in
   let open CoreSyntax in
   match args with
   | [V { v = VGlobal stage }; V { v = VInt addval }] ->
     let get_f arg = vinteger arg in
     let set_f arg = Integer.add arg addval in
-    update_switch swid stage 0 get_f set_f nst
+    InterpSwitch.update stage 0 get_f set_f (sw nst swid)
   | _ ->
     counter_add_error "Incorrect number or type of arguments to Counter.add"
 ;;

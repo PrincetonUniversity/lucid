@@ -5,12 +5,26 @@ let self_id = Id.create "self"
 let self_ty = ty (TInt (IConst 32))
 let recirc_id = Id.create "recirculation_port"
 let recirc_ty = ty (TInt (IConst 32))
-let lucid_ety_id = Id.create "LUCID_ETHERTY"
 
-(* FIXME: Just guessing: we should probably have this be configurable *)
+(* the lucid ethernet header is the tag for background events *)
+let lucid_ety_id = Id.create "LUCID_ETHERTY"
 let lucid_ety_ty = ty (TInt (IConst 16))
 let lucid_ety_int = 666
 let lucid_ety_value = vint lucid_ety_int 16
+
+let lucid_eth_smac_int = 0x000000000777
+let lucid_eth_smac_ty = ty (TInt (IConst 48))
+let lucid_eth_smac_value = vint lucid_eth_smac_int 48
+let lucid_eth_dmac_int = 0x000000000888
+let lucid_eth_dmac_ty = ty (TInt (IConst 48))
+let lucid_eth_dmac_value = vint lucid_eth_dmac_int 48
+
+let lucid_eventnum_ty = ty (TInt (IConst 16))
+
+(* used in the parser *) 
+let lucid_parse_id = Id.create "do_lucid_parsing"
+let packet_arg_id = Id.create "packet"
+let main_parse_id = Id.create "main"
 
 (* used as first argument to hash, for checksum in deparser *)
 let checksum_id = Id.create "checksum"
@@ -25,7 +39,9 @@ let builtin_type_info =
   [ Arrays.t_id, Arrays.sizes, Arrays.global
   ; Counters.t_id, Counters.sizes, Counters.global
   ; PairArrays.t_id, PairArrays.sizes, PairArrays.global
-  ; Payloads.t_id, Payloads.sizes, Payloads.global ]
+  ; Payloads.t_id, Payloads.sizes, Payloads.global
+  ; Packet.t_id, Packet.sizes, Packet.global
+  ]
 ;;
 
 (* Building modules *)
@@ -35,7 +51,10 @@ let builtin_modules =
   ; Events.signature
   ; System.signature
   ; PairArrays.signature
-  ; Payloads.signature ]
+  ; Payloads.signature
+  ; Packet.signature 
+
+  ]
 ;;
 
 let builtin_defs =
@@ -45,6 +64,7 @@ let builtin_defs =
   @ System.defs
   @ PairArrays.defs
   @ Payloads.defs
+  @ Packet.defs
 ;;
 
 (* Builtin local vars with
@@ -74,5 +94,4 @@ let start_id = Id.create "start"
 (* Used in memops *)
 let cell1_id = SyntaxUtils.cell1_id
 let cell2_id = SyntaxUtils.cell2_id
-let lucid_parse_id = Id.create "do_lucid_parsing"
 

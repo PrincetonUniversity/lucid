@@ -21,10 +21,10 @@ parser parse_ip(eth_hdr e) {
     generate(ip_pkt(e, ip, ip_src, ip_dst));
 }
 
-parser main() {
+parser main(Payload.t pkt) {
     read eth_hdr e;
     match e#etype with
-    | LUCID_ETHERTY -> {do_lucid_parsing();}
+    | LUCID_ETHERTY -> {do_lucid_parsing(pkt);}
     | 0x0800 -> {parse_ip(e);}
 }
 

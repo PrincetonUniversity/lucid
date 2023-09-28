@@ -59,7 +59,8 @@ let pairarray_update_ty =
 ;;
 
 let pairarray_update_fun nst swid args =
-  let open State in
+  let open InterpSyntax in
+  let open State in 
   match args with
   | [V { v = VGlobal stage }; V { v = VInt idx }; F memop; arg1; arg2; default]
     ->
@@ -76,7 +77,7 @@ let pairarray_update_fun nst swid args =
       | VTuple [VInt n1; VInt n2; v3] -> n1, n2, { v with v = v3 }
       | _ -> failwith "array_update: Internal error"
     in
-    update_switch_complex swid stage (Integer.to_int idx) update_f nst
+    InterpSwitch.update_complex stage (Integer.to_int idx) update_f (sw nst swid)
   | _ -> pairarray_update_error "Incorrect number or type of arguments"
 ;;
 

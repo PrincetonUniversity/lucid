@@ -11,6 +11,8 @@ and z = [%import: (Z.t[@opaque])]
 and pragma = [%import: Pragma.t]
 and zint = [%import: (Integer.t[@with Z.t := (Z.t [@opaque])])]
 and location = int
+and bit = [%import: (BitString.bit[@opaque])]
+and bits = [%import: (BitString.bits[@opaque])]
 
 (* All sizes should be inlined and precomputed *)
 and size = int
@@ -32,6 +34,7 @@ and raw_ty =
   | TPat of size
   | TRecord of (id * raw_ty) list
   | TTuple of raw_ty list
+  | TBits of size
 
 and tbl_ty =
   { tkey_sizes : size list
@@ -99,11 +102,14 @@ and v =
   | VTuple of v list (* Only used in the interpreter during complex memops *)
   | VGroup of location list
   | VPat of int list
+  | VBits of bits
 
 and event_val =
   { eid : cid
+  ; evnum : value option
   ; data : value list
   ; edelay : int
+  ; eserialized : bool
   }
 
 and value =
@@ -301,6 +307,8 @@ let ty_sp raw_ty tspan = { raw_ty; tspan }
 let ty raw_ty = { raw_ty; tspan = Span.default }
 let tint sz = ty (TInt sz)
 
+let payload_ty = ty@@TName(Cid.create ["Payload"; "t"], [], false)
+
 let infer_vty v =
   match v with
   | VBool _ -> TBool
@@ -311,6 +319,7 @@ let infer_vty v =
   | VPat bs -> TPat (List.length bs)
   | VTuple _ ->
     failwith "Cannot infer type of tuple value (only used in complex memops)"
+  | VBits bits -> TBits (List.length bits)
 ;;
 
 (* Values *)
@@ -336,6 +345,8 @@ let vtup vs = avalue (VTuple vs) (ty (TTuple(List.map infer_vty vs)))
 let vint_tups i_s =
   vtup (List.map (fun (i, s) -> VInt(Integer.create i s)) i_s) (Span.default)
 ;;  
+let vbits bits = value (VBits bits)
+
 
 (* Expressions *)
 let exp e ety = { e; ety; espan = Span.default }
@@ -554,7 +565,7 @@ let ty_to_size ty =
   match ty.raw_ty with
   | TBool -> 1
   | TInt sz -> sz
-  | _ -> error "[size_of_tint] not a tint"
+  | _ -> error "[ty_to_size] can only get size of ints or bools"
 ;;
 
 let size_of_tint = ty_to_size
@@ -587,4 +598,13 @@ let exp_to_int exp =
   match exp.e with
   | EVal { v = VInt z; _ } -> Integer.to_int z
   | _ -> error "[exp_to_int] exp is not an EVal(EInt(...))"
+;;
+
+(* bitstrings *)
+let hexstr_to_vbits hexstr = vbits@@BitString.hexstr_to_bits hexstr
+
+let extract_bits value = 
+  match value.v with
+  | VBits bits -> bits
+  | _ -> error "[extract_bits] value is not a VBits"
 ;;

@@ -465,6 +465,9 @@ let analyze_prog ds =
     end
   in
   let env = ref empty_env in
+  (* add the lucid builtin parser to the environment. *)
+  let new_env = create_param_slots !env (Cid.id (Builtins.lucid_parse_id)) [(Id.create "pkt",Payloads.payload_ty)] false in
+  env := new_env;
   v#visit_decls env ds;
   assign_int_slotids !env
 ;;

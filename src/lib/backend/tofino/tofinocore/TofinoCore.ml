@@ -62,6 +62,8 @@ and parser_action = [%import: CoreSyntax.parser_action]
 and parser_branch = [%import: CoreSyntax.parser_branch]
 and parser_step = [%import: CoreSyntax.parser_step]
 and parser_block = [%import: CoreSyntax.parser_block]
+and bit = [%import: CoreSyntax.bit]
+and bits = [%import: CoreSyntax.bits]
 
 (*NEW 6/2023 -- event types / definitions *)
 

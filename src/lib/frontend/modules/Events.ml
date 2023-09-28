@@ -18,7 +18,7 @@ let event_delay_error msg = event_error event_delay_name msg
 
 let event_delay_fun _ _ args =
   let open CoreSyntax in
-  let open State in
+  let open InterpSyntax in 
   match args with
   | [V { v = VEvent event }; V { v = VInt delay }] ->
     let delay = Integer.to_int delay in

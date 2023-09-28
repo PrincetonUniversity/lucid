@@ -1,32 +1,126 @@
 {
+  "event_arrival": {
+    "switch": 0,
+    "port": 99,
+    "time": 1200,
+    "event": "ip_pkt(11,22)"
+  }
+}
+{
   "printf": "packet entered switch 0 from port 99. Forwarding out of port: 0",
   "switch": 0
 }
-{ "printf": "counting packet with src=11 at switch 0", "switch": 0 }
+{
+  "event_arrival": {
+    "switch": 1,
+    "port": 0,
+    "time": 1800,
+    "event": "ip_pkt(11,22)"
+  }
+}
 {
   "printf": "packet entered switch 1 from port 0. Forwarding out of port: 1",
   "switch": 1
 }
-{ "printf": "counting packet with src=11 at switch 1", "switch": 1 }
+{
+  "event_arrival": {
+    "switch": 0,
+    "port": 196,
+    "time": 1802,
+    "event": "count_src(11)"
+  }
+}
+{ "printf": "counting packet with src=11 at switch 0", "switch": 0 }
+{
+  "event_arrival": {
+    "switch": 3,
+    "port": 0,
+    "time": 2400,
+    "event": "ip_pkt(11,22)"
+  }
+}
 {
   "printf": "packet entered switch 3 from port 0. Forwarding out of port: 99",
   "switch": 3
 }
-{"name":"ip_pkt","args":[11,22],"locations":["3:99"],"timestamp":2400}
+{
+  "event_arrival": {
+    "switch": 1,
+    "port": 196,
+    "time": 2402,
+    "event": "count_src(11)"
+  }
+}
+{ "printf": "counting packet with src=11 at switch 1", "switch": 1 }
+{
+  "event_arrival": {
+    "switch": 3,
+    "port": 196,
+    "time": 3002,
+    "event": "count_src(11)"
+  }
+}
 { "printf": "counting packet with src=11 at switch 3", "switch": 3 }
+{
+  "event_arrival": {
+    "switch": 3,
+    "port": 99,
+    "time": 3003,
+    "event": "ip_pkt(22,11)"
+  }
+}
 {
   "printf": "packet entered switch 3 from port 99. Forwarding out of port: 0",
   "switch": 3
 }
 {
+  "event_arrival": {
+    "switch": 1,
+    "port": 1,
+    "time": 3604,
+    "event": "ip_pkt(22,11)"
+  }
+}
+{
   "printf": "packet entered switch 1 from port 1. Forwarding out of port: 0",
   "switch": 1
 }
+{
+  "event_arrival": {
+    "switch": 3,
+    "port": 196,
+    "time": 3605,
+    "event": "count_src(22)"
+  }
+}
 { "printf": "counting packet with src=22 at switch 3", "switch": 3 }
+{
+  "event_arrival": {
+    "switch": 0,
+    "port": 0,
+    "time": 4205,
+    "event": "ip_pkt(22,11)"
+  }
+}
 {
   "printf": "packet entered switch 0 from port 0. Forwarding out of port: 99",
   "switch": 0
 }
-{"name":"ip_pkt","args":[22,11],"locations":["0:99"],"timestamp":4201}
+{
+  "event_arrival": {
+    "switch": 1,
+    "port": 196,
+    "time": 4206,
+    "event": "count_src(22)"
+  }
+}
 { "printf": "counting packet with src=22 at switch 1", "switch": 1 }
+{
+  "event_arrival": {
+    "switch": 0,
+    "port": 196,
+    "time": 4807,
+    "event": "count_src(22)"
+  }
+}
 { "printf": "counting packet with src=22 at switch 0", "switch": 0 }

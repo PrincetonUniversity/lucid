@@ -27,7 +27,7 @@ packet event pkt_in(eth_t eth, ip_t ip, int<16> comp_csum);
 packet event pkt_out(eth_t eth, ip_t ip) {skip;}
 
 
-parser main() {
+parser main(Payload.t pkt) {
    read eth_t eth;
    match eth#ety with
    // every program must begin by reading a 114 bit 
@@ -35,7 +35,7 @@ parser main() {
    // the first branch of the match must always just 
    // call do_lucid_parsing();, which does background 
    // event parsing stuff.
-   | LUCID_ETHERTY -> {do_lucid_parsing();}
+   | LUCID_ETHERTY -> {do_lucid_parsing(pkt);}
    | 0x0800 -> {
       read ip_t ip;
       // currently, a checksum operation is represented as 

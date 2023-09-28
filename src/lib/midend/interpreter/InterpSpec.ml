@@ -1,10 +1,13 @@
 open Batteries
 open CoreSyntax
 open InterpSyntax
+open InterpJson
 open Yojson.Basic
 open Preprocess
 module Env = InterpState.Env
 module IntMap = InterpState.IntMap
+
+module IC = InterpControl
 
 type json = Yojson.Basic.t
 
@@ -12,17 +15,11 @@ type t =
   { num_switches : int
   ; links : InterpState.State.topology
   ; externs : value Env.t list
-  ; events : located_event list
+  ; events : interp_input list
   ; config : InterpState.State.config
-  ; extern_funs : InterpState.State.ival Env.t
+  ; extern_funs : (InterpState.State.network_state InterpSyntax.ival) Env.t
   ; ctl_pipe_name : string option
   }
-
-let rename env err_str id_str =
-  match Collections.CidMap.find_opt (Cid.from_string id_str) env with
-  | Some id -> id
-  | None -> error @@ Printf.sprintf "Unknown %s %s" err_str id_str
-;;
 
 let parse_int err_str (j : json) =
   match j with
@@ -60,135 +57,6 @@ let parse_port str =
 
 let default_port = 0
 
-let parse_delay cur_ts lst =
-  match List.assoc_opt "timestamp" lst with
-  | Some (`Int n) -> n
-  | None -> cur_ts
-  | _ -> error "Event specification had non-integer delay field"
-;;
-
-let parse_event
-  (pp : Preprocess.t)
-  (renaming : Renaming.env)
-  num_switches
-  (cur_ts : int)
-  (event : json)
-  : located_event
-  =
-  let parse_locations num_switches lst =
-    let locations =
-      match List.assoc_opt "locations" lst with
-      | Some (`List lst) ->
-        List.map
-          (function
-           | `String str ->
-             let sw, port = parse_port str in
-             if sw < 0 || sw >= num_switches
-             then
-               error
-               @@ "Cannot specify event at nonexistent switch "
-               ^ string_of_int sw;
-             if port < 0 || port >= 255
-             then
-               error
-               @@ "Cannot specify event at nonexistent port "
-               ^ string_of_int port;
-             sw, port
-           | _ -> error "Event specification had non-string location")
-          lst
-      | None -> [0, default_port]
-      | _ -> error "Event specification has non-list locations field"
-    in
-    locations
-  in
-  match event with
-  | `Assoc lst ->
-    (* Find the event name, accounting for the renaming pass, and get its
-       sort and argument types *)
-    (* Determine if the record is an event or a control command.
-       "type" == "command" -> command
-       "type" == "event" -> event
-       - if there is no type, it is an event *)
-    let eid =
-      match List.assoc_opt "name" lst with
-      | Some (`String id) -> rename renaming.var_map "event" id
-      | None -> error "Event specification missing name field"
-      | _ -> error "Event specification had non-string type for name field"
-    in
-    let _, tys = Env.find eid pp.events in
-    (* Parse the arguments into values, and make sure they have the right types.
-       At the moment only integer and boolean arguments are supported *)
-    let data =
-      match List.assoc_opt "args" lst with
-      | Some (`List lst) ->
-        (try List.map2 (parse_value "Event") tys lst with
-         | Invalid_argument _ ->
-           error
-           @@ Printf.sprintf
-                "Event specification for %s had wrong number of arguments"
-                (Cid.to_string eid))
-      | None -> error "Event specification missing args field"
-      | _ -> error "Event specification had non-list type for args field"
-    in
-    (* Parse the delay and location fields, if they exist *)
-    let edelay = parse_delay cur_ts lst in
-    let locations = parse_locations num_switches lst in
-    ilocated_event ({ eid; data; edelay }, locations)
-  | _ -> error "Non-assoc type for event definition"
-;;
-
-let parse_control_op num_switches (cur_ts : int) (control : json) =
-  let parse_locations num_switches lst =
-    let locations =
-      match List.assoc_opt "locations" lst with
-      | Some (`List lst) ->
-        List.map
-          (function
-           | `Int sw ->
-             if sw < 0 || sw >= num_switches
-             then
-               error
-               @@ "Cannot specify control command at nonexistent switch "
-               ^ string_of_int sw;
-             sw
-           | _ -> error "Control command specification had non-int location")
-          lst
-      | None -> [0]
-      | _ -> error "control command specification has non-list locations field"
-    in
-    locations
-  in
-  match control with
-  | `Assoc lst ->
-    let edelay = parse_delay cur_ts lst in
-    let locations = parse_locations num_switches lst in
-    let control_event =
-      { ctl_cmd = InterpSyntax.parse_control_e lst; ctl_edelay = edelay }
-    in
-    ilocated_control (control_event, List.map (fun sw -> sw, 0) locations)
-  | _ -> error "Non-assoc type for control command"
-;;
-
-let parse_interp_input
-  (pp : Preprocess.t)
-  (renaming : Renaming.env)
-  num_switches
-  (cur_ts : int)
-  (event : json)
-  =
-  match event with
-  | `Assoc lst ->
-    (match List.assoc_opt "type" lst with
-     | Some (`String "event") ->
-       parse_event pp renaming num_switches cur_ts event
-     | Some (`String "command") -> parse_control_op num_switches cur_ts event
-     | Some _ ->
-       error "unknown interpreter input type (expected event or command)"
-     (* default is event *)
-     | None -> parse_event pp renaming num_switches cur_ts event)
-  | _ -> error "Non-assoc type for interpreter input"
-;;
-
 (* parse a line provided to the interactive mode interpreter,
    which may either be a single event (an assoc) or a list of
    multiple events (List of assocs) *)
@@ -197,55 +65,43 @@ let parse_interp_event_list
   (renaming : Renaming.env)
   (num_switches : int)
   (gap : int)
-  (events : json)
+  (input_json : json)
   =
-  match events with
-  | `List lst -> List.map (parse_interp_input pp renaming num_switches gap) lst
-  | _ -> [parse_interp_input pp renaming num_switches gap events]
+  let parse_f =
+    (parse_interp_input 
+      Payloads.t_id 
+      (Builtins.lucid_eventnum_ty |> SyntaxToCore.translate_ty)
+      renaming.var_map pp.events num_switches gap default_port)
+  in
+  match input_json with
+  | `List lst -> List.map parse_f lst
+  | _ -> [parse_f input_json]
 ;;
 
 let parse_interp_inputs
   (pp : Preprocess.t)
   (renaming : Renaming.env)
   (num_switches : int)
-  (gap : int)
+  (inter_event_gap : int)
   (events : json list)
   =
+  let parse_f =
+    (parse_interp_input 
+      Payloads.t_id (Builtins.lucid_eventnum_ty |> SyntaxToCore.translate_ty) renaming.var_map pp.events num_switches)
+  in
   let wrapper
-    ((located_events_rev : located_event list), (current_ts : int))
+    ((located_events_rev : interp_input list), (default_next_event_time : int))
     (event_json : json)
     =
     let located_event =
-      parse_interp_input pp renaming num_switches current_ts event_json
+      parse_f default_next_event_time default_port event_json
     in
-    let next_ts = located_event_delay located_event + gap in
+    let next_ts = (interp_input_to_time located_event) + inter_event_gap in
     located_event :: located_events_rev, next_ts
   in
   let located_events_rev, _ = List.fold_left wrapper ([], 0) events in
   List.rev located_events_rev
 ;;
-
-(* DEPRECIATED *)
-(* let parse_events
-    (pp : Preprocess.t)
-    (renaming : Renaming.env)
-    (num_switches : int)
-    (gap : int)
-    (events : json list)
-  =
-  let wrapper
-      ((located_events_rev : located_event list), (current_ts : int))
-      (event_json : json)
-    =
-    let located_event =
-      parse_event pp renaming num_switches current_ts event_json
-    in
-    let next_ts = (fst located_event).edelay + gap in
-    located_event::located_events_rev,next_ts
-  in
-  let located_events_rev, _ = List.fold_left wrapper ([], 0) events in
-  List.rev located_events_rev
-;; *)
 
 let builtins renaming n =
   List.init n (fun i ->
@@ -278,7 +134,7 @@ let parse_externs
     externs
 ;;
 
-let parse_links num_switches links =
+let parse_links num_switches links recirc_ports =
   let add_link id port dst acc =
     try
       IntMap.modify
@@ -309,25 +165,26 @@ let parse_links num_switches links =
     |> add_link src_id src_port (dst_id, dst_port)
     |> add_link dst_id dst_port (src_id, src_port)
   in
-  List.fold_left add_links (InterpState.State.empty_topology num_switches) links
+  List.fold_left add_links (InterpState.State.empty_topology num_switches recirc_ports) links
 ;;
 
 (* Make a full mesh with arbitrary port numbers.
    Specifically, we map 1:2 to 2:1, and 3:4 to 4:3, etc. *)
-let make_full_mesh num_switches =
+let make_full_mesh num_switches recirc_ports =
   let switch_ids = List.init num_switches (fun n -> n) in
-  List.fold_left
-    (fun acc id ->
+  List.fold_left2
+    (fun acc id recirc_port ->
       let port_map =
         List.fold_left
           (fun acc port ->
             if id = port then acc else IntMap.add port (port, id) acc)
-          IntMap.empty
+          (IntMap.add recirc_port (id, recirc_port) IntMap.empty)
           switch_ids
       in
       IntMap.add id port_map acc)
     IntMap.empty
     switch_ids
+    recirc_ports
 ;;
 
 (*   and code = network_state -> int (* switch *) -> ival list -> value
@@ -336,8 +193,8 @@ let create_foreign_functions renaming efuns python_file =
   let open InterpState.State in
   let oc_to_py v =
     match v with
-    | V { v = VBool b } -> Py.Bool.of_bool b
-    | V { v = VInt n } -> Py.Int.of_int (Integer.to_int n)
+    | InterpSyntax.V { v = VBool b } -> Py.Bool.of_bool b
+    | InterpSyntax.V { v = VInt n } -> Py.Int.of_int (Integer.to_int n)
     | _ -> error "Can only call external functions with int/bool arguments"
   in
   let obj =
@@ -362,7 +219,7 @@ let create_foreign_functions renaming efuns python_file =
         ^ " is not a function in the python file!"
       | Some o ->
         let f =
-          InterpState.State.F
+          InterpSyntax.F
             (fun _ _ args ->
               let pyretvar =
                 Py.Callable.to_function
@@ -405,31 +262,14 @@ let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t 
       | Some _ -> error "Python path entry must be a string!"
       | None -> Py.initialize ()
     in
-    let links =
-      if num_switches = 1
-      then InterpState.State.empty_topology 1
-      else (
-        match List.assoc_opt "links" lst with
-        | Some (`Assoc links) -> parse_links num_switches links
-        | Some (`String "full mesh") -> make_full_mesh num_switches
-        | None -> error "No links field in network with multiple switches"
-        | _ -> error "Unexpected format for links field")
-    in
-    let max_time =
-      match List.assoc_opt "max time" lst with
-      | Some (`Int n) -> n
-      | _ -> 0
-      (* a max time of 0 makes sense for interactive mode *)
-      (* error "No value or non-int value specified for max time" *)
-    in
-    let externs =
+    let externs, recirc_port_ints =
       let externs =
         match List.assoc_opt "externs" lst with
         | Some (`Assoc lst) -> lst
         | None -> []
         | Some _ -> error "Non-assoc type for extern definitions"
       in
-      let recirc_ports =
+      let recirc_ports_def =
         (* This is an extern under the hood, but users don't see it that way *)
         match List.assoc_opt "recirculation_ports" lst with
         | Some (`List lst) -> "recirculation_port", `List lst
@@ -438,7 +278,39 @@ let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t 
           , `List (List.init num_switches (fun _ -> `Int 196)) )
         | Some _ -> error "Non-list type for recirculation port definitions"
       in
-      parse_externs pp renaming num_switches (recirc_ports :: externs)
+      (* each switch may have a different recirc port, for some reason *)
+      let recirc_ports_ints = match (snd recirc_ports_def) with
+        | `List lst -> List.map (fun j -> parse_int "recirculation port" j) lst
+        | _ -> error "Non-list type for recirculation port definitions"
+      in
+      parse_externs pp renaming num_switches (recirc_ports_def :: externs), recirc_ports_ints
+    in
+    if ((List.length recirc_port_ints) <> num_switches)
+    then
+      error
+      @@ "Number of recirculation ports does not match number of switches!";
+    let links =
+      if num_switches = 1
+      then InterpState.State.empty_topology 1 recirc_port_ints
+      else (
+        match List.assoc_opt "links" lst with
+        | Some (`Assoc links) -> parse_links num_switches links recirc_port_ints
+        | Some (`String "full mesh") -> make_full_mesh num_switches recirc_port_ints
+        | None -> error "No links field in network with multiple switches"
+        | _ -> error "Unexpected format for links field")
+    in
+    let max_time =
+      match List.assoc_opt "max time" lst with
+      | Some (`Int n) -> n
+      | _ -> (
+        (* for interactive mode, max_time is the start timestamp for incoming events *)
+        (* TODO: this isn't quite right. A max_time of 0 in interactive mode 
+           prevents any recirculated events from running until the simulation starts. 
+           That might be what we want, but it also might not be. Hmm... *)
+        if (Cmdline.cfg.interactive)
+          then 0
+          else 10000
+      )
     in
     let events =
       match List.assoc_opt "events" lst with

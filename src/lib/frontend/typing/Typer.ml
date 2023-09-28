@@ -882,7 +882,11 @@ and infer_statement (env : env) (s : statement) : env * statement =
           env, GMulti inf_loc
         | GPort loc ->
           let env, inf_loc, lty = infer_exp env loc |> textract in
-          unify_raw_ty s.sspan lty.raw_ty (TInt (fresh_size ()));
+          (* the egress port expression should be the same type as the 
+            ingress port builtin *)
+          let inst t = instantiator#visit_ty (fresh_maps ()) t in
+          let t = inst (lookup_var e.espan env (Cid.id Builtins.ingr_port_id)) in
+          unify_raw_ty s.sspan lty.raw_ty t.raw_ty;
           env, GPort inf_loc
       in
       env, SGen (inf_g, inf_e)
@@ -1568,7 +1572,8 @@ let rec infer_declaration
       (* a parser may branch on the ingress port *)
       let ingress_port_param = (Builtins.ingr_port_id, builtin_tys.ingr_port_ty) in
       let parser_env =
-        add_locals env (ingress_port_param::params) |> define_parser Builtins.lucid_parse_id []
+        add_locals env (ingress_port_param::params) 
+        |> define_parser Builtins.lucid_parse_id [(Id.create "pkt", Payloads.payload_ty)]
       in
       let inf_parser = infer_parser_block parser_env parser in
       let env = define_parser id params env in
