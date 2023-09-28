@@ -39,6 +39,17 @@ event siphash_intermediate(int<<32>> src, int<<32>> dst, int<<16>> src_port, int
 exit event iptcp_craft_out(
         int<<32>> src, int<<32>> dst, int<<16>> src_port, int<<16>> dst_port,
         int<<32>> seq_no, int<<32>> ack_no);
+// not a real exit event, just for reporting to regex
+event iptcp_craft_out_dummy(
+        int<<32>> src, int<<32>> dst, int<<16>> src_port, int<<16>> dst_port,
+        int<<32>> seq_no, int<<32>> ack_no);
+
+//Handlers
+handle iptcp_craft_out_dummy(
+        int<<32>> src, int<<32>> dst, int<<16>> src_port, int<<16>> dst_port,
+        int<<32>> seq_no, int<<32>> ack_no){
+    printf("Dummy.");
+}
 
 handle  siphash_intermediate(int<<32>> src, int<<32>> dst, int<<16>> src_port, int<<16>> dst_port, int<<32>> _seq_no, int<<32>> _ack_no, int<<32>> cookie_time, 
 	int<<32>> v0, int<<32>> v1, int<<32>> v2, int<<32>> v3, 
