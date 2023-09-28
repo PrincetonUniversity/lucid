@@ -80,16 +80,19 @@ module State = struct
 
   let sw nst swid = nst.switches.(swid)
 
+  let pipe nst swid = nst.switches.(swid).pipeline
+
   let mem_env swid cid nst = InterpSwitch.mem_env cid nst.switches.(swid)
   let lookup swid k nst = InterpSwitch.lookup k nst.switches.(swid)
 
 
-  let sw_update nst swid update_f = 
-    nst.switches.(swid) <- update_f nst.switches.(swid)
+  (* update the state of a switch. Pass this callback to 
+     a switch so that it can update itself without having to know 
+     about the network. *)
+  let save_update nst sw = nst.switches.(sw.swid) <- sw;    
   ;;
-
-  
-  let add_global swid cid v nst = sw_update nst swid (InterpSwitch.add_global cid v)
+  let add_global swid cid v nst = 
+    save_update nst (InterpSwitch.add_global cid v nst.switches.(swid))
   ;;
 
   let add_global_function (g : global_fun) nst =
@@ -101,11 +104,6 @@ module State = struct
         else InterpSwitch.add_global g.cid (F g.body) st)
       nst.switches
   ;;
-
-  (* let lookup_handler cid nst =
-    try Some (Env.find cid nst.handlers) with
-    | Not_found -> error ("missing handler: " ^ Cid.to_string cid)
-  ;; *)
 
   let lookup_action cid nst =
     try Env.find cid nst.actions with
@@ -187,15 +185,15 @@ module State = struct
   let ingress_receive arrival_time swid port (ievent : internal_event) nst =
     let st = nst.switches.(swid) in
     if Random.int 100 < nst.config.drop_chance
-    then (InterpSwitch.log_drop  ievent nst.current_time st)
-    else (nst.switches.(swid) <- InterpSwitch.push_to_ingress ievent arrival_time port st;)
+    then (InterpSwitch.log_drop ievent nst.current_time st)
+    else (InterpSwitch.push_to_ingress nst st ievent arrival_time port)     
   ;;
 
   (* push a single event to the switch's egress queue. Called by local methods 
      moving events from ingress to egress.*)
   let egress_receive arrival_time swid port (ievent : internal_event) nst =
     let st = nst.switches.(swid) in
-    nst.switches.(swid) <- InterpSwitch.push_to_egress ievent arrival_time port st;
+    InterpSwitch.push_to_egress nst st ievent arrival_time port;
   ;;
   (* send out of an ingress *)
   type ingress_destination = 
@@ -247,9 +245,8 @@ module State = struct
             | Some(switch) -> switch
           in
           let internal_event = to_internal_event iev loc itime in
-          sws.(switch) <- InterpSwitch.push_to_ingress 
-          internal_event itime loc.port (sws.(switch))
-          )
+          (InterpSwitch.push_to_ingress nst sws.(switch) internal_event itime loc.port)
+        )
         ilocs      
     | IControl({ictl; ilocs; itime}) -> 
       List.iter 
@@ -258,8 +255,8 @@ module State = struct
             | None -> error "input event not associated with a switch"
             | Some(switch) -> switch
           in
-          sws.(switch) <- InterpSwitch.push_to_commands ictl itime (sws.(switch))
-          )
+          (InterpSwitch.push_to_commands nst sws.(switch) ictl itime)
+        )
         ilocs
   ;;
 
@@ -276,7 +273,7 @@ module State = struct
         print_endline@@"[next_event] got "^(string_of_int (List.length epgs));
         print_endline@@"queues before:\n"^
         (queue_sizes nst); *)
-        nst.switches.(swid) <- st';
+        save_update nst st';
         (* print_endline ("-----");
         print_endline@@"queues after:\n"^
         (queue_sizes nst);
@@ -287,20 +284,17 @@ module State = struct
   let ready_egress_events swid nst = 
     let st = nst.switches.(swid) in
     let st', evs = InterpSwitch.ready_egress_events nst.current_time st in
-    nst.switches.(swid) <- st';
+    save_update nst st';
     evs
   ;;
-
   let ready_control_commands swid nst = 
     let st = nst.switches.(swid) in
-    let st', evs = InterpSwitch.ready_control_commands nst.current_time st in
-    nst.switches.(swid) <- st';
-    evs
-
+    InterpSwitch.ready_control_commands nst st nst.current_time
+  ;;
   let all_egress_events swid nst = 
     let st = nst.switches.(swid) in
     let st', evs = InterpSwitch.all_egress_events st in
-    nst.switches.(swid) <- st';
+    save_update nst st';
     evs
   ;;
 

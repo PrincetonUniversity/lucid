@@ -5,6 +5,7 @@ type json = Yojson.Basic.t
 
 open CoreSyntax
 open InterpSyntax
+open InterpControl
 
 let assoc_to_vals keys lst =
   List.map

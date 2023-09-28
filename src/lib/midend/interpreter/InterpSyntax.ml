@@ -1,12 +1,7 @@
-(* syntax extensions for the interpreter, mainly related 
-   to the input stream, which consists of 
-   events located at specific ports in the network, 
-   interpreter control commands, and payload values.
-   It would be nice to move payload values to interpPayload, 
-   but I can't figure out how to resolve dependency cycles 
-  in the current architecture. *)
-(* interpreter-specific extensions to core syntax. *)
+(* interpreter-specific extensions to core syntax: 
+internal value and event types *)
 open CoreSyntax
+open InterpControl
 
 (* values used in interpreter contexts. 'nst is network state *)
 type 'nst ival =
@@ -26,15 +21,6 @@ let extract_ival iv =
   | F _ -> failwith "IVal not a regular value"
 ;;
 
-(* a control value *)
-type control_val = 
-  | ArraySet of string * value * (value list)
-  | ArraySetRange of string * value * value * (value list)
-  | ArrayGet of string * value
-  | ArrayGetRange of string * value * value
-  | TableInstall of string * tbl_entry
-  | Print of string
-  | Noop
 
 (* internal event location in simulated network *)
 type loc = {

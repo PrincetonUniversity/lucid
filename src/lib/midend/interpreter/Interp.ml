@@ -3,6 +3,7 @@ open Yojson.Basic
 open Syntax
 open InterpSyntax
 open InterpState
+open InterpControl
 open CoreSyntaxGlobalDirectory
 
 let initial_state (pp : Preprocess.t) (spec : InterpSpec.t) =
@@ -19,7 +20,7 @@ let initial_state (pp : Preprocess.t) (spec : InterpSpec.t) =
           IntMap.add num (evid, arg_tys) acc)
         IntMap.empty
         (Env.bindings pp.events)
-    ; switches = Array.init spec.num_switches (fun _ -> InterpSwitch.empty_state ())
+    ; switches = Array.init spec.num_switches (fun swid -> InterpSwitch.create swid State.save_update)
     ; links = spec.links
     }
   in
@@ -157,7 +158,7 @@ let execute_main_parser print_log swidx port (nst: State.network_state) (pkt_ev 
 ;;   
 
 let execute_control swidx (nst : State.network_state) (ctl_ev : control_val) =
-  InterpControl.handle_control nst swidx ctl_ev
+  InterpControl.handle_control (State.pipe nst swidx) nst.global_names ctl_ev
 ;;
 
 

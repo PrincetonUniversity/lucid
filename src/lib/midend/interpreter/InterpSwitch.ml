@@ -2,6 +2,7 @@
 
 open CoreSyntax
 open InterpSyntax
+open InterpControl
 open Batteries
 module Env = Collections.CidMap
 module IntMap = Map.Make (Int)
@@ -35,7 +36,9 @@ type gress =
   | Egress
 
 type 'nst state = 
-  { global_env : 'nst InterpSyntax.ival Env.t
+  { 
+    swid : int
+  ; global_env : 'nst InterpSyntax.ival Env.t
   ; command_queue : CommandQueue.t
   ; ingress_queue : EventQueue.t
   ; egress_queue : EventQueue.t
@@ -44,14 +47,15 @@ type 'nst state =
   ; drops : (internal_event * int) Queue.t
   ; retval : value option ref
   ; counter : stats_counter ref
+  ; save_update : ('nst -> 'nst state -> unit)
   }
-
 
 let empty_counter = { entries_handled = 0; total_handled = 0 }
 
 
-let empty_state () =
-  { global_env = Env.empty
+let create swid update_f =
+  { swid = swid
+  ; global_env = Env.empty
   ; pipeline = Pipeline.empty ()
   ; command_queue = CommandQueue.empty
   ; ingress_queue = EventQueue.empty
@@ -60,15 +64,16 @@ let empty_state () =
   ; drops = Queue.create ()
   ; retval = ref None
   ; counter = ref empty_counter
+  ; save_update = update_f
   }
 ;;
 
-let copy_state st =
+(* let copy_state st =
   { st with
     pipeline = Pipeline.copy st.pipeline
   ; exits = Queue.copy st.exits
   }
-;;
+;; *)
 
 let mem_env cid state = Env.mem cid state.global_env
 let lookup k state = 
@@ -106,7 +111,7 @@ let n_queued_for_time queued_events stime =
 ;;
 
 (* push an event to an ingress at a different switch *)
-let push_to_ingress internal_event stime sport st =
+let push_to_ingress nst st internal_event stime sport =
   let squeue_order = n_queued_for_time (EventQueue.elems st.ingress_queue) stime in
   let internal_event = {
     internal_event with   
@@ -114,22 +119,23 @@ let push_to_ingress internal_event stime sport st =
     squeue_order;
     stime
   } in
-  
-  (* let internal_event = set_timestamp internal_event stime in *)
-  {st with ingress_queue=EventQueue.add internal_event st.ingress_queue}
+  let st' = {st with ingress_queue=EventQueue.add internal_event st.ingress_queue} in
+  st.save_update nst st' 
 ;;
 (* push an event from an ingress queue to an egress queue. Here, sport is the output port of the switch *)
-let push_to_egress internal_event stime sport st =
+let push_to_egress nst st internal_event stime sport =
   (* if there's already an event in the queue with the same time, we want to 
      make sure this one gets popped after it. So we increment the queue_spot. *)
   let squeue_order = n_queued_for_time (EventQueue.elems st.egress_queue) stime in
   let internal_event = {internal_event with squeue_order; sloc = loc (None,sport); stime} in
   (* let internal_event = set_timestamp internal_event stime in *)
-  {st with egress_queue=EventQueue.add internal_event st.egress_queue}
+  let st' = {st with egress_queue=EventQueue.add internal_event st.egress_queue} in
+  st.save_update nst st' 
 ;;
 
-let push_to_commands control_val stime st = 
-  {st with command_queue=CommandQueue.add (control_val, stime) st.command_queue}
+let push_to_commands nst st control_val stime = 
+  let st' = {st with command_queue=CommandQueue.add (control_val, stime) st.command_queue} in
+  st.save_update nst st'
 ;;
 
 let next_q_ele (fsize, fmin, fdel, ftime) q cur_time = 
@@ -152,7 +158,6 @@ let next_command current_time st =
   | None -> None
   | Some (q, (control_val, time)) -> Some ({st with command_queue = q;}, control_val, time)
 ;;
-
 
 let event_queue_fs = (EventQueue.size, EventQueue.find_min, EventQueue.del_min, timestamp)
 
@@ -212,7 +217,7 @@ let ready_egress_events current_time st =
   _all_egress_events st
 ;;
 
-let ready_control_commands current_time st = 
+let ready_control_commands nst st current_time = 
   (* pop events out of the queue for current time *)
   let rec _all_control_commands st = 
     match next_command current_time st with
@@ -221,7 +226,9 @@ let ready_control_commands current_time st =
       st', event :: rest
     | None -> st, []
   in
-  _all_control_commands st
+  let st', control_vals = _all_control_commands st in
+  st.save_update nst st';
+  control_vals
 ;;
 
 
