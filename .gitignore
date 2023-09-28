@@ -45,6 +45,7 @@ compilerOut
 examples/tofino_apps/__testbuilds/
 examples/tofino_apps/builds
 lucidCompilerOut/
+lucid_tofino_build/
 
 # Compiled binaries
 dpt
