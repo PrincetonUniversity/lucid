@@ -1,3 +1,4 @@
+(* The main interpreter library. Does initialization, user-polling, and event execution / simulator update loops. *)
 open Batteries
 open Yojson.Basic
 open Syntax
@@ -20,7 +21,8 @@ let initial_state (pp : Preprocess.t) (spec : InterpSpec.t) =
           IntMap.add num (evid, arg_tys) acc)
         IntMap.empty
         (Env.bindings pp.events)
-    ; switches = Array.init spec.num_switches (fun swid -> InterpSwitch.create swid State.save_update)
+    ; switches = Array.init spec.num_switches 
+      (InterpSwitch.create spec.config State.network_utils)
     ; links = spec.links
     }
   in
@@ -46,6 +48,7 @@ let initial_state (pp : Preprocess.t) (spec : InterpSpec.t) =
   ;
   (* push interpreter inputs to ingress and control command queues *)
   State.load_interp_inputs nst spec.events;
+
   nst
 ;;
 

@@ -1,17 +1,15 @@
-(* models a single switch in the interpreter *)
+(* Per-switch state in the interpreter. *)
 
 open CoreSyntax
 open InterpSyntax
 open InterpControl
 open Batteries
 module Env = Collections.CidMap
-module IntMap = Map.Make (Int)
-
 
 (* input queue for a single switch *)
 module EventQueue = BatHeap.Make (struct
   (* time, event, port *)
-  type t = internal_event
+  type t = ievent
   let compare t1 t2 = 
     (* compare stime and use squeue_order as a tiebreaker *)
     if (timestamp t1) = (timestamp t2)
@@ -31,30 +29,51 @@ type stats_counter =
 ; total_handled : int
 }
 
+(* topology-related datatypes that should be combined 
+into a proper "location" type *)
 type gress = 
   | Ingress
   | Egress
 
-type 'nst state = 
+type ingress_destination = 
+  | Port of int
+  | Switch of int
+  | PExit of int
+  
+
+(* utility functions that the network (InterpState) 
+   provides a switch (InterpSwitch) *)
+type 'nst network_utils = 
+{
+       save_update : 'nst -> 'nst state -> unit (* for updating queues *)
+     ; lookup_dst : 'nst -> (int * int) -> (int * int) (* for routing *)
+     ; lookup_switch : 'nst -> int -> 'nst state (* for moving events *)
+     ; get_time : 'nst -> int
+     ; calc_arrival_time : 'nst -> int -> int -> int -> int
+}   
+
+and 'nst state = 
   { 
     swid : int
-  ; global_env : 'nst InterpSyntax.ival Env.t
+  ; config : InterpConfig.config
+  ; global_env : 'nst ival Env.t
   ; command_queue : CommandQueue.t
   ; ingress_queue : EventQueue.t
   ; egress_queue : EventQueue.t
   ; pipeline : Pipeline.t
-  ; exits : (InterpSyntax.internal_event * int option * int) Queue.t
-  ; drops : (internal_event * int) Queue.t
+  ; exits : (ievent * int option * int) Queue.t
+  ; drops : (ievent * int) Queue.t
   ; retval : value option ref
   ; counter : stats_counter ref
-  ; save_update : ('nst -> 'nst state -> unit)
+  ; utils : 'nst network_utils
   }
 
 let empty_counter = { entries_handled = 0; total_handled = 0 }
 
 
-let create swid update_f =
-  { swid = swid
+let create config utils swid =
+  { swid
+  ; config
   ; global_env = Env.empty
   ; pipeline = Pipeline.empty ()
   ; command_queue = CommandQueue.empty
@@ -64,16 +83,9 @@ let create swid update_f =
   ; drops = Queue.create ()
   ; retval = ref None
   ; counter = ref empty_counter
-  ; save_update = update_f
+  ; utils
   }
 ;;
-
-(* let copy_state st =
-  { st with
-    pipeline = Pipeline.copy st.pipeline
-  ; exits = Queue.copy st.exits
-  }
-;; *)
 
 let mem_env cid state = Env.mem cid state.global_env
 let lookup k state = 
@@ -120,7 +132,7 @@ let push_to_ingress nst st internal_event stime sport =
     stime
   } in
   let st' = {st with ingress_queue=EventQueue.add internal_event st.ingress_queue} in
-  st.save_update nst st' 
+  st.utils.save_update nst st' 
 ;;
 (* push an event from an ingress queue to an egress queue. Here, sport is the output port of the switch *)
 let push_to_egress nst st internal_event stime sport =
@@ -130,12 +142,69 @@ let push_to_egress nst st internal_event stime sport =
   let internal_event = {internal_event with squeue_order; sloc = loc (None,sport); stime} in
   (* let internal_event = set_timestamp internal_event stime in *)
   let st' = {st with egress_queue=EventQueue.add internal_event st.egress_queue} in
-  st.save_update nst st' 
+  st.utils.save_update nst st' 
 ;;
 
 let push_to_commands nst st control_val stime = 
   let st' = {st with command_queue=CommandQueue.add (control_val, stime) st.command_queue} in
-  st.save_update nst st'
+  st.utils.save_update nst st'
+;;
+
+(** input loading **)
+let load_interp_input nst st port interp_input = 
+  match interp_input with
+  | IEvent({iev; itime}) -> 
+    let internal_event = to_internal_event iev {switch=Some st.swid; port} itime in
+    push_to_ingress nst st internal_event itime port
+  | IControl({ictl; itime}) -> 
+    push_to_commands nst st ictl itime
+;;
+
+
+(* event movement functions *)
+
+let ingress_receive nst st send_time arrival_time port (ievent : ievent)  =
+if Random.int 100 < st.config.drop_chance
+  then (log_drop ievent send_time st)
+  else (push_to_ingress nst st ievent arrival_time port)     
+;;
+
+let egress_receive nst st arrival_time port ievent = 
+  push_to_egress nst st ievent arrival_time port
+;;
+
+let ingress_send nst src_sw ingress_destination event_val = 
+  match ingress_destination with
+    | Switch sw -> 
+      let dst_sw = src_sw.utils.lookup_switch nst sw in
+      let send_time = src_sw.utils.get_time nst in
+      let arrive_time = src_sw.utils.calc_arrival_time nst src_sw.swid dst_sw.swid (event_val.edelay)  in
+      let ievent = to_internal_event event_val {switch = Some dst_sw.swid; port = 0} arrive_time in
+      ingress_receive nst dst_sw send_time arrive_time 0 ievent
+    | PExit port -> 
+      let send_time = src_sw.utils.get_time nst in
+      let ievent = to_internal_event event_val {switch = Some src_sw.swid; port = port} send_time in
+      log_exit (Some port) ievent send_time src_sw
+    | Port port -> 
+      let dst_id, _ = src_sw.utils.lookup_dst nst (src_sw.swid, port) in 
+      let timestamp = src_sw.utils.calc_arrival_time nst src_sw.swid dst_id (event_val.edelay) in
+      let ievent = to_internal_event event_val {switch = Some src_sw.swid; port = port} timestamp in
+      egress_receive nst src_sw timestamp port ievent
+;;
+
+let egress_send nst src_sw out_port event_val = 
+  let dst_id, dst_port = src_sw.utils.lookup_dst nst (src_sw.swid, out_port) in
+  let time = src_sw.utils.get_time nst in
+  (* dst -1 means "somewhere outside of the lucid network" *)
+  if (dst_id = -1) 
+    then 
+      let ievent = to_internal_event event_val {switch = Some src_sw.swid; port = out_port} time in
+      log_exit (Some out_port) ievent time src_sw
+    else 
+      let dst_sw = src_sw.utils.lookup_switch nst dst_id in
+      let ievent = to_internal_event event_val {switch = Some dst_id; port = dst_port} time in        
+      (* note that send and arrival times are currently the same -- we model 0-latency egress, for now *)
+      ingress_receive nst dst_sw time time dst_port ievent
 ;;
 
 let next_q_ele (fsize, fmin, fdel, ftime) q cur_time = 
@@ -171,8 +240,6 @@ let next_egress_event current_time st =
   match (next_q_ele event_queue_fs st.egress_queue current_time) with
   | None -> None
   | Some (q, (iev)) -> Some ({st with egress_queue = q;}, iev.sevent, get_port iev, timestamp iev)
-
-
 
 let next_event current_time st = 
   let igr_result, egr_result = next_ingress_event current_time st, next_egress_event current_time st in
@@ -227,7 +294,7 @@ let ready_control_commands nst st current_time =
     | None -> st, []
   in
   let st', control_vals = _all_control_commands st in
-  st.save_update nst st';
+  st.utils.save_update nst st';
   control_vals
 ;;
 
@@ -240,28 +307,6 @@ let all_egress_events st =
       all_elems
   in
   {st with egress_queue = EventQueue.empty}, all_elems
-;;
-
-
-  
-
-
-
-(* pipeline wrappers *)
-let get_table_entries stage st=
-  Pipeline.get_table_entries ~stage st.pipeline
-;;
-
-let install_table_entry  stage entry st =
-  Pipeline.install_table_entry ~stage ~entry st.pipeline
-;;
-
-let update  stage idx getop setop st  =
-  Pipeline.update ~stage ~idx ~getop ~setop st.pipeline
-;;
-
-let update_complex stage idx memop st=
-  Pipeline.update_complex ~stage ~idx ~memop st.pipeline
 ;;
 
 (* printers *)
@@ -328,7 +373,7 @@ let drops_to_string s =
          s
 ;;
 
-let env_to_string ival_to_string env =
+let env_to_string env =
   if Env.is_empty env
   then "{ }"
   else
@@ -342,7 +387,6 @@ let env_to_string ival_to_string env =
 ;;
 
 let to_string
-  ival_to_string
 ?(show_vars = false)
 ?(show_pipeline = true)
 ?(show_queue = true)
@@ -359,7 +403,7 @@ let show b title str =
       (String.make (8 - String.length title) ' ')
       str
 in
-let vars = show show_vars "Env" @@ env_to_string ival_to_string st.global_env in
+let vars = show show_vars "Env" @@ env_to_string st.global_env in
 let pipeline =
   show show_pipeline "Pipeline" @@ Pipeline.to_string ~pad:"  " st.pipeline
 in

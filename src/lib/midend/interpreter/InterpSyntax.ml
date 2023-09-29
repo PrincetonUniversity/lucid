@@ -21,6 +21,12 @@ let extract_ival iv =
   | F _ -> failwith "IVal not a regular value"
 ;;
 
+let ival_to_string v =
+  match v with
+  | V v -> CorePrinting.value_to_string v
+  | F _ -> "<function>"
+;;
+
 
 (* internal event location in simulated network *)
 type loc = {
@@ -29,37 +35,43 @@ type loc = {
 }
 
 (* an internal event in the interpreter *)
-type internal_event = {
+type ievent = {
   sevent : event_val;
   sloc : loc; (*we always know where an event is located *)
   stime : int;
   squeue_order : int; (* tiebreaker for two events queued at the same time *)
 }
 
+let to_internal_event ev loc time = 
+  { sevent = ev
+  ; sloc = loc
+  ; stime = time
+  ; squeue_order = 0;
+  }
 
-let get_loc (ev : internal_event) = 
+let get_loc (ev : ievent) = 
   ev.sloc
 ;;
-let update_port (ev : internal_event) port' = 
+let update_port (ev : ievent) port' = 
   {ev with sloc = {ev.sloc with port = port'}}
 ;;
 
-let get_port (ev : internal_event) =  ev.sloc.port
+let get_port (ev : ievent) =  ev.sloc.port
 ;;
 
-let delay (ev : internal_event) = ev.sevent.edelay
+let delay (ev : ievent) = ev.sevent.edelay
 ;;
 
-let timestamp internal_event = internal_event.stime
+let timestamp ievent = ievent.stime
 ;;
 
-let set_timestamp internal_event ts = 
-  {internal_event with stime = ts}
+let set_timestamp ievent ts = 
+  {ievent with stime = ts}
 ;;
 let loc (switch, port) = {switch; port}
 
-let internal_event_to_string internal_event = 
-  CorePrinting.event_to_string internal_event.sevent
+let internal_event_to_string ievent = 
+  CorePrinting.event_to_string ievent.sevent
 ;;
 
 
@@ -74,4 +86,10 @@ let interp_input_to_time interp_input =
   match interp_input with
   | IEvent({itime}) -> itime
   | IControl({itime}) -> itime
+;;
+
+let input_locs interp_input = 
+  match interp_input with
+  | IEvent({ilocs}) -> ilocs
+  | IControl({ilocs}) -> ilocs
 ;;

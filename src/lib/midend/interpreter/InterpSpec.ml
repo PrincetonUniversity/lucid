@@ -1,3 +1,4 @@
+(* Parsing the interpreter specification file. *)
 open Batteries
 open CoreSyntax
 open InterpSyntax
@@ -16,7 +17,7 @@ type t =
   ; links : InterpState.State.topology
   ; externs : value Env.t list
   ; events : interp_input list
-  ; config : InterpState.State.config
+  ; config : InterpConfig.config
   ; extern_funs : (InterpState.State.network_state InterpSyntax.ival) Env.t
   ; ctl_pipe_name : string option
   }
@@ -335,7 +336,7 @@ let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t 
       | Some (`String filename) -> Some filename
       | _ -> None
     in
-    let config : InterpState.State.config =
+    let config : InterpConfig.config =
       { max_time
       ; default_input_gap
       ; generate_delay

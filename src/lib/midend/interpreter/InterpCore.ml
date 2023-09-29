@@ -4,9 +4,8 @@ open Yojson.Basic
 open CoreSyntax
 open SyntaxUtils
 open InterpState
+open InterpSwitch
 module Printing = CorePrinting
-
-
 
 let raw_integer v =
   match v.v with
@@ -147,7 +146,6 @@ let lookup_var swid nst locals cid =
   | _ -> State.lookup swid cid nst
 ;;
 
-
 let port_arg locals = 
   let (port:CoreSyntax.value) = match Env.find (Id Builtins.ingr_port_id) locals with 
     | InterpSyntax.V(port_val) -> port_val
@@ -163,20 +161,6 @@ let get_local id locals = match Env.find (Id id) locals with
 let update_local local_id v locals = 
   Env.add (Id local_id) (InterpSyntax.V(v)) (Env.remove (Id local_id) locals)
 ;;
-(* let get_payload payload_id locals = 
-  match Env.find (Id payload_id) locals with 
-  | InterpSyntax.V(payload) -> (
-    match payload.v with 
-    | VBits(bs) -> bs
-    | _ -> error "[InterpCore.get_payload] local payload variable should be a bit string"
-  )
-  | _ -> error "could not find current packet buffer while interpreting parser!"
-;;
-
-let update_payload payload_id payload locals = 
-  Env.add (Id payload_id) (InterpSyntax.V(payload)) (Env.remove (Id payload_id) locals)
-;; *)
-
 
 let interp_eval exp : 'a InterpSyntax.ival =
   match exp.e with
@@ -350,36 +334,6 @@ let print_event_arrival swid str = interp_report "event_arrival" str (Some swid)
 let print_final_state str = interp_report "final_state" str None
 let print_printf swid str = interp_report "printf" str (Some swid)
 
-(* print an exit event as a json to stdout *)
-let print_exit_event swid port_opt (event:InterpSyntax.internal_event) time =
-  let base_out_json =
-      if (event.sevent.eserialized = false)
-        then InterpJson.event_val_to_json event.sevent
-        else InterpJson.packet_event_to_json event.sevent
-  in
-  (* add location and timestamp metadata *)
-  let port =
-    match port_opt with
-    | None -> -1
-    | Some p -> p
-  in
-  let locs = `List [`String (Printf.sprintf "%i:%i" swid port)] in
-  let timestamp = `Int time in
-  let evjson =
-    `Assoc
-      (base_out_json@["locations", locs; "timestamp", timestamp])
-  in
-  print_endline (Yojson.Basic.to_string evjson)
-;;
-
-(* print event as json if interactive mode is set,
-   else log for final report *)
-let log_exit swid port_opt (event:InterpSyntax.internal_event) (nst : State.network_state) =
-  if Cmdline.cfg.interactive
-  then print_exit_event swid port_opt event nst.current_time
-  else State.log_exit swid port_opt event nst
-;;
-
 let partial_interp_exps nst swid env exps =
   List.map
     (fun exp ->
@@ -391,7 +345,6 @@ let partial_interp_exps nst swid env exps =
            pointer, expected value")
     exps
 ;;
-
 
 (* convert a flood port into a list of declared ports *)
 let expand_flood_port nst swid flood_port =
@@ -463,29 +416,29 @@ let rec interp_statement nst hdl_sort swid locals s =
       let output_ports = match g with
         (* recirculation *)
         | GSingle None ->
-          [ State.Port(State.lookup swid (Cid.from_string "recirculation_port") nst
+          [ Port(State.lookup swid (Cid.from_string "recirculation_port") nst
           |> extract_ival
           |> raw_integer
           |> Integer.to_int )  ]
         (* teleport to switch ingress. should be depreciated *)
         | GSingle (Some exp) -> 
           let swid = interp_exp exp |> extract_ival |> raw_integer |> Integer.to_int in
-          [(State.Switch(swid))]
+          [(Switch(swid))]
         (* generate to a port in the switch *)
-        | GPort port -> [State.Port(interp_exp port |> extract_ival |> raw_integer |> Integer.to_int)]
+        | GPort port -> [Port(interp_exp port |> extract_ival |> raw_integer |> Integer.to_int)]
         (* generate to multiple ports *)
         | GMulti grp -> 
           let ports = interp_exp grp |> extract_ival |> raw_group in
           (match ports with
           | [port] when port < 0 -> (* flood to all ports except: -(port + 1) *)
             (* if we're flooding, we should also generate an event to the "exit" node in the network.  *)
-              State.PExit(port)::(List.map (fun p-> State.Port(p)) (expand_flood_port nst swid port))              
+              PExit(port)::(List.map (fun p-> Port(p)) (expand_flood_port nst swid port))              
           | _ -> 
-            List.map (fun port -> State.Port(port)) ports)
+            List.map (fun port -> Port(port)) ports)
       in
       (* push all the events to output ports *)
       List.iter (fun out_port -> 
-        State.ingress_send swid out_port event nst) 
+        InterpSwitch.ingress_send nst (State.lookup_switch nst swid) out_port event) 
         output_ports;
       locals       
     )
@@ -505,7 +458,7 @@ let rec interp_statement nst hdl_sort swid locals s =
         | EBackground -> event (* background events stay as events *)
         | EPacket -> InterpPayload.serialize_packet_event event
       in
-      State.egress_send swid port event_val nst;
+      InterpSwitch.egress_send nst (State.lookup_switch nst swid) port event_val;
       locals
     )
     | HControl -> (error "control events are not implemented")
@@ -547,7 +500,7 @@ let rec interp_statement nst hdl_sort swid locals s =
       | _ -> error "Table did not evaluate to a pipeline object reference"
     in
     (* call install_table_entry for each entry *)
-    List.iter (fun entry -> InterpSwitch.install_table_entry tbl_pos entry (State.sw nst swid)) entries;
+    List.iter (fun entry -> Pipeline.install_table_entry tbl_pos entry (State.sw nst swid).pipeline) entries;
     (* return unmodified locals context *)
     locals
   | STableMatch tm ->
@@ -557,7 +510,7 @@ let rec interp_statement nst hdl_sort swid locals s =
       | V { v = VGlobal stage } -> stage
       | _ -> error "Table did not evaluate to a pipeline object reference"
     in
-    let default, entries = InterpSwitch.get_table_entries tbl_pos (State.sw nst swid) in
+    let default, entries = Pipeline.get_table_entries tbl_pos (State.sw nst swid).pipeline in
     (* find the first matching case *)
     let key_vs = List.map (fun e -> interp_exp e |> extract_ival) tm.keys in
     let fst_match =
@@ -906,7 +859,7 @@ let interp_decl (nst : State.network_state) swid d =
           event.data
           params
       in
-      State.update_counter swid event nst; (*TODO: fix counters for egress. *)
+      State.update_counter swid event nst; (*TODO: why are we counting packet events here? *)
       Pipeline.reset_stage nst.switches.(swid).pipeline;
       ignore @@ interp_statement nst hdl_sort swid locals body
     in

@@ -65,7 +65,7 @@ let counter_add_fun nst swid args =
   | [V { v = VGlobal stage }; V { v = VInt addval }] ->
     let get_f arg = vinteger arg in
     let set_f arg = Integer.add arg addval in
-    InterpSwitch.update stage 0 get_f set_f (sw nst swid)
+    Pipeline.update ~stage ~idx:0 ~getop:get_f ~setop:set_f (sw nst swid).pipeline
   | _ ->
     counter_add_error "Incorrect number or type of arguments to Counter.add"
 ;;

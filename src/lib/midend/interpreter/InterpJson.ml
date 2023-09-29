@@ -1,4 +1,4 @@
-(* IO for the interpreter *)
+(* json parsing and deparsing for interpreter io from user *)
 
 open Yojson.Basic
 type json = Yojson.Basic.t

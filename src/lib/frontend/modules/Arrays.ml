@@ -81,7 +81,9 @@ let update_fun err nst swid args =
       | { v = VInt v } -> v
       | _ -> err "Wrong type of value from set op"
     in
-    InterpSwitch.update stage (Integer.to_int idx) get_f set_f (sw nst swid)
+    let pipe = (sw nst swid).pipeline in
+    Pipeline.update ~stage ~idx:(Integer.to_int idx) ~getop:get_f ~setop:set_f pipe
+    (* InterpSwitch.update stage (Integer.to_int idx) get_f set_f (sw nst swid) *)
   | _ -> err "Incorrect number or type of arguments to Array.update"
 ;;
 
@@ -237,7 +239,8 @@ let array_update_complex_fun nst swid args =
       | VTuple [VInt n1; VInt n2; v3] -> n1, n2, { v with v = v3 }
       | _ -> failwith "array_update_complex: Internal error"
     in
-    InterpSwitch.update_complex stage (Integer.to_int idx) update_f (sw nst swid)
+    let pipe = (sw nst swid).pipeline in
+    Pipeline.update_complex ~stage ~idx:(Integer.to_int idx) ~memop:update_f pipe
   | _ -> array_update_complex_error "Incorrect number or type of arguments"
 ;;
 

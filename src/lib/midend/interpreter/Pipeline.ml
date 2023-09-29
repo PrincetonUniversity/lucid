@@ -1,3 +1,4 @@
+(* Mutable program state within a single switch in the interpreter. *)
 open Batteries
 open CoreSyntax
 

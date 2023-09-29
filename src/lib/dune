@@ -71,6 +71,7 @@
    midendPipeline
    syntaxToCore
    interp
+   InterpConfig
    interpCore
    interpControl
    pipeline
