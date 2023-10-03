@@ -1,0 +1,145 @@
+/*
+A distributed probabilistic stateful firewall implemented using a Bloom filter,
+with timeouts.
+*/
+
+// Implement a Bloom filter with m = 16, k = 2
+const int NUM_REGISTERS = 1024;
+const int HASH_SEED_1 = 22;
+const int HASH_SEED_2 = 33;
+const int ROTATE_PERIOD = 1000;
+const int EMPTY_PERIOD = 50;
+
+const int<1> TRUE = 1;
+const int<1> FALSE = 0;
+
+/* Information about the chain. */
+/* I want this to read "extern location foo;" but we don't have that syntax yet */
+const int head = 0;
+const int tail = 0;
+const int succ = 0;
+
+/* We have three Bloom filters -- at any given time, one is active, one is
+"warming up", and one is being zeroed out. */
+
+// Basically a counter, but we need to be able to read and write simultaneously
+// in order to to mod it by 3
+global Array.t<8> active = Array.create(1);
+
+global Array.t<1> filter0_1 = Array.create(NUM_REGISTERS);
+global Array.t<1> filter0_2 = Array.create(NUM_REGISTERS);
+global Array.t<1> filter1_1 = Array.create(NUM_REGISTERS);
+global Array.t<1> filter1_2 = Array.create(NUM_REGISTERS);
+global Array.t<1> filter2_1 = Array.create(NUM_REGISTERS);
+global Array.t<1> filter2_2 = Array.create(NUM_REGISTERS);
+
+event add_to_filter(int i1, int i2);
+event rotate_active();
+event write_empty(int<32> i, int<8> curr);
+
+// Request_x is for packets coming from inside, response_x is for packets coming from outside
+// packet events
+packet event request_packet (int client_ip, int server_ip);
+packet event response_packet (int server_ip, int client_ip);
+// exit events
+exit event request_continue (int src_ip, int dst_ip);
+exit event response_continue (int src_ip, int dst_ip);
+
+handle add_to_filter(int i1, int i2) {
+  int idx1 = i1; int idx2 = i2;
+  int self = 1;
+  int<8> curr = Array.get(active, 0);
+  // Add only to active and warmup filters
+  if (curr == 0) {
+    Array.set(filter0_1, idx1, TRUE);
+    Array.set(filter0_2, idx2, TRUE);
+    Array.set(filter1_1, idx1, TRUE);
+    Array.set(filter1_2, idx2, TRUE);
+  } else {if (curr == 1) {
+    Array.set(filter1_1, idx1, TRUE);
+    Array.set(filter1_2, idx2, TRUE);
+    Array.set(filter2_1, idx1, TRUE);
+    Array.set(filter2_2, idx2, TRUE);
+  } else {
+    Array.set(filter0_1, idx1, TRUE);
+    Array.set(filter0_2, idx2, TRUE);
+    Array.set(filter2_1, idx1, TRUE);
+    Array.set(filter2_2, idx2, TRUE);
+  }}
+  // Send to next in chain
+  if (self != tail) {
+    generate Event.sslocate(add_to_filter(idx1, idx2), succ);
+  }
+}
+
+// Increment by 1 and mod by 3
+memop rotate (int<8> x, int<8> dummy) {
+  if (x == 2) {
+    return 0;
+  } else {
+    return x + 1;
+  }
+}
+
+handle rotate_active() {
+  int<8> new_curr = Array.update(active, 0, rotate, 0, rotate, 0);
+  generate write_empty(0, new_curr);
+  generate Event.delay(rotate_active(), ROTATE_PERIOD);
+}
+
+handle write_empty (int<32> i, int<8> curr) {
+  int<32> idx = i;
+  if (curr == 0) {
+    Array.set(filter2_1, idx, FALSE);
+    Array.set(filter2_2, idx, FALSE);
+  } else {if (curr == 1) {
+    Array.set(filter0_1, idx, FALSE);
+    Array.set(filter0_2, idx, FALSE);
+  } else {
+    Array.set(filter1_1, idx, FALSE);
+    Array.set(filter1_2, idx, FALSE);
+  }}
+  int<32> next_index = idx+1;
+  if (next_index != 16) {
+      generate write_empty(next_index, curr);
+  }
+}
+
+fun bool in_filter(int idx1, int idx2, int<8> curr) {
+  bool ret = false;
+  if (curr == 0) {
+    int<1> r1 = Array.get(filter0_1, idx1);
+    int<1> r2 = Array.get(filter0_2, idx2);
+    if ((r1 == TRUE) && (r2 == TRUE)) { ret = true; }
+  } else {if (curr == 1) {
+    int<1> r1 = Array.get(filter1_1, idx1);
+    int<1> r2 = Array.get(filter1_2, idx2);
+    if ((r1 == TRUE) && (r2 == TRUE)) { ret = true; }
+  } else {
+    int<1> r1 = Array.get(filter2_1, idx1);
+    int<1> r2 = Array.get(filter2_2, idx2);
+    if ((r1 == TRUE) && (r2 == TRUE)) { ret = true; }
+  }}
+  return ret;
+}
+
+handle request_packet(int client_ip, int server_ip) {
+  int idx1 = hash<32>(HASH_SEED_1, client_ip, server_ip);
+  int idx2 = hash<32>(HASH_SEED_2, client_ip, server_ip);
+  int<8> curr = Array.get(active, 0);
+  bool in_f = in_filter(idx1, idx2, curr);
+  if (in_f == false) {
+    generate Event.sslocate(add_to_filter(idx1, idx2), head);
+  }
+  generate request_continue(client_ip, server_ip);
+}
+
+handle response_packet(int server_ip, int client_ip) {
+  int idx1 = hash<32>(HASH_SEED_1, server_ip, client_ip);
+  int idx2 = hash<32>(HASH_SEED_2, server_ip, client_ip);
+  int<8> curr = Array.get(active, 0);
+  bool in_f = in_filter(idx1, idx2, curr);
+  if (in_f == true) {
+    generate response_continue(server_ip, client_ip);
+  }
+}

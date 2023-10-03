@@ -1,0 +1,200 @@
+// Starflow telemetry cache.
+/* 
+A P4 program passes control to *Flow by generating a "monitor_pkt" event. 
+This calls the "monitor_pkt" handler in this program (around line 75)
+That handler may generate two other events: 
+  1. GPV records to collection servers (the events short_record and long_record)
+  2. A memory release event (free_block) that gets recirculated
+*/
+
+const int h1_poly = 10398247;
+const int H_SLOTS = 1024;
+const int L_SLOTS = 128;
+const int SIZE_SHORT = 2;
+const int MAX_IDX = 7;
+const int MMATCH = 0;
+
+packet event monitor_pkt(int src, int len);
+
+// records that the cache emits when something gets evicted. 
+const int COLLECTION_SERVER = 1234;
+exit event short_record(int src, int len, int rec0, int rec1);
+exit event long_record(int src, int len, int rec0, int rec1, int rec2, int rec3, int rec4, int rec5, int rec6, int rec7);
+
+// free a "long slot" by pushing it's index back onto the stack. 
+event free_block(int block_id);
+
+global Array.t<32> srcarr = Array.create(H_SLOTS);
+global Array.t<32> ctarr = Array.create(H_SLOTS);
+global Array.t<32> idxarr = Array.create(H_SLOTS);
+
+global Array.t<32> stack_top = Array.create(1);
+global Array.t<32> longblock_stack = Array.create(L_SLOTS);
+global Array.t<32> block_map = Array.create(H_SLOTS);
+
+global Array.t<32> rec0 = Array.create(H_SLOTS);
+global Array.t<32> rec1 = Array.create(H_SLOTS);
+
+global Array.t<32> rec2 = Array.create(L_SLOTS);
+global Array.t<32> rec3 = Array.create(L_SLOTS);
+global Array.t<32> rec4 = Array.create(L_SLOTS);
+global Array.t<32> rec5 = Array.create(L_SLOTS);
+global Array.t<32> rec6 = Array.create(L_SLOTS);
+global Array.t<32> rec7 = Array.create(L_SLOTS);
+
+memop read (int stored, int nothingval) { 
+  return stored;
+}
+memop write (int stored, int newval) {
+  return newval;
+}
+memop incr (int stored, int nothingval) { 
+  return stored + 1;
+}
+
+// increment index with rollover.
+memop incr_idx (int stored, int nothingval) { 
+  if (stored == MAX_IDX) {
+    return 0;
+  }
+  else {
+    return stored + 1;
+  }
+}
+
+// We need to get the index, and also the count. 
+
+memop decr_sat (int stored, int nothingval) {
+  if (stored == 0) {
+    return 0;
+  }
+  else {
+    return stored - 1;
+  }
+}
+
+handle monitor_pkt(int src, int len) {
+  int ct  = 0; int idx = 0; // idx = (count % num_rec_slots)
+  int stored_rec0 = 0; int stored_rec1 = 0; 
+  int stored_rec2 = 0; int stored_rec3 = 0; 
+  int stored_rec4 = 0; int stored_rec5 = 0;
+  int stored_rec6 = 0; int stored_rec7 = 0;
+  int blk_id = 0;
+  // update the key. 
+  int h1 = hash<32>(h1_poly, src);
+  int stored_src = Array.update(srcarr, h1, read, 0, write, src);
+  // update the count and index (if its a hit). 
+  int is_match = src - stored_src;
+  if (is_match == MMATCH) {
+    ct = Array.update(ctarr, h1, incr, 1, incr, 1);
+    idx = Array.update(idxarr, h1, incr_idx, 1, incr_idx, 1);
+  }
+  // take care of memory allocation ahead of time. 
+  // each flow gets to try and allocate a block once
+  //  -- when it reaches this size. 
+  if (ct == SIZE_SHORT) {  
+    int stack_idx = Array.update(stack_top, 0, read, 0, decr_sat, 1);
+    // got an extended block!
+    if (stack_idx != 0) {
+      blk_id = Array.get(longblock_stack, stack_idx);
+      Array.set(block_map, h1, blk_id);      
+    }
+  } else {
+    // if we are not at this count, then we want to see if we have a block id.
+    blk_id = Array.get(block_map, h1);
+  }
+  if (blk_id == 0) {
+    // idx = idx mod SIZE_SHORT, but mod isnt implemented yet. 
+    if (idx == 2) { idx = 0; } else {
+    if (idx == 3) { idx = 1; } else {
+    if (idx == 4) { idx = 0; } else {
+    if (idx == 5) { idx = 1; } else {
+    if (idx == 6) { idx = 0; } else {
+    if (idx == 7) { idx = 1; } } } } } }
+  }
+
+  // update all the packet record cells.
+  // always read from every cell. 
+  // only write to the cell if: an evict has not happened AND we are at the right index value 
+  // if (is_match == MMATCH) {
+
+  // }
+
+  if (is_match == MMATCH) {
+    if (idx == 0) {
+      stored_rec0 = Array.update(rec0, h1, read, 0, write, len);
+    } else {
+      stored_rec0 = Array.get(rec0, h1);
+    if (idx == 1) {
+      stored_rec1 = Array.update(rec1, h1, read, 0, write, len);
+    } else {
+      stored_rec1 = Array.get(rec1, h1);
+    if (idx == 2) {
+      stored_rec2 = Array.update(rec2, h1, read, 0, write, len);
+    } else {
+      stored_rec2 = Array.get(rec2, h1);
+    if (idx == 3) {
+      stored_rec3 = Array.update(rec3, h1, read, 0, write, len);
+    } else {
+      stored_rec3 = Array.get(rec3, h1);
+    if (idx == 4) {
+      stored_rec4 = Array.update(rec4, h1, read, 0, write, len);
+    } else {
+      stored_rec4 = Array.get(rec4, h1);
+    if (idx == 5) {
+      stored_rec5 = Array.update(rec5, h1, read, 0, write, len);
+    } else {
+      stored_rec5 = Array.get(rec5, h1);
+    if (idx == 6) {
+      stored_rec6 = Array.update(rec6, h1, read, 0, write, len);
+    } else {
+      stored_rec6 = Array.get(rec6, h1);
+    if (idx == 7) {
+      stored_rec7 = Array.update(rec7, h1, read, 0, write, len);
+    } else {
+      stored_rec7 = Array.get(rec7, h1);
+      } } } } } } }
+    } 
+  }  
+  // No match, just read for evict.
+  else {
+    stored_rec0 = Array.get(rec0, h1);
+    stored_rec1 = Array.get(rec1, h1);
+    stored_rec2 = Array.get(rec2, h1);
+    stored_rec3 = Array.get(rec3, h1);
+    stored_rec4 = Array.get(rec4, h1);
+    stored_rec5 = Array.get(rec5, h1);
+    stored_rec5 = Array.get(rec6, h1);
+    stored_rec5 = Array.get(rec7, h1);
+  }
+
+  // We also need to generate (and implement) the memory free event... 
+  // finally, generate some events depending on whether there was an evict or buffer rollover. 
+  if (is_match == MMATCH) {
+    if (idx == 0) {
+      if (blk_id == 0) {
+        generate Event.sslocate(short_record(src, len, stored_rec0, stored_rec1), COLLECTION_SERVER);
+      } else {
+        generate Event.sslocate(long_record(src, len, stored_rec0, stored_rec1, stored_rec2, stored_rec3, stored_rec4, stored_rec5, stored_rec6, stored_rec7), COLLECTION_SERVER);
+      }
+    }
+  }
+  // if there wasn't a match, we need to generate a new record no matter what. 
+  // Note: at this point, we could zero out the invalid entries too. Original starflow implementation assumes the server takes care of it. 
+  else {
+      if (blk_id == 0) {
+        generate Event.sslocate(short_record(src, len, stored_rec0, stored_rec1), COLLECTION_SERVER);
+      } else {
+        generate Event.sslocate(long_record(src, len, stored_rec0, stored_rec1, stored_rec2, stored_rec3, stored_rec4, stored_rec5, stored_rec6, stored_rec7), COLLECTION_SERVER);
+        // in this case, we also have to free the long block for another flow -- do that with a control event.
+        generate free_block(blk_id);
+      }
+  }
+} 
+
+handle free_block(int block_id) {
+  // get a pointer to an unused slot in the free stack.
+  int stack_idx = Array.update(stack_top, 0, incr, 1, incr, 1);
+  // write the block id to the unused slot. 
+  Array.set(longblock_stack, stack_idx, block_id);
+}
