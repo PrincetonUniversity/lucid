@@ -55,7 +55,15 @@
      Unfortunately, that one is not optimal. It is basically a copy/paste of the original ShareMemopInputs, 
      which allocates variables 1 register at a time, (e.g., it allocates all the variables 
      in the nth parameter of each array to one intermediate variable if they cannot be overlaid.)
-*) 
+
+
+  Bug [10/3/24]
+  the above algorithm is not correct and can generate illegal layouts. 
+  I think the real solution is to have a transitive closure constraint on the alias variables.
+  (e.g., alias(x, y) && alias(y, z)) ==> alias(x, z))
+  For now, there is just a check to see if the layout is legal after the solver runs. 
+    If it is not legal, the compiler errors out
+  *) 
 
 open CoreSyntax
 open TofinoCore
@@ -66,6 +74,11 @@ open Solver
 module Z3Bool = Boolean
 module Z3Int = Arithmetic.Integer
 
+(* logging *)
+module DBG = BackendLogging
+let outc = ref None
+let dprint_endline = ref DBG.no_printf
+let start_logging () = DBG.start_mlog (!IoUtils.moduleLogDir) __FILE__ outc dprint_endline
 
 
 exception Error of string
@@ -90,6 +103,10 @@ type term =
 
 let var_to_string var = CorePrinting.cid_to_string var.vcid
   
+let var_to_fullstring var = 
+  Printf.sprintf "%s_%i" (var_to_string var) var.vuid
+;;
+
 let register_to_string reg = 
   match reg with
   | Register(var, slot) ->
@@ -112,6 +129,8 @@ let rec term_to_string exp = match exp with
 
 
 let vartup_to_string (x, y) = Printf.sprintf "(%s, %s)" (var_to_string x) (var_to_string y) ;;
+
+let vartup_to_full_string (x, y) = Printf.sprintf "(%s, %s)" (var_to_fullstring x) (var_to_fullstring y) ;;
 
 let cidpairs_to_string cidpairs = 
   List.map (fun (x, y) -> 
@@ -147,22 +166,34 @@ let assignment_constraints a users slots : term list =
 
 (* if v and w are allocated to the same register, it implies they are aliases *)
   let shared_alloc_implies_alias v w a s =
-    Implies(And([BoolConst(Alloc(v, Register(a, s))); BoolConst(Alloc(w, Register(a, s)))]), BoolConst(Alias(v, w)))
+    Implies(
+      And([BoolConst(Alloc(v, Register(a, s))); BoolConst(Alloc(w, Register(a, s)))]), 
+    (* ==> *)
+      BoolConst(Alias(v, w))
+      )
   ;;
   
   let for_all xs fn : term = 
     And(List.map fn xs)
   ;;
   
-  let alias_constraints a users slots = 
+  let alias_constraints arr arr_users slots = 
     List.map
-      (fun v -> 
+      (fun arr_user -> 
         (* for every variable v, for all other users of v, sharing any register implies aliasing *)
-        for_all users (fun w -> for_all slots (shared_alloc_implies_alias v w a) ))
-      users
+        for_all arr_users (fun w -> for_all slots (shared_alloc_implies_alias arr_user w arr) ))
+        arr_users
   ;;
   
 (**** conflict constraints ****)
+
+
+(* let all_array_conflict_constraint_strs = ref [];; *)
+let is_debug_tgt cid =
+  (Cid.names cid) = ["ingress_input";"insert"; "insert_client_ip"]
+;;
+
+(* are we missing a constraint that conflicting variables may not be aliases? *)
 
 (* 
   given two conflicting variables, v and w,    
@@ -170,12 +201,17 @@ let assignment_constraints a users slots : term list =
       then if v_a is allocated to a register, w_a is not *)
 let conflicting_aliases_dont_share v v_a w w_a a slots =
   let per_slot v v_a w w_a a s = 
+    let one_slot_implication = 
   Implies(
     And([
       BoolConst(Alias(v, v_a)); 
       BoolConst(Alias(w, w_a)); 
       BoolConst(Alloc(v_a, Register(a, s)))]), 
-    Not(BoolConst(Alloc(w_a, Register(a, s)))))
+    Not(BoolConst(Alloc(w_a, Register(a, s))))) in
+    if ((var_to_string a = "server_stash" ) && (is_debug_tgt v.vcid || is_debug_tgt w.vcid)) then (
+     !dprint_endline (Printf.sprintf "generating innermost constraint: %s" (term_to_string one_slot_implication))
+    );
+    one_slot_implication
   in
   for_all slots (per_slot v v_a w w_a a)
 ;;
@@ -184,21 +220,36 @@ let no_conflicting_aliases_share all_vars v w a slots =
   (* given two conflicting variables, (v, w), 
       for all pairs of aliases of (v, w), the aliases dont map 
      to the same slot in a *)
+  if ((is_debug_tgt v.vcid) || (is_debug_tgt w.vcid))
+  then           
+   !dprint_endline 
+      (Printf.sprintf "[no_conflicting_aliases_share] generating innermost no-conflicting-alias constraint for variables %s and %s in all slots of array %s"
+        (var_to_string v)
+        (var_to_string w)
+        (var_to_string a));   
+
   for_all all_vars (fun v_a -> 
     for_all all_vars ((fun w_a -> 
       conflicting_aliases_dont_share v v_a w w_a a slots)))
 ;;
 
-let conflict_constraints conflicts all_vars a users slots = 
+let conflict_constraints conflicts all_vars array array_users slots = 
+  (* hmm... this doesn't iterate over _all_ the arrays, does it? *)
   List.map 
-    (fun v -> 
-      let conflicting_users = match List.assoc_opt v conflicts with  
+    (fun array_user -> 
+      let conflicting_vars = match List.assoc_opt array_user conflicts with  
         | None -> []
         | Some(uss) -> uss
       in 
-      for_all conflicting_users 
-        (fun w -> no_conflicting_aliases_share all_vars v w a slots))
-  users
+      for_all conflicting_vars 
+        (fun conflicting_var -> 
+          if (is_debug_tgt array_user.vcid)
+            then               
+             !dprint_endline (Printf.sprintf "%s" (vartup_to_full_string (array_user, conflicting_var)));
+            (* all_array_conflict_constraint_strs := 
+            (!all_array_conflict_constraint_strs)@[(array, array_user, conflicting_var)]; *)
+          no_conflicting_aliases_share all_vars array_user conflicting_var array slots))
+  array_users
 ;;
 
 (**** generating the constraints ****)
@@ -210,10 +261,14 @@ let generate_constraints
   let all_array_users = List.flatten (List.map snd array_users) |> MiscUtils.unique_list_of in
   let slots = List.init nslots (fun x -> x) in
   let constraints = List.fold_left
-    (fun constraints (a, users) -> 
-      let ass_constr = assignment_constraints a users slots in
-      let ali_constr = alias_constraints a users slots in
-      let confl_constr = conflict_constraints conflicts all_array_users a users slots in
+    (fun constraints (array, users) -> 
+      let ass_constr = assignment_constraints array users slots in
+      let ali_constr = alias_constraints array users slots in
+      let confl_constr = conflict_constraints conflicts all_array_users array users slots in
+      !dprint_endline "------- confl_constr constraints ------";
+      List.iter (fun c -> term_to_string c |> (!dprint_endline)) confl_constr;
+      !dprint_endline "------- end confl_constr constraints ------"; 
+
       constraints@ass_constr@ali_constr@confl_constr)
       (* constraints
       @(assignment_constraints a users slots)
@@ -222,6 +277,17 @@ let generate_constraints
     []
     array_users
   in
+
+  !dprint_endline "------ [generate_constraints] conflicts ------";
+  List.iter
+    (fun (var, conflict_vars) -> 
+      List.iter (fun (v1, v2) -> 
+        !dprint_endline (Printf.sprintf "%s" (vartup_to_full_string (v1, v2))))
+        (List.map (fun v -> (var, v)) conflict_vars))
+    conflicts;
+  !dprint_endline "------ [generate_constraints]---------- ------";
+  (* print the constraints... *)
+  
   constraints
 ;;
 
@@ -546,15 +612,15 @@ let conflict_graph_of_parser var_map ds =
   match parser.pret_event with
   | Some(ret_event) -> 
     let out_params = grouped_fields_of_event (get_event_tds ds ret_event) |> List.flatten in
-    (* print_endline ("output parameters of event");
-    CorePrinting.comma_sep CorePrinting.cid_to_string out_params |> print_endline; *)
+    !dprint_endline ("output parameters of event");
+    CorePrinting.comma_sep CorePrinting.cid_to_string out_params |> !dprint_endline;
     let conflict_pairs = conflict_graph_of_parse_block [] out_params parser.pblock |> 
       MiscUtils.unique_list_of 
     in
-    (* print_endline ("parser");
-    print_endline (TofinoCorePrinting.parser_to_string parser);
-    print_endline ("conflict pairs");
-    (cidpairs_to_string conflict_pairs) |> print_endline; *)
+    !dprint_endline ("parser");
+    !dprint_endline (TofinoCorePrinting.parser_to_string parser);
+    !dprint_endline ("conflict pairs");
+    (cidpairs_to_string conflict_pairs) |> !dprint_endline;
     let conflict_varpairs = Core.List.filter_map conflict_pairs
     ~f:(fun (x, y) -> 
       let x = Core.List.Assoc.find var_map ~equal:Cid.equal x in
@@ -713,6 +779,31 @@ and terms_to_z3 ctx terms =
     ctx, z3terms    
 ;;
 
+
+let boolconst_assignment_to_string bc = 
+  match bc with 
+  | Alloc(var, register) -> 
+    (Printf.sprintf "%s = %s" 
+    (register_to_string register)
+    (var_to_string var))
+  | Alias(var1, var2) -> 
+    (Printf.sprintf "%s ~= %s" 
+      (var_to_string var1) 
+      (var_to_string var2))
+;;
+
+let rec assignments_to_string assignments = 
+  match assignments with
+  | [] -> ""
+  | assignment::assignments -> (
+    match assignment with 
+    | (bc, true) -> 
+      (boolconst_assignment_to_string bc)^"\n"^(assignments_to_string assignments)
+    | (_, false) -> 
+      (assignments_to_string assignments)
+    )
+;;
+
 (* 2. running the solver and get the mapping from boolean var names -> values *)
 let run_solver constraints = 
   let solver = Solver.mk_simple_solver z3_ctx in
@@ -732,6 +823,7 @@ let run_solver constraints =
           let name = FuncDecl.get_name decl |> Symbol.to_string in
           (* convert the name back into a boolean variable... *)
           let boolvar = Z3Map.find name ctx.const_map in
+          (* convert the value *)
           let v = match Expr.to_string value with
             | "true" -> true
             | "false" -> false
@@ -741,6 +833,9 @@ let run_solver constraints =
         else ()
       | None -> ()
     ) decls;
+   !dprint_endline ("---- found assignment ----");
+   !dprint_endline (assignments_to_string !solution);
+   !dprint_endline ("---- end assignment ------");
     true, !solution
   | UNSATISFIABLE -> false, []
   | UNKNOWN -> false, []
@@ -779,7 +874,7 @@ end
 (* cid <-> cid graph *)
 module G = GenericGraph(Cid)
 let check_path g a b = 
-  (* print_endline ("checking for path from "^(cidtup_to_string (a, b))); *)
+  (*!dprint_endline ("checking for path from "^(cidtup_to_string (a, b))); *)
   let module GPath = Graph.Path.Check(G) in
   if G.mem_vertex g a && G.mem_vertex g b then
     (GPath.check_path (GPath.create g) a b)
@@ -841,6 +936,17 @@ let cid_to_loc tds main cid =
 
 
 let replace_cid tds cids cid' = 
+  !dprint_endline (Printf.sprintf "[replace_cid] [%s] --> [%s]" 
+    (CorePrinting.comma_sep CorePrinting.cid_to_string cids)
+    (CorePrinting.cid_to_string cid'));
+  (* print each replacement out individually *)
+  (* List.iter (fun cid -> 
+    (* skip over when cid == cid *)
+    if (not (Cid.equal cid cid')) then 
+    !dprint_endline (Printf.sprintf "[replace_cid] %s --> %s" 
+      (CorePrinting.cid_to_string cid)
+      (CorePrinting.cid_to_string cid'))
+  ) cids; *)
   (* replace any cid in cids with cid' everywhere they appear (including the parser) *)
   let is_tgt_cid cidq = List.exists (fun x -> Cid.equal x cidq) cids in
   let v = 
@@ -871,9 +977,9 @@ let replace_cid tds cids cid' =
       method! visit_SAssign ctx lcid rexp = 
         if (is_tgt_cid lcid) 
         then (
-          (* print_endline ("SASSIGN replacing "^(CorePrinting.cid_to_string lcid)^" with "^(CorePrinting.cid_to_string cid')^" in SAssign");
-          print_endline ("old statement: "^(CorePrinting.s_to_string (SAssign(lcid, rexp))));
-          print_endline ("new statement: "^(CorePrinting.s_to_string (SAssign(cid', (super#visit_exp ctx rexp))))); *)
+          (*!dprint_endline ("SASSIGN replacing "^(CorePrinting.cid_to_string lcid)^" with "^(CorePrinting.cid_to_string cid')^" in SAssign");
+         !dprint_endline ("old statement: "^(CorePrinting.s_to_string (SAssign(lcid, rexp))));
+         !dprint_endline ("new statement: "^(CorePrinting.s_to_string (SAssign(cid', (super#visit_exp ctx rexp))))); *)
           SAssign(cid', (super#visit_exp ctx rexp))
           )
         else (SAssign(lcid, (super#visit_exp ctx rexp)))
@@ -881,9 +987,9 @@ let replace_cid tds cids cid' =
         (* if this cid is the target, we replace the declaration with an assign *)
         if (is_tgt_cid (Cid.id id)) 
         then (
-          (* print_endline ("SLOCAL replacing "^(CorePrinting.id_to_string id)^" with "^(CorePrinting.cid_to_string cid')^" in SAssign");
-          print_endline ("old statement: "^(CorePrinting.s_to_string (SLocal(id ,ty, exp))));
-          print_endline ("new statement: "^(CorePrinting.s_to_string (SAssign(cid', (super#visit_exp ctx exp))))); *)
+          (*!dprint_endline ("SLOCAL replacing "^(CorePrinting.id_to_string id)^" with "^(CorePrinting.cid_to_string cid')^" in SAssign");
+         !dprint_endline ("old statement: "^(CorePrinting.s_to_string (SLocal(id ,ty, exp))));
+         !dprint_endline ("new statement: "^(CorePrinting.s_to_string (SAssign(cid', (super#visit_exp ctx exp))))); *)
         SAssign(cid', (super#visit_exp ctx exp))
           )
         else (SLocal(id, ty, (super#visit_exp ctx exp)))
@@ -1191,12 +1297,12 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
        let y_aliases = get_aliases y in
        (* if (List.length x_aliases > 0 || List.length y_aliases > 0)
          then ( *)
-       (* print_endline("deriving alias conflicts for ("^(CorePrinting.cid_to_string x)^", "^(CorePrinting.cid_to_string y)^")");
-       print_endline("x aliases: "^(CorePrinting.comma_sep CorePrinting.cid_to_string x_aliases));
-       print_endline("y aliases: "^(CorePrinting.comma_sep CorePrinting.cid_to_string y_aliases));); *)
+       (*!dprint_endline("deriving alias conflicts for ("^(CorePrinting.cid_to_string x)^", "^(CorePrinting.cid_to_string y)^")");
+      !dprint_endline("x aliases: "^(CorePrinting.comma_sep CorePrinting.cid_to_string x_aliases));
+      !dprint_endline("y aliases: "^(CorePrinting.comma_sep CorePrinting.cid_to_string y_aliases));); *)
        List.iter (x::x_aliases) ~f:(fun x' ->
          List.iter (y::y_aliases) ~f:(fun y' ->
-           (* print_endline("\tadding alias conflict: ("^(CorePrinting.cid_to_string x')^", "^(CorePrinting.cid_to_string y')^")"); *)
+           (*!dprint_endline("\tadding alias conflict: ("^(CorePrinting.cid_to_string x')^", "^(CorePrinting.cid_to_string y')^")"); *)
            alias_conflicts := (x', y')::(!alias_conflicts)
          )
        )
@@ -1213,18 +1319,18 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
          )      
      in *)
      let alias_conflicts = !alias_conflicts in 
-     (* print_endline ("----var conflicts----");  
+     (*!dprint_endline ("----var conflicts----");  
      (* List.filter var_conflicts ~f:(fun (x, y) -> (CorePrinting.cid_to_string x = "stg_1_src3151") or (CorePrinting.cid_to_string y = "stg_1_src3151")) *)
      List.map ~f:(fun (x, y) -> "("^(CorePrinting.cid_to_string x) ^ "," ^ (CorePrinting.cid_to_string y)^")") var_conflicts
      |> String.concat "\n" 
-     |> print_endline; *)
+     |>!dprint_endline; *)
    
-     (* print_endline ("----alias conflicts----");
+     (*!dprint_endline ("----alias conflicts----");
      (* List.filter alias_conflicts ~f:(fun (x, y) -> (CorePrinting.cid_to_string x = "stg_1_src3151") or (CorePrinting.cid_to_string y = "stg_1_src3151")) *)
      List.map ~f:(fun (x, y) -> "("^(CorePrinting.cid_to_string x) ^ "," ^ (CorePrinting.cid_to_string y)^")") var_conflicts
      |> String.concat "\n" 
-     |> print_endline;
-     print_endline ("----end alias conflicts----"); *)
+     |>!dprint_endline;
+    !dprint_endline ("----end alias conflicts----"); *)
      param_conflicts@var_conflicts@alias_conflicts
    ;;
    
@@ -1238,9 +1344,9 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
        (CorePrinting.cid_to_string cid)^" -> ["^alias_cids_string^"]"
      in *)
      (* let alias_list_string = List.map ~f:alias_entry_to_string aliases |> String.concat "\n" in *)
-     (* print_endline ("----alias list----");
-     print_endline alias_list_string;
-     print_endline ("----end alias list----"); *)
+     (*!dprint_endline ("----alias list----");
+    !dprint_endline alias_list_string;
+    !dprint_endline ("----end alias list----"); *)
      let conflict_pairs = conflict_graph 
        ds
        aliases 
@@ -1257,9 +1363,9 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
    ;;
    
    let any_pairs_conflict ds vars overlay_pairs =
-     (* print_endline ("[any_pairs_conflict] aliases");
-     List.iter overlay_pairs (fun (x, y) -> print_endline ((CorePrinting.cid_to_string x)^" -> "^(CorePrinting.cid_to_string y)));
-     print_endline ("----"); *)
+     (*!dprint_endline ("[any_pairs_conflict] aliases");
+     List.iter overlay_pairs (fun (x, y) ->!dprint_endline ((CorePrinting.cid_to_string x)^" -> "^(CorePrinting.cid_to_string y)));
+    !dprint_endline ("----"); *)
      (* compute all the conflict pairs at this point in the program *)
      let conflict_pairs = precompute_conflict_graph ds overlay_pairs in
      let conflict = ref false in
@@ -1496,7 +1602,7 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
        | 0 | 1 -> overlaid_pairs, tds
        (* >= 2 vars -- we need to get it down to 1 var, by either overlaying the variables or creating an intermediate *)
        | _ -> (
-         (* print_endline("[merge_nth_arg] merging Array method args: "^(CorePrinting.comma_sep CorePrinting.cid_to_string args)); *)
+         (*!dprint_endline("[merge_nth_arg] merging Array method args: "^(CorePrinting.comma_sep CorePrinting.cid_to_string args)); *)
          (* if any of the variables conflict, we have to create an intermediate *)
          if (any_pairs_conflict tds args (List.map ~f:fst overlaid_pairs))
          then (
@@ -1596,7 +1702,7 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
    (* cid <-> cid graph *)
    module G = GenericGraph(Cid)
    let check_path g a b = 
-     (* print_endline ("checking for path from "^(cidtup_to_string (a, b))); *)
+     (*!dprint_endline ("checking for path from "^(cidtup_to_string (a, b))); *)
      let module GPath = Graph.Path.Check(G) in
      if G.mem_vertex g a && G.mem_vertex g b then
        (GPath.check_path (GPath.create g) a b)
@@ -1690,9 +1796,9 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
          method! visit_SAssign ctx lcid rexp = 
            if (is_tgt_cid lcid) 
            then (
-             (* print_endline ("SASSIGN replacing "^(CorePrinting.cid_to_string lcid)^" with "^(CorePrinting.cid_to_string cid')^" in SAssign");
-             print_endline ("old statement: "^(CorePrinting.s_to_string (SAssign(lcid, rexp))));
-             print_endline ("new statement: "^(CorePrinting.s_to_string (SAssign(cid', (super#visit_exp ctx rexp))))); *)
+             (*!dprint_endline ("SASSIGN replacing "^(CorePrinting.cid_to_string lcid)^" with "^(CorePrinting.cid_to_string cid')^" in SAssign");
+            !dprint_endline ("old statement: "^(CorePrinting.s_to_string (SAssign(lcid, rexp))));
+            !dprint_endline ("new statement: "^(CorePrinting.s_to_string (SAssign(cid', (super#visit_exp ctx rexp))))); *)
              SAssign(cid', (super#visit_exp ctx rexp))
              )
            else (SAssign(lcid, (super#visit_exp ctx rexp)))
@@ -1700,9 +1806,9 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
            (* if this cid is the target, we replace the declaration with an assign *)
            if (is_tgt_cid (Cid.id id)) 
            then (
-             (* print_endline ("SLOCAL replacing "^(CorePrinting.id_to_string id)^" with "^(CorePrinting.cid_to_string cid')^" in SAssign");
-             print_endline ("old statement: "^(CorePrinting.s_to_string (SLocal(id ,ty, exp))));
-             print_endline ("new statement: "^(CorePrinting.s_to_string (SAssign(cid', (super#visit_exp ctx exp))))); *)
+             (*!dprint_endline ("SLOCAL replacing "^(CorePrinting.id_to_string id)^" with "^(CorePrinting.cid_to_string cid')^" in SAssign");
+            !dprint_endline ("old statement: "^(CorePrinting.s_to_string (SLocal(id ,ty, exp))));
+            !dprint_endline ("new statement: "^(CorePrinting.s_to_string (SAssign(cid', (super#visit_exp ctx exp))))); *)
            SAssign(cid', (super#visit_exp ctx exp))
              )
            else (SLocal(id, ty, (super#visit_exp ctx exp)))
@@ -1747,10 +1853,10 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
    
    (* overlay all the variables in vars in the program tds *)
    let overlay_aliases tds (vars, varty) = 
-     (* print_endline("[overlay_aliases] overlaying variables");
-     print_endline(CorePrinting.comma_sep CorePrinting.cid_to_string vars);
-     print_endline("[overlay_aliases] in program:");
-     print_endline(TofinoCorePrinting.tdecls_to_string tds); *)
+     (*!dprint_endline("[overlay_aliases] overlaying variables");
+    !dprint_endline(CorePrinting.comma_sep CorePrinting.cid_to_string vars);
+    !dprint_endline("[overlay_aliases] in program:");
+    !dprint_endline(TofinoCorePrinting.tdecls_to_string tds); *)
      let main = main_handler_of_decls tds in
      let var_locs = List.map vars ~f:(cid_to_loc tds main) in
      (* if any of the variables are parameters, we have to update the parser and 
@@ -1856,6 +1962,23 @@ module ShareMemopInputsGreedy = struct
 
 end
 
+let check_alias_groups (conflict_pairs : (var * var) list) (alias_groups : cid list list) = 
+  (* for each conflict pair, check if both var.vcids are in any one alias group together *)
+  let conflict_violation (x, y) = 
+    List.exists (fun aliases ->
+      List.exists (fun alias -> 
+        Cid.equal alias x.vcid
+      ) aliases
+      &&
+      List.exists (fun alias -> 
+        Cid.equal alias y.vcid
+      ) aliases
+    )
+    alias_groups
+  in
+  if (List.exists conflict_violation conflict_pairs)
+    then (error "stateful alu input overlay allocator generated an invalid solution. This is a known compiler bug. You may get a different solution by running the compiler again, or try the --old_memop_alloc option to use a less optimal algorithm that will always produce a valid layout.");  
+;;
 
 let process_component component = 
   let tds = component.comp_decls in
@@ -1863,9 +1986,10 @@ let process_component component =
   let alias_groups_opt = solve_overlay_opt conflict_pairs array_users in
   match alias_groups_opt with
   | Some(alias_grps) -> 
-    (* print_endline ("---[alias groups]---");
-    List.iter ~f:(fun aliases -> print_endline (CorePrinting.comma_sep CorePrinting.cid_to_string (fst aliases))) alias_grps;
-    print_endline ("----------------------"); *)
+    check_alias_groups conflict_pairs (List.split alias_grps |> fst);
+    !dprint_endline ("---[alias groups]---");
+    List.iter (fun aliases ->  !dprint_endline (CorePrinting.comma_sep CorePrinting.cid_to_string (fst aliases))) alias_grps;
+    !dprint_endline ("----------------------");
     let tds = List.fold_left overlay_aliases tds alias_grps in 
     {component with comp_decls = tds} 
   | None -> 

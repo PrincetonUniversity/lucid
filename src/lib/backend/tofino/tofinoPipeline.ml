@@ -15,6 +15,7 @@ let start_backend_logging () =
       TofinoDfg.start_logging ();
       PropagateEvars.start_logging();
       DeparserChecksums.start_logging();
+      ShareMemopInputsSat.start_logging();
       );
 ;;  
 let dump_ir_prog comment fn prog = 
@@ -183,8 +184,8 @@ let tofinocore_passes core_prog portspec =
   report_if_verbose "-------Converting all memops to complex form-------";
   let core_prog = RegularizeMemops.process_core core_prog in
   report_if_verbose "-------Allocating memop input variables-------";
+  dump_prog "before ShareMemopInputsSat" "tofinocore_pre_memop_overlay" core_prog;
   let core_prog = ShareMemopInputsSat.process_core core_prog in
-
   dump_prog "IfToMatch; RegularizeMemops; ShareMemopInputsSat" "tofinocore_regularized_memops" core_prog;
   report_if_verbose "-------Transforming table matches into single-call form-------";
   let core_prog = SingleTableMatch.process_core core_prog in
@@ -250,6 +251,7 @@ let layout (prog : TofinoCore.prog) =
 
 (* main compilation function *)
 let compile ds portspec =  
+  start_backend_logging ();
   report_if_verbose "-------Translating to Midend IR---------";
   let ds = SyntaxToCore.translate_prog ds in
   printprog_if_debug ds;

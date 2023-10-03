@@ -12,11 +12,11 @@ const int seed1_val = 10398247;
 const int seed2_val = 1295981879;
 
 // packet events
-packet event request_packet (int client_ip, int server_ip);
-packet event response_packet (int server_ip, int client_ip);
+event request_packet (int client_ip, int server_ip);
+event response_packet (int server_ip, int client_ip);
 // exit events
-exit event request_continue (int src_ip, int dst_ip);
-exit event response_continue (int src_ip, int dst_ip);
+event request_continue (int src_ip, int dst_ip){skip;}
+event response_continue (int src_ip, int dst_ip){skip;}
 
 // background events
 event insert (int client_ip, int server_ip, int ts, int first_client_ip, int first_server_ip, int<8> retry_ct);

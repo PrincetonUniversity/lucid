@@ -219,7 +219,7 @@ let atomize_int_assigns ds =
 ;;
 
 let do_passes ds =
-  if Cmdline.cfg.debug then DBG.start_mlog (!IoUtils.irLogDir) __FILE__ outc dprint_endline;
+  if Cmdline.cfg.debug then DBG.start_mlog (!IoUtils.moduleLogDir) __FILE__ outc dprint_endline;
   let orig_ds = ds in
   let ds = balance_assign_exps ds in
   (* info "assignments transformed to balanced exps"; *)

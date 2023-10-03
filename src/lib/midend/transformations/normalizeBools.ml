@@ -377,7 +377,7 @@ module NormalizeBoolExps = struct
 end
 
 let do_passes ds =
-  if Cmdline.cfg.debug then DBG.start_mlog (!IoUtils.irLogDir) __FILE__ outc dprint_endline;
+  if Cmdline.cfg.debug then DBG.start_mlog (!IoUtils.moduleLogDir) __FILE__ outc dprint_endline;
   (* normalize the relational operations inside of if statements, so
      that each atomic boolean is a relational operation of the form
      <var> <!=, ==> <const> *)
