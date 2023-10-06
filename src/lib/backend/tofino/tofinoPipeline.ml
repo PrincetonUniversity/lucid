@@ -16,6 +16,7 @@ let start_backend_logging () =
       PropagateEvars.start_logging();
       DeparserChecksums.start_logging();
       ShareMemopInputsSat.start_logging();
+      TofinoResources.start_logging ();
       );
 ;;  
 let dump_ir_prog comment fn prog = 

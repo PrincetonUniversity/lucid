@@ -294,6 +294,7 @@ type constraints_stage = {
   max_arrays : int;
   max_hashers : int;
   max_array_blocks : int;
+  max_hash_bits : int;
 }
 (* default config for tofino -- change for other architectures *)
 let table_constraints = {
@@ -309,6 +310,7 @@ let stage_constraints = {
   max_arrays = 4;
   max_hashers = 6;
   max_array_blocks = 48;
+  max_hash_bits = 96;
 }
 (* calculate resources used by program components *)
 let arrays_of_vertex v = arrays_of_stmt v.stmt
@@ -373,6 +375,30 @@ let hashers_of_stage stage =
   CL.map hashers_of_table stage.tables |> CL.flatten |> unique_stmt_list
 ;;
 
+let hashbits_of_table dbg table = 
+  let res = hash_bits_of_stmt dbg (stmt_of_table table) in
+  (* if (res > 0) then (
+  print_endline ("---- hashbits_of_table ----");
+  print_endline (CorePrinting.statement_to_string (stmt_of_table table));
+  print_endline ("hash bits: "^(res |> string_of_int));
+  ); *)
+  res
+;;
+let hashbits_of_stage stage = 
+  (* let _ = stage in 0 *)
+  (* print_endline ("------ stage hashbits start -----"); *)
+  let res = CL.fold_left (fun ct tbl -> ct + hashbits_of_table false tbl) 0 stage.tables in
+  (* print_endline ("------ stage hashbits end (result = "^(string_of_int res)^") -----"); *)
+  if (res >= 128) then (
+    print_endline ("------ stage hashbits start BIG BAD STAGE -----");
+    let res = CL.fold_left (fun ct tbl -> ct + hashbits_of_table true tbl) 0 stage.tables in
+    print_endline ("------ stage hashbits end (result = "^(string_of_int res)^") -----");
+  );
+
+  res
+  
+
+;;
 let string_of_statement_group stmt_group = 
   let string_of_vertex_statement (vs : vertex_stmt) =
     CorePrinting.statement_to_string vs.stmt
@@ -518,13 +544,16 @@ let stage_fits_verbose (prog_info:layout_args) stage =
   let c_hashers = ((hashers_of_stage stage |> CL.length) <= stage_constraints.max_hashers) in 
   let n_blocks = sblocks_of_stmt prog_info.arr_dimensions (stmt_of_stage stage) in
   let c_blocks = (n_blocks <= stage_constraints.max_array_blocks) in
-  (c_tbls, c_arrays, c_hashers, c_blocks)
+  let c_hashbits = hashbits_of_stage stage <= stage_constraints.max_hash_bits in  
+  if (not c_hashbits)
+    then (print_endline ("number of hash bits in this stage: "^(string_of_int(hashbits_of_stage stage))));
+  (c_tbls, c_arrays, c_hashers, c_blocks, c_hashbits)
 ;;  
 
 
 let stage_fits (prog_info:layout_args) stage =
-  let a, b, c, d = stage_fits_verbose prog_info stage in
-  a && b && c && d
+  let a, b, c, d, e = stage_fits_verbose prog_info stage in
+  a && b && c && d && e
 ;;  
 
 
@@ -612,6 +641,21 @@ let try_place_in_stage prog_info (prior_stages, stmt_group_opt) stage =
     | _ -> 
       (prior_stages@[stage], stmt_group_opt) 
   in 
+  let placed_result_report () = 
+    match stmt_group_opt with
+    | Some(stmt_group) -> (
+      (match stmt_group.arr with
+      | Some(arr) -> (
+        let stage_num = List.length prior_stages in      
+        print_endline 
+          ("[try_place_in_stage]  SUCCESS. placed array "
+          ^(CorePrinting.cid_to_string arr)
+          ^" in stage "^string_of_int stage_num^".");
+      )
+      | _ -> ());
+    )
+    | _ -> ()
+  in 
   match stmt_group_opt with 
   | None -> not_placed_result "already placed" (* already placed in a prior stage *)
   | Some(stmt_group) -> (
@@ -628,15 +672,17 @@ let try_place_in_stage prog_info (prior_stages, stmt_group_opt) stage =
       let updated_stage = {tables = tables';} in
       if (not (stage_fits prog_info updated_stage)) 
         then (
-          let (c_tbls, c_arrays, c_hashers, c_blocks) = stage_fits_verbose prog_info updated_stage in
+          let (c_tbls, c_arrays, c_hashers, c_blocks, c_hashbits) = stage_fits_verbose prog_info updated_stage in
           let dbg_msg = 
             Printf.sprintf 
-              "stage %i would be too big: c_tbls=%b, c_arrays=%b, c_hashers=%b, c_blocks=%b"
+              "stage %i would be too big: c_tbls=%b, c_arrays=%b, c_hashers=%b, c_blocks=%b, c_hashbits=%b"
               (List.length prior_stages)
-              c_tbls c_arrays c_hashers c_blocks
+              c_tbls c_arrays c_hashers c_blocks c_hashbits
           in
           not_placed_result dbg_msg)
-        else (prior_stages@[updated_stage], None)
+        else (
+          placed_result_report ();  
+        (prior_stages@[updated_stage], None))
     )
     else ( not_placed_result "dependencies" )
   )
@@ -669,10 +715,16 @@ let place_in_pipe prog_info stmt_group pipe : pipeline =
     then ({stages = updated_stages;})
     else (
       (* could not place in current stages: place in a new stage at the end *)
+      let num_stgs = List.length updated_stages in
       let updated_stages, _ = try_place_in_stage prog_info
         (updated_stages, stmt_group_opt) 
         empty_stage
       in 
+      let num_stgs' = List.length updated_stages in
+      if (num_stgs = num_stgs') then (
+        print_endline ("tried to add a new stage, but failed");
+        exit 1;
+      );
       (* at this point, we can assume that the placement had to succeed *)
       ({stages = updated_stages;}))
 ;;
@@ -703,8 +755,6 @@ let statement_group_directory_string sgdfg =
   in
   str
 ;;
-
-
 
 (* layout is a topological fold over the statement groups, 
    where ties between nodes are broken based on the length of the 
