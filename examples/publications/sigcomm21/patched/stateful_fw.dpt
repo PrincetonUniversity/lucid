@@ -21,8 +21,8 @@ event response_continue (int src_ip, int dst_ip){skip;}
 // background events
 event insert (int client_ip, int server_ip, int ts, int first_client_ip, int first_server_ip, int<8> retry_ct);
 event reinsert(int client_ip, int server_ip, int ts, int first_client_ip, int first_server_ip, int<8> retry_ct);
-event scan (int prev_idx, int<8> prev_stage);
-event delete (int cur_idx, int<8> cur_stage);
+event scan (int<16> prev_idx, int<8> prev_stage);
+event delete (int<16> cur_idx, int<8> cur_stage);
 
 // persistent state
 // (client_ip, server_ip) -> last_accessed_ts
@@ -76,14 +76,14 @@ memop set_mem_if_null(int stored_val, int new_val) {
 handle response_packet(int server_ip, int client_ip) {
     int sip = server_ip; int cip = client_ip;
     /* check if the key is in the first hash table stage */
-    int h1h = hash<32>(seed1_val, client_ip, server_ip);
+    int<16> h1h = hash<16>(seed1_val, client_ip, server_ip);
     int stg1_client_stored = Array.getm(stg1_client, h1h, get_cmp, cip);
     int stg1_server_stored = Array.getm(stg1_server, h1h, get_cmp, sip);
     if (stg1_client_stored==TRUE && stg1_server_stored==TRUE) {
         generate response_continue(client_ip, server_ip);
     }
     else {
-        int h2h = hash<32>(seed2_val, client_ip, server_ip);
+        int<16> h2h = hash<16>(seed2_val, client_ip, server_ip);
         /* check if the key is in the second hash table stage. */
         int stg2_client_stored = Array.getm(stg2_client, h2h, get_cmp, client_ip);
         int stg2_server_stored = Array.getm(stg2_server, h2h, get_cmp, server_ip);
@@ -103,7 +103,7 @@ handle response_packet(int server_ip, int client_ip) {
 
 // packet from local client to remote server
 handle request_packet(int client_ip, int server_ip) {
-	int<32> h1h = hash<32>(seed1_val, client_ip, server_ip);
+	int<16> h1h = hash<16>(seed1_val, client_ip, server_ip);
     int cur_ts = Sys.time();
 
     /* check if the key is in the first hash table stage */
@@ -115,7 +115,7 @@ handle request_packet(int client_ip, int server_ip) {
         generate request_continue(client_ip, server_ip);
     }
     else {
-        int h2h = hash<32>(seed2_val, client_ip, server_ip);
+        int<16> h2h = hash<16>(seed2_val, client_ip, server_ip);
         /* check if the key is in the second hash table stage. */
         int stg2_client_stored = Array.getm(stg2_client, h2h, get_cmp, client_ip);
         int stg2_server_stored = Array.getm(stg2_server, h2h, get_cmp, server_ip);
@@ -149,7 +149,7 @@ handle request_packet(int client_ip, int server_ip) {
 
 handle insert(int client_ip, int server_ip, int ts, int first_client_ip, int first_server_ip, int<8> retry_ct) {
     int sip = server_ip; int cip = client_ip;
-    int h1h = hash<32>(seed1_val, client_ip, server_ip);
+    int<16> h1h = hash<16>(seed1_val, client_ip, server_ip);
     /* insert and evict to stage 1 */
     int client_victim = Array.update(stg1_client, h1h, get_mem, 0, set_mem, cip);
     int server_victim = Array.update(stg1_server, h1h, get_mem, 0, set_mem, sip);
@@ -159,7 +159,7 @@ handle insert(int client_ip, int server_ip, int ts, int first_client_ip, int fir
     // if (client_victim != 0 && server_victim != 0) { 
     if (client_victim != NULL && server_victim != NULL) { 
         /* insert and evict to stage 2. */
-        int h2h = hash<32>(seed2_val, client_victim, server_victim);
+        int<16> h2h = hash<16>(seed2_val, client_victim, server_victim);
         client_victim = Array.update(stg2_client, h2h, get_mem, 0, set_mem, client_victim);
         server_victim = Array.update(stg2_server, h2h, get_mem, 0, set_mem, server_victim);
         ts_victim = Array.update(stg2_last_accessed, h2h, get_mem, 0, set_mem, ts_victim);
@@ -195,11 +195,11 @@ handle reinsert(int client_ip, int server_ip, int ts, int first_client_ip, int f
     }
 }
 
-handle scan (int prev_idx, int<8> prev_stage) {
+handle scan (int<16> prev_idx, int<8> prev_stage) {
     /* calculate address to scan */
     int ts = Sys.time();
     int over_thresh = 0; 
-    int next_scan_idx = 0;
+    int<16> next_scan_idx = 0;
     int<8> next_stage = 0;
     if (prev_stage == 1) {
         next_stage = 2;
@@ -226,8 +226,8 @@ handle scan (int prev_idx, int<8> prev_stage) {
     }
 }
 
-handle delete (int cur_idx, int<8> cur_stage) {
-    int i = cur_idx;
+handle delete (int<16> cur_idx, int<8> cur_stage) {
+    int<16> i = cur_idx;
     /* set all arrays at this position to zero.  */
     if (cur_stage == 1) {
         Array.set(stg1_client, i, 0);
