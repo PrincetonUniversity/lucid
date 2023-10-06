@@ -1,0 +1,113 @@
+// simple port knocking example app + demonstration
+// of core lucid features
+
+// packet headers, like struct defs in C
+type eth_hdr = {
+    int<48> dmac;
+    int<48> smac;
+    int<16> ety;
+}
+type ip_hdr = {
+    int<32> src;
+    int<32> dst;
+}
+type tcp_hdr = {
+    int<16> sport;
+    int<16> dport;
+}
+
+// events -- an abstraction of packets and internal system messages.
+// the lucid compiler generates all the parser functions necessary 
+// to convert raw packets to events, but you can also 
+// write a custom parse function in lucid if you'd like
+event tcp_pkt(eth_hdr eth, ip_hdr ip, tcp_hdr tcp);
+
+
+// some constants for the port-knocking state machine
+const int<16> PORT_1 = 100;
+const int<16> PORT_2 = 101;
+const int<16> PORT_3 = 102; // accept on port3
+
+const int CLOSED_0 = 0;
+const int CLOSED_1 = 1;
+const int CLOSED_2 = 2;
+const int OPEN = 3;
+
+// state that persists across events is stored in "globals"
+global Array.t<32> knock_state = Array.create(8); // 8 slots, initialized to 0 by default
+
+// state transition function
+// functions in lucid work like they do in any other language, 
+// except they can't do recursion
+fun int next_state(int state, int<16> dport) {
+    // match statements are a nicer version of switch statements in C
+    // (or a less flexible version of match expressions in ML)
+    match (state, dport) with 
+        | CLOSED_0, PORT_1 -> {state = CLOSED_1;}
+        | CLOSED_1, PORT_2 -> {state = CLOSED_2;}
+        | CLOSED_2, PORT_3 -> {state = OPEN;}
+        | _, _ -> {state = CLOSED_0;}
+    return state;
+}
+
+// you can use printf functions in the lucid interpreter
+// for debugging, etc
+fun void print_state(int state) {
+    match state with 
+    | CLOSED_0 -> {printf("CLOSED_0");}
+    | CLOSED_1 -> {printf("CLOSED_1");}
+    | CLOSED_2 ->{printf("CLOSED_2");}
+    | OPEN -> {printf("OPEN");}
+}
+
+// ignore this event on first read of program -- its related to pipelining
+event set_knock_state(int<32> new_state) {
+    Array.set(knock_state, 0, new_state);
+}
+
+
+// handlers are entry points to the program. When an 
+// event named X arrives, the handler named X executes. 
+// handlers can generate other events, to execute 
+// at the current node or another node in the network. 
+// you can do recursion with events / handlers. 
+handle tcp_pkt(eth_hdr eth, ip_hdr ip, tcp_hdr tcp) {
+    // to operate on persistent state, you use 
+    // builtin "Array" methods, like get, set, and "update"
+    // Generally, an array method should compile to an 
+    // atomic instruction on the machine it runs on.
+    int start_state = Array.get(knock_state, 0);
+    printf("new tcp packet");
+    printf("start state:");
+    print_state(start_state);
+    // once a port is open, it stays open.
+    if (start_state != OPEN) {
+        int end_state = next_state(start_state, tcp#dport);
+        // Array.set(knock_state, 0, end_state); 
+        // when lucid operates in "pipeline" mode, it makes sure 
+        // that arrays are always used in order, and never used twice 
+        // in any single program control flow. This guarantees that
+        // the program can compile to _some_ pipeline with 
+        // sufficient memory and compute resources.
+        // So, in "pipeline" mode, this program will fail to 
+        // type check because it does 2 operations on start state. 
+        // For ebpf, we probably want to have a "non-pipelined"
+        // mode, or the option to declare "unordered globals"
+        // For the tofino, where there _is_ ordering, we generate 
+        // a second event to asynchronously update the state. 
+        generate(set_knock_state(end_state));
+        printf("end state:");
+        print_state(end_state);
+        if (end_state == OPEN) {
+            // accept the packet, reflecting it back
+            generate_port((int<9>)ingress_port, tcp_pkt(eth, ip, tcp));
+            printf("accepting first packet of open connection");
+        } 
+    }
+    // case: start_state == OPEN
+    else {
+        // accept the packet, reflecting it back
+        generate_port((int<9>)ingress_port, tcp_pkt(eth, ip, tcp));
+        printf("accepting packet from already-open connection");
+    }
+}

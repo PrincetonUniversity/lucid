@@ -1,0 +1,91 @@
+// a port knocking example where the packet carries a 
+// vector of postcards that get processed before the 
+// current packet.
+
+type eth_hdr = {
+    int<48> dmac;
+    int<48> smac;
+    int<16> ety;
+}
+// mock ip and tcp headers
+type ip_hdr = {
+    int<32> src;
+    int<32> dst;
+}
+type tcp_hdr = {
+    int<16> sport;
+    int<16> dport;
+}
+
+// history-related data structures
+// a "postcard" carries one packet's history
+// the entire history is just an array of postcards
+type postcard_t = {
+    int<16> dp;
+}
+const postcard_t empty_postcard = {dp = 0;};
+
+
+// a history is just a fixed-length list of postcard with a pointer to the 
+// next one to process.
+type history_t<'maxlen> = {
+    int hidx; 
+    postcard_t['maxlen] hpostcards;
+}
+
+// a "postcard_option" is just an optional postcard.
+// used for getting a postcard out of a fixed-length array
+type postcard_option = {
+    postcard_t postcard;
+    bool valid;
+}
+const postcard_option empty_postcard_option = {postcard = empty_postcard; valid = false;};
+// get the next postcard out of a history struct, if it is in bounds
+fun postcard_option get_next_postcard(history_t<'maxlen> hist) {
+    postcard_option ret = empty_postcard_option;
+    for (h < 'maxlen) {
+        if (hist#hidx == size_to_int(h)) {
+            ret = {postcard=hist#hpostcards[h]; valid=true;};
+        }
+    }
+    return ret;
+}
+
+size MAX_HIST_LEN = 4; // we need a concrete max history length for a full program 
+
+// an incoming packet carries a packet history and a packet
+event pkt_in(history_t<MAX_HIST_LEN> hist, eth_hdr eth, ip_hdr ip, tcp_hdr tcp);
+event pkt_out(eth_hdr eth, ip_hdr ip, tcp_hdr tcp){skip;}
+
+// port-knocking state machine
+const int<16> PORT_1 = 100;
+const int<16> PORT_2 = 101;
+const int<16> PORT_3 = 102; // accept on port3
+
+const int CLOSED_0 = 0;
+const int CLOSED_1 = 1;
+const int CLOSED_2 = 2;
+const int OPEN = 3;
+
+global Array.t<32> knock_state = Array.create(8); // 8 slots. Just use 1 for prototype.
+
+
+handle pkt_in(history_t<MAX_HIST_LEN> hist, eth_hdr eth, ip_hdr ip, tcp_hdr tcp) {    
+    postcard_option next_postcard = get_next_postcard(hist);
+    if (next_postcard#valid) {
+        int<16> dport = next_postcard#postcard#dp;
+        int cur_idx = hist#hidx;
+        printf("processing hist[%d] with dport=%d", cur_idx, dport);
+        // TODO: actual history processing
+        generate(pkt_in({hist with hidx = (hist#hidx +1)}, eth, ip, tcp));
+    }
+    else {
+        printf ("no more history -- processing main packet");
+        // TODO: packet processing
+        generate_port((int<9>)ingress_port, pkt_out(eth, ip, tcp));
+    }
+}
+
+
+
+

@@ -1,0 +1,100 @@
+// A simple port knocking example
+// Processes one packet at a time, 
+// sets state updates in a separate event
+
+type eth_hdr = {
+    int<48> dmac;
+    int<48> smac;
+    int<16> ety;
+}
+// mock ip and tcp headers
+type ip_hdr = {
+    int<32> src;
+    int<32> dst;
+}
+type tcp_hdr = {
+    int<16> sport;
+    int<16> dport;
+}
+
+event tcp_pkt(eth_hdr eth, ip_hdr ip, tcp_hdr tcp);
+
+// port-knocking state machine
+const int<16> PORT_1 = 100;
+const int<16> PORT_2 = 101;
+const int<16> PORT_3 = 102; // accept on port3
+
+const int CLOSED_0 = 0;
+const int CLOSED_1 = 1;
+const int CLOSED_2 = 2;
+const int OPEN = 3;
+
+global Array.t<32> knock_state = Array.create(8); // 8 slots. Just use 1 for prototype.
+// initialized to CLOSED_0
+
+// an "unordered" global that can be accessed multiple times and out of order
+// we need to loosen the restrictions for ebpf programs. 
+// two ways: 
+// one way is loosen memop restrictions
+// another way is loosen ordering restrictions
+unordered global Array.t<32> knock_state = Array.create(8);
+// an unordered global is a global that we can access multiple times in the pipeline
+
+event set_state(int state) {
+    Array.set(knock_state, 0, state);
+}
+// state transition (not optimized)
+fun int get_new_state(int state, int<16> dport) {
+    match (state, dport) with 
+    | CLOSED_0, PORT_1 -> {state = CLOSED_1;}
+    | CLOSED_1, PORT_2 -> {state = CLOSED_2;}
+    | CLOSED_2, PORT_3 -> {state = OPEN;}
+    | _, _ -> {state = CLOSED_0;}
+    return state;
+}
+fun int get_state() {
+    return Array.get(knock_state, 0);
+}
+
+fun void set_new_state(int state) {
+    // in ebpf with non-shared memory, this would call Array.set directly
+    // for the tofino (and to satisfy the current lucid type system)
+    // we need to generate an event and set the state in a second pass
+    // Another option for ebpf: the ebpf compiler could translate 
+    // the generate into a tail call to set_state's handler
+    generate(set_state(state));
+}
+
+fun void print_state(int state) {
+    match state with 
+    | CLOSED_0 -> {printf("CLOSED_0");}
+    | CLOSED_1 -> {printf("CLOSED_1");}
+    | CLOSED_2 ->{printf("CLOSED_2");}
+    | OPEN -> {printf("OPEN");}
+}
+
+
+handle tcp_pkt(eth_hdr eth, ip_hdr ip, tcp_hdr tcp) {
+    int start_state = Array.get(knock_state, 0);
+    printf("new tcp packet");
+    printf("start state:");
+    print_state(start_state);
+    // once a port is open, it stays open.
+    if (start_state != OPEN) {
+        int end_state = get_new_state(start_state, tcp#dport);
+        set_new_state(end_state);
+        printf("end state:");
+        print_state(end_state);
+        if (end_state == OPEN) {
+            // accept the packet, reflecting it back
+            generate_port((int<9>)ingress_port, tcp_pkt(eth, ip, tcp));
+            printf("accepting first packet of open connection");
+        } 
+    }
+    // case: start_state == OPEN
+    else {
+        // accept the packet, reflecting it back
+        generate_port((int<9>)ingress_port, tcp_pkt(eth, ip, tcp));
+        printf("accepting packet from already-open connection");
+    }
+}

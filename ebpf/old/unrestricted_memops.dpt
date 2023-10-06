@@ -1,0 +1,60 @@
+/* playing around with unrestricted memops for eBPF */
+size hist_len = 2;
+
+event pkt(int sip, int dport, int start_state); 
+event hist_pkt(int sip, int[hist_len] dports, int dport, int start_state); 
+
+const int PORT_1 = 100;
+const int PORT_2 = 101;
+const int PORT_3 = 102; 
+
+const int CLOSED_0 = 0;
+const int CLOSED_1 = 1;
+const int CLOSED_2 = 2;
+const int OPEN = 3;
+
+// the memop for a single-process (or sharded) port-knocking state machine
+fun int update_state(int state, int dport) {
+    int rv = CLOSED_0;
+    match (state, dport) with 
+    | CLOSED_0, PORT_1 -> {rv = CLOSED_1;}
+    | CLOSED_1, PORT_2 -> {rv = CLOSED_2;}
+    | CLOSED_2, PORT_3 -> {rv = OPEN;}
+    | OPEN, _ -> {rv = OPEN;}
+    | _, _ -> {rv = CLOSED_0;}
+    return rv;
+}
+
+// a memop to "fast-forward" the state machine before updating. 
+fun int ff_update_state(int state, int['len] dport, int final_dport) {
+    int cur_state = state;
+    for (i < 'len) {
+        match (cur_state, dport[i]) with 
+        | CLOSED_0, PORT_1 -> {cur_state = CLOSED_1;}
+        | CLOSED_1, PORT_2 -> {cur_state = CLOSED_2;}
+        | CLOSED_2, PORT_3 -> {cur_state = OPEN;}
+        | OPEN, _ -> {cur_state = OPEN;}
+        | _, _ -> {cur_state = CLOSED_0;}
+    }
+    return update_state(cur_state, final_dport);
+}
+
+handle pkt(int sip, int dport, int start_state){
+    int final_state = update_state(start_state, dport);
+    printf("start_state=%d, final_state=%d", start_state, final_state);
+    // Array usage would look like: 
+    // int final_state = Array.update(knock_array, hash(sip), update_state, dport);
+}
+
+handle hist_pkt(int sip, int[hist_len] hist_dports, int dport, int start_state) {
+    // int[hist_len] dports = [hist_dports[i] for i < hist_len];
+    int final_state = ff_update_state(start_state, hist_dports, dport);
+    printf("[ff] start_state=%d, final_state=%d", start_state, final_state);
+    // Array usage would look like: 
+    // int final_state = Array.update(knock_array, hash(sip), update_state, hist_dports, dport);
+    // this might be complicated in the type system, 
+    // because Array.update no longer has a fixed type. It depends on the 
+    // type of the memop?
+}
+
+// Is there a different way to implement this? 
