@@ -389,11 +389,11 @@ let hashbits_of_stage stage =
   (* print_endline ("------ stage hashbits start -----"); *)
   let res = CL.fold_left (fun ct tbl -> ct + hashbits_of_table false tbl) 0 stage.tables in
   (* print_endline ("------ stage hashbits end (result = "^(string_of_int res)^") -----"); *)
-  if (res >= 128) then (
+  (* if (res >= 128) then (
     print_endline ("------ stage hashbits start BIG BAD STAGE -----");
     let res = CL.fold_left (fun ct tbl -> ct + hashbits_of_table true tbl) 0 stage.tables in
     print_endline ("------ stage hashbits end (result = "^(string_of_int res)^") -----");
-  );
+  ); *)
 
   res
   
@@ -545,8 +545,8 @@ let stage_fits_verbose (prog_info:layout_args) stage =
   let n_blocks = sblocks_of_stmt prog_info.arr_dimensions (stmt_of_stage stage) in
   let c_blocks = (n_blocks <= stage_constraints.max_array_blocks) in
   let c_hashbits = hashbits_of_stage stage <= stage_constraints.max_hash_bits in  
-  if (not c_hashbits)
-    then (print_endline ("number of hash bits in this stage: "^(string_of_int(hashbits_of_stage stage))));
+  (* if (not c_hashbits)
+    then (print_endline ("number of hash bits in this stage: "^(string_of_int(hashbits_of_stage stage)))); *)
   (c_tbls, c_arrays, c_hashers, c_blocks, c_hashbits)
 ;;  
 

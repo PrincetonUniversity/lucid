@@ -8,7 +8,7 @@ const int dst_ip = 1234; // The single destination
 
 // Recall that we have two builtin variables representing locations:
 const int self = 1; //(This switch)
-group neighbors = {2, 3, 4}; //(Multicast group for all neighbors of this switch)
+const group neighbors = {2, 3, 4}; //(Multicast group for all neighbors of this switch)
 
 const int num_neighbors = 3;
 global Array.t<32> edge_lengths = Array.create(num_neighbors); // Initialized by the control plane, or at compile time
@@ -73,7 +73,7 @@ handle advertise(int neighbor, int dist) {
      if (updated == TRUE) {
       // Set the best neighbor to this one and readvertise to neighbors
         Array.set(best_neighbor, 0, neighbor);
-        mgenerate Event.smlocate(advertise(self, totaldist), neighbors);
+        generate_ports (neighbors, advertise(self, totaldist));
      } else {
          // Check if this neighbor was already the best. If it was, and the route length
          // increased, our best distance may no longer be accurate.
@@ -91,7 +91,7 @@ handle set_best_dist(int dist) {
 
 handle gen_advertise() {
     int best = Array.get(best_dist, 0);
-    mgenerate Event.smlocate(advertise(self, best), neighbors);
+    generate_ports (neighbors, advertise(self, best));
     generate Event.delay(gen_advertise(), ADVERTISE_PERIOD);
 }
 
@@ -110,8 +110,8 @@ handle scan(int idx) {
     generate Event.delay(scan(next_idx), SCAN_PERIOD);
 }
 
-packet event packetin(int dst);
-exit event continue(int dst);
+event packetin(int dst);
+event continue(int dst) {skip;}
 
 handle packetin(int dst) {
     if (dst == dst_ip) {

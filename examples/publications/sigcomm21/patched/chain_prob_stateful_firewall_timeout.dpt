@@ -15,9 +15,9 @@ const int<1> FALSE = 0;
 
 /* Information about the chain. */
 /* I want this to read "extern location foo;" but we don't have that syntax yet */
-const int head = 0;
-const int tail = 0;
-const int succ = 0;
+const int<9> head = 0;
+const int<9> tail = 0;
+const int<9> succ = 0;
 
 /* We have three Bloom filters -- at any given time, one is active, one is
 "warming up", and one is being zeroed out. */
@@ -39,15 +39,15 @@ event write_empty(int<32> i, int<8> curr);
 
 // Request_x is for packets coming from inside, response_x is for packets coming from outside
 // packet events
-packet event request_packet (int client_ip, int server_ip);
-packet event response_packet (int server_ip, int client_ip);
+event request_packet(int client_ip, int server_ip);
+event response_packet(int server_ip, int client_ip);
 // exit events
-exit event request_continue (int src_ip, int dst_ip);
-exit event response_continue (int src_ip, int dst_ip);
+event request_continue(int src_ip, int dst_ip) {skip;}
+event response_continue(int src_ip, int dst_ip) {skip;}
 
 handle add_to_filter(int i1, int i2) {
   int idx1 = i1; int idx2 = i2;
-  int self = 1;
+  int<9> self = 1;
   int<8> curr = Array.get(active, 0);
   // Add only to active and warmup filters
   if (curr == 0) {
@@ -68,7 +68,7 @@ handle add_to_filter(int i1, int i2) {
   }}
   // Send to next in chain
   if (self != tail) {
-    generate Event.sslocate(add_to_filter(idx1, idx2), succ);
+    generate_port ((int<9>)succ, add_to_filter(idx1, idx2));
   }
 }
 
@@ -129,7 +129,7 @@ handle request_packet(int client_ip, int server_ip) {
   int<8> curr = Array.get(active, 0);
   bool in_f = in_filter(idx1, idx2, curr);
   if (in_f == false) {
-    generate Event.sslocate(add_to_filter(idx1, idx2), head);
+    generate_port ((int<9>)head, add_to_filter(idx1, idx2));
   }
   generate request_continue(client_ip, server_ip);
 }

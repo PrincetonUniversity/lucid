@@ -32,9 +32,9 @@ const int<1> TRUE = 1;
 
 /* Information about the chain. */
 /* I want this to read "extern location foo;" but we don't have that syntax yet */
-const int head = 0;
-const int tail = 0;
-const int succ = 0;
+const int<9> head = 0;
+const int<9> tail = 0;
+const int<9> succ = 0;
 
 global Array.t<1> filter1 = Array.create(NUM_REGISTERS);
 global Array.t<1> filter2 = Array.create(NUM_REGISTERS);
@@ -45,14 +45,14 @@ event add_to_filter(int idx1, int idx2, int idx3, int idx4);
 
 // Request_X is for packets coming from inside, reponse_x is for packets coming from outside
 // packet events
-packet event request_packet (int client_ip, int server_ip);
-packet event response_packet (int server_ip, int client_ip);
+event request_packet(int client_ip, int server_ip);
+event response_packet(int server_ip, int client_ip);
 // exit events
-exit event request_continue (int src_ip, int dst_ip);
-exit event response_continue (int src_ip, int dst_ip);
+event request_continue(int src_ip, int dst_ip) {skip;}
+event response_continue(int src_ip, int dst_ip) {skip;}
 
 handle add_to_filter(int idx1, int idx2, int idx3, int idx4) {
-  int self = 1;
+  int<9> self = 1;
   Array.set(filter1, idx1, TRUE);
   Array.set(filter2, idx2, TRUE);
   Array.set(filter3, idx3, TRUE);
@@ -60,7 +60,7 @@ handle add_to_filter(int idx1, int idx2, int idx3, int idx4) {
   if (self != tail) {
     // backend bug: event combinators must be inlined.
     // event this = add_to_filter(idx1, idx2, idx3, idx4);
-    generate Event.sslocate(add_to_filter(idx1, idx2, idx3, idx4), succ);
+    generate_port ((int<9>)succ, add_to_filter(idx1, idx2, idx3, idx4));
   }
 }
 
@@ -92,7 +92,7 @@ handle request_packet(int client_ip, int server_ip) {
   // backend bug: negation not implemented on bools.
   // if (!in_filter) {
   if (in_filter == false) {
-    generate Event.sslocate(add_to_filter(idx1, idx2, idx3, idx4), head);
+    generate_port ((int<9>)head, add_to_filter(idx1, idx2, idx3, idx4));
   }
   generate request_continue(client_ip, server_ip);
 }

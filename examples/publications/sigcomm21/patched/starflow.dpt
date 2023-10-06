@@ -14,12 +14,12 @@ const int SIZE_SHORT = 2;
 const int MAX_IDX = 7;
 const int MMATCH = 0;
 
-packet event monitor_pkt(int src, int len);
+event monitor_pkt(int src, int len);
 
 // records that the cache emits when something gets evicted. 
 const int COLLECTION_SERVER = 1234;
-exit event short_record(int src, int len, int rec0, int rec1);
-exit event long_record(int src, int len, int rec0, int rec1, int rec2, int rec3, int rec4, int rec5, int rec6, int rec7);
+event short_record(int src, int len, int rec0, int rec1) {skip;}
+event long_record(int src, int len, int rec0, int rec1, int rec2, int rec3, int rec4, int rec5, int rec6, int rec7) {skip;}
 
 // free a "long slot" by pushing it's index back onto the stack. 
 event free_block(int block_id);
@@ -42,7 +42,7 @@ global Array.t<32> rec5 = Array.create(L_SLOTS);
 global Array.t<32> rec6 = Array.create(L_SLOTS);
 global Array.t<32> rec7 = Array.create(L_SLOTS);
 
-memop read (int stored, int nothingval) { 
+memop fst (int stored, int nothingval) { 
   return stored;
 }
 memop write (int stored, int newval) {
@@ -82,7 +82,7 @@ handle monitor_pkt(int src, int len) {
   int blk_id = 0;
   // update the key. 
   int h1 = hash<32>(h1_poly, src);
-  int stored_src = Array.update(srcarr, h1, read, 0, write, src);
+  int stored_src = Array.update(srcarr, h1, fst, 0, write, src);
   // update the count and index (if its a hit). 
   int is_match = src - stored_src;
   if (is_match == MMATCH) {
@@ -93,7 +93,7 @@ handle monitor_pkt(int src, int len) {
   // each flow gets to try and allocate a block once
   //  -- when it reaches this size. 
   if (ct == SIZE_SHORT) {  
-    int stack_idx = Array.update(stack_top, 0, read, 0, decr_sat, 1);
+    int stack_idx = Array.update(stack_top, 0, fst, 0, decr_sat, 1);
     // got an extended block!
     if (stack_idx != 0) {
       blk_id = Array.get(longblock_stack, stack_idx);
@@ -122,35 +122,35 @@ handle monitor_pkt(int src, int len) {
 
   if (is_match == MMATCH) {
     if (idx == 0) {
-      stored_rec0 = Array.update(rec0, h1, read, 0, write, len);
+      stored_rec0 = Array.update(rec0, h1, fst, 0, write, len);
     } else {
       stored_rec0 = Array.get(rec0, h1);
     if (idx == 1) {
-      stored_rec1 = Array.update(rec1, h1, read, 0, write, len);
+      stored_rec1 = Array.update(rec1, h1, fst, 0, write, len);
     } else {
       stored_rec1 = Array.get(rec1, h1);
     if (idx == 2) {
-      stored_rec2 = Array.update(rec2, h1, read, 0, write, len);
+      stored_rec2 = Array.update(rec2, h1, fst, 0, write, len);
     } else {
       stored_rec2 = Array.get(rec2, h1);
     if (idx == 3) {
-      stored_rec3 = Array.update(rec3, h1, read, 0, write, len);
+      stored_rec3 = Array.update(rec3, h1, fst, 0, write, len);
     } else {
       stored_rec3 = Array.get(rec3, h1);
     if (idx == 4) {
-      stored_rec4 = Array.update(rec4, h1, read, 0, write, len);
+      stored_rec4 = Array.update(rec4, h1, fst, 0, write, len);
     } else {
       stored_rec4 = Array.get(rec4, h1);
     if (idx == 5) {
-      stored_rec5 = Array.update(rec5, h1, read, 0, write, len);
+      stored_rec5 = Array.update(rec5, h1, fst, 0, write, len);
     } else {
       stored_rec5 = Array.get(rec5, h1);
     if (idx == 6) {
-      stored_rec6 = Array.update(rec6, h1, read, 0, write, len);
+      stored_rec6 = Array.update(rec6, h1, fst, 0, write, len);
     } else {
       stored_rec6 = Array.get(rec6, h1);
     if (idx == 7) {
-      stored_rec7 = Array.update(rec7, h1, read, 0, write, len);
+      stored_rec7 = Array.update(rec7, h1, fst, 0, write, len);
     } else {
       stored_rec7 = Array.get(rec7, h1);
       } } } } } } }
@@ -173,9 +173,9 @@ handle monitor_pkt(int src, int len) {
   if (is_match == MMATCH) {
     if (idx == 0) {
       if (blk_id == 0) {
-        generate Event.sslocate(short_record(src, len, stored_rec0, stored_rec1), COLLECTION_SERVER);
+        generate_port ((int<9>)COLLECTION_SERVER, short_record(src, len, stored_rec0, stored_rec1));
       } else {
-        generate Event.sslocate(long_record(src, len, stored_rec0, stored_rec1, stored_rec2, stored_rec3, stored_rec4, stored_rec5, stored_rec6, stored_rec7), COLLECTION_SERVER);
+        generate_port ((int<9>)COLLECTION_SERVER, long_record(src, len, stored_rec0, stored_rec1, stored_rec2, stored_rec3, stored_rec4, stored_rec5, stored_rec6, stored_rec7));
       }
     }
   }
@@ -183,9 +183,9 @@ handle monitor_pkt(int src, int len) {
   // Note: at this point, we could zero out the invalid entries too. Original starflow implementation assumes the server takes care of it. 
   else {
       if (blk_id == 0) {
-        generate Event.sslocate(short_record(src, len, stored_rec0, stored_rec1), COLLECTION_SERVER);
+        generate_port ((int<9>)COLLECTION_SERVER, short_record(src, len, stored_rec0, stored_rec1));
       } else {
-        generate Event.sslocate(long_record(src, len, stored_rec0, stored_rec1, stored_rec2, stored_rec3, stored_rec4, stored_rec5, stored_rec6, stored_rec7), COLLECTION_SERVER);
+        generate_port ((int<9>)COLLECTION_SERVER, long_record(src, len, stored_rec0, stored_rec1, stored_rec2, stored_rec3, stored_rec4, stored_rec5, stored_rec6, stored_rec7));
         // in this case, we also have to free the long block for another flow -- do that with a control event.
         generate free_block(blk_id);
       }

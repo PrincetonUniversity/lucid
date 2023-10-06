@@ -12,9 +12,9 @@ const int FALSE = 0;
 
 /* Information about the chain. */
 /* I want this to read "extern location foo;" but we don't have that syntax yet */
-const int head = 0;
-const int tail = 0;
-const int succ = 0;
+const int<9> head = 0;
+const int<9> tail = 0;
+const int<9> succ = 0;
 
 /* Global data: the registers, plus metadata about each of them */
 global Array.t<32> pending = Array.create(NUM_REGISTERS);
@@ -26,8 +26,8 @@ event ack(int idx);
 
 event process(int src, int dst, int idx);
 
-packet event pktin(int src, int dst);
-exit event continue(int src, int dst);
+event pktin(int src, int dst);
+event continue(int src, int dst) {skip;}
 
 memop id (int x, int dummy) {
   return x;
@@ -51,7 +51,7 @@ memop check_and_incr (int curr, int next) {
 
 handle write(int idx, int seq, int data) {
   int nseq = seq;
-  int self = 0;
+  int<9> self = 0;
   // The event we just got
   // event this = write(idx, seq, data); 
   // Same event but delayed
@@ -80,9 +80,9 @@ handle write(int idx, int seq, int data) {
       Array.set(registers, idx, data);
       // Either propagate to next in chain, or tell head we're done
       if (self != tail) {
-        generate Event.sslocate(write(idx, nseq, data), succ);
+        generate_port ((int<9>)succ, write(idx, nseq, data));
       } else {
-        generate Event.sslocate(ack(idx), head);
+        generate_port ((int<9>)head, ack(idx));
       }
     }
   }
@@ -90,10 +90,10 @@ handle write(int idx, int seq, int data) {
 
 // Set pending bit to false across the whole chain
 handle ack(int idx) {
-  int self = 0;
+  int<9> self = 0;
   Array.set(pending, idx, FALSE);
   if (self != tail) {
-    generate Event.sslocate(ack(idx), succ);
+    generate_port ((int<9>)succ, ack(idx));
   }
 }
 
@@ -122,7 +122,7 @@ handle pktin(int src, int dst) {
   bool ntw = need_to_write(src, dst); // Can't manually inline this or function inlining fails
   if (ntw == true) {
     // event writer = write(0,0,0); // Specific values are application-specific
-    generate Event.sslocate(write(0,0,0), head);
+    generate_port ((int<9>)head, write(0,0,0));
   }
 
   // Actually do the processing
@@ -131,7 +131,7 @@ handle pktin(int src, int dst) {
   if (r == TRUE) {
     // If we're in the middle of a write, send it to the tail, since that has
     // the last fully consistent data
-    generate Event.sslocate(process(src, dst, idx), tail);
+    generate_port ((int<9>)tail, process(src, dst, idx));
   } else {
     process_fun(src, dst, idx);
   }

@@ -10,12 +10,12 @@ global Array.t<32> nat_to_ip  = Array.create(NUM_PORTS);
 global Array.t<32> nat_to_port  = Array.create(NUM_PORTS);
 
 // Handle packets coming from behind the NAT
-packet event inside_packet(int src_ip, int<32> src_port);
-exit event inside_continue(int<32> src_port);
+event inside_packet(int src_ip, int<32> src_port);
+event inside_continue(int<32> src_port) {skip;}
 
 // Handle packets coming from outside the NAT
-packet event outside_packet(int<32> dst_port);
-exit event outside_continue(int dst_ip, int<32> dst_port);
+event outside_packet(int<32> dst_port);
+event outside_continue(int dst_ip, int<32> dst_port) {skip;}
 
 event add_to_nat(int src_ip, int<32> src_port);
 

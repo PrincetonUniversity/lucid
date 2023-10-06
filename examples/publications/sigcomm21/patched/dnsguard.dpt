@@ -39,11 +39,11 @@ const int T_INTERVAL = 1000; // How long between rotations.
 const int h1_poly = 10398247;
 const int h2_poly = 1295981879;
 
-packet event dnsrequest_in(int src, int dst, int req_id);
-packet event dnsresponse_in(int src, int dst, int req_id);
+event dnsrequest_in(int src, int dst, int req_id);
+event dnsresponse_in(int src, int dst, int req_id);
 // Exit point back to the P4 program. Generated when a packet is allowed to 
 // proceed.
-exit event dnspkt_out (int<1> packet_allowed);
+event dnspkt_out (int<1> packet_allowed, int<31> padding) {skip;}
 
 event clear(int idx);
 event rotate();
@@ -206,7 +206,7 @@ handle dnsrequest_in(int src, int dst, int req_id) {
       }
     } 
   }
-  generate dnspkt_out(TRUE);
+  generate dnspkt_out(TRUE, 0);
 }
 
 handle dnsresponse_in(int src, int dst, int req_id) {
@@ -267,12 +267,12 @@ handle dnsresponse_in(int src, int dst, int req_id) {
     }
     if (in_1 == TRUE){
       if (in_2 == TRUE) {
-        generate (dnspkt_out(TRUE));
+        generate (dnspkt_out(TRUE, 0));
       }
     }
   }
   // host not protected, always allow.
   else {
-    generate dnspkt_out(TRUE);
+    generate dnspkt_out(TRUE, 0);
   }
 }

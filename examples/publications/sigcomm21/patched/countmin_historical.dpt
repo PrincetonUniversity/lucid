@@ -11,7 +11,7 @@ const int h2_poly = 1295981879;
 
 
 // measure count. 
-packet event pktin(int src, int dst);
+event pktin(int src, int dst);
 
 // clear a slice of the sketch and export.
 event clear(int idx, int ts);
@@ -36,7 +36,7 @@ global Array.t<32> cm5 = Array.create(countmin_slots);
 global Array.t<32> cm6 = Array.create(countmin_slots);
 
 
-memop read(int stored, int dummy){
+memop fst(int stored, int dummy){
   return stored;
 }
 memop wipe(int stored, int dummy){
@@ -52,24 +52,24 @@ handle clear(int idx, int ts) {
   int next_idx = tmp_idx1 + 1;
   int val1 = 0; int val2 = 0;
   if (rot_id == 0) {
-    Array.update(cm1, tmp_idx1, read, 0, wipe, 0);
-    Array.update(cm2, tmp_idx2, read, 0, wipe, 0);
+    Array.update(cm1, tmp_idx1, fst, 0, wipe, 0);
+    Array.update(cm2, tmp_idx2, fst, 0, wipe, 0);
   }
   else {
     if (rot_id == 1) {
-    Array.update(cm3, tmp_idx1, read, 0, wipe, 0);
-    Array.update(cm4, tmp_idx2, read, 0, wipe, 0);
+    Array.update(cm3, tmp_idx1, fst, 0, wipe, 0);
+    Array.update(cm4, tmp_idx2, fst, 0, wipe, 0);
     }
     else {
-    Array.update(cm5, tmp_idx1, read, 0, wipe, 0);
-    Array.update(cm6, tmp_idx2, read, 0, wipe, 0);
+    Array.update(cm5, tmp_idx1, fst, 0, wipe, 0);
+    Array.update(cm6, tmp_idx2, fst, 0, wipe, 0);
     }
   }
   if (next_idx != countmin_slots) {
     generate clear(next_idx, ts);
   }
   // export to collector.
-  generate Event.sslocate(export(idx, ts, val1, val2), collector); 
+  generate_port ((int<9>)collector, export(idx, ts, val1, val2)); 
 }
 
 
