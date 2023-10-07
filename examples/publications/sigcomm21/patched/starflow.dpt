@@ -10,6 +10,7 @@ That handler may generate two other events:
 const int h1_poly = 10398247;
 const int H_SLOTS = 1024;
 const int L_SLOTS = 128;
+size idx_t = 16;
 const int SIZE_SHORT = 2;
 const int MAX_IDX = 7;
 const int MMATCH = 0;
@@ -81,7 +82,7 @@ handle monitor_pkt(int src, int len) {
   int stored_rec6 = 0; int stored_rec7 = 0;
   int blk_id = 0;
   // update the key. 
-  int h1 = hash<32>(h1_poly, src);
+  auto h1 = hash<idx_t>(h1_poly, src);
   int stored_src = Array.update(srcarr, h1, fst, 0, write, src);
   // update the count and index (if its a hit). 
   int is_match = src - stored_src;
@@ -96,7 +97,7 @@ handle monitor_pkt(int src, int len) {
     int stack_idx = Array.update(stack_top, 0, fst, 0, decr_sat, 1);
     // got an extended block!
     if (stack_idx != 0) {
-      blk_id = Array.get(longblock_stack, stack_idx);
+      blk_id = Array.get(longblock_stack, (int<idx_t>)stack_idx);
       Array.set(block_map, h1, blk_id);      
     }
   } else {
@@ -196,5 +197,5 @@ handle free_block(int block_id) {
   // get a pointer to an unused slot in the free stack.
   int stack_idx = Array.update(stack_top, 0, incr, 1, incr, 1);
   // write the block id to the unused slot. 
-  Array.set(longblock_stack, stack_idx, block_id);
+  Array.set(longblock_stack, (int<16>)stack_idx, block_id);
 }

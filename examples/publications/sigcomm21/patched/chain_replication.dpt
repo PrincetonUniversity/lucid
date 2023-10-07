@@ -61,26 +61,26 @@ handle write(int idx, int seq, int data) {
   int update_res = Array.update(pending, idx, id, 0, tru, 0);
   if (update_res == TRUE) {
     // If another write is happening, wait for that one to finish
-    generate Event.delay(write(idx, nseq, data), 10);
+    generate Event.delay(write(idx, seq, data), 10);
 
   } else {
     int cont = 1;
     /* The first router sets the sequence number, all other routers check it */
     if (self == head) {
-      nseq = Array.update(sequence_nums, idx, incr, 1, incr, 1);
+      seq = Array.update(sequence_nums, idx, incr, 1, incr, 1);
     } else {
-      int seq2 = Array.update(sequence_nums, idx, check_and_incr, nseq, check_and_incr, nseq);
-      if (nseq == seq2) { 
+      int seq2 = Array.update(sequence_nums, idx, check_and_incr, seq, check_and_incr, seq);
+      if (seq == seq2) { 
         cont = 0; 
       }
     }
     if (cont==0) {
-      generate Event.delay(write(idx, nseq, data), 10);
+      generate Event.delay(write(idx, seq, data), 10);
     } else {
       Array.set(registers, idx, data);
       // Either propagate to next in chain, or tell head we're done
       if (self != tail) {
-        generate_port ((int<9>)succ, write(idx, nseq, data));
+        generate_port ((int<9>)succ, write(idx, seq, data));
       } else {
         generate_port ((int<9>)head, ack(idx));
       }

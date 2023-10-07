@@ -25,6 +25,9 @@ Todo:
   - write simple P4 driver program
   - compile to Tofino
   - add background tasks
+
+
+BUG: [10/7/24] using 32-bit hash operations causes a discrepancy between the lucid estimated stage count and tofino-estimated stage count. Why?
 */
 
 const int<1> TRUE = 1;
@@ -155,54 +158,54 @@ handle dnsrequest_in(int src, int dst, int req_id) {
 
   int rot_id = Array.get(iid, 0);
 
-  int h1 = hash<32>(h1_poly, src);
-  int h2 = hash<32>(h2_poly, src);
+  // int h1 = hash<16>(h1_poly, src);
+  // int h2 = hash<16>(h2_poly, src);
 
   int ct1_gt_thresh = 0;
   int ct2_gt_thresh = 0;
 
   // this handler just reads. So rot_id --> which replica to read.
   if (rot_id == 0) {
-    ct1_gt_thresh = Array.getm(cm1, h1, gt_thresh, 0);
-    ct2_gt_thresh = Array.getm(cm2, h2, gt_thresh, 0);
+    ct1_gt_thresh = Array.getm(cm1, hash<16>(h1_poly, src), gt_thresh, 0);
+    ct2_gt_thresh = Array.getm(cm2, hash<16>(h2_poly, src), gt_thresh, 0);
   } 
   else {
     if (rot_id == 1) {
-      ct1_gt_thresh = Array.getm(cm3, h1, gt_thresh, 0);
-      ct2_gt_thresh = Array.getm(cm4, h2, gt_thresh, 0);
+      ct1_gt_thresh = Array.getm(cm3, hash<16>(h1_poly, src), gt_thresh, 0);
+      ct2_gt_thresh = Array.getm(cm4, hash<16>(h2_poly, src), gt_thresh, 0);
     }
     else {
-      ct1_gt_thresh = Array.getm(cm5, h1, gt_thresh, 0);
-      ct2_gt_thresh = Array.getm(cm6, h2, gt_thresh, 0);
+      ct1_gt_thresh = Array.getm(cm5, hash<16>(h1_poly, src), gt_thresh, 0);
+      ct2_gt_thresh = Array.getm(cm6, hash<16>(h2_poly, src), gt_thresh, 0);
     }
   }
 
   // if count > thresh, the host is protected.
   if (ct1_gt_thresh == 1 && ct2_gt_thresh == 1) { //ct1 and ct2 gt thresh
     // this handler just writes here. So rot_id --> which replicas to write. 
-    int sfwh1 = hash<32>(h1_poly, src, dst, req_id);
-    int sfwh2 = hash<32>(h2_poly, src, dst, req_id);
+    // int sfwh1 = hash<16>(h1_poly, src, dst, req_id);
+    // int sfwh2 = hash<16>(h2_poly, src, dst, req_id);
     if (rot_id == 0) {
       // 1 is active, 2 is warming.
-      Array.set(sfw1, sfwh1, TRUE);
-      Array.set(sfw2, sfwh2, TRUE);
-      Array.set(sfw3, sfwh1, TRUE);
-      Array.set(sfw4, sfwh2, TRUE);
+      Array.set(sfw1, hash<16>(h1_poly, src, dst, req_id), TRUE);
+      Array.set(sfw2, hash<16>(h2_poly, src, dst, req_id), TRUE);
+      Array.set(sfw3, hash<16>(h1_poly, src, dst, req_id), TRUE);
+      Array.set(sfw4, hash<16>(h2_poly, src, dst, req_id), TRUE);
     }
     else {
       if (rot_id == 1) {
         // 2 is active, 3 is warming.
-        Array.set(sfw3, sfwh1, TRUE);
-        Array.set(sfw4, sfwh2, TRUE);
-        Array.set(sfw5, sfwh1, TRUE);
-        Array.set(sfw6, sfwh2, TRUE);
+        Array.set(sfw3, hash<16>(h1_poly, src, dst, req_id), TRUE);
+        Array.set(sfw4, hash<16>(h2_poly, src, dst, req_id), TRUE);
+        Array.set(sfw5, hash<16>(h1_poly, src, dst, req_id), TRUE);
+        Array.set(sfw6, hash<16>(h2_poly, src, dst, req_id), TRUE);
       }
       else {
         // 3 is active, 1 is warming. (but we must access them in order)
-        Array.set(sfw1, sfwh1, TRUE);
-        Array.set(sfw2, sfwh2, TRUE);
-        Array.set(sfw5, sfwh1, TRUE);
-        Array.set(sfw6, sfwh2, TRUE);
+        Array.set(sfw1, hash<16>(h1_poly, src, dst, req_id), TRUE);
+        Array.set(sfw2, hash<16>(h2_poly, src, dst, req_id), TRUE);
+        Array.set(sfw5, hash<16>(h1_poly, src, dst, req_id), TRUE);
+        Array.set(sfw6, hash<16>(h2_poly, src, dst, req_id), TRUE);
       }
     } 
   }
@@ -213,8 +216,8 @@ handle dnsresponse_in(int src, int dst, int req_id) {
   int rot_id = Array.get(iid, 0);
 
   // countmin 
-  int h1 = hash<32>(h1_poly, dst);
-  int h2 = hash<32>(h2_poly, dst);
+  // int h1 = hash<16>(h1_poly, dst);
+  // int h2 = hash<16>(h2_poly, dst);
   int ct1_gt_thresh = 0;
   int ct2_gt_thresh = 0;
 
@@ -222,47 +225,47 @@ handle dnsresponse_in(int src, int dst, int req_id) {
   // so rot determine which ones we write to and which one we read from. 
   // 1 active, 2 warming
   if (rot_id == 0) {    
-    ct1_gt_thresh = Array.update(cm1, h1, incr, 1, gt_thresh, 0);
-    ct2_gt_thresh = Array.update(cm2, h2, incr, 1, gt_thresh, 0);
-    Array.setm(cm3, h1, incr, 1);
-    Array.setm(cm4, h2, incr, 1);
+    ct1_gt_thresh = Array.update(cm1, hash<16>(h1_poly, dst), incr, 1, gt_thresh, 0);
+    ct2_gt_thresh = Array.update(cm2, hash<16>(h2_poly, dst), incr, 1, gt_thresh, 0);
+    Array.setm(cm3, hash<16>(h1_poly, dst), incr, 1);
+    Array.setm(cm4, hash<16>(h2_poly, dst), incr, 1);
   } 
   else {
     // 2 active, 3 warming.
     if (rot_id == 1) {
-      ct1_gt_thresh = Array.update(cm3, h1, incr, 1, gt_thresh, 0);
-      ct2_gt_thresh = Array.update(cm4, h2, incr, 1, gt_thresh, 0);
-      Array.setm(cm5, h1, incr, 1);
-      Array.setm(cm6, h2, incr, 1);      
+      ct1_gt_thresh = Array.update(cm3, hash<16>(h1_poly, dst), incr, 1, gt_thresh, 0);
+      ct2_gt_thresh = Array.update(cm4, hash<16>(h2_poly, dst), incr, 1, gt_thresh, 0);
+      Array.setm(cm5, hash<16>(h1_poly, dst), incr, 1);
+      Array.setm(cm6, hash<16>(h2_poly, dst), incr, 1);      
     }
     // 3 active, 1 warming.
     else {
-      Array.setm(cm1, h1, incr, 1);
-      Array.setm(cm2, h2, incr, 1);            
-      ct1_gt_thresh = Array.update(cm5, h1, incr, 1, gt_thresh, 0);
-      ct2_gt_thresh = Array.update(cm6, h2, incr, 1, gt_thresh, 0);
+      Array.setm(cm1, hash<16>(h1_poly, dst), incr, 1);
+      Array.setm(cm2, hash<16>(h2_poly, dst), incr, 1);            
+      ct1_gt_thresh = Array.update(cm5, hash<16>(h1_poly, dst), incr, 1, gt_thresh, 0);
+      ct2_gt_thresh = Array.update(cm6, hash<16>(h2_poly, dst), incr, 1, gt_thresh, 0);
     }
   }
   // if count > thresh, the host is protected.
   if (ct1_gt_thresh == 1 && ct2_gt_thresh == 1) { //ct1 and ct2 gt thresh
     // stateful firewall.
-    int sfwh1 = hash<32>(h1_poly, src, dst, req_id);
-    int sfwh2 = hash<32>(h2_poly, src, dst, req_id);
+    // int sfwh1 = hash<16>(h1_poly, src, dst, req_id);
+    // int sfwh2 = hash<16>(h2_poly, src, dst, req_id);
     int<1> in_1 = FALSE;
     int<1> in_2 = FALSE;
     // This thread only reads. 
     if (rot_id == 0) {
-      in_1 = Array.get(sfw1, sfwh1);
-      in_2 = Array.get(sfw2, sfwh2);
+      in_1 = Array.get(sfw1, hash<16>(h1_poly, src, dst, req_id));
+      in_2 = Array.get(sfw2, hash<16>(h2_poly, src, dst, req_id));
     }
     else {
       if (rot_id == 1){
-        in_1 = Array.get(sfw3, sfwh1);
-        in_2 = Array.get(sfw4, sfwh2);
+        in_1 = Array.get(sfw3, hash<16>(h1_poly, src, dst, req_id));
+        in_2 = Array.get(sfw4, hash<16>(h2_poly, src, dst, req_id));
       }
       else {
-        in_1 = Array.get(sfw5, sfwh1);
-        in_2 = Array.get(sfw6, sfwh2);        
+        in_1 = Array.get(sfw5, hash<16>(h1_poly, src, dst, req_id));
+        in_2 = Array.get(sfw6, hash<16>(h2_poly, src, dst, req_id));        
       }      
     }
     if (in_1 == TRUE){
