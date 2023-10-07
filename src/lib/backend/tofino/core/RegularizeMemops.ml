@@ -150,6 +150,73 @@ let memop_size ememop =
     | _ -> error "[regularize_array_calls] memop argument is not a memop expression."
 ;;
 
+(* we only want to make 1 memop for get and set *)
+let suffixed_id id_suffix s = Id.create (s^id_suffix) ;;
+let get_memop ty = 
+  let memop_size = match ty.raw_ty with 
+    | TInt(sz) -> sz
+    | _ -> error "Array.get's type should be a tint"     
+  in
+  let id_suffix = "_get_memop_"^(string_of_int memop_size)^"_bit" in
+  let fname = (suffixed_id id_suffix) in
+  let cell_ty = ty in 
+  let mem_val_id =  fname "mem_val" in
+  let complex_params = [
+    (mem_val_id, cell_ty);
+    (fname "unused", cell_ty);                 
+    (fname "unused", cell_ty);                  
+  ]
+  in             
+  let complex_body = MBComplex{
+    b1 = None;
+    b2 = None;
+    cell1 = None, None;
+    cell2 = None, None;
+    extern_calls = [];
+    ret = Some(
+      CS.value_to_exp (CS.vbool true), 
+      CS.var_sp (Cid.id mem_val_id) cell_ty (Span.default)
+      )
+    }
+  in
+  let complex_memop = 
+    {mid = fname "get"; mparams = complex_params; mbody = complex_body;}  
+  in
+  complex_memop
+;;
+
+let set_memop cell_ty = 
+  let memop_size = match cell_ty.raw_ty with 
+    | TInt(sz) -> sz
+    | _ -> error "Array.set's type should be a tint"     
+  in
+  let id_suffix = "_set_memop_"^(string_of_int memop_size)^"_bit" in
+  let fname = (suffixed_id id_suffix) in
+
+  let newval_param_id = fname "new_val" in
+  let complex_params = [
+    (fname"mem_val", cell_ty);
+    (newval_param_id, cell_ty);                 
+    (fname "unused", cell_ty);                  
+  ]
+  in             
+  let complex_body = MBComplex{
+    b1 = None;
+    b2 = None;
+    cell1 = Some(CS.value_to_exp (CS.vbool true), CS.var_sp (Cid.create_ids [newval_param_id]) (cell_ty) Span.default), None;
+    cell2 = None, None;
+    extern_calls = [];
+    ret = None;
+  }
+  in
+  let complex_memop = 
+    {mid = fname"set"; mparams = complex_params; mbody = complex_body;}
+  in 
+  complex_memop
+
+;;
+
+
 (* convert every array.set/get/setm/getm/update call into an array.update_complex, creating a new memop if necessary.*)
 (* need to avoid creating duplicates of the same memops... *)
 let regularize_array_calls tds = 
@@ -205,28 +272,7 @@ let regularize_array_calls tds =
                 | _ -> error "Array.get's type should be a tint"     
               in                    
               let cell_ty = exp.ety in 
-              let mem_val_id =  Id.fresh_name "mem_val" in
-              let complex_params = [
-                (mem_val_id, cell_ty);
-                (Id.fresh_name "unused", cell_ty);                 
-                (Id.fresh_name "unused", cell_ty);                  
-              ]
-              in             
-              let complex_body = MBComplex{
-                b1 = None;
-                b2 = None;
-                cell1 = None, None;
-                cell2 = None, None;
-                extern_calls = [];
-                ret = Some(
-                  CS.value_to_exp (CS.vbool true), 
-                  CS.var_sp (Cid.id mem_val_id) cell_ty (Span.default)
-                  )
-                }
-              in
-              let complex_memop = 
-                {mid = Id.fresh_name "get"; mparams = complex_params; mbody = complex_body;}
-              in 
+              let complex_memop = get_memop cell_ty in
               let complex_memop_exp = CS.exp (EVar(Cid.id complex_memop.mid)) (ty (TMemop(3, memop_size))) in
               let complex_args = [
                   aid; 
@@ -275,29 +321,11 @@ let regularize_array_calls tds =
                   | _ -> error "[translate_array_call] unexpected arguments for array method"
                 in 
                 let cell_ty = set_arg.ety in 
-                let newval_param_id = Id.fresh_name "new_val" in
-                let complex_params = [
-                  (Id.fresh_name "mem_val", cell_ty);
-                  (newval_param_id, cell_ty);                 
-                  (Id.fresh_name "unused", cell_ty);                  
-                ]
-                in             
-                let complex_body = MBComplex{
-                  b1 = None;
-                  b2 = None;
-                  cell1 = Some(CS.value_to_exp (CS.vbool true), CS.var_sp (Cid.create_ids [newval_param_id]) (cell_ty) Span.default), None;
-                  cell2 = None, None;
-                  extern_calls = [];
-                  ret = None;
-                }
-                in
                 let memop_size = match set_arg.ety.raw_ty with 
                   | TInt(sz) -> sz
                   | _ -> error "Array.set arg's type should be a tint"     
                 in                    
-                let complex_memop = 
-                  {mid = Id.fresh_name "set"; mparams = complex_params; mbody = complex_body;}
-                in 
+                let complex_memop = set_memop cell_ty in
                 let complex_memop_exp = CS.exp (EVar(Cid.id complex_memop.mid)) (ty (TMemop(3, memop_size))) in
                 let complex_args = [
                     aid; 

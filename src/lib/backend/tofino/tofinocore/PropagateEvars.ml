@@ -237,9 +237,9 @@ let rec valid_path cur fin g =
 let rec collect_valid_optimizations src_var out g rev_g =
   (* if there's a valid path, then we can add this node 
      and recurse on its children in rev_g *)
-(*   !dprint_endline ("checking if there is a valid optimization from");
+   !dprint_endline ("checking if there is a valid optimization from");
   !dprint_endline (Node.to_string src_var);
-  !dprint_endline (Node.to_string out); *)
+  !dprint_endline (Node.to_string out);
   if (valid_path src_var out g)
   then (
     let next_vars = G.succ rev_g src_var in
@@ -304,10 +304,13 @@ let do_optimization stmt (inter_var, output_var) =
         if (Cid.equal cid inter_var) 
         then (SAssign(output_var, exp))
         else (SAssign(cid, exp))
+
     method! visit_SLocal () id ty exp =
       (* 3. *)
       match exp.e with
-      | EVar(rcid) when (Cid.equal rcid inter_var) -> SNoop
+      | EVar(rcid) when (Cid.equal rcid inter_var) -> 
+        !dprint_endline ("eliminating local declaration of var: "^(CorePrinting.cid_to_string inter_var));
+        SNoop
       | _ ->
         (* 2. *)
         if (Cid.equal (Cid.id id) inter_var) 

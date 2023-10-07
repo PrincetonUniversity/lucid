@@ -54,6 +54,15 @@ end
 
 module SgDfg = Graph.Persistent.Digraph.Concrete(SgDfgNode)
 module SgDfgTopo = Graph.Topological.Make(SgDfg)
+module SgDfgComponents = Graph.Components.Make(SgDfg)
+let has_cycle g =
+  let scc = SgDfgComponents.scc_list g in
+  List.exists (fun component -> List.length component > 1) scc
+;;
+let get_cycle_sccs g = 
+  let scc = SgDfgComponents.scc_list g in
+  List.filter (fun component -> List.length component > 1) scc
+;;
 
 (*** mapping arrays <--> caller statements ***)
 type array_users_map = (vertex_stmt list) CidMap.t
@@ -87,6 +96,13 @@ let build_array_map dfg : array_users_map =
 (* convert a data dependency graph of statements 
    into a data dependency graph of statement groups *)
 let dfg_to_sgdfg dfg =
+  (* if (has_cycle dfg) then (
+    print_endline ("error: dfg_to_sgdfg produced a cyclic graph.");
+    exit 1;); *)
+  if (TofinoDfg.has_cycle dfg) then (
+    print_endline ("error: dfg_to_sgdfg input is a cyclic graph.");
+    exit 1;);
+
   let array_to_vertices_map = build_array_map dfg in
   let _ = array_to_vertices_map in
 
@@ -149,6 +165,25 @@ let dfg_to_sgdfg dfg =
     sgdfg_with_nodes
     statement_groups
   in
+  if (has_cycle g) then (    
+    print_endline ("error: dfg_to_sgdfg produced a cyclic graph.");
+    let cycle_stmt_groups = get_cycle_sccs g in
+    print_endline ("[dfg_to_sgdfg] cycle statement groups: ");
+    List.iter
+      (fun sgs_in_cycle -> 
+        print_endline ("--------");
+        print_endline ("[dfg_to_sgdfg] cycle statement group node ids: "^(List.map (fun sg -> sg.sguid |> string_of_int) sgs_in_cycle |> String.concat ","));
+        print_endline ("[dfg_to_sgdfg] cycle statement group vertex_stmts ids: "^(List.map (fun sg -> sg.vertex_stmts |> List.map (fun vs -> vs.vuid |> string_of_int) |> String.concat ",") sgs_in_cycle |> String.concat ","));
+        let array_ids = List.filter_map (fun sg -> sg.arr) sgs_in_cycle in
+        print_endline ("[dfg_to_sgdfg] cycle statement group array ids: "^(List.map (CorePrinting.cid_to_string) array_ids |> String.concat ","));
+        let stmts = List.map (fun sg -> sg.vertex_stmts) sgs_in_cycle |> List.flatten in
+        print_endline ("[dfg_to_sgdfg] cycle statement group statements: ");
+        List.iter (fun vs -> print_endline ("-------");print_endline (CorePrinting.statement_to_string vs.stmt); print_endline ("------");) stmts;
+        print_endline ("--------");
+      )
+      cycle_stmt_groups;
+    
+    exit 1;);
   (* let nodes = SgDfg.fold_vertex (fun v acc -> v :: acc) g [] in *)
 (*   debug_print_endline (
     "[dfg_to_sgdfg] number of statement group nodes in dfg: "^
@@ -294,14 +329,13 @@ type constraints_stage = {
   max_arrays : int;
   max_hashers : int;
   max_array_blocks : int;
-  max_hash_bits : int;
 }
 (* default config for tofino -- change for other architectures *)
 let table_constraints = {
   max_statements = 25;
   max_matchbits = 512;
   max_arrays = 1;
-  max_hashers = 1;
+  max_hashers = 2;
   max_array_addrs = 1;
 }
 
@@ -310,15 +344,110 @@ let stage_constraints = {
   max_arrays = 4;
   max_hashers = 6;
   max_array_blocks = 48;
-  max_hash_bits = 96;
 }
 (* calculate resources used by program components *)
 let arrays_of_vertex v = arrays_of_stmt v.stmt
 
 let arrays_of_table (t:table) = arrays_of_stmt (stmt_of_table t)
-let hashers_of_table table =
+(* let hashers_of_table table =
   hashers_of_stmt (stmt_of_table table) |> unique_stmt_list
+;; *)
+
+let hashers_of_table_stmt salu_idx_vars stmt = 
+  let n_hash_units = ref 0 in
+  (* only allocate a single hash unit for each (array, idx_var) pair 
+     used across the entire stage. *)
+  let salu_idx_vars = ref salu_idx_vars in
+  (* only allocate a single hash unit for each (array, hash_exp) pair 
+     used in the _table_. *)
+  let salu_idx_hashes = ref [] in
+  let standalone_hash_expressions = ref [] in
+  let v = object
+    inherit [_] s_iter as super
+    (* count hashes in array ops *)
+    method! visit_ECall _ fid args = 
+      match (Cid.names fid) with
+        | ["Sys"; "random"] -> (
+          error "todo: count random as using hash unit"
+        )
+        (* for any array function, get the index/address expression,
+          which is always the 2nd argument *)
+        | ["Array"; "get"]
+        | ["Array"; "getm"]
+        | ["Array"; "set"]
+        | ["Array"; "setm"]
+        | ["Array"; "update"]
+        | ["Array"; "update_complex"]
+        | ["PairArray"; "update"] -> (
+          let arr_exp = List.nth args 0 in
+          let idx_exp = List.nth args 1 in
+          match arr_exp.e, idx_exp.e with
+          | EVar(arrcid), EVar(idxcid) -> (
+            let is_dup = List.exists (fun (a', i') -> (Cid.equal a' arrcid) && (Cid.equal i' idxcid)) !salu_idx_vars in
+            if (not is_dup) then (
+              n_hash_units := (!n_hash_units) + 1;
+              salu_idx_vars := (arrcid, idxcid)::(!salu_idx_vars);
+            );
+          )          
+          | EVar(arrcid), EHash(_, _) -> (
+            let is_dup = List.exists (fun (a', h') ->
+              (Cid.equal a' arrcid) && (equiv_exp h' idx_exp)) !salu_idx_hashes 
+            in
+            if (not is_dup) then (
+              n_hash_units := (!n_hash_units) + 1;
+              salu_idx_hashes := (arrcid, idx_exp)::(!salu_idx_hashes);
+            );
+          )
+          | _ -> ()
+        )
+        | _ -> ()
+    (* count hashes in hash expressions outside of array calls *)
+    method! visit_SAssign _ lhs rhs = 
+      match rhs.e with
+      | EHash(sz, _) -> (
+        let is_dup = List.exists (fun (c, h) -> (Cid.equal c lhs) && (equiv_exp h rhs)) !standalone_hash_expressions in
+        if (not is_dup) then (
+          if (sz <= 16) then 
+            n_hash_units := (!n_hash_units) + 1
+          else 
+            n_hash_units := (!n_hash_units) + 2;
+          standalone_hash_expressions := (lhs, rhs)::(!standalone_hash_expressions);
+        );
+      )
+      | _ -> super#visit_SAssign () lhs rhs
+    
+    method! visit_SLocal _ lhs_id ty rhs =
+      match rhs.e with
+      | EHash(sz, _) -> (
+        let is_dup = List.exists (fun (c, h) -> (Cid.equal c (Cid.id lhs_id)) && (equiv_exp h rhs)) !standalone_hash_expressions in
+        if (not is_dup) then (
+          if (sz <= 16) then 
+            n_hash_units := (!n_hash_units) + 1
+          else 
+            n_hash_units := (!n_hash_units) + 2;
+          standalone_hash_expressions := ((Cid.id lhs_id), rhs)::(!standalone_hash_expressions);
+        );
+      )
+      | _ -> super#visit_SLocal () lhs_id ty rhs
+    end
+  in
+  v#visit_statement () stmt;
+  !n_hash_units, !salu_idx_vars
+let hashers_of_table salu_idx_vars table = 
+  hashers_of_table_stmt salu_idx_vars (stmt_of_table table)
 ;;
+
+let hashers_of_stage stage = 
+  List.fold_left (fun (ct, arr_idx_vars) tbl -> 
+    let ct', arr_idx_vars' = hashers_of_table arr_idx_vars tbl in
+    ct + ct', arr_idx_vars'
+  ) 
+  (0, []) 
+  stage.tables
+  |> fst
+;;
+
+
 let keywidth_of_table table = 
   let width_of_exp exp =
     match exp.ety.raw_ty with
@@ -336,7 +465,7 @@ let array_addrs_of_table (t:table) =
 let table_fits table = 
   let c_stmts = (statements_of_table table |> CL.length) <= table_constraints.max_statements in
   let c_keywidth = (keywidth_of_table table) <= table_constraints.max_matchbits in
-  let c_hashers = (hashers_of_table table |> CL.length) <= table_constraints.max_hashers in
+  let c_hashers = (hashers_of_table [] table |> fst) <= table_constraints.max_hashers in
   let c_arrays = (arrays_of_table table |> CL.length) <= table_constraints.max_arrays in
   let c_addrs = (array_addrs_of_table table |> CL.length) <= table_constraints.max_array_addrs in
   if (
@@ -371,9 +500,9 @@ let table_fits table =
 (* does the stage fit in the target? *)
 let arrays_of_stage s = CL.map arrays_of_table s.tables |> CL.flatten |> (MatchAlgebra.unique_list_of_eq Cid.equal)
 
-let hashers_of_stage stage =
+(* let hashers_of_stage stage =
   CL.map hashers_of_table stage.tables |> CL.flatten |> unique_stmt_list
-;;
+;; *)
 
 let hashbits_of_table dbg table = 
   let res = hash_bits_of_stmt dbg (stmt_of_table table) in
@@ -388,17 +517,17 @@ let hashbits_of_stage stage =
   (* let _ = stage in 0 *)
   (* print_endline ("------ stage hashbits start -----"); *)
   let res = CL.fold_left (fun ct tbl -> ct + hashbits_of_table false tbl) 0 stage.tables in
-  (* print_endline ("------ stage hashbits end (result = "^(string_of_int res)^") -----"); *)
-  (* if (res >= 128) then (
+  print_endline ("------ stage hashbits end (result = "^(string_of_int res)^") -----");
+  if (res >= 128) then (
     print_endline ("------ stage hashbits start BIG BAD STAGE -----");
+    print_endline (string_of_stage stage);
     let res = CL.fold_left (fun ct tbl -> ct + hashbits_of_table true tbl) 0 stage.tables in
     print_endline ("------ stage hashbits end (result = "^(string_of_int res)^") -----");
-  ); *)
+  );
 
   res
-  
-
 ;;
+
 let string_of_statement_group stmt_group = 
   let string_of_vertex_statement (vs : vertex_stmt) =
     CorePrinting.statement_to_string vs.stmt
@@ -493,15 +622,18 @@ let table_placement_precheck table (stmt:vertex_stmt) =
   in  *)
   (* estimating the keywidth is a bit more complex, can add if needed. *)
   (* let c_keywidth = (keywidth_of_table table) + ... in *)
-  let hash_stmts = 
-    (hashers_of_table table)@(hashers_of_stmt stmt.stmt)
+  let tbl_hash_stmts, cache = hashers_of_table [] table in
+  let stmt_hash_stmts, _ = hashers_of_table_stmt cache stmt.stmt in
+  let hash_stmts = tbl_hash_stmts + stmt_hash_stmts in
+  (* let hash_stmts = 
+    (hashers_of_table [] table)@(hashers_of_table_stmt [] stmt.stmt)
     |> MatchAlgebra.unique_stmt_list
-  in
+  in *)
   let arrays = (arrays_of_table table)@(arrays_of_stmt stmt.stmt) |> unique_list_of_eq Cid.equal in
   (not table.solitary) 
   && (List.length table.branches <= 100) (* put an upper bound on number of rules in table, for now.*)
   (* && ((List.length all_stmts) <= table_constraints.max_statements) *)
-  && ((List.length hash_stmts) <= table_constraints.max_hashers)
+  && ((hash_stmts) <= table_constraints.max_hashers)
   && ((List.length arrays) <= table_constraints.max_arrays)
 ;;
 
@@ -527,7 +659,8 @@ let try_place_in_table (prior_tables, (stmt_opt:vertex_stmt option)) (table:tabl
           if (not (table_fits new_table))
           then (not_placed_result)
           (* if not too big, return the new table and empty placement request *)
-          else ((prior_tables@[new_table], None))
+          else (
+            (prior_tables@[new_table], None))
         )
       )
   )
@@ -541,19 +674,18 @@ let try_place_in_table (prior_tables, (stmt_opt:vertex_stmt option)) (table:tabl
 let stage_fits_verbose (prog_info:layout_args) stage =
   let c_tbls = (CL.length stage.tables <= stage_constraints.max_tables) in
   let c_arrays = ((arrays_of_stage stage |> CL.length) <= stage_constraints.max_arrays) in
-  let c_hashers = ((hashers_of_stage stage |> CL.length) <= stage_constraints.max_hashers) in 
+  let c_hashers = ((hashers_of_stage stage) <= stage_constraints.max_hashers) in 
   let n_blocks = sblocks_of_stmt prog_info.arr_dimensions (stmt_of_stage stage) in
   let c_blocks = (n_blocks <= stage_constraints.max_array_blocks) in
-  let c_hashbits = hashbits_of_stage stage <= stage_constraints.max_hash_bits in  
   (* if (not c_hashbits)
     then (print_endline ("number of hash bits in this stage: "^(string_of_int(hashbits_of_stage stage)))); *)
-  (c_tbls, c_arrays, c_hashers, c_blocks, c_hashbits)
+  (c_tbls, c_arrays, c_hashers, c_blocks)
 ;;  
 
 
 let stage_fits (prog_info:layout_args) stage =
-  let a, b, c, d, e = stage_fits_verbose prog_info stage in
-  a && b && c && d && e
+  let a, b, c, d= stage_fits_verbose prog_info stage in
+  a && b && c && d
 ;;  
 
 
@@ -672,12 +804,12 @@ let try_place_in_stage prog_info (prior_stages, stmt_group_opt) stage =
       let updated_stage = {tables = tables';} in
       if (not (stage_fits prog_info updated_stage)) 
         then (
-          let (c_tbls, c_arrays, c_hashers, c_blocks, c_hashbits) = stage_fits_verbose prog_info updated_stage in
+          let (c_tbls, c_arrays, c_hashers, c_blocks) = stage_fits_verbose prog_info updated_stage in
           let dbg_msg = 
             Printf.sprintf 
-              "stage %i would be too big: c_tbls=%b, c_arrays=%b, c_hashers=%b, c_blocks=%b, c_hashbits=%b"
+              "stage %i would be too big: c_tbls=%b, c_arrays=%b, c_hashers=%b, c_blocks=%b"
               (List.length prior_stages)
-              c_tbls c_arrays c_hashers c_blocks c_hashbits
+              c_tbls c_arrays c_hashers c_blocks
           in
           not_placed_result dbg_msg)
         else (

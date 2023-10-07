@@ -127,9 +127,7 @@ let cell_struct_of_array_ty module_name cell_width rid : T.decl =
 ;;
 
 
-
 (*** helper functions ***)
-
 (*** environment  ***)
 type prog_env = {
   memops : memop IdMap.t;
@@ -137,12 +135,17 @@ type prog_env = {
   (* defined_fcns : tdecl CidMap.t; *)
   tables : (CS.tbl_def * Span.t) CidMap.t;
   vars   : exp CidMap.t;
+  (* hashers that have already been constructed, 
+     because we can't deduplicate hash expressions 
+     that appear inside of Array ops in coreIr *)
+  generated_hashers : ((int * int * string) * id) list
 }
 
 let empty_env = {memops = IdMap.empty; 
 actions = CidSet.empty;
 (* defined_fcns = CidMap.empty;  *)
-tables = CidMap.empty; vars=CidMap.empty}
+tables = CidMap.empty; vars=CidMap.empty;
+generated_hashers = [];}
 ;;
 
 let bind_var env (x, y) : prog_env = 
@@ -249,59 +252,73 @@ let rec relation_const_folding exp =
   | _ -> exp
 ;;
 
-let rec translate_exp (prog_env:prog_env) exp : (T.decl list * T.expr) =
+let fst_snd ((_, y), _) = y
+
+let rec translate_exp (prog_env:prog_env) exp : (T.decl list * T.expr) * prog_env =
   match exp.e with 
   | ECall(fcn_cid, args) ->  translate_ecall prog_env fcn_cid args
   | CS.EHash (size, args) -> translate_hash prog_env size args 
   | CS.EVal v -> 
-    [], T.eval_ty_sp (translate_value v.v) (translate_ty exp.ety) exp.espan
+    ([], T.eval_ty_sp (translate_value v.v) (translate_ty exp.ety) exp.espan), prog_env
   | CS.EFlood _ -> error "[translate_memop_exp] flood expressions inside of memop are not supported"
   | CS.EVar cid -> (
     match (CidMap.find_opt cid prog_env.vars) with 
       (* we may have just replaced a var with a val, which could add a constant that needs to be folded.. *)
       | Some (new_exp) -> translate_exp prog_env new_exp
       (* no renaming to do, use the given id *)
-      | None -> [], T.evar_ty_sp cid (translate_ty exp.ety) exp.espan
+      | None -> ([], T.evar_ty_sp cid (translate_ty exp.ety) exp.espan), prog_env
   )
   | CS.EOp(op, args) -> (
     let args = match op with 
       (* cast and slice have arguments in a different form *)
       | CS.Cast(sz) -> 
-        let _, exps = translate_exps prog_env args in 
+        let (_, exps), _ = translate_exps prog_env args in 
         (eval_int sz)::(exps)
       | CS.Slice(s, e) -> 
-        let _, exps = translate_exps prog_env args in 
+        let (_, exps), _ = translate_exps prog_env args in 
         (eval_int s)::(eval_int e)::(exps)
-      | _ -> translate_exps prog_env args |> snd
+      | _ -> 
+        let (_, exps), _ = translate_exps prog_env args in 
+        exps
     in
     let op = translate_op op in 
-    [], eop_ty_sp op args (translate_ty exp.ety) exp.espan
+    ([], eop_ty_sp op args (translate_ty exp.ety) exp.espan), prog_env
   )
   | CS.ETableCreate(_) ->
     error "[coreToP4Tofino.translate_exp] got an etablecreate expression. This should have been handled by the declaration translator."
 
-and translate_exps (prog_env:prog_env) exps = 
+and translate_exps (prog_env:prog_env) exps : (decl list * expr list) * prog_env = 
   let translate_exp_wrapper exp = translate_exp prog_env exp in
-  let decls, exps = List.map translate_exp_wrapper exps |> List.split in
-  List.flatten decls, exps
+  let decls_exps, _ = List.map translate_exp_wrapper exps |> List.split in
+  let decls, exps = List.split decls_exps in
+  (List.flatten decls, exps), prog_env
 
-and translate_hash prog_env size args = 
+and translate_hash prog_env size args : (decl list * expr) * prog_env = 
   match (List.hd args).e with 
   (* special case: checksum hash, which may appear in the deparser *)
   | EVar(cid) when (Cid.equal (Cid.id Builtins.checksum_id) cid) -> 
     translate_checksum prog_env (List.tl args)
   (* base case: just a hash *)
   | _ -> 
-    let hasher_id = fresh_numbered_id "hash" in
     let poly, args = match args with
       | poly::args -> poly, args
       | _ -> error "[translate_hash] invalid arguments to hash call" 
     in
-    let args = (snd (translate_exps prog_env args)) in 
+    let args = (fst_snd (translate_exps prog_env args)) in 
     let arg = elist args in 
+    let poly = int_from_exp poly in
+    let hasher_id_opt = List.assoc_opt (poly, size, (P4TofinoPrinting.string_of_expr arg |> P4TofinoPrinting.doc_to_string)) prog_env.generated_hashers in
+    (* hasher with same args is already declared, re-use it *)
+    match hasher_id_opt with 
+    | Some(hasher_id) -> (
+      (* print_endline ("RE USING HASHER! "^(Id.to_string hasher_id)); *)
+      ([], ecall (Cid.create_ids [hasher_id; id "get"]) [arg]), prog_env)
+    | None -> (
+    (* hasher is not declared -- construct a new one and update the environment *)
+    let hasher_id = fresh_numbered_id "hash" in
     let dhash = decl (DHash{
       id = hasher_id;
-      poly = int_from_exp poly;
+      poly = poly;
       out_wid = size;
       })
     in
@@ -309,41 +326,44 @@ and translate_hash prog_env size args =
       (Cid.create_ids [hasher_id; id "get"]) 
       [arg]
     in
-    [dhash], hasher_call
+    let prog_env = {prog_env with generated_hashers = ((poly, size, (P4TofinoPrinting.string_of_expr arg |> P4TofinoPrinting.doc_to_string)), hasher_id)::prog_env.generated_hashers} in
+    ([dhash], hasher_call), prog_env
+    )
 
 and translate_checksum prog_env args =
   (* translate a checksum. This version should only be called for the deparser.  *)
   (* ah. and the way that we translate checksums is different in each. Of course it is. *)
   let checksum_obj_id = fresh_numbered_id "checksum" in
   let checksum_obj = dobj (id "Checksum") [] [] checksum_obj_id (Span.default) in
-  let arglist = elist (snd (translate_exps prog_env args)) in 
+  let arglist = elist (fst_snd (translate_exps prog_env args)) in 
   let checksum_call = ecall
     (Cid.create_ids [checksum_obj_id; id "update"])
     [arglist]
   in
-  [checksum_obj], checksum_call
+  ([checksum_obj], checksum_call), prog_env
 
 and translate_ecall env fcn_cid args = 
   (* first, check if its an action *)
   if (CidSet.mem fcn_cid env.actions) then 
-    ([], ecall_action fcn_cid [])
+    ([], ecall_action fcn_cid []), env
   else (
     match (Cid.names fcn_cid) with
     (* system functions *)
     | ["Sys"; "enable"]
     | ["Sys"; "time"]
     | ["Sys"; "random"] ->
-      translate_sys_call (List.hd (List.tl (Cid.to_ids fcn_cid))) args
+      translate_sys_call (List.hd (List.tl (Cid.to_ids fcn_cid))) args, env
     (* Array stuff *)
     | "Array"::_ -> 
-      let regacn_id, decl = translate_array_call env fcn_cid args in
-      (* idx_decls are produced if the arg is a hash op *)
-      let idx_decls, idx_arg = translate_exp env (List.hd (List.tl args)) in
-      idx_decls@[decl], ecall (Cid.create_ids [regacn_id; (id "execute")]) [idx_arg]
+      (* generate the memop *)
+      let (regacn_id, decl), env = translate_array_call env fcn_cid args in
+      (* translate the index, generating a hash decl if the arg is a hash op *)
+      let (idx_decls, idx_arg), env = translate_exp env (List.hd (List.tl args)) in
+      (idx_decls@[decl], ecall (Cid.create_ids [regacn_id; (id "execute")]) [idx_arg]), env
     | "PairArray"::_ -> 
-      let regacn_id, decl = translate_pairarray_call env fcn_cid args in 
-      let idx_decls, idx_arg = translate_exp env (List.hd (List.tl args)) in
-      idx_decls@[decl], ecall (Cid.create_ids [regacn_id; (id "execute")]) [idx_arg]
+      let (regacn_id, decl), env = translate_pairarray_call env fcn_cid args in 
+      let (idx_decls, idx_arg), env = translate_exp env (List.hd (List.tl args)) in
+      (idx_decls@[decl], ecall (Cid.create_ids [regacn_id; (id "execute")]) [idx_arg]), env
     | _ -> error "[translate_ecall] unknown function")
 
 and translate_sys_call fcn_id args = 
@@ -354,7 +374,7 @@ and translate_sys_call fcn_id args =
         | {e=CS.EVar(cid)} -> (Cid.names cid)@["setValid"] |> Cid.create
         | _ -> error "[translate_ecall] invalid argument to enable"
       in
-      [], ecall_method method_cid
+      ([], ecall_method method_cid)
       | "time" -> 
         [], 
         eop 
@@ -396,12 +416,12 @@ and translate_array_call env fcn_id args =
     | "Array.set" -> error "[coreToP4Tofino] All array method calls should have been converted to Array.update_complex by this point."
     | s -> error ("[translate_array_call] unknown array method: "^s)
   in
-  reg_acn_id, decl (DRegAction{
+  (reg_acn_id, decl (DRegAction{
     id = reg_acn_id;
     reg = reg_id;
     idx_ty = InterpHelpers.raw_ty_of_exp idx |> translate_rty;
     mem_fcn = translate_array_memop_complex env returns cell_ty args memop;
-    })
+    })), env
 
 and translate_pairarray_call env fcn_id (args:CS.exp list) =
   let reg = name_from_exp (List.hd args) in 
@@ -424,12 +444,12 @@ and translate_pairarray_call env fcn_id (args:CS.exp list) =
     )
     | s -> error ("[translate_pairarray_call] unknown pairarray method: "^s)
   in
-  reg_acn_id, decl (DRegAction{
+  (reg_acn_id, decl (DRegAction{
     id = reg_acn_id;
     reg = reg_id;
     idx_ty = InterpHelpers.raw_ty_of_exp idx |> translate_rty;
     mem_fcn = translate_pairarray_memop_complex env slot_ty cell_ty args memop;
-    })
+    })), env
 
 
 
@@ -442,7 +462,7 @@ and translate_memop_exp env exp =
     |> relation_const_folding
   in
   (* translate the expression. This shouldn't do any other replacements *)
-  translate_exp env folded_exp |> snd
+  translate_exp env folded_exp |> fst_snd
 
   and translate_memop_exps env exps =
   List.map (translate_memop_exp env) exps
@@ -624,12 +644,12 @@ let declared_vars prev_decls = CL.filter_map (fun dec ->
 
 (* translate a statement that appears inside of an action. 
    generate a list of decls and a statement. *)
-let rec translate_statement env prev_decls stmt =
+let rec translate_statement env prev_decls stmt : (decl list * T.statement) * prog_env =
   match stmt.s with
-  | SNoop -> [], Noop
+  | SNoop -> ([], Noop), env
   | CS.SUnit(e) ->
-    let decls, expr = translate_exp env e in 
-    decls, sunit expr
+    let (decls, expr), env = translate_exp env e in 
+    (decls, sunit expr), env
   | CS.SLocal(id, ty, e) -> (
     (* variables can't be declared inside of an action, so if a variable has not been 
       declared yet, produce a global declaration 
@@ -639,43 +659,43 @@ let rec translate_statement env prev_decls stmt =
        we shouldn't see another declaration statement. *)
     | true -> (
       (* let vardecl = dvar_uninit id (translate_rty ty.raw_ty) in  *)
-      let decls, expr = translate_exp env e in 
-      decls, sassign (Cid.id id) expr
+      let (decls, expr), env = translate_exp env e in 
+      (decls, sassign (Cid.id id) expr), env
     )
     | false -> (
       let vardecl = dvar_uninit id (translate_rty ty.raw_ty) in 
-      let decls, expr = translate_exp env e in 
-      vardecl::decls, sassign (Cid.id id) expr
+      let (decls, expr), env = translate_exp env e in 
+      (vardecl::decls, sassign (Cid.id id) expr), env
     )
   )
   | CS.SAssign(id, e) -> 
-    let decls, expr = translate_exp env e in 
+    let (decls, expr), env = translate_exp env e in 
     (* use the new name, if there is one *)
-    decls, sassign id expr
+    (decls, sassign id expr), env
   | SPrintf _ -> error "[translate_statement] printf should be removed by now"
   | CS.SIf(exp, s1, s2) -> (
     (* this is used in the deparser block for checksum ops *)
-    let exp_decls, expr = translate_exp env exp in
-    let s1_decls, s1_stmt = translate_statement env prev_decls s1 in
+    let (exp_decls, expr), env = translate_exp env exp in
+    let (s1_decls, s1_stmt), s1_env = translate_statement env prev_decls s1 in
     match s2.s with 
     | CS.SNoop -> 
-      exp_decls@s1_decls, sif expr s1_stmt
+      (exp_decls@s1_decls, sif expr s1_stmt), s1_env
     | _ -> 
-      let s2_decls, s2_stmt = translate_statement env prev_decls s2 in
-      exp_decls@s1_decls@s2_decls, sifelse expr s1_stmt s2_stmt
+      let (s2_decls, s2_stmt), s2_env = translate_statement s1_env prev_decls s2 in
+      (exp_decls@s1_decls@s2_decls, sifelse expr s1_stmt s2_stmt), s2_env
   )
   | SMatch _ -> error "[translate_statement] match statement cannot appear inside action body"
   | SRet _ -> error "[translate_statement] ret statement cannot appear inside action body"
   | SGen(_) -> 
       error "[translate_statement] generates should have been eliminated"
   | SSeq (s1, s2) -> 
-    let s1_decls, s1_stmt = translate_statement env prev_decls s1 in
-    let s2_decls, s2_stmt = translate_statement env prev_decls s2 in
-    s1_decls@s2_decls, sseq [s1_stmt; s2_stmt]
+    let (s1_decls, s1_stmt), s1_env = translate_statement env prev_decls s1 in
+    let (s2_decls, s2_stmt), s2_env = translate_statement s1_env prev_decls s2 in
+    (s1_decls@s2_decls, sseq [s1_stmt; s2_stmt]), s2_env
   | STableMatch _ | STableInstall _ -> error "[coreToP4Tofino.translate_statement] tables not implemented"
 ;;
 
-(* generate an action, and other compute objects, from an open function *)
+(* generate an action, and other compute objects, from an open function
 let translate_openfunction env tdecl =
   let new_env, new_decls = match tdecl.td with 
     | TDOpenFunction(id, const_params, stmt) -> (
@@ -692,7 +712,7 @@ let translate_openfunction env tdecl =
     | _ -> env, []
   in
   new_env, new_decls
-;;
+;; *)
 
 
 (*** threaded control flow statements (tables, etc) ***)
@@ -706,15 +726,15 @@ let fresh_table_id _ = Id.fresh_name "table"
 let translate_table env tdef tspan pragmas keys =
   let tid = tdef.tid in
   let size = CoreSyntax.exp_to_int tdef.tsize in
-  let actions = translate_exps env tdef.tactions |> snd in
+  let action_ids = translate_exps env tdef.tactions |> fst_snd in
   (* let actions = List.map CoreSyntax.id_of_exp tdef.tactions in *)
   let default_aid, default_args = tdef.tdefault in 
   let default = Some(
     scall 
       default_aid 
-      (translate_exps env default_args |> snd))
+      (translate_exps env default_args |> fst_snd))
   in
-  dtable_sp tid keys actions [] default (Some(size)) pragmas tspan
+  dtable_sp tid keys action_ids [] default (Some(size)) pragmas tspan
 ;;
 
 (* translate a match or if statement into a table *)
@@ -737,16 +757,16 @@ let stmt_to_table env (_:pragma) (ignore_pragmas: (id * pragma) list) (tid, stmt
   | SIf(e, {s=STableMatch(tm);}, _) ->   
     (* match keys are specified in the statement *)
     let keys = translate_exps env tm.keys 
-      |> snd 
+      |> fst_snd 
       |> List.map exp_to_ternary_key
     in
     let tdef, tspan = find_tbl env tid in 
     let tbl_decl = translate_table env tdef tspan ignore_parallel_tbls_pragmas keys in
-    let _, e' = translate_exp env e in
+    let (_, e'), _ = translate_exp env e in
     let tbl_call = sif e' (sunit (ecall_table tdef.tid)) in
     tbl_decl, tbl_call
   | SMatch(exps, branches) -> (
-    let _, keys = translate_exps env exps in 
+    let (_, keys), _ = translate_exps env exps in 
     (* small optimization: if there's only 1 key and all the patterns matching that key are exact (except for a final default case) emit an exact table. Otherwise, a ternary table. *)      
     let patses = List.map fst branches in
     let last_pats = List.rev patses |> List.hd in
@@ -762,8 +782,6 @@ let stmt_to_table env (_:pragma) (ignore_pragmas: (id * pragma) list) (tid, stmt
       (match last_pats with 
       | [TofinoCore.PWild] -> true | _ -> false)
     in
-
-
     match is_exact with
     | true -> (
       let keys = List.map exp_to_exact_key keys in 
@@ -1299,7 +1317,7 @@ let translate_parser_checksum penv exp =
   in
   let checksum_obj_id = fresh_numbered_id "checksum" in
   let checksum_obj = dobj (id "Checksum") [] [] checksum_obj_id (Span.default) in
-  let arg_exprs = snd (translate_exps penv args) in
+  let arg_exprs = fst_snd (translate_exps penv args) in
   let arg_cids = List.map (CoreSyntax.exp_to_cid) args in
   (* let arglist = elist (snd (translate_exps penv args)) in  *)
   (* now... one subtract and invalidate for each arg *)
@@ -1456,10 +1474,10 @@ let translate_parser denv parser =
       let decls, sub_stmt, get_expr, invalid_stmt = translate_parser_checksum denv.penv exp in
       decls, (sseq [sub_stmt;(slocal (Cid.to_id cid) (translate_ty ty) get_expr); invalid_stmt])
     | PAssign(cid, exp) ->         
-      let decls, expr = translate_exp denv.penv exp in
+      let (decls, expr), _ = translate_exp denv.penv exp in
       decls, sassign cid expr
     | PLocal(cid, ty, exp) ->
-      let decls, expr = translate_exp denv.penv exp in
+      let (decls, expr), _ = translate_exp denv.penv exp in
       decls, slocal (Cid.to_id cid) (translate_ty ty) expr
   
   and translate_parser_branch (pats, block) = 
@@ -1470,7 +1488,7 @@ let translate_parser denv parser =
   and translate_parser_step parser_step = 
     match parser_step with
     | PMatch(exps, parser_branches) -> (
-      let exps' = translate_exps denv.penv exps |> snd in
+      let exps' = translate_exps denv.penv exps |> fst_snd in
       let branches' = List.map translate_parser_branch parser_branches in
       smatch exps' branches'
     )
@@ -1554,7 +1572,7 @@ let construct_deparser denv hevent : decl =
     [pkt_param; hdr_param; meta_param; intrinsic_param]
   in
   (* finally, translate the body of the deparser *)
-  let decls, stmt = translate_statement denv.penv [] hevent.hdl_deparse in
+  let (decls, stmt), _ = translate_statement denv.penv [] hevent.hdl_deparse in
   (* the emit call is the final statement. *)
   let emit_call = sunit (T.ecall (Cid.create_ids [pkt_arg; id"emit"]) [T.evar (Cid.id hdr_param_id)]) in
 
@@ -1584,7 +1602,7 @@ let translate_tdecl (denv : translate_decl_env) tdecl : (translate_decl_env) =
         let module_name = List.hd (Cid.names tcid) in 
         let len, default_opt = match exp.e with 
           | ECall(_, args) -> (
-            match (translate_exps denv.penv args |> snd) with 
+            match (translate_exps denv.penv args |> fst_snd) with 
             | [elen; edefault] -> elen, Some(edefault)
             | [elen] -> elen, None
             | _ -> error "[generate_reg_array] expected 1 or 2 arguments in global constructor"
@@ -1620,10 +1638,12 @@ let translate_tdecl (denv : translate_decl_env) tdecl : (translate_decl_env) =
       (fun (id, ty) -> (None, translate_ty ty, id))
       const_params
     in
-    let body_decls, body = translate_statement denv.penv [] stmt in
+    let (body_decls, body), penv = translate_statement denv.penv [] stmt in
     let action = daction id params body in
-    (* add the open function to the actions context *)
-    let penv = {denv.penv with actions = CidSet.add (Cid.id id) denv.penv.actions} in
+    (* add the open function to the actions context, 
+       the updated penv from translate_statement should also have the 
+       list of hashers that have been generates so far in the program *)
+    let penv = {penv with actions = CidSet.add (Cid.id id) penv.actions} in
     let locals = denv.locals@body_decls@[action] in
     {denv with penv; locals}
   | TDEvent(_) -> denv

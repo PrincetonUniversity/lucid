@@ -132,7 +132,7 @@ let precompute_args ds =
                 then addr' 
                 else self#precompute_arg addr' 
               in
-              (* print_endline ("addr': " ^ (CorePrinting.exp_to_string addr')); *)
+              print_endline ("addr': " ^ (CorePrinting.exp_to_string addr'));
               let rest' = CL.map self#precompute_arg rest in
               {exp with e = ECall (fcn_id, arr'::addr'::rest')}
             | _ -> error "[precompute_args] array method call with < 3 args"

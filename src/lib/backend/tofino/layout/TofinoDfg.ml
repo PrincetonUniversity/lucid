@@ -63,7 +63,11 @@ end
 
 module Dfg = Graph.Persistent.Digraph.ConcreteLabeled (DfgNode) (DfgEdge)
 module DfgTopo = Graph.Topological.Make (Dfg)
-
+module DfgComponents = Graph.Components.Make(Dfg)
+let has_cycle g =
+  let scc = DfgComponents.scc_list g in
+  List.exists (fun component -> List.length component > 1) scc
+;;
 
 module DfgDotConfig = struct
   include Dfg

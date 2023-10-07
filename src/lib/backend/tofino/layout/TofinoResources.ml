@@ -146,7 +146,9 @@ let rec hashers_of_stmt stmt =
     if (uses_hash) then [stmt] else []
 
 
-let calc_hash_bits_block ty = ((((ty_to_size ty) - 1) / 16) + 1) * 16 ;;
+let calc_hash_bits_block ty =
+  ty_to_size ty
+  (* ((((ty_to_size ty) - 1) / 16) + 1) * 16 ;; *)
 let calc_salu_hash_bits ty = min 22 (ty_to_size ty)
 
 (* count the number of hash alus needed to implement an expression *)
@@ -209,6 +211,10 @@ and hash_ops_of_exps exps =
   List.fold_left (fun ct e -> ct + hash_ops_of_exp e) 0 exps
 ;;
 
+(* bug -- deduplicating statements is not right for array operations. 
+   all the array ops in a table that use the same index variable get the same 
+   hash unit (i think). So we need to deduplicate those based on 
+   (arr_id, idx_exp), I think? *)
 let rec hash_ops_of_stmt statement_cache stmt = 
   (* how many hash bits does a statement take, given that everything 
       in statement_cache is "free" *)
@@ -303,16 +309,7 @@ let rec array_addrs_of_stmt stmt : exp list =
   in 
   (* now make the list unique with structurally equal exps *)
   let res = all_addr_exprs |> (MatchAlgebra.unique_list_of_eq (CoreSyntax.equiv_exp)) in
-  (* if (List.length res > 1) then 
-    (
-    print_endline ("--------------");
-    print_endline 
-      ("[array_addrs_of_stmt] stmt:" 
-      ^ (CorePrinting.stmt_to_string stmt));
-    print_endline
-      ("[array_addrs_of_stmt] all_addr_exprs:"^(Caml.String.concat ", " @@ List.map CorePrinting.exp_to_string all_addr_exprs));
-    print_endline ("--------------");
-    ); *)
+
   res
 ;;
 
