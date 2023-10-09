@@ -94,13 +94,42 @@ let sys_checksum_fun _ _ args =
 
 
 
+(* Sys.dequeue_depth *)
+let sys_dequeue_depth_name = "dequeue_depth"
+let sys_dequeue_depth_id = Id.create sys_dequeue_depth_name
+let sys_dequeue_depth_cid = Cid.create_ids [sys_id; sys_dequeue_depth_id]
+let sys_dequeue_depth_error msg = sys_error sys_dequeue_depth_name msg
+
+
+let sys_dequeue_depth_fun _ _ args =
+  let open CoreSyntax in
+  match args with
+  | [] ->
+    (* return 0 for now *)
+    default_vint 32
+  | _ -> sys_dequeue_depth_error "takes no parameters"
+;;
+let sys_dequeue_depth_ty =
+  let start_eff = FVar (QVar (Id.fresh "eff")) in
+  ty
+  @@ TFun
+       { arg_tys = []
+       ; ret_ty = ty_sp (TQVar (QVar (Id.create "auto_deq_depth"))) Span.default
+       ; start_eff
+       ; end_eff = start_eff
+       ; constraints = ref []
+       }
+;;
+
 (* directory of Sys methods *)
 let defs : State.global_fun list =
   [ { cid = sys_time_cid; body = sys_time_fun; ty = sys_time_ty }
   ; { cid = sys_random_cid; body = sys_random_fun; ty = sys_random_ty } 
+  ; { cid = sys_dequeue_depth_cid; body = sys_dequeue_depth_fun; ty = sys_dequeue_depth_ty}
   (* ; { cid = sys_checksum_cid; body = sys_checksum_fun; ty = sys_checksum_ty}  *)
   
   ]
 ;;
+
 
 let signature = module_id, [], defs, []

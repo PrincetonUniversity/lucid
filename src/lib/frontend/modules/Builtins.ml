@@ -11,26 +11,13 @@ let lucid_ety_id = Id.create "LUCID_ETHERTY"
 let lucid_ety_ty = ty (TInt (IConst 16))
 let lucid_ety_int = 666
 let lucid_ety_value = vint lucid_ety_int 16
-
-let lucid_eth_smac_int = 0x000000000777
-let lucid_eth_smac_ty = ty (TInt (IConst 48))
-let lucid_eth_smac_value = vint lucid_eth_smac_int 48
-let lucid_eth_dmac_int = 0x000000000888
-let lucid_eth_dmac_ty = ty (TInt (IConst 48))
-let lucid_eth_dmac_value = vint lucid_eth_dmac_int 48
-
 let lucid_eventnum_ty = ty (TInt (IConst 16))
 
-(* used in the parser *) 
-let lucid_parse_id = Id.create "do_lucid_parsing"
-let packet_arg_id = Id.create "packet"
-let main_parse_id = Id.create "main"
-
-(* used as first argument to hash, for checksum in deparser *)
+(* used as first argument to hash, for checksum in (de)parser *)
 let checksum_id = Id.create "checksum"
 let checksum_ty = TInt (IConst 32) |> ty
 
-
+let this_ty = ty TEvent
 let builtin_vars =
   [self_id, self_ty; recirc_id, recirc_ty; lucid_ety_id, lucid_ety_ty; checksum_id, checksum_ty]
 ;;
@@ -44,7 +31,7 @@ let builtin_type_info =
   ]
 ;;
 
-(* Building modules *)
+(* Builtin modules *)
 let builtin_modules =
   [ Arrays.signature
   ; Counters.signature
@@ -67,25 +54,24 @@ let builtin_defs =
   @ Packet.defs
 ;;
 
+
+(* Builtin local vars *)
+let this_id = Id.create "this"
+
 (* Builtin local vars with
    platform-dependent types *)
-let this_id = Id.create "this"
 let ingr_port_id = Id.create "ingress_port"
 
 type builtin_tys =
-  { ingr_port_ty : Syntax.ty
-  ; this_ty : Syntax.ty
-  }
+  { ingr_port_ty : Syntax.ty }
 
 let interp_builtin_tys =
   { ingr_port_ty =
-      ty_sp (TQVar (QVar (Id.create "auto_ingress_port"))) Span.default
-  ; this_ty = TEvent |> ty
-  }
+      ty_sp (TQVar (QVar (Id.create "auto_ingress_port"))) Span.default}
 ;;
 
 let tofino_builtin_tys =
-  { ingr_port_ty = TInt (IConst 9) |> ty; this_ty = TEvent |> ty }
+  { ingr_port_ty = TInt (IConst 9) |> ty; }
 ;;
 
 (* Used in constraints *)
@@ -95,3 +81,7 @@ let start_id = Id.create "start"
 let cell1_id = SyntaxUtils.cell1_id
 let cell2_id = SyntaxUtils.cell2_id
 
+(* used in the parser *) 
+let lucid_parse_id = Id.create "do_lucid_parsing"
+let packet_arg_id = Id.create "packet"
+let main_parse_id = Id.create "main"

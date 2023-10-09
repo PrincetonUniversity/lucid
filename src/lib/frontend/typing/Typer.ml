@@ -1330,7 +1330,7 @@ let rec infer_declaration
       let _, inf_body =
         let starting_env =
           { env with current_effect = FZero; constraints }
-          |> define_const Builtins.this_id builtin_tys.this_ty
+          |> define_const Builtins.this_id Builtins.this_ty
           |> define_const Builtins.ingr_port_id builtin_tys.ingr_port_ty
         in
         infer_body starting_env body

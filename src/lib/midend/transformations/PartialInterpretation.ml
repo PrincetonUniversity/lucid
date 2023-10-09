@@ -638,7 +638,7 @@ let interp_body builtin_tys env (params, stmt) =
   let builtins =
     let open Builtins in
     (ingr_port_id, builtin_tys.ingr_port_ty)
-    :: (this_id, builtin_tys.this_ty)
+    :: (this_id, Builtins.this_ty)
     :: builtin_vars
   in
   let env = env |> add_builtin_defs builtins |> add_builtin_defs params in

@@ -196,7 +196,7 @@ let tofinocore_passes core_prog portspec =
   (* propagateEvars is another hoisting pass that benefits control flows with 
      match tables that are declared and used once. *)
   let core_prog = PropagateEvars.process core_prog in
-  (* dump_prog "PropagateEvars; (tofinocore right before layout)" "tofinocore_pre_layout" core_prog; *)
+  dump_prog "PropagateEvars; (tofinocore right before layout)" "tofinocore_evars" core_prog;
   (* this moves checksums over event outputs to the deparser. It has to come 
      after propagateEvars because it requires that the checksum statement be inlined. *)
   report_if_verbose "-------Moving output checksum operations to deparser-------";

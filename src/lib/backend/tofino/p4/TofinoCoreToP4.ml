@@ -351,9 +351,10 @@ and translate_ecall env fcn_cid args =
     (* system functions *)
     | ["Sys"; "enable"]
     | ["Sys"; "time"]
-    | ["Sys"; "random"] ->
+    | ["Sys"; "random"] 
+    | ["Sys"; "dequeue_depth"] ->
       translate_sys_call (List.hd (List.tl (Cid.to_ids fcn_cid))) args, env
-    (* Array stuff *)
+    (* Array functions *)
     | "Array"::_ -> 
       (* generate the memop *)
       let (regacn_id, decl), env = translate_array_call env fcn_cid args in
@@ -386,6 +387,9 @@ and translate_sys_call fcn_id args =
         let decl = drandom 32 rng_id in
         let expr = ecall (Cid.create_ids [rng_id; id "get"]) [] in
         [decl], expr      
+      | "dequeue_depth" ->
+         (* just a rename to the intrinsic variable *)
+        [], T.evar (Cid.create ["egress_intrinsic_metadata"; "deq_qdepth"])
       | _ -> error "[translate_sys_call] unknown lucid system call"
 
 

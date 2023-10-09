@@ -160,6 +160,11 @@ let cid_to_taggedvar input_event output_event cid =
     else (Intermediate(cid))) 
 ;;
 
+(* to find valid optimizations, we build a simple 
+   data flow graph. Data flows from 
+   x -> y if there is an expression of the form 
+    y := x
+   *)
 let rec stmt_to_g input_event output_event g stmt =
   let tagcid = cid_to_taggedvar input_event output_event in
   match stmt.s with
@@ -290,8 +295,7 @@ let do_optimization stmt (inter_var, output_var) =
   (* do one optimization in the body of a handler
      1. replace all assignments to inter_var with assignments to output var. 
      2. replace declaration of inter_var with an assignment to output var.
-     3. delete all statements with rhs expressions that contain inter_var -- 
-        by definition, these should all be EVar expressions.*)
+     3. delete all statements with rhs expressions that are _only_ inter_var.*)
   let v = object (_)
     inherit [_] s_map as super  
 
