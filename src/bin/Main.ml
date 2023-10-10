@@ -46,13 +46,10 @@ let main () =
     else (
       if not cfg.json then Console.report "Simulating...";
       let nst = Interp.simulate nst in
-      if cfg.show_interp_state
-      then
-        if cfg.json || cfg.interactive
-        then InterpCore.print_final_state (InterpState.State.nst_to_string nst)
-        else (
-          Console.report "Final State:";
-          print_endline @@ InterpState.State.nst_to_string nst))
+      if cfg.show_interp_state then (
+        if (not cfg.interactive) && not cfg.json
+          then Console.report "Final State:";
+      print_endline @@ InterpState.State.nst_to_string nst))
 ;;
 
 let _ = main ()

@@ -139,19 +139,20 @@ let rec v_to_string v =
   | VPat bs -> bs_to_string bs
   | VBits bs -> 
     let bs = BitString.bits_to_hexstr bs in
+    bs
     (* truncate the hex string after 64 bytes, if its longer than that put ... at the end *)
-    let len = String.length bs in
+    (* let len = String.length bs in
     let bs = 
       if len > 128
       then String.sub bs 0 128 ^ "...("^(string_of_int (len - 128))^" B truncated)..."
       else bs
     in
-    Printf.sprintf "<<%iB unparsed bytestring=0x%s>>" (len/2) bs 
+    Printf.sprintf "<<%iB unparsed bytestring=0x%s>>" (len/2) bs  *)
     
 
 and value_to_string v = v_to_string v.v
 
-and event_to_string { eid; data; edelay } =
+and event_to_string { eid; data; edelay; } =
   let delaystr =
     if edelay <> 0 && cfg.verbose_types
     then "@" ^ string_of_int edelay ^ "ns"

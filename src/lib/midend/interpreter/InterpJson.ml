@@ -382,7 +382,7 @@ let parse_interp_input
   | _ -> error "Non-assoc type for interpreter input"
 ;;
 
-(* printing *)
+(* string functions *)
 let control_event_to_string control_e =
   match control_e with
   | ArraySet(arrname, idx, newvals) -> 
@@ -403,21 +403,52 @@ let control_event_to_string control_e =
   | _ -> "<control event without printer>"
 ;;
 
-(* json printers *)
-let event_val_to_json event = 
-  let raw_json_val v =
-    match v.v with
-    | VInt i -> `Int (Integer.to_int i)
-    | VBool b -> `Bool b
-    | _ -> error "not an int or bool"
-  in  
-  let {eid; data;} = event in
-  let name = `String (CorePrinting.cid_to_string eid) in
-  let args = `List (List.map raw_json_val data) in
-  [("name", name); ("args", args)]
-;;
-
+(* json exporter functions *)
 let packet_event_to_json event = 
   ["type", `String "packet";   
   "bytes", `String (List.hd event.data |> CorePrinting.value_to_string)]
 ;;
+
+let event_to_json {eid; data; eserialized} =   
+  let raw_json_val v =
+    match v.v with
+    | VInt i -> `Int (Integer.to_int i)
+    | VBool b -> `Bool b
+    | _ -> error "[json event arg printing] not an int or bool"
+  in  
+  if (eserialized) then (
+    let name = `String (CorePrinting.cid_to_string eid) in
+    let args = `List (List.map raw_json_val data) in
+    [("name", name); ("args", args)])
+  else (
+    let ty = `String "packet" in    
+    let bs = `String (List.hd data |> CorePrinting.value_to_string) in
+    [("type", ty); ("bytes", bs)]
+  )
+;;
+
+let event_exit_to_json swid port_opt event time =
+  let open Yojson.Basic in
+  let base_event = event_to_json event in  
+  let port =
+    match port_opt with
+    | None -> -1
+    | Some p -> p
+  in
+  let locs = `List [`String (Printf.sprintf "%i:%i" swid port)] in
+  let timestamp = `Int time in
+  (* let args = CorePrinting.value_to_string data in  *)
+  let evjson = `Assoc(base_event@["locations", locs; "timestamp", timestamp]) in
+  Yojson.Basic.to_string evjson
+;;
+
+
+let interp_report_json msgty msg swid_opt =
+`Assoc ([msgty, `String msg]
+  @ match swid_opt with
+    | Some swid -> ["switch", `Int swid]
+    | _ -> [])
+|> Yojson.Basic.pretty_to_string
+;;
+
+

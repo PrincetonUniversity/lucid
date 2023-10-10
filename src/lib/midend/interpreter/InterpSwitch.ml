@@ -100,35 +100,15 @@ let add_global cid v st =
     { st with global_env = Env.add cid v st.global_env }
 ;;
 
-let print_exit_event swid port_opt event time =
-  let open Yojson.Basic in
-  let raw_json_val v =
-    match v.v with
-    | VInt i -> `Int (Integer.to_int i)
-    | VBool b -> `Bool b
-    | _ -> error "not an int or bool"
-  in
-  let { eid; data; _ } = event in
-  let name = `String (CorePrinting.cid_to_string eid) in
-  let args = `List (List.map raw_json_val data) in
-  let port =
-    match port_opt with
-    | None -> -1
-    | Some p -> p
-  in
-  let locs = `List [`String (Printf.sprintf "%i:%i" swid port)] in
-  let timestamp = `Int time in
-  (* let args = CorePrinting.value_to_string data in  *)
-  let evjson =
-    `Assoc
-      ["name", name; "args", args; "locations", locs; "timestamp", timestamp]
-  in
-  print_endline (Yojson.Basic.to_string evjson)
-;;
-
 let log_exit port (ievent:ievent) current_time st = 
   if Cmdline.cfg.interactive
-    then print_exit_event st.swid port ievent.sevent current_time
+    then (
+      InterpJson.event_exit_to_json 
+        st.swid 
+        port
+        ievent.sevent 
+        current_time
+      |> print_endline)
     else Queue.push (ievent, port, current_time) st.exits
 ;;
 
@@ -226,14 +206,14 @@ let egress_send nst src_sw out_port event_val =
   let time = src_sw.utils.get_time nst in
   (* dst -1 means "somewhere outside of the lucid network" *)
   if (dst_id = -1) 
-    then 
+    then (
       let ievent = to_internal_event event_val {switch = Some src_sw.swid; port = out_port} time in
-      log_exit (Some out_port) ievent time src_sw
-    else 
+      log_exit (Some out_port) ievent time src_sw)
+    else (
       let dst_sw = src_sw.utils.lookup_switch nst dst_id in
       let ievent = to_internal_event event_val {switch = Some dst_id; port = dst_port} time in        
       (* note that send and arrival times are currently the same -- we model 0-latency egress, for now *)
-      ingress_receive nst dst_sw time time dst_port ievent
+      ingress_receive nst dst_sw time time dst_port ievent)
 ;;
 
 let next_q_ele (fsize, fmin, fdel, ftime) q cur_time = 

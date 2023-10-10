@@ -299,6 +299,7 @@ let rec execute_interactive_sim_step event_getter_opt max_time idx nst =
   | Some t -> 
     let nst = if (idx = 0)
       then (
+    run_egress_events true nst;
         load_new_events nst event_getter_opt;
         advance_current_time t nst)
       else nst

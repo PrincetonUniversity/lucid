@@ -218,12 +218,16 @@ module State = struct
     ?(show_exits = true)
     nst
     =
-    Array.fold_lefti
+    let base_str = Array.fold_lefti
       (fun acc idx st ->
         Printf.sprintf "%s\nSwitch %d : %s" acc idx
         @@ InterpSwitch.to_string ~show_vars ~show_pipeline ~show_queue ~show_exits st)
       ""
       nst.switches
+    in
+    if Cmdline.cfg.json || Cmdline.cfg.interactive
+      then InterpJson.interp_report_json "final_state" base_str None
+      else base_str
   ;;
 end
 

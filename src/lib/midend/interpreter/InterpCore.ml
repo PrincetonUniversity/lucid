@@ -346,25 +346,10 @@ let printf_replace vs (s : string) : string =
     vs
 ;;
 
-(* print message to a json record *)
-let interp_report msgty msg swid_opt =
-  (if Cmdline.cfg.json || Cmdline.cfg.interactive
-  then
-    `Assoc
-      ([msgty, `String msg]
-      (* `Assoc ["interpreter_message", `Assoc ["inter_message", `String msgty; "value", `String msg]] *)
-      @
-      match swid_opt with
-      | Some swid -> ["switch", `Int swid]
-      | _ -> [])
-    |> Yojson.Basic.pretty_to_string
-  else msg)
-  |> print_endline
-;;
-
-let print_event_arrival swid str = interp_report "event_arrival" str (Some swid)
-let print_final_state str = interp_report "final_state" str None
-let print_printf swid str = interp_report "printf" str (Some swid)
+let printf_string swid str = 
+  if Cmdline.cfg.json || Cmdline.cfg.interactive
+    then InterpJson.interp_report_json str str (Some swid)
+    else str    
 
 let partial_interp_exps nst swid env exps =
   List.map
@@ -412,7 +397,7 @@ let rec interp_statement nst hdl_sort swid locals s =
   | SPrintf (s, es) ->
     let vs = List.map (fun e -> interp_exp e |> extract_ival) es in
     let strout = printf_replace vs s in
-    print_printf swid strout;
+    printf_string swid strout |> print_endline;
     locals
   | SIf (e, ss1, ss2) ->
     let b = interp_exp e |> extract_ival |> raw_bool in
