@@ -403,7 +403,7 @@ let control_event_to_string control_e =
   | _ -> "<control event without printer>"
 ;;
 
-(* print to json *)
+(* json printers *)
 let event_val_to_json event = 
   let raw_json_val v =
     match v.v with

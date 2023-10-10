@@ -346,18 +346,6 @@ let printf_replace vs (s : string) : string =
     vs
 ;;
 
-(*
-{
-  interp_msg : {
-    "type" : "printf"
-    "value" : ...
-    "location"
-  }
-
-
-}
- *)
-
 (* print message to a json record *)
 let interp_report msgty msg swid_opt =
   (if Cmdline.cfg.json || Cmdline.cfg.interactive
