@@ -288,7 +288,7 @@ let load_new_events nst event_getter_opt =
   match event_getter_opt with
   | None -> ()
   | Some(event_getter) -> 
-    State.load_interp_inputs nst (event_getter nst.current_time) ;
+    State.load_interp_inputs nst (event_getter nst) ;
 ;;
 (* execute a step of the simulation running in interactive mode *)
 let rec execute_interactive_sim_step event_getter_opt max_time idx nst = 
@@ -299,7 +299,7 @@ let rec execute_interactive_sim_step event_getter_opt max_time idx nst =
   | Some t -> 
     let nst = if (idx = 0)
       then (
-    run_egress_events true nst;
+        run_egress_events true nst;
         load_new_events nst event_getter_opt;
         advance_current_time t nst)
       else nst
@@ -320,137 +320,68 @@ let sighdl s =
   if s != -14 then exit 1
 ;;
 
-(* this type should be refactored out *)
-type interactive_mode_input =
-  | Process of interp_input list
-  | Continue
-  | End
-
-(* create a pipe for control commands *)
-let create_control_pipe ctl_pipe_name =
-  prerr_endline ("using control pipe: " ^ ctl_pipe_name);
-  let exists =
-    try
-      Unix.access ctl_pipe_name [Unix.F_OK];
-      true
-    with
-    | Unix.Unix_error _ -> false
-  in
-  (* we can mkfifo if file is fifo or does not exist *)
-  let okay_to_mkfifo =
-    if not exists
-    then true
-    else (
-      let stats = Unix.stat ctl_pipe_name in
-      if stats.st_kind <> Unix.S_FIFO
-      then
-        error
-        @@ "the control pipe file "
-        ^ ctl_pipe_name
-        ^ " already exists, and is not a named pipe. "
-        ^ " please delete it or use another file."
-      else true)
-  in
-  if okay_to_mkfifo
-  then (
-    try Unix.mkfifo ctl_pipe_name 0o664 with
-    | Unix.Unix_error (Unix.EEXIST, _, _) -> ()
-    | e -> raise e)
-  else error "could not create named pipe to controller";
-  let ctl_fd = Unix.openfile ctl_pipe_name [Unix.O_RDONLY; Unix.O_NONBLOCK] 0 in
-  ctl_fd
+let blocking_read_line fd  =
+  let (ready_fds, _, _) = Unix.select [fd] [] [] (-1.0) in
+  if List.mem fd ready_fds then
+    try Some (input_line ( Unix.input_of_descr ~autoclose:false fd))
+    with End_of_file -> None
+  else
+    error "a blocking select completed without the fd being ready"
 ;;
 
-(* Run the interpreter in interactive mode. *)
+let non_blocking_read_line fd =  
+  try Some (input_line ( Unix.input_of_descr ~autoclose:false fd))
+  with
+  | End_of_file -> None
+  | Unix.Unix_error (Unix.EAGAIN, _, _) -> None
+  | Unix.Unix_error (Unix.EWOULDBLOCK, _, _) -> None
+;;
+
+type interactive_mode_input =
+  | Events of interp_input list
+  | NoEvents (* no new events, but the file is not closed *)
+  | End (* the file is closed *)
+;;
+let get_input block pp renaming num_switches current_time =
+  let parse_input_str ev_str = InterpSpec.parse_interp_event_list
+    pp
+    renaming
+    num_switches
+    current_time
+    (Yojson.Basic.from_string ev_str)
+  in
+  if (block) then
+    let ev_str = blocking_read_line Unix.stdin in
+    match ev_str with
+    | None -> End (* eof is the only option here *)
+    | Some ev_str -> Events (parse_input_str ev_str) (* got something -- interp it *)
+  else
+    let ev_str = non_blocking_read_line Unix.stdin in
+    match ev_str with
+      | None -> NoEvents (* ignore eof until a blocking read *)
+      | Some ev_str -> Events (parse_input_str ev_str) (* got something -- interp it *)
+  ;;
 let run pp renaming (spec : InterpSpec.t) (nst : State.network_state) =
-  let all_fds =
-    match spec.ctl_pipe_name with
-    | Some ctl_pipe_name -> [Unix.stdin; create_control_pipe ctl_pipe_name]
-    | None -> [Unix.stdin]
-  in
-  (* get a single input from either stdin or the control pipe *)
-  let get_input pp renaming num_switches current_time twait =
-    (* poll stdin and the control pipe for input *)
-    let read_fds, _, _ =
-      try Unix.select all_fds [] [] twait with
-      | Unix.Unix_error (err, fname, arg) ->
-        (match err with
-         | Unix.EBADF ->
-           ( []
-           , []
-           , [] (* supposed to happen when stdin closes, but not sure of that.*)
-           )
-         | _ -> error @@ "[get_input] unix error: " ^ fname ^ "(" ^ arg ^ ")")
-    in
-    (* this part sould be cleaned up, but it may be a bit delicate with the file descriptors. *)
-    (* if stdin has input available, read it *)
-    if List.mem Unix.stdin read_fds
-    then (
-      try
-        let ev_str = input_line stdin in
-        let ev_json = Yojson.Basic.from_string ev_str in
-        let located_events =
-          InterpSpec.parse_interp_event_list
-            pp
-            renaming
-            num_switches
-            current_time
-            ev_json
-        in
-        (* let located_event = InterpSpec.parse_interp_input pp renaming num_switches current_time ev_json in  *)
-        Process located_events
-      with
-      | _ ->
-        End
-        (* if reading from stdin fails, we want to exit *)
-        (* if there are any other input pipes (i.e., the control pipe), read a command from it *))
-    else if List.length all_fds = 2 && List.mem (List.nth all_fds 1) read_fds
-    then (
-      try
-        let ctl_fd = List.nth all_fds 1 in
-        let ev_str = input_line (Unix.in_channel_of_descr ctl_fd) in
-        let ev_json = Yojson.Basic.from_string ev_str in
-        let located_events =
-          InterpSpec.parse_interp_event_list
-            pp
-            renaming
-            num_switches
-            current_time
-            ev_json
-        in
-        (* let located_event = InterpSpec.parse_interp_input pp renaming num_switches current_time ev_json in  *)
-        Process located_events
-      with
-      (* if reading from anything besides stdin fails, we don't want to exit because there's still stdin.. *)
-      (* TODO -- lol clean that up *)
-      | End_of_file -> Continue
-      | e ->
-        let _ = e in
-        error "error reading from control pipe (NOT an EOF)")
-    else Continue
-  in
-  (* get up to n inputs. For any inputs that are events,
-     queue the events for processing. For any inputs that are
-     commands, execute them immediately. *)
-  let get_events_nonblocking pp renaming num_switches n current_time =
+  Unix.set_nonblock Unix.stdin;
+
+  (* read a single event, blocking until it appears. This is used to 
+  read in new events after the interpreter has finished all of its 
+  current work. *)
+  let get_input_blocking = get_input true in
+
+  (* read up to n immediately available events from stdin, 
+  ignoring end of file. This is used to read in new events 
+  while the interpreter is still working on a previous event. *)
+  let get_input_nonblocking (nst: State.network_state) =
     let located_events =
       List.filter_map
         (fun _ ->
-          match get_input pp renaming num_switches current_time 0.0 with
-          | Process e -> Some e
+          match get_input false pp renaming spec.num_switches nst.current_time  with
+          | Events e -> Some e
           | _ -> None)
-        (MiscUtils.range 0 n)
+        (MiscUtils.range 0 spec.num_switches)
     in
-    List.flatten located_events
-  in
-  (* wait for 1 event or eof *)
-  let get_input_blocking pp renaming num_switches current_time =
-    let res = get_input pp renaming num_switches current_time (-1.0) in
-    res
-  in
-  (* function to get a batch of events that arrive while interpreter is executing *)
-  let event_getter =
-    get_events_nonblocking pp renaming spec.num_switches spec.num_switches
+    List.flatten located_events  
   in
   let rec poll_loop (nst : State.network_state) =
     (* wait for a single event or command *)
@@ -458,17 +389,19 @@ let run pp renaming (spec : InterpSpec.t) (nst : State.network_state) =
       get_input_blocking pp renaming spec.num_switches nst.current_time
     in
     match input with
-    | End -> nst (* end *)
-    | Continue -> poll_loop nst
-    | Process evs -> 
+    | End -> (* no more input, but we want to finish up the egress events to generate everything *)
+      run_egress_events true nst;
+      nst
+    | NoEvents -> poll_loop nst
+    | Events evs -> 
       State.load_interp_inputs nst evs;
       (* interpret all the queued events, using event_getter to poll for more events
            in between iterations. *)
-      let nst = execute_interactive_sim_step (Some event_getter) (-1) 0 nst in
+      let nst = execute_interactive_sim_step (Some get_input_nonblocking) (-1) 0 nst in
       poll_loop nst
   in
   Random.init nst.config.random_seed;
   (* interp events with no event getter to initialize network, then run the polling loop *)
   let nst = execute_interactive_sim_step None nst.config.max_time 0 nst in
-  poll_loop nst
+  poll_loop nst  
 ;;
