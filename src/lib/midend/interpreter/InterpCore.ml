@@ -169,8 +169,50 @@ let interp_eval exp : 'a InterpSyntax.ival =
     error "[interp_eval] expected a value expression, but got something else."
 ;;
 
+let calc_crc16_csum (zs : zint list) = 
+  let full_z = List.fold_left (fun acc z -> Integer.concat acc z) (Integer.create ~value:0 ~size:0) zs in
+
+  (* let bs = List.map (fun z -> BitString.int_to_bits (Z.to_int z.size) (Z.to_int z.value)) zs in *)
+  (* let full_b = List.fold_left BitString.concat BitString.empty bs in *)
+  (* print_endline ("calculating ipv4 checksum of: "^(BitString.bits_to_hexstr full_b)); *)
+
+  (* print_endline ("size of full_z: "^(string_of_int (Integer.size full_z))); *)
+  let full_z = ref full_z in
+  let sum = ref (Integer.create ~value:0 ~size:17) in
+  (* 16 bits + carry... *)
+  while ((Integer.size (!full_z)) > 0)
+  do
+    (* print_endline "-----";
+    print_endline ("full_z: "^(Integer.to_string (!full_z)));
+    print_endline ("sum start: "^(Integer.to_string (!sum))); *)
+    let msb, rest = Integer.pop_msb (Z.of_int 16) (!full_z) in
+    (* print_endline ("msb: "^(Integer.to_string msb));
+    print_endline ("rest: "^(Integer.to_string rest)); *)
+    full_z := rest;
+    (* add and get carry bit *)
+    sum := Integer.add (!sum) (Integer.set_size 17 msb);
+    (* fold carry bit into the checksum *)
+    let carry, sum_rest = Integer.pop_msb (Z.of_int 1) (!sum) in
+    let carry = Integer.set_size 16 carry in
+    let sum' = Integer.add sum_rest carry in
+    (* update the checksum *)
+    sum := Integer.set_size 17 sum';
+    (* print_endline ("sum end: "^(Integer.to_string (!sum))); *)
+  done;
+  (* take the ones compliment of the sum *)
+  Integer.bitnot (Integer.set_size 16 !sum)
+;;
+
+
+
+
 let rec interp_exp (nst : State.network_state) swid locals e : 'a InterpSyntax.ival =
   let interp_exps = interp_exps nst swid locals in
+  let interp_exp = interp_exp nst swid locals in
+  let extract_int = function
+    | VInt n -> n
+    | _ -> failwith "No good"
+  in
   let lookup cid = lookup_var swid nst locals cid in
   match e.e with
   | EVal v -> V v
@@ -189,48 +231,50 @@ let rec interp_exp (nst : State.network_state) swid locals e : 'a InterpSyntax.i
          ^ " is a value identifier and cannot be used in a call")
      | F f -> V (f nst swid vs)
    )
-  | EHash (size, args) ->
-    let vs = interp_exps args in
-    let vs =
-      List.map
-        (function
-         | InterpSyntax.V v -> v.v
-         | _ -> failwith "What? No hashing functions!")
-        vs
-    in
-    let extract_int = function
-      | VInt n -> n
-      | _ -> failwith "No good"
-    in
-    (match vs with
-     | VInt seed :: tl ->
-       (* Special case: if the hash seed is 1 and all the arguments are integers,
-          we perform an identity hash (i.e. just concatenate the arguments) *)
-       if Z.to_int (Integer.value seed) = 1
-       then (
-         try
-           let n =
-             List.fold_left
-               (fun acc v -> Integer.concat acc (extract_int v))
-               (List.hd tl |> extract_int)
-               (List.tl tl)
-           in
-           V (VInt (Integer.set_size size n) |> value)
-         with
-         | Failure _ ->
-           (* Fallback to non-special case *)
-           let hashed = Legacy.Hashtbl.seeded_hash (Integer.to_int seed) tl in
-           V (vint hashed size))
-       else (
-         (* For some reason hash would only take into account the first few elements
-           of the list, so this forces all of them to have some impact on the output *)
-         let feld = List.fold_left (fun acc v -> Hashtbl.hash (acc, v)) 0 tl in
-         let hashed = Legacy.Hashtbl.seeded_hash (Integer.to_int seed) feld in
-         V (vint hashed size))
-     | _ -> failwith "Wrong arguments to hash operation")
+  | EHash (size, args) -> (
+    let poly, args = List.hd args, List.tl args in
+    let vs = List.map (fun ival -> (extract_ival ival).v) (interp_exps args) in
+    match poly.e with
+    (* special case 1: do a checksum calculation *)
+    | EVar(cid) when (Cid.equal (cid) (Cid.id Builtins.checksum_id)) -> (
+      let zs = List.map extract_int vs in
+      let csum = calc_crc16_csum zs in
+      V (VInt csum |> value)
+    )
+    | _ -> (
+      let seed = (interp_exp poly |> extract_ival).v in
+      let vs = seed::vs in
+      (match vs with
+      | VInt seed :: tl ->
+        (* Special case 2: if the hash seed is 1 and all the arguments are integers,
+           we perform an identity hash (i.e. just concatenate the arguments) *)
+        if Z.to_int (Integer.value seed) = 1
+        then (
+          try
+            let n =
+              List.fold_left
+                (fun acc v -> Integer.concat acc (extract_int v))
+                (List.hd tl |> extract_int)
+                (List.tl tl)
+            in
+            V (VInt (Integer.set_size size n) |> value)
+          with
+          | Failure _ ->
+            (* Fallback to non-special case *)
+            let hashed = Legacy.Hashtbl.seeded_hash (Integer.to_int seed) tl in
+            V (vint hashed size))
+        else (
+          (* For some reason hash would only take into account the first few elements
+            of the list, so this forces all of them to have some impact on the output *)
+          let feld = List.fold_left (fun acc v -> Hashtbl.hash (acc, v)) 0 tl in
+          let hashed = Legacy.Hashtbl.seeded_hash (Integer.to_int seed) feld in
+          V (vint hashed size))
+      | _ -> failwith "Wrong arguments to hash operation")
+    )
+  )
   | EFlood e1 ->
     let port =
-      interp_exp nst swid locals e1
+      interp_exp e1
       |> extract_ival
       |> raw_integer
       |> Integer.to_int

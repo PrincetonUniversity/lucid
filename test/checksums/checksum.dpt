@@ -1,0 +1,85 @@
+// IP checksum verification and recalculation test
+
+
+type eth_t = {
+   int<48> edst;
+   int<48> esrc; 
+   int<16> ety;   
+}
+
+type ip_t = {
+    int<8> v_ihl; 
+    int<8> tos;
+    int<16> len;
+    int<16> id;
+    int<16> flags_frag;
+    int<8> ttl;
+    int<8> proto;
+    int<16> csum;
+    int src;
+    int dst;
+}
+
+
+// the in event carries a recomputed ip checksum.
+packet event pkt_in(eth_t eth, ip_t ip, int<16> comp_csum);
+
+// the out event is a raw ip packet (and there is no handler)
+packet event pkt_out(eth_t eth, ip_t ip) {skip;}
+
+
+parser main(Payload.t p) {
+   read eth_t eth;
+   match eth#ety with
+   // every program must begin by reading a 114 bit 
+   // eth header and then matching on the last 16 bits, 
+   // the first branch of the match must always just 
+   // call do_lucid_parsing();, which does background 
+   // event parsing stuff.
+   | LUCID_ETHERTY -> {do_lucid_parsing(p);}
+   | 0x0800 -> {
+      read ip_t ip;
+      // currently, a checksum operation is represented as 
+      // a hash call where the first argument (the polynomial)
+      // is a builtin variable named "checksum".
+      // Checksums calculated in the parser will be 
+      // translated into p4 parser checksum.update operations, 
+      // with each checksum call using a separate checksum 
+      // object in p4.
+      int<16> new_csum = hash<16>(checksum, ip#v_ihl, ip#tos, ip#len, ip#id, ip#flags_frag, ip#ttl, ip#proto, ip#src, ip#dst);
+      generate(pkt_in(eth, ip, new_csum));
+   }
+}
+
+
+handle pkt_in(eth_t eth, ip_t ip, int<16> calc_csum){
+   printf ("checksum = %d", calc_csum);
+   // make sure the packet's checksum is correct (calc = orig)
+   if (ip#csum == calc_csum) {
+      // here is a tricky part: for the checksum to work, it 
+      // currently has to be inlined a generate statement.
+      int new_src = ip#src + 1;
+      int new_dst = ip#dst + 1;
+
+      // for deparser checksums, we again represent a checksum 
+      // operation as a hash call with first arg = "checksum".
+      // To get the checksum to compile to the deparser, the 
+      // checksum call MUST currently be inlined into a 
+      // generate command. If we precomputed the checksum, 
+      // the lucid compiler would currently either 
+      // break or implement the checksum as a hash.
+      printf("generating exit event");
+      generate_port(128w9,
+         pkt_out(
+            eth,
+            { ip with 
+               src = ip#src;
+               dst = ip#dst;
+               csum = hash<16>(checksum, ip#v_ihl, ip#tos, ip#len, ip#id, ip#flags_frag, ip#ttl, ip#proto, ip#src, ip#dst);
+            }
+         )
+      );
+   }
+   // else: no output, packet gets dropped
+}
+

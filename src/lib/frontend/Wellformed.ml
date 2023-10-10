@@ -283,6 +283,48 @@ let check_payloads ds =
   v#visit_decls () ds
 ;;
 
+(* make sure that: 
+   1. if there are parsers, there is a "main" parser;
+   2. the main parser has a single argument of type Payload.t
+   3. there is only 1 main parser 
+   
+   We may also want to check that the call to "do_lucid_parsing" is 
+    in the main parser and correct. 
+    1) the main parser begins by extracting a 114-bit ethernet header,
+       followed by a branch on the last 16 bits that matches LUCID_ETHERTYPE
+       to a call of do_lucid_parsing(x), where x is of type Payload.t
+   *)
+let check_parser_entry ds = 
+  let main_found = ref false in
+  let nonmain_found = ref false in 
+  let v =
+    object (_)
+      inherit [_] s_iter as super
+
+      method! visit_decl _ d = 
+        match d.d with 
+        | DParser(id, params, _) -> (
+          if (Id.equal id (Builtins.main_parse_id)) then (
+            if (!main_found) then 
+              Console.error_position d.dspan "Multiple main parsers in program.";
+            main_found := true;
+            (match params with
+            | [_, ty] when (equiv_ty ty Payloads.payload_ty)-> ()
+            | _ -> 
+              Console.error_position d.dspan "main parser function must have a single argument of type Payload.t.");
+          )
+          else (
+            nonmain_found := true;            
+          )
+        )
+        | _ -> ()
+
+      end
+  in
+  v#visit_decls () ds;
+  if (!nonmain_found && not (!main_found)) then 
+    Console.error "This program has parsers, but no main parser."
+;;
 
 (* basic return-match coverage check: make sure that every 
    match statement that has a return in some branch 

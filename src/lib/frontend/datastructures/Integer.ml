@@ -158,3 +158,24 @@ let concat x y =
   let x', y' = set_size sz x, set_size sz y in
   add (shift_left x' (size y)) y'
 ;;
+
+(* pop off the "sz" most significant bits of x, 
+   return the popped bits and the rest of x *)
+let pop_msb (sz: Z.t) (x:t) : t * t = 
+  (* input: sz = 16; x = something 8-bit *)
+  let sz = Z.to_int sz in
+  (* we have to handle the case where |x| < sz, by padding x with zeros *)
+  (* x' is x with the size of sz? Why? *)
+  (* let x' = set_size sz x in *)
+  if (size x <= sz) 
+    (*if its under sz bits, take the whole thing as msb*)
+      then 
+    set_size sz x, create ~value:0 ~size:0 
+  else 
+    (* otherwise, shift right to remove rest from msb *)
+    let msb = shift_right x (size x - sz) in
+    (* shift x left then right to remove the msb from rest *)
+    let rest = (shift_left x sz) in
+    let rest = shift_right rest sz in
+    set_size sz msb, set_size (size x - sz) rest
+;;
