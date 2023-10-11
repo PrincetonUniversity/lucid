@@ -100,7 +100,7 @@ let rec read_ids_of_exp exp : Cid.t list =
   match exp.e with 
   | EVar(cid) -> [cid]
   | EOp(_, args)
-  | ECall(_, args)
+  | ECall(_, args, _)
   | EHash(_, args) ->
     List.map read_ids_of_exp args |> List.flatten
   | EFlood(arg) -> read_ids_of_exp arg
@@ -140,7 +140,7 @@ let rec read_ids_of_stmt (stmt:CoreSyntax.statement) : Cid.t list =
   (* invalidate call _writes_ to its arg fields *)
   | SUnit(exp) -> (
     match exp.e with 
-    | ECall(fcn_cid, _) -> (
+    | ECall(fcn_cid, _, _) -> (
       match Cid.names fcn_cid with 
       | "Sys"::"invalidate"::_ -> []
       | _ -> read_ids_of_exp exp
@@ -179,7 +179,7 @@ let rec write_ids_of_stmt (stmt:CoreSyntax.statement) : (Cid.t list) =
   (* an invalidate call writes to its fields *)
   | SUnit(exp) -> (
     match exp.e with 
-    | ECall(fcn_cid, args) -> (
+    | ECall(fcn_cid, args, _) -> (
       match Cid.names fcn_cid with 
       | "Sys"::"invalidate"::_ -> (
         List.map (fun arg_exp -> 

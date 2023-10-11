@@ -116,7 +116,7 @@ let rec translate_exp (e : S.exp) : C.exp =
       C.EVal (C.vint (Z.to_int z) sz)
     | S.EVar cid -> C.EVar cid
     | S.EOp (op, es) -> C.EOp (translate_op op, List.map translate_exp es)
-    | S.ECall (cid, es) -> C.ECall (cid, List.map translate_exp es)
+    | S.ECall (cid, es, unordered) -> C.ECall (cid, List.map translate_exp es, unordered)
     | S.EHash (sz, es) -> C.EHash (translate_size sz, List.map translate_exp es)
     | S.EFlood e -> C.EFlood (translate_exp e)
     | ESizeCast _

@@ -638,7 +638,7 @@ let match_of_if_new exp s1 s2 =
     let stmt_list = unfold_stmts stmt in
     let branch_votes = CL.map 
       (fun stmt -> (match stmt.s with
-        | SUnit({e=ECall(_, [{e=EVal({v=VBool branch_bool})}])}) -> branch_bool
+        | SUnit({e=ECall(_, [{e=EVal({v=VBool branch_bool})}], _)}) -> branch_bool
         | _ -> error "[match_of_if_new] unexpected statement in branch of merged match"))
       stmt_list
     in

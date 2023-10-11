@@ -323,7 +323,7 @@ let rec enable_event_headers ev =
     | SGen(gty, exp) -> (
       (* ingress_out.foo.bar, [1, 2, 3] *)
       let ctor_cid, args = match exp.e with
-        | ECall(cid, args) -> cid, args
+        | ECall(cid, args, _) -> cid, args
         | _ -> error "[EliminateGenerates] event expression inside of a generate must be a constructor expression"
       in
       (* replace the generate statement with a sequence of assignments. *)
@@ -431,7 +431,7 @@ let rec enable_event_headers ev =
     | SGen(_, exp) -> (
       (* ingress_out.foo.bar, [1, 2, 3] *)
       let ctor_cid, args = match exp.e with
-        | ECall(cid, args) -> cid, args
+        | ECall(cid, args, _) -> cid, args
         | _ -> error "[EliminateGenerates] event expression inside of a generate must be a constructor expression"
       in    
       (* replace the generate statement with a sequence of assignments. *)

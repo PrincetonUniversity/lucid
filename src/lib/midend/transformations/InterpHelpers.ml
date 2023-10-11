@@ -133,7 +133,7 @@ let intwidth_of_exp (exp : exp) : int = intwidth_from_raw_ty exp.ety.raw_ty
 
 let args_of_exp exp =
   match exp.e with
-  | EOp (_, args) | ECall (_, args) | EHash (_, args) -> args
+  | EOp (_, args) | ECall (_, args, _) | EHash (_, args) -> args
   | _ -> []
 ;;
 
@@ -182,7 +182,7 @@ let is_atomic exp =
   (* ops are atomic if they are binary with all args immediates *)
   | EOp (_, args) -> CL.for_all is_immediate args && CL.length args <= 2
   (* calls are atomic if they have all immediate args *)
-  | EHash (_, args) | ECall (_, args) ->
+  | EHash (_, args) | ECall (_, args, _) ->
     CL.map is_immediate args |> CL.for_all identity
   (* a flood expression is atomic if its argument is an immediate *)
   | EFlood arg -> is_immediate arg
@@ -213,7 +213,7 @@ let replace_assign_rhs stmt exp =
 let replace_args exp new_args =
   match exp.e with
   | EOp (op, _) -> { exp with e = EOp (op, new_args) }
-  | ECall (id, _) -> { exp with e = ECall (id, new_args) }
+  | ECall (id, _, u) -> { exp with e = ECall (id, new_args, u) }
   | EHash (sz, _) -> { exp with e = EHash (sz, new_args) }
   | _ -> exp
 ;;
@@ -327,8 +327,8 @@ let rec replace_in_exp (exp : exp) (t : cid) (n : exp) : exp =
      | false -> exp)
   | { e = EOp (op, exps); _ } ->
     { exp with e = EOp (op, replace_in_exps exps t n) }
-  | { e = ECall (name, exps); _ } ->
-    { exp with e = ECall (name, replace_in_exps exps t n) }
+  | { e = ECall (name, exps, u); _ } ->
+    { exp with e = ECall (name, replace_in_exps exps t n, u) }
   | { e = EHash (sz, exps); _ } ->
     { exp with e = EHash (sz, replace_in_exps exps t n) }
   | _ -> exp

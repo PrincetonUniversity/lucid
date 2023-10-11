@@ -16,7 +16,7 @@ let pre_check ds =
     inherit [_] s_iter as super
     method! visit_exp _ exp = 
       match exp.e with
-      | ECall(cid, _) when (Cid.equal cid Payloads.payload_empty_cid) -> 
+      | ECall(cid, _, _) when (Cid.equal cid Payloads.payload_empty_cid) -> 
         CoreSyntax.error ("The Payload.empty() function is not supported on the tofino.")
       | _ -> super#visit_exp () exp
     end
@@ -37,11 +37,11 @@ let rec process ds =
         params
       method! visit_exp ctx exp = 
         match exp.e with
-        | ECall(cid, args) ->
+        | ECall(cid, args, u) ->
           (* delete any args with payload type *)
           let args = List.filter args ~f:(fun arg -> 
             not (InterpPayload.is_payload_ty arg.ety)) in
-          { exp with e = ECall(cid, args) }
+          { exp with e = ECall(cid, args, u) }
         | _ -> super#visit_exp ctx exp
     end
   in

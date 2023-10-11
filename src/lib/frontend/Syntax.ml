@@ -154,7 +154,7 @@ and e =
       z * size option (* Differs from VInt since size may be polymorphic *)
   | EVar of cid
   | EOp of op * exp list
-  | ECall of cid * exp list
+  | ECall of cid * exp list * bool (* true if its an unordered call *)
   | EHash of size * exp list
   | EFlood of exp (* Generate a group of all ports but one *)
   | ESizeCast of size * size (* Cast a size to int *)
@@ -450,7 +450,7 @@ let var_sp cid span = exp_sp (EVar cid) span
 let eint z size = exp (EInt (z, size))
 let eint_sp z size span = exp_sp (EInt (z, size)) span
 let op_sp op args span = exp_sp (EOp (op, args)) span
-let call_sp cid args span = exp_sp (ECall (cid, args)) span
+let call_sp cid args span = exp_sp (ECall (cid, args, false)) span
 let hash_sp size args span = exp_sp (EHash (size, args)) span
 let proj_sp e l span = exp_sp (EProj (e, l)) span
 let record_sp lst span = exp_sp (ERecord lst) span

@@ -242,9 +242,9 @@ let replacer =
     (* We replace tuple-type parameters to functions and events with
        one parameter for each tuple entry. So we need to adjust the
        arguments at the call site as well *)
-    method! visit_ECall env cid args =
+    method! visit_ECall env cid args unordered =
       let args = List.map (self#flatten env) args |> List.concat in
-      ECall (cid, args)
+      ECall (cid, args, unordered)
 
     (* Same as ECall *)
     method! visit_EHash env sz args =

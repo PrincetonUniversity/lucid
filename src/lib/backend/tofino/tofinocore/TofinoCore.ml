@@ -389,7 +389,7 @@ let id_of_generate statement =
   match statement.s with
   | SGen(_, exp) -> (
     match exp.e with
-    | ECall(cid, _) -> Cid.to_id cid
+    | ECall(cid, _, _) -> Cid.to_id cid
     | _ -> error "[id_of_generate] event variables are not yet supported in generates."
   )
   | _ -> error "[id_of_generate] expected generate statement."
@@ -418,7 +418,7 @@ let array_dimensions tds =
       | TDGlobal
           ( id
           , { raw_ty = TName (ty_cid, sizes, true); _ }
-          , { e = ECall (_, num_slots :: _) } ) ->
+          , { e = ECall (_, num_slots :: _, _) } ) ->
         (match Cid.names ty_cid |> List.hd with
          | "Array" ->
            let num_slots = InterpHelpers.int_from_exp num_slots in

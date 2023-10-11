@@ -168,8 +168,8 @@ let rec interp_exp env e =
     (match try_inline_variable env (Cid.to_id cid) with
      | Some e' -> { e with e = e' }
      | None -> e)
-  | ECall (cid, args) ->
-    { e with e = ECall (cid, List.map (interp_exp env) args) }
+  | ECall (cid, args, u) ->
+    { e with e = ECall (cid, List.map (interp_exp env) args, u) }
   | EHash (sz, args) ->
     { e with e = EHash (sz, List.map (interp_exp env) args) }
   | EFlood e' -> { e with e = EFlood (interp_exp env e') }
@@ -547,7 +547,7 @@ let remove_unused_variables stmt =
     let v =
       object
         inherit [_] s_iter
-        method! visit_ECall _ _ _ = acc := true
+        method! visit_ECall _ _ _ _ = acc := true
       end
     in
     v#visit_exp () e;

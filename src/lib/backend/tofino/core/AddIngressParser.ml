@@ -108,7 +108,7 @@ let inline_parser = object (_)
          match parser_block.pstep with
          | (PCall(exp), _) -> (
             match exp.e with 
-            | ECall(called_cid, eargs) -> (
+            | ECall(called_cid, eargs, _) -> (
                (* first replace params with args *)
                let params, called_body_block = CidMap.find called_cid ctx in
                let (subst_map: e CidMap.t) = List.fold_left2
@@ -247,7 +247,7 @@ let direct_call_parser_block parser_block =
    let {pactions=acns_spans; pstep=(step, _);} = parser_block in
    let acns, _ = List.split acns_spans in
    match acns, step with 
-   | [], PCall({e=ECall(cid, _); _}) when (Id.equal Builtins.lucid_parse_id (Cid.to_id cid)) -> true
+   | [], PCall({e=ECall(cid, _, _); _}) when (Id.equal Builtins.lucid_parse_id (Cid.to_id cid)) -> true
    | _ -> false 
 ;;
 (* a direct call parser branch is one that matches a single variable and 
@@ -263,7 +263,7 @@ let never_calls_lucid_parser branch =
       inherit [_] s_iter as super
       method! visit_PCall _ exp = 
          match exp.e with 
-            | ECall(cid, _)
+            | ECall(cid, _, _)
                when (Id.equal Builtins.lucid_parse_id (Cid.to_id cid)) -> 
                   call_found := true
             | _ -> ()
@@ -324,7 +324,7 @@ let check_valid_entry_parse_block parse_block : lucid_entry_block_ty =
    let acns, _ = List.split acns_spans in 
    match acns, step with
    (* parser main() { do_lucid_parsing(); } *)
-   | [], PCall({e=ECall(cid, _); _}) when cid_is_ingress_port cid -> 
+   | [], PCall({e=ECall(cid, _, _); _}) when cid_is_ingress_port cid -> 
       CallAlways
    (* parser main() { match ingress_port with <branches>, where branches 
       either directly call the lucid parser or never call the lucid parser } *)

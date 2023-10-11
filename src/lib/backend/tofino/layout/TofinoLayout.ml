@@ -365,7 +365,7 @@ let hashers_of_table_stmt salu_idx_vars stmt =
   let v = object
     inherit [_] s_iter as super
     (* count hashes in array ops *)
-    method! visit_ECall _ fid args = 
+    method! visit_ECall _ fid args _ = 
       match (Cid.names fid) with
         | ["Sys"; "random"] -> (
           error "todo: count random as using hash unit"

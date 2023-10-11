@@ -17,7 +17,7 @@ let arrays_of_exp exp =
     Caml.String.concat "." @@ Cid.names cid 
   in
   match exp.e with 
-  | ECall(fid, args) -> (
+  | ECall(fid, args, _) -> (
     match (string_of_fcncid fid) with 
       | "Array.get"| "Array.getm" | "Array.set"
       | "Array.setm" | "Array.update" 
@@ -77,7 +77,7 @@ let sblocks_of_stmt arr_info stmt =
 let rec hashers_of_exp exp = 
   match exp.e with 
   | EOp(_, es) -> List.map hashers_of_exp es |> List.flatten
-  | ECall(fcn_cid, es) -> (
+  | ECall(fcn_cid, es, _) -> (
     match (Cid.names fcn_cid) with
     | "Sys"::"random"::_ -> 
       exp::(List.map hashers_of_exp es |> List.flatten)
@@ -154,7 +154,7 @@ let calc_salu_hash_bits ty = min 22 (ty_to_size ty)
 (* count the number of hash alus needed to implement an expression *)
 let rec hash_ops_of_exp exp = match exp.e with 
 | EOp(_, es) -> hash_ops_of_exps es
-| ECall(fcn_cid, es) -> (
+| ECall(fcn_cid, es, _) -> (
   match (Cid.names fcn_cid) with
     | "Sys"::"random"::_ -> 
       calc_hash_bits_block exp.ety + (hash_ops_of_exps es)
@@ -269,7 +269,7 @@ let rec hash_ops_of_stmt statement_cache stmt =
 (* array address expressions *)
 let array_addrs_of_exp exp = 
   match exp.e with 
-  | ECall(fid, args) -> (
+  | ECall(fid, args, _) -> (
     match (Cid.names fid) with
     (* for any array function, get the index/address expression,
        which is always the 2nd argument *)

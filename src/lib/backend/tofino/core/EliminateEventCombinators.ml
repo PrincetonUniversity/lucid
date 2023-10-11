@@ -15,7 +15,7 @@ let rec process ds =
       method! visit_exp ctx exp =
         let exp = super#visit_exp ctx exp in
         match exp.e with
-        | ECall(fcn_cid, args) -> (
+        | ECall(fcn_cid, args, _) -> (
           match Cid.names fcn_cid with
           | "Event"::"delay"::_ -> (
             warn@@"removing event delay combinator in ("^(CorePrinting.exp_to_string exp)^" -- not yet supported";

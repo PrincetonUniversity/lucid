@@ -137,7 +137,7 @@ let inliner =
 
     method! visit_exp env e =
       match e.e with
-      | ECall (cid, es) ->
+      | ECall (cid, es, u) ->
         let es = List.map (self#visit_exp env) es in
         (* case: cid is a function *)
         if CidMap.mem cid env.funcs
@@ -187,7 +187,7 @@ let inliner =
           inlined_exp)
         else
           (* Not user-defined function; we don't have to inline it *)
-          { e with e = ECall (cid, es) }
+          { e with e = ECall (cid, es, u) }
       | _ ->
         let res = super#visit_exp env e in
         res

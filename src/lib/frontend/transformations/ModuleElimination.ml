@@ -70,14 +70,14 @@ let subst =
         in
         STableInstall (etbl, entries)
 
-      method! visit_ECall env x args =
+      method! visit_ECall env x args u =
         let args = List.map (self#visit_exp env) args in
         let x =
           match CidMap.find_opt x env.vars with
           | None -> x
           | Some x' -> Id x'
         in
-        ECall (x, args)
+        ECall (x, args, u)
     end
   in
   v

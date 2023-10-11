@@ -303,7 +303,7 @@ let arrs_in_prog tds =
   let rec _arrs_in_prog (tds:tdecls) = 
     match tds with 
     | [] -> []
-    | {td=TDGlobal(id, _, {e=ECall(constr_cid, _); ety=ety;}); _}::ds -> 
+    | {td=TDGlobal(id, _, {e=ECall(constr_cid, _, _); ety=ety;}); _}::ds -> 
       if (MiscUtils.contains constructor_cids constr_cid)
       then ((id, ety)::(_arrs_in_prog ds))
       else (_arrs_in_prog ds)
@@ -354,7 +354,7 @@ let array_user_vars tds arr_id =
     method! visit_exp ctx exp = 
       super#visit_exp ctx exp;
       match exp.e with 
-      | ECall(fcnid, args) -> (
+      | ECall(fcnid, args, _) -> (
         if (call_accesses_arr arr_id fcnid args)
         then (
           let inputs = memop_args_of_array_call fcnid args in
@@ -1393,7 +1393,7 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
    let rec _arrs_in_prog (tds:tdecls) = 
      match tds with 
      | [] -> []
-     | {td=TDGlobal(id, _, {e=ECall(constr_cid, _); _}); _}::ds -> 
+     | {td=TDGlobal(id, _, {e=ECall(constr_cid, _, _); _}); _}::ds -> 
        if (MiscUtils.contains constructor_cids constr_cid)
        then (id::(_arrs_in_prog ds))
        else (_arrs_in_prog ds)
@@ -1419,7 +1419,7 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
    (* get the arguments of the array call that are passed to the memop *)
    let memop_args_of_array_call exp =
      match exp.e with 
-     | ECall(fcnid, args) -> (
+     | ECall(fcnid, args, _) -> (
        match ((string_of_fcncid fcnid), args) with
        | "Array.get", _ -> []
        | "Array.getm", [_; _; _; arg1] -> [arg1]
@@ -1465,7 +1465,7 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
          method! visit_exp ctx exp = 
            super#visit_exp ctx exp;
            match exp.e with 
-           | ECall(fcnid, args) -> (
+           | ECall(fcnid, args, _) -> (
              if (call_accesses_arr arrid fcnid args)
              then (
                match nth_memop_var_arg exp nth with 
@@ -1525,7 +1525,7 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
    let replace_var_arg_with_tmp arr_id nth tmp_id exp =
      let tmp_cid = Cid.id tmp_id in
      match exp.e with
-     | ECall(fid, args) -> (
+     | ECall(fid, args, u) -> (
        if (call_accesses_arr arr_id fid args)
        then (
          let unique_var_args = memop_var_args_of_array_call exp |> MiscUtils.unique_list_of in
@@ -1537,7 +1537,7 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
          (* replace all instances of that variable with tmp_cid *)
            let args = CL.map (replace_cid_in_exp tgt_cid tmp_cid) args in
            let set_stmt = sassign tmp_cid (var_sp tgt_cid arg_ty Span.default) in 
-           Some(set_stmt, {exp with e=ECall(fid, args)})
+           Some(set_stmt, {exp with e=ECall(fid, args,u)})
          )
        )
        else (None)

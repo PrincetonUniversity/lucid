@@ -54,7 +54,7 @@ let array_sizes ds : bool =
         | DGlobal
             ( id
             , { raw_ty = TName (ty_cid, sizes, true); _ }
-            , { e = ECall (_, num_slots :: _) } ) ->
+            , { e = ECall (_, num_slots :: _, _) } ) ->
           (match Cid.names ty_cid |> List.hd with
            | "Array" ->
              let slot_sz = List.hd sizes in
@@ -288,8 +288,8 @@ let align_ecalls ds =
       method! visit_exp ctx exp =
         let exp = super#visit_exp ctx exp in
         match exp.ety.raw_ty, exp.e with
-        | TEvent, ECall (ev_cid, args) ->
-          { exp with e = ECall (ev_cid, align_args args) }
+        | TEvent, ECall (ev_cid, args, u) ->
+          { exp with e = ECall (ev_cid, align_args args, u) }
         | _ -> exp
     end
   in

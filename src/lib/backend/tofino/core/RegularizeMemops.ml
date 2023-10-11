@@ -232,7 +232,7 @@ let regularize_array_calls tds =
         method! visit_exp ctx exp = 
           let exp = super#visit_exp ctx exp in 
           let results = match exp.e with 
-            | ECall(fcn_cid, args) -> (
+            | ECall(fcn_cid, args, _) -> (
               match (string_of_fcncid fcn_cid) with 
               | "Array.getm" -> (
                 let aid, idx, get_memop, get_arg = match args with
@@ -258,7 +258,7 @@ let regularize_array_calls tds =
                   (CS.default_vint memop_size |> value_to_exp)
                   ]
                 in
-                let complex_call = CS.ECall ((Cid.create ["Array"; "update_complex"]), complex_args) in 
+                let complex_call = CS.ECall ((Cid.create ["Array"; "update_complex"]), complex_args, false) in 
                 Some ({exp with e = complex_call;}, complex_memop, old_memop_ids)
               )
             | "Array.get" ->  
@@ -283,7 +283,7 @@ let regularize_array_calls tds =
                   (CS.default_vint memop_size |> value_to_exp)
                   ]
               in
-              let complex_call = CS.ECall ((Cid.create ["Array"; "update_complex"]), complex_args) in 
+              let complex_call = CS.ECall ((Cid.create ["Array"; "update_complex"]), complex_args, false) in 
               Some ({exp with e = complex_call;}, complex_memop, [])
               | "Array.setm" -> 
                 let aid, idx, set_memop, set_arg = match args with
@@ -312,7 +312,7 @@ let regularize_array_calls tds =
                   (CS.default_vint memop_size |> value_to_exp)
                   ]
                 in
-                let complex_call = CS.ECall ((Cid.create ["Array"; "update_complex"]), complex_args) in 
+                let complex_call = CS.ECall ((Cid.create ["Array"; "update_complex"]), complex_args, false) in 
                 Some ({exp with e = complex_call;}, complex_memop, old_memop_ids)
               | "Array.set" -> 
                 let aid, idx, set_arg = match args with
@@ -336,7 +336,7 @@ let regularize_array_calls tds =
                     (CS.default_vint memop_size |> value_to_exp)
                     ]
                 in
-                let complex_call = CS.ECall ((Cid.create ["Array"; "update_complex"]), complex_args) in 
+                let complex_call = CS.ECall ((Cid.create ["Array"; "update_complex"]), complex_args, false) in 
                 Some ({exp with e = complex_call;}, complex_memop, [])
 
               | "Array.update" -> (
@@ -366,7 +366,7 @@ let regularize_array_calls tds =
                   (CS.default_vint memop_size |> value_to_exp)
                   ]
                 in
-                let complex_call = CS.ECall ((Cid.create ["Array"; "update_complex"]), complex_args) in 
+                let complex_call = CS.ECall ((Cid.create ["Array"; "update_complex"]), complex_args, false) in 
                 Some ({exp with e = complex_call;}, complex_memop, old_memop_ids)
               )
               | _ -> None
