@@ -117,18 +117,34 @@ let extract_variables ?(acc = IdSet.empty) exp =
   !acc
 ;;
 
+let contains_hash_or_call exp =
+  let ret = ref false in
+  let checker =
+    object
+      inherit [_] s_iter as super
+      method! visit_EHash _ _ _ = ret := true
+      method! visit_ECall _ _ _ = ret := true
+    end
+  in
+  checker#visit_exp () exp;
+  !ret
+;;
+
 (* Create the appropriate type of partial value to represent an expression.
    Always return unknown for hashes and function values to avoid inlining them *)
 let extract_partial_value (env : env) exp =
-  match exp.e with
-  | EVal v -> PValue v
-  | EHash _ | ECall _ -> new_unknown ()
-  | _ ->
-    let vars = extract_variables exp in
-    let var_values =
-      List.map (fun id -> id, IdMap.find id env) (IdSet.to_list vars)
-    in
-    PExp (exp, var_values)
+  if contains_hash_or_call exp
+  then new_unknown ()
+  else (
+    match exp.e with
+    | EVal v -> PValue v
+    | EHash _ | ECall _ -> new_unknown ()
+    | _ ->
+      let vars = extract_variables exp in
+      let var_values =
+        List.map (fun id -> id, IdMap.find id env) (IdSet.to_list vars)
+      in
+      PExp (exp, var_values))
 ;;
 
 (* Replace the variable with its definition in the environment, if allowable.
@@ -358,6 +374,7 @@ let bitmatch bits n =
   in
   aux bits n
 ;;
+
 let matches_pat vs ps =
   if ps = [PWild]
   then true
@@ -374,35 +391,39 @@ let matches_pat vs ps =
       ps
 ;;
 
-let exp_to_value_opt exp = match exp.e with 
-  | EVal(value) -> Some (value)
+let exp_to_value_opt exp =
+  match exp.e with
+  | EVal value -> Some value
   | _ -> None
 ;;
+
 let rec exp_to_values exps =
-  match exps with 
-  | [] -> Some([])
-  | exp::exps -> 
+  match exps with
+  | [] -> Some []
+  | exp :: exps ->
     let value = exp_to_value_opt exp in
     let values = exp_to_values exps in
-    match (value, values) with 
-    | (Some(value), Some(values)) -> Some(value::values)
-    | _ -> None
+    (match value, values with
+     | Some value, Some values -> Some (value :: values)
+     | _ -> None)
 ;;
 
-let elim_const_smatch stmt = 
+let elim_const_smatch stmt =
   match stmt.s with
-  | SMatch(es, bs) -> (
+  | SMatch (es, bs) ->
     let v_opts = exp_to_values es in
-    match v_opts with 
-      | None -> stmt
-      | Some(vs) ->       
-        let first_match =
-          try List.find (fun (pats, _) -> matches_pat vs pats) bs with
-          | _ -> error "[PartialInterpretation.elim_const_smatch] Match statement did not match any branch!"
-        in
-        let stmt' = snd first_match in
-        stmt'
-  )
+    (match v_opts with
+     | None -> stmt
+     | Some vs ->
+       let first_match =
+         try List.find (fun (pats, _) -> matches_pat vs pats) bs with
+         | _ ->
+           error
+             "[PartialInterpretation.elim_const_smatch] Match statement did \
+              not match any branch!"
+       in
+       let stmt' = snd first_match in
+       stmt')
   | _ -> stmt
 ;;
 
@@ -414,8 +435,9 @@ let rec interp_stmt env s : statement * env =
    | _ -> print_endline @@ "Interping " ^ CorePrinting.stmt_to_string s); *)
   let interp_exp = interp_exp env in
   let should_inline () =
-    match (Pragma.find_sprag "noinline" [] s.spragmas) with
-    | Some(_) -> false    | _ -> true
+    match Pragma.find_sprag "noinline" [] s.spragmas with
+    | Some _ -> false
+    | _ -> true
   in
   match s.s with
   | SNoop -> s, env
@@ -439,17 +461,15 @@ let rec interp_stmt env s : statement * env =
     let s1, env1 = interp_stmt env s1 in
     let s2, env2 = interp_stmt env1 s2 in
     (* make sure to carry the pragmas and other annotations on statements *)
-    let stmt' = 
-      if (s1.s = SNoop) 
-        then 
-          s2 
-        else 
-          if (s2.s = SNoop) 
-          then s1 
-          else { s with s = SSeq (s1, s2)}
+    let stmt' =
+      if s1.s = SNoop
+      then s2
+      else if s2.s = SNoop
+      then s1
+      else { s with s = SSeq (s1, s2) }
     in
     stmt', env2
-    (* let s' =
+  (* let s' =
       if s1.s = SNoop then s2.s else if s2.s = SNoop then s1.s else SSeq (s1, s2)
     in
     { s with s = s' }, env2 *)
@@ -479,22 +499,21 @@ let rec interp_stmt env s : statement * env =
     in
     { s with s = STableMatch { tm with keys; args } }, env
   (* Cases where we branch *)
-
-  (* jsonch 8/23 -- for now, don't inline into certain if expressions. 
-      Inlining, in combination with sub-optimal placement of 
-      precompute statements in the tofino backend 
-      can add significant overheads to programs 
+  (* jsonch 8/23 -- for now, don't inline into certain if expressions.
+      Inlining, in combination with sub-optimal placement of
+      precompute statements in the tofino backend
+      can add significant overheads to programs
       where if expressions are explicitly precomputed.
-      We don't inline into if expression that test a variable 
+      We don't inline into if expression that test a variable
       against 0, to give users a workaround. *)
-  (* jsonch 8/23 -- with the hoisting pass added, we should 
+  (* jsonch 8/23 -- with the hoisting pass added, we should
      be able to re-enable this. *)
-  (* | SIf (test, s1, s2) 
-      when (match test.e with 
+  (* | SIf (test, s1, s2)
+      when (match test.e with
         | EOp(Eq, [{e=EVar(_)}; {e=EVal(_)}]) -> true
         | _ -> false
       ) ->
-    (* only inline if it results in a compile-time 
+    (* only inline if it results in a compile-time
        delete-able branch. *)
     let test' = interp_exp test in
     (match test' with
@@ -526,7 +545,7 @@ let rec interp_stmt env s : statement * env =
       |> List.split
     in
     let base_stmt = { s with s = SMatch (es, branches) } in
-    (* if the match statement's key expression is a constant, 
+    (* if the match statement's key expression is a constant,
        compute the branch and replace the match statement with it *)
     elim_const_smatch base_stmt, merge_envs (env :: envs)
 ;;
@@ -585,7 +604,9 @@ let remove_unused_variables stmt =
       (* Same as SLocal but we don't unalive the variable if it was already live *)
       let live_vars', stmt' =
         if IdSet.mem (Cid.to_id id) live_vars || cannot_remove_e e
-        then extract_variables ~acc:live_vars e, stmt
+        then (
+          let live_vars = IdSet.add (Cid.to_id id) live_vars in
+          extract_variables ~acc:live_vars e, stmt)
         else live_vars, { stmt with s = SNoop }
       in
       live_vars', stmt'
