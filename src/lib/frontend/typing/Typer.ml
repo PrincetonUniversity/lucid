@@ -76,6 +76,20 @@ let infer_pattern_size env sp p =
   | PBit ps -> IConst (List.length ps)
 ;;
 
+(* cast a function as effectless *)
+let rec remove_effects ty = 
+  let v = object (_) 
+    inherit [_] s_map
+    method! visit_func_ty _ func_ty = 
+      (* drop any constraints on the function *)
+      { func_ty with 
+        constraints = ref [];
+        end_eff = func_ty.start_eff;}
+  end
+  in
+  v#visit_ty () ty
+;;
+
 let rec infer_exp (env : env) (e : exp) : env * exp =
   (* print_endline @@ "Inferring " ^ exp_to_string e; *)
   match e.e with
@@ -117,6 +131,12 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
       (* Get type of f as if we used the var rule for the function *)
       infer_exp env { e with e = EVar f } |> textract
     in
+    (* if we are in unordered mode, cast everything as effectless *)
+    let inferred_fty = if (Cmdline.cfg.unordered) then 
+      remove_effects inferred_fty
+      else inferred_fty 
+    in
+  
     let env, inferred_args = infer_exps env args in
     let fty : func_ty =
       { arg_tys = List.map (fun arg -> Option.get arg.ety) inferred_args
