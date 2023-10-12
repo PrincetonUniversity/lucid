@@ -348,7 +348,7 @@ let printf_replace vs (s : string) : string =
 
 let printf_string swid str = 
   if Cmdline.cfg.json || Cmdline.cfg.interactive
-    then InterpJson.interp_report_json str str (Some swid)
+    then InterpJson.interp_report_json "printf" str (Some swid)
     else str    
 
 let partial_interp_exps nst swid env exps =

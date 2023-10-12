@@ -17,7 +17,7 @@ fun int get_output_port(int current_switch, int dst) {
 handle ip_pkt(int src, int dst) {
 	// ingress_port 
 	int out_port = get_output_port(self, dst);
-	// printf ("packet entered switch %d from port %d. Forwarding out of port: %d", self, ingress_port, out_port);
+	printf ("packet entered switch %d from port %d. Forwarding out of port: %d", self, ingress_port, out_port);
 	generate_port(out_port, ip_pkt(src, dst));
 
 	generate(count_src(src));
@@ -31,6 +31,6 @@ memop incr(int mv, int lv) {
 }
 handle count_src(int src) {
 	int<4> h = hash<4>(7, src);
-	// printf("counting packet with src=%d at switch %d", src, self);
+	printf("counting packet with src=%d at switch %d", src, self);
 	Array.setm(src_cts, h, incr, 0);
 }

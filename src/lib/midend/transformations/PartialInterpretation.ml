@@ -123,7 +123,7 @@ let contains_hash_or_call exp =
     object
       inherit [_] s_iter as super
       method! visit_EHash _ _ _ = ret := true
-      method! visit_ECall _ _ _ = ret := true
+      method! visit_ECall _ _ _ _= ret := true
     end
   in
   checker#visit_exp () exp;
