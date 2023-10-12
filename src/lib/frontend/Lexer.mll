@@ -63,6 +63,7 @@ rule token = parse
   | "return"          { RETURN (position lexbuf)}
   | "size"            { SIZE (position lexbuf) }
   | "global"          { GLOBAL (position lexbuf) }
+  | "unordered"       { UNORDERED (position lexbuf) }
   | "const"           { CONST (position lexbuf) }
   | "extern"          { EXTERN (position lexbuf) }
   | "void"            { VOID (position lexbuf) }

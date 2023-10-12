@@ -76,6 +76,20 @@ let infer_pattern_size env sp p =
   | PBit ps -> IConst (List.length ps)
 ;;
 
+(* cast a function as effectless *)
+let rec remove_effects ty = 
+  let v = object (_) 
+    inherit [_] s_map
+    method! visit_func_ty _ func_ty = 
+      (* drop any constraints on the function *)
+      { func_ty with 
+        constraints = ref [];
+        end_eff = func_ty.start_eff;}
+  end
+  in
+  v#visit_ty () ty
+;;
+
 let rec infer_exp (env : env) (e : exp) : env * exp =
   (* print_endline @@ "Inferring " ^ exp_to_string e; *)
   match e.e with
@@ -112,11 +126,18 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
     let env, inf_e, inf_ety = infer_exp env e1 |> textract in
     unify_ty e.espan inf_ety (mk_ty @@ TInt (fresh_size ()));
     env, { e with e = EFlood inf_e; ety = Some (mk_ty @@ TGroup) }
-  | ECall (f, args) ->
+  | ECall (f, args, unordered) ->
     let _, _, inferred_fty =
       (* Get type of f as if we used the var rule for the function *)
       infer_exp env { e with e = EVar f } |> textract
     in
+    (* if we are in unordered mode, cast everything as effectless *)
+    (* let inferred_fty = if (Cmdline.cfg.unordered) then  *)
+    let inferred_fty = if (unordered) then 
+        remove_effects inferred_fty
+      else inferred_fty 
+    in
+  
     let env, inferred_args = infer_exps env args in
     let fty : func_ty =
       { arg_tys = List.map (fun arg -> Option.get arg.ety) inferred_args
@@ -133,7 +154,7 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
       check_constraints e.espan "Function call" env fty.end_eff
       @@ !(fty.constraints)
     in
-    new_env, { e with e = ECall (f, inferred_args); ety = Some fty.ret_ty }
+    new_env, { e with e = ECall (f, inferred_args, unordered); ety = Some fty.ret_ty }
   | EProj (e, label) ->
     let env, inf_e = infer_exp env e in
     let expected_ty, entries =
@@ -1125,7 +1146,7 @@ let infer_memop env params mbody =
     in
     let extern_calls =
       let unpack_ecall = function
-        | { e = ECall (cid, es) } -> cid, es
+        | { e = ECall (cid, es, _) } -> cid, es
         | _ -> failwith "impossible"
       in
       List.map
@@ -1220,7 +1241,7 @@ let rec infer_parser_step env (step, span) =
   | PCall exp ->
     (* Similar to checking an ECall, but we look for the function in the parser environment *)
     (match exp.e with
-     | ECall (cid, args) ->
+     | ECall (cid, args, _) ->
        let params = lookup_parser span env cid in
        let _, inf_args = infer_exps env args in
        List.iter2

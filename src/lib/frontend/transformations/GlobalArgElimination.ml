@@ -258,14 +258,14 @@ let replace_uses (event_mappings : event_mapping list IdMap.t) ds =
     object (self)
       inherit [_] s_map as super
 
-      method! visit_ECall dummy cid args =
+      method! visit_ECall dummy cid args u =
         match cid with
         (* At least for now, events never have Compound ids *)
-        | Compound _ -> ECall (cid, List.map (self#visit_exp dummy) args)
+        | Compound _ -> ECall (cid, List.map (self#visit_exp dummy) args, u)
         | Id id ->
           (match IdMap.find_opt id event_mappings with
            (* Check to see if we've replaced this event *)
-           | None -> ECall (cid, List.map (self#visit_exp dummy) args)
+           | None -> ECall (cid, List.map (self#visit_exp dummy) args, u)
            | Some mappings ->
              let global_arg_values, other_args =
                partition_map
@@ -300,7 +300,7 @@ let replace_uses (event_mappings : event_mapping list IdMap.t) ds =
                    if Id.name new_id = expected_name then Some new_id else None)
                  mappings
              in
-             ECall (Id new_id, List.map (self#visit_exp dummy) other_args))
+             ECall (Id new_id, List.map (self#visit_exp dummy) other_args, u))
     end
   in
   v#visit_decls () ds
@@ -348,7 +348,7 @@ let deduplicate (event_mapping : event_mapping list IdMap.t) ds =
     object (self)
       inherit [_] s_iter as super
 
-      method! visit_ECall dummy cid args =
+      method! visit_ECall dummy cid args _ =
         List.iter (self#visit_exp dummy) args;
         don't_remove := CidSet.add cid !don't_remove
     end

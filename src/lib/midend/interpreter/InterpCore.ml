@@ -222,7 +222,7 @@ let rec interp_exp (nst : State.network_state) swid locals e : 'a InterpSyntax.i
   | EOp (op, es) ->
     let vs = interp_exps es in
     V (interp_op op vs)
-  | ECall (cid, es) ->
+  | ECall (cid, es, _) ->
     let vs = interp_exps es in
     (match lookup cid with
      | V _ ->
@@ -634,7 +634,7 @@ let _interp_dglobal (nst : State.network_state) swid id ty e =
   in
   let args =
     match e.e with
-    | ECall (_, args) -> args
+    | ECall (_, args, _) -> args
     | _ -> failwith "Bad constructor"
   in
   let new_p =
@@ -822,7 +822,7 @@ and interp_parser_step nst swid payload_id locals parser_step =
     )
     | PCall(exp) -> (
         match exp.e with 
-        | ECall(cid, args) -> (
+        | ECall(cid, args, _) -> (
           (* a call to another parser. *)
           (* construct ival arguments *)
           let args = 

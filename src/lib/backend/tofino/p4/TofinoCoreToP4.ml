@@ -90,7 +90,7 @@ let translate_pat pat =
 ;;
 let translate_sunit_ecall stmt =
   match stmt.s with 
-  | SUnit({e=ECall(acn_id, _); _}) -> sunit (ecall acn_id [])
+  | SUnit({e=ECall(acn_id, _, _); _}) -> sunit (ecall acn_id [])
   | _ -> error "[translate_branch] branch statement must be a method call to a labeled block, which represents an action"
 ;;
 let translate_branch complete_branches 
@@ -256,7 +256,7 @@ let fst_snd ((_, y), _) = y
 
 let rec translate_exp (prog_env:prog_env) exp : (T.decl list * T.expr) * prog_env =
   match exp.e with 
-  | ECall(fcn_cid, args) ->  translate_ecall prog_env fcn_cid args
+  | ECall(fcn_cid, args, _) ->  translate_ecall prog_env fcn_cid args
   | CS.EHash (size, args) -> translate_hash prog_env size args 
   | CS.EVal v -> 
     ([], T.eval_ty_sp (translate_value v.v) (translate_ty exp.ety) exp.espan), prog_env
@@ -754,7 +754,7 @@ let stmt_to_table env (_:pragma) (ignore_pragmas: (id * pragma) list) (tid, stmt
   in *)
   let action_cid_of_branch (_, stmt) =
     match stmt.s with
-      | SUnit({e=ECall(acn_id, _); _}) -> acn_id  
+      | SUnit({e=ECall(acn_id, _, _); _}) -> acn_id  
       | _ -> error "[action_id_of_branch] branch does not call an action function"
   in
   match stmt.s with
@@ -1497,7 +1497,7 @@ let translate_parser denv parser =
       smatch exps' branches'
     )
     | PGen _ -> error "[translate_parser_step] pgens should have been elminiateasd"
-    | PCall({e=CS.ECall(fcid, _)}) -> 
+    | PCall({e=CS.ECall(fcid, _, _)}) -> 
       if ((Cid.names fcid |> List.hd) = "exit")
         then transition_accept
         else error "[translate_parser_step] the only supported call is to exit/accept"
@@ -1605,7 +1605,7 @@ let translate_tdecl (denv : translate_decl_env) tdecl : (translate_decl_env) =
     | TName(tcid, [cell_size], true) -> (
         let module_name = List.hd (Cid.names tcid) in 
         let len, default_opt = match exp.e with 
-          | ECall(_, args) -> (
+          | ECall(_, args, _) -> (
             match (translate_exps denv.penv args |> fst_snd) with 
             | [elen; edefault] -> elen, Some(edefault)
             | [elen] -> elen, None

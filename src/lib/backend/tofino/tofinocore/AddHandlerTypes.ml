@@ -103,7 +103,7 @@ let derive_output_event (ctx:ctx) (hdl_id : id) (hdl_body:statement) : event =
   (* At this point, each generate expression should be an ecall, where the id 
      is the id of the event that it generates. We get that list of event ids. *)
   let event_ids = List.map (fun (_, exp) -> match exp.e with
-    | ECall (cid, _) -> Cid.to_id cid
+    | ECall (cid, _, _) -> Cid.to_id cid
     | _ -> error "[addHandlerTypes.derive_output_type] generate expression should be an ecall") 
     generates 
   in
@@ -332,13 +332,13 @@ let scope_event_constructors (output_event : event) (hdl_body : statement) =
          (type: event; variant: ECall(evcid, evargs)); *)
       let econs_transformer exp = 
         match exp.e, exp.ety.raw_ty with
-        | (ECall(evcid, evargs), TEvent) -> (
+        | (ECall(evcid, evargs, u), TEvent) -> (
           (* this is an event constructor. The new name is 
              the old name, with the output event id prefixed. *)
           let evcid' = Cid.compound (id_of_event output_event) evcid in
           (* check to make sure the new name is valid *)
           if (ensure_event_defines_econs output_event evcid')
-            then {exp with e=ECall(evcid', evargs)}
+            then {exp with e=ECall(evcid', evargs, u)}
             else error "[addHandlerTypes.scope_event_constructors] event constructor not defined in output event."
         )
         (* non-event-constructor expressions: do nothing. *)

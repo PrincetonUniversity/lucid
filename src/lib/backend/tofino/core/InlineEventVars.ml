@@ -155,7 +155,7 @@ let inline_event_vars (ds:decls) =
           | TEvent -> (
             match exp.e with 
             (* set event var to value --  bind *)
-            | ECall(ev_cid, ev_args) -> (
+            | ECall(ev_cid, ev_args, u) -> (
               (* create new variables that are copies of args 
                  at event var decl time. Create var exps and assign stmts. *)
               let ev_args, arg_assignments = List.mapi
@@ -169,7 +169,7 @@ let inline_event_vars (ds:decls) =
               |> List.split
               in
               (* use copy variables as event arguments *)
-              let exp = {exp with e=ECall(ev_cid, ev_args)} in 
+              let exp = {exp with e=ECall(ev_cid, ev_args, u)} in 
               (* bind the updated event exp *)
               ev_calls := (cid, exp)::(!ev_calls);
               (* return statements to set copy variables instead of setting event*)
@@ -194,7 +194,7 @@ let inline_event_vars (ds:decls) =
           | TEvent -> (
             match exp.e with 
             (* set event var to value --  bind *)
-            | ECall(ev_cid, ev_args) -> (
+            | ECall(ev_cid, ev_args, u) -> (
               (* create new variables that are copies of args 
                  at event var decl time. Create var exps and assign stmts. *)
               let ev_args, arg_assignments = List.mapi
@@ -208,7 +208,7 @@ let inline_event_vars (ds:decls) =
               |> List.split
               in
               (* use copy variables as event arguments *)
-              let exp = {exp with e=ECall(ev_cid, ev_args)} in 
+              let exp = {exp with e=ECall(ev_cid, ev_args, u)} in 
               (* bind the updated event exp *)
               ev_calls := (cid, exp)::(!ev_calls);
               (* return statements to set copy variables instead of setting event*)
@@ -308,7 +308,7 @@ let empty_ctx = {event_constrs = []; event_vars = []};;
 
 let evconstr_of_exp ctx exp = 
   match exp.e with 
-  | ECall(cid, args) -> (
+  | ECall(cid, args, _) -> (
     match List.assoc_opt cid ctx.event_constrs with
     | Some(constr) -> Some(constr, args)
     | None -> None
@@ -432,7 +432,7 @@ let evconstr_num ctx constr_cid =
 let rec inline_stmt ctx stmt = 
   let elim_ev_var_update cid exp = 
     match exp.ety.raw_ty, exp.e  with
-    | TEvent, ECall(constr_cid, args) -> 
+    | TEvent, ECall(constr_cid, args, _) -> 
       (* update the context, adding the constructor to the event *)
       let ctx = add_constr ctx cid constr_cid in
       (* set tag and params from constructor  *)

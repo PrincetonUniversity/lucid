@@ -241,7 +241,7 @@ let check_payloads ds =
 
       method! visit_exp () e =
         match e.e with
-        | ECall (cid, args) ->
+        | ECall (cid, args, _) ->
           List.iter (self#visit_exp ()) args;
           if in_parser && Cid.equal cid Payloads.payload_empty_cid
           then

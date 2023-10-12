@@ -47,7 +47,7 @@ let exp_to_arrmeta id exp =
     name;
     compiled_cid = (Cid.id id);
     length = (match exp.e with
-      | ECall(_, len_exp::_) -> exp_to_int len_exp
+      | ECall(_, len_exp::_, _) -> exp_to_int len_exp
       | _ -> error "[dir_of_decls] wrong form");
     cell_size = [arrconstr_to_sz exp];}
   in
@@ -116,7 +116,7 @@ let core_exp_to_arrmeta id (exp:C.exp) =
   in
   let compiled_cid = (Cid.id id) in
   let length = (match exp.e with
-    | ECall(_, len_exp::_) -> C.exp_to_int len_exp
+    | ECall(_, len_exp::_, _) -> C.exp_to_int len_exp
     | _ -> error "[core_exp_to_arrmeta] array constructor has wrong form")
   in
   let cell_size = match exp.ety.raw_ty with

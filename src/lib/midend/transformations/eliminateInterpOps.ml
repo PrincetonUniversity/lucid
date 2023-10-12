@@ -26,7 +26,7 @@ let eliminate_prog ds =
 
       method! visit_SUnit _ unit_exp =
         match unit_exp.e with
-        | ECall (cid, _) ->
+        | ECall (cid, _, _) ->
           if List.exists (Cid.equals cid) extern_cids
           then SNoop
           else super#visit_SUnit () unit_exp

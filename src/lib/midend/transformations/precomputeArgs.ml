@@ -116,7 +116,7 @@ let precompute_args ds =
         | EHash (size, args) ->
           let new_args = CL.map self#precompute_arg args in
           { exp with e = EHash (size, new_args) }
-        | ECall (fcn_id, args) 
+        | ECall (fcn_id, args, u) 
             when (List.exists 
               (fun fcid -> Cid.equal_names fcn_id fcid)
               array_method_cids) -> (
@@ -133,16 +133,16 @@ let precompute_args ds =
                 else self#precompute_arg addr' 
               in
               let rest' = CL.map self#precompute_arg rest in
-              {exp with e = ECall (fcn_id, arr'::addr'::rest')}
+              {exp with e = ECall (fcn_id, arr'::addr'::rest', u)}
             | _ -> error "[precompute_args] array method call with < 3 args"
         )        
-        | ECall (fcn_id, args) ->
+        | ECall (fcn_id, args, u) ->
           (match CL.mem fcn_id exception_cids with
            | true -> exp (* skip event combinators *)
            | false ->
              (* pull out the argument if it is not an immediate *)
              let new_args = CL.map self#precompute_arg args in
-             { exp with e = ECall (fcn_id, new_args) })
+             { exp with e = ECall (fcn_id, new_args, u) })
         | _ -> exp
     end
   in

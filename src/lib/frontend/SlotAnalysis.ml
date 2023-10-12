@@ -102,7 +102,7 @@ let extract_call e =
   let extract_var e =
     match e.e with
     | EVar cid -> Cid.to_id cid
-    | ECall (cid, []) when Cid.equal cid Payloads.payload_parse_cid ->
+    | ECall (cid, [], _) when Cid.equal cid Payloads.payload_parse_cid ->
       payload_parse_id
     | _ ->
       failwith
@@ -110,7 +110,7 @@ let extract_call e =
          call to Payload.parse "
   in
   match e.e with
-  | ECall (cid, es) -> cid, List.map extract_var es
+  | ECall (cid, es, _) -> cid, List.map extract_var es
   | _ -> failwith "slotAnalysis: expected a call in parser"
 ;;
 

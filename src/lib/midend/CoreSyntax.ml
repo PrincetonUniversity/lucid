@@ -131,7 +131,7 @@ and e =
   | EVal of value
   | EVar of cid
   | EOp of op * exp list
-  | ECall of cid * exp list
+  | ECall of cid * exp list * bool
   | EHash of size * exp list
   | EFlood of exp
   | ETableCreate of tbl_def
@@ -356,7 +356,7 @@ let var_sp cid ety span = aexp (EVar cid) ety span
 let var cid ety = var_sp cid ety Span.default
 let op_sp op args ety span = aexp (EOp (op, args)) ety span
 let op op args ety = op_sp op args ety Span.default
-let call_sp cid args ety span = aexp (ECall (cid, args)) ety span
+let call_sp cid args ety span = aexp (ECall (cid, args, false)) ety span
 let call cid args ety = call_sp cid args ety Span.default
 let hash_sp size args ety span = aexp (EHash (size, args)) ety span
 let vint_exp i size = value_to_exp (vint i size)
@@ -483,8 +483,8 @@ let rec equiv_e e1 e2 =
   match e1, e2 with
   | EVal v1, EVal v2 -> equiv_value v1 v2
   | EVar cid1, EVar cid2 -> Cid.equal cid1 cid2
-  | ECall (cid1, es1), ECall (cid2, es2) ->
-    Cid.equal cid1 cid2 && equiv_list equiv_exp es1 es2
+  | ECall (cid1, es1, u1), ECall (cid2, es2, u2) ->
+    Cid.equal cid1 cid2 && equiv_list equiv_exp es1 es2 && (u1 = u2)
   | EHash (sz1, es1), EHash (sz2, es2) ->
     sz1 = sz2 && equiv_list equiv_exp es1 es2
   | EOp (op1, es1), EOp (op2, es2) -> op1 = op2 && equiv_list equiv_exp es1 es2

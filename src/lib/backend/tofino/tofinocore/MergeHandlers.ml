@@ -45,10 +45,10 @@ let scope_pgen =
     method !visit_PGen (merged_hdl_event, _) exp =
       (* generates set parameters in the hdl input / parser output event *)
       let exp' = match exp.e with 
-        | ECall(ev_cid, ev_params) -> 
+        | ECall(ev_cid, ev_params, u) -> 
           {exp with e = ECall (
             Cid.compound (merged_hdl_event) ev_cid, 
-            ev_params)}
+            ev_params, u)}
         | _ -> exp
       in
       PGen(exp')

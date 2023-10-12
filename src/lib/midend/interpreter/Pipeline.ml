@@ -142,12 +142,14 @@ let get_obj_unconstrained stage t =
 
 let get_obj stage t =
   (* load the object from the pipe *)
-  if stage < 0 then failwith "Pipeline Error: Stage is negative";
-  if stage < !(t.current_stage)
+  if stage < 0 then failwith "Pipeline Error: Stage is negative";  
+  (* we may want this to double check that accesses are ordered. 
+     (I don't think it matters though) *)
+  (* if (not (Cmdline.cfg.unordered) && stage < !(t.current_stage))
   then
     failwith
       "Pipeline Error: Attempted to access global out-of-order. The type \
-       system should have caught this, so notify the developer.";
+       system should have caught this, so notify the developer."; *)
   if stage >= Array.length t.objs
   then
     failwith

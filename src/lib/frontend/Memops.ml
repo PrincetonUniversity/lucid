@@ -154,7 +154,7 @@ let classify_stmts (body : statement) : (complex_stmt * sp) list =
     let ret =
       match s.s with
       | SLocal (id, { raw_ty = TBool }, e) -> BoolDef (id, e)
-      | SUnit { e = ECall (cid, es) } -> ExternCall (cid, es)
+      | SUnit { e = ECall (cid, es, _) } -> ExternCall (cid, es)
       | SIf (test1, s1, s2) -> begin
         match flatten_stmt s1, flatten_stmt s2 with
         | [{ s = SRet (Some ret) }], [] -> LocalRet (test1, ret)

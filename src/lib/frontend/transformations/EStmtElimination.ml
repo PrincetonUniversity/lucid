@@ -12,9 +12,9 @@ let rec inline_exp e =
   | EOp (op, es) ->
     let stmt, es' = inline_exps es in
     stmt, { e with e = EOp (op, es') }
-  | ECall (cid, es) ->
+  | ECall (cid, es, u) ->
     let stmt, es' = inline_exps es in
-    stmt, { e with e = ECall (cid, es') }
+    stmt, { e with e = ECall (cid, es', u) }
   | EHash (sz, es) ->
     let stmt, es' = inline_exps es in
     stmt, { e with e = EHash (sz, es') }

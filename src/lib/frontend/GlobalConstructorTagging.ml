@@ -83,7 +83,7 @@ let rec globals_of_econstr user_constrs parent_tcid var_tcid constr_exp : (exp) 
   let var_tcid = {var_tcid with tparent=parent_tcid;} in
   (* let annotated_constr_exp = annotate_espan constr_exp parent_tcid var_tcid in *)
   match constr_exp.e with
-  | ECall(constr_cid, _) -> (
+  | ECall(constr_cid, _, _) -> (
 (*     print_endline ("[globals_of_econstr.ECall]");
     print_endline ("[globals_of_econstr.INPUT] "^(annotated_exp_to_string annotated_constr_exp)); *)
     match (Cid.names constr_cid) with

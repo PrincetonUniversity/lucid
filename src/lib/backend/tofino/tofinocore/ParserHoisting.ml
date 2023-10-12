@@ -99,7 +99,7 @@ and elim_parser_inner output_event (vars_read : cids) (pactions : paction_sps) (
       (* a generate step. We want to replace this generate with assign statements as necessary
          for all the variables in the arguments that will not be hoisted. *)
       match exp.e with 
-      | ECall(base_event_cid, eargs) -> (
+      | ECall(base_event_cid, eargs, _) -> (
         (* build an assoc list from args to parameters *)
         let params = scoped_params_of_evconstr output_event base_event_cid in 
         let hoist_cmds, gen_assigns = List.fold_left2
