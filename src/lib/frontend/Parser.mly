@@ -91,6 +91,7 @@
 %token <Span.t> OR
 %token <Span.t> CONCAT
 %token <Span.t> NOT
+%token <Span.t> UNORDERED
 %token <Span.t> LESS
 %token <Span.t> MORE
 %token <Span.t> PLUS
@@ -259,7 +260,13 @@ binop:
     | exp LSHIFT exp                      { op_sp LShift [$1; $3] (Span.extend $1.espan $3.espan) }
     | exp RSHIFT exp                      { op_sp RShift [$1; $3] (Span.extend $1.espan $3.espan) }
     | exp PATAND exp                      { op_sp PatMask [$1; $3] (Span.extend $1.espan $3.espan) }
-
+    // unordered call. put here to avoid conflict with exp LESS exp
+    | exp LESS UNORDERED MORE paren_args  { 
+                                            match $1.e with
+                                            | EVar(cid) ->         
+                                            ucall_sp cid (snd $5) (Span.extend $1.espan (fst $5))
+                                            | _ -> error "parsing error: cannot call an expression"
+                                          }
 pattern:
     | cid                               { pat_of_cid $1 }
     | NUM                               { PNum (snd $1) }
@@ -268,16 +275,16 @@ pattern:
 patterns:
   | pattern                             { [$1] }
   | pattern COMMA patterns              { $1 :: $3 }
-
-
+    
 exp:
     | BITPAT                              { value_to_exp (vpat_sp (snd $1) (fst $1))}
-    | cid			                            { var_sp (snd $1) (fst $1) }
+    | cid			                      { var_sp (snd $1) (fst $1) }
     | NUMWITDH                            { eint_sp (fst (snd $1)) (Some (IConst (snd (snd $1)))) (fst $1) }
     | NUM                                 { eint_sp (snd $1) None (fst $1) }
     | TRUE                                { value_to_exp (vbool_sp true $1) }
     | FALSE                               { value_to_exp (vbool_sp false $1) }
     | cid paren_args                      { call_sp (snd $1) (snd $2) (Span.extend (fst $1) (fst $2)) }
+    // | cid LESS UNORDERED MORE paren_args  { ucall_sp (snd $1) (snd $5) (Span.extend (fst $1) (fst $5)) }
     | binop                               { $1 }
     | NOT exp                             { op_sp Not [$2] (Span.extend $1 $2.espan) }
     | SUB exp                             { op_sp Neg [$2] (Span.extend $1 $2.espan) }
@@ -553,6 +560,8 @@ statement1:
     | SGENERATE LPAREN exp COMMA exp RPAREN SEMI { gen_sp (GSingle (Some $3)) $5 (Span.extend $1 $7)}
     | MGENERATE LPAREN exp COMMA exp RPAREN SEMI { gen_sp (GMulti $3) $5 (Span.extend $1 $7)}
     | PGENERATE LPAREN exp COMMA exp RPAREN SEMI { gen_sp (GPort $3) $5 (Span.extend $1 $7)}
+    | cid LESS UNORDERED MORE paren_args SEMI { sucall_sp (snd $1) (snd $5) (Span.extend (fst $1) $6) }
+    
     | cid paren_args SEMI                   { scall_sp (snd $1) (snd $2) (Span.extend (fst $1) $3) }
     | MATCH args WITH branches              { match_sp $2 (snd $4) (Span.extend $1 (fst $4)) }
     | MATCH LPAREN multiargs RPAREN WITH branches  { match_sp $3 (snd $6) (Span.extend $1 (fst $6)) }

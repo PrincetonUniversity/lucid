@@ -34,7 +34,6 @@ type config =
   ; mutable optimal_memop_input_alloc : bool
     (* find an allocation of memop inputs to sALU input register that requires no extra copy operations.
        In some cases, this may create larger PHV clusters. *)
-  ; mutable unordered : bool 
   
   }
 
@@ -66,7 +65,6 @@ let default () =
   ; ctl_fn = None
   ; serverlib = false
   ; optimal_memop_input_alloc = true
-  ; unordered = false
   }
 ;;
 let cfg = default ()
@@ -100,7 +98,6 @@ let parse_common () =
     cfg.verbose <- false
   in
   let set_serverlib () = cfg.serverlib <- true in
-  let set_unordered () = cfg.unordered <- true in 
   let speclist =
     [ ( "--silent"
       , Arg.Unit unset_verbose
@@ -149,9 +146,6 @@ let parse_common () =
     ; ( "--serverlib"
       , Arg.Unit set_serverlib
       , "If true, generate the python event library generator" ) 
-    ; ( "--unordered"
-      , Arg.Unit set_unordered
-      , "If true, ignore all global ordering in the effects system.")
       ]
   in
 
