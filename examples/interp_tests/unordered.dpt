@@ -1,0 +1,11 @@
+global Array.t<32> arr2 = Array.create(8);
+global Array.t<32> arr1 = Array.create(8);
+
+event pktin(int x) {
+  for (i < 8) {
+    int i = size_to_int(i);
+    int v = i + i;
+    Array.set<unordered>(arr1, i, v);
+  }
+  Array.set<unordered>(arr2, 0, Array.get<unordered>(arr1, 7));
+}

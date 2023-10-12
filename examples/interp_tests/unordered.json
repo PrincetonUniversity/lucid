@@ -1,0 +1,6 @@
+{
+  "seed" : 1,
+  "events":[
+    {"name":"pktin", "args":[1]}
+  ]
+}
