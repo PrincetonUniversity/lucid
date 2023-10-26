@@ -517,3 +517,98 @@ let is_evar exp =
   | EVar _ -> true
   | _ -> false
 ;;
+
+
+(* 
+and raw_ty =
+  | TQVar of raw_ty tqvar
+  | TBool
+  | TVoid
+  | TGroup
+  | TInt of size (* Number of bits *)
+  | TEvent
+  | TFun of func_ty
+  | TMemop of int (* Number of arguments: 2-4 *) * size
+  | TName of cid * sizes * bool
+    (* Named type: e.g. "Array.t<<32>>". Bool is true if it represents a global type *)
+  | TAbstract of
+      cid * sizes * bool * raw_ty (* raw_ty is the type when it was a TName *)
+  | TRecord of (string * raw_ty) list
+  | TVector of raw_ty * size
+  | TTuple of raw_ty list
+  | TTable of tbl_ty
+  | TAction of acn_ty
+  | TPat of size (* number of bits *)   
+
+*)
+
+let raw_ty_to_constr_str raw_ty = 
+  match raw_ty with 
+  | TBool -> "bool"
+  | TVoid -> "void"
+  | TGroup -> "group"
+  | TInt (_) -> "int"
+  | TEvent -> "event"
+  | TFun (_) -> "fun"
+  | TMemop (_) -> "memop"
+  | TName (cid, _, _) -> Cid.to_string cid
+  | TAbstract (cid, _, _, _) -> Cid.to_string cid
+  | TRecord (_) -> "record"
+  | TVector (_) -> "vector"
+  | TTuple (_) -> "tuple"
+  | TTable (_) -> "table"
+  | TAction (_) -> "action"
+  | TPat (_) -> "pat"
+  | TQVar (_) -> "qvar"
+;;
+
+let op_to_constr_str o =
+  match o with
+  | And -> "And"
+  | Or -> "Or"
+  | Not -> "Not"
+  | Eq -> "Eq"
+  | Neq -> "Neq"
+  | Less -> "Less"
+  | More -> "More"
+  | Leq -> "Leq"
+  | Geq -> "Geq"
+  | Neg -> "Neg"
+  | Plus -> "Plus"
+  | Sub -> "Sub"
+  | SatPlus -> "SatPlus"
+  | SatSub -> "SatSub"
+  | Cast _ -> "Cast"
+  | Conc -> "Conc"
+  | BitAnd -> "BitAnd"
+  | BitOr -> "BitOr"
+  | BitXor -> "BitXor"
+  | BitNot -> "BitNot"
+  | LShift -> "LShift"
+  | RShift -> "RShift"
+  | TGet _ -> "TGet"
+  | Slice _ -> "Slice"
+  | PatExact -> "PatExact"
+  | PatMask -> "PatMask"
+;;
+let e_to_constr_str e = match e with 
+| EVal (_) -> "val"
+| EInt (_) -> "int"
+| EVar (_) -> "var"
+| EOp (op, _) -> "op "^(op_to_constr_str op)
+| ECall (_) -> "call"
+| EHash (_) -> "hash"
+| EFlood (_) -> "flood"
+| ESizeCast (_) -> "sizecast"
+| EStmt (_) -> "stmt"
+| ERecord (_) -> "record"
+| EWith (_) -> "with"
+| EProj (_) -> "proj"
+| EVector (_) -> "vector"
+| EComp (_) -> "comp"
+| EIndex (_) -> "index"
+| ETuple (_) -> "tuple"
+| ETableCreate (_) -> "tablecreate"
+| ETableMatch (_) -> "tablematch"
+| EPatWild (_) -> "patwild"
+;;

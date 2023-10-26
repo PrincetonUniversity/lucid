@@ -12,6 +12,7 @@ let process_prog builtin_tys ds =
   print_if_debug ds;
   print_if_verbose "-------Checking well-formedness---------";
   Wellformed.pre_typing_checks ds;
+  print_if_debug ds;
   print_if_verbose "---------typing1---------";
   let ds = Typer.infer_prog builtin_tys ds in
   let ds = GlobalConstructorTagging.annotate ds in
@@ -55,15 +56,19 @@ let process_prog builtin_tys ds =
   print_if_debug ds;
   print_if_verbose "---------------typing3-------------";
   let ds = Typer.infer_prog builtin_tys ds in
+  print_if_debug ds;
   (* print_if_verbose "------------Checking entry handlers---------------";
   Linerate.check ds; *)
+  print_if_verbose "-------Making user types concrete-------";
+  let ds = ConcreteUserTypes.replace_prog ds in 
+  print_if_debug ds;
+  print_if_verbose "---------------typing4-------------";
+  let ds = Typer.infer_prog builtin_tys ds in
   print_if_verbose "-------Eliminating vectors-------";
-  (* WARNING: Don't run the typechecker from now until records have been eliminated.
-     See VectorElimination.ml for an explanation. *)
-  (* jsonch note: actually, its until tuples have been eliminated.
-     Not sure why, but typing just before tuple elimination fails for
-     programs with vectors. *)
   let ds = VectorElimination.eliminate_prog ds in
+  print_if_debug ds;
+  print_if_verbose "---------------typing5-------------";
+  let ds = Typer.infer_prog builtin_tys ds in
   print_if_debug ds;
   (* We might have duplicate variable names in EStmts that got copied during
      vector elimination *)
@@ -73,14 +78,20 @@ let process_prog builtin_tys ds =
   print_if_verbose "-------Eliminating EStmts-------";
   let ds = EStmtElimination.eliminate_prog ds in
   print_if_debug ds;
+  print_if_verbose "---------------typing6-------------";
+  let ds = Typer.infer_prog builtin_tys ds in
   (* Record elimination removes useful debugging information, so we want it as
      close to the end of the pipeline as possible. *)
   print_if_verbose "-------Eliminating records-------";
   let ds = RecordElimination.eliminate_prog ds in
   print_if_debug ds;
+  print_if_verbose "---------------typing7-------------";
+  let ds = Typer.infer_prog builtin_tys ds in
   print_if_verbose "-------Eliminating tuples-------";
   let ds = TupleElimination.eliminate_prog ds in
   print_if_debug ds;
+  print_if_verbose "---------------typing8-------------";
+  let ds = Typer.infer_prog builtin_tys ds in
   print_if_verbose "-------Inlining Constants-------";
   let ds = ConstInlining.inline_prog ds in
   print_if_debug ds;

@@ -5,17 +5,8 @@ open Collections
 
 (* Remove all vectors from the program by transforming them into tuples.
    Assumes functions have already been eliminated, so we don't have
-   any more polymorphic vector sizes. *)
-
-(* WARNING: It's convenient to run this before record elimination, but we
-   might have problems if a record contains a vector of polymorphic length. All
-   record _uses_ should be concretized, but record type declarations won't be.
-   We take the lazy approach to get around this and simply remove all DUserTys,
-   but this technically leaves the program in an ill-formed state until we run
-   record elimination, because we are now using record types without a corresponding
-   declaration. As long as we don't run the typechecker in between, it should be
-   fine. The "right" way to do this is to duplicate the DUserTy once for each
-   set of polymorphic values, but that's a loooooot of work. *)
+   any more polymorphic vector sizes. 
+   Also assumes that all user type declarations have been made concrete. *)
 
 let extract_size sz =
   match normalize_size sz with
@@ -36,6 +27,34 @@ let subst_index =
       if Cid.equal target cid then sz else IUser cid
   end
 ;;
+
+(* refresh the effects on each element of a tuple. 
+   Use on the tuple generated from comprehension unrolling. 
+   Necessary because a tuple element generated from a 
+   comprehension unrolling might have the comp's 
+   index effect bound to it. *)
+   let refresh_tup_effects exp =    
+    let refresh_effect =
+      object (_) 
+      inherit [_] s_map as super  
+    
+      method! visit_effect tgt_effect effect = 
+        if (equiv_effect tgt_effect effect)
+        then TyperUtil.fresh_effect ~name:"comp_unroll" ()
+        else effect
+      end  
+    in  
+    match exp.e with 
+    | ETuple(exps) -> 
+      let exps' = List.map
+        (fun exp -> 
+          let eff = (Option.get exp.ety).teffect in
+          refresh_effect#visit_exp eff exp)
+        exps
+      in
+        {exp with e = ETuple(exps')}
+    | _ -> exp
+  ;;
 
 let replacer =
   object (self)
@@ -75,8 +94,9 @@ let replacer =
       (* re-annotate comprehensions after expansion to set proper index *)
       match exp.e with
       | EComp(_) -> (
-        let exp' = super#visit_exp env exp in
-        GlobalConstructorTagging.reannotate_inlined_exp exp exp'
+        super#visit_exp env exp |>
+        GlobalConstructorTagging.reannotate_inlined_exp exp |> 
+        refresh_tup_effects
       )
       | _ -> super#visit_exp env exp
 
@@ -95,10 +115,14 @@ let replacer =
   end
 ;;
 
-let eliminate_prog ds =
-  ds
-  |> List.filter (function
+let eliminate_prog = (replacer#visit_decls ())
+(* note: before concreteUserTypes pass, we just deleted 
+   all user type definitions at this point, to get around 
+   polymorphic user type definitions. This meant that the 
+   program did not type check from this point 
+   until after tuples were eliminated, though.  *)
+  (* |> List.filter (function
          | { d = DUserTy _ } -> false
-         | _ -> true)
-  |> replacer#visit_decls ()
+         | _ -> true) *)
+
 ;;

@@ -205,6 +205,11 @@ and s =
   | SLoop of statement * id * size
   | STableMatch of tbl_match
   | STableInstall of exp * tbl_entry list
+  (* | SMultiAssign of {
+    cids : cid list; (* variables being assigned *)
+    tys  : ty list option; (*types of variables (if used to declare) *)
+    rhs  : exp list;    (* rhs expressions (e.g., tuple) *)
+  } *)
 
 and tbl_match =
   { tbl : exp

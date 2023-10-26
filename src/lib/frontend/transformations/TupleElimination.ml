@@ -424,7 +424,8 @@ let rec replace_decl (env : env) d =
     let body_env, new_params = flatten_params env params in
     let body = replace_parser body_env body in
     env, [{ d with d = DParser (id, new_params, body) }]
-  | DFun _ | DConstr _ | DModule _ | DUserTy _ | DModuleAlias _ ->
+  | DUserTy _ -> env, [d]
+  | DFun _ | DConstr _ | DModule _ | DModuleAlias _ ->
     Console.error_position
       d.dspan
       "Modules, records and functions should be eliminated before tuple \

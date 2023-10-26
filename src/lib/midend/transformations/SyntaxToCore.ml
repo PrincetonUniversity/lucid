@@ -283,39 +283,43 @@ and translate_parser_block (actions, (step, step_span)) =
    pstep=(translate_parser_step step, step_span);}
 ;;
 
-let translate_decl (d : S.decl) : C.decl =
-  let d' =
-    match d.d with
-    | S.DGlobal (id, ty, inner_exp) ->
-      (match inner_exp.e with
-       | ETableCreate _ ->
-         C.DGlobal (id, translate_ty ty, translate_etablecreate id inner_exp)
-       | _ -> C.DGlobal (id, translate_ty ty, translate_exp inner_exp))
-    | S.DEvent (id, annot, sort, _, params) ->
-      C.DEvent (id, annot, translate_sort sort, translate_params params)
-    | S.DHandler (id, s, body) ->
-      C.DHandler (id, translate_hsort s, translate_body body)
-    | S.DMemop (mid, mparams, mbody) ->
-      C.DMemop
-        { mid
-        ; mparams = translate_params mparams
-        ; mbody = translate_memop mbody
-        }
-    | S.DExtern (id, ty) -> C.DExtern (id, translate_ty ty)
-    | S.DAction (id, tys, const_params, (params, acn_body)) ->
-      C.DAction
-        { aid = id
-        ; artys = List.map translate_ty tys
-        ; aconst_params = translate_params const_params
-        ; aparams = translate_params params
-        ; abody = List.map translate_exp acn_body
-        }
-    | S.DParser (id, params, parser_block) ->
-      C.DParser
-        (id, translate_params params, translate_parser_block parser_block)
-    | _ -> err d.dspan (Printing.decl_to_string d)
-  in
-  C.decl_sp d' d.dspan
+let translate_decl (d : S.decl) : C.decl option =
+  match d.d with 
+  | DUserTy _ -> None 
+  | _ -> 
+    let d' =
+      match d.d with
+      | S.DGlobal (id, ty, inner_exp) ->
+        (match inner_exp.e with
+        | ETableCreate _ ->
+          C.DGlobal (id, translate_ty ty, translate_etablecreate id inner_exp)
+        | _ -> C.DGlobal (id, translate_ty ty, translate_exp inner_exp))
+      | S.DEvent (id, annot, sort, _, params) ->
+        C.DEvent (id, annot, translate_sort sort, translate_params params)
+      | S.DHandler (id, s, body) ->
+        C.DHandler (id, translate_hsort s, translate_body body)
+      | S.DMemop (mid, mparams, mbody) ->
+        C.DMemop
+          { mid
+          ; mparams = translate_params mparams
+          ; mbody = translate_memop mbody
+          }
+      | S.DExtern (id, ty) -> C.DExtern (id, translate_ty ty)
+      | S.DAction (id, tys, const_params, (params, acn_body)) ->
+        C.DAction
+          { aid = id
+          ; artys = List.map translate_ty tys
+          ; aconst_params = translate_params const_params
+          ; aparams = translate_params params
+          ; abody = List.map translate_exp acn_body
+          }
+      | S.DParser (id, params, parser_block) ->
+        C.DParser
+          (id, translate_params params, translate_parser_block parser_block)
+      | S.DUserTy _ -> err d.dspan "user/named types not yet supported in ir"
+      | _ -> err d.dspan (Printing.decl_to_string d)
+    in
+    Some(C.decl_sp d' d.dspan)
 ;;
 
-let translate_prog (ds : S.decls) : C.decls = List.map translate_decl ds
+let translate_prog (ds : S.decls) : C.decls = List.filter_map translate_decl ds
