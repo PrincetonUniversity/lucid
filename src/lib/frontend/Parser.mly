@@ -534,16 +534,16 @@ opt_tpats:
   | LPAREN tpats RPAREN                   { Span.extend $1 $3, $2}
   | LPAREN RPAREN                         { Span.extend $1 $2, []}
 
-entry:
+table_entry:
     (* an entry with no priority *)
-    | opt_tpats ARROW ID opt_args             { Span.extend (fst $1) (fst $4), mk_entry 0 (snd $1) (snd $3) (snd $4)}
+    | opt_tpats ARROW ID opt_args             { Span.extend (fst $1) (fst $4), mk_entry 0 (snd $1) (snd $3) (snd $4) (Span.extend (fst $1) (fst $4))}
     (* an entry with a priority *)
     | LBRACKET NUM RBRACKET opt_tpats ARROW ID opt_args
-                                                    { Span.extend $1 (fst $7), mk_entry (snd $2 |> Z.to_int) (snd $4) (snd $6) (snd $7)}
+                                                    { Span.extend $1 (fst $7), mk_entry (snd $2 |> Z.to_int) (snd $4) (snd $6) (snd $7) (Span.extend $1 (fst $7))}
 
-entries:
-    | entry                                            { fst $1, [snd $1] }
-    | entry SEMI entries                               { Span.extend (fst $1) (fst $3), (snd $1::snd $3)}
+table_entries:
+    | table_entry                                            { fst $1, [snd $1] }
+    | table_entry SEMI table_entries                         { Span.extend (fst $1) (fst $3), (snd $1::snd $3)}
 
 // TODO: remove multiargs for match statements -- no need to suport match x, y, ... with syntax (no parens for multiple args)
 multiargs:
@@ -569,9 +569,9 @@ statement1:
     | PRINTF LPAREN STRING COMMA args RPAREN SEMI  { sprintf_sp (snd $3) $5 (Span.extend $1 $7) }
     | FOR LPAREN ID LESS size RPAREN LBRACE statement RBRACE { loop_sp $8 (snd $3) (snd $5) (Span.extend $1 $9) }
     | TABLE_MULTI_INSTALL LPAREN tbl=exp COMMA
-        LBRACE tbl_entries=entries RBRACE RPAREN SEMI                 {tblinstall_sp (tbl) (snd tbl_entries) (Span.extend $1 $9)}
+        LBRACE tbl_entries=table_entries RBRACE RPAREN SEMI                 {tblinstall_sp (tbl) (snd tbl_entries) (Span.extend $1 $9)}
     | TABLE_INSTALL LPAREN tbl=exp COMMA
-        LBRACE tbl_entries=entries RBRACE RPAREN SEMI                 {mk_tblinstall_single (tbl) (snd tbl_entries) (Span.extend $1 $9)}
+        LBRACE tbl_entries=table_entries RBRACE RPAREN SEMI                 {mk_tblinstall_single (tbl) (snd tbl_entries) (Span.extend $1 $9)}
 includes:
     | INCLUDE STRING                        {[(snd $2)]}
     | INCLUDE STRING includes               {(snd $2)::$3}

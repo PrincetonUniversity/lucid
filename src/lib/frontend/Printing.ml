@@ -360,11 +360,10 @@ and action_to_string (name, (ps, stmt)) =
 
 and entry_to_string entry =
   Printf.sprintf
-    "[%s](%s) -> %s(%s);"
+    "[%s](%s) -> %s;"
     (string_of_int entry.eprio)
     (comma_sep exp_to_string entry.ematch)
-    (id_to_string entry.eaction)
-    (comma_sep exp_to_string entry.eargs)
+    (exp_to_string entry.eaction)
 
 and s_to_string s = 
   match s with 

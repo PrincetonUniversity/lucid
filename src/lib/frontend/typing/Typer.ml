@@ -1055,18 +1055,22 @@ and infer_entries (env : env) sp tbl_ty entries =
         env, List.rev inf_epats_rev)
     in
     (* type the constant action parameters *)
+    let action_cid, action_args, flag = unpack_default_action entry.eaction.e in
     let param_tys =
-      match (lookup_var sp env (Cid.id entry.eaction)).raw_ty with
+      match (lookup_var sp env action_cid).raw_ty with
       | TAction acn_ty -> acn_ty.aconst_param_tys
       | _ -> error_sp sp "table entry does not refer to an action."
     in
     (* infer types of action args *)
-    let env, inf_eargs = infer_exps env entry.eargs in
+    let env, inf_eargs = infer_exps env action_args in
     let inf_arg_tys = List.map (fun arg -> Option.get arg.ety) inf_eargs in
     (* "unify", inferred args with params (make sure they are equiv) *)
     List.iter2 (unify_ty sp) inf_arg_tys param_tys;
     (* return new env and entry with typed patterns and args *)
-    env, { entry with ematch = inf_ematch; eargs = inf_eargs }
+    (* note that the action call's type is not currently checked *)
+    let eaction = {entry.eaction with e=ECall(action_cid, inf_eargs, flag); ety = Some(ty TVoid)} in
+    let entry = {entry with ematch = inf_ematch; eaction;} in
+    env, entry
   in
   let env', entries_rev =
     List.fold_left

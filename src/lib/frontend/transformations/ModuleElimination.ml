@@ -1,5 +1,6 @@
 open Batteries
 open Syntax
+open SyntaxUtils
 open Collections
 
 (* Move all code from modules to toplevel, creating a single flat program.
@@ -66,10 +67,13 @@ let subst =
               { entry with
                 ematch = List.map (self#visit_exp env) entry.ematch
               ; eaction =
-                  (match CidMap.find_opt (Cid.id entry.eaction) env.vars with
-                   | None -> entry.eaction
-                   | Some new_action_id -> new_action_id)
-              ; eargs = List.map (self#visit_exp env) entry.eargs
+                  let action_cid, action_args, flag = unpack_default_action entry.eaction.e in                  
+                  let action_cid = match CidMap.find_opt action_cid env.vars with
+                     | None -> action_cid
+                     | Some new_action_id -> (Cid.id new_action_id)
+                  in
+                  let action_args = List.map (self#visit_exp env) action_args in
+                  { entry.eaction with e = ECall(action_cid, action_args, flag) }
               })
             entries
         in

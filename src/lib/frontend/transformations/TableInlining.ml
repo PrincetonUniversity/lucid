@@ -1,6 +1,7 @@
 (* This pass translates ETableMatches into STableMatches *)
 
 open Syntax
+open SyntaxUtils
 open Collections
 module CMap = Collections.CidMap
 
@@ -149,8 +150,10 @@ and eliminate_stmt stmt =
     let pre_stmt, entries_rev =
       List.fold_left
         (fun (pre_stmt, entries') entry ->
-          let args_stmt, eargs = eliminate_exps entry.eargs in
-          sseq pre_stmt args_stmt, { entry with eargs } :: entries')
+          let action_cid, eargs, flag = unpack_default_action entry.eaction.e in
+          let args_stmt, eargs = eliminate_exps eargs in
+          let entry = { entry with eaction = {entry.eaction with e = ECall(action_cid, eargs, flag)}} in
+          sseq pre_stmt args_stmt, entry :: entries')
         (snoop, [])
         entries
     in

@@ -170,9 +170,7 @@ and e =
       { tty : ty
       ; tactions : exp list
       ; tsize : exp
-      ; tdefault : exp;      
-      (* cid * exp list *)
-          (* ECall(default_acn_id, default_installtime_args) *)
+      ; tdefault : exp; (* ECall(default_acn_id, default_installtime_args) *)
       }
   | ETableMatch of tbl_match
   | EPatWild of
@@ -214,7 +212,7 @@ and tbl_match =
   ; outs : id list
   ; out_tys : ty list option
   }
-(* out_tys set for statements that create new vars *)
+(* out_tys is populated for statements that create new vars *)
 
 (* entries are like branches in match statements, except instead of
    a statement there is an action id + const args *)
@@ -224,17 +222,13 @@ and tbl_match =
 and tbl_entry =
   { eprio : int
   ; ematch : exp list
-  ; eaction : id
-  ; eargs : exp list
+  ; eaction : exp (* ecall(action id, action args) *)
   }
 
 and statement =
   { s : s
   ; sspan : sp
-   (* Only used during partial interpretation; only appears on SLocal or SAssign *)
-    (* noinline : bool *)
   ; spragmas : pragma list;
-    (*  *)
   }
 
 (* event handler bodies *)

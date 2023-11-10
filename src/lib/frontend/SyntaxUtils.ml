@@ -474,8 +474,8 @@ let mk_daction id rty cp p body span =
   decl_sp (DAction (id, rty, cp, (p, extract_action_body body))) span
 ;;
 
-let mk_entry prio pats acn args =
-  { eprio = prio; eaction = acn; ematch = pats; eargs = args }
+let mk_entry prio pats acn args span =
+  { eprio = prio; ematch = pats; eaction = Syntax.ucall_sp (Cid.id acn) args span;}
 ;;
 
 (* convert something parsed as an expression into a pattern *)
@@ -515,6 +515,7 @@ let unpack_default_action e =
   | ECall(cid, args, flag) -> cid, args, flag
   | _ -> error "default table action must be a expression"
 ;;
+
 
 let cid_of_exp (ex : exp) : Cid.t =
   match ex.e with

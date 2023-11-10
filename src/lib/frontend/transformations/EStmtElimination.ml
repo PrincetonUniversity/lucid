@@ -113,8 +113,10 @@ and inline_stmt s =
   | STableInstall(tbl_id, entries) -> 
     let stmt, entries_rev = List.fold_left
       (fun (s,entries) entry -> 
-        let a_s, eargs = inline_exps entry.eargs in
-        sseq a_s s, {entry with eargs}::entries)
+        let acn_cid, eargs, flag = unpack_default_action entry.eaction.e in
+        let a_s, eargs = inline_exps eargs in
+        let entry = {entry with eaction = {entry.eaction with e = ECall(acn_cid, eargs, flag)}} in
+        sseq a_s s, entry::entries)
       (snoop, [])
       entries
     in

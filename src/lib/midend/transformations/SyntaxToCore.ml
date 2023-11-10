@@ -190,10 +190,11 @@ and translate_statement (s : S.statement) : C.statement =
     List.map translate_pattern ps, translate_statement s
   in
   let translate_entry (entry : S.tbl_entry) : C.tbl_entry =
+    let action_cid, action_args, _ = SyntaxUtils.unpack_default_action entry.eaction.e in
     { ematch = List.map translate_exp entry.ematch
     ; eprio = entry.eprio
-    ; eaction = entry.eaction
-    ; eargs = List.map translate_exp entry.eargs
+    ; eaction = Cid.to_id action_cid
+    ; eargs = List.map translate_exp action_args
     }
   in
   let s' =
