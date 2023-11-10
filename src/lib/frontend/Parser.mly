@@ -568,11 +568,10 @@ statement1:
     | PRINTF LPAREN STRING RPAREN SEMI             { sprintf_sp (snd $3) [] (Span.extend $1 $5) }
     | PRINTF LPAREN STRING COMMA args RPAREN SEMI  { sprintf_sp (snd $3) $5 (Span.extend $1 $7) }
     | FOR LPAREN ID LESS size RPAREN LBRACE statement RBRACE { loop_sp $8 (snd $3) (snd $5) (Span.extend $1 $9) }
-    | TABLE_MULTI_INSTALL LPAREN exp COMMA
-      LBRACE entries RBRACE RPAREN SEMI                 {tblinstall_sp ($3) (snd $6) (Span.extend $1 $9)}
-    | TABLE_INSTALL LPAREN exp COMMA
-      LBRACE entries RBRACE RPAREN SEMI                 { mk_tblinstall_single ($3) (snd $6) (Span.extend $1 $9)}
-
+    | TABLE_MULTI_INSTALL LPAREN tbl=exp COMMA
+        LBRACE tbl_entries=entries RBRACE RPAREN SEMI                 {tblinstall_sp (tbl) (snd tbl_entries) (Span.extend $1 $9)}
+    | TABLE_INSTALL LPAREN tbl=exp COMMA
+        LBRACE tbl_entries=entries RBRACE RPAREN SEMI                 {mk_tblinstall_single (tbl) (snd tbl_entries) (Span.extend $1 $9)}
 includes:
     | INCLUDE STRING                        {[(snd $2)]}
     | INCLUDE STRING includes               {(snd $2)::$3}

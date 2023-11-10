@@ -495,13 +495,13 @@ let tpat_of_exp exp =
   | _ -> op_sp PatExact [exp] exp.espan
 ;;
 
-let mk_tblinstall_single id entries span =
+let mk_tblinstall_single tbl entries span =
   if List.length entries > 1
   then
     Console.error_position
       span
       "table_install can only install one entry at a time."
-  else tblinstall_sp id entries span
+  else tblinstall_sp tbl entries span
 ;;
 
 let unpack_parsed_tuple (e : exp) =
