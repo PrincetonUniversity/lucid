@@ -93,7 +93,8 @@ rule token = parse
   | "read"            { READ (position lexbuf) }
   | "skip"            { SKIP (position lexbuf) }
   | "drop"            { DROP (position lexbuf) }
-
+  | "@process"        { PROCESS (position lexbuf) }
+  
   | "constructor"     { CONSTR (position lexbuf) }
   | "constr"          { CONSTR (position lexbuf) }
   | "module"          { MODULE (position lexbuf) }

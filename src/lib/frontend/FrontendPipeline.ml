@@ -8,6 +8,7 @@ let print_if_debug ds =
 
 let print_if_verbose str = if Cmdline.cfg.verbose then Console.report str
 
+   
 let process_prog builtin_tys ds =
   print_if_debug ds;
   print_if_verbose "-------Checking well-formedness---------";

@@ -1311,6 +1311,16 @@ let rec infer_declaration
   (* print_endline @@ "After subst_TNames "^ decl_to_string d; *)
   let env, effect_count, new_d =
     match d.d with
+    | DProcess{pid; pdecls} -> 
+      let _, _, pdecls' = List.fold_left 
+        (fun (env', effect_count', pdecls') pdecl -> 
+          let env'', effect_count'', pdecl' = 
+            infer_declaration builtin_tys env' effect_count' pdecl in
+          env'', effect_count'', pdecls'@[pdecl'])
+        (env, effect_count, [])
+        pdecls
+      in
+      env, effect_count, DProcess{pid; pdecls=pdecls'}
     | DSize (id, szo) ->
       let _ = Option.map (validate_size d.dspan env) szo in
       define_size id env, effect_count, d.d

@@ -132,6 +132,7 @@ let add_definitions prefix env ds =
         }
       in
       env
+    | DProcess _ -> env
   in
   List.fold_left (aux prefix) env ds
 ;;
@@ -189,6 +190,7 @@ let rec replace_module env m_id ds =
             let _, ds = replace_module env id ds in
             replace_module env m_id ds
           | DModuleAlias _ -> failwith "Should be eliminated before this"
+          | DProcess _ -> env, [d]
         in
         env, d :: ds)
       (env, [])

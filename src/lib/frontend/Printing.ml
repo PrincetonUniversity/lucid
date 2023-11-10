@@ -636,6 +636,11 @@ and d_to_string d =
       (id_to_string id)
       (params_to_string params)
       (parser_block_to_string parser)
+  | DProcess{pid; pdecls} -> 
+    Printf.sprintf
+      "@process %s {\n%s\n}\n"
+      (id_to_string pid)
+      (decls_to_string pdecls)
 
 and decl_to_string d = d_to_string d.d
 and decls_to_string ds = concat_map "\n\n" decl_to_string ds

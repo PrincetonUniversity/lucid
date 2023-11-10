@@ -543,6 +543,7 @@ let rec check_qvars d =
   | DModule (_, intf, ds) ->
     List.iter check_qvars_intf intf;
     List.iter check_qvars ds
+  | DProcess{pdecls} -> List.iter check_qvars pdecls
 
 (* These don't actually have to be mutually recursive, I just want to put this
    below check_qvars *)

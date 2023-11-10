@@ -386,6 +386,12 @@ let rename prog =
           let id = if (Id.equal id (Builtins.main_parse_id)) then id else self#freshen_var id in
           DParser (id, params, body)
         | DModuleAlias _ -> failwith "Should be eliminated before this"
+        | DProcess{pid; pdecls} -> 
+          let orig_env = env in
+          let pdecls = self#visit_decls dummy pdecls in
+          env <- orig_env;
+          DProcess{pid; pdecls}
+
 
       (*** Places we enter a scope ***)
       method! visit_SIf dummy test left right =

@@ -430,6 +430,9 @@ let rec replace_decl (env : env) d =
       d.dspan
       "Modules, records and functions should be eliminated before tuple \
        elimination."
+  | DProcess{pid; pdecls} -> 
+    let _, pdecls = replace_decls env pdecls in
+    env, [{d with d = DProcess{pid; pdecls}}]
 
 and replace_decls env ds =
   let env, ds =

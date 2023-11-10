@@ -198,7 +198,7 @@ let inline_body env (params, body) = params, inliner#visit_statement env body
 
 (* Substitute into each decl as appropriate, collecting and removing DFun and
    DConstr declarations along the way. *)
-let inline_decl env d =
+let rec inline_decl env d =
   match d.d with
   (* Add to env, remove declaration *)
   | DFun (id, ty, _, body) ->
@@ -234,6 +234,16 @@ let inline_decl env d =
     failwith "Modules should be eliminated before inlining"
   (* no function calls allowed in actions *)
   | DAction _ -> env, Some d
+  | DProcess{pid; pdecls} -> 
+    let _, pdecls = 
+      List.fold_left
+        (fun (env, pdecls) pdecl ->
+          let env, pdecl = inline_decl env pdecl in
+          env, pdecl :: pdecls)
+        (env, [])
+        pdecls
+    in
+    env, Some { d with d = DProcess{pid; pdecls=(List.filter_map (fun x -> x) pdecls)} }
 ;;
 
 let inline_prog ds =

@@ -155,6 +155,7 @@
 %token <Span.t> EXTERN
 %token <Span.t> TYPE
 %token <Span.t> NOINLINE
+%token <Span.t> PROCESS
 
 %token <Span.t> TABLE_TYPE
 %token <Span.t> KEY_TYPE
@@ -498,7 +499,7 @@ decl:
                                             { [dglobal_sp (snd $3) $2 $5 (Span.extend $1 $6)] }
     | TABLE_TYPE dt_table                    { [$2] }
     | PARSER ID paramsdef LBRACE parser_block RBRACE { [mk_dparser (snd $2) $3 $5 (Span.extend $1 $6)] }
-
+    | PROCESS ID LBRACE decls RBRACE        { [dprocess_sp (snd $2) $4 (Span.extend $1 $5)] }
 
 decls:
     | decl                             { $1 }
@@ -589,6 +590,7 @@ statement1:
         LBRACE tbl_entries=table_entries RBRACE RPAREN SEMI                 {tblinstall_sp (tbl) (snd tbl_entries) (Span.extend $1 $9)}
     | TABLE_INSTALL LPAREN tbl=exp COMMA
         LBRACE tbl_entries=table_entries RBRACE RPAREN SEMI                 {mk_tblinstall_single (tbl) (snd tbl_entries) (Span.extend $1 $9)}
+
 includes:
     | INCLUDE STRING                        {[(snd $2)]}
     | INCLUDE STRING includes               {(snd $2)::$3}

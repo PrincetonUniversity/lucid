@@ -300,6 +300,7 @@ and parser_step =
 (* Include span for error reporting *)
 and parser_block = (parser_action * sp) list * (parser_step * sp)
 
+
 (* declarations *)
 and d =
   | DSize of id * size option
@@ -317,6 +318,7 @@ and d =
   | DModuleAlias of id * exp * cid * cid
   | DAction of id * ty list * params * (params * action_body)
   | DParser of id * params * parser_block
+  | DProcess of {pid : id; pdecls:decls}
 
 (* name, return type, args & body *)
 and decl =
@@ -564,3 +566,5 @@ let inevent_sp id cspecs params span =
 ;;
 
 let inmodule_sp id intf span = spec_sp (InModule (id, intf)) span
+
+let dprocess_sp pid pdecls span = decl_sp (DProcess {pid; pdecls}) span
