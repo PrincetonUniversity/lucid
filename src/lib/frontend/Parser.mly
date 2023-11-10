@@ -288,7 +288,7 @@ exp:
     | HASH single_poly LPAREN args RPAREN { hash_sp (snd $2) $4 (Span.extend $1 $5) }
     | LPAREN TINT single_poly RPAREN exp  { op_sp (Cast(snd $3))[$5] (Span.extend $1 $5.espan) }
     | exp PROJ ID                         { proj_sp $1 (Id.name (snd $3)) (Span.extend $1.espan (fst $3)) }
-    | LPAREN exp RPAREN		             	  { $2 }
+    // | LPAREN exp RPAREN		             	  { $2 }
     | exp LBRACKET size COLON size RBRACKET { op_sp (Slice (snd $3, snd $5)) [$1] (Span.extend ($1).espan (fst $5)) }
     | LBRACE record_entries RBRACE        { record_sp $2 (Span.extend $1 $3) }
     | LBRACE exp WITH record_entries RBRACE { with_sp $2 $4 (Span.extend $1 $5) }
@@ -299,19 +299,29 @@ exp:
     | SIZECAST single_poly LPAREN size RPAREN { szcast_sp (snd $2) (snd $4) (Span.extend $1 $5) }
     | FLOOD exp                           { flood_sp $2 (Span.extend $1 $2.espan) }
     | LBRACE args RBRACE                  { make_group $2 (Span.extend $1 $3) }
-    | TABLE_CREATE LESS ty MORE LPAREN
-        LPAREN args RPAREN COMMA
-        exp COMMA
-        cid opt_args
+    | TABLE_CREATE LESS tbl_ty=ty MORE LPAREN
+        LPAREN actions=exp RPAREN COMMA
+        n_entries=exp COMMA
+        default_action_id=cid 
+        default_action_args=opt_args
         RPAREN
-
-                                         { make_create_table $3 $7 ($10) (snd $12, snd $13) (Span.extend $1 $14) }
+                                         { make_create_table tbl_ty (unpack_parsed_tuple actions) (n_entries) (snd default_action_id, snd default_action_args) (Span.extend $1 $14) }
     | TABLE_MATCH
-        LPAREN exp COMMA
-        opt_args COMMA
-        opt_args
-        RPAREN                          { tblmatch_sp $3 (snd $5) (snd $7) (Span.extend $1 $8)}
+        LPAREN tbl=exp COMMA
+        keys=exp COMMA
+        args=exp
+        RPAREN                          { tblmatch_sp tbl (unpack_parsed_tuple keys) (unpack_parsed_tuple args) (Span.extend $1 $8)}
+    | paren_exp                         { $1 }
 
+// an expression with a parenthesis is a tuple, unless its a single-element tuple, in which case its just the element.
+// note that user-written tuples may not appear in the AST, so any parsed tuple must be unpacked with 
+// SyntaxUtils.unpack_parsed_tuple before calling a AST node constructor
+paren_exp:
+    | LPAREN args RPAREN                  { match $2 with 
+                                            | [] -> tuple_sp [] (Span.extend $1 $3)
+                                            | [x] -> x
+                                            | args -> tuple_sp args (Span.extend $1 $3)}
+    | LPAREN RPAREN                       { tuple_sp [] (Span.extend $1 $2) }
 
 exps:
   | exp                                 { [$1] }
@@ -397,16 +407,15 @@ tys:
     | ty                                        { $1.tspan, [ $1 ] }
     | ty COMMA tys                              { (Span.extend $1.tspan (fst $3), $1::(snd $3)) }
 
-// a tuple of types, possibly empty, with optional parens for single-element tuples.
-optional_ty_tuple:
+ty_tuple:
     | LPAREN tys RPAREN                         { (Span.extend $1 $3, snd $2) }
     | LPAREN RPAREN                             { (Span.extend $1 $2, []) }
     | ty                                        { ($1.tspan, [ $1 ]) }
 
 dt_table:
     | ID ASSIGN LBRACE
-        KEY_TYPE optional_ty_tuple
-        ARG_TYPE optional_ty_tuple
+        KEY_TYPE ty_tuple
+        ARG_TYPE ty_tuple
         RET_TYPE ty RBRACE
                                             { duty_sp
                                                     (snd $1)
@@ -537,8 +546,7 @@ entries:
     | entry                                            { fst $1, [snd $1] }
     | entry SEMI entries                               { Span.extend (fst $1) (fst $3), (snd $1::snd $3)}
 
-(* Only needed to avoid a shift-reduce warning on with match statemnets.
-   We'd get the same result either way, though. *)
+// TODO: remove multiargs for match statements -- no need to suport match x, y, ... with syntax (no parens for multiple args)
 multiargs:
     | exp COMMA args                         { $1::$3 }
 
@@ -555,10 +563,9 @@ statement1:
     | MGENERATE LPAREN exp COMMA exp RPAREN SEMI { gen_sp (GMulti $3) $5 (Span.extend $1 $7)}
     | PGENERATE LPAREN exp COMMA exp RPAREN SEMI { gen_sp (GPort $3) $5 (Span.extend $1 $7)}
     | cid LESS UNORDERED MORE paren_args SEMI { sucall_sp (snd $1) (snd $5) (Span.extend (fst $1) $6) }
-    
     | cid paren_args SEMI                   { scall_sp (snd $1) (snd $2) (Span.extend (fst $1) $3) }
-    | MATCH args WITH branches              { match_sp $2 (snd $4) (Span.extend $1 (fst $4)) }
-    | MATCH LPAREN multiargs RPAREN WITH branches  { match_sp $3 (snd $6) (Span.extend $1 (fst $6)) }
+    | MATCH exp=exp WITH branches=branches  { match_sp (unpack_parsed_tuple exp) (snd branches) (Span.extend $1 (fst branches)) }
+    | MATCH multiargs=multiargs WITH branches=branches { match_sp multiargs (snd branches) (Span.extend $1 (fst branches)) }
     | PRINTF LPAREN STRING RPAREN SEMI             { sprintf_sp (snd $3) [] (Span.extend $1 $5) }
     | PRINTF LPAREN STRING COMMA args RPAREN SEMI  { sprintf_sp (snd $3) $5 (Span.extend $1 $7) }
     | FOR LPAREN ID LESS size RPAREN LBRACE statement RBRACE { loop_sp $8 (snd $3) (snd $5) (Span.extend $1 $9) }

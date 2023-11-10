@@ -466,6 +466,9 @@ let comp_sp e i k span = exp_sp (EComp (e, i, k)) span
 let vector_sp es span = exp_sp (EVector es) span
 let szcast_sp sz1 sz2 span = exp_sp (ESizeCast (sz1, sz2)) span
 let flood_sp e span = exp_sp (EFlood e) span
+let tuple_sp es span = exp_sp (ETuple es) span
+
+
 
 let tblmatch_sp tbl keys args span =
   let t = { tbl; keys; args; outs = []; out_tys = None } in
@@ -481,7 +484,6 @@ let dextern_sp id ty span = decl_sp (DExtern (id, ty)) span
 let dsymbolic_sp id ty span = decl_sp (DSymbolic (id, ty)) span
 let handler_sp id s p body span = decl_sp (DHandler (id, s, (p, body))) span
 let dparser_sp id params p span = decl_sp (DParser (id, params, p)) span
-
 
 
 

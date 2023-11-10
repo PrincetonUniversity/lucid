@@ -26,6 +26,10 @@ global ftbl_t ftbl = table_create<ftbl_t>((hit_acn, miss_acn), 1024, miss_acn(0)
 
 event pktin(int src, int dst) {
   Array.set(myarr, 0, dst);
-  res_t tbl_result = table_match(ftbl, (dst), (1234));
+  res_t tbl_result = table_match(
+    ftbl, 
+    (dst), 
+    (1234)
+  );
   printf ("table result: %d", tbl_result#val);
 }

@@ -504,6 +504,13 @@ let mk_tblinstall_single id entries span =
   else tblinstall_sp id entries span
 ;;
 
+let unpack_parsed_tuple (e : exp) =
+  match e.e with
+  | ETuple lst -> lst
+  | _ -> [e]
+;;
+
+
 let cid_of_exp (ex : exp) : Cid.t =
   match ex.e with
   | EVar n -> n
