@@ -119,12 +119,14 @@ and op =
   | PatExact
   | PatMask (* x && y matches z when z && y == x && y *)
 
+(* pats get wrapped in values for table operations, 
+   but for match statements they are used directly. 
+   (this should be refactored to use values everywhere) *)
 and pat =
-  | PWild
-  (* Span is just for easy error messaging in ConstInlining *)
-  | PVar of cid * sp
-  | PNum of z
-  | PBit of int list
+  | PWild            
+  | PVar of cid * sp 
+  | PNum of z        
+  | PBit of int list 
 
 (* values *)
 and v =
@@ -133,7 +135,7 @@ and v =
   | VEvent of event
   | VGlobal of int (* Stage number *)
   | VGroup of location list
-  | VPat of int list (* every pattern typed expression evaluates to a VPat *)
+  | VPat of pat
 
 and event =
   { eid : cid
@@ -173,8 +175,6 @@ and e =
       ; tdefault : exp; (* ECall(default_acn_id, default_installtime_args) *)
       }
   | ETableMatch of tbl_match
-  | EPatWild of
-      size option (* Polymorphic wildcard pat, handled similar to EInt *)
 
 and exp =
   { e : e
@@ -215,7 +215,8 @@ and tbl_match =
 (* out_tys is populated for statements that create new vars *)
 
 (* entries are like branches in match statements, except instead of
-   a statement there is an action id + const args *)
+   a statement there is a call to an action (really an action generator) *)
+
 (* notes on entry priorities:
   1. Lower priorities are checked first.
   2. Priorities should be a bounded size, under 24 bits for tof. *)
@@ -394,7 +395,7 @@ let vevent event = value (VEvent event)
 let vevent_sp event span = value_sp (VEvent event) span
 let vglobal idx = value (VGlobal idx)
 let vgroup locs = value (VGroup locs)
-let vpat_sp bs span = value_sp (VPat bs) span
+let vbits_sp bs span = value_sp (VPat (PBit bs)) span
 
 (***********************************)
 (* Modules for manipulating tqvars *)

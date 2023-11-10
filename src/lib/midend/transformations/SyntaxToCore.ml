@@ -108,7 +108,9 @@ let rec translate_value (v : S.value) : C.value =
     | S.VGroup ls -> C.VGroup ls
     | VEvent { eid; data; edelay } ->
       C.VEvent { eid; data = List.map translate_value data; edelay; evnum = None; eserialized=false }
-    | S.VPat bs -> C.VPat bs
+    | S.VPat(S.PBit bs) -> C.VPat bs
+    | S.VPat(S.PWild) -> S.error "wildcard pattern should be translated as a special case of expression"
+    | S.VPat _ -> err v.vspan "pattern VALUES should all be converted into PBits before backend"
   in
   { v = v'; vty = translate_ty (Option.get v.vty); vspan = v.vspan }
 ;;
@@ -116,6 +118,15 @@ let rec translate_value (v : S.value) : C.value =
 let rec translate_exp (e : S.exp) : C.exp =
   let e' =
     match e.e with
+    (* special case for wildcard value -- TODO: make wildcard a value in backend too *)
+    | S.EVal v when v.v = (S.VPat(S.PWild)) -> 
+      let ty = Option.get e.ety in
+      let sz = match ty.raw_ty with 
+        | TPat sz -> sz
+        | _ -> S.error "[translate_exp] expected a pattern type, but got something else"
+      in      
+      (* the size must be resolved by now *)
+      C.EVal (C.vwild (SyntaxUtils.extract_size (sz)))
     | S.EVal v -> C.EVal (translate_value v)
     | S.EInt (z, szo) ->
       let sz = Option.default 32 (Option.map translate_size szo) in
@@ -141,9 +152,9 @@ let rec translate_exp (e : S.exp) : C.exp =
          special function"
     | S.ETableMatch _ ->
       err e.espan "table match exps should have been eliminated before IR."
-    | S.EPatWild (Some sz) -> C.EVal (C.vwild (translate_size sz))
+    (* | S.EPatWild (Some sz) -> C.EVal (C.vwild (translate_size sz))
     | S.EPatWild None ->
-      err e.espan "wildcard patterns (_) should have a size before IR."
+      err e.espan "wildcard patterns (_) should have a size before IR." *)
   in
   { e = e'; ety = translate_ty (Option.get e.ety); espan = e.espan }
 

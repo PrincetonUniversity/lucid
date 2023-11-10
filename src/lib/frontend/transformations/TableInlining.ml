@@ -69,7 +69,7 @@ let rec eliminate_exp e =
   | EComp (e, id, size) ->
     let stmt, e' = eliminate_exp e in
     stmt, { e with e = EComp (e', id, size) }
-  | EPatWild _ -> snoop, e
+  (* | EPatWild _ -> snoop, e *)
 
 (* eliminate table expressions in a list of expressions *)
 and eliminate_exps exps =

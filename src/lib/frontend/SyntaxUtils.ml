@@ -359,7 +359,7 @@ let default_expression ty =
    be duplicated) *)
 let rec is_compound e =
   match e.e with
-  | EInt _ | EVal _ | EVar _ | ESizeCast _ | EPatWild _ -> false
+  | EInt _ | EVal _ | EVar _ | ESizeCast _ -> false
   | EHash _ | EOp _ | ECall _ | EStmt _ -> true
   | ETableCreate _ -> true
   | ETableMatch _ -> true
@@ -478,18 +478,33 @@ let mk_entry prio pats acn args span =
   { eprio = prio; ematch = pats; eaction = Syntax.ucall_sp (Cid.id acn) args span;}
 ;;
 
+let tpat_sz_ct = ref (-1)
+let fresh_tpat_sz () =
+  incr tpat_sz_ct;
+  let id = Id.create ("tpat_sz" ^ string_of_int !tpat_sz_ct) in
+  IVar (QVar id)
+
 (* convert something parsed as an expression into a pattern *)
 let tpat_of_exp exp =
   match exp.e with
   (* if we somehow get an EPatWild, keep it *)
-  | EPatWild _ -> exp
+  (* | EPatWild _ -> exp *)
   (* _ is a builtin for wildcard *)
-  | EVar (Cid.Id ("_", _)) -> { exp with e = EPatWild None }
+  | EVar (Cid.Id ("_", _)) ->
+    let sz = fresh_tpat_sz () in 
+    let v = avalue 
+      (VPat(PWild))
+      (Some (ty(TPat sz)))
+      exp.espan
+    in
+    (* let v = avalue VTWild (Some (ty(TPat sz))) exp.espan in *)
+    value_to_exp v
+  (* exp with e = EPatWild None  *)
   (* &&& is an operation that produces a pattern,
      so keep the expression as is *)
   | EOp (PatMask, _) -> exp
   (* pattern values are already patterns *)
-  | EVal { v = VPat _ } -> exp
+  | EVal { v = VPat(PBit _) } -> exp
   (* everything else is assumed to be an int and
      gets wrapped in a PatExact op *)
   | _ -> op_sp PatExact [exp] exp.espan
@@ -601,7 +616,7 @@ let e_to_constr_str e = match e with
 | ETuple (_) -> "tuple"
 | ETableCreate (_) -> "tablecreate"
 | ETableMatch (_) -> "tablematch"
-| EPatWild (_) -> "patwild"
+(* | EPatWild (_) -> "patwild" *)
 ;;
 
 

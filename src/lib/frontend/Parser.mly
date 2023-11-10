@@ -273,7 +273,7 @@ patterns:
   | pattern COMMA patterns              { $1 :: $3 }
     
 exp:
-    | BITPAT                              { value_to_exp (vpat_sp (snd $1) (fst $1))}
+    | BITPAT                              { value_to_exp (vbits_sp (snd $1) (fst $1))}
     | cid			                      { var_sp (snd $1) (fst $1) }
     | NUMWITDH                            { eint_sp (fst (snd $1)) (Some (IConst (snd (snd $1)))) (fst $1) }
     | NUM                                 { eint_sp (snd $1) None (fst $1) }

@@ -255,7 +255,9 @@ let rec v_to_string v =
   | VEvent event -> event_to_string event
   | VGlobal i -> "global_" ^ string_of_int i
   | VGroup vs -> Printf.sprintf "{%s}" (comma_sep location_to_string vs)
-  | VPat bs -> bs_to_string bs
+  | VPat p -> pat_to_string p
+  (* | VTBits bs -> bs_to_string bs
+  | VTWild -> "_" *)
 
 and value_to_string v = v_to_string v.v
 
@@ -334,7 +336,7 @@ let rec e_to_string e =
       (comma_sep exp_to_string (snd t.tdefault)) *)
   | ETableMatch tr ->
     Printf.sprintf "table_match(%s);" (comma_sep exp_to_string tr.args)
-  | EPatWild _ -> "_"
+  (* | EPatWild _ -> "_" *)
 
 and exp_to_string e = e_to_string e.e
 (* ^ Printf.sprintf "[ty:%s]"

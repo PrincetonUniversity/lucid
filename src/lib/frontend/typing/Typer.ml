@@ -47,7 +47,9 @@ let infer_value v =
     | VInt n -> TInt (IConst (Integer.size n))
     | VGroup _ -> TGroup
     | VGlobal _ | VEvent _ -> failwith "Cannot write values of these types"
-    | VPat bs -> TPat (IConst (List.length bs))
+    | VPat (PBit bs) -> TPat (IConst (List.length bs))
+    | VPat (PWild) -> TPat (fresh_size ())
+    | VPat (_) -> failwith "patterns besides bitstrings and wilds should not appear in a value"
   in
   { v with vty = Some (mk_ty vty) }
 ;;
@@ -516,18 +518,7 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
     in
     let new_e = ETableMatch new_tr in
     new_env, { e with e = new_e; ety = Some ret_ty }
-  | EPatWild sz ->
-    ( env
-    , (match sz with
-       | None ->
-         let new_size = fresh_size () in
-         { e with
-           e = EPatWild (Some new_size)
-         ; ety = Some (mk_ty @@ TPat new_size)
-         }
-       | Some sz ->
-         validate_size e.espan env sz;
-         Some (mk_ty @@ TPat sz) |> wrap e) )
+  
 
 and infer_op env span op args =
   let env, ty, new_args =
