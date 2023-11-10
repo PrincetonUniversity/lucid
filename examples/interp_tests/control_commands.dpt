@@ -17,8 +17,8 @@ action res_t miss_acn(int x)(int a) {
 }
 // extend parsing to not need parens around single element tuples
 table_type ftbl_t = {
-  key_size: (32)
-  arg_types: (int)
+  key_type: (int)
+  arg_type: (int)
   ret_type: res_t
 }
 global ftbl_t ftbl = table_create<ftbl_t>((hit_acn, miss_acn), 1024, miss_acn(0));

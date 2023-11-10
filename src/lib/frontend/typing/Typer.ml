@@ -686,7 +686,7 @@ and infer_action_args env sp (acn_args : exp list) (expected_arg_tys : ty list) 
     expected_arg_tys;
   inf_acn_args
 
-and infer_keys env sp inf_keysizes keys =
+and infer_keys env sp (inf_keysizes : ty list) keys =
   let inf_keys = List.map (infer_exp env) keys |> List.split |> snd in
   if List.length inf_keysizes <> List.length keys
   then error_sp sp "Key has incorrect number of fields for table_type.";
@@ -695,13 +695,9 @@ and infer_keys env sp inf_keysizes keys =
       let keysz =
         match key_exp.ety with
         | None -> error_sp key_exp.espan "Could not infer type"
-        | Some ty ->
-          (match ty.raw_ty with
-           | TInt sz -> sz
-           | TBool -> IConst 1
-           | _ -> error_sp key_exp.espan "key must be int or bool")
+        | Some ty -> ty
       in
-      unify_size sp keysz inf_keysz)
+      unify_ty sp keysz inf_keysz)
     inf_keys
     inf_keysizes;
   inf_keys
@@ -1025,7 +1021,13 @@ and infer_entries (env : env) sp tbl_ty entries =
     | TTable tbl_ty -> tbl_ty.tkey_sizes
     | _ -> error_sp sp ("first argument to table_install is not a table:\n"^(Printing.raw_ty_to_string tbl_ty.raw_ty))
   in
-  let expected_pat_rawtys = List.map (fun sz -> TPat sz) key_sizes in
+  let ty_to_size (ty : ty) = 
+    match ty.raw_ty with 
+    | TInt(sz) -> sz
+    | TBool -> IConst(1)
+    | _ -> error_sp sp "[ty_to_size] expected an int or bool, but got something else"
+  in
+  let expected_pat_rawtys = List.map (fun sz -> TPat (ty_to_size sz)) key_sizes in
   (* do inference and checks for a single entry *)
   let infer_entry env entry =
     (* type the patterns *)

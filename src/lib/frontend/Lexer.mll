@@ -80,8 +80,8 @@ rule token = parse
   | "noinline"        { NOINLINE (position lexbuf) }
 
   | "table_type"              { TABLE_TYPE (position lexbuf) }
-  | "key_size:"               { KEY_SIZE (position lexbuf) }
-  | "arg_types:"              { ARG_TYPES (position lexbuf) }
+  | "key_type:"               { KEY_TYPE (position lexbuf) }
+  | "arg_type:"               { ARG_TYPE (position lexbuf) }
   | "ret_type:"               { RET_TYPE (position lexbuf) }
   | "action"                  { ACTION (position lexbuf) }
   | "table_create"            { TABLE_CREATE (position lexbuf) }

@@ -61,7 +61,7 @@ and raw_ty =
   | TPat of size (* number of bits *)
 
 and tbl_ty =
-  { tkey_sizes : size list
+  { tkey_sizes : ty list
   ; tparam_tys : ty list
   ; tret_tys : ty list
   }

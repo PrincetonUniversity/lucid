@@ -265,7 +265,7 @@ and try_unify_rty span rty1 rty2 =
     try_unify_size span size1 size2;
     unify_raw_ty ty1 ty2
   | TTable(t1), TTable(t2) -> 
-    List.iter2 (try_unify_size span) t1.tkey_sizes t2.tkey_sizes;
+    List.iter2 (try_unify_ty span) t1.tkey_sizes t2.tkey_sizes;
     List.iter2 (try_unify_ty span) t1.tparam_tys t2.tparam_tys;
     List.iter2 (try_unify_ty span) t1.tret_tys t2.tret_tys
   | TAction(a1), TAction(a2) -> 

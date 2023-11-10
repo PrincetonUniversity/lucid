@@ -62,8 +62,8 @@ let exp_to_tblmeta id exp =
     | _ -> error "[rty_to_size] expected an integer, but got something else"
   in
   (* a user-defined key of size sz *)
-  let user_key sz = 
-    {kid = None; kty = "ternary"; ksize = SyntaxUtils.extract_size sz;}
+  let user_key ty = 
+    {kid = None; kty = "ternary"; ksize = SyntaxUtils.extract_size (ty_to_size ty);}
   in
   (* builtin *)
   let priority_key = 

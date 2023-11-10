@@ -149,7 +149,7 @@ let rec raw_ty_to_string t =
   | TTable t ->
     " table_type {"
     ^ "\n\tkey_size: "
-    ^ comma_sep size_to_string t.tkey_sizes
+    ^ comma_sep ty_to_string t.tkey_sizes
     ^ "\n\targ_ty: "
     ^ comma_sep ty_to_string t.tparam_tys
     ^ "\n\tret_ty: "

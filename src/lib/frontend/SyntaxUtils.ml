@@ -286,7 +286,7 @@ let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
     then false
     else List.for_all2 equiv_raw_ty lst1 lst2
   | TTable t1, TTable t2 ->
-    List.for_all2 equiv_size t1.tkey_sizes t2.tkey_sizes
+    List.for_all2 equiv_ty t1.tkey_sizes t2.tkey_sizes
     && List.for_all2 equiv_ty t1.tparam_tys t2.tparam_tys
     && List.for_all2 equiv_ty t1.tret_tys t2.tret_tys
   | ( ( TBool

@@ -26,8 +26,8 @@ module WriteCacheTable : {
 {
   // types for data stored by the table
   table_type cttbl_t = {
-    key_size: (32)
-    arg_types: ()
+    key_type: (int)
+    arg_type: ()
     ret_type: res_t
   }
   // table actions

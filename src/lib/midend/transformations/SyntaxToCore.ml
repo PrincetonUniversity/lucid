@@ -36,7 +36,13 @@ let rec translate_ty (ty : S.ty) : C.ty =
         }
     | S.TVoid -> C.TBool (* Dummy translation needed for foreign functions *)
     | S.TTable tbl ->
-      let tkey_sizes = List.map translate_size tbl.tkey_sizes in
+      let ty_to_size (ty : S.ty) = 
+        match ty.raw_ty with 
+        | TInt(sz) -> sz
+        | TBool -> IConst(1)
+        | _ -> S.error "[rty_to_size] expected an integer, but got something else"
+      in
+      let tkey_sizes = List.map translate_size (List.map ty_to_size tbl.tkey_sizes) in
       let tparam_tys = List.map translate_ty tbl.tparam_tys in
       let tret_tys = List.map translate_ty tbl.tret_tys in
       C.TTable { tkey_sizes; tparam_tys; tret_tys }

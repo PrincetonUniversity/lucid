@@ -141,8 +141,8 @@
 %token <Span.t> NOINLINE
 
 %token <Span.t> TABLE_TYPE
-%token <Span.t> KEY_SIZE
-%token <Span.t> ARG_TYPES
+%token <Span.t> KEY_TYPE
+%token <Span.t> ARG_TYPE
 %token <Span.t> RET_TYPE
 %token <Span.t> ACTION
 %token <Span.t> TABLE_CREATE
@@ -212,7 +212,7 @@ ty:
     | ty LBRACKET size RBRACKET         { ty_sp (TVector ($1.raw_ty, snd $3)) (Span.extend $1.tspan $4) }
 
 cid:
-    | ID				                        { (fst $1, Cid.id (snd $1)) }
+    | ID				                { (fst $1, Cid.id (snd $1)) }
     | ID DOT cid                        { (Span.extend (fst $1) (fst $3),
                                             Compound (snd $1, snd $3) )  }
 size:
@@ -221,10 +221,6 @@ size:
     | QID                               { fst $1, IVar (QVar (snd $1)) }
     | AUTO                              { $1, IVar (QVar (fresh_auto ())) }
     | size PLUS size                    { Span.extend (fst $1) (fst $3), add_sizes (snd $1) (snd $3)}
-
-sizes:
-    | size                              { fst $1, [snd $1] }
-    | size COMMA sizes                  { Span.extend (fst $1) (fst $3), (snd $1)::(snd $3) }
 
 polys:
     | size                              { fst $1, [snd $1] }
@@ -397,22 +393,20 @@ tyname_def:
     | ID                                  { snd $1, [] }
     | ID poly                             { snd $1, snd $2}
 
-optional_sizes:
-    | LPAREN sizes RPAREN                       { (Span.extend $1 $3, snd $2) }
-    | LPAREN RPAREN                             { (Span.extend $1 $2, []) }
-
 tys:
     | ty                                        { $1.tspan, [ $1 ] }
     | ty COMMA tys                              { (Span.extend $1.tspan (fst $3), $1::(snd $3)) }
 
-optional_tys:
+// a tuple of types, possibly empty, with optional parens for single-element tuples.
+optional_ty_tuple:
     | LPAREN tys RPAREN                         { (Span.extend $1 $3, snd $2) }
     | LPAREN RPAREN                             { (Span.extend $1 $2, []) }
+    | ty                                        { ($1.tspan, [ $1 ]) }
 
 dt_table:
     | ID ASSIGN LBRACE
-        KEY_SIZE optional_sizes
-        ARG_TYPES optional_tys
+        KEY_TYPE optional_ty_tuple
+        ARG_TYPE optional_ty_tuple
         RET_TYPE ty RBRACE
                                             { duty_sp
                                                     (snd $1)

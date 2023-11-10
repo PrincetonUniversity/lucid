@@ -34,8 +34,8 @@ action res_t miss_acn(bool b)(int a) {
 // the type of its actions' runtime parameters, and the type of 
 // its actions' return.
 table_type ftbl_t = {
-  key_size: (32) // a table of type ftbl_t will match on a single 32-bit expression. If we wanted to match on a pair of 32-bit expressions, we'd write (32, 32)
-  arg_types: (int) // all the actions bound to a table of type ftbl_t must take a single integer as their _match time_ argument.
+  key_type: (int) // a table of type ftbl_t will match on a single 32-bit expression. If we wanted to match on a pair of 32-bit expressions, we'd write (32, 32)
+  arg_type: (int) // all the actions bound to a table of type ftbl_t must take a single integer as their _match time_ argument.
   ret_type: res_t // all the actions bound to a table of type ftbl_t must return a single res_t.
 }
 // table_create creates a table of the given type, binds actions to it, and assigns a default action. 
