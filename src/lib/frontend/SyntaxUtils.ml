@@ -510,6 +510,11 @@ let unpack_parsed_tuple (e : exp) =
   | _ -> [e]
 ;;
 
+let unpack_default_action e = 
+  match e with 
+  | ECall(cid, args, flag) -> cid, args, flag
+  | _ -> error "default table action must be a expression"
+;;
 
 let cid_of_exp (ex : exp) : Cid.t =
   match ex.e with
@@ -526,28 +531,6 @@ let is_evar exp =
 ;;
 
 
-(* 
-and raw_ty =
-  | TQVar of raw_ty tqvar
-  | TBool
-  | TVoid
-  | TGroup
-  | TInt of size (* Number of bits *)
-  | TEvent
-  | TFun of func_ty
-  | TMemop of int (* Number of arguments: 2-4 *) * size
-  | TName of cid * sizes * bool
-    (* Named type: e.g. "Array.t<<32>>". Bool is true if it represents a global type *)
-  | TAbstract of
-      cid * sizes * bool * raw_ty (* raw_ty is the type when it was a TName *)
-  | TRecord of (string * raw_ty) list
-  | TVector of raw_ty * size
-  | TTuple of raw_ty list
-  | TTable of tbl_ty
-  | TAction of acn_ty
-  | TPat of size (* number of bits *)   
-
-*)
 
 let raw_ty_to_constr_str raw_ty = 
   match raw_ty with 
@@ -619,3 +602,5 @@ let e_to_constr_str e = match e with
 | ETableMatch (_) -> "tablematch"
 | EPatWild (_) -> "patwild"
 ;;
+
+

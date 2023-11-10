@@ -41,8 +41,13 @@ let subst =
 
       method! visit_ETableCreate env tty tactions tsize tdefault =
         let tactions = List.map (self#visit_exp env) tactions in
-        let tdefault_cid, tdefault_args =
-          fst tdefault, List.map (self#visit_exp env) (snd tdefault)
+        let tdefault_cid, tdefault_args, flag = match tdefault.e with 
+        | ECall(tdefault_cid, tdefault_args, flag) -> tdefault_cid, tdefault_args, flag
+        | _ -> error "internal error: default table action in constructor is not a call"
+        in
+
+        let tdefault_args =
+          List.map (self#visit_exp env) tdefault_args
         in
         (* rename the default action cid *)
         let tdefault_cid =
@@ -51,8 +56,8 @@ let subst =
           | Some tdefault_cid' -> Id tdefault_cid'
         in
         ETableCreate
-          { tty; tactions; tsize; tdefault = tdefault_cid, tdefault_args }
-
+          { tty; tactions; tsize; tdefault = {tdefault with e=ECall(tdefault_cid, tdefault_args, flag)}}
+          
       method! visit_STableInstall env etbl entries =
         let etbl = self#visit_exp env etbl in
         let entries =

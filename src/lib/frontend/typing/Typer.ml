@@ -453,7 +453,7 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
     in
     List.iter check_acn_ty inf_acns;
     (* infer types of default action args *)
-    let def_cid, def_args = ecreate.tdefault in
+    let def_cid, def_args, flag = unpack_default_action ecreate.tdefault.e in
     let env, inf_def_args = infer_exps env def_args in
     (* type check the default action's const args *)
     let expected_def_arg_tys =
@@ -498,7 +498,9 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
             { ecreate with
               tactions = inf_acns
             ; tsize = inf_tsize
-            ; tdefault = def_cid, inf_def_args
+            (* note that the default action expression is currently typed as TVoid, because the type 
+               never matters except for earlier in this checking branch, where it is obtained from elsewhere *)
+            ; tdefault = {ecreate.tdefault with e=ECall(def_cid, inf_def_args, flag); ety=Some(ty TVoid)}
             }
       ; ety = Some ety
       } )

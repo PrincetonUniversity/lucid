@@ -325,12 +325,13 @@ let rec e_to_string e =
     Printf.sprintf "{%s; return %s}" (stmt_to_string s) (exp_to_string e)
   | ETableCreate t ->
     Printf.sprintf
-      "table_create<%s>((%s),%s, %s(%s))"
+      "table_create<%s>((%s),%s, %s)"
       (ty_to_string t.tty)
       (concat_map "," exp_to_string t.tactions)
       (exp_to_string t.tsize)
-      (cid_to_string (fst t.tdefault))
-      (comma_sep exp_to_string (snd t.tdefault))
+      (exp_to_string t.tdefault)
+      (* (cid_to_string (fst t.tdefault))
+      (comma_sep exp_to_string (snd t.tdefault)) *)
   | ETableMatch tr ->
     Printf.sprintf "table_match(%s);" (comma_sep exp_to_string tr.args)
   | EPatWild _ -> "_"

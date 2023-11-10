@@ -1,4 +1,5 @@
 open Syntax
+open SyntaxUtils
 open Batteries
 
 let rec inline_exp e =
@@ -48,8 +49,9 @@ let rec inline_exp e =
     stmt, { e with e = ETuple es' }
   | ETableCreate tc -> 
     let acn_stmt, tactions = inline_exps tc.tactions in
-    let def_stmt, def_args = inline_exps (snd tc.tdefault) in
-    let tdefault = (fst tc.tdefault, def_args) in
+    let def_cid, def_args, def_flag = unpack_default_action tc.tdefault.e in
+    let def_stmt, def_args = inline_exps def_args in
+    let tdefault = {tc.tdefault with e = ECall(def_cid, def_args, def_flag)} in
     sseq 
       acn_stmt def_stmt
       ,{e with e = ETableCreate({tc with tactions; tdefault})}  

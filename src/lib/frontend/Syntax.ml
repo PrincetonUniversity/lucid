@@ -170,7 +170,8 @@ and e =
       { tty : ty
       ; tactions : exp list
       ; tsize : exp
-      ; tdefault : cid * exp list
+      ; tdefault : exp;      
+      (* cid * exp list *)
           (* ECall(default_acn_id, default_installtime_args) *)
       }
   | ETableMatch of tbl_match

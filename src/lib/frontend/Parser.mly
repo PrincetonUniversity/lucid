@@ -300,12 +300,11 @@ exp:
     | FLOOD exp                           { flood_sp $2 (Span.extend $1 $2.espan) }
     | LBRACE args RBRACE                  { make_group $2 (Span.extend $1 $3) }
     | TABLE_CREATE LESS tbl_ty=ty MORE LPAREN
-        LPAREN actions=exp RPAREN COMMA
+        actions=exp COMMA
         n_entries=exp COMMA
-        default_action_id=cid 
-        default_action_args=opt_args
+        default_action_call=exp // default action initialized with compile time arguments
         RPAREN
-                                         { make_create_table tbl_ty (unpack_parsed_tuple actions) (n_entries) (snd default_action_id, snd default_action_args) (Span.extend $1 $14) }
+                                         { make_create_table tbl_ty (unpack_parsed_tuple actions) (n_entries) (default_action_call) (Span.extend $1 $11) }
     | TABLE_MATCH
         LPAREN tbl=exp COMMA
         keys=exp COMMA

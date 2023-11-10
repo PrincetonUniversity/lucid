@@ -153,7 +153,8 @@ and translate_etablecreate id (exp : S.exp) : C.exp =
     let tty = translate_ty tc.tty in
     let tactions = List.map translate_exp tc.tactions in
     let tsize = translate_exp tc.tsize in
-    let tdefault = fst tc.tdefault, snd tc.tdefault |> List.map translate_exp in
+    let default_cid, default_args, _ = SyntaxUtils.unpack_default_action tc.tdefault.e in
+    let tdefault = default_cid, default_args |> List.map translate_exp in
     let e' = C.ETableCreate { tid = id; tty; tactions; tsize; tdefault } in
     { e = e'; ety = translate_ty (Option.get exp.ety); espan = exp.espan }
   | _ ->
