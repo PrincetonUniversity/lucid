@@ -116,7 +116,7 @@ and op =
   | RShift
   | TGet of int * int (* Size of the tuple, index to get *)
   | Slice of size * size
-  | PatExact
+  | PatExact (*cast an int to a pat -- automatically added during parsing in appropriate contexts *)
   | PatMask (* x && y matches z when z && y == x && y *)
 
 (* pats get wrapped in values for table operations, 
@@ -222,7 +222,7 @@ and tbl_match =
   2. Priorities should be a bounded size, under 24 bits for tof. *)
 and tbl_entry =
   { eprio : int
-  ; ematch : exp list
+  ; ematch : exp list (*expresisons because some patterns are given as mask operations *)
   ; eaction : exp (* ecall(action id, action args) *)
   }
 
@@ -287,7 +287,6 @@ and parser_action =
   (* The first exp is an l-value, presumably a record projection operation.
      We can make this explicit if we ever add l-values properly *)
   | PAssign of exp * exp  
-  (* Sorry but we also have to declare/init local variables in parsers... *)
   | PLocal of id * ty * exp
 
 and parser_branch = pat * parser_block
@@ -384,6 +383,7 @@ let value_sp v vspan = { v; vty = None; vspan }
 let value v = { v; vty = None; vspan = Span.default }
 let vint i size = value (VInt (Integer.create i size))
 
+let vpat p size span = avalue (VPat p) (Some (ty (TPat size))) span
 
 let vinteger i = value (VInt i)
 let vbool b = value (VBool b)
@@ -396,6 +396,7 @@ let vevent_sp event span = value_sp (VEvent event) span
 let vglobal idx = value (VGlobal idx)
 let vgroup locs = value (VGroup locs)
 let vbits_sp bs span = value_sp (VPat (PBit bs)) span
+let vwild_sp span = value_sp (VPat PWild) span
 
 (***********************************)
 (* Modules for manipulating tqvars *)

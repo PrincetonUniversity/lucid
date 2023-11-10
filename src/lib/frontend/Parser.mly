@@ -32,6 +32,9 @@
     incr auto_count;
     Id.create ("auto" ^ string_of_int !auto_count)
 
+  let fresh_size () = 
+    IVar (QVar (fresh_auto ()))
+
   let pat_of_cid (span, cid) =
     match Cid.names cid with
     | [name] when String.equal name "_" -> PWild
@@ -72,6 +75,19 @@
             dparser_sp Builtins.main_parse_id params p span
         else(
             dparser_sp id params p span) 
+
+
+    (* in a pattern context of parsing, wrap all expression that 
+    do not parse as pat types to pats *)
+    let cast_int_pats exp = 
+        match exp.e with 
+        (* exception cases: pattern values, pattern casts, and mask ops *)
+        | EVal({v=VPat (_)}) -> exp
+        | EOp(PatExact, _) -> exp
+        | EOp(PatMask, _) -> exp 
+        (* everything else gets cast to a pattern *)
+        | _ -> op_sp PatExact [exp] exp.espan
+
 ;;
 
 %}
@@ -173,6 +189,7 @@
 %token <Span.t> BITNOT
 %token <Span.t> SYMBOLIC
 %token <Span.t> FLOOD
+%token <Span.t> WILDCARD
 
 %token EOF
 
@@ -274,6 +291,7 @@ patterns:
     
 exp:
     | BITPAT                              { value_to_exp (vbits_sp (snd $1) (fst $1))}
+    | WILDCARD                            { value_to_exp (vwild_sp $1) }
     | cid			                      { var_sp (snd $1) (fst $1) }
     | NUMWITDH                            { eint_sp (fst (snd $1)) (Some (IConst (snd (snd $1)))) (fst $1) }
     | NUM                                 { eint_sp (snd $1) None (fst $1) }
@@ -433,7 +451,6 @@ parser_action:
   | ty ID ASSIGN exp SEMI                   { PLocal(snd $2, $1, $4), Span.extend ($1.tspan) $5 }
   | lexp ASSIGN exp SEMI                     { (PAssign ($1, $3)), Span.extend $1.espan $4 }
 
-
 parser_branch:
   | PIPE pattern ARROW LBRACE parser_block RBRACE  { Span.extend $1 $6, ($2, $5) }
 
@@ -523,23 +540,23 @@ branches:
     | branch                                 { fst $1, [snd $1] }
     | branch branches                        { Span.extend (fst $1) (fst $2), (snd $1::snd $2) }
 
-tpat:
-    | exp                               { tpat_of_exp $1 }
-
-tpats:
-  | tpat                             { [$1] }
-  | tpat COMMA tpats              { $1 :: $3 }
-
-opt_tpats:
-  | LPAREN tpats RPAREN                   { Span.extend $1 $3, $2}
-  | LPAREN RPAREN                         { Span.extend $1 $2, []}
-
 table_entry:
     (* an entry with no priority *)
-    | opt_tpats ARROW ID opt_args             { Span.extend (fst $1) (fst $4), mk_entry 0 (snd $1) (snd $3) (snd $4) (Span.extend (fst $1) (fst $4))}
+    | pats=opt_args ARROW ID args=opt_args             
+        { 
+            let pats_span, pats = pats in
+            let pats = List.map cast_int_pats pats in
+            Span.extend (pats_span) (fst args), 
+            mk_entry 0 (pats) (snd $3) (snd args) (Span.extend (pats_span) (fst args))            
+            }
     (* an entry with a priority *)
-    | LBRACKET NUM RBRACKET opt_tpats ARROW ID opt_args
-                                                    { Span.extend $1 (fst $7), mk_entry (snd $2 |> Z.to_int) (snd $4) (snd $6) (snd $7) (Span.extend $1 (fst $7))}
+    | LBRACKET NUM RBRACKET pats=opt_args ARROW ID args=opt_args
+        { 
+            let _, pats = pats in
+            let pats = List.map cast_int_pats pats in
+            Span.extend $1 (fst args), 
+            mk_entry (snd $2 |> Z.to_int) (pats) (snd $6) (snd args) (Span.extend $1 (fst args))
+            }
 
 table_entries:
     | table_entry                                            { fst $1, [snd $1] }

@@ -141,6 +141,7 @@ rule token = parse
   | "|"               { PIPE (position lexbuf) }
   | "->"              { ARROW (position lexbuf) }
   | "&&&"             { PATAND (position lexbuf) }
+  | "_"               { WILDCARD (position lexbuf) }
   | wspace            { token lexbuf }
   | '\n'              { incr_linenum lexbuf; token lexbuf}
   | str as s          { STRING (position lexbuf, extract_string s) }
