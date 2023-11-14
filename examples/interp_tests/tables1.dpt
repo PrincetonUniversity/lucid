@@ -13,22 +13,23 @@ type res_t = {
   int val;
   bool is_hit;
 }
-// Actions are functions executed by tables. 
-// They have two sets of parameters. 
-// The first set of parameters 
-// is filled at _install time_, that is, when an entry is 
-// added to a table that executes the action. 
-// The second set of parameters is filled at _match time_, when 
-// the table is matched. 
-// All the actions in a single table must have the same types for their 
-// match time parameters and also their return parameter.
-action res_t hit_acn(int x)(int a) {
-  return {val = x; is_hit = true};
-}
+// Action constructors are functions used to create actions. 
+// They are passed to table_create, to specify the domain of 
+// actions that a table supports, and table_install to 
+// construct a specific action for a table entry.
+// All the action constructors used in a table must create 
+// actions of the same type (same argument types and return type).
+action_constr hit_acn(int x) = {
+  return action res_t anon(int a) {
+    return {val = x; is_hit = true};
+  };
+};
 
-action res_t miss_acn(bool b)(int a) {
-  return {val = a; is_hit = b};
-}
+action_constr miss_acn(bool b) = {
+  return action res_t anon(int a) {
+    return {val = a; is_hit = b};
+  };
+};
 
 // A table type defines the type of value that the table matches on, 
 // the type of its actions' runtime parameters, and the type of 
@@ -38,7 +39,7 @@ table_type ftbl_t = {
   arg_type: (int) // all the actions bound to a table of type ftbl_t must take a single integer as their _match time_ argument.
   ret_type: res_t // all the actions bound to a table of type ftbl_t must return a single res_t.
 }
-// table_create creates a table of the given type, binds actions to it, and assigns a default action. 
+// table_create creates a table of the given type, binds action constructors to it, and assigns a default action. 
 // table_create<"table type">("actions bound to table", "table size", "default action");
 global ftbl_t ftbl = table_create<ftbl_t>((hit_acn, miss_acn), 1024, miss_acn(false));
 

@@ -148,7 +148,7 @@ let parse_entry entrylst =
   in
   let priority = match (List.assoc_opt "priority" entrylst) with
     | Some(v) -> JP.to_size v
-    | _ -> 0
+    | _ -> 50
   in
   let action_args = match (List.assoc "args" entrylst) with
     | `List argslst -> 

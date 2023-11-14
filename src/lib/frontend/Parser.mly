@@ -161,6 +161,7 @@
 %token <Span.t> ARG_TYPE
 %token <Span.t> RET_TYPE
 %token <Span.t> ACTION
+%token <Span.t> ACTION_CONSTR
 %token <Span.t> TABLE_CREATE
 %token <Span.t> TABLE_MATCH
 %token <Span.t> TABLE_INSTALL
@@ -482,8 +483,12 @@ decl:
                                             { [fun_sp (snd $3) $2 [] $4 $6 (Span.extend $1 $7)] }
     | FUN ty ID paramsdef constr_list LBRACE statement RBRACE
                                             { [fun_sp (snd $3) $2 $5 $4 $7 (Span.extend $1 $8)] }
-    | ACTION ty ID paramsdef paramsdef LBRACE statement RBRACE
-                                            { [mk_daction (snd $3) [$2] $4 $5 $7 (Span.extend $1 $8)]}
+    // declare an action constructor.... ugh with this custom syntax
+    | ACTION_CONSTR ID constr_params=paramsdef ASSIGN LBRACE RETURN ACTION ty=ty ID acn_params=paramsdef LBRACE acn_body=statement RBRACE SEMI RBRACE SEMI
+        { [mk_daction (snd $2) [ty] constr_params acn_params acn_body (Span.extend $1 $16)]}
+
+    // | ACTION ty=ty ID constr_params=paramsdef acn_params=paramsdef LBRACE acn_body=statement RBRACE
+    //                                         { [mk_daction (snd $3) [ty] constr_params acn_params acn_body (Span.extend $1 $8)]}
     | MEMOP ID paramsdef LBRACE statement RBRACE
                                             { [mk_dmemop (snd $2) $3 $5 (Span.extend (fst $1) $6)] }
     | SYMBOLIC SIZE ID SEMI                 { [dsize_sp (snd $3) None (Span.extend $1 $4)] }
@@ -547,7 +552,7 @@ table_entry:
             let pats_span, pats = pats in
             let pats = List.map cast_int_pats pats in
             Span.extend (pats_span) (fst args), 
-            mk_entry 0 (pats) (snd $3) (snd args) (Span.extend (pats_span) (fst args))            
+            mk_entry 50 (pats) (snd $3) (snd args) (Span.extend (pats_span) (fst args))            
             }
     (* an entry with a priority *)
     | LBRACKET NUM RBRACKET pats=opt_args ARROW ID args=opt_args

@@ -1,7 +1,7 @@
 
 In examples/interp_tests/tables1_wrong.dpt: 
 
-30|    res_t tbl_out2 = table_match(ftbl, (1), (2));
+39|    res_t tbl_out2 = table_match(ftbl, (1), (2));
                           ~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 error: examples/interp_tests/tables1_wrong.dpt: Table match in a handler may violate global order. (Did you include all the necessary constraints when declaring the event?)

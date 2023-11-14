@@ -8,13 +8,26 @@ type res_t = {
   bool is_hit;
 }
 
-action res_t hit_acn(int x)(int a) {
-  return {val = x; is_hit = true};
-}
+// action res_t hit_acn(int x)(int a) {
+//   return {val = x; is_hit = true};
+// }
 
-action res_t miss_acn(int x)(int a) {
-  return {val = x; is_hit = false};
-}
+action_constr hit_acn(int x) = {
+  return action res_t anon(int a) {
+    return {val = x; is_hit = true};
+  };
+};
+
+// action res_t miss_acn(int x)(int a) {
+//   return {val = x; is_hit = false};
+// }
+
+action_constr miss_acn(int x) = {
+  return action res_t anon(int a) {
+    return {val = x; is_hit = false};
+  };
+};
+
 // extend parsing to not need parens around single element tuples
 table_type ftbl_t = {
   key_type: (int)

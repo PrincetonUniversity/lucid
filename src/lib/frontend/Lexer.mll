@@ -83,6 +83,7 @@ rule token = parse
   | "key_type:"               { KEY_TYPE (position lexbuf) }
   | "arg_type:"               { ARG_TYPE (position lexbuf) }
   | "ret_type:"               { RET_TYPE (position lexbuf) }
+  | "action_constr"           { ACTION_CONSTR (position lexbuf) }
   | "action"                  { ACTION (position lexbuf) }
   | "table_create"            { TABLE_CREATE (position lexbuf) }
   | "table_match"             { TABLE_MATCH (position lexbuf) }
