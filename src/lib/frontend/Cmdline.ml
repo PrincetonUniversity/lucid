@@ -19,7 +19,8 @@ type config =
   ; mutable spec_file : string (** Path to an interpreter specification file *)
   ; mutable symb_file : string (** Path to a symbolic specification file *)
   ; mutable dpt_file : string (** Path to the input dpt file *)
-  ; mutable show_interp_state : bool
+  ; mutable show_interp_state : bool (* report final interpreter state *)
+  ; mutable show_interp_events : bool (* report events processed by interpreter *)
   ; mutable interactive : bool
       (** Run interpreter interactively (stdin / stdout) **)
   ; mutable output : string
@@ -56,6 +57,7 @@ let default () =
   ; symb_file = ""
   ; dpt_file = ""
   ; show_interp_state = true
+  ; show_interp_events = true
   ; interactive = false
   ; output = "lucid.output"
   ; json = false
@@ -156,7 +158,8 @@ let parse_interp () =
   (* common options *)
   let speclist = parse_common () in
   (* added options for interp *)
-  let set_final_state () = cfg.show_interp_state <- false in
+  let hide_final_state () = cfg.show_interp_state <- false in
+  let hide_event_reports () = cfg.show_interp_events <- false in
   let set_interactive () =
     cfg.interactive <- true;
     cfg.verbose <- false;
@@ -168,9 +171,13 @@ let parse_interp () =
         , Arg.String set_spec
         , "Path to the interpreter specification file" )
       ; ( "--suppress-final-state"
-        , Arg.Unit set_final_state
+        , Arg.Unit hide_final_state
         , "If set, don't print the final state of the interpreter when it \
            finishes." )
+      ; ( "--suppress-event-reports"
+        , Arg.Unit hide_event_reports
+        , "If set, don't print event arrival / generation reports while \
+            interpreting. ")
       ; ( "--interactive"
         , Arg.Unit set_interactive
         , "Run interpreter interactively, piping events to/from stdin/stdout" )
