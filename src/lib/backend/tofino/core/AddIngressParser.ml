@@ -22,11 +22,20 @@ open ParsePortSpec
 open CoreSyntax
 open MiscUtils
 
+(* let pkt_var = var (Cid.id pkt_varid) ((Payloads.payload_ty) |> SyntaxToCore.translate_ty) in *)
 
+let read_from_pkt_var ty pkt_var =  call Payloads.payload_read_cid [pkt_var] (ty);;
 (* create a parse block to parse and generate a single packet event. *)
-let packetevent_parse_block event = match event.d with
+let packetevent_parse_block (pkt_var : exp) event = match event.d with
 | DEvent(id,_, _, params) -> 
-   let read_cmds = List.map read_id params in
+   let read_cmds = List.filter_map 
+      (fun (id, ty) -> 
+         (* if it is a payload type, don't worry about the read *)
+         if (CoreSyntax.equiv_ty ty (Payloads.payload_ty |> SyntaxToCore.translate_ty)) then None
+         else
+         Some(read_id (read_from_pkt_var ty pkt_var) (id, ty)))
+      params
+   in
    let gen_cmd = pgen 
       (call
          (Cid.id id)
@@ -39,19 +48,12 @@ let packetevent_parse_block event = match event.d with
 ;;
 
 
-
-type lucid_entry_block_ty = 
-   | CallFromPortNum
-   | CallFromEth
-   | CallAlways
-   | CallInvalid
-
 (* call the parser for background events. *)
-let lucid_background_event_parser bg_events = 
+let lucid_background_event_parser pkt_var bg_events = 
    let (branches : parser_branch list) = List.map 
       (fun bg_ev -> match bg_ev.d with 
          | DEvent(_, Some(num), _,_) -> 
-            pbranch [num] (packetevent_parse_block bg_ev)
+            pbranch [num] (packetevent_parse_block pkt_var bg_ev)
          | DEvent(_, None, _, _) -> error "event has no number"
          | _ -> error "not an event?")
       bg_events
@@ -62,17 +64,17 @@ let lucid_background_event_parser bg_events =
    block 
       [ (* skip the lucid ethernet header. If we want to be safer, we can read it and check correctness. *)
          skip (ty (TInt(14*8)));
-         read (Cid.create ["tag"]) (ty (TInt(16))) (* read the event tag *)
+         read (Cid.create ["tag"]) tag_ty (read_from_pkt_var tag_ty pkt_var)  (* read the event tag *)
       ]
       (pmatch [etag] branches)
       
 ;;
 (* a parser that starts after the ethernet header (it doesn't skip ethernet header) *)
-let lucid_background_event_parser_from_eth bg_events = 
+let lucid_background_event_parser_from_eth pkt_var bg_events = 
    let (branches : parser_branch list) = List.map 
       (fun bg_ev -> match bg_ev.d with 
          | DEvent(_, Some(num), _,_) -> 
-            pbranch [num] (packetevent_parse_block bg_ev)
+            pbranch [num] (packetevent_parse_block pkt_var bg_ev)
          | DEvent(_, None, _, _) -> error "event has no number"
          | _ -> error "not an event?")
       bg_events
@@ -82,7 +84,7 @@ let lucid_background_event_parser_from_eth bg_events =
    let etag = var tag_id tag_ty in
    block 
       [
-         read (Cid.create ["tag"]) (ty (TInt(16))) (* read the event tag *)
+         read (Cid.create ["tag"]) tag_ty ((read_from_pkt_var tag_ty pkt_var))
       ]
       (pmatch [etag] branches)      
 ;;
@@ -148,15 +150,22 @@ let rec inline_parsers_rec (ctx:inline_ctx) (decls:decls) =
       | _ -> decl::(inline_parsers_rec ctx decls)
    )
 ;;
-let inline_parsers parser_entry_ty bg_events decls = 
+
+type lucid_entry_block_ty = 
+   | CallFromPortNum
+   | CallFromEth
+   | CallAlways
+   | CallInvalid
+
+let inline_parsers parser_entry_ty pkt_var bg_events decls = 
    let lucid_bg_event_block = match parser_entry_ty with
-      | CallFromPortNum -> lucid_background_event_parser bg_events
-      | CallFromEth -> lucid_background_event_parser_from_eth bg_events
-      | CallAlways -> lucid_background_event_parser bg_events
+      | CallFromPortNum -> lucid_background_event_parser pkt_var bg_events
+      | CallFromEth -> lucid_background_event_parser_from_eth pkt_var bg_events
+      | CallAlways -> lucid_background_event_parser pkt_var bg_events
       | CallInvalid -> error "[inline_parsers] invalid parser entry type -- this should have been caught earlier"
    in
    (* note that the builtin lucid parser has its payload argument removed in tofino backend. *)
-   let ctx = CidMap.add (Cid.id Builtins.lucid_parse_id) ([], lucid_bg_event_block) CidMap.empty in
+   let ctx = CidMap.add (Cid.id Builtins.lucid_parse_id) ([Id.create "pkt", Payloads.payload_ty |> SyntaxToCore.translate_ty], lucid_bg_event_block) CidMap.empty in
 
    (* let ctx = CidMap.add (Cid.id Builtins.lucid_parse_id) ([(Id.create "pkt", Payloads.payload_ty |> SyntaxToCore.translate_ty)], lucid_bg_event_block) CidMap.empty in *)
    inline_parsers_rec ctx decls
@@ -186,7 +195,7 @@ let name_of_event eventdecl = match eventdecl.d with
 
 (* create a full parser from a portspec file, 
    if there are packet events but no parser. *)
-let portspec_to_parser portspec pkt_events bg_events = 
+let portspec_to_parser portspec pkt_var pkt_events bg_events = 
    (* 1. generate a parse block from each event. *)
    (* 2. generate branches from the portspec *)
    let synthesized_parser actions (step:parser_step) = decl (parser (id "main") [] (block actions step)) in
@@ -206,10 +215,10 @@ let portspec_to_parser portspec pkt_events bg_events =
       in
       let background_branches = if (List.length bg_events > 0)
          then (     
-         (pbranch [portspec.recirc_dpid] (lucid_background_event_parser bg_events))
+         (pbranch [portspec.recirc_dpid] (lucid_background_event_parser pkt_var bg_events))
          ::(List.map (fun port ->          
             bind_port port.dpid;
-            pbranch [port.dpid] (lucid_background_event_parser bg_events)) portspec.internal_ports))
+            pbranch [port.dpid] (lucid_background_event_parser pkt_var bg_events)) portspec.internal_ports))
          else ([])
       in
       let external_packet_branches = match events with 
@@ -218,7 +227,7 @@ let portspec_to_parser portspec pkt_events bg_events =
             List.map 
                (fun port -> 
                   bind_port port.dpid;
-                  pbranch [port.dpid] (packetevent_parse_block event))
+                  pbranch [port.dpid] (packetevent_parse_block pkt_var event))
                portspec.external_ports)
          (* multiple events -- we _can't_ use external ports *)
          | _ -> []
@@ -228,7 +237,7 @@ let portspec_to_parser portspec pkt_events bg_events =
       let port_packet_branches = List.map
          (fun (dpid, evname) -> 
             bind_port dpid;
-            pbranch [dpid] (packetevent_parse_block (List.assoc evname name_to_event)))
+            pbranch [dpid] (packetevent_parse_block pkt_var (List.assoc evname name_to_event)))
          portspec.port_events
       in
       background_branches@external_packet_branches@port_packet_branches
@@ -278,7 +287,7 @@ let cid_is_ingress_port cid =
 
 let bytes_read_by_action action =
    match action with 
-   | PRead(_, ty) -> size_of_tint ty
+   | PRead(_, ty, _) -> size_of_tint ty
    | PSkip(ty) -> size_of_tint ty
    | _ -> 0   
 ;;
@@ -295,7 +304,7 @@ let last_ele ls =
 let exp_refs_last_read actions exp = 
    let read_cids = List.filter_map (fun action -> 
       match action with 
-      | PRead(cid, _) -> Some(cid)
+      | PRead(cid, _, _) -> Some(cid)
       | _ -> None) actions
    in
    match read_cids with
@@ -357,40 +366,22 @@ let check_valid_entry_parse_block parse_block : lucid_entry_block_ty =
 
 ;;
 
-let check_user_parser main_parser = 
-   let entry_ty = ref CallInvalid in
-   let v = object
-      inherit [_] s_map as super
-      method! visit_DParser () id params parser_block = 
-         (* check how the parser enters the lucid parser *)
-         entry_ty := check_valid_entry_parse_block parser_block;
-         if ((!entry_ty) <> CallInvalid)
-            then (
-               (* refactor: this is just a noop that does not halt the compiler *)
-               let acns_sps, (step, sp) = parser_block.pactions, parser_block.pstep in
-               let acns, sps = List.split acns_sps in
-               (* inline calls to background event parser *)
-               (* reassemble *)
-               let acns_sps' = List.combine acns sps in
-               super#visit_DParser () id params {pactions=acns_sps'; pstep=(step, sp);}
-            )
-            else (
-               error "Invalid start for user-defined parser"
-            )
-      end
-   in
-   let _ = v#visit_decl () main_parser in 
-   !entry_ty
+let pkt_param_exp params = 
+   match params with 
+   | (id, ty)::_ when (CoreSyntax.equiv_ty ty (Payloads.payload_ty |> SyntaxToCore.translate_ty)) -> 
+      var (Cid.id id) ty
+   | _ -> error "main parser has wrong signature (expected a single argument of type Payload.t)"
 ;;
-
-let main_parser_opt ds = 
-   let main_parsers = List.filter (fun decl -> match decl.d with | DParser(id, _,_) when (fst id = "main") -> true | _ ->false) ds in
-   match main_parsers with 
+let rec main_parser_opt ds = 
+   match ds with 
    | [] -> None
-   | [main_parser] -> Some(main_parser)
-   | _ -> error "multiple main parsers!"
+   | decl::ds -> (
+      match decl.d with 
+      | DParser(id, params, parser_block) when (fst id = "main") -> 
+         Some(params, parser_block)
+      | _ -> main_parser_opt ds
+   )
 ;;
-
 
 let add_parser (portspec:port_config) ds =
    (* separate packet and background events *)
@@ -399,24 +390,25 @@ let add_parser (portspec:port_config) ds =
    (* construct the background event parsing block *)
    (* note: we need to construct a slightly different parser depending on whether the user calls the lucid parser before or after eth *)
    match main_parser_opt ds with 
-   | Some(main_parser_decl) -> 
+   | Some(main_params, main_block) -> 
       (* if there's a main parser, check the user parser to make sure it's well-formed, 
          then inline parsers, including the background block which 
          replaces the call_lucid_parser builtin *)
-      let parser_entry_ty = check_user_parser main_parser_decl in
-      (* bg_block depends on where it is.  *)
-      inline_parsers parser_entry_ty bg_events ds
+      let parser_entry_ty = check_valid_entry_parse_block main_block in
+      let pkt_var = pkt_param_exp main_params in (* we need to know the name of the packet argument to main *)
+      inline_parsers parser_entry_ty pkt_var bg_events ds
    (* if there's no main parser, attempt to generate one *)
    | None -> (
+      let pkt_var = var (Cid.create ["pkt"]) ((Payloads.payload_ty) |> SyntaxToCore.translate_ty) in
       match pkt_events with 
       | [] -> 
          (* case 1: no packet events and no parsers -- so make a parser for the bg events. *)
-         let bg_block = lucid_background_event_parser bg_events in
+         let bg_block = lucid_background_event_parser pkt_var bg_events in
 
          (decl (parser (id "main") [] bg_block))::ds
       | _ -> 
       (* case 2: packet events declared, but no parser -- 
          so make a parser that parses packet or background events 
          according to the portspec. *)
-         (portspec_to_parser portspec pkt_events bg_events)::ds)
+         (portspec_to_parser portspec pkt_var pkt_events bg_events)::ds)
 ;;

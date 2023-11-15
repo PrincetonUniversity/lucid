@@ -63,9 +63,60 @@ let payload_parse_fun _ _ _ =
   payload_parse_error "Payload.parse should never be called outside of parsers"
 ;;
 
+(*  some helpers for readability *)
+let effectless_fun_ty arg_tys ret_ty =
+  let start_eff = FVar (QVar (Id.fresh "eff")) in
+  ty
+  @@ TFun
+       { arg_tys
+       ; ret_ty
+       ; start_eff
+       ; end_eff = start_eff
+       ; constraints = ref []
+       }
+;;
+
+let tynum = ref (-1)
+let fresh_ty tyid_base =  
+  incr tynum;
+  let ty_id = Id.create (tyid_base ^ string_of_int !tynum) in
+  ty_sp (TQVar (QVar ty_id)) Span.default
+;;
+
+(* Payload.read *)
+let payload_read_name = "read"
+let payload_read_id = Id.create payload_read_name
+let payload_read_cid = Cid.create_ids [payload_id; payload_read_id]
+
+let payload_read_ty = effectless_fun_ty [payload_ty] (fresh_ty "payload_read_ret") ;;
+  
+let payload_read_error msg = payload_error payload_read_name msg
+
+let payload_read_fun _ _ _ =
+  payload_read_error "Payload.read is not implemented yet"
+;;
+
+
+(* Payload.peek *)
+let payload_peek_name = "peek"
+let payload_peek_id = Id.create payload_peek_name
+let payload_peek_cid = Cid.create_ids [payload_id; payload_peek_id]
+
+let payload_peek_ty = effectless_fun_ty [payload_ty] (fresh_ty "payload_peek_ret") ;;
+
+let payload_peek_error msg = payload_error payload_peek_name msg
+
+let payload_peek_fun _ _ _ =
+  payload_peek_error "Payload.peek is not implemented yet"
+;;
+
+
+
 let defs : State.global_fun list =
   [ { cid = payload_empty_cid; body = payload_empty_fun; ty = payload_empty_ty }
   ; { cid = payload_parse_cid; body = payload_parse_fun; ty = payload_parse_ty }
+  ; {cid = payload_read_cid; body = payload_read_fun; ty = payload_read_ty}
+  ; {cid = payload_peek_cid; body = payload_peek_fun; ty = payload_peek_ty}
   ]
 ;;
 

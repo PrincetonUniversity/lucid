@@ -515,7 +515,6 @@ let is_evar exp =
 ;;
 
 
-
 let raw_ty_to_constr_str raw_ty = 
   match raw_ty with 
   | TBool -> "bool"
@@ -586,5 +585,3 @@ let e_to_constr_str e = match e with
 | ETableMatch (_) -> "tablematch"
 (* | EPatWild (_) -> "patwild" *)
 ;;
-
-

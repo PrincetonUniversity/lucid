@@ -10,8 +10,13 @@ let parser pid pparams pblock pret_event phdlret_event outparams =
   TDParser({pid; pparams; pblock; pret_event=Some(pret_event); phdlret_event = Some(phdlret_event); pret_params = outparams;})
 ;;
 
-(*  *)
+let read_pkt_var_cmd tgt_cid tgt_ty pkt_var = 
+  read tgt_cid tgt_ty (call Payloads.payload_read_cid [pkt_var] (tgt_ty))
 ;;
+let read_params_from_pkt_var_cmds params pkt_var = 
+  List.map (fun (id, ty) -> read_pkt_var_cmd (Cid.id id) ty pkt_var) params
+;;
+
 let idxof = 
   let rec _idxof idx id events = 
     match events with 
@@ -41,14 +46,14 @@ let get_n_to_idx_map bitvec : (int * int) list =
   assoc
 ;;
 
-let block_of_nth_member out_ctor_base (members : event list) n = 
+let block_of_nth_member pkt_var out_ctor_base (members : event list) n = 
   let event = List.nth members n in
   let params = match event with 
     | EventSingle({evparams=evparams;}) -> evparams
     | _ -> error "[not a single event]"
   in
   (* read the event parameters *)
-  let read_cmds = List.map read_id params in
+  let read_cmds = read_params_from_pkt_var_cmds params pkt_var in    
   (* the generate expression uses the event constructor for _egress_, 
      i.e., not where members came from. *)
   let gen_cmd = pgen (
@@ -67,7 +72,7 @@ let block_of_nth_member out_ctor_base (members : event list) n =
    parameters and generate the event for each case. 
    out_ctor_base is the fully qualified cid 
    of the event to generate. *)
-let branches_of_subsets out_ctor_base members subsets = 
+let branches_of_subsets pkt_var out_ctor_base members subsets = 
   (* return an integer list of length |events| that
      contains a 1 for each event in events that is 
      in subset. Use "idxof events id" to get the 
@@ -94,7 +99,7 @@ let branches_of_subsets out_ctor_base members subsets =
         (fun (copy_num, event_idx) -> 
           pbranch
             (copy_num::bitvec)
-            (block_of_nth_member out_ctor_base members event_idx))
+            (block_of_nth_member pkt_var out_ctor_base members event_idx))
         rid_to_bitvec_idx
       in
       branches@new_branches)
@@ -131,9 +136,9 @@ let pskip_event_params event =
   in
   [PSkip(ty (TInt(event_size)))];
 ;;
-(* write a command to read an event's parameters *)
-let pread_event_params event = 
-  let read_cmds = List.map read_id (params_of_event event) in
+(* write a command to read an event's parameters from pkt_var *)
+let pread_event_params pkt_var event = 
+  let read_cmds = read_params_from_pkt_var_cmds (params_of_event event) pkt_var in
   read_cmds
 ;;
 (* write a command to generate an event, assuming that 
@@ -149,7 +154,7 @@ let pgen_event out_ctor_base event = pgen (
 
 (* construct a parser block to read active event params, 
    skip other events, then generate the event. *)
-let make_extract_event_block out_ctor_base members gen_seq active_event_id = 
+let make_extract_event_block pkt_var out_ctor_base members gen_seq active_event_id = 
   let pblock_egr actions step = 
     {
       pactions = List.map (fun a -> (a, Span.default)) actions;
@@ -167,7 +172,7 @@ let make_extract_event_block out_ctor_base members gen_seq active_event_id =
       else, ignore its params totally *)
   let actions = List.fold_left (fun actions member -> 
     if (Id.equal (id_of_event member) active_event_id)
-      then (actions@(pread_event_params member))
+      then (actions@(pread_event_params pkt_var member))
       else if (List.mem_assoc (id_of_event member) gen_seq)
         then (actions@(pskip_event_params member))
         else actions
@@ -204,7 +209,7 @@ let string_of_generate_seq gs =
   in
   String.concat ", " (List.map string_of_gen_seq gs)
 ;;
-let branches_of_generated_events out_ctor_base (members : event list) (gen_seqs : generate_seq list) : parser_branch list = 
+let branches_of_generated_events pkt_var out_ctor_base (members : event list) (gen_seqs : generate_seq list) : parser_branch list = 
   (* each generate sequence turns into n rules -- one rule for each member *)
     (*
     here's roughly what we'd do in a friendly programming language 
@@ -233,7 +238,7 @@ let branches_of_generated_events out_ctor_base (members : event list) (gen_seqs 
   (*construct the branches to parse a single generate sequence (each sequence has 1 branch for each replica) *)
   (* print_endline ("[branches_of_generated_events] out_ctor_base: "^(Cid.to_string out_ctor_base));
   print_endline ("[branches_of_generated_events] members: "^(String.concat ", " (List.map (fun m -> id_of_event m |> fst) members))); *)
-  let branches_of_gen_seq (gen_seq : generate_seq) = 
+  let branches_of_gen_seq pkt_var (gen_seq : generate_seq) = 
     (* print_endline ("[branches_of_gen_seq] gen_seq: "^(string_of_generate_seq gen_seq)); *)
     (* there is 1 branch for each event in the sequence, because there's one branch for each replica. *)
     (* flag vals tells us which events are in the packet, so its the same for all rules *)
@@ -245,7 +250,7 @@ let branches_of_generated_events out_ctor_base (members : event list) (gen_seqs 
     (* make a single branch, for a single replica of the event event_id in a set of events "members" 
         where "gen_seq" tells you the other members in the current value of the set... *)
     let branch_of_gen (event_id, gen_ty) = 
-      let block = make_extract_event_block out_ctor_base members gen_seq event_id in 
+      let block = make_extract_event_block pkt_var out_ctor_base members gen_seq event_id in 
       let replica_val = match (gen_ty) with 
         | GSingle(None)-> (
           (* start at 1 and increment every
@@ -265,21 +270,21 @@ let branches_of_generated_events out_ctor_base (members : event list) (gen_seqs 
     List.map branch_of_gen gen_seq
   in
 
-  List.map branches_of_gen_seq gen_seqs |> List.flatten
+  List.map (branches_of_gen_seq pkt_var) gen_seqs |> List.flatten
 ;;
 
 
 (* make a block to parse a serialized eventset, 
    extract the nth_var event in the set, 
    and generate the event evout.members[idxof(nth_var)]...
-   oof this is complicated. *)
-let eventset_block evset (rid_var : (cid * ty)) (out_ctor_base : cid) = 
+   ...this is complicated. *)
+let eventset_block pkt_var evset (rid_var : (cid * ty)) (out_ctor_base : cid) = 
   (* print_endline ("[eventset_block] evset id: "^(id_of_event evset |> fst)); *)
   match evset with 
   | EventSet({flags;members; generated_events;}) -> (
     let _, flag_fields, pad_opt = flags in 
     (* read the flags to locals, skip the padding *)
-    let flag_actions = List.map read_id flag_fields in 
+    let flag_actions = read_params_from_pkt_var_cmds flag_fields pkt_var in
     let actions = match pad_opt with 
       | None -> flag_actions
       | Some(pad) -> flag_actions@[skip (snd pad)]
@@ -292,7 +297,7 @@ let eventset_block evset (rid_var : (cid * ty)) (out_ctor_base : cid) =
     (* for each subset in subsets, make per-replica_id rules.
         for each rule, make a block that read the parameters and generates the event *)  
     (* let branches = branches_of_subsets out_ctor_base members subsets in *)
-    let branches = branches_of_generated_events out_ctor_base members generated_events in
+    let branches = branches_of_generated_events pkt_var out_ctor_base members generated_events in
     block
       actions
       (pmatch match_exps branches)  
@@ -322,13 +327,17 @@ let make_egr_parser
       }
     *)
   let egr_intr_id, egr_intr_ty = intrinsic_to_param egress_intrinsic_metadata_t in 
+  (* the packet argument to the main parser *)
+  let pkt_id = Id.create "pkt" in
+  let pkt_var = var (Cid.create_ids [pkt_id]) ((Payloads.payload_ty) |> SyntaxToCore.translate_ty) in
 
   (* note_ tagid does not matter. *)
   let local_tag_id = Id.create "ingress_union_tag" in
   let _, (_, tagty) = etag from_ingress in
 
-  let read_intr_cmd = read (Cid.id egr_intr_id) egr_intr_ty in
-  let read_event_tag = read (Cid.id local_tag_id) tagty in
+  let read_intr_cmd = read_pkt_var_cmd (Cid.id egr_intr_id) egr_intr_ty pkt_var in
+  let read_event_tag = read_pkt_var_cmd (Cid.id local_tag_id) tagty pkt_var in
+    
   let egress_replica_id = field_of_intrinsic 
     egress_intrinsic_metadata_t 
     (Cid.id egr_intr_id)
@@ -336,7 +345,7 @@ let make_egr_parser
   in    
   let egr_parser = parser
     (id "main")
-    ([])
+    ([pkt_id, Payloads.payload_ty |> SyntaxToCore.translate_ty])
     (block
       [
         read_intr_cmd;
@@ -347,6 +356,7 @@ let make_egr_parser
           pbranch 
             [tagval] 
             (eventset_block (* one block for each handler that may have run in ingress *)
+              pkt_var
               event 
               egress_replica_id 
               (id_of_event to_egress |> Cid.id)))  

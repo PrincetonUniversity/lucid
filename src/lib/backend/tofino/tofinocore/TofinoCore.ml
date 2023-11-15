@@ -251,9 +251,20 @@ let decl_to_tdecl (decl:decl) =
      we add the return parameters (intrinsic metadata) and an action 
      at the beginning of the parser to read that parameter *)
   | DParser(pid, pparams, pblock) when ((fst pid) = "main") -> 
+    let pkt_id, _ = match pparams with 
+      (* this should be checked by wellformed in frontend and maintained throughout *)
+      | [(id, ty)] -> (id, ty)
+      | _ -> error "internal error -- main parser did not have correct arguments."
+    in
+    
     let actions, spans = List.split pblock.pactions in
     let intr_id, intr_ty = intrinsic_to_param ingress_intrinsic_metadata_t in 
-    let read_intr_acn = read (Cid.id intr_id) intr_ty in
+    let read_call = call 
+      Payloads.payload_read_cid 
+      [var (Cid.id pkt_id) (Payloads.payload_ty |> SyntaxToCore.translate_ty)] 
+      intr_ty
+    in
+    let read_intr_acn = read (Cid.id intr_id) intr_ty read_call in
     let skip_resubmit_intr_acn = skip (tint 64) in 
     let pblock = {pblock with
       pactions=

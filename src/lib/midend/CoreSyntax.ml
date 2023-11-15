@@ -237,8 +237,8 @@ and action =
   }
 
 and parser_action =
-  | PRead of cid * ty
-  | PPeek of cid * ty
+  | PRead of cid * ty * exp (* exp should always be ECall(Payload.read, [_ : Payload.t]) *)
+  | PPeek of cid * ty * exp (* peek is a read from the payload without advancing the header *)
   | PSkip of ty
   | PAssign of cid * exp
   | PLocal of cid * ty * exp
@@ -415,9 +415,10 @@ let block actions step : parser_block =
 ;;
 
 (* actions *)
-let read cid ty = PRead(cid, ty)
-let read_id (id, ty) = read (Cid.id id) ty
-let peek cid ty = PPeek(cid, ty)
+let read cid ty exp = PRead(cid, ty, exp)
+let read_id exp (id, ty) = read (Cid.id id) ty exp
+
+let peek cid ty exp = PPeek(cid, ty, exp)
 let skip ty = PSkip(ty)
 let assign cid exp = PAssign(cid, exp)
 

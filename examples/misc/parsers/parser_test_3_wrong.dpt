@@ -1,27 +1,26 @@
-type eth = { int srcMac; int dstMac; int etherTy; }
+type eth = { int srcMac; int dstMac; int<16> etherTy; }
 type ip =  { int srcIp; int dstIp; int srcPort; int dstPort; }
 
 event background(int x) { printf("%d", x); }
 event eth(Payload.t p, eth e) { generate background(e#srcMac); }
 event etheth(Payload.t p, eth e, eth e2) { generate background(e#srcMac); }
 
-// LUCID_ETHERTY is builtin
-const int IP_ETHERTY = 0x8000;
 
 // ERROR: Transitively unifies args of etheth
 parser main(Payload.t p) {
-  read eth e;
+  eth e = Payload.read(p);
   match e#etherTy with
+  | LUCID_ETHERTY -> { do_lucid_parsing(p); }
   | 0 -> {
-         read eth e1;
-         read eth e2;
+         eth e1 = Payload.read(p);
+         eth e2 = Payload.read(p);
          match e1#etherTy with
          | 1 -> { generate eth(p, e1); }
          | 2 -> { generate etheth(p, e1, e2); }
          }
   | 3 -> {
-         read eth e3;
-         read eth e4;
+         eth e3 = Payload.read(p);
+         eth e4 = Payload.read(p);
          match e3#etherTy with
          | 4 -> { generate eth(p, e3); }
          | 5 -> { generate etheth(p, e4, e3); }

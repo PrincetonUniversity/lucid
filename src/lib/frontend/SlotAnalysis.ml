@@ -361,7 +361,7 @@ let rec analyze_parser_action env cid action =
   (* print_endline @@ "ANALYZING " ^ Printing.parser_action_to_string action;
   print_endline @@ env_to_string env; *)
   match action with
-  | PRead (id, _) -> create_var_slot env cid id
+  | PRead (id, _, _) -> create_var_slot env cid id
   | PLocal(id, _, _) -> create_var_slot env cid id (* FIXME: declaring a local isn't exactly the same as reading it...*)
   | PAssign _ -> (* FIXME: Not sure what to do here *) env
   | PSkip _ -> env

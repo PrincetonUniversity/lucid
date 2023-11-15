@@ -62,6 +62,7 @@ let rec string_of_ty t = match t with
     | TKey(KTernary, _) -> s'"ternary"
     | TKey(KExact, _) -> s'"exact"
     | TFun(rty, argtys) -> s'"/*"^^(string_of_tys argtys)^^s'" -> "^^(string_of_ty rty)^^s'"*/"
+    | TPacket -> s'"PACKET"
 
 and string_of_tys ts = 
   separate_map (s'", ") string_of_ty ts

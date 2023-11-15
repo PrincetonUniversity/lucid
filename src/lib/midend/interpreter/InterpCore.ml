@@ -783,8 +783,9 @@ let rec interp_parser_block nst swid payload_id locals parser_block =
   interp_parser_step nst swid payload_id locals (fst parser_block.pstep)
   
 and interp_parser_action (nst : State.network_state) swid payload_id locals parser_action = 
+  (* TODO: implement Payload.read and Payload.peek *)
   match parser_action with 
-  | PRead(cid, ty) -> 
+  | PRead(cid, ty, _) -> 
     let payload = get_local payload_id locals in
     (* semantically, a read creates a new variable and also updates the payload variable *)
     let parsed_val, payload' = InterpPayload.pread payload ty in
@@ -792,7 +793,7 @@ and interp_parser_action (nst : State.network_state) swid payload_id locals pars
     locals
       |> Env.add (cid) (InterpSyntax.V(parsed_val))
       |> update_local payload_id payload'
-  | PPeek(cid, ty) -> 
+  | PPeek(cid, ty, exp) -> 
     let peeked_val = InterpPayload.ppeek (get_local payload_id locals) ty in
     locals |> Env.add (cid) (InterpSyntax.V(peeked_val))
   | PSkip(ty) ->

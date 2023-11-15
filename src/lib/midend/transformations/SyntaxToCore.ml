@@ -275,7 +275,7 @@ let translate_hsort = function
 ;;
 
 let translate_parser_action = function
-  | S.PRead (id, ty) -> C.PRead (Cid.id id, translate_ty ty)
+  | S.PRead(id, ty, exp) -> C.PRead (Cid.id id, translate_ty ty, translate_exp exp)
   | S.PSkip ty -> C.PSkip (translate_ty ty)
   | S.PAssign (lexp, rexp) ->
     let id =

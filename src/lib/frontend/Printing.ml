@@ -509,8 +509,8 @@ and memop_to_string body = stmt_to_string (memop_body_to_stmt body)
 and parser_action_to_string action =
   match action with
   | PSkip ty -> Printf.sprintf "skip %s;" (ty_to_string ty)
-  | PRead (id, ty) ->
-    Printf.sprintf "read %s : %s;" (id_to_string id) (ty_to_string ty)
+  | PRead (id, ty, exp) ->
+    Printf.sprintf "(%s : %s) = %s;" (id_to_string id) (ty_to_string ty) (exp_to_string exp)
   | PAssign (lval, exp) ->
     Printf.sprintf "%s = %s;" (exp_to_string lval) (exp_to_string exp)
   | PLocal (id, ty, exp) ->

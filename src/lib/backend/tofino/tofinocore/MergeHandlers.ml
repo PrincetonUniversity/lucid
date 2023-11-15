@@ -122,8 +122,8 @@ let merge_handlers_in_component (c:component) : component =
         [1, 48; 2, 48; Builtins.lucid_ety_int, 16]
       in
       let const_lucid_eth_hdr = hdr
-        (id "eth")
-        (id "eth_h")
+        (id "lucid_eth")
+        (id "lucid_eth_h")
         (ty (TRecord([
           (id "dst",  (TInt(48)));
           (id "src",  (TInt(48)));

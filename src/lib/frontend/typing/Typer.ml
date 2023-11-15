@@ -1235,12 +1235,18 @@ let retrieve_constraints env span id params =
 let infer_parser_action env (action, span) =
   match action with
   | PSkip _ -> env, (action, span)
-  | PRead (id, ty) -> add_locals env [id, ty], (action, span)
   | PAssign (lexp, exp) ->
     let env, inf_lexp, inf_lty = infer_exp env lexp |> textract in
     let env, inf_exp, inf_ety = infer_exp env exp |> textract in
     unify_ty exp.espan inf_lty inf_ety;
     env, (PAssign (inf_lexp, inf_exp), span)
+  (* read and local have the same type rules. Read is just a 
+     convenience tag with a specific form. *)
+  | PRead (id, ty, exp) -> 
+    let env, inf_exp, inf_ety = infer_exp env exp |> textract in
+    unify_ty exp.espan ty inf_ety;
+    let env = add_locals env [id, ty] in
+    env, (PRead(id, ty, inf_exp), span)
   | PLocal(id, ty, exp) -> 
     let env, inf_exp, inf_ety = infer_exp env exp |> textract in
     unify_ty exp.espan ty inf_ety;
@@ -1614,6 +1620,7 @@ let rec infer_declaration
         add_locals env (ingress_port_param::params) 
         |> define_parser Builtins.lucid_parse_id [(Id.create "pkt", Payloads.payload_ty)]
       in
+      
       let inf_parser = infer_parser_block parser_env parser in
       let env = define_parser id params env in
       env, effect_count, DParser (id, params, inf_parser)

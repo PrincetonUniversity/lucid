@@ -31,6 +31,8 @@ open AddIntrinsics
 (* [@@@ocaml.warning "-21-27-26"] *)
 
 
+let peek_from_pkt_var ty pkt_var =  call Payloads.payload_peek_cid [pkt_var] (ty);;
+
 (* given a list of events, find the one that matches cid *)
 let rec cid_to_eventconstr prefix_ids events cid =
   match cid with 
@@ -160,8 +162,9 @@ and elim_parser_inner output_event (vars_read : cids) (pactions : paction_sps) (
      hoisting statements for params set to the variable. *)
   | (paction, sp)::pactions -> (
     match paction with 
-    | PRead(cid, _) 
-    | PPeek(cid, _) -> (
+    | PRead(cid, _, ecall) 
+    | PPeek(cid, _, ecall) -> (
+      let pkt_var = match ecall.e with ECall(_, [pkt_var], _) -> pkt_var | _ -> error "wrong form for ecall in parse command" in
       let vars_read = cid::vars_read in
       (* the result does not include this action. So we need to add it. 
          But also, we want to add all the hoist commands related to cid. *)
@@ -173,7 +176,7 @@ and elim_parser_inner output_event (vars_read : cids) (pactions : paction_sps) (
           (* downstream processing has commanded us to set 
              paramcid with a peek at the point where this argcid is read. *)
           if (Cid.equal argcid cid) then 
-            let peek_action = PPeek(paramcid, paramty) in
+            let peek_action = PPeek(paramcid, paramty, peek_from_pkt_var paramty pkt_var) in
             remaining_hoist_cmds, pactions@[(peek_action, sp)]          
           else 
             (* this command has nothing to do with us, propagate it *)
@@ -238,7 +241,7 @@ let used_in cid out_params pactions pstep  =
     let used = ref false in
     let v = object
     inherit [_] s_iter as super
-    method! visit_PRead () cid' _ = 
+    method! visit_PRead () cid' _ _ = 
       if (Cid.equal cid cid')
         then error "[used_in] while checking to see if a parser variable is ever used, it was found to be read. That means its read twice, which should be impossible."
     method! visit_EVar () cid' = 
@@ -271,7 +274,7 @@ let elim_dead_reads component =
             then (paction, sp)::(update_actions pactions)
             else (update_actions pactions)
         )
-        | PRead(cid, ty) -> (
+        | PRead(cid, ty, _) -> (
           let used_later = used_in cid out_params (List.split pactions |> fst) (fst parser_block.pstep) in
           if (used_later)
             then (paction, sp)::(update_actions pactions)
@@ -383,20 +386,20 @@ let move_checksum_args_into_header component =
     inherit [_] s_map as super
     method! visit_parser_action () pa = 
       match pa with
-        | PPeek(cid, ty) when (List.mem_assoc cid replace_map) ->
-          PPeek(List.assoc cid replace_map, ty)
+        | PPeek(cid, ty, exp) when (List.mem_assoc cid replace_map) ->
+          PPeek(List.assoc cid replace_map, ty, exp)
         (* TRICKY: read event_param.hdr_var_param.hdr_var translates into:
            read event_param.hdr_var_param; invalidate(event_param.hdr_var_param);
             (we read the header, not the field within it, and we also need to 
               invalidate the field as soon as its read)
             However, since the parser syntax can't support a unit call, 
             we add the invalidate in the final translation... *)
-        | PRead(cid, ty) when (List.mem_assoc cid replace_map) ->
+        | PRead(cid, ty, pkt_read_call) when (List.mem_assoc cid replace_map) ->
           let full_cid = List.assoc cid replace_map in 
           let hdr_field_only_cid = 
             Cid.to_ids full_cid |> List.rev |> List.tl |> List.rev |> Cid.create_ids 
           in 
-          PRead(hdr_field_only_cid, ty)
+          PRead(hdr_field_only_cid, ty, pkt_read_call)
         | PAssign(cid, exp) when (List.mem_assoc cid replace_map) -> 
           PAssign(List.assoc cid replace_map, super#visit_exp () exp)
         | PLocal(cid, ty, exp) when (List.mem_assoc cid replace_map) -> 

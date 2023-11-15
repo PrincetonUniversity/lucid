@@ -361,12 +361,13 @@ let memop_to_string body =
 let rec parser_action_to_string action =
   match action with
   | PSkip ty -> Printf.sprintf "skip %s;" (ty_to_string ty)
-  | PRead (id, ty) ->
-    Printf.sprintf "read %s : %s;" (cid_to_string id) (ty_to_string ty)
   | PAssign (id, exp) ->
     Printf.sprintf "%s = %s;" (cid_to_string id) (exp_to_string exp)
-  | PPeek (id, ty) -> 
-    Printf.sprintf "peek %s : %s;" (cid_to_string id) (ty_to_string ty)
+  | PRead (id, ty, exp) ->
+    Printf.sprintf "%s %s = %s;" (ty_to_string ty) (cid_to_string id) (exp_to_string exp)
+    (* Printf.sprintf "read %s : %s;" (cid_to_string id) (ty_to_string ty) *)
+  | PPeek (id, ty, exp) -> 
+    Printf.sprintf "%s %s = %s;" (ty_to_string ty) (cid_to_string id) (exp_to_string exp)
   | PLocal (id, ty, exp) -> 
     Printf.sprintf "%s %s = %s;" (ty_to_string ty) (cid_to_string id) (exp_to_string exp)
 

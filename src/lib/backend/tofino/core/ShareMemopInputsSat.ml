@@ -556,8 +556,8 @@ let used_in_action pa =
 ;;
 let assigned_in_action pa = 
   match pa with 
-  | PRead(cid, _) -> [cid]
-  | PPeek(cid, _) -> [cid]
+  | PRead(cid, _, _) -> [cid]
+  | PPeek(cid, _, _) -> [cid]
   | PAssign(cid, _) -> [cid]
   | _ -> []
 ;;
@@ -568,8 +568,8 @@ let rec conflicts_of_parser_actions declared_before used_after pas =
   | [] -> declared_before, []
   | pa::pas -> (
     match pa with
-    | PRead(cid, _) 
-    | PPeek(cid, _)
+    | PRead(cid, _, _) 
+    | PPeek(cid, _, _)
     | PLocal(cid, _, _)
     | PAssign(cid, _) -> (
       let used_after_local = used_after@(List.map assigned_in_action pas |> List.flatten) |> MiscUtils.unique_list_of in 
@@ -962,17 +962,17 @@ let replace_cid tds cids cid' =
         if (is_tgt_cid lcid) 
         then (PAssign(cid', (super#visit_exp ctx rexp)))
         else (PAssign(lcid, (super#visit_exp ctx rexp)))
-      method! visit_PRead _ lcid lty = 
+      method! visit_PRead _ lcid lty pktvar = 
         if (is_tgt_cid lcid) 
-        then (PRead(cid', lty))
-        else (PRead(lcid, lty))
-      method! visit_PPeek _ lcid lty = 
+        then (PRead(cid', lty, pktvar))
+        else (PRead(lcid, lty, pktvar))
+      method! visit_PPeek _ lcid lty ecall = 
         if (is_tgt_cid lcid) 
         then (
-          let pnew = PPeek(cid', lty) in
+          let pnew = PPeek(cid', lty, ecall) in
           pnew
           )
-        else (PPeek(lcid, lty))
+        else (PPeek(lcid, lty, ecall))
       (* statements *)
       method! visit_SAssign ctx lcid rexp = 
         if (is_tgt_cid lcid) 
@@ -1781,17 +1781,17 @@ let unique_list_of_eq eq xs = List.rev (Caml.List.fold_left (cons_uniq_eq eq) []
            if (is_tgt_cid lcid) 
            then (PAssign(cid', (super#visit_exp ctx rexp)))
            else (PAssign(lcid, (super#visit_exp ctx rexp)))
-         method! visit_PRead _ lcid lty = 
+         method! visit_PRead _ lcid lty pktvar = 
            if (is_tgt_cid lcid) 
-           then (PRead(cid', lty))
-           else (PRead(lcid, lty))
-         method! visit_PPeek _ lcid lty = 
+           then (PRead(cid', lty, pktvar))
+           else (PRead(lcid, lty, pktvar))
+         method! visit_PPeek _ lcid lty ecall = 
            if (is_tgt_cid lcid) 
            then (
-             let pnew = PPeek(cid', lty) in
+             let pnew = PPeek(cid', lty, ecall) in
              pnew
              )
-           else (PPeek(lcid, lty))
+           else (PPeek(lcid, lty, ecall))
          (* statements *)
          method! visit_SAssign ctx lcid rexp = 
            if (is_tgt_cid lcid) 

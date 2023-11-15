@@ -261,7 +261,7 @@ let replacer =
       @@ "Internal error (contact a developer): Tried to visit PRead of "
       ^ Id.to_string id
 
-    method replace_PRead env id ty span : (parser_action * sp) list =
+    method replace_PRead env id ty pkt span : (parser_action * sp) list =
       match ty.raw_ty with
       | TTuple tys ->
         let new_ids = rename_elements id tys in
@@ -269,7 +269,7 @@ let replacer =
           List.map
             (fun (id, ty) ->
               (* Recursively split up each entry *)
-              let recursive_defs = self#replace_PRead env id ty span in
+              let recursive_defs = self#replace_PRead env id ty pkt span in
               recursive_defs)
             new_ids
         in
@@ -277,7 +277,7 @@ let replacer =
         List.flatten new_defs
       | _ ->
         (* Other non-compound types should be eliminated by now *)
-        [PRead (id, ty), span]
+        [PRead (id, ty, pkt), span]
 
     method replace_PSkip env typ span : (parser_action * sp) list =
       match typ.raw_ty with
@@ -347,7 +347,7 @@ let replacer =
 
     method replace_action env (action, span) =
       match action with
-      | PRead (id, ty) -> self#replace_PRead env id ty span
+      | PRead (id, ty, pktid) -> self#replace_PRead env id ty pktid span
       | PSkip ty -> self#replace_PSkip env ty span
       | PAssign (lexp, rexp) -> self#replace_PAssign env lexp rexp span
       | PLocal(id, ty, exp) -> self#replace_PLocal env id ty exp span

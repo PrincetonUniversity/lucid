@@ -56,31 +56,25 @@ generate packet event ->
 - Where does the payload come from? We have to keep it around. 
 And it is basically a "packet" object.
 So merge packet and payload.
-
-
 */
-
 
 
 // main must take a Payload.t object
 // parser main(Payload.t pkt) {
-parser main(Payload.t pkt) {
+parser main(Payload.t pppaaaackk) {
 	// locals = {ingress_port : ...; pkt : ...}
-	// int<48> d =  Payload.read(pkt);
-	read int<48> d; // how do i know what bitstring to pass to read? You have to tell me!
-	read int<48> s;
-	read int<16> t;
+	int<48> d =  Payload.read(pppaaaackk);
+	int<48> s = Payload.read(pppaaaackk);
+	int<16> t = Payload.read(pppaaaackk);
 	match t with
-	| LUCID_ETHERTY -> {do_lucid_parsing(pkt);}
-	| _ -> {generate(eth(d, s, t, pkt));	} // we _need_ to know what pkt is to interpret the generate.
+	| LUCID_ETHERTY -> {do_lucid_parsing(pppaaaackk);}
+	| _ -> {generate(eth(d, s, t, pppaaaackk));	}
 }
 
 handle foo(int<48> dmac, int<48> smac, int<16> etype, int x, int y, Payload.t pkt){
 	printf("in foo");
 	printf("ingress port, %d", ingress_port);
 	generate(eth(dmac, smac, etype, pkt));
-	// its actually wrong. passing 196 SHOULD be fine. 
-	// generate_port(196, eth(dmac, smac, etype, pkt));
 }
 
 handle eth(int<48> dmac, int<48> smac, int<16> etype, Payload.t pkt){

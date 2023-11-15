@@ -93,9 +93,7 @@ let core_passes ds portspec =
   (* these passes are misc transformations that can happen in any order. 
      In a refactored backend, EliminateEventCombinators, StandardizeEventParams, and InlineEventVars
      should be removable. *)
-  EliminatePayloads.pre_check ds;
-  let ds = EliminatePayloads.process ds in
-  EliminatePayloads.post_check ds;
+  let ds = EliminatePayloads.process ds in 
   let ds = EliminateEventCombinators.process ds in
   report_if_verbose "-------Unifying event and handler parameter ids---------";
   let ds = StandardizeEventParams.process ds in

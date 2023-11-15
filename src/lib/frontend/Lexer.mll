@@ -91,7 +91,7 @@ rule token = parse
   | "table_multi_install"     { TABLE_MULTI_INSTALL (position lexbuf) }
 
   | "parser"          { PARSER (position lexbuf) }
-  | "read"            { READ (position lexbuf) }
+  (* | "read"            { READ (position lexbuf) } *)
   | "skip"            { SKIP (position lexbuf) }
   | "drop"            { DROP (position lexbuf) }
 

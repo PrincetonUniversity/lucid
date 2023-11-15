@@ -1284,13 +1284,19 @@ let sassign_lookahead pkt_arg cid ty =
 (* construct parameters for the parser that feeds given handler *)
 let translate_parser_params (comp : component) (parser:parser) = 
 (* P4 params: 
-
+  TODO: the packet in parameter is now in the parser's parameter list. Use it. 
+        - need to carry the packet peek commands first, though.
   directionless packet_in pkt *implicit*
   out hdr_t hdr               *_handler's_ out event...*
   out meta_t meta             *parser's out event*
   out ingress_intrinsic_metadata_t ig_intr_md   *parser's out param*
 *)
-  let pkt_t, pkt_arg = id"packet_in", id"pkt" in 
+  let pkt_arg, pkt_t = match parser.pparams with 
+    | (pkt_arg, {raw_ty=TName(cid, _, _)})::_ when (Cid.equal cid (Payloads.t_id)) ->
+        pkt_arg, id"packet_in"
+    | _ -> error "[translate_parser_params] expected a packet_in parameter"
+  in
+  (* let pkt_t, pkt_arg = id"packet_in", id"pkt" in  *)
   let pkt_param = param (tstruct pkt_t) pkt_arg in
   let parser_out_event = get_event comp (parser.pret_event |> Option.get) in
   let handler_out_event = get_event comp (parser.phdlret_event |> Option.get) in
@@ -1455,14 +1461,14 @@ let translate_parser denv parser =
 
   and translate_parse_action parser_action : (T.decl list * T.statement) = 
     match parser_action with 
-    | PRead(cid, ty) -> (
+    | PRead(cid, ty, _) -> (
       (* case -- cid is param -> read is an extract
          case -- cid is not param -> read is a slocal lookahead; advance *)
       match (is_param cid) with
       | true -> [], extract pkt_arg cid
       | false -> [], sseq [slocal_lookahead pkt_arg cid (translate_ty ty); sadvance pkt_arg (size_of_tint ty)]
     )
-    | PPeek(cid, ty) -> (
+    | PPeek(cid, ty, _) -> (
       (* case -- cid is an event field (first id is name of output event param) sassign lookahead -> 
          case -- cis is not a param -> slocal lookahead *)
       match (is_event_field cid) with 

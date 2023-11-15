@@ -27,6 +27,7 @@ and ty =
     | TObj of id
     | TKey of (key_ty * int) (* match type, key length *)
     | TFun of ty * ty list
+    | TPacket
 
 and value = 
     | VInt of int * (int option)

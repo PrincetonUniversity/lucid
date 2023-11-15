@@ -28,16 +28,26 @@ let event_param_alignment ds =
       method! visit_decl ctx decl =
         super#visit_decl ctx decl;
         match decl.d with
-        | DEvent (id, _, _, params) ->
-          if params_wid params mod 8 <> 0
-          then (
-            report_err
-              decl.dspan
-              ("[Event Alignment Check] every event parameter must either \
-                start or end on a byte boundary. The event "
-              ^ fst id
-              ^ "'s parameters are not byte-aligned.");
-            pass := false)
+        | DEvent (id, _, _, params) -> (
+          (* get all the params that must be aligned by ignoring the last param if it is 
+             a payload *)
+          let hdr_params = match (List.rev params) with 
+            | [] -> []
+            | (_, pty) :: ps -> 
+              if (CoreSyntax.equiv_ty pty (Payloads.payload_ty |> SyntaxToCore.translate_ty)) then 
+                List.rev ps
+            else params 
+          in
+          if params_wid hdr_params mod 8 <> 0
+            then (
+              report_err
+                decl.dspan
+                ("[Event Alignment Check] every event parameter must either \
+                  start or end on a byte boundary. The event "
+                ^ fst id
+                ^ "'s parameters are not byte-aligned.");
+              pass := false)          
+        )
         | _ -> ()
     end
   in

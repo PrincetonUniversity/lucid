@@ -210,10 +210,11 @@ let rename prog =
         let new_x = self#freshen_var x in
         SLocal (new_x, new_ty, replaced_e)
 
-      method! visit_PRead dummy x ty =
+      method! visit_PRead dummy x ty exp =
         let new_ty = self#visit_ty dummy ty in
         let new_x = self#freshen_var x in
-        PRead (new_x, new_ty)
+        let new_exp = self#visit_exp dummy exp in
+        PRead (new_x, new_ty, new_exp)
 
         method! visit_PLocal dummy x ty exp = 
         let new_ty = self#visit_ty dummy ty in

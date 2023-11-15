@@ -90,6 +90,17 @@
 
 ;;
 
+(* convert "payload.read" calls to PReads -- this will be depreciated, 
+   but its here for now because so many frontend and midend passes 
+   look for the PRead tag *)
+let mk_plocal id ty exp = 
+  match exp.e with 
+  | ECall(cid, _, _) when Cid.equal cid Payloads.payload_read_cid -> 
+    PRead(id, ty, exp)
+  | _ -> PLocal(id, ty, exp)
+;;
+
+
 %}
 
 %token <Span.t * Id.t> ID
@@ -169,7 +180,7 @@
 %token <Span.t> PATAND
 
 %token <Span.t> PARSER
-%token <Span.t> READ
+// %token <Span.t> READ
 %token <Span.t> SKIP
 %token <Span.t> DROP
 
@@ -447,9 +458,14 @@ lexp:
     | lexp PROJ ID                         { proj_sp $1 (Id.name (snd $3)) (Span.extend $1.espan (fst $3)) }
 
 parser_action:
-  | READ ty ID SEMI                         { (PRead (snd $3, $2)), (Span.extend $1 $4) }
   | SKIP ty SEMI                            { (PSkip $2), Span.extend $1 $3 }
-  | ty ID ASSIGN exp SEMI                   { PLocal(snd $2, $1, $4), Span.extend ($1.tspan) $5 }
+// reads no longer have special syntax -- they are just calls to Payload.read
+//   | READ ty ID SEMI                         { (PRead (snd $3, $2,  (Id.create "packet"))), (Span.extend $1 $4) }
+//   | ty ID ASSIGN READ LPAREN ID RPAREN SEMI { PRead (snd $2, $1), Span.extend ($1.tspan) $8 }    
+  | ty ID ASSIGN exp SEMI                   { 
+        mk_plocal (snd $2) $1 $4, Span.extend $1.tspan $5 }
+    
+    // PLocal(snd $2, $1, $4), Span.extend ($1.tspan) $5 }
   | lexp ASSIGN exp SEMI                     { (PAssign ($1, $3)), Span.extend $1.espan $4 }
 
 parser_branch:

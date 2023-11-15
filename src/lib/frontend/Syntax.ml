@@ -282,7 +282,7 @@ and memop_body =
 and action_body = exp list
 
 and parser_action =
-  | PRead of id * ty
+  | PRead of id * ty * exp  (* int foo = Payload.read(pkt); *)
   | PSkip of ty
   (* The first exp is an l-value, presumably a record projection operation.
      We can make this explicit if we ever add l-values properly *)
