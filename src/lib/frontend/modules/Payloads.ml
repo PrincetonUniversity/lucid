@@ -82,6 +82,11 @@ let fresh_ty tyid_base =
   let ty_id = Id.create (tyid_base ^ string_of_int !tynum) in
   ty_sp (TQVar (QVar ty_id)) Span.default
 ;;
+let fresh_size base_id = 
+  incr tynum;
+  let size_id = Id.create ( base_id ^ string_of_int !tynum) in
+   (IVar (QVar size_id))
+;;
 
 (* Payload.read *)
 let payload_read_name = "read"
@@ -96,6 +101,18 @@ let payload_read_fun _ _ _ =
   payload_read_error "Payload.read is not implemented yet"
 ;;
 
+
+(* Payload.skip *)
+(* Payload.skip : (pkt : Payload.t) -> (n : int) -> unit 
+    skip n bytes in pkt *)
+let payload_skip_name = "skip"
+let payload_skip_id = Id.create payload_skip_name
+let payload_skip_cid = Cid.create_ids [payload_id; payload_skip_id]
+let payload_skip_ty = effectless_fun_ty [payload_ty; ty (TInt(fresh_size "payload_skip_arg"))   ] (ty TVoid) ;;
+let payload_skip_error msg = payload_error payload_skip_name msg
+let payload_skip_fun _ _ _ =
+  payload_skip_error "Payload.skip is not implemented yet"
+;;
 
 (* Payload.peek *)
 let payload_peek_name = "peek"

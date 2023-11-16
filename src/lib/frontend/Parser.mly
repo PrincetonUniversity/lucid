@@ -90,7 +90,7 @@
 
 ;;
 
-(* convert "payload.read" calls to PReads -- this will be depreciated, 
+(* convert "Payload.read" calls to PReads -- this will be depreciated, 
    but its here for now because so many frontend and midend passes 
    look for the PRead tag *)
 let mk_plocal id ty exp = 
@@ -99,7 +99,13 @@ let mk_plocal id ty exp =
     PRead(id, ty, exp)
   | _ -> PLocal(id, ty, exp)
 ;;
-
+(* convert Payload.skip<ty>(pkt); into a Pskip command *)
+let mk_punit fcn_cid ty arg_exp = 
+    if (Cid.equal fcn_cid Payloads.payload_skip_cid) then 
+        PSkip ty
+    else 
+        error ("parsing error: a unit expression in a parse action list must be a call to Payload.skip, but found a call to: "^(Printing.cid_to_string fcn_cid))
+;;
 
 %}
 
@@ -458,14 +464,15 @@ lexp:
     | lexp PROJ ID                         { proj_sp $1 (Id.name (snd $3)) (Span.extend $1.espan (fst $3)) }
 
 parser_action:
-  | SKIP ty SEMI                            { (PSkip $2), Span.extend $1 $3 }
+//   | SKIP ty SEMI                                { (PSkip $2), Span.extend $1 $3 }
+    //  Payload.skip<int>(pkt); 
+  | ID DOT SKIP LESS size=size MORE LPAREN exp=exp RPAREN SEMI      { mk_punit (Cid.create_ids [snd $1; Id.create "skip"]) (ty (TInt(snd size))) exp, Span.extend (fst $1) $10 }
+  | ty ID ASSIGN exp SEMI                                       { mk_plocal (snd $2) $1 $4, Span.extend $1.tspan $5 }
+
 // reads no longer have special syntax -- they are just calls to Payload.read
 //   | READ ty ID SEMI                         { (PRead (snd $3, $2,  (Id.create "packet"))), (Span.extend $1 $4) }
 //   | ty ID ASSIGN READ LPAREN ID RPAREN SEMI { PRead (snd $2, $1), Span.extend ($1.tspan) $8 }    
-  | ty ID ASSIGN exp SEMI                   { 
-        mk_plocal (snd $2) $1 $4, Span.extend $1.tspan $5 }
-    
-    // PLocal(snd $2, $1, $4), Span.extend ($1.tspan) $5 }
+
   | lexp ASSIGN exp SEMI                     { (PAssign ($1, $3)), Span.extend $1.espan $4 }
 
 parser_branch:

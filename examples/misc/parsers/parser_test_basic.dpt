@@ -2,16 +2,13 @@ type eth = { int<48> dstMac; int<48> srcMac; int<16> etherTy; }
 type ip =  { int srcIp; int dstIp; int srcPort; int dstPort; }
 
 event background(int<16> x) { printf("%d", x); }
-event eth(eth e) { generate background(e#etherTy); }
-event eth_ip(eth e, ip ip, Payload.t payload) { generate background(e#etherTy); }
+packet event eth(eth e) { generate background(e#etherTy); }
+packet event eth_ip(eth e, ip ip, Payload.t payload) { generate background(e#etherTy); }
 
 parser parse_ip(Payload.t pkt, eth e) {
   ip ip = Payload.read(pkt);
   generate eth_ip(e, ip, pkt);
 }
-
-// LUCID_ETHERTY is builtin
-// do_lucid_parsing() is also builtin
 const int<16> IP_ETHERTY = 0x8000;
 
 parser main(Payload.t pkt) {
