@@ -198,7 +198,7 @@ let name_of_event eventdecl = match eventdecl.d with
 let portspec_to_parser portspec pkt_var pkt_events bg_events = 
    (* 1. generate a parse block from each event. *)
    (* 2. generate branches from the portspec *)
-   let synthesized_parser actions (step:parser_step) = decl (parser (id "main") [] (block actions step)) in
+   let synthesized_parser actions (step:parser_step) = decl (parser (id "main") [id"pkt", ((Payloads.payload_ty) |> SyntaxToCore.translate_ty)] (block actions step)) in
    let portspec_to_pbranches portspec events =
       (* 
          match port with 
@@ -405,7 +405,7 @@ let add_parser (portspec:port_config) ds =
          (* case 1: no packet events and no parsers -- so make a parser for the bg events. *)
          let bg_block = lucid_background_event_parser pkt_var bg_events in
 
-         (decl (parser (id "main") [] bg_block))::ds
+         (decl (parser (id "main") [id"pkt", ((Payloads.payload_ty) |> SyntaxToCore.translate_ty)] bg_block))::ds
       | _ -> 
       (* case 2: packet events declared, but no parser -- 
          so make a parser that parses packet or background events 
