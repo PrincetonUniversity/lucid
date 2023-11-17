@@ -2,6 +2,6 @@
 	"switches" : 1,
 	"recirculation_ports": [196],
   	"events":[
-	    
+	    {"type":"packet", "bytes":"00000000000300000000000408000000000500000006deadbeef"}
 	]
 }
