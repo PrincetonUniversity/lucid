@@ -22,18 +22,15 @@ open ParsePortSpec
 open CoreSyntax
 open MiscUtils
 
-(* let pkt_var = var (Cid.id pkt_varid) ((Payloads.payload_ty) |> SyntaxToCore.translate_ty) in *)
-
-let read_from_pkt_var ty pkt_var =  call Payloads.payload_read_cid [pkt_var] (ty);;
 (* create a parse block to parse and generate a single packet event. *)
 let packetevent_parse_block (pkt_var : exp) event = match event.d with
 | DEvent(id,_, _, params) -> 
    let read_cmds = List.filter_map 
       (fun (id, ty) -> 
-         (* if it is a payload type, don't worry about the read *)
+         (* don't generate a read for a payload  *)
          if (CoreSyntax.equiv_ty ty (Payloads.payload_ty |> SyntaxToCore.translate_ty)) then None
          else
-         Some(read_id (read_from_pkt_var ty pkt_var) (id, ty)))
+         Some(PRead(Cid.id id, ty, pkt_var)))
       params
    in
    let gen_cmd = pgen 
@@ -64,7 +61,7 @@ let lucid_background_event_parser pkt_var bg_events =
    block 
       [ (* skip the lucid ethernet header. If we want to be safer, we can read it and check correctness. *)
          skip (ty (TInt(14*8)));
-         read (Cid.create ["tag"]) tag_ty (read_from_pkt_var tag_ty pkt_var)  (* read the event tag *)
+         PRead(Cid.create ["tag"], tag_ty, pkt_var) (* read the event tag *)
       ]
       (pmatch [etag] branches)
       
@@ -84,7 +81,7 @@ let lucid_background_event_parser_from_eth pkt_var bg_events =
    let etag = var tag_id tag_ty in
    block 
       [
-         read (Cid.create ["tag"]) tag_ty ((read_from_pkt_var tag_ty pkt_var))
+         PRead((Cid.create ["tag"]),tag_ty,pkt_var)
       ]
       (pmatch [etag] branches)      
 ;;
@@ -164,10 +161,7 @@ let inline_parsers parser_entry_ty pkt_var bg_events decls =
       | CallAlways -> lucid_background_event_parser pkt_var bg_events
       | CallInvalid -> error "[inline_parsers] invalid parser entry type -- this should have been caught earlier"
    in
-   (* note that the builtin lucid parser has its payload argument removed in tofino backend. *)
-   let ctx = CidMap.add (Cid.id Builtins.lucid_parse_id) ([Id.create "pkt", Payloads.payload_ty |> SyntaxToCore.translate_ty], lucid_bg_event_block) CidMap.empty in
-
-   (* let ctx = CidMap.add (Cid.id Builtins.lucid_parse_id) ([(Id.create "pkt", Payloads.payload_ty |> SyntaxToCore.translate_ty)], lucid_bg_event_block) CidMap.empty in *)
+   let ctx = CidMap.add (Cid.id Builtins.lucid_parse_id) ([Id.create "pkt", pkt_arg_ty], lucid_bg_event_block) CidMap.empty in
    inline_parsers_rec ctx decls
 ;;
 
@@ -198,7 +192,7 @@ let name_of_event eventdecl = match eventdecl.d with
 let portspec_to_parser portspec pkt_var pkt_events bg_events = 
    (* 1. generate a parse block from each event. *)
    (* 2. generate branches from the portspec *)
-   let synthesized_parser actions (step:parser_step) = decl (parser (id "main") [id"pkt", ((Payloads.payload_ty) |> SyntaxToCore.translate_ty)] (block actions step)) in
+   let synthesized_parser actions (step:parser_step) = decl (parser (id "main") [id"pkt", pkt_arg_ty] (block actions step)) in
    let portspec_to_pbranches portspec events =
       (* 
          match port with 
@@ -368,10 +362,12 @@ let check_valid_entry_parse_block parse_block : lucid_entry_block_ty =
 
 let pkt_param_exp params = 
    match params with 
-   | (id, ty)::_ when (CoreSyntax.equiv_ty ty (Payloads.payload_ty |> SyntaxToCore.translate_ty)) -> 
+   | (id, ty)::_ when (CoreSyntax.equiv_ty ty pkt_arg_ty) -> 
       var (Cid.id id) ty
-   | _ -> error "main parser has wrong signature (expected a single argument of type Payload.t)"
+   | _ -> 
+      error "main parser has wrong signature (expected a single argument of type bitstring)"
 ;;
+
 let rec main_parser_opt ds = 
    match ds with 
    | [] -> None
@@ -399,13 +395,13 @@ let add_parser (portspec:port_config) ds =
       inline_parsers parser_entry_ty pkt_var bg_events ds
    (* if there's no main parser, attempt to generate one *)
    | None -> (
-      let pkt_var = var (Cid.create ["pkt"]) ((Payloads.payload_ty) |> SyntaxToCore.translate_ty) in
+      let pkt_var = var (Cid.create ["pkt"]) pkt_arg_ty in
       match pkt_events with 
       | [] -> 
          (* case 1: no packet events and no parsers -- so make a parser for the bg events. *)
          let bg_block = lucid_background_event_parser pkt_var bg_events in
 
-         (decl (parser (id "main") [id"pkt", ((Payloads.payload_ty) |> SyntaxToCore.translate_ty)] bg_block))::ds
+         (decl (parser (id "main") [id"pkt", pkt_arg_ty] bg_block))::ds
       | _ -> 
       (* case 2: packet events declared, but no parser -- 
          so make a parser that parses packet or background events 

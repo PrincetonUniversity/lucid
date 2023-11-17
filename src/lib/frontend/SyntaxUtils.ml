@@ -68,6 +68,7 @@ let rec is_global_rty rty =
   | TVector (t, _) -> is_global_rty t
   | TTable _ -> true
   | TAction _ -> false
+  | TBitstring -> false
 ;;
 
 let is_global ty = is_global_rty ty.raw_ty
@@ -84,6 +85,7 @@ let rec is_not_global_rty rty =
   | TVector (t, _) -> is_not_global_rty t
   | TTable _ -> false
   | TAction _ -> false
+  | TBitstring -> true
 ;;
 
 let is_not_global ty = is_not_global_rty ty.raw_ty
@@ -289,7 +291,9 @@ let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
     List.for_all2 equiv_ty t1.tkey_sizes t2.tkey_sizes
     && List.for_all2 equiv_ty t1.tparam_tys t2.tparam_tys
     && List.for_all2 equiv_ty t1.tret_tys t2.tret_tys
-  | ( ( TBool
+  | TBitstring, TBitstring -> true
+  | ( (TBitstring
+      | TBool
       | TMemop _
       | TInt _
       | TPat _
@@ -345,6 +349,7 @@ let default_expression ty =
     | TAction _ -> failwith "Cannot create default expression for action"
     | TTable _ -> failwith "Cannot create default expression for table"
     | TQVar _ -> failwith "Cannot create default expression for type variable"
+    | TBitstring -> failwith "Cannot create default expression for bitstring"
 
 
 
@@ -533,6 +538,7 @@ let raw_ty_to_constr_str raw_ty =
   | TAction (_) -> "action"
   | TPat (_) -> "pat"
   | TQVar (_) -> "qvar"
+  | TBitstring -> "bitstring"
 ;;
 
 let op_to_constr_str o =

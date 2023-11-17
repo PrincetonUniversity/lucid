@@ -7,8 +7,8 @@ event etheth(eth e, eth e2) { generate background(e#srcMac); }
 // LUCID_ETHERTY is builtin
 const int<16> IP_ETHERTY = 0x8000;
 
-parser main(Payload.t pkt) {
-  eth e = Payload.read(pkt);
+parser main(bitstring pkt) {
+  eth e = read(pkt);
   match e#etherTy with
   | LUCID_ETHERTY -> { do_lucid_parsing(pkt); }
   | IP_ETHERTY -> { generate etheth(e, e); } // ERROR: Unifies both arguments of etheth

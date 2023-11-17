@@ -52,6 +52,7 @@ let rec translate_ty (ty : S.ty) : C.ty =
       let aret_tys = List.map translate_ty a.aret_tys in
       C.TAction { aconst_param_tys; aparam_tys; aret_tys }
     | S.TPat s -> C.TPat (translate_size s)
+    | S.TBitstring -> C.TBits (1500)
     | _ -> err ty.tspan (Printing.ty_to_string ty)
   in
   { raw_ty; tspan = ty.tspan }

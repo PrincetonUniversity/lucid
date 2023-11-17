@@ -63,6 +63,7 @@ let occurs_ty span tvar raw_ty : unit =
     match raw_ty with
     | TQVar tvr -> occurs_tqvar occ tvar tvr
     | TBool
+    | TBitstring
     | TInt _
     | TName _
     | TAbstract _
@@ -272,7 +273,9 @@ and try_unify_rty span rty1 rty2 =
     List.iter2 (try_unify_ty span) a1.aconst_param_tys a2.aconst_param_tys;
     List.iter2 (try_unify_ty span) a1.aparam_tys a2.aparam_tys;
     List.iter2 (try_unify_ty span) a1.aret_tys a2.aret_tys
+  | TBitstring, TBitstring -> ()
   | ( ( TVoid
+      | TBitstring
       | TGroup
       | TBool
       | TEvent

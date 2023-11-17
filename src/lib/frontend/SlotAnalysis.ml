@@ -102,7 +102,7 @@ let extract_call e =
   let extract_var e =
     match e.e with
     | EVar cid -> Cid.to_id cid
-    | ECall (cid, [], _) when Cid.equal cid Payloads.payload_parse_cid ->
+    | ECall (cid, [_], _) when Cid.equal cid Payloads.payload_parse_cid ->
       payload_parse_id
     | _ ->
       failwith

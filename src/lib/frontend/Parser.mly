@@ -90,23 +90,6 @@
 
 ;;
 
-(* convert "Payload.read" calls to PReads -- this will be depreciated, 
-   but its here for now because so many frontend and midend passes 
-   look for the PRead tag *)
-let mk_plocal id ty exp = 
-  match exp.e with 
-  | ECall(cid, _, _) when Cid.equal cid Payloads.payload_read_cid -> 
-    PRead(id, ty, exp)
-  | _ -> PLocal(id, ty, exp)
-;;
-(* convert Payload.skip<ty>(pkt); into a Pskip command *)
-let mk_punit fcn_cid ty arg_exp = 
-    if (Cid.equal fcn_cid Payloads.payload_skip_cid) then 
-        PSkip ty
-    else 
-        error ("parsing error: a unit expression in a parse action list must be a call to Payload.skip, but found a call to: "^(Printing.cid_to_string fcn_cid))
-;;
-
 %}
 
 %token <Span.t * Id.t> ID
@@ -186,9 +169,10 @@ let mk_punit fcn_cid ty arg_exp =
 %token <Span.t> PATAND
 
 %token <Span.t> PARSER
-// %token <Span.t> READ
+%token <Span.t> READ
 %token <Span.t> SKIP
 %token <Span.t> DROP
+%token <Span.t> BITSTRING
 
 %token <Span.t> CONSTR
 %token <Span.t> PROJ
@@ -245,7 +229,7 @@ ty:
     | MEMOP poly                        { ty_sp (mk_tmemop (fst $2) (snd $1) (snd $2)) (Span.extend (fst $1) (fst $2)) }
     | LBRACE record_def RBRACE          { ty_sp (mk_trecord $2) (Span.extend $1 $3) }
     | ty LBRACKET size RBRACKET         { ty_sp (TVector ($1.raw_ty, snd $3)) (Span.extend $1.tspan $4) }
-
+    | BITSTRING                         { ty_sp TBitstring ($1)}
 cid:
     | ID				                { (fst $1, Cid.id (snd $1)) }
     | ID DOT cid                        { (Span.extend (fst $1) (fst $3),
@@ -464,16 +448,14 @@ lexp:
     | lexp PROJ ID                         { proj_sp $1 (Id.name (snd $3)) (Span.extend $1.espan (fst $3)) }
 
 parser_action:
-//   | SKIP ty SEMI                                { (PSkip $2), Span.extend $1 $3 }
-    //  Payload.skip<int>(pkt); 
-  | ID DOT SKIP LESS size=size MORE LPAREN exp=exp RPAREN SEMI      { mk_punit (Cid.create_ids [snd $1; Id.create "skip"]) (ty (TInt(snd size))) exp, Span.extend (fst $1) $10 }
-  | ty ID ASSIGN exp SEMI                                       { mk_plocal (snd $2) $1 $4, Span.extend $1.tspan $5 }
-
-// reads no longer have special syntax -- they are just calls to Payload.read
-//   | READ ty ID SEMI                         { (PRead (snd $3, $2,  (Id.create "packet"))), (Span.extend $1 $4) }
-//   | ty ID ASSIGN READ LPAREN ID RPAREN SEMI { PRead (snd $2, $1), Span.extend ($1.tspan) $8 }    
-
-  | lexp ASSIGN exp SEMI                     { (PAssign ($1, $3)), Span.extend $1.espan $4 }
+  // skip(int, payload);
+  | SKIP LPAREN ty=ty COMMA exp=exp RPAREN SEMI                             { PSkip(ty), Span.extend $1 $7 }
+  // int foo = read(payload);
+  | ty=ty ID ASSIGN READ LPAREN exp=exp RPAREN SEMI                         { PRead(snd $2, ty, exp), Span.extend ty.tspan $8  }
+  // int foo = hash...(checksum, ...)...;
+  | ty=ty ID ASSIGN exp=exp SEMI                                            { PLocal(snd $2, ty, exp), Span.extend ty.tspan $5 }
+  // ??? not sure what this is for. Don't assigns mess slot analysis up?
+  | lexp ASSIGN exp SEMI                                                    { (PAssign ($1, $3)), Span.extend $1.espan $4 }
 
 parser_branch:
   | PIPE pattern ARROW LBRACE parser_block RBRACE  { Span.extend $1 $6, ($2, $5) }

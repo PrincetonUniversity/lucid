@@ -1234,6 +1234,7 @@ let retrieve_constraints env span id params =
 
 let infer_parser_action env (action, span) =
   match action with
+  (* no typing to do in pskip *)
   | PSkip _ -> env, (action, span)
   | PAssign (lexp, exp) ->
     let env, inf_lexp, inf_lty = infer_exp env lexp |> textract in
@@ -1242,11 +1243,15 @@ let infer_parser_action env (action, span) =
     env, (PAssign (inf_lexp, inf_exp), span)
   (* read and local have the same type rules. Read is just a 
      convenience tag with a specific form. *)
-  | PRead (id, ty, exp) -> 
-    let env, inf_exp, inf_ety = infer_exp env exp |> textract in
-    unify_ty exp.espan ty inf_ety;
-    let env = add_locals env [id, ty] in
-    env, (PRead(id, ty, inf_exp), span)
+  | PRead (var_id, var_ty, pkt_exp) -> 
+    (* ty id = read(pkt_exp); *)
+    let env, inf_pkt_exp, inf_pkt_ety = infer_exp env pkt_exp |> textract in
+    (* pkt_exp should have type bitstring *)
+    unify_ty inf_pkt_exp.espan inf_pkt_ety (ty TBitstring) ;
+    (* assume read always returns the right type, so 
+       just add id to the env *)
+    let env = add_locals env [var_id, var_ty] in
+    env, (PRead(var_id, var_ty, inf_pkt_exp), span)
   | PLocal(id, ty, exp) -> 
     let env, inf_exp, inf_ety = infer_exp env exp |> textract in
     unify_ty exp.espan ty inf_ety;
@@ -1618,7 +1623,7 @@ let rec infer_declaration
       let ingress_port_param = (Builtins.ingr_port_id, builtin_tys.ingr_port_ty) in
       let parser_env =
         add_locals env (ingress_port_param::params) 
-        |> define_parser Builtins.lucid_parse_id [(Id.create "pkt", Payloads.payload_ty)]
+        |> define_parser Builtins.lucid_parse_id [(Id.create "pkt", ty TBitstring)]
       in
       
       let inf_parser = infer_parser_block parser_env parser in

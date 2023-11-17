@@ -7,21 +7,21 @@ event foo(int<48> dmac, int<48> smac, int<16> etype, int x, int y, Payload.t pkt
 // 	match ingress_port with 
 // 	| 196 -> {do_lucid_parsing(pkt);}
 // 	| _ -> {
-// 		int<48> d =  Payload.read(pkt);
-// 		int<48> s = Payload.read(pkt);
-// 		int<16> t = Payload.read(pkt);
+// 		int<48> d =  read(pkt);
+// 		int<48> s = read(pkt);
+// 		int<16> t = read(pkt);
 // 		generate(eth(d, s, t, pkt));
 // 	}
 
 
-parser main(Payload.t pkt) {
-	int<48> d =  Payload.read(pkt);
-	int<48> s =  Payload.read(pkt);
-	int<16> t =  Payload.read(pkt);
-	Payload.skip<32>(pkt); 
+parser main(bitstring pkt) {
+	int<48> d =  read(pkt);
+	int<48> s =  read(pkt);
+	int<16> t =  read(pkt);
+	int<16> csum = hash<16>(checksum, d, s, t);
 	match t with
 		| LUCID_ETHERTY -> {do_lucid_parsing(pkt);}
-		| _ -> {generate(eth(d, s, t, pkt));	}
+		| _ -> {generate(eth(d, s, t, Payload.parse(pkt)));	}
 }
 
 handle foo(int<48> dmac, int<48> smac, int<16> etype, int x, int y, Payload.t pkt){

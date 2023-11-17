@@ -10,11 +10,8 @@ let parser pid pparams pblock pret_event phdlret_event outparams =
   TDParser({pid; pparams; pblock; pret_event=Some(pret_event); phdlret_event = Some(phdlret_event); pret_params = outparams;})
 ;;
 
-let read_pkt_var_cmd tgt_cid tgt_ty pkt_var = 
-  read tgt_cid tgt_ty (call Payloads.payload_read_cid [pkt_var] (tgt_ty))
-;;
 let read_params_from_pkt_var_cmds params pkt_var = 
-  List.map (fun (id, ty) -> read_pkt_var_cmd (Cid.id id) ty pkt_var) params
+  List.map (fun (id, ty) -> PRead(Cid.id id, ty, pkt_var)) params    
 ;;
 
 let idxof = 
@@ -329,14 +326,14 @@ let make_egr_parser
   let egr_intr_id, egr_intr_ty = intrinsic_to_param egress_intrinsic_metadata_t in 
   (* the packet argument to the main parser *)
   let pkt_id = Id.create "pkt" in
-  let pkt_var = var (Cid.create_ids [pkt_id]) ((Payloads.payload_ty) |> SyntaxToCore.translate_ty) in
+  let pkt_var =  var (Cid.create_ids [pkt_id]) pkt_arg_ty in
 
   (* note_ tagid does not matter. *)
   let local_tag_id = Id.create "ingress_union_tag" in
   let _, (_, tagty) = etag from_ingress in
 
-  let read_intr_cmd = read_pkt_var_cmd (Cid.id egr_intr_id) egr_intr_ty pkt_var in
-  let read_event_tag = read_pkt_var_cmd (Cid.id local_tag_id) tagty pkt_var in
+  let read_intr_cmd = PRead((Cid.id egr_intr_id), egr_intr_ty, pkt_var) in
+  let read_event_tag = PRead((Cid.id local_tag_id),tagty,pkt_var) in
     
   let egress_replica_id = field_of_intrinsic 
     egress_intrinsic_metadata_t 
@@ -345,7 +342,7 @@ let make_egr_parser
   in    
   let egr_parser = parser
     (id "main")
-    ([pkt_id, Payloads.payload_ty |> SyntaxToCore.translate_ty])
+    ([pkt_id, pkt_arg_ty])
     (block
       [
         read_intr_cmd;

@@ -3,6 +3,31 @@ open Batteries
 open Syntax
 open InterpState
 
+(*  some helpers for readability *)
+let effectless_fun_ty arg_tys ret_ty =
+  let start_eff = FVar (QVar (Id.fresh "eff")) in
+  ty
+  @@ TFun
+       { arg_tys
+       ; ret_ty
+       ; start_eff
+       ; end_eff = start_eff
+       ; constraints = ref []
+       }
+;;
+
+let tynum = ref (-1)
+let fresh_ty tyid_base =  
+  incr tynum;
+  let ty_id = Id.create (tyid_base ^ string_of_int !tynum) in
+  ty_sp (TQVar (QVar ty_id)) Span.default
+;;
+let fresh_size base_id = 
+  incr tynum;
+  let size_id = Id.create ( base_id ^ string_of_int !tynum) in
+   (IVar (QVar size_id))
+;;
+
 (* Generic Payload defs *)
 let payload_name = "Payload"
 let payload_id = Id.create payload_name
@@ -56,36 +81,17 @@ let payload_empty_fun _ _ args =
 let payload_parse_name = "parse"
 let payload_parse_id = Id.create payload_parse_name
 let payload_parse_cid = Cid.create_ids [payload_id; payload_parse_id]
-let payload_parse_ty = payload_empty_ty
+let payload_parse_ty = effectless_fun_ty [ty TBitstring] payload_ty
 let payload_parse_error msg = payload_error payload_parse_name msg
 
-let payload_parse_fun _ _ _ =
-  payload_parse_error "Payload.parse should never be called outside of parsers"
-;;
-
-(*  some helpers for readability *)
-let effectless_fun_ty arg_tys ret_ty =
-  let start_eff = FVar (QVar (Id.fresh "eff")) in
-  ty
-  @@ TFun
-       { arg_tys
-       ; ret_ty
-       ; start_eff
-       ; end_eff = start_eff
-       ; constraints = ref []
-       }
-;;
-
-let tynum = ref (-1)
-let fresh_ty tyid_base =  
-  incr tynum;
-  let ty_id = Id.create (tyid_base ^ string_of_int !tynum) in
-  ty_sp (TQVar (QVar ty_id)) Span.default
-;;
-let fresh_size base_id = 
-  incr tynum;
-  let size_id = Id.create ( base_id ^ string_of_int !tynum) in
-   (IVar (QVar size_id))
+let payload_parse_fun _ _ args =
+  (* at this point, Payload.parse is just a wrapper that stores 
+     whatever bitstring is left at the end of packet processing. *)
+  let open InterpSyntax in
+  let open CoreSyntax in
+  match args with 
+  | [V{v}] -> value v
+  | _ -> payload_parse_error "Payload.parse called with wrong args"
 ;;
 
 (* Payload.read *)

@@ -27,8 +27,8 @@ packet event pkt_in(eth_t eth, ip_t ip, int<16> comp_csum);
 packet event pkt_out(eth_t eth, ip_t ip) {skip;}
 
 
-parser main(Payload.t pkt) {
-   eth_t eth = Payload.read(pkt);
+parser main(bitstring pkt) {
+   eth_t eth = read(pkt);
    match eth#ety with
    // every program must begin by reading a 114 bit 
    // eth header and then matching on the last 16 bits, 
@@ -37,7 +37,7 @@ parser main(Payload.t pkt) {
    // event parsing stuff.
    | LUCID_ETHERTY -> {do_lucid_parsing(pkt);}
    | 0x0800 -> {
-      ip_t ip = Payload.read(pkt);
+      ip_t ip = read(pkt);
       // currently, a checksum operation is represented as 
       // a hash call where the first argument (the polynomial)
       // is a builtin variable named "checksum".

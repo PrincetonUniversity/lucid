@@ -1292,12 +1292,14 @@ let translate_parser_params (comp : component) (parser:parser) =
   out ingress_intrinsic_metadata_t ig_intr_md   *parser's out param*
 *)
   let pkt_arg, pkt_t = match parser.pparams with 
-    | (pkt_arg, {raw_ty=TName(cid, _, _)})::_ when (Cid.equal cid (Payloads.t_id)) ->
-        pkt_arg, id"packet_in"
-    | _ -> error "[translate_parser_params] expected a packet_in parameter"
+    | (pkt_arg, {raw_ty=TBits(_)})::_ ->
+        pkt_arg, tstruct (id"packet_in")
+    | _ -> 
+      print_endline ("pkt_args: "^(CorePrinting.params_to_string parser.pparams));
+      error "[translate_parser_params] expected a packet_in parameter"
   in
   (* let pkt_t, pkt_arg = id"packet_in", id"pkt" in  *)
-  let pkt_param = param (tstruct pkt_t) pkt_arg in
+  let pkt_param = param pkt_t pkt_arg in
   let parser_out_event = get_event comp (parser.pret_event |> Option.get) in
   let handler_out_event = get_event comp (parser.phdlret_event |> Option.get) in
   let hdr_param = outparam 

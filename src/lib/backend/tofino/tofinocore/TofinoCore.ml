@@ -259,12 +259,7 @@ let decl_to_tdecl (decl:decl) =
     
     let actions, spans = List.split pblock.pactions in
     let intr_id, intr_ty = intrinsic_to_param ingress_intrinsic_metadata_t in 
-    let read_call = call 
-      Payloads.payload_read_cid 
-      [var (Cid.id pkt_id) (Payloads.payload_ty |> SyntaxToCore.translate_ty)] 
-      intr_ty
-    in
-    let read_intr_acn = read (Cid.id intr_id) intr_ty read_call in
+    let read_intr_acn = PRead((Cid.id intr_id), intr_ty, var (Cid.id pkt_id) pkt_arg_ty) in
     let skip_resubmit_intr_acn = skip (tint 64) in 
     let pblock = {pblock with
       pactions=

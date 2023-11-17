@@ -8,19 +8,19 @@ event etheth(eth e, eth em) { generate background(e#srcMac); }
 // LUCID_ETHERTY is builtin
 const int IP_ETHERTY = 0x8000;
 
-parser main(Payload.t pkt) {
-  eth e = Payload.read(pkt);
+parser main(bitstring pkt) {
+  eth e = read(pkt);
   match e#etherTy with
   | 0 -> { 
-         eth e1 = Payload.read(pkt);
-         eth e1 = Payload.read(pkt);
-         eth e2 = Payload.read(pkt);
+         eth e1 = read(pkt);
+         eth e1 = read(pkt);
+         eth e2 = read(pkt);
          match e1#etherTy with
          | 1 -> { generate eth(e1); }
          | 2 -> { generate etheth(e1, e2); } }
   | 3 -> {
-         eth e3 = Payload.read(pkt);
-         eth e4 = Payload.read(pkt); 
+         eth e3 = read(pkt);
+         eth e4 = read(pkt); 
          match e3#etherTy with
          | 4 -> { generate eth(e3); } }
 }

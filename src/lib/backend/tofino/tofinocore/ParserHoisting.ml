@@ -31,8 +31,6 @@ open AddIntrinsics
 (* [@@@ocaml.warning "-21-27-26"] *)
 
 
-let peek_from_pkt_var ty pkt_var =  call Payloads.payload_peek_cid [pkt_var] (ty);;
-
 (* given a list of events, find the one that matches cid *)
 let rec cid_to_eventconstr prefix_ids events cid =
   match cid with 
@@ -162,9 +160,8 @@ and elim_parser_inner output_event (vars_read : cids) (pactions : paction_sps) (
      hoisting statements for params set to the variable. *)
   | (paction, sp)::pactions -> (
     match paction with 
-    | PRead(cid, _, ecall) 
-    | PPeek(cid, _, ecall) -> (
-      let pkt_var = match ecall.e with ECall(_, [pkt_var], _) -> pkt_var | _ -> error "wrong form for ecall in parse command" in
+    | PRead(cid, _, pkt_var) 
+    | PPeek(cid, _, pkt_var) -> (
       let vars_read = cid::vars_read in
       (* the result does not include this action. So we need to add it. 
          But also, we want to add all the hoist commands related to cid. *)
@@ -176,7 +173,7 @@ and elim_parser_inner output_event (vars_read : cids) (pactions : paction_sps) (
           (* downstream processing has commanded us to set 
              paramcid with a peek at the point where this argcid is read. *)
           if (Cid.equal argcid cid) then 
-            let peek_action = PPeek(paramcid, paramty, peek_from_pkt_var paramty pkt_var) in
+            let peek_action = PPeek(paramcid, paramty, pkt_var) in
             remaining_hoist_cmds, pactions@[(peek_action, sp)]          
           else 
             (* this command has nothing to do with us, propagate it *)

@@ -161,7 +161,8 @@ let rec raw_ty_to_string t =
       (concat_map " * " ty_to_string a.aconst_param_tys)
       (concat_map " * " ty_to_string a.aparam_tys)
       (comma_sep ty_to_string a.aret_tys)
-  | TPat s -> Printf.sprintf "pat<<%s>>" (size_to_string s)
+  | TPat s -> Printf.sprintf "pat<%s>" (size_to_string s)
+  | TBitstring -> "bitstring"
 
 and func_to_string func =
   let arg_tys = concat_map ", " ty_to_string func.arg_tys in

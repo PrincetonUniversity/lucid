@@ -841,11 +841,11 @@ and interp_parser_step nst swid payload_id locals parser_step =
     | PDrop -> CoreSyntax.vbool false
 ;;
 
-let rec find_payload_param params = 
+let rec find_bitstring_param params = 
   match params with 
   | [] -> None
-  | (id, ty)::_ when InterpPayload.is_payload_ty ty -> Some(id)
-  | _::tl -> find_payload_param tl
+  | (id, ty)::_ when (ty.raw_ty = TBits(1500)) -> Some(id)
+  | _::tl -> find_bitstring_param tl
 ;;
 
 let interp_decl (nst : State.network_state) swid d =
@@ -892,7 +892,7 @@ let interp_decl (nst : State.network_state) swid d =
   | DParser(id, params, parser_block) -> 
     (* figure out whether to use the implicit payload argument. if there is an explicit 
         payload for the parser, it must be the first argument. *)
-    let payload_id_opt = find_payload_param params in
+    let payload_id_opt = find_bitstring_param params in
     let runtime_function nst swid args = 
       (* if there is no payload parameter, put one in the front *)
       let param_ids, payload_id = match payload_id_opt with

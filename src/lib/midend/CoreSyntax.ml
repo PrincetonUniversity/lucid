@@ -415,8 +415,8 @@ let block actions step : parser_block =
 ;;
 
 (* actions *)
-let read cid ty exp = PRead(cid, ty, exp)
-let read_id exp (id, ty) = read (Cid.id id) ty exp
+(* let read cid ty exp = PRead(cid, ty, exp) *)
+(* let read_id exp (id, ty) = read (Cid.id id) ty exp *)
 
 let peek cid ty exp = PPeek(cid, ty, exp)
 let skip ty = PSkip(ty)
@@ -455,6 +455,7 @@ let equiv_ty t1 t2 =
   | TEvent, TEvent -> true
   | TGroup, TGroup -> true
   | TPat sz1, TPat sz2 -> sz1 = sz2
+  | TBits sz1, TBits sz2 -> sz1 = sz2
   | TName(n1, [], false), TName(n2, [], false) -> Cid.equal n1 n2
   | _ -> false
 ;;
@@ -609,3 +610,7 @@ let extract_bits value =
   | VBits bits -> bits
   | _ -> error "[extract_bits] value is not a VBits"
 ;;
+
+(* is an argument to a parser its packet arg? *)
+let pkt_arg_ty = ty(TBits 1500)
+let is_pkt_arg (_, ty) = match ty.raw_ty with | TBits 1500 -> true | _ -> false 

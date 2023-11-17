@@ -59,6 +59,7 @@ and raw_ty =
   | TTable of tbl_ty
   | TAction of acn_ty
   | TPat of size (* number of bits *)
+  | TBitstring
 
 and tbl_ty =
   { tkey_sizes : ty list
