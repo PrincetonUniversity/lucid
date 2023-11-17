@@ -27,7 +27,7 @@ parser main(bitstring pkt) {
 handle foo(int<48> dmac, int<48> smac, int<16> etype, int x, int y, Payload.t pkt){
 	printf("in foo");
 	printf("ingress port, %d", ingress_port);
-	generate_port(0, eth(dmac, smac, etype, pkt));
+	generate_port(0, foo(dmac, smac, etype, x, y, pkt));
 }
 
 handle eth(int<48> dmac, int<48> smac, int<16> etype, Payload.t pkt){

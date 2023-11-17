@@ -56,7 +56,7 @@ let pwrite (p:BitString.bits) (v:value) : BitString.bits =
 ;;
 
 
-(* serialize a packet event to a payload *)
+(* serialize a packet event to a single bitstring *)
 let serialize_packet_event event_val = 
   let packet_bits = List.fold_left pwrite [] event_val.data in 
   {event_val with eid=Cid.create ["bits"]; data=[vbits packet_bits]; eserialized=true;}

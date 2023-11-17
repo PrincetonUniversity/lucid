@@ -414,9 +414,10 @@ let event_to_json {eid; data; eserialized} =
     match v.v with
     | VInt i -> `Int (Integer.to_int i)
     | VBool b -> `Bool b
-    | _ -> error "[json event arg printing] not an int or bool"
+    | VBits bs -> `String (BitString.bits_to_hexstr bs)
+    | _ -> error "[json event arg printing] not an int, bool, or bitstring / payload"
   in  
-  if (eserialized) then (
+  if (not eserialized) then (
     let name = `String (CorePrinting.cid_to_string eid) in
     let args = `List (List.map raw_json_val data) in
     [("name", name); ("args", args)])

@@ -395,9 +395,10 @@ let rec interp_statement nst hdl_sort swid locals s =
     Env.add (id) (interp_exp e) locals
   | SLocal (id, _, e) -> Env.add (Id id) (interp_exp e) locals
   | SPrintf (s, es) ->
-    let vs = List.map (fun e -> interp_exp e |> extract_ival) es in
-    let strout = printf_replace vs s in
-    printf_string swid strout |> print_endline;
+    if (Cmdline.cfg.show_printf) then (
+      let vs = List.map (fun e -> interp_exp e |> extract_ival) es in
+      let strout = printf_replace vs s in
+      printf_string swid strout |> print_endline);
     locals
   | SIf (e, ss1, ss2) ->
     let b = interp_exp e |> extract_ival |> raw_bool in
@@ -472,8 +473,10 @@ let rec interp_statement nst hdl_sort swid locals s =
       let ev_sort = Env.find event.eid nst.event_sorts in
       (* serialize packet events *)
       let event_val = match ev_sort with 
-        | EBackground -> event (* background events stay as events *)
-        | EPacket -> InterpPayload.serialize_packet_event event
+        | EBackground -> 
+          event (* background events stay as events *)
+        | EPacket -> 
+          InterpPayload.serialize_packet_event event
       in
       InterpSwitch.egress_send nst (State.lookup_switch nst swid) port event_val;
       locals

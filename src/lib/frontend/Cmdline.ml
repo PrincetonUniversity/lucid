@@ -21,6 +21,7 @@ type config =
   ; mutable dpt_file : string (** Path to the input dpt file *)
   ; mutable show_interp_state : bool (* report final interpreter state *)
   ; mutable show_interp_events : bool (* report events processed by interpreter *)
+  ; mutable show_printf        : bool (* report printf statements *)
   ; mutable interactive : bool
       (** Run interpreter interactively (stdin / stdout) **)
   ; mutable output : string
@@ -58,6 +59,7 @@ let default () =
   ; dpt_file = ""
   ; show_interp_state = true
   ; show_interp_events = true
+  ; show_printf = true
   ; interactive = false
   ; output = "lucid.output"
   ; json = false
@@ -160,9 +162,13 @@ let parse_interp () =
   (* added options for interp *)
   let hide_final_state () = cfg.show_interp_state <- false in
   let hide_event_reports () = cfg.show_interp_events <- false in
+  let hide_printf () = cfg.show_printf <- false in
   let set_interactive () =
     cfg.interactive <- true;
     cfg.verbose <- false;
+    cfg.show_interp_state <- false;
+    cfg.show_interp_events <- false
+    (* cfg.show_printf <- false *)
   in
   let set_spec s = cfg.spec_file <- s in
   let speclist =
@@ -178,12 +184,17 @@ let parse_interp () =
         , Arg.Unit hide_event_reports
         , "If set, don't print event arrival / generation reports while \
             interpreting. ")
+      ; ( "--no-printf"
+        , Arg.Unit hide_printf
+        , "If set, don't print printf statements while interpreting. ")
       ; ( "--interactive"
         , Arg.Unit set_interactive
-        , "Run interpreter interactively, piping events to/from stdin/stdout" )
+        , "Run interpreter interactively, piping events to/from stdin/stdout \
+            disables verbose and suppresses final state and event reports" )
       ; ( "-i"
         , Arg.Unit set_interactive
-        , "Run interpreter interactively, piping events to/from stdin/stdout" )
+        , "Run interpreter interactively, piping events to/from stdin/stdout \
+            disables verbose and suppresses final state and event reports" )
       ]
   in
   let target_filename = ref "" in
