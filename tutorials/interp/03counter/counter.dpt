@@ -1,0 +1,89 @@
+const int OUT_PORT = 1;
+const int SERVER_PORT = 2;
+
+type eth_t = {
+	int<48> dmac;
+	int<48> smac;
+	int<16> etype;
+}
+type ip_t = {
+	int src;
+	int dst;
+	int<16> len; 
+}
+
+/********** Events *********/
+event eth_ip(eth_t eth, ip_t ip);
+
+event get_report(int src, int dst); // get_report is sent by the monitoring server.
+
+event report(int src, int dst, int<32> count) {skip;} // report is sent back to the monitoring server.
+
+/**** Indexing table -- map a flow to an integer index ****/
+action_constr mk_flow_idx(int idx) = {
+	return action int flow_idx () {
+		return idx;
+	};
+};
+
+
+table_type indexing_table_t = {
+	key_type: (int, int)
+	arg_type: ()
+	ret_type: int
+}
+
+global indexing_table_t idx_tbl = 
+	table_create<indexing_table_t>(
+		(mk_flow_idx), 
+		1024, 
+		mk_flow_idx(0)
+	);
+
+
+fun int get_idx_exact(int src, int dst) {
+	return table_match(
+		idx_tbl, 
+		(src, dst), 
+		());
+}
+
+/**** the flow counter array ****/
+global Array.t<32> flow_counts = Array.create(8);
+
+// a memop is a function that can
+// be passed to array methods to modify the 
+// array's contents.
+memop incr(int stored_val, int incr_by) {
+	return stored_val + incr_by;
+}
+
+/**** Main functions for counting and reporting with exact indexes ****/
+fun void count_exact(int src, int dst) {
+	int idx = get_idx_exact(src, dst);
+	// we use 0 as a special value to indicate that
+	// the flow is not tracked.
+	if (idx != 0) {
+		Array.setm(flow_counts, idx, incr, 1);
+	}
+}
+
+fun void report_exact(int src, int dst) {
+	int idx = get_idx_exact(src, dst);
+	if (idx != 0) {
+		int ct = Array.get(flow_counts, idx);
+		printf("sending report about flow {src=%d; dst=%d; packet ct=%d} to monitor on port %d", src, dst, ct, SERVER_PORT);
+		event r = report(src, dst, ct);
+		generate_port(SERVER_PORT, r);
+	}
+}
+
+/********** Handlers *********/
+handle eth_ip(eth_t eth, ip_t ip) {
+	generate_port(OUT_PORT, eth_ip(eth, ip));
+	count_exact(ip#src, ip#dst);
+}
+
+handle get_report(int src, int dst) {
+	report_exact(src, dst);
+}
