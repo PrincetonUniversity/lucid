@@ -13,12 +13,13 @@ The easiest way to use lucid is with its docker image and the lucid.sh script.
   - if you are on a laptop/desktop, just install the docker desktop app: [docker desktop](https://www.docker.com/products/docker-desktop/)
   - if you are on a server... you can probably figure out how to install docker
 
-**2. Clone this repository, switch to the langsec23 branch, and pull the lucid docker container**
+**2. Clone this repository and pull the lucid docker container**
 
 Run this in your terminal:
 ```
 git clone https://github.com/PrincetonUniversity/lucid/
 cd lucid
+./lucid.sh pull
 ```
 
 This will download about 400MB of data and should take < 5 minutes. 
@@ -28,6 +29,8 @@ This will download about 400MB of data and should take < 5 minutes.
 To make sure everything is working correctly, run this command from the root of the repository:
 
 `./lucid.sh interp ./tutorials/interp/01monitor/monitor.dpt`
+
+You should see a bunch of output from the interpreter, ending with a summary of events handled in an execution of it.
 
 **4. (optional) set up your IDE**
 
