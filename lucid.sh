@@ -266,13 +266,13 @@ compile_cmd ()
             shift
         else
             case $1 in 
-                --spec)
-                    SPEC_FOUND=1
-                    ARGS="$ARGS --spec $(docker_local_fn ${2})"
-                    MOUNT="$MOUNT $(mount_file_str ${2})"
-                    shift
-                    shift
-                    ;;            
+                # --spec)
+                #     SPEC_FOUND=1
+                #     ARGS="$ARGS --spec $(docker_local_fn ${2})"
+                #     MOUNT="$MOUNT $(mount_file_str ${2})"
+                #     shift
+                #     shift
+                #     ;;            
                 # output directory, process this at the end.
                 -o)
                     BUILD_DIR="$2"
@@ -289,18 +289,18 @@ compile_cmd ()
     done
 
     # if there is no provided spec file, check for a <src>.json
-    if [[ $SPEC_FOUND == 0 ]]
-    then
-        >&2 echo "no interp spec file provided"
-        spec=${main%.dpt}.json
-        >&2 echo "checking if spec exists: $spec"
-        if [[ -f "$spec" ]]
-        then
-            >&2 echo "spec exists, adding args"
-            ARGS="$ARGS --spec $(docker_local_fn ${spec})"
-            MOUNT="$MOUNT $(mount_file_str ${spec})"
-        fi
-    fi
+    # if [[ $SPEC_FOUND == 0 ]]
+    # then
+    #     >&2 echo "no interp spec file provided"
+    #     spec=${main%.dpt}.json
+    #     >&2 echo "checking if spec exists: $spec"
+    #     if [[ -f "$spec" ]]
+    #     then
+    #         >&2 echo "spec exists, adding args"
+    #         ARGS="$ARGS --spec $(docker_local_fn ${spec})"
+    #         MOUNT="$MOUNT $(mount_file_str ${spec})"
+    #     fi
+    # fi
     # build directory arg.
     # 1. if no build is given, create a default.
     if [[ $BUILD_DIR == "" ]]

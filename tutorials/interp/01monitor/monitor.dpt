@@ -1,6 +1,6 @@
 // some constants -- not important.
-const int OUT_PORT = 1;
-const int SERVER_PORT = 2;
+const int<9> OUT_PORT = 1;
+const int<9> SERVER_PORT = 2;
 
 // type definitions in lucid are structs 
 // in c. 
