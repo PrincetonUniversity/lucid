@@ -1389,10 +1389,16 @@ let rec infer_declaration
       let inf_body = generalizer#visit_body () inf_body in
       env, effect_count, DHandler (id, s, inf_body)
     | DFun (id, ret_ty, constr_specs, body) ->
+      (* a function declaration needs to have all the 
+         local builtins available to it as well. *)
+      let env' = env 
+        |> define_const Builtins.this_id Builtins.this_ty 
+        |> define_const Builtins.ingr_port_id builtin_tys.ingr_port_ty
+      in
       enter_level ();
       let start_eff = fresh_effect () in
       let constraints, end_eff =
-        spec_to_constraints env d.dspan start_eff (fst body) constr_specs
+        spec_to_constraints env' d.dspan start_eff (fst body) constr_specs
       in
       let ret_effects =
         match end_eff with
@@ -1402,7 +1408,7 @@ let rec infer_declaration
       let end_eff, constraints, ret_effects, inf_body =
         let fun_env, inf_body =
           infer_body
-            { env with
+            { env' with
               current_effect = start_eff
             ; ret_ty = Some ret_ty
             ; constraints
