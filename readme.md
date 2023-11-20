@@ -29,45 +29,81 @@ That's it! Once the pull is done, you are ready to run the Lucid interpreter and
 
 Run the interpreter with `./lucid.sh interpret <lucid program name>`. The interpreter type checks your program, then runs it in a simulated network defined by a specification file. 
 
-Try it out with the tutorial program, `histogram.dpt`:
+Try it out with one of the tutorial programs ([monitor.dpt](https://github.com/PrincetonUniversity/lucid/blob/main/tutorials/interp/01monitor/monitor.dpt)):
+
 ```
-% ./lucid.sh interpret examples/tutorial/histogram.dpt 
-running command:docker run --rm -it -v /Users/jsonch/Desktop/gits/lucid/examples/tutorial/histogram.dpt:/app/inputs/histogram.dpt -v /Users/jsonch/Desktop/gits/lucid/examples/tutorial/histogram.json:/app/inputs/histogram.json jsonch/lucid:lucid /bin/sh -c "./dpt /app/inputs/histogram.dpt --spec /app/inputs/histogram.json"
-dpt: -------Checking well-formedness---------
-# ... type checker output elided ...
-dpt: Simulating...
-# ... interpreter output elided ...
-t=32400: Handling event report(3) at switch 0, port 196
-t=40000: Handling entry event ip_in(128,5,2,768,0) at switch 0, port 0
+jsonch@jsonchs-MBP lucid % ./lucid.sh interp tutorials/interp/01monitor/monitor.dpt
+# ... startup output elided ...
+t=0: Handling event eth_ip(11,22,2048,1,2,128) at switch 0, port 0
+t=600: Handling event prepare_report(11,22,2048,1,2,128) at switch 0, port 196
+sending report about packet {src=1; dst=2; len=128} to monitor on port 2
 dpt: Final State:
-# ... interpreter output elided ...
- entry events handled: 5
- total events handled: 9
+
+Switch 0 : {
+
+ Pipeline : [ ]
+
+ Events :   [ ]
+
+ Exits :    [
+    eth_ip(11,22,2048,1,2,128) at port 1, t=600
+    report(1,2,128) at port 2, t=1200
+  ]
+
+ Drops :    [ ]
+
+ packet events handled: 0
+ total events handled: 2
 
 }
-``` 
+```
 
 ### Run the compiler
 
-Finally, to compile Lucid programs to P4, run the compiler with `./lucid.sh compile <lucid program name>`.
+Finally, to compile Lucid programs to P4 for the Intel tofino, run the compiler with `./lucid.sh compile <lucid program name> -o <build directory name>`.
 
-The compiler translates a Lucid program into P4, optimizes it, and produces a build directory with a P4 program, Python control plane, and helper scripts to make deployment easier. 
-
-Try it out with a simple application that bounces packets back to their ingress port:
+The compiler translates a Lucid program into P4, optimizes it, and produces a build directory with a P4 program, Python control plane, and a directory that maps control-plane modifiable Lucid object names to their associated P4 object names. 
+Try it out with the tutorial application: 
 
 ```
-% ./lucid.sh compile examples/tofino_apps/src/reflector.dpt                            
-compiler: Compilation to P4 started...
-...
-% ls reflector_build                                       
-libs           logs           lucid.cpp      lucid.p4       lucid.py       makefile       num_stages.txt scripts        src
+jsonch@jsonchs-MBP lucid % ./lucid.sh compile tutorials/interp/01monitor/monitor.dpt -o monitor_build
+build dir: monitor_build
+build dir: /Users/jsonch/Desktop/gits/lucid/monitor_build
+# ... output elided ...
+[coreLayout] placing 41 atomic statement groups into pipeline
+.........................................
+[coreLayout] final pipeline
+--- 41 IR statements in 3 physical tables across 2 stages ---
+stage 0 -- 2 tables: [(branches: 3, IR statements: 25, statements: 25),(branches: 4, IR statements: 13, statements: 13)]
+stage 1 -- 1 tables: [(branches: 4, IR statements: 3, statements: 3)]
+Tofino backend: -------Layout for egress: wrapping table branches in functions-------
+Tofino backend: -------Layout for egress: deduplicating table branch functions-------
+Tofino backend: -------Translating to final P4-tofino-lite IR-------
+Tofino backend: -------generating python event parsing library-------
+Tofino backend: -------generating Lucid name => P4 name directory-------
+Tofino backend: -------printing P4 program to string-------
+Tofino backend: -------printing Python control plane to string-------
+compiler: Compilation to P4 finished. Writing to build directory:/app/build
+local p4 build is in: /Users/jsonch/Desktop/gits/lucid/monitor_build
+jsonch@jsonchs-MBP lucid % ls monitor_build
+eventlib.py     libs            lucid.p4        manifest.txt
+globals.json    logs            lucid.py        scripts
+layout_info.txt lucid.cpp       makefile        src
+jsonch@jsonchs-MBP lucid % cat monitor_build/manifest.txt 
+Lucid-generated tofino project folderContents: 
+lucid.p4 -- P4 data plane program
+lucid.py -- Python script to install multicast rules after starting lucid.p4
+eventlib.py -- Python event parsing library
+globals.json -- Globals name directory (maps lucid global variable names to names in compiled P4)
+makefile -- simple makefile to build and run P4 program
+lucid.cpp -- c control plane (currently unused)
 ```
+
 
 ### What to do next
 
-Ultimately, Lucid is simple language -- by design. The best way to get a feel for Lucid is to play around with the examples (in `/examples`) or check out the tutorials that introduce the Lucid [language](docs/tutorial_language.md), [interpreter](docs/tutorial_interpreter.md), and [p4-tofino compiler](docs/tutorial_compiler.md).
-
-**Warning: the tutorials are currently (9/22) being updated. The P4-tofino compiler tutorial is particularly out of date.**
+Lucid is a simple language. You might want to just play around with some [examples](https://github.com/PrincetonUniversity/lucid/tree/main/examples/interp_tests) in our interpreter test suite, or some [tofino examples](https://github.com/PrincetonUniversity/lucid/tree/main/examples/tofino_apps) that we use to test the tofino compiler. 
+Alternately, you can take a look at the [tutorials](tutorials/readme.md).
 
 
 ## More details
