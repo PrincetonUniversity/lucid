@@ -40,7 +40,7 @@ If you are using visual studio, there is a nice custom lucid syntax highlighter 
 
 **5. Look at the example applications**
 
-Finally, take a look at the examples applications, starting with `interp/01monitor`. 
+Finally, take a look at the examples applications, starting with [interp/01monitor](https://github.com/PrincetonUniversity/lucid/tree/main/tutorials/interp/01monitor). 
 
 For more information about any topic covered in the tutorial, look at the [lucid wiki](https://github.com/PrincetonUniversity/lucid/wiki).
 
