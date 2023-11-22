@@ -35,7 +35,9 @@ default:
 
 function:
 	dune build src/bin/functionInterpreter.exe
-	cp -f _build/default/src/bin/functionInterpreter.exe bin/lucidfcn
+	cp -f _build/default/src/bin/functionInterpreter.exe bin/lucidf
+	dune build src/bin/functionCompiler.exe
+	cp -f _build/default/src/bin/functionCompiler.exe bin/lucidfc
 
 all:
 	dune build src/bin/main.exe
