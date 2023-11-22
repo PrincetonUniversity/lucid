@@ -165,6 +165,8 @@ and group = {
   gcopies : (int * int) list; (* port, replica id *)
 }
 
+
+
 and td =
   | TDGlobal of id * ty * exp
   | TDMemop of memop
@@ -176,6 +178,7 @@ and td =
   | TDHandler of handler
   | TDOpenFunction of id * params * statement (*accessible variables should be tracked*)
   | TDMulticastGroup of group (* used by the control component *)
+  | TDFun of (id * ty * body) (* "main/entry" function to compile, when in function compiler mode *)
 and tdecl =
   { td : td
   ; tdspan : sp
@@ -282,6 +285,11 @@ let decl_to_tdecl (decl:decl) =
         pret_params = [];});
     tdspan = decl.dspan;
     tdpragma = opt_to_list decl.dpragma;}
+  | DFun(id, ty, body) -> {
+    td = TDFun(id, ty, body);
+    tdspan = decl.dspan;
+    tdpragma = opt_to_list decl.dpragma;
+  }
 ;;
 
 let rec decls_to_tdecls tdecls ds : tdecls = 

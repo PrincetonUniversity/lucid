@@ -779,6 +779,7 @@ let interp_memop params body nst swid args =
 ;;
 
 
+
 let rec interp_parser_block nst swid payload_id locals parser_block =
   (* interpret the actions, updating locals *)
   let locals = List.fold_left (interp_parser_action nst swid payload_id) locals (List.split parser_block.pactions |> fst) in
@@ -796,7 +797,7 @@ and interp_parser_action (nst : State.network_state) swid payload_id locals pars
     locals
       |> Env.add (cid) (InterpSyntax.V(parsed_val))
       |> update_local payload_id payload'
-  | PPeek(cid, ty, exp) -> 
+  | PPeek(cid, ty, _) -> 
     let peeked_val = InterpPayload.ppeek (get_local payload_id locals) ty in
     locals |> Env.add (cid) (InterpSyntax.V(peeked_val))
   | PSkip(ty) ->
@@ -946,7 +947,31 @@ let interp_decl (nst : State.network_state) swid d =
     nst
   | DExtern _ ->
     failwith "Extern declarations should be handled during preprocessing"
+  | DFun(id, _, body) -> 
+    let runtime_function (nst: State.network_state) swid args = 
+      (* bind args to parameters *)
+      let locals = 
+        List.fold_left2
+          (fun acc v id -> Env.add (Id id) v acc)
+          Env.empty
+          args 
+          (fst body |> List.split |> fst)
+      in
+      (* no need to reset the pipe stage -- main should start at the beginning. *)
+      (* Pipeline.reset_stage nst.switches.(swid).pipeline; *)
+      (* interp the statement *)
+      let _ = interp_statement  nst HData swid locals (snd body) in
+      let ret_v = match (!(nst.switches.(swid).retval)) with 
+        | Some(v) -> v
+        | None -> vint 0 0;
+      in
+      nst.switches.(swid).retval := None;
+      ret_v
+    in 
+    State.add_global swid (Cid.id id) (F runtime_function) nst;
+    nst
 ;;
+
 
 let process_decls nst ds =
   let rec aux i (nst : State.network_state) =

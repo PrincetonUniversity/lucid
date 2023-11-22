@@ -307,6 +307,7 @@ let translate_decl (d : S.decl) : C.decl option =
   match d.d with 
   | DUserTy _ -> None 
   | _ -> 
+    let dprag = ref None in
     let d' =
       match d.d with
       | S.DGlobal (id, ty, inner_exp) ->
@@ -337,9 +338,19 @@ let translate_decl (d : S.decl) : C.decl option =
         C.DParser
           (id, translate_params params, translate_parser_block parser_block)
       | S.DUserTy _ -> err d.dspan "user/named types not yet supported in ir"
+    | S.DFun(id, ty, _, (params, stmt)) when (Pragma.exists_sprag "main" [] d.dpragmas) -> 
+        (* retain "main" pragma *)
+        dprag := Some(List.hd (d.dpragmas));
+        C.DFun(id, translate_ty ty, (translate_params params, translate_statement stmt))
       | _ -> err d.dspan (Printing.decl_to_string d)
     in
-    Some(C.decl_sp d' d.dspan)
+    (* retain "main" pragma *)
+    match !dprag with 
+      | None -> 
+        Some(C.decl_sp d' d.dspan)
+      | Some(dprag) -> 
+        Some({(C.decl_sp d' d.dspan) with dpragma = Some(dprag)})
+
 ;;
 
 let translate_prog (ds : S.decls) : C.decls = List.filter_map translate_decl ds

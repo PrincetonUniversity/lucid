@@ -425,6 +425,10 @@ let rec replace_decl (env : env) d =
     let body = replace_parser body_env body in
     env, [{ d with d = DParser (id, new_params, body) }]
   | DUserTy _ -> env, [d]
+  | DFun (id, ty, constr_spec, (params, body)) when (Pragma.exists_sprag "main" [] d.dpragmas) -> 
+    let body_env, new_params = flatten_params env params in
+    let body = replace_statement body_env body in    
+    env, [{d with d = DFun(id, ty, constr_spec, (new_params, body);)}]
   | DFun _ | DConstr _ | DModule _ | DModuleAlias _ ->
     Console.error_position
       d.dspan

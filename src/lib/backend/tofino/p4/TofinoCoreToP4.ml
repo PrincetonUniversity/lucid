@@ -1747,6 +1747,7 @@ let translate_tdecl (denv : translate_decl_env) tdecl : (translate_decl_env) =
   | TDMulticastGroup(group) -> 
     let decl = T.decl_full (DMCGroup{gid=group.gnum; replicas =group.gcopies;}) [] tdecl.tdspan in 
     {denv with globals = denv.globals@[decl]}
+  | TDFun(_) -> error "[translate_tdecl] function compilation is not implemented for tofino backend"
 ;;
 
 (* move parsers to the end of the decls *)

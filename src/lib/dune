@@ -83,6 +83,7 @@
    InterpSwitch
    interpPayload
    interpSyntax
+   funInterp
    libraryInterface
    arrays
    counters

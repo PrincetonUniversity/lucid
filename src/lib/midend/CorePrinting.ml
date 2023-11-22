@@ -440,6 +440,14 @@ let d_to_string d =
       (id_to_string id)
       (params_to_string params)
       (parser_block_to_string parser)
+  | DFun(id, ty, (params, s)) -> 
+    Printf.sprintf
+      "fun %s %s(%s) {\n%s\n}"
+      (ty_to_string ty)
+      (id_to_string id)
+      (params_to_string params)
+      (stmt_to_string s |> indent_body)
+
 ;;
 
 let decl_to_string d = d_to_string d.d

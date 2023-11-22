@@ -258,6 +258,7 @@ and parser_block = {
 }
 (* and parser_block = (parser_action * sp) list * (parser_step * sp) *)
 
+
 (* declarations *)
 and d =
   | DGlobal of id * ty * exp
@@ -267,7 +268,12 @@ and d =
   | DExtern of id * ty
   | DAction of action
   | DParser of id * params * parser_block
-(* name, return type, args & body *)
+      (* name, return type, args & body *)
+  | DFun of id * ty * body
+      (* dfun should only ever be a "main" function, 
+         when using lucid as a function compiler *)
+
+         
 and decl =
   { d : d
   ; dspan : sp

@@ -33,6 +33,10 @@ default:
 	dune build src/bin/compiler.exe
 	cp -f _build/default/src/bin/compiler.exe dptc
 
+function:
+	dune build src/bin/functionInterpreter.exe
+	cp -f _build/default/src/bin/functionInterpreter.exe bin/lucidfcn
+
 all:
 	dune build src/bin/main.exe
 	cp -f _build/default/src/bin/main.exe dpt

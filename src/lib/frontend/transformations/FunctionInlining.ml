@@ -199,6 +199,10 @@ let inline_body env (params, body) = params, inliner#visit_statement env body
 (* Substitute into each decl as appropriate, collecting and removing DFun and
    DConstr declarations along the way. *)
 let inline_decl env d =
+  (* skip "main" for function compiler *)
+  if (Pragma.exists_sprag "main" [] d.dpragmas)
+    then env, Some d
+  else
   match d.d with
   (* Add to env, remove declaration *)
   | DFun (id, ty, _, body) ->

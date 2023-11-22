@@ -22,6 +22,25 @@ type t =
   ; ctl_pipe_name : string option
   }
 
+(* and empty configuration. For function interpretation. *)
+let empty_spec = {
+  num_switches = 1;
+  links = IntMap.empty;
+  externs = [];
+  events = [];
+  config = { 
+      max_time = 0
+    ; default_input_gap = 0
+    ; generate_delay = 0
+    ; propagate_delay = 0
+    ; random_delay_range = 1
+    ; random_propagate_range = 1
+    ; random_seed = 0
+    ; drop_chance = 0 };
+  extern_funs = Env.empty;
+  ctl_pipe_name = None;
+}
+
 let parse_int err_str (j : json) =
   match j with
   | `Int n -> n

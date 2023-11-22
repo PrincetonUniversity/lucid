@@ -73,6 +73,7 @@ rule token = parse
   | "control"         { CONTROL (position lexbuf) }
   | "@egress"         { EGRESS (position lexbuf) }
   | "@"(num as n)     { ANNOT (position lexbuf, Int.of_string n) }
+  | "@main"           { MAIN  (position lexbuf) }
   | "packet"          { PACKET (position lexbuf) }
   | "match"           { MATCH (position lexbuf) }
   | "with"            { WITH (position lexbuf) }

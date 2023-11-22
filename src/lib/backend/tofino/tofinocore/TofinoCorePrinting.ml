@@ -161,6 +161,12 @@ let td_to_string (td:td)=
       (params_to_string params)
       (stmt_to_string statement |> indent_body)  
   | TDMulticastGroup (group) -> group_to_string group  
+  | TDFun(id, ty, body) -> Printf.sprintf
+    "fun %s %s(%s){%s}"
+      (ty_to_string ty)
+      (id_to_string id)
+      (params_to_string (fst body))
+      (stmt_to_string (snd body))
 ;;
 
 let tdecl_to_string td = td_to_string td.td

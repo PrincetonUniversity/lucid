@@ -146,6 +146,7 @@
 %token <Span.t> GROUP
 %token <Span.t> CONTROL
 %token <Span.t> EGRESS
+%token <Span.t> MAIN
 %token <Span.t> PACKET
 %token <Span.t * int> ANNOT
 %token <Span.t> MATCH
@@ -449,7 +450,7 @@ lexp:
 
 parser_action:
   // skip(int, payload);
-  | SKIP LPAREN ty=ty COMMA exp=exp RPAREN SEMI                             { PSkip(ty), Span.extend $1 $7 }
+  | SKIP LPAREN ty=ty COMMA exp RPAREN SEMI                                 { PSkip(ty), Span.extend $1 $7 }
   // int foo = read(payload);
   | ty=ty ID ASSIGN READ LPAREN exp=exp RPAREN SEMI                         { PRead(snd $2, ty, exp), Span.extend ty.tspan $8  }
   // int foo = hash...(checksum, ...)...;
@@ -488,7 +489,10 @@ decl:
                                             { [fun_sp (snd $3) $2 [] $4 $6 (Span.extend $1 $7)] }
     | FUN ty ID paramsdef constr_list LBRACE statement RBRACE
                                             { [fun_sp (snd $3) $2 $5 $4 $7 (Span.extend $1 $8)] }
-    // declare an action constructor.... ugh with this custom syntax
+    | MAIN decl
+                                            { match $2 with 
+                                              | [decl] -> [{decl with dpragmas = [Pragma.sprag "main" []]}] 
+                                              | _ -> error "parsing error: invalid use of @main"}
     | ACTION_CONSTR ID constr_params=paramsdef ASSIGN LBRACE RETURN ACTION ty=ty ID acn_params=paramsdef LBRACE acn_body=statement RBRACE SEMI RBRACE SEMI
         { [mk_daction (snd $2) [ty] constr_params acn_params acn_body (Span.extend $1 $16)]}
 

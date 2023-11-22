@@ -323,6 +323,7 @@ and d =
 and decl =
   { d : d
   ; dspan : sp
+  ; dpragmas : pragma list
   }
 
 (* a program is a list of declarations *)
@@ -469,8 +470,8 @@ let tblmatch_sp tbl keys args span =
 ;;
 
 (* declarations *)
-let decl d = { d; dspan = Span.default }
-let decl_sp d span = { d; dspan = span }
+let decl d = { d; dspan = Span.default; dpragmas = []; }
+let decl_sp d span = { d; dspan = span; dpragmas = [];}
 let dglobal_sp id ty exp span = decl_sp (DGlobal (id, ty, exp)) span
 let dconst_sp id ty e span = decl_sp (DConst (id, ty, e)) span
 let dextern_sp id ty span = decl_sp (DExtern (id, ty)) span

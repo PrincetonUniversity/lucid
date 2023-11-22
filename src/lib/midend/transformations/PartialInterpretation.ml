@@ -681,6 +681,9 @@ let interp_decl builtin_tys env d =
   | DHandler (id, s, body) ->
     (* let env = add_dec env id in *)
     env, { d with d = DHandler (id, s, interp_body builtin_tys env body) }
+  | DFun(id, ty, body) -> 
+    env, { d with d = DFun (id, ty, interp_body builtin_tys env body) }
+
   | DEvent (id, _, _, _) | DExtern (id, _) ->
     let env = add_dec env id in
     env, d
