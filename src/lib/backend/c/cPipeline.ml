@@ -24,6 +24,6 @@ let compile ds =
   report_if_verbose "-------Translating to Midend IR---------";
   let ds = SyntaxToCore.translate_prog ds in
   printprog_if_debug ds;
-  let c_str = "//" in
+  let c_str = CTranslate.translate_decls ds in
   c_str
 ;;

@@ -160,6 +160,7 @@
    pyEventLib
    pyControlLib
    cPipeline
+   cTranslate
    )
  (preprocess
     (staged_pps ppx_import visitors.ppx ppx_deriving.show ppx_deriving.std ppx_string))
