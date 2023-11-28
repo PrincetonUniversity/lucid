@@ -19,8 +19,7 @@ let main () =
   in
   print_endline ("compiling");
   let prog_str = CPipeline.compile ds in
-  let out_chan = open_out out_filename in
-  output_string out_chan prog_str;
+  output_string (open_out out_filename) prog_str
 ;;
 
 let _ = main ();;

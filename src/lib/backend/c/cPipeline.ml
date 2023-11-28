@@ -1,4 +1,4 @@
-(* C + libpcap backend *)
+(* initial C backend, for compiling function programs *)
 open BackendLogging
 
 let print_if_debug str = if Cmdline.cfg.debug then Console.report str ;;
@@ -24,6 +24,9 @@ let compile ds =
   report_if_verbose "-------Translating to Midend IR---------";
   let ds = SyntaxToCore.translate_prog ds in
   printprog_if_debug ds;
+  let ds = CTransformations.strip_noops#visit_decls () ds in
+  report_if_verbose "-------Translating to C---------";
   let c_str = CTranslate.translate_decls ds in
+  let c_str = (CLibs.libs ["base"]) ^ "\n" ^ c_str in
   c_str
 ;;
