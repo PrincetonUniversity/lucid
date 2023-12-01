@@ -37,7 +37,7 @@ let packetevent_parse_block (pkt_var : exp) event = match event.d with
       (call
          (Cid.id id)
          (List.map (fun (id, ty) -> var (Cid.id id) ty) params)
-         (ty TEvent))
+         (tevent))
    in
    block read_cmds gen_cmd
 | _ -> 

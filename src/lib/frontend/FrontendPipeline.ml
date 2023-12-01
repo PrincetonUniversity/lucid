@@ -8,10 +8,18 @@ let print_if_debug ds =
 
 let print_if_verbose str = if Cmdline.cfg.verbose then Console.report str
 
-let process_prog builtin_tys ds =
+type frontend_options = {
+   match_event_handlers : bool; (* check that all events are matched with handlers *)
+}
+let def_opts = {
+   (* with pattern matching over events, it no longer makes sense 
+      to require every event to have a handler. *)
+   match_event_handlers = false;
+}
+let process_prog ?(opts=def_opts) builtin_tys ds =
   print_if_debug ds;
   print_if_verbose "-------Checking well-formedness---------";
-  Wellformed.pre_typing_checks ds;
+  Wellformed.pre_typing_checks ~handlers:opts.match_event_handlers ds;
   print_if_debug ds;
   print_if_verbose "---------typing1---------";
   let ds = Typer.infer_prog builtin_tys ds in

@@ -287,6 +287,7 @@ pattern:
     | cid                               { pat_of_cid $1 }
     | NUM                               { PNum (snd $1) }
     | BITPAT                            { PBit (snd $1) }
+    | cid paramsdef                     { PEvent ((snd $1), $2)}
 
 patterns:
   | pattern                             { [$1] }
@@ -492,6 +493,10 @@ decl:
     | MAIN decl
                                             { match $2 with 
                                               | [decl] -> [{decl with dpragmas = [Pragma.sprag "main" []]}] 
+                                              | _ -> error "parsing error: invalid use of @main"}
+    | MAIN LPAREN ID ARROW ID RPAREN decl (* @main(ev_ctor1 -> ev_ctor2) *)
+                                            { match $7 with 
+                                              | [decl] -> [{decl with dpragmas = [Pragma.sprag "main" [Id.name (snd $3); Id.name (snd $5)]]}] 
                                               | _ -> error "parsing error: invalid use of @main"}
     | ACTION_CONSTR ID constr_params=paramsdef ASSIGN LBRACE RETURN ACTION ty=ty ID acn_params=paramsdef LBRACE acn_body=statement RBRACE SEMI RBRACE SEMI
         { [mk_daction (snd $2) [ty] constr_params acn_params acn_body (Span.extend $1 $16)]}

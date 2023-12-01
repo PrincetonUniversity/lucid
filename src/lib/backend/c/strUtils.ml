@@ -5,6 +5,7 @@ let char_sep c f ls =
   String.concat c (List.map f ls)
 let underscore_sep f ls = char_sep "_" f ls;;
 let comma_sep f ls = char_sep ", " f ls;;
+let line_sep f ls = char_sep "\n" f ls;;
 let sp n = String.make n ' '
 let indent n str = 
   String.split_on_char '\n' str 

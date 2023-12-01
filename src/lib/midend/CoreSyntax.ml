@@ -23,8 +23,11 @@ and raw_ty =
   | TBool
   | TGroup
   | TInt of size (* Number of bits *)
-  | TEvent
-  (* an event type carries a list of the variants it may contain *)
+  | TEvent of event_variant list
+      (* optional list of event constructors that 
+         may be used to create a particular 
+         event-typed value or expression. 
+         An empty list means "any constructor" *)
   | TFun of func_ty (* Only used for Array/event functions at this point *)
   | TName of cid * sizes * bool
     (* Named type: e.g. "Array.t<<32>>". Bool is true if it represents a global type *)
@@ -35,6 +38,11 @@ and raw_ty =
   | TRecord of (id * raw_ty) list
   | TTuple of raw_ty list
   | TBits of size
+
+and event_variant =
+  { event_ctor_name : id
+  ; event_ctor_args : ty list
+  }
 
 and tbl_ty =
   { tkey_sizes : size list
@@ -92,6 +100,7 @@ and pat =
   | PWild
   | PNum of z
   | PBit of int list
+  | PEvent of cid * params
 
 (* values *)
 and v =
@@ -258,11 +267,12 @@ and parser_block = {
 }
 (* and parser_block = (parser_action * sp) list * (parser_step * sp) *)
 
+and event_constr = (id * int option * event_sort * params)
 
 (* declarations *)
 and d =
   | DGlobal of id * ty * exp
-  | DEvent of id * int option * event_sort * params
+  | DEvent of event_constr
   | DHandler of id * handler_sort * body
   | DMemop of memop
   | DExtern of id * ty
@@ -312,14 +322,16 @@ let error s = raise (Error s)
 let ty_sp raw_ty tspan = { raw_ty; tspan }
 let ty raw_ty = { raw_ty; tspan = Span.default }
 let tint sz = ty (TInt sz)
+let tevent = ty (TEvent [])
+
 
 let payload_ty = ty@@TName(Cid.create ["Payload"; "t"], [], false)
 
-let infer_vty v =
+let rec infer_vty v =
   match v with
   | VBool _ -> TBool
   | VInt z -> TInt (Integer.size z)
-  | VEvent _ -> TEvent
+  | VEvent _ -> TEvent []
   | VGroup _ -> TGroup
   | VGlobal _ -> failwith "Cannot infer type of global value"
   | VPat bs -> TPat (List.length bs)
@@ -458,7 +470,7 @@ let equiv_ty t1 t2 =
   match t1.raw_ty, t2.raw_ty with
   | TBool, TBool -> true
   | TInt sz1, TInt sz2 -> sz1 = sz2
-  | TEvent, TEvent -> true
+  | TEvent _, TEvent _ -> true
   | TGroup, TGroup -> true
   | TPat sz1, TPat sz2 -> sz1 = sz2
   | TBits sz1, TBits sz2 -> sz1 = sz2

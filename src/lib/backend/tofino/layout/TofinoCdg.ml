@@ -265,7 +265,7 @@ let vertices_in_normal_match_form g =
         (* if a statement is annotated with ignore_path_conditions, 
            that means it already tests all the conditions necessary for 
            execution. Currently, this is just for table_match statements. *)
-        if (Pragma.exists_sprag "ignore_path_conditions" [] (vertex_prags v))
+        if (Pragma.exists_sprag_args "ignore_path_conditions" [] (vertex_prags v))
         then v
         else (
         match v.stmt.s, v.solitary with

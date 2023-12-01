@@ -128,6 +128,7 @@ and pat =
   | PVar of cid * sp 
   | PNum of z        
   | PBit of int list 
+  | PEvent of cid * params
 
 (* values *)
 and v =

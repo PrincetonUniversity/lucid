@@ -38,7 +38,7 @@ let rec raw_ty_to_string t =
     cid_to_string cid
     ^ sizes_to_string sizes
     ^ if cfg.verbose_types then "{" ^ string_of_bool b ^ "}" else ""
-  | TEvent -> "event"
+  | TEvent _-> "event"
   | TFun func -> func_to_string func
   | TMemop (n, size) -> Printf.sprintf "memop%d<<%s>>" n (size_to_string size)
   | TGroup -> "group"
@@ -84,6 +84,8 @@ let pat_to_string p =
            | 1 -> '1'
            | _ -> '*')
       |> String.of_list)
+  | PEvent (e, _) -> (cid_to_string e)^"(...unprinted params...)"
+
 ;;
 
 let op_to_string op =
@@ -137,6 +139,7 @@ let rec v_to_string v =
   | VGroup vs -> Printf.sprintf "{%s}" (comma_sep location_to_string vs)
   | VTuple vs -> Printf.sprintf "(%s)" (comma_sep v_to_string vs)
   | VPat bs -> bs_to_string bs
+
   | VBits bs -> 
     let bs = BitString.bits_to_hexstr bs in
     bs
@@ -392,6 +395,15 @@ and parser_block_to_string {pactions;pstep} =
 
 and parser_to_string p = parser_block_to_string p
 
+let event_constr_to_string (id, annot, sort, params) = 
+  Printf.sprintf
+  "%s %s%s(%s);"
+  (event_sort_to_string sort)
+  (id_to_string id)
+  (Option.map_default (fun n -> "@" ^ string_of_int n) "" annot)
+  (params_to_string params)
+
+
 let d_to_string d =
   match d with
   | DGlobal (id, ty, exp) ->
@@ -410,13 +422,7 @@ let d_to_string d =
       (id_to_string id)
       (params_to_string params)
       (stmt_to_string s |> indent_body)
-  | DEvent (id, annot, sort, params) ->
-    Printf.sprintf
-      "%s %s%s(%s);"
-      (event_sort_to_string sort)
-      (id_to_string id)
-      (Option.map_default (fun n -> "@" ^ string_of_int n) "" annot)
-      (params_to_string params)
+  | DEvent econstr -> event_constr_to_string econstr
   | DMemop { mid; mparams; mbody } ->
     Printf.sprintf
       "memop %s(%s)\n {%s}"
@@ -447,7 +453,6 @@ let d_to_string d =
       (id_to_string id)
       (params_to_string params)
       (stmt_to_string s |> indent_body)
-
 ;;
 
 let decl_to_string d = d_to_string d.d

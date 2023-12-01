@@ -25,7 +25,7 @@ let rec translate_ty (ty : S.ty) : C.ty =
     match S.TyTQVar.strip_links ty.raw_ty with
     | S.TBool -> C.TBool
     | S.TGroup -> C.TGroup
-    | S.TEvent -> C.TEvent
+    | S.TEvent -> C.TEvent([])
     | S.TInt sz -> C.TInt (translate_size sz)
     | S.TName (cid, sizes, b) -> C.TName (cid, List.map translate_size sizes, b)
     | S.TMemop (n, sz) -> C.TMemop (n, translate_size sz)
@@ -92,13 +92,6 @@ let translate_op (op : S.op) : C.op =
   | S.PatMask -> C.PatMask
 ;;
 
-let translate_pattern (p : S.pat) : C.pat =
-  match p with
-  | S.PWild -> C.PWild
-  | S.PNum n -> C.PNum n
-  | S.PBit ns -> C.PBit ns
-  | S.PVar (_, sp) -> err sp "variable pattern"
-;;
 
 let rec translate_value (v : S.value) : C.value =
   let v' =
@@ -114,9 +107,16 @@ let rec translate_value (v : S.value) : C.value =
     | S.VPat _ -> err v.vspan "pattern VALUES should all be converted into PBits before backend"
   in
   { v = v'; vty = translate_ty (Option.get v.vty); vspan = v.vspan }
-;;
 
-let rec translate_exp (e : S.exp) : C.exp =
+and translate_pattern (p : S.pat) : C.pat =
+  match p with
+  | S.PWild -> C.PWild
+  | S.PNum n -> C.PNum n
+  | S.PBit ns -> C.PBit ns
+  | S.PVar (_, sp) -> err sp "variable pattern"
+  | S.PEvent(eventcid, params) -> C.PEvent(eventcid, translate_params params)
+
+and translate_exp (e : S.exp) : C.exp =
   let e' =
     match e.e with
     (* special case for wildcard value -- TODO: make wildcard a value in backend too *)
@@ -338,7 +338,7 @@ let translate_decl (d : S.decl) : C.decl option =
         C.DParser
           (id, translate_params params, translate_parser_block parser_block)
       | S.DUserTy _ -> err d.dspan "user/named types not yet supported in ir"
-    | S.DFun(id, ty, _, (params, stmt)) when (Pragma.exists_sprag "main" [] d.dpragmas) -> 
+    | S.DFun(id, ty, _, (params, stmt)) when (Pragma.exists_sprag "main" d.dpragmas) -> 
         (* retain "main" pragma *)
         dprag := Some(List.hd (d.dpragmas));
         C.DFun(id, translate_ty ty, (translate_params params, translate_statement stmt))

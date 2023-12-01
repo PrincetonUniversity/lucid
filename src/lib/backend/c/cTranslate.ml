@@ -9,6 +9,9 @@ open Printf
 exception Error of string
 let error s = raise (Error s)
 
+let dprint_endline str = 
+  if Cmdline.cfg.debug then print_endline str else ()
+
 (* 
 
 The goal of this pass is to translate a program with a single entry point 
@@ -88,6 +91,34 @@ This strategy allows us to handle Lucid integers of any size, as long as they fi
   }
   
 *)
+let id_string = Id.name
+let cid_string cid = String.concat "_" (Cid.names cid);;
+
+
+(* naming functions *)
+let memopty_string n_args arg_sz = sprintf "memop_%d_%d" n_args arg_sz
+
+let namety_string cid sizes = sprintf "%s_%s" (cid_string cid) (underscore_sep string_of_int sizes)  
+
+(* the name of an events argument struct *)
+let event_struct evid = sprintf "event_%s" (id_string evid)
+(* the type tag of the event -- part of the event_type enum *)
+let event_type evid = sprintf "EVENT_TYPE_%s" (String.uppercase_ascii (id_string evid))
+let unknown_event_type, unknown_event_num = "EVENT_TYPE_UNKNOWN", 0
+(* the name of an event constructor *)
+
+
+(* c code generators *)
+let struct_string name (fields : (string * string) list) = 
+  sprintf "typedef struct %s {\n%s\n} %s;" 
+    name 
+    ((List.map 
+      (fun (ts, ns) -> sprintf "%s %s;" ts ns) 
+      fields) |> String.concat "\n" |> indent_def) 
+    name
+;;
+
+(* misc helpers *)
 let rty_to_size rty =
   match rty with
   | TBool -> 1
@@ -98,16 +129,7 @@ let rty_to_size rty =
 let maxint n = Z.sub (Z.(lsl) (Z.of_int 1) n) (Z.of_int 1) 
 let zhexstr z = "0x"^(Z.format "%x" z)
 ;;
-let id_string = Id.name
-let cid_string cid = String.concat "_" (Cid.names cid);;
 
-let memopty_string n_args arg_sz = 
-  sprintf "memop_%d_%d" n_args arg_sz
-;;
-
-let namety_string cid sizes = 
-  sprintf "%s_%s" (cid_string cid) (underscore_sep string_of_int sizes)  
-;;
 
 
 let translate_tint (sz:int) =
@@ -148,7 +170,7 @@ and translate_raw_ty rty = match rty with
   | TBool -> "bool" 
   | TInt(sz) -> translate_tint sz
   | TGroup -> error "Group types not implemented"
-  | TEvent -> "event"
+  | TEvent _ -> "event"
   | TFun({arg_tys; ret_ty;}) -> 
     let _, _ = arg_tys, ret_ty in
     error "function types cannot be translated alone"
@@ -170,6 +192,11 @@ and translate_raw_ty rty = match rty with
   | TBits _ -> error "bitstrings not implemented"
 ;;
 
+let translate_params params = 
+  let params = List.map (fun (id, ty) -> sprintf "%s %s" (translate_ty ty) (id_string id)) params in
+  String.concat ", " params
+;;
+
 let rec translate_v v = 
   match v with 
   | VBool(true) -> "1"
@@ -185,8 +212,6 @@ let rec translate_v v =
   | VBits _ -> error "bitstring values not implemented"
 and translate_value value = 
   translate_v value.v
-
-
 
 let translate_op op = match op with 
   | And -> "&&"
@@ -215,8 +240,6 @@ let translate_op op = match op with
   | PatExact -> error "pattern ops cannot be translated alone"
   | PatMask -> error "pattern ops cannot be translated alone"
 ;;
-
-
 
 let rec translate_e e ety = match e with 
   | EVal(value) -> translate_value value
@@ -282,11 +305,22 @@ let rec translate_e e ety = match e with
     sprintf "(%s%s)" op binarg
   | EOp(_, _) -> error@@"unimplemented eop expression ("^(CorePrinting.e_to_string e)^")"
   (* int<k> hash_res = hash<k>(poly, v0, v1, v2, ..., vn);  *)
-  | ECall(cid, args, _) -> 
-    let args = List.map translate_exp args in
-    let args = String.concat ", " args in
-    let cid = cid_string cid in
-    sprintf "%s(%s)" cid args
+  | ECall(cid, args, _) -> (
+    (* a call may either be an function or an event constructor. If its an 
+       event constructor, we translate it into a struct initializer for the 
+       event union that sets the field corresponding to this 
+       event's constructor. *)
+    match (ety.raw_ty) with 
+    | TEvent _ -> 
+      let args = List.map translate_exp args in
+      let args = String.concat ", " args in
+      sprintf "{.%s={%s}}" (cid_string cid) args
+    | _ -> 
+      let args = List.map translate_exp args in
+      let args = String.concat ", " args in
+      let cid = cid_string cid in
+      sprintf "%s(%s)" cid args
+  )
   | EHash _ -> error "hash expressions must be evaluated at the statement level"
   | EFlood _ -> error "the flood builtin is not implemented"
   | ETableCreate _ -> error "table create expressions must be evaluated at the declaration level"
@@ -318,11 +352,20 @@ let rec translate_s s =
     let s2 = translate_statement s2 in
     sprintf "%s\n%s" (s1) (s2)
   | SMatch _ -> error "match not implemented"
-  | SRet(exp_opt) -> 
+  | SRet(exp_opt) -> (
     let exp = match exp_opt with 
       | Some(exp) -> translate_exp exp
       | None -> "" in
-    sprintf "return %s;" exp
+    (* if we are returning an event, we have to create a variable and return that, 
+       because compound literals aren't allowed in return statements *)
+    match exp_opt with
+    | Some(exp) when equiv_ty exp.ety tevent  -> 
+      let tmp_var = "tmp_event" in
+      let exp = translate_exp exp in
+      sprintf "event %s = %s;\nreturn %s;" tmp_var exp tmp_var
+    | _ -> 
+      sprintf "return %s;" exp
+  )
   | STableMatch _ -> error "table match not implemented"
   | STableInstall _ -> error "table install not implemented"
   | SUnit(exp) -> 
@@ -330,13 +373,14 @@ let rec translate_s s =
     sprintf "%s;" exp
 and translate_statement s = translate_s s.s
 
-let rec translate_decl decl = translate_d decl.d
+
+
+let rec translate_decl  decl = translate_d  decl.d
 
 and translate_d d = match d with 
     | DGlobal(id, ty, exp) -> 
-      translate_dglobal id ty exp
-    | DEvent(id, num_opt, ev_sort, params) -> 
-      error "events not implemented"
+      translate_dglobal  id ty exp
+    | DEvent _ -> "" (* handled in event struct generator *)
     | DMemop _ -> 
       error "memops not implemented"
     | DExtern _ -> 
@@ -352,7 +396,7 @@ and translate_d d = match d with
     | DHandler _ -> error "handlers not implemented"
     | DParser _ -> error "parsers not implemented"
 
-and translate_dglobal id ty e = 
+and translate_dglobal  id ty e = 
   (* tables are special *)
   match ty.raw_ty with 
   | TTable _ -> error "tables not implemented"
@@ -377,9 +421,61 @@ and translate_dglobal id ty e =
     | ["PairArray"; "t"], [size], [e] -> error "pairarray not implemented"
     | _ -> error "unknown global type"
   )
+;;
 
+(* translate computation declarations (everything except events) *)
+let rec translate_compute decls = 
+  match decls with 
+  | [] -> ""
+  | decl::decls -> 
+    let decl = translate_decl  decl in
+    let decls = translate_compute  decls in
+    (decl ^ "\n" ^ decls)
+;;
 
-let translate_decls decls = 
-  let decls = List.map translate_decl decls in
-  String.concat "\n" decls
+(* generate all event-related data structures *)
+let translate_events decls = 
+  let events = List.filter_map (fun decl -> 
+    match decl.d with 
+    | DEvent(ev_constr) -> Some(ev_constr)
+    | _ -> None
+  ) decls in
+  if (List.length events = 0) then "" else
+    (* 1. an enum of event tags *)
+    let event_to_enum_field ((id, num_opt, _, _):event_constr) = 
+      match num_opt with 
+      | None -> error "event constructors must have a number"
+      | Some(num) -> sprintf "%s = %i" (event_type id) num
+    in
+    let fields_str = (sprintf "%s = %i" unknown_event_type unknown_event_num)
+      ::(List.map event_to_enum_field events) |> String.concat ",\n" in
+    let event_enum = sprintf 
+      "typedef enum event_type {\n%s\n} event_type;" 
+      (indent_def fields_str)
+      ^"\n"
+    in
+    (* 2. a struct for each event *)
+    let event_to_struct (id, _, _, params) =         
+      struct_string 
+        (event_struct id) 
+        (List.map (fun (id, ty) -> (translate_ty ty, id_string id)) params)^"\n"
+    in
+    let event_structs = List.map event_to_struct events |> String.concat "\n" in
+    (* 3. a union of all events *)
+    let event_union = sprintf
+      "typedef union event {\n%s\n} event;"
+      (indent_def 
+        (List.map 
+          (fun (id, _, _, _) -> sprintf "%s %s;" (event_struct id) (id_string id)) 
+          events 
+        |> String.concat "\n"))
+    in
+    line_sep (fun s -> s) ["//event data structures"; event_enum; event_structs; event_union]
+;; 
+
+let translate decls = 
+  let libs = (CLibs.libs ["base"]) in
+  let event_structs = translate_events decls in
+  let fcn_structs = translate_compute decls in
+  line_sep (fun s -> s) [libs; event_structs; fcn_structs]
 ;;

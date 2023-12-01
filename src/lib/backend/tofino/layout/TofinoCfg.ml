@@ -280,7 +280,7 @@ let pattern_of_branch es b =
         2. no sequences of statements 
     Also, the match statements that wrap table_matchs are solitary. *)
 let is_solitary_match stmt =
-    match Pragma.find_sprag "solitary" [] stmt.spragmas with
+    match Pragma.find_sprag_args "solitary" [] stmt.spragmas with
     | Some(_) -> true
     | _ -> false
 ;;

@@ -24,9 +24,9 @@ let compile ds =
   report_if_verbose "-------Translating to Midend IR---------";
   let ds = SyntaxToCore.translate_prog ds in
   printprog_if_debug ds;
-  let ds = CTransformations.strip_noops#visit_decls () ds in
+  (* some simple transformations *)
+  let ds = CTransformations.transform ds in 
   report_if_verbose "-------Translating to C---------";
-  let c_str = CTranslate.translate_decls ds in
-  let c_str = (CLibs.libs ["base"]) ^ "\n" ^ c_str in
+  let c_str = CTranslate.translate ds in
   c_str
 ;;

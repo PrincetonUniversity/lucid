@@ -71,7 +71,9 @@ let stdio_loop () =
   let ds = Input.parse target_filename in
   let _, ds =
     (* Profile.time_profile "frontend" @@ fun () -> *)
-    FrontendPipeline.process_prog Builtins.interp_builtin_tys ds
+    FrontendPipeline.process_prog 
+      ~opts:{match_event_handlers=false;}
+    Builtins.interp_builtin_tys ds
   in
   let ds =
     (* Profile.time_profile "midend" @@ fun () -> *)

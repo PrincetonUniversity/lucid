@@ -87,6 +87,7 @@ let translate_pat pat =
       in 
       PBitstring bits
     )
+    | PEvent _ -> error "[coreToP4Tofino.Translate_pat] event patterns are not implemented"
 ;;
 let translate_sunit_ecall stmt =
   match stmt.s with 

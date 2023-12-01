@@ -117,7 +117,7 @@ let execute_event
       let builtin_env = Env.add (Id (Builtins.ingr_port_id)) (InterpSyntax.V (C.vint port 32)) Env.empty in
       (* print_endline@@"t="^(string_of_int nst.current_time)^" running default egress handler for event " ^ Cid.to_string event.eid ^ " at switch " ^ (string_of_int swid) ^ " port " ^ (string_of_int port); *)
       let default_handler_body = 
-        C.SGen(C.GPort(C.vint_exp port 32), C.value_to_exp {v=C.VEvent(event); vty=C.ty TEvent; vspan=Span.default})
+        C.SGen(C.GPort(C.vint_exp port 32), C.value_to_exp {v=C.VEvent(event); vty=C.tevent; vspan=Span.default})
       in      
       ignore@@InterpCore.interp_statement nst HEgress swid builtin_env (C.statement default_handler_body)
     | InterpSwitch.Ingress ->    

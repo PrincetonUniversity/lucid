@@ -190,19 +190,6 @@ and ty_to_string t =
   | _ -> raw_ty_to_string t.raw_ty ^ eff_str
 ;;
 
-let pat_to_string p =
-  match p with
-  | PWild -> "_"
-  | PNum n -> Z.to_string n
-  | PVar (cid, _) -> cid_to_string cid
-  | PBit bs ->
-    "0b"
-    ^ (bs
-      |> List.map (function
-           | 0 -> '0'
-           | 1 -> '1'
-           | _ -> '*')
-      |> String.of_list)
 ;;
 
 let op_to_string op =
@@ -273,9 +260,23 @@ and event_to_string { eid; data; edelay } =
     (cid_to_string eid)
     (comma_sep value_to_string data)
     delaystr
-;;
 
-let rec e_to_string e =
+and pat_to_string p =
+  match p with
+  | PWild -> "_"
+  | PNum n -> Z.to_string n
+  | PVar (cid, _) -> cid_to_string cid
+  | PBit bs ->
+    "0b"
+    ^ (bs
+      |> List.map (function
+           | 0 -> '0'
+           | 1 -> '1'
+           | _ -> '*')
+      |> String.of_list)
+  | PEvent (e, params) -> (cid_to_string e)^"("^params_to_string params^")"
+
+and e_to_string e =
   match e with
   | EVal v -> v_to_string v.v
   | EVar cid -> cid_to_string cid

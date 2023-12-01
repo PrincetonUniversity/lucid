@@ -435,7 +435,7 @@ let rec interp_stmt env s : statement * env =
    | _ -> print_endline @@ "Interping " ^ CorePrinting.stmt_to_string s); *)
   let interp_exp = interp_exp env in
   let should_inline () =
-    match Pragma.find_sprag "noinline" [] s.spragmas with
+    match Pragma.find_sprag_args "noinline" [] s.spragmas with
     | Some _ -> false
     | _ -> true
   in
@@ -498,32 +498,6 @@ let rec interp_stmt env s : statement * env =
         tm.outs
     in
     { s with s = STableMatch { tm with keys; args } }, env
-  (* Cases where we branch *)
-  (* jsonch 8/23 -- for now, don't inline into certain if expressions.
-      Inlining, in combination with sub-optimal placement of
-      precompute statements in the tofino backend
-      can add significant overheads to programs
-      where if expressions are explicitly precomputed.
-      We don't inline into if expression that test a variable
-      against 0, to give users a workaround. *)
-  (* jsonch 8/23 -- with the hoisting pass added, we should
-     be able to re-enable this. *)
-  (* | SIf (test, s1, s2)
-      when (match test.e with
-        | EOp(Eq, [{e=EVar(_)}; {e=EVal(_)}]) -> true
-        | _ -> false
-      ) ->
-    (* only inline if it results in a compile-time
-       delete-able branch. *)
-    let test' = interp_exp test in
-    (match test' with
-      | { e = EVal { v = VBool b } } ->
-        if b then interp_stmt env s1 else interp_stmt env s2
-      | _ ->
-        let s1, env1 = interp_stmt env s1 in
-        let s2, env2 = interp_stmt env s2 in
-        let base_stmt = { s with s = SIf (test, s1, s2) } in
-        base_stmt, merge_envs [env; env1; env2])     *)
   | SIf (test, s1, s2) ->
     let test = interp_exp test in
     (match test with
@@ -536,14 +510,37 @@ let rec interp_stmt env s : statement * env =
        base_stmt, merge_envs [env; env1; env2])
   | SMatch (es, branches) ->
     let es = List.map interp_exp es in
-    let branches, envs =
-      List.map
-        (fun (p, stmt) ->
-          let stmt', env' = interp_stmt env stmt in
-          (p, stmt'), env')
-        branches
-      |> List.split
+    let rec process_branch (ps, stmt) =       
+      (*  1. bind the event parameters
+          2. interp the statement
+          3. unbind the event parameters *)
+      (* We need to bind all the params in matching events.
+         We just bind them all to unknown for now. *)
+      let event_param_bindings = List.fold_left2 
+        (fun event_param_bindings pat exp -> 
+          match pat, exp.e with 
+          | PEvent(_, params), _ -> 
+              event_param_bindings@(List.map (fun (id, _) -> id, new_unknown ()) params)
+          | _ -> event_param_bindings)
+        []
+        ps
+        es
+      in
+      let env = List.fold_left
+        (fun env (id, pv) -> IdMap.add id pv env)
+        env
+        event_param_bindings
+      in
+      let stmt', env' = interp_stmt env stmt in
+      let env' = List.fold_left
+        (fun env id -> IdMap.remove id env)
+        env'
+        (List.split event_param_bindings |> fst)
+      in
+      (ps, stmt'), env'
     in
+    let branches, envs = List.map process_branch branches |> List.split in
+    
     let base_stmt = { s with s = SMatch (es, branches) } in
     (* if the match statement's key expression is a constant,
        compute the branch and replace the match statement with it *)

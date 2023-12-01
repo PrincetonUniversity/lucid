@@ -217,6 +217,8 @@ let intersect_pats a b : pat option =
             | Some ab_bits -> Some (PBit ab_bits)
             | None -> None
     )
+    | (_, PEvent _)
+    | (PEvent _, _) -> error "event patterns should have been eliminated"
 ;;
 
 
@@ -361,7 +363,9 @@ let eqn_of_core_pat ctx (m_exp : pattern) =
       let z3_lhs = Z3Bit.mk_and ctx z3_vid z3_m in 
       let term = Z3Bool.mk_eq ctx z3_lhs z3_v in
       (* print_endline ("encoded "^(Cid.to_string vid)^"= wild"); *)
-      ctx, terms @ [term]  in
+      ctx, terms @ [term]  
+    | _, PEvent _ -> error "event patterns should have been eliminated before tofino backend"
+  in
   let ctx, terms = CL.fold_left fold_f (ctx, []) m_exp in
   let eqn = Z3Bool.mk_and ctx terms in
   ctx, eqn

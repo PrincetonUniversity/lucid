@@ -57,7 +57,7 @@ let block_of_nth_member pkt_var out_ctor_base (members : event list) n =
     call 
     (Cid.concat out_ctor_base (Cid.id (id_of_event event))) 
     (List.map (fun (id, ty) -> var (Cid.id id) ty) params)
-    (ty TEvent)  
+    (tevent)  
   )
   in
   block read_cmds gen_cmd
@@ -144,7 +144,7 @@ let pgen_event out_ctor_base event = pgen (
   call 
   (Cid.concat out_ctor_base (Cid.id (id_of_event event))) 
   (List.map (fun (id, ty) -> var (Cid.id id) ty) (params_of_event event))
-  (ty TEvent)  
+  (tevent)  
 )
 ;;
 

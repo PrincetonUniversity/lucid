@@ -96,6 +96,7 @@
    TQVar
    backendLogging
    addDefaultBranches
+   eliminateEventMatch
    eliminateFloods
    precomputeArgs
    normalizeBools

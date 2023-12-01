@@ -332,7 +332,7 @@ let scope_event_constructors (output_event : event) (hdl_body : statement) =
          (type: event; variant: ECall(evcid, evargs)); *)
       let econs_transformer exp = 
         match exp.e, exp.ety.raw_ty with
-        | (ECall(evcid, evargs, u), TEvent) -> (
+        | (ECall(evcid, evargs, u), TEvent _) -> (
           (* this is an event constructor. The new name is 
              the old name, with the output event id prefixed. *)
           let evcid' = Cid.compound (id_of_event output_event) evcid in
