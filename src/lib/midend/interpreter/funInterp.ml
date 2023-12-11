@@ -5,7 +5,8 @@
       return values as ints *)
 open Batteries
 open Yojson.Basic
-open Syntax
+(* open Syntax *)
+open CoreSyntax
 open InterpSyntax
 open InterpState
 open InterpControl
@@ -45,32 +46,59 @@ let initial_state (pp : Preprocess.t) (spec : InterpSpec.t) =
   nst
 ;;
 
+type main_params = 
+  (* the parameters of main can be either a standard list of params or an event *)
+  | Params of params 
+  | Event of Cid.t * params
+
+type fctx = {
+  nst : State.network_state;
+  main_id : Cid.t;
+  main_params : main_params;
+}
+
+(* initialize a single pipeline and return the initial state 
+   and name / params of the function tagged with "@main" *)
 let init_function ds = 
   let pp, ds = Preprocess.preprocess ds in
   let nst = initial_state pp (InterpSpec.empty_spec) in
   let _ = InterpCore.process_decls nst ds in
-  let main_id, main_params = List.find_map 
-    (fun (decl:C.decl) -> 
-      match decl.d with
-      | C.DFun(id, _, (params, _)) -> (
-        match decl.dpragma with 
-        | Some(p) -> (
-          if (Pragma.exists_sprag "main" [p])
-            then Some(id, params)
-            else None
-        )
-        | _ -> None)
-      | _ -> None)
+  (* find the main function and the event constructors *)
+  let main_sigs, event_constrs = List.fold_left 
+    (fun (main_fcns, event_constrs) decl -> 
+      match decl.d, decl.dpragma with 
+      | C.DFun(main_id, _, (main_params, _)), Some(prag) -> (
+        match (Pragma.find_sprag "main" [prag]) with 
+        | Some((_, pragma_args)) -> ((main_id, main_params, pragma_args)::main_fcns, event_constrs)
+        | _ -> (main_fcns, event_constrs))
+      | C.DEvent(ctr), _ -> (main_fcns, ctr::event_constrs)
+      | _ -> (main_fcns, event_constrs))
+    ([], [])
     ds
   in
-  nst, main_id, main_params
+  (* figure out the main id and parameters *)
+  match main_sigs with 
+  | [] -> failwith "cannot continue -- no main function"
+  | [(main_id, main_params, pragma_args)] -> (
+    match pragma_args with 
+      (* no pragma args --> the function is just annotated with @main, its not an event function *)
+      | [] -> {nst; main_id=(Cid.id (main_id)); main_params = Params(main_params)}
+      (* pragma args --> the function is annotated with specific in and out event constructors *)
+      | in_event_name::_::[] -> ( 
+        (* find the in event constructor *)
+        match (List.fold_left 
+          (fun main_params_opt (ev_id, _, _, ev_params) -> 
+            if (Id.name ev_id) = in_event_name 
+            then Some({nst; main_id=(Cid.id (main_id)); main_params = Event((Cid.id ev_id), ev_params)})
+            else main_params_opt)
+          None
+          event_constrs) with 
+          | Some(main_params) -> main_params
+          | None -> failwith ("cannot continue -- could not find event constructor for " ^ in_event_name))
+    | _ -> failwith "wrong arguments to @main pragma"
+  )
+  | _ -> failwith "cannot continue -- multiple main functions"
 ;;
-
-  (* let args = List.map2 
-    (fun int_arg (_, ty)  -> C.vint_exp_ty int_arg ty)
-    args
-    fcn_params
-  in *)
 
 let int_args_to_exp int_arg ty = 
   C.vint_exp_ty int_arg ty
@@ -101,14 +129,33 @@ let rec pack_args (param_tys : (C.ty) list) (int_args : int list) : C.value list
   | [] -> [], []
 ;;
 
-let run_function nst fcn_id fcn_params int_args =   
-  (* if its a record, expand the parameters *)
-  (* build up the arguments list *)
-  let param_tys = List.map (fun (_, ty) -> ty) fcn_params in
-  let args_values, unused_args = pack_args param_tys int_args in
-  let args = List.map C.value_to_exp args_values in
-  if (List.length unused_args > 0) then error "failure: too many arguments";
-  let main_call = C.call(Cid.id fcn_id) args (C.ty C.TBool) in
+let check_params_len fcn_params int_args = 
+  if ((List.length int_args) <> (List.length fcn_params))
+  then (
+    Printf.printf "Expected %d arguments, got %d\n" (List.length fcn_params) (List.length int_args);
+    exit 1;)
+;;
+let run_function init_result int_args = 
+  let nst = init_result.nst in
+  let fcn_id = init_result.main_id in
+  (* processing is slightly different for functions and event functions *)
+  let main_call = match init_result.main_params with
+  | Params(params) -> (* regular function: pack args, call, decode return value *)
+    check_params_len params int_args;
+    let param_tys = List.map (fun (_, ty) -> ty) params in
+    let args_values, unused_args = pack_args param_tys int_args in
+    let args = List.map C.value_to_exp args_values in
+    if (List.length unused_args > 0) then error "failure: too many arguments";
+    C.call fcn_id args (C.ty C.TBool)
+  | Event(ev_id, params) -> (* event function: wrap input in approprate event id *)
+    check_params_len params int_args;
+    let param_tys = List.map (fun (_, ty) -> ty) params in
+    let args_values, unused_args = pack_args param_tys int_args in
+    let args = List.map C.value_to_exp args_values in
+    if (List.length unused_args > 0) then error "failure: too many arguments";
+    let main_arg = C.call ev_id args (C.tevent) in 
+    C.call fcn_id [main_arg] (C.ty C.TBool)
+  in  
   let res = InterpCore.interp_exp nst 0 Env.empty main_call |> extract_ival in
   let rec decode_v (v : C.v) = match v with 
     | C.VInt(z) -> [Integer.to_int z]

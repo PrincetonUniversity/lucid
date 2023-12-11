@@ -44,8 +44,9 @@ let main () =
     MidendPipeline.process_prog ds
   in
   (* finally, interpret a call to the interpreter...  *)
-  let  nst, main_id, main_params = FunInterp.init_function ds in
-  let results = FunInterp.run_function nst main_id main_params (Array.to_list args) in
+  (* left off HERE *)
+  let init = FunInterp.init_function ds in
+  let results = FunInterp.run_function init (Array.to_list args) in
   let res_str = String.concat " " (List.map string_of_int results) in
   print_endline res_str;
 ;;
@@ -79,18 +80,13 @@ let stdio_loop () =
     (* Profile.time_profile "midend" @@ fun () -> *)
     MidendPipeline.process_prog ds
   in
-  let  nst, main_id, main_params = FunInterp.init_function ds in
+  let ctx = FunInterp.init_function ds in
   try
     while true do
       let line = input_line stdin in
       let args = Str.split (Str.regexp " ") line in
-      if ((List.length) args <> (List.length main_params))
-        then (
-          Printf.printf "Expected %d arguments, got %d\n" (List.length main_params) (List.length args);
-          exit 1;
-        );
       let args = List.map int_of_string args in
-      let results = FunInterp.run_function nst main_id main_params args in
+      let results = FunInterp.run_function ctx args in
       let res_str = String.concat " " (List.map string_of_int results) in
       print_endline res_str;
     done
