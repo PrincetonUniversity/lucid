@@ -164,7 +164,6 @@ let mk_name_ty cid sizes =
   | _ -> error "unknown name type"
 ;;
 
-
 let rec translate_ty ty = translate_raw_ty ty.raw_ty
 and translate_raw_ty rty = match rty with
   | TBool -> "bool" 

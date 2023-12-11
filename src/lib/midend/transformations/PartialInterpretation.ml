@@ -509,6 +509,14 @@ let rec interp_stmt env s : statement * env =
        let base_stmt = { s with s = SIf (test, s1, s2) } in
        base_stmt, merge_envs [env; env1; env2])
   | SMatch (es, branches) ->
+    (* expand wildcard rules to have one wildcard for each es *)
+    let branches = List.map 
+      (fun (ps, stmt) -> 
+        let ps = match ps with 
+        | [PWild] -> List.init (List.length es) (fun _ -> PWild)
+        | _ -> ps in
+        (ps, stmt)) branches 
+    in
     let es = List.map interp_exp es in
     let rec process_branch (ps, stmt) =       
       (*  1. bind the event parameters
