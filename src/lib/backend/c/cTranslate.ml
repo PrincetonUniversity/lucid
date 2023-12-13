@@ -1,4 +1,23 @@
-(* Simple direct translation pass from core parts of the Lucid IR to c *)
+(* Simple direct translation pass from core parts of the Lucid IR to c 
+
+  Progress: 
+    - expressions and operations
+    - statements (besides match)
+    - sized integers
+    - user-defined record types
+    - entry / main functions
+
+  TODO: 
+    - match statements
+    - hash statements
+    - arrays & memops
+    - tables & actions
+    - patterns
+    - events, handlers, and event generation
+    - bitstrings & event parsers
+
+
+*)
 open CoreSyntax
 open StrUtils
 open InterpHelpers
