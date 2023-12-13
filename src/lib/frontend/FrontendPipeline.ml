@@ -10,7 +10,7 @@ let print_if_verbose str = if Cmdline.cfg.verbose then Console.report str
 
 type frontend_options = {
    match_event_handlers : bool; (* check that all events are matched with handlers *)
-   elim_records : bool;
+   elim_records : bool; (* eliminate records *)
 }
 let def_opts = {
    (* with pattern matching over events, it no longer makes sense 

@@ -21,7 +21,7 @@ let printprog_if_debug ds =
 ;;
 
 let compile ds =  
-  let ds = SyntaxToCore.translate_prog ds in
+  let ds = SyntaxToCore.translate_prog ~preserve_user_decls:true ds in
   report_if_verbose "-------Translated to Midend IR---------";
   printprog_if_debug ds;
   (* partial interpretation... maybe.. this reduces readability. *)

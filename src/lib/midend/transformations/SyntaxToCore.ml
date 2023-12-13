@@ -306,52 +306,56 @@ and translate_parser_block (actions, (step, step_span)) =
    pstep=(translate_parser_step step, step_span);}
 ;;
 
-let translate_decl (d : S.decl) : C.decl option =
-    let dprag = ref None in
-    let d' =
-      match d.d with
-      | S.DGlobal (id, ty, inner_exp) ->
-        (match inner_exp.e with
-        | ETableCreate _ ->
-          C.DGlobal (id, translate_ty ty, translate_etablecreate id inner_exp)
-        | _ -> C.DGlobal (id, translate_ty ty, translate_exp inner_exp))
-      | S.DEvent (id, annot, sort, _, params) ->
-        C.DEvent (id, annot, translate_sort sort, translate_params params)
-      | S.DHandler (id, s, body) ->
-        C.DHandler (id, translate_hsort s, translate_body body)
-      | S.DMemop (mid, mparams, mbody) ->
-        C.DMemop
-          { mid
-          ; mparams = translate_params mparams
-          ; mbody = translate_memop mbody
-          }
-      | S.DExtern (id, ty) -> C.DExtern (id, translate_ty ty)
-      | S.DAction (id, tys, const_params, (params, acn_body)) ->
-        C.DAction
-          { aid = id
-          ; artys = List.map translate_ty tys
-          ; aconst_params = translate_params const_params
-          ; aparams = translate_params params
-          ; abody = List.map translate_exp acn_body
-          }
-      | S.DParser (id, params, parser_block) ->
-        C.DParser
-          (id, translate_params params, translate_parser_block parser_block)
-      | S.DUserTy(id, [], ty) -> C.DUserTy(id, translate_ty ty)
-      | S.DUserTy _ -> err d.dspan "size polymorphism in type declarations should be eliminated before midend"
-    | S.DFun(id, ty, _, (params, stmt)) when (Pragma.exists_sprag "main" d.dpragmas) -> 
-        (* retain "main" pragma *)
-        dprag := Some(List.hd (d.dpragmas));
-        C.DFun(id, translate_ty ty, (translate_params params, translate_statement stmt))
-      | _ -> err d.dspan (Printing.decl_to_string d)
-    in
-    (* retain "main" pragma *)
-    match !dprag with 
-      | None -> 
-        Some(C.decl_sp d' d.dspan)
-      | Some(dprag) -> 
-        Some({(C.decl_sp d' d.dspan) with dpragma = Some(dprag)})
-
+let translate_d preserve_user_decls d dspan dpragmas = 
+  match d with
+  | S.DGlobal (id, ty, inner_exp) ->
+    Some (match inner_exp.e with
+    | ETableCreate _ ->
+      C.DGlobal (id, translate_ty ty, translate_etablecreate id inner_exp)
+    | _ -> C.DGlobal (id, translate_ty ty, translate_exp inner_exp))
+  | S.DEvent (id, annot, sort, _, params) ->
+    Some (C.DEvent (id, annot, translate_sort sort, translate_params params))
+  | S.DHandler (id, s, body) ->
+    Some (C.DHandler (id, translate_hsort s, translate_body body))
+  | S.DMemop (mid, mparams, mbody) ->
+    Some (C.DMemop
+      { mid
+      ; mparams = translate_params mparams
+      ; mbody = translate_memop mbody
+      })
+  | S.DExtern (id, ty) -> Some (C.DExtern (id, translate_ty ty))
+  | S.DAction (id, tys, const_params, (params, acn_body)) ->
+    Some (C.DAction
+      { aid = id
+      ; artys = List.map translate_ty tys
+      ; aconst_params = translate_params const_params
+      ; aparams = translate_params params
+      ; abody = List.map translate_exp acn_body
+      })
+  | S.DParser (id, params, parser_block) ->
+    Some (C.DParser
+      (id, translate_params params, translate_parser_block parser_block))
+  | S.DUserTy(id, [], ty) when preserve_user_decls -> Some (C.DUserTy(id, translate_ty ty))
+  | S.DUserTy _ when not preserve_user_decls -> None
+  | S.DUserTy _ -> err dspan "size polymorphism in type declarations should be eliminated before midend"    
+  | S.DFun(id, ty, _, (params, stmt)) when (Pragma.exists_sprag "main" dpragmas) -> 
+      (* retain functions tagged as entry points into program, with their pragmas *)
+      Some (C.DFun(id, translate_ty ty, (translate_params params, translate_statement stmt)))
+  | _ -> err dspan (Printing.d_to_string d)
 ;;
 
-let translate_prog (ds : S.decls) : C.decls = List.filter_map translate_decl ds
+let translate_decl 
+  ?(preserve_user_decls=false)
+  (d : S.decl) : C.decl option =
+    let dpragma = match d.dpragmas with
+      | [] -> None
+      | [dprag] -> Some(dprag)
+      | _ -> err d.dspan "multiple pragmas on a single declaration"
+    in
+    match translate_d preserve_user_decls d.d d.dspan d.dpragmas with
+      | None -> None
+      | Some(d') -> Some({(C.decl_sp d' d.dspan) with dpragma})
+;;
+
+let translate_prog ?(preserve_user_decls=false) (ds : S.decls) : C.decls = 
+  List.filter_map (translate_decl ~preserve_user_decls) ds
