@@ -73,8 +73,8 @@ let stdio_loop () =
   let _, ds =
     (* Profile.time_profile "frontend" @@ fun () -> *)
     FrontendPipeline.process_prog 
-      ~opts:{match_event_handlers=false;}
-    Builtins.interp_builtin_tys ds
+      ~opts:{match_event_handlers=false; elim_records=false;}
+      Builtins.interp_builtin_tys ds
   in
   let ds =
     (* Profile.time_profile "midend" @@ fun () -> *)

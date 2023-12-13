@@ -1,8 +1,7 @@
 (* make user type declarations concrete. Assumes that 
    all _uses_ of user types are concrete, but the 
-   declarations are not. This should be true 
-   _immediately before_ vector elimination, and this 
-   pass should be run immediately before it. *)
+   declarations are not. This is true immediately before vector elimination, 
+   which is when this pass should be run. *)
 
 open Batteries
 open Syntax
@@ -10,6 +9,11 @@ open SyntaxUtils
 open Collections
    
 let print_endline _ = ();;
+
+let get_fieldnames fields = 
+  (* order the field strings in some consistent way *)
+  List.split fields |> fst |> List.sort compare
+;;
 
 let is_duserty_concrete id sizes ty = 
   let result = ref true in
@@ -106,8 +110,8 @@ let concretize_user_ty_decls ds =
   let used_ty_renames = TypeHashTbl.create 16 in
 
   let add_renamed_concrete_ty raw_ty (raw_ty', label_rename, tydecl) = 
-    (* print_hash_tbl concrete_rec_tys; *)
-    (* print_endline ("adding new_rec_tys entry for raw type: "^(Printing.raw_ty_to_string raw_ty)); *)
+    print_hash_tbl used_ty_renames;
+    print_endline ("adding used_ty_renames entry for raw type: "^(Printing.raw_ty_to_string raw_ty));
     TypeHashTbl.add used_ty_renames raw_ty (raw_ty', label_rename, tydecl);
   in  
 
@@ -123,10 +127,8 @@ let concretize_user_ty_decls ds =
       None
   in
 
-
   let v = object (self) 
     inherit [_] s_map as skip
-
       method! visit_decl () decl = 
         print_endline ("DECL: ");
         print_endline (Printing.decl_to_string decl);
@@ -139,7 +141,7 @@ let concretize_user_ty_decls ds =
           print_endline ("ty: "^(Printing.ty_to_string ty));
           let is_conc = is_duserty_concrete id sizes ty in
           print_endline ("is it concrete? "^(string_of_bool is_conc));
-          let fieldnames = List.split fields |> fst in
+          let fieldnames = get_fieldnames fields in
           (* if this is _not_ a concrete type, then we just add an entry for 
              the type declaration and we're done here *)
           if (not is_conc) then  (
@@ -155,7 +157,7 @@ let concretize_user_ty_decls ds =
               (fun (fieldname, fieldty) -> fieldname, self#visit_raw_ty () fieldty)
               fields
             in
-            (* the type for something with these field names is ... a type with different fieldnames lil *)
+            (* the declared types inner types might change  *)
             let ty = {ty with raw_ty = TRecord(fields)} in
             add_tydecl fieldnames (id, sizes, ty, ty.tspan);
             print_endline "done. Final:";
@@ -175,7 +177,7 @@ let concretize_user_ty_decls ds =
         print_endline ("visiting raw type: "^(Printing.raw_ty_to_string raw_ty));
         match raw_ty with
         | TRecord(label_rtys) -> (
-          let fieldnames = List.split label_rtys |> fst in
+          let fieldnames = get_fieldnames label_rtys in
           (* the declared record type is concrete -- that means we don't have to recurse
               because everything inside the type must be concrete as well *)
           let tydecl = get_tydecl fieldnames in
@@ -202,7 +204,6 @@ let concretize_user_ty_decls ds =
                 let label_rtys = List.map (fun (label, lty) -> label, self#visit_raw_ty () lty) label_rtys in
                 let label_rtys' = relabel label_rtys in
                 
-
                 (* the new raw type *)
                 let raw_ty' = TRecord(label_rtys') in
                 (* the rename map, for transforming labels that appear in expression *)
@@ -238,7 +239,7 @@ let concretize_user_ty_decls ds =
         let res = match exp.e with           
           | ERecord(label_exps) -> 
             (* only relabel if this is a polymorphic declared type *)
-            let fieldnames = List.split label_exps |> fst in
+            let fieldnames = get_fieldnames label_exps in
             if (not (is_tydecl_concrete (get_tydecl fieldnames))) then (
               let ty_id, _, _, _ = get_tydecl fieldnames in
               print_endline ("POLYMORPHIC RECORD EXPRESSION");
@@ -285,7 +286,7 @@ let concretize_user_ty_decls ds =
             (* get the _original_ fieldnames to look up the type declaration. *)
             (* let fieldnames = match ((Option.get rec_exp.ety).raw_ty) with  *)
             let fieldnames = match old_rec_exp_raw_ty with 
-              | TRecord(fields) -> List.split fields |> fst
+              | TRecord(fields) -> get_fieldnames fields
               | _ -> error "err"
             in
             (* if the field names belong to a concrete type declaration *)
@@ -313,8 +314,8 @@ let concretize_user_ty_decls ds =
             let original_rec_rty = (Option.get rec_exp.ety).raw_ty in
             (* only relabel if the inner record exp is a polymorphic declared type *)       
             match original_rec_rty with 
-              | TRecord(fields) when (not (List.split fields |> fst |> get_tydecl |> is_tydecl_concrete)) -> (
-                print_endline ("[EProj] the type "^(Printing.raw_ty_to_string original_rec_rty)^" is polymorphic");
+              | TRecord(fields) -> (
+                let fieldnames = get_fieldnames fields in
                 (*recurse on outer type *)
                 let new_ety = match exp.ety with 
                   | None -> None
@@ -322,23 +323,20 @@ let concretize_user_ty_decls ds =
                 in
                 (* recurse on inner record *)
                 let rec_exp = self#visit_exp () rec_exp in
-                (* rename the label argument *)
-                let _, label_renames, _ = TypeHashTbl.find used_ty_renames original_rec_rty in
-                let new_label = List.assoc label label_renames in
-                {exp with e=EProj(rec_exp, new_label); ety=new_ety}
-              )
-              (* let new_ety = 
-                let new_rawty = match (Option.get rec_exp.ety).raw_ty with 
-                  | TRecord(label_rtys) -> List.assoc new_label label_rtys
-                  | _ -> error "[EProj] expected record type for record operand of projection expression"
+                  
+                (* rename the label argument if its polymorphic *)
+                let new_label = if (is_tydecl_concrete (get_tydecl fieldnames)) 
+                  then (label)
+                  else (
+                    print_endline ("[EProj] the type "^(Printing.raw_ty_to_string original_rec_rty)^" is polymorphic");
+
+                    let _, label_renames, _ = TypeHashTbl.find used_ty_renames original_rec_rty in
+                    let new_label = List.assoc label label_renames in 
+                    new_label)
                 in
-                Some({(Option.get(exp.ety)) with raw_ty= new_rawty})
-              in
-              {exp with e=EProj(rec_exp, new_label); ety =new_ety}) *)
-              | _ -> 
-                (* this is a record with a non-polymorphic type. So there is no renaming to do in inner. *)
-                exp
-                (* skip#visit_exp () exp *)
+                {exp with e=EProj(rec_exp, new_label); ety=new_ety}
+                ) 
+              | _ -> error "internal compiler error: projection from non-record type"
           )
           | _ -> skip#visit_exp () exp
         in
@@ -351,9 +349,8 @@ let concretize_user_ty_decls ds =
   in
   (* relabel record type fields in the program *)
   let ds = v#visit_decls () ds in
-  (* we renamed labels in some record type uses, now we need to construct 
-     type declarations for them. Put the type declarations in a map 
-     from original polymorphic type to concrete types *)
+  (* now we make declarations for all the concrete user types we created by doing the relabeling. 
+     Put the type declarations in a map from original polymorphic type to concrete types. *)
   let poly_userty_to_concrete_decls = TypeHashTbl.fold 
     (fun _ (new_rec_ty, _, (id, sizes, ty, tspan)) poly_userty_to_concrete_decls -> 
         (* if the declared user type is concrete, we don't add anything *)
@@ -375,8 +372,8 @@ let concretize_user_ty_decls ds =
     used_ty_renames 
     (IdMap.empty)
   in
-  (* finally, delete all the original user type declarations and replace 
-     them with the newly-created concrete ones *)
+  (* finally, replace all the polymorphic user types with declarations of all the concrete 
+     instances that we created. *)
   List.fold_left 
     (fun decls decl -> 
       match decl.d with 
