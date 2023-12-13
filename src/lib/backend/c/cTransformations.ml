@@ -121,9 +121,53 @@ let number_events decls =
   v#visit_decls () decls
 ;;
 
+let print_assoc assoc = 
+  List.iter (fun (ty, id) -> 
+    Printf.printf "type: %s name: %s\n"
+    (CorePrinting.ty_to_string ty)
+    (CorePrinting.id_to_string id))
+      assoc;
+;;
+
+Cmdline.cfg.verbose_types <- true;;
+
+
+let rec assoc_custom_eq eq key = function
+  | [] -> None
+  | (k, v) :: rest -> if eq key k then Some v else assoc_custom_eq eq key rest
+;;
+
+let assoc_ty key = assoc_custom_eq equiv_ty key;;
+
+(* replace user-defined types with their names *)
+let uninline_user_types decls = 
+  (* get an assoc of user-defined types *)
+  let user_ty_to_name = List.filter_map
+    (fun decl -> 
+      match decl.d with 
+      | DUserTy(id, ty) -> Some(ty, id)
+      | _ -> None)
+    decls
+  in
+  (* For each type, if its in the user-defined type list, 
+     replace it with a named type. *)
+  let v = 
+    object inherit [_] s_map as super
+      method! visit_DUserTy () id ty = 
+        DUserTy(id, ty)
+      method! visit_ty () ty = 
+        match (assoc_ty ty user_ty_to_name) with 
+        | None -> ty
+        | Some(ty_id) -> CoreSyntax.ty (TName(Cid.id ty_id, [], false))
+      end
+  in
+  v#visit_decls () decls
+;;
+
 
 let transform decls = 
   let decls = strip_noops#visit_decls () decls in
   let decls = precompute_hash#visit_decls () decls in
   let decls = number_events decls in
+  let decls = uninline_user_types decls in
   decls

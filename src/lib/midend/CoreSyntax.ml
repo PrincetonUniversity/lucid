@@ -464,7 +464,7 @@ let equiv_list f lst1 lst2 =
   | Invalid_argument _ -> false
 ;;
 
-let equiv_ty t1 t2 =
+let rec equiv_ty t1 t2 =
   match t1.raw_ty, t2.raw_ty with
   | TBool, TBool -> true
   | TInt sz1, TInt sz2 -> sz1 = sz2
@@ -473,6 +473,8 @@ let equiv_ty t1 t2 =
   | TPat sz1, TPat sz2 -> sz1 = sz2
   | TBits sz1, TBits sz2 -> sz1 = sz2
   | TName(n1, [], false), TName(n2, [], false) -> Cid.equal n1 n2
+  | TRecord(fields1), TRecord(fields2) ->
+    List.for_all2 (fun (id1, ty1) (id2, ty2) -> Id.equal id1 id2 && equiv_ty (ty ty1) (ty ty2)) fields1 fields2
   | _ -> false
 ;;
 

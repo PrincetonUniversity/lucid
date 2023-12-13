@@ -30,6 +30,9 @@ let compile ds =
   printprog_if_debug ds;
   (* some simple transformations *)
   let ds = CTransformations.transform ds in 
+  report_if_verbose "-------C preprocessing transformations applied---------";
+  printprog_if_debug ds;
+  (* translate to C *)
   report_if_verbose "-------Translating to C---------";
   let c_str = CTranslate.translate ds in
   c_str

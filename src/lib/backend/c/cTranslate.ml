@@ -91,6 +91,20 @@ This strategy allows us to handle Lucid integers of any size, as long as they fi
   }
   
 *)
+
+
+(* c code generators *)
+let struct_string name (fields : (string * string) list) = 
+  sprintf "typedef struct %s {\n%s\n} %s;\n" 
+    name 
+    ((List.map 
+      (fun (ts, ns) -> sprintf "%s %s;" ts ns) 
+      fields) |> String.concat "\n" |> indent_def) 
+    name
+;;
+
+
+
 let id_string = Id.name
 let cid_string cid = String.concat "_" (Cid.names cid);;
 
@@ -108,15 +122,6 @@ let unknown_event_type, unknown_event_num = "EVENT_TYPE_UNKNOWN", 0
 (* the name of an event constructor *)
 
 
-(* c code generators *)
-let struct_string name (fields : (string * string) list) = 
-  sprintf "typedef struct %s {\n%s\n} %s;" 
-    name 
-    ((List.map 
-      (fun (ts, ns) -> sprintf "%s %s;" ts ns) 
-      fields) |> String.concat "\n" |> indent_def) 
-    name
-;;
 
 (* misc helpers *)
 let rty_to_size rty =
@@ -202,7 +207,7 @@ let rec translate_v v =
   match v with 
   | VBool(true) -> "1"
   | VBool(false) -> "0"
-  | VInt(zint) -> Integer.to_string zint
+  | VInt(zint) -> Integer.value_string zint
   | VEvent(event_val) -> 
     sprintf "{%s}" (comma_sep translate_value event_val.data)
   | VTuple(vs) -> 
@@ -323,11 +328,16 @@ let rec translate_e e ety = match e with
       let cid = cid_string cid in
       sprintf "%s(%s)" cid args
   )
+  | ERecord(fields) -> 
+    let fields = List.map (fun (id, exp) -> sprintf ".%s=%s" (id_string id) (translate_exp exp)) fields in
+    sprintf "(%s){%s}" 
+      (translate_ty ety) (* in some places, like return statements, we need an explicit cast *)
+      (String.concat ", " fields)
+  | EProj(exp, cid) -> 
+    sprintf "%s.%s" (translate_exp exp) (id_string cid)
   | EHash _ -> error "hash expressions must be evaluated at the statement level"
   | EFlood _ -> error "the flood builtin is not implemented"
   | ETableCreate _ -> error "table create expressions must be evaluated at the declaration level"
-  | ERecord _ -> error "record expressions not implemented"
-  | EProj _ -> error "projection expressions not implemented"
 and translate_exp exp = 
   translate_e exp.e exp.ety
 
@@ -399,7 +409,11 @@ and translate_d d = match d with
       sprintf "%s %s(%s) {\n%s\n}" ty (id_string id) params (indent_def statement)
     | DHandler _ -> error "handlers not implemented"
     | DParser _ -> error "parsers not implemented"
-    | DUserTy _ -> error "user types not implemented"
+    | DUserTy(id, {raw_ty=TRecord(fields)}) -> 
+      (* declare a typedef struct with fields in type. Type must be trecord *)
+      let field_strs = List.map (fun (id, ty) -> translate_raw_ty ty, id_string id) fields in
+      struct_string (id_string id) field_strs
+    | DUserTy(_, _) ->error "user types must be records"
 
 and translate_dglobal  id ty e = 
   (* tables are special *)
