@@ -20,43 +20,46 @@ let translate_size (sz : S.size) : C.size =
   SyntaxUtils.extract_size_default sz 32
 ;;
 
-let rec translate_ty (ty : S.ty) : C.ty =
-  let raw_ty =
-    match S.TyTQVar.strip_links ty.raw_ty with
-    | S.TBool -> C.TBool
-    | S.TGroup -> C.TGroup
-    | S.TEvent -> C.TEvent([])
-    | S.TInt sz -> C.TInt (translate_size sz)
-    | S.TName (cid, sizes, b) -> C.TName (cid, List.map translate_size sizes, b)
-    | S.TMemop (n, sz) -> C.TMemop (n, translate_size sz)
-    | S.TFun fty ->
-      C.TFun
-        { arg_tys = List.map translate_ty fty.arg_tys
-        ; ret_ty = translate_ty fty.ret_ty
-        }
-    | S.TVoid -> C.TBool (* Dummy translation needed for foreign functions *)
-    | S.TTable tbl ->
-      let ty_to_size (ty : S.ty) = 
-        match ty.raw_ty with 
-        | TInt(sz) -> sz
-        | TBool -> IConst(1)
-        | _ -> S.error "[rty_to_size] expected an integer, but got something else"
-      in
-      let tkey_sizes = List.map translate_size (List.map ty_to_size tbl.tkey_sizes) in
-      let tparam_tys = List.map translate_ty tbl.tparam_tys in
-      let tret_tys = List.map translate_ty tbl.tret_tys in
-      C.TTable { tkey_sizes; tparam_tys; tret_tys }
-    | S.TAction a ->
-      let aconst_param_tys = List.map translate_ty a.aconst_param_tys in
-      let aparam_tys = List.map translate_ty a.aparam_tys in
-      let aret_tys = List.map translate_ty a.aret_tys in
-      C.TAction { aconst_param_tys; aparam_tys; aret_tys }
-    | S.TPat s -> C.TPat (translate_size s)
-    | S.TBitstring -> C.TBits (1500)
-    | _ -> err ty.tspan (Printing.ty_to_string ty)
-  in
-  { raw_ty; tspan = ty.tspan }
 
+let rec translate_raw_ty (rty : S.raw_ty) tspan : C.raw_ty = 
+  match S.TyTQVar.strip_links rty with
+  | S.TBool -> C.TBool
+  | S.TGroup -> C.TGroup
+  | S.TEvent -> C.TEvent([])
+  | S.TInt sz -> C.TInt (translate_size sz)
+  | S.TName (cid, sizes, b) -> C.TName (cid, List.map translate_size sizes, b)
+  | S.TMemop (n, sz) -> C.TMemop (n, translate_size sz)
+  | S.TFun fty ->
+    C.TFun
+      { arg_tys = List.map translate_ty fty.arg_tys
+      ; ret_ty = translate_ty fty.ret_ty
+      }
+  | S.TVoid -> C.TBool (* Dummy translation needed for foreign functions *)
+  | S.TTable tbl ->
+    let ty_to_size (ty : S.ty) = 
+      match ty.raw_ty with 
+      | TInt(sz) -> sz
+      | TBool -> IConst(1)
+      | _ -> S.error "[rty_to_size] expected an integer, but got something else"
+    in
+    let tkey_sizes = List.map translate_size (List.map ty_to_size tbl.tkey_sizes) in
+    let tparam_tys = List.map translate_ty tbl.tparam_tys in
+    let tret_tys = List.map translate_ty tbl.tret_tys in
+    C.TTable { tkey_sizes; tparam_tys; tret_tys }
+  | S.TAction a ->
+    let aconst_param_tys = List.map translate_ty a.aconst_param_tys in
+    let aparam_tys = List.map translate_ty a.aparam_tys in
+    let aret_tys = List.map translate_ty a.aret_tys in
+    C.TAction { aconst_param_tys; aparam_tys; aret_tys }
+  | S.TPat s -> C.TPat (translate_size s)
+  | S.TBitstring -> C.TBits (1500)
+  | S.TRecord fields -> C.TRecord (List.map (fun (id, ty) -> (Id.create id), translate_raw_ty ty tspan) fields)
+  | _ -> err tspan (Printing.raw_ty_to_string rty)
+and translate_ty (ty : S.ty) : C.ty =
+  {
+    raw_ty = translate_raw_ty ty.raw_ty ty.tspan;
+    tspan = ty.tspan;
+  }
 and translate_asig asig =
   let name, tys = asig in
   name, List.map (fun rty -> (translate_ty (S.ty rty)).raw_ty) tys
@@ -137,11 +140,11 @@ and translate_exp (e : S.exp) : C.exp =
     | S.ECall (cid, es, unordered) -> C.ECall (cid, List.map translate_exp es, unordered)
     | S.EHash (sz, es) -> C.EHash (translate_size sz, List.map translate_exp es)
     | S.EFlood e -> C.EFlood (translate_exp e)
+    | S.ERecord(fields) -> C.ERecord (List.map (fun (id, e) -> (Id.create id), translate_exp e) fields)
+    | S.EProj(e, id) -> C.EProj (translate_exp e, Id.create id)
     | ESizeCast _
     | EStmt _
-    | ERecord _
     | EWith _
-    | EProj _
     | EVector _
     | EComp _
     | EIndex _

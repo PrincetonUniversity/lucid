@@ -139,10 +139,14 @@ let rec v_to_string v =
   | VGroup vs -> Printf.sprintf "{%s}" (comma_sep location_to_string vs)
   | VTuple vs -> Printf.sprintf "(%s)" (comma_sep v_to_string vs)
   | VPat bs -> bs_to_string bs
-
   | VBits bs -> 
     let bs = BitString.bits_to_hexstr bs in
     bs
+  | VRecord fields -> 
+    Printf.sprintf
+      "{%s}"
+      (concat_map "; " (fun (str, v) -> (id_to_string str) ^ " = " ^ v_to_string v) fields)
+
     (* truncate the hex string after 64 bytes, if its longer than that put ... at the end *)
     (* let len = String.length bs in
     let bs = 
@@ -196,6 +200,11 @@ let rec e_to_string e =
       (exp_to_string t.tsize)
       (cid_to_string (fst t.tdefault))
       (comma_sep exp_to_string (snd t.tdefault))
+  | EProj (e, l) -> exp_to_string e ^ "#" ^ (id_to_string l)
+  | ERecord lst ->
+    Printf.sprintf
+      "{%s}"
+      (concat_map "; " (fun (id, exp) -> (id_to_string id) ^ " = " ^ exp_to_string exp) lst)
 
 and exp_to_string e = e_to_string e.e
 and es_to_string es = comma_sep exp_to_string es

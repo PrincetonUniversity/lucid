@@ -93,6 +93,7 @@ let process_prog ?(opts=def_opts) builtin_tys ds =
   (* Record elimination removes useful debugging information, so we want it as
      close to the end of the pipeline as possible. *)
   let ds = if (opts.elim_records) then (
+      (* the function compiler uses records in the backend for (in/out)puts *)
       print_if_verbose "-------Eliminating records-------";
       let ds = RecordElimination.eliminate_prog ds in
       print_if_debug ds;

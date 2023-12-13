@@ -191,6 +191,15 @@ let rec interp_exp env e =
   | EFlood e' -> { e with e = EFlood (interp_exp env e') }
   | EOp (op, args) -> { e with e = interp_op env op args }
   | ETableCreate _ -> e
+  | ERecord(fields) -> {
+    e with e = ERecord (List.map (fun (id, e) -> (id, interp_exp env e)) fields)
+  }
+  | EProj(rec_exp, id) -> (
+    let rec_exp = interp_exp env rec_exp in
+    match rec_exp.e with
+    | ERecord(fields) -> interp_exp env (List.assoc id fields)
+    | _ -> {e with e = EProj(rec_exp, id)}
+  )
 
 (* Mostly copied from InterpCore, could maybe merge the two functions *)
 and interp_op env op args =

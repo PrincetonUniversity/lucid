@@ -188,6 +188,8 @@ let is_atomic exp =
   | EFlood arg -> is_immediate arg
   (* table create -- meaningless, not a runtime expression *)
   | ETableCreate _ -> false
+  | EProj _ -> error "[is_atomic] EProj not implemented"
+  | ERecord _ -> error "[is_atomic] ERecord not implemented"
 ;;
 
 let is_bool_non_immediate exp = is_bool exp && not (is_immediate exp)

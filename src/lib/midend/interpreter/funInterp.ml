@@ -120,6 +120,17 @@ let rec pack_args (param_tys : (C.ty) list) (int_args : int list) : C.value list
       (* recurse on the rest *)
       let rest_values, unused_args = pack_args rest_params rest_int_args in
       arg_value::rest_values, unused_args
+    | TRecord(fields) -> 
+      let inner_tys = List.map (fun (_, raw_ty) -> C.ty raw_ty) fields in
+      (* fill the inner params first *)
+      if ((List.length inner_tys) > (List.length int_args)) then error "failure: not enough arguments";
+      let inner_values, rest_int_args = pack_args inner_tys int_args in
+      let inner_vs = List.map (fun (value : C.value) -> value.v) inner_values in
+      let field_ids = List.map (fun (id, _) -> id) fields in
+      let arg_value = C.value (VRecord(List.combine field_ids inner_vs)) in
+      (* recurse on the rest *)
+      let rest_values, unused_args = pack_args rest_params rest_int_args in
+      arg_value::rest_values, unused_args
     | _ -> 
       if (List.length int_args = 0) then error "failure: not enough arguments";
       let arg_value = C.vint (List.hd int_args) (C.ty_to_size ty) in
@@ -129,8 +140,25 @@ let rec pack_args (param_tys : (C.ty) list) (int_args : int list) : C.value list
   | [] -> [], []
 ;;
 
+(* how many arguments does it take to fill a parameter? *)
+let rec flat_param_len (id, ty) = 
+  match ty.raw_ty with
+  | TTuple(raw_tys) -> 
+    List.fold_left (fun acc raw_ty -> acc + (flat_param_len (id, C.ty raw_ty))) 0 raw_tys        
+  | TRecord(fields) ->
+    List.fold_left (fun acc (id, raw_ty) -> acc + (flat_param_len (id, C.ty raw_ty))) 0 fields
+  | TBool | TGroup | TInt _ | TEvent _ | TPat _ | TBits _ -> 1
+  | TFun _ 
+  | TName _
+  | TMemop _ 
+  | TAction _ 
+  | TTable _ -> failwith "[flat_param_len] unsupported argument type"
+;;
+let flat_params_len params = 
+  List.fold_left (fun acc param -> acc + (flat_param_len param)) 0 params
+;;
 let check_params_len fcn_params int_args = 
-  if ((List.length int_args) <> (List.length fcn_params))
+  if ((List.length int_args) <> (flat_params_len fcn_params))
   then (
     Printf.printf "Expected %d arguments, got %d\n" (List.length fcn_params) (List.length int_args);
     exit 1;)
@@ -161,6 +189,7 @@ let run_function init_result int_args =
     | C.VInt(z) -> [Integer.to_int z]
     | C.VBool(b) -> [if b then 1 else 0]
     | C.VTuple(vs) -> List.flatten (List.map decode_v vs)
+    | C.VRecord(fields) -> List.flatten (List.map (fun (_, v) -> decode_v v) fields)
     | C.VEvent({data}) -> List.flatten (List.map (fun (v: C.value) -> decode_v v.v) (data: C.value list))
     | _ -> error "unsupported return type"
   in

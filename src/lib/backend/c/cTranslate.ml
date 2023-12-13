@@ -209,6 +209,7 @@ let rec translate_v v =
   | VGroup _ -> error "group valus not implemented"
   | VPat _ -> error "pattern values not implemented"
   | VBits _ -> error "bitstring values not implemented"
+  | VRecord _ -> error "record values not implemented"
 and translate_value value = 
   translate_v value.v
 
@@ -323,6 +324,8 @@ let rec translate_e e ety = match e with
   | EHash _ -> error "hash expressions must be evaluated at the statement level"
   | EFlood _ -> error "the flood builtin is not implemented"
   | ETableCreate _ -> error "table create expressions must be evaluated at the declaration level"
+  | ERecord _ -> error "record expressions not implemented"
+  | EProj _ -> error "projection expressions not implemented"
 and translate_exp exp = 
   translate_e exp.e exp.ety
 

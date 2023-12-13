@@ -4,7 +4,6 @@ open Dpt
 
 let cfg = Cmdline.cfg
 
-
 let main () =
   Cmdline.cfg.debug <- true; 
 

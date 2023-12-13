@@ -106,6 +106,9 @@ let rec read_ids_of_exp exp : Cid.t list =
   | EFlood(arg) -> read_ids_of_exp arg
   | EVal _ -> []
   | ETableCreate _ -> [] 
+  | ERecord(fields)-> List.map (fun (_, exp) -> read_ids_of_exp exp) fields |> List.flatten
+  | EProj(({e=ERecord(fields)}), fid) -> List.assoc fid fields |> read_ids_of_exp
+  | EProj _ -> error "[coreDfg] read_ids_of_exp: EProj not given a record"
 ;;
 
 let read_ids_of_exps exps = List.map read_ids_of_exp exps |> List.flatten

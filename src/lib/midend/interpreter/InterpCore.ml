@@ -283,8 +283,28 @@ let rec interp_exp (nst : State.network_state) swid locals e : 'a InterpSyntax.i
   | ETableCreate _ ->
     error
       "[InterpCore.interp_exp] got a table_create expression, which should not \
-       happenbecause the table creation should be interpeter in the \
-       declaration"
+       happen because tables should be created at startup"
+  | ERecord(fields) -> 
+    (* interp each field to produce a VRecord((id * v) list) *)
+    let fields = List.map 
+      (fun (id, e) -> 
+        let v = (interp_exp e |> extract_ival).v in
+        (id, v)) 
+      fields 
+    in
+    V (vrecord fields)
+  | EProj(e, id) ->
+    let v = interp_exp e |> extract_ival in
+    (match v.v with
+     | VRecord(fields) -> (
+       try
+         let v = List.assoc id fields in
+         V (value v)
+       with
+       | Not_found -> error ("Field " ^ Id.to_string id ^ " not found"))
+      | _ -> error "Not a record")
+
+    (* V (VRecord(fields)) *)
 
 and interp_exps nst swid locals es : 'a InterpSyntax.ival list =
   List.map (interp_exp nst swid locals) es

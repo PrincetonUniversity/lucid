@@ -112,6 +112,7 @@ and v =
   | VGroup of location list
   | VPat of int list
   | VBits of bits
+  | VRecord of (id * v) list
 
 and event_val =
   { eid : cid
@@ -144,6 +145,9 @@ and e =
   | EHash of size * exp list
   | EFlood of exp
   | ETableCreate of tbl_def
+  (* records *)
+  | ERecord of (id * exp) list
+  | EProj of exp * id
 
 and exp =
   { e : e
@@ -338,6 +342,8 @@ let rec infer_vty v =
   | VTuple _ ->
     failwith "Cannot infer type of tuple value (only used in complex memops)"
   | VBits bits -> TBits (List.length bits)
+  | VRecord fields ->
+    TRecord (List.map (fun (id, v) -> id, infer_vty v) fields)
 ;;
 
 (* Values *)
@@ -358,7 +364,7 @@ let vevent_sp event span = value_sp (VEvent event) span
 let vglobal idx ty = avalue (VGlobal idx) ty Span.default
 let vgroup locs = value (VGroup locs)
 let vtup vs = avalue (VTuple vs) (ty (TTuple(List.map infer_vty vs)))
-
+let vrecord fields = value (VRecord fields)
 (* int, size tups -> vtup(sized_ints) *)
 let vint_tups i_s =
   vtup (List.map (fun (i, s) -> VInt(Integer.create i s)) i_s) (Span.default)
