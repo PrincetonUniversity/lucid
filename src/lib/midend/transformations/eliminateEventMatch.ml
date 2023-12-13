@@ -128,7 +128,7 @@ let replacer =
 
     method! visit_SLocal env id ty exp = 
       match ty.raw_ty with 
-      | TEvent _ -> print_endline "REPLACED LOCAL DEF"; let initial_val = 
+      | TEvent -> print_endline "REPLACED LOCAL DEF"; let initial_val = 
                     match exp.e with
                     | ECall (cid, params, _) -> (match IdMap.find_opt (Cid.to_id cid) (!env).event_infos with 
                                               | Some ev_info -> ev_info.i

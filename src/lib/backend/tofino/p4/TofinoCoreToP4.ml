@@ -1751,6 +1751,7 @@ let translate_tdecl (denv : translate_decl_env) tdecl : (translate_decl_env) =
     let decl = T.decl_full (DMCGroup{gid=group.gnum; replicas =group.gcopies;}) [] tdecl.tdspan in 
     {denv with globals = denv.globals@[decl]}
   | TDFun(_) -> error "[translate_tdecl] function compilation is not implemented for tofino backend"
+  | TDUserTy(_) -> error "[translate_tdecl] user-defined types are not implemented for tofino backend"
 ;;
 
 (* move parsers to the end of the decls *)

@@ -122,21 +122,6 @@ let number_events decls =
 ;;
 
 
-(* for every event-typed expression, infer the event variants 
-   that could have been used to construct it. *)
-let infer_event_variants decls = 
-  (* 1. an event value has one constructor, inferred from the value itself 
-     2. a value expression's constructor is the same as its value's
-     3. the local declaration of event e = ...; gives e the same constructor types as rhs exp
-     4. mutating an event e, "e = ...;" gives e the constructor types (ctors[e] U ctors[...])
-     5. an event argument may take any constructor 
-     6. an event return takes any constructor that matches its rhs
-     7. the @main(ev1 -> ev2) pragma may be used to declare a main function from one event constructor to another.
-  *)
-  decls
-
-;;
-
 let transform decls = 
   let decls = strip_noops#visit_decls () decls in
   let decls = precompute_hash#visit_decls () decls in

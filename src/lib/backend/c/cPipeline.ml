@@ -21,8 +21,12 @@ let printprog_if_debug ds =
 ;;
 
 let compile ds =  
-  report_if_verbose "-------Translating to Midend IR---------";
   let ds = SyntaxToCore.translate_prog ds in
+  report_if_verbose "-------Translated to Midend IR---------";
+  printprog_if_debug ds;
+  (* partial interpretation... maybe.. this reduces readability. *)
+  let ds = PartialInterpretation.interp_prog ds in
+  report_if_verbose "-------Partially Interpreted---------";
   printprog_if_debug ds;
   (* some simple transformations *)
   let ds = CTransformations.transform ds in 

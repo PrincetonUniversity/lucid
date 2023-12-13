@@ -55,8 +55,8 @@ let hevent_to_string h =
     | HData -> ""
     | HEgress -> "@egress"
   in
-  let params = ( h.hdl_input, {raw_ty=TEvent([]); tspan=Span.default})::h.hdl_params in 
-  let out_params = ( h.hdl_output, {raw_ty=TEvent([]); tspan=Span.default})::h.hdl_retparams in 
+  let params = ( h.hdl_input, {raw_ty=TEvent; tspan=Span.default})::h.hdl_params in 
+  let out_params = ( h.hdl_output, {raw_ty=TEvent; tspan=Span.default})::h.hdl_retparams in 
   let body_str = match h.hdl_body with 
     | SFlat stmt -> stmt_to_string stmt |> indent_body
     | SPipeline stmts -> 
@@ -167,6 +167,9 @@ let td_to_string (td:td)=
       (id_to_string id)
       (params_to_string (fst body))
       (stmt_to_string (snd body))
+  | TDUserTy(id, ty) -> 
+    Printf.sprintf "type %s = %s;" (id_to_string id) (ty_to_string ty)
+
 ;;
 
 let tdecl_to_string td = td_to_string td.td

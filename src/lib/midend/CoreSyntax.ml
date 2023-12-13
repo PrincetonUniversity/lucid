@@ -23,11 +23,7 @@ and raw_ty =
   | TBool
   | TGroup
   | TInt of size (* Number of bits *)
-  | TEvent of event_variant list
-      (* optional list of event constructors that 
-         may be used to create a particular 
-         event-typed value or expression. 
-         An empty list means "any constructor" *)
+  | TEvent
   | TFun of func_ty (* Only used for Array/event functions at this point *)
   | TName of cid * sizes * bool
     (* Named type: e.g. "Array.t<<32>>". Bool is true if it represents a global type *)
@@ -38,11 +34,6 @@ and raw_ty =
   | TRecord of (id * raw_ty) list
   | TTuple of raw_ty list
   | TBits of size
-
-and event_variant =
-  { event_ctor_name : id
-  ; event_ctor_args : ty list
-  }
 
 and tbl_ty =
   { tkey_sizes : size list
@@ -280,6 +271,7 @@ and d =
   | DHandler of id * handler_sort * body
   | DMemop of memop
   | DExtern of id * ty
+  | DUserTy of id * ty
   | DAction of action
   | DParser of id * params * parser_block
       (* name, return type, args & body *)
@@ -326,7 +318,7 @@ let error s = raise (Error s)
 let ty_sp raw_ty tspan = { raw_ty; tspan }
 let ty raw_ty = { raw_ty; tspan = Span.default }
 let tint sz = ty (TInt sz)
-let tevent = ty (TEvent [])
+let tevent = ty (TEvent)
 
 
 let payload_ty = ty@@TName(Cid.create ["Payload"; "t"], [], false)
@@ -335,7 +327,7 @@ let rec infer_vty v =
   match v with
   | VBool _ -> TBool
   | VInt z -> TInt (Integer.size z)
-  | VEvent _ -> TEvent []
+  | VEvent _ -> TEvent
   | VGroup _ -> TGroup
   | VGlobal _ -> failwith "Cannot infer type of global value"
   | VPat bs -> TPat (List.length bs)
@@ -476,7 +468,7 @@ let equiv_ty t1 t2 =
   match t1.raw_ty, t2.raw_ty with
   | TBool, TBool -> true
   | TInt sz1, TInt sz2 -> sz1 = sz2
-  | TEvent _, TEvent _ -> true
+  | TEvent, TEvent -> true
   | TGroup, TGroup -> true
   | TPat sz1, TPat sz2 -> sz1 = sz2
   | TBits sz1, TBits sz2 -> sz1 = sz2

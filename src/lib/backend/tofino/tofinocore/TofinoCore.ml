@@ -64,7 +64,6 @@ and parser_step = [%import: CoreSyntax.parser_step]
 and parser_block = [%import: CoreSyntax.parser_block]
 and bit = [%import: CoreSyntax.bit]
 and bits = [%import: CoreSyntax.bits]
-and event_variant = [%import: CoreSyntax.event_variant]
 
 (*NEW 6/2023 -- event types / definitions *)
 
@@ -180,6 +179,7 @@ and td =
   | TDOpenFunction of id * params * statement (*accessible variables should be tracked*)
   | TDMulticastGroup of group (* used by the control component *)
   | TDFun of (id * ty * body) (* "main/entry" function to compile, when in function compiler mode *)
+  | TDUserTy of id * ty
 and tdecl =
   { td : td
   ; tdspan : sp
@@ -288,6 +288,11 @@ let decl_to_tdecl (decl:decl) =
     tdpragma = opt_to_list decl.dpragma;}
   | DFun(id, ty, body) -> {
     td = TDFun(id, ty, body);
+    tdspan = decl.dspan;
+    tdpragma = opt_to_list decl.dpragma;
+  }
+  | DUserTy(id, ty) -> {
+    td = TDUserTy(id, ty);
     tdspan = decl.dspan;
     tdpragma = opt_to_list decl.dpragma;
   }

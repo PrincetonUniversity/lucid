@@ -25,7 +25,7 @@ let rec translate_raw_ty (rty : S.raw_ty) tspan : C.raw_ty =
   match S.TyTQVar.strip_links rty with
   | S.TBool -> C.TBool
   | S.TGroup -> C.TGroup
-  | S.TEvent -> C.TEvent([])
+  | S.TEvent -> C.TEvent
   | S.TInt sz -> C.TInt (translate_size sz)
   | S.TName (cid, sizes, b) -> C.TName (cid, List.map translate_size sizes, b)
   | S.TMemop (n, sz) -> C.TMemop (n, translate_size sz)
@@ -307,9 +307,6 @@ and translate_parser_block (actions, (step, step_span)) =
 ;;
 
 let translate_decl (d : S.decl) : C.decl option =
-  match d.d with 
-  | DUserTy _ -> None 
-  | _ -> 
     let dprag = ref None in
     let d' =
       match d.d with
@@ -340,7 +337,8 @@ let translate_decl (d : S.decl) : C.decl option =
       | S.DParser (id, params, parser_block) ->
         C.DParser
           (id, translate_params params, translate_parser_block parser_block)
-      | S.DUserTy _ -> err d.dspan "user/named types not yet supported in ir"
+      | S.DUserTy(id, [], ty) -> C.DUserTy(id, translate_ty ty)
+      | S.DUserTy _ -> err d.dspan "size polymorphism in type declarations should be eliminated before midend"
     | S.DFun(id, ty, _, (params, stmt)) when (Pragma.exists_sprag "main" d.dpragmas) -> 
         (* retain "main" pragma *)
         dprag := Some(List.hd (d.dpragmas));

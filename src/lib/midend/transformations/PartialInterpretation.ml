@@ -709,6 +709,7 @@ let interp_decl builtin_tys env d =
     let abody = List.map (interp_exp acn_env) acn.abody in
     env, { d with d = DAction { acn with abody } }
   | DParser _ -> env, d
+  | DUserTy _ -> env, d
 ;;
 
 let interp_prog ds =

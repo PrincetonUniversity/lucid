@@ -147,7 +147,7 @@ let rec flat_param_len (id, ty) =
     List.fold_left (fun acc raw_ty -> acc + (flat_param_len (id, C.ty raw_ty))) 0 raw_tys        
   | TRecord(fields) ->
     List.fold_left (fun acc (id, raw_ty) -> acc + (flat_param_len (id, C.ty raw_ty))) 0 fields
-  | TBool | TGroup | TInt _ | TEvent _ | TPat _ | TBits _ -> 1
+  | TBool | TGroup | TInt _ | TEvent | TPat _ | TBits _ -> 1
   | TFun _ 
   | TName _
   | TMemop _ 

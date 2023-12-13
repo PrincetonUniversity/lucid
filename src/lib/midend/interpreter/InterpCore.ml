@@ -984,6 +984,7 @@ let interp_decl (nst : State.network_state) swid d =
     nst
   | DExtern _ ->
     failwith "Extern declarations should be handled during preprocessing"
+  | DUserTy _ -> nst (*all user types should be inlined by now*)
   | DFun(id, _, body) -> 
     let runtime_function (nst: State.network_state) swid args = 
       (* bind args to parameters *)

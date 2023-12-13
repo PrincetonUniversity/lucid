@@ -152,7 +152,7 @@ let inline_event_vars (ds:decls) =
         match stmt.s with 
         | SAssign(cid, exp) -> (
           match exp.ety.raw_ty with 
-          | TEvent _ -> (
+          | TEvent-> (
             match exp.e with 
             (* set event var to value --  bind *)
             | ECall(ev_cid, ev_args, u) -> (
@@ -191,7 +191,7 @@ let inline_event_vars (ds:decls) =
         | SLocal(id, _, exp) -> (
           let cid = Cid.id id in 
           match exp.ety.raw_ty with 
-          | TEvent _ -> (
+          | TEvent -> (
             match exp.e with 
             (* set event var to value --  bind *)
             | ECall(ev_cid, ev_args, u) -> (
@@ -230,7 +230,7 @@ let inline_event_vars (ds:decls) =
         (* replace expressions in generates if they are evars *)
         | SGen(gty, exp) -> (
           let exp = match exp.ety.raw_ty with 
-            | TEvent _ -> (
+            | TEvent -> (
               match exp.e with 
               | EVar(cid) -> (
                 match (List.assoc_opt (cid) (!ev_calls)) with
@@ -432,7 +432,7 @@ let evconstr_num ctx constr_cid =
 let rec inline_stmt ctx stmt = 
   let elim_ev_var_update cid exp = 
     match exp.ety.raw_ty, exp.e  with
-    | TEvent _, ECall(constr_cid, args, _) -> 
+    | TEvent, ECall(constr_cid, args, _) -> 
       (* update the context, adding the constructor to the event *)
       let ctx = add_constr ctx cid constr_cid in
       (* set tag and params from constructor  *)
@@ -442,7 +442,7 @@ let rec inline_stmt ctx stmt =
       in
       (* return the updated context and statement *)
       ctx, stmt
-    | TEvent _, EVar(rhs_cid) -> 
+    | TEvent, EVar(rhs_cid) -> 
       let ctx = add_constrs_from_var ctx cid rhs_cid in
       let param_stmt = param_copy_stmts ctx cid rhs_cid in
       let stmt = sequence_stmts

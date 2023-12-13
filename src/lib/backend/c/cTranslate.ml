@@ -98,7 +98,7 @@ let cid_string cid = String.concat "_" (Cid.names cid);;
 (* naming functions *)
 let memopty_string n_args arg_sz = sprintf "memop_%d_%d" n_args arg_sz
 
-let namety_string cid sizes = sprintf "%s_%s" (cid_string cid) (underscore_sep string_of_int sizes)  
+let builtin_ty_string cid sizes = sprintf "%s_%s" (cid_string cid) (underscore_sep string_of_int sizes)  
 
 (* the name of an events argument struct *)
 let event_struct evid = sprintf "event_%s" (id_string evid)
@@ -153,7 +153,7 @@ let mk_name_ty cid sizes =
   | "Counter"::_ -> error "counter not implemented"
   | "Array"::_
   | "PairArrays"::_ -> (
-    let name_ty = namety_string cid sizes in
+    let name_ty = builtin_ty_string cid sizes in
     let sizes = List.map (fun sz -> sprintf "uint%d_t" sz) sizes in
     sprintf "typedef struct %s { uint16_t size; %s* data; } %s;" 
       name_ty
@@ -169,15 +169,17 @@ and translate_raw_ty rty = match rty with
   | TBool -> "bool" 
   | TInt(sz) -> translate_tint sz
   | TGroup -> error "Group types not implemented"
-  | TEvent _ -> "event"
+  | TEvent -> "event"
   | TFun({arg_tys; ret_ty;}) -> 
     let _, _ = arg_tys, ret_ty in
     error "function types cannot be translated alone"
     (* let arg_tys = List.map translate_ty arg_tys in
     let ret_ty = translate_ty ret_ty in
     sprintf "%s (*func_type)(%s)" ret_ty (String.concat ", " arg_tys) *)    
-  | TName(cid, sizes, true) -> namety_string cid sizes
-  | TName(_, _, false) -> error "user-defined named types should be inlined by now"
+  | TName(cid, sizes, true) -> builtin_ty_string cid sizes
+  | TName(cid, [], false) -> cid_string cid
+  | TName(cid, _, false) -> error "user-defined types should not be size polymorphic"    
+    (* error "user-defined named types should be inlined by now" *)
   | TMemop(n_args, arg_sz) -> memopty_string n_args arg_sz
   (* an action type is really an action constructor type *)
   | TTable _ -> error "table types cannot be translated alone"
@@ -311,7 +313,7 @@ let rec translate_e e ety = match e with
        event union that sets the field corresponding to this 
        event's constructor. *)
     match (ety.raw_ty) with 
-    | TEvent _ -> 
+    | TEvent -> 
       let args = List.map translate_exp args in
       let args = String.concat ", " args in
       sprintf "{.%s={%s}}" (cid_string cid) args
@@ -397,6 +399,7 @@ and translate_d d = match d with
       sprintf "%s %s(%s) {\n%s\n}" ty (id_string id) params (indent_def statement)
     | DHandler _ -> error "handlers not implemented"
     | DParser _ -> error "parsers not implemented"
+    | DUserTy _ -> error "user types not implemented"
 
 and translate_dglobal  id ty e = 
   (* tables are special *)

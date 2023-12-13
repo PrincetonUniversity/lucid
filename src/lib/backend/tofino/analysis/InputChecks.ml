@@ -298,7 +298,7 @@ let align_ecalls ds =
       method! visit_exp ctx exp =
         let exp = super#visit_exp ctx exp in
         match exp.ety.raw_ty, exp.e with
-        | TEvent _, ECall (ev_cid, args, u) ->
+        | TEvent, ECall (ev_cid, args, u) ->
           { exp with e = ECall (ev_cid, align_args args, u) }
         | _ -> exp
     end

@@ -38,7 +38,7 @@ let rec raw_ty_to_string t =
     cid_to_string cid
     ^ sizes_to_string sizes
     ^ if cfg.verbose_types then "{" ^ string_of_bool b ^ "}" else ""
-  | TEvent _-> "event"
+  | TEvent -> "event"
   | TFun func -> func_to_string func
   | TMemop (n, size) -> Printf.sprintf "memop%d<<%s>>" n (size_to_string size)
   | TGroup -> "group"
@@ -462,6 +462,11 @@ let d_to_string d =
       (id_to_string id)
       (params_to_string params)
       (stmt_to_string s |> indent_body)
+  | DUserTy (id, ty) ->
+    Printf.sprintf
+      "type %s = %s"
+      (id_to_string id)
+      (ty_to_string ty)    
 ;;
 
 let decl_to_string d = d_to_string d.d
