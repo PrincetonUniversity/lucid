@@ -520,6 +520,44 @@ let is_evar exp =
 ;;
 
 
+(* 
+let d = 
+    | DSize of id * size option
+  | DGlobal of id * ty * exp
+  | DEvent of id * int option * event_sort * constr_spec list * params
+  | DHandler of id * handler_sort * body
+  | DFun of id * ty * constr_spec list * body
+  | DMemop of id * params * memop_body
+  | DConst of id * ty * exp
+  | DExtern of id * ty
+  | DSymbolic of id * ty
+  | DUserTy of id * sizes * ty
+  | DConstr of id * ty * params * exp
+  | DModule of id * interface * decls
+  | DModuleAlias of id * exp * cid * cid
+  | DAction of id * ty list * params * (params * action_body)
+  | DParser of id * params * parser_block   
+*)
+
+let d_to_constr_str d = match d with 
+  | DSize _ -> "size"
+  | DGlobal _ -> "global"
+  | DEvent _ -> "event"
+  | DHandler _ -> "handler"
+  | DFun _ -> "fun"
+  | DMemop _ -> "memop"
+  | DConst _ -> "const"
+  | DExtern _ -> "extern"
+  | DSymbolic _ -> "symbolic"
+  | DUserTy _ -> "userty"
+  | DConstr _ -> "constr"
+  | DModule _ -> "module"
+  | DModuleAlias _ -> "modulealias"
+  | DAction _ -> "action"
+  | DParser _ -> "parser"
+;;
+
+
 let raw_ty_to_constr_str raw_ty = 
   match raw_ty with 
   | TBool -> "bool"

@@ -83,6 +83,9 @@ let rec remove_effects ty =
 
 let rec infer_exp (env : env) (e : exp) : env * exp =
   (* print_endline @@ "Inferring " ^ exp_to_string e; *)
+  (* (match e.ety with 
+    | None -> ()
+    | Some(ety) -> print_endline@@"Listed type: "^(Printing.ty_to_string ety)); *)
   match e.e with
   | EVar cid ->
     let inst t = instantiator#visit_ty (fresh_maps ()) t in
@@ -153,7 +156,7 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
       match Option.map inst @@ StringMap.find_opt label env.record_labels with
       | Some ({ raw_ty = TRecord lst } as ty) -> ty, lst
       | Some _ -> failwith "Impossible, I hope"
-      | None -> error_sp e.espan @@ "Unknown label " ^ label
+      | None -> error_sp e.espan @@ "Unknown label " ^ label ^" in record exp: "^(Printing.exp_to_string e)
     in
     unify_ty e.espan expected_ty (Option.get inf_e.ety);
     let e_effect = (Option.get inf_e.ety).teffect in
@@ -172,13 +175,14 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
         then
           error_sp e.espan "Cannot dynamically create values of a global type"
         else inst ty
-      | None -> error_sp e.espan @@ "Unknown label " ^ List.hd labels
-    in
+        | None -> error_sp e.espan @@ "Unknown label " ^ List.hd labels ^" in record exp: "^(Printing.exp_to_string e)
+      in
     let inf_ety =
       TRecord
         (List.map2 (fun l e -> l, (Option.get e.ety).raw_ty) labels inf_es)
       |> mk_ty
     in
+
     unify_ty e.espan expected_ty inf_ety;
     let inf_entries = List.combine labels inf_es in
     env, { e with e = ERecord inf_entries; ety = Some expected_ty }

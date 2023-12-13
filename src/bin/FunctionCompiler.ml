@@ -17,7 +17,7 @@ let main () =
   let ds = Input.parse target_filename in
   let _, ds =
     (* Profile.time_profile "frontend" @@ fun () -> *)
-    FrontendPipeline.process_prog ~opts:{match_event_handlers=false;} Builtins.interp_builtin_tys ds
+    FrontendPipeline.process_prog ~opts:{match_event_handlers=false; elim_records=false;} Builtins.interp_builtin_tys ds
   in
   print_endline ("compiling");
   let prog_str = CPipeline.compile ds in

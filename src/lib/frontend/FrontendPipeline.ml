@@ -10,11 +10,13 @@ let print_if_verbose str = if Cmdline.cfg.verbose then Console.report str
 
 type frontend_options = {
    match_event_handlers : bool; (* check that all events are matched with handlers *)
+   elim_records : bool;
 }
 let def_opts = {
    (* with pattern matching over events, it no longer makes sense 
       to require every event to have a handler. *)
    match_event_handlers = false;
+   elim_records = true;
 }
 let process_prog ?(opts=def_opts) builtin_tys ds =
   print_if_debug ds;
@@ -90,11 +92,15 @@ let process_prog ?(opts=def_opts) builtin_tys ds =
   let ds = Typer.infer_prog builtin_tys ds in
   (* Record elimination removes useful debugging information, so we want it as
      close to the end of the pipeline as possible. *)
-  print_if_verbose "-------Eliminating records-------";
-  let ds = RecordElimination.eliminate_prog ds in
-  print_if_debug ds;
-  print_if_verbose "---------------typing7-------------";
-  let ds = Typer.infer_prog builtin_tys ds in
+  let ds = if (opts.elim_records) then (
+      print_if_verbose "-------Eliminating records-------";
+      let ds = RecordElimination.eliminate_prog ds in
+      print_if_debug ds;
+      print_if_verbose "---------------typing7-------------";
+      let ds = Typer.infer_prog builtin_tys ds in
+      ds)
+      else ds      
+  in   
   print_if_verbose "-------Eliminating tuples-------";
   let ds = TupleElimination.eliminate_prog ds in
   print_if_debug ds;
