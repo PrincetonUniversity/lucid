@@ -40,6 +40,8 @@ let module_id = payload_id
 let t_id = Cid.create_ids [payload_id; Id.create "t"]
 let payload_ty = ty @@ TName (t_id, [], false, [])
 let sizes = 0
+let ty_args = 0
+
 let global = false
 
 (* Not a global type, so no global constructor *)

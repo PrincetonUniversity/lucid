@@ -222,8 +222,12 @@ ty:
     | TBOOL				                      { ty_sp TBool $1 }
     | QID                               { ty_sp (TQVar (QVar (snd $1))) (fst $1) }
     | AUTO                              { ty_sp (TQVar (QVar (fresh_auto ()))) $1 }
-    | cid    				                    { ty_sp (TName (snd $1, [], true, [])) (fst $1) }
-    | cid poly				                  { ty_sp (TName (snd $1, snd $2, true, [])) (fst $1) }
+    | cid    				            { ty_sp (TName (snd $1, [], true, [])) (fst $1) }
+    | cid poly				            { ty_sp (TName (snd $1, snd $2, true, [])) (fst $1) }
+    | cid ty_poly                       { (* a builtin module's type that has type args *)
+                                            let raw_tys = List.map (fun ty -> ty.raw_ty) (snd $2) in
+                                            let span = Span.extend (fst $1) (fst $2) in 
+                                            ty_sp (TName (snd $1, [], true, raw_tys)) span }
     | EVENT                             { ty_sp TEvent $1}
     | VOID                              { ty_sp (TVoid) $1 }
     | GROUP                             { ty_sp (TGroup) $1 }
@@ -231,6 +235,28 @@ ty:
     | LBRACE record_def RBRACE          { ty_sp (mk_trecord $2) (Span.extend $1 $3) }
     | ty LBRACKET size RBRACKET         { ty_sp (TVector ($1.raw_ty, snd $3)) (Span.extend $1.tspan $4) }
     | BITSTRING                         { ty_sp TBitstring ($1)}
+
+tys:
+    | ty                                        { $1.tspan, [ $1 ] }
+    | ty COMMA tys                              { (Span.extend $1.tspan (fst $3), $1::(snd $3)) }
+
+// tuple types can only be written inside of a type argument list, 
+// which only builtin module named types may have.
+ty_tuple: 
+    | LPAREN RPAREN                             { ty_sp (TTuple []) (Span.extend $1 $2) }
+    | LPAREN tys RPAREN                         { 
+        let raw_tys = List.map (fun ty -> ty.raw_ty) (snd $2) in
+        ty_sp (TTuple raw_tys) (Span.extend $1 $3) }
+
+ty_polys:
+    | ty                                      { [$1] }
+    | ty_tuple                                { [$1] }
+    | ty_tuple COMMA ty_polys                 { ($1)::($3) }
+    | ty COMMA ty_polys                       { ($1)::($3) }
+
+ty_poly: 
+    | LSHIFT ty_polys RSHIFT            { Span.extend $1 $3, $2 }
+
 cid:
     | ID				                { (fst $1, Cid.id (snd $1)) }
     | ID DOT cid                        { (Span.extend (fst $1) (fst $3),
@@ -247,10 +273,11 @@ polys:
     | size COMMA polys                  { Span.extend (fst $1) (fst $3), (snd $1)::(snd $3) }
 
 poly:
-    | LESS polys MORE                { Span.extend $1 $3, snd $2 }
+    | LESS polys MORE                   { Span.extend $1 $3, snd $2 }
 
 single_poly:
-    | LESS size MORE                 { Span.extend $1 $3, snd $2 }
+    | LESS size MORE                    { Span.extend $1 $3, snd $2 }
+
 
 paren_args:
     | LPAREN RPAREN                     { Span.extend $1 $2, [] }
@@ -424,19 +451,15 @@ tyname_def:
     | ID                                  { snd $1, [] }
     | ID poly                             { snd $1, snd $2}
 
-tys:
-    | ty                                        { $1.tspan, [ $1 ] }
-    | ty COMMA tys                              { (Span.extend $1.tspan (fst $3), $1::(snd $3)) }
-
-ty_tuple:
+ty_args:
     | LPAREN tys RPAREN                         { (Span.extend $1 $3, snd $2) }
     | LPAREN RPAREN                             { (Span.extend $1 $2, []) }
     | ty                                        { ($1.tspan, [ $1 ]) }
 
 dt_table:
     | ID ASSIGN LBRACE
-        KEY_TYPE ty_tuple
-        ARG_TYPE ty_tuple
+        KEY_TYPE ty_args
+        ARG_TYPE ty_args
         RET_TYPE ty RBRACE
                                             { duty_sp
                                                     (snd $1)

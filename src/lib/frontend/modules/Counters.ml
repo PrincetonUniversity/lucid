@@ -14,6 +14,7 @@ let counter_error fun_name msg =
 let module_id = counter_id
 let t_id = Cid.create_ids [counter_id; Id.create "t"]
 let sizes = 1
+let ty_args = 0
 let global = true
 
 (* Constructor *)

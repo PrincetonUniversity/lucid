@@ -13,6 +13,8 @@ let array_error fun_name msg = error (array_name ^ ": " ^ fun_name ^ ": " ^ msg)
 let module_id = array_id
 let t_id = Cid.create_ids [array_id; Id.create "t"]
 let sizes = 1
+let ty_args = 0
+
 let global = true
 
 (* Constructor *)

@@ -13,6 +13,7 @@ let module_id = packet_id
 let t_id = Cid.create_ids [packet_id; Id.create "t"]
 let packet_ty = ty @@ TName (t_id, [], false, [])
 let sizes = 0
+let ty_args = 0
 let global = false
 
 (* Not a global type, so no global constructor *)

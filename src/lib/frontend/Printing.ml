@@ -121,9 +121,11 @@ let rec raw_ty_to_string t =
   | TQVar tqv -> tqvar_to_string raw_ty_to_string tqv
   | TBool -> "bool"
   | TInt i -> "int<<" ^ size_to_string i ^ ">>"
-  | TName (cid, sizes, b, _) ->
+  | TName (cid, sizes, b, arg_tys) ->
     cid_to_string cid
-    ^ sizes_to_string sizes
+    ^ (if (List.length arg_tys > 0) 
+      then "<<"^(comma_sep raw_ty_to_string arg_tys)^">>"    
+      else sizes_to_string sizes)
     ^ if cfg.verbose_types then "{" ^ string_of_bool b ^ "}" else ""
   | TAbstract (cid, sizes, b, _) ->
     let base =

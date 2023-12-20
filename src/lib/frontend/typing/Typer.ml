@@ -1316,9 +1316,9 @@ let rec infer_declaration
   (d : decl)
   : env * effect * decl
   =
-  (* print_endline @@ "Inferring decl " ^ decl_to_string d; *)
+  print_endline @@ "Inferring decl " ^ decl_to_string d;
   let d = subst_TNames env d in
-  (* print_endline @@ "After subst_TNames "^ decl_to_string d; *)
+  print_endline @@ "After subst_TNames "^ decl_to_string d;
   let env, effect_count, new_d =
     match d.d with
     | DSize (id, szo) ->

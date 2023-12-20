@@ -129,7 +129,7 @@ let rename prog =
         in
         let ty_map =
           List.fold_left
-            (fun env (cid, _, _) -> CidMap.add cid cid env)
+            (fun env (cid, _, _, _) -> CidMap.add cid cid env)
             CidMap.empty
             builtin_type_info
         in

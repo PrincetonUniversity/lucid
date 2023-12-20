@@ -87,6 +87,7 @@
    libraryInterface
    arrays
    counters
+   tables
    pairArrays
    system
    events

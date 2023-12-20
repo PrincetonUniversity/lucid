@@ -458,16 +458,25 @@ let drop_indexes target eff =
 
 let lookup_TName span env rty =
   match TyTQVar.strip_links rty with
-  | TName (cid, sizes, _, _) ->
+  | TName (cid, sizes, _, ty_args) ->
     let sizes', ty = lookup_ty span env cid in
+    (* put the raw type args back
+       TODO: double check this *)
+    let raw_ty = match ty.raw_ty with 
+      | TName(c, s, g, _) -> 
+        TName(c, s, g, ty_args)
+      | rty -> rty 
+    in
     let replaced_ty =
+      (* replace size ids in sizes' with sizes *)
       ReplaceUserTys.subst_sizes
         span
         cid
-        ty.raw_ty
-        (ReplaceUserTys.extract_ids span sizes')
+        raw_ty
+        (ReplaceUserTys.extract_ids span sizes') 
         sizes
     in
+
     replaced_ty
   | rty -> rty
 ;;
