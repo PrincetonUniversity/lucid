@@ -44,65 +44,6 @@ let sizes = 0
 let ty_args = 3
 let global = true
 
-(* Constructor *)
-(* 
-// example usage:
-// (16, 16) is the size of the table key, (32, 32) is the size of the table's actions
-// 32 is the table's actions' args, 8 is the table's actions' return
-
-global Table.t<(16, 16), 32, 8> mytbl = Table.create(1024, mk_default(1));
-lhs: fully types
-rhs: tint, tfun 
-
-arg size = (32, 32)
-ret size = 8
-
-action int doit(int x, int y) {return 1;}
-
-Typing the declaration: 
-global Table.t<(16, 16), 32, 8> mytbl = Table.create(1024, doit);
-
-Table.create(1024, mk_default(1));
-
-------------------
-
-one option is to make actions functions from ints to ints. 
-and those ints can be sized with tuples.
-oh that's so gross.
-
-Table.create : int -> (int<'x> -> int<'y>) -> Table.t<'sk, 'x, 'y>
-doit : int<(32, 32)> -> int<32>
-
-action int doit(int<(32, 32)> (x, y))
-
-----------------
-
-without knowing anything about the call, write down the type of table create. 
-
-(tup<'a> -> tup<'r>) -> Table.t<'sk, 'a, 'r>
-
-and then when they come for the tuples... 
-
-
------------------
-
-What if the table type carried type arguments instead of size args? 
-  Would that help? 
-
-Table.create : int -> ('x -> 'y) -> Table.t<<int<32>, 'x, 'y>>
-
-action int doit(int x, int y) {return 1;}
-doit : (int, int) -> int
-
-Table.create(1024, doit) : Table.t<'sk, 'x, 'y>
-
-Yeah. That'd work. 
-
-But that's a possibly hard modification...
-
-
-
-*)
 
 let create_id = Cid.create_ids [id; Id.create "create"]
 let create_sig =
