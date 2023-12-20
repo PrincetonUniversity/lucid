@@ -24,7 +24,7 @@ let counter_create_sig =
   let counter_eff = FVar (QVar (Id.fresh "eff")) in
   let start_eff = FVar (QVar (Id.fresh "eff")) in
   { arg_tys = [ty @@ TInt counter_size]
-  ; ret_ty = ty_eff (TName (t_id, [counter_size], true)) counter_eff
+  ; ret_ty = ty_eff (TName (t_id, [counter_size], true, [])) counter_eff
   ; start_eff
   ; end_eff = start_eff
   ; constraints = ref []
@@ -44,7 +44,7 @@ let counter_add_ty =
   ty
   @@ TFun
        { arg_tys =
-           [ ty_eff (TName (t_id, [counter_size], true)) counter_eff
+           [ ty_eff (TName (t_id, [counter_size], true, [])) counter_eff
            ; ty @@ TInt counter_size ]
        ; ret_ty = ty @@ TInt counter_size
        ; start_eff
@@ -79,7 +79,7 @@ let defs : State.global_fun list =
 let signature =
   let sz = IVar (QVar (Id.fresh "sz")) in
   ( module_id
-  , [Cid.last_id t_id, [sz], TName (t_id, [sz], true) |> ty]
+  , [Cid.last_id t_id, [sz], TName (t_id, [sz], true, []) |> ty]
   , defs
   , constructors )
 ;;

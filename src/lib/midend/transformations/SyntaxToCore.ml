@@ -27,7 +27,8 @@ let rec translate_raw_ty (rty : S.raw_ty) tspan : C.raw_ty =
   | S.TGroup -> C.TGroup
   | S.TEvent -> C.TEvent
   | S.TInt sz -> C.TInt (translate_size sz)
-  | S.TName (cid, sizes, b) -> C.TName (cid, List.map translate_size sizes, b)
+  | S.TName (cid, sizes, b, []) -> C.TName (cid, List.map translate_size sizes, b)
+  | S.TName (_) -> err_unsupported tspan "[translate_raw_ty] types with arguments not yet implemented"
   | S.TMemop (n, sz) -> C.TMemop (n, translate_size sz)
   | S.TFun fty ->
     C.TFun

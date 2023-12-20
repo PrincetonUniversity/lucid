@@ -38,7 +38,7 @@ let payload_error fun_name msg =
 
 let module_id = payload_id
 let t_id = Cid.create_ids [payload_id; Id.create "t"]
-let payload_ty = ty @@ TName (t_id, [], false)
+let payload_ty = ty @@ TName (t_id, [], false, [])
 let sizes = 0
 let global = false
 

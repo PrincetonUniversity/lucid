@@ -184,12 +184,12 @@ let rename prog =
         env <- { env with active = old.active };
         ret
 
-      method! visit_TName dummy cid sizes b =
+      method! visit_TName dummy cid sizes b arg_tys=
         let old = env in
         self#activate_ty ();
         let cid = self#lookup cid in
         env <- { env with active = old.active };
-        TName (cid, List.map (self#visit_size dummy) sizes, b)
+        TName (cid, List.map (self#visit_size dummy) sizes, b, arg_tys)
 
       method! visit_size dummy size =
         let old = env in

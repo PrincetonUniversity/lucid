@@ -239,8 +239,9 @@ and try_unify_rty span rty1 rty2 =
            n1
            n2;
     try_unify_size span size1 size2
-  | TName (cid1, sizes1, b1), TName (cid2, sizes2, b2) ->
+  | TName (cid1, sizes1, b1, atys1), TName (cid2, sizes2, b2, atys2) ->
     if b1 <> b2 || not (Cid.equal cid1 cid2) then raise CannotUnify;
+    List.iter2 (try_unify_rty span) atys1 atys2;
     List.iter2 (try_unify_size span) sizes1 sizes2
   | TAbstract (cid1, sizes1, b1, _), TAbstract (cid2, sizes2, b2, _) ->
     if b1 <> b2 || not (Cid.equal cid1 cid2) then raise CannotUnify;

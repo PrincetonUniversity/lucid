@@ -58,7 +58,8 @@ let base_env () : env ref =
   let mk_entry t_id sizes global =
     let size_ids = List.init sizes (fun _ -> Id.fresh "sz") in
     let sizes = List.map (fun id -> IVar (QVar id)) size_ids in
-    TName (t_id, sizes, global), size_ids
+    (* user types cannot have arguments *)
+    TName (t_id, sizes, global, []), size_ids
   in
   let mapping =
     List.fold_left
@@ -93,11 +94,11 @@ let prefixer =
   object (self)
     inherit [_] s_map
 
-    method! visit_TName (f, mdefs) cid sizes b =
+    method! visit_TName (f, mdefs) cid sizes b tyargs =
       let sizes = List.map (self#visit_size (f, mdefs)) sizes in
       if CidSet.mem cid mdefs
-      then TName (f cid, sizes, b)
-      else TName (cid, sizes, b)
+      then TName (f cid, sizes, b, tyargs)
+      else TName (cid, sizes, b, tyargs)
   end
 ;;
 
@@ -126,7 +127,7 @@ let replacer =
       since that mechanism seems to do more harm than good anyway *)
     method! visit_raw_ty (env : env ref) raw_ty =
       match raw_ty with
-      | TName (cid, sizes, _) -> begin
+      | TName (cid, sizes, _, _) -> begin
         match CidMap.find_opt cid !env.mapping with
         | None -> Console.error @@ "Unknown type " ^ Printing.cid_to_string cid
         | Some (raw_ty, size_vars) ->
@@ -164,7 +165,8 @@ let replacer =
         let ret_ty =
           match tyo with
           | Some ty -> ty.raw_ty
-          | None -> TName (Id id, sizes, b)
+          (* TODO: double check the empty list for type args *)
+          | None -> TName (Id id, sizes, b, [])
         in
         add_entry env id ret_ty sizes';
         { ispec with ispec = InTy (id, sizes, tyo, b) }

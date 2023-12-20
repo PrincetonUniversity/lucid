@@ -23,7 +23,7 @@ let tupletag = "tuple"
 let recordtag = "record"
 let unknowntag = "unknown"
 let gty_to_tag ty = match (TyTQVar.strip_links ty.raw_ty) with
-  | TName(cid, _, true) -> (
+  | TName(cid, _, true, _) -> (
     match (Cid.names cid) with 
     | "Array"::_ -> (arraytag)
     | "PairArray"::_ -> (arraytag)

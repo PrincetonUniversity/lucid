@@ -222,8 +222,8 @@ ty:
     | TBOOL				                      { ty_sp TBool $1 }
     | QID                               { ty_sp (TQVar (QVar (snd $1))) (fst $1) }
     | AUTO                              { ty_sp (TQVar (QVar (fresh_auto ()))) $1 }
-    | cid    				                    { ty_sp (TName (snd $1, [], true)) (fst $1) }
-    | cid poly				                  { ty_sp (TName (snd $1, snd $2, true)) (fst $1) }
+    | cid    				                    { ty_sp (TName (snd $1, [], true, [])) (fst $1) }
+    | cid poly				                  { ty_sp (TName (snd $1, snd $2, true, [])) (fst $1) }
     | EVENT                             { ty_sp TEvent $1}
     | VOID                              { ty_sp (TVoid) $1 }
     | GROUP                             { ty_sp (TGroup) $1 }

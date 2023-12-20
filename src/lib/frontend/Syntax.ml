@@ -49,7 +49,7 @@ and raw_ty =
   | TEvent
   | TFun of func_ty
   | TMemop of int (* Number of arguments: 2-4 *) * size
-  | TName of cid * sizes * bool
+  | TName of cid * sizes * bool  * (raw_ty list)
     (* Named type: e.g. "Array.t<<32>>". Bool is true if it represents a global type *)
   | TAbstract of
       cid * sizes * bool * raw_ty (* raw_ty is the type when it was a TName *)

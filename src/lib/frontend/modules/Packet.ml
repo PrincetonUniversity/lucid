@@ -11,7 +11,7 @@ let packet_error fun_name msg =
 
 let module_id = packet_id
 let t_id = Cid.create_ids [packet_id; Id.create "t"]
-let packet_ty = ty @@ TName (t_id, [], false)
+let packet_ty = ty @@ TName (t_id, [], false, [])
 let sizes = 0
 let global = false
 

@@ -121,7 +121,7 @@ let rec raw_ty_to_string t =
   | TQVar tqv -> tqvar_to_string raw_ty_to_string tqv
   | TBool -> "bool"
   | TInt i -> "int<<" ^ size_to_string i ^ ">>"
-  | TName (cid, sizes, b) ->
+  | TName (cid, sizes, b, _) ->
     cid_to_string cid
     ^ sizes_to_string sizes
     ^ if cfg.verbose_types then "{" ^ string_of_bool b ^ "}" else ""

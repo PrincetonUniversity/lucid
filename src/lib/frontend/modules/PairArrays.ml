@@ -24,7 +24,7 @@ let pairarray_create_sig =
   let pairarray_eff = FVar (QVar (Id.fresh "eff")) in
   let start_eff = FVar (QVar (Id.fresh "eff")) in
   { arg_tys = [ty @@ TInt pairarray_size]
-  ; ret_ty = ty_eff (TName (t_id, [pairarray_size], true)) pairarray_eff
+  ; ret_ty = ty_eff (TName (t_id, [pairarray_size], true, [])) pairarray_eff
   ; start_eff
   ; end_eff = start_eff
   ; constraints = ref []
@@ -45,7 +45,7 @@ let pairarray_update_ty =
   ty
   @@ TFun
        { arg_tys =
-           [ ty_eff (TName (t_id, [a], true)) arr_eff
+           [ ty_eff (TName (t_id, [a], true, [])) arr_eff
            ; ty @@ TInt (IVar (QVar (Id.fresh "sz")))
            ; ty @@ TMemop (4, a)
            ; ty @@ TInt a
@@ -93,7 +93,7 @@ let defs : State.global_fun list =
 let signature =
   let sz = IVar (QVar (Id.fresh "sz")) in
   ( module_id
-  , [Cid.last_id t_id, [sz], TName (t_id, [sz], true) |> ty]
+  , [Cid.last_id t_id, [sz], TName (t_id, [sz], true, []) |> ty]
   , defs
   , constructors )
 ;;

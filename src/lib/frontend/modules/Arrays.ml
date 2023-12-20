@@ -23,7 +23,7 @@ let array_create_sig =
   let arr_eff = FVar (QVar (Id.fresh "eff")) in
   let start_eff = FVar (QVar (Id.fresh "eff")) in
   { arg_tys = [ty @@ TInt (IVar (QVar (Id.fresh "sz")))]
-  ; ret_ty = ty_eff (TName (t_id, [arr_size], true)) arr_eff
+  ; ret_ty = ty_eff (TName (t_id, [arr_size], true, [])) arr_eff
   ; start_eff
   ; end_eff = start_eff
   ; constraints = ref []
@@ -50,7 +50,7 @@ let array_update_ty =
   ty
   @@ TFun
        { arg_tys =
-           [ ty_eff (TName (t_id, [a], true)) arr_eff
+           [ ty_eff (TName (t_id, [a], true, [])) arr_eff
            ; ty @@ TInt (IVar (QVar (Id.fresh "sz")))
            ; ty @@ TMemop (2, a)
            ; ty @@ TInt a
@@ -171,7 +171,7 @@ let array_get_ty, array_set_ty, array_getm_ty, array_setm_ty =
   let start_eff = FVar (QVar (Id.fresh "eff")) in
   let fty =
     { arg_tys =
-        [ ty_eff (TName (t_id, [a], true)) arr_eff
+        [ ty_eff (TName (t_id, [a], true, [])) arr_eff
         ; ty @@ TInt (IVar (QVar (Id.fresh "sz"))) ]
     ; ret_ty = ty @@ TInt a
     ; start_eff
@@ -213,7 +213,7 @@ let array_update_complex_ty =
   ty
   @@ TFun
        { arg_tys =
-           [ ty_eff (TName (t_id, [a], true)) arr_eff
+           [ ty_eff (TName (t_id, [a], true, [])) arr_eff
            ; ty @@ TInt (IVar (QVar (Id.fresh "sz")))
            ; ty @@ TMemop (3, a)
            ; ty @@ TInt a
@@ -261,7 +261,7 @@ let defs : State.global_fun list =
 let signature =
   let sz = IVar (QVar (Id.fresh "sz")) in
   ( module_id
-  , [Cid.last_id t_id, [sz], TName (t_id, [sz], true) |> ty]
+  , [Cid.last_id t_id, [sz], TName (t_id, [sz], true, []) |> ty]
   , defs
   , constructors )
 ;;
