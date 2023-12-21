@@ -396,6 +396,14 @@ and s_to_string s =
       (raw_ty_to_string t.raw_ty)
       (id_to_string i)
       (exp_to_string e)
+  | STupleAssign({ids; tys; exp}) ->
+    Printf.sprintf
+      "%s%s = %s;"
+      (match tys with 
+        | Some(tys) -> (comma_sep ty_to_string tys)^" "
+        | None -> "")
+      (comma_sep id_to_string ids)
+      (exp_to_string exp)
   | SPrintf (s, es) ->
     Printf.sprintf "printf \"%s\" %s;" s (comma_sep exp_to_string es)
   | SUnit e -> exp_to_string e ^ ";"

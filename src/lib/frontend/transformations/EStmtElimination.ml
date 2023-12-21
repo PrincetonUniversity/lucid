@@ -89,6 +89,9 @@ and inline_stmt s =
   | SAssign (id, e) ->
     let s', e' = inline_exp e in
     sseq s' { s with s = SAssign (id, e') }
+  | STupleAssign({ids; tys; exp}) -> 
+    let s', exp' = inline_exp exp in
+    sseq s' {s with s = STupleAssign({ids; tys; exp=exp'})}
   | SPrintf (str, es) ->
     let s', es' = inline_exps es in
     sseq s' { s with s = SPrintf (str, es') }

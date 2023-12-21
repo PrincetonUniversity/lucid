@@ -493,11 +493,18 @@ let mk_tblinstall_single tbl entries span =
   else tblinstall_sp tbl entries span
 ;;
 
-let unpack_parsed_tuple (e : exp) =
+let unpack_tuple (e : exp) =
   match e.e with
   | ETuple lst -> lst
   | _ -> [e]
 ;;
+
+let unpack_tuple_rty (raw_ty : raw_ty) = 
+  match raw_ty with 
+  | TTuple(lst) -> lst
+  | _ -> error "[unpack tuple] tried to unpack a non tuple type"
+;;
+
 
 let unpack_default_action e = 
   match e with 

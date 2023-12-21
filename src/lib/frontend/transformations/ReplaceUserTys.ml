@@ -175,9 +175,9 @@ let replacer =
         match CidMap.find_opt cid !env.mapping with
         | None -> Console.error @@ "Unknown type " ^ Printing.cid_to_string cid
         | Some (raw_ty, size_vars, ty_vars) ->
-          print_endline("[replacer] about to call subst_sizes");
+          (* print_endline("[replacer] about to call subst_sizes");
           print_endline ("sizes = "^(Printing.sizes_to_string sizes));
-          print_endline ("size_vars = "^(Printing.comma_sep Printing.id_to_string size_vars));
+          print_endline ("size_vars = "^(Printing.comma_sep Printing.id_to_string size_vars)); *)
           let raw_ty = subst_sizes Span.default cid raw_ty size_vars sizes in
           subst_ty_args Span.default cid raw_ty ty_vars arg_tys
       end
@@ -229,7 +229,7 @@ let replacer =
 ;;
 
 let replace_prog ds = 
-  let be = base_env () in
+  (* let be = base_env () in *)
   (* (match CidMap.find_opt (Cid.create ["Table"; "t"]) !be.mapping with
   | Some (_, size_vars) ->
     print_endline ("in base_env -- size_vars = "^(Printing.comma_sep Printing.id_to_string size_vars));

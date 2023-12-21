@@ -139,6 +139,7 @@ and eliminate_stmt stmt =
     sseq pre_stmt { stmt with s = SMatch (exps, branches) }
   | SLoop (stmt, id, size) ->
     { stmt with s = SLoop (eliminate_stmt stmt, id, size) }
+  | STupleAssign _ -> error "Table inlining should not be necessary once tuple assignment is implemented..."
   | STableMatch t ->
     let pre_tble, tbl = eliminate_exp t.tbl in
     let pre_key, keys = eliminate_exps t.keys in

@@ -197,6 +197,13 @@ and s =
   | SUnit of exp
   | SLocal of id * ty * exp
   | SAssign of id * exp
+  (* internal-only node used for builtin methods that return 
+     multiple values, like Table.match *)
+  | STupleAssign of {
+    ids : id list;
+    tys : (ty list) option;
+    exp : exp;
+  }
   | SPrintf of string * exp list
   | SIf of exp * statement * statement
   | SGen of gen_type * exp

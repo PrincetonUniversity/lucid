@@ -353,17 +353,17 @@ exp:
         n_entries=exp COMMA
         default_action_call=exp // default action initialized with compile time arguments
         RPAREN
-                                         { make_create_table tbl_ty (unpack_parsed_tuple actions) (n_entries) (default_action_call) (Span.extend $1 $11) }
+                                         { make_create_table tbl_ty (unpack_tuple actions) (n_entries) (default_action_call) (Span.extend $1 $11) }
     | TABLE_MATCH
         LPAREN tbl=exp COMMA
         keys=exp COMMA
         args=exp
-        RPAREN                          { tblmatch_sp tbl (unpack_parsed_tuple keys) (unpack_parsed_tuple args) (Span.extend $1 $8)}
+        RPAREN                          { tblmatch_sp tbl (unpack_tuple keys) (unpack_tuple args) (Span.extend $1 $8)}
     | paren_exp                         { $1 }
 
 // an expression with a parenthesis is a tuple, unless its a single-element tuple, in which case its just the element.
 // note that user-written tuples may not appear in the AST, so any parsed tuple must be unpacked with 
-// SyntaxUtils.unpack_parsed_tuple before calling a AST node constructor
+// SyntaxUtils.unpack_tuple before calling a AST node constructor
 paren_exp:
     | LPAREN args RPAREN                  { match $2 with 
                                             | [] -> tuple_sp [] (Span.extend $1 $3)
@@ -618,7 +618,7 @@ statement1:
     | PGENERATE LPAREN exp COMMA exp RPAREN SEMI { gen_sp (GPort $3) $5 (Span.extend $1 $7)}
     | cid LESS UNORDERED MORE paren_args SEMI { sucall_sp (snd $1) (snd $5) (Span.extend (fst $1) $6) }
     | cid paren_args SEMI                   { scall_sp (snd $1) (snd $2) (Span.extend (fst $1) $3) }
-    | MATCH exp=exp WITH branches=branches  { match_sp (unpack_parsed_tuple exp) (snd branches) (Span.extend $1 (fst branches)) }
+    | MATCH exp=exp WITH branches=branches  { match_sp (unpack_tuple exp) (snd branches) (Span.extend $1 (fst branches)) }
     | MATCH multiargs=multiargs WITH branches=branches { match_sp multiargs (snd branches) (Span.extend $1 (fst branches)) }
     | PRINTF LPAREN STRING RPAREN SEMI             { sprintf_sp (snd $3) [] (Span.extend $1 $5) }
     | PRINTF LPAREN STRING COMMA args RPAREN SEMI  { sprintf_sp (snd $3) $5 (Span.extend $1 $7) }
