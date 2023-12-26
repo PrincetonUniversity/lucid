@@ -23,7 +23,7 @@ let fresh_numbered_id s =
 let rec translate_ty ty = match ty.raw_ty with 
   | CS.TBool -> T.TBool
   | CS.TInt (s) -> T.TInt (s)
-  | CS.TAction(_) -> error "[translate_ty] action types should be eliminated in IR..."
+  | CS.TActionConstr(_) -> error "[translate_ty] action types should be eliminated in IR..."
   | CS.TFun(fty) -> tfun (translate_ty fty.ret_ty) (List.map translate_ty fty.arg_tys)
   | CS.TName(cid, _, _) -> tstruct (Cid.to_id cid)
   | _ -> error "[translate_ty] translation for this type is not implemented"
@@ -1746,7 +1746,7 @@ let translate_tdecl (denv : translate_decl_env) tdecl : (translate_decl_env) =
   )
   | TDHandler(HParams(_)) -> error "param-based handles should have been eliminated"
   | TDParser(p) -> let globals = denv.globals@[translate_parser denv p] in {denv with globals}
-  | TDAction _ -> error "[translate_tdecl] actions should have been converted into functions"
+  | TDActionConstr _ -> error "[translate_tdecl] actions should have been converted into functions"
   | TDMulticastGroup(group) -> 
     let decl = T.decl_full (DMCGroup{gid=group.gnum; replicas =group.gcopies;}) [] tdecl.tdspan in 
     {denv with globals = denv.globals@[decl]}

@@ -116,8 +116,8 @@ let actions_to_functions env tdecl =
 
 let actionty_to_functionty aty = 
   match aty.raw_ty with
-  | TAction(acn_ty) -> 
-    {aty with raw_ty=TFun({arg_tys = acn_ty.aconst_param_tys; ret_ty=CoreSyntax.ty TBool;})}
+  | TActionConstr(acn_ctor_ty) -> 
+    {aty with raw_ty=TFun({arg_tys = acn_ctor_ty.aconst_param_tys; ret_ty=CoreSyntax.ty TBool;})}
   | _ -> aty
 ;;
 
@@ -129,7 +129,7 @@ let rec _process env tdecls =
       (* add the action to context and delete its declaration -- 
          we will generate the appropriate function from the 
          match statement that uses the action. *)
-      | TDAction(acn) -> 
+      | TDActionConstr(acn) -> 
         let actions' = (acn.aid, acn)::env.actions in
         (_process {env with actions=actions'} tdecls)
       | TDGlobal(id, gty, {e=ETableCreate(tbl); ety=ety; espan=espan;}) -> 

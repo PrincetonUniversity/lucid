@@ -81,9 +81,12 @@ let occurs_ty span tvar raw_ty : unit =
       List.iter occ_ty t.tparam_tys;
       List.iter occ_ty t.tret_tys
     | TAction(a) -> 
-      List.iter occ_ty a.aconst_param_tys;
-      List.iter occ_ty a.aparam_tys;
+      List.iter occ_ty a.aarg_tys;
       List.iter occ_ty a.aret_tys
+    | TActionConstr({aconst_param_tys; aacn_ty = {aarg_tys; aret_tys}}) -> 
+      List.iter occ_ty aconst_param_tys;
+      List.iter occ_ty aarg_tys;
+      List.iter occ_ty aret_tys
     | TPat _ -> ()
   in
   check_occurs span occ raw_ty_to_string tvar raw_ty
@@ -271,9 +274,23 @@ and try_unify_rty span rty1 rty2 =
     List.iter2 (try_unify_ty span) t1.tparam_tys t2.tparam_tys;
     List.iter2 (try_unify_ty span) t1.tret_tys t2.tret_tys
   | TAction(a1), TAction(a2) -> 
+    let tuple_wrap (lst : ty list) = 
+      match lst with 
+      | [] -> []
+      | [a] -> [a]
+      | lst -> [ty@@TTuple (List.map (fun ty -> ty.raw_ty) lst)]
+    in
+    (* hack to type check after tuple elimination:
+       put the action's argument and return types inside of a 
+       tuple type, and then unify those types. 
+       This lets us unify an action with a single polymorphic argument type 
+       with an action that has multiple arguments. *)
+    List.iter2 (try_unify_ty span) (tuple_wrap a1.aarg_tys) (tuple_wrap a2.aarg_tys);
+    List.iter2 (try_unify_ty span) (tuple_wrap a1.aret_tys) (tuple_wrap a2.aret_tys)
+  | TActionConstr(a1), TActionConstr(a2) -> 
     List.iter2 (try_unify_ty span) a1.aconst_param_tys a2.aconst_param_tys;
-    List.iter2 (try_unify_ty span) a1.aparam_tys a2.aparam_tys;
-    List.iter2 (try_unify_ty span) a1.aret_tys a2.aret_tys
+    List.iter2 (try_unify_ty span) a1.aacn_ty.aarg_tys a2.aacn_ty.aarg_tys;
+    List.iter2 (try_unify_ty span) a1.aacn_ty.aret_tys a2.aacn_ty.aret_tys
   | TBitstring, TBitstring -> ()
   | ( ( TVoid
       | TBitstring
@@ -289,6 +306,7 @@ and try_unify_rty span rty1 rty2 =
       | TTuple _
       | TAbstract _ 
       | TAction _
+      | TActionConstr _
       | TTable _
       | TPat _)
     , _ ) -> raise CannotUnify

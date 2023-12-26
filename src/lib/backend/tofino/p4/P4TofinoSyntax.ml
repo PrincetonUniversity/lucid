@@ -116,7 +116,7 @@ and d =
   | DVar of id * ty * (expr option) (* variables may be declared but not initialized... *)
   (* | DInit of cid * expr *)
   | DTable of {id:id; keys:expr list; actions: expr list; rules: branch list; default: statement option; size: int option;}
-  | DAction of {id:id; params : params; body: statement;}
+  | DActionConstr of {id:id; params : params; body: statement;}
   | DHash of {id:id; poly: int; out_wid:int;}
   | DRegAction of {  
       id : id; 
@@ -291,7 +291,7 @@ let dstruct hid sty fields =
 ;;
 
 let dinclude str = decl (DInclude(str))
-let daction id params body = decl (DAction{id; params; body;})
+let daction id params body = decl (DActionConstr{id; params; body;})
 
 let dtable_sp id keys actions rules default size pragmas sp =
   {d=DTable({id; keys; actions; rules; default; size});

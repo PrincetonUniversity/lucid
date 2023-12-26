@@ -24,7 +24,7 @@ let source_globals tds =
         | TDGlobal(id, _, _) -> 
           print_endline (TofinoCorePrinting.tdecl_to_string tdecl);
           global_ids := id::(!global_ids);
-        | TDAction({aid=aid; _}) -> 
+        | TDActionConstr({aid=aid; _}) -> 
           global_ids := aid::(!global_ids);
         | _ -> ()
     end

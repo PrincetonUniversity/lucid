@@ -112,7 +112,8 @@ let add_definitions prefix env ds =
     | DGlobal (id, _, _) -> { env with vars = add_entry env.vars id }
     | DSize (id, _) -> { env with sizes = add_entry env.sizes id }
     | DUserTy (id, _, _) -> { env with types = add_entry env.types id }
-    | DAction (id, _, _, _) -> { env with vars = add_entry env.vars id }
+    | DActionConstr (id, _, _, _) -> { env with vars = add_entry env.vars id }
+    | DAction(id, _, _) -> { env with vars = add_entry env.vars id }
     | DParser (id, _, _) -> { env with vars = add_entry env.vars id }
     | DModuleAlias _ -> failwith "Should be eliminated before this"
     | DModule (id, _, ds) ->
@@ -180,9 +181,12 @@ let rec replace_module env m_id ds =
           | DUserTy (id, x, y) ->
             ( { env with types = add_entry env.types id }
             , DUserTy (prefix id, x, y) |> wrap d )
-          | DAction (id, x, y, z) ->
+          | DActionConstr (id, x, y, z) ->
             ( { env with vars = add_entry env.vars id }
-            , DAction (prefix id, x, y, z) |> wrap d )
+            , DActionConstr (prefix id, x, y, z) |> wrap d )
+          | DAction(id, x, y) -> 
+            ( { env with vars = add_entry env.vars id }
+            , DAction(prefix id, x, y) |> wrap d )
           | DParser (id, x, y) ->
             ( { env with vars = add_entry env.vars id }
             , DParser (prefix id, x, y) |> wrap d )

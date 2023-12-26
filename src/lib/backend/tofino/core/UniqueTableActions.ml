@@ -65,9 +65,9 @@ let rename_actionexp renames exp =
 let copy_action ctx aid aid' =
   let acn_decl = IdMap.find aid ctx.actions in
   match acn_decl.d with
-    | DAction(acn_def) -> 
+    | DActionConstr(acn_def) -> 
       {acn_decl with d=
-        DAction({acn_def with aid=aid';});}
+        DActionConstr({acn_def with aid=aid';});}
     | _ -> error "[copy_action] found a non-action in the action map"
 ;;
 
@@ -92,7 +92,7 @@ let rename_actionvars renames decl =
 let update_decl ctx decl : replace_ctx * decls =
   match decl.d with
   (* actions -- add action to context and remove from prog *)
-  | DAction({aid=aid; _}) -> 
+  | DActionConstr({aid=aid; _}) -> 
     add_action aid decl ctx, []
   (* table constructors -- create bindings, update context, update local actions *)
   | DGlobal(tid, tty, {e=ETableCreate(tdef); ety=ety; espan=espan;}) -> 

@@ -82,10 +82,10 @@ let rec remove_effects ty =
 ;;
 
 let rec infer_exp (env : env) (e : exp) : env * exp =
-  (* print_endline @@ "Inferring " ^ exp_to_string e; *)
-  (* (match e.ety with 
+  print_endline @@ "Inferring " ^ exp_to_string e;
+  (match e.ety with 
     | None -> ()
-    | Some(ety) -> print_endline@@"Listed type: "^(Printing.ty_to_string ety)); *)
+    | Some(ety) -> print_endline@@"Listed type: "^(Printing.ty_to_string ety));
   match e.e with
   | EVar cid ->
     let inst t = instantiator#visit_ty (fresh_maps ()) t in
@@ -125,6 +125,8 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
       (* Get type of f as if we used the var rule for the function *)
       infer_exp env { e with e = EVar f } |> textract
     in
+    print_endline @@ "Inferred_fty: " ^ Printing.ty_to_string inferred_fty;
+
     (* if we are in unordered mode, cast everything as effectless *)
     (* let inferred_fty = if (Cmdline.cfg.unordered) then  *)
     let inferred_fty = if (unordered) then 
@@ -141,8 +143,9 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
       ; constraints = ref []
       }
     in
-    (* print_endline @@ "Inferred_fty: " ^ Printing.ty_to_string inferred_fty;
-    print_endline @@ "fty: " ^ Printing.func_to_string fty; *)
+    print_endline ("back in inferring exp: " ^ exp_to_string e);
+    print_endline @@ "Inferred_fty: " ^ Printing.ty_to_string inferred_fty;
+    print_endline @@ "fty: " ^ Printing.func_to_string fty;
     unify_raw_ty e.espan (TFun fty) inferred_fty.raw_ty;
     let new_env =
       check_constraints e.espan "Function call" env fty.end_eff
@@ -428,10 +431,10 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
     in
     (* inferred types come from actions passed as arguments *)
     let env, inf_acns = infer_exps env ecreate.tactions in
-    let check_acn_ty e_inf_acn =
+    let check_acn_ctor_ty e_inf_acn =
       let inf_atys, inf_rty =
         match (Option.get e_inf_acn.ety).raw_ty with
-        | TAction { aparam_tys; aret_tys } -> aparam_tys, aret_tys
+        | TActionConstr {aacn_ty = {aarg_tys; aret_tys} } -> aarg_tys, aret_tys
         | _ -> error "not an action"
       in
       (* unify runtime arg and return types *)
@@ -446,15 +449,15 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
         exp_rty
         inf_rty
     in
-    List.iter check_acn_ty inf_acns;
+    List.iter check_acn_ctor_ty inf_acns;
     (* infer types of default action args *)
     let def_cid, def_args, flag = unpack_default_action ecreate.tdefault.e in
     let env, inf_def_args = infer_exps env def_args in
     (* type check the default action's const args *)
     let expected_def_arg_tys =
       match (lookup_var e.espan env def_cid).raw_ty with
-      | TAction a -> a.aconst_param_tys
-      | _ -> error_sp e.espan "the default action does not have type TAction"
+      | TActionConstr a -> a.aconst_param_tys
+      | _ -> error_sp e.espan "the default action does not have type TActionConstr"
     in
     let inf_def_arg_tys =
       List.map (fun exp -> Option.get exp.ety) inf_def_args
@@ -1083,7 +1086,7 @@ and infer_entries (env : env) sp tbl_ty entries =
     let action_cid, action_args, flag = unpack_default_action entry.eaction.e in
     let param_tys =
       match (lookup_var sp env action_cid).raw_ty with
-      | TAction acn_ty -> acn_ty.aconst_param_tys
+      | TActionConstr acn_ctor_ty -> acn_ctor_ty.aconst_param_tys
       | _ -> error_sp sp "table entry does not refer to an action."
     in
     (* infer types of action args *)
@@ -1357,9 +1360,9 @@ let rec infer_declaration
   (d : decl)
   : env * effect * decl
   =
-  (* print_endline @@ "Inferring decl " ^ decl_to_string d; *)
+  print_endline @@ "Inferring decl " ^ decl_to_string d;
   let d = subst_TNames env d in
-  (* print_endline @@ "After subst_TNames "^ decl_to_string d; *)
+  print_endline @@ "After subst_TNames "^ decl_to_string d;
   let env, effect_count, new_d =
     match d.d with
     | DSize (id, szo) ->
@@ -1626,20 +1629,30 @@ let rec infer_declaration
       ( define_submodule id1 m env
       , effect_count
       , DModuleAlias (id1, inf_e, cid1, cid2) )
-    (*     | DInlineAction(id, const_params) ->
-      (* the action's body is not yet defined. We can't type check
-         it until the inline table and its inlined actions are defined. *)
-      (* add variable to type env *)
-      (* inlined actions may not have arguments or return types *)
-      let acn_ty = TAction({
-          const_aarg_tys = List.map (fun (_, ty) -> ty) (const_params);
-          aarg_tys = [];
-          aret_ty = ty TVoid;
-        })
+    | DAction(id, ret_ty, (params, action_body)) -> 
+      let check_e env expected_ty e =
+        let _, inf_e, inf_ety = infer_exp env e |> textract in
+        try_unify_ty e.espan inf_ety expected_ty;
+        inf_e
       in
-      let env = define_const id (mk_ty @@ acn_ty ) env in
-      env, effect_count, DInlineAction(id, const_params) *)
-    | DAction (id, ret_ty, const_params, (params, action_body)) ->
+      (* check and infer action body expression types *)
+      enter_level ();
+      let action_env = add_locals env params in
+      let inf_action_body = List.map2 (check_e action_env) ret_ty action_body in
+      leave_level ();
+      (* add variable to type env *)
+      let acn_ty =
+        TAction
+          { aarg_tys = List.map (fun (_, ty) -> ty) params
+          ; aret_tys = ret_ty
+          }
+      in
+      let env = define_const id (mk_ty @@ acn_ty) env in
+      (* return action with type annotations *)
+      ( env
+      , effect_count
+      , DAction (id, ret_ty, (params, inf_action_body)) )
+    | DActionConstr (id, ret_ty, const_params, (params, action_body)) ->
       let check_e env expected_ty e =
         let _, inf_e, inf_ety = infer_exp env e |> textract in
         try_unify_ty e.espan inf_ety expected_ty;
@@ -1652,17 +1665,17 @@ let rec infer_declaration
       let inf_action_body = List.map2 (check_e action_env) ret_ty action_body in
       leave_level ();
       (* add variable to type env *)
-      let acn_ty =
-        TAction
+      let acn_ctor_ty =
+        TActionConstr
           { aconst_param_tys = List.map (fun (_, ty) -> ty) const_params
-          ; aparam_tys = List.map (fun (_, ty) -> ty) params
-          ; aret_tys = ret_ty
+          ; aacn_ty = {aarg_tys = List.map (fun (_, ty) -> ty) params
+          ; aret_tys = ret_ty};
           }
       in
-      let env = define_const id (mk_ty @@ acn_ty) env in
+      let env = define_const id (mk_ty @@ acn_ctor_ty) env in
       ( env
       , effect_count
-      , DAction (id, ret_ty, const_params, (params, inf_action_body)) )
+      , DActionConstr (id, ret_ty, const_params, (params, inf_action_body)) )
     | DParser (id, params, parser) ->
       enter_level ();
       (* a parser may branch on the ingress port *)

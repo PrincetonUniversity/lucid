@@ -3,17 +3,23 @@ open Batteries
 open Syntax
 open InterpState
 
-(*  some helpers for readability *)
-let effectless_fun_ty arg_tys ret_ty =
+(*  some type constructor helpers *)
+let effectless_fun_rawty arg_tys ret_ty = 
   let start_eff = FVar (QVar (Id.fresh "eff")) in
-  ty
-  @@ TFun
-       { arg_tys
-       ; ret_ty
-       ; start_eff
-       ; end_eff = start_eff
-       ; constraints = ref []
-       }
+  TFun
+    { arg_tys
+    ; ret_ty
+    ; start_eff
+    ; end_eff = start_eff
+    ; constraints = ref []
+    }
+;;
+
+let acn_rawty arg_tys ret_ty =
+  TAction {
+    aarg_tys = arg_tys;
+    aret_tys = [ret_ty];
+  }
 ;;
 
 let tynum = ref (-1)
@@ -53,8 +59,14 @@ let create_sig =
   let key_ty = fresh_rawty "table_key_ty" in
   let arg_ty = fresh_rawty "table_arg_ty" in
   let ret_ty = fresh_rawty "table_ret_ty" in
+  let acn_ty = acn_rawty [ty arg_ty] (ty ret_ty) in
+  (* let acn_ty = effectless_fun_rawty [ty arg_ty] (ty ret_ty) in *)
+  (* the trick is how we are relating the argument types to the module type of the return *)
+  (* the arguments are the key and the action *)
+  let arg_tys = [ty @@ TInt size; ty @@ key_ty;  ty @@ acn_ty] in
+  (* the return is a module parameterized with the args and return of the action *)
   let unbound_module_ty = TName (t_id, [], true, [key_ty; arg_ty; ret_ty]) in
-  { arg_tys = [ty @@ TInt size; ty @@ key_ty]
+  { arg_tys = arg_tys
   ; ret_ty = ty_eff unbound_module_ty eff
   ; start_eff
   ; end_eff = start_eff
@@ -109,9 +121,9 @@ let defs : State.global_fun list =
 
 let signature =
   (* let sz = IVar (QVar (Id.fresh "sz")) in *)
-  let key_ty = fresh_rawty "table_sig_key_ty" in
-  let arg_ty = fresh_rawty "table_sig_arg_ty" in
-  let ret_ty = fresh_rawty "table_sig_ret_ty" in
+  let key_ty = fresh_rawty "table_key_ty" in
+  let arg_ty = fresh_rawty "table_arg_ty" in
+  let ret_ty = fresh_rawty "table_ret_ty" in
   let unbound_module_ty = TName (t_id, [], true, [key_ty; arg_ty; ret_ty]) in
   ( module_id
   , [Cid.last_id t_id, [], unbound_module_ty |> ty]

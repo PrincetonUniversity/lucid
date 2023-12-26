@@ -30,6 +30,7 @@ and raw_ty =
   | TMemop of int * size
   | TTable of tbl_ty
   | TAction of acn_ty
+  | TActionConstr of acn_ctor_ty
   | TPat of size
   | TRecord of (id * raw_ty) list
   | TTuple of raw_ty list
@@ -41,10 +42,14 @@ and tbl_ty =
   ; tret_tys : ty list
   }
 
-and acn_ty =
+and acn_ty = {
+  aarg_tys : tys;
+  aret_tys : tys;
+}
+
+and acn_ctor_ty =
   { aconst_param_tys : tys
-  ; aparam_tys : tys
-  ; aret_tys : tys
+  ; aacn_ty : acn_ty
   }
 
 (* Don't need effects or constraints since we passed typechecking ages ago *)
@@ -272,7 +277,7 @@ and d =
   | DMemop of memop
   | DExtern of id * ty
   | DUserTy of id * ty
-  | DAction of action
+  | DActionConstr of action
   | DParser of id * params * parser_block
       (* name, return type, args & body *)
   | DFun of id * ty * body

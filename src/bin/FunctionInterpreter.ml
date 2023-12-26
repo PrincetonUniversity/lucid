@@ -44,7 +44,6 @@ let main () =
     MidendPipeline.process_prog ds
   in
   (* finally, interpret a call to the interpreter...  *)
-  (* left off HERE *)
   let init = FunInterp.init_function ds in
   let results = FunInterp.run_function init (Array.to_list args) in
   let res_str = String.concat " " (List.map string_of_int results) in

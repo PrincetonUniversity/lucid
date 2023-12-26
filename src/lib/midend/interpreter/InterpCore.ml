@@ -893,7 +893,7 @@ let interp_decl (nst : State.network_state) swid d =
   (* print_endline @@ "Interping decl: " ^ Printing.decl_to_string d; *)
   match d.d with
   | DGlobal (id, ty, e) -> interp_dglobal nst swid id ty e
-  | DAction acn ->
+  | DActionConstr acn ->
     (* add the action to the environment *)
     State.add_action (Cid.id acn.aid) acn nst
   | DHandler (id, hdl_sort, (params, body)) ->(

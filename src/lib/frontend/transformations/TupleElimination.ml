@@ -110,14 +110,23 @@ let replacer =
       in
       TTable tbl_ty'
 
-    method! visit_TAction _ acn_ty =
+    method! visit_acn_ty _ acn_ty =
+      (* flatten param and return types *)
       let acn_ty' =
-        { aconst_param_tys = flatten_tys acn_ty.aconst_param_tys
-        ; aparam_tys = flatten_tys acn_ty.aparam_tys
+        {
+          aarg_tys = flatten_tys acn_ty.aarg_tys
         ; aret_tys = flatten_tys acn_ty.aret_tys
         }
       in
-      TAction acn_ty'
+      acn_ty'
+    method! visit_TActionConstr env acn_ctor_ty =
+      let acn_ctor_ty' =
+        { 
+          aconst_param_tys = flatten_tys acn_ctor_ty.aconst_param_tys;
+          aacn_ty = self#visit_acn_ty env acn_ctor_ty.aacn_ty;
+        }
+      in
+      TActionConstr acn_ctor_ty'
 
     (* Table extensions -- statements *)
     method! visit_STableMatch env tblmatch =
@@ -409,7 +418,7 @@ let rec replace_decl (env : env) d =
     let body = replace_statement body_env body in
     env, [{ d with d = DHandler (id, sort, (new_params, body)) }]
   | DSize _ | DMemop _ | DExtern _ | DSymbolic _ | DConst _ -> env, [d]
-  | DAction (id, tys, const_params, (params, action_body)) ->
+  | DActionConstr (id, tys, const_params, (params, action_body)) ->
     let tys' = flatten_tys tys in
     let body_env, const_params' = flatten_params env const_params in
     let body_env, params' = flatten_params body_env params in
@@ -418,8 +427,19 @@ let rec replace_decl (env : env) d =
       List.map (flatten body_env) action_body |> List.flatten
     in
     ( env
-    , [{ d with d = DAction (id, tys', const_params', (params', action_body')) }]
+    , [{ d with d = DActionConstr (id, tys', const_params', (params', action_body')) }]
     )
+  | DAction (id, tys, (params, action_body)) -> 
+    let tys' = flatten_tys tys in
+    let body_env, params' = flatten_params env params in
+    (* Flatten all tuples in action body *)
+    let action_body' =
+      List.map (flatten body_env) action_body |> List.flatten
+    in
+    ( env
+    , [{ d with d = DAction (id, tys', (params', action_body')) }]
+    )
+
   | DParser (id, params, body) ->
     let body_env, new_params = flatten_params env params in
     let body = replace_parser body_env body in

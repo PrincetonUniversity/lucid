@@ -54,9 +54,6 @@ let merge_status s_pre s_branches =
   | Read, _ -> Read
 ;;
 
-(* <<left off here>> theres a bug with branches that return -- 
-   when you add a default branch, it doesn't return... *)
-
 (* merge symbol tables after a branch *)
 let merge_symbols 
     (symbols_pre : (cid * var_status) list) 

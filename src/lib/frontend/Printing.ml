@@ -157,12 +157,19 @@ let rec raw_ty_to_string t =
     ^ "\n\tret_ty: "
     ^ comma_sep ty_to_string t.tret_tys
     ^ "}\n"
+  | TActionConstr a ->
+    Printf.sprintf
+      "ACTION CTOR : %s -> %s -> %s"
+      (concat_map " * " ty_to_string a.aconst_param_tys)
+      (concat_map " * " ty_to_string a.aacn_ty.aarg_tys)
+      (comma_sep ty_to_string a.aacn_ty.aret_tys)
   | TAction a ->
     Printf.sprintf
-      "%s -> %s -> %s"
-      (concat_map " * " ty_to_string a.aconst_param_tys)
-      (concat_map " * " ty_to_string a.aparam_tys)
-      (comma_sep ty_to_string a.aret_tys)
+      "(ACTION FUNCTION : {
+          arg_tys = [%s] 
+          ret_tys = [%s]})"
+      (concat_map " ; " ty_to_string a.aarg_tys)
+      (concat_map " ; " ty_to_string a.aret_tys)
   | TPat s -> Printf.sprintf "pat<%s>" (size_to_string s)
   | TBitstring -> "bitstring"
 
@@ -634,9 +641,16 @@ and d_to_string d =
       (cid_to_string cid1)
       (exp_to_string e)
       (cid_to_string cid2)
-  | DAction (id, ret_tys, const_params, (dyn_params, acn_body)) ->
+  | DAction (id, ret_tys, (dyn_params, acn_body)) -> 
     Printf.sprintf
-      "action (%s) %s(%s)(%s) {\n\taction_return (%s)\n}\n"
+      "action (%s) %s(%s) {\n%s\n}"
+      (comma_sep ty_to_string ret_tys)
+      (id_to_string id)
+      (params_to_string dyn_params)
+      (comma_sep exp_to_string acn_body)
+  | DActionConstr (id, ret_tys, const_params, (dyn_params, acn_body)) ->
+    Printf.sprintf
+      "action_constr (%s) %s(%s)(%s) {\n\taction_return (%s)\n}\n"
       (comma_sep ty_to_string ret_tys)
       (id_to_string id)
       (params_to_string const_params)

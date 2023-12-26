@@ -47,11 +47,11 @@ let rec translate_raw_ty (rty : S.raw_ty) tspan : C.raw_ty =
     let tparam_tys = List.map translate_ty tbl.tparam_tys in
     let tret_tys = List.map translate_ty tbl.tret_tys in
     C.TTable { tkey_sizes; tparam_tys; tret_tys }
-  | S.TAction a ->
+  | S.TActionConstr a ->
     let aconst_param_tys = List.map translate_ty a.aconst_param_tys in
-    let aparam_tys = List.map translate_ty a.aparam_tys in
-    let aret_tys = List.map translate_ty a.aret_tys in
-    C.TAction { aconst_param_tys; aparam_tys; aret_tys }
+    let aarg_tys = List.map translate_ty a.aacn_ty.aarg_tys in
+    let aret_tys = List.map translate_ty a.aacn_ty.aret_tys in
+    C.TActionConstr { aconst_param_tys; aacn_ty={aarg_tys; aret_tys }}
   | S.TPat s -> C.TPat (translate_size s)
   | S.TBitstring -> C.TBits (1500)
   | S.TRecord fields -> C.TRecord (List.map (fun (id, ty) -> (Id.create id), translate_raw_ty ty tspan) fields)
@@ -325,8 +325,8 @@ let translate_d preserve_user_decls d dspan dpragmas =
       ; mbody = translate_memop mbody
       })
   | S.DExtern (id, ty) -> Some (C.DExtern (id, translate_ty ty))
-  | S.DAction (id, tys, const_params, (params, acn_body)) ->
-    Some (C.DAction
+  | S.DActionConstr (id, tys, const_params, (params, acn_body)) ->
+    Some (C.DActionConstr
       { aid = id
       ; artys = List.map translate_ty tys
       ; aconst_params = translate_params const_params

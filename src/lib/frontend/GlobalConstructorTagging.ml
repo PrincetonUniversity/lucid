@@ -32,7 +32,7 @@ let gty_to_tag ty = match (TyTQVar.strip_links ty.raw_ty) with
     (* error ("[gty_to_tag] unknown global constructor type: "^(Printing.ty_to_string ty)) *)
   )
   | TTable _ -> (tabletag)
-  | TAction _ -> (actiontag)
+  | TActionConstr _ -> (actiontag)
   | TRecord _ -> (recordtag)
   | TVector _ -> (tupletag)
   | TTuple _ -> (tupletag)

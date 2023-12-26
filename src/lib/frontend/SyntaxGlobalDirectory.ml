@@ -79,7 +79,7 @@ let exp_to_tblmeta id exp =
       | _ -> error "[evar_to_action] expected an action variable"
     in
     let arg_sizes = match (Option.get exp.ety).raw_ty with
-      | TAction(aty) -> 
+      | TActionConstr(aty) -> 
         List.map ty_to_size aty.aconst_param_tys
         |> List.map SyntaxUtils.extract_size
       | _ -> error "[action_to_argsizes] action exp is not an action type"
@@ -142,7 +142,7 @@ let core_exp_to_tblmeta id (exp : C.exp) =
       | _ -> error "[evar_to_action] expected an action variable"
     in
     let arg_sizes = match exp.ety.raw_ty with
-      | TAction(aty) -> List.map C.ty_to_size aty.aconst_param_tys
+      | TActionConstr(aty) -> List.map C.ty_to_size aty.aconst_param_tys
       | _ -> error "[action_to_argsizes] action exp is not an action type"
     in
     {aid; acompiled_id; arg_sizes}

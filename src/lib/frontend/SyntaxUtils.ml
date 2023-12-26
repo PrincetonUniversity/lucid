@@ -67,6 +67,7 @@ let rec is_global_rty rty =
   | TRecord lst -> List.exists (fun (_, rty) -> is_global_rty rty) lst
   | TVector (t, _) -> is_global_rty t
   | TTable _ -> true
+  | TActionConstr _ -> false
   | TAction _ -> false
   | TBitstring -> false
 ;;
@@ -84,6 +85,7 @@ let rec is_not_global_rty rty =
   | TRecord lst -> List.for_all (fun (_, rty) -> is_not_global_rty rty) lst
   | TVector (t, _) -> is_not_global_rty t
   | TTable _ -> false
+  | TActionConstr _ -> false
   | TAction _ -> false
   | TBitstring -> true
 ;;
@@ -307,6 +309,7 @@ let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
       | TVector _
       | TTuple _
       | TAbstract _
+      | TActionConstr _
       | TAction _
       | TTable _ )
     , _ ) -> false
@@ -347,6 +350,7 @@ let default_expression ty =
     | TVoid -> failwith "Cannot create default expression for void"
     | TAbstract _ -> failwith "Cannot create default expression for abstract"
     | TFun _ -> failwith "Cannot create default expression for function"
+    | TActionConstr _ -> failwith "Cannot create default expression for action"
     | TAction _ -> failwith "Cannot create default expression for action"
     | TTable _ -> failwith "Cannot create default expression for table"
     | TQVar _ -> failwith "Cannot create default expression for type variable"
@@ -476,9 +480,12 @@ let extract_action_body (body : statement) : action_body =
   action_body
 ;;
 
-let mk_daction id rty cp p body span =
-  decl_sp (DAction (id, rty, cp, (p, extract_action_body body))) span
+let mk_daction_ctor id rty cp p body span =
+  decl_sp (DActionConstr (id, rty, cp, (p, extract_action_body body))) span
 ;;
+
+let mk_daction id rty p body span = 
+  decl_sp (DAction (id, rty, (p, extract_action_body body))) span
 
 let mk_entry prio pats acn args span =
   { eprio = prio; ematch = pats; eaction = Syntax.ucall_sp (Cid.id acn) args span;}
@@ -543,7 +550,7 @@ let d =
   | DConstr of id * ty * params * exp
   | DModule of id * interface * decls
   | DModuleAlias of id * exp * cid * cid
-  | DAction of id * ty list * params * (params * action_body)
+  | DActionConstr of id * ty list * params * (params * action_body)
   | DParser of id * params * parser_block   
 *)
 
@@ -561,6 +568,7 @@ let d_to_constr_str d = match d with
   | DConstr _ -> "constr"
   | DModule _ -> "module"
   | DModuleAlias _ -> "modulealias"
+  | DActionConstr _ -> "actionconstr"
   | DAction _ -> "action"
   | DParser _ -> "parser"
 ;;
@@ -581,10 +589,11 @@ let raw_ty_to_constr_str raw_ty =
   | TVector (_) -> "vector"
   | TTuple (_) -> "tuple"
   | TTable (_) -> "table"
-  | TAction (_) -> "action"
+  | TActionConstr (_) -> "action"
   | TPat (_) -> "pat"
   | TQVar (_) -> "qvar"
   | TBitstring -> "bitstring"
+  | TAction (_) -> "action"
 ;;
 
 let op_to_constr_str o =

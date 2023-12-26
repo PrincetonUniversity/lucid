@@ -207,7 +207,7 @@ and translate_raw_ty rty = match rty with
   | TMemop(n_args, arg_sz) -> memopty_string n_args arg_sz
   (* an action type is really an action constructor type *)
   | TTable _ -> error "table types cannot be translated alone"
-  | TAction _ -> error "action types cannot be translated alone"
+  | TActionConstr _ -> error "action types cannot be translated alone"
   | TPat _ -> error "patterns not implemented"
   | TRecord _ -> error "record types cannot be translated alone"
   | TTuple(tys) -> 
@@ -418,7 +418,7 @@ and translate_d d = match d with
       error "memops not implemented"
     | DExtern _ -> 
       error "externs not implemented"
-    | DAction _ -> 
+    | DActionConstr _ -> 
       error "actions not implemented"
     | DFun(id, ty, (params, statement)) -> 
       let ty = translate_ty ty in

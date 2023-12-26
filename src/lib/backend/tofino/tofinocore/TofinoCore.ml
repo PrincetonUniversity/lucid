@@ -29,6 +29,7 @@ and sizes = size list
 and raw_ty = [%import: CoreSyntax.raw_ty]
 and tbl_ty = [%import: CoreSyntax.tbl_ty]
 and acn_ty = [%import: CoreSyntax.acn_ty]
+and acn_ctor_ty = [%import: CoreSyntax.acn_ctor_ty]
 and func_ty = [%import: CoreSyntax.func_ty]
 and ty = [%import: CoreSyntax.ty]
 and tys = [%import: CoreSyntax.tys]
@@ -171,7 +172,7 @@ and td =
   | TDGlobal of id * ty * exp
   | TDMemop of memop
   | TDExtern of id * ty
-  | TDAction of action
+  | TDActionConstr of action
   | TDParser of parser
   (* new / changed decls *)
   | TDEvent of event
@@ -236,8 +237,8 @@ let decl_to_tdecl (decl:decl) =
   | DMemop m -> { td = TDMemop m; tdspan = decl.dspan; tdpragma = opt_to_list decl.dpragma }
   | DExtern (i, t) ->
     { td = TDExtern (i, t); tdspan = decl.dspan; tdpragma = opt_to_list decl.dpragma }
-  | DAction a ->
-    { td = TDAction a; tdspan = decl.dspan; tdpragma = opt_to_list decl.dpragma }
+  | DActionConstr a ->
+    { td = TDActionConstr a; tdspan = decl.dspan; tdpragma = opt_to_list decl.dpragma }
    | DEvent (evid, evnum, evsort, evparams) ->
     let event = EventSingle{
       evid; 

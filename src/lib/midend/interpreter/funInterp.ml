@@ -151,7 +151,8 @@ let rec flat_param_len (id, ty) =
   | TFun _ 
   | TName _
   | TMemop _ 
-  | TAction _ 
+  | TActionConstr _ 
+  | TAction _
   | TTable _ -> failwith "[flat_param_len] unsupported argument type"
 ;;
 let flat_params_len params = 

@@ -51,11 +51,16 @@ let rec raw_ty_to_string t =
     ^ "\n\tret_ty: "
     ^ comma_sep ty_to_string t.tret_tys
     ^ "}\n"
+  | TActionConstr a ->
+    Printf.sprintf
+      "ACTION CTOR : %s -> %s -> %s"
+      (concat_map " * " ty_to_string a.aconst_param_tys)
+      (concat_map " * " ty_to_string a.aacn_ty.aarg_tys)
+      (comma_sep ty_to_string a.aacn_ty.aret_tys)
   | TAction a ->
     Printf.sprintf
-      "%s -> %s -> %s"
-      (concat_map " * " ty_to_string a.aconst_param_tys)
-      (concat_map " * " ty_to_string a.aparam_tys)
+      "ACTION FUNCTION : %s -> %s"
+      (concat_map " * " ty_to_string a.aarg_tys)
       (comma_sep ty_to_string a.aret_tys)
   | TPat s -> "pat<<" ^ size_to_string s ^ ">>"
   | TRecord lst ->
@@ -440,7 +445,7 @@ let d_to_string d =
       (memop_to_string mbody)
   | DExtern (id, ty) ->
     Printf.sprintf "extern %s %s;" (id_to_string id) (ty_to_string ty)
-  | DAction acn ->
+  | DActionConstr acn ->
     (* id, ret_tys, const_params, (dyn_params, acn_body)) ->  *)
     Printf.sprintf
       "action (%s) %s(%s)(%s) {\n\taction_return (%s)\n}\n"

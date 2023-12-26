@@ -518,10 +518,10 @@ decl:
                                               | [decl] -> [{decl with dpragmas = [Pragma.sprag "main" []]}] 
                                               | _ -> error "parsing error: invalid use of @main"}
     | ACTION_CONSTR ID constr_params=paramsdef ASSIGN LBRACE RETURN ACTION ty=ty ID acn_params=paramsdef LBRACE acn_body=statement RBRACE SEMI RBRACE SEMI
-        { [mk_daction (snd $2) [ty] constr_params acn_params acn_body (Span.extend $1 $16)]}
+        { [mk_daction_ctor (snd $2) [ty] constr_params acn_params acn_body (Span.extend $1 $16)]}
 
-    // | ACTION ty=ty ID constr_params=paramsdef acn_params=paramsdef LBRACE acn_body=statement RBRACE
-    //                                         { [mk_daction (snd $3) [ty] constr_params acn_params acn_body (Span.extend $1 $8)]}
+    | ACTION ty=ty ID acn_params=paramsdef LBRACE acn_body=statement RBRACE
+                                            { [mk_daction (snd $3) [ty] acn_params acn_body (Span.extend $1 $7)]}
     | MEMOP ID paramsdef LBRACE statement RBRACE
                                             { [mk_dmemop (snd $2) $3 $5 (Span.extend (fst $1) $6)] }
     | SYMBOLIC SIZE ID SEMI                 { [dsize_sp (snd $3) None (Span.extend $1 $4)] }

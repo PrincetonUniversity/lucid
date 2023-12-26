@@ -237,6 +237,7 @@ let inline_decl env d =
   | DModule _ | DModuleAlias _ ->
     failwith "Modules should be eliminated before inlining"
   (* no function calls allowed in actions *)
+  | DActionConstr _ -> env, Some d
   | DAction _ -> env, Some d
 ;;
 

@@ -701,13 +701,13 @@ let interp_decl builtin_tys env d =
   | DEvent (id, _, _, _) | DExtern (id, _) ->
     let env = add_dec env id in
     env, d
-  | DAction acn ->
+  | DActionConstr acn ->
     let env = add_dec env acn.aid in
     let acn_env =
       env |> add_builtin_defs acn.aconst_params |> add_builtin_defs acn.aparams
     in
     let abody = List.map (interp_exp acn_env) acn.abody in
-    env, { d with d = DAction { acn with abody } }
+    env, { d with d = DActionConstr { acn with abody } }
   | DParser _ -> env, d
   | DUserTy _ -> env, d
 ;;

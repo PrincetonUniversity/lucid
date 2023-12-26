@@ -58,6 +58,7 @@ and raw_ty =
   | TTuple of raw_ty list
   | TTable of tbl_ty
   | TAction of acn_ty
+  | TActionConstr of acn_ctor_ty
   | TPat of size (* number of bits *)
   | TBitstring
 
@@ -67,10 +68,15 @@ and tbl_ty =
   ; tret_tys : ty list
   }
 
-and acn_ty =
+and acn_ty = 
+  {
+    aarg_tys : tys;
+    aret_tys : tys;
+  }
+
+and acn_ctor_ty =
   { aconst_param_tys : tys
-  ; aparam_tys : tys
-  ; aret_tys : tys
+  ; aacn_ty : acn_ty
   }
 
 and func_ty =
@@ -324,7 +330,8 @@ and d =
   | DConstr of id * ty * params * exp
   | DModule of id * interface * decls
   | DModuleAlias of id * exp * cid * cid
-  | DAction of id * ty list * params * (params * action_body)
+  | DAction of id * ty list * (params * action_body)
+  | DActionConstr of id * ty list * params * (params * action_body)
   | DParser of id * params * parser_block
 
 (* name, return type, args & body *)
@@ -503,7 +510,7 @@ let memop_sp id p body span = decl_sp (DMemop (id, p, body)) span
 let duty_sp id sizes rty span = decl_sp (DUserTy (id, sizes, rty)) span
 
 let action_sp id rty cp p body span =
-  decl_sp (DAction (id, rty, cp, (p, body))) span
+  decl_sp (DActionConstr (id, rty, cp, (p, body))) span
 ;;
 
 let dconstr_sp id ty params exp span =

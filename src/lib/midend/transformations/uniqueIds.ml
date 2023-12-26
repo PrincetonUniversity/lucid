@@ -34,8 +34,8 @@ let make_var_names_unique ds =
         DMemop({mid; mparams; mbody})
 
       (* Save the parameters of the action in the context *)
-      method! visit_DAction _ acn =
-        super#visit_DAction
+      method! visit_DActionConstr _ acn =
+        super#visit_DActionConstr
           (CL.split (acn.aconst_params@acn.aparams) |> fst)
           acn
       (* skip params *)
