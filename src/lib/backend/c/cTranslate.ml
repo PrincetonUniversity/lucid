@@ -207,6 +207,7 @@ and translate_raw_ty rty = match rty with
   | TMemop(n_args, arg_sz) -> memopty_string n_args arg_sz
   (* an action type is really an action constructor type *)
   | TTable _ -> error "table types cannot be translated alone"
+  | TAction _ -> error "action type not implemented"
   | TActionConstr _ -> error "action types cannot be translated alone"
   | TPat _ -> error "patterns not implemented"
   | TRecord _ -> error "record types cannot be translated alone"

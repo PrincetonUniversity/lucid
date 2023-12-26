@@ -50,6 +50,9 @@ let rec size_to_string s =
   | IUser cid -> cid_to_string cid
   | ISum (tqvs, n) ->
     concat_map " + " size_to_string tqvs ^ " + " ^ string_of_int n
+  | ITup(sizes) -> 
+    "("^(concat_map ", " size_to_string sizes)^")"
+
 ;;
 
 let wrap l r str = if String.equal str "" then "" else l ^ str ^ r
@@ -165,9 +168,7 @@ let rec raw_ty_to_string t =
       (comma_sep ty_to_string a.aacn_ty.aret_tys)
   | TAction a ->
     Printf.sprintf
-      "(ACTION FUNCTION : {
-          arg_tys = [%s] 
-          ret_tys = [%s]})"
+      "(ACTION FUNCTION : {\narg_tys = [%s]\nret_tys = [%s]})"
       (concat_map " ; " ty_to_string a.aarg_tys)
       (concat_map " ; " ty_to_string a.aret_tys)
   | TPat s -> Printf.sprintf "pat<%s>" (size_to_string s)

@@ -17,6 +17,7 @@ let extract_size sz =
     ^ Printing.cid_to_string cid
   | ISum _ -> failwith "Got sum after normalize_size?"
   | IVar _ -> failwith "Got polymorphic vector length during elimination"
+  | ITup _ -> failwith "Got size tuple for vector length during elimination"
 ;;
 
 let subst_index =

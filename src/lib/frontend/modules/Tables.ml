@@ -3,6 +3,25 @@ open Batteries
 open Syntax
 open InterpState
 
+
+(* 
+Taking a step back: 
+
+  - I don't think tables actually need type arguments after all. 
+  - The arguments to the constructor can just be unbound types. 
+      - a list or tuple of actions
+      - a default action
+  - We need to specify the key size somewhere, and that can be a 
+    tuple of sizes.
+  - Todo: make sure that approach works out alright for Table.match and Table.install
+  - It does, kind of. If you make all the types of the table functions be "anything", then 
+    its fine for the type checker, but may permit invalid table calls. 
+    - I think we could check all the Table expressions and declarations in a separate pass, after 
+      type checking...
+  Table.match : Table.t<'k> -> 'k -> 'a -> 'r
+  Table.install : Table.t<'k> -> pat<'k> -> ('a -> 'r) -> ()
+*)
+
 (*  some type constructor helpers *)
 let effectless_fun_rawty arg_tys ret_ty = 
   let start_eff = FVar (QVar (Id.fresh "eff")) in
@@ -50,28 +69,41 @@ let sizes = 0
 let ty_args = 3
 let global = true
 
-
 let create_id = Cid.create_ids [id; Id.create "create"]
 let create_sig =
-  let size = IVar (QVar (Id.fresh "a")) in
+  (* let size = IVar (QVar (Id.fresh "a")) in *)
   let eff = FVar (QVar (Id.fresh "eff")) in
   let start_eff = FVar (QVar (Id.fresh "eff")) in
   let key_ty = fresh_rawty "table_key_ty" in
   let arg_ty = fresh_rawty "table_arg_ty" in
   let ret_ty = fresh_rawty "table_ret_ty" in
-  let acn_ty = acn_rawty [ty arg_ty] (ty ret_ty) in
+  (* let acn_ty = acn_rawty [ty arg_ty] (ty ret_ty) in *)
+  let acn_ty = fresh_rawty "tbl_acn_ty" in
   (* let acn_ty = effectless_fun_rawty [ty arg_ty] (ty ret_ty) in *)
   (* the trick is how we are relating the argument types to the module type of the return *)
   (* the arguments are the key and the action *)
-  let arg_tys = [ty @@ TInt size; ty @@ key_ty;  ty @@ acn_ty] in
+  (* TODO: bound_acns_ty should be a vector, but then type checking fails after vector 
+     elimination. So we either need: 
+        1) vector types in backend;
+        2) a way for vector elimination to change the signatures of builtin 
+           functions when it runs. *)
+  let bound_acns_ty = fresh_rawty "bound_acns_ty" in
+  let arg_tys = [
+      ty @@ TInt (IVar (QVar (Id.fresh "sz"))); (* number of entries *)
+      ty @@ bound_acns_ty;                      (* actions bound to the table *)
+      ty @@ acn_ty                              (* default action *)
+    ] 
+  in
   (* the return is a module parameterized with the args and return of the action *)
   let unbound_module_ty = TName (t_id, [], true, [key_ty; arg_ty; ret_ty]) in
-  { arg_tys = arg_tys
-  ; ret_ty = ty_eff unbound_module_ty eff
-  ; start_eff
-  ; end_eff = start_eff
-  ; constraints = ref []
-  }
+  let ctor_ty = {
+    arg_tys = arg_tys
+    ; ret_ty = ty_eff unbound_module_ty eff
+    ; start_eff
+    ; end_eff = start_eff
+    ; constraints = ref []
+  } in
+  ctor_ty 
 ;;
 
 (* Table.add *)

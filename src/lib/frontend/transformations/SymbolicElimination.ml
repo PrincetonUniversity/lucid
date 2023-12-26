@@ -26,7 +26,9 @@ let rec compute_size err env size =
   | ISum (sizes, n) ->
     n + List.fold_left (fun acc s -> acc + compute_size err env s) 0 sizes
   | IVar _ | IUser _ -> err ()
+  | ITup _ -> err ()
 ;;
+
 
 let parse_symbolic sizes id ty (j : json) =
   let error () =

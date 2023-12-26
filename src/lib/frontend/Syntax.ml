@@ -20,6 +20,7 @@ and size =
   | IVar of size tqvar
   (* Normal form: list is non-empty, sorted, and no entries are Link, IConst, or ISum *)
   | ISum of sizes * int
+  | ITup of sizes
 
 and sizes = size list
 

@@ -21,7 +21,6 @@ and action_sig = string * size list * size list
 
 and raw_ty =
   | TBool
-  | TGroup
   | TInt of size (* Number of bits *)
   | TEvent
   | TFun of func_ty (* Only used for Array/event functions at this point *)
@@ -31,9 +30,11 @@ and raw_ty =
   | TTable of tbl_ty
   | TAction of acn_ty
   | TActionConstr of acn_ctor_ty
-  | TPat of size
   | TRecord of (id * raw_ty) list
   | TTuple of raw_ty list
+  (* group, pat, and bits all seem like instances of a "list" type? *)
+  | TGroup
+  | TPat of size
   | TBits of size
 
 and tbl_ty =

@@ -43,9 +43,11 @@ let occurs_size span tvar size : unit =
     | IVar tvr -> occurs_tqvar occ tvar tvr
     | IConst _ | IUser _ -> ()
     | ISum (sizes, _) -> List.iter (occ tvar) sizes
+    | ITup (sizes) -> List.iter (occ tvar) sizes
   in
   check_occurs span occ size_to_string tvar size
 ;;
+
 
 let occurs_effect span tvar eff : unit =
   let rec occ tvar eff =
@@ -172,6 +174,8 @@ let rec try_unify_size span size1 size2 =
         | vs1', [hd] when n2 <= n1 -> try_unify hd (ISum (vs1', n1 - n2))
         | _ -> raise CannotUnify
       end
+    | ITup(vs1), ITup(vs2) -> List.iter2 (try_unify_size span) vs1 vs2
+    | ITup _, _ | _, ITup _
     | IUser _, _ | _, IUser _ -> raise CannotUnify)
 ;;
 

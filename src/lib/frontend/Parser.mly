@@ -267,6 +267,12 @@ size:
     | QID                               { fst $1, IVar (QVar (snd $1)) }
     | AUTO                              { $1, IVar (QVar (fresh_auto ())) }
     | size PLUS size                    { Span.extend (fst $1) (fst $3), add_sizes (snd $1) (snd $3)}
+    | LPAREN RPAREN                     { Span.extend $1 $2, ITup([]) }
+    | LPAREN sizes RPAREN               { Span.extend $1 $3, ITup(snd $2) }
+sizes: 
+    | size                              { fst $1, [snd $1] }
+    | size COMMA sizes                  { Span.extend (fst $1) (fst $3), (snd $1)::(snd $3) }
+
 
 polys:
     | size                              { fst $1, [snd $1] }

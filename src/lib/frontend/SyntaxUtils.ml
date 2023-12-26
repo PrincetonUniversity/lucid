@@ -102,7 +102,11 @@ let add_sizes s1 s2 =
     -> ISum ([s], n1)
   | (IVar _ | IUser _), (IVar _ | IUser _) -> ISum ([s1; s2], 0)
   | ISum (vs1, n1), ISum (vs2, n2) -> ISum (vs1 @ vs2, n1 + n2)
+  | ITup _, ITup _ 
+  | ITup _, _ 
+  | _ , ITup _ -> error "[add_sizes] cannot add tuple sizes"
 ;;
+
 
 (* If an ISum, the list is non-empty, sorted, and no entries are Links *)
 let rec normalize_size s =
