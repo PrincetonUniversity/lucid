@@ -62,7 +62,7 @@ let rec is_global_rty rty =
   | TBool | TVoid | TGroup | TInt _ | TEvent | TFun _ | TMemop _ | TPat _ ->
     false
   | TQVar _ -> false (* I think *)
-  | TName (_, _, b, _) | TAbstract (_, _, b, _) -> b
+  | TName (_, _, b) | TAbstract (_, _, b, _) -> b
   | TTuple lst -> List.exists is_global_rty lst
   | TRecord lst -> List.exists (fun (_, rty) -> is_global_rty rty) lst
   | TVector (t, _) -> is_global_rty t
@@ -80,7 +80,7 @@ let rec is_not_global_rty rty =
   | TBool | TVoid | TGroup | TInt _ | TEvent | TFun _ | TMemop _ | TPat _ ->
     true
   | TQVar _ -> false (* I think *)
-  | TName (_, _, b, _) | TAbstract (_, _, b, _) -> not b
+  | TName (_, _, b) | TAbstract (_, _, b, _) -> not b
   | TTuple lst -> List.for_all is_not_global_rty lst
   | TRecord lst -> List.for_all (fun (_, rty) -> is_not_global_rty rty) lst
   | TVector (t, _) -> is_not_global_rty t
@@ -128,6 +128,7 @@ let rec normalize_size s =
       | ISum (vs, n) -> ISum (List.sort Pervasives.compare vs, n)
       | sz -> sz
     end
+  | ITup(vs) -> ITup(List.map normalize_size vs)
   | s -> s
 ;;
 
@@ -166,9 +167,14 @@ let rec equiv_size ?(qvars_wild = false) s1 s2 =
           | _ -> false)
          vs
   | IVar tqv, s | s, IVar tqv -> STQVar.equiv_tqvar ~qvars_wild equiv_size tqv s
-  | _ -> false
+  | ITup(vs1), ITup(vs2) -> equiv_lists equiv_size vs1 vs2
+  | IConst _, _
+  | IUser _, _ 
+  | ISum _, _
+  | ITup _, _
+  -> false
+    
 ;;
-
 (* If s1 is "obviously" greater than s2, return the difference; otherwise None.
    "Obvious" means they are both integers, or s1 is just s2 plus something *)
 let try_subtract_sizes s1 s2 =
@@ -265,8 +271,8 @@ let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
   | TInt size1, TInt size2 -> equiv_size size1 size2
   | TPat size1, TPat size2 -> equiv_size size1 size2
   | TMemop (n1, size1), TMemop (n2, size2) -> n1 = n2 && equiv_size size1 size2
-  | TName (id1, sizes1, b1, targs1), TName (id2, sizes2, b2, targs2) -> 
-    b1 = b2 && Cid.equal id1 id2 && List.for_all2 equiv_size sizes1 sizes2 && List.for_all2 equiv_raw_ty targs1 targs2
+  | TName (id1, sizes1, b1), TName (id2, sizes2, b2) -> 
+    b1 = b2 && Cid.equal id1 id2 && List.for_all2 equiv_size sizes1 sizes2 
   | TAbstract (id1, sizes1, b1, _), TAbstract (id2, sizes2, b2, _) ->
     b1 = b2 && Cid.equal id1 id2 && List.for_all2 equiv_size sizes1 sizes2
   | TFun func1, TFun func2 ->
@@ -277,6 +283,8 @@ let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
     && equiv_effect func1.start_eff func2.start_eff
     && equiv_effect func1.end_eff func2.end_eff
     && equiv_constraints !(func1.constraints) !(func2.constraints)
+  | TAction{aarg_tys=args1; aret_tys=aret1;}, TAction{aarg_tys=args2; aret_tys=aret2;} ->
+    equiv_lists equiv_ty args1 args2 && equiv_lists equiv_ty aret1 aret2
   | TQVar tqv, ty | ty, TQVar tqv ->
     TyTQVar.equiv_tqvar ~qvars_wild equiv_raw_ty tqv ty
   | TRecord lst1, TRecord lst2 ->
@@ -346,7 +354,7 @@ let default_expression ty =
     | TRecord lst ->
       record_sp (List.map (fun (s, raw_ty) -> s, aux raw_ty) lst) Span.default
     | TTuple _ -> failwith "Cannot create default expression for tuple"
-    | TName(cid, _, _, _) -> failwith ("Cannot create default expression for user type "^(Cid.to_string cid))
+    | TName(cid, _, _) -> failwith ("Cannot create default expression for user type "^(Cid.to_string cid))
     | TMemop _ -> failwith "Cannot create default expression for memop"
     | TPat _ -> failwith "Cannot create default expression for pattern"
     | TEvent -> failwith "Cannot create default expression for event"
@@ -587,7 +595,7 @@ let raw_ty_to_constr_str raw_ty =
   | TEvent -> "event"
   | TFun (_) -> "fun"
   | TMemop (_) -> "memop"
-  | TName (cid, _, _, _) -> Cid.to_string cid
+  | TName (cid, _, _) -> Cid.to_string cid
   | TAbstract (cid, _, _, _) -> Cid.to_string cid
   | TRecord (_) -> "record"
   | TVector (_) -> "vector"

@@ -16,6 +16,7 @@ module type TypeInterface = sig
   include BasicInterface
 
   val t_id : Cid.t
+
   val constructors : (Cid.t * func_ty) list
   val sizes : int (* Number of polymorphic size arguments the type takes *)
   val ty_args : int (* Number of polymorphic type arguments the type takes *)

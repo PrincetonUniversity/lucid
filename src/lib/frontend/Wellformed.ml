@@ -217,14 +217,14 @@ let check_payloads ds =
 
       method! visit_raw_ty () rty =
         match TyTQVar.strip_links rty with
-        | TName (cid, _, _, _)
+        | TName (cid, _, _)
           when Cid.equal cid Payloads.t_id || CidSet.mem cid user_payload_tys ->
           saw_payload <- true
         | rty -> super#visit_raw_ty () rty
 
       method contains_payload ty =
         match TyTQVar.strip_links ty.raw_ty with
-        | TName (cid, _, _, _) ->
+        | TName (cid, _, _) ->
           Cid.equal cid Payloads.t_id || CidSet.mem cid user_payload_tys
         | rty ->
           saw_payload <- false;

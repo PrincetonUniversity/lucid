@@ -34,9 +34,9 @@ let exp_to_arrmeta id exp =
   let arrconstr_to_sz exp =
     let rty = TyTQVar.strip_links (Option.get(exp.ety)).raw_ty in 
     match rty with
-    | TName(_, [sz], true, _) ->
+    | TName(_, [sz], true) ->
       SyntaxUtils.extract_size sz
-    | TName(_, _, _, _) -> error "[arrconstr_to_sz] exp type is tname, but wrong form"
+    | TName(_, _, _) -> error "[arrconstr_to_sz] exp type is tname, but wrong form"
     | _ -> error "[arrconstr_to_sz] exp type is not in expected form"
   in
   let name = match (exp.espan.global_created_in_src) with

@@ -5,7 +5,13 @@ open Syntax
 open SyntaxUtils
 open Batteries
 open Printing
-open TyperUtil
+(* open TyperUtil *)
+(* error_sp and strip_links are the only dependencies from TyperUtil. 
+   If we break the dependency on TyperUtil, then we might be able to call 
+   unify functions from the module-specific checkers. *)
+let error_sp sp msg = Console.error_position sp msg
+let strip_links ty = { ty with raw_ty = TyTQVar.strip_links ty.raw_ty }
+
 
 exception Occurs
 
@@ -136,10 +142,10 @@ let sub lst1 lst2 = List.filter (fun x -> not (List.mem x lst2)) lst1
    e.g. a+b with c+d, we have to be careful when unifying Sums *)
 
 let rec try_unify_size span size1 size2 =
-  (* Printf.printf
+  Printf.printf
        "Trying to unify %s and %s\n"
        (Printing.size_to_string size1)
-        (Printing.size_to_string size2); *)
+        (Printing.size_to_string size2);
   let try_unify = try_unify_size span in
   let size1, size2 = normalize_size size1, normalize_size size2 in
   (* Physical equality *)
@@ -246,9 +252,9 @@ and try_unify_rty span rty1 rty2 =
            n1
            n2;
     try_unify_size span size1 size2
-  | TName (cid1, sizes1, b1, atys1), TName (cid2, sizes2, b2, atys2) ->
+  | TName (cid1, sizes1, b1), TName (cid2, sizes2, b2) ->
     if b1 <> b2 || not (Cid.equal cid1 cid2) then raise CannotUnify;
-    List.iter2 (try_unify_rty span) atys1 atys2;
+    if (List.length sizes1 <> List.length sizes2) then raise CannotUnify;
     List.iter2 (try_unify_size span) sizes1 sizes2
   | TAbstract (cid1, sizes1, b1, _), TAbstract (cid2, sizes2, b2, _) ->
     if b1 <> b2 || not (Cid.equal cid1 cid2) then raise CannotUnify;

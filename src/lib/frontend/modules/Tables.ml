@@ -2,103 +2,53 @@
 open Batteries
 open Syntax
 open InterpState
+open LibraryUtils
 
+let err_sp = Console.error_position
+let err = Console.error
 
-(* 
-Taking a step back: 
-
-  - I don't think tables actually need type arguments after all. 
-  - The arguments to the constructor can just be unbound types. 
-      - a list or tuple of actions
-      - a default action
-  - We need to specify the key size somewhere, and that can be a 
-    tuple of sizes.
-  - Todo: make sure that approach works out alright for Table.match and Table.install
-  - It does, kind of. If you make all the types of the table functions be "anything", then 
-    its fine for the type checker, but may permit invalid table calls. 
-    - I think we could check all the Table expressions and declarations in a separate pass, after 
-      type checking...
-  Table.match : Table.t<'k> -> 'k -> 'a -> 'r
-  Table.install : Table.t<'k> -> pat<'k> -> ('a -> 'r) -> ()
-*)
-
-(*  some type constructor helpers *)
-let effectless_fun_rawty arg_tys ret_ty = 
-  let start_eff = FVar (QVar (Id.fresh "eff")) in
-  TFun
-    { arg_tys
-    ; ret_ty
-    ; start_eff
-    ; end_eff = start_eff
-    ; constraints = ref []
-    }
-;;
-
-let acn_rawty arg_tys ret_ty =
-  TAction {
-    aarg_tys = arg_tys;
-    aret_tys = [ret_ty];
-  }
-;;
-
-let tynum = ref (-1)
-let fresh_rawty base_tyname = 
-  incr tynum;
-  let ty_id = Id.create (base_tyname ^ string_of_int !tynum) in
-  (TQVar (QVar ty_id))
-;;
-let fresh_ty base_tyname =  
-  ty_sp (fresh_rawty base_tyname) Span.default
-;;
-let fresh_size base_id = 
-  incr tynum;
-  let size_id = Id.create ( base_id ^ string_of_int !tynum) in
-   (IVar (QVar size_id))
-;;
-
-(* Generic  defs *)
 let name = "Table"
 let id = Id.create name
+let module_id = id
+let t_id = Cid.create_ids [id; Id.create "t"]
 
 let error fun_name msg =
   error (name ^ ": " ^ fun_name ^ ": " ^ msg)
 ;;
-let module_id = id
-let t_id = Cid.create_ids [id; Id.create "t"]
-let sizes = 0
-let ty_args = 3
+
+let sizes = 3 (* key dimensions, action args, action ret *)
+let ty_args = 0
 let global = true
 
+
+(* Table.t<'k, 'a, 'r> *)
+let unbound_t (key_fmt,acn_arg,acn_ret) = 
+  TName(t_id, [key_fmt; acn_arg; acn_ret], true)
+;;
+let fresh_t_sizes () = 
+  fresh_size "table_key_fmt",
+  fresh_size "table_acn_arg", 
+  fresh_size "table_acn_ret"
+;;
+
+(*  Table.create  :   int -> 'a list (or tup)  -> 'a -> Table.t<'k><<'a>> *)
 let create_id = Cid.create_ids [id; Id.create "create"]
 let create_sig =
-  (* let size = IVar (QVar (Id.fresh "a")) in *)
-  let eff = FVar (QVar (Id.fresh "eff")) in
-  let start_eff = FVar (QVar (Id.fresh "eff")) in
-  let key_ty = fresh_rawty "table_key_ty" in
-  let arg_ty = fresh_rawty "table_arg_ty" in
-  let ret_ty = fresh_rawty "table_ret_ty" in
-  (* let acn_ty = acn_rawty [ty arg_ty] (ty ret_ty) in *)
-  let acn_ty = fresh_rawty "tbl_acn_ty" in
-  (* let acn_ty = effectless_fun_rawty [ty arg_ty] (ty ret_ty) in *)
-  (* the trick is how we are relating the argument types to the module type of the return *)
-  (* the arguments are the key and the action *)
-  (* TODO: bound_acns_ty should be a vector, but then type checking fails after vector 
-     elimination. So we either need: 
-        1) vector types in backend;
-        2) a way for vector elimination to change the signatures of builtin 
-           functions when it runs. *)
-  let bound_acns_ty = fresh_rawty "bound_acns_ty" in
+  let key_fmt, acn_arg, acn_ret = fresh_t_sizes () in
+  let acn_rty  = fresh_rawty   "table_acn_rty" in
+  let acns_rty = fresh_rawty "table_acns_rty" in
+  let start_eff = FVar (QVar (Id.fresh "tbl_create_eff")) in
   let arg_tys = [
-      ty @@ TInt (IVar (QVar (Id.fresh "sz"))); (* number of entries *)
-      ty @@ bound_acns_ty;                      (* actions bound to the table *)
-      ty @@ acn_ty                              (* default action *)
+      fresh_tint () ;                            (* number of entries *)
+      ty @@ acns_rty;                            (* actions bound to the table *)
+      ty @@ acn_rty                              (* default action *)
     ] 
   in
-  (* the return is a module parameterized with the args and return of the action *)
-  let unbound_module_ty = TName (t_id, [], true, [key_ty; arg_ty; ret_ty]) in
+  let tbl_eff = FVar (QVar (Id.fresh "tbl_eff")) in
+  let ret_ty = ty_eff (unbound_t (key_fmt, acn_arg, acn_ret)) tbl_eff in
   let ctor_ty = {
-    arg_tys = arg_tys
-    ; ret_ty = ty_eff unbound_module_ty eff
+      arg_tys
+    ; ret_ty
     ; start_eff
     ; end_eff = start_eff
     ; constraints = ref []
@@ -106,59 +56,265 @@ let create_sig =
   ctor_ty 
 ;;
 
-(* Table.add *)
-let add_name = "add"
-let add_id = Id.create add_name
-let add_cid = Cid.create_ids [id; add_id]
-let add_error msg = error add_name msg
+(* Table.install *)
+let install_name = "install"
+let install_id = Id.create install_name
+let install_cid = Cid.create_ids [id; install_id]
+let install_error msg = error install_name msg
 
-let add_ty =
-  let size = IVar (QVar (Id.fresh "a")) in
-  let eff = FVar (QVar (Id.fresh "eff")) in
-  let start_eff = FVar (QVar (Id.fresh "eff")) in
-  ty
-  @@ TFun
-       { arg_tys =
-           [ ty_eff (TName (t_id, [size], true, [])) eff
-           ; ty @@ TInt size ]
-       ; ret_ty = ty @@ TInt size
-       ; start_eff
-       ; end_eff = FSucc eff
-       ; constraints = ref [CLeq (start_eff, eff)]
-       }
+let install_ty = 
+  let key_fmt, acn_arg, acn_ret = fresh_t_sizes () in
+  let key_ty = fresh_rawty "tbl_key_ty" in
+  let acn_ty = fresh_rawty "tbl_acn_ty" in
+  let start_eff = FVar (QVar (Id.fresh "eff")) in (* effect where this call begins *)
+  (* table argument *)
+  let tbl_eff = FVar (QVar (Id.fresh "eff")) in (* effect attached to table arg *)
+  let tbl_t = ty_eff (unbound_t (key_fmt, acn_arg, acn_ret)) tbl_eff in
+  let arg_tys = [
+      tbl_t; 
+      ty @@ key_ty;
+      ty @@ acn_ty
+    ]
+  in
+  let ret_ty = ty @@ TVoid in
+  ty @@ TFun
+    { arg_tys
+    ; ret_ty
+    ; start_eff
+    ; end_eff = FSucc tbl_eff
+    ; constraints = ref [CLeq (start_eff, tbl_eff)]
+    }
 ;;
 
-let dummy_memop = InterpSyntax.F (fun _ _ args -> extract_ival (List.hd args))
-let setop = InterpSyntax.F (fun _ _ args -> extract_ival (List.nth args 1))
-let dummy_int = InterpSyntax.V (CoreSyntax.vinteger (Integer.of_int 0))
-
-let add_fun nst swid args =
+let install_fun nst swid args =
+  let _, _ = nst, swid in
   let open State in
   let open InterpSyntax in
   let open CoreSyntax in
   match args with
-  | [V { v = VGlobal stage }; V { v = VInt addval }] ->
-    let get_f arg = vinteger arg in
-    let set_f arg = Integer.add arg addval in
-    Pipeline.update ~stage ~idx:0 ~getop:get_f ~setop:set_f (sw nst swid).pipeline
+  | [V { v = VGlobal _ }; V { v = VTuple(_) }; F _] ->    
+    install_error "Table.install not implemented"
   | _ ->
-    add_error "Incorrect number or type of arguments to Counter.add"
+    install_error "Incorrect number or type of arguments to Table.install"
+
+
+(* Table.lookup *)
+let lookup_name = "lookup"
+let lookup_id = Id.create lookup_name
+let lookup_cid = Cid.create_ids [id; lookup_id]
+let lookup_error msg = error lookup_name msg
+(* Table.match   :   Table.t<'k> -> int<'k> -> 'a -> 'r *)
+let lookup_ty = 
+  let key_fmt, acn_arg, acn_ret = fresh_t_sizes () in
+
+  let key_ty = fresh_rawty "tbl_key_ty" in
+  let acn_arg_ty = fresh_rawty "tbl_acn_arg_ty" in
+  let acn_ret_ty = fresh_rawty "tbl_acn_ret_ty" in
+
+  let start_eff = FVar (QVar (Id.fresh "eff")) in (* effect where this call begins *)
+  let tbl_eff = FVar (QVar (Id.fresh "eff")) in (* effect attached to table arg *)
+  let tbl_t = ty_eff (unbound_t (key_fmt, acn_arg, acn_ret)) tbl_eff in
+  let arg_tys = [
+      tbl_t; 
+      ty @@ key_ty;
+      ty @@ acn_arg_ty
+    ]
+  in
+  let ret_ty = ty acn_ret_ty in 
+  ty @@ TFun
+    { arg_tys
+    ; ret_ty
+    ; start_eff
+    ; end_eff = FSucc tbl_eff
+    ; constraints = ref [CLeq (start_eff, tbl_eff)]
+    }
 ;;
+
+let lookup_fun nst swid args =
+  let _, _ = nst, swid in
+  let open State in
+  let open InterpSyntax in
+  let open CoreSyntax in
+  match args with
+  | [V { v = VGlobal _ }; V { v = VTuple(_) }; F _] ->    
+    lookup_error "Table.lookup not implemented"
+  | _ ->
+    lookup_error "Incorrect number or type of arguments to Table.lookup"
+
 
 let constructors = [create_id, create_sig]
 
 let defs : State.global_fun list =
-  [{ cid = add_cid; body = add_fun; ty = add_ty }]
+  [{ cid = install_cid; body = install_fun; ty = install_ty }
+  ;{ cid = lookup_cid; body = lookup_fun; ty = lookup_ty }  
+  ]
 ;;
 
-let signature =
-  (* let sz = IVar (QVar (Id.fresh "sz")) in *)
-  let key_ty = fresh_rawty "table_key_ty" in
-  let arg_ty = fresh_rawty "table_arg_ty" in
-  let ret_ty = fresh_rawty "table_ret_ty" in
-  let unbound_module_ty = TName (t_id, [], true, [key_ty; arg_ty; ret_ty]) in
+let signature =  
+  let key_fmt, acn_arg, acn_ret = fresh_t_sizes () in
   ( module_id
-  , [Cid.last_id t_id, [], unbound_module_ty |> ty]
+  , [Cid.last_id t_id, [key_fmt; acn_arg; acn_ret], ty (unbound_t (key_fmt, acn_arg, acn_ret))]
   , defs
   , constructors )
+;;
+
+
+(* type check Table expressions. 
+   This should be run after each pass of the main type checker.  *)
+let strip_links ty = { ty with raw_ty = TyTQVar.strip_links ty.raw_ty }
+
+(*** typing ***)
+let rty_to_size rty = 
+  match rty with 
+  | TInt(sz) -> sz
+  | TBool -> IConst(1)
+  | _ -> err "[rty_to_size] expected an integer, but got something else"
+;;
+
+(* convert a raw type into a list of sizes *)
+let rec rty_to_sizes rty = 
+  match (TyTQVar.strip_links rty) with 
+  | TQVar(_) -> [fresh_size "any_sz"]
+  | TTuple(rtys) -> List.map rty_to_sizes rtys |> List.flatten
+  | TRecord(label_rtys) -> List.map (fun (_, rty) -> rty_to_sizes rty) label_rtys |> List.flatten
+  | TVector(rty, len) -> List.init (SyntaxUtils.extract_size len) (fun _ -> rty_to_size rty)
+  | _ -> [rty_to_size rty]
+;;
+  (* unpack and flatten sizes *)
+let rec unpack_sizes sz = match (STQVar.strip_links sz) with 
+  | ITup(sizes) -> List.map unpack_sizes sizes |> List.flatten
+  | sz -> [sz]
+;;
+
+
+let extract_actions eactions = match eactions.e with 
+  | ETuple(acns) -> acns
+  | EVector(acns) -> acns
+  | _ -> err "[table type checker] wrong form for actions list"
+;;
+let check_create (exp : Syntax.exp) : unit =
+   (* make sure all the actions have the same type *)
+  let actions, default_action = match exp.e with 
+    | ECall(_, [_; action_list; default_action], _) -> extract_actions action_list, default_action 
+    | _ -> err_sp exp.espan "[table type checker] Table.create has invalid number of arguments"
+  in
+  let acn_raw_tys = List.map (fun acn_exp -> (Option.get acn_exp.ety).raw_ty) (default_action::actions) in
+  if (not (equiv_raw_tys acn_raw_tys)) then (
+    err_sp exp.espan "[table type checker] actions in Table.create don't have matching types"
+  )
+;;
+
+let check_install exp = 
+  let table_arg, key_arg, acn_arg = match exp.e with 
+    | ECall(_, [table_arg; key_arg; acn_arg], _) -> table_arg, key_arg, acn_arg
+    | _ -> err_sp exp.espan "[table type checker] Table.install called with wrong number of arguments"
+  in   
+  let key_fmt, acn_arg_fmt, acn_ret_fmt = match (Option.get table_arg.ety).raw_ty with 
+    | TName(_, [key_fmt; acn_arg; acn_ret], _) -> key_fmt, acn_arg, acn_ret
+    | _ -> err_sp table_arg.espan "[table type checker] Wrong number of size parameters for Table.t"
+  in
+  (* make sure the sizes of the key argument match the key format size attached to Table.t *)
+  let key_rawty = (Option.get key_arg.ety).raw_ty in
+  let expected_key_rawty = TTuple(List.map (fun sz -> TInt(sz)) (unpack_sizes key_fmt)) in
+  if (not (SyntaxUtils.equiv_raw_ty ~qvars_wild:true expected_key_rawty key_rawty)) then 
+    (err_sp key_arg.espan "[table type checker] Table.install's key argument has wrong type");
+
+  (* make sure the size of the action's arguments and return match the Table.t's formats *)
+  let acn_arg_rawtys, acn_ret_rawtys = match (Option.get acn_arg.ety).raw_ty with 
+    | TAction({aarg_tys; aret_tys;}) -> 
+      let acn_arg_rawtys = List.map (fun arg_ty -> arg_ty.raw_ty) aarg_tys in
+      let acn_ret_rawtys = List.map (fun arg_ty -> arg_ty.raw_ty) aret_tys in
+      acn_arg_rawtys, acn_ret_rawtys
+    | _ -> err_sp exp.espan "[table type checker] Table.install's action argument has wrong type"
+  in
+  let acn_arg_sizes = List.map rty_to_sizes acn_arg_rawtys |> List.flatten in
+  let acn_ret_sizes = List.map rty_to_sizes acn_ret_rawtys |> List.flatten in
+  (* check list lengths first *)
+  if (List.length acn_arg_sizes <> List.length (unpack_sizes acn_arg_fmt)) then 
+    (err_sp acn_arg.espan "[table type checker] Table.install's action has wrong number of arguments");
+  if (List.length acn_ret_sizes <> List.length (unpack_sizes acn_ret_fmt)) then
+    (err_sp acn_arg.espan "[table type checker] Table.install's action has wrong number of return values");
+  (* check that the sizes match *)
+  if (not (List.for_all2 (SyntaxUtils.equiv_size ~qvars_wild:true) acn_arg_sizes (unpack_sizes acn_arg_fmt))) then 
+    (err_sp acn_arg.espan "[table type checker] Table.install's action has wrong argument type");
+  if (not (List.for_all2 (SyntaxUtils.equiv_size ~qvars_wild:true) acn_ret_sizes (unpack_sizes acn_ret_fmt))) then
+    (err_sp acn_arg.espan "[table type checker] Table.install's action has wrong return type");
+;;
+
+
+let check_lookup exp = 
+  let table_arg, key_arg, acn_args = match exp.e with 
+    | ECall(_, [table_arg; key_arg; acn_args], _) -> table_arg, key_arg, acn_args
+    | _ -> err_sp exp.espan "[table type checker] Table.lookup called with wrong number of arguments"
+  in
+  let key_fmt, acn_arg_fmt, acn_ret_fmt = match (Option.get table_arg.ety).raw_ty with 
+    | TName(_, [key_fmt; acn_arg; acn_ret], _) -> key_fmt, acn_arg, acn_ret
+    | _ -> err_sp table_arg.espan "[table type checker] Wrong number of size parameters for Table.t"
+  in
+  (* make sure the sizes of the key argument match the key format size attached to Table.t *)
+  let key_rawty = (Option.get key_arg.ety).raw_ty in
+  let expected_key_rawty = TTuple(List.map (fun sz -> TInt(sz)) (unpack_sizes key_fmt)) in
+  if (not (SyntaxUtils.equiv_raw_ty ~qvars_wild:true expected_key_rawty key_rawty)) then 
+    (err_sp key_arg.espan "[table type checker] Table.install's key argument has wrong type");
+
+  (* make sure the action args match the acn_arg_fmt *)
+  let acn_arg_rawtys = match (Option.get acn_args.ety).raw_ty with 
+    | TTuple(acn_arg_rawtys) -> acn_arg_rawtys
+    | _ -> err_sp acn_args.espan "[table type checker] Table.lookup's action argument has wrong type"
+  in
+  let acn_arg_sizes = List.map rty_to_sizes acn_arg_rawtys |> List.flatten in
+  (* check list lengths first *)
+  if (List.length acn_arg_sizes <> List.length (unpack_sizes acn_arg_fmt)) then 
+    (err_sp acn_args.espan "[table type checker] Table.lookup called with wrong number of action arguments");
+  (* check that the sizes match *)
+  if (not (List.for_all2 (SyntaxUtils.equiv_size ~qvars_wild:true) acn_arg_sizes (unpack_sizes acn_arg_fmt))) then 
+    (err_sp acn_args.espan "[table type checker] Table.lookup called with a wrong action argument type");
+
+  match (strip_links ((Option.get exp.ety))).raw_ty with 
+  | TQVar _ -> () (* if the return's size is unbound, it can be anything *)
+  | raw_ty -> (
+    let acn_ret_sizes = rty_to_sizes raw_ty in
+    if (List.length acn_ret_sizes <> List.length (unpack_sizes acn_ret_fmt)) then
+      (err_sp exp.espan "[table type checker] return variable has wrong number of values for table's action type.");
+    (* check that the sizes match *)
+    if (not (List.for_all2 (SyntaxUtils.equiv_size ~qvars_wild:true) acn_ret_sizes (unpack_sizes acn_ret_fmt))) then
+      (err_sp exp.espan "[table type checker] return variable does not match table's action return type.");
+  )
+;;
+
+(* type checker signatures *)
+type module_typer = (Syntax.exp -> unit)
+type module_typer_map = (Cid.t * module_typer) list
+
+let (typers : module_typer_map) = [
+  (create_id, check_create);
+  (install_cid, check_install);
+  (lookup_cid, check_lookup);
+]
+
+(* scan through the declarations, each time a call to 
+   an entry in module_typers is found, 
+   call the corresponding typer *)
+let module_type_checker (module_typers: module_typer_map) decls = 
+  let checker = object(_) 
+    inherit [_] s_iter as super 
+    method! visit_exp () exp = 
+      match exp.e with 
+      | ECall(cid, _, _) -> (
+        match (List.assoc_opt cid module_typers) with 
+        | Some(typer) -> 
+          typer exp;
+          print_endline ("[table type checker] "^Cid.to_string cid^" check passed")        
+        | None -> 
+          super#visit_exp () exp
+      )
+      | _ -> 
+        super#visit_exp () exp
+    end 
+  in 
+  checker#visit_decls () decls
+;;
+
+let type_checker decls = 
+  module_type_checker typers decls
 ;;

@@ -3,6 +3,7 @@
   open Batteries
   open SyntaxUtils
   open Collections
+  open Builtins
 
   let first (x, _, _, _, _) = x
   let second (_, x, _, _, _) = x
@@ -67,9 +68,8 @@
     in
     ty_sp (TFun fty) tspan
 
-
     let mk_dparser id params p span = 
-     (* adjust the id of a "main" parser *)
+        (* adjust the id of a "main" parser *)
         if ((Id.name id) = (Id.name Builtins.main_parse_id))
         then 
             dparser_sp Builtins.main_parse_id params p span
@@ -222,12 +222,8 @@ ty:
     | TBOOL				                      { ty_sp TBool $1 }
     | QID                               { ty_sp (TQVar (QVar (snd $1))) (fst $1) }
     | AUTO                              { ty_sp (TQVar (QVar (fresh_auto ()))) $1 }
-    | cid    				            { ty_sp (TName (snd $1, [], true, [])) (fst $1) }
-    | cid poly				            { ty_sp (TName (snd $1, snd $2, true, [])) (fst $1) }
-    | cid ty_poly                       { (* a builtin module's type that has type args *)
-                                            let raw_tys = List.map (fun ty -> ty.raw_ty) (snd $2) in
-                                            let span = Span.extend (fst $1) (fst $2) in 
-                                            ty_sp (TName (snd $1, [], true, raw_tys)) span }
+    | cid    				            { ty_sp (TName (snd $1, [], true)) (fst $1) }
+    | cid poly				            { ty_sp (TName (snd $1, snd $2, true)) (fst $1) }
     | EVENT                             { ty_sp TEvent $1}
     | VOID                              { ty_sp (TVoid) $1 }
     | GROUP                             { ty_sp (TGroup) $1 }
@@ -240,22 +236,6 @@ tys:
     | ty                                        { $1.tspan, [ $1 ] }
     | ty COMMA tys                              { (Span.extend $1.tspan (fst $3), $1::(snd $3)) }
 
-// tuple types can only be written inside of a type argument list, 
-// which only builtin module named types may have.
-ty_tuple: 
-    | LPAREN RPAREN                             { ty_sp (TTuple []) (Span.extend $1 $2) }
-    | LPAREN tys RPAREN                         { 
-        let raw_tys = List.map (fun ty -> ty.raw_ty) (snd $2) in
-        ty_sp (TTuple raw_tys) (Span.extend $1 $3) }
-
-ty_polys:
-    | ty                                      { [$1] }
-    | ty_tuple                                { [$1] }
-    | ty_tuple COMMA ty_polys                 { ($1)::($3) }
-    | ty COMMA ty_polys                       { ($1)::($3) }
-
-ty_poly: 
-    | LSHIFT ty_polys RSHIFT            { Span.extend $1 $3, $2 }
 
 cid:
     | ID				                { (fst $1, Cid.id (snd $1)) }

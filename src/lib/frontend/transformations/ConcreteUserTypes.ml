@@ -164,7 +164,7 @@ let concretize_user_ty_decls ds =
             print_endline (Printing.ty_to_string ty);
             DUserTy(id, sizes, ty)
           )
-        | TName(_, _, _, _) -> 
+        | TName(_, _, _) -> 
           DUserTy(id, sizes, ty)
           (* a user _could_ rename another named type, but that named type 
              should be replaced by whatever it referenced by now *)

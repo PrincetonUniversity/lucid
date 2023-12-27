@@ -252,8 +252,26 @@ let replacer =
        one parameter for each tuple entry. So we need to adjust the
        arguments at the call site as well *)
     method! visit_ECall env cid args unordered =
-      let args = List.map (self#flatten env) args |> List.concat in
-      ECall (cid, args, unordered)
+      (* Builtin functions are an exception. We don't change their 
+         parameters, so its wrong to change their calls. *)
+      let builtin_funs =
+        List.map
+          (fun (_, _, global_funs, constructors) ->
+            let fun_cids =
+              List.map
+                (fun (gf : InterpState.State.global_fun) -> gf.cid)
+                global_funs
+            in
+            let constructor_cids = List.map fst constructors in
+            fun_cids @ constructor_cids)
+          Builtins.builtin_modules
+        |> List.flatten
+      in
+      if (List.mem cid builtin_funs) then 
+        ECall (cid, args, unordered)
+      else 
+        let args = List.map (self#flatten env) args |> List.concat in
+        ECall (cid, args, unordered)
 
     (* Same as ECall *)
     method! visit_EHash env sz args =

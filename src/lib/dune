@@ -85,6 +85,7 @@
    interpSyntax
    funInterp
    libraryInterface
+   libraryUtils
    arrays
    counters
    tables

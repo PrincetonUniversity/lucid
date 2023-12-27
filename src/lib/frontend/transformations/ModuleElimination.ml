@@ -31,15 +31,14 @@ let subst =
         | None -> IUser x
         | Some x' -> IUser (Id x')
 
-      method! visit_TName env cid sizes b tyargs =
+      method! visit_TName env cid sizes b =
         let sizes = List.map (self#visit_size env) sizes in
-        let tyargs = List.map (self#visit_raw_ty env) tyargs in
         let cid =
           match CidMap.find_opt cid env.types with
           | None -> cid
           | Some x -> Id x
         in
-        TName (cid, sizes, b, tyargs)
+        TName (cid, sizes, b)
 
       method! visit_ETableCreate env tty tactions tsize tdefault =
         let tactions = List.map (self#visit_exp env) tactions in

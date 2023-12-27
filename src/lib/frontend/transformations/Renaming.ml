@@ -129,7 +129,7 @@ let rename prog =
         in
         let ty_map =
           List.fold_left
-            (fun env (cid, _, _, _) -> CidMap.add cid cid env)
+            (fun env (cid, _, _) -> CidMap.add cid cid env)
             CidMap.empty
             builtin_type_info
         in
@@ -184,12 +184,12 @@ let rename prog =
         env <- { env with active = old.active };
         ret
 
-      method! visit_TName dummy cid sizes b arg_tys=
+      method! visit_TName dummy cid sizes b=
         let old = env in
         self#activate_ty ();
         let cid = self#lookup cid in
         env <- { env with active = old.active };
-        TName (cid, List.map (self#visit_size dummy) sizes, b, arg_tys)
+        TName (cid, List.map (self#visit_size dummy) sizes, b)
 
       method! visit_size dummy size =
         let old = env in

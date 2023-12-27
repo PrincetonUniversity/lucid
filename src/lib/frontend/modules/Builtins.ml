@@ -23,12 +23,12 @@ let builtin_vars =
 ;;
 
 let builtin_type_info =
-  [ Arrays.t_id, Arrays.sizes, Arrays.global, Arrays.ty_args
-  ; Counters.t_id, Counters.sizes, Counters.global, Counters.ty_args
-  ; PairArrays.t_id, PairArrays.sizes, PairArrays.global, PairArrays.ty_args
-  ; Payloads.t_id, Payloads.sizes, Payloads.global, Payloads.ty_args
-  ; Packet.t_id, Packet.sizes, Packet.global, Packet.ty_args
-  ; Tables.t_id, Tables.sizes, Tables.global, Tables.ty_args
+  [ Arrays.t_id, Arrays.sizes, Arrays.global
+  ; Counters.t_id, Counters.sizes, Counters.global
+  ; PairArrays.t_id, PairArrays.sizes, PairArrays.global
+  ; Payloads.t_id, Payloads.sizes, Payloads.global
+  ; Packet.t_id, Packet.sizes, Packet.global
+  ; Tables.t_id, Tables.sizes, Tables.global
   ]
 ;;
 
@@ -56,6 +56,10 @@ let builtin_defs =
   @ Tables.defs
 ;;
 
+
+let builtin_typers = 
+  [Tables.type_checker]
+;;
 
 (* Builtin local vars *)
 let this_id = Id.create "this"
