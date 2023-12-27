@@ -27,6 +27,20 @@ let rec translate_raw_ty (rty : S.raw_ty) tspan : C.raw_ty =
   | S.TGroup -> C.TGroup
   | S.TEvent -> C.TEvent
   | S.TInt sz -> C.TInt (translate_size sz)
+  (* translate into a table type -- hard coded for now. *)
+  | S.TName(cid, sizes, _) when (Cid.equals cid Tables.t_id) -> 
+    let size_to_ty (sz : S.size) = 
+      C.ty (C.TInt (translate_size sz))
+    in
+    let tkey_sizes, tparam_tys, tret_tys = match sizes with 
+      | [ITup(skeys); ITup(sparams); ITup(srets)] -> (
+        List.map translate_size skeys,
+        List.map size_to_ty sparams,
+        List.map size_to_ty srets
+      )
+      | _ -> S.error "[translate_raw_ty] expected a tuple of sizes, but got something else"
+    in
+    C.TTable { tkey_sizes; tparam_tys; tret_tys }
   | S.TName (cid, sizes, b) -> C.TName (cid, List.map translate_size sizes, b)
   | S.TMemop (n, sz) -> C.TMemop (n, translate_size sz)
   | S.TFun fty ->

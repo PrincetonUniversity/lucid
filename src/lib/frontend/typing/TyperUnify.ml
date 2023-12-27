@@ -280,23 +280,32 @@ and try_unify_rty span rty1 rty2 =
     List.iter2 (try_unify_ty span) t1.tparam_tys t2.tparam_tys;
     List.iter2 (try_unify_ty span) t1.tret_tys t2.tret_tys
   | TAction(a1), TAction(a2) -> 
-    let tuple_wrap (lst : ty list) = 
+    (* let tuple_wrap (lst : ty list) = 
       match lst with 
       | [] -> []
       | [a] -> [a]
       | lst -> [ty@@TTuple (List.map (fun ty -> ty.raw_ty) lst)]
-    in
+    in *)
     (* hack to type check after tuple elimination:
        put the action's argument and return types inside of a 
        tuple type, and then unify those types. 
        This lets us unify an action with a single polymorphic argument type 
        with an action that has multiple arguments. *)
-    List.iter2 (try_unify_ty span) (tuple_wrap a1.aarg_tys) (tuple_wrap a2.aarg_tys);
-    List.iter2 (try_unify_ty span) (tuple_wrap a1.aret_tys) (tuple_wrap a2.aret_tys)
+    (* List.iter2 (try_unify_ty span) (tuple_wrap a1.aarg_tys) (tuple_wrap a2.aarg_tys);
+    List.iter2 (try_unify_ty span) (tuple_wrap a1.aret_tys) (tuple_wrap a2.aret_tys); *)
+    try_unify_lists unify_ty a1.aarg_tys a2.aarg_tys;
+    try_unify_lists unify_ty a1.aret_tys a2.aret_tys;
+    (* List.iter2 (try_unify_ty span) (a1.aarg_tys) (a2.aarg_tys);
+    List.iter2 (try_unify_ty span) (a1.aret_tys) (a2.aret_tys) *)
   | TActionConstr(a1), TActionConstr(a2) -> 
-    List.iter2 (try_unify_ty span) a1.aconst_param_tys a2.aconst_param_tys;
-    List.iter2 (try_unify_ty span) a1.aacn_ty.aarg_tys a2.aacn_ty.aarg_tys;
-    List.iter2 (try_unify_ty span) a1.aacn_ty.aret_tys a2.aacn_ty.aret_tys
+    try_unify_lists unify_ty a1.aconst_param_tys a2.aconst_param_tys;
+    try_unify_lists unify_ty a1.aacn_ty.aarg_tys a2.aacn_ty.aarg_tys;
+    try_unify_lists unify_ty a1.aacn_ty.aret_tys a2.aacn_ty.aret_tys;
+    (*
+      List.iter2 (try_unify_ty span) a1.aconst_param_tys a2.aconst_param_tys;
+      List.iter2 (try_unify_ty span) a1.aacn_ty.aarg_tys a2.aacn_ty.aarg_tys;
+      List.iter2 (try_unify_ty span) a1.aacn_ty.aret_tys a2.aacn_ty.aret_tys;
+    *)
   | TBitstring, TBitstring -> ()
   | ( ( TVoid
       | TBitstring

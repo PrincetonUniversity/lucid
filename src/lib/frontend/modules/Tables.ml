@@ -186,6 +186,15 @@ let rec unpack_sizes sz = match (STQVar.strip_links sz) with
   | sz -> [sz]
 ;;
 
+let rec flatten_rty rty = 
+  match (TyTQVar.strip_links rty) with 
+  | TQVar(_) -> [rty]
+  | TTuple(rtys) -> List.map flatten_rty rtys |> List.flatten
+  | TRecord(label_rtys) -> List.map (fun (_, rty) -> flatten_rty rty) label_rtys |> List.flatten
+  | TVector(rty, len) -> List.init (SyntaxUtils.extract_size len) (fun _ -> rty)
+  | _ -> [rty]
+;;
+
 
 let extract_actions eactions = match eactions.e with 
   | ETuple(acns) -> acns
@@ -241,7 +250,6 @@ let check_install exp =
     (err_sp acn_arg.espan "[table type checker] Table.install's action has wrong return type");
 ;;
 
-
 let check_lookup exp = 
   let table_arg, key_arg, acn_args = match exp.e with 
     | ECall(_, [table_arg; key_arg; acn_args], _) -> table_arg, key_arg, acn_args
@@ -253,15 +261,20 @@ let check_lookup exp =
   in
   (* make sure the sizes of the key argument match the key format size attached to Table.t *)
   let key_rawty = (Option.get key_arg.ety).raw_ty in
-  let expected_key_rawty = TTuple(List.map (fun sz -> TInt(sz)) (unpack_sizes key_fmt)) in
-  if (not (SyntaxUtils.equiv_raw_ty ~qvars_wild:true expected_key_rawty key_rawty)) then 
+  let key_sizes = rty_to_sizes key_rawty in
+  let expected_key_sizes = unpack_sizes key_fmt in
+  if (not (List.for_all2 (SyntaxUtils.equiv_size ~qvars_wild:true) key_sizes expected_key_sizes)) then    
     (err_sp key_arg.espan "[table type checker] Table.install's key argument has wrong type");
 
   (* make sure the action args match the acn_arg_fmt *)
-  let acn_arg_rawtys = match (Option.get acn_args.ety).raw_ty with 
+  let acn_arg_rawtys = flatten_rty (Option.get acn_args.ety).raw_ty in
+    
+  (* match (Option.get acn_args.ety).raw_ty with 
     | TTuple(acn_arg_rawtys) -> acn_arg_rawtys
+    | TRecord(label_rtys) -> List.map (fun (_, rty) -> rty) label_rtys
+    | TVector(rty, len) -> List.init (SyntaxUtils.extract_size len) (fun _ -> rty)
     | _ -> err_sp acn_args.espan "[table type checker] Table.lookup's action argument has wrong type"
-  in
+  in *)
   let acn_arg_sizes = List.map rty_to_sizes acn_arg_rawtys |> List.flatten in
   (* check list lengths first *)
   if (List.length acn_arg_sizes <> List.length (unpack_sizes acn_arg_fmt)) then 

@@ -120,7 +120,7 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
     let env, inf_e, inf_ety = infer_exp env e1 |> textract in
     unify_ty e.espan inf_ety (mk_ty @@ TInt (fresh_size ()));
     env, { e with e = EFlood inf_e; ety = Some (mk_ty @@ TGroup) }
-  | ECall (f, args, unordered) ->
+  | ECall (f, args, unordered) -> (
     let _, _, inferred_fty =
       (* Get type of f as if we used the var rule for the function *)
       infer_exp env { e with e = EVar f } |> textract
@@ -132,22 +132,45 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
         remove_effects inferred_fty
       else inferred_fty 
     in
-  
-    let env, inferred_args = infer_exps env args in
-    let fty : func_ty =
-      { arg_tys = List.map (fun arg -> Option.get arg.ety) inferred_args
-      ; ret_ty = fresh_type ()
-      ; start_eff = env.current_effect
-      ; end_eff = fresh_effect ()
-      ; constraints = ref []
-      }
-    in
-    unify_raw_ty e.espan (TFun fty) inferred_fty.raw_ty;
-    let new_env =
-      check_constraints e.espan "Function call" env fty.end_eff
-      @@ !(fty.constraints)
-    in
-    new_env, { e with e = ECall (f, inferred_args, unordered); ety = Some fty.ret_ty }
+
+    match inferred_fty.raw_ty with 
+    | TFun _ -> 
+      let env, inferred_args = infer_exps env args in
+      let fty : func_ty =
+        { arg_tys = List.map (fun arg -> Option.get arg.ety) inferred_args
+        ; ret_ty = fresh_type ()
+        ; start_eff = env.current_effect
+        ; end_eff = fresh_effect ()
+        ; constraints = ref []
+        }
+      in
+      unify_raw_ty e.espan (TFun fty) inferred_fty.raw_ty;
+      let new_env =
+        check_constraints e.espan "Function call" env fty.end_eff
+        @@ !(fty.constraints)
+      in
+      new_env, { e with e = ECall (f, inferred_args, unordered); ety = Some fty.ret_ty }
+    | TActionConstr(acn_ctor_ty) -> (
+      let env, inferred_args = infer_exps env args in
+      let fty : acn_ctor_ty =
+        { aconst_param_tys = List.map (fun arg -> Option.get arg.ety) inferred_args
+        ; aacn_ty = {
+            aarg_tys = List.init (List.length acn_ctor_ty.aacn_ty.aarg_tys) (fun _ -> fresh_type ());
+            aret_tys = List.init (List.length acn_ctor_ty.aacn_ty.aret_tys) (fun _ -> fresh_type ());}
+        }
+      in
+      unify_raw_ty e.espan (TActionConstr fty) inferred_fty.raw_ty;
+      let aacn_ty = {
+        aarg_tys = List.map strip_links fty.aacn_ty.aarg_tys;
+        aret_tys = List.map strip_links fty.aacn_ty.aret_tys;
+        }
+      in
+      let acn_ty = ty@@TAction (aacn_ty) in
+      let acn_ty = strip_links acn_ty in
+      env, { e with e = ECall (f, inferred_args, unordered); ety = Some (acn_ty) }
+    )
+    | _ -> error_sp e.espan "Cannot call non-function"
+  )
   | EProj (e, label) ->
     let env, inf_e = infer_exp env e in (* infer the type of the _record_ *)
     let expected_ty, entries = (* expected_ty is the expected type of the _record_ *)
@@ -819,9 +842,6 @@ and infer_statement (env : env) (s : statement) : env * statement =
       end
     | SLocal (id, ty, e) ->
       let env, inf_e, ety = infer_exp env e |> textract in
-      (* print_endline ("SLocal");
-      print_endline@@"declared ty: "^(Printing.ty_to_string ty);
-      print_endline@@"inferred ty: "^(Printing.ty_to_string ety); *)
       unify_ty s.sspan ty ety;
       (match TyTQVar.strip_links ety.raw_ty with
        | TVoid ->
@@ -1492,11 +1512,6 @@ let rec infer_declaration
       in
       let inf_body = generalizer#visit_body () inf_body in
       let env = define_const id (mk_ty @@ TFun fty) env in
-      (* print_endline
-      @@ "Inferred type for "
-      ^ id_to_string id
-      ^ " is "
-      ^ raw_ty_to_string (TFun fty); *)
       env, effect_count, DFun (id, ret_ty, constr_specs, inf_body)
     | DMemop (id, params, memop_body) ->
       enter_level ();

@@ -85,8 +85,8 @@ let rec is_not_global_rty rty =
   | TRecord lst -> List.for_all (fun (_, rty) -> is_not_global_rty rty) lst
   | TVector (t, _) -> is_not_global_rty t
   | TTable _ -> false
-  | TActionConstr _ -> false
-  | TAction _ -> false
+  | TActionConstr _ -> true
+  | TAction _ -> true
   | TBitstring -> true
 ;;
 

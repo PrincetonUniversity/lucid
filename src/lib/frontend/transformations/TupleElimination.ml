@@ -120,6 +120,7 @@ let replacer =
       in
       acn_ty'
     method! visit_TActionConstr env acn_ctor_ty =
+      (* flatten param and return types *)
       let acn_ctor_ty' =
         { 
           aconst_param_tys = flatten_tys acn_ctor_ty.aconst_param_tys;
@@ -326,7 +327,6 @@ let replacer =
     method replace_PLocal env id ty exp span  : (parser_action * sp) list = 
       match ty.raw_ty with
       | TTuple tys ->
-        print_endline ("replacing a tuple type..");
         let entries = self#visit_exp env exp |> extract_etuple in
         let new_ids = rename_elements id tys in
         let new_defs =
@@ -427,6 +427,8 @@ let rec replace_decl (env : env) d =
        replace_decls env new_ds
      (* The tuple types inside of a table types must be flattened *)
      | TTable _ ->
+       env, [{ d with d = DGlobal (id, replace_ty ty, replace_exp env exp) }]     
+     | TName _ -> (* tuples may appear in global constructors, e.g., actions and action constructors in Table.create *)
        env, [{ d with d = DGlobal (id, replace_ty ty, replace_exp env exp) }]
      | _ -> env, [d])
   | DEvent (id, annot, sort, _, params) ->
