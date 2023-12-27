@@ -302,11 +302,8 @@ let module_type_checker (module_typers: module_typer_map) decls =
       match exp.e with 
       | ECall(cid, _, _) -> (
         match (List.assoc_opt cid module_typers) with 
-        | Some(typer) -> 
-          typer exp;
-          print_endline ("[table type checker] "^Cid.to_string cid^" check passed")        
-        | None -> 
-          super#visit_exp () exp
+        | Some(typer) -> typer exp
+        | None -> super#visit_exp () exp
       )
       | _ -> 
         super#visit_exp () exp

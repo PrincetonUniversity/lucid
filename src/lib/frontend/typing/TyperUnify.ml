@@ -142,10 +142,6 @@ let sub lst1 lst2 = List.filter (fun x -> not (List.mem x lst2)) lst1
    e.g. a+b with c+d, we have to be careful when unifying Sums *)
 
 let rec try_unify_size span size1 size2 =
-  Printf.printf
-       "Trying to unify %s and %s\n"
-       (Printing.size_to_string size1)
-        (Printing.size_to_string size2);
   let try_unify = try_unify_size span in
   let size1, size2 = normalize_size size1, normalize_size size2 in
   (* Physical equality *)

@@ -268,6 +268,7 @@ let replacer =
         |> List.flatten
       in
       if (List.mem cid builtin_funs) then 
+        let args = List.map (self#visit_exp env) args in
         ECall (cid, args, unordered)
       else 
         let args = List.map (self#flatten env) args |> List.concat in
