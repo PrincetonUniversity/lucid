@@ -303,6 +303,9 @@ let rec interp_exp (nst : State.network_state) swid locals e : 'a InterpSyntax.i
        with
        | Not_found -> error ("Field " ^ Id.to_string id ^ " not found"))
       | _ -> error "Not a record")
+  | ETuple(es) -> 
+    let vs = interp_exps es in
+    V (vtup (List.map (fun v -> (extract_ival v).v) vs) Span.default)
 
     (* V (VRecord(fields)) *)
 

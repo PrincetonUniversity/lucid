@@ -288,6 +288,7 @@ let rec translate_exp (prog_env:prog_env) exp : (T.decl list * T.expr) * prog_en
   | CS.ETableCreate(_) ->
     error "[coreToP4Tofino.translate_exp] got an etablecreate expression. This should have been handled by the declaration translator."
   | CS.ERecord(_) -> error "[coreToP4Tofino.translate_exp] records not implemented"
+  | CS.ETuple _ -> error "[coreToP4Tofino.translate_exp] tuples not implemented"
   | CS.EProj(_, _) -> error "[coreToP4Tofino.translate_exp] projections not implemented"
 
 and translate_exps (prog_env:prog_env) exps : (decl list * expr list) * prog_env = 

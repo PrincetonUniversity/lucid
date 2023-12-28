@@ -91,8 +91,9 @@ let rec eliminate_exp e =
     let stmt, e' = eliminate_exp e in
     stmt, { e with e = EComp (e', id, size) }
   (* | EPatWild _ -> snoop, e *)
-  | ETableMatch _ -> error "special table syntax is depreciated"
-  | ETableCreate _ -> error "special table syntax is depreciated"
+  | ETableMatch _ -> snoop, e
+  | ETableCreate _ -> snoop, e 
+  (* error "special table syntax is depreciated" *)
 
 and eliminate_exps exps =
   let acc =
@@ -123,6 +124,8 @@ and eliminate_stmt stmt =
   (* same special case for sLocal, except we fill in the type of the tuple assign *)
   | SLocal (id, ty, { e = ECall(cid, args, u); ety; espan}) 
     when ((List.mem cid builtin_cids) && (Option.get ety |> is_tuple)) ->
+    print_endline ("found a local tuple assign" ^ (Cid.to_string cid));
+    print_endline (Printing.ty_to_string ty);
     let args_pre_stmt, args' = eliminate_exps args in
     let exp' = { e = ECall (cid, args', u); ety; espan } in
     let stupleassign = statement@@STupleAssign { ids = [id]; tys = Some [ty]; exp = exp' } in
@@ -165,8 +168,8 @@ and eliminate_stmt stmt =
   | SLoop (stmt, id, size) ->
     { stmt with s = SLoop (eliminate_stmt stmt, id, size) }
   | STupleAssign _ -> stmt (* noop for tuple assignments *)
-  | STableMatch _ -> error "special table syntax is depreciated"
-  | STableInstall _ -> error "special table syntax is depreciated"
+  | STableMatch _ -> stmt 
+  | STableInstall _ -> stmt
 ;;
 
 let eliminator =

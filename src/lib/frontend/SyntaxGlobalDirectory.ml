@@ -86,9 +86,15 @@ let exp_to_tblmeta id exp =
     in
     {aid; acompiled_id; arg_sizes}
   in
-  let keys = match (Option.get exp.ety).raw_ty with
+  let keys = match TyTQVar.strip_links ((Option.get exp.ety).raw_ty) with
     | TTable(tty) -> (List.map user_key tty.tkey_sizes)@[priority_key] 
-    | _ -> error "[exp_to_tblmeta] expression is not a table type"
+    | TName(_, sizes, _) ->
+      let key_sz = List.nth sizes 0 in
+      let key_sizes = SyntaxUtils.flatten_size key_sz in
+      let key_tys = List.map (fun sz -> Syntax.ty@@TInt(sz)) key_sizes in
+      (List.map user_key key_tys)@[priority_key] 
+    | TQVar _ -> error "[exp_to_tblmeta] expression is a type variable"
+    | raw_ty -> error@@"[exp_to_tblmeta] expression is not a table type ("^(Printing.raw_ty_to_string raw_ty)^")"
   in
   let actions, length = match exp.e with
     | ETableCreate(tbl) -> (
@@ -98,7 +104,15 @@ let exp_to_tblmeta id exp =
           Integer.to_int z
         | EInt(z, _) -> Z.to_int z
         | _ -> error "[exp_to_tblmeta] table size expression is not an EVal(EInt(...))")
-    | _ -> error "[exp_to_tblmeta] expression is not a table create"
+    | ECall(_, [len_exp; acns_exp; _], _) -> (
+      List.map evar_to_action (SyntaxUtils.flatten_exp acns_exp),
+      match len_exp.e with 
+        | EVal({v=VInt(z); _}) ->
+          Integer.to_int z
+        | EInt(z, _) -> Z.to_int z
+        | _ -> error "[exp_to_tblmeta] table size expression is not an EVal(EInt(...))"
+    )
+    | _ -> error@@Printf.sprintf "[exp_to_tblmeta] expression %s is not a table create" (Printing.exp_to_string exp)
   in
   let compiled_cid = (Cid.id id) in 
   let name = match exp.espan.global_created_in_src with

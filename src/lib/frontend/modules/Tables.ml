@@ -184,6 +184,7 @@ let rec unpack_sizes sz = match (STQVar.strip_links sz) with
   | sz -> [sz]
 ;;
 
+(* type and size flatteners  *)
 let rec flatten_rty rty = 
   match (TyTQVar.strip_links rty) with 
   | TQVar(_) -> [rty]
@@ -192,7 +193,35 @@ let rec flatten_rty rty =
   | TVector(rty, len) -> List.init (SyntaxUtils.extract_size len) (fun _ -> rty)
   | _ -> [rty]
 ;;
+let rec flatten_size size = 
+  match (STQVar.strip_links size) with 
+  | ITup(sizes) -> List.map flatten_size sizes |> List.flatten
+  | size -> [size]
+;;
 
+(* given a raw_ty and a size with the same shape, 
+  replace any TQVar in the raw_ty with TInt(sz) *)
+  let rec replace_qvars raw_ty size = 
+  match (TyTQVar.strip_links raw_ty), size with 
+    | TQVar(_), sz -> TInt(sz)
+    | TTuple(rtys), ITup(sizes) -> 
+      if List.length rtys != List.length sizes then
+        err "Tables.typer.replace_qvars: rtys and sizes have different lengths in TTuple"
+      else
+        TTuple(List.map2 replace_qvars rtys sizes)
+    | TRecord(label_rtys), ITup(sizes) -> 
+      if List.length label_rtys != List.length sizes then
+        err "Tables.typer.replace_qvars: label_rtys and sizes have different lengths in TRecord"
+      else
+        TRecord(List.map2 (fun (label, rty) sz -> (label, replace_qvars rty sz)) label_rtys sizes)
+    | TVector(rty, len), ITup(sizes) -> 
+      if List.length sizes != 1 then
+        err "Tables.typer.replace_qvars: sizes should have one element in TVector"
+      else
+        TVector(replace_qvars rty (List.hd sizes), len)
+    (* no replacement necessary for any other case *)
+    | _, _ -> raw_ty
+;;  
 
 let rec flatten_exp exp = match exp.e with 
   | ETuple(es) -> List.map flatten_exp es |> List.flatten
@@ -207,7 +236,7 @@ let to_action_ty sp raw_ty = match raw_ty with
   | _ -> err_sp sp "[table type checker] expected an action or action constructor"
 ;;
 
-let check_create (exp : Syntax.exp) : unit =
+let check_create (exp : Syntax.exp) =
    (* make sure all the actions have the same type *)
   let actions, default_action = match exp.e with 
     | ECall(_, [_; action_list; default_action], _) -> flatten_exp action_list, default_action 
@@ -221,7 +250,8 @@ let check_create (exp : Syntax.exp) : unit =
   in
   if (not (equiv_raw_tys acn_raw_tys)) then (
     err_sp exp.espan "[table type checker] actions in Table.create don't have matching types"
-  )
+  );
+  exp
 ;;
 
 let check_install exp = 
@@ -269,9 +299,12 @@ let check_install exp =
     (err_sp acn_arg.espan "[table type checker] Table.install's action has wrong argument type");
   if (not (List.for_all2 (SyntaxUtils.equiv_size ~qvars_wild:true) acn_ret_sizes (unpack_sizes acn_ret_fmt))) then
     (err_sp acn_arg.espan "[table type checker] Table.install's action has wrong return type");
+  exp
 ;;
 
-let check_lookup exp = 
+
+
+let check_lookup exp : exp = 
   let table_arg, key_arg, acn_args = match exp.e with 
     | ECall(_, [table_arg; key_arg; acn_args], _) -> table_arg, key_arg, acn_args
     | _ -> err_sp exp.espan "[table type checker] Table.lookup called with wrong number of arguments"
@@ -294,23 +327,31 @@ let check_lookup exp =
   if (List.length acn_arg_sizes <> List.length (unpack_sizes acn_arg_fmt)) then 
     (err_sp acn_args.espan "[table type checker] Table.lookup called with wrong number of action arguments");
   (* check that the sizes match *)
-  if (not (List.for_all2 (SyntaxUtils.equiv_size ~qvars_wild:true) acn_arg_sizes (unpack_sizes acn_arg_fmt))) then 
-    (err_sp acn_args.espan "[table type checker] Table.lookup called with a wrong action argument type");
+  if (not (List.for_all2 (SyntaxUtils.equiv_size ~qvars_wild:true) acn_arg_sizes (unpack_sizes acn_arg_fmt))) then (
+    let err_msg = Printf.sprintf 
+      "[table type checker] Table.lookup called with wrong action argument sizes. Expected %s, got %s" 
+      (Printing.size_to_string (acn_arg_fmt))
+      (Printing.sizes_to_string acn_arg_sizes)
+    in
+    err_sp acn_args.espan err_msg);
 
   match (strip_links ((Option.get exp.ety))).raw_ty with 
-  | TQVar _ -> () (* if the return's size is unbound, it can be anything *)
+  | TQVar _ -> exp (* if the return's size is unbound, it can be anything *)
   | raw_ty -> (
+    (* qvars can happen here if an element from the tuple is never used. *)
+    let raw_ty = replace_qvars raw_ty acn_ret_fmt in
     let acn_ret_sizes = rty_to_sizes raw_ty in
-    if (List.length acn_ret_sizes <> List.length (unpack_sizes acn_ret_fmt)) then
-      (err_sp exp.espan "[table type checker] return variable has wrong number of values for table's action type.");
+    if (List.length acn_ret_sizes <> List.length (unpack_sizes acn_ret_fmt)) then (
+      err_sp exp.espan "[table type checker] return variable has wrong number of values for table's action type.");
     (* check that the sizes match *)
-    if (not (List.for_all2 (SyntaxUtils.equiv_size ~qvars_wild:true) acn_ret_sizes (unpack_sizes acn_ret_fmt))) then
-      (err_sp exp.espan "[table type checker] return variable does not match table's action return type.");
+    if (not (List.for_all2 (SyntaxUtils.equiv_size ~qvars_wild:false) acn_ret_sizes (unpack_sizes acn_ret_fmt))) then
+      (err_sp exp.espan "[table type checker] return variable has wrong type for table's action type.");
+    {exp with ety = Some({(Option.get exp.ety) with raw_ty = raw_ty})}
   )
 ;;
 
 (* type checker signatures *)
-type module_typer = (Syntax.exp -> unit)
+type module_typer = (Syntax.exp -> Syntax.exp)
 type module_typer_map = (Cid.t * module_typer) list
 
 let (typers : module_typer_map) = [
@@ -324,7 +365,7 @@ let (typers : module_typer_map) = [
    call the corresponding typer *)
 let module_type_checker (module_typers: module_typer_map) decls = 
   let checker = object(_) 
-    inherit [_] s_iter as super 
+    inherit [_] s_map as super 
     method! visit_exp () exp = 
       match exp.e with 
       | ECall(cid, _, _) -> (

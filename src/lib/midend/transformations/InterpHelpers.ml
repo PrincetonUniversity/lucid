@@ -190,6 +190,7 @@ let is_atomic exp =
   | ETableCreate _ -> false
   | EProj _ -> error "[is_atomic] EProj not implemented"
   | ERecord _ -> error "[is_atomic] ERecord not implemented"
+  | ETuple _ -> error "[is_atomic] ETuple not implemented"
 ;;
 
 let is_bool_non_immediate exp = is_bool exp && not (is_immediate exp)

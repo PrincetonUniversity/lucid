@@ -877,17 +877,24 @@ and infer_statement (env : env) (s : statement) : env * statement =
         | None -> error_sp s.sspan @@ "Variable " ^ Id.name id ^ " not declared") ids 
       in
       (* unify a tuple of id tys with exp ty *)
-      let ty_tuple = TTuple (id_tys) in
+      let ty_tuple = match id_tys with 
+        | [TTuple _] -> (List.hd id_tys)
+        |  _ -> TTuple (id_tys)
+      in
       unify_raw_ty s.sspan ety.raw_ty ty_tuple;
       (* return the statement *)
       env, STupleAssign({ids; tys=None; exp=inf_e})
     )
     | STupleAssign({ids; tys=Some(tys); exp}) -> (
-      print_endline ("Case: STupleAssign");
       (* type the exp and unify with a tuple of the declared types *)
       let env, inf_e, ety = infer_exp env exp |> textract in
-      let ty_tuple = TTuple (List.map (fun ty -> ty.raw_ty) tys) in
+      let raw_tys = List.map (fun ty -> ty.raw_ty) tys in
+      let ty_tuple = match raw_tys with 
+        | [TTuple _] -> (List.hd raw_tys)
+        |  _ -> TTuple (raw_tys)
+      in
       unify_raw_ty s.sspan ety.raw_ty ty_tuple;
+      (* look up the types of the ids *)
       (* update the environment with the new variables *)
       let new_locals = List.combine ids tys in
       let env = add_locals env new_locals in
@@ -1735,7 +1742,7 @@ let infer_prog (builtin_tys : Builtins.builtin_tys) (decls : decls) : decls =
   (* exit 1; *)
   let decls = List.rev inf_decls in
   (* now, run through module-specific type checkers *)
-  List.iter (fun typer -> typer decls) (Builtins.builtin_typers);
+  let decls = List.fold (fun decls typer -> typer decls) decls (Builtins.builtin_typers) in
   (* Tables.table_type_checker decls; *)
   decls
 ;;

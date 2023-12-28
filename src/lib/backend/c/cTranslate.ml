@@ -353,6 +353,7 @@ let rec translate_e e ety = match e with
     sprintf "(%s){%s}" 
       (translate_ty ety) (* in some places, like return statements, we need an explicit cast *)
       (String.concat ", " fields)
+  | ETuple(exps) -> error "tuple expressions cannot be compositionally translated"
   | EProj(exp, cid) -> 
     sprintf "%s.%s" (translate_exp exp) (id_string cid)
   | EHash _ -> error "hash expressions must be evaluated at the statement level"

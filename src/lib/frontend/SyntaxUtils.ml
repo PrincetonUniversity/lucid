@@ -525,6 +525,20 @@ let flatten_tuple_ty (raw_ty : raw_ty) =
 ;;
 
 
+let rec flatten_exp exp = match exp.e with 
+  | ETuple(es) -> List.map flatten_exp es |> List.flatten
+  | EVector(es) -> List.map flatten_exp es |> List.flatten
+  | ERecord(label_exps) -> List.map (fun (_, exp) -> flatten_exp exp) label_exps |> List.flatten
+  | _ -> [exp]
+;;
+
+let rec flatten_size size = 
+  match (STQVar.strip_links size) with 
+  | ITup(sizes) -> List.map flatten_size sizes |> List.flatten
+  | size -> [size]
+;;
+
+
 let unpack_default_action e = 
   match e with 
   | ECall(cid, args, flag) -> cid, args, flag

@@ -26,18 +26,18 @@ let rec translate_raw_ty (rty : S.raw_ty) tspan : C.raw_ty =
   | S.TGroup -> C.TGroup
   | S.TEvent -> C.TEvent
   | S.TInt sz -> C.TInt (translate_size sz)
-  (* translate into a table type -- hard coded for now. *)
+  (* TABLE UPDATE hard coded translation into table type *)
   | S.TName(cid, sizes, _) when (Cid.equals cid Tables.t_id) -> 
     let size_to_ty (sz : S.size) = 
       C.ty (C.TInt (translate_size sz))
     in
-    let tkey_sizes, tparam_tys, tret_tys = match sizes with 
+    let tkey_sizes, tparam_tys, tret_tys = match (List.map (SyntaxUtils.normalize_size) sizes) with 
       | [ITup(skeys); ITup(sparams); ITup(srets)] -> (
         List.map translate_size skeys,
         List.map size_to_ty sparams,
         List.map size_to_ty srets
       )
-      | _ -> S.error "[translate_raw_ty] expected a tuple of sizes, but got something else"
+      | _ -> S.error@@"[translate_raw_ty] expected 3 size arguments, each a tuple, but got something else"
     in
     C.TTable { tkey_sizes; tparam_tys; tret_tys }
   | S.TName (cid, sizes, b) -> C.TName (cid, List.map translate_size sizes, b)
@@ -67,7 +67,15 @@ let rec translate_raw_ty (rty : S.raw_ty) tspan : C.raw_ty =
   | S.TPat s -> C.TPat (translate_size s)
   | S.TBitstring -> C.TBits (1500)
   | S.TRecord fields -> C.TRecord (List.map (fun (id, ty) -> (Id.create id), translate_raw_ty ty tspan) fields)
-  | _ -> err tspan (Printing.raw_ty_to_string rty)
+  | S.TAction a ->
+    let aarg_tys = List.map translate_ty a.aarg_tys in
+    let aret_tys = List.map translate_ty a.aret_tys in
+    C.TAction { aarg_tys; aret_tys } 
+    (* err tspan "action type should have been eliminated before backend" *)
+  | S.TTuple tys -> C.TTuple (List.map (fun ty -> translate_raw_ty ty tspan) tys)
+  | S.TVector _ -> err_unsupported tspan "vector type"
+  | S.TQVar _ -> err_unsupported tspan "quantified type"
+  | S.TAbstract _ -> err_unsupported tspan "abstract type"    
 and translate_ty (ty : S.ty) : C.ty =
   {
     raw_ty = translate_raw_ty ty.raw_ty ty.tspan;
@@ -155,13 +163,13 @@ and translate_exp (e : S.exp) : C.exp =
     | S.EFlood e -> C.EFlood (translate_exp e)
     | S.ERecord(fields) -> C.ERecord (List.map (fun (id, e) -> (Id.create id), translate_exp e) fields)
     | S.EProj(e, id) -> C.EProj (translate_exp e, Id.create id)
+    | ETuple exps -> C.ETuple(List.map translate_exp exps)
     | ESizeCast _
     | EStmt _
     | EWith _
     | EVector _
     | EComp _
     | EIndex _
-    | ETuple _ -> err_unsupported e.espan (Printing.exp_to_string e)
     | S.ETableCreate _ ->
       err
         e.espan
@@ -252,6 +260,31 @@ and translate_statement (s : S.statement) : C.statement =
         }
     | S.STableInstall (tbl_exp, entries) ->
       C.STableInstall (translate_exp tbl_exp, List.map translate_entry entries)
+    (* TABLE UPDATE -- hard coded tuple assign -> table assign *)
+    | S.STupleAssign(tup_asn) -> (
+      match tup_asn.exp.e with 
+      | ECall(cid, args, _) when ((Cid.names cid) = ["Table"; "lookup"]) -> (
+        let tbl_exp = List.nth args 0 in
+        let keys_exp = List.nth args 1 in
+        let action_args_exp = List.nth args 2 in
+        let tbl = translate_exp tbl_exp in
+        let keys = match keys_exp.e with
+          | ETuple keys -> List.map translate_exp keys
+          | _ -> err_unsupported tup_asn.exp.espan "keys in a table lookup should be a tuple"
+        in
+        let args = match action_args_exp.e with
+          | ETuple action_args -> List.map translate_exp action_args
+          | _ -> err_unsupported tup_asn.exp.espan "action args in a table lookup should be a tuple"
+        in
+        let outs = tup_asn.ids in
+        let out_tys = match tup_asn.tys with
+          | Some tys -> Some (List.map translate_ty tys)
+          | None -> None
+        in
+        STableMatch { tbl; keys; args; outs; out_tys }
+      )
+      | _ -> err_unsupported tup_asn.exp.espan "tuple assign is only supported for table lookup in the backend"
+    )
     | _ -> err s.sspan (Printing.statement_to_string s)
   in
   { s = s'; sspan = s.sspan; spragmas = s.spragmas }
@@ -321,11 +354,41 @@ and translate_parser_block (actions, (step, step_span)) =
 
 let translate_d preserve_user_decls d dspan dpragmas = 
   match d with
-  | S.DGlobal (id, ty, inner_exp) ->
-    Some (match inner_exp.e with
-    | ETableCreate _ ->
-      C.DGlobal (id, translate_ty ty, translate_etablecreate id inner_exp)
-    | _ -> C.DGlobal (id, translate_ty ty, translate_exp inner_exp))
+  | S.DGlobal (id, ty, constr_exp) -> (
+    match ty.raw_ty with 
+    (* TABLE UPDATE -- hard coded translation into a decl with ETableCreate *)
+    | (TName(cid, _, _)) when (Cid.equal cid Tables.t_id) -> (
+      match constr_exp.e with
+      | S.ECall(_, [size_exp; actions_exp; default_exp], _) ->
+        let size = translate_exp size_exp in
+        let actions = match actions_exp.e with
+          | ETuple actions -> List.map translate_exp actions
+          | _ -> err_unsupported dspan "actions in a table create should be a tuple"
+        in
+        let default_cid, default_args = match default_exp.e with
+          | ECall(cid, args, _) -> cid, args (* call to an action constructor *)
+          | EVar(_) ->   
+            err_unsupported dspan "Tables currently must use action constructors"
+            (* cid, [] *) (* an action, which isn't fully supported *)
+          | _ -> err_unsupported dspan "default action in a table create should be a call"
+        in
+        let (tbl_def : C.tbl_def) = {
+          tid = id; 
+          tty = translate_ty ty;
+          tactions = actions;
+          tsize = size;
+          tdefault = (default_cid, List.map translate_exp default_args);
+          }
+        in
+        Some (C.DGlobal (id, translate_ty ty, {e=C.ETableCreate tbl_def; ety=translate_ty ty; espan=constr_exp.espan}))
+      | _ -> err_unsupported dspan "table create should be a call"
+    )     
+    | _ -> 
+      Some (match constr_exp.e with
+      | ETableCreate _ ->
+        C.DGlobal (id, translate_ty ty, translate_etablecreate id constr_exp)
+      | _ -> C.DGlobal (id, translate_ty ty, translate_exp constr_exp))
+  )
   | S.DEvent (id, annot, sort, _, params) ->
     Some (C.DEvent (id, annot, translate_sort sort, translate_params params))
   | S.DHandler (id, s, body) ->
@@ -372,3 +435,4 @@ let translate_decl
 
 let translate_prog ?(preserve_user_decls=false) (ds : S.decls) : C.decls = 
   List.filter_map (translate_decl ~preserve_user_decls) ds
+;;

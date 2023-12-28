@@ -194,6 +194,7 @@ let rec interp_exp env e =
   | ERecord(fields) -> {
     e with e = ERecord (List.map (fun (id, e) -> (id, interp_exp env e)) fields)
   }
+  | ETuple(es) -> { e with e = ETuple (List.map (interp_exp env) es) }
   | EProj(rec_exp, id) -> (
     let rec_exp = interp_exp env rec_exp in
     match rec_exp.e with

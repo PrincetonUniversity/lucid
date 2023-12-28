@@ -108,7 +108,8 @@ let rec read_ids_of_exp exp : Cid.t list =
   | ETableCreate _ -> [] 
   | ERecord(fields)-> List.map (fun (_, exp) -> read_ids_of_exp exp) fields |> List.flatten
   | EProj(({e=ERecord(fields)}), fid) -> List.assoc fid fields |> read_ids_of_exp
-  | EProj _ -> error "[coreDfg] read_ids_of_exp: EProj not given a record"
+  | EProj _ -> error "[coreDfg] read_ids_of_exp: EProj not supported"
+  | ETuple _ -> error "[coreDfg] read_ids_of_exp: ETuple not supported"
 ;;
 
 let read_ids_of_exps exps = List.map read_ids_of_exp exps |> List.flatten

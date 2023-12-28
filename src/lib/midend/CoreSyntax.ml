@@ -142,9 +142,11 @@ and e =
   | EHash of size * exp list
   | EFlood of exp
   | ETableCreate of tbl_def
-  (* records *)
   | ERecord of (id * exp) list
   | EProj of exp * id
+  | ETuple of exp list 
+  
+    (* note: no tuple get op *)
 
 and exp =
   { e : e

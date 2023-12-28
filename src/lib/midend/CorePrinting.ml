@@ -210,6 +210,7 @@ let rec e_to_string e =
     Printf.sprintf
       "{%s}"
       (concat_map "; " (fun (id, exp) -> (id_to_string id) ^ " = " ^ exp_to_string exp) lst)
+  | ETuple lst -> "(" ^ concat_map ", " exp_to_string lst ^ ")"
 
 and exp_to_string e = e_to_string e.e
 and es_to_string es = comma_sep exp_to_string es

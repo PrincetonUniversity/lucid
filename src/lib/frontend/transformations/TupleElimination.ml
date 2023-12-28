@@ -207,7 +207,6 @@ let replacer =
     (* Split into a bunch of variable definitions, one for each
        tuple element. *)
     method! visit_SLocal env id ty exp =
-      print_endline ("SLocal: " ^ (Id.to_string id) ^ " = " ^ (Printing.exp_to_string exp) ^ " : " ^ (Printing.ty_to_string ty));
       match (Option.get exp.ety).raw_ty with
       | TTuple tys ->
         let entries = self#visit_exp env exp |> extract_etuple in
