@@ -196,18 +196,31 @@ let rec flatten_rty rty =
 ;;
 
 
-let extract_actions eactions = match eactions.e with 
-  | ETuple(acns) -> acns
-  | EVector(acns) -> acns
-  | _ -> err "[table type checker] wrong form for actions list"
+let rec flatten_exp exp = match exp.e with 
+  | ETuple(es) -> List.map flatten_exp es |> List.flatten
+  | EVector(es) -> List.map flatten_exp es |> List.flatten
+  | ERecord(label_exps) -> List.map (fun (_, exp) -> flatten_exp exp) label_exps |> List.flatten
+  | _ -> [exp]
 ;;
+
+let to_action_ty sp raw_ty = match raw_ty with 
+  | TAction _ -> raw_ty
+  | TActionConstr({aacn_ty}) -> TAction(aacn_ty)
+  | _ -> err_sp sp "[table type checker] expected an action or action constructor"
+;;
+
 let check_create (exp : Syntax.exp) : unit =
    (* make sure all the actions have the same type *)
   let actions, default_action = match exp.e with 
-    | ECall(_, [_; action_list; default_action], _) -> extract_actions action_list, default_action 
+    | ECall(_, [_; action_list; default_action], _) -> flatten_exp action_list, default_action 
     | _ -> err_sp exp.espan "[table type checker] Table.create has invalid number of arguments"
+  in  
+  let acn_raw_tys = List.map 
+    (fun acn_exp -> 
+      (Option.get acn_exp.ety).raw_ty
+      |> to_action_ty acn_exp.espan) 
+    (default_action::actions) 
   in
-  let acn_raw_tys = List.map (fun acn_exp -> (Option.get acn_exp.ety).raw_ty) (default_action::actions) in
   if (not (equiv_raw_tys acn_raw_tys)) then (
     err_sp exp.espan "[table type checker] actions in Table.create don't have matching types"
   )

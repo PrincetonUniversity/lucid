@@ -20,7 +20,6 @@ let translate_size (sz : S.size) : C.size =
   SyntaxUtils.extract_size_default sz 32
 ;;
 
-
 let rec translate_raw_ty (rty : S.raw_ty) tspan : C.raw_ty = 
   match S.TyTQVar.strip_links rty with
   | S.TBool -> C.TBool
