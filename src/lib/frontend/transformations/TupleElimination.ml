@@ -8,6 +8,22 @@ open Collections
    have already been removed, so a type contains a tuple if and only if
    it is itself a tuple. *)
 
+
+(* builtin functions are a special case: they may accept and return tuples *)
+let builtin_cids = 
+  List.map
+    (fun (_, _, global_funs, constructors) ->
+      let fun_cids =
+        List.map
+          (fun (gf : InterpState.State.global_fun) -> gf.cid)
+          global_funs
+      in
+      let constructor_cids = List.map fst constructors in
+      fun_cids @ constructor_cids)
+    Builtins.builtin_modules
+  |> List.flatten
+;;
+
 let extract_etuple e =
   match e.e with
   | ETuple es -> es
@@ -129,6 +145,32 @@ let replacer =
       in
       TActionConstr acn_ctor_ty'
 
+    method! visit_STupleAssign env tuple_assign = 
+      (* It should not matter whether you 
+         recurse on the tuple assign statement? *)
+      let tuple_assign = self#visit_tuple_assign env tuple_assign in
+      match tuple_assign.tys with
+      (* flatten any tuple variables that get created *)
+      | Some(out_tys) -> 
+        let var_defs = List.combine tuple_assign.ids out_tys in
+        let env', new_var_defs = flatten_params !env var_defs in
+        let ids', out_tys' = List.split new_var_defs in
+        (* update the environment with the new ids *)
+        env := env';
+        (* return tuple assign statement with updates *)
+        STupleAssign { tuple_assign with ids = ids'; tys = Some out_tys' }
+      | None -> 
+        (* the tuple assign writes existing variables, we must
+           find their flattened ids (and we don't need types) *)
+        let rec lookup_flat_ids id : id list =
+          match IdMap.find_opt id !env with
+          | None -> [id] (* not a tuple *)
+          | Some ids_tys ->
+            List.map lookup_flat_ids (List.split ids_tys |> fst) |> List.flatten
+        in
+        let ids' = List.map lookup_flat_ids tuple_assign.ids |> List.flatten in
+        STupleAssign { tuple_assign with ids = ids' }
+
     (* Table extensions -- statements *)
     method! visit_STableMatch env tblmatch =
       (* recurse on inner components *)
@@ -165,6 +207,7 @@ let replacer =
     (* Split into a bunch of variable definitions, one for each
        tuple element. *)
     method! visit_SLocal env id ty exp =
+      print_endline ("SLocal: " ^ (Id.to_string id) ^ " = " ^ (Printing.exp_to_string exp) ^ " : " ^ (Printing.ty_to_string ty));
       match (Option.get exp.ety).raw_ty with
       | TTuple tys ->
         let entries = self#visit_exp env exp |> extract_etuple in
@@ -253,22 +296,8 @@ let replacer =
        one parameter for each tuple entry. So we need to adjust the
        arguments at the call site as well *)
     method! visit_ECall env cid args unordered =
-      (* Builtin functions are an exception. We don't change their 
-         parameters, so its wrong to change their calls. *)
-      let builtin_funs =
-        List.map
-          (fun (_, _, global_funs, constructors) ->
-            let fun_cids =
-              List.map
-                (fun (gf : InterpState.State.global_fun) -> gf.cid)
-                global_funs
-            in
-            let constructor_cids = List.map fst constructors in
-            fun_cids @ constructor_cids)
-          Builtins.builtin_modules
-        |> List.flatten
-      in
-      if (List.mem cid builtin_funs) then 
+      (* Builtin function calls keep their toplevel tuple args *)
+      if (List.mem cid builtin_cids) then 
         let args = List.map (self#visit_exp env) args in
         ECall (cid, args, unordered)
       else 

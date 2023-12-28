@@ -206,11 +206,7 @@ and s =
   | SAssign of id * exp
   (* internal-only node used for builtin methods that return 
      multiple values, like Table.match *)
-  | STupleAssign of {
-    ids : id list;
-    tys : (ty list) option;
-    exp : exp;
-  }
+  | STupleAssign of tuple_assign
   | SPrintf of string * exp list
   | SIf of exp * statement * statement
   | SGen of gen_type * exp
@@ -220,6 +216,12 @@ and s =
   | SLoop of statement * id * size
   | STableMatch of tbl_match
   | STableInstall of exp * tbl_entry list
+
+and tuple_assign = {
+  ids : id list;
+  tys : (ty list) option;
+  exp : exp;
+}
 
 and tbl_match =
   { tbl : exp

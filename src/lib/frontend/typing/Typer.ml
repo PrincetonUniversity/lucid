@@ -868,43 +868,30 @@ and infer_statement (env : env) (s : statement) : env * statement =
       env, SAssign (id, inf_e)
     (* assignment to already declared tuple *)
     | STupleAssign({ids; tys=None; exp}) -> (
-      (* type the exp *)
+      (* type the exp and unify with a tuple of the var types *)
       let env, inf_e, ety = infer_exp env exp |> textract in
-      let etys = unpack_tuple_rty (ety.raw_ty) in
-      (* make sure no inner types are TVoid *)
-      List.iter (fun ty -> match TyTQVar.strip_links ty with
-        | TVoid -> error_sp s.sspan "Cannot assign result of void function to variable"
-        | _ -> ()) etys;
-      (* make sure the number of ids matches the number of types in the tuple *)
-      if (List.length ids) <> (List.length etys) then (
-        error_sp s.sspan "Incorrect number of variables in tuple assignment";
-      );
       (* look up the types of the ids *)
       let id_tys = List.map (fun id -> 
         match (IdMap.find_opt id env.locals) with 
         | Some ty -> ty.raw_ty
         | None -> error_sp s.sspan @@ "Variable " ^ Id.name id ^ " not declared") ids 
       in
-      (* unify id_tys with etys *)
-      List.iter2 (unify_raw_ty s.sspan) id_tys etys;
+      (* unify a tuple of id tys with exp ty *)
+      let ty_tuple = TTuple (id_tys) in
+      unify_raw_ty s.sspan ety.raw_ty ty_tuple;
       (* return the statement *)
       env, STupleAssign({ids; tys=None; exp=inf_e})
     )
     | STupleAssign({ids; tys=Some(tys); exp}) -> (
-      (* type the exp *)
+      print_endline ("Case: STupleAssign");
+      (* type the exp and unify with a tuple of the declared types *)
       let env, inf_e, ety = infer_exp env exp |> textract in
-      let etys = unpack_tuple_rty (ety.raw_ty) in
-      (* make sure no inner types are TVoid *)
-      List.iter (fun ty -> match TyTQVar.strip_links ty with
-        | TVoid -> error_sp s.sspan "Cannot assign result of void function to variable"
-        | _ -> ()) etys;
-      (* make sure the number of ids matches the number of types in the tuple *)
-      if (List.length ids) <> (List.length etys) then (
-        error_sp s.sspan "Incorrect number of variables in tuple assignment";
-      );
-      (* unify id_tys with tys *)
-      List.iter2 (unify_raw_ty s.sspan) (List.map (fun ty -> ty.raw_ty) tys) etys;
-      (* return the statement *)
+      let ty_tuple = TTuple (List.map (fun ty -> ty.raw_ty) tys) in
+      unify_raw_ty s.sspan ety.raw_ty ty_tuple;
+      (* update the environment with the new variables *)
+      let new_locals = List.combine ids tys in
+      let env = add_locals env new_locals in
+      (* return the statement *)      
       env, STupleAssign({ids; tys=Some(tys); exp=inf_e})
     )
     | SPrintf (str, es) ->

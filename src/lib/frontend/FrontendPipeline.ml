@@ -108,9 +108,13 @@ let process_prog ?(opts=def_opts) builtin_tys ds =
          ds)
   in   
   print_if_verbose "-------Eliminating tuples-------";
-  let ds = TupleElimination.eliminate_prog ds in
+  let ds = BuiltinsTupleElimination.eliminate_prog ds in
   print_if_debug ds;
   print_if_verbose "---------------typing8-------------";
+  let ds = Typer.infer_prog builtin_tys ds in
+  let ds = TupleElimination.eliminate_prog ds in
+  print_if_debug ds;
+  print_if_verbose "---------------typing9-------------";
   let ds = Typer.infer_prog builtin_tys ds in
   print_if_verbose "-------Inlining Constants-------";
   let ds = ConstInlining.inline_prog ds in

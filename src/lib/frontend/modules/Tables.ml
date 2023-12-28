@@ -159,11 +159,9 @@ let signature =
 ;;
 
 
-(* type check Table expressions. 
-   This should be run after each pass of the main type checker.  *)
-let strip_links ty = { ty with raw_ty = TyTQVar.strip_links ty.raw_ty }
 
-(*** typing ***)
+(*** Table method call typing -- this runs after the main pass of the frontend type checker ***)
+let strip_links ty = { ty with raw_ty = TyTQVar.strip_links ty.raw_ty }
 let rty_to_size rty = 
   match rty with 
   | TInt(sz) -> sz
@@ -247,13 +245,23 @@ let check_install exp =
       let acn_arg_rawtys = List.map (fun arg_ty -> arg_ty.raw_ty) aarg_tys in
       let acn_ret_rawtys = List.map (fun arg_ty -> arg_ty.raw_ty) aret_tys in
       acn_arg_rawtys, acn_ret_rawtys
-    | _ -> err_sp exp.espan "[table type checker] Table.install's action argument has wrong type"
+    | TActionConstr(acn_ctor) -> 
+      let acn_arg_rawtys = List.map (fun arg_ty -> arg_ty.raw_ty) acn_ctor.aacn_ty.aarg_tys in
+      let acn_ret_rawtys = List.map (fun arg_ty -> arg_ty.raw_ty) acn_ctor.aacn_ty.aret_tys in
+      acn_arg_rawtys, acn_ret_rawtys
+    | _ -> err_sp acn_arg.espan ("[table type checker] Table.install's action argument ("^(Printing.exp_to_string acn_arg)^") has wrong type")
   in
   let acn_arg_sizes = List.map rty_to_sizes acn_arg_rawtys |> List.flatten in
   let acn_ret_sizes = List.map rty_to_sizes acn_ret_rawtys |> List.flatten in
   (* check list lengths first *)
-  if (List.length acn_arg_sizes <> List.length (unpack_sizes acn_arg_fmt)) then 
-    (err_sp acn_arg.espan "[table type checker] Table.install's action has wrong number of arguments");
+  if (List.length acn_arg_sizes <> List.length (unpack_sizes acn_arg_fmt)) then (
+    let err_msg = Printf.sprintf 
+      "[table type checker] Table.install's action (%s) has wrong number of arguments. Expected %d, got %d" 
+      (Printing.exp_to_string acn_arg)
+      (List.length (unpack_sizes acn_arg_fmt))
+      (List.length acn_arg_sizes) 
+    in
+    err_sp acn_arg.espan err_msg);
   if (List.length acn_ret_sizes <> List.length (unpack_sizes acn_ret_fmt)) then
     (err_sp acn_arg.espan "[table type checker] Table.install's action has wrong number of return values");
   (* check that the sizes match *)
@@ -280,14 +288,7 @@ let check_lookup exp =
     (err_sp key_arg.espan "[table type checker] Table.install's key argument has wrong type");
 
   (* make sure the action args match the acn_arg_fmt *)
-  let acn_arg_rawtys = flatten_rty (Option.get acn_args.ety).raw_ty in
-    
-  (* match (Option.get acn_args.ety).raw_ty with 
-    | TTuple(acn_arg_rawtys) -> acn_arg_rawtys
-    | TRecord(label_rtys) -> List.map (fun (_, rty) -> rty) label_rtys
-    | TVector(rty, len) -> List.init (SyntaxUtils.extract_size len) (fun _ -> rty)
-    | _ -> err_sp acn_args.espan "[table type checker] Table.lookup's action argument has wrong type"
-  in *)
+  let acn_arg_rawtys = flatten_rty (Option.get acn_args.ety).raw_ty in    
   let acn_arg_sizes = List.map rty_to_sizes acn_arg_rawtys |> List.flatten in
   (* check list lengths first *)
   if (List.length acn_arg_sizes <> List.length (unpack_sizes acn_arg_fmt)) then 

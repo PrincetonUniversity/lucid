@@ -518,10 +518,10 @@ let unpack_tuple (e : exp) =
   | _ -> [e]
 ;;
 
-let unpack_tuple_rty (raw_ty : raw_ty) = 
+let flatten_tuple_ty (raw_ty : raw_ty) = 
   match raw_ty with 
   | TTuple(lst) -> lst
-  | _ -> error "[unpack tuple] tried to unpack a non tuple type"
+  | _ -> [raw_ty]
 ;;
 
 

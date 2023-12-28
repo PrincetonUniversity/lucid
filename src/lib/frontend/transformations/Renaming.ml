@@ -209,6 +209,16 @@ let rename prog =
         let new_ty = self#visit_ty dummy ty in
         let new_x = self#freshen_var x in
         SLocal (new_x, new_ty, replaced_e)
+      method! visit_STupleAssign dummy tup_assn = 
+        let replaced_exp = self#visit_exp dummy tup_assn.exp in
+        match tup_assn.tys with 
+        | None -> (* assign to existing vars, visit ids *)
+          let new_ids = List.map (self#visit_id dummy) tup_assn.ids in
+          STupleAssign {ids=new_ids; tys = None; exp = replaced_exp}
+        | Some(tys) -> (* assign to new vars, rename, recurse on types, and bind *)
+          let new_tys = List.map (self#visit_ty dummy) tys in
+          let new_ids = List.map (self#freshen_var) tup_assn.ids in
+          STupleAssign {ids=new_ids; tys = Some(new_tys); exp = replaced_exp}
 
       method! visit_PRead dummy x ty exp =
         let new_ty = self#visit_ty dummy ty in

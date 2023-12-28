@@ -53,6 +53,7 @@
    functionInlining
    tableInlining
    sizeInlining
+   builtinsTupleElimination
    renaming
    globalArgElimination
    explicitReturns
