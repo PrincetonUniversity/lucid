@@ -700,7 +700,8 @@ let rec translate_statement env prev_decls stmt : (decl list * T.statement) * pr
     let (s1_decls, s1_stmt), s1_env = translate_statement env prev_decls s1 in
     let (s2_decls, s2_stmt), s2_env = translate_statement s1_env prev_decls s2 in
     (s1_decls@s2_decls, sseq [s1_stmt; s2_stmt]), s2_env
-  | STableMatch _ | STableInstall _ -> error "[coreToP4Tofino.translate_statement] tables not implemented"
+  | STupleAssign _ -> error "[coreToP4Tofino.translate_statement] multiassign not yet supported inside of an action"
+  | STableMatch _ | STableInstall _ -> error "[coreToP4Tofino.translate_statement] tables may not appear inside action bodies"
 ;;
 
 (* generate an action, and other compute objects, from an open function

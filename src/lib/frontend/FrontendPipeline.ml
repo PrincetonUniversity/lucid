@@ -107,11 +107,12 @@ let process_prog ?(opts=def_opts) builtin_tys ds =
          let ds = Typer.infer_prog builtin_tys ds in
          ds)
   in   
-  print_if_verbose "-------Eliminating tuples-------";
+  print_if_verbose "-------Wrapping builtins calls in TupleAssign statements-------";
   let ds = BuiltinsTupleElimination.eliminate_prog ds in
   print_if_debug ds;
   print_if_verbose "---------------typing8-------------";
   let ds = Typer.infer_prog builtin_tys ds in
+  print_if_verbose "-------Eliminating tuples-------";
   let ds = TupleElimination.eliminate_prog ds in
   print_if_debug ds;
   print_if_verbose "---------------typing9-------------";

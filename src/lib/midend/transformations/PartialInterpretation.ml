@@ -498,6 +498,15 @@ let rec interp_stmt env s : statement * env =
     in
     let new_s = { s with s = SAssign (id, exp) } in
     new_s, IdMap.add (Cid.to_id id) pv env
+  | STupleAssign({ids; tys; exp}) -> 
+    let exp' = interp_exp exp in
+    let env = List.fold_left
+      (fun env id -> IdMap.add id (new_unknown ()) env)
+      env
+      ids
+    in
+    let new_s = { s with s = STupleAssign({ids; tys; exp = exp'}) } in
+    new_s, env
   | STableMatch tm ->
     let keys = List.map interp_exp tm.keys in
     let args = List.map interp_exp tm.args in
@@ -628,6 +637,16 @@ let remove_unused_variables stmt =
     (* We can't remove the variables that are declared as part of a table match
          without changing semantics, so just make sure we unalive them and gather
          any arguments to the match *)
+    | STupleAssign({ids}) ->
+      let live_vars =
+        let acc = ref live_vars in
+        variable_extractor#visit_statement acc stmt;
+        !acc
+      in
+      let live_vars =
+        List.fold_left (fun acc id -> IdSet.remove id acc) live_vars ids
+      in
+      live_vars, stmt
     | STableMatch tm ->
       let live_vars =
         let acc = ref live_vars in

@@ -105,6 +105,7 @@ rule token = parse
   | "size_to_int"     { SIZECAST (position lexbuf) }
   | "symbolic"        { SYMBOLIC (position lexbuf) }
   | "flood"           { FLOOD (position lexbuf) }
+  | "pat"             { PAT (position lexbuf) }
   | id as s           { ID (position lexbuf, Id.create s) }
   | "'"(id as s)      { QID (position lexbuf, Id.create s) }
   | num width as w    { NUMWITDH (position lexbuf, extract_numwidth w) }

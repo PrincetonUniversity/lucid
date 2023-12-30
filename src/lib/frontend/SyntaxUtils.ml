@@ -561,6 +561,19 @@ let is_evar exp =
 ;;
 
 
+(* in a pattern context of parsing, wrap all expression that 
+do not parse as pat types to pats *)
+let cast_int_pats exp = 
+  match exp.e with 
+  (* exception cases: pattern values, pattern casts, and mask ops *)
+  | EVal({v=VPat (_)}) -> exp
+  | EOp(PatExact, _) -> exp
+  | EOp(PatMask, _) -> exp 
+  (* everything else gets cast to a pattern *)
+  | _ -> op_sp PatExact [exp] exp.espan
+;;
+
+
 (* 
 let d = 
     | DSize of id * size option

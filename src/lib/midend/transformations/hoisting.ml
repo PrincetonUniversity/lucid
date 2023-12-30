@@ -161,7 +161,7 @@ let rec hoist (stmts_to_place : statement list) stmt =
       let non_deps, deps = stmt_to_transitive_deps stmt stmts_to_place in
       sequence_stmts (stmt::(deps)), non_deps
       
-  ) 
+  )
   | SSeq(s1, s2) -> 
     (* walk backwards *)
     let s2, s2_stmts_to_place = hoist stmts_to_place s2 in
@@ -200,6 +200,8 @@ let rec hoist (stmts_to_place : statement list) stmt =
     let stmts_before, stmts_after = stmt_to_transitive_deps stmt stmts_to_place in
     sequence_stmts ({stmt with s=SMatch(es, bs)}::( stmts_after)), (stmts_before@stmts_to_place_branches)
   )
+  (* tuple assign has the same semantics as table match, meaning we don't try to hoist it *)
+  | STupleAssign _ -> stmt, stmts_to_place
   (* nothing else changes *)
   | SNoop | SUnit _ | SPrintf _ | SGen _ | SRet _ | STableInstall _ | STableMatch _ -> stmt, stmts_to_place
 ;;

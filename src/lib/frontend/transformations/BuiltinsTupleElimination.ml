@@ -124,8 +124,8 @@ and eliminate_stmt stmt =
   (* same special case for sLocal, except we fill in the type of the tuple assign *)
   | SLocal (id, ty, { e = ECall(cid, args, u); ety; espan}) 
     when ((List.mem cid builtin_cids) && (Option.get ety |> is_tuple)) ->
-    print_endline ("found a local tuple assign" ^ (Cid.to_string cid));
-    print_endline (Printing.ty_to_string ty);
+    (* print_endline ("found a local tuple assign" ^ (Cid.to_string cid)); *)
+    (* print_endline (Printing.ty_to_string ty); *)
     let args_pre_stmt, args' = eliminate_exps args in
     let exp' = { e = ECall (cid, args', u); ety; espan } in
     let stupleassign = statement@@STupleAssign { ids = [id]; tys = Some [ty]; exp = exp' } in

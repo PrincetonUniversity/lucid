@@ -403,6 +403,7 @@ let rec translate_s s =
   )
   | STableMatch _ -> error "table match not implemented"
   | STableInstall _ -> error "table install not implemented"
+  | STupleAssign _ -> error "tuple assignment not implemented"
   | SUnit(exp) -> 
     let exp = translate_exp exp in
     sprintf "%s;" exp

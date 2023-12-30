@@ -141,12 +141,10 @@ and e =
   | ECall of cid * exp list * bool
   | EHash of size * exp list
   | EFlood of exp
-  | ETableCreate of tbl_def
   | ERecord of (id * exp) list
   | EProj of exp * id
   | ETuple of exp list 
-  
-    (* note: no tuple get op *)
+  | ETableCreate of tbl_def
 
 and exp =
   { e : e
@@ -173,16 +171,25 @@ and s =
   | SSeq of statement * statement
   | SMatch of exp list * branch list
   | SRet of exp option
+
   | STableMatch of tbl_match
   | STableInstall of exp * tbl_entry list
+
+  | STupleAssign of tuple_assign
+
+
+and tuple_assign = {
+  ids : id list;
+  tys : (ty list) option;
+  exp : exp;
+}
+
 
 and statement =
   { s : s
   ; sspan : sp
   ; spragmas : pragma list
   }
-
-and tbl_match_out_param = id * ty option
 
 and tbl_match =
   { tbl : exp
@@ -191,7 +198,6 @@ and tbl_match =
   ; outs : id list
   ; out_tys : ty list option
   }
-(* out_tys set for statements that create new vars *)
 
 (* table entries are patterns that point
    to actions, with values to be used

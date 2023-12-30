@@ -314,7 +314,16 @@ match s with
     "table_install(%s, {\n\t%s\n\t}\n);"
     (exp_to_string tbl_exp)
     (List.map entry_to_string entries |> String.concat "\n")
-  
+| STupleAssign({ids; tys; exp}) ->
+  Printf.sprintf
+    "%s%s = %s;"
+    (match tys with 
+      | Some(tys) -> (comma_sep ty_to_string tys)^" "
+      | None -> "")
+    (comma_sep id_to_string ids)
+    (exp_to_string exp)
+
+    
 
 and stmt_to_string stmt =
   let s_str = s_to_string stmt.s in

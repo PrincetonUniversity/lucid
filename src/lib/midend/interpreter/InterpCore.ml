@@ -563,6 +563,9 @@ let rec interp_statement nst hdl_sort swid locals s =
     List.iter (fun entry -> Pipeline.install_table_entry tbl_pos entry (State.sw nst swid).pipeline) entries;
     (* return unmodified locals context *)
     locals
+  | STupleAssign(_) -> (
+    error "Tuple assignment (and new Table library functions) not implemented in interpreter"
+  )
   | STableMatch tm ->
     (* load the dynamic entries from the pipeline *)
     let tbl_pos =

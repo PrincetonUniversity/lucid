@@ -236,6 +236,28 @@ and translate_statement (s : S.statement) : C.statement =
   let s' =
     match s.s with
     | S.SNoop -> C.SNoop
+    (* TABLE UPDATE -- hard coded table install call -> table_install *)
+    | S.SUnit {e=ECall(cid, args, _)} when ((Cid.names cid) = ["Table"; "install"]) -> 
+      let tbl_exp = List.nth args 0 in
+      let key_tup = List.nth args 1 in
+      let match_keys = match key_tup.e with 
+        | ETuple keys -> List.map translate_exp keys
+        | _ -> err_unsupported key_tup.espan "keys in a table install should be a tuple"
+      in
+      let action_exp = List.nth args 2 in
+      let action_cid, action_args = match action_exp.e with 
+        | ECall(cid, args, _) -> cid, List.map translate_exp args (* call to an action constructor *)
+        | _ -> err action_exp.espan "the last argument of Table.install must be a call to an action constructor"
+      in 
+      let tbl_entry : C.tbl_entry = {
+        eprio = 10;
+        ematch = match_keys;
+        eaction = Cid.to_id action_cid;
+        eargs = action_args;
+      }
+      in
+      let tbl_exp = translate_exp tbl_exp in
+      C.STableInstall (tbl_exp, [tbl_entry])
     | S.SUnit e -> C.SUnit (translate_exp e)
     | S.SLocal (id, ty, e) -> C.SLocal (id, translate_ty ty, translate_exp e)
     | S.SAssign (id, e) -> C.SAssign (Cid.id id, translate_exp e)

@@ -76,18 +76,6 @@
         else(
             dparser_sp id params p span) 
 
-
-    (* in a pattern context of parsing, wrap all expression that 
-    do not parse as pat types to pats *)
-    let cast_int_pats exp = 
-        match exp.e with 
-        (* exception cases: pattern values, pattern casts, and mask ops *)
-        | EVal({v=VPat (_)}) -> exp
-        | EOp(PatExact, _) -> exp
-        | EOp(PatMask, _) -> exp 
-        (* everything else gets cast to a pattern *)
-        | _ -> op_sp PatExact [exp] exp.espan
-
 ;;
 
 %}
@@ -193,6 +181,7 @@
 %token <Span.t> SYMBOLIC
 %token <Span.t> FLOOD
 %token <Span.t> WILDCARD
+%token <Span.t> PAT
 
 %token EOF
 
@@ -321,6 +310,11 @@ exp:
     | SUB exp                             { op_sp Neg [$2] (Span.extend $1 $2.espan) }
     | BITNOT exp                          { op_sp BitNot [$2] (Span.extend $1 $2.espan) }
     | HASH single_poly LPAREN args RPAREN { hash_sp (snd $2) $4 (Span.extend $1 $5) }
+
+
+    | PAT LPAREN exp RPAREN               { 
+        op_sp PatExact [$3] (Span.extend $1 $4)}
+
     | LPAREN TINT single_poly RPAREN exp  { op_sp (Cast(snd $3))[$5] (Span.extend $1 $5.espan) }
     | exp PROJ ID                         { proj_sp $1 (Id.name (snd $3)) (Span.extend $1.espan (fst $3)) }
     // | LPAREN exp RPAREN		             	  { $2 }

@@ -154,6 +154,7 @@ let rec read_ids_of_stmt (stmt:CoreSyntax.statement) : Cid.t list =
   | STableMatch(tm) -> 
     (read_ids_of_exps tm.keys)
     @(read_ids_of_exps tm.args)
+  | STupleAssign({exp}) -> read_ids_of_exp exp
   | STableInstall(_, entries) -> 
     List.map 
       (fun entry -> 
@@ -198,6 +199,7 @@ let rec write_ids_of_stmt (stmt:CoreSyntax.statement) : (Cid.t list) =
     | _ -> []
   )  
   | STableInstall _ -> []
+  | STupleAssign({ids}) -> List.map Cid.id ids
   | STableMatch(tm) -> CL.map Cid.id tm.outs
 ;;
 

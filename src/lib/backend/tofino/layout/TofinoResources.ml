@@ -134,6 +134,10 @@ let rec hashers_of_stmt stmt =
     if (hashers_in_exps (tm.keys@tm.args))
     then [stmt]
     else []
+  | STupleAssign({exp}) -> 
+    if (hashers_in_exps [exp])
+    then [stmt]
+    else []
   | STableInstall(_, entries) -> 
     let hasher_in_entry ent =
       (hashers_in_exps ent.ematch || hashers_in_exps ent.eargs)
@@ -255,6 +259,8 @@ let rec hash_ops_of_stmt statement_cache stmt =
     )
     | STableMatch(tm) ->
       statement_cache,hash_ops_of_exps (tm.keys@tm.args)
+    | STupleAssign({exp}) -> 
+      statement_cache, hash_ops_of_exp exp
     | STableInstall(_, entries) -> 
       statement_cache,List.fold_left 
         (fun ct ent ->         

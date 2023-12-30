@@ -253,7 +253,6 @@ let check_create (exp : Syntax.exp) =
   );
   exp
 ;;
-
 let check_install exp = 
   let table_arg, key_arg, acn_arg = match exp.e with 
     | ECall(_, [table_arg; key_arg; acn_arg], _) -> table_arg, key_arg, acn_arg
@@ -265,10 +264,9 @@ let check_install exp =
   in
   (* make sure the sizes of the key argument match the key format size attached to Table.t *)
   let key_rawty = (Option.get key_arg.ety).raw_ty in
-  let expected_key_rawty = TTuple(List.map (fun sz -> TInt(sz)) (unpack_sizes key_fmt)) in
+  let expected_key_rawty = TTuple(List.map (fun sz -> TPat(sz)) (unpack_sizes key_fmt)) in
   if (not (SyntaxUtils.equiv_raw_ty ~qvars_wild:true expected_key_rawty key_rawty)) then 
     (err_sp key_arg.espan "[table type checker] Table.install's key argument has wrong type");
-
   (* make sure the size of the action's arguments and return match the Table.t's formats *)
   let acn_arg_rawtys, acn_ret_rawtys = match (Option.get acn_arg.ety).raw_ty with 
     | TAction({aarg_tys; aret_tys;}) -> 
