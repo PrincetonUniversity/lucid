@@ -84,7 +84,7 @@ let expr_to_rawty expr =
   let sort = Z3.Expr.get_sort expr in 
   match Z3.Sort.get_sort_kind sort with 
     | Z3enums.BOOL_SORT -> TBool
-    | Z3enums.BV_SORT -> TInt (Z3.BitVector.get_size sort)
+    | Z3enums.BV_SORT -> TInt (Sz(Z3.BitVector.get_size sort))
     | _ -> error "[expr_to_raw_ty] unsupported kind of z3 expression."
 ;;
 

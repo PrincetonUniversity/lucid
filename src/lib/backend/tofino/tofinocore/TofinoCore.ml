@@ -24,7 +24,7 @@ and sp = [%import: Span.t]
 and z = [%import: (Z.t[@opaque])]
 and zint = [%import: (Integer.t[@with Z.t := (Z.t [@opaque])])]
 and location = int
-and size = int
+and size = [%import: CoreSyntax.size]
 and sizes = size list
 and raw_ty = [%import: CoreSyntax.raw_ty]
 and tbl_ty = [%import: CoreSyntax.tbl_ty]
@@ -265,7 +265,7 @@ let decl_to_tdecl (decl:decl) =
     let actions, spans = List.split pblock.pactions in
     let intr_id, intr_ty = intrinsic_to_param ingress_intrinsic_metadata_t in 
     let read_intr_acn = PRead((Cid.id intr_id), intr_ty, var (Cid.id pkt_id) pkt_arg_ty) in
-    let skip_resubmit_intr_acn = skip (tint 64) in 
+    let skip_resubmit_intr_acn = skip (tint (Sz 64)) in 
     let pblock = {pblock with
       pactions=
       [read_intr_acn, Span.default; skip_resubmit_intr_acn, Span.default]
@@ -440,7 +440,9 @@ let array_dimensions tds =
           ( id
           , { raw_ty = TName (ty_cid, sizes, true); _ }
           , { e = ECall (_, num_slots :: _, _) } ) ->
-        (match Cid.names ty_cid |> List.hd with
+        (
+          let sizes = to_singleton_sizes sizes in
+          match Cid.names ty_cid |> List.hd with
          | "Array" ->
            let num_slots = InterpHelpers.int_from_exp num_slots in
            Some (id, (List.hd sizes, num_slots))

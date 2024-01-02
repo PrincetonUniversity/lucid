@@ -26,7 +26,10 @@ let cid_to_string cid =
   else String.concat "." @@ Cid.names cid
 ;;
 
-let rec size_to_string = string_of_int
+let rec size_to_string = function 
+  | Sz sz -> string_of_int sz
+  | Szs szs -> ("(" ^ (comma_sep string_of_int szs) ^ ")")
+;;
 let wrap l r str = if String.equal str "" then "" else l ^ str ^ r
 let sizes_to_string sizes = comma_sep size_to_string sizes |> wrap "<<" ">>"
 

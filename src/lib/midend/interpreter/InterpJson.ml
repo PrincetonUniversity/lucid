@@ -217,7 +217,7 @@ let parse_int err_str (j) =
 
 let rec parse_value payloads_t_id err_str ty j =
   match j, ty.raw_ty with
-  | `Int n, TInt size -> vint n size
+  | `Int n, TInt (Sz size) -> vint n size
   (* payloads should be hex strings, but we graciously read ints as 32-bit uints *)
   | `Int n, TName (cid, _, _) when Cid.equal cid payloads_t_id -> (
     BitString.int_to_bits 32 n |> CoreSyntax.vbits

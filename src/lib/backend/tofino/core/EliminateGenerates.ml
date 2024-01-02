@@ -385,7 +385,7 @@ let rec enable_event_headers ev =
                 (* multicast group b is the broadcast group *)
                 (sassign_var ctx.ctx_group_evar (vint broadcast_groupnum 16|> value_to_exp))
                 (* exclude the ingress port from the output ports *)
-                (sassign_var ctx.ctx_flood_source_evar (op (Cast(size_of_tint ctx.ctx_flood_source_evar.ety)) [skip_port] (ctx.ctx_flood_source_evar.ety)))
+                (sassign_var ctx.ctx_flood_source_evar (op (Cast(Sz(size_of_tint ctx.ctx_flood_source_evar.ety))) [skip_port] (ctx.ctx_flood_source_evar.ety)))
             in
             [], stmt
           | _ -> 

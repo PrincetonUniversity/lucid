@@ -131,8 +131,14 @@ let cid_string cid = String.concat "_" (Cid.names cid);;
 (* naming functions *)
 let memopty_string n_args arg_sz = sprintf "memop_%d_%d" n_args arg_sz
 
-let builtin_ty_string cid sizes = sprintf "%s_%s" (cid_string cid) (underscore_sep string_of_int sizes)  
-
+let builtin_ty_string cid (sizes : CoreSyntax.size list) = 
+  let builtin_size_string sz = match sz with 
+    | Sz sz -> string_of_int sz
+    | Szs szs -> underscore_sep string_of_int szs
+  in
+  let size_str = String.concat "__" (List.map builtin_size_string sizes) in
+  sprintf "%s_%s" (cid_string cid) size_str  
+;;
 (* the name of an events argument struct *)
 let event_struct evid = sprintf "event_%s" (id_string evid)
 (* the type tag of the event -- part of the event_type enum *)
@@ -146,7 +152,7 @@ let unknown_event_type, unknown_event_num = "EVENT_TYPE_UNKNOWN", 0
 let rty_to_size rty =
   match rty with
   | TBool -> 1
-  | TInt sz -> sz
+  | TInt Sz sz -> sz
   | _ -> error "[ty_to_size] can only get size of ints or bools"
 ;;
 
@@ -178,6 +184,7 @@ let mk_name_ty cid sizes =
   | "Array"::_
   | "PairArrays"::_ -> (
     let name_ty = builtin_ty_string cid sizes in
+    let sizes = List.map (fun sz -> match sz with Sz sz -> sz | _ -> error "expected singleton size") sizes in
     let sizes = List.map (fun sz -> sprintf "uint%d_t" sz) sizes in
     sprintf "typedef struct %s { uint16_t size; %s* data; } %s;" 
       name_ty
@@ -191,7 +198,8 @@ let mk_name_ty cid sizes =
 let rec translate_ty ty = translate_raw_ty ty.raw_ty
 and translate_raw_ty rty = match rty with
   | TBool -> "bool" 
-  | TInt(sz) -> translate_tint sz
+  | TInt(Sz sz) -> translate_tint sz
+  | TInt _ -> error "int with multi-dimensional size should not exist"
   | TGroup -> error "Group types not implemented"
   | TEvent -> "event"
   | TFun({arg_tys; ret_ty;}) -> 
@@ -204,7 +212,8 @@ and translate_raw_ty rty = match rty with
   | TName(cid, [], false) -> cid_string cid
   | TName(cid, _, false) -> error "user-defined types should not be size polymorphic"    
     (* error "user-defined named types should be inlined by now" *)
-  | TMemop(n_args, arg_sz) -> memopty_string n_args arg_sz
+  | TMemop(n_args, (Sz arg_sz)) -> memopty_string n_args arg_sz
+  | TMemop _ -> error "memops with multi-dimensional sizes should not exist"
   (* an action type is really an action constructor type *)
   | TTable _ -> error "table types cannot be translated alone"
   | TAction _ -> error "action type not implemented"
@@ -253,7 +262,8 @@ let translate_op op = match op with
   | Neg -> "-"
   | Plus -> "+"
   | Sub -> "-"
-  | Cast(sz) -> sprintf "(%s)" (translate_tint sz)
+  | Cast(Sz sz) -> sprintf "(%s)" (translate_tint sz)
+  | Cast _ -> error "casts with multi-dimensional sizes should not exist"
   | Conc -> error "concat cannot be translated alone"
   | Slice _ -> error "slice cannot be translated alone"
   | SatSub -> error "satsub cannot be translated alone"

@@ -121,19 +121,19 @@ let derive_output_event (ctx:ctx) (hdl_id : id) (hdl_body:statement) : event =
      as one event. Whereas egress produces a union, because it only 
      generates one event. *)
   let ev_tag evid = 
-    Id.create ((fst evid)^"_tag"), (Id.create "tag", ty (TInt(16))  )
+    Id.create ((fst evid)^"_tag"), (Id.create "tag", ty (TInt(Sz 16))  )
   in
   let ev_flag evid events = 
     let flag_wid = 2 in
     let flags = List.map 
     (fun event -> 
-      (Id.prepend_string "flag_" (id_of_event event), ty (TInt(flag_wid)))) events
+      (Id.prepend_string "flag_" (id_of_event event), ty (TInt(Sz flag_wid)))) events
     in    
     let flags_len = (List.length flags) * flag_wid in
     let flag_padding = if (flags_len mod 8 = 0) then None
       else (
         let pad_len = 8 - (flags_len mod 8) in
-        Some(Id.create "_flag_padding", ty (TInt(pad_len)))
+        Some(Id.create "_flag_padding", ty (TInt(Sz pad_len)))
       )
     in
     Id.create ((fst evid)^"_flag"), (* struct id *)

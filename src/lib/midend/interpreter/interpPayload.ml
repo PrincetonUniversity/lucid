@@ -11,7 +11,7 @@ let is_payload_ty ty = equiv_ty ty (Payloads.payload_ty |> SyntaxToCore.translat
 (* read something of the given type from the packet. Return a CoreSyntax value. *)
 let pread (p: value) ty : (value * value) = 
   let size = match ty.raw_ty with 
-    | TInt(size) -> size | TBool -> 1
+    | TInt(Sz size) -> size | TBool -> 1
     | _ -> error ("[pread] unsupported type ("^(CorePrinting.ty_to_string ty)^")")
   in
   match (BitString.pop_msb size (extract_bits p)) with
@@ -21,7 +21,7 @@ let pread (p: value) ty : (value * value) =
 
 let ppeek p ty = 
   let size = match ty.raw_ty with 
-    | TInt(size) -> size | TBool -> 1
+    | TInt(Sz size) -> size | TBool -> 1
     | _ -> error "[ppeek] unsupported type"
   in
   match (BitString.pop_msb size (extract_bits p)) with
@@ -31,7 +31,7 @@ let ppeek p ty =
 
 let padvance p ty =
   let size = match ty.raw_ty with 
-    | TInt(size) -> size | TBool -> 1
+    | TInt(Sz size) -> size | TBool -> 1
     | _ -> error "[padvance] unsupported type"
   in
   match (BitString.pop_msb size (extract_bits p)) with

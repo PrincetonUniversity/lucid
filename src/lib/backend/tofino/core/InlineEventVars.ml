@@ -420,7 +420,7 @@ let tag_set_stmt cid tag_num = sassign (evar_tag_cid cid) (vint_exp tag_num evar
 let tag_cpy_stmt cid rhs_cid = 
   let rhs_tag_cid = evar_tag_cid rhs_cid in
   let lhs_tag_cid = evar_tag_cid cid in
-  sassign lhs_tag_cid (var rhs_tag_cid (tint evar_tag_size))
+  sassign lhs_tag_cid (var rhs_tag_cid (tint@@Sz evar_tag_size))
 ;;
 
 let evconstr_num ctx constr_cid = 
@@ -479,7 +479,7 @@ let rec inline_stmt ctx stmt =
       in
       (* create a match statement that branches on the tag of evar_cid *)
       let tag_cid = evar_tag_cid evar_cid in
-      let tag_exp = var tag_cid (tint evar_tag_size) in
+      let tag_exp = var tag_cid (tint@@Sz evar_tag_size) in
       let gen_stmt = smatch [tag_exp] gen_branches in
       ctx, gen_stmt
     )
@@ -513,7 +513,7 @@ let rec inline_stmt ctx stmt =
 
 let event_var_param_slocals evar_cid constrs = 
   (* declare the tag *)
-  let tag_decl = slocal (evar_tag_cid evar_cid |> Cid.to_id) (ty (TInt(evar_tag_size))) (vint_exp 0 evar_tag_size) in
+  let tag_decl = slocal (evar_tag_cid evar_cid |> Cid.to_id) (ty (TInt(Sz evar_tag_size))) (vint_exp 0 evar_tag_size) in
   (* for each constructor that the event variable may take, declare parameter variables.  *)
   let param_decls = List.map
     (fun constr -> 

@@ -240,7 +240,7 @@ and interp_op env op args =
     let v1 = raw_integer v1 in
     vinteger (Integer.sub (Integer.create ~value:0 ~size:(Integer.size v1)) v1)
     |> mk_e
-  | Cast size, [{ e = EVal v }] ->
+  | Cast (Sz size), [{ e = EVal v }] ->
     vinteger (Integer.set_size size (raw_integer v)) |> mk_e
   | Conc, [{ e = EVal v1 }; { e = EVal v2 }] ->
     let v1, v2 = raw_integer v1, raw_integer v2 in

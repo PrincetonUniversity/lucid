@@ -45,7 +45,7 @@ let interp_op op vs =
     (* Compute 0 - v1 *)
     let v1 = raw_integer v1 in
     vinteger (Integer.sub (Integer.create ~value:0 ~size:(Integer.size v1)) v1)
-  | Cast size, [v] -> vinteger (Integer.set_size size (raw_integer v))
+  | Cast (Sz size), [v] -> vinteger (Integer.set_size size (raw_integer v))
   | Eq, [v1; v2] -> vbool (v1.v = v2.v)
   | Neq, [v1; v2] ->
     vbool (not (Integer.equal (raw_integer v1) (raw_integer v2)))
@@ -231,7 +231,9 @@ let rec interp_exp (nst : State.network_state) swid locals e : 'a InterpSyntax.i
          ^ " is a value identifier and cannot be used in a call")
      | F f -> V (f nst swid vs)
    )
-  | EHash (size, args) -> (
+  | EHash (Szs _, _ ) -> 
+    error "Hash expression size should not be a tuple"
+  | EHash (Sz size, args) -> (
     let poly, args = List.hd args, List.tl args in
     let vs = List.map (fun ival -> (extract_ival ival).v) (interp_exps args) in
     match poly.e with
@@ -685,7 +687,7 @@ let _interp_dglobal (nst : State.network_state) swid id ty e =
   in
   let new_p =
     match gty_name, gty_sizes, args with
-    | ["Array"; "t"], [size], [e] ->
+    | ["Array"; "t"], [Sz size], [e] ->
       let len =
         interp_exp nst swid Env.empty e
         |> extract_ival
@@ -693,7 +695,7 @@ let _interp_dglobal (nst : State.network_state) swid id ty e =
         |> Integer.to_int
       in
       Pipeline.append p (Pipeline.mk_array id size len false)
-    | ["Counter"; "t"], [size], [e] ->
+    | ["Counter"; "t"], [Sz size], [e] ->
       let init_value =
         interp_exp nst swid Env.empty e |> extract_ival |> raw_integer
       in
@@ -706,7 +708,7 @@ let _interp_dglobal (nst : State.network_state) swid id ty e =
            ~setop:(fun _ -> init_value)
            new_p);
       new_p
-    | ["PairArray"; "t"], [size], [e] ->
+    | ["PairArray"; "t"], [Sz size], [e] ->
       let len =
         interp_exp nst swid Env.empty e
         |> extract_ival
@@ -891,7 +893,7 @@ and interp_parser_step nst swid payload_id locals parser_step =
 let rec find_bitstring_param params = 
   match params with 
   | [] -> None
-  | (id, ty)::_ when (ty.raw_ty = TBits(1500)) -> Some(id)
+  | (id, ty)::_ when (ty.raw_ty = TBits(Sz 1500)) -> Some(id)
   | _::tl -> find_bitstring_param tl
 ;;
 

@@ -131,7 +131,7 @@ let pskip_event_params event =
     0
     (params_of_event event)
   in
-  [PSkip(ty (TInt(event_size)))];
+  [PSkip(ty (TInt(Sz event_size)))];
 ;;
 (* write a command to read an event's parameters from pkt_var *)
 let pread_event_params pkt_var event = 

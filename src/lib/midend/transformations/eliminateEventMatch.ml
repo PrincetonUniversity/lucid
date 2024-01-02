@@ -47,13 +47,13 @@ let make_params_map var_id ev_infos =
 
 let make_default_val ty = 
   match ty.raw_ty with
-  | TInt size -> exp (EVal(vint 0 size)) ty
+  | TInt (Sz size) -> exp (EVal(vint 0 size)) ty
   | _ -> Console.error "No default for non-ints"
 ;;
 
-let ev_id_int_var_ty = ty (TInt (8));;
+let ev_id_int_var_ty = ty (TInt (Sz 8));;
 
-let make_num_size i size = exp (EVal (vinteger (Integer.create i size))) (ty (TInt size));;
+let make_num_size i size = exp (EVal (vinteger (Integer.create i size))) (ty (TInt(Sz size)));;
 let make_ev_id_var ev_var_info = 
   (statement (SLocal (ev_var_info.ev_id_int, ev_id_int_var_ty, (make_num_size ev_var_info.ev_initial_val 8))))
 

@@ -22,7 +22,7 @@ let fresh_numbered_id s =
 (*** basic syntax translation ***)
 let rec translate_ty ty = match ty.raw_ty with 
   | CS.TBool -> T.TBool
-  | CS.TInt (s) -> T.TInt (s)
+  | CS.TInt (Sz (s)) -> T.TInt (s)
   | CS.TActionConstr(_) -> error "[translate_ty] action types should be eliminated in IR..."
   | CS.TFun(fty) -> tfun (translate_ty fty.ret_ty) (List.map translate_ty fty.arg_tys)
   | CS.TName(cid, _, _) -> tstruct (Cid.to_id cid)
@@ -37,7 +37,7 @@ let size_of_tint ty =
 
 let translate_rty rty =
   match rty with 
-  | CS.TInt(s) -> T.TInt(s)
+  | CS.TInt(Sz s) -> T.TInt(s)
   | _ -> error "[translate_rty] not a TInt"
 ;;
 let translate_value v =
@@ -272,7 +272,7 @@ let rec translate_exp (prog_env:prog_env) exp : (T.decl list * T.expr) * prog_en
   | CS.EOp(op, args) -> (
     let args = match op with 
       (* cast and slice have arguments in a different form *)
-      | CS.Cast(sz) -> 
+      | CS.Cast(Sz sz) -> 
         let (_, exps), _ = translate_exps prog_env args in 
         (eval_int sz)::(exps)
       | CS.Slice(s, e) -> 
@@ -298,6 +298,7 @@ and translate_exps (prog_env:prog_env) exps : (decl list * expr list) * prog_env
   (List.flatten decls, exps), prog_env
 
 and translate_hash prog_env size args : (decl list * expr) * prog_env = 
+  let size = CoreSyntax.size_to_int size in
   match (List.hd args).e with 
   (* special case: checksum hash, which may appear in the deparser *)
   | EVar(cid) when (Cid.equal (Cid.id Builtins.checksum_id) cid) -> 
@@ -1473,7 +1474,7 @@ let translate_parser denv parser =
          case -- cid is not param -> read is a slocal lookahead; advance *)
       match (is_param cid) with
       | true -> [], extract pkt_arg cid
-      | false -> [], sseq [slocal_lookahead pkt_arg cid (translate_ty ty); sadvance pkt_arg (size_of_tint ty)]
+      | false -> [], sseq [slocal_lookahead pkt_arg cid (translate_ty ty); sadvance pkt_arg (size_of_tint ty |> CoreSyntax.size_to_int)]
     )
     | PPeek(cid, ty, _) -> (
       (* case -- cid is an event field (first id is name of output event param) sassign lookahead -> 
@@ -1482,7 +1483,7 @@ let translate_parser denv parser =
       | true -> [], sassign_lookahead pkt_arg cid (translate_ty ty)
       | false -> [], slocal_lookahead pkt_arg cid (translate_ty ty)
     )
-    | PSkip(ty) -> [], sadvance pkt_arg (size_of_tint ty)
+    | PSkip(ty) -> [], sadvance pkt_arg (size_of_tint ty|> CoreSyntax.size_to_int)
     | PAssign(cid, exp) when (is_checksum exp) -> 
       (* invalidate statements come after the use of the headers *)
       let decls, sub_stmt, get_expr, invalid_stmt = translate_parser_checksum denv.penv exp in
@@ -1615,7 +1616,7 @@ let translate_tdecl (denv : translate_decl_env) tdecl : (translate_decl_env) =
   (* arrays get translated into registerarrays, which are global. *)
   | TDGlobal(rid, ty, exp) -> (
     match ty.raw_ty with 
-    | TName(tcid, [cell_size], true) -> (
+    | TName(tcid, [Sz cell_size], true) -> (
         let module_name = List.hd (Cid.names tcid) in 
         let len, default_opt = match exp.e with 
           | ECall(_, args, _) -> (
@@ -1632,7 +1633,7 @@ let translate_tdecl (denv : translate_decl_env) tdecl : (translate_decl_env) =
              because the constructor expression tracks source ids *)
           let reg_decl = 
             dreg_sp 
-              rid (tint cell_size) [cell_size] TAuto len default_opt [] exp.espan
+              rid (tint (cell_size)) [cell_size] TAuto len default_opt [] exp.espan
           in
           let globals = denv.globals @ [reg_decl] in
           {denv with globals}

@@ -15,7 +15,10 @@ and bit = [%import: (BitString.bit[@opaque])]
 and bits = [%import: (BitString.bits[@opaque])]
 
 (* All sizes should be inlined and precomputed *)
-and size = int
+and size = 
+  | Sz of int
+  | Szs of int list
+
 and sizes = size list
 and action_sig = string * size list * size list
 
@@ -340,14 +343,14 @@ let payload_ty = ty@@TName(Cid.create ["Payload"; "t"], [], false)
 let rec infer_vty v =
   match v with
   | VBool _ -> TBool
-  | VInt z -> TInt (Integer.size z)
+  | VInt z -> TInt(Sz(Integer.size z))
   | VEvent _ -> TEvent
   | VGroup _ -> TGroup
   | VGlobal _ -> failwith "Cannot infer type of global value"
-  | VPat bs -> TPat (List.length bs)
+  | VPat bs -> TPat(Sz(List.length bs))
   | VTuple _ ->
     failwith "Cannot infer type of tuple value (only used in complex memops)"
-  | VBits bits -> TBits (List.length bits)
+  | VBits bits -> TBits(Sz(List.length bits))
   | VRecord fields ->
     TRecord (List.map (fun (id, v) -> id, infer_vty v) fields)
 ;;
@@ -392,7 +395,7 @@ let hash_sp size args ety span = aexp (EHash (size, args)) ety span
 let vint_exp i size = value_to_exp (vint i size)
 let vint_exp_ty i (ty:ty) = 
   match ty.raw_ty with
-  | TInt(sz) -> 
+  | TInt(Sz sz) -> 
     value_to_exp (vint i sz)
   | _ -> error "[vint_exp_ty] type mismatch"
 ;;
@@ -598,7 +601,7 @@ let ty_of_tbl td =
 let ty_to_size ty =
   match ty.raw_ty with
   | TBool -> 1
-  | TInt sz -> sz
+  | TInt (Sz sz) -> sz
   | _ -> error "[ty_to_size] can only get size of ints or bools"
 ;;
 
@@ -644,5 +647,9 @@ let extract_bits value =
 ;;
 
 (* is an argument to a parser its packet arg? *)
-let pkt_arg_ty = ty(TBits 1500)
-let is_pkt_arg (_, ty) = match ty.raw_ty with | TBits 1500 -> true | _ -> false 
+let pkt_arg_ty = ty(TBits (Sz 1500))
+let is_pkt_arg (_, ty) = match ty.raw_ty with | TBits (Sz 1500) -> true | _ -> false 
+
+
+let to_singleton_sizes szs = List.map (fun sz -> match sz with | Sz s -> s | _ -> error "[to_singleton_sizes] non-singleton size") szs
+let size_to_int sz = match sz with | Sz s -> s | _ -> error "[size_to_int] non-singleton size"

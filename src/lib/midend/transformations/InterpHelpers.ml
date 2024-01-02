@@ -19,7 +19,7 @@ let int_width = 32
 let intwidth_from_raw_ty rty : int =
   match rty with
   | TBool -> 1
-  | TInt sz -> sz
+  | TInt (Sz sz) -> sz
   | TGroup -> 16 (* hard coded for tofino! *)
   | _ -> error "cannot get size from this type"
 ;;

@@ -12,7 +12,7 @@ let params_wid params =
   List.fold_left
     (fun tot_wid (_, pty) ->
       match pty.raw_ty with
-      | TInt w -> tot_wid + w
+      | TInt (Sz w) -> tot_wid + w
       | TBool -> tot_wid + 1
       | _ -> error "[param_wids] event parameters must be ints or bools")
     0
@@ -68,6 +68,7 @@ let array_sizes ds : bool =
           (match Cid.names ty_cid |> List.hd with
            | "Array" ->
              let slot_sz = List.hd sizes in
+             let slot_sz = size_to_int slot_sz in
              let num_slots = InterpHelpers.int_from_exp num_slots in
              let sblocks = TofinoResources.sblocks_of_arr slot_sz num_slots in
              let pass = sblocks <= max_sblocks in
@@ -83,7 +84,7 @@ let array_sizes ds : bool =
                  ^ string_of_int (sblocks - 1));
              prev_pass && pass
            | "PairArray" ->
-             let slot_sz = 2 * List.hd sizes in
+             let slot_sz = 2 * (List.hd sizes |> size_to_int) in
              let num_slots = InterpHelpers.int_from_exp num_slots in
              let sblocks = TofinoResources.sblocks_of_arr slot_sz num_slots in
              let pass = sblocks <= max_sblocks in
@@ -246,11 +247,11 @@ let rec align_params ps =
   | [] -> []
   | (id, pty) :: ps ->
     (match pty.raw_ty with
-     | TInt w ->
+     | TInt (Sz w) ->
        if w mod 8 = 0
        then (id, pty) :: align_params ps
        else (
-         let pad_field = Id.fresh_name "pad", ty (TInt (8 - (w mod 8))) in
+         let pad_field = Id.fresh_name "pad", ty (TInt(Sz (8 - (w mod 8)))) in
          (id, pty) :: pad_field :: align_params ps)
      | _ -> (id, pty) :: align_params ps)
 ;;
@@ -261,7 +262,7 @@ let rec align_args exps =
   | [] -> []
   | exp :: exps ->
     (match exp.ety.raw_ty with
-     | TInt w ->
+     | TInt (Sz w) ->
        if w mod 8 = 0
        then exp :: align_args exps
        else (

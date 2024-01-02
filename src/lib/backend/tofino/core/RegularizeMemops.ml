@@ -146,7 +146,7 @@ let to_complex_memop get_memop_opt set_memop_opt =
 
 let memop_size ememop =
   match ememop.ety.raw_ty with 
-    | TMemop(_, size) -> size
+    | TMemop(_, Sz (size)) -> size
     | _ -> error "[regularize_array_calls] memop argument is not a memop expression."
 ;;
 
@@ -154,7 +154,7 @@ let memop_size ememop =
 let suffixed_id id_suffix s = Id.create (s^id_suffix) ;;
 let get_memop ty = 
   let memop_size = match ty.raw_ty with 
-    | TInt(sz) -> sz
+    | TInt(Sz sz) -> sz
     | _ -> error "Array.get's type should be a tint"     
   in
   let id_suffix = "_get_memop_"^(string_of_int memop_size)^"_bit" in
@@ -187,7 +187,7 @@ let get_memop ty =
 
 let set_memop cell_ty = 
   let memop_size = match cell_ty.raw_ty with 
-    | TInt(sz) -> sz
+    | TInt(Sz sz) -> sz
     | _ -> error "Array.set's type should be a tint"     
   in
   let id_suffix = "_set_memop_"^(string_of_int memop_size)^"_bit" in
@@ -247,7 +247,7 @@ let regularize_array_calls tds =
                     memops
                 in 
                 let complex_memop = to_complex_memop (Some(get_memop)) (None) in 
-                let complex_memop_exp = CS.exp (EVar(Cid.id complex_memop.mid)) (ty (TMemop(3, memop_size))) in
+                let complex_memop_exp = CS.exp (EVar(Cid.id complex_memop.mid)) (ty (TMemop(3, Sz memop_size))) in
                 let old_memop_ids = [get_memop.mid] in 
                 let complex_args = [
                   aid; 
@@ -268,12 +268,12 @@ let regularize_array_calls tds =
                 | _ -> error "[translate_array_call] unexpected arguments for array method"
               in 
               let memop_size = match exp.ety.raw_ty with 
-                | TInt(sz) -> sz
+                | TInt(Sz sz) -> sz
                 | _ -> error "Array.get's type should be a tint"     
               in                    
               let cell_ty = exp.ety in 
               let complex_memop = get_memop cell_ty in
-              let complex_memop_exp = CS.exp (EVar(Cid.id complex_memop.mid)) (ty (TMemop(3, memop_size))) in
+              let complex_memop_exp = CS.exp (EVar(Cid.id complex_memop.mid)) (ty (TMemop(3, Sz memop_size))) in
               let complex_args = [
                   aid; 
                   idx;
@@ -292,7 +292,7 @@ let regularize_array_calls tds =
                   | _ -> error "[translate_array_call] unexpected arguments for array method"
                 in 
                 let memop_size = match exp.ety.raw_ty with 
-                  | TInt(sz) -> sz
+                  | TInt(Sz sz) -> sz
                   | _ -> error "Array.setm argument's type should be a tint"     
                 in      
                 let set_memop = 
@@ -301,7 +301,7 @@ let regularize_array_calls tds =
                     memops
                 in 
                 let complex_memop = to_complex_memop (None) (Some(set_memop)) in 
-                let complex_memop_exp = CS.exp (EVar(Cid.id complex_memop.mid)) (ty (TMemop(3, memop_size))) in
+                let complex_memop_exp = CS.exp (EVar(Cid.id complex_memop.mid)) (ty (TMemop(3, Sz memop_size))) in
                 let old_memop_ids = [set_memop.mid] in 
                 let complex_args = [
                   aid; 
@@ -322,11 +322,11 @@ let regularize_array_calls tds =
                 in 
                 let cell_ty = set_arg.ety in 
                 let memop_size = match set_arg.ety.raw_ty with 
-                  | TInt(sz) -> sz
+                  | TInt(Sz sz) -> sz
                   | _ -> error "Array.set arg's type should be a tint"     
                 in                    
                 let complex_memop = set_memop cell_ty in
-                let complex_memop_exp = CS.exp (EVar(Cid.id complex_memop.mid)) (ty (TMemop(3, memop_size))) in
+                let complex_memop_exp = CS.exp (EVar(Cid.id complex_memop.mid)) (ty (TMemop(3, Sz memop_size))) in
                 let complex_args = [
                     aid; 
                     idx;
@@ -355,7 +355,7 @@ let regularize_array_calls tds =
                     memops
                 in 
                 let complex_memop = to_complex_memop (Some(get_memop)) (Some(set_memop)) in 
-                let complex_memop_exp = CS.exp (EVar(Cid.id complex_memop.mid)) (ty (TMemop(3, memop_size))) in
+                let complex_memop_exp = CS.exp (EVar(Cid.id complex_memop.mid)) (ty (TMemop(3, Sz memop_size))) in
                 let old_memop_ids = [set_memop.mid; get_memop.mid] in 
                 let complex_args = [
                   aid; 

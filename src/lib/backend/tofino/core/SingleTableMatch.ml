@@ -141,10 +141,10 @@ let rec has_tbl_call tid stmt =
 
 (* supporting variables for tables *)
 let callnumvar_of_tid tid : (id * ty)  =
-  Id.append_string "_callnum" tid, tint 32
+  Id.append_string "_callnum" tid, tint (Sz 32)
 ;;
 let callnumvar_of_table td : (id * ty) =
-  Id.append_string "_callnum" td.tid, tint 32
+  Id.append_string "_callnum" td.tid, tint (Sz 32)
 ;;
 
 let keyvars_of_table td : (id * ty) list =

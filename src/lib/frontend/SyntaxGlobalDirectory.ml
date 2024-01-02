@@ -134,7 +134,7 @@ let core_exp_to_arrmeta id (exp:C.exp) =
     | _ -> error "[core_exp_to_arrmeta] array constructor has wrong form")
   in
   let cell_size = match exp.ety.raw_ty with
-    | TName(_, sizes, true) -> sizes
+    | TName(_, sizes, true) -> List.map (fun sz -> match sz with | C.Sz sz -> sz | _ -> error "need singleton size") sizes
     | _ -> error "[core_exp_to_arrmeta] array constructor has unexpected type"
   in
   let arr = {name; compiled_cid; length; cell_size} in
@@ -162,7 +162,9 @@ let core_exp_to_tblmeta id (exp : C.exp) =
     {aid; acompiled_id; arg_sizes}
   in  
   let keys = match exp.ety.raw_ty with
-    | TTable(tty) -> (List.map user_key tty.tkey_sizes)@[priority_key] 
+    | TTable(tty) -> 
+      let key_sizes = List.map (fun sz -> match sz with | C.Sz sz -> sz | _ -> error "need singleton size") tty.tkey_sizes in
+      (List.map user_key key_sizes)@[priority_key] 
     | _ -> error "[exp_to_tblmeta] expression is not a table type"
   in
   let actions, length = match exp.e with

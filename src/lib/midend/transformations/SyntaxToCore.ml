@@ -17,8 +17,18 @@ let err_unsupported span str =
 ;;
 
 let translate_size (sz : S.size) : C.size =
-  SyntaxUtils.extract_size_default sz 32
+  match (S.STQVar.strip_links sz) with 
+  | S.IConst i -> C.Sz i
+  | S.ITup is -> C.Szs (
+    List.map (fun inner_sz -> match inner_sz with | S.IConst i -> i | _ -> 
+      S.error@@"[translate_size] expected a constant size, but got "
+        ^(Printing.size_to_string inner_sz)
+      ) 
+      is
+    )
+  | _ -> C.Sz(SyntaxUtils.extract_size_default sz 32)
 ;;
+let sz_int sz = match sz with | S.IConst i -> i | _ -> S.error "[sz_int] expected a constant size, but got something else";;
 
 let rec translate_raw_ty (rty : S.raw_ty) tspan : C.raw_ty = 
   match S.TyTQVar.strip_links rty with
@@ -65,7 +75,7 @@ let rec translate_raw_ty (rty : S.raw_ty) tspan : C.raw_ty =
     let aret_tys = List.map translate_ty a.aacn_ty.aret_tys in
     C.TActionConstr { aconst_param_tys; aacn_ty={aarg_tys; aret_tys }}
   | S.TPat s -> C.TPat (translate_size s)
-  | S.TBitstring -> C.TBits (1500)
+  | S.TBitstring -> C.TBits (Sz 1500)
   | S.TRecord fields -> C.TRecord (List.map (fun (id, ty) -> (Id.create id), translate_raw_ty ty tspan) fields)
   | S.TAction a ->
     let aarg_tys = List.map translate_ty a.aarg_tys in
@@ -110,7 +120,7 @@ let translate_op (op : S.op) : C.op =
   | S.BitNot -> C.BitNot
   | S.LShift -> C.LShift
   | S.RShift -> C.RShift
-  | S.Slice (lo, hi) -> C.Slice (translate_size lo, translate_size hi)
+  | S.Slice (lo, hi) -> C.Slice (sz_int lo, sz_int hi)
   | S.TGet _ -> err Span.default "tuple get operator"
   | S.PatExact -> C.PatExact
   | S.PatMask -> C.PatMask
@@ -154,8 +164,16 @@ and translate_exp (e : S.exp) : C.exp =
       C.EVal (C.vwild (SyntaxUtils.extract_size (sz)))
     | S.EVal v -> C.EVal (translate_value v)
     | S.EInt (z, szo) ->
-      let sz = Option.default 32 (Option.map translate_size szo) in
-      C.EVal (C.vint (Z.to_int z) sz)
+      let core_szo_opt = Option.map translate_size szo in
+      let core_szo = Option.default 
+        (C.Sz 32)
+        core_szo_opt
+      in
+      let core_szo_int = match core_szo with 
+        | C.Sz i -> i
+        | _ -> S.error "[translate_exp] expected a constant size, but got something else"
+      in
+      C.EVal (C.vint (Z.to_int z) core_szo_int)
     | S.EVar cid -> C.EVar cid
     | S.EOp (op, es) -> C.EOp (translate_op op, List.map translate_exp es)
     | S.ECall (cid, es, unordered) -> C.ECall (cid, List.map translate_exp es, unordered)

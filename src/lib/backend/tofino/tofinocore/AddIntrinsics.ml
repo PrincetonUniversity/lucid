@@ -191,7 +191,7 @@ All other accessor functions above should be deleted. *)
 let ty_to_dextern p4_intr =
   let fields = List.map 
     (fun (i, id) -> 
-      (id,TInt(i))) 
+      (id,TInt(Sz i))) 
     p4_intr.tyfields
   in
   let record_ty = ty (TRecord(fields)) in
@@ -224,7 +224,7 @@ let field_of_intrinsic_opt intrinsic varcid fieldcid =
      return the full name (varcid.fieldcid) and the type. *)
   let fields = List.map 
     (fun (i, id) -> 
-      (id,TInt(i))) 
+      (id,TInt(Sz i))) 
       intrinsic.tyfields
   in
   match (List.assoc_opt (Cid.to_id fieldcid) fields) with
@@ -243,6 +243,6 @@ let param_to_cidty intr_param field_name : (cid * ty) =
     intr_param.pty.tyfields) 
   in
   match field_info with 
-  | Some((width, id)) -> Cid.id id, tint width
+  | Some((width, id)) -> Cid.id id, tint@@Sz width
   | None -> error "[intrinsic.param_to_cidty] this field is not a member of the param"
 ;;

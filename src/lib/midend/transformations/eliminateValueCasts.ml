@@ -38,7 +38,7 @@ let eliminate_value_casts ds =
         let e = super#visit_e ctx e in 
         let _ = ctx in 
         match e with 
-          | EOp(Cast(sz), [{e=EVal({v=VInt(i); _}); _}]) -> (   
+          | EOp(Cast(Sz sz), [{e=EVal({v=VInt(i); _}); _}]) -> (   
             EVal(vinteger (Integer.set_size sz i))
           )
   (* | Cast size, [v] -> vinteger (Integer.set_size size (raw_integer v)) *)
