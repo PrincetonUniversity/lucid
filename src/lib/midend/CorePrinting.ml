@@ -45,7 +45,7 @@ let rec raw_ty_to_string t =
   | TFun func -> func_to_string func
   | TMemop (n, size) -> Printf.sprintf "memop%d<<%s>>" n (size_to_string size)
   | TGroup -> "group"
-  | TTable t ->
+  (* | TTable t ->
     " table_type {"
     ^ "\n\tkey_size: "
     ^ comma_sep size_to_string t.tkey_sizes
@@ -53,7 +53,7 @@ let rec raw_ty_to_string t =
     ^ comma_sep ty_to_string t.tparam_tys
     ^ "\n\tret_ty: "
     ^ comma_sep ty_to_string t.tret_tys
-    ^ "}\n"
+    ^ "}\n" *)
   | TActionConstr a ->
     Printf.sprintf
       "ACTION CTOR : %s -> %s -> %s"

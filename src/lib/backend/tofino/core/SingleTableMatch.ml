@@ -148,19 +148,22 @@ let callnumvar_of_table td : (id * ty) =
 ;;
 
 let keyvars_of_table td : (id * ty) list =
+  let tbl_ty = Tables.tname_to_ttable td.tty.raw_ty in
   List.mapi 
     (fun i sz -> Id.append_string ("_"^(string_of_int i)^"_key") td.tid, tint sz)
-    (ty_of_tbl td).tkey_sizes
+    tbl_ty.tkey_sizes
 ;;    
 let argvars_of_table td : (id * ty) list =
+  let tbl_ty = Tables.tname_to_ttable td.tty.raw_ty in
   List.mapi 
     (fun i ty -> Id.append_string ("_"^(string_of_int i)^"_arg") td.tid, ty)
-    (ty_of_tbl td).tparam_tys
+    tbl_ty.tparam_tys
 ;;    
 let retvars_of_table td : (id * ty) list =
+  let tbl_ty = Tables.tname_to_ttable td.tty.raw_ty in
   List.mapi 
     (fun i ty -> Id.append_string ("_"^(string_of_int i)^"_ret") td.tid, ty)
-    (ty_of_tbl td).tret_tys
+    tbl_ty.tret_tys
 ;; 
 
 let iovars_of_table td : (id * ty) list =

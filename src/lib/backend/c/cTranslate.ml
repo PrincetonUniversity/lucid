@@ -215,7 +215,7 @@ and translate_raw_ty rty = match rty with
   | TMemop(n_args, (Sz arg_sz)) -> memopty_string n_args arg_sz
   | TMemop _ -> error "memops with multi-dimensional sizes should not exist"
   (* an action type is really an action constructor type *)
-  | TTable _ -> error "table types cannot be translated alone"
+  (* | TTable _ -> error "table types cannot be translated alone" *)
   | TAction _ -> error "action type not implemented"
   | TActionConstr _ -> error "action types cannot be translated alone"
   | TPat _ -> error "patterns not implemented"
@@ -450,7 +450,6 @@ and translate_d d = match d with
 and translate_dglobal  id ty e = 
   (* tables are special *)
   match ty.raw_ty with 
-  | TTable _ -> error "tables not implemented"
   | _ -> (
     let gty_name, gty_sizes =
       match ty.raw_ty with

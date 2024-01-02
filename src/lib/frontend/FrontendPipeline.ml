@@ -131,5 +131,9 @@ let process_prog ?(opts=def_opts) builtin_tys ds =
   print_if_debug ds;
   (* TODO: Return these, maybe apply renaming to them or something *)
   ignore slot_assignments;
+  (* let dir = 
+   SyntaxGlobalDirectory.syntax_to_globaldir ds in
+  print_endline "Global directory:";
+  print_endline@@(dir |> Yojson.Basic.pretty_to_string); *)
   renaming, ds
 ;;

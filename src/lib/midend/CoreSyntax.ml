@@ -30,7 +30,6 @@ and raw_ty =
   | TName of cid * sizes * bool
     (* Named type: e.g. "Array.t<<32>>". Bool is true if it represents a global type *)
   | TMemop of int * size
-  | TTable of tbl_ty
   | TAction of acn_ty
   | TActionConstr of acn_ctor_ty
   | TRecord of (id * raw_ty) list
@@ -39,12 +38,6 @@ and raw_ty =
   | TGroup
   | TPat of size
   | TBits of size
-
-and tbl_ty =
-  { tkey_sizes : size list
-  ; tparam_tys : ty list
-  ; tret_tys : ty list
-  }
 
 and acn_ty = {
   aarg_tys : tys;
@@ -592,11 +585,11 @@ let int_mask_to_bitpat n mask len =
   Array.to_list bs
 ;;
 
-let ty_of_tbl td =
+(* let ty_of_tbl td =
   match td.tty.raw_ty with
   | TTable tbl_ty -> tbl_ty
   | _ -> error "[ty_of_tbl] table does not have type table."
-;;
+;; *)
 
 let ty_to_size ty =
   match ty.raw_ty with
@@ -652,4 +645,5 @@ let is_pkt_arg (_, ty) = match ty.raw_ty with | TBits (Sz 1500) -> true | _ -> f
 
 
 let to_singleton_sizes szs = List.map (fun sz -> match sz with | Sz s -> s | _ -> error "[to_singleton_sizes] non-singleton size") szs
+let size_to_ints sz = match sz with | Sz s -> [s] | Szs ss -> ss
 let size_to_int sz = match sz with | Sz s -> s | _ -> error "[size_to_int] non-singleton size"

@@ -642,7 +642,8 @@ let interp_dtable (nst : State.network_state) swid id ty e =
   (* add element to pipeline *)
   let new_p =
     match ty.raw_ty with
-    | TTable _ ->
+    | rty when Tables.is_tbl_ty rty  ->
+    (* | TTable _ -> *)
       (match e.e with
        | ETableCreate t ->
          (* eval args to value expressions *)
@@ -728,7 +729,7 @@ let _interp_dglobal (nst : State.network_state) swid id ty e =
 
 let interp_dglobal (nst : State.network_state) swid id ty e =
   match ty.raw_ty with
-  | TTable _ -> interp_dtable nst swid id ty e
+  | rty when Tables.is_tbl_ty rty -> interp_dtable nst swid id ty e
   | _ -> _interp_dglobal nst swid id ty e
 ;;
 

@@ -152,8 +152,7 @@ let rec flat_param_len (id, ty) =
   | TName _
   | TMemop _ 
   | TActionConstr _ 
-  | TAction _
-  | TTable _ -> failwith "[flat_param_len] unsupported argument type"
+  | TAction _ -> failwith "[flat_param_len] unsupported argument type"
 ;;
 let flat_params_len params = 
   List.fold_left (fun acc param -> acc + (flat_param_len param)) 0 params

@@ -381,3 +381,35 @@ let module_type_checker (module_typers: module_typer_map) decls =
 let type_checker decls = 
   module_type_checker typers decls
 ;;
+
+let is_tbl_ty (raw_ty : CoreSyntax.raw_ty) = 
+  match raw_ty with 
+  | TName(cid, _, _) -> Cid.equal cid t_id
+  | _ -> false
+;;
+
+type core_tbl_ty = 
+  { tkey_sizes : CoreSyntax.size list
+  ; tparam_tys : CoreSyntax.ty list
+  ; tret_tys : CoreSyntax.ty list
+  }
+;;
+
+let size_ints (sz : CoreSyntax.size) = match sz with 
+  | Sz sz -> [sz]
+  | Szs szs -> szs
+;;
+let size_to_ty (sz: int) = (CoreSyntax.ty) @@ TInt(CoreSyntax.Sz sz) ;;
+
+let tname_to_ttable (rty : CoreSyntax.raw_ty) : core_tbl_ty =
+  match rty with
+  | TName(cid, [key_sizes; param_sizes; ret_sizes], _) when Cid.equal cid t_id -> 
+    let param_tys = List.map size_to_ty (size_ints param_sizes) in
+    let ret_tys = List.map size_to_ty (size_ints ret_sizes) in
+    { 
+      tkey_sizes = List.map (fun sz -> (CoreSyntax.Sz sz)) (size_ints key_sizes); 
+      tparam_tys = param_tys;
+      tret_tys = ret_tys;
+    }
+  | _ -> err "[tname_to_ttable] table does not have type table."
+;;

@@ -47,9 +47,12 @@ let core_exp_to_tblmeta id (exp : C.exp) =
     {aid; acompiled_id; arg_sizes}
   in  
   let keys = match exp.ety.raw_ty with
-    | TTable(tty) -> 
-      let key_szs = List.map (fun sz -> match sz with C.Sz s -> s | _ -> error "[exp_to_tblmeta] table constructor has unexpected type") tty.tkey_sizes in
-      (List.map user_key key_szs)@[priority_key] 
+    | TName(_, sizes, _) -> 
+      let key_sizes = CoreSyntax.size_to_ints (List.hd sizes) in
+      (List.map user_key key_sizes)@[priority_key]
+    (* | TTable(tty) -> 
+      let key_sizes = List.map (fun sz -> match sz with | C.Sz sz -> sz | _ -> error "need singleton size") tty.tkey_sizes in
+      (List.map user_key key_sizes)@[priority_key]  *)
     | _ -> error "[exp_to_tblmeta] expression is not a table type"
   in
   let actions, length = match exp.e with
@@ -78,10 +81,10 @@ let build_coredirectory (decls:C.decls) =
         let proceed = match ty.raw_ty with
           | TName(cid, _, true) -> (
             match (Cid.names cid) with
-            | "Array"::_ -> true
+            | "Array"::_ 
+            | "Table"::_ -> true
             | _ -> false
           )
-          | TTable(_) -> true
           | _ -> false
         in
         if (proceed) then

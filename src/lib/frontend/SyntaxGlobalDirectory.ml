@@ -162,9 +162,12 @@ let core_exp_to_tblmeta id (exp : C.exp) =
     {aid; acompiled_id; arg_sizes}
   in  
   let keys = match exp.ety.raw_ty with
-    | TTable(tty) -> 
+    | TName(_, sizes, _) -> 
+      let key_sizes = CoreSyntax.size_to_ints (List.hd sizes) in
+      (List.map user_key key_sizes)@[priority_key]
+    (* | TTable(tty) -> 
       let key_sizes = List.map (fun sz -> match sz with | C.Sz sz -> sz | _ -> error "need singleton size") tty.tkey_sizes in
-      (List.map user_key key_sizes)@[priority_key] 
+      (List.map user_key key_sizes)@[priority_key]  *)
     | _ -> error "[exp_to_tblmeta] expression is not a table type"
   in
   let actions, length = match exp.e with
@@ -436,7 +439,6 @@ let syntax_to_globaldir ds =
   print_endline (dir_to_json dir |> Yojson.Basic.pretty_to_string );
   dir_to_json dir
 ;;
-
 let coresyntax_to_globaldir ds =
   let dir = build_coredirectory ds in
   let json = dir_to_json dir in

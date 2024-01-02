@@ -37,7 +37,7 @@ let rec translate_raw_ty (rty : S.raw_ty) tspan : C.raw_ty =
   | S.TEvent -> C.TEvent
   | S.TInt sz -> C.TInt (translate_size sz)
   (* TABLE UPDATE hard coded translation into table type *)
-  | S.TName(cid, sizes, _) when (Cid.equals cid Tables.t_id) -> 
+  (* | S.TName(cid, sizes, _) when (Cid.equals cid Tables.t_id) -> 
     let size_to_ty (sz : S.size) = 
       C.ty (C.TInt (translate_size sz))
     in
@@ -49,7 +49,7 @@ let rec translate_raw_ty (rty : S.raw_ty) tspan : C.raw_ty =
       )
       | _ -> S.error@@"[translate_raw_ty] expected 3 size arguments, each a tuple, but got something else"
     in
-    C.TTable { tkey_sizes; tparam_tys; tret_tys }
+    C.TTable { tkey_sizes; tparam_tys; tret_tys } *)
   | S.TName (cid, sizes, b) -> C.TName (cid, List.map translate_size sizes, b)
   | S.TMemop (n, sz) -> C.TMemop (n, translate_size sz)
   | S.TFun fty ->
@@ -59,16 +59,20 @@ let rec translate_raw_ty (rty : S.raw_ty) tspan : C.raw_ty =
       }
   | S.TVoid -> C.TBool (* Dummy translation needed for foreign functions *)
   | S.TTable tbl ->
-    let ty_to_size (ty : S.ty) = 
+    let ty_to_intsize (ty : S.ty) = 
       match ty.raw_ty with 
-      | TInt(sz) -> sz
-      | TBool -> IConst(1)
+      | TInt(sz) -> SyntaxUtils.extract_size sz
+      | TBool ->1
       | _ -> S.error "[rty_to_size] expected an integer, but got something else"
     in
-    let tkey_sizes = List.map translate_size (List.map ty_to_size tbl.tkey_sizes) in
-    let tparam_tys = List.map translate_ty tbl.tparam_tys in
+    let tkey_sizes = C.Szs (List.map ty_to_intsize tbl.tkey_sizes) in
+    let tparam_sizes = C.Szs (List.map ty_to_intsize tbl.tparam_tys) in
+    let tret_sizes = C.Szs (List.map ty_to_intsize tbl.tret_tys) in
+    C.TName(Tables.t_id, [tkey_sizes; tparam_sizes; tret_sizes], true)
+    (* let tparam_tys = List.map translate_ty tbl.tparam_tys in
     let tret_tys = List.map translate_ty tbl.tret_tys in
-    C.TTable { tkey_sizes; tparam_tys; tret_tys }
+
+    C.TTable { tkey_sizes; tparam_tys; tret_tys } *)
   | S.TActionConstr a ->
     let aconst_param_tys = List.map translate_ty a.aconst_param_tys in
     let aarg_tys = List.map translate_ty a.aacn_ty.aarg_tys in
