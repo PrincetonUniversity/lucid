@@ -165,15 +165,9 @@ let port_tys ds =
    that is never used, but it requires a bit different approach
    in the table inlining. (and the P4 compiler would likely
    delete it anyway) *)
+
 let all_tables_used ds =
   let pass = ref true in
-  let rec tables_in_prog ds =
-    match ds with
-    | [] -> []
-    | { d = DGlobal (_, _, { e = ETableCreate tbl_def; espan }); dspan } :: ds'
-      -> (tbl_def, dspan, espan) :: tables_in_prog ds'
-    | _ :: ds' -> tables_in_prog ds'
-  in
   let tables_matched_in_prog ds =
     let tbl_ids = ref [] in
     let v =
@@ -187,10 +181,10 @@ let all_tables_used ds =
     v#visit_decls () ds;
     !tbl_ids |> MiscUtils.unique_list_of
   in
-  let defined_tbls = tables_in_prog ds in
+  let defined_tbls = InterpHelpers.tables_in_prog ds in
   let used_ids = tables_matched_in_prog ds in
   List.iter
-    (fun (tdef, dspan, espan) ->
+    (fun ((tdef:Tables.core_tbl_def), dspan, espan) ->
       let is_used = List.exists (fun id -> id = tdef.tid) used_ids in
       if not is_used
       then (

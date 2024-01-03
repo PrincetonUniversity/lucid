@@ -171,12 +171,22 @@ let core_exp_to_tblmeta id (exp : C.exp) =
     | _ -> error "[exp_to_tblmeta] expression is not a table type"
   in
   let actions, length = match exp.e with
-    | ETableCreate(tbl) -> (
+    | ECall(_, [len_exp; acns_exp; _], _) -> (
+      let acn_exps = match acns_exp.e with 
+        | ETuple(exps) -> exps
+        | _ -> [acns_exp]
+      in
+      List.map evar_to_action acn_exps,
+      match len_exp.e with 
+        | EVal({v=VInt(z); _}) -> Integer.to_int z
+        | _ -> error "[exp_to_tblmeta] table size expression is not an EVal(EInt(...))"
+    )
+    (* | ETableCreate(tbl) -> (
       List.map evar_to_action tbl.tactions,
       match tbl.tsize.e with 
         | EVal({v=VInt(z); _}) ->
           Integer.to_int z
-        | _ -> error "[exp_to_tblmeta] table size expression is not an EVal(EInt(...))")
+        | _ -> error "[exp_to_tblmeta] table size expression is not an EVal(EInt(...))") *)
     | _ -> error "[exp_to_tblmeta] expression is not a table create"
   in
   let compiled_cid = (Cid.id id) in 

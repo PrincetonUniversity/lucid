@@ -44,7 +44,6 @@ and exp = [%import: CoreSyntax.exp]
 and branch = [%import: CoreSyntax.branch]
 and gen_type = [%import: CoreSyntax.gen_type]
 and s = [%import: CoreSyntax.s]
-and tbl_def = [%import: CoreSyntax.tbl_def]
 and tbl_match = [%import: CoreSyntax.tbl_match]
 and tbl_entry = [%import: CoreSyntax.tbl_entry]
 and tuple_assign = [%import: CoreSyntax.tuple_assign]
@@ -439,7 +438,9 @@ let array_dimensions tds =
       | TDGlobal
           ( id
           , { raw_ty = TName (ty_cid, sizes, true); _ }
-          , { e = ECall (_, num_slots :: _, _) } ) ->
+          , { e = ECall (_, num_slots :: _, _) } ) 
+          (* skip declarations of Tables, etc. *)
+              when (List.mem (Cid.names ty_cid |> List.hd) ["Array"; "PairArray"]) ->
         (
           let sizes = to_singleton_sizes sizes in
           match Cid.names ty_cid |> List.hd with

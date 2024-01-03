@@ -105,7 +105,7 @@ let rec read_ids_of_exp exp : Cid.t list =
     List.map read_ids_of_exp args |> List.flatten
   | EFlood(arg) -> read_ids_of_exp arg
   | EVal _ -> []
-  | ETableCreate _ -> [] 
+  (* | ETableCreate _ -> []  *)
   | ERecord(fields)-> List.map (fun (_, exp) -> read_ids_of_exp exp) fields |> List.flatten
   | EProj(({e=ERecord(fields)}), fid) -> List.assoc fid fields |> read_ids_of_exp
   | EProj _ -> error "[coreDfg] read_ids_of_exp: EProj not supported"
@@ -151,10 +151,14 @@ let rec read_ids_of_stmt (stmt:CoreSyntax.statement) : Cid.t list =
     )
     | _ -> read_ids_of_exp exp
   )  
-  | STableMatch(tm) -> 
+  (* | STableMatch(tm) -> 
+    (read_ids_of_exps tm.keys)
+    @(read_ids_of_exps tm.args) *)
+  | STupleAssign(_) when (Tables.s_to_tbl_match_opt stmt.s <> None) -> 
+    let tm = Tables.s_to_tbl_match stmt.s in
     (read_ids_of_exps tm.keys)
     @(read_ids_of_exps tm.args)
-  | STupleAssign({exp}) -> read_ids_of_exp exp
+  | STupleAssign(_) -> error "[coreDfg] read_ids_of_stmt: STupleAssign only supported for Table.lookup supported"
   | STableInstall(_, entries) -> 
     List.map 
       (fun entry -> 
@@ -200,7 +204,7 @@ let rec write_ids_of_stmt (stmt:CoreSyntax.statement) : (Cid.t list) =
   )  
   | STableInstall _ -> []
   | STupleAssign({ids}) -> List.map Cid.id ids
-  | STableMatch(tm) -> CL.map Cid.id tm.outs
+  (* | STableMatch(tm) -> CL.map Cid.id tm.outs *)
 ;;
 
 let rec read_ids_of_pattern pattern =

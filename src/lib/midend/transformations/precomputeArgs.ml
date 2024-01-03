@@ -6,8 +6,8 @@ open Batteries
 open InterpHelpers
 module CL = Caml.List
 
-(* 5/19/22 -- don't precompute arguments to event combinators. This is
-temporary to support event combinators inlined with a generate statement. *)
+(* 5/19/22 -- don't precompute arguments to event combinators (which are depreciated) 
+   or Table method *)
 let exception_cids = [Cid.create ["Event"; "delay"]]
 
 let array_method_cids = 
@@ -120,8 +120,8 @@ let precompute_args ds =
             when (List.exists 
               (fun fcid -> Cid.equal_names fcn_id fcid)
               array_method_cids) -> (
-            (* array methods are special -- we allow hash expressions 
-            in the index argument, which is always the 2nd arg (at pos 1) *)
+            (* array methods have a special case -- we allow hash expressions 
+                in the index argument (which is always at position1, after the array ref arg) *)
             match args with
             | arr::addr::rest ->
               let arr' = self#precompute_arg arr in
@@ -135,7 +135,9 @@ let precompute_args ds =
               let rest' = CL.map self#precompute_arg rest in
               {exp with e = ECall (fcn_id, arr'::addr'::rest', u)}
             | _ -> error "[precompute_args] array method call with < 3 args"
-        )        
+        )
+        (* skip table function calls -- nothing to inline *)
+        | ECall (fcn_id, _, _) when (List.exists) (fun fcid -> Cid.equal_names fcn_id fcid) Tables.function_cids -> exp
         | ECall (fcn_id, args, u) ->
           (match CL.mem fcn_id exception_cids with
            | true -> exp (* skip event combinators *)

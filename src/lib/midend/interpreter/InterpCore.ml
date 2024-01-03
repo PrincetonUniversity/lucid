@@ -282,10 +282,6 @@ let rec interp_exp (nst : State.network_state) swid locals e : 'a InterpSyntax.i
       |> Integer.to_int
     in
     V (vgroup [-(port + 1)])
-  | ETableCreate _ ->
-    error
-      "[InterpCore.interp_exp] got a table_create expression, which should not \
-       happen because tables should be created at startup"
   | ERecord(fields) -> 
     (* interp each field to produce a VRecord((id * v) list) *)
     let fields = List.map 
@@ -564,11 +560,10 @@ let rec interp_statement nst hdl_sort swid locals s =
     (* call install_table_entry for each entry *)
     List.iter (fun entry -> Pipeline.install_table_entry tbl_pos entry (State.sw nst swid).pipeline) entries;
     (* return unmodified locals context *)
-    locals
+    locals  
   | STupleAssign(_) -> (
-    error "Tuple assignment (and new Table library functions) not implemented in interpreter"
-  )
-  | STableMatch tm ->
+    (* TODO: refactor so that evaluation of the call is done in the same way as all the other calls *)
+    let tm = Tables.s_to_tbl_match s.s in
     (* load the dynamic entries from the pipeline *)
     let tbl_pos =
       match interp_exp tm.tbl with
@@ -625,6 +620,64 @@ let rec interp_statement nst hdl_sort swid locals s =
         tm.outs
     in
     locals
+  )
+  (* | STableMatch tm ->
+    (* load the dynamic entries from the pipeline *)
+    let tbl_pos =
+      match interp_exp tm.tbl with
+      | V { v = VGlobal stage } -> stage
+      | _ -> error "Table did not evaluate to a pipeline object reference"
+    in
+    let default, entries = Pipeline.get_table_entries tbl_pos (State.sw nst swid).pipeline in
+    (* find the first matching case *)
+    let key_vs = List.map (fun e -> interp_exp e |> extract_ival) tm.keys in
+    let fst_match =
+      List.fold_left
+        (fun fst_match entry ->
+          (* print_endline ("checking entry: "^(CorePrinting.entry_to_string entry)); *)
+          match fst_match with
+          | None ->
+            let pat_vs =
+              List.map (fun e -> interp_exp e |> extract_ival) entry.ematch
+            in
+            if matches_pat_vals key_vs pat_vs
+            then Some (entry.eaction, entry.eargs)
+            else None
+          | Some _ -> fst_match)
+        None
+        entries
+    in
+    (* if there's no matching entry, use the default action. *)
+    let acnid, e_const_args =
+      match fst_match with
+      | Some (acnid, const_args) -> acnid, const_args
+      | None -> default
+    in
+    (* find the action in context *)
+    let action = State.lookup_action (Id acnid) nst in
+    (* extract values from const arguments *)
+    let const_args = List.map interp_eval e_const_args in
+    (* evaluate the runtime action arguments *)
+    let dyn_args = List.map interp_exp tm.args in
+    (* bind install- and match-time parameters in env *)
+    let inner_locals =
+      List.fold_left2
+        (fun inner_locals v (id, _) -> Env.add (Id id) v inner_locals)
+        locals
+        (const_args @ dyn_args)
+        (action.aconst_params @ action.aparams)
+    in
+    (* evaluate the action's expressions *)
+    let acn_ret_vals = List.map (interpret_exp inner_locals) action.abody in
+    (* update variables set by table's output in the env *)
+    let locals =
+      List.fold_left2
+        (fun locals v id -> Env.add (Id id) v locals)
+        locals
+        acn_ret_vals
+        tm.outs
+    in
+    locals *)
 ;;
 
 let interp_dtable (nst : State.network_state) swid id ty e =
@@ -643,23 +696,20 @@ let interp_dtable (nst : State.network_state) swid id ty e =
   let new_p =
     match ty.raw_ty with
     | rty when Tables.is_tbl_ty rty  ->
-    (* | TTable _ -> *)
-      (match e.e with
-       | ETableCreate t ->
-         (* eval args to value expressions *)
-         let def_acn_args =
-           partial_interp_exps nst swid Env.empty (snd t.tdefault)
-         in
-         (* construct the default entry with wildcard args *)
-         (*         let def_entry_pats = List.map (fun _ -> PWild) (tbl_ty.tkey_sizes) in
-        let (def_entry:tbl_entry) = {ematch=def_entry_pats; eaction=(Cid.to_id (fst t.tdefault)); eargs=def_install_args;eprio=0;} in *)
-         Pipeline.append
-           p
-           (Pipeline.mk_table
-              id
-              (extract_int t.tsize)
-              (fst t.tdefault |> Cid.to_id, def_acn_args))
-       | _ -> error "[interp_dtable] incorrect constructor for table")
+      let t = Tables.dglobal_params_to_tbl_def id e in
+      (* eval args to value expressions *)
+      let def_acn_args =
+        partial_interp_exps nst swid Env.empty (snd t.tdefault)
+      in
+      (* construct the default entry with wildcard args *)
+      (*         let def_entry_pats = List.map (fun _ -> PWild) (tbl_ty.tkey_sizes) in
+      let (def_entry:tbl_entry) = {ematch=def_entry_pats; eaction=(Cid.to_id (fst t.tdefault)); eargs=def_install_args;eprio=0;} in *)
+      Pipeline.append
+        p
+        (Pipeline.mk_table
+            id
+            (extract_int t.tsize)
+            (fst t.tdefault |> Cid.to_id, def_acn_args))
     | _ -> error "[interp_dtable] called to create a non table type object"
   in
   nst.switches.(swid) <- { st with pipeline = new_p };

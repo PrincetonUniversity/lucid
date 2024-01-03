@@ -200,14 +200,14 @@ let rec e_to_string e =
   | EHash (size, es) ->
     Printf.sprintf "hash<<%s>>(%s)" (size_to_string size) (es_to_string es)
   | EFlood e -> Printf.sprintf "flood %s" (exp_to_string e)
-  | ETableCreate t ->
+  (* | ETableCreate t ->
     Printf.sprintf
       "table_create<%s>((%s),%s, %s(%s))"
       (ty_to_string t.tty)
       (concat_map "," exp_to_string t.tactions)
       (exp_to_string t.tsize)
       (cid_to_string (fst t.tdefault))
-      (comma_sep exp_to_string (snd t.tdefault))
+      (comma_sep exp_to_string (snd t.tdefault)) *)
   | EProj (e, l) -> exp_to_string e ^ "#" ^ (id_to_string l)
   | ERecord lst ->
     Printf.sprintf
@@ -297,7 +297,7 @@ match s with
     | None -> ""
   in
   Printf.sprintf "return%s;" estr
-| STableMatch tbl_rec ->
+(* | STableMatch tbl_rec ->
   if tbl_rec.out_tys <> None
   then
     Printf.sprintf
@@ -311,7 +311,7 @@ match s with
     Printf.sprintf
       "%s = table_match(%s);"
       (comma_sep id_to_string tbl_rec.outs)
-      (comma_sep exp_to_string ((tbl_rec.tbl :: tbl_rec.keys) @ tbl_rec.args))
+      (comma_sep exp_to_string ((tbl_rec.tbl :: tbl_rec.keys) @ tbl_rec.args)) *)
 | STableInstall (tbl_exp, entries) ->
   Printf.sprintf
     "table_install(%s, {\n\t%s\n\t}\n);"

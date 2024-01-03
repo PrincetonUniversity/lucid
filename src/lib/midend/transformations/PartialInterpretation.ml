@@ -190,7 +190,6 @@ let rec interp_exp env e =
     { e with e = EHash (sz, List.map (interp_exp env) args) }
   | EFlood e' -> { e with e = EFlood (interp_exp env e') }
   | EOp (op, args) -> { e with e = interp_op env op args }
-  | ETableCreate _ -> e
   | ERecord(fields) -> {
     e with e = ERecord (List.map (fun (id, e) -> (id, interp_exp env e)) fields)
   }
@@ -507,7 +506,7 @@ let rec interp_stmt env s : statement * env =
     in
     let new_s = { s with s = STupleAssign({ids; tys; exp = exp'}) } in
     new_s, env
-  | STableMatch tm ->
+  (* | STableMatch tm ->
     let keys = List.map interp_exp tm.keys in
     let args = List.map interp_exp tm.args in
     let env =
@@ -516,7 +515,7 @@ let rec interp_stmt env s : statement * env =
         env
         tm.outs
     in
-    { s with s = STableMatch { tm with keys; args } }, env
+    { s with s = STableMatch { tm with keys; args } }, env *)
   | SIf (test, s1, s2) ->
     let test = interp_exp test in
     (match test with
@@ -647,7 +646,7 @@ let remove_unused_variables stmt =
         List.fold_left (fun acc id -> IdSet.remove id acc) live_vars ids
       in
       live_vars, stmt
-    | STableMatch tm ->
+    (* | STableMatch tm ->
       let live_vars =
         let acc = ref live_vars in
         variable_extractor#visit_statement acc stmt;
@@ -656,7 +655,7 @@ let remove_unused_variables stmt =
       let live_vars =
         List.fold_left (fun acc id -> IdSet.remove id acc) live_vars tm.outs
       in
-      live_vars, stmt
+      live_vars, stmt *)
     (* Code inside a branch can add live variables, but it can't remove them
        (since they were used outside the branch, and so weren't defined inside it) *)
     | SIf (test, s1, s2) ->

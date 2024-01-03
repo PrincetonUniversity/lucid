@@ -382,6 +382,21 @@ let type_checker decls =
   module_type_checker typers decls
 ;;
 
+
+(*** helpers for interp and tofino backend ***)
+let function_cids = 
+  (fst (List.split constructors))@(List.map 
+    (fun (def: InterpState.State.global_fun ) -> def.cid) 
+    (defs)
+  )
+;;
+
+let rec flatten_core_exp (exp: CoreSyntax.exp) = match exp.e with 
+  | ETuple(es) -> List.map flatten_core_exp es |> List.flatten
+  | ERecord(label_exps) -> List.map (fun (_, exp) -> flatten_core_exp exp) label_exps |> List.flatten
+  | _ -> [exp]
+;;
+
 let is_tbl_ty (raw_ty : CoreSyntax.raw_ty) = 
   match raw_ty with 
   | TName(cid, _, _) -> Cid.equal cid t_id
@@ -394,6 +409,23 @@ type core_tbl_ty =
   ; tret_tys : CoreSyntax.ty list
   }
 ;;
+
+type core_tbl_def = 
+{ tid : CoreSyntax.id (* for convenience *)
+; tty : CoreSyntax.ty
+; tactions : CoreSyntax. exp list
+; tsize : CoreSyntax.exp
+; tdefault : CoreSyntax.cid * CoreSyntax.exp list
+}
+
+type core_tbl_match = 
+{
+  tbl : CoreSyntax.exp; 
+  keys : CoreSyntax.exp list;
+  args : CoreSyntax.exp list;
+  outs : Id.t list; 
+  out_tys : CoreSyntax.ty list option;
+}
 
 let size_ints (sz : CoreSyntax.size) = match sz with 
   | Sz sz -> [sz]
@@ -412,4 +444,54 @@ let tname_to_ttable (rty : CoreSyntax.raw_ty) : core_tbl_ty =
       tret_tys = ret_tys;
     }
   | _ -> err "[tname_to_ttable] table does not have type table."
+;;
+
+let dglobal_params_to_tbl_def tid (exp : CoreSyntax.exp) : core_tbl_def = 
+  match exp.e with 
+  | CoreSyntax.ECall(_, [size; actions_tup; default_call], _) -> (
+    match actions_tup.e, default_call.e with
+    | ETuple(actions), ECall(cid, args, _) ->
+      let tsize = size in
+      let tactions = actions in
+      let tdefault = (cid, args) in
+      let tty = exp.ety in
+      {tid; tty; tactions; tsize; tdefault}
+    | _ -> err "got invalid table declaration")
+  | _ -> err "got invalid table declaration"
+;;
+
+let tbl_def_to_econstr (tbl_def : core_tbl_def) : CoreSyntax.exp = 
+  let open CoreSyntax in
+  let {tty; tactions; tsize; tdefault} = tbl_def in
+  let actions_tup = {CoreSyntax.e = CoreSyntax.ETuple(tactions); ety = tty; espan = Span.default} in
+  let default_call = {CoreSyntax.e = ECall(fst tdefault, snd tdefault, false); ety = tty; espan = Span.default} in
+  let exp = {CoreSyntax.e = ECall(create_id, [tsize; actions_tup; default_call], false); ety = tty; espan = Span.default} in
+  exp
+;;
+
+
+(* translate a coresyntax statement into a table match command *)
+let s_to_tbl_match (s : CoreSyntax.s) : core_tbl_match = 
+  match s with 
+    | CoreSyntax.STupleAssign({ids; tys; exp={e=CoreSyntax.ECall(_, [tbl; keys_exp; args_exp], _)}}) -> 
+      let keys = flatten_core_exp keys_exp in
+      let args = flatten_core_exp args_exp in
+      let outs = ids in
+      let out_tys = tys in
+      {tbl; keys; args; outs; out_tys}      
+    | _ -> err "[Table.s_to_tbl_match] only a STupleAssign can be translated into a table match"
+;;
+
+let s_to_tbl_match_opt (s : CoreSyntax.s) : core_tbl_match option = 
+  try Some(s_to_tbl_match s) with _ -> None
+;;
+
+
+let tbl_match_to_s ({tbl; keys; args; outs; out_tys} : core_tbl_match) : CoreSyntax.s = 
+  let keys_exp = {CoreSyntax.e = CoreSyntax.ETuple(keys); ety = tbl.ety; espan = Span.default} in
+  let args_exp = {CoreSyntax.e = CoreSyntax.ETuple(args); ety = tbl.ety; espan = Span.default} in
+  let ids = outs in
+  let tys = out_tys in
+  let exp = {CoreSyntax.e =CoreSyntax.ECall(lookup_cid, [tbl; keys_exp; args_exp], false); ety = tbl.ety; espan = Span.default} in
+  CoreSyntax.STupleAssign({ids; tys; exp})
 ;;

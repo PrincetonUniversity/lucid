@@ -368,7 +368,6 @@ let rec translate_e e ety = match e with
     sprintf "%s.%s" (translate_exp exp) (id_string cid)
   | EHash _ -> error "hash expressions must be evaluated at the statement level"
   | EFlood _ -> error "the flood builtin is not implemented"
-  | ETableCreate _ -> error "table create expressions must be evaluated at the declaration level"
 and translate_exp exp = 
   translate_e exp.e exp.ety
 
@@ -411,7 +410,6 @@ let rec translate_s s =
     | _ -> 
       sprintf "return %s;" exp
   )
-  | STableMatch _ -> error "table match not implemented"
   | STableInstall _ -> error "table install not implemented"
   | STupleAssign _ -> error "tuple assignment not implemented"
   | SUnit(exp) -> 

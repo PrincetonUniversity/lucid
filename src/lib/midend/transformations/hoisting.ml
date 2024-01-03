@@ -203,7 +203,8 @@ let rec hoist (stmts_to_place : statement list) stmt =
   (* tuple assign has the same semantics as table match, meaning we don't try to hoist it *)
   | STupleAssign _ -> stmt, stmts_to_place
   (* nothing else changes *)
-  | SNoop | SUnit _ | SPrintf _ | SGen _ | SRet _ | STableInstall _ | STableMatch _ -> stmt, stmts_to_place
+  | SNoop | SUnit _ | SPrintf _ | SGen _ | SRet _ | STableInstall _ -> stmt, stmts_to_place
+  (* | STableMatch _ -> stmt, stmts_to_place *)
 ;;
 
 let rec process decls = 

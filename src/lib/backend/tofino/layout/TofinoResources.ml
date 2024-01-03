@@ -130,10 +130,10 @@ let rec hashers_of_stmt stmt =
       | false -> branch_hashers
     (* (match es_has_hasher with | true -> [stmt] | false -> [])@(List.map hashers_of_branch bs |> List.flatten) *)
   )
-  | STableMatch(tm) ->
+  (* | STableMatch(tm) ->
     if (hashers_in_exps (tm.keys@tm.args))
     then [stmt]
-    else []
+    else [] *)
   | STupleAssign({exp}) -> 
     if (hashers_in_exps [exp])
     then [stmt]
@@ -257,8 +257,8 @@ let rec hash_ops_of_stmt statement_cache stmt =
       in
       statement_cache, (hash_ops_branches + hash_ops_es)
     )
-    | STableMatch(tm) ->
-      statement_cache,hash_ops_of_exps (tm.keys@tm.args)
+    (* | STableMatch(tm) ->
+      statement_cache,hash_ops_of_exps (tm.keys@tm.args) *)
     | STupleAssign({exp}) -> 
       statement_cache, hash_ops_of_exp exp
     | STableInstall(_, entries) -> 

@@ -134,7 +134,7 @@ type prog_env = {
   memops : memop IdMap.t;
   actions : CidSet.t;
   (* defined_fcns : tdecl CidMap.t; *)
-  tables : (CS.tbl_def * Span.t) CidMap.t;
+  tables : (Tables.core_tbl_def * Span.t) CidMap.t;
   vars   : exp CidMap.t;
   (* hashers that have already been constructed, 
      because we can't deduplicate hash expressions 
@@ -285,8 +285,6 @@ let rec translate_exp (prog_env:prog_env) exp : (T.decl list * T.expr) * prog_en
     let op = translate_op op in 
     ([], eop_ty_sp op args (translate_ty exp.ety) exp.espan), prog_env
   )
-  | CS.ETableCreate(_) ->
-    error "[coreToP4Tofino.translate_exp] got an etablecreate expression. This should have been handled by the declaration translator."
   | CS.ERecord(_) -> error "[coreToP4Tofino.translate_exp] records not implemented"
   | CS.ETuple _ -> error "[coreToP4Tofino.translate_exp] tuples not implemented"
   | CS.EProj(_, _) -> error "[coreToP4Tofino.translate_exp] projections not implemented"
@@ -701,8 +699,9 @@ let rec translate_statement env prev_decls stmt : (decl list * T.statement) * pr
     let (s1_decls, s1_stmt), s1_env = translate_statement env prev_decls s1 in
     let (s2_decls, s2_stmt), s2_env = translate_statement s1_env prev_decls s2 in
     (s1_decls@s2_decls, sseq [s1_stmt; s2_stmt]), s2_env
-  | STupleAssign _ -> error "[coreToP4Tofino.translate_statement] multiassign not yet supported inside of an action"
-  | STableMatch _ | STableInstall _ -> error "[coreToP4Tofino.translate_statement] tables may not appear inside action bodies"
+  | STupleAssign _ -> error "[coreToP4Tofino.translate_statement] multiassign may not appear inside of an action"
+  (* | STableMatch _  *)
+  | STableInstall _ -> error "[coreToP4Tofino.translate_statement] tables may not appear inside action bodies"
 ;;
 
 (* generate an action, and other compute objects, from an open function
@@ -733,7 +732,7 @@ let fresh_table_id _ = Id.fresh_name "table"
 (* translate a table object declaration into a P4 table. 
    Note: we need the match statement that calls the table 
    because it contains the key *)
-let translate_table env tdef tspan pragmas keys =
+let translate_table env (tdef:Tables.core_tbl_def) tspan pragmas keys =
   let tid = tdef.tid in
   let size = CoreSyntax.exp_to_int tdef.tsize in
   let action_ids = translate_exps env tdef.tactions |> fst_snd in
@@ -764,7 +763,9 @@ let stmt_to_table env (_:pragma) (ignore_pragmas: (id * pragma) list) (tid, stmt
       | _ -> error "[action_id_of_branch] branch does not call an action function"
   in
   match stmt.s with
-  | SIf(e, {s=STableMatch(tm);}, _) ->   
+  | SIf(e, {s}, _) when (match s with STupleAssign(_) -> true | _ -> false)-> 
+    let tm = Tables.s_to_tbl_match s in
+  (* | SIf(e, {s=STableMatch(tm);}, _) ->    *)
     (* match keys are specified in the statement *)
     let keys = translate_exps env tm.keys 
       |> fst_snd 
@@ -858,7 +859,10 @@ let sseq_to_stage stage_num env block_id seq_stmt =
   (* user tables already have ids *)
   let table_ids = List.map 
     (fun call_stmt -> match call_stmt.s with
-      | SIf(_, {s=STableMatch(tm);}, _) -> CoreSyntax.id_of_exp tm.tbl
+      | SIf(_, {s}, _) when (match s with STupleAssign(_) -> true | _ -> false)-> 
+        let tm = Tables.s_to_tbl_match s in
+      (* | SIf(_, {s=STableMatch(tm);}, _) ->  *)
+        CoreSyntax.id_of_exp tm.tbl
       | SMatch(_) -> fresh_table_id ()
       | _ -> error "[sseq_to_stage] a statement in this stage is something besides a conditional table_match or an unconditional match statement.")
     stmts
@@ -1611,8 +1615,9 @@ let translate_tdecl (denv : translate_decl_env) tdecl : (translate_decl_env) =
   (* memops just go into the context *)
   | TDMemop(m) -> (dw bind_memop denv (m.mid, m))
   (* tables just go into context *)
-  | TDGlobal(tbl_id, _, {e=ETableCreate(tbl_def); espan=espan;}) -> 
-    dw bind_tbl denv ((Cid.id tbl_id), (tbl_def, espan))
+  | TDGlobal(tbl_id, {raw_ty = TName(ty_cid, _, _)}, econstr) when (Cid.names ty_cid = ["Table"; "t"]) ->
+    let tbl_def = Tables.dglobal_params_to_tbl_def tbl_id econstr in 
+    dw bind_tbl denv ((Cid.id tbl_id), (tbl_def, econstr.espan))
   (* arrays get translated into registerarrays, which are global. *)
   | TDGlobal(rid, ty, exp) -> (
     match ty.raw_ty with 

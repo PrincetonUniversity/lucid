@@ -7,7 +7,6 @@
 open TofinoCore
 open BackendLogging
 
-
 let start_backend_logging () = 
   if (Cmdline.cfg.debug)
     then (
@@ -188,9 +187,10 @@ let tofinocore_passes core_prog portspec =
   dump_prog "IfToMatch; RegularizeMemops; ShareMemopInputsSat" "tofinocore_regularized_memops" core_prog;
   report_if_verbose "-------Transforming table matches into single-call form-------";
   let core_prog = SingleTableMatch.process_core core_prog in
+  dump_prog "SingleTableMatch; ActionsToFunctions" "tofinocore_single_table_match" core_prog;
   report_if_verbose "-------Transforming actions into functions-------";
   let core_prog = ActionsToFunctions.process_core core_prog in
-  dump_prog "SingleTableMatch; ActionsToFunctions" "tofinocore_single_table_match" core_prog;
+  dump_prog "SingleTableMatch; ActionsToFunctions" "tofinocore_action_functions" core_prog;
   (* propagateEvars is another hoisting pass that benefits control flows with 
      match tables that are declared and used once. *)
   let core_prog = PropagateEvars.process core_prog in

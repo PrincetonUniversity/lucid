@@ -122,14 +122,6 @@ and value =
   }
 
 (* expressions *)
-and tbl_def =
-  { tid : id (* for convenience *)
-  ; tty : ty
-  ; tactions : exp list
-  ; tsize : exp
-  ; tdefault : cid * exp list
-  }
-
 and e =
   | EVal of value
   | EVar of cid
@@ -140,7 +132,6 @@ and e =
   | ERecord of (id * exp) list
   | EProj of exp * id
   | ETuple of exp list 
-  | ETableCreate of tbl_def
 
 and exp =
   { e : e
@@ -168,7 +159,6 @@ and s =
   | SMatch of exp list * branch list
   | SRet of exp option
 
-  | STableMatch of tbl_match
   | STableInstall of exp * tbl_entry list
 
   | STupleAssign of tuple_assign
@@ -391,6 +381,10 @@ let vint_exp_ty i (ty:ty) =
   | TInt(Sz sz) -> 
     value_to_exp (vint i sz)
   | _ -> error "[vint_exp_ty] type mismatch"
+;;
+let tup_sp es span = 
+  let tys = List.map (fun e -> e.ety) es in
+  aexp (ETuple es) (ty (TTuple (List.map (fun ty -> ty.raw_ty) tys))) span
 ;;
 
 (* Statements *)

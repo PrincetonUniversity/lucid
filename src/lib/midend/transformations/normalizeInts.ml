@@ -182,7 +182,10 @@ let atomize_int_assigns ds =
 
       method! visit_exp _ exp =
         match exp.e with 
-        (* skip calls (which should all be atomic by now) but recurse on arguments *)
+        (* skip Tables method calls completely *)
+        | ECall(cid, _, _) when (List.exists (fun cid' -> Cid.equal cid cid') Tables.function_cids) -> 
+          exp
+        (* recurse on arguments of other calls (Array and System) *)
         | ECall _ -> super#visit_exp () exp
         | _ -> 
           let new_exp, precompute_stmts = transform_exp exp in
@@ -211,6 +214,8 @@ let atomize_int_assigns ds =
            statements handle their own precomputations *)
           { stmt with s = SSeq (s1, s2) }
         | _ ->
+          print_endline ("visiting statement: "^(CorePrinting.stmt_to_string stmt));
+          (* Otherwise, we need to precompute for this statement *)
           let stmt' = super#visit_statement () stmt in
           sequence_stmts (precompute @ [stmt'])
     end

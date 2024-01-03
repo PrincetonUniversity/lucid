@@ -256,8 +256,6 @@ module NormalizeBoolExps = struct
       error
         "z3_from_expr got an eflood -- there shouldn't be a flood constructor \
          inside of a boolean"
-    | ETableCreate _, _ ->
-      error "[z3_from_expr] a create table call inside a bool"
     | ERecord _, _ -> error "[z3_from_expr] records not supported"
     | ETuple _, _-> error "[z3_from_expr] tuples not supported"
     | EProj _, _ -> error "[z3_from_expr] projections not supported"

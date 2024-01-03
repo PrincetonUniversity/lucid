@@ -205,15 +205,21 @@ and translate_exp (e : S.exp) : C.exp =
   in
   { e = e'; ety = translate_ty (Option.get e.ety); espan = e.espan }
 
-and translate_etablecreate id (exp : S.exp) : C.exp =
+and translate_etablecreate _ (exp : S.exp) : C.exp =
   match exp.e with
   | S.ETableCreate tc ->
-    let tty = translate_ty tc.tty in
-    let tactions = List.map translate_exp tc.tactions in
+    (* let tty = translate_ty tc.tty in
     let tsize = translate_exp tc.tsize in
+    let tactions = List.map translate_exp tc.tactions in
     let default_cid, default_args, _ = SyntaxUtils.unpack_default_action tc.tdefault.e in
     let tdefault = default_cid, default_args |> List.map translate_exp in
-    let e' = C.ETableCreate { tid = id; tty; tactions; tsize; tdefault } in
+    let e' = C.ETableCreate { tid = id; tty; tactions; tsize; tdefault } in *)
+    (* let tty = translate_ty tc.tty in *)
+    let tsize = translate_exp tc.tsize in
+    let tactions = C.tup_sp (List.map translate_exp tc.tactions) Span.default in
+    let default_acn_constr = translate_exp tc.tdefault in
+    let e' = 
+      C.ECall(Cid.create ["Table"; "create"], [tsize; tactions; default_acn_constr], false) in
     { e = e'; ety = translate_ty (Option.get exp.ety); espan = exp.espan }
   | _ ->
     err
@@ -292,7 +298,18 @@ and translate_statement (s : S.statement) : C.statement =
       C.SMatch (List.map translate_exp es, List.map translate_branch branches)
     | S.SRet eopt -> C.SRet (Option.map translate_exp eopt)
     | S.STableMatch tm ->
-      C.STableMatch
+      let (core_tm : Tables.core_tbl_match) = { 
+          Tables.tbl = translate_exp tm.tbl
+        ; Tables.keys = List.map translate_exp tm.keys
+        ; Tables.args = List.map translate_exp tm.args
+        ; Tables.outs = tm.outs
+        ; Tables.out_tys =
+            (match tm.out_tys with
+            | None -> None
+            | Some otys -> Some (List.map translate_ty otys))
+      } in
+      Tables.tbl_match_to_s core_tm
+      (* C.STableMatch
         { C.tbl = translate_exp tm.tbl
         ; C.keys = List.map translate_exp tm.keys
         ; C.args = List.map translate_exp tm.args
@@ -301,7 +318,7 @@ and translate_statement (s : S.statement) : C.statement =
             (match tm.out_tys with
              | None -> None
              | Some otys -> Some (List.map translate_ty otys))
-        }
+        } *)
     | S.STableInstall (tbl_exp, entries) ->
       C.STableInstall (translate_exp tbl_exp, List.map translate_entry entries)
     (* TABLE UPDATE -- hard coded tuple assign -> table assign *)
@@ -325,7 +342,9 @@ and translate_statement (s : S.statement) : C.statement =
           | Some tys -> Some (List.map translate_ty tys)
           | None -> None
         in
-        STableMatch { tbl; keys; args; outs; out_tys }
+        let (tm : Tables.core_tbl_match) = { Tables.tbl; keys; args; outs; out_tys } in
+        Tables.tbl_match_to_s tm
+        (* STableMatch { tbl; keys; args; outs; out_tys } *)
       )
       | _ -> err_unsupported tup_asn.exp.espan "tuple assign is only supported for table lookup in the backend"
     )
@@ -401,7 +420,7 @@ let translate_d preserve_user_decls d dspan dpragmas =
   | S.DGlobal (id, ty, constr_exp) -> (
     match ty.raw_ty with 
     (* TABLE UPDATE -- hard coded translation into a decl with ETableCreate *)
-    | (TName(cid, _, _)) when (Cid.equal cid Tables.t_id) -> (
+    (* | (TName(cid, _, _)) when (Cid.equal cid Tables.t_id) -> (
       match constr_exp.e with
       | S.ECall(_, [size_exp; actions_exp; default_exp], _) ->
         let size = translate_exp size_exp in
@@ -426,7 +445,7 @@ let translate_d preserve_user_decls d dspan dpragmas =
         in
         Some (C.DGlobal (id, translate_ty ty, {e=C.ETableCreate tbl_def; ety=translate_ty ty; espan=constr_exp.espan}))
       | _ -> err_unsupported dspan "table create should be a call"
-    )     
+    )      *)
     | _ -> 
       Some (match constr_exp.e with
       | ETableCreate _ ->

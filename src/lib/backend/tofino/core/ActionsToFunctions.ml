@@ -17,7 +17,7 @@ module IdMap = Collections.IdMap
 
 type env = {
   actions : (Id.t * action) list;
-  tables : (Id.t * tbl_def) list;
+  tables : (Id.t * Tables.core_tbl_def) list;
 }
 let empty_env = {actions = []; tables = [];}
 
@@ -51,7 +51,7 @@ let openfcn id params stmt vars span =
 ;;
 
 (* convert an action into a function *)
-let action_to_function env tmatch acn_exp =
+let action_to_function env (tmatch: Tables.core_tbl_match) acn_exp =
   let acn = lookup_acn env acn_exp in
   (* map from ids (params) to expressions (args) *)
   let subst_map =
@@ -104,10 +104,17 @@ let actions_to_functions env tdecl =
   let v =
     object
       inherit [_] s_iter as super
-      method! visit_STableMatch env tmatch =
+      method! visit_STupleAssign env tassn = 
+        match (Tables.s_to_tbl_match_opt (STupleAssign(tassn))) with 
+        | Some(tmatch) -> 
+            let tbl = lookup_tbl env tmatch.tbl in
+            fcn_decls := (!fcn_decls)@(
+              List.map (action_to_function env tmatch) tbl.tactions)
+        | None -> ()
+      (* method! visit_STableMatch env tmatch =
         let tbl = lookup_tbl env tmatch.tbl in
         fcn_decls := (!fcn_decls)@(
-          List.map (action_to_function env tmatch) tbl.tactions)
+          List.map (action_to_function env tmatch) tbl.tactions) *)
     end
   in
   v#visit_tdecl env tdecl;
@@ -132,7 +139,22 @@ let rec _process env tdecls =
       | TDActionConstr(acn) -> 
         let actions' = (acn.aid, acn)::env.actions in
         (_process {env with actions=actions'} tdecls)
-      | TDGlobal(id, gty, {e=ETableCreate(tbl); ety=ety; espan=espan;}) -> 
+      | TDGlobal(id, gty, etblconstr) -> 
+        let tbl = Tables.dglobal_params_to_tbl_def id etblconstr in
+        (* remember the table. *)
+        let tables' = (tbl.tid, tbl)::env.tables in
+        let env' = {env with tables=tables'} in
+        (* transform the type of the action references *)
+        let tactions' = List.map
+          (fun eacn -> {eacn with ety=actionty_to_functionty eacn.ety;})
+          tbl.tactions
+        in
+        let tbl' = {tbl with tactions=tactions'} in
+        let etblconstr' = Tables.tbl_def_to_econstr tbl' in
+        let etblconstr' = {etblconstr with e=etblconstr'.e} in
+        let tdecl' = {tdecl with td=TDGlobal(id, gty, etblconstr')} in
+        tdecl'::(_process env' tdecls)
+      (* | TDGlobal(id, gty, {e=ETableCreate(tbl); ety=ety; espan=espan;}) -> 
         (* remember the table. *)
         let tables' = (tbl.tid, tbl)::env.tables in
         let env' = {env with tables=tables'} in
@@ -143,7 +165,7 @@ let rec _process env tdecls =
         in
         let tbl' = {tbl with tactions=tactions'} in
         let tdecl' = {tdecl with td=TDGlobal(id, gty, {e=ETableCreate(tbl'); ety; espan})} in
-        tdecl'::(_process env' tdecls)
+        tdecl'::(_process env' tdecls) *)
       (* transform all the actions that 
          appear in table_install statements *)
       | _ -> 

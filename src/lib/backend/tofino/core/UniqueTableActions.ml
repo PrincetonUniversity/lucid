@@ -95,7 +95,8 @@ let update_decl ctx decl : replace_ctx * decls =
   | DActionConstr({aid=aid; _}) -> 
     add_action aid decl ctx, []
   (* table constructors -- create bindings, update context, update local actions *)
-  | DGlobal(tid, tty, {e=ETableCreate(tdef); ety=ety; espan=espan;}) -> 
+  | DGlobal(tid, tty, econstr) ->
+    let tdef = Tables.dglobal_params_to_tbl_def tid econstr in  
     let aids = List.map id_of_exp tdef.tactions in
     let new_aids = List.map (new_aid tid) aids in
     let ctx = add_tableaction_renames tid aids new_aids ctx in
@@ -114,7 +115,11 @@ let update_decl ctx decl : replace_ctx * decls =
     (* new action definitions -- copies of original actions, 
        with local names.*)
     let actions = List.map2 (copy_action ctx) aids new_aids in
-    ctx, actions@[{decl with d=DGlobal(tid, tty, {e=ETableCreate(tdef'); ety; espan})}]
+    (* let d' = DGlobal(tid, tty, {e=ETableCreate(tdef'); ety=tty; espan=decl.espan}) in *)
+    let econstr' = Tables.tbl_def_to_econstr tdef' in
+    let exp_constr = {econstr with e = econstr'.e}in
+    let d' = DGlobal(tid, tty, exp_constr) in
+    ctx, actions@[{decl with d=d'}]
   (* everything else -- rename action vars wherever they appear (table_install, mainly) *)
   | _ -> 
     ctx, [rename_actionvars ctx decl]
