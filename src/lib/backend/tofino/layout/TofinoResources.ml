@@ -138,7 +138,7 @@ let rec hashers_of_stmt stmt =
     if (hashers_in_exps [exp])
     then [stmt]
     else []
-  | STableInstall(_, entries) -> 
+  (* | STableInstall(_, entries) -> 
     let hasher_in_entry ent =
       (hashers_in_exps ent.ematch || hashers_in_exps ent.eargs)
     in
@@ -147,7 +147,7 @@ let rec hashers_of_stmt stmt =
       false
       entries
     in 
-    if (uses_hash) then [stmt] else []
+    if (uses_hash) then [stmt] else [] *)
 
 
 let calc_hash_bits_block ty =
@@ -261,13 +261,13 @@ let rec hash_ops_of_stmt statement_cache stmt =
       statement_cache,hash_ops_of_exps (tm.keys@tm.args) *)
     | STupleAssign({exp}) -> 
       statement_cache, hash_ops_of_exp exp
-    | STableInstall(_, entries) -> 
+    (* | STableInstall(_, entries) -> 
       statement_cache,List.fold_left 
         (fun ct ent ->         
           ct + hash_ops_of_exps ent.ematch
           + hash_ops_of_exps ent.eargs)
         0
-        entries
+        entries *)
 ;;
 
 

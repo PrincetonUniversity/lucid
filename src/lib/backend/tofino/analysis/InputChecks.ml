@@ -174,7 +174,8 @@ let all_tables_used ds =
       object
         inherit [_] CoreSyntax.s_iter as super
 
-        method! visit_tbl_match _ tm =
+        method! visit_STupleAssign _ tuple_assign = 
+          let tm = Tables.s_to_tbl_match@@STupleAssign(tuple_assign) in
           tbl_ids := (tm.tbl |> CoreSyntax.exp_to_id) :: !tbl_ids
       end
     in

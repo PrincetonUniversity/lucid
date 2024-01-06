@@ -410,7 +410,6 @@ let rec translate_s s =
     | _ -> 
       sprintf "return %s;" exp
   )
-  | STableInstall _ -> error "table install not implemented"
   | STupleAssign _ -> error "tuple assignment not implemented"
   | SUnit(exp) -> 
     let exp = translate_exp exp in

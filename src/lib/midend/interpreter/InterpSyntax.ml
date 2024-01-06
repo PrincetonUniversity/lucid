@@ -1,14 +1,14 @@
 (* interpreter-specific extensions to core syntax: 
 internal value and event types *)
 open CoreSyntax
-open InterpControl
+(* open InterpControl *)
 
 (* values used in interpreter contexts. 'nst is network state *)
 type 'nst ival =
   | V of value
   | F of 'nst code
 
-and 'nst code = 'nst -> int (* switch *) -> 'nst ival list -> value
+and 'nst code = 'nst -> int (* switch *) -> 'nst ival list -> 'nst ival
 
 and memop
 
@@ -76,7 +76,9 @@ let internal_event_to_string ievent =
 
 
 (* an input from the user *)
-type interp_input =
+
+
+(* type interp_input =
   | IEvent of {iev : event_val; ilocs : loc list; itime : int}
   | IControl of {ictl : control_val; ilocs : loc list; itime : int}
 ;;
@@ -92,4 +94,4 @@ let input_locs interp_input =
   match interp_input with
   | IEvent({ilocs}) -> ilocs
   | IControl({ilocs}) -> ilocs
-;;
+;; *)

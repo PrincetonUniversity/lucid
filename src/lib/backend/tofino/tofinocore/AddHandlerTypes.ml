@@ -87,7 +87,7 @@ let rec find_generates (stmt : statement) : (gen_type * exp) list =
   | SNoop | SUnit _ | SLocal _ | SAssign _ | SPrintf _ | SRet _ ->
       []
   (* | STableMatch _  *)
-  | STableInstall _-> []
+  (* | STableInstall _-> [] *)
   | STupleAssign _ -> []
   | SIf (_, then_stmt, else_stmt) ->
       find_generates then_stmt @ find_generates else_stmt

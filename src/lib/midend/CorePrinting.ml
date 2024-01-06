@@ -234,13 +234,13 @@ and action_to_string (name, (ps, stmt)) =
     (params_to_string ps)
     (stmt_to_string stmt)
 
-and entry_to_string entry =
+(* and entry_to_string entry =
   Printf.sprintf
     "[%s](%s) -> %s(%s);"
     (string_of_int entry.eprio)
     (comma_sep exp_to_string entry.ematch)
     (id_to_string entry.eaction)
-    (comma_sep exp_to_string entry.eargs)
+    (comma_sep exp_to_string entry.eargs) *)
 
 and s_to_string s = 
 match s with
@@ -312,11 +312,11 @@ match s with
       "%s = table_match(%s);"
       (comma_sep id_to_string tbl_rec.outs)
       (comma_sep exp_to_string ((tbl_rec.tbl :: tbl_rec.keys) @ tbl_rec.args)) *)
-| STableInstall (tbl_exp, entries) ->
+(* | STableInstall (tbl_exp, entries) ->
   Printf.sprintf
     "table_install(%s, {\n\t%s\n\t}\n);"
     (exp_to_string tbl_exp)
-    (List.map entry_to_string entries |> String.concat "\n")
+    (List.map entry_to_string entries |> String.concat "\n") *)
 | STupleAssign({ids; tys; exp}) ->
   Printf.sprintf
     "%s%s = %s;"

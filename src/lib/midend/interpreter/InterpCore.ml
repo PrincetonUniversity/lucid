@@ -203,9 +203,6 @@ let calc_crc16_csum (zs : zint list) =
   Integer.bitnot (Integer.set_size 16 !sum)
 ;;
 
-
-
-
 let rec interp_exp (nst : State.network_state) swid locals e : 'a InterpSyntax.ival =
   let interp_exps = interp_exps nst swid locals in
   let interp_exp = interp_exp nst swid locals in
@@ -229,7 +226,7 @@ let rec interp_exp (nst : State.network_state) swid locals e : 'a InterpSyntax.i
        error
          (Cid.to_string cid
          ^ " is a value identifier and cannot be used in a call")
-     | F f -> V (f nst swid vs)
+     | F f -> f nst swid vs
    )
   | EHash (Szs _, _ ) -> 
     error "Hash expression size should not be a tuple"
@@ -540,7 +537,32 @@ let rec interp_statement nst hdl_sort swid locals s =
     in
     let locals = List.fold_left2 update_local locals (fst first_match) vs in
     interp_statement nst hdl_sort swid locals (snd first_match)
-  | STableInstall (tbl, entries) ->
+  (* | SUnit({e=ECall(fcid, _, _)})
+        when (Cid.equal fcid (Cid.create ["Table"; "install"])) -> 
+    let tbl, entries = Tables.s_to_tbl_install s.s in
+    (* install entries into the pipeline *)
+    (* evaluate entry patterns and install-time action args to EVals *)
+    let entries =
+      List.map
+        (fun (entry : Tables.core_tbl_entry) ->
+          let ematch = partial_interp_exps nst swid locals entry.ematch in
+          let eargs = partial_interp_exps nst swid locals entry.eargs in
+          { entry with ematch; eargs })
+        entries
+    in
+    (* get index of table in pipeline *)
+    let tbl_pos =
+      match interp_exp tbl with
+      | V { v = VGlobal stage } -> stage
+      | _ -> error "Table did not evaluate to a pipeline object reference"
+    in
+    (* LEFT OFF HERE: wanna change this signature to not take tbl_entries, bc more circ deps *)
+    (* call install_table_entry for each entry *)
+    List.iter (fun entry -> Pipeline.install_table_entry tbl_pos entry (State.sw nst swid).pipeline) entries;
+    (* return unmodified locals context *)
+    locals       *)
+
+    (* | STableInstall (tbl, entries) ->
     (* install entries into the pipeline *)
     (* evaluate entry patterns and install-time action args to EVals *)
     let entries =
@@ -560,7 +582,7 @@ let rec interp_statement nst hdl_sort swid locals s =
     (* call install_table_entry for each entry *)
     List.iter (fun entry -> Pipeline.install_table_entry tbl_pos entry (State.sw nst swid).pipeline) entries;
     (* return unmodified locals context *)
-    locals  
+    locals   *)
   | STupleAssign(_) -> (
     (* TODO: refactor so that evaluation of the call is done in the same way as all the other calls *)
     let tm = Tables.s_to_tbl_match s.s in
@@ -575,42 +597,26 @@ let rec interp_statement nst hdl_sort swid locals s =
     let key_vs = List.map (fun e -> interp_exp e |> extract_ival) tm.keys in
     let fst_match =
       List.fold_left
-        (fun fst_match entry ->
+        (fun fst_match (pat_vs, eaction) ->
           (* print_endline ("checking entry: "^(CorePrinting.entry_to_string entry)); *)
           match fst_match with
           | None ->
-            let pat_vs =
-              List.map (fun e -> interp_exp e |> extract_ival) entry.ematch
-            in
             if matches_pat_vals key_vs pat_vs
-            then Some (entry.eaction, entry.eargs)
-            else None
+            then Some eaction else None
           | Some _ -> fst_match)
         None
         entries
     in
     (* if there's no matching entry, use the default action. *)
-    let acnid, e_const_args =
+    let acn =
       match fst_match with
-      | Some (acnid, const_args) -> acnid, const_args
+      | Some (acn) -> acn
       | None -> default
     in
-    (* find the action in context *)
-    let action = State.lookup_action (Id acnid) nst in
-    (* extract values from const arguments *)
-    let const_args = List.map interp_eval e_const_args in
     (* evaluate the runtime action arguments *)
-    let dyn_args = List.map interp_exp tm.args in
-    (* bind install- and match-time parameters in env *)
-    let inner_locals =
-      List.fold_left2
-        (fun inner_locals v (id, _) -> Env.add (Id id) v inner_locals)
-        locals
-        (const_args @ dyn_args)
-        (action.aconst_params @ action.aparams)
-    in
-    (* evaluate the action's expressions *)
-    let acn_ret_vals = List.map (interpret_exp inner_locals) action.abody in
+    let dyn_args = List.map (fun arg -> interp_exp arg |> extract_ival) tm.args in
+    (* call the action function *)
+    let acn_ret_vals = acn dyn_args |> List.map (fun value -> InterpSyntax.V value) in
     (* update variables set by table's output in the env *)
     let locals =
       List.fold_left2
@@ -701,15 +707,29 @@ let interp_dtable (nst : State.network_state) swid id ty e =
       let def_acn_args =
         partial_interp_exps nst swid Env.empty (snd t.tdefault)
       in
-      (* construct the default entry with wildcard args *)
-      (*         let def_entry_pats = List.map (fun _ -> PWild) (tbl_ty.tkey_sizes) in
-      let (def_entry:tbl_entry) = {ematch=def_entry_pats; eaction=(Cid.to_id (fst t.tdefault)); eargs=def_install_args;eprio=0;} in *)
+      (* eval a call to an action constructor and use resulting action to get default action *)
+      let def_action_constr_call = exp (ECall(fst t.tdefault, def_acn_args, false)) (CoreSyntax.ty@@TBool) in
+      let def_acn = match (interp_exp nst swid Env.empty def_action_constr_call) with
+          | F f -> (
+            let acn_f  (vs : value list) : value list = 
+              (* wrap vs in ivals, call action_f, unwrap results *)
+              let ivals = List.map (fun v -> InterpSyntax.V v) vs in
+              let result = f nst swid ivals |> extract_ival in
+              match result.v with
+              | VTuple(vs) -> List.map value vs
+              | _ -> [result]
+            in
+            acn_f
+        )
+        | _ -> error "default action did not evaluate to an action"
+      in
+      (* make the table with the default action and append it to the pipeline *)
       Pipeline.append
         p
         (Pipeline.mk_table
             id
             (extract_int t.tsize)
-            (fst t.tdefault |> Cid.to_id, def_acn_args))
+            (def_acn))
     | _ -> error "[interp_dtable] called to create a non table type object"
   in
   nst.switches.(swid) <- { st with pipeline = new_p };
@@ -850,7 +870,7 @@ let interp_memop params body nst swid args =
   let sz = List.hd args |> extract_ival |> raw_integer |> Integer.size in
   let body = replacer#visit_memop_body sz body in
   match body with
-  | MBComplex body -> interp_complex_body params body nst swid args
+  | MBComplex body -> InterpSyntax.V(interp_complex_body params body nst swid args)
   | MBReturn e ->
     let locals =
       List.fold_left2
@@ -859,7 +879,7 @@ let interp_memop params body nst swid args =
         args
         params
     in
-    interp_exp nst swid locals e |> extract_ival
+    interp_exp nst swid locals e
   | MBIf (e1, e2, e3) ->
     let locals =
       List.fold_left2
@@ -870,8 +890,8 @@ let interp_memop params body nst swid args =
     in
     let b = interp_exp nst swid locals e1 |> extract_ival |> raw_bool in
     if b
-    then interp_exp nst swid locals e2 |> extract_ival
-    else interp_exp nst swid locals e3 |> extract_ival
+    then interp_exp nst swid locals e2
+    else interp_exp nst swid locals e3
 ;;
 
 
@@ -931,7 +951,7 @@ and interp_parser_step nst swid payload_id locals parser_step =
           in
           (* call the parser function as you would any other function *)
           match State.lookup swid cid nst with 
-            | F(parser_f) -> parser_f nst swid args
+            | F(parser_f) -> let rv = parser_f nst swid args in rv |> extract_ival
             | _ -> error "[parser call] could not find parser function"
         )
         | _ -> error "[parser call] expected a call expression"
@@ -952,9 +972,6 @@ let interp_decl (nst : State.network_state) swid d =
   (* print_endline @@ "Interping decl: " ^ Printing.decl_to_string d; *)
   match d.d with
   | DGlobal (id, ty, e) -> interp_dglobal nst swid id ty e
-  | DActionConstr acn ->
-    (* add the action to the environment *)
-    State.add_action (Cid.id acn.aid) acn nst
   | DHandler (id, hdl_sort, (params, body)) ->(
     (* print_endline@@"Adding handler"^(CorePrinting.id_to_string id);
     print_endline@@"handler sort: "^(match hdl_sort with | HData -> "ingress" | HEgress -> "egress" | _ ->""); *)
@@ -1007,7 +1024,7 @@ let interp_decl (nst : State.network_state) swid d =
           args
           param_ids
       in
-      interp_parser_block nst swid payload_id locals parser_block
+      InterpSyntax.V(interp_parser_block nst swid payload_id locals parser_block)
     in
     State.add_global swid (Cid.id id) (F runtime_function) nst;
     nst
@@ -1027,13 +1044,13 @@ let interp_decl (nst : State.network_state) swid d =
         | State.P(_) -> {v=VPat([]); vty=Payloads.payload_ty |> SyntaxToCore.translate_ty; vspan=Span.default}
         | _ -> extract_ival ival
       in *)
-      vevent { 
+      InterpSyntax.V (vevent { 
         eid = Id id; 
         data = List.map extract_ival args; 
         edelay = 0;
         evnum = event_num_val;
         eserialized = false;
-    }
+    })
     in
     State.add_global swid (Id id) (InterpSyntax.F f) nst;
     nst
@@ -1063,10 +1080,49 @@ let interp_decl (nst : State.network_state) swid d =
         | None -> vint 0 0;
       in
       nst.switches.(swid).retval := None;
-      ret_v
+      InterpSyntax.V(ret_v)
     in 
     State.add_global swid (Cid.id id) (F runtime_function) nst;
     nst
+  (* | DActionConstr acn ->
+    (* add the action to the environment *)
+    State.add_action (Cid.id acn.aid) acn nst *)
+
+  | DActionConstr({aid; aconst_params; aparams; abody}) -> 
+    print_endline @@ "Interping action constructor: " ^ Id.to_string aid;
+    (* add a function to the environment that takes the action constructor's params 
+       and returns a function version of the inner action *)
+    let action_function_generator _ _ const_args = 
+      (* the inner action function *)
+      let action_function _ _ args = 
+        (* bind the closure args and runtime args in the env *)
+        let const_locals = 
+          List.fold_left2
+            (fun acc v id -> Env.add (Id id) v acc)
+            Env.empty
+            const_args 
+            (aconst_params|> List.split |> fst)
+        in
+        let locals = 
+          List.fold_left2
+            (fun acc v id -> Env.add (Id id) v acc)
+            const_locals
+            args 
+            (aparams |> List.split |> fst)
+        in
+        let ret_vs = List.map 
+          (fun exp -> (interp_exp nst swid locals exp |> extract_ival).v)
+          abody 
+        in
+        let ret_v = value@@VTuple(ret_vs) in
+        InterpSyntax.V(ret_v)
+      in
+      let action_f = InterpSyntax.F action_function in
+      action_f
+    in
+    let constr_f = InterpSyntax.F action_function_generator in
+    State.add_global swid (Cid.id aid) constr_f nst;    
+    nst   
 ;;
 
 

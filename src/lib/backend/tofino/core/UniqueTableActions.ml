@@ -72,18 +72,33 @@ let copy_action ctx aid aid' =
 ;;
 
 (* rename actions in a statement *)
+(* LEFT OFF HERE: eliminating table_install from IR *)
 let rename_actionvars renames decl = 
   let evar_replacer =
     object (_)
       inherit [_] s_map as super
-      method! visit_STableInstall renames tbl entries =
+      method! visit_ECall renames cid exps b = 
+        let (tbl, key, action_call) = match exps with 
+          | [tbl; key; action_call] -> (tbl, key, action_call)
+          | _ -> error "[rename_actionvars] expected 3 args to table_install"
+        in
+        let local_renames = get_renames (id_of_exp tbl) renames in
+        let action_call = match action_call.e with 
+          | ECall(aid, args, b) -> 
+            let id = Cid.to_id aid in
+            let id' = IdMap.find id local_renames in
+            {action_call with e=ECall(Cid.id id', args, b)}
+          | _ -> error "[rename_actionvars] expected action call in table_install"
+        in
+        ECall(cid, [tbl; key; action_call], b)
+      (* method! visit_STableInstall renames tbl entries =
         let local_renames = get_renames (id_of_exp tbl) renames in
         let entries' = List.map 
           (fun entry -> {entry with
             eaction = IdMap.find (entry.eaction) local_renames;})
           entries
         in 
-        STableInstall(tbl, entries')
+        STableInstall(tbl, entries') *)
       end
   in
   evar_replacer#visit_decl renames decl

@@ -122,5 +122,5 @@ let lucid_parse_fun (nst: State.network_state) swid args =
     eserialized = false;
   }
   in 
-  res
+  InterpSyntax.V(res)
 ;;

@@ -1,15 +1,26 @@
 open CoreSyntax
 (* a pipeline of mutable objects (arrays and tables) in a switch *)
 type obj
-
+type action = value list -> value list
 (* create an array object to place in pipeline *)
 val mk_array : id:Id.t -> width:int -> length:int -> pair:bool -> obj
 
 (* create a table object *)
-val mk_table : id:Id.t -> length:int -> def: (id * exp list) -> obj
+val mk_table : id:Id.t -> length:int -> def: action -> obj
 
 (* pipeline type *)
 type t
+
+type tbl_entry 
+
+(* = {
+  eprio : int;
+  ematch : exp list;  
+  eaction : id;
+  eargs : exp list;
+  efaction : value list -> value list;
+} *)
+
 
 val empty : unit -> t
 
@@ -49,13 +60,15 @@ val update_complex:
 val get_table_entries:
       stage:int
    -> t
-   -> (id * exp list) * tbl_entry list
-[@@ocamlformat "disable"]   
+   -> action * (value list * action) list
+[@@ocamlformat "disable"]
 
 (* install entry into table at stage *)
 val install_table_entry:
      stage: int
-   -> entry: tbl_entry
+   -> priority: int
+   -> key : value list
+   -> action : action
    -> t
    -> unit
 [@@ocamlformat "disable"]   
@@ -92,12 +105,3 @@ val control_getrange:
   -> t
   -> zint list list
 [@@ocamlformat "disable"]
-
-(* just wraps the internal method *)
-val control_install_table_entry:
-     id:Id.t
-   -> entry: tbl_entry
-   -> t
-   -> unit
-[@@ocamlformat "disable"]   
-

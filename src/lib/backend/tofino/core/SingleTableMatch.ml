@@ -83,8 +83,12 @@ let tables_matched_in_prog (tds:TC.tdecls) =
   let v =
     object
       inherit [_] TC.s_iter as super
-      method! visit_tbl_match _ tm =
-        tbl_ids := (tm.tbl |> CoreSyntax.exp_to_id)::(!tbl_ids)
+
+      method! visit_STupleAssign _ tupcmd  =
+        let tm = Tables.s_to_tbl_match@@STupleAssign(tupcmd) in
+        let tbl_id = tm.tbl |> CoreSyntax.exp_to_id in
+        tbl_ids := tbl_id::(!tbl_ids);
+    
     end
   in
   v#visit_tdecls () tds;
@@ -329,7 +333,8 @@ let count_tbl_matches (tbl:Tables.core_tbl_def) stmt =
   let v =
     object
       inherit [_] s_iter as super
-      method! visit_tbl_match _ tm =
+      method! visit_STupleAssign _ tupcmd  =
+        let tm = Tables.s_to_tbl_match@@STupleAssign(tupcmd) in
         if (tblid_equal tbl.tid tm.tbl)
         then (ct := !ct + 1;)
     end
@@ -649,7 +654,8 @@ let tables_matched_in_prog (tds:tdecls) =
   let v =
     object
       inherit [_] s_iter as super
-      method! visit_tbl_match _ tm =
+      method! visit_STupleAssign _ tuple_assign = 
+        let tm = Tables.s_to_tbl_match (STupleAssign(tuple_assign)) in
         tbl_ids := (tm.tbl |> CoreSyntax.exp_to_id)::(!tbl_ids)
     end
   in

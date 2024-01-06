@@ -2,6 +2,7 @@ open Batteries
 open CoreSyntax
 open InterpSyntax
 open InterpControl
+open InterpJson
 module Env = Collections.CidMap
 module CommandQueue : BatHeap.H
 module EventQueue : BatHeap.H

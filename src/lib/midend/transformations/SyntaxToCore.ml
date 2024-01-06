@@ -253,19 +253,19 @@ and translate_statement (s : S.statement) : C.statement =
   let translate_branch (ps, s) =
     List.map translate_pattern ps, translate_statement s
   in
-  let translate_entry (entry : S.tbl_entry) : C.tbl_entry =
+  (* let translate_entry (entry : S.tbl_entry) : C.tbl_entry =
     let action_cid, action_args, _ = SyntaxUtils.unpack_default_action entry.eaction.e in
     { ematch = List.map translate_exp entry.ematch
     ; eprio = entry.eprio
     ; eaction = Cid.to_id action_cid
     ; eargs = List.map translate_exp action_args
     }
-  in
+  in *)
   let s' =
     match s.s with
     | S.SNoop -> C.SNoop
     (* TABLE UPDATE -- hard coded table install call -> table_install *)
-    | S.SUnit {e=ECall(cid, args, _)} when ((Cid.names cid) = ["Table"; "install"]) -> 
+    (* | S.SUnit {e=ECall(cid, args, _)} when ((Cid.names cid) = ["Table"; "install"]) -> 
       let tbl_exp = List.nth args 0 in
       let key_tup = List.nth args 1 in
       let match_keys = match key_tup.e with 
@@ -285,7 +285,7 @@ and translate_statement (s : S.statement) : C.statement =
       }
       in
       let tbl_exp = translate_exp tbl_exp in
-      C.STableInstall (tbl_exp, [tbl_entry])
+      C.STableInstall (tbl_exp, [tbl_entry]) *)
     | S.SUnit e -> C.SUnit (translate_exp e)
     | S.SLocal (id, ty, e) -> C.SLocal (id, translate_ty ty, translate_exp e)
     | S.SAssign (id, e) -> C.SAssign (Cid.id id, translate_exp e)
@@ -319,8 +319,21 @@ and translate_statement (s : S.statement) : C.statement =
              | None -> None
              | Some otys -> Some (List.map translate_ty otys))
         } *)
-    | S.STableInstall (tbl_exp, entries) ->
-      C.STableInstall (translate_exp tbl_exp, List.map translate_entry entries)
+    | S.STableInstall (tbl_exp, entries) -> (
+      match entries with 
+        | [{ematch; eaction}] -> (
+          let tbl_exp = translate_exp tbl_exp in
+          let ematch = List.map translate_exp ematch in
+          let ematch_tys = List.map (fun (exp : C.exp) -> exp.ety.raw_ty) ematch in
+          let ematch_ty = CoreSyntax.ty@@CoreSyntax.TTuple ematch_tys in
+          let eaction = translate_exp eaction in          
+          let ematch = CoreSyntax.exp (CoreSyntax.ETuple ematch) ematch_ty in
+          let e = C.ECall(Cid.create ["Table"; "install"], [tbl_exp; ematch; eaction], false) in
+          C.SUnit({e; ety=C.ty C.TBool; C.espan = s.sspan})
+        )
+        | _ -> err s.sspan "table install with >1 entries not supported have exactly one entry"
+    )
+    (* C.STableInstall (translate_exp tbl_exp, List.map translate_entry entries) *)
     (* TABLE UPDATE -- hard coded tuple assign -> table assign *)
     | S.STupleAssign(tup_asn) -> (
       match tup_asn.exp.e with 
@@ -464,6 +477,7 @@ let translate_d preserve_user_decls d dspan dpragmas =
       })
   | S.DExtern (id, ty) -> Some (C.DExtern (id, translate_ty ty))
   | S.DActionConstr (id, tys, const_params, (params, acn_body)) ->
+    List.iter (fun e -> print_endline (Printing.exp_to_string e)) acn_body;
     Some (C.DActionConstr
       { aid = id
       ; artys = List.map translate_ty tys

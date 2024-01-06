@@ -159,13 +159,13 @@ let rec read_ids_of_stmt (stmt:CoreSyntax.statement) : Cid.t list =
     (read_ids_of_exps tm.keys)
     @(read_ids_of_exps tm.args)
   | STupleAssign(_) -> error "[coreDfg] read_ids_of_stmt: STupleAssign only supported for Table.lookup supported"
-  | STableInstall(_, entries) -> 
+  (* | STableInstall(_, entries) -> 
     List.map 
       (fun entry -> 
         (read_ids_of_exps entry.ematch)
         @(read_ids_of_exps entry.eargs))
       entries
-    |> List.flatten
+    |> List.flatten *)
 ;;
 
 (* return the IDs that a statement writes to *)
@@ -202,7 +202,7 @@ let rec write_ids_of_stmt (stmt:CoreSyntax.statement) : (Cid.t list) =
     )
     | _ -> []
   )  
-  | STableInstall _ -> []
+  (* | STableInstall _ -> [] *)
   | STupleAssign({ids}) -> List.map Cid.id ids
   (* | STableMatch(tm) -> CL.map Cid.id tm.outs *)
 ;;

@@ -2,6 +2,7 @@
 
 open CoreSyntax
 open InterpSyntax
+open InterpJson
 open InterpControl
 open Batteries
 module Env = Collections.CidMap

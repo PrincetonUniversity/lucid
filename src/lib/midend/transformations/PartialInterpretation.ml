@@ -450,12 +450,15 @@ let rec interp_stmt env s : statement * env =
   in
   match s.s with
   | SNoop -> s, env
-  | SUnit e -> { s with s = SUnit (interp_exp e) }, env
   | SPrintf (str, es) ->
     { s with s = SPrintf (str, List.map interp_exp es) }, env
   | SGen (g, e) -> { s with s = SGen (interp_gen_ty env g, interp_exp e) }, env
   | SRet eopt -> { s with s = SRet (Option.map interp_exp eopt) }, env
-  | STableInstall (id, entries) ->
+  | SUnit({e=ECall(fcid, [tbl; key; acn_constr], b); espan; ety}) when Cid.equal fcid (Cid.create ["Table"; "install"]) ->
+    let key = interp_exp key in
+    let acn_constr = interp_exp acn_constr in
+    { s with s = SUnit({e=ECall(fcid, [tbl; key; acn_constr], b); espan; ety}) }, env
+  (* | STableInstall (id, entries) ->
     let entries =
       List.map
         (fun entry ->
@@ -465,7 +468,8 @@ let rec interp_stmt env s : statement * env =
           })
         entries
     in
-    { s with s = STableInstall (id, entries) }, env
+    { s with s = STableInstall (id, entries) }, env *)
+  | SUnit e -> { s with s = SUnit (interp_exp e) }, env
   | SSeq (s1, s2) ->
     let s1, env1 = interp_stmt env s1 in
     let s2, env2 = interp_stmt env1 s2 in
@@ -604,7 +608,9 @@ let remove_unused_variables stmt =
       live_vars, { stmt with s = SSeq (s1', s2') }
     (* For most statements, we just collect the variables that are used
        inside it *)
-    | SNoop | SPrintf _ | SRet _ | SUnit _ | SGen _ | STableInstall _ ->
+    | SNoop | SPrintf _ | SRet _ | SUnit _ | SGen _ 
+    (* | STableInstall _  *)
+    ->
       let acc = ref live_vars in
       variable_extractor#visit_statement acc stmt;
       !acc, stmt

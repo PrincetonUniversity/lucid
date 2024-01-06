@@ -3,6 +3,8 @@ open Batteries
 open Syntax
 open InterpState
 open LibraryUtils
+open Pipeline
+open InterpSyntax
 
 let err_sp = Console.error_position
 let err = Console.error
@@ -56,7 +58,7 @@ let create_sig =
   ctor_ty 
 ;;
 
-(* Table.install *)
+(* Table.install : Table.t -> tuple<pat> -> action_constructor *)
 let install_name = "install"
 let install_id = Id.create install_name
 let install_cid = Cid.create_ids [id; install_id]
@@ -86,14 +88,52 @@ let install_ty =
     }
 ;;
 
+let lookup_var swid nst locals cid =
+  try Env.find cid locals with
+  | _ -> State.lookup swid cid nst
+;;
+
+
 let install_fun nst swid args =
   let _, _ = nst, swid in
-  let open State in
-  let open InterpSyntax in
   let open CoreSyntax in
   match args with
-  | [V { v = VGlobal _ }; V { v = VTuple(_) }; F _] ->    
-    install_error "Table.install not implemented"
+  | [vtbl; vkey; vaction] -> 
+    (* the final argument at this point should be an action itself. No need to 
+       evaluate it, we'd like to just put it into pipeline. *)        
+    let target_pipe = (State.sw nst swid).pipeline in    
+    let stage = match (extract_ival vtbl).v with 
+      | VGlobal(stage) -> stage
+      | _-> error "Table.install: table arg didn't eval to a global"
+    in
+    let keys = match (extract_ival vkey).v with 
+      | VTuple(vs) -> (List.map value vs)
+      | _ -> error "Table.install: key arge didnt eval to a tuple"
+    in
+
+    let action_f = match vaction with 
+      | F f -> f
+      | _ -> error "Table.install: expected a function"
+    in
+    (* fill state args of the action function, which don't matter because 
+       its a pure function  *)
+    let acn_f  (vs : value list) : value list = 
+      (* wrap vs in ivals, call action_f, unwrap results *)
+      let ivals = List.map (fun v -> V v) vs in
+      let result = action_f nst swid ivals |> extract_ival in
+      match result.v with
+      | VTuple(vs) -> List.map value vs
+      | _ -> [result]
+    in
+    (* install to the pipeline *)
+    Pipeline.install_table_entry 
+      stage
+      10 (* TODO: add an install_priority function *)
+      keys
+      acn_f
+      target_pipe
+    ; 
+    V(vtup [] Span.default) (* no return *)
   | _ ->
     install_error "Incorrect number or type of arguments to Table.install"
 
@@ -427,6 +467,17 @@ type core_tbl_match =
   out_tys : CoreSyntax.ty list option;
 }
 
+(* table entries are patterns that point
+   to actions, with values to be used
+   as the install-time arguments. *)
+type core_tbl_entry =
+    { eprio : int
+    ; ematch : CoreSyntax.exp list
+    ; eaction : CoreSyntax.id
+    ; eargs : CoreSyntax.exp list
+    }
+;;
+
 let size_ints (sz : CoreSyntax.size) = match sz with 
   | Sz sz -> [sz]
   | Szs szs -> szs
@@ -494,4 +545,42 @@ let tbl_match_to_s ({tbl; keys; args; outs; out_tys} : core_tbl_match) : CoreSyn
   let tys = out_tys in
   let exp = {CoreSyntax.e =CoreSyntax.ECall(lookup_cid, [tbl; keys_exp; args_exp], false); ety = tbl.ety; espan = Span.default} in
   CoreSyntax.STupleAssign({ids; tys; exp})
+;;
+
+
+let s_to_tbl_install (s : CoreSyntax.s) : (CoreSyntax.exp * core_tbl_entry list) = 
+  match s with 
+    | CoreSyntax.SUnit({e=CoreSyntax.ECall(_, [tbl; key; action], _)}) -> 
+
+      let key = flatten_core_exp key in
+      let (action : Id.t), args = match action.e with 
+        | CoreSyntax.ECall((cid : Cid.t), args, _) -> (Cid.to_id cid), args
+        | _ -> err "[Table.s_to_tbl_install] action is not a call"
+      in
+      let entry = {eprio = 10; ematch = key; eaction = action; eargs = args} in
+      let entry_list = [entry] in
+      (tbl, entry_list)
+    | _ -> err "[Table.s_to_tbl_install] only a SUnit can be translated into a table install"
+;;
+
+let tbl_install_to_s ((tbl : CoreSyntax.exp), entries) : CoreSyntax.s = 
+  let (entry : core_tbl_entry) = List.hd entries in
+  let tup_inner = List.map (fun (exp: CoreSyntax.exp) -> exp.ety.raw_ty) entry.ematch in
+  let key_tup_ty = {
+    CoreSyntax.raw_ty = CoreSyntax.TTuple(tup_inner); 
+    tspan = Span.default
+    } 
+  in
+  let key = {CoreSyntax.e = CoreSyntax.ETuple(entry.ematch); ety = key_tup_ty; espan = Span.default} in
+  let action = {
+    CoreSyntax.e = CoreSyntax.ECall(
+      Cid.id entry.eaction, 
+      entry.eargs, 
+      false);
+    CoreSyntax.ety = CoreSyntax.ty @@ CoreSyntax.TAction({aarg_tys = []; aret_tys = []});
+    espan = Span.default} 
+  in
+  
+  let exp = {CoreSyntax.e = CoreSyntax.ECall(install_cid, [tbl; key; action], false); ety = CoreSyntax.ty@@TBool; espan = Span.default} in
+  CoreSyntax.SUnit(exp)
 ;;

@@ -158,9 +158,7 @@ and s =
   | SSeq of statement * statement
   | SMatch of exp list * branch list
   | SRet of exp option
-
-  | STableInstall of exp * tbl_entry list
-
+  (* | STableInstall of exp * tbl_entry list *)
   | STupleAssign of tuple_assign
 
 
@@ -177,23 +175,15 @@ and statement =
   ; spragmas : pragma list
   }
 
-and tbl_match =
-  { tbl : exp
-  ; keys : exp list
-  ; args : exp list
-  ; outs : id list
-  ; out_tys : ty list option
-  }
-
 (* table entries are patterns that point
    to actions, with values to be used
    as the install-time arguments. *)
-and tbl_entry =
+(* and tbl_entry =
   { eprio : int
   ; ematch : exp list
   ; eaction : id
   ; eargs : exp list
-  }
+  } *)
 and params = (id * ty) list
 and cid_params = (cid * ty) list
 and body = params * statement
@@ -331,8 +321,7 @@ let rec infer_vty v =
   | VGroup _ -> TGroup
   | VGlobal _ -> failwith "Cannot infer type of global value"
   | VPat bs -> TPat(Sz(List.length bs))
-  | VTuple _ ->
-    failwith "Cannot infer type of tuple value (only used in complex memops)"
+  | VTuple(vs) -> TTuple(List.map infer_vty vs)
   | VBits bits -> TBits(Sz(List.length bits))
   | VRecord fields ->
     TRecord (List.map (fun (id, v) -> id, infer_vty v) fields)

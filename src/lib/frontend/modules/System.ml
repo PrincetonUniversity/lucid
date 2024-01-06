@@ -28,7 +28,7 @@ let sys_time_ty =
 let sys_time_fun (nst : State.network_state) _ args =
   let open CoreSyntax in
   match args with
-  | [] -> vinteger (Integer.create ~value:nst.current_time ~size:32)
+  | [] -> InterpSyntax.V(vinteger (Integer.create ~value:nst.current_time ~size:32))
   | _ -> sys_time_error "takes no parameters"
 ;;
 
@@ -65,7 +65,7 @@ let sys_random_fun _ _ args =
       |> Z.( * ) (Z.of_int 2)
       |> Z.( + ) (if Random.bool () then Z.one else Z.zero)
     in
-    vinteger (Integer.create_z ~value:randval ~size:32)
+    InterpSyntax.V(vinteger (Integer.create_z ~value:randval ~size:32))
   | _ -> sys_random_error "takes no parameters"
 ;;
 
@@ -106,7 +106,7 @@ let sys_dequeue_depth_fun _ _ args =
   match args with
   | [] ->
     (* return 0 for now *)
-    default_vint 32
+    InterpSyntax.V(default_vint 32)
   | _ -> sys_dequeue_depth_error "takes no parameters"
 ;;
 let sys_dequeue_depth_ty =

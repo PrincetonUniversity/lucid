@@ -6,6 +6,26 @@ type json = Yojson.Basic.t
 open CoreSyntax
 open InterpSyntax
 open InterpControl
+open Pipeline
+
+(* ---- interpreter input types -- (probably should go somewhere else!) ----  *)
+type interp_input =
+  | IEvent of {iev : event_val; ilocs : loc list; itime : int}
+  | IControl of {ictl : control_val; ilocs : loc list; itime : int}
+;;
+let ievent iev ilocs itime = IEvent{iev; ilocs; itime}
+let icontrol ictl ilocs itime = IControl{ictl; ilocs; itime}
+let interp_input_to_time interp_input = 
+  match interp_input with
+  | IEvent({itime}) -> itime
+  | IControl({itime}) -> itime
+;;
+
+let input_locs interp_input = 
+  match interp_input with
+  | IEvent({ilocs}) -> ilocs
+  | IControl({ilocs}) -> ilocs
+;;
 
 let assoc_to_vals keys lst =
   List.map
@@ -156,10 +176,10 @@ let parse_entry entrylst =
     | _ -> error "[parse_entry] action args are in wrong format"
   in
   {
-    eprio= priority;
-    ematch=key;
-    eaction=action;
-    eargs = action_args;
+    InterpControl.iprio= priority;
+    imatch=key;
+    iaction=action;
+    iargs = action_args;
   }
 ;;
 
@@ -218,7 +238,7 @@ let parse_int err_str (j) =
 let rec parse_value payloads_t_id err_str ty j =
   match j, ty.raw_ty with
   | `Int n, TInt (Sz size) -> vint n size
-  (* payloads should be hex strings, but we graciously read ints as 32-bit uints *)
+  (* payloads should be hex strings, but we also read ints as 32-bit uints *)
   | `Int n, TName (cid, _, _) when Cid.equal cid payloads_t_id -> (
     BitString.int_to_bits 32 n |> CoreSyntax.vbits
   )
@@ -232,7 +252,7 @@ let rec parse_value payloads_t_id err_str ty j =
     error
     @@ err_str
     ^ " specification had wrong or unexpected argument "
-    ^ to_string j
+    ^ Yojson.Basic.to_string j
 ;;
 
 
@@ -330,7 +350,6 @@ let get_num events eid =
 let packet_event bits_val edelay = 
   {eid=Cid.create ["packet"]; evnum=None; data=[bits_val]; edelay; eserialized=true}
 ;;
-
 
 let parse_interp_input 
   payloads_t_id

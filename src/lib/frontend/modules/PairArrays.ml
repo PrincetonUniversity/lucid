@@ -73,12 +73,12 @@ let pairarray_update_fun nst swid args =
         ; arg2
         ; default ]
       in
-      let v = memop nst swid args in
+      let v = memop nst swid args |> extract_ival in
       match v.v with
       | VTuple [VInt n1; VInt n2; v3] -> n1, n2, { v with v = v3 }
       | _ -> failwith "array_update: Internal error"
     in
-    Pipeline.update_complex ~stage ~idx:(Integer.to_int idx) ~memop:update_f (sw nst swid).pipeline
+    V(Pipeline.update_complex ~stage ~idx:(Integer.to_int idx) ~memop:update_f (sw nst swid).pipeline)
   | _ -> pairarray_update_error "Incorrect number or type of arguments"
 ;;
 

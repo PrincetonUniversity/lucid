@@ -314,8 +314,8 @@ let rec cfg_of_statement_inner (st:statement) =
     | STupleAssign _ -> 
         (* same semantics as table match, assign, and local *)
         error "[coreCfg.cfg_of_statement_inner] tuple assignments should be removed from tofino program by this point."
-    | STableInstall(_) -> 
-        error "[coreCfg.cfg_of_statement_inner] table installs should be removed from tofino program by this point."
+    (* | STableInstall(_) -> 
+        error "[coreCfg.cfg_of_statement_inner] table installs should be removed from tofino program by this point." *)
     | SIf(e, s1, s2) ->
         (* 1. compute graph of s1 and s2 *)
         let g_s1 = cfg_of_statement_inner s1 in
@@ -464,8 +464,8 @@ let statement_of_cfg cfg =
         )
         | SSeq _ -> error "[stmt_of_vertex] sseq not expected"
         | SIf _ -> error "sif not expected"
-        | STableInstall(_) -> 
-            error "[coreCfg.statement_of_cfg] table installs should be removed from tofino program by this point."
+        (* | STableInstall(_) -> 
+            error "[coreCfg.statement_of_cfg] table installs should be removed from tofino program by this point." *)
         | SMatch(exps, branches) -> (
             let pats = List.split branches |> fst in
             let next_vs = Cfg.succ cfg v in

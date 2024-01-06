@@ -70,7 +70,7 @@ let payload_empty_ty =
 (* Lets use a pattern value for now. *)
 let payload_empty_fun _ _ args =
   match args with
-  | [] -> {(CoreSyntax.vpat []) with vty = (SyntaxToCore.translate_ty payload_ty)}
+  | [] -> InterpSyntax.V({(CoreSyntax.vpat []) with vty = (SyntaxToCore.translate_ty payload_ty)})
     
     (* CoreSyntax.vint_sp (Integer.create ~size:32 ~value:0) Span.default *)
   | _ ->
@@ -92,7 +92,7 @@ let payload_parse_fun _ _ args =
   let open InterpSyntax in
   let open CoreSyntax in
   match args with 
-  | [V{v}] -> value v
+  | [V{v}] -> InterpSyntax.V(value v)
   | _ -> payload_parse_error "Payload.parse called with wrong args"
 ;;
 
