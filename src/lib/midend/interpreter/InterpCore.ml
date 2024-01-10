@@ -583,9 +583,21 @@ let rec interp_statement nst hdl_sort swid locals s =
     List.iter (fun entry -> Pipeline.install_table_entry tbl_pos entry (State.sw nst swid).pipeline) entries;
     (* return unmodified locals context *)
     locals   *)
-  | STupleAssign(_) -> (
+  | STupleAssign({ids; exp}) -> (
+    (* eval the exp, get a list of results, assign them to the ids in locals *)
+    let v_result = interp_exp exp |> extract_ival in
+    let vs = match v_result.v with
+      | VTuple(vs) -> vs
+      | _ -> error "not a tuple"
+    in
+    List.fold_left2 
+      (fun locals v id -> Env.add (Id id) (InterpSyntax.V v) locals) 
+      locals 
+      (List.map (fun v -> value v) vs)
+      ids
+
     (* TODO: refactor so that evaluation of the call is done in the same way as all the other calls *)
-    let tm = Tables.s_to_tbl_match s.s in
+    (* let tm = Tables.s_to_tbl_match s.s in
     (* load the dynamic entries from the pipeline *)
     let tbl_pos =
       match interp_exp tm.tbl with
@@ -625,7 +637,7 @@ let rec interp_statement nst hdl_sort swid locals s =
         acn_ret_vals
         tm.outs
     in
-    locals
+    locals *)
   )
   (* | STableMatch tm ->
     (* load the dynamic entries from the pipeline *)
@@ -1084,12 +1096,8 @@ let interp_decl (nst : State.network_state) swid d =
     in 
     State.add_global swid (Cid.id id) (F runtime_function) nst;
     nst
-  (* | DActionConstr acn ->
-    (* add the action to the environment *)
-    State.add_action (Cid.id acn.aid) acn nst *)
 
   | DActionConstr({aid; aconst_params; aparams; abody}) -> 
-    print_endline @@ "Interping action constructor: " ^ Id.to_string aid;
     (* add a function to the environment that takes the action constructor's params 
        and returns a function version of the inner action *)
     let action_function_generator _ _ const_args = 

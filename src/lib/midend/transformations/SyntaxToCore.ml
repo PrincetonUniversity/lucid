@@ -477,7 +477,6 @@ let translate_d preserve_user_decls d dspan dpragmas =
       })
   | S.DExtern (id, ty) -> Some (C.DExtern (id, translate_ty ty))
   | S.DActionConstr (id, tys, const_params, (params, acn_body)) ->
-    List.iter (fun e -> print_endline (Printing.exp_to_string e)) acn_body;
     Some (C.DActionConstr
       { aid = id
       ; artys = List.map translate_ty tys

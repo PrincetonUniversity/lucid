@@ -72,8 +72,10 @@ event do_match(int<32> s) {
 
 event do_install(int<32> v, int<32> m) {
   printf("installing entry: (%d &&& %d)", v, m);
-  table_multi_install(ftbl, 
-    {(v) -> hit_acn(2); 
-      (v &&& m) -> hit_acn(3)}
-      );
+  table_install(ftbl, 
+    {(v) -> hit_acn(2)}
+    );
+  table_install(ftbl, 
+    {(v &&& m) -> hit_acn(3)}
+    );
  }

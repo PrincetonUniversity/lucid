@@ -170,14 +170,68 @@ let lookup_ty =
     }
 ;;
 
+let bitmatch bits n =
+  let open Z in
+  let bits = List.rev bits in
+  let two = Z.of_int 2 in
+  let rec aux bits n =
+    match bits with
+    | [] -> n = zero
+    | hd :: tl ->
+      aux tl (shift_right n 1)
+      &&
+      (match hd with
+       | 0 -> rem n two = zero
+       | 1 -> rem n two <> zero
+       | _ -> true)
+  in
+  aux bits n
+;;
+
+let matches_pat_vals (vs : CoreSyntax.value list) (pats : CoreSyntax.value list) =
+  List.for_all2
+    (fun (v : CoreSyntax.value) (p: CoreSyntax.value) ->
+      match v.v, p.v with
+      | VInt n, VPat bs -> bitmatch bs (Integer.value n)
+      | _ -> false)
+    vs
+    pats
+;;
+
 let lookup_fun nst swid args =
   let _, _ = nst, swid in
   let open State in
   let open InterpSyntax in
   let open CoreSyntax in
   match args with
-  | [V { v = VGlobal _ }; V { v = VTuple(_) }; F _] ->    
-    lookup_error "Table.lookup not implemented"
+  | [V { v = VGlobal(tbl_pos) }; V { v = VTuple(key_vs) }; V { v = VTuple(arg_vs) }] ->   
+    let key_vs = List.map (CoreSyntax.value) key_vs in
+    (* get all the entries from the table *)
+    let default, entries = Pipeline.get_table_entries tbl_pos (State.sw nst swid).pipeline in
+    (* find the first matching case *)
+    let fst_match =
+      List.fold_left
+        (fun fst_match (pat_vs, eaction) ->
+          (* print_endline ("checking entry: "^(CorePrinting.entry_to_string entry)); *)
+          match fst_match with
+          | None ->
+            if matches_pat_vals key_vs pat_vs
+            then Some eaction else None
+          | Some _ -> fst_match)
+        None
+        entries
+    in
+    (* if there's no matching entry, use the default action. *)
+    let acn =
+      match fst_match with
+      | Some (acn) -> acn
+      | None -> default
+    in
+    (* call the action function *)
+    let arg_values = List.map CoreSyntax.value arg_vs in
+    let acn_ret_vals = acn arg_values |> List.map (fun (valu: CoreSyntax.value) -> valu.v) in
+    (* wrap the return values in a tuple *)
+    InterpSyntax.V(vtup acn_ret_vals Span.default)
   | _ ->
     lookup_error "Incorrect number or type of arguments to Table.lookup"
 
