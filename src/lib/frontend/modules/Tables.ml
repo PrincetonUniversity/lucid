@@ -477,7 +477,7 @@ let type_checker decls =
 ;;
 
 
-(*** helpers for interp and tofino backend ***)
+(*** helpers for tofino backend ***)
 let function_cids = 
   (fst (List.split constructors))@(List.map 
     (fun (def: InterpState.State.global_fun ) -> def.cid) 
@@ -521,16 +521,6 @@ type core_tbl_match =
   out_tys : CoreSyntax.ty list option;
 }
 
-(* table entries are patterns that point
-   to actions, with values to be used
-   as the install-time arguments. *)
-type core_tbl_entry =
-    { eprio : int
-    ; ematch : CoreSyntax.exp list
-    ; eaction : CoreSyntax.id
-    ; eargs : CoreSyntax.exp list
-    }
-;;
 
 let size_ints (sz : CoreSyntax.size) = match sz with 
   | Sz sz -> [sz]
@@ -601,40 +591,3 @@ let tbl_match_to_s ({tbl; keys; args; outs; out_tys} : core_tbl_match) : CoreSyn
   CoreSyntax.STupleAssign({ids; tys; exp})
 ;;
 
-
-let s_to_tbl_install (s : CoreSyntax.s) : (CoreSyntax.exp * core_tbl_entry list) = 
-  match s with 
-    | CoreSyntax.SUnit({e=CoreSyntax.ECall(_, [tbl; key; action], _)}) -> 
-
-      let key = flatten_core_exp key in
-      let (action : Id.t), args = match action.e with 
-        | CoreSyntax.ECall((cid : Cid.t), args, _) -> (Cid.to_id cid), args
-        | _ -> err "[Table.s_to_tbl_install] action is not a call"
-      in
-      let entry = {eprio = 10; ematch = key; eaction = action; eargs = args} in
-      let entry_list = [entry] in
-      (tbl, entry_list)
-    | _ -> err "[Table.s_to_tbl_install] only a SUnit can be translated into a table install"
-;;
-
-let tbl_install_to_s ((tbl : CoreSyntax.exp), entries) : CoreSyntax.s = 
-  let (entry : core_tbl_entry) = List.hd entries in
-  let tup_inner = List.map (fun (exp: CoreSyntax.exp) -> exp.ety.raw_ty) entry.ematch in
-  let key_tup_ty = {
-    CoreSyntax.raw_ty = CoreSyntax.TTuple(tup_inner); 
-    tspan = Span.default
-    } 
-  in
-  let key = {CoreSyntax.e = CoreSyntax.ETuple(entry.ematch); ety = key_tup_ty; espan = Span.default} in
-  let action = {
-    CoreSyntax.e = CoreSyntax.ECall(
-      Cid.id entry.eaction, 
-      entry.eargs, 
-      false);
-    CoreSyntax.ety = CoreSyntax.ty @@ CoreSyntax.TAction({aarg_tys = []; aret_tys = []});
-    espan = Span.default} 
-  in
-  
-  let exp = {CoreSyntax.e = CoreSyntax.ECall(install_cid, [tbl; key; action], false); ety = CoreSyntax.ty@@TBool; espan = Span.default} in
-  CoreSyntax.SUnit(exp)
-;;

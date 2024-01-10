@@ -35,13 +35,6 @@ type core_tbl_match =
     out_tys : CoreSyntax.ty list option;
   }
 ;;
-type core_tbl_entry =
-    { eprio : int
-    ; ematch : CoreSyntax.exp list
-    ; eaction : CoreSyntax.id
-    ; eargs : CoreSyntax.exp list
-    }
-;;
 
 val tname_to_ttable : CoreSyntax.raw_ty -> core_tbl_ty
 
@@ -52,5 +45,3 @@ val s_to_tbl_match : CoreSyntax.s -> core_tbl_match
 val s_to_tbl_match_opt : CoreSyntax.s -> core_tbl_match option
 
 val tbl_match_to_s : core_tbl_match -> CoreSyntax.s
-
-val s_to_tbl_install : CoreSyntax.s -> (CoreSyntax.exp * core_tbl_entry list)

@@ -397,7 +397,6 @@ let rec interp_statement nst hdl_sort swid locals s =
   (* (match s.s with
   | SSeq _ | SNoop -> () (* We'll print the sub-parts when we get to them *)
   | _ -> print_endline @@ "Interpreting " ^ CorePrinting.stmt_to_string s); *)
-  let interpret_exp = interp_exp nst swid in
   let interp_exp = interp_exp nst swid locals in
   let interp_s = interp_statement nst hdl_sort swid locals in
   match s.s with
