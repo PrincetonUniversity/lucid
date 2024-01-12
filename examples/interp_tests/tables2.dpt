@@ -24,14 +24,7 @@ module WriteCacheTable : {
   fun void set(ct<'i> cachetbl, int k, int v)[start <= cachetbl; end cachetbl];
 }
 {
-  // types for data stored by the table
-  // table_type cttbl_t = {
-  //   key_type: (int)
-  //   arg_type: ()
-  //   ret_type: res_t
-  // }
   // table actions
-
   action_constr hit_acn(int x) = {
     return action res_t anon() {
       return {val = x; found = true};
@@ -77,7 +70,6 @@ module WriteCacheTable : {
       return {val = stored_val; found = true;};
     } else { // cache miss
       return Table.lookup(cachetbl#ct_tbl, (k), ());
-      // table_match(cachetbl#ct_tbl, (k), ());
     }
   }
 
@@ -97,7 +89,6 @@ module WriteCacheTable : {
     } else { // cache slot is used. Install to table.
       printf("installing entry for %d into TABLE", k);
       Table.install(cachetbl#ct_tbl, (int_to_pat(k)), hit_acn(v));
-      // table_install(cachetbl#ct_tbl, {(k) -> hit_acn(v)});
     }
   }
 }
