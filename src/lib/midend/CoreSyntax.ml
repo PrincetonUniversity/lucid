@@ -101,11 +101,11 @@ and v =
   | VInt of zint
   | VEvent of event_val
   | VGlobal of id * int (* Name * Stage number *)
-  | VTuple of v list (* Only used in the interpreter during complex memops *)
   | VGroup of location list
   | VPat of int list
-  | VBits of bits
+  | VTuple of v list
   | VRecord of (id * v) list
+  | VBits of bits
 
 and event_val =
   { eid : cid
