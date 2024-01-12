@@ -25,32 +25,36 @@ action_constr hit_acn(int x) = {
   };
 };
 
-action_constr miss_acn(bool b) = {
+action_constr miss_acn(int b) = {
   return action res_t anon(int a) {
-    return {val = a; is_hit = b};
+    return {val = a; is_hit = false};
   };
 };
 
 // A table type defines the type of value that the table matches on, 
 // the type of its actions' runtime parameters, and the type of 
 // its actions' return.
-table_type ftbl_t = {
-  key_type: (int) // a table of type ftbl_t will match on a single 32-bit expression. If we wanted to match on a pair of 32-bit expressions, we'd write (32, 32)
-  arg_type: (int) // all the actions bound to a table of type ftbl_t must take a single integer as their _match time_ argument.
-  ret_type: res_t // all the actions bound to a table of type ftbl_t must return a single res_t.
-}
+// table_type ftbl_t = {
+//   key_type: (int) // a table of type ftbl_t will match on a single 32-bit expression. If we wanted to match on a pair of 32-bit expressions, we'd write (32, 32)
+//   arg_type: (int) // all the actions bound to a table of type ftbl_t must take a single integer as their _match time_ argument.
+//   ret_type: res_t // all the actions bound to a table of type ftbl_t must return a single res_t.
+// }
 // table_create creates a table of the given type, binds action constructors to it, and assigns a default action. 
 // table_create<"table type">("actions bound to table", "table size", "default action");
-global ftbl_t ftbl = table_create<ftbl_t>((hit_acn, miss_acn), 1024, miss_acn(false));
+// global ftbl_t ftbl = table_create<ftbl_t>((hit_acn, miss_acn), 1024, miss_acn(false));
+
+// new syntax
+global Table.t<(32), (32), (32, 1)> ftbl = Table.create(1024, miss_acn, miss_acn(1));
 
 event do_match(int<32> s) {
   int a = 1000;
   // table_match takes a table (ftbl), a tuple of keys (s), and a tuple of arguments (a) to pass to the matching 
   // action. The return value is the return of the action.
-  res_t tbl_out = table_match(ftbl, (s), (a)); 
+  // res_t tbl_out = table_match(ftbl, (s), (a)); 
+  res_t tbl_out = Table.lookup(ftbl, (s), (a)); 
 
   printf("return of table match: %d", tbl_out#val);
-  if (tbl_out#is_hit) {
+  if (tbl_out#is_hit == true) {
     printf ("table HIT.");
   }
   else {
@@ -58,9 +62,10 @@ event do_match(int<32> s) {
     // table_install is only available in the interpreter, it takes a table and a rule to install 
     // into the table. The command below says, "install a rule into ftbl that executes hit_acn(3)
     // whenever the key passed to table_match is equal to the current value of s".
-    table_install(ftbl, 
-      {(s) -> hit_acn(3)}
-      );    
+    Table.install<unordered>(ftbl, (int_to_pat(s)), (hit_acn(3)));
+    // table_install(ftbl, 
+    //   {(s) -> hit_acn(3)}
+    //   );    
   }
 }
 /*
@@ -72,10 +77,12 @@ event do_match(int<32> s) {
 
 event do_install(int<32> v, int<32> m) {
   printf("installing entry: (%d &&& %d)", v, m);
-  table_install(ftbl, 
-    {(v) -> hit_acn(2)}
-    );
-  table_install(ftbl, 
-    {(v &&& m) -> hit_acn(3)}
-    );
+  // table_install(ftbl, 
+  //   {(v) -> hit_acn(2)}
+  //   );
+  Table.install<unordered>(ftbl, (int_to_pat(v)), (hit_acn(2)));
+  // table_install(ftbl, 
+  //   {(v &&& m) -> hit_acn(3)}
+  //   );
+  Table.install<unordered>(ftbl, (v &&& m), (hit_acn(3)));
  }

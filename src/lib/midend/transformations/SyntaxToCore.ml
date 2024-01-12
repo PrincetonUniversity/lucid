@@ -336,30 +336,14 @@ and translate_statement (s : S.statement) : C.statement =
     (* C.STableInstall (translate_exp tbl_exp, List.map translate_entry entries) *)
     (* TABLE UPDATE -- hard coded tuple assign -> table assign *)
     | S.STupleAssign(tup_asn) -> (
-      match tup_asn.exp.e with 
-      | ECall(cid, args, _) when ((Cid.names cid) = ["Table"; "lookup"]) -> (
-        let tbl_exp = List.nth args 0 in
-        let keys_exp = List.nth args 1 in
-        let action_args_exp = List.nth args 2 in
-        let tbl = translate_exp tbl_exp in
-        let keys = match keys_exp.e with
-          | ETuple keys -> List.map translate_exp keys
-          | _ -> err_unsupported tup_asn.exp.espan "keys in a table lookup should be a tuple"
-        in
-        let args = match action_args_exp.e with
-          | ETuple action_args -> List.map translate_exp action_args
-          | _ -> err_unsupported tup_asn.exp.espan "action args in a table lookup should be a tuple"
-        in
-        let outs = tup_asn.ids in
-        let out_tys = match tup_asn.tys with
+        let ids = tup_asn.ids in
+        let tys = match tup_asn.tys with
           | Some tys -> Some (List.map translate_ty tys)
           | None -> None
         in
-        let (tm : Tables.core_tbl_match) = { Tables.tbl; keys; args; outs; out_tys } in
-        Tables.tbl_match_to_s tm
-        (* STableMatch { tbl; keys; args; outs; out_tys } *)
-      )
-      | _ -> err_unsupported tup_asn.exp.espan "tuple assign is only supported for table lookup in the backend"
+        let exp = translate_exp tup_asn.exp in
+        let res = C.STupleAssign({ids; tys; exp}) in
+        res
     )
     | _ -> err s.sspan (Printing.statement_to_string s)
   in

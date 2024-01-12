@@ -108,7 +108,7 @@ let install_fun nst swid args =
     in
     let keys = match (extract_ival vkey).v with 
       | VTuple(vs) -> (List.map value vs)
-      | _ -> error "Table.install: key arge didnt eval to a tuple"
+      | v -> [value v]
     in
 
     let action_f = match vaction with 
@@ -135,7 +135,7 @@ let install_fun nst swid args =
     ; 
     V(vtup [] Span.default) (* no return *)
   | _ ->
-    install_error "Incorrect number or type of arguments to Table.install"
+    install_error "Incorrect number of arguments to Table.install"
 
 
 (* Table.lookup *)
@@ -204,8 +204,12 @@ let lookup_fun nst swid args =
   let open InterpSyntax in
   let open CoreSyntax in
   match args with
-  | [V { v = VGlobal(tbl_pos) }; V { v = VTuple(key_vs) }; V { v = VTuple(arg_vs) }] ->   
-    let key_vs = List.map (CoreSyntax.value) key_vs in
+  | [V { v = VGlobal(tbl_pos) }; V { v = vkeys }; V { v = vargs }] ->   
+    let key_vs = match vkeys with 
+      | VTuple(vs) -> List.map (CoreSyntax.value) vs
+      | v -> [CoreSyntax.value v]
+    in
+    (* | [V { v = VGlobal(tbl_pos) }; V { v = VTuple(key_vs) }; V { v = VTuple(arg_vs) }] ->    *)
     (* get all the entries from the table *)
     let default, entries = Pipeline.get_table_entries tbl_pos (State.sw nst swid).pipeline in
     (* find the first matching case *)
@@ -228,7 +232,10 @@ let lookup_fun nst swid args =
       | None -> default
     in
     (* call the action function *)
-    let arg_values = List.map CoreSyntax.value arg_vs in
+    let arg_values =match vargs with 
+      | VTuple(arg_vs) -> List.map CoreSyntax.value arg_vs 
+      | v -> [CoreSyntax.value v]
+    in
     let acn_ret_vals = acn arg_values |> List.map (fun (valu: CoreSyntax.value) -> valu.v) in
     (* wrap the return values in a tuple *)
     InterpSyntax.V(vtup acn_ret_vals Span.default)
@@ -357,10 +364,19 @@ let check_install exp =
     | _ -> err_sp table_arg.espan "[table type checker] Wrong number of size parameters for Table.t"
   in
   (* make sure the sizes of the key argument match the key format size attached to Table.t *)
-  let key_rawty = (Option.get key_arg.ety).raw_ty in
+  let key_rawty = match (Option.get key_arg.ety).raw_ty with 
+    | TTuple(rtys) -> TTuple(rtys)
+    | raw_ty -> TTuple(raw_ty::[])
+  in
   let expected_key_rawty = TTuple(List.map (fun sz -> TPat(sz)) (unpack_sizes key_fmt)) in
   if (not (SyntaxUtils.equiv_raw_ty ~qvars_wild:true expected_key_rawty key_rawty)) then 
-    (err_sp key_arg.espan "[table type checker] Table.install's key argument has wrong type");
+    (
+      let msg = Printf.sprintf 
+        "[table type checker] Table.install's key argument has wrong type. Expected:\n%s\ngot:\n%s" 
+        (Printing.raw_ty_to_string expected_key_rawty)
+        (Printing.raw_ty_to_string key_rawty)
+      in
+      err_sp key_arg.espan msg);
   (* make sure the size of the action's arguments and return match the Table.t's formats *)
   let acn_arg_rawtys, acn_ret_rawtys = match (Option.get acn_arg.ety).raw_ty with 
     | TAction({aarg_tys; aret_tys;}) -> 
@@ -548,6 +564,12 @@ let dglobal_params_to_tbl_def tid (exp : CoreSyntax.exp) : core_tbl_def =
     | ETuple(actions), ECall(cid, args, _) ->
       let tsize = size in
       let tactions = actions in
+      let tdefault = (cid, args) in
+      let tty = exp.ety in
+      {tid; tty; tactions; tsize; tdefault}
+    | _, ECall(cid, args, _) -> 
+      let tsize = size in
+      let tactions = [actions_tup] in
       let tdefault = (cid, args) in
       let tty = exp.ety in
       {tid; tty; tactions; tsize; tdefault}

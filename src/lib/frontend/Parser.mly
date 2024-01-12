@@ -181,7 +181,7 @@
 %token <Span.t> SYMBOLIC
 %token <Span.t> FLOOD
 %token <Span.t> WILDCARD
-%token <Span.t> PAT
+%token <Span.t> PATCAST
 
 %token EOF
 
@@ -312,7 +312,7 @@ exp:
     | HASH single_poly LPAREN args RPAREN { hash_sp (snd $2) $4 (Span.extend $1 $5) }
 
 
-    | PAT LPAREN exp RPAREN               { 
+    | PATCAST LPAREN exp RPAREN               { 
         op_sp PatExact [$3] (Span.extend $1 $4)}
 
     | LPAREN TINT single_poly RPAREN exp  { op_sp (Cast(snd $3))[$5] (Span.extend $1 $5.espan) }

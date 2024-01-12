@@ -298,7 +298,7 @@ and try_unify_rty span rty1 rty2 =
     (* List.iter2 (try_unify_ty span) (a1.aarg_tys) (a2.aarg_tys);
     List.iter2 (try_unify_ty span) (a1.aret_tys) (a2.aret_tys) *)
   | TActionConstr(a1), TActionConstr(a2) -> 
-    try_unify_lists unify_ty a1.aconst_param_tys a2.aconst_param_tys;
+    (* try_unify_lists unify_ty a1.aconst_param_tys a2.aconst_param_tys; *)
     try_unify_lists unify_ty a1.aacn_ty.aarg_tys a2.aacn_ty.aarg_tys;
     try_unify_lists unify_ty a1.aacn_ty.aret_tys a2.aacn_ty.aret_tys;
     (*
