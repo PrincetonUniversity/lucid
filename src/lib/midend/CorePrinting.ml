@@ -143,7 +143,7 @@ let rec v_to_string v =
   | VBool false -> "false"
   | VInt i -> integer_to_string i
   | VEvent event -> event_to_string event
-  | VGlobal i -> "global_" ^ string_of_int i
+  | VGlobal(_,i) -> "global_" ^ string_of_int i
   | VGroup vs -> Printf.sprintf "{%s}" (comma_sep location_to_string vs)
   | VTuple vs -> Printf.sprintf "(%s)" (comma_sep v_to_string vs)
   | VPat bs -> bs_to_string bs

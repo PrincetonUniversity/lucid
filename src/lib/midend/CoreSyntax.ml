@@ -100,7 +100,7 @@ and v =
   | VBool of bool
   | VInt of zint
   | VEvent of event_val
-  | VGlobal of int (* Stage number *)
+  | VGlobal of id * int (* Name * Stage number *)
   | VTuple of v list (* Only used in the interpreter during complex memops *)
   | VGroup of location list
   | VPat of int list
@@ -175,15 +175,6 @@ and statement =
   ; spragmas : pragma list
   }
 
-(* table entries are patterns that point
-   to actions, with values to be used
-   as the install-time arguments. *)
-(* and tbl_entry =
-  { eprio : int
-  ; ematch : exp list
-  ; eaction : id
-  ; eargs : exp list
-  } *)
 and params = (id * ty) list
 and cid_params = (cid * ty) list
 and body = params * statement
@@ -342,7 +333,7 @@ let vint_sp i span = value_sp (VInt i) span
 let vbool_sp b span = value_sp (VBool b) span
 let vevent event = value (VEvent event)
 let vevent_sp event span = value_sp (VEvent event) span
-let vglobal idx ty = avalue (VGlobal idx) ty Span.default
+let vglobal id idx ty = avalue (VGlobal(id, idx)) ty Span.default
 let vgroup locs = value (VGroup locs)
 let vtup vs = avalue (VTuple vs) (ty (TTuple(List.map infer_vty vs)))
 let vrecord fields = value (VRecord fields)
@@ -482,7 +473,7 @@ let rec equiv_value v1 v2 =
   match v1.v, v2.v with
   | VBool b1, VBool b2 -> b1 = b2
   | VInt n1, VInt n2 -> Integer.equal n1 n2
-  | VGlobal n1, VGlobal n2 -> n1 = n2
+  | VGlobal(_, n1), VGlobal(_, n2) -> n1 = n2
   | VGroup locs1, VGroup locs2 -> locs1 = locs2
   | VEvent e1, VEvent e2 ->
     Cid.equal e1.eid e2.eid

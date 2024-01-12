@@ -32,7 +32,7 @@ action_constr miss_acn(int b) = {
 };
 
 // table_create creates a table of the given type, binds action constructors to it, and assigns a default action. 
-global Table.t<(32), (32), (32, 1)> ftbl = Table.create(1024, miss_acn, miss_acn(1));
+global Table.t<(32), (32), (32, 1)> ftbl = Table.create(1024, (hit_acn, miss_acn), miss_acn(1));
 
 event do_match(int<32> s) {
   int a = 1000;

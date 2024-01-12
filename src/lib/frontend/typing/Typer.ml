@@ -150,6 +150,7 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
         @@ !(fty.constraints)
       in
       new_env, { e with e = ECall (f, inferred_args, unordered); ety = Some fty.ret_ty }
+    (* Special case for action constructor. TODO: make actions constructors just be functions *)
     | TActionConstr(acn_ctor_ty) -> (
       let env, inferred_args = infer_exps env args in
       let fty : acn_ctor_ty =

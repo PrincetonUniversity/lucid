@@ -1,16 +1,20 @@
 include LibraryInterface.TypeInterface
 
+(* the type checker extension for the tables
+   module checks calls to all table methods
+   (basically, any expression with type Table.t) *)
 val type_checker : Syntax.decl list -> Syntax.decl list
 
+val is_tbl_ty : CoreSyntax.raw_ty -> bool
+(* create the table, adding it to a pipeline in a switch *)
+val create_ctor : InterpState.State.network_state -> int -> InterpState.State.network_state InterpSyntax.ival list -> Pipeline.t
 
-(* helpers for interp and core -- these will eventually be 
+(* helpers for tofino backend -- these will eventually be 
    eliminated, but smooth the conversion from custom table syntax 
    to the standardized Table module. *)
 
 val function_cids : Cid.t list
    
-val is_tbl_ty : CoreSyntax.raw_ty -> bool
-
 type core_tbl_ty = 
   { tkey_sizes : CoreSyntax.size list
   ; tparam_tys : CoreSyntax.ty list

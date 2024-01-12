@@ -72,7 +72,7 @@ let update_fun err nst swid args =
   let open State in
   let open InterpSyntax in 
   match args with
-  | [ V { v = VGlobal stage }
+  | [ V { v = VGlobal (_, stage) }
     ; V { v = VInt idx }
     ; F getop
     ; getarg
@@ -233,7 +233,7 @@ let array_update_complex_fun nst swid args =
   let open State in
   let open InterpSyntax in
   match args with
-  | [V { v = VGlobal stage }; V { v = VInt idx }; F memop; arg1; arg2; default]
+  | [V { v = VGlobal (_, stage) }; V { v = VInt idx }; F memop; arg1; arg2; default]
     ->
     let update_f mem1 _ =
       let args = [V (CoreSyntax.vinteger mem1); arg1; arg2; default] in

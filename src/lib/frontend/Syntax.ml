@@ -142,7 +142,7 @@ and v =
   | VBool of bool
   | VInt of zint
   | VEvent of event
-  | VGlobal of int (* Stage number *)
+  | VGlobal of id * int (* Stage number *)
   | VGroup of location list
   | VPat of pat
 
@@ -413,7 +413,7 @@ let vint_sp i span = value_sp (VInt i) span
 let vbool_sp b span = value_sp (VBool b) span
 let vevent event = value (VEvent event)
 let vevent_sp event span = value_sp (VEvent event) span
-let vglobal idx = value (VGlobal idx)
+let vglobal id idx = value (VGlobal(id, idx))
 let vgroup locs = value (VGroup locs)
 let vbits_sp bs span = value_sp (VPat (PBit bs)) span
 let vwild_sp span = value_sp (VPat PWild) span

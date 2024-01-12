@@ -136,7 +136,7 @@ let rec translate_value (v : S.value) : C.value =
     match v.v with
     | S.VBool b -> C.VBool b
     | S.VInt z -> C.VInt z
-    | S.VGlobal n -> C.VGlobal n
+    | S.VGlobal(id, n) -> C.VGlobal(id, n) (* note: S.VGlobal never appears as of 1/2024 *)
     | S.VGroup ls -> C.VGroup ls
     | VEvent { eid; data; edelay } ->
       C.VEvent { eid; data = List.map translate_value data; edelay; evnum = None; eserialized=false }

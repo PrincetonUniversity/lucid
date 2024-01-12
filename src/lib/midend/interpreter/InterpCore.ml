@@ -299,8 +299,16 @@ let rec interp_exp (nst : State.network_state) swid locals e : 'a InterpSyntax.i
        | Not_found -> error ("Field " ^ Id.to_string id ^ " not found"))
       | _ -> error "Not a record")
   | ETuple(es) -> 
-    let vs = interp_exps es in
-    V (vtup (List.map (fun v -> (extract_ival v).v) vs) Span.default)
+    let ivals = interp_exps es in
+    (* HACK: Table.create takes a list of action constructors as an argument. 
+       Action constructors are function IVals, which can't be converted into a 
+       raw value. So we just drop those values. *)
+    let vs = try 
+      List.map (fun ival -> (extract_ival ival).v) ivals
+    with
+      Failure _ -> []
+    in
+      V (vtup vs Span.default)
 
     (* V (VRecord(fields)) *)
 
@@ -536,53 +544,7 @@ let rec interp_statement nst hdl_sort swid locals s =
     in
     let locals = List.fold_left2 update_local locals (fst first_match) vs in
     interp_statement nst hdl_sort swid locals (snd first_match)
-  (* | SUnit({e=ECall(fcid, _, _)})
-        when (Cid.equal fcid (Cid.create ["Table"; "install"])) -> 
-    let tbl, entries = Tables.s_to_tbl_install s.s in
-    (* install entries into the pipeline *)
-    (* evaluate entry patterns and install-time action args to EVals *)
-    let entries =
-      List.map
-        (fun (entry : Tables.core_tbl_entry) ->
-          let ematch = partial_interp_exps nst swid locals entry.ematch in
-          let eargs = partial_interp_exps nst swid locals entry.eargs in
-          { entry with ematch; eargs })
-        entries
-    in
-    (* get index of table in pipeline *)
-    let tbl_pos =
-      match interp_exp tbl with
-      | V { v = VGlobal stage } -> stage
-      | _ -> error "Table did not evaluate to a pipeline object reference"
-    in
-    (* LEFT OFF HERE: wanna change this signature to not take tbl_entries, bc more circ deps *)
-    (* call install_table_entry for each entry *)
-    List.iter (fun entry -> Pipeline.install_table_entry tbl_pos entry (State.sw nst swid).pipeline) entries;
-    (* return unmodified locals context *)
-    locals       *)
-
-    (* | STableInstall (tbl, entries) ->
-    (* install entries into the pipeline *)
-    (* evaluate entry patterns and install-time action args to EVals *)
-    let entries =
-      List.map
-        (fun entry ->
-          let ematch = partial_interp_exps nst swid locals entry.ematch in
-          let eargs = partial_interp_exps nst swid locals entry.eargs in
-          { entry with ematch; eargs })
-        entries
-    in
-    (* get index of table in pipeline *)
-    let tbl_pos =
-      match interp_exp tbl with
-      | V { v = VGlobal stage } -> stage
-      | _ -> error "Table did not evaluate to a pipeline object reference"
-    in
-    (* call install_table_entry for each entry *)
-    List.iter (fun entry -> Pipeline.install_table_entry tbl_pos entry (State.sw nst swid).pipeline) entries;
-    (* return unmodified locals context *)
-    locals   *)
-  | STupleAssign({ids; exp}) -> (
+  | STupleAssign({ids; exp}) ->
     (* eval the exp, get a list of results, assign them to the ids in locals *)
     let v_result = interp_exp exp |> extract_ival in
     let vs = match v_result.v with
@@ -594,158 +556,6 @@ let rec interp_statement nst hdl_sort swid locals s =
       locals 
       (List.map (fun v -> value v) vs)
       ids
-
-    (* TODO: refactor so that evaluation of the call is done in the same way as all the other calls *)
-    (* let tm = Tables.s_to_tbl_match s.s in
-    (* load the dynamic entries from the pipeline *)
-    let tbl_pos =
-      match interp_exp tm.tbl with
-      | V { v = VGlobal stage } -> stage
-      | _ -> error "Table did not evaluate to a pipeline object reference"
-    in
-    let default, entries = Pipeline.get_table_entries tbl_pos (State.sw nst swid).pipeline in
-    (* find the first matching case *)
-    let key_vs = List.map (fun e -> interp_exp e |> extract_ival) tm.keys in
-    let fst_match =
-      List.fold_left
-        (fun fst_match (pat_vs, eaction) ->
-          (* print_endline ("checking entry: "^(CorePrinting.entry_to_string entry)); *)
-          match fst_match with
-          | None ->
-            if matches_pat_vals key_vs pat_vs
-            then Some eaction else None
-          | Some _ -> fst_match)
-        None
-        entries
-    in
-    (* if there's no matching entry, use the default action. *)
-    let acn =
-      match fst_match with
-      | Some (acn) -> acn
-      | None -> default
-    in
-    (* evaluate the runtime action arguments *)
-    let dyn_args = List.map (fun arg -> interp_exp arg |> extract_ival) tm.args in
-    (* call the action function *)
-    let acn_ret_vals = acn dyn_args |> List.map (fun value -> InterpSyntax.V value) in
-    (* update variables set by table's output in the env *)
-    let locals =
-      List.fold_left2
-        (fun locals v id -> Env.add (Id id) v locals)
-        locals
-        acn_ret_vals
-        tm.outs
-    in
-    locals *)
-  )
-  (* | STableMatch tm ->
-    (* load the dynamic entries from the pipeline *)
-    let tbl_pos =
-      match interp_exp tm.tbl with
-      | V { v = VGlobal stage } -> stage
-      | _ -> error "Table did not evaluate to a pipeline object reference"
-    in
-    let default, entries = Pipeline.get_table_entries tbl_pos (State.sw nst swid).pipeline in
-    (* find the first matching case *)
-    let key_vs = List.map (fun e -> interp_exp e |> extract_ival) tm.keys in
-    let fst_match =
-      List.fold_left
-        (fun fst_match entry ->
-          (* print_endline ("checking entry: "^(CorePrinting.entry_to_string entry)); *)
-          match fst_match with
-          | None ->
-            let pat_vs =
-              List.map (fun e -> interp_exp e |> extract_ival) entry.ematch
-            in
-            if matches_pat_vals key_vs pat_vs
-            then Some (entry.eaction, entry.eargs)
-            else None
-          | Some _ -> fst_match)
-        None
-        entries
-    in
-    (* if there's no matching entry, use the default action. *)
-    let acnid, e_const_args =
-      match fst_match with
-      | Some (acnid, const_args) -> acnid, const_args
-      | None -> default
-    in
-    (* find the action in context *)
-    let action = State.lookup_action (Id acnid) nst in
-    (* extract values from const arguments *)
-    let const_args = List.map interp_eval e_const_args in
-    (* evaluate the runtime action arguments *)
-    let dyn_args = List.map interp_exp tm.args in
-    (* bind install- and match-time parameters in env *)
-    let inner_locals =
-      List.fold_left2
-        (fun inner_locals v (id, _) -> Env.add (Id id) v inner_locals)
-        locals
-        (const_args @ dyn_args)
-        (action.aconst_params @ action.aparams)
-    in
-    (* evaluate the action's expressions *)
-    let acn_ret_vals = List.map (interpret_exp inner_locals) action.abody in
-    (* update variables set by table's output in the env *)
-    let locals =
-      List.fold_left2
-        (fun locals v id -> Env.add (Id id) v locals)
-        locals
-        acn_ret_vals
-        tm.outs
-    in
-    locals *)
-;;
-
-let interp_dtable (nst : State.network_state) swid id ty e =
-  (* FIXME: hacked in a dtable interp that gets called from
-            interp_dglobal. *)
-  let extract_int exp =
-    let size_val = interp_exp (nst : State.network_state) swid Env.empty exp in
-    match size_val with
-    | V { v = VInt n } -> Integer.to_int n
-    | _ -> failwith "not an int val"
-  in
-  let st = nst.switches.(swid) in
-  let p = st.pipeline in
-  let idx = Pipeline.length p in
-  (* add element to pipeline *)
-  let new_p =
-    match ty.raw_ty with
-    | rty when Tables.is_tbl_ty rty  ->
-      let t = Tables.dglobal_params_to_tbl_def id e in
-      (* eval args to value expressions *)
-      let def_acn_args =
-        partial_interp_exps nst swid Env.empty (snd t.tdefault)
-      in
-      (* eval a call to an action constructor and use resulting action to get default action *)
-      let def_action_constr_call = exp (ECall(fst t.tdefault, def_acn_args, false)) (CoreSyntax.ty@@TBool) in
-      let def_acn = match (interp_exp nst swid Env.empty def_action_constr_call) with
-          | F f -> (
-            let acn_f  (vs : value list) : value list = 
-              (* wrap vs in ivals, call action_f, unwrap results *)
-              let ivals = List.map (fun v -> InterpSyntax.V v) vs in
-              let result = f nst swid ivals |> extract_ival in
-              match result.v with
-              | VTuple(vs) -> List.map value vs
-              | _ -> [result]
-            in
-            acn_f
-        )
-        | _ -> error "default action did not evaluate to an action"
-      in
-      (* make the table with the default action and append it to the pipeline *)
-      Pipeline.append
-        p
-        (Pipeline.mk_table
-            id
-            (extract_int t.tsize)
-            (def_acn))
-    | _ -> error "[interp_dtable] called to create a non table type object"
-  in
-  nst.switches.(swid) <- { st with pipeline = new_p };
-  State.add_global swid (Id id) (V (vglobal idx ty)) nst;
-  nst
 ;;
 
 let _interp_dglobal (nst : State.network_state) swid id ty e =
@@ -804,13 +614,34 @@ let _interp_dglobal (nst : State.network_state) swid id ty e =
          appeared during interpretation"
   in
   nst.switches.(swid) <- { st with pipeline = new_p };
-  State.add_global swid (Id id) (V (vglobal idx ty)) nst;
+  State.add_global swid (Id id) (V (vglobal id idx ty)) nst;
   nst
 ;;
 
 let interp_dglobal (nst : State.network_state) swid id ty e =
-  match ty.raw_ty with
-  | rty when Tables.is_tbl_ty rty -> interp_dtable nst swid id ty e
+  match e.e with 
+  | ECall(cid, args, _) when (Cid.names cid) = ["Table"; "create"] -> (
+    (* eval the args *)
+    let arg_ivals = List.map (fun e -> interp_exp nst swid Env.empty e) args in
+    (* construct the value *)
+    let idx = Pipeline.length (nst.switches.(swid).pipeline) in
+    let vg_ival = InterpSyntax.V (vglobal id idx ty) in
+    (* call the constructor to update the pipeline, adding the value to it *)
+    let arg_ivals = vg_ival::arg_ivals in
+    let new_pipe = Tables.create_ctor nst swid arg_ivals in 
+    (* update the global state's pipeline *)
+    nst.switches.(swid) <- { nst.switches.(swid) with pipeline = new_pipe };
+    (* add the global to globals context in nst *)
+    State.add_global swid (Id id) vg_ival nst;
+    (* return updated nst *)
+    nst
+    (* interp_dtable nst swid id ty e *)
+  )
+  (* old builtin method of constructing globals. 
+     TODO: put the constructors into a global context and refactor 
+           to use the same approach as for tables, above. 
+           Eventually, a constructor call should be implemented the same way as a 
+           function call (it just happens to be one that updates the network state) *)
   | _ -> _interp_dglobal nst swid id ty e
 ;;
 

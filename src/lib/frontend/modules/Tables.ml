@@ -58,6 +58,58 @@ let create_sig =
   ctor_ty 
 ;;
 
+
+(* convert a function from ivals -> ivals to a function from values -> values *)
+let ival_fcn_to_internal_action nst swid vaction = 
+  let open CoreSyntax in
+  let open InterpState.State in 
+  let action_f = match vaction with 
+    | F f -> f
+    | _ -> error "Table.install: expected a function"
+  in
+  (* fill state and switch id args of the action function, 
+     which don't matter because its a pure function  *)
+  let acn_f  (vs : value list) : value list = 
+    (* wrap vs in ivals, call action_f, unwrap results *)
+    let ivals = List.map (fun v -> V v) vs in
+    let result = action_f nst swid ivals |> extract_ival in
+    match result.v with
+    | VTuple(vs) -> List.map value vs
+    | _ -> [result]
+  in
+  acn_f
+;;
+
+(* implement table create *)
+let create_ctor (nst : InterpState.State.network_state) swid args = 
+  match args with 
+  (* the table value arg is added by interpcore *)
+  | [tbl_v; tbl_len; tbl_acn_ctors; tbl_def_acn] -> 
+    let _ = tbl_acn_ctors in
+    let st = nst.switches.(swid) in
+    let p = st.pipeline in
+    let tbl_id = match tbl_v with 
+      | V { v = VGlobal(tbl_id, _) } -> tbl_id
+      | _ -> err "Table.create: expected a global for the table id"
+    in
+    let def_acn = ival_fcn_to_internal_action nst swid tbl_def_acn in
+    let tbl_size = match tbl_len with 
+      | V(v) -> (
+        match v.v with 
+          | VInt(i) -> Integer.to_int i
+          | _ -> err "Table.create: expected an integer for the table size"
+      )
+      | _ -> err "Table.create: expected an integer for the table size"
+    in
+
+    let new_pipe = Pipeline.append p
+      (Pipeline.mk_table tbl_id tbl_size def_acn)
+    in
+    new_pipe  
+  | _ -> err "wrong number of arguments to Table.create"
+;;
+
+
 (* Table.install : Table.t -> tuple<pat> -> action_constructor *)
 let install_name = "install"
 let install_id = Id.create install_name
@@ -103,7 +155,7 @@ let install_fun nst swid args =
        evaluate it, we'd like to just put it into pipeline. *)        
     let target_pipe = (State.sw nst swid).pipeline in    
     let stage = match (extract_ival vtbl).v with 
-      | VGlobal(stage) -> stage
+      | VGlobal(_, stage) -> stage
       | _-> error "Table.install: table arg didn't eval to a global"
     in
     let keys = match (extract_ival vkey).v with 
@@ -204,7 +256,7 @@ let lookup_fun nst swid args =
   let open InterpSyntax in
   let open CoreSyntax in
   match args with
-  | [V { v = VGlobal(tbl_pos) }; V { v = vkeys }; V { v = vargs }] ->   
+  | [V { v = VGlobal(_, tbl_pos) }; V { v = vkeys }; V { v = vargs }] ->   
     let key_vs = match vkeys with 
       | VTuple(vs) -> List.map (CoreSyntax.value) vs
       | v -> [CoreSyntax.value v]

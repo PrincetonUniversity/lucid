@@ -63,7 +63,7 @@ let pairarray_update_fun nst swid args =
   let open InterpSyntax in
   let open State in 
   match args with
-  | [V { v = VGlobal stage }; V { v = VInt idx }; F memop; arg1; arg2; default]
+  | [V { v = VGlobal (_, stage) }; V { v = VInt idx }; F memop; arg1; arg2; default]
     ->
     let update_f mem1 mem2 =
       let args =
