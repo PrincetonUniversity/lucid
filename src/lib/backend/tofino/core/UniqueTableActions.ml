@@ -72,25 +72,27 @@ let copy_action ctx aid aid' =
 ;;
 
 (* rename actions in a statement *)
-(* LEFT OFF HERE: eliminating table_install from IR *)
 let rename_actionvars renames decl = 
   let evar_replacer =
     object (_)
       inherit [_] s_map as super
-      method! visit_ECall renames cid exps b = 
-        let (tbl, key, action_call) = match exps with 
-          | [tbl; key; action_call] -> (tbl, key, action_call)
-          | _ -> error "[rename_actionvars] expected 3 args to table_install"
-        in
-        let local_renames = get_renames (id_of_exp tbl) renames in
-        let action_call = match action_call.e with 
-          | ECall(aid, args, b) -> 
-            let id = Cid.to_id aid in
-            let id' = IdMap.find id local_renames in
-            {action_call with e=ECall(Cid.id id', args, b)}
-          | _ -> error "[rename_actionvars] expected action call in table_install"
-        in
-        ECall(cid, [tbl; key; action_call], b)
+      method! visit_exp renames exp = 
+        match exp.e with 
+        | ECall(cid, exps, b) when Tables.is_tbl_ty exp.ety.raw_ty -> 
+          let (tbl, key, action_call) = match exps with 
+            | [tbl; key; action_call] -> (tbl, key, action_call)
+            | _ -> error "[rename_actionvars] expected 3 args to table_install"
+          in
+          let local_renames = get_renames (id_of_exp tbl) renames in
+          let action_call = match action_call.e with 
+            | ECall(aid, args, b) -> 
+              let id = Cid.to_id aid in
+              let id' = IdMap.find id local_renames in
+              {action_call with e=ECall(Cid.id id', args, b)}
+            | _ -> error "[rename_actionvars] expected action call in table_install"
+          in
+          {exp with e=ECall(cid, [tbl; key; action_call], b)}
+        | _ -> super#visit_exp renames exp
       (* method! visit_STableInstall renames tbl entries =
         let local_renames = get_renames (id_of_exp tbl) renames in
         let entries' = List.map 
@@ -110,7 +112,7 @@ let update_decl ctx decl : replace_ctx * decls =
   | DActionConstr({aid=aid; _}) -> 
     add_action aid decl ctx, []
   (* table constructors -- create bindings, update context, update local actions *)
-  | DGlobal(tid, tty, econstr) ->
+  | DGlobal(tid, tty, econstr) when (Tables.is_tbl_ty tty.raw_ty)->
     let tdef = Tables.dglobal_params_to_tbl_def tid econstr in  
     let aids = List.map id_of_exp tdef.tactions in
     let new_aids = List.map (new_aid tid) aids in

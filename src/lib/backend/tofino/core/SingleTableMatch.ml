@@ -73,7 +73,7 @@ module ZZ = Z
 let rec tables_in_prog (tds:TC.tdecls) = 
   match tds with 
   | [] -> []
-  | {td=TDGlobal(tbl_id, _, econstr)}::tds' -> 
+  | {td=TDGlobal(tbl_id, _, econstr)}::tds' when Tables.is_tbl_ty econstr.ety.raw_ty -> 
     let tbl_def = Tables.dglobal_params_to_tbl_def tbl_id econstr in
     tbl_def::(tables_in_prog tds')
   | _::tds' -> tables_in_prog tds'

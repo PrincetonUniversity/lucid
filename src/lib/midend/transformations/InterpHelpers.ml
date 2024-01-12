@@ -362,7 +362,7 @@ let eop_and x y = aexp (EOp (And, [x; y])) x.ety
 let rec tables_in_prog (tds:decls) = 
   match tds with 
   | [] -> []
-  | {d=DGlobal(tbl_id, _, econstr); dspan}::tds' -> 
+  | {d=DGlobal(tbl_id, _, econstr); dspan}::tds' when Tables.is_tbl_ty econstr.ety.raw_ty -> 
     let tbl_def = Tables.dglobal_params_to_tbl_def tbl_id econstr in
     (tbl_def, dspan, econstr.espan)::(tables_in_prog tds')
   | _::tds' -> tables_in_prog tds'
