@@ -7,8 +7,9 @@ type cid = Cid.t
 type size = SConst of int | SPlatformDependent
 type pragma = Pragma.t
 
-(* tag to indicate types in other IRs *)
-type ty_ext = ..
+(* annotations (not part of core IR) *)
+type ty_annot = ..
+type exp_annot = ..
 
 type op =  | And | Or | Not
           | Eq  | Neq | Less| More  | Leq | Geq
@@ -19,6 +20,7 @@ type op =  | And | Or | Not
           | Hash of size
           | Cast of size 
           | Conc
+          | Project of id | Get of int (* record and tuple ops *)
 
 type raw_ty = 
   | TUnit
@@ -31,7 +33,7 @@ type raw_ty =
   | TEvent
 and func_ty = {arg_tys : ty list; ret_ty : ty; func_kind : func_kind;}
 and func_kind = FNormal | FHandler | FParser | FAction | FMemop
-and ty = {raw_ty:raw_ty; tspan : sp; ty_ext : ty_ext option;}
+and ty = {raw_ty:raw_ty; tspan : sp; ty_annot : ty_annot option;}
 
 type params = (id * ty) list
 type func = { fun_args: id list; fun_body: exp; }
@@ -55,7 +57,7 @@ and pat =
 and branch = pat list * exp
 and e = 
   | EVal of value
-  | EVar of id
+  | EVar of cid
   | ERecord of {labels : id list option; es : exp list;}
   | ECall of exp * exp list
   | EOp of op * exp list 
@@ -65,7 +67,7 @@ and e =
   | ESeq of exp * exp
   | EIf of exp * exp * exp
   | EMatch of exp * branch list
-and exp = {e:e; ety:ty; espan : sp;}
+and exp = {e:e; ety:ty; espan : sp; exp_annot : exp_annot option;}
 
 type global_def = {eid : id; ety : ty; econstr : exp option;}
 type event_def = {evid : id; evnum : int option; evparams : params; is_parsed : bool}
@@ -86,7 +88,8 @@ type fdecl = {d:d; dspan : sp;}
 type fdecls = fdecl list
 
 (* extensions for translation to / from CoreIr *)
-type ty_ext += TGroup
+type ty_annot += TGroup
+type exp_annot += ECallUnordered of bool
 (* Statements and handlers with statement bodies are only for translation to / from the IR *)
 type s = 
   | SNoop
@@ -106,9 +109,10 @@ type decls = decl list
 (* constructors *)
 let sz n = SConst n
 let sz_platform = SPlatformDependent
-let ty raw_ty = {raw_ty=raw_ty; tspan=Span.default; ty_ext=None}
-let ty_ext raw_ty ty_ext = {raw_ty=raw_ty; tspan=Span.default; ty_ext=Some ty_ext}
+let ty raw_ty = {raw_ty=raw_ty; tspan=Span.default; ty_annot=None}
+let ty_annot raw_ty ty_annot = {raw_ty=raw_ty; tspan=Span.default; ty_annot=Some ty_annot}
 
+let trecord labels tys = ty (TRecord {labels=Some labels; ts=tys})
 let ttuple tys = ty (TRecord {labels=None; ts=tys})
 let tfun arg_tys ret_ty func_kind = ty (TFun {arg_tys; ret_ty; func_kind})
 
@@ -132,3 +136,11 @@ let vpat ints = {v=VBits {ternary=true; bits=ints}; vty=ty (TBits {ternary=true;
 let vbits ints = {v=VBits {ternary=false; bits=ints}; vty=ty (TBits {ternary=false; len=sz (List.length ints)}); vspan=Span.default}
 let vrecord labels values = {v=VRecord {labels=Some labels; es=values}; vty=ty (TRecord {labels=Some labels; ts=List.map (fun v -> v.vty) values}); vspan=Span.default}
 let vtuple vs = {v=VRecord {labels=None; es=vs}; vty=ty (TRecord {labels=None; ts=List.map (fun v -> v.vty) vs}); vspan=Span.default}
+
+
+(* expressions *)
+let efunref cid fty = {e=EVar cid; ety=fty; espan=Span.default; exp_annot=None}
+let erecord labels es = {e=ERecord {labels=Some labels; es}; ety=trecord labels (List.map (fun (e:exp) -> e.ety) es); espan=Span.default; exp_annot=None}
+let etuple es = {e=ERecord {labels=None; es}; ety=ttuple (List.map (fun (e:exp) -> e.ety) es); espan=Span.default; exp_annot=None}
+
+let eop op es = {e=EOp (op, es); ety=ty TBool; espan=Span.default; exp_annot=None}

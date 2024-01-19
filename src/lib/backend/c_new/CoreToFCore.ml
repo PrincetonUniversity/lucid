@@ -77,7 +77,7 @@ and translate_ty (ty : C.ty) : F.ty =
    tspan = ty.tspan;
    (* tag "group" types because they are represented in FCore 
       as a non-unique Int type *)
-   ty_ext = match ty.raw_ty with 
+   ty_annot = match ty.raw_ty with 
       | C.TGroup -> Some(F.TGroup) | _ -> None}
 ;;
 
@@ -111,6 +111,7 @@ let translate_op (op : C.op) : F.op =
   | C.PatMask -> F.PatMask
 ;;
 
+(*** values ***)
 let rec translate_v (v : C.v) (vty:C.ty) : F.v = 
   match vty, v with 
   | _, C.VBool(b) -> F.VBool(b)
@@ -146,14 +147,63 @@ and translate_event_val (ev : C.event_val) : F.vevent =
       "edelay", F.vint_unsized ev.edelay;
       "eserialized", F.vbool ev.eserialized;
     ]
-  }
-  
-
+  }  
 and translate_value (value : C.value) : F.value = 
   {v = translate_v value.v value.vty; 
    vty = translate_ty value.vty;
    vspan = value.vspan}
 ;;
+
+(*** expressions ***)
+let rec translate_e (e : C.e) ety : F.e = 
+  match ety, e with 
+  | _, C.EVal(v) -> F.EVal(translate_value v)
+  | _, C.EVar(c) -> F.EVar(c)
+  | _, C.EOp(op, es) -> F.EOp(translate_op op, List.map translate_exp es)
+  | ret_ty, C.ECall(cid, es, _) -> 
+    (* reconstruct the functions assumed type based on arg and expression types *)
+    let arg_tys = List.map (fun e -> e.C.ety) es in
+    let fty = F.tfun 
+      (List.map translate_ty arg_tys)
+      (translate_ty ret_ty)
+      FNormal
+    in
+    let fexp = F.efunref cid fty in
+    F.ECall(fexp, List.map translate_exp es)
+  | _, EHash((Sz size), es) -> 
+    (* hash is an op in F *)
+    F.EOp(F.Hash(F.sz size), List.map translate_exp es)
+  | _, EHash(_, _) -> err "Hash size should be a singleton"
+  | ret_ty, EFlood(port_exp) -> 
+    (* flood is a call to a builtin *)
+    let arg_tys = [translate_ty port_exp.ety] in
+    let ret_ty = translate_ty ret_ty in
+    let fty = F.tfun arg_tys ret_ty F.FNormal in
+    let fexp = F.efunref (Cid.create ["flood"]) fty in
+    F.ECall(fexp, [translate_exp port_exp])
+  | _, ERecord(label_exp_pairs) -> 
+    let labels, es = List.split label_exp_pairs in
+    let es = List.map translate_exp es in
+    (F.erecord labels es).e
+  | _, ETuple(exps) -> 
+    let es = List.map translate_exp exps in
+    (F.etuple es).e
+  | _, EProj(rec_exp, label) -> 
+    (* project is an op *)
+    (F.eop (F.Project(label)) [translate_exp rec_exp]).e
+and translate_exp (exp : C.exp) : F.exp = 
+  {
+    e = translate_e exp.e exp.ety;
+    ety = translate_ty exp.ety;
+    espan = exp.espan;
+    exp_annot =(match exp.e with 
+      | ECall(_, _, is_unordered) -> Some(F.ECallUnordered(is_unordered))
+      | _ -> None);
+  }
+
+
+
+
 
 (* let translate_decl (decl:C.decl) : F.decl = 
   match decl.d with 
