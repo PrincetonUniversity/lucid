@@ -35,16 +35,20 @@ and ty = {raw_ty:raw_ty; tspan : sp; ty_ext : ty_ext option;}
 
 type params = (id * ty) list
 type func = { fun_args: id list; fun_body: exp; }
+(* convention: it should always possible to infer 
+   the type of a value from the value itself *)
 and v =
   | VUnit
-  | VInt of int
+  | VInt of {value : int; size : size;}
   | VBool of bool
   | VRecord of {labels : id list option; es : value list;}
   | VBits of {ternary: bool; bits : int list;}
-  | VGlobal of id * int (* global variable reference, int is an address *)
-  | VClosure of {env : (id * value) list; args: id list; fexp : exp;}
-  | VEvent of {event_id : id; event_arg: value list;}
+  | VTyRef of id * int * ty (* typed reference to a global variable *)
+  | VClosure of {env : (id * value) list; params: params; fexp : exp;}
+  | VEvent of vevent
+and vevent = {evid : cid; evnum : int option; evdata: value list; meta : (string * value) list;}
 and value = {v:v; vty:ty; vspan : sp;}
+
 and pat = 
   | PVal of value
   | PEvent of {event_id : id; params : params;}
@@ -107,3 +111,24 @@ let ty_ext raw_ty ty_ext = {raw_ty=raw_ty; tspan=Span.default; ty_ext=Some ty_ex
 
 let ttuple tys = ty (TRecord {labels=None; ts=tys})
 let tfun arg_tys ret_ty func_kind = ty (TFun {arg_tys; ret_ty; func_kind})
+
+let infer_vty = function 
+  | VUnit -> ty TUnit
+  | VInt {size; _} -> ty (TInt size)
+  | VBool _ -> ty TBool
+  | VRecord {labels; es} -> ty (TRecord {labels; ts=List.map (fun v -> v.vty) es})
+  | VBits {ternary; bits} -> ty (TBits {ternary; len=sz (List.length bits)})
+  | VTyRef (_, _, ty) -> ty
+  | VClosure {params; fexp; _} -> tfun (List.map snd params) fexp.ety FNormal
+  | VEvent _ -> ty (TEvent)
+;;  
+
+let value v = {v=v; vty=infer_vty v; vspan=Span.default}
+let vint_unsized value = {v=VInt {value; size = sz_platform}; vty=ty (TInt sz_platform); vspan=Span.default}
+let vint value size = {v=VInt {value; size = sz size}; vty=ty (TInt(sz size)); vspan=Span.default}
+let vbool b = {v=VBool b; vty=ty TBool; vspan=Span.default}
+let vtup vs = {v=VRecord {labels=None; es=vs}; vty=ttuple (List.map (fun v -> v.vty) vs); vspan=Span.default}
+let vpat ints = {v=VBits {ternary=true; bits=ints}; vty=ty (TBits {ternary=true; len=sz (List.length ints)}); vspan=Span.default}
+let vbits ints = {v=VBits {ternary=false; bits=ints}; vty=ty (TBits {ternary=false; len=sz (List.length ints)}); vspan=Span.default}
+let vrecord labels values = {v=VRecord {labels=Some labels; es=values}; vty=ty (TRecord {labels=Some labels; ts=List.map (fun v -> v.vty) values}); vspan=Span.default}
+let vtuple vs = {v=VRecord {labels=None; es=vs}; vty=ty (TRecord {labels=None; ts=List.map (fun v -> v.vty) vs}); vspan=Span.default}

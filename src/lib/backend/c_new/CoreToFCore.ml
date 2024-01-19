@@ -3,9 +3,17 @@ module F = FCoreSyntax
 
 let err = Console.error ;;
 
+(* small helpers to transform representations *)
+(* a singleton size is an int; 
+   a list of sizes is a tuple *)
 let size_to_ty = function 
   | C.Sz(sz) -> F.ty@@F.TInt(F.sz sz)
   | C.Szs(szs) -> F.ty@@F.TRecord{labels=None; ts=List.map (fun sz -> F.ty@@F.TInt(F.sz sz)) szs}
+;;
+let rec bits_to_ints = function 
+  | BitString.B0::bs -> 0::(bits_to_ints bs)
+  | BitString.B1::bs -> 1::(bits_to_ints bs)
+  | [] -> []
 ;;
 
 let rec translate_raw_ty (raw_ty : C.raw_ty) : F.raw_ty = 
@@ -71,6 +79,80 @@ and translate_ty (ty : C.ty) : F.ty =
       as a non-unique Int type *)
    ty_ext = match ty.raw_ty with 
       | C.TGroup -> Some(F.TGroup) | _ -> None}
+;;
+
+let translate_op (op : C.op) : F.op = 
+  match op with 
+  | C.And -> F.And
+  | C.Or -> F.Or
+  | C.Not -> F.Not
+  | C.Eq -> F.Eq
+  | C.Neq -> F.Neq
+  | C.Less -> F.Less
+  | C.More -> F.More
+  | C.Leq -> F.Leq
+  | C.Geq -> F.Geq
+  | C.Neg -> F.Neg
+  | C.Plus -> F.Plus
+  | C.Sub -> F.Sub
+  | C.SatPlus -> F.SatPlus
+  | C.SatSub -> F.SatSub
+  | C.Cast(Sz sz) -> F.Cast(F.sz sz)
+  | C.Cast(_) -> err "Cast size should be a singleton"
+  | C.Conc -> F.Conc
+  | C.BitAnd -> F.BitAnd
+  | C.BitOr -> F.BitOr
+  | C.BitXor -> F.BitXor
+  | C.BitNot -> F.BitNot
+  | C.LShift -> F.LShift
+  | C.RShift -> F.RShift
+  | C.Slice(i, j) -> F.Slice(i, j)
+  | C.PatExact -> F.PatExact
+  | C.PatMask -> F.PatMask
+;;
+
+let rec translate_v (v : C.v) (vty:C.ty) : F.v = 
+  match vty, v with 
+  | _, C.VBool(b) -> F.VBool(b)
+  | _, C.VInt({value; size}) -> (F.vint (Z.to_int value) (Z.to_int size)).v
+  | _, C.VEvent event_val -> F.VEvent(translate_event_val event_val)
+  | vty, C.VGlobal(id, addr) -> F.VTyRef(id, addr, translate_ty vty)
+  | _, C.VGroup(locs) -> (F.vtup (List.map F.vint_unsized locs)).v
+  | _, C.VPat(tbits) -> (F.vpat tbits).v
+  | _, C.VBits(bits) -> (F.vbits (bits_to_ints bits)).v
+  | {raw_ty=C.TTuple(raw_tys)}, C.VTuple(vs) -> 
+    let tys = List.map C.ty raw_tys in
+    let vs = List.map2 translate_v vs tys in
+    let values = List.map F.value vs in
+    (F.vtuple values).v
+  | _, C.VTuple(_) -> err "VTuple type should be a tuple"
+  | {raw_ty=C.TRecord(id_rawty_pairs)}, C.VRecord(id_v_pairs) -> 
+    let labels, vs = List.split id_v_pairs in
+    let tys = List.map (fun id -> List.assoc id id_rawty_pairs |> C.ty) labels in
+    let vs = List.map2 translate_v vs tys in
+    let values = List.map F.value vs in
+    (F.vrecord labels values).v
+  | _, C.VRecord(_) -> err "VRecord type should be a record"
+
+and translate_event_val (ev : C.event_val) : F.vevent = 
+  {
+    evid = ev.eid;
+    evnum = (match ev.evnum with 
+      | Some({C.v=VInt({value})}) -> Some(Z.to_int value)
+      | Some(_) -> err "event number should be an integer"
+      | None -> None);
+    evdata = List.map translate_value ev.data;
+    meta = [
+      "edelay", F.vint_unsized ev.edelay;
+      "eserialized", F.vbool ev.eserialized;
+    ]
+  }
+  
+
+and translate_value (value : C.value) : F.value = 
+  {v = translate_v value.v value.vty; 
+   vty = translate_ty value.vty;
+   vspan = value.vspan}
 ;;
 
 (* let translate_decl (decl:C.decl) : F.decl = 
