@@ -168,6 +168,12 @@
    cLibs
    cTransformations
    strUtils
+   FCoreSyntax
+   FCorePrinting
+   CoreToFCore
+   CPasses
+
+
    )
  (preprocess
     (staged_pps ppx_import visitors.ppx ppx_deriving.show ppx_deriving.std ppx_string))
