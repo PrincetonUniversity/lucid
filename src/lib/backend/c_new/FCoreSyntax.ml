@@ -1,9 +1,10 @@
-(* self-contained functional IR for lucid, with extra nodes 
-   for compatability with the current CoreSyntax IR *)
+(* simpler functional IR for lucid, with extensions
+   for compatability with the current CoreSyntax IR
+   (Extensions should be eliminated before any further processing) *)
 type sp = Span.t
 type id = Id.t
 type cid = Cid.t
-type size = int
+type size = SConst of int | SPlatformDependent
 type pragma = Pragma.t
 
 (* tag to indicate types in other IRs *)
@@ -18,7 +19,7 @@ type op =  | And | Or | Not
           | Hash of size
           | Cast of size 
           | Conc
-  
+
 type raw_ty = 
   | TUnit
   | TInt of size 
@@ -99,6 +100,8 @@ type decls = decl list
 
 
 (* constructors *)
+let sz n = SConst n
+let sz_platform = SPlatformDependent
 let ty raw_ty = {raw_ty=raw_ty; tspan=Span.default; ty_ext=None}
 let ty_ext raw_ty ty_ext = {raw_ty=raw_ty; tspan=Span.default; ty_ext=Some ty_ext}
 

@@ -4,14 +4,14 @@ module F = FCoreSyntax
 let err = Console.error ;;
 
 let size_to_ty = function 
-  | C.Sz(sz) -> F.ty@@F.TInt(sz)
-  | C.Szs(szs) -> F.ty@@F.TRecord{labels=None; ts=List.map (fun sz -> F.ty@@F.TInt(sz)) szs}
+  | C.Sz(sz) -> F.ty@@F.TInt(F.sz sz)
+  | C.Szs(szs) -> F.ty@@F.TRecord{labels=None; ts=List.map (fun sz -> F.ty@@F.TInt(F.sz sz)) szs}
 ;;
 
 let rec translate_raw_ty (raw_ty : C.raw_ty) : F.raw_ty = 
   match raw_ty with 
   | C.TBool -> F.TBool
-  | C.TInt(Sz sz) ->  F.TInt(sz)
+  | C.TInt(Sz sz) ->  F.TInt(F.sz sz)
   | C.TInt(_) -> err "TInt size should be a singleton"
   | C.TEvent -> F.TEvent
   | C.TFun {arg_tys; ret_ty} -> 
@@ -26,8 +26,8 @@ let rec translate_raw_ty (raw_ty : C.raw_ty) : F.raw_ty =
        into int types or tuple types *)
     F.TName(cid, List.map size_to_ty sizes, is_global)
   | C.TMemop(n_args, Sz(arg_size)) -> 
-    let arg_tys = List.init n_args (fun _ -> F.ty@@F.TInt(arg_size)) in
-    let ret_ty = F.ty@@F.TInt(arg_size) in
+    let arg_tys = List.init n_args (fun _ -> F.ty@@F.TInt(F.sz arg_size)) in
+    let ret_ty = F.ty@@F.TInt(F.sz arg_size) in
     let fty : F.func_ty = {
       F.arg_tys = arg_tys; 
       F.ret_ty = ret_ty;
@@ -53,10 +53,10 @@ let rec translate_raw_ty (raw_ty : C.raw_ty) : F.raw_ty =
     let raw_tys = List.map translate_raw_ty raw_tys in
     let tys = List.map F.ty raw_tys in
     F.TRecord{labels=None; ts=tys}
-  | C.TGroup -> F.TInt(-1)
-  | C.TPat(Sz(sz)) -> F.TBits{ternary=true; len=sz}
+  | C.TGroup -> F.TInt(F.sz_platform)
+  | C.TPat(Sz(sz)) -> F.TBits{ternary=true; len=F.sz sz}
   | C.TPat(_) -> err "TPat size should be a singleton"
-  | C.TBits(Sz(sz)) -> F.TBits{ternary=false; len=sz}
+  | C.TBits(Sz(sz)) -> F.TBits{ternary=false; len=F.sz sz}
   | C.TBits(_) -> err "TBits size should be a singleton"
 and translate_acn_ty (aty : C.acn_ty) = 
   {
