@@ -1,5 +1,39 @@
 module C = CoreSyntax
-module F = FCoreSyntax
+
+module F = struct 
+  (* FCoreSyntax with extra nodes for translation from Core IR *)
+  include FCoreSyntax
+  (* extensions for translation to / from CoreIr *)
+  type ty_annot += | TGroup
+  type exp_annot += ECallUnordered of bool
+  (* Statements and handlers with statement bodies are only for translation to / from the IR *)
+  type s = 
+    | SNoop
+    | SUnit of exp
+    | SAssign of assign
+    | SSeq of statement * statement
+    | SIf of exp * statement * statement
+    | SMatch of exp * sbranch list
+    | SGen of {loc: exp option; ev:exp; }
+    | SRet of exp option
+  and assign = {ids : cid list; tys : ty list; new_vars : bool; exp : exp}
+  and sbranch = pat list * statement
+  and statement = {s:s; sspan : sp; spragmas : pragma list;}
+  type d += DHandler of {hdl_id : id; hdl_params: id list; hdl_body : statement;}
+  type decl = {d:d; dspan : sp; dpragma : pragma option}
+  type decls = decl list
+
+  let new_local id ty exp = SAssign{ids=[id]; tys=[ty]; new_vars=true; exp}
+  let update_local id exp = SAssign{ids=[id]; tys=[]; new_vars=false; exp}
+  let new_locals ids tys exp = SAssign{ids; tys; new_vars=true; exp}
+  let update_locals ids exp = SAssign{ids; tys=[]; new_vars=false; exp}
+end
+
+(* ops that are calls to builtins in FCore:
+    flood
+    printf
+    event generation functions
+*)
 
 let err = Console.error ;;
 
@@ -16,6 +50,7 @@ let rec bits_to_ints = function
   | [] -> []
 ;;
 
+
 let rec translate_raw_ty (raw_ty : C.raw_ty) : F.raw_ty = 
   match raw_ty with 
   | C.TBool -> F.TBool
@@ -26,7 +61,7 @@ let rec translate_raw_ty (raw_ty : C.raw_ty) : F.raw_ty =
     let fty : F.func_ty = {
       F.arg_tys = List.map translate_ty arg_tys; 
       F.ret_ty = translate_ty ret_ty;
-      F.func_kind = FNormal;}
+      F.func_kind = F.FNormal;}
     in
     F.TFun fty
   | C.TName(cid, sizes, is_global) -> 
@@ -39,7 +74,7 @@ let rec translate_raw_ty (raw_ty : C.raw_ty) : F.raw_ty =
     let fty : F.func_ty = {
       F.arg_tys = arg_tys; 
       F.ret_ty = ret_ty;
-      F.func_kind = FMemop;}
+      F.func_kind = F.FMemop;}
     in
     F.TFun fty
   | C.TMemop(_, _) -> err "TMemop size should be a singleton"
@@ -49,7 +84,7 @@ let rec translate_raw_ty (raw_ty : C.raw_ty) : F.raw_ty =
     let fty : F.func_ty = {
       F.arg_tys = List.map translate_ty aconst_param_tys; 
       F.ret_ty = F.ty@@F.TFun(translate_acn_ty aacn_ty);
-      F.func_kind = FNormal;}
+      F.func_kind = F.FNormal;}
     in
     F.TFun fty
   | C.TRecord(id_rawty_pairs) -> 
@@ -70,7 +105,7 @@ and translate_acn_ty (aty : C.acn_ty) =
   {
     F.arg_tys = List.map translate_ty aty.aarg_tys; 
     F.ret_ty = F.ttuple @@ List.map translate_ty aty.aret_tys;
-    F.func_kind = FAction;
+    F.func_kind = F.FAction;
   }
 and translate_ty (ty : C.ty) : F.ty = 
   {raw_ty = translate_raw_ty ty.raw_ty; 
@@ -166,7 +201,7 @@ let rec translate_e (e : C.e) ety : F.e =
     let fty = F.tfun 
       (List.map translate_ty arg_tys)
       (translate_ty ret_ty)
-      FNormal
+      F.FNormal
     in
     let fexp = F.efunref cid fty in
     F.ECall(fexp, List.map translate_exp es)
@@ -200,6 +235,82 @@ and translate_exp (exp : C.exp) : F.exp =
       | ECall(_, _, is_unordered) -> Some(F.ECallUnordered(is_unordered))
       | _ -> None);
   }
+
+let translate_pat (pat:C.pat) : F.pat = 
+  match pat with 
+  | PBit(ints) -> F.PVal(F.vpat ints)
+  | C.PNum(z) -> 
+    let sz = Z.size z in
+    let v = Z.to_int z in
+    F.PVal(F.vint v sz)
+  | PEvent(cid, params) -> 
+    let params = List.map (fun (id, ty) -> id, translate_ty ty) params in
+    F.PEvent{event_id=cid; params;}
+  | PWild -> err "wildcard patterns should be translated 
+    into wildcard bitstrings before translation into IR"
+;;
+let rec translate_s (s:C.s) : F.s = 
+  match s with
+  | C.SNoop -> F.SNoop
+  | C.SUnit(exp) -> F.SUnit(translate_exp exp)
+  | C.SLocal(id, ty, exp) -> F.new_local (Cid.id id) (translate_ty ty) (translate_exp exp)
+  | C.SAssign(id, exp) -> F.update_local id (translate_exp exp)
+  | C.SPrintf(fmt_str, args) -> 
+    (* printf  *)
+    let str_exp = F.eval (F.string_to_value fmt_str) in
+    let args = str_exp::List.map (fun arg -> (translate_exp arg)) args in
+    let arg_tys = List.map (fun (arg:F.exp) -> arg.ety) args in
+    let ret_ty = F.ty@@TUnit in
+    let fty = F.tfun arg_tys ret_ty F.FNormal in
+    let fexp = F.efunref (Cid.create ["printf"]) fty in
+    let print_call = F.ecall fexp args in
+    F.SUnit(print_call)
+  | C.SIf(exp, stmt1, stmt2) -> 
+    let exp = translate_exp exp in
+    let stmt1 = translate_statement stmt1 in
+    let stmt2 = translate_statement stmt2 in
+    F.SIf(exp, stmt1, stmt2)
+  | C.SGen(GSingle(None), ev) -> 
+    F.SGen{loc=None; ev=translate_exp ev}
+  | C.SGen(GSingle(_), _) -> 
+    err "generate to switch addresses not supported"
+  | C.SGen(GPort(port), ev) -> 
+    F.SGen{loc=Some(translate_exp port); ev=translate_exp ev}
+  | C.SGen(GMulti(port), ev) -> 
+    F.SGen{loc=Some(translate_exp port); ev=translate_exp ev}
+  | C.SSeq(s1, s2) -> F.SSeq(translate_statement s1, translate_statement s2)
+  | C.SMatch(exps, branches) -> 
+    let exps = List.map translate_exp exps in
+    (* if there's more than one expression, wrap it in a tuple *)
+    let exp = match exps with 
+      | [exp] -> exp
+      | exps -> F.etuple exps
+    in
+    let branches = List.map 
+      (fun (pats, stmt) -> 
+        let pats = List.map translate_pat pats in
+        let stmt = translate_statement stmt in
+        (pats, stmt))
+      branches
+    in
+    F.SMatch(exp, branches)
+  | C.SRet(None) -> F.SRet(None)
+  | C.SRet(Some(exp)) -> F.SRet(Some(translate_exp exp))
+  | STupleAssign{ids; tys; exp;} -> 
+    let cids = List.map (Cid.id) ids in
+    let tys, new_vars = match tys with 
+      | None -> [], false
+      | Some(tys) -> List.map translate_ty tys, true
+    in
+    let exp = translate_exp exp in
+    F.SAssign{ids=cids; tys; new_vars; exp}
+and translate_statement (stmt : C.statement) : F.statement = 
+  {
+    s = translate_s stmt.s;
+    sspan = stmt.sspan;
+    spragmas = stmt.spragmas;
+  }
+
 
 
 

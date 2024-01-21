@@ -7,9 +7,15 @@ type cid = Cid.t
 type size = SConst of int | SPlatformDependent
 type pragma = Pragma.t
 
-(* annotations (not part of core IR) *)
+(* extensible / open nodes in AST: individual passes can extend the AST 
+   at these points by adding new datatypes. *)
+(* annotations *)
 type ty_annot = ..
 type exp_annot = ..
+(* function kinds *)
+type func_kind = ..
+(* toplevel declaration *)
+type d = ..
 
 type op =  | And | Or | Not
           | Eq  | Neq | Less| More  | Leq | Geq
@@ -22,6 +28,8 @@ type op =  | And | Or | Not
           | Conc
           | Project of id | Get of int (* record and tuple ops *)
 
+type func_kind += | FNormal | FHandler | FParser | FAction | FMemop
+
 type raw_ty = 
   | TUnit
   | TInt of size 
@@ -32,7 +40,6 @@ type raw_ty =
   | TBits of {ternary: bool; len : size;}
   | TEvent
 and func_ty = {arg_tys : ty list; ret_ty : ty; func_kind : func_kind;}
-and func_kind = FNormal | FHandler | FParser | FAction | FMemop
 and ty = {raw_ty:raw_ty; tspan : sp; ty_annot : ty_annot option;}
 
 type params = (id * ty) list
@@ -53,8 +60,9 @@ and value = {v:v; vty:ty; vspan : sp;}
 
 and pat = 
   | PVal of value
-  | PEvent of {event_id : id; params : params;}
+  | PEvent of {event_id : cid; params : params;}
 and branch = pat list * exp
+
 and e = 
   | EVal of value
   | EVar of cid
@@ -62,14 +70,14 @@ and e =
   | ECall of exp * exp list
   | EOp of op * exp list 
   | EEvent of {event_id : id; args : exp list;}
-  | EClosure of {env : (id * exp) list; args: id list; fexp : exp;}
+  | EClosure of {env : (id * exp) list; params: params; fexp : exp;}
+  | EGenerate of {loc : exp option; ev: exp;}
   | ELet of id list * exp * exp
   | ESeq of exp * exp
   | EIf of exp * exp * exp
   | EMatch of exp * branch list
 and exp = {e:e; ety:ty; espan : sp; exp_annot : exp_annot option;}
 
-type global_def = {eid : id; ety : ty; econstr : exp option;}
 type event_def = {evid : id; evnum : int option; evparams : params; is_parsed : bool}
 type func_def = {
   fid : id;
@@ -78,32 +86,14 @@ type func_def = {
   fret_ty : ty;
   fbody : exp;
 }
+type global_def = {eid : id; ety : ty; econstr : exp option;}
 type ty_def = {tid : id; tty : ty;}
-type d = ..
-type d += DGlobal of global_def
-type d += DEvent of event_def  
-type d += DFun of func_def
-type d += DUserTy of ty_def
+type d += | DGlobal of global_def
+          | DEvent of event_def  
+          | DFun of func_def
+          | DUserTy of ty_def
 type fdecl = {d:d; dspan : sp;}
 type fdecls = fdecl list
-
-(* extensions for translation to / from CoreIr *)
-type ty_annot += TGroup
-type exp_annot += ECallUnordered of bool
-(* Statements and handlers with statement bodies are only for translation to / from the IR *)
-type s = 
-  | SNoop
-  | SUnit of exp
-  | SAssign of assign
-  | SSeq of statement * statement
-  | SIf of exp * statement * statement
-  | SMatch of exp * sbranch list
-and assign = {ids : id list; tys : ty list; new_vars : bool; exp : exp}
-and sbranch = pat list * statement
-and statement = {s:s; sspan : sp; spragmas : pragma list;}
-type d += DHandler of {hdl_id : id; hdl_params: id list; hdl_body : statement;}
-type decl = {d:d; dspan : sp; dpragma : pragma option}
-type decls = decl list
 
 
 (* constructors *)
@@ -142,5 +132,27 @@ let vtuple vs = {v=VRecord {labels=None; es=vs}; vty=ty (TRecord {labels=None; t
 let efunref cid fty = {e=EVar cid; ety=fty; espan=Span.default; exp_annot=None}
 let erecord labels es = {e=ERecord {labels=Some labels; es}; ety=trecord labels (List.map (fun (e:exp) -> e.ety) es); espan=Span.default; exp_annot=None}
 let etuple es = {e=ERecord {labels=None; es}; ety=ttuple (List.map (fun (e:exp) -> e.ety) es); espan=Span.default; exp_annot=None}
-
 let eop op es = {e=EOp (op, es); ety=ty TBool; espan=Span.default; exp_annot=None}
+let eval value = {e=EVal value; ety=value.vty; espan=Span.default; exp_annot=None}
+let ecall f es = {e=ECall (f, es); ety=f.ety; espan=Span.default; exp_annot=None}
+
+let string_to_value (s:string) =
+  let chars = List.of_seq (String.to_seq s) in
+  let vchars = List.map (fun c -> vint (Char.code c) 8) chars in
+  let vstr = vtup vchars in
+  {vstr with vty={vstr.vty with ty_annot=None;}}
+;;
+let value_to_string (v:value) =
+  match v.v with
+  | VRecord {labels=None; es} ->
+    let charints = List.map 
+      (fun v -> 
+        match v.v with 
+          | VInt({value}) -> value
+          | _ -> failwith "strings are encoded as int tuples") 
+      es 
+    in
+    let chars = List.map (fun i -> Char.chr i) charints in
+    String.of_seq (List.to_seq chars)
+  | _ -> failwith "strings are encoded as int tuples"
+;;
