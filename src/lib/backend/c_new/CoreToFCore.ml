@@ -17,16 +17,16 @@ end
 (* ops that are calls to builtins in FCore:
     flood
     printf
-    event generation functions
-    "update cell" -- a placeholder representing an update to a memory address
     Payload.skip
     Payload.peek
     Payload.read
+    Array.*
+    PairArray.*
+    Sys.*
 *)
 let cid s = s |> Id.create |> Cid.id
 let err = Console.error ;;
 
-(* small helpers to transform representations *)
 (* a singleton size is an int; 
    a list of sizes is a tuple *)
 let size_to_ty = function 
@@ -181,11 +181,11 @@ and translate_value (value : C.value) : F.value =
 ;;
 
 (*** expressions ***)
-let rec translate_e (e : C.e) ety : F.e = 
-  match ety, e with 
-  | _, C.EVal(v) -> F.EVal(translate_value v)
-  | _, C.EVar(c) -> F.EVar(c)
-  | _, C.EOp(op, es) -> F.EOp(translate_op op, List.map translate_exp es)
+let rec translate_exp (exp : C.exp) : F.exp = 
+  let exp' = match exp.ety, exp.e with 
+  | _, C.EVal(v) -> (F.eval (translate_value v))
+  | _, C.EVar(c) -> F.local_var c (translate_ty exp.ety)
+  | _, C.EOp(op, es) -> F.eop (translate_op op) (List.map translate_exp es)
   | ret_ty, C.ECall(cid, es, _) -> 
     (* reconstruct the functions assumed type based on arg and expression types *)
     let arg_tys = List.map (fun e -> e.C.ety) es in
@@ -195,10 +195,10 @@ let rec translate_e (e : C.e) ety : F.e =
       F.FNormal
     in
     let fexp = F.efunref cid fty in
-    F.ECall(fexp, List.map translate_exp es)
+    F.ecall fexp (List.map translate_exp es)
   | _, EHash((Sz size), es) -> 
     (* hash is an op in F *)
-    F.EOp(F.Hash(F.sz size), List.map translate_exp es)
+    F.eop (F.Hash(F.sz size)) (List.map translate_exp es)
   | _, EHash(_, _) -> err "Hash size should be a singleton"
   | ret_ty, EFlood(port_exp) -> 
     (* flood is a call to a builtin *)
@@ -206,27 +206,24 @@ let rec translate_e (e : C.e) ety : F.e =
     let ret_ty = translate_ty ret_ty in
     let fty = F.tfun arg_tys ret_ty F.FNormal in
     let fexp = F.efunref (Cid.create ["flood"]) fty in
-    F.ECall(fexp, [translate_exp port_exp])
+    F.ecall fexp [translate_exp port_exp]
   | _, ERecord(label_exp_pairs) -> 
     let labels, es = List.split label_exp_pairs in
     let es = List.map translate_exp es in
-    (F.erecord labels es).e
+    (F.erecord labels es)
   | _, ETuple(exps) -> 
     let es = List.map translate_exp exps in
-    (F.etuple es).e
+    (F.etuple es)
   | _, EProj(rec_exp, label) -> 
     (* project is an op *)
-    (F.eop (F.Project(label)) [translate_exp rec_exp]).e
-and translate_exp (exp : C.exp) : F.exp = 
-  {
-    e = translate_e exp.e exp.ety;
-    ety = translate_ty exp.ety;
-    espan = exp.espan;
-    exp_annot =(match exp.e with 
-      | ECall(_, _, is_unordered) -> Some(F.ECallUnordered(is_unordered))
-      | _ -> None);
-  }
-
+    (F.eop (F.Project(label)) [translate_exp rec_exp])
+  in
+  let annot = match exp.e with 
+    | ECall(_, _, is_unordered) -> Some(F.ECallUnordered(is_unordered))
+    | _ -> None
+  in
+  {exp' with exp_annot = annot}
+;;
 let translate_pat (pat:C.pat) : F.pat = 
   match pat with 
   | PBit(ints) -> F.PVal(F.vpat ints)
@@ -333,7 +330,7 @@ let translate_memop (m : CoreSyntax.memop) =
           let enewval = translate_exp eval in
           Some(F.eif econd enewval ecurval)
       in 
-      let (cell1_var : F.exp) = F.evar (List.nth args 0 |> fst |> Cid.id) ret_ty in
+      let (cell1_var : F.exp) = F.local_var (List.nth args 0 |> fst |> Cid.id) ret_ty in
       (* cell2 is a local if there are only 3 args *)
       let cell2_id = match n_args with 
         | 3 -> cid "cell2"
@@ -348,14 +345,14 @@ let translate_memop (m : CoreSyntax.memop) =
         | 4 -> None
         | _ -> err "wrong number of args for memop"
       in
-      let cell2_var = F.evar cell2_id ret_ty in
+      let cell2_var = F.local_var cell2_id ret_ty in
       (* the return variable is always a local *)
       let ret_id  = cid "ret" in
       let ret_init = 
         let init_val = F.eval (F.vint_ty 0 ret_ty) in
         Some(F.elocal ret_id ret_ty init_val)
       in
-      let ret_var = F.evar ret_id ret_ty in
+      let ret_var = F.local_var ret_id ret_ty in
 
       (* the body is a sequence of assignments, some optional *)
       let update_exps = List.filter_map (fun x -> x ) [

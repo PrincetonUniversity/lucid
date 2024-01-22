@@ -61,7 +61,7 @@ and branch = pat list * exp
 
 and e = 
   | EVal of value
-  | EVar of cid
+  | EVar of cid * bool (* true if mutable *)
   | ERecord of {labels : id list option; es : exp list;}
   | EClosure of {env : (id * exp) list; params: params; fexp : exp;}
   | ECall of exp * exp list
@@ -86,25 +86,27 @@ type d =
   | DEvent of event_def (* declare an event, which is a constructor for the datatype TEvent *)
   | DExt of d_ext         (* a declaration from an extended AST*)
 
-    (*
-      construct a global: exp is a call to a builtin constructor
-        let (myarr : Array.t<int>) = Array.create(...);
-      declare a function or handler: exp is an EClosure (i.e., a function definition)
-        let (foo : TFun<handler, (int, int -> ())) = fun arg1 arg2 -> foo_body;
-      declare an extern variable or function: no exp
-        let (extern_do_foo : TFun<function, int -> int);)
-      declare an event: exp 
-      let (foo : event) = ???
-      
-      declare a type: 
-        type some_struct = {x : int; y : int};
-
-      
-    *)
 
 type fdecl = {d:d; dspan : sp; d_annot : decl_annot option;}
 type fdecls = fdecl list
 
+
+
+(*
+  construct a global: exp is a call to a builtin constructor
+    let (myarr : Array.t<int>) = Array.create(...);
+  declare a function or handler: exp is an EClosure (i.e., a function definition)
+    let (foo : TFun<handler, (int, int -> ())) = fun arg1 arg2 -> foo_body;
+  declare an extern variable or function: no exp
+    let (extern_do_foo : TFun<function, int -> int);)
+  declare an event: exp 
+  let (foo : event) = ???
+  
+  declare a type: 
+    type some_struct = {x : int; y : int};
+
+  
+*)
 
 (* constructors *)
 (* type constructors *)
@@ -174,12 +176,14 @@ let value_to_string (v:value) =
 
 (* expression constructors *)
 let exp e ety espan = {e; ety; espan; exp_annot=None}
-let efunref cid fty = {e=EVar cid; ety=fty; espan=Span.default; exp_annot=None}
+let efunref cid fty = {e=EVar (cid, false); ety=fty; espan=Span.default; exp_annot=None}
 let erecord labels es = {e=ERecord {labels=Some labels; es}; ety=trecord labels (List.map (fun (e:exp) -> e.ety) es); espan=Span.default; exp_annot=None}
 let etuple es = {e=ERecord {labels=None; es}; ety=ttuple (List.map (fun (e:exp) -> e.ety) es); espan=Span.default; exp_annot=None}
 let eop op es = {e=EOp (op, es); ety=ty TBool; espan=Span.default; exp_annot=None}
 let eval value = {e=EVal value; ety=value.vty; espan=Span.default; exp_annot=None}
-let evar id ty = {e=EVar id; ety=ty; espan=Span.default; exp_annot=None}
+let evar mut id ty = {e=EVar(id, mut); ety=ty; espan=Span.default; exp_annot=None}
+let local_var id ty = evar true id ty
+let const_var id ty = evar false id ty
 let eunit () = eval (vunit ())
 let ecall f es = {e=ECall (f, es); ety=f.ety; espan=Span.default; exp_annot=None}
 let efun_kind func_kind params fexp = {e=EClosure {env=[]; params; fexp}; ety=tfun (List.map snd params) fexp.ety func_kind; espan=Span.default; exp_annot=None}
@@ -220,3 +224,9 @@ let dty_ext tycid = decl (DTy(tycid, None)) Span.default
 
 (* event declarations *)
 let devent id evnum params is_parsed = decl (DEvent {evid=id; evnum; evparams=params; is_parsed}) Span.default
+
+
+(* traversal utils *)
+
+
+(* let rec exp_map (map_f : exp -> exp) exp =  *)
