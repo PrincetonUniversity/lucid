@@ -531,8 +531,12 @@ let rec equiv_stmt s1 s2 =
   | _ -> false
 
 and equiv_branch (ps1, s1) (ps2, s2) =
-  equiv_list equiv_pat ps1 ps2 && equiv_stmt s1 s2
+  let res = equiv_list equiv_pat ps1 ps2 && equiv_stmt s1 s2 in 
+  if not res then 
+    Console.error@@"[equiv_branch] branches not equivalent";
+  res
 ;;
+
 
 (* bit pattern helpers, for interp *)
 let int_to_bitpat n len =
@@ -582,6 +586,12 @@ let rec sequence_stmts lst =
   | [hd] -> hd
   | hd :: tl -> sseq hd (sequence_stmts tl)
 ;;
+let rec flatten_stmt (stmt : statement) : statement list = 
+  match stmt.s with 
+  | SSeq(s1, s2) -> (flatten_stmt s1) @ (flatten_stmt s2)
+  | _ -> [stmt]
+;;
+
 
 let exp_to_cid exp =
   match exp.e with

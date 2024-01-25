@@ -110,6 +110,7 @@
    immutableConditions
    uniqueSpans
    uniqueIds
+   ParsersToStatements
    interpHelpers
    miscUtils
    packageTofinoApp
@@ -171,6 +172,7 @@
    FCoreSyntax
    FCorePrinting
    CoreToFCore
+   FCoreToCore
    CPasses
 
 

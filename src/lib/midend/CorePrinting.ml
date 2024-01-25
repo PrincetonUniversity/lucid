@@ -394,7 +394,7 @@ let rec parser_action_to_string action =
   | PAssign (id, exp) ->
     Printf.sprintf "%s = %s;" (cid_to_string id) (exp_to_string exp)
   | PRead (id, ty, exp) ->
-    Printf.sprintf "%s %s = %s;" (ty_to_string ty) (cid_to_string id) (exp_to_string exp)
+    Printf.sprintf "%s %s = read(%s);" (ty_to_string ty) (cid_to_string id) (exp_to_string exp)
     (* Printf.sprintf "read %s : %s;" (cid_to_string id) (ty_to_string ty) *)
   | PPeek (id, ty, exp) -> 
     Printf.sprintf "%s %s = %s;" (ty_to_string ty) (cid_to_string id) (exp_to_string exp)

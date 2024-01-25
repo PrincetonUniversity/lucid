@@ -1,0 +1,24 @@
+type eth = { int<48> dstMac; int<48> srcMac; int<16> etherTy; }
+type ip =  { int srcIp; int dstIp; int srcPort; int dstPort; }
+
+event background(int<16> x) { printf("%d", x); }
+packet event eth(eth e) { generate background(e#etherTy); }
+packet event eth_ip(eth e, ip ip, Payload.t payload) { generate background(e#etherTy); }
+
+parser parse_ip(bitstring pkt, eth e) {
+  ip ip = read(pkt);
+  generate eth_ip(e, ip, Payload.parse(pkt));
+}
+const int<16> IP_ETHERTY = 0x0800;
+
+parser main(bitstring pkt) {
+  eth e = read(pkt);
+  match e#etherTy with
+  | LUCID_ETHERTY -> { do_lucid_parsing(pkt); }
+  | IP_ETHERTY -> { parse_ip(pkt, e); }
+  | 0 -> { drop; }
+  | _ -> {
+      e#etherTy = 0x9999;
+      generate eth(e);
+  }
+}

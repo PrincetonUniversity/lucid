@@ -40,6 +40,7 @@ let stringify_action_constructor_names ds =
 let process_prog ds =
   print_if_verbose "-------Translating to core syntax---------";
   let ds = SyntaxToCore.translate_prog ds in
+  (* let ds = ParsersToStatements.test_parser_desugaring ds in *)
   (* let ds = stringify_action_constructor_names ds in *)
   print_if_debug ds;
   let ds =
