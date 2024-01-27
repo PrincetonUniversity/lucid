@@ -537,6 +537,38 @@ and equiv_branch (ps1, s1) (ps2, s2) =
   res
 ;;
 
+let equiv_bool_assign (b1, e1) (b2, e2) = 
+  Id.equal b1 b2 && equiv_exp e1 e2
+;;
+
+let equiv_conditional_return (e1, e2) (e1', e2') = 
+  equiv_exp e1 e1' && equiv_exp e2 e2'
+;;
+
+
+let equiv_memop_body mb1 mb2 = 
+  match (mb1, mb2) with 
+  | (MBReturn e1, MBReturn e2) -> equiv_exp e1 e2
+  | (MBIf (e1, e2, e3), MBIf (e1', e2', e3')) -> 
+    equiv_exp e1 e1' && equiv_exp e2 e2' && equiv_exp e3 e3'
+  | (MBComplex(c1), MBComplex(c2)) -> 
+  begin
+       equiv_options equiv_bool_assign c1.b1 c2.b1
+    && equiv_options equiv_bool_assign c1.b2 c2.b2
+    && equiv_options equiv_conditional_return (fst c1.cell1) (fst c2.cell1)
+    && equiv_options equiv_conditional_return (snd c1.cell1) (snd c2.cell1)
+    && equiv_options equiv_conditional_return (fst c1.cell2) (fst c2.cell2)
+    && equiv_options equiv_conditional_return (snd c1.cell2) (snd c2.cell2)
+    && equiv_options equiv_conditional_return c1.ret c2.ret
+  end
+  | _ -> false
+;;
+
+let equiv_memop (m1 : memop) (m2 : memop) = 
+  Id.equal m1.mid m2.mid
+  && equiv_list equiv_ty (List.map snd m1.mparams) (List.map snd m2.mparams)
+  && equiv_memop_body m1.mbody m2.mbody
+;;
 
 (* bit pattern helpers, for interp *)
 let int_to_bitpat n len =

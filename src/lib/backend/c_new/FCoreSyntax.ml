@@ -71,7 +71,7 @@ and e =
   | EVal of value
   | EVar of cid * bool (* true if mutable *)
   | ERecord of {labels : id list option; es : exp list;}
-  | ECall of exp * exp list
+  | ECall of exp * exp list * bool
   | EOp of op * exp list 
   | EEvent of {event_id : id; args : exp list;}
   | EClosure of {env : (id * exp) list; params: params; fexp : exp;}
@@ -213,7 +213,12 @@ let evar mut id ty = {e=EVar(id, mut); ety=ty; espan=Span.default; exp_annot=[]}
 let local_var id ty = evar true id ty
 let const_var id ty = evar false id ty
 let eunit () = eval (vunit ())
-let ecall f es = {e=ECall (f, es); ety=f.ety; espan=Span.default; exp_annot=[]}
+let ecall f es unordered_flag = 
+  let rty = match f.ety.raw_ty with 
+    | TFun {ret_ty; _} -> ret_ty
+    | _ -> failwith "ecall: expected function type"
+  in
+  {e=ECall (f, es, unordered_flag); ety=rty; espan=Span.default; exp_annot=[]}
 let efun_kind func_kind params fexp = {e=EClosure {env=[]; params; fexp}; ety=tfun_kind (List.map snd params) fexp.ety func_kind; espan=Span.default; exp_annot=[]}
 let efun = efun_kind FNormal
 let eaction = efun_kind FAction
@@ -222,7 +227,16 @@ let eaction = efun_kind FAction
 let egen_self ev = 
   let gen_ty = tfun [tevent] (tunit ()) in
   ecall (efunref (Cid.create ["generate_self"]) gen_ty) [ev]
-let egen loc ev = ecall (efunref (Cid.create ["generate"]) (tfun [tevent] (tunit ()))) [loc; ev]
+let egen_switch loc ev = 
+  ecall (efunref (Cid.create ["generate_switch"]) (tfun [tevent] (tunit ()))) [loc; ev]
+;;
+let egen_group loc ev = 
+  ecall (efunref (Cid.create ["generate_group"]) (tfun [tevent] (tunit ()))) [loc; ev]
+;;
+let egen_port loc ev = 
+  ecall (efunref (Cid.create ["generate_port"]) (tfun [tevent] (tunit ()))) [loc; ev]
+
+(* let egen loc ev = ecall (efunref (Cid.create ["generate"]) (tfun [tevent] (tunit ()))) [loc; ev] *)
 
 
 (* let emultiassign ids tys new_vars rhs_exp = exp (EAssign {ids; tys; new_vars; exp=rhs_exp}) (ty TUnit) Span.default *)
@@ -241,7 +255,9 @@ let slocal id ty exp = smultiassign [id] [ty] true exp
 let sassign id exp = smultiassign [id] [exp.ety] false exp
 let sif cond s_then s_else = s (SIf(cond, s_then, s_else)) Span.default
 let smatch match_exp branches = s (SMatch(match_exp, branches)) Span.default
-let sseq s1 s2 = s (SSeq(s1, s2)) (Span.extend s1.sspan s2.sspan)
+let sseq s1 s2 = 
+  let span = try Span.extend s1.sspan s2.sspan with _ -> Span.default in
+  s (SSeq(s1, s2)) span
 let snoop = s SNoop Span.default
 let sunit exp = s (SUnit exp) Span.default
 let sret_none = s (SRet None) Span.default

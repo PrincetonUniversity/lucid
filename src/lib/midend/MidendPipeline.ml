@@ -40,8 +40,12 @@ let stringify_action_constructor_names ds =
 let process_prog ds =
   print_if_verbose "-------Translating to core syntax---------";
   let ds = SyntaxToCore.translate_prog ds in
-  (* let ds = ParsersToStatements.test_parser_desugaring ds in *)
+  (* let ds = Despecialization.test_parser_despecialization ds in *)
+  (* let ds = Despecialization.test_memop_despecialization ds in *)
   (* let ds = stringify_action_constructor_names ds in *)
+  (* uncomment to test if core -> fcore -> core is correct *)
+  (* let fds = CoreToFCore.translate_prog ds in
+  let ds = FCoreToCore.translate_prog fds in *)
   print_if_debug ds;
   let ds =
     if cfg.partial_interp

@@ -175,7 +175,7 @@ let rec translate_exp (exp : C.exp) : F.exp =
   | _, C.EVal(v) -> (F.eval (translate_value v))
   | _, C.EVar(c) -> F.local_var c (translate_ty exp.ety)
   | _, C.EOp(op, es) -> F.eop (translate_op op) (List.map translate_exp es)
-  | ret_ty, C.ECall(cid, es, _) -> 
+  | ret_ty, C.ECall(cid, es, unordered_flag) -> 
     (* reconstruct the functions assumed type based on arg and expression types *)
     let arg_tys = List.map (fun e -> e.C.ety) es in
     let fty = F.tfun 
@@ -183,7 +183,7 @@ let rec translate_exp (exp : C.exp) : F.exp =
       (translate_ty ret_ty)
     in
     let fexp = F.efunref cid fty in
-    F.ecall fexp (List.map translate_exp es)
+    F.ecall fexp (List.map translate_exp es) unordered_flag
   | _, EHash((Sz size), es) -> 
     (* hash is an op in F *)
     F.eop (F.Hash(F.sz size)) (List.map translate_exp es)
@@ -194,7 +194,7 @@ let rec translate_exp (exp : C.exp) : F.exp =
     let ret_ty = translate_ty ret_ty in
     let fty = F.tfun arg_tys ret_ty in
     let fexp = F.efunref (Cid.create ["flood"]) fty in
-    F.ecall fexp [translate_exp port_exp]
+    F.ecall fexp [translate_exp port_exp] true
   | _, ERecord(label_exp_pairs) -> 
     let labels, es = List.split label_exp_pairs in
     let es = List.map translate_exp es in
@@ -210,21 +210,21 @@ let rec translate_exp (exp : C.exp) : F.exp =
   | ECall(_, _, true) -> [F.annot "unordered"]
   | _ -> []
   in
-  {exp' with exp_annot = annot}
+  {exp' with exp_annot = annot; espan = exp.espan}
 ;;
-let translate_pat (pat:C.pat) : F.pat = 
+let translate_pat (pat:C.pat)  (pat_sz : int) : F.pat = 
   match pat with 
   | PBit(ints) -> F.PVal(F.vpat ints)
   | C.PNum(z)  -> F.PVal(F.vint_unsized (Z.to_int z))
   | PEvent(cid, params) -> 
     let params = List.map (fun (id, ty) -> id, translate_ty ty) params in
     F.PEvent{event_id=cid; params;}
-  | PWild -> err "wildcard patterns should be translated 
-    into wildcard bitstrings before translation into IR"
+  | PWild ->
+    F.PVal(F.vpat (List.init pat_sz (fun _ -> -1)))
 ;;
 
 let rec translate_statement (stmt:C.statement) : F.statement = 
-  match stmt.s with 
+  let stmt' = match stmt.s with 
   | C.SNoop -> F.snoop |> F.swrap stmt.sspan
   | C.SUnit(exp) -> translate_exp exp |> F.sunit |> F.swrap stmt.sspan
   | C.SAssign(id, exp) -> 
@@ -239,7 +239,7 @@ let rec translate_statement (stmt:C.statement) : F.statement =
     let ret_ty = F.ty@@TUnit in
     let fty = F.tfun arg_tys ret_ty in
     let fexp = F.efunref (Cid.create ["printf"]) fty in
-    let print_call = F.ecall fexp args in
+    let print_call = F.ecall fexp args true in
     F.sunit print_call |> F.swrap stmt.sspan
   | C.SIf(exp, stmt1, stmt2) -> 
     let exp = translate_exp exp in
@@ -247,23 +247,41 @@ let rec translate_statement (stmt:C.statement) : F.statement =
     let stmt2 = translate_statement stmt2 in
     F.sif exp stmt1 stmt2 |> F.swrap stmt.sspan
   | C.SGen(GSingle(None), ev) -> 
-    F.egen_self (translate_exp ev) |> F.sunit |> F.swrap stmt.sspan
-  | C.SGen(GSingle(_), _) -> err "generate to switch addresses not supported"
-  | C.SGen(GPort(port), ev) 
+    F.egen_self (translate_exp ev) true |> F.sunit |> F.swrap stmt.sspan
+  | C.SGen(GSingle(Some(loc)), ev) -> 
+    F.egen_switch (translate_exp loc) (translate_exp ev) true |> F.sunit |> F.swrap stmt.sspan
+  | C.SGen(GPort(port), ev) -> 
+    F.egen_port (translate_exp port) (translate_exp ev) true |> F.sunit |> F.swrap stmt.sspan
   | C.SGen(GMulti(port), ev) -> 
-    F.egen (translate_exp port) (translate_exp ev) |> F.sunit |> F.swrap stmt.sspan
+    F.egen_group (translate_exp port) (translate_exp ev) true |> F.sunit |> F.swrap stmt.sspan
   | C.SSeq(s1, s2) -> 
     F.sseq (translate_statement s1) (translate_statement s2) |> F.swrap stmt.sspan
   | C.SMatch(exps, branches) -> 
+    let pat_lens = List.map (fun (exp : C.exp) -> 
+      InterpHelpers.intwidth_from_raw_ty exp.ety.raw_ty)
+      exps 
+    in    
     let exps = List.map translate_exp exps in
     (* if there's more than one expression, wrap it in a tuple *)
     let exp = match exps with 
       | [exp] -> exp
       | exps -> F.etuple exps
     in
+    (* we have to expand a single wildcard into multiple wildcards *)
+    let num_pats = List.length pat_lens in
+    let rec extend_single_wild_pats branches = 
+      match branches with 
+      | [] -> []
+      | ([C.PWild], stmt)::branches when num_pats > 1 -> 
+        let new_pats = List.init num_pats (fun _ -> C.PWild) in
+        let branches = extend_single_wild_pats branches in
+        (new_pats, stmt)::branches
+      | branch::branches -> branch::(extend_single_wild_pats branches)
+    in
+    let branches = extend_single_wild_pats branches in
     let branches = List.map 
       (fun (pats, stmt) -> 
-        let pats = List.map translate_pat pats in
+        let pats = List.map2 translate_pat pats pat_lens in
         let stmt = translate_statement stmt in
         (pats, F.S(stmt)))
       branches
@@ -279,140 +297,22 @@ let rec translate_statement (stmt:C.statement) : F.statement =
     in
     let exp = translate_exp exp in
     F.smultiassign cids tys new_vars exp |> F.swrap stmt.sspan
+  in
+  {stmt' with sspan = stmt.sspan}
 ;;
 
 let translate_memop (m : CoreSyntax.memop) = 
-  let args = List.map (fun (id, ty) -> id, translate_ty ty) m.mparams in
-  (* construct the function type *)
-  let ret_ty = match args with 
-    | [] -> err "a memop must have arguments"
-    | (_, ty)::_ -> ty
-  in
-  (* construct the function body *)
-  let body = match m.mbody, List.length args with 
-    | C.MBReturn(exp), _ -> translate_exp exp |> F.sret
-    | C.MBIf(expc, expl, expr), _ -> 
-      F.sif (translate_exp expc) (translate_exp expl |> F.sret) (translate_exp expr |> F.sret)
-    | C.MBComplex(body), n_args -> 
-      let bool_update_stmt = function 
-        | None -> None 
-        | Some(id, exp) -> 
-          let exp = translate_exp exp in
-          Some(F.slocal (Cid.id id) exp.ety exp)
-      in 
-      let cell_update_stmt cell_cid = function 
-        | None -> None 
-        | Some(econd, eval) -> 
-          let econd = translate_exp econd in
-          let enewval = translate_exp eval in
-          Some(F.sif econd (F.sassign cell_cid enewval) F.snoop)
-      in 
-      let cell1_id = List.nth args 0 |> fst |> Cid.id in
-      (* let (cell1_var : F.exp) = F.slocal (List.nth args 0 |> fst |> Cid.id) ret_ty in *)
-      (* cell2 is a local if there are only 3 args *)
-      let cell2_id = match n_args with 
-        | 3 -> cid "cell2"
-        | 4 -> Cid.id (List.nth args 1 |> fst)
-        | _ -> err "wrong number of args for memop"
-      in
-      (* cell2 might need to be initialized *)
-      let cell2_init = match n_args with 
-        | 3 -> 
-          let init_val = F.eval (F.vint_ty 0 ret_ty) in
-          Some(F.slocal cell2_id ret_ty init_val)
-        | 4 -> None
-        | _ -> err "wrong number of args for memop"
-      in
-      (* the return variable is always a local and uninitialized *)
-      let ret_id  = cid "ret" in
-      let ret_init = 
-        let init_val = F.eval (F.vint_ty 0 ret_ty) in
-        Some(F.slocal ret_id ret_ty init_val)
-      in
-
-      (* the body is a sequence of assignments, some optional *)
-      let update_exps = List.filter_map (fun x -> x ) [
-        cell2_init;
-        ret_init;
-        bool_update_stmt body.b1;
-        bool_update_stmt body.b2;
-        cell_update_stmt cell1_id (fst body.cell1);
-        cell_update_stmt cell1_id (snd body.cell1);
-        cell_update_stmt cell2_id (fst body.cell2);
-        cell_update_stmt cell2_id (snd body.cell2);
-        cell_update_stmt ret_id body.ret;
-      ]      
-      in
-      let body = List.fold_left 
-        (fun acc exp -> F.sseq acc exp) 
-          (List.hd update_exps)
-          (List.tl update_exps)
-      in
-      let eret = F.evar false ret_id ret_ty in
-      F.sseq body (F.sret eret)
-    in 
-    (* construct the function *)
-    F.dmemop m.mid ret_ty args body
-;;
-
-(*** parser translation ***)
-let rec translate_parser_action (pa : C.parser_action) =
-  match pa with 
-  | PRead(cid, ty, exp) -> 
-    let exp = translate_exp exp in
-    F.slocal cid (translate_ty ty) exp
-  | PPeek(cid, ty, exp) -> 
-    let exp = translate_exp exp in
-    F.slocal cid (translate_ty ty) exp
-  | PSkip(ty) -> 
-    let skip_arg = F.eval (F.vint_ty 0 (translate_ty ty)) in
-    let skip_funref = F.efunref (Cid.create ["Payload"; "skip"]) (F.tfun [] (translate_ty ty)) in
-    F.ecall skip_funref [skip_arg] |> F.sunit
-  | PAssign(cid, exp) -> 
-    let exp = translate_exp exp in
-    F.sassign cid exp
-  | PLocal(cid, ty, exp) -> 
-    let exp = translate_exp exp in
-    F.slocal cid (translate_ty ty) exp
-and translate_parser_branch ((pats, parser_block) : C.parser_branch) : F.branch = 
-  let pats = List.map translate_pat pats in
-  let block_exp = F.S(translate_parser_block parser_block) in
-  (pats, block_exp)
-
-and translate_parser_step (pstep : C.parser_step) = 
-  match pstep with 
-  | PMatch([exp], branches) -> 
-    let exp = translate_exp exp in
-    let branches = List.map translate_parser_branch branches in
-    F.smatch exp branches
-  | PMatch(exps, branches) -> 
-    let exps = List.map translate_exp exps in
-    let exp = F.etuple exps in
-    let branches = List.map translate_parser_branch branches in
-    F.smatch exp branches
-  | PGen(event_exp) -> 
-    F.egen_self (translate_exp event_exp) |> F.sunit
-  | PCall(call_exp) -> 
-    (* its a tail call, so there's no return *)
-    translate_exp call_exp |> F.sunit
-  (* drop is a call to a unit -> unit function *)
-  | PDrop -> F.ecall (F.efunref (Cid.create ["drop"]) (F.tfun [F.tunit ()] (F.tunit ()))  ) [] |> F.sunit
-
-and translate_parser_block (pb : C.parser_block) = 
-  let action_stmts = List.map (fun (a, span) -> translate_parser_action a |> F.swrap span) pb.pactions in
-  let step_stmt = translate_parser_step (fst pb.pstep) |> F.swrap (snd pb.pstep) in
-  let stmts = action_stmts @ [step_stmt] in
-  let rec seq_stmts = function 
-    | [] -> err "empty parser block"
-    | [stmt] -> stmt
-    | stmt::stmts -> F.sseq stmt (seq_stmts stmts)
-  in
-  seq_stmts stmts
+  let (id, params, body) = Despecialization.despecialize_memop m in
+  (* return type is the same as the parameter type *)
+  let rty = (List.hd params |> snd) in
+  (* translate this as a function, but with type FMemop *)
+  F.dmemop id (translate_ty rty) (translate_params params) (translate_statement body)
 ;;
 
 let translate_decl (decl:C.decl) : F.fdecl = 
-  match decl.d with 
+ let decl' =  match decl.d with 
   | C.DGlobal(id, ty, exp) -> F.dglobal id (translate_ty ty) (translate_exp exp)
+  | DExtern(id, ty) -> F.dextern id (translate_ty ty)
   | C.DEvent((evid, evnum_opt,ev_sort, params)) -> 
     let is_parsed = match ev_sort with 
       | C.EPacket -> true 
@@ -430,7 +330,6 @@ let translate_decl (decl:C.decl) : F.fdecl =
       | _ -> decl
   end
   | DMemop(memop) -> translate_memop memop
-  | DExtern(id, ty) -> F.dextern id (translate_ty ty)
   | DUserTy(id, ty) -> F.dty (Cid.id id) (translate_ty ty)
   | DActionConstr(acn_constr) -> 
     (* first, build the inner action function *)
@@ -456,9 +355,15 @@ let translate_decl (decl:C.decl) : F.fdecl =
         option 2 is more complicated, and I think it boils down to something 
         like option 1. *)
   | DParser(id, params, parser_block) -> 
-    F.dparser id (F.tunit ()) (translate_params params) (translate_parser_block parser_block)
+    (* despecialize parser with Core pass *)
+    let parse_stmt = Despecialization.despecialize_parser_block parser_block in
+    (* translate the statement *)
+    F.dparser id (F.tunit ()) (translate_params params) (translate_statement parse_stmt)
   | DFun(id, rty, (params, body)) -> 
     F.dfun id (translate_ty rty) (translate_params params) (translate_statement body)
+  in
+  {decl' with dspan = decl.dspan}
+    
 ;;
 let translate_prog (ds : C.decls) : F.fdecls = 
   List.map translate_decl ds

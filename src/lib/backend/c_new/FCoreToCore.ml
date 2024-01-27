@@ -34,8 +34,8 @@ let rec translate_raw_ty (raw_ty : F.raw_ty) : C.raw_ty =
   | F.TBool -> C.TBool
   | F.TInt(F.SConst sz) -> C.TInt(C.Sz sz)
   | F.TEvent -> C.TEvent
-  | F.TBits{ternary=true; len=F.SConst sz} -> C.TBits(C.Sz sz)
-  | F.TBits{ternary=false; len=F.SConst sz} -> C.TPat(C.Sz sz)
+  | F.TBits{ternary=true; len=F.SConst sz} -> C.TPat(C.Sz sz)
+  | F.TBits{ternary=false; len=F.SConst sz} -> C.TBits(C.Sz sz)
   | F.TBits{len=_} -> err "bitpattern with unspecified length"
   (* This _should_ be true. Also, group types should be removed from core syntax anyway *)
   | F.TInt(F.SPlatformDependent) -> err "platform dependent int type"
@@ -195,6 +195,9 @@ and translate_event_val (ev : F.vevent) : C.event_val =
   }
 ;;
 
+(* define an error for the case of "generate_self" *)
+
+exception MadeStatement of C.s
 let rec translate_exp (exp: F.exp) = 
   match exp.e with
   | F.EVal(value) -> 
@@ -219,20 +222,44 @@ let rec translate_exp (exp: F.exp) =
     let label_exp_pairs = List.combine labels es in
     C.aexp (C.ERecord(List.map (fun (label, exp) -> (label, translate_exp exp)) label_exp_pairs)) (translate_ty exp.ety) exp.espan
   | F.EClosure _ -> err "closure expressions cannot be translated back to CoreSyntax"
-  | F.ECall({e=EVar(cid, _)}, [port_arg]) when (Cid.names cid = ["flood"]) -> 
+  | F.ECall({e=EVar(cid, _)}, [port_arg], true) when (Cid.names cid = ["flood"]) -> 
     C.aexp (C.EFlood(translate_exp port_arg)) (translate_ty exp.ety) exp.espan
-  | F.ECall({e=EVar(cid, _)}, _) when (Cid.names cid = ["generate_self"]) -> 
-    err "generate_self translates into a statement"
-    (* C.aexp (C.EFlood(translate_exp in_parser port_arg)) (translate_ty exp.ety) exp.espan *)
-  | F.ECall({e=EVar(cid, _)}, _) when (Cid.names cid = ["generate"]) -> 
-    err "generate translates into a statement"
-  | F.ECall({e=EVar(cid, _)}, eargs) -> C.aexp 
-    (C.ECall(cid, List.map (translate_exp) eargs, F.has_annot exp.exp_annot "unordred")) 
+  | F.ECall({e=EVar(cid, _)}, [ev_exp], true) when (Cid.names cid = ["generate_self"]) -> 
+    let ev_exp = translate_exp ev_exp in
+    let s = C.SGen(GSingle(None), ev_exp) in
+    raise (MadeStatement(s))
+  | F.ECall({e=EVar(cid, _)}, [port_exp; ev_exp], true) when (Cid.names cid = ["generate_port"]) -> 
+    let port_exp = translate_exp port_exp in
+    let ev_exp = translate_exp ev_exp in
+    let s = C.SGen(GPort(port_exp), ev_exp) in
+    raise (MadeStatement(s))
+  | F.ECall({e=EVar(cid, _)}, [port_exp; ev_exp], true) when (Cid.names cid = ["generate_switch"]) -> 
+    let port_exp = translate_exp port_exp in
+    let ev_exp = translate_exp ev_exp in
+    let s = C.SGen(GSingle(Some(port_exp)), ev_exp) in
+    raise (MadeStatement(s))
+  | F.ECall({e=EVar(cid, _)}, [group_exp; ev_exp], true) when (Cid.names cid = ["generate_group"]) -> 
+    let group_exp = translate_exp group_exp in
+    let ev_exp = translate_exp ev_exp in
+    let s = C.SGen(GMulti(group_exp), ev_exp) in
+    raise (MadeStatement(s))
+  | F.ECall({e=EVar(cid, _)}, str_arg::args, true) when (Cid.names cid = ["printf"]) -> 
+    let str_val = match str_arg.e with 
+      | EVal(value) -> value
+      | _ -> err "printf with non-string argument"
+    in
+    let str = F.value_to_string str_val in
+    let args = List.map (translate_exp) args in
+    let s = C.SPrintf(str, args) in
+    raise (MadeStatement(s))
+  | F.ECall({e=EVar(cid, _)}, eargs, unordered_flag) -> 
+    C.aexp 
+    (C.ECall(cid, List.map (translate_exp) eargs, unordered_flag)) 
     (translate_ty exp.ety) 
     exp.espan
   | F.EEvent{event_id; args} -> 
     C.aexp (C.ECall(Cid.id(event_id), List.map (translate_exp) args, false)) (translate_ty exp.ety) exp.espan
-  | F.ECall(_, _) -> err "call expression with non-var function"
+  | F.ECall(_, _, _) -> err "call expression with non-var function"
 
 
 and translate_pat (pat : F.pat) : C.pat = 
@@ -247,7 +274,12 @@ and translate_pat (pat : F.pat) : C.pat =
 and translate_stmt in_parser (stmt : F.statement) = 
   match in_parser, stmt.s with
   | _, SNoop -> C.statement_sp (C.SNoop) stmt.sspan
-  | _, SUnit exp -> C.statement_sp (C.SUnit(translate_exp exp)) stmt.sspan
+  | _, SUnit exp -> 
+    let s = try 
+        C.SUnit(translate_exp exp)    
+      with MadeStatement(s) -> s
+    in
+    C.statement_sp s stmt.sspan
   (* assignment *)
   | _, SAssign({ids=[cid]; tys=[ty]; new_vars=true; exp}) -> 
     C.statement_sp (C.SLocal(Cid.to_id cid, translate_ty ty, translate_exp exp)) stmt.sspan
@@ -287,21 +319,81 @@ and translate_stmt in_parser (stmt : F.statement) =
     C.statement_sp (C.SRet(exp_opt)) stmt.sspan
 ;;
 
-
-
-let translat_parser body = 
-  let body = translate_stmt true body in
-  failwith "not done"  
-
 let translate_decl (decl : F.fdecl) : C.decl = 
   match decl.d with
-  | F.DFun(F.FParser, id, _, params, Some(body)) -> (
-    let body = translate_stmt true body in
-    failwith "not done"
-
+  (* variables can be globals or externs *)
+  | F.DVar(id, ty, Some(exp)) -> 
+    let ty = translate_ty ty in
+    let exp = translate_exp exp in
+    C.decl_sp (C.DGlobal(id, ty, exp)) decl.dspan
+  | F.DVar(id, ty, None) ->
+    let ty = translate_ty ty in
+    C.decl_sp (C.DExtern(id, ty)) decl.dspan
+  | F.DEvent{evid; evnum; evparams; is_parsed} -> 
+    let ev_sort = if is_parsed then C.EPacket else C.EBackground in
+    let params = List.map (fun (id, ty) -> id, translate_ty ty) evparams in
+    C.decl_sp (C.DEvent(evid, evnum, ev_sort, params)) decl.dspan
+  (* functions can be handlers, memops, parsers, or functions *)
+  | F.DFun(F.FHandler, id, _, params, Some(body)) ->
+    let params = List.map (fun (id, ty) -> id, translate_ty ty) params in
+    let body = translate_stmt false body in
+    let d = C.DHandler(id, C.HData, (params, body)) in
+    C.decl_sp d decl.dspan
+  | F.DFun(F.FMemop, id, _, params, Some(body)) ->
+    (* translate to core, then specialize as memop *)
+    let params = List.map (fun (id, ty) -> id, translate_ty ty) params in
+    let body = translate_stmt false body in
+    let memop = Despecialization.specialize_memop id params body in
+    let d = C.DMemop(memop) in
+    C.decl_sp d decl.dspan    
+  | F.DFun(F.FParser, id, _, params, Some(body)) -> (    
+    (* translate to core, then specialize parser *)
+    let params = List.map (fun (id, ty) -> id, translate_ty ty) params in
+    let body = translate_stmt false body in
+    let parse_block = Despecialization.specialize_parser_block body in
+    C.decl_sp (C.DParser(id, params, parse_block)) decl.dspan
   )
-  | _ -> failwith "not done"
-
+  | F.DFun(F.FNormal, id, {raw_ty=TFun{func_kind=F.FAction}}, params, Some(body)) -> 
+    let const_params = List.map (fun (id, ty) -> id, translate_ty ty) params in
+    let action_params, ret_tys, action_body_exps = match body.s with 
+      | SRet(Some({e=EClosure{params; fexp;}})) -> 
+        let params = List.map (fun (id, ty) -> id, translate_ty ty) params in
+        let ret_tys = match fexp.ety.raw_ty with
+          | TRecord{labels=None; ts} -> ts
+          | _ -> [fexp.ety]
+        in
+        let action_body_exps = match fexp.e with 
+          | ERecord{labels=None; es} -> es
+          | _ -> [fexp]
+        in
+        let action_body_exps = List.map (fun exp -> translate_exp exp) action_body_exps in
+        let ret_tys = List.map translate_ty ret_tys in
+        params, ret_tys, action_body_exps
+      | _ -> failwith "error: unexpected action body in action constructor"
+    in
+    C.decl_sp (C.DActionConstr{
+      aid = id;
+      artys = ret_tys;
+      aconst_params = const_params;
+      aparams = action_params;
+      abody = action_body_exps;
+    }) decl.dspan
+  | F.DFun(F.FNormal, id, rty, params, Some(body)) ->
+    let params = List.map (fun (id, ty) -> id, translate_ty ty) params in
+    let body = translate_stmt false body in
+    let rty = translate_ty rty in
+    let d = C.DFun(id, rty, (params, body)) in
+    C.decl_sp d decl.dspan
+  | F.DFun(_, _, _, _, None) -> err "extern functions are not supported in CoreSyntax"
+  | F.DFun(_, _, _, _, _) -> err "Unknown function kind"
+  | F.DExt _ -> err "cannot translate declaration extension to core Ir"
+  (* types *)
+  | F.DTy(cid, Some(ty)) -> 
+    let ty = translate_ty ty in
+    C.decl_sp (C.DUserTy(Cid.to_id cid, ty)) decl.dspan
+  | F.DTy(_, None) -> 
+    failwith "type declaration without type definition"
+  (* events *)
 ;;
 
 let translate_prog (ds : F.fdecls) : C.decls = 

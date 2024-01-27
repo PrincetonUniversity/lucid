@@ -110,7 +110,7 @@
    immutableConditions
    uniqueSpans
    uniqueIds
-   ParsersToStatements
+   Despecialization
    interpHelpers
    miscUtils
    packageTofinoApp
