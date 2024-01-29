@@ -326,10 +326,10 @@ let translate_decl (decl : F.fdecl) : C.decl =
   | F.DVar(id, ty, None) ->
     let ty = translate_ty ty in
     C.decl_sp (C.DExtern(id, ty)) decl.dspan
-  | F.DEvent{evid; evnum; evparams; is_parsed} -> 
+  | F.DEvent{evconstrid; evconstrnum; evparams; is_parsed} -> 
     let ev_sort = if is_parsed then C.EPacket else C.EBackground in
     let params = List.map (fun (id, ty) -> id, translate_ty ty) evparams in
-    C.decl_sp (C.DEvent(evid, evnum, ev_sort, params)) decl.dspan
+    C.decl_sp (C.DEvent(evconstrid, evconstrnum, ev_sort, params)) decl.dspan
   (* functions can be handlers, memops, parsers, or functions *)
   | F.DFun(F.FHandler, id, _, params, Some(body)) ->
     let params = List.map (fun (id, ty) -> id, translate_ty ty) params in

@@ -1,3 +1,11 @@
+(* translate a frontend program into a C program *)
+
+let fcore_passes fds = 
+  (* monomorphization *)
+  Monomorphization.transform fds
+
+;;
+
 
 let compile ds = 
   (* 1. translate to core syntax *)
@@ -6,6 +14,7 @@ let compile ds =
   let ds = PartialInterpretation.interp_prog ds in
   (* 3. translate to FCore *)
   let fds = CoreToFCore.translate_prog ds in
+
   print_endline ("translation to FCore complete");
   FCorePrinting.decls_to_string fds 
   (* core_str *)

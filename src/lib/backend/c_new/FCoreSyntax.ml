@@ -1,15 +1,18 @@
 (* simpler functional IR for lucid, with extensions
    for compatability with the current CoreSyntax IR
    (Extensions should be eliminated before any further processing) *)
-type sp = Span.t
-type id = Id.t
-type cid = Cid.t
-type pragma = Pragma.t
+type id = [%import: (Id.t[@opaque])]
+and cid = [%import: (Cid.t[@opqaue])]
+and tagval = [%import: (TaggedCid.tagval[@opqaue])]
+and tcid = [%import: (TaggedCid.t[@opqaue])]
+and sp = [%import: Span.t]
 
-type size = int
-type func_kind = | FNormal | FHandler | FParser | FAction | FMemop | FExtern
 
-type op =   | And | Or | Not
+  
+and size = int
+and func_kind = | FNormal | FHandler | FParser | FAction | FMemop | FExtern
+
+and op =   | And | Or | Not
             | Eq  | Neq | Less| More | Leq | Geq
             | Neg | Plus| Sub | SatPlus | SatSub
             | BitAnd  | BitOr | BitXor | BitNot | LShift | RShift
@@ -20,7 +23,7 @@ type op =   | And | Or | Not
             | Conc
             | Project of id | Get of int (* record and tuple ops *)
 
-type raw_ty = 
+            and raw_ty = 
   | TUnit
   | TInt of size 
   | TBool 
@@ -44,7 +47,7 @@ type raw_ty =
 and func_ty = {arg_tys : ty list; ret_ty : ty; func_kind : func_kind;}
 and ty = {raw_ty:raw_ty; tspan : sp;}
 
-type params = (id * ty) list
+and params = (id * ty) list
 
 and v =
   | VUnit
@@ -58,13 +61,6 @@ and v =
 and vevent = {evid : cid; evnum : value option; evdata: value list; meta : (string * value) list;}
 and value = {v:v; vty:ty; vspan : sp;}
 
-and pat = 
-  | PVal of value
-  | PEvent of {event_id : cid; params : params;}
-and branch = pat list * branch_tgt
-and branch_tgt = 
-  | S of statement
-  | E of exp
 and e = 
   | EVal of value
   | EVar of cid * bool (* true if mutable *)
@@ -82,6 +78,7 @@ and call_kind =
   | CEvent 
 and exp = {e:e; ety:ty; espan : sp;}
 
+
 and s = 
   | SNoop
   | SUnit of exp
@@ -91,17 +88,43 @@ and s =
   | SSeq of statement * statement
   | SRet of exp option
 
+  and pat = 
+    | PVal of value
+    | PEvent of {event_id : cid; params : params;}
+  and branch = pat list * branch_tgt
+  and branch_tgt = 
+    | S of statement
+    | E of exp
+
 and statement = {s:s; sspan : sp;}
 
-type event_def = {evid : id; evnum : int option; evparams : params; is_parsed : bool}
-type d = 
+
+and event_def = {evconstrid : id; evconstrnum : int option; evparams : params; is_parsed : bool}
+and d = 
   | DVar of id * ty * (exp option) (* constants and globals, possibly externs *)
   | DFun of func_kind * id * ty * params * (statement option) (* first-order functions, possibly extern. ty is return type. *)
   | DTy  of cid * ty option (* declare named types, which may be external *)
   | DEvent of event_def (* declare an event, which is a constructor for the datatype TEvent *)
-
-type fdecl = {d:d; dspan : sp;}
-type fdecls = fdecl list
+and fdecl = {d:d; dspan : sp;}
+and fdecls = fdecl list
+[@@deriving
+  visitors
+    { name = "s_iter"
+    ; variety = "iter"
+    ; polymorphic = false
+    ; data = true
+    ; concrete = true
+    ; nude = false
+    }, 
+  visitors
+    { name = "s_map"
+    ; variety = "map"
+    ; polymorphic = false
+    ; data = true
+    ; concrete = true
+    ; nude = false
+    },
+  show]
 
 
 
@@ -272,7 +295,7 @@ let dty tycid ty = decl (DTy(tycid, Some ty)) Span.default
 let dty_ext tycid = decl (DTy(tycid, None)) Span.default
 
 (* event declarations *)
-let devent id evnum params is_parsed = decl (DEvent {evid=id; evnum; evparams=params; is_parsed}) Span.default
+let devent id evconstrnum params is_parsed = decl (DEvent {evconstrid=id; evconstrnum; evparams=params; is_parsed}) Span.default
 
 
 (* traversal utils *)

@@ -169,10 +169,12 @@
    cLibs
    cTransformations
    strUtils
+
    FCoreSyntax
    FCorePrinting
    CoreToFCore
    FCoreToCore
+   Monomorphization
    CPasses
 
 
