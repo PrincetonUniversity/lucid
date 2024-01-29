@@ -9,8 +9,8 @@ type pragma = Pragma.t
 type size = int
 type func_kind = | FNormal | FHandler | FParser | FAction | FMemop | FExtern
 
-type op =  | And | Or | Not
-            | Eq  | Neq | Less| More  | Leq | Geq
+type op =   | And | Or | Not
+            | Eq  | Neq | Less| More | Leq | Geq
             | Neg | Plus| Sub | SatPlus | SatSub
             | BitAnd  | BitOr | BitXor | BitNot | LShift | RShift
             | Slice of int * int
@@ -52,7 +52,7 @@ and v =
   | VBool of bool
   | VRecord of {labels : id list option; es : value list;}
   | VClosure of {env : (id * value) list; params: params; fexp : exp;}
-  | VTyRef of id * int * ty (* typed reference to a value memory, e.g., a global *)
+  | VTyRef of id * int * ty (* typed reference to a value memory *)
   | VBits of {ternary: bool; bits : int list;}
   | VEvent of vevent
 and vevent = {evid : cid; evnum : value option; evdata: value list; meta : (string * value) list;}
