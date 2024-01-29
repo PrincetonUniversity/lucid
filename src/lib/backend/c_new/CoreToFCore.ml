@@ -174,7 +174,11 @@ let rec translate_exp (exp : C.exp) : F.exp =
     let fexp = F.efunref cid (F.tevent) in 
     F.eevent fexp (List.map translate_exp es)
   (* if its not an event, its an ordered or unordered call *)
-  | ret_ty, C.ECall(cid, es, unordered_flag) -> (
+  | ret_ty, C.ECall(cid, es, ignores_ordering) -> (
+    (* NOTE: we lose information about whether or not the user 
+       asked us to ignore ordering constraints. If that is important later, 
+       we can add a special call kind. *)
+    let _ = ignores_ordering in (* we don't care if it ignores ordering *)
     (* reconstruct the functions assumed type based on arg and expression types *)
     let arg_tys = List.map (fun e -> e.C.ety) es in
     let fty = F.tfun 
@@ -182,9 +186,7 @@ let rec translate_exp (exp : C.exp) : F.exp =
       (translate_ty ret_ty)
     in
     let fexp = F.efunref cid fty in 
-    match unordered_flag with 
-    | true -> F.ecall_unordered fexp (List.map translate_exp es)
-    | false -> F.ecall fexp (List.map translate_exp es)
+    F.ecall fexp (List.map translate_exp es)
   )
   | _, EHash((Sz size), es) -> 
     (* hash is an op in F *)

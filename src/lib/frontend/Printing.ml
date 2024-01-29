@@ -303,11 +303,13 @@ and e_to_string e =
       ^ string_of_int (List.length es)
       ^ ") to "
       ^ op_to_string op)
-  | ECall (cid, es, unordered) ->
-    if (unordered) then 
-      Printf.sprintf "%s(%s)" (cid_to_string cid) (es_to_string es)
-    else
+  | ECall (cid, es, unordered) -> (
+    match unordered with 
+    | true -> 
       Printf.sprintf "%s<unordered>(%s)" (cid_to_string cid) (es_to_string es)
+    | false ->
+      Printf.sprintf "%s(%s)" (cid_to_string cid) (es_to_string es)
+  )
   | EHash (size, es) ->
     Printf.sprintf "hash<<%s>>(%s)" (size_to_string size) (es_to_string es)
   | EFlood e -> Printf.sprintf "flood %s" (exp_to_string e)
@@ -348,7 +350,8 @@ and e_to_string e =
     Printf.sprintf "table_match(%s);" (comma_sep exp_to_string tr.args)
   (* | EPatWild _ -> "_" *)
 
-and exp_to_string e = e_to_string e.e
+and exp_to_string exp = 
+  e_to_string exp.e
 (* ^ Printf.sprintf "[ty:%s]"
   @@ Option.map_default ty_to_string "" e.ety *)
 

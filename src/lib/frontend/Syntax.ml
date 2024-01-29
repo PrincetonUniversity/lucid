@@ -165,7 +165,7 @@ and e =
       z * size option (* Differs from VInt since size may be polymorphic *)
   | EVar of cid
   | EOp of op * exp list
-  | ECall of cid * exp list * bool (* true if its an unordered call *)
+  | ECall of cid * exp list * bool (* true means this call ignores ordering <unordered> *)
   | EHash of size * exp list
   | EFlood of exp (* Generate a group of all ports but one *)
   | ESizeCast of size * size (* Cast a size to int *)

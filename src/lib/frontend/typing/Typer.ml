@@ -128,7 +128,7 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
     
     (* if we are in unordered mode, cast everything as effectless *)
     (* let inferred_fty = if (Cmdline.cfg.unordered) then  *)
-    let inferred_fty = if (unordered) then 
+    let inferred_fty = if (unordered = true) then 
         remove_effects inferred_fty
       else inferred_fty 
     in

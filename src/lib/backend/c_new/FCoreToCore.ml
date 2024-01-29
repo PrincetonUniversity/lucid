@@ -249,12 +249,6 @@ let rec translate_exp (exp: F.exp) =
         (C.ECall(cid, eargs, false)) 
         (translate_ty exp.ety) 
         exp.espan
-    | F.CUnordered ->
-      let eargs = List.map (translate_exp) eargs in
-      C.aexp 
-        (C.ECall(cid, eargs, true)) 
-        (translate_ty exp.ety) 
-        exp.espan
     | F.CEvent -> 
       let eargs = List.map (translate_exp) eargs in
       C.aexp 

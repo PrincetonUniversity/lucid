@@ -79,7 +79,6 @@ and e =
   (* | ESeq of exp * exp *)
 and call_kind = 
   | CNormal
-  | CUnordered
   | CEvent 
 and exp = {e:e; ety:ty; espan : sp;}
 
@@ -203,7 +202,6 @@ let ecall_kind call_kind f es =
 ;;
 let ecall = ecall_kind CNormal
 let eevent = ecall_kind CEvent
-let ecall_unordered = ecall_kind CUnordered
 let efun_kind func_kind params fexp = {e=EClosure {env=[]; params; fexp}; ety=tfun_kind (List.map snd params) fexp.ety func_kind; espan=Span.default; }
 let efun = efun_kind FNormal
 let eaction = efun_kind FAction
