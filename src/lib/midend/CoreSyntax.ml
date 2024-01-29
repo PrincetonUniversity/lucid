@@ -27,7 +27,7 @@ and raw_ty =
   | TInt of size (* Number of bits *)
   | TEvent
   | TFun of func_ty (* Only used for Array/event functions at this point *)
-  | TName of cid * sizes * bool
+  | TName of cid * sizes
     (* Named type: e.g. "Array.t<<32>>". Bool is true if it represents a global type *)
   | TMemop of int * size
   | TAction of acn_ty
@@ -300,9 +300,9 @@ let ty_sp raw_ty tspan = { raw_ty; tspan }
 let ty raw_ty = { raw_ty; tspan = Span.default }
 let tint sz = ty (TInt sz)
 let tevent = ty (TEvent)
-
-
-let payload_ty = ty@@TName(Cid.create ["Payload"; "t"], [], false)
+let tname_sp cid sizes tspan = ty_sp (TName(cid, sizes)) tspan
+let tname cid sizes = tname_sp cid sizes Span.default
+let payload_ty = ty@@TName(Cid.create ["Payload"; "t"], [])
 
 let rec infer_vty v =
   match v with
@@ -456,7 +456,7 @@ let rec equiv_ty t1 t2 =
   | TGroup, TGroup -> true
   | TPat sz1, TPat sz2 -> sz1 = sz2
   | TBits sz1, TBits sz2 -> sz1 = sz2
-  | TName(n1, [], false), TName(n2, [], false) -> Cid.equal n1 n2
+  | TName(n1, []), TName(n2, []) -> Cid.equal n1 n2
   | TRecord(fields1), TRecord(fields2) ->
     List.for_all2 (fun (id1, ty1) (id2, ty2) -> Id.equal id1 id2 && equiv_ty (ty ty1) (ty ty2)) fields1 fields2
   | _ -> false

@@ -35,7 +35,7 @@ let ty_to_param pty dir =
 
 let p4header_to_tname h =
   let cid = Cid.create_ids [h.tyid] in
-  ty (TName(cid, [], false))
+  tname cid []
 ;;
 let id = Id.create;;
 (* p4 ingress intrinsics *)
@@ -215,7 +215,7 @@ let add_intrinsics ds = List.map ty_to_dextern
 
 let intrinsic_to_param intrinsic =
   intrinsic.tyid |> Id.name |> remove_trailing_t |> Id.create, 
-  ty (TName(Cid.id intrinsic.tyid, [], false))
+  tname (Cid.create_ids [intrinsic.tyid]) []
 ;;  
 
 

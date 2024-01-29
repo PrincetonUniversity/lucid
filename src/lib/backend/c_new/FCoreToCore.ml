@@ -34,11 +34,9 @@ let rec translate_raw_ty (raw_ty : F.raw_ty) : C.raw_ty =
   | F.TBits{ternary=true; len= sz} -> C.TPat(C.Sz sz)
   | F.TBits{ternary=false; len= sz} -> C.TBits(C.Sz sz)
   (* named types *)
-  | F.TPrimitive(tcid, [], false) when (Cid.equal tcid F.tgroup_cid) -> C.TGroup
-  | F.TPrimitive(ty_id, ty_args, true) -> C.TName(ty_id, List.map ty_to_size ty_args, true)
-  | F.TPrimitive(_, _::_, false)  ->  err "primitive type with arguments that's not global?"
-  | F.TPrimitive(ty_id, [], false) -> C.TName(ty_id, [], false) 
-  | F.TName(ty_id) -> C.TName(ty_id, [], false)
+  | F.TName(tcid, []) when (Cid.equal tcid F.tgroup_cid) -> C.TGroup
+  | F.TName(ty_id, []) -> C.TName(ty_id, [])
+  | F.TName(ty_id, ty_args) -> C.TName(ty_id, List.map ty_to_size ty_args)
   (* functions types for functions, action constructors, actions, and memops *)
   | F.TFun{arg_tys; ret_ty; func_kind} when (func_kind = F.FNormal) -> (
         (* if it returns an action, its an action constructor, else its a function *)

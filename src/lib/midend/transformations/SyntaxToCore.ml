@@ -50,7 +50,7 @@ let rec translate_raw_ty (rty : S.raw_ty) tspan : C.raw_ty =
       | _ -> S.error@@"[translate_raw_ty] expected 3 size arguments, each a tuple, but got something else"
     in
     C.TTable { tkey_sizes; tparam_tys; tret_tys } *)
-  | S.TName (cid, sizes, b) -> C.TName (cid, List.map translate_size sizes, b)
+  | S.TName (cid, sizes, _) -> C.TName (cid, List.map translate_size sizes)
   | S.TMemop (n, sz) -> C.TMemop (n, translate_size sz)
   | S.TFun fty ->
     C.TFun
@@ -68,7 +68,7 @@ let rec translate_raw_ty (rty : S.raw_ty) tspan : C.raw_ty =
     let tkey_sizes = C.Szs (List.map ty_to_intsize tbl.tkey_sizes) in
     let tparam_sizes = C.Szs (List.map ty_to_intsize tbl.tparam_tys) in
     let tret_sizes = C.Szs (List.map ty_to_intsize tbl.tret_tys) in
-    C.TName(Tables.t_id, [tkey_sizes; tparam_sizes; tret_sizes], true)
+    C.TName(Tables.t_id, [tkey_sizes; tparam_sizes; tret_sizes])
     (* let tparam_tys = List.map translate_ty tbl.tparam_tys in
     let tret_tys = List.map translate_ty tbl.tret_tys in
 

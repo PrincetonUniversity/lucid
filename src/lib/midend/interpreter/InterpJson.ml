@@ -239,10 +239,10 @@ let rec parse_value payloads_t_id err_str ty j =
   match j, ty.raw_ty with
   | `Int n, TInt (Sz size) -> vint n size
   (* payloads should be hex strings, but we also read ints as 32-bit uints *)
-  | `Int n, TName (cid, _, _) when Cid.equal cid payloads_t_id -> (
+  | `Int n, TName (cid, _) when Cid.equal cid payloads_t_id -> (
     BitString.int_to_bits 32 n |> CoreSyntax.vbits
   )
-  | `String s, TName (cid, _, _) when Cid.equal cid payloads_t_id -> (
+  | `String s, TName (cid, _) when Cid.equal cid payloads_t_id -> (
     BitString.hexstr_to_bits s |> CoreSyntax.vbits
   )
   | `Bool b, TBool -> vbool b

@@ -158,7 +158,7 @@ let uninline_user_types decls =
       method! visit_ty () ty = 
         match (assoc_ty ty user_ty_to_name) with 
         | None -> ty
-        | Some(ty_id) -> CoreSyntax.ty (TName(Cid.id ty_id, [], false))
+        | Some(ty_id) -> CoreSyntax.tname_sp (Cid.id ty_id) [] ty.tspan
       end
   in
   v#visit_decls () decls

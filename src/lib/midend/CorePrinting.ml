@@ -37,10 +37,10 @@ let rec raw_ty_to_string t =
   match t with
   | TBool -> "bool"
   | TInt i -> "int<<" ^ size_to_string i ^ ">>"
-  | TName (cid, sizes, b) ->
+  | TName (cid, sizes) ->
     cid_to_string cid
     ^ sizes_to_string sizes
-    ^ if cfg.verbose_types then "{" ^ string_of_bool b ^ "}" else ""
+    (* ^ if cfg.verbose_types then "{" ^ string_of_bool b ^ "}" else "" *)
   | TEvent -> "event"
   | TFun func -> func_to_string func
   | TMemop (n, size) -> Printf.sprintf "memop%d<<%s>>" n (size_to_string size)

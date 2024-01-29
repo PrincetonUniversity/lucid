@@ -63,7 +63,7 @@ let array_sizes ds : bool =
         match dec.d with
         | DGlobal
             ( id
-            , { raw_ty = TName (ty_cid, sizes, true); _ }
+            , { raw_ty = TName (ty_cid, sizes); _ }
             , { e = ECall (_, num_slots :: _, _) } ) ->
           (match Cid.names ty_cid |> List.hd with
            | "Array" ->

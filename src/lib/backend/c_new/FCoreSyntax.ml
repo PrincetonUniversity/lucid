@@ -26,19 +26,19 @@ type raw_ty =
   | TBool 
   | TRecord of {labels : id list option; ts : ty list;}
   | TFun of func_ty
-  | TName of cid (* a type reference *)
-  | TPrimitive of cid * (ty list) * bool 
-    (* A primitive type whose value 
-        depends on the given types, but is 
-        represented in a backend-dependent way. 
-       It could be something from the surface language, 
-        like "Table.t<...>", or something for a backend IR, 
-        like "Union" or "Ref".
-      - The bool is vestigal, it represents whether the type 
-        is "global" in CoreSyntax. I don't think that matters 
-        anymore at the point of CoreSyntax or this IR, but 
-        not positive yet.
-      bool indicates that it was a global in the surface syntax. *)
+  | TName of cid * (ty list)
+    (* a named type can either be:
+        1. a type variable (defined in the toplevel), 
+            which should have no arguments. 
+        2. a primitive type, which may take arguments. 
+            The primitive type is one that should be 
+            considered "built in" to the language, though 
+            it may be implemented by a module like Array or 
+            Table. Rephrased, its a type whose value representation 
+            is not defined at this point in compilation. 
+            It could be something from the surface language,
+            like "Table.t<...>", or something for a backend IR,
+            like "Union" or "Ref". *)            
   | TBits of {ternary: bool; len : size;}
   | TEvent
 and func_ty = {arg_tys : ty list; ret_ty : ty; func_kind : func_kind;}
@@ -118,11 +118,11 @@ let ttuple tys = ty (TRecord {labels=None; ts=tys})
 let tfun_kind arg_tys ret_ty func_kind = ty (TFun {arg_tys; ret_ty; func_kind})
 let tfun arg_tys ret_ty = tfun_kind arg_tys ret_ty FNormal
 (* global type *)
-let tglobal cid global_tyargs b = ty (TPrimitive(cid, global_tyargs, b))
+let tglobal cid global_tyargs = ty (TName(cid, global_tyargs))
 (* named type *)
-let tname cid = ty (TName cid)
+let tname cid = ty (TName(cid, []))
 let tgroup_cid = Cid.create ["Group"]
-let tgroup = TPrimitive(tgroup_cid, [], false)
+let tgroup = tname tgroup_cid
 
 (* test to see if an ast node represents one of the functions defined above *)
   let is_tunit ty = match ty.raw_ty with TUnit -> true | _ -> false

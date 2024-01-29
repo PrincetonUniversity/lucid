@@ -435,7 +435,7 @@ let array_dimensions tds =
       match dec.td with
       | TDGlobal
           ( id
-          , { raw_ty = TName (ty_cid, sizes, true); _ }
+          , { raw_ty = TName (ty_cid, sizes); _ }
           , { e = ECall (_, num_slots :: _, _) } ) 
           (* skip declarations of Tables, etc. *)
               when (List.mem (Cid.names ty_cid |> List.hd) ["Array"; "PairArray"]) ->

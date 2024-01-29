@@ -569,7 +569,7 @@ let _interp_dglobal (nst : State.network_state) swid id ty e =
   let idx = Pipeline.length p in
   let gty_name, gty_sizes =
     match ty.raw_ty with
-    | TName (cid, sizes, _) -> Cid.names cid, sizes
+    | TName (cid, sizes) -> Cid.names cid, sizes
     | _ -> failwith "Bad DGlobal"
   in
   let args =

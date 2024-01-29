@@ -561,7 +561,7 @@ let rec flatten_core_exp (exp: CoreSyntax.exp) = match exp.e with
 
 let is_tbl_ty (raw_ty : CoreSyntax.raw_ty) = 
   match raw_ty with 
-  | TName(cid, _, _) -> Cid.equal cid t_id
+  | TName(cid, _) -> Cid.equal cid t_id
   | _ -> false
 ;;
 
@@ -598,7 +598,7 @@ let size_to_ty (sz: int) = (CoreSyntax.ty) @@ TInt(CoreSyntax.Sz sz) ;;
 
 let tname_to_ttable (rty : CoreSyntax.raw_ty) : core_tbl_ty =
   match rty with
-  | TName(cid, [key_sizes; param_sizes; ret_sizes], _) when Cid.equal cid t_id -> 
+  | TName(cid, [key_sizes; param_sizes; ret_sizes]) when Cid.equal cid t_id -> 
     let param_tys = List.map size_to_ty (size_ints param_sizes) in
     let ret_tys = List.map size_to_ty (size_ints ret_sizes) in
     { 

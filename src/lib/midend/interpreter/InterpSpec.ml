@@ -58,7 +58,7 @@ let parse_int_entry lst str default =
 let rec parse_value err_str ty j =
   match j, ty.raw_ty with
   | `Int n, TInt Sz size -> vint n size
-  | `Int n, TName (cid, _, _) when Cid.equal cid Payloads.t_id -> vint n 32
+  | `Int n, TName (cid, _) when Cid.equal cid Payloads.t_id -> vint n 32
   | `Bool b, TBool -> vbool b
   | `List lst, TGroup ->
     vgroup (List.map (fun n -> parse_int "group value definition" n) lst)

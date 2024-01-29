@@ -302,7 +302,7 @@ let eventset_block pkt_var evset (rid_var : (cid * ty)) (out_ctor_base : cid) =
   | _ -> error "not an eventset"
 ;;
 
-let tname id = ty (TName(id, [], false)) ;;
+let tname id = ty (TName(id, [])) ;;
 
 let id = Id.create
 (* make a parser that reads a serialized version of 

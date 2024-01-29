@@ -193,7 +193,7 @@ let merge_handlers_in_component (c:component) : component =
           in
           let out_tag_cid = Cid.create_ids [output_evid; out_tag_outer] in
           let out_tag_ty_cid = Cid.create_ids [output_evid; (Id.create ((fst out_tag_outer)^"_t"))] in
-          let out_tag_outer_ty  = ty (TName(out_tag_ty_cid, [], false)) in 
+          let out_tag_outer_ty  = ty (TName(out_tag_ty_cid, [])) in 
           let tag_enable_stmt = enable_call out_tag_cid out_tag_outer_ty in 
           (* let tag_enable_stmt = sassign tag_hdr_cid tag_hdr_val_exp in *)          
           let tag_cid = Cid.concat out_tag_cid (Cid.id out_tag_inner) in

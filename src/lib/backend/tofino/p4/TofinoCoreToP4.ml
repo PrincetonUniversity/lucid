@@ -25,7 +25,7 @@ let rec translate_ty ty = match ty.raw_ty with
   | CS.TInt (Sz (s)) -> T.TInt (s)
   | CS.TActionConstr(_) -> error "[translate_ty] action types should be eliminated in IR..."
   | CS.TFun(fty) -> tfun (translate_ty fty.ret_ty) (List.map translate_ty fty.arg_tys)
-  | CS.TName(cid, _, _) -> tstruct (Cid.to_id cid)
+  | CS.TName(cid, _) -> tstruct (Cid.to_id cid)
   | _ -> error "[translate_ty] translation for this type is not implemented"
 ;;
 
@@ -988,7 +988,7 @@ and translate_param_with_anon_recty struct_kind (id, ty) =
       struct_kind
       (List.map (fun (id, rty) -> id, translate_ty (CoreSyntax.ty rty)) fields)
     in
-    let ref_ty = translate_ty (CoreSyntax.ty (CoreSyntax.TName(Cid.id ty_id, [], false))) in
+    let ref_ty = translate_ty (CoreSyntax.ty (CoreSyntax.TName(Cid.id ty_id, []))) in
     (* give back the translated param and the struct declaration *)
     (id, ref_ty), [struct_decl]
   )
@@ -1571,7 +1571,7 @@ let construct_deparser denv hevent : decl =
       that is of type TName(cid, _, _) where (hd (Cid.names cid)) = fst intrinsic_param_ty_id *)
     let intrinsic_param = List.find_map (fun (id, ty) -> 
       match ty.raw_ty with 
-      | TName(tcid, _, _) -> (
+      | TName(tcid, _) -> (
         match (Cid.names tcid) with 
         | [name] -> (
           let (matching_ty_names : string list) = List.filter (String.equal name) possible_intrinsic_param_ty_names in
@@ -1615,13 +1615,13 @@ let translate_tdecl (denv : translate_decl_env) tdecl : (translate_decl_env) =
   (* memops just go into the context *)
   | TDMemop(m) -> (dw bind_memop denv (m.mid, m))
   (* tables just go into context *)
-  | TDGlobal(tbl_id, {raw_ty = TName(ty_cid, _, _)}, econstr) when (Cid.names ty_cid = ["Table"; "t"]) ->
+  | TDGlobal(tbl_id, {raw_ty = TName(ty_cid, _)}, econstr) when (Cid.names ty_cid = ["Table"; "t"]) ->
     let tbl_def = Tables.dglobal_params_to_tbl_def tbl_id econstr in 
     dw bind_tbl denv ((Cid.id tbl_id), (tbl_def, econstr.espan))
   (* arrays get translated into registerarrays, which are global. *)
   | TDGlobal(rid, ty, exp) -> (
     match ty.raw_ty with 
-    | TName(tcid, [Sz cell_size], true) -> (
+    | TName(tcid, [Sz cell_size]) -> (
         let module_name = List.hd (Cid.names tcid) in 
         let len, default_opt = match exp.e with 
           | ECall(_, args, _) -> (

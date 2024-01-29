@@ -208,9 +208,9 @@ and translate_raw_ty rty = match rty with
     (* let arg_tys = List.map translate_ty arg_tys in
     let ret_ty = translate_ty ret_ty in
     sprintf "%s (*func_type)(%s)" ret_ty (String.concat ", " arg_tys) *)    
-  | TName(cid, sizes, true) -> builtin_ty_string cid sizes
-  | TName(cid, [], false) -> cid_string cid
-  | TName(cid, _, false) -> error "user-defined types should not be size polymorphic"    
+  | TName(cid, []) -> cid_string cid
+  | TName(cid, sizes) -> builtin_ty_string cid sizes
+  (* | TName(cid, _, false) -> error "user-defined types should not be size polymorphic"     *)
     (* error "user-defined named types should be inlined by now" *)
   | TMemop(n_args, (Sz arg_sz)) -> memopty_string n_args arg_sz
   | TMemop _ -> error "memops with multi-dimensional sizes should not exist"
@@ -450,7 +450,7 @@ and translate_dglobal  id ty e =
   | _ -> (
     let gty_name, gty_sizes =
       match ty.raw_ty with
-      | TName (cid, sizes, _) -> Cid.names cid, sizes
+      | TName (cid, sizes) -> Cid.names cid, sizes
       | _ -> failwith "Bad DGlobal"
     in
     let args =

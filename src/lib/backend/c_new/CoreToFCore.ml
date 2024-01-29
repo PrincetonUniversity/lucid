@@ -35,9 +35,8 @@ let rec translate_raw_ty (raw_ty : C.raw_ty) : F.raw_ty =
   | C.TInt(Sz sz) ->  F.TInt(F.sz sz)
   | C.TInt(_) -> err "TInt size should be a singleton"
   | C.TEvent -> F.TEvent
-  | C.TName(cid, sizes, true) -> (F.tglobal cid (List.map size_to_ty sizes) true).raw_ty
-  | C.TName(cid, [], false) -> (F.tname cid).raw_ty
-  | C.TName(_, _, false) -> err "non-global named types should not have arguments"
+  | C.TName(cid, []) -> (F.tname cid).raw_ty
+  | C.TName(cid, sizes) -> (F.tglobal cid (List.map size_to_ty sizes)).raw_ty
   | C.TFun {arg_tys; ret_ty} -> 
     let fty : F.func_ty = {
       F.arg_tys = List.map translate_ty arg_tys; 
@@ -73,7 +72,7 @@ let rec translate_raw_ty (raw_ty : C.raw_ty) : F.raw_ty =
     let raw_tys = List.map translate_raw_ty raw_tys in
     let tys = List.map F.ty raw_tys in
     F.TRecord{labels=None; ts=tys}
-  | C.TGroup -> F.tgroup
+  | C.TGroup -> (F.tgroup).raw_ty
   | C.TPat(Sz(sz)) -> F.TBits{ternary=true; len=F.sz sz}
   | C.TPat(_) -> err "TPat size should be a singleton"
   | C.TBits(Sz(sz)) -> F.TBits{ternary=false; len=F.sz sz}
