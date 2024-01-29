@@ -2,14 +2,12 @@
 let err = Console.error ;;
 
 
-
-
 module C = CoreSyntax
 module F = FCoreSyntax
 
 let rec ty_to_size (ty : F.ty) = 
   match ty.raw_ty with 
-  | F.TInt(F.SConst sz) -> C.Sz sz
+  | F.TInt(sz) -> C.Sz sz
   | F.TRecord{ts} -> 
     C.Szs (List.map ty_to_size ts |> List.map (function | C.Sz sz -> sz | _ -> err "bug"))
   | _ -> failwith "not done"
@@ -26,20 +24,17 @@ let detuple_ty (ty : F.ty) = match ty.raw_ty with
   | F.TRecord{labels=None; ts} -> ts
   | _ -> [ty]
 ;;
-
 let rec translate_raw_ty (raw_ty : F.raw_ty) : C.raw_ty = 
   match raw_ty with 
   (* basic types *)
   | F.TUnit -> err "you shouldn't have to translate a unit type back to CoreSyntax"
   | F.TBool -> C.TBool
-  | F.TInt(F.SConst sz) -> C.TInt(C.Sz sz)
+  | F.TInt(sz) -> C.TInt(C.Sz sz)
   | F.TEvent -> C.TEvent
-  | F.TBits{ternary=true; len=F.SConst sz} -> C.TPat(C.Sz sz)
-  | F.TBits{ternary=false; len=F.SConst sz} -> C.TBits(C.Sz sz)
-  | F.TBits{len=_} -> err "bitpattern with unspecified length"
-  (* This _should_ be true. Also, group types should be removed from core syntax anyway *)
-  | F.TInt(F.SPlatformDependent) -> err "platform dependent int type"
+  | F.TBits{ternary=true; len= sz} -> C.TPat(C.Sz sz)
+  | F.TBits{ternary=false; len= sz} -> C.TBits(C.Sz sz)
   (* named types *)
+  | F.TPrimitive(tcid, [], false) when (Cid.equal tcid F.tgroup_cid) -> C.TGroup
   | F.TPrimitive(ty_id, ty_args, true) -> C.TName(ty_id, List.map ty_to_size ty_args, true)
   | F.TPrimitive(_, _::_, false)  ->  err "primitive type with arguments that's not global?"
   | F.TPrimitive(ty_id, [], false) -> C.TName(ty_id, [], false) 
@@ -68,7 +63,7 @@ let rec translate_raw_ty (raw_ty : F.raw_ty) : C.raw_ty =
       aret_tys = List.map translate_ty (detuple_ty ret_ty);}
   | F.TFun{arg_tys; func_kind} when (func_kind = F.FMemop) ->
       (match (List.hd arg_tys).raw_ty with 
-        | F.TInt(F.SConst sz) -> C.TMemop(List.length arg_tys, C.Sz sz)
+        | F.TInt( sz) -> C.TMemop(List.length arg_tys, C.Sz sz)
         | _ -> err "memop function doesn't have an int type arg?")
   | F.TFun _ -> err "unknown function kind in function type"
   (* collection types *)
@@ -79,9 +74,7 @@ let rec translate_raw_ty (raw_ty : F.raw_ty) : C.raw_ty =
     C.TRecord(label_rawty_pairs)
 
   and translate_ty (ty : F.ty) : C.ty = 
-  if (F.has_annot ty.ty_annot "group") 
-  then C.ty_sp C.TGroup ty.tspan
-  else C.ty_sp (translate_raw_ty ty.raw_ty) ty.tspan
+    C.ty_sp (translate_raw_ty ty.raw_ty) ty.tspan
 ;;
 
 
@@ -132,8 +125,7 @@ let translate_op op =
   | F.Sub -> C.Sub
   | F.SatPlus -> C.SatPlus
   | F.SatSub -> C.SatSub
-  | F.Cast(F.SConst sz) -> C.Cast(C.Sz sz)
-  | F.Cast(_) -> err "Cast size should be a singleton"
+  | F.Cast( sz) -> C.Cast(C.Sz sz)
   | F.Conc -> C.Conc
   | F.BitAnd -> C.BitAnd
   | F.BitOr -> C.BitOr
@@ -152,7 +144,7 @@ let translate_op op =
 (* left off here -- at translate_v *)
 let value_to_int (value : F.value) : int = 
   match value.v with 
-  | F.VInt{value; size=F.SConst(_)} -> value
+  | F.VInt{value; size=(_)} -> value
   | _ -> err "value is not an int"
 ;;
 let value_to_bool (value : F.value) : bool = 
@@ -165,12 +157,11 @@ let uv (value : C.value) : C.v = value.v
 let rec translate_value (value : F.value) : C.value = 
   match value.v with 
   | F.VBool b -> C.value_sp (C.VBool b) value.vspan
-  | F.VInt{value=ival; size=F.SConst(size)} -> 
+  | F.VInt{value=ival; size=(size)} -> 
     C.value_sp (C.VInt(Integer.create ival size)) value.vspan
-  | F.VInt{size=_} -> err "int value with unspecified size"
   | F.VEvent(event_val) -> 
     C.value_sp (C.VEvent(translate_event_val event_val)) value.vspan
-  | F.VGlobal(id, addr, _) -> 
+  | F.VTyRef(id, addr, _) -> 
     C.value_sp (C.VGlobal(id, addr)) value.vspan
   | F.VBits {ternary=true; bits} -> 
     C.value_sp (C.VPat(bits)) value.vspan
@@ -205,7 +196,7 @@ let rec translate_exp (exp: F.exp) =
   | F.EVar(cid, _) -> 
     C.aexp (C.EVar(cid)) (translate_ty exp.ety) exp.espan
   (* operations *)
-  | F.EOp(F.Hash(F.SConst sz), eargs) -> 
+  | F.EOp(F.Hash( sz), eargs) -> 
     let sz = C.Sz sz in
     let eargs = List.map (translate_exp) eargs in
     C.aexp (C.EHash(sz, eargs)) (translate_ty exp.ety) exp.espan
@@ -222,28 +213,28 @@ let rec translate_exp (exp: F.exp) =
     let label_exp_pairs = List.combine labels es in
     C.aexp (C.ERecord(List.map (fun (label, exp) -> (label, translate_exp exp)) label_exp_pairs)) (translate_ty exp.ety) exp.espan
   | F.EClosure _ -> err "closure expressions cannot be translated back to CoreSyntax"
-  | F.ECall({e=EVar(cid, _)}, [port_arg], true) when (Cid.names cid = ["flood"]) -> 
+  | F.ECall{f={e=EVar(cid, _)}; args=[port_arg];} when (Cid.names cid = ["flood"]) -> 
     C.aexp (C.EFlood(translate_exp port_arg)) (translate_ty exp.ety) exp.espan
-  | F.ECall({e=EVar(cid, _)}, [ev_exp], true) when (Cid.names cid = ["generate_self"]) -> 
+  | F.ECall{f={e=EVar(cid, _)}; args=[ev_exp];} when (Cid.names cid = ["generate_self"]) -> 
     let ev_exp = translate_exp ev_exp in
     let s = C.SGen(GSingle(None), ev_exp) in
     raise (MadeStatement(s))
-  | F.ECall({e=EVar(cid, _)}, [port_exp; ev_exp], true) when (Cid.names cid = ["generate_port"]) -> 
+  | F.ECall{f={e=EVar(cid, _)}; args=[port_exp; ev_exp]} when (Cid.names cid = ["generate_port"]) -> 
     let port_exp = translate_exp port_exp in
     let ev_exp = translate_exp ev_exp in
     let s = C.SGen(GPort(port_exp), ev_exp) in
     raise (MadeStatement(s))
-  | F.ECall({e=EVar(cid, _)}, [port_exp; ev_exp], true) when (Cid.names cid = ["generate_switch"]) -> 
+  | F.ECall{f={e=EVar(cid, _)} ;args=[port_exp; ev_exp]} when (Cid.names cid = ["generate_switch"]) -> 
     let port_exp = translate_exp port_exp in
     let ev_exp = translate_exp ev_exp in
     let s = C.SGen(GSingle(Some(port_exp)), ev_exp) in
     raise (MadeStatement(s))
-  | F.ECall({e=EVar(cid, _)}, [group_exp; ev_exp], true) when (Cid.names cid = ["generate_group"]) -> 
+  | F.ECall{f={e=EVar(cid, _)}; args=[group_exp; ev_exp]} when (Cid.names cid = ["generate_group"]) -> 
     let group_exp = translate_exp group_exp in
     let ev_exp = translate_exp ev_exp in
     let s = C.SGen(GMulti(group_exp), ev_exp) in
     raise (MadeStatement(s))
-  | F.ECall({e=EVar(cid, _)}, str_arg::args, true) when (Cid.names cid = ["printf"]) -> 
+  | F.ECall{f={e=EVar(cid, _)}; args=str_arg::args} when (Cid.names cid = ["printf"]) -> 
     let str_val = match str_arg.e with 
       | EVal(value) -> value
       | _ -> err "printf with non-string argument"
@@ -252,14 +243,28 @@ let rec translate_exp (exp: F.exp) =
     let args = List.map (translate_exp) args in
     let s = C.SPrintf(str, args) in
     raise (MadeStatement(s))
-  | F.ECall({e=EVar(cid, _)}, eargs, unordered_flag) -> 
-    C.aexp 
-    (C.ECall(cid, List.map (translate_exp) eargs, unordered_flag)) 
-    (translate_ty exp.ety) 
-    exp.espan
-  | F.EEvent{event_id; args} -> 
-    C.aexp (C.ECall(Cid.id(event_id), List.map (translate_exp) args, false)) (translate_ty exp.ety) exp.espan
-  | F.ECall(_, _, _) -> err "call expression with non-var function"
+  | F.ECall{f={e=EVar(cid, _)}; args=eargs;call_kind} -> 
+    (match call_kind with
+    | F.CNormal -> 
+      let eargs = List.map (translate_exp) eargs in
+      C.aexp 
+        (C.ECall(cid, eargs, false)) 
+        (translate_ty exp.ety) 
+        exp.espan
+    | F.CUnordered ->
+      let eargs = List.map (translate_exp) eargs in
+      C.aexp 
+        (C.ECall(cid, eargs, true)) 
+        (translate_ty exp.ety) 
+        exp.espan
+    | F.CEvent -> 
+      let eargs = List.map (translate_exp) eargs in
+      C.aexp 
+        (C.ECall(cid, eargs, false)) 
+        (translate_ty exp.ety) 
+        exp.espan
+  )   
+  | F.ECall _ -> err "call expression with non-var function"
 
 
 and translate_pat (pat : F.pat) : C.pat = 
@@ -386,7 +391,6 @@ let translate_decl (decl : F.fdecl) : C.decl =
     C.decl_sp d decl.dspan
   | F.DFun(_, _, _, _, None) -> err "extern functions are not supported in CoreSyntax"
   | F.DFun(_, _, _, _, _) -> err "Unknown function kind"
-  | F.DExt _ -> err "cannot translate declaration extension to core Ir"
   (* types *)
   | F.DTy(cid, Some(ty)) -> 
     let ty = translate_ty ty in

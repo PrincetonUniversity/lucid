@@ -73,7 +73,7 @@ let rec translate_raw_ty (raw_ty : C.raw_ty) : F.raw_ty =
     let raw_tys = List.map translate_raw_ty raw_tys in
     let tys = List.map F.ty raw_tys in
     F.TRecord{labels=None; ts=tys}
-  | C.TGroup -> F.TInt(F.sz_platform)
+  | C.TGroup -> F.tgroup
   | C.TPat(Sz(sz)) -> F.TBits{ternary=true; len=F.sz sz}
   | C.TPat(_) -> err "TPat size should be a singleton"
   | C.TBits(Sz(sz)) -> F.TBits{ternary=false; len=F.sz sz}
@@ -87,11 +87,7 @@ and translate_acn_ty (aty : C.acn_ty) =
 and translate_ty (ty : C.ty) : F.ty = 
   {raw_ty = translate_raw_ty ty.raw_ty; 
    tspan = ty.tspan;
-   (* tag "group" types because they are represented in FCore 
-      as a non-unique Int type *)
-   ty_annot = match ty.raw_ty with 
-      | C.TGroup -> [F.annot "group"]
-      | _ -> []}
+   }
 ;;
 let translate_params (params: C.params) : F.params = 
   List.map (fun ((id: Id.t), ty) -> id, translate_ty ty) params
@@ -134,7 +130,7 @@ let rec translate_v (v : C.v) (vty:C.ty) : F.v =
   | _, C.VInt({value; size}) -> (F.vint (Z.to_int value) (Z.to_int size)).v
   | _, C.VEvent event_val -> F.VEvent(translate_event_val event_val)
   | vty, C.VGlobal(id, addr) -> (F.vglobal id addr (translate_ty vty)).v
-  | _, C.VGroup(locs) -> (F.vtup (List.map F.vint_unsized locs)).v
+  | _, C.VGroup(locs) -> (F.vtup (List.map (fun i -> F.vint 32 i ) locs)).v
   | _, C.VPat(tbits) -> (F.vpat tbits).v
   | _, C.VBits(bits) -> (F.vbits (bits_to_ints bits)).v
   | {raw_ty=C.TTuple(raw_tys)}, C.VTuple(vs) -> 
@@ -159,7 +155,7 @@ and translate_event_val (ev : C.event_val) : F.vevent =
       | None -> None);
     evdata = List.map translate_value ev.data;
     meta = [
-      "edelay", F.vint_unsized ev.edelay;
+      "edelay", F.vint ev.edelay 16;
       "eserialized", F.vbool ev.eserialized;
     ]
   }  
@@ -175,15 +171,22 @@ let rec translate_exp (exp : C.exp) : F.exp =
   | _, C.EVal(v) -> (F.eval (translate_value v))
   | _, C.EVar(c) -> F.local_var c (translate_ty exp.ety)
   | _, C.EOp(op, es) -> F.eop (translate_op op) (List.map translate_exp es)
-  | ret_ty, C.ECall(cid, es, unordered_flag) -> 
+  | {raw_ty=C.TEvent}, C.ECall(cid, es, _) -> 
+    let fexp = F.efunref cid (F.tevent) in 
+    F.eevent fexp (List.map translate_exp es)
+  (* if its not an event, its an ordered or unordered call *)
+  | ret_ty, C.ECall(cid, es, unordered_flag) -> (
     (* reconstruct the functions assumed type based on arg and expression types *)
     let arg_tys = List.map (fun e -> e.C.ety) es in
     let fty = F.tfun 
       (List.map translate_ty arg_tys)
       (translate_ty ret_ty)
     in
-    let fexp = F.efunref cid fty in
-    F.ecall fexp (List.map translate_exp es) unordered_flag
+    let fexp = F.efunref cid fty in 
+    match unordered_flag with 
+    | true -> F.ecall_unordered fexp (List.map translate_exp es)
+    | false -> F.ecall fexp (List.map translate_exp es)
+  )
   | _, EHash((Sz size), es) -> 
     (* hash is an op in F *)
     F.eop (F.Hash(F.sz size)) (List.map translate_exp es)
@@ -194,7 +197,7 @@ let rec translate_exp (exp : C.exp) : F.exp =
     let ret_ty = translate_ty ret_ty in
     let fty = F.tfun arg_tys ret_ty in
     let fexp = F.efunref (Cid.create ["flood"]) fty in
-    F.ecall fexp [translate_exp port_exp] true
+    F.ecall fexp [translate_exp port_exp]
   | _, ERecord(label_exp_pairs) -> 
     let labels, es = List.split label_exp_pairs in
     let es = List.map translate_exp es in
@@ -206,16 +209,12 @@ let rec translate_exp (exp : C.exp) : F.exp =
     (* project is an op *)
     (F.eop (F.Project(label)) [translate_exp rec_exp])
   in
-  let annot = match exp.e with 
-  | ECall(_, _, true) -> [F.annot "unordered"]
-  | _ -> []
-  in
-  {exp' with exp_annot = annot; espan = exp.espan}
+  {exp' with espan = exp.espan}
 ;;
 let translate_pat (pat:C.pat)  (pat_sz : int) : F.pat = 
   match pat with 
   | PBit(ints) -> F.PVal(F.vpat ints)
-  | C.PNum(z)  -> F.PVal(F.vint_unsized (Z.to_int z))
+  | C.PNum(z)  -> F.PVal(F.vint (Z.to_int z) pat_sz)
   | PEvent(cid, params) -> 
     let params = List.map (fun (id, ty) -> id, translate_ty ty) params in
     F.PEvent{event_id=cid; params;}
@@ -239,7 +238,7 @@ let rec translate_statement (stmt:C.statement) : F.statement =
     let ret_ty = F.ty@@TUnit in
     let fty = F.tfun arg_tys ret_ty in
     let fexp = F.efunref (Cid.create ["printf"]) fty in
-    let print_call = F.ecall fexp args true in
+    let print_call = F.ecall fexp args in
     F.sunit print_call |> F.swrap stmt.sspan
   | C.SIf(exp, stmt1, stmt2) -> 
     let exp = translate_exp exp in
@@ -247,13 +246,13 @@ let rec translate_statement (stmt:C.statement) : F.statement =
     let stmt2 = translate_statement stmt2 in
     F.sif exp stmt1 stmt2 |> F.swrap stmt.sspan
   | C.SGen(GSingle(None), ev) -> 
-    F.egen_self (translate_exp ev) true |> F.sunit |> F.swrap stmt.sspan
+    F.egen_self (translate_exp ev) |> F.sunit |> F.swrap stmt.sspan
   | C.SGen(GSingle(Some(loc)), ev) -> 
-    F.egen_switch (translate_exp loc) (translate_exp ev) true |> F.sunit |> F.swrap stmt.sspan
+    F.egen_switch (translate_exp loc) (translate_exp ev) |> F.sunit |> F.swrap stmt.sspan
   | C.SGen(GPort(port), ev) -> 
-    F.egen_port (translate_exp port) (translate_exp ev) true |> F.sunit |> F.swrap stmt.sspan
+    F.egen_port (translate_exp port) (translate_exp ev) |> F.sunit |> F.swrap stmt.sspan
   | C.SGen(GMulti(port), ev) -> 
-    F.egen_group (translate_exp port) (translate_exp ev) true |> F.sunit |> F.swrap stmt.sspan
+    F.egen_group (translate_exp port) (translate_exp ev) |> F.sunit |> F.swrap stmt.sspan
   | C.SSeq(s1, s2) -> 
     F.sseq (translate_statement s1) (translate_statement s2) |> F.swrap stmt.sspan
   | C.SMatch(exps, branches) -> 

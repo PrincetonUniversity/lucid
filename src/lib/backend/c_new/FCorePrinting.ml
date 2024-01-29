@@ -44,8 +44,8 @@ and eop_to_string op args raw_ty =
   | Slice (i, j), [e1], _ -> Printf.sprintf "(%s[%d:%d])" (exp_to_string e1) i j
   | PatExact, [e1], _ -> Printf.sprintf "(exact_pat(%s))" (exp_to_string e1)
   | PatMask, [e1; e2], _ -> Printf.sprintf "(mask_pat(%s, %s))" (exp_to_string e1) (exp_to_string e2)
-  | Hash(SConst(s)), args, _ -> Printf.sprintf "(hash<%s>(%s))" (string_of_int s) (List.map exp_to_string args |> String.concat ", ")
-  | Cast(SConst(s)), [e1], _ -> Printf.sprintf "(int<%s>(%s))" (string_of_int s) (exp_to_string e1)
+  | Hash((s)), args, _ -> Printf.sprintf "(hash<%s>(%s))" (string_of_int s) (List.map exp_to_string args |> String.concat ", ")
+  | Cast((s)), [e1], _ -> Printf.sprintf "(int<%s>(%s))" (string_of_int s) (exp_to_string e1)
   | Conc, [e1; e2], _ -> Printf.sprintf "(%s @ %s)" (exp_to_string e1) (exp_to_string e2)
   | Project(id), [e1], _ -> Printf.sprintf "(%s.%s)" (exp_to_string e1) (id_to_string id)
   | Get(i), [e1], _ -> Printf.sprintf "(%s[%d])" (exp_to_string e1) i
