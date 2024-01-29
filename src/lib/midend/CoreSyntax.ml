@@ -565,7 +565,7 @@ let equiv_memop_body mb1 mb2 =
 ;;
 
 let equiv_memop (m1 : memop) (m2 : memop) = 
-  Id.equal m1.mid m2.mid
+  Id.equal 
   && equiv_list equiv_ty (List.map snd m1.mparams) (List.map snd m2.mparams)
   && equiv_memop_body m1.mbody m2.mbody
 ;;
