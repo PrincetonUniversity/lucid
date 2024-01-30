@@ -316,7 +316,7 @@ and translate_stmt in_parser (stmt : F.statement) =
     C.statement_sp (C.SRet(exp_opt)) stmt.sspan
 ;;
 
-let translate_decl (decl : F.fdecl) : C.decl = 
+let translate_decl (decl : F.decl) : C.decl = 
   match decl.d with
   (* variables can be globals or externs *)
   | F.DVar(id, ty, Some(exp)) -> 
@@ -392,6 +392,6 @@ let translate_decl (decl : F.fdecl) : C.decl =
   (* events *)
 ;;
 
-let translate_prog (ds : F.fdecls) : C.decls = 
+let translate_prog (ds : F.decls) : C.decls = 
   List.map translate_decl ds
 ;;

@@ -12,7 +12,7 @@ and sp = [%import: Span.t]
 and size = int
 and func_kind = | FNormal | FHandler | FParser | FAction | FMemop | FExtern
 
-and op =   | And | Or | Not
+and op =    | And | Or | Not
             | Eq  | Neq | Less| More | Leq | Geq
             | Neg | Plus| Sub | SatPlus | SatSub
             | BitAnd  | BitOr | BitXor | BitNot | LShift | RShift
@@ -105,8 +105,8 @@ and d =
   | DFun of func_kind * id * ty * params * (statement option) (* first-order functions, possibly extern. ty is return type. *)
   | DTy  of cid * ty option (* declare named types, which may be external *)
   | DEvent of event_def (* declare an event, which is a constructor for the datatype TEvent *)
-and fdecl = {d:d; dspan : sp;}
-and fdecls = fdecl list
+and decl = {d:d; dspan : sp;}
+and decls = decl list
 [@@deriving
   visitors
     { name = "s_iter"
@@ -208,7 +208,44 @@ let exp e ety espan = {e; ety; espan}
 let efunref cid fty = {e=EVar (cid, false); ety=fty; espan=Span.default; }
 let erecord labels es = {e=ERecord {labels=Some labels; es}; ety=trecord labels (List.map (fun (e:exp) -> e.ety) es); espan=Span.default; }
 let etuple es = {e=ERecord {labels=None; es}; ety=ttuple (List.map (fun (e:exp) -> e.ety) es); espan=Span.default; }
-let eop op es = {e=EOp (op, es); ety=ty TBool; espan=Span.default; }
+let eop op es = 
+  let eop_ty = match op with 
+    | And | Or | Not
+    | Eq  | Neq | Less| More | Leq | Geq -> ty TBool
+    | Neg | Plus| Sub | SatPlus | SatSub -> (List.hd es).ety
+    | BitAnd  | BitOr | BitXor | BitNot | LShift | RShift -> (List.hd es).ety
+    | Slice(hi, lo) -> ty (TInt (hi - lo + 1))
+    | PatExact
+    | PatMask ->      
+      let sz = match (List.hd es).ety.raw_ty with 
+      | TInt sz -> sz
+      | _ -> failwith "pat op expects int args"
+      in
+      ty (TBits {ternary=true; len=sz})
+    | Hash size -> ty (TInt size)
+    | Cast size  -> ty (TInt size)
+    | Conc -> 
+      let arg_sizes = List.map (fun e -> match e.ety.raw_ty with TInt sz -> sz | _ -> failwith "conc expects int args") es in
+      ty (TInt (List.fold_left (+) 0 arg_sizes))
+
+    | Project(id) -> 
+      let rec_arg = List.hd es in
+      let labels, ts = match rec_arg.ety.raw_ty with 
+        | TRecord {labels=Some(labels); ts} -> labels, ts
+        | _ -> failwith "project expects record arg"
+      in
+      let labels_ts = List.combine labels ts in
+      let _, ty = List.find (fun (label, _) -> Id.equal label id) labels_ts in
+      ty
+    
+    | Get(idx) -> 
+      let ts = match (List.hd es).ety.raw_ty with 
+        | TRecord {labels=None; ts} -> ts
+        | _ -> failwith "get expects tuple arg"
+      in
+      List.nth ts idx
+  in 
+  {e=EOp (op, es); ety=eop_ty; espan=Span.default; }
 let eval value = {e=EVal value; ety=value.vty; espan=Span.default; }
 let evar mut id ty = {e=EVar(id, mut); ety=ty; espan=Span.default; }
 let local_var id ty = evar true id ty
@@ -225,7 +262,10 @@ let ecall_kind call_kind f es =
 ;;
 let ecall = ecall_kind CNormal
 let eevent = ecall_kind CEvent
-let efun_kind func_kind params fexp = {e=EClosure {env=[]; params; fexp}; ety=tfun_kind (List.map snd params) fexp.ety func_kind; espan=Span.default; }
+let efun_kind func_kind params fexp = {
+  e=EClosure {env=[]; params; fexp}; 
+  ety=tfun_kind (List.map snd params) fexp.ety func_kind; espan=Span.default; 
+}
 let efun = efun_kind FNormal
 let eaction = efun_kind FAction
 (* let elet id ety exp_rhs exp_rest espan = exp (ELet([id], exp_rhs, exp_rest)) ety espan *)
@@ -298,7 +338,12 @@ let dty_ext tycid = decl (DTy(tycid, None)) Span.default
 let devent id evconstrnum params is_parsed = decl (DEvent {evconstrid=id; evconstrnum; evparams=params; is_parsed}) Span.default
 
 
-(* traversal utils *)
-
-
-(* let rec exp_map (map_f : exp -> exp) exp =  *)
+(* helpers *)
+let untuple exp = match exp.e with
+  | ERecord {labels=None; es} -> es
+  | _ -> [exp]
+;;
+let retuple exps = match exps with
+  | [exp] -> exp
+  | _ -> etuple exps
+;;

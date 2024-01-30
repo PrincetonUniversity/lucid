@@ -309,7 +309,7 @@ let translate_memop (m : CoreSyntax.memop) =
   F.dmemop id (translate_ty rty) (translate_params params) (translate_statement body)
 ;;
 
-let translate_decl (decl:C.decl) : F.fdecl = 
+let translate_decl (decl:C.decl) : F.decl = 
  let decl' =  match decl.d with 
   | C.DGlobal(id, ty, exp) -> F.dglobal id (translate_ty ty) (translate_exp exp)
   | DExtern(id, ty) -> F.dextern id (translate_ty ty)
@@ -365,6 +365,6 @@ let translate_decl (decl:C.decl) : F.fdecl =
   {decl' with dspan = decl.dspan}
     
 ;;
-let translate_prog (ds : C.decls) : F.fdecls = 
+let translate_prog (ds : C.decls) : F.decls = 
   List.map translate_decl ds
 ;;
