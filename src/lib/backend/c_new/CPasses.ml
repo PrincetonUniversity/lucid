@@ -19,7 +19,9 @@ let compile ds =
   print_endline s;
   (* capture variables in closures *)
   let fds = ClosureConversion.capture_vars fds in
-  (* print program *)
+  (* add closure types *)
+  let fds = ClosureConversion.add_closure_types fds in
+  (* add closure conversion functions *)  
   print_endline ("--- after closure conversion ---");
   let s = FCorePrinting.show_decls fds in
   print_endline s;

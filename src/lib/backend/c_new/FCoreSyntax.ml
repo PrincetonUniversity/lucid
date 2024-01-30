@@ -143,6 +143,7 @@ let tfun arg_tys ret_ty = tfun_kind arg_tys ret_ty FNormal
 let tglobal cid global_tyargs = ty (TName(cid, global_tyargs))
 (* named type *)
 let tname cid = ty (TName(cid, []))
+let tcustom cid tyargs = ty (TName(cid, tyargs))
 let tgroup_cid = Cid.create ["Group"]
 let tgroup = tname tgroup_cid
 
@@ -346,4 +347,9 @@ let untuple exp = match exp.e with
 let retuple exps = match exps with
   | [exp] -> exp
   | _ -> etuple exps
+;;
+
+let kind_of_tfun raw_ty = match raw_ty with 
+  | TFun {func_kind; _} -> func_kind
+  | _ -> failwith "kind_of_tfun: expected TFun"
 ;;

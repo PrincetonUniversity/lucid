@@ -1,4 +1,5 @@
 open FCoreSyntax
+let def_tystr = true (* show type string in show_exp *)
 let sprintf = Printf.sprintf
 
 (* split on newlines, indent each newline by n spaces, combine back into string *)
@@ -93,7 +94,9 @@ and show_v = function
     let evdata = List.map show_value evdata |> String.concat ", " in
     sprintf "%s(%s)" evid evdata
 
-let rec show_exp exp = show_e exp.e
+let rec show_exp ?(tystr=def_tystr) exp  = 
+  if (tystr) then sprintf "(%s: %s)" (show_e exp.e) (show_ty exp.ety)
+  else sprintf "%s" (show_e exp.e)
 and show_e = function 
     | EVal v -> show_value v
     | EVar(cid, _) -> show_cid cid

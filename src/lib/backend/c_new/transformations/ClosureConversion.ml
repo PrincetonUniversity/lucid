@@ -48,7 +48,7 @@ let rec get_unbound_vars bound_vars exp =
     get_unbound_vars bound_vars fexp
   | EVal _ -> [] (* only closure values have unbound vars *)
   | EVar(cid, _) -> 
-    if env_exists bound_vars cid then [] else [cid, exp.ety]
+    if env_exists bound_vars cid then [] else [(cid, Cid.fresh (Cid.names cid)), exp.ety]
   | ERecord{es} -> 
     List.concat (List.map (get_unbound_vars bound_vars) es)
   | ECall{f; args} -> 
@@ -75,7 +75,7 @@ let capture_vars decls =
       (* get unbound variables in the closure *)
       let unbound_var_tys = get_unbound_vars [] exp in
       (* move those unbound vars into the closure environment *)
-      let cenv_ext = List.map (fun (cid, ty) -> (Cid.to_id cid, local_var cid ty)) unbound_var_tys in
+      let cenv_ext = List.map (fun ((outer_cid, inner_cid), ty) -> (Cid.to_id inner_cid, local_var outer_cid ty)) unbound_var_tys in
       let cenv' = cenv@cenv_ext in
       (* recurse on closure body, adding only the declared params (captured vars should already be in the environment) *)
       let env' = env_add_params env params in
@@ -112,7 +112,10 @@ let capture_vars decls =
       let env' = env_adds env ids in
       (* add new vars to env *)
       {stmt with s = SAssign{ids; tys; new_vars=true; exp = exp'}}, env'
-    | SAssign{new_vars=false} -> stmt, env (* vars should already be in the env *)
+    | SAssign{ids; tys; new_vars=false; exp} -> 
+      (* still have to recurse on exp *)
+      let exp' = visit_exp env exp |> fst in
+      {stmt with s = SAssign{ids; tys; new_vars=false; exp = exp'}}, env      
     | SIf(exp, stmt1, stmt2) -> 
       let exp' = visit_exp env exp |> fst in
       (* new vars inside of if block are locally scoped *)
@@ -152,9 +155,11 @@ let capture_vars decls =
     decl', env'
   )
   (* vars and events: just add to the environment *)
-  | DVar(id, _, _) -> 
+  | DVar(id, ty, exp_opt) ->
+    let exp_opt' = Option.map (fun exp -> visit_exp env exp |> fst) exp_opt in
+    let d' = DVar(id, ty, exp_opt') in
     let env' = env_add env (ccid id)in 
-    decl, env'
+    {decl with d=d'}, env'
   | DEvent{evconstrid} -> 
     let env' = env_add env (ccid evconstrid) in
     decl, env'
@@ -169,3 +174,34 @@ let capture_vars decls =
   List.rev decls'
 ;;
 
+let eenv_to_rec_ty env = 
+  let fields, tys = List.map (fun (id, exp) -> (id, exp.ety)) env |> List.split in
+  trecord fields tys
+;;
+let venv_to_rec_ty env = 
+  let fields, tys = List.map (fun (id, value) -> (id, value.vty)) env |> List.split in
+  trecord fields tys
+;;
+let tclosure_cid = Cid.create ["Closure"]
+let tclosure env_ty fun_ty = 
+  tcustom tclosure_cid [env_ty; fun_ty]
+;;
+(* we want to change the type of the action closure to "Closure(ctx_struct, fun_ty)" *)
+let add_closure_types decls = 
+  let v = object 
+    inherit [_] s_map as super 
+    method! visit_exp () exp = 
+      let exp = super#visit_exp () exp in
+      match exp.ety.raw_ty, exp.e with
+      | TFun{func_kind=FAction;}, EClosure({env}) -> 
+        let ctx_ty = eenv_to_rec_ty env in
+        let fun_ty = exp.ety in
+        {exp with ety=tclosure ctx_ty fun_ty}
+      | TFun{func_kind=FAction;}, EVal({v=VClosure{env}}) -> 
+        let ctx_ty = venv_to_rec_ty env in
+        let fun_ty = exp.ety in
+        {exp with ety=tclosure ctx_ty fun_ty}
+      | _ -> exp
+    end
+  in
+  v#visit_decls () decls |> RetypeEvars.update_var_types

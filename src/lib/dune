@@ -175,6 +175,7 @@
    CoreToFCore
    FCoreToCore
    ClosureConversion
+   RetypeEvars
    Monomorphization
    CPasses
 
