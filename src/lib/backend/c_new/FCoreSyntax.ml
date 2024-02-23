@@ -23,7 +23,7 @@ and op =    | And | Or | Not
             | Conc
             | Project of id | Get of int (* record and tuple ops *)
 
-            and raw_ty = 
+and raw_ty = 
   | TUnit
   | TInt of size 
   | TBool 
@@ -44,9 +44,12 @@ and op =    | And | Or | Not
             like "Union" or "Ref". *)            
   | TBits of {ternary: bool; len : size;}
   | TEvent
+  | TEnum of (string * int) list 
 and func_ty = {arg_tys : ty list; ret_ty : ty; func_kind : func_kind;}
 and ty = {raw_ty:raw_ty; tspan : sp;}
-
+(* left off here -- I think we want an enum type and value for 
+   defunctionalization and tables. Also, I think we want a 
+   for statement (SFor exp * statement) *)
 and params = (id * ty) list
 
 and v =
@@ -58,6 +61,7 @@ and v =
   | VTyRef of id * int * ty (* typed reference to a value memory *)
   | VBits of {ternary: bool; bits : int list;}
   | VEvent of vevent
+  | VEnum of string * ty (* symbol in enum * enum ty *)
 and vevent = {evid : cid; evnum : value option; evdata: value list; meta : (string * value) list;}
 and value = {v:v; vty:ty; vspan : sp;}
 
@@ -134,6 +138,7 @@ let sz n = n
 let ty raw_ty = {raw_ty=raw_ty; tspan=Span.default; }
 
 let tunit () = ty TUnit
+let tint i = ty@@TInt(i)
 let tevent = ty TEvent
 let trecord labels tys = ty (TRecord {labels=Some labels; ts=tys})
 let ttuple tys = ty (TRecord {labels=None; ts=tys})
@@ -165,6 +170,7 @@ let infer_vty = function
   | VTyRef (_, _, ty) -> ty
   | VClosure {params; fexp; _} -> tfun (List.map snd params) fexp.ety
   | VEvent _ -> ty (TEvent)
+  | VEnum (_, ty) -> ty (* TODO: do we want this? *)
 ;;  
 
 let value v = {v=v; vty=infer_vty v; vspan=Span.default}
@@ -353,3 +359,15 @@ let kind_of_tfun raw_ty = match raw_ty with
   | TFun {func_kind; _} -> func_kind
   | _ -> failwith "kind_of_tfun: expected TFun"
 ;;
+
+(* custom types for c compilation *)
+let tclosure_cid = Cid.create ["CClosure"]
+let tclosure env_ty fun_ty = 
+  tcustom tclosure_cid [env_ty; fun_ty]
+;;
+let tunion_cid = Cid.create ["CUnion"]
+let tunion tys = tcustom tunion_cid tys
+
+let tcarray_cid = Cid.create ["CArray"]
+let tcarray (cell_ty : ty) (len : int) = 
+  tcustom tcarray_cid [cell_ty; tint len]

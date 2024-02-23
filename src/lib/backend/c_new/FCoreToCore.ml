@@ -70,6 +70,11 @@ let rec translate_raw_ty (raw_ty : F.raw_ty) : C.raw_ty =
     let raw_tys = List.map translate_ty ts |> List.map (fun (ty : C.ty) -> ty.raw_ty) in
     let label_rawty_pairs = List.combine labels raw_tys in
     C.TRecord(label_rawty_pairs)
+  | F.TEnum(tags) ->
+     C.TInt(
+      if (List.length tags <= 256) 
+        then (C.Sz 8) 
+        else (C.Sz 16))
 
   and translate_ty (ty : F.ty) : C.ty = 
     C.ty_sp (translate_raw_ty ty.raw_ty) ty.tspan
@@ -172,6 +177,17 @@ let rec translate_value (value : F.value) : C.value =
     C.value_sp (C.VRecord(List.map (fun (label, value) -> (label, translate_value value |> uv)) label_value_pairs)) value.vspan
   | F.VUnit -> err "unit values cannot be translated back to CoreSyntax"
   | F.VClosure _ -> err "closure values cannot be translated back to CoreSyntax"
+  | F.VEnum(str, enum_ty) -> 
+    (* translate to an int *)
+    let tags = match enum_ty.raw_ty with 
+      | F.TEnum(tags) -> tags
+      | _ -> err "enum type is not an enum"
+    in
+    let ival = List.assoc str tags in
+    let size = if (List.length tags <= 256) then 8 else 16 in
+    C.value_sp (C.VInt(Integer.create ival size)) value.vspan
+
+
 
 
 and translate_event_val (ev : F.vevent) : C.event_val = 

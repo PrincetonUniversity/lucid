@@ -43,7 +43,9 @@ and show_raw_ty = function
     let ternary = if ternary then "pattern" else "bitstring" in
     sprintf "%s<%d>" ternary len
   | TEvent -> "event"
-
+  | TEnum(tags) -> 
+    let tag_str = List.map (fun (tag, i) -> sprintf "%s = %d" (tag) i) tags in
+    sprintf "{%s}" (String.concat " | " tag_str)
 
 let show_params params = 
   let params = List.map (fun (id, ty) -> sprintf "%s: %s" (show_id id) (show_ty ty)) params in
@@ -93,6 +95,7 @@ and show_v = function
     let evid = show_cid evid in
     let evdata = List.map show_value evdata |> String.concat ", " in
     sprintf "%s(%s)" evid evdata
+  | VEnum(tag, _) -> tag
 
 let rec show_exp ?(tystr=def_tystr) exp  = 
   if (tystr) then sprintf "(%s: %s)" (show_e exp.e) (show_ty exp.ety)

@@ -182,10 +182,6 @@ let venv_to_rec_ty env =
   let fields, tys = List.map (fun (id, value) -> (id, value.vty)) env |> List.split in
   trecord fields tys
 ;;
-let tclosure_cid = Cid.create ["Closure"]
-let tclosure env_ty fun_ty = 
-  tcustom tclosure_cid [env_ty; fun_ty]
-;;
 (* we want to change the type of the action closure to "Closure(ctx_struct, fun_ty)" *)
 let add_closure_types decls = 
   let v = object 
