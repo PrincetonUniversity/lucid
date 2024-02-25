@@ -25,7 +25,11 @@ let process_prog ?(opts=def_opts) builtin_tys ds =
   print_if_debug ds;
   print_if_verbose "---------typing1---------";
   let ds = Typer.infer_prog builtin_tys ds in
+  print_if_debug ds;
+  print_if_verbose "---------Tagging global constructors-------------";
   let ds = GlobalConstructorTagging.annotate ds in
+  print_if_debug ds;
+  let ds = Typer.infer_prog builtin_tys ds in
   (* let ds = SourceTracking.init_tracking ds in  *)
   print_if_verbose "---------Concretizing symbolics-------------";
   let ds = SymbolicElimination.eliminate_prog ds in

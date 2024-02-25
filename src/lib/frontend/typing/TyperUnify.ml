@@ -81,6 +81,7 @@ let occurs_ty span tvar raw_ty : unit =
     | TMemop _ -> ()
     | TRecord lst -> List.iter (fun (_, raw_ty) -> occ tvar raw_ty) lst
     | TTuple lst -> List.iter (occ tvar) lst
+    | TBuiltin (_, raw_tys, _) -> List.iter (occ tvar) raw_tys
     | TFun { arg_tys; ret_ty; _ } ->
       List.iter (fun ty -> occ tvar ty.raw_ty) arg_tys;
       occ tvar ret_ty.raw_ty
@@ -252,6 +253,10 @@ and try_unify_rty span rty1 rty2 =
     if b1 <> b2 || not (Cid.equal cid1 cid2) then raise CannotUnify;
     if (List.length sizes1 <> List.length sizes2) then raise CannotUnify;
     List.iter2 (try_unify_size span) sizes1 sizes2
+  | TBuiltin(cid1, raw_tys1, b1), TBuiltin(cid2, raw_tys2, b2) ->
+    if b1 <> b2 || not (Cid.equal cid1 cid2) then raise CannotUnify;
+    if (List.length raw_tys1 <> List.length raw_tys2) then raise CannotUnify;
+    try_unify_lists unify_raw_ty raw_tys1 raw_tys2
   | TAbstract (cid1, sizes1, b1, _), TAbstract (cid2, sizes2, b2, _) ->
     if b1 <> b2 || not (Cid.equal cid1 cid2) then raise CannotUnify;
     List.iter2 (try_unify_size span) sizes1 sizes2
@@ -315,6 +320,7 @@ and try_unify_rty span rty1 rty2 =
       | TInt _
       | TMemop _
       | TName _
+      | TBuiltin _
       | TFun _
       | TRecord _
       | TVector _

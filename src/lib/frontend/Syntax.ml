@@ -58,6 +58,7 @@ and raw_ty =
   | TVector of raw_ty * size
   | TTuple of raw_ty list
   | TTable of tbl_ty
+  | TBuiltin of cid * (raw_ty list) * bool (* new named builtin types. Table.t<<key_t, arg1_t, arg2_t, ret_t>>*)
   | TAction of acn_ty
   | TActionConstr of acn_ctor_ty
   | TPat of size (* number of bits *)

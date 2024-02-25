@@ -18,36 +18,57 @@ let error fun_name msg =
   error (name ^ ": " ^ fun_name ^ ": " ^ msg)
 ;;
 
-let sizes = 3 (* key dimensions, action args, action ret *)
-let ty_args = 0
+let sizes = 0 (* key dimensions, action args, action ret *)
+let ty_args = 4
 let global = true
 
 
 (* Table.t<'k, 'a, 'r> *)
-let unbound_t (key_fmt,acn_arg,acn_ret) = 
-  TName(t_id, [key_fmt; acn_arg; acn_ret], true)
+let unbound_t (key_ty, iarg_ty, marg_ty, ret_ty) = 
+  TBuiltin(t_id, [key_ty; iarg_ty; marg_ty; ret_ty], true)
 ;;
-let fresh_t_sizes () = 
+(* let fresh_t_sizes () = 
   fresh_size "table_key_fmt",
   fresh_size "table_acn_arg", 
   fresh_size "table_acn_ret"
+;; *)
+
+(*  Table.create  :   
+    int ->  iarg -> marg -> ret -> Table.t<<'k, iarg, marg, ret>> *)
+(* NOTE: 
+    DON'T FLATTEN TUPLES IN AN ACTION *)
+let create_id = Cid.create_ids [id; Id.create "create"]
+
+let taction iarg marg ret = 
+  TActionConstr(
+    {
+      aconst_param_tys=[ty iarg];
+      aacn_ty={
+        aarg_tys=[ty marg];
+        aret_tys=[ty ret];
+      }
+    })
 ;;
 
-(*  Table.create  :   int -> 'a list (or tup)  -> 'a -> Table.t<'k><<'a>> *)
-let create_id = Cid.create_ids [id; Id.create "create"]
 let create_sig =
-  let key_fmt, acn_arg, acn_ret = fresh_t_sizes () in
-  let acn_rty  = fresh_rawty   "table_acn_rty" in
-  let acns_rty = fresh_rawty "table_acns_rty" in
+  let key_rty, iarg_rty, marg_rty, ret_rty = 
+    fresh_rawty "table_key_ty",
+    fresh_rawty "table_iarg_ty",
+    fresh_rawty "table_marg_ty",
+    fresh_rawty "table_ret_ty"
+  in
+  let acn_rty = taction iarg_rty marg_rty ret_rty in
+  let acns_rty = TVector(acn_rty, fresh_size "acn_vec_len") in
   let start_eff = FVar (QVar (Id.fresh "tbl_create_eff")) in
   let arg_tys = [
       fresh_tint () ;                            (* number of entries *)
       ty @@ acns_rty;                            (* actions bound to the table *)
-      ty @@ acn_rty                              (* default action *)
+      ty @@ acn_rty;                             (* default action *)
+      ty @@ iarg_rty                              (* default action argument *)
     ] 
   in
   let tbl_eff = FVar (QVar (Id.fresh "tbl_eff")) in
-  let ret_ty = ty_eff (unbound_t (key_fmt, acn_arg, acn_ret)) tbl_eff in
+  let ret_ty = ty_eff (unbound_t (key_rty, iarg_rty, marg_rty, ret_rty)) tbl_eff in
   let ctor_ty = {
       arg_tys
     ; ret_ty
@@ -57,7 +78,6 @@ let create_sig =
   } in
   ctor_ty 
 ;;
-
 
 (* convert a function from ivals -> ivals to a function from values -> values *)
 let ival_fcn_to_internal_action nst swid vaction = 
@@ -110,24 +130,31 @@ let create_ctor (nst : InterpState.State.network_state) swid args =
 ;;
 
 
-(* Table.install : Table.t -> tuple<pat> -> action_constructor *)
+(* Table.install : Table.t<<'k, iarg, marg, ret>> -> 'k -> (iarg -> marg -> ret) -> iarg -> () *)
 let install_name = "install"
 let install_id = Id.create install_name
 let install_cid = Cid.create_ids [id; install_id]
 let install_error msg = error install_name msg
 
 let install_ty = 
-  let key_fmt, acn_arg, acn_ret = fresh_t_sizes () in
-  let key_ty = fresh_rawty "tbl_key_ty" in
-  let acn_ty = fresh_rawty "tbl_acn_ty" in
+  let key_rty, iarg_rty, marg_rty, ret_rty = 
+    fresh_rawty "table_key_ty",
+    fresh_rawty "table_iarg_ty",
+    fresh_rawty "table_marg_ty",
+    fresh_rawty "table_ret_ty"
+  in
+  let mask_rawty = key_rty in
+  let acn_rty = taction iarg_rty marg_rty ret_rty in  
   let start_eff = FVar (QVar (Id.fresh "eff")) in (* effect where this call begins *)
   (* table argument *)
   let tbl_eff = FVar (QVar (Id.fresh "eff")) in (* effect attached to table arg *)
-  let tbl_t = ty_eff (unbound_t (key_fmt, acn_arg, acn_ret)) tbl_eff in
+  let tbl_t = ty_eff (unbound_t (key_rty, iarg_rty, marg_rty, ret_rty)) tbl_eff in
   let arg_tys = [
       tbl_t; 
-      ty @@ key_ty;
-      ty @@ acn_ty
+      ty @@ key_rty;
+      ty @@ mask_rawty;
+      ty @@ acn_rty;
+      ty @@ iarg_rty
     ]
   in
   let ret_ty = ty @@ TVoid in
@@ -195,24 +222,24 @@ let lookup_name = "lookup"
 let lookup_id = Id.create lookup_name
 let lookup_cid = Cid.create_ids [id; lookup_id]
 let lookup_error msg = error lookup_name msg
-(* Table.match   :   Table.t<'k> -> int<'k> -> 'a -> 'r *)
+(* Table.lookup : Table.t<<'k, iarg, marg, ret>> -> 'k -> iarg -> ret *)
 let lookup_ty = 
-  let key_fmt, acn_arg, acn_ret = fresh_t_sizes () in
-
-  let key_ty = fresh_rawty "tbl_key_ty" in
-  let acn_arg_ty = fresh_rawty "tbl_acn_arg_ty" in
-  let acn_ret_ty = fresh_rawty "tbl_acn_ret_ty" in
-
+  let key_rty, iarg_rty, marg_rty, ret_rty = 
+    fresh_rawty "table_key_ty",
+    fresh_rawty "table_iarg_ty",
+    fresh_rawty "table_marg_ty",
+    fresh_rawty "table_ret_ty"
+  in
   let start_eff = FVar (QVar (Id.fresh "eff")) in (* effect where this call begins *)
   let tbl_eff = FVar (QVar (Id.fresh "eff")) in (* effect attached to table arg *)
-  let tbl_t = ty_eff (unbound_t (key_fmt, acn_arg, acn_ret)) tbl_eff in
+  let tbl_t = ty_eff (unbound_t (key_rty, iarg_rty, marg_rty, ret_rty)) tbl_eff in
   let arg_tys = [
       tbl_t; 
-      ty @@ key_ty;
-      ty @@ acn_arg_ty
+      ty @@ key_rty;
+      ty @@ marg_rty
     ]
   in
-  let ret_ty = ty acn_ret_ty in 
+  let ret_ty = ty ret_rty in 
   ty @@ TFun
     { arg_tys
     ; ret_ty
@@ -304,14 +331,17 @@ let defs : State.global_fun list =
 ;;
 
 let signature =  
-  let key_fmt, acn_arg, acn_ret = fresh_t_sizes () in
+  let key_rty, iarg_rty, marg_rty, ret_rty = 
+    fresh_rawty "table_key_ty",
+    fresh_rawty "table_iarg_ty",
+    fresh_rawty "table_marg_ty",
+    fresh_rawty "table_ret_ty"
+  in
   ( module_id
-  , [Cid.last_id t_id, [key_fmt; acn_arg; acn_ret], ty (unbound_t (key_fmt, acn_arg, acn_ret))]
+  , [Cid.last_id t_id, [], ty (unbound_t (key_rty, iarg_rty, marg_rty, ret_rty))]
   , defs
   , constructors )
 ;;
-
-
 
 (*** Table method call typing -- this runs after the main pass of the frontend type checker ***)
 let strip_links ty = { ty with raw_ty = TyTQVar.strip_links ty.raw_ty }

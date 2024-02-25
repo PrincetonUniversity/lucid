@@ -58,6 +58,21 @@ let rec translate_raw_ty (rty : S.raw_ty) tspan : C.raw_ty =
       ; ret_ty = translate_ty fty.ret_ty
       }
   | S.TVoid -> C.TBool (* Dummy translation needed for foreign functions *)
+  | S.TBuiltin(cid, raw_tys, _) when Cid.equals cid Tables.t_id-> 
+    err_unsupported tspan "TBuiltin IR translation not implemented"
+    (* let rawty_to_intsize (raw_ty : S.raw_ty) = 
+      match raw_ty with 
+      | TInt(sz) -> SyntaxUtils.extract_size sz
+      | TBool ->1
+      | _ -> S.error "[rty_to_size] expected an integer, but got something else"
+    in
+
+    let tkey_sizes = C.Szs (List.map rawty_to_intsize ) in
+    let tparam_sizes = C.Szs (List.map rawty_to_intsize raw_tys.(1)) in
+    let tret_sizes = C.Szs (List.map rawty_to_intsize raw_tys.(2)) in
+    C.TName(Tables.t_id, [tkey_sizes; tparam_sizes; tret_sizes]) *)
+  | S.TBuiltin _ -> 
+    failwith "builtins besides tables not implemented as TBuiltin"
   | S.TTable tbl ->
     let ty_to_intsize (ty : S.ty) = 
       match ty.raw_ty with 

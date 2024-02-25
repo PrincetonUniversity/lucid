@@ -213,6 +213,10 @@ ty:
     | AUTO                              { ty_sp (TQVar (QVar (fresh_auto ()))) $1 }
     | cid    				            { ty_sp (TName (snd $1, [], true)) (fst $1) }
     | cid poly				            { ty_sp (TName (snd $1, snd $2, true)) (fst $1) }
+    | cid ty_poly                       {
+                                            let raw_tys = List.map (fun ty -> ty.raw_ty) (snd $2) in
+                                            let span = Span.extend (fst $1) (fst $2) in 
+                                            ty_sp (TBuiltin (snd $1, raw_tys, true)) span }
     | EVENT                             { ty_sp TEvent $1}
     | VOID                              { ty_sp (TVoid) $1 }
     | GROUP                             { ty_sp (TGroup) $1 }
@@ -252,6 +256,15 @@ poly:
 
 single_poly:
     | LESS size MORE                    { Span.extend $1 $3, snd $2 }
+
+
+ty_polys:
+    | ty                                      { [$1] }
+    | ty COMMA ty_polys                       { ($1)::($3) }
+
+ty_poly: 
+    | LSHIFT ty_polys RSHIFT            { Span.extend $1 $3, $2 }
+
 
 
 paren_args:
@@ -499,9 +512,9 @@ decl:
                                               | _ -> error "parsing error: invalid use of @main"}
     | ACTION_CONSTR ID constr_params=paramsdef ASSIGN LBRACE RETURN ACTION ty=ty ID acn_params=paramsdef LBRACE acn_body=statement RBRACE SEMI RBRACE SEMI
         { [mk_daction_ctor (snd $2) [ty] constr_params acn_params acn_body (Span.extend $1 $16)]}
+    | ACTION ty=ty ID install_params=paramsdef match_params=paramsdef LBRACE acn_body=statement RBRACE
+        { [mk_daction_ctor (snd $3) [ty] install_params match_params acn_body (Span.extend $1 $8)]}
 
-    | ACTION ty=ty ID acn_params=paramsdef LBRACE acn_body=statement RBRACE
-                                            { [mk_daction (snd $3) [ty] acn_params acn_body (Span.extend $1 $7)]}
     | MEMOP ID paramsdef LBRACE statement RBRACE
                                             { [mk_dmemop (snd $2) $3 $5 (Span.extend (fst $1) $6)] }
     | SYMBOLIC SIZE ID SEMI                 { [dsize_sp (snd $3) None (Span.extend $1 $4)] }

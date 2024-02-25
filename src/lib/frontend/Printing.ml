@@ -128,6 +128,11 @@ let rec raw_ty_to_string t =
     cid_to_string cid
     ^ (sizes_to_string sizes)
     ^ if cfg.verbose_types then "{" ^ string_of_bool b ^ "}" else ""
+  | TBuiltin (cid, raw_tys, b) ->
+    cid_to_string cid
+    ^ "<<" ^(comma_sep raw_ty_to_string raw_tys) ^">>"
+    ^ if cfg.verbose_types then "{" ^ string_of_bool b ^ "}" else ""
+
   | TAbstract (cid, sizes, b, _) ->
     let base =
       if cfg.verbose_types

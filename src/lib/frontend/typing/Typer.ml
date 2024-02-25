@@ -1743,7 +1743,8 @@ let infer_prog (builtin_tys : Builtins.builtin_tys) (decls : decls) : decls =
   (* exit 1; *)
   let decls = List.rev inf_decls in
   (* now, run through module-specific type checkers *)
-  let decls = List.fold (fun decls typer -> typer decls) decls (Builtins.builtin_typers) in
+  (* DEPRECIATED in favor of type args to builtin types *)
+  (* let decls = List.fold (fun decls typer -> typer decls) decls (Builtins.builtin_typers) in *)
   (* Tables.table_type_checker decls; *)
   decls
 ;;

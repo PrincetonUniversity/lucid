@@ -93,8 +93,8 @@ let rec globals_of_econstr user_constrs parent_tcid var_tcid constr_exp : (exp) 
     | ["Array"; "create"] -> 
       annotate_espan constr_exp parent_tcid var_tcid
     | ["Table"; "create"] -> (
-      let (tbl_len, taction_arg, tactiondef) = match constr_args with 
-        | [tbl_len; taction_arg; tactiondef] -> (tbl_len, taction_arg, tactiondef)
+      let (len, actions, def, def_arg) = match constr_args with 
+        | [len; actions; def; def_arg] -> (len, actions, def, def_arg)
         | _ -> error "[globals_of_econstr] error: unexpected constructor expression form" 
       in
       (* the action arg may be a tuple or vector, recursively annotate it. *)
@@ -109,8 +109,8 @@ let rec globals_of_econstr user_constrs parent_tcid var_tcid constr_exp : (exp) 
         | _ -> 
           annotate_espan exp None (SyntaxUtils.cid_of_exp exp |> cid)
       in
-      let taction_arg' = annotate_inner taction_arg in
-      let constr_args' = [tbl_len; taction_arg'; tactiondef] in
+      let actions' = annotate_inner actions in
+      let constr_args' = [len; actions'; def; def_arg] in
       let e' = ECall(constr_cid, constr_args', u) in
       annotate_espan {constr_exp with e=e'} parent_tcid var_tcid    )
     | _ -> (

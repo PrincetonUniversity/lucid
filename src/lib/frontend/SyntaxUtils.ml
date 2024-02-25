@@ -63,6 +63,7 @@ let rec is_global_rty rty =
     false
   | TQVar _ -> false (* I think *)
   | TName (_, _, b) | TAbstract (_, _, b, _) -> b
+  | TBuiltin(_, _, b) -> b
   | TTuple lst -> List.exists is_global_rty lst
   | TRecord lst -> List.exists (fun (_, rty) -> is_global_rty rty) lst
   | TVector (t, _) -> is_global_rty t
@@ -81,6 +82,7 @@ let rec is_not_global_rty rty =
     true
   | TQVar _ -> false (* I think *)
   | TName (_, _, b) | TAbstract (_, _, b, _) -> not b
+  | TBuiltin(_, _, b) -> not b
   | TTuple lst -> List.for_all is_not_global_rty lst
   | TRecord lst -> List.for_all (fun (_, rty) -> is_not_global_rty rty) lst
   | TVector (t, _) -> is_not_global_rty t
@@ -275,6 +277,8 @@ let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
     b1 = b2 && Cid.equal id1 id2 && List.for_all2 equiv_size sizes1 sizes2 
   | TAbstract (id1, sizes1, b1, _), TAbstract (id2, sizes2, b2, _) ->
     b1 = b2 && Cid.equal id1 id2 && List.for_all2 equiv_size sizes1 sizes2
+  | TBuiltin(id1, rty1, b1), TBuiltin(id2, rty2, b2) ->
+    b1 = b2 && Cid.equal id1 id2 && List.for_all2 equiv_raw_ty rty1 rty2
   | TFun func1, TFun func2 ->
     let func1 = normalize_tfun func1 in
     let func2 = normalize_tfun func2 in
@@ -323,7 +327,8 @@ let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
       | TAbstract _
       | TActionConstr _
       | TAction _
-      | TTable _ )
+      | TTable _ 
+      | TBuiltin _)
     , _ ) -> false
 
 and equiv_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
@@ -355,6 +360,7 @@ let default_expression ty =
       record_sp (List.map (fun (s, raw_ty) -> s, aux raw_ty) lst) Span.default
     | TTuple _ -> failwith "Cannot create default expression for tuple"
     | TName(cid, _, _) -> failwith ("Cannot create default expression for user type "^(Cid.to_string cid))
+    | TBuiltin(cid, _, _) -> failwith ("Cannot create default expression for builtin type "^(Cid.to_string cid))
     | TMemop _ -> failwith "Cannot create default expression for memop"
     | TPat _ -> failwith "Cannot create default expression for pattern"
     | TEvent -> failwith "Cannot create default expression for event"
@@ -633,6 +639,7 @@ let raw_ty_to_constr_str raw_ty =
   | TQVar (_) -> "qvar"
   | TBitstring -> "bitstring"
   | TAction (_) -> "action"
+  | TBuiltin (cid, _, _) -> Cid.to_string cid
 ;;
 
 let op_to_constr_str o =
