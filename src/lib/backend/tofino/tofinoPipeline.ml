@@ -78,6 +78,7 @@ let atomic_op_form ds =
 
 let core_passes ds portspec = 
   (* all the passes over CoreSyntax *)
+  let ds = EliminateTBuiltin.process_prog ds in
   dump_ir_prog "midend before partial interp (initial prog)" "midend_pre_partial_interp.dpt" ds;
   let ds = if Cmdline.cfg.partial_interp
     then (

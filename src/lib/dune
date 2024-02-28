@@ -72,6 +72,7 @@
    frontendPipeline
    midendPipeline
    syntaxToCore
+   eliminateTBuiltin
    interp
    InterpConfig
    interpCore

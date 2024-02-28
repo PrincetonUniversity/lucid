@@ -58,41 +58,8 @@ let rec translate_raw_ty (rty : S.raw_ty) tspan : C.raw_ty =
       ; ret_ty = translate_ty fty.ret_ty
       }
   | S.TVoid -> C.TBool (* Dummy translation needed for foreign functions *)
-  | S.TBuiltin(cid, raw_tys, _) when Cid.equals cid Tables.t_id -> 
-    (* let raw_tys = List.map (fun rty -> translate_raw_ty rty tspan) raw_tys in *)
-    let key_raw_ty = List.nth raw_tys 0 |> S.TyTQVar.strip_links in
-    let install_raw_ty = List.nth raw_tys 1 |> S.TyTQVar.strip_links in
-    (* install time param not currently used in backend *)
-    let param_raw_ty = List.nth raw_tys 2 |> S.TyTQVar.strip_links in
-    let ret_raw_ty = List.nth raw_tys 3 |> S.TyTQVar.strip_links in
-    let rec flatten (raw_ty : S.raw_ty) : S.raw_ty list = 
-      match raw_ty with 
-        | S.TTuple(tys) -> 
-          List.map flatten tys |> List.concat
-        | _ -> [raw_ty]
-    in
-    let key_raw_tys = flatten key_raw_ty in
-    let install_raw_tys = flatten install_raw_ty in
-    let param_raw_tys = flatten param_raw_ty in
-    let ret_raw_tys = flatten ret_raw_ty in
-
-    (* err_unsupported tspan "TBuiltin IR translation not implemented" *)
-    let rawty_to_intsize (raw_ty : S.raw_ty) = 
-      match S.TyTQVar.strip_links (raw_ty) with 
-      | TInt(sz) -> SyntaxUtils.extract_size sz
-      | TBool ->1
-      | _ -> 
-        print_endline (Printing.raw_ty_to_string raw_ty);
-        S.error "[rty_to_size] expected an integer, but got something else"
-    in
-
-    let tkey_sizes = C.Szs (List.map rawty_to_intsize key_raw_tys) in
-    let tinstall_sizes = C.Szs (List.map rawty_to_intsize install_raw_tys) in
-    let tparam_sizes = C.Szs (List.map rawty_to_intsize param_raw_tys) in
-    let tret_sizes = C.Szs (List.map rawty_to_intsize ret_raw_tys) in
-    C.TName(Tables.t_id, [tkey_sizes; tinstall_sizes; tparam_sizes; tret_sizes])
-  | S.TBuiltin _ -> 
-    failwith "builtins besides tables not implemented as TBuiltin"
+  | S.TBuiltin(cid, rtys, _) -> 
+    C.TBuiltin(cid, List.map (fun rty -> translate_raw_ty rty Span.default)  rtys)
   | S.TTable tbl ->
     let ty_to_intsize (ty : S.ty) = 
       match ty.raw_ty with 

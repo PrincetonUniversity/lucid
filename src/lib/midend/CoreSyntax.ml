@@ -29,7 +29,7 @@ and raw_ty =
   | TFun of func_ty (* Only used for Array/event functions at this point *)
   | TName of cid * sizes
     (* Named type: e.g. "Array.t<<32>>". Bool is true if it represents a global type *)
-  (* | TBuiltin of cid * ty list *)
+  | TBuiltin of cid * raw_ty list
     (* Named type that is a builtin *)
   | TMemop of int * size
   | TAction of acn_ty

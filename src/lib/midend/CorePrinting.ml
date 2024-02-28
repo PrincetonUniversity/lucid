@@ -41,6 +41,10 @@ let rec raw_ty_to_string t =
     cid_to_string cid
     ^ sizes_to_string sizes
     (* ^ if cfg.verbose_types then "{" ^ string_of_bool b ^ "}" else "" *)
+  | TBuiltin (cid, rtys) ->
+    cid_to_string cid
+    ^ comma_sep raw_ty_to_string rtys
+    (* ^ if cfg.verbose_types then "{" ^ string_of_bool b ^ "}" else "" *)
   | TEvent -> "event"
   | TFun func -> func_to_string func
   | TMemop (n, size) -> Printf.sprintf "memop%d<<%s>>" n (size_to_string size)
