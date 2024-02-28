@@ -32,7 +32,7 @@ let builtin_cids =
         (List.init (List.length constructors) (fun _ -> is_builtin))
       in
       fun_cids @ constructor_cids)
-    Builtins.builtin_modules
+    (List.map LibraryInterface.sigty_to_tup Builtins.builtin_modules)
   |> List.flatten
 ;;
 

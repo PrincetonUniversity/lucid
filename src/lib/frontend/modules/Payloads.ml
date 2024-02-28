@@ -146,5 +146,6 @@ let defs : State.global_fun list =
 ;;
 
 let signature =
-  module_id, [Cid.last_id t_id, [], payload_ty], defs, constructors
+  LibraryInterface.tup_to_sigty
+  (module_id, [Cid.last_id t_id, [], payload_ty], defs, constructors)
 ;;

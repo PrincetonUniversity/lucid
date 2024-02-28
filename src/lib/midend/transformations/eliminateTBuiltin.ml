@@ -1,9 +1,6 @@
 (* convert TBuiltin table types to TName, which is still used 
    in the current tofino and interp implementations *)
-
 open CoreSyntax
-  
-
 
 let v =
    object (self)

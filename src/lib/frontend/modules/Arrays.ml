@@ -263,6 +263,7 @@ let defs : State.global_fun list =
 
 let signature =
   let sz = IVar (QVar (Id.fresh "sz")) in
+  LibraryInterface.tup_to_sigty
   ( module_id
   , [Cid.last_id t_id, [sz], TName (t_id, [sz], true) |> ty]
   , defs

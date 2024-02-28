@@ -20,7 +20,7 @@ List.map
     in
     let constructor_cids = List.map fst constructors in
     fun_cids @ constructor_cids)
-  Builtins.builtin_modules
+  (List.map LibraryInterface.sigty_to_tup Builtins.builtin_modules)
 |> List.flatten
 ;;
 

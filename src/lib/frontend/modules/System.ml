@@ -132,4 +132,6 @@ let defs : State.global_fun list =
 ;;
 
 
-let signature = module_id, [], defs, []
+let signature = 
+  LibraryInterface.tup_to_sigty
+  (module_id, [], defs, [])

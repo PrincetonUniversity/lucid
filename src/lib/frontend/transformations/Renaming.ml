@@ -118,7 +118,7 @@ let rename prog =
               in
               let constructor_cids = List.map fst constructors in
               fun_cids @ constructor_cids)
-            builtin_modules
+            (List.map LibraryInterface.sigty_to_tup builtin_modules)
           |> List.flatten
         in
         let var_map =

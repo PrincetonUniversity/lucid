@@ -158,7 +158,7 @@ let default_env =
             tys
         in
         id, { empty_modul with vars; constructors; user_tys })
-      Builtins.builtin_modules
+        (List.map LibraryInterface.sigty_to_tup (Builtins.builtin_modules))
   in
   let submodules =
     List.fold_left

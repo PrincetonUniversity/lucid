@@ -1,10 +1,12 @@
 (* Tables as a builtin module *)
 (* TODO: test with nested types for keys, args *)
-(* TODO: update table control commands *)
 (* TODO: update documentation *)
 (* TODO: add an install_mask_priority function *)
 (* TODO: add a remove function *)
 (* TODO: add an update function *)
+(* TODO: simplify action / action constructor syntax *)
+(* TODO: remove all the pattern syntax and 
+         special table syntax from the frontend *)
 open Batteries
 open Syntax
 open InterpState
@@ -14,8 +16,6 @@ open InterpSyntax
 
 
 (*** masked-key helpers ***)
-
-
 
 (* translate a value into a (value, mask) tuple 
   representing an exact match pattern *)
@@ -420,6 +420,7 @@ let signature =
     fresh_rawty "table_marg_ty",
     fresh_rawty "table_ret_ty"
   in
+  LibraryInterface.tup_to_sigty
   ( module_id
   , [Cid.last_id t_id, [], ty (fresh_t (key_rty, iarg_rty, marg_rty, ret_rty))]
   , defs

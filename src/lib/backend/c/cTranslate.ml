@@ -210,6 +210,7 @@ and translate_raw_ty rty = match rty with
     sprintf "%s (*func_type)(%s)" ret_ty (String.concat ", " arg_tys) *)    
   | TName(cid, []) -> cid_string cid
   | TName(cid, sizes) -> builtin_ty_string cid sizes
+  | TBuiltin _ -> error "TBuiltins are not yet supported in this backend."
   (* | TName(cid, _, false) -> error "user-defined types should not be size polymorphic"     *)
     (* error "user-defined named types should be inlined by now" *)
   | TMemop(n_args, (Sz arg_sz)) -> memopty_string n_args arg_sz
