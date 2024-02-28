@@ -155,6 +155,41 @@ let port_tys ds =
   !pass
 ;;
 
+
+(* Table.install is not supported on the tofino *)
+let no_table_installs ds = 
+  let pass = ref true in
+  let table_install_fcn_cids = List.filter_map 
+    (fun fcn_cid -> 
+      let (name  : String.t) = Cid.to_string fcn_cid in
+      let contains_install = 
+            (Batteries.String.exists name "install" )
+        ||  (Batteries.String.exists name "Install")
+      in      
+      if contains_install then Some fcn_cid else None)
+    (Tables.function_cids)
+  in
+  (* check every ECall in the program, fail if any one 
+     of them to a function in table_install_fcn_cids *)
+  let v =
+    object
+      inherit [_] s_iter as super
+
+      method! visit_exp ctx exp = 
+        match exp.e with 
+        | ECall(fcn_cid, _, _) -> 
+          if List.exists (Cid.equals fcn_cid) table_install_fcn_cids then 
+            (pass := false;
+            let err_str = "Table.install not supported on tofino." in
+            report_err exp.espan err_str)
+          else (super#visit_exp ctx exp)
+        | _ -> super#visit_exp ctx exp
+    end
+  in
+  v#visit_decls () ds; 
+  !pass
+;;
+
 (* All tables must be used in a program to compile to P4,
    because if a table is not used, we have no way of
    creating the actions, whose bodies must be inlined with
@@ -216,7 +251,7 @@ let all_tables_used ds =
 *)
 let all_checks ds =
   let checks =
-    [event_param_alignment; array_sizes; port_tys; all_tables_used]
+    [event_param_alignment; array_sizes; port_tys; all_tables_used; no_table_installs]
   in
   let pass =
     List.fold_left

@@ -61,6 +61,7 @@ let rec translate_raw_ty (rty : S.raw_ty) tspan : C.raw_ty =
   | S.TBuiltin(cid, raw_tys, _) when Cid.equals cid Tables.t_id -> 
     (* let raw_tys = List.map (fun rty -> translate_raw_ty rty tspan) raw_tys in *)
     let key_raw_ty = List.nth raw_tys 0 |> S.TyTQVar.strip_links in
+    let install_raw_ty = List.nth raw_tys 1 |> S.TyTQVar.strip_links in
     (* install time param not currently used in backend *)
     let param_raw_ty = List.nth raw_tys 2 |> S.TyTQVar.strip_links in
     let ret_raw_ty = List.nth raw_tys 3 |> S.TyTQVar.strip_links in
@@ -71,6 +72,7 @@ let rec translate_raw_ty (rty : S.raw_ty) tspan : C.raw_ty =
         | _ -> [raw_ty]
     in
     let key_raw_tys = flatten key_raw_ty in
+    let install_raw_tys = flatten install_raw_ty in
     let param_raw_tys = flatten param_raw_ty in
     let ret_raw_tys = flatten ret_raw_ty in
 
@@ -85,9 +87,10 @@ let rec translate_raw_ty (rty : S.raw_ty) tspan : C.raw_ty =
     in
 
     let tkey_sizes = C.Szs (List.map rawty_to_intsize key_raw_tys) in
+    let tinstall_sizes = C.Szs (List.map rawty_to_intsize install_raw_tys) in
     let tparam_sizes = C.Szs (List.map rawty_to_intsize param_raw_tys) in
     let tret_sizes = C.Szs (List.map rawty_to_intsize ret_raw_tys) in
-    C.TName(Tables.t_id, [tkey_sizes; tparam_sizes; tret_sizes])
+    C.TName(Tables.t_id, [tkey_sizes; tinstall_sizes; tparam_sizes; tret_sizes])
   | S.TBuiltin _ -> 
     failwith "builtins besides tables not implemented as TBuiltin"
   | S.TTable tbl ->

@@ -246,7 +246,6 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
   | ETuple es ->
     let env, inf_es = infer_exps env es in
     let tuple_eff = fresh_effect () in
-    print_endline@@"infer_exp on tuple("^(Printing.comma_sep Printing.exp_to_string es)^")";
     List.iteri
       (fun i e' ->
         if (not env.in_global_def) && is_global (Option.get e'.ety)
@@ -1748,9 +1747,5 @@ let infer_prog (builtin_tys : Builtins.builtin_tys) (decls : decls) : decls =
   let inf_decls = unsubst_TAbstracts inf_decls in
   (* exit 1; *)
   let decls = List.rev inf_decls in
-  (* now, run through module-specific type checkers *)
-  (* DEPRECIATED in favor of type args to builtin types *)
-  (* let decls = List.fold (fun decls typer -> typer decls) decls (Builtins.builtin_typers) in *)
-  (* Tables.table_type_checker decls; *)
   decls
 ;;

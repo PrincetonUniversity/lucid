@@ -214,7 +214,7 @@ let atomize_int_assigns ds =
            statements handle their own precomputations *)
           { stmt with s = SSeq (s1, s2) }
         | _ ->
-          print_endline ("visiting statement: "^(CorePrinting.stmt_to_string stmt));
+          (* print_endline ("visiting statement: "^(CorePrinting.stmt_to_string stmt)); *)
           (* Otherwise, we need to precompute for this statement *)
           let stmt' = super#visit_statement () stmt in
           sequence_stmts (precompute @ [stmt'])

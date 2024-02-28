@@ -927,14 +927,14 @@ let interp_decl (nst : State.network_state) swid d =
     State.add_global swid (Cid.id id) (F runtime_function) nst;
     nst
 
-  | DActionConstr({aid; aconst_params; aparams; abody}) -> 
+  | DActionConstr({aid; aconst_params; aparams; abody}) ->
+     (* TODO: clean up the way actions and action constructors are 
+              interpreted, here and in Tables.ml *)
     (* add a function to the environment that takes the action constructor's params 
        and returns a function version of the inner action *)
     let action_function_generator _ _ const_args = 
-      print_endline ("in action_function_generator with args: "^(List.map (fun v -> (extract_ival v) |> Printing.value_to_string) const_args |> String.concat ", "));
       (* the inner action function *)
       let action_function _ _ args = 
-        print_endline ("in action_function with args: "^(List.map (fun v -> (extract_ival v) |> Printing.value_to_string) args |> String.concat ", "));
         (* bind the closure args and runtime args in the env *)
         let locals = 
           List.fold_left2

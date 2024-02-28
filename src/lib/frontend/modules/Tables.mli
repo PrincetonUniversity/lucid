@@ -1,9 +1,5 @@
 include LibraryInterface.TypeInterface
 
-(* the type checker extension for the tables
-   module checks calls to all table methods
-   (basically, any expression with type Table.t) *)
-val type_checker : Syntax.decl list -> Syntax.decl list
 
 val is_tbl_ty : CoreSyntax.raw_ty -> bool
 (* create the table, adding it to a pipeline in a switch *)
@@ -17,6 +13,7 @@ val function_cids : Cid.t list
    
 type core_tbl_ty = 
   { tkey_sizes : CoreSyntax.size list
+  ; tinstallparam_tys : CoreSyntax.ty list
   ; tparam_tys : CoreSyntax.ty list
   ; tret_tys : CoreSyntax.ty list
   }

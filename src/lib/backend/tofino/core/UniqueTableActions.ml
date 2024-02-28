@@ -77,20 +77,56 @@ let rename_actionvars renames decl =
   let evar_replacer =
     object (_)
       inherit [_] s_map as super
+
+      (* replace the name of an action variable with 
+         the name of the table-specific action variable.
+         Use the table that appears with the action in 
+         the call to the Table builtin method.
+         This should only apply to Table.install 
+         and its variants -- Table.create is processed 
+         separately. *)
+
       method! visit_ECall renames cid exps b = 
-        let (tbl, key, action_call) = match exps with 
-          | [tbl; key; action_call] -> (tbl, key, action_call)
-          | _ -> error "[rename_actionvars] expected 3 args to table_install"
-        in
-        let local_renames = get_renames (id_of_exp tbl) renames in
-        let action_call = match action_call.e with 
-          | ECall(aid, args, b) -> 
-            let id = Cid.to_id aid in
-            let id' = IdMap.find id local_renames in
-            {action_call with e=ECall(Cid.id id', args, b)}
-          | _ -> error "[rename_actionvars] expected action call in table_install"
-        in
-        ECall(cid, [tbl; key; action_call], b)
+        let tbl_exps = List.filter_map (fun exp -> if (Tables.is_tbl_ty exp.ety.raw_ty) then Some(exp) else None) exps in
+        match tbl_exps with 
+          | [] -> ECall(cid, exps, b)
+          | [tbl_exp] -> (
+            let local_renames = get_renames (id_of_exp tbl_exp) renames in
+            (* for each argument expression, if it is an EVar(id) where id is in local_renames, then replace the id   *)
+              let exps' = List.map 
+              (fun exp -> 
+                match exp.e with 
+                | EVar(id) -> 
+                  let id' = match (IdMap.find_opt (Cid.to_id id) local_renames) with
+                    | None -> id
+                    | Some(id') -> Cid.id id'                
+                  in
+                  {exp with e=EVar(id')}
+                | _ -> exp
+              )
+              exps
+            in
+            ECall(cid, exps', b)
+          )
+          | _ -> error "[UniqueTableActions.rename_actionvars] reached a function call with multiple table type arguments"
+
+        (* match tbl_ty with 
+          | None -> ECall(cid, exps, b)
+          | Some _ -> 
+            (* need to figure out the table's name and which parameter is an action variable *)
+            let (tbl, key, action_call) = match exps with 
+              | [tbl; key; action_call] -> (tbl, key, action_call)
+              | _ -> error "[rename_actionvars] expected 3 args to table_install"
+            in
+            let local_renames = get_renames (id_of_exp tbl) renames in
+            let action_call = match action_call.e with 
+              | ECall(aid, args, b) -> 
+                let id = Cid.to_id aid in
+                let id' = IdMap.find id local_renames in
+                {action_call with e=ECall(Cid.id id', args, b)}
+              | _ -> error "[rename_actionvars] expected action call in table_install"
+            in
+            ECall(cid, [tbl; key; action_call], b) *)
       (* method! visit_STableInstall renames tbl entries =
         let local_renames = get_renames (id_of_exp tbl) renames in
         let entries' = List.map 

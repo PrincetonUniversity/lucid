@@ -56,11 +56,6 @@ let builtin_defs =
   @ Tables.defs
 ;;
 
-
-let builtin_typers = 
-  [Tables.type_checker]
-;;
-
 (* Builtin local vars *)
 let this_id = Id.create "this"
 

@@ -368,7 +368,7 @@ and translate_ecall env fcn_cid args =
       let (regacn_id, decl), env = translate_pairarray_call env fcn_cid args in 
       let (idx_decls, idx_arg), env = translate_exp env (List.hd (List.tl args)) in
       (idx_decls@[decl], ecall (Cid.create_ids [regacn_id; (id "execute")]) [idx_arg]), env
-    | _ -> error "[translate_ecall] unknown function")
+    | _ -> error@@"[translate_ecall] unknown function: "^(CorePrinting.cid_to_string fcn_cid))
 
 and translate_sys_call fcn_id args = 
       match (Id.name fcn_id) with
