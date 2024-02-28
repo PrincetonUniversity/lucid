@@ -191,9 +191,9 @@ let create_ctor (nst : InterpState.State.network_state) swid args =
     in
 
     let def_acn remaining_args =
-      print_endline ("inside of partially_applied_def_acn");
+      (* print_endline ("inside of partially_applied_def_acn");
       print_endline ("default args: "^(CorePrinting.comma_sep CorePrinting.value_to_string flat_default_args));
-      print_endline ("remaining args: "^(CorePrinting.comma_sep CorePrinting.value_to_string remaining_args));
+      print_endline ("remaining args: "^(CorePrinting.comma_sep CorePrinting.value_to_string remaining_args)); *)
       def_acn_ctor (flat_default_args@remaining_args)
     in
     let tbl_size = match tbl_len with 
@@ -330,18 +330,6 @@ let install_fun nst swid args =
       acn_ctor (vaction_const_args@remaining_args)
     in
 
-
-    (* fill state args of the action function, which don't matter because 
-       its a pure function  *)
-    (* let acn_f  (vs : value list) : value list = 
-      (* wrap vs in ivals, call action_f, unwrap results *)
-      let ivals = List.map (fun v -> V v) (vaction_const_args@vs) in
-      let result = action_f nst swid (ivals) in 
-      let result = extract_ival result in
-      match result.v with
-      | VTuple(vs) -> List.map value vs
-      | _ -> [result]
-    in *)
     (* install to the pipeline *)
     Pipeline.install_table_entry 
       stage
