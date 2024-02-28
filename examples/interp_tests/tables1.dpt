@@ -50,7 +50,7 @@ event do_match(int<32> s) {
     // table_install is only available in the interpreter, it takes a table and a rule to install 
     // into the table. The command below says, "install a rule into ftbl that executes hit_acn(3)
     // whenever the key passed to table_match is equal to the current value of s".
-    // Table.install<unordered>(ftbl, s, hit_acn, 3);
+    Table.install<unordered>(ftbl, s, hit_acn, 3);
   }
 }
 /*
@@ -62,7 +62,6 @@ event do_match(int<32> s) {
 
 event do_install(int<32> v, int<32> m) {
   printf("installing entry: (%d &&& %d)", v, m);
-  // Table.install<unordered>(ftbl, v, hit_acn, 2);
-  // Table.install<unordered>(ftbl, (int_to_pat(v)), (hit_acn(2)));
-  // Table.install<unordered>(ftbl, (v &&& m), (hit_acn(3)));
+  Table.install<unordered>(ftbl, v, hit_acn, 2);
+  Table.install_ternary<unordered>(ftbl, v, m, hit_acn, 3);
  }

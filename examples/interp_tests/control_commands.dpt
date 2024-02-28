@@ -29,20 +29,11 @@ action_constr miss_acn(int x) = {
 };
 
 // extend parsing to not need parens around single element tuples
-table_type ftbl_t = {
-  key_type: (int)
-  arg_type: (int)
-  ret_type: res_t
-}
-global ftbl_t ftbl = table_create<ftbl_t>((hit_acn, miss_acn), 1024, miss_acn(0));
+global Table.t<<int, int, int, res_t>> ftbl = Table.create(1024, [hit_acn; miss_acn], miss_acn, 0);
 
 
 event pktin(int src, int dst) {
   Array.set(myarr, 0, dst);
-  res_t tbl_result = table_match(
-    ftbl, 
-    (dst), 
-    (1234)
-  );
+  res_t tbl_result = Table.lookup(ftbl, dst, 1234);
   printf ("table result: %d", tbl_result#val);
 }

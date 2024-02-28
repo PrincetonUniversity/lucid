@@ -1,9 +1,10 @@
 (* Tables as a builtin module *)
-(* TODO: add an install_priority function *)
+(* TODO: test with nested types for keys, args *)
+(* TODO: update table control commands *)
+(* TODO: update documentation *)
 (* TODO: add an install_mask_priority function *)
 (* TODO: add a remove function *)
 (* TODO: add an update function *)
-(* TODO: test with nested types for keys, args *)
 open Batteries
 open Syntax
 open InterpState
@@ -13,8 +14,12 @@ open InterpSyntax
 
 
 (*** masked-key helpers ***)
+
+
+
 (* translate a value into a (value, mask) tuple 
-   representing an exact match pattern *)
+  representing an exact match pattern *)
+
 let rec v_to_flat_exact (v : CoreSyntax.v) = 
 match v with 
   | VTuple(vs) -> 
@@ -38,6 +43,8 @@ match v with
   | VPat _  -> Console.error "pat values are depreciated"
   | VGroup _ -> Console.error "group values cannot appear as a key in a table"
 ;;
+
+
 (* check if a list of values matches a pattern, where the 
    pattern is a list of (value, mask) tuples *)
 let matches_pat_vals (vs : CoreSyntax.value list) (pats : CoreSyntax.value list) =
@@ -169,7 +176,6 @@ let install_ty =
     fresh_rawty "table_marg_ty",
     fresh_rawty "table_ret_ty"
   in
-  let mask_rawty = key_rty in
   let acn_rty = taction iarg_rty marg_rty ret_rty in  
   let start_eff = FVar (QVar (Id.fresh "eff")) in (* effect where this call begins *)
   (* table argument *)
@@ -178,7 +184,6 @@ let install_ty =
   let arg_tys = [
       tbl_t; 
       ty @@ key_rty;
-      ty @@ mask_rawty;
       ty @@ acn_rty;
       ty @@ iarg_rty
     ]
@@ -199,8 +204,6 @@ let install_fun nst swid args =
   let open CoreSyntax in
   match args with
   | [vtbl; vkey; vaction; vaction_const_arg_tup] -> 
-    (* the final argument at this point should be an action itself. No need to 
-       evaluate it, we'd like to just put it into pipeline. *)        
     let target_pipe = (State.sw nst swid).pipeline in    
     let stage = match (extract_ival vtbl).v with 
       | VGlobal(_, stage) -> stage
@@ -234,6 +237,91 @@ let install_fun nst swid args =
     V(vtup [] Span.default) (* no return *)
   | _ ->
     install_error "Incorrect number of arguments to Table.install"
+
+
+
+(* Table.install_ternary : Table.t<<'k, iarg, marg, ret>> -> 'k -> 'k -> (iarg -> marg -> ret) -> iarg -> () *)
+let install_ternary_name = "install_ternary"
+let install_ternary_id = Id.create install_ternary_name
+let install_ternary_cid = Cid.create_ids [id; install_ternary_id]
+let install_ternary_error msg = error install_ternary_name msg
+
+let install_ternary_ty = 
+  let key_rty, iarg_rty, marg_rty, ret_rty = 
+    fresh_rawty "table_key_ty",
+    fresh_rawty "table_iarg_ty",
+    fresh_rawty "table_marg_ty",
+    fresh_rawty "table_ret_ty"
+  in
+  let mask_rawty = key_rty in
+  let acn_rty = taction iarg_rty marg_rty ret_rty in  
+  let start_eff = FVar (QVar (Id.fresh "eff")) in (* effect where this call begins *)
+  (* table argument *)
+  let tbl_eff = FVar (QVar (Id.fresh "eff")) in (* effect attached to table arg *)
+  let tbl_t = ty_eff (fresh_t (key_rty, iarg_rty, marg_rty, ret_rty)) tbl_eff in
+  let arg_tys = [
+      tbl_t; 
+      ty @@ key_rty;
+      ty @@ mask_rawty;
+      ty @@ acn_rty;
+      ty @@ iarg_rty
+    ]
+  in
+  let ret_ty = ty @@ TVoid in
+  ty @@ TFun
+    { arg_tys
+    ; ret_ty
+    ; start_eff
+    ; end_eff = FSucc tbl_eff
+    ; constraints = ref [CLeq (start_eff, tbl_eff)]
+    }
+;;
+
+(* install an exact pattern, with key value equal to mask *)
+let install_ternary_fun nst swid args =
+  let _, _ = nst, swid in
+  let open CoreSyntax in
+  match args with
+  | [vtbl; vkey; vmask; vaction; vaction_const_arg_tup] -> 
+    let target_pipe = (State.sw nst swid).pipeline in    
+    let stage = match (extract_ival vtbl).v with 
+      | VGlobal(_, stage) -> stage
+      | _-> error "Table.install: table arg didn't eval to a global"
+    in
+
+    let keys = flatten_v (extract_ival vkey).v in 
+    let masks = flatten_v (extract_ival vmask).v in
+    if (List.length keys <> List.length masks) then 
+      error "Table.install_ternary: key and mask lists are not the same length";
+    let pat_tuple_keys = List.map2 
+      (fun k m -> CoreSyntax.VTuple([k; m])) 
+      keys 
+      masks 
+    in
+    let keys = List.map value pat_tuple_keys in 
+    let vaction_const_args = match vaction_const_arg_tup with 
+      | V({v=VTuple(vs)}) -> List.map CoreSyntax.value vs
+      | V(v) -> [v]
+      | _ -> err "Table.create: expected a tuple for the default action args"
+    in
+    let acn_ctor = 
+      ival_fcn_to_internal_action nst swid vaction
+    in
+    let acn remaining_args = 
+      acn_ctor (vaction_const_args@remaining_args)
+    in
+    (* install to the pipeline *)
+    Pipeline.install_table_entry 
+      stage
+      10 
+      keys
+      acn
+      target_pipe
+    ; 
+    V(vtup [] Span.default) (* no return *)
+  | _ ->
+    install_error "Incorrect number of arguments to Table.install"
+
 
 
 (* Table.lookup *)
@@ -318,8 +406,10 @@ let lookup_fun nst swid args =
 let constructors = [create_id, create_sig]
 
 let defs : State.global_fun list =
-  [{ cid = install_cid; body = install_fun; ty = install_ty }
-  ;{ cid = lookup_cid; body = lookup_fun; ty = lookup_ty }  
+  [
+    { cid = install_cid; body = install_fun; ty = install_ty };
+    { cid = install_ternary_cid; body = install_ternary_fun; ty = install_ternary_ty };
+    { cid = lookup_cid; body = lookup_fun; ty = lookup_ty }  
   ]
 ;;
 

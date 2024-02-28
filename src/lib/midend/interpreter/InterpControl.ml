@@ -11,6 +11,7 @@ open Pipeline
 type entry_install_cmd = {
   iprio : int;
   imatch : exp list;  
+  imask  : exp list;
   iaction : id;
   iargs : exp list;
 }

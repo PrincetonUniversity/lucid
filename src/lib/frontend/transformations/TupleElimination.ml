@@ -319,13 +319,19 @@ let replacer =
             {arg with e = ETuple(exps)}
           | EVar _, Some({raw_ty=TTuple _}) -> 
             (* flatten variable and make into a tuple *)
-            {arg with e=ETuple(self#flatten env arg)}
+            {arg with e=ETuple(self#flatten env arg)}            
+          | EOp(TGet (_, _), [_]), _ -> 
+            (* eliminate tuple ops *)
+            (self#visit_exp env arg)
+          (* nothing to do anywhere else? *)
           | _ -> arg
         in
-        ECall (cid, List.map repack args, unordered)
+        let e' = ECall (cid, List.map repack args, unordered) in
+        (* let e = ECall(cid, args, unordered) in *)
+        e'
       | Some(false) -> 
         (* an old-style builtin with TName *)
-      (* (keep toplevel tuple args) *)
+      (* keep toplevel tuple args, (no flatten) *)
       let args = List.map (self#visit_exp env) args in
         ECall (cid, args, unordered)
       | None -> (

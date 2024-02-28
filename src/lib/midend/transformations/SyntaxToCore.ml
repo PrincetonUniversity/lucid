@@ -267,9 +267,18 @@ and translate_etablecreate _ (exp : S.exp) : C.exp =
     (* let tty = translate_ty tc.tty in *)
     let tsize = translate_exp tc.tsize in
     let tactions = C.tup_sp (List.map translate_exp tc.tactions) Span.default in
-    let default_acn_constr = translate_exp tc.tdefault in
+    let default_acn_constr_evar, default_acn_constr_arg = match tc.tdefault.e with 
+      | ECall(cid, args, _) -> 
+        let e = Syntax.EVar(cid) in
+        let ty_opt = (List.hd tc.tactions).ety in
+        let espan = tc.tdefault.espan in
+        (Syntax.aexp e ty_opt espan, Syntax.tuple_sp args tc.tdefault.espan)
+      | _ -> err_unsupported tc.tdefault.espan "default action in a table create should be a call"  
+    in
+    let default_acn_constr_evar = translate_exp default_acn_constr_evar in
+    let default_acn_constr_arg = translate_exp default_acn_constr_arg in
     let e' = 
-      C.ECall(Cid.create ["Table"; "create"], [tsize; tactions; default_acn_constr], false) in
+      C.ECall(Cid.create ["Table"; "create"], [tsize; tactions; default_acn_constr_evar; default_acn_constr_arg], false) in
     { e = e'; ety = translate_ty (Option.get exp.ety); espan = exp.espan }
   | _ ->
     err
@@ -495,10 +504,7 @@ let translate_d preserve_user_decls d dspan dpragmas =
     )      *)
     | _ -> 
       Some (match constr_exp.e with
-      | S.ETableCreate _ ->
-        print_endline ("etablecreate...");
-        exit 1;
-        C.DGlobal (id, translate_ty ty, translate_etablecreate id constr_exp)
+      | S.ETableCreate _ -> C.DGlobal (id, translate_ty ty, translate_etablecreate id constr_exp)
       | _ -> C.DGlobal (id, translate_ty ty, translate_exp constr_exp))
   )
   | S.DEvent (id, annot, sort, _, params) ->

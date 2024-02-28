@@ -110,10 +110,9 @@ let try_unify_lists f lst1 lst2 =
      unifying, that way if unification fails 
      you can still recover, otherwise it will 
      bind variables weirdly with all the mutable stuff *)
-  if (List.length lst1 = List.length lst2) then 
-    try List.iter2 f lst1 lst2 with
-    (* Different lengths *)
-    | Invalid_argument _ -> raise CannotUnify
+  if (List.length lst1 = List.length lst2) 
+    then List.iter2 f lst1 lst2
+    else raise CannotUnify (* different lengths *)
 ;;
 
 let check_unify span try_unify f x1 x2 : unit =
@@ -240,16 +239,28 @@ and try_unify_rty span rty1 rty2 =
   let unify_param_tys_after_tuple_elim tys1 tys2 = 
     (* unify parameter types in actions (or functions) in a way that is still 
        works after tuple elimination *)
-    try try_unify_lists unify_ty tys1 tys2 with 
+(* print_endline "Unifying after tuple elimination";
+print_endline ("rtys1: "^(Printing.comma_sep Printing.ty_to_string tys1));
+print_endline ("rtys2: "^(Printing.comma_sep Printing.ty_to_string tys2));           *)
+ try try_unify_lists unify_ty tys1 tys2 with 
     | CannotUnify ->
       let rtys1 = List.map (fun t -> TyTQVar.strip_links t.raw_ty) tys1 in
       let rtys2 = List.map (fun t -> TyTQVar.strip_links t.raw_ty) tys2 in
+      (* print_endline "Unifying after tuple elimination: failed initial unification. Now we have: ";
+      print_endline ("rtys1: "^(Printing.comma_sep Printing.raw_ty_to_string rtys1));
+      print_endline ("rtys2: "^(Printing.comma_sep Printing.raw_ty_to_string rtys2));           *)
       match rtys1, rtys2 with 
         (* both tuples -- nothing we can do *)
         | [TTuple(_)], [TTuple(_)] -> raise CannotUnify
         (* one side is a tuple, other side is not -- we can try to unify inner types with outers *)
-        | [TTuple(rtys1)], rtys2
-        | rtys1, [TTuple(rtys2)] -> try_unify_lists unify_raw_ty rtys1 rtys2
+        | [TTuple(wrapped_rtys)], rtys
+        | rtys, [TTuple(wrapped_rtys)] -> 
+          try_unify_lists unify_raw_ty rtys wrapped_rtys
+        (* one side is a tqvar, the other side is not -- we can also try to unify inner with outer *)
+        | [TQVar(x)], rtys
+        | rtys, [TQVar(x)] -> 
+          let rty = if (List.length rtys = 1) then List.hd rtys else TTuple(rtys) in
+          try_unify_lists unify_raw_ty [TQVar(x)] [rty]
         | _, _ -> raise CannotUnify
   in
   

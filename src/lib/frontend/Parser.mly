@@ -257,10 +257,13 @@ poly:
 single_poly:
     | LESS size MORE                    { Span.extend $1 $3, snd $2 }
 
+ty_or_empty_tuple: 
+    | ty                                      { $1 }
+    | LPAREN RPAREN                           { ty_sp (TTuple([])) (Span.extend $1 $2) }
 
 ty_polys:
-    | ty                                      { [$1] }
-    | ty COMMA ty_polys                       { ($1)::($3) }
+    | ty_or_empty_tuple                       { [$1] }
+    | ty_or_empty_tuple COMMA ty_polys        { $1::$3 }
 
 ty_poly: 
     | LSHIFT ty_polys RSHIFT            { Span.extend $1 $3, $2 }

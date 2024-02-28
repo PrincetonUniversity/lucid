@@ -165,13 +165,13 @@ let rec raw_ty_to_string t =
     ^ "}\n"
   | TActionConstr a ->
     Printf.sprintf
-      "ACTION CTOR : (%s) -> (%s) -> (%s)"
+      "(ACTION CTOR : (%s) -> (%s) -> (%s))"
       (concat_map " , " ty_to_string a.aconst_param_tys)
       (concat_map " , " ty_to_string a.aacn_ty.aarg_tys)
       (comma_sep ty_to_string a.aacn_ty.aret_tys)
   | TAction a ->
     Printf.sprintf
-      "(ACTION FUNCTION : {\narg_tys = [%s]\nret_tys = [%s]})"
+      "((ACTION FUNCTION : {\narg_tys = [%s]\nret_tys = [%s]}))"
       (concat_map " ; " ty_to_string a.aarg_tys)
       (concat_map " ; " ty_to_string a.aret_tys)
   | TPat s -> Printf.sprintf "pat<%s>" (size_to_string s)

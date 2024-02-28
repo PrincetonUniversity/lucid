@@ -168,15 +168,21 @@ let execute_control swidx (nst : State.network_state) (ctl_ev : control_val) =
      can't call back up to InterpCore *)
   let do_tbl_install tbl_cid (cmd : entry_install_cmd) =
     let etbl = exp (EVar tbl_cid) (ty@@TBool) in
-    let ematch = exp 
+    let ekey = exp 
       (ETuple(cmd.imatch)) 
       (ty@@TTuple(List.map (fun exp -> exp.ety.raw_ty) cmd.imatch) ) in
-    let econstr_call = exp 
-      (ECall(Cid.id cmd.iaction, cmd.iargs, false))
-      (ty@@TBool) (* note: not typed correctly *)
+    let emask = exp
+      (ETuple(cmd.imask))
+      (ty@@TTuple(List.map (fun exp -> exp.ety.raw_ty) cmd.imask) ) in
+    let eaction_constr = exp 
+      (EVar(Cid.id cmd.iaction))
+      (ty@@TBool) (* note: type is bogus *)      
     in
-    let eargs = [etbl; ematch; econstr_call] in
-    let ecall = C.exp (ECall(Cid.create ["Table"; "install"],eargs, false)) (ty TBool) in
+    let eaction_constr_args = exp
+      (ETuple(cmd.iargs))
+      (ty@@TTuple(List.map (fun exp -> exp.ety.raw_ty) cmd.iargs)) in
+    let eargs = [etbl; ekey; emask; eaction_constr; eaction_constr_args] in
+    let ecall = C.exp (ECall(Cid.create ["Table"; "install_ternary"],eargs, false)) (ty TBool) in
     InterpCore.interp_exp nst swidx Env.empty ecall
   in
   InterpControl.handle_control 
