@@ -931,22 +931,17 @@ let interp_decl (nst : State.network_state) swid d =
     (* add a function to the environment that takes the action constructor's params 
        and returns a function version of the inner action *)
     let action_function_generator _ _ const_args = 
+      print_endline ("in action_function_generator with args: "^(List.map (fun v -> (extract_ival v) |> Printing.value_to_string) const_args |> String.concat ", "));
       (* the inner action function *)
       let action_function _ _ args = 
+        print_endline ("in action_function with args: "^(List.map (fun v -> (extract_ival v) |> Printing.value_to_string) args |> String.concat ", "));
         (* bind the closure args and runtime args in the env *)
-        let const_locals = 
-          List.fold_left2
-            (fun acc v id -> Env.add (Id id) v acc)
-            Env.empty
-            const_args 
-            (aconst_params|> List.split |> fst)
-        in
         let locals = 
           List.fold_left2
             (fun acc v id -> Env.add (Id id) v acc)
-            const_locals
-            args 
-            (aparams |> List.split |> fst)
+            Env.empty
+            (const_args@args)
+            ((aconst_params|> List.split |> fst)@(aparams |> List.split |> fst))
         in
         let ret_vs = List.map 
           (fun exp -> (interp_exp nst swid locals exp |> extract_ival).v)

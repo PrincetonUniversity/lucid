@@ -28,7 +28,7 @@ and tblobj =
 and action = value list -> value list
 and tbl_entry = {
   eprio : int;
-  ematch : value list; 
+  ematch : value list; (* (key, mask) tuples *)
   eaction : action;
 }
 

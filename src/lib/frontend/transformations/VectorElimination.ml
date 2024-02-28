@@ -101,7 +101,6 @@ let replacer =
             | TBuiltin _ -> true
             | _ -> false)            
       in
-      print_endline@@SyntaxUtils.raw_ty_to_constr_str ((Option.get exp.ety).raw_ty);
       if is_builtin then exp else
         (* re-annotate comprehensions after expansion to set proper index *)
         match exp.e with

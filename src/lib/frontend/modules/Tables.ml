@@ -50,6 +50,63 @@ let taction iarg marg ret =
     })
 ;;
 
+(* 
+    (* on the one hand, we _dont_ want to flatten the tuples in 
+       the action constructor, because this messes up the type of the 
+       builtin functions for Table. 
+       
+       On the other hand, we _do_ want to flatten the tuples in the 
+       action constructor, because we don't want tuples in the IR. 
+
+      unflattened: 
+
+       action (int, int) foo((int, int) a, (int, int) b) {
+          return (a.0 + b.0, a.1 + b.1);
+       }
+       table.install(tbl, key, foo, (1, 2));
+        : t<k, i, a, r> -> k, (i -> a -> r), i
+
+      flattened:
+       action (int, int) foo(int a0, int a1, int b0, int b1) {
+        return a0 + b0, a1 + b1;
+       }
+       table.install(tbl, key, foo, (1, 2));
+        : t<k, i, a, r> -> k, (i -> a -> r), i
+
+       (r1, r2) = table.match(tbl, (k1, k2), (a1, a2));
+         match : t<k, i, a, r> -> k -> a -> r
+        
+       (r1, r2) = table.match(tbl, k1, k2, a1, a2);
+         match : t<k, i, a, r> -> k -> a -> r
+      
+       "match"'s type wants to be told how many keys, args, and returns there are
+
+       mk_match_t [n_params1; n_params2; n_params3]
+    *)   
+*)
+
+let mk_match_t arg_lens = 
+  (* arg_counts tells you how many elements are in each argument
+     its for after tuple elimination *)
+  if List.length arg_lens != ty_args
+    then error "wrong number of arg lens used with table type constructor"
+  else 
+    error "not done"
+    (* (
+      (* t<k, i, a, r> *)
+      let keys = 
+    ) *)
+
+
+(* how would mk_t be called?  
+   
+    - not at the beginning of type checking, because its different for each call..
+    - but if its different for each call, that really messes things up
+    - 
+
+*)
+
+
 let create_sig =
   let key_rty, iarg_rty, marg_rty, ret_rty = 
     fresh_rawty "table_key_ty",
@@ -90,9 +147,21 @@ let ival_fcn_to_internal_action nst swid vaction =
   (* fill state and switch id args of the action function, 
      which don't matter because its a pure function  *)
   let acn_f  (vs : value list) : value list = 
+    print_endline ("inside of acn_f");
+    print_endline ("vs: "^(CorePrinting.comma_sep CorePrinting.value_to_string vs));
     (* wrap vs in ivals, call action_f, unwrap results *)
     let ivals = List.map (fun v -> V v) vs in
-    let result = action_f nst swid ivals |> extract_ival in
+    let result = action_f nst swid ivals in
+    (* passing action and args separately to install makes the 
+       action return a function *)
+    let result = match result with 
+      | F f -> 
+        f nst swid []
+      | V v ->
+        V(v)
+        (* extract_ival result *)
+    in
+    let result = extract_ival result in
     match result.v with
     | VTuple(vs) -> List.map value vs
     | _ -> [result]
@@ -104,7 +173,7 @@ let ival_fcn_to_internal_action nst swid vaction =
 let create_ctor (nst : InterpState.State.network_state) swid args = 
   match args with 
   (* the table value arg is added by interpcore *)
-  | [tbl_v; tbl_len; tbl_acn_ctors; tbl_def_acn] -> 
+  | [tbl_v; tbl_len; tbl_acn_ctors; tbl_def_acn; tbl_def_args] -> 
     let _ = tbl_acn_ctors in
     let st = nst.switches.(swid) in
     let p = st.pipeline in
@@ -112,7 +181,21 @@ let create_ctor (nst : InterpState.State.network_state) swid args =
       | V { v = VGlobal(tbl_id, _) } -> tbl_id
       | _ -> err "Table.create: expected a global for the table id"
     in
-    let def_acn = ival_fcn_to_internal_action nst swid tbl_def_acn in
+    let def_acn_ctor = 
+      ival_fcn_to_internal_action nst swid tbl_def_acn 
+    in
+    let flat_default_args = match tbl_def_args with 
+      | V({v=VTuple(vs)}) -> List.map CoreSyntax.value vs
+      | V(v) -> [v]
+      | _ -> err "Table.create: expected a tuple for the default action args"
+    in
+
+    let def_acn remaining_args =
+      print_endline ("inside of partially_applied_def_acn");
+      print_endline ("default args: "^(CorePrinting.comma_sep CorePrinting.value_to_string flat_default_args));
+      print_endline ("remaining args: "^(CorePrinting.comma_sep CorePrinting.value_to_string remaining_args));
+      def_acn_ctor (flat_default_args@remaining_args)
+    in
     let tbl_size = match tbl_len with 
       | V(v) -> (
         match v.v with 
@@ -172,12 +255,49 @@ let lookup_var swid nst locals cid =
   | _ -> State.lookup swid cid nst
 ;;
 
+let rec flatten_v (v : CoreSyntax.v) = 
+  match v with 
+  | VTuple(vs) -> 
+    (List.map flatten_v vs) |> List.flatten
+  | VRecord(id_vs) -> 
+    List.split id_vs |> snd |> List.map flatten_v |> List.flatten
+  | VBool _ | VInt _ | VEvent _ | VGlobal _ 
+  | VPat _  | VGroup _ | VBits _ -> [v]
+;;
 
+(* translate a value into a (value, mask) tuple 
+   representing an exact match *)
+let rec v_to_flat_exact (v : CoreSyntax.v) = 
+  match v with 
+  | VTuple(vs) -> 
+    CoreSyntax.VTuple(List.map v_to_flat_exact vs)
+  | VRecord(id_vs) -> 
+    VRecord(
+      List.combine
+        ((List.split id_vs) |> fst)
+        (List.split id_vs |> snd |> List.map v_to_flat_exact))
+  | VBool _ -> CoreSyntax.VTuple([v; CoreSyntax.VBool true])
+  | VInt(z) -> 
+    let mask = Integer.max_int (Integer.size z) in
+    CoreSyntax.VTuple([v; CoreSyntax.VInt(mask)])
+  | VBits b -> 
+    let v = BitString.bits_to_int b  in 
+    let v = Integer.create ~value:v ~size:(List.length b) in
+    let m  = Integer.max_int (List.length b) in
+    CoreSyntax.VTuple([CoreSyntax.VInt(v); CoreSyntax.VInt(m)])
+  | VGlobal _ -> err "a global cannot appear as a key in a table"
+  | VEvent _ -> err "an event cannot appear as a key in a table"
+  | VPat _  -> err "pat values are depreciated"
+  | VGroup _ -> err "group values cannot appear as a key in a table"
+;;
+
+
+(* install an exact pattern, with key value equal to mask *)
 let install_fun nst swid args =
   let _, _ = nst, swid in
   let open CoreSyntax in
   match args with
-  | [vtbl; vkey; vaction] -> 
+  | [vtbl; vkey; vaction; vaction_const_arg_tup] -> 
     (* the final argument at this point should be an action itself. No need to 
        evaluate it, we'd like to just put it into pipeline. *)        
     let target_pipe = (State.sw nst swid).pipeline in    
@@ -185,31 +305,49 @@ let install_fun nst swid args =
       | VGlobal(_, stage) -> stage
       | _-> error "Table.install: table arg didn't eval to a global"
     in
-    let keys = match (extract_ival vkey).v with 
-      | VTuple(vs) -> (List.map value vs)
-      | v -> [value v]
-    in
 
-    let action_f = match vaction with 
+    let keys = flatten_v (extract_ival vkey).v in 
+    let pat_tuple_keys = List.map v_to_flat_exact keys in
+    let keys = List.map value pat_tuple_keys in 
+    (* action_f is an action constructor *)
+    (* let action_f = match vaction with 
       | F f -> f
       | _ -> error "Table.install: expected a function"
+    in *)
+    let vaction_const_args = match vaction_const_arg_tup with 
+      | V({v=VTuple(vs)}) -> List.map CoreSyntax.value vs
+      | V(v) -> [v]
+      | _ -> err "Table.create: expected a tuple for the default action args"
     in
+    let acn_ctor = 
+      ival_fcn_to_internal_action nst swid vaction
+    in
+
+    let acn remaining_args = 
+      (* print_endline ("inside of partially_applied_def_acn");
+      print_endline ("const args: "^(CorePrinting.comma_sep CorePrinting.value_to_string vaction_const_args));
+      print_endline ("runtime args: "^(CorePrinting.comma_sep CorePrinting.value_to_string remaining_args)); *)
+      acn_ctor (vaction_const_args@remaining_args)
+    in
+
+
     (* fill state args of the action function, which don't matter because 
        its a pure function  *)
-    let acn_f  (vs : value list) : value list = 
+    (* let acn_f  (vs : value list) : value list = 
       (* wrap vs in ivals, call action_f, unwrap results *)
-      let ivals = List.map (fun v -> V v) vs in
-      let result = action_f nst swid ivals |> extract_ival in
+      let ivals = List.map (fun v -> V v) (vaction_const_args@vs) in
+      let result = action_f nst swid (ivals) in 
+      let result = extract_ival result in
       match result.v with
       | VTuple(vs) -> List.map value vs
       | _ -> [result]
-    in
+    in *)
     (* install to the pipeline *)
     Pipeline.install_table_entry 
       stage
       10 (* TODO: add an install_priority function *)
       keys
-      acn_f
+      acn
       target_pipe
     ; 
     V(vtup [] Span.default) (* no return *)
@@ -271,7 +409,8 @@ let matches_pat_vals (vs : CoreSyntax.value list) (pats : CoreSyntax.value list)
   List.for_all2
     (fun (v : CoreSyntax.value) (p: CoreSyntax.value) ->
       match v.v, p.v with
-      | VInt n, VPat bs -> bitmatch bs (Integer.value n)
+      | VInt n, VTuple([VInt(v);VInt(m)]) -> 
+        Integer.equal (Integer.bitand n m) (Integer.bitand v m)
       | _ -> false)
     vs
     pats
@@ -283,23 +422,23 @@ let lookup_fun nst swid args =
   let open InterpSyntax in
   let open CoreSyntax in
   match args with
-  | [V { v = VGlobal(_, tbl_pos) }; V { v = vkeys }; V { v = vargs }] ->   
-    let key_vs = match vkeys with 
-      | VTuple(vs) -> List.map (CoreSyntax.value) vs
-      | v -> [CoreSyntax.value v]
-    in
-    (* | [V { v = VGlobal(tbl_pos) }; V { v = VTuple(key_vs) }; V { v = VTuple(arg_vs) }] ->    *)
+  | [V { v = VGlobal(_, tbl_pos) }; V { v = vkey }; V { v = vargs }] ->  
+    let keys = flatten_v vkey |> List.map value in  
     (* get all the entries from the table *)
     let default, entries = Pipeline.get_table_entries tbl_pos (State.sw nst swid).pipeline in
     (* find the first matching case *)
     let fst_match =
       List.fold_left
         (fun fst_match (pat_vs, eaction) ->
-          (* print_endline ("checking entry: "^(CorePrinting.entry_to_string entry)); *)
+          print_endline ("checking entry: "
+            ^(CorePrinting.comma_sep CorePrinting.value_to_string pat_vs));
           match fst_match with
           | None ->
-            if matches_pat_vals key_vs pat_vs
-            then Some eaction else None
+            if matches_pat_vals keys pat_vs
+              then 
+                (print_endline ("pat vals match");
+                Some eaction) 
+              else None
           | Some _ -> fst_match)
         None
         entries
@@ -315,9 +454,10 @@ let lookup_fun nst swid args =
       | VTuple(arg_vs) -> List.map CoreSyntax.value arg_vs 
       | v -> [CoreSyntax.value v]
     in
-    let acn_ret_vals = acn arg_values |> List.map (fun (valu: CoreSyntax.value) -> valu.v) in
+    let ret_values = acn arg_values in
+    let ret_vs = List.map (fun (valu: CoreSyntax.value) -> valu.v) ret_values in
     (* wrap the return values in a tuple *)
-    InterpSyntax.V(vtup acn_ret_vals Span.default)
+    InterpSyntax.V(vtup ret_vs Span.default)
   | _ ->
     lookup_error "Incorrect number or type of arguments to Table.lookup"
 

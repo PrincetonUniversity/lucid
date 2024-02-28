@@ -58,19 +58,36 @@ let rec translate_raw_ty (rty : S.raw_ty) tspan : C.raw_ty =
       ; ret_ty = translate_ty fty.ret_ty
       }
   | S.TVoid -> C.TBool (* Dummy translation needed for foreign functions *)
-  | S.TBuiltin(cid, raw_tys, _) when Cid.equals cid Tables.t_id-> 
-    err_unsupported tspan "TBuiltin IR translation not implemented"
-    (* let rawty_to_intsize (raw_ty : S.raw_ty) = 
+  | S.TBuiltin(cid, raw_tys, _) when Cid.equals cid Tables.t_id -> 
+    (* let raw_tys = List.map (fun rty -> translate_raw_ty rty tspan) raw_tys in *)
+    let key_raw_ty = List.nth raw_tys 0 |> S.TyTQVar.strip_links in
+    (* install time param not currently used in backend *)
+    let param_raw_ty = List.nth raw_tys 2 |> S.TyTQVar.strip_links in
+    let ret_raw_ty = List.nth raw_tys 3 |> S.TyTQVar.strip_links in
+    let rec flatten (raw_ty : S.raw_ty) : S.raw_ty list = 
       match raw_ty with 
+        | S.TTuple(tys) -> 
+          List.map flatten tys |> List.concat
+        | _ -> [raw_ty]
+    in
+    let key_raw_tys = flatten key_raw_ty in
+    let param_raw_tys = flatten param_raw_ty in
+    let ret_raw_tys = flatten ret_raw_ty in
+
+    (* err_unsupported tspan "TBuiltin IR translation not implemented" *)
+    let rawty_to_intsize (raw_ty : S.raw_ty) = 
+      match S.TyTQVar.strip_links (raw_ty) with 
       | TInt(sz) -> SyntaxUtils.extract_size sz
       | TBool ->1
-      | _ -> S.error "[rty_to_size] expected an integer, but got something else"
+      | _ -> 
+        print_endline (Printing.raw_ty_to_string raw_ty);
+        S.error "[rty_to_size] expected an integer, but got something else"
     in
 
-    let tkey_sizes = C.Szs (List.map rawty_to_intsize ) in
-    let tparam_sizes = C.Szs (List.map rawty_to_intsize raw_tys.(1)) in
-    let tret_sizes = C.Szs (List.map rawty_to_intsize raw_tys.(2)) in
-    C.TName(Tables.t_id, [tkey_sizes; tparam_sizes; tret_sizes]) *)
+    let tkey_sizes = C.Szs (List.map rawty_to_intsize key_raw_tys) in
+    let tparam_sizes = C.Szs (List.map rawty_to_intsize param_raw_tys) in
+    let tret_sizes = C.Szs (List.map rawty_to_intsize ret_raw_tys) in
+    C.TName(Tables.t_id, [tkey_sizes; tparam_sizes; tret_sizes])
   | S.TBuiltin _ -> 
     failwith "builtins besides tables not implemented as TBuiltin"
   | S.TTable tbl ->
@@ -102,7 +119,10 @@ let rec translate_raw_ty (rty : S.raw_ty) tspan : C.raw_ty =
     C.TAction { aarg_tys; aret_tys } 
     (* err tspan "action type should have been eliminated before backend" *)
   | S.TTuple tys -> C.TTuple (List.map (fun ty -> translate_raw_ty ty tspan) tys)
-  | S.TVector _ -> err_unsupported tspan "vector type"
+  | S.TVector(raw_ty, sz) -> 
+    let len = SyntaxUtils.extract_size sz in 
+    let inner_rtys = List.init len (fun _ -> raw_ty) in
+    C.TTuple (List.map (fun ty -> translate_raw_ty ty tspan) inner_rtys)
   | S.TQVar _ -> err_unsupported tspan "quantified type"
   | S.TAbstract _ -> err_unsupported tspan "abstract type"    
 and translate_ty (ty : S.ty) : C.ty =
@@ -195,7 +215,13 @@ and translate_exp (e : S.exp) : C.exp =
       C.EVal (C.vint (Z.to_int z) core_szo_int)
     | S.EVar cid -> C.EVar cid
     | S.EOp (op, es) -> C.EOp (translate_op op, List.map translate_exp es)
-    | S.ECall (cid, es, unordered) -> C.ECall (cid, List.map translate_exp es, unordered)
+    | S.ECall (cid, es, unordered) when SyntaxUtils.is_ecall_builtin e -> 
+      (* TODO: special processing for builtins *)
+      C.ECall (cid, List.map translate_exp es, unordered)
+
+    | S.ECall (cid, es, unordered) -> 
+      (* TODO: special processing for builtins *)
+      C.ECall (cid, List.map translate_exp es, unordered)
     | S.EHash (sz, es) -> C.EHash (translate_size sz, List.map translate_exp es)
     | S.EFlood e -> C.EFlood (translate_exp e)
     | S.ERecord(fields) -> C.ERecord (List.map (fun (id, e) -> (Id.create id), translate_exp e) fields)
@@ -204,9 +230,15 @@ and translate_exp (e : S.exp) : C.exp =
     | ESizeCast _
     | EStmt _
     | EWith _
-    | EVector _
     | EComp _
-    | EIndex _
+    | EIndex _ -> 
+      err
+        e.espan
+        "[SyntaxToCore.translate_exp] unsupported construct for core IR (EStmt, EWith, EComp, EIndex)"
+    | EVector(exps) ->
+      (* vectors can appear as builtin type arguments. At this point, they have a known 
+         length, so can be translated into tuples. *)
+      C.ETuple(List.map translate_exp exps)
     | S.ETableCreate _ ->
       err
         e.espan
@@ -460,7 +492,9 @@ let translate_d preserve_user_decls d dspan dpragmas =
     )      *)
     | _ -> 
       Some (match constr_exp.e with
-      | ETableCreate _ ->
+      | S.ETableCreate _ ->
+        print_endline ("etablecreate...");
+        exit 1;
         C.DGlobal (id, translate_ty ty, translate_etablecreate id constr_exp)
       | _ -> C.DGlobal (id, translate_ty ty, translate_exp constr_exp))
   )

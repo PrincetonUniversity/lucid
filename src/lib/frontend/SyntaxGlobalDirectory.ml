@@ -56,10 +56,11 @@ let exp_to_arrmeta id exp =
 
 let exp_to_tblmeta id exp = 
   let ty_to_size ty = 
+    let ty = SyntaxUtils.normalize_ty ty in
     match ty.raw_ty with 
     | TInt(sz) -> sz
     | TBool -> IConst(1)
-    | _ -> error "[rty_to_size] expected an integer, but got something else"
+    | raw_ty -> error@@"[rty_to_size] expected an integer, but got :"^(Printing.raw_ty_to_string raw_ty)
   in
   (* a user-defined key of size sz *)
   let user_key ty = 
@@ -93,6 +94,9 @@ let exp_to_tblmeta id exp =
       let key_sizes = SyntaxUtils.flatten_size key_sz in
       let key_tys = List.map (fun sz -> Syntax.ty@@TInt(sz)) key_sizes in
       (List.map user_key key_tys)@[priority_key] 
+    | TBuiltin(_, tys, _) -> 
+        let key_tys = List.nth tys 0 |> SyntaxUtils.flatten_tuple_ty |> List.map Syntax.ty in
+        (List.map user_key key_tys)@[priority_key] 
     | TQVar _ -> error "[exp_to_tblmeta] expression is a type variable"
     | raw_ty -> error@@"[exp_to_tblmeta] expression is not a table type ("^(Printing.raw_ty_to_string raw_ty)^")"
   in
@@ -104,8 +108,9 @@ let exp_to_tblmeta id exp =
           Integer.to_int z
         | EInt(z, _) -> Z.to_int z
         | _ -> error "[exp_to_tblmeta] table size expression is not an EVal(EInt(...))")
-    | ECall(_, [len_exp; acns_exp; _], _) -> (
-      List.map evar_to_action (SyntaxUtils.flatten_exp acns_exp),
+    | ECall(_, [len_exp; acns_exp; _], _)
+    | ECall(_, [len_exp; acns_exp; _; _], _) -> (
+        List.map evar_to_action (SyntaxUtils.flatten_exp acns_exp),
       match len_exp.e with 
         | EVal({v=VInt(z); _}) ->
           Integer.to_int z

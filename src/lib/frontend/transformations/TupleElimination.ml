@@ -12,13 +12,25 @@ open Collections
 (* builtin functions are a special case: they may accept and return tuples *)
 let builtin_cids = 
   List.map
-    (fun (_, _, global_funs, constructors) ->
+    (fun (_, id_size_ty_list, global_funs, constructors) ->
+      let is_builtin = match id_size_ty_list with 
+        | [_, _, ty] -> (
+          match ty.raw_ty with 
+          | TBuiltin _ -> true
+          | _ -> false
+        )
+        | _ -> false
+      in
       let fun_cids =
         List.map
-          (fun (gf : InterpState.State.global_fun) -> gf.cid)
+          (fun (gf : InterpState.State.global_fun) -> gf.cid, is_builtin)
           global_funs
       in
-      let constructor_cids = List.map fst constructors in
+      let constructor_cids = 
+        List.combine
+        (List.map fst constructors) 
+        (List.init (List.length constructors) (fun _ -> is_builtin))
+      in
       fun_cids @ constructor_cids)
     Builtins.builtin_modules
   |> List.flatten
@@ -295,13 +307,32 @@ let replacer =
        one parameter for each tuple entry. So we need to adjust the
        arguments at the call site as well *)
     method! visit_ECall env cid args unordered =
-      (* Builtin function calls keep their toplevel tuple args *)
-      if (List.mem cid builtin_cids) then 
-        let args = List.map (self#visit_exp env) args in
+      (*  *)
+      match List.assoc_opt cid builtin_cids with 
+      | Some(true) -> 
+        (* a builtin from a module with a type TBuiltin *)
+        (* flatten tuple variables and repack them as tuples *)
+        let rec repack arg = 
+          match arg.e, arg.ety with 
+          | ETuple(exps), _ -> 
+            let exps = List.map repack exps in
+            {arg with e = ETuple(exps)}
+          | EVar _, Some({raw_ty=TTuple _}) -> 
+            (* flatten variable and make into a tuple *)
+            {arg with e=ETuple(self#flatten env arg)}
+          | _ -> arg
+        in
+        ECall (cid, List.map repack args, unordered)
+      | Some(false) -> 
+        (* an old-style builtin with TName *)
+      (* (keep toplevel tuple args) *)
+      let args = List.map (self#visit_exp env) args in
         ECall (cid, args, unordered)
-      else 
+      | None -> (
+        (* not a builtin *)
         let args = List.map (self#flatten env) args |> List.concat in
         ECall (cid, args, unordered)
+      ) 
 
     (* Same as ECall *)
     method! visit_EHash env sz args =
@@ -456,7 +487,9 @@ let rec replace_decl (env : env) d =
      (* The tuple types inside of a table types must be flattened *)
      | TTable _ ->
        env, [{ d with d = DGlobal (id, replace_ty ty, replace_exp env exp) }]     
-     | TName _ -> (* tuples may appear in global constructors, e.g., actions and action constructors in Table.create *)
+     | TName _ -> 
+      (* tuples may appear in global constructors, e.g., actions and action constructors in Table.create *)
+      (* (if the above comment is correct, why are we running replace on ty and exp?) *)
        env, [{ d with d = DGlobal (id, replace_ty ty, replace_exp env exp) }]
      | _ -> env, [d])
   | DEvent (id, annot, sort, _, params) ->

@@ -152,7 +152,8 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
       new_env, { e with e = ECall (f, inferred_args, unordered); ety = Some fty.ret_ty }
     (* Special case for action constructor. TODO: make actions constructors just be functions *)
     | TActionConstr(acn_ctor_ty) -> (
-      let env, inferred_args = infer_exps env args in
+      failwith "TActionConstr is not expected to ever be reached"
+      (* let env, inferred_args = infer_exps env args in
       let fty : acn_ctor_ty =
         { aconst_param_tys = List.map (fun arg -> Option.get arg.ety) inferred_args
         ; aacn_ty = {
@@ -168,7 +169,7 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
       in
       let acn_ty = ty@@TAction (aacn_ty) in
       let acn_ty = strip_links acn_ty in
-      env, { e with e = ECall (f, inferred_args, unordered); ety = Some (acn_ty) }
+      env, { e with e = ECall (f, inferred_args, unordered); ety = Some (acn_ty) } *)
     )
     | _ -> error_sp e.espan "Cannot call non-function"
   )
@@ -245,6 +246,7 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
   | ETuple es ->
     let env, inf_es = infer_exps env es in
     let tuple_eff = fresh_effect () in
+    print_endline@@"infer_exp on tuple("^(Printing.comma_sep Printing.exp_to_string es)^")";
     List.iteri
       (fun i e' ->
         if (not env.in_global_def) && is_global (Option.get e'.ety)
@@ -1670,13 +1672,17 @@ let rec infer_declaration
       let action_env = add_locals env (const_params @ params) in
       (* check and infer action body expression types *)
       let inf_action_body = List.map2 (check_e action_env) ret_ty action_body in
-      leave_level ();
+      leave_level ();      
       (* add variable to type env *)
+      let (const_param_tys : ty list) = List.map snd const_params in
+      let param_tys = List.map snd params in
       let acn_ctor_ty =
         TActionConstr
-          { aconst_param_tys = List.map (fun (_, ty) -> ty) const_params
-          ; aacn_ty = {aarg_tys = List.map (fun (_, ty) -> ty) params
-          ; aret_tys = ret_ty};
+          { aconst_param_tys = const_param_tys
+          ; aacn_ty = {
+            aarg_tys = param_tys
+            ; aret_tys = ret_ty 
+          };
           }
       in
       let env = define_const id (mk_ty @@ acn_ctor_ty) env in

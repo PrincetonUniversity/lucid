@@ -165,7 +165,7 @@ let rec raw_ty_to_string t =
     ^ "}\n"
   | TActionConstr a ->
     Printf.sprintf
-      "ACTION CTOR : %s -> %s -> %s"
+      "ACTION CTOR : (%s) -> (%s) -> (%s)"
       (concat_map " , " ty_to_string a.aconst_param_tys)
       (concat_map " , " ty_to_string a.aacn_ty.aarg_tys)
       (comma_sep ty_to_string a.aacn_ty.aret_tys)

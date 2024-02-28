@@ -525,7 +525,7 @@ let unpack_tuple (e : exp) =
 ;;
 
 let flatten_tuple_ty (raw_ty : raw_ty) = 
-  match raw_ty with 
+  match TyTQVar.strip_links raw_ty with 
   | TTuple(lst) -> lst
   | _ -> [raw_ty]
 ;;
@@ -566,6 +566,11 @@ let is_evar exp =
   | _ -> false
 ;;
 
+let is_ecall_builtin exp = 
+  match exp.ety with 
+  | Some({raw_ty=TBuiltin _}) -> true
+  | _ -> false
+;;
 
 (* in a pattern context of parsing, wrap all expression that 
 do not parse as pat types to pats *)

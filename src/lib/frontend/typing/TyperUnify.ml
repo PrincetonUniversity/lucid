@@ -106,9 +106,14 @@ let occurs_ty span tvar raw_ty : unit =
 exception CannotUnify
 
 let try_unify_lists f lst1 lst2 =
-  try List.iter2 f lst1 lst2 with
-  (* Different lengths *)
-  | Invalid_argument _ -> raise CannotUnify
+  (* check different lengths _before_ 
+     unifying, that way if unification fails 
+     you can still recover, otherwise it will 
+     bind variables weirdly with all the mutable stuff *)
+  if (List.length lst1 = List.length lst2) then 
+    try List.iter2 f lst1 lst2 with
+    (* Different lengths *)
+    | Invalid_argument _ -> raise CannotUnify
 ;;
 
 let check_unify span try_unify f x1 x2 : unit =
@@ -213,6 +218,8 @@ let unify_effect (span : Span.t) eff1 eff2 : unit =
   check_unify span (try_unify_effect span) effect_to_string eff1 eff2
 ;;
 
+
+
 let rec try_unify_ty span ty1 ty2 =
   let ty1, ty2 = strip_links ty1, strip_links ty2 in
   if ty1.raw_ty == ty2.raw_ty && ty1.teffect == ty2.teffect
@@ -229,6 +236,23 @@ let rec try_unify_ty span ty1 ty2 =
 and try_unify_rty span rty1 rty2 =
   let unify_raw_ty = unify_raw_ty span in
   let unify_ty = unify_ty span in
+
+  let unify_param_tys_after_tuple_elim tys1 tys2 = 
+    (* unify parameter types in actions (or functions) in a way that is still 
+       works after tuple elimination *)
+    try try_unify_lists unify_ty tys1 tys2 with 
+    | CannotUnify ->
+      let rtys1 = List.map (fun t -> TyTQVar.strip_links t.raw_ty) tys1 in
+      let rtys2 = List.map (fun t -> TyTQVar.strip_links t.raw_ty) tys2 in
+      match rtys1, rtys2 with 
+        (* both tuples -- nothing we can do *)
+        | [TTuple(_)], [TTuple(_)] -> raise CannotUnify
+        (* one side is a tuple, other side is not -- we can try to unify inner types with outers *)
+        | [TTuple(rtys1)], rtys2
+        | rtys1, [TTuple(rtys2)] -> try_unify_lists unify_raw_ty rtys1 rtys2
+        | _, _ -> raise CannotUnify
+  in
+  
   match rty1, rty2 with
   | TQVar tqv, ty | ty, TQVar tqv ->
     try_unify_tqvar
@@ -285,32 +309,13 @@ and try_unify_rty span rty1 rty2 =
     List.iter2 (try_unify_ty span) t1.tparam_tys t2.tparam_tys;
     List.iter2 (try_unify_ty span) t1.tret_tys t2.tret_tys
   | TAction(a1), TAction(a2) -> 
-    (* let tuple_wrap (lst : ty list) = 
-      match lst with 
-      | [] -> []
-      | [a] -> [a]
-      | lst -> [ty@@TTuple (List.map (fun ty -> ty.raw_ty) lst)]
-    in *)
-    (* hack to type check after tuple elimination:
-       put the action's argument and return types inside of a 
-       tuple type, and then unify those types. 
-       This lets us unify an action with a single polymorphic argument type 
-       with an action that has multiple arguments. *)
-    (* List.iter2 (try_unify_ty span) (tuple_wrap a1.aarg_tys) (tuple_wrap a2.aarg_tys);
-    List.iter2 (try_unify_ty span) (tuple_wrap a1.aret_tys) (tuple_wrap a2.aret_tys); *)
-    try_unify_lists unify_ty a1.aarg_tys a2.aarg_tys;
-    try_unify_lists unify_ty a1.aret_tys a2.aret_tys;
-    (* List.iter2 (try_unify_ty span) (a1.aarg_tys) (a2.aarg_tys);
-    List.iter2 (try_unify_ty span) (a1.aret_tys) (a2.aret_tys) *)
+    unify_param_tys_after_tuple_elim a1.aarg_tys a2.aarg_tys;
+    unify_param_tys_after_tuple_elim a1.aret_tys a2.aret_tys;
+
   | TActionConstr(a1), TActionConstr(a2) -> 
-    (* try_unify_lists unify_ty a1.aconst_param_tys a2.aconst_param_tys; *)
-    try_unify_lists unify_ty a1.aacn_ty.aarg_tys a2.aacn_ty.aarg_tys;
-    try_unify_lists unify_ty a1.aacn_ty.aret_tys a2.aacn_ty.aret_tys;
-    (*
-      List.iter2 (try_unify_ty span) a1.aconst_param_tys a2.aconst_param_tys;
-      List.iter2 (try_unify_ty span) a1.aacn_ty.aarg_tys a2.aacn_ty.aarg_tys;
-      List.iter2 (try_unify_ty span) a1.aacn_ty.aret_tys a2.aacn_ty.aret_tys;
-    *)
+    unify_param_tys_after_tuple_elim a1.aconst_param_tys a2.aconst_param_tys;
+    unify_param_tys_after_tuple_elim a1.aacn_ty.aarg_tys a2.aacn_ty.aarg_tys;
+    unify_param_tys_after_tuple_elim a1.aacn_ty.aret_tys a2.aacn_ty.aret_tys;
   | TBitstring, TBitstring -> ()
   | ( ( TVoid
       | TBitstring

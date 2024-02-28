@@ -56,7 +56,8 @@ let core_exp_to_tblmeta id (exp : C.exp) =
     | _ -> error "[exp_to_tblmeta] expression is not a table type"
   in
   let actions, length = match exp.e with
-    | ECall(_, [len_exp; acns_exp; _], _) -> (
+    | ECall(_, [len_exp; acns_exp; _], _)
+    | ECall(_, [len_exp; acns_exp; _; _], _) -> (
       let acn_exps = match acns_exp.e with 
         | ETuple(exps) -> exps
         | _ -> [acns_exp]
