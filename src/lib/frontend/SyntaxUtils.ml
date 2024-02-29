@@ -697,3 +697,9 @@ let e_to_constr_str e = match e with
 | ETableMatch (_) -> "tablematch"
 (* | EPatWild (_) -> "patwild" *)
 ;;
+
+let is_tbuiltin ty = 
+  match ty.raw_ty with 
+    | TBuiltin _ -> true
+    | _ -> false
+;;

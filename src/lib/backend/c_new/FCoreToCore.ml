@@ -24,6 +24,13 @@ let detuple_ty (ty : F.ty) = match ty.raw_ty with
   | F.TRecord{labels=None; ts} -> ts
   | _ -> [ty]
 ;;
+
+let is_tbuiltin tycid = 
+  match (List.assoc_opt tycid Builtins.builtin_tycid_to_ty) with 
+  | Some(ty) -> SyntaxUtils.is_tbuiltin ty
+  | None -> false
+;;
+
 let rec translate_raw_ty (raw_ty : F.raw_ty) : C.raw_ty = 
   match raw_ty with 
   (* basic types *)
@@ -36,7 +43,8 @@ let rec translate_raw_ty (raw_ty : F.raw_ty) : C.raw_ty =
   (* named types *)
   | F.TName(tcid, []) when (Cid.equal tcid F.tgroup_cid) -> C.TGroup
   | F.TName(ty_id, []) -> C.TName(ty_id, [])
-  | F.TName(ty_id, ty_args) -> C.TName(ty_id, List.map ty_to_size ty_args)
+  | F.TName(ty_cid, ty_args) when is_tbuiltin ty_cid -> C.TBuiltin(ty_cid, List.map (fun ty -> (translate_ty ty).raw_ty) ty_args)
+  | F.TName(ty_cid, ty_args) -> C.TName(ty_cid, List.map ty_to_size ty_args)
   (* functions types for functions, action constructors, actions, and memops *)
   | F.TFun{arg_tys; ret_ty; func_kind} when (func_kind = F.FNormal) -> (
         (* if it returns an action, its an action constructor, else its a function *)
@@ -186,7 +194,6 @@ let rec translate_value (value : F.value) : C.value =
     let ival = List.assoc str tags in
     let size = if (List.length tags <= 256) then 8 else 16 in
     C.value_sp (C.VInt(Integer.create ival size)) value.vspan
-
 
 
 

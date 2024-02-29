@@ -45,6 +45,17 @@ let builtin_modules =
   ; Tables.signature
   ]
 ;;
+let builtin_tycid_to_ty = List.filter_map 
+  (fun (libsig: LibraryInterface.sigty) -> 
+    match libsig.m_tys with 
+    | [] -> None
+    | [t_id, _, ty] -> 
+      Some(Cid.create_ids [libsig.m_id; t_id], ty)
+    | _ -> error "unexpected: builtin library with multiple constructors"
+      (* its fine, just fix *)
+  )
+  builtin_modules
+;;
 
 let builtin_defs =
   Arrays.defs

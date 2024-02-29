@@ -37,6 +37,7 @@ let rec translate_raw_ty (raw_ty : C.raw_ty) : F.raw_ty =
   | C.TEvent -> F.TEvent
   | C.TName(cid, []) -> (F.tname cid).raw_ty
   | C.TName(cid, sizes) -> (F.tglobal cid (List.map size_to_ty sizes)).raw_ty
+  | C.TBuiltin(cid, raw_tys) -> (F.tglobal cid (List.map (fun raw_ty -> F.ty (translate_raw_ty raw_ty)) raw_tys )).raw_ty
   | C.TFun {arg_tys; ret_ty} -> 
     let fty : F.func_ty = {
       F.arg_tys = List.map translate_ty arg_tys; 
