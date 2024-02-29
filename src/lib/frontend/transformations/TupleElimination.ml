@@ -52,6 +52,29 @@ let rename_elements id tys =
     tys
 ;;
 
+(* undo rename elements:
+    - return the id of the tuple and the raw types that it contains *)
+let unname_elements (id_tys : (id * ty) list) : (id * (raw_ty list)) = 
+  let split_at_last_underscore str =
+    let i = String.rindex str '_' in
+    let base = String.sub str 0 i in
+    let idx = String.sub str (i + 1) ((String.length str) - i - 1) in
+    (base, int_of_string idx)
+  in
+  let tup_name, tup_inner_rawtys = List.fold_left 
+    (fun (tup_name, tup_inner_rawtys) (field_id, field_ty)  -> 
+      let tup_name', _ = split_at_last_underscore (Id.name field_id) in
+      if (tup_name <> tup_name') then 
+        error "[unname_elements] one of the elements has a different base name";
+      let tup_inner_rawty = field_ty.raw_ty in
+      tup_name, (tup_inner_rawtys@[tup_inner_rawty]))
+    ("", [])
+    id_tys
+  in
+  Id.create tup_name, tup_inner_rawtys
+;;
+
+
 let sequence_statements ss =
   let seq = List.fold_left sseq snoop ss in
   seq.s

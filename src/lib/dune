@@ -175,7 +175,7 @@
    FCorePrinting
    CoreToFCore
    FCoreToCore
-   ClosureConversion
+   ; ClosureConversion
    RetypeEvars
    Monomorphization
    CPasses

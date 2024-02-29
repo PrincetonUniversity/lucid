@@ -88,37 +88,6 @@ let rec translate_raw_ty (raw_ty : F.raw_ty) : C.raw_ty =
     C.ty_sp (translate_raw_ty ty.raw_ty) ty.tspan
 ;;
 
-
-(* 
-let translate_op (op : C.op) : F.op = 
-  match op with 
-  | C.And -> F.And
-  | C.Or -> F.Or
-  | C.Not -> F.Not
-  | C.Eq -> F.Eq
-  | C.Neq -> F.Neq
-  | C.Less -> F.Less
-  | C.More -> F.More
-  | C.Leq -> F.Leq
-  | C.Geq -> F.Geq
-  | C.Neg -> F.Neg
-  | C.Plus -> F.Plus
-  | C.Sub -> F.Sub
-  | C.SatPlus -> F.SatPlus
-  | C.SatSub -> F.SatSub
-  | C.Cast(Sz sz) -> F.Cast(F.sz sz)
-  | C.Cast(_) -> err "Cast size should be a singleton"
-  | C.Conc -> F.Conc
-  | C.BitAnd -> F.BitAnd
-  | C.BitOr -> F.BitOr
-  | C.BitXor -> F.BitXor
-  | C.BitNot -> F.BitNot
-  | C.LShift -> F.LShift
-  | C.RShift -> F.RShift
-  | C.Slice(i, j) -> F.Slice(i, j)
-  | C.PatExact -> F.PatExact
-  | C.PatMask -> F.PatMask   
-*)
 (* inverse of translate_op in comment *)
 let translate_op op = 
   match op with 
@@ -184,7 +153,7 @@ let rec translate_value (value : F.value) : C.value =
     let label_value_pairs = List.combine labels es in
     C.value_sp (C.VRecord(List.map (fun (label, value) -> (label, translate_value value |> uv)) label_value_pairs)) value.vspan
   | F.VUnit -> err "unit values cannot be translated back to CoreSyntax"
-  | F.VClosure _ -> err "closure values cannot be translated back to CoreSyntax"
+  (* | F.VClosure _ -> err "closure values cannot be translated back to CoreSyntax" *)
   | F.VEnum(str, enum_ty) -> 
     (* translate to an int *)
     let tags = match enum_ty.raw_ty with 
@@ -214,7 +183,7 @@ let rec translate_exp (exp: F.exp) =
   match exp.e with
   | F.EVal(value) -> 
     C.aexp (C.EVal(translate_value value)) (translate_ty exp.ety) exp.espan
-  | F.EVar(cid, _) -> 
+  | F.EVar(cid) -> 
     C.aexp (C.EVar(cid)) (translate_ty exp.ety) exp.espan
   (* operations *)
   | F.EOp(F.Hash( sz), eargs) -> 
@@ -233,29 +202,29 @@ let rec translate_exp (exp: F.exp) =
   | F.ERecord{labels=Some labels; es} ->
     let label_exp_pairs = List.combine labels es in
     C.aexp (C.ERecord(List.map (fun (label, exp) -> (label, translate_exp exp)) label_exp_pairs)) (translate_ty exp.ety) exp.espan
-  | F.EClosure _ -> err "closure expressions cannot be translated back to CoreSyntax"
-  | F.ECall{f={e=EVar(cid, _)}; args=[port_arg];} when (Cid.names cid = ["flood"]) -> 
+  (* | F.EClosure _ -> err "closure expressions cannot be translated back to CoreSyntax" *)
+  | F.ECall{f={e=EVar(cid)}; args=[port_arg];} when (Cid.names cid = ["flood"]) -> 
     C.aexp (C.EFlood(translate_exp port_arg)) (translate_ty exp.ety) exp.espan
-  | F.ECall{f={e=EVar(cid, _)}; args=[ev_exp];} when (Cid.names cid = ["generate_self"]) -> 
+  | F.ECall{f={e=EVar(cid)}; args=[ev_exp];} when (Cid.names cid = ["generate_self"]) -> 
     let ev_exp = translate_exp ev_exp in
     let s = C.SGen(GSingle(None), ev_exp) in
     raise (MadeStatement(s))
-  | F.ECall{f={e=EVar(cid, _)}; args=[port_exp; ev_exp]} when (Cid.names cid = ["generate_port"]) -> 
+  | F.ECall{f={e=EVar(cid)}; args=[port_exp; ev_exp]} when (Cid.names cid = ["generate_port"]) -> 
     let port_exp = translate_exp port_exp in
     let ev_exp = translate_exp ev_exp in
     let s = C.SGen(GPort(port_exp), ev_exp) in
     raise (MadeStatement(s))
-  | F.ECall{f={e=EVar(cid, _)} ;args=[port_exp; ev_exp]} when (Cid.names cid = ["generate_switch"]) -> 
+  | F.ECall{f={e=EVar(cid)} ;args=[port_exp; ev_exp]} when (Cid.names cid = ["generate_switch"]) -> 
     let port_exp = translate_exp port_exp in
     let ev_exp = translate_exp ev_exp in
     let s = C.SGen(GSingle(Some(port_exp)), ev_exp) in
     raise (MadeStatement(s))
-  | F.ECall{f={e=EVar(cid, _)}; args=[group_exp; ev_exp]} when (Cid.names cid = ["generate_group"]) -> 
+  | F.ECall{f={e=EVar(cid)}; args=[group_exp; ev_exp]} when (Cid.names cid = ["generate_group"]) -> 
     let group_exp = translate_exp group_exp in
     let ev_exp = translate_exp ev_exp in
     let s = C.SGen(GMulti(group_exp), ev_exp) in
     raise (MadeStatement(s))
-  | F.ECall{f={e=EVar(cid, _)}; args=str_arg::args} when (Cid.names cid = ["printf"]) -> 
+  | F.ECall{f={e=EVar(cid)}; args=str_arg::args} when (Cid.names cid = ["printf"]) -> 
     let str_val = match str_arg.e with 
       | EVal(value) -> value
       | _ -> err "printf with non-string argument"
@@ -264,7 +233,7 @@ let rec translate_exp (exp: F.exp) =
     let args = List.map (translate_exp) args in
     let s = C.SPrintf(str, args) in
     raise (MadeStatement(s))
-  | F.ECall{f={e=EVar(cid, _)}; args=eargs;call_kind} -> 
+  | F.ECall{f={e=EVar(cid)}; args=eargs;call_kind} -> 
     (match call_kind with
     | F.CNormal -> 
       let eargs = List.map (translate_exp) eargs in
@@ -324,9 +293,8 @@ and translate_stmt in_parser (stmt : F.statement) =
     let branches = List.map 
       (fun (pats, branch_tgt) -> 
         match branch_tgt with 
-        | F.S stmt -> 
-          (List.map translate_pat pats, translate_stmt in_parser stmt)
-        | _ -> err "match statement with non-statement branch")       
+        | stmt -> 
+          (List.map translate_pat pats, translate_stmt in_parser stmt))
       branches
     in
     C.statement_sp (C.SMatch(exps, branches)) stmt.sspan
@@ -373,29 +341,61 @@ let translate_decl (decl : F.decl) : C.decl =
     let parse_block = Despecialization.specialize_parser_block body in
     C.decl_sp (C.DParser(id, params, parse_block)) decl.dspan
   )
-  | F.DFun(F.FNormal, id, {raw_ty=TFun{func_kind=F.FAction}}, params, Some(body)) -> 
-    let const_params = List.map (fun (id, ty) -> id, translate_ty ty) params in
-    let action_params, ret_tys, action_body_exps = match body.s with 
-      | SRet(Some({e=EClosure{params; fexp;}})) -> 
-        let params = List.map (fun (id, ty) -> id, translate_ty ty) params in
-        let ret_tys = match fexp.ety.raw_ty with
-          | TRecord{labels=None; ts} -> ts
-          | _ -> [fexp.ety]
-        in
-        let action_body_exps = match fexp.e with 
-          | ERecord{labels=None; es} -> es
-          | _ -> [fexp]
-        in
-        let action_body_exps = List.map (fun exp -> translate_exp exp) action_body_exps in
-        let ret_tys = List.map translate_ty ret_tys in
-        params, ret_tys, action_body_exps
-      | _ -> failwith "error: unexpected action body in action constructor"
+  | F.DFun(F.FAction, id, rty, params, Some(body)) -> 
+    (* detuple return type, first param, and second param *)
+    let detuple_ty (ty: F.ty) = match ty.raw_ty with 
+      | TRecord{ts} -> ts
+      | _ -> [ty]
     in
+    let detuple_param = function 
+      | (base_id, {F.raw_ty=TRecord{ts}}) -> 
+        List.mapi 
+          (fun i ty -> (
+            let name = 
+              (Id.name base_id ^ "_"^(string_of_int i))
+            in
+            Id.create(name), ty))
+          ts
+      (* its already not a tuple *)
+      | (base_id, ty) -> [base_id, ty]
+    in
+    let rtys = detuple_ty rty in
+    let const_params, params = match params with 
+      | [const_param; param] ->  (
+        match (F.is_trecord (snd const_param), F.is_trecord (snd param)) with 
+        | true, true -> [const_param], [param]
+        | false, false -> 
+          detuple_param const_param, detuple_param param
+        | _, _ -> err "action has inconsistent parameter for conversion back to CoreIR"
+      )
+      | _ -> 
+        err@@"action has invalid number of arguments for conversion back to CoreIR "
+          ^"action: "^FCorePrinting.show_decl decl
+    in
+    let field_replacer = 
+      (* replace tuple get ops with evars  *)
+      object 
+      inherit [_] F.s_map as super
+      method! visit_exp  () exp = 
+        match exp.e with 
+        | EOp(Get(field_idx), [{e=F.EVar(cid);}]) -> 
+          let field_name = (Cid.to_id cid |> Id.name)^"_"^(string_of_int field_idx) in
+          {exp with e=F.EVar(Cid.create [field_name])}
+        | _ -> super#visit_exp () exp
+      end
+    in
+    let body = field_replacer#visit_statement () body in
+    let action_body_exps = match body.s with 
+    | F.SRet(Some(exp)) when F.etup_form exp ->
+      List.map translate_exp (F.flatten_tuple exp)
+    | F.SRet(Some(exp)) ->[translate_exp exp]
+      | _ -> err "action has more than just a return statement"
+    in 
     C.decl_sp (C.DActionConstr{
       aid = id;
-      artys = ret_tys;
-      aconst_params = const_params;
-      aparams = action_params;
+      artys = List.map translate_ty rtys;
+      aconst_params = List.map (fun (id, ty) -> id, translate_ty ty) const_params;
+      aparams = List.map (fun (id, ty) -> id, translate_ty ty) params;
       abody = action_body_exps;
     }) decl.dspan
   | F.DFun(F.FNormal, id, rty, params, Some(body)) ->
@@ -405,7 +405,9 @@ let translate_decl (decl : F.decl) : C.decl =
     let d = C.DFun(id, rty, (params, body)) in
     C.decl_sp d decl.dspan
   | F.DFun(_, _, _, _, None) -> err "extern functions are not supported in CoreSyntax"
-  | F.DFun(_, _, _, _, _) -> err "Unknown function kind"
+  | F.DFun(_, _, _, _, _) -> 
+    FCorePrinting.show_decl decl |> print_endline;
+    err "Unknown function kind"
   (* types *)
   | F.DTy(cid, Some(ty)) -> 
     let ty = translate_ty ty in

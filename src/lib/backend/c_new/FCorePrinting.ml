@@ -70,12 +70,12 @@ and show_v = function
       let values = List.map show_value es in
       sprintf "(%s)" (String.concat ", " values)
   )
-  | VClosure{env; params; fexp} -> 
+  (* | VClosure{env; params; fexp} -> 
     let env = List.map (fun (id, v) -> sprintf "%s = %s" (show_id id) (show_value v)) env in
     let env = String.concat "; " env in
     let params = show_params params in
     let fexp = show_exp fexp in
-    sprintf "{%s} (%s) -> %s" env params fexp
+    sprintf "{%s} (%s) -> %s" env params fexp *)
   | VTyRef(id, int_addr, ty) -> 
     let id = show_id id in
     let int_addr = string_of_int int_addr in
@@ -102,7 +102,7 @@ let rec show_exp ?(tystr=def_tystr) exp  =
   else sprintf "%s" (show_e exp.e)
 and show_e = function 
     | EVal v -> show_value v
-    | EVar(cid, _) -> show_cid cid
+    | EVar(cid) -> show_cid cid
     | ERecord{labels; es} -> (
       match labels with 
       | Some(labels) -> 
@@ -125,12 +125,12 @@ and show_e = function
       let args = List.map show_exp args in
       let args = String.concat ", " args in
       sprintf "%s(%s)" op args
-    | EClosure{env; params; fexp} -> 
+    (* | EClosure{env; params; fexp} -> 
       let env = List.map (fun (id, v) -> sprintf "%s = %s" (show_id id) (show_exp v)) env in
       let env = String.concat "; " env in
       let params = show_params params in
       let fexp = show_exp fexp in
-      sprintf "{%s} (%s) -> %s" env params fexp
+      sprintf "{%s} (%s) -> %s" env params fexp *)
 ;;
 
 let show_pat = function 
@@ -144,8 +144,7 @@ let show_branch (pats, branch_tgt) =
   let pats = List.map show_pat pats in
   let pats = String.concat ", " pats in
   let branch_tgt = match branch_tgt with 
-  | S s -> show_statement s
-  | E e -> show_exp e
+  s -> show_statement s
   in
   sprintf "| %s -> {%s}" pats branch_tgt
 ;;

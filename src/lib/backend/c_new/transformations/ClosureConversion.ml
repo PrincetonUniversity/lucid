@@ -1,4 +1,4 @@
-(* capture variables in closures *)
+(* Depreciated -- no more closures *)
 open FCoreSyntax
 let err = Console.error ;;
 

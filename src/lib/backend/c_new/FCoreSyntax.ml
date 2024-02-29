@@ -7,11 +7,49 @@ and tagval = [%import: (TaggedCid.tagval[@opqaue])]
 and tcid = [%import: (TaggedCid.t[@opqaue])]
 and sp = [%import: Span.t]
 
-
-  
+(* types *)
 and size = int
 and func_kind = | FNormal | FHandler | FParser | FAction | FMemop | FExtern
+and raw_ty = 
+  | TUnit
+  | TInt of size 
+  | TBool 
+  | TRecord of {labels : id list option; ts : ty list;}
+  | TFun of func_ty
+  | TName of cid * (ty list)
+    (* a named type can either be:
+        1. a type variable defined in the application, 
+            which should have no arguments. 
+        2. a primitive type, which may take arguments. 
+            A primitive type is built in to the language, though 
+            it may be implemented by a module like Array or 
+            Table. Rephrased, its a type whose value representation 
+            is not defined at this point in compilation. 
+            It could be something from the surface language,
+            like "Table.t<<...>>", or something for a backend IR,
+            like "Union" or "Ref". *)            
+  | TBits of {ternary: bool; len : size;}
+  | TEvent
+  | TEnum of (string * int) list 
+and func_ty = {arg_tys : ty list; ret_ty : ty; func_kind : func_kind;}
+and ty = {raw_ty:raw_ty; tspan : sp;}
+and params = (id * ty) list
+(* values *)
+and v =
+  | VUnit
+  | VInt of {value : int; size : size;}
+  | VBool of bool
+  | VRecord of {labels : id list option; es : value list;}
+  (* no closures for now *)
+  (* | VClosure of {env : (id * value) list; params: params; fexp : exp;} *)
+  | VTyRef of id * int * ty (* typed reference to a value in memory *)
+  | VBits of {ternary: bool; bits : int list;}
+  | VEvent of vevent
+  | VEnum of string * ty (* symbol in enum * enum ty *)
+and vevent = {evid : cid; evnum : value option; evdata: value list; meta : (string * value) list;}
+and value = {v:v; vty:ty; vspan : sp;}
 
+(* expressions *)
 and op =    | And | Or | Not
             | Eq  | Neq | Less| More | Leq | Geq
             | Neg | Plus| Sub | SatPlus | SatSub
@@ -22,56 +60,14 @@ and op =    | And | Or | Not
             | Cast of size 
             | Conc
             | Project of id | Get of int (* record and tuple ops *)
-
-and raw_ty = 
-  | TUnit
-  | TInt of size 
-  | TBool 
-  | TRecord of {labels : id list option; ts : ty list;}
-  | TFun of func_ty
-  | TName of cid * (ty list)
-    (* a named type can either be:
-        1. a type variable (defined in the toplevel), 
-            which should have no arguments. 
-        2. a primitive type, which may take arguments. 
-            The primitive type is one that should be 
-            considered "built in" to the language, though 
-            it may be implemented by a module like Array or 
-            Table. Rephrased, its a type whose value representation 
-            is not defined at this point in compilation. 
-            It could be something from the surface language,
-            like "Table.t<...>", or something for a backend IR,
-            like "Union" or "Ref". *)            
-  | TBits of {ternary: bool; len : size;}
-  | TEvent
-  | TEnum of (string * int) list 
-and func_ty = {arg_tys : ty list; ret_ty : ty; func_kind : func_kind;}
-and ty = {raw_ty:raw_ty; tspan : sp;}
-(* left off here -- I think we want an enum type and value for 
-   defunctionalization and tables. Also, I think we want a 
-   for statement (SFor exp * statement) *)
-and params = (id * ty) list
-
-and v =
-  | VUnit
-  | VInt of {value : int; size : size;}
-  | VBool of bool
-  | VRecord of {labels : id list option; es : value list;}
-  | VClosure of {env : (id * value) list; params: params; fexp : exp;}
-  | VTyRef of id * int * ty (* typed reference to a value memory *)
-  | VBits of {ternary: bool; bits : int list;}
-  | VEvent of vevent
-  | VEnum of string * ty (* symbol in enum * enum ty *)
-and vevent = {evid : cid; evnum : value option; evdata: value list; meta : (string * value) list;}
-and value = {v:v; vty:ty; vspan : sp;}
-
 and e = 
   | EVal of value
-  | EVar of cid * bool (* true if mutable *)
+  | EVar of cid 
   | ERecord of {labels : id list option; es : exp list;}
   | ECall of {f:exp; args:exp list; call_kind:call_kind;}
   | EOp of op * exp list
-  | EClosure of {env : (id * exp) list; params: params; fexp : exp;}
+  (* no closures for now *)
+  (* | EClosure of {env : (id * exp) list; params: params; fexp : exp;} *)
   (* for a functional ast, add these *)
   (* | ELet of cid * exp * exp *)
   (* | EIf of exp * exp * exp *)
@@ -82,27 +78,30 @@ and call_kind =
   | CEvent 
 and exp = {e:e; ety:ty; espan : sp;}
 
-
+(* patterns are in both expressions and statements *)
+and pat = 
+  | PVal of value
+  | PEvent of {event_id : cid; params : params;}
+and branch = pat list * branch_tgt
+and branch_tgt = statement
+(* branch targets can be expressions in a functional IR *)
+  (* | S of statement
+  | E of exp *)
+(* statements *)
 and s = 
   | SNoop
   | SUnit of exp
+  (* assign may create a new variable, and can unpack tuples *)
   | SAssign of {ids : cid list; tys : ty list; new_vars : bool; exp : exp}
   | SIf of exp * statement * statement
   | SMatch of exp * branch list
   | SSeq of statement * statement
   | SRet of exp option
 
-  and pat = 
-    | PVal of value
-    | PEvent of {event_id : cid; params : params;}
-  and branch = pat list * branch_tgt
-  and branch_tgt = 
-    | S of statement
-    | E of exp
 
 and statement = {s:s; sspan : sp;}
 
-
+(* declarations *)
 and event_def = {evconstrid : id; evconstrnum : int option; evparams : params; is_parsed : bool}
 and d = 
   | DVar of id * ty * (exp option) (* constants and globals, possibly externs *)
@@ -152,11 +151,10 @@ let tcustom cid tyargs = ty (TName(cid, tyargs))
 let tgroup_cid = Cid.create ["Group"]
 let tgroup = tname tgroup_cid
 
-(* test to see if an ast node represents one of the functions defined above *)
-  let is_tunit ty = match ty.raw_ty with TUnit -> true | _ -> false
-  let is_trecord ty = match ty.raw_ty with TRecord{labels=Some(_)} -> true | _ -> false
-  let is_ttuple ty = match ty.raw_ty with TRecord{labels=None} -> true | _ -> false
-  let is_tfun ty = match ty.raw_ty with TFun({func_kind=FNormal}) -> true | _ -> false
+let is_tunit ty = match ty.raw_ty with TUnit -> true | _ -> false
+let is_trecord ty = match ty.raw_ty with TRecord{labels=Some(_)} -> true | _ -> false
+let is_ttuple ty = match ty.raw_ty with TRecord{labels=None} -> true | _ -> false
+let is_tfun ty = match ty.raw_ty with TFun({func_kind=FNormal}) -> true | _ -> false
 
 
 
@@ -168,7 +166,7 @@ let infer_vty = function
   | VRecord {labels; es} -> ty (TRecord {labels; ts=List.map (fun v -> v.vty) es})
   | VBits {ternary; bits} -> ty (TBits {ternary; len=sz (List.length bits)})
   | VTyRef (_, _, ty) -> ty
-  | VClosure {params; fexp; _} -> tfun (List.map snd params) fexp.ety
+  (* | VClosure {params; fexp; _} -> tfun (List.map snd params) fexp.ety *)
   | VEvent _ -> ty (TEvent)
   | VEnum (_, ty) -> ty (* TODO: do we want this? *)
 ;;  
@@ -212,7 +210,7 @@ let value_to_string (v:value) =
 
 (* expression constructors *)
 let exp e ety espan = {e; ety; espan}
-let efunref cid fty = {e=EVar (cid, false); ety=fty; espan=Span.default; }
+let efunref cid fty = {e=EVar (cid); ety=fty; espan=Span.default; }
 let erecord labels es = {e=ERecord {labels=Some labels; es}; ety=trecord labels (List.map (fun (e:exp) -> e.ety) es); espan=Span.default; }
 let etuple es = {e=ERecord {labels=None; es}; ety=ttuple (List.map (fun (e:exp) -> e.ety) es); espan=Span.default; }
 let eop op es = 
@@ -254,9 +252,7 @@ let eop op es =
   in 
   {e=EOp (op, es); ety=eop_ty; espan=Span.default; }
 let eval value = {e=EVal value; ety=value.vty; espan=Span.default; }
-let evar mut id ty = {e=EVar(id, mut); ety=ty; espan=Span.default; }
-let local_var id ty = evar true id ty
-let const_var id ty = evar false id ty
+let evar id ty = {e=EVar(id); ety=ty; espan=Span.default; }
 let eunit () = eval (vunit ())
 
 let ecall_kind call_kind f es = 
@@ -269,12 +265,12 @@ let ecall_kind call_kind f es =
 ;;
 let ecall = ecall_kind CNormal
 let eevent = ecall_kind CEvent
-let efun_kind func_kind params fexp = {
+(* let efun_kind func_kind params fexp = {
   e=EClosure {env=[]; params; fexp}; 
   ety=tfun_kind (List.map snd params) fexp.ety func_kind; espan=Span.default; 
-}
-let efun = efun_kind FNormal
-let eaction = efun_kind FAction
+} *)
+(* let efun = efun_kind FNormal *)
+(* let eaction = efun_kind FAction *)
 (* let elet id ety exp_rhs exp_rest espan = exp (ELet([id], exp_rhs, exp_rest)) ety espan *)
 
 let egen_self ev = 
@@ -288,6 +284,30 @@ let egen_group loc ev =
 ;;
 let egen_port loc ev = 
   ecall (efunref (Cid.create ["generate_port"]) (tfun [tevent] (tunit ()))) [loc; ev]
+
+(* form checking *)
+let etup_form exp = match exp.e with
+  | ERecord {labels=None; _} -> true
+  | EVal {v=VRecord {labels=None; _}} -> true
+  | _ -> false
+;;
+let erec_form exp = match exp.e with
+  | ERecord {labels=Some _; _} -> true
+  | EVal {v=VRecord {labels=Some _; _}} -> true
+  | _ -> false
+;;
+
+exception FormError of string
+let flatten_tuple exp = match exp.e with
+  | ERecord {labels=None; es} -> es
+  | EVal {v=VRecord {labels=None; es}} -> 
+    List.map (fun v -> eval v) es
+  | _ -> raise (FormError "[flatten_tuple] expected tuple")
+;;
+let rec flatten_exp exp = match exp.e with
+  | ERecord {labels=_; es} -> List.concat (List.map flatten_exp es)
+  | _ -> [exp]
+;;
 
 (* let egen loc ev = ecall (efunref (Cid.create ["generate"]) (tfun [tevent] (tunit ()))) [loc; ev] *)
 
@@ -331,7 +351,7 @@ let dfun_kind fun_kind id rty params body =
 let dfun = dfun_kind FNormal
 let dhandler = dfun_kind FHandler
 let dparser = dfun_kind FParser
-let daction = dfun_kind FAction (* note: actions are higher-order -- returned from action constructors *)
+let daction = dfun_kind FAction 
 let dmemop = dfun_kind FMemop
 (* global variables *)
 let dglobal id ty exp = decl (DVar(id, ty, Some exp)) Span.default

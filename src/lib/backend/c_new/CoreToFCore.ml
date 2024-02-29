@@ -1,6 +1,8 @@
 module C = CoreSyntax
 
 module F = FCoreSyntax
+
+let printf = Printf.printf
 (* ops that are calls to builtins in FCore:
     flood
     printf
@@ -169,7 +171,7 @@ and translate_value (value : C.value) : F.value =
 let rec translate_exp (exp : C.exp) : F.exp = 
   let exp' = match exp.ety, exp.e with 
   | _, C.EVal(v) -> (F.eval (translate_value v))
-  | _, C.EVar(c) -> F.local_var c (translate_ty exp.ety)
+  | _, C.EVar(c) -> F.evar c (translate_ty exp.ety)
   | _, C.EOp(op, es) -> F.eop (translate_op op) (List.map translate_exp es)
   | {raw_ty=C.TEvent}, C.ECall(cid, es, _) -> 
     let fexp = F.efunref cid (F.tevent) in 
@@ -284,7 +286,7 @@ let rec translate_statement (stmt:C.statement) : F.statement =
       (fun (pats, stmt) -> 
         let pats = List.map2 translate_pat pats pat_lens in
         let stmt = translate_statement stmt in
-        (pats, F.S(stmt)))
+        (pats, (stmt)))
       branches
     in
     F.smatch exp branches |> F.swrap stmt.sspan
@@ -310,6 +312,48 @@ let translate_memop (m : CoreSyntax.memop) =
   F.dmemop id (translate_ty rty) (translate_params params) (translate_statement body)
 ;;
 
+(* if the parameters are a flattened list 
+   (not a single-element tuple or record), 
+    wrap them in a tuple. *)
+let is_flattened_tuple params : bool =
+     List.length params > 1
+  && List.for_all 
+      (fun (_, (ty : C.ty)) -> match ty.raw_ty with 
+        | TTuple _ 
+        | TRecord _ -> false
+        | _ -> true)
+      params
+;;
+
+(* given a list of non-container parameters, pack them into a tuple 
+   and return a map from each parameter's id to the 
+   id and position of the new tuple. *)
+let tuple_params(params : C.params) : 
+    (C.id * C.ty)                 (* tuple name and type *)
+  * ((C.id * (C.id * int)) list)  (* dict from param name to tuple name and index *)
+=
+  if ((is_flattened_tuple params) = false) then 
+      err "[tuple_params] not a flattened tuple!";
+  let split_at_last_underscore str =
+    let i = String.rindex str '_' in
+    let base = String.sub str 0 i in
+    let idx = String.sub str (i + 1) ((String.length str) - i - 1) in
+    (base, int_of_string idx)
+  in
+  let tup_name, tup_inner_rawtys, subst_dict = List.fold_left 
+    (fun (_, tup_inner_rawtys, subst_dict) (field_id, (field_ty : C.ty))  -> 
+      let tup_name, field_index = split_at_last_underscore (Id.name field_id) in
+      let tup_inner_rawty = field_ty.raw_ty in
+      let rename_entry = field_id, (Id.create tup_name, field_index) in 
+      tup_name, (tup_inner_rawtys@[tup_inner_rawty]), subst_dict@[rename_entry]      
+    )
+    ("", [], [])
+    params
+  in
+  ((Id.create tup_name), (C.ttuple tup_inner_rawtys)), (subst_dict)
+;;
+
+
 let translate_decl (decl:C.decl) : F.decl = 
  let decl' =  match decl.d with 
   | C.DGlobal(id, ty, exp) -> F.dglobal id (translate_ty ty) (translate_exp exp)
@@ -333,28 +377,64 @@ let translate_decl (decl:C.decl) : F.decl =
   | DMemop(memop) -> translate_memop memop
   | DUserTy(id, ty) -> F.dty (Cid.id id) (translate_ty ty)
   | DActionConstr(acn_constr) -> 
-    (* first, build the inner action function *)
+    (* requirement: action constructor is only allowed to have 1 parameter in 
+       each of its parameter set. 1 install-time parameter, 1 run-time parameter, 
+       1 return parameter. The parameters may be tuples or records. *)
+
+    (* pack parameter lists into tuples, updating 
+       action body as needed. *)
+    let pack_params params  =
+      match params with 
+      | [] -> (Id.fresh "empty", C.ttuple []), []
+      | params when is_flattened_tuple params -> 
+        print_endline ("[pack_params] packing flattened tuple into tuple:");
+        print_endline (CorePrinting.params_to_string params);
+        tuple_params params
+      | param::[] -> param, []
+      | _ -> err "[pack_params] invalid action arguments for translating to C Core."
+    in
+    let const_param, const_rename_map = pack_params acn_constr.aconst_params in
+    let param, param_rename_map      = pack_params acn_constr.aparams in
+    let ret_ty      = C.ttuple (List.map (fun (ty : C.ty) -> ty.raw_ty) acn_constr.artys) in 
+
+
+    let field_replacer = 
+      (* replace a evar reference to a field with a tuple get op *)
+      object 
+      inherit [_] F.s_map as super
+      method! visit_exp  tup_ty_param_rename_map exp = 
+        let tup_ty, param_rename_map = tup_ty_param_rename_map in 
+        match exp.e with 
+        | EVar(cid) -> (
+          let id = Cid.to_id cid in
+          match (List.assoc_opt id param_rename_map) with 
+          | None -> {exp with e=EVar(cid)}
+          | Some(tup_id, field_idx) -> 
+            {exp with 
+              e=((F.eop (Get(field_idx)) [F.evar (Cid.id tup_id) tup_ty]).e)}
+        )
+        | _ -> super#visit_exp tup_ty_param_rename_map exp
+      end
+    in
+    (* build the action body and replace fields with tuple get ops *)
     let acn_body = match acn_constr.abody with 
       | [exp] -> translate_exp exp
       | exps -> F.etuple (List.map translate_exp exps)
     in
-    let acn_fun = F.eaction (translate_params acn_constr.aparams) acn_body in
-    (* now build the action constructor, which is just a regular function that returns the action *)
-    F.dfun acn_constr.aid (acn_fun.ety) (translate_params acn_constr.aconst_params) (F.sret acn_fun)
-    (* action translation strategy: there are two options for an action constructor. 
-        an "action constructor" is a function that returns an action function.
-        To translate into c: 
-          the inner action is a function that takes its action parameter, 
-          and a pointer to a context. The context holds the 
-          values of the action's constructor parameter. 
-          the action constructor is a function that takes its parameters, 
-          it returns a pointer to the inner action and a pointer to the context. 
-          Actually, we want those things to be pre-allocated. So it takes 
-          a pointer to the context that it is supposed to fill. 
-          It returns a pointer to the inner action and populates the 
-          context. 
-        option 2 is more complicated, and I think it boils down to something 
-        like option 1. *)
+    let acn_body = List.fold_left2 
+      (fun acn_body (_, ty) rename_map -> 
+        field_replacer#visit_exp (translate_ty ty, rename_map) acn_body)
+      acn_body
+      [const_param; param]
+      [const_rename_map; param_rename_map]
+    in
+    (* finally, build the action: a function with two arguments 
+       and a single return that has the translated version of the renamed body *)
+    F.daction 
+      acn_constr.aid 
+      (translate_ty ret_ty)
+      (translate_params [const_param; param])
+      (F.sret acn_body)
   | DParser(id, params, parser_block) -> 
     (* despecialize parser with Core pass *)
     let parse_stmt = Despecialization.despecialize_parser_block parser_block in

@@ -36,13 +36,13 @@ let update_var_types decls =
      update the type of EVars, in case the variable's type has changed. 
      The rest of the cases are just recursing through the tree, 
      retyping evars, and propagating any changes up. *)
-  | EVar(cid, _) -> (
+  | EVar(cid) -> (
     match (env_find_opt env cid) with
     | Some ty -> {exp with ety=ty}, env
     | None -> 
       raise (UnboundVar cid)
   )
-  | EVal({v=VClosure({env=cenv; params; fexp}); vspan}) -> 
+  (* | EVal({v=VClosure({env=cenv; params; fexp}); vspan}) -> 
       (* visit closure body *)
       let env' = env_add_params env (List.map (fun (id, value) -> (id, value.vty)) cenv) in
       let env' = env_add_params env' params in
@@ -74,7 +74,7 @@ let update_var_types decls =
       (* print_endline ("new closure type: ");
       print_endline (FCorePrinting.show_ty ety'); *)
       {exp with e = EClosure({env=cenv; params; fexp=fexp'}); ety=ety'}, env
-    )
+    ) *)
     | EVal _ -> exp, env
     | ERecord{labels; es} -> 
         (* recurse on members *)
@@ -144,11 +144,11 @@ let update_var_types decls =
       let rty = ref None in
       let branches' = List.map (fun (pats, stmt) -> 
         let stmt' = match stmt with 
-          | S(stmt) -> 
+          | stmt -> 
             let stmt, _, ret = visit_stmt env stmt in
             rty := ret;
-            S(stmt)
-          | E(exp) -> E(visit_exp env exp |> fst)
+            stmt
+          (* | E(exp) -> E(visit_exp env exp |> fst) *)
         in
         (pats, stmt')
       ) branches in

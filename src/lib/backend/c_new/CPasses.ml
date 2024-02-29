@@ -18,11 +18,11 @@ let compile ds =
   let s = FCorePrinting.show_decls fds in
   print_endline s;
   (* capture variables in closures *)
-  let fds = ClosureConversion.capture_vars fds in
+  (* let fds = ClosureConversion.capture_vars fds in *)
   (* add closure types *)
-  let fds = ClosureConversion.add_closure_types fds in
+  (* let fds = ClosureConversion.add_closure_types fds in *)
   (* add closure conversion functions *)  
-  print_endline ("--- after closure conversion ---");
+  (* print_endline ("--- after closure conversion ---"); *)
   let s = FCorePrinting.show_decls fds in
   print_endline s;
   s

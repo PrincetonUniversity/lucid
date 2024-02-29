@@ -305,6 +305,7 @@ let tevent = ty (TEvent)
 let tname_sp cid sizes tspan = ty_sp (TName(cid, sizes)) tspan
 let tname cid sizes = tname_sp cid sizes Span.default
 let payload_ty = ty@@TName(Cid.create ["Payload"; "t"], [])
+let ttuple raw_tys = {raw_ty = TTuple(raw_tys); tspan = Span.default}
 
 let rec infer_vty v =
   match v with
@@ -665,3 +666,5 @@ let is_pkt_arg (_, ty) = match ty.raw_ty with | TBits (Sz 1500) -> true | _ -> f
 let to_singleton_sizes szs = List.map (fun sz -> match sz with | Sz s -> s | _ -> error "[to_singleton_sizes] non-singleton size") szs
 let size_to_ints sz = match sz with | Sz s -> [s] | Szs ss -> ss
 let size_to_int sz = match sz with | Sz s -> s | _ -> error "[size_to_int] non-singleton size"
+
+

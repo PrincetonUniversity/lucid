@@ -32,9 +32,16 @@ let is_tuple ty =
 let rec eliminate_exp e =
   match e.e with
   (* call to a builtin that returns a tuple *)
-    (* replace with:
-      1. an intermediate variable that gets set in a pre statement
-      2. an evar of the intermediate *)
+  (* 
+    given a call to a builtin that returns a tuple,
+    return a statement that sets a temp variable in a 
+    tuple assign and an evar that replaces the 
+    call in the statement where it appears.
+      (int, int) foo = doit();
+        ==> 
+      (int, int) tmp_var = doit(); // STupleAssign
+      foo = tmp_var;   
+  *)
   | ECall (cid, args, u) when 
       ((List.mem cid builtin_cids) && (Option.get e.ety |> is_tuple)) ->
     let outvar = fresh_intermediate () in
