@@ -13,9 +13,9 @@ let compile ds =
   (* 2. run partial interpretation *)
   let ds = PartialInterpretation.interp_prog ds in
   (* 3. translate to FCore *)
-  let fds = CoreToFCore.translate_prog ds in
+  let fds = CoreToCCore.translate_prog ds in
   print_endline ("--- before closure conversion ---");
-  let s = FCorePrinting.show_decls fds in
+  let s = CCorePrinting.show_decls fds in
   print_endline s;
   (* capture variables in closures *)
   (* let fds = ClosureConversion.capture_vars fds in *)
@@ -23,7 +23,7 @@ let compile ds =
   (* let fds = ClosureConversion.add_closure_types fds in *)
   (* add closure conversion functions *)  
   (* print_endline ("--- after closure conversion ---"); *)
-  let s = FCorePrinting.show_decls fds in
+  let s = CCorePrinting.show_decls fds in
   print_endline s;
   s
 (* 

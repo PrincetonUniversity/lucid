@@ -1,6 +1,6 @@
 module C = CoreSyntax
 
-module F = FCoreSyntax
+module F = CCoreSyntax
 
 let printf = Printf.printf
 (* ops that are calls to builtins in FCore:

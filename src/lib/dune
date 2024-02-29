@@ -171,10 +171,10 @@
    cTransformations
    strUtils
 
-   FCoreSyntax
-   FCorePrinting
-   CoreToFCore
-   FCoreToCore
+   CCoreSyntax
+   CCorePrinting
+   CoreToCCore
+   CCoreToCore
    ; ClosureConversion
    RetypeEvars
    Monomorphization

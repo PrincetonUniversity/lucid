@@ -3,7 +3,7 @@ let err = Console.error ;;
 
 
 module C = CoreSyntax
-module F = FCoreSyntax
+module F = CCoreSyntax
 
 let rec ty_to_size (ty : F.ty) = 
   match ty.raw_ty with 
@@ -370,7 +370,7 @@ let translate_decl (decl : F.decl) : C.decl =
       )
       | _ -> 
         err@@"action has invalid number of arguments for conversion back to CoreIR "
-          ^"action: "^FCorePrinting.show_decl decl
+          ^"action: "^CCorePrinting.show_decl decl
     in
     let field_replacer = 
       (* replace tuple get ops with evars  *)
@@ -406,7 +406,7 @@ let translate_decl (decl : F.decl) : C.decl =
     C.decl_sp d decl.dspan
   | F.DFun(_, _, _, _, None) -> err "extern functions are not supported in CoreSyntax"
   | F.DFun(_, _, _, _, _) -> 
-    FCorePrinting.show_decl decl |> print_endline;
+    CCorePrinting.show_decl decl |> print_endline;
     err "Unknown function kind"
   (* types *)
   | F.DTy(cid, Some(ty)) -> 

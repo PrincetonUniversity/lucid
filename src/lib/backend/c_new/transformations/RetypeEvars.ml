@@ -1,5 +1,5 @@
 (* helper function: update all the types of evar expressions in the program  *)
-open FCoreSyntax
+open CCoreSyntax
 let err = Console.error ;;
 
 type env = (cid * ty) list

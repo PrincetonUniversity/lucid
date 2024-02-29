@@ -1,4 +1,4 @@
-open FCoreSyntax
+open CCoreSyntax
 let def_tystr = true (* show type string in show_exp *)
 let sprintf = Printf.sprintf
 

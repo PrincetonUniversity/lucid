@@ -4,7 +4,7 @@
    Also add function implementations for the 
    builtin functions that use values of those 
    types. *)
-open FCoreSyntax
+open CCoreSyntax
 let err = Console.error ;;
 let str = Printf.sprintf
 
