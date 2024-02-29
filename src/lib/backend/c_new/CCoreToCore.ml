@@ -141,8 +141,8 @@ let rec translate_value (value : F.value) : C.value =
     C.value_sp (C.VInt(Integer.create ival size)) value.vspan
   | F.VEvent(event_val) -> 
     C.value_sp (C.VEvent(translate_event_val event_val)) value.vspan
-  | F.VTyRef(id, addr, _) -> 
-    C.value_sp (C.VGlobal(id, addr)) value.vspan
+  | F.VGlobal{global_id; global_pos} -> 
+    C.value_sp (C.VGlobal(global_id, global_pos)) value.vspan
   | F.VBits {ternary=true; bits} -> 
     C.value_sp (C.VPat(bits)) value.vspan
   | F.VBits {ternary=false; bits} ->

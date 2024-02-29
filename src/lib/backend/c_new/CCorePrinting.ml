@@ -76,10 +76,10 @@ and show_v = function
     let params = show_params params in
     let fexp = show_exp fexp in
     sprintf "{%s} (%s) -> %s" env params fexp *)
-  | VTyRef(id, int_addr, ty) -> 
-    let id = show_id id in
-    let int_addr = string_of_int int_addr in
-    let ty = show_ty ty in
+  | VGlobal{global_id; global_pos; global_ty} -> 
+    let id = show_id global_id in
+    let int_addr = string_of_int global_pos in
+    let ty = show_ty global_ty in
     sprintf "ref %s[@%s]: %s" id int_addr ty
   | VBits {bits} -> 
     let rec bits_to_str bits = 

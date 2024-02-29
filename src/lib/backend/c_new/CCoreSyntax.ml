@@ -16,6 +16,9 @@ and raw_ty =
   | TBool 
   | TRecord of {labels : id list option; ts : ty list;}
   | TFun of func_ty
+  | TBits of {ternary: bool; len : size;}
+  | TEvent
+  | TEnum of (string * int) list 
   | TName of cid * (ty list)
     (* a named type can either be:
         1. a type variable defined in the application, 
@@ -28,9 +31,6 @@ and raw_ty =
             It could be something from the surface language,
             like "Table.t<<...>>", or something for a backend IR,
             like "Union" or "Ref". *)            
-  | TBits of {ternary: bool; len : size;}
-  | TEvent
-  | TEnum of (string * int) list 
 and func_ty = {arg_tys : ty list; ret_ty : ty; func_kind : func_kind;}
 and ty = {raw_ty:raw_ty; tspan : sp;}
 and params = (id * ty) list
@@ -42,10 +42,14 @@ and v =
   | VRecord of {labels : id list option; es : value list;}
   (* no closures for now *)
   (* | VClosure of {env : (id * value) list; params: params; fexp : exp;} *)
-  | VTyRef of id * int * ty (* typed reference to a value in memory *)
   | VBits of {ternary: bool; bits : int list;}
   | VEvent of vevent
   | VEnum of string * ty (* symbol in enum * enum ty *)
+  | VGlobal of {
+      global_id : id; (* name of the global, may be interpreted as a pointer variable *)
+      global_pos : int; (* position of the global in the pipeline. Every global should have a unique position *)
+      global_ty  : ty; (* type of the global *)
+  }
 and vevent = {evid : cid; evnum : value option; evdata: value list; meta : (string * value) list;}
 and value = {v:v; vty:ty; vspan : sp;}
 
@@ -165,7 +169,7 @@ let infer_vty = function
   | VBool _ -> ty TBool
   | VRecord {labels; es} -> ty (TRecord {labels; ts=List.map (fun v -> v.vty) es})
   | VBits {ternary; bits} -> ty (TBits {ternary; len=sz (List.length bits)})
-  | VTyRef (_, _, ty) -> ty
+  | VGlobal {global_ty} -> global_ty
   (* | VClosure {params; fexp; _} -> tfun (List.map snd params) fexp.ety *)
   | VEvent _ -> ty (TEvent)
   | VEnum (_, ty) -> ty (* TODO: do we want this? *)
@@ -184,8 +188,7 @@ let vpat ints = {v=VBits {ternary=true; bits=ints}; vty=ty (TBits {ternary=true;
 let vbits ints = {v=VBits {ternary=false; bits=ints}; vty=ty (TBits {ternary=false; len=sz (List.length ints)}); vspan=Span.default}
 let vrecord labels values = {v=VRecord {labels=Some labels; es=values}; vty=ty (TRecord {labels=Some labels; ts=List.map (fun v -> v.vty) values}); vspan=Span.default}
 let vtuple vs = {v=VRecord {labels=None; es=vs}; vty=ty (TRecord {labels=None; ts=List.map (fun v -> v.vty) vs}); vspan=Span.default}
-
-let vglobal cid addr ty = {v=VTyRef (cid, addr, ty); vty=ty; vspan=Span.default}
+let vglobal global_id global_pos global_ty = {v=VGlobal {global_id; global_pos; global_ty}; vty=global_ty; vspan=Span.default}
 let string_to_value (s:string) =
   let chars = List.of_seq (String.to_seq s) in
   let vchars = List.map (fun c -> vint (Char.code c) 8) chars in
