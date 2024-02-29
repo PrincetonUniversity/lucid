@@ -175,12 +175,7 @@
    CCorePrinting
    CoreToCCore
    CCoreToCore
-   ; ClosureConversion
-   RetypeEvars
-   Monomorphization
    CPasses
-
-
    )
  (preprocess
     (staged_pps ppx_import visitors.ppx ppx_deriving.show ppx_deriving.std ppx_string))

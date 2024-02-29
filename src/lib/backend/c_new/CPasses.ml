@@ -1,9 +1,6 @@
 (* translate a frontend program into a C program *)
 
-let fcore_passes fds = 
-  (* monomorphization *)
-  Monomorphization.transform fds
-
+let fcore_passes fds = fds 
 ;;
 
 
@@ -14,8 +11,8 @@ let compile ds =
   let ds = PartialInterpretation.interp_prog ds in
   (* 3. translate to FCore *)
   let fds = CoreToCCore.translate_prog ds in
-  print_endline ("--- before closure conversion ---");
   let s = CCorePrinting.show_decls fds in
+  print_endline ("---- intial CCore ----");
   print_endline s;
   (* capture variables in closures *)
   (* let fds = ClosureConversion.capture_vars fds in *)

@@ -181,7 +181,7 @@ and show_s = function
 
 let rec show_decl decl = show_d decl.d
 and show_d = function 
-    | DVar(id, ty, exp_opt) -> (
+    | DVal(id, ty, exp_opt) -> (
       match exp_opt with 
       | None -> sprintf "extern %s: %s;" (show_id id) (show_ty ty)
       | Some(exp) -> sprintf "%s: %s = %s;" (show_id id) (show_ty ty) (show_exp exp)

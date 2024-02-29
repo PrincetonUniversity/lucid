@@ -70,27 +70,16 @@ and e =
   | ERecord of {labels : id list option; es : exp list;}
   | ECall of {f:exp; args:exp list; call_kind:call_kind;}
   | EOp of op * exp list
-  (* no closures for now *)
-  (* | EClosure of {env : (id * exp) list; params: params; fexp : exp;} *)
-  (* for a functional ast, add these *)
-  (* | ELet of cid * exp * exp *)
-  (* | EIf of exp * exp * exp *)
-  (* | EMatch of exp * branch list *)
-  (* | ESeq of exp * exp *)
 and call_kind = 
   | CNormal
   | CEvent 
 and exp = {e:e; ety:ty; espan : sp;}
 
-(* patterns are in both expressions and statements *)
 and pat = 
   | PVal of value
   | PEvent of {event_id : cid; params : params;}
 and branch = pat list * branch_tgt
 and branch_tgt = statement
-(* branch targets can be expressions in a functional IR *)
-  (* | S of statement
-  | E of exp *)
 (* statements *)
 and s = 
   | SNoop
@@ -102,17 +91,17 @@ and s =
   | SSeq of statement * statement
   | SRet of exp option
 
-
 and statement = {s:s; sspan : sp;}
 
 (* declarations *)
 and event_def = {evconstrid : id; evconstrnum : int option; evparams : params; is_parsed : bool}
 and d = 
-  | DVar of id * ty * (exp option) (* constants and globals, possibly externs *)
-  | DFun of func_kind * id * ty * params * (statement option) (* first-order functions, possibly extern. ty is return type. *)
-  | DTy  of cid * ty option (* declare named types, which may be external *)
+  | DVal of id * ty * (exp option) (* constants and globals, possibly externs *)
+  | DFun of func_kind * id * ty * params * (statement option) (* functions and externs *)
+  | DTy  of cid * ty option (* named types and external types *)
   | DEvent of event_def (* declare an event, which is a constructor for the datatype TEvent *)
-and decl = {d:d; dspan : sp;}
+
+  and decl = {d:d; dspan : sp;}
 and decls = decl list
 [@@deriving
   visitors
@@ -357,8 +346,8 @@ let dparser = dfun_kind FParser
 let daction = dfun_kind FAction 
 let dmemop = dfun_kind FMemop
 (* global variables *)
-let dglobal id ty exp = decl (DVar(id, ty, Some exp)) Span.default
-let dextern id ty = decl (DVar(id, ty, None)) Span.default
+let dglobal id ty exp = decl (DVal(id, ty, Some exp)) Span.default
+let dextern id ty = decl (DVal(id, ty, None)) Span.default
 
 (* type declarations *)
 let dty tycid ty = decl (DTy(tycid, Some ty)) Span.default

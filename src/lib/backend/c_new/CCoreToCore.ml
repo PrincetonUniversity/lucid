@@ -310,11 +310,11 @@ and translate_stmt in_parser (stmt : F.statement) =
 let translate_decl (decl : F.decl) : C.decl = 
   match decl.d with
   (* variables can be globals or externs *)
-  | F.DVar(id, ty, Some(exp)) -> 
+  | F.DVal(id, ty, Some(exp)) -> 
     let ty = translate_ty ty in
     let exp = translate_exp exp in
     C.decl_sp (C.DGlobal(id, ty, exp)) decl.dspan
-  | F.DVar(id, ty, None) ->
+  | F.DVal(id, ty, None) ->
     let ty = translate_ty ty in
     C.decl_sp (C.DExtern(id, ty)) decl.dspan
   | F.DEvent{evconstrid; evconstrnum; evparams; is_parsed} -> 
