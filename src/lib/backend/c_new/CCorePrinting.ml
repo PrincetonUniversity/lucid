@@ -46,6 +46,8 @@ and show_raw_ty = function
   | TEnum(tags) -> 
     let tag_str = List.map (fun (tag, i) -> sprintf "%s = %d" (tag) i) tags in
     sprintf "{%s}" (String.concat " | " tag_str)
+  | TList(ty, len) -> 
+    sprintf "%s[%i]" (show_ty ty) len
 
 let show_params params = 
   let params = List.map (fun (id, ty) -> sprintf "%s: %s" (show_id id) (show_ty ty)) params in
@@ -70,6 +72,9 @@ and show_v = function
       let values = List.map show_value es in
       sprintf "(%s)" (String.concat ", " values)
   )
+  | VList(values) -> 
+    let values = List.map show_value values in
+    sprintf "[%s]" (String.concat ", " values)
   (* | VClosure{env; params; fexp} -> 
     let env = List.map (fun (id, v) -> sprintf "%s = %s" (show_id id) (show_value v)) env in
     let env = String.concat "; " env in
@@ -172,6 +177,9 @@ and show_s = function
     let exp = show_exp exp in
     let branches = List.map show_branch branches |> String.concat "\n" |> indent 2 in    
     sprintf "match(%s) with\n%s\n" exp branches
+  | SListSet{arr; idx; exp} -> 
+    let cid, _ = extract_evar arr in
+    sprintf "%s[%s] := %s;" (show_cid cid) (show_exp idx) (show_exp exp)
   | SSeq(s1, s2) -> 
     let s1 = show_statement s1 in
     let s2 = show_statement s2 in
@@ -183,8 +191,11 @@ let rec show_decl decl = show_d decl.d
 and show_d = function 
     | DVal(id, ty, exp_opt) -> (
       match exp_opt with 
-      | None -> sprintf "extern %s: %s;" (show_id id) (show_ty ty)
-      | Some(exp) -> sprintf "%s: %s = %s;" (show_id id) (show_ty ty) (show_exp exp)
+      | [] -> sprintf "extern %s: %s;" (show_id id) (show_ty ty)
+      | [exp] -> sprintf "%s: %s := %s;" (show_id id) (show_ty ty) (show_exp exp)
+      | exps -> 
+        (* list constructor *)
+        sprintf "%s: %s := {%s};" (show_id id) (show_ty ty) (List.map show_exp exps |> String.concat ", ")
     )
     | DFun(func_kind, id, ty, params, stmt_opt) -> (
       match stmt_opt with 

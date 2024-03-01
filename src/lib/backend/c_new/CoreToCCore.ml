@@ -28,9 +28,6 @@ let rec bits_to_ints = function
   | [] -> []
 ;;
 
-
-
-
 let rec translate_raw_ty (raw_ty : C.raw_ty) : F.raw_ty = 
   match raw_ty with 
   | C.TBool -> F.TBool

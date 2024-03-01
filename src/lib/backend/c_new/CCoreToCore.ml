@@ -73,6 +73,8 @@ let rec translate_raw_ty (raw_ty : F.raw_ty) : C.raw_ty =
         | _ -> err "memop function doesn't have an int type arg?")
   | F.TFun _ -> err "unknown function kind in function type"
   (* collection types *)
+  (* note: string types don't need to get translated because they are never visited
+     -- only appear as literal values *)
   | F.TRecord{labels=None; ts} -> C.TTuple(List.map translate_ty ts |> List.map (fun (ty : C.ty) -> ty.raw_ty))
   | F.TRecord{labels=Some labels; ts} -> 
     let raw_tys = List.map translate_ty ts |> List.map (fun (ty : C.ty) -> ty.raw_ty) in
@@ -83,6 +85,7 @@ let rec translate_raw_ty (raw_ty : F.raw_ty) : C.raw_ty =
       if (List.length tags <= 256) 
         then (C.Sz 8) 
         else (C.Sz 16))
+  | F.TList _ -> err "List types cannot be translated back to core IR"
 
   and translate_ty (ty : F.ty) : C.ty = 
     C.ty_sp (translate_raw_ty ty.raw_ty) ty.tspan
@@ -119,6 +122,7 @@ let translate_op op =
   | F.Hash _ -> err "hash op must translate into hash expression"
   | F.Project _ -> err "project op must translate into project expression"
   | F.Get _ -> err "there is no get op in CoreSyntax"
+  | F.ListGet _ -> err "there is no array index operation in CoreSyntax"
 ;;
 
 (* left off here -- at translate_v *)
@@ -163,6 +167,7 @@ let rec translate_value (value : F.value) : C.value =
     let ival = List.assoc str tags in
     let size = if (List.length tags <= 256) then 8 else 16 in
     C.value_sp (C.VInt(Integer.create ival size)) value.vspan
+  | F.VList _ -> err "cannot translate list value back to coreIr"
 
 
 
@@ -305,18 +310,21 @@ and translate_stmt in_parser (stmt : F.statement) =
   | _, SRet(exp_opt) -> 
     let exp_opt = Option.map translate_exp exp_opt in
     C.statement_sp (C.SRet(exp_opt)) stmt.sspan
+  | _, SListSet _ -> err "cannot translate list set statement back to coreIR"
 ;;
 
 let translate_decl (decl : F.decl) : C.decl = 
   match decl.d with
   (* variables can be globals or externs *)
-  | F.DVal(id, ty, Some(exp)) -> 
+  | F.DVal(id, ty, [exp]) -> 
     let ty = translate_ty ty in
     let exp = translate_exp exp in
     C.decl_sp (C.DGlobal(id, ty, exp)) decl.dspan
-  | F.DVal(id, ty, None) ->
+  | F.DVal(id, ty, []) ->
     let ty = translate_ty ty in
     C.decl_sp (C.DExtern(id, ty)) decl.dspan
+  | F.DVal(_, _, _) -> 
+    err "cannot translate list declaration back to coreIR"
   | F.DEvent{evconstrid; evconstrnum; evparams; is_parsed} -> 
     let ev_sort = if is_parsed then C.EPacket else C.EBackground in
     let params = List.map (fun (id, ty) -> id, translate_ty ty) evparams in

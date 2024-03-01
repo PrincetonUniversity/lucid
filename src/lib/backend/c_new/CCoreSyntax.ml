@@ -1,6 +1,18 @@
 (* simpler functional IR for lucid, with extensions
    for compatability with the current CoreSyntax IR
    (Extensions should be eliminated before any further processing) *)
+(* TODO: 
+    figure out how we want to represent string types
+      remember: it doesn't really matter, because the 
+      string types don't need to get translated back to 
+      coreSyntax.
+    figure out if the conversion from Array / Table to 
+      list is represented by a "Type Function" / "Type Abstraction"
+      or just replaced in a transformation pass. 
+        remember: if they are just replaced, you may be able to do 
+        inference to recover them. Or, perhaps there's a tag. 
+*)
+
 type id = [%import: (Id.t[@opaque])]
 and cid = [%import: (Cid.t[@opqaue])]
 and tagval = [%import: (TaggedCid.tagval[@opqaue])]
@@ -15,11 +27,29 @@ and raw_ty =
   | TInt of size 
   | TBool 
   | TRecord of {labels : id list option; ts : ty list;}
+  | TList of ty * size 
   | TFun of func_ty
   | TBits of {ternary: bool; len : size;}
   | TEvent
   | TEnum of (string * int) list 
   | TName of cid * (ty list)
+    (* gotta rethink tname. Seems overloaded. 
+       Array.t<32> ==> TName(Array, [int<32>])
+       but then, we also want to represent an array as a list... 
+       I thought we could do something like: 
+         TName(Array, [TList(int<32>, ...)])
+         That's not even right, though. 
+         We can _replace_ the TName(Array, [int<32>]) with TList(int<32>, ...)
+         But we can't use TName to wrap it. 
+         Can we do the same thing with strings? 
+          - start with TName(String, [])
+          - replace with TList(int<8>, ?sz)
+         The problem is really reversibility. When we do a type 
+         transformation like this, we want to know the original type. 
+         hmm... We could do a type wrapper, or have an annotation?
+         or maybe we need a type function / constructor? 
+         A TName is really supposed to be a type variable. 
+         Lets keep that convention. *)
     (* a named type can either be:
         1. a type variable defined in the application, 
             which should have no arguments. 
@@ -40,6 +70,7 @@ and v =
   | VInt of {value : int; size : size;}
   | VBool of bool
   | VRecord of {labels : id list option; es : value list;}
+  | VList  of value list
   (* no closures for now *)
   (* | VClosure of {env : (id * value) list; params: params; fexp : exp;} *)
   | VBits of {ternary: bool; bits : int list;}
@@ -64,6 +95,7 @@ and op =    | And | Or | Not
             | Cast of size 
             | Conc
             | Project of id | Get of int (* record and tuple ops *)
+            | ListGet of int
 and e = 
   | EVal of value
   | EVar of cid 
@@ -86,6 +118,7 @@ and s =
   | SUnit of exp
   (* assign may create a new variable, and can unpack tuples *)
   | SAssign of {ids : cid list; tys : ty list; new_vars : bool; exp : exp}
+  | SListSet of {arr : exp; idx : exp; exp : exp;} (* arr[idx] = exp; *)
   | SIf of exp * statement * statement
   | SMatch of exp * branch list
   | SSeq of statement * statement
@@ -96,11 +129,10 @@ and statement = {s:s; sspan : sp;}
 (* declarations *)
 and event_def = {evconstrid : id; evconstrnum : int option; evparams : params; is_parsed : bool}
 and d = 
-  | DVal of id * ty * (exp option) (* constants and globals, possibly externs *)
+  | DVal of id * ty * exp list (* constants and globals, possibly externs *)
   | DFun of func_kind * id * ty * params * (statement option) (* functions and externs *)
   | DTy  of cid * ty option (* named types and external types *)
   | DEvent of event_def (* declare an event, which is a constructor for the datatype TEvent *)
-
   and decl = {d:d; dspan : sp;}
 and decls = decl list
 [@@deriving
@@ -138,11 +170,18 @@ let tfun_kind arg_tys ret_ty func_kind = ty (TFun {arg_tys; ret_ty; func_kind})
 let tfun arg_tys ret_ty = tfun_kind arg_tys ret_ty FNormal
 (* global type *)
 let tglobal cid global_tyargs = ty (TName(cid, global_tyargs))
+
+
+let tlist ele_ty len = ty (TList(ele_ty, len))
 (* named type *)
 let tname cid = ty (TName(cid, []))
 let tcustom cid tyargs = ty (TName(cid, tyargs))
 let tgroup_cid = Cid.create ["Group"]
 let tgroup = tname tgroup_cid
+
+let tchar = tint 8
+let tstring_cid = Cid.create ["String"]
+let tstring len = tcustom tstring_cid [tlist tchar len]
 
 let is_tunit ty = match ty.raw_ty with TUnit -> true | _ -> false
 let is_trecord ty = match ty.raw_ty with TRecord{labels=Some(_)} -> true | _ -> false
@@ -157,11 +196,14 @@ let infer_vty = function
   | VInt {size; _} -> ty (TInt size)
   | VBool _ -> ty TBool
   | VRecord {labels; es} -> ty (TRecord {labels; ts=List.map (fun v -> v.vty) es})
+  | VList(values) -> 
+    if (List.length values) == 0 then failwith "cannot infer type of length 0 list" 
+    else ty (TList((List.hd values).vty, List.length values))
   | VBits {ternary; bits} -> ty (TBits {ternary; len=sz (List.length bits)})
   | VGlobal {global_ty} -> global_ty
   (* | VClosure {params; fexp; _} -> tfun (List.map snd params) fexp.ety *)
   | VEvent _ -> ty (TEvent)
-  | VEnum (_, ty) -> ty (* TODO: do we want this? *)
+  | VEnum (_, ty) -> ty 
 ;;  
 
 let value v = {v=v; vty=infer_vty v; vspan=Span.default}
@@ -241,6 +283,12 @@ let eop op es =
         | _ -> failwith "get expects tuple arg"
       in
       List.nth ts idx
+    | ListGet(_) -> 
+      let ty = match (List.hd es).ety.raw_ty with 
+        | TList(ty, _) -> ty
+        | _ -> failwith "listget expects list arg"
+      in
+      ty
   in 
   {e=EOp (op, es); ety=eop_ty; espan=Span.default; }
 let eval value = {e=EVal value; ety=value.vty; espan=Span.default; }
@@ -301,6 +349,11 @@ let rec flatten_exp exp = match exp.e with
   | _ -> [exp]
 ;;
 
+let extract_evar exp = match exp.e with
+  | EVar id -> id, exp.ety
+  | _ -> raise (FormError "[extract_evar] expected EVar")
+;;
+
 (* let egen loc ev = ecall (efunref (Cid.create ["generate"]) (tfun [tevent] (tunit ()))) [loc; ev] *)
 
 
@@ -346,8 +399,8 @@ let dparser = dfun_kind FParser
 let daction = dfun_kind FAction 
 let dmemop = dfun_kind FMemop
 (* global variables *)
-let dglobal id ty exp = decl (DVal(id, ty, Some exp)) Span.default
-let dextern id ty = decl (DVal(id, ty, None)) Span.default
+let dglobal id ty exp = decl (DVal(id, ty, [exp])) Span.default
+let dextern id ty = decl (DVal(id, ty, [])) Span.default
 
 (* type declarations *)
 let dty tycid ty = decl (DTy(tycid, Some ty)) Span.default

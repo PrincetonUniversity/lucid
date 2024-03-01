@@ -150,6 +150,7 @@ let rec flat_param_len (id, ty) =
   | TBool | TGroup | TInt _ | TEvent | TPat _ | TBits _ -> 1
   | TFun _ 
   | TName _
+  | TBuiltin _
   | TMemop _ 
   | TActionConstr _ 
   | TAction _ -> failwith "[flat_param_len] unsupported argument type"
