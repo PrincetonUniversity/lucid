@@ -2,15 +2,24 @@
    for compatability with the current CoreSyntax IR
    (Extensions should be eliminated before any further processing) *)
 (* TODO: 
-    figure out how we want to represent string types
+    1. figure out how we want to represent string types
       remember: it doesn't really matter, because the 
       string types don't need to get translated back to 
       coreSyntax.
-    figure out if the conversion from Array / Table to 
+    2. figure out if the conversion from Array / Table to 
       list is represented by a "Type Function" / "Type Abstraction"
       or just replaced in a transformation pass. 
         remember: if they are just replaced, you may be able to do 
         inference to recover them. Or, perhaps there's a tag. 
+    3. add a simple for loop: 
+        for $id < $value while $id {
+          // the index and guard variables start at 0 and true
+          // they can be read and set in the statement
+          // the guard variable is optional
+          // after each iteration, it gets checked
+          // we can put various restrictions on the loop later.
+          $statement
+        }
 *)
 
 type id = [%import: (Id.t[@opaque])]
