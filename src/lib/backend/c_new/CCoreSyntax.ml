@@ -29,7 +29,9 @@ and tcid = [%import: (TaggedCid.t[@opqaue])]
 and sp = [%import: Span.t]
 
 (* types *)
-and size = int
+and size = 
+  | SConst of int
+  | SVar of id
 and func_kind = | FNormal | FHandler | FParser | FAction | FMemop | FExtern
 and raw_ty = 
   | TUnit
@@ -70,7 +72,12 @@ and raw_ty =
             It could be something from the surface language,
             like "Table.t<<...>>", or something for a backend IR,
             like "Union" or "Ref". *)            
-and func_ty = {arg_tys : ty list; ret_ty : ty; func_kind : func_kind;}
+and func_ty = {
+  arg_sizes : size list;
+  arg_tys : ty list; 
+  ret_ty : ty; 
+  func_kind : func_kind;
+}
 and ty = {raw_ty:raw_ty; tspan : sp;}
 and params = (id * ty) list
 (* values *)
@@ -104,7 +111,7 @@ and op =    | And | Or | Not
             | Cast of size 
             | Conc
             | Project of id | Get of int (* record and tuple ops *)
-            | ListGet of int
+            | ListGet of size
 and e = 
   | EVal of value
   | EVar of cid 
@@ -112,7 +119,7 @@ and e =
   | ECall of {f:exp; args:exp list; call_kind:call_kind;}
   | EOp of op * exp list
 and call_kind = 
-  | CNormal
+  | CFun
   | CEvent 
 and exp = {e:e; ety:ty; espan : sp;}
 
@@ -127,7 +134,7 @@ and s =
   | SUnit of exp
   (* assign may create a new variable, and can unpack tuples *)
   | SAssign of {ids : cid list; tys : ty list; new_vars : bool; exp : exp}
-  | SListSet of {arr : exp; idx : exp; exp : exp;} (* arr[idx] = exp; *)
+  | SListSet of {arr : exp; idx : size; exp : exp;} (* arr[idx] = exp; *)
   | SIf of exp * statement * statement
   | SMatch of exp * branch list
   | SSeq of statement * statement
@@ -138,7 +145,7 @@ and statement = {s:s; sspan : sp;}
 (* declarations *)
 and event_def = {evconstrid : id; evconstrnum : int option; evparams : params; is_parsed : bool}
 and d = 
-  | DVal of id * ty * exp list (* constants and globals, possibly externs *)
+  | DVar of id * ty * exp list (* constants and globals, possibly externs *)
   | DFun of func_kind * id * ty * params * (statement option) (* functions and externs *)
   | DTy  of cid * ty option (* named types and external types *)
   | DEvent of event_def (* declare an event, which is a constructor for the datatype TEvent *)
@@ -167,15 +174,17 @@ and decls = decl list
 
 (* constructors *)
 (* type constructors *)
-let sz n = n
+let sz n = SConst n
 let ty raw_ty = {raw_ty=raw_ty; tspan=Span.default; }
 
 let tunit () = ty TUnit
-let tint i = ty@@TInt(i)
+let tbool = ty TBool
+let tint i = ty@@TInt(sz i)
+let tpat len = ty (TBits {ternary=false; len})
 let tevent = ty TEvent
 let trecord labels tys = ty (TRecord {labels=Some labels; ts=tys})
 let ttuple tys = ty (TRecord {labels=None; ts=tys})
-let tfun_kind arg_tys ret_ty func_kind = ty (TFun {arg_tys; ret_ty; func_kind})
+let tfun_kind arg_tys ret_ty func_kind = ty (TFun {arg_sizes = [];arg_tys; ret_ty; func_kind})
 let tfun arg_tys ret_ty = tfun_kind arg_tys ret_ty FNormal
 (* global type *)
 let tglobal cid global_tyargs = ty (TName(cid, global_tyargs))
@@ -196,8 +205,11 @@ let is_tunit ty = match ty.raw_ty with TUnit -> true | _ -> false
 let is_trecord ty = match ty.raw_ty with TRecord{labels=Some(_)} -> true | _ -> false
 let is_ttuple ty = match ty.raw_ty with TRecord{labels=None} -> true | _ -> false
 let is_tfun ty = match ty.raw_ty with TFun({func_kind=FNormal}) -> true | _ -> false
-
-
+let is_tbool ty = match ty.raw_ty with TBool -> true | _ -> false
+let is_tint ty = match ty.raw_ty with TInt(_) -> true | _ -> false
+let is_tbits ty = match ty.raw_ty with TBits(_) -> true | _ -> false
+let is_tlist ty = match ty.raw_ty with TList(_, _) -> true | _ -> false
+let is_tevent ty = match ty.raw_ty with TEvent -> true | _ -> false
 
 (* value constructors *)
 let infer_vty = function 
@@ -207,7 +219,7 @@ let infer_vty = function
   | VRecord {labels; es} -> ty (TRecord {labels; ts=List.map (fun v -> v.vty) es})
   | VList(values) -> 
     if (List.length values) == 0 then failwith "cannot infer type of length 0 list" 
-    else ty (TList((List.hd values).vty, List.length values))
+    else ty (TList((List.hd values).vty, sz@@List.length values))
   | VBits {ternary; bits} -> ty (TBits {ternary; len=sz (List.length bits)})
   | VGlobal {global_ty} -> global_ty
   (* | VClosure {params; fexp; _} -> tfun (List.map snd params) fexp.ety *)
@@ -220,7 +232,7 @@ let vunit () = {v=VUnit; vty=ty TUnit; vspan=Span.default}
 let vint value size = {v=VInt {value; size = sz size}; vty=ty (TInt(sz size)); vspan=Span.default}
 (* declare a vint with size derived from ty *)
 let vint_ty value ty = match ty.raw_ty with 
-  | TInt (size) -> vint value size
+  | TInt (SConst size) -> vint value size
   | _ -> failwith "vint_ty: expected TInt"
 let vbool b = {v=VBool b; vty=ty TBool; vspan=Span.default}
 let vtup vs = {v=VRecord {labels=None; es=vs}; vty=ttuple (List.map (fun v -> v.vty) vs); vspan=Span.default}
@@ -262,7 +274,7 @@ let eop op es =
     | Eq  | Neq | Less| More | Leq | Geq -> ty TBool
     | Neg | Plus| Sub | SatPlus | SatSub -> (List.hd es).ety
     | BitAnd  | BitOr | BitXor | BitNot | LShift | RShift -> (List.hd es).ety
-    | Slice(hi, lo) -> ty (TInt (hi - lo + 1))
+    | Slice(hi, lo) -> ty (TInt (sz (hi - lo + 1)))
     | PatExact
     | PatMask ->      
       let sz = match (List.hd es).ety.raw_ty with 
@@ -273,8 +285,8 @@ let eop op es =
     | Hash size -> ty (TInt size)
     | Cast size  -> ty (TInt size)
     | Conc -> 
-      let arg_sizes = List.map (fun e -> match e.ety.raw_ty with TInt sz -> sz | _ -> failwith "conc expects int args") es in
-      ty (TInt (List.fold_left (+) 0 arg_sizes))
+      let arg_sizes = List.map (fun e -> match e.ety.raw_ty with TInt (SConst sz) -> sz | _ -> failwith "conc expects int args") es in
+      ty (TInt (sz (List.fold_left (+) 0 arg_sizes)))
 
     | Project(id) -> 
       let rec_arg = List.hd es in
@@ -312,7 +324,7 @@ let ecall_kind call_kind f es =
   in
   {e=ECall {f; args=es; call_kind}; ety; espan=Span.default; }
 ;;
-let ecall = ecall_kind CNormal
+let ecall = ecall_kind CFun
 let eevent = ecall_kind CEvent
 (* let efun_kind func_kind params fexp = {
   e=EClosure {env=[]; params; fexp}; 
@@ -363,6 +375,25 @@ let extract_evar exp = match exp.e with
   | _ -> raise (FormError "[extract_evar] expected EVar")
 ;;
 
+let extract_func_ty ty = match ty.raw_ty with 
+  | TFun {arg_sizes; arg_tys; ret_ty; func_kind} -> arg_sizes, arg_tys, ret_ty, func_kind
+  | _ -> raise (FormError "[extract_func_ty] expected TFun")
+
+let extract_tint_size ty = match ty.raw_ty with 
+  | TInt size -> size
+  | _ -> raise (FormError "[extract_tint_size] expected TInt")
+
+let extract_trecord ty = match ty.raw_ty with 
+  | TRecord {labels=Some labels; ts} -> labels, ts
+  | _ -> raise (FormError "[extract_trecord] expected TRecord")
+;;
+let extract_ttuple ty = match ty.raw_ty with 
+  | TRecord {labels=None; ts} -> ts
+  | _ -> raise (FormError "[extract_ttuple] expected TRecord")
+
+let extract_tlist ty = match ty.raw_ty with 
+  | TList(ty, len) -> ty, len
+  | _ -> raise (FormError "[extract_tlist] expected TList")
 (* let egen loc ev = ecall (efunref (Cid.create ["generate"]) (tfun [tevent] (tunit ()))) [loc; ev] *)
 
 
@@ -408,8 +439,8 @@ let dparser = dfun_kind FParser
 let daction = dfun_kind FAction 
 let dmemop = dfun_kind FMemop
 (* global variables *)
-let dglobal id ty exp = decl (DVal(id, ty, [exp])) Span.default
-let dextern id ty = decl (DVal(id, ty, [])) Span.default
+let dglobal id ty exp = decl (DVar(id, ty, [exp])) Span.default
+let dextern id ty = decl (DVar(id, ty, [])) Span.default
 
 (* type declarations *)
 let dty tycid ty = decl (DTy(tycid, Some ty)) Span.default

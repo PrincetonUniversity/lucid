@@ -172,6 +172,7 @@
    strUtils
 
    CCoreSyntax
+   CCoreTyper
    CCorePrinting
    CoreToCCore
    CCoreToCore

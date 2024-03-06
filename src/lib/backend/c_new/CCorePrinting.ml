@@ -10,11 +10,14 @@ let op_to_string = show_op
 let show_id id = fst id
 let show_cid cid = Cid.names cid |> String.concat "."
 
+let show_size = function 
+  | SConst sz -> string_of_int sz
+  | SVar id -> show_id id
 
 let rec show_ty ty = show_raw_ty ty.raw_ty
 and show_raw_ty = function 
   | TUnit -> "unit"
-  | TInt sz -> sprintf "int<%d>" sz
+  | TInt sz -> sprintf "int<%s>" (show_size sz)
   | TBool -> "bool"
   | TRecord{labels; ts} -> (
     match labels with 
@@ -41,13 +44,13 @@ and show_raw_ty = function
     sprintf "%s<%s>" cid ty_args
   | TBits{ternary; len} -> 
     let ternary = if ternary then "pattern" else "bitstring" in
-    sprintf "%s<%d>" ternary len
+    sprintf "%s<%s>" ternary (show_size len)
   | TEvent -> "event"
   | TEnum(tags) -> 
     let tag_str = List.map (fun (tag, i) -> sprintf "%s = %d" (tag) i) tags in
     sprintf "{%s}" (String.concat " | " tag_str)
   | TList(ty, len) -> 
-    sprintf "%s[%i]" (show_ty ty) len
+    sprintf "%s[%s]" (show_ty ty) (show_size len)
 
 let show_params params = 
   let params = List.map (fun (id, ty) -> sprintf "%s: %s" (show_id id) (show_ty ty)) params in
@@ -179,7 +182,7 @@ and show_s = function
     sprintf "match(%s) with\n%s\n" exp branches
   | SListSet{arr; idx; exp} -> 
     let cid, _ = extract_evar arr in
-    sprintf "%s[%s] := %s;" (show_cid cid) (show_exp idx) (show_exp exp)
+    sprintf "%s[%s] := %s;" (show_cid cid) (show_size idx) (show_exp exp)
   | SSeq(s1, s2) -> 
     let s1 = show_statement s1 in
     let s2 = show_statement s2 in
@@ -189,7 +192,7 @@ and show_s = function
 
 let rec show_decl decl = show_d decl.d
 and show_d = function 
-    | DVal(id, ty, exp_opt) -> (
+    | DVar(id, ty, exp_opt) -> (
       match exp_opt with 
       | [] -> sprintf "extern %s: %s;" (show_id id) (show_ty ty)
       | [exp] -> sprintf "%s: %s := %s;" (show_id id) (show_ty ty) (show_exp exp)

@@ -39,6 +39,7 @@ let rec translate_raw_ty (raw_ty : C.raw_ty) : F.raw_ty =
   | C.TBuiltin(cid, raw_tys) -> (F.tglobal cid (List.map (fun raw_ty -> F.ty (translate_raw_ty raw_ty)) raw_tys )).raw_ty
   | C.TFun {arg_tys; ret_ty} -> 
     let fty : F.func_ty = {
+      F.arg_sizes = [];
       F.arg_tys = List.map translate_ty arg_tys; 
       F.ret_ty = translate_ty ret_ty;
       F.func_kind = F.FNormal;}
@@ -48,6 +49,7 @@ let rec translate_raw_ty (raw_ty : C.raw_ty) : F.raw_ty =
     let arg_tys = List.init n_args (fun _ -> F.ty@@F.TInt(F.sz arg_size)) in
     let ret_ty = F.ty@@F.TInt(F.sz arg_size) in
     let fty : F.func_ty = {
+      F.arg_sizes = [];
       F.arg_tys = arg_tys; 
       F.ret_ty = ret_ty;
       F.func_kind = F.FMemop;}
@@ -58,6 +60,7 @@ let rec translate_raw_ty (raw_ty : C.raw_ty) : F.raw_ty =
   | C.TActionConstr{aconst_param_tys; aacn_ty} -> 
     (* an action constructor is a normal function that returns an action *)
     let fty : F.func_ty = {
+      F.arg_sizes = [];
       F.arg_tys = List.map translate_ty aconst_param_tys; 
       F.ret_ty = F.ty@@F.TFun(translate_acn_ty aacn_ty);
       F.func_kind = F.FNormal;}
@@ -79,6 +82,7 @@ let rec translate_raw_ty (raw_ty : C.raw_ty) : F.raw_ty =
   | C.TBits(_) -> err "TBits size should be a singleton"
 and translate_acn_ty (aty : C.acn_ty) = 
   {
+    F.arg_sizes = [];
     F.arg_tys = List.map translate_ty aty.aarg_tys; 
     F.ret_ty = F.ttuple @@ List.map translate_ty aty.aret_tys;
     F.func_kind = F.FAction;

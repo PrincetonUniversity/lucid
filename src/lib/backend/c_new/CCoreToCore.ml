@@ -5,9 +5,15 @@ let err = Console.error ;;
 module C = CoreSyntax
 module F = CCoreSyntax
 
+let translate_size (s : F.size) = match s with 
+| SConst i -> C.Sz i
+| SVar _ -> failwith "cannot translate size var back to ir"
+let size_to_int (s : F.size) = match s with 
+  | SConst i -> i
+  | SVar _ -> failwith "cannot translate size var to int"
 let rec ty_to_size (ty : F.ty) = 
   match ty.raw_ty with 
-  | F.TInt(sz) -> C.Sz sz
+  | F.TInt(sz) -> translate_size sz
   | F.TRecord{ts} -> 
     C.Szs (List.map ty_to_size ts |> List.map (function | C.Sz sz -> sz | _ -> err "bug"))
   | _ -> failwith "not done"
@@ -36,10 +42,10 @@ let rec translate_raw_ty (raw_ty : F.raw_ty) : C.raw_ty =
   (* basic types *)
   | F.TUnit -> err "you shouldn't have to translate a unit type back to CoreSyntax"
   | F.TBool -> C.TBool
-  | F.TInt(sz) -> C.TInt(C.Sz sz)
+  | F.TInt(sz) -> C.TInt(translate_size sz)
   | F.TEvent -> C.TEvent
-  | F.TBits{ternary=true; len= sz} -> C.TPat(C.Sz sz)
-  | F.TBits{ternary=false; len= sz} -> C.TBits(C.Sz sz)
+  | F.TBits{ternary=true; len= sz} -> C.TPat(translate_size sz)
+  | F.TBits{ternary=false; len= sz} -> C.TBits(translate_size sz)
   (* named types *)
   | F.TName(tcid, []) when (Cid.equal tcid F.tgroup_cid) -> C.TGroup
   | F.TName(ty_id, []) -> C.TName(ty_id, [])
@@ -69,7 +75,7 @@ let rec translate_raw_ty (raw_ty : F.raw_ty) : C.raw_ty =
       aret_tys = List.map translate_ty (detuple_ty ret_ty);}
   | F.TFun{arg_tys; func_kind} when (func_kind = F.FMemop) ->
       (match (List.hd arg_tys).raw_ty with 
-        | F.TInt( sz) -> C.TMemop(List.length arg_tys, C.Sz sz)
+        | F.TInt( sz) -> C.TMemop(List.length arg_tys, translate_size sz)
         | _ -> err "memop function doesn't have an int type arg?")
   | F.TFun _ -> err "unknown function kind in function type"
   (* collection types *)
@@ -108,7 +114,7 @@ let translate_op op =
   | F.Sub -> C.Sub
   | F.SatPlus -> C.SatPlus
   | F.SatSub -> C.SatSub
-  | F.Cast( sz) -> C.Cast(C.Sz sz)
+  | F.Cast( sz) -> C.Cast(translate_size sz)
   | F.Conc -> C.Conc
   | F.BitAnd -> C.BitAnd
   | F.BitOr -> C.BitOr
@@ -142,6 +148,7 @@ let rec translate_value (value : F.value) : C.value =
   match value.v with 
   | F.VBool b -> C.value_sp (C.VBool b) value.vspan
   | F.VInt{value=ival; size=(size)} -> 
+    let size = size_to_int size in 
     C.value_sp (C.VInt(Integer.create ival size)) value.vspan
   | F.VEvent(event_val) -> 
     C.value_sp (C.VEvent(translate_event_val event_val)) value.vspan
@@ -192,7 +199,7 @@ let rec translate_exp (exp: F.exp) =
     C.aexp (C.EVar(cid)) (translate_ty exp.ety) exp.espan
   (* operations *)
   | F.EOp(F.Hash( sz), eargs) -> 
-    let sz = C.Sz sz in
+    let sz = translate_size sz in 
     let eargs = List.map (translate_exp) eargs in
     C.aexp (C.EHash(sz, eargs)) (translate_ty exp.ety) exp.espan
   | F.EOp(F.Project(label), [earg]) ->
@@ -240,7 +247,7 @@ let rec translate_exp (exp: F.exp) =
     raise (MadeStatement(s))
   | F.ECall{f={e=EVar(cid)}; args=eargs;call_kind} -> 
     (match call_kind with
-    | F.CNormal -> 
+    | F.CFun -> 
       let eargs = List.map (translate_exp) eargs in
       C.aexp 
         (C.ECall(cid, eargs, false)) 
@@ -316,14 +323,14 @@ and translate_stmt in_parser (stmt : F.statement) =
 let translate_decl (decl : F.decl) : C.decl = 
   match decl.d with
   (* variables can be globals or externs *)
-  | F.DVal(id, ty, [exp]) -> 
+  | F.DVar(id, ty, [exp]) -> 
     let ty = translate_ty ty in
     let exp = translate_exp exp in
     C.decl_sp (C.DGlobal(id, ty, exp)) decl.dspan
-  | F.DVal(id, ty, []) ->
+  | F.DVar(id, ty, []) ->
     let ty = translate_ty ty in
     C.decl_sp (C.DExtern(id, ty)) decl.dspan
-  | F.DVal(_, _, _) -> 
+  | F.DVar(_, _, _) -> 
     err "cannot translate list declaration back to coreIR"
   | F.DEvent{evconstrid; evconstrnum; evparams; is_parsed} -> 
     let ev_sort = if is_parsed then C.EPacket else C.EBackground in
