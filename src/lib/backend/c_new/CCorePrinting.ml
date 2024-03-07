@@ -10,14 +10,14 @@ let op_to_string = show_op
 let show_id id = fst id
 let show_cid cid = Cid.names cid |> String.concat "."
 
-let show_size = function 
-  | SConst sz -> string_of_int sz
-  | SVar id -> show_id id
+let show_arridx idx = match idx with 
+  | IVar s -> s
+  | IConst i -> string_of_int i
 
 let rec show_ty ty = show_raw_ty ty.raw_ty
 and show_raw_ty = function 
   | TUnit -> "unit"
-  | TInt sz -> sprintf "int<%s>" (show_size sz)
+  | TInt sz -> sprintf "int<%d>" sz
   | TBool -> "bool"
   | TRecord{labels; ts} -> (
     match labels with 
@@ -37,21 +37,22 @@ and show_raw_ty = function
     let ret_ty = show_ty ret_ty in
     let func_kind = show_func_kind func_kind in
     sprintf "%s<%s -> %s>" func_kind arg_tys ret_ty
-  | TName(cid, ty_args) -> 
+  | TBuiltin(cid, ty_args) -> 
     let cid = show_cid cid in
     let ty_args = List.map show_ty ty_args in
     let ty_args = String.concat ", " ty_args in
     sprintf "%s<%s>" cid ty_args
+  | TName(cid) -> show_cid cid
   | TBits{ternary; len} -> 
     let ternary = if ternary then "pattern" else "bitstring" in
-    sprintf "%s<%s>" ternary (show_size len)
+    sprintf "%s<%d>" ternary len
   | TEvent -> "event"
   | TEnum(tags) -> 
     let tag_str = List.map (fun (tag, i) -> sprintf "%s = %d" (tag) i) tags in
     sprintf "{%s}" (String.concat " | " tag_str)
   | TList(ty, len) -> 
-    sprintf "%s[%s]" (show_ty ty) (show_size len)
-
+    sprintf "%s[%s]" (show_ty ty) (show_arridx len)
+  
 let show_params params = 
   let params = List.map (fun (id, ty) -> sprintf "%s: %s" (show_id id) (show_ty ty)) params in
   String.concat ", " params
@@ -133,6 +134,8 @@ and show_e = function
       let args = List.map show_exp args in
       let args = String.concat ", " args in
       sprintf "%s(%s)" op args
+    | EListGet(arr, idx) -> 
+      sprintf "%s[%s]" (show_exp arr) (show_arridx idx)
     (* | EClosure{env; params; fexp} -> 
       let env = List.map (fun (id, v) -> sprintf "%s = %s" (show_id id) (show_exp v)) env in
       let env = String.concat "; " env in
@@ -182,7 +185,7 @@ and show_s = function
     sprintf "match(%s) with\n%s\n" exp branches
   | SListSet{arr; idx; exp} -> 
     let cid, _ = extract_evar arr in
-    sprintf "%s[%s] := %s;" (show_cid cid) (show_size idx) (show_exp exp)
+    sprintf "%s[%s] := %s;" (show_cid cid) (show_arridx idx) (show_exp exp)
   | SSeq(s1, s2) -> 
     let s1 = show_statement s1 in
     let s2 = show_statement s2 in
@@ -194,11 +197,8 @@ let rec show_decl decl = show_d decl.d
 and show_d = function 
     | DVar(id, ty, exp_opt) -> (
       match exp_opt with 
-      | [] -> sprintf "extern %s: %s;" (show_id id) (show_ty ty)
-      | [exp] -> sprintf "%s: %s := %s;" (show_id id) (show_ty ty) (show_exp exp)
-      | exps -> 
-        (* list constructor *)
-        sprintf "%s: %s := {%s};" (show_id id) (show_ty ty) (List.map show_exp exps |> String.concat ", ")
+      | None -> sprintf "extern %s: %s;" (show_id id) (show_ty ty)
+      | Some(exp) -> sprintf "%s: %s := %s;" (show_id id) (show_ty ty) (show_exp exp)
     )
     | DFun(func_kind, id, ty, params, stmt_opt) -> (
       match stmt_opt with 
@@ -222,6 +222,13 @@ and show_d = function
       let evconstrid = show_id evconstrid in
       let evparams = show_params evparams in
       sprintf "event %s(%s);" evconstrid evparams
+    )
+    | DList(id, ty, exps_opt) -> (
+      match exps_opt with 
+      | None -> sprintf "extern %s: %s;" (show_id id) (show_ty ty)
+      | Some(exps) -> 
+        sprintf "%s: %s := {%s};" (show_id id) (show_ty ty) (List.map show_exp exps |> String.concat ", ")
+    
     )
 
 let show_decls decls  = List.map show_decl decls |> String.concat "\n"

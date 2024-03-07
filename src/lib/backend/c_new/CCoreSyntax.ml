@@ -29,21 +29,33 @@ and tcid = [%import: (TaggedCid.t[@opqaue])]
 and sp = [%import: Span.t]
 
 (* types *)
-and size = 
-  | SConst of int
-  | SVar of id
+and size = int
+  (* | SConst of int *)
+  (* | SVar of id *)
+
+(* array indices -- separate from sizes so we can figure out 
+   exactly how they need to work *)
+and arridx = 
+    | IConst of int
+    | IVar of string
+
 and func_kind = | FNormal | FHandler | FParser | FAction | FMemop | FExtern
 and raw_ty = 
   | TUnit
   | TInt of size 
   | TBool 
   | TRecord of {labels : id list option; ts : ty list;}
-  | TList of ty * size 
+  | TList of ty * arridx
   | TFun of func_ty
   | TBits of {ternary: bool; len : size;}
   | TEvent
   | TEnum of (string * int) list 
-  | TName of cid * (ty list)
+  | TBuiltin of cid * (ty list)
+  | TName of cid (* tydef, basically*)
+  (* TBuiltins are types built into CoreIr: 
+      arrays, tables, port groups *)
+  (* | TName of *)
+  (* | TName of cid * (ty list) *)
     (* gotta rethink tname. Seems overloaded. 
        Array.t<32> ==> TName(Array, [int<32>])
        but then, we also want to represent an array as a list... 
@@ -73,7 +85,6 @@ and raw_ty =
             like "Table.t<<...>>", or something for a backend IR,
             like "Union" or "Ref". *)            
 and func_ty = {
-  arg_sizes : size list;
   arg_tys : ty list; 
   ret_ty : ty; 
   func_kind : func_kind;
@@ -92,6 +103,8 @@ and v =
   | VBits of {ternary: bool; bits : int list;}
   | VEvent of vevent
   | VEnum of string * ty (* symbol in enum * enum ty *)
+  (* we should not need VGlobals. Globals should never 
+     get to the point of being evaluated. *)
   | VGlobal of {
       global_id : id; (* name of the global, may be interpreted as a pointer variable *)
       global_pos : int; (* position of the global in the pipeline. Every global should have a unique position *)
@@ -111,13 +124,14 @@ and op =    | And | Or | Not
             | Cast of size 
             | Conc
             | Project of id | Get of int (* record and tuple ops *)
-            | ListGet of size
 and e = 
   | EVal of value
   | EVar of cid 
   | ERecord of {labels : id list option; es : exp list;}
   | ECall of {f:exp; args:exp list; call_kind:call_kind;}
   | EOp of op * exp list
+  | EListGet of exp * arridx
+
 and call_kind = 
   | CFun
   | CEvent 
@@ -134,7 +148,8 @@ and s =
   | SUnit of exp
   (* assign may create a new variable, and can unpack tuples *)
   | SAssign of {ids : cid list; tys : ty list; new_vars : bool; exp : exp}
-  | SListSet of {arr : exp; idx : size; exp : exp;} (* arr[idx] = exp; *)
+  | SListSet of {arr : exp; idx : arridx; exp : exp;} (* arr[idx] = exp; *)
+  (* TODO: for / loop: SFor of {idxvar : id; bound : arridx stmt: statement} *)
   | SIf of exp * statement * statement
   | SMatch of exp * branch list
   | SSeq of statement * statement
@@ -145,7 +160,8 @@ and statement = {s:s; sspan : sp;}
 (* declarations *)
 and event_def = {evconstrid : id; evconstrnum : int option; evparams : params; is_parsed : bool}
 and d = 
-  | DVar of id * ty * exp list (* constants and globals, possibly externs *)
+  | DVar of id * ty * exp option (* constants and globals, possibly externs *)
+  | DList of id * ty * (exp list) option (* mutable list *)
   | DFun of func_kind * id * ty * params * (statement option) (* functions and externs *)
   | DTy  of cid * ty option (* named types and external types *)
   | DEvent of event_def (* declare an event, which is a constructor for the datatype TEvent *)
@@ -174,7 +190,13 @@ and decls = decl list
 
 (* constructors *)
 (* type constructors *)
-let sz n = SConst n
+
+let arridx_ct = ref (-1);;
+let fresh_arridx str = 
+  arridx_ct := (!arridx_ct + 1);
+  IVar(str^"-"^(string_of_int (!arridx_ct)))
+;;
+let sz n = n
 let ty raw_ty = {raw_ty=raw_ty; tspan=Span.default; }
 
 let tunit () = ty TUnit
@@ -184,22 +206,25 @@ let tpat len = ty (TBits {ternary=false; len})
 let tevent = ty TEvent
 let trecord labels tys = ty (TRecord {labels=Some labels; ts=tys})
 let ttuple tys = ty (TRecord {labels=None; ts=tys})
-let tfun_kind arg_tys ret_ty func_kind = ty (TFun {arg_sizes = [];arg_tys; ret_ty; func_kind})
+let tfun_kind arg_tys ret_ty func_kind = ty (TFun {arg_tys; ret_ty; func_kind})
 let tfun arg_tys ret_ty = tfun_kind arg_tys ret_ty FNormal
-(* global type *)
-let tglobal cid global_tyargs = ty (TName(cid, global_tyargs))
+(* global type from CoreSyntax *)
+let tglobal cid global_tyargs = ty (TBuiltin(cid, global_tyargs))
 
 
 let tlist ele_ty len = ty (TList(ele_ty, len))
-(* named type *)
-let tname cid = ty (TName(cid, []))
-let tcustom cid tyargs = ty (TName(cid, tyargs))
+let tname cid = ty (TName(cid))
+let tbuiltin cid tyargs = ty (TBuiltin(cid, tyargs))
 let tgroup_cid = Cid.create ["Group"]
 let tgroup = tname tgroup_cid
 
+(* character is just an alias for an int *)
 let tchar = tint 8
-let tstring_cid = Cid.create ["String"]
-let tstring len = tcustom tstring_cid [tlist tchar len]
+(* string is just a list of chars *)
+let tstring = tlist tchar (fresh_arridx "strlen")
+(* a named type that resolves to textern_base is an extern type *)
+let textern = tname (Cid.create ["_extern_ty_"])
+let is_textern ty = match ty.raw_ty with TName cid -> Cid.equal cid (Cid.create ["_extern_ty_"]) | _ -> false
 
 let is_tunit ty = match ty.raw_ty with TUnit -> true | _ -> false
 let is_trecord ty = match ty.raw_ty with TRecord{labels=Some(_)} -> true | _ -> false
@@ -219,7 +244,7 @@ let infer_vty = function
   | VRecord {labels; es} -> ty (TRecord {labels; ts=List.map (fun v -> v.vty) es})
   | VList(values) -> 
     if (List.length values) == 0 then failwith "cannot infer type of length 0 list" 
-    else ty (TList((List.hd values).vty, sz@@List.length values))
+    else ty (TList((List.hd values).vty, IConst (List.length values)))
   | VBits {ternary; bits} -> ty (TBits {ternary; len=sz (List.length bits)})
   | VGlobal {global_ty} -> global_ty
   (* | VClosure {params; fexp; _} -> tfun (List.map snd params) fexp.ety *)
@@ -232,7 +257,7 @@ let vunit () = {v=VUnit; vty=ty TUnit; vspan=Span.default}
 let vint value size = {v=VInt {value; size = sz size}; vty=ty (TInt(sz size)); vspan=Span.default}
 (* declare a vint with size derived from ty *)
 let vint_ty value ty = match ty.raw_ty with 
-  | TInt (SConst size) -> vint value size
+  | TInt  size -> vint value size
   | _ -> failwith "vint_ty: expected TInt"
 let vbool b = {v=VBool b; vty=ty TBool; vspan=Span.default}
 let vtup vs = {v=VRecord {labels=None; es=vs}; vty=ttuple (List.map (fun v -> v.vty) vs); vspan=Span.default}
@@ -285,7 +310,7 @@ let eop op es =
     | Hash size -> ty (TInt size)
     | Cast size  -> ty (TInt size)
     | Conc -> 
-      let arg_sizes = List.map (fun e -> match e.ety.raw_ty with TInt (SConst sz) -> sz | _ -> failwith "conc expects int args") es in
+      let arg_sizes = List.map (fun e -> match e.ety.raw_ty with TInt sz -> sz | _ -> failwith "conc expects int args") es in
       ty (TInt (sz (List.fold_left (+) 0 arg_sizes)))
 
     | Project(id) -> 
@@ -304,12 +329,6 @@ let eop op es =
         | _ -> failwith "get expects tuple arg"
       in
       List.nth ts idx
-    | ListGet(_) -> 
-      let ty = match (List.hd es).ety.raw_ty with 
-        | TList(ty, _) -> ty
-        | _ -> failwith "listget expects list arg"
-      in
-      ty
   in 
   {e=EOp (op, es); ety=eop_ty; espan=Span.default; }
 let eval value = {e=EVal value; ety=value.vty; espan=Span.default; }
@@ -376,7 +395,7 @@ let extract_evar exp = match exp.e with
 ;;
 
 let extract_func_ty ty = match ty.raw_ty with 
-  | TFun {arg_sizes; arg_tys; ret_ty; func_kind} -> arg_sizes, arg_tys, ret_ty, func_kind
+  | TFun {arg_tys; ret_ty; func_kind} -> arg_tys, ret_ty, func_kind
   | _ -> raise (FormError "[extract_func_ty] expected TFun")
 
 let extract_tint_size ty = match ty.raw_ty with 
@@ -439,8 +458,8 @@ let dparser = dfun_kind FParser
 let daction = dfun_kind FAction 
 let dmemop = dfun_kind FMemop
 (* global variables *)
-let dglobal id ty exp = decl (DVar(id, ty, [exp])) Span.default
-let dextern id ty = decl (DVar(id, ty, [])) Span.default
+let dglobal id ty exp = decl (DVar(id, ty, Some(exp))) Span.default
+let dextern id ty = decl (DVar(id, ty, None)) Span.default
 
 (* type declarations *)
 let dty tycid ty = decl (DTy(tycid, Some ty)) Span.default
@@ -465,14 +484,3 @@ let kind_of_tfun raw_ty = match raw_ty with
   | _ -> failwith "kind_of_tfun: expected TFun"
 ;;
 
-(* custom types for c compilation *)
-let tclosure_cid = Cid.create ["CClosure"]
-let tclosure env_ty fun_ty = 
-  tcustom tclosure_cid [env_ty; fun_ty]
-;;
-let tunion_cid = Cid.create ["CUnion"]
-let tunion tys = tcustom tunion_cid tys
-
-let tcarray_cid = Cid.create ["CArray"]
-let tcarray (cell_ty : ty) (len : int) = 
-  tcustom tcarray_cid [cell_ty; tint len]

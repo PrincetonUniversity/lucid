@@ -173,6 +173,7 @@
 
    CCoreSyntax
    CCoreTyper
+   SimpleSolver
    CCorePrinting
    CoreToCCore
    CCoreToCore

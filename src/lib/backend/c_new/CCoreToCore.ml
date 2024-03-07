@@ -5,12 +5,8 @@ let err = Console.error ;;
 module C = CoreSyntax
 module F = CCoreSyntax
 
-let translate_size (s : F.size) = match s with 
-| SConst i -> C.Sz i
-| SVar _ -> failwith "cannot translate size var back to ir"
-let size_to_int (s : F.size) = match s with 
-  | SConst i -> i
-  | SVar _ -> failwith "cannot translate size var to int"
+let translate_size (s : F.size) = C.Sz s
+let size_to_int (s : F.size) = s 
 let rec ty_to_size (ty : F.ty) = 
   match ty.raw_ty with 
   | F.TInt(sz) -> translate_size sz
@@ -47,10 +43,11 @@ let rec translate_raw_ty (raw_ty : F.raw_ty) : C.raw_ty =
   | F.TBits{ternary=true; len= sz} -> C.TPat(translate_size sz)
   | F.TBits{ternary=false; len= sz} -> C.TBits(translate_size sz)
   (* named types *)
-  | F.TName(tcid, []) when (Cid.equal tcid F.tgroup_cid) -> C.TGroup
-  | F.TName(ty_id, []) -> C.TName(ty_id, [])
-  | F.TName(ty_cid, ty_args) when is_tbuiltin ty_cid -> C.TBuiltin(ty_cid, List.map (fun ty -> (translate_ty ty).raw_ty) ty_args)
-  | F.TName(ty_cid, ty_args) -> C.TName(ty_cid, List.map ty_to_size ty_args)
+  | F.TBuiltin(ty_cid, []) when (Cid.equal ty_cid F.tgroup_cid) -> C.TGroup
+  | F.TBuiltin(ty_cid, ty_args) when is_tbuiltin ty_cid 
+      -> C.TBuiltin(ty_cid, List.map (fun ty -> (translate_ty ty).raw_ty) ty_args)
+  | F.TBuiltin(ty_cid, ty_args) -> C.TName(ty_cid, List.map ty_to_size ty_args)
+  | F.TName(ty_cid) -> C.TName(ty_cid, [])
   (* functions types for functions, action constructors, actions, and memops *)
   | F.TFun{arg_tys; ret_ty; func_kind} when (func_kind = F.FNormal) -> (
         (* if it returns an action, its an action constructor, else its a function *)
@@ -128,7 +125,6 @@ let translate_op op =
   | F.Hash _ -> err "hash op must translate into hash expression"
   | F.Project _ -> err "project op must translate into project expression"
   | F.Get _ -> err "there is no get op in CoreSyntax"
-  | F.ListGet _ -> err "there is no array index operation in CoreSyntax"
 ;;
 
 (* left off here -- at translate_v *)
@@ -261,6 +257,7 @@ let rec translate_exp (exp: F.exp) =
         exp.espan
   )   
   | F.ECall _ -> err "call expression with non-var function"
+  | F.EListGet _ -> err "there is no list index / get operation in CoreIr"
 
 
 and translate_pat (pat : F.pat) : C.pat = 
@@ -323,15 +320,15 @@ and translate_stmt in_parser (stmt : F.statement) =
 let translate_decl (decl : F.decl) : C.decl = 
   match decl.d with
   (* variables can be globals or externs *)
-  | F.DVar(id, ty, [exp]) -> 
+  | F.DVar(id, ty, Some(exp)) -> 
     let ty = translate_ty ty in
     let exp = translate_exp exp in
     C.decl_sp (C.DGlobal(id, ty, exp)) decl.dspan
-  | F.DVar(id, ty, []) ->
+  | F.DVar(id, ty, None) ->
     let ty = translate_ty ty in
     C.decl_sp (C.DExtern(id, ty)) decl.dspan
-  | F.DVar(_, _, _) -> 
-    err "cannot translate list declaration back to coreIR"
+  | F.DList(_, _, _) -> 
+    err "list primitives are not supported in CoreSyntax"
   | F.DEvent{evconstrid; evconstrnum; evparams; is_parsed} -> 
     let ev_sort = if is_parsed then C.EPacket else C.EBackground in
     let params = List.map (fun (id, ty) -> id, translate_ty ty) evparams in
