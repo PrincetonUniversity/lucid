@@ -171,13 +171,15 @@
    cTransformations
    strUtils
 
+   deleteNoops
    CCoreSyntax
    CCoreTyper
-   SimpleSolver
    CCorePrinting
+   CCorePPrint
    CoreToCCore
    CCoreToCore
    CPasses
+   CCoreTables
    )
  (preprocess
     (staged_pps ppx_import visitors.ppx ppx_deriving.show ppx_deriving.std ppx_string))

@@ -75,6 +75,12 @@ let rec unify_lists env f_unify xs ys =
 
 let rec unify_raw_ty env rawty1 rawty2 : env = 
   match rawty1, rawty2 with
+  (* abstract types unify with their inner types *)
+  | TAbstract(_, {raw_ty = ty1}), TAbstract(_, {raw_ty = ty2}) -> 
+    unify_raw_ty env ty1 ty2
+  | TAbstract(_, {raw_ty = ty1}), ty2 
+  | ty1, TAbstract(_, {raw_ty = ty2}) -> 
+    unify_raw_ty env ty1 ty2
   | TName cid1, TName cid2 -> 
     if (not (Cid.equal cid1 cid2)) then 
       (ty_err "named types with different names");
@@ -130,7 +136,7 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
     let env' = unify_lists env unify_ty arg_tys1 arg_tys2 in
     let env'' = unify_ty env' ret_ty1 ret_ty2 in
     env''
-  | (TUnit|TBool|TEvent|TInt _|TRecord _ | TName _
+  | ( TUnit|TBool|TEvent|TInt _|TRecord _ | TName _
     |TList (_, _)|TFun _|TBits _|TEnum _|TBuiltin (_, _)), _ -> ty_err "types do not match"
 
 and unify_ty env ty1 ty2 : env = 
@@ -427,6 +433,13 @@ let rec infer_statement env (stmt:statement) =
       env, {stmt with s=SRet(Some(inf_exp))}
   )
   | SRet(None) -> env, stmt
+  | SFor{idx; bound; stmt} -> 
+    (* TODO: add constraint idx < bound --  only while inside of new environment? *)
+    let env, inf_stmt = infer_statement env stmt in
+    env, {stmt with s=SFor{idx; bound; stmt=inf_stmt}}
+  | SForEver stmt -> 
+    let env, inf_stmt = infer_statement env stmt in
+    env, {stmt with s=SForEver(inf_stmt)}
 ;;
 
 let infer_decl env decl : env * decl = 
@@ -483,11 +496,11 @@ let infer_decl env decl : env * decl =
     let env = unify_ty env ret_ty inf_ret_ty in
     (* update the environment with the function *)
 
-    let fun_ty = tfun_kind (List.map snd params) ret_ty fun_kind in
+    let fun_ty = tfun_kind fun_kind (List.map snd params) ret_ty  in
     let env = add_var env id fun_ty in
     env, {decl with d=DFun(fun_kind, id, inf_ret_ty, params, Some(inf_stmt))}
   | DFun(fun_kind, id, ret_ty, params, None) -> 
-    let fun_ty = tfun_kind (List.map snd params) ret_ty fun_kind in
+    let fun_ty = tfun_kind fun_kind (List.map snd params) ret_ty  in
     let env = add_var env id fun_ty in
     env, decl
 ;;

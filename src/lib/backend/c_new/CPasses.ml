@@ -4,24 +4,28 @@ let fcore_passes fds = fds
 ;;
 
 
+
+
 let compile ds = 
   (* 1. translate to core syntax *)
   let ds = SyntaxToCore.translate_prog ~preserve_user_decls:true ds in
   (* 2. run partial interpretation *)
   let ds = PartialInterpretation.interp_prog ds in
+  let ds = DeleteNoops.deleter#visit_decls () ds in
   (* 3. translate to FCore *)
   let fds = CoreToCCore.translate_prog ds in
-  let s = CCorePrinting.show_decls fds in
+  let s = CCorePPrint.decls_to_string fds in
   print_endline ("---- intial CCore ----");
   print_endline s;
+  print_endline ("----------------------");
   (* capture variables in closures *)
   (* let fds = ClosureConversion.capture_vars fds in *)
   (* add closure types *)
   (* let fds = ClosureConversion.add_closure_types fds in *)
   (* add closure conversion functions *)  
   (* print_endline ("--- after closure conversion ---"); *)
-  let s = CCorePrinting.show_decls fds in
-  print_endline s;
+  (* let s = CCorePPrint.decls_to_string fds in *)
+  (* let s = CCorePrinting.show_decls fds in *)
   s
 (* 
   print_endline ("translation to FCore complete");

@@ -30,8 +30,6 @@ and sp = [%import: Span.t]
 
 (* types *)
 and size = int
-  (* | SConst of int *)
-  (* | SVar of id *)
 
 (* array indices -- separate from sizes so we can figure out 
    exactly how they need to work *)
@@ -50,40 +48,10 @@ and raw_ty =
   | TBits of {ternary: bool; len : size;}
   | TEvent
   | TEnum of (string * int) list 
-  | TBuiltin of cid * (ty list)
-  | TName of cid (* tydef, basically*)
-  (* TBuiltins are types built into CoreIr: 
-      arrays, tables, port groups *)
-  (* | TName of *)
-  (* | TName of cid * (ty list) *)
-    (* gotta rethink tname. Seems overloaded. 
-       Array.t<32> ==> TName(Array, [int<32>])
-       but then, we also want to represent an array as a list... 
-       I thought we could do something like: 
-         TName(Array, [TList(int<32>, ...)])
-         That's not even right, though. 
-         We can _replace_ the TName(Array, [int<32>]) with TList(int<32>, ...)
-         But we can't use TName to wrap it. 
-         Can we do the same thing with strings? 
-          - start with TName(String, [])
-          - replace with TList(int<8>, ?sz)
-         The problem is really reversibility. When we do a type 
-         transformation like this, we want to know the original type. 
-         hmm... We could do a type wrapper, or have an annotation?
-         or maybe we need a type function / constructor? 
-         A TName is really supposed to be a type variable. 
-         Lets keep that convention. *)
-    (* a named type can either be:
-        1. a type variable defined in the application, 
-            which should have no arguments. 
-        2. a primitive type, which may take arguments. 
-            A primitive type is built in to the language, though 
-            it may be implemented by a module like Array or 
-            Table. Rephrased, its a type whose value representation 
-            is not defined at this point in compilation. 
-            It could be something from the surface language,
-            like "Table.t<<...>>", or something for a backend IR,
-            like "Union" or "Ref". *)            
+  | TBuiltin of cid * (ty list) (* types built into the lucid language that must be eliminated for c*)
+  | TName of cid (* tydef, basically *)
+  | TAbstract of cid * ty (* just a wrapper around some other type. For convenience. *)
+
 and func_ty = {
   arg_tys : ty list; 
   ret_ty : ty; 
@@ -123,7 +91,9 @@ and op =    | And | Or | Not
             | Hash of size
             | Cast of size 
             | Conc
-            | Project of id | Get of int (* record and tuple ops *)
+            | Project of id | Get of int 
+            
+            (* record and tuple ops *)
 and e = 
   | EVal of value
   | EVar of cid 
@@ -140,8 +110,7 @@ and exp = {e:e; ety:ty; espan : sp;}
 and pat = 
   | PVal of value
   | PEvent of {event_id : cid; params : params;}
-and branch = pat list * branch_tgt
-and branch_tgt = statement
+and branch = pat list * statement
 (* statements *)
 and s = 
   | SNoop
@@ -149,7 +118,8 @@ and s =
   (* assign may create a new variable, and can unpack tuples *)
   | SAssign of {ids : cid list; tys : ty list; new_vars : bool; exp : exp}
   | SListSet of {arr : exp; idx : arridx; exp : exp;} (* arr[idx] = exp; *)
-  (* TODO: for / loop: SFor of {idxvar : id; bound : arridx stmt: statement} *)
+  | SFor of {idx : id; bound : arridx; stmt: statement}
+  | SForEver of statement (* infinite loop *)
   | SIf of exp * statement * statement
   | SMatch of exp * branch list
   | SSeq of statement * statement
@@ -206,8 +176,8 @@ let tpat len = ty (TBits {ternary=false; len})
 let tevent = ty TEvent
 let trecord labels tys = ty (TRecord {labels=Some labels; ts=tys})
 let ttuple tys = ty (TRecord {labels=None; ts=tys})
-let tfun_kind arg_tys ret_ty func_kind = ty (TFun {arg_tys; ret_ty; func_kind})
-let tfun arg_tys ret_ty = tfun_kind arg_tys ret_ty FNormal
+let tfun_kind func_kind arg_tys ret_ty = ty (TFun {arg_tys; ret_ty; func_kind})
+let tfun arg_tys ret_ty = tfun_kind FNormal arg_tys ret_ty 
 (* global type from CoreSyntax *)
 let tglobal cid global_tyargs = ty (TBuiltin(cid, global_tyargs))
 
@@ -217,12 +187,8 @@ let tname cid = ty (TName(cid))
 let tbuiltin cid tyargs = ty (TBuiltin(cid, tyargs))
 let tgroup_cid = Cid.create ["Group"]
 let tgroup = tname tgroup_cid
+let tabstract tname inner_ty = ty (TAbstract(Cid.create [tname], inner_ty))
 
-(* character is just an alias for an int *)
-let tchar = tint 8
-(* string is just a list of chars *)
-let tstring = tlist tchar (fresh_arridx "strlen")
-(* a named type that resolves to textern_base is an extern type *)
 let textern = tname (Cid.create ["_extern_ty_"])
 let is_textern ty = match ty.raw_ty with TName cid -> Cid.equal cid (Cid.create ["_extern_ty_"]) | _ -> false
 
@@ -235,7 +201,9 @@ let is_tint ty = match ty.raw_ty with TInt(_) -> true | _ -> false
 let is_tbits ty = match ty.raw_ty with TBits(_) -> true | _ -> false
 let is_tlist ty = match ty.raw_ty with TList(_, _) -> true | _ -> false
 let is_tevent ty = match ty.raw_ty with TEvent -> true | _ -> false
-
+let is_tabstract name ty = match ty.raw_ty with TAbstract(cid, _) -> Cid.equal cid (Cid.create [name]) | _ -> false
+let is_tstring ty = is_tabstract "string" ty
+let is_tchar ty = is_tabstract "char" ty
 (* value constructors *)
 let infer_vty = function 
   | VUnit -> ty TUnit
@@ -260,6 +228,8 @@ let vint_ty value ty = match ty.raw_ty with
   | TInt  size -> vint value size
   | _ -> failwith "vint_ty: expected TInt"
 let vbool b = {v=VBool b; vty=ty TBool; vspan=Span.default}
+
+let vlist vs = {v=VList vs; vty=ty (TList((List.hd vs).vty, IConst (List.length vs))); vspan=Span.default}
 let vtup vs = {v=VRecord {labels=None; es=vs}; vty=ttuple (List.map (fun v -> v.vty) vs); vspan=Span.default}
 let vpat ints = {v=VBits {ternary=true; bits=ints}; vty=ty (TBits {ternary=true; len=sz (List.length ints)}); vspan=Span.default}
 let vbits ints = {v=VBits {ternary=false; bits=ints}; vty=ty (TBits {ternary=false; len=sz (List.length ints)}); vspan=Span.default}
@@ -269,18 +239,20 @@ let vglobal global_id global_pos global_ty = {v=VGlobal {global_id; global_pos; 
 let string_to_value (s:string) =
   let chars = List.of_seq (String.to_seq s) in
   let vchars = List.map (fun c -> vint (Char.code c) 8) chars in
-  let vstr = vtup vchars in
-  {vstr with vty=vstr.vty}
+  (* wrap chars in "char" type *)
+  let vchars = List.map (fun value -> {value with vty=tabstract "char" value.vty}) vchars in
+  let vstr = vlist vchars in
+  {vstr with vty=tabstract "string" vstr.vty}
 ;;
-let value_to_string (v:value) =
+let charints_to_string (v:value) =
   match v.v with
-  | VRecord {labels=None; es} ->
+  | VList ints ->
     let charints = List.map 
       (fun v -> 
         match v.v with 
           | VInt({value}) -> value
           | _ -> failwith "strings are encoded as int tuples") 
-      es 
+      ints 
     in
     let chars = List.map (fun i -> Char.chr i) charints in
     String.of_seq (List.to_seq chars)
@@ -345,25 +317,20 @@ let ecall_kind call_kind f es =
 ;;
 let ecall = ecall_kind CFun
 let eevent = ecall_kind CEvent
-(* let efun_kind func_kind params fexp = {
-  e=EClosure {env=[]; params; fexp}; 
-  ety=tfun_kind (List.map snd params) fexp.ety func_kind; espan=Span.default; 
-} *)
-(* let efun = efun_kind FNormal *)
-(* let eaction = efun_kind FAction *)
-(* let elet id ety exp_rhs exp_rest espan = exp (ELet([id], exp_rhs, exp_rest)) ety espan *)
 
+
+(* BUILTIN FUNCTIONS: generates *)
+let fgen_ty = tfun_kind FExtern [tevent] (tunit ())
 let egen_self ev = 
-  let gen_ty = tfun [tevent] (tunit ()) in
-  ecall (efunref (Cid.create ["generate_self"]) gen_ty) [ev]
+  ecall (efunref (Cid.create ["generate_self"]) fgen_ty) [ev]
 let egen_switch loc ev = 
-  ecall (efunref (Cid.create ["generate_switch"]) (tfun [tevent] (tunit ()))) [loc; ev]
+  ecall (efunref (Cid.create ["generate_switch"]) fgen_ty) [loc; ev]
 ;;
 let egen_group loc ev = 
-  ecall (efunref (Cid.create ["generate_group"]) (tfun [tevent] (tunit ()))) [loc; ev]
+  ecall (efunref (Cid.create ["generate_group"]) fgen_ty) [loc; ev]
 ;;
 let egen_port loc ev = 
-  ecall (efunref (Cid.create ["generate_port"]) (tfun [tevent] (tunit ()))) [loc; ev]
+  ecall (efunref (Cid.create ["generate_port"]) fgen_ty) [loc; ev]
 
 (* form checking *)
 let etup_form exp = match exp.e with

@@ -44,12 +44,9 @@ let main () =
       elim_records=false;
       } Builtins.interp_builtin_tys ds
   in
-  print_endline ("compiling");
-  print_endline ("compiling");
+  print_endline (" --- compiling to c --- ");
   let prog_str = CPasses.compile ds in
   output_string (open_out out_filename) prog_str
-
-
 ;;
 
 

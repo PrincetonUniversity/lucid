@@ -36,6 +36,7 @@ let is_tbuiltin tycid =
 let rec translate_raw_ty (raw_ty : F.raw_ty) : C.raw_ty = 
   match raw_ty with 
   (* basic types *)
+  | F.TAbstract(_, inner_ty) -> (translate_ty inner_ty).raw_ty
   | F.TUnit -> err "you shouldn't have to translate a unit type back to CoreSyntax"
   | F.TBool -> C.TBool
   | F.TInt(sz) -> C.TInt(translate_size sz)
@@ -237,7 +238,7 @@ let rec translate_exp (exp: F.exp) =
       | EVal(value) -> value
       | _ -> err "printf with non-string argument"
     in
-    let str = F.value_to_string str_val in
+    let str = F.charints_to_string str_val in
     let args = List.map (translate_exp) args in
     let s = C.SPrintf(str, args) in
     raise (MadeStatement(s))
@@ -315,6 +316,8 @@ and translate_stmt in_parser (stmt : F.statement) =
     let exp_opt = Option.map translate_exp exp_opt in
     C.statement_sp (C.SRet(exp_opt)) stmt.sspan
   | _, SListSet _ -> err "cannot translate list set statement back to coreIR"
+  | _, SFor _ -> err "cannot translate for loop back to coreIR"
+  | _, SForEver _ -> err "cannot translate infinite loop back to coreIR"
 ;;
 
 let translate_decl (decl : F.decl) : C.decl = 

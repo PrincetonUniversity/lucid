@@ -5,10 +5,10 @@ let sprintf = Printf.sprintf
 (* split on newlines, indent each newline by n spaces, combine back into string *)
 let indent n str = str |> String.split_on_char '\n' |> List.map (fun s -> String.make n ' ' ^ s) |> String.concat "\n"
 
-let op_to_string = show_op
 
 let show_id id = fst id
 let show_cid cid = Cid.names cid |> String.concat "."
+
 
 let show_arridx idx = match idx with 
   | IVar s -> s
@@ -43,6 +43,7 @@ and show_raw_ty = function
     let ty_args = String.concat ", " ty_args in
     sprintf "%s<%s>" cid ty_args
   | TName(cid) -> show_cid cid
+  | TAbstract(cid, _) -> show_cid cid
   | TBits{ternary; len} -> 
     let ternary = if ternary then "pattern" else "bitstring" in
     sprintf "%s<%d>" ternary len
@@ -58,7 +59,9 @@ let show_params params =
   String.concat ", " params
 ;;
 
-let rec show_value v = show_v v.v
+let rec show_value v = 
+  if is_tstring v.vty then "\""^charints_to_string v^"\""
+  else show_v v.v
 
 and show_v = function
   | VUnit -> "()"
@@ -76,15 +79,9 @@ and show_v = function
       let values = List.map show_value es in
       sprintf "(%s)" (String.concat ", " values)
   )
-  | VList(values) -> 
+  | VList(values) ->     
     let values = List.map show_value values in
     sprintf "[%s]" (String.concat ", " values)
-  (* | VClosure{env; params; fexp} -> 
-    let env = List.map (fun (id, v) -> sprintf "%s = %s" (show_id id) (show_value v)) env in
-    let env = String.concat "; " env in
-    let params = show_params params in
-    let fexp = show_exp fexp in
-    sprintf "{%s} (%s) -> %s" env params fexp *)
   | VGlobal{global_id; global_pos; global_ty} -> 
     let id = show_id global_id in
     let int_addr = string_of_int global_pos in
@@ -192,6 +189,16 @@ and show_s = function
     sprintf "%s\n%s" s1 s2
   | SRet(None) -> "return;"
   | SRet(Some(exp)) -> sprintf "return %s;" (show_exp exp)
+  | SFor{idx; bound; stmt;} -> (
+    let idx = show_id idx in
+    let bound = show_arridx bound in
+    let stmt = show_statement stmt |> indent 2 in
+    sprintf "for(%s in %s) {\n%s\n}" idx bound stmt
+  )
+  | SForEver stmt -> 
+    let stmt = show_statement stmt |> indent 2 in
+    sprintf "forever {\n%s\n}" stmt
+
 
 let rec show_decl decl = show_d decl.d
 and show_d = function 

@@ -384,15 +384,19 @@ let translate_decl (decl:C.decl) : F.decl =
       match params with 
       | [] -> (Id.fresh "empty", C.ttuple []), []
       | params when is_flattened_tuple params -> 
-        print_endline ("[pack_params] packing flattened tuple into tuple:");
-        print_endline (CorePrinting.params_to_string params);
+        (* print_endline ("[pack_params] packing flattened tuple into tuple:");
+        print_endline (CorePrinting.params_to_string params); *)
         tuple_params params
       | param::[] -> param, []
       | _ -> err "[pack_params] invalid action arguments for translating to C Core."
     in
     let const_param, const_rename_map = pack_params acn_constr.aconst_params in
     let param, param_rename_map      = pack_params acn_constr.aparams in
-    let ret_ty      = C.ttuple (List.map (fun (ty : C.ty) -> ty.raw_ty) acn_constr.artys) in 
+    (* wrap in a tuple if there's not exactly one type. *)
+    let ret_ty = match acn_constr.artys with
+      | [ret_ty] -> ret_ty
+      | _ -> C.ttuple (List.map (fun (ty : C.ty) -> ty.raw_ty) acn_constr.artys) 
+    in 
 
 
     let field_replacer = 
