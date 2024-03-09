@@ -97,16 +97,14 @@ let table_lookup tbl_id tbl_ty tbl_len key_ty const_arg_ty arg_ty ret_ty action_
   let idx = id "idx" in
   let apply_branch  action_id = 
     (* tbl->entries[idx]->action_arg *)
-    let action_evar = efunref (Cid.id action_id) action_ty in
-    let entry = tbl_param/->"entries"/@idx in
-    print_endline ("entry type: ");
-    print_endline (CCorePPrint.ty_to_string entry.ety);
-    let _ = entry/->"action_arg" in
+    let action_evar = efunref (Cid.id action_id) action_ty in    
     (case actions_enum_ty) 
       (tag action_id)
       ( id"rv" /:= (action_evar /** [((tbl_param/->"entries")/@idx)/->"action_arg"; arg_param]))
   in
-  let s_apply_entry = smatch 
+  let s_apply_entry = 
+    (* LEFT OFF HERE: todo -- ADD CHECK TO VALID FIELD! *)
+    smatch 
     ((tbl_param/->"entries"/@idx)/->"action_tag")
     (List.map apply_branch action_ids)
   in
