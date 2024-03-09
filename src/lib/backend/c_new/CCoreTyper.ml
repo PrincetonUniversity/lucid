@@ -64,9 +64,9 @@ let unify_arridx env x y =
     else ty_err "array index mismatch"
   | IConst x, IVar v 
   | IVar v , IConst x ->
-    add_constr env (Eq(v, (IVal x)))
+    add_constr env (Eq(fst v, (IVal x)))
   | IVar v, IVar w -> 
-    add_constr env (Eq(v, (IVar w)))
+    add_constr env (Eq(fst v, (IVar (fst w))))
 ;;
 
 let rec unify_lists env f_unify xs ys = 
@@ -94,7 +94,9 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
   | TBool, TBool -> env
   | TEvent, TEvent -> env
   | TEnum(variants1), TEnum(variants2) -> 
-      if not (List.equal (Id.equal) variants1 variants2) then 
+      let ids1, _ = List.split variants1 in
+      let ids2, _ = List.split variants2 in
+      if not (List.equal (Id.equal) ids1 ids2) then 
         (raise (TypeError("enum types have different variants")));
     env
   | TBuiltin(cid1, tys1), TBuiltin(cid2, tys2) -> 
@@ -136,7 +138,9 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
     let env' = unify_lists env unify_ty arg_tys1 arg_tys2 in
     let env'' = unify_ty env' ret_ty1 ret_ty2 in
     env''
-  | ( TUnit|TBool|TEvent|TInt _|TRecord _ | TName _
+  | TGlobal(ty1), TGlobal(ty2) -> 
+    unify_ty env ty1 ty2
+  | ( TGlobal _ | TUnit|TBool|TEvent|TInt _|TRecord _ | TName _
     |TList (_, _)|TFun _|TBits _|TEnum _|TBuiltin (_, _)), _ -> ty_err "types do not match"
 
 and unify_ty env ty1 ty2 : env = 
@@ -162,8 +166,7 @@ let rec infer_value value : value =
     tlist (List.hd ts) (IConst (List.length ts))
   | VBits{ternary; bits} -> ty@@TBits{ternary; len=sz@@List.length bits}
   | VEvent _ -> tevent
-  | VEnum(_, ty) -> ty
-  | VGlobal{global_ty} -> global_ty
+  | VSymbol(_, ty) -> ty
   in
   {value with vty=ty}
 ;;
@@ -442,7 +445,7 @@ let rec infer_statement env (stmt:statement) =
     env, {stmt with s=SForEver(inf_stmt)}
 ;;
 
-let infer_decl env decl : env * decl = 
+let rec infer_decl env decl : env * decl = 
   match decl.d with 
   | DVar(id, ty, Some(arg)) -> 
     let env, inf_arg = infer_exp env arg in
@@ -503,4 +506,12 @@ let infer_decl env decl : env * decl =
     let fun_ty = tfun_kind fun_kind (List.map snd params) ret_ty  in
     let env = add_var env id fun_ty in
     env, decl
+
+and infer_decls env decls : env * decl list =
+  match decls with
+  | [] -> env, []
+  | decl::decls -> 
+    let env, inf_decl = infer_decl env decl in
+    let env, inf_decls = infer_decls env decls in
+    env, inf_decl::inf_decls
 ;;

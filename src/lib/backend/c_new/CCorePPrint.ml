@@ -7,10 +7,10 @@ let indent n str = str |> String.split_on_char '\n' |> List.map (fun s -> String
 let size_to_string size = string_of_int size
 let arridx_to_string = function 
   | IConst(i) -> string_of_int i
-  | IVar(v) -> v
+  | IVar(v) -> fst v
 
 let func_kind_to_string = function
-  | FNormal -> "normal"
+  | FNormal -> ""
   | FHandler -> "handler"
   | FParser -> "parser"
   | FAction -> "action"
@@ -27,24 +27,33 @@ let rec raw_ty_to_string (r: raw_ty) : string =
   | TInt size -> "int" ^ size_to_string size
   | TBool -> "bool"
   | TRecord {labels; ts} -> 
-    let labels_str = match labels with 
-      | Some ids -> String.concat ", " (List.map id_to_string ids)
-      | None -> String.concat ", " (List.mapi (fun i _ -> "_" ^ string_of_int i) ts) in
-    let ts_str = String.concat ", " (List.map ty_to_string ts) in
-    "struct {" ^ labels_str ^ ": " ^ ts_str ^ "}"
-  | TList (ty, arridx) -> ty_to_string ty ^ "[" ^ arridx_to_string arridx ^ "]"
+    let label_strs = match labels with 
+      | Some ids -> List.map id_to_string ids
+      | None -> List.mapi (fun i _ -> "_" ^ string_of_int i) ts 
+    in
+    let ts_strs = List.map 
+      (fun ty ->       
+        let aty = alias_type ty in
+        ty_to_string aty) 
+      ts 
+    in
+    let field_strs = List.map2 (fun l e -> l ^ ": " ^ e ^";") label_strs ts_strs in
+    let fields_str = String.concat " " field_strs in    
+    "{" ^ fields_str ^ "}"
+  | TList (ty, arridx) -> 
+    ty_to_string (alias_type ty) ^ "[" ^ arridx_to_string arridx ^ "]"
   | TFun func_ty -> "function(" ^ func_ty_to_string func_ty ^ ")"
   | TBits {ternary; len} -> (if ternary then "ternary_" else "") ^ "bit[" ^ size_to_string len ^ "]"
   | TEvent -> "event"
   | TEnum list -> 
-    let list_str = String.concat ", " (List.map (fun (s, i) -> s ^ " = " ^ string_of_int i) list) in
+    let list_str = String.concat ", " (List.map (fun (s, i) -> id_to_string s ^ " = " ^ string_of_int i) list) in
     "enum {" ^ list_str ^ "}"
   | TBuiltin (cid, ty_list) -> 
     let ty_list_str = String.concat ", " (List.map ty_to_string ty_list) in
     cid_to_string cid ^ "<<" ^ ty_list_str ^ ">>"
   | TName cid -> cid_to_string cid
   | TAbstract (cid, ty) -> cid_to_string cid ^ " " ^ ty_to_string ty
-
+  | TGlobal (ty) -> "global " ^ ty_to_string ty
 and func_ty_to_string (f: func_ty) : string =
   let arg_tys_str = String.concat ", " (List.map ty_to_string f.arg_tys) in
   let ret_ty_str = ty_to_string f.ret_ty in
@@ -64,18 +73,20 @@ let rec v_to_string (v: v) : string =
   | VInt {value; _} -> string_of_int value
   | VBool b -> string_of_bool b
   | VRecord {labels; es} -> 
-    let labels_str = match labels with 
-      | Some ids -> String.concat ", " (List.map id_to_string ids)
-      | None -> String.concat ", " (List.mapi (fun i _ -> "_" ^ string_of_int i) es) in
-    let es_str = String.concat ", " (List.map value_to_string es) in
-    "struct {" ^ labels_str ^ ": " ^ es_str ^ "}"
+    let label_strs = match labels with 
+      | Some ids -> List.map id_to_string ids
+      | None -> List.mapi (fun i _ -> "_" ^ string_of_int i) es 
+    in
+    let es_strs = List.map value_to_string es in
+    let field_strs = List.map2 (fun l e -> "." ^l ^ " = " ^ e ^";") label_strs es_strs in
+    let fields_str = String.concat " " field_strs in    
+    "{" ^ fields_str ^ "}"
   | VList vs -> "{" ^ String.concat ", " (List.map value_to_string vs) ^ "}"
   | VBits {ternary; bits} -> 
     let bits_str = String.concat "" (List.map (fun i -> if i = -1 then "*" else string_of_int i) bits) in
     (if ternary then "ternary " else "") ^ "bits[" ^ bits_str ^ "]"
   | VEvent e -> "event(" ^ vevent_to_string e ^ ")"
-  | VEnum (s, ty) -> "enum " ^ ty_to_string ty ^ "(" ^ s ^ ")"
-  | VGlobal _ -> failwith "VGlobal is not supported"
+  | VSymbol (s, _) -> id_to_string s
 
 and vevent_to_string (e: vevent) : string =
   sprintf "%s(%s)" (cid_to_string e.evid) (String.concat ", " (List.map value_to_string e.evdata))
@@ -93,7 +104,7 @@ let rec e_to_string (e: e) : string =
       | None -> List.mapi (fun i _ -> "_" ^ string_of_int i) es 
     in
     let es_strs = List.map exp_to_string es in
-    let field_strs = List.map2 (fun l e -> l ^ ": " ^ e ^";") label_strs es_strs in
+    let field_strs = List.map2 (fun l e -> "." ^l ^ " = " ^ e ^";") label_strs es_strs in
     let fields_str = String.concat " " field_strs in    
     "{" ^ fields_str ^ "}"
   | ECall {f; args; call_kind=CEvent} -> 
@@ -142,7 +153,8 @@ and op_to_string (op: op) (args: exp list) : string =
     let int_ty_str = raw_ty_to_string (TInt size) in
     "(" ^ int_ty_str ^ ")" ^ a
   | Conc, args -> String.concat "++" args
-  | Project id, [a] -> a ^ "." ^ id_to_string id
+  | Project id, [a] when is_global (List.hd args).ety -> a ^ "->" ^ id_to_string id
+  | Project id, [a]                                   -> a ^ "." ^ id_to_string id
   | Get i, [a] -> a ^ "._" ^ string_of_int i
   | _, _ -> failwith "Invalid number of arguments for operator"
 
@@ -167,7 +179,7 @@ let rec s_to_string (s: s) : string =
     indent 2 (statement_to_string s2) ^ "\n};"
   | SMatch (e, branches) -> 
     "match (" ^ exp_to_string e ^ ") {\n" 
-    ^ (String.concat "\n" (List.map branch_to_string branches)) 
+    ^ indent 2 (String.concat "\n" (List.map branch_to_string branches)) 
     ^ "\n}"
   | SSeq (s1, s2) -> statement_to_string s1 ^"\n" ^ statement_to_string s2
   | SRet e_opt -> 
@@ -196,7 +208,7 @@ and branch_to_string (b: branch) : string =
 and statement_to_string statement = s_to_string statement.s
 
 
-let d_to_string (d: d) : string =
+let rec d_to_string (d: d) : string =
   match d with
   | DVar (id, ty, exp_opt) -> 
     let id_str = id_to_string id in
@@ -234,21 +246,17 @@ let d_to_string (d: d) : string =
     else
       kind_str ^ " "  ^ ret_ty_str ^ " " ^ id_str ^ "(" ^ params_str ^ ")" ^ stmt_str
   | DTy (cid, ty_opt) -> 
-    let cid_str = cid_to_string cid in
-    let ty_str = match ty_opt with 
-                 | Some ty -> ": " ^ ty_to_string ty 
-                 | None -> " extern" in
-    if ty_opt = None then 
-      "extern " ^ cid_str ^ ";"
-    else
-      cid_str ^ ty_str ^ ";"
+    sprintf "type %s = %s;"
+      (cid_to_string cid)
+      (match ty_opt with 
+                 | Some ty -> ty_to_string ty 
+                 | None -> " extern")
   | DEvent event_def -> 
     let id_str = id_to_string event_def.evconstrid in
     let params_str = params_to_string event_def.evparams in
     "event " ^ id_str ^ "(" ^ params_str ^ ");"
 
+and decl_to_string decl = d_to_string decl.d
 
-let decl_to_string decl = d_to_string decl.d
 
-
-let decls_to_string decls = String.concat "\n" (List.map decl_to_string decls)
+and decls_to_string decls = String.concat "\n" (List.map decl_to_string decls)

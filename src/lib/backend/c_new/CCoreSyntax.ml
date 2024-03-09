@@ -1,26 +1,6 @@
-(* simpler functional IR for lucid, with extensions
+(* simpler c-like IR for lucid, with extensions
    for compatability with the current CoreSyntax IR
    (Extensions should be eliminated before any further processing) *)
-(* TODO: 
-    1. figure out how we want to represent string types
-      remember: it doesn't really matter, because the 
-      string types don't need to get translated back to 
-      coreSyntax.
-    2. figure out if the conversion from Array / Table to 
-      list is represented by a "Type Function" / "Type Abstraction"
-      or just replaced in a transformation pass. 
-        remember: if they are just replaced, you may be able to do 
-        inference to recover them. Or, perhaps there's a tag. 
-    3. add a simple for loop: 
-        for $id < $value while $id {
-          // the index and guard variables start at 0 and true
-          // they can be read and set in the statement
-          // the guard variable is optional
-          // after each iteration, it gets checked
-          // we can put various restrictions on the loop later.
-          $statement
-        }
-*)
 
 type id = [%import: (Id.t[@opaque])]
 and cid = [%import: (Cid.t[@opqaue])]
@@ -35,7 +15,7 @@ and size = int
    exactly how they need to work *)
 and arridx = 
     | IConst of int
-    | IVar of string
+    | IVar of id
 
 and func_kind = | FNormal | FHandler | FParser | FAction | FMemop | FExtern
 and raw_ty = 
@@ -47,10 +27,13 @@ and raw_ty =
   | TFun of func_ty
   | TBits of {ternary: bool; len : size;}
   | TEvent
-  | TEnum of (string * int) list 
+  | TEnum of (id * int) list 
   | TBuiltin of cid * (ty list) (* types built into the lucid language that must be eliminated for c*)
   | TName of cid (* tydef, basically *)
   | TAbstract of cid * ty (* just a wrapper around some other type. For convenience. *)
+  | TGlobal of ty 
+    (* a global is declared at the toplevel and then used 
+     as a pointer within functions. *)
 
 and func_ty = {
   arg_tys : ty list; 
@@ -70,14 +53,12 @@ and v =
   (* | VClosure of {env : (id * value) list; params: params; fexp : exp;} *)
   | VBits of {ternary: bool; bits : int list;}
   | VEvent of vevent
-  | VEnum of string * ty (* symbol in enum * enum ty *)
-  (* we should not need VGlobals. Globals should never 
-     get to the point of being evaluated. *)
-  | VGlobal of {
-      global_id : id; (* name of the global, may be interpreted as a pointer variable *)
-      global_pos : int; (* position of the global in the pipeline. Every global should have a unique position *)
-      global_ty  : ty; (* type of the global *)
-  }
+  | VSymbol of id * ty 
+    (* an id that is a  primitive value. 
+       used to represent enum values, 
+       globals in the interpreter pipeline, 
+       constants, partially-interpreted values with 
+       unbound variables, etc *)
 and vevent = {evid : cid; evnum : value option; evdata: value list; meta : (string * value) list;}
 and value = {v:v; vty:ty; vspan : sp;}
 
@@ -157,18 +138,21 @@ and decls = decl list
   show]
 
 
+  exception FormError of string
 
-(* constructors *)
-(* type constructors *)
+(* constructors and destructors *)
 
 let arridx_ct = ref (-1);;
 let fresh_arridx str = 
   arridx_ct := (!arridx_ct + 1);
-  IVar(str^"-"^(string_of_int (!arridx_ct)))
+  IVar (Id.fresh str)
 ;;
+let arridx i = IConst i
+let idxvar id = IVar id
 let sz n = n
-let ty raw_ty = {raw_ty=raw_ty; tspan=Span.default; }
 
+(**** types ****)
+let ty raw_ty = {raw_ty=raw_ty; tspan=Span.default; }
 let tunit () = ty TUnit
 let tbool = ty TBool
 let tint i = ty@@TInt(sz i)
@@ -179,19 +163,20 @@ let ttuple tys = ty (TRecord {labels=None; ts=tys})
 let tfun_kind func_kind arg_tys ret_ty = ty (TFun {arg_tys; ret_ty; func_kind})
 let tfun arg_tys ret_ty = tfun_kind FNormal arg_tys ret_ty 
 (* global type from CoreSyntax *)
-let tglobal cid global_tyargs = ty (TBuiltin(cid, global_tyargs))
-
-
 let tlist ele_ty len = ty (TList(ele_ty, len))
 let tname cid = ty (TName(cid))
 let tbuiltin cid tyargs = ty (TBuiltin(cid, tyargs))
 let tgroup_cid = Cid.create ["Group"]
 let tgroup = tname tgroup_cid
 let tabstract tname inner_ty = ty (TAbstract(Cid.create [tname], inner_ty))
-
+let tabstract_cid tcid inner_ty = ty (TAbstract(tcid, inner_ty))
+let tabstract_id id inner_ty = ty (TAbstract(Cid.create_ids [id], inner_ty))
 let textern = tname (Cid.create ["_extern_ty_"])
-let is_textern ty = match ty.raw_ty with TName cid -> Cid.equal cid (Cid.create ["_extern_ty_"]) | _ -> false
+let tenum_pairs (tagpairs : (Id.t * int) list) = ty (TEnum tagpairs)
+let tenum ids = tenum_pairs (List.mapi (fun i id -> (id, i)) ids)
+let tglobal inner_ty = ty (TGlobal inner_ty)
 
+let is_textern ty = match ty.raw_ty with TName cid -> Cid.equal cid (Cid.create ["_extern_ty_"]) | _ -> false
 let is_tunit ty = match ty.raw_ty with TUnit -> true | _ -> false
 let is_trecord ty = match ty.raw_ty with TRecord{labels=Some(_)} -> true | _ -> false
 let is_ttuple ty = match ty.raw_ty with TRecord{labels=None} -> true | _ -> false
@@ -204,6 +189,53 @@ let is_tevent ty = match ty.raw_ty with TEvent -> true | _ -> false
 let is_tabstract name ty = match ty.raw_ty with TAbstract(cid, _) -> Cid.equal cid (Cid.create [name]) | _ -> false
 let is_tstring ty = is_tabstract "string" ty
 let is_tchar ty = is_tabstract "char" ty
+
+let is_tbuiltin tycid ty = match ty.raw_ty with TBuiltin(cid, _) -> Cid.equal cid tycid | _ -> false
+
+
+let extract_func_ty ty = match ty.raw_ty with 
+  | TFun {arg_tys; ret_ty; func_kind} -> arg_tys, ret_ty, func_kind
+  | _ -> raise (FormError "[extract_func_ty] expected TFun")
+
+
+let extract_tint_size ty = match ty.raw_ty with 
+  | TInt size -> size
+  | _ -> raise (FormError "[extract_tint_size] expected TInt")
+
+let extract_trecord ty = match ty.raw_ty with 
+  | TRecord {labels=Some labels; ts} -> labels, ts
+  | _ -> raise (FormError "[extract_trecord] expected TRecord")
+;;
+let extract_ttuple ty = match ty.raw_ty with 
+  | TRecord {labels=None; ts} -> ts
+  | _ -> raise (FormError "[extract_ttuple] expected TRecord")
+;;
+let extract_tlist ty = match ty.raw_ty with 
+  | TList(ty, len) -> ty, len
+  | _ -> raise (FormError "[extract_tlist] expected TList")
+;;
+let extract_tenum ty = match ty.raw_ty with 
+  | TEnum tagpairs -> tagpairs 
+  | _ -> failwith "expected TEnum"
+;;
+
+let extract_tbuiltin ty = match ty.raw_ty with 
+  | TBuiltin(cid, tyargs) -> cid, tyargs
+  | _ -> raise (FormError "[extract_tbuiltin] expected TBuiltin")
+
+let extract_tabstract ty = match ty.raw_ty with 
+  | TAbstract(cid, inner_ty) -> cid, inner_ty
+  | _ -> raise (FormError "[extract_tabstract] expected TAbstract")
+
+let split_tabstract ty = match ty.raw_ty with 
+  | TAbstract(cid, inner_ty) -> tname cid, inner_ty
+  | _ -> raise (FormError "[split_tabstract] expected TAbstract")
+
+let rec extract_tname ty = match ty.raw_ty with
+  | TName cid -> cid
+  | TGlobal ty -> extract_tname ty
+  | _ -> raise (FormError "[extract_tname] expected TName")
+
 (* value constructors *)
 let infer_vty = function 
   | VUnit -> ty TUnit
@@ -214,10 +246,9 @@ let infer_vty = function
     if (List.length values) == 0 then failwith "cannot infer type of length 0 list" 
     else ty (TList((List.hd values).vty, IConst (List.length values)))
   | VBits {ternary; bits} -> ty (TBits {ternary; len=sz (List.length bits)})
-  | VGlobal {global_ty} -> global_ty
   (* | VClosure {params; fexp; _} -> tfun (List.map snd params) fexp.ety *)
   | VEvent _ -> ty (TEvent)
-  | VEnum (_, ty) -> ty 
+  | VSymbol (_, ty) -> ty 
 ;;  
 
 let value v = {v=v; vty=infer_vty v; vspan=Span.default}
@@ -228,14 +259,21 @@ let vint_ty value ty = match ty.raw_ty with
   | TInt  size -> vint value size
   | _ -> failwith "vint_ty: expected TInt"
 let vbool b = {v=VBool b; vty=ty TBool; vspan=Span.default}
-
 let vlist vs = {v=VList vs; vty=ty (TList((List.hd vs).vty, IConst (List.length vs))); vspan=Span.default}
 let vtup vs = {v=VRecord {labels=None; es=vs}; vty=ttuple (List.map (fun v -> v.vty) vs); vspan=Span.default}
 let vpat ints = {v=VBits {ternary=true; bits=ints}; vty=ty (TBits {ternary=true; len=sz (List.length ints)}); vspan=Span.default}
 let vbits ints = {v=VBits {ternary=false; bits=ints}; vty=ty (TBits {ternary=false; len=sz (List.length ints)}); vspan=Span.default}
 let vrecord labels values = {v=VRecord {labels=Some labels; es=values}; vty=ty (TRecord {labels=Some labels; ts=List.map (fun v -> v.vty) values}); vspan=Span.default}
 let vtuple vs = {v=VRecord {labels=None; es=vs}; vty=ty (TRecord {labels=None; ts=List.map (fun v -> v.vty) vs}); vspan=Span.default}
-let vglobal global_id global_pos global_ty = {v=VGlobal {global_id; global_pos; global_ty}; vty=global_ty; vspan=Span.default}
+let vevent evid evnum evdata meta = {v=VEvent {evid; evnum; evdata; meta}; vty=ty TEvent; vspan=Span.default}
+let vevent_simple evid evdata = vevent evid None evdata []
+let venum tag ty = {v=VSymbol(tag, ty); vty=ty; vspan=Span.default}
+let vsymbol str ty = venum str ty
+
+(* BUILTIN *)
+let zero_list ty = vsymbol (Id.create "{0}") ty;;
+
+
 let string_to_value (s:string) =
   let chars = List.of_seq (String.to_seq s) in
   let vchars = List.map (fun c -> vint (Char.code c) 8) chars in
@@ -259,12 +297,78 @@ let charints_to_string (v:value) =
   | _ -> failwith "strings are encoded as int tuples"
 ;;
 
+let rec default_value ty = match ty.raw_ty with 
+  | TUnit -> vunit ()
+  | TInt size -> vint 0 size
+  | TBool -> vbool false
+  | TRecord{labels=Some(labels); ts} -> 
+    vrecord labels (List.map default_value ts)
+  | TRecord{labels=None; ts} -> 
+    vtuple (List.map default_value ts)
+  | TList(t, IConst n) -> 
+    vlist (List.init n (fun _ -> default_value t))
+  | TList(_, _) -> failwith "no default value non-constant list length"
+  | TFun _ -> failwith "no default value for function type"
+  | TBits{len} -> vbits (List.init len (fun _ -> 0))
+  | TEvent -> failwith "no default value for event type"
+  | TEnum(cases) -> 
+    venum ((List.hd cases) |> fst) ty
+  | TBuiltin _ -> failwith "no default value for builtin type"
+  | TName _ -> failwith "no default value for named type"
+  | TAbstract(_, ty) -> default_value ty
+  | TGlobal(ty) -> default_value ty
+;;
 
+
+let extract_vevent value = match value.v with 
+  | VEvent ev -> ev
+  | _ -> failwith "expected VEvent"
+;;
+let extract_vint value = match value.v with 
+  | VInt {value; _} -> value
+  | _ -> failwith "expected VInt"
+;;
+let extract_vsymbol v = match v.v with 
+  | VSymbol(tag, _) -> tag
+  | _ -> failwith "expected VEnum"
+;;
+
+let extract_vrecord value = match value.v with 
+  | VRecord {labels=Some labels; es} -> labels, es
+  | _ -> failwith "expected VRecord"
+;;
+let extract_vtuple value = match value.v with 
+  | VRecord {labels=None; es} -> es
+  | _ -> failwith "expected VRecord"
+;;
 (* expression constructors *)
 let exp e ety espan = {e; ety; espan}
 let efunref cid fty = {e=EVar (cid); ety=fty; espan=Span.default; }
 let erecord labels es = {e=ERecord {labels=Some labels; es}; ety=trecord labels (List.map (fun (e:exp) -> e.ety) es); espan=Span.default; }
 let etuple es = {e=ERecord {labels=None; es}; ety=ttuple (List.map (fun (e:exp) -> e.ety) es); espan=Span.default; }
+
+let rec base_type ty = 
+  match ty.raw_ty with 
+  | TGlobal(ty) -> base_type ty
+  | TAbstract(_, ty) -> base_type ty
+  | _ -> ty
+;;
+
+(* derive the alias type used to print c *)
+let rec alias_type ty = 
+  match ty.raw_ty with 
+  | TGlobal(ty) -> tglobal (alias_type ty)
+  | TAbstract(cid, _) -> tname cid
+  | TName(_)-> ty
+  | _ -> ty
+;;
+
+let is_global ty = 
+  match ty.raw_ty with 
+  | TGlobal _ -> true 
+  | _ -> false
+;;
+
 let eop op es = 
   let eop_ty = match op with 
     | And | Or | Not
@@ -287,9 +391,10 @@ let eop op es =
 
     | Project(id) -> 
       let rec_arg = List.hd es in
-      let labels, ts = match rec_arg.ety.raw_ty with 
+      let labels, ts = match (base_type rec_arg.ety).raw_ty with 
         | TRecord {labels=Some(labels); ts} -> labels, ts
-        | _ -> failwith "project expects record arg"
+        | _ -> 
+          failwith "project expects record arg"
       in
       let labels_ts = List.combine labels ts in
       let _, ty = List.find (fun (label, _) -> Id.equal label id) labels_ts in
@@ -307,6 +412,12 @@ let eval value = {e=EVal value; ety=value.vty; espan=Span.default; }
 let evar id ty = {e=EVar(id); ety=ty; espan=Span.default; }
 let eunit () = eval (vunit ())
 
+let default_exp ty = eval@@default_value ty
+
+let eproj rec_exp field_id = 
+  eop (Project(field_id)) [rec_exp]
+;;
+
 let ecall_kind call_kind f es = 
   let ety = match f.ety.raw_ty with 
     | TFun {ret_ty; _} -> ret_ty
@@ -316,7 +427,14 @@ let ecall_kind call_kind f es =
   {e=ECall {f; args=es; call_kind}; ety; espan=Span.default; }
 ;;
 let ecall = ecall_kind CFun
+
+let ecall_op (f: exp) args = ecall f args
+
 let eevent = ecall_kind CEvent
+
+let elistget exp arridx = 
+  let cell_ty = extract_tlist exp.ety |> fst in
+  {e=EListGet(exp, arridx); ety=cell_ty; espan=Span.default}
 
 
 (* BUILTIN FUNCTIONS: generates *)
@@ -344,7 +462,6 @@ let erec_form exp = match exp.e with
   | _ -> false
 ;;
 
-exception FormError of string
 let flatten_tuple exp = match exp.e with
   | ERecord {labels=None; es} -> es
   | EVal {v=VRecord {labels=None; es}} -> 
@@ -361,25 +478,8 @@ let extract_evar exp = match exp.e with
   | _ -> raise (FormError "[extract_evar] expected EVar")
 ;;
 
-let extract_func_ty ty = match ty.raw_ty with 
-  | TFun {arg_tys; ret_ty; func_kind} -> arg_tys, ret_ty, func_kind
-  | _ -> raise (FormError "[extract_func_ty] expected TFun")
 
-let extract_tint_size ty = match ty.raw_ty with 
-  | TInt size -> size
-  | _ -> raise (FormError "[extract_tint_size] expected TInt")
 
-let extract_trecord ty = match ty.raw_ty with 
-  | TRecord {labels=Some labels; ts} -> labels, ts
-  | _ -> raise (FormError "[extract_trecord] expected TRecord")
-;;
-let extract_ttuple ty = match ty.raw_ty with 
-  | TRecord {labels=None; ts} -> ts
-  | _ -> raise (FormError "[extract_ttuple] expected TRecord")
-
-let extract_tlist ty = match ty.raw_ty with 
-  | TList(ty, len) -> ty, len
-  | _ -> raise (FormError "[extract_tlist] expected TList")
 (* let egen loc ev = ecall (efunref (Cid.create ["generate"]) (tfun [tevent] (tunit ()))) [loc; ev] *)
 
 
@@ -392,6 +492,11 @@ let extract_tlist ty = match ty.raw_ty with
 (* let eret eret = exp (EReturn eret) (tunit ()) Span.default *)
 let ewrap espan exp = {exp with espan}
 
+let patval value = PVal(value)
+
+let case enum_ty tag_id statement : branch = 
+  ([patval (venum tag_id enum_ty)]), statement
+
 (* statements *)
 let s s sspan = {s; sspan;}
 let smultiassign ids tys new_vars rhs_exp = s (SAssign {ids; tys; new_vars; exp=rhs_exp}) Span.default
@@ -399,26 +504,36 @@ let slocal id ty exp = smultiassign [id] [ty] true exp
 let sassign id exp = smultiassign [id] [exp.ety] false exp
 let sif cond s_then s_else = s (SIf(cond, s_then, s_else)) Span.default
 let smatch match_exp branches = s (SMatch(match_exp, branches)) Span.default
-let sseq s1 s2 = 
-  let span = try Span.extend s1.sspan s2.sspan with _ -> Span.default in
-  s (SSeq(s1, s2)) span
+
 let snoop = s SNoop Span.default
 let sunit exp = s (SUnit exp) Span.default
 let sret_none = s (SRet None) Span.default
 let sret eret = s (SRet (Some eret)) Span.default
 let swrap sspan s = {s with sspan}
 
+let sfor idx bound stmt = 
+  s (SFor{idx; bound; stmt}) Span.default
+;;
+
+let sseq s1 s2 = 
+  let span = try Span.extend s1.sspan s2.sspan with _ -> Span.default in
+  s (SSeq(s1, s2)) span
+;;
+let stmts stmts = 
+  match stmts with 
+  | [] -> snoop
+  | _ ->
+    List.fold_left (fun acc s -> sseq acc s) (List.hd stmts) (List.tl stmts)
+;;
+
+
+
 (* declarations *)
 
 (* declarations *)
 let decl d dspan = {d; dspan;}
-(* different kinds of first-order functions *)
 let dfun_kind fun_kind id rty params body = 
   decl (DFun(fun_kind, id, rty, params, Some body)) Span.default
-(* let dfun_kind func_kind id (params:params) body = 
-  let fun_ty = tfun_kind (List.map snd params) body.ety func_kind in  
-  decl (DFun(id, params, Some body)) Span.default *)
-  (* decl (DVar(id, fun_ty, Some body)) Span.default *)
 let dfun = dfun_kind FNormal
 let dhandler = dfun_kind FHandler
 let dparser = dfun_kind FParser
@@ -427,7 +542,6 @@ let dmemop = dfun_kind FMemop
 (* global variables *)
 let dglobal id ty exp = decl (DVar(id, ty, Some(exp))) Span.default
 let dextern id ty = decl (DVar(id, ty, None)) Span.default
-
 (* type declarations *)
 let dty tycid ty = decl (DTy(tycid, Some ty)) Span.default
 let dty_ext tycid = decl (DTy(tycid, None)) Span.default
@@ -435,6 +549,13 @@ let dty_ext tycid = decl (DTy(tycid, None)) Span.default
 (* event declarations *)
 let devent id evconstrnum params is_parsed = decl (DEvent {evconstrid=id; evconstrnum; evparams=params; is_parsed}) Span.default
 
+let extract_daction_opt decl = match decl.d with 
+  | DFun(FAction, id, ty, params, Some body) -> Some (id, ty, params, body)
+  | _ -> None
+;;
+let extract_daction_id_opt decl = match decl.d with 
+  | DFun(FAction, id, _, _, _) -> Some id
+  | _ -> None
 
 (* helpers *)
 let untuple exp = match exp.e with
@@ -451,3 +572,63 @@ let kind_of_tfun raw_ty = match raw_ty with
   | _ -> failwith "kind_of_tfun: expected TFun"
 ;;
 
+(* partial evaluation of constant expressions *)
+
+
+exception EvalFailure of string
+let eval_err msg = raise (EvalFailure msg)
+
+let eval_vint value = match value.v with 
+  | VInt {value; _} -> value
+  | _ -> eval_err "expected VInt"
+;;
+
+let rec eval_exp exp = 
+  match exp.e with 
+  | EVal(value) -> value
+  | ECall {f; args; _} -> 
+    (* calls evaluate to event values *)
+    let argvals = List.map eval_exp args in
+    let f_cid = extract_evar f |> fst in
+    vevent_simple f_cid argvals  
+  | EVar (cid) -> vsymbol (Cid.to_id cid) exp.ety
+  | ERecord {labels=None; es} -> 
+    let es = List.map eval_exp es in
+    vtuple es
+  | ERecord {labels=Some labels; es} ->
+    let es = List.map eval_exp es in
+    vrecord labels es
+  | _ ->  eval_err "cannot evalute expression type"
+;;
+
+
+
+(* function call: f <op> args --> build expression that calls f on args *)
+let ( /** ) f args = ecall_op f args
+
+(* record projection: rec <op> str --> build expression that gets field str from record rec *)
+let ( /-> ) rec_exp field_str = 
+  eop (Project(Id.create field_str)) [rec_exp]
+;;
+
+let (/@) my_arr_exp idx_id = 
+  elistget my_arr_exp (idxvar idx_id)
+;;
+(* let ( at ) arr_exp idx_id = 
+  elistget arr_exp idx_id
+;; *)
+(* array access
+   
+  my_arr_exp[idx_exp]
+  EListGet(my_arr_exp, idx_exp)
+
+*)
+
+
+(* assignment *)
+let ( /:= ) var_id rhs_exp = 
+  sassign (Cid.id var_id) rhs_exp
+;;
+let ( /::=) var_id rhs_exp = 
+  slocal var_id rhs_exp.ety rhs_exp
+;;

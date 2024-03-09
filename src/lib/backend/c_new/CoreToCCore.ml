@@ -35,8 +35,8 @@ let rec translate_raw_ty (raw_ty : C.raw_ty) : F.raw_ty =
   | C.TInt(_) -> err "TInt size should be a singleton"
   | C.TEvent -> F.TEvent
   | C.TName(cid, []) -> (F.tname cid).raw_ty
-  | C.TName(cid, sizes) -> (F.tglobal cid (List.map size_to_ty sizes)).raw_ty
-  | C.TBuiltin(cid, raw_tys) -> (F.tglobal cid (List.map (fun raw_ty -> F.ty (translate_raw_ty raw_ty)) raw_tys )).raw_ty
+  | C.TName(cid, sizes) -> (F.tbuiltin cid (List.map size_to_ty sizes)).raw_ty
+  | C.TBuiltin(cid, raw_tys) -> (F.tbuiltin cid (List.map (fun raw_ty -> F.ty (translate_raw_ty raw_ty)) raw_tys )).raw_ty
   | C.TFun {arg_tys; ret_ty} -> 
     let fty : F.func_ty = {
       F.arg_tys = List.map translate_ty arg_tys; 
@@ -128,7 +128,7 @@ let rec translate_v (v : C.v) (vty:C.ty) : F.v =
   | _, C.VBool(b) -> (F.vbool b).v
   | _, C.VInt({value; size}) -> (F.vint (Z.to_int value) (Z.to_int size)).v
   | _, C.VEvent event_val -> F.VEvent(translate_event_val event_val)
-  | vty, C.VGlobal(id, addr) -> (F.vglobal id addr (translate_ty vty)).v
+  | _, C.VGlobal(_) -> err "VGlobals should not appear outside of the interpreter's execution"
   | _, C.VGroup(locs) -> (F.vtup (List.map (fun i -> F.vint 32 i ) locs)).v
   | _, C.VPat(tbits) -> (F.vpat tbits).v
   | _, C.VBits(bits) -> (F.vbits (bits_to_ints bits)).v

@@ -18,6 +18,14 @@ let compile ds =
   print_endline ("---- intial CCore ----");
   print_endline s;
   print_endline ("----------------------");
+  (* implement tables *)
+  let fds = CCoreTables.process_decls fds in
+
+  let s = CCorePPrint.decls_to_string fds in
+  print_endline ("---- after table implementation ----");
+  print_endline s;
+  print_endline ("----------------------");
+
   (* capture variables in closures *)
   (* let fds = ClosureConversion.capture_vars fds in *)
   (* add closure types *)

@@ -49,7 +49,7 @@ and show_raw_ty = function
     sprintf "%s<%d>" ternary len
   | TEvent -> "event"
   | TEnum(tags) -> 
-    let tag_str = List.map (fun (tag, i) -> sprintf "%s = %d" (tag) i) tags in
+    let tag_str = List.map (fun (tag, i) -> sprintf "%s = %d" (show_id tag) i) tags in
     sprintf "{%s}" (String.concat " | " tag_str)
   | TList(ty, len) -> 
     sprintf "%s[%s]" (show_ty ty) (show_arridx len)
@@ -82,11 +82,6 @@ and show_v = function
   | VList(values) ->     
     let values = List.map show_value values in
     sprintf "[%s]" (String.concat ", " values)
-  | VGlobal{global_id; global_pos; global_ty} -> 
-    let id = show_id global_id in
-    let int_addr = string_of_int global_pos in
-    let ty = show_ty global_ty in
-    sprintf "ref %s[@%s]: %s" id int_addr ty
   | VBits {bits} -> 
     let rec bits_to_str bits = 
       match bits with 
@@ -101,7 +96,7 @@ and show_v = function
     let evid = show_cid evid in
     let evdata = List.map show_value evdata |> String.concat ", " in
     sprintf "%s(%s)" evid evdata
-  | VEnum(tag, _) -> tag
+  | VSymbol(tag, _) -> show_id tag
 
 let rec show_exp ?(tystr=def_tystr) exp  = 
   if (tystr) then sprintf "(%s: %s)" (show_e exp.e) (show_ty exp.ety)
@@ -235,7 +230,6 @@ and show_d = function
       | None -> sprintf "extern %s: %s;" (show_id id) (show_ty ty)
       | Some(exps) -> 
         sprintf "%s: %s := {%s};" (show_id id) (show_ty ty) (List.map show_exp exps |> String.concat ", ")
-    
     )
 
 let show_decls decls  = List.map show_decl decls |> String.concat "\n"

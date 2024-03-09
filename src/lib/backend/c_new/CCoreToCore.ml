@@ -84,6 +84,7 @@ let rec translate_raw_ty (raw_ty : F.raw_ty) : C.raw_ty =
     let raw_tys = List.map translate_ty ts |> List.map (fun (ty : C.ty) -> ty.raw_ty) in
     let label_rawty_pairs = List.combine labels raw_tys in
     C.TRecord(label_rawty_pairs)
+  | F.TGlobal _ -> err "global types cannot be translated back to core IR. Note that CCore Globals are not CoreIR Globals, which are `builtins` in CCore."
   | F.TEnum(tags) ->
      C.TInt(
       if (List.length tags <= 256) 
@@ -149,8 +150,6 @@ let rec translate_value (value : F.value) : C.value =
     C.value_sp (C.VInt(Integer.create ival size)) value.vspan
   | F.VEvent(event_val) -> 
     C.value_sp (C.VEvent(translate_event_val event_val)) value.vspan
-  | F.VGlobal{global_id; global_pos} -> 
-    C.value_sp (C.VGlobal(global_id, global_pos)) value.vspan
   | F.VBits {ternary=true; bits} -> 
     C.value_sp (C.VPat(bits)) value.vspan
   | F.VBits {ternary=false; bits} ->
@@ -162,7 +161,7 @@ let rec translate_value (value : F.value) : C.value =
     C.value_sp (C.VRecord(List.map (fun (label, value) -> (label, translate_value value |> uv)) label_value_pairs)) value.vspan
   | F.VUnit -> err "unit values cannot be translated back to CoreSyntax"
   (* | F.VClosure _ -> err "closure values cannot be translated back to CoreSyntax" *)
-  | F.VEnum(str, enum_ty) -> 
+  | F.VSymbol(str, enum_ty) -> 
     (* translate to an int *)
     let tags = match enum_ty.raw_ty with 
       | F.TEnum(tags) -> tags
@@ -385,7 +384,7 @@ let translate_decl (decl : F.decl) : C.decl =
       )
       | _ -> 
         err@@"action has invalid number of arguments for conversion back to CoreIR "
-          ^"action: "^CCorePrinting.show_decl decl
+          ^"action: "^CCorePPrint.decl_to_string decl
     in
     let field_replacer = 
       (* replace tuple get ops with evars  *)
@@ -421,7 +420,7 @@ let translate_decl (decl : F.decl) : C.decl =
     C.decl_sp d decl.dspan
   | F.DFun(_, _, _, _, None) -> err "extern functions are not supported in CoreSyntax"
   | F.DFun(_, _, _, _, _) -> 
-    CCorePrinting.show_decl decl |> print_endline;
+    CCorePPrint.decl_to_string decl |> print_endline;
     err "Unknown function kind"
   (* types *)
   | F.DTy(cid, Some(ty)) -> 
@@ -429,6 +428,7 @@ let translate_decl (decl : F.decl) : C.decl =
     C.decl_sp (C.DUserTy(Cid.to_id cid, ty)) decl.dspan
   | F.DTy(_, None) -> 
     failwith "type declaration without type definition"
+  
   (* events *)
 ;;
 
