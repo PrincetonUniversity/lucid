@@ -48,6 +48,7 @@ and v =
   | VInt of {value : int; size : size;}
   | VBool of bool
   | VRecord of {labels : id list option; es : value list;}
+  | VGlobal of value
   | VList  of value list
   (* no closures for now *)
   (* | VClosure of {env : (id * value) list; params: params; fexp : exp;} *)
@@ -99,7 +100,8 @@ and s =
   (* assign may create a new variable, and can unpack tuples *)
   | SAssign of {ids : cid list; tys : ty list; new_vars : bool; exp : exp}
   | SListSet of {arr : exp; idx : arridx; exp : exp;} (* arr[idx] = exp; *)
-  | SFor of {idx : id; bound : arridx; stmt: statement}
+  (* for (idx < bound) while guard *)
+  | SFor of {idx : id; bound : arridx; stmt: statement; guard : id option}
   | SForEver of statement (* infinite loop *)
   | SIf of exp * statement * statement
   | SMatch of exp * branch list
@@ -176,9 +178,26 @@ let tenum_pairs (tagpairs : (Id.t * int) list) = ty (TEnum tagpairs)
 let tenum ids = tenum_pairs (List.mapi (fun i id -> (id, i)) ids)
 let tglobal inner_ty = ty (TGlobal inner_ty)
 
+
+let rec base_type ty = 
+  match ty.raw_ty with 
+  | TGlobal(ty) -> base_type ty
+  | TAbstract(_, ty) -> base_type ty
+  | _ -> ty
+;;
+
+(* derive the alias type used to print c *)
+let rec alias_type ty = 
+  match ty.raw_ty with 
+  | TGlobal(ty) -> tglobal (alias_type ty)
+  | TAbstract(cid, _) -> tname cid
+  | TName(_)-> ty
+  | _ -> ty
+;;
+
 let is_textern ty = match ty.raw_ty with TName cid -> Cid.equal cid (Cid.create ["_extern_ty_"]) | _ -> false
 let is_tunit ty = match ty.raw_ty with TUnit -> true | _ -> false
-let is_trecord ty = match ty.raw_ty with TRecord{labels=Some(_)} -> true | _ -> false
+let is_trecord ty = match (base_type ty).raw_ty with TRecord{labels=Some(_)} -> true | _ -> false
 let is_ttuple ty = match ty.raw_ty with TRecord{labels=None} -> true | _ -> false
 let is_tfun ty = match ty.raw_ty with TFun({func_kind=FNormal}) -> true | _ -> false
 let is_tbool ty = match ty.raw_ty with TBool -> true | _ -> false
@@ -193,6 +212,7 @@ let is_tchar ty = is_tabstract "char" ty
 let is_tbuiltin tycid ty = match ty.raw_ty with TBuiltin(cid, _) -> Cid.equal cid tycid | _ -> false
 
 
+
 let extract_func_ty ty = match ty.raw_ty with 
   | TFun {arg_tys; ret_ty; func_kind} -> arg_tys, ret_ty, func_kind
   | _ -> raise (FormError "[extract_func_ty] expected TFun")
@@ -202,7 +222,7 @@ let extract_tint_size ty = match ty.raw_ty with
   | TInt size -> size
   | _ -> raise (FormError "[extract_tint_size] expected TInt")
 
-let extract_trecord ty = match ty.raw_ty with 
+let extract_trecord ty = match (base_type ty).raw_ty with 
   | TRecord {labels=Some labels; ts} -> labels, ts
   | _ -> raise (FormError "[extract_trecord] expected TRecord")
 ;;
@@ -237,7 +257,7 @@ let rec extract_tname ty = match ty.raw_ty with
   | _ -> raise (FormError "[extract_tname] expected TName")
 
 (* value constructors *)
-let infer_vty = function 
+let rec infer_vty = function 
   | VUnit -> ty TUnit
   | VInt {size; _} -> ty (TInt size)
   | VBool _ -> ty TBool
@@ -248,7 +268,10 @@ let infer_vty = function
   | VBits {ternary; bits} -> ty (TBits {ternary; len=sz (List.length bits)})
   (* | VClosure {params; fexp; _} -> tfun (List.map snd params) fexp.ety *)
   | VEvent _ -> ty (TEvent)
-  | VSymbol (_, ty) -> ty 
+  | VSymbol (_, inner_ty) -> inner_ty 
+  | VGlobal value -> 
+    let inner_ty = infer_vty value.v in
+    ty@@TGlobal(inner_ty)
 ;;  
 
 let value v = {v=v; vty=infer_vty v; vspan=Span.default}
@@ -269,6 +292,12 @@ let vevent evid evnum evdata meta = {v=VEvent {evid; evnum; evdata; meta}; vty=t
 let vevent_simple evid evdata = vevent evid None evdata []
 let venum tag ty = {v=VSymbol(tag, ty); vty=ty; vspan=Span.default}
 let vsymbol str ty = venum str ty
+let vglobal inner_value = {v=VGlobal(inner_value); vty=tglobal (inner_value.vty); vspan=Span.default}
+
+(* cast a value to an abstract type *)
+let abstr_cast_value cid value = 
+  {value with vty=tabstract_cid cid value.vty}
+;;
 
 (* BUILTIN *)
 let zero_list ty = vsymbol (Id.create "{0}") ty;;
@@ -347,21 +376,8 @@ let efunref cid fty = {e=EVar (cid); ety=fty; espan=Span.default; }
 let erecord labels es = {e=ERecord {labels=Some labels; es}; ety=trecord labels (List.map (fun (e:exp) -> e.ety) es); espan=Span.default; }
 let etuple es = {e=ERecord {labels=None; es}; ety=ttuple (List.map (fun (e:exp) -> e.ety) es); espan=Span.default; }
 
-let rec base_type ty = 
-  match ty.raw_ty with 
-  | TGlobal(ty) -> base_type ty
-  | TAbstract(_, ty) -> base_type ty
-  | _ -> ty
-;;
 
-(* derive the alias type used to print c *)
-let rec alias_type ty = 
-  match ty.raw_ty with 
-  | TGlobal(ty) -> tglobal (alias_type ty)
-  | TAbstract(cid, _) -> tname cid
-  | TName(_)-> ty
-  | _ -> ty
-;;
+
 
 let is_global ty = 
   match ty.raw_ty with 
@@ -478,6 +494,11 @@ let extract_evar exp = match exp.e with
   | _ -> raise (FormError "[extract_evar] expected EVar")
 ;;
 
+let extract_evar_id exp = match exp.e with 
+| EVar(cid) -> Cid.to_id(cid), exp.ety
+| _ -> failwith "[evar_to_param] not an evar"
+;;
+
 
 
 (* let egen loc ev = ecall (efunref (Cid.create ["generate"]) (tfun [tevent] (tunit ()))) [loc; ev] *)
@@ -504,15 +525,19 @@ let slocal id ty exp = smultiassign [id] [ty] true exp
 let sassign id exp = smultiassign [id] [exp.ety] false exp
 let sif cond s_then s_else = s (SIf(cond, s_then, s_else)) Span.default
 let smatch match_exp branches = s (SMatch(match_exp, branches)) Span.default
-
 let snoop = s SNoop Span.default
 let sunit exp = s (SUnit exp) Span.default
 let sret_none = s (SRet None) Span.default
 let sret eret = s (SRet (Some eret)) Span.default
-let swrap sspan s = {s with sspan}
+let slistset arr idx exp= s (SListSet{arr; idx; exp}) Span.default
+
 
 let sfor idx bound stmt = 
-  s (SFor{idx; bound; stmt}) Span.default
+  s (SFor{idx; bound; stmt; guard=None}) Span.default
+;;
+
+let swhile idx bound guard stmt = 
+  s (SFor{idx; bound; stmt; guard=Some(guard)}) Span.default
 ;;
 
 let sseq s1 s2 = 
@@ -527,6 +552,7 @@ let stmts stmts =
 ;;
 
 
+let swrap sspan s = {s with sspan}
 
 (* declarations *)
 
@@ -545,6 +571,14 @@ let dextern id ty = decl (DVar(id, ty, None)) Span.default
 (* type declarations *)
 let dty tycid ty = decl (DTy(tycid, Some ty)) Span.default
 let dty_ext tycid = decl (DTy(tycid, None)) Span.default
+
+let decl_tabstract ty = 
+  let tname = alias_type ty in
+  let ty = base_type ty in
+  let name = extract_tname tname in
+  dty name ty
+;;
+
 
 (* event declarations *)
 let devent id evconstrnum params is_parsed = decl (DEvent {evconstrid=id; evconstrnum; evparams=params; is_parsed}) Span.default
@@ -614,21 +648,18 @@ let ( /-> ) rec_exp field_str =
 let (/@) my_arr_exp idx_id = 
   elistget my_arr_exp (idxvar idx_id)
 ;;
-(* let ( at ) arr_exp idx_id = 
-  elistget arr_exp idx_id
-;; *)
-(* array access
-   
-  my_arr_exp[idx_exp]
-  EListGet(my_arr_exp, idx_exp)
 
-*)
-
-
+let (/<-) (arr, idx) rhs = 
+  slistset arr idx rhs
+;;
 (* assignment *)
 let ( /:= ) var_id rhs_exp = 
   sassign (Cid.id var_id) rhs_exp
 ;;
 let ( /::=) var_id rhs_exp = 
   slocal var_id rhs_exp.ety rhs_exp
+;;
+
+let ( /: ) stmt1 stmt2 = 
+  sseq stmt1 stmt2
 ;;

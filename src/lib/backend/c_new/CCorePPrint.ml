@@ -87,6 +87,7 @@ let rec v_to_string (v: v) : string =
     (if ternary then "ternary " else "") ^ "bits[" ^ bits_str ^ "]"
   | VEvent e -> "event(" ^ vevent_to_string e ^ ")"
   | VSymbol (s, _) -> id_to_string s
+  | VGlobal(v) -> v_to_string v.v
 
 and vevent_to_string (e: vevent) : string =
   sprintf "%s(%s)" (cid_to_string e.evid) (String.concat ", " (List.map value_to_string e.evdata))
@@ -186,8 +187,11 @@ let rec s_to_string (s: s) : string =
     "return " ^ (match e_opt with 
                   | Some e -> exp_to_string e 
                   | None -> "") ^ ";"  
-  | SFor{idx; bound; stmt} -> 
+  | SFor{idx; bound; stmt; guard=None} -> 
     "for (" ^ (id_to_string idx) ^ " < " ^ arridx_to_string bound ^ ") {\n" ^ 
+    indent 2 (statement_to_string stmt) ^ "\n}"
+  | SFor{idx; bound; stmt; guard=Some(guard)} -> 
+    "for (" ^ (id_to_string idx) ^ " < " ^ arridx_to_string bound ^ ") while"^(id_to_string guard)^"{\n" ^ 
     indent 2 (statement_to_string stmt) ^ "\n}"
   | SForEver(stmt) -> 
     "forever {\n" ^ indent 2 (statement_to_string stmt) ^ "\n}"

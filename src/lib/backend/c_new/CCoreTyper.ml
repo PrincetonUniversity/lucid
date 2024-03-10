@@ -32,12 +32,21 @@ type env =
   (* tys  : ty CidMap.t; *)
   (* list_sizes : int option CidMap.t  *)
 }
+let empty_env = 
+  {
+    vars = IdMap.empty;
+    tys = CidMap.empty;
+    idx_constrs = [];
+    ret_ty = None;
+  }
+;;
 let add_var env id ty = 
   {env with vars = IdMap.add id ty env.vars}
 ;;
 let add_vars env ids tys = 
   List.fold_left2 add_var env ids tys
 ;;
+
 
 let add_ty env cid ty = 
   {env with tys = CidMap.add cid ty env.tys}
@@ -81,6 +90,8 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
   | TAbstract(_, {raw_ty = ty1}), ty2 
   | ty1, TAbstract(_, {raw_ty = ty2}) -> 
     unify_raw_ty env ty1 ty2
+  | TGlobal(ty1), TGlobal(ty2) -> 
+    unify_ty env ty1 ty2  
   | TName cid1, TName cid2 -> 
     if (not (Cid.equal cid1 cid2)) then 
       (ty_err "named types with different names");
@@ -138,10 +149,10 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
     let env' = unify_lists env unify_ty arg_tys1 arg_tys2 in
     let env'' = unify_ty env' ret_ty1 ret_ty2 in
     env''
-  | TGlobal(ty1), TGlobal(ty2) -> 
-    unify_ty env ty1 ty2
   | ( TGlobal _ | TUnit|TBool|TEvent|TInt _|TRecord _ | TName _
-    |TList (_, _)|TFun _|TBits _|TEnum _|TBuiltin (_, _)), _ -> ty_err "types do not match"
+    |TList (_, _)|TFun _|TBits _|TEnum _|TBuiltin (_, _)), _ -> 
+      print_endline@@"type mismatch:\n"^(CCorePPrint.raw_ty_to_string rawty1)^"\nand\n"^(CCorePPrint.raw_ty_to_string rawty2);
+      ty_err "type mismatch"
 
 and unify_ty env ty1 ty2 : env = 
   unify_raw_ty env ty1.raw_ty ty2.raw_ty
@@ -167,6 +178,9 @@ let rec infer_value value : value =
   | VBits{ternary; bits} -> ty@@TBits{ternary; len=sz@@List.length bits}
   | VEvent _ -> tevent
   | VSymbol(_, ty) -> ty
+  | VGlobal value -> 
+    let inner_ty = infer_vty value.v in
+    ty@@TGlobal(inner_ty)
   in
   {value with vty=ty}
 ;;
@@ -182,6 +196,7 @@ let rec infer_lists env f_infer xs =
 ;;
 
 let rec infer_exp env exp : env * exp = 
+  print_endline ("inferring exp: "^(CCorePPrint.exp_to_string exp));
   let infer_exps env = infer_lists env infer_exp in
   let env, exp = match exp.e with 
     | EVal value -> 
@@ -201,13 +216,27 @@ let rec infer_exp env exp : env * exp =
     | ERecord{labels=Some labels; es} -> 
       let env, es' = infer_exps env es in
       let e = ERecord{labels=Some(labels); es=es'} in
-      let ety = ttuple (List.map (fun exp -> exp.ety) es') in
+      let ety = trecord labels (List.map (fun exp -> exp.ety) es') in
       env, {e; ety; espan=exp.espan}
     | ECall{f; call_kind=CEvent} ->
       let env, inf_f = infer_exp env f in
       if (is_tevent inf_f.ety) then unify_ty env exp.ety tevent, exp
       else ty_err "event call on non-event"
-    | ECall{f; args; call_kind=CFun;} -> 
+      | ECall{f; call_kind=CFun;} when (Cid.equal (fst (extract_evar f)) (Cid.create ["printf"]) )-> 
+
+        (* TODO: hole for printf.
+            options: 
+            1. printf statement.
+            2. printf externs, one for each call,  
+               implemented as extern functions that just have 
+               c code as the untyped body.
+            3. a single untyped printf extern
+            4. a printf op. Like hash. 
+              - oh. This makes sense. Its very similar to hash, 
+                except it doesn't return anything.*)
+        env, exp
+  
+      | ECall{f; args; call_kind=CFun;} -> 
       let env, inf_f = infer_exp env f in
       let param_tys, ret_ty, _ = extract_func_ty inf_f.ety in
       let env, inf_args = infer_lists env infer_exp args in
@@ -227,16 +256,14 @@ let rec infer_exp env exp : env * exp =
       let env, inf_list_exp = infer_exp env list_exp in
       if not (is_tlist inf_list_exp.ety) then 
         raise (TypeMismatch(inf_list_exp.ety, tlist inf_list_exp.ety arridx));
-      let inf_ty, _ = extract_tlist inf_list_exp.ety in  
-      let arr_len = match inf_ty.raw_ty with 
-        | TList(_, l) -> l
-        | _ -> ty_err "list get operation on not a list"
-      in
-      let _ = arr_len in 
-      (* TODO: check arr_len against arr_idx *)
+      let cell_ty, arr_len = extract_tlist inf_list_exp.ety in  
+      let _ = arr_len in
+      let inf_ty = cell_ty in
+      (* TODO: check arr_len against arridx *)
       let e = EListGet(inf_list_exp, arridx) in
       env, {exp with e; ety=inf_ty}
   in
+  print_endline@@"finished inferring expression -- "^(CCorePPrint.exp_to_string exp)^" : "^(CCorePPrint.ty_to_string exp.ety);
   env, exp
 
 (* derive the type for an operation expression *)
@@ -321,8 +348,12 @@ and infer_eop env op (args : exp list) : env * op * exp list * ty = match op, ar
     env, op, [inf_exp_val; inf_exp_mask], tpat (extract_tint_size inf_exp_val.ety)
   | Project id, [exp] -> (
     let env, inf_exp = infer_exp env exp in
-    if not (is_trecord inf_exp.ety) then 
-      raise (TypeMismatch(inf_exp.ety, trecord [id] [inf_exp.ety]));
+    if not (is_trecord inf_exp.ety) then (
+      let ty1 = inf_exp.ety in
+      let ty2 = trecord [id] [inf_exp.ety] in
+      print_endline@@"type mismatch in project:\n"^(CCorePPrint.ty_to_string ty1)^"\nand\n"^(CCorePPrint.ty_to_string ty2);
+      ty_err "type mismatch"
+    );
     let inf_labels, inf_tys = extract_trecord inf_exp.ety in
     let labels_tys = List.combine inf_labels inf_tys in
     let inf_ty = List.assoc_opt id labels_tys in
@@ -410,8 +441,11 @@ let rec infer_statement env (stmt:statement) =
     let env, inf_econd = infer_exp env econd in
     if (not@@is_tbool inf_econd.ety) then 
       raise (TypeError("if condition must be a boolean"));
-    let env, inf_stmt1 = infer_statement env stmt1 in
-    let env, inf_stmt2 = infer_statement env stmt2 in
+    let env', inf_stmt1 = infer_statement env stmt1 in
+    (* process block, restore vars, keep constraints *)
+    let env = {env' with vars=env.vars} in
+    let env', inf_stmt2 = infer_statement env stmt2 in
+    let env = {env' with vars=env.vars} in
     env, {stmt with s=SIf(inf_econd, inf_stmt1, inf_stmt2)}
   | SMatch(exp, branches) -> 
     let env, inf_exp = infer_exp env exp in
@@ -419,11 +453,14 @@ let rec infer_statement env (stmt:statement) =
       match branches with 
       | [] -> env, []
       | (pats, statement)::branches -> 
-        let env, statement = infer_statement env statement in
+        let env', statement = infer_statement env statement in
+        let env = {env' with vars=env.vars} in
         let env, rest = infer_branches env branches in
         env, (pats, statement)::rest
     in
-    let env, inf_branches = infer_branches env branches in
+    let env', inf_branches = infer_branches env branches in
+    let env = {env' with vars=env.vars} in
+
     env, {stmt with s=SMatch(inf_exp, inf_branches)}
   | SRet(Some(exp)) -> (
     (* TODO: update environment *)
@@ -436,16 +473,24 @@ let rec infer_statement env (stmt:statement) =
       env, {stmt with s=SRet(Some(inf_exp))}
   )
   | SRet(None) -> env, stmt
-  | SFor{idx; bound; stmt} -> 
+  | SFor{idx; bound; stmt; guard} -> 
+    let env = match guard with 
+      | None -> env
+      | Some(guard_id) -> add_var env guard_id tbool
+    in
     (* TODO: add constraint idx < bound --  only while inside of new environment? *)
-    let env, inf_stmt = infer_statement env stmt in
-    env, {stmt with s=SFor{idx; bound; stmt=inf_stmt}}
+    let env', inf_stmt = infer_statement env stmt in
+    let env = {env' with vars=env.vars} in
+    env, {stmt with s=SFor{idx; bound; stmt=inf_stmt; guard}}
+  
   | SForEver stmt -> 
     let env, inf_stmt = infer_statement env stmt in
     env, {stmt with s=SForEver(inf_stmt)}
 ;;
 
 let rec infer_decl env decl : env * decl = 
+  print_endline ("inferring decl: ");
+  print_endline (CCorePPrint.decl_to_string decl);
   match decl.d with 
   | DVar(id, ty, Some(arg)) -> 
     let env, inf_arg = infer_exp env arg in
@@ -484,7 +529,7 @@ let rec infer_decl env decl : env * decl =
   | DFun(fun_kind, id, ret_ty, params, Some(statement)) -> 
     (* set up the environment *)
     let outer_env = env in 
-    let env = {env with ret_ty = None} in    
+    let env = {env with ret_ty=Some(ret_ty)} in    
     let env = add_vars env (List.map fst params) (List.map snd params) in
     (* check the statement *)
     let env, inf_stmt = infer_statement env statement in
@@ -514,4 +559,9 @@ and infer_decls env decls : env * decl list =
     let env, inf_decl = infer_decl env decl in
     let env, inf_decls = infer_decls env decls in
     env, inf_decl::inf_decls
+;;
+
+
+let check_decls decls = 
+  snd@@infer_decls empty_env decls
 ;;

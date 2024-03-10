@@ -171,7 +171,7 @@ let rec translate_value (value : F.value) : C.value =
     let size = if (List.length tags <= 256) then 8 else 16 in
     C.value_sp (C.VInt(Integer.create ival size)) value.vspan
   | F.VList _ -> err "cannot translate list value back to coreIr"
-
+  | F.VGlobal _ -> err "cannot translate global values back to coreIr"
 
 
 and translate_event_val (ev : F.vevent) : C.event_val = 

@@ -68,6 +68,10 @@ let builtin_defs =
   @ Tables.defs
 ;;
 
+let gfun_cid (gf : InterpState.State.global_fun) : Cid.t = 
+  gf.cid
+;;
+
 (* Builtin local vars *)
 let this_id = Id.create "this"
 
