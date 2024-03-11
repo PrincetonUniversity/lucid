@@ -20,6 +20,7 @@ let compile ds =
   print_endline ("----------------------");
   (* implement tables *)
   let fds = CCoreTables.process_decls fds in
+  CheckFFuns.check fds;
 
   (* implement arrays *)
 

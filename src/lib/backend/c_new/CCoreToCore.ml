@@ -431,6 +431,8 @@ let translate_decl (decl : F.decl) : C.decl =
     C.decl_sp (C.DUserTy(Cid.to_id cid, ty)) decl.dspan
   | F.DTy(_, None) -> 
     failwith "type declaration without type definition"
+  | F.DFFun _ -> 
+    failwith "foriegn functions cannot translate back to Core"
   
   (* events *)
 ;;

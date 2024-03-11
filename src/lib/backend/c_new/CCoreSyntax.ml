@@ -123,12 +123,27 @@ and statement = {s:s; sspan : sp;}
 (* declarations *)
 
 and event_def = {evconstrid : id; evconstrnum : int option; evparams : params; is_parsed : bool}
-and ffun_sig = {fid : id; fparams: params; fret_ty : ty; fstr : string}
+and ffun = {
+  fid : id;         (* function name *)
+  fparams: params;  (* function params *)
+  fret_ty : ty;     (* function return type *)
+  fstr : string;    (* the function definition in whatever language *)
+  check_cmd : string option; 
+    (* an optional "checker command". 
+        If this is given, the type checker 
+        will generate a string containing: 
+          1. the function signature, derived from the id, params, and return type
+          2. the function definition
+        the checker will then put the signature and definition into a file in the 
+        target language (c) and run the "check_cmd" on that file. If the check 
+        command returns any error, type checking will fail. *)
+}
+
 and d = 
   | DVar of id * ty * exp option (* constants and globals, possibly externs *)
   | DList of id * ty * (exp list) option (* mutable list *)
   | DFun of func_kind * id * ty * params * (statement option) (* functions and externs *)
-  | DFFun of ffun_sig (* a foriegn function *)
+  | DFFun of ffun (* a foriegn function *)
   | DTy  of cid * ty option (* named types and external types *)
   | DEvent of event_def (* declare an event, which is a constructor for the datatype TEvent *)
 

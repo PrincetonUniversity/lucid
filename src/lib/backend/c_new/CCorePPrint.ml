@@ -27,6 +27,7 @@ let cid_to_string (cid : Cid.t) = String.concat "_" (List.map id_to_string (Cid.
 let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : string =
   match r with
   | TUnit -> "void"
+  | TInt 32 -> "int"
   | TInt size -> "int" ^ size_to_string size
   | TBool -> "bool"
   | TRecord(labels, ts) -> 
@@ -65,7 +66,7 @@ and func_ty_to_string (f: func_ty) : string =
   "(" ^ arg_tys_str ^ ") -> " ^ ret_ty_str
 
 let params_to_string params = 
-  let params_str = String.concat ", " (List.map (fun (id, ty) -> id_to_string id ^ ": " ^ ty_to_string ~use_abstract_name:true ty) params) in
+  let params_str = String.concat ", " (List.map (fun (id, ty) -> ty_to_string ~use_abstract_name:true ty ^" "^ id_to_string id ) params) in
   params_str
 ;;
 
@@ -167,20 +168,6 @@ and op_to_string (op: op) (args: exp list) : string =
   | Get i, [a] -> a ^ "._" ^ string_of_int i
   | _, _ -> failwith "Invalid number of arguments for operator"
 
-
-
-  (* 
-   
-and assign_op = 
-  | OLocal  of cid * ty (* create a new variable *)
-  | OAssign of cid      (* assign to variable *)
-  | OTupleLocal of cid list * ty list (* create new variables, unpack tuple to them *)
-  | OTupleAssign of cid list (* unpack tuple to variables *)
-  | OListSet of {arr : exp; idx : arridx} (* set index in array *)
-  | ORecordSet of {rec_exp : exp; field : id} (* set field in record *)
-  
-  
-  *)
 let assign_op_to_string (op: assign_op) = 
   match op with
   | OLocal (cid, ty) -> ty_to_string ty ^ " " ^ cid_to_string cid
