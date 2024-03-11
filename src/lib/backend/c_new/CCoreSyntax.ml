@@ -30,10 +30,7 @@ and raw_ty =
   | TEnum of (id * int) list 
   | TBuiltin of cid * (ty list) (* types built into the lucid language that must be eliminated for c*)
   | TName of cid (* tydef, basically *)
-  | TAbstract of cid * ty (* just a wrapper around some other type. For convenience. *)
-  | TGlobal of ty 
-    (* a global is declared at the toplevel and then used 
-     as a pointer within functions. *)
+  | TAbstract of cid * ty (* just a wrapper around some other type. For convenience *)
 
 and func_ty = {
   arg_tys : ty list; 
@@ -48,7 +45,6 @@ and v =
   | VInt of {value : int; size : size;}
   | VBool of bool
   | VRecord of {labels : id list option; es : value list;}
-  | VGlobal of value
   | VList  of value list
   (* no closures for now *)
   (* | VClosure of {env : (id * value) list; params: params; fexp : exp;} *)
@@ -176,12 +172,10 @@ let tabstract_id id inner_ty = ty (TAbstract(Cid.create_ids [id], inner_ty))
 let textern = tname (Cid.create ["_extern_ty_"])
 let tenum_pairs (tagpairs : (Id.t * int) list) = ty (TEnum tagpairs)
 let tenum ids = tenum_pairs (List.mapi (fun i id -> (id, i)) ids)
-let tglobal inner_ty = ty (TGlobal inner_ty)
 
 
 let rec base_type ty = 
   match ty.raw_ty with 
-  | TGlobal(ty) -> base_type ty
   | TAbstract(_, ty) -> base_type ty
   | _ -> ty
 ;;
@@ -189,7 +183,6 @@ let rec base_type ty =
 (* derive the alias type used to print c *)
 let rec alias_type ty = 
   match ty.raw_ty with 
-  | TGlobal(ty) -> tglobal (alias_type ty)
   | TAbstract(cid, _) -> tname cid
   | TName(_)-> ty
   | _ -> ty
@@ -253,7 +246,7 @@ let split_tabstract ty = match ty.raw_ty with
 
 let rec extract_tname ty = match ty.raw_ty with
   | TName cid -> cid
-  | TGlobal ty -> extract_tname ty
+  | TAbstract(cid, _) -> cid
   | _ -> raise (FormError "[extract_tname] expected TName")
 
 (* value constructors *)
@@ -269,9 +262,6 @@ let rec infer_vty = function
   (* | VClosure {params; fexp; _} -> tfun (List.map snd params) fexp.ety *)
   | VEvent _ -> ty (TEvent)
   | VSymbol (_, inner_ty) -> inner_ty 
-  | VGlobal value -> 
-    let inner_ty = infer_vty value.v in
-    ty@@TGlobal(inner_ty)
 ;;  
 
 let value v = {v=v; vty=infer_vty v; vspan=Span.default}
@@ -292,7 +282,6 @@ let vevent evid evnum evdata meta = {v=VEvent {evid; evnum; evdata; meta}; vty=t
 let vevent_simple evid evdata = vevent evid None evdata []
 let venum tag ty = {v=VSymbol(tag, ty); vty=ty; vspan=Span.default}
 let vsymbol str ty = venum str ty
-let vglobal inner_value = {v=VGlobal(inner_value); vty=tglobal (inner_value.vty); vspan=Span.default}
 
 (* cast a value to an abstract type *)
 let abstr_cast_value cid value = 
@@ -345,7 +334,6 @@ let rec default_value ty = match ty.raw_ty with
   | TBuiltin _ -> failwith "no default value for builtin type"
   | TName _ -> failwith "no default value for named type"
   | TAbstract(_, ty) -> default_value ty
-  | TGlobal(ty) -> default_value ty
 ;;
 
 
@@ -375,15 +363,6 @@ let exp e ety espan = {e; ety; espan}
 let efunref cid fty = {e=EVar (cid); ety=fty; espan=Span.default; }
 let erecord labels es = {e=ERecord {labels=Some labels; es}; ety=trecord labels (List.map (fun (e:exp) -> e.ety) es); espan=Span.default; }
 let etuple es = {e=ERecord {labels=None; es}; ety=ttuple (List.map (fun (e:exp) -> e.ety) es); espan=Span.default; }
-
-
-
-
-let is_global ty = 
-  match ty.raw_ty with 
-  | TGlobal _ -> true 
-  | _ -> false
-;;
 
 let eop op es = 
   let eop_ty = match op with 

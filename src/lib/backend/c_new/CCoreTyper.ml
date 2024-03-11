@@ -90,8 +90,6 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
   | TAbstract(_, {raw_ty = ty1}), ty2 
   | ty1, TAbstract(_, {raw_ty = ty2}) -> 
     unify_raw_ty env ty1 ty2
-  | TGlobal(ty1), TGlobal(ty2) -> 
-    unify_ty env ty1 ty2  
   | TName cid1, TName cid2 -> 
     if (not (Cid.equal cid1 cid2)) then 
       (ty_err "named types with different names");
@@ -149,7 +147,7 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
     let env' = unify_lists env unify_ty arg_tys1 arg_tys2 in
     let env'' = unify_ty env' ret_ty1 ret_ty2 in
     env''
-  | ( TGlobal _ | TUnit|TBool|TEvent|TInt _|TRecord _ | TName _
+  | (TUnit|TBool|TEvent|TInt _|TRecord _ | TName _
     |TList (_, _)|TFun _|TBits _|TEnum _|TBuiltin (_, _)), _ -> 
       print_endline@@"type mismatch:\n"^(CCorePPrint.raw_ty_to_string rawty1)^"\nand\n"^(CCorePPrint.raw_ty_to_string rawty2);
       ty_err "type mismatch"
@@ -178,9 +176,6 @@ let rec infer_value value : value =
   | VBits{ternary; bits} -> ty@@TBits{ternary; len=sz@@List.length bits}
   | VEvent _ -> tevent
   | VSymbol(_, ty) -> ty
-  | VGlobal value -> 
-    let inner_ty = infer_vty value.v in
-    ty@@TGlobal(inner_ty)
   in
   {value with vty=ty}
 ;;

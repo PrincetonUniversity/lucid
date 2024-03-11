@@ -83,18 +83,16 @@ let table_cell_type tbl_id key_ty acns_enum_ty const_action_arg_ty : ty =
 ;;
 
 let table_instance_type tbl_id acns_enum_ty const_action_arg_ty tbl_cell_ty tbl_len =   
-  (* a table is a global struct with a default and a list of entries *)
-  tglobal (
-    tabstract_id
-    (Id.append_string "_ty" tbl_id)
-    (
-      trecord
-        [id "default"; id "entries"]
-        [
-          trecord [id "action_tag"; id "action_arg"] [acns_enum_ty; const_action_arg_ty];
-          tlist tbl_cell_ty tbl_len
-        ]
-    )
+  (* a table is a struct variable with a default and a list of entries *)
+  tabstract_id
+  (Id.append_string "_ty" tbl_id)
+  (
+    trecord
+      [id "default"; id "entries"]
+      [
+        trecord [id "action_tag"; id "action_arg"] [acns_enum_ty; const_action_arg_ty];
+        tlist tbl_cell_ty tbl_len
+      ]
   )
 ;;
 
@@ -118,7 +116,7 @@ let table_create (tbl_ty : ty) (def_enum_id : id) (acn_enum_ty : ty) (def_arg : 
   ] 
   in
   let abstr_ty = abstr_cast_value (alias_type tbl_ty |> extract_tname) base_ty in
-  vglobal abstr_ty
+  abstr_ty
 ;;
 
 (* tbl_lookup(tbl_ty t, key_ty k, arg_ty arg) *)

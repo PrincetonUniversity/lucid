@@ -84,7 +84,6 @@ let rec translate_raw_ty (raw_ty : F.raw_ty) : C.raw_ty =
     let raw_tys = List.map translate_ty ts |> List.map (fun (ty : C.ty) -> ty.raw_ty) in
     let label_rawty_pairs = List.combine labels raw_tys in
     C.TRecord(label_rawty_pairs)
-  | F.TGlobal _ -> err "global types cannot be translated back to core IR. Note that CCore Globals are not CoreIR Globals, which are `builtins` in CCore."
   | F.TEnum(tags) ->
      C.TInt(
       if (List.length tags <= 256) 
@@ -171,7 +170,6 @@ let rec translate_value (value : F.value) : C.value =
     let size = if (List.length tags <= 256) then 8 else 16 in
     C.value_sp (C.VInt(Integer.create ival size)) value.vspan
   | F.VList _ -> err "cannot translate list value back to coreIr"
-  | F.VGlobal _ -> err "cannot translate global values back to coreIr"
 
 
 and translate_event_val (ev : F.vevent) : C.event_val = 

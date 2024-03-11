@@ -21,27 +21,23 @@ let func_kind_to_string = function
 let id_to_string id = fst id
 let cid_to_string (cid : Cid.t) = String.concat "_" (List.map id_to_string (Cid.to_ids cid))
 
-let rec raw_ty_to_string (r: raw_ty) : string =
+(* use abstract names in parameter and function argument types. Possibly elsewhere. *)
+let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : string =
   match r with
   | TUnit -> "void"
   | TInt size -> "int" ^ size_to_string size
   | TBool -> "bool"
   | TRecord {labels; ts} -> 
     let label_strs = match labels with 
-      | Some ids -> List.map id_to_string ids
+      | Some ids -> List.map (id_to_string) ids
       | None -> List.mapi (fun i _ -> "_" ^ string_of_int i) ts 
     in
-    let ts_strs = List.map 
-      (fun ty ->       
-        let aty = alias_type ty in
-        ty_to_string aty) 
-      ts 
-    in
+    let ts_strs = List.map (ty_to_string ~use_abstract_name:true) ts in
     let field_strs = List.map2 (fun l e -> l ^ ": " ^ e ^";") label_strs ts_strs in
     let fields_str = String.concat " " field_strs in    
     "{" ^ fields_str ^ "}"
   | TList (ty, arridx) -> 
-    ty_to_string (alias_type ty) ^ "[" ^ arridx_to_string arridx ^ "]"
+    ty_to_string ~use_abstract_name:true ty ^ "[" ^ arridx_to_string arridx ^ "]"
   | TFun func_ty -> "function(" ^ func_ty_to_string func_ty ^ ")"
   | TBits {ternary; len} -> (if ternary then "ternary_" else "") ^ "bit[" ^ size_to_string len ^ "]"
   | TEvent -> "event"
@@ -52,16 +48,19 @@ let rec raw_ty_to_string (r: raw_ty) : string =
     let ty_list_str = String.concat ", " (List.map ty_to_string ty_list) in
     cid_to_string cid ^ "<<" ^ ty_list_str ^ ">>"
   | TName cid -> cid_to_string cid
-  | TAbstract (cid, ty) -> cid_to_string cid ^ " " ^ ty_to_string ty
-  | TGlobal (ty) -> "global " ^ ty_to_string ty
+  | TAbstract (cid, ty) -> 
+    if (use_abstract_name) then 
+      cid_to_string cid
+    else ty_to_string ty
+and ty_to_string ?(use_abstract_name=false) ty = raw_ty_to_string ~use_abstract_name ty.raw_ty
+
 and func_ty_to_string (f: func_ty) : string =
-  let arg_tys_str = String.concat ", " (List.map ty_to_string f.arg_tys) in
-  let ret_ty_str = ty_to_string f.ret_ty in
+  let arg_tys_str = String.concat ", " (List.map (ty_to_string ~use_abstract_name:true) f.arg_tys) in
+  let ret_ty_str = ty_to_string ~use_abstract_name:true f.ret_ty in
   "(" ^ arg_tys_str ^ ") -> " ^ ret_ty_str
-and ty_to_string ty = raw_ty_to_string ty.raw_ty
 
 let params_to_string params = 
-  let params_str = String.concat ", " (List.map (fun (id, ty) -> id_to_string id ^ ": " ^ ty_to_string ty) params) in
+  let params_str = String.concat ", " (List.map (fun (id, ty) -> id_to_string id ^ ": " ^ ty_to_string ~use_abstract_name:true ty) params) in
   params_str
 ;;
 
@@ -87,7 +86,6 @@ let rec v_to_string (v: v) : string =
     (if ternary then "ternary " else "") ^ "bits[" ^ bits_str ^ "]"
   | VEvent e -> "event(" ^ vevent_to_string e ^ ")"
   | VSymbol (s, _) -> id_to_string s
-  | VGlobal(v) -> v_to_string v.v
 
 and vevent_to_string (e: vevent) : string =
   sprintf "%s(%s)" (cid_to_string e.evid) (String.concat ", " (List.map value_to_string e.evdata))
@@ -154,7 +152,7 @@ and op_to_string (op: op) (args: exp list) : string =
     let int_ty_str = raw_ty_to_string (TInt size) in
     "(" ^ int_ty_str ^ ")" ^ a
   | Conc, args -> String.concat "++" args
-  | Project id, [a] when is_global (List.hd args).ety -> a ^ "->" ^ id_to_string id
+  (* | Project id, [a] when is_mutable (List.hd args).ety -> a ^ "->" ^ id_to_string id *)
   | Project id, [a]                                   -> a ^ "." ^ id_to_string id
   | Get i, [a] -> a ^ "._" ^ string_of_int i
   | _, _ -> failwith "Invalid number of arguments for operator"
