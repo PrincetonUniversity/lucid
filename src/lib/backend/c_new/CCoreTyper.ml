@@ -559,6 +559,10 @@ let rec infer_decl env decl : env * decl =
     let fun_ty = tfun_kind fun_kind (List.map snd params) ret_ty  in
     let env = add_var env id fun_ty in
     env, decl
+  | DFFun{fid; fparams; fret_ty; _} -> 
+    let fun_ty = tfun_kind FExtern (List.map snd fparams) fret_ty in
+    let env = add_var env fid fun_ty in
+    env, decl
 
 and infer_decls env decls : env * decl list =
   match decls with

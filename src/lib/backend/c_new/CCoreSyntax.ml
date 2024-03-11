@@ -121,14 +121,18 @@ and s =
 and statement = {s:s; sspan : sp;}
 
 (* declarations *)
+
 and event_def = {evconstrid : id; evconstrnum : int option; evparams : params; is_parsed : bool}
+and ffun_sig = {fid : id; fparams: params; fret_ty : ty; fstr : string}
 and d = 
   | DVar of id * ty * exp option (* constants and globals, possibly externs *)
   | DList of id * ty * (exp list) option (* mutable list *)
   | DFun of func_kind * id * ty * params * (statement option) (* functions and externs *)
+  | DFFun of ffun_sig (* a foriegn function *)
   | DTy  of cid * ty option (* named types and external types *)
   | DEvent of event_def (* declare an event, which is a constructor for the datatype TEvent *)
-  and decl = {d:d; dspan : sp;}
+
+and decl = {d:d; dspan : sp;}
 and decls = decl list
 [@@deriving
   visitors

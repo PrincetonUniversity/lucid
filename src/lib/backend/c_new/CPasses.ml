@@ -21,6 +21,21 @@ let compile ds =
   (* implement tables *)
   let fds = CCoreTables.process_decls fds in
 
+  (* implement arrays *)
+
+  (* eliminate complex primitives and add misc builtins
+      (match statements, hash, printf) *)
+
+  (* add parser builtins *)
+
+  (* add other misc builtins *)
+
+  (* add event loop / event generation / continuation scaffolding *)
+    (* (target specific) *)
+  (* check for compatability with c *)  
+
+  (* print as C *)
+
   let s = CCorePPrint.decls_to_string fds in
   print_endline ("---- after table implementation ----");
   print_endline s;

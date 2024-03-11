@@ -4,6 +4,8 @@ let sprintf = Printf.sprintf
 (* split on newlines, indent each newline by n spaces, combine back into string *)
 let indent n str = str |> String.split_on_char '\n' |> List.map (fun s -> String.make n ' ' ^ s) |> String.concat "\n"
 
+let comment str = "/* "^str^"*/"
+
 let size_to_string size = string_of_int size
 let arridx_to_string = function 
   | IConst(i) -> string_of_int i
@@ -283,6 +285,12 @@ let rec d_to_string (d: d) : string =
     let id_str = id_to_string event_def.evconstrid in
     let params_str = params_to_string event_def.evparams in
     "event " ^ id_str ^ "(" ^ params_str ^ ");"
+  | DFFun{fid; fparams; fret_ty; fstr} -> 
+    let comment_str = 
+      comment (sprintf "%s %s(%s);" (ty_to_string fret_ty) (id_to_string fid) (params_to_string fparams);)
+    in
+    (comment comment_str) 
+    ^ "\n" ^ fstr
 
 and decl_to_string decl = d_to_string decl.d
 
