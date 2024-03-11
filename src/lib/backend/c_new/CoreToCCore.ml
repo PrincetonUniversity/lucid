@@ -88,11 +88,8 @@ and translate_ty (ty : C.ty) : F.ty =
    tspan = ty.tspan;
    }
 ;;
-let translate_param (id, ty) : F.param =
-  {pid=id; pty=translate_ty ty;}
-;;
 let translate_params (params: C.params) : F.params = 
-  List.map translate_param params
+  List.map (fun ((id: Id.t), ty) -> id, translate_ty ty) params
 ;;
 
 let translate_op (op : C.op) : F.op = 
@@ -220,7 +217,7 @@ let translate_pat (pat:C.pat)  (pat_sz : int) : F.pat =
   | PBit(ints) -> F.PVal(F.vpat ints)
   | C.PNum(z)  -> F.PVal(F.vint (Z.to_int z) pat_sz)
   | PEvent(cid, params) -> 
-    let params = translate_params params in
+    let params = List.map (fun (id, ty) -> id, translate_ty ty) params in
     F.PEvent{event_id=cid; params;}
   | PWild ->
     F.PVal(F.vpat (List.init pat_sz (fun _ -> -1)))
@@ -364,10 +361,10 @@ let translate_decl (decl:C.decl) : F.decl =
       | C.EPacket -> true 
       | C.EBackground -> false
     in
-    F.devent evid evnum_opt (translate_params params) is_parsed
+    F.devent evid evnum_opt (List.map (fun (id, ty) -> id, translate_ty ty) params) is_parsed
   | C.DHandler(id, hdl_sort, (params, body)) -> 
   begin
-    let params = translate_params params in
+    let params = List.map (fun (id, ty) -> id, translate_ty ty) params in
     let hdl_body = translate_statement body in
     let decl = F.dhandler id (F.tunit ()) params hdl_body in
     match hdl_sort with
