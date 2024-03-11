@@ -125,7 +125,9 @@ let table_create (tbl_ty : ty) (def_enum_id : id) (acn_enum_ty : ty) (def_arg : 
    function builder. *)
 let lookup_id tbl_id = Id.append_string "_lookup" tbl_id ;;
 let table_lookup spec = 
-  let tbl_param = evar (cid "tbl") spec.tbl_ty in
+  (* note: the table is hard coded into the function, not a parameter. *)
+  let tbl = evar (Cid.id spec.tbl_id) spec.tbl_ty in
+  (* let tbl_param = evar (cid "tbl") spec.tbl_ty in *)
   let key_param = evar (cid "key") spec.key_ty in
   let arg_param = evar (cid "arg") spec.arg_ty in
   (* reconstruct the action type for the match branches *)
@@ -136,10 +138,10 @@ let table_lookup spec =
     let action_evar = efunref (Cid.id (untag action_tag)) action_ty in
     (case spec.actions_enum_ty)
     action_tag
-      ( id"rv" /:= (action_evar /** [tbl_param/->"default"/->"action_arg"; arg_param]))
+      ( id"rv" /:= (action_evar /** [tbl/->"default"/->"action_arg"; arg_param]))
   in
   let s_apply_default = smatch
-    (tbl_param/->"default"/->"action_tag")
+    (tbl/->"default"/->"action_tag")
     (List.map apply_default_branch spec.action_tags)
   in
   let idx = id "_idx" in
@@ -149,13 +151,13 @@ let table_lookup spec =
     let action_evar = efunref (Cid.id (untag action_tag)) action_ty in    
     (case spec.actions_enum_ty) 
     action_tag
-      ( id"rv" /:= (action_evar /** [((tbl_param/->"entries")/@idx)/->"action_arg"; arg_param]))
+      ( id"rv" /:= (action_evar /** [((tbl/->"entries")/@idx)/->"action_arg"; arg_param]))
   in
 
   let s_loop = 
     swhile idx spec.len cont 
       (
-        let entry = (tbl_param/->"entries"/@idx) in        
+        let entry = (tbl/->"entries"/@idx) in        
         sif (entry/->"valid")
           (
             sif (eop Eq [key_param; entry/->"key"])
@@ -173,7 +175,7 @@ let table_lookup spec =
   let s_ret = sret (evar (cid"rv") spec.ret_ty) in
   
   let params = List.map extract_evar_id 
-    [tbl_param; key_param; arg_param]
+    [key_param; arg_param]
   in
   dfun 
     (lookup_id spec.tbl_id)
@@ -189,7 +191,9 @@ let table_lookup spec =
 (* Table.install(Table_t, key, action, const_arg) *)
 let install_id tbl_id = Id.append_string "_install" tbl_id ;;
 let table_install spec = 
-  let tbl_param = evar (cid "tbl") spec.tbl_ty in
+  (* note: the table is hard coded into the function, not a parameter. *)
+  let tbl = evar (Cid.id spec.tbl_id) spec.tbl_ty in
+  (* let tbl_param = evar (cid "tbl") spec.tbl_ty in *)
   let key_param = evar (cid "key") spec.key_ty in
   (* note: call has to be transformed from an action variable to an action tag value *)
   let action_param = evar (cid "action") (spec.actions_enum_ty) in 
@@ -203,19 +207,19 @@ let table_install spec =
   let cont = id "_cont" in
   let body = swhile idx spec.len cont
     (
-      let entries = eop (Project(id"entries")) [tbl_param] in
+      let entries = eop (Project(id"entries")) [tbl] in
       let entry = elistget entries (idxvar idx) in
       (* let entry = (entries/@idx) in     *)
       sif (eop Eq [entry/->"valid";eval@@vbool false])
         (stmts [
             sassign (Cid.id cont)  (eval (vbool false));
-            (tbl_param/->"entries", idxvar idx)/<-new_slot;            
+            (tbl/->"entries", idxvar idx)/<-new_slot;            
           ])
         snoop
     )
   in
   let params = List.map extract_evar_id 
-    [tbl_param; key_param; action_param; const_arg_param]
+    [key_param; action_param; const_arg_param]
   in
   let sret = sret_none in
   dfun 
@@ -271,7 +275,8 @@ let monomorphic_table_calls =
     method! visit_exp () exp = 
       match exp.e with 
       | ECall({f; args; call_kind=CFun}) -> 
-        (* replace generic table function call with table-specific function call *)
+        (* replace generic table function call with table-specific function call, 
+           then remove the table argument *)
         let f_cid, _ = extract_evar f in
         if (List.mem f_cid table_fun_cids) then 
         (
@@ -282,7 +287,14 @@ let monomorphic_table_calls =
             | ["Table";"lookup"] -> ( lookup_id tbl_id )
             | _ -> failwith "unexpected table method"
           in
-          let f = efunref (Cid.id fun_id) f.ety in
+          let f_ety = match f.ety.raw_ty with 
+            TFun{arg_tys; ret_ty; func_kind} -> 
+              let arg_tys = List.tl arg_tys in
+              {f.ety with raw_ty=TFun{arg_tys; ret_ty; func_kind}}
+            | _ -> failwith "unexpected type"
+          in
+          let f = efunref (Cid.id fun_id) f_ety in
+          let args = List.tl args in
           {exp with e=ECall{f; args; call_kind=CFun}}
         )
         else

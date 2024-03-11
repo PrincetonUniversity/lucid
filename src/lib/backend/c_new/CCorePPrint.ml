@@ -27,11 +27,14 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : string =
   | TUnit -> "void"
   | TInt size -> "int" ^ size_to_string size
   | TBool -> "bool"
-  | TRecord {labels; ts} -> 
-    let label_strs = match labels with 
-      | Some ids -> List.map (id_to_string) ids
-      | None -> List.mapi (fun i _ -> "_" ^ string_of_int i) ts 
-    in
+  | TRecord(labels, ts) -> 
+    let label_strs = List.map (id_to_string) labels in
+    let ts_strs = List.map (ty_to_string ~use_abstract_name:true) ts in
+    let field_strs = List.map2 (fun l e -> l ^ ": " ^ e ^";") label_strs ts_strs in
+    let fields_str = String.concat " " field_strs in    
+    "{" ^ fields_str ^ "}"
+  | TTuple ts -> 
+    let label_strs = List.mapi (fun i _ -> "_" ^ string_of_int i) ts in
     let ts_strs = List.map (ty_to_string ~use_abstract_name:true) ts in
     let field_strs = List.map2 (fun l e -> l ^ ": " ^ e ^";") label_strs ts_strs in
     let fields_str = String.concat " " field_strs in    
@@ -71,11 +74,14 @@ let rec v_to_string (v: v) : string =
   | VUnit -> "void"
   | VInt {value; _} -> string_of_int value
   | VBool b -> string_of_bool b
-  | VRecord {labels; es} -> 
-    let label_strs = match labels with 
-      | Some ids -> List.map id_to_string ids
-      | None -> List.mapi (fun i _ -> "_" ^ string_of_int i) es 
-    in
+  | VRecord(labels, es) -> 
+    let label_strs = List.map id_to_string labels in
+    let es_strs = List.map value_to_string es in
+    let field_strs = List.map2 (fun l e -> "." ^l ^ " = " ^ e ^";") label_strs es_strs in
+    let fields_str = String.concat " " field_strs in    
+    "{" ^ fields_str ^ "}"
+  | VTuple(es) -> 
+    let label_strs = List.mapi (fun i _ -> "_" ^ string_of_int i) es in
     let es_strs = List.map value_to_string es in
     let field_strs = List.map2 (fun l e -> "." ^l ^ " = " ^ e ^";") label_strs es_strs in
     let fields_str = String.concat " " field_strs in    
@@ -97,11 +103,13 @@ let rec e_to_string (e: e) : string =
   match e with
   | EVal v -> value_to_string v
   | EVar cid -> cid_to_string cid
-  | ERecord {labels; es} -> 
-    let label_strs = match labels with 
-      | Some ids -> List.map id_to_string ids
-      | None -> List.mapi (fun i _ -> "_" ^ string_of_int i) es 
-    in
+  | ETuple es -> 
+    let es_strs = List.map exp_to_string es in
+    let field_strs = List.mapi (fun i e -> "." ^ "_" ^ string_of_int i ^ " = " ^ e ^";") es_strs in
+    let fields_str = String.concat " " field_strs in    
+    "{" ^ fields_str ^ "}"
+  | ERecord(labels, es) -> 
+    let label_strs = List.map id_to_string labels in
     let es_strs = List.map exp_to_string es in
     let field_strs = List.map2 (fun l e -> "." ^l ^ " = " ^ e ^";") label_strs es_strs in
     let fields_str = String.concat " " field_strs in    
@@ -158,20 +166,38 @@ and op_to_string (op: op) (args: exp list) : string =
   | _, _ -> failwith "Invalid number of arguments for operator"
 
 
+
+  (* 
+   
+and assign_op = 
+  | OLocal  of cid * ty (* create a new variable *)
+  | OAssign of cid      (* assign to variable *)
+  | OTupleLocal of cid list * ty list (* create new variables, unpack tuple to them *)
+  | OTupleAssign of cid list (* unpack tuple to variables *)
+  | OListSet of {arr : exp; idx : arridx} (* set index in array *)
+  | ORecordSet of {rec_exp : exp; field : id} (* set field in record *)
+  
+  
+  *)
+let assign_op_to_string (op: assign_op) = 
+  match op with
+  | OLocal (cid, ty) -> ty_to_string ty ^ " " ^ cid_to_string cid
+  | OAssign cid -> cid_to_string cid
+  | OTupleLocal (cids, tys) -> 
+    let cids_str = ""^String.concat ", " (List.map cid_to_string cids) ^"" in
+    let tys_str = "("^String.concat ", " (List.map ty_to_string tys) ^")" in
+    tys_str ^ " " ^ cids_str
+  | OTupleAssign cids -> String.concat ", " (List.map cid_to_string cids)
+  | OListSet {arr; idx} -> exp_to_string arr ^ "[" ^ arridx_to_string idx ^ "]"
+  | ORecordSet {rec_exp; field} -> exp_to_string rec_exp ^"."^id_to_string field
+;;
+
+
 let rec s_to_string (s: s) : string =
   match s with
   | SNoop -> "skip;"
   | SUnit e ->  exp_to_string e ^ ";"
-  | SAssign {ids; tys; new_vars; exp} -> 
-    let ids_str = String.concat ", " (List.map cid_to_string ids) in
-    let exp_str = exp_to_string exp in
-    (if new_vars then 
-        let tys_str = String.concat ", " (List.map ty_to_string tys) in
-        tys_str ^ " " ^ ids_str ^ " = " ^ exp_str ^ ";"
-      else 
-        ids_str ^ " = " ^ exp_str ^ ";")
-  | SListSet {arr; idx; exp} -> 
-    exp_to_string arr ^ "[" ^ arridx_to_string idx ^ "] = " ^ exp_to_string exp ^ ";"
+  | SAssign(op, exp) -> assign_op_to_string op ^ " = " ^ exp_to_string exp ^ ";"
   | SIf (e, s1, s2) -> 
     "if (" ^ exp_to_string e ^ ") {\n" ^ 
     indent 2 (statement_to_string s1) ^ "\n} else {\n" ^ 
@@ -189,7 +215,7 @@ let rec s_to_string (s: s) : string =
     "for (" ^ (id_to_string idx) ^ " < " ^ arridx_to_string bound ^ ") {\n" ^ 
     indent 2 (statement_to_string stmt) ^ "\n}"
   | SFor{idx; bound; stmt; guard=Some(guard)} -> 
-    "for (" ^ (id_to_string idx) ^ " < " ^ arridx_to_string bound ^ ") while"^(id_to_string guard)^"{\n" ^ 
+    "for (" ^ (id_to_string idx) ^ " < " ^ arridx_to_string bound ^ ") while ("^(id_to_string guard)^" == true) {\n" ^ 
     indent 2 (statement_to_string stmt) ^ "\n}"
   | SForEver(stmt) -> 
     "forever {\n" ^ indent 2 (statement_to_string stmt) ^ "\n}"

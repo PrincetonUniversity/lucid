@@ -19,16 +19,21 @@ and arridx =
 
 and func_kind = | FNormal | FHandler | FParser | FAction | FMemop | FExtern
 and raw_ty = 
+  (* value types *)
   | TUnit
   | TInt of size 
   | TBool 
-  | TRecord of {labels : id list option; ts : ty list;}
+  | TRecord of id list * ty list
+  | TTuple  of ty list 
+  (* | TRecord of {labels : id list option; ts : ty list;} *)
   | TList of ty * arridx
-  | TFun of func_ty
   | TBits of {ternary: bool; len : size;}
   | TEvent
   | TEnum of (id * int) list 
-  | TBuiltin of cid * (ty list) (* types built into the lucid language that must be eliminated for c*)
+  (* function type *)
+  | TFun of func_ty
+  (* alias types *)
+  | TBuiltin of cid * (ty list) (* types built into the lucid language that must be eliminated for c *)
   | TName of cid (* tydef, basically *)
   | TAbstract of cid * ty (* just a wrapper around some other type. For convenience *)
 
@@ -44,10 +49,10 @@ and v =
   | VUnit
   | VInt of {value : int; size : size;}
   | VBool of bool
-  | VRecord of {labels : id list option; es : value list;}
+  | VRecord of id list * value list
+  | VTuple of value list
+  (* | VRecord of {labels : id list option; es : value list;} *)
   | VList  of value list
-  (* no closures for now *)
-  (* | VClosure of {env : (id * value) list; params: params; fexp : exp;} *)
   | VBits of {ternary: bool; bits : int list;}
   | VEvent of vevent
   | VSymbol of id * ty 
@@ -75,10 +80,12 @@ and op =    | And | Or | Not
 and e = 
   | EVal of value
   | EVar of cid 
-  | ERecord of {labels : id list option; es : exp list;}
+  | ETuple of exp list
+  | ERecord of id list * exp list
+  (* | ERecord of {labels : id list option; es : exp list;} *)
   | ECall of {f:exp; args:exp list; call_kind:call_kind;}
   | EOp of op * exp list
-  | EListGet of exp * arridx
+  | EListGet of exp * arridx (* Why not make this an Op? *)
 
 and call_kind = 
   | CFun
@@ -90,14 +97,21 @@ and pat =
   | PEvent of {event_id : cid; params : params;}
 and branch = pat list * statement
 (* statements *)
+
+and assign_op = 
+  | OLocal  of cid * ty (* create a new variable *)
+  | OAssign of cid      (* assign to variable *)
+  | OTupleLocal of cid list * ty list (* create new variables, unpack tuple to them *)
+  | OTupleAssign of cid list (* unpack tuple to variables *)
+  | OListSet of {arr : exp; idx : arridx} (* set index in array *)
+  | ORecordSet of {rec_exp : exp; field : id} (* set field in record *)
+
 and s = 
   | SNoop
   | SUnit of exp
-  (* assign may create a new variable, and can unpack tuples *)
-  | SAssign of {ids : cid list; tys : ty list; new_vars : bool; exp : exp}
-  | SListSet of {arr : exp; idx : arridx; exp : exp;} (* arr[idx] = exp; *)
-  (* for (idx < bound) while guard *)
+  | SAssign of assign_op * exp
   | SFor of {idx : id; bound : arridx; stmt: statement; guard : id option}
+    (* for (idx < bound) while guard *)
   | SForEver of statement (* infinite loop *)
   | SIf of exp * statement * statement
   | SMatch of exp * branch list
@@ -156,8 +170,9 @@ let tbool = ty TBool
 let tint i = ty@@TInt(sz i)
 let tpat len = ty (TBits {ternary=false; len})
 let tevent = ty TEvent
-let trecord labels tys = ty (TRecord {labels=Some labels; ts=tys})
-let ttuple tys = ty (TRecord {labels=None; ts=tys})
+let trecord labels tys = ty (TRecord(labels, tys))
+let ttuple tys = ty (TTuple tys)
+  
 let tfun_kind func_kind arg_tys ret_ty = ty (TFun {arg_tys; ret_ty; func_kind})
 let tfun arg_tys ret_ty = tfun_kind FNormal arg_tys ret_ty 
 (* global type from CoreSyntax *)
@@ -190,8 +205,8 @@ let rec alias_type ty =
 
 let is_textern ty = match ty.raw_ty with TName cid -> Cid.equal cid (Cid.create ["_extern_ty_"]) | _ -> false
 let is_tunit ty = match ty.raw_ty with TUnit -> true | _ -> false
-let is_trecord ty = match (base_type ty).raw_ty with TRecord{labels=Some(_)} -> true | _ -> false
-let is_ttuple ty = match ty.raw_ty with TRecord{labels=None} -> true | _ -> false
+let is_trecord ty = match (base_type ty).raw_ty with TRecord _ -> true | _ -> false
+let is_ttuple ty = match ty.raw_ty with TTuple _ -> true | _ -> false
 let is_tfun ty = match ty.raw_ty with TFun({func_kind=FNormal}) -> true | _ -> false
 let is_tbool ty = match ty.raw_ty with TBool -> true | _ -> false
 let is_tint ty = match ty.raw_ty with TInt(_) -> true | _ -> false
@@ -216,11 +231,11 @@ let extract_tint_size ty = match ty.raw_ty with
   | _ -> raise (FormError "[extract_tint_size] expected TInt")
 
 let extract_trecord ty = match (base_type ty).raw_ty with 
-  | TRecord {labels=Some labels; ts} -> labels, ts
+  | TRecord(labels, ts) -> labels, ts
   | _ -> raise (FormError "[extract_trecord] expected TRecord")
 ;;
 let extract_ttuple ty = match ty.raw_ty with 
-  | TRecord {labels=None; ts} -> ts
+  | TTuple(ts) -> ts
   | _ -> raise (FormError "[extract_ttuple] expected TRecord")
 ;;
 let extract_tlist ty = match ty.raw_ty with 
@@ -254,7 +269,8 @@ let rec infer_vty = function
   | VUnit -> ty TUnit
   | VInt {size; _} -> ty (TInt size)
   | VBool _ -> ty TBool
-  | VRecord {labels; es} -> ty (TRecord {labels; ts=List.map (fun v -> v.vty) es})
+  | VRecord(labels, vs) -> ty (TRecord(labels, List.map (fun v -> v.vty) vs))
+  | VTuple(vs) -> ty (TTuple (List.map (fun v -> v.vty) vs))
   | VList(values) -> 
     if (List.length values) == 0 then failwith "cannot infer type of length 0 list" 
     else ty (TList((List.hd values).vty, IConst (List.length values)))
@@ -273,11 +289,11 @@ let vint_ty value ty = match ty.raw_ty with
   | _ -> failwith "vint_ty: expected TInt"
 let vbool b = {v=VBool b; vty=ty TBool; vspan=Span.default}
 let vlist vs = {v=VList vs; vty=ty (TList((List.hd vs).vty, IConst (List.length vs))); vspan=Span.default}
-let vtup vs = {v=VRecord {labels=None; es=vs}; vty=ttuple (List.map (fun v -> v.vty) vs); vspan=Span.default}
+let vtup vs = {v=VTuple(vs); vty=ttuple (List.map (fun v -> v.vty) vs); vspan=Span.default}
 let vpat ints = {v=VBits {ternary=true; bits=ints}; vty=ty (TBits {ternary=true; len=sz (List.length ints)}); vspan=Span.default}
 let vbits ints = {v=VBits {ternary=false; bits=ints}; vty=ty (TBits {ternary=false; len=sz (List.length ints)}); vspan=Span.default}
-let vrecord labels values = {v=VRecord {labels=Some labels; es=values}; vty=ty (TRecord {labels=Some labels; ts=List.map (fun v -> v.vty) values}); vspan=Span.default}
-let vtuple vs = {v=VRecord {labels=None; es=vs}; vty=ty (TRecord {labels=None; ts=List.map (fun v -> v.vty) vs}); vspan=Span.default}
+let vrecord labels values = {v=VRecord(labels, values); vty=trecord labels (List.map (fun v -> v.vty) values); vspan=Span.default}
+let vtuple vs = {v=VTuple(vs); vty=ttuple (List.map (fun v -> v.vty) vs); vspan=Span.default}
 let vevent evid evnum evdata meta = {v=VEvent {evid; evnum; evdata; meta}; vty=ty TEvent; vspan=Span.default}
 let vevent_simple evid evdata = vevent evid None evdata []
 let venum tag ty = {v=VSymbol(tag, ty); vty=ty; vspan=Span.default}
@@ -319,9 +335,9 @@ let rec default_value ty = match ty.raw_ty with
   | TUnit -> vunit ()
   | TInt size -> vint 0 size
   | TBool -> vbool false
-  | TRecord{labels=Some(labels); ts} -> 
+  | TRecord(labels, ts) -> 
     vrecord labels (List.map default_value ts)
-  | TRecord{labels=None; ts} -> 
+  | TTuple(ts) -> 
     vtuple (List.map default_value ts)
   | TList(t, IConst n) -> 
     vlist (List.init n (fun _ -> default_value t))
@@ -351,18 +367,18 @@ let extract_vsymbol v = match v.v with
 ;;
 
 let extract_vrecord value = match value.v with 
-  | VRecord {labels=Some labels; es} -> labels, es
+  | VRecord(labels, vs) -> labels, vs
   | _ -> failwith "expected VRecord"
 ;;
 let extract_vtuple value = match value.v with 
-  | VRecord {labels=None; es} -> es
+  | VTuple(vs) -> vs
   | _ -> failwith "expected VRecord"
 ;;
 (* expression constructors *)
 let exp e ety espan = {e; ety; espan}
 let efunref cid fty = {e=EVar (cid); ety=fty; espan=Span.default; }
-let erecord labels es = {e=ERecord {labels=Some labels; es}; ety=trecord labels (List.map (fun (e:exp) -> e.ety) es); espan=Span.default; }
-let etuple es = {e=ERecord {labels=None; es}; ety=ttuple (List.map (fun (e:exp) -> e.ety) es); espan=Span.default; }
+let erecord labels es = {e=ERecord(labels, es); ety=trecord labels (List.map (fun (e:exp) -> e.ety) es); espan=Span.default; }
+let etuple es = {e=ETuple es; ety=ttuple (List.map (fun (e:exp) -> e.ety) es); espan=Span.default; }
 
 let eop op es = 
   let eop_ty = match op with 
@@ -387,7 +403,7 @@ let eop op es =
     | Project(id) -> 
       let rec_arg = List.hd es in
       let labels, ts = match (base_type rec_arg.ety).raw_ty with 
-        | TRecord {labels=Some(labels); ts} -> labels, ts
+        | TRecord(labels, ts) -> labels, ts
         | _ -> 
           failwith "project expects record arg"
       in
@@ -397,7 +413,7 @@ let eop op es =
     
     | Get(idx) -> 
       let ts = match (List.hd es).ety.raw_ty with 
-        | TRecord {labels=None; ts} -> ts
+        | TTuple ts -> ts
         | _ -> failwith "get expects tuple arg"
       in
       List.nth ts idx
@@ -447,24 +463,25 @@ let egen_port loc ev =
 
 (* form checking *)
 let etup_form exp = match exp.e with
-  | ERecord {labels=None; _} -> true
-  | EVal {v=VRecord {labels=None; _}} -> true
+  | ETuple _ -> true
+  | EVal {v=VTuple _} -> true
   | _ -> false
 ;;
 let erec_form exp = match exp.e with
-  | ERecord {labels=Some _; _} -> true
-  | EVal {v=VRecord {labels=Some _; _}} -> true
+  | ERecord _ -> true
+  | EVal {v=VRecord _} -> true
   | _ -> false
 ;;
 
 let flatten_tuple exp = match exp.e with
-  | ERecord {labels=None; es} -> es
-  | EVal {v=VRecord {labels=None; es}} -> 
+  | ETuple es -> es
+  | EVal {v=VTuple es} -> 
     List.map (fun v -> eval v) es
   | _ -> raise (FormError "[flatten_tuple] expected tuple")
 ;;
 let rec flatten_exp exp = match exp.e with
-  | ERecord {labels=_; es} -> List.concat (List.map flatten_exp es)
+  | ETuple es -> List.concat (List.map flatten_exp es)
+  | ERecord(_, es) -> List.concat (List.map flatten_exp es)
   | _ -> [exp]
 ;;
 
@@ -499,16 +516,19 @@ let case enum_ty tag_id statement : branch =
 
 (* statements *)
 let s s sspan = {s; sspan;}
-let smultiassign ids tys new_vars rhs_exp = s (SAssign {ids; tys; new_vars; exp=rhs_exp}) Span.default
-let slocal id ty exp = smultiassign [id] [ty] true exp
-let sassign id exp = smultiassign [id] [exp.ety] false exp
+let sass op exp = s (SAssign(op, exp)) Span.default
+let stupleassign ids rhs_exp = sass (OTupleAssign ids) rhs_exp
+let stuplelocal ids tys rhs_exp = sass (OTupleLocal(ids, tys)) rhs_exp
+let slocal id ty exp = sass (OLocal(id, ty)) exp
+let sassign id exp = sass (OAssign id) exp
+let slistset arr idx exp = sass (OListSet{arr; idx}) exp 
+let srecordset rec_exp field exp = sass (ORecordSet{rec_exp; field}) exp
 let sif cond s_then s_else = s (SIf(cond, s_then, s_else)) Span.default
 let smatch match_exp branches = s (SMatch(match_exp, branches)) Span.default
 let snoop = s SNoop Span.default
 let sunit exp = s (SUnit exp) Span.default
 let sret_none = s (SRet None) Span.default
 let sret eret = s (SRet (Some eret)) Span.default
-let slistset arr idx exp= s (SListSet{arr; idx; exp}) Span.default
 
 
 let sfor idx bound stmt = 
@@ -572,7 +592,7 @@ let extract_daction_id_opt decl = match decl.d with
 
 (* helpers *)
 let untuple exp = match exp.e with
-  | ERecord {labels=None; es} -> es
+  | ETuple es -> es
   | _ -> [exp]
 ;;
 let retuple exps = match exps with
@@ -605,10 +625,10 @@ let rec eval_exp exp =
     let f_cid = extract_evar f |> fst in
     vevent_simple f_cid argvals  
   | EVar (cid) -> vsymbol (Cid.to_id cid) exp.ety
-  | ERecord {labels=None; es} -> 
+  | ETuple es -> 
     let es = List.map eval_exp es in
     vtuple es
-  | ERecord {labels=Some labels; es} ->
+  | ERecord(labels, es) -> 
     let es = List.map eval_exp es in
     vrecord labels es
   | _ ->  eval_err "cannot evalute expression type"

@@ -10,7 +10,7 @@ let size_to_int (s : F.size) = s
 let rec ty_to_size (ty : F.ty) = 
   match ty.raw_ty with 
   | F.TInt(sz) -> translate_size sz
-  | F.TRecord{ts} -> 
+  | F.TTuple(ts) -> 
     C.Szs (List.map ty_to_size ts |> List.map (function | C.Sz sz -> sz | _ -> err "bug"))
   | _ -> failwith "not done"
 ;;
@@ -23,7 +23,7 @@ let rec ints_to_bits = function
 ;;
 
 let detuple_ty (ty : F.ty) = match ty.raw_ty with 
-  | F.TRecord{labels=None; ts} -> ts
+  | F.TTuple(ts) -> ts
   | _ -> [ty]
 ;;
 
@@ -79,8 +79,8 @@ let rec translate_raw_ty (raw_ty : F.raw_ty) : C.raw_ty =
   (* collection types *)
   (* note: string types don't need to get translated because they are never visited
      -- only appear as literal values *)
-  | F.TRecord{labels=None; ts} -> C.TTuple(List.map translate_ty ts |> List.map (fun (ty : C.ty) -> ty.raw_ty))
-  | F.TRecord{labels=Some labels; ts} -> 
+  | F.TTuple(ts) -> C.TTuple(List.map translate_ty ts |> List.map (fun (ty : C.ty) -> ty.raw_ty))
+  | F.TRecord(labels, ts) -> 
     let raw_tys = List.map translate_ty ts |> List.map (fun (ty : C.ty) -> ty.raw_ty) in
     let label_rawty_pairs = List.combine labels raw_tys in
     C.TRecord(label_rawty_pairs)
@@ -153,9 +153,9 @@ let rec translate_value (value : F.value) : C.value =
     C.value_sp (C.VPat(bits)) value.vspan
   | F.VBits {ternary=false; bits} ->
     C.value_sp (C.VBits(ints_to_bits bits)) value.vspan
-  | F.VRecord{labels=None; es} -> 
+  | F.VTuple(es) -> 
     C.value_sp (C.VTuple(List.map (fun value -> value |> translate_value |> uv) es)) value.vspan
-  | F.VRecord{labels=Some labels; es} ->
+  | F.VRecord(labels, es) ->
     let label_value_pairs = List.combine labels es in
     C.value_sp (C.VRecord(List.map (fun (label, value) -> (label, translate_value value |> uv)) label_value_pairs)) value.vspan
   | F.VUnit -> err "unit values cannot be translated back to CoreSyntax"
@@ -203,9 +203,9 @@ let rec translate_exp (exp: F.exp) =
     let op = translate_op op in
     let args = List.map (translate_exp) args in
     C.aexp (C.EOp(op, args)) (translate_ty exp.ety) exp.espan
-  | F.ERecord{labels=None; es} -> 
+  | F.ETuple(es) -> 
     C.aexp (C.ETuple(List.map (fun exp -> exp |> translate_exp) es)) (translate_ty exp.ety) exp.espan
-  | F.ERecord{labels=Some labels; es} ->
+  | F.ERecord(labels, es) ->
     let label_exp_pairs = List.combine labels es in
     C.aexp (C.ERecord(List.map (fun (label, exp) -> (label, translate_exp exp)) label_exp_pairs)) (translate_ty exp.ety) exp.espan
   (* | F.EClosure _ -> err "closure expressions cannot be translated back to CoreSyntax" *)
@@ -277,15 +277,19 @@ and translate_stmt in_parser (stmt : F.statement) =
     in
     C.statement_sp s stmt.sspan
   (* assignment *)
-  | _, SAssign({ids=[cid]; tys=[ty]; new_vars=true; exp}) -> 
+  | _, SAssign(OLocal(cid, ty), exp) -> 
     C.statement_sp (C.SLocal(Cid.to_id cid, translate_ty ty, translate_exp exp)) stmt.sspan
-  | _, SAssign({ids=[cid]; new_vars=false; exp}) ->
+  | _, SAssign(OAssign(cid), exp) -> 
     C.statement_sp (C.SAssign(cid, translate_exp exp)) stmt.sspan
-  | _, SAssign({ids; tys; new_vars; exp;}) -> 
-    let tys = if new_vars then Some(List.map translate_ty tys) else None in
+  | _, SAssign(OTupleLocal(ids, tys),exp) -> 
+    let tys = List.map translate_ty tys in
     let ids = List.map Cid.to_id ids in
     let exp = translate_exp exp in
-    C.statement_sp (C.STupleAssign{ids; tys; exp}) stmt.sspan
+    C.statement_sp (C.STupleAssign{ids; tys=Some(tys); exp}) stmt.sspan
+  | _, SAssign(OTupleAssign(cids), exp) ->
+    let cids = List.map (fun cid -> Cid.to_id cid) cids in
+    let exp = translate_exp exp in
+    C.statement_sp (C.STupleAssign{ids=cids; tys=None; exp}) stmt.sspan
   | _, SIf(exp, stmt1, stmt2) -> 
     let exp = translate_exp exp in
     let stmt1 = translate_stmt in_parser stmt1 in
@@ -293,7 +297,7 @@ and translate_stmt in_parser (stmt : F.statement) =
     C.statement_sp (C.SIf(exp, stmt1, stmt2)) stmt.sspan
   | _, SMatch(exp, branches) -> 
     let exps = match exp.e with 
-      | ERecord{labels=None; es} -> es
+      | ETuple(es) -> es
       | _ -> [exp]
     in
     let exps = List.map translate_exp exps in
@@ -312,7 +316,8 @@ and translate_stmt in_parser (stmt : F.statement) =
   | _, SRet(exp_opt) -> 
     let exp_opt = Option.map translate_exp exp_opt in
     C.statement_sp (C.SRet(exp_opt)) stmt.sspan
-  | _, SListSet _ -> err "cannot translate list set statement back to coreIR"
+  | _, SAssign(OListSet _, _) -> err "cannot translate list set statement back to coreIR"
+  | _, SAssign(ORecordSet _, _) -> err "cannot translate record set statement back to coreIR"
   | _, SFor _ -> err "cannot translate for loop back to coreIR"
   | _, SForEver _ -> err "cannot translate infinite loop back to coreIR"
 ;;
@@ -356,11 +361,11 @@ let translate_decl (decl : F.decl) : C.decl =
   | F.DFun(F.FAction, id, rty, params, Some(body)) -> 
     (* detuple return type, first param, and second param *)
     let detuple_ty (ty: F.ty) = match ty.raw_ty with 
-      | TRecord{ts} -> ts
+      | TTuple(ts) -> ts
       | _ -> [ty]
     in
     let detuple_param = function 
-      | (base_id, {F.raw_ty=TRecord{ts}}) -> 
+      | (base_id, {F.raw_ty=TTuple(ts)}) -> 
         List.mapi 
           (fun i ty -> (
             let name = 

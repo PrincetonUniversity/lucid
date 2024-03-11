@@ -122,7 +122,7 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
     if l1 <> l2 then 
       ty_err ("int types with different lengths");
     env
-  | TRecord{labels=Some(l1); ts=tys1}, TRecord{labels=Some(l2); ts=tys2} -> 
+  | TRecord(l1, tys1), TRecord(l2, tys2) -> 
     if (List.length l1 <> List.length tys1) then 
       (ty_err ("invalid record type: number of fields and types differ"));
     if (List.length l2 <> List.length tys2) then 
@@ -134,7 +134,7 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
     if (List.length tys1 <> List.length tys2) then 
       (ty_err("record types have different numbers of types"));        
     unify_lists env unify_ty tys1 tys2      
-  | TRecord{labels=None; ts=tys1}, TRecord{labels=None; ts=tys2} -> 
+  | TTuple(tys1), TTuple(tys2) -> 
     if (List.length tys1 <> List.length tys2) then 
       (ty_err ("record types have different numbers types"));    
     unify_lists env unify_ty tys1 tys2      
@@ -147,7 +147,7 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
     let env' = unify_lists env unify_ty arg_tys1 arg_tys2 in
     let env'' = unify_ty env' ret_ty1 ret_ty2 in
     env''
-  | (TUnit|TBool|TEvent|TInt _|TRecord _ | TName _
+  | (TUnit|TBool|TEvent|TInt _|TRecord _ | TTuple _ | TName _
     |TList (_, _)|TFun _|TBits _|TEnum _|TBuiltin (_, _)), _ -> 
       print_endline@@"type mismatch:\n"^(CCorePPrint.raw_ty_to_string rawty1)^"\nand\n"^(CCorePPrint.raw_ty_to_string rawty2);
       ty_err "type mismatch"
@@ -164,12 +164,12 @@ let rec infer_value value : value =
   | VUnit -> tunit ()
   | VInt{size} -> tint size 
   | VBool _ -> tbool
-  | VRecord{labels=None; es} -> 
-    let ts = List.map type_value es in
-    ttuple ts
-  | VRecord{labels=Some labels; es} ->
+  | VRecord(labels, es) -> 
     let ts = List.map type_value es in
     trecord labels ts
+  | VTuple es -> 
+    let ts = List.map type_value es in
+    ttuple ts
   | VList vs -> 
     let ts = List.map type_value vs in
     tlist (List.hd ts) (IConst (List.length ts))
@@ -203,14 +203,15 @@ let rec infer_exp env exp : env * exp =
         | None -> raise (UnboundVariable id)
       in
       env, {e=EVar id; ety; espan=exp.espan}
-    | ERecord{labels=None; es} ->       
+    (* | ERecord{labels=None; es} ->        *)
+    | ETuple(es) -> 
       let env, es' = infer_exps env es in
-      let e = ERecord{labels=None; es=es'} in
+      let e = ETuple(es') in
       let ety = ttuple (List.map (fun exp -> exp.ety) es') in
       env, {e; ety; espan=exp.espan}
-    | ERecord{labels=Some labels; es} -> 
+    | ERecord(labels, es) -> 
       let env, es' = infer_exps env es in
-      let e = ERecord{labels=Some(labels); es=es'} in
+      let e =ERecord(labels, es') in
       let ety = trecord labels (List.map (fun exp -> exp.ety) es') in
       env, {e; ety; espan=exp.espan}
     | ECall{f; call_kind=CEvent} ->
@@ -374,23 +375,21 @@ let rec infer_statement env (stmt:statement) =
   | SUnit(exp) -> 
     let env, inf_exp = infer_exp env exp in
     env, {stmt with s=SUnit(inf_exp)}
-  | SAssign{ids=[id]; tys=[ty]; new_vars=true; exp} -> 
-    (* declaring a new variable *)
+  | SAssign(OLocal(id, ty), exp) -> 
     let env, inf_exp = infer_exp env exp in
     let env = unify_ty env ty inf_exp.ety in
     let env = add_var env (Cid.to_id id) ty in
-    env, {stmt with s=SAssign{ids=[id]; tys=[ty]; new_vars=true; exp=inf_exp}}
-  | SAssign{ids=[id]; new_vars=false; exp} -> 
-    (* assigning to an existing variable *)
+    env, {stmt with s=SAssign(OLocal(id, ty), inf_exp)}
+  | SAssign(OAssign(id), exp) -> 
     let env, inf_exp = infer_exp env exp in
     let ty = match IdMap.find_opt (Cid.to_id id) env.vars with
       | Some ty -> ty
       | None -> raise (UnboundVariable id)
     in
     let env = unify_ty env ty inf_exp.ety in
-    env, {stmt with s=SAssign{ids=[id]; tys=[ty]; new_vars=false; exp=inf_exp}}
-  | SAssign{ids=ids; tys=tys; new_vars=true; exp} -> 
-    (* declaring new multiple variables from a tuple-type expression *)
+    env, {stmt with s=SAssign(OAssign(id), inf_exp)}
+  (* declare multiple variables, unpack tuple, assign to variables *)
+  | SAssign(OTupleLocal(ids, tys), exp) -> 
     let env, inf_exp = infer_exp env exp in
     if (not@@is_ttuple inf_exp.ety) then 
       raise (TypeError("only tuples can be unpacked with a multi-assign"));
@@ -399,9 +398,9 @@ let rec infer_statement env (stmt:statement) =
       raise (LengthMismatch(List.length ids, List.length inf_exps));
     let env = unify_lists env unify_ty tys (List.map (fun exp -> exp.ety) inf_exps) in
     let env = add_vars env (List.map Cid.to_id ids) tys in
-    let inf_exp = {inf_exp with e=ERecord{labels=None; es=inf_exps}} in
-    env, {stmt with s=SAssign{ids=ids; tys=tys; new_vars=true; exp=inf_exp}}
-  | SAssign{ids=ids; new_vars=false; exp} -> 
+    let inf_exp = {inf_exp with e=ETuple(inf_exps)} in
+    env, {stmt with s=SAssign(OTupleLocal(ids, tys), inf_exp)}
+  | SAssign(OTupleAssign(ids), exp) -> 
     (* assigning to existing multiple variables from a tuple-type expression *)
     let env, inf_exp = infer_exp env exp in
     if (not@@is_ttuple inf_exp.ety) then 
@@ -416,9 +415,9 @@ let rec infer_statement env (stmt:statement) =
       | None -> raise (UnboundVariable id)
     ) ids in
     let env = unify_lists env unify_ty tys (List.map (fun exp -> exp.ety) inf_exps) in
-    let inf_exp = {inf_exp with e=ERecord{labels=None; es=inf_exps}} in
-    env, {stmt with s=SAssign{ids=ids; tys=tys; new_vars=false; exp=inf_exp}}
-  | SListSet{arr; idx=arridx; exp} -> 
+    let inf_exp = {inf_exp with e=ETuple(inf_exps)} in
+    env, {stmt with s=SAssign(OTupleAssign(ids), inf_exp)}
+  | SAssign(OListSet{arr; idx=arridx}, exp) -> 
     let env, inf_arr = infer_exp env arr in
     let env, inf_exp = infer_exp env exp in
     if (not@@is_tlist inf_arr.ety) then 
@@ -427,7 +426,21 @@ let rec infer_statement env (stmt:statement) =
     (* unify cell type and rhs type *)
     let env = unify_ty env inf_cell_ty inf_exp.ety in
     (* TODO: constrain |inf_arr| > arridx *)
-    env, {stmt with s=SListSet{arr=inf_arr; idx=arridx; exp=inf_exp}}
+    env, {stmt with s=SAssign(OListSet{arr=inf_arr; idx=arridx}, inf_exp)}
+  | SAssign(ORecordSet{rec_exp; field;} , exp) -> (
+    let env, inf_rec_exp = infer_exp env rec_exp in
+    let env, inf_exp = infer_exp env exp in
+    if (not@@is_trecord inf_rec_exp.ety) then 
+      raise (TypeError("record set on non-record"));
+    let inf_labels, inf_tys = extract_trecord inf_rec_exp.ety in
+    let labels_tys = List.combine inf_labels inf_tys in
+    let inf_ty = List.assoc_opt field labels_tys in
+    match inf_ty with
+      | Some ty -> 
+        let env = unify_ty env ty inf_exp.ety in
+        env, {stmt with s=SAssign(ORecordSet{rec_exp=inf_rec_exp; field;}, inf_exp)}
+      | None -> raise (UnboundField field)
+    )
   | SSeq(stmt1, stmt2) -> 
     let env, inf_stmt1 = infer_statement env stmt1 in
     let env, inf_stmt2 = infer_statement env stmt2 in

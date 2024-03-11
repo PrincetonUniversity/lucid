@@ -20,7 +20,7 @@ let err = Console.error ;;
    a list of sizes is a tuple *)
 let size_to_ty = function 
   | C.Sz(sz) -> F.ty@@F.TInt(F.sz sz)
-  | C.Szs(szs) -> F.ty@@F.TRecord{labels=None; ts=List.map (fun sz -> F.ty@@F.TInt(F.sz sz)) szs}
+  | C.Szs(szs) -> F.ttuple @@ List.map (fun sz -> F.ty@@F.TInt(F.sz sz)) szs
 ;;
 let rec bits_to_ints = function 
   | BitString.B0::bs -> 0::(bits_to_ints bs)
@@ -67,11 +67,11 @@ let rec translate_raw_ty (raw_ty : C.raw_ty) : F.raw_ty =
     let ids, raw_tys = List.split id_rawty_pairs in
     let raw_tys = List.map translate_raw_ty raw_tys in
     let tys = List.map F.ty raw_tys in
-    F.TRecord{labels=Some ids; ts=tys}
+    F.TRecord(ids, tys)
   | C.TTuple(raw_tys) ->
     let raw_tys = List.map translate_raw_ty raw_tys in
     let tys = List.map F.ty raw_tys in
-    F.TRecord{labels=None; ts=tys}
+    F.TTuple(tys)
   | C.TGroup -> (F.tgroup).raw_ty
   | C.TPat(Sz(sz)) -> F.TBits{ternary=true; len=F.sz sz}
   | C.TPat(_) -> err "TPat size should be a singleton"
@@ -88,8 +88,11 @@ and translate_ty (ty : C.ty) : F.ty =
    tspan = ty.tspan;
    }
 ;;
+let translate_param (id, ty) : F.param =
+  {pid=id; pty=translate_ty ty;}
+;;
 let translate_params (params: C.params) : F.params = 
-  List.map (fun ((id: Id.t), ty) -> id, translate_ty ty) params
+  List.map translate_param params
 ;;
 
 let translate_op (op : C.op) : F.op = 
@@ -217,7 +220,7 @@ let translate_pat (pat:C.pat)  (pat_sz : int) : F.pat =
   | PBit(ints) -> F.PVal(F.vpat ints)
   | C.PNum(z)  -> F.PVal(F.vint (Z.to_int z) pat_sz)
   | PEvent(cid, params) -> 
-    let params = List.map (fun (id, ty) -> id, translate_ty ty) params in
+    let params = translate_params params in
     F.PEvent{event_id=cid; params;}
   | PWild ->
     F.PVal(F.vpat (List.init pat_sz (fun _ -> -1)))
@@ -289,14 +292,15 @@ let rec translate_statement (stmt:C.statement) : F.statement =
     F.smatch exp branches |> F.swrap stmt.sspan
   | C.SRet(None) -> F.sret_none |> F.swrap stmt.sspan
   | C.SRet(Some(exp)) -> F.sret (translate_exp exp) |> F.swrap stmt.sspan
-  | STupleAssign{ids; tys; exp;} -> 
+  | STupleAssign{ids; tys=None; exp} -> 
     let cids = List.map Cid.id ids in
-    let tys, new_vars = match tys with 
-      | None -> [], false
-      | Some(tys) -> List.map translate_ty tys, true
-    in
     let exp = translate_exp exp in
-    F.smultiassign cids tys new_vars exp |> F.swrap stmt.sspan
+    F.stupleassign cids exp |> F.swrap stmt.sspan
+  | STupleAssign{ids; tys=Some(tys); exp;} -> 
+    let cids = List.map Cid.id ids in
+    let tys=List.map translate_ty tys in 
+    let exp = translate_exp exp in
+    F.stuplelocal cids tys exp |> F.swrap stmt.sspan
   in
   {stmt' with sspan = stmt.sspan}
 ;;
@@ -360,10 +364,10 @@ let translate_decl (decl:C.decl) : F.decl =
       | C.EPacket -> true 
       | C.EBackground -> false
     in
-    F.devent evid evnum_opt (List.map (fun (id, ty) -> id, translate_ty ty) params) is_parsed
+    F.devent evid evnum_opt (translate_params params) is_parsed
   | C.DHandler(id, hdl_sort, (params, body)) -> 
   begin
-    let params = List.map (fun (id, ty) -> id, translate_ty ty) params in
+    let params = translate_params params in
     let hdl_body = translate_statement body in
     let decl = F.dhandler id (F.tunit ()) params hdl_body in
     match hdl_sort with

@@ -161,7 +161,7 @@ and s =
   | SMatch of exp list * branch list
   | SRet of exp option
   (* | STableInstall of exp * tbl_entry list *)
-  | STupleAssign of tuple_assign
+  | STupleAssign of tuple_assign (* unpack a tuple exp and use it to create or set variables *)
 
 
 and tuple_assign = {
