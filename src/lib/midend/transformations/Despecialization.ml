@@ -168,7 +168,7 @@ let cell1_id = Cid.create ["cell1"] ;;
 let cell2_id = Cid.create ["cell2"] ;;
 let ret_id = Cid.create ["ret"] ;;
 
-let despecialize_memop (m : memop)  : (id * params * statement) = 
+let despecialize_memop (m : memop)  : (id * params * statement * ty) = 
 let args = m.mparams in
 let cell_ty = match args with 
 | [] -> err "a memop must have arguments"
@@ -178,10 +178,10 @@ let cell_sz = match cell_ty.raw_ty with
   | TInt(Sz(sz)) -> sz
   | _ -> err "memop return type must be an integer"
 in 
-let body = match m.mbody, List.length args with 
-  | MBReturn(exp), _ -> statement@@SRet(Some(exp))
+let body, ret_ty = match m.mbody, List.length args with 
+  | MBReturn(exp), _ -> statement@@SRet(Some(exp)), exp.ety
   | MBIf(expc, expl, expr), _ -> 
-    sifte expc (statement@@SRet(Some(expl))) (statement@@SRet(Some(expr)))
+    sifte expc (statement@@SRet(Some(expl))) (statement@@SRet(Some(expr))), expl.ety
   | MBComplex(body), n_args -> (
     let bool_update_stmt = function 
     | None -> None 
@@ -231,9 +231,14 @@ let body = match m.mbody, List.length args with
     let eret = var ret_id cell_ty in
     let ecell1 = var cell1_id cell_ty in
     let ecell2 = var cell2_id cell_ty in
-    let ret_tuple = exp 
-      (ETuple [ecell1; ecell2; eret]) 
-      (ty@@TTuple [eret.ety.raw_ty; ecell1.ety.raw_ty; ecell2.ety.raw_ty]) 
+    let ret_tuple = match n_args with 
+      | 4 -> exp (* for pairarray, return both cells *)
+        (ETuple [ecell1; ecell2; eret]) 
+        (ty@@TTuple [ecell1.ety.raw_ty; ecell2.ety.raw_ty; eret.ety.raw_ty;]) 
+      | 3 -> exp (* for plain array, return only cell 1*)
+        (ETuple [ecell1; eret]) 
+        (ty@@TTuple [ecell1.ety.raw_ty; eret.ety.raw_ty;]) 
+      | _ -> err "wrong number of args for memop"
     in
     let sret = statement@@SRet(Some(ret_tuple)) in
     let stmts = update_stmts@[sret] in
@@ -242,10 +247,10 @@ let body = match m.mbody, List.length args with
         (List.hd stmts)
         (List.tl stmts)
     in
-    body 
+    body, ret_tuple.ety
   )
   in
-  m.mid, m.mparams, body
+  m.mid, m.mparams, body, ret_ty
 ;;
 
 (* turn a function body back into a memop *)
@@ -307,7 +312,7 @@ let test_memop_despecialization (ds : decl list) =
     (fun decl -> 
       match decl.d with 
         | DMemop(m) -> 
-          let id, params, body = despecialize_memop m in
+          let id, params, body, _ = despecialize_memop m in
           (* print_endline ("------original memop ------");
           print_endline (CorePrinting.d_to_string (DMemop(m)));
           print_endline ("-------- despecialized function body ------");

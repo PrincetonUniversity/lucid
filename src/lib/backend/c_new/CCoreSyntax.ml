@@ -11,9 +11,9 @@ and sp = [%import: Span.t]
 (* types *)
 and size = int
 
-(* array indices -- separate from sizes so we can figure out 
-   exactly how they need to work *)
-and arridx = 
+(* length of an array. I think its just a size, 
+   but not positive how it will work out yet. *)
+and arrlen = 
     | IConst of int
     | IVar of id
 
@@ -26,10 +26,10 @@ and raw_ty =
   | TRecord of id list * ty list
   | TTuple  of ty list 
   (* | TRecord of {labels : id list option; ts : ty list;} *)
-  | TList of ty * arridx
+  | TList of ty * arrlen
   | TBits of {ternary: bool; len : size;}
   | TEvent
-  | TEnum of (id * int) list 
+  | TEnum of (cid * int) list 
   (* function type *)
   | TFun of func_ty
   (* alias types *)
@@ -55,7 +55,7 @@ and v =
   | VList  of value list
   | VBits of {ternary: bool; bits : int list;}
   | VEvent of vevent
-  | VSymbol of id * ty 
+  | VSymbol of cid * ty 
     (* an id that is a  primitive value. 
        used to represent enum values, 
        globals in the interpreter pipeline, 
@@ -75,8 +75,10 @@ and op =    | And | Or | Not
             | Cast of size 
             | Conc
             | Project of id | Get of int 
+            | Mod
             
             (* record and tuple ops *)
+
 and e = 
   | EVal of value
   | EVar of cid 
@@ -85,7 +87,7 @@ and e =
   (* | ERecord of {labels : id list option; es : exp list;} *)
   | ECall of {f:exp; args:exp list; call_kind:call_kind;}
   | EOp of op * exp list
-  | EListGet of exp * arridx (* Why not make this an Op? *)
+  | EListGet of exp * exp 
 
 and call_kind = 
   | CFun
@@ -95,6 +97,7 @@ and exp = {e:e; ety:ty; espan : sp;}
 and pat = 
   | PVal of value
   | PEvent of {event_id : cid; params : params;}
+
 and branch = pat list * statement
 (* statements *)
 
@@ -103,14 +106,14 @@ and assign_op =
   | OAssign of cid      (* assign to variable *)
   | OTupleLocal of cid list * ty list (* create new variables, unpack tuple to them *)
   | OTupleAssign of cid list (* unpack tuple to variables *)
-  | OListSet of {arr : exp; idx : arridx} (* set index in array *)
   | ORecordSet of {rec_exp : exp; field : id} (* set field in record *)
+  | OListSet of exp * exp (* set index in array *)
 
 and s = 
   | SNoop
   | SUnit of exp
   | SAssign of assign_op * exp
-  | SFor of {idx : id; bound : arridx; stmt: statement; guard : id option}
+  | SFor of {idx : id; bound : arrlen; stmt: statement; guard : id option}
     (* for (idx < bound) while guard *)
   | SForEver of statement (* infinite loop *)
   | SIf of exp * statement * statement
@@ -124,7 +127,7 @@ and statement = {s:s; sspan : sp;}
 
 and event_def = {evconstrid : id; evconstrnum : int option; evparams : params; is_parsed : bool}
 and ffun = {
-  fid : id;         (* function name *)
+  fid : cid;         (* function name *)
   fparams: params;  (* function params *)
   fret_ty : ty;     (* function return type *)
   fstr : string;    (* the function definition in whatever language *)
@@ -140,9 +143,9 @@ and ffun = {
 }
 
 and d = 
-  | DVar of id * ty * exp option (* constants and globals, possibly externs *)
+  | DVar of cid * ty * exp option (* constants and globals, possibly externs *)
   | DList of id * ty * (exp list) option (* mutable list *)
-  | DFun of func_kind * id * ty * params * (statement option) (* functions and externs *)
+  | DFun of func_kind * cid * ty * params * (statement option) (* functions and externs *)
   | DFFun of ffun (* a foriegn function *)
   | DTy  of cid * ty option (* named types and external types *)
   | DEvent of event_def (* declare an event, which is a constructor for the datatype TEvent *)
@@ -173,14 +176,15 @@ and decls = decl list
 
 (* constructors and destructors *)
 
-let arridx_ct = ref (-1);;
-let fresh_arridx str = 
-  arridx_ct := (!arridx_ct + 1);
+let arrlen_ct = ref (-1);;
+let fresh_arrlen str = 
+  arrlen_ct := (!arrlen_ct + 1);
   IVar (Id.fresh str)
 ;;
-let arridx i = IConst i
+let arrlen i = IConst i
 let idxvar id = IVar id
 let sz n = n
+let cid s = Cid.create([s])
 
 (**** types ****)
 let ty raw_ty = {raw_ty=raw_ty; tspan=Span.default; }
@@ -204,7 +208,7 @@ let tabstract tname inner_ty = ty (TAbstract(Cid.create [tname], inner_ty))
 let tabstract_cid tcid inner_ty = ty (TAbstract(tcid, inner_ty))
 let tabstract_id id inner_ty = ty (TAbstract(Cid.create_ids [id], inner_ty))
 let textern = tname (Cid.create ["_extern_ty_"])
-let tenum_pairs (tagpairs : (Id.t * int) list) = ty (TEnum tagpairs)
+let tenum_pairs (tagpairs : (Cid.t * int) list) = ty (TEnum tagpairs)
 let tenum ids = tenum_pairs (List.mapi (fun i id -> (id, i)) ids)
 
 
@@ -299,6 +303,15 @@ let rec infer_vty = function
   | VSymbol (_, inner_ty) -> inner_ty 
 ;;  
 
+let sizeof_ty ty = 
+  match ty.raw_ty with 
+  | TInt size -> size
+  | TBool -> 1
+  | TBits {len} -> len
+  | _ -> failwith "sizeof_ty: expected TInt or TBits"
+;;
+
+
 let value v = {v=v; vty=infer_vty v; vspan=Span.default}
 let vunit () = {v=VUnit; vty=ty TUnit; vspan=Span.default}
 let vint value size = {v=VInt {value; size = sz size}; vty=ty (TInt(sz size)); vspan=Span.default}
@@ -324,7 +337,7 @@ let abstr_cast_value cid value =
 ;;
 
 (* BUILTIN *)
-let zero_list ty = vsymbol (Id.create "{0}") ty;;
+let zero_list ty = vsymbol (cid "{0}") ty;;
 
 
 let string_to_value (s:string) =
@@ -404,7 +417,7 @@ let eop op es =
     | And | Or | Not
     | Eq  | Neq | Less| More | Leq | Geq -> ty TBool
     | Neg | Plus| Sub | SatPlus | SatSub -> (List.hd es).ety
-    | BitAnd  | BitOr | BitXor | BitNot | LShift | RShift -> (List.hd es).ety
+    | BitAnd  | BitOr | BitXor | BitNot | LShift | RShift | Mod -> (List.hd es).ety
     | Slice(hi, lo) -> ty (TInt (sz (hi - lo + 1)))
     | PatExact
     | PatMask ->      
@@ -436,10 +449,12 @@ let eop op es =
         | _ -> failwith "get expects tuple arg"
       in
       List.nth ts idx
+
   in 
   {e=EOp (op, es); ety=eop_ty; espan=Span.default; }
 let eval value = {e=EVal value; ety=value.vty; espan=Span.default; }
-let evar id ty = {e=EVar(id); ety=ty; espan=Span.default; }
+let evar cid ty = {e=EVar(cid); ety=ty; espan=Span.default; }
+let param_evar (id, ty) = evar (Cid.id id) ty
 let eunit () = eval (vunit ())
 
 let default_exp ty = eval@@default_value ty
@@ -462,9 +477,10 @@ let ecall_op (f: exp) args = ecall f args
 
 let eevent = ecall_kind CEvent
 
-let elistget exp arridx = 
-  let cell_ty = extract_tlist exp.ety |> fst in
-  {e=EListGet(exp, arridx); ety=cell_ty; espan=Span.default}
+
+let elistget arr arrlen = 
+  let cell_ty = extract_tlist arr.ety |> fst in
+  {e=EListGet(arr, arrlen); ety=cell_ty; espan=Span.default}
 
 
 (* BUILTIN FUNCTIONS: generates *)
@@ -509,11 +525,18 @@ let extract_evar exp = match exp.e with
   | _ -> raise (FormError "[extract_evar] expected EVar")
 ;;
 
+let extract_etuple exp = match exp.e with
+  | ETuple es -> es
+  | _ -> raise (FormError "[flatten_tuple] expected tuple")
+;;
 let extract_evar_id exp = match exp.e with 
 | EVar(cid) -> Cid.to_id(cid), exp.ety
 | _ -> failwith "[evar_to_param] not an evar"
 ;;
 
+let extract_ecall exp = match exp.e with
+  | ECall {f; args; _} -> f, args
+  | _ -> raise (FormError "[extract_ecall] expected ECall")
 
 
 (* let egen loc ev = ecall (efunref (Cid.create ["generate"]) (tfun [tevent] (tunit ()))) [loc; ev] *)
@@ -540,7 +563,10 @@ let stupleassign ids rhs_exp = sass (OTupleAssign ids) rhs_exp
 let stuplelocal ids tys rhs_exp = sass (OTupleLocal(ids, tys)) rhs_exp
 let slocal id ty exp = sass (OLocal(id, ty)) exp
 let sassign id exp = sass (OAssign id) exp
-let slistset arr idx exp = sass (OListSet{arr; idx}) exp 
+let slistset arr idx exp = sass (OListSet(arr, idx)) exp 
+(* let slistset_exp arr idx bound exp = 
+  let arrlen = arrlen_const_mod idx bound in 
+  slistset arr arrlen exp *)
 let srecordset rec_exp field exp = sass (ORecordSet{rec_exp; field}) exp
 let sif cond s_then s_else = s (SIf(cond, s_then, s_else)) Span.default
 let smatch match_exp branches = s (SMatch(match_exp, branches)) Span.default
@@ -583,6 +609,12 @@ let dhandler = dfun_kind FHandler
 let dparser = dfun_kind FParser
 let daction = dfun_kind FAction 
 let dmemop = dfun_kind FMemop
+
+let dfun_extern id fty = 
+  let param_tys, rty, fun_kind = extract_func_ty fty in
+  let params = List.map (fun ty -> (Id.fresh "a", ty)) param_tys in
+  decl (DFun(fun_kind, id, rty, params, None))
+;;
 (* global variables *)
 let dglobal id ty exp = decl (DVar(id, ty, Some(exp))) Span.default
 let dextern id ty = decl (DVar(id, ty, None)) Span.default
@@ -608,6 +640,13 @@ let extract_daction_opt decl = match decl.d with
 let extract_daction_id_opt decl = match decl.d with 
   | DFun(FAction, id, _, _, _) -> Some id
   | _ -> None
+
+
+(* derive the type of a declared function *)
+(* let extract_dfun_ty decl = match decl.d with 
+  | DFun(_, _, ty, params, _) -> tfun params ty
+  | _ -> failwith "expected DFun" *)
+
 
 (* helpers *)
 let untuple exp = match exp.e with
@@ -643,7 +682,7 @@ let rec eval_exp exp =
     let argvals = List.map eval_exp args in
     let f_cid = extract_evar f |> fst in
     vevent_simple f_cid argvals  
-  | EVar (cid) -> vsymbol (Cid.to_id cid) exp.ety
+  | EVar (cid) -> vsymbol cid exp.ety
   | ETuple es -> 
     let es = List.map eval_exp es in
     vtuple es
@@ -654,6 +693,28 @@ let rec eval_exp exp =
 ;;
 
 
+(**** substitute a variable for an expression ****)
+open Collections
+
+
+(* let subst_map id exp = CidMap.add (Cid.id id) exp CidMap.empty;; *)
+let subst_evar = object (_)
+   inherit [_] s_map as super
+   method! visit_exp transformer exp = 
+    match exp.e with
+      | EVar _ -> transformer exp
+      | _ -> super#visit_exp transformer exp
+   end
+;;
+(* transform a return statement  *)
+let subst_return = object (_)
+  inherit [_] s_map as super
+  method! visit_statement transformer stmt = 
+    match stmt.s with 
+    | SRet(_) -> transformer stmt 
+    | _ -> super#visit_statement transformer stmt
+  end
+;;
 
 (* function call: f <op> args --> build expression that calls f on args *)
 let ( /** ) f args = ecall_op f args
@@ -664,7 +725,7 @@ let ( /-> ) rec_exp field_str =
 ;;
 
 let (/@) my_arr_exp idx_id = 
-  elistget my_arr_exp (idxvar idx_id)
+  elistget my_arr_exp (evar (Cid.id idx_id) (tint 32))
 ;;
 
 let (/<-) (arr, idx) rhs = 

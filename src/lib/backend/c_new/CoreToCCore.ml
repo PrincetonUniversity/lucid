@@ -303,11 +303,9 @@ let rec translate_statement (stmt:C.statement) : F.statement =
 ;;
 
 let translate_memop (m : CoreSyntax.memop) = 
-  let (id, params, body) = Despecialization.despecialize_memop m in
-  (* return type is the same as the parameter type *)
-  let rty = (List.hd params |> snd) in
+  let (id, params, body, rty) = Despecialization.despecialize_memop m in
   (* translate this as a function, but with type FMemop *)
-  F.dmemop id (translate_ty rty) (translate_params params) (translate_statement body)
+  F.dmemop (Cid.id id) (translate_ty rty) (translate_params params) (translate_statement body)
 ;;
 
 (* if the parameters are a flattened list 
@@ -354,8 +352,8 @@ let tuple_params(params : C.params) :
 
 let translate_decl (decl:C.decl) : F.decl = 
  let decl' =  match decl.d with 
-  | C.DGlobal(id, ty, exp) -> F.dglobal id (translate_ty ty) (translate_exp exp)
-  | DExtern(id, ty) -> F.dextern id (translate_ty ty)
+  | C.DGlobal(cid, ty, exp) -> F.dglobal (Cid.id cid) (translate_ty ty) (translate_exp exp)
+  | DExtern(cid, ty) -> F.dextern (Cid.id cid) (translate_ty ty)
   | C.DEvent((evid, evnum_opt,ev_sort, params)) -> 
     let is_parsed = match ev_sort with 
       | C.EPacket -> true 
@@ -366,7 +364,7 @@ let translate_decl (decl:C.decl) : F.decl =
   begin
     let params = List.map (fun (id, ty) -> id, translate_ty ty) params in
     let hdl_body = translate_statement body in
-    let decl = F.dhandler id (F.tunit ()) params hdl_body in
+    let decl = F.dhandler (Cid.id id) (F.tunit ()) params hdl_body in
     match hdl_sort with
       | C.HControl -> err "control handlers not supported"
       | C.HEgress ->  err "egress handlers not supported"
@@ -433,7 +431,7 @@ let translate_decl (decl:C.decl) : F.decl =
     (* finally, build the action: a function with two arguments 
        and a single return that has the translated version of the renamed body *)
     F.daction 
-      acn_constr.aid 
+      (Cid.id acn_constr.aid) 
       (translate_ty ret_ty)
       (translate_params [const_param; param])
       (F.sret acn_body)
@@ -441,13 +439,13 @@ let translate_decl (decl:C.decl) : F.decl =
     (* despecialize parser with Core pass *)
     let parse_stmt = Despecialization.despecialize_parser_block parser_block in
     (* translate the statement *)
-    F.dparser id (F.tunit ()) (translate_params params) (translate_statement parse_stmt)
+    F.dparser (Cid.id id) (F.tunit ()) (translate_params params) (translate_statement parse_stmt)
   | DFun(id, rty, (params, body)) -> 
-    F.dfun id (translate_ty rty) (translate_params params) (translate_statement body)
+    F.dfun (Cid.id id) (translate_ty rty) (translate_params params) (translate_statement body)
   in
   {decl' with dspan = decl.dspan}
-    
 ;;
+
 let translate_prog (ds : C.decls) : F.decls = 
   List.map translate_decl ds
 ;;

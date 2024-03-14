@@ -172,14 +172,16 @@
    strUtils
 
    deleteNoops
+   CoreRegularizeMemops
    CCoreSyntax
-   CCoreTyper
-   CheckFFuns
-   CCorePPrint
    CoreToCCore
    CCoreToCore
-   CPasses
+   CCorePPrint
+   CCoreTyper
+   CheckFFuns
    CCoreTables
+   CCoreArrays
+   CPasses
    )
  (preprocess
     (staged_pps ppx_import visitors.ppx ppx_deriving.show ppx_deriving.std ppx_string))

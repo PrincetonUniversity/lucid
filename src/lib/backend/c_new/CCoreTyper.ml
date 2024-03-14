@@ -25,7 +25,7 @@ type constr =
   
 type env =
 {
-  vars : ty IdMap.t;
+  vars : ty CidMap.t;
   tys  : ty CidMap.t;
   idx_constrs : constr list;
   ret_ty : ty option;
@@ -34,14 +34,16 @@ type env =
 }
 let empty_env = 
   {
-    vars = IdMap.empty;
+    vars = CidMap.empty;
     tys = CidMap.empty;
     idx_constrs = [];
     ret_ty = None;
   }
 ;;
+
+
 let add_var env id ty = 
-  {env with vars = IdMap.add id ty env.vars}
+  {env with vars = CidMap.add id ty env.vars}
 ;;
 let add_vars env ids tys = 
   List.fold_left2 add_var env ids tys
@@ -64,9 +66,9 @@ let add_constr env constr =
 
 let ty_err str = raise(TypeError(str));;
 
-(* unify just adds constraints to context for arridxes *)
+(* unify just adds constraints to context for arrlenes *)
 
-let unify_arridx env x y =
+let rec unify_arrlen env x y =
   match x, y with 
   | IConst x, IConst y -> 
     if (x = y) then env
@@ -105,7 +107,7 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
   | TEnum(variants1), TEnum(variants2) -> 
       let ids1, _ = List.split variants1 in
       let ids2, _ = List.split variants2 in
-      if not (List.equal (Id.equal) ids1 ids2) then 
+      if not (List.equal (Cid.equal) ids1 ids2) then 
         (raise (TypeError("enum types have different variants")));
     env
   | TBuiltin(cid1, tys1), TBuiltin(cid2, tys2) -> 
@@ -140,7 +142,7 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
     unify_lists env unify_ty tys1 tys2      
   | TList(t1, l1), TList(t2, l2) ->
     let env' = unify_ty env t1 t2 in
-    unify_arridx env' l1 l2    
+    unify_arrlen env' l1 l2    
   | TFun{arg_tys=arg_tys1; ret_ty=ret_ty1; func_kind=fk1}, TFun{arg_tys=arg_tys2; ret_ty=ret_ty2; func_kind=fk2} -> 
     if (fk1 <> fk2) then 
       ty_err "functions of different kinds";
@@ -191,18 +193,18 @@ let rec infer_lists env f_infer xs =
 ;;
 
 let rec infer_exp env exp : env * exp = 
-  print_endline ("inferring exp: "^(CCorePPrint.exp_to_string exp));
+  (* print_endline ("inferring exp: "^(CCorePPrint.exp_to_string exp)); *)
   let infer_exps env = infer_lists env infer_exp in
   let env, exp = match exp.e with 
     | EVal value -> 
       let ety = (infer_value value).vty in
       env, {e=EVal(value); ety; espan=exp.espan}
-    | EVar id -> 
-      let ety = match IdMap.find_opt (Cid.to_id id) env.vars with
+    | EVar cid -> 
+      let ety = match CidMap.find_opt cid env.vars with
         | Some ty -> ty
-        | None -> raise (UnboundVariable id)
+        | None -> raise (UnboundVariable cid)
       in
-      env, {e=EVar id; ety; espan=exp.espan}
+      env, {e=EVar cid; ety; espan=exp.espan}
     (* | ERecord{labels=None; es} ->        *)
     | ETuple(es) -> 
       let env, es' = infer_exps env es in
@@ -247,16 +249,25 @@ let rec infer_exp env exp : env * exp =
       let env, op, inf_args, ety = infer_eop env op args in
       let e = EOp(op, inf_args) in
       env, {exp with e; ety}
-    | EListGet(list_exp, arridx) -> 
-      (* TODO *)
+    | EListGet(list_exp, idx_exp) -> 
       let env, inf_list_exp = infer_exp env list_exp in
+      let env, inf_idx_exp = infer_exp env idx_exp in
+      if not (is_tint inf_idx_exp.ety) then 
+        ty_err "list index must be an int";
       if not (is_tlist inf_list_exp.ety) then 
-        raise (TypeMismatch(inf_list_exp.ety, tlist inf_list_exp.ety arridx));
+        ty_err "expected a list";
       let cell_ty, arr_len = extract_tlist inf_list_exp.ety in  
       let _ = arr_len in
       let inf_ty = cell_ty in
-      (* TODO: check arr_len against arridx *)
-      let e = EListGet(inf_list_exp, arridx) in
+      (* TODO: check inf_idx_exp against the length of inf_list_exp *)
+      (* the index expression must either: 
+         1. evaluate to a constant.
+         2. be a for loop variable bound by a size less than or equal to the size of the array
+         3. be a mod op.
+            - hmm... could we track an optional "max value" on tints that we infer? 
+              - then we could just check that...         
+         *)
+      let e = EListGet(inf_list_exp, inf_idx_exp) in
       env, {exp with e; ety=inf_ty}
   in
   print_endline@@"finished inferring expression -- "^(CCorePPrint.exp_to_string exp)^" : "^(CCorePPrint.ty_to_string exp.ety);
@@ -279,9 +290,15 @@ and infer_eop env op (args : exp list) : env * op * exp list * ty = match op, ar
     let env, inf_exp2 = infer_exp env exp2 in
     let env = unify_ty env inf_exp1.ety inf_exp2.ety in
     env, op, [inf_exp1; inf_exp2], tbool
-  | Less, [exp1; exp2] | More, [exp1; exp2] | Leq , [exp1; exp2] | Geq, [exp1; exp2] 
+  | Less, [exp1; exp2] | More, [exp1; exp2] | Leq , [exp1; exp2] | Geq, [exp1; exp2] ->
+    let env, inf_exp1 = infer_exp env exp1 in
+    let env, inf_exp2 = infer_exp env exp2 in
+    if (not (is_tint inf_exp1.ety)) then 
+      ty_err "int op with non-int arg";
+    let env = unify_ty env inf_exp1.ety inf_exp2.ety in
+    env, op, [inf_exp1; inf_exp2], tbool
   | Plus, [exp1; exp2] | Sub, [exp1; exp2] | SatPlus, [exp1; exp2] | SatSub, [exp1; exp2]
-  | BitAnd, [exp1; exp2] | BitOr, [exp1; exp2] | BitXor, [exp1; exp2] -> 
+  | BitAnd, [exp1; exp2] | BitOr, [exp1; exp2] | BitXor, [exp1; exp2] | Mod, [exp1; exp2] -> 
     let env, inf_exp1 = infer_exp env exp1 in
     let env, inf_exp2 = infer_exp env exp2 in
     if (not (is_tint inf_exp1.ety)) then 
@@ -370,24 +387,25 @@ and infer_eop env op (args : exp list) : env * op * exp list * ty = match op, ar
 ;;
 
 let rec infer_statement env (stmt:statement) = 
+  (* print_endline ("inferring statement: "^(CCorePPrint.statement_to_string stmt)); *)
   match stmt.s with 
   | SNoop -> env, stmt
   | SUnit(exp) -> 
     let env, inf_exp = infer_exp env exp in
     env, {stmt with s=SUnit(inf_exp)}
-  | SAssign(OLocal(id, ty), exp) -> 
+  | SAssign(OLocal(cid, ty), exp) -> 
     let env, inf_exp = infer_exp env exp in
     let env = unify_ty env ty inf_exp.ety in
-    let env = add_var env (Cid.to_id id) ty in
-    env, {stmt with s=SAssign(OLocal(id, ty), inf_exp)}
-  | SAssign(OAssign(id), exp) -> 
+    let env = add_var env cid ty in
+    env, {stmt with s=SAssign(OLocal(cid, ty), inf_exp)}
+  | SAssign(OAssign(cid), exp) -> 
     let env, inf_exp = infer_exp env exp in
-    let ty = match IdMap.find_opt (Cid.to_id id) env.vars with
+    let ty = match CidMap.find_opt cid env.vars with
       | Some ty -> ty
-      | None -> raise (UnboundVariable id)
+      | None -> raise (UnboundVariable cid)
     in
     let env = unify_ty env ty inf_exp.ety in
-    env, {stmt with s=SAssign(OAssign(id), inf_exp)}
+    env, {stmt with s=SAssign(OAssign(cid), inf_exp)}
   (* declare multiple variables, unpack tuple, assign to variables *)
   | SAssign(OTupleLocal(ids, tys), exp) -> 
     let env, inf_exp = infer_exp env exp in
@@ -397,7 +415,7 @@ let rec infer_statement env (stmt:statement) =
     if (List.length ids <> List.length inf_exps) then 
       raise (LengthMismatch(List.length ids, List.length inf_exps));
     let env = unify_lists env unify_ty tys (List.map (fun exp -> exp.ety) inf_exps) in
-    let env = add_vars env (List.map Cid.to_id ids) tys in
+    let env = add_vars env ids tys in
     let inf_exp = {inf_exp with e=ETuple(inf_exps)} in
     env, {stmt with s=SAssign(OTupleLocal(ids, tys), inf_exp)}
   | SAssign(OTupleAssign(ids), exp) -> 
@@ -410,23 +428,24 @@ let rec infer_statement env (stmt:statement) =
       raise (LengthMismatch(List.length ids, List.length inf_exps));
     (* make sure all the variables are already declared in the environment *)
     let tys = List.map (fun id -> 
-      match IdMap.find_opt (Cid.to_id id) env.vars with
+      match CidMap.find_opt id env.vars with
       | Some ty -> ty
       | None -> raise (UnboundVariable id)
     ) ids in
     let env = unify_lists env unify_ty tys (List.map (fun exp -> exp.ety) inf_exps) in
     let inf_exp = {inf_exp with e=ETuple(inf_exps)} in
     env, {stmt with s=SAssign(OTupleAssign(ids), inf_exp)}
-  | SAssign(OListSet{arr; idx=arridx}, exp) -> 
+  | SAssign(OListSet(arr, idx), exp) -> 
     let env, inf_arr = infer_exp env arr in
+    let env, inf_idx = infer_exp env idx in
     let env, inf_exp = infer_exp env exp in
     if (not@@is_tlist inf_arr.ety) then 
       raise (TypeError("list set on non-list"));
     let inf_cell_ty, _ = extract_tlist inf_arr.ety in
     (* unify cell type and rhs type *)
     let env = unify_ty env inf_cell_ty inf_exp.ety in
-    (* TODO: constrain |inf_arr| > arridx *)
-    env, {stmt with s=SAssign(OListSet{arr=inf_arr; idx=arridx}, inf_exp)}
+    (* TODO: constrain |inf_arr| > arrlen *)
+    env, {stmt with s=SAssign(OListSet(inf_arr, inf_idx), inf_exp)}
   | SAssign(ORecordSet{rec_exp; field;} , exp) -> (
     let env, inf_rec_exp = infer_exp env rec_exp in
     let env, inf_exp = infer_exp env exp in
@@ -484,7 +503,7 @@ let rec infer_statement env (stmt:statement) =
   | SFor{idx; bound; stmt; guard} -> 
     let env = match guard with 
       | None -> env
-      | Some(guard_id) -> add_var env guard_id tbool
+      | Some(guard_id) -> add_var env (Cid.id guard_id) tbool
     in
     (* TODO: add constraint idx < bound --  only while inside of new environment? *)
     let env', inf_stmt = infer_statement env stmt in
@@ -497,16 +516,16 @@ let rec infer_statement env (stmt:statement) =
 ;;
 
 let rec infer_decl env decl : env * decl = 
-  print_endline ("inferring decl: ");
-  print_endline (CCorePPrint.decl_to_string decl);
+  (* print_endline ("inferring decl: ");
+  print_endline (CCorePPrint.decl_to_string decl); *)
   match decl.d with 
   | DVar(id, ty, Some(arg)) -> 
     let env, inf_arg = infer_exp env arg in
     let env = unify_ty env ty inf_arg.ety in
-    let env = add_var env id ty in
+    let env = add_var env (id) ty in
     env, {decl with d=DVar(id, ty, Some(inf_arg))}
   | DVar(id, ty, None) ->
-    let env = add_var env id ty in
+    let env = add_var env (id) ty in
     env, decl
   | DList(id, ty, Some(args)) -> (
     let env, inf_args = infer_lists env infer_exp args in
@@ -517,12 +536,12 @@ let rec infer_decl env decl : env * decl =
         let env = List.fold_left (fun env inf_arg -> 
           unify_ty env cellty inf_arg.ety
         ) env inf_args in
-        let env = add_var env id ty in
+        let env = add_var env (Cid.id id) ty in
         env, {decl with d=DList(id, ty, Some(inf_args))}
       | _ -> ty_err "list declaration with non-list type"
   )
   | DList(id, ty, None) ->
-    let env = add_var env id ty in
+    let env = add_var env (Cid.id id) ty in
     env, decl
   | DTy(cid, Some(ty)) -> 
     let env = add_ty env cid ty in
@@ -532,13 +551,13 @@ let rec infer_decl env decl : env * decl =
     env, decl
   | DEvent{evconstrid} -> 
     (* just add the event type to the var_ty table *)
-    let env = add_var env evconstrid tevent in
+    let env = add_var env (Cid.id evconstrid) tevent in
     env, decl
   | DFun(fun_kind, id, ret_ty, params, Some(statement)) -> 
     (* set up the environment *)
     let outer_env = env in 
     let env = {env with ret_ty=Some(ret_ty)} in    
-    let env = add_vars env (List.map fst params) (List.map snd params) in
+    let env = add_vars env (List.map (fun f -> f|> fst |> Cid.id) params) (List.map snd params) in
     (* check the statement *)
     let env, inf_stmt = infer_statement env statement in
     (* check the return type *)
@@ -553,15 +572,15 @@ let rec infer_decl env decl : env * decl =
     (* update the environment with the function *)
 
     let fun_ty = tfun_kind fun_kind (List.map snd params) ret_ty  in
-    let env = add_var env id fun_ty in
+    let env = add_var env (id) fun_ty in
     env, {decl with d=DFun(fun_kind, id, inf_ret_ty, params, Some(inf_stmt))}
   | DFun(fun_kind, id, ret_ty, params, None) -> 
     let fun_ty = tfun_kind fun_kind (List.map snd params) ret_ty  in
-    let env = add_var env id fun_ty in
+    let env = add_var env (id) fun_ty in
     env, decl
   | DFFun{fid; fparams; fret_ty;} -> 
     let fun_ty = tfun_kind FExtern (List.map snd fparams) fret_ty in
-    let env = add_var env fid fun_ty in
+    let env = add_var env (fid) fun_ty in
     env, decl
 
 and infer_decls env decls : env * decl list =

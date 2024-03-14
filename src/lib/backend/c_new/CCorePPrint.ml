@@ -7,7 +7,7 @@ let indent n str = str |> String.split_on_char '\n' |> List.map (fun s -> String
 let comment str = "/* "^str^"*/"
 
 let size_to_string size = string_of_int size
-let arridx_to_string = function 
+let arrlen_to_string = function 
   | IConst(i) -> string_of_int i
   | IVar(v) -> fst v
 
@@ -42,13 +42,13 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : string =
     let field_strs = List.map2 (fun l e -> l ^ ": " ^ e ^";") label_strs ts_strs in
     let fields_str = String.concat " " field_strs in    
     "{" ^ fields_str ^ "}"
-  | TList (ty, arridx) -> 
-    ty_to_string ~use_abstract_name:true ty ^ "[" ^ arridx_to_string arridx ^ "]"
+  | TList (ty, arrlen) -> 
+    ty_to_string ~use_abstract_name:true ty ^ "[" ^ arrlen_to_string arrlen ^ "]"
   | TFun func_ty -> "function(" ^ func_ty_to_string func_ty ^ ")"
   | TBits {ternary; len} -> (if ternary then "ternary_" else "") ^ "bit[" ^ size_to_string len ^ "]"
   | TEvent -> "event"
   | TEnum list -> 
-    let list_str = String.concat ", " (List.map (fun (s, i) -> id_to_string s ^ " = " ^ string_of_int i) list) in
+    let list_str = String.concat ", " (List.map (fun (s, i) -> cid_to_string s ^ " = " ^ string_of_int i) list) in
     "enum {" ^ list_str ^ "}"
   | TBuiltin (cid, ty_list) -> 
     let ty_list_str = String.concat ", " (List.map ty_to_string ty_list) in
@@ -94,7 +94,7 @@ let rec v_to_string (v: v) : string =
     let bits_str = String.concat "" (List.map (fun i -> if i = -1 then "*" else string_of_int i) bits) in
     (if ternary then "ternary " else "") ^ "bits[" ^ bits_str ^ "]"
   | VEvent e -> "event(" ^ vevent_to_string e ^ ")"
-  | VSymbol (s, _) -> id_to_string s
+  | VSymbol (s, _) -> cid_to_string s
 
 and vevent_to_string (e: vevent) : string =
   sprintf "%s(%s)" (cid_to_string e.evid) (String.concat ", " (List.map value_to_string e.evdata))
@@ -130,7 +130,7 @@ let rec e_to_string (e: e) : string =
     in
     f_str ^ "(" ^ args_str ^ ")" ^ comment_str
   | EOp (op, args) -> op_to_string op args
-  | EListGet (e, arridx) -> exp_to_string e ^ "[" ^ arridx_to_string arridx ^ "]"
+  | EListGet (e, i) -> exp_to_string e ^ "[" ^ exp_to_string i ^ "]"
 and exp_to_string exp = e_to_string exp.e
 and op_to_string (op: op) (args: exp list) : string =
   let args_str = List.map exp_to_string args in
@@ -166,7 +166,8 @@ and op_to_string (op: op) (args: exp list) : string =
   (* | Project id, [a] when is_mutable (List.hd args).ety -> a ^ "->" ^ id_to_string id *)
   | Project id, [a]                                   -> a ^ "." ^ id_to_string id
   | Get i, [a] -> a ^ "._" ^ string_of_int i
-  | _, _ -> failwith "Invalid number of arguments for operator"
+  | Mod, [x; m] -> Printf.sprintf "%s mod %s" x m
+  | _, _ -> failwith ("Invalid number of arguments for operator: "^(show_op op))
 
 let assign_op_to_string (op: assign_op) = 
   match op with
@@ -177,7 +178,7 @@ let assign_op_to_string (op: assign_op) =
     let tys_str = "("^String.concat ", " (List.map ty_to_string tys) ^")" in
     tys_str ^ " " ^ cids_str
   | OTupleAssign cids -> String.concat ", " (List.map cid_to_string cids)
-  | OListSet {arr; idx} -> exp_to_string arr ^ "[" ^ arridx_to_string idx ^ "]"
+  | OListSet (arr, idx) -> exp_to_string arr ^ "[" ^ exp_to_string idx ^ "]"
   | ORecordSet {rec_exp; field} -> exp_to_string rec_exp ^"."^id_to_string field
 ;;
 
@@ -201,10 +202,10 @@ let rec s_to_string (s: s) : string =
                   | Some e -> exp_to_string e 
                   | None -> "") ^ ";"  
   | SFor{idx; bound; stmt; guard=None} -> 
-    "for (" ^ (id_to_string idx) ^ " < " ^ arridx_to_string bound ^ ") {\n" ^ 
+    "for (" ^ (id_to_string idx) ^ " < " ^ arrlen_to_string bound ^ ") {\n" ^ 
     indent 2 (statement_to_string stmt) ^ "\n}"
   | SFor{idx; bound; stmt; guard=Some(guard)} -> 
-    "for (" ^ (id_to_string idx) ^ " < " ^ arridx_to_string bound ^ ") while ("^(id_to_string guard)^" == true) {\n" ^ 
+    "for (" ^ (id_to_string idx) ^ " < " ^ arrlen_to_string bound ^ ") while ("^(id_to_string guard)^" == true) {\n" ^ 
     indent 2 (statement_to_string stmt) ^ "\n}"
   | SForEver(stmt) -> 
     "forever {\n" ^ indent 2 (statement_to_string stmt) ^ "\n}"
@@ -228,7 +229,7 @@ and statement_to_string statement = s_to_string statement.s
 let rec d_to_string (d: d) : string =
   match d with
   | DVar (id, ty, exp_opt) -> 
-    let id_str = id_to_string id in
+    let id_str = cid_to_string id in
     let ty_str = ty_to_string ty in
     let exp_str = match exp_opt with 
                   | Some exp -> " = " ^ exp_to_string exp 
@@ -249,7 +250,7 @@ let rec d_to_string (d: d) : string =
       id_str ^ ": " ^ ty_str ^ exps_str ^ ";"
   | DFun (kind, id, ty, params, stmt_opt) -> 
     let kind_str = func_kind_to_string kind in
-    let id_str = id_to_string id in
+    let id_str = cid_to_string id in
     let ret_ty_str = match kind with 
       | FHandler -> ""
       | _ -> ty_to_string ty 
@@ -274,7 +275,7 @@ let rec d_to_string (d: d) : string =
     "event " ^ id_str ^ "(" ^ params_str ^ ");"
   | DFFun{fid; fparams; fret_ty; fstr} -> 
     let comment_str = 
-      comment (sprintf "%s %s(%s);" (ty_to_string fret_ty) (id_to_string fid) (params_to_string fparams);)
+      comment (sprintf "%s %s(%s);" (ty_to_string fret_ty) (cid_to_string fid) (params_to_string fparams);)
     in
     (comment comment_str) 
     ^ "\n" ^ fstr

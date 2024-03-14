@@ -9,8 +9,9 @@ let fcore_passes fds = fds
 let compile ds = 
   (* 1. translate to core syntax *)
   let ds = SyntaxToCore.translate_prog ~preserve_user_decls:true ds in
-  (* 2. run partial interpretation *)
+  (* 2. a few core passes *)
   let ds = PartialInterpretation.interp_prog ds in
+  let ds = CoreRegularizeMemops.process ds in
   let ds = DeleteNoops.deleter#visit_decls () ds in
   (* 3. translate to FCore *)
   let fds = CoreToCCore.translate_prog ds in
@@ -20,9 +21,20 @@ let compile ds =
   print_endline ("----------------------");
   (* implement tables *)
   let fds = CCoreTables.process_decls fds in
-  CheckFFuns.check fds;
-
   (* implement arrays *)
+  let fds = CCoreArrays.process_decls fds in
+  print_endline ("---- after data structure implementation ----");
+  print_endline (CCorePPrint.decls_to_string fds);
+  print_endline ("----------------------");
+
+
+  (* type check -- this will only pass after all the 
+     builtin type / functions from Core are eliminated *)
+  CheckFFuns.check fds;
+  let fds = CCoreTyper.check_decls fds in
+ 
+  (* implement arrays *)
+
 
   (* eliminate complex primitives and add misc builtins
       (match statements, hash, printf) *)

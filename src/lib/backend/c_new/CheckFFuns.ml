@@ -1,4 +1,5 @@
-(* check foriegn function defintions *)
+(* check foriegn function defintions by piping the 
+   function signature and definition to gcc *)
 
 open CCoreSyntax
 
@@ -22,10 +23,10 @@ let check_ffun (f: ffun) : bool =
   in
 
   match f.check_cmd with
-  | None -> true  (* If there's no check command, assume the function is correct *)
+  | None -> true  (* If there's no check lscommand, assume the function is correct *)
   | Some cmd -> (
     (* Generate the function signature *)
-    let signature = ty_to_string f.fret_ty ^ " "^ id_to_string f.fid ^"(" ^params_to_string f.fparams ^ ");"  in
+    let signature = ty_to_string f.fret_ty ^ " "^ cid_to_string f.fid ^"(" ^params_to_string f.fparams ^ ");"  in
 
     (* Combine the signature and the function definition *)
     let full_function = signature ^ "\n" ^ f.fstr in

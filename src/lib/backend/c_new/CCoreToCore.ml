@@ -126,6 +126,7 @@ let translate_op op =
   | F.Hash _ -> err "hash op must translate into hash expression"
   | F.Project _ -> err "project op must translate into project expression"
   | F.Get _ -> err "there is no get op in CoreSyntax"
+  | F.Mod -> err "there is no mod op in CoreSyntax"
 ;;
 
 (* left off here -- at translate_v *)
@@ -328,10 +329,10 @@ let translate_decl (decl : F.decl) : C.decl =
   | F.DVar(id, ty, Some(exp)) -> 
     let ty = translate_ty ty in
     let exp = translate_exp exp in
-    C.decl_sp (C.DGlobal(id, ty, exp)) decl.dspan
+    C.decl_sp (C.DGlobal((Cid.to_id id), ty, exp)) decl.dspan
   | F.DVar(id, ty, None) ->
     let ty = translate_ty ty in
-    C.decl_sp (C.DExtern(id, ty)) decl.dspan
+    C.decl_sp (C.DExtern((Cid.to_id id), ty)) decl.dspan
   | F.DList(_, _, _) -> 
     err "list primitives are not supported in CoreSyntax"
   | F.DEvent{evconstrid; evconstrnum; evparams; is_parsed} -> 
@@ -342,13 +343,13 @@ let translate_decl (decl : F.decl) : C.decl =
   | F.DFun(F.FHandler, id, _, params, Some(body)) ->
     let params = List.map (fun (id, ty) -> id, translate_ty ty) params in
     let body = translate_stmt false body in
-    let d = C.DHandler(id, C.HData, (params, body)) in
+    let d = C.DHandler((Cid.to_id id), C.HData, (params, body)) in
     C.decl_sp d decl.dspan
   | F.DFun(F.FMemop, id, _, params, Some(body)) ->
     (* translate to core, then specialize as memop *)
     let params = List.map (fun (id, ty) -> id, translate_ty ty) params in
     let body = translate_stmt false body in
-    let memop = Despecialization.specialize_memop id params body in
+    let memop = Despecialization.specialize_memop (Cid.to_id id) params body in
     let d = C.DMemop(memop) in
     C.decl_sp d decl.dspan    
   | F.DFun(F.FParser, id, _, params, Some(body)) -> (    
@@ -356,7 +357,7 @@ let translate_decl (decl : F.decl) : C.decl =
     let params = List.map (fun (id, ty) -> id, translate_ty ty) params in
     let body = translate_stmt false body in
     let parse_block = Despecialization.specialize_parser_block body in
-    C.decl_sp (C.DParser(id, params, parse_block)) decl.dspan
+    C.decl_sp (C.DParser((Cid.to_id id), params, parse_block)) decl.dspan
   )
   | F.DFun(F.FAction, id, rty, params, Some(body)) -> 
     (* detuple return type, first param, and second param *)
@@ -409,7 +410,7 @@ let translate_decl (decl : F.decl) : C.decl =
       | _ -> err "action has more than just a return statement"
     in 
     C.decl_sp (C.DActionConstr{
-      aid = id;
+      aid = (Cid.to_id id);
       artys = List.map translate_ty rtys;
       aconst_params = List.map (fun (id, ty) -> id, translate_ty ty) const_params;
       aparams = List.map (fun (id, ty) -> id, translate_ty ty) params;
@@ -419,7 +420,7 @@ let translate_decl (decl : F.decl) : C.decl =
     let params = List.map (fun (id, ty) -> id, translate_ty ty) params in
     let body = translate_stmt false body in
     let rty = translate_ty rty in
-    let d = C.DFun(id, rty, (params, body)) in
+    let d = C.DFun((Cid.to_id id), rty, (params, body)) in
     C.decl_sp d decl.dspan
   | F.DFun(_, _, _, _, None) -> err "extern functions are not supported in CoreSyntax"
   | F.DFun(_, _, _, _, _) -> 

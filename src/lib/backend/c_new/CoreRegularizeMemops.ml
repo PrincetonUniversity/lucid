@@ -5,7 +5,7 @@
 *) 
 open InterpHelpers
 open CoreSyntax
-open TofinoCore
+(* open TofinoCore *)
 module CS = CoreSyntax
 module C = TofinoCore
 
@@ -216,6 +216,16 @@ let set_memop cell_ty =
 
 ;;
 
+let memops ds = 
+  List.filter_map
+  (fun dec ->
+    match dec.d with 
+    | DMemop m -> Some(m.mid, m)
+    | _ -> None)
+  ds
+;;
+
+
 
 (* convert every array.set/get/setm/getm/update call into an array.update_complex, creating a new memop if necessary.*)
 (* need to avoid creating duplicates of the same memops... *)
@@ -375,7 +385,7 @@ let regularize_array_calls tds =
         in
         match results with 
         | Some(new_exp, new_memop, old_memop_ids) -> 
-          new_memops := {td=TDMemop(new_memop); tdspan=Span.default; tdpragma=[]}::(!new_memops); 
+          new_memops := {d=DMemop(new_memop); dspan=Span.default; dpragma=None}::(!new_memops); 
           memops_to_delete := (!memops_to_delete)@old_memop_ids;
           new_exp
         | None -> exp
@@ -385,8 +395,8 @@ let regularize_array_calls tds =
     match tds with 
     | [] -> []
     | td::tds -> (
-      match td.td with 
-      | TDMemop({mid=mid; _}) -> (
+      match td.d with 
+      | DMemop({mid=mid; _}) -> (
         if (MiscUtils.contains (!memops_to_delete) mid)
         then (update_memops tds)
         else (td::(update_memops tds))
@@ -395,7 +405,7 @@ let regularize_array_calls tds =
     )
   in
 
-  let new_tds = v#visit_tdecls () tds in 
+  let new_tds = v#visit_decls () tds in 
   (* now add decls for new memops and delete old merged memops *)
   (update_memops new_tds)@(MiscUtils.unique_list_of (!new_memops))
 ;;
@@ -437,9 +447,9 @@ let condition_snd_cr_stmts (b:CoreSyntax.complex_body) =
 
 let rec delete_non_complex_memops tds =
   List.filter (fun td -> 
-    match td.td with
-      | TDMemop({mbody=MBComplex(_);}) -> true
-      | TDMemop(_) -> false
+    match td.d with
+      | DMemop({mbody=MBComplex(_);}) -> true
+      | DMemop(_) -> false
       | _ -> true )
   tds
 ;;
@@ -448,13 +458,13 @@ let rec regularize_memop_conditions tds =
   match tds with 
   | [] -> []
   | td::tds -> (
-    match td.td with 
-      | TDMemop(mo) -> (
+    match td.d with 
+      | DMemop(mo) -> (
         match mo.mbody with 
           | MBComplex(complex_body) -> 
             let new_mbody = MBComplex(condition_snd_cr_stmts complex_body) in
             let new_mo = {mo with mbody=new_mbody;} in 
-            let new_td = {td with td=TDMemop(new_mo)} in 
+            let new_td = {td with d=DMemop(new_mo)} in 
             new_td::(regularize_memop_conditions tds)
           | _ -> 
             error "[regularize_memop_conditions] all memops must be complex by this point."
@@ -469,15 +479,15 @@ let rec regularize_memop_conditions tds =
 let correct_decl_ordering tds = 
   let memops_decls, other_decls = List.fold_left 
     (fun (memop_decls, other_decls) decl -> 
-      match decl.td with 
-      | TDMemop(_) -> (memop_decls@[decl], other_decls)
+      match decl.d with 
+      | DMemop(_) -> (memop_decls@[decl], other_decls)
       | _ -> (memop_decls, other_decls@[decl]))
     ([], [])
     tds
   in
   List.fold_left (fun decls decl -> 
-    match decl.td with
-    | TDHandler(_) -> decls@memops_decls@[decl]
+    match decl.d with
+    | DHandler(_) -> decls@memops_decls@[decl]
     | _ -> decls@[decl])
   []
   other_decls
@@ -488,10 +498,4 @@ let process tds =
   |> delete_non_complex_memops 
   |> regularize_memop_conditions 
   |> correct_decl_ordering
-;;
-let process_core prog =
-  List.map
-    (fun component -> 
-      {component with comp_decls = process component.comp_decls;})
-    prog
 ;;

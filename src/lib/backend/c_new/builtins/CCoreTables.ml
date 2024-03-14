@@ -18,11 +18,8 @@ open CCoreSyntax
 [@@@ocaml.warning "-27"]
 
 (*** defunctionalize actions ***)
-let tag id = Id.append_string "_tag" id
-let untag id = 
-  (* remove the suffix "_tag" from (fst id) *)
-  let s = String.split_on_char '_' (fst id) |> List.hd in
-  (s, snd id)
+let tag cid = Cid.str_cons "tag" cid
+let untag cid = Cid.tl cid 
 let cid s = Cid.create [s]
 let id = Id.create
 
@@ -38,7 +35,7 @@ let defunctionalize_actions decls =
       inherit [_] s_map as super
       method! visit_exp () exp = 
         try 
-          let var_id, _ = extract_evar_id exp in
+          let var_id, _ = extract_evar exp in
           if (List.mem var_id action_ids) then 
             eval (venum (tag var_id) action_enum_ty)
           else
@@ -57,20 +54,20 @@ let defunctionalize_actions decls =
    This can be derived from the declaration. *)
 type table_spec = 
 {
-  tbl_id : id; 
-  len    : arridx;
+  tbl_id : cid; 
+  len    : arrlen;
   tbl_ty : ty;  
   key_ty : ty;
   const_arg_ty : ty;
   arg_ty : ty; 
   ret_ty : ty;
-  action_tags : id list;
+  action_tags : cid list;
   actions_enum_ty : ty;
 }
 
 let table_cell_type tbl_id key_ty acns_enum_ty const_action_arg_ty : ty = 
-  let tblcellty_id = Id.append_string "_cellty" tbl_id in
-  tabstract_id 
+  let tblcellty_id = Cid.str_cons "cellty" tbl_id in
+  tabstract_cid 
     tblcellty_id
     (trecord 
       [id "valid"; id "key"; id "action_tag"; id "action_arg"] 
@@ -84,8 +81,8 @@ let table_cell_type tbl_id key_ty acns_enum_ty const_action_arg_ty : ty =
 
 let table_instance_type tbl_id acns_enum_ty const_action_arg_ty tbl_cell_ty tbl_len =   
   (* a table is a struct variable with a default and a list of entries *)
-  tabstract_id
-  (Id.append_string "_ty" tbl_id)
+  tabstract_cid
+  (Cid.str_cons "ty" tbl_id)
   (
     trecord
       [id "default"; id "entries"]
@@ -100,7 +97,7 @@ let vrecord pairs =
   let a, b = List.split pairs in
   vrecord a b
 ;;
-let table_create (tbl_ty : ty) (def_enum_id : id) (acn_enum_ty : ty) (def_arg : value) = 
+let table_create (tbl_ty : ty) (def_enum_id : cid) (acn_enum_ty : ty) (def_arg : value) = 
   let fields, tys = extract_trecord tbl_ty in
   let field_ty = List.combine fields tys in 
   let entries_ty = List.assoc (id"entries") field_ty in
@@ -123,10 +120,10 @@ let table_create (tbl_ty : ty) (def_enum_id : id) (acn_enum_ty : ty) (def_arg : 
 (* note: the length and the types are all part of tbl_ty, 
    but its easier to just pass them in from the 
    function builder. *)
-let lookup_id tbl_id = Id.append_string "_lookup" tbl_id ;;
+let lookup_id tbl_id = Cid.str_cons "lookup" tbl_id ;;
 let table_lookup spec = 
   (* note: the table is hard coded into the function, not a parameter. *)
-  let tbl = evar (Cid.id spec.tbl_id) spec.tbl_ty in
+  let tbl = evar (spec.tbl_id) spec.tbl_ty in
   (* let tbl_param = evar (cid "tbl") spec.tbl_ty in *)
   let key_param = evar (cid "key") spec.key_ty in
   let arg_param = evar (cid "arg") spec.arg_ty in
@@ -135,7 +132,7 @@ let table_lookup spec =
   (* first, declare a local variable that calls the default action *)
   let s_decl_rv = (cid"rv") /::= default_exp spec.ret_ty in
   let apply_default_branch action_tag =    
-    let action_evar = efunref (Cid.id (untag action_tag)) action_ty in
+    let action_evar = efunref (untag action_tag) action_ty in
     (case spec.actions_enum_ty)
     action_tag
       ( id"rv" /:= (action_evar /** [tbl/->"default"/->"action_arg"; arg_param]))
@@ -148,7 +145,7 @@ let table_lookup spec =
   let cont = id "_cont" in
   let apply_branch  action_tag = 
     (* tbl->entries[idx]->action_arg *)
-    let action_evar = efunref (Cid.id (untag action_tag)) action_ty in    
+    let action_evar = efunref ((untag action_tag)) action_ty in    
     (case spec.actions_enum_ty) 
     action_tag
       ( id"rv" /:= (action_evar /** [((tbl/->"entries")/@idx)/->"action_arg"; arg_param]))
@@ -189,10 +186,10 @@ let table_lookup spec =
 ;;
 
 (* Table.install(Table_t, key, action, const_arg) *)
-let install_id tbl_id = Id.append_string "_install" tbl_id ;;
+let install_id tbl_id = Cid.str_cons "install" tbl_id ;;
 let table_install spec = 
   (* note: the table is hard coded into the function, not a parameter. *)
-  let tbl = evar (Cid.id spec.tbl_id) spec.tbl_ty in
+  let tbl = evar (spec.tbl_id) spec.tbl_ty in
   (* let tbl_param = evar (cid "tbl") spec.tbl_ty in *)
   let key_param = evar (cid "key") spec.key_ty in
   (* note: call has to be transformed from an action variable to an action tag value *)
@@ -204,16 +201,17 @@ let table_install spec =
   in
 
   let idx = id "_idx" in
+  let idx_var = evar (Cid.id idx) (tint 32) in
   let cont = id "_cont" in
   let body = swhile idx spec.len cont
     (
       let entries = eop (Project(id"entries")) [tbl] in
-      let entry = elistget entries (idxvar idx) in
+      let entry = elistget entries idx_var in
       (* let entry = (entries/@idx) in     *)
       sif (eop Eq [entry/->"valid";eval@@vbool false])
         (stmts [
             sassign (Cid.id cont)  (eval (vbool false));
-            (tbl/->"entries", idxvar idx)/<-new_slot;            
+            (tbl/->"entries", idx_var)/<-new_slot;            
           ])
         snoop
     )
@@ -239,7 +237,7 @@ let monomorphic_table_decls actions_enum_ty decl : decls =
     in
     let len, action_tags, default_action_enum_id, default_action_arg = match (eval_exp exp |> extract_vevent).evdata with 
       | [len; actions; default_action; default_action_arg] ->  
-        extract_vint len |> arridx, 
+        extract_vint len |> arrlen, 
         extract_vtuple actions |> List.map extract_vsymbol,
         extract_vsymbol default_action, (* here, the id is the symbol in the enum *) 
         default_action_arg
@@ -280,7 +278,7 @@ let monomorphic_table_calls =
         let f_cid, _ = extract_evar f in
         if (List.mem f_cid table_fun_cids) then 
         (
-          let tbl_id, _ = extract_evar_id (List.hd args) in 
+          let tbl_id, _ = extract_evar (List.hd args) in 
           let fun_id = match (Cid.names f_cid) with 
             | ["Table";"install"] -> ( install_id tbl_id )
             | ["Table";"install_ternary"] -> ( failwith "ternary install not implemented" )
@@ -293,12 +291,12 @@ let monomorphic_table_calls =
               {f.ety with raw_ty=TFun{arg_tys; ret_ty; func_kind}}
             | _ -> failwith "unexpected type"
           in
-          let f = efunref (Cid.id fun_id) f_ety in
+          let f = efunref (fun_id) f_ety in
           let args = List.tl args in
           {exp with e=ECall{f; args; call_kind=CFun}}
         )
         else
-          {exp with e=ECall{f; args; call_kind=CFun}}
+          super#visit_exp () exp
       | _ -> super#visit_exp () exp
   end
 ;; 
@@ -314,6 +312,5 @@ let process_decls decls =
   let decls = (decl_tabstract actions_enum_ty)::decls in 
   let decls = List.flatten (List.map (monomorphic_table_decls actions_enum_ty) decls) in
   let decls = monomorphic_table_calls#visit_decls () decls in
-  let decls = CCoreTyper.check_decls decls in
   decls
 ;;

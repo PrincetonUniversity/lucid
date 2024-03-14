@@ -646,6 +646,9 @@ let interp_dglobal (nst : State.network_state) swid id ty e =
 ;;
 
 let interp_complex_body params body nst swid args =
+  (* TODO: 
+        - cell2 should not take default.
+        - the default parameter should get removed. Just use 0. *)
   let args, default = List.takedrop (List.length params) args in
   let default = List.hd default in
   let cell1_val = List.hd args in
