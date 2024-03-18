@@ -653,6 +653,13 @@ let stmts stmts =
     List.fold_left (fun acc s -> sseq acc s) (List.hd stmts) (List.tl stmts)
 ;;
 
+let rec to_stmt_block stmt = 
+  match stmt.s with 
+  | SSeq(s1, s2) -> 
+    (to_stmt_block s1)@(to_stmt_block s2)
+  | _ -> [stmt]
+;;
+
 let swrap sspan s = {s with sspan}
 
 let slocal_evar (evar : exp) (exp : exp) = 
@@ -710,7 +717,11 @@ let extract_daction_id_opt decl = match decl.d with
   | DFun(FAction, id, _, _, _) -> Some id
   | _ -> None
 
-
+let extract_dfun_opt decl = match decl.d with 
+  | DFun(FNormal, id, ty, params, Some body) -> 
+    Some(id, ty, params, body)
+  | _ -> None
+  ;;
 (* derive the type of a declared function *)
 (* let extract_dfun_ty decl = match decl.d with 
   | DFun(_, _, ty, params, _) -> tfun params ty

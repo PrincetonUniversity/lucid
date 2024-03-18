@@ -33,7 +33,6 @@ let compile ds =
   print_endline ("---- after handler to function transformation ----");
   print_endline (CCorePPrint.decls_to_string fds);
   print_endline ("----------------------");
-  exit 1;
  (* 
     1. number events. 
     2. move generates to the end of the handler. 

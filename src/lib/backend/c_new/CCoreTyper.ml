@@ -470,7 +470,18 @@ let rec infer_statement env (stmt:statement) =
       | (pats, statement)::branches -> 
         if (List.length pats <> List.length exps) then 
           ty_err "wrong number of patterns for expressions in match statement";
-        let env', statement = infer_statement env statement in
+        (* for all the patterns that are events, we need to bind parameter types in env *)
+        let inner_env = 
+          List.fold_left (fun env pat -> 
+            match pat with 
+            | PEvent{params} -> 
+              let env = add_vars env (List.map (fun f -> f|> fst |> Cid.id) params) (List.map snd params) in
+              env
+            | _ -> env
+          ) env pats
+        in
+        let env', statement = infer_statement inner_env statement in
+        (* unbind parameters now *)
         let env = {env' with vars=env.vars} in
         let env, rest = infer_branches env branches in
         env, (pats, statement)::rest

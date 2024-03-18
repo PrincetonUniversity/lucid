@@ -58,7 +58,7 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : string =
     if (use_abstract_name) then 
       cid_to_string cid
     else ty_to_string ty
-  | TGlobal(ty) -> sprintf "(%s*)" (ty_to_string ty)
+  | TGlobal(ty) -> sprintf "%s*" (ty_to_string ~use_abstract_name ty)
 and ty_to_string ?(use_abstract_name=false) ty = raw_ty_to_string ~use_abstract_name ty.raw_ty
 
 and func_ty_to_string (f: func_ty) : string =
@@ -253,7 +253,7 @@ let rec d_to_string (d: d) : string =
     let id_str = cid_to_string id in
     let ret_ty_str = match kind with 
       | FHandler -> ""
-      | _ -> ty_to_string ty 
+      | _ -> ty_to_string ~use_abstract_name:true ty 
     in
     let params_str = params_to_string params in
     let stmt_str = match stmt_opt with 
