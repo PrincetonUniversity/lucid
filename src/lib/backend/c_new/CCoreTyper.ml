@@ -41,6 +41,17 @@ let empty_env =
   }
 ;;
 
+let env_to_string env = 
+  let vars =  env.vars  |> CidMap.to_seq |> List.of_seq in
+  let vars = List.map (fun (cid, ty) -> (Cid.to_string cid, CCorePPrint.ty_to_string ty)) vars in
+  let vars = String.concat "\n" (List.map (fun (cid, ty) -> cid^" : "^ty) vars) in
+  let vars_str = "vars:\n"^vars in
+  let tys =  env.tys  |> CidMap.to_seq |> List.of_seq in
+  let tys = List.map (fun (cid, ty) -> (Cid.to_string cid, CCorePPrint.ty_to_string ty)) tys in
+  let tys = String.concat "\n" (List.map (fun (cid, ty) -> cid^" : "^ty) tys) in
+  let tys_str = "tys:\n"^tys in
+  vars_str^"\n"^tys_str
+;;
 
 let add_var env id ty = 
   {env with vars = CidMap.add id ty env.vars}
@@ -92,6 +103,9 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
   | TAbstract(_, {raw_ty = ty1}), ty2 
   | ty1, TAbstract(_, {raw_ty = ty2}) -> 
     unify_raw_ty env ty1 ty2
+  (* named types unify if their names and types are equal *)
+  | TGlobal(t1), TGlobal(t2) -> 
+    unify_ty env t1 t2
   | TName cid1, TName cid2 -> 
     if (not (Cid.equal cid1 cid2)) then 
       (ty_err "named types with different names");
@@ -149,7 +163,7 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
     let env' = unify_lists env unify_ty arg_tys1 arg_tys2 in
     let env'' = unify_ty env' ret_ty1 ret_ty2 in
     env''
-  | (TUnit|TBool|TEvent|TInt _|TRecord _ | TTuple _ | TName _
+  | (TUnit|TBool|TEvent|TInt _|TRecord _ | TTuple _ | TName _ | TGlobal _
     |TList (_, _)|TFun _|TBits _|TEnum _|TBuiltin (_, _)), _ -> 
       print_endline@@"type mismatch:\n"^(CCorePPrint.raw_ty_to_string rawty1)^"\nand\n"^(CCorePPrint.raw_ty_to_string rawty2);
       ty_err "type mismatch"
@@ -193,7 +207,7 @@ let rec infer_lists env f_infer xs =
 ;;
 
 let rec infer_exp env exp : env * exp = 
-  (* print_endline ("inferring exp: "^(CCorePPrint.exp_to_string exp)); *)
+  print_endline ("inferring exp: "^(CCorePPrint.exp_to_string exp));
   let infer_exps env = infer_lists env infer_exp in
   let env, exp = match exp.e with 
     | EVal value -> 
@@ -202,9 +216,15 @@ let rec infer_exp env exp : env * exp =
     | EVar cid -> 
       let ety = match CidMap.find_opt cid env.vars with
         | Some ty -> ty
-        | None -> raise (UnboundVariable cid)
+        | None -> 
+          print_endline ("current env:\n"^(env_to_string env));      
+          ty_err@@"cannot find type for unbound variable: "^(CCorePPrint.cid_to_string cid)
       in
       env, {e=EVar cid; ety; espan=exp.espan}
+    | EGlobalDeref(inner_exp) -> 
+      let env, inf_inner_exp = infer_exp env inner_exp in
+      (* inner exp should be a global, this is the inner type *)
+      env, {e=EGlobalDeref(inner_exp); ety = extract_tglobal (inf_inner_exp.ety); espan = exp.espan}
     (* | ERecord{labels=None; es} ->        *)
     | ETuple(es) -> 
       let env, es' = infer_exps env es in
@@ -218,9 +238,10 @@ let rec infer_exp env exp : env * exp =
       env, {e; ety; espan=exp.espan}
     | ECall{f; call_kind=CEvent} ->
       let env, inf_f = infer_exp env f in
+      (* todo: this unify is kind of weird? *)
       if (is_tevent inf_f.ety) then unify_ty env exp.ety tevent, exp
       else ty_err "event call on non-event"
-      | ECall{f; call_kind=CFun;} when (Cid.equal (fst (extract_evar f)) (Cid.create ["printf"]) )-> 
+    | ECall{f; call_kind=CFun;} when (Cid.equal (fst (extract_evar f)) (Cid.create ["printf"]) )-> 
 
         (* TODO: hole for printf.
             options: 
@@ -230,7 +251,7 @@ let rec infer_exp env exp : env * exp =
                c code as the untyped body.
             3. a single untyped printf extern
             4. a printf op. Like hash. 
-              - oh. This makes sense. Its very similar to hash, 
+              - oh. This makes sense. Its similar to hash, 
                 except it doesn't return anything.*)
         env, exp
   
@@ -240,16 +261,14 @@ let rec infer_exp env exp : env * exp =
       let env, inf_args = infer_lists env infer_exp args in
       let arg_tys = List.map (fun exp -> exp.ety) inf_args in
       let env = unify_lists env unify_ty param_tys arg_tys in
-      (* TODO: unify here isn't quite right. We 
-          don't want to constrain the function's index vars, 
-          just the call's. *)
+      (* TODO: update unify for list lengths *)
       let e = ECall{f=inf_f; args=inf_args; call_kind=CFun} in
       env, {e; ety=ret_ty; espan=exp.espan}
     | EOp(op, args) -> 
       let env, op, inf_args, ety = infer_eop env op args in
       let e = EOp(op, inf_args) in
       env, {exp with e; ety}
-    | EListGet(list_exp, idx_exp) -> 
+    | EListIdx(list_exp, idx_exp) -> 
       let env, inf_list_exp = infer_exp env list_exp in
       let env, inf_idx_exp = infer_exp env idx_exp in
       if not (is_tint inf_idx_exp.ety) then 
@@ -267,7 +286,7 @@ let rec infer_exp env exp : env * exp =
             - hmm... could we track an optional "max value" on tints that we infer? 
               - then we could just check that...         
          *)
-      let e = EListGet(inf_list_exp, inf_idx_exp) in
+      let e = EListIdx(inf_list_exp, inf_idx_exp) in
       env, {exp with e; ety=inf_ty}
   in
   print_endline@@"finished inferring expression -- "^(CCorePPrint.exp_to_string exp)^" : "^(CCorePPrint.ty_to_string exp.ety);
@@ -387,7 +406,7 @@ and infer_eop env op (args : exp list) : env * op * exp list * ty = match op, ar
 ;;
 
 let rec infer_statement env (stmt:statement) = 
-  (* print_endline ("inferring statement: "^(CCorePPrint.statement_to_string stmt)); *)
+  print_endline ("inferring statement: "^(CCorePPrint.statement_to_string stmt));
   match stmt.s with 
   | SNoop -> env, stmt
   | SUnit(exp) -> 
@@ -398,14 +417,6 @@ let rec infer_statement env (stmt:statement) =
     let env = unify_ty env ty inf_exp.ety in
     let env = add_var env cid ty in
     env, {stmt with s=SAssign(OLocal(cid, ty), inf_exp)}
-  | SAssign(OAssign(cid), exp) -> 
-    let env, inf_exp = infer_exp env exp in
-    let ty = match CidMap.find_opt cid env.vars with
-      | Some ty -> ty
-      | None -> raise (UnboundVariable cid)
-    in
-    let env = unify_ty env ty inf_exp.ety in
-    env, {stmt with s=SAssign(OAssign(cid), inf_exp)}
   (* declare multiple variables, unpack tuple, assign to variables *)
   | SAssign(OTupleLocal(ids, tys), exp) -> 
     let env, inf_exp = infer_exp env exp in
@@ -418,48 +429,24 @@ let rec infer_statement env (stmt:statement) =
     let env = add_vars env ids tys in
     let inf_exp = {inf_exp with e=ETuple(inf_exps)} in
     env, {stmt with s=SAssign(OTupleLocal(ids, tys), inf_exp)}
-  | SAssign(OTupleAssign(ids), exp) -> 
+  | SAssign(OTupleAssign(lexps), exp) ->
+    let env, inf_lexps = infer_lists env infer_exp lexps in
     (* assigning to existing multiple variables from a tuple-type expression *)
     let env, inf_exp = infer_exp env exp in
     if (not@@is_ttuple inf_exp.ety) then 
       raise (TypeError("only tuples can be unpacked with a multi-assign"));
     let inf_exps = flatten_tuple inf_exp in
-    if (List.length ids <> List.length inf_exps) then 
-      raise (LengthMismatch(List.length ids, List.length inf_exps));
+    if (List.length inf_lexps <> List.length inf_exps) then 
+      raise (LengthMismatch(List.length inf_lexps, List.length inf_exps));
     (* make sure all the variables are already declared in the environment *)
-    let tys = List.map (fun id -> 
-      match CidMap.find_opt id env.vars with
-      | Some ty -> ty
-      | None -> raise (UnboundVariable id)
-    ) ids in
-    let env = unify_lists env unify_ty tys (List.map (fun exp -> exp.ety) inf_exps) in
+    let env = unify_lists env unify_ty (List.map (fun exp -> exp.ety) inf_lexps) (List.map (fun exp -> exp.ety) inf_exps) in
     let inf_exp = {inf_exp with e=ETuple(inf_exps)} in
-    env, {stmt with s=SAssign(OTupleAssign(ids), inf_exp)}
-  | SAssign(OListSet(arr, idx), exp) -> 
-    let env, inf_arr = infer_exp env arr in
-    let env, inf_idx = infer_exp env idx in
+    env, {stmt with s=SAssign(OTupleAssign(inf_lexps), inf_exp)}
+  | SAssign(OAssign(lexp), exp) ->
+    let env, inf_lexp = infer_exp env lexp in
     let env, inf_exp = infer_exp env exp in
-    if (not@@is_tlist inf_arr.ety) then 
-      raise (TypeError("list set on non-list"));
-    let inf_cell_ty, _ = extract_tlist inf_arr.ety in
-    (* unify cell type and rhs type *)
-    let env = unify_ty env inf_cell_ty inf_exp.ety in
-    (* TODO: constrain |inf_arr| > arrlen *)
-    env, {stmt with s=SAssign(OListSet(inf_arr, inf_idx), inf_exp)}
-  | SAssign(ORecordSet{rec_exp; field;} , exp) -> (
-    let env, inf_rec_exp = infer_exp env rec_exp in
-    let env, inf_exp = infer_exp env exp in
-    if (not@@is_trecord inf_rec_exp.ety) then 
-      raise (TypeError("record set on non-record"));
-    let inf_labels, inf_tys = extract_trecord inf_rec_exp.ety in
-    let labels_tys = List.combine inf_labels inf_tys in
-    let inf_ty = List.assoc_opt field labels_tys in
-    match inf_ty with
-      | Some ty -> 
-        let env = unify_ty env ty inf_exp.ety in
-        env, {stmt with s=SAssign(ORecordSet{rec_exp=inf_rec_exp; field;}, inf_exp)}
-      | None -> raise (UnboundField field)
-    )
+    let env = unify_ty env inf_lexp.ety inf_exp.ety in
+    env, {stmt with s=SAssign(OAssign(lexp), exp)}
   | SSeq(stmt1, stmt2) -> 
     let env, inf_stmt1 = infer_statement env stmt1 in
     let env, inf_stmt2 = infer_statement env stmt2 in
@@ -474,12 +461,15 @@ let rec infer_statement env (stmt:statement) =
     let env', inf_stmt2 = infer_statement env stmt2 in
     let env = {env' with vars=env.vars} in
     env, {stmt with s=SIf(inf_econd, inf_stmt1, inf_stmt2)}
-  | SMatch(exp, branches) -> 
-    let env, inf_exp = infer_exp env exp in
+  | SMatch(exps, branches) -> 
+    let infer_exps env = infer_lists env infer_exp in
+    let env, inf_exps = infer_exps env exps in
     let rec infer_branches env branches =
       match branches with 
       | [] -> env, []
       | (pats, statement)::branches -> 
+        if (List.length pats <> List.length exps) then 
+          ty_err "wrong number of patterns for expressions in match statement";
         let env', statement = infer_statement env statement in
         let env = {env' with vars=env.vars} in
         let env, rest = infer_branches env branches in
@@ -488,9 +478,8 @@ let rec infer_statement env (stmt:statement) =
     let env', inf_branches = infer_branches env branches in
     let env = {env' with vars=env.vars} in
 
-    env, {stmt with s=SMatch(inf_exp, inf_branches)}
+    env, {stmt with s=SMatch(inf_exps, inf_branches)}
   | SRet(Some(exp)) -> (
-    (* TODO: update environment *)
     let env, inf_exp = infer_exp env exp in
     match env.ret_ty with
     | Some ret_ty -> 
@@ -501,6 +490,9 @@ let rec infer_statement env (stmt:statement) =
   )
   | SRet(None) -> env, stmt
   | SFor{idx; bound; stmt; guard} -> 
+    (* add the index to the env *)
+    let env = add_var env (Cid.id idx) (tint 32) in
+    (* add the guard to the env *)
     let env = match guard with 
       | None -> env
       | Some(guard_id) -> add_var env (Cid.id guard_id) tbool
@@ -516,15 +508,21 @@ let rec infer_statement env (stmt:statement) =
 ;;
 
 let rec infer_decl env decl : env * decl = 
-  (* print_endline ("inferring decl: ");
-  print_endline (CCorePPrint.decl_to_string decl); *)
+  print_endline ("inferring decl: ");
+  print_endline (CCorePPrint.decl_to_string decl);
   match decl.d with 
   | DVar(id, ty, Some(arg)) -> 
+    (* globals: the type of the constructor expression
+       is t, BUT the declared type (of the variable) must be tglobal t *)
+    if (is_tglobal ty <> true) then 
+      ty_err "a toplevel variable must be declared with a global type";
     let env, inf_arg = infer_exp env arg in
-    let env = unify_ty env ty inf_arg.ety in
+    let env = unify_ty env ty (tglobal inf_arg.ety) in
     let env = add_var env (id) ty in
     env, {decl with d=DVar(id, ty, Some(inf_arg))}
   | DVar(id, ty, None) ->
+    if ((is_tglobal ty) <> true) then 
+      ty_err "globally scoped variables must be declared as globals";
     let env = add_var env (id) ty in
     env, decl
   | DList(id, ty, Some(args)) -> (
@@ -570,7 +568,6 @@ let rec infer_decl env decl : env * decl =
     (* unify the return type *)
     let env = unify_ty env ret_ty inf_ret_ty in
     (* update the environment with the function *)
-
     let fun_ty = tfun_kind fun_kind (List.map snd params) ret_ty  in
     let env = add_var env (id) fun_ty in
     env, {decl with d=DFun(fun_kind, id, inf_ret_ty, params, Some(inf_stmt))}

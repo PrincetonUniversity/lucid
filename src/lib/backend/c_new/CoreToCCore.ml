@@ -34,9 +34,12 @@ let rec translate_raw_ty (raw_ty : C.raw_ty) : F.raw_ty =
   | C.TInt(Sz sz) ->  F.TInt(F.sz sz)
   | C.TInt(_) -> err "TInt size should be a singleton"
   | C.TEvent -> F.TEvent
-  | C.TName(cid, []) -> (F.tname cid).raw_ty
+  | C.TName(cid, []) -> (F.tname cid).raw_ty (* user-defined type *)
   | C.TName(cid, sizes) -> (F.tbuiltin cid (List.map size_to_ty sizes)).raw_ty
-  | C.TBuiltin(cid, raw_tys) -> (F.tbuiltin cid (List.map (fun raw_ty -> F.ty (translate_raw_ty raw_ty)) raw_tys )).raw_ty
+      (* builtin types with size args *)
+  | C.TBuiltin(cid, raw_tys) -> 
+    (F.tbuiltin cid (List.map (fun raw_ty -> F.ty (translate_raw_ty raw_ty)) raw_tys )).raw_ty
+      (* builtin types with type args *)
   | C.TFun {arg_tys; ret_ty} -> 
     let fty : F.func_ty = {
       F.arg_tys = List.map translate_ty arg_tys; 
@@ -85,8 +88,7 @@ and translate_acn_ty (aty : C.acn_ty) =
   }
 and translate_ty (ty : C.ty) : F.ty = 
   {raw_ty = translate_raw_ty ty.raw_ty; 
-   tspan = ty.tspan;
-   }
+   tspan = ty.tspan;}
 ;;
 let translate_params (params: C.params) : F.params = 
   List.map (fun ((id: Id.t), ty) -> id, translate_ty ty) params
@@ -263,10 +265,10 @@ let rec translate_statement (stmt:C.statement) : F.statement =
     in    
     let exps = List.map translate_exp exps in
     (* if there's more than one expression, wrap it in a tuple *)
-    let exp = match exps with 
+    (* let exp = match exps with 
       | [exp] -> exp
       | exps -> F.etuple exps
-    in
+    in *)
     (* we have to expand a single wildcard into multiple wildcards *)
     let num_pats = List.length pat_lens in
     let rec extend_single_wild_pats branches = 
@@ -286,13 +288,15 @@ let rec translate_statement (stmt:C.statement) : F.statement =
         (pats, (stmt)))
       branches
     in
-    F.smatch exp branches |> F.swrap stmt.sspan
+    F.smatch exps branches |> F.swrap stmt.sspan
   | C.SRet(None) -> F.sret_none |> F.swrap stmt.sspan
   | C.SRet(Some(exp)) -> F.sret (translate_exp exp) |> F.swrap stmt.sspan
   | STupleAssign{ids; tys=None; exp} -> 
     let cids = List.map Cid.id ids in
     let exp = translate_exp exp in
-    F.stupleassign cids exp |> F.swrap stmt.sspan
+    let cid_tys = F.extract_ttuple exp.ety in 
+    let exps = List.map2 F.evar cids cid_tys in
+    F.stupleassign exps exp |> F.swrap stmt.sspan
   | STupleAssign{ids; tys=Some(tys); exp;} -> 
     let cids = List.map Cid.id ids in
     let tys=List.map translate_ty tys in 

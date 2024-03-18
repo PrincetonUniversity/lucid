@@ -173,6 +173,7 @@
 
    deleteNoops
    CoreRegularizeMemops
+   SimplifyMatch
    CCoreSyntax
    CoreToCCore
    CCoreToCore
@@ -181,6 +182,9 @@
    CheckFFuns
    CCoreTables
    CCoreArrays
+   CCoreHandlers
+   CCoreEvents
+   CCoreMainLoop
    CPasses
    )
  (preprocess

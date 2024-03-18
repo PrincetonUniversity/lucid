@@ -18,7 +18,7 @@ open CCoreSyntax
 [@@@ocaml.warning "-27"]
 
 (*** defunctionalize actions ***)
-let tag cid = Cid.str_cons "tag" cid
+let tag cid = Cid.str_cons_plain "tag" cid
 let untag cid = Cid.tl cid 
 let cid s = Cid.create [s]
 let id = Id.create
@@ -66,7 +66,7 @@ type table_spec =
 }
 
 let table_cell_type tbl_id key_ty acns_enum_ty const_action_arg_ty : ty = 
-  let tblcellty_id = Cid.str_cons "cellty" tbl_id in
+  let tblcellty_id = Cid.str_cons_plain "cellty" tbl_id in
   tabstract_cid 
     tblcellty_id
     (trecord 
@@ -80,17 +80,18 @@ let table_cell_type tbl_id key_ty acns_enum_ty const_action_arg_ty : ty =
 ;;
 
 let table_instance_type tbl_id acns_enum_ty const_action_arg_ty tbl_cell_ty tbl_len =   
-  (* a table is a struct variable with a default and a list of entries *)
-  tabstract_cid
-  (Cid.str_cons "ty" tbl_id)
-  (
-    trecord
-      [id "default"; id "entries"]
-      [
-        trecord [id "action_tag"; id "action_arg"] [acns_enum_ty; const_action_arg_ty];
-        tlist tbl_cell_ty tbl_len
-      ]
-  )
+  (* a table is a GLOBAL struct variable with a default and a list of entries *)
+  tglobal@@
+    tabstract_cid
+    (Cid.str_cons_plain "ty" tbl_id)
+    (
+      trecord
+        [id "default"; id "entries"]
+        [
+          trecord [id "action_tag"; id "action_arg"] [acns_enum_ty; const_action_arg_ty];
+          tlist tbl_cell_ty tbl_len
+        ]
+    )
 ;;
 
 let vrecord pairs = 
@@ -98,32 +99,32 @@ let vrecord pairs =
   vrecord a b
 ;;
 let table_create (tbl_ty : ty) (def_enum_id : cid) (acn_enum_ty : ty) (def_arg : value) = 
-  let fields, tys = extract_trecord tbl_ty in
+  let fields, tys = extract_trecord (extract_tglobal tbl_ty) in
   let field_ty = List.combine fields tys in 
   let entries_ty = List.assoc (id"entries") field_ty in
   let default = vrecord [
     id"action_tag", venum def_enum_id acn_enum_ty;
     id"action_arg", def_arg
   ] in
-  let base_ty = vrecord [
+  let base_ty_value = vrecord [
     id"default", default;
     (* its a global value. Maybe this should just be 
        baked into a special declaration for globals? *)
     id"entries", (zero_list entries_ty)
   ] 
   in
-  let abstr_ty = abstr_cast_value (alias_type tbl_ty |> extract_tname) base_ty in
-  abstr_ty
+  base_ty_value
 ;;
 
 (* tbl_lookup(tbl_ty t, key_ty k, arg_ty arg) *)
 (* note: the length and the types are all part of tbl_ty, 
    but its easier to just pass them in from the 
    function builder. *)
-let lookup_id tbl_id = Cid.str_cons "lookup" tbl_id ;;
+let lookup_id tbl_id = Cid.str_cons_plain "lookup" tbl_id ;;
 let table_lookup spec = 
   (* note: the table is hard coded into the function, not a parameter. *)
-  let tbl = evar (spec.tbl_id) spec.tbl_ty in
+  (* deref a variable that is a pointer to the table  *)
+  let tbl = ederef (evar (spec.tbl_id) (spec.tbl_ty)) in
   (* let tbl_param = evar (cid "tbl") spec.tbl_ty in *)
   let key_param = evar (cid "key") spec.key_ty in
   let arg_param = evar (cid "arg") spec.arg_ty in
@@ -138,7 +139,7 @@ let table_lookup spec =
       ( id"rv" /:= (action_evar /** [tbl/->"default"/->"action_arg"; arg_param]))
   in
   let s_apply_default = smatch
-    (tbl/->"default"/->"action_tag")
+    [(tbl/->"default"/->"action_tag")]
     (List.map apply_default_branch spec.action_tags)
   in
   let idx = id "_idx" in
@@ -160,7 +161,7 @@ let table_lookup spec =
             sif (eop Eq [key_param; entry/->"key"])
               (stmts [
               sassign (Cid.id cont)  (eval (vbool false));
-              smatch (entry/->"action_tag")
+              smatch [(entry/->"action_tag")]
                 (List.map apply_branch spec.action_tags);
               ]
               )
@@ -186,10 +187,10 @@ let table_lookup spec =
 ;;
 
 (* Table.install(Table_t, key, action, const_arg) *)
-let install_id tbl_id = Cid.str_cons "install" tbl_id ;;
+let install_id tbl_id = Cid.str_cons_plain "install" tbl_id ;;
 let table_install spec = 
   (* note: the table is hard coded into the function, not a parameter. *)
-  let tbl = evar (spec.tbl_id) spec.tbl_ty in
+  let tbl = ederef (evar (spec.tbl_id) (spec.tbl_ty)) in
   (* let tbl_param = evar (cid "tbl") spec.tbl_ty in *)
   let key_param = evar (cid "key") spec.key_ty in
   (* note: call has to be transformed from an action variable to an action tag value *)
@@ -244,14 +245,14 @@ let monomorphic_table_decls actions_enum_ty decl : decls =
       | _ -> failwith "unexpected table declaration"
     in
     let tbl_cell_ty = table_cell_type tbl_id key_ty (actions_enum_ty) const_arg_ty in
-    print_endline ("table cell type: ");
-    print_endline (CCorePPrint.ty_to_string tbl_cell_ty);
+    (* print_endline ("table cell type: ");
+    print_endline (CCorePPrint.ty_to_string tbl_cell_ty); *)
     let tbl_ty = table_instance_type tbl_id (actions_enum_ty) const_arg_ty tbl_cell_ty len in
     let tbl_value = table_create tbl_ty default_action_enum_id (actions_enum_ty) default_action_arg in
     let tbl_spec = {tbl_id; len; tbl_ty; key_ty; const_arg_ty; arg_ty; ret_ty; action_tags; actions_enum_ty;} in
     let new_decls = [
       decl_tabstract tbl_cell_ty;   (* cell type within a table *)
-      decl_tabstract tbl_ty;        (* the table's type *)
+      decl_tabstract (extract_tglobal tbl_ty);        (* the table's type *)
       dglobal tbl_id (tbl_ty) (eval tbl_value); (* table declaration *)
       table_install tbl_spec;       (* table install function *)
       table_lookup tbl_spec         (* table lookup function *)

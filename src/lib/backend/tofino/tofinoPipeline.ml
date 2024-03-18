@@ -78,6 +78,8 @@ let atomic_op_form ds =
 
 let core_passes ds portspec = 
   (* all the passes over CoreSyntax *)
+  print_endline ("--------eliminating event match--------");
+  let ds = EliminateEventMatch.process_prog ds in
   let ds = EliminateTBuiltin.process_prog ds in
   dump_ir_prog "midend before partial interp (initial prog)" "midend_pre_partial_interp.dpt" ds;
   let ds = if Cmdline.cfg.partial_interp

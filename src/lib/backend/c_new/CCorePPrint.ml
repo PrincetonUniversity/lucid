@@ -58,6 +58,7 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : string =
     if (use_abstract_name) then 
       cid_to_string cid
     else ty_to_string ty
+  | TGlobal(ty) -> sprintf "(%s*)" (ty_to_string ty)
 and ty_to_string ?(use_abstract_name=false) ty = raw_ty_to_string ~use_abstract_name ty.raw_ty
 
 and func_ty_to_string (f: func_ty) : string =
@@ -130,8 +131,9 @@ let rec e_to_string (e: e) : string =
     in
     f_str ^ "(" ^ args_str ^ ")" ^ comment_str
   | EOp (op, args) -> op_to_string op args
-  | EListGet (e, i) -> exp_to_string e ^ "[" ^ exp_to_string i ^ "]"
-and exp_to_string exp = e_to_string exp.e
+  | EListIdx (e, i) -> exp_to_string e ^ "[" ^ exp_to_string i ^ "]"
+  | EGlobalDeref(exp) -> sprintf "(*%s)" (exp_to_string exp)
+and exp_to_string exp : string = e_to_string exp.e
 and op_to_string (op: op) (args: exp list) : string =
   let args_str = List.map exp_to_string args in
   match op, args_str with
@@ -172,14 +174,12 @@ and op_to_string (op: op) (args: exp list) : string =
 let assign_op_to_string (op: assign_op) = 
   match op with
   | OLocal (cid, ty) -> ty_to_string ty ^ " " ^ cid_to_string cid
-  | OAssign cid -> cid_to_string cid
   | OTupleLocal (cids, tys) -> 
     let cids_str = ""^String.concat ", " (List.map cid_to_string cids) ^"" in
     let tys_str = "("^String.concat ", " (List.map ty_to_string tys) ^")" in
     tys_str ^ " " ^ cids_str
-  | OTupleAssign cids -> String.concat ", " (List.map cid_to_string cids)
-  | OListSet (arr, idx) -> exp_to_string arr ^ "[" ^ exp_to_string idx ^ "]"
-  | ORecordSet {rec_exp; field} -> exp_to_string rec_exp ^"."^id_to_string field
+  | OTupleAssign exps -> String.concat ", " (List.map exp_to_string exps)
+  | OAssign(exp) -> exp_to_string exp
 ;;
 
 
@@ -192,8 +192,8 @@ let rec s_to_string (s: s) : string =
     "if (" ^ exp_to_string e ^ ") {\n" ^ 
     indent 2 (statement_to_string s1) ^ "\n} else {\n" ^ 
     indent 2 (statement_to_string s2) ^ "\n};"
-  | SMatch (e, branches) -> 
-    "match (" ^ exp_to_string e ^ ") {\n" 
+  | SMatch (es, branches) -> 
+    "match (" ^ (List.map exp_to_string es |> String.concat " , ") ^ ") {\n" 
     ^ indent 2 (String.concat "\n" (List.map branch_to_string branches)) 
     ^ "\n}"
   | SSeq (s1, s2) -> statement_to_string s1 ^"\n" ^ statement_to_string s2
@@ -230,7 +230,7 @@ let rec d_to_string (d: d) : string =
   match d with
   | DVar (id, ty, exp_opt) -> 
     let id_str = cid_to_string id in
-    let ty_str = ty_to_string ty in
+    let ty_str = ty_to_string ~use_abstract_name:true ty in
     let exp_str = match exp_opt with 
                   | Some exp -> " = " ^ exp_to_string exp 
                   | None -> " extern" in

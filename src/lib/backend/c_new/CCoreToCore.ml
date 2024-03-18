@@ -36,7 +36,6 @@ let is_tbuiltin tycid =
 let rec translate_raw_ty (raw_ty : F.raw_ty) : C.raw_ty = 
   match raw_ty with 
   (* basic types *)
-  | F.TAbstract(_, inner_ty) -> (translate_ty inner_ty).raw_ty
   | F.TUnit -> err "you shouldn't have to translate a unit type back to CoreSyntax"
   | F.TBool -> C.TBool
   | F.TInt(sz) -> C.TInt(translate_size sz)
@@ -49,6 +48,7 @@ let rec translate_raw_ty (raw_ty : F.raw_ty) : C.raw_ty =
       -> C.TBuiltin(ty_cid, List.map (fun ty -> (translate_ty ty).raw_ty) ty_args)
   | F.TBuiltin(ty_cid, ty_args) -> C.TName(ty_cid, List.map ty_to_size ty_args)
   | F.TName(ty_cid) -> C.TName(ty_cid, [])
+  | F.TAbstract(_, inner_ty) -> (translate_ty inner_ty).raw_ty
   (* functions types for functions, action constructors, actions, and memops *)
   | F.TFun{arg_tys; ret_ty; func_kind} when (func_kind = F.FNormal) -> (
         (* if it returns an action, its an action constructor, else its a function *)
@@ -90,6 +90,8 @@ let rec translate_raw_ty (raw_ty : F.raw_ty) : C.raw_ty =
         then (C.Sz 8) 
         else (C.Sz 16))
   | F.TList _ -> err "List types cannot be translated back to core IR"
+        (* tbuiltins might be wrapped in global, but they are global already *)
+  | F.TGlobal(ty) -> (translate_ty ty).raw_ty
 
   and translate_ty (ty : F.ty) : C.ty = 
     C.ty_sp (translate_raw_ty ty.raw_ty) ty.tspan
@@ -256,7 +258,8 @@ let rec translate_exp (exp: F.exp) =
         exp.espan
   )   
   | F.ECall _ -> err "call expression with non-var function"
-  | F.EListGet _ -> err "there is no list index / get operation in CoreIr"
+  | F.EListIdx _ -> err "there is no list index / get operation in CoreIr"
+  | F.EGlobalDeref _ -> err "dereferences are not supported in core ir"
 
 
 and translate_pat (pat : F.pat) : C.pat = 
@@ -280,15 +283,16 @@ and translate_stmt in_parser (stmt : F.statement) =
   (* assignment *)
   | _, SAssign(OLocal(cid, ty), exp) -> 
     C.statement_sp (C.SLocal(Cid.to_id cid, translate_ty ty, translate_exp exp)) stmt.sspan
-  | _, SAssign(OAssign(cid), exp) -> 
-    C.statement_sp (C.SAssign(cid, translate_exp exp)) stmt.sspan
+  | _, SAssign(OAssign(exp), exp2) when F.is_evar exp -> 
+    let cid = F.extract_evar exp |> fst in
+    C.statement_sp (C.SAssign(cid, translate_exp exp2)) stmt.sspan
   | _, SAssign(OTupleLocal(ids, tys),exp) -> 
     let tys = List.map translate_ty tys in
     let ids = List.map Cid.to_id ids in
     let exp = translate_exp exp in
     C.statement_sp (C.STupleAssign{ids; tys=Some(tys); exp}) stmt.sspan
-  | _, SAssign(OTupleAssign(cids), exp) ->
-    let cids = List.map (fun cid -> Cid.to_id cid) cids in
+  | _, SAssign(OTupleAssign(lexps), exp) ->
+    let cids = List.map (fun exp -> F.extract_evar exp |> fst |> Cid.to_id) lexps in
     let exp = translate_exp exp in
     C.statement_sp (C.STupleAssign{ids=cids; tys=None; exp}) stmt.sspan
   | _, SIf(exp, stmt1, stmt2) -> 
@@ -296,11 +300,7 @@ and translate_stmt in_parser (stmt : F.statement) =
     let stmt1 = translate_stmt in_parser stmt1 in
     let stmt2 = translate_stmt in_parser stmt2 in
     C.statement_sp (C.SIf(exp, stmt1, stmt2)) stmt.sspan
-  | _, SMatch(exp, branches) -> 
-    let exps = match exp.e with 
-      | ETuple(es) -> es
-      | _ -> [exp]
-    in
+  | _, SMatch(exps, branches) -> 
     let exps = List.map translate_exp exps in
     let branches = List.map 
       (fun (pats, branch_tgt) -> 
@@ -317,8 +317,9 @@ and translate_stmt in_parser (stmt : F.statement) =
   | _, SRet(exp_opt) -> 
     let exp_opt = Option.map translate_exp exp_opt in
     C.statement_sp (C.SRet(exp_opt)) stmt.sspan
-  | _, SAssign(OListSet _, _) -> err "cannot translate list set statement back to coreIR"
-  | _, SAssign(ORecordSet _, _) -> err "cannot translate record set statement back to coreIR"
+  | _, SAssign(OAssign(exp), _) when F.is_elistidx exp -> err "cannot translate list set statement back to coreIR"
+  | _, SAssign(OAssign(exp), _) when F.is_eproject exp -> err "cannot translate list set statement back to coreIR"
+  | _, SAssign(OAssign(_), _) -> err "unknown EAssign form"
   | _, SFor _ -> err "cannot translate for loop back to coreIR"
   | _, SForEver _ -> err "cannot translate infinite loop back to coreIR"
 ;;

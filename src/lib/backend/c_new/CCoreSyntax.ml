@@ -25,17 +25,17 @@ and raw_ty =
   | TBool 
   | TRecord of id list * ty list
   | TTuple  of ty list 
-  (* | TRecord of {labels : id list option; ts : ty list;} *)
   | TList of ty * arrlen
   | TBits of {ternary: bool; len : size;}
   | TEvent
   | TEnum of (cid * int) list 
-  (* function type *)
   | TFun of func_ty
+  | TGlobal of ty
   (* alias types *)
   | TBuiltin of cid * (ty list) (* types built into the lucid language that must be eliminated for c *)
-  | TName of cid (* tydef, basically *)
-  | TAbstract of cid * ty (* just a wrapper around some other type. For convenience *)
+  | TAbstract of cid * ty (* a name for another type *)
+  | TName of cid (* an opaque TAbstract *)
+
 
 and func_ty = {
   arg_tys : ty list; 
@@ -51,16 +51,10 @@ and v =
   | VBool of bool
   | VRecord of id list * value list
   | VTuple of value list
-  (* | VRecord of {labels : id list option; es : value list;} *)
   | VList  of value list
   | VBits of {ternary: bool; bits : int list;}
   | VEvent of vevent
   | VSymbol of cid * ty 
-    (* an id that is a  primitive value. 
-       used to represent enum values, 
-       globals in the interpreter pipeline, 
-       constants, partially-interpreted values with 
-       unbound variables, etc *)
 and vevent = {evid : cid; evnum : value option; evdata: value list; meta : (string * value) list;}
 and value = {v:v; vty:ty; vspan : sp;}
 
@@ -81,13 +75,13 @@ and op =    | And | Or | Not
 
 and e = 
   | EVal of value
+  | EOp of op * exp list
+  | ECall of {f:exp; args:exp list; call_kind:call_kind;}
   | EVar of cid 
   | ETuple of exp list
   | ERecord of id list * exp list
-  (* | ERecord of {labels : id list option; es : exp list;} *)
-  | ECall of {f:exp; args:exp list; call_kind:call_kind;}
-  | EOp of op * exp list
-  | EListGet of exp * exp 
+  | EListIdx of exp * exp 
+  | EGlobalDeref of exp (* dereference the global to get its value *)
 
 and call_kind = 
   | CFun
@@ -103,11 +97,9 @@ and branch = pat list * statement
 
 and assign_op = 
   | OLocal  of cid * ty (* create a new variable *)
-  | OAssign of cid      (* assign to variable *)
+  | OAssign of exp          (* local variables, array and record elements, implicitly dereferenced globals *)
   | OTupleLocal of cid list * ty list (* create new variables, unpack tuple to them *)
-  | OTupleAssign of cid list (* unpack tuple to variables *)
-  | ORecordSet of {rec_exp : exp; field : id} (* set field in record *)
-  | OListSet of exp * exp (* set index in array *)
+  | OTupleAssign of exp list (* unpack tuple to variables *)
 
 and s = 
   | SNoop
@@ -117,7 +109,7 @@ and s =
     (* for (idx < bound) while guard *)
   | SForEver of statement (* infinite loop *)
   | SIf of exp * statement * statement
-  | SMatch of exp * branch list
+  | SMatch of exp list * branch list
   | SSeq of statement * statement
   | SRet of exp option
 
@@ -187,7 +179,7 @@ let sz n = n
 let cid s = Cid.create([s])
 
 (**** types ****)
-let ty raw_ty = {raw_ty=raw_ty; tspan=Span.default; }
+let ty raw_ty = {raw_ty=raw_ty; tspan=Span.default}
 let tunit () = ty TUnit
 let tbool = ty TBool
 let tint i = ty@@TInt(sz i)
@@ -201,17 +193,16 @@ let tfun arg_tys ret_ty = tfun_kind FNormal arg_tys ret_ty
 (* global type from CoreSyntax *)
 let tlist ele_ty len = ty (TList(ele_ty, len))
 let tname cid = ty (TName(cid))
+let textern = tname (Cid.create ["_extern_ty_"])
 let tbuiltin cid tyargs = ty (TBuiltin(cid, tyargs))
 let tgroup_cid = Cid.create ["Group"]
-let tgroup = tname tgroup_cid
-let tabstract tname inner_ty = ty (TAbstract(Cid.create [tname], inner_ty))
+let tgroup = tbuiltin tgroup_cid []
+let tabstract n inner_ty = ty (TAbstract(Cid.create [n], inner_ty))
 let tabstract_cid tcid inner_ty = ty (TAbstract(tcid, inner_ty))
 let tabstract_id id inner_ty = ty (TAbstract(Cid.create_ids [id], inner_ty))
-let textern = tname (Cid.create ["_extern_ty_"])
 let tenum_pairs (tagpairs : (Cid.t * int) list) = ty (TEnum tagpairs)
 let tenum ids = tenum_pairs (List.mapi (fun i id -> (id, i)) ids)
-
-
+let tglobal t = ty (TGlobal(t))
 let rec base_type ty = 
   match ty.raw_ty with 
   | TAbstract(_, ty) -> base_type ty
@@ -239,9 +230,8 @@ let is_tevent ty = match ty.raw_ty with TEvent -> true | _ -> false
 let is_tabstract name ty = match ty.raw_ty with TAbstract(cid, _) -> Cid.equal cid (Cid.create [name]) | _ -> false
 let is_tstring ty = is_tabstract "string" ty
 let is_tchar ty = is_tabstract "char" ty
-
 let is_tbuiltin tycid ty = match ty.raw_ty with TBuiltin(cid, _) -> Cid.equal cid tycid | _ -> false
-
+let is_tglobal  ty = match ty.raw_ty with TGlobal _ -> true | _ -> false
 
 
 let extract_func_ty ty = match ty.raw_ty with 
@@ -286,6 +276,10 @@ let rec extract_tname ty = match ty.raw_ty with
   | TName cid -> cid
   | TAbstract(cid, _) -> cid
   | _ -> raise (FormError "[extract_tname] expected TName")
+
+let extract_tglobal ty = match ty.raw_ty with 
+  | TGlobal tinner -> tinner
+  | _ -> raise (FormError "[extract_tglobal] expected TGlobal")
 
 (* value constructors *)
 let rec infer_vty = function 
@@ -332,9 +326,10 @@ let venum tag ty = {v=VSymbol(tag, ty); vty=ty; vspan=Span.default}
 let vsymbol str ty = venum str ty
 
 (* cast a value to an abstract type *)
-let abstr_cast_value cid value = 
+(* this is WEIRD... *)
+(* let abstr_cast_value cid value = 
   {value with vty=tabstract_cid cid value.vty}
-;;
+;; *)
 
 (* BUILTIN *)
 let zero_list ty = vsymbol (cid "{0}") ty;;
@@ -382,6 +377,7 @@ let rec default_value ty = match ty.raw_ty with
   | TBuiltin _ -> failwith "no default value for builtin type"
   | TName _ -> failwith "no default value for named type"
   | TAbstract(_, ty) -> default_value ty
+  | TGlobal(ty) -> default_value ty
 ;;
 
 
@@ -480,8 +476,20 @@ let eevent = ecall_kind CEvent
 
 let elistget arr arrlen = 
   let cell_ty = extract_tlist arr.ety |> fst in
-  {e=EListGet(arr, arrlen); ety=cell_ty; espan=Span.default}
+  {e=EListIdx(arr, arrlen); ety=cell_ty; espan=Span.default}
 
+let ederef inner = 
+  {e=EGlobalDeref(inner); ety=extract_tglobal inner.ety; espan=Span.default}
+;;
+
+let to_global exp = 
+  (* turn an expression for a local value into 
+     a reference to a global value:
+      1. wrap exp type in a global
+      2. wrap expression in a deref *)
+  let gety = tglobal exp.ety in
+  ederef {exp with ety=gety}
+;;
 
 (* BUILTIN FUNCTIONS: generates *)
 let fgen_ty = tfun_kind FExtern [tevent] (tunit ())
@@ -539,6 +547,22 @@ let extract_ecall exp = match exp.e with
   | _ -> raise (FormError "[extract_ecall] expected ECall")
 
 
+let is_eop exp = match exp.e with 
+  | EOp _ -> true
+  | _ -> false
+
+let is_eproject exp = match exp.e with 
+  | EOp(Project _, _) -> true
+  | _ -> false
+
+let is_elistidx exp = match exp.e with 
+  | EListIdx _ -> true
+  | _ -> false
+
+let is_evar exp = match exp.e with 
+  | EVar _ -> true
+  | _ -> false
+
 (* let egen loc ev = ecall (efunref (Cid.create ["generate"]) (tfun [tevent] (tunit ()))) [loc; ev] *)
 
 
@@ -562,12 +586,14 @@ let sass op exp = s (SAssign(op, exp)) Span.default
 let stupleassign ids rhs_exp = sass (OTupleAssign ids) rhs_exp
 let stuplelocal ids tys rhs_exp = sass (OTupleLocal(ids, tys)) rhs_exp
 let slocal id ty exp = sass (OLocal(id, ty)) exp
-let sassign id exp = sass (OAssign id) exp
-let slistset arr idx exp = sass (OListSet(arr, idx)) exp 
+let sassign id exp = sass (OAssign (evar id exp.ety)) exp
+let slistset arr idx exp = sass (OAssign(elistget arr idx)) exp 
 (* let slistset_exp arr idx bound exp = 
   let arrlen = arrlen_const_mod idx bound in 
   slistset arr arrlen exp *)
-let srecordset rec_exp field exp = sass (ORecordSet{rec_exp; field}) exp
+let srecordset rec_exp field exp = 
+  let lexp = eproj rec_exp field in
+  sass (OAssign(lexp)) exp
 let sif cond s_then s_else = s (SIf(cond, s_then, s_else)) Span.default
 let smatch match_exp branches = s (SMatch(match_exp, branches)) Span.default
 let snoop = s SNoop Span.default
@@ -615,8 +641,9 @@ let dfun_extern id fty =
   let params = List.map (fun ty -> (Id.fresh "a", ty)) param_tys in
   decl (DFun(fun_kind, id, rty, params, None))
 ;;
-(* global variables *)
+(* toplevel variable. Should be declaring as a global type. *)
 let dglobal id ty exp = decl (DVar(id, ty, Some(exp))) Span.default
+
 let dextern id ty = decl (DVar(id, ty, None)) Span.default
 (* type declarations *)
 let dty tycid ty = decl (DTy(tycid, Some ty)) Span.default
