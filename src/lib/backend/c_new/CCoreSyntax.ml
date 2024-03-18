@@ -91,6 +91,7 @@ and exp = {e:e; ety:ty; espan : sp;}
 and pat = 
   | PVal of value
   | PEvent of {event_id : cid; params : params;}
+  | PWild of ty (* sure, do a wildcard, but tell me the type *)
 
 and branch = pat list * statement
 (* statements *)
@@ -217,6 +218,12 @@ let rec alias_type ty =
   | _ -> ty
 ;;
 
+let trecord_pairs pairs = 
+  let cids, tys = List.split pairs in
+  trecord cids tys
+;;
+
+
 let is_textern ty = match ty.raw_ty with TName cid -> Cid.equal cid (Cid.create ["_extern_ty_"]) | _ -> false
 let is_tunit ty = match ty.raw_ty with TUnit -> true | _ -> false
 let is_trecord ty = match (base_type ty).raw_ty with TRecord _ -> true | _ -> false
@@ -281,6 +288,7 @@ let extract_tglobal ty = match ty.raw_ty with
   | TGlobal tinner -> tinner
   | _ -> raise (FormError "[extract_tglobal] expected TGlobal")
 
+  
 (* value constructors *)
 let rec infer_vty = function 
   | VUnit -> ty TUnit
@@ -371,7 +379,7 @@ let rec default_value ty = match ty.raw_ty with
   | TList(_, _) -> failwith "no default value non-constant list length"
   | TFun _ -> failwith "no default value for function type"
   | TBits{len} -> vbits (List.init len (fun _ -> 0))
-  | TEvent -> failwith "no default value for event type"
+  | TEvent -> vevent (Cid.create ["_none"]) None [] []
   | TEnum(cases) -> 
     venum ((List.hd cases) |> fst) ty
   | TBuiltin _ -> failwith "no default value for builtin type"
@@ -491,61 +499,8 @@ let to_global exp =
   ederef {exp with ety=gety}
 ;;
 
-(* BUILTIN FUNCTIONS: generates *)
-let fgen_ty = tfun_kind FExtern [tevent] (tunit ())
-let egen_self ev = 
-  ecall (efunref (Cid.create ["generate_self"]) fgen_ty) [ev]
-let egen_switch loc ev = 
-  ecall (efunref (Cid.create ["generate_switch"]) fgen_ty) [loc; ev]
-;;
-let egen_group loc ev = 
-  ecall (efunref (Cid.create ["generate_group"]) fgen_ty) [loc; ev]
-;;
-let egen_port loc ev = 
-  ecall (efunref (Cid.create ["generate_port"]) fgen_ty) [loc; ev]
 
 (* form checking *)
-let etup_form exp = match exp.e with
-  | ETuple _ -> true
-  | EVal {v=VTuple _} -> true
-  | _ -> false
-;;
-let erec_form exp = match exp.e with
-  | ERecord _ -> true
-  | EVal {v=VRecord _} -> true
-  | _ -> false
-;;
-
-let flatten_tuple exp = match exp.e with
-  | ETuple es -> es
-  | EVal {v=VTuple es} -> 
-    List.map (fun v -> eval v) es
-  | _ -> raise (FormError "[flatten_tuple] expected tuple")
-;;
-let rec flatten_exp exp = match exp.e with
-  | ETuple es -> List.concat (List.map flatten_exp es)
-  | ERecord(_, es) -> List.concat (List.map flatten_exp es)
-  | _ -> [exp]
-;;
-
-let extract_evar exp = match exp.e with
-  | EVar id -> id, exp.ety
-  | _ -> raise (FormError "[extract_evar] expected EVar")
-;;
-
-let extract_etuple exp = match exp.e with
-  | ETuple es -> es
-  | _ -> raise (FormError "[flatten_tuple] expected tuple")
-;;
-let extract_evar_id exp = match exp.e with 
-| EVar(cid) -> Cid.to_id(cid), exp.ety
-| _ -> failwith "[evar_to_param] not an evar"
-;;
-
-let extract_ecall exp = match exp.e with
-  | ECall {f; args; _} -> f, args
-  | _ -> raise (FormError "[extract_ecall] expected ECall")
-
 
 let is_eop exp = match exp.e with 
   | EOp _ -> true
@@ -563,8 +518,83 @@ let is_evar exp = match exp.e with
   | EVar _ -> true
   | _ -> false
 
-(* let egen loc ev = ecall (efunref (Cid.create ["generate"]) (tfun [tevent] (tunit ()))) [loc; ev] *)
+let etup_form exp = match exp.e with
+  | ETuple _ -> true
+  | EVal {v=VTuple _} -> true
+  | _ -> false
+;;
+let erec_form exp = match exp.e with
+  | ERecord _ -> true
+  | EVal {v=VRecord _} -> true
+  | _ -> false
+;;
 
+(* extracting components of expressions *)
+let flatten_tuple exp = match exp.e with
+  | ETuple es -> es
+  | EVal {v=VTuple es} -> 
+    List.map (fun v -> eval v) es
+  | _ -> raise (FormError "[flatten_tuple] expected tuple")
+;;
+let rec flatten_exp exp = match exp.e with
+  | ETuple es -> List.concat (List.map flatten_exp es)
+  | ERecord(_, es) -> List.concat (List.map flatten_exp es)
+  | _ -> [exp]
+;;
+let extract_evar exp = match exp.e with
+  | EVar id -> id, exp.ety
+  | _ -> raise (FormError "[extract_evar] expected EVar")
+;;
+
+let extract_etuple exp = match exp.e with
+  | ETuple es -> es
+  | _ -> raise (FormError "[flatten_tuple] expected tuple")
+;;
+let extract_evar_id exp = match exp.e with 
+| EVar(cid) -> Cid.to_id(cid), exp.ety
+| _ -> failwith "[evar_to_param] not an evar"
+;;
+let extract_ecall exp = match exp.e with
+  | ECall {f; args; _} -> f, args
+  | _ -> raise (FormError "[extract_ecall] expected ECall")
+;;
+let args exp = extract_ecall exp |> snd
+let arg exp = args exp |> List.hd
+
+(* generates are custom statements into CoreSyntax, 
+   but extern functions of CCoreSyntax  *)
+let fgen_ty = tfun_kind FExtern [tevent] (tunit ())
+let egen_self ev = 
+  ecall (efunref (Cid.create ["generate_self"]) fgen_ty) [ev]
+let egen_switch loc ev = 
+  ecall (efunref (Cid.create ["generate_switch"]) fgen_ty) [loc; ev]
+;;
+let egen_group loc ev = 
+  ecall (efunref (Cid.create ["generate_group"]) fgen_ty) [loc; ev]
+;;
+let egen_port loc ev = 
+  ecall (efunref (Cid.create ["generate_port"]) fgen_ty) [loc; ev]
+;;
+let is_egen_self exp = match exp.e with 
+  | ECall {f; _} -> Cid.equal (extract_evar f |> fst) (Cid.create ["generate_self"])
+  | _ -> false
+;;
+let is_egen_port exp = match exp.e with 
+  | ECall {f; _} -> Cid.equal (extract_evar f |> fst) (Cid.create ["generate_port"])
+  | _ -> false
+;;
+let is_egen_group exp = match exp.e with 
+  | ECall {f; _} -> Cid.equal (extract_evar f |> fst) (Cid.create ["generate_group"])
+  | _ -> false
+;;
+let unbox_egen_self exp = match exp.e with 
+  | ECall {args=[eport]} -> eport
+  | _ -> failwith "unbox_egen_self: invalid form for generate"
+;;
+let unbox_egen_port exp = match exp.e with 
+  | ECall {args=[eport; eevent]} -> (eport, eevent)
+  | _ -> failwith "unbox_egen_port: invalid form for generate"
+;;
 
 (* let emultiassign ids tys new_vars rhs_exp = exp (EAssign {ids; tys; new_vars; exp=rhs_exp}) (ty TUnit) Span.default *)
 (* let elocal id ty exp = emultiassign [id] [ty] true exp *)
@@ -576,6 +606,9 @@ let is_evar exp = match exp.e with
 let ewrap espan exp = {exp with espan}
 
 let patval value = PVal(value)
+
+let pevent event_id params = 
+  PEvent{event_id; params}
 
 let case enum_ty tag_id statement : branch = 
   ([patval (venum tag_id enum_ty)]), statement
@@ -601,7 +634,6 @@ let sunit exp = s (SUnit exp) Span.default
 let sret_none = s (SRet None) Span.default
 let sret eret = s (SRet (Some eret)) Span.default
 
-
 let sfor idx bound stmt = 
   s (SFor{idx; bound; stmt; guard=None}) Span.default
 ;;
@@ -621,10 +653,15 @@ let stmts stmts =
     List.fold_left (fun acc s -> sseq acc s) (List.hd stmts) (List.tl stmts)
 ;;
 
-
 let swrap sspan s = {s with sspan}
 
-(* declarations *)
+let slocal_evar (evar : exp) (exp : exp) = 
+  let cid, ty = extract_evar evar in
+  slocal cid ty exp
+;;
+let sassign_exp lhs rhs = 
+  sass (OAssign lhs) rhs
+;;
 
 (* declarations *)
 let decl d dspan = {d; dspan;}
@@ -660,6 +697,11 @@ let decl_tabstract ty =
 (* event declarations *)
 let devent id evconstrnum params is_parsed = decl (DEvent {evconstrid=id; evconstrnum; evparams=params; is_parsed}) Span.default
 
+
+let extract_dhandle_opt decl = match decl.d with 
+| DFun(FHandler, id, ty, params, Some body) -> Some (id, ty, params, body)
+| _ -> None
+;;
 let extract_daction_opt decl = match decl.d with 
   | DFun(FAction, id, ty, params, Some body) -> Some (id, ty, params, body)
   | _ -> None
@@ -721,27 +763,6 @@ let rec eval_exp exp =
 
 
 (**** substitute a variable for an expression ****)
-open Collections
-
-
-(* let subst_map id exp = CidMap.add (Cid.id id) exp CidMap.empty;; *)
-let subst_evar = object (_)
-   inherit [_] s_map as super
-   method! visit_exp transformer exp = 
-    match exp.e with
-      | EVar _ -> transformer exp
-      | _ -> super#visit_exp transformer exp
-   end
-;;
-(* transform a return statement  *)
-let subst_return = object (_)
-  inherit [_] s_map as super
-  method! visit_statement transformer stmt = 
-    match stmt.s with 
-    | SRet(_) -> transformer stmt 
-    | _ -> super#visit_statement transformer stmt
-  end
-;;
 
 (* function call: f <op> args --> build expression that calls f on args *)
 let ( /** ) f args = ecall_op f args
@@ -765,7 +786,15 @@ let ( /:= ) var_id rhs_exp =
 let ( /::=) var_id rhs_exp = 
   slocal var_id rhs_exp.ety rhs_exp
 ;;
-
 let ( /: ) stmt1 stmt2 = 
   sseq stmt1 stmt2
 ;;
+
+
+
+(* declarations that must be added to a program *)
+let default_event_id = Id.create "_none"
+let default_event_decl = devent default_event_id None [] false
+let is_default_event_decl decl = match decl.d with 
+  | DEvent {evconstrid; _} -> Id.equal evconstrid default_event_id
+  | _ -> false

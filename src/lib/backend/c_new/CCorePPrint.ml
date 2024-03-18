@@ -12,7 +12,7 @@ let arrlen_to_string = function
   | IVar(v) -> fst v
 
 let func_kind_to_string = function
-  | FNormal -> ""
+  | FNormal -> "fn"
   | FHandler -> "handler"
   | FParser -> "parser"
   | FAction -> "action"
@@ -173,10 +173,10 @@ and op_to_string (op: op) (args: exp list) : string =
 
 let assign_op_to_string (op: assign_op) = 
   match op with
-  | OLocal (cid, ty) -> ty_to_string ty ^ " " ^ cid_to_string cid
+  | OLocal (cid, ty) -> ty_to_string ~use_abstract_name:true ty ^ " " ^ cid_to_string cid
   | OTupleLocal (cids, tys) -> 
     let cids_str = ""^String.concat ", " (List.map cid_to_string cids) ^"" in
-    let tys_str = "("^String.concat ", " (List.map ty_to_string tys) ^")" in
+    let tys_str = "("^String.concat ", " (List.map (ty_to_string ~use_abstract_name:true) tys) ^")" in
     tys_str ^ " " ^ cids_str
   | OTupleAssign exps -> String.concat ", " (List.map exp_to_string exps)
   | OAssign(exp) -> exp_to_string exp
@@ -210,13 +210,13 @@ let rec s_to_string (s: s) : string =
   | SForEver(stmt) -> 
     "forever {\n" ^ indent 2 (statement_to_string stmt) ^ "\n}"
 
-(* left off here *)
 and pat_to_string (p: pat) : string =
   match p with
   | PVal v -> value_to_string v
   | PEvent {event_id; params} -> 
     let params_str = params_to_string params in
     (cid_to_string event_id) ^ "(" ^ params_str ^ ")"
+  | PWild _ -> "_"
 
 and branch_to_string (b: branch) : string =
   let (pats, s) = b in

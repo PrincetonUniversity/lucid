@@ -173,7 +173,7 @@ let rec translate_exp (exp : C.exp) : F.exp =
   | _, C.EVar(c) -> F.evar c (translate_ty exp.ety)
   | _, C.EOp(op, es) -> F.eop (translate_op op) (List.map translate_exp es)
   | {raw_ty=C.TEvent}, C.ECall(cid, es, _) -> 
-    let fexp = F.efunref cid (F.tevent) in 
+    let fexp = F.efunref cid (F.tevent) in     
     F.eevent fexp (List.map translate_exp es)
   (* if its not an event, its an ordered or unordered call *)
   | ret_ty, C.ECall(cid, es, ignores_ordering) -> (
@@ -214,15 +214,16 @@ let rec translate_exp (exp : C.exp) : F.exp =
   in
   {exp' with espan = exp.espan}
 ;;
-let translate_pat (pat:C.pat)  (pat_sz : int) : F.pat = 
+let translate_pat (pat:C.pat) (ty : C.ty) : F.pat = 
   match pat with 
   | PBit(ints) -> F.PVal(F.vpat ints)
-  | C.PNum(z)  -> F.PVal(F.vint (Z.to_int z) pat_sz)
+  | C.PNum(z)  -> 
+    let pat_sz = InterpHelpers.intwidth_from_raw_ty ty.raw_ty in
+    F.PVal(F.vint (Z.to_int z) pat_sz)
   | PEvent(cid, params) -> 
     let params = List.map (fun (id, ty) -> id, translate_ty ty) params in
-    F.PEvent{event_id=cid; params;}
-  | PWild ->
-    F.PVal(F.vpat (List.init pat_sz (fun _ -> -1)))
+    F.PEvent {event_id=cid; params;}
+  | PWild -> F.PWild (translate_ty ty)
 ;;
 
 let rec translate_statement (stmt:C.statement) : F.statement = 
@@ -259,10 +260,7 @@ let rec translate_statement (stmt:C.statement) : F.statement =
   | C.SSeq(s1, s2) -> 
     F.sseq (translate_statement s1) (translate_statement s2) |> F.swrap stmt.sspan
   | C.SMatch(exps, branches) -> 
-    let pat_lens = List.map (fun (exp : C.exp) -> 
-      InterpHelpers.intwidth_from_raw_ty exp.ety.raw_ty)
-      exps 
-    in    
+    let pat_tys = List.map (fun (exp : C.exp) -> exp.ety) exps in
     let exps = List.map translate_exp exps in
     (* if there's more than one expression, wrap it in a tuple *)
     (* let exp = match exps with 
@@ -270,7 +268,7 @@ let rec translate_statement (stmt:C.statement) : F.statement =
       | exps -> F.etuple exps
     in *)
     (* we have to expand a single wildcard into multiple wildcards *)
-    let num_pats = List.length pat_lens in
+    let num_pats = List.length pat_tys in
     let rec extend_single_wild_pats branches = 
       match branches with 
       | [] -> []
@@ -283,7 +281,7 @@ let rec translate_statement (stmt:C.statement) : F.statement =
     let branches = extend_single_wild_pats branches in
     let branches = List.map 
       (fun (pats, stmt) -> 
-        let pats = List.map2 translate_pat pats pat_lens in
+        let pats = List.map2 translate_pat pats pat_tys in
         let stmt = translate_statement stmt in
         (pats, (stmt)))
       branches

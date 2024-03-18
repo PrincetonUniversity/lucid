@@ -1,5 +1,6 @@
 (* implementation of arrays *)
 open CCoreSyntax
+open CCoreTransformers
 
 type ctx = {
   memops : (cid *(ty * params * statement)) list;

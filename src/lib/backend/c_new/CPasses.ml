@@ -12,7 +12,7 @@ let compile ds =
   (* 2. a few core passes *)
   let ds = PartialInterpretation.interp_prog ds in
   let ds = CoreRegularizeMemops.process ds in
-  let ds = EliminateEventMatch.process_prog ds in
+  (* let ds = EliminateEventMatch.process_prog ds in *)
   let ds = DeleteNoops.deleter#visit_decls () ds in
   (* 3. translate to FCore *)
   let fds = CoreToCCore.translate_prog ds in
@@ -28,21 +28,28 @@ let compile ds =
   print_endline (CCorePPrint.decls_to_string fds);
   print_endline ("----------------------");
 
-
+  (* transform handlers into event functions *)
+  let fds = CCoreHandlers.process_decls fds in
+  print_endline ("---- after handler to function transformation ----");
+  print_endline (CCorePPrint.decls_to_string fds);
+  print_endline ("----------------------");
+  exit 1;
  (* 
     1. number events. 
     2. move generates to the end of the handler. 
         (generate an event variable at the end)
     3. turn handlers into event functions.
       handle foo(int a, int b) {
-        ... 
-        generate(foo(a, b));
-        generate_port(foo(c, d))
+        <body>
+
       }
       --> 
       foo_out foo(event e) {
         match e with 
-        | 
+        | foo(int a, int b) -> {
+          <body>
+        }
+        | _ -> 
       }
  
  

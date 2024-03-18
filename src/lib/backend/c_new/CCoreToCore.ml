@@ -270,6 +270,7 @@ and translate_pat (pat : F.pat) : C.pat =
   | F.PEvent{event_id; params;} -> 
     let params = List.map (fun (id, ty) -> id, translate_ty ty) params in
     C.PEvent(event_id, params)
+  | F.PWild _ -> C.PWild
 
 and translate_stmt in_parser (stmt : F.statement) = 
   match in_parser, stmt.s with

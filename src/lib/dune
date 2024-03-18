@@ -175,6 +175,7 @@
    CoreRegularizeMemops
    SimplifyMatch
    CCoreSyntax
+   CCoreTransformers
    CoreToCCore
    CCoreToCore
    CCorePPrint
