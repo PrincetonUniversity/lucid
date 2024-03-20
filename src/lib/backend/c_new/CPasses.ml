@@ -28,34 +28,25 @@ let compile ds =
   print_endline (CCorePPrint.decls_to_string fds);
   print_endline ("----------------------");
 
-  (* transform handlers into event functions *)
+  (* transform handlers into event functions
+     and implement generate as setting output fields *)
   let fds = CCoreHandlers.process_decls fds in
   print_endline ("---- after handler to function transformation ----");
   print_endline (CCorePPrint.decls_to_string fds);
   print_endline ("----------------------");
- (* 
-    1. number events. 
-    2. move generates to the end of the handler. 
-        (generate an event variable at the end)
-    3. turn handlers into event functions.
-      handle foo(int a, int b) {
-        <body>
 
-      }
-      --> 
-      foo_out foo(event e) {
-        match e with 
-        | foo(int a, int b) -> {
-          <body>
-        }
-        | _ -> 
-      }
- 
- 
- *)
- (* eliminate match statements *)
+  (* merge handlers *)
 
- (* implement ops that are really function calls
+
+  (* eliminate events by converting into 
+     tagged unions of records *)
+
+
+  (* generate toplevel *)
+
+  (* eliminate match statements *)
+
+  (* implement ops that are really function calls
     (hash, printf) *)
  
 
