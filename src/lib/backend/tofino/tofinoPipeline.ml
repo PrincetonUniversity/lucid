@@ -110,7 +110,9 @@ let core_passes ds portspec =
   let ds = AddIntrinsics.add_intrinsics ds in
   (* generate the ingress parser or add background event parsing *)
   report_if_verbose "-------Adding background event parser---------";
-  let ds = AddIngressParser.add_parser portspec ds in
+  let port_ty = (Builtins.tofino_builtin_tys.ingr_port_ty |> SyntaxToCore.translate_ty) in 
+
+  let ds = AddIngressParser.add_parser port_ty portspec ds in
   (* static analysis to see if this program is compile-able *)
   report_if_verbose "-------Checking tofino compatibilty---------";
   InputChecks.all_checks ds;

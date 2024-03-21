@@ -432,7 +432,7 @@ let pcall exp = PCall(exp)
 let pmatch exps branches = PMatch(exps, branches)
 (* match branches *)
 let pbranch ints block : parser_branch  = (List.map (fun i -> PNum (Z.of_int i)) ints), block
-
+let pbranch_wild num_pats block : parser_branch = (List.init num_pats (fun _ -> PWild)), block
 
 let parser id params block = 
   DParser(id, params, block)

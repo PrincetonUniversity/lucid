@@ -189,7 +189,7 @@ let name_of_event eventdecl = match eventdecl.d with
 
 (* create a full parser from a portspec file, 
    if there are packet events but no parser. *)
-let portspec_to_parser portspec pkt_var pkt_events bg_events = 
+let portspec_to_parser port_ty portspec pkt_var pkt_events bg_events = 
    (* 1. generate a parse block from each event. *)
    (* 2. generate branches from the portspec *)
    let synthesized_parser actions (step:parser_step) = decl (parser (id "main") [id"pkt", pkt_arg_ty] (block actions step)) in
@@ -237,7 +237,7 @@ let portspec_to_parser portspec pkt_var pkt_events bg_events =
       background_branches@external_packet_branches@port_packet_branches
    in
    let branches = portspec_to_pbranches portspec pkt_events in
-   let eingress_port = (var (Cid.id Builtins.ingr_port_id) (Builtins.tofino_builtin_tys.ingr_port_ty |> SyntaxToCore.translate_ty)) in 
+   let eingress_port = (var (Cid.id Builtins.ingr_port_id) port_ty) in 
    let (step : parser_step) = pmatch [eingress_port] branches in
    synthesized_parser [] step
 ;;
@@ -379,7 +379,61 @@ let rec main_parser_opt ds =
    )
 ;;
 
-let add_parser (portspec:port_config) ds =
+let add_simple_parser recirc_port_opt ds = 
+   (* add a simple parser given an optional recirculation port. 
+      If the target is one that uses recirculation ports for 
+      self events, then this event MUST be passed a port id *)
+   (* used in new C IR *)
+   (* 
+      case 1: no packet events, no user parser, _ ->
+         // parse all packets as events with compiler-given formats:
+            lucid_background_event_parser 
+      case 2: 1 packet event, no user parser, no recirc port ->  
+         // parse all packets as the single packet event
+         // (this assumes self-events are handled some way besides recirc)
+         packetevent_parse_block
+      case 3: 1 packet event, no user parser, recirc port -> 
+         // parse all packets from recirc port as lucid-formatted events
+         // parse all other packets as the packet event
+         if (port == recirc_port) then lucid_background_event_parser
+            else  packetevent_parse_block
+   *)
+   let pkt_events = List.filter is_pktev ds in
+   let bg_events = List.filter is_bgev ds in 
+   let main_user_parser_opt = main_parser_opt ds in
+   let pkt_var = var (Cid.create ["pkt"]) pkt_arg_ty in
+   match pkt_events, main_user_parser_opt, recirc_port_opt with 
+      | [], None, _ -> 
+         let parser_body = lucid_background_event_parser pkt_var bg_events in
+         let decl = (decl (parser (id "main") [id"pkt", pkt_arg_ty] parser_body)) in
+         decl::ds
+      | [pkt_ev_decl], None, None -> 
+         let parser_body = packetevent_parse_block pkt_var pkt_ev_decl in
+         let decl = (decl (parser (id "main") [id"pkt", pkt_arg_ty] parser_body)) in
+         decl::ds
+      | [pkt_ev_decl], None, Some(recirc_dpid, port_ty) -> 
+         let branches = [
+            (pbranch [recirc_dpid] (lucid_background_event_parser pkt_var bg_events));
+            (pbranch_wild 1 (packetevent_parse_block pkt_var pkt_ev_decl))
+            ] 
+         in
+         let eingress_port = (var (Cid.id Builtins.ingr_port_id) port_ty) in 
+         let (step : parser_step) = pmatch [eingress_port] branches in
+         let parser_body = block [] step in
+         let decl = (decl (parser (id "main") [id"pkt", pkt_arg_ty] parser_body)) in
+         decl::ds
+      | _ , Some(main_params, main_block), _ -> 
+      (* if there's a main parser, check the user parser to make sure it's well-formed, 
+         then inline parsers, including the background block which 
+         replaces the call_lucid_parser builtin *)
+         let parser_entry_ty = check_valid_entry_parse_block main_block in
+         let pkt_var = pkt_param_exp main_params in (* we need to know the name of the packet argument to main *)
+         inline_parsers parser_entry_ty pkt_var bg_events ds
+      | _, _, _ -> 
+         error "invalid combination of packet events, user parser, and recirc port"
+;;
+
+let add_parser port_ty (portspec:port_config) ds =
    (* separate packet and background events *)
    let pkt_events = List.filter is_pktev ds in
    let bg_events = List.filter is_bgev ds in 
@@ -406,5 +460,5 @@ let add_parser (portspec:port_config) ds =
       (* case 2: packet events declared, but no parser -- 
          so make a parser that parses packet or background events 
          according to the portspec. *)
-         (portspec_to_parser portspec pkt_var pkt_events bg_events)::ds)
+         (portspec_to_parser port_ty portspec pkt_var pkt_events bg_events)::ds)
 ;;

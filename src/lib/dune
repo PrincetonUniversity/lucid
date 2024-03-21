@@ -186,6 +186,7 @@
    CCoreArrays
    CCoreHandlers
    CCoreEvents
+   CCoreParse
    CCoreMainLoop
    CPasses
    )
