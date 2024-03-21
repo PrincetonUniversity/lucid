@@ -92,6 +92,7 @@ let rec translate_raw_ty (raw_ty : F.raw_ty) : C.raw_ty =
   | F.TList _ -> err "List types cannot be translated back to core IR"
         (* tbuiltins might be wrapped in global, but they are global already *)
   | F.TGlobal(ty) -> (translate_ty ty).raw_ty
+  | F.TUnion _ -> err "union types cannot be translated back to core IR"
 
   and translate_ty (ty : F.ty) : C.ty = 
     C.ty_sp (translate_raw_ty ty.raw_ty) ty.tspan
@@ -172,6 +173,7 @@ let rec translate_value (value : F.value) : C.value =
     let ival = List.assoc str tags in
     let size = if (List.length tags <= 256) then 8 else 16 in
     C.value_sp (C.VInt(Integer.create ival size)) value.vspan
+  | F.VUnion _ -> err "unions cannot be translated back to CoreSyntax"
   | F.VList _ -> err "cannot translate list value back to coreIr"
 
 
@@ -260,6 +262,7 @@ let rec translate_exp (exp: F.exp) =
   | F.ECall _ -> err "call expression with non-var function"
   | F.EListIdx _ -> err "there is no list index / get operation in CoreIr"
   | F.EGlobalDeref _ -> err "dereferences are not supported in core ir"
+  | F.EUnion _ -> err "unions are not supported in core ir"
 
 
 and translate_pat (pat : F.pat) : C.pat = 

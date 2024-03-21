@@ -23,12 +23,13 @@ and raw_ty =
   | TUnit
   | TInt of size 
   | TBool 
+  | TEnum of (cid * int) list 
+  | TUnion of id list * ty list
   | TRecord of id list * ty list
   | TTuple  of ty list 
   | TList of ty * arrlen
   | TBits of {ternary: bool; len : size;}
   | TEvent
-  | TEnum of (cid * int) list 
   | TFun of func_ty
   | TGlobal of ty
   (* alias types *)
@@ -49,6 +50,7 @@ and v =
   | VUnit
   | VInt of {value : int; size : size;}
   | VBool of bool
+  | VUnion of id * value * ty (* ty is the union type *)
   | VRecord of id list * value list
   | VTuple of value list
   | VList  of value list
@@ -79,6 +81,7 @@ and e =
   | ECall of {f:exp; args:exp list; call_kind:call_kind;}
   | EVar of cid 
   | ETuple of exp list
+  | EUnion  of id * exp * ty
   | ERecord of id list * exp list
   | EListIdx of exp * exp 
   | EGlobalDeref of exp (* dereference the global to get its value *)
@@ -188,7 +191,7 @@ let tpat len = ty (TBits {ternary=false; len})
 let tevent = ty TEvent
 let trecord labels tys = ty (TRecord(labels, tys))
 let ttuple tys = ty (TTuple tys)
-  
+let tunion labels tys = ty (TUnion(labels, tys))  
 let tfun_kind func_kind arg_tys ret_ty = ty (TFun {arg_tys; ret_ty; func_kind})
 let tfun arg_tys ret_ty = tfun_kind FNormal arg_tys ret_ty 
 (* global type from CoreSyntax *)
@@ -223,9 +226,15 @@ let trecord_pairs pairs =
   trecord cids tys
 ;;
 
+let tunion_pairs pairs = 
+  let cids, tys = List.split pairs in
+  tunion cids tys
+;;
+
 
 let is_textern ty = match ty.raw_ty with TName cid -> Cid.equal cid (Cid.create ["_extern_ty_"]) | _ -> false
 let is_tunit ty = match ty.raw_ty with TUnit -> true | _ -> false
+let is_tunion ty = match (base_type ty).raw_ty with TUnion _ -> true | _ -> false
 let is_trecord ty = match (base_type ty).raw_ty with TRecord _ -> true | _ -> false
 let is_ttuple ty = match ty.raw_ty with TTuple _ -> true | _ -> false
 let is_tfun ty = match ty.raw_ty with TFun({func_kind=FNormal}) -> true | _ -> false
@@ -250,6 +259,11 @@ let extract_tint_size ty = match ty.raw_ty with
   | TInt size -> size
   | _ -> raise (FormError "[extract_tint_size] expected TInt")
 
+let extract_trecord_or_union ty = match ty.raw_ty with 
+  | TRecord(labels, ts) -> labels, ts
+  | TUnion(labels, ts) -> labels, ts
+  | _ -> raise (FormError "[extract_trecord_or_union] expected TRecord or TUnion")
+;;
 let extract_trecord ty = match (base_type ty).raw_ty with 
   | TRecord(labels, ts) -> labels, ts
   | _ -> raise (FormError "[extract_trecord] expected TRecord")
@@ -290,21 +304,6 @@ let extract_tglobal ty = match ty.raw_ty with
 
   
 (* value constructors *)
-let rec infer_vty = function 
-  | VUnit -> ty TUnit
-  | VInt {size; _} -> ty (TInt size)
-  | VBool _ -> ty TBool
-  | VRecord(labels, vs) -> ty (TRecord(labels, List.map (fun v -> v.vty) vs))
-  | VTuple(vs) -> ty (TTuple (List.map (fun v -> v.vty) vs))
-  | VList(values) -> 
-    if (List.length values) == 0 then failwith "cannot infer type of length 0 list" 
-    else ty (TList((List.hd values).vty, IConst (List.length values)))
-  | VBits {ternary; bits} -> ty (TBits {ternary; len=sz (List.length bits)})
-  (* | VClosure {params; fexp; _} -> tfun (List.map snd params) fexp.ety *)
-  | VEvent _ -> ty (TEvent)
-  | VSymbol (_, inner_ty) -> inner_ty 
-;;  
-
 let sizeof_ty ty = 
   match ty.raw_ty with 
   | TInt size -> size
@@ -314,7 +313,7 @@ let sizeof_ty ty =
 ;;
 
 
-let value v = {v=v; vty=infer_vty v; vspan=Span.default}
+let value v vty = {v=v; vty=vty; vspan=Span.default}
 let vunit () = {v=VUnit; vty=ty TUnit; vspan=Span.default}
 let vint value size = {v=VInt {value; size = sz size}; vty=ty (TInt(sz size)); vspan=Span.default}
 (* declare a vint with size derived from ty *)
@@ -327,6 +326,10 @@ let vtup vs = {v=VTuple(vs); vty=ttuple (List.map (fun v -> v.vty) vs); vspan=Sp
 let vpat ints = {v=VBits {ternary=true; bits=ints}; vty=ty (TBits {ternary=true; len=sz (List.length ints)}); vspan=Span.default}
 let vbits ints = {v=VBits {ternary=false; bits=ints}; vty=ty (TBits {ternary=false; len=sz (List.length ints)}); vspan=Span.default}
 let vrecord labels values = {v=VRecord(labels, values); vty=trecord labels (List.map (fun v -> v.vty) values); vspan=Span.default}
+let vrecord_pairs label_values = 
+  let labels, values = List.split label_values in
+  vrecord labels values
+let vunion label value ty = {v=VUnion(label, value, ty); vty=ty; vspan=Span.default}
 let vtuple vs = {v=VTuple(vs); vty=ttuple (List.map (fun v -> v.vty) vs); vspan=Span.default}
 let vevent evid evnum evdata meta = {v=VEvent {evid; evnum; evdata; meta}; vty=ty TEvent; vspan=Span.default}
 let vevent_simple evid evdata = vevent evid None evdata []
@@ -372,6 +375,7 @@ let rec default_value ty = match ty.raw_ty with
   | TBool -> vbool false
   | TRecord(labels, ts) -> 
     vrecord labels (List.map default_value ts)
+  | TUnion(ids, tys) -> vunion (List.hd ids) (List.hd tys |> default_value) ty
   | TTuple(ts) -> 
     vtuple (List.map default_value ts)
   | TList(t, IConst n) -> 
@@ -414,6 +418,11 @@ let extract_vtuple value = match value.v with
 let exp e ety espan = {e; ety; espan}
 let efunref cid fty = {e=EVar (cid); ety=fty; espan=Span.default; }
 let erecord labels es = {e=ERecord(labels, es); ety=trecord labels (List.map (fun (e:exp) -> e.ety) es); espan=Span.default; }
+let erecord_pair label_es = 
+  let labels, es = List.split label_es in
+  erecord labels es
+;;
+let eunion label exp ety= {e=EUnion(label, exp, ety); ety=ety; espan=Span.default; }
 let etuple es = {e=ETuple es; ety=ttuple (List.map (fun (e:exp) -> e.ety) es); espan=Span.default; }
 
 let eop op es = 
@@ -440,11 +449,14 @@ let eop op es =
       let rec_arg = List.hd es in
       let labels, ts = match (base_type rec_arg.ety).raw_ty with 
         | TRecord(labels, ts) -> labels, ts
-        | _ -> 
-          failwith "project expects record arg"
+        | TUnion(labels, ts) -> labels, ts
+        | _ -> failwith "project expects record or union arg"
       in
       let labels_ts = List.combine labels ts in
-      let _, ty = List.find (fun (label, _) -> Id.equal label id) labels_ts in
+      print_endline ("looking for id: "^(Id.to_string id));
+      print_endline ("in ids: "^(String.concat " , " (List.map Id.to_string labels)));
+      (* let _, ty = List.find (fun (label, _) -> Id.equal label id) labels_ts in *)
+      let _, ty = List.find (fun (label, _) -> fst label = fst id) labels_ts in
       ty
     
     | Get(idx) -> 
@@ -701,10 +713,14 @@ let decl_tabstract ty =
 ;;
 
 
+
+
 (* event declarations *)
 let devent id evconstrnum params is_parsed = decl (DEvent {evconstrid=id; evconstrnum; evparams=params; is_parsed}) Span.default
 
-
+let extract_devent_opt decl = match decl.d with 
+  | DEvent ev -> Some ev
+  | _ -> None
 let extract_dhandle_opt decl = match decl.d with 
 | DFun(FHandler, id, ty, params, Some body) -> Some (id, ty, params, body)
 | _ -> None
@@ -779,8 +795,8 @@ let rec eval_exp exp =
 let ( /** ) f args = ecall_op f args
 
 (* record projection: rec <op> str --> build expression that gets field str from record rec *)
-let ( /-> ) rec_exp field_str = 
-  eop (Project(Id.create field_str)) [rec_exp]
+let ( /-> ) rec_exp field_id = 
+  eop (Project(field_id)) [rec_exp]
 ;;
 
 let (/@) my_arr_exp idx_id = 

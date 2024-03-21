@@ -179,6 +179,7 @@
    CoreToCCore
    CCoreToCore
    CCorePPrint
+   CCoreRenaming
    CCoreTyper
    CheckFFuns
    CCoreTables

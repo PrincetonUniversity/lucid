@@ -20,8 +20,12 @@ let func_kind_to_string = function
   | FExtern -> "extern"
 ;;
 
-let id_to_string id = fst id
-let cid_to_string (cid : Cid.t) = String.concat "_" (List.map id_to_string (Cid.to_ids cid))
+let id_to_string id = 
+  fst id
+  (* Id.to_string id *)
+let cid_to_string (cid : Cid.t) = 
+  String.concat "_" (List.map id_to_string (Cid.to_ids cid))
+  (* Cid.to_string cid *)
 
 (* use abstract names in parameter and function argument types. Possibly elsewhere. *)
 let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : string =
@@ -30,6 +34,13 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : string =
   | TInt 32 -> "int"
   | TInt size -> "int" ^ size_to_string size
   | TBool -> "bool"
+  | TUnion(labels, ts) -> 
+    let label_strs = List.map (id_to_string) labels in
+    let ts_strs = List.map (ty_to_string ~use_abstract_name:true) ts in
+    let field_strs = List.map2 (fun l e -> l ^ ": " ^ e ^";") label_strs ts_strs in
+    let fields_str = String.concat " " field_strs in  
+    sprintf "union {%s}" fields_str 
+    (* "{" ^ fields_str ^ "}" *)
   | TRecord(labels, ts) -> 
     let label_strs = List.map (id_to_string) labels in
     let ts_strs = List.map (ty_to_string ~use_abstract_name:true) ts in
@@ -71,8 +82,6 @@ let params_to_string params =
   params_str
 ;;
 
-
-
 let rec v_to_string (v: v) : string =
   match v with
   | VUnit -> "void"
@@ -84,6 +93,8 @@ let rec v_to_string (v: v) : string =
     let field_strs = List.map2 (fun l e -> "." ^l ^ " = " ^ e ^";") label_strs es_strs in
     let fields_str = String.concat " " field_strs in    
     "{" ^ fields_str ^ "}"
+  | VUnion(label, v, _) -> 
+    sprintf "{%s = %s}" (id_to_string label) (value_to_string v)
   | VTuple(es) -> 
     let label_strs = List.mapi (fun i _ -> "_" ^ string_of_int i) es in
     let es_strs = List.map value_to_string es in
@@ -118,6 +129,8 @@ let rec e_to_string (e: e) : string =
     let field_strs = List.map2 (fun l e -> "." ^l ^ " = " ^ e ^";") label_strs es_strs in
     let fields_str = String.concat " " field_strs in    
     "{" ^ fields_str ^ "}"
+  | EUnion(label, exp, _) -> 
+    sprintf "{%s = %s}" (id_to_string label) (exp_to_string exp)
   | ECall {f; args; call_kind=CEvent} -> 
     let f_str = exp_to_string f in
     let args_str = String.concat ", " (List.map exp_to_string args) in

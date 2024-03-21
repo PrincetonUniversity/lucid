@@ -13,6 +13,7 @@ exception SizeMismatch of size * size
 exception SelfRefSize of size
 exception TypeError of string
 
+let print_endline _ = ()
 
 
 type constr_var = 
@@ -163,10 +164,17 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
     let env' = unify_lists env unify_ty arg_tys1 arg_tys2 in
     let env'' = unify_ty env' ret_ty1 ret_ty2 in
     env''
-  | (TUnit|TBool|TEvent|TInt _|TRecord _ | TTuple _ | TName _ | TGlobal _
+  | TUnion(labels1, tys1), TUnion(labels2, tys2) -> 
+    if (List.length labels1 <> List.length labels2) then 
+      ty_err "union types with different numbers of labels";
+    if (not (List.for_all2 Id.equal labels1 labels2)) then 
+      ty_err "union types with different labels";
+    unify_lists env unify_ty tys1 tys2
+  | (TUnit|TBool|TEvent|TInt _|TRecord _ | TTuple _ | TName _ | TGlobal _ | TUnion _
     |TList (_, _)|TFun _|TBits _|TEnum _|TBuiltin (_, _)), _ -> 
       print_endline@@"type mismatch:\n"^(CCorePPrint.raw_ty_to_string rawty1)^"\nand\n"^(CCorePPrint.raw_ty_to_string rawty2);
       ty_err "type mismatch"
+    
 
 and unify_ty env ty1 ty2 : env = 
   unify_raw_ty env ty1.raw_ty ty2.raw_ty
@@ -192,6 +200,15 @@ let rec infer_value value : value =
   | VBits{ternary; bits} -> ty@@TBits{ternary; len=sz@@List.length bits}
   | VEvent _ -> tevent
   | VSymbol(_, ty) -> ty
+  | VUnion(label, inner_value, ty) ->
+    match (base_type ty).raw_ty with
+    | TUnion(labels, tys) -> (
+      let inf_inner_value = infer_value inner_value in
+      let expected_ty = List.assoc label (List.combine labels tys) in
+      let _ = unify_ty empty_env expected_ty inf_inner_value.vty in
+      ty
+    )
+    | _ -> ty_err "union value does not have the right type for the corresponding member of the union"
   in
   {value with vty=ty}
 ;;
@@ -236,6 +253,18 @@ let rec infer_exp env exp : env * exp =
       let e =ERecord(labels, es') in
       let ety = trecord labels (List.map (fun exp -> exp.ety) es') in
       env, {e; ety; espan=exp.espan}
+    | EUnion(label, exp, union_ty) -> 
+      let env, inf_exp = infer_exp env exp in
+      let env = match (base_type union_ty).raw_ty with 
+        | TUnion(labels, tys) -> 
+          let expected_ty = List.assoc label (List.combine labels tys) in
+          let env = unify_ty env expected_ty inf_exp.ety in
+          env
+        | _ -> 
+          ty_err "union exp does not have the right type for the corresponding member of the union"
+      in
+      env, {e=EUnion(label, inf_exp, union_ty); ety=union_ty; espan=exp.espan}
+      
     | ECall{f; call_kind=CEvent} ->
       let env, inf_f = infer_exp env f in
       (* todo: this unify is kind of weird? *)
@@ -380,18 +409,23 @@ and infer_eop env op (args : exp list) : env * op * exp list * ty = match op, ar
     env, op, [inf_exp_val; inf_exp_mask], tpat (extract_tint_size inf_exp_val.ety)
   | Project id, [exp] -> (
     let env, inf_exp = infer_exp env exp in
-    if not (is_trecord inf_exp.ety) then (
+    if not (is_trecord inf_exp.ety or is_tunion inf_exp.ety) then (
       let ty1 = inf_exp.ety in
       let ty2 = trecord [id] [inf_exp.ety] in
       print_endline@@"type mismatch in project:\n"^(CCorePPrint.ty_to_string ty1)^"\nand\n"^(CCorePPrint.ty_to_string ty2);
       ty_err "type mismatch"
     );
-    let inf_labels, inf_tys = extract_trecord inf_exp.ety in
-    let labels_tys = List.combine inf_labels inf_tys in
-    let inf_ty = List.assoc_opt id labels_tys in
+    print_endline ("inf exp: "^CCorePPrint.exp_to_string inf_exp);
+    print_endline ("inf exp ty: "^CCorePPrint.ty_to_string inf_exp.ety);
+    let inf_labels, inf_tys = extract_trecord_or_union (base_type inf_exp.ety) in
+    let inf_label_names = List.map Id.name inf_labels in
+    let labels_tys = List.combine inf_label_names inf_tys in
+    let inf_ty = List.assoc_opt (Id.name id) labels_tys in
     match inf_ty with
       | Some ty -> env, op, [inf_exp], ty
-      | None -> raise (UnboundField id)
+      | None -> 
+        print_endline ("could not find: "^(Id.to_string id));
+        raise (UnboundField id)
   )
   | Get idx, [exp] -> (
     let env, inf_exp = infer_exp env exp in
@@ -538,7 +572,7 @@ let rec infer_decl env decl : env * decl =
     env, decl
   | DList(id, ty, Some(args)) -> (
     let env, inf_args = infer_lists env infer_exp args in
-    match ty.raw_ty with 
+    match (base_type ty).raw_ty with 
       | TList(cellty, len) -> 
         (* TODO later: constrain list's length based on length of args *)
         let _ = len in

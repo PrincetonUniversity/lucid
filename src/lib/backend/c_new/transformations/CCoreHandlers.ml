@@ -40,13 +40,13 @@ let transform_generate statement =
   match statement.s with 
   | SUnit(exp) when is_egen_self exp -> 
     print_endline ("generate self?");
-    sassign_exp (rv/->"next_ev") (arg exp)
+    sassign_exp (rv/->id"next_ev") (arg exp)
   | SUnit(exp) when is_egen_port exp -> 
     print_endline ("generate port?");
     let port_exp, event_exp = unbox_egen_port exp in
     sseq 
-      (sassign_exp (rv/->"out_ev") event_exp)
-      (sassign_exp (rv/->"out_port") port_exp)
+      (sassign_exp (rv/->id"out_ev") event_exp)
+      (sassign_exp (rv/->id"out_port") port_exp)
   | _ -> 
     statement
 ;;
@@ -85,7 +85,7 @@ let transform_handler last_handler_cid (handlers, decls) decl : (handler_rec lis
       let merged_decl = 
         dfun merged_handler_cid t_handler_ret [in_event_param] merged_body
       in
-      handlers, decls@[merged_decl]
+      handlers, decls@[decl_tabstract t_handler_ret; merged_decl]
     )
     else (* not the last handler, don't keep this handler decl *)
       handlers, decls

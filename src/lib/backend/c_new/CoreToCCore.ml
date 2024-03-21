@@ -137,14 +137,15 @@ let rec translate_v (v : C.v) (vty:C.ty) : F.v =
   | {raw_ty=C.TTuple(raw_tys)}, C.VTuple(vs) -> 
     let tys = List.map C.ty raw_tys in
     let vs = List.map2 translate_v vs tys in
-    let values = List.map F.value vs in
+    let values = List.map2 F.value vs (List.map translate_ty tys) in
+    (* let values = List.map F.value vs in *)
     (F.vtuple values).v
   | _, C.VTuple(_) -> err "VTuple type should be a tuple"
   | {raw_ty=C.TRecord(id_rawty_pairs)}, C.VRecord(id_v_pairs) -> 
     let labels, vs = List.split id_v_pairs in
     let tys = List.map (fun id -> List.assoc id id_rawty_pairs |> C.ty) labels in
     let vs = List.map2 translate_v vs tys in
-    let values = List.map F.value vs in
+    let values = List.map2 F.value vs (List.map translate_ty tys) in
     (F.vrecord labels values).v
   | _, C.VRecord(_) -> err "VRecord type should be a record"
 

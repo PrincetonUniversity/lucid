@@ -16,6 +16,7 @@ let compile ds =
   let ds = DeleteNoops.deleter#visit_decls () ds in
   (* 3. translate to FCore *)
   let fds = CoreToCCore.translate_prog ds in
+  let fds = CCoreRenaming.unify_event_ids fds in
   let s = CCorePPrint.decls_to_string fds in
   print_endline ("---- intial CCore ----");
   print_endline s;
@@ -28,27 +29,38 @@ let compile ds =
   print_endline (CCorePPrint.decls_to_string fds);
   print_endline ("----------------------");
 
-  (* transform handlers into event functions
+  (* merge handlers to create event handler function
      and implement generate as setting output fields *)
   let fds = CCoreHandlers.process_decls fds in
   print_endline ("---- after handler to function transformation ----");
   print_endline (CCorePPrint.decls_to_string fds);
   print_endline ("----------------------");
 
-  (* merge handlers *)
-
-
   (* eliminate events by converting into 
      tagged unions of records *)
+  let fds = CCoreEvents.process fds in
+  print_endline ("---- after event elimination ----");
+  print_endline (CCorePPrint.decls_to_string fds);
+  print_endline ("----------------------");
 
+  (* eliminate match statements 
+      (this MUST come after event elimination because 
+      match statements are the only way to unpack 
+      events) *)
 
   (* generate toplevel *)
 
-  (* eliminate match statements *)
+  
+
 
   (* implement ops that are really function calls
     (hash, printf) *)
  
+  (* put into c-normal form: 
+      1. record expressions, record values, union expression, and union values 
+         can only appear in local or global variable declarations. 
+
+  *)
 
 
   (* type check -- this will only pass after all the 
@@ -69,7 +81,7 @@ let compile ds =
   (* print as C *)
 
   let s = CCorePPrint.decls_to_string fds in
-  print_endline ("---- after table implementation ----");
+  print_endline ("---- final CCore ----");
   print_endline s;
   print_endline ("----------------------");
 
