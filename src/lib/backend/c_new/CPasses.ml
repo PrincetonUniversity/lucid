@@ -20,6 +20,7 @@ let compile ds =
   print_endline ("---- intial CCore ----");
   print_endline s;
   print_endline ("----------------------");
+  let fds = CCoreParse.process fds in
   exit 1;
   (* 1: implement all the "builtins" of lucid *)
   (* data structures *)
