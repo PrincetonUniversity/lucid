@@ -281,21 +281,45 @@ let cid_is_ingress_port cid =
 
 let bytes_read_by_action action =
    match action with 
-   | PRead(_, ty, _) -> size_of_tint ty
-   | PSkip(ty) -> size_of_tint ty
+   | PRead(_, ty, _) -> size_of_rawty ty.raw_ty
+   | PSkip(ty) -> size_of_rawty ty.raw_ty
    | _ -> 0   
 ;;
 let bits_read_by_actions actions = 
    List.fold_left (fun acc action -> acc + (bytes_read_by_action action)) 0 actions
 ;;
 
-let size_of_exp exp = size_of_tint exp.ety ;;
+let size_of_exp exp = size_of_rawty exp.ety.raw_ty ;;
 
 let last_ele ls = 
    List.rev ls |> List.hd
 ;;
 
-let exp_refs_last_read actions exp = 
+
+(* foo.bar.baz *)
+let rec is_last_subfield_of_evar var_cid exp = 
+   match exp.e with 
+      (* the var itself satisfies *)
+   | EVar(cid) ->  Cid.equal var_cid cid
+   | EProj(rec_exp, field_id) -> (
+      (* rec_exp has to be a last field or evar itself, and then 
+         field_id has to point to the last field of rec_exp *)
+      if (is_last_subfield_of_evar var_cid rec_exp) then (
+         let field_ids = match rec_exp.ety.raw_ty with 
+            | TRecord(id_tys) -> List.split id_tys |> fst
+            | _ -> error "project on a non-record-type"
+         in 
+         (Id.equal field_id (List.nth field_ids ((List.length field_ids) -1)))
+      ) 
+      else (
+         false
+      )
+   )
+   | _ -> false
+   ;;
+
+let exp_refs_last_read actions exp =
+    (* actions in the block, expression being matched on *)
    let read_cids = List.filter_map (fun action -> 
       match action with 
       | PRead(cid, _, _) -> Some(cid)
@@ -303,11 +327,15 @@ let exp_refs_last_read actions exp =
    in
    match read_cids with
    | [] -> false 
-   | _ -> (
+   | _ -> 
       let last_read_cid = last_ele read_cids in
-      match exp.e with 
+      is_last_subfield_of_evar last_read_cid exp
+      (* match exp.e with 
       | EVar(cid') -> Cid.equal last_read_cid cid'
-      | _ -> false)
+      | EProj(inner_exp, field_id) -> 
+
+         failwith "todo"
+      | _ -> false) *)
 ;;
 
 

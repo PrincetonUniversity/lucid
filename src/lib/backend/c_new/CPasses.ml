@@ -11,8 +11,9 @@ let compile ds =
   let ds = PartialInterpretation.interp_prog ds in
   let ds = CoreRegularizeMemops.process ds in
   let ds = AddIngressParser.add_simple_parser None (InlineEventVars.set_event_nums ds) in 
-    (*try to add parser for platform with no recirc port *)
+  (* add parser for platform with no recirc port *)
   let ds = DeleteNoops.deleter#visit_decls () ds in
+
   (* 3. translate to FCore *)
   let fds = CoreToCCore.translate_prog ds in
   let fds = CCoreRenaming.unify_event_ids fds in
@@ -20,6 +21,10 @@ let compile ds =
   print_endline ("---- intial CCore ----");
   print_endline s;
   print_endline ("----------------------");
+  (* TODO: abstract named types. For all user types that remain in the program 
+      declared as type t_cid = concrete_type;      
+      find all the types equivalent to concrete_type and 
+      replace them with tabstr(t_cid, concrete_type); *)
   let fds = CCoreParse.process fds in
   exit 1;
   (* 1: implement all the "builtins" of lucid *)

@@ -729,6 +729,13 @@ let extract_daction_opt decl = match decl.d with
   | DFun(FAction, id, ty, params, Some body) -> Some (id, ty, params, body)
   | _ -> None
 ;;
+let extract_dparser_opt decl = match decl.d with 
+  | DFun(FParser, id, ty, params, Some body) -> Some(id, ty, params, body)
+  | _ -> None
+;;
+let extract_dparser decl = Option.get (extract_dparser_opt decl)
+;;
+
 let extract_daction_id_opt decl = match decl.d with 
   | DFun(FAction, id, _, _, _) -> Some id
   | _ -> None

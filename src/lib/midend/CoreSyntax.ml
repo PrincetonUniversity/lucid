@@ -611,6 +611,15 @@ let ty_to_size ty =
   | _ -> error "[ty_to_size] can only get size of ints or bools"
 ;;
 
+let rec size_of_rawty raw_ty = match raw_ty with 
+  | TBool -> 1
+  | TInt (Sz sz) -> sz
+  | TRecord(params) -> 
+    List.split params |> snd |> List.map size_of_rawty |> List.sum    
+  | TTuple(raw_tys) -> 
+    List.map size_of_rawty raw_tys |> List.sum
+  | _ -> error@@"[size_of_rawty] unsupported type."
+  ;;
 let size_of_tint = ty_to_size
 
 (* Turn a list of statements into an SSeq (or a SNoop, if empty) *)
