@@ -1,5 +1,48 @@
 (* implementation of parse functions *)
 
+(* 
+Design:  
+
+  The bytes struct
+  - this represents unparsed packets
+    typedef struct bytes_t {
+      char* start;  // pointer to start of buffer
+      char* cur;    // pointer to current position
+      char* end;    // pointer to end of buffer
+    } bytes_t;
+
+skip, peek, and read are methods that operate on the packet buffer. 
+One method is generated for each type. 
+
+void skip_int(bytes_t* bs) {
+    bs->cur = bs->cur + sizeof(int);
+}
+
+int peek_int(bytes_t* bs) {
+ // EOp(Cast(TRef(TInt(32))), [EProj( EDeref(EVar("bs")), "cur")])
+    return ((int * ) (bs->cur))[0];
+}
+
+int read_int(bytes_t* bs) {
+    int rv = ((int * ) (bs->cur))[0];
+    skip_int(bs);
+    return rv;
+} 
+
+In the parser functions, bytes_t* bs is an argument
+
+For deparsing (which is not in this module)
+  TODO: list semantics. 
+    - Payload is a flag (carry input payload or not)
+    - the function that writes out the packet will get a 
+      value of the event and the bytes_t of the packet. 
+         - what happens next is platform dependent. 
+          - in ebpf, it will shrink or grow the buffer of the 
+            current packet to hold the new event. 
+          - in userspace c it will likely allocate 
+            output buffer and copy the event header and payload there. 
+*)
+
 
 open CCoreSyntax
 

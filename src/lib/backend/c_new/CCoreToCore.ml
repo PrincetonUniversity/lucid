@@ -115,7 +115,10 @@ let translate_op op =
   | F.Sub -> C.Sub
   | F.SatPlus -> C.SatPlus
   | F.SatSub -> C.SatSub
-  | F.Cast( sz) -> C.Cast(translate_size sz)
+  | F.Cast( ty ) when F.is_tint ty -> 
+    let sz = F.extract_tint_size ty in
+    C.Cast(translate_size sz)
+  | F.Cast _ -> err "only casts to ints are supported in core ir"
   | F.Conc -> C.Conc
   | F.BitAnd -> C.BitAnd
   | F.BitOr -> C.BitOr

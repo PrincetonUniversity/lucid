@@ -67,7 +67,7 @@ and op =    | And | Or | Not
             | Slice of int * int
             | PatExact | PatMask
             | Hash of size
-            | Cast of size 
+            | Cast of ty 
             | Conc
             | Project of id | Get of int 
             | Mod
@@ -437,7 +437,7 @@ let eop op es =
       in
       ty (TBits {ternary=true; len=sz})
     | Hash size -> ty (TInt size)
-    | Cast size  -> ty (TInt size)
+    | Cast ty  -> ty
     | Conc -> 
       let arg_sizes = List.map (fun e -> match e.ety.raw_ty with TInt sz -> sz | _ -> failwith "conc expects int args") es in
       ty (TInt (sz (List.fold_left (+) 0 arg_sizes)))

@@ -177,8 +177,8 @@ and op_to_string (op: op) (args: exp list) : string =
   | PatExact, [a] -> "PatExact(" ^ a ^ ")"
   | PatMask, [a] -> "PatMask(" ^ a ^ ")"
   | Hash size, [a] -> "Hash_" ^ size_to_string size ^ "(" ^ a ^ ")"
-  | Cast size, [a] ->
-    let int_ty_str = raw_ty_to_string (TInt size) in
+  | Cast new_ty, [a] ->
+    let int_ty_str = ty_to_string (new_ty) in
     "(" ^ int_ty_str ^ ")" ^ a
   | Conc, args -> String.concat "++" args
   | Project id, [a]                                   -> a ^ "." ^ id_to_string id

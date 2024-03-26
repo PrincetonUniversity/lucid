@@ -109,8 +109,8 @@ let translate_op (op : C.op) : F.op =
   | C.Plus -> F.Plus
   | C.Sub -> F.Sub
   | C.SatPlus -> F.SatPlus
-  | C.SatSub -> F.SatSub
-  | C.Cast(Sz sz) -> F.Cast(F.sz sz)
+  | C.SatSub -> F.SatSub    
+  | C.Cast(Sz sz) -> F.Cast(F.tint sz)
   | C.Cast(_) -> err "Cast size should be a singleton"
   | C.Conc -> F.Conc
   | C.BitAnd -> F.BitAnd
