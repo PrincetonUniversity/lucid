@@ -335,14 +335,11 @@ and infer_eop env op (args : exp list) : env * op * exp list * ty = match op, ar
     let env = unify_ty env inf_exp1.ety inf_exp2.ety in
     env, op, [inf_exp1; inf_exp2], tbool
   | Plus, [exp1; exp2] -> (
-    print_endline ("INFERRING PLUS OP");
     let env, inf_exp1 = infer_exp env exp1 in
     let env, inf_exp2 = infer_exp env exp2 in    
     match inf_exp1.ety.raw_ty with 
       | TRef(_, _) -> 
         (* allow pointer arithmetic if t1 is a ref type. *)
-        print_endline ("in hole case");
-        print_endline@@"expression type: "^(CCorePPrint.ty_to_string inf_exp1.ety);
         env, op, [inf_exp1; inf_exp2], inf_exp1.ety
       | _ -> 
         if (not (is_tint inf_exp1.ety)) then 
@@ -564,7 +561,7 @@ let rec infer_decl env decl : env * decl =
   | DVar(id, ty, Some(arg)) -> (
     match ty.raw_ty with 
     | TRef(_, None) -> 
-      (* if this is an array with 1 element, the other side must be a single value. *)
+      (* if this a pointer to a single cell, the other side is a single value *)
       let env, inf_arg = infer_exp env arg in
       let env = unify_ty env ty (tref inf_arg.ety) in
       let env = add_var env (id) ty in
@@ -576,7 +573,14 @@ let rec infer_decl env decl : env * decl =
       let env = add_var env (id) ty in
       env, {decl with d=DVar(id, ty, Some(inf_arg))}
     )
-    | _ -> ty_err "a toplevel variable must be a reference / global"
+    | _ -> (
+      (* anything else is fine too without a special case *)
+      let env, inf_arg = infer_exp env arg in
+      let env = unify_ty env ty inf_arg.ety in
+      let env = add_var env (id) ty in
+      env, {decl with d=DVar(id, ty, Some(inf_arg))}
+    )
+    (* | _ -> ty_err "a toplevel variable must be a reference / global" *)
   )
   | DVar(id, ty, None) ->
     if ((is_tref ty) <> true) then 

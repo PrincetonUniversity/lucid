@@ -10,8 +10,8 @@ let compile ds =
   (* 2. a few core passes *)
   let ds = PartialInterpretation.interp_prog ds in
   let ds = CoreRegularizeMemops.process ds in
-  (* let ds = AddIngressParser.add_simple_parser None (InlineEventVars.set_event_nums ds) in  *)
-  (* add parser for platform with no recirc port *)
+  let ds = AddIngressParser.add_simple_parser None (InlineEventVars.set_event_nums ds) in 
+    (* add parser for platform with no recirc port *)
   let ds = DeleteNoops.deleter#visit_decls () ds in
 
   (* 3. translate to FCore *)
@@ -25,9 +25,8 @@ let compile ds =
       declared as type t_cid = concrete_type;      
       find all the types equivalent to concrete_type and 
       replace them with tabstr(t_cid, concrete_type); *)
-  let fds = CCoreParse.process fds in
-  (* exit 1; *)
   (* 1: implement all the "builtins" of lucid *)
+  let fds = CCoreParse.process fds in
   (* data structures *)
   let fds = CCoreTables.process_decls fds in
   let fds = CCoreArrays.process_decls fds in
@@ -38,10 +37,9 @@ let compile ds =
   let fds = CCoreTyper.check_decls fds in
 
 
-  print_endline ("---- after data structure implementation and first type checkign ----");
+  print_endline ("---- after data structure implementation and first type checking ----");
   print_endline (CCorePPrint.decls_to_string fds);
   print_endline ("----------------------");
-  exit 1;
   (* 2: eliminate events and handlers *)
   (* merge handlers to create event handler function
      and implement generate as setting output fields *)

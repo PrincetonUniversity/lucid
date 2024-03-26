@@ -80,8 +80,8 @@ let table_cell_type tbl_id key_ty acns_enum_ty const_action_arg_ty : ty =
 ;;
 
 let table_instance_type tbl_id acns_enum_ty const_action_arg_ty tbl_cell_ty tbl_len =   
-  (* a table is a GLOBAL struct variable with a default and a list of entries *)
-  tref@@
+  (* a table is a struct variable with a default and a list of entries *)
+  (* tref@@ *) (* no longer a tref *)
     tabstract_cid
     (Cid.str_cons_plain "ty" tbl_id)
     (
@@ -99,7 +99,8 @@ let vrecord pairs =
   vrecord a b
 ;;
 let table_create (tbl_ty : ty) (def_enum_id : cid) (acn_enum_ty : ty) (def_arg : value) = 
-  let fields, tys = extract_trecord (extract_tref tbl_ty) in
+  (* let fields, tys = extract_trecord (extract_tref tbl_ty) in *)
+  let fields, tys = extract_trecord tbl_ty in
   let field_ty = List.combine fields tys in 
   let entries_ty = List.assoc (id"entries") field_ty in
   let default = vrecord [
@@ -123,8 +124,8 @@ let table_create (tbl_ty : ty) (def_enum_id : cid) (acn_enum_ty : ty) (def_arg :
 let lookup_id tbl_id = Cid.str_cons_plain "lookup" tbl_id ;;
 let table_lookup spec = 
   (* note: the table is hard coded into the function, not a parameter. *)
-  (* deref a variable that is a pointer to the table  *)
-  let tbl = ederef (evar (spec.tbl_id) (spec.tbl_ty)) in
+  (* (so it doesn't need to be a ref) *)
+  let tbl = (* ederef *) (evar (spec.tbl_id) (spec.tbl_ty)) in
   (* let tbl_param = evar (cid "tbl") spec.tbl_ty in *)
   let key_param = evar (cid "key") spec.key_ty in
   let arg_param = evar (cid "arg") spec.arg_ty in
@@ -198,7 +199,7 @@ let table_lookup spec =
 let install_id tbl_id = Cid.str_cons_plain "install" tbl_id ;;
 let table_install spec = 
   (* note: the table is hard coded into the function, not a parameter. *)
-  let tbl = ederef (evar (spec.tbl_id) (spec.tbl_ty)) in
+  let tbl = (* ederef *) (evar (spec.tbl_id) (spec.tbl_ty)) in
   (* let tbl_param = evar (cid "tbl") spec.tbl_ty in *)
   let key_param = evar (cid "key") spec.key_ty in
   (* note: call has to be transformed from an action variable to an action tag value *)
@@ -259,11 +260,11 @@ let monomorphic_table_decls actions_enum_ty decl : decls =
     let tbl_value = table_create tbl_ty default_action_enum_id (actions_enum_ty) default_action_arg in
     let tbl_spec = {tbl_id; len; tbl_ty; key_ty; const_arg_ty; arg_ty; ret_ty; action_tags; actions_enum_ty;} in
     let new_decls = [
-      decl_tabstract tbl_cell_ty;   (* cell type within a table *)
-      decl_tabstract (extract_tref tbl_ty);        (* the table's type *)
+      decl_tabstract tbl_cell_ty;               (* cell type within a table *)
+      decl_tabstract tbl_ty;                    (* the table's type *)
       dglobal tbl_id (tbl_ty) (eval tbl_value); (* table declaration *)
-      table_install tbl_spec;       (* table install function *)
-      table_lookup tbl_spec         (* table lookup function *)
+      table_install tbl_spec;                   (* table install function *)
+      table_lookup tbl_spec                     (* table lookup function *)
       ] 
     in
     print_endline ("source table declaration: ");

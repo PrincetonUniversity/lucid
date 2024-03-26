@@ -146,8 +146,8 @@ let rec e_to_string (e: e) : string =
     f_str ^ "(" ^ args_str ^ ")" ^ comment_str
   | EOp (op, args) -> op_to_string op args
   (* special case: print deref of pointer arith as a subscript *)
-  (* | EDeref({e=EOp(Plus, [arr_exp; idx_exp])}) -> 
-    sprintf "%s[%s]" (exp_to_string arr_exp) (exp_to_string idx_exp) *)
+  | EDeref({e=EOp(Plus, [arr_exp; idx_exp])}) -> 
+    sprintf "%s[%s]" (exp_to_string arr_exp) (exp_to_string idx_exp)
   | EDeref(exp) -> sprintf "(*(%s))" (exp_to_string exp)
 and exp_to_string exp : string = e_to_string exp.e
 and op_to_string (op: op) (args: exp list) : string =
@@ -181,7 +181,6 @@ and op_to_string (op: op) (args: exp list) : string =
     let int_ty_str = raw_ty_to_string (TInt size) in
     "(" ^ int_ty_str ^ ")" ^ a
   | Conc, args -> String.concat "++" args
-  (* | Project id, [a] when is_mutable (List.hd args).ety -> a ^ "->" ^ id_to_string id *)
   | Project id, [a]                                   -> a ^ "." ^ id_to_string id
   | Get i, [a] -> a ^ "._" ^ string_of_int i
   | Mod, [x; m] -> Printf.sprintf "(%s mod %s)" x m
