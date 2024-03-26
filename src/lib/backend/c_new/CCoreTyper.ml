@@ -13,7 +13,7 @@ exception SizeMismatch of size * size
 exception SelfRefSize of size
 exception TypeError of string
 
-let print_endline _ = ()
+(* let print_endline _ = () *)
 
 
 type constr_var = 
@@ -105,8 +105,11 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
   | ty1, TAbstract(_, {raw_ty = ty2}) -> 
     unify_raw_ty env ty1 ty2
   (* named types unify if their names and types are equal *)
-  | TRef(t1), TRef(t2) -> 
+  | TRef(t1, None), TRef(t2, None) -> 
     unify_ty env t1 t2
+  | TRef(t1, Some(l1)), TRef(t2, Some(l2)) ->
+    let env' = unify_ty env t1 t2 in
+    unify_arrlen env' l1 l2      
   | TName cid1, TName cid2 -> 
     if (not (Cid.equal cid1 cid2)) then 
       (ty_err "named types with different names");
@@ -155,9 +158,6 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
     if (List.length tys1 <> List.length tys2) then 
       (ty_err ("record types have different numbers types"));    
     unify_lists env unify_ty tys1 tys2      
-  | TList(t1, l1), TList(t2, l2) ->
-    let env' = unify_ty env t1 t2 in
-    unify_arrlen env' l1 l2    
   | TFun{arg_tys=arg_tys1; ret_ty=ret_ty1; func_kind=fk1}, TFun{arg_tys=arg_tys2; ret_ty=ret_ty2; func_kind=fk2} -> 
     if (fk1 <> fk2) then 
       ty_err "functions of different kinds";
@@ -171,7 +171,7 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
       ty_err "union types with different labels";
     unify_lists env unify_ty tys1 tys2
   | (TUnit|TBool|TEvent|TInt _|TRecord _ | TTuple _ | TName _ | TRef _ | TUnion _
-    |TList (_, _)|TFun _|TBits _|TEnum _|TBuiltin (_, _)), _ -> 
+  | TFun _|TBits _|TEnum _|TBuiltin (_, _)), _ -> 
       print_endline@@"type mismatch:\n"^(CCorePPrint.raw_ty_to_string rawty1)^"\nand\n"^(CCorePPrint.raw_ty_to_string rawty2);
       ty_err "type mismatch"
     
@@ -240,8 +240,11 @@ let rec infer_exp env exp : env * exp =
       env, {e=EVar cid; ety; espan=exp.espan}
     | EDeref(inner_exp) -> 
       let env, inf_inner_exp = infer_exp env inner_exp in
+      if (is_tref inf_inner_exp.ety) then 
       (* inner exp should be a global, this is the inner type *)
       env, {e=EDeref(inner_exp); ety = extract_tref (inf_inner_exp.ety); espan = exp.espan}
+      else 
+        ty_err (Printf.sprintf "tried to dereference a non reference type (%s : %s)" (CCorePPrint.exp_to_string inf_inner_exp) (CCorePPrint.ty_to_string inf_inner_exp.ety));
     (* | ERecord{labels=None; es} ->        *)
     | ETuple(es) -> 
       let env, es' = infer_exps env es in
@@ -297,26 +300,12 @@ let rec infer_exp env exp : env * exp =
       let env, op, inf_args, ety = infer_eop env op args in
       let e = EOp(op, inf_args) in
       env, {exp with e; ety}
-    | EListIdx(list_exp, idx_exp) -> 
-      let env, inf_list_exp = infer_exp env list_exp in
-      let env, inf_idx_exp = infer_exp env idx_exp in
-      if not (is_tint inf_idx_exp.ety) then 
-        ty_err "list index must be an int";
-      if not (is_tlist inf_list_exp.ety) then 
-        ty_err "expected a list";
-      let cell_ty, arr_len = extract_tlist inf_list_exp.ety in  
-      let _ = arr_len in
-      let inf_ty = cell_ty in
-      (* TODO: check inf_idx_exp against the length of inf_list_exp *)
-      (* the index expression must either: 
+      (* TODO: for eop plus, if it is adding to a ref, we want to check the index expression:
          1. evaluate to a constant.
          2. be a for loop variable bound by a size less than or equal to the size of the array
          3. be a mod op.
             - hmm... could we track an optional "max value" on tints that we infer? 
-              - then we could just check that...         
-         *)
-      let e = EListIdx(inf_list_exp, inf_idx_exp) in
-      env, {exp with e; ety=inf_ty}
+              - then we could just check that...*)
   in
   print_endline@@"finished inferring expression -- "^(CCorePPrint.exp_to_string exp)^" : "^(CCorePPrint.ty_to_string exp.ety);
   env, exp
@@ -345,10 +334,26 @@ and infer_eop env op (args : exp list) : env * op * exp list * ty = match op, ar
       ty_err "int op with non-int arg";
     let env = unify_ty env inf_exp1.ety inf_exp2.ety in
     env, op, [inf_exp1; inf_exp2], tbool
-  | Plus, [exp1; exp2] | Sub, [exp1; exp2] | SatPlus, [exp1; exp2] | SatSub, [exp1; exp2]
+  | Plus, [exp1; exp2] -> (
+    print_endline ("INFERRING PLUS OP");
+    let env, inf_exp1 = infer_exp env exp1 in
+    let env, inf_exp2 = infer_exp env exp2 in    
+    match inf_exp1.ety.raw_ty with 
+      | TRef(_, _) -> 
+        (* allow pointer arithmetic if t1 is a ref type. *)
+        print_endline ("in hole case");
+        print_endline@@"expression type: "^(CCorePPrint.ty_to_string inf_exp1.ety);
+        env, op, [inf_exp1; inf_exp2], inf_exp1.ety
+      | _ -> 
+        if (not (is_tint inf_exp1.ety)) then 
+          ty_err "int op with non-int arg";
+        let env = unify_ty env inf_exp1.ety inf_exp2.ety in
+        env, op, [inf_exp1; inf_exp2], inf_exp1.ety
+  )
+  | Sub, [exp1; exp2] | SatPlus, [exp1; exp2] | SatSub, [exp1; exp2]
   | BitAnd, [exp1; exp2] | BitOr, [exp1; exp2] | BitXor, [exp1; exp2] | Mod, [exp1; exp2] -> 
     let env, inf_exp1 = infer_exp env exp1 in
-    let env, inf_exp2 = infer_exp env exp2 in
+    let env, inf_exp2 = infer_exp env exp2 in    
     if (not (is_tint inf_exp1.ety)) then 
       ty_err "int op with non-int arg";
     let env = unify_ty env inf_exp1.ety inf_exp2.ety in
@@ -556,15 +561,23 @@ let rec infer_decl env decl : env * decl =
   print_endline ("inferring decl: ");
   print_endline (CCorePPrint.decl_to_string decl);
   match decl.d with 
-  | DVar(id, ty, Some(arg)) -> 
-    (* globals: the type of the constructor expression
-       is t, BUT the declared type (of the variable) must be tref t *)
-    if (is_tref ty <> true) then 
-      ty_err "a toplevel variable must be declared with a global type";
-    let env, inf_arg = infer_exp env arg in
-    let env = unify_ty env ty (tref inf_arg.ety) in
-    let env = add_var env (id) ty in
-    env, {decl with d=DVar(id, ty, Some(inf_arg))}
+  | DVar(id, ty, Some(arg)) -> (
+    match ty.raw_ty with 
+    | TRef(_, None) -> 
+      (* if this is an array with 1 element, the other side must be a single value. *)
+      let env, inf_arg = infer_exp env arg in
+      let env = unify_ty env ty (tref inf_arg.ety) in
+      let env = add_var env (id) ty in
+      env, {decl with d=DVar(id, ty, Some(inf_arg))}
+    | TRef(_, Some(_)) -> (
+      (* if this is an array, the rhs must also be an array *)
+      let env, inf_arg = infer_exp env arg in
+      let env = unify_ty env ty inf_arg.ety in
+      let env = add_var env (id) ty in
+      env, {decl with d=DVar(id, ty, Some(inf_arg))}
+    )
+    | _ -> ty_err "a toplevel variable must be a reference / global"
+  )
   | DVar(id, ty, None) ->
     if ((is_tref ty) <> true) then 
       ty_err "globally scoped variables must be declared as globals";
@@ -573,7 +586,7 @@ let rec infer_decl env decl : env * decl =
   | DList(id, ty, Some(args)) -> (
     let env, inf_args = infer_lists env infer_exp args in
     match (base_type ty).raw_ty with 
-      | TList(cellty, len) -> 
+      | TRef(cellty, Some(len)) -> 
         (* TODO later: constrain list's length based on length of args *)
         let _ = len in
         let env = List.fold_left (fun env inf_arg -> 

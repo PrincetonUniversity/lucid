@@ -155,7 +155,15 @@ let table_lookup spec =
   let s_loop = 
     swhile idx spec.len cont 
       (
-        let entry = (tbl/->id"entries"/@idx) in        
+        print_endline ("type of tbl: ");
+        print_endline (CCorePPrint.ty_to_string tbl.ety);
+        let entries = tbl/->id"entries" in
+        print_endline ("type of entries: ");
+        print_endline (CCorePPrint.ty_to_string entries.ety);
+        
+        let entry = entries/@idx in
+        (* *(entries + idx) *)
+        (* let entry = (tbl/->id"entries"/@idx) in         *)
         sif (entry/->id"valid")
           (
             sif (eop Eq [key_param; entry/->id"key"])

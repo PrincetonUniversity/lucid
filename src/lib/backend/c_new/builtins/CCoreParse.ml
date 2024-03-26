@@ -20,6 +20,7 @@ let payload_parse = Cid.create ["Payload"; "parse"] ;;
 (* maybe do_lucid_parsing? Not sure. *)
 let process_parser decl = 
   let id, ty, params, body = extract_dparser decl in
+  let _, _, _, _ = id, ty, params, body in
   decl
 ;;
 

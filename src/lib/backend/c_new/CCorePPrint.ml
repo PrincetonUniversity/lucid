@@ -53,8 +53,6 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : string =
     let field_strs = List.map2 (fun l e -> l ^ ": " ^ e ^";") label_strs ts_strs in
     let fields_str = String.concat " " field_strs in    
     "{" ^ fields_str ^ "}"
-  | TList (ty, arrlen) -> 
-    ty_to_string ~use_abstract_name:true ty ^ "[" ^ arrlen_to_string arrlen ^ "]"
   | TFun func_ty -> "function(" ^ func_ty_to_string func_ty ^ ")"
   | TBits {ternary; len} -> (if ternary then "ternary_" else "") ^ "bit[" ^ size_to_string len ^ "]"
   | TEvent -> "event"
@@ -69,7 +67,10 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : string =
     if (use_abstract_name) then 
       cid_to_string cid
     else ty_to_string ty
-  | TRef(ty) -> sprintf "%s*" (ty_to_string ~use_abstract_name ty)
+  | TRef(ty, None) -> sprintf "%s*" (ty_to_string ~use_abstract_name ty)
+  | TRef(ty, Some(arrlen)) -> 
+    ty_to_string ~use_abstract_name:true ty ^ "[" ^ arrlen_to_string arrlen ^ "]"
+
 and ty_to_string ?(use_abstract_name=false) ty = raw_ty_to_string ~use_abstract_name ty.raw_ty
 
 and func_ty_to_string (f: func_ty) : string =
@@ -144,8 +145,10 @@ let rec e_to_string (e: e) : string =
     in
     f_str ^ "(" ^ args_str ^ ")" ^ comment_str
   | EOp (op, args) -> op_to_string op args
-  | EListIdx (e, i) -> exp_to_string e ^ "[" ^ exp_to_string i ^ "]"
-  | EDeref(exp) -> sprintf "(*%s)" (exp_to_string exp)
+  (* special case: print deref of pointer arith as a subscript *)
+  (* | EDeref({e=EOp(Plus, [arr_exp; idx_exp])}) -> 
+    sprintf "%s[%s]" (exp_to_string arr_exp) (exp_to_string idx_exp) *)
+  | EDeref(exp) -> sprintf "(*(%s))" (exp_to_string exp)
 and exp_to_string exp : string = e_to_string exp.e
 and op_to_string (op: op) (args: exp list) : string =
   let args_str = List.map exp_to_string args in
@@ -181,7 +184,7 @@ and op_to_string (op: op) (args: exp list) : string =
   (* | Project id, [a] when is_mutable (List.hd args).ety -> a ^ "->" ^ id_to_string id *)
   | Project id, [a]                                   -> a ^ "." ^ id_to_string id
   | Get i, [a] -> a ^ "._" ^ string_of_int i
-  | Mod, [x; m] -> Printf.sprintf "%s mod %s" x m
+  | Mod, [x; m] -> Printf.sprintf "(%s mod %s)" x m
   | _, _ -> failwith ("Invalid number of arguments for operator: "^(show_op op))
 
 let assign_op_to_string (op: assign_op) = 

@@ -27,11 +27,10 @@ and raw_ty =
   | TUnion of id list * ty list
   | TRecord of id list * ty list
   | TTuple  of ty list 
-  | TList of ty * arrlen
+  | TRef of ty * (arrlen option) (* a pointer to a memory cell of a certain type or an array of them *)
   | TBits of {ternary: bool; len : size;}
   | TEvent
   | TFun of func_ty
-  | TRef of ty
   (* alias types *)
   | TBuiltin of cid * (ty list) (* types built into the lucid language that must be eliminated for c *)
   | TAbstract of cid * ty (* a name for another type *)
@@ -82,8 +81,8 @@ and e =
   | ETuple of exp list
   | EUnion  of id * exp * ty
   | ERecord of id list * exp list
-  | EListIdx of exp * exp 
-  | EDeref of exp (* dereference the global to get its value *)
+  (* | EListIdx of exp * exp  *)
+  | EDeref of exp
 
 and call_kind = 
   | CFun
@@ -194,7 +193,7 @@ let tunion labels tys = ty (TUnion(labels, tys))
 let tfun_kind func_kind arg_tys ret_ty = ty (TFun {arg_tys; ret_ty; func_kind})
 let tfun arg_tys ret_ty = tfun_kind FNormal arg_tys ret_ty 
 (* global type from CoreSyntax *)
-let tlist ele_ty len = ty (TList(ele_ty, len))
+let tlist ele_ty len = ty (TRef(ele_ty, Some(len)))
 let tname cid = ty (TName(cid))
 let textern = tname (Cid.create ["_extern_ty_"])
 let tbuiltin cid tyargs = ty (TBuiltin(cid, tyargs))
@@ -205,7 +204,7 @@ let tabstract_cid tcid inner_ty = ty (TAbstract(tcid, inner_ty))
 let tabstract_id id inner_ty = ty (TAbstract(Cid.create_ids [id], inner_ty))
 let tenum_pairs (tagpairs : (Cid.t * int) list) = ty (TEnum tagpairs)
 let tenum ids = tenum_pairs (List.mapi (fun i id -> (id, i)) ids)
-let tref t = ty (TRef(t))
+let tref t = ty (TRef(t, None))
 let rec base_type ty = 
   match ty.raw_ty with 
   | TAbstract(_, ty) -> base_type ty
@@ -240,7 +239,7 @@ let is_tfun ty = match ty.raw_ty with TFun({func_kind=FNormal}) -> true | _ -> f
 let is_tbool ty = match ty.raw_ty with TBool -> true | _ -> false
 let is_tint ty = match ty.raw_ty with TInt(_) -> true | _ -> false
 let is_tbits ty = match ty.raw_ty with TBits(_) -> true | _ -> false
-let is_tlist ty = match ty.raw_ty with TList(_, _) -> true | _ -> false
+let is_tlist ty = match ty.raw_ty with TRef(_, Some _) -> true | _ -> false
 let is_tevent ty = match ty.raw_ty with TEvent -> true | _ -> false
 let is_tabstract name ty = match ty.raw_ty with TAbstract(cid, _) -> Cid.equal cid (Cid.create [name]) | _ -> false
 let is_tstring ty = is_tabstract "string" ty
@@ -272,7 +271,7 @@ let extract_ttuple ty = match ty.raw_ty with
   | _ -> raise (FormError "[extract_ttuple] expected TRecord")
 ;;
 let extract_tlist ty = match ty.raw_ty with 
-  | TList(ty, len) -> ty, len
+  | TRef(ty, Some(len)) -> ty, len
   | _ -> raise (FormError "[extract_tlist] expected TList")
 ;;
 let extract_tenum ty = match ty.raw_ty with 
@@ -298,7 +297,7 @@ let rec extract_tname ty = match ty.raw_ty with
   | _ -> raise (FormError "[extract_tname] expected TName")
 
 let extract_tref ty = match ty.raw_ty with 
-  | TRef tinner -> tinner
+  | TRef(tinner, _) -> tinner
   | _ -> raise (FormError "[extract_tref] expected TGlobal")
 
   
@@ -320,7 +319,7 @@ let vint_ty value ty = match ty.raw_ty with
   | TInt  size -> vint value size
   | _ -> failwith "vint_ty: expected TInt"
 let vbool b = {v=VBool b; vty=ty TBool; vspan=Span.default}
-let vlist vs = {v=VList vs; vty=ty (TList((List.hd vs).vty, IConst (List.length vs))); vspan=Span.default}
+let vlist vs = {v=VList vs; vty=ty (TRef((List.hd vs).vty, Some(IConst (List.length vs)))); vspan=Span.default}
 let vtup vs = {v=VTuple(vs); vty=ttuple (List.map (fun v -> v.vty) vs); vspan=Span.default}
 let vpat ints = {v=VBits {ternary=true; bits=ints}; vty=ty (TBits {ternary=true; len=sz (List.length ints)}); vspan=Span.default}
 let vbits ints = {v=VBits {ternary=false; bits=ints}; vty=ty (TBits {ternary=false; len=sz (List.length ints)}); vspan=Span.default}
@@ -377,9 +376,6 @@ let rec default_value ty = match ty.raw_ty with
   | TUnion(ids, tys) -> vunion (List.hd ids) (List.hd tys |> default_value) ty
   | TTuple(ts) -> 
     vtuple (List.map default_value ts)
-  | TList(t, IConst n) -> 
-    vlist (List.init n (fun _ -> default_value t))
-  | TList(_, _) -> failwith "no default value non-constant list length"
   | TFun _ -> failwith "no default value for function type"
   | TBits{len} -> vbits (List.init len (fun _ -> 0))
   | TEvent -> vevent (Cid.create ["_none"]) None [] []
@@ -388,7 +384,9 @@ let rec default_value ty = match ty.raw_ty with
   | TBuiltin _ -> failwith "no default value for builtin type"
   | TName _ -> failwith "no default value for named type"
   | TAbstract(_, ty) -> default_value ty
-  | TRef(ty) -> default_value ty
+  | TRef(ty, None) -> default_value ty
+  | TRef(ty, Some(IConst(n))) -> vlist (List.init n (fun _ -> default_value ty))
+  | TRef(_, Some _) -> failwith "no default value for list of unknown length"
 ;;
 
 
@@ -492,14 +490,18 @@ let ecall_op (f: exp) args = ecall f args
 
 let eevent = ecall_kind CEvent
 
-
-let elistget arr arrlen = 
-  let cell_ty = extract_tlist arr.ety |> fst in
-  {e=EListIdx(arr, arrlen); ety=cell_ty; espan=Span.default}
-
 let ederef inner = 
   {e=EDeref(inner); ety=extract_tref inner.ety; espan=Span.default}
 ;;
+
+let elistget arr idx = 
+  (* a list get is just sugar for an add and deref *)
+  (* update -- use pointer arith instead *)
+  let pos = eop Plus [arr; idx] in
+  ederef pos
+  (* let cell_ty = extract_tlist arr.ety |> fst in
+  {e=EListIdx(arr, idx); ety=cell_ty; espan=Span.default} *)
+
 
 let to_ref exp = 
   (* turn an expression for a local value into 
@@ -522,7 +524,11 @@ let is_eproject exp = match exp.e with
   | _ -> false
 
 let is_elistidx exp = match exp.e with 
-  | EListIdx _ -> true
+  | EDeref(inner_exp) -> (
+    match inner_exp.e, inner_exp.ety.raw_ty with 
+      | EOp(Plus, _), TRef _ -> true
+      | _ -> false
+  )
   | _ -> false
 
 let is_evar exp = match exp.e with 
