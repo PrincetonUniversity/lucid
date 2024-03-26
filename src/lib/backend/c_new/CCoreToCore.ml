@@ -91,7 +91,7 @@ let rec translate_raw_ty (raw_ty : F.raw_ty) : C.raw_ty =
         else (C.Sz 16))
   | F.TList _ -> err "List types cannot be translated back to core IR"
         (* tbuiltins might be wrapped in global, but they are global already *)
-  | F.TGlobal(ty) -> (translate_ty ty).raw_ty
+  | F.TRef(ty) -> (translate_ty ty).raw_ty
   | F.TUnion _ -> err "union types cannot be translated back to core IR"
 
   and translate_ty (ty : F.ty) : C.ty = 
@@ -261,7 +261,7 @@ let rec translate_exp (exp: F.exp) =
   )   
   | F.ECall _ -> err "call expression with non-var function"
   | F.EListIdx _ -> err "there is no list index / get operation in CoreIr"
-  | F.EGlobalDeref _ -> err "dereferences are not supported in core ir"
+  | F.EDeref _ -> err "dereferences are not supported in core ir"
   | F.EUnion _ -> err "unions are not supported in core ir"
 
 

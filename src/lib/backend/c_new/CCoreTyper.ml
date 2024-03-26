@@ -105,7 +105,7 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
   | ty1, TAbstract(_, {raw_ty = ty2}) -> 
     unify_raw_ty env ty1 ty2
   (* named types unify if their names and types are equal *)
-  | TGlobal(t1), TGlobal(t2) -> 
+  | TRef(t1), TRef(t2) -> 
     unify_ty env t1 t2
   | TName cid1, TName cid2 -> 
     if (not (Cid.equal cid1 cid2)) then 
@@ -170,7 +170,7 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
     if (not (List.for_all2 Id.equal labels1 labels2)) then 
       ty_err "union types with different labels";
     unify_lists env unify_ty tys1 tys2
-  | (TUnit|TBool|TEvent|TInt _|TRecord _ | TTuple _ | TName _ | TGlobal _ | TUnion _
+  | (TUnit|TBool|TEvent|TInt _|TRecord _ | TTuple _ | TName _ | TRef _ | TUnion _
     |TList (_, _)|TFun _|TBits _|TEnum _|TBuiltin (_, _)), _ -> 
       print_endline@@"type mismatch:\n"^(CCorePPrint.raw_ty_to_string rawty1)^"\nand\n"^(CCorePPrint.raw_ty_to_string rawty2);
       ty_err "type mismatch"
@@ -238,10 +238,10 @@ let rec infer_exp env exp : env * exp =
           ty_err@@"cannot find type for unbound variable: "^(CCorePPrint.cid_to_string cid)
       in
       env, {e=EVar cid; ety; espan=exp.espan}
-    | EGlobalDeref(inner_exp) -> 
+    | EDeref(inner_exp) -> 
       let env, inf_inner_exp = infer_exp env inner_exp in
       (* inner exp should be a global, this is the inner type *)
-      env, {e=EGlobalDeref(inner_exp); ety = extract_tglobal (inf_inner_exp.ety); espan = exp.espan}
+      env, {e=EDeref(inner_exp); ety = extract_tref (inf_inner_exp.ety); espan = exp.espan}
     (* | ERecord{labels=None; es} ->        *)
     | ETuple(es) -> 
       let env, es' = infer_exps env es in
@@ -558,15 +558,15 @@ let rec infer_decl env decl : env * decl =
   match decl.d with 
   | DVar(id, ty, Some(arg)) -> 
     (* globals: the type of the constructor expression
-       is t, BUT the declared type (of the variable) must be tglobal t *)
-    if (is_tglobal ty <> true) then 
+       is t, BUT the declared type (of the variable) must be tref t *)
+    if (is_tref ty <> true) then 
       ty_err "a toplevel variable must be declared with a global type";
     let env, inf_arg = infer_exp env arg in
-    let env = unify_ty env ty (tglobal inf_arg.ety) in
+    let env = unify_ty env ty (tref inf_arg.ety) in
     let env = add_var env (id) ty in
     env, {decl with d=DVar(id, ty, Some(inf_arg))}
   | DVar(id, ty, None) ->
-    if ((is_tglobal ty) <> true) then 
+    if ((is_tref ty) <> true) then 
       ty_err "globally scoped variables must be declared as globals";
     let env = add_var env (id) ty in
     env, decl

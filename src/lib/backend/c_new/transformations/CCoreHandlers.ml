@@ -104,7 +104,7 @@ let transform_handler last_handler_cid (handlers, decls) decl : (handler_rec lis
 let globalize_evars param_ids exp = 
   let var_id, _ = extract_evar_id exp in
   if (List.exists (Id.equal var_id) param_ids) then 
-    to_global exp
+    to_ref exp
   else 
     exp
 ;;
@@ -132,7 +132,7 @@ let val_to_ref_args target_functions_cids decl =
       let statement = subst_evar#visit_statement (globalize_evars (rv_id::param_ids)) inner_statement in
       let new_params = List.map 
         (fun (id, ty) -> 
-          (id, tglobal ty)
+          (id, tref ty)
         ) 
         (params@[(Cid.to_id ret_var_id), ret_ty])
       in

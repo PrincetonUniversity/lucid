@@ -40,7 +40,7 @@ let array_create ctx (arr_ty : ty) (arr_id : cid) (ctor_call : exp) =
   let ctx = {ctx with 
     arrays = (arr_id, (cell_ty, len))::ctx.arrays;}
   in
-  ctx, dglobal arr_id (tglobal arr_ty) (eval arr_val)
+  ctx, dglobal arr_id (tref arr_ty) (eval arr_val)
 ;;
 
 let arr_fcn_id accessor_id arr_id memop_ids = 
@@ -57,7 +57,7 @@ let update_complex ctx call_id call_args =
   let arr = List.nth call_args 0 in (* should have type TBuiltin *)
   let arr_id, (arr_cellty, arr_len) = get_array ctx arr in
   let arr = {arr with ety = array_value_ty arr_cellty arr_len} in
-  let arr = to_global arr in
+  let arr = to_ref arr in
   let memop_id, (_, memop_params, memop_body) = get_memop ctx (List.nth call_args 2) in
 
   let idx_param = Id.create "_idx", (List.nth call_args 1).ety in

@@ -69,7 +69,7 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : string =
     if (use_abstract_name) then 
       cid_to_string cid
     else ty_to_string ty
-  | TGlobal(ty) -> sprintf "%s*" (ty_to_string ~use_abstract_name ty)
+  | TRef(ty) -> sprintf "%s*" (ty_to_string ~use_abstract_name ty)
 and ty_to_string ?(use_abstract_name=false) ty = raw_ty_to_string ~use_abstract_name ty.raw_ty
 
 and func_ty_to_string (f: func_ty) : string =
@@ -145,7 +145,7 @@ let rec e_to_string (e: e) : string =
     f_str ^ "(" ^ args_str ^ ")" ^ comment_str
   | EOp (op, args) -> op_to_string op args
   | EListIdx (e, i) -> exp_to_string e ^ "[" ^ exp_to_string i ^ "]"
-  | EGlobalDeref(exp) -> sprintf "(*%s)" (exp_to_string exp)
+  | EDeref(exp) -> sprintf "(*%s)" (exp_to_string exp)
 and exp_to_string exp : string = e_to_string exp.e
 and op_to_string (op: op) (args: exp list) : string =
   let args_str = List.map exp_to_string args in

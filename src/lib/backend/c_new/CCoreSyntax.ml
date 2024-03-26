@@ -31,7 +31,7 @@ and raw_ty =
   | TBits of {ternary: bool; len : size;}
   | TEvent
   | TFun of func_ty
-  | TGlobal of ty
+  | TRef of ty
   (* alias types *)
   | TBuiltin of cid * (ty list) (* types built into the lucid language that must be eliminated for c *)
   | TAbstract of cid * ty (* a name for another type *)
@@ -72,7 +72,6 @@ and op =    | And | Or | Not
             | Conc
             | Project of id | Get of int 
             | Mod
-            
             (* record and tuple ops *)
 
 and e = 
@@ -84,7 +83,7 @@ and e =
   | EUnion  of id * exp * ty
   | ERecord of id list * exp list
   | EListIdx of exp * exp 
-  | EGlobalDeref of exp (* dereference the global to get its value *)
+  | EDeref of exp (* dereference the global to get its value *)
 
 and call_kind = 
   | CFun
@@ -206,7 +205,7 @@ let tabstract_cid tcid inner_ty = ty (TAbstract(tcid, inner_ty))
 let tabstract_id id inner_ty = ty (TAbstract(Cid.create_ids [id], inner_ty))
 let tenum_pairs (tagpairs : (Cid.t * int) list) = ty (TEnum tagpairs)
 let tenum ids = tenum_pairs (List.mapi (fun i id -> (id, i)) ids)
-let tglobal t = ty (TGlobal(t))
+let tref t = ty (TRef(t))
 let rec base_type ty = 
   match ty.raw_ty with 
   | TAbstract(_, ty) -> base_type ty
@@ -247,7 +246,7 @@ let is_tabstract name ty = match ty.raw_ty with TAbstract(cid, _) -> Cid.equal c
 let is_tstring ty = is_tabstract "string" ty
 let is_tchar ty = is_tabstract "char" ty
 let is_tbuiltin tycid ty = match ty.raw_ty with TBuiltin(cid, _) -> Cid.equal cid tycid | _ -> false
-let is_tglobal  ty = match ty.raw_ty with TGlobal _ -> true | _ -> false
+let is_tref  ty = match ty.raw_ty with TRef _ -> true | _ -> false
 
 
 let extract_func_ty ty = match ty.raw_ty with 
@@ -298,9 +297,9 @@ let rec extract_tname ty = match ty.raw_ty with
   | TAbstract(cid, _) -> cid
   | _ -> raise (FormError "[extract_tname] expected TName")
 
-let extract_tglobal ty = match ty.raw_ty with 
-  | TGlobal tinner -> tinner
-  | _ -> raise (FormError "[extract_tglobal] expected TGlobal")
+let extract_tref ty = match ty.raw_ty with 
+  | TRef tinner -> tinner
+  | _ -> raise (FormError "[extract_tref] expected TGlobal")
 
   
 (* value constructors *)
@@ -389,7 +388,7 @@ let rec default_value ty = match ty.raw_ty with
   | TBuiltin _ -> failwith "no default value for builtin type"
   | TName _ -> failwith "no default value for named type"
   | TAbstract(_, ty) -> default_value ty
-  | TGlobal(ty) -> default_value ty
+  | TRef(ty) -> default_value ty
 ;;
 
 
@@ -499,15 +498,15 @@ let elistget arr arrlen =
   {e=EListIdx(arr, arrlen); ety=cell_ty; espan=Span.default}
 
 let ederef inner = 
-  {e=EGlobalDeref(inner); ety=extract_tglobal inner.ety; espan=Span.default}
+  {e=EDeref(inner); ety=extract_tref inner.ety; espan=Span.default}
 ;;
 
-let to_global exp = 
+let to_ref exp = 
   (* turn an expression for a local value into 
-     a reference to a global value:
-      1. wrap exp type in a global
+     a reference to a ref value:
+      1. wrap exp type in a ref
       2. wrap expression in a deref *)
-  let gety = tglobal exp.ety in
+  let gety = tref exp.ety in
   ederef {exp with ety=gety}
 ;;
 
@@ -697,7 +696,7 @@ let dfun_extern id fty =
   let params = List.map (fun ty -> (Id.fresh "a", ty)) param_tys in
   decl (DFun(fun_kind, id, rty, params, None))
 ;;
-(* toplevel variable. Should be declaring as a global type. *)
+(* toplevel variable. Should be declaring as a ref type. *)
 let dglobal id ty exp = decl (DVar(id, ty, Some(exp))) Span.default
 
 let dextern id ty = decl (DVar(id, ty, None)) Span.default
