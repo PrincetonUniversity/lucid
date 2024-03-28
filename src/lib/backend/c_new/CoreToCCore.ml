@@ -28,6 +28,9 @@ let builtin_externs loc_size =
   ] 
 ;;
 let builtin_cids = List.filter_map F.extract_dfun_cid (builtin_externs 1) ;;
+(* we don't know what size integer port IDs are, so if 
+   we see any generate statements we will use the corresponding size. *)
+let inferred_loc_size = ref 16 ;;
 
 (* a singleton size is an int; 
    a list of sizes is a tuple *)
@@ -273,10 +276,13 @@ let rec translate_statement (stmt:C.statement) : F.statement =
   | C.SGen(GSingle(None), ev) -> 
     F.egen_self (translate_exp ev) |> F.sunit |> F.swrap stmt.sspan
   | C.SGen(GSingle(Some(loc)), ev) -> 
+    inferred_loc_size := C.size_of_tint loc.ety; 
     F.egen_switch (translate_exp loc) (translate_exp ev) |> F.sunit |> F.swrap stmt.sspan
   | C.SGen(GPort(port), ev) -> 
+    inferred_loc_size := C.size_of_tint port.ety; 
     F.egen_port (translate_exp port) (translate_exp ev) |> F.sunit |> F.swrap stmt.sspan
   | C.SGen(GMulti(port), ev) -> 
+    inferred_loc_size := C.size_of_tint port.ety; 
     F.egen_group (translate_exp port) (translate_exp ev) |> F.sunit |> F.swrap stmt.sspan
   | C.SSeq(s1, s2) -> 
     F.sseq (translate_statement s1) (translate_statement s2) |> F.swrap stmt.sspan
@@ -470,6 +476,7 @@ let translate_decl (decl:C.decl) : F.decl =
 ;;
 
 let translate_prog (ds : C.decls) : F.decls = 
-  builtin_externs 16
-  @List.map translate_decl ds
+  (* translate declarations first in case something in there uses a port.. *)
+  let ds = List.map translate_decl ds in
+  (builtin_externs (!inferred_loc_size))@ds
 ;;

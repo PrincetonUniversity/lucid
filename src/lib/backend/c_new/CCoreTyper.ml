@@ -126,7 +126,7 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
     env
   | TInt l1, TInt l2 -> 
     if l1 <> l2 then 
-      ty_err ("int types with different lengths");
+      ty_err ("int types with different lengths ("^(string_of_int l1)^" vs "^(string_of_int l2));
     env
   | TRecord(l1, tys1), TRecord(l2, tys2) -> 
     if (List.length l1 <> List.length tys1) then 
@@ -282,7 +282,11 @@ let rec infer_exp env exp : env * exp =
       let param_tys, ret_ty, _ = extract_func_ty inf_f.ety in
       let env, inf_args = infer_lists env infer_exp args in
       let arg_tys = List.map (fun exp -> exp.ety) inf_args in
-      let env = unify_lists env unify_ty param_tys arg_tys in
+      let env = try unify_lists env unify_ty param_tys arg_tys 
+      with TypeError(str) -> 
+        print_endline@@">>>> "^(CCorePPrint.exp_to_string exp)^"<<<< ";
+        ty_err str
+      in
       (* TODO: update unify for list lengths *)
       let e = ECall{f=inf_f; args=inf_args; call_kind=CFun} in
       env, {e; ety=ret_ty; espan=exp.espan}

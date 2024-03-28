@@ -5,7 +5,6 @@ open CCoreSyntax
 
 
 (* gcc syntax checker *)
-let default_checker = Some("gcc -x c - -fsyntax-only");;
 
 let check_ffun (f: ffun) : bool =
   let open CCorePPrint in 

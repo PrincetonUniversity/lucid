@@ -268,6 +268,8 @@ let process_decl read_tys decl =
     in
     (* add the return parameter *)
     let params = params@[extract_evar_id rv] in
+    (* if the parser's name is main, change it to event_parser *)
+    let id = if (Cid.names id = ["main"]) then Cid.create ["event_parser"] else id in
     (* return type and body change *)
     dfun id tunit params body 
 ;;
@@ -289,9 +291,8 @@ let process decls =
     ([], [])
     read_tys
   in
-  let generated_decls = 
+  let decls = 
     decl_tabstract bytes_t::
-    decl_tabstract rv_ty::
     ((List.map  (*parse helpers for all primitive types *)
         (fun ty -> [mk_skip ty;mk_peek ty;mk_read ty])
         read_primitive_tys) 
@@ -312,6 +313,16 @@ let process decls =
       []
       decls)
   in
-  let decls = generated_decls@decls in
+  (* we have to place the parse return struct after the event definitions... *)
+  let decls = 
+    (List.fold_left (fun (decls, fin) decl -> 
+      if fin then (decls@[decl], fin) else 
+      match decl.d with 
+      | DEvent _ -> decls@[decl_tabstract rv_ty; decl], true
+      | _ -> decls@[decl], fin)
+      ([], false)
+      (List.rev decls))
+    |> fst |> List.rev
+  in
   decls
 ;;

@@ -750,6 +750,12 @@ let dfun_extern id fun_kind param_tys ret_ty =
   decl (DFun(fun_kind, id, ret_ty, params, None))
 ;;
 
+
+let default_checker = Some("gcc -x c - -fsyntax-only");;
+let dfun_foriegn fid fparams fret_ty fstr = 
+  (* foriegn function with default checker. *)
+  decl (DFFun{fid; fparams; fret_ty; fstr; check_cmd=default_checker}) Span.default
+;;
 (* toplevel variable. Should be declaring as a ref type. *)
 let dglobal id ty exp = decl (DVar(id, ty, Some(exp))) Span.default
 
@@ -908,7 +914,7 @@ let is_default_event_decl decl = match decl.d with
 
 (* CONSTANTS *)
 let event_tag_size = 16
-let enum_size = 16
+let enum_size = 32
 
 
 

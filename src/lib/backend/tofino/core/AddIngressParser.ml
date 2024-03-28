@@ -69,7 +69,11 @@ let lucid_background_event_parser ?(with_payloads=true) pkt_var bg_events =
    let etag = var tag_id tag_ty in
    block 
       [ (* skip the lucid ethernet header. If we want to be safer, we can read it and check correctness. *)
-         skip (ty (TInt(Sz (14*8))));
+         skip (ty (TInt(Sz 32)));
+         skip (ty (TInt(Sz 16)));
+         skip (ty (TInt(Sz 32)));
+         skip (ty (TInt(Sz 16)));
+         skip (ty (TInt(Sz 16)));
          PRead(Cid.create ["tag"], tag_ty, pkt_var) (* read the event tag *)
       ]
       (pmatch [etag] branches)

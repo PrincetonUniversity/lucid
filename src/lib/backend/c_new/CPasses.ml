@@ -44,7 +44,6 @@ let compile ds =
   let cds = CCoreEvents.process cds in
   ccore_print "after event elimination" cds;
   let cds = CCoreTyper.check_decls cds in
-  exit 1;
   (*** 6. small transformations for c-compatible form *)
   let cds = CCoreCForm.normalize_matches cds in
   let cds = CCoreCForm.normalize_struct_inits cds in
@@ -52,8 +51,12 @@ let compile ds =
   (* final type check *)
   CheckFFuns.check cds;
   let cds = CCoreTyper.check_decls cds in
- 
-  (*** 7. print as C *)
+
+  (*** 7. add toplevel driver functions *)
+  let cds = CCoreDrivers.StdinDriver.process cds in
+  CheckFFuns.check cds;
+   
+  (*** 8. print as C *)
   let s = CCorePPrint.decls_to_string cds in
   print_endline ("---- final CCore ----");
   print_endline s;

@@ -69,12 +69,15 @@ let transform_handler last_handler_cid (handlers, decls) decl : (handler_rec lis
     let handlers = handlers@[{hcid=handler_cid; hparams=params; hbody=statement}] in 
     if (Cid.equal handler_cid last_handler_cid) then (
       (* if this is the last handler, replace with merged handler *)
-      let branches = List.map (fun handler -> 
-        (* one branch for each handler *)
-      let pats = [pevent handler.hcid handler.hparams] in
-        (pats, subst_statement#visit_statement transform_generate handler.hbody))
+      let branches = List.map 
+        (fun handler -> 
+          (* one branch for each handler *)
+          let pats = [pevent handler.hcid handler.hparams] in
+          (pats, subst_statement#visit_statement transform_generate handler.hbody))
         handlers
       in
+      (* add a default no-op branch *)
+      let branches = branches@[([PWild (in_event.ety)], snoop)] in
       let merged_body = stmts [
         slocal_rv;
         smatch [in_event] branches;

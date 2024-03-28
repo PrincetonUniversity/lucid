@@ -87,15 +87,17 @@ let event_to_trecord event_def = tabstract_id
 ;;
 
 let event_tag evid = id (Printf.sprintf "%s_tag" (Id.name evid));;
+(* remove the "_tag" suffix from evid's name component *)
+let event_untag evid = id (Id.name evid |> fun name -> String.sub name 0 ((String.length name) - 4));;
 let event_enum_tyid = id"event_tag_t";;
 let events_to_tenum (event_defs :event_def list) = 
   let event_tags =     (List.mapi (fun i event_def -> 
     (event_tag event_def.evconstrid |> Cid.id, 
-      (Option.value ~default:i event_def.evconstrnum)
+      (Option.value ~default:(i+1) event_def.evconstrnum)
     )
     ) event_defs)
   in
-  let event_tags = (Cid.id default_event_id, 0)::event_tags in
+  let event_tags = event_tags in
   tabstract_id event_enum_tyid (tenum_pairs event_tags)
 ;;
 
