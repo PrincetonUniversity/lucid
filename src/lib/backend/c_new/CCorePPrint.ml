@@ -17,7 +17,7 @@ let func_kind_to_string = function
   | FParser -> "parser"
   | FAction -> "action"
   | FMemop -> "memop"
-  | FExtern -> "extern"
+  | FForiegn -> "fn"
 ;;
 
 let id_to_string id = 
@@ -140,7 +140,7 @@ let rec e_to_string (e: e) : string =
     let f_str = exp_to_string f in
     let args_str = String.concat ", " (List.map exp_to_string args) in
     let comment_str = match (extract_func_ty f.ety) with 
-      | _, _, FExtern -> " /* extern call */"
+      (* | _, _, FForiegn -> " /* forien */" *)
       | _ -> "" 
     in
     f_str ^ "(" ^ args_str ^ ")" ^ comment_str
@@ -181,6 +181,11 @@ and op_to_string (op: op) (args: exp list) : string =
     let int_ty_str = ty_to_string (new_ty) in
     "(" ^ int_ty_str ^ ")" ^ a
   | Conc, args -> String.concat "++" args
+  (* use arrow notation shorthand *)
+  | Project id, _ when (is_ederef (List.hd args)) -> 
+                                                     let arg = extract_ederef (List.hd args) in 
+                                                     let a = exp_to_string arg in
+                                                         a ^ "->" ^ id_to_string id
   | Project id, [a]                                   -> a ^ "." ^ id_to_string id
   | Get i, [a] -> a ^ "._" ^ string_of_int i
   | Mod, [x; m] -> Printf.sprintf "(%s mod %s)" x m

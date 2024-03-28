@@ -17,7 +17,7 @@ and arrlen =
     | IConst of int
     | IVar of id
 
-and func_kind = | FNormal | FHandler | FParser | FAction | FMemop | FExtern
+and func_kind = | FNormal | FHandler | FParser | FAction | FMemop | FForiegn
 and raw_ty = 
   (* value types *)
   | TUnit
@@ -170,6 +170,8 @@ and decls = decl list
 
 (* constructors and destructors *)
 
+let id = Id.create
+let cid s = Cid.create [s]
 let arrlen_ct = ref (-1);;
 let fresh_arrlen str = 
   arrlen_ct := (!arrlen_ct + 1);
@@ -182,7 +184,7 @@ let cid s = Cid.create([s])
 
 (**** types ****)
 let ty raw_ty = {raw_ty=raw_ty; tspan=Span.default}
-let tunit () = ty TUnit
+let tunit = ty TUnit
 let tbool = ty TBool
 let tint i = ty@@TInt(sz i)
 let tpat len = ty (TBits {ternary=false; len})
@@ -228,6 +230,8 @@ let tunion_pairs pairs =
   let cids, tys = List.split pairs in
   tunion cids tys
 ;;
+
+let tchar = tabstract "char" (tint 8)
 
 
 let is_textern ty = match ty.raw_ty with TName cid -> Cid.equal cid (Cid.create ["_extern_ty_"]) | _ -> false
@@ -300,8 +304,31 @@ let extract_tref ty = match ty.raw_ty with
   | TRef(tinner, _) -> tinner
   | _ -> raise (FormError "[extract_tref] expected TGlobal")
 
+
+let rec bitsizeof_ty ty = 
+  match ty.raw_ty with 
+  | TUnit -> 0 |> Option.some
+  | TInt size -> size |> Option.some
+  | TBool -> 1 |> Option.some
+  | TEnum _ -> None
+  | TUnion(_, tys) -> 
+    tys |> List.map bitsizeof_ty_exn |> List.fold_left (max) 0 |> Option.some
+  | TRecord(_, tys)
+  | TTuple(tys) -> 
+      tys |> List.map bitsizeof_ty_exn |> List.fold_left (+) 0 |> Option.some
+  | TRef _ -> None
+  | TBits {len} -> len |> Option.some
+  | TEvent -> None
+  | TFun _ -> None
+  | TBuiltin _ -> None
+  | TName _ -> None
+  | TAbstract(_, ty) -> bitsizeof_ty ty
+and bitsizeof_ty_exn ty = 
+  match bitsizeof_ty ty with 
+  | Some size -> size
+  | None -> failwith "bitsizeof_ty_exn: got an unsizeable type"
   
-(* value constructors *)
+  
 let sizeof_ty ty = 
   match ty.raw_ty with 
   | TInt size -> size
@@ -309,6 +336,9 @@ let sizeof_ty ty =
   | TBits {len} -> len
   | _ -> failwith "sizeof_ty: expected TInt or TBits"
 ;;
+  
+
+  (* value constructors *)
 
 
 let value v vty = {v=v; vty=vty; vspan=Span.default}
@@ -450,8 +480,8 @@ let eop op es =
         | _ -> failwith "project expects record or union arg"
       in
       let labels_ts = List.combine labels ts in
-      print_endline ("looking for id: "^(Id.to_string id));
-      print_endline ("in ids: "^(String.concat " , " (List.map Id.to_string labels)));
+      (* print_endline ("looking for id: "^(Id.to_string id));
+      print_endline ("in ids: "^(String.concat " , " (List.map Id.to_string labels))); *)
       (* let _, ty = List.find (fun (label, _) -> Id.equal label id) labels_ts in *)
       let _, ty = List.find (fun (label, _) -> fst label = fst id) labels_ts in
       ty
@@ -469,6 +499,8 @@ let eval value = {e=EVal value; ety=value.vty; espan=Span.default; }
 let evar cid ty = {e=EVar(cid); ety=ty; espan=Span.default; }
 let param_evar (id, ty) = evar (Cid.id id) ty
 let eunit () = eval (vunit ())
+
+let ecast ty exp = eop (Cast ty) [exp]
 
 let default_exp ty = eval@@default_value ty
 
@@ -546,6 +578,17 @@ let erec_form exp = match exp.e with
   | _ -> false
 ;;
 
+let is_ederef exp = match exp.e with 
+  | EDeref _ -> true
+  | _ -> false
+;;
+
+let extract_ederef exp = match exp.e with 
+  | EDeref inner -> inner
+  | _ -> raise (FormError "[extract_ederef] expected EDeref")
+;;
+
+
 (* extracting components of expressions *)
 let flatten_tuple exp = match exp.e with
   | ETuple es -> es
@@ -580,7 +623,7 @@ let arg exp = args exp |> List.hd
 
 (* generates are custom statements into CoreSyntax, 
    but extern functions of CCoreSyntax  *)
-let fgen_ty = tfun_kind FExtern [tevent] (tunit ())
+let fgen_ty = tfun_kind FNormal [tevent] tunit
 let egen_self ev = 
   ecall (efunref (Cid.create ["generate_self"]) fgen_ty) [ev]
 let egen_switch loc ev = 
@@ -604,6 +647,11 @@ let is_egen_group exp = match exp.e with
   | ECall {f; _} -> Cid.equal (extract_evar f |> fst) (Cid.create ["generate_group"])
   | _ -> false
 ;;
+
+let is_ecall_cid exp cid = match exp.e with 
+| ECall {f; _} -> Cid.equal (extract_evar f |> fst) cid
+| _ -> false
+;;
 let unbox_egen_self exp = match exp.e with 
   | ECall {args=[eport]} -> eport
   | _ -> failwith "unbox_egen_self: invalid form for generate"
@@ -619,7 +667,7 @@ let unbox_egen_port exp = match exp.e with
 (* let eif cond exp_then exp_else = exp (EIf(cond, exp_then, exp_else)) exp_then.ety Span.default *)
 (* let ematch match_exp branches = exp (EMatch(match_exp, branches)) (List.hd branches |> snd).ety Span.default *)
 (* let eseq exp1 exp2 = exp (ESeq(exp1, exp2)) exp2.ety (Span.extend exp1.espan exp2.espan) *)
-(* let eret eret = exp (EReturn eret) (tunit ()) Span.default *)
+(* let eret eret = exp (EReturn eret) (tunit) Span.default *)
 let ewrap espan exp = {exp with espan}
 
 let patval value = PVal(value)
@@ -697,11 +745,11 @@ let dparser = dfun_kind FParser
 let daction = dfun_kind FAction 
 let dmemop = dfun_kind FMemop
 
-let dfun_extern id fty = 
-  let param_tys, rty, fun_kind = extract_func_ty fty in
-  let params = List.map (fun ty -> (Id.fresh "a", ty)) param_tys in
-  decl (DFun(fun_kind, id, rty, params, None))
+let dfun_extern id fun_kind param_tys ret_ty = 
+  let params = List.map (fun ty -> (Id.fresh_name "a", ty)) param_tys in
+  decl (DFun(fun_kind, id, ret_ty, params, None))
 ;;
+
 (* toplevel variable. Should be declaring as a ref type. *)
 let dglobal id ty exp = decl (DVar(id, ty, Some(exp))) Span.default
 
@@ -717,6 +765,18 @@ let decl_tabstract ty =
   dty name ty
 ;;
 
+let is_devent decl = match decl.d with 
+  | DEvent _ -> true
+  | _ -> false
+;;
+let is_dhandler decl = match decl.d with 
+  | DFun(FHandler, _, _, _, _) -> true
+  | _ -> false
+;;
+let is_dparser decl = match decl.d with 
+  | DFun(FParser, _, _, _, _) -> true
+  | _ -> false
+;;
 
 
 
@@ -740,7 +800,6 @@ let extract_dparser_opt decl = match decl.d with
 ;;
 let extract_dparser decl = Option.get (extract_dparser_opt decl)
 ;;
-
 let extract_daction_id_opt decl = match decl.d with 
   | DFun(FAction, id, _, _, _) -> Some id
   | _ -> None
@@ -750,6 +809,11 @@ let extract_dfun_opt decl = match decl.d with
     Some(id, ty, params, body)
   | _ -> None
   ;;
+
+let extract_dfun_cid decl = match decl.d with 
+  | DFun(_, cid, _, _, _) -> Some(cid)
+  | _ -> None
+;;
 (* derive the type of a declared function *)
 (* let extract_dfun_ty decl = match decl.d with 
   | DFun(_, _, ty, params, _) -> tfun params ty
@@ -806,10 +870,16 @@ let rec eval_exp exp =
 (* function call: f <op> args --> build expression that calls f on args *)
 let ( /** ) f args = ecall_op f args
 
-(* record projection: rec <op> str --> build expression that gets field str from record rec *)
-let ( /-> ) rec_exp field_id = 
+(* rec_exp.field_id *)
+let ( /. ) rec_exp field_id = 
   eop (Project(field_id)) [rec_exp]
 ;;
+(* rec_exp->field_id *)
+let ( /-> ) rec_exp field_id = 
+  eop (Project(field_id)) [ederef rec_exp]
+;;
+
+let (/+) e1 e2 = eop Plus [e1; e2]
 
 let (/@) my_arr_exp idx_id = 
   elistget my_arr_exp (evar (Cid.id idx_id) (tint 32))
@@ -829,11 +899,54 @@ let ( /: ) stmt1 stmt2 =
   sseq stmt1 stmt2
 ;;
 
-
-
 (* declarations that must be added to a program *)
 let default_event_id = Id.create "_none"
 let default_event_decl = devent default_event_id None [] false
 let is_default_event_decl decl = match decl.d with 
   | DEvent {evconstrid; _} -> Id.equal evconstrid default_event_id
   | _ -> false
+
+(* CONSTANTS *)
+let event_tag_size = 16
+let enum_size = 16
+
+
+
+
+(* equivalence *)
+let rec equiv_tys ty1 ty2 = match ty1.raw_ty, ty2.raw_ty with 
+| TUnit, TUnit -> true
+| TInt sz1, TInt sz2 -> sz1 = sz2
+| TBool, TBool -> true
+| TEnum(cid_nums1), TEnum(cid_nums2) -> 
+  List.length cid_nums1 = List.length cid_nums2
+  && List.for_all2 (fun (cid1, num1) (cid2, num2) -> Cid.equal cid1 cid2 && num1 = num2) cid_nums1 cid_nums2
+| TUnion(ids1, tys1), TUnion(ids2, tys2)
+| TRecord(ids1, tys1), TRecord(ids2, tys2) -> 
+  List.length ids1 = List.length ids2
+  && List.for_all2 (fun id1 id2 -> Id.equal id1 id2) ids1 ids2
+  && List.length tys1 = List.length tys2
+  && List.for_all2 equiv_tys tys1 tys2
+| TTuple(tys1), TTuple(tys2) -> 
+  List.length tys1 = List.length tys2
+  && List.for_all2 equiv_tys tys1 tys2
+| TRef(t1, None), TRef(t2, None) -> equiv_tys t1 t2
+| TRef(t1, Some(IConst n1)), TRef(t2, Some(IConst n2)) -> n1 = n2 && equiv_tys t1 t2
+| TBits {ternary=b1; len=l1}, TBits {ternary=b2; len=l2} -> 
+  (b1 = b2) && (l1 = l2)
+| TEvent, TEvent -> true
+| TFun {arg_tys=arg_tys1; ret_ty=ret_ty1; func_kind=fk1}, TFun {arg_tys=arg_tys2; ret_ty=ret_ty2; func_kind=fk2} -> 
+  List.length arg_tys1 = List.length arg_tys2
+  && List.for_all2 equiv_tys arg_tys1 arg_tys2
+  && equiv_tys ret_ty1 ret_ty2
+  && fk1 = fk2
+| TBuiltin(cid1, tyargs1), TBuiltin(cid2, tyargs2) -> 
+  Cid.equal cid1 cid2
+  && List.length tyargs1 = List.length tyargs2
+  && List.for_all2 equiv_tys tyargs1 tyargs2
+| TAbstract(cid1, ty1), TAbstract(cid2, ty2) -> 
+  Cid.equal cid1 cid2
+  && equiv_tys ty1 ty2
+| TName cid1, TName cid2 -> Cid.equal cid1 cid2
+| (TUnit|TBool|TEvent|TInt _|TRecord _ | TTuple _ | TName _ | TRef _ | TUnion _
+| TFun _|TBits _|TEnum _|TBuiltin (_, _) |TAbstract _), _ -> false

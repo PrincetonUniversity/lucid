@@ -175,10 +175,12 @@
    CoreRegularizeMemops
    SimplifyMatch
    CCoreSyntax
+   CCorePPrint
+   CCoreExceptions
    CCoreTransformers
    CoreToCCore
    CCoreToCore
-   CCorePPrint
+   CCoreTNameToTAbstr
    CCoreRenaming
    CCoreTyper
    CheckFFuns

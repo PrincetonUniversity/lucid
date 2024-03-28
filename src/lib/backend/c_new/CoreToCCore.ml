@@ -1,5 +1,4 @@
 module C = CoreSyntax
-
 module F = CCoreSyntax
 
 let printf = Printf.printf
@@ -15,6 +14,20 @@ let printf = Printf.printf
 *)
 let cid s = s |> Id.create |> Cid.id
 let err = Console.error ;;
+
+(* declare builtin functions as externs in CCore *)
+(* TODO: add more *)
+let builtin_externs loc_size =
+  let open F in
+  let cid = Cid.create in
+  [
+    dfun_extern (cid ["generate_self"]) FNormal [tevent] tunit Span.default;
+    dfun_extern (cid ["generate_port"]) FNormal [tint loc_size; tevent] tunit Span.default;
+    dfun_extern (cid ["generate_switch"]) FNormal [tint loc_size; tevent] tunit Span.default;
+    dfun_extern (cid ["generate_group"]) FNormal [tint loc_size; tevent] tunit Span.default
+  ] 
+;;
+let builtin_cids = List.filter_map F.extract_dfun_cid (builtin_externs 1) ;;
 
 (* a singleton size is an int; 
    a list of sizes is a tuple *)
@@ -34,8 +47,15 @@ let rec translate_raw_ty (raw_ty : C.raw_ty) : F.raw_ty =
   | C.TInt(Sz sz) ->  F.TInt(F.sz sz)
   | C.TInt(_) -> err "TInt size should be a singleton"
   | C.TEvent -> F.TEvent
+  | C.TName(cid, sizes) when 
+    List.exists 
+      (fun (builtin_ty_cid, _) -> Cid.equal builtin_ty_cid cid) 
+      Builtins.builtin_tycid_to_ty ->
+        (F.tbuiltin cid (List.map size_to_ty sizes)).raw_ty
   | C.TName(cid, []) -> (F.tname cid).raw_ty (* user-defined type *)
-  | C.TName(cid, sizes) -> (F.tbuiltin cid (List.map size_to_ty sizes)).raw_ty
+  | C.TName(_, _) -> 
+      err "unexpected: a TName with size args that is not a builtin"
+      (* (F.tbuiltin cid (List.map size_to_ty sizes)).raw_ty *)
       (* builtin types with size args *)
   | C.TBuiltin(cid, raw_tys) -> 
     (F.tbuiltin cid (List.map (fun raw_ty -> F.ty (translate_raw_ty raw_ty)) raw_tys )).raw_ty
@@ -367,7 +387,7 @@ let translate_decl (decl:C.decl) : F.decl =
   begin
     let params = List.map (fun (id, ty) -> id, translate_ty ty) params in
     let hdl_body = translate_statement body in
-    let decl = F.dhandler (Cid.id id) (F.tunit ()) params hdl_body in
+    let decl = F.dhandler (Cid.id id) (F.tunit) params hdl_body in
     match hdl_sort with
       | C.HControl -> err "control handlers not supported"
       | C.HEgress ->  err "egress handlers not supported"
@@ -442,7 +462,7 @@ let translate_decl (decl:C.decl) : F.decl =
     (* despecialize parser with Core pass *)
     let parse_stmt = Despecialization.despecialize_parser_block parser_block in
     (* translate the statement *)
-    F.dparser (Cid.id id) (F.tunit ()) (translate_params params) (translate_statement parse_stmt)
+    F.dparser (Cid.id id) (F.tunit) (translate_params params) (translate_statement parse_stmt)
   | DFun(id, rty, (params, body)) -> 
     F.dfun (Cid.id id) (translate_ty rty) (translate_params params) (translate_statement body)
   in
@@ -450,5 +470,6 @@ let translate_decl (decl:C.decl) : F.decl =
 ;;
 
 let translate_prog (ds : C.decls) : F.decls = 
-  List.map translate_decl ds
+  builtin_externs 16
+  @List.map translate_decl ds
 ;;

@@ -2,27 +2,16 @@
 open Collections
 open CCoreSyntax
 open Batteries
+open CCoreExceptions
 
-exception TypeMismatch of ty * ty
-exception UnboundVariable of cid
-exception LengthMismatch of int * int
-exception UnboundField of id
-exception InvalidSize of size
-exception UnboundType of cid
-exception SizeMismatch of size * size
-exception SelfRefSize of size
-exception TypeError of string
-
-(* let print_endline _ = () *)
-
+let dprint_endline = print_endline ;;
+let dprint_endline = fun _ -> () ;;
 
 type constr_var = 
   | IVar of string
   | IVal of int
 type constr = 
   | Eq of string * constr_var
-
-
   
 type env =
 {
@@ -74,9 +63,6 @@ let get_ty env cid =
 
 let add_constr env constr = 
   {env with idx_constrs = constr::env.idx_constrs}
-
-
-let ty_err str = raise(TypeError(str));;
 
 (* unify just adds constraints to context for arrlenes *)
 
@@ -172,7 +158,7 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
     unify_lists env unify_ty tys1 tys2
   | (TUnit|TBool|TEvent|TInt _|TRecord _ | TTuple _ | TName _ | TRef _ | TUnion _
   | TFun _|TBits _|TEnum _|TBuiltin (_, _)), _ -> 
-      print_endline@@"type mismatch:\n"^(CCorePPrint.raw_ty_to_string rawty1)^"\nand\n"^(CCorePPrint.raw_ty_to_string rawty2);
+      dprint_endline@@"type mismatch:\n"^(CCorePPrint.raw_ty_to_string rawty1)^"\nand\n"^(CCorePPrint.raw_ty_to_string rawty2);
       ty_err "type mismatch"
     
 
@@ -185,7 +171,7 @@ let rec infer_value value : value =
   let type_value value = (infer_value value).vty in 
   let ty = match value.v with 
   (* values may only have have const sizes *)
-  | VUnit -> tunit ()
+  | VUnit -> tunit
   | VInt{size} -> tint size 
   | VBool _ -> tbool
   | VRecord(labels, es) -> 
@@ -224,7 +210,7 @@ let rec infer_lists env f_infer xs =
 ;;
 
 let rec infer_exp env exp : env * exp = 
-  print_endline ("inferring exp: "^(CCorePPrint.exp_to_string exp));
+  dprint_endline ("inferring exp: "^(CCorePPrint.exp_to_string exp));
   let infer_exps env = infer_lists env infer_exp in
   let env, exp = match exp.e with 
     | EVal value -> 
@@ -234,7 +220,7 @@ let rec infer_exp env exp : env * exp =
       let ety = match CidMap.find_opt cid env.vars with
         | Some ty -> ty
         | None -> 
-          print_endline ("current env:\n"^(env_to_string env));      
+          dprint_endline ("current env:\n"^(env_to_string env));      
           ty_err@@"cannot find type for unbound variable: "^(CCorePPrint.cid_to_string cid)
       in
       env, {e=EVar cid; ety; espan=exp.espan}
@@ -271,8 +257,12 @@ let rec infer_exp env exp : env * exp =
     | ECall{f; call_kind=CEvent} ->
       let env, inf_f = infer_exp env f in
       (* todo: this unify is kind of weird? *)
+
       if (is_tevent inf_f.ety) then unify_ty env exp.ety tevent, exp
-      else ty_err "event call on non-event"
+      else (
+        dprint_endline ("current env: ");
+        dprint_endline (env_to_string env);
+        ty_err "event call on non-event")
     | ECall{f; call_kind=CFun;} when (Cid.equal (fst (extract_evar f)) (Cid.create ["printf"]) )-> 
 
         (* TODO: hole for printf.
@@ -307,7 +297,7 @@ let rec infer_exp env exp : env * exp =
             - hmm... could we track an optional "max value" on tints that we infer? 
               - then we could just check that...*)
   in
-  print_endline@@"finished inferring expression -- "^(CCorePPrint.exp_to_string exp)^" : "^(CCorePPrint.ty_to_string exp.ety);
+  dprint_endline@@"finished inferring expression -- "^(CCorePPrint.exp_to_string exp)^" : "^(CCorePPrint.ty_to_string exp.ety);
   env, exp
 
 (* derive the type for an operation expression *)
@@ -422,11 +412,11 @@ and infer_eop env op (args : exp list) : env * op * exp list * ty = match op, ar
     if not (is_trecord inf_exp.ety or is_tunion inf_exp.ety) then (
       let ty1 = inf_exp.ety in
       let ty2 = trecord [id] [inf_exp.ety] in
-      print_endline@@"type mismatch in project:\n"^(CCorePPrint.ty_to_string ty1)^"\nand\n"^(CCorePPrint.ty_to_string ty2);
+      dprint_endline@@"type mismatch in project:\n"^(CCorePPrint.ty_to_string ty1)^"\nand\n"^(CCorePPrint.ty_to_string ty2);
       ty_err "type mismatch"
     );
-    print_endline ("inf exp: "^CCorePPrint.exp_to_string inf_exp);
-    print_endline ("inf exp ty: "^CCorePPrint.ty_to_string inf_exp.ety);
+    dprint_endline ("inf exp: "^CCorePPrint.exp_to_string inf_exp);
+    dprint_endline ("inf exp ty: "^CCorePPrint.ty_to_string inf_exp.ety);
     let inf_labels, inf_tys = extract_trecord_or_union (base_type inf_exp.ety) in
     let inf_label_names = List.map Id.name inf_labels in
     let labels_tys = List.combine inf_label_names inf_tys in
@@ -434,7 +424,7 @@ and infer_eop env op (args : exp list) : env * op * exp list * ty = match op, ar
     match inf_ty with
       | Some ty -> env, op, [inf_exp], ty
       | None -> 
-        print_endline ("could not find: "^(Id.to_string id));
+        dprint_endline ("could not find: "^(Id.to_string id));
         raise (UnboundField id)
   )
   | Get idx, [exp] -> (
@@ -450,7 +440,7 @@ and infer_eop env op (args : exp list) : env * op * exp list * ty = match op, ar
 ;;
 
 let rec infer_statement env (stmt:statement) = 
-  print_endline ("inferring statement: "^(CCorePPrint.statement_to_string stmt));
+  dprint_endline ("inferring statement: "^(CCorePPrint.statement_to_string stmt));
   match stmt.s with 
   | SNoop -> env, stmt
   | SUnit(exp) -> 
@@ -563,8 +553,10 @@ let rec infer_statement env (stmt:statement) =
 ;;
 
 let rec infer_decl env decl : env * decl = 
-  print_endline ("inferring decl: ");
-  print_endline (CCorePPrint.decl_to_string decl);
+  (* dprint_endline ("inferring decl: ");
+  dprint_endline (CCorePPrint.decl_to_string decl);
+  dprint_endline ("current env: ");
+  dprint_endline (env_to_string env); *)
   match decl.d with 
   | DVar(id, ty, Some(arg)) -> (
     match ty.raw_ty with 
@@ -626,27 +618,31 @@ let rec infer_decl env decl : env * decl =
     let outer_env = env in 
     let env = {env with ret_ty=Some(ret_ty)} in    
     let env = add_vars env (List.map (fun f -> f|> fst |> Cid.id) params) (List.map snd params) in
-    (* check the statement *)
+    (* check the body *)
     let env, inf_stmt = infer_statement env statement in
     (* check the return type *)
     let inf_ret_ty = match env.ret_ty with 
       | Some ty -> ty
-      | None -> tunit ()
+      | None -> tunit
     in
     (* return to outer env *)
     let env = outer_env in
     (* unify the return type *)
     let env = unify_ty env ret_ty inf_ret_ty in
-    (* update the environment with the function *)
+    (* update the environment with the function, except for handlers, 
+       because a handler is never referenced. *)
     let fun_ty = tfun_kind fun_kind (List.map snd params) ret_ty  in
-    let env = add_var env (id) fun_ty in
+    let env = if (fun_kind <> FHandler) 
+      then add_var env (id) fun_ty
+      else env
+    in
     env, {decl with d=DFun(fun_kind, id, inf_ret_ty, params, Some(inf_stmt))}
   | DFun(fun_kind, id, ret_ty, params, None) -> 
     let fun_ty = tfun_kind fun_kind (List.map snd params) ret_ty  in
     let env = add_var env (id) fun_ty in
     env, decl
   | DFFun{fid; fparams; fret_ty;} -> 
-    let fun_ty = tfun_kind FExtern (List.map snd fparams) fret_ty in
+    let fun_ty = tfun_kind FForiegn (List.map snd fparams) fret_ty in
     let env = add_var env (fid) fun_ty in
     env, decl
 

@@ -2,13 +2,21 @@ open CCoreSyntax
 
 (* generic transformer functions *)
 
-let subst_decl = object(_)
+let subst_ty = object (_)
   inherit [_] s_map as super
-  method! visit_decl transformer decl = 
-    transformer decl
-end
+  method! visit_ty transformer ty = 
+    transformer ty
+  end
+;;
 
-(* transform any statement *)
+let subst_exp = object (_)
+  inherit [_] s_map as super
+  method! visit_exp transformer exp = 
+    let exp = transformer exp in
+    super#visit_exp transformer exp
+  end
+;;
+
 let subst_statement = object (_)
   inherit [_] s_map as super
   method! visit_statement transformer stmt = 
@@ -19,13 +27,11 @@ let subst_statement = object (_)
   end
 ;;
 
-(* transform any expression *)
-let subst_exp = object (_)
+let subst_decl = object(_)
   inherit [_] s_map as super
-  method! visit_exp transformer exp = 
-    let exp = transformer exp in
-    super#visit_exp transformer exp
-  end
+  method! visit_decl transformer decl = 
+    transformer decl
+end
 ;;
 
 (* transform an evar *)

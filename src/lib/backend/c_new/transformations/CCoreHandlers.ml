@@ -39,14 +39,12 @@ let transform_generate statement =
   (* instead of generating the event, set the appropriate event variable *)
   match statement.s with 
   | SUnit(exp) when is_egen_self exp -> 
-    print_endline ("generate self?");
-    sassign_exp (rv/->id"next_ev") (arg exp)
+    sassign_exp (rv/.id"next_ev") (arg exp)
   | SUnit(exp) when is_egen_port exp -> 
-    print_endline ("generate port?");
     let port_exp, event_exp = unbox_egen_port exp in
     sseq 
-      (sassign_exp (rv/->id"out_ev") event_exp)
-      (sassign_exp (rv/->id"out_port") port_exp)
+      (sassign_exp (rv/.id"out_ev") event_exp)
+      (sassign_exp (rv/.id"out_port") port_exp)
   | _ -> 
     statement
 ;;
@@ -136,7 +134,7 @@ let val_to_ref_args target_functions_cids decl =
         ) 
         (params@[(Cid.to_id ret_var_id), ret_ty])
       in
-      dfun fun_cid (tunit ()) new_params statement
+      dfun fun_cid (tunit) new_params statement
     | _ -> decl
   )
   | _ -> decl

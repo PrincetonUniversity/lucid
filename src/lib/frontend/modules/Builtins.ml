@@ -52,7 +52,7 @@ let builtin_tycid_to_ty = List.filter_map
     | [t_id, _, ty] -> 
       Some(Cid.create_ids [libsig.m_id; t_id], ty)
     | _ -> error "unexpected: builtin library with multiple constructors"
-      (* its fine, just fix *)
+      (* this is fine to change, but the callers of this function need to adjust *)
   )
   builtin_modules
 ;;

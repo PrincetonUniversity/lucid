@@ -90,7 +90,9 @@ let event_tag evid = id (Printf.sprintf "%s_tag" (Id.name evid));;
 let event_enum_tyid = id"event_tag_t";;
 let events_to_tenum (event_defs :event_def list) = 
   let event_tags =     (List.mapi (fun i event_def -> 
-    (event_tag event_def.evconstrid |> Cid.id, i)
+    (event_tag event_def.evconstrid |> Cid.id, 
+      (Option.value ~default:i event_def.evconstrnum)
+    )
     ) event_defs)
   in
   let event_tags = (Cid.id default_event_id, 0)::event_tags in
@@ -172,10 +174,10 @@ let transformer =
       print_endline ("event expression: "^(CCorePPrint.exp_to_string ev));
       print_endline ("event expression type: "^(CCorePPrint.ty_to_string ev.ety));
       print_endline ("event id: "^(CCorePPrint.id_to_string evid));
-      let data = ev/->id"data" in
+      let data = ev/.id"data" in
       print_endline ("data field type: "^(CCorePPrint.ty_to_string data.ety));
-      let event = data/->evid in 
-      let param = event/->field in
+      let event = data/.evid in 
+      let param = event/.field in
       slocal (Cid.id field) ty param
     in
     stmts

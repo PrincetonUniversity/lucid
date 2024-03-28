@@ -14,28 +14,31 @@ let compile ds =
     (* add parser for platform with no recirc port *)
   let ds = DeleteNoops.deleter#visit_decls () ds in
 
-  (* 3. translate to FCore *)
+  (* 3. translate to FCore and do some cleanup *)
   let fds = CoreToCCore.translate_prog ds in
+  let fds = CCoreTNameToTAbstr.process fds in
   let fds = CCoreRenaming.unify_event_ids fds in
+
   let s = CCorePPrint.decls_to_string fds in
   print_endline ("---- intial CCore ----");
   print_endline s;
   print_endline ("----------------------");
-  (* TODO: abstract named types. For all user types that remain in the program 
-      declared as type t_cid = concrete_type;      
-      find all the types equivalent to concrete_type and 
-      replace them with tabstr(t_cid, concrete_type); *)
+
+  (*** CCore transformations ***)
   (* 1: implement all the "builtins" of lucid *)
   let fds = CCoreParse.process fds in
   (* data structures *)
   let fds = CCoreTables.process_decls fds in
   let fds = CCoreArrays.process_decls fds in
   (* misc helpers (hash, printf)  TODO *)
-  (* parsing helpers + payload arguments  TODO*)
+  print_endline ("---- after data structure implementation ----");
+  print_endline (CCorePPrint.decls_to_string fds);
+  print_endline ("----------------------");
 
+  (* type check *)
   CheckFFuns.check fds;
   let fds = CCoreTyper.check_decls fds in
-
+  exit 1;
 
   print_endline ("---- after data structure implementation and first type checking ----");
   print_endline (CCorePPrint.decls_to_string fds);

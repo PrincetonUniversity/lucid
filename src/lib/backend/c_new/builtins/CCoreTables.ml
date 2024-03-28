@@ -137,10 +137,10 @@ let table_lookup spec =
     let action_evar = efunref (untag action_tag) action_ty in
     (case spec.actions_enum_ty)
     action_tag
-      ( id"rv" /:= (action_evar /** [tbl/->id"default"/->id"action_arg"; arg_param]))
+      ( id"rv" /:= (action_evar /** [tbl/.id"default"/.id"action_arg"; arg_param]))
   in
   let s_apply_default = smatch
-    [(tbl/->id"default"/->id"action_tag")]
+    [(tbl/.id"default"/.id"action_tag")]
     (List.map apply_default_branch spec.action_tags)
   in
   let idx = id "_idx" in
@@ -150,7 +150,7 @@ let table_lookup spec =
     let action_evar = efunref ((untag action_tag)) action_ty in    
     (case spec.actions_enum_ty) 
     action_tag
-      ( id"rv" /:= (action_evar /** [((tbl/->id"entries")/@idx)/->id"action_arg"; arg_param]))
+      ( id"rv" /:= (action_evar /** [((tbl/.id"entries")/@idx)/.id"action_arg"; arg_param]))
   in
 
   let s_loop = 
@@ -158,19 +158,19 @@ let table_lookup spec =
       (
         print_endline ("type of tbl: ");
         print_endline (CCorePPrint.ty_to_string tbl.ety);
-        let entries = tbl/->id"entries" in
+        let entries = tbl/.id"entries" in
         print_endline ("type of entries: ");
         print_endline (CCorePPrint.ty_to_string entries.ety);
         
         let entry = entries/@idx in
         (* *(entries + idx) *)
-        (* let entry = (tbl/->id"entries"/@idx) in         *)
-        sif (entry/->id"valid")
+        (* let entry = (tbl/.id"entries"/@idx) in         *)
+        sif (entry/.id"valid")
           (
-            sif (eop Eq [key_param; entry/->id"key"])
+            sif (eop Eq [key_param; entry/.id"key"])
               (stmts [
               sassign (Cid.id cont)  (eval (vbool false));
-              smatch [(entry/->id"action_tag")]
+              smatch [(entry/.id"action_tag")]
                 (List.map apply_branch spec.action_tags);
               ]
               )
@@ -218,10 +218,10 @@ let table_install spec =
       let entries = eop (Project(id"entries")) [tbl] in
       let entry = elistget entries idx_var in
       (* let entry = (entries/@idx) in     *)
-      sif (eop Eq [entry/->id"valid";eval@@vbool false])
+      sif (eop Eq [entry/.id"valid";eval@@vbool false])
         (stmts [
             sassign (Cid.id cont)  (eval (vbool false));
-            (tbl/->id"entries", idx_var)/<-new_slot;            
+            (tbl/.id"entries", idx_var)/<-new_slot;            
           ])
         snoop
     )
@@ -232,7 +232,7 @@ let table_install spec =
   let sret = sret_none in
   dfun 
     (install_id spec.tbl_id)
-    (tunit ())
+    (tunit)
     params
     (sseq body sret)
 ;;
