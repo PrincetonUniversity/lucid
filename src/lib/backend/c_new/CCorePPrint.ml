@@ -131,7 +131,7 @@ let rec e_to_string (e: e) : string =
     let fields_str = String.concat " " field_strs in    
     "{" ^ fields_str ^ "}"
   | EUnion(label, exp, _) -> 
-    sprintf "{%s = %s}" (id_to_string label) (exp_to_string exp)
+    sprintf "{.%s = %s}" (id_to_string label) (exp_to_string exp)
   | ECall {f; args; call_kind=CEvent} -> 
     let f_str = exp_to_string f in
     let args_str = String.concat ", " (List.map exp_to_string args) in

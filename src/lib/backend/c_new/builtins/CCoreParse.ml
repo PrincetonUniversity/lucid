@@ -195,7 +195,7 @@ let transform_exp bs read_tys exp : exp =
 ;;
 
 let rv_ty = 
-  tabstract "parse_rv_t"
+  tabstract "parse_ret_t"
   @@trecord_pairs 
 [
   id"next_ev", tevent;
@@ -208,11 +208,11 @@ let transform_stmt bs rv read_tys stmt : statement =
   (* generate(foo(...)); --> rv.next_ev = foo(...); rv.success=1; *)
   | SUnit(exp) when is_egen_self exp -> 
     sseq 
-      (sassign_exp (rv/.id"next_ev") (arg exp))
-      (sassign_exp (rv/.id"success") (eval@@vint 1 8))
+      (sassign_exp (rv/->id"next_ev") (arg exp))
+      (sassign_exp (rv/->id"success") (eval@@vint 1 8))
   (* drop(); --> rv.success=0; *)
   | SUnit(exp) when is_ecall_cid exp (Cid.create ["parse";"drop"]) -> 
-    sassign_exp (rv/.id"success") (eval@@vint 0 8)
+    sassign_exp (rv/->id"success") (eval@@vint 0 8)
   (* transform builtin calls *)
   | _ -> CCoreTransformers.subst_exp#visit_statement (transform_exp bs read_tys) stmt
 ;;
@@ -237,7 +237,7 @@ let transform_bytestrings =
   end
 ;;
 let process_decl read_tys decl = 
-  let rv = evar (cid"rv") rv_ty in
+  let rv = evar (cid"rv") (tref rv_ty) in
   match extract_dparser_opt decl with 
   | None -> decl
   | Some(id, _, params, body) -> 
@@ -255,9 +255,7 @@ let process_decl read_tys decl =
     in
     let bs = param_evar bs_param in
     let body = stmts [
-      slocal_evar rv (default_value rv_ty |> eval); (* this gets dropped when converting to return-by-ref *)
       CCoreTransformers.subst_statement#visit_statement (transform_stmt bs rv read_tys) body; (* do the statement-level transforms *)
-      sret rv
     ]
     in
     (* convert the bs parameter to a ref *)
@@ -268,8 +266,10 @@ let process_decl read_tys decl =
         | _ -> (pid, ty))
       params
     in
+    (* add the return parameter *)
+    let params = params@[extract_evar_id rv] in
     (* return type and body change *)
-    dparser id rv_ty params body 
+    dfun id tunit params body 
 ;;
 
 
@@ -284,14 +284,12 @@ let process decls =
   let read_tys = MiscUtils.unique_list_of_eq (equiv_tys) !read_tys in
   let generated_decls = 
     decl_tabstract bytes_t::
+    decl_tabstract rv_ty::
     ((List.map 
         (fun ty -> [mk_skip ty;mk_peek ty;mk_read ty])
         read_tys) 
       |> List.flatten)
   in
-  (* left off here. *)
-  (* TODO:  1) parsers need to come after event declarations.
-            2) make sure environment works right for events and handlers with same ids. *)
   let decls = generated_decls@decls in
   decls
 ;;

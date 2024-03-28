@@ -427,13 +427,14 @@ let parser_after_events decls =
       decls
    in
    let decls = List.rev decls in
-   (List.fold_left (fun decls decl -> 
+   (List.fold_left (fun (decls, fin) decl -> 
+      if fin then (decls@[decl], fin) else 
       match decl.d with 
-      | DEvent _ -> decls@parsers@[decl]
-      | _ -> decls@[decl])
-      []
+      | DEvent _ -> decls@parsers@[decl], true
+      | _ -> decls@[decl], fin)
+      ([], false)
       decls)
-   |> List.rev
+   |> fst |> List.rev
 
 let add_simple_parser ?(with_payloads=true) recirc_port_opt ds = 
    (* add a simple parser given an optional recirculation port. 
@@ -462,11 +463,11 @@ let add_simple_parser ?(with_payloads=true) recirc_port_opt ds =
       | [], None, _ -> 
          let parser_body = lucid_background_event_parser ~with_payloads pkt_var bg_events in
          let decl = (decl (parser (id "main") [id"pkt", pkt_arg_ty] parser_body)) in
-         decl::ds
+         decl::ds |> parser_after_events 
       | [pkt_ev_decl], None, None -> 
          let parser_body = packetevent_parse_block pkt_var pkt_ev_decl in
          let decl = (decl (parser (id "main") [id"pkt", pkt_arg_ty] parser_body)) in
-         decl::ds
+         decl::ds |> parser_after_events 
       | [pkt_ev_decl], None, Some(recirc_dpid, port_ty) -> 
          let branches = [
             (pbranch [recirc_dpid] (lucid_background_event_parser ~with_payloads pkt_var bg_events));
@@ -477,7 +478,7 @@ let add_simple_parser ?(with_payloads=true) recirc_port_opt ds =
          let (step : parser_step) = pmatch [eingress_port] branches in
          let parser_body = block [] step in
          let decl = (decl (parser (id "main") [id"pkt", pkt_arg_ty] parser_body)) in
-         decl::ds
+         decl::ds |> parser_after_events 
       | _ , Some(main_params, main_block), _ -> 
       (* if there's a main parser, check the user parser to make sure it's well-formed, 
          then inline parsers, including the background block which 
@@ -488,7 +489,7 @@ let add_simple_parser ?(with_payloads=true) recirc_port_opt ds =
       | _, _, _ -> 
          error "invalid combination of packet events, user parser, and recirc port"
       in
-   parser_after_events decls
+   decls
 ;;
 
 let add_parser port_ty (portspec:port_config) ds =

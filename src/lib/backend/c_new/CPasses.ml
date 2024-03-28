@@ -1,62 +1,50 @@
 (* translate a frontend program into a C program *)
 
-let fcore_passes fds = fds 
+let ccore_print phase_str decls = 
+  print_endline ("---- "^phase_str^" ----");
+  print_endline@@CCorePPrint.decls_to_string decls;
+  print_endline ("------------------------")
 ;;
+
 
 
 let compile ds = 
   (* 1. translate to core syntax *)
   let ds = SyntaxToCore.translate_prog ~preserve_user_decls:true ds in
+
   (* 2. a few core passes *)
+  let ds = MiscCorePasses.this_eliminator#visit_decls () ds in
   let ds = PartialInterpretation.interp_prog ds in
   let ds = CoreRegularizeMemops.process ds in
-  let ds = AddIngressParser.add_simple_parser None (InlineEventVars.set_event_nums ds) in 
-    (* add parser for platform with no recirc port *)
-  let ds = DeleteNoops.deleter#visit_decls () ds in
+  let ds = InlineEventVars.set_event_nums ds in
+  let ds = AddIngressParser.add_simple_parser None ds in 
+  let ds = MiscCorePasses.noop_deleter#visit_decls () ds in
 
-  (* 3. translate to FCore and do some cleanup *)
-  let fds = CoreToCCore.translate_prog ds in
-  let fds = CCoreTNameToTAbstr.process fds in
-  let fds = CCoreRenaming.unify_event_ids fds in
+  (* 3. translate to CCore and do some cleanup *)
+  let cds = CoreToCCore.translate_prog ds in
+  let cds = CCoreTNameToTAbstr.process cds in
+  let cds = CCoreRenaming.unify_event_ids cds in
 
-  let s = CCorePPrint.decls_to_string fds in
-  print_endline ("---- intial CCore ----");
-  print_endline s;
-  print_endline ("----------------------");
+  ccore_print "initial CCore" cds;
 
-  (*** CCore transformations ***)
-  (* 1: implement all the "builtins" of lucid *)
-  let fds = CCoreParse.process fds in
-  (* data structures *)
-  let fds = CCoreTables.process_decls fds in
-  let fds = CCoreArrays.process_decls fds in
-  (* misc helpers (hash, printf)  TODO *)
-  print_endline ("---- after data structure implementation ----");
-  print_endline (CCorePPrint.decls_to_string fds);
-  print_endline ("----------------------");
+  (*** 4. Code generation to implement builtins ***)
+  let cds = CCoreParse.process cds in
+  let cds = CCoreTables.process_decls cds in
+  let cds = CCoreArrays.process_decls cds in
+  (* TODO: misc helpers (hash, printf) *)
+  ccore_print "after code generation" cds;
 
   (* type check *)
-  CheckFFuns.check fds;
-  let fds = CCoreTyper.check_decls fds in
-  exit 1;
+  CheckFFuns.check cds; (* foriegn function checking *)
+  let cds = CCoreTyper.check_decls cds in
+  ccore_print "after type checking" cds;
+  (* exit 1; *)
 
-  print_endline ("---- after data structure implementation and first type checking ----");
-  print_endline (CCorePPrint.decls_to_string fds);
-  print_endline ("----------------------");
   (* 2: eliminate events and handlers *)
-  (* merge handlers to create event handler function
-     and implement generate as setting output fields *)
-  let fds = CCoreHandlers.process_decls fds in
-  print_endline ("---- after handler to function transformation ----");
-  print_endline (CCorePPrint.decls_to_string fds);
-  print_endline ("----------------------");
-  (* eliminate events by converting into 
-     tagged unions of records *)
-  let fds = CCoreEvents.process fds in
-  print_endline ("---- after event elimination ----");
-  print_endline (CCorePPrint.decls_to_string fds);
-  print_endline ("----------------------");
-
+  let cds = CCoreHandlers.process_decls cds in
+  ccore_print "after handler elimination" cds;
+  let cds = CCoreEvents.process cds in
+  ccore_print "after event elimination" cds;
   (* 3. put into c-normal form: TODO
       1. record expressions, record values, union expression, and union values 
          can only appear in local or global variable declarations. 
@@ -67,15 +55,15 @@ let compile ds =
   *)
 
   (* 4. type check -- this should pass any time after step 1 *)
-  CheckFFuns.check fds;
-  let fds = CCoreTyper.check_decls fds in
+  CheckFFuns.check cds;
+  let cds = CCoreTyper.check_decls cds in
  
   (* 5. This must come after step 3, but it might as well 
         go at the end. *) 
 
   (* 6. print as C *)
 
-  let s = CCorePPrint.decls_to_string fds in
+  let s = CCorePPrint.decls_to_string cds in
   print_endline ("---- final CCore ----");
   print_endline s;
   print_endline ("----------------------");

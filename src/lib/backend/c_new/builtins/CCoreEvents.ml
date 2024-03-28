@@ -315,10 +315,13 @@ let transform_decl last_event_id event_defs decls decl : decls =
 ;;
   
 let process decls = 
+  print_endline ("starting event elimination");
   let event_defs = List.filter_map extract_devent_opt decls in
   let last_event_id = (List.rev event_defs |> List.hd).evconstrid in
+  print_endline ("transforming decls");
   let decls = List.fold_left (transform_decl last_event_id event_defs) [] decls in
   let event_defs_assoc = List.map (fun event_def -> (event_def.evconstrid, event_def)) event_defs in
+  print_endline ("transforming statements / expressions");
   let decls = transformer#visit_decls event_defs_assoc decls in
   decls
 ;;

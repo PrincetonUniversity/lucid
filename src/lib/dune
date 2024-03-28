@@ -171,7 +171,7 @@
    cTransformations
    strUtils
 
-   deleteNoops
+   miscCorePasses
    CoreRegularizeMemops
    SimplifyMatch
    CCoreSyntax
