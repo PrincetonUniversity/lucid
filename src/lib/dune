@@ -173,7 +173,7 @@
 
    miscCorePasses
    CoreRegularizeMemops
-   SimplifyMatch
+   CPasses
    CCoreSyntax
    CCorePPrint
    CCoreExceptions
@@ -184,13 +184,13 @@
    CCoreRenaming
    CCoreTyper
    CheckFFuns
+   CCoreParse
    CCoreTables
    CCoreArrays
    CCoreHandlers
    CCoreEvents
-   CCoreParse
-   CCoreMainLoop
-   CPasses
+   CCoreCForm
+   CCoreDrivers
    )
  (preprocess
     (staged_pps ppx_import visitors.ppx ppx_deriving.show ppx_deriving.std ppx_string))

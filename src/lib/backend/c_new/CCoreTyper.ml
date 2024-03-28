@@ -439,6 +439,16 @@ and infer_eop env op (args : exp list) : env * op * exp list * ty = match op, ar
   | _,_-> ty_err "error type checking Eop"
 ;;
 
+let unify_pat env exp pat = 
+  match pat with 
+    | PVal v -> unify_ty env v.vty exp.ety
+    | PWild ty -> unify_ty env ty exp.ety
+    | PEvent{event_id} -> 
+      let ev_exp = evar event_id tevent in
+      unify_ty env ev_exp.ety exp.ety
+let unify_pats env exps pats = 
+  List.fold_left2 unify_pat env exps pats
+
 let rec infer_statement env (stmt:statement) = 
   dprint_endline ("inferring statement: "^(CCorePPrint.statement_to_string stmt));
   match stmt.s with 
@@ -504,6 +514,8 @@ let rec infer_statement env (stmt:statement) =
       | (pats, statement)::branches -> 
         if (List.length pats <> List.length exps) then 
           ty_err "wrong number of patterns for expressions in match statement";
+        (* unify the patterns *)
+        let env = unify_pats env inf_exps pats in
         (* for all the patterns that are events, we need to bind parameter types in env *)
         let inner_env = 
           List.fold_left (fun env pat -> 

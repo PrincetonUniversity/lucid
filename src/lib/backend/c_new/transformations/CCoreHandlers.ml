@@ -150,6 +150,18 @@ let process_decls decls =
   (* merge the handlers into 1 call/return by value event function *)
   let decls = List.fold_left (transform_handler last_handler_cid) ([], []) decls in
 
-  snd decls
-  |> subst_decl#visit_decls (val_to_ref_args [merged_handler_cid]) (* convert the function to call by reference *)
+  let decls = snd decls
+    |> subst_decl#visit_decls (val_to_ref_args [merged_handler_cid]) (* convert the function to call by reference *)
+  in
+  (* finally, remove the declarations for builtin generate functions, since they're no longer needed *)
+  let decls = List.filter 
+    (fun decl -> 
+      match decl.d with 
+      | DFun(_, cid, _, _, None) -> 
+        (* if (Cid.to_id cid |> fst) is in ["generate"; "generate_port"; "generate_switch"; "generate_group"] *)
+        if (List.mem (Cid.to_id cid |> fst) ["generate_self"; "generate_port"; "generate_switch"; "generate_group"]) then false else true
+      | _ -> true)
+    decls
+  in
+  decls
 ;;

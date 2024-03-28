@@ -211,7 +211,7 @@ let rec s_to_string (s: s) : string =
   | SIf (e, s1, s2) -> 
     "if (" ^ exp_to_string e ^ ") {\n" ^ 
     indent 2 (statement_to_string s1) ^ "\n} else {\n" ^ 
-    indent 2 (statement_to_string s2) ^ "\n};"
+    indent 2 (statement_to_string s2) ^ "\n}"
   | SMatch (es, branches) -> 
     "match (" ^ (List.map exp_to_string es |> String.concat " , ") ^ ") {\n" 
     ^ indent 2 (String.concat "\n" (List.map branch_to_string branches)) 

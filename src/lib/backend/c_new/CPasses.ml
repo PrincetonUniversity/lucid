@@ -9,10 +9,10 @@ let ccore_print phase_str decls =
 
 
 let compile ds = 
-  (* 1. translate to core syntax *)
+  (*** 1. translate to core syntax *)
   let ds = SyntaxToCore.translate_prog ~preserve_user_decls:true ds in
 
-  (* 2. a few core passes *)
+  (*** 2. a few passes in core *)
   let ds = MiscCorePasses.this_eliminator#visit_decls () ds in
   let ds = PartialInterpretation.interp_prog ds in
   let ds = CoreRegularizeMemops.process ds in
@@ -20,65 +20,43 @@ let compile ds =
   let ds = AddIngressParser.add_simple_parser None ds in 
   let ds = MiscCorePasses.noop_deleter#visit_decls () ds in
 
-  (* 3. translate to CCore and do some cleanup *)
+  (*** 3. translate to CCore and some cleanup *)
   let cds = CoreToCCore.translate_prog ds in
   let cds = CCoreTNameToTAbstr.process cds in
   let cds = CCoreRenaming.unify_event_ids cds in
-
   ccore_print "initial CCore" cds;
 
   (*** 4. Code generation to implement builtins ***)
   let cds = CCoreParse.process cds in
   let cds = CCoreTables.process_decls cds in
   let cds = CCoreArrays.process_decls cds in
-  (* TODO: misc helpers (hash, printf) *)
+  (* TODO: implement misc helpers (hash, printf) *)
   ccore_print "after code generation" cds;
 
   (* type check *)
   CheckFFuns.check cds; (* foriegn function checking *)
   let cds = CCoreTyper.check_decls cds in
   ccore_print "after type checking" cds;
-  (* exit 1; *)
 
-  (* 2: eliminate events and handlers *)
+  (*** 5. eliminate events and handlers *)
   let cds = CCoreHandlers.process_decls cds in
   ccore_print "after handler elimination" cds;
   let cds = CCoreEvents.process cds in
   ccore_print "after event elimination" cds;
-  (* 3. put into c-normal form: TODO
-      1. record expressions, record values, union expression, and union values 
-         can only appear in local or global variable declarations. 
-      2. no match statements (probably convert into nested ifs?) 
-        
-    - this must be done after event elimination, which generates 
-      records and union types all over the place. 
-  *)
+  let cds = CCoreTyper.check_decls cds in
+  exit 1;
+  (*** 6. small transformations for c-compatible form *)
+  let cds = CCoreCForm.normalize_matches cds in
+  let cds = CCoreCForm.normalize_struct_inits cds in
 
-  (* 4. type check -- this should pass any time after step 1 *)
+  (* final type check *)
   CheckFFuns.check cds;
   let cds = CCoreTyper.check_decls cds in
  
-  (* 5. This must come after step 3, but it might as well 
-        go at the end. *) 
-
-  (* 6. print as C *)
-
+  (*** 7. print as C *)
   let s = CCorePPrint.decls_to_string cds in
   print_endline ("---- final CCore ----");
   print_endline s;
   print_endline ("----------------------");
-
-  (* capture variables in closures *)
-  (* let fds = ClosureConversion.capture_vars fds in *)
-  (* add closure types *)
-  (* let fds = ClosureConversion.add_closure_types fds in *)
-  (* add closure conversion functions *)  
-  (* print_endline ("--- after closure conversion ---"); *)
-  (* let s = CCorePPrint.decls_to_string fds in *)
-  (* let s = CCorePrinting.show_decls fds in *)
   s
-(* 
-  print_endline ("translation to FCore complete");
-  FCorePrinting.decls_to_string fds  *)
-  (* core_str *)
 ;;

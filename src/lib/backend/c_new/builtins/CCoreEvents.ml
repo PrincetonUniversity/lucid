@@ -61,7 +61,7 @@
 
 open CCoreSyntax
 
-let print_endline _ = ()
+(* let print_endline _ = () *)
 
 let replace n x xs = 
   let rec replace' n x xs acc = 
@@ -171,11 +171,7 @@ let transformer =
   let extract_fields ev evid params = 
     (* ev should be an event expression AFTER TRANSFORMATION *)
     let extract_field (ev:exp) (evid : id) (field : id) (ty : ty) = 
-      print_endline ("event expression: "^(CCorePPrint.exp_to_string ev));
-      print_endline ("event expression type: "^(CCorePPrint.ty_to_string ev.ety));
-      print_endline ("event id: "^(CCorePPrint.id_to_string evid));
       let data = ev/.id"data" in
-      print_endline ("data field type: "^(CCorePPrint.ty_to_string data.ety));
       let event = data/.evid in 
       let param = event/.field in
       slocal (Cid.id field) ty param
@@ -188,25 +184,30 @@ let transformer =
   in
   (* the event's tag as an enum value *)
   let event_tag_symbol_val event_def_assoc evid = 
-    let ty = events_to_t_taggedunion (List.split event_def_assoc |> snd) in
+    let ty = events_to_tenum (List.split event_def_assoc |> snd) in
     vsymbol (Cid.id@@event_tag evid) ty
   in
-  let rec transform_for_pat event_def_assoc exps n cases = 
+  let rec inline_eventpat_into_case event_def_assoc exps n cases = 
     match cases with 
     | [] -> cases 
     | (pats, bstmt)::cases -> (
       let exp = List.nth exps n in
       let pat = List.nth pats n in
-      print_endline ("transforming for exp: "^(CCorePPrint.exp_to_string exp)^" and pat: "^(CCorePPrint.pat_to_string pat));
       match pat with 
         | PEvent{event_id; params} -> 
           let field_var_init = extract_fields exp (Cid.to_id event_id) params in 
           let pat = event_tag_symbol_val event_def_assoc (Cid.to_id event_id) in
           let pats = replace n (patval pat) pats in
           let bstmt = sseq field_var_init bstmt in
-          (pats, bstmt)::(transform_for_pat event_def_assoc exps n cases)
+          (pats, bstmt)::(inline_eventpat_into_case event_def_assoc exps n cases)
+        | PWild(ty) when (ty = (events_to_t_taggedunion (List.split event_def_assoc |> snd))) -> 
+          (* wildcard on event translates to wildcard on event tag *)
+          let ty = events_to_tenum (List.split event_def_assoc |> snd) in
+          let pat = PWild(ty) in
+          let pats = replace n (pat) pats in 
+          (pats, bstmt)::(inline_eventpat_into_case event_def_assoc exps n cases)
         | _ ->  
-          (pats, bstmt)::(transform_for_pat event_def_assoc exps n cases)
+          (pats, bstmt)::(inline_eventpat_into_case event_def_assoc exps n cases)
     )
   in
 
@@ -248,7 +249,6 @@ let transformer =
   (* event constructors change to function calls *)
   method! visit_exp event_def_assoc exp = 
     let exp = super#visit_exp event_def_assoc exp in
-    print_endline ("visiting exp: "^(CCorePPrint.exp_to_string exp));
     let exp = 
       match exp.e with 
         | ECall{f; args; call_kind=CEvent} -> 
@@ -261,7 +261,6 @@ let transformer =
           {exp with e=ECall{f; args; call_kind=CFun}}
         | _ -> exp
     in
-    print_endline ("DONE WITH exp: "^(CCorePPrint.exp_to_string exp));
     exp
 
   (* match statements:
@@ -272,17 +271,26 @@ let transformer =
           the event's parameters as variables. *)
   method! visit_statement event_def_assoc stmt = 
     let orig_stmt = stmt in 
-    print_endline@@ "transforming statement: "^(CCorePPrint.statement_to_string stmt);
     let stmt = super#visit_statement event_def_assoc stmt in
-    print_endline@@ "back in statement: "^(CCorePPrint.statement_to_string orig_stmt);
     match stmt.s with 
     | SMatch(exps, branches) -> 
+      (* match on event tags, not the event itself *)
+      let tag_of_union_exp exp = 
+        match exp.ety with 
+        | ty when ty = (events_to_t_taggedunion (List.split event_def_assoc |> snd)) -> 
+          exp/.id"tag"
+        | _ -> exp
+      in
       let branches' = 
         List.fold_left 
-          (fun branches n -> transform_for_pat event_def_assoc exps n branches)
+          (fun branches n -> inline_eventpat_into_case event_def_assoc exps n branches)
           branches
           (List.init (List.length exps) (fun i -> i))
       in
+      (* we transform exps _after_ the branches, because to transform the branches 
+         we need to know the data in the tagged union, which we don't get if 
+          we transform the expressions to tags *)
+      let exps = List.map tag_of_union_exp exps in
       {stmt with s=SMatch(exps, branches')}
     | _ -> stmt
   end
@@ -315,13 +323,10 @@ let transform_decl last_event_id event_defs decls decl : decls =
 ;;
   
 let process decls = 
-  print_endline ("starting event elimination");
   let event_defs = List.filter_map extract_devent_opt decls in
   let last_event_id = (List.rev event_defs |> List.hd).evconstrid in
-  print_endline ("transforming decls");
   let decls = List.fold_left (transform_decl last_event_id event_defs) [] decls in
   let event_defs_assoc = List.map (fun event_def -> (event_def.evconstrid, event_def)) event_defs in
-  print_endline ("transforming statements / expressions");
   let decls = transformer#visit_decls event_defs_assoc decls in
   decls
 ;;

@@ -282,13 +282,35 @@ let process decls =
   let decls = List.map (process_decl read_tys) decls in
   (* finally, add new declarations for: 1) bytes_t; 2) skip, peek, and read functions for all types read *)
   let read_tys = MiscUtils.unique_list_of_eq (equiv_tys) !read_tys in
+  let read_usertys, read_primitive_tys = List.fold_left 
+    (fun (read_usertys, read_tys) ty -> 
+      match ty.raw_ty with TAbstract(cid, _) -> read_usertys@[Cid.to_string cid, ty], read_tys
+      | _ -> read_usertys, read_tys@[ty])
+    ([], [])
+    read_tys
+  in
   let generated_decls = 
     decl_tabstract bytes_t::
     decl_tabstract rv_ty::
-    ((List.map 
+    ((List.map  (*parse helpers for all primitive types *)
         (fun ty -> [mk_skip ty;mk_peek ty;mk_read ty])
-        read_tys) 
-      |> List.flatten)
+        read_primitive_tys) 
+      |> List.flatten)    
+    @
+    (List.fold_left (* the input program, with user type readers placed 
+                       just after the corresponding type declarations *)
+      (fun decls decl -> 
+        match decl.d with 
+        | DTy(cid, _) -> 
+          let user_ty_opt = List.assoc_opt (Cid.to_string cid) read_usertys in
+          let new_decls = match user_ty_opt with 
+            | Some(ty) -> [decl]@[mk_skip ty;mk_peek ty;mk_read ty]
+            | None -> [decl]
+          in
+          decls@new_decls
+        | _ -> decls@[decl])
+      []
+      decls)
   in
   let decls = generated_decls@decls in
   decls

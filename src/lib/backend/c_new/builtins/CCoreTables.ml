@@ -318,9 +318,12 @@ let transform_decls decls =
 
 
 let process_decls decls = 
-  let decls, actions_enum_ty = defunctionalize_actions decls in
-  let decls = (decl_tabstract actions_enum_ty)::decls in 
-  let decls = List.flatten (List.map (monomorphic_table_decls actions_enum_ty) decls) in
-  let decls = monomorphic_table_calls#visit_decls () decls in
-  decls
+  if (List.filter_map extract_daction_id_opt decls) = [] 
+  then decls (* no actions, nothing to do here. *)
+  else
+    let decls, actions_enum_ty = defunctionalize_actions decls in
+    let decls = (decl_tabstract actions_enum_ty)::decls in 
+    let decls = List.flatten (List.map (monomorphic_table_decls actions_enum_ty) decls) in
+    let decls = monomorphic_table_calls#visit_decls () decls in
+    decls
 ;;
