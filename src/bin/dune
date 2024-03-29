@@ -1,5 +1,5 @@
 (executables
- (names main compiler dockerUtils cCompiler dfgCompiler eventParsers)
+ (names main compiler dockerUtils lucidcc dfgCompiler eventParsers)
  (libraries dpt)
  (link_flags -cc g++)
  )
@@ -10,8 +10,8 @@
     (main.exe as dpt) 
     (compiler.exe as compiler) 
     (dockerUtils.exe as dockerUtils)
-    (cCompiler.exe as cCompiler)
+    (lucidcc.exe as lucidcc)
     (dfgCompiler.exe as dfgCompiler) 
     (eventParsers.exe as eventParsers)
     )
-    )
+ )
