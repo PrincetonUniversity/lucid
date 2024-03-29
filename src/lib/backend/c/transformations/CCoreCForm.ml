@@ -68,6 +68,7 @@ let transform_match stmt =
   match stmt.s with 
   (* a match on a single integer is just a switch *)
   | SMatch([exp], _) when is_tint exp.ety -> stmt
+  | SMatch([exp], _) when is_tenum exp.ety -> stmt
   | SMatch(es, branches) -> match_to_if es branches
   | _ -> stmt
 ;;

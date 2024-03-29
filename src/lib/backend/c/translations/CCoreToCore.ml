@@ -342,8 +342,8 @@ let translate_decl (decl : F.decl) : C.decl option =
     C.decl_sp (C.DExtern((Cid.to_id id), ty)) decl.dspan |> Option.some
   | F.DList(_, _, _) -> 
     err "list primitives are not supported in CoreSyntax"
-  | F.DEvent{evconstrid; evconstrnum; evparams; is_parsed} -> 
-    let ev_sort = if is_parsed then C.EPacket else C.EBackground in
+  | F.DEvent{evconstrid; evconstrnum; evparams; is_packet} -> 
+    let ev_sort = if is_packet then C.EPacket else C.EBackground in
     let params = List.map (fun (id, ty) -> id, translate_ty ty) evparams in
     C.decl_sp (C.DEvent(evconstrid, evconstrnum, ev_sort, params)) decl.dspan |> Option.some
   (* functions can be handlers, memops, parsers, or functions *)

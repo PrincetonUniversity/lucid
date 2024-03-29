@@ -178,8 +178,8 @@ and op_to_string (op: op) (args: exp list) : string =
   | PatMask, [a] -> "PatMask(" ^ a ^ ")"
   | Hash size, [a] -> "Hash_" ^ size_to_string size ^ "(" ^ a ^ ")"
   | Cast new_ty, [a] ->
-    let int_ty_str = ty_to_string (new_ty) in
-    "(" ^ int_ty_str ^ ")" ^ a
+    let int_ty_str = ty_to_string ~use_abstract_name:true (new_ty) in
+    "((" ^ int_ty_str ^ ")(" ^ a ^"))"
   | Conc, args -> String.concat "++" args
   (* use arrow notation shorthand *)
   | Project id, _ when (is_ederef (List.hd args)) -> 
@@ -193,7 +193,8 @@ and op_to_string (op: op) (args: exp list) : string =
 
 let assign_op_to_string (op: assign_op) = 
   match op with
-  | OLocal (cid, ty) -> ty_to_string ~use_abstract_name:true ty ^ " " ^ cid_to_string cid
+  | OLocal (cid, ty) -> 
+    ty_to_string ~use_abstract_name:true ty ^ " " ^ cid_to_string cid
   | OTupleLocal (cids, tys) -> 
     let cids_str = ""^String.concat ", " (List.map cid_to_string cids) ^"" in
     let tys_str = "("^String.concat ", " (List.map (ty_to_string ~use_abstract_name:true) tys) ^")" in

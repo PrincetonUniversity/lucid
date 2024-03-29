@@ -30,7 +30,7 @@ let main () =
       } Builtins.interp_builtin_tys ds
   in
   print_endline (" --- compiling to c --- ");
-  let prog_str = CPasses.compile ds in
+  let prog_str = CCorePasses.compile ds in
   output_string (open_out out_filename) prog_str
 ;;
 

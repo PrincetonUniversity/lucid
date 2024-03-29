@@ -63,7 +63,6 @@ Deparsing notes (this goes into a separate pass)
 *)
 open CCoreSyntax
 open CCoreExceptions
-open CCoreUtils
 
 (* helpers *)
 let ty_to_namestr ty = match ty.raw_ty with 
@@ -261,15 +260,14 @@ let transform_parser id params body =
   (* transform the body *)
   let pkt_param = Option.get byte_s_params in     
   let pkt_var = param_evar pkt_param in
-  let body = CCoreTransformers.subst_statement#visit_statement 
-    (transform_stmt pkt_var parsed_tys_acc) 
-    body
+  let body = stmts [
+    CCoreTransformers.subst_statement#visit_statement 
+      (transform_stmt pkt_var parsed_tys_acc) 
+      body;
+    (* if nothing was generated, its an implicit drop *)
+    sret parser_ret_drop
+  ]
   in
-  let body = if is_smatch body 
-    then sseq body (sret parser_ret_drop)
-    else body
-  in
-
   (* return type and body change *)
   !parsed_tys_acc, dfun id parser_ret_ty params body   
 ;;

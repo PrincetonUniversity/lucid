@@ -119,7 +119,7 @@ and statement = {s:s; sspan : sp;}
 
 (* declarations *)
 
-and event_def = {evconstrid : id; evconstrnum : int option; evparams : params; is_parsed : bool}
+and event_def = {evconstrid : id; evconstrnum : int option; evparams : params; is_packet : bool}
 and ffun = {
   fid : cid;         (* function name *)
   fparams: params;  (* function params *)
@@ -250,7 +250,7 @@ let is_tstring ty = is_tabstract "string" ty
 let is_tchar ty = is_tabstract "char" ty
 let is_tbuiltin tycid ty = match ty.raw_ty with TBuiltin(cid, _) -> Cid.equal cid tycid | _ -> false
 let is_tref  ty = match ty.raw_ty with TRef _ -> true | _ -> false
-
+let is_tenum ty = match (base_type ty).raw_ty with TEnum _ -> true | _ -> false
 
 let extract_func_ty ty = match ty.raw_ty with 
   | TFun {arg_tys; ret_ty; func_kind} -> arg_tys, ret_ty, func_kind
@@ -327,8 +327,14 @@ and bitsizeof_ty_exn ty =
   match bitsizeof_ty ty with 
   | Some size -> size
   | None -> failwith "bitsizeof_ty_exn: got an unsizeable type"
-  
-  
+
+let size_of_ty ty = 
+  let n = bitsizeof_ty_exn ty in
+  let byte_n = (n+7) / 8 in
+  byte_n
+;;
+    
+
 let sizeof_ty ty = 
   match ty.raw_ty with 
   | TInt size -> size
@@ -787,7 +793,7 @@ let is_dparser decl = match decl.d with
 
 
 (* event declarations *)
-let devent id evconstrnum params is_parsed = decl (DEvent {evconstrid=id; evconstrnum; evparams=params; is_parsed}) Span.default
+let devent id evconstrnum params is_packet = decl (DEvent {evconstrid=id; evconstrnum; evparams=params; is_packet}) Span.default
 
 let extract_devent_opt decl = match decl.d with 
   | DEvent ev -> Some ev

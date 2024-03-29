@@ -490,11 +490,19 @@ let rec infer_statement env (stmt:statement) =
     let env = unify_lists env unify_ty (List.map (fun exp -> exp.ety) inf_lexps) (List.map (fun exp -> exp.ety) inf_exps) in
     let inf_exp = {inf_exp with e=ETuple(inf_exps)} in
     env, {stmt with s=SAssign(OTupleAssign(inf_lexps), inf_exp)}
-  | SAssign(OAssign(lexp), exp) ->
+  | SAssign(OAssign(lexp), exp) ->(
     let env, inf_lexp = infer_exp env lexp in
     let env, inf_exp = infer_exp env exp in
-    let env = unify_ty env inf_lexp.ety inf_exp.ety in
-    env, {stmt with s=SAssign(OAssign(lexp), exp)}
+    try 
+      let env = unify_ty env inf_lexp.ety inf_exp.ety in
+      env, {stmt with s=SAssign(OAssign(lexp), exp)}
+    with TypeError(str) -> 
+      print_endline ("statement: "^(CCorePPrint.statement_to_string stmt));
+      print_endline ("ty 1: "
+        ^(CCorePPrint.ty_to_string ~use_abstract_name:true inf_lexp.ety)^" ty 2:"
+        ^(CCorePPrint.ty_to_string ~use_abstract_name:true inf_exp.ety));
+      raise(TypeError(str))
+    ) 
   | SSeq(stmt1, stmt2) -> 
     let env, inf_stmt1 = infer_statement env stmt1 in
     let env, inf_stmt2 = infer_statement env stmt2 in
