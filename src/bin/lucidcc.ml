@@ -1,18 +1,25 @@
 (* compile a lucid function (plus globals) to c *)
-open Batteries
 open Dpt
 
 let cfg = Cmdline.cfg
 
-let main () = 
-  Cmdline.cfg.debug <- true; 
+(* parse function with added c-compiler args *)
+let parse () =
+  let speclist = Cmdline.parse_common () in
+  let set_output s = cfg.output <- s in
+  let speclist = speclist @ ["-o", Arg.String set_output, "Output filename."] in
+  let target_filename = ref "" in
+  let usage_msg = "lucidcc (c compiler). Options available:" in
+  Arg.parse speclist (fun s -> target_filename := s) usage_msg;
+  !target_filename
+;;
 
-  if ((Array.length Sys.argv) != 3)
-    then failwith "Usage: lucidcc <lucid program> <output filename>";
-  let target_filename = Sys.argv.(1) in
-  let out_filename = Sys.argv.(2) in
-  (* now parse the file and run the frontend and midend *)
+let main () = 
+  let target_filename = parse () in
   Cmdline.set_dpt_file target_filename;
+  let out_filename = Cmdline.cfg.output in 
+
+  (* now parse the file and run the frontend and midend *)
   let ds = Input.parse target_filename in
   let _, ds =
     (* Profile.time_profile "frontend" @@ fun () -> *)
