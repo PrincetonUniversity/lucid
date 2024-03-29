@@ -1,6 +1,45 @@
 (* deparser implementation *)
-(* notes 
-    - Payload is a flag (carry input payload or not)
+(* 
+
+Assumptions:
+  - the buffer is set up properly (cur points to start, buffer is large enough)
+  - event parameters are efficiently packable (no padding)
+
+deparse_event function:
+  - for background events, start by serializing 
+    an empty ethernet header and the event's tag
+  - then, copy the event's params struct to the 
+    output buffer. Note that the union is _NOT_ copied, 
+    only the struct for the particular event. 
+
+example:
+program with an event 
+  do_add(int i, int j, int k);
+==>
+fn void deparse_event(event* ev_out, bytes_t* buf_out){
+  if (ev_out->is_packet == 0) {
+    ((int* )(buf_out->cur))[0] = 0;
+  ((int* )(buf_out->cur))[1] = 0;
+  ((int* )(buf_out->cur))[2] = 0;
+  ((int16* )(buf_out->cur + 12))[0] = 0;
+  buf_out->cur = buf_out->cur + 14;
+  (*(((event_tag_t*)(buf_out->cur)))) = ev_out->tag;
+  buf_out->cur = buf_out->cur + 2;
+} else {
+  skip;
+}
+match (ev_out->tag) {
+  case do_add_tag: {
+    (*(((do_add_t*)(buf_out->cur)))) = ev_out->data.do_add;
+    buf_out->cur = buf_out->cur + 12;
+  }
+}
+return;
+}
+
+TODO: 
+  - support payloads
+  - in-place deparsing vs packet copying
 *)
 open CCoreSyntax
 open CCoreExceptions
@@ -31,25 +70,7 @@ let memset_n dst_ref_exp src_val n =
 let ptr_incr eptr i = (eptr/+(eval@@vint i 32))
 let sptr_incr eptr i = sassign_exp eptr (ptr_incr eptr i)
 ;;
-(* 
-  // bytes refs an empty buffer that is large enough
-  // event parameters are efficiently packable (no padding)
-  void deparse_event(event* ev_out, bytes_t* bytes) {
-    if (ev_out->is_packet == 1) {
-      *(())
-      // empty eth header
-      memset(bytes->cur, 0, 14);
-      *(bytes->cur) = *(bytes->cur) + 14;
-      // event tag
-      *((uint16_t* )(bytes->cur)) = event->tag;
-      *(bytes->cur) = *(bytes->cur) + 2;
-    }
-    // event data
-    *((event_data_t* ) bytes->cur) = event->data;
-    *(bytes->cur) = *(bytes->cur) + sizeof(event->data);
-    return
-  }
-*)
+
 (* find a type definition based on its id *)
 let rec find_ty_opt ty_cid decls = 
   match decls with 
@@ -109,7 +130,9 @@ let deparse_fun event_t =
             sptr_incr (buf_out/->id"cur") (size_of_ty event_struct_ty)
           ])
         tag_cids
-        event_struct_tys)]
+        event_struct_tys);
+    sret_none
+    ]
   in
   dfun (Cid.id fun_id) tunit params body
 ;;
