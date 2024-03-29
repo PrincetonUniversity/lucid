@@ -19,10 +19,11 @@ let main () =
   Cmdline.set_dpt_file target_filename;
   let out_filename = Cmdline.cfg.output in 
 
-  (* now parse the file and run the frontend and midend *)
   let ds = Input.parse target_filename in
+  (* run frontend pipeline with options to:
+      - allow multiple handlers for an event
+      - preserve user-defined record types to the midend ir *)
   let _, ds =
-    (* Profile.time_profile "frontend" @@ fun () -> *)
     FrontendPipeline.process_prog ~opts:{
       match_event_handlers=false; 
       elim_records=false;

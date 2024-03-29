@@ -1,12 +1,10 @@
-(* translate a frontend program into a C program *)
+(* compile a frontend program into a C program *)
 
 let ccore_print phase_str decls = 
   print_endline ("---- "^phase_str^" ----");
   print_endline@@CCorePPrint.decls_to_string decls;
   print_endline ("------------------------")
 ;;
-
-
 
 let compile ds = 
   (*** 1. translate to core syntax *)
