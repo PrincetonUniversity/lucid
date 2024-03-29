@@ -167,7 +167,7 @@
 
    miscCorePasses
    CoreRegularizeMemops
-   CPasses
+   CCorePasses
    CCoreSyntax
    CCorePPrint
    CCoreExceptions
