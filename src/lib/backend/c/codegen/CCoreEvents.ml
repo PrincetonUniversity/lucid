@@ -96,7 +96,7 @@ let event_params_union_ty (event_defs :event_def list) =
 ;;
 
 (* event foo(int a, int b); event bar(int c); ==> type event = {event_tag_t tag; event_data_t data;} *)
-let event_tunion_tyid = id"event";;
+let event_tunion_tyid = id"event_t";;
 let event_tunion_ty event_defs = 
   let tag_ty = event_enum_ty event_defs in
   let data_ty = event_params_union_ty event_defs in

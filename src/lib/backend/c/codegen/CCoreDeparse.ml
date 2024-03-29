@@ -16,7 +16,7 @@ example:
 program with an event 
   do_add(int i, int j, int k);
 ==>
-fn void deparse_event(event* ev_out, bytes_t* buf_out){
+fn int deparse_event(event* ev_out, bytes_t* buf_out){
   if (ev_out->is_packet == 0) {
     ((int* )(buf_out->cur))[0] = 0;
   ((int* )(buf_out->cur))[1] = 0;
@@ -34,7 +34,7 @@ match (ev_out->tag) {
     buf_out->cur = buf_out->cur + 12;
   }
 }
-return;
+return (buf_out->cur) - (buf_out->start);
 }
 
 TODO: 
@@ -105,6 +105,7 @@ let deparse_fun event_t =
   let fun_id = id"deparse_event" in
   let params = [ev_out_param; buf_out_param] in
   let body = stmts [
+    slocal (cid"bytes_written") (tint 32) (default_exp (tint 32));
     sif (eop Eq [(ev_out/->id"is_packet");(eval@@vint 0 8)])
       (* not a packet / raw event *)
       (stmts [
@@ -115,6 +116,9 @@ let deparse_fun event_t =
         (* set event type *)
         memcpy (buf_out/->id"cur") (ev_out/->id"tag");
         sptr_incr (buf_out/->id"cur") 2;
+        sassign 
+          (cid"bytes_written") 
+          ((evar (cid"bytes_written") (tint 32))/+(eval@@vint 16 32))
       ])
       (snoop);
     smatch [ev_out/->id"tag"] 
@@ -127,14 +131,17 @@ let deparse_fun event_t =
             (* copy to memory *)
             memcpy (buf_out/->id"cur") ((ev_out/->id"data")/.this_event_data_field);
             (* increment pointer *)
-            sptr_incr (buf_out/->id"cur") (size_of_ty event_struct_ty)
-          ])
+            sptr_incr (buf_out/->id"cur") (size_of_ty event_struct_ty);
+            sassign 
+              (cid"bytes_written") 
+              ((evar (cid"bytes_written") (tint 32))/+(eval@@vint (size_of_ty event_struct_ty) 32));
+        ])
         tag_cids
         event_struct_tys);
-    sret_none
+    sret ((evar (cid"bytes_written") (tint 32)))
     ]
   in
-  dfun (Cid.id fun_id) tunit params body
+  dfun (Cid.id fun_id) (tint 32) params body
 ;;
 
 (* find the event type definition and put the deparser 
