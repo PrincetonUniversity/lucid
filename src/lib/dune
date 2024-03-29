@@ -85,7 +85,6 @@
    InterpSwitch
    interpPayload
    interpSyntax
-   funInterp
    libraryInterface
    libraryUtils
    arrays
