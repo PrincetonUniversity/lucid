@@ -186,6 +186,7 @@
    CCoreHandlers
    CCoreEvents
    CCoreCForm
+   CCorePacketHandler
    CCoreDrivers
    )
  (preprocess

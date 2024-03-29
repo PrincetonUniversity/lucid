@@ -56,13 +56,15 @@ let compile ds =
   let cds = CCoreCForm.normalize_matches cds in
   let cds = CCoreCForm.normalize_struct_inits cds in
 
-  (*** deparser generation (comes after events are turned into structs) ***)
+  (*** 7. toplevel function generation ***)
+  (* these functions are outside of the user program, 
+     and can just be tacked onto the end. *)
+  (* deparser generation *)
   let cds = CCoreDeparse.process cds in
-
-
-  (*** 7. add toplevel driver functions *)
+  (* packet handler generation (platform specific) *)
+  let cds = CCorePacketHandler.process cds in
+  (* toplevel driver function (not always necessary, platform specific) *)
   (* let cds = CCoreDrivers.StdinDriver.process cds in *)
-  (* CheckFFuns.check cds; *)
 
   (* final type check *)
   CheckFFuns.check cds;
