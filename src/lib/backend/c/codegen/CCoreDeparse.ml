@@ -71,17 +71,7 @@ let ptr_incr eptr i = (eptr/+(eval@@vint i 32))
 let sptr_incr eptr i = sassign_exp eptr (ptr_incr eptr i)
 ;;
 
-(* find a type definition based on its id *)
-let rec find_ty_opt ty_cid decls = 
-  match decls with 
-  | [] -> None
-  | decl::decls -> (
-    match decl.d with 
-    | DTy(cid, Some(ty)) -> 
-      if (Cid.equal cid ty_cid) then Some(ty) else (find_ty_opt ty_cid decls)
-    | _ -> find_ty_opt ty_cid decls
-  )
-;;
+
 
 let deparse_fun event_t = 
   let tag_enum_ty = 
