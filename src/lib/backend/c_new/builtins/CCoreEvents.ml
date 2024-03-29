@@ -272,7 +272,6 @@ let transformer =
           prepend statements to the case's branch to initialize 
           the event's parameters as variables. *)
   method! visit_statement event_def_assoc stmt = 
-    let orig_stmt = stmt in 
     let stmt = super#visit_statement event_def_assoc stmt in
     match stmt.s with 
     | SMatch(exps, branches) -> 

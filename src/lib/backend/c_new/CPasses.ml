@@ -53,8 +53,8 @@ let compile ds =
   let cds = CCoreTyper.check_decls cds in
 
   (*** 7. add toplevel driver functions *)
-  let cds = CCoreDrivers.StdinDriver.process cds in
-  CheckFFuns.check cds;
+  (* let cds = CCoreDrivers.StdinDriver.process cds in *)
+  (* CheckFFuns.check cds; *)
    
   (*** 8. print as C *)
   let s = CCorePPrint.decls_to_string cds in

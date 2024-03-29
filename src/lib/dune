@@ -165,11 +165,6 @@
    cEventLib
    pyEventLib
    pyControlLib
-   cPipeline
-   cTranslate
-   cLibs
-   cTransformations
-   strUtils
 
    miscCorePasses
    CoreRegularizeMemops
