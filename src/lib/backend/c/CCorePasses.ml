@@ -63,11 +63,26 @@ let compile ds =
   let cds = CCoreDeparse.process cds in
   (* packet handler generation (platform specific) *)
   let cds = CCorePacketHandler.process cds in
+
   (* toplevel driver function (not always necessary, platform specific) *)
+  (* LEFT OFF HERE. 
+      final steps: 
+        - driver function in ccore, not just a string of c
+        - libpcap driver 
+        - c pretty printer
+      then, the actual fun:
+        - making it compatible with ebpf (parameterized?)
+        - representing multiple threads
+          - locks
+          - multiple processes (probably don't want this)
+          - steering
+          - atomics
+        - optimizations? 
+  *)
   (* let cds = CCoreDrivers.StdinDriver.process cds in *)
 
   (* final type check *)
-  CheckFFuns.check cds;
+  (* CheckFFuns.check cds; *)
   let cds = CCoreTyper.check_decls cds in
   
   (*** 8. print as C *)

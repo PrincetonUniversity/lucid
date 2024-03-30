@@ -166,7 +166,11 @@ and decls = decl list
   show]
 
 
-  exception FormError of string
+(* CONSTANTS *)
+let event_tag_size = 16
+let enum_size = 32
+
+exception FormError of string
 
 (* constructors and destructors *)
 
@@ -257,8 +261,9 @@ let extract_func_ty ty = match ty.raw_ty with
   | _ -> raise (FormError "[extract_func_ty] expected TFun")
 
 
-let extract_tint_size ty = match ty.raw_ty with 
+let extract_tint_size ty = match (base_type ty).raw_ty with 
   | TInt size -> size
+  | TEnum _ -> enum_size
   | _ -> raise (FormError "[extract_tint_size] expected TInt")
 
 let extract_trecord_or_union ty = match ty.raw_ty with 
@@ -918,9 +923,6 @@ let is_default_event_decl decl = match decl.d with
   | DEvent {evconstrid; _} -> Id.equal evconstrid default_event_id
   | _ -> false
 
-(* CONSTANTS *)
-let event_tag_size = 16
-let enum_size = 32
 
 
 
