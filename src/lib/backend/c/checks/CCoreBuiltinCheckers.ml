@@ -86,8 +86,6 @@ let table_install_check _ exp =
   let tbl = (List.hd args) in
   let key = List.nth args 1 in
   let action = List.nth args 2 in
-  print_endline ("action: "^(CCorePPrint.exp_to_string action));
-  print_endline ("action ty: "^(CCorePPrint.ty_to_string action.ety));
   let forwarded_param = List.nth args 3 in
   let bty_cid, bty_args = extract_tbuiltin tbl.ety in
   match (Cid.names bty_cid), bty_args with 

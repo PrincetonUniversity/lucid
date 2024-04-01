@@ -24,8 +24,11 @@ let emplace_fcn ctx ((cid : Cid.t), decl) =
   else {ctx with generated_fcns=(ctx.generated_fcns@[(cid, decl)])}
 
 (* the value type of the array (inside the global/ref type) *)
-let array_value_ty cell_ty len = tlist cell_ty (arrlen len) ;;
-
+let array_value_ty cell_ty len orig_ty = 
+  timpl_wrap
+    (tlist cell_ty (arrlen len))
+    orig_ty
+;;
 
 (* memops: memops are functions passed as arguments. *)
 (* return the array declaration and an array spec *)
@@ -36,13 +39,14 @@ let array_create ctx (arr_ty : ty) (arr_id : cid) (ctor_call : exp) =
   let cell_size = sizeof_ty cell_ty in
   (* length is the argument of the call *)
   let len = extract_ecall ctor_call |> snd |> List.hd |> eval_exp |> extract_vint in
-  let arr_ty = array_value_ty (tint cell_size) len in
-  let arr_val = zero_list arr_ty in
+  let arr_ty = array_value_ty (tint cell_size) len arr_ty in
+  let arr_val = eval (zero_list arr_ty) in
+  let arr = eimpl_wrap arr_val ctor_call in
   let ctx = {ctx with 
     arrays = (arr_id, (cell_ty, len))::ctx.arrays;}
   in
   (* ctx, dglobal arr_id (tref arr_ty) (eval arr_val) *)
-  ctx, dglobal arr_id arr_ty (eval arr_val)
+  ctx, (dglobal arr_id arr_ty arr)
 
 ;;
 
@@ -59,7 +63,8 @@ let arr_fcn_id accessor_id arr_id memop_ids =
 let update_complex ctx call_id call_args = 
   let arr = List.nth call_args 0 in (* should have type TBuiltin *)
   let arr_id, (arr_cellty, arr_len) = get_array ctx arr in
-  let arr = {arr with ety = array_value_ty arr_cellty arr_len} in
+  let arr_ty = array_value_ty arr_cellty arr_len arr.ety in
+  let arr = {arr with ety = arr_ty} in
   (* let arr = to_ref arr in *) 
 
   (* no longer need to do this. *)
@@ -82,7 +87,6 @@ let update_complex ctx call_id call_args =
   let sret_transformer ret_stmt = 
     match ret_stmt.s with 
     | SRet(Some(tuple_exp)) -> (
-      print_endline ("xforming return");
       let es = extract_etuple tuple_exp in
       let exp_to_mem, exp_to_ret = match es with 
         | [e1; e2] -> e1, e2
@@ -139,6 +143,7 @@ let transform_calls ctx decl =
           if (List.mem f_cid arr_fun_cids) then 
           (
             let ctx', exp' = update_complex (!ctx) f_cid args in
+            let exp' = eimpl_wrap exp' exp in
             ctx := ctx';
             exp'
           )
@@ -156,7 +161,7 @@ let process_decl ctx decl =
     (* remember memop and delete *)
     {ctx with memops=(id, (ret_ty, params, body))::ctx.memops}, None
   | DVar(cid, ty, Some(exp)) when is_tbuiltin Arrays.t_id ty ->
-    let ctx, decl = array_create ctx ty cid exp in 
+    let ctx, decl = (array_create ctx ty cid exp) in 
     ctx, Some(decl)
   | _ -> let ctx, decl = transform_calls ctx decl in 
     ctx, Some(decl)

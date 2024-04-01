@@ -197,12 +197,13 @@ let transform_bytestrings =
 (* transform expressions that call parse helpers into 
    calls to the appropriate generated function *)
 let transform_exp pkt_bytestring read_tys exp : exp = 
+  let orig_exp = exp in
   match exp.e with 
   | ECall{f; call_kind=CFun} -> (
     match (eval_exp f |> extract_vsymbol |> Cid.names) with 
     | ["parse";"peek"] -> 
       read_tys := exp.ety::(!read_tys);
-      call_peek exp.ety pkt_bytestring    
+      call_peek exp.ety pkt_bytestring
     | ["parse";"skip"] -> 
       read_tys := exp.ety::(!read_tys);
       call_skip exp.ety pkt_bytestring
@@ -218,7 +219,7 @@ let transform_exp pkt_bytestring read_tys exp : exp =
       let arg_ety = tref arg_ety in 
       let payload_arg = {payload_arg with ety=arg_ety} in
       let res = ederef payload_arg in  
-      res 
+      eimpl_wrap res orig_exp
     | _ -> exp
   )
   | _ -> exp

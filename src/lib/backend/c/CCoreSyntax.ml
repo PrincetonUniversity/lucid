@@ -41,7 +41,8 @@ and func_ty = {
   ret_ty : ty; 
   func_kind : func_kind;
 }
-and ty = {raw_ty:raw_ty; tspan : sp; timplements : ty option}
+and ty = {raw_ty:raw_ty; tspan : sp; timplements : (ty[@opaque]) option}
+
 and params = (id * ty) list
 (* values *)
 and v =
@@ -87,7 +88,7 @@ and call_kind =
   (* a call to a builtin is annotated with the original 
      builtin function and arguments *)
 
-and exp = {e:e; ety:ty; espan : sp; eimplements : exp option}
+and exp = {e:e; ety:ty; espan : sp; eimplements : (exp[@opaque]) option}
 
 and pat = 
   | PVal of value
@@ -339,11 +340,11 @@ let sizeof_ty ty =
   | TBits {len} -> len
   | _ -> failwith "sizeof_ty: expected TInt or TBits"
 ;;
-  
 
-  (* value constructors *)
+let timpl_wrap ty impl = {ty with timplements = Some impl}
 
 
+(* value constructors *)
 let value v vty = {v=v; vty=vty; vspan=Span.default}
 let vunit () = {v=VUnit; vty=ty TUnit; vspan=Span.default}
 let vint value size = {v=VInt {value; size = sz size}; vty=ty (TInt(sz size)); vspan=Span.default}
@@ -681,6 +682,9 @@ let unbox_egen_port exp = match exp.e with
 (* let eret eret = exp (EReturn eret) (tunit) Span.default *)
 let ewrap espan exp = {exp with espan}
 
+let eimpl_wrap e eimpl = 
+  {e with eimplements = Some(eimpl)}
+
 let patval value = PVal(value)
 
 let pevent event_id params = 
@@ -780,6 +784,8 @@ let decl_tabstract ty =
   let name = extract_tname tname in
   dty name ty
 ;;
+let devent id evconstrnum params is_packet = decl (DEvent {evconstrid=id; evconstrnum; evparams=params; is_packet}) Span.default
+
 
 let is_devent decl = match decl.d with 
   | DEvent _ -> true
@@ -794,10 +800,6 @@ let is_dparser decl = match decl.d with
   | _ -> false
 ;;
 
-
-
-(* event declarations *)
-let devent id evconstrnum params is_packet = decl (DEvent {evconstrid=id; evconstrnum; evparams=params; is_packet}) Span.default
 
 let extract_devent_opt decl = match decl.d with 
   | DEvent ev -> Some ev
