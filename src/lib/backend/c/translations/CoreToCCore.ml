@@ -111,7 +111,8 @@ and translate_acn_ty (aty : C.acn_ty) =
   }
 and translate_ty (ty : C.ty) : F.ty = 
   {raw_ty = translate_raw_ty ty.raw_ty; 
-   tspan = ty.tspan;}
+   tspan = ty.tspan;
+   timplements = None}
 ;;
 let translate_params (params: C.params) : F.params = 
   List.map (fun ((id: Id.t), ty) -> id, translate_ty ty) params
@@ -289,11 +290,6 @@ let rec translate_statement (stmt:C.statement) : F.statement =
   | C.SMatch(exps, branches) -> 
     let pat_tys = List.map (fun (exp : C.exp) -> exp.ety) exps in
     let exps = List.map translate_exp exps in
-    (* if there's more than one expression, wrap it in a tuple *)
-    (* let exp = match exps with 
-      | [exp] -> exp
-      | exps -> F.etuple exps
-    in *)
     (* we have to expand a single wildcard into multiple wildcards *)
     let num_pats = List.length pat_tys in
     let rec extend_single_wild_pats branches = 

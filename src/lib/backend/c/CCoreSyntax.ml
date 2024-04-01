@@ -32,7 +32,7 @@ and raw_ty =
   | TEvent
   | TFun of func_ty
   (* alias types *)
-  | TBuiltin of cid * (ty list) (* abstract types built into lucid that must be implemented in CCore *)     
+  | TBuiltin of cid * (ty list) (* abstract types built into lucid that must be implemented in CCore *)
   | TAbstract of cid * ty (* a name for another type *)
   | TName of cid (* an opaque TAbstract -- we should choose one or the other*)
 
@@ -41,7 +41,7 @@ and func_ty = {
   ret_ty : ty; 
   func_kind : func_kind;
 }
-and ty = {raw_ty:raw_ty; tspan : sp;}
+and ty = {raw_ty:raw_ty; tspan : sp; timplements : ty option}
 and params = (id * ty) list
 (* values *)
 and v =
@@ -87,7 +87,7 @@ and call_kind =
   (* a call to a builtin is annotated with the original 
      builtin function and arguments *)
 
-and exp = {e:e; ety:ty; espan : sp;}
+and exp = {e:e; ety:ty; espan : sp; eimplements : exp option}
 
 and pat = 
   | PVal of value
@@ -125,8 +125,7 @@ and fun_def = func_kind * cid * ty * params * fun_body
 and fun_body = 
   | BExtern
   | BStatement of statement
-  | BForiegn of string 
-  | BBuiltin of fun_def list (* a builtin function's body is a bunch of implementations *)
+  | BForiegn of string
   
 and d = 
   | DVar of cid * ty * (exp option)
@@ -177,7 +176,7 @@ let sz n = n
 let cid s = Cid.create([s])
 
 (**** types ****)
-let ty raw_ty = {raw_ty=raw_ty; tspan=Span.default}
+let ty raw_ty = {raw_ty=raw_ty; tspan=Span.default; timplements = None}
 let tunit = ty TUnit
 let tbool = ty TBool
 let tint i = ty@@TInt(sz i)
@@ -450,14 +449,19 @@ let extract_vtuple value = match value.v with
   | _ -> failwith "expected VRecord"
 ;;
 (* expression constructors *)
-let exp e ety espan = {e; ety; espan}
-let efunref cid fty = {e=EVar (cid); ety=fty; espan=Span.default; }
+let exp e ety espan = {e; ety; espan; eimplements=None; }
+let efunref cid fty = exp (EVar (cid)) fty (Span.default)
 let erecord label_es = 
   let labels, es = List.split label_es in
-  {e=ERecord(labels, es); ety = trecord (List.map (fun (label, exp) -> (label, exp.ety)) label_es); espan=Span.default}
+  {e=ERecord(labels, es); 
+   ety = trecord (List.map (fun (label, exp) -> (label, exp.ety)) label_es); 
+   espan=Span.default;
+   eimplements=None; }
 ;;
-let eunion label exp ety= {e=EUnion(label, exp, ety); ety=ety; espan=Span.default; }
-let etuple es = {e=ETuple es; ety=ttuple (List.map (fun (e:exp) -> e.ety) es); espan=Span.default; }
+let eunion label e ety = 
+  exp (EUnion(label, e, ety)) ety (Span.default)
+let etuple es = 
+  exp (ETuple es) (ttuple (List.map (fun e -> e.ety) es)) Span.default
 
 let eop op es = 
   let eop_ty = match op with 
@@ -501,9 +505,9 @@ let eop op es =
       List.nth ts idx
 
   in 
-  {e=EOp (op, es); ety=eop_ty; espan=Span.default; }
-let eval value = {e=EVal value; ety=value.vty; espan=Span.default; }
-let evar cid ty = {e=EVar(cid); ety=ty; espan=Span.default; }
+  exp (EOp(op, es)) eop_ty Span.default
+let eval value = exp (EVal value) value.vty Span.default
+let evar cid ty = exp (EVar cid) ty Span.default
 let param_evar (id, ty) = evar (Cid.id id) ty
 let eunit () = eval (vunit ())
 
@@ -521,7 +525,7 @@ let ecall_kind call_kind f es =
     | TEvent -> tevent
     | _ -> failwith "ecall: expected function type"
   in
-  {e=ECall {f; args=es; call_kind}; ety; espan=Span.default; }
+  exp (ECall {f; args=es; call_kind}) ety Span.default
 ;;
 let ecall = ecall_kind CFun
 
@@ -530,7 +534,7 @@ let ecall_op (f: exp) args = ecall f args
 let eevent = ecall_kind CEvent
 
 let ederef inner = 
-  {e=EDeref(inner); ety=extract_tref inner.ety; espan=Span.default}
+  exp (EDeref inner) (extract_tref inner.ety) Span.default
 ;;
 
 let elistget arr idx = 

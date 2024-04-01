@@ -226,7 +226,7 @@ let rec infer_exp env exp : env * exp =
   let env, exp = match exp.e with 
     | EVal value -> 
       let ety = (infer_value value).vty in
-      env, {e=EVal(value); ety; espan=exp.espan}
+      env, {exp with e=EVal(value); ety;}
     | EVar cid -> 
       let ety = match CidMap.find_opt cid env.vars with
         | Some ty -> ty
@@ -234,12 +234,12 @@ let rec infer_exp env exp : env * exp =
           dprint_endline ("current env:\n"^(env_to_string env));      
           ty_err@@"cannot find type for unbound variable: "^(CCorePPrint.cid_to_string cid)
       in
-      env, {e=EVar cid; ety; espan=exp.espan}
+      env, {exp with e=EVar cid; ety;}
     | EDeref(inner_exp) -> 
       let env, inf_inner_exp = infer_exp env inner_exp in
       if (is_tref inf_inner_exp.ety) then 
       (* inner exp should be a global, this is the inner type *)
-      env, {e=EDeref(inner_exp); ety = extract_tref (inf_inner_exp.ety); espan = exp.espan}
+      env, {exp with e=EDeref(inner_exp); ety = extract_tref (inf_inner_exp.ety); }
       else 
         ty_err (Printf.sprintf "tried to dereference a non reference type (%s : %s)" (CCorePPrint.exp_to_string inf_inner_exp) (CCorePPrint.ty_to_string inf_inner_exp.ety));
     (* | ERecord{labels=None; es} ->        *)
@@ -247,12 +247,12 @@ let rec infer_exp env exp : env * exp =
       let env, es' = infer_exps env es in
       let e = ETuple(es') in
       let ety = ttuple (List.map (fun exp -> exp.ety) es') in
-      env, {e; ety; espan=exp.espan}
+      env, {exp with e; ety;}
     | ERecord(labels, es) -> 
       let env, es' = infer_exps env es in
       let e =ERecord(labels, es') in
       let ety = trecord (List.combine labels (List.map (fun exp -> exp.ety) es')) in
-      env, {e; ety; espan=exp.espan}
+      env, {exp with e; ety;}
     | EUnion(label, exp, union_ty) -> 
       let env, inf_exp = infer_exp env exp in
       let env = match (base_type union_ty).raw_ty with 
@@ -263,7 +263,7 @@ let rec infer_exp env exp : env * exp =
         | _ -> 
           ty_err "union exp does not have the right type for the corresponding member of the union"
       in
-      env, {e=EUnion(label, inf_exp, union_ty); ety=union_ty; espan=exp.espan}
+      env, {exp with e=EUnion(label, inf_exp, union_ty); ety=union_ty}
     
     | ECall{f; call_kind=CEvent} ->
       let env, inf_f = infer_exp env f in
@@ -296,7 +296,7 @@ let rec infer_exp env exp : env * exp =
         in
         (* TODO: update unify for list lengths *)
         let e = ECall{f=inf_f; args=inf_args; call_kind=CFun} in
-        env, {e; ety=ret_ty; espan=exp.espan}
+        env, {exp with e; ety=ret_ty}
     )
     | EOp(op, args) -> 
       let env, op, inf_args, ety = infer_eop env op args in
@@ -673,7 +673,6 @@ let rec infer_decl env decl : env * decl option =
     env, decl |> Option.some
   | DFun(_, _, _, _, BForiegn _) -> 
     ty_err "foriegn functions must be declared as type foriegn"
-  | DFun(_, _, _, _, BBuiltin(_)) -> env, None
 
 
 

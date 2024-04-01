@@ -283,12 +283,10 @@ and fun_def_to_string (kind, id, ty, params, stmt_opt) =
                  | BStatement stmt -> "{\n" ^ indent 2 (statement_to_string stmt) ^ "\n}" 
                  | BExtern -> ";" 
                  | BForiegn s -> s  
-                 | BBuiltin defs -> String.concat "\n" (List.map fun_def_to_string defs)                
   in
   match stmt_opt with 
     | BExtern -> 
       "extern " ^ kind_str ^ " " ^ ret_ty_str ^ " " ^id_str ^ "(" ^ params_str ^ ")" ^ stmt_str
-    | BBuiltin _ -> stmt_str
     | _ -> kind_str ^ " "  ^ ret_ty_str ^ " " ^ id_str ^ "(" ^ params_str ^ ")" ^ stmt_str
   
 and decl_to_string decl = d_to_string decl.d

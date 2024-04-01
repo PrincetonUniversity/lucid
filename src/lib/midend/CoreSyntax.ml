@@ -598,16 +598,11 @@ let int_mask_to_bitpat n mask len =
   Array.to_list bs
 ;;
 
-(* let ty_of_tbl td =
-  match td.tty.raw_ty with
-  | TTable tbl_ty -> tbl_ty
-  | _ -> error "[ty_of_tbl] table does not have type table."
-;; *)
-
 let ty_to_size ty =
   match ty.raw_ty with
   | TBool -> 1
   | TInt (Sz sz) -> sz
+  | TGroup -> 16
   | _ -> error "[ty_to_size] can only get size of ints or bools"
 ;;
 
