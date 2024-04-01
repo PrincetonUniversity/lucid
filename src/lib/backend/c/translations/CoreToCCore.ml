@@ -169,7 +169,7 @@ let rec translate_v (v : C.v) (vty:C.ty) : F.v =
     let tys = List.map (fun id -> List.assoc id id_rawty_pairs |> C.ty) labels in
     let vs = List.map2 translate_v vs tys in
     let values = List.map2 F.value vs (List.map translate_ty tys) in
-    (F.vrecord labels values).v
+    (F.vrecord (List.combine labels values)).v
   | _, C.VRecord(_) -> err "VRecord type should be a record"
 
 and translate_event_val (ev : C.event_val) : F.vevent = 
@@ -228,7 +228,7 @@ let rec translate_exp (exp : C.exp) : F.exp =
   | _, ERecord(label_exp_pairs) -> 
     let labels, es = List.split label_exp_pairs in
     let es = List.map translate_exp es in
-    (F.erecord labels es)
+    (F.erecord (List.combine labels es))
   | _, ETuple(exps) -> 
     let es = List.map translate_exp exps in
     (F.etuple es)

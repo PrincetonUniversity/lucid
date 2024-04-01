@@ -152,7 +152,7 @@ let transform_calls ctx decl =
 
 let process_decl ctx decl = 
   match decl.d with 
-  | DFun(FMemop, id, ret_ty, params, Some(body)) -> 
+  | DFun(FMemop, id, ret_ty, params, BStatement(body)) -> 
     (* remember memop and delete *)
     {ctx with memops=(id, (ret_ty, params, body))::ctx.memops}, None
   | DVar(cid, ty, Some(exp)) when is_tbuiltin Arrays.t_id ty ->

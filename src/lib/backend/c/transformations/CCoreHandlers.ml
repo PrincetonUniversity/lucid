@@ -97,7 +97,7 @@ let process_decls decls =
   let decls = List.filter 
     (fun decl -> 
       match decl.d with 
-      | DFun(_, cid, _, _, None) -> 
+      | DFun(_, cid, _, _, BExtern) -> 
         (* if (Cid.to_id cid |> fst) is in ["generate"; "generate_port"; "generate_switch"; "generate_group"] *)
         if (List.mem (Cid.to_id cid |> fst) ["generate_self"; "generate_port"; "generate_switch"; "generate_group"]) then false else true
       | _ -> true)

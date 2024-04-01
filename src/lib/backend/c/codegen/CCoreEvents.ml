@@ -82,7 +82,7 @@ let event_enum_ty (event_defs :event_def list) =
 (* event foo(int a, int b) -> type foo = {int a; int b} *)
 let event_params_ty event_def = tabstract_id 
   (id((fst event_def.evconstrid)^"_t")) 
-  (trecord_pairs event_def.evparams)
+  (trecord event_def.evparams)
 ;;
 
 (* event foo(int a, int b); event bar(int c); -> type event_data_t = union {foo foo; bar bar;} *)
@@ -100,7 +100,7 @@ let event_tunion_tyid = id"event_t";;
 let event_tunion_ty event_defs = 
   let tag_ty = event_enum_ty event_defs in
   let data_ty = event_params_union_ty event_defs in
-  tabstract_id event_tunion_tyid (trecord_pairs [
+  tabstract_id event_tunion_tyid (trecord [
     (id"tag", tag_ty);
     (id"data", data_ty);
     (id"is_packet", tint 8);
@@ -136,12 +136,12 @@ let event_constr event_defs event_def =
   let event_enum_ty = event_enum_ty event_defs in
   let event_data_ty = event_params_union_ty event_defs in
   let event_exp =         
-    {(erecord_pair
+    {(erecord
       [
         id"tag", eval@@venum (Cid.id@@event_tag event_def.evconstrid) event_enum_ty; 
         id"data", (eunion
                       event_def.evconstrid 
-                      (erecord_pair 
+                      (erecord 
                         (List.map 
                           (fun (id, ty) -> 
                             id, evar (Cid.id id) ty)
@@ -224,12 +224,12 @@ let transformer =
         let evconstrid = vevent.evid |> Cid.to_id in
         let ev_params  = (List.assoc evconstrid event_def_assoc).evparams in
         let evdata = vevent.evdata in
-        vrecord_pairs 
+        vrecord 
           [
             id"tag",   venum (Cid.id@@event_tag evconstrid) event_enum_ty;
             id"data", (vunion
                         evconstrid
-                        (vrecord_pairs
+                        (vrecord
                           (List.map2
                             (fun (id, _) param_value -> 
                               id, param_value)

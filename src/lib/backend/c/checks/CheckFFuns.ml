@@ -6,6 +6,14 @@ open CCoreSyntax
 
 (* gcc syntax checker *)
 
+type ffun = {
+  fid : cid;
+  fret_ty : ty;
+  fparams : params;
+  fstr : string;
+  check_cmd : string option;
+}
+
 let check_ffun (f: ffun) : bool =
   let open CCorePPrint in 
   let open Caml in
@@ -59,20 +67,10 @@ let check_ffun (f: ffun) : bool =
     (* Run the check command on the file *)
     (* let check_result = Sys.command (cmd ^ " " ^ filename) in *)
   )
-
   ;;
 
-
-
-let check fds : unit =
-  let v = object 
-    inherit [_] s_iter as super
-    method! visit_ffun () ffun = 
-      let _ = check_ffun ffun in ()
-    end
-  in
-  v#visit_decls () fds     
-;;
+(* disabled. TODO: do we even want this? *)
+let check fds : unit = let _ = fds in ()
 
 
 (* example usage *)

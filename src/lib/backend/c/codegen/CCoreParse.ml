@@ -96,7 +96,7 @@ let n_bytes ty =
 } bytes_t; *)
 let bytes_t = 
   tabstract 
-    "bytes_t"@@trecord_pairs
+    "bytes_t"@@trecord
       [
         id"start", tref tchar;
         id"cur", tref tchar;

@@ -1,8 +1,7 @@
-(* implementation of Tables in CCore
-   
+(* implementation of Tables in CCore 
   Implements: 
 
-    1. Type TBuiltin(Cid["Table"; "t"], [key_type; const_arg_type; arg_type; result_type])
+    1. Type TBuiltin(Cid["Table"; "t"], [key_type; const_arg_type; arg_type; result_type]);
 
     2. Constructor Table.create(length, actions, default_action, default_action_const_arg);
 
@@ -13,6 +12,7 @@
 *)
 
 open CCoreSyntax
+open CCoreUtils
 
 [@@@ocaml.warning "-21"]
 [@@@ocaml.warning "-27"]
@@ -20,8 +20,6 @@ open CCoreSyntax
 (*** defunctionalize actions ***)
 let tag cid = Cid.str_cons_plain "tag" cid
 let untag cid = Cid.tl cid 
-let cid s = Cid.create [s]
-let id = Id.create
 
 let defunctionalize_actions decls = 
   (* construct the action enum type, then go through the 
@@ -57,47 +55,39 @@ type table_spec =
   tbl_id : cid; 
   len    : arrlen;
   tbl_ty : ty;  
-  key_ty : ty;
-  const_arg_ty : ty;
-  arg_ty : ty; 
-  ret_ty : ty;
-  action_tags : cid list;
+    key_ty : ty;
+    const_arg_ty : ty;
+    arg_ty : ty; 
+    ret_ty : ty;
   actions_enum_ty : ty;
 }
-
+let tags_of_actions_enum enum_ty = 
+  enum_ty |> base_type |> extract_tenum |> List.split |> fst
+;;
 let table_cell_type tbl_id key_ty acns_enum_ty const_action_arg_ty : ty = 
   let tblcellty_id = Cid.str_cons_plain "cellty" tbl_id in
   tabstract_cid 
     tblcellty_id
-    (trecord 
-      [id "valid"; id "key"; id "action_tag"; id "action_arg"] 
-      [
-        tbool; (* is entry valid or not *)
-        key_ty; (* the key *)
-        acns_enum_ty; (* tag of the action *)
-        const_action_arg_ty; (* constant argument to the action *)
-      ])
+    (trecord [
+      id"valid", tbool;
+      id"key", key_ty;
+      id"action_tag", acns_enum_ty;
+      id"action_arg", const_action_arg_ty;      
+    ])
 ;;
 
 let table_instance_type tbl_id acns_enum_ty const_action_arg_ty tbl_cell_ty tbl_len =   
   (* a table is a struct variable with a default and a list of entries *)
   (* tref@@ *) (* no longer a tref *)
-    tabstract_cid
+  tabstract_cid
     (Cid.str_cons_plain "ty" tbl_id)
     (
       trecord
-        [id "default"; id "entries"]
-        [
-          trecord [id "action_tag"; id "action_arg"] [acns_enum_ty; const_action_arg_ty];
-          tlist tbl_cell_ty tbl_len
-        ]
-    )
+        [id "default", trecord [id "action_tag", acns_enum_ty; 
+                                id "action_arg", const_action_arg_ty];
+        id "entries",tlist tbl_cell_ty tbl_len])
 ;;
 
-let vrecord pairs = 
-  let a, b = List.split pairs in
-  vrecord a b
-;;
 let table_create (tbl_ty : ty) (def_enum_id : cid) (acn_enum_ty : ty) (def_arg : value) = 
   (* let fields, tys = extract_trecord (extract_tref tbl_ty) in *)
   let fields, tys = extract_trecord tbl_ty in
@@ -123,6 +113,7 @@ let table_create (tbl_ty : ty) (def_enum_id : cid) (acn_enum_ty : ty) (def_arg :
    function builder. *)
 let lookup_id tbl_id = Cid.str_cons_plain "lookup" tbl_id ;;
 let table_lookup spec = 
+  let action_tags = tags_of_actions_enum spec.actions_enum_ty in
   (* note: the table is hard coded into the function, not a parameter. *)
   (* (so it doesn't need to be a ref) *)
   let tbl = (* ederef *) (evar (spec.tbl_id) (spec.tbl_ty)) in
@@ -141,7 +132,7 @@ let table_lookup spec =
   in
   let s_apply_default = smatch
     [(tbl/.id"default"/.id"action_tag")]
-    (List.map apply_default_branch spec.action_tags)
+    (List.map apply_default_branch action_tags)
   in
   let idx = id "_idx" in
   let cont = id "_cont" in
@@ -156,22 +147,14 @@ let table_lookup spec =
   let s_loop = 
     swhile idx spec.len cont 
       (
-        print_endline ("type of tbl: ");
-        print_endline (CCorePPrint.ty_to_string tbl.ety);
-        let entries = tbl/.id"entries" in
-        print_endline ("type of entries: ");
-        print_endline (CCorePPrint.ty_to_string entries.ety);
-        
-        let entry = entries/@idx in
-        (* *(entries + idx) *)
-        (* let entry = (tbl/.id"entries"/@idx) in         *)
+        let entry = (tbl/.id"entries")/@idx in
         sif (entry/.id"valid")
           (
             sif (eop Eq [key_param; entry/.id"key"])
               (stmts [
               sassign (Cid.id cont)  (eval (vbool false));
               smatch [(entry/.id"action_tag")]
-                (List.map apply_branch spec.action_tags);
+                (List.map apply_branch action_tags);
               ]
               )
               snoop
@@ -205,11 +188,12 @@ let table_install spec =
   (* note: call has to be transformed from an action variable to an action tag value *)
   let action_param = evar (cid "action") (spec.actions_enum_ty) in 
   let const_arg_param = evar (cid "const_arg") spec.const_arg_ty in
-  let new_slot = erecord 
-    [id "valid"; id "key"; id "action_tag"; id "action_arg"] 
-    [eval (vbool true); key_param; action_param; const_arg_param]
+  let new_slot = erecord [
+                          id "valid", eval (vbool true); 
+                          id "key", key_param; 
+                          id "action_tag", action_param; 
+                          id "action_arg", const_arg_param] 
   in
-
   let idx = id "_idx" in
   let idx_var = evar (Cid.id idx) (tint 32) in
   let cont = id "_cont" in
@@ -245,6 +229,7 @@ let monomorphic_table_decls actions_enum_ty decl : decls =
       | _, [key_ty; const_arg_ty; arg_ty; ret_ty] -> key_ty, const_arg_ty, arg_ty, ret_ty
       | _, _ -> failwith "unexpected type"      
     in
+    print_endline@@ "implementing declaration: "^(CCorePPrint.decl_to_string decl);
     let len, action_tags, default_action_enum_id, default_action_arg = match (eval_exp exp |> extract_vevent).evdata with 
       | [len; actions; default_action; default_action_arg] ->  
         extract_vint len |> arrlen, 
@@ -258,7 +243,7 @@ let monomorphic_table_decls actions_enum_ty decl : decls =
     print_endline (CCorePPrint.ty_to_string tbl_cell_ty); *)
     let tbl_ty = table_instance_type tbl_id (actions_enum_ty) const_arg_ty tbl_cell_ty len in
     let tbl_value = table_create tbl_ty default_action_enum_id (actions_enum_ty) default_action_arg in
-    let tbl_spec = {tbl_id; len; tbl_ty; key_ty; const_arg_ty; arg_ty; ret_ty; action_tags; actions_enum_ty;} in
+    let tbl_spec = {tbl_id; len; tbl_ty; key_ty; const_arg_ty; arg_ty; ret_ty; actions_enum_ty;} in
     let new_decls = [
       decl_tabstract tbl_cell_ty;               (* cell type within a table *)
       decl_tabstract tbl_ty;                    (* the table's type *)

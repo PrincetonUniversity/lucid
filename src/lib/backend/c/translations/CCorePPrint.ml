@@ -259,31 +259,7 @@ let rec d_to_string (d: d) : string =
       "extern " ^ ty_str ^ " " ^ id_str ^ ";"
     else
       ty_str ^ " " ^ id_str ^ exp_str ^ ";"
-  | DList (id, ty, exps_opt) -> 
-    let id_str = id_to_string id in
-    let ty_str = ty_to_string ty in
-    let exps_str = match exps_opt with 
-                   | Some exps -> " = [" ^ String.concat ", " (List.map exp_to_string exps) ^ "]" 
-                   | None -> " extern" in
-    if exps_opt = None then 
-      "extern " ^ id_str ^ ": " ^ ty_str ^ ";"
-    else
-      id_str ^ ": " ^ ty_str ^ exps_str ^ ";"
-  | DFun (kind, id, ty, params, stmt_opt) -> 
-    let kind_str = func_kind_to_string kind in
-    let id_str = cid_to_string id in
-    let ret_ty_str = match kind with 
-      | FHandler -> ""
-      | _ -> ty_to_string ~use_abstract_name:true ty 
-    in
-    let params_str = params_to_string params in
-    let stmt_str = match stmt_opt with 
-                   | Some stmt -> "{\n" ^ indent 2 (statement_to_string stmt) ^ "\n}" 
-                   | None -> ";" in
-    if stmt_opt = None then 
-      "extern " ^ kind_str ^ " " ^ ret_ty_str ^ " " ^id_str ^ "(" ^ params_str ^ ")" ^ stmt_str
-    else
-      kind_str ^ " "  ^ ret_ty_str ^ " " ^ id_str ^ "(" ^ params_str ^ ")" ^ stmt_str
+  | DFun fun_def -> fun_def_to_string fun_def
   | DTy (cid, ty_opt) -> 
     sprintf "type %s = %s;"
       (cid_to_string cid)
@@ -294,13 +270,27 @@ let rec d_to_string (d: d) : string =
     let id_str = id_to_string event_def.evconstrid in
     let params_str = params_to_string event_def.evparams in
     "event " ^ id_str ^ "(" ^ params_str ^ ");"
-  | DFFun{fid; fparams; fret_ty; fstr} -> 
-    let comment_str = 
-      comment (sprintf "%s %s(%s);" (ty_to_string fret_ty) (cid_to_string fid) (params_to_string fparams);)
-    in
-    (comment comment_str) 
-    ^ "\n" ^ fstr
 
+and fun_def_to_string (kind, id, ty, params, stmt_opt) = 
+  let kind_str = func_kind_to_string kind in
+  let id_str = cid_to_string id in
+  let ret_ty_str = match kind with 
+    | FHandler -> ""
+    | _ -> ty_to_string ~use_abstract_name:true ty 
+  in
+  let params_str = params_to_string params in
+  let stmt_str = match stmt_opt with 
+                 | BStatement stmt -> "{\n" ^ indent 2 (statement_to_string stmt) ^ "\n}" 
+                 | BExtern -> ";" 
+                 | BForiegn s -> s  
+                 | BBuiltin defs -> String.concat "\n" (List.map fun_def_to_string defs)                
+  in
+  match stmt_opt with 
+    | BExtern -> 
+      "extern " ^ kind_str ^ " " ^ ret_ty_str ^ " " ^id_str ^ "(" ^ params_str ^ ")" ^ stmt_str
+    | BBuiltin _ -> stmt_str
+    | _ -> kind_str ^ " "  ^ ret_ty_str ^ " " ^ id_str ^ "(" ^ params_str ^ ")" ^ stmt_str
+  
 and decl_to_string decl = d_to_string decl.d
 
 

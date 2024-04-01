@@ -3,6 +3,7 @@ open Collections
 open CCoreSyntax
 open Batteries
 open CCoreExceptions
+open CCoreBuiltinCheckers
 
 let dprint_endline = print_endline ;;
 let dprint_endline = fun _ -> () ;;
@@ -13,21 +14,28 @@ type constr_var =
 type constr = 
   | Eq of string * constr_var
   
+
+
 type env =
 {
   vars : ty CidMap.t;
   tys  : ty CidMap.t;
   idx_constrs : constr list;
   ret_ty : ty option;
+  builtin_checkers : (cid * builtin_checker_t) list 
+    (* checkers for builtin functions *)
   (* tys  : ty CidMap.t; *)
   (* list_sizes : int option CidMap.t  *)
 }
+
+
 let empty_env = 
   {
     vars = CidMap.empty;
     tys = CidMap.empty;
     idx_constrs = [];
     ret_ty = None;
+    builtin_checkers = CCoreBuiltinCheckers.builtin_checkers;
   }
 ;;
 
@@ -166,6 +174,9 @@ and unify_ty env ty1 ty2 : env =
   unify_raw_ty env ty1.raw_ty ty2.raw_ty
 ;;
 
+
+
+
 (* derive the type of a value with constant sizes *)
 let rec infer_value value : value = 
   let type_value value = (infer_value value).vty in 
@@ -176,7 +187,7 @@ let rec infer_value value : value =
   | VBool _ -> tbool
   | VRecord(labels, es) -> 
     let ts = List.map type_value es in
-    trecord labels ts
+    trecord (List.combine labels ts)
   | VTuple es -> 
     let ts = List.map type_value es in
     ttuple ts
@@ -240,7 +251,7 @@ let rec infer_exp env exp : env * exp =
     | ERecord(labels, es) -> 
       let env, es' = infer_exps env es in
       let e =ERecord(labels, es') in
-      let ety = trecord labels (List.map (fun exp -> exp.ety) es') in
+      let ety = trecord (List.combine labels (List.map (fun exp -> exp.ety) es')) in
       env, {e; ety; espan=exp.espan}
     | EUnion(label, exp, union_ty) -> 
       let env, inf_exp = infer_exp env exp in
@@ -253,43 +264,40 @@ let rec infer_exp env exp : env * exp =
           ty_err "union exp does not have the right type for the corresponding member of the union"
       in
       env, {e=EUnion(label, inf_exp, union_ty); ety=union_ty; espan=exp.espan}
-      
+    
     | ECall{f; call_kind=CEvent} ->
       let env, inf_f = infer_exp env f in
       (* todo: this unify is kind of weird? *)
-
       if (is_tevent inf_f.ety) then unify_ty env exp.ety tevent, exp
       else (
         dprint_endline ("current env: ");
         dprint_endline (env_to_string env);
         ty_err "event call on non-event")
     | ECall{f; call_kind=CFun;} when (Cid.equal (fst (extract_evar f)) (Cid.create ["printf"]) )-> 
-
-        (* TODO: hole for printf.
-            options: 
-            1. printf statement.
-            2. printf externs, one for each call,  
-               implemented as extern functions that just have 
-               c code as the untyped body.
-            3. a single untyped printf extern
-            4. a printf op. Like hash. 
-              - oh. This makes sense. Its similar to hash, 
-                except it doesn't return anything.*)
         env, exp
-  
-      | ECall{f; args; call_kind=CFun;} -> 
-      let env, inf_f = infer_exp env f in
-      let param_tys, ret_ty, _ = extract_func_ty inf_f.ety in
-      let env, inf_args = infer_lists env infer_exp args in
-      let arg_tys = List.map (fun exp -> exp.ety) inf_args in
-      let env = try unify_lists env unify_ty param_tys arg_tys 
-      with TypeError(str) -> 
-        print_endline@@">>>> "^(CCorePPrint.exp_to_string exp)^"<<<< ";
-        ty_err str
-      in
-      (* TODO: update unify for list lengths *)
-      let e = ECall{f=inf_f; args=inf_args; call_kind=CFun} in
-      env, {e; ety=ret_ty; espan=exp.espan}
+    | ECall{f; args; call_kind=CFun;} -> (
+      match CCoreBuiltinCheckers.get_checker f with 
+      | Some(checker) -> 
+        (* check the args, call the builtin checker, 
+           use the return type given by the input checker *)
+        let env, inf_args = infer_lists env infer_exp args in
+        let exp = {exp with e=ECall{f=f; args=inf_args; call_kind=CFun}} in
+        let inf_ety = checker None exp in
+        env, {exp with ety=inf_ety}
+      | None -> 
+        let env, inf_f = infer_exp env f in
+        let param_tys, ret_ty, _ = extract_func_ty inf_f.ety in
+        let env, inf_args = infer_lists env infer_exp args in
+        let arg_tys = List.map (fun exp -> exp.ety) inf_args in
+        let env = try unify_lists env unify_ty param_tys arg_tys 
+        with TypeError(str) -> 
+          print_endline@@">>>> "^(CCorePPrint.exp_to_string exp)^"<<<< ";
+          ty_err str
+        in
+        (* TODO: update unify for list lengths *)
+        let e = ECall{f=inf_f; args=inf_args; call_kind=CFun} in
+        env, {e; ety=ret_ty; espan=exp.espan}
+    )
     | EOp(op, args) -> 
       let env, op, inf_args, ety = infer_eop env op args in
       let e = EOp(op, inf_args) in
@@ -415,7 +423,7 @@ and infer_eop env op (args : exp list) : env * op * exp list * ty = match op, ar
     let env, inf_exp = infer_exp env exp in
     if not (is_trecord inf_exp.ety or is_tunion inf_exp.ety) then (
       let ty1 = inf_exp.ety in
-      let ty2 = trecord [id] [inf_exp.ety] in
+      let ty2 = trecord [id, inf_exp.ety] in
       dprint_endline@@"type mismatch in project:\n"^(CCorePPrint.ty_to_string ty1)^"\nand\n"^(CCorePPrint.ty_to_string ty2);
       ty_err "type mismatch"
     );
@@ -576,12 +584,22 @@ let rec infer_statement env (stmt:statement) =
     env, {stmt with s=SForEver(inf_stmt)}
 ;;
 
-let rec infer_decl env decl : env * decl = 
+let rec infer_decl env decl : env * decl option = 
   (* dprint_endline ("inferring decl: ");
   dprint_endline (CCorePPrint.decl_to_string decl);
   dprint_endline ("current env: ");
   dprint_endline (env_to_string env); *)
   match decl.d with 
+  | DVar(id, ty, Some(exp)) when is_tbuiltin_any ty -> (
+    let constr_exp = extract_ecall exp |> fst in
+    match (get_checker constr_exp) with 
+    | None -> ty_err@@"checker for builtin constructor: "^(CCorePPrint.exp_to_string constr_exp)^" not found"
+    | Some(checker) -> 
+      let inf_ty = checker (Some(ty)) exp in
+      let env = add_var env (id) inf_ty in
+      let exp = {exp with ety=inf_ty} in
+      env, {decl with d=DVar(id, inf_ty, Some(exp))} |> Option.some
+  )
   | DVar(id, ty, Some(arg)) -> (
     match ty.raw_ty with 
     | TRef(_, None) -> 
@@ -589,20 +607,20 @@ let rec infer_decl env decl : env * decl =
       let env, inf_arg = infer_exp env arg in
       let env = unify_ty env ty (tref inf_arg.ety) in
       let env = add_var env (id) ty in
-      env, {decl with d=DVar(id, ty, Some(inf_arg))}
+      env, {decl with d=DVar(id, ty, Some(inf_arg))} |> Option.some
     | TRef(_, Some(_)) -> (
       (* if this is an array, the rhs must also be an array *)
       let env, inf_arg = infer_exp env arg in
       let env = unify_ty env ty inf_arg.ety in
       let env = add_var env (id) ty in
-      env, {decl with d=DVar(id, ty, Some(inf_arg))}
+      env, {decl with d=DVar(id, ty, Some(inf_arg))} |> Option.some
     )
     | _ -> (
       (* anything else is fine too without a special case *)
       let env, inf_arg = infer_exp env arg in
       let env = unify_ty env ty inf_arg.ety in
       let env = add_var env (id) ty in
-      env, {decl with d=DVar(id, ty, Some(inf_arg))}
+      env, {decl with d=DVar(id, ty, Some(inf_arg))} |> Option.some
     )
     (* | _ -> ty_err "a toplevel variable must be a reference / global" *)
   )
@@ -610,34 +628,18 @@ let rec infer_decl env decl : env * decl =
     if ((is_tref ty) <> true) then 
       ty_err "globally scoped variables must be declared as globals";
     let env = add_var env (id) ty in
-    env, decl
-  | DList(id, ty, Some(args)) -> (
-    let env, inf_args = infer_lists env infer_exp args in
-    match (base_type ty).raw_ty with 
-      | TRef(cellty, Some(len)) -> 
-        (* TODO later: constrain list's length based on length of args *)
-        let _ = len in
-        let env = List.fold_left (fun env inf_arg -> 
-          unify_ty env cellty inf_arg.ety
-        ) env inf_args in
-        let env = add_var env (Cid.id id) ty in
-        env, {decl with d=DList(id, ty, Some(inf_args))}
-      | _ -> ty_err "list declaration with non-list type"
-  )
-  | DList(id, ty, None) ->
-    let env = add_var env (Cid.id id) ty in
-    env, decl
+    env, decl |> Option.some
   | DTy(cid, Some(ty)) -> 
     let env = add_ty env cid ty in
-    env, decl
+    env, decl |> Option.some
   | DTy(cid, None) ->
     let env = add_extern_ty env cid in
-    env, decl
+    env, decl |> Option.some
   | DEvent{evconstrid} -> 
     (* just add the event type to the var_ty table *)
     let env = add_var env (Cid.id evconstrid) tevent in
-    env, decl
-  | DFun(fun_kind, id, ret_ty, params, Some(statement)) -> 
+    env, decl |> Option.some
+  | DFun(fun_kind, id, ret_ty, params, BStatement(statement)) -> 
     (* set up the environment *)
     let outer_env = env in 
     let env = {env with ret_ty=Some(ret_ty)} in    
@@ -660,23 +662,35 @@ let rec infer_decl env decl : env * decl =
       then add_var env (id) fun_ty
       else env
     in
-    env, {decl with d=DFun(fun_kind, id, inf_ret_ty, params, Some(inf_stmt))}
-  | DFun(fun_kind, id, ret_ty, params, None) -> 
+    env, {decl with d=DFun(fun_kind, id, inf_ret_ty, params, BStatement(inf_stmt))} |> Option.some
+  | DFun(fun_kind, id, ret_ty, params, BExtern) -> 
     let fun_ty = tfun_kind fun_kind (List.map snd params) ret_ty  in
     let env = add_var env (id) fun_ty in
-    env, decl
-  | DFFun{fid; fparams; fret_ty;} -> 
-    let fun_ty = tfun_kind FForiegn (List.map snd fparams) fret_ty in
-    let env = add_var env (fid) fun_ty in
-    env, decl
+    env, decl |> Option.some
+  | DFun(FForiegn, id, ret_ty, params, BForiegn _) -> 
+    let fun_ty = tfun_kind FForiegn (List.map snd params) ret_ty in
+    let env = add_var env (id) fun_ty in
+    env, decl |> Option.some
+  | DFun(_, _, _, _, BForiegn _) -> 
+    ty_err "foriegn functions must be declared as type foriegn"
+  | DFun(_, _, _, _, BBuiltin(_)) -> env, None
+
+
+
+
 
 and infer_decls env decls : env * decl list =
   match decls with
   | [] -> env, []
   | decl::decls -> 
-    let env, inf_decl = infer_decl env decl in
+    let env, inf_decl_opt = infer_decl env decl in
     let env, inf_decls = infer_decls env decls in
-    env, inf_decl::inf_decls
+    match inf_decl_opt with
+    | Some(inf_decl) -> env, inf_decl::inf_decls
+    | None -> env, inf_decls
+
+
+(* let pervasives =  *)
 
 let check_decls decls = 
   snd@@infer_decls empty_env decls

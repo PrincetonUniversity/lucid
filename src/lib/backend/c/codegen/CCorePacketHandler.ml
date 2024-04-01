@@ -138,11 +138,11 @@ int pkt_handler(char* buf, int len, char* out_buf, int* out_len) {
 
 let pkt_handler = dfun_foriegn 
   (cid"pkt_handler")
+  (tint 32)
   [
     id"buf", tref tchar; id"len", tint 32; 
     id"out_buf", tref tchar; id"out_len", tref@@tint 32; 
   ]
-  (tint 32)
   pkt_handler_str
 
 

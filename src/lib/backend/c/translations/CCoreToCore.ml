@@ -340,33 +340,33 @@ let translate_decl (decl : F.decl) : C.decl option =
   | F.DVar(id, ty, None) ->
     let ty = translate_ty ty in
     C.decl_sp (C.DExtern((Cid.to_id id), ty)) decl.dspan |> Option.some
-  | F.DList(_, _, _) -> 
-    err "list primitives are not supported in CoreSyntax"
+  (* | F.DList(_, _, _) -> 
+    err "list primitives are not supported in CoreSyntax" *)
   | F.DEvent{evconstrid; evconstrnum; evparams; is_packet} -> 
     let ev_sort = if is_packet then C.EPacket else C.EBackground in
     let params = List.map (fun (id, ty) -> id, translate_ty ty) evparams in
     C.decl_sp (C.DEvent(evconstrid, evconstrnum, ev_sort, params)) decl.dspan |> Option.some
   (* functions can be handlers, memops, parsers, or functions *)
-  | F.DFun(F.FHandler, id, _, params, Some(body)) ->
+  | F.DFun(F.FHandler, id, _, params, BStatement(body)) ->
     let params = List.map (fun (id, ty) -> id, translate_ty ty) params in
     let body = translate_stmt false body in
     let d = C.DHandler((Cid.to_id id), C.HData, (params, body)) in
     C.decl_sp d decl.dspan |> Option.some
-  | F.DFun(F.FMemop, id, _, params, Some(body)) ->
+  | F.DFun(F.FMemop, id, _, params, BStatement(body)) ->
     (* translate to core, then specialize as memop *)
     let params = List.map (fun (id, ty) -> id, translate_ty ty) params in
     let body = translate_stmt false body in
     let memop = Despecialization.specialize_memop (Cid.to_id id) params body in
     let d = C.DMemop(memop) in
     C.decl_sp d decl.dspan |> Option.some
-  | F.DFun(F.FParser, id, _, params, Some(body)) -> (    
+  | F.DFun(F.FParser, id, _, params, BStatement(body)) -> (    
     (* translate to core, then specialize parser *)
     let params = List.map (fun (id, ty) -> id, translate_ty ty) params in
     let body = translate_stmt false body in
     let parse_block = Despecialization.specialize_parser_block body in
     C.decl_sp (C.DParser((Cid.to_id id), params, parse_block)) decl.dspan |> Option.some
   )
-  | F.DFun(F.FAction, id, rty, params, Some(body)) -> 
+  | F.DFun(F.FAction, id, rty, params, BStatement(body)) -> 
     (* detuple return type, first param, and second param *)
     let detuple_ty (ty: F.ty) = match ty.raw_ty with 
       | TTuple(ts) -> ts
@@ -423,13 +423,14 @@ let translate_decl (decl : F.decl) : C.decl option =
       aparams = List.map (fun (id, ty) -> id, translate_ty ty) params;
       abody = action_body_exps;
     }) decl.dspan |> Option.some
-  | F.DFun(F.FNormal, id, rty, params, Some(body)) ->
+  | F.DFun(F.FNormal, id, rty, params, BStatement(body)) ->
     let params = List.map (fun (id, ty) -> id, translate_ty ty) params in
     let body = translate_stmt false body in
     let rty = translate_ty rty in
     let d = C.DFun((Cid.to_id id), rty, (params, body)) in
     C.decl_sp d decl.dspan |> Option.some
-  | F.DFun(_, cid, _, _, None) -> 
+  | F.DFun(_, _, _, _, BForiegn _) -> err "foriegn functions not supported in Core"
+  | F.DFun(_, cid, _, _, BExtern) -> 
     (* if this declaration is a builtin in Core, remove it, else fail *)
     if List.exists (Cid.equal cid) CoreToCCore.builtin_cids
       then None
@@ -442,11 +443,7 @@ let translate_decl (decl : F.decl) : C.decl option =
     let ty = translate_ty ty in
     C.decl_sp (C.DUserTy(Cid.to_id cid, ty)) decl.dspan |> Option.some
   | F.DTy(_, None) -> 
-    failwith "type declaration without type definition"
-  | F.DFFun _ -> 
-    failwith "foriegn functions cannot translate back to Core"
-  
-  (* events *)
+    failwith "type declaration without type definition"  
 ;;
 
 let translate_prog (ds : F.decls) : C.decls = 

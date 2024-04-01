@@ -32,10 +32,9 @@ and raw_ty =
   | TEvent
   | TFun of func_ty
   (* alias types *)
-  | TBuiltin of cid * (ty list) (* types built into the lucid language that must be eliminated for c *)
+  | TBuiltin of cid * (ty list) (* abstract types built into lucid that must be implemented in CCore *)     
   | TAbstract of cid * ty (* a name for another type *)
-  | TName of cid (* an opaque TAbstract *)
-
+  | TName of cid (* an opaque TAbstract -- we should choose one or the other*)
 
 and func_ty = {
   arg_tys : ty list; 
@@ -71,7 +70,6 @@ and op =    | And | Or | Not
             | Conc
             | Project of id | Get of int 
             | Mod
-            (* record and tuple ops *)
 
 and e = 
   | EVal of value
@@ -81,21 +79,22 @@ and e =
   | ETuple of exp list
   | EUnion  of id * exp * ty
   | ERecord of id list * exp list
-  (* | EListIdx of exp * exp  *)
   | EDeref of exp
 
 and call_kind = 
   | CFun
   | CEvent 
+  (* a call to a builtin is annotated with the original 
+     builtin function and arguments *)
+
 and exp = {e:e; ety:ty; espan : sp;}
 
 and pat = 
   | PVal of value
   | PEvent of {event_id : cid; params : params;}
-  | PWild of ty (* sure, do a wildcard, but tell me the type *)
+  | PWild of ty 
 
 and branch = pat list * statement
-(* statements *)
 
 and assign_op = 
   | OLocal  of cid * ty (* create a new variable *)
@@ -118,29 +117,20 @@ and s =
 and statement = {s:s; sspan : sp;}
 
 (* declarations *)
-
 and event_def = {evconstrid : id; evconstrnum : int option; evparams : params; is_packet : bool}
-and ffun = {
-  fid : cid;         (* function name *)
-  fparams: params;  (* function params *)
-  fret_ty : ty;     (* function return type *)
-  fstr : string;    (* the function definition in whatever language *)
-  check_cmd : string option; 
-    (* an optional "checker command". 
-        If this is given, the type checker 
-        will generate a string containing: 
-          1. the function signature, derived from the id, params, and return type
-          2. the function definition
-        the checker will then put the signature and definition into a file in the 
-        target language (c) and run the "check_cmd" on that file. If the check 
-        command returns any error, type checking will fail. *)
-}
 
+
+and fun_def = func_kind * cid * ty * params * fun_body
+
+and fun_body = 
+  | BExtern
+  | BStatement of statement
+  | BForiegn of string 
+  | BBuiltin of fun_def list (* a builtin function's body is a bunch of implementations *)
+  
 and d = 
-  | DVar of cid * ty * exp option (* constants and globals, possibly externs *)
-  | DList of id * ty * (exp list) option (* mutable list *)
-  | DFun of func_kind * cid * ty * params * (statement option) (* functions and externs *)
-  | DFFun of ffun (* a foriegn function *)
+  | DVar of cid * ty * (exp option)
+  | DFun of fun_def
   | DTy  of cid * ty option (* named types and external types *)
   | DEvent of event_def (* declare an event, which is a constructor for the datatype TEvent *)
 
@@ -193,7 +183,12 @@ let tbool = ty TBool
 let tint i = ty@@TInt(sz i)
 let tpat len = ty (TBits {ternary=false; len})
 let tevent = ty TEvent
-let trecord labels tys = ty (TRecord(labels, tys))
+(* let trecord labels tys = ty (TRecord(labels, tys)) *)
+let trecord pairs = 
+  let cids, tys = List.split pairs in
+  ty (TRecord(cids, tys))
+;;
+
 let ttuple tys = ty (TTuple tys)
 let tunion labels tys = ty (TUnion(labels, tys))  
 let tfun_kind func_kind arg_tys ret_ty = ty (TFun {arg_tys; ret_ty; func_kind})
@@ -225,10 +220,6 @@ let rec alias_type ty =
   | _ -> ty
 ;;
 
-let trecord_pairs pairs = 
-  let cids, tys = List.split pairs in
-  trecord cids tys
-;;
 
 let tunion_pairs pairs = 
   let cids, tys = List.split pairs in
@@ -253,6 +244,8 @@ let is_tabstract name ty = match ty.raw_ty with TAbstract(cid, _) -> Cid.equal c
 let is_tstring ty = is_tabstract "string" ty
 let is_tchar ty = is_tabstract "char" ty
 let is_tbuiltin tycid ty = match ty.raw_ty with TBuiltin(cid, _) -> Cid.equal cid tycid | _ -> false
+let is_tbuiltin_any ty = match ty.raw_ty with TBuiltin(_, _) -> true | _ -> false
+
 let is_tref  ty = match ty.raw_ty with TRef _ -> true | _ -> false
 let is_tenum ty = match (base_type ty).raw_ty with TEnum _ -> true | _ -> false
 
@@ -364,10 +357,14 @@ let vlist vs = {v=VList vs; vty=ty (TRef((List.hd vs).vty, Some(IConst (List.len
 let vtup vs = {v=VTuple(vs); vty=ttuple (List.map (fun v -> v.vty) vs); vspan=Span.default}
 let vpat ints = {v=VBits {ternary=true; bits=ints}; vty=ty (TBits {ternary=true; len=sz (List.length ints)}); vspan=Span.default}
 let vbits ints = {v=VBits {ternary=false; bits=ints}; vty=ty (TBits {ternary=false; len=sz (List.length ints)}); vspan=Span.default}
-let vrecord labels values = {v=VRecord(labels, values); vty=trecord labels (List.map (fun v -> v.vty) values); vspan=Span.default}
-let vrecord_pairs label_values = 
+let vrecord label_values = 
   let labels, values = List.split label_values in
-  vrecord labels values
+  {v=VRecord(labels, values); vty=trecord (List.map (fun (id, value) -> (id, value.vty)) label_values); vspan=Span.default}
+;;  
+  
+  (* labels (List.map (fun v -> v.vty) values); vspan=Span.default} *)
+
+  (* vrecord labels values *)
 let vunion label value ty = {v=VUnion(label, value, ty); vty=ty; vspan=Span.default}
 let vtuple vs = {v=VTuple(vs); vty=ttuple (List.map (fun v -> v.vty) vs); vspan=Span.default}
 let vevent evid evnum evdata meta = {v=VEvent {evid; evnum; evdata; meta}; vty=ty TEvent; vspan=Span.default}
@@ -413,7 +410,7 @@ let rec default_value ty = match ty.raw_ty with
   | TInt size -> vint 0 size
   | TBool -> vbool false
   | TRecord(labels, ts) -> 
-    vrecord labels (List.map default_value ts)
+    vrecord (List.map (fun (label, ty) -> (label, default_value ty)) (List.combine labels ts))
   | TUnion(ids, tys) -> vunion (List.hd ids) (List.hd tys |> default_value) ty
   | TTuple(ts) -> 
     vtuple (List.map default_value ts)
@@ -455,10 +452,9 @@ let extract_vtuple value = match value.v with
 (* expression constructors *)
 let exp e ety espan = {e; ety; espan}
 let efunref cid fty = {e=EVar (cid); ety=fty; espan=Span.default; }
-let erecord labels es = {e=ERecord(labels, es); ety=trecord labels (List.map (fun (e:exp) -> e.ety) es); espan=Span.default; }
-let erecord_pair label_es = 
+let erecord label_es = 
   let labels, es = List.split label_es in
-  erecord labels es
+  {e=ERecord(labels, es); ety = trecord (List.map (fun (label, exp) -> (label, exp.ety)) label_es); espan=Span.default}
 ;;
 let eunion label exp ety= {e=EUnion(label, exp, ety); ety=ety; espan=Span.default; }
 let etuple es = {e=ETuple es; ety=ttuple (List.map (fun (e:exp) -> e.ety) es); espan=Span.default; }
@@ -749,7 +745,7 @@ let sassign_exp lhs rhs =
 (* declarations *)
 let decl d dspan = {d; dspan;}
 let dfun_kind fun_kind id rty params body = 
-  decl (DFun(fun_kind, id, rty, params, Some body)) Span.default
+  decl (DFun(fun_kind, id, rty, params, BStatement body)) Span.default
 let dfun = dfun_kind FNormal
 let dhandler = dfun_kind FHandler
 let dparser = dfun_kind FParser
@@ -758,14 +754,13 @@ let dmemop = dfun_kind FMemop
 
 let dfun_extern id fun_kind param_tys ret_ty = 
   let params = List.map (fun ty -> (Id.fresh_name "a", ty)) param_tys in
-  decl (DFun(fun_kind, id, ret_ty, params, None))
+  decl (DFun(fun_kind, id, ret_ty, params, BExtern))
 ;;
-
 
 let default_checker = Some("gcc -x c - -fsyntax-only");;
 let dfun_foriegn fid fparams fret_ty fstr = 
   (* foriegn function with default checker. *)
-  decl (DFFun{fid; fparams; fret_ty; fstr; check_cmd=default_checker}) Span.default
+  decl (DFun(FForiegn, fid, fparams, fret_ty, BForiegn fstr)) Span.default
 ;;
 (* toplevel variable. Should be declaring as a ref type. *)
 let dglobal id ty exp = decl (DVar(id, ty, Some(exp))) Span.default
@@ -804,15 +799,15 @@ let extract_devent_opt decl = match decl.d with
   | DEvent ev -> Some ev
   | _ -> None
 let extract_dhandle_opt decl = match decl.d with 
-| DFun(FHandler, id, ty, params, Some body) -> Some (id, ty, params, body)
+| DFun(FHandler, id, ty, params, BStatement body) -> Some (id, ty, params, body)
 | _ -> None
 ;;
 let extract_daction_opt decl = match decl.d with 
-  | DFun(FAction, id, ty, params, Some body) -> Some (id, ty, params, body)
+  | DFun(FAction, id, ty, params, BStatement body) -> Some (id, ty, params, body)
   | _ -> None
 ;;
 let extract_dparser_opt decl = match decl.d with 
-  | DFun(FParser, id, ty, params, Some body) -> Some(id, ty, params, body)
+  | DFun(FParser, id, ty, params, BStatement body) -> Some(id, ty, params, body)
   | _ -> None
 ;;
 let extract_dparser decl = Option.get (extract_dparser_opt decl)
@@ -822,7 +817,7 @@ let extract_daction_id_opt decl = match decl.d with
   | _ -> None
 
 let extract_dfun_opt decl = match decl.d with 
-  | DFun(FNormal, id, ty, params, Some body) -> 
+  | DFun(FNormal, id, ty, params, BStatement body) -> 
     Some(id, ty, params, body)
   | _ -> None
   ;;
@@ -877,7 +872,7 @@ let rec eval_exp exp =
     vtuple es
   | ERecord(labels, es) -> 
     let es = List.map eval_exp es in
-    vrecord labels es
+    vrecord (List.combine labels es)
   | _ ->  eval_err "cannot evalute expression type"
 ;;
 

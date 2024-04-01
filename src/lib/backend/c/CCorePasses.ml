@@ -29,6 +29,7 @@ let compile ds =
   let cds = CCoreTNameToTAbstr.process cds in
   let cds = CCoreRenaming.unify_event_ids cds in
   ccore_print "initial CCore" cds;
+  let cds = CCoreTyper.check_decls cds in
 
   (*** 4. Code generation to implement builtins ***)
   print_endline ("---- Implementing builtins ----");
