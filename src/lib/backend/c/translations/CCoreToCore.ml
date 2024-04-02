@@ -33,6 +33,12 @@ let is_tbuiltin tycid =
   | None -> false
 ;;
 
+let detuple_ty (ty: F.ty) = match ty.raw_ty with 
+  | TTuple(ts) -> ts
+  | _ -> [ty]
+;;
+
+
 let rec translate_raw_ty (raw_ty : F.raw_ty) : C.raw_ty = 
   match raw_ty with 
   (* basic types *)
@@ -68,9 +74,21 @@ let rec translate_raw_ty (raw_ty : F.raw_ty) : C.raw_ty =
           }
       )
   | F.TFun{arg_tys; ret_ty; func_kind} when (func_kind = F.FAction) ->
+    let const_ty, arg_ty = match arg_tys with 
+      | [c; a] -> c, a
+      | _ -> err "an action should have exactly two parameters"
+    in
+    C.TActionConstr{
+      aconst_param_tys = detuple_ty const_ty |> List.map translate_ty;
+      aacn_ty = {
+        aarg_tys = detuple_ty arg_ty |> List.map translate_ty;
+        aret_tys = detuple_ty ret_ty |> List.map translate_ty;
+      };
+    }
+    (* print_endline ("action path");
     C.TAction{
       aarg_tys = List.map translate_ty arg_tys;
-      aret_tys = List.map translate_ty (detuple_ty ret_ty);}
+      aret_tys = List.map translate_ty (detuple_ty ret_ty);} *)
   | F.TFun{arg_tys; func_kind} when (func_kind = F.FMemop) ->
       (match (List.hd arg_tys).raw_ty with 
         | F.TInt( sz) -> C.TMemop(List.length arg_tys, translate_size sz)
@@ -333,10 +351,14 @@ and translate_stmt in_parser (stmt : F.statement) =
 let rec translate_decl (decl : F.decl) : C.decl list = 
   match decl.d with
   (* variables can be globals or externs *)
-  | F.DVar(id, ty, Some(exp)) -> 
+  | F.DVar(var_cid, ty, Some(exp)) -> 
+    (* drop builtins *)
+    if List.exists (fun cid -> (Cid.equal cid var_cid)) CoreToCCore.builtin_cids
+      then []
+    else
     let ty = translate_ty ty in
     let exp = translate_exp exp in
-    [C.decl_sp (C.DGlobal((Cid.to_id id), ty, exp)) decl.dspan]
+    [C.decl_sp (C.DGlobal((Cid.to_id var_cid), ty, exp)) decl.dspan]
   | F.DVar(id, ty, None) ->
     let ty = translate_ty ty in
     [C.decl_sp (C.DExtern((Cid.to_id id), ty)) decl.dspan]
@@ -368,11 +390,8 @@ let rec translate_decl (decl : F.decl) : C.decl list =
   )
   | F.DFun(F.FAction, id, rty, params, BStatement(body)) -> 
     (* detuple return type, first param, and second param *)
-    let detuple_ty (ty: F.ty) = match ty.raw_ty with 
-      | TTuple(ts) -> ts
-      | _ -> [ty]
-    in
     let detuple_param = function 
+      (* unpack tuples, following the convention of TupleElimination.ml *)
       | (base_id, {F.raw_ty=TTuple(ts)}) -> 
         List.mapi 
           (fun i ty -> (
@@ -398,7 +417,7 @@ let rec translate_decl (decl : F.decl) : C.decl list =
           ^"action: "^CCorePPrint.decl_to_string decl
     in
     let field_replacer = 
-      (* replace tuple get ops with evars  *)
+      (* replace tuple get ops with evars -- the second half of detuple_params  *)
       object 
       inherit [_] F.s_map as super
       method! visit_exp  () exp = 

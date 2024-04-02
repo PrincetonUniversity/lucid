@@ -99,7 +99,12 @@ let normalize_struct_inits decls =
         let stmt = super#visit_statement () stmt in
           match new_stmts with 
           | [] -> stmt
-          | _ -> stmts (new_stmts@[stmt])
+          | _ -> 
+            let stmt' = 
+              stmts (new_stmts@[stmt])
+            in
+            new_stmts <- []; (* have to clear new_stmts, else parent will add it in too. *)
+            stmt'
       )
     method! visit_exp () exp = 
       if (is_initializer exp) 

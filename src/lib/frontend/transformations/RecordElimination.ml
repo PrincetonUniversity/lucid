@@ -104,7 +104,8 @@ let global_replacer =
             |> List.map (fun (_, e) -> self#visit_exp env e)
           in
           ETuple lst
-        | EWith (exp, lst) when (is_global (Option.get (exp.ety))) ->
+        (* EWith gets desugared for non-globals, eliminated for globals *)
+        | EWith (exp, lst)  ->
           let labels =
             match (Option.get exp.ety).raw_ty with
             | TRecord lst -> lst |> sort_by_label (extract_tys exp)
@@ -118,7 +119,12 @@ let global_replacer =
                 | None -> aexp (EProj (exp, l)) (Some (ty rty)) exp.espan)
               labels
           in
-          ETuple (List.map (self#visit_exp env) entries)
+          if (is_global (Option.get (exp.ety))) then 
+            (ETuple (List.map (self#visit_exp env) entries))
+          else (
+            let label_entrys = List.combine (List.split labels |> fst) entries in
+            ERecord label_entrys
+          )
         | EProj (exp, label) when (is_global (Option.get (exp.ety))) ->
           let labels =
             match (Option.get exp.ety).raw_ty with

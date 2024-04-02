@@ -602,7 +602,7 @@ let ty_to_size ty =
   match ty.raw_ty with
   | TBool -> 1
   | TInt (Sz sz) -> sz
-  | TGroup -> 16
+  (* | TGroup -> 16 *)
   | _ -> error "[ty_to_size] can only get size of ints or bools"
 ;;
 

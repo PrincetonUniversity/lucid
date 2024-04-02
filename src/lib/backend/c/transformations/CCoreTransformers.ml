@@ -5,7 +5,9 @@ open CCoreSyntax
 let subst_ty = object (_)
   inherit [_] s_map as super
   method! visit_ty transformer ty = 
-    transformer ty
+    let ty = super#visit_ty transformer ty in
+    let res = transformer ty in
+    res
   end
 ;;
 

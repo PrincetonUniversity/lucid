@@ -139,7 +139,7 @@ let rec _process env tdecls =
       | TDActionConstr(acn) -> 
         let actions' = (acn.aid, acn)::env.actions in
         (_process {env with actions=actions'} tdecls)
-      | TDGlobal(id, gty, etblconstr) -> 
+      | TDGlobal(id, tty, etblconstr)  when Tables.is_tbl_ty (tty.raw_ty) -> 
         let tbl = Tables.dglobal_params_to_tbl_def id etblconstr in
         (* remember the table. *)
         let tables' = (tbl.tid, tbl)::env.tables in
@@ -152,7 +152,7 @@ let rec _process env tdecls =
         let tbl' = {tbl with tactions=tactions'} in
         let etblconstr' = Tables.tbl_def_to_econstr tbl' in
         let etblconstr' = {etblconstr with e=etblconstr'.e} in
-        let tdecl' = {tdecl with td=TDGlobal(id, gty, etblconstr')} in
+        let tdecl' = {tdecl with td=TDGlobal(id, tty, etblconstr')} in
         tdecl'::(_process env' tdecls)
       (* | TDGlobal(id, gty, {e=ETableCreate(tbl); ety=ety; espan=espan;}) -> 
         (* remember the table. *)

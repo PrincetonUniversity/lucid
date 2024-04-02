@@ -22,7 +22,7 @@ let handler_cid = Cid.create ["handle_event"] ;;
 let in_ev_param = id"ev_in", tref tevent
 let next_ev_param = id"ev_next", tref tevent
 let out_ev_param = id"ev_out", tref tevent
-let out_port_param = id"out_port", tint 32 (* port for out event, 0 means no out event *)
+let out_port_param = id"out_port", tint ((!CCoreConfig.cfg).port_id_size) (* port for out event, 0 means no out event *)
 let ev_in = param_evar in_ev_param
 let ev_next = param_evar next_ev_param 
 let ev_out = param_evar out_ev_param
@@ -35,6 +35,19 @@ let transform_generate statement =
   | SUnit(exp) when is_egen_self exp -> 
       (sassign_exp (ederef ev_next) (arg exp))
   | SUnit(exp) when is_egen_port exp -> 
+    let port_exp, event_exp = unbox_egen_port exp in
+    sseq 
+      (sassign_exp (ederef ev_out) event_exp)
+      (sassign_exp (out_port) port_exp)
+  | SUnit(exp) when is_egen_switch exp ->
+    let switch_exp, event_exp = unbox_egen_switch exp in
+    (* at this point, switch is just another name for generate_port with a different type *)
+    let switch_exp = ecast (out_port.ety) switch_exp in
+    sseq 
+      (sassign_exp (ederef ev_out) event_exp)
+      (sassign_exp (out_port) switch_exp)
+  | SUnit(exp) when is_egen_group exp ->
+    (* treat group the same as port *)
     let port_exp, event_exp = unbox_egen_port exp in
     sseq 
       (sassign_exp (ederef ev_out) event_exp)

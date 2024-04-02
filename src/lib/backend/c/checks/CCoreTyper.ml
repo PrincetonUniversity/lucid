@@ -5,8 +5,11 @@ open Batteries
 open CCoreExceptions
 open CCoreBuiltinCheckers
 
-let dprint_endline = print_endline ;;
-let dprint_endline = fun _ -> () ;;
+let dprint_endline x = 
+  if (Cmdline.cfg.debug) then 
+    print_endline x
+  else ()
+;;
 
 type constr_var = 
   | IVar of string
@@ -174,9 +177,6 @@ and unify_ty env ty1 ty2 : env =
   unify_raw_ty env ty1.raw_ty ty2.raw_ty
 ;;
 
-
-
-
 (* derive the type of a value with constant sizes *)
 let rec infer_value value : value = 
   let type_value value = (infer_value value).vty in 
@@ -231,7 +231,7 @@ let rec infer_exp env exp : env * exp =
       let ety = match CidMap.find_opt cid env.vars with
         | Some ty -> ty
         | None -> 
-          dprint_endline ("current env:\n"^(env_to_string env));      
+          print_endline ("current env:\n"^(env_to_string env));      
           ty_err@@"cannot find type for unbound variable: "^(CCorePPrint.cid_to_string cid)
       in
       env, {exp with e=EVar cid; ety;}
@@ -453,7 +453,17 @@ and infer_eop env op (args : exp list) : env * op * exp list * ty = match op, ar
 
 let unify_pat env exp pat = 
   match pat with 
-    | PVal v -> unify_ty env v.vty exp.ety
+    | PVal v when is_tenum v.vty -> 
+      unify_ty env v.vty exp.ety
+    | PVal v -> 
+      let v_sz_opt = bitsizeof_ty v.vty in
+      let e_sz_opt = bitsizeof_ty exp.ety in
+      (if (v_sz_opt = None || e_sz_opt = None) 
+        then ty_err"unsizeable"
+        else if (v_sz_opt <> e_sz_opt)
+          then ty_err@@"the expression"^(CCorePPrint.exp_to_string exp)^" and the pattern matched against it ("^(CCorePPrint.pat_to_string pat)^" have different types"
+          );    
+      env
     | PWild ty -> unify_ty env ty exp.ety
     | PEvent{event_id} -> 
       let ev_exp = evar event_id tevent in
@@ -535,6 +545,9 @@ let rec infer_statement env (stmt:statement) =
         if (List.length pats <> List.length exps) then 
           ty_err "wrong number of patterns for expressions in match statement";
         (* unify the patterns *)
+        dprint_endline
+          @@"unifying expressions <<"^(String.concat ", " (List.map CCorePPrint.exp_to_string exps))
+          ^">> with pats <<"^(String.concat ", " (List.map CCorePPrint.pat_to_string pats));          
         let env = unify_pats env inf_exps pats in
         (* for all the patterns that are events, we need to bind parameter types in env *)
         let inner_env = 
@@ -624,9 +637,7 @@ let rec infer_decl env decl : env * decl option =
     )
     (* | _ -> ty_err "a toplevel variable must be a reference / global" *)
   )
-  | DVar(id, ty, None) ->
-    if ((is_tref ty) <> true) then 
-      ty_err "globally scoped variables must be declared as globals";
+  | DVar(id, ty, None) -> (* extern variable, nothing to check *)
     let env = add_var env (id) ty in
     env, decl |> Option.some
   | DTy(cid, Some(ty)) -> 

@@ -60,7 +60,7 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : string =
     let list_str = String.concat ", " (List.map (fun (s, i) -> cid_to_string s ^ " = " ^ string_of_int i) list) in
     "enum {" ^ list_str ^ "}"
   | TBuiltin (cid, ty_list) -> 
-    let ty_list_str = String.concat ", " (List.map ty_to_string ty_list) in
+    let ty_list_str = String.concat ", " (List.map (ty_to_string ~use_abstract_name) ty_list) in
     cid_to_string cid ^ "<<" ^ ty_list_str ^ ">>"
   | TName cid -> cid_to_string cid
   | TAbstract (cid, ty) -> 
@@ -176,16 +176,17 @@ and op_to_string (op: op) (args: exp list) : string =
   | Slice (i, j), [a] -> a ^ "[" ^ string_of_int i ^ ":" ^ string_of_int j ^ "]"
   | PatExact, [a] -> "PatExact(" ^ a ^ ")"
   | PatMask, [a] -> "PatMask(" ^ a ^ ")"
-  | Hash size, [a] -> "Hash_" ^ size_to_string size ^ "(" ^ a ^ ")"
+  | Hash size, args -> "Hash_" ^ size_to_string size ^ "(" ^ (String.concat ", " args) ^ ")"
   | Cast new_ty, [a] ->
     let int_ty_str = ty_to_string ~use_abstract_name:true (new_ty) in
     "((" ^ int_ty_str ^ ")(" ^ a ^"))"
   | Conc, args -> String.concat "++" args
-  (* use arrow notation shorthand *)
-  | Project id, _ when (is_ederef (List.hd args)) -> 
+  (* use arrow notation shorthand for derefs, unless its a subscript op *)
+  | Project id, _ when (is_ederef (List.hd args) && (not@@is_eop (extract_ederef (List.hd args)))) -> 
                                                      let arg = extract_ederef (List.hd args) in 
                                                      let a = exp_to_string arg in
                                                          a ^ "->" ^ id_to_string id
+
   | Project id, [a]                                   -> a ^ "." ^ id_to_string id
   | Get i, [a] -> a ^ "._" ^ string_of_int i
   | Mod, [x; m] -> Printf.sprintf "(%s mod %s)" x m
@@ -206,13 +207,16 @@ let assign_op_to_string (op: assign_op) =
 
 let rec s_to_string (s: s) : string =
   match s with
-  | SNoop -> "skip;"
+  | SNoop -> ""
   | SUnit e ->  exp_to_string e ^ ";"
   | SAssign(op, exp) -> assign_op_to_string op ^ " = " ^ exp_to_string exp ^ ";"
   | SIf (e, s1, s2) -> 
     "if (" ^ exp_to_string e ^ ") {\n" ^ 
-    indent 2 (statement_to_string s1) ^ "\n} else {\n" ^ 
-    indent 2 (statement_to_string s2) ^ "\n}"
+    indent 2 (statement_to_string s1) ^ "\n}"
+    ^(if (statement_to_string s2 == "") then 
+      "" else 
+      "else {\n" ^ 
+      indent 2 (statement_to_string s2) ^ "\n}")
   | SMatch (es, branches) -> 
     "match (" ^ (List.map exp_to_string es |> String.concat " , ") ^ ") {\n" 
     ^ indent 2 (String.concat "\n" (List.map branch_to_string branches)) 

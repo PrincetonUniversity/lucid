@@ -103,9 +103,10 @@ let core_passes ds portspec =
   let ds = InlineEventVars.set_event_nums ds in 
   report_if_verbose "-------Inlining event variables---------";
   let ds = InlineEventVars.inline ds in
+  printprog_if_debug ds;
   report_if_verbose "-------Creating unique per-table actions---------";
   let ds = UniqueTableActions.process ds in
-
+  printprog_if_debug ds;
   report_if_verbose "-------Adding declarations for P4Tofino intrinsics---------";
   let ds = AddIntrinsics.add_intrinsics ds in
   (* generate the ingress parser or add background event parsing *)

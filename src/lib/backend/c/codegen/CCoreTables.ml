@@ -71,9 +71,21 @@ let table_cell_type tbl_id key_ty acns_enum_ty const_action_arg_ty : ty =
     (trecord [
       id"valid", tbool;
       id"key", key_ty;
+      id"mask", key_ty;
       id"action_tag", acns_enum_ty;
       id"action_arg", const_action_arg_ty;      
     ])
+;;
+
+let table_cell tbl_id key_param mask_param action_param const_arg_param =
+  let exp = erecord [
+          id "valid", eval (vbool true); 
+          id "key", key_param; 
+          id "mask", mask_param;
+          id "action_tag", action_param; 
+          id "action_arg", const_arg_param]
+  in
+  {exp with ety=table_cell_type tbl_id key_param.ety action_param.ety const_arg_param.ety;}
 ;;
 
 let table_instance_type tbl_id acns_enum_ty const_action_arg_ty tbl_cell_ty tbl_len =   
@@ -107,6 +119,8 @@ let table_create (tbl_ty : ty) (def_enum_id : cid) (acn_enum_ty : ty) (def_arg :
   base_ty_value
 ;;
 
+
+
 (* tbl_lookup(tbl_ty t, key_ty k, arg_ty arg) *)
 (* note: the length and the types are all part of tbl_ty, 
    but its easier to just pass them in from the 
@@ -135,31 +149,25 @@ let table_lookup spec =
     (List.map apply_default_branch action_tags)
   in
   let idx = id "_idx" in
-  let cont = id "_cont" in
-  let apply_branch  action_tag = 
+  let cont = id "_continue" in
+  let apply_branch  entry action_tag = 
     (* tbl->entries[idx]->action_arg *)
     let action_evar = efunref ((untag action_tag)) action_ty in    
-    (case spec.actions_enum_ty) 
+    case spec.actions_enum_ty
     action_tag
-      ( id"rv" /:= (action_evar /** [((tbl/.id"entries")/@idx)/.id"action_arg"; arg_param]))
+      (sif (eop Eq [(key_param /&& (entry/.id"mask")); ((entry/.id"key") /&& (entry/.id"mask"))])
+        (stmts [
+          (id"rv" /:= (action_evar /** [((tbl/.id"entries")/@idx)/.id"action_arg"; arg_param]));
+          sassign (Cid.id cont)  (eval (vbool false));])
+        snoop)
   in
-
+  
   let s_loop = 
     swhile idx spec.len cont 
       (
         let entry = (tbl/.id"entries")/@idx in
-        sif (entry/.id"valid")
-          (
-            sif (eop Eq [key_param; entry/.id"key"])
-              (stmts [
-              sassign (Cid.id cont)  (eval (vbool false));
-              smatch [(entry/.id"action_tag")]
-                (List.map apply_branch action_tags);
-              ]
-              )
-              snoop
-          )
-          snoop
+        smatch [(entry/.id"action_tag")]
+        (List.map (apply_branch entry) action_tags);
       )
   in
   let s_ret = sret (evar (cid"rv") spec.ret_ty) in
@@ -188,15 +196,10 @@ let table_install spec =
   (* note: call has to be transformed from an action variable to an action tag value *)
   let action_param = evar (cid "action") (spec.actions_enum_ty) in 
   let const_arg_param = evar (cid "const_arg") spec.const_arg_ty in
-  let new_slot = erecord [
-                          id "valid", eval (vbool true); 
-                          id "key", key_param; 
-                          id "action_tag", action_param; 
-                          id "action_arg", const_arg_param] 
-  in
+  let new_slot = table_cell spec.tbl_id key_param key_param action_param const_arg_param in 
   let idx = id "_idx" in
   let idx_var = evar (Cid.id idx) (tint 32) in
-  let cont = id "_cont" in
+  let cont = id "_continue" in
   let body = swhile idx spec.len cont
     (
       let entries = eop (Project(id"entries")) [tbl] in
@@ -221,6 +224,49 @@ let table_install spec =
     (sseq body sret)
 ;;
 
+(* Table.install_ternary(Table_t, key, mask, action, const_arg)  *)
+(* LEFT OFF HERE. 
+    decision: do we want ternary install to be a method of the table, 
+    or do we want a new ternary table type?   
+*)
+let install_ternary_id tbl_id = Cid.str_cons_plain "install_ternary" tbl_id ;;
+let table_ternary_install spec = 
+  (* note: the table is hard coded into the function, not a parameter. *)
+  let tbl = (* ederef *) (evar (spec.tbl_id) (spec.tbl_ty)) in
+  (* let tbl_param = evar (cid "tbl") spec.tbl_ty in *)
+  let key_param = evar (cid "key") spec.key_ty in
+  let mask_param = evar (cid"mask") spec.key_ty in
+  let action_param = evar (cid "action") (spec.actions_enum_ty) in 
+  let const_arg_param = evar (cid "const_arg") spec.const_arg_ty in
+  let new_slot = table_cell spec.tbl_id key_param mask_param action_param const_arg_param in 
+  let idx = id "_idx" in
+  let idx_var = evar (Cid.id idx) (tint 32) in
+  let cont = id "_continue" in
+  let body = swhile idx spec.len cont
+    (
+      let entries = eop (Project(id"entries")) [tbl] in
+      let entry = elistget entries idx_var in
+      (* let entry = (entries/@idx) in     *)
+      sif (eop Eq [entry/.id"valid";eval@@vbool false])
+        (stmts [
+            sassign (Cid.id cont)  (eval (vbool false));
+            (tbl/.id"entries", idx_var)/<-new_slot;            
+          ])
+        snoop
+    )
+  in
+  let params = List.map extract_evar_id 
+    [key_param; mask_param; action_param; const_arg_param]
+  in
+  let sret = sret_none in
+  dfun 
+    (install_ternary_id spec.tbl_id)
+    (tunit)
+    params
+    (sseq body sret)
+;;
+
+
 let monomorphic_table_decls actions_enum_ty decl : decls = 
   match decl.d with 
   | DVar(tbl_id, builtin_tbl_ty, Some(builtin_constr_call_exp)) when is_tbuiltin Tables.t_id builtin_tbl_ty -> 
@@ -229,7 +275,6 @@ let monomorphic_table_decls actions_enum_ty decl : decls =
       | _, [key_ty; const_arg_ty; arg_ty; ret_ty] -> key_ty, const_arg_ty, arg_ty, ret_ty
       | _, _ -> failwith "unexpected type"      
     in
-    print_endline@@ "implementing declaration: "^(CCorePPrint.decl_to_string decl);
     let len, default_action_enum_id, default_action_arg = match (eval_exp builtin_constr_call_exp |> extract_vevent).evdata with 
       | [len; _; default_action; default_action_arg] ->  
         extract_vint len |> arrlen, 
@@ -244,7 +289,6 @@ let monomorphic_table_decls actions_enum_ty decl : decls =
     let tbl_ty = timpl_wrap tbl_ty builtin_tbl_ty in
 
     let tbl_value = table_create tbl_ty default_action_enum_id (actions_enum_ty) default_action_arg in
-    print_endline ("original constructor call exp: "^(CCorePPrint.exp_to_string builtin_constr_call_exp));
     let tbl_constructor =  eimpl_wrap (eval tbl_value) builtin_constr_call_exp in
 
     let tbl_spec = {tbl_id; len; tbl_ty; key_ty; const_arg_ty; arg_ty; ret_ty; actions_enum_ty;} in
@@ -253,13 +297,10 @@ let monomorphic_table_decls actions_enum_ty decl : decls =
       decl_tabstract tbl_ty;                    (* the table's type *)
       dglobal tbl_id tbl_ty tbl_constructor; (* table declaration *)
       table_install tbl_spec;                   (* table install function *)
+      table_ternary_install tbl_spec; 
       table_lookup tbl_spec                     (* table lookup function *)
       ] 
     in
-    print_endline ("source table declaration: ");
-    print_endline (CCorePPrint.decl_to_string decl); 
-    print_endline ("constructed declarations:");
-    String.concat "\n" (List.map CCorePPrint.decl_to_string new_decls) |> print_endline;
     new_decls
   | _ -> [decl]
 ;;
@@ -280,13 +321,13 @@ let monomorphic_table_calls =
           let tbl_id, _ = extract_evar (List.hd args) in 
           let fun_id = match (Cid.names f_cid) with 
             | ["Table";"install"] -> ( install_id tbl_id )
-            | ["Table";"install_ternary"] -> ( failwith "ternary install not implemented" )
+            | ["Table";"install_ternary"] -> ( install_ternary_id tbl_id )
             | ["Table";"lookup"] -> ( lookup_id tbl_id )
             | _ -> failwith "unexpected table method"
           in
           let f_ety = match f.ety.raw_ty with 
             TFun{arg_tys; ret_ty; func_kind} -> 
-              let arg_tys = List.tl arg_tys in
+              let arg_tys = List.tl arg_tys in (* remove table arg *)
               {f.ety with raw_ty=TFun{arg_tys; ret_ty; func_kind}}
             | _ -> failwith "unexpected type"
           in

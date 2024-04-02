@@ -410,14 +410,16 @@ let translate_hsort = function
   | S.HEgress -> C.HEgress
 ;;
 
-let translate_parser_action = function
+let translate_parser_action paction = match paction with
   | S.PRead(id, ty, exp) -> C.PRead (Cid.id id, translate_ty ty, translate_exp exp)
   | S.PSkip ty -> C.PSkip (translate_ty ty)
   | S.PAssign (lexp, rexp) ->
     let id =
       match lexp.e with
       | EVar cid -> Cid.to_id cid
-      | _ -> failwith "Internal error: SyntaxToCore PAssign"
+      | _ -> 
+        print_endline (">>>> "^(Printing.parser_action_to_string paction)^" <<<< ");
+        failwith "Internal error: SyntaxToCore PAssign"
     in
     C.PAssign (Cid.id id, translate_exp rexp)
   | S.PLocal(id, ty, exp) ->

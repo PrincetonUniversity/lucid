@@ -100,6 +100,7 @@ let process_prog ?(opts=def_opts) builtin_tys ds =
          let ds = Typer.infer_prog builtin_tys ds in
          ds)
       else (
+         (* global records have to be eliminated no matter what *)
          print_if_verbose "-------Eliminating records with globals-------";
          let ds = RecordElimination.eliminate_globals ds in
          print_if_debug ds;

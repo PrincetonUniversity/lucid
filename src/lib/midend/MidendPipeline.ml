@@ -44,8 +44,9 @@ let process_prog ds =
   (* let ds = Despecialization.test_memop_despecialization ds in *)
   (* let ds = stringify_action_constructor_names ds in *)
   (* uncomment to test if core -> fcore -> core is correct *)
-  let fds = CoreToCCore.translate_prog ds in
-  let ds = CCoreToCore.translate_prog fds in
+  let ds = CCorePasses.test_core_translation ds in
+  (* let fds = CoreToCCore.translate_prog ds in
+  let ds = CCoreToCore.translate_prog fds in *)
   let ds = EliminateTBuiltin.process_prog ds in
   print_if_debug ds;
   let ds =

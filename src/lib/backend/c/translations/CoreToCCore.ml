@@ -17,21 +17,31 @@ let err = Console.error ;;
 
 (* declare builtin functions as externs in CCore *)
 (* TODO: add more *)
-let builtin_externs loc_size =
+(* note that config for port and switch sizes is inferred during translation *)
+let builtin_externs config =
   let open F in
+  let open CCoreConfig in
   let cid = Cid.create in
   [
     dfun_extern (cid ["generate_self"]) FNormal [tevent] tunit Span.default;
-    dfun_extern (cid ["generate_port"]) FNormal [tint loc_size; tevent] tunit Span.default;
-    dfun_extern (cid ["generate_switch"]) FNormal [tint loc_size; tevent] tunit Span.default;
-    dfun_extern (cid ["generate_group"]) FNormal [tint loc_size; tevent] tunit Span.default
+    dfun_extern (cid ["generate_port"]) FNormal [tint config.port_id_size; tevent] tunit Span.default;
+    dfun_extern (cid ["generate_switch"]) FNormal [tint config.switch_id_size; tevent] tunit Span.default;
+    dfun_extern (cid ["generate_group"]) FNormal [F.tgroup; tevent] tunit Span.default;
+    dvar_extern (Cid.id Builtins.ingr_port_id) (F.tint config.port_id_size);
+    (* recirc port id is a constant from a config file *)
+    dvar_const  (Cid.id Builtins.recirc_id) (F.tint config.port_id_size) (F.eval (F.vint config.recirc_port config.port_id_size));
+    dvar_const (Cid.id Builtins.self_id) (F.tint config.switch_id_size) (F.eval (F.vint config.self_id_num config.switch_id_size));
+    
   ] 
 ;;
-let builtin_cids = List.filter_map F.extract_dfun_cid (builtin_externs 1) ;;
-(* we don't know what size integer port IDs are, so if 
-   we see any generate statements we will use the corresponding size. *)
-let inferred_loc_size = ref 16 ;;
-
+let builtin_cids = List.filter_map 
+  (fun (decl: F.decl) -> 
+    match decl.d with
+    | F.DFun _ -> F.extract_dfun_cid decl
+    | F.DVar _ -> F.extract_dvar_cid decl
+    | _ -> None)
+  (builtin_externs (!CCoreConfig.cfg))
+;;
 (* a singleton size is an int; 
    a list of sizes is a tuple *)
 let size_to_ty = function 
@@ -43,6 +53,42 @@ let rec bits_to_ints = function
   | BitString.B1::bs -> 1::(bits_to_ints bs)
   | [] -> []
 ;;
+
+
+(* helpers for actions and action types *)
+(* given a list of non-container parameters, pack them into a tuple 
+   and return a map from each parameter's id to the 
+   id and position of the new tuple. *)
+let retuple_params(params : C.params) : 
+    (C.id * C.ty)                 (* tuple name and type *)
+  * ((C.id * (C.id * int)) list)  (* dict from param name to tuple name and index *)
+=
+  let split_at_last_underscore str =
+    (* assumes that parameters came from a tuple and were given their names by 
+       the convention in TupleElimination.ml *)
+    let i = String.rindex str '_' in
+    let base = String.sub str 0 i in
+    let idx = String.sub str (i + 1) ((String.length str) - i - 1) in
+    (base, int_of_string idx)
+  in
+  let tup_name, tup_inner_rawtys, subst_dict = List.fold_left 
+    (fun (_, tup_inner_rawtys, subst_dict) (field_id, (field_ty : C.ty))  -> 
+      let tup_name, field_index = split_at_last_underscore (Id.name field_id) in
+      let tup_inner_rawty = field_ty.raw_ty in
+      let rename_entry = field_id, (Id.create tup_name, field_index) in 
+      tup_name, (tup_inner_rawtys@[tup_inner_rawty]), subst_dict@[rename_entry]      
+    )
+    ("", [], [])
+    params
+  in
+  ((Id.create tup_name), (C.ttuple tup_inner_rawtys)), (subst_dict)
+;;
+let retuple_tys tys = 
+  match tys with
+    | [ret_ty] -> ret_ty
+    | _ -> 
+      C.ttuple (List.map (fun (ty : C.ty) -> ty.raw_ty) tys) 
+;; 
 
 let rec translate_raw_ty (raw_ty : C.raw_ty) : F.raw_ty = 
   match raw_ty with 
@@ -82,13 +128,37 @@ let rec translate_raw_ty (raw_ty : C.raw_ty) : F.raw_ty =
   | C.TMemop(_, _) -> err "TMemop size should be a singleton"
   | C.TAction(aty) -> F.TFun(translate_acn_ty aty)
   | C.TActionConstr{aconst_param_tys; aacn_ty} -> 
+    (* let pack_action_param_tys param_tys = 
+      match param_tys with 
+      | [] -> F.ttuple [] 
+      | 
+
+    in *)
     (* an action constructor is a normal function that returns an action *)
-    let fty : F.func_ty = {
+    (* hm... this does not agree with the definition of an action, 
+       where we translate an action as a function with 2 arguments and a return. *)
+    (* let param_tys = List.map translate_ty aconst_param_tys in
+    let arg_tys = List.map translate_ty aacn_ty.aarg_tys in
+    let ret_tys = List.map translate_ty aacn_ty.aret_tys in *)
+
+    let param_ty = retuple_tys aconst_param_tys |> translate_ty in
+    let arg_ty = retuple_tys aacn_ty.aarg_tys |> translate_ty in
+    let ret_ty = retuple_tys aacn_ty.aret_tys |> translate_ty in
+    F.TFun {
+      F.arg_tys = [param_ty; arg_ty];
+      F.ret_ty = ret_ty;
+      F.func_kind = F.FAction;
+    }
+    (* translate type lists to *)
+    (* let fty : F.func_ty = {
+
+    } *)
+    (* let fty : F.func_ty = {
       F.arg_tys = List.map translate_ty aconst_param_tys; 
       F.ret_ty = F.ty@@F.TFun(translate_acn_ty aacn_ty);
       F.func_kind = F.FNormal;}
     in
-    F.TFun fty
+    F.TFun fty *)
   | C.TRecord(id_rawty_pairs) -> 
     let ids, raw_tys = List.split id_rawty_pairs in
     let raw_tys = List.map translate_raw_ty raw_tys in
@@ -277,13 +347,13 @@ let rec translate_statement (stmt:C.statement) : F.statement =
   | C.SGen(GSingle(None), ev) -> 
     F.egen_self (translate_exp ev) |> F.sunit |> F.swrap stmt.sspan
   | C.SGen(GSingle(Some(loc)), ev) -> 
-    inferred_loc_size := C.size_of_tint loc.ety; 
+    CCoreConfig.cfg := {!CCoreConfig.cfg with switch_id_size = C.size_of_tint loc.ety};
     F.egen_switch (translate_exp loc) (translate_exp ev) |> F.sunit |> F.swrap stmt.sspan
   | C.SGen(GPort(port), ev) -> 
-    inferred_loc_size := C.size_of_tint port.ety; 
+    CCoreConfig.cfg := {!CCoreConfig.cfg with port_id_size = C.size_of_tint port.ety};
     F.egen_port (translate_exp port) (translate_exp ev) |> F.sunit |> F.swrap stmt.sspan
   | C.SGen(GMulti(port), ev) -> 
-    inferred_loc_size := C.size_of_tint port.ety; 
+    (* gen_ports takes a group, which can be any size *)
     F.egen_group (translate_exp port) (translate_exp ev) |> F.sunit |> F.swrap stmt.sspan
   | C.SSeq(s1, s2) -> 
     F.sseq (translate_statement s1) (translate_statement s2) |> F.swrap stmt.sspan
@@ -333,46 +403,16 @@ let translate_memop (m : CoreSyntax.memop) =
   F.dmemop (Cid.id id) (translate_ty rty) (translate_params params) (translate_statement body)
 ;;
 
-(* if the parameters are a flattened list 
-   (not a single-element tuple or record), 
-    wrap them in a tuple. *)
-let is_flattened_tuple params : bool =
-     List.length params > 1
-  && List.for_all 
-      (fun (_, (ty : C.ty)) -> match ty.raw_ty with 
-        | TTuple _ 
-        | TRecord _ -> false
-        | _ -> true)
-      params
+
+let is_record (param : (C.id * C.ty)) = 
+  match (snd param).raw_ty with 
+  | C.TRecord _ -> true
+  | _ -> false
 ;;
 
-(* given a list of non-container parameters, pack them into a tuple 
-   and return a map from each parameter's id to the 
-   id and position of the new tuple. *)
-let tuple_params(params : C.params) : 
-    (C.id * C.ty)                 (* tuple name and type *)
-  * ((C.id * (C.id * int)) list)  (* dict from param name to tuple name and index *)
-=
-  if ((is_flattened_tuple params) = false) then 
-      err "[tuple_params] not a flattened tuple!";
-  let split_at_last_underscore str =
-    let i = String.rindex str '_' in
-    let base = String.sub str 0 i in
-    let idx = String.sub str (i + 1) ((String.length str) - i - 1) in
-    (base, int_of_string idx)
-  in
-  let tup_name, tup_inner_rawtys, subst_dict = List.fold_left 
-    (fun (_, tup_inner_rawtys, subst_dict) (field_id, (field_ty : C.ty))  -> 
-      let tup_name, field_index = split_at_last_underscore (Id.name field_id) in
-      let tup_inner_rawty = field_ty.raw_ty in
-      let rename_entry = field_id, (Id.create tup_name, field_index) in 
-      tup_name, (tup_inner_rawtys@[tup_inner_rawty]), subst_dict@[rename_entry]      
-    )
-    ("", [], [])
-    params
-  in
-  ((Id.create tup_name), (C.ttuple tup_inner_rawtys)), (subst_dict)
-;;
+
+
+
 
 
 let translate_decl (decl:C.decl) : F.decl = 
@@ -406,23 +446,27 @@ let translate_decl (decl:C.decl) : F.decl =
        action body as needed. *)
     let pack_params params  =
       match params with 
-      | [] -> (Id.fresh "empty", C.ttuple []), []
-      | params when is_flattened_tuple params -> 
+      | [] -> (Id.fresh "empty", C.ttuple []), [] (* no params -- empty tuple *)
+      | [param] -> param, [] (* one param -- no change *)
+      | params ->
+        (* The only way we could possibly have multiple parameters 
+           is if tuple elimination unpacked a tuple parameter. *)
         (* print_endline ("[pack_params] packing flattened tuple into tuple:");
         print_endline (CorePrinting.params_to_string params); *)
-        tuple_params params
-      | param::[] -> param, []
-      | _ -> err "[pack_params] invalid action arguments for translating to C Core."
+        retuple_params params
+      (* | _ -> err "[pack_params] action arguments must either be a singleton or a list of non-containers (not tuple or record)" *)
     in
     let const_param, const_rename_map = pack_params acn_constr.aconst_params in
     let param, param_rename_map      = pack_params acn_constr.aparams in
-    (* wrap in a tuple if there's not exactly one type. *)
+    (* wrap in a tuple if there's not exactly one type. 
+       This matches what retuple_params does, but its simpler because 
+       we're only operating on types and there are no parameters to rename. *)
+    (* also, there's no "empty return" for an action. *)
     let ret_ty = match acn_constr.artys with
       | [ret_ty] -> ret_ty
-      | _ -> C.ttuple (List.map (fun (ty : C.ty) -> ty.raw_ty) acn_constr.artys) 
+      | _ -> 
+        C.ttuple (List.map (fun (ty : C.ty) -> ty.raw_ty) acn_constr.artys) 
     in 
-
-
     let field_replacer = 
       (* replace a evar reference to a field with a tuple get op *)
       object 
@@ -474,5 +518,5 @@ let translate_decl (decl:C.decl) : F.decl =
 let translate_prog (ds : C.decls) : F.decls = 
   (* translate declarations first in case something in there uses a port.. *)
   let ds = List.map translate_decl ds in
-  (builtin_externs (!inferred_loc_size))@ds
+  (builtin_externs (!CCoreConfig.cfg))@ds
 ;;

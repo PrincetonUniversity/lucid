@@ -146,7 +146,8 @@ let update_decl ctx decl : replace_ctx * decls =
   | DActionConstr({aid=aid; _}) -> 
     add_action aid decl ctx, []
   (* table constructors -- create bindings, update context, update local actions *)
-  | DGlobal(tid, tty, econstr) ->
+  | DGlobal(tid, tty, econstr) when Tables.is_tbl_ty (tty.raw_ty) ->
+    (* bug? Doesn't this apply to everything, not just tables? *)
     let tdef = Tables.dglobal_params_to_tbl_def tid econstr in  
     let aids = List.map id_of_exp tdef.tactions in
     let new_aids = List.map (new_aid tid) aids in

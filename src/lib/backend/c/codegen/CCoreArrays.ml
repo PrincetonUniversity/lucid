@@ -71,7 +71,7 @@ let update_complex ctx call_id call_args =
   let memop_id, (_, memop_params, memop_body) = get_memop ctx (List.nth call_args 2) in
 
   let idx_param = Id.create "_idx", (List.nth call_args 1).ety in
-  let idx = eop Mod [param_evar idx_param; eval (vint arr_len 32)] in
+  let idx = eop Mod [ecast (tint 32) (param_evar idx_param); eval (vint arr_len 32)] in
   
   (* replace memop_param with arr[idx]; *)
   let memval_param_id = List.hd memop_params |> fst in
@@ -130,13 +130,13 @@ let update_complex ctx call_id call_args =
 
 let arr_fun_cids = List.map Builtins.gfun_cid Arrays.signature.m_funs ;;
 
-
 let transform_calls ctx decl = 
   let ctx = ref ctx in
   let v = object 
     inherit [_] s_map as super
 
       method! visit_exp () exp = 
+        let exp = super#visit_exp () exp in
         match exp.e with 
         | ECall({f; args; call_kind=CFun}) -> 
           let f_cid, _ = extract_evar f in
@@ -147,8 +147,8 @@ let transform_calls ctx decl =
             ctx := ctx';
             exp'
           )
-          else super#visit_exp () exp
-        | _ -> super#visit_exp () exp
+          else exp
+        | _ -> exp
   end
   in
   let res = v#visit_decl () decl in 

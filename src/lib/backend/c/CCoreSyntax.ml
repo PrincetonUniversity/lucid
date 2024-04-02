@@ -655,6 +655,9 @@ let is_egen_port exp = match exp.e with
   | ECall {f; _} -> Cid.equal (extract_evar f |> fst) (Cid.create ["generate_port"])
   | _ -> false
 ;;
+let is_egen_switch exp = match exp.e with 
+  | ECall {f; _} -> Cid.equal (extract_evar f |> fst) (Cid.create ["generate_switch"])
+  | _ -> false
 let is_egen_group exp = match exp.e with 
   | ECall {f; _} -> Cid.equal (extract_evar f |> fst) (Cid.create ["generate_group"])
   | _ -> false
@@ -672,6 +675,9 @@ let unbox_egen_port exp = match exp.e with
   | ECall {args=[eport; eevent]} -> (eport, eevent)
   | _ -> failwith "unbox_egen_port: invalid form for generate"
 ;;
+let unbox_egen_switch exp = match exp.e with 
+  | ECall {args=[eloc; eevent]} -> (eloc, eevent)
+  | _ -> failwith "unbox_egen_switch: invalid form for generate"
 
 (* let emultiassign ids tys new_vars rhs_exp = exp (EAssign {ids; tys; new_vars; exp=rhs_exp}) (ty TUnit) Span.default *)
 (* let elocal id ty exp = emultiassign [id] [ty] true exp *)
@@ -764,6 +770,8 @@ let dfun_extern id fun_kind param_tys ret_ty =
   let params = List.map (fun ty -> (Id.fresh_name "a", ty)) param_tys in
   decl (DFun(fun_kind, id, ret_ty, params, BExtern))
 ;;
+let dvar_const id ty exp = decl (DVar(id, ty, Some(exp))) Span.default
+let dvar_extern id ty = decl (DVar(id, ty, None)) Span.default
 
 let default_checker = Some("gcc -x c - -fsyntax-only");;
 let dfun_foriegn fid fparams fret_ty fstr = 
@@ -832,6 +840,11 @@ let extract_dfun_cid decl = match decl.d with
   | DFun(_, cid, _, _, _) -> Some(cid)
   | _ -> None
 ;;
+
+let extract_dvar_cid decl = match decl.d with 
+  | DVar(cid, _, _) -> Some(cid)
+  | _ -> None
+
 (* derive the type of a declared function *)
 (* let extract_dfun_ty decl = match decl.d with 
   | DFun(_, _, ty, params, _) -> tfun params ty
@@ -898,6 +911,7 @@ let ( /-> ) rec_exp field_id =
 ;;
 
 let (/+) e1 e2 = eop Plus [e1; e2]
+let (/&&) e1 e2 = eop BitAnd [e1; e2]
 
 let (/@) my_arr_exp idx_id = 
   elistget my_arr_exp (evar (Cid.id idx_id) (tint 32))

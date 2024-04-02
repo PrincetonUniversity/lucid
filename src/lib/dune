@@ -169,6 +169,7 @@
    CoreRegularizeMemops
    CCorePasses
    CCoreSyntax
+   CCoreConfig
    CCoreUtils
    CCorePPrint
    CCoreExceptions
@@ -184,6 +185,7 @@
    CCoreDeparse
    CCoreTables
    CCoreArrays
+   CCoreSystem
    CCoreHandlers
    CCoreEvents
    CCoreCForm

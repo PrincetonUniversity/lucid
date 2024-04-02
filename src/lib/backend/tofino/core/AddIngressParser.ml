@@ -491,6 +491,14 @@ let add_simple_parser ?(with_payloads=true) recirc_port_opt ds =
          let pkt_var = pkt_param_exp main_params in (* we need to know the name of the packet argument to main *)
          inline_parsers ~with_payloads parser_entry_ty pkt_var bg_events ds
       | _, _, _ -> 
+         print_endline "pkt_events: ";
+         List.iter (fun ev -> print_endline (CorePrinting.decl_to_string ev)) pkt_events;
+         print_endline@@"user parser: "
+            ^(match main_user_parser_opt with | Some(params, block) ->  
+               "("^CorePrinting.params_to_string params ^ ")" ^ 
+               CorePrinting.parser_block_to_string block | None -> "None");
+         print_endline "recirc port: ";
+         (match recirc_port_opt with | Some(port) -> print_endline (string_of_int@@fst port) | None -> print_endline "None");
          error "invalid combination of packet events, user parser, and recirc port"
       in
    decls
