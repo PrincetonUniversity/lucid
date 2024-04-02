@@ -11,7 +11,7 @@ let id = Id.create
   We should start with a simple driver that reads events from a binary file. *)
 
 module BinaryFileDriver = struct 
-  (* left off here process binary events from a file *)
+  (* TODO: process binary events from a file *)
   (* main: 
       1. open input file and output file. 
       2. while input file is not empty: 

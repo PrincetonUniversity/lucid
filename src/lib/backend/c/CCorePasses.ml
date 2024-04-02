@@ -76,9 +76,14 @@ let compile ds =
   (* toplevel driver function (not always necessary, platform specific) *)
   (* LEFT OFF HERE. 
       final steps: 
+        - implement hash and CRC (at least stubs)
         - driver function in ccore, not just a string of c
         - libpcap driver 
         - c pretty printer
+        - feature completeness: 
+          - pairarrays
+          - payloads
+          - counters
       then, the actual fun:
         - making it compatible with ebpf (parameterized?)
         - representing multiple threads

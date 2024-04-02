@@ -153,7 +153,6 @@ let translate_op op =
   | F.Mod -> err "there is no mod op in CoreSyntax"
 ;;
 
-(* left off here -- at translate_v *)
 let value_to_int (value : F.value) : int = 
   match value.v with 
   | F.VInt{value; size=(_)} -> value
