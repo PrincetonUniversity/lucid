@@ -22,14 +22,15 @@ let handler_cid = Cid.create ["handle_event"] ;;
 let in_ev_param = id"ev_in", tref tevent
 let next_ev_param = id"ev_next", tref tevent
 let out_ev_param = id"ev_out", tref tevent
-let out_port_param = id"out_port", tint ((!CCoreConfig.cfg).port_id_size) (* port for out event, 0 means no out event *)
+let out_port_param () = id"out_port", tint ((!CCoreConfig.cfg).port_id_size) (* port for out event, 0 means no out event *)
 let ev_in = param_evar in_ev_param
 let ev_next = param_evar next_ev_param 
 let ev_out = param_evar out_ev_param
-let out_port = param_evar (out_port_param)
+let out_port () = param_evar (out_port_param ())
 
 (* transform a generate statement in the body of the event handler function *)
 let transform_generate statement = 
+  let out_port = out_port () in
   (* instead of generating the event, set the appropriate event variable *)
   match statement.s with 
   | SUnit(exp) when is_egen_self exp -> 
@@ -63,6 +64,8 @@ type handler_rec = {
 
 (* make the main handler *)
 let mk_main_handler handlers = 
+  let out_port = out_port () in
+  let out_port_param = out_port_param () in
   let branches = List.map 
     (fun handler -> 
       (* one branch for each handler *)

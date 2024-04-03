@@ -74,7 +74,7 @@ let compile ds =
   let cds = CCorePacketHandler.process cds in
 
   (* toplevel driver function (not always necessary, platform specific) *)
-  (* LEFT OFF HERE. 
+  (* TODO 
       final steps: 
         - implement hash and CRC (at least stubs)
         - driver function in ccore, not just a string of c

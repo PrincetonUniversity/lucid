@@ -65,26 +65,7 @@ open CCoreSyntax
 open CCoreExceptions
 open CCoreUtils
 
-(* helpers *)
-let ty_to_namestr ty = match ty.raw_ty with 
-  | TInt _ | TBool | TAbstract _ -> CCorePPrint.ty_to_string ~use_abstract_name:true ty
-  | _ -> err_expected_ty ty "to convert a type to a string for a generated function, the type must be an int, bool, or abstract"
-;;
-
-let tyapp cid ty = 
-  Cid.str_cons_plain (ty_to_namestr ty) cid
-;;
-
-(* ( *bs).cur *)
-
-let n_bytes ty = 
-  match bitsizeof_ty ty with
-  | None -> err_expected_ty ty "to generate a bytesize_of_ty_exp, the type must have a known size"
-  | Some n ->     
-    let byte_n = (n+7) / 8 in
-    eval (vint byte_n 32)
-;;
-
+let n_bytes ty = eval (vint (size_of_ty ty) 32) ;;
 
 (*** primary type and code generators ***)
 (* note: these can be made "safe" for ebpf by
@@ -113,7 +94,7 @@ let _bs = param_evar _bs_param
     bs->cur = bs->cur + sizeof(int);
 } *)
 (* generate a skip function for the given type *)
-let skip_name ty = tyapp (cid"skip") ty
+let skip_name ty = cid_for_ty (cid"skip") ty
 let skip_ty = tfun [snd _bs_param] tunit
 let skip_var ty = efunref (skip_name ty) skip_ty
 let call_skip ty bs = ecall (skip_var ty) [bs]
@@ -131,7 +112,7 @@ let mk_skip ty =
     return ((int * ) *(bs->cur));
 } *)
 (* generate a peek function for the given type *)
-let peek_name ty = tyapp (cid"peek") ty
+let peek_name ty = cid_for_ty (cid"peek") ty
 let peek_ty ty = tfun [snd _bs_param] ty
 let peek_var ty = efunref (peek_name ty) (peek_ty ty)
 let call_peek ty bs = ecall (peek_var ty) [bs]
@@ -151,7 +132,7 @@ let mk_peek ty =
     return rv;
 } *)
 (* generate a read function for the given type *)
-let read_name ty = tyapp (cid"read") ty
+let read_name ty = cid_for_ty (cid"read") ty
 let read_ty ty = tfun [snd _bs_param] ty
 let read_var ty = efunref (read_name ty) (read_ty ty)
 let call_read ty bs = ecall (read_var ty) [bs]
