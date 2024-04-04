@@ -92,7 +92,21 @@ let normalize_struct_inits decls =
     method! visit_statement () stmt = 
       match stmt.s with 
       (* creating a new local -- nothing has to change, so don't recurse *)
-      | SAssign(OLocal _, _) -> stmt 
+      | SAssign(OLocal(a, b), exp) -> (
+        (* exp can be an initializer, but its subnodes can't *)
+        new_stmts <- [];
+        let exp = super#visit_exp () exp in
+        match new_stmts with 
+        | [] -> stmt
+        | _ -> 
+          (* update exp *)
+          let stmt = {stmt with s=SAssign(OLocal(a, b),  exp)} in
+          (* combine statements *)
+          let stmt' = stmts (new_stmts@[stmt]) in
+          (* reset statement store *)
+          new_stmts <- []; (* have to clear new_stmts, else parent will add it in too. *)          
+          stmt'
+      )
       (* pull initializers out of other statements *)
       | _ -> (
         new_stmts <- [];
@@ -107,12 +121,14 @@ let normalize_struct_inits decls =
             stmt'
       )
     method! visit_exp () exp = 
+      print_endline ("[normalize_inits] visiting exp: "^(CCorePPrint.exp_to_string exp));
       if (is_initializer exp) 
-      then 
+      then (
+        print_endline ("  its an initializer");
         let id = Id.fresh_name "tmp" in
         let stmt = slocal (Cid.id id) exp.ety exp in
         new_stmts <- new_stmts@[stmt];
-        evar (Cid.id id) exp.ety
+        evar (Cid.id id) exp.ety)
       else exp
     end
   in

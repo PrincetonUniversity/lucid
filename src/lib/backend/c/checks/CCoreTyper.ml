@@ -403,9 +403,17 @@ and infer_eop env op (args : exp list) : env * op * exp list * ty = match op, ar
     if (not (is_tref inf_exp.ety)) then 
       raise (TypeError("cast from ref to non-ref"));
     env, op, [inf_exp], new_ty
-  | Hash(size), _ -> 
-    (* hash arguments can be anything *)
-    env, op, args, ty@@TInt size
+  | Hash(size), args -> 
+    (
+    let infer_exps env = infer_lists env infer_exp in
+    let env, inf_args = infer_exps env args in
+    match inf_args with 
+      | [seed; arg] -> 
+        if (not@@is_tint seed.ety) then ty_err "first arg of hash must be an int seed";
+        if (is_tref arg.ety) then ty_err "the hash of a reference is not allowed";
+        env, op, inf_args, ty@@TInt size
+      | _ -> ty_err "In the CCore backend, hash op takes a seed and 1 argument (which may be a compound)"
+    )
   | PatExact, [exp] -> 
     let env, inf_exp = infer_exp env exp in
     if (not (is_tint inf_exp.ety)) then 

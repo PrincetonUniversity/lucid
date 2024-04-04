@@ -181,7 +181,16 @@ and op_to_string (op: op) (args: exp list) : string =
   | Slice (i, j), [a] -> exp_to_string a ^ "[" ^ string_of_int i ^ ":" ^ string_of_int j ^ "]"
   | PatExact, [a] -> "PatExact(" ^ exp_to_string a ^ ")"
   | PatMask, [a] -> "PatMask(" ^ exp_to_string a ^ ")"
-  | Hash size, args -> "Hash_" ^ size_to_string size ^ "(" ^exps_to_string args ^ ")"
+  | Hash 32, [seed; a] -> 
+    let ref_arg = sprintf "(%s)&%s" (ty_to_string (tref (tint 8))) (exp_to_string a) in
+    let seed_arg = sprintf "(%s)%s" (ty_to_string (tint 32)) (exp_to_string seed) in
+    (* TODO: polymorphic hashes *)
+    sprintf "hash_%i(%s, %s, sizeof(%s))" 32 seed_arg ref_arg (exp_to_string a)
+  | Hash n, [seed; a] -> 
+    let ref_arg = sprintf "(%s)&%s" (ty_to_string (tref (tint 8))) (exp_to_string a) in
+    let seed_arg = sprintf "(%s)%s" (ty_to_string (tint 32)) (exp_to_string seed) in
+    sprintf "(%s)hash_32(%s, %s, sizeof(%s))" (ty_to_string@@tint n) seed_arg ref_arg (exp_to_string a)
+    (* "Hash_" ^ size_to_string size ^ "(" ^exps_to_string args ^ ")" *)
   | Cast new_ty, [a] ->
     let int_ty_str = ty_to_string ~use_abstract_name:true (new_ty) in
     "((" ^ int_ty_str ^ ")(" ^ exp_to_string a ^"))"

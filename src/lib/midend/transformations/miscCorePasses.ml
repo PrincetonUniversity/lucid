@@ -63,3 +63,21 @@ let this_eliminator =
       | _ -> decl    
   end     
 ;;
+
+let pack_hash_args = 
+  object (_) inherit [_] s_map as super
+    method! visit_exp () exp = 
+      let exp = super#visit_exp () exp in
+      match exp.e with 
+      | EHash(size, seed::args) -> (
+        match args with 
+          | [] -> error "wrong number of hash args"
+          | [_] -> exp
+          | args ->  
+            let tuple_ty = ttuple@@List.map (fun arg -> arg.ety.raw_ty) args in
+            let tuple_exp = CoreSyntax.exp (ETuple(args)) tuple_ty in
+            {exp with e=EHash(size, [seed; tuple_exp]) }
+      )
+      | _ -> exp
+  end
+;;

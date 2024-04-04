@@ -30,6 +30,7 @@ let compile ds =
   let ds = EliminateEventCombinators.process ds in
   let ds = AddIngressParser.add_simple_parser None ds in 
   let ds = MiscCorePasses.noop_deleter#visit_decls () ds in
+  let ds = MiscCorePasses.pack_hash_args#visit_decls () ds in
 
   (*** 3. translate to CCore and some cleanup *)
   print_endline ("---- Translating to CCore ----");
