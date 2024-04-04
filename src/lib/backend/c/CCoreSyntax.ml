@@ -23,12 +23,12 @@ and raw_ty =
   | TUnit
   | TInt of size 
   | TBool 
+  | TBits of {ternary: bool; len : size;}
   | TEnum of (cid * int) list 
   | TUnion of id list * ty list
   | TRecord of id list * ty list
-  | TTuple  of ty list 
-  | TRef of ty * (arrlen option) (* a pointer to a memory cell of a certain type or an array of them *)
-  | TBits of {ternary: bool; len : size;}
+  | TTuple  of ty list
+  | TPtr of ty * (arrlen option) (* a pointer to a memory cell of a certain type or an array of them *)
   | TEvent
   | TFun of func_ty
   (* alias types *)
@@ -76,13 +76,14 @@ and e =
   | EVal of value
   | EOp of op * exp list
   | ECall of {f:exp; args:exp list; call_kind:call_kind;}
-  | EVar of cid 
+  | EVar    of cid 
+  | EAddr   of cid (* tref *)
   | ETuple of exp list
   | EUnion  of id * exp * ty
   | ERecord of id list * exp list
   | EDeref of exp
 
-and call_kind = 
+  and call_kind = 
   | CFun
   | CEvent 
   (* a call to a builtin is annotated with the original 
@@ -194,7 +195,7 @@ let tunion labels tys = ty (TUnion(labels, tys))
 let tfun_kind func_kind arg_tys ret_ty = ty (TFun {arg_tys; ret_ty; func_kind})
 let tfun arg_tys ret_ty = tfun_kind FNormal arg_tys ret_ty 
 (* global type from CoreSyntax *)
-let tlist ele_ty len = ty (TRef(ele_ty, Some(len)))
+let tlist ele_ty len = ty (TPtr(ele_ty, Some(len)))
 let tname cid = ty (TName(cid))
 let textern = tname (Cid.create ["_extern_ty_"])
 let tbuiltin cid tyargs = ty (TBuiltin(cid, tyargs))
@@ -205,7 +206,7 @@ let tabstract_cid tcid inner_ty = ty (TAbstract(tcid, inner_ty))
 let tabstract_id id inner_ty = ty (TAbstract(Cid.create_ids [id], inner_ty))
 let tenum_pairs (tagpairs : (Cid.t * int) list) = ty (TEnum tagpairs)
 let tenum ids = tenum_pairs (List.mapi (fun i id -> (id, i)) ids)
-let tref t = ty (TRef(t, None))
+let tref t = ty (TPtr(t, None))
 let rec base_type ty = 
   match ty.raw_ty with 
   | TAbstract(_, ty) -> base_type ty
@@ -238,7 +239,7 @@ let is_tfun ty = match ty.raw_ty with TFun({func_kind=FNormal}) -> true | _ -> f
 let is_tbool ty = match ty.raw_ty with TBool -> true | _ -> false
 let is_tint ty = match ty.raw_ty with TInt(_) -> true | _ -> false
 let is_tbits ty = match ty.raw_ty with TBits(_) -> true | _ -> false
-let is_tlist ty = match ty.raw_ty with TRef(_, Some _) -> true | _ -> false
+let is_tlist ty = match ty.raw_ty with TPtr(_, Some _) -> true | _ -> false
 let is_tevent ty = match ty.raw_ty with TEvent -> true | _ -> false
 let is_tabstract name ty = match ty.raw_ty with TAbstract(cid, _) -> Cid.equal cid (Cid.create [name]) | _ -> false
 let is_tstring ty = is_tabstract "string" ty
@@ -246,7 +247,7 @@ let is_tchar ty = is_tabstract "char" ty
 let is_tbuiltin tycid ty = match ty.raw_ty with TBuiltin(cid, _) -> Cid.equal cid tycid | _ -> false
 let is_tbuiltin_any ty = match ty.raw_ty with TBuiltin(_, _) -> true | _ -> false
 
-let is_tref  ty = match ty.raw_ty with TRef _ -> true | _ -> false
+let is_tref  ty = match ty.raw_ty with TPtr _ -> true | _ -> false
 let is_tenum ty = match (base_type ty).raw_ty with TEnum _ -> true | _ -> false
 
 let extract_func_ty ty = match ty.raw_ty with 
@@ -273,7 +274,7 @@ let extract_ttuple ty = match ty.raw_ty with
   | _ -> raise (FormError "[extract_ttuple] expected TRecord")
 ;;
 let extract_tlist ty = match ty.raw_ty with 
-  | TRef(ty, Some(len)) -> ty, len
+  | TPtr(ty, Some(len)) -> ty, len
   | _ -> raise (FormError "[extract_tlist] expected TList")
 ;;
 let extract_tenum ty = match ty.raw_ty with 
@@ -299,7 +300,7 @@ let rec extract_tname ty = match ty.raw_ty with
   | _ -> raise (FormError "[extract_tname] expected TName")
 
 let extract_tref ty = match ty.raw_ty with 
-  | TRef(tinner, _) -> tinner
+  | TPtr(tinner, _) -> tinner
   | _ -> raise (FormError "[extract_tref] expected TGlobal")
 
 
@@ -314,7 +315,7 @@ let rec bitsizeof_ty ty =
   | TRecord(_, tys)
   | TTuple(tys) -> 
       tys |> List.map bitsizeof_ty_exn |> List.fold_left (+) 0 |> Option.some
-  | TRef _ -> None
+  | TPtr _ -> None
   | TBits {len} -> len |> Option.some
   | TEvent -> None
   | TFun _ -> None
@@ -353,7 +354,7 @@ let vint_ty value ty = match ty.raw_ty with
   | TInt  size -> vint value size
   | _ -> failwith "vint_ty: expected TInt"
 let vbool b = {v=VBool b; vty=ty TBool; vspan=Span.default}
-let vlist vs = {v=VList vs; vty=ty (TRef((List.hd vs).vty, Some(IConst (List.length vs)))); vspan=Span.default}
+let vlist vs = {v=VList vs; vty=ty (TPtr((List.hd vs).vty, Some(IConst (List.length vs)))); vspan=Span.default}
 let vtup vs = {v=VTuple(vs); vty=ttuple (List.map (fun v -> v.vty) vs); vspan=Span.default}
 let vpat ints = {v=VBits {ternary=true; bits=ints}; vty=ty (TBits {ternary=true; len=sz (List.length ints)}); vspan=Span.default}
 let vbits ints = {v=VBits {ternary=false; bits=ints}; vty=ty (TBits {ternary=false; len=sz (List.length ints)}); vspan=Span.default}
@@ -422,9 +423,9 @@ let rec default_value ty = match ty.raw_ty with
   | TBuiltin _ -> failwith "no default value for builtin type"
   | TName _ -> failwith "no default value for named type"
   | TAbstract(_, ty) -> default_value ty
-  | TRef(ty, None) -> default_value ty
-  | TRef(ty, Some(IConst(n))) -> vlist (List.init n (fun _ -> default_value ty))
-  | TRef(_, Some _) -> failwith "no default value for list of unknown length"
+  | TPtr(ty, None) -> default_value ty
+  | TPtr(ty, Some(IConst(n))) -> vlist (List.init n (fun _ -> default_value ty))
+  | TPtr(_, Some _) -> failwith "no default value for list of unknown length"
 ;;
 
 
@@ -537,6 +538,10 @@ let eevent = ecall_kind CEvent
 let ederef inner = 
   exp (EDeref inner) (extract_tref inner.ety) Span.default
 ;;
+let eaddr cid ty = 
+  exp (EAddr cid) (tref ty) Span.default
+;;
+
 
 let elistget arr idx = 
   (* a list get is just sugar for an add and deref *)
@@ -570,7 +575,7 @@ let is_eproject exp = match exp.e with
 let is_elistidx exp = match exp.e with 
   | EDeref(inner_exp) -> (
     match inner_exp.e, inner_exp.ety.raw_ty with 
-      | EOp(Plus, _), TRef _ -> true
+      | EOp(Plus, _), TPtr _ -> true
       | _ -> false
   )
   | _ -> false
@@ -905,16 +910,21 @@ let ( /** ) f args = ecall_op f args
 let ( /. ) rec_exp field_id = 
   eop (Project(field_id)) [rec_exp]
 ;;
+let ( /.@) tup_exp i = 
+  eop (Get i) [tup_exp]
+
 (* rec_exp->field_id *)
 let ( /-> ) rec_exp field_id = 
   eop (Project(field_id)) [ederef rec_exp]
 ;;
 
 let (/+) e1 e2 = eop Plus [e1; e2]
-let (/&&) e1 e2 = eop BitAnd [e1; e2]
+let (/&) e1 e2 = eop BitAnd [e1; e2]
+let ( /== ) e1 e2 = eop Eq [e1; e2]
+let vtrue = eval@@vbool true
 
-let (/@) my_arr_exp idx_id = 
-  elistget my_arr_exp (evar (Cid.id idx_id) (tint 32))
+let (/@) my_arr_exp idx_exp = 
+  elistget my_arr_exp idx_exp
 ;;
 
 let (/<-) (arr, idx) rhs = 
@@ -959,8 +969,8 @@ let rec equiv_tys ty1 ty2 = match ty1.raw_ty, ty2.raw_ty with
 | TTuple(tys1), TTuple(tys2) -> 
   List.length tys1 = List.length tys2
   && List.for_all2 equiv_tys tys1 tys2
-| TRef(t1, None), TRef(t2, None) -> equiv_tys t1 t2
-| TRef(t1, Some(IConst n1)), TRef(t2, Some(IConst n2)) -> n1 = n2 && equiv_tys t1 t2
+| TPtr(t1, None), TPtr(t2, None) -> equiv_tys t1 t2
+| TPtr(t1, Some(IConst n1)), TPtr(t2, Some(IConst n2)) -> n1 = n2 && equiv_tys t1 t2
 | TBits {ternary=b1; len=l1}, TBits {ternary=b2; len=l2} -> 
   (b1 = b2) && (l1 = l2)
 | TEvent, TEvent -> true
@@ -977,5 +987,5 @@ let rec equiv_tys ty1 ty2 = match ty1.raw_ty, ty2.raw_ty with
   Cid.equal cid1 cid2
   && equiv_tys ty1 ty2
 | TName cid1, TName cid2 -> Cid.equal cid1 cid2
-| (TUnit|TBool|TEvent|TInt _|TRecord _ | TTuple _ | TName _ | TRef _ | TUnion _
+| (TUnit|TBool|TEvent|TInt _|TRecord _ | TTuple _ | TName _ | TPtr _ | TUnion _
 | TFun _|TBits _|TEnum _|TBuiltin (_, _) |TAbstract _), _ -> false

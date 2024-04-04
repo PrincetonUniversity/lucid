@@ -16,8 +16,6 @@ type constr_var =
   | IVal of int
 type constr = 
   | Eq of string * constr_var
-  
-
 
 type env =
 {
@@ -30,7 +28,6 @@ type env =
   (* tys  : ty CidMap.t; *)
   (* list_sizes : int option CidMap.t  *)
 }
-
 
 let empty_env = 
   {
@@ -61,7 +58,6 @@ let add_vars env ids tys =
   List.fold_left2 add_var env ids tys
 ;;
 
-
 let add_ty env cid ty = 
   {env with tys = CidMap.add cid ty env.tys}
 let add_extern_ty env cid = 
@@ -71,12 +67,10 @@ let get_ty env cid =
   | Some ty -> ty
   | None -> raise (UnboundType cid)
 
-
 let add_constr env constr = 
   {env with idx_constrs = constr::env.idx_constrs}
 
 (* unify just adds constraints to context for arrlenes *)
-
 let rec unify_arrlen env x y =
   match x, y with 
   | IConst x, IConst y -> 
@@ -102,9 +96,9 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
   | ty1, TAbstract(_, {raw_ty = ty2}) -> 
     unify_raw_ty env ty1 ty2
   (* named types unify if their names and types are equal *)
-  | TRef(t1, None), TRef(t2, None) -> 
+  | TPtr(t1, None), TPtr(t2, None) -> 
     unify_ty env t1 t2
-  | TRef(t1, Some(l1)), TRef(t2, Some(l2)) ->
+  | TPtr(t1, Some(l1)), TPtr(t2, Some(l2)) ->
     let env' = unify_ty env t1 t2 in
     unify_arrlen env' l1 l2      
   | TName cid1, TName cid2 -> 
@@ -167,11 +161,10 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
     if (not (List.for_all2 Id.equal labels1 labels2)) then 
       ty_err "union types with different labels";
     unify_lists env unify_ty tys1 tys2
-  | (TUnit|TBool|TEvent|TInt _|TRecord _ | TTuple _ | TName _ | TRef _ | TUnion _
+  | (TUnit|TBool|TEvent|TInt _|TRecord _ | TTuple _ | TName _ | TPtr _ | TUnion _
   | TFun _|TBits _|TEnum _|TBuiltin (_, _)), _ -> 
       dprint_endline@@"type mismatch:\n"^(CCorePPrint.raw_ty_to_string rawty1)^"\nand\n"^(CCorePPrint.raw_ty_to_string rawty2);
       ty_err "type mismatch"
-    
 
 and unify_ty env ty1 ty2 : env = 
   unify_raw_ty env ty1.raw_ty ty2.raw_ty
@@ -230,6 +223,14 @@ let rec infer_exp env exp : env * exp =
     | EVar cid -> 
       let ety = match CidMap.find_opt cid env.vars with
         | Some ty -> ty
+        | None -> 
+          print_endline ("current env:\n"^(env_to_string env));      
+          ty_err@@"cannot find type for unbound variable: "^(CCorePPrint.cid_to_string cid)
+      in
+      env, {exp with e=EVar cid; ety;}
+    | EAddr(cid) -> 
+      let ety = match CidMap.find_opt cid env.vars with
+        | Some ty -> tref ty
         | None -> 
           print_endline ("current env:\n"^(env_to_string env));      
           ty_err@@"cannot find type for unbound variable: "^(CCorePPrint.cid_to_string cid)
@@ -340,7 +341,7 @@ and infer_eop env op (args : exp list) : env * op * exp list * ty = match op, ar
     let env, inf_exp1 = infer_exp env exp1 in
     let env, inf_exp2 = infer_exp env exp2 in    
     match inf_exp1.ety.raw_ty with 
-      | TRef(_, _) -> 
+      | TPtr(_, _) -> 
         (* allow pointer arithmetic if t1 is a ref type. *)
         env, op, [inf_exp1; inf_exp2], inf_exp1.ety
       | _ -> 
@@ -615,13 +616,13 @@ let rec infer_decl env decl : env * decl option =
   )
   | DVar(id, ty, Some(arg)) -> (
     match ty.raw_ty with 
-    | TRef(_, None) -> 
+    | TPtr(_, None) -> 
       (* if this a pointer to a single cell, the other side is a single value *)
       let env, inf_arg = infer_exp env arg in
       let env = unify_ty env ty (tref inf_arg.ety) in
       let env = add_var env (id) ty in
       env, {decl with d=DVar(id, ty, Some(inf_arg))} |> Option.some
-    | TRef(_, Some(_)) -> (
+    | TPtr(_, Some(_)) -> (
       (* if this is an array, the rhs must also be an array *)
       let env, inf_arg = infer_exp env arg in
       let env = unify_ty env ty inf_arg.ety in

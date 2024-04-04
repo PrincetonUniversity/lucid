@@ -60,9 +60,10 @@ let table_lookup_check _ exp =
   let bty_cid, bty_args = extract_tbuiltin tbl.ety in
   match (Cid.names bty_cid), bty_args with 
     | ["Table"; "t"], [key_ty'; _; arg_ty'; ret_ty'] -> (
-      if (not (equiv_tys key.ety key_ty')) then 
-        ty_err "key type does not match table key type";
-      if (not (equiv_tys arg.ety arg_ty')) then 
+      if (not (equiv_tys key.ety (base_type key_ty'))) then (
+        print_endline@@"argument key type:\n"^(CCorePPrint.ty_to_string ~use_abstract_name:true key.ety)^"\ntable key type:\n"^(CCorePPrint.ty_to_string ~use_abstract_name:true key_ty');
+        ty_err "key type does not match table key type");
+      if (not (equiv_tys arg.ety (base_type arg_ty'))) then 
         ty_err "arg type does not match table arg type";
       ret_ty'
     )

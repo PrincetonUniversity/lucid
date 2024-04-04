@@ -52,7 +52,6 @@ let sys_flood =
 *)
 
 (*  
-
   int foo = hash<int>(a, b, c, d, ...); 
   // the arguments to hash may be any type. 
   // for each call to hash we want to do something 
@@ -63,41 +62,108 @@ uint32_t sys_hash(foo_struct foo, bar_struct bar) {
     uint32_t rv = 0;
     uint8_t* foo_bytes = (uint8_t* )&foo;
     uint8_t* bar_bytes = (uint8_t* )&bar;
-
     for (size_t i = 0; i < sizeof(foo); i++) {
         rv += foo_bytes[i];
     }
-
     for (size_t i = 0; i < sizeof(bar); i++) {
         rv += bar_bytes[i];
     }
-
     return rv;
 }
+*)
+  
+(* vector of ops *)
+(* let hash_uid = ref 0;;
+let mk_sys_hash size (args : exp list) = 
+  hash_uid := !hash_uid + 1;
+  let ret_ty = tint size in
+  let ss = stmts@@
+    [slocal (cid"rv") ret_ty (default_exp ret_ty);]
+    @(Core.List.map args 
+        ~f:(fun earg -> 
+                slocal  (eref earg.ety) (ecast (tint 8) (eaddr earg)  )
+            ))
+    (* stopped here. addresses of values? ...  *)
+    (* dereferencing a value is one thing ... (is it?)    
+    *)
+  in 
+  dfun
+    (* (cid@@"hash_"^(string_of_int (!hash_uid)))
+    (tint size)
+    (List.map extract_evar_id args)
+    (sret) *)
+;; *)
+
+(*  
+   we need to generate equality test functions to implement: 
+    x : t1 == y : t1 for table key comparison
+    hash(a : t1, b : t2, ...) for hash operations
+*)
+
+
+
+(* can we make a general expander? *)
+(*  
+  foo_t a; foo_t b; foo_t vm;
+  
+  (a & mask) == (b & mask) 
+
+  --> expand masks
+  ({.field1 = a.field1 & mask.field1; ...}) == ({.field1 = b.field1 & mask.field1 ...})
+
+  --> expand equalities
+  ({.field1 = a.field1 & mask.field1; ...}).field1 == ({.field1 = b.field1 & mask.field1 ...}).field1
+    &&
+  ({.field1 = a.field1 & mask.field1; ...}).field2 == ({.field1 = b.field1 & mask.field1 ...}).field2
+
+  --> optimize projections
+  ((a->field1 & mask->field1) == (b->field1 & mask->field1)) &&
+  ((a->field2 & mask->field2) == (b->field2 & mask->field2)) &&
+  ((a->field3 & mask->field3) == (b->field3 & mask->field3)) &&
+  ((a->field4 & mask->field4) == (b->field4 & mask->field4))
+
+
+
+  if this ends up constructing two new records, then... 
+  it will end up costing more because of the temp var creations
+
+
+  // the type o fthis is foo_t, which makes it harder
 
 
 *)
+
+
+
+
+(* now... hash expressions... *)
 (* 
-(* vector of ops *)
-let rec eops op exps = 
-  match exps with 
-  | [] -> err "no expressions"
-  | [exp] -> exp
-  | exp::exps -> 
-    eop op [exp; eops op exps]
-;;
-let hash_uid = ref 0;;
-let mk_sys_hash size (args : exp list) = 
-  hash_uid := !hash_uid + 1;
-  dfun
-    (cid@@"hash_"^(string_of_int (!hash_uid)))
-    (tint size)
-    (List.map extract_evar_id args)
-    (sret)
-    
+   
+hash<32>(a, b, c, d); --> 
+
+hash<32>((a, b, c, d)); --> 
+
+tup x = (a, b, c, d);
+hash<32>(x);
+
+--> 
+
+tup x = (a, b, c, d);
+hash<32>(&x);
 
 
-;; *)
+
+
+
+
+
+
+*)
+
+
+
+
+
 
 let process decls = 
   sys_time::sys_flood:: (*add the functions, replace group types with port types *)

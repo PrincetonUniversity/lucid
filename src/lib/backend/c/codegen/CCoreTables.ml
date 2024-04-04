@@ -149,13 +149,15 @@ let table_lookup spec =
     (List.map apply_default_branch action_tags)
   in
   let idx = id "_idx" in
+  let idx = evar (Cid.id idx) (tint 32) in
   let cont = id "_continue" in
   let apply_branch  entry action_tag = 
     (* tbl->entries[idx]->action_arg *)
     let action_evar = efunref ((untag action_tag)) action_ty in    
+    let eq_test_op = compound_masked_eq key_param (entry/.id"key") (entry/.id"mask") in
     case spec.actions_enum_ty
     action_tag
-      (sif (eop Eq [(key_param /&& (entry/.id"mask")); ((entry/.id"key") /&& (entry/.id"mask"))])
+      (sif eq_test_op
         (stmts [
           (id"rv" /:= (action_evar /** [((tbl/.id"entries")/@idx)/.id"action_arg"; arg_param]));
           sassign (Cid.id cont)  (eval (vbool false));])
@@ -163,7 +165,7 @@ let table_lookup spec =
   in
   
   let s_loop = 
-    swhile idx spec.len cont 
+    swhile (id "_idx") spec.len cont 
       (
         let entry = (tbl/.id"entries")/@idx in
         smatch [(entry/.id"action_tag")]

@@ -67,8 +67,8 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : string =
     if (use_abstract_name) then 
       cid_to_string cid
     else ty_to_string ty
-  | TRef(ty, None) -> sprintf "%s*" (ty_to_string ~use_abstract_name ty)
-  | TRef(ty, Some(arrlen)) -> 
+  | TPtr(ty, None) -> sprintf "%s*" (ty_to_string ~use_abstract_name ty)
+  | TPtr(ty, Some(arrlen)) -> 
     ty_to_string ~use_abstract_name:true ty ^ "[" ^ arrlen_to_string arrlen ^ "]"
 
 and ty_to_string ?(use_abstract_name=false) ty = raw_ty_to_string ~use_abstract_name ty.raw_ty
@@ -119,6 +119,7 @@ let rec e_to_string (e: e) : string =
   match e with
   | EVal v -> value_to_string v
   | EVar cid -> cid_to_string cid
+  | EAddr(cid) -> sprintf "(&%s)" (cid_to_string cid)
   | ETuple es -> 
     let es_strs = List.map exp_to_string es in
     let field_strs = List.mapi (fun i e -> "." ^ "_" ^ string_of_int i ^ " = " ^ e ^";") es_strs in
@@ -150,47 +151,49 @@ let rec e_to_string (e: e) : string =
     sprintf "%s[%s]" (exp_to_string arr_exp) (exp_to_string idx_exp)
   | EDeref(exp) -> sprintf "(*(%s))" (exp_to_string exp)
 and exp_to_string exp : string = e_to_string exp.e
+and exps_to_string exps = String.concat ", " (List.map exp_to_string exps)
 and op_to_string (op: op) (args: exp list) : string =
-  let args_str = List.map exp_to_string args in
-  match op, args_str with
-  | And, [a; b] -> a ^ " && " ^ b
-  | Or, [a; b] -> a ^ " || " ^ b
-  | Not, [a] -> "!" ^ a
-  | Eq, [a; b] -> a ^ " == " ^ b
-  | Neq, [a; b] -> a ^ " != " ^ b
-  | Less, [a; b] -> a ^ " < " ^ b
-  | More, [a; b] -> a ^ " > " ^ b
-  | Leq, [a; b] -> a ^ " <= " ^ b
-  | Geq, [a; b] -> a ^ " >= " ^ b
-  | Neg, [a] -> "-" ^ a
-  | Plus, [a; b] -> a ^ " + " ^ b
-  | Sub, [a; b] -> a ^ " - " ^ b
-  | SatPlus, [a; b] -> a ^ " |+| " ^ b
-  | SatSub, [a; b] -> a ^ " |-| " ^ b
-  | BitAnd, [a; b] -> a ^ " & " ^ b
-  | BitOr, [a; b] -> a ^ " | " ^ b
-  | BitXor, [a; b] -> a ^ " ^ " ^ b
-  | BitNot, [a] -> "~" ^ a
-  | LShift, [a; b] -> a ^ " << " ^ b
-  | RShift, [a; b] -> a ^ " >> " ^ b
-  | Slice (i, j), [a] -> a ^ "[" ^ string_of_int i ^ ":" ^ string_of_int j ^ "]"
-  | PatExact, [a] -> "PatExact(" ^ a ^ ")"
-  | PatMask, [a] -> "PatMask(" ^ a ^ ")"
-  | Hash size, args -> "Hash_" ^ size_to_string size ^ "(" ^ (String.concat ", " args) ^ ")"
+  match op, args with 
+  | And, [a; b] when is_eop a || is_eop b -> 
+    sprintf "(%s) && (%s)" (exp_to_string a) (exp_to_string b)
+  | And, [a; b] -> exp_to_string a ^ " && " ^ exp_to_string b
+  | Or, [a; b] -> exp_to_string a ^ " || " ^ exp_to_string b
+  | Not, [a] -> "!" ^ exp_to_string a
+  | Eq, [a; b] when is_eop a || is_eop b -> 
+    sprintf "(%s) == (%s)" (exp_to_string a) (exp_to_string b)
+  | Eq, [a; b] -> exp_to_string a ^ " == " ^ exp_to_string b
+  | Neq, [a; b] -> exp_to_string a ^ " != " ^ exp_to_string b
+  | Less, [a; b] -> exp_to_string a ^ " < " ^ exp_to_string b
+  | More, [a; b] -> exp_to_string a ^ " > " ^ exp_to_string b
+  | Leq, [a; b] -> exp_to_string a ^ " <= " ^ exp_to_string b
+  | Geq, [a; b] -> exp_to_string a ^ " >= " ^ exp_to_string b
+  | Neg, [a] -> "-" ^ exp_to_string a
+  | Plus, [a; b] -> exp_to_string a ^ " + " ^ exp_to_string b
+  | Sub, [a; b] -> exp_to_string a ^ " - " ^ exp_to_string b
+  | SatPlus, [a; b] -> exp_to_string a ^ " |+| " ^ exp_to_string b
+  | SatSub, [a; b] -> exp_to_string a ^ " |-| " ^ exp_to_string b
+  | BitAnd, [a; b] -> exp_to_string a ^ " & " ^ exp_to_string b
+  | BitOr, [a; b] -> exp_to_string a ^ " | " ^ exp_to_string b
+  | BitXor, [a; b] -> exp_to_string a ^ " ^ " ^ exp_to_string b
+  | BitNot, [a] -> "~" ^ exp_to_string a
+  | LShift, [a; b] -> exp_to_string a ^ " << " ^ exp_to_string b
+  | RShift, [a; b] -> exp_to_string a ^ " >> " ^ exp_to_string b
+  | Slice (i, j), [a] -> exp_to_string a ^ "[" ^ string_of_int i ^ ":" ^ string_of_int j ^ "]"
+  | PatExact, [a] -> "PatExact(" ^ exp_to_string a ^ ")"
+  | PatMask, [a] -> "PatMask(" ^ exp_to_string a ^ ")"
+  | Hash size, args -> "Hash_" ^ size_to_string size ^ "(" ^exps_to_string args ^ ")"
   | Cast new_ty, [a] ->
     let int_ty_str = ty_to_string ~use_abstract_name:true (new_ty) in
-    "((" ^ int_ty_str ^ ")(" ^ a ^"))"
-  | Conc, args -> String.concat "++" args
+    "((" ^ int_ty_str ^ ")(" ^ exp_to_string a ^"))"
+  | Conc, args -> String.concat "++" ((List.map exp_to_string args))
   (* use arrow notation shorthand for derefs, unless its a subscript op *)
-  | Project id, _ when (is_ederef (List.hd args) && (not@@is_eop (extract_ederef (List.hd args)))) -> 
-                                                     let arg = extract_ederef (List.hd args) in 
-                                                     let a = exp_to_string arg in
-                                                         a ^ "->" ^ id_to_string id
-
-  | Project id, [a]                                   -> a ^ "." ^ id_to_string id
-  | Get i, [a] -> a ^ "._" ^ string_of_int i
-  | Mod, [x; m] -> Printf.sprintf "(%s mod %s)" x m
+  | Project id, [a] when (is_ederef (a) && (not@@is_eop (extract_ederef (a)))) -> 
+      exp_to_string a ^ "->" ^ id_to_string id
+  | Project id, [a] -> exp_to_string a ^ "." ^ id_to_string id
+  | Get i, [a] -> exp_to_string a ^ "._" ^ string_of_int i
+  | Mod, [x; m] -> Printf.sprintf "(%s mod %s)" (exp_to_string x) (exp_to_string m)
   | _, _ -> failwith ("Invalid number of arguments for operator: "^(show_op op))
+
 
 let assign_op_to_string (op: assign_op) = 
   match op with
