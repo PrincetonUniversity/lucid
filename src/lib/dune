@@ -172,6 +172,7 @@
    CCoreConfig
    CCoreUtils
    CCorePPrint
+   CCoreCPrint
    CCoreExceptions
    CCoreTransformers
    CoreToCCore

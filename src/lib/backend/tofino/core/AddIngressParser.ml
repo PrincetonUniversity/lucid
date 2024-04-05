@@ -56,6 +56,9 @@ let packetevent_parse_block ?(with_payloads=false) (pkt_var : exp) event = match
 
 (* call the parser for background events. *)
 let lucid_background_event_parser ?(with_payloads=true) pkt_var bg_events = 
+   match bg_events with 
+   | [] -> block [ ] pdrop (* no background events means there's nothing to parse *)
+   | _ ->
    let (branches : parser_branch list) = List.map 
       (fun bg_ev -> match bg_ev.d with 
          | DEvent(_, Some(num), _,_) -> 
@@ -81,6 +84,9 @@ let lucid_background_event_parser ?(with_payloads=true) pkt_var bg_events =
 ;;
 (* a parser that starts after the ethernet header (it doesn't skip ethernet header) *)
 let lucid_background_event_parser_from_eth ?(with_payloads=true) pkt_var bg_events = 
+   match bg_events with 
+   | [] -> block [ ] pdrop (* no background events means there's nothing to parse *)
+   | _ -> 
    let (branches : parser_branch list) = List.map 
       (fun bg_ev -> match bg_ev.d with 
          | DEvent(_, Some(num), _,_) -> 

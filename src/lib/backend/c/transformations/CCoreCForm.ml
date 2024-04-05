@@ -255,9 +255,7 @@ let declare_tuples decls =
     val mutable tnum = 0
     inherit [_] s_map as super
     method! visit_ty () ty =
-      print_endline ("visiting type: "^(CCorePPrint.ty_to_string ty));
       let ty = super#visit_ty () ty in
-      print_endline ("inner visit of type: "^(CCorePPrint.ty_to_string ty));
       if is_ttuple ty then (
         let found_opt = (List.find_opt  (fun (t, _ )-> equiv_tys t ty) tuple_tys) in
         let tcid = match found_opt with 
@@ -265,7 +263,6 @@ let declare_tuples decls =
           | _ -> 
             tnum <- tnum + 1;
             let tcid = cid("tuple_"^string_of_int tnum) in
-            print_endline ("tuple type: "^(CCorePPrint.ty_to_string ty)^" -> "^(CCorePPrint.cid_to_string tcid));
             tuple_tys <- tuple_tys@[ty, tcid];
             tcid
         in

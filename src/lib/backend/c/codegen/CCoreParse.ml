@@ -42,6 +42,22 @@ Parse helpers:
       return rv;
   } 
 
+Bits:
+  The alignreads pass ensures that all contiguous reads 
+  in a parser are byte aligned, and wraps them in byte-aligned structs:
+
+  align_bit_read_block pkt bit_read_block =  (* bit_read_block is the block of read commands that must be aligned *)
+    let bitrec = fresh_rec bit_read_block in (* make the record *)
+    let read_stmt = sread bitrec pkt in (* read the record *)
+    let id_subst_exps = List.map (fun stmt -> assigned_id stmt, bitrec/.(assigned_id stmt) ) bit_read_block in (* replace each variable with its struct field *)
+    
+    let assign_stmts 
+    for stmt in bit_read_block: 
+      stmt' =  (bitrec/.(var_of stmt))
+    for (sz, id) in bit_read_block:
+
+
+
 Generate: 
   event generation is translated into setting the 
   value of the event return variable, similar to 

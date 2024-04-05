@@ -83,7 +83,7 @@ and e =
   | ERecord of id list * exp list
   | EDeref of exp
 
-  and call_kind = 
+and call_kind = 
   | CFun
   | CEvent 
   (* a call to a builtin is annotated with the original 
