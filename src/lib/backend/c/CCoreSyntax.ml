@@ -130,6 +130,7 @@ and fun_body =
   | BForiegn of string
   
 and d = 
+  | DForiegn of string (* misc things in the underlying language. Imports, etc. *)
   | DVar of cid * ty * (exp option)
   | DFun of fun_def
   | DTy  of cid * ty option (* named types and external types *)
@@ -188,8 +189,6 @@ let tevent = ty TEvent
 let trecord pairs = 
   let cids, tys = List.split pairs in
   ty (TRecord(cids, tys))
-;;
-
 let ttuple tys = ty (TTuple tys)
 let tunion labels tys = ty (TUnion(labels, tys))  
 let tfun_kind func_kind arg_tys ret_ty = ty (TFun {arg_tys; ret_ty; func_kind})
@@ -246,14 +245,12 @@ let is_tstring ty = is_tabstract "string" ty
 let is_tchar ty = is_tabstract "char" ty
 let is_tbuiltin tycid ty = match ty.raw_ty with TBuiltin(cid, _) -> Cid.equal cid tycid | _ -> false
 let is_tbuiltin_any ty = match ty.raw_ty with TBuiltin(_, _) -> true | _ -> false
-
 let is_tref  ty = match ty.raw_ty with TPtr _ -> true | _ -> false
 let is_tenum ty = match (base_type ty).raw_ty with TEnum _ -> true | _ -> false
 
 let extract_func_ty ty = match ty.raw_ty with 
   | TFun {arg_tys; ret_ty; func_kind} -> arg_tys, ret_ty, func_kind
   | _ -> raise (FormError "[extract_func_ty] expected TFun")
-
 
 let extract_tint_size ty = match (base_type ty).raw_ty with 
   | TInt size -> size
@@ -303,6 +300,11 @@ let extract_tref ty = match ty.raw_ty with
   | TPtr(tinner, _) -> tinner
   | _ -> raise (FormError "[extract_tref] expected TGlobal")
 
+
+let tuple_length ty = match ty.raw_ty with 
+  | TTuple ts -> List.length ts
+  | _ -> raise (FormError "[ttup_len] expected TTuple")
+;;
 
 let rec bitsizeof_ty ty = 
   match ty.raw_ty with 
@@ -770,14 +772,13 @@ let dhandler = dfun_kind FHandler
 let dparser = dfun_kind FParser
 let daction = dfun_kind FAction 
 let dmemop = dfun_kind FMemop
-
 let dfun_extern id fun_kind param_tys ret_ty = 
   let params = List.map (fun ty -> (Id.fresh_name "a", ty)) param_tys in
   decl (DFun(fun_kind, id, ret_ty, params, BExtern))
 ;;
 let dvar_const id ty exp = decl (DVar(id, ty, Some(exp))) Span.default
 let dvar_extern id ty = decl (DVar(id, ty, None)) Span.default
-
+let dextern id ty = decl (DVar(id, ty, None)) Span.default
 let default_checker = Some("gcc -x c - -fsyntax-only");;
 let dfun_foriegn fid fparams fret_ty fstr = 
   (* foriegn function with default checker. *)
@@ -786,11 +787,9 @@ let dfun_foriegn fid fparams fret_ty fstr =
 (* toplevel variable. Should be declaring as a ref type. *)
 let dglobal id ty exp = decl (DVar(id, ty, Some(exp))) Span.default
 
-let dextern id ty = decl (DVar(id, ty, None)) Span.default
-(* type declarations *)
+
 let dty tycid ty = decl (DTy(tycid, Some ty)) Span.default
 let dty_ext tycid = decl (DTy(tycid, None)) Span.default
-
 let decl_tabstract ty = 
   let tname = alias_type ty in
   let ty = base_type ty in
@@ -798,6 +797,9 @@ let decl_tabstract ty =
   dty name ty
 ;;
 let devent id evconstrnum params is_packet = decl (DEvent {evconstrid=id; evconstrnum; evparams=params; is_packet}) Span.default
+
+let dforiegn str = decl (DForiegn(str)) Span.default
+let dinclude str = dforiegn("#include "^str)
 
 
 let is_devent decl = match decl.d with 

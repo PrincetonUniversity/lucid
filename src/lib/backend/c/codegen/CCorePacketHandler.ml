@@ -70,37 +70,6 @@ let reset_cursor =
 ;;
 
 let pkt_handler_str = {| 
-/* uncomment this is you want the gcc syntax checker
-to pass before compilation is finished.  */
-/* 
-#include <stdio.h>
-#include <stdlib.h>
-#include <stdint.h>
-
-typedef struct bytes_t bytes_t;
-typedef struct event_t event_t;
-
-extern bytes_t bytes_v;
-extern bytes_t* bytes;
-
-extern event_t ev1_v;
-extern event_t ev2_v;
-extern event_t ev_out_v;
-
-extern event_t* ev1;
-extern event_t* ev2;
-extern event_t* ev_out;
-extern event_t* ev_tmp;
-
-extern int deparse_event(event_t* ev_out, bytes_t* buf_out);
-extern uint8_t parse_event(bytes_t* pkt, event_t* ev_in);
-extern int handle_event(event_t* ev_in, event_t* ev_next, event_t* ev_out);
-
-extern int get_event_tag(event_t* ev);
-extern void set_event_tag(event_t* ev, int tag);
-extern void reset_cursor(char* buf, int len, bytes_t* bytes);
-*/
-
 // fixed toplevel packet handler 
 int pkt_handler(char* buf, int len, char* out_buf, int* out_len) {
     int generated_port = 0;
@@ -155,3 +124,42 @@ let process decls =
   in
   decls@[get_event_tag t_event; reset_event_tag t_event; reset_cursor; pkt_handler]
 ;;
+
+
+(*  
+copy and pasted from packet handler to make it check 
+without any compiler generated code.
+/* uncomment this is you want the gcc syntax checker
+to pass before compilation is finished.  */
+/* 
+#include <stdio.h>
+#include <stdlib.h>
+#include <stdint.h>
+
+typedef struct bytes_t bytes_t;
+typedef struct event_t event_t;
+
+extern bytes_t bytes_v;
+extern bytes_t* bytes;
+
+extern event_t ev1_v;
+extern event_t ev2_v;
+extern event_t ev_out_v;
+
+extern event_t* ev1;
+extern event_t* ev2;
+extern event_t* ev_out;
+extern event_t* ev_tmp;
+
+extern int deparse_event(event_t* ev_out, bytes_t* buf_out);
+extern uint8_t parse_event(bytes_t* pkt, event_t* ev_in);
+extern int handle_event(event_t* ev_in, event_t* ev_next, event_t* ev_out);
+
+extern int get_event_tag(event_t* ev);
+extern void set_event_tag(event_t* ev, int tag);
+extern void reset_cursor(char* buf, int len, bytes_t* bytes);
+*/
+   
+
+
+*)

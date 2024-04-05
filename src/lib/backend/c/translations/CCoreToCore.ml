@@ -462,7 +462,9 @@ let rec translate_decl (decl : F.decl) : C.decl list =
     let ty = translate_ty ty in
     [C.decl_sp (C.DUserTy(Cid.to_id cid, ty)) decl.dspan]
   | F.DTy(_, None) -> 
-    failwith "type declaration without type definition"  
+    failwith "type declaration without type definition"
+  | F.DForiegn _ -> 
+    failwith "foriegn declaration"
 ;;
 
 let translate_prog (ds : F.decls) : C.decls = 

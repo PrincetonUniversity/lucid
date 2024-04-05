@@ -65,6 +65,8 @@ let compile ds =
   print_endline ("---- Normalizing code forms for c ----");
   let cds = CCoreCForm.normalize_matches cds in
   let cds = CCoreCForm.normalize_struct_inits cds in
+  let cds = CCoreCForm.delete_empty_tuples cds in
+  let cds = CCoreCForm.declare_tuples cds in
 
   (*** 7. toplevel function generation ***)
   (* these functions are outside of the user program, 
@@ -77,10 +79,10 @@ let compile ds =
   (* toplevel driver function (not always necessary, platform specific) *)
   (* TODO 
       final steps: 
-        - implement hash and CRC (at least stubs)
-        - driver function in ccore, not just a string of c
-        - libpcap driver 
+        - Tagged unions instead of enums + unions
         - c pretty printer
+        - libpcap driver 
+        - driver function in ccore, not just a string of c
         - feature completeness: 
           - pairarrays
           - payloads
@@ -102,6 +104,14 @@ let compile ds =
 
   let cds = CCoreTyper.check_decls cds in
   
+  (* add some includes (likely platform specific, may go in a particular pass) *)
+  let cds = [
+      CCoreSyntax.dinclude "<stdio.h>";
+      CCoreSyntax.dinclude "<stdlib.h>";
+      CCoreSyntax.dinclude "<stdint.h>"]
+    @cds
+  in
+
   (*** 8. print as C *)
   let s = CCorePPrint.decls_to_string cds in
   print_endline ("---- C compilation done ----");

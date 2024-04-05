@@ -286,6 +286,7 @@ let rec d_to_string (d: d) : string =
     let id_str = id_to_string event_def.evconstrid in
     let params_str = params_to_string event_def.evparams in
     "event " ^ id_str ^ "(" ^ params_str ^ ");"
+  | DForiegn str -> str
 
 and fun_def_to_string (kind, id, ty, params, stmt_opt) = 
   let kind_str = func_kind_to_string kind in

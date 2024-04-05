@@ -52,6 +52,7 @@ let hash_fun size =
 }
 |}
 
+
 let process decls = 
   sys_time::sys_flood:: (*add the functions, replace group types with port types *)
   hash_fun 32::

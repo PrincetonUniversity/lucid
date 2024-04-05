@@ -121,10 +121,8 @@ let normalize_struct_inits decls =
             stmt'
       )
     method! visit_exp () exp = 
-      print_endline ("[normalize_inits] visiting exp: "^(CCorePPrint.exp_to_string exp));
       if (is_initializer exp) 
       then (
-        print_endline ("  its an initializer");
         let id = Id.fresh_name "tmp" in
         let stmt = slocal (Cid.id id) exp.ety exp in
         new_stmts <- new_stmts@[stmt];
@@ -134,3 +132,156 @@ let normalize_struct_inits decls =
   in
   v#visit_decls () decls
 ;;
+
+let delete_empty_tuples decls = 
+  (* remove everything relating to empty tuples. 
+      - type and variable declarations
+      - SAssigns with rhs : ()
+      - parameters
+      - arguments to calls  
+  *)
+  let rec is_empty_tuple ty = 
+    match ty.raw_ty with 
+    | TTuple([]) -> true
+    | TPtr(ty, _) -> is_empty_tuple ty
+    | TAbstract(_, ty) -> is_empty_tuple ty
+    | _ -> false
+  in
+  let v = object 
+    inherit [_] s_map as super
+    method! visit_TUnion () ids tys = 
+      let tys = List.map (super#visit_ty ()) tys in
+      let id_tys = List.combine ids tys in
+      let id_tys = List.filter (fun (_, ty) -> not (is_empty_tuple ty)) id_tys in
+      let ids, tys = List.split id_tys in
+      TUnion(ids, tys)
+    method! visit_TRecord () ids tys = 
+      let tys = List.map (super#visit_ty ()) tys in
+      let id_tys = List.combine ids tys in
+      let id_tys = List.filter (fun (_, ty) -> not (is_empty_tuple ty)) id_tys in
+      let ids, tys = List.split id_tys in
+      TRecord(ids, tys)
+    method! visit_TTuple () tys = 
+      let tys = List.map (super#visit_ty ()) tys in
+      let tys = List.filter (fun ty -> not (is_empty_tuple ty)) tys in
+      TTuple(tys)
+    method! visit_VRecord () ids vs = 
+      let vs = List.map (super#visit_value ()) vs in
+      let id_vs = List.combine ids vs in
+      let id_vs = List.filter (fun (_, v) -> not (is_empty_tuple v.vty)) id_vs in
+      let ids, vs = List.split id_vs in
+      VRecord(ids, vs)
+    method! visit_VTuple () vs = 
+      let vs = List.map (super#visit_value ()) vs in
+      let vs = List.filter (fun v -> not (is_empty_tuple v.vty)) vs in
+      VTuple(vs)
+    method! visit_func_ty () func_ty = 
+      let func_ty = super#visit_func_ty () func_ty in
+      let arg_tys = List.filter (fun ty -> not (is_empty_tuple ty)) func_ty.arg_tys in
+      {func_ty with arg_tys}
+    method! visit_vevent () vevent = 
+      let evdata = List.map (super#visit_value ()) vevent.evdata in
+      let evdata = List.filter (fun v -> not (is_empty_tuple v.vty)) evdata in
+      super#visit_vevent () {vevent with evdata}
+    method! visit_ERecord () ids es = 
+      let es = List.map (super#visit_exp ()) es in
+      let id_es = List.combine ids es in
+      let id_es = List.filter (fun (_, e) -> not (is_empty_tuple e.ety)) id_es in
+      let ids, es = List.split id_es in
+      ERecord(ids, es)
+    method! visit_ETuple () es = 
+      let es = List.map (super#visit_exp ()) es in
+      let es = List.filter (fun e -> not (is_empty_tuple e.ety)) es in
+      ETuple(es)
+    method! visit_OTupleLocal () cids tys = 
+      let tys = List.map (super#visit_ty ()) tys in
+      let tys = List.filter (fun ty -> not (is_empty_tuple ty)) tys in
+      super#visit_OTupleLocal () cids tys
+    method! visit_OTupleAssign () exps = 
+      let exps = List.map (super#visit_exp ()) exps in
+      let exps = List.filter (fun exp -> not (is_empty_tuple exp.ety)) exps in
+      super#visit_OTupleAssign () exps
+    method! visit_SAssign () assign_op exp = 
+      if (is_ttuple exp.ety && (tuple_length exp.ety = 0)) 
+        then SNoop
+        else super#visit_SAssign () assign_op exp    
+    method! visit_params () params = 
+      let params = List.filter (fun (_, ty) -> not (is_empty_tuple ty)) params in
+      params
+    
+    method! visit_ECall () f args call_kind = 
+      let args = List.filter (fun exp -> not (is_empty_tuple exp.ety)) args in
+      super#visit_ECall () f args call_kind
+    end
+  in
+
+  let rec process_decls decls = 
+    match decls with 
+    | [] -> []
+    | decl::decls -> (
+      let decl = v#visit_decl () decl in
+      match decl.d with 
+      | DTy(_, Some(ty)) when is_empty_tuple ty -> 
+        process_decls decls
+      | DVar(_, ty, _) when is_empty_tuple ty -> 
+        process_decls decls
+      | _ -> decl::(process_decls decls)
+    )
+
+  in
+
+  let empty_tuple_checker = object 
+    inherit [_] s_iter as super
+    val mutable has_empty_tuple = false
+    method has_empty_tuple = has_empty_tuple
+    method! visit_TTuple () tys = 
+      if (List.exists is_empty_tuple tys) then has_empty_tuple <- true;
+      super#visit_TTuple () tys;
+    end
+  in
+  let result = process_decls decls in
+  empty_tuple_checker#visit_decls () result;
+  if empty_tuple_checker#has_empty_tuple then 
+    err "empty tuple elimination failed to remove all empty tuples"
+  else result
+;;
+
+
+let declare_tuples decls =
+  (* replace tuple types with named tuple types *)
+  let v = object 
+    (* new statements that must be added before the current one *)
+    val mutable tuple_tys = []
+    val mutable tnum = 0
+    inherit [_] s_map as super
+    method! visit_ty () ty =
+      print_endline ("visiting type: "^(CCorePPrint.ty_to_string ty));
+      let ty = super#visit_ty () ty in
+      print_endline ("inner visit of type: "^(CCorePPrint.ty_to_string ty));
+      if is_ttuple ty then (
+        let found_opt = (List.find_opt  (fun (t, _ )-> equiv_tys t ty) tuple_tys) in
+        let tcid = match found_opt with 
+          | Some(_, tcid) -> tcid 
+          | _ -> 
+            tnum <- tnum + 1;
+            let tcid = cid("tuple_"^string_of_int tnum) in
+            print_endline ("tuple type: "^(CCorePPrint.ty_to_string ty)^" -> "^(CCorePPrint.cid_to_string tcid));
+            tuple_tys <- tuple_tys@[ty, tcid];
+            tcid
+        in
+        tabstract_cid tcid ty
+      ) 
+      else ty
+    method get_tuple_tys = tuple_tys
+  end
+  in
+  (* add in the tuple declarations. Should be safe to put these at the top. 
+     Also, because of the traversal order, inner tuple types should 
+     be generated before outer types. *)
+  let decls = 
+    (v#visit_decls () decls) 
+  in
+  (List.map (fun (ty, cid) -> decl_tabstract@@tabstract_cid cid ty) (v#get_tuple_tys))
+  @decls
+;;
+

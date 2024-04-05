@@ -693,6 +693,7 @@ let rec infer_decl env decl : env * decl option =
     env, decl |> Option.some
   | DFun(_, _, _, _, BForiegn _) -> 
     ty_err "foriegn functions must be declared as type foriegn"
+  | DForiegn _ -> env, decl |> Option.some
 
 and infer_decls env decls : env * decl list =
   match decls with
