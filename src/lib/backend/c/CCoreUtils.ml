@@ -19,6 +19,10 @@ let id = Id.create
 let cid s = Cid.create [s]
 
 
+let n_bytes n_bits = (* number of bytes required to hold n_bits *) 
+  (n_bits + 7) / 8
+;;
+
 
 let is_smatch statement = match statement.s with 
   | SMatch _ -> true 

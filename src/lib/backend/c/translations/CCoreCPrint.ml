@@ -1,87 +1,128 @@
 open CCoreSyntax
+open CCoreExceptions
+open CCoreUtils
 let sprintf = Printf.sprintf
+
+(* TODO:
+   
+1. eliminate tuple assign and local (and check?)
+2. eliminate bit and tern types (probably in match elim) (and check?)
+
+*)
 
 (* split on newlines, indent each newline by n spaces, combine back into string *)
 let indent n str = str |> String.split_on_char '\n' |> List.map (fun s -> String.make n ' ' ^ s) |> String.concat "\n"
+let comma_sep fn lst = String.concat ", " (List.map fn lst)
+let line_sep fn lst = String.concat "\n" (List.map fn lst)
+let comment str = sprintf "/* %s */" str
 
-let comment str = "/* "^str^"*/"
-
+let is_tbit_int ty = 
+  match ty.raw_ty with 
+  | TInt size ->( 
+    match size with 
+    | 8 | 16 | 32 | 64 -> false
+    | _ -> true)
+  | _ -> false
+;;
 let size_to_string size = string_of_int size
 let arrlen_to_string = function 
   | IConst(i) -> string_of_int i
-  | IVar(v) -> fst v
+  | IVar(_) -> ty_err "size variables cannot be printed to c"
 
-let func_kind_to_string = function
-  | FNormal -> "fn"
-  | FHandler -> "handler"
-  | FParser -> "parser"
-  | FAction -> "action"
-  | FMemop -> "memop"
-  | FForiegn -> "fn"
-;;
-
-let id_to_string id = 
-  fst id
+let id_to_string id = Id.name id
   (* Id.to_string id *)
 let cid_to_string (cid : Cid.t) = 
   String.concat "_" (List.map id_to_string (Cid.to_ids cid))
   (* Cid.to_string cid *)
 
 (* use abstract names in parameter and function argument types. Possibly elsewhere. *)
-let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : string =
+(* let rec raw_ty_to_string_pair ?(use_abstract_name=false) (r: raw_ty) : (string * string) =
   match r with
-  | TUnit -> "void"
-  | TInt 32 -> "int"
-  | TInt size -> "int" ^ size_to_string size
-  | TBool -> "bool"
+  | TPtr(ty, (Some(len))) -> 
+    let prefix, suffix = ty_to_string_pair use_abstract_name ty in
+    prefix, (sprintf "[%s]" (arrlen_to_string len))^suffix
+  | TPtr(ty, None) -> 
+    let prefix, suffix = ty_to_string_pair use_abstract_name ty in
+    let prefix = prefix ^ "(*" in
+    let suffix = ")" ^ suffix in
+    prefix, suffix *)
+let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : (string * string) =
+  match r with
+  | TUnit -> "void", ""
+  | TInt n when (List.mem n [8; 16; 32; 64]) -> sprintf "uint%i_t" n, ""
+  | TInt n -> 
+    sprintf "uint%i_t" ((n_bytes n)), sprintf ": %i" n
+  | TBool -> "uint8_t", ""
   | TUnion(labels, ts) -> 
-    let label_strs = List.map (id_to_string) labels in
-    let ts_strs = List.map (ty_to_string ~use_abstract_name:true) ts in
-    let field_strs = List.map2 (fun l e -> l ^ ": " ^ e ^";") label_strs ts_strs in
-    let fields_str = String.concat " " field_strs in  
-    sprintf "union {%s}" fields_str 
-    (* "{" ^ fields_str ^ "}" *)
+    let label_tys = List.map2 (fun l t -> l, t) labels ts in
+    let field_str = line_sep field_to_string label_tys |> indent 2 in
+    sprintf "union {\n%s\n}" field_str, ""
   | TRecord(labels, ts) -> 
-    let label_strs = List.map (id_to_string) labels in
-    let ts_strs = List.map (ty_to_string ~use_abstract_name:true) ts in
-    let field_strs = List.map2 (fun l e -> l ^ ": " ^ e ^";") label_strs ts_strs in
-    let fields_str = String.concat " " field_strs in    
-    "{" ^ fields_str ^ "}"
+    let label_tys = List.map2 (fun l t -> l, t) labels ts in
+    let field_str = line_sep field_to_string label_tys |> indent 2 in
+    sprintf "struct {\n%s\n}" field_str, ""
   | TTuple ts -> 
-    let label_strs = List.mapi (fun i _ -> "_" ^ string_of_int i) ts in
-    let ts_strs = List.map (ty_to_string ~use_abstract_name:true) ts in
-    let field_strs = List.map2 (fun l e -> l ^ ": " ^ e ^";") label_strs ts_strs in
-    let fields_str = String.concat " " field_strs in    
-    "{" ^ fields_str ^ "}"
-  | TFun func_ty -> "function(" ^ func_ty_to_string func_ty ^ ")"
-  | TBits {ternary; len} -> (if ternary then "ternary_" else "") ^ "bit[" ^ size_to_string len ^ "]"
-  | TEvent -> "event"
-  | TEnum list -> 
-    let list_str = String.concat ", " (List.map (fun (s, i) -> cid_to_string s ^ " = " ^ string_of_int i) list) in
-    "enum {" ^ list_str ^ "}"
-  | TBuiltin (cid, ty_list) -> 
-    let ty_list_str = String.concat ", " (List.map (ty_to_string ~use_abstract_name) ty_list) in
-    cid_to_string cid ^ "<<" ^ ty_list_str ^ ">>"
-  | TName cid -> cid_to_string cid
+    let labels = List.init (List.length ts) (fun i -> Id.create("_" ^  string_of_int i)) in
+    let label_tys = List.map2 (fun l t -> l, t) labels ts in
+    let field_str = line_sep field_to_string label_tys |> indent 2 in
+    sprintf "struct {\n%s\n}" field_str, ""
+  | TFun _ -> ty_err "function types string depends on context"
+  | TBits _ -> ty_err "bit types should be eliminated"
+  | TEvent -> ty_err "event types should be eliminated"
+  | TEnum cid_ints ->  
+    let list_str = String.concat ", " (List.map (fun (s, i) -> cid_to_string s ^ " = " ^ string_of_int i) cid_ints) in
+    "{" ^ list_str ^ "}", ""
+  | TBuiltin (_, _) -> ty_err "builtin types should be eliminated"
+  | TName _ -> ty_err "name types should be eliminated"
   | TAbstract (cid, ty) -> 
-    if (use_abstract_name) then 
-      cid_to_string cid
+    if (use_abstract_name) then cid_to_string cid, ""
     else ty_to_string ty
-  | TPtr(ty, None) -> sprintf "%s*" (ty_to_string ~use_abstract_name ty)
-  | TPtr(ty, Some(arrlen)) -> 
-    ty_to_string ~use_abstract_name:true ty ^ "[" ^ arrlen_to_string arrlen ^ "]"
+  | TPtr(ty, Some(len)) -> 
+    let prefix, suffix = ty_to_string ~use_abstract_name ty in
+    prefix, (sprintf "[%s]" (arrlen_to_string len))^suffix
+  | TPtr(ty, None) -> 
+    let prefix, suffix = ty_to_string ~use_abstract_name ty in
+    match ty.raw_ty with 
+    | TPtr _ -> 
+      let prefix = prefix ^ "(*" in
+      let suffix = ")" ^ suffix in
+      prefix, suffix         
+    | _ -> 
+      prefix ^ "* ", suffix
 
 and ty_to_string ?(use_abstract_name=false) ty = raw_ty_to_string ~use_abstract_name ty.raw_ty
+
+and field_to_string (id, ty) = 
+  let prefix, suffix = ty_to_string ty in
+  prefix ^" "^(id_to_string id)^" "^suffix^";"
+
+  (* ty_to_string ~use_abstract_name:true ty ^ "[" ^ arrlen_to_string arrlen ^ "]" *)
+(* and field_to_string (id,ty) = 
+  if (is_tbit_int ty) then (
+    let n_bits = extract_tint_size ty in
+    sprintf "uint%i_t %s : %i;" (n_bytes n_bits) (id_to_string id) n_bits
+    )
+else 
+  sprintf "%s %s;" (ty_to_string ~use_abstract_name:true ty) (id_to_string id)
 
 and func_ty_to_string (f: func_ty) : string =
   let arg_tys_str = String.concat ", " (List.map (ty_to_string ~use_abstract_name:true) f.arg_tys) in
   let ret_ty_str = ty_to_string ~use_abstract_name:true f.ret_ty in
   "(" ^ arg_tys_str ^ ") -> " ^ ret_ty_str
-
+ *)
 let params_to_string params = 
-  let params_str = String.concat ", " (List.map (fun (id, ty) -> ty_to_string ~use_abstract_name:true ty ^" "^ id_to_string id ) params) in
+  let params_str = String.concat ", " (List.map (fun (id, ty) -> 
+    let prefix, suffix = ty_to_string ~use_abstract_name:true ty in
+    prefix ^ " " ^ (id_to_string id) ^ " " ^ suffix)
+    params) in
   params_str
 ;;
+
+let plain_ty_to_string ?(use_abstract_name=false) ty = 
+  (* types that can appear anywhere, like an int or a named struct *)
+  let p, s = ty_to_string ~use_abstract_name ty in
+  p^s
+
 
 let rec v_to_string (v: v) : string =
   match v with
@@ -182,17 +223,17 @@ and op_to_string (op: op) (args: exp list) : string =
   | PatExact, [a] -> "PatExact(" ^ exp_to_string a ^ ")"
   | PatMask, [a] -> "PatMask(" ^ exp_to_string a ^ ")"
   | Hash 32, [seed; a] -> 
-    let ref_arg = sprintf "(%s)&%s" (ty_to_string (tref (tint 8))) (exp_to_string a) in
-    let seed_arg = sprintf "(%s)%s" (ty_to_string (tint 32)) (exp_to_string seed) in
+    let ref_arg = sprintf "(%s)&%s" (plain_ty_to_string (tref (tint 8))) (exp_to_string a) in
+    let seed_arg = sprintf "(%s)%s" (plain_ty_to_string (tint 32)) (exp_to_string seed) in
     (* TODO: polymorphic hashes *)
     sprintf "hash_%i(%s, %s, sizeof(%s))" 32 seed_arg ref_arg (exp_to_string a)
   | Hash n, [seed; a] -> 
-    let ref_arg = sprintf "(%s)&%s" (ty_to_string (tref (tint 8))) (exp_to_string a) in
-    let seed_arg = sprintf "(%s)%s" (ty_to_string (tint 32)) (exp_to_string seed) in
-    sprintf "(%s)hash_32(%s, %s, sizeof(%s))" (ty_to_string@@tint n) seed_arg ref_arg (exp_to_string a)
+    let ref_arg = sprintf "(%s)&%s" (plain_ty_to_string (tref (tint 8))) (exp_to_string a) in
+    let seed_arg = sprintf "(%s)%s" (plain_ty_to_string (tint 32)) (exp_to_string seed) in
+    sprintf "(%s)hash_32(%s, %s, sizeof(%s))" (plain_ty_to_string@@tint n) seed_arg ref_arg (exp_to_string a)
     (* "Hash_" ^ size_to_string size ^ "(" ^exps_to_string args ^ ")" *)
   | Cast new_ty, [a] ->
-    let int_ty_str = ty_to_string ~use_abstract_name:true (new_ty) in
+    let int_ty_str = plain_ty_to_string ~use_abstract_name:true (new_ty) in
     "((" ^ int_ty_str ^ ")(" ^ exp_to_string a ^"))"
   | Conc, args -> String.concat "++" ((List.map exp_to_string args))
   (* use arrow notation shorthand for derefs, unless its a subscript op *)
@@ -207,12 +248,10 @@ and op_to_string (op: op) (args: exp list) : string =
 let assign_op_to_string (op: assign_op) = 
   match op with
   | OLocal (cid, ty) -> 
-    ty_to_string ~use_abstract_name:true ty ^ " " ^ cid_to_string cid
-  | OTupleLocal (cids, tys) -> 
-    let cids_str = ""^String.concat ", " (List.map cid_to_string cids) ^"" in
-    let tys_str = "("^String.concat ", " (List.map (ty_to_string ~use_abstract_name:true) tys) ^")" in
-    tys_str ^ " " ^ cids_str
-  | OTupleAssign exps -> String.concat ", " (List.map exp_to_string exps)
+    let p, s = ty_to_string ~use_abstract_name:true ty in
+    p^" "^cid_to_string cid^" "^s
+  | OTupleLocal (_, _) -> ty_err "unpacked tuple declarations should be eliminated"
+  | OTupleAssign _ -> ty_err "tuple unpack / assign op should be eliminated"
   | OAssign(exp) -> exp_to_string exp
 ;;
 
@@ -267,33 +306,27 @@ let rec d_to_string (d: d) : string =
   match d with
   | DVar (id, ty, exp_opt) -> 
     let id_str = cid_to_string id in
-    let ty_str = ty_to_string ~use_abstract_name:true ty in
+    let ty_p, ty_s = ty_to_string ~use_abstract_name:true ty in
     let exp_str = match exp_opt with 
                   | Some exp -> " = " ^ exp_to_string exp 
                   | None -> " extern" in
     if exp_opt = None then 
-      "extern " ^ ty_str ^ " " ^ id_str ^ ";"
+      ty_p ^ " " ^ id_str ^ " "^ ty_s ^ ";"
     else
-      ty_str ^ " " ^ id_str ^ exp_str ^ ";"
+      ty_p ^ " " ^ id_str ^ " "^ ty_s ^ " = "^ exp_str ^ ";"
   | DFun fun_def -> fun_def_to_string fun_def
-  | DTy (cid, ty_opt) -> 
-    sprintf "type %s = %s;"
-      (cid_to_string cid)
-      (match ty_opt with 
-                 | Some ty -> ty_to_string ty 
-                 | None -> " extern")
-  | DEvent event_def -> 
-    let id_str = id_to_string event_def.evconstrid in
-    let params_str = params_to_string event_def.evparams in
-    "event " ^ id_str ^ "(" ^ params_str ^ ");"
+  | DTy (cid, Some(ty)) -> 
+    let ty_p, ty_s = ty_to_string ty in
+    sprintf "typedef %s %s %s;" ty_p (cid_to_string cid) ty_s
+  | DTy (_, None) -> ty_err "can't print typdef with no type"
+  | DEvent _ -> ty_err "events should be eliminated"
   | DForiegn str -> str
 
 and fun_def_to_string (kind, id, ty, params, stmt_opt) = 
   (* let kind_str = func_kind_to_string kind in *)
   let id_str = cid_to_string id in
   let ret_ty_str = match kind with 
-    | FHandler -> "void"
-    | _ -> ty_to_string ~use_abstract_name:true ty 
+    | _ -> plain_ty_to_string ~use_abstract_name:true ty 
   in
   let params_str = params_to_string params in
   let stmt_str = match stmt_opt with 
