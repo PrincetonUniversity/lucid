@@ -69,16 +69,31 @@ let reset_cursor =
 
 ;;
 
+(* int pkt_handler(char* buf, int len, char* out_buf, int* out_len)  *)
 let pkt_handler_str = {| 
-// fixed toplevel packet handler 
-int pkt_handler(char* buf, int len, char* out_buf, int* out_len) {
-    int generated_port = 0;
+{
+    // fixed-function toplevel packet handler 
+    // locals (that should maybe be globals?)
+    bytes_t bytes_v;
+    event_t ev1_v;
+    event_t ev2_v;
+    event_t ev_out_v;
+
+    bytes_t * bytes = &bytes_v;
+    event_t * ev1 = &ev1_v;
+    event_t * ev2 = &ev2_v;
+    event_t * ev_out = &ev_out_v;
+    event_t * ev_tmp;
+    int generated_port = 0; // return value
+
     // prepare the cursor
     reset_cursor(buf, len, bytes);
+    // parse the event
     uint8_t parse_success = parse_event(bytes, ev1);
     if (parse_success == 1) {
+        // event continuation trampoline
         for (int i=0; i < 100; i++) {
-            set_event_tag(ev2, 0);
+            reset_event_tag(ev2);
             generated_port = handle_event(ev1, ev2, ev_out);
             // we have generated an event to ev2. 
             // We want to make ev1 point to that, and ev2 point to the old ev1, 

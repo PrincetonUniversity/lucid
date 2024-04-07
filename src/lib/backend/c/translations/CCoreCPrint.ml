@@ -3,12 +3,15 @@ open CCoreExceptions
 open CCoreUtils
 let sprintf = Printf.sprintf
 
-(* TODO:
-   
-1. eliminate tuple assign and local (and check?)
-2. eliminate bit and tern types (probably in match elim) (and check?)
-
+(* TODO:   
+  1. eliminate tuple assign and local (and check?)
+  2. eliminate bit and tern types (probably in match elim) (and check?)
+  3. add logic to set ingress_port
+  4. add port binding config
+  5. printf
+  6. payloads
 *)
+
 
 (* split on newlines, indent each newline by n spaces, combine back into string *)
 let indent n str = str |> String.split_on_char '\n' |> List.map (fun s -> String.make n ' ' ^ s) |> String.concat "\n"
@@ -71,7 +74,7 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : (string * stri
   | TEvent -> ty_err "event types should be eliminated"
   | TEnum cid_ints ->  
     let list_str = String.concat ", " (List.map (fun (s, i) -> cid_to_string s ^ " = " ^ string_of_int i) cid_ints) in
-    "{" ^ list_str ^ "}", ""
+    "enum {" ^ list_str ^ "}", ""
   | TBuiltin (_, _) -> ty_err "builtin types should be eliminated"
   | TName _ -> ty_err "name types should be eliminated"
   | TAbstract (cid, ty) -> 
@@ -93,8 +96,11 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : (string * stri
 and ty_to_string ?(use_abstract_name=false) ty = raw_ty_to_string ~use_abstract_name ty.raw_ty
 
 and field_to_string (id, ty) = 
-  let prefix, suffix = ty_to_string ty in
-  prefix ^" "^(id_to_string id)^" "^suffix^";"
+  let prefix, suffix = ty_to_string ~use_abstract_name:true ty in
+  match suffix with 
+  | "" -> prefix ^" "^(id_to_string id)^";"
+  | _ -> prefix ^" "^(id_to_string id)^" "^suffix^";"
+  
 
   (* ty_to_string ~use_abstract_name:true ty ^ "[" ^ arrlen_to_string arrlen ^ "]" *)
 (* and field_to_string (id,ty) = 
@@ -169,7 +175,7 @@ let rec e_to_string (e: e) : string =
   | ERecord(labels, es) -> 
     let label_strs = List.map id_to_string labels in
     let es_strs = List.map exp_to_string es in
-    let field_strs = List.map2 (fun l e -> "." ^l ^ " = " ^ e ^";") label_strs es_strs in
+    let field_strs = List.map2 (fun l e -> "." ^l ^ " = " ^ e ^",") label_strs es_strs in
     let fields_str = String.concat " " field_strs in    
     "{" ^ fields_str ^ "}"
   | EUnion(label, exp, _) -> 
@@ -238,7 +244,7 @@ and op_to_string (op: op) (args: exp list) : string =
   | Conc, args -> String.concat "++" ((List.map exp_to_string args))
   (* use arrow notation shorthand for derefs, unless its a subscript op *)
   | Project id, [a] when (is_ederef (a) && (not@@is_eop (extract_ederef (a)))) -> 
-      exp_to_string a ^ "->" ^ id_to_string id
+      exp_to_string (extract_ederef a) ^ "->" ^ id_to_string id
   | Project id, [a] -> exp_to_string a ^ "." ^ id_to_string id
   | Get i, [a] -> exp_to_string a ^ "._" ^ string_of_int i
   | Mod, [x; m] -> Printf.sprintf "(%s mod %s)" (exp_to_string x) (exp_to_string m)
@@ -269,7 +275,7 @@ let rec s_to_string (s: s) : string =
       "else {\n" ^ 
       indent 2 (statement_to_string s2) ^ "\n}")
   | SMatch (es, branches) -> 
-    "match (" ^ (List.map exp_to_string es |> String.concat " , ") ^ ") {\n" 
+    "switch (" ^ (List.map exp_to_string es |> String.concat " , ") ^ ") {\n" 
     ^ indent 2 (String.concat "\n" (List.map branch_to_string branches)) 
     ^ "\n}"
   | SSeq (s1, s2) -> statement_to_string s1 ^"\n" ^ statement_to_string s2
@@ -296,28 +302,37 @@ and pat_to_string (p: pat) : string =
 
 and branch_to_string (b: branch) : string =
   let (pats, s) = b in
-  let pats_str = String.concat " | " (List.map pat_to_string pats) in
-  "case " ^ pats_str ^ ": {\n" ^ indent 2 (statement_to_string s) ^ "\n}"
+  let stmt_str = (statement_to_string s)^"\nbreak;" |> indent 2 in
+  let pat_str = match pats with 
+    | [PWild _] -> "default:"
+    | [pat] -> "case "^(pat_to_string pat)^":"
+    | _ -> err "wrong pat form for c"
+  in
+  sprintf "%s {\n%s\n}" pat_str stmt_str
 
 and statement_to_string statement = s_to_string statement.s
 
 
 let rec d_to_string (d: d) : string =
   match d with
-  | DVar (id, ty, exp_opt) -> 
+  | DVar (id, ty, exp_opt) -> (
     let id_str = cid_to_string id in
     let ty_p, ty_s = ty_to_string ~use_abstract_name:true ty in
-    let exp_str = match exp_opt with 
-                  | Some exp -> " = " ^ exp_to_string exp 
-                  | None -> " extern" in
-    if exp_opt = None then 
-      ty_p ^ " " ^ id_str ^ " "^ ty_s ^ ";"
-    else
-      ty_p ^ " " ^ id_str ^ " "^ ty_s ^ " = "^ exp_str ^ ";"
+    match exp_opt with 
+      | None -> 
+        ty_p ^ " " ^ id_str ^ " "^ ty_s ^ ";"
+      | Some exp -> 
+        ty_p ^ " " ^ id_str ^ " "^ ty_s ^ " = "^ (exp_to_string exp) ^ ";"
+    )
   | DFun fun_def -> fun_def_to_string fun_def
-  | DTy (cid, Some(ty)) -> 
+  | DTy (cid, Some(ty)) -> (
     let ty_p, ty_s = ty_to_string ty in
-    sprintf "typedef %s %s %s;" ty_p (cid_to_string cid) ty_s
+    match ty_s with 
+    | "" ->
+      sprintf "typedef %s %s;" ty_p (cid_to_string cid)
+    | _ ->  
+      sprintf "typedef %s %s %s;" ty_p (cid_to_string cid) ty_s
+  )
   | DTy (_, None) -> ty_err "can't print typdef with no type"
   | DEvent _ -> ty_err "events should be eliminated"
   | DForiegn str -> str

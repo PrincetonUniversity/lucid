@@ -18,7 +18,7 @@ let sys_time =
     System.sys_time_cid
     (tint 32)
     []
-    "{ return 0;// TODO! }"
+    "{ return 0; /*TODO!*/ }"
 
 (* Flood was a core builtin, now a Sys function *)
 let sys_flood = 
@@ -26,7 +26,7 @@ let sys_flood =
     (cid"flood")
     (new_group_ty)
     [id"port", new_group_ty]
-    "{ return port + 10000;// TODO! }"
+    "{ return port + 10000;/* TODO!*/ }"
 ;;
 (* let flood_call_replacer exp = 
   if (is_ecall_cid exp (cid"flood")) then (
@@ -42,15 +42,23 @@ let hash_fun size =
     (cid("hash_"^(string_of_int size)))
     (tint size)
     [id"seed", tint 32; id"str", tref (tint 8); id"length", tint 32]
-{| 
-{
+{|{
   int hashValue = seed;
   for (int i = 0; i < length; i++) {
       hashValue += str[i];
   }
   return hashValue;
-}
-|}
+}|}
+
+
+let main_fun = 
+  dforiegn 
+{|int main(int argc, char const *argv[])
+  {
+    /* code */
+    return 0;
+  }|}
+
 
 
 let process decls = 
@@ -59,4 +67,4 @@ let process decls =
   ( decls 
     |> CCoreTransformers.subst_ty#visit_decls group_ty_replacer
     (* |> CCoreTransformers.subst_exp#visit_decls flood_call_replacer *)
-  )
+  )@[main_fun]
