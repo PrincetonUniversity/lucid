@@ -4,12 +4,6 @@ open CCoreUtils
 let sprintf = Printf.sprintf
 
 (* TODO:   
-  1. eliminate tuple assign and local (and check?)
-  2. eliminate bit and tern types (probably in match elim) (and check?)
-  3. add logic to set ingress_port
-  4. add port binding config
-  5. printf
-  6. payloads
 *)
 
 
@@ -54,7 +48,7 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : (string * stri
   | TUnit -> "void", ""
   | TInt n when (List.mem n [8; 16; 32; 64]) -> sprintf "uint%i_t" n, ""
   | TInt n -> 
-    sprintf "uint%i_t" ((n_bytes n)), sprintf ": %i" n
+    sprintf "uint%i_t" (((n_bytes n)*8)), sprintf ": %i" n
   | TBool -> "uint8_t", ""
   | TUnion(labels, ts) -> 
     let label_tys = List.map2 (fun l t -> l, t) labels ts in
@@ -123,6 +117,9 @@ let params_to_string params =
     params) in
   params_str
 ;;
+
+let base_ty_to_string ?(use_abstract_name=false) ty = 
+  ty_to_string ~use_abstract_name ty |> fst
 
 let plain_ty_to_string ?(use_abstract_name=false) ty = 
   (* types that can appear anywhere, like an int or a named struct *)
@@ -239,7 +236,9 @@ and op_to_string (op: op) (args: exp list) : string =
     sprintf "(%s)hash_32(%s, %s, sizeof(%s))" (plain_ty_to_string@@tint n) seed_arg ref_arg (exp_to_string a)
     (* "Hash_" ^ size_to_string size ^ "(" ^exps_to_string args ^ ")" *)
   | Cast new_ty, [a] ->
-    let int_ty_str = plain_ty_to_string ~use_abstract_name:true (new_ty) in
+    (* casting is only between plain types (not bit-ints). This is safe because bitints 
+       must be stored in structs, where the mod is done automatically. *)
+    let int_ty_str = base_ty_to_string ~use_abstract_name:true (new_ty) in
     "((" ^ int_ty_str ^ ")(" ^ exp_to_string a ^"))"
   | Conc, args -> String.concat "++" ((List.map exp_to_string args))
   (* use arrow notation shorthand for derefs, unless its a subscript op *)

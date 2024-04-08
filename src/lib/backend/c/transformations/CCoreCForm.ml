@@ -6,6 +6,7 @@
 *)
 open CCoreSyntax
 open CCoreExceptions
+open CCoreTransformers
 
 (* Convert match statements to if statements *)
 let bitstring_to_maskedint (bs : int list) : int*int = 
@@ -26,6 +27,13 @@ let bitstring_to_maskedint (bs : int list) : int*int =
   bitstring_to_int vbits, bitstring_to_int mbits
 ;;
 
+let tbit_to_tint ty = 
+  match ty.raw_ty with 
+  | TBits{len} -> tint len
+  | _ -> ty
+;;
+
+
 let to_bool_atom (e,p) = 
   match p with 
     | PVal {v=VBits{ternary=true; bits;};} -> 
@@ -35,6 +43,9 @@ let to_bool_atom (e,p) =
         let rhs = eop BitAnd [eval value; eval mask] in
         let lhs = eop BitAnd [e; eval mask] in
         Some(eop Eq [lhs; rhs])
+    | PVal {v=VBits{ternary=false; bits;};} ->
+        let value = (bitstring_to_maskedint bits |> fst |> vint) (List.length bits) in
+        Some(eop Eq [e; eval value])
     | PVal v -> Some(eop Eq [e; eval v])
     | PWild _ -> None (* no constraint *)
     | PEvent _ -> err "events must be eliminated before matches"
@@ -64,11 +75,29 @@ let rec match_to_if exps branches =
     in
     sif econd stmt else_stmt
 ;;
+
+
+
+let has_ternary_bits branches = 
+  let v = 
+    object 
+    inherit [_] s_iter as super
+    val mutable has_ternary_bits = false
+    method has_ternary_bits = has_ternary_bits
+    method! visit_TBits () is_tern _ = 
+      if is_tern then has_ternary_bits <- true
+    end
+  in
+  List.iter (v#visit_branch ()) branches;
+  v#has_ternary_bits
+;;
+
 let transform_match stmt = 
   match stmt.s with 
-  (* a match on a single integer is just a switch *)
-  | SMatch([exp], _) when is_tint exp.ety -> stmt
   | SMatch([exp], _) when is_tenum exp.ety -> stmt
+  (* a match on a single integer is just a switch, as long as no ternary patterns are used *)
+  | SMatch([exp], branches) when ((is_tint exp.ety) && (not@@has_ternary_bits branches)) ->
+    CCoreTransformers.subst_ty#visit_statement tbit_to_tint stmt
   | SMatch(es, branches) -> match_to_if es branches
   | _ -> stmt
 ;;

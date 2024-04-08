@@ -190,6 +190,7 @@
    CCoreHandlers
    CCoreEvents
    CCoreCForm
+   CCoreWellformedC
    CCorePacketHandler
    CCoreDrivers
    )

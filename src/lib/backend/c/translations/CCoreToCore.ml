@@ -467,6 +467,6 @@ let rec translate_decl (decl : F.decl) : C.decl list =
     failwith "foriegn declaration"
 ;;
 
-let translate_prog (ds : F.decls) : C.decls = 
+let translate (ds : F.decls) : C.decls = 
   List.map translate_decl ds |> List.flatten
 ;;

@@ -349,7 +349,7 @@ let transform_decls decls =
 ;;
 
 
-let process_decls decls = 
+let process decls = 
   if (List.filter_map extract_daction_id_opt decls) = [] 
   then decls (* no actions, nothing to do here. *)
   else

@@ -310,8 +310,8 @@ let rec bitsizeof_ty ty =
   match ty.raw_ty with 
   | TUnit -> 0 |> Option.some
   | TInt size -> size |> Option.some
-  | TBool -> 1 |> Option.some
-  | TEnum _ -> None
+  | TBool -> 8 |> Option.some (* uint8_t *)
+  | TEnum _ -> 32 |> Option.some
   | TUnion(_, tys) -> 
     tys |> List.map bitsizeof_ty_exn |> List.fold_left (max) 0 |> Option.some
   | TRecord(_, tys)

@@ -81,3 +81,55 @@ let pack_hash_args =
       | _ -> exp
   end
 ;;
+
+(* assign a number to each event *)
+let set_event_nums decls =
+  let event_nums = List.filter_map 
+    (fun decl -> match decl.d with
+      | DEvent(_, nopt, _, _) -> nopt
+      | _ -> None)
+    decls
+  in
+  let rec set_event_nums' num decls = 
+    if (List.exists (fun v -> v = num) event_nums)
+    then set_event_nums' (num+1) decls
+    else 
+      match decls with
+      | [] -> []
+      | decl::decls -> (
+        match decl.d with
+        | DEvent(a, None, b, c) -> 
+          {decl with d = DEvent(a, Some(num), b, c)}::(set_event_nums' (num+1) decls)
+        | _ -> decl::(set_event_nums' num decls)
+      )
+  in
+  set_event_nums' 1 decls
+;;
+
+
+let warn str = 
+  Console.show_message str ANSITerminal.Yellow "Unsupported feature"
+;;
+
+let rec delete_event_combinators ds =   
+  let v = 
+    object
+      inherit [_] s_map as super
+      method! visit_exp ctx exp =
+        let exp = super#visit_exp ctx exp in
+        match exp.e with
+        | ECall(fcn_cid, args, _) -> (
+          match Cid.names fcn_cid with
+          | "Event"::"delay"::_ -> (
+            warn@@"removing event delay combinator in ("^(CorePrinting.exp_to_string exp)^" -- not yet supported";
+            match args with 
+            | ev_exp::_ -> ev_exp
+            | _ -> exp
+          )
+          | _ -> exp
+        )
+        | _ -> exp
+    end
+  in
+  v#visit_decls () ds
+;;

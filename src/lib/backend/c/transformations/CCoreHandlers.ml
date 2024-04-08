@@ -99,7 +99,7 @@ let transform_handler last_handler_cid (handlers, decls) decl : (handler_rec lis
 ;;
 
 
-let process_decls decls = 
+let process decls = 
   (* get id of last handler -- that declaration will become the 
      merged handler *)
   let last_handler_cid = List.filter_map extract_dhandle_opt decls 

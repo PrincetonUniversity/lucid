@@ -515,7 +515,7 @@ let translate_decl (decl:C.decl) : F.decl =
   {decl' with dspan = decl.dspan}
 ;;
 
-let translate_prog (ds : C.decls) : F.decls = 
+let translate (ds : C.decls) : F.decls = 
   (* translate declarations first in case something in there uses a port.. *)
   let ds = List.map translate_decl ds in
   (builtin_externs (!CCoreConfig.cfg))@ds

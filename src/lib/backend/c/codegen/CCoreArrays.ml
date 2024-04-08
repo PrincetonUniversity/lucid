@@ -166,7 +166,7 @@ let process_decl ctx decl =
   | _ -> let ctx, decl = transform_calls ctx decl in 
     ctx, Some(decl)
   ;;
-let process_decls decls = 
+let process decls = 
   let ctx, decls = List.fold_left (fun (ctx, decls) decl -> 
       let ctx, decl_opt = process_decl ctx decl in
       match decl_opt with 
