@@ -26,8 +26,8 @@ let builtin_externs config =
     dfun_extern (cid ["generate_self"]) FNormal [tevent] tunit Span.default;
     dfun_extern (cid ["generate_port"]) FNormal [tint config.port_id_size; tevent] tunit Span.default;
     dfun_extern (cid ["generate_switch"]) FNormal [tint config.switch_id_size; tevent] tunit Span.default;
-    dfun_extern (cid ["generate_group"]) FNormal [F.tgroup; tevent] tunit Span.default;
-    dvar_extern (Cid.id Builtins.ingr_port_id) (F.tint config.port_id_size);
+    dfun_extern (cid ["generate_group"]) FNormal [F.tgroup; tevent] tunit Span.default;    
+    (* dvar_extern (Cid.id Builtins.ingr_port_id) (F.tint config.port_id_size); *)
     (* recirc port id is a constant from a config file *)
     dvar_const  (Cid.id Builtins.recirc_id) (F.tint config.port_id_size) (F.eval (F.vint config.recirc_port config.port_id_size));
     dvar_const (Cid.id Builtins.self_id) (F.tint config.switch_id_size) (F.eval (F.vint config.self_id_num config.switch_id_size));
@@ -347,10 +347,10 @@ let rec translate_statement (stmt:C.statement) : F.statement =
   | C.SGen(GSingle(None), ev) -> 
     F.egen_self (translate_exp ev) |> F.sunit |> F.swrap stmt.sspan
   | C.SGen(GSingle(Some(loc)), ev) -> 
-    CCoreConfig.cfg := {!CCoreConfig.cfg with switch_id_size = C.size_of_tint loc.ety};
+    (* CCoreConfig.cfg := {!CCoreConfig.cfg with switch_id_size = C.size_of_tint loc.ety}; *)
     F.egen_switch (translate_exp loc) (translate_exp ev) |> F.sunit |> F.swrap stmt.sspan
   | C.SGen(GPort(port), ev) -> 
-    CCoreConfig.cfg := {!CCoreConfig.cfg with port_id_size = C.size_of_tint port.ety};
+    (* CCoreConfig.cfg := {!CCoreConfig.cfg with port_id_size = C.size_of_tint port.ety}; *)
     F.egen_port (translate_exp port) (translate_exp ev) |> F.sunit |> F.swrap stmt.sspan
   | C.SGen(GMulti(port), ev) -> 
     (* gen_ports takes a group, which can be any size *)
@@ -515,8 +515,32 @@ let translate_decl (decl:C.decl) : F.decl =
   {decl' with dspan = decl.dspan}
 ;;
 
+(* infer the sizes of location identifiers in the program, which includes port_id and switch_id. *)
+   let infer_loc_id_sizes = 
+    let v = object inherit [_] C.s_iter as super
+      method! visit_exp () exp = 
+        match exp.e with
+        | C.EVar(cid) when (Cid.equal (Cid.id Builtins.ingr_port_id) cid) -> 
+          CCoreConfig.cfg := {!CCoreConfig.cfg with port_id_size = C.size_of_tint exp.ety}
+        | _ -> super#visit_exp () exp
+      
+      method! visit_statement () stmt = 
+        match stmt.s with 
+        | C.SGen(GSingle(Some(loc)), _) -> 
+          print_endline@@"found generate_single with loc size "^(string_of_int (C.size_of_tint loc.ety));
+          CCoreConfig.cfg := {!CCoreConfig.cfg with switch_id_size = C.size_of_tint loc.ety}
+        | C.SGen(GPort(port), _) -> 
+          print_endline@@"found generate_port with port size "^(string_of_int (C.size_of_tint port.ety));
+          CCoreConfig.cfg := {!CCoreConfig.cfg with port_id_size = C.size_of_tint port.ety}
+        | _ -> super#visit_statement () stmt
+    end
+    in
+    v#visit_decls ()
+  ;;
+
 let translate (ds : C.decls) : F.decls = 
   (* translate declarations first in case something in there uses a port.. *)
+  infer_loc_id_sizes ds;
   let ds = List.map translate_decl ds in
   (builtin_externs (!CCoreConfig.cfg))@ds
 ;;

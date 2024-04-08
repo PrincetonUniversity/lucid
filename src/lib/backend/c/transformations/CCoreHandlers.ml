@@ -64,6 +64,9 @@ type handler_rec = {
 
 (* make the main handler *)
 let mk_main_handler handlers = 
+  (* ingress_port size is derived from mutable that is set in translation to CCore *)
+  let ingress_port_param = Builtins.ingr_port_id, tint (!CCoreConfig.cfg).port_id_size in
+
   let out_port = out_port () in
   let out_port_param = out_port_param () in
   let branches = List.map 
@@ -81,7 +84,7 @@ let mk_main_handler handlers =
     smatch [ederef ev_in] branches;
     sret out_port]
   in
-  dfun handler_cid (snd out_port_param) [in_ev_param; next_ev_param; out_ev_param] merged_body
+  dfun handler_cid (snd out_port_param) [ingress_port_param; in_ev_param; next_ev_param; out_ev_param] merged_body
 ;;
 
 let transform_handler last_handler_cid (handlers, decls) decl : (handler_rec list * decls) = 

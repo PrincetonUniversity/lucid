@@ -30,7 +30,10 @@ let main () =
       } Builtins.interp_builtin_tys ds
   in
   print_endline (" --- compiling to c --- ");
-  let prog_str = CCorePasses.compile ds in
+  let prog_str, cflags = CCorePasses.compile ds in
+  let base_filename = Filename.chop_extension out_filename in
+  let build_cmd = Printf.sprintf "gcc -o %s %s %s" base_filename out_filename cflags in
+  let prog_str =  "// "^ build_cmd  ^ "\n" ^ prog_str in
   output_string (open_out out_filename) prog_str
 ;;
 

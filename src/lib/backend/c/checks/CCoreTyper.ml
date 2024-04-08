@@ -70,6 +70,13 @@ let get_ty env cid =
 let add_constr env constr = 
   {env with idx_constrs = constr::env.idx_constrs}
 
+let add_builtins env = 
+  let params = CCoreBuiltinCheckers.builtin_vars () in
+  let ids, tys = List.split params in
+  let cids = List.map Cid.id ids in
+  add_vars env cids tys
+;;  
+  
 (* unify just adds constraints to context for arrlenes *)
 let rec unify_arrlen env x y =
   match x, y with 
@@ -696,6 +703,7 @@ let rec infer_decl env decl : env * decl option =
   | DForiegn _ -> env, decl |> Option.some
 
 and infer_decls env decls : env * decl list =
+
   match decls with
   | [] -> env, []
   | decl::decls -> 
@@ -709,6 +717,6 @@ and infer_decls env decls : env * decl list =
 (* let pervasives =  *)
 
 let check decls = 
-  snd@@infer_decls empty_env decls
+  snd@@infer_decls (add_builtins empty_env) decls
 ;;
 

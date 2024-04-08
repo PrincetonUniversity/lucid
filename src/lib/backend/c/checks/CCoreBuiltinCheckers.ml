@@ -243,6 +243,15 @@ let builtin_checkers =
   ]
 ;;
 
+
+(* builtin globals from the frontend that are not implemented as globals 
+   in the backend. These should not be necessary in the final type checking pass. *)
+let builtin_vars () = 
+  [
+    Builtins.ingr_port_id, ((!CCoreConfig.cfg).port_id_size) |> tint;
+  ]
+;;
+
 let get_checker fexp = 
   let cid = eval_exp fexp |> extract_vsymbol in
   List.assoc_opt cid builtin_checkers

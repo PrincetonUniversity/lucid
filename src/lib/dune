@@ -192,6 +192,8 @@
    CCoreCForm
    CCoreWellformedC
    CCorePacketHandler
+   CCoreDriverInterface
+   CCoreDriverPcap
    CCoreDrivers
    )
  (preprocess

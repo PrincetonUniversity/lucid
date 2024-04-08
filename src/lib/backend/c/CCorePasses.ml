@@ -4,7 +4,7 @@
       final steps: 
 *         1. eliminate tuple assign and local (and check?)
 *         2. eliminate bit and tern types (probably in match elim) (and check?)
-          3. add logic to set ingress_port
+*         3. add logic to set ingress_port
           4. add port binding config
           5. printf
           6. payloads          
@@ -94,27 +94,15 @@ let compile ds =
      and can just be tacked onto the end. *)
   (* deparser generation *)
   let cds = CCoreDeparse.process cds in
-  (* packet handler generation (platform specific) *)
-  let cds = CCorePacketHandler.process cds in
-
-  (* toplevel driver function (not always necessary, platform specific) *)
-  (* let cds = CCoreDrivers.StdinDriver.process cds in *)
 
   (* final type check *)
-  ccore_print "RIGHT BEFORE FINAL TYPE CHECKING" cds;
-
   let cds = CCoreTyper.check cds in
   CCoreWellformedC.all_checks cds;
-  (* add some includes (likely platform specific, may go in a particular pass) *)
-  let cds = [
-      CCoreSyntax.dinclude "<stdio.h>";
-      CCoreSyntax.dinclude "<stdlib.h>";
-      CCoreSyntax.dinclude "<stdint.h>"]
-    @cds
-  in
+
+  let prog, cflags = CCoreDriverInterface.package (module CCoreDriverPcap) cds in
 
   (*** 8. print as C *)
-  let s = CCoreCPrint.decls_to_string cds in
+  let s = CCoreCPrint.decls_to_string prog in
   print_endline ("---- C compilation done ----");
-  s
+  s, cflags
 ;;

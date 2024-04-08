@@ -83,8 +83,15 @@ type builtin_tys =
   { ingr_port_ty : Syntax.ty }
 
 let interp_builtin_tys =
-  { ingr_port_ty =
-      ty_sp (TQVar (QVar (Id.create "auto_ingress_port"))) Span.default}
+  (*  note that this is a TVar, which means that all the uses of ingress_port_size 
+      will be unified to the same value. This is important for the typechecker to 
+      ensure that the size of the ingress port is consistent across the program.
+      If it was a QVar, as are most of the reference sizes and types, then it 
+      would represent a constant that could take a different size _every time it was 
+      used_.       
+  *)
+  let ingr_port_size_tvar =  TVar (ref (Unbound (Id.fresh "ingress_port_size", 0))) in
+  { ingr_port_ty = ty_sp (TInt ((IVar ingr_port_size_tvar))) Span.default }
 ;;
 
 let tofino_builtin_tys =

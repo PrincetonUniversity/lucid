@@ -18,9 +18,20 @@ let id = Id.create
 
 let cid s = Cid.create [s]
 
-
 let n_bytes n_bits = (* number of bytes required to hold n_bits *) 
   (n_bits + 7) / 8
+;;
+
+(* find a type definition based on its id *)
+let rec find_ty_opt ty_cid decls = 
+  match decls with 
+  | [] -> None
+  | decl::decls -> (
+    match decl.d with 
+    | DTy(cid, Some(ty)) -> 
+      if (Cid.equal cid ty_cid) then Some(tabstract_cid cid ty) else (find_ty_opt ty_cid decls)
+    | _ -> find_ty_opt ty_cid decls
+  )
 ;;
 
 
