@@ -51,20 +51,10 @@ let hash_fun size =
 }|}
 
 
-let main_fun = 
-  dforiegn 
-{|int main(int argc, char const *argv[])
-  {
-    /* code */
-    return 0;
-  }|}
-
-
-
 let process decls = 
   sys_time::sys_flood:: (*add the functions, replace group types with port types *)
   hash_fun 32::
   ( decls 
     |> CCoreTransformers.subst_ty#visit_decls group_ty_replacer
     (* |> CCoreTransformers.subst_exp#visit_decls flood_call_replacer *)
-  )@[main_fun]
+  )

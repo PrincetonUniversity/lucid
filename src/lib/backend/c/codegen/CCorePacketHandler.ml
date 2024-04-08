@@ -128,16 +128,26 @@ let pkt_handler = dfun_foriegn
     id"out_buf", tref tchar; id"out_len", tref@@tint 32; 
   ]
   pkt_handler_str
-
-
 ;;
+
+
+let main_fun = 
+  dforiegn 
+{|int main(int argc, char const *argv[])
+  {
+    /* code */
+    return 0;
+  }|}
+
+
+
 
 let process decls = 
   let t_event = match (find_ty_opt (Cid.id CCoreEvents.event_tunion_tyid) decls) with 
     | Some(ty) -> ty
     | _ -> err "no tevent"
   in
-  decls@[get_event_tag t_event; reset_event_tag t_event; reset_cursor; pkt_handler]
+  decls@[get_event_tag t_event; reset_event_tag t_event; reset_cursor; pkt_handler]@[main_fun]
 ;;
 
 
