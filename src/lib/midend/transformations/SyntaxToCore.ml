@@ -239,7 +239,7 @@ and translate_etablecreate _ (exp : S.exp) : C.exp =
         let e = Syntax.EVar(cid) in
         let ty_opt = (List.hd tc.tactions).ety in
         let espan = tc.tdefault.espan in
-        (Syntax.aexp e ty_opt espan, Syntax.tuple_sp args tc.tdefault.espan)
+        (Syntax.aexp e ty_opt espan, Syntax.tuple_sp_ty args tc.tdefault.espan)
       | _ -> err_unsupported tc.tdefault.espan "default action in a table create should be a call"  
     in
     let default_acn_constr_evar = translate_exp default_acn_constr_evar in
@@ -353,8 +353,27 @@ and translate_statement (s : S.statement) : C.statement =
           let ematch_tys = List.map (fun (exp : C.exp) -> exp.ety.raw_ty) ematch in
           let ematch_ty = CoreSyntax.ty@@CoreSyntax.TTuple ematch_tys in
           let eaction = translate_exp eaction in          
+          let action_cid, action_arg = match eaction.e with 
+            | C.ECall(cid, args, _) ->
+              let arg = 
+                if (List.length args) == 0 then 
+                  C.tup_sp [] eaction.espan
+                else
+                if (List.length args) > 1 then 
+                  C.tup_sp args eaction.espan
+                else
+                  List.hd args
+              in
+              cid, arg
+            | _ -> err s.sspan "using old syntax, table install should be a call"
+          in
+          (* how do we figure out the type of the action reference expression? *)
+          let action_var = C.var (action_cid) (C.ty (C.TBool)) in
+
+          
+
           let ematch = CoreSyntax.exp (CoreSyntax.ETuple ematch) ematch_ty in
-          let e = C.ECall(Cid.create ["Table"; "install"], [tbl_exp; ematch; eaction], false) in
+          let e = C.ECall(Cid.create ["Table"; "install"], [tbl_exp; ematch; action_var; action_arg], false) in
           C.SUnit({e; ety=C.ty C.TBool; C.espan = s.sspan})
         )
         | _ -> err s.sspan "table install with >1 entries not supported have exactly one entry"

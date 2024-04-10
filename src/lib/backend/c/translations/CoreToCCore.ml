@@ -527,10 +527,8 @@ let translate_decl (decl:C.decl) : F.decl =
       method! visit_statement () stmt = 
         match stmt.s with 
         | C.SGen(GSingle(Some(loc)), _) -> 
-          print_endline@@"found generate_single with loc size "^(string_of_int (C.size_of_tint loc.ety));
           CCoreConfig.cfg := {!CCoreConfig.cfg with switch_id_size = C.size_of_tint loc.ety}
         | C.SGen(GPort(port), _) -> 
-          print_endline@@"found generate_port with port size "^(string_of_int (C.size_of_tint port.ety));
           CCoreConfig.cfg := {!CCoreConfig.cfg with port_id_size = C.size_of_tint port.ety}
         | _ -> super#visit_statement () stmt
     end

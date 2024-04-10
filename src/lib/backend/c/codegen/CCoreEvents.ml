@@ -193,7 +193,11 @@ let transformer =
           let pat = event_tag_symbol_val event_def_assoc (Cid.to_id event_id) in
           let pats = replace n (patval pat) pats in
           let bstmt = sseq field_var_init bstmt in
-          (pats, bstmt)::(inline_eventpat_into_case event_def_assoc exps n cases)
+          let res = 
+            (pats, bstmt)::(inline_eventpat_into_case event_def_assoc exps n cases)
+          in
+          res
+  
         | PWild(ty) when (ty = (event_tunion_ty (List.split event_def_assoc |> snd))) -> 
           (* wildcard on event translates to wildcard on event tag *)
           let ty = event_enum_ty (List.split event_def_assoc |> snd) in

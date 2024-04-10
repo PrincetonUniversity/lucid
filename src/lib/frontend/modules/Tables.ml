@@ -20,6 +20,27 @@ open InterpSyntax
 (* translate a value into a (value, mask) tuple 
   representing an exact match pattern *)
 
+
+let bitstring_to_maskedint (bs : int list) : int*int = 
+  let module Int = Caml.Int in
+  let to_val_and_mask bit = 
+    match bit with 
+    | 0    -> (0, 1) (* val: 0, mask 1 *) 
+    | 1    -> (1, 1) (* val: 1, mask 1 *) 
+    | -1  -> (0, 0) (* val: 0, mask :0 *)
+    | _ -> error "invalid bitstring bit"
+  in
+  let rec bitstring_to_int bits =  
+    match bits with 
+      | [] -> 0
+      | hd::tl ->
+        (Int.shift_left hd (List.length tl)) + (bitstring_to_int tl)
+  in      
+  let vbits, mbits = List.map to_val_and_mask bs |> List.split in 
+  bitstring_to_int vbits, bitstring_to_int mbits
+;;
+  
+
 let rec v_to_flat_exact (v : CoreSyntax.v) = 
 match v with 
   | VTuple(vs) -> 
@@ -40,7 +61,18 @@ match v with
     CoreSyntax.VTuple([CoreSyntax.VInt(v); CoreSyntax.VInt(m)])
   | VGlobal _ -> Console.error "a global cannot appear as a key in a table"
   | VEvent _ -> Console.error "an event cannot appear as a key in a table"
-  | VPat _  -> Console.error "pat values are depreciated"
+  | VPat xs  -> 
+    (* for VPat we keep the mask because that is only used by table
+  install in the depreciated table syntax. *)
+    (* let v_strs = List.map string_of_int xs in *)
+    let v, m = bitstring_to_maskedint xs in
+    let v = Integer.create ~value:v ~size:(List.length xs) in
+    let m = Integer.create ~value:m ~size:(List.length xs) in
+    CoreSyntax.VTuple([CoreSyntax.VInt(v); CoreSyntax.VInt(m)])
+    (* print_endline ("v_strs: "^(String.concat ", " v_strs)); *)
+
+    
+    (* Console.error "pat values are depreciated" *)
   | VGroup _ -> Console.error "group values cannot appear as a key in a table"
 ;;
 
@@ -558,4 +590,3 @@ let tbl_match_to_s ({tbl; keys; args; outs; out_tys} : core_tbl_match) : CoreSyn
   let exp = {CoreSyntax.e =CoreSyntax.ECall(lookup_cid, [tbl; keys_exp; args_exp], false); ety = tbl.ety; espan = Span.default} in
   CoreSyntax.STupleAssign({ids; tys; exp})
 ;;
-

@@ -481,8 +481,11 @@ let szcast_sp sz1 sz2 span = exp_sp (ESizeCast (sz1, sz2)) span
 let flood_sp e span = exp_sp (EFlood e) span
 let tuple_sp es span = exp_sp (ETuple es) span
 
-
-
+let tuple_sp_ty es span = 
+  let tys = List.map (fun e -> (Option.get e.ety).raw_ty) es in
+  let ty = ty (TTuple tys) in
+  aexp (ETuple es) (Some ty) span
+;;
 let tblmatch_sp tbl keys args span =
   let t = { tbl; keys; args; outs = []; out_tys = None } in
   exp_sp (ETableMatch t) span

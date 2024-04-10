@@ -133,3 +133,36 @@ let rec delete_event_combinators ds =
   in
   v#visit_decls () ds
 ;;
+
+
+(* payloads are implicit for now, 
+   so remove them from all event declarations 
+   and event constructor calls *)
+let implicit_payloads ds = 
+  let is_payload ty = 
+    match ty.raw_ty with
+    | TName(cid, _) when Cid.equal cid Payloads.t_id -> true
+    | _ -> false
+  in
+
+  let v = 
+    object
+      inherit [_] s_map as super
+      method! visit_DEvent () (id, nopt, esort, params) = 
+        let params = List.filter (fun (_, ty) -> not (is_payload ty)) params in
+        DEvent(id, nopt, esort, params)
+      method! visit_DHandler () id hdl_sort (params, stmt) = 
+        let params = List.filter (fun (_, ty) -> not (is_payload ty)) params in
+        DHandler(id, hdl_sort, (params, stmt))
+      method! visit_exp () exp =
+        let exp = super#visit_exp () exp in
+        match exp.ety.raw_ty, exp.e with
+        | TEvent, ECall(fcn_cid, args, b) when (Cid.equal fcn_cid (Builtins.lucid_parse_id |> Cid.id) = false)-> 
+          let args = List.filter (fun (exp) -> not (is_payload exp.ety)) args in
+          {exp with e=ECall(fcn_cid, args, b)}
+        | _ -> exp
+    end
+  in
+  v#visit_decls () ds
+  (* ds *)
+;;

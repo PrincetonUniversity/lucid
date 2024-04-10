@@ -211,6 +211,15 @@ let parse_drop_check _ exp =
   tunit
 ;;
 
+let payload_parse_cid = Payloads.payload_parse_cid ;;
+let payload_parse_check _ exp = 
+  let _, args = extract_ecall exp in
+  if List.length args <> 1 then 
+    ty_err "payload_parse takes exactly one argument";
+  if (not (is_tbits (List.hd args).ety))
+    then ty_err "payload_parse takes a bits argument";
+  exp.ety
+
 (* Sys functions *)
 let sys_time_cid = System.sys_time_cid ;;
 let sys_time_check _ exp = 
@@ -238,6 +247,7 @@ let builtin_checkers =
     parse_skip_cid, parse_skip_check;
     parse_read_cid, parse_read_check;
     parse_drop_cid, parse_drop_check;
+    payload_parse_cid, payload_parse_check;
     sys_time_cid, sys_time_check;
     flood_cid, flood_check
   ]

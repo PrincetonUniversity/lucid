@@ -40,14 +40,18 @@ let stringify_action_constructor_names ds =
 let process_prog ds =
   print_if_verbose "-------Translating to core syntax---------";
   let ds = SyntaxToCore.translate_prog ds in
+
   (* let ds = Despecialization.test_parser_despecialization ds in *)
   (* let ds = Despecialization.test_memop_despecialization ds in *)
   (* let ds = stringify_action_constructor_names ds in *)
   (* uncomment to test if core -> fcore -> core is correct *)
-  let ds = CCorePasses.test_core_translation ds in
+  (* let ds = CCorePasses.test_core_translation ds in *)
+  (* TBuiltins have to be converted back to TName's 
+     for the interpreter backend, for now,
+     as we haven't ensured that they are implemented throughout. *)
+  let ds = EliminateTBuiltin.process_prog ds in
   (* let fds = CoreToCCore.translate_prog ds in
   let ds = CCoreToCore.translate_prog fds in *)
-  let ds = EliminateTBuiltin.process_prog ds in
   print_if_debug ds;
   let ds =
     if cfg.partial_interp
