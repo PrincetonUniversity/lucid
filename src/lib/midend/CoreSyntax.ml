@@ -15,37 +15,40 @@ and bit = [%import: (BitString.bit[@opaque])]
 and bits = [%import: (BitString.bits[@opaque])]
 
 (* All sizes should be inlined and precomputed *)
-and size = int
+and size = 
+  | Sz of int
+  | Szs of int list
+
 and sizes = size list
 and action_sig = string * size list * size list
 
 and raw_ty =
   | TBool
-  | TGroup
   | TInt of size (* Number of bits *)
   | TEvent
-  (* an event type carries a list of the variants it may contain *)
   | TFun of func_ty (* Only used for Array/event functions at this point *)
-  | TName of cid * sizes * bool
+  | TName of cid * sizes
     (* Named type: e.g. "Array.t<<32>>". Bool is true if it represents a global type *)
+  | TBuiltin of cid * raw_ty list
+    (* Named type that is a builtin *)
   | TMemop of int * size
-  | TTable of tbl_ty
   | TAction of acn_ty
-  | TPat of size
+  | TActionConstr of acn_ctor_ty
   | TRecord of (id * raw_ty) list
   | TTuple of raw_ty list
+  (* group, pat, and bits all seem like instances of a "list" type? *)
+  | TGroup
+  | TPat of size
   | TBits of size
 
-and tbl_ty =
-  { tkey_sizes : size list
-  ; tparam_tys : ty list
-  ; tret_tys : ty list
-  }
+and acn_ty = {
+  aarg_tys : tys;
+  aret_tys : tys;
+}
 
-and acn_ty =
+and acn_ctor_ty =
   { aconst_param_tys : tys
-  ; aparam_tys : tys
-  ; aret_tys : tys
+  ; aacn_ty : acn_ty
   }
 
 (* Don't need effects or constraints since we passed typechecking ages ago *)
@@ -92,17 +95,19 @@ and pat =
   | PWild
   | PNum of z
   | PBit of int list
+  | PEvent of cid * params
 
 (* values *)
 and v =
   | VBool of bool
   | VInt of zint
   | VEvent of event_val
-  | VGlobal of int (* Stage number *)
+  | VGlobal of id * int (* Name * Stage number *)
   | VTuple of v list (* Only used in the interpreter during complex memops *)
   | VGroup of location list
   | VPat of int list
   | VBits of bits
+  | VRecord of (id * v) list
 
 and event_val =
   { eid : cid
@@ -119,14 +124,6 @@ and value =
   }
 
 (* expressions *)
-and tbl_def =
-  { tid : id (* for convenience *)
-  ; tty : ty
-  ; tactions : exp list
-  ; tsize : exp
-  ; tdefault : cid * exp list
-  }
-
 and e =
   | EVal of value
   | EVar of cid
@@ -134,7 +131,9 @@ and e =
   | ECall of cid * exp list * bool
   | EHash of size * exp list
   | EFlood of exp
-  | ETableCreate of tbl_def
+  | ERecord of (id * exp) list
+  | EProj of exp * id
+  | ETuple of exp list 
 
 and exp =
   { e : e
@@ -161,8 +160,16 @@ and s =
   | SSeq of statement * statement
   | SMatch of exp list * branch list
   | SRet of exp option
-  | STableMatch of tbl_match
-  | STableInstall of exp * tbl_entry list
+  (* | STableInstall of exp * tbl_entry list *)
+  | STupleAssign of tuple_assign (* unpack a tuple exp and use it to create or set variables *)
+
+
+and tuple_assign = {
+  ids : id list;
+  tys : (ty list) option;
+  exp : exp;
+}
+
 
 and statement =
   { s : s
@@ -170,26 +177,6 @@ and statement =
   ; spragmas : pragma list
   }
 
-and tbl_match_out_param = id * ty option
-
-and tbl_match =
-  { tbl : exp
-  ; keys : exp list
-  ; args : exp list
-  ; outs : id list
-  ; out_tys : ty list option
-  }
-(* out_tys set for statements that create new vars *)
-
-(* table entries are patterns that point
-   to actions, with values to be used
-   as the install-time arguments. *)
-and tbl_entry =
-  { eprio : int
-  ; ematch : exp list
-  ; eaction : id
-  ; eargs : exp list
-  }
 and params = (id * ty) list
 and cid_params = (cid * ty) list
 and body = params * statement
@@ -258,15 +245,17 @@ and parser_block = {
 }
 (* and parser_block = (parser_action * sp) list * (parser_step * sp) *)
 
+and event_constr = (id * int option * event_sort * params)
 
 (* declarations *)
 and d =
   | DGlobal of id * ty * exp
-  | DEvent of id * int option * event_sort * params
+  | DEvent of event_constr
   | DHandler of id * handler_sort * body
   | DMemop of memop
   | DExtern of id * ty
-  | DAction of action
+  | DUserTy of id * ty
+  | DActionConstr of action
   | DParser of id * params * parser_block
       (* name, return type, args & body *)
   | DFun of id * ty * body
@@ -312,20 +301,24 @@ let error s = raise (Error s)
 let ty_sp raw_ty tspan = { raw_ty; tspan }
 let ty raw_ty = { raw_ty; tspan = Span.default }
 let tint sz = ty (TInt sz)
+let tevent = ty (TEvent)
+let tname_sp cid sizes tspan = ty_sp (TName(cid, sizes)) tspan
+let tname cid sizes = tname_sp cid sizes Span.default
+let payload_ty = ty@@TName(Cid.create ["Payload"; "t"], [])
+let ttuple raw_tys = {raw_ty = TTuple(raw_tys); tspan = Span.default}
 
-let payload_ty = ty@@TName(Cid.create ["Payload"; "t"], [], false)
-
-let infer_vty v =
+let rec infer_vty v =
   match v with
   | VBool _ -> TBool
-  | VInt z -> TInt (Integer.size z)
+  | VInt z -> TInt(Sz(Integer.size z))
   | VEvent _ -> TEvent
   | VGroup _ -> TGroup
   | VGlobal _ -> failwith "Cannot infer type of global value"
-  | VPat bs -> TPat (List.length bs)
-  | VTuple _ ->
-    failwith "Cannot infer type of tuple value (only used in complex memops)"
-  | VBits bits -> TBits (List.length bits)
+  | VPat bs -> TPat(Sz(List.length bs))
+  | VTuple(vs) -> TTuple(List.map infer_vty vs)
+  | VBits bits -> TBits(Sz(List.length bits))
+  | VRecord fields ->
+    TRecord (List.map (fun (id, v) -> id, infer_vty v) fields)
 ;;
 
 (* Values *)
@@ -343,10 +336,10 @@ let vint_sp i span = value_sp (VInt i) span
 let vbool_sp b span = value_sp (VBool b) span
 let vevent event = value (VEvent event)
 let vevent_sp event span = value_sp (VEvent event) span
-let vglobal idx ty = avalue (VGlobal idx) ty Span.default
+let vglobal id idx ty = avalue (VGlobal(id, idx)) ty Span.default
 let vgroup locs = value (VGroup locs)
 let vtup vs = avalue (VTuple vs) (ty (TTuple(List.map infer_vty vs)))
-
+let vrecord fields = value (VRecord fields)
 (* int, size tups -> vtup(sized_ints) *)
 let vint_tups i_s =
   vtup (List.map (fun (i, s) -> VInt(Integer.create i s)) i_s) (Span.default)
@@ -368,9 +361,13 @@ let hash_sp size args ety span = aexp (EHash (size, args)) ety span
 let vint_exp i size = value_to_exp (vint i size)
 let vint_exp_ty i (ty:ty) = 
   match ty.raw_ty with
-  | TInt(sz) -> 
+  | TInt(Sz sz) -> 
     value_to_exp (vint i sz)
   | _ -> error "[vint_exp_ty] type mismatch"
+;;
+let tup_sp es span = 
+  let tys = List.map (fun e -> e.ety) es in
+  aexp (ETuple es) (ty (TTuple (List.map (fun ty -> ty.raw_ty) tys))) span
 ;;
 
 (* Statements *)
@@ -435,7 +432,7 @@ let pcall exp = PCall(exp)
 let pmatch exps branches = PMatch(exps, branches)
 (* match branches *)
 let pbranch ints block : parser_branch  = (List.map (fun i -> PNum (Z.of_int i)) ints), block
-
+let pbranch_wild num_pats block : parser_branch = (List.init num_pats (fun _ -> PWild)), block
 
 let parser id params block = 
   DParser(id, params, block)
@@ -454,7 +451,7 @@ let equiv_list f lst1 lst2 =
   | Invalid_argument _ -> false
 ;;
 
-let equiv_ty t1 t2 =
+let rec equiv_ty t1 t2 =
   match t1.raw_ty, t2.raw_ty with
   | TBool, TBool -> true
   | TInt sz1, TInt sz2 -> sz1 = sz2
@@ -462,7 +459,9 @@ let equiv_ty t1 t2 =
   | TGroup, TGroup -> true
   | TPat sz1, TPat sz2 -> sz1 = sz2
   | TBits sz1, TBits sz2 -> sz1 = sz2
-  | TName(n1, [], false), TName(n2, [], false) -> Cid.equal n1 n2
+  | TName(n1, []), TName(n2, []) -> Cid.equal n1 n2
+  | TRecord(fields1), TRecord(fields2) ->
+    List.for_all2 (fun (id1, ty1) (id2, ty2) -> Id.equal id1 id2 && equiv_ty (ty ty1) (ty ty2)) fields1 fields2
   | _ -> false
 ;;
 
@@ -477,7 +476,7 @@ let rec equiv_value v1 v2 =
   match v1.v, v2.v with
   | VBool b1, VBool b2 -> b1 = b2
   | VInt n1, VInt n2 -> Integer.equal n1 n2
-  | VGlobal n1, VGlobal n2 -> n1 = n2
+  | VGlobal(_, n1), VGlobal(_, n2) -> n1 = n2
   | VGroup locs1, VGroup locs2 -> locs1 = locs2
   | VEvent e1, VEvent e2 ->
     Cid.equal e1.eid e2.eid
@@ -535,7 +534,43 @@ let rec equiv_stmt s1 s2 =
   | _ -> false
 
 and equiv_branch (ps1, s1) (ps2, s2) =
-  equiv_list equiv_pat ps1 ps2 && equiv_stmt s1 s2
+  let res = equiv_list equiv_pat ps1 ps2 && equiv_stmt s1 s2 in 
+  if not res then 
+    Console.error@@"[equiv_branch] branches not equivalent";
+  res
+;;
+
+let equiv_bool_assign (b1, e1) (b2, e2) = 
+  Id.equal b1 b2 && equiv_exp e1 e2
+;;
+
+let equiv_conditional_return (e1, e2) (e1', e2') = 
+  equiv_exp e1 e1' && equiv_exp e2 e2'
+;;
+
+
+let equiv_memop_body mb1 mb2 = 
+  match (mb1, mb2) with 
+  | (MBReturn e1, MBReturn e2) -> equiv_exp e1 e2
+  | (MBIf (e1, e2, e3), MBIf (e1', e2', e3')) -> 
+    equiv_exp e1 e1' && equiv_exp e2 e2' && equiv_exp e3 e3'
+  | (MBComplex(c1), MBComplex(c2)) -> 
+  begin
+       equiv_options equiv_bool_assign c1.b1 c2.b1
+    && equiv_options equiv_bool_assign c1.b2 c2.b2
+    && equiv_options equiv_conditional_return (fst c1.cell1) (fst c2.cell1)
+    && equiv_options equiv_conditional_return (snd c1.cell1) (snd c2.cell1)
+    && equiv_options equiv_conditional_return (fst c1.cell2) (fst c2.cell2)
+    && equiv_options equiv_conditional_return (snd c1.cell2) (snd c2.cell2)
+    && equiv_options equiv_conditional_return c1.ret c2.ret
+  end
+  | _ -> false
+;;
+
+let equiv_memop (m1 : memop) (m2 : memop) = 
+  Id.equal m1.mid m2.mid
+  && equiv_list equiv_ty (List.map snd m1.mparams) (List.map snd m2.mparams)
+  && equiv_memop_body m1.mbody m2.mbody
 ;;
 
 (* bit pattern helpers, for interp *)
@@ -563,19 +598,23 @@ let int_mask_to_bitpat n mask len =
   Array.to_list bs
 ;;
 
-let ty_of_tbl td =
-  match td.tty.raw_ty with
-  | TTable tbl_ty -> tbl_ty
-  | _ -> error "[ty_of_tbl] table does not have type table."
-;;
-
 let ty_to_size ty =
   match ty.raw_ty with
   | TBool -> 1
-  | TInt sz -> sz
+  | TInt (Sz sz) -> sz
+  (* | TGroup -> 16 *)
   | _ -> error "[ty_to_size] can only get size of ints or bools"
 ;;
 
+let rec size_of_rawty raw_ty = match raw_ty with 
+  | TBool -> 1
+  | TInt (Sz sz) -> sz
+  | TRecord(params) -> 
+    List.split params |> snd |> List.map size_of_rawty |> List.sum    
+  | TTuple(raw_tys) -> 
+    List.map size_of_rawty raw_tys |> List.sum
+  | _ -> error@@"[size_of_rawty] unsupported type."
+  ;;
 let size_of_tint = ty_to_size
 
 (* Turn a list of statements into an SSeq (or a SNoop, if empty) *)
@@ -586,6 +625,12 @@ let rec sequence_stmts lst =
   | [hd] -> hd
   | hd :: tl -> sseq hd (sequence_stmts tl)
 ;;
+let rec flatten_stmt (stmt : statement) : statement list = 
+  match stmt.s with 
+  | SSeq(s1, s2) -> (flatten_stmt s1) @ (flatten_stmt s2)
+  | _ -> [stmt]
+;;
+
 
 let exp_to_cid exp =
   match exp.e with
@@ -618,5 +663,12 @@ let extract_bits value =
 ;;
 
 (* is an argument to a parser its packet arg? *)
-let pkt_arg_ty = ty(TBits 1500)
-let is_pkt_arg (_, ty) = match ty.raw_ty with | TBits 1500 -> true | _ -> false 
+let pkt_arg_ty = ty(TBits (Sz 1500))
+let is_pkt_arg (_, ty) = match ty.raw_ty with | TBits (Sz 1500) -> true | _ -> false 
+
+
+let to_singleton_sizes szs = List.map (fun sz -> match sz with | Sz s -> s | _ -> error "[to_singleton_sizes] non-singleton size") szs
+let size_to_ints sz = match sz with | Sz s -> [s] | Szs ss -> ss
+let size_to_int sz = match sz with | Sz s -> s | _ -> error "[size_to_int] non-singleton size"
+
+

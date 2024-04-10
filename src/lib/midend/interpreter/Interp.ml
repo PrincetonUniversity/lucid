@@ -1,8 +1,9 @@
 (* The main interpreter library. Does initialization, user-polling, and event execution / simulator update loops. *)
 open Batteries
 open Yojson.Basic
-open Syntax
+open CoreSyntax
 open InterpSyntax
+open InterpJson
 open InterpState
 open InterpControl
 open CoreSyntaxGlobalDirectory
@@ -29,7 +30,9 @@ let initial_state (pp : Preprocess.t) (spec : InterpSpec.t) =
   (* Add builtins *)
   List.iter
     (fun f -> State.add_global_function f nst)
-    (System.defs @ Events.defs @ Counters.defs @ Arrays.defs @ PairArrays.defs @Payloads.defs);
+    Builtins.builtin_defs
+  ;
+    (* (System.defs @ Events.defs @ Counters.defs @ Arrays.defs @ PairArrays.defs @Payloads.defs @ Tables.defs); *)
   (* Add externs *)
   List.iteri
     (fun i exs -> Env.iter (fun cid v -> State.add_global i cid (V v) nst) exs)
@@ -117,7 +120,7 @@ let execute_event
       let builtin_env = Env.add (Id (Builtins.ingr_port_id)) (InterpSyntax.V (C.vint port 32)) Env.empty in
       (* print_endline@@"t="^(string_of_int nst.current_time)^" running default egress handler for event " ^ Cid.to_string event.eid ^ " at switch " ^ (string_of_int swid) ^ " port " ^ (string_of_int port); *)
       let default_handler_body = 
-        C.SGen(C.GPort(C.vint_exp port 32), C.value_to_exp {v=C.VEvent(event); vty=C.ty TEvent; vspan=Span.default})
+        C.SGen(C.GPort(C.vint_exp port 32), C.value_to_exp {v=C.VEvent(event); vty=C.tevent; vspan=Span.default})
       in      
       ignore@@InterpCore.interp_statement nst HEgress swid builtin_env (C.statement default_handler_body)
     | InterpSwitch.Ingress ->    
@@ -152,7 +155,7 @@ let execute_main_parser print_log swidx port (nst: State.network_state) (pkt_ev 
               (CorePrinting.value_to_string payload_val)
               swidx
               port;
-      let event_val = parser_f nst swidx main_args in
+      let event_val = parser_f nst swidx main_args |> extract_ival in
       match event_val.v with 
       | VEvent(event_val) -> execute_event print_log swidx nst event_val port (InterpSwitch.Ingress)
       | VBool(false) -> error "main parser did not generate an event"
@@ -161,7 +164,32 @@ let execute_main_parser print_log swidx port (nst: State.network_state) (pkt_ev 
 ;;   
 
 let execute_control swidx (nst : State.network_state) (ctl_ev : control_val) =
-  InterpControl.handle_control (State.pipe nst swidx) nst.global_names ctl_ev
+  (* construst a helper to install the table entry, as InterpControl 
+     can't call back up to InterpCore *)
+  let do_tbl_install tbl_cid (cmd : entry_install_cmd) =
+    let etbl = exp (EVar tbl_cid) (ty@@TBool) in
+    let ekey = exp 
+      (ETuple(cmd.imatch)) 
+      (ty@@TTuple(List.map (fun exp -> exp.ety.raw_ty) cmd.imatch) ) in
+    let emask = exp
+      (ETuple(cmd.imask))
+      (ty@@TTuple(List.map (fun exp -> exp.ety.raw_ty) cmd.imask) ) in
+    let eaction_constr = exp 
+      (EVar(Cid.id cmd.iaction))
+      (ty@@TBool) (* note: type is bogus *)      
+    in
+    let eaction_constr_args = exp
+      (ETuple(cmd.iargs))
+      (ty@@TTuple(List.map (fun exp -> exp.ety.raw_ty) cmd.iargs)) in
+    let eargs = [etbl; ekey; emask; eaction_constr; eaction_constr_args] in
+    let ecall = C.exp (ECall(Cid.create ["Table"; "install_ternary"],eargs, false)) (ty TBool) in
+    InterpCore.interp_exp nst swidx Env.empty ecall
+  in
+  InterpControl.handle_control 
+    do_tbl_install
+    (State.pipe nst swidx) 
+    nst.global_names 
+    ctl_ev    
 ;;
 
 
@@ -279,7 +307,7 @@ let simulate (nst : State.network_state) =
       - all printfs in the program print to stderr
 **)
 
-type event_getter = int -> InterpSyntax.interp_input list
+type event_getter = int -> InterpJson.interp_input list
 
 (* interp events until max_time is reached
    or there are no more events to interpret *)

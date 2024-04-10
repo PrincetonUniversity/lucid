@@ -265,7 +265,7 @@ let vertices_in_normal_match_form g =
         (* if a statement is annotated with ignore_path_conditions, 
            that means it already tests all the conditions necessary for 
            execution. Currently, this is just for table_match statements. *)
-        if (Pragma.exists_sprag "ignore_path_conditions" [] (vertex_prags v))
+        if (Pragma.exists_sprag_args "ignore_path_conditions" [] (vertex_prags v))
         then v
         else (
         match v.stmt.s, v.solitary with
@@ -317,8 +317,10 @@ let vertices_in_normal_match_form g =
                 res
                 )
             )
-            | STableMatch(_), _ -> 
+            | STupleAssign(_), _ -> 
                 error "[vertices_in_normal_match_form] processing an stablematch, which should be wrapped in a match table _already_ in normal match form"
+            (* | STableMatch(_), _ -> 
+                error "[vertices_in_normal_match_form] processing an stablematch, which should be wrapped in a match table _already_ in normal match form" *)
 (*                 (* craft the match statement *)
                 let keyvar, keyty = SingleTableMatch.callnumvar_of_tid (id_of_exp tm.tbl) in
                 let keys = [exp_of_id keyvar keyty] in

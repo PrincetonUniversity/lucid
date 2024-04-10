@@ -23,21 +23,30 @@ open CoreSyntax
 open MiscUtils
 
 (* create a parse block to parse and generate a single packet event. *)
-let packetevent_parse_block (pkt_var : exp) event = match event.d with
+let packetevent_parse_block ?(with_payloads=false) (pkt_var : exp) event = match event.d with
 | DEvent(id,_, _, params) -> 
    let read_cmds = List.filter_map 
       (fun (id, ty) -> 
-         (* don't generate a read for a payload  *)
-         if (CoreSyntax.equiv_ty ty (Payloads.payload_ty |> SyntaxToCore.translate_ty)) then None
-         else
-         Some(PRead(Cid.id id, ty, pkt_var)))
+         (* don't generate a read for a payload unless asked to
+            (as of 3/26/24, tofino backend does not use explicit payloads, 
+            but C backend does. But Tofino backend _should_ use explicit payloads) *)
+         let payload_ty = (Payloads.payload_ty |> SyntaxToCore.translate_ty) in
+         if (CoreSyntax.equiv_ty ty (Payloads.payload_ty |> SyntaxToCore.translate_ty)) 
+         then 
+            (  if with_payloads then 
+                  let call = PLocal(Cid.id id, ty,call Payloads.payload_parse_cid [pkt_var] (payload_ty)) in 
+                  Some(call)
+               else 
+                  None
+            )
+         else Some(PRead(Cid.id id, ty, pkt_var)))
       params
    in
    let gen_cmd = pgen 
       (call
          (Cid.id id)
          (List.map (fun (id, ty) -> var (Cid.id id) ty) params)
-         (ty TEvent))
+         (tevent))
    in
    block read_cmds gen_cmd
 | _ -> 
@@ -46,38 +55,48 @@ let packetevent_parse_block (pkt_var : exp) event = match event.d with
 
 
 (* call the parser for background events. *)
-let lucid_background_event_parser pkt_var bg_events = 
+let lucid_background_event_parser ?(with_payloads=true) pkt_var bg_events = 
+   match bg_events with 
+   | [] -> block [ ] pdrop (* no background events means there's nothing to parse *)
+   | _ ->
    let (branches : parser_branch list) = List.map 
       (fun bg_ev -> match bg_ev.d with 
          | DEvent(_, Some(num), _,_) -> 
-            pbranch [num] (packetevent_parse_block pkt_var bg_ev)
+            pbranch [num] (packetevent_parse_block ~with_payloads pkt_var bg_ev)
          | DEvent(_, None, _, _) -> error "event has no number"
          | _ -> error "not an event?")
       bg_events
    in
    let tag_id = Cid.create ["tag"] in
-   let tag_ty = ty (TInt(16)) in   
+   let tag_ty = ty (TInt(Sz 16)) in   
    let etag = var tag_id tag_ty in
    block 
       [ (* skip the lucid ethernet header. If we want to be safer, we can read it and check correctness. *)
-         skip (ty (TInt(14*8)));
+         skip (ty (TInt(Sz 32)));
+         skip (ty (TInt(Sz 16)));
+         skip (ty (TInt(Sz 32)));
+         skip (ty (TInt(Sz 16)));
+         skip (ty (TInt(Sz 16)));
          PRead(Cid.create ["tag"], tag_ty, pkt_var) (* read the event tag *)
       ]
       (pmatch [etag] branches)
       
 ;;
 (* a parser that starts after the ethernet header (it doesn't skip ethernet header) *)
-let lucid_background_event_parser_from_eth pkt_var bg_events = 
+let lucid_background_event_parser_from_eth ?(with_payloads=true) pkt_var bg_events = 
+   match bg_events with 
+   | [] -> block [ ] pdrop (* no background events means there's nothing to parse *)
+   | _ -> 
    let (branches : parser_branch list) = List.map 
       (fun bg_ev -> match bg_ev.d with 
          | DEvent(_, Some(num), _,_) -> 
-            pbranch [num] (packetevent_parse_block pkt_var bg_ev)
+            pbranch [num] (packetevent_parse_block ~with_payloads pkt_var bg_ev)
          | DEvent(_, None, _, _) -> error "event has no number"
          | _ -> error "not an event?")
       bg_events
    in
    let tag_id = Cid.create ["tag"] in
-   let tag_ty = ty (TInt(16)) in   
+   let tag_ty = ty (TInt(Sz 16)) in   
    let etag = var tag_id tag_ty in
    block 
       [
@@ -154,11 +173,11 @@ type lucid_entry_block_ty =
    | CallAlways
    | CallInvalid
 
-let inline_parsers parser_entry_ty pkt_var bg_events decls = 
+let inline_parsers ?(with_payloads=true) parser_entry_ty pkt_var bg_events decls = 
    let lucid_bg_event_block = match parser_entry_ty with
-      | CallFromPortNum -> lucid_background_event_parser pkt_var bg_events
-      | CallFromEth -> lucid_background_event_parser_from_eth pkt_var bg_events
-      | CallAlways -> lucid_background_event_parser pkt_var bg_events
+      | CallFromPortNum -> lucid_background_event_parser ~with_payloads pkt_var bg_events
+      | CallFromEth -> lucid_background_event_parser_from_eth ~with_payloads  pkt_var bg_events
+      | CallAlways -> lucid_background_event_parser ~with_payloads  pkt_var bg_events
       | CallInvalid -> error "[inline_parsers] invalid parser entry type -- this should have been caught earlier"
    in
    let ctx = CidMap.add (Cid.id Builtins.lucid_parse_id) ([Id.create "pkt", pkt_arg_ty], lucid_bg_event_block) CidMap.empty in
@@ -189,7 +208,7 @@ let name_of_event eventdecl = match eventdecl.d with
 
 (* create a full parser from a portspec file, 
    if there are packet events but no parser. *)
-let portspec_to_parser portspec pkt_var pkt_events bg_events = 
+let portspec_to_parser port_ty portspec pkt_var pkt_events bg_events = 
    (* 1. generate a parse block from each event. *)
    (* 2. generate branches from the portspec *)
    let synthesized_parser actions (step:parser_step) = decl (parser (id "main") [id"pkt", pkt_arg_ty] (block actions step)) in
@@ -237,7 +256,7 @@ let portspec_to_parser portspec pkt_var pkt_events bg_events =
       background_branches@external_packet_branches@port_packet_branches
    in
    let branches = portspec_to_pbranches portspec pkt_events in
-   let eingress_port = (var (Cid.id Builtins.ingr_port_id) (Builtins.tofino_builtin_tys.ingr_port_ty |> SyntaxToCore.translate_ty)) in 
+   let eingress_port = (var (Cid.id Builtins.ingr_port_id) port_ty) in 
    let (step : parser_step) = pmatch [eingress_port] branches in
    synthesized_parser [] step
 ;;
@@ -281,21 +300,45 @@ let cid_is_ingress_port cid =
 
 let bytes_read_by_action action =
    match action with 
-   | PRead(_, ty, _) -> size_of_tint ty
-   | PSkip(ty) -> size_of_tint ty
+   | PRead(_, ty, _) -> size_of_rawty ty.raw_ty
+   | PSkip(ty) -> size_of_rawty ty.raw_ty
    | _ -> 0   
 ;;
 let bits_read_by_actions actions = 
    List.fold_left (fun acc action -> acc + (bytes_read_by_action action)) 0 actions
 ;;
 
-let size_of_exp exp = size_of_tint exp.ety ;;
+let size_of_exp exp = size_of_rawty exp.ety.raw_ty ;;
 
 let last_ele ls = 
    List.rev ls |> List.hd
 ;;
 
-let exp_refs_last_read actions exp = 
+
+(* foo.bar.baz *)
+let rec is_last_subfield_of_evar var_cid exp = 
+   match exp.e with 
+      (* the var itself satisfies *)
+   | EVar(cid) ->  Cid.equal var_cid cid
+   | EProj(rec_exp, field_id) -> (
+      (* rec_exp has to be a last field or evar itself, and then 
+         field_id has to point to the last field of rec_exp *)
+      if (is_last_subfield_of_evar var_cid rec_exp) then (
+         let field_ids = match rec_exp.ety.raw_ty with 
+            | TRecord(id_tys) -> List.split id_tys |> fst
+            | _ -> error "project on a non-record-type"
+         in 
+         (Id.equal field_id (List.nth field_ids ((List.length field_ids) -1)))
+      ) 
+      else (
+         false
+      )
+   )
+   | _ -> false
+   ;;
+
+let exp_refs_last_read actions exp =
+    (* actions in the block, expression being matched on *)
    let read_cids = List.filter_map (fun action -> 
       match action with 
       | PRead(cid, _, _) -> Some(cid)
@@ -303,11 +346,15 @@ let exp_refs_last_read actions exp =
    in
    match read_cids with
    | [] -> false 
-   | _ -> (
+   | _ -> 
       let last_read_cid = last_ele read_cids in
-      match exp.e with 
+      is_last_subfield_of_evar last_read_cid exp
+      (* match exp.e with 
       | EVar(cid') -> Cid.equal last_read_cid cid'
-      | _ -> false)
+      | EProj(inner_exp, field_id) -> 
+
+         failwith "todo"
+      | _ -> false) *)
 ;;
 
 
@@ -379,7 +426,91 @@ let rec main_parser_opt ds =
    )
 ;;
 
-let add_parser (portspec:port_config) ds =
+let parser_after_events decls = 
+   (* make sure the parsers come after the last event declaration *)
+   let parsers, decls = List.fold_left 
+      (fun (parsers, decls) decl -> 
+         match decl.d with 
+         | DParser _ -> (parsers@[decl], decls)
+         | _ -> (parsers, decls@[decl]))
+      ([], [])
+      decls
+   in
+   let decls = List.rev decls in
+   (List.fold_left (fun (decls, fin) decl -> 
+      if fin then (decls@[decl], fin) else 
+      match decl.d with 
+      | DEvent _ -> decls@parsers@[decl], true
+      | _ -> decls@[decl], fin)
+      ([], false)
+      decls)
+   |> fst |> List.rev
+
+let add_simple_parser ?(with_payloads=true) recirc_port_opt ds = 
+   (* add a simple parser given an optional recirculation port. 
+      If the target is one that uses recirculation ports for 
+      self events, then this event MUST be passed a port id *)
+   (* used in new C IR *)
+   (* 
+      case 1: no packet events, no user parser, _ ->
+         // parse all packets as events with compiler-given formats:
+            lucid_background_event_parser 
+      case 2: 1 packet event, no user parser, no recirc port ->  
+         // parse all packets as the single packet event
+         // (this assumes self-events are handled some way besides recirc)
+         packetevent_parse_block
+      case 3: 1 packet event, no user parser, recirc port -> 
+         // parse all packets from recirc port as lucid-formatted events
+         // parse all other packets as the packet event
+         if (port == recirc_port) then lucid_background_event_parser
+            else  packetevent_parse_block
+   *)
+   let pkt_events = List.filter is_pktev ds in
+   let bg_events = List.filter is_bgev ds in 
+   let main_user_parser_opt = main_parser_opt ds in
+   let pkt_var = var (Cid.create ["pkt"]) pkt_arg_ty in
+   let decls = match pkt_events, main_user_parser_opt, recirc_port_opt with 
+      | [], None, _ -> 
+         let parser_body = lucid_background_event_parser ~with_payloads pkt_var bg_events in
+         let decl = (decl (parser (id "main") [id"pkt", pkt_arg_ty] parser_body)) in
+         decl::ds |> parser_after_events 
+      | [pkt_ev_decl], None, None -> 
+         let parser_body = packetevent_parse_block pkt_var pkt_ev_decl in
+         let decl = (decl (parser (id "main") [id"pkt", pkt_arg_ty] parser_body)) in
+         decl::ds |> parser_after_events 
+      | [pkt_ev_decl], None, Some(recirc_dpid, port_ty) -> 
+         let branches = [
+            (pbranch [recirc_dpid] (lucid_background_event_parser ~with_payloads pkt_var bg_events));
+            (pbranch_wild 1 (packetevent_parse_block pkt_var pkt_ev_decl))
+            ] 
+         in
+         let eingress_port = (var (Cid.id Builtins.ingr_port_id) port_ty) in 
+         let (step : parser_step) = pmatch [eingress_port] branches in
+         let parser_body = block [] step in
+         let decl = (decl (parser (id "main") [id"pkt", pkt_arg_ty] parser_body)) in
+         decl::ds |> parser_after_events 
+      | _ , Some(main_params, main_block), _ -> 
+      (* if there's a main parser, check the user parser to make sure it's well-formed, 
+         then inline parsers, including the background block which 
+         replaces the call_lucid_parser builtin *)
+         let parser_entry_ty = check_valid_entry_parse_block main_block in
+         let pkt_var = pkt_param_exp main_params in (* we need to know the name of the packet argument to main *)
+         inline_parsers ~with_payloads parser_entry_ty pkt_var bg_events ds
+      | _, _, _ -> 
+         print_endline "pkt_events: ";
+         List.iter (fun ev -> print_endline (CorePrinting.decl_to_string ev)) pkt_events;
+         print_endline@@"user parser: "
+            ^(match main_user_parser_opt with | Some(params, block) ->  
+               "("^CorePrinting.params_to_string params ^ ")" ^ 
+               CorePrinting.parser_block_to_string block | None -> "None");
+         print_endline "recirc port: ";
+         (match recirc_port_opt with | Some(port) -> print_endline (string_of_int@@fst port) | None -> print_endline "None");
+         error "invalid combination of packet events, user parser, and recirc port"
+      in
+   decls
+;;
+
+let add_parser port_ty (portspec:port_config) ds =
    (* separate packet and background events *)
    let pkt_events = List.filter is_pktev ds in
    let bg_events = List.filter is_bgev ds in 
@@ -406,5 +537,5 @@ let add_parser (portspec:port_config) ds =
       (* case 2: packet events declared, but no parser -- 
          so make a parser that parses packet or background events 
          according to the portspec. *)
-         (portspec_to_parser portspec pkt_var pkt_events bg_events)::ds)
+         (portspec_to_parser port_ty portspec pkt_var pkt_events bg_events)::ds)
 ;;

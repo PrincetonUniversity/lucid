@@ -22,12 +22,12 @@ let event_delay_fun _ _ args =
   match args with
   | [V { v = VEvent event }; V { v = VInt delay }] ->
     let delay = Integer.to_int delay in
-    if delay < 0
+    V (if delay < 0
     then
       event_error
         event_delay_name
         "Interpreter: Cannot create an event with negative delay"
-    else vevent { event with edelay = delay }
+    else vevent { event with edelay = delay })
   | _ ->
     event_error event_delay_name "Incorrect number of arguments to Event.delay"
 ;;
@@ -48,4 +48,6 @@ let defs : State.global_fun list =
   [{ cid = event_delay_cid; body = event_delay_fun; ty = event_delay_ty }]
 ;;
 
-let signature = module_id, [], defs, []
+let signature = 
+  LibraryInterface.tup_to_sigty
+  (module_id, [], defs, [])

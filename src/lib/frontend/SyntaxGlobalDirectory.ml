@@ -56,10 +56,11 @@ let exp_to_arrmeta id exp =
 
 let exp_to_tblmeta id exp = 
   let ty_to_size ty = 
+    let ty = SyntaxUtils.normalize_ty ty in
     match ty.raw_ty with 
     | TInt(sz) -> sz
     | TBool -> IConst(1)
-    | _ -> error "[rty_to_size] expected an integer, but got something else"
+    | raw_ty -> error@@"[rty_to_size] expected an integer, but got :"^(Printing.raw_ty_to_string raw_ty)
   in
   (* a user-defined key of size sz *)
   let user_key ty = 
@@ -79,16 +80,25 @@ let exp_to_tblmeta id exp =
       | _ -> error "[evar_to_action] expected an action variable"
     in
     let arg_sizes = match (Option.get exp.ety).raw_ty with
-      | TAction(aty) -> 
+      | TActionConstr(aty) -> 
         List.map ty_to_size aty.aconst_param_tys
         |> List.map SyntaxUtils.extract_size
       | _ -> error "[action_to_argsizes] action exp is not an action type"
     in
     {aid; acompiled_id; arg_sizes}
   in
-  let keys = match (Option.get exp.ety).raw_ty with
+  let keys = match TyTQVar.strip_links ((Option.get exp.ety).raw_ty) with
     | TTable(tty) -> (List.map user_key tty.tkey_sizes)@[priority_key] 
-    | _ -> error "[exp_to_tblmeta] expression is not a table type"
+    | TName(_, sizes, _) ->
+      let key_sz = List.nth sizes 0 in
+      let key_sizes = SyntaxUtils.flatten_size key_sz in
+      let key_tys = List.map (fun sz -> Syntax.ty@@TInt(sz)) key_sizes in
+      (List.map user_key key_tys)@[priority_key] 
+    | TBuiltin(_, tys, _) -> 
+        let key_tys = List.nth tys 0 |> SyntaxUtils.flatten_tuple_ty |> List.map Syntax.ty in
+        (List.map user_key key_tys)@[priority_key] 
+    | TQVar _ -> error "[exp_to_tblmeta] expression is a type variable"
+    | raw_ty -> error@@"[exp_to_tblmeta] expression is not a table type ("^(Printing.raw_ty_to_string raw_ty)^")"
   in
   let actions, length = match exp.e with
     | ETableCreate(tbl) -> (
@@ -98,7 +108,16 @@ let exp_to_tblmeta id exp =
           Integer.to_int z
         | EInt(z, _) -> Z.to_int z
         | _ -> error "[exp_to_tblmeta] table size expression is not an EVal(EInt(...))")
-    | _ -> error "[exp_to_tblmeta] expression is not a table create"
+    | ECall(_, [len_exp; acns_exp; _], _)
+    | ECall(_, [len_exp; acns_exp; _; _], _) -> (
+        List.map evar_to_action (SyntaxUtils.flatten_exp acns_exp),
+      match len_exp.e with 
+        | EVal({v=VInt(z); _}) ->
+          Integer.to_int z
+        | EInt(z, _) -> Z.to_int z
+        | _ -> error "[exp_to_tblmeta] table size expression is not an EVal(EInt(...))"
+    )
+    | _ -> error@@Printf.sprintf "[exp_to_tblmeta] expression %s is not a table create" (Printing.exp_to_string exp)
   in
   let compiled_cid = (Cid.id id) in 
   let name = match exp.espan.global_created_in_src with
@@ -120,7 +139,7 @@ let core_exp_to_arrmeta id (exp:C.exp) =
     | _ -> error "[core_exp_to_arrmeta] array constructor has wrong form")
   in
   let cell_size = match exp.ety.raw_ty with
-    | TName(_, sizes, true) -> sizes
+    | TName(_, sizes) -> List.map (fun sz -> match sz with | C.Sz sz -> sz | _ -> error "need singleton size") sizes
     | _ -> error "[core_exp_to_arrmeta] array constructor has unexpected type"
   in
   let arr = {name; compiled_cid; length; cell_size} in
@@ -142,22 +161,37 @@ let core_exp_to_tblmeta id (exp : C.exp) =
       | _ -> error "[evar_to_action] expected an action variable"
     in
     let arg_sizes = match exp.ety.raw_ty with
-      | TAction(aty) -> List.map C.ty_to_size aty.aconst_param_tys
+      | TActionConstr(aty) -> List.map C.ty_to_size aty.aconst_param_tys
       | _ -> error "[action_to_argsizes] action exp is not an action type"
     in
     {aid; acompiled_id; arg_sizes}
   in  
   let keys = match exp.ety.raw_ty with
-    | TTable(tty) -> (List.map user_key tty.tkey_sizes)@[priority_key] 
+    | TName(_, sizes) -> 
+      let key_sizes = CoreSyntax.size_to_ints (List.hd sizes) in
+      (List.map user_key key_sizes)@[priority_key]
+    (* | TTable(tty) -> 
+      let key_sizes = List.map (fun sz -> match sz with | C.Sz sz -> sz | _ -> error "need singleton size") tty.tkey_sizes in
+      (List.map user_key key_sizes)@[priority_key]  *)
     | _ -> error "[exp_to_tblmeta] expression is not a table type"
   in
   let actions, length = match exp.e with
-    | ETableCreate(tbl) -> (
+    | ECall(_, [len_exp; acns_exp; _], _) -> (
+      let acn_exps = match acns_exp.e with 
+        | ETuple(exps) -> exps
+        | _ -> [acns_exp]
+      in
+      List.map evar_to_action acn_exps,
+      match len_exp.e with 
+        | EVal({v=VInt(z); _}) -> Integer.to_int z
+        | _ -> error "[exp_to_tblmeta] table size expression is not an EVal(EInt(...))"
+    )
+    (* | ETableCreate(tbl) -> (
       List.map evar_to_action tbl.tactions,
       match tbl.tsize.e with 
         | EVal({v=VInt(z); _}) ->
           Integer.to_int z
-        | _ -> error "[exp_to_tblmeta] table size expression is not an EVal(EInt(...))")
+        | _ -> error "[exp_to_tblmeta] table size expression is not an EVal(EInt(...))") *)
     | _ -> error "[exp_to_tblmeta] expression is not a table create"
   in
   let compiled_cid = (Cid.id id) in 
@@ -420,7 +454,6 @@ let syntax_to_globaldir ds =
   print_endline (dir_to_json dir |> Yojson.Basic.pretty_to_string );
   dir_to_json dir
 ;;
-
 let coresyntax_to_globaldir ds =
   let dir = build_coredirectory ds in
   let json = dir_to_json dir in

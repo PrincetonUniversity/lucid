@@ -21,7 +21,8 @@ let subst_TNames env d =
             | TAbstract (x, y, z, _) -> TAbstract (x, y, z, ty.raw_ty)
             | raw_ty -> raw_ty
           in
-          { ty with raw_ty }
+          
+          { ty with raw_ty=(super#visit_raw_ty env raw_ty) }
         | _ -> super#visit_ty env ty
 
       method! visit_raw_ty env raw_ty =
@@ -32,7 +33,8 @@ let subst_TNames env d =
             | TAbstract (x, y, z, _) -> TAbstract (x, y, z, raw_ty)
             | raw_ty -> raw_ty
           in
-          raw_ty
+          super#visit_raw_ty env raw_ty
+          (* raw_ty *)
         | _ -> super#visit_raw_ty env raw_ty
 
       method! visit_TAbstract _ cid sizes b rty =

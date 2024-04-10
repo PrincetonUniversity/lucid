@@ -23,16 +23,19 @@ let tupletag = "tuple"
 let recordtag = "record"
 let unknowntag = "unknown"
 let gty_to_tag ty = match (TyTQVar.strip_links ty.raw_ty) with
-  | TName(cid, _, true) -> (
+  | TName(cid, _, true) 
+  | TBuiltin(cid, _, true) -> 
+    (
     match (Cid.names cid) with 
     | "Array"::_ -> (arraytag)
-    | "PairArray"::_ -> (arraytag)
+    (* | "PairArray"::_ -> (arraytag) *)
+    | "Table"::_ -> (tabletag)
     | _ -> unknowntag
 
     (* error ("[gty_to_tag] unknown global constructor type: "^(Printing.ty_to_string ty)) *)
   )
   | TTable _ -> (tabletag)
-  | TAction _ -> (actiontag)
+  | TActionConstr _ -> (actiontag)
   | TRecord _ -> (recordtag)
   | TVector _ -> (tupletag)
   | TTuple _ -> (tupletag)
@@ -72,6 +75,8 @@ let tcid_ancestors_str tcid =
 ;;
 
 
+ 
+
 (* annotate the constructor expression constr_exp with the id of the
    global it creates (var_cid) and the path / scope of that global 
    in the program (var_path). user_constrs is an assoc of user-defined 
@@ -83,12 +88,33 @@ let rec globals_of_econstr user_constrs parent_tcid var_tcid constr_exp : (exp) 
   let var_tcid = {var_tcid with tparent=parent_tcid;} in
   (* let annotated_constr_exp = annotate_espan constr_exp parent_tcid var_tcid in *)
   match constr_exp.e with
-  | ECall(constr_cid, _, _) -> (
+  | ECall(constr_cid, constr_args, u) -> (
 (*     print_endline ("[globals_of_econstr.ECall]");
     print_endline ("[globals_of_econstr.INPUT] "^(annotated_exp_to_string annotated_constr_exp)); *)
     match (Cid.names constr_cid) with
     | ["Array"; "create"] -> 
       annotate_espan constr_exp parent_tcid var_tcid
+    | ["Table"; "create"] -> (
+      let (len, actions, def, def_arg) = match constr_args with 
+        | [len; actions; def; def_arg] -> (len, actions, def, def_arg)
+        | _ -> error "[globals_of_econstr] error: unexpected constructor expression form" 
+      in
+      (* the action arg may be a tuple or vector, recursively annotate it. *)
+      let rec annotate_inner exp : exp = 
+        match exp.e with 
+        | ETuple(exps) -> 
+          let exps' = List.map annotate_inner exps in
+          {exp with e=ETuple(exps')}
+        | EVector(exps) ->
+          let exps' = List.map annotate_inner exps in
+          {exp with e=EVector(exps')}
+        | _ -> 
+          annotate_espan exp None (SyntaxUtils.cid_of_exp exp |> cid)
+      in
+      let actions' = annotate_inner actions in
+      let constr_args' = [len; actions'; def; def_arg] in
+      let e' = ECall(constr_cid, constr_args', u) in
+      annotate_espan {constr_exp with e=e'} parent_tcid var_tcid    )
     | _ -> (
       match (List.assoc_opt constr_cid user_constrs) with
       | None -> 
@@ -362,12 +388,24 @@ let debug_tagged_global_names decls =
         print_endline ("path: ");
         print_endline (tagged_path_to_string src_path);
         name_map := (Cid.Id id, fq_tcid)::(!name_map);
-    method! visit_ETableCreate () _ tactions _ _ = 
+    method! visit_ECall () cid args _ = 
+      (* if this is a call to Table.create, gather the actions *)
+      let tbl_action_exps = List.nth args 1 |> SyntaxUtils.flatten_exp in
+      if (Cid.names cid) = ["Table"; "create"] then (
+        let action_names = List.map 
+          (fun eaction -> 
+            SyntaxUtils.cid_of_exp eaction, Option.get eaction.espan.global_created_in_src)
+            tbl_action_exps
+        in
+        name_map := action_names@(!name_map);
+      );
+    method! visit_ETableCreate () _ tbl_action_exps _ _ = 
       let action_names = List.map 
         (fun eaction -> 
           SyntaxUtils.cid_of_exp eaction, Option.get eaction.espan.global_created_in_src)
-        tactions
+        tbl_action_exps
       in
+
       name_map := action_names@(!name_map);
     end
   in

@@ -158,6 +158,8 @@ module Z3Helpers = struct
         let z3_lhs = Z3Bit.mk_and ctx z3_vid z3_m in 
         let term = Z3Bool.mk_eq ctx z3_lhs z3_v in
         ctx, terms @ [term]
+      | _, PEvent (_) -> Console.error_position Span.default "[eqn_of_core_pat] AN EVENT MATCH GOT THROUGH!"
+
     in
     let ctx, terms = CL.fold_left fold_f (ctx, []) m_exp in
     let eqn = Z3Bool.mk_and ctx terms in
@@ -416,6 +418,9 @@ let and_patterns (pat1:pattern) (pat2:pattern) : pattern option =
                 if (c = newc) then (Some pat)
                 else (None)
               )
+              | _, PEvent (_) -> Console.error_position Span.default "AN EVENT MATCH GOT THROUGH!"
+              | PEvent (_), _  -> Console.error_position Span.default "AN EVENT MATCH GOT THROUGH!"
+              
           )
       )
     in

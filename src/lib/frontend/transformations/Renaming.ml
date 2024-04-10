@@ -118,7 +118,7 @@ let rename prog =
               in
               let constructor_cids = List.map fst constructors in
               fun_cids @ constructor_cids)
-            builtin_modules
+            (List.map LibraryInterface.sigty_to_tup builtin_modules)
           |> List.flatten
         in
         let var_map =
@@ -184,7 +184,7 @@ let rename prog =
         env <- { env with active = old.active };
         ret
 
-      method! visit_TName dummy cid sizes b =
+      method! visit_TName dummy cid sizes b=
         let old = env in
         self#activate_ty ();
         let cid = self#lookup cid in
@@ -209,6 +209,16 @@ let rename prog =
         let new_ty = self#visit_ty dummy ty in
         let new_x = self#freshen_var x in
         SLocal (new_x, new_ty, replaced_e)
+      method! visit_STupleAssign dummy tup_assn = 
+        let replaced_exp = self#visit_exp dummy tup_assn.exp in
+        match tup_assn.tys with 
+        | None -> (* assign to existing vars, visit ids *)
+          let new_ids = List.map (self#visit_id dummy) tup_assn.ids in
+          STupleAssign {ids=new_ids; tys = None; exp = replaced_exp}
+        | Some(tys) -> (* assign to new vars, rename, recurse on types, and bind *)
+          let new_tys = List.map (self#visit_ty dummy) tys in
+          let new_ids = List.map (self#freshen_var) tup_assn.ids in
+          STupleAssign {ids=new_ids; tys = Some(new_tys); exp = replaced_exp}
 
       method! visit_PRead dummy x ty exp =
         let new_ty = self#visit_ty dummy ty in
@@ -263,7 +273,7 @@ let rename prog =
           let replaced_size = Option.map (self#visit_size dummy) size in
           let new_x = self#freshen_size x in
           DSize (new_x, replaced_size)
-        | DAction (x, rtys, const_params, (params, action_body)) ->
+        | DActionConstr (x, rtys, const_params, (params, action_body)) ->
           let new_rtys = List.map (self#visit_ty dummy) rtys in
           let new_const_params =
             List.map
@@ -277,8 +287,18 @@ let rename prog =
           in
           let new_action_body = List.map (self#visit_exp dummy) action_body in
           let new_x = self#freshen_var x in
-          DAction
+          DActionConstr
             (new_x, new_rtys, new_const_params, (new_params, new_action_body))
+        | DAction(x, rtys, (params, action_body)) -> 
+          let new_rtys = List.map (self#visit_ty dummy) rtys in
+          let new_params =
+            List.map
+              (fun (id, ty) -> self#freshen_var id, self#visit_ty dummy ty)
+              params
+          in
+          let new_action_body = List.map (self#visit_exp dummy) action_body in
+          let new_x = self#freshen_var x in
+          DAction (new_x, new_rtys, (new_params, new_action_body))
         | DMemop (x, params, body) ->
           let old_env = env in
           let replaced_params =
@@ -426,6 +446,22 @@ let rename prog =
             branches
         in
         SMatch (es, branches)
+
+      (* added for event matching *)
+      method! visit_branch dummy (ps, s) = 
+        let new_ps = List.map (fun p -> self#visit_pat dummy p) ps in
+        let new_s = self#visit_statement dummy s in
+        (new_ps, new_s)
+      
+      method! visit_pat dummy pat = 
+        match pat with 
+        | PEvent (cid, params) -> 
+          (let new_params = List.map
+            (fun (id, ty) -> self#freshen_var id, self#visit_ty dummy ty)
+            params in PEvent (cid, new_params))
+        | _ -> super#visit_pat dummy pat      
+
+
 
       (*** Special Cases ***)
       method! visit_params dummy params =

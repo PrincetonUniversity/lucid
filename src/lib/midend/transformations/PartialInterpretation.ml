@@ -190,7 +190,16 @@ let rec interp_exp env e =
     { e with e = EHash (sz, List.map (interp_exp env) args) }
   | EFlood e' -> { e with e = EFlood (interp_exp env e') }
   | EOp (op, args) -> { e with e = interp_op env op args }
-  | ETableCreate _ -> e
+  | ERecord(fields) -> {
+    e with e = ERecord (List.map (fun (id, e) -> (id, interp_exp env e)) fields)
+  }
+  | ETuple(es) -> { e with e = ETuple (List.map (interp_exp env) es) }
+  | EProj(rec_exp, id) -> (
+    let rec_exp = interp_exp env rec_exp in
+    match rec_exp.e with
+    | ERecord(fields) -> interp_exp env (List.assoc id fields)
+    | _ -> {e with e = EProj(rec_exp, id)}
+  )
 
 (* Mostly copied from InterpCore, could maybe merge the two functions *)
 and interp_op env op args =
@@ -230,7 +239,7 @@ and interp_op env op args =
     let v1 = raw_integer v1 in
     vinteger (Integer.sub (Integer.create ~value:0 ~size:(Integer.size v1)) v1)
     |> mk_e
-  | Cast size, [{ e = EVal v }] ->
+  | Cast (Sz size), [{ e = EVal v }] ->
     vinteger (Integer.set_size size (raw_integer v)) |> mk_e
   | Conc, [{ e = EVal v1 }; { e = EVal v2 }] ->
     let v1, v2 = raw_integer v1, raw_integer v2 in
@@ -435,18 +444,21 @@ let rec interp_stmt env s : statement * env =
    | _ -> print_endline @@ "Interping " ^ CorePrinting.stmt_to_string s); *)
   let interp_exp = interp_exp env in
   let should_inline () =
-    match Pragma.find_sprag "noinline" [] s.spragmas with
+    match Pragma.find_sprag_args "noinline" [] s.spragmas with
     | Some _ -> false
     | _ -> true
   in
   match s.s with
   | SNoop -> s, env
-  | SUnit e -> { s with s = SUnit (interp_exp e) }, env
   | SPrintf (str, es) ->
     { s with s = SPrintf (str, List.map interp_exp es) }, env
   | SGen (g, e) -> { s with s = SGen (interp_gen_ty env g, interp_exp e) }, env
   | SRet eopt -> { s with s = SRet (Option.map interp_exp eopt) }, env
-  | STableInstall (id, entries) ->
+  | SUnit({e=ECall(fcid, [tbl; key; acn_constr], b); espan; ety}) when Cid.equal fcid (Cid.create ["Table"; "install"]) ->
+    let key = interp_exp key in
+    let acn_constr = interp_exp acn_constr in
+    { s with s = SUnit({e=ECall(fcid, [tbl; key; acn_constr], b); espan; ety}) }, env
+  (* | STableInstall (id, entries) ->
     let entries =
       List.map
         (fun entry ->
@@ -456,7 +468,8 @@ let rec interp_stmt env s : statement * env =
           })
         entries
     in
-    { s with s = STableInstall (id, entries) }, env
+    { s with s = STableInstall (id, entries) }, env *)
+  | SUnit e -> { s with s = SUnit (interp_exp e) }, env
   | SSeq (s1, s2) ->
     let s1, env1 = interp_stmt env s1 in
     let s2, env2 = interp_stmt env1 s2 in
@@ -488,7 +501,16 @@ let rec interp_stmt env s : statement * env =
     in
     let new_s = { s with s = SAssign (id, exp) } in
     new_s, IdMap.add (Cid.to_id id) pv env
-  | STableMatch tm ->
+  | STupleAssign({ids; tys; exp}) -> 
+    let exp' = interp_exp exp in
+    let env = List.fold_left
+      (fun env id -> IdMap.add id (new_unknown ()) env)
+      env
+      ids
+    in
+    let new_s = { s with s = STupleAssign({ids; tys; exp = exp'}) } in
+    new_s, env
+  (* | STableMatch tm ->
     let keys = List.map interp_exp tm.keys in
     let args = List.map interp_exp tm.args in
     let env =
@@ -497,33 +519,7 @@ let rec interp_stmt env s : statement * env =
         env
         tm.outs
     in
-    { s with s = STableMatch { tm with keys; args } }, env
-  (* Cases where we branch *)
-  (* jsonch 8/23 -- for now, don't inline into certain if expressions.
-      Inlining, in combination with sub-optimal placement of
-      precompute statements in the tofino backend
-      can add significant overheads to programs
-      where if expressions are explicitly precomputed.
-      We don't inline into if expression that test a variable
-      against 0, to give users a workaround. *)
-  (* jsonch 8/23 -- with the hoisting pass added, we should
-     be able to re-enable this. *)
-  (* | SIf (test, s1, s2)
-      when (match test.e with
-        | EOp(Eq, [{e=EVar(_)}; {e=EVal(_)}]) -> true
-        | _ -> false
-      ) ->
-    (* only inline if it results in a compile-time
-       delete-able branch. *)
-    let test' = interp_exp test in
-    (match test' with
-      | { e = EVal { v = VBool b } } ->
-        if b then interp_stmt env s1 else interp_stmt env s2
-      | _ ->
-        let s1, env1 = interp_stmt env s1 in
-        let s2, env2 = interp_stmt env s2 in
-        let base_stmt = { s with s = SIf (test, s1, s2) } in
-        base_stmt, merge_envs [env; env1; env2])     *)
+    { s with s = STableMatch { tm with keys; args } }, env *)
   | SIf (test, s1, s2) ->
     let test = interp_exp test in
     (match test with
@@ -535,15 +531,46 @@ let rec interp_stmt env s : statement * env =
        let base_stmt = { s with s = SIf (test, s1, s2) } in
        base_stmt, merge_envs [env; env1; env2])
   | SMatch (es, branches) ->
-    let es = List.map interp_exp es in
-    let branches, envs =
-      List.map
-        (fun (p, stmt) ->
-          let stmt', env' = interp_stmt env stmt in
-          (p, stmt'), env')
-        branches
-      |> List.split
+    (* expand wildcard rules to have one wildcard for each es *)
+    let branches = List.map 
+      (fun (ps, stmt) -> 
+        let ps = match ps with 
+        | [PWild] -> List.init (List.length es) (fun _ -> PWild)
+        | _ -> ps in
+        (ps, stmt)) branches 
     in
+    let es = List.map interp_exp es in
+    let rec process_branch (ps, stmt) =       
+      (*  1. bind the event parameters
+          2. interp the statement
+          3. unbind the event parameters *)
+      (* We need to bind all the params in matching events.
+         We just bind them all to unknown for now. *)
+      let event_param_bindings = List.fold_left2 
+        (fun event_param_bindings pat exp -> 
+          match pat, exp.e with 
+          | PEvent(_, params), _ -> 
+              event_param_bindings@(List.map (fun (id, _) -> id, new_unknown ()) params)
+          | _ -> event_param_bindings)
+        []
+        ps
+        es
+      in
+      let env = List.fold_left
+        (fun env (id, pv) -> IdMap.add id pv env)
+        env
+        event_param_bindings
+      in
+      let stmt', env' = interp_stmt env stmt in
+      let env' = List.fold_left
+        (fun env id -> IdMap.remove id env)
+        env'
+        (List.split event_param_bindings |> fst)
+      in
+      (ps, stmt'), env'
+    in
+    let branches, envs = List.map process_branch branches |> List.split in
+    
     let base_stmt = { s with s = SMatch (es, branches) } in
     (* if the match statement's key expression is a constant,
        compute the branch and replace the match statement with it *)
@@ -581,7 +608,9 @@ let remove_unused_variables stmt =
       live_vars, { stmt with s = SSeq (s1', s2') }
     (* For most statements, we just collect the variables that are used
        inside it *)
-    | SNoop | SPrintf _ | SRet _ | SUnit _ | SGen _ | STableInstall _ ->
+    | SNoop | SPrintf _ | SRet _ | SUnit _ | SGen _ 
+    (* | STableInstall _  *)
+    ->
       let acc = ref live_vars in
       variable_extractor#visit_statement acc stmt;
       !acc, stmt
@@ -613,7 +642,17 @@ let remove_unused_variables stmt =
     (* We can't remove the variables that are declared as part of a table match
          without changing semantics, so just make sure we unalive them and gather
          any arguments to the match *)
-    | STableMatch tm ->
+    | STupleAssign({ids}) ->
+      let live_vars =
+        let acc = ref live_vars in
+        variable_extractor#visit_statement acc stmt;
+        !acc
+      in
+      let live_vars =
+        List.fold_left (fun acc id -> IdSet.remove id acc) live_vars ids
+      in
+      live_vars, stmt
+    (* | STableMatch tm ->
       let live_vars =
         let acc = ref live_vars in
         variable_extractor#visit_statement acc stmt;
@@ -622,7 +661,7 @@ let remove_unused_variables stmt =
       let live_vars =
         List.fold_left (fun acc id -> IdSet.remove id acc) live_vars tm.outs
       in
-      live_vars, stmt
+      live_vars, stmt *)
     (* Code inside a branch can add live variables, but it can't remove them
        (since they were used outside the branch, and so weren't defined inside it) *)
     | SIf (test, s1, s2) ->
@@ -687,14 +726,15 @@ let interp_decl builtin_tys env d =
   | DEvent (id, _, _, _) | DExtern (id, _) ->
     let env = add_dec env id in
     env, d
-  | DAction acn ->
+  | DActionConstr acn ->
     let env = add_dec env acn.aid in
     let acn_env =
       env |> add_builtin_defs acn.aconst_params |> add_builtin_defs acn.aparams
     in
     let abody = List.map (interp_exp acn_env) acn.abody in
-    env, { d with d = DAction { acn with abody } }
+    env, { d with d = DActionConstr { acn with abody } }
   | DParser _ -> env, d
+  | DUserTy _ -> env, d
 ;;
 
 let interp_prog ds =

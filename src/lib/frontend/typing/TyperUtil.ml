@@ -158,7 +158,7 @@ let default_env =
             tys
         in
         id, { empty_modul with vars; constructors; user_tys })
-      Builtins.builtin_modules
+        (List.map LibraryInterface.sigty_to_tup (Builtins.builtin_modules))
   in
   let submodules =
     List.fold_left
@@ -340,6 +340,7 @@ let extract_print_tys span (s : string) =
   List.rev @@ aux [] (String.to_list s)
 ;;
 
+
 let rec validate_size span env size =
   match STQVar.strip_links size with
   | IUser cid ->
@@ -349,6 +350,8 @@ let rec validate_size span env size =
     if n < 0 then error_sp span @@ "Size sum had negative number?";
     List.iter (validate_size span env) sizes
   | IConst _ | IVar _ -> ()
+  | ITup(sizes) -> 
+    List.iter (validate_size span env) sizes
 ;;
 
 (* Turn a user's constraint specification into a list of actual constraints
@@ -461,13 +464,15 @@ let lookup_TName span env rty =
   | TName (cid, sizes, _) ->
     let sizes', ty = lookup_ty span env cid in
     let replaced_ty =
+      (* replace size ids in sizes' with sizes *)
       ReplaceUserTys.subst_sizes
         span
         cid
         ty.raw_ty
-        (ReplaceUserTys.extract_ids span sizes')
+        (ReplaceUserTys.extract_ids span sizes') 
         sizes
     in
+
     replaced_ty
   | rty -> rty
 ;;

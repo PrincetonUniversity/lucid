@@ -1,6 +1,8 @@
 (* Mutable program state within a single switch in the interpreter. *)
 open Batteries
 open CoreSyntax
+(* open InterpState *)
+open InterpSyntax
 
 (*** pipeline objects ***)
 type obj =
@@ -19,9 +21,18 @@ and tblobj =
   ; (* sentries: tbl_entry list; *)
     tmaxlen : int
   ; tentries : tbl_entry list
-  ; tdefault : id * exp list (* default action + value args *)
+  ; tdefault : action
   }
+(* internally, a table is represented as a list of action, 
+   which are pure function, each with a match pattern and a priority *)
+and action = value list -> value list
+and tbl_entry = {
+  eprio : int;
+  ematch : value list; (* (key, mask) tuples *)
+  eaction : action;
+}
 
+  
 (*** the pipeline ***)
 type t =
   { objs : obj array
@@ -250,7 +261,7 @@ let update_complex
 (*** table functions ***)
 
 (* allocate a table with room for n entries *)
-let mk_table ~(id : Id.t) ~(length : int) ~(def : id * exp list) =
+let mk_table ~(id : Id.t) ~(length : int) ~(def : action) =
   (* wrap in pipeline object *)
   OTable
     { tid = id; tdefault = def; tmaxlen = length; tentries = [] }
@@ -260,7 +271,7 @@ let get_table_entries
   ~(* read the entries in a table for a table match *)
   (stage : int)
   (t : t)
-  : (id * exp list) * tbl_entry list
+  : action * (value list * action) list
   =
   let obj = get_obj stage t in
   match obj with
@@ -268,47 +279,42 @@ let get_table_entries
     (* advance stage and return default + list of cases *)
     t.current_stage := stage + 1;
     (* print_endline ("[get_table_entries] number of entries: "^(string_of_int (List.length tbl.sentries))); *)
-    tbl.tdefault, tbl.tentries
+    tbl.tdefault, List.map (fun entry -> entry.ematch, entry.eaction) tbl.tentries
   | OArray _ -> failwith "Pipeline Error: Expected a table obj, got array obj."
 ;;
 
-let install_table_entry ~(stage : int) ~(entry : tbl_entry) (t : t) =
-  (* get the table object *)
+let install_table_entry ~(stage : int) ~(priority : int) 
+    ~(key : value list) ~(action : value list -> value list) (t : t) = 
   let obj = get_obj_unconstrained stage t in
-  match obj with
-  | OTable tbl ->
-    (* install semantics:
-        - entries are always sorted by priority (lowest priority first)
-        - a new entry is added immediately before the first entry with a higher priority *)
-    (* print_endline ("[install_table_entry] installing table entry.. "); *)
-    (* CorePrinting.entry_to_string entry |> print_endline; *)
-    (* print_endline ("[install_table_entry] ----"); *)
-    if List.length tbl.tentries == tbl.tmaxlen
+  let tbl = match obj with 
+    | OTable tbl -> tbl
+    | _ -> failwith "Pipeline Error: object is not a table"
+  in
+  if List.length tbl.tentries == tbl.tmaxlen
     then failwith "Pipeline Error: tried to add an entry to a full table!";
-    let entries =
-      match tbl.tentries with
-      | [] -> [entry]
-      | _ ->
-        let added, entries_rev =
-          List.fold_left
-            (fun (added, entries_rev) cur_entry ->
-              if added (* nothing else to do *)
-              then added, cur_entry :: entries_rev
-              else if (* reached an entry with higher prio, put new entry before it (after in reversed list) *)
-                      cur_entry.eprio > entry.eprio
-              then true, cur_entry :: entry :: entries_rev
-              else false, cur_entry :: entries_rev)
-            (false, [])
-            tbl.tentries
-        in
-        let entries =
-          if added then List.rev entries_rev else List.rev (entry :: entries_rev)
-        in
-        entries
-    in
-    (* update stage with new table *)
-    set_obj stage t (OTable { tbl with tentries = entries })
-  | _ -> error "Pipeline Error: object is not a table"
+  let new_entry = {eprio = priority; ematch = key; eaction = action} in
+  let entries = match tbl.tentries with 
+  | [] -> [new_entry]
+  | _ -> 
+    let added, entries_rev =
+    List.fold_left
+      (fun (added, entries_rev) cur_entry ->
+        if added (* nothing else to do *)
+        then added, cur_entry :: entries_rev
+        else if (* reached an entry with higher prio, put new entry before it (after in reversed list) *)
+                cur_entry.eprio > new_entry.eprio
+        then true, cur_entry :: new_entry :: entries_rev
+        else false, cur_entry :: entries_rev)
+      (false, [])
+      tbl.tentries
+  in
+  let entries =
+    if added then List.rev entries_rev else List.rev (new_entry :: entries_rev)
+  in
+  entries
+in
+(* update stage with new table *)
+set_obj stage t (OTable { tbl with tentries = entries })
 ;;
 
 (*** control command functions.
@@ -399,9 +405,4 @@ let control_getrange ~(id : Id.t) ~(s : int) ~(e : int) (t : t) =
     in
     List.map (get_idx a.ispair) (MiscUtils.range s e)
   | _ -> error "[control_get] tried to use control_get on a non-array object"
-;;
-
-let control_install_table_entry ~(id : Id.t) ~(entry : tbl_entry) (t : t) =
-  let stage = id_to_stage id t in
-  install_table_entry stage entry t
 ;;

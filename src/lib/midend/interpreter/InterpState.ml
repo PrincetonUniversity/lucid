@@ -160,7 +160,7 @@ module State = struct
 
   (* load an interpreter input into the network environment *)
   let load_interp_input nst interp_input = 
-    let locs = InterpSyntax.input_locs interp_input in
+    let locs = InterpJson.input_locs interp_input in
     List.iter (fun loc -> 
       let swid = match loc.switch with 
         | None -> error "input event not associated with a switch"

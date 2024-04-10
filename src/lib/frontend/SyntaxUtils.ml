@@ -63,10 +63,12 @@ let rec is_global_rty rty =
     false
   | TQVar _ -> false (* I think *)
   | TName (_, _, b) | TAbstract (_, _, b, _) -> b
+  | TBuiltin(_, _, b) -> b
   | TTuple lst -> List.exists is_global_rty lst
   | TRecord lst -> List.exists (fun (_, rty) -> is_global_rty rty) lst
   | TVector (t, _) -> is_global_rty t
   | TTable _ -> true
+  | TActionConstr _ -> false
   | TAction _ -> false
   | TBitstring -> false
 ;;
@@ -80,11 +82,13 @@ let rec is_not_global_rty rty =
     true
   | TQVar _ -> false (* I think *)
   | TName (_, _, b) | TAbstract (_, _, b, _) -> not b
+  | TBuiltin(_, _, b) -> not b
   | TTuple lst -> List.for_all is_not_global_rty lst
   | TRecord lst -> List.for_all (fun (_, rty) -> is_not_global_rty rty) lst
   | TVector (t, _) -> is_not_global_rty t
   | TTable _ -> false
-  | TAction _ -> false
+  | TActionConstr _ -> true
+  | TAction _ -> true
   | TBitstring -> true
 ;;
 
@@ -100,7 +104,11 @@ let add_sizes s1 s2 =
     -> ISum ([s], n1)
   | (IVar _ | IUser _), (IVar _ | IUser _) -> ISum ([s1; s2], 0)
   | ISum (vs1, n1), ISum (vs2, n2) -> ISum (vs1 @ vs2, n1 + n2)
+  | ITup _, ITup _ 
+  | ITup _, _ 
+  | _ , ITup _ -> error "[add_sizes] cannot add tuple sizes"
 ;;
+
 
 (* If an ISum, the list is non-empty, sorted, and no entries are Links *)
 let rec normalize_size s =
@@ -122,6 +130,7 @@ let rec normalize_size s =
       | ISum (vs, n) -> ISum (List.sort Pervasives.compare vs, n)
       | sz -> sz
     end
+  | ITup(vs) -> ITup(List.map normalize_size vs)
   | s -> s
 ;;
 
@@ -160,9 +169,14 @@ let rec equiv_size ?(qvars_wild = false) s1 s2 =
           | _ -> false)
          vs
   | IVar tqv, s | s, IVar tqv -> STQVar.equiv_tqvar ~qvars_wild equiv_size tqv s
-  | _ -> false
+  | ITup(vs1), ITup(vs2) -> equiv_lists equiv_size vs1 vs2
+  | IConst _, _
+  | IUser _, _ 
+  | ISum _, _
+  | ITup _, _
+  -> false
+    
 ;;
-
 (* If s1 is "obviously" greater than s2, return the difference; otherwise None.
    "Obvious" means they are both integers, or s1 is just s2 plus something *)
 let try_subtract_sizes s1 s2 =
@@ -259,9 +273,12 @@ let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
   | TInt size1, TInt size2 -> equiv_size size1 size2
   | TPat size1, TPat size2 -> equiv_size size1 size2
   | TMemop (n1, size1), TMemop (n2, size2) -> n1 = n2 && equiv_size size1 size2
-  | TName (id1, sizes1, b1), TName (id2, sizes2, b2)
+  | TName (id1, sizes1, b1), TName (id2, sizes2, b2) -> 
+    b1 = b2 && Cid.equal id1 id2 && List.for_all2 equiv_size sizes1 sizes2 
   | TAbstract (id1, sizes1, b1, _), TAbstract (id2, sizes2, b2, _) ->
     b1 = b2 && Cid.equal id1 id2 && List.for_all2 equiv_size sizes1 sizes2
+  | TBuiltin(id1, rty1, b1), TBuiltin(id2, rty2, b2) ->
+    b1 = b2 && Cid.equal id1 id2 && List.for_all2 equiv_raw_ty rty1 rty2
   | TFun func1, TFun func2 ->
     let func1 = normalize_tfun func1 in
     let func2 = normalize_tfun func2 in
@@ -270,6 +287,8 @@ let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
     && equiv_effect func1.start_eff func2.start_eff
     && equiv_effect func1.end_eff func2.end_eff
     && equiv_constraints !(func1.constraints) !(func2.constraints)
+  | TAction{aarg_tys=args1; aret_tys=aret1;}, TAction{aarg_tys=args2; aret_tys=aret2;} ->
+    equiv_lists equiv_ty args1 args2 && equiv_lists equiv_ty aret1 aret2
   | TQVar tqv, ty | ty, TQVar tqv ->
     TyTQVar.equiv_tqvar ~qvars_wild equiv_raw_ty tqv ty
   | TRecord lst1, TRecord lst2 ->
@@ -306,8 +325,10 @@ let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
       | TVector _
       | TTuple _
       | TAbstract _
+      | TActionConstr _
       | TAction _
-      | TTable _ )
+      | TTable _ 
+      | TBuiltin _)
     , _ ) -> false
 
 and equiv_ty ?(ignore_effects = false) ?(qvars_wild = false) ty1 ty2 =
@@ -339,6 +360,7 @@ let default_expression ty =
       record_sp (List.map (fun (s, raw_ty) -> s, aux raw_ty) lst) Span.default
     | TTuple _ -> failwith "Cannot create default expression for tuple"
     | TName(cid, _, _) -> failwith ("Cannot create default expression for user type "^(Cid.to_string cid))
+    | TBuiltin(cid, _, _) -> failwith ("Cannot create default expression for builtin type "^(Cid.to_string cid))
     | TMemop _ -> failwith "Cannot create default expression for memop"
     | TPat _ -> failwith "Cannot create default expression for pattern"
     | TEvent -> failwith "Cannot create default expression for event"
@@ -346,6 +368,7 @@ let default_expression ty =
     | TVoid -> failwith "Cannot create default expression for void"
     | TAbstract _ -> failwith "Cannot create default expression for abstract"
     | TFun _ -> failwith "Cannot create default expression for function"
+    | TActionConstr _ -> failwith "Cannot create default expression for action"
     | TAction _ -> failwith "Cannot create default expression for action"
     | TTable _ -> failwith "Cannot create default expression for table"
     | TQVar _ -> failwith "Cannot create default expression for type variable"
@@ -475,9 +498,12 @@ let extract_action_body (body : statement) : action_body =
   action_body
 ;;
 
-let mk_daction id rty cp p body span =
-  decl_sp (DAction (id, rty, cp, (p, extract_action_body body))) span
+let mk_daction_ctor id rty cp p body span =
+  decl_sp (DActionConstr (id, rty, cp, (p, extract_action_body body))) span
 ;;
+
+let mk_daction id rty p body span = 
+  decl_sp (DAction (id, rty, (p, extract_action_body body))) span
 
 let mk_entry prio pats acn args span =
   { eprio = prio; ematch = pats; eaction = Syntax.ucall_sp (Cid.id acn) args span;}
@@ -492,11 +518,32 @@ let mk_tblinstall_single tbl entries span =
   else tblinstall_sp tbl entries span
 ;;
 
-let unpack_parsed_tuple (e : exp) =
+let unpack_tuple (e : exp) =
   match e.e with
   | ETuple lst -> lst
   | _ -> [e]
 ;;
+
+let flatten_tuple_ty (raw_ty : raw_ty) = 
+  match TyTQVar.strip_links raw_ty with 
+  | TTuple(lst) -> lst
+  | _ -> [raw_ty]
+;;
+
+
+let rec flatten_exp exp = match exp.e with 
+  | ETuple(es) -> List.map flatten_exp es |> List.flatten
+  | EVector(es) -> List.map flatten_exp es |> List.flatten
+  | ERecord(label_exps) -> List.map (fun (_, exp) -> flatten_exp exp) label_exps |> List.flatten
+  | _ -> [exp]
+;;
+
+let rec flatten_size size = 
+  match (STQVar.strip_links size) with 
+  | ITup(sizes) -> List.map flatten_size sizes |> List.flatten
+  | size -> [size]
+;;
+
 
 let unpack_default_action e = 
   match e with 
@@ -519,6 +566,63 @@ let is_evar exp =
   | _ -> false
 ;;
 
+let is_ecall_builtin exp = 
+  match exp.ety with 
+  | Some({raw_ty=TBuiltin _}) -> true
+  | _ -> false
+;;
+
+(* in a pattern context of parsing, wrap all expression that 
+do not parse as pat types to pats *)
+let cast_int_pats exp = 
+  match exp.e with 
+  (* exception cases: pattern values, pattern casts, and mask ops *)
+  | EVal({v=VPat (_)}) -> exp
+  | EOp(PatExact, _) -> exp
+  | EOp(PatMask, _) -> exp 
+  (* everything else gets cast to a pattern *)
+  | _ -> op_sp PatExact [exp] exp.espan
+;;
+
+
+(* 
+let d = 
+    | DSize of id * size option
+  | DGlobal of id * ty * exp
+  | DEvent of id * int option * event_sort * constr_spec list * params
+  | DHandler of id * handler_sort * body
+  | DFun of id * ty * constr_spec list * body
+  | DMemop of id * params * memop_body
+  | DConst of id * ty * exp
+  | DExtern of id * ty
+  | DSymbolic of id * ty
+  | DUserTy of id * sizes * ty
+  | DConstr of id * ty * params * exp
+  | DModule of id * interface * decls
+  | DModuleAlias of id * exp * cid * cid
+  | DActionConstr of id * ty list * params * (params * action_body)
+  | DParser of id * params * parser_block   
+*)
+
+let d_to_constr_str d = match d with 
+  | DSize _ -> "size"
+  | DGlobal _ -> "global"
+  | DEvent _ -> "event"
+  | DHandler _ -> "handler"
+  | DFun _ -> "fun"
+  | DMemop _ -> "memop"
+  | DConst _ -> "const"
+  | DExtern _ -> "extern"
+  | DSymbolic _ -> "symbolic"
+  | DUserTy _ -> "userty"
+  | DConstr _ -> "constr"
+  | DModule _ -> "module"
+  | DModuleAlias _ -> "modulealias"
+  | DActionConstr _ -> "actionconstr"
+  | DAction _ -> "action"
+  | DParser _ -> "parser"
+;;
+
 
 let raw_ty_to_constr_str raw_ty = 
   match raw_ty with 
@@ -535,10 +639,12 @@ let raw_ty_to_constr_str raw_ty =
   | TVector (_) -> "vector"
   | TTuple (_) -> "tuple"
   | TTable (_) -> "table"
-  | TAction (_) -> "action"
+  | TActionConstr (_) -> "action"
   | TPat (_) -> "pat"
   | TQVar (_) -> "qvar"
   | TBitstring -> "bitstring"
+  | TAction (_) -> "action"
+  | TBuiltin (cid, _, _) -> Cid.to_string cid
 ;;
 
 let op_to_constr_str o =
@@ -590,4 +696,10 @@ let e_to_constr_str e = match e with
 | ETableCreate (_) -> "tablecreate"
 | ETableMatch (_) -> "tablematch"
 (* | EPatWild (_) -> "patwild" *)
+;;
+
+let is_tbuiltin ty = 
+  match ty.raw_ty with 
+    | TBuiltin _ -> true
+    | _ -> false
 ;;

@@ -7,7 +7,6 @@
 open TofinoCore
 open BackendLogging
 
-
 let start_backend_logging () = 
   if (Cmdline.cfg.debug)
     then (
@@ -79,6 +78,7 @@ let atomic_op_form ds =
 
 let core_passes ds portspec = 
   (* all the passes over CoreSyntax *)
+  let ds = EliminateTBuiltin.process_prog ds in
   dump_ir_prog "midend before partial interp (initial prog)" "midend_pre_partial_interp.dpt" ds;
   let ds = if Cmdline.cfg.partial_interp
     then (
@@ -101,14 +101,19 @@ let core_passes ds portspec =
   let ds = InlineEventVars.set_event_nums ds in 
   report_if_verbose "-------Inlining event variables---------";
   let ds = InlineEventVars.inline ds in
+  printprog_if_debug ds;
+  report_if_verbose ("--------eliminating event match--------");
+  let ds = EliminateEventMatch.process_prog ds in
   report_if_verbose "-------Creating unique per-table actions---------";
   let ds = UniqueTableActions.process ds in
-
+  printprog_if_debug ds;
   report_if_verbose "-------Adding declarations for P4Tofino intrinsics---------";
   let ds = AddIntrinsics.add_intrinsics ds in
   (* generate the ingress parser or add background event parsing *)
   report_if_verbose "-------Adding background event parser---------";
-  let ds = AddIngressParser.add_parser portspec ds in
+  let port_ty = (Builtins.tofino_builtin_tys.ingr_port_ty |> SyntaxToCore.translate_ty) in 
+
+  let ds = AddIngressParser.add_parser port_ty portspec ds in
   (* static analysis to see if this program is compile-able *)
   report_if_verbose "-------Checking tofino compatibilty---------";
   InputChecks.all_checks ds;
@@ -188,9 +193,10 @@ let tofinocore_passes core_prog portspec =
   dump_prog "IfToMatch; RegularizeMemops; ShareMemopInputsSat" "tofinocore_regularized_memops" core_prog;
   report_if_verbose "-------Transforming table matches into single-call form-------";
   let core_prog = SingleTableMatch.process_core core_prog in
+  dump_prog "SingleTableMatch; ActionsToFunctions" "tofinocore_single_table_match" core_prog;
   report_if_verbose "-------Transforming actions into functions-------";
   let core_prog = ActionsToFunctions.process_core core_prog in
-  dump_prog "SingleTableMatch; ActionsToFunctions" "tofinocore_single_table_match" core_prog;
+  dump_prog "SingleTableMatch; ActionsToFunctions" "tofinocore_action_functions" core_prog;
   (* propagateEvars is another hoisting pass that benefits control flows with 
      match tables that are declared and used once. *)
   let core_prog = PropagateEvars.process core_prog in

@@ -337,7 +337,7 @@ let rec string_of_decl dec =
           hardline
           ^^s'"const default_action = "^^(string_of_statement default))
       )^^s'" "
-  | DAction{id=id;params=params;body=body;} -> 
+  | DActionConstr{id=id;params=params;body=body;} -> 
     s'"action "^^(string_of_id id)
     ^^parens (string_of_params params)
     ^^nested_block_better (
@@ -458,7 +458,7 @@ let p4_of_prog (prog:tofino_prog) =
       (string_of_decls f.decls)^^hardline 
       ^^s'"apply" ^^ nested_block (string_of_statement f.body)                    
     )
-  | DAction f -> 
+  | DActionConstr f -> 
     s'"action"^-^(string_of_id f.id)
     ^^s'"("^^(string_of_params f.params)^^s'")"
     ^^nested_block (string_of_statement f.body) 

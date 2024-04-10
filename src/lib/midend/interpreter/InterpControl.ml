@@ -3,20 +3,30 @@
 open CoreSyntax
 (* open InterpSyntax *)
 open CoreSyntaxGlobalDirectory
+open Pipeline
 
+(* left off here -- make this tbl_entry an unevaluated expression, 
+   which handle_control should transform into an action function *)
 
+type entry_install_cmd = {
+  iprio : int;
+  imatch : exp list;  
+  imask  : exp list;
+  iaction : id;
+  iargs : exp list;
+}
 (* a control value *)
 type control_val = 
   | ArraySet of string * value * (value list)
   | ArraySetRange of string * value * value * (value list)
   | ArrayGet of string * value
   | ArrayGetRange of string * value * value
-  | TableInstall of string * tbl_entry
+  | TableInstall of string * entry_install_cmd
   | Print of string
   | Noop
 
 
-let handle_control p global_names ctl_val =
+let handle_control do_tbl_install p global_names ctl_val =
   let extract_int v = match v.v with
     | VInt z -> Integer.to_int z
     | _ -> error "[extract_int] not an int"
@@ -68,13 +78,14 @@ let handle_control p global_names ctl_val =
     in
     print_endline (Yojson.Basic.pretty_to_string result_json)
   | TableInstall (tblname, entry) ->
-    let id = name_to_compiled_cid global_names tblname |> Cid.to_id in
-    (* resolve correct action name *)
-    let eaction_str = fst entry.eaction in
+    let tbl_cid = name_to_compiled_cid global_names tblname in
+    (* resolve correct action constructor name *)
     let eaction' =
-      name_to_compiled_cid global_names eaction_str |> Cid.to_id
+      name_to_compiled_cid global_names (fst entry.iaction) |> Cid.to_id
     in
-    let entry = { entry with eaction = eaction' } in
-    Pipeline.control_install_table_entry id entry p
+    let entry = {entry with iaction = eaction' } in
+    (* use the callback, which should call Tables.install_fun *)
+    let _ = do_tbl_install tbl_cid entry in
+    ()
   | _ -> error "[execute_control] unknown control command"
 ;;

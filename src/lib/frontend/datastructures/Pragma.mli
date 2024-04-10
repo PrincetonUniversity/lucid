@@ -22,11 +22,15 @@ type t =
 
 val sprag : string -> string list -> t
 
-val find_sprag : string -> string list -> t list -> t option
+val find_sprag : string -> t list -> (string * string list) option
+
+val find_sprag_args : string -> string list -> t list -> t option
 
 val exists_pnolocal : t list -> bool
 
-val exists_sprag : string -> string list -> t list -> bool
+val exists_sprag : string -> t list -> bool
+
+val exists_sprag_args : string -> string list -> t list -> bool
 
 val to_string : t -> string
 

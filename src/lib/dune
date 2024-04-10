@@ -53,6 +53,7 @@
    functionInlining
    tableInlining
    sizeInlining
+   builtinsTupleElimination
    renaming
    globalArgElimination
    explicitReturns
@@ -71,6 +72,7 @@
    frontendPipeline
    midendPipeline
    syntaxToCore
+   eliminateTBuiltin
    interp
    InterpConfig
    interpCore
@@ -83,10 +85,11 @@
    InterpSwitch
    interpPayload
    interpSyntax
-   funInterp
    libraryInterface
+   libraryUtils
    arrays
    counters
+   tables
    pairArrays
    system
    events
@@ -96,6 +99,7 @@
    TQVar
    backendLogging
    addDefaultBranches
+   eliminateEventMatch
    eliminateFloods
    precomputeArgs
    normalizeBools
@@ -106,6 +110,7 @@
    immutableConditions
    uniqueSpans
    uniqueIds
+   Despecialization
    interpHelpers
    miscUtils
    packageTofinoApp
@@ -159,6 +164,36 @@
    cEventLib
    pyEventLib
    pyControlLib
+
+   miscCorePasses
+   CoreRegularizeMemops
+   CCorePasses
+   CCoreSyntax
+   CCoreConfig
+   CCoreUtils
+   CCorePPrint
+   CCoreCPrint
+   CCoreExceptions
+   CCoreTransformers
+   CoreToCCore
+   CCoreToCore
+   CCoreTNameToTAbstr
+   CCoreRenaming
+   CCoreTyper
+   CCoreBuiltinCheckers
+   CheckFFuns
+   CCoreParse
+   CCoreDeparse
+   CCoreTables
+   CCoreArrays
+   CCoreSystem
+   CCoreHandlers
+   CCoreEvents
+   CCoreCForm
+   CCoreWellformedC
+   CCorePacketHandler
+   CCoreDriverInterface
+   CCoreDriverPcap
    )
  (preprocess
     (staged_pps ppx_import visitors.ppx ppx_deriving.show ppx_deriving.std ppx_string))

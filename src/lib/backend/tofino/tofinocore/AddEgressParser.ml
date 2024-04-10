@@ -57,7 +57,7 @@ let block_of_nth_member pkt_var out_ctor_base (members : event list) n =
     call 
     (Cid.concat out_ctor_base (Cid.id (id_of_event event))) 
     (List.map (fun (id, ty) -> var (Cid.id id) ty) params)
-    (ty TEvent)  
+    (tevent)  
   )
   in
   block read_cmds gen_cmd
@@ -131,7 +131,7 @@ let pskip_event_params event =
     0
     (params_of_event event)
   in
-  [PSkip(ty (TInt(event_size)))];
+  [PSkip(ty (TInt(Sz event_size)))];
 ;;
 (* write a command to read an event's parameters from pkt_var *)
 let pread_event_params pkt_var event = 
@@ -144,7 +144,7 @@ let pgen_event out_ctor_base event = pgen (
   call 
   (Cid.concat out_ctor_base (Cid.id (id_of_event event))) 
   (List.map (fun (id, ty) -> var (Cid.id id) ty) (params_of_event event))
-  (ty TEvent)  
+  (tevent)  
 )
 ;;
 
@@ -302,7 +302,7 @@ let eventset_block pkt_var evset (rid_var : (cid * ty)) (out_ctor_base : cid) =
   | _ -> error "not an eventset"
 ;;
 
-let tname id = ty (TName(id, [], false)) ;;
+let tname id = ty (TName(id, [])) ;;
 
 let id = Id.create
 (* make a parser that reads a serialized version of 

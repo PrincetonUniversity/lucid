@@ -3,6 +3,7 @@
   open Batteries
   open SyntaxUtils
   open Collections
+  open Builtins
 
   let first (x, _, _, _, _) = x
   let second (_, x, _, _, _) = x
@@ -67,26 +68,13 @@
     in
     ty_sp (TFun fty) tspan
 
-
     let mk_dparser id params p span = 
-     (* adjust the id of a "main" parser *)
+        (* adjust the id of a "main" parser *)
         if ((Id.name id) = (Id.name Builtins.main_parse_id))
         then 
             dparser_sp Builtins.main_parse_id params p span
         else(
             dparser_sp id params p span) 
-
-
-    (* in a pattern context of parsing, wrap all expression that 
-    do not parse as pat types to pats *)
-    let cast_int_pats exp = 
-        match exp.e with 
-        (* exception cases: pattern values, pattern casts, and mask ops *)
-        | EVal({v=VPat (_)}) -> exp
-        | EOp(PatExact, _) -> exp
-        | EOp(PatMask, _) -> exp 
-        (* everything else gets cast to a pattern *)
-        | _ -> op_sp PatExact [exp] exp.espan
 
 ;;
 
@@ -193,6 +181,7 @@
 %token <Span.t> SYMBOLIC
 %token <Span.t> FLOOD
 %token <Span.t> WILDCARD
+%token <Span.t> PATCAST
 
 %token EOF
 
@@ -222,8 +211,12 @@ ty:
     | TBOOL				                      { ty_sp TBool $1 }
     | QID                               { ty_sp (TQVar (QVar (snd $1))) (fst $1) }
     | AUTO                              { ty_sp (TQVar (QVar (fresh_auto ()))) $1 }
-    | cid    				                    { ty_sp (TName (snd $1, [], true)) (fst $1) }
-    | cid poly				                  { ty_sp (TName (snd $1, snd $2, true)) (fst $1) }
+    | cid    				            { ty_sp (TName (snd $1, [], true)) (fst $1) }
+    | cid poly				            { ty_sp (TName (snd $1, snd $2, true)) (fst $1) }
+    | cid ty_poly                       {
+                                            let raw_tys = List.map (fun ty -> ty.raw_ty) (snd $2) in
+                                            let span = Span.extend (fst $1) (fst $2) in 
+                                            ty_sp (TBuiltin (snd $1, raw_tys, true)) span }
     | EVENT                             { ty_sp TEvent $1}
     | VOID                              { ty_sp (TVoid) $1 }
     | GROUP                             { ty_sp (TGroup) $1 }
@@ -231,6 +224,12 @@ ty:
     | LBRACE record_def RBRACE          { ty_sp (mk_trecord $2) (Span.extend $1 $3) }
     | ty LBRACKET size RBRACKET         { ty_sp (TVector ($1.raw_ty, snd $3)) (Span.extend $1.tspan $4) }
     | BITSTRING                         { ty_sp TBitstring ($1)}
+
+tys:
+    | ty                                        { $1.tspan, [ $1 ] }
+    | ty COMMA tys                              { (Span.extend $1.tspan (fst $3), $1::(snd $3)) }
+
+
 cid:
     | ID				                { (fst $1, Cid.id (snd $1)) }
     | ID DOT cid                        { (Span.extend (fst $1) (fst $3),
@@ -241,16 +240,35 @@ size:
     | QID                               { fst $1, IVar (QVar (snd $1)) }
     | AUTO                              { $1, IVar (QVar (fresh_auto ())) }
     | size PLUS size                    { Span.extend (fst $1) (fst $3), add_sizes (snd $1) (snd $3)}
+    | LPAREN RPAREN                     { Span.extend $1 $2, ITup([]) }
+    | LPAREN sizes RPAREN               { Span.extend $1 $3, ITup(snd $2) }
+sizes: 
+    | size                              { fst $1, [snd $1] }
+    | size COMMA sizes                  { Span.extend (fst $1) (fst $3), (snd $1)::(snd $3) }
+
 
 polys:
     | size                              { fst $1, [snd $1] }
     | size COMMA polys                  { Span.extend (fst $1) (fst $3), (snd $1)::(snd $3) }
 
 poly:
-    | LESS polys MORE                { Span.extend $1 $3, snd $2 }
+    | LESS polys MORE                   { Span.extend $1 $3, snd $2 }
 
 single_poly:
-    | LESS size MORE                 { Span.extend $1 $3, snd $2 }
+    | LESS size MORE                    { Span.extend $1 $3, snd $2 }
+
+ty_or_empty_tuple: 
+    | ty                                      { $1 }
+    | LPAREN RPAREN                           { ty_sp (TTuple([])) (Span.extend $1 $2) }
+
+ty_polys:
+    | ty_or_empty_tuple                       { [$1] }
+    | ty_or_empty_tuple COMMA ty_polys        { $1::$3 }
+
+ty_poly: 
+    | LSHIFT ty_polys RSHIFT            { Span.extend $1 $3, $2 }
+
+
 
 paren_args:
     | LPAREN RPAREN                     { Span.extend $1 $2, [] }
@@ -287,6 +305,7 @@ pattern:
     | cid                               { pat_of_cid $1 }
     | NUM                               { PNum (snd $1) }
     | BITPAT                            { PBit (snd $1) }
+    | cid paramsdef                     { PEvent ((snd $1), $2)}
 
 patterns:
   | pattern                             { [$1] }
@@ -307,6 +326,11 @@ exp:
     | SUB exp                             { op_sp Neg [$2] (Span.extend $1 $2.espan) }
     | BITNOT exp                          { op_sp BitNot [$2] (Span.extend $1 $2.espan) }
     | HASH single_poly LPAREN args RPAREN { hash_sp (snd $2) $4 (Span.extend $1 $5) }
+
+
+    | PATCAST LPAREN exp RPAREN               { 
+        op_sp PatExact [$3] (Span.extend $1 $4)}
+
     | LPAREN TINT single_poly RPAREN exp  { op_sp (Cast(snd $3))[$5] (Span.extend $1 $5.espan) }
     | exp PROJ ID                         { proj_sp $1 (Id.name (snd $3)) (Span.extend $1.espan (fst $3)) }
     // | LPAREN exp RPAREN		             	  { $2 }
@@ -325,17 +349,17 @@ exp:
         n_entries=exp COMMA
         default_action_call=exp // default action initialized with compile time arguments
         RPAREN
-                                         { make_create_table tbl_ty (unpack_parsed_tuple actions) (n_entries) (default_action_call) (Span.extend $1 $11) }
+                                         { make_create_table tbl_ty (unpack_tuple actions) (n_entries) (default_action_call) (Span.extend $1 $11) }
     | TABLE_MATCH
         LPAREN tbl=exp COMMA
         keys=exp COMMA
         args=exp
-        RPAREN                          { tblmatch_sp tbl (unpack_parsed_tuple keys) (unpack_parsed_tuple args) (Span.extend $1 $8)}
+        RPAREN                          { tblmatch_sp tbl (unpack_tuple keys) (unpack_tuple args) (Span.extend $1 $8)}
     | paren_exp                         { $1 }
 
 // an expression with a parenthesis is a tuple, unless its a single-element tuple, in which case its just the element.
 // note that user-written tuples may not appear in the AST, so any parsed tuple must be unpacked with 
-// SyntaxUtils.unpack_parsed_tuple before calling a AST node constructor
+// SyntaxUtils.unpack_tuple before calling a AST node constructor
 paren_exp:
     | LPAREN args RPAREN                  { match $2 with 
                                             | [] -> tuple_sp [] (Span.extend $1 $3)
@@ -423,19 +447,15 @@ tyname_def:
     | ID                                  { snd $1, [] }
     | ID poly                             { snd $1, snd $2}
 
-tys:
-    | ty                                        { $1.tspan, [ $1 ] }
-    | ty COMMA tys                              { (Span.extend $1.tspan (fst $3), $1::(snd $3)) }
-
-ty_tuple:
+ty_args:
     | LPAREN tys RPAREN                         { (Span.extend $1 $3, snd $2) }
     | LPAREN RPAREN                             { (Span.extend $1 $2, []) }
     | ty                                        { ($1.tspan, [ $1 ]) }
 
 dt_table:
     | ID ASSIGN LBRACE
-        KEY_TYPE ty_tuple
-        ARG_TYPE ty_tuple
+        KEY_TYPE ty_args
+        ARG_TYPE ty_args
         RET_TYPE ty RBRACE
                                             { duty_sp
                                                     (snd $1)
@@ -494,10 +514,10 @@ decl:
                                               | [decl] -> [{decl with dpragmas = [Pragma.sprag "main" []]}] 
                                               | _ -> error "parsing error: invalid use of @main"}
     | ACTION_CONSTR ID constr_params=paramsdef ASSIGN LBRACE RETURN ACTION ty=ty ID acn_params=paramsdef LBRACE acn_body=statement RBRACE SEMI RBRACE SEMI
-        { [mk_daction (snd $2) [ty] constr_params acn_params acn_body (Span.extend $1 $16)]}
+        { [mk_daction_ctor (snd $2) [ty] constr_params acn_params acn_body (Span.extend $1 $16)]}
+    | ACTION ty=ty ID install_params=paramsdef match_params=paramsdef LBRACE acn_body=statement RBRACE
+        { [mk_daction_ctor (snd $3) [ty] install_params match_params acn_body (Span.extend $1 $8)]}
 
-    // | ACTION ty=ty ID constr_params=paramsdef acn_params=paramsdef LBRACE acn_body=statement RBRACE
-    //                                         { [mk_daction (snd $3) [ty] constr_params acn_params acn_body (Span.extend $1 $8)]}
     | MEMOP ID paramsdef LBRACE statement RBRACE
                                             { [mk_dmemop (snd $2) $3 $5 (Span.extend (fst $1) $6)] }
     | SYMBOLIC SIZE ID SEMI                 { [dsize_sp (snd $3) None (Span.extend $1 $4)] }
@@ -594,7 +614,7 @@ statement1:
     | PGENERATE LPAREN exp COMMA exp RPAREN SEMI { gen_sp (GPort $3) $5 (Span.extend $1 $7)}
     | cid LESS UNORDERED MORE paren_args SEMI { sucall_sp (snd $1) (snd $5) (Span.extend (fst $1) $6) }
     | cid paren_args SEMI                   { scall_sp (snd $1) (snd $2) (Span.extend (fst $1) $3) }
-    | MATCH exp=exp WITH branches=branches  { match_sp (unpack_parsed_tuple exp) (snd branches) (Span.extend $1 (fst branches)) }
+    | MATCH exp=exp WITH branches=branches  { match_sp (unpack_tuple exp) (snd branches) (Span.extend $1 (fst branches)) }
     | MATCH multiargs=multiargs WITH branches=branches { match_sp multiargs (snd branches) (Span.extend $1 (fst branches)) }
     | PRINTF LPAREN STRING RPAREN SEMI             { sprintf_sp (snd $3) [] (Span.extend $1 $5) }
     | PRINTF LPAREN STRING COMMA args RPAREN SEMI  { sprintf_sp (snd $3) $5 (Span.extend $1 $7) }

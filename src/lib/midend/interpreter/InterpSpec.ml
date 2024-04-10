@@ -3,6 +3,7 @@ open Batteries
 open CoreSyntax
 open InterpSyntax
 open InterpJson
+open InterpCore
 open Yojson.Basic
 open Preprocess
 module Env = InterpState.Env
@@ -29,7 +30,8 @@ let empty_spec = {
   externs = [];
   events = [];
   config = { 
-      max_time = 0
+      num_switches = 1
+    ; max_time = 0
     ; default_input_gap = 0
     ; generate_delay = 0
     ; propagate_delay = 0
@@ -55,8 +57,8 @@ let parse_int_entry lst str default =
 
 let rec parse_value err_str ty j =
   match j, ty.raw_ty with
-  | `Int n, TInt size -> vint n size
-  | `Int n, TName (cid, _, _) when Cid.equal cid Payloads.t_id -> vint n 32
+  | `Int n, TInt Sz size -> vint n size
+  | `Int n, TName (cid, _) when Cid.equal cid Payloads.t_id -> vint n 32
   | `Bool b, TBool -> vbool b
   | `List lst, TGroup ->
     vgroup (List.map (fun n -> parse_int "group value definition" n) lst)
@@ -88,7 +90,7 @@ let parse_interp_event_list
   (input_json : json)
   =
   let parse_f =
-    (parse_interp_input 
+    (parse_interp_input
       Payloads.t_id 
       (Builtins.lucid_eventnum_ty |> SyntaxToCore.translate_ty)
       renaming.var_map pp.events num_switches gap default_port)
@@ -106,7 +108,7 @@ let parse_interp_inputs
   (events : json list)
   =
   let parse_f =
-    (parse_interp_input 
+    (parse_interp_input
       Payloads.t_id (Builtins.lucid_eventnum_ty |> SyntaxToCore.translate_ty) renaming.var_map pp.events num_switches)
   in
   let wrapper
@@ -249,14 +251,16 @@ let create_foreign_functions renaming efuns python_file =
               let _ = pyretvar in
               (* this is the return from python? *)
               (* Dummy return value *)
-              value (VBool false))
+              InterpSyntax.V(value (VBool false)))
         in
         Env.add id f acc)
     efuns
     Env.empty
 ;;
 
-let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t =
+let parse 
+(* (nst : InterpState.State.network_state) *)
+(pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t =
   let json = from_file filename in
   match json with
   | `Assoc lst ->
@@ -356,7 +360,8 @@ let parse (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t 
       | _ -> None
     in
     let config : InterpConfig.config =
-      { max_time
+      { num_switches
+      ; max_time
       ; default_input_gap
       ; generate_delay
       ; propagate_delay

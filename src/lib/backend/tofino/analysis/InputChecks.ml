@@ -12,7 +12,7 @@ let params_wid params =
   List.fold_left
     (fun tot_wid (_, pty) ->
       match pty.raw_ty with
-      | TInt w -> tot_wid + w
+      | TInt (Sz w) -> tot_wid + w
       | TBool -> tot_wid + 1
       | _ -> error "[param_wids] event parameters must be ints or bools")
     0
@@ -63,11 +63,12 @@ let array_sizes ds : bool =
         match dec.d with
         | DGlobal
             ( id
-            , { raw_ty = TName (ty_cid, sizes, true); _ }
+            , { raw_ty = TName (ty_cid, sizes); _ }
             , { e = ECall (_, num_slots :: _, _) } ) ->
           (match Cid.names ty_cid |> List.hd with
            | "Array" ->
              let slot_sz = List.hd sizes in
+             let slot_sz = size_to_int slot_sz in
              let num_slots = InterpHelpers.int_from_exp num_slots in
              let sblocks = TofinoResources.sblocks_of_arr slot_sz num_slots in
              let pass = sblocks <= max_sblocks in
@@ -83,7 +84,7 @@ let array_sizes ds : bool =
                  ^ string_of_int (sblocks - 1));
              prev_pass && pass
            | "PairArray" ->
-             let slot_sz = 2 * List.hd sizes in
+             let slot_sz = 2 * (List.hd sizes |> size_to_int) in
              let num_slots = InterpHelpers.int_from_exp num_slots in
              let sblocks = TofinoResources.sblocks_of_arr slot_sz num_slots in
              let pass = sblocks <= max_sblocks in
@@ -154,6 +155,41 @@ let port_tys ds =
   !pass
 ;;
 
+
+(* Table.install is not supported on the tofino *)
+let no_table_installs ds = 
+  let pass = ref true in
+  let table_install_fcn_cids = List.filter_map 
+    (fun fcn_cid -> 
+      let (name  : String.t) = Cid.to_string fcn_cid in
+      let contains_install = 
+            (Batteries.String.exists name "install" )
+        ||  (Batteries.String.exists name "Install")
+      in      
+      if contains_install then Some fcn_cid else None)
+    (Tables.function_cids)
+  in
+  (* check every ECall in the program, fail if any one 
+     of them to a function in table_install_fcn_cids *)
+  let v =
+    object
+      inherit [_] s_iter as super
+
+      method! visit_exp ctx exp = 
+        match exp.e with 
+        | ECall(fcn_cid, _, _) -> 
+          if List.exists (Cid.equals fcn_cid) table_install_fcn_cids then 
+            (pass := false;
+            let err_str = "Table.install not supported on tofino." in
+            report_err exp.espan err_str)
+          else (super#visit_exp ctx exp)
+        | _ -> super#visit_exp ctx exp
+    end
+  in
+  v#visit_decls () ds; 
+  !pass
+;;
+
 (* All tables must be used in a program to compile to P4,
    because if a table is not used, we have no way of
    creating the actions, whose bodies must be inlined with
@@ -164,32 +200,27 @@ let port_tys ds =
    that is never used, but it requires a bit different approach
    in the table inlining. (and the P4 compiler would likely
    delete it anyway) *)
+
 let all_tables_used ds =
   let pass = ref true in
-  let rec tables_in_prog ds =
-    match ds with
-    | [] -> []
-    | { d = DGlobal (_, _, { e = ETableCreate tbl_def; espan }); dspan } :: ds'
-      -> (tbl_def, dspan, espan) :: tables_in_prog ds'
-    | _ :: ds' -> tables_in_prog ds'
-  in
   let tables_matched_in_prog ds =
     let tbl_ids = ref [] in
     let v =
       object
         inherit [_] CoreSyntax.s_iter as super
 
-        method! visit_tbl_match _ tm =
+        method! visit_STupleAssign _ tuple_assign = 
+          let tm = Tables.s_to_tbl_match@@STupleAssign(tuple_assign) in
           tbl_ids := (tm.tbl |> CoreSyntax.exp_to_id) :: !tbl_ids
       end
     in
     v#visit_decls () ds;
     !tbl_ids |> MiscUtils.unique_list_of
   in
-  let defined_tbls = tables_in_prog ds in
+  let defined_tbls = InterpHelpers.tables_in_prog ds in
   let used_ids = tables_matched_in_prog ds in
   List.iter
-    (fun (tdef, dspan, espan) ->
+    (fun ((tdef:Tables.core_tbl_def), dspan, espan) ->
       let is_used = List.exists (fun id -> id = tdef.tid) used_ids in
       if not is_used
       then (
@@ -220,7 +251,7 @@ let all_tables_used ds =
 *)
 let all_checks ds =
   let checks =
-    [event_param_alignment; array_sizes; port_tys; all_tables_used]
+    [event_param_alignment; array_sizes; port_tys; all_tables_used; no_table_installs]
   in
   let pass =
     List.fold_left
@@ -246,11 +277,11 @@ let rec align_params ps =
   | [] -> []
   | (id, pty) :: ps ->
     (match pty.raw_ty with
-     | TInt w ->
+     | TInt (Sz w) ->
        if w mod 8 = 0
        then (id, pty) :: align_params ps
        else (
-         let pad_field = Id.fresh_name "pad", ty (TInt (8 - (w mod 8))) in
+         let pad_field = Id.fresh_name "pad", ty (TInt(Sz (8 - (w mod 8)))) in
          (id, pty) :: pad_field :: align_params ps)
      | _ -> (id, pty) :: align_params ps)
 ;;
@@ -261,7 +292,7 @@ let rec align_args exps =
   | [] -> []
   | exp :: exps ->
     (match exp.ety.raw_ty with
-     | TInt w ->
+     | TInt (Sz w) ->
        if w mod 8 = 0
        then exp :: align_args exps
        else (

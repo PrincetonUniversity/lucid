@@ -75,7 +75,7 @@ let del xs x =
 
 (* generates ultimately get replaced by a call to "exit" that 
    represents the end of the parser. *)
-let exit_call = call (Cid.create ["exit"]) [] (ty TEvent) ;;
+let exit_call = call (Cid.create ["exit"]) [] tevent ;;
 let exit_step = PCall(exit_call) 
 ;;
 

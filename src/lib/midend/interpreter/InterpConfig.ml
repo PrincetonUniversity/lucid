@@ -1,6 +1,7 @@
 (* static interpreter configuration values *)
 type config =
-{ max_time : int
+{ num_switches : int
+; max_time : int
 ; default_input_gap : int
 ; generate_delay : int
 ; propagate_delay : int

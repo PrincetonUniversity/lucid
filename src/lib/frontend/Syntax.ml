@@ -20,6 +20,7 @@ and size =
   | IVar of size tqvar
   (* Normal form: list is non-empty, sorted, and no entries are Link, IConst, or ISum *)
   | ISum of sizes * int
+  | ITup of sizes
 
 and sizes = size list
 
@@ -57,7 +58,9 @@ and raw_ty =
   | TVector of raw_ty * size
   | TTuple of raw_ty list
   | TTable of tbl_ty
+  | TBuiltin of cid * (raw_ty list) * bool (* new named builtin types. Table.t<<key_t, arg1_t, arg2_t, ret_t>>*)
   | TAction of acn_ty
+  | TActionConstr of acn_ctor_ty
   | TPat of size (* number of bits *)
   | TBitstring
 
@@ -67,10 +70,15 @@ and tbl_ty =
   ; tret_tys : ty list
   }
 
-and acn_ty =
+and acn_ty = 
+  {
+    aarg_tys : tys;
+    aret_tys : tys;
+  }
+
+and acn_ctor_ty =
   { aconst_param_tys : tys
-  ; aparam_tys : tys
-  ; aret_tys : tys
+  ; aacn_ty : acn_ty
   }
 
 and func_ty =
@@ -128,13 +136,14 @@ and pat =
   | PVar of cid * sp 
   | PNum of z        
   | PBit of int list 
+  | PEvent of cid * params
 
 (* values *)
 and v =
   | VBool of bool
   | VInt of zint
   | VEvent of event
-  | VGlobal of int (* Stage number *)
+  | VGlobal of id * int (* Stage number *)
   | VGroup of location list
   | VPat of pat
 
@@ -157,7 +166,7 @@ and e =
       z * size option (* Differs from VInt since size may be polymorphic *)
   | EVar of cid
   | EOp of op * exp list
-  | ECall of cid * exp list * bool (* true if its an unordered call *)
+  | ECall of cid * exp list * bool (* true means this call ignores ordering <unordered> *)
   | EHash of size * exp list
   | EFlood of exp (* Generate a group of all ports but one *)
   | ESizeCast of size * size (* Cast a size to int *)
@@ -196,6 +205,9 @@ and s =
   | SUnit of exp
   | SLocal of id * ty * exp
   | SAssign of id * exp
+  (* internal-only node used for builtin methods that return 
+     multiple values, like Table.match *)
+  | STupleAssign of tuple_assign
   | SPrintf of string * exp list
   | SIf of exp * statement * statement
   | SGen of gen_type * exp
@@ -205,6 +217,12 @@ and s =
   | SLoop of statement * id * size
   | STableMatch of tbl_match
   | STableInstall of exp * tbl_entry list
+
+and tuple_assign = {
+  ids : id list;
+  tys : (ty list) option;
+  exp : exp;
+}
 
 and tbl_match =
   { tbl : exp
@@ -316,7 +334,8 @@ and d =
   | DConstr of id * ty * params * exp
   | DModule of id * interface * decls
   | DModuleAlias of id * exp * cid * cid
-  | DAction of id * ty list * params * (params * action_body)
+  | DAction of id * ty list * (params * action_body)
+  | DActionConstr of id * ty list * params * (params * action_body)
   | DParser of id * params * parser_block
 
 (* name, return type, args & body *)
@@ -395,7 +414,7 @@ let vint_sp i span = value_sp (VInt i) span
 let vbool_sp b span = value_sp (VBool b) span
 let vevent event = value (VEvent event)
 let vevent_sp event span = value_sp (VEvent event) span
-let vglobal idx = value (VGlobal idx)
+let vglobal id idx = value (VGlobal(id, idx))
 let vgroup locs = value (VGroup locs)
 let vbits_sp bs span = value_sp (VPat (PBit bs)) span
 let vwild_sp span = value_sp (VPat PWild) span
@@ -462,8 +481,11 @@ let szcast_sp sz1 sz2 span = exp_sp (ESizeCast (sz1, sz2)) span
 let flood_sp e span = exp_sp (EFlood e) span
 let tuple_sp es span = exp_sp (ETuple es) span
 
-
-
+let tuple_sp_ty es span = 
+  let tys = List.map (fun e -> (Option.get e.ety).raw_ty) es in
+  let ty = ty (TTuple tys) in
+  aexp (ETuple es) (Some ty) span
+;;
 let tblmatch_sp tbl keys args span =
   let t = { tbl; keys; args; outs = []; out_tys = None } in
   exp_sp (ETableMatch t) span
@@ -495,7 +517,7 @@ let memop_sp id p body span = decl_sp (DMemop (id, p, body)) span
 let duty_sp id sizes rty span = decl_sp (DUserTy (id, sizes, rty)) span
 
 let action_sp id rty cp p body span =
-  decl_sp (DAction (id, rty, cp, (p, body))) span
+  decl_sp (DActionConstr (id, rty, cp, (p, body))) span
 ;;
 
 let dconstr_sp id ty params exp span =

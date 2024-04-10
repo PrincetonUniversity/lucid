@@ -368,8 +368,26 @@ let check_match_returns ds =
       List.exists is_default_branch branches
     in
 
-    object (_)
+    object (self)
       inherit [_] s_iter as super
+      (* special case for "main" methods tagged with 
+         event in / out types *)
+      method! visit_decl _ decl = 
+        (* special case: a main function tagged with event in / out types that has one event-type argument *)
+        match decl.d, Pragma.find_sprag "main" decl.dpragmas with 
+        | DFun(_, _, _, ([event_var_id, {raw_ty=TEvent}], {s=SMatch(es, bs)})), Some("main", [event_in_name; _]) -> (
+          (* if the first statement of this function is a match statement that matches on the event 
+             argument, that match statement only needs to have a branch for the specified event ctor *)
+          match es, bs with
+          | [{e=EVar(cid)}], [[PEvent(pevent_cid, _)], branch_stmt] (* make sure it has a single branch on the event arg *)
+            when (Cid.equal cid (Cid.id event_var_id)) (* make sure its matching on the event parameter *)
+            && (Cid.equal pevent_cid (Cid.create [event_in_name])) -> (* make sure it matches the specified input event ctor *)
+            self#visit_statement () branch_stmt (*just *)
+          | _ -> 
+          super#visit_decl () decl
+        )
+        | _ -> super#visit_decl () decl
+
       method! visit_statement _ stmt = 
         match stmt.s with 
           | SMatch(_, branches) -> 
@@ -394,9 +412,9 @@ let check_match_returns ds =
 ;;
 
 
-let pre_typing_checks ds =
+let pre_typing_checks ?(handlers=true) ds =
   check_decls ds;
-  match_handlers ds;
+  if handlers then match_handlers ds;
   check_symbolics ds;
   check_payloads ds;
   check_match_returns ds
@@ -526,6 +544,7 @@ let event_qvar_checker =
 let rec check_qvars d =
   match d.d with
   | DFun _ | DMemop _ | DModuleAlias _ -> (* No restrictions *) ()
+  | DActionConstr _ -> ()
   | DAction _ -> ()
   | DGlobal _ ->
     (* None allowed at all *) basic_qvar_checker#visit_decl (true, true) d

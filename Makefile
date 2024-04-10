@@ -32,19 +32,17 @@ default:
 	cp -f _build/default/src/bin/main.exe dpt
 	dune build src/bin/compiler.exe
 	cp -f _build/default/src/bin/compiler.exe dptc
-
-function:
-	dune build src/bin/functionInterpreter.exe
-	cp -f _build/default/src/bin/functionInterpreter.exe bin/lucidfcn
+	dune build src/bin/lucidcc.exe
+	cp -f _build/default/src/bin/lucidcc.exe lucidcc
 
 all:
 	dune build src/bin/main.exe
 	cp -f _build/default/src/bin/main.exe dpt
 	dune build src/bin/compiler.exe
 	cp -f _build/default/src/bin/compiler.exe dptc
+	dune build src/bin/lucidcc.exe
+	cp -f _build/default/src/bin/lucidcc.exe lucidcc
 	mkdir -p bin
-	dune build src/bin/functionCompiler.exe
-	cp -f _build/default/src/bin/functionCompiler.exe bin/dptf
 	dune build src/bin/dockerUtils.exe
 	cp -f _build/default/src/bin/dockerUtils.exe bin/dockerUtils
 	dune build src/bin/dfgCompiler.exe
@@ -54,14 +52,6 @@ all:
 
 generatedVisitors: src/lib/frontend/Syntax.processed.ml
 
-#install: default
-#	cp _build/default/src/bin/main.exe dpt
-
-# test: default
-# 	dune runtest -f --no-buffer
-# test:
-# 	dune build test/testing.exe
-# 	cp _build/default/test/testing.exe test
 test: default
 	python3 ./test/runtests.py
 

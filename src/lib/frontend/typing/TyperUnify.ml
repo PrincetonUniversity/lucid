@@ -5,7 +5,13 @@ open Syntax
 open SyntaxUtils
 open Batteries
 open Printing
-open TyperUtil
+(* open TyperUtil *)
+(* error_sp and strip_links are the only dependencies from TyperUtil. 
+   If we break the dependency on TyperUtil, then we might be able to call 
+   unify functions from the module-specific checkers. *)
+let error_sp sp msg = Console.error_position sp msg
+let strip_links ty = { ty with raw_ty = TyTQVar.strip_links ty.raw_ty }
+
 
 exception Occurs
 
@@ -43,9 +49,11 @@ let occurs_size span tvar size : unit =
     | IVar tvr -> occurs_tqvar occ tvar tvr
     | IConst _ | IUser _ -> ()
     | ISum (sizes, _) -> List.iter (occ tvar) sizes
+    | ITup (sizes) -> List.iter (occ tvar) sizes
   in
   check_occurs span occ size_to_string tvar size
 ;;
+
 
 let occurs_effect span tvar eff : unit =
   let rec occ tvar eff =
@@ -73,6 +81,7 @@ let occurs_ty span tvar raw_ty : unit =
     | TMemop _ -> ()
     | TRecord lst -> List.iter (fun (_, raw_ty) -> occ tvar raw_ty) lst
     | TTuple lst -> List.iter (occ tvar) lst
+    | TBuiltin (_, raw_tys, _) -> List.iter (occ tvar) raw_tys
     | TFun { arg_tys; ret_ty; _ } ->
       List.iter (fun ty -> occ tvar ty.raw_ty) arg_tys;
       occ tvar ret_ty.raw_ty
@@ -81,9 +90,12 @@ let occurs_ty span tvar raw_ty : unit =
       List.iter occ_ty t.tparam_tys;
       List.iter occ_ty t.tret_tys
     | TAction(a) -> 
-      List.iter occ_ty a.aconst_param_tys;
-      List.iter occ_ty a.aparam_tys;
+      List.iter occ_ty a.aarg_tys;
       List.iter occ_ty a.aret_tys
+    | TActionConstr({aconst_param_tys; aacn_ty = {aarg_tys; aret_tys}}) -> 
+      List.iter occ_ty aconst_param_tys;
+      List.iter occ_ty aarg_tys;
+      List.iter occ_ty aret_tys
     | TPat _ -> ()
   in
   check_occurs span occ raw_ty_to_string tvar raw_ty
@@ -94,9 +106,13 @@ let occurs_ty span tvar raw_ty : unit =
 exception CannotUnify
 
 let try_unify_lists f lst1 lst2 =
-  try List.iter2 f lst1 lst2 with
-  (* Different lengths *)
-  | Invalid_argument _ -> raise CannotUnify
+  (* check different lengths _before_ 
+     unifying, that way if unification fails 
+     you can still recover, otherwise it will 
+     bind variables weirdly with all the mutable stuff *)
+  if (List.length lst1 = List.length lst2) 
+    then List.iter2 f lst1 lst2
+    else raise CannotUnify (* different lengths *)
 ;;
 
 let check_unify span try_unify f x1 x2 : unit =
@@ -131,10 +147,6 @@ let sub lst1 lst2 = List.filter (fun x -> not (List.mem x lst2)) lst1
    e.g. a+b with c+d, we have to be careful when unifying Sums *)
 
 let rec try_unify_size span size1 size2 =
-  (* Printf.printf
-       "Trying to unify %s and %s\n"
-       (Printing.size_to_string size1)
-        (Printing.size_to_string size2); *)
   let try_unify = try_unify_size span in
   let size1, size2 = normalize_size size1, normalize_size size2 in
   (* Physical equality *)
@@ -169,6 +181,8 @@ let rec try_unify_size span size1 size2 =
         | vs1', [hd] when n2 <= n1 -> try_unify hd (ISum (vs1', n1 - n2))
         | _ -> raise CannotUnify
       end
+    | ITup(vs1), ITup(vs2) -> List.iter2 (try_unify_size span) vs1 vs2
+    | ITup _, _ | _, ITup _
     | IUser _, _ | _, IUser _ -> raise CannotUnify)
 ;;
 
@@ -203,6 +217,8 @@ let unify_effect (span : Span.t) eff1 eff2 : unit =
   check_unify span (try_unify_effect span) effect_to_string eff1 eff2
 ;;
 
+
+
 let rec try_unify_ty span ty1 ty2 =
   let ty1, ty2 = strip_links ty1, strip_links ty2 in
   if ty1.raw_ty == ty2.raw_ty && ty1.teffect == ty2.teffect
@@ -219,6 +235,35 @@ let rec try_unify_ty span ty1 ty2 =
 and try_unify_rty span rty1 rty2 =
   let unify_raw_ty = unify_raw_ty span in
   let unify_ty = unify_ty span in
+
+  let unify_param_tys_after_tuple_elim tys1 tys2 = 
+    (* unify parameter types in actions (or functions) in a way that is still 
+       works after tuple elimination *)
+(* print_endline "Unifying after tuple elimination";
+print_endline ("rtys1: "^(Printing.comma_sep Printing.ty_to_string tys1));
+print_endline ("rtys2: "^(Printing.comma_sep Printing.ty_to_string tys2));           *)
+ try try_unify_lists unify_ty tys1 tys2 with 
+    | CannotUnify ->
+      let rtys1 = List.map (fun t -> TyTQVar.strip_links t.raw_ty) tys1 in
+      let rtys2 = List.map (fun t -> TyTQVar.strip_links t.raw_ty) tys2 in
+      (* print_endline "Unifying after tuple elimination: failed initial unification. Now we have: ";
+      print_endline ("rtys1: "^(Printing.comma_sep Printing.raw_ty_to_string rtys1));
+      print_endline ("rtys2: "^(Printing.comma_sep Printing.raw_ty_to_string rtys2));           *)
+      match rtys1, rtys2 with 
+        (* both tuples -- nothing we can do *)
+        | [TTuple(_)], [TTuple(_)] -> raise CannotUnify
+        (* one side is a tuple, other side is not -- we can try to unify inner types with outers *)
+        | [TTuple(wrapped_rtys)], rtys
+        | rtys, [TTuple(wrapped_rtys)] -> 
+          try_unify_lists unify_raw_ty rtys wrapped_rtys
+        (* one side is a tqvar, the other side is not -- we can also try to unify inner with outer *)
+        | [TQVar(x)], rtys
+        | rtys, [TQVar(x)] -> 
+          let rty = if (List.length rtys = 1) then List.hd rtys else TTuple(rtys) in
+          try_unify_lists unify_raw_ty [TQVar(x)] [rty]
+        | _, _ -> raise CannotUnify
+  in
+  
   match rty1, rty2 with
   | TQVar tqv, ty | ty, TQVar tqv ->
     try_unify_tqvar
@@ -241,7 +286,12 @@ and try_unify_rty span rty1 rty2 =
     try_unify_size span size1 size2
   | TName (cid1, sizes1, b1), TName (cid2, sizes2, b2) ->
     if b1 <> b2 || not (Cid.equal cid1 cid2) then raise CannotUnify;
+    if (List.length sizes1 <> List.length sizes2) then raise CannotUnify;
     List.iter2 (try_unify_size span) sizes1 sizes2
+  | TBuiltin(cid1, raw_tys1, b1), TBuiltin(cid2, raw_tys2, b2) ->
+    if b1 <> b2 || not (Cid.equal cid1 cid2) then raise CannotUnify;
+    if (List.length raw_tys1 <> List.length raw_tys2) then raise CannotUnify;
+    try_unify_lists unify_raw_ty raw_tys1 raw_tys2
   | TAbstract (cid1, sizes1, b1, _), TAbstract (cid2, sizes2, b2, _) ->
     if b1 <> b2 || not (Cid.equal cid1 cid2) then raise CannotUnify;
     List.iter2 (try_unify_size span) sizes1 sizes2
@@ -270,9 +320,13 @@ and try_unify_rty span rty1 rty2 =
     List.iter2 (try_unify_ty span) t1.tparam_tys t2.tparam_tys;
     List.iter2 (try_unify_ty span) t1.tret_tys t2.tret_tys
   | TAction(a1), TAction(a2) -> 
-    List.iter2 (try_unify_ty span) a1.aconst_param_tys a2.aconst_param_tys;
-    List.iter2 (try_unify_ty span) a1.aparam_tys a2.aparam_tys;
-    List.iter2 (try_unify_ty span) a1.aret_tys a2.aret_tys
+    unify_param_tys_after_tuple_elim a1.aarg_tys a2.aarg_tys;
+    unify_param_tys_after_tuple_elim a1.aret_tys a2.aret_tys;
+
+  | TActionConstr(a1), TActionConstr(a2) -> 
+    unify_param_tys_after_tuple_elim a1.aconst_param_tys a2.aconst_param_tys;
+    unify_param_tys_after_tuple_elim a1.aacn_ty.aarg_tys a2.aacn_ty.aarg_tys;
+    unify_param_tys_after_tuple_elim a1.aacn_ty.aret_tys a2.aacn_ty.aret_tys;
   | TBitstring, TBitstring -> ()
   | ( ( TVoid
       | TBitstring
@@ -282,12 +336,14 @@ and try_unify_rty span rty1 rty2 =
       | TInt _
       | TMemop _
       | TName _
+      | TBuiltin _
       | TFun _
       | TRecord _
       | TVector _
       | TTuple _
       | TAbstract _ 
       | TAction _
+      | TActionConstr _
       | TTable _
       | TPat _)
     , _ ) -> raise CannotUnify

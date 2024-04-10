@@ -1,4 +1,5 @@
 (* Helper functions to partially interpret the source syntax *)
+(* 1/2/24 -- this is basically the utils module for coreSyntax *)
 module Syntax = CoreSyntax
 module Printing = CorePrinting
 open CoreSyntax
@@ -19,7 +20,7 @@ let int_width = 32
 let intwidth_from_raw_ty rty : int =
   match rty with
   | TBool -> 1
-  | TInt sz -> sz
+  | TInt (Sz sz) -> sz
   | TGroup -> 16 (* hard coded for tofino! *)
   | _ -> error "cannot get size from this type"
 ;;
@@ -187,7 +188,10 @@ let is_atomic exp =
   (* a flood expression is atomic if its argument is an immediate *)
   | EFlood arg -> is_immediate arg
   (* table create -- meaningless, not a runtime expression *)
-  | ETableCreate _ -> false
+  (* | ETableCreate _ -> false *)
+  | EProj _ -> error "[is_atomic] EProj not implemented"
+  | ERecord _ -> error "[is_atomic] ERecord not implemented"
+  | ETuple _ -> error "[is_atomic] ETuple not implemented"
 ;;
 
 let is_bool_non_immediate exp = is_bool exp && not (is_immediate exp)
@@ -354,3 +358,16 @@ let rec refresh_event_param_ids ds : decls =
 (* let not_c1 = S.exp (S.EOp(S.Not, [c1_cond])) c1_cond.ety in  *)
 
 let eop_and x y = aexp (EOp (And, [x; y])) x.ety
+
+let rec tables_in_prog (tds:decls) = 
+  match tds with 
+  | [] -> []
+  | {d=DGlobal(tbl_id, _, econstr); dspan}::tds' -> (
+    (* might not be a table, in which case dglobal_params will fail *)
+    try 
+      let tbl_def = Tables.dglobal_params_to_tbl_def tbl_id econstr in
+      (tbl_def, dspan, econstr.espan)::(tables_in_prog tds')
+    with _ -> tables_in_prog tds')
+  | _::tds' -> tables_in_prog tds'
+;;
+

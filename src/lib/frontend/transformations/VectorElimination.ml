@@ -8,6 +8,7 @@ open Collections
    any more polymorphic vector sizes. 
    Also assumes that all user type declarations have been made concrete. *)
 
+(* NOTE: skips calls to constructors for builtins. They keep their vector arguments. *)
 let extract_size sz =
   match normalize_size sz with
   | IConst n -> n (* Should be the only possible outcome *)
@@ -17,6 +18,7 @@ let extract_size sz =
     ^ Printing.cid_to_string cid
   | ISum _ -> failwith "Got sum after normalize_size?"
   | IVar _ -> failwith "Got polymorphic vector length during elimination"
+  | ITup _ -> failwith "Got size tuple for vector length during elimination"
 ;;
 
 let subst_index =
@@ -91,14 +93,23 @@ let replacer =
       seq.s
 
     method! visit_exp env exp = 
-      (* re-annotate comprehensions after expansion to set proper index *)
-      match exp.e with
-      | EComp(_) -> (
-        super#visit_exp env exp |>
-        GlobalConstructorTagging.reannotate_inlined_exp exp |> 
-        refresh_tup_effects
-      )
-      | _ -> super#visit_exp env exp
+      (* skip builtin constructors *)
+      let is_builtin = match exp.ety with 
+        | None -> false
+        | Some(ty) -> (
+          match (TyTQVar.strip_links ty.raw_ty) with 
+            | TBuiltin _ -> true
+            | _ -> false)            
+      in
+      if is_builtin then exp else
+        (* re-annotate comprehensions after expansion to set proper index *)
+        match exp.e with
+        | EComp(_) -> (
+          super#visit_exp env exp |>
+          GlobalConstructorTagging.reannotate_inlined_exp exp |> 
+          refresh_tup_effects
+        )
+        | _ -> super#visit_exp env exp
 
     method! visit_EComp env body i sz =
       let length = extract_size sz in
@@ -116,6 +127,7 @@ let replacer =
 ;;
 
 let eliminate_prog = (replacer#visit_decls ())
+
 (* note: before concreteUserTypes pass, we just deleted 
    all user type definitions at this point, to get around 
    polymorphic user type definitions. This meant that the 

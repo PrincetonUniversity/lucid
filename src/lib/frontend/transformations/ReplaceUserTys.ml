@@ -48,15 +48,16 @@ let subst_sizes span tyname raw_ty size_vars sizes =
 ;;
 
 (* Maps each type name to its definition, as well as a list of sizes to unify
-   the arguments with. The ids are the QVar ids for any polymorphic size args *)
+   the size arguments with. The ids are the QVar ids for any polymorphic size args.
+   Also keep a list of type ids to unify the type arguments with, if any. *)
 type env =
   { mapping : (raw_ty * id list) CidMap.t
   ; module_defs : CidSet.t
   }
 
 let base_env () : env ref =
-  let mk_entry t_id sizes global =
-    let size_ids = List.init sizes (fun _ -> Id.fresh "sz") in
+  let mk_entry t_id n_sizes global =
+    let size_ids = List.init n_sizes (fun _ -> Id.fresh "sz") in
     let sizes = List.map (fun id -> IVar (QVar id)) size_ids in
     TName (t_id, sizes, global), size_ids
   in
@@ -82,6 +83,8 @@ let extract_ids span sizes =
     sizes
 ;;
 
+(* add an entry for a user-defined type. Since user types cannot have 
+   type arguments, the entry ends with an empty list ((rty, size_vars, [])) *)
 let add_entry env id rty size_vars =
   env
     := { mapping = CidMap.add (Id id) (rty, size_vars) !env.mapping
@@ -178,4 +181,11 @@ let replacer =
   end
 ;;
 
-let replace_prog ds = replacer#visit_decls (base_env ()) ds
+let replace_prog ds = 
+  (* let be = base_env () in *)
+  (* (match CidMap.find_opt (Cid.create ["Table"; "t"]) !be.mapping with
+  | Some (_, size_vars) ->
+    print_endline ("in base_env -- size_vars = "^(Printing.comma_sep Printing.id_to_string size_vars));
+    | _ -> ());
+  exit 1; *)
+  replacer#visit_decls (base_env ()) ds

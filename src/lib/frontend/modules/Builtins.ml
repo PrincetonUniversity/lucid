@@ -28,8 +28,10 @@ let builtin_type_info =
   ; PairArrays.t_id, PairArrays.sizes, PairArrays.global
   ; Payloads.t_id, Payloads.sizes, Payloads.global
   ; Packet.t_id, Packet.sizes, Packet.global
+  ; Tables.t_id, Tables.sizes, Tables.global
   ]
 ;;
+
 
 (* Builtin modules *)
 let builtin_modules =
@@ -40,8 +42,19 @@ let builtin_modules =
   ; PairArrays.signature
   ; Payloads.signature
   ; Packet.signature 
-
+  ; Tables.signature
   ]
+;;
+let builtin_tycid_to_ty = List.filter_map 
+  (fun (libsig: LibraryInterface.sigty) -> 
+    match libsig.m_tys with 
+    | [] -> None
+    | [t_id, _, ty] -> 
+      Some(Cid.create_ids [libsig.m_id; t_id], ty)
+    | _ -> error "unexpected: builtin library with multiple constructors"
+      (* this is fine to change, but the callers of this function need to adjust *)
+  )
+  builtin_modules
 ;;
 
 let builtin_defs =
@@ -52,8 +65,12 @@ let builtin_defs =
   @ PairArrays.defs
   @ Payloads.defs
   @ Packet.defs
+  @ Tables.defs
 ;;
 
+let gfun_cid (gf : InterpState.State.global_fun) : Cid.t = 
+  gf.cid
+;;
 
 (* Builtin local vars *)
 let this_id = Id.create "this"
@@ -66,8 +83,15 @@ type builtin_tys =
   { ingr_port_ty : Syntax.ty }
 
 let interp_builtin_tys =
-  { ingr_port_ty =
-      ty_sp (TQVar (QVar (Id.create "auto_ingress_port"))) Span.default}
+  (*  note that this is a TVar, which means that all the uses of ingress_port_size 
+      will be unified to the same value. This is important for the typechecker to 
+      ensure that the size of the ingress port is consistent across the program.
+      If it was a QVar, as are most of the reference sizes and types, then it 
+      would represent a constant that could take a different size _every time it was 
+      used_.       
+  *)
+  let ingr_port_size_tvar =  TVar (ref (Unbound (Id.fresh "ingress_port_size", 0))) in
+  { ingr_port_ty = ty_sp (TInt ((IVar ingr_port_size_tvar))) Span.default }
 ;;
 
 let tofino_builtin_tys =

@@ -29,12 +29,26 @@ let sprag_equal pname pargs prag =
   | PStringPrag(name, args) -> 
       (pname = name) & (List.for_all2 (=) pargs args)
   | _ -> false
-
-let find_sprag pname pargs prags =
+;;
+let sprag_name_equal pname prag = 
+  match prag with 
+  | PStringPrag(name, _) -> (pname = name)
+  | _ -> false
+;;
+let find_sprag_args pname pargs prags =
   List.find_opt (sprag_equal pname pargs) prags
 ;;
 
-let exists_sprag pname pargs = 
+let find_sprag pname prags = 
+  match List.find_opt (sprag_name_equal pname) prags with 
+  | Some(PStringPrag(name, args)) -> Some(name, args)
+  | _ -> None
+;;
+
+let exists_sprag pname = 
+  List.exists (sprag_name_equal pname)
+;;
+let exists_sprag_args pname pargs = 
   List.exists (sprag_equal pname pargs)
 ;;
 

@@ -122,10 +122,10 @@ def deparse_eventpacket(event, payload):
 (* lucid type to a struct format specifier in python *)
 let ty_to_fmt (ty : CoreSyntax.ty) =
   match ty.raw_ty with
-  | TInt 8 -> "B"
-  | TInt 16 -> "H"
-  | TInt 32 -> "I"
-  | TInt n_bits ->
+  | TInt Sz 8 -> "B"
+  | TInt Sz 16 -> "H"
+  | TInt Sz 32 -> "I"
+  | TInt Sz n_bits ->
     if (* anything larger than 32-bits is a byte string *)
        n_bits mod 8 == 0
     then string_of_int (n_bits / 8) ^ "s"

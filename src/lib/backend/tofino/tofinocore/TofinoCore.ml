@@ -24,11 +24,11 @@ and sp = [%import: Span.t]
 and z = [%import: (Z.t[@opaque])]
 and zint = [%import: (Integer.t[@with Z.t := (Z.t [@opaque])])]
 and location = int
-and size = int
+and size = [%import: CoreSyntax.size]
 and sizes = size list
 and raw_ty = [%import: CoreSyntax.raw_ty]
-and tbl_ty = [%import: CoreSyntax.tbl_ty]
 and acn_ty = [%import: CoreSyntax.acn_ty]
+and acn_ctor_ty = [%import: CoreSyntax.acn_ctor_ty]
 and func_ty = [%import: CoreSyntax.func_ty]
 and ty = [%import: CoreSyntax.ty]
 and tys = [%import: CoreSyntax.tys]
@@ -43,10 +43,8 @@ and exp = [%import: CoreSyntax.exp]
 and branch = [%import: CoreSyntax.branch]
 and gen_type = [%import: CoreSyntax.gen_type]
 and s = [%import: CoreSyntax.s]
-and tbl_def = [%import: CoreSyntax.tbl_def]
-and tbl_match_out_param = [%import: CoreSyntax.tbl_match_out_param]
-and tbl_match = [%import: CoreSyntax.tbl_match]
-and tbl_entry = [%import: CoreSyntax.tbl_entry]
+(* and tbl_entry = [%import: CoreSyntax.tbl_entry] *)
+and tuple_assign = [%import: CoreSyntax.tuple_assign]
 and statement = [%import: CoreSyntax.statement]
 and params = [%import: CoreSyntax.params]
 and body = [%import: CoreSyntax.body]
@@ -171,7 +169,7 @@ and td =
   | TDGlobal of id * ty * exp
   | TDMemop of memop
   | TDExtern of id * ty
-  | TDAction of action
+  | TDActionConstr of action
   | TDParser of parser
   (* new / changed decls *)
   | TDEvent of event
@@ -179,6 +177,7 @@ and td =
   | TDOpenFunction of id * params * statement (*accessible variables should be tracked*)
   | TDMulticastGroup of group (* used by the control component *)
   | TDFun of (id * ty * body) (* "main/entry" function to compile, when in function compiler mode *)
+  | TDUserTy of id * ty
 and tdecl =
   { td : td
   ; tdspan : sp
@@ -235,8 +234,8 @@ let decl_to_tdecl (decl:decl) =
   | DMemop m -> { td = TDMemop m; tdspan = decl.dspan; tdpragma = opt_to_list decl.dpragma }
   | DExtern (i, t) ->
     { td = TDExtern (i, t); tdspan = decl.dspan; tdpragma = opt_to_list decl.dpragma }
-  | DAction a ->
-    { td = TDAction a; tdspan = decl.dspan; tdpragma = opt_to_list decl.dpragma }
+  | DActionConstr a ->
+    { td = TDActionConstr a; tdspan = decl.dspan; tdpragma = opt_to_list decl.dpragma }
    | DEvent (evid, evnum, evsort, evparams) ->
     let event = EventSingle{
       evid; 
@@ -263,7 +262,7 @@ let decl_to_tdecl (decl:decl) =
     let actions, spans = List.split pblock.pactions in
     let intr_id, intr_ty = intrinsic_to_param ingress_intrinsic_metadata_t in 
     let read_intr_acn = PRead((Cid.id intr_id), intr_ty, var (Cid.id pkt_id) pkt_arg_ty) in
-    let skip_resubmit_intr_acn = skip (tint 64) in 
+    let skip_resubmit_intr_acn = skip (tint (Sz 64)) in 
     let pblock = {pblock with
       pactions=
       [read_intr_acn, Span.default; skip_resubmit_intr_acn, Span.default]
@@ -287,6 +286,11 @@ let decl_to_tdecl (decl:decl) =
     tdpragma = opt_to_list decl.dpragma;}
   | DFun(id, ty, body) -> {
     td = TDFun(id, ty, body);
+    tdspan = decl.dspan;
+    tdpragma = opt_to_list decl.dpragma;
+  }
+  | DUserTy(id, ty) -> {
+    td = TDUserTy(id, ty);
     tdspan = decl.dspan;
     tdpragma = opt_to_list decl.dpragma;
   }
@@ -431,9 +435,13 @@ let array_dimensions tds =
       match dec.td with
       | TDGlobal
           ( id
-          , { raw_ty = TName (ty_cid, sizes, true); _ }
-          , { e = ECall (_, num_slots :: _, _) } ) ->
-        (match Cid.names ty_cid |> List.hd with
+          , { raw_ty = TName (ty_cid, sizes); _ }
+          , { e = ECall (_, num_slots :: _, _) } ) 
+          (* skip declarations of Tables, etc. *)
+              when (List.mem (Cid.names ty_cid |> List.hd) ["Array"; "PairArray"]) ->
+        (
+          let sizes = to_singleton_sizes sizes in
+          match Cid.names ty_cid |> List.hd with
          | "Array" ->
            let num_slots = InterpHelpers.int_from_exp num_slots in
            Some (id, (List.hd sizes, num_slots))

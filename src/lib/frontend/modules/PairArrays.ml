@@ -14,6 +14,7 @@ let pairarray_error fun_name msg =
 let module_id = pairarray_id
 let t_id = Cid.create_ids [pairarray_id; Id.create "t"]
 let sizes = 1
+let ty_args = 0
 let global = true
 
 (* Constructor *)
@@ -62,7 +63,7 @@ let pairarray_update_fun nst swid args =
   let open InterpSyntax in
   let open State in 
   match args with
-  | [V { v = VGlobal stage }; V { v = VInt idx }; F memop; arg1; arg2; default]
+  | [V { v = VGlobal (_, stage) }; V { v = VInt idx }; F memop; arg1; arg2; default]
     ->
     let update_f mem1 mem2 =
       let args =
@@ -72,12 +73,12 @@ let pairarray_update_fun nst swid args =
         ; arg2
         ; default ]
       in
-      let v = memop nst swid args in
+      let v = memop nst swid args |> extract_ival in
       match v.v with
       | VTuple [VInt n1; VInt n2; v3] -> n1, n2, { v with v = v3 }
       | _ -> failwith "array_update: Internal error"
     in
-    Pipeline.update_complex ~stage ~idx:(Integer.to_int idx) ~memop:update_f (sw nst swid).pipeline
+    V(Pipeline.update_complex ~stage ~idx:(Integer.to_int idx) ~memop:update_f (sw nst swid).pipeline)
   | _ -> pairarray_update_error "Incorrect number or type of arguments"
 ;;
 
@@ -92,6 +93,7 @@ let defs : State.global_fun list =
 
 let signature =
   let sz = IVar (QVar (Id.fresh "sz")) in
+  LibraryInterface.tup_to_sigty
   ( module_id
   , [Cid.last_id t_id, [sz], TName (t_id, [sz], true) |> ty]
   , defs

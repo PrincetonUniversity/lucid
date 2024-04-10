@@ -26,7 +26,10 @@ let cid_to_string cid =
   else String.concat "." @@ Cid.names cid
 ;;
 
-let rec size_to_string = string_of_int
+let rec size_to_string = function 
+  | Sz sz -> string_of_int sz
+  | Szs szs -> ("(" ^ (comma_sep string_of_int szs) ^ ")")
+;;
 let wrap l r str = if String.equal str "" then "" else l ^ str ^ r
 let sizes_to_string sizes = comma_sep size_to_string sizes |> wrap "<<" ">>"
 
@@ -34,15 +37,19 @@ let rec raw_ty_to_string t =
   match t with
   | TBool -> "bool"
   | TInt i -> "int<<" ^ size_to_string i ^ ">>"
-  | TName (cid, sizes, b) ->
+  | TName (cid, sizes) ->
     cid_to_string cid
     ^ sizes_to_string sizes
-    ^ if cfg.verbose_types then "{" ^ string_of_bool b ^ "}" else ""
+    (* ^ if cfg.verbose_types then "{" ^ string_of_bool b ^ "}" else "" *)
+  | TBuiltin (cid, rtys) ->
+    cid_to_string cid
+    ^ comma_sep raw_ty_to_string rtys
+    (* ^ if cfg.verbose_types then "{" ^ string_of_bool b ^ "}" else "" *)
   | TEvent -> "event"
   | TFun func -> func_to_string func
   | TMemop (n, size) -> Printf.sprintf "memop%d<<%s>>" n (size_to_string size)
   | TGroup -> "group"
-  | TTable t ->
+  (* | TTable t ->
     " table_type {"
     ^ "\n\tkey_size: "
     ^ comma_sep size_to_string t.tkey_sizes
@@ -50,12 +57,17 @@ let rec raw_ty_to_string t =
     ^ comma_sep ty_to_string t.tparam_tys
     ^ "\n\tret_ty: "
     ^ comma_sep ty_to_string t.tret_tys
-    ^ "}\n"
+    ^ "}\n" *)
+  | TActionConstr a ->
+    Printf.sprintf
+      "ACTION CTOR : %s -> %s -> %s"
+      (concat_map " * " ty_to_string a.aconst_param_tys)
+      (concat_map " * " ty_to_string a.aacn_ty.aarg_tys)
+      (comma_sep ty_to_string a.aacn_ty.aret_tys)
   | TAction a ->
     Printf.sprintf
-      "%s -> %s -> %s"
-      (concat_map " * " ty_to_string a.aconst_param_tys)
-      (concat_map " * " ty_to_string a.aparam_tys)
+      "ACTION FUNCTION : %s -> %s"
+      (concat_map " * " ty_to_string a.aarg_tys)
       (comma_sep ty_to_string a.aret_tys)
   | TPat s -> "pat<<" ^ size_to_string s ^ ">>"
   | TRecord lst ->
@@ -84,6 +96,8 @@ let pat_to_string p =
            | 1 -> '1'
            | _ -> '*')
       |> String.of_list)
+  | PEvent (e, _) -> (cid_to_string e)^"(...unprinted params...)"
+
 ;;
 
 let op_to_string op =
@@ -133,13 +147,18 @@ let rec v_to_string v =
   | VBool false -> "false"
   | VInt i -> integer_to_string i
   | VEvent event -> event_to_string event
-  | VGlobal i -> "global_" ^ string_of_int i
+  | VGlobal(_,i) -> "global_" ^ string_of_int i
   | VGroup vs -> Printf.sprintf "{%s}" (comma_sep location_to_string vs)
   | VTuple vs -> Printf.sprintf "(%s)" (comma_sep v_to_string vs)
   | VPat bs -> bs_to_string bs
   | VBits bs -> 
     let bs = BitString.bits_to_hexstr bs in
     bs
+  | VRecord fields -> 
+    Printf.sprintf
+      "{%s}"
+      (concat_map "; " (fun (str, v) -> (id_to_string str) ^ " = " ^ v_to_string v) fields)
+
     (* truncate the hex string after 64 bytes, if its longer than that put ... at the end *)
     (* let len = String.length bs in
     let bs = 
@@ -179,20 +198,26 @@ let rec e_to_string e =
       ^ op_to_string op)
   | ECall (cid, es, unordered) ->
     if (unordered) then 
-    Printf.sprintf "%s<unordered>(%s)" (cid_to_string cid) (es_to_string es)
+      Printf.sprintf "%s<unordered>(%s)" (cid_to_string cid) (es_to_string es)
     else 
-    Printf.sprintf "%s(%s)" (cid_to_string cid) (es_to_string es)
+      Printf.sprintf "%s(%s)" (cid_to_string cid) (es_to_string es)
   | EHash (size, es) ->
     Printf.sprintf "hash<<%s>>(%s)" (size_to_string size) (es_to_string es)
   | EFlood e -> Printf.sprintf "flood %s" (exp_to_string e)
-  | ETableCreate t ->
+  (* | ETableCreate t ->
     Printf.sprintf
       "table_create<%s>((%s),%s, %s(%s))"
       (ty_to_string t.tty)
       (concat_map "," exp_to_string t.tactions)
       (exp_to_string t.tsize)
       (cid_to_string (fst t.tdefault))
-      (comma_sep exp_to_string (snd t.tdefault))
+      (comma_sep exp_to_string (snd t.tdefault)) *)
+  | EProj (e, l) -> exp_to_string e ^ "#" ^ (id_to_string l)
+  | ERecord lst ->
+    Printf.sprintf
+      "{%s}"
+      (concat_map "; " (fun (id, exp) -> (id_to_string id) ^ " = " ^ exp_to_string exp) lst)
+  | ETuple lst -> "(" ^ concat_map ", " exp_to_string lst ^ ")"
 
 and exp_to_string e = e_to_string e.e
 and es_to_string es = comma_sep exp_to_string es
@@ -213,13 +238,13 @@ and action_to_string (name, (ps, stmt)) =
     (params_to_string ps)
     (stmt_to_string stmt)
 
-and entry_to_string entry =
+(* and entry_to_string entry =
   Printf.sprintf
     "[%s](%s) -> %s(%s);"
     (string_of_int entry.eprio)
     (comma_sep exp_to_string entry.ematch)
     (id_to_string entry.eaction)
-    (comma_sep exp_to_string entry.eargs)
+    (comma_sep exp_to_string entry.eargs) *)
 
 and s_to_string s = 
 match s with
@@ -276,7 +301,7 @@ match s with
     | None -> ""
   in
   Printf.sprintf "return%s;" estr
-| STableMatch tbl_rec ->
+(* | STableMatch tbl_rec ->
   if tbl_rec.out_tys <> None
   then
     Printf.sprintf
@@ -290,13 +315,22 @@ match s with
     Printf.sprintf
       "%s = table_match(%s);"
       (comma_sep id_to_string tbl_rec.outs)
-      (comma_sep exp_to_string ((tbl_rec.tbl :: tbl_rec.keys) @ tbl_rec.args))
-| STableInstall (tbl_exp, entries) ->
+      (comma_sep exp_to_string ((tbl_rec.tbl :: tbl_rec.keys) @ tbl_rec.args)) *)
+(* | STableInstall (tbl_exp, entries) ->
   Printf.sprintf
     "table_install(%s, {\n\t%s\n\t}\n);"
     (exp_to_string tbl_exp)
-    (List.map entry_to_string entries |> String.concat "\n")
-  
+    (List.map entry_to_string entries |> String.concat "\n") *)
+| STupleAssign({ids; tys; exp}) ->
+  Printf.sprintf
+    "%s%s = %s;"
+    (match tys with 
+      | Some(tys) -> (comma_sep ty_to_string tys)^" "
+      | None -> "")
+    (comma_sep id_to_string ids)
+    (exp_to_string exp)
+
+    
 
 and stmt_to_string stmt =
   let s_str = s_to_string stmt.s in
@@ -364,7 +398,7 @@ let rec parser_action_to_string action =
   | PAssign (id, exp) ->
     Printf.sprintf "%s = %s;" (cid_to_string id) (exp_to_string exp)
   | PRead (id, ty, exp) ->
-    Printf.sprintf "%s %s = %s;" (ty_to_string ty) (cid_to_string id) (exp_to_string exp)
+    Printf.sprintf "%s %s = read(%s);" (ty_to_string ty) (cid_to_string id) (exp_to_string exp)
     (* Printf.sprintf "read %s : %s;" (cid_to_string id) (ty_to_string ty) *)
   | PPeek (id, ty, exp) -> 
     Printf.sprintf "%s %s = %s;" (ty_to_string ty) (cid_to_string id) (exp_to_string exp)
@@ -392,6 +426,15 @@ and parser_block_to_string {pactions;pstep} =
 
 and parser_to_string p = parser_block_to_string p
 
+let event_constr_to_string (id, annot, sort, params) = 
+  Printf.sprintf
+  "%s %s%s(%s);"
+  (event_sort_to_string sort)
+  (id_to_string id)
+  (Option.map_default (fun n -> "@" ^ string_of_int n) "" annot)
+  (params_to_string params)
+
+
 let d_to_string d =
   match d with
   | DGlobal (id, ty, exp) ->
@@ -410,13 +453,7 @@ let d_to_string d =
       (id_to_string id)
       (params_to_string params)
       (stmt_to_string s |> indent_body)
-  | DEvent (id, annot, sort, params) ->
-    Printf.sprintf
-      "%s %s%s(%s);"
-      (event_sort_to_string sort)
-      (id_to_string id)
-      (Option.map_default (fun n -> "@" ^ string_of_int n) "" annot)
-      (params_to_string params)
+  | DEvent econstr -> event_constr_to_string econstr
   | DMemop { mid; mparams; mbody } ->
     Printf.sprintf
       "memop %s(%s)\n {%s}"
@@ -425,7 +462,7 @@ let d_to_string d =
       (memop_to_string mbody)
   | DExtern (id, ty) ->
     Printf.sprintf "extern %s %s;" (id_to_string id) (ty_to_string ty)
-  | DAction acn ->
+  | DActionConstr acn ->
     (* id, ret_tys, const_params, (dyn_params, acn_body)) ->  *)
     Printf.sprintf
       "action (%s) %s(%s)(%s) {\n\taction_return (%s)\n}\n"
@@ -447,7 +484,11 @@ let d_to_string d =
       (id_to_string id)
       (params_to_string params)
       (stmt_to_string s |> indent_body)
-
+  | DUserTy (id, ty) ->
+    Printf.sprintf
+      "type %s = %s"
+      (id_to_string id)
+      (ty_to_string ty)    
 ;;
 
 let decl_to_string d = d_to_string d.d

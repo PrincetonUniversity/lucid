@@ -8,6 +8,34 @@ open Collections
    have already been removed, so a type contains a tuple if and only if
    it is itself a tuple. *)
 
+
+(* builtin functions are a special case: they may accept and return tuples *)
+let builtin_cids = 
+  List.map
+    (fun (_, id_size_ty_list, global_funs, constructors) ->
+      let is_builtin = match id_size_ty_list with 
+        | [_, _, ty] -> (
+          match ty.raw_ty with 
+          | TBuiltin _ -> true
+          | _ -> false
+        )
+        | _ -> false
+      in
+      let fun_cids =
+        List.map
+          (fun (gf : InterpState.State.global_fun) -> gf.cid, is_builtin)
+          global_funs
+      in
+      let constructor_cids = 
+        List.combine
+        (List.map fst constructors) 
+        (List.init (List.length constructors) (fun _ -> is_builtin))
+      in
+      fun_cids @ constructor_cids)
+    (List.map LibraryInterface.sigty_to_tup Builtins.builtin_modules)
+  |> List.flatten
+;;
+
 let extract_etuple e =
   match e.e with
   | ETuple es -> es
@@ -23,6 +51,29 @@ let rename_elements id tys =
     (fun i rty -> Id.fresh (Id.name id ^ "_" ^ string_of_int i), ty rty)
     tys
 ;;
+
+(* undo rename elements:
+    - return the id of the tuple and the raw types that it contains *)
+let unname_elements (id_tys : (id * ty) list) : (id * (raw_ty list)) = 
+  let split_at_last_underscore str =
+    let i = String.rindex str '_' in
+    let base = String.sub str 0 i in
+    let idx = String.sub str (i + 1) ((String.length str) - i - 1) in
+    (base, int_of_string idx)
+  in
+  let tup_name, tup_inner_rawtys = List.fold_left 
+    (fun (tup_name, tup_inner_rawtys) (field_id, field_ty)  -> 
+      let tup_name', _ = split_at_last_underscore (Id.name field_id) in
+      if (tup_name <> tup_name') then 
+        error "[unname_elements] one of the elements has a different base name";
+      let tup_inner_rawty = field_ty.raw_ty in
+      tup_name, (tup_inner_rawtys@[tup_inner_rawty]))
+    ("", [])
+    id_tys
+  in
+  Id.create tup_name, tup_inner_rawtys
+;;
+
 
 let sequence_statements ss =
   let seq = List.fold_left sseq snoop ss in
@@ -110,14 +161,50 @@ let replacer =
       in
       TTable tbl_ty'
 
-    method! visit_TAction _ acn_ty =
+    method! visit_acn_ty _ acn_ty =
+      (* flatten param and return types *)
       let acn_ty' =
-        { aconst_param_tys = flatten_tys acn_ty.aconst_param_tys
-        ; aparam_tys = flatten_tys acn_ty.aparam_tys
+        {
+          aarg_tys = flatten_tys acn_ty.aarg_tys
         ; aret_tys = flatten_tys acn_ty.aret_tys
         }
       in
-      TAction acn_ty'
+      acn_ty'
+    method! visit_TActionConstr env acn_ctor_ty =
+      (* flatten param and return types *)
+      let acn_ctor_ty' =
+        { 
+          aconst_param_tys = flatten_tys acn_ctor_ty.aconst_param_tys;
+          aacn_ty = self#visit_acn_ty env acn_ctor_ty.aacn_ty;
+        }
+      in
+      TActionConstr acn_ctor_ty'
+
+    method! visit_STupleAssign env tuple_assign = 
+      (* It should not matter whether you 
+         recurse on the tuple assign statement? *)
+      let tuple_assign = self#visit_tuple_assign env tuple_assign in
+      match tuple_assign.tys with
+      (* flatten any tuple variables that get created *)
+      | Some(out_tys) -> 
+        let var_defs = List.combine tuple_assign.ids out_tys in
+        let env', new_var_defs = flatten_params !env var_defs in
+        let ids', out_tys' = List.split new_var_defs in
+        (* update the environment with the new ids *)
+        env := env';
+        (* return tuple assign statement with updates *)
+        STupleAssign { tuple_assign with ids = ids'; tys = Some out_tys' }
+      | None -> 
+        (* the tuple assign writes existing variables, we must
+           find their flattened ids (and we don't need types) *)
+        let rec lookup_flat_ids id : id list =
+          match IdMap.find_opt id !env with
+          | None -> [id] (* not a tuple *)
+          | Some ids_tys ->
+            List.map lookup_flat_ids (List.split ids_tys |> fst) |> List.flatten
+        in
+        let ids' = List.map lookup_flat_ids tuple_assign.ids |> List.flatten in
+        STupleAssign { tuple_assign with ids = ids' }
 
     (* Table extensions -- statements *)
     method! visit_STableMatch env tblmatch =
@@ -243,8 +330,38 @@ let replacer =
        one parameter for each tuple entry. So we need to adjust the
        arguments at the call site as well *)
     method! visit_ECall env cid args unordered =
-      let args = List.map (self#flatten env) args |> List.concat in
-      ECall (cid, args, unordered)
+      (*  *)
+      match List.assoc_opt cid builtin_cids with 
+      | Some(true) -> 
+        (* a builtin from a module with a type TBuiltin *)
+        (* flatten tuple variables and repack them as tuples *)
+        let rec repack arg = 
+          match arg.e, arg.ety with 
+          | ETuple(exps), _ -> 
+            let exps = List.map repack exps in
+            {arg with e = ETuple(exps)}
+          | EVar _, Some({raw_ty=TTuple _}) -> 
+            (* flatten variable and make into a tuple *)
+            {arg with e=ETuple(self#flatten env arg)}            
+          | EOp(TGet (_, _), [_]), _ -> 
+            (* eliminate tuple ops *)
+            (self#visit_exp env arg)
+          (* nothing to do anywhere else? *)
+          | _ -> arg
+        in
+        let e' = ECall (cid, List.map repack args, unordered) in
+        (* let e = ECall(cid, args, unordered) in *)
+        e'
+      | Some(false) -> 
+        (* an old-style builtin with TName *)
+      (* keep toplevel tuple args, (no flatten) *)
+      let args = List.map (self#visit_exp env) args in
+        ECall (cid, args, unordered)
+      | None -> (
+        (* not a builtin *)
+        let args = List.map (self#flatten env) args |> List.concat in
+        ECall (cid, args, unordered)
+      ) 
 
     (* Same as ECall *)
     method! visit_EHash env sz args =
@@ -298,7 +415,6 @@ let replacer =
     method replace_PLocal env id ty exp span  : (parser_action * sp) list = 
       match ty.raw_ty with
       | TTuple tys ->
-        print_endline ("replacing a tuple type..");
         let entries = self#visit_exp env exp |> extract_etuple in
         let new_ids = rename_elements id tys in
         let new_defs =
@@ -399,6 +515,10 @@ let rec replace_decl (env : env) d =
        replace_decls env new_ds
      (* The tuple types inside of a table types must be flattened *)
      | TTable _ ->
+       env, [{ d with d = DGlobal (id, replace_ty ty, replace_exp env exp) }]     
+     | TName _ -> 
+      (* tuples may appear in global constructors, e.g., actions and action constructors in Table.create *)
+      (* (if the above comment is correct, why are we running replace on ty and exp?) *)
        env, [{ d with d = DGlobal (id, replace_ty ty, replace_exp env exp) }]
      | _ -> env, [d])
   | DEvent (id, annot, sort, _, params) ->
@@ -409,7 +529,7 @@ let rec replace_decl (env : env) d =
     let body = replace_statement body_env body in
     env, [{ d with d = DHandler (id, sort, (new_params, body)) }]
   | DSize _ | DMemop _ | DExtern _ | DSymbolic _ | DConst _ -> env, [d]
-  | DAction (id, tys, const_params, (params, action_body)) ->
+  | DActionConstr (id, tys, const_params, (params, action_body)) ->
     let tys' = flatten_tys tys in
     let body_env, const_params' = flatten_params env const_params in
     let body_env, params' = flatten_params body_env params in
@@ -418,14 +538,25 @@ let rec replace_decl (env : env) d =
       List.map (flatten body_env) action_body |> List.flatten
     in
     ( env
-    , [{ d with d = DAction (id, tys', const_params', (params', action_body')) }]
+    , [{ d with d = DActionConstr (id, tys', const_params', (params', action_body')) }]
     )
+  | DAction (id, tys, (params, action_body)) -> 
+    let tys' = flatten_tys tys in
+    let body_env, params' = flatten_params env params in
+    (* Flatten all tuples in action body *)
+    let action_body' =
+      List.map (flatten body_env) action_body |> List.flatten
+    in
+    ( env
+    , [{ d with d = DAction (id, tys', (params', action_body')) }]
+    )
+
   | DParser (id, params, body) ->
     let body_env, new_params = flatten_params env params in
     let body = replace_parser body_env body in
     env, [{ d with d = DParser (id, new_params, body) }]
   | DUserTy _ -> env, [d]
-  | DFun (id, ty, constr_spec, (params, body)) when (Pragma.exists_sprag "main" [] d.dpragmas) -> 
+  | DFun (id, ty, constr_spec, (params, body)) when (Pragma.exists_sprag "main" d.dpragmas) -> 
     let body_env, new_params = flatten_params env params in
     let body = replace_statement body_env body in    
     env, [{d with d = DFun(id, ty, constr_spec, (new_params, body);)}]

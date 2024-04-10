@@ -8,6 +8,10 @@ let error s = raise (Error s)
 
 (* misc util functions *)
 
+let option_to_list = function
+  | None -> []
+  | Some x -> [x]
+;;
 (* (s, e] *)
 let range s e = List.init (e - s) (fun x -> s + x)
 

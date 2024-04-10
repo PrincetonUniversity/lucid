@@ -24,29 +24,22 @@ module WriteCacheTable : {
   fun void set(ct<'i> cachetbl, int k, int v)[start <= cachetbl; end cachetbl];
 }
 {
-  // types for data stored by the table
-  table_type cttbl_t = {
-    key_type: (int)
-    arg_type: ()
-    ret_type: res_t
-  }
   // table actions
-
   action_constr hit_acn(int x) = {
     return action res_t anon() {
       return {val = x; found = true};
     };
   };
 
-  // action res_t hit_acn(int x)() {
-  //   return {val = x; found = true};
-  // }
-
-  action_constr miss_acn() = {
+  action_constr miss_acn(int unused) = {
     return action res_t anon() {
       return {val = 0; found = false};
     };
   };
+
+  // action res_t hit_acn(int x)() {
+  //   return {val = x; found = true};
+  // }
 
   // action res_t miss_acn()() {
   //   return {val = 0; found = false};
@@ -56,7 +49,7 @@ module WriteCacheTable : {
   type ct<'i> = {
     Array.t<32> ct_keys;
     Array.t<32> ct_vals;
-    cttbl_t ct_tbl;
+    Table.t<<int, int, (), res_t>> ct_tbl;
     int<'i> p;
   }
 
@@ -65,7 +58,7 @@ module WriteCacheTable : {
   constr ct<'i> create(int cache_sz, int tbl_eles, int<'i> poly) = {
     ct_keys = Array.create(cache_sz);
     ct_vals = Array.create(cache_sz);
-    ct_tbl  = table_create<cttbl_t>((hit_acn, miss_acn), tbl_eles, miss_acn());
+    ct_tbl  = Table.create(tbl_eles, [hit_acn; miss_acn], miss_acn, 0);
     p = poly;
   };
 
@@ -76,7 +69,7 @@ module WriteCacheTable : {
       int stored_val = Array.get(cachetbl#ct_vals, idx);
       return {val = stored_val; found = true;};
     } else { // cache miss
-      return table_match(cachetbl#ct_tbl, (k), ());
+      return Table.lookup(cachetbl#ct_tbl, k, ());
     }
   }
 
@@ -95,7 +88,7 @@ module WriteCacheTable : {
       Array.set(cachetbl#ct_vals, idx, v);
     } else { // cache slot is used. Install to table.
       printf("installing entry for %d into TABLE", k);
-      table_install(cachetbl#ct_tbl, {(k) -> hit_acn(v)});
+      Table.install(cachetbl#ct_tbl, k, hit_acn, v);
     }
   }
 }

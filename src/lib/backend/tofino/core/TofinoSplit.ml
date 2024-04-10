@@ -105,7 +105,7 @@ let add_continue_handlers split_prog : split_prog =
     let body = 
       gen_sp 
         (GSingle(None))
-        (call_sp (Cid.id evid) eparams (ty TEvent) Span.default)
+        (call_sp (Cid.id evid) eparams tevent Span.default)
         Span.default
     in
     handler_sp evid evparams hdl_sort body Span.default

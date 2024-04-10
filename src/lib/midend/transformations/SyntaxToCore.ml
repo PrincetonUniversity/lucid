@@ -17,46 +17,89 @@ let err_unsupported span str =
 ;;
 
 let translate_size (sz : S.size) : C.size =
-  SyntaxUtils.extract_size_default sz 32
+  match (S.STQVar.strip_links sz) with 
+  | S.IConst i -> C.Sz i
+  | S.ITup is -> C.Szs (
+    List.map (fun inner_sz -> match inner_sz with | S.IConst i -> i | _ -> 
+      S.error@@"[translate_size] expected a constant size, but got "
+        ^(Printing.size_to_string inner_sz)
+      ) 
+      is
+    )
+  | _ -> C.Sz(SyntaxUtils.extract_size_default sz 32)
 ;;
+let sz_int sz = match sz with | S.IConst i -> i | _ -> S.error "[sz_int] expected a constant size, but got something else";;
 
-let rec translate_ty (ty : S.ty) : C.ty =
-  let raw_ty =
-    match S.TyTQVar.strip_links ty.raw_ty with
-    | S.TBool -> C.TBool
-    | S.TGroup -> C.TGroup
-    | S.TEvent -> C.TEvent
-    | S.TInt sz -> C.TInt (translate_size sz)
-    | S.TName (cid, sizes, b) -> C.TName (cid, List.map translate_size sizes, b)
-    | S.TMemop (n, sz) -> C.TMemop (n, translate_size sz)
-    | S.TFun fty ->
-      C.TFun
-        { arg_tys = List.map translate_ty fty.arg_tys
-        ; ret_ty = translate_ty fty.ret_ty
-        }
-    | S.TVoid -> C.TBool (* Dummy translation needed for foreign functions *)
-    | S.TTable tbl ->
-      let ty_to_size (ty : S.ty) = 
-        match ty.raw_ty with 
-        | TInt(sz) -> sz
-        | TBool -> IConst(1)
-        | _ -> S.error "[rty_to_size] expected an integer, but got something else"
-      in
-      let tkey_sizes = List.map translate_size (List.map ty_to_size tbl.tkey_sizes) in
-      let tparam_tys = List.map translate_ty tbl.tparam_tys in
-      let tret_tys = List.map translate_ty tbl.tret_tys in
-      C.TTable { tkey_sizes; tparam_tys; tret_tys }
-    | S.TAction a ->
-      let aconst_param_tys = List.map translate_ty a.aconst_param_tys in
-      let aparam_tys = List.map translate_ty a.aparam_tys in
-      let aret_tys = List.map translate_ty a.aret_tys in
-      C.TAction { aconst_param_tys; aparam_tys; aret_tys }
-    | S.TPat s -> C.TPat (translate_size s)
-    | S.TBitstring -> C.TBits (1500)
-    | _ -> err ty.tspan (Printing.ty_to_string ty)
-  in
-  { raw_ty; tspan = ty.tspan }
+let rec translate_raw_ty (rty : S.raw_ty) tspan : C.raw_ty = 
+  match S.TyTQVar.strip_links rty with
+  | S.TBool -> C.TBool
+  | S.TGroup -> C.TGroup
+  | S.TEvent -> C.TEvent
+  | S.TInt sz -> C.TInt (translate_size sz)
+  (* TABLE UPDATE hard coded translation into table type *)
+  (* | S.TName(cid, sizes, _) when (Cid.equals cid Tables.t_id) -> 
+    let size_to_ty (sz : S.size) = 
+      C.ty (C.TInt (translate_size sz))
+    in
+    let tkey_sizes, tparam_tys, tret_tys = match (List.map (SyntaxUtils.normalize_size) sizes) with 
+      | [ITup(skeys); ITup(sparams); ITup(srets)] -> (
+        List.map translate_size skeys,
+        List.map size_to_ty sparams,
+        List.map size_to_ty srets
+      )
+      | _ -> S.error@@"[translate_raw_ty] expected 3 size arguments, each a tuple, but got something else"
+    in
+    C.TTable { tkey_sizes; tparam_tys; tret_tys } *)
+  | S.TName (cid, sizes, _) -> C.TName (cid, List.map translate_size sizes)
+  | S.TMemop (n, sz) -> C.TMemop (n, translate_size sz)
+  | S.TFun fty ->
+    C.TFun
+      { arg_tys = List.map translate_ty fty.arg_tys
+      ; ret_ty = translate_ty fty.ret_ty
+      }
+  | S.TVoid -> C.TBool (* Dummy translation needed for foreign functions *)
+  | S.TBuiltin(cid, rtys, _) -> 
+    C.TBuiltin(cid, List.map (fun rty -> translate_raw_ty rty Span.default)  rtys)
+  | S.TTable tbl ->
+    let ty_to_intsize (ty : S.ty) = 
+      match ty.raw_ty with 
+      | TInt(sz) -> SyntaxUtils.extract_size sz
+      | TBool ->1
+      | _ -> S.error "[rty_to_size] expected an integer, but got something else"
+    in
+    let tkey_sizes = C.Szs (List.map ty_to_intsize tbl.tkey_sizes) in
+    let tparam_sizes = C.Szs (List.map ty_to_intsize tbl.tparam_tys) in
+    let tret_sizes = C.Szs (List.map ty_to_intsize tbl.tret_tys) in
+    C.TName(Tables.t_id, [tkey_sizes; tparam_sizes; tret_sizes])
+    (* let tparam_tys = List.map translate_ty tbl.tparam_tys in
+    let tret_tys = List.map translate_ty tbl.tret_tys in
 
+    C.TTable { tkey_sizes; tparam_tys; tret_tys } *)
+  | S.TActionConstr a ->
+    let aconst_param_tys = List.map translate_ty a.aconst_param_tys in
+    let aarg_tys = List.map translate_ty a.aacn_ty.aarg_tys in
+    let aret_tys = List.map translate_ty a.aacn_ty.aret_tys in
+    C.TActionConstr { aconst_param_tys; aacn_ty={aarg_tys; aret_tys }}
+  | S.TPat s -> C.TPat (translate_size s)
+  | S.TBitstring -> C.TBits (Sz 1500)
+  | S.TRecord fields -> C.TRecord (List.map (fun (id, ty) -> (Id.create id), translate_raw_ty ty tspan) fields)
+  | S.TAction a ->
+    let aarg_tys = List.map translate_ty a.aarg_tys in
+    let aret_tys = List.map translate_ty a.aret_tys in
+    C.TAction { aarg_tys; aret_tys } 
+    (* err tspan "action type should have been eliminated before backend" *)
+  | S.TTuple tys -> C.TTuple (List.map (fun ty -> translate_raw_ty ty tspan) tys)
+  | S.TVector(raw_ty, sz) -> 
+    let len = SyntaxUtils.extract_size sz in 
+    let inner_rtys = List.init len (fun _ -> raw_ty) in
+    C.TTuple (List.map (fun ty -> translate_raw_ty ty tspan) inner_rtys)
+  | S.TQVar _ -> err_unsupported tspan "quantified type"
+  | S.TAbstract _ -> err_unsupported tspan "abstract type"    
+and translate_ty (ty : S.ty) : C.ty =
+  {
+    raw_ty = translate_raw_ty ty.raw_ty ty.tspan;
+    tspan = ty.tspan;
+  }
 and translate_asig asig =
   let name, tys = asig in
   name, List.map (fun rty -> (translate_ty (S.ty rty)).raw_ty) tys
@@ -86,26 +129,19 @@ let translate_op (op : S.op) : C.op =
   | S.BitNot -> C.BitNot
   | S.LShift -> C.LShift
   | S.RShift -> C.RShift
-  | S.Slice (lo, hi) -> C.Slice (translate_size lo, translate_size hi)
+  | S.Slice (lo, hi) -> C.Slice (sz_int lo, sz_int hi)
   | S.TGet _ -> err Span.default "tuple get operator"
   | S.PatExact -> C.PatExact
   | S.PatMask -> C.PatMask
 ;;
 
-let translate_pattern (p : S.pat) : C.pat =
-  match p with
-  | S.PWild -> C.PWild
-  | S.PNum n -> C.PNum n
-  | S.PBit ns -> C.PBit ns
-  | S.PVar (_, sp) -> err sp "variable pattern"
-;;
 
 let rec translate_value (v : S.value) : C.value =
   let v' =
     match v.v with
     | S.VBool b -> C.VBool b
     | S.VInt z -> C.VInt z
-    | S.VGlobal n -> C.VGlobal n
+    | S.VGlobal(id, n) -> C.VGlobal(id, n) (* note: S.VGlobal never appears as of 1/2024 *)
     | S.VGroup ls -> C.VGroup ls
     | VEvent { eid; data; edelay } ->
       C.VEvent { eid; data = List.map translate_value data; edelay; evnum = None; eserialized=false }
@@ -114,9 +150,16 @@ let rec translate_value (v : S.value) : C.value =
     | S.VPat _ -> err v.vspan "pattern VALUES should all be converted into PBits before backend"
   in
   { v = v'; vty = translate_ty (Option.get v.vty); vspan = v.vspan }
-;;
 
-let rec translate_exp (e : S.exp) : C.exp =
+and translate_pattern (p : S.pat) : C.pat =
+  match p with
+  | S.PWild -> C.PWild
+  | S.PNum n -> C.PNum n
+  | S.PBit ns -> C.PBit ns
+  | S.PVar (_, sp) -> err sp "variable pattern"
+  | S.PEvent(eventcid, params) -> C.PEvent(eventcid, translate_params params)
+
+and translate_exp (e : S.exp) : C.exp =
   let e' =
     match e.e with
     (* special case for wildcard value -- TODO: make wildcard a value in backend too *)
@@ -130,22 +173,42 @@ let rec translate_exp (e : S.exp) : C.exp =
       C.EVal (C.vwild (SyntaxUtils.extract_size (sz)))
     | S.EVal v -> C.EVal (translate_value v)
     | S.EInt (z, szo) ->
-      let sz = Option.default 32 (Option.map translate_size szo) in
-      C.EVal (C.vint (Z.to_int z) sz)
+      let core_szo_opt = Option.map translate_size szo in
+      let core_szo = Option.default 
+        (C.Sz 32)
+        core_szo_opt
+      in
+      let core_szo_int = match core_szo with 
+        | C.Sz i -> i
+        | _ -> S.error "[translate_exp] expected a constant size, but got something else"
+      in
+      C.EVal (C.vint (Z.to_int z) core_szo_int)
     | S.EVar cid -> C.EVar cid
     | S.EOp (op, es) -> C.EOp (translate_op op, List.map translate_exp es)
-    | S.ECall (cid, es, unordered) -> C.ECall (cid, List.map translate_exp es, unordered)
+    | S.ECall (cid, es, unordered) when SyntaxUtils.is_ecall_builtin e -> 
+      (* TODO: special processing for builtins *)
+      C.ECall (cid, List.map translate_exp es, unordered)
+
+    | S.ECall (cid, es, unordered) -> 
+      (* TODO: special processing for builtins *)
+      C.ECall (cid, List.map translate_exp es, unordered)
     | S.EHash (sz, es) -> C.EHash (translate_size sz, List.map translate_exp es)
     | S.EFlood e -> C.EFlood (translate_exp e)
+    | S.ERecord(fields) -> C.ERecord (List.map (fun (id, e) -> (Id.create id), translate_exp e) fields)
+    | S.EProj(e, id) -> C.EProj (translate_exp e, Id.create id)
+    | ETuple exps -> C.ETuple(List.map translate_exp exps)
     | ESizeCast _
     | EStmt _
-    | ERecord _
     | EWith _
-    | EProj _
-    | EVector _
     | EComp _
-    | EIndex _
-    | ETuple _ -> err_unsupported e.espan (Printing.exp_to_string e)
+    | EIndex _ -> 
+      err
+        e.espan
+        "[SyntaxToCore.translate_exp] unsupported construct for core IR (EStmt, EWith, EComp, EIndex)"
+    | EVector(exps) ->
+      (* vectors can appear as builtin type arguments. At this point, they have a known 
+         length, so can be translated into tuples. *)
+      C.ETuple(List.map translate_exp exps)
     | S.ETableCreate _ ->
       err
         e.espan
@@ -159,15 +222,30 @@ let rec translate_exp (e : S.exp) : C.exp =
   in
   { e = e'; ety = translate_ty (Option.get e.ety); espan = e.espan }
 
-and translate_etablecreate id (exp : S.exp) : C.exp =
+and translate_etablecreate _ (exp : S.exp) : C.exp =
   match exp.e with
   | S.ETableCreate tc ->
-    let tty = translate_ty tc.tty in
-    let tactions = List.map translate_exp tc.tactions in
+    (* let tty = translate_ty tc.tty in
     let tsize = translate_exp tc.tsize in
+    let tactions = List.map translate_exp tc.tactions in
     let default_cid, default_args, _ = SyntaxUtils.unpack_default_action tc.tdefault.e in
     let tdefault = default_cid, default_args |> List.map translate_exp in
-    let e' = C.ETableCreate { tid = id; tty; tactions; tsize; tdefault } in
+    let e' = C.ETableCreate { tid = id; tty; tactions; tsize; tdefault } in *)
+    (* let tty = translate_ty tc.tty in *)
+    let tsize = translate_exp tc.tsize in
+    let tactions = C.tup_sp (List.map translate_exp tc.tactions) Span.default in
+    let default_acn_constr_evar, default_acn_constr_arg = match tc.tdefault.e with 
+      | ECall(cid, args, _) -> 
+        let e = Syntax.EVar(cid) in
+        let ty_opt = (List.hd tc.tactions).ety in
+        let espan = tc.tdefault.espan in
+        (Syntax.aexp e ty_opt espan, Syntax.tuple_sp_ty args tc.tdefault.espan)
+      | _ -> err_unsupported tc.tdefault.espan "default action in a table create should be a call"  
+    in
+    let default_acn_constr_evar = translate_exp default_acn_constr_evar in
+    let default_acn_constr_arg = translate_exp default_acn_constr_arg in
+    let e' = 
+      C.ECall(Cid.create ["Table"; "create"], [tsize; tactions; default_acn_constr_evar; default_acn_constr_arg], false) in
     { e = e'; ety = translate_ty (Option.get exp.ety); espan = exp.espan }
   | _ ->
     err
@@ -201,17 +279,39 @@ and translate_statement (s : S.statement) : C.statement =
   let translate_branch (ps, s) =
     List.map translate_pattern ps, translate_statement s
   in
-  let translate_entry (entry : S.tbl_entry) : C.tbl_entry =
+  (* let translate_entry (entry : S.tbl_entry) : C.tbl_entry =
     let action_cid, action_args, _ = SyntaxUtils.unpack_default_action entry.eaction.e in
     { ematch = List.map translate_exp entry.ematch
     ; eprio = entry.eprio
     ; eaction = Cid.to_id action_cid
     ; eargs = List.map translate_exp action_args
     }
-  in
+  in *)
   let s' =
     match s.s with
     | S.SNoop -> C.SNoop
+    (* TABLE UPDATE -- hard coded table install call -> table_install *)
+    (* | S.SUnit {e=ECall(cid, args, _)} when ((Cid.names cid) = ["Table"; "install"]) -> 
+      let tbl_exp = List.nth args 0 in
+      let key_tup = List.nth args 1 in
+      let match_keys = match key_tup.e with 
+        | ETuple keys -> List.map translate_exp keys
+        | _ -> err_unsupported key_tup.espan "keys in a table install should be a tuple"
+      in
+      let action_exp = List.nth args 2 in
+      let action_cid, action_args = match action_exp.e with 
+        | ECall(cid, args, _) -> cid, List.map translate_exp args (* call to an action constructor *)
+        | _ -> err action_exp.espan "the last argument of Table.install must be a call to an action constructor"
+      in 
+      let tbl_entry : C.tbl_entry = {
+        eprio = 10;
+        ematch = match_keys;
+        eaction = Cid.to_id action_cid;
+        eargs = action_args;
+      }
+      in
+      let tbl_exp = translate_exp tbl_exp in
+      C.STableInstall (tbl_exp, [tbl_entry]) *)
     | S.SUnit e -> C.SUnit (translate_exp e)
     | S.SLocal (id, ty, e) -> C.SLocal (id, translate_ty ty, translate_exp e)
     | S.SAssign (id, e) -> C.SAssign (Cid.id id, translate_exp e)
@@ -224,7 +324,18 @@ and translate_statement (s : S.statement) : C.statement =
       C.SMatch (List.map translate_exp es, List.map translate_branch branches)
     | S.SRet eopt -> C.SRet (Option.map translate_exp eopt)
     | S.STableMatch tm ->
-      C.STableMatch
+      let (core_tm : Tables.core_tbl_match) = { 
+          Tables.tbl = translate_exp tm.tbl
+        ; Tables.keys = List.map translate_exp tm.keys
+        ; Tables.args = List.map translate_exp tm.args
+        ; Tables.outs = tm.outs
+        ; Tables.out_tys =
+            (match tm.out_tys with
+            | None -> None
+            | Some otys -> Some (List.map translate_ty otys))
+      } in
+      Tables.tbl_match_to_s core_tm
+      (* C.STableMatch
         { C.tbl = translate_exp tm.tbl
         ; C.keys = List.map translate_exp tm.keys
         ; C.args = List.map translate_exp tm.args
@@ -233,9 +344,52 @@ and translate_statement (s : S.statement) : C.statement =
             (match tm.out_tys with
              | None -> None
              | Some otys -> Some (List.map translate_ty otys))
-        }
-    | S.STableInstall (tbl_exp, entries) ->
-      C.STableInstall (translate_exp tbl_exp, List.map translate_entry entries)
+        } *)
+    | S.STableInstall (tbl_exp, entries) -> (
+      match entries with 
+        | [{ematch; eaction}] -> (
+          let tbl_exp = translate_exp tbl_exp in
+          let ematch = List.map translate_exp ematch in
+          let ematch_tys = List.map (fun (exp : C.exp) -> exp.ety.raw_ty) ematch in
+          let ematch_ty = CoreSyntax.ty@@CoreSyntax.TTuple ematch_tys in
+          let eaction = translate_exp eaction in          
+          let action_cid, action_arg = match eaction.e with 
+            | C.ECall(cid, args, _) ->
+              let arg = 
+                if (List.length args) == 0 then 
+                  C.tup_sp [] eaction.espan
+                else
+                if (List.length args) > 1 then 
+                  C.tup_sp args eaction.espan
+                else
+                  List.hd args
+              in
+              cid, arg
+            | _ -> err s.sspan "using old syntax, table install should be a call"
+          in
+          (* how do we figure out the type of the action reference expression? *)
+          let action_var = C.var (action_cid) (C.ty (C.TBool)) in
+
+          
+
+          let ematch = CoreSyntax.exp (CoreSyntax.ETuple ematch) ematch_ty in
+          let e = C.ECall(Cid.create ["Table"; "install"], [tbl_exp; ematch; action_var; action_arg], false) in
+          C.SUnit({e; ety=C.ty C.TBool; C.espan = s.sspan})
+        )
+        | _ -> err s.sspan "table install with >1 entries not supported have exactly one entry"
+    )
+    (* C.STableInstall (translate_exp tbl_exp, List.map translate_entry entries) *)
+    (* TABLE UPDATE -- hard coded tuple assign -> table assign *)
+    | S.STupleAssign(tup_asn) -> (
+        let ids = tup_asn.ids in
+        let tys = match tup_asn.tys with
+          | Some tys -> Some (List.map translate_ty tys)
+          | None -> None
+        in
+        let exp = translate_exp tup_asn.exp in
+        let res = C.STupleAssign({ids; tys; exp}) in
+        res
+    )
     | _ -> err s.sspan (Printing.statement_to_string s)
   in
   { s = s'; sspan = s.sspan; spragmas = s.spragmas }
@@ -275,14 +429,16 @@ let translate_hsort = function
   | S.HEgress -> C.HEgress
 ;;
 
-let translate_parser_action = function
+let translate_parser_action paction = match paction with
   | S.PRead(id, ty, exp) -> C.PRead (Cid.id id, translate_ty ty, translate_exp exp)
   | S.PSkip ty -> C.PSkip (translate_ty ty)
   | S.PAssign (lexp, rexp) ->
     let id =
       match lexp.e with
       | EVar cid -> Cid.to_id cid
-      | _ -> failwith "Internal error: SyntaxToCore PAssign"
+      | _ -> 
+        print_endline (">>>> "^(Printing.parser_action_to_string paction)^" <<<< ");
+        failwith "Internal error: SyntaxToCore PAssign"
     in
     C.PAssign (Cid.id id, translate_exp rexp)
   | S.PLocal(id, ty, exp) ->
@@ -303,54 +459,89 @@ and translate_parser_block (actions, (step, step_span)) =
    pstep=(translate_parser_step step, step_span);}
 ;;
 
-let translate_decl (d : S.decl) : C.decl option =
-  match d.d with 
-  | DUserTy _ -> None 
-  | _ -> 
-    let dprag = ref None in
-    let d' =
-      match d.d with
-      | S.DGlobal (id, ty, inner_exp) ->
-        (match inner_exp.e with
-        | ETableCreate _ ->
-          C.DGlobal (id, translate_ty ty, translate_etablecreate id inner_exp)
-        | _ -> C.DGlobal (id, translate_ty ty, translate_exp inner_exp))
-      | S.DEvent (id, annot, sort, _, params) ->
-        C.DEvent (id, annot, translate_sort sort, translate_params params)
-      | S.DHandler (id, s, body) ->
-        C.DHandler (id, translate_hsort s, translate_body body)
-      | S.DMemop (mid, mparams, mbody) ->
-        C.DMemop
-          { mid
-          ; mparams = translate_params mparams
-          ; mbody = translate_memop mbody
+let translate_d preserve_user_decls d dspan dpragmas = 
+  match d with
+  | S.DGlobal (id, ty, constr_exp) -> (
+    match ty.raw_ty with 
+    (* TABLE UPDATE -- hard coded translation into a decl with ETableCreate *)
+    (* | (TName(cid, _, _)) when (Cid.equal cid Tables.t_id) -> (
+      match constr_exp.e with
+      | S.ECall(_, [size_exp; actions_exp; default_exp], _) ->
+        let size = translate_exp size_exp in
+        let actions = match actions_exp.e with
+          | ETuple actions -> List.map translate_exp actions
+          | _ -> err_unsupported dspan "actions in a table create should be a tuple"
+        in
+        let default_cid, default_args = match default_exp.e with
+          | ECall(cid, args, _) -> cid, args (* call to an action constructor *)
+          | EVar(_) ->   
+            err_unsupported dspan "Tables currently must use action constructors"
+            (* cid, [] *) (* an action, which isn't fully supported *)
+          | _ -> err_unsupported dspan "default action in a table create should be a call"
+        in
+        let (tbl_def : C.tbl_def) = {
+          tid = id; 
+          tty = translate_ty ty;
+          tactions = actions;
+          tsize = size;
+          tdefault = (default_cid, List.map translate_exp default_args);
           }
-      | S.DExtern (id, ty) -> C.DExtern (id, translate_ty ty)
-      | S.DAction (id, tys, const_params, (params, acn_body)) ->
-        C.DAction
-          { aid = id
-          ; artys = List.map translate_ty tys
-          ; aconst_params = translate_params const_params
-          ; aparams = translate_params params
-          ; abody = List.map translate_exp acn_body
-          }
-      | S.DParser (id, params, parser_block) ->
-        C.DParser
-          (id, translate_params params, translate_parser_block parser_block)
-      | S.DUserTy _ -> err d.dspan "user/named types not yet supported in ir"
-    | S.DFun(id, ty, _, (params, stmt)) when (Pragma.exists_sprag "main" [] d.dpragmas) -> 
-        (* retain "main" pragma *)
-        dprag := Some(List.hd (d.dpragmas));
-        C.DFun(id, translate_ty ty, (translate_params params, translate_statement stmt))
-      | _ -> err d.dspan (Printing.decl_to_string d)
-    in
-    (* retain "main" pragma *)
-    match !dprag with 
-      | None -> 
-        Some(C.decl_sp d' d.dspan)
-      | Some(dprag) -> 
-        Some({(C.decl_sp d' d.dspan) with dpragma = Some(dprag)})
-
+        in
+        Some (C.DGlobal (id, translate_ty ty, {e=C.ETableCreate tbl_def; ety=translate_ty ty; espan=constr_exp.espan}))
+      | _ -> err_unsupported dspan "table create should be a call"
+    )      *)
+    | _ -> 
+      Some (match constr_exp.e with
+      | S.ETableCreate _ -> C.DGlobal (id, translate_ty ty, translate_etablecreate id constr_exp)
+      | _ -> C.DGlobal (id, translate_ty ty, translate_exp constr_exp))
+  )
+  | S.DEvent (id, annot, sort, _, params) ->
+    Some (C.DEvent (id, annot, translate_sort sort, translate_params params))
+  | S.DHandler (id, s, body) ->
+    Some (C.DHandler (id, translate_hsort s, translate_body body))
+  | S.DMemop (mid, mparams, mbody) ->
+    Some (C.DMemop
+      { mid
+      ; mparams = translate_params mparams
+      ; mbody = translate_memop mbody
+      })
+  | S.DExtern (id, ty) -> Some (C.DExtern (id, translate_ty ty))
+  | S.DActionConstr (id, tys, const_params, (params, acn_body)) ->
+    Some (C.DActionConstr
+      { aid = id
+      ; artys = List.map translate_ty tys
+      ; aconst_params = translate_params const_params
+      ; aparams = translate_params params
+      ; abody = List.map translate_exp acn_body
+      })
+  | S.DParser (id, params, parser_block) ->
+    Some (C.DParser
+      (id, translate_params params, translate_parser_block parser_block))
+  | S.DUserTy(id, [], ty) when preserve_user_decls -> Some (C.DUserTy(id, translate_ty ty))
+  | S.DUserTy _ when not preserve_user_decls -> None
+  | S.DUserTy _ -> err dspan "size polymorphism in type declarations should be eliminated before midend"    
+  | S.DFun(id, ty, _, (params, stmt)) when (Pragma.exists_sprag "main" dpragmas) -> 
+      (* retain functions tagged as entry points into program, with their pragmas *)
+      Some (C.DFun(id, translate_ty ty, (translate_params params, translate_statement stmt)))
+  | _ -> err dspan (Printing.d_to_string d)
 ;;
 
-let translate_prog (ds : S.decls) : C.decls = List.filter_map translate_decl ds
+let translate_decl 
+  ?(preserve_user_decls=false)
+  (d : S.decl) : C.decl option =
+    let dpragma = match d.dpragmas with
+      | [] -> None
+      | [dprag] -> Some(dprag)
+      | _ -> err d.dspan "multiple pragmas on a single declaration"
+    in
+    match translate_d preserve_user_decls d.d d.dspan d.dpragmas with
+      | None -> None
+      | Some(d') -> Some({(C.decl_sp d' d.dspan) with dpragma})
+;;
+
+
+
+
+let translate_prog ?(preserve_user_decls=false) (ds : S.decls) : C.decls = 
+  List.filter_map (translate_decl ~preserve_user_decls) ds
+;;

@@ -29,7 +29,8 @@ let partial_backend_pipeline ds portspec =
   let ds = InlineEventVars.inline ds in
   let ds = UniqueTableActions.process ds in
   let ds = AddIntrinsics.add_intrinsics ds in
-  let ds = AddIngressParser.add_parser portspec ds in
+  let port_ty = (Builtins.tofino_builtin_tys.ingr_port_ty |> SyntaxToCore.translate_ty) in 
+  let ds = AddIngressParser.add_parser port_ty portspec ds in
   InputChecks.all_checks ds;
   let ds = TofinoPipeline.atomic_op_form ds in
   let ds = Hoisting.process ds in 

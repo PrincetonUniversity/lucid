@@ -237,16 +237,16 @@ module NormalizeBoolExps = struct
       let expstr = Printing.exp_to_string exp in
       let tystr = Printing.ty_to_string rty in
       sprintf
-        "z3_from_expr got a variable that is not an integer or boolean: (%s) : \
+        "[z3_from_expr] got a variable that is not an integer or boolean: (%s) : \
          <%s>"
         expstr
         tystr
       |> error
     | EVal _, _ ->
-      error "z3_from_expr got a value that is not an integer or boolean..."
+      error "[z3_from_expr] got a value that is not an integer or boolean..."
     | ECall _, _ ->
       error
-        "z3_from_expr got an ecall -- this should have been eliminated by an \
+        "[z3_from_expr] got an ecall -- this should have been eliminated by an \
          earlier pass."
     | EHash _, _ ->
       error
@@ -256,8 +256,9 @@ module NormalizeBoolExps = struct
       error
         "z3_from_expr got an eflood -- there shouldn't be a flood constructor \
          inside of a boolean"
-    | ETableCreate _, _ ->
-      error "[z3_from_expr] a create table call inside a bool"
+    | ERecord _, _ -> error "[z3_from_expr] records not supported"
+    | ETuple _, _-> error "[z3_from_expr] tuples not supported"
+    | EProj _, _ -> error "[z3_from_expr] projections not supported"
   ;;
 
   (* tell Z3 to convert a boolean expression into disjunctive normal form *)

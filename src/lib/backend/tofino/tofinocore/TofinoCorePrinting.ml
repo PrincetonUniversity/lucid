@@ -144,7 +144,7 @@ let td_to_string (td:td)=
       (memop_to_string mbody |> indent_body)
   | TDExtern (id, ty) ->
     Printf.sprintf "extern %s %s;" (id_to_string id) (ty_to_string ty)
-  | TDAction acn ->
+  | TDActionConstr acn ->
     (* id, ret_tys, const_params, (dyn_params, acn_body)) ->  *)
     Printf.sprintf
       "action (%s) %s(%s)(%s) {\n\taction_return (%s)\n}\n"
@@ -167,6 +167,9 @@ let td_to_string (td:td)=
       (id_to_string id)
       (params_to_string (fst body))
       (stmt_to_string (snd body))
+  | TDUserTy(id, ty) -> 
+    Printf.sprintf "type %s = %s;" (id_to_string id) (ty_to_string ty)
+
 ;;
 
 let tdecl_to_string td = td_to_string td.td

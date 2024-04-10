@@ -404,7 +404,7 @@ let hashers_of_table_stmt salu_idx_vars stmt =
     (* count hashes in hash expressions outside of array calls *)
     method! visit_SAssign _ lhs rhs = 
       match rhs.e with
-      | EHash(sz, _) -> (
+      | EHash(Sz sz, _) -> (
         let is_dup = List.exists (fun (c, h) -> (Cid.equal c lhs) && (equiv_exp h rhs)) !standalone_hash_expressions in
         if (not is_dup) then (
           if (sz <= 16) then 
@@ -418,7 +418,7 @@ let hashers_of_table_stmt salu_idx_vars stmt =
     
     method! visit_SLocal _ lhs_id ty rhs =
       match rhs.e with
-      | EHash(sz, _) -> (
+      | EHash(Sz sz, _) -> (
         let is_dup = List.exists (fun (c, h) -> (Cid.equal c (Cid.id lhs_id)) && (equiv_exp h rhs)) !standalone_hash_expressions in
         if (not is_dup) then (
           if (sz <= 16) then 
@@ -452,7 +452,7 @@ let keywidth_of_table table =
   let width_of_exp exp =
     match exp.ety.raw_ty with
     | TBool -> 1
-    | TInt(sz) -> sz
+    | TInt(Sz sz) -> sz
     | _ -> error "[keywidth_of_table] reached table key that is not bool or int..."
   in
   CL.fold_left (+) 0 (CL.map width_of_exp table.tkeys)

@@ -200,7 +200,7 @@ let inline_body env (params, body) = params, inliner#visit_statement env body
    DConstr declarations along the way. *)
 let inline_decl env d =
   (* skip "main" for function compiler *)
-  if (Pragma.exists_sprag "main" [] d.dpragmas)
+  if (Pragma.exists_sprag "main" d.dpragmas)
     then env, Some d
   else
   match d.d with
@@ -237,6 +237,7 @@ let inline_decl env d =
   | DModule _ | DModuleAlias _ ->
     failwith "Modules should be eliminated before inlining"
   (* no function calls allowed in actions *)
+  | DActionConstr _ -> env, Some d
   | DAction _ -> env, Some d
 ;;
 

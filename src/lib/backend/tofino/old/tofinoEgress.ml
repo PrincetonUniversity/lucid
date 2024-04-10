@@ -21,7 +21,7 @@ let find_globals ds =
         | DGlobal(id, _, _) -> 
           print_endline (CorePrinting.decl_to_string (decl));
           global_ids := id::(!global_ids);
-        | DAction({aid=aid; _}) -> 
+        | DActionConstr({aid=aid; _}) -> 
           global_ids := aid::(!global_ids);
         | _ -> ()
     end

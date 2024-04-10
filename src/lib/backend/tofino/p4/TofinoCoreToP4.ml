@@ -22,10 +22,10 @@ let fresh_numbered_id s =
 (*** basic syntax translation ***)
 let rec translate_ty ty = match ty.raw_ty with 
   | CS.TBool -> T.TBool
-  | CS.TInt (s) -> T.TInt (s)
-  | CS.TAction(_) -> error "[translate_ty] action types should be eliminated in IR..."
+  | CS.TInt (Sz (s)) -> T.TInt (s)
+  | CS.TActionConstr(_) -> error "[translate_ty] action types should be eliminated in IR..."
   | CS.TFun(fty) -> tfun (translate_ty fty.ret_ty) (List.map translate_ty fty.arg_tys)
-  | CS.TName(cid, _, _) -> tstruct (Cid.to_id cid)
+  | CS.TName(cid, _) -> tstruct (Cid.to_id cid)
   | _ -> error "[translate_ty] translation for this type is not implemented"
 ;;
 
@@ -37,7 +37,7 @@ let size_of_tint ty =
 
 let translate_rty rty =
   match rty with 
-  | CS.TInt(s) -> T.TInt(s)
+  | CS.TInt(Sz s) -> T.TInt(s)
   | _ -> error "[translate_rty] not a TInt"
 ;;
 let translate_value v =
@@ -87,6 +87,7 @@ let translate_pat pat =
       in 
       PBitstring bits
     )
+    | PEvent _ -> error "[coreToP4Tofino.Translate_pat] event patterns are not implemented"
 ;;
 let translate_sunit_ecall stmt =
   match stmt.s with 
@@ -133,7 +134,7 @@ type prog_env = {
   memops : memop IdMap.t;
   actions : CidSet.t;
   (* defined_fcns : tdecl CidMap.t; *)
-  tables : (CS.tbl_def * Span.t) CidMap.t;
+  tables : (Tables.core_tbl_def * Span.t) CidMap.t;
   vars   : exp CidMap.t;
   (* hashers that have already been constructed, 
      because we can't deduplicate hash expressions 
@@ -271,7 +272,7 @@ let rec translate_exp (prog_env:prog_env) exp : (T.decl list * T.expr) * prog_en
   | CS.EOp(op, args) -> (
     let args = match op with 
       (* cast and slice have arguments in a different form *)
-      | CS.Cast(sz) -> 
+      | CS.Cast(Sz sz) -> 
         let (_, exps), _ = translate_exps prog_env args in 
         (eval_int sz)::(exps)
       | CS.Slice(s, e) -> 
@@ -284,8 +285,9 @@ let rec translate_exp (prog_env:prog_env) exp : (T.decl list * T.expr) * prog_en
     let op = translate_op op in 
     ([], eop_ty_sp op args (translate_ty exp.ety) exp.espan), prog_env
   )
-  | CS.ETableCreate(_) ->
-    error "[coreToP4Tofino.translate_exp] got an etablecreate expression. This should have been handled by the declaration translator."
+  | CS.ERecord(_) -> error "[coreToP4Tofino.translate_exp] records not implemented"
+  | CS.ETuple _ -> error "[coreToP4Tofino.translate_exp] tuples not implemented"
+  | CS.EProj(_, _) -> error "[coreToP4Tofino.translate_exp] projections not implemented"
 
 and translate_exps (prog_env:prog_env) exps : (decl list * expr list) * prog_env = 
   let translate_exp_wrapper exp = translate_exp prog_env exp in
@@ -294,6 +296,7 @@ and translate_exps (prog_env:prog_env) exps : (decl list * expr list) * prog_env
   (List.flatten decls, exps), prog_env
 
 and translate_hash prog_env size args : (decl list * expr) * prog_env = 
+  let size = CoreSyntax.size_to_int size in
   match (List.hd args).e with 
   (* special case: checksum hash, which may appear in the deparser *)
   | EVar(cid) when (Cid.equal (Cid.id Builtins.checksum_id) cid) -> 
@@ -365,7 +368,7 @@ and translate_ecall env fcn_cid args =
       let (regacn_id, decl), env = translate_pairarray_call env fcn_cid args in 
       let (idx_decls, idx_arg), env = translate_exp env (List.hd (List.tl args)) in
       (idx_decls@[decl], ecall (Cid.create_ids [regacn_id; (id "execute")]) [idx_arg]), env
-    | _ -> error "[translate_ecall] unknown function")
+    | _ -> error@@"[translate_ecall] unknown function: "^(CorePrinting.cid_to_string fcn_cid))
 
 and translate_sys_call fcn_id args = 
       match (Id.name fcn_id) with
@@ -696,7 +699,9 @@ let rec translate_statement env prev_decls stmt : (decl list * T.statement) * pr
     let (s1_decls, s1_stmt), s1_env = translate_statement env prev_decls s1 in
     let (s2_decls, s2_stmt), s2_env = translate_statement s1_env prev_decls s2 in
     (s1_decls@s2_decls, sseq [s1_stmt; s2_stmt]), s2_env
-  | STableMatch _ | STableInstall _ -> error "[coreToP4Tofino.translate_statement] tables not implemented"
+  | STupleAssign _ -> error "[coreToP4Tofino.translate_statement] multiassign may not appear inside of an action"
+  (* | STableMatch _  *)
+  (* | STableInstall _ -> error "[coreToP4Tofino.translate_statement] tables may not appear inside action bodies" *)
 ;;
 
 (* generate an action, and other compute objects, from an open function
@@ -727,7 +732,7 @@ let fresh_table_id _ = Id.fresh_name "table"
 (* translate a table object declaration into a P4 table. 
    Note: we need the match statement that calls the table 
    because it contains the key *)
-let translate_table env tdef tspan pragmas keys =
+let translate_table env (tdef:Tables.core_tbl_def) tspan pragmas keys =
   let tid = tdef.tid in
   let size = CoreSyntax.exp_to_int tdef.tsize in
   let action_ids = translate_exps env tdef.tactions |> fst_snd in
@@ -758,7 +763,9 @@ let stmt_to_table env (_:pragma) (ignore_pragmas: (id * pragma) list) (tid, stmt
       | _ -> error "[action_id_of_branch] branch does not call an action function"
   in
   match stmt.s with
-  | SIf(e, {s=STableMatch(tm);}, _) ->   
+  | SIf(e, {s}, _) when (match s with STupleAssign(_) -> true | _ -> false)-> 
+    let tm = Tables.s_to_tbl_match s in
+  (* | SIf(e, {s=STableMatch(tm);}, _) ->    *)
     (* match keys are specified in the statement *)
     let keys = translate_exps env tm.keys 
       |> fst_snd 
@@ -852,7 +859,10 @@ let sseq_to_stage stage_num env block_id seq_stmt =
   (* user tables already have ids *)
   let table_ids = List.map 
     (fun call_stmt -> match call_stmt.s with
-      | SIf(_, {s=STableMatch(tm);}, _) -> CoreSyntax.id_of_exp tm.tbl
+      | SIf(_, {s}, _) when (match s with STupleAssign(_) -> true | _ -> false)-> 
+        let tm = Tables.s_to_tbl_match s in
+      (* | SIf(_, {s=STableMatch(tm);}, _) ->  *)
+        CoreSyntax.id_of_exp tm.tbl
       | SMatch(_) -> fresh_table_id ()
       | _ -> error "[sseq_to_stage] a statement in this stage is something besides a conditional table_match or an unconditional match statement.")
     stmts
@@ -978,7 +988,7 @@ and translate_param_with_anon_recty struct_kind (id, ty) =
       struct_kind
       (List.map (fun (id, rty) -> id, translate_ty (CoreSyntax.ty rty)) fields)
     in
-    let ref_ty = translate_ty (CoreSyntax.ty (CoreSyntax.TName(Cid.id ty_id, [], false))) in
+    let ref_ty = translate_ty (CoreSyntax.ty (CoreSyntax.TName(Cid.id ty_id, []))) in
     (* give back the translated param and the struct declaration *)
     (id, ref_ty), [struct_decl]
   )
@@ -1468,7 +1478,7 @@ let translate_parser denv parser =
          case -- cid is not param -> read is a slocal lookahead; advance *)
       match (is_param cid) with
       | true -> [], extract pkt_arg cid
-      | false -> [], sseq [slocal_lookahead pkt_arg cid (translate_ty ty); sadvance pkt_arg (size_of_tint ty)]
+      | false -> [], sseq [slocal_lookahead pkt_arg cid (translate_ty ty); sadvance pkt_arg (size_of_tint ty |> CoreSyntax.size_to_int)]
     )
     | PPeek(cid, ty, _) -> (
       (* case -- cid is an event field (first id is name of output event param) sassign lookahead -> 
@@ -1477,7 +1487,7 @@ let translate_parser denv parser =
       | true -> [], sassign_lookahead pkt_arg cid (translate_ty ty)
       | false -> [], slocal_lookahead pkt_arg cid (translate_ty ty)
     )
-    | PSkip(ty) -> [], sadvance pkt_arg (size_of_tint ty)
+    | PSkip(ty) -> [], sadvance pkt_arg (size_of_tint ty|> CoreSyntax.size_to_int)
     | PAssign(cid, exp) when (is_checksum exp) -> 
       (* invalidate statements come after the use of the headers *)
       let decls, sub_stmt, get_expr, invalid_stmt = translate_parser_checksum denv.penv exp in
@@ -1504,13 +1514,13 @@ let translate_parser denv parser =
       let branches' = List.map translate_parser_branch parser_branches in
       smatch exps' branches'
     )
-    | PGen _ -> error "[translate_parser_step] pgens should have been elminiateasd"
+    | PGen _ -> error "[translate_parser_step] pgens should have been eliminated"
     | PCall({e=CS.ECall(fcid, _, _)}) -> 
       if ((Cid.names fcid |> List.hd) = "exit")
         then transition_accept
         else error "[translate_parser_step] the only supported call is to exit/accept"
     | PCall _ -> error "[translate_parser_step] the only supported call is to exit/accept"
-    | PDrop -> transition (id "drop")
+    | PDrop -> transition (id "reject")
   in
   (* back in outer translate_parser *)
   (* print_endline ("------ translating parser ------"); *)
@@ -1561,7 +1571,7 @@ let construct_deparser denv hevent : decl =
       that is of type TName(cid, _, _) where (hd (Cid.names cid)) = fst intrinsic_param_ty_id *)
     let intrinsic_param = List.find_map (fun (id, ty) -> 
       match ty.raw_ty with 
-      | TName(tcid, _, _) -> (
+      | TName(tcid, _) -> (
         match (Cid.names tcid) with 
         | [name] -> (
           let (matching_ty_names : string list) = List.filter (String.equal name) possible_intrinsic_param_ty_names in
@@ -1605,12 +1615,13 @@ let translate_tdecl (denv : translate_decl_env) tdecl : (translate_decl_env) =
   (* memops just go into the context *)
   | TDMemop(m) -> (dw bind_memop denv (m.mid, m))
   (* tables just go into context *)
-  | TDGlobal(tbl_id, _, {e=ETableCreate(tbl_def); espan=espan;}) -> 
-    dw bind_tbl denv ((Cid.id tbl_id), (tbl_def, espan))
+  | TDGlobal(tbl_id, {raw_ty = TName(ty_cid, _)}, econstr) when (Cid.names ty_cid = ["Table"; "t"]) ->
+    let tbl_def = Tables.dglobal_params_to_tbl_def tbl_id econstr in 
+    dw bind_tbl denv ((Cid.id tbl_id), (tbl_def, econstr.espan))
   (* arrays get translated into registerarrays, which are global. *)
   | TDGlobal(rid, ty, exp) -> (
     match ty.raw_ty with 
-    | TName(tcid, [cell_size], true) -> (
+    | TName(tcid, [Sz cell_size]) -> (
         let module_name = List.hd (Cid.names tcid) in 
         let len, default_opt = match exp.e with 
           | ECall(_, args, _) -> (
@@ -1627,7 +1638,7 @@ let translate_tdecl (denv : translate_decl_env) tdecl : (translate_decl_env) =
              because the constructor expression tracks source ids *)
           let reg_decl = 
             dreg_sp 
-              rid (tint cell_size) [cell_size] TAuto len default_opt [] exp.espan
+              rid (tint (cell_size)) [cell_size] TAuto len default_opt [] exp.espan
           in
           let globals = denv.globals @ [reg_decl] in
           {denv with globals}
@@ -1743,11 +1754,12 @@ let translate_tdecl (denv : translate_decl_env) tdecl : (translate_decl_env) =
   )
   | TDHandler(HParams(_)) -> error "param-based handles should have been eliminated"
   | TDParser(p) -> let globals = denv.globals@[translate_parser denv p] in {denv with globals}
-  | TDAction _ -> error "[translate_tdecl] actions should have been converted into functions"
+  | TDActionConstr _ -> error "[translate_tdecl] actions should have been converted into functions"
   | TDMulticastGroup(group) -> 
     let decl = T.decl_full (DMCGroup{gid=group.gnum; replicas =group.gcopies;}) [] tdecl.tdspan in 
     {denv with globals = denv.globals@[decl]}
   | TDFun(_) -> error "[translate_tdecl] function compilation is not implemented for tofino backend"
+  | TDUserTy(_) -> error "[translate_tdecl] user-defined types are not implemented for tofino backend"
 ;;
 
 (* move parsers to the end of the decls *)

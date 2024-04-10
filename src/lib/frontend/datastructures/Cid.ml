@@ -45,6 +45,11 @@ let str_cons str cid : t =
   | Compound (id, cid) -> Compound (Id.fresh str, Compound (id, cid))
 ;;
 
+let str_cons_plain str cid : t = 
+  match cid with
+  | Id id -> Compound (Id.create str, Id id)
+  | Compound (id, cid) -> Compound (Id.create str, Compound (id, cid))
+
 let id id = Id id
 let compound id cid = Compound (id, cid)
 

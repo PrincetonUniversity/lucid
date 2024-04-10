@@ -17,7 +17,7 @@ let is_checksum_hash exp =
   match exp.e with 
   | EHash(size, args) -> (
     match size, args with
-    | 16, epoly::_ -> (
+    | Sz 16, epoly::_ -> (
       match epoly.e with
       | EVar(cid) -> Cid.equal cid (Cid.id Builtins.checksum_id)
       | _ -> false
@@ -48,7 +48,7 @@ let extract_checksums output_cids stmts =
   let checksum_flag_num = ref 1 in
   let fresh_checksum_flag () = 
     let id = ("do_checksum_op_"^(string_of_int !checksum_flag_num), !checksum_flag_num) in
-    let ty = CoreSyntax.tint 1 in
+    let ty = CoreSyntax.tint@@Sz 1 in
     checksum_flag_num := !checksum_flag_num + 1;
     id, ty
   in

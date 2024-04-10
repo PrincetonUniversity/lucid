@@ -70,7 +70,7 @@ let eliminate_bool_values_and_types ds =
       (* skip memops! *)
       method! visit_DMemop _ m = DMemop m
       method! visit_VBool _ b = VInt (zint_of_bool b)
-      method! visit_TBool _ = TInt bool_sz
+      method! visit_TBool _ = TInt(Sz bool_sz)
     end
   in
   v#visit_decls (statement SNoop) ds

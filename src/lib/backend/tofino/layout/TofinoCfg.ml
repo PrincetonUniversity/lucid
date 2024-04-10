@@ -280,7 +280,7 @@ let pattern_of_branch es b =
         2. no sequences of statements 
     Also, the match statements that wrap table_matchs are solitary. *)
 let is_solitary_match stmt =
-    match Pragma.find_sprag "solitary" [] stmt.spragmas with
+    match Pragma.find_sprag_args "solitary" [] stmt.spragmas with
     | Some(_) -> true
     | _ -> false
 ;;
@@ -307,12 +307,15 @@ let rec cfg_of_statement_inner (st:statement) =
     | SRet(_)  
     | SGen(_) ->
         Cfg.add_vertex Cfg.empty (vertex_of_stmt st false)
-    | STableMatch(_) -> 
+    (* | STableMatch(_) ->  *)
         (* a table match remains a table match *)
-        error "coreCfg.cfg_of_statement_inner] table match statements should be wrapped in solitary matches"
+        (* error "coreCfg.cfg_of_statement_inner] table match statements should be wrapped in solitary matches" *)
         (* Cfg.add_vertex Cfg.empty (vertex_of_stmt st true) *)
-    | STableInstall(_) -> 
-        error "[coreCfg.cfg_of_statement_inner] table installs should be removed from tofino program by this point."
+    | STupleAssign _ -> 
+        (* same semantics as table match, assign, and local *)
+        error "[coreCfg.cfg_of_statement_inner] tuple assignments should be removed from tofino program by this point."
+    (* | STableInstall(_) -> 
+        error "[coreCfg.cfg_of_statement_inner] table installs should be removed from tofino program by this point." *)
     | SIf(e, s1, s2) ->
         (* 1. compute graph of s1 and s2 *)
         let g_s1 = cfg_of_statement_inner s1 in
@@ -444,7 +447,15 @@ let statement_of_cfg cfg =
         | SPrintf _
         | SGen _ 
         | SRet _
-        | STableMatch _ ->
+        (* | STableMatch _ ->
+            (
+            match (Cfg.succ cfg v) with 
+            | [] -> v.stmt
+            | [next_node] -> sseq (v.stmt) (stmt_of_vertex next_node)
+            | _ -> error "[stmt_of_vertex] expected at most 1 successor for this type of cfg node"
+        ) *)
+        (* same semantics as table match *)
+        | STupleAssign _ -> 
             (
             match (Cfg.succ cfg v) with 
             | [] -> v.stmt
@@ -453,8 +464,8 @@ let statement_of_cfg cfg =
         )
         | SSeq _ -> error "[stmt_of_vertex] sseq not expected"
         | SIf _ -> error "sif not expected"
-        | STableInstall(_) -> 
-            error "[coreCfg.statement_of_cfg] table installs should be removed from tofino program by this point."
+        (* | STableInstall(_) -> 
+            error "[coreCfg.statement_of_cfg] table installs should be removed from tofino program by this point." *)
         | SMatch(exps, branches) -> (
             let pats = List.split branches |> fst in
             let next_vs = Cfg.succ cfg v in

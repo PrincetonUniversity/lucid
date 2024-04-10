@@ -14,6 +14,7 @@ val fresh : string list -> t
 val id : Id.t -> t
 val compound : Id.t -> t -> t
 val str_cons : string -> t -> t
+val str_cons_plain : string -> t -> t
 val concat : t -> t -> t
 val from_string : string -> t
 

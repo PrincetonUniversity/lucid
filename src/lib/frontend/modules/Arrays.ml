@@ -2,6 +2,7 @@
 open Syntax
 open Batteries
 open InterpState
+open Pipeline
 let rec create_ls size buckets =
   List.init buckets (fun _ -> Integer.create ~value:0 ~size)
 ;;
@@ -13,6 +14,8 @@ let array_error fun_name msg = error (array_name ^ ": " ^ fun_name ^ ": " ^ msg)
 let module_id = array_id
 let t_id = Cid.create_ids [array_id; Id.create "t"]
 let sizes = 1
+let ty_args = 0
+
 let global = true
 
 (* Constructor *)
@@ -69,7 +72,7 @@ let update_fun err nst swid args =
   let open State in
   let open InterpSyntax in 
   match args with
-  | [ V { v = VGlobal stage }
+  | [ V { v = VGlobal (_, stage) }
     ; V { v = VInt idx }
     ; F getop
     ; getarg
@@ -77,7 +80,7 @@ let update_fun err nst swid args =
     ; setarg ] ->
     let get_f arg = getop nst swid [V (CoreSyntax.vinteger arg); getarg] in
     let set_f arg =
-      match setop nst swid [V (CoreSyntax.vinteger arg); setarg] with
+      match setop nst swid [V (CoreSyntax.vinteger arg); setarg] |> extract_ival with
       | { v = VInt v } -> v
       | _ -> err "Wrong type of value from set op"
     in
@@ -88,8 +91,8 @@ let update_fun err nst swid args =
 ;;
 
 let array_update_fun = update_fun array_update_error
-let dummy_memop = InterpSyntax.F (fun _ _ args -> extract_ival (List.hd args))
-let setop = InterpSyntax.F (fun _ _ args -> extract_ival (List.nth args 1))
+let dummy_memop = InterpSyntax.F (fun _ _ args -> V(extract_ival (List.hd args)))
+let setop = InterpSyntax.F (fun _ _ args -> V(extract_ival (List.nth args 1)))
 let dummy_int = InterpSyntax.V (CoreSyntax.vinteger (Integer.of_int 0))
 
 (* Array.get *)
@@ -230,17 +233,17 @@ let array_update_complex_fun nst swid args =
   let open State in
   let open InterpSyntax in
   match args with
-  | [V { v = VGlobal stage }; V { v = VInt idx }; F memop; arg1; arg2; default]
+  | [V { v = VGlobal (_, stage) }; V { v = VInt idx }; F memop; arg1; arg2; default]
     ->
     let update_f mem1 _ =
       let args = [V (CoreSyntax.vinteger mem1); arg1; arg2; default] in
-      let v = memop nst swid args in
+      let v = memop nst swid args |> extract_ival in
       match v.v with
       | VTuple [VInt n1; VInt n2; v3] -> n1, n2, { v with v = v3 }
       | _ -> failwith "array_update_complex: Internal error"
     in
     let pipe = (sw nst swid).pipeline in
-    Pipeline.update_complex ~stage ~idx:(Integer.to_int idx) ~memop:update_f pipe
+    V(Pipeline.update_complex ~stage ~idx:(Integer.to_int idx) ~memop:update_f pipe)
   | _ -> array_update_complex_error "Incorrect number or type of arguments"
 ;;
 
@@ -260,6 +263,7 @@ let defs : State.global_fun list =
 
 let signature =
   let sz = IVar (QVar (Id.fresh "sz")) in
+  LibraryInterface.tup_to_sigty
   ( module_id
   , [Cid.last_id t_id, [sz], TName (t_id, [sz], true) |> ty]
   , defs
