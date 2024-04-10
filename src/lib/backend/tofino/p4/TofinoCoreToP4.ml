@@ -1514,13 +1514,13 @@ let translate_parser denv parser =
       let branches' = List.map translate_parser_branch parser_branches in
       smatch exps' branches'
     )
-    | PGen _ -> error "[translate_parser_step] pgens should have been elminiateasd"
+    | PGen _ -> error "[translate_parser_step] pgens should have been eliminated"
     | PCall({e=CS.ECall(fcid, _, _)}) -> 
       if ((Cid.names fcid |> List.hd) = "exit")
         then transition_accept
         else error "[translate_parser_step] the only supported call is to exit/accept"
     | PCall _ -> error "[translate_parser_step] the only supported call is to exit/accept"
-    | PDrop -> transition (id "drop")
+    | PDrop -> transition (id "reject")
   in
   (* back in outer translate_parser *)
   (* print_endline ("------ translating parser ------"); *)

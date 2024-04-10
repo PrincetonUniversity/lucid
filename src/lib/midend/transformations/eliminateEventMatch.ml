@@ -166,8 +166,21 @@ let replacer =
       (SMatch (new_exps, (List.map branch_replacer branches)))
   end
 
+let contains_event_match ds =
+  let contains_pevent = ref false in
+  let v = object 
+    inherit [_] s_iter as super
+      method! visit_PEvent _ _ _ = contains_pevent := true
+    end
+  in
+  v#visit_decls () ds;
+  !contains_pevent
+;;
 
+(* only run this transformation if we need to. *)
 let process_prog ds = 
-  let env_infos = (ref {var_infos = IdMap.empty; event_infos = IdMap.empty}) in
-  let ds = replacer#visit_decls env_infos ds in 
-  ds
+  if (contains_event_match ds) then 
+    let env_infos = (ref {var_infos = IdMap.empty; event_infos = IdMap.empty}) in
+    let ds = replacer#visit_decls env_infos ds in 
+    ds
+  else ds

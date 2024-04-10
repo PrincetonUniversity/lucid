@@ -78,8 +78,6 @@ let atomic_op_form ds =
 
 let core_passes ds portspec = 
   (* all the passes over CoreSyntax *)
-  print_endline ("--------eliminating event match--------");
-  let ds = EliminateEventMatch.process_prog ds in
   let ds = EliminateTBuiltin.process_prog ds in
   dump_ir_prog "midend before partial interp (initial prog)" "midend_pre_partial_interp.dpt" ds;
   let ds = if Cmdline.cfg.partial_interp
@@ -104,6 +102,8 @@ let core_passes ds portspec =
   report_if_verbose "-------Inlining event variables---------";
   let ds = InlineEventVars.inline ds in
   printprog_if_debug ds;
+  report_if_verbose ("--------eliminating event match--------");
+  let ds = EliminateEventMatch.process_prog ds in
   report_if_verbose "-------Creating unique per-table actions---------";
   let ds = UniqueTableActions.process ds in
   printprog_if_debug ds;
