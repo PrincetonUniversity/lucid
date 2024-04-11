@@ -1,4 +1,5 @@
 import subprocess, os, filecmp
+"""frontend and lucid interpreter test script"""
 
 # parse a single command line argument: "--lucidcc" to test the c backend, otherwise test interpreter
 test_tgt = "interpreter"
@@ -9,12 +10,14 @@ if len(os.sys.argv) > 1:
         print("Unrecognized argument: "+os.sys.argv[1])
         os.sys.exit(1)
 
-
 interpdir = "examples/interp_tests/"
 librarydir = "examples/library/"
 regressiondir = "examples/misc/regression/"
 parserdir = "examples/misc/parsers/"
 popldir = "examples/publications/popl22/"
+test_dir = os.path.dirname(os.path.abspath(__file__))
+output_dir = test_dir+"/output/"
+expected_dir = test_dir+"/expected/"
 
 interactivefiles = [x for x in os.listdir(interpdir) if x.endswith("staticrouter.dpt")]
 interpfiles = [x for x in os.listdir(interpdir) if ((x.endswith(".dpt")) and (x not in interactivefiles))]
@@ -27,8 +30,8 @@ errors = []
 bad_successes = []
 diffs = []
 
-if not (os.path.isdir("test/output")):
-    os.mkdir("test/output")
+if not (os.path.isdir(output_dir)):
+    os.mkdir(output_dir)
 
 # Convention: a test is expected to fail if and only if the test file ends in
 # _wrong.dpt
@@ -45,12 +48,12 @@ def interp_test(fullfile, args):
     shortfile = fullfile[0:-4]
     print("Running test on "+shortfile)
     outname = "{}_output.txt".format(shortfile)
-    with open("test/output/"+outname, "w") as outfile:
+    with open(output_dir+outname, "w") as outfile:
         fullfile = interpdir+fullfile
         cmd = ["./dpt", "--silent", fullfile] + args
         ret = subprocess.run(cmd, stdout=outfile, stderr=subprocess.DEVNULL)
     check_return(ret, fullfile)
-    if not filecmp.cmp("test/output/"+outname, "test/expected/"+outname):
+    if not filecmp.cmp(output_dir+outname, expected_dir+outname):
         print("test returned different output than expected: "+"./dpt --silent %s"%fullfile)
         diffs.append(shortfile)
     outfile.close()
@@ -62,12 +65,11 @@ def just_typecheck(path, file, suffix = ""):
     ret = subprocess.run(cmd, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     check_return(ret, fullfile)
 
-
 def interactive_test(fullfile, args):
     shortfile = fullfile[0:-4]
     print("Running interactive test on "+shortfile)
     outname = "{}_output.txt".format(shortfile)
-    with open("test/output/"+outname, "w") as outfile:
+    with open(output_dir+outname, "w") as outfile:
         fullfile = interpdir+fullfile
         input_events_fn = "%s.input.txt"%fullfile
         cmd = ["./dpt", "-i", fullfile] + args
@@ -76,10 +78,9 @@ def interactive_test(fullfile, args):
             ret = subprocess.run(cmd, stdin=open(input_events_fn, "r"),stdout=outfile, stderr=subprocess.DEVNULL, timeout=3)
         except subprocess.TimeoutExpired:
             pass
-        if not filecmp.cmp("test/output/"+outname, "test/expected/"+outname):
+        if not filecmp.cmp(output_dir+outname, expected_dir+outname):
             diffs.append(shortfile)
         outfile.close()
-
 
 def check_lucidcc_compat(incompat_keywords, fullfile):
     fname = fullfile[0:-4]
@@ -92,7 +93,6 @@ def check_lucidcc_compat(incompat_keywords, fullfile):
                 if keyword in line:
                     return keyword
     return None
-
 
 def lucidcc_test(n_tests, i, fullfile, args):
     incompat_keywords = ["Counter.create", "PairArray.create", "Payload.t"]
@@ -124,11 +124,10 @@ def lucidcc_test(n_tests, i, fullfile, args):
     # ret = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL)
     # stdout_str = ret.stdout.decode("utf-8")
     # check_return(ret, fullfile)
-    # if not filecmp.cmp("test/output/"+outname, "test/expected/"+outname):
+    # if not filecmp.cmp(output_dir+outname, expected_dir+outname):
     #     print("test returned different output than expected: "+"./dpt --silent %s"%fullfile)
     #     diffs.append(shortfile)
     # outfile.close()
-
 
 if (test_tgt == "interpreter"):
     for file in interpfiles: interp_test(file, [])

@@ -1,0 +1,49 @@
+dpt: Auto-detected specification file examples/interp_tests/tables1.json
+dpt: Simulating...
+dpt: Using random seed: 0
+
+t=0: Handling event do_match(2) at switch 0, port 0
+return of table match: 1000
+table MISS. Installing hit_acn(3) for current key. 
+t=10000: Handling event do_match(2) at switch 0, port 0
+return of table match: 3
+table HIT.
+t=20000: Handling event do_install(3,2) at switch 0, port 0
+installing entry: (3 &&& 2)
+t=30000: Handling event do_match(3) at switch 0, port 0
+return of table match: 2
+table HIT.
+dpt: Final State:
+
+Switch 0 : {
+
+ Pipeline : [
+    ftbl(0) : Table [...]
+  ]
+
+ Events :   [ ]
+
+ Exits :    [ ]
+
+ Drops :    [ ]
+
+ packet events handled: 0
+ total events handled: 4
+
+}
+Switch 1 : {
+
+ Pipeline : [
+    ftbl(0) : Table [...]
+  ]
+
+ Events :   [ ]
+
+ Exits :    [ ]
+
+ Drops :    [ ]
+
+ packet events handled: 0
+ total events handled: 0
+
+}

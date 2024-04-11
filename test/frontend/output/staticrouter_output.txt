@@ -1,0 +1,16 @@
+{
+  "printf": "packet entered switch 0 from port 99. Forwarding out of port: 0",
+  "switch": 0
+}
+{
+  "printf": "packet entered switch 1 from port 0. Forwarding out of port: 1",
+  "switch": 1
+}
+{ "printf": "counting packet with src=11 at switch 0", "switch": 0 }
+{
+  "printf": "packet entered switch 3 from port 0. Forwarding out of port: 99",
+  "switch": 3
+}
+{ "printf": "counting packet with src=11 at switch 1", "switch": 1 }
+{"name":"ip_pkt","args":[11,22],"locations":["3:99"],"timestamp":3000}
+{ "printf": "counting packet with src=11 at switch 3", "switch": 3 }

@@ -53,7 +53,7 @@ all:
 generatedVisitors: src/lib/frontend/Syntax.processed.ml
 
 test: default
-	python3 ./test/runtests.py
+	python3 ./test/frontend/runtests.py
 
 EXPECTED_SDE_VER := bf-sde-9.13.0
 # cd into test/backend and then call ./runtests.sh

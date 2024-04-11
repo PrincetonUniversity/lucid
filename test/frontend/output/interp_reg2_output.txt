@@ -1,0 +1,32 @@
+dpt: Auto-detected specification file examples/interp_tests/interp_reg2.json
+dpt: Simulating...
+dpt: Using random seed: 0
+
+t=0: Handling event in(10398247,1,2,3,4,4294967295,0) at switch 0, port 0
+t=100: Handling event in(10398247,1,2,3,4,10,0) at switch 0, port 0
+t=200: Handling event in(10398247,1,2,3,4,10,19) at switch 0, port 0
+t=300: Handling event in(10398247,1,2,3,4,11,19) at switch 0, port 0
+t=400: Handling event in(10398247,1,2,5,4,10,0) at switch 0, port 0
+t=500: Handling event in(10398247,1,2,3,11,10,0) at switch 0, port 0
+t=600: Handling event out(807691391) at switch 0, port 196
+t=700: Handling event out(517672782) at switch 0, port 196
+t=800: Handling event out(572862758) at switch 0, port 196
+t=900: Handling event out(162398454) at switch 0, port 196
+t=1000: Handling event out(1002403229) at switch 0, port 196
+t=1100: Handling event out(875870293) at switch 0, port 196
+dpt: Final State:
+
+Switch 0 : {
+
+ Pipeline : [ ]
+
+ Events :   [ ]
+
+ Exits :    [ ]
+
+ Drops :    [ ]
+
+ packet events handled: 0
+ total events handled: 12
+
+}

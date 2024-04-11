@@ -1,0 +1,27 @@
+dpt: Auto-detected symbolic file examples/interp_tests/symbolics.symb
+dpt: Auto-detected specification file examples/interp_tests/symbolics.json
+dpt: Simulating...
+dpt: Using random seed: 0
+
+t=0: Handling event in(0) at switch 0, port 0
+dpt: Final State:
+
+Switch 0 : {
+
+ Pipeline : [
+    arrs_0(0) : [0u32; 0u32; 0u32; 0u32]
+    arrs_1(1) : [0u32; 2u32; 0u32; 0u32]
+    arrs_2(2) : [0u32; 0u32; 4u32; 0u32]
+    arrs_3(3) : [0u32; 0u32; 0u32; 6u32]
+  ]
+
+ Events :   [ ]
+
+ Exits :    [ ]
+
+ Drops :    [ ]
+
+ packet events handled: 0
+ total events handled: 1
+
+}

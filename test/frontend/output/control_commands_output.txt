@@ -1,0 +1,39 @@
+dpt: Auto-detected specification file examples/interp_tests/control_commands.json
+dpt: Simulating...
+dpt: Using random seed: 0
+
+{ "array": "myarr", "index": 0, "value": [ 10 ] }
+t=5: Handling event pktin(1,1) at switch 0, port 0
+table result: 10
+{ "array": "myarr", "index": 0, "value": [ 1 ] }
+t=7: Handling event pktin(1,2) at switch 0, port 0
+table result: 20
+{ "array": "myarr", "index": 0, "value": [ 2 ] }
+t=9: Handling event pktin(1,3) at switch 0, port 0
+table result: 10
+{ "array": "myarr", "index": 0, "value": [ 3 ] }
+{
+  "array": "myarr",
+  "start": 0,
+  "end": 8,
+  "values": [ [ 3 ], [ 10 ], [ 10 ], [ 10 ], [ 10 ], [ 10 ], [ 10 ], [ 10 ] ]
+}
+dpt: Final State:
+
+Switch 0 : {
+
+ Pipeline : [
+    myarr(0) : [3u32; 10u32; 10u32; 10u32; 10u32; 10u32; 10u32; 10u32]
+    ftbl(1) : Table [...]
+  ]
+
+ Events :   [ ]
+
+ Exits :    [ ]
+
+ Drops :    [ ]
+
+ packet events handled: 0
+ total events handled: 3
+
+}
