@@ -140,5 +140,14 @@ let global_replacer =
   end
 ;;
 
+let rec delete_global_ty_decls ds = 
+  match ds with
+  | [] -> []
+  | d :: ds' -> 
+    match d.d with
+    | DUserTy(_, _, ty) when (is_global ty && is_trecord ty) -> delete_global_ty_decls ds'
+    | _ -> d :: delete_global_ty_decls ds'
 
-let eliminate_globals ds = global_replacer#visit_decls () ds
+
+
+let eliminate_globals ds = global_replacer#visit_decls () (delete_global_ty_decls ds)

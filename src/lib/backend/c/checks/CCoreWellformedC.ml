@@ -65,6 +65,10 @@ let bitint_checker = object
           (CCorePPrint.id_to_string id)) 
     params
   method! visit_ty () ty = 
+    (* left off here. We actually just want to check structs that are event arguments.
+       ./lucidcc examples/interp_tests/module_aliasing.dpt -o /home/jsonch/Desktop/gits/lucid/test/c/output/module_aliasing.c --debug
+    
+    *)
     super#visit_ty () ty;
     let ty = base_type ty in
     match ty.raw_ty with 

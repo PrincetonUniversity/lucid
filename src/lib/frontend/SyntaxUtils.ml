@@ -703,3 +703,9 @@ let is_tbuiltin ty =
     | TBuiltin _ -> true
     | _ -> false
 ;;
+
+let is_trecord ty = 
+  match ty.raw_ty with 
+    | TRecord _ -> true
+    | _ -> false
+;;

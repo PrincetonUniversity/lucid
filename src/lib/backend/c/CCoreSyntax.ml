@@ -327,7 +327,7 @@ let rec bitsizeof_ty ty =
 and bitsizeof_ty_exn ty = 
   match bitsizeof_ty ty with 
   | Some size -> size
-  | None -> failwith "bitsizeof_ty_exn: got an unsizeable type"
+  | None -> failwith@@"bitsizeof_ty_exn: got an unsizeable type >>>> "^(show_ty ty)^" <<<<"
 
 let size_of_ty ty = 
   let n = bitsizeof_ty_exn ty in
