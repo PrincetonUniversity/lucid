@@ -1,0 +1,27 @@
+{
+    "events":[
+        {
+            "type": "command", 
+            "name":"Table.install", 
+            "args":{
+                "table":"mytbl", 
+                "key":["16909057<32>"], 
+                "action":"mytbl.get_flag", 
+                "args":["false"]
+            }
+        },  
+        {
+            "type": "command", 
+            "name":"Table.install", 
+            "args":{
+                "table":"mytbl", 
+                "key":["16909056<32>"], 
+                "mask":["4294967040<32>"], 
+                "action":"mytbl.get_flag", 
+                "args":["true"]
+            }
+        },
+        {"name":"ip_pkt", "args":[16909056]},
+        {"name":"ip_pkt", "args":[16909057]}
+    ]
+}

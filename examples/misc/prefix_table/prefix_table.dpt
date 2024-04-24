@@ -1,0 +1,94 @@
+/*
+
+========== converting prefixes to masks =========
+A prefix (e.g., 1.2.3.0/24) has two parts: 
+    1. a key, which is the "base" part of the prefix (i.e., the part before the "/24")
+    2. a prefix length, which indicates which bits of the key are significant 
+        (i.e., the "/24" means the first 24 bits are significant)
+
+You have to convert the key to an integer and then use the prefix length to create a mask.
+
+For example, say you want to add a rule for 1.2.3.0/24. 
+The integer value of 1.2.3.0 is 16909056 (1*256^3 + 2*256^2 + 3*256 + 0),
+and the mask for a /24 prefix is 0xFFFFFF00 (24 bits set to 1, 8 bits set to 0).
+As a decimal integer, the mask is 0xFFFFFF00 = 4294967040.
+
+so, prefix 1.2.3.0/24, written as a value and mask, is 16909056<32> and 4294967040<32>.
+And so you want a Table.install command (in the json) with that value and mask, for example: 
+{
+    "type": "command", 
+    "name":"Table.install", 
+    "args":{
+        "table":"mytbl", 
+        "key":["16909056<32>"], 
+        "mask":["4294967040<32>"], 
+        "action":"mytbl.get_flag", 
+        "args":["true"]
+    }
+}
+
+This rule will match anything in prefix 1.2.3.0/24 and return "true".
+For example, 1.2.3.1, which is 16909057, will match this rule.
+But 16909054, which is 1.2.2.255, will not. 
+
+
+========== match order =========
+Usually when you match on prefixes, you want the longest prefix to match first.
+One way to do this in Lucid is to add the rules for the longer prefixes first, 
+because the lucid interpreter will match rules in the order they are added to the table.
+
+For example, suppose that the json we add these two rules: 
+        {
+            "type": "command", 
+            "name":"Table.install", 
+            "args":{
+                "table":"mytbl", 
+                "key":["16909057<32>"], 
+                "action":"mytbl.get_flag", 
+                "args":["false"]
+            }
+        },  
+        {
+            "type": "command", 
+            "name":"Table.install", 
+            "args":{
+                "table":"mytbl", 
+                "key":["16909056<32>"], 
+                "mask":["4294967040<32>"], 
+                "action":"mytbl.get_flag", 
+                "args":["true"]
+            }
+        }
+
+Then, when we run the program, the ip address 16909057 (1.2.3.1) will match the "false" rule
+and anything else in the (1.2.3.0/24) subnet will match the true rule.
+
+*/
+
+table_type mytbl_t = {
+    key_type: (int)
+    arg_type: ()
+    ret_type: bool
+}
+
+action_constr get_flag(bool flag) = {
+    return action bool get_flag_action() {
+        return flag;
+    };
+};
+
+// table that returns "false" by default
+global mytbl_t mytbl = table_create<mytbl_t>((get_flag),1024, get_flag(false)); 
+
+
+
+event ip_pkt(int dst);
+handle ip_pkt(int dst) {
+    printf("inside of ip_pkt(%d)", dst);
+    bool flag = table_match(mytbl, dst, ());
+    if (flag) {
+        printf("flag is true");
+    } else {
+        printf("flag is false");
+    }
+}
