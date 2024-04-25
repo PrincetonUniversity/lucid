@@ -44,7 +44,7 @@ symbolic bool b;
 
 module Filter = BF if b else BloomFilterTimeout;
 
-global Filter.t<32, 2, 4> bf1 = Filter.create(4, [0; 1; 2; 3], 2000, 10);
+global Filter.t<32, 8, 4> bf1 = Filter.create(256, [0; 1; 2; 3], 2000, 10);
 
 event allowed(int x) { skip; }
 event denied(int x) { skip; }

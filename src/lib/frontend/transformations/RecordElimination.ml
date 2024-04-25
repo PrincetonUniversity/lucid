@@ -140,5 +140,10 @@ let global_replacer =
   end
 ;;
 
+let delete_global_user_tys decls =
+  List.filter (fun decl -> match decl.d with
+    | DUserTy(_, _, ty)-> not@@is_global ty
+    | _ -> true) decls
+;;
 
-let eliminate_globals ds = global_replacer#visit_decls () ds
+let eliminate_globals ds = global_replacer#visit_decls () ds |> delete_global_user_tys

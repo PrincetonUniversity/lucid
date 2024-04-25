@@ -35,8 +35,8 @@ dpt: Final State:
 Switch 0 : {
 
  Pipeline : [
-    learned_macs_1(0) : [1u1; 1u1; 0u1; 0u1]
-    learned_macs_2(1) : [1u1; 1u1; 0u1; 0u1]
+    learned_macs_1(0) : [1u8; 1u8; 0u8; 0u8]
+    learned_macs_2(1) : [1u8; 1u8; 0u8; 0u8]
     mac_table(2) : [7u8; 1u8; 0u8; 0u8]
   ]
 
@@ -57,8 +57,8 @@ Switch 0 : {
 Switch 1 : {
 
  Pipeline : [
-    learned_macs_1(0) : [1u1; 1u1; 0u1; 0u1]
-    learned_macs_2(1) : [1u1; 1u1; 0u1; 0u1]
+    learned_macs_1(0) : [1u8; 1u8; 0u8; 0u8]
+    learned_macs_2(1) : [1u8; 1u8; 0u8; 0u8]
     mac_table(2) : [0u8; 2u8; 0u8; 0u8]
   ]
 
@@ -78,8 +78,8 @@ Switch 1 : {
 Switch 2 : {
 
  Pipeline : [
-    learned_macs_1(0) : [1u1; 1u1; 1u1; 0u1]
-    learned_macs_2(1) : [1u1; 1u1; 1u1; 0u1]
+    learned_macs_1(0) : [1u8; 1u8; 1u8; 0u8]
+    learned_macs_2(1) : [1u8; 1u8; 1u8; 0u8]
     mac_table(2) : [1u8; 3u8; 4u8; 0u8]
   ]
 
@@ -98,8 +98,8 @@ Switch 2 : {
 Switch 3 : {
 
  Pipeline : [
-    learned_macs_1(0) : [1u1; 1u1; 1u1; 0u1]
-    learned_macs_2(1) : [1u1; 1u1; 1u1; 0u1]
+    learned_macs_1(0) : [1u8; 1u8; 1u8; 0u8]
+    learned_macs_2(1) : [1u8; 1u8; 1u8; 0u8]
     mac_table(2) : [2u8; 9u8; 2u8; 0u8]
   ]
 
@@ -119,8 +119,8 @@ Switch 3 : {
 Switch 4 : {
 
  Pipeline : [
-    learned_macs_1(0) : [1u1; 0u1; 1u1; 0u1]
-    learned_macs_2(1) : [1u1; 0u1; 1u1; 0u1]
+    learned_macs_1(0) : [1u8; 0u8; 1u8; 0u8]
+    learned_macs_2(1) : [1u8; 0u8; 1u8; 0u8]
     mac_table(2) : [2u8; 0u8; 42u8; 0u8]
   ]
 

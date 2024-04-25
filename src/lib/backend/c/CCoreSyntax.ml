@@ -424,8 +424,8 @@ let rec default_value ty = match ty.raw_ty with
     venum ((List.hd cases) |> fst) ty
   | TBuiltin _ -> failwith "no default value for builtin type"
   | TName _ -> failwith "no default value for named type"
-  | TAbstract(_, ty) -> default_value ty
-  | TPtr(ty, None) -> default_value ty
+  | TAbstract(_, inner_ty) -> {(default_value inner_ty) with vty=ty}
+  | TPtr(inner_ty, None) -> {(default_value inner_ty) with vty=ty}
   | TPtr(ty, Some(IConst(n))) -> vlist (List.init n (fun _ -> default_value ty))
   | TPtr(_, Some _) -> failwith "no default value for list of unknown length"
 ;;

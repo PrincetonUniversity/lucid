@@ -1,14 +1,14 @@
-global Array.t<1> learned_macs_1 = Array.create(4); // True if we've learnd this mac address
-global Array.t<1> learned_macs_2 = Array.create(4); // Second copy so we can access it twice
+global Array.t<8> learned_macs_1 = Array.create(4); // True if we've learnd this mac address
+global Array.t<8> learned_macs_2 = Array.create(4); // Second copy so we can access it twice
 global Array.t<8> mac_table = Array.create(4); // 2-bit mac addresses, 8-bit ports
 
-event learn_mac(int<2> mac, int<8> out_port) {
+event learn_mac(int<8> mac, int<8> out_port) {
   Array.set(learned_macs_1, mac, 1);
   Array.set(learned_macs_2, mac, 1);
   Array.set(mac_table, mac, out_port);
 }
   
-event eth(int<2> src_mac, int<2> dst_mac) {
+event eth(int<8> src_mac, int<8> dst_mac) {
   // Learn src_mac if necessary
   if (Array.get(learned_macs_1, src_mac) == 0) {
     generate learn_mac(src_mac, (int<8>)ingress_port);

@@ -302,8 +302,11 @@ let rec infer_exp env exp : env * exp =
           print_endline@@">>>> "^(CCorePPrint.exp_to_string exp)^"<<<< ";
           ty_err str
         in
+        (* use the function types, in case they have names *)
+        let args = List.map2 (fun exp ty -> {exp with ety=ty}) inf_args param_tys in
+
         (* TODO: update unify for list lengths *)
-        let e = ECall{f=inf_f; args=inf_args; call_kind=CFun} in
+        let e = ECall{f=inf_f; args=args; call_kind=CFun} in
         env, {exp with e; ety=ret_ty}
     )
     | EOp(op, args) -> 
@@ -587,12 +590,13 @@ let rec infer_statement env (stmt:statement) =
     env, {stmt with s=SMatch(inf_exps, inf_branches)}
   | SRet(Some(exp)) -> (
     let env, inf_exp = infer_exp env exp in
-    match env.ret_ty with
-    | Some ret_ty -> 
-      let env = unify_ty env ret_ty inf_exp.ety in
-      env, {stmt with s=SRet(Some(inf_exp))}
-    | None -> 
-      env, {stmt with s=SRet(Some(inf_exp))}
+    (* what _should_ the return type be, according to the environment *)
+    let env_ret_ty = match env.ret_ty with 
+      | Some ty -> ty
+      | None -> tunit
+    in
+    let env = unify_ty env env_ret_ty inf_exp.ety in
+    env, {stmt with s=SRet(Some({inf_exp with ety=env_ret_ty}))}
   )
   | SRet(None) -> env, stmt
   | SFor{idx; bound; stmt; guard} -> 
@@ -672,16 +676,9 @@ let rec infer_decl env decl : env * decl option =
     let env = {env with ret_ty=Some(ret_ty)} in    
     let env = add_vars env (List.map (fun f -> f|> fst |> Cid.id) params) (List.map snd params) in
     (* check the body *)
-    let env, inf_stmt = infer_statement env statement in
-    (* check the return type *)
-    let inf_ret_ty = match env.ret_ty with 
-      | Some ty -> ty
-      | None -> tunit
-    in
+    let _, inf_stmt = infer_statement env statement in
     (* return to outer env *)
     let env = outer_env in
-    (* unify the return type *)
-    let env = unify_ty env ret_ty inf_ret_ty in
     (* update the environment with the function, except for handlers, 
        because a handler is never referenced. *)
     let fun_ty = tfun_kind fun_kind (List.map snd params) ret_ty  in
@@ -689,7 +686,7 @@ let rec infer_decl env decl : env * decl option =
       then add_var env (id) fun_ty
       else env
     in
-    env, {decl with d=DFun(fun_kind, id, inf_ret_ty, params, BStatement(inf_stmt))} |> Option.some
+    env, {decl with d=DFun(fun_kind, id, ret_ty, params, BStatement(inf_stmt))} |> Option.some
   | DFun(fun_kind, id, ret_ty, params, BExtern) -> 
     let fun_ty = tfun_kind fun_kind (List.map snd params) ret_ty  in
     let env = add_var env (id) fun_ty in

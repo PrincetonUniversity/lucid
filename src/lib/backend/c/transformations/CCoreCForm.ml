@@ -105,11 +105,15 @@ let normalize_matches decls =
   CCoreTransformers.subst_statement#visit_decls transform_match decls
 ;;
 
+
 (* ensure that record, union, and tuple expressions only appear in declarations *)
 let is_initializer exp = match exp.e with 
   | EUnion _ -> true 
   | ERecord _ -> true
   | ETuple _ -> true
+  | EVal({v=VUnion _}) -> true
+  | EVal({v=VRecord _}) -> true
+  | EVal({v=VTuple _}) -> true
   | _ -> false
 ;;
 let normalize_struct_inits decls = 
@@ -118,13 +122,13 @@ let normalize_struct_inits decls =
     val mutable new_stmts = []
     inherit [_] s_map as super
     
-    method! visit_statement () stmt = 
+    method! visit_statement rty_opt stmt = 
       match stmt.s with 
       (* creating a new local -- nothing has to change, so don't recurse *)
       | SAssign(OLocal(a, b), exp) -> (
         (* exp can be an initializer, but its subnodes can't *)
         new_stmts <- [];
-        let exp = super#visit_exp () exp in
+        let exp = super#visit_exp rty_opt exp in
         match new_stmts with 
         | [] -> stmt
         | _ -> 
@@ -139,7 +143,7 @@ let normalize_struct_inits decls =
       (* pull initializers out of other statements *)
       | _ -> (
         new_stmts <- [];
-        let stmt = super#visit_statement () stmt in
+        let stmt = super#visit_statement rty_opt stmt in
           match new_stmts with 
           | [] -> stmt
           | _ -> 
@@ -149,18 +153,26 @@ let normalize_struct_inits decls =
             new_stmts <- []; (* have to clear new_stmts, else parent will add it in too. *)
             stmt'
       )
-    method! visit_exp () exp = 
+    method! visit_decl rty_opt decl = 
+      match decl.d with
+        | DVar _ -> decl
+        | _ -> super#visit_decl rty_opt decl
+    method! visit_exp rty_opt exp = 
       if (is_initializer exp) 
       then (
         let id = Id.fresh_name "tmp" in
         let stmt = slocal (Cid.id id) exp.ety exp in
         new_stmts <- new_stmts@[stmt];
         evar (Cid.id id) exp.ety)
-      else exp
+      else (
+        let exp = super#visit_exp rty_opt exp in
+        exp
+      )
     end
   in
-  v#visit_decls () decls
+  v#visit_decls None decls
 ;;
+
 
 let delete_empty_tuples decls = 
   (* remove everything relating to empty tuples. 

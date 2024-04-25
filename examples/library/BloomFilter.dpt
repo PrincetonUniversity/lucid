@@ -9,7 +9,7 @@ module BloomFilter : {
 }
 {
   type t<'key_sz, 'idx_sz, 'k> = {
-    Array.t<1>['k] arrs;
+    Array.t<8>['k] arrs;
     int['k] hash_seeds;
     int<'idx_sz> max_idx;
   }
@@ -29,7 +29,7 @@ module BloomFilter : {
   fun bool in_filter(t<'a, 'b, 'k> filter, int<'a> key) {
     bool acc = true;
     for (i < 'k) {
-      int<1> x = Array.get(filter#arrs[i], hash<'b>(filter#hash_seeds[i], key));
+      int<8> x = Array.get(filter#arrs[i], hash<'b>(filter#hash_seeds[i], key));
       acc = acc && x == 1;
     }
     return acc;

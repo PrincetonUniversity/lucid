@@ -40,6 +40,13 @@ let is_smatch statement = match statement.s with
   | _ -> false
 ;;
 
+let ends_with_smatch statement = 
+  let stmts = to_stmt_block statement in
+  match List.rev stmts with
+  | [] -> false
+  | stmt::_ -> is_smatch stmt
+;;
+
 (* monomorphization and code gen sometimes needs type names *)
 let ty_to_namestr ty = match ty.raw_ty with 
   | TInt _ | TBool | TAbstract _ -> CCorePPrint.ty_to_string ~use_abstract_name:true ty

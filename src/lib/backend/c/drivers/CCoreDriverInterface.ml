@@ -86,7 +86,8 @@ void copy_payload(bytes_t*  buf_out , bytes_t*  buf_in ) {
 let default_imports = [
    CCoreSyntax.dinclude "<stdio.h>";
    CCoreSyntax.dinclude "<stdlib.h>";
-   CCoreSyntax.dinclude "<stdint.h>"
+   CCoreSyntax.dinclude "<stdint.h>";
+   CCoreSyntax.dinclude "<stdbool.h>";
 ];;
     
 let default_pkt_handler = dforiegn [%string

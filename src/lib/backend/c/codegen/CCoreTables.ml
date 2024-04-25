@@ -95,7 +95,7 @@ let table_instance_type tbl_id acns_enum_ty const_action_arg_ty tbl_cell_ty tbl_
     (Cid.str_cons_plain "ty" tbl_id)
     (
       trecord
-        [id "default", trecord [id "action_tag", acns_enum_ty; 
+        [id "_default", trecord [id "action_tag", acns_enum_ty; 
                                 id "action_arg", const_action_arg_ty];
         id "entries",tlist tbl_cell_ty tbl_len])
 ;;
@@ -110,7 +110,7 @@ let table_create (tbl_ty : ty) (def_enum_id : cid) (acn_enum_ty : ty) (def_arg :
     id"action_arg", def_arg
   ] in
   let base_ty_value = vrecord [
-    id"default", default;
+    id"_default", default;
     (* its a global value. Maybe this should just be 
        baked into a special declaration for globals? *)
     id"entries", (zero_list entries_ty)
@@ -142,10 +142,10 @@ let table_lookup spec =
     let action_evar = efunref (untag action_tag) action_ty in
     (case spec.actions_enum_ty)
     action_tag
-      ( id"rv" /:= (action_evar /** [tbl/.id"default"/.id"action_arg"; arg_param]))
+      ( id"rv" /:= (action_evar /** [tbl/.id"_default"/.id"action_arg"; arg_param]))
   in
   let s_apply_default = smatch
-    [(tbl/.id"default"/.id"action_tag")]
+    [(tbl/.id"_default"/.id"action_tag")]
     (List.map apply_default_branch action_tags)
   in
   let idx = id "_idx" in

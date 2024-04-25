@@ -135,16 +135,16 @@ let rec v_to_string (v: v) : string =
   | VRecord(labels, es) -> 
     let label_strs = List.map id_to_string labels in
     let es_strs = List.map value_to_string es in
-    let field_strs = List.map2 (fun l e -> "." ^l ^ " = " ^ e ^";") label_strs es_strs in
-    let fields_str = String.concat " " field_strs in    
+    let field_strs = List.map2 (fun l e -> "." ^l ^ " = " ^ e) label_strs es_strs in
+    let fields_str = String.concat ", " field_strs in    
     "{" ^ fields_str ^ "}"
   | VUnion(label, v, _) -> 
     sprintf "{%s = %s}" (id_to_string label) (value_to_string v)
   | VTuple(es) -> 
     let label_strs = List.mapi (fun i _ -> "_" ^ string_of_int i) es in
     let es_strs = List.map value_to_string es in
-    let field_strs = List.map2 (fun l e -> "." ^l ^ " = " ^ e ^";") label_strs es_strs in
-    let fields_str = String.concat " " field_strs in    
+    let field_strs = List.map2 (fun l e -> "." ^l ^ " = " ^ e ) label_strs es_strs in
+    let fields_str = String.concat ", " field_strs in    
     "{" ^ fields_str ^ "}"
   | VList vs -> "{" ^ String.concat ", " (List.map value_to_string vs) ^ "}"
   | VBits {ternary; bits} -> 
@@ -166,14 +166,14 @@ let rec e_to_string (e: e) : string =
   | EAddr(cid) -> sprintf "(&%s)" (cid_to_string cid)
   | ETuple es -> 
     let es_strs = List.map exp_to_string es in
-    let field_strs = List.mapi (fun i e -> "." ^ "_" ^ string_of_int i ^ " = " ^ e ^";") es_strs in
+    let field_strs = List.mapi (fun i e -> "." ^ "_" ^ string_of_int i ^ " = " ^ e ^",") es_strs in
     let fields_str = String.concat " " field_strs in    
     "{" ^ fields_str ^ "}"
   | ERecord(labels, es) -> 
     let label_strs = List.map id_to_string labels in
     let es_strs = List.map exp_to_string es in
-    let field_strs = List.map2 (fun l e -> "." ^l ^ " = " ^ e ^",") label_strs es_strs in
-    let fields_str = String.concat " " field_strs in    
+    let field_strs = List.map2 (fun l e -> "." ^l ^ " = " ^ e) label_strs es_strs in
+    let fields_str = String.concat ", " field_strs in    
     "{" ^ fields_str ^ "}"
   | EUnion(label, exp, _) -> 
     sprintf "{.%s = %s}" (id_to_string label) (exp_to_string exp)
@@ -283,13 +283,17 @@ let rec s_to_string (s: s) : string =
                   | Some e -> exp_to_string e 
                   | None -> "") ^ ";"  
   | SFor{idx; bound; stmt; guard=None} -> 
-    "for (" ^ (id_to_string idx) ^ " < " ^ arrlen_to_string bound ^ ") {\n" ^ 
-    indent 2 (statement_to_string stmt) ^ "\n}"
-  | SFor{idx; bound; stmt; guard=Some(guard)} -> 
-    "for (" ^ (id_to_string idx) ^ " < " ^ arrlen_to_string bound ^ ") while ("^(id_to_string guard)^" == true) {\n" ^ 
-    indent 2 (statement_to_string stmt) ^ "\n}"
+    let loop_init = sprintf "for (int %s = 0; %s < %s; %s++) {\n" (id_to_string idx) (id_to_string idx) (arrlen_to_string bound) (id_to_string idx) in
+    let loop_body = indent 2 (statement_to_string stmt) in
+    loop_init ^ loop_body ^ "\n}"
+  | SFor{idx; bound; stmt; guard=Some(guard_id)} -> 
+    let guard_init = sprintf "bool %s = true;\n" (id_to_string guard_id) in
+    let loop_init = sprintf "for (int %s = 0; %s < %s; %s++) {\n" (id_to_string idx) (id_to_string idx) (arrlen_to_string bound) (id_to_string idx) in
+    let loop_body = indent 2 (statement_to_string stmt) in
+    let loop_guard = indent 2 @@ sprintf "if (!%s) break;\n" (id_to_string guard_id) in
+    guard_init ^ loop_init ^ loop_body ^ loop_guard ^ "\n}"
   | SForEver(stmt) -> 
-    "forever {\n" ^ indent 2 (statement_to_string stmt) ^ "\n}"
+    "while (1) {\n" ^ indent 2 (statement_to_string stmt) ^ "\n}"
 
 and pat_to_string (p: pat) : string =
   match p with

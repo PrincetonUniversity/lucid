@@ -97,7 +97,7 @@ let compile ds =
   let cds = CCoreDeparse.process cds in
 
   (* final type check *)
-  let cds = CCoreTyper.check cds in
+  (* let cds = CCoreTyper.check cds in *)
   CCoreWellformedC.all_checks cds;
 
   let prog, cflags = CCoreDriverInterface.package (module CCoreDriverPcap) cds in

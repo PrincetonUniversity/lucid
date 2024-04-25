@@ -263,7 +263,7 @@ let transform_parser id params body =
     (transform_stmt pkt_var parsed_tys_acc) 
     body
   in
-  let body = if is_smatch body 
+  let body = if ends_with_smatch body 
     then sseq body (sret parser_ret_drop)
     else body
   in
