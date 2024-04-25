@@ -87,8 +87,8 @@ let deparse_fun event_t =
   let tag_cids = List.split (extract_tenum (base_type tag_enum_ty)) |> fst in
   let event_struct_tys = extract_trecord_or_union (base_type data_union_ty) |> snd in
   (* let tag_symbols = List.map (fun cid -> eval@@vsymbol cid tag_enum_ty) tag_cids in *)
-  let ev_out_param = id"ev_out", tref event_t in
-  let buf_out_param = id"buf_out", tref bytes_t in
+  let ev_out_param = cid"ev_out", tref event_t in
+  let buf_out_param = cid"buf_out", tref bytes_t in
   let ev_out = param_evar ev_out_param in
   let buf_out = param_evar buf_out_param in
   (* start function def *)
@@ -96,32 +96,32 @@ let deparse_fun event_t =
   let params = [ev_out_param; buf_out_param] in
   let body = stmts [
     slocal (cid"bytes_written") (tint 32) (default_exp (tint 32));
-    sif (eop Eq [(ev_out/->id"is_packet");(eval@@vint 0 8)])
+    sif (eop Eq [(ev_out/->cid"is_packet");(eval@@vint 0 8)])
       (* not a packet / raw event *)
       (stmts [
         (* set empty eth header *)
-        memset_n (buf_out/->id"cur") (vint 0 32) 3; (* 12 bytes *)
-        memset_n (ptr_incr (buf_out/->id"cur") 12) (vint 0 16) 1; (* 2 bytes *)
-        sptr_incr (buf_out/->id"cur") 14;
+        memset_n (buf_out/->cid"cur") (vint 0 32) 3; (* 12 bytes *)
+        memset_n (ptr_incr (buf_out/->cid"cur") 12) (vint 0 16) 1; (* 2 bytes *)
+        sptr_incr (buf_out/->cid"cur") 14;
         (* set event type *)
-        memcpy (buf_out/->id"cur") (ev_out/->id"tag");
-        sptr_incr (buf_out/->id"cur") 2;
+        memcpy (buf_out/->cid"cur") (ev_out/->cid"tag");
+        sptr_incr (buf_out/->cid"cur") 2;
         sassign 
           (cid"bytes_written") 
           ((evar (cid"bytes_written") (tint 32))/+(eval@@vint 16 32))
       ])
       (snoop);
-    smatch [ev_out/->id"tag"] 
+    smatch [ev_out/->cid"tag"] 
       (* one branch for each event *)
       (List.map2 
         (fun tag_cid event_struct_ty -> 
-          let this_event_data_field = CCoreEvents.event_untag (Cid.to_id tag_cid) in
+          let this_event_data_field = CCoreEvents.event_untag ( tag_cid) in
           [PVal(vsymbol tag_cid tag_enum_ty)],
           stmts [
             (* copy to memory *)
-            memcpy (buf_out/->id"cur") ((ev_out/->id"data")/.this_event_data_field);
+            memcpy (buf_out/->cid"cur") ((ev_out/->cid"data")/.( this_event_data_field));
             (* increment pointer *)
-            sptr_incr (buf_out/->id"cur") (size_of_ty event_struct_ty);
+            sptr_incr (buf_out/->cid"cur") (size_of_ty event_struct_ty);
             sassign 
               (cid"bytes_written") 
               ((evar (cid"bytes_written") (tint 32))/+(eval@@vint (size_of_ty event_struct_ty) 32));

@@ -23,6 +23,7 @@ val from_string : string -> t
 val to_string : t -> string
 val to_string_delim : string -> t -> string
 val names : t -> string list
+val name : t -> string
 val to_id : t -> Id.t
 val to_ids : t -> Id.t list
 val to_ids_prefix : t -> Id.t * Id.t list
@@ -43,3 +44,4 @@ val replace : (t * 'a) list -> t -> 'a -> (t * 'a) list
 val remove : (t * 'a) list -> t -> (t * 'a) list
 val modify_tail : (id -> id) -> t -> t
 val freshen_last : t -> t
+val fresh_name : string -> t

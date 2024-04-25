@@ -69,21 +69,21 @@ let table_cell_type tbl_id key_ty acns_enum_ty const_action_arg_ty : ty =
   tabstract_cid 
     tblcellty_id
     (trecord [
-      id"valid", tbool;
-      id"key", key_ty;
-      id"mask", key_ty;
-      id"action_tag", acns_enum_ty;
-      id"action_arg", const_action_arg_ty;      
+      cid"valid", tbool;
+      cid"key", key_ty;
+      cid"mask", key_ty;
+      cid"action_tag", acns_enum_ty;
+      cid"action_arg", const_action_arg_ty;      
     ])
 ;;
 
 let table_cell tbl_id key_param mask_param action_param const_arg_param =
   let exp = erecord [
-          id "valid", eval (vbool true); 
-          id "key", key_param; 
-          id "mask", mask_param;
-          id "action_tag", action_param; 
-          id "action_arg", const_arg_param]
+         cid "valid", eval (vbool true); 
+          cid "key", key_param; 
+          cid "mask", mask_param;
+          cid "action_tag", action_param; 
+          cid "action_arg", const_arg_param]
   in
   {exp with ety=table_cell_type tbl_id key_param.ety action_param.ety const_arg_param.ety;}
 ;;
@@ -95,25 +95,25 @@ let table_instance_type tbl_id acns_enum_ty const_action_arg_ty tbl_cell_ty tbl_
     (Cid.str_cons_plain "ty" tbl_id)
     (
       trecord
-        [id "_default", trecord [id "action_tag", acns_enum_ty; 
-                                id "action_arg", const_action_arg_ty];
-        id "entries",tlist tbl_cell_ty tbl_len])
+        [cid "_default", trecord [cid "action_tag", acns_enum_ty; 
+                                cid "action_arg", const_action_arg_ty];
+        cid "entries",tlist tbl_cell_ty tbl_len])
 ;;
 
 let table_create (tbl_ty : ty) (def_enum_id : cid) (acn_enum_ty : ty) (def_arg : value) = 
   (* let fields, tys = extract_trecord (extract_tref tbl_ty) in *)
   let fields, tys = extract_trecord tbl_ty in
   let field_ty = List.combine fields tys in 
-  let entries_ty = List.assoc (id"entries") field_ty in
+  let entries_ty = List.assoc (cid"entries") field_ty in
   let default = vrecord [
-    id"action_tag", venum def_enum_id acn_enum_ty;
-    id"action_arg", def_arg
+    cid"action_tag", venum def_enum_id acn_enum_ty;
+    cid"action_arg", def_arg
   ] in
   let base_ty_value = vrecord [
-    id"_default", default;
+    cid"_default", default;
     (* its a global value. Maybe this should just be 
        baked into a special declaration for globals? *)
-    id"entries", (zero_list entries_ty)
+    cid"entries", (zero_list entries_ty)
   ] 
   in
   base_ty_value
@@ -142,39 +142,39 @@ let table_lookup spec =
     let action_evar = efunref (untag action_tag) action_ty in
     (case spec.actions_enum_ty)
     action_tag
-      ( id"rv" /:= (action_evar /** [tbl/.id"_default"/.id"action_arg"; arg_param]))
+      ( id"rv" /:= (action_evar /** [tbl/.cid"_default"/.cid"action_arg"; arg_param]))
   in
   let s_apply_default = smatch
-    [(tbl/.id"_default"/.id"action_tag")]
+    [(tbl/.cid"_default"/.cid"action_tag")]
     (List.map apply_default_branch action_tags)
   in
-  let idx = id "_idx" in
-  let idx = evar (Cid.id idx) (tint 32) in
-  let cont = id "_continue" in
+  let idx = cid "_idx" in
+  let idx = evar idx (tint 32) in
+  let cont = cid "_continue" in
   let apply_branch  entry action_tag = 
     (* tbl->entries[idx]->action_arg *)
     let action_evar = efunref ((untag action_tag)) action_ty in    
-    let eq_test_op = compound_masked_eq key_param (entry/.id"key") (entry/.id"mask") in
+    let eq_test_op = compound_masked_eq key_param (entry/.cid"key") (entry/.cid"mask") in
     case spec.actions_enum_ty
     action_tag
       (sif eq_test_op
         (stmts [
-          (id"rv" /:= (action_evar /** [((tbl/.id"entries")/@idx)/.id"action_arg"; arg_param]));
-          sassign (Cid.id cont)  (eval (vbool false));])
+          (id"rv" /:= (action_evar /** [((tbl/.cid"entries")/@idx)/.cid"action_arg"; arg_param]));
+          sassign (cont)  (eval (vbool false));])
         snoop)
   in
   
   let s_loop = 
-    swhile (id "_idx") spec.len cont 
+    swhile (cid "_idx") spec.len cont 
       (
-        let entry = (tbl/.id"entries")/@idx in
-        smatch [(entry/.id"action_tag")]
+        let entry = (tbl/.cid"entries")/@idx in
+        smatch [(entry/.cid"action_tag")]
         (List.map (apply_branch entry) action_tags);
       )
   in
   let s_ret = sret (evar (cid"rv") spec.ret_ty) in
   
-  let params = List.map extract_evar_id 
+  let params = List.map extract_evar 
     [key_param; arg_param]
   in
   dfun 
@@ -199,23 +199,23 @@ let table_install spec =
   let action_param = evar (cid "action") (spec.actions_enum_ty) in 
   let const_arg_param = evar (cid "const_arg") spec.const_arg_ty in
   let new_slot = table_cell spec.tbl_id key_param key_param action_param const_arg_param in 
-  let idx = id "_idx" in
-  let idx_var = evar (Cid.id idx) (tint 32) in
-  let cont = id "_continue" in
+  let idx = cid "_idx" in
+  let idx_var = evar (idx) (tint 32) in
+  let cont = cid "_continue" in
   let body = swhile idx spec.len cont
     (
-      let entries = eop (Project(id"entries")) [tbl] in
+      let entries = eop (Project(cid"entries")) [tbl] in
       let entry = elistget entries idx_var in
       (* let entry = (entries/@idx) in     *)
-      sif (eop Eq [entry/.id"valid";eval@@vbool false])
+      sif (eop Eq [entry/.cid"valid";eval@@vbool false])
         (stmts [
-            sassign (Cid.id cont)  (eval (vbool false));
-            (tbl/.id"entries", idx_var)/<-new_slot;            
+            sassign (cont)  (eval (vbool false));
+            (tbl/.cid"entries", idx_var)/<-new_slot;            
           ])
         snoop
     )
   in
-  let params = List.map extract_evar_id 
+  let params = List.map extract_evar 
     [key_param; action_param; const_arg_param]
   in
   let sret = sret_none in
@@ -241,23 +241,23 @@ let table_ternary_install spec =
   let action_param = evar (cid "action") (spec.actions_enum_ty) in 
   let const_arg_param = evar (cid "const_arg") spec.const_arg_ty in
   let new_slot = table_cell spec.tbl_id key_param mask_param action_param const_arg_param in 
-  let idx = id "_idx" in
-  let idx_var = evar (Cid.id idx) (tint 32) in
-  let cont = id "_continue" in
+  let idx = cid "_idx" in
+  let idx_var = evar ( idx) (tint 32) in
+  let cont = cid "_continue" in
   let body = swhile idx spec.len cont
     (
-      let entries = eop (Project(id"entries")) [tbl] in
+      let entries = eop (Project(cid"entries")) [tbl] in
       let entry = elistget entries idx_var in
       (* let entry = (entries/@idx) in     *)
-      sif (eop Eq [entry/.id"valid";eval@@vbool false])
+      sif (eop Eq [entry/.cid"valid";eval@@vbool false])
         (stmts [
-            sassign (Cid.id cont)  (eval (vbool false));
-            (tbl/.id"entries", idx_var)/<-new_slot;            
+            sassign ( cont)  (eval (vbool false));
+            (tbl/.cid"entries", idx_var)/<-new_slot;            
           ])
         snoop
     )
   in
-  let params = List.map extract_evar_id 
+  let params = List.map extract_evar
     [key_param; mask_param; action_param; const_arg_param]
   in
   let sret = sret_none in
@@ -267,7 +267,6 @@ let table_ternary_install spec =
     params
     (sseq body sret)
 ;;
-
 
 let monomorphic_table_decls actions_enum_ty decl : decls = 
   match decl.d with 

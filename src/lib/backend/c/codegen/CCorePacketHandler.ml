@@ -8,28 +8,28 @@ open CCoreUtils
     - deparse_event
 *)
 let get_event_tag t_event = 
-  let ev_param = id"ev", tref t_event in
+  let ev_param = cid"ev", tref t_event in
   dfun 
     (cid"get_event_tag")
     (tint event_tag_size)
     [ev_param]
-    (sret (ecast (tint event_tag_size) ((param_evar ev_param)/->id"tag")))
+    (sret (ecast (tint event_tag_size) ((param_evar ev_param)/->cid"tag")))
 ;;
 let reset_event_tag t_event = 
   (* this isn't right. Need an address.. *)
-  let ev_param = id"ev", tref t_event in
-  let enum_ty = ((param_evar ev_param)/->id"tag").ety in 
+  let ev_param = cid"ev", tref t_event in
+  let enum_ty = ((param_evar ev_param)/->cid"tag").ety in 
   dfun 
     (cid"reset_event_tag")
     (tunit)
     [ev_param]
-    (sassign_exp ((param_evar ev_param)/->id"tag") (ecast (enum_ty) (default_exp (tint event_tag_size))))
+    (sassign_exp ((param_evar ev_param)/->cid"tag") (ecast (enum_ty) (default_exp (tint event_tag_size))))
 ;;
 
 let reset_cursor = 
-  let buf_param = id"buf", tref tchar in
-  let len_param = id"len", tint 32 in
-  let bs_param = id"bytes", tref CCoreParse.bytes_t in
+  let buf_param = cid"buf", tref tchar in
+  let len_param = cid"len", tint 32 in
+  let bs_param = cid"bytes", tref CCoreParse.bytes_t in
   let buf = param_evar buf_param in
   let bs = param_evar bs_param in
   let len = param_evar len_param in
@@ -38,9 +38,9 @@ let reset_cursor =
     tunit
     [buf_param; len_param; bs_param]    
     (stmts [
-      sassign_exp (bs/->id"start") (buf);
-      sassign_exp (bs/->id"cur") (buf);
-      sassign_exp (bs/->id"end") (buf/+len)])
+      sassign_exp (bs/->cid"start") (buf);
+      sassign_exp (bs/->cid"cur") (buf);
+      sassign_exp (bs/->cid"end") (buf/+len)])
 ;;
 
 let pkt_handler_str = {| 
@@ -96,9 +96,9 @@ let pkt_handler = dfun_foriegn
   (cid"pkt_handler")
   (tint 32)
   [
-    id"ingress_port", tint (!CCoreConfig.cfg).port_id_size;
-    id"buf", tref tchar; id"len", tint 32; 
-    id"out_buf", tref tchar; id"out_len", tref@@tint 32; 
+    cid"ingress_port", tint (!CCoreConfig.cfg).port_id_size;
+    cid"buf", tref tchar; cid"len", tint 32; 
+    cid"out_buf", tref tchar; cid"out_len", tref@@tint 32; 
   ]
   pkt_handler_str
 ;;

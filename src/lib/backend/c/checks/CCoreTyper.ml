@@ -85,9 +85,9 @@ let rec unify_arrlen env x y =
     else ty_err "array index mismatch"
   | IConst x, IVar v 
   | IVar v , IConst x ->
-    add_constr env (Eq(fst v, (IVal x)))
+    add_constr env (Eq(Cid.name v, (IVal x)))
   | IVar v, IVar w -> 
-    add_constr env (Eq(fst v, (IVar (fst w))))
+    add_constr env (Eq(Cid.name v, (IVar (Cid.name w))))
 ;;
 
 let rec unify_lists env f_unify xs ys = 
@@ -147,7 +147,7 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
       (ty_err ("invalid record type: number of fields and types differ"));
     if (List.length l1 <> List.length l2) then 
       (ty_err ("record types have different numbers of fields"));
-    if (not (List.for_all2 Id.equal l1 l2)) then 
+    if (not (List.for_all2 Cid.equal l1 l2)) then 
       (ty_err("fields of record type are not the same"));
     if (List.length tys1 <> List.length tys2) then 
       (ty_err("record types have different numbers of types"));        
@@ -165,7 +165,7 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
   | TUnion(labels1, tys1), TUnion(labels2, tys2) -> 
     if (List.length labels1 <> List.length labels2) then 
       ty_err "union types with different numbers of labels";
-    if (not (List.for_all2 Id.equal labels1 labels2)) then 
+    if (not (List.for_all2 Cid.equal labels1 labels2)) then 
       ty_err "union types with different labels";
     unify_lists env unify_ty tys1 tys2
   | (TUnit|TBool|TEvent|TInt _|TRecord _ | TTuple _ | TName _ | TPtr _ | TUnion _
@@ -449,14 +449,14 @@ and infer_eop env op (args : exp list) : env * op * exp list * ty = match op, ar
     dprint_endline ("inf exp: "^CCorePPrint.exp_to_string inf_exp);
     dprint_endline ("inf exp ty: "^CCorePPrint.ty_to_string inf_exp.ety);
     let inf_labels, inf_tys = extract_trecord_or_union (base_type inf_exp.ety) in
-    let inf_label_names = List.map Id.name inf_labels in
+    let inf_label_names = List.map Cid.name inf_labels in
     let labels_tys = List.combine inf_label_names inf_tys in
-    let inf_ty = List.assoc_opt (Id.name id) labels_tys in
+    let inf_ty = List.assoc_opt (Cid.name id) labels_tys in
     match inf_ty with
       | Some ty -> env, op, [inf_exp], ty
       | None -> 
-        dprint_endline ("could not find: "^(Id.to_string id));
-        raise (UnboundField id)
+        dprint_endline ("could not find: "^(Cid.to_string id));
+        raise (UnboundField (Cid.to_id id))
   )
   | Get idx, [exp] -> (
     let env, inf_exp = infer_exp env exp in
@@ -573,7 +573,7 @@ let rec infer_statement env (stmt:statement) =
           List.fold_left (fun env pat -> 
             match pat with 
             | PEvent{params} -> 
-              let env = add_vars env (List.map (fun f -> f|> fst |> Cid.id) params) (List.map snd params) in
+              let env = add_vars env (List.map (fun f -> f|> fst) params) (List.map snd params) in
               env
             | _ -> env
           ) env pats
@@ -601,11 +601,11 @@ let rec infer_statement env (stmt:statement) =
   | SRet(None) -> env, stmt
   | SFor{idx; bound; stmt; guard} -> 
     (* add the index to the env *)
-    let env = add_var env (Cid.id idx) (tint 32) in
+    let env = add_var env (idx) (tint 32) in
     (* add the guard to the env *)
     let env = match guard with 
       | None -> env
-      | Some(guard_id) -> add_var env (Cid.id guard_id) tbool
+      | Some(guard_id) -> add_var env (guard_id) tbool
     in
     (* TODO: add constraint idx < bound --  only while inside of new environment? *)
     let env', inf_stmt = infer_statement env stmt in
@@ -668,13 +668,13 @@ let rec infer_decl env decl : env * decl option =
     env, decl |> Option.some
   | DEvent{evconstrid} -> 
     (* just add the event type to the var_ty table *)
-    let env = add_var env (Cid.id evconstrid) tevent in
+    let env = add_var env (evconstrid) tevent in
     env, decl |> Option.some
   | DFun(fun_kind, id, ret_ty, params, BStatement(statement)) -> 
     (* set up the environment *)
     let outer_env = env in 
     let env = {env with ret_ty=Some(ret_ty)} in    
-    let env = add_vars env (List.map (fun f -> f|> fst |> Cid.id) params) (List.map snd params) in
+    let env = add_vars env (List.map (fun f -> f|> fst) params) (List.map snd params) in
     (* check the body *)
     let _, inf_stmt = infer_statement env statement in
     (* return to outer env *)

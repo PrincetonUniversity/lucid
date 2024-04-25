@@ -95,13 +95,13 @@ let bytes_t =
   tabstract 
     "bytes_t"@@trecord
       [
-        id"start", tref tchar;
-        id"cur", tref tchar;
-        id"end", tref tchar;
+        cid"start", tref tchar;
+        cid"cur", tref tchar;
+        cid"end", tref tchar;
       ]
 ;;
 (* bytes_t param for generated functions *)
-let _bs_param = (id"bs", tref bytes_t)
+let _bs_param = (cid"bs", tref bytes_t)
 (* bytes_t var within generated functions *)
 let _bs = param_evar _bs_param
 
@@ -119,7 +119,7 @@ let mk_skip ty =
     tunit
     [_bs_param]
     @@stmts [
-      sassign_exp (_bs/->id"cur") ((_bs/->id"cur")/+(n_bytes ty));
+      sassign_exp (_bs/->cid"cur") ((_bs/->cid"cur")/+(n_bytes ty));
       sret_none
     ]
 ;;
@@ -138,7 +138,7 @@ let mk_peek ty =
     [_bs_param]
     @@stmts [
       (* get pointer, cast to correct pointer type, deref *)
-      sret @@ (ederef @@ ecast (tref ty) @@ (_bs/->id"cur"))
+      sret @@ (ederef @@ ecast (tref ty) @@ (_bs/->cid"cur"))
     ]
 ;;
 
@@ -166,7 +166,7 @@ let mk_read ty =
 (*** parse function transformations ***)
 (* the parser fills a next event and returns a success flag *)
 let parser_cid = Cid.create ["parse_event"] ;;
-let parser_out_event_param = id"next_event", tref tevent;;
+let parser_out_event_param = cid"next_event", tref tevent;;
 let parser_out_event = param_evar parser_out_event_param;;
 let parser_ret_ty = tint 8
 let parser_ret_cont = eval@@vint 1 8

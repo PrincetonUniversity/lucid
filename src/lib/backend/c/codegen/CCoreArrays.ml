@@ -70,7 +70,7 @@ let update_complex ctx call_id call_args =
   (* no longer need to do this. *)
   let memop_id, (_, memop_params, memop_body) = get_memop ctx (List.nth call_args 2) in
 
-  let idx_param = Id.create "_idx", (List.nth call_args 1).ety in
+  let idx_param = Cid.create ["_idx"], (List.nth call_args 1).ety in
   let idx = eop Mod [ecast (tint 32) (param_evar idx_param); eval (vint arr_len 32)] in
   
   (* replace memop_param with arr[idx]; *)
@@ -78,7 +78,7 @@ let update_complex ctx call_id call_args =
   let memval_exp_transformer evar_exp = 
     match evar_exp.e with 
     | EVar(cid) -> 
-      if (Cid.equal cid (Cid.id memval_param_id)) 
+      if (Cid.equal cid (memval_param_id)) 
       then (elistget arr idx)
       else evar_exp
     | _ -> failwith "expected evar"

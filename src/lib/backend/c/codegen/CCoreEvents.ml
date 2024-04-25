@@ -66,11 +66,11 @@ open CCoreUtils
 
 (* event foo(int a, int b); event bar(int c); -> type event_tag_t = [foo = 1; bar = 2] *)
 let event_enum_tyid = id"event_tag_t";;
-let event_tag evid = id (Printf.sprintf "%s_tag" (Id.name evid));;
-let event_untag evid = id (Id.name evid |> fun name -> String.sub name 0 ((String.length name) - 4));;
+let event_tag evid = cid (Printf.sprintf "%s_tag" (Cid.name evid));;
+let event_untag evid = cid (Cid.name evid |> fun name -> String.sub name 0 ((String.length name) - 4));;
 let event_enum_ty (event_defs :event_def list) = 
   let event_tags =     (List.mapi (fun i event_def -> 
-    (event_tag event_def.evconstrid |> Cid.id, 
+    (event_tag event_def.evconstrid , 
       (Option.value ~default:(i+1) event_def.evconstrnum)
     )
     ) event_defs)
@@ -80,19 +80,21 @@ let event_enum_ty (event_defs :event_def list) =
 ;;
 
 (* event foo(int a, int b) -> type foo = {int a; int b} *)
-let event_params_ty event_def = tabstract_id 
-  (id((fst event_def.evconstrid)^"_t")) 
-  (trecord event_def.evparams)
+let event_params_ty event_def =
+  let evparams = List.map (fun (id, ty) -> (id, ty)) event_def.evparams in
+  tabstract_cid
+  (cid((Cid.name event_def.evconstrid)^"_t")) 
+  (trecord evparams)
 ;;
 
 (* event foo(int a, int b); event bar(int c); -> type event_data_t = union {foo foo; bar bar;} *)
-let event_params_union_tyid = id"event_data_t";;
+let event_params_union_tyid = cid"event_data_t";;
 let event_params_union_ty (event_defs :event_def list) = 
   let event_unions = List.map (fun event_def -> 
     (event_def.evconstrid, event_params_ty event_def)
   ) event_defs
   in
-  tabstract_id event_params_union_tyid (tunion_pairs event_unions)
+  tabstract_cid event_params_union_tyid (tunion_pairs event_unions)
 ;;
 
 (* event foo(int a, int b); event bar(int c); ==> type event = {event_tag_t tag; event_data_t data;} *)
@@ -101,9 +103,9 @@ let event_tunion_ty event_defs =
   let tag_ty = event_enum_ty event_defs in
   let data_ty = event_params_union_ty event_defs in
   tabstract_id event_tunion_tyid (trecord [
-    (id"tag", tag_ty);
-    (id"data", data_ty);
-    (id"is_packet", tint 8);
+    (cid"tag", tag_ty);
+    (cid"data", data_ty);
+    (cid"is_packet", tint 8);
   ])  
 ;;
 
@@ -138,23 +140,23 @@ let event_constr event_defs event_def =
   let event_exp =         
     {(erecord
       [
-        id"tag", eval@@venum (Cid.id@@event_tag event_def.evconstrid) event_enum_ty; 
-        id"data", (eunion
-                      event_def.evconstrid 
+        cid"tag", eval@@venum (event_tag event_def.evconstrid) event_enum_ty; 
+        cid"data", (eunion
+                      (event_def.evconstrid )
                       (erecord 
                         (List.map 
                           (fun (id, ty) -> 
-                            id, evar (Cid.id id) ty)
+                            id, evar (id) ty)
                           event_def.evparams))
                       event_data_ty);
-        id"is_packet", (if event_def.is_packet then eval@@vint 1 8 else eval@@vint 0 8)
+        cid"is_packet", (if event_def.is_packet then eval@@vint 1 8 else eval@@vint 0 8)
       ]) with ety = event_ty
     }
   in
-  let rv_id = Id.fresh_name "ev" in
-  dfun (Cid.id event_def.evconstrid) event_ty event_def.evparams
+  let rv_id = Cid.fresh_name "ev" in
+  dfun (event_def.evconstrid) event_ty event_def.evparams
     ( stmts [
-        slocal (Cid.id rv_id) event_ty event_exp;
+        slocal (rv_id) event_ty event_exp;
         sret (param_evar (rv_id, event_ty))
       ])
 ;;
@@ -164,11 +166,11 @@ let transformer =
   (* first, some helpers *)
   let extract_fields ev evid params = 
     (* ev should be an event expression AFTER TRANSFORMATION *)
-    let extract_field (ev:exp) (evid : id) (field : id) (ty : ty) = 
-      let data = ev/.id"data" in
+    let extract_field (ev:exp) (evid : cid) (field : cid) (ty : ty) = 
+      let data = ev/.cid"data" in
       let event = data/.evid in 
       let param = event/.field in
-      slocal (Cid.id field) ty param
+      slocal (field) ty param
     in
     stmts
     @@List.map2 
@@ -179,7 +181,7 @@ let transformer =
   (* the event's tag as an enum value *)
   let event_tag_symbol_val event_def_assoc evid = 
     let ty = event_enum_ty (List.split event_def_assoc |> snd) in
-    vsymbol (Cid.id@@event_tag evid) ty
+    vsymbol (event_tag evid) ty
   in
   let rec inline_eventpat_into_case event_def_assoc exps n cases = 
     match cases with 
@@ -189,8 +191,8 @@ let transformer =
       let pat = List.nth pats n in
       match pat with 
         | PEvent{event_id; params} -> 
-          let field_var_init = extract_fields exp (Cid.to_id event_id) params in 
-          let pat = event_tag_symbol_val event_def_assoc (Cid.to_id event_id) in
+          let field_var_init = extract_fields exp (event_id) params in 
+          let pat = event_tag_symbol_val event_def_assoc (event_id) in
           let pats = replace n (patval pat) pats in
           let bstmt = sseq field_var_init bstmt in
           let res = 
@@ -225,14 +227,14 @@ let transformer =
       | VEvent(vevent) -> 
         let event_enum_ty = event_tunion_ty (List.map snd event_def_assoc) in
         let event_data_ty = event_params_union_ty (List.map snd event_def_assoc) in
-        let evconstrid = vevent.evid |> Cid.to_id in
+        let evconstrid = vevent.evid in
         let ev_params  = (List.assoc evconstrid event_def_assoc).evparams in
         let evdata = vevent.evdata in
         vrecord 
           [
-            id"tag",   venum (Cid.id@@event_tag evconstrid) event_enum_ty;
-            id"data", (vunion
-                        evconstrid
+            cid"tag",   venum (event_tag evconstrid) event_enum_ty;
+            cid"data", (vunion
+                        (evconstrid)
                         (vrecord
                           (List.map2
                             (fun (id, _) param_value -> 
@@ -273,9 +275,9 @@ let transformer =
       (* match on event tags, not the event itself *)
       let tag_of_union_exp exp = match exp.ety with 
         | ty when ty = (event_tunion_ty (List.split event_def_assoc |> snd)) -> 
-          exp/.id"tag"
+          exp/.cid"tag"
         | ty when ty = (tref@@event_tunion_ty (List.split event_def_assoc |> snd)) -> 
-          exp/->id"tag"
+          exp/->cid"tag"
         | _ -> exp
       in
       let branches' = 
@@ -307,7 +309,7 @@ let transform_decl last_event_id event_defs decls decl : decls =
   | None -> decls @ [decl]
   | Some(event_def) -> 
     let event_ty_decl = decl_tabstract@@event_params_ty event_def in
-    if (Id.equal event_def.evconstrid last_event_id) then (
+    if (Cid.equal event_def.evconstrid last_event_id) then (
       (* this is the last event. So we also need to generate 
          the toplevel / global event data structures *)
       let toplevel_event_decls = mk_toplevel_event_decls event_defs in

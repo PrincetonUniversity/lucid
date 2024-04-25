@@ -161,9 +161,10 @@ let rec translate_raw_ty (raw_ty : C.raw_ty) : F.raw_ty =
     F.TFun fty *)
   | C.TRecord(id_rawty_pairs) -> 
     let ids, raw_tys = List.split id_rawty_pairs in
+    let cids = List.map Cid.id ids in
     let raw_tys = List.map translate_raw_ty raw_tys in
     let tys = List.map F.ty raw_tys in
-    F.TRecord(ids, tys)
+    F.TRecord(cids, tys)
   | C.TTuple(raw_tys) ->
     let raw_tys = List.map translate_raw_ty raw_tys in
     let tys = List.map F.ty raw_tys in
@@ -185,7 +186,7 @@ and translate_ty (ty : C.ty) : F.ty =
    timplements = None}
 ;;
 let translate_params (params: C.params) : F.params = 
-  List.map (fun ((id: Id.t), ty) -> id, translate_ty ty) params
+  List.map (fun ((id: Id.t), ty) -> Cid.id id, translate_ty ty) params
 ;;
 
 let translate_op (op : C.op) : F.op = 
@@ -238,6 +239,7 @@ let rec translate_v (v : C.v) (vty:C.ty) : F.v =
   | {raw_ty=C.TRecord(id_rawty_pairs)}, C.VRecord(id_v_pairs) -> 
     let labels, vs = List.split id_v_pairs in
     let tys = List.map (fun id -> List.assoc id id_rawty_pairs |> C.ty) labels in
+    let labels = List.map Cid.id labels in
     let vs = List.map2 translate_v vs tys in
     let values = List.map2 F.value vs (List.map translate_ty tys) in
     (F.vrecord (List.combine labels values)).v
@@ -298,6 +300,7 @@ let rec translate_exp (exp : C.exp) : F.exp =
     F.ecall fexp [translate_exp port_exp]
   | _, ERecord(label_exp_pairs) -> 
     let labels, es = List.split label_exp_pairs in
+    let labels = List.map Cid.id labels in
     let es = List.map translate_exp es in
     (F.erecord (List.combine labels es))
   | _, ETuple(exps) -> 
@@ -305,6 +308,7 @@ let rec translate_exp (exp : C.exp) : F.exp =
     (F.etuple es)
   | _, EProj(rec_exp, label) -> 
     (* project is an op *)
+    let label = Cid.id label in
     (F.eop (F.Project(label)) [translate_exp rec_exp])
   in
   {exp' with espan = exp.espan}
@@ -316,7 +320,7 @@ let translate_pat (pat:C.pat) (ty : C.ty) : F.pat =
     let pat_sz = InterpHelpers.intwidth_from_raw_ty ty.raw_ty in
     F.PVal(F.vint (Z.to_int z) pat_sz)
   | PEvent(cid, params) -> 
-    let params = List.map (fun (id, ty) -> id, translate_ty ty) params in
+    let params = List.map (fun (id, ty) -> Cid.id id, translate_ty ty) params in
     F.PEvent {event_id=cid; params;}
   | PWild -> F.PWild (translate_ty ty)
 ;;
@@ -411,10 +415,6 @@ let is_record (param : (C.id * C.ty)) =
 ;;
 
 
-
-
-
-
 let translate_decl (decl:C.decl) : F.decl = 
  let decl' =  match decl.d with 
   | C.DGlobal(cid, ty, exp) -> F.dglobal (Cid.id cid) (translate_ty ty) (translate_exp exp)
@@ -424,10 +424,10 @@ let translate_decl (decl:C.decl) : F.decl =
       | C.EPacket -> true 
       | C.EBackground -> false
     in
-    F.devent evid evnum_opt (List.map (fun (id, ty) -> id, translate_ty ty) params) is_parsed
+    F.devent (Cid.id evid) evnum_opt (List.map (fun (id, ty) -> Cid.id id, translate_ty ty) params) is_parsed
   | C.DHandler(id, hdl_sort, (params, body)) -> 
   begin
-    let params = List.map (fun (id, ty) -> id, translate_ty ty) params in
+    let params = List.map (fun (id, ty) -> Cid.id id, translate_ty ty) params in
     let hdl_body = translate_statement body in
     let decl = F.dhandler (Cid.id id) (F.tunit) params hdl_body in
     match hdl_sort with

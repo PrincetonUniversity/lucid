@@ -6,10 +6,17 @@ let indent n str = str |> String.split_on_char '\n' |> List.map (fun s -> String
 
 let comment str = "/* "^str^"*/"
 
+let id_to_string id = 
+  fst id
+  (* Id.to_string id *)
+let cid_to_string (cid : Cid.t) = 
+  String.concat "_" (List.map id_to_string (Cid.to_ids cid))
+  (* Cid.to_string cid *)
+
 let size_to_string size = string_of_int size
 let arrlen_to_string = function 
   | IConst(i) -> string_of_int i
-  | IVar(v) -> fst v
+  | IVar(v) -> cid_to_string v
 
 let func_kind_to_string = function
   | FNormal -> "fn"
@@ -20,12 +27,6 @@ let func_kind_to_string = function
   | FForiegn -> "fn"
 ;;
 
-let id_to_string id = 
-  fst id
-  (* Id.to_string id *)
-let cid_to_string (cid : Cid.t) = 
-  String.concat "_" (List.map id_to_string (Cid.to_ids cid))
-  (* Cid.to_string cid *)
 
 (* use abstract names in parameter and function argument types. Possibly elsewhere. *)
 let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : string =
@@ -35,14 +36,14 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : string =
   | TInt size -> "int" ^ size_to_string size
   | TBool -> "bool"
   | TUnion(labels, ts) -> 
-    let label_strs = List.map (id_to_string) labels in
+    let label_strs = List.map (cid_to_string) labels in
     let ts_strs = List.map (ty_to_string ~use_abstract_name:true) ts in
     let field_strs = List.map2 (fun l e -> l ^ ": " ^ e ^";") label_strs ts_strs in
     let fields_str = String.concat " " field_strs in  
     sprintf "union {%s}" fields_str 
     (* "{" ^ fields_str ^ "}" *)
   | TRecord(labels, ts) -> 
-    let label_strs = List.map (id_to_string) labels in
+    let label_strs = List.map (cid_to_string) labels in
     let ts_strs = List.map (ty_to_string ~use_abstract_name:true) ts in
     let field_strs = List.map2 (fun l e -> l ^ ": " ^ e ^";") label_strs ts_strs in
     let fields_str = String.concat " " field_strs in    
@@ -79,7 +80,7 @@ and func_ty_to_string (f: func_ty) : string =
   "(" ^ arg_tys_str ^ ") -> " ^ ret_ty_str
 
 let params_to_string params = 
-  let params_str = String.concat ", " (List.map (fun (id, ty) -> ty_to_string ~use_abstract_name:true ty ^" "^ id_to_string id ) params) in
+  let params_str = String.concat ", " (List.map (fun (id, ty) -> ty_to_string ~use_abstract_name:true ty ^" "^ cid_to_string id ) params) in
   params_str
 ;;
 
@@ -89,13 +90,13 @@ let rec v_to_string (v: v) : string =
   | VInt {value; _} -> string_of_int value
   | VBool b -> string_of_bool b
   | VRecord(labels, es) -> 
-    let label_strs = List.map id_to_string labels in
+    let label_strs = List.map cid_to_string labels in
     let es_strs = List.map value_to_string es in
     let field_strs = List.map2 (fun l e -> "." ^l ^ " = " ^ e ^";") label_strs es_strs in
     let fields_str = String.concat " " field_strs in    
     "{" ^ fields_str ^ "}"
   | VUnion(label, v, _) -> 
-    sprintf "{%s = %s}" (id_to_string label) (value_to_string v)
+    sprintf "{%s = %s}" (cid_to_string label) (value_to_string v)
   | VTuple(es) -> 
     let label_strs = List.mapi (fun i _ -> "_" ^ string_of_int i) es in
     let es_strs = List.map value_to_string es in
@@ -126,13 +127,13 @@ let rec e_to_string (e: e) : string =
     let fields_str = String.concat " " field_strs in    
     "{" ^ fields_str ^ "}"
   | ERecord(labels, es) -> 
-    let label_strs = List.map id_to_string labels in
+    let label_strs = List.map cid_to_string labels in
     let es_strs = List.map exp_to_string es in
     let field_strs = List.map2 (fun l e -> "." ^l ^ " = " ^ e ^";") label_strs es_strs in
     let fields_str = String.concat " " field_strs in    
     "{" ^ fields_str ^ "}"
   | EUnion(label, exp, _) -> 
-    sprintf "{.%s = %s}" (id_to_string label) (exp_to_string exp)
+    sprintf "{.%s = %s}" (cid_to_string label) (exp_to_string exp)
   | ECall {f; args; call_kind=CEvent} -> 
     let f_str = exp_to_string f in
     let args_str = String.concat ", " (List.map exp_to_string args) in
@@ -197,8 +198,8 @@ and op_to_string (op: op) (args: exp list) : string =
   | Conc, args -> String.concat "++" ((List.map exp_to_string args))
   (* use arrow notation shorthand for derefs, unless its a subscript op *)
   | Project id, [a] when (is_ederef (a) && (not@@is_eop (extract_ederef (a)))) -> 
-      exp_to_string a ^ "->" ^ id_to_string id
-  | Project id, [a] -> exp_to_string a ^ "." ^ id_to_string id
+      exp_to_string a ^ "->" ^ cid_to_string id
+  | Project id, [a] -> exp_to_string a ^ "." ^ cid_to_string id
   | Get i, [a] -> exp_to_string a ^ "._" ^ string_of_int i
   | Mod, [x; m] -> Printf.sprintf "(%s mod %s)" (exp_to_string x) (exp_to_string m)
   | _, _ -> failwith ("Invalid number of arguments for operator: "^(show_op op))
@@ -239,10 +240,10 @@ let rec s_to_string (s: s) : string =
                   | Some e -> exp_to_string e 
                   | None -> "") ^ ";"  
   | SFor{idx; bound; stmt; guard=None} -> 
-    "for (" ^ (id_to_string idx) ^ " < " ^ arrlen_to_string bound ^ ") {\n" ^ 
+    "for (" ^ (cid_to_string idx) ^ " < " ^ arrlen_to_string bound ^ ") {\n" ^ 
     indent 2 (statement_to_string stmt) ^ "\n}"
   | SFor{idx; bound; stmt; guard=Some(guard)} -> 
-    "for (" ^ (id_to_string idx) ^ " < " ^ arrlen_to_string bound ^ ") while ("^(id_to_string guard)^" == true) {\n" ^ 
+    "for (" ^ (cid_to_string idx) ^ " < " ^ arrlen_to_string bound ^ ") while ("^(cid_to_string guard)^" == true) {\n" ^ 
     indent 2 (statement_to_string stmt) ^ "\n}"
   | SForEver(stmt) -> 
     "forever {\n" ^ indent 2 (statement_to_string stmt) ^ "\n}"
@@ -283,7 +284,7 @@ let rec d_to_string (d: d) : string =
                  | Some ty -> ty_to_string ty 
                  | None -> " extern")
   | DEvent event_def -> 
-    let id_str = id_to_string event_def.evconstrid in
+    let id_str = cid_to_string event_def.evconstrid in
     let params_str = params_to_string event_def.evparams in
     "event " ^ id_str ^ "(" ^ params_str ^ ");"
   | DForiegn str -> str

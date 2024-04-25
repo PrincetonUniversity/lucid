@@ -25,22 +25,22 @@ let package (module D : DriverInterface) decls =
 
 (* default helpers *)
 let get_event_tag t_event = 
-   let ev_param = id"ev", tref t_event in
+   let ev_param = cid"ev", tref t_event in
    dfun 
      (cid"get_event_tag")
      (tint event_tag_size)
      [ev_param]
-     (sret (ecast (tint event_tag_size) ((param_evar ev_param)/->id"tag")))
+     (sret (ecast (tint event_tag_size) ((param_evar ev_param)/->cid"tag")))
  ;;
  let reset_event_tag t_event = 
    (* this isn't right. Need an address.. *)
-   let ev_param = id"ev", tref t_event in
-   let enum_ty = ((param_evar ev_param)/->id"tag").ety in 
+   let ev_param = cid"ev", tref t_event in
+   let enum_ty = ((param_evar ev_param)/->cid"tag").ety in 
    dfun 
      (cid"reset_event_tag")
      (tunit)
      [ev_param]
-     (sassign_exp ((param_evar ev_param)/->id"tag") (ecast (enum_ty) (default_exp (tint event_tag_size))))
+     (sassign_exp ((param_evar ev_param)/->cid"tag") (ecast (enum_ty) (default_exp (tint event_tag_size))))
  ;;
  
  let init_cursor = 

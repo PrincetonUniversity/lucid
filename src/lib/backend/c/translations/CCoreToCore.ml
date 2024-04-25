@@ -100,6 +100,7 @@ let rec translate_raw_ty (raw_ty : F.raw_ty) : C.raw_ty =
   | F.TTuple(ts) -> C.TTuple(List.map translate_ty ts |> List.map (fun (ty : C.ty) -> ty.raw_ty))
   | F.TRecord(labels, ts) -> 
     let raw_tys = List.map translate_ty ts |> List.map (fun (ty : C.ty) -> ty.raw_ty) in
+    let labels = List.map Cid.to_id labels in
     let label_rawty_pairs = List.combine labels raw_tys in
     C.TRecord(label_rawty_pairs)
   | F.TEnum(tags) ->
@@ -180,6 +181,7 @@ let rec translate_value (value : F.value) : C.value =
   | F.VTuple(es) -> 
     C.value_sp (C.VTuple(List.map (fun value -> value |> translate_value |> uv) es)) value.vspan
   | F.VRecord(labels, es) ->
+    let labels = List.map Cid.to_id labels in
     let label_value_pairs = List.combine labels es in
     C.value_sp (C.VRecord(List.map (fun (label, value) -> (label, translate_value value |> uv)) label_value_pairs)) value.vspan
   | F.VUnit -> err "unit values cannot be translated back to CoreSyntax"
@@ -223,6 +225,7 @@ let rec translate_exp (exp: F.exp) =
     C.aexp (C.EHash(sz, eargs)) (translate_ty exp.ety) exp.espan
   | F.EOp(F.Project(label), [earg]) ->
     let earg = translate_exp earg in
+    let label = Cid.to_id label in
     C.aexp (C.EProj(earg, label)) (translate_ty exp.ety) exp.espan
   | F.EOp(op, args) -> 
     let op = translate_op op in
@@ -231,6 +234,7 @@ let rec translate_exp (exp: F.exp) =
   | F.ETuple(es) -> 
     C.aexp (C.ETuple(List.map (fun exp -> exp |> translate_exp) es)) (translate_ty exp.ety) exp.espan
   | F.ERecord(labels, es) ->
+    let labels = List.map Cid.to_id labels in
     let label_exp_pairs = List.combine labels es in
     C.aexp (C.ERecord(List.map (fun (label, exp) -> (label, translate_exp exp)) label_exp_pairs)) (translate_ty exp.ety) exp.espan
   (* | F.EClosure _ -> err "closure expressions cannot be translated back to CoreSyntax" *)
@@ -291,7 +295,7 @@ and translate_pat (pat : F.pat) : C.pat =
   | F.PVal({v=F.VInt{value}}) -> C.PNum(Z.of_int value)
   | F.PVal _ -> err "pattern with non-int or non-bit value"
   | F.PEvent{event_id; params;} -> 
-    let params = List.map (fun (id, ty) -> id, translate_ty ty) params in
+    let params = List.map (fun (id, ty) -> Cid.to_id id, translate_ty ty) params in
     C.PEvent(event_id, params)
   | F.PWild _ -> C.PWild
 
@@ -366,24 +370,24 @@ let rec translate_decl (decl : F.decl) : C.decl list =
     err "list primitives are not supported in CoreSyntax" *)
   | F.DEvent{evconstrid; evconstrnum; evparams; is_packet} -> 
     let ev_sort = if is_packet then C.EPacket else C.EBackground in
-    let params = List.map (fun (id, ty) -> id, translate_ty ty) evparams in
-    [C.decl_sp (C.DEvent(evconstrid, evconstrnum, ev_sort, params)) decl.dspan]
+    let params = List.map (fun (id, ty) -> Cid.to_id id, translate_ty ty) evparams in
+    [C.decl_sp (C.DEvent(Cid.to_id evconstrid, evconstrnum, ev_sort, params)) decl.dspan]
   (* functions can be handlers, memops, parsers, or functions *)
   | F.DFun(F.FHandler, id, _, params, BStatement(body)) ->
-    let params = List.map (fun (id, ty) -> id, translate_ty ty) params in
+    let params = List.map (fun (id, ty) -> Cid.to_id id, translate_ty ty) params in
     let body = translate_stmt false body in
     let d = C.DHandler((Cid.to_id id), C.HData, (params, body)) in
     [C.decl_sp d decl.dspan]
   | F.DFun(F.FMemop, id, _, params, BStatement(body)) ->
     (* translate to core, then specialize as memop *)
-    let params = List.map (fun (id, ty) -> id, translate_ty ty) params in
+    let params = List.map (fun (id, ty) -> Cid.to_id id, translate_ty ty) params in
     let body = translate_stmt false body in
     let memop = Despecialization.specialize_memop (Cid.to_id id) params body in
     let d = C.DMemop(memop) in
     [C.decl_sp d decl.dspan]
   | F.DFun(F.FParser, id, _, params, BStatement(body)) -> (    
     (* translate to core, then specialize parser *)
-    let params = List.map (fun (id, ty) -> id, translate_ty ty) params in
+    let params = List.map (fun (id, ty) -> Cid.to_id id, translate_ty ty) params in
     let body = translate_stmt false body in
     let parse_block = Despecialization.specialize_parser_block body in
     [C.decl_sp (C.DParser((Cid.to_id id), params, parse_block)) decl.dspan]
@@ -396,9 +400,9 @@ let rec translate_decl (decl : F.decl) : C.decl list =
         List.mapi 
           (fun i ty -> (
             let name = 
-              (Id.name base_id ^ "_"^(string_of_int i))
+              (Cid.name base_id ^ "_"^(string_of_int i))
             in
-            Id.create(name), ty))
+            Cid.create([name]), ty))
           ts
       (* its already not a tuple *)
       | (base_id, ty) -> [base_id, ty]
@@ -438,12 +442,12 @@ let rec translate_decl (decl : F.decl) : C.decl list =
     [C.decl_sp (C.DActionConstr{
       aid = (Cid.to_id id);
       artys = List.map translate_ty rtys;
-      aconst_params = List.map (fun (id, ty) -> id, translate_ty ty) const_params;
-      aparams = List.map (fun (id, ty) -> id, translate_ty ty) params;
+      aconst_params = List.map (fun (id, ty) -> Cid.to_id id, translate_ty ty) const_params;
+      aparams = List.map (fun (id, ty) -> Cid.to_id id, translate_ty ty) params;
       abody = action_body_exps;
     }) decl.dspan]
   | F.DFun(F.FNormal, id, rty, params, BStatement(body)) ->
-    let params = List.map (fun (id, ty) -> id, translate_ty ty) params in
+    let params = List.map (fun (id, ty) -> Cid.to_id id, translate_ty ty) params in
     let body = translate_stmt false body in
     let rty = translate_ty rty in
     let d = C.DFun((Cid.to_id id), rty, (params, body)) in

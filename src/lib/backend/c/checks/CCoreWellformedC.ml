@@ -62,7 +62,7 @@ let bitint_checker = object
         Printf.sprintf 
           "int parameters must be 8, 16, 32, or 64 bytes. Wrap it in a record padded to an even byte width. >>> %s %s <<<" 
           (CCorePPrint.ty_to_string ty) 
-          (CCorePPrint.id_to_string id)) 
+          (CCorePPrint.cid_to_string id)) 
     params
   method! visit_ty () ty = 
     super#visit_ty () ty;

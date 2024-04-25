@@ -59,7 +59,7 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : (string * stri
     let field_str = line_sep field_to_string label_tys |> indent 2 in
     sprintf "struct {\n%s\n}" field_str, ""
   | TTuple ts -> 
-    let labels = List.init (List.length ts) (fun i -> Id.create("_" ^  string_of_int i)) in
+    let labels = List.init (List.length ts) (fun i -> Cid.create(["_" ^  string_of_int i])) in
     let label_tys = List.map2 (fun l t -> l, t) labels ts in
     let field_str = line_sep field_to_string label_tys |> indent 2 in
     sprintf "struct {\n%s\n}" field_str, ""
@@ -92,8 +92,8 @@ and ty_to_string ?(use_abstract_name=false) ty = raw_ty_to_string ~use_abstract_
 and field_to_string (id, ty) = 
   let prefix, suffix = ty_to_string ~use_abstract_name:true ty in
   match suffix with 
-  | "" -> prefix ^" "^(id_to_string id)^";"
-  | _ -> prefix ^" "^(id_to_string id)^" "^suffix^";"
+  | "" -> prefix ^" "^(cid_to_string id)^";"
+  | _ -> prefix ^" "^(cid_to_string id)^" "^suffix^";"
   
 
   (* ty_to_string ~use_abstract_name:true ty ^ "[" ^ arrlen_to_string arrlen ^ "]" *)
@@ -113,7 +113,7 @@ and func_ty_to_string (f: func_ty) : string =
 let params_to_string params = 
   let params_str = String.concat ", " (List.map (fun (id, ty) -> 
     let prefix, suffix = ty_to_string ~use_abstract_name:true ty in
-    prefix ^ " " ^ (id_to_string id) ^ " " ^ suffix)
+    prefix ^ " " ^ (cid_to_string id) ^ " " ^ suffix)
     params) in
   params_str
 ;;
@@ -133,13 +133,13 @@ let rec v_to_string (v: v) : string =
   | VInt {value; _} -> string_of_int value
   | VBool b -> string_of_bool b
   | VRecord(labels, es) -> 
-    let label_strs = List.map id_to_string labels in
+    let label_strs = List.map cid_to_string labels in
     let es_strs = List.map value_to_string es in
     let field_strs = List.map2 (fun l e -> "." ^l ^ " = " ^ e) label_strs es_strs in
     let fields_str = String.concat ", " field_strs in    
     "{" ^ fields_str ^ "}"
   | VUnion(label, v, _) -> 
-    sprintf "{%s = %s}" (id_to_string label) (value_to_string v)
+    sprintf "{%s = %s}" (cid_to_string label) (value_to_string v)
   | VTuple(es) -> 
     let label_strs = List.mapi (fun i _ -> "_" ^ string_of_int i) es in
     let es_strs = List.map value_to_string es in
@@ -170,13 +170,13 @@ let rec e_to_string (e: e) : string =
     let fields_str = String.concat " " field_strs in    
     "{" ^ fields_str ^ "}"
   | ERecord(labels, es) -> 
-    let label_strs = List.map id_to_string labels in
+    let label_strs = List.map cid_to_string labels in
     let es_strs = List.map exp_to_string es in
     let field_strs = List.map2 (fun l e -> "." ^l ^ " = " ^ e) label_strs es_strs in
     let fields_str = String.concat ", " field_strs in    
     "{" ^ fields_str ^ "}"
   | EUnion(label, exp, _) -> 
-    sprintf "{.%s = %s}" (id_to_string label) (exp_to_string exp)
+    sprintf "{.%s = %s}" (cid_to_string label) (exp_to_string exp)
   | ECall {f; args; call_kind=CEvent} -> 
     let f_str = exp_to_string f in
     let args_str = String.concat ", " (List.map exp_to_string args) in
@@ -243,8 +243,8 @@ and op_to_string (op: op) (args: exp list) : string =
   | Conc, args -> String.concat "++" ((List.map exp_to_string args))
   (* use arrow notation shorthand for derefs, unless its a subscript op *)
   | Project id, [a] when (is_ederef (a) && (not@@is_eop (extract_ederef (a)))) -> 
-      exp_to_string (extract_ederef a) ^ "->" ^ id_to_string id
-  | Project id, [a] -> exp_to_string a ^ "." ^ id_to_string id
+      exp_to_string (extract_ederef a) ^ "->" ^ cid_to_string id
+  | Project id, [a] -> exp_to_string a ^ "." ^ cid_to_string id
   | Get i, [a] -> exp_to_string a ^ "._" ^ string_of_int i
   | Mod, [x; m] -> Printf.sprintf "(%s mod %s)" (exp_to_string x) (exp_to_string m)
   | _, _ -> failwith ("Invalid number of arguments for operator: "^(show_op op))
@@ -283,14 +283,14 @@ let rec s_to_string (s: s) : string =
                   | Some e -> exp_to_string e 
                   | None -> "") ^ ";"  
   | SFor{idx; bound; stmt; guard=None} -> 
-    let loop_init = sprintf "for (int %s = 0; %s < %s; %s++) {\n" (id_to_string idx) (id_to_string idx) (arrlen_to_string bound) (id_to_string idx) in
+    let loop_init = sprintf "for (int %s = 0; %s < %s; %s++) {\n" (cid_to_string idx) (cid_to_string idx) (arrlen_to_string bound) (cid_to_string idx) in
     let loop_body = indent 2 (statement_to_string stmt) in
     loop_init ^ loop_body ^ "\n}"
   | SFor{idx; bound; stmt; guard=Some(guard_id)} -> 
-    let guard_init = sprintf "bool %s = true;\n" (id_to_string guard_id) in
-    let loop_init = sprintf "for (int %s = 0; %s < %s; %s++) {\n" (id_to_string idx) (id_to_string idx) (arrlen_to_string bound) (id_to_string idx) in
+    let guard_init = sprintf "bool %s = true;\n" (cid_to_string guard_id) in
+    let loop_init = sprintf "for (int %s = 0; %s < %s; %s++) {\n" (cid_to_string idx) (cid_to_string idx) (arrlen_to_string bound) (cid_to_string idx) in
     let loop_body = indent 2 (statement_to_string stmt) in
-    let loop_guard = indent 2 @@ sprintf "if (!%s) break;\n" (id_to_string guard_id) in
+    let loop_guard = indent 2 @@ sprintf "if (!%s) break;\n" (cid_to_string guard_id) in
     guard_init ^ loop_init ^ loop_body ^ loop_guard ^ "\n}"
   | SForEver(stmt) -> 
     "while (1) {\n" ^ indent 2 (statement_to_string stmt) ^ "\n}"

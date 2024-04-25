@@ -15,7 +15,7 @@ and size = int
    but not positive how it will work out yet. *)
 and arrlen = 
     | IConst of int
-    | IVar of id
+    | IVar of cid
 
 and func_kind = | FNormal | FHandler | FParser | FAction | FMemop | FForiegn
 and raw_ty = 
@@ -25,8 +25,8 @@ and raw_ty =
   | TBool 
   | TBits of {ternary: bool; len : size;}
   | TEnum of (cid * int) list 
-  | TUnion of id list * ty list
-  | TRecord of id list * ty list
+  | TUnion of cid list * ty list
+  | TRecord of cid list * ty list
   | TTuple  of ty list
   | TPtr of ty * (arrlen option) (* a pointer to a memory cell of a certain type or an array of them *)
   | TEvent
@@ -43,14 +43,14 @@ and func_ty = {
 }
 and ty = {raw_ty:raw_ty; tspan : sp; timplements : (ty[@opaque]) option}
 
-and params = (id * ty) list
+and params = (cid * ty) list
 (* values *)
 and v =
   | VUnit
   | VInt of {value : int; size : size;}
   | VBool of bool
-  | VUnion of id * value * ty (* ty is the union type *)
-  | VRecord of id list * value list
+  | VUnion of cid * value * ty (* ty is the union type *)
+  | VRecord of cid list * value list
   | VTuple of value list
   | VList  of value list
   | VBits of {ternary: bool; bits : int list;}
@@ -69,7 +69,7 @@ and op =    | And | Or | Not
             | Hash of size
             | Cast of ty 
             | Conc
-            | Project of id | Get of int 
+            | Project of cid | Get of int 
             | Mod
 
 and e = 
@@ -79,8 +79,8 @@ and e =
   | EVar    of cid 
   | EAddr   of cid (* tref *)
   | ETuple of exp list
-  | EUnion  of id * exp * ty
-  | ERecord of id list * exp list
+  | EUnion  of cid * exp * ty
+  | ERecord of cid list * exp list
   | EDeref of exp
 
 and call_kind = 
@@ -108,7 +108,7 @@ and s =
   | SNoop
   | SUnit of exp
   | SAssign of assign_op * exp
-  | SFor of {idx : id; bound : arrlen; stmt: statement; guard : id option}
+  | SFor of {idx : cid; bound : arrlen; stmt: statement; guard : cid option}
     (* for (idx < bound) while guard *)
   | SForEver of statement (* infinite loop *)
   | SIf of exp * statement * statement
@@ -119,7 +119,7 @@ and s =
 and statement = {s:s; sspan : sp;}
 
 (* declarations *)
-and event_def = {evconstrid : id; evconstrnum : int option; evparams : params; is_packet : bool}
+and event_def = {evconstrid : cid; evconstrnum : int option; evparams : params; is_packet : bool}
 
 
 and fun_def = func_kind * cid * ty * params * fun_body
@@ -171,7 +171,7 @@ let cid s = Cid.create [s]
 let arrlen_ct = ref (-1);;
 let fresh_arrlen str = 
   arrlen_ct := (!arrlen_ct + 1);
-  IVar (Id.fresh str)
+  IVar (Cid.fresh str)
 ;;
 let arrlen i = IConst i
 let idxvar id = IVar id
@@ -498,7 +498,7 @@ let eop op es =
       (* print_endline ("looking for id: "^(Id.to_string id));
       print_endline ("in ids: "^(String.concat " , " (List.map Id.to_string labels))); *)
       (* let _, ty = List.find (fun (label, _) -> Id.equal label id) labels_ts in *)
-      let _, ty = List.find (fun (label, _) -> fst label = fst id) labels_ts in
+      let _, ty = List.find (fun (label, _) -> Cid.name label = Cid.name id) labels_ts in
       ty
     
     | Get(idx) -> 
@@ -512,7 +512,7 @@ let eop op es =
   exp (EOp(op, es)) eop_ty Span.default
 let eval value = exp (EVal value) value.vty Span.default
 let evar cid ty = exp (EVar cid) ty Span.default
-let param_evar (id, ty) = evar (Cid.id id) ty
+let param_evar (id, ty) = evar id ty
 let eunit () = eval (vunit ())
 
 let ecast ty exp = eop (Cast ty) [exp]
@@ -773,7 +773,7 @@ let dparser = dfun_kind FParser
 let daction = dfun_kind FAction 
 let dmemop = dfun_kind FMemop
 let dfun_extern id fun_kind param_tys ret_ty = 
-  let params = List.map (fun ty -> (Id.fresh_name "a", ty)) param_tys in
+  let params = List.map (fun ty -> (Cid.fresh_name "a", ty)) param_tys in
   decl (DFun(fun_kind, id, ret_ty, params, BExtern))
 ;;
 let dvar_const id ty exp = decl (DVar(id, ty, Some(exp))) Span.default
@@ -944,10 +944,10 @@ let ( /: ) stmt1 stmt2 =
 ;;
 
 (* declarations that must be added to a program *)
-let default_event_id = Id.create "_none"
+let default_event_id = Cid.create ["_none"]
 let default_event_decl = devent default_event_id None [] false
 let is_default_event_decl decl = match decl.d with 
-  | DEvent {evconstrid; _} -> Id.equal evconstrid default_event_id
+  | DEvent {evconstrid; _} -> Cid.equal evconstrid default_event_id
   | _ -> false
 
 
@@ -965,7 +965,7 @@ let rec equiv_tys ty1 ty2 = match ty1.raw_ty, ty2.raw_ty with
 | TUnion(ids1, tys1), TUnion(ids2, tys2)
 | TRecord(ids1, tys1), TRecord(ids2, tys2) -> 
   List.length ids1 = List.length ids2
-  && List.for_all2 (fun id1 id2 -> Id.equal id1 id2) ids1 ids2
+  && List.for_all2 (fun id1 id2 -> Cid.equal id1 id2) ids1 ids2
   && List.length tys1 = List.length tys2
   && List.for_all2 equiv_tys tys1 tys2
 | TTuple(tys1), TTuple(tys2) -> 

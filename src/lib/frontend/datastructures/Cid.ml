@@ -112,6 +112,7 @@ let rec names cid =
   | Id id -> [Id.name id]
   | Compound (id, cid) -> Id.name id :: names cid
 ;;
+let name cid = String.concat "." (names cid)
 
 let tl cid = match cid with 
 | Compound(_, cid) -> cid
@@ -177,3 +178,5 @@ let rec modify_tail f t =
   | Id id -> Id (f id)
   | Compound (id, cid) -> Compound (id, modify_tail f cid)
 ;;
+
+let fresh_name str = Id (Id.fresh str)

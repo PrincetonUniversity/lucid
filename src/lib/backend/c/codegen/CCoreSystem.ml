@@ -25,7 +25,7 @@ let sys_flood =
   dfun_foriegn
     (cid"flood")
     (new_group_ty)
-    [id"port", new_group_ty]
+    [cid"port", new_group_ty]
     "{ return port + 10000;/* TODO!*/ }"
 ;;
 (* let flood_call_replacer exp = 
@@ -41,7 +41,7 @@ let hash_fun size =
   dfun_foriegn 
     (cid("hash_"^(string_of_int size)))
     (tint size)
-    [id"seed", tint 32; id"str", tref (tint 8); id"length", tint 32]
+    [cid"seed", tint 32; cid"str", tref (tint 8); cid"length", tint 32]
 {|{
   int hashValue = seed;
   for (int i = 0; i < length; i++) {
