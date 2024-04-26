@@ -49,7 +49,7 @@ let get_event_tag t_event =
 {|
 void init_cursor(char*  buf , uint32_t len , %{bytes_ptr_t}  bytes ){
    bytes->start = buf;
-   bytes->cur = buf;
+   bytes->payload = buf;
    bytes->end = buf + len;
 }|}]
 ;;
@@ -58,14 +58,14 @@ let reset_cursor =
    dforiegn [%string
 {|
 void reset_cursor(%{bytes_ptr_t}  bytes){
-   bytes->cur = bytes->start;
+   bytes->payload = bytes->start;
 }|}]
 let copy_payload = 
    dforiegn [%string
 {|
 void copy_payload(bytes_t*  buf_out , bytes_t*  buf_in ) {
-   memcpy(buf_out->cur, buf_in->cur, buf_in->end - buf_in->cur);
-   buf_out->cur = buf_out->cur + (buf_in->end - buf_in->cur);
+   memcpy(buf_out->payload, buf_in->payload, buf_in->end - buf_in->payload);
+   buf_out->payload = buf_out->payload + (buf_in->end - buf_in->payload);
 }|}]    
 ;;
 

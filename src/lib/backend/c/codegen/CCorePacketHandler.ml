@@ -39,7 +39,7 @@ let reset_cursor =
     [buf_param; len_param; bs_param]    
     (stmts [
       sassign_exp (bs/->cid"start") (buf);
-      sassign_exp (bs/->cid"cur") (buf);
+      sassign_exp (bs/->cid"payload") (buf);
       sassign_exp (bs/->cid"end") (buf/+len)])
 ;;
 

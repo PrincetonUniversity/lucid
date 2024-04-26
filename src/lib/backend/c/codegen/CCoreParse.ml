@@ -96,7 +96,7 @@ let bytes_t =
     "bytes_t"@@trecord
       [
         cid"start", tref tchar;
-        cid"cur", tref tchar;
+        cid"payload", tref tchar;
         cid"end", tref tchar;
       ]
 ;;
@@ -119,7 +119,7 @@ let mk_skip ty =
     tunit
     [_bs_param]
     @@stmts [
-      sassign_exp (_bs/->cid"cur") ((_bs/->cid"cur")/+(n_bytes ty));
+      sassign_exp (_bs/->cid"payload") ((_bs/->cid"payload")/+(n_bytes ty));
       sret_none
     ]
 ;;
@@ -138,7 +138,7 @@ let mk_peek ty =
     [_bs_param]
     @@stmts [
       (* get pointer, cast to correct pointer type, deref *)
-      sret @@ (ederef @@ ecast (tref ty) @@ (_bs/->cid"cur"))
+      sret @@ (ederef @@ ecast (tref ty) @@ (_bs/->cid"payload"))
     ]
 ;;
 

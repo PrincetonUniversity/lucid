@@ -47,7 +47,7 @@ typedef struct pkt_hdl_ctx_t {
 
 void fill_out_pkthdr(const struct pcap_pkthdr *in_pkthdr, bytes_t* out_pkt, struct pcap_pkthdr* out_pkthdr) {
     out_pkthdr->ts = in_pkthdr->ts;
-    out_pkthdr->caplen = out_pkt->cur - out_pkt->start;
+    out_pkthdr->caplen = out_pkt->payload - out_pkt->start;
     out_pkthdr->len = in_pkthdr->len;
 }
 
@@ -71,7 +71,7 @@ pkt_hdl_ctx_t ctx = {
     .in_pkt = {0},
     .out_pkt = {
     .start = (char *)out_buf,
-    .cur = (char *)out_buf,
+    .payload = (char *)out_buf,
     .end = (char *)out_buf + out_buf_len
     },
     .out_pkthdr = {0}

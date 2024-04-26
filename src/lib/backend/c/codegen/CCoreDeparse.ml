@@ -99,12 +99,12 @@ let deparse_fun event_defs event_t =
       (* not a packet / raw event *)
       (stmts [
         (* set empty eth header *)
-        memset_n (buf_out/->cid"cur") (vint 0 32) 3; (* 12 bytes *)
-        memset_n (ptr_incr (buf_out/->cid"cur") 12) (vint 0 16) 1; (* 2 bytes *)
-        sptr_incr (buf_out/->cid"cur") 14;
+        memset_n (buf_out/->cid"payload") (vint 0 32) 3; (* 12 bytes *)
+        memset_n (ptr_incr (buf_out/->cid"payload") 12) (vint 0 16) 1; (* 2 bytes *)
+        sptr_incr (buf_out/->cid"payload") 14;
         (* set event type *)
-        memcpy (buf_out/->cid"cur") (ev_out/->cid"tag");
-        sptr_incr (buf_out/->cid"cur") 2;
+        memcpy (buf_out/->cid"payload") (ev_out/->cid"tag");
+        sptr_incr (buf_out/->cid"payload") 2;
         sassign 
           (cid"bytes_written") 
           ((evar (cid"bytes_written") (tint 32))/+(eval@@vint 16 32))
@@ -117,9 +117,9 @@ let deparse_fun event_defs event_t =
           [PVal(vint (Option.get (event_def.evconstrnum)) event_tag_size)],
           stmts [
             (* copy to memory *)
-            memcpy (buf_out/->cid"cur") (ev_out/->cid"data");
+            memcpy (buf_out/->cid"payload") (ev_out/->cid"data");
             (* increment pointer *)
-            sptr_incr (buf_out/->cid"cur") (CCoreEvents.event_len event_def);
+            sptr_incr (buf_out/->cid"payload") (CCoreEvents.event_len event_def);
             sassign 
               (cid"bytes_written") 
               ((evar (cid"bytes_written") (tint 32))/+(eval@@vint ((CCoreEvents.event_len event_def)) 32));
