@@ -80,11 +80,8 @@ let compile ds =
   print_endline ("---- Eliminating events and handlers ----");
   let cds = CCoreHandlers.process cds in
   let cds = CCoreEvents.process cds in
-  ccore_print "after event and handler generation" cds;
-  exit 1;
   let cds = CCoreTyper.check cds in
-  ccore_print "after event and handler generation" cds;
-
+  ccore_print "after event and handler generation type checking" cds;
   (*** 6. small transformations for c-compatible form *)
   print_endline ("---- Normalizing code forms for c ----");
   let cds = CCoreCForm.normalize_matches cds in
@@ -97,6 +94,7 @@ let compile ds =
      and can just be tacked onto the end. *)
   (* deparser generation *)
   let cds = CCoreDeparse.process cds in
+  ccore_print "after deparse" cds;
 
   (* final type check *)
   (* let cds = CCoreTyper.check cds in *)

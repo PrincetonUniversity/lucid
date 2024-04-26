@@ -70,7 +70,7 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : (string * stri
     let list_str = String.concat ", " (List.map (fun (s, i) -> cid_to_string s ^ " = " ^ string_of_int i) cid_ints) in
     "enum {" ^ list_str ^ "}", ""
   | TBuiltin (_, _) -> ty_err "builtin types should be eliminated"
-  | TName _ -> ty_err "name types should be eliminated"
+  | TName(cid) -> cid_to_string cid, ""
   | TAbstract (cid, ty) -> 
     if (use_abstract_name) then cid_to_string cid, ""
     else ty_to_string ty

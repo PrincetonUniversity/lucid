@@ -72,20 +72,19 @@ let sptr_incr eptr i = sassign_exp eptr (ptr_incr eptr i)
 ;;
 
 
+let deparse_fun event_defs event_t = 
 
-let deparse_fun event_t = 
-  let tag_enum_ty = 
+  (* let tag_enum_ty = 
     extract_trecord_or_union (base_type event_t) |> snd
     |> List.hd (* event.tag *)
-  in
-  let data_union_ty = List.nth
+  in *)
+  (* let data_union_ty = List.nth
     (extract_trecord_or_union (base_type event_t) |> snd) 
     1 (* event.data *)
-  in
+  in *)
   (* print_endline ("tag_enum_ty: "^(CCorePPrint.ty_to_string ~use_abstract_name:true tag_enum_ty));
   print_endline ("data_union_ty: "^(CCorePPrint.ty_to_string data_union_ty)); *)
-  let tag_cids = List.split (extract_tenum (base_type tag_enum_ty)) |> fst in
-  let event_struct_tys = extract_trecord_or_union (base_type data_union_ty) |> snd in
+  (* let event_struct_tys = extract_trecord_or_union (base_type data_union_ty) |> snd in *)
   (* let tag_symbols = List.map (fun cid -> eval@@vsymbol cid tag_enum_ty) tag_cids in *)
   let ev_out_param = cid"ev_out", tref event_t in
   let buf_out_param = cid"buf_out", tref bytes_t in
@@ -113,21 +112,19 @@ let deparse_fun event_t =
       (snoop);
     smatch [ev_out/->cid"tag"] 
       (* one branch for each event *)
-      (List.map2 
-        (fun tag_cid event_struct_ty -> 
-          let this_event_data_field = CCoreEvents.event_untag ( tag_cid) in
-          [PVal(vsymbol tag_cid tag_enum_ty)],
+      (List.map
+        (fun event_def -> 
+          [PVal(vint (Option.get (event_def.evconstrnum)) event_tag_size)],
           stmts [
             (* copy to memory *)
-            memcpy (buf_out/->cid"cur") ((ev_out/->cid"data")/.( this_event_data_field));
+            memcpy (buf_out/->cid"cur") (ev_out/->cid"data");
             (* increment pointer *)
-            sptr_incr (buf_out/->cid"cur") (size_of_ty event_struct_ty);
+            sptr_incr (buf_out/->cid"cur") (CCoreEvents.event_len event_def);
             sassign 
               (cid"bytes_written") 
-              ((evar (cid"bytes_written") (tint 32))/+(eval@@vint (size_of_ty event_struct_ty) 32));
+              ((evar (cid"bytes_written") (tint 32))/+(eval@@vint ((CCoreEvents.event_len event_def)) 32));
         ])
-        tag_cids
-        event_struct_tys);
+        event_defs);
     sret ((evar (cid"bytes_written") (tint 32)))
     ]
   in
@@ -141,17 +138,19 @@ let deparse_fun event_t =
    It would also be safe to put the deparser at the end, since its 
    not called by anything except the handler, as long as that's not already 
    implemented by this point in the compilation. *)
-let rec process_inner decls = match decls with 
+let rec process_inner event_defs decls = match decls with 
   | [] -> []
   | decl::decls -> (
     match decl.d with 
+    | DEvent _ -> process_inner event_defs decls (* events are not needed after this, so remove *)
     | DTy(cid, Some(ty)) when Cid.equal cid ((CCoreEvents.event_ty_id)) -> 
       let event_t = tabstract_cid cid ty in
-      let deparse_decl = deparse_fun event_t in
+      let deparse_decl = deparse_fun event_defs event_t in
       decl::(deparse_decl::decls)
-    | _ -> decl::(process_inner decls)
+    | _ -> decl::(process_inner event_defs decls)
   )
 
 let process decls = 
-  process_inner decls
+  let event_defs = List.filter_map (extract_devent_opt) decls in 
+  process_inner event_defs decls
 ;;

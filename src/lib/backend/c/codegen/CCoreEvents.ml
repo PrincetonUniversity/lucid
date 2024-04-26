@@ -90,14 +90,18 @@ let event_param_ty event_def =
 
 (* event foo(int a, int b); event bar(int c); -> type event_data_t = union {foo foo; bar bar;} *)
 let event_len event_def = 
-  List.fold_left  
-  (fun sz (_, ty) -> sz + size_of_ty ty)
+  let bit_len = List.fold_left  
+  (fun sz (_, ty) -> sz + bitsizeof_ty_exn ty)
   0
   event_def.evparams
+  in
+  let byte_len = (bit_len+7) / 8 in
+  byte_len
 ;;
 let event_len_ty = tint 16
 let event_len_val event_def = 
-  vint (event_len event_def) (size_of_ty event_len_ty)
+  let res = vint (event_len event_def) (bitsizeof_ty_exn event_len_ty) in
+  res
 ;;
 let event_data_ty_id = cid"event_data_t";;
 let event_data_ty (event_defs :event_def list) = 
@@ -116,7 +120,8 @@ let event_ty event_defs =
   tabstract_cid event_ty_id (trecord [
     (cid"data",event_data_ty event_defs); (* IMPORTANT: the data has to come first because of how we cast *)
     (cid"tag", event_tag_ty);
-    (cid"len", event_len_ty)
+    (cid"len", event_len_ty);
+    (cid"is_packet", tint 8)
   ])
 
 let mk_toplevel_event_decls event_defs = 
@@ -176,6 +181,7 @@ let event_constr event_ty event_def =
   let set_data = stmts@@List.map2 (set_data_field event_var event_param_ty) event_fields constr_param_vars in
   let set_tag = sassign_exp (event_var/.cid"tag") (event_tag_var event_def) in
   let set_len = sassign_exp (event_var/.cid"len") (eval (event_len_val event_def)) in
+  let set_packet = sassign_exp (event_var/.cid"is_packet") (eval (if (event_def.is_packet) then vint 1 8 else vint 0 8)) in
   let ret_rv = sret event_var in
   dfun (event_def.evconstrid) event_ty event_def.evparams @@
     stmts [
@@ -183,6 +189,7 @@ let event_constr event_ty event_def =
       set_data;
       set_tag;
       set_len;
+      set_packet;
       ret_rv
     ]
 ;;
@@ -327,11 +334,15 @@ let transform_decl last_event_id event_defs decls decl : decls =
 ;;
 
 let process decls = 
+  let event_decls = List.filter is_devent decls in 
   let event_defs = List.filter_map extract_devent_opt decls in
   let last_event_id = (List.rev event_defs |> List.hd).evconstrid in
   let decls = List.fold_left (transform_decl last_event_id event_defs) [] decls in
   let event_defs_assoc = List.map (fun event_def -> (event_def.evconstrid, event_def)) event_defs in
-  let decls = transformer#visit_decls event_defs_assoc decls in
+  (* the event declarations are convenient for deparse generation, so keep them around until that *)
+  let decls = 
+    (event_decls@(transformer#visit_decls event_defs_assoc decls)) 
+  in
   decls
 ;;
 
