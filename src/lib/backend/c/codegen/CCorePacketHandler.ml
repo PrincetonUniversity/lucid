@@ -110,7 +110,7 @@ let main_fun =
     return 0;
   }|}
 let process decls = 
-  let t_event = match (find_ty_opt (Cid.id CCoreEvents.event_tunion_tyid) decls) with 
+  let t_event = match (find_ty_opt CCoreEvents.event_ty_id decls) with 
     | Some(ty) -> ty
     | _ -> err "no tevent"
   in

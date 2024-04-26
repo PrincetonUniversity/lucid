@@ -145,7 +145,7 @@ let rec process_inner decls = match decls with
   | [] -> []
   | decl::decls -> (
     match decl.d with 
-    | DTy(cid, Some(ty)) when Cid.equal cid (Cid.id (CCoreEvents.event_tunion_tyid)) -> 
+    | DTy(cid, Some(ty)) when Cid.equal cid ((CCoreEvents.event_ty_id)) -> 
       let event_t = tabstract_cid cid ty in
       let deparse_decl = deparse_fun event_t in
       decl::(deparse_decl::decls)

@@ -70,7 +70,7 @@ void copy_payload(bytes_t*  buf_out , bytes_t*  buf_in ) {
 ;;
 
  let default_helpers decls = 
-   let teventstruct = match (find_ty_opt (Cid.id CCoreEvents.event_tunion_tyid) decls) with 
+   let teventstruct = match (find_ty_opt (CCoreEvents.event_ty_id) decls) with 
       | Some(ty) -> ty
       | _ -> err "no tevent"
    in  

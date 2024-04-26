@@ -10,23 +10,18 @@
 
   // --> c-like language 
 
+    int foo_tag = 1;
     type foo_t {
       int x;
       int y;
     }
+    int bar_tag = 2;
     type bar_t {
       int z;
     }
-    enum event_tag = {
-      foo_tag;
-      bar_tag;
-    }
-    union event_data = {
-      foo_t foo; 
-      bar_t bar;
-    }
+    type event_data = foo_t; // largest event
     type event {
-      event_tag tag;
+      int tag;
       event_data data;
     }
 
@@ -62,58 +57,70 @@ open CCoreSyntax
 open CCoreUtils
 
 (* let print_endline _ = () *)
-
-
-(* event foo(int a, int b); event bar(int c); -> type event_tag_t = [foo = 1; bar = 2] *)
-let event_enum_tyid = id"event_tag_t";;
+(*** rewrite ***)
+let event_tag_size = 16
+let event_tag_ty = tint event_tag_size
 let event_tag evid = cid (Printf.sprintf "%s_tag" (Cid.name evid));;
 let event_untag evid = cid (Cid.name evid |> fun name -> String.sub name 0 ((String.length name) - 4));;
-let event_enum_ty (event_defs :event_def list) = 
-  let event_tags =     (List.mapi (fun i event_def -> 
-    (event_tag event_def.evconstrid , 
-      (Option.value ~default:(i+1) event_def.evconstrnum)
-    )
-    ) event_defs)
-  in
-  let event_tags = event_tags in
-  tabstract_id event_enum_tyid (tenum_pairs event_tags)
+
+let decl_event_tag event_def = 
+  (* const uint16_t e_tag = {$num}; *)
+  dvar_const 
+    (event_tag event_def.evconstrid) 
+    event_tag_ty 
+    (eval (vint (Option.get event_def.evconstrnum) event_tag_size))
+;;
+let event_tag_val event_def = 
+  vint (Option.get event_def.evconstrnum) event_tag_size
+;;
+let event_tag_var event_def = 
+  evar (event_tag event_def.evconstrid) event_tag_ty
 ;;
 
 (* event foo(int a, int b) -> type foo = {int a; int b} *)
-let event_params_ty event_def =
+let event_param_tyid event_def = 
+  (cid((Cid.name event_def.evconstrid)^"_t")) 
+;;
+let event_param_ty event_def =
   let evparams = List.map (fun (id, ty) -> (id, ty)) event_def.evparams in
   tabstract_cid
-  (cid((Cid.name event_def.evconstrid)^"_t")) 
+  (event_param_tyid event_def)
   (trecord evparams)
 ;;
 
 (* event foo(int a, int b); event bar(int c); -> type event_data_t = union {foo foo; bar bar;} *)
-let event_params_union_tyid = cid"event_data_t";;
-let event_params_union_ty (event_defs :event_def list) = 
-  let event_unions = List.map (fun event_def -> 
-    (event_def.evconstrid, event_params_ty event_def)
-  ) event_defs
+let event_len event_def = 
+  List.fold_left  
+  (fun sz (_, ty) -> sz + size_of_ty ty)
+  0
+  event_def.evparams
+;;
+let event_len_ty = tint 16
+let event_len_val event_def = 
+  vint (event_len event_def) (size_of_ty event_len_ty)
+;;
+let event_data_ty_id = cid"event_data_t";;
+let event_data_ty (event_defs :event_def list) = 
+  let biggest_ev_opt, _ =  List.fold_left 
+    (fun (ev, sz) evdef -> 
+      if (event_len evdef) > sz then (Some(evdef), event_len evdef) else (ev, sz))
+    (None, 0)
+    event_defs
   in
-  tabstract_cid event_params_union_tyid (tunion_pairs event_unions)
+  tabstract_cid (event_data_ty_id) (tname@@event_param_tyid (Option.get biggest_ev_opt))
 ;;
 
-(* event foo(int a, int b); event bar(int c); ==> type event = {event_tag_t tag; event_data_t data;} *)
-let event_tunion_tyid = id"event_t";;
-let event_tunion_ty event_defs = 
-  let tag_ty = event_enum_ty event_defs in
-  let data_ty = event_params_union_ty event_defs in
-  tabstract_id event_tunion_tyid (trecord [
-    (cid"tag", tag_ty);
-    (cid"data", data_ty);
-    (cid"is_packet", tint 8);
-  ])  
-;;
+(* the toplevel event type *)
+let event_ty_id = cid"event_t";;
+let event_ty event_defs = 
+  tabstract_cid event_ty_id (trecord [
+    (cid"data",event_data_ty event_defs); (* IMPORTANT: the data has to come first because of how we cast *)
+    (cid"tag", event_tag_ty);
+    (cid"len", event_len_ty)
+  ])
 
 let mk_toplevel_event_decls event_defs = 
-  let tag_ty = event_enum_ty event_defs in
-  let data_ty = event_params_union_ty event_defs in
-  let event_ty = event_tunion_ty event_defs in
-  [decl_tabstract tag_ty; decl_tabstract data_ty; decl_tabstract event_ty]
+  [decl_tabstract (event_data_ty event_defs); decl_tabstract (event_ty event_defs)]
 ;;
 
 (**** code generation and transformations ****)
@@ -133,55 +140,76 @@ let mk_toplevel_event_decls event_defs =
       }
     ;
 *)
-let event_constr event_defs event_def = 
-  let event_ty = event_tunion_ty event_defs in
-  let event_enum_ty = event_enum_ty event_defs in
-  let event_data_ty = event_params_union_ty event_defs in
-  let event_exp =         
-    {(erecord
-      [
-        cid"tag", eval@@venum (event_tag event_def.evconstrid) event_enum_ty; 
-        cid"data", (eunion
-                      (event_def.evconstrid )
-                      (erecord 
-                        (List.map 
-                          (fun (id, ty) -> 
-                            id, evar (id) ty)
-                          event_def.evparams))
-                      event_data_ty);
-        cid"is_packet", (if event_def.is_packet then eval@@vint 1 8 else eval@@vint 0 8)
-      ]) with ety = event_ty
-    }
-  in
-  let rv_id = Cid.fresh_name "ev" in
-  dfun (event_def.evconstrid) event_ty event_def.evparams
-    ( stmts [
-        slocal (rv_id) event_ty event_exp;
-        sret (param_evar (rv_id, event_ty))
-      ])
+let event_constr_ty event_ty event_def = 
+  tfun (List.map snd event_def.evparams) event_ty
 ;;
-
+let event_constr event_ty event_def = 
+  (* construct an event *)
+  (* 
+    event_t mk_ev_a(uint16_t x, u_int16_t y, u_int32_t z) {
+        event_t rv;
+        ((ev_a * )(&rv))->x = x;
+        ((ev_a * )(&rv))->y = y;
+        ((ev_a * )(&rv))->z = z;
+        rv.tag = ev_a_num;
+        rv.len = sizeof(ev_a);
+        return rv;
+    }     
+  *)
+  let rv_cid = cid"ev" in
+  let set_data_field (event : exp) (event_params_ty : ty) (field : cid) (newval : exp) : statement = 
+    (* cast the event to the type of the specific event and then 
+       set field to newval *)
+    (* event.field := newval; // where field is a member of event_data_ty *)
+    let event_var, event_var_ty = extract_evar event in 
+    sassign_exp
+      (* >>> ((event_data_ty * )(&event_var)) -> field_cid = newval <<< *)
+      (( ecast (tptr event_params_ty) (eaddr event_var event_var_ty))/->(field))
+      newval
+  in
+  let event_var = evar rv_cid event_ty in
+  let event_param_ty = event_param_ty event_def in
+  let constr_args = event_def.evparams in
+  let constr_param_vars = List.map param_evar constr_args in
+  let event_fields = List.split event_def.evparams |> fst in
+  let init_rv = slocal rv_cid event_ty (eval@@memzero event_ty) in 
+  let set_data = stmts@@List.map2 (set_data_field event_var event_param_ty) event_fields constr_param_vars in
+  let set_tag = sassign_exp (event_var/.cid"tag") (event_tag_var event_def) in
+  let set_len = sassign_exp (event_var/.cid"len") (eval (event_len_val event_def)) in
+  let ret_rv = sret event_var in
+  dfun (event_def.evconstrid) event_ty event_def.evparams @@
+    stmts [
+      init_rv;
+      set_data;
+      set_tag;
+      set_len;
+      ret_rv
+    ]
+;;
 let transformer = 
   (* do all the transformations on event-related types, expressions, and statements *)
   (* first, some helpers *)
-  let extract_fields ev evid params = 
-    (* ev should be an event expression AFTER TRANSFORMATION *)
-    let extract_field (ev:exp) (evid : cid) (field : cid) (ty : ty) = 
-      let data = ev/.cid"data" in
-      let event = data/.evid in 
-      let param = event/.field in
-      slocal (field) ty param
+  let extract_fields ev evdef params = 
+    (* ev should be a global event union type expression *)
+    let evref = (* we want a reference to the event *)
+      if (is_ederef ev) then (extract_ederef ev) (* if its a deref, just get the event ref out*)
+      else (* if its not a deref, it must be a var, so we take its address *)
+        let event_var, event_var_ty = extract_evar ev in
+        (eaddr event_var event_var_ty)
+    in
+    let extract_field (field : cid) (ty : ty) = 
+      (* (( ecast (tptr event_params_ty) (eaddr event_var event_var_ty))/->(field)) *)
+      let rhs = (( ecast (tptr (event_param_ty evdef)) evref)/->(field)) in
+      slocal (field) ty rhs
     in
     stmts
     @@List.map2 
-      (extract_field ev evid) 
+      extract_field 
       (List.split params |> fst) 
       (List.split params |> snd)
   in
-  (* the event's tag as an enum value *)
-  let event_tag_symbol_val event_def_assoc evid = 
-    let ty = event_enum_ty (List.split event_def_assoc |> snd) in
-    vsymbol (event_tag evid) ty
+  let event_tag_val event_def_assoc evid = 
+    event_tag_val (List.assoc evid event_def_assoc)
   in
   let rec inline_eventpat_into_case event_def_assoc exps n cases = 
     match cases with 
@@ -191,8 +219,8 @@ let transformer =
       let pat = List.nth pats n in
       match pat with 
         | PEvent{event_id; params} -> 
-          let field_var_init = extract_fields exp (event_id) params in 
-          let pat = event_tag_symbol_val event_def_assoc (event_id) in
+          let field_var_init = extract_fields exp (List.assoc event_id event_def_assoc) params in 
+          let pat = event_tag_val event_def_assoc (event_id) in
           let pats = replace n (patval pat) pats in
           let bstmt = sseq field_var_init bstmt in
           let res = 
@@ -200,10 +228,9 @@ let transformer =
           in
           res
   
-        | PWild(ty) when (ty = (event_tunion_ty (List.split event_def_assoc |> snd))) -> 
-          (* wildcard on event translates to wildcard on event tag *)
-          let ty = event_enum_ty (List.split event_def_assoc |> snd) in
-          let pat = PWild(ty) in
+        | PWild(ty) when (ty = (event_ty (List.split event_def_assoc |> snd))) -> 
+          (* wildcard on event translates to wildcard on event tag, with nothing bound *)
+          let pat = PWild(event_tag_ty) in
           let pats = replace n (pat) pats in 
           (pats, bstmt)::(inline_eventpat_into_case event_def_assoc exps n cases)
         | _ ->  
@@ -212,51 +239,28 @@ let transformer =
   in
 
   object (_) inherit [_] s_map as super 
-
-  (* event types change to the global event tagged union type  *)
+  (* event types change to the union event type  *)
   method! visit_ty event_def_assoc ty = 
     let ty = super#visit_ty event_def_assoc ty in
     match ty.raw_ty with 
-      | TEvent -> event_tunion_ty (List.map snd event_def_assoc)
+      | TEvent -> event_ty (List.map snd event_def_assoc)
       | _ -> ty
 
-  (* event values change to global event tagged union values *)
-  method! visit_value event_def_assoc value = 
-    let value = super#visit_value event_def_assoc value in
-    match value.v with 
-      | VEvent(vevent) -> 
-        let event_enum_ty = event_tunion_ty (List.map snd event_def_assoc) in
-        let event_data_ty = event_params_union_ty (List.map snd event_def_assoc) in
-        let evconstrid = vevent.evid in
-        let ev_params  = (List.assoc evconstrid event_def_assoc).evparams in
-        let evdata = vevent.evdata in
-        vrecord 
-          [
-            cid"tag",   venum (event_tag evconstrid) event_enum_ty;
-            cid"data", (vunion
-                        (evconstrid)
-                        (vrecord
-                          (List.map2
-                            (fun (id, _) param_value -> 
-                              id, param_value)
-                            ev_params
-                            evdata))
-                        event_data_ty)
-          ]
-      | _ -> value    
-
-  (* event constructors change to function calls *)
+  (* event expressions and values change to constructor function calls *)
   method! visit_exp event_def_assoc exp = 
     let exp = super#visit_exp event_def_assoc exp in
     let exp = 
       match exp.e with 
         | ECall{f; args; call_kind=CEvent} -> 
-          (* because of visit_ty, f's type is the event tagged union.
-             but inside of a call, that's wrong because now we're calling the 
-             event constructor, which is a function from params -> event struct. 
-             So we update f's type. *)
-          let f_ety = tfun (List.map (fun arg -> arg.ety) args) f.ety in
+          let union_event_ty = f.ety in (* because of visit_ty *)
+          let f_ety = tfun (List.map (fun arg -> arg.ety) args) union_event_ty in
           let f = {f with ety=f_ety} in
+          {exp with e=ECall{f; args; call_kind=CFun}}
+        | EVal({v=VEvent(vevent); vty=union_event_ty}) -> 
+          let args = List.map eval vevent.evdata in
+          let f_cid = vevent.evid in
+          let f_ety = tfun (List.map (fun arg -> arg.ety) args) union_event_ty in
+          let f = efunref f_cid f_ety in
           {exp with e=ECall{f; args; call_kind=CFun}}
         | _ -> exp
     in
@@ -273,10 +277,10 @@ let transformer =
     match stmt.s with 
     | SMatch(exps, branches) -> 
       (* match on event tags, not the event itself *)
-      let tag_of_union_exp exp = match exp.ety with 
-        | ty when ty = (event_tunion_ty (List.split event_def_assoc |> snd)) -> 
+      let tag_of_union_event_exp exp = match exp.ety with 
+        | ty when ty = (event_ty (List.split event_def_assoc |> snd)) -> 
           exp/.cid"tag"
-        | ty when ty = (tref@@event_tunion_ty (List.split event_def_assoc |> snd)) -> 
+        | ty when ty = (tref@@event_ty (List.split event_def_assoc |> snd)) -> 
           exp/->cid"tag"
         | _ -> exp
       in
@@ -289,7 +293,7 @@ let transformer =
       (* we transform exps _after_ the branches, because to transform the branches 
          we need to know the data in the tagged union, which we don't get if 
           we transform the expressions to tags *)
-      let exps = List.map tag_of_union_exp exps in
+      let exps = List.map tag_of_union_event_exp exps in
       {stmt with s=SMatch(exps, branches')}
     | _ -> stmt
   end
@@ -297,10 +301,9 @@ let transformer =
 
 (* declarations: 
     1. each event translates into: 1) an event parameter struct; 2) a constructor that returns a struct.
-    2. there are three toplevel types: 
-        1. an event enum, with a tag for each event's id
-        2. an event parameters union, with a component named after each event that holds its parameters
-        3. an event tagged-union record, which holds a tag of type event_enum and a data of type parameter_union
+    2. there are two toplevel types: 
+        1. an event parameters union, which is just an alias of the largest event parameter struct
+        2. an event tagged-union record, which holds a tag of type event_enum and a data of type parameter_union
 *)
 let transform_decl last_event_id event_defs decls decl : decls = 
   (* The transformation is a little convoluted because the toplevel types 
@@ -308,17 +311,19 @@ let transform_decl last_event_id event_defs decls decl : decls =
   match extract_devent_opt decl with
   | None -> decls @ [decl]
   | Some(event_def) -> 
-    let event_ty_decl = decl_tabstract@@event_params_ty event_def in
+    let event_ty_decl = decl_tabstract@@event_param_ty event_def in
+    let event_num_decl = decl_event_tag event_def in
     if (Cid.equal event_def.evconstrid last_event_id) then (
       (* this is the last event. So we also need to generate 
          the toplevel / global event data structures *)
       let toplevel_event_decls = mk_toplevel_event_decls event_defs in
-      let event_fun_decls = List.map (event_constr event_defs) event_defs in
-      decls @ [event_ty_decl] @ toplevel_event_decls @ event_fun_decls
+      (* event functions have to go after events *)
+      let event_fun_decls = List.map (event_constr (event_ty event_defs)) event_defs in
+      decls @ [event_num_decl;event_ty_decl] @ toplevel_event_decls @ event_fun_decls
     )
     else
       (* this is not the last event. So just return the event-specific decls *)
-      decls@[event_ty_decl]
+      decls@[event_num_decl;event_ty_decl]
 ;;
 
 let process decls = 

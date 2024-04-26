@@ -184,6 +184,7 @@ let tunit = ty TUnit
 let tbool = ty TBool
 let tint i = ty@@TInt(sz i)
 let tpat len = ty (TBits {ternary=false; len})
+let tptr base_ty = ty (TPtr(base_ty,None))
 let tevent = ty TEvent
 (* let trecord labels tys = ty (TRecord(labels, tys)) *)
 let trecord pairs = 
@@ -383,6 +384,7 @@ let vsymbol str ty = venum str ty
 
 (* BUILTIN *)
 let zero_list ty = vsymbol (cid "{0}") ty;;
+let memzero ty = vsymbol (cid "{0}") ty;;
 
 
 let string_to_value (s:string) =

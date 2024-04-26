@@ -80,6 +80,8 @@ let compile ds =
   print_endline ("---- Eliminating events and handlers ----");
   let cds = CCoreHandlers.process cds in
   let cds = CCoreEvents.process cds in
+  ccore_print "after event and handler generation" cds;
+  exit 1;
   let cds = CCoreTyper.check cds in
   ccore_print "after event and handler generation" cds;
 
