@@ -108,7 +108,7 @@ let event_data_ty (event_defs :event_def list) =
   let biggest_ev_opt, _ =  List.fold_left 
     (fun (ev, sz) evdef -> 
       if (event_len evdef) > sz then (Some(evdef), event_len evdef) else (ev, sz))
-    (None, 0)
+    (None, -1)
     event_defs
   in
   tabstract_cid (event_data_ty_id) (tname@@event_param_tyid (Option.get biggest_ev_opt))

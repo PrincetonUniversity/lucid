@@ -48,7 +48,10 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : (string * stri
   | TUnit -> "void", ""
   | TInt n when (List.mem n [8; 16; 32; 64]) -> sprintf "uint%i_t" n, ""
   | TInt n -> 
-    sprintf "uint%i_t" (((n_bytes n)*8)), sprintf ": %i" n
+    (* full size is smallest int larger than n in [8; 16; 32; 64] *)
+    let int_sz = List.find (fun i -> i > n) [8; 16; 32; 64] in
+    sprintf "uint%i_t" int_sz, sprintf ": %i" n
+    (* sprintf "uint%i_t" (((n_bytes n)*8)), sprintf ": %i" n *)
   | TBool -> "uint8_t", ""
   | TUnion(labels, ts) -> 
     let label_tys = List.map2 (fun l t -> l, t) labels ts in

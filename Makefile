@@ -25,7 +25,7 @@ DEV_DEPENDENCIES = \
 merlin \
 ocamlformat
 
-.PHONY: test promote test-promote clean
+.PHONY: test promote test-promote test-cc clean
 
 default:
 	dune build src/bin/main.exe
@@ -55,6 +55,16 @@ generatedVisitors: src/lib/frontend/Syntax.processed.ml
 test: default
 	python3 ./test/runtests.py
 
+promote:
+	cp test/output/* test/expected/
+
+test-promote: default
+	python3 ./test/runtests.py
+	cp test/output/* test/expected/
+
+test-cc: default
+	python3 ./test/runtests.py --lucidcc
+
 EXPECTED_SDE_VER := bf-sde-9.13.0
 # cd into test/backend and then call ./runtests.sh
 test_tofino: default
@@ -67,13 +77,6 @@ test_tofino: default
 		exit 1; \
 	fi
 	cd test/backend && ./runtests.sh
-
-promote:
-	cp test/output/* test/expected/
-
-test-promote: default
-	python3 ./test/runtests.py
-	cp test/output/* test/expected/
 
 doc:
 	dune build @doc
