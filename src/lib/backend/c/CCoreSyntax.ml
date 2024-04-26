@@ -923,6 +923,8 @@ let ( /-> ) rec_exp field_id =
 ;;
 
 let (/+) e1 e2 = eop Plus [e1; e2]
+let (/-) e1 e2 = eop Sub [e1; e2]
+
 let (/&) e1 e2 = eop BitAnd [e1; e2]
 let ( /== ) e1 e2 = eop Eq [e1; e2]
 let vtrue = eval@@vbool true

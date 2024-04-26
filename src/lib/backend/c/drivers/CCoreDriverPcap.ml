@@ -39,13 +39,13 @@ uint64_t pkt_ct = 0;
 typedef struct pkt_hdl_ctx_t {
     uint8_t ingress_port;
     u_char *out_pcap;
-    bytes_t in_pkt;
-    bytes_t out_pkt;
+    packet_t in_pkt;
+    packet_t out_pkt;
     struct pcap_pkthdr out_pkthdr;
 } pkt_hdl_ctx_t;
 
 
-void fill_out_pkthdr(const struct pcap_pkthdr *in_pkthdr, bytes_t* out_pkt, struct pcap_pkthdr* out_pkthdr) {
+void fill_out_pkthdr(const struct pcap_pkthdr *in_pkthdr, packet_t* out_pkt, struct pcap_pkthdr* out_pkthdr) {
     out_pkthdr->ts = in_pkthdr->ts;
     out_pkthdr->caplen = out_pkt->payload - out_pkt->start;
     out_pkthdr->len = in_pkthdr->len;

@@ -2,21 +2,25 @@
 (* 
 
 Assumptions:
-  - the buffer is set up properly (cur points to start, buffer is large enough)
+  - the packet_t buffer's "payload" pointer points to the payload 
+    of the packet that we wish to send out.  
   - event parameters are efficiently packable (no padding)
+  - the packet_t buffer has sufficient headroom before "start" to 
+    store any event that can be serialized, even if it is larger 
+    than the event that was extracted from the packet upon arrival.
 
 deparse_event function:
-  - for background events, start by serializing 
-    an empty ethernet header and the event's tag
-  - then, copy the event's params struct to the 
-    output buffer. Note that the union is _NOT_ copied, 
-    only the struct for the particular event. 
+  1. calculate the new start: packet->payload - event->len
+  2. if the event is a background event, 
+     prepend an ethernet header before start and the 
+     16-bit event tag.
+  3. copy the event's data to the start of the packet.
 
 example:
 program with an event 
   do_add(int i, int j, int k);
 ==>
-fn int deparse_event(event* ev_out, bytes_t* buf_out){
+fn int deparse_event(event* ev_out, packet_t* buf_out){
   if (ev_out->is_packet == 0) {
     ((int* )(buf_out->cur))[0] = 0;
   ((int* )(buf_out->cur))[1] = 0;
@@ -43,7 +47,7 @@ TODO:
 *)
 open CCoreSyntax
 open CCoreExceptions
-let bytes_t = CCoreParse.bytes_t
+let packet_t = CCoreParse.packet_t
 
 
 (*  macros *)
@@ -73,62 +77,51 @@ let sptr_incr eptr i = sassign_exp eptr (ptr_incr eptr i)
 
 
 let deparse_fun event_defs event_t = 
-
-  (* let tag_enum_ty = 
-    extract_trecord_or_union (base_type event_t) |> snd
-    |> List.hd (* event.tag *)
-  in *)
-  (* let data_union_ty = List.nth
-    (extract_trecord_or_union (base_type event_t) |> snd) 
-    1 (* event.data *)
-  in *)
-  (* print_endline ("tag_enum_ty: "^(CCorePPrint.ty_to_string ~use_abstract_name:true tag_enum_ty));
-  print_endline ("data_union_ty: "^(CCorePPrint.ty_to_string data_union_ty)); *)
-  (* let event_struct_tys = extract_trecord_or_union (base_type data_union_ty) |> snd in *)
-  (* let tag_symbols = List.map (fun cid -> eval@@vsymbol cid tag_enum_ty) tag_cids in *)
   let ev_out_param = cid"ev_out", tref event_t in
-  let buf_out_param = cid"buf_out", tref bytes_t in
+  let buf_out_param = cid"buf_out", tref packet_t in
   let ev_out = param_evar ev_out_param in
   let buf_out = param_evar buf_out_param in
   (* start function def *)
   let fun_id = id"deparse_event" in
   let params = [ev_out_param; buf_out_param] in
   let body = stmts [
-    slocal (cid"bytes_written") (tint 32) (default_exp (tint 32));
+    (* calculate new start *)
+    sassign_exp (buf_out/->cid"start") ((buf_out/->cid"start")/-((ev_out/->cid"len")));
+    (* if not a packet, prepend ethernet header and event tag *)
     sif (eop Eq [(ev_out/->cid"is_packet");(eval@@vint 0 8)])
       (* not a packet / raw event *)
       (stmts [
-        (* set empty eth header *)
-        memset_n (buf_out/->cid"payload") (vint 0 32) 3; (* 12 bytes *)
-        memset_n (ptr_incr (buf_out/->cid"payload") 12) (vint 0 16) 1; (* 2 bytes *)
-        sptr_incr (buf_out/->cid"payload") 14;
+        (* prepend eth header and event tag *)
+        sassign_exp (buf_out/->cid"start") ((buf_out/->cid"start")/-((eval@@vint 16 32)));
+        memset_n (buf_out/->cid"start") (vint 0 32) 3; (* 12 bytes *)
+        memset_n (ptr_incr (buf_out/->cid"start") 12) (vint 0 16) 1; (* 2 bytes *)
         (* set event type *)
-        memcpy (buf_out/->cid"payload") (ev_out/->cid"tag");
-        sptr_incr (buf_out/->cid"payload") 2;
-        sassign 
-          (cid"bytes_written") 
-          ((evar (cid"bytes_written") (tint 32))/+(eval@@vint 16 32))
+        memcpy (ptr_incr (buf_out/->cid"start") 14) (ev_out/->cid"tag");
+        (* update start -- should now be back to before prepend *)
+        sptr_incr (buf_out/->cid"start") 16;
       ])
       (snoop);
     smatch [ev_out/->cid"tag"] 
-      (* one branch for each event *)
+      (* now branch on tag, copying event parameters to packet *)
       (List.map
         (fun event_def -> 
+          let event_data_ty = CCoreEvents.event_param_ty event_def in
           [PVal(vint (Option.get (event_def.evconstrnum)) event_tag_size)],
           stmts [
-            (* copy to memory *)
-            memcpy (buf_out/->cid"payload") (ev_out/->cid"data");
-            (* increment pointer *)
-            sptr_incr (buf_out/->cid"payload") (CCoreEvents.event_len event_def);
-            sassign 
-              (cid"bytes_written") 
-              ((evar (cid"bytes_written") (tint 32))/+(eval@@vint ((CCoreEvents.event_len event_def)) 32));
+            (* this is wrong -- data is the size of the largest event. 
+                We need to cast ev_out to a pointer to the event's parameter type *)
+      (*this is what we want ( *(((do_add_t* )(buf_out->start)))) = *((do_add_t* )(ev_out)); *)
+          sassign_exp 
+            (ederef (ecast (tref event_data_ty) (buf_out/->cid"start")))
+            (ederef (ecast (tref event_data_ty) (ev_out)));
+          (* memcpy (buf_out/->cid"start") (ecast (tref event_data_ty) (ev_out)); *)
+            (* increment pointer -- this is optional, but should take it back to payload *)
+            sptr_incr (buf_out/->cid"start") (CCoreEvents.event_len event_def);
         ])
         event_defs);
-    sret ((evar (cid"bytes_written") (tint 32)))
     ]
   in
-  dfun (Cid.id fun_id) (tint 32) params body
+  dfun (Cid.id fun_id) (tunit) params body
 ;;
 
 (* find the event type definition and put the deparser 

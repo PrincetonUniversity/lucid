@@ -29,7 +29,7 @@ let reset_event_tag t_event =
 let reset_cursor = 
   let buf_param = cid"buf", tref tchar in
   let len_param = cid"len", tint 32 in
-  let bs_param = cid"bytes", tref CCoreParse.bytes_t in
+  let bs_param = cid"bytes", tref CCoreParse.packet_t in
   let buf = param_evar buf_param in
   let bs = param_evar bs_param in
   let len = param_evar len_param in
@@ -47,12 +47,12 @@ let pkt_handler_str = {|
 {
     // fixed-function toplevel packet handler 
     // locals (that should maybe be globals?)
-    bytes_t bytes_v;
+    packet_t bytes_v;
     event_t ev1_v;
     event_t ev2_v;
     event_t ev_out_v;
 
-    bytes_t * bytes = &bytes_v;
+    packet_t * bytes = &bytes_v;
     event_t * ev1 = &ev1_v;
     event_t * ev2 = &ev2_v;
     event_t * ev_out = &ev_out_v;

@@ -44,7 +44,7 @@ let get_event_tag t_event =
  ;;
  
  let init_cursor = 
-   let bytes_ptr_t = tref CCoreParse.bytes_t |> CCorePPrint.ty_to_string ~use_abstract_name:true in
+   let bytes_ptr_t = tref CCoreParse.packet_t |> CCorePPrint.ty_to_string ~use_abstract_name:true in
    dforiegn [%string
 {|
 void init_cursor(char*  buf , uint32_t len , %{bytes_ptr_t}  bytes ){
@@ -54,22 +54,29 @@ void init_cursor(char*  buf , uint32_t len , %{bytes_ptr_t}  bytes ){
 }|}]
 ;;
 let reset_cursor = 
-   let bytes_ptr_t = tref CCoreParse.bytes_t |> CCorePPrint.ty_to_string ~use_abstract_name:true in
+   let bytes_ptr_t = tref CCoreParse.packet_t |> CCorePPrint.ty_to_string ~use_abstract_name:true in
    dforiegn [%string
 {|
 void reset_cursor(%{bytes_ptr_t}  bytes){
    bytes->payload = bytes->start;
 }|}]
-let copy_payload = 
+
+(* copy an input packet to an output packet *)
+(* Assumption: buf_out and buf_in are allocated by the same 
+   internal function and have the same maximum size.
+   This ensures that if data fits in buf_in, it will also fit in buf_out, 
+   eliminating the need for explicit bounds checking within this function. *)
+let copy_packet = 
    dforiegn [%string
 {|
-void copy_payload(bytes_t*  buf_out , bytes_t*  buf_in ) {
-   memcpy(buf_out->payload, buf_in->payload, buf_in->end - buf_in->payload);
-   buf_out->payload = buf_out->payload + (buf_in->end - buf_in->payload);
+void copy_packet(packet_t*  buf_out , packet_t*  buf_in ) {
+   memcpy(buf_out->start, buf_in->start, buf_in->end - buf_in->start);
+   buf_out->payload = buf_out->start + (buf_in->payload - buf_in->start);
+   buf_out->end = buf_out->start + (buf_in->end - buf_in->start);
 }|}]    
 ;;
 
- let default_helpers decls = 
+let default_helpers decls = 
    let teventstruct = match (find_ty_opt (CCoreEvents.event_ty_id) decls) with 
       | Some(ty) -> ty
       | _ -> err "no tevent"
@@ -79,7 +86,7 @@ void copy_payload(bytes_t*  buf_out , bytes_t*  buf_in ) {
       reset_event_tag teventstruct;
       init_cursor;
       reset_cursor;
-      copy_payload;
+      copy_packet;
    ]
 ;;
 
@@ -92,7 +99,7 @@ let default_imports = [
     
 let default_pkt_handler = dforiegn [%string
 {|
-uint8_t pkt_handler(uint8_t ingress_port, bytes_t* pkt_in, bytes_t* pkt_out){
+uint8_t pkt_handler(uint8_t ingress_port, packet_t* pkt_in, packet_t* pkt_out){
    // locals
    event_t ev1_v = {0};
    event_t ev2_v = {0};
@@ -119,8 +126,8 @@ uint8_t pkt_handler(uint8_t ingress_port, bytes_t* pkt_in, bytes_t* pkt_out){
       }
       // we have generated an output event, write it to the buffer
       if (generated_port != 0) {
+            copy_packet(pkt_out, pkt_in);
             deparse_event(ev_out, pkt_out);
-            copy_payload(pkt_out, pkt_in);
       }
    }
    else {

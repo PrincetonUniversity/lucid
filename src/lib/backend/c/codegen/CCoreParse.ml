@@ -6,7 +6,7 @@ Design:
 Parser functions: 
   A parse function is originally a function that takes a 
   bytestring and generates an event or calls drop. 
-  e.g.:  parser foo(bytes_t bs)
+  e.g.:  parser foo(packet_t bs)
   It is transformed into a function that takes a 
   reference to a bytestring and a reference to an output
   event. It fills the output events, updates the bytestring, 
@@ -15,11 +15,11 @@ Parser functions:
 Bytestrings:
   A bytestring represents the unparsed part of a packet. 
   It is a record with three pointers: 
-    typedef struct bytes_t {
+    typedef struct packet_t {
       char* start;  // pointer to start of buffer
       char* cur;    // pointer to current position
       char* end;    // pointer to end of buffer
-    } bytes_t;
+    } packet_t;
   - Before parsing, "cur" should equal start.
   - After parsing, "cur" points to the payload.
   - "cur" should always be less than or equal to end.
@@ -30,13 +30,13 @@ Parse helpers:
   The functions are polymorphic on the type of the extracted 
   or skipped value. An instance is generated for each 
   type used in a parser.
-  void skip_int(bytes_t* bs) {
+  void skip_int(packet_t* bs) {
     bs->cur = bs->cur + sizeof(int);
   }
-  int peek_int(bytes_t* bs) {
+  int peek_int(packet_t* bs) {
     return ((int * ) (bs->cur))[0];
   }
-  int read_int(bytes_t* bs) {
+  int read_int(packet_t* bs) {
       int rv = ((int 
       skip_int(bs);
       return rv;
@@ -70,7 +70,7 @@ Background event parsing:
 Deparsing notes (this goes into a separate pass)
     - Payload is a flag (carry input payload or not)
     - the function that writes out the packet will get a 
-      value of the event and the bytes_t of the packet. 
+      value of the event and the packet_t of the packet. 
          - what happens next is platform dependent. 
           - in ebpf, it will shrink or grow the buffer of the 
             current packet to hold the new event. 
@@ -86,27 +86,27 @@ let n_bytes ty = eval (vint (size_of_ty ty) 32) ;;
 (*** primary type and code generators ***)
 (* note: these can be made "safe" for ebpf by
    adding runtime checks on the bounds (cur + $ty_size <= end) *)
-(* typedef struct bytes_t {
+(* typedef struct packet_t {
   char* start;  // pointer to start of buffer
   char* cur;    // pointer to current position
   char* end;    // pointer to end of buffer
-} bytes_t; *)
-let bytes_t = 
+} packet_t; *)
+let packet_t = 
   tabstract 
-    "bytes_t"@@trecord
+    "packet_t"@@trecord
       [
         cid"start", tref tchar;
         cid"payload", tref tchar;
         cid"end", tref tchar;
       ]
 ;;
-(* bytes_t param for generated functions *)
-let _bs_param = (cid"bs", tref bytes_t)
-(* bytes_t var within generated functions *)
+(* packet_t param for generated functions *)
+let _bs_param = (cid"bs", tref packet_t)
+(* packet_t var within generated functions *)
 let _bs = param_evar _bs_param
 
 
-(* void skip_int(bytes_t* bs) {
+(* void skip_int(packet_t* bs) {
     bs->cur = bs->cur + sizeof(int);
 } *)
 (* generate a skip function for the given type *)
@@ -124,7 +124,7 @@ let mk_skip ty =
     ]
 ;;
 
-(* int peek_int(bytes_t* bs) {
+(* int peek_int(packet_t* bs) {
     return ((int * ) *(bs->cur));
 } *)
 (* generate a peek function for the given type *)
@@ -142,7 +142,7 @@ let mk_peek ty =
     ]
 ;;
 
-(* int read_int(bytes_t* bs) {
+(* int read_int(packet_t* bs) {
     int rv = peek(bs);
     skip_int(bs);
     return rv;
@@ -172,9 +172,9 @@ let parser_ret_ty = tint 8
 let parser_ret_cont = eval@@vint 1 8
 let parser_ret_drop = eval@@vint 0 8
 
-(* transform all types that represent bytes_t into bytes_t *)
+(* transform all types that represent packet_t into packet_t *)
 let transform_bytestrings = 
-  let is_bytes_t_placeholder ty = match ty.raw_ty with 
+  let is_packet_t_placeholder ty = match ty.raw_ty with 
     | TBits{ternary=false; len=1500} -> true
     | TBuiltin(cid, _) when (Cid.names cid = ["Payload"; "t"]) -> 
       true
@@ -186,8 +186,8 @@ let transform_bytestrings =
   object (_) inherit [_] s_map as super 
   method! visit_ty () ty = 
     let ty = super#visit_ty () ty in 
-    if is_bytes_t_placeholder ty 
-      then bytes_t
+    if is_packet_t_placeholder ty 
+      then packet_t
       else ty 
   end
 ;;
@@ -247,7 +247,7 @@ let transform_parser id params body =
   let params, byte_s_params = List.fold_left 
     (fun (params, pkt_param) (pid, ty) -> 
       match ty.raw_ty with 
-      | TAbstract(tcid, _) when Cid.equal tcid (cid"bytes_t") 
+      | TAbstract(tcid, _) when Cid.equal tcid (cid"packet_t") 
           -> params@[(pid,tref ty)], Some((pid,tref ty))
       | _ -> params@[(pid, ty)], pkt_param  )
     ([], None)
@@ -285,7 +285,7 @@ let process decls =
   let decls = transform_bytestrings#visit_decls () decls in
   let read_tys = ref [] in
   let decls = List.map (process_decl read_tys) decls in
-  (* finally, add new declarations for: 1) bytes_t; 2) skip, peek, and read functions for all types read *)
+  (* finally, add new declarations for: 1) packet_t; 2) skip, peek, and read functions for all types read *)
   let read_tys = MiscUtils.unique_list_of_eq (equiv_tys) !read_tys in
   let read_usertys, read_primitive_tys = List.fold_left 
     (fun (read_usertys, read_tys) ty -> 
@@ -296,8 +296,8 @@ let process decls =
   in
   (* rebuilding the decls is convoluted because we have to put things in 
      a particular order. 
-     - bytes_t at the top
-     - primitive parse helpers after bytes_t
+     - packet_t at the top
+     - primitive parse helpers after packet_t
      - parse helpers for _user defined types_ must go after those type defs *)
   let primitive_parse_helpers = (List.map 
       (fun ty -> [mk_skip ty;mk_peek ty;mk_read ty])
@@ -305,7 +305,7 @@ let process decls =
     |> List.flatten    
   in
   let decls = 
-    decl_tabstract bytes_t
+    decl_tabstract packet_t
     ::primitive_parse_helpers
     @(List.fold_left (* the input program, with user type readers placed 
                        just after the corresponding type declarations *)
