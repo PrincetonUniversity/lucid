@@ -22,7 +22,7 @@ let handler_cid = Cid.create ["handle_event"] ;;
 let in_ev_param = cid"ev_in", tref tevent
 let next_ev_param = cid"ev_next", tref tevent
 let out_ev_param = cid"ev_out", tref tevent
-let out_port_param () = cid"out_port", tint ((!CCoreConfig.cfg).port_id_size) (* port for out event, 0 means no out event *)
+let out_port_param () = cid"out_port", tref@@tint ((CCoreConfig.cfg).port_id_size) (* port for out event, 0 means no out event *)
 let ev_in = param_evar in_ev_param
 let ev_next = param_evar next_ev_param 
 let ev_out = param_evar out_ev_param
@@ -39,20 +39,20 @@ let transform_generate statement =
     let port_exp, event_exp = unbox_egen_port exp in
     sseq 
       (sassign_exp (ederef ev_out) event_exp)
-      (sassign_exp (out_port) port_exp)
+      (sassign_exp (ederef out_port) port_exp)
   | SUnit(exp) when is_egen_switch exp ->
     let switch_exp, event_exp = unbox_egen_switch exp in
     (* at this point, switch is just another name for generate_port with a different type *)
     let switch_exp = ecast (out_port.ety) switch_exp in
     sseq 
       (sassign_exp (ederef ev_out) event_exp)
-      (sassign_exp (out_port) switch_exp)
+      (sassign_exp (ederef out_port) switch_exp)
   | SUnit(exp) when is_egen_group exp ->
     (* treat group the same as port *)
     let port_exp, event_exp = unbox_egen_port exp in
     sseq 
       (sassign_exp (ederef ev_out) event_exp)
-      (sassign_exp (out_port) port_exp)
+      (sassign_exp (ederef out_port) port_exp)
   | _ -> 
     statement
 ;;
@@ -65,9 +65,7 @@ type handler_rec = {
 (* make the main handler *)
 let mk_main_handler handlers = 
   (* ingress_port size is derived from mutable that is set in translation to CCore *)
-  let ingress_port_param = (Cid.id Builtins.ingr_port_id), tint (!CCoreConfig.cfg).port_id_size in
-
-  let out_port = out_port () in
+  let ingress_port_param = (Cid.id Builtins.ingr_port_id), tint (CCoreConfig.cfg).port_id_size in
   let out_port_param = out_port_param () in
   let branches = List.map 
     (fun handler -> 
@@ -80,11 +78,9 @@ let mk_main_handler handlers =
   (* we're matching on a pointer to an event *)
   let branches = branches@[([PWild (extract_tref ev_in.ety)], snoop)] in
   let merged_body = stmts [
-    slocal_evar out_port (default_exp out_port.ety);
-    smatch [ederef ev_in] branches;
-    sret out_port]
+    smatch [ederef ev_in] branches]
   in
-  dfun handler_cid (snd out_port_param) [ingress_port_param; in_ev_param; next_ev_param; out_ev_param] merged_body
+  dfun handler_cid (tunit) [ingress_port_param; in_ev_param; next_ev_param; out_ev_param; out_port_param] merged_body
 ;;
 
 let transform_handler last_handler_cid (handlers, decls) decl : (handler_rec list * decls) = 

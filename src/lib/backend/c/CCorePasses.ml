@@ -4,7 +4,6 @@
       final steps: 
 *         1. eliminate tuple assign and local (and check?)
 *         2. eliminate bit and tern types (probably in match elim) (and check?)
-*         3. add logic to set ingress_port
           4. add port binding config
           5. printf
           6. payloads          
@@ -26,6 +25,7 @@
         - optimizations? 
   *)
 
+open CCoreExceptions
 
 let ccore_print phase_str decls = 
 
@@ -60,7 +60,9 @@ let compile ds =
 
   (*** 3. translate to CCore and some cleanup *)
   print_endline ("---- Translating to CCore ----");
+  print_endline ("initial configuration has port_id_size = "^(string_of_int CCoreConfig.cfg.port_id_size));
   let cds = CoreToCCore.translate ds in
+  print_endline ("after translate, port_id_size = "^(string_of_int CCoreConfig.cfg.port_id_size));
   ccore_print "initial CCore" cds;
   let cds = CCoreTNameToTAbstr.process cds in
   let cds = CCoreRenaming.unify_event_ids cds in
@@ -89,20 +91,21 @@ let compile ds =
   let cds = CCoreCForm.delete_empty_tuples cds in
   let cds = CCoreCForm.declare_tuples cds in
 
-  (*** 7. toplevel function generation ***)
-  (* these functions are outside of the user program, 
-     and can just be tacked onto the end. *)
-  (* deparser generation *)
+  (*** 7. generate deparser (probably should come earlier) ***)
   let cds = CCoreDeparse.process cds in
   ccore_print "after deparse" cds;
 
   (* final type check *)
   (* let cds = CCoreTyper.check cds in *)
   CCoreWellformedC.all_checks cds;
+  (*** 8. add target-specific driver interface *)
+  let prog, cflags = match CCoreConfig.cfg.driver with 
+    | "lpcap" -> CCoreDriverInterface.package (module CCoreDriverPcap) cds 
+    | "dpdk" -> CCoreDriverInterface.package (module CCoreDriverPcap) cds 
+    | d -> err (Printf.sprintf "unknown driver %s. valid options are: [lpcap (pcap driver); dpdk (dpdk driver)]" d)
+  in
 
-  let prog, cflags = CCoreDriverInterface.package (module CCoreDriverPcap) cds in
-
-  (*** 8. print as C *)
+  (*** 9. print as C *)
   let s = CCoreCPrint.decls_to_string prog in
   print_endline ("---- C compilation done ----");
   s, cflags

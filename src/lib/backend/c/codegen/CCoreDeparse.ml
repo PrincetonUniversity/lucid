@@ -85,8 +85,8 @@ let deparse_fun event_defs event_t =
   let fun_id = id"deparse_event" in
   let params = [ev_out_param; buf_out_param] in
   let body = stmts [
-    (* calculate new start *)
-    sassign_exp (buf_out/->cid"start") ((buf_out/->cid"start")/-((ev_out/->cid"len")));
+    (* calculate new start as payload - |ev_out| *)
+    sassign_exp (buf_out/->cid"start") ((buf_out/->cid"payload")/-((ev_out/->cid"len")));
     (* if not a packet, prepend ethernet header and event tag *)
     sif (eop Eq [(ev_out/->cid"is_packet");(eval@@vint 0 8)])
       (* not a packet / raw event *)

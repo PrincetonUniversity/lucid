@@ -40,7 +40,7 @@ let builtin_cids = List.filter_map
     | F.DFun _ -> F.extract_dfun_cid decl
     | F.DVar _ -> F.extract_dvar_cid decl
     | _ -> None)
-  (builtin_externs (!CCoreConfig.cfg))
+  (builtin_externs (CCoreConfig.cfg))
 ;;
 (* a singleton size is an int; 
    a list of sizes is a tuple *)
@@ -521,15 +521,15 @@ let translate_decl (decl:C.decl) : F.decl =
       method! visit_exp () exp = 
         match exp.e with
         | C.EVar(cid) when (Cid.equal (Cid.id Builtins.ingr_port_id) cid) -> 
-          CCoreConfig.cfg := {!CCoreConfig.cfg with port_id_size = C.size_of_tint exp.ety}
+          CCoreConfig.cfg.port_id_size <- C.size_of_tint exp.ety;
         | _ -> super#visit_exp () exp
       
       method! visit_statement () stmt = 
         match stmt.s with 
         | C.SGen(GSingle(Some(loc)), _) -> 
-          CCoreConfig.cfg := {!CCoreConfig.cfg with switch_id_size = C.size_of_tint loc.ety}
+          CCoreConfig.cfg.switch_id_size <- C.size_of_tint loc.ety;
         | C.SGen(GPort(port), _) -> 
-          CCoreConfig.cfg := {!CCoreConfig.cfg with port_id_size = C.size_of_tint port.ety}
+          CCoreConfig.cfg.port_id_size <- C.size_of_tint port.ety;
         | _ -> super#visit_statement () stmt
     end
     in
@@ -538,7 +538,8 @@ let translate_decl (decl:C.decl) : F.decl =
 
 let translate (ds : C.decls) : F.decls = 
   (* translate declarations first in case something in there uses a port.. *)
-  infer_loc_id_sizes ds;
+  if (CCoreConfig.cfg.driver == "interp") then 
+    infer_loc_id_sizes ds;
   let ds = List.map translate_decl ds in
-  (builtin_externs (!CCoreConfig.cfg))@ds
+  (builtin_externs (CCoreConfig.cfg))@ds
 ;;

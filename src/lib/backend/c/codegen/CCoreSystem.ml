@@ -5,7 +5,7 @@ open CCoreUtils
 open Str
 
 (* for now, group type is an alias for port type *)
-let new_group_ty = tint ((!CCoreConfig.cfg).port_id_size) ;;
+let new_group_ty = tint ((CCoreConfig.cfg).port_id_size) ;;
 let group_ty_replacer ty = 
   if (is_tbuiltin tgroup_cid ty) then
     new_group_ty
