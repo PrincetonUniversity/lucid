@@ -199,8 +199,8 @@ let tlist ele_ty len = ty (TPtr(ele_ty, Some(len)))
 let tname cid = ty (TName(cid))
 let textern = tname (Cid.create ["_extern_ty_"])
 let tbuiltin cid tyargs = ty (TBuiltin(cid, tyargs))
-let tgroup_cid = Cid.create ["Group"]
-let tgroup = tbuiltin tgroup_cid []
+(* let tgroup_cid = Cid.create ["Group"]
+let tgroup = tbuiltin tgroup_cid [] *)
 let tabstract n inner_ty = ty (TAbstract(Cid.create [n], inner_ty))
 let tabstract_cid tcid inner_ty = ty (TAbstract(tcid, inner_ty))
 let tabstract_id id inner_ty = ty (TAbstract(Cid.create_ids [id], inner_ty))
@@ -644,17 +644,20 @@ let arg exp = args exp |> List.hd
 
 (* generates are custom statements into CoreSyntax, 
    but extern functions of CCoreSyntax  *)
-let fgen_ty = tfun_kind FNormal [tevent] tunit
+let fake_fgen_ty = tfun_kind FNormal [tunit] tunit
+(* use tunit as the function type for all of these functions 
+   because the type of the variable will be looked up 
+   anyways, so it doesn't matter. *)
 let egen_self ev = 
-  ecall (efunref (Cid.create ["generate_self"]) fgen_ty) [ev]
+  ecall (efunref (Cid.create ["generate_self"]) fake_fgen_ty) [ev]
 let egen_switch loc ev = 
-  ecall (efunref (Cid.create ["generate_switch"]) fgen_ty) [loc; ev]
+  ecall (efunref (Cid.create ["generate_switch"]) fake_fgen_ty) [loc; ev]
 ;;
 let egen_group loc ev = 
-  ecall (efunref (Cid.create ["generate_group"]) fgen_ty) [loc; ev]
+  ecall (efunref (Cid.create ["generate_group"]) fake_fgen_ty) [loc; ev]
 ;;
 let egen_port loc ev = 
-  ecall (efunref (Cid.create ["generate_port"]) fgen_ty) [loc; ev]
+  ecall (efunref (Cid.create ["generate_port"]) fake_fgen_ty) [loc; ev]
 ;;
 let is_egen_self exp = match exp.e with 
   | ECall {f; _} -> Cid.equal (extract_evar f |> fst) (Cid.create ["generate_self"])

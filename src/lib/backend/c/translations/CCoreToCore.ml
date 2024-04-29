@@ -49,7 +49,7 @@ let rec translate_raw_ty (raw_ty : F.raw_ty) : C.raw_ty =
   | F.TBits{ternary=true; len= sz} -> C.TPat(translate_size sz)
   | F.TBits{ternary=false; len= sz} -> C.TBits(translate_size sz)
   (* named types *)
-  | F.TBuiltin(ty_cid, []) when (Cid.equal ty_cid F.tgroup_cid) -> C.TGroup
+  (* | F.TBuiltin(ty_cid, []) when (Cid.equal ty_cid F.tgroup_cid) -> C.TGroup *)
   | F.TBuiltin(ty_cid, ty_args) when is_tbuiltin ty_cid 
       -> C.TBuiltin(ty_cid, List.map (fun ty -> (translate_ty ty).raw_ty) ty_args)
   | F.TBuiltin(ty_cid, ty_args) -> C.TName(ty_cid, List.map ty_to_size ty_args)
@@ -239,7 +239,7 @@ let rec translate_exp (exp: F.exp) =
     C.aexp (C.ERecord(List.map (fun (label, exp) -> (label, translate_exp exp)) label_exp_pairs)) (translate_ty exp.ety) exp.espan
   (* | F.EClosure _ -> err "closure expressions cannot be translated back to CoreSyntax" *)
   | F.ECall{f={e=EVar(cid)}; args=[port_arg];} when (Cid.names cid = ["flood"]) -> 
-    C.aexp (C.EFlood(translate_exp port_arg)) (translate_ty exp.ety) exp.espan
+    C.aexp (C.EFlood(translate_exp port_arg)) (C.ty C.TGroup) exp.espan
   | F.ECall{f={e=EVar(cid)}; args=[ev_exp];} when (Cid.names cid = ["generate_self"]) -> 
     let ev_exp = translate_exp ev_exp in
     let s = C.SGen(GSingle(None), ev_exp) in

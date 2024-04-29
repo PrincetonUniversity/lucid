@@ -153,4 +153,4 @@ elif (test_tgt == "lucidcc"):
 
     print("testing lucid compiler")
     n_tests = len(interpfiles)
-    for i, file in enumerate(interpfiles): lucidcc_test(n_tests, i, file, ["--debug"])
+    for i, file in enumerate(interpfiles): lucidcc_test(n_tests, i, file, ["--lpcap","--debug"])

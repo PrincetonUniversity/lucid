@@ -1,6 +1,12 @@
 module C = CoreSyntax
 module F = CCoreSyntax
 
+(* 
+FIX:
+  - group values translate into tuples, but group type is port type (some sized int)   
+
+*)
+
 let printf = Printf.printf
 (* ops that are calls to builtins in FCore:
     flood
@@ -26,7 +32,7 @@ let builtin_externs config =
     dfun_extern (cid ["generate_self"]) FNormal [tevent] tunit Span.default;
     dfun_extern (cid ["generate_port"]) FNormal [tint config.port_id_size; tevent] tunit Span.default;
     dfun_extern (cid ["generate_switch"]) FNormal [tint config.switch_id_size; tevent] tunit Span.default;
-    dfun_extern (cid ["generate_group"]) FNormal [F.tgroup; tevent] tunit Span.default;    
+    dfun_extern (cid ["generate_group"]) FNormal [(F.tint config.port_id_size); tevent] tunit Span.default;    
     (* dvar_extern (Cid.id Builtins.ingr_port_id) (F.tint config.port_id_size); *)
     (* recirc port id is a constant from a config file *)
     dvar_const  (Cid.id Builtins.recirc_id) (F.tint config.port_id_size) (F.eval (F.vint config.recirc_port config.port_id_size));
@@ -169,7 +175,7 @@ let rec translate_raw_ty (raw_ty : C.raw_ty) : F.raw_ty =
     let raw_tys = List.map translate_raw_ty raw_tys in
     let tys = List.map F.ty raw_tys in
     F.TTuple(tys)
-  | C.TGroup -> (F.tgroup).raw_ty
+  | C.TGroup -> (F.tint CCoreConfig.cfg.port_id_size).raw_ty
   | C.TPat(Sz(sz)) -> F.TBits{ternary=true; len=F.sz sz}
   | C.TPat(_) -> err "TPat size should be a singleton"
   | C.TBits(Sz(sz)) -> F.TBits{ternary=false; len=F.sz sz}
@@ -291,12 +297,14 @@ let rec translate_exp (exp : C.exp) : F.exp =
     (* hash is an op in F *)
     F.eop (F.Hash(F.sz size)) (List.map translate_exp es)
   | _, EHash(_, _) -> err "Hash size should be a singleton"
-  | ret_ty, EFlood(port_exp) -> 
+  | _, EFlood(port_exp) -> 
     (* flood is a call to a builtin *)
     let arg_tys = [translate_ty port_exp.ety] in
-    let ret_ty = translate_ty ret_ty in
+    (* let ret_ty = translate_ty ret_ty in *)
+    let ret_ty = (F.tint CCoreConfig.cfg.port_id_size) in
     let fty = F.tfun arg_tys ret_ty in
     let fexp = F.efunref (Cid.create ["flood"]) fty in
+    (* cast "flood" calls, which should just be banned, to the right type *)
     F.ecall fexp [translate_exp port_exp]
   | _, ERecord(label_exp_pairs) -> 
     let labels, es = List.split label_exp_pairs in
@@ -351,14 +359,28 @@ let rec translate_statement (stmt:C.statement) : F.statement =
   | C.SGen(GSingle(None), ev) -> 
     F.egen_self (translate_exp ev) |> F.sunit |> F.swrap stmt.sspan
   | C.SGen(GSingle(Some(loc)), ev) -> 
-    (* CCoreConfig.cfg := {!CCoreConfig.cfg with switch_id_size = C.size_of_tint loc.ety}; *)
-    F.egen_switch (translate_exp loc) (translate_exp ev) |> F.sunit |> F.swrap stmt.sspan
+    let loc = translate_exp loc in
+    let loc = if CCoreSyntax.bitsizeof_ty_exn loc.ety < CCoreConfig.cfg.switch_id_size 
+      then CCoreSyntax.ecast (F.tint CCoreConfig.cfg.switch_id_size) loc
+      else loc
+    in
+    F.egen_switch (loc) (translate_exp ev) |> F.sunit |> F.swrap stmt.sspan
   | C.SGen(GPort(port), ev) -> 
-    (* CCoreConfig.cfg := {!CCoreConfig.cfg with port_id_size = C.size_of_tint port.ety}; *)
-    F.egen_port (translate_exp port) (translate_exp ev) |> F.sunit |> F.swrap stmt.sspan
+    let port = translate_exp port in
+    print_endline("port type: " ^ (CCorePPrint.ty_to_string port.ety));
+    let port = if CCoreSyntax.bitsizeof_ty_exn port.ety < CCoreConfig.cfg.switch_id_size 
+      then CCoreSyntax.ecast (F.tint CCoreConfig.cfg.switch_id_size) port
+      else port
+    in
+    print_endline("here");
+    F.egen_port (port) (translate_exp ev) |> F.sunit |> F.swrap stmt.sspan
   | C.SGen(GMulti(port), ev) -> 
-    (* gen_ports takes a group, which can be any size *)
-    F.egen_group (translate_exp port) (translate_exp ev) |> F.sunit |> F.swrap stmt.sspan
+    let port = translate_exp port in
+    let port = if CCoreSyntax.bitsizeof_ty_exn port.ety < CCoreConfig.cfg.switch_id_size 
+      then CCoreSyntax.ecast (F.tint CCoreConfig.cfg.switch_id_size) port
+      else port
+    in
+    F.egen_group (port) (translate_exp ev) |> F.sunit |> F.swrap stmt.sspan
   | C.SSeq(s1, s2) -> 
     F.sseq (translate_statement s1) (translate_statement s2) |> F.swrap stmt.sspan
   | C.SMatch(exps, branches) -> 
@@ -538,8 +560,8 @@ let translate_decl (decl:C.decl) : F.decl =
 
 let translate (ds : C.decls) : F.decls = 
   (* translate declarations first in case something in there uses a port.. *)
-  if (CCoreConfig.cfg.driver == "interp") then 
-    infer_loc_id_sizes ds;
+  (* if (CCoreConfig.cfg.driver == "interp") then  *)  
+  (* infer_loc_id_sizes ds; *)
   let ds = List.map translate_decl ds in
   (builtin_externs (CCoreConfig.cfg))@ds
 ;;

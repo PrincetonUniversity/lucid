@@ -6,12 +6,11 @@ type ccore_config = {
   mutable driver : string;
 }
 let default_config () = {
-  port_id_size = 8;
+  port_id_size = 32;
   switch_id_size = 32;
   recirc_port = 0;
   self_id_num = 0;
-  driver = "interp" (* interp means its getting translated back to core and interpreter *)
+  driver = "lpcap" 
 }
-
 
 let cfg = default_config ()

@@ -1,29 +1,11 @@
 (* compile a frontend program into a C program *)
 
-  (* TODO 
-      final steps: 
-*         1. eliminate tuple assign and local (and check?)
-*         2. eliminate bit and tern types (probably in match elim) (and check?)
-          4. add port binding config
-          5. printf
-          6. payloads          
-      - libpcap driver 
-        - improvements: 
-          - Tagged unions instead of enums + unions
-          - driver function in ccore, not just a string of c
-        - feature completeness: 
-          - pairarrays
-          - payloads
-          - counters
-      then, the actual fun:
-        - making it compatible with ebpf (parameterized?)
-        - representing multiple threads
-          - locks
-          - multiple processes (probably don't want this)
-          - steering
-          - atomics
-        - optimizations? 
-  *)
+(* unimplemented:    
+    - pairarrays
+    - payloads
+    - counters
+    - packet duplication / multicast (not sure if we want)
+*)
 
 open CCoreExceptions
 
@@ -62,6 +44,7 @@ let compile ds =
   print_endline ("---- Translating to CCore ----");
   let cds = CoreToCCore.translate ds in
   ccore_print "initial CCore" cds;
+  (* exit 1; *)
   let cds = CCoreTNameToTAbstr.process cds in
   let cds = CCoreRenaming.unify_event_ids cds in
   let cds = CCoreTyper.check cds in

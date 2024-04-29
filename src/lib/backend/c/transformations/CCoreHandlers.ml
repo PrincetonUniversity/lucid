@@ -37,13 +37,19 @@ let transform_generate statement =
       (sassign_exp (ederef ev_next) (arg exp))
   | SUnit(exp) when is_egen_port exp -> 
     let port_exp, event_exp = unbox_egen_port exp in
+    let port_exp_size = size_of_ty port_exp.ety in
+    let out_port_size = size_of_ty (extract_tref out_port.ety) in
+    let port_exp = if (port_exp_size < out_port_size)
+      then ecast (extract_tref out_port.ety) port_exp 
+      else port_exp
+    in
     sseq 
       (sassign_exp (ederef ev_out) event_exp)
       (sassign_exp (ederef out_port) port_exp)
   | SUnit(exp) when is_egen_switch exp ->
     let switch_exp, event_exp = unbox_egen_switch exp in
     (* at this point, switch is just another name for generate_port with a different type *)
-    let switch_exp = ecast (out_port.ety) switch_exp in
+    let switch_exp = ecast (extract_tref out_port.ety) switch_exp in
     sseq 
       (sassign_exp (ederef ev_out) event_exp)
       (sassign_exp (ederef out_port) switch_exp)
