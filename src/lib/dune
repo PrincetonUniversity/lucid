@@ -192,7 +192,6 @@
    CCoreCForm
    CCoreWellformedC
    CCorePacketHandler
-   CCoreDriverInterface
    CCoreDriverPcap
    CCoreDriverDpdk
    )

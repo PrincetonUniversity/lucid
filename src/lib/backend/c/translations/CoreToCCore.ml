@@ -367,12 +367,10 @@ let rec translate_statement (stmt:C.statement) : F.statement =
     F.egen_switch (loc) (translate_exp ev) |> F.sunit |> F.swrap stmt.sspan
   | C.SGen(GPort(port), ev) -> 
     let port = translate_exp port in
-    print_endline("port type: " ^ (CCorePPrint.ty_to_string port.ety));
     let port = if CCoreSyntax.bitsizeof_ty_exn port.ety < CCoreConfig.cfg.switch_id_size 
       then CCoreSyntax.ecast (F.tint CCoreConfig.cfg.switch_id_size) port
       else port
     in
-    print_endline("here");
     F.egen_port (port) (translate_exp ev) |> F.sunit |> F.swrap stmt.sspan
   | C.SGen(GMulti(port), ev) -> 
     let port = translate_exp port in

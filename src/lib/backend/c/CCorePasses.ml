@@ -79,15 +79,20 @@ let compile ds =
   (* final type check *)
   (* let cds = CCoreTyper.check cds in *)
   CCoreWellformedC.all_checks cds;
+
   (*** 8. add target-specific driver interface *)
-  let prog, cflags = match CCoreConfig.cfg.driver with 
-    | "lpcap" -> CCoreDriverInterface.package (module CCoreDriverPcap) cds 
-    | "dpdk" -> CCoreDriverInterface.package (module CCoreDriverDpdk) cds 
+  let progbundle = match CCoreConfig.cfg.driver with 
+    | "lpcap" -> CCoreDriverPcap.package_prog cds
+    | "dpdk" -> CCoreDriverDpdk.package_prog cds
     | d -> err (Printf.sprintf "unknown driver %s. valid options are: [lpcap (pcap driver); dpdk (dpdk driver)]" d)
   in
-
   (*** 9. print as C *)
-  let s = CCoreCPrint.decls_to_string prog in
+  let progbundle = List.map (fun (fn, contents) -> match contents with 
+    | `Decls(decls) -> fn,CCoreCPrint.decls_to_string decls
+    | `String(s) -> fn,s
+    | _ -> err "unexpected contents")
+    progbundle
+  in
   print_endline ("---- C compilation done ----");
-  s, cflags
+  progbundle
 ;;

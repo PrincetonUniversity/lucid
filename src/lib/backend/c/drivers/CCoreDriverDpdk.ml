@@ -1,7 +1,6 @@
 open CCoreSyntax
 open CCoreExceptions
 open CCoreUtils
-open CCoreDriverInterface
 
 
 (* 
@@ -236,7 +235,25 @@ static inline uint8_t handle_packet(struct rte_mbuf *buf) {
 |}
 ;;
 
-(* set everything up to make it happy... *)
+let get_event_tag t_event = 
+	let ev_param = cid"ev", tref t_event in
+	dfun 
+		(cid"get_event_tag")
+		(tint event_tag_size)
+		[ev_param]
+		(sret (ecast (tint event_tag_size) ((param_evar ev_param)/->cid"tag")))
+;;
+let reset_event_tag t_event = 
+	(* this isn't right. Need an address.. *)
+	let ev_param = cid"ev", tref t_event in
+	let enum_ty = ((param_evar ev_param)/->cid"tag").ety in 
+	dfun 
+		(cid"reset_event_tag")
+		(tunit)
+		[ev_param]
+		(sassign_exp ((param_evar ev_param)/->cid"tag") (ecast (enum_ty) (default_exp (tint event_tag_size))))
+;;
+
 
 let tag_helpers decls = 
     let teventstruct = match (find_ty_opt (CCoreEvents.event_ty_id) decls) with 
@@ -249,14 +266,73 @@ let tag_helpers decls =
     ]
  ;;
  
-
 let helpers = tag_helpers (* don't need cursor init or pkt copy *)
 let imports = [dpdk_header];;
 let pkt_handler = pkt_handler
 let main = dforiegn ""
-
-
-let cflags = "" (* its a whole big thing *)
-
+let cflags = ""
+let other_files = []
 (* *)
 
+let progname = "lucidprog"
+
+let makefile = [%string{| 
+# binary name and src must match
+APP = %{progname}
+SRCS-y := %{progname}.c
+
+PKGCONF ?= pkg-config
+ifneq ($(shell $(PKGCONF) --exists libdpdk && echo 0),0)
+	$(error "no DPDK")
+endif
+
+all: shared
+.PHONY: shared static
+shared: build/$(APP)-shared
+	ln -sf $(APP)-shared build/$(APP)
+static: build/$(APP)-static
+	ln -sf $(APP)-static build/$(APP)
+
+PC_FILE := $(shell $(PKGCONF) --path libdpdk 2>/dev/null)
+CFLAGS += -O3 $(shell $(PKGCONF) --cflags libdpdk)
+LDFLAGS_SHARED = $(shell $(PKGCONF) --libs libdpdk)
+LDFLAGS_STATIC = $(shell $(PKGCONF) --static --libs libdpdk)
+
+ifeq ($(MAKECMDGOALS),static)
+# check for broken pkg-config
+ifeq ($(shell echo $(LDFLAGS_STATIC) | grep 'whole-archive.*l:lib.*no-whole-archive'),)
+$(warning "pkg-config output list does not contain drivers between 'whole-archive'/'no-whole-archive' flags.")
+$(error "Cannot generate statically-linked binaries with this version of pkg-config")
+endif
+endif
+
+CFLAGS += -DALLOW_EXPERIMENTAL_API
+
+build/$(APP)-shared: $(SRCS-y) Makefile $(PC_FILE) | build
+	$(CC) $(CFLAGS) $(SRCS-y) -o $@ $(LDFLAGS) $(LDFLAGS_SHARED)
+
+build/$(APP)-static: $(SRCS-y) Makefile $(PC_FILE) | build
+	$(CC) $(CFLAGS) $(SRCS-y) -o $@ $(LDFLAGS) $(LDFLAGS_STATIC)
+
+build:
+	@mkdir -p $@
+
+.PHONY: clean
+clean:
+	rm -f build/$(APP) build/$(APP)-static build/$(APP)-shared
+	test -d build && rmdir -p build || true
+|}]
+;;
+
+let run_sh = 
+	[%string{|
+sudo ./build/%{progname}-shared --log-level=8 -l 1 -n 4 --no-pci --vdev 'net_pcap0,rx_pcap=small_in.pcap,tx_pcap=small_out.pcap'	
+	|}]
+;;
+(* return a list of files *)
+let package_prog decls = 
+[
+	"lucidprog.c", `Decls (imports @ decls @ (helpers decls) @ [pkt_handler]);
+	"makefile", `String makefile;
+	"run.sh", `String run_sh;
+]

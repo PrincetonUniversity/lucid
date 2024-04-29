@@ -14,14 +14,15 @@ let init_lpcap_config _ =
   CCoreConfig.cfg.port_id_size <- 32;
   CCoreConfig.cfg.switch_id_size <- 32;
 ;;
-
+let build_dir = ref None
 (* parse function with added c-compiler args *)
 let parse () =
   let speclist = Cmdline.parse_common () in
   let speclist = speclist @ [
     "-o", Arg.String (fun s -> Cmdline.cfg.output <- s), "Output filename.";
     "--dpdk", Arg.Unit (init_dpdk_config), "Compile against dpdk library";    
-    "--lpcap", Arg.Unit (init_lpcap_config), "Compile against lpcap library";    
+    "--lpcap", Arg.Unit (init_lpcap_config), "Compile against lpcap library";  
+    "--build", Arg.String (fun s -> build_dir := Some(s)), "Output directory for build files. Overrides output filename.";
   ] 
   in
   let target_filename = ref "" in
@@ -46,11 +47,28 @@ let main () =
       } Builtins.interp_builtin_tys ds
   in
   print_endline (" --- compiling to c --- ");
-  let prog_str, cflags = CCorePasses.compile ds in
-  let base_filename = Filename.chop_extension out_filename in
-  let build_cmd = Printf.sprintf "gcc -o %s %s %s" base_filename out_filename cflags in
-  let prog_str =  "// "^ build_cmd  ^ "\n" ^ prog_str in
-  output_string (open_out out_filename) prog_str
+  let generated_files = CCorePasses.compile ds in
+  match (!build_dir) with 
+    | Some(dir) -> 
+      (* make sure the directory exists, put all the files there *)
+      print_endline ("Writing files to " ^ dir);
+      IoUtils.ensure_dir dir;
+      List.iter (fun (filename, prog_str) -> 
+        let out_filename = Filename.concat dir filename in
+        print_endline ("Writing " ^ out_filename);
+        output_string (open_out out_filename) prog_str
+      ) generated_files;
+      (* put the source files there too. Kind of hacky. *)
+      IoUtils.ensure_dir (Filename.concat dir "src");
+      let source_fnames = Input.get_all_source_filenames target_filename in
+      List.iter (fun source_fn -> let _ = IoUtils.cpy_src_to_build source_fn dir in ()) source_fnames;
+
+
+    | None -> 
+      (* just write the program to out_filename *)
+      let prog_str = List.assoc "lucidprog.c" generated_files in
+      print_endline ("Writing " ^ out_filename);
+      output_string (open_out out_filename) prog_str;
 ;;
 
 
