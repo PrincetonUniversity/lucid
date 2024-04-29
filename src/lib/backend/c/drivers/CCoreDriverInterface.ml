@@ -20,7 +20,14 @@ let package (module D : DriverInterface) decls =
    let helpers = D.helpers decls in
    let pkt_handler = D.pkt_handler in
    let main = D.main in
-   imports @ decls @ helpers @ [pkt_handler; main], D.cflags
+      [dforiegn "/**** driver-specific setup code ****/"] 
+      @ imports 
+      @ [dforiegn "/**** compiler-generated application code ****/"] 
+      @ decls
+      @ helpers 
+      @ [dforiegn "/**** driver-specific packet handler code  ****/"] 
+      @ [pkt_handler; main]
+   , D.cflags
 ;;
 
 (* default helpers *)

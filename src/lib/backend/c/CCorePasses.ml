@@ -60,9 +60,7 @@ let compile ds =
 
   (*** 3. translate to CCore and some cleanup *)
   print_endline ("---- Translating to CCore ----");
-  print_endline ("initial configuration has port_id_size = "^(string_of_int CCoreConfig.cfg.port_id_size));
   let cds = CoreToCCore.translate ds in
-  print_endline ("after translate, port_id_size = "^(string_of_int CCoreConfig.cfg.port_id_size));
   ccore_print "initial CCore" cds;
   let cds = CCoreTNameToTAbstr.process cds in
   let cds = CCoreRenaming.unify_event_ids cds in
@@ -101,7 +99,7 @@ let compile ds =
   (*** 8. add target-specific driver interface *)
   let prog, cflags = match CCoreConfig.cfg.driver with 
     | "lpcap" -> CCoreDriverInterface.package (module CCoreDriverPcap) cds 
-    | "dpdk" -> CCoreDriverInterface.package (module CCoreDriverPcap) cds 
+    | "dpdk" -> CCoreDriverInterface.package (module CCoreDriverDpdk) cds 
     | d -> err (Printf.sprintf "unknown driver %s. valid options are: [lpcap (pcap driver); dpdk (dpdk driver)]" d)
   in
 

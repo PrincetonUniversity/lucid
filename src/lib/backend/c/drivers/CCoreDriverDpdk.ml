@@ -7,118 +7,256 @@ open CCoreDriverInterface
 (* 
   Single-core DPDK toplevel driver. 
   Assumes that all the output ports used in the program are ids that are 
-  bound to valid ports.
-*)   
+  bound to valid devices. *)   
 
-let helpers = default_helpers
-let imports = default_imports
-    @[
-dinclude "<pcap.h>"; 
-dinclude "<string.h>";
-dforiegn 
-{|
-#ifdef DEBUG
-    #define debug_printf(...) printf(__VA_ARGS__)
-    #else
-    #define debug_printf(...)
-#endif            
-|};
-dforiegn 
-{|
-#ifdef __GNUC__
-    #define unroll GCC unroll
-#endif
-|}    
-]
-let pkt_handler = default_pkt_handler
-let main = 
-  dforiegn 
-  [%string{| 
-/********* lpcap packet driver ***********/
-uint64_t pkt_ct = 0;
+(* the dpdk_header is everything we need except: 
+   1) the helpers; 
+   2) the application-specific generated code; 
+   3) the fixed packet_handler that calls the app-specific code  *)
+let dpdk_header = dforiegn {|
+#include <stdlib.h> 
+#include <stdint.h>
+#include <inttypes.h> 
+#include <unistd.h> // for sleep
+#include <stdatomic.h> // atomics
+#include <sys/mman.h> // shared memory
+// dpdk imports
+#include <rte_eal.h>
+#include <rte_ethdev.h>
+#include <rte_cycles.h>
+#include <rte_lcore.h>
+#include <rte_mbuf.h>
 
+// the user/compiler-written packet handler function. 
+// return 1 to send, 0 to drop
+static inline uint8_t handle_packet(struct rte_mbuf *buf) __attribute__((always_inline));
 
-typedef struct pkt_hdl_ctx_t {
-    uint8_t ingress_port;
-    u_char *out_pcap;
-    packet_t in_pkt;
-    packet_t out_pkt;
-    struct pcap_pkthdr out_pkthdr;
-} pkt_hdl_ctx_t;
+// dpdk initialization helpers 
+typedef struct cfg_t {
+	uint16_t rx_ring_size;
+	uint16_t tx_ring_size;
+	int      num_mbufs;
+	int      mbuf_cache_size;
+	unsigned num_ports;
+} cfg_t;
 
 
-void fill_out_pkthdr(const struct pcap_pkthdr *in_pkthdr, packet_t* out_pkt, struct pcap_pkthdr* out_pkthdr) {
-    out_pkthdr->ts = in_pkthdr->ts;
-    out_pkthdr->caplen = out_pkt->payload - out_pkt->start;
-    out_pkthdr->len = in_pkthdr->len;
+static inline int
+port_init(cfg_t cfg, uint16_t port, struct rte_mempool *mbuf_pool)
+{
+	printf("initializing port %u\n", port);
+	struct rte_eth_conf port_conf;
+	const uint16_t rx_rings = 1, tx_rings = 1;
+	uint16_t nb_rxd = cfg.rx_ring_size;
+	uint16_t nb_txd = cfg.tx_ring_size;
+	int retval;
+	uint16_t q;
+	struct rte_eth_dev_info dev_info;
+	struct rte_eth_txconf txconf;
+
+	if (!rte_eth_dev_is_valid_port(port))
+		return -1;
+
+	memset(&port_conf, 0, sizeof(struct rte_eth_conf));
+
+	retval = rte_eth_dev_info_get(port, &dev_info);
+	if (retval != 0) {
+		printf("Error during getting device (port %u) info: %s\n",
+				port, strerror(-retval));
+		return retval;
+	}
+
+	if (dev_info.tx_offload_capa & RTE_ETH_TX_OFFLOAD_MBUF_FAST_FREE)
+		port_conf.txmode.offloads |= RTE_ETH_TX_OFFLOAD_MBUF_FAST_FREE;
+
+	/* Configure the Ethernet device. */
+	retval = rte_eth_dev_configure(port, rx_rings, tx_rings, &port_conf);
+	if (retval != 0) return retval;
+
+	retval = rte_eth_dev_adjust_nb_rx_tx_desc(port, &nb_rxd, &nb_txd);
+	if (retval != 0) return retval;
+
+	/* Allocate and set up 1 RX queue per Ethernet port. */
+	for (q = 0; q < rx_rings; q++) {
+		retval = rte_eth_rx_queue_setup(port, q, nb_rxd,
+				rte_eth_dev_socket_id(port), NULL, mbuf_pool);
+		if (retval < 0) return retval;
+	}
+
+	txconf = dev_info.default_txconf;
+	txconf.offloads = port_conf.txmode.offloads;
+	/* Allocate and set up 1 TX queue per Ethernet port. */
+	for (q = 0; q < tx_rings; q++) {
+		retval = rte_eth_tx_queue_setup(port, q, nb_txd,
+				rte_eth_dev_socket_id(port), &txconf);
+		if (retval < 0)
+			return retval;
+	}
+	retval = rte_eth_dev_start(port);
+	if (retval < 0)
+		return retval;
+
+	/* Enable RX in promiscuous mode for the Ethernet device. */
+	retval = rte_eth_promiscuous_enable(port);
+	/* End of setting RX port in promiscuous mode. */
+	if (retval != 0)
+		return retval;
+
+	return 0;
 }
 
-void lpcap_packet_handler(u_char *ctx, const struct pcap_pkthdr *pkthdr, const u_char *packet) {
-    pkt_hdl_ctx_t * hdl_ctx = (pkt_hdl_ctx_t *)ctx;
-    init_cursor((char *)packet, pkthdr->len, &hdl_ctx->in_pkt); // construct a new cursor
-    reset_cursor(&hdl_ctx->out_pkt); // reset the out cursor, it never changes
-    uint8_t out_port = pkt_handler(hdl_ctx->ingress_port, &hdl_ctx->in_pkt, &hdl_ctx->out_pkt);
+void dpdk_init(cfg_t* cfg, int argc, char *argv[]) {
+	if (rte_eal_init(argc, argv) < 0)
+		rte_exit(EXIT_FAILURE, "Error with EAL initialization\n");
+	struct rte_mempool *mbuf_pool;
+	unsigned nb_ports = rte_eth_dev_count_avail();
+	printf("number of ports: %u\n", nb_ports);
+	if (nb_ports == 0)
+		rte_exit(EXIT_FAILURE, "No Ethernet ports - bye\n");
+	cfg->num_ports = nb_ports;	
+	mbuf_pool = rte_pktmbuf_pool_create("MBUF_POOL", cfg->num_mbufs * nb_ports,
+		cfg->mbuf_cache_size, 0, RTE_MBUF_DEFAULT_BUF_SIZE, rte_socket_id());
+	if (mbuf_pool == NULL) rte_exit(EXIT_FAILURE, "failed to cread mbuf pool. not enough memory?");
 
-    if(out_port != 0) {
-        fill_out_pkthdr(pkthdr, &hdl_ctx->out_pkt, &hdl_ctx->out_pkthdr);
-        pcap_dump(hdl_ctx->out_pcap, &hdl_ctx->out_pkthdr, (u_char *)hdl_ctx->out_pkt.start);
-    }
-    pkt_ct++;
+	uint16_t portid;
+	RTE_ETH_FOREACH_DEV(portid)
+		if (port_init(*cfg, portid, mbuf_pool) != 0)
+			rte_exit(EXIT_FAILURE, "Cannot init port %"PRIu16 "\n", portid);
+	return;
 }
-/********** allocation + main ***********/
-pkt_hdl_ctx_t mk_pkt_hdl_ctx(pcap_dumper_t* out_pcap, u_char* out_buf, uint32_t out_buf_len) {
-pkt_hdl_ctx_t ctx = {
-    .ingress_port = 1, // always 1 in this driver
-    .out_pcap = (u_char *)out_pcap,
-    .in_pkt = {0},
-    .out_pkt = {
-    .start = (char *)out_buf,
-    .payload = (char *)out_buf,
-    .end = (char *)out_buf + out_buf_len
-    },
-    .out_pkthdr = {0}
+
+// packet handler loop and main
+#define BURST_SIZE 64
+cfg_t cfg = {
+	.rx_ring_size = 1024,
+	.tx_ring_size = 1024,
+	.num_mbufs = 8191,
+	.mbuf_cache_size = 512,
+	.num_ports = 0 // will be filled in by init
 };
-return ctx;
+
+static __rte_noreturn void lcore_main(void) {
+	printf("handler loop running -- ctrl-c to quit\n");
+	uint16_t port = 0;
+	for (;;) {
+		// get packets
+		struct rte_mbuf *bufs[BURST_SIZE];
+		const uint16_t nb_rx = rte_eth_rx_burst(port, 0,bufs, BURST_SIZE);
+		if (unlikely(nb_rx == 0))
+			continue;
+		for (uint16_t i = 0; i < nb_rx; i++) {
+			// run handler
+			uint8_t acn = handle_packet(bufs[i]);
+			if (likely(acn==1)) {
+				// send packet
+				if (unlikely(bufs[i]->port >= cfg.num_ports)) {
+					rte_pktmbuf_free(bufs[i]);
+					printf("WARNING: dropping packet to out-of-range port: %u\n", bufs[i]->port);
+				} else {
+					uint16_t nb_tx = rte_eth_tx_burst(port, 0, &(bufs[i]), 1);
+					if (unlikely(nb_tx < 1)) rte_pktmbuf_free(bufs[i]);
+				}
+			}
+			else {
+				rte_pktmbuf_free(bufs[i]);
+			}
+		}
+	}
 }
 
-int main(int argc, char const *argv[]){
-    if (argc != 3) {
-        debug_printf(stderr, "Usage: %s <input pcap file> <output pcap file>\n", argv[0]);
-        return 1;
-    }
-
-    char errbuf[PCAP_ERRBUF_SIZE];    
-    // Open the input pcap file in read mode
-    pcap_t *in_pcap = pcap_open_offline(argv[1], errbuf);
-    if (in_pcap == NULL) {
-        debug_printf(stderr, "Error opening input pcap file: %s\n", errbuf);
-        return 1;
-    }
-
-    // Open the output pcap file in write mode
-    pcap_dumper_t *out_pcap = pcap_dump_open(in_pcap, argv[2]);
-    if (out_pcap == NULL) {
-        debug_printf(stderr, "Error opening output pcap file: %s\n", pcap_geterr(in_pcap));
-        return 1;
-    }
-
-    // prepare the context for the packet handler
-    u_char outbuf[1600];
-    pkt_hdl_ctx_t ctx = mk_pkt_hdl_ctx(out_pcap, outbuf, 1600);
-
-    pcap_loop(in_pcap, 0, lpcap_packet_handler, (u_char *)&ctx);
-
-    printf("Processed %llu packets\n", pkt_ct);
-
-    // Close the pcap files
-    pcap_dump_close(out_pcap);
-    pcap_close(in_pcap);
-
-    return 0;
-}|}]
+int main(int argc, char *argv[]) {	
+	dpdk_init(&cfg, argc, argv); // init dpdk, ports, and memory pools
+	lcore_main(); // call the rx, handle, tx loop
+	rte_eal_cleanup(); // cleanup, happens after ctrl-c (I think?)
+	return 0;
+}
+|};;
 
 
-let cflags = "-lpcap"
+let pkt_handler = dforiegn {|
+static inline uint8_t handle_packet(struct rte_mbuf *buf) {
+
+	// setup packet, ingress and egress port locals
+	packet_t pkt_in_val = {
+		.start = 0,
+		.payload = rte_pktmbuf_mtod(buf, char*),
+		.end = 0
+	};
+	packet_t* pkt_in = &pkt_in_val;
+	uint16_t ingress_port = buf->port;
+	uint16_t egress_port = 0;
+
+	// locals
+	event_t ev1_v = {0};
+	event_t ev2_v = {0};
+	event_t ev_out_v = {0};
+
+	uint8_t send_pkt = 0;
+
+	event_t * ev1 = &ev1_v;
+	event_t * ev2 = &ev2_v;
+	event_t * ev_out = &ev_out_v;
+	event_t * ev_tmp;
+	uint8_t parse_success = parse_event(pkt_in, ev1);   
+	uint16_t ev_in_len = ev1->len;    
+	if (parse_success == 1) {
+		// event continuation trampoline
+		#pragma unroll 4
+		for (int i=0; i < 100; i++) {
+			reset_event_tag(ev2);
+			reset_event_tag(ev_out); // NEW
+			handle_event(ingress_port, ev1, ev2, ev_out, &egress_port);
+			if (get_event_tag(ev2) == 0) { // no continuation event to process
+				break;
+			}
+			ev_tmp = ev1;
+			ev1 = ev2; 
+			ev2 = ev_tmp;
+		}
+		// we have generated an output event, so we need to 
+		// modify the packet buffer so it gets sent out
+		if (get_event_tag(ev_out) !=0) {
+			buf->port = egress_port;
+			// deparse the packet right back to pkt_in
+			// first adjust the data offset in the mbuf
+			int16_t header_diff = ev_out->len - ev_in_len;
+			buf -> data_off -= header_diff;
+			deparse_event(ev_out, pkt_in); 
+			send_pkt = 1; // NEW
+				// writes to payload - hdr, which should 
+				// be exactly at the mbuf's data start
+		}
+	}
+	else {
+        // parse failed, drop packet
+        send_pkt = 0;
+	}
+	return send_pkt;
+} 
+|}
+;;
+
+(* set everything up to make it happy... *)
+
+let tag_helpers decls = 
+    let teventstruct = match (find_ty_opt (CCoreEvents.event_ty_id) decls) with 
+       | Some(ty) -> ty
+       | _ -> err "no tevent"
+    in  
+    [
+       get_event_tag teventstruct;
+       reset_event_tag teventstruct;
+    ]
+ ;;
+ 
+
+let helpers = tag_helpers (* don't need cursor init or pkt copy *)
+let imports = [dpdk_header];;
+let pkt_handler = pkt_handler
+let main = dforiegn ""
+
+
+let cflags = "" (* its a whole big thing *)
 
 (* *)
 
