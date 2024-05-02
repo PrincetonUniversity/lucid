@@ -1,0 +1,70 @@
+{
+    "switches": 1,
+    "max time": 9999999,
+    "events": [
+      {
+        "type": "command", 
+        "name":"Table.install", 
+        "args":{
+          "table":"anony_mac_dst_oui_tb", 
+          "key":[1], 
+          "action":"anony_mac_dst_oui_tb.hash_mac_action",
+          "args": []
+        }
+      },
+      {
+        "type": "command", 
+        "name":"Table.install", 
+        "args":{
+          "table":"anony_mac_dst_id_tb", 
+          "key":[1], 
+          "action":"anony_mac_dst_id_tb.hash_mac_action",
+          "args": []
+        }
+      },
+      {
+        "type": "command", 
+        "name":"Table.install", 
+        "args":{
+          "table":"anony_mac_src_oui_tb", 
+          "key":[1], 
+          "action":"anony_mac_src_oui_tb.hash_mac_action",
+          "args": []
+        }
+      },
+      {
+        "type": "command", 
+        "name":"Table.install", 
+        "args":{
+          "table":"anony_mac_src_id_tb", 
+          "key":[0], 
+          "action":"anony_mac_src_id_tb.hash_mac_action",
+          "args": []
+        }
+      },
+      {
+        "type": "command", 
+        "name":"Table.install", 
+        "args":{
+            "table":"anony_src_ip_tb", 
+            "key":[16909056], 
+            "mask": ["4294967040"],
+            "action":"anony_src_ip_tb.get_ip_prefix", 
+            "args":[4294967040, 255, 24]
+        }
+      },
+      {
+        "type": "command", 
+        "name":"Table.install", 
+        "args":{
+            "table":"anony_dst_ip_tb", 
+            "key":[16909057], 
+            "mask": ["4294967040"],
+            "action":"anony_dst_ip_tb.get_ip_prefix", 
+            "args":[4294967040, 255, 24]
+        }
+      },
+
+      {"name":"eth_ip", "args": [10542275, 1715004, 16646365, 13428138, 1, 16909056, 16909057, 1]}
+    ]
+  }
