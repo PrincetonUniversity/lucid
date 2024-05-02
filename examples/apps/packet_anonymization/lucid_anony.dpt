@@ -1,0 +1,423 @@
+const int<9> OUT_PORT = 1;
+const int<9> SERVER_PORT = 2;
+
+const int HASH_SEED = 1234;
+
+//************ HEADERS ************//
+
+type eth_t = {
+  int<24> dst_mac_oui;
+  int<24> dst_mac_id;
+  int<24> src_mac_oui;
+  int<24> src_mac_id;
+  int<16> etype;
+}
+
+// type vlan_tag_t = {
+//     int<3> pcp;
+//     int<1> cfi;
+//     int<12> vid;
+//     int<16> etherType;
+// }
+
+// type ipv4_t = {
+//   int<4> version;
+//   int<4> ihl;
+//   int<8> diffserv;
+//   int<16> totalLen;
+//   int<16> identification;
+//   int<3> flags;
+//   int<13> fragOffset;
+//   int<8> ttl;
+//   int<8> protocol;
+//   int<16> hdrChecksum;
+//   int<32> srcAddr;
+//   int<32> dstAddr;
+// }
+
+type ipv4_t = {
+	int src;
+	int dst;
+	int<16> len; 
+}
+
+type prefix_output = {
+  int prefix;
+  int non_fixed;
+  int fixed_length;
+}
+
+// type ip_hdr_prefix = {
+//   int<8> v_ihl; 
+//   int<8> tos;
+//   int<16> len;
+//   int<16> id;
+//   int<16> flags_frag;
+//   int<8> ttl;
+//   int<8> proto;
+//   int<16> csum;
+//   int src;
+//   int dst;
+// }
+
+//************ EVENTS ************//
+
+event eth_ip(eth_t eth, ipv4_t ip);
+event prepare_report(eth_t eth, ipv4_t ip);
+event report(int src, int dst, int<32> count) {skip;} // report is sent back to the monitoring server.
+
+//************ ACTIONS ************// 
+action_constr nop_action() = {
+    return action int<24> acn (int<24> any_24) {
+        return any_24;
+    };
+};
+
+action_constr nop_ip_action() = {
+    return action int<32> acn (int<32> any_32) {
+        return any_32;
+    };
+};
+
+action_constr hash_mac_action() = {
+    return action int<24> acn (int<24> mac_part) {
+        return hash<24>(HASH_SEED, mac_part);
+    };
+};
+
+action_constr get_ip_prefix(int prefix_mask, int non_fixed_mask, int prefix_size) = {
+    return action prefix_output get_prefix_action(int ip) {
+        return {prefix = ip & prefix_mask; non_fixed = ip & non_fixed_mask; fixed_length = prefix_size};
+    };
+};
+
+//************ TABLES ************//
+
+table_type anony_mac_table_t = {
+  key_type: (int)
+  arg_type: (int<24>)
+  ret_type: int<24>
+}
+
+table_type ip_prefix_table_t = {
+    key_type: (int)
+    arg_type: (int)
+    ret_type: prefix_output
+}
+
+table_type anony_ip_table_t = {
+  key_type: (int)
+  arg_type: (int<32>)
+  ret_type: int<32>
+}
+
+global anony_mac_table_t anony_mac_dst_oui_tb = table_create<anony_mac_table_t>(
+  (hash_mac_action, nop_action),
+  10,
+  nop_action()
+);
+
+global anony_mac_table_t anony_mac_dst_id_tb = table_create<anony_mac_table_t>(
+  (hash_mac_action, nop_action),
+  10,
+  nop_action()
+);
+
+global anony_mac_table_t anony_mac_src_oui_tb = table_create<anony_mac_table_t>(
+  (hash_mac_action, nop_action),
+  10,
+  nop_action()
+);
+
+global anony_mac_table_t anony_mac_src_id_tb = table_create<anony_mac_table_t>(
+  (hash_mac_action, nop_action),
+  10,
+  nop_action()
+);
+
+global ip_prefix_table_t anony_src_ip_tb = table_create<ip_prefix_table_t>(
+  (get_ip_prefix),
+  1024, 
+  get_ip_prefix(0, 0, 0)
+);
+
+global ip_prefix_table_t anony_dst_ip_tb = table_create<ip_prefix_table_t>(
+  (get_ip_prefix),
+  1024, 
+  get_ip_prefix(0, 0, 0)
+);
+
+//************ FUNCTIONS ************//
+
+fun eth_t process_packet(eth_t eth, ipv4_t ip) {
+    // Match and table and return hashed or not-hashed 24 bits
+    int<24> dst_oui = table_match(anony_mac_dst_oui_tb, (1), (eth#dst_mac_oui));
+
+    int<24> dst_id = table_match(anony_mac_dst_id_tb, (1), (eth#dst_mac_id));
+
+    int<24> src_oui = table_match(anony_mac_src_oui_tb, (1), (eth#src_mac_oui));    
+
+    int<24> src_id = table_match(anony_mac_src_id_tb, (1), (eth#src_mac_id));
+    
+    // eth_t eth = {eth with dst_mac_oui = dst_oui};
+
+    eth_t eth = {dst_mac_oui = dst_oui;
+          dst_mac_id = dst_id;
+          src_mac_oui = src_oui;
+          src_mac_id = src_id;
+          etype = eth#etype};
+
+    return eth;
+}
+
+fun void process_ip(ipv4_t ip) {
+  printf("inside of ip_pkt(%d)", ip#dst);
+  
+  prefix_output src_ip_output = table_match(anony_src_ip_tb, ip#src, (ip#src));
+  prefix_output dst_ip_output = table_match(anony_dst_ip_tb, ip#dst, (ip#dst));
+
+  // src match statement
+  match (src_ip_output#fixed_length) with
+  | 0 -> {
+    int hashed_32 = hash<32>(HASH_SEED, src_ip_output#non_fixed);
+    int new_src = src_ip_output#prefix | hashed_32;      
+    }
+  | 8 -> {
+    int unfix_cast = src_ip_output#non_fixed;
+    int<24> unfixed_part = (int<24>) unfix_cast;
+    
+    int<24> hashed_24 = hash<24>(HASH_SEED, unfixed_part);
+    int hashed_part = (int<32>) hashed_24;
+
+    int new_src = src_ip_output#prefix | hashed_part;
+  }
+  | 16 -> {
+    int unfix_cast = src_ip_output#non_fixed;
+    int<16> unfixed_part = (int<16>) unfix_cast;
+    
+    int<16> hashed_16 = hash<16>(HASH_SEED, unfixed_part);
+    int hashed_part = (int<32>) hashed_16;
+
+    int new_src = src_ip_output#prefix | hashed_part;
+  }
+  | 24 -> {
+    int unfix_cast = src_ip_output#non_fixed;
+    int<8> unfixed_part = (int<8>) unfix_cast;
+
+    int<8> hashed_8 = hash<8>(HASH_SEED, unfixed_part);
+    int hashed_part = (int<32>) hashed_8;
+
+    int new_src = src_ip_output#prefix | hashed_part;
+  }
+  | _ -> {
+    int new_src = ip#src;
+  }
+
+  // dst match statement
+  match (dst_ip_output#fixed_length) with
+  | 0 -> {
+    int hashed_32 = hash<32>(HASH_SEED, dst_ip_output#non_fixed);
+    int new_dst = dst_ip_output#prefix | hashed_32;      
+    }
+  | 8 -> {
+    int unfix_cast = dst_ip_output#non_fixed;
+    int<24> unfixed_part = (int<24>) unfix_cast;
+    
+    int<24> hashed_24 = hash<24>(HASH_SEED, unfixed_part);
+    int hashed_part = (int<32>) hashed_24;
+
+    int new_dst = dst_ip_output#prefix | hashed_part;
+  }
+  | 16 -> {
+    int unfix_cast = dst_ip_output#non_fixed;
+    int<16> unfixed_part = (int<16>) unfix_cast;
+    
+    int<16> hashed_16 = hash<16>(HASH_SEED, unfixed_part);
+    int hashed_part = (int<32>) hashed_16;
+
+    int new_dst = dst_ip_output#prefix | hashed_part;
+  }
+  | 24 -> {
+    int unfix_cast = dst_ip_output#non_fixed;
+    int<8> unfixed_part = (int<8>) unfix_cast;
+
+    int<8> hashed_8 = hash<8>(HASH_SEED, unfixed_part);
+    int hashed_part = (int<32>) hashed_8;
+
+    int new_dst = dst_ip_output#prefix | hashed_part;
+  }
+  | _ -> {
+    int new_dst = ip#dst;
+  }
+  
+}
+
+// if (prefix_size == 0) {
+  //     int hashed_32 = hash<32>(HASH_SEED, non_fixed);
+  //     int new_dst = prefix | hashed_32;
+  // } else if (prefix_size == 8) {
+  //     int hashed_24 = hash<24>(HASH_SEED, non_fixed);
+  //     int new_dst = prefix | hashed_part;
+  // } 
+  // else if (prefix_size == 16) {
+  //     int hashed_16 = hash<16>(HASH_SEED, non_fixed);
+  //     int new_dst = prefix | hashed_part;
+  // } 
+  // else if (prefix_size == 24) {
+  //     int hashed_8 = hash<8>(HASH_SEED, non_fixed);
+  //     int new_dst = prefix | hashed_part;
+  // } else {
+  //     int new_dst = dst;
+  // }
+
+//************ HANDLERS ************//
+
+handle eth_ip(eth_t eth, ipv4_t ip) {
+    printf("Pre Hash");
+    printf("Flow {dst_MAC_OUI=%d; dst_MAC_ID=%d}", eth#dst_mac_oui, eth#dst_mac_id);
+    printf("Flow {src_MAC_OUI=%d; src_MAC_ID=%d}", eth#src_mac_oui, eth#src_mac_id);
+
+    printf("SRC IP In (%d)", ip#src);
+    printf("DST IP In (%d)", ip#dst);
+
+    // Match and table and return hashed or not-hashed 24 bits
+    int<24> dst_oui = table_match(anony_mac_dst_oui_tb, (1), (eth#dst_mac_oui));
+
+    int<24> dst_id = table_match(anony_mac_dst_id_tb, (1), (eth#dst_mac_id));
+
+    int<24> src_oui = table_match(anony_mac_src_oui_tb, (1), (eth#src_mac_oui));    
+
+    int<24> src_id = table_match(anony_mac_src_id_tb, (1), (eth#src_mac_id));
+
+    prefix_output src_ip_output = table_match(anony_src_ip_tb, ip#src, (ip#src));
+    prefix_output dst_ip_output = table_match(anony_dst_ip_tb, ip#dst, (ip#dst));
+    // int new_src = 0;
+    // int new_dst = 0;
+
+    // src match statement
+    match (src_ip_output#fixed_length) with
+    | 0 -> {
+      int hashed_32 = hash<32>(HASH_SEED, src_ip_output#non_fixed);
+      int new_src = src_ip_output#prefix | hashed_32;      
+      }
+    | 8 -> {
+      int unfix_cast = src_ip_output#non_fixed;
+      int<24> unfixed_part = (int<24>) unfix_cast;
+      
+      int<24> hashed_24 = hash<24>(HASH_SEED, unfixed_part);
+      int hashed_part = (int<32>) hashed_24;
+
+      int new_src = src_ip_output#prefix | hashed_part;
+    }
+    | 16 -> {
+      int unfix_cast = src_ip_output#non_fixed;
+      int<16> unfixed_part = (int<16>) unfix_cast;
+      
+      int<16> hashed_16 = hash<16>(HASH_SEED, unfixed_part);
+      int hashed_part = (int<32>) hashed_16;
+
+      int new_src = src_ip_output#prefix | hashed_part;
+    }
+    | 24 -> {
+      int unfix_cast = src_ip_output#non_fixed;
+      int<8> unfixed_part = (int<8>) unfix_cast;
+
+      int<8> hashed_8 = hash<8>(HASH_SEED, unfixed_part);
+      int hashed_part = (int<32>) hashed_8;
+
+      int new_src = src_ip_output#prefix | hashed_part;
+      printf("SRC IP Output (%d)", new_src);
+    }
+    | _ -> {
+      int new_src = ip#src;
+    }
+
+    // dst match statement
+    match (dst_ip_output#fixed_length) with
+    | 0 -> {
+      int hashed_32 = hash<32>(HASH_SEED, dst_ip_output#non_fixed);
+      int new_dst = dst_ip_output#prefix | hashed_32;      
+      }
+    | 8 -> {
+      int unfix_cast = dst_ip_output#non_fixed;
+      int<24> unfixed_part = (int<24>) unfix_cast;
+      
+      int<24> hashed_24 = hash<24>(HASH_SEED, unfixed_part);
+      int hashed_part = (int<32>) hashed_24;
+
+      int new_dst = dst_ip_output#prefix | hashed_part;
+    }
+    | 16 -> {
+      int unfix_cast = dst_ip_output#non_fixed;
+      int<16> unfixed_part = (int<16>) unfix_cast;
+      
+      int<16> hashed_16 = hash<16>(HASH_SEED, unfixed_part);
+      int hashed_part = (int<32>) hashed_16;
+
+      int new_dst = dst_ip_output#prefix | hashed_part;
+    }
+    | 24 -> {
+      int unfix_cast = dst_ip_output#non_fixed;
+      int<8> unfixed_part = (int<8>) unfix_cast;
+
+      int<8> hashed_8 = hash<8>(HASH_SEED, unfixed_part);
+      int hashed_part = (int<32>) hashed_8;
+
+      int new_dst = dst_ip_output#prefix | hashed_part;
+      printf("DST IP Output (%d)", new_dst);
+    }
+    | _ -> {
+      int new_dst = ip#dst;
+    }
+
+    eth_t eth = {dst_mac_oui = dst_oui;
+          dst_mac_id = dst_id;
+          src_mac_oui = src_oui;
+          src_mac_id = src_id;
+          etype = eth#etype};
+
+    // int anony_src = new_src;
+    // int anony_dst = new_dst;
+
+    // ipv4_t ip = {src = anony_src;
+    //       dst = anony_dst;
+    //       len = ip#length};
+
+    generate(prepare_report(eth, ip));
+}
+
+// event ip_pkt(int dst);
+
+// handle ip_pkt(int dst) {
+//     printf("inside of ip_pkt(%d)", dst);
+//     prefix_output ip_output = table_match(anony_dst_ip_tb, dst, ());
+// if (prefix_size == 0) {
+//     int hashed_32 = hash<32>(HASH_SEED, non_fixed);
+//     int new_dst = prefix | hashed_32;
+// } else if (prefix_size == 8) {
+//     int hashed_24 = hash<24>(HASH_SEED, non_fixed);
+//     int new_dst = prefix | hashed_part;
+// } 
+// else if (prefix_size == 16) {
+//     int hashed_16 = hash<16>(HASH_SEED, non_fixed);
+//     int new_dst = prefix | hashed_part;
+// } 
+// else if (prefix_size == 24) {
+//     int hashed_8 = hash<8>(HASH_SEED, non_fixed);
+//     int new_dst = prefix | hashed_part;
+// } else {
+//     int new_dst = dst;
+// }
+
+handle prepare_report(eth_t eth, ipv4_t ip) {
+  printf("Post Hash");
+	printf("Flow {dst_MAC_OUI=%d; dst_MAC_ID=%d}", eth#dst_mac_oui, eth#dst_mac_id);
+  printf("Flow {src_MAC_OUI=%d; src_MAC_ID=%d}", eth#src_mac_oui, eth#src_mac_id);
+
+  // printf("SRC IP Output (%d)", ip#src);
+  // printf("DST IP Output (%d)", ip#dst);
+
+	int<32> tmp = 0;
+	event r = report(ip#src, ip#dst, tmp);
+	generate_port(SERVER_PORT, r);
+}
