@@ -5,6 +5,7 @@ const int HASH_SEED = 1234;
 
 //************ HEADERS ************//
 
+// Ethernet header type
 type eth_t = {
   int<24> dst_mac_oui;
   int<24> dst_mac_id;
@@ -17,77 +18,71 @@ type eth_t = {
 //     int<3> pcp;
 //     int<1> cfi;
 //     int<12> vid;
-//     int<16> etherType;
+//     int<16> etype;
 // }
 
-// type ipv4_t = {
-//   int<4> version;
-//   int<4> ihl;
-//   int<8> diffserv;
-//   int<16> totalLen;
-//   int<16> identification;
-//   int<3> flags;
-//   int<13> fragOffset;
-//   int<8> ttl;
-//   int<8> protocol;
-//   int<16> hdrChecksum;
-//   int<32> srcAddr;
-//   int<32> dstAddr;
-// }
-
+// IPv4 header type
 type ipv4_t = {
-	int src;
-	int dst;
-	int<16> len; 
+  int<4> version;
+  int<4> ihl;
+  int<8> diffserv;
+  int<16> total_len;
+  int<16> id;
+  int<3> flags;
+  int<13> frag_offset;
+  int<8> ttl;
+  int<8> protocol;
+  int<16> hdr_csum;
+  int<32> src;
+  int<32> dst;
 }
 
+// Prefix output type
 type prefix_output = {
   int prefix;
   int non_fixed;
-  int fixed_length;
+  int subnet_mask;
 }
 
-// type ip_hdr_prefix = {
-//   int<8> v_ihl; 
-//   int<8> tos;
-//   int<16> len;
-//   int<16> id;
-//   int<16> flags_frag;
-//   int<8> ttl;
-//   int<8> proto;
-//   int<16> csum;
-//   int src;
-//   int dst;
-// }
 
 //************ EVENTS ************//
 
+// Event for anonymizing Ethernet and IPv4 packet
 event eth_ip(eth_t eth, ipv4_t ip);
-event prepare_report(eth_t eth, ipv4_t ip);
-event report(int src, int dst, int<32> count) {skip;} // report is sent back to the monitoring server.
+
+// Event to prepare report after anonymizing a packet
+event prepare_report(eth_t orig_eth, ipv4_t orig_ip, eth_t anon_eth, ipv4_t anon_ip);
+
+// Event to send report containing anonymized packet to the monitoring server
+event report(eth_t eth, ipv4_t ip) {skip;} 
+
+// event packet_in(eth_t eth, ipv4_t ip, int inport);
+// event packet_out(eth_t eth, ipv4_t ip, int outport);
 
 //************ ACTIONS ************// 
-action_constr nop_action() = {
+action_constr nop_mac_action() = {
     return action int<24> acn (int<24> any_24) {
         return any_24;
     };
 };
 
 action_constr nop_ip_action() = {
-    return action int<32> acn (int<32> any_32) {
-        return any_32;
+    return action prefix_output acn (int ip) {
+        return {prefix = 4294967295; non_fixed = 0; subnet_mask = 4294967295};
     };
 };
 
+// Hash action for MAC address 
 action_constr hash_mac_action() = {
     return action int<24> acn (int<24> mac_part) {
         return hash<24>(HASH_SEED, mac_part);
     };
 };
 
-action_constr get_ip_prefix(int prefix_mask, int non_fixed_mask, int prefix_size) = {
+// Action to get IP prefix based on subnet mask for prefix
+action_constr get_ip_prefix(int prefix_mask) = {
     return action prefix_output get_prefix_action(int ip) {
-        return {prefix = ip & prefix_mask; non_fixed = ip & non_fixed_mask; fixed_length = prefix_size};
+        return {prefix = ip & prefix_mask; non_fixed = ip & ~prefix_mask; subnet_mask = prefix_mask};
     };
 };
 
@@ -105,51 +100,108 @@ table_type ip_prefix_table_t = {
     ret_type: prefix_output
 }
 
-table_type anony_ip_table_t = {
-  key_type: (int)
-  arg_type: (int<32>)
-  ret_type: int<32>
-}
-
+// Tables for performing match actions on MAC address parts (Separate for each SRC/DST OUI/ID).
+// The tables match on an assigned int ('1' in the case of this program) and perform the hash 
+// action so long as the match occurs. Otherwise, the table will default to the 'nop_mac_action'
+// which will simply pass the respective 24-bit MAC address part unchanged.
 global anony_mac_table_t anony_mac_dst_oui_tb = table_create<anony_mac_table_t>(
-  (hash_mac_action, nop_action),
+  (hash_mac_action, nop_mac_action),
   10,
-  nop_action()
+  nop_mac_action()
 );
 
 global anony_mac_table_t anony_mac_dst_id_tb = table_create<anony_mac_table_t>(
-  (hash_mac_action, nop_action),
+  (hash_mac_action, nop_mac_action),
   10,
-  nop_action()
+  nop_mac_action()
 );
 
 global anony_mac_table_t anony_mac_src_oui_tb = table_create<anony_mac_table_t>(
-  (hash_mac_action, nop_action),
+  (hash_mac_action, nop_mac_action),
   10,
-  nop_action()
+  nop_mac_action()
 );
 
 global anony_mac_table_t anony_mac_src_id_tb = table_create<anony_mac_table_t>(
-  (hash_mac_action, nop_action),
+  (hash_mac_action, nop_mac_action),
   10,
-  nop_action()
+  nop_mac_action()
 );
 
+// Tables for performing match actions on IP addresses (SRC/DST) based on provide prefix. 
+// The tables match an IP address on a matching prefix and perform an IP preparation action
+// that derive the prefix, host ID, and subnet allowing for anonymization in further steps.
+// For example with the key for 1.2.3.0/24 (16909056<<32>> &&& 4294967040<<32>> as masked int),
+// any IP matching that prefix, such as 1.2.3.1 (16909057) will match, allowing for the 
+// 'get_ip_action' to occur. Otherwise, the table will default to the 'nop_ip_action', which
+// will simply pass a subnet of 255.255.255.255 through, indicating that no hash will occur.
 global ip_prefix_table_t anony_src_ip_tb = table_create<ip_prefix_table_t>(
-  (get_ip_prefix),
-  1024, 
-  get_ip_prefix(0, 0, 0)
+  (get_ip_prefix, nop_ip_action),
+  24, 
+  nop_ip_action()
 );
 
 global ip_prefix_table_t anony_dst_ip_tb = table_create<ip_prefix_table_t>(
-  (get_ip_prefix),
-  1024, 
-  get_ip_prefix(0, 0, 0)
+  (get_ip_prefix, nop_ip_action),
+  24, 
+  nop_ip_action()
 );
 
 //************ FUNCTIONS ************//
 
-fun eth_t process_packet(eth_t eth, ipv4_t ip) {
+/*
+ * Prints the details of the input Ethernet and IPv4 packets before/after anonymization.
+ * The following two functions displays the packet information in a formatted manner,
+ * including the flow information (destination and source MAC OUI and ID) and the source 
+ * and destination IP addresses.
+ *
+ * @param eth The input Ethernet packet
+ * @param ip The input IPv4 packet
+ */
+
+ fun void print_pkt_in_detail(eth_t eth, ipv4_t ip) {
+  printf("+----------------------+");
+  printf("| Packet In            |");
+  printf("+----------------------+");
+  printf("| Flow Info:           |");
+  printf("|   dst_MAC_OUI: %d |", eth#dst_mac_oui);
+  printf("|   dst_MAC_ID:  %d |", eth#dst_mac_id);
+  printf("|   src_MAC_OUI: %d |", eth#src_mac_oui);
+  printf("|   src_MAC_ID:  %d |", eth#src_mac_id);
+  printf("+----------------------+");
+  printf("| IP Addresses:        |");
+  printf("|   SRC IP: %d |", ip#src);
+  printf("|   DST IP: %d |", ip#dst);
+  printf("+----------------------+");
+}
+
+fun void print_pkt_out_detail(eth_t eth, ipv4_t ip) {
+  printf("+----------------------+");
+  printf("| Anonymized Packet    |");
+  printf("+----------------------+");
+  printf("| Flow Info:           |");
+  printf("|   dst_MAC_OUI: %d |", eth#dst_mac_oui);
+  printf("|   dst_MAC_ID:  %d |", eth#dst_mac_id);
+  printf("|   src_MAC_OUI: %d |", eth#src_mac_oui);
+  printf("|   src_MAC_ID:  %d |", eth#src_mac_id);
+  printf("+----------------------+");
+  printf("| IP Addresses:        |");
+  printf("|   SRC IP: %d |", ip#src);
+  printf("|   DST IP: %d |", ip#dst);
+  printf("+----------------------+");
+}
+
+/*
+ * Anonymizes the Ethernet packet by hashing the MAC address components based on 
+ * specified match action. If the user provides an int '1' as the key in the 
+ * table install, the table match will perform a 24-bit hash on the given MAC
+ * address component. The component will be returned unchanged otherwise.
+ *
+ * @param eth The input Ethernet packet
+ * @return The anonymized Ethernet packet
+ */
+
+fun eth_t anonymize_eth_packet(eth_t eth) {
     // Match and table and return hashed or not-hashed 24 bits
     int<24> dst_oui = table_match(anony_mac_dst_oui_tb, (1), (eth#dst_mac_oui));
 
@@ -159,265 +211,250 @@ fun eth_t process_packet(eth_t eth, ipv4_t ip) {
 
     int<24> src_id = table_match(anony_mac_src_id_tb, (1), (eth#src_mac_id));
     
-    // eth_t eth = {eth with dst_mac_oui = dst_oui};
-
-    eth_t eth = {dst_mac_oui = dst_oui;
+    eth_t anonymized_eth_pkt = {dst_mac_oui = dst_oui;
           dst_mac_id = dst_id;
           src_mac_oui = src_oui;
           src_mac_id = src_id;
           etype = eth#etype};
 
-    return eth;
+    return anonymized_eth_pkt;
 }
 
-fun void process_ip(ipv4_t ip) {
-  printf("inside of ip_pkt(%d)", ip#dst);
-  
+/*
+ * Anonymizes the IPv4 packet by hashing the host portion of the IP address based
+ * on the subnet mask obtained from the prefix table match. The function performs
+ * a hash of varying sizes (8, 16, 24, or 32 bits) depending on the prefix length.
+ *
+ * @param ip The input IPv4 packet
+ * @return The anonymized IPv4 packet
+ */
+
+fun ipv4_t anonymize_ip_packet(ipv4_t ip) {
+  // Perform table match on SRC and DST IP. The match occurs if provided IP matches
+  // the prefix set as the key during the install.
   prefix_output src_ip_output = table_match(anony_src_ip_tb, ip#src, (ip#src));
   prefix_output dst_ip_output = table_match(anony_dst_ip_tb, ip#dst, (ip#dst));
 
-  // src match statement
-  match (src_ip_output#fixed_length) with
-  | 0 -> {
-    int hashed_32 = hash<32>(HASH_SEED, src_ip_output#non_fixed);
-    int new_src = src_ip_output#prefix | hashed_32;      
+  // Initialize vars for storing anonymized SRC/DST IPs outside match statements
+  int anony_src_ip = 0;
+  int anony_dst_ip = 0;
+
+  // Match statement for source IP anonymization
+  match (src_ip_output#subnet_mask) with
+  | 0x0 -> { // Perform a full 32-bit hash on the unfixed portion given a /0 prefix
+    int hashed_ip = hash<32>(HASH_SEED, src_ip_output#non_fixed);
+    anony_src_ip = src_ip_output#prefix | hashed_ip;      
     }
-  | 8 -> {
-    int unfix_cast = src_ip_output#non_fixed;
-    int<24> unfixed_part = (int<24>) unfix_cast;
+  | 0xff000000 -> { // Perform 24-bit hash on the unfixed portion given a /8 prefix
+    int<24> host_id_24 = (int<24>) (src_ip_output#non_fixed);
     
-    int<24> hashed_24 = hash<24>(HASH_SEED, unfixed_part);
-    int hashed_part = (int<32>) hashed_24;
+    int hashed_host_id = (int<32>) (hash<24>(HASH_SEED, host_id_24));
 
-    int new_src = src_ip_output#prefix | hashed_part;
+    anony_src_ip = src_ip_output#prefix | hashed_host_id;
   }
-  | 16 -> {
-    int unfix_cast = src_ip_output#non_fixed;
-    int<16> unfixed_part = (int<16>) unfix_cast;
+  | 0xffff0000 -> { // Perform 16-bit hash on the unfixed portion given a /16 prefix
+    int<16> host_id_16 = (int<16>) (src_ip_output#non_fixed);
     
-    int<16> hashed_16 = hash<16>(HASH_SEED, unfixed_part);
-    int hashed_part = (int<32>) hashed_16;
+    int hashed_host_id = (int<32>) (hash<16>(HASH_SEED, host_id_16));
 
-    int new_src = src_ip_output#prefix | hashed_part;
+    anony_src_ip = src_ip_output#prefix | hashed_host_id;
   }
-  | 24 -> {
-    int unfix_cast = src_ip_output#non_fixed;
-    int<8> unfixed_part = (int<8>) unfix_cast;
+  | 0xffffff00 -> { // Perform 8-bit hash on the unfixed portion given a /24 prefix
+    int<8> host_id_8 = (int<8>) (src_ip_output#non_fixed);
 
-    int<8> hashed_8 = hash<8>(HASH_SEED, unfixed_part);
-    int hashed_part = (int<32>) hashed_8;
+    int hashed_host_id = (int<32>) (hash<8>(HASH_SEED, host_id_8));
 
-    int new_src = src_ip_output#prefix | hashed_part;
+    anony_src_ip = src_ip_output#prefix | hashed_host_id;
   }
-  | _ -> {
-    int new_src = ip#src;
+  | _ -> { // Perform no hash on the IP given an unspecified or /32 prefix
+    anony_src_ip = ip#src;
   }
 
-  // dst match statement
-  match (dst_ip_output#fixed_length) with
-  | 0 -> {
-    int hashed_32 = hash<32>(HASH_SEED, dst_ip_output#non_fixed);
-    int new_dst = dst_ip_output#prefix | hashed_32;      
+  // Match statement for destination IP anonymization
+  match (dst_ip_output#subnet_mask) with
+  | 0x0 -> { // Perform a full 32-bit hash on the unfixed portion given a /0 prefix
+    int hashed_ip = hash<32>(HASH_SEED, dst_ip_output#non_fixed);
+    anony_dst_ip = dst_ip_output#prefix | hashed_ip;      
     }
-  | 8 -> {
-    int unfix_cast = dst_ip_output#non_fixed;
-    int<24> unfixed_part = (int<24>) unfix_cast;
+  | 0xff000000 -> { // Perform 24-bit hash on the unfixed portion given a /8 prefix
+    int<24> host_id_24 = (int<24>) (dst_ip_output#non_fixed);
     
-    int<24> hashed_24 = hash<24>(HASH_SEED, unfixed_part);
-    int hashed_part = (int<32>) hashed_24;
+    int hashed_host_id = (int<32>) (hash<24>(HASH_SEED, host_id_24));
 
-    int new_dst = dst_ip_output#prefix | hashed_part;
+    anony_dst_ip = dst_ip_output#prefix | hashed_host_id;
   }
-  | 16 -> {
-    int unfix_cast = dst_ip_output#non_fixed;
-    int<16> unfixed_part = (int<16>) unfix_cast;
+  | 0xffff0000 -> { // Perform 16-bit hash on the unfixed portion given a /16 prefix
+    int<16> host_id_16 = (int<16>) (dst_ip_output#non_fixed);
     
-    int<16> hashed_16 = hash<16>(HASH_SEED, unfixed_part);
-    int hashed_part = (int<32>) hashed_16;
+    int hashed_host_id = (int<32>) (hash<16>(HASH_SEED, host_id_16));
 
-    int new_dst = dst_ip_output#prefix | hashed_part;
+    anony_dst_ip = dst_ip_output#prefix | hashed_host_id;
   }
-  | 24 -> {
-    int unfix_cast = dst_ip_output#non_fixed;
-    int<8> unfixed_part = (int<8>) unfix_cast;
+  | 0xffffff00 -> { // Perform 8-bit hash on the unfixed portion given a /24 prefix
+    int<8> host_id_8 = (int<8>) (dst_ip_output#non_fixed);
 
-    int<8> hashed_8 = hash<8>(HASH_SEED, unfixed_part);
-    int hashed_part = (int<32>) hashed_8;
+    int hashed_host_id = (int<32>) (hash<8>(HASH_SEED, host_id_8));
 
-    int new_dst = dst_ip_output#prefix | hashed_part;
+    anony_dst_ip = dst_ip_output#prefix | hashed_host_id;
   }
-  | _ -> {
-    int new_dst = ip#dst;
+  | _ -> { // Perform no hash on the IP given an unspecified or /32 prefix
+    anony_dst_ip = ip#dst;
   }
-  
+
+  // Create new IP for outputting anonymized IP
+  ipv4_t anonymized_ip_pkt = {version = ip#version;
+        ihl = ip#ihl;
+        diffserv = ip#diffserv;
+        total_len = ip#total_len;
+        id = ip#id;
+        flags = ip#flags;
+        frag_offset = ip#frag_offset;
+        ttl = ip#ttl;
+        protocol = ip#protocol;
+        hdr_csum = ip#hdr_csum;
+        src = anony_src_ip;
+        dst = anony_dst_ip};
+
+  return anonymized_ip_pkt;
 }
 
-// if (prefix_size == 0) {
-  //     int hashed_32 = hash<32>(HASH_SEED, non_fixed);
-  //     int new_dst = prefix | hashed_32;
-  // } else if (prefix_size == 8) {
-  //     int hashed_24 = hash<24>(HASH_SEED, non_fixed);
-  //     int new_dst = prefix | hashed_part;
-  // } 
-  // else if (prefix_size == 16) {
-  //     int hashed_16 = hash<16>(HASH_SEED, non_fixed);
-  //     int new_dst = prefix | hashed_part;
-  // } 
-  // else if (prefix_size == 24) {
-  //     int hashed_8 = hash<8>(HASH_SEED, non_fixed);
-  //     int new_dst = prefix | hashed_part;
-  // } else {
-  //     int new_dst = dst;
-  // }
+/**
+ * Anonymizes both the Ethernet and IPv4 packets by hashing the MAC address components
+ * and the host portion of the IP addresses based on the specified match actions and
+ * subnet masks obtained from the prefix table matches.
+ *
+ * @param eth The input Ethernet packet
+ * @param ip The input IPv4 packet
+ * @return void --instead, anonymized packets are forwarded to report handler
+ **/
+
+fun void anonymize_eth_ip_packet(eth_t eth, ipv4_t ip) {
+  // MAC address anonymization
+  int<24> dst_oui = table_match(anony_mac_dst_oui_tb, (1), (eth#dst_mac_oui));
+
+  int<24> dst_id = table_match(anony_mac_dst_id_tb, (1), (eth#dst_mac_id));
+
+  int<24> src_oui = table_match(anony_mac_src_oui_tb, (1), (eth#src_mac_oui));    
+
+  int<24> src_id = table_match(anony_mac_src_id_tb, (1), (eth#src_mac_id));
+  
+  // IP address anonymization
+  prefix_output src_ip_output = table_match(anony_src_ip_tb, ip#src, (ip#src));
+  prefix_output dst_ip_output = table_match(anony_dst_ip_tb, ip#dst, (ip#dst));
+
+  int anony_src_ip = 0;
+  int anony_dst_ip = 0;
+
+  match (src_ip_output#subnet_mask) with
+  | 0x0 -> {
+    int hashed_ip = hash<32>(HASH_SEED, src_ip_output#non_fixed);
+    anony_src_ip = src_ip_output#prefix | hashed_ip;      
+    }
+  | 0xff000000 -> {
+    int<24> host_id_24 = (int<24>) (src_ip_output#non_fixed);
+    
+    int hashed_host_id = (int<32>) (hash<24>(HASH_SEED, host_id_24));
+
+    anony_src_ip = src_ip_output#prefix | hashed_host_id;
+  }
+  | 0xffff0000 -> {
+    int<16> host_id_16 = (int<16>) (src_ip_output#non_fixed);
+    
+    int hashed_host_id = (int<32>) (hash<16>(HASH_SEED, host_id_16));
+
+    anony_src_ip = src_ip_output#prefix | hashed_host_id;
+  }
+  | 0xffffff00 -> {
+    int<8> host_id_8 = (int<8>) (src_ip_output#non_fixed);
+
+    int hashed_host_id = (int<32>) (hash<8>(HASH_SEED, host_id_8));
+
+    anony_src_ip = src_ip_output#prefix | hashed_host_id;
+  }
+  | _ -> {
+    anony_src_ip = ip#src;
+  }
+
+  match (dst_ip_output#subnet_mask) with
+  | 0x0 -> {
+    int hashed_ip = hash<32>(HASH_SEED, dst_ip_output#non_fixed);
+    anony_dst_ip = dst_ip_output#prefix | hashed_ip;      
+    }
+  | 0xff000000 -> {
+    int<24> host_id_24 = (int<24>) (dst_ip_output#non_fixed);
+    
+    int hashed_host_id = (int<32>) (hash<24>(HASH_SEED, host_id_24));
+
+    anony_dst_ip = dst_ip_output#prefix | hashed_host_id;
+  }
+  | 0xffff0000 -> {
+    int<16> host_id_16 = (int<16>) (dst_ip_output#non_fixed);
+    
+    int hashed_host_id = (int<32>) (hash<16>(HASH_SEED, host_id_16));
+
+    anony_dst_ip = dst_ip_output#prefix | hashed_host_id;
+  }
+  | 0xffffff00 -> {
+    int<8> host_id_8 = (int<8>) (dst_ip_output#non_fixed);
+
+    int hashed_host_id = (int<32>) (hash<8>(HASH_SEED, host_id_8));
+
+    anony_dst_ip = dst_ip_output#prefix | hashed_host_id;
+  }
+  | _ -> {
+    anony_dst_ip = ip#dst;
+  }
+
+  // Updating packet with anonymized information
+  eth_t anonymized_eth_pkt = {dst_mac_oui = dst_oui;
+        dst_mac_id = dst_id;
+        src_mac_oui = src_oui;
+        src_mac_id = src_id;
+        etype = eth#etype};
+
+  ipv4_t anonymized_ip_pkt = {version = ip#version;
+      ihl = ip#ihl;
+      diffserv = ip#diffserv;
+      total_len = ip#total_len;
+      id = ip#id;
+      flags = ip#flags;
+      frag_offset = ip#frag_offset;
+      ttl = ip#ttl;
+      protocol = ip#protocol;
+      hdr_csum = ip#hdr_csum;
+      src = anony_src_ip;
+      dst = anony_dst_ip};
+
+}
 
 //************ HANDLERS ************//
 
-handle eth_ip(eth_t eth, ipv4_t ip) {
-    printf("Pre Hash");
-    printf("Flow {dst_MAC_OUI=%d; dst_MAC_ID=%d}", eth#dst_mac_oui, eth#dst_mac_id);
-    printf("Flow {src_MAC_OUI=%d; src_MAC_ID=%d}", eth#src_mac_oui, eth#src_mac_id);
-
-    printf("SRC IP In (%d)", ip#src);
-    printf("DST IP In (%d)", ip#dst);
-
-    // Match and table and return hashed or not-hashed 24 bits
-    int<24> dst_oui = table_match(anony_mac_dst_oui_tb, (1), (eth#dst_mac_oui));
-
-    int<24> dst_id = table_match(anony_mac_dst_id_tb, (1), (eth#dst_mac_id));
-
-    int<24> src_oui = table_match(anony_mac_src_oui_tb, (1), (eth#src_mac_oui));    
-
-    int<24> src_id = table_match(anony_mac_src_id_tb, (1), (eth#src_mac_id));
-
-    prefix_output src_ip_output = table_match(anony_src_ip_tb, ip#src, (ip#src));
-    prefix_output dst_ip_output = table_match(anony_dst_ip_tb, ip#dst, (ip#dst));
-    // int new_src = 0;
-    // int new_dst = 0;
-
-    // src match statement
-    match (src_ip_output#fixed_length) with
-    | 0 -> {
-      int hashed_32 = hash<32>(HASH_SEED, src_ip_output#non_fixed);
-      int new_src = src_ip_output#prefix | hashed_32;      
-      }
-    | 8 -> {
-      int unfix_cast = src_ip_output#non_fixed;
-      int<24> unfixed_part = (int<24>) unfix_cast;
-      
-      int<24> hashed_24 = hash<24>(HASH_SEED, unfixed_part);
-      int hashed_part = (int<32>) hashed_24;
-
-      int new_src = src_ip_output#prefix | hashed_part;
-    }
-    | 16 -> {
-      int unfix_cast = src_ip_output#non_fixed;
-      int<16> unfixed_part = (int<16>) unfix_cast;
-      
-      int<16> hashed_16 = hash<16>(HASH_SEED, unfixed_part);
-      int hashed_part = (int<32>) hashed_16;
-
-      int new_src = src_ip_output#prefix | hashed_part;
-    }
-    | 24 -> {
-      int unfix_cast = src_ip_output#non_fixed;
-      int<8> unfixed_part = (int<8>) unfix_cast;
-
-      int<8> hashed_8 = hash<8>(HASH_SEED, unfixed_part);
-      int hashed_part = (int<32>) hashed_8;
-
-      int new_src = src_ip_output#prefix | hashed_part;
-      printf("SRC IP Output (%d)", new_src);
-    }
-    | _ -> {
-      int new_src = ip#src;
-    }
-
-    // dst match statement
-    match (dst_ip_output#fixed_length) with
-    | 0 -> {
-      int hashed_32 = hash<32>(HASH_SEED, dst_ip_output#non_fixed);
-      int new_dst = dst_ip_output#prefix | hashed_32;      
-      }
-    | 8 -> {
-      int unfix_cast = dst_ip_output#non_fixed;
-      int<24> unfixed_part = (int<24>) unfix_cast;
-      
-      int<24> hashed_24 = hash<24>(HASH_SEED, unfixed_part);
-      int hashed_part = (int<32>) hashed_24;
-
-      int new_dst = dst_ip_output#prefix | hashed_part;
-    }
-    | 16 -> {
-      int unfix_cast = dst_ip_output#non_fixed;
-      int<16> unfixed_part = (int<16>) unfix_cast;
-      
-      int<16> hashed_16 = hash<16>(HASH_SEED, unfixed_part);
-      int hashed_part = (int<32>) hashed_16;
-
-      int new_dst = dst_ip_output#prefix | hashed_part;
-    }
-    | 24 -> {
-      int unfix_cast = dst_ip_output#non_fixed;
-      int<8> unfixed_part = (int<8>) unfix_cast;
-
-      int<8> hashed_8 = hash<8>(HASH_SEED, unfixed_part);
-      int hashed_part = (int<32>) hashed_8;
-
-      int new_dst = dst_ip_output#prefix | hashed_part;
-      printf("DST IP Output (%d)", new_dst);
-    }
-    | _ -> {
-      int new_dst = ip#dst;
-    }
-
-    eth_t eth = {dst_mac_oui = dst_oui;
-          dst_mac_id = dst_id;
-          src_mac_oui = src_oui;
-          src_mac_id = src_id;
-          etype = eth#etype};
-
-    // int anony_src = new_src;
-    // int anony_dst = new_dst;
-
-    // ipv4_t ip = {src = anony_src;
-    //       dst = anony_dst;
-    //       len = ip#length};
-
-    generate(prepare_report(eth, ip));
-}
-
-// event ip_pkt(int dst);
-
-// handle ip_pkt(int dst) {
-//     printf("inside of ip_pkt(%d)", dst);
-//     prefix_output ip_output = table_match(anony_dst_ip_tb, dst, ());
-// if (prefix_size == 0) {
-//     int hashed_32 = hash<32>(HASH_SEED, non_fixed);
-//     int new_dst = prefix | hashed_32;
-// } else if (prefix_size == 8) {
-//     int hashed_24 = hash<24>(HASH_SEED, non_fixed);
-//     int new_dst = prefix | hashed_part;
-// } 
-// else if (prefix_size == 16) {
-//     int hashed_16 = hash<16>(HASH_SEED, non_fixed);
-//     int new_dst = prefix | hashed_part;
-// } 
-// else if (prefix_size == 24) {
-//     int hashed_8 = hash<8>(HASH_SEED, non_fixed);
-//     int new_dst = prefix | hashed_part;
-// } else {
-//     int new_dst = dst;
+// handle packet_in(int inport, eth_t eth, ipv4_t ip) {
+// 
 // }
 
-handle prepare_report(eth_t eth, ipv4_t ip) {
-  printf("Post Hash");
-	printf("Flow {dst_MAC_OUI=%d; dst_MAC_ID=%d}", eth#dst_mac_oui, eth#dst_mac_id);
-  printf("Flow {src_MAC_OUI=%d; src_MAC_ID=%d}", eth#src_mac_oui, eth#src_mac_id);
+handle eth_ip(eth_t eth, ipv4_t ip) {
+    // Store input ethernet and ip packet for verification
+    eth_t orig_eth = eth;
+    ipv4_t orig_ip = ip;
+    eth = anonymize_eth_packet(eth);
+    ip = anonymize_ip_packet(ip);
 
-  // printf("SRC IP Output (%d)", ip#src);
-  // printf("DST IP Output (%d)", ip#dst);
+    // Forward an event representing the packet out of OUT_PORT
+    generate_port(OUT_PORT, eth_ip(eth, ip));
+    // Prepare a report to send to the monitoring server
+    generate(prepare_report(orig_eth, orig_ip, eth, ip));
+}
+
+handle prepare_report(eth_t orig_eth, ipv4_t orig_ip, eth_t anon_eth, ipv4_t anon_ip) {
+  printf("Sending report about packet {src=%d; dst=%d} to monitor on port %d", orig_ip#src, orig_ip#dst, SERVER_PORT);
+
+  // Print packet details
+  print_pkt_in_detail(orig_eth, orig_ip);
+  print_pkt_out_detail(anon_eth, anon_ip);
 
 	int<32> tmp = 0;
-	event r = report(ip#src, ip#dst, tmp);
+	event r = report(anon_eth, anon_ip);
 	generate_port(SERVER_PORT, r);
 }
+
