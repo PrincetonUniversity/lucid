@@ -70,18 +70,20 @@ fun void store_count_and_time(int src, int dst, int psize, int payload_hash, int
 
 	}
 	else if (table_num == 1) {
+		printf("I am here table number 1");	
 		Array.set(flow_counts_p_to_b, payload_hash, psize);
 		Array.set(time_counts_p_to_b, payload_hash, Sys.time());
 		Array.set(src_ip_p_to_b, payload_hash, src);
 		Array.set(dst_ip_p_to_b, payload_hash, dst);
 	}
 	else if (table_num == 2) {
+		printf("I am here table number 2");
 		Array.set(flow_counts_b_to_p, hashed, psize);
 		Array.set(time_counts_b_to_p, hashed, Sys.time());
 	}
 }
 
-fun bool checkRelation(int src, int dst, int psize, int alpha) {
+fun bool checkRelation(int src, int dst, int psize, int alpha, int beta) {
 	int flag = 0;
 	// Step 1. Look at the a-> p arrays
 	int hashed = (int<32>)hash<4>(HASH_SEED, dst, src);
@@ -90,7 +92,7 @@ fun bool checkRelation(int src, int dst, int psize, int alpha) {
 	int cur = Sys.time();
 	printf("pszie is %d, prev size is %d, prev time is %d, and cur time is %d", psize, prev_size, prev_time, cur);
 	if (((cur - prev_time) < alpha)) {
-		if ((psize - prev_size) < 50) {
+		if ((psize - prev_size) < beta) {
 			flag = flag +  1;
 		}
 	}
@@ -106,7 +108,7 @@ fun bool checkRelation(int src, int dst, int psize, int alpha) {
 	int cur = Sys.time();
 	printf("pszie is %d, prev size is %d, prev time is %d, and cur time is %d", psize, prev_size, prev_time, cur);
 	if (((cur - prev_time) < alpha)) {
-		if ((psize - prev_size) < 50) {
+		if ((psize - prev_size) < beta) {
 			flag = flag +  1;
 		}
 	}
@@ -123,7 +125,7 @@ fun bool checkRelation(int src, int dst, int psize, int alpha) {
 	int cur = Sys.time();
 	printf("pszie is %d, prev size is %d, prev time is %d, and cur time is %d", psize, prev_size, prev_time, cur);
 	if (((cur - prev_time) < alpha)) {
-		if ((psize - prev_size) < 50) {
+		if ((psize - prev_size) < beta) {
 			flag = flag +  1;
 		}
 	}
@@ -159,7 +161,7 @@ handle eth_ip(eth_t eth, ip_t ip) {
 		// if it is not internal, it means that it is p_to_a, so we need to check the tables
 		else {
 			// Since it is going out from p, check whether it is pivotting attack
-			if (checkRelation(ip#src, ip#dst, eth#psize, 100)) {
+			if (checkRelation(ip#src, ip#dst, eth#psize, 1000, 50)) {
 				generate(prepare_report(eth, ip));
 			}
 		}

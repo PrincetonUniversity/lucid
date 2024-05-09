@@ -14,7 +14,7 @@ normalize = -1;
 for packet in packets:
     if normalize == -1:
         normalize = packet.time;
-    packet_time = int((packet.time - normalize) * 100);
+    packet_time = int((packet.time - normalize) * 1000);
     #print(packet_time);
     if packet.haslayer(IP):
         src = socket.inet_aton(packet[IP].src)
@@ -49,18 +49,18 @@ for packet in packets:
         })
 
 dict_to_json = {
-    "max_time": 99999999,  # I just used the default one i was given, idk what this means 
+    "max time": 999999,  # I just used the default one i was given, idk what this means 
     "events": events
 }
 
 json_output = json.dumps(dict_to_json, indent=2)
 
 # Saving the JSON output to a file
-with open('packet_data.json', 'w') as file:
+with open('pivot.json', 'w') as file:
     file.write(json_output)
 
 # Optionally, print a message indicating success
-print("Packet data has been saved to 'packet_data.json'")
+print("Packet data has been saved to 'pivot.json'")
 
 def get_memop(mem_val, passed_val):
     if mem_val < 1000:
