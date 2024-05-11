@@ -4,7 +4,7 @@ import struct
 from scapy.all import rdpcap, IP, TCP
 
 # NOTE: Change pcap names as needed, especially if you are using a specialized dataset
-packets = rdpcap("/Users/lucaskohler/Downloads/smallFlows.pcap")
+packets = rdpcap("smallFlows.pcap")
 
 events = []
 
