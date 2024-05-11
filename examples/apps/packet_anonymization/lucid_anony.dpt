@@ -47,11 +47,11 @@ type prefix_output = {
 
 //************ EVENTS ************//
 
-// Event for anonymizing Ethernet and IPv4 packet
+// Event for processing Ethernet and IPv4 packet
 event eth_ip(eth_t eth, ipv4_t ip);
 
 // Event to prepare report after anonymizing a packet
-event prepare_report(eth_t orig_eth, ipv4_t orig_ip, eth_t anon_eth, ipv4_t anon_ip);
+event prepare_report(eth_t eth, ipv4_t ip);
 
 // Event to send report containing anonymized packet to the monitoring server
 event report(eth_t eth, ipv4_t ip) {skip;} 
@@ -93,6 +93,7 @@ table_type anony_mac_table_t = {
   arg_type: (int<24>)
   ret_type: int<24>
 }
+
 
 table_type ip_prefix_table_t = {
     key_type: (int)
@@ -211,13 +212,13 @@ fun eth_t anonymize_eth_packet(eth_t eth) {
 
     int<24> src_id = table_match(anony_mac_src_id_tb, (1), (eth#src_mac_id));
     
-    eth_t anonymized_eth_pkt = {dst_mac_oui = dst_oui;
+    eth_t eth = {dst_mac_oui = dst_oui;
           dst_mac_id = dst_id;
           src_mac_oui = src_oui;
           src_mac_id = src_id;
           etype = eth#etype};
 
-    return anonymized_eth_pkt;
+    return eth;
 }
 
 /*
@@ -302,7 +303,7 @@ fun ipv4_t anonymize_ip_packet(ipv4_t ip) {
   }
 
   // Create new IP for outputting anonymized IP
-  ipv4_t anonymized_ip_pkt = {version = ip#version;
+  ipv4_t ip = {version = ip#version;
         ihl = ip#ihl;
         diffserv = ip#diffserv;
         total_len = ip#total_len;
@@ -315,7 +316,7 @@ fun ipv4_t anonymize_ip_packet(ipv4_t ip) {
         src = anony_src_ip;
         dst = anony_dst_ip};
 
-  return anonymized_ip_pkt;
+  return ip;
 }
 
 /**
@@ -434,27 +435,26 @@ fun void anonymize_eth_ip_packet(eth_t eth, ipv4_t ip) {
 // }
 
 handle eth_ip(eth_t eth, ipv4_t ip) {
-    // Store input ethernet and ip packet for verification
-    eth_t orig_eth = eth;
-    ipv4_t orig_ip = ip;
+
+    // print_pkt_in_detail(eth, ip);
+
     eth = anonymize_eth_packet(eth);
     ip = anonymize_ip_packet(ip);
 
     // Forward an event representing the packet out of OUT_PORT
     generate_port(OUT_PORT, eth_ip(eth, ip));
     // Prepare a report to send to the monitoring server
-    generate(prepare_report(orig_eth, orig_ip, eth, ip));
+    generate(prepare_report(eth, ip));
 }
 
-handle prepare_report(eth_t orig_eth, ipv4_t orig_ip, eth_t anon_eth, ipv4_t anon_ip) {
-  printf("Sending report about packet {src=%d; dst=%d} to monitor on port %d", orig_ip#src, orig_ip#dst, SERVER_PORT);
+handle prepare_report(eth_t eth, ipv4_t ip) {
+  printf("Sending report about packet {src=%d; dst=%d} to monitor on port %d", ip#src, ip#dst, SERVER_PORT);
 
   // Print packet details
-  print_pkt_in_detail(orig_eth, orig_ip);
-  print_pkt_out_detail(anon_eth, anon_ip);
+  print_pkt_out_detail(eth, ip);
 
 	int<32> tmp = 0;
-	event r = report(anon_eth, anon_ip);
+	event r = report(eth, ip);
 	generate_port(SERVER_PORT, r);
 }
 
