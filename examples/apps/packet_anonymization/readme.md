@@ -14,93 +14,134 @@ Once you have generated the json, you must manually add the table rules like thi
 
 ```
 {
-    "switches": 1,
-    "max time": 9999999,
-    "events": [
-      {
-        "type": "command", 
-        "name":"Table.install", 
-        "args":{
-          "table":"anony_mac_dst_oui_tb", 
-          "key":[1], 
-          "action":"anony_mac_dst_oui_tb.hash_mac_action",
-          "args": []
-        }
-      },
-      {
-        "type": "command", 
-        "name":"Table.install", 
-        "args":{
-          "table":"anony_mac_dst_id_tb", 
-          "key":[1], 
-          "action":"anony_mac_dst_id_tb.hash_mac_action",
-          "args": []
-        }
-      },
-      {
-        "type": "command", 
-        "name":"Table.install", 
-        "args":{
-          "table":"anony_mac_src_oui_tb", 
-          "key":[1], 
-          "action":"anony_mac_src_oui_tb.hash_mac_action",
-          "args": []
-        }
-      },
-      {
-        "type": "command", 
-        "name":"Table.install", 
-        "args":{
-          "table":"anony_mac_src_id_tb", 
-          "key":[0], 
-          "action":"anony_mac_src_id_tb.hash_mac_action",
-          "args": []
-        }
-      },
-      {
-        "type": "command", 
-        "name":"Table.install", 
-        "args":{
-            "table":"anony_src_ip_tb", 
-            "key":["16909056<<32>> &&& 4294967040<<32>>"],
-            "action":"anony_src_ip_tb.get_ip_prefix", 
-            "args":[4294967040]
-        }
-      },
-      {
-        "type": "command", 
-        "name":"Table.install", 
-        "args":{
-            "table":"anony_dst_ip_tb", 
-            "key":["16909056<<32>> &&& 4294967040<<32>>"], 
-            "action":"anony_dst_ip_tb.get_ip_prefix", 
-            "args":[4294967040]
-        }
-      },
-      {
-        "type": "command", 
-        "name":"Table.install", 
-        "args":{
-            "table":"anony_src_ip_tb", 
-            "key":["1684275200<<32>> &&& 4278190080<<32>>"],
-            "action":"anony_src_ip_tb.get_ip_prefix", 
-            "args":[4278190080]
-        }
-      },
-      {
-        "type": "command", 
-        "name":"Table.install", 
-        "args":{
-            "table":"anony_dst_ip_tb", 
-            "key":["1684275200<<32>> &&& 4278190080<<32>>"], 
-            "action":"anony_dst_ip_tb.get_ip_prefix", 
-            "args":[4278190080]
-        }
-      },
-
-      {"name":"eth_ip", "args": [10542275, 1715004, 16646365, 13428138, 0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 16909056, 16909057]},
-
-      ...
+  "switches": 1,
+  "max_time": 99999999,
+  "events": [
+    {
+      "type": "command", 
+      "name":"Table.install", 
+      "args":{
+        "table":"anony_mac_dst_oui_tb", 
+        "key":[0], 
+        "action":"anony_mac_dst_oui_tb.hash_mac_action",
+        "args": []
+      }
+    },
+    {
+      "type": "command", 
+      "name":"Table.install", 
+      "args":{
+        "table":"anony_mac_dst_id_tb", 
+        "key":[1], 
+        "action":"anony_mac_dst_id_tb.hash_mac_action",
+        "args": []
+      }
+    },
+    {
+      "type": "command", 
+      "name":"Table.install", 
+      "args":{
+        "table":"anony_mac_src_oui_tb", 
+        "key":[0], 
+        "action":"anony_mac_src_oui_tb.hash_mac_action",
+        "args": []
+      }
+    },
+    {
+      "type": "command", 
+      "name":"Table.install", 
+      "args":{
+        "table":"anony_mac_src_id_tb", 
+        "key":[1], 
+        "action":"anony_mac_src_id_tb.hash_mac_action",
+        "args": []
+      }
+    },
+    {
+      "type": "command", 
+      "name":"Table.install", 
+      "args":{
+          "table":"anony_src_ip_tb", 
+          "key":["2198055104<<32>> &&& 4294967040<<32>>"],
+          "action":"anony_src_ip_tb.get_ip_prefix", 
+          "args":[4294967040]
+      }
+    },
+    {
+      "type": "command", 
+      "name":"Table.install", 
+      "args":{
+          "table":"anony_dst_ip_tb", 
+          "key":["2198055104<<32>> &&& 4294967040<<32>>"], 
+          "action":"anony_dst_ip_tb.get_ip_prefix", 
+          "args":[4294967040]
+      }
+    },
+    {
+      "type": "command", 
+      "name":"Table.install", 
+      "args":{
+          "table":"anony_src_ip_tb", 
+          "key":["33493164<<32>> &&& 4294901760<<32>>"],
+          "action":"anony_src_ip_tb.get_ip_prefix", 
+          "args":[4294901760]
+      }
+    },
+    {
+      "type": "command", 
+      "name":"Table.install", 
+      "args":{
+          "table":"anony_dst_ip_tb", 
+          "key":["33493164<<32>> &&& 4294901760<<32>>"], 
+          "action":"anony_dst_ip_tb.get_ip_prefix", 
+          "args":[4294901760]
+      }
+    },
+    {
+      "name": "eth_ip",
+      "args": [
+        6796,
+        1440128,
+        4219270,
+        10154485,
+        2048,
+        4,
+        5,
+        0,
+        983,
+        30432,
+        2,
+        0,
+        128,
+        6,
+        40572,
+        2198055104,
+        2329218632
+      ]
+    },
+    {
+      "name": "eth_ip",
+      "args": [
+        4219270,
+        10154485,
+        6796,
+        1440128,
+        2048,
+        4,
+        5,
+        0,
+        426,
+        11618,
+        0,
+        0,
+        52,
+        6,
+        30248,
+        2329218632,
+        2198055104
+      ]
+    },
+    ...
 
       ]
   }
@@ -147,23 +188,21 @@ dpt: -------Partial interpreting---------
 dpt: Simulating...
 dpt: Using random seed: 1715288726
 
-t=8: Handling event eth_ip(10542275,1715004,16646365,13428138,0,1,2,3,4,5,6,7,8,9,10,16909056,16909057) at switch 0, port 0
-t=9: Handling event eth_ip(1,2,3,4,0,1,2,3,4,5,6,7,8,9,10,16909058,16909059) at switch 0, port 0
-t=10: Handling event eth_ip(1,2,3,4,0,1,2,3,4,5,6,7,8,9,10,1684275458,1684275972) at switch 0, port 0
-t=608: Handling event prepare_report(10542275,1715004,16646365,13428138,0,1,2,3,4,5,6,7,8,9,10,16909056,16909057,13345610,11900208,10198107,13428138,0,1,2,3,4,5,6,7,8,9,10,16909066,16909237) at switch 0, port 196
-Sending report about packet {src=16909056; dst=16909057} to monitor on port 2
+t=8: Handling event eth_ip(6796,1440128,4219270,10154485,2048,4,5,0,983,30432,2,0,128,6,40572,2198055104,2329218632) at switch 0, port 0
+t=608: Handling event prepare_report(6796,5072193,4219270,14530415,2048,4,5,0,983,30432,2,0,128,6,40572,2198054914,2329218632) at switch 0, port 196
+Sending report about packet {src=2198054914; dst=2329218632} to monitor on port 2
 +----------------------+
 | Anonymized Packet    |
 +----------------------+
 | Flow Info:           |
-|   dst_MAC_OUI: 13345610 |
-|   dst_MAC_ID:  11900208 |
-|   src_MAC_OUI: 10198107 |
-|   src_MAC_ID:  13428138 |
+|   dst_MAC_OUI: 6796 |
+|   dst_MAC_ID:  5072193 |
+|   src_MAC_OUI: 4219270 |
+|   src_MAC_ID:  14530415 |
 +----------------------+
 | IP Addresses:        |
-|   SRC IP: 16909066 |
-|   DST IP: 16909237 |
+|   SRC IP: 2198054914 |
+|   DST IP: 2329218632 |
 +----------------------+
 
 ...
@@ -171,7 +210,7 @@ Sending report about packet {src=16909056; dst=16909057} to monitor on port 2
 Drops :    [ ]
 
  packet events handled: 0
- total events handled: 6
+ total events handled: 9993
 
 }
 ```
@@ -180,25 +219,22 @@ Drops :    [ ]
 
 The simulator's output for the provided `lucid_anony.json` is rather simple. Each packet event processed in the simulation has some associated trace that summarizes the event that was handled at each switch in the simulation respectively. In the case of this program, a single trace will look like so:
 ```
-t=8: Handling event eth_ip(10542275,1715004,16646365,13428138,0,1,2,3,4,5,6,7,8,9,10,16909056,16909057) at switch 0, port 0
-...
-t=608: Handling event prepare_report(10542275,1715004,16646365,13428138,0,1,2,3,4,5,6,7,8,9,10,16909056,16909057,13345610,11900208,10198107,13428138,0,1,2,3,4,5,6,7,8,9,10,16909066,16909237) at switch 0, port 196
-Sending report about packet {src=16909056; dst=16909057} to monitor on port 2
+Sending report about packet {src=2198054914; dst=2329218632} to monitor on port 2
 +----------------------+
 | Anonymized Packet    |
 +----------------------+
 | Flow Info:           |
-|   dst_MAC_OUI: 13345610 |
-|   dst_MAC_ID:  11900208 |
-|   src_MAC_OUI: 10198107 |
-|   src_MAC_ID:  13428138 |
+|   dst_MAC_OUI: 6796 |
+|   dst_MAC_ID:  5072193 |
+|   src_MAC_OUI: 4219270 |
+|   src_MAC_ID:  14530415 |
 +----------------------+
 | IP Addresses:        |
-|   SRC IP: 16909066   |
-|   DST IP: 16909237   |
+|   SRC IP: 2198054914 |
+|   DST IP: 2329218632 |
 +----------------------+
 ```
-the lines with `t=...` are reports about events arriving at switches in the simulation, printed by the Lucid interpreter. The line `sending report...` as well as the `Anonymized Packet` table are printed via statements in the `prepare_report` handler. The `Anonymized Packet` simply provides the details of the anonymized `eth_ip` packet via a helper function that formats and prints the table. Additionally, another helper function, `Packet In`, exists and can be called before anonymization occurs in the `eth_ip` event if you are looking to see the details of the original packet in the trace.
+The line `sending report...` as well as the `Anonymized Packet` table are printed via statements in the `prepare_report` handler. The `Anonymized Packet` simply provides the details of the anonymized `eth_ip` packet via a helper function that formats and prints the table. Additionally, another helper function, `Packet In`, exists and can be called before anonymization occurs in the `eth_ip` event if you are looking to see the details of the original packet in the trace.
 
 ## Anonymization Approach
 
