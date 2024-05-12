@@ -150,7 +150,7 @@ Once you have generated the json, you must manually add the table rules like thi
 ```
 #### Usage
 
-Finally, to run the program, make sure that you have docker and the lucid-docker image installed, then run `./lucid.sh interp .examples/apps/pkt_anony/lucid_anony.dpt` in the lucid home directory.
+Finally, to run the program, make sure that you have docker and the lucid-docker image installed, then run `./lucid.sh interp .examples/apps/pkt_anonymizer/lucid_anony.dpt` in the lucid home directory.
 
 **Expected output**
 
