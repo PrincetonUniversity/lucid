@@ -17,6 +17,7 @@ Once you have generated the json, you must manually add the table rules like thi
   "switches": 1,
   "max_time": 99999999,
   "events": [
+    // Install table rules here  
     {
       "type": "command", 
       "name":"Table.install", 
@@ -97,6 +98,7 @@ Once you have generated the json, you must manually add the table rules like thi
           "args":[4294901760]
       }
     },
+    // Events simulating packets
     {
       "name": "eth_ip",
       "args": [
@@ -277,19 +279,20 @@ This JSON command installs a rule to anonymize the last 8 bits of the IPv4 sourc
   "name":"Table.install", 
   "args":{
       "table":"anony_src_ip_tb", 
-      "key":[16909056], 
-      "mask": ["4294967040"],
+      "key":["16909056<<32>> &&& 4294967040<<32>>"], 
       "action":"anony_src_ip_tb.get_ip_prefix", 
       "args":[4294967040]
   }
 }
 ```
+*"key": The used by both of the IP tables is a masked pattern. The user provides the IP containing the prefix in addition to the subnet for said prefix, then use the `&&&` operator to allow for any IPs with the same prefix to match. 
+*"args": The install-time argument for the get_ip_prefix constructor. The user provides a install-time argument of a subnet for the IP prefix they are preserving, this subnet is then used to derive the prefix and host ID portions of a provided IP
 
 The get_ip_prefix constructor generates the action to extract the prefix and non-fixed part:
 ```c
-action_constr get_ip_prefix(int prefix_mask, int non_fixed_mask, int prefix_size) = {
+action_constr get_ip_prefix(int prefix_mask) = {
     return action prefix_output get_prefix_action(int ip) {
-        return {prefix = ip & prefix_mask; non_fixed = ip & non_fixed_mask; fixed_length = prefix_size};
+        return {prefix = ip & prefix_mask; non_fixed = ip & ~prefix_mask; subnet_mask = prefix_mask};
     };
 };
 ```
