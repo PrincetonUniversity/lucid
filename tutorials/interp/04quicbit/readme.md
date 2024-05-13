@@ -168,7 +168,7 @@ The program, as stated before, took "quicbit4.json" as the input, and processed 
 
 ## Other Important Notes 
 
-QUIC traffic that uses the spin bit is not typically available on the internet, as noted by https://dl.acm.org/doi/10.1145/3618257.3624844. In order to obtain our quic traffic, I used the aioquic library at https://github.com/aiortc/aioquic and used their examples to generate quic traffic. 
+QUIC traffic that uses the spin bit is not typically available on the internet, as noted by https://dl.acm.org/doi/10.1145/3618257.3624844. In order to obtain our quic traffic, I used the aioquic library at https://github.com/aiortc/aioquic and used their examples to generate quic traffic. Wireshark was then used to capture the QUIC traffic and then converted into a pcapng file. 
 
 One other note is that for actual usage with a switch, the program would need to be edited in order to get the current time that the switch has, not the time from within the packet itself. The main change would be getting rid of the int cur_time argument, and changing the int current_ts variable to equal Sys.time() on lines 15 and 17, respectively. Another change that would have to be made is to the pcapconversion_ipv6.py file. In that file, you would remove the timestamp variable on line 16 and then get rid of the corresponding timestamp variable on line 47 in the '"args": [src, dst, spin_flipped, timestamp]' line. The script would also need to be rerun in order to create a JSON file that matches the event. 
 
