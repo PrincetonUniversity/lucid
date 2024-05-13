@@ -1,0 +1,47 @@
+const int HASH_SEED = 1234;
+const int MAX_CONVERSATIONS = 1024;
+
+// these arrays check the conversation states
+global Array.t<32> last_timestamp_true = Array.create(MAX_CONVERSATIONS);
+global Array.t<32> last_timestamp_false = Array.create(MAX_CONVERSATIONS);
+global Array.t<32> rtt_measurement = Array.create(MAX_CONVERSATIONS);
+
+// Hashing function for src_dst to array index????? i thnkn hopefully this owrks 
+fun int hash_src_dst(int src, int dest){
+    return (int<32>)hash<4>(HASH_SEED, src, dest);
+}
+
+
+event quic_packet_alt(int src, int dest, bool spinbit, int cur_time) {
+    int idx = hash_src_dst(src, dest);
+    int current_ts = cur_time;
+    if (spinbit) {
+        // CHANGE: structuring the control flow in this way 
+        // allows us to swap the order of accesses to last_timestamp_true
+        // and last_timestamp_false without changing the overall program
+        // behavior.
+        // 1.b. set the last true timestamp
+        Array.set(last_timestamp_true, idx, current_ts);
+        // 1.a. get the last false timestamp        
+        int last_ts_false = Array.get(last_timestamp_false, idx);
+        if (last_ts_false != 0) {
+            // 2.   calculate the rtt (from last false timestamp)
+            int rtt = current_ts - last_ts_false;
+            // 3.   save the rtt
+            Array.set(rtt_measurement, idx, rtt);
+            printf("RTT for conversation %d (spinbit true): %d ms", idx, rtt);
+        }
+    } else {
+        // 1.a. get the last true timestamp        
+        int last_ts_true= Array.get(last_timestamp_true, idx);
+        // 1.b. set the last false timestamp
+        Array.set(last_timestamp_false, idx, current_ts);
+        if (last_ts_true != 0) {
+            // 2.   calculate the rtt (from last true timestamp)
+            int rtt = current_ts - last_ts_true;
+            // 3.   save the rtt
+            Array.set(rtt_measurement, idx, rtt);
+            printf("RTT for conversation %d (spinbit true): %d ms", idx, rtt);
+        }
+    }
+}
