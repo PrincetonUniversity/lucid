@@ -1,5 +1,6 @@
 {
-    "max_time": 10000,
+    "random seed":1,
+    "max time": 10000,
     "events": [
       {
         "name": "quic_packet_alt",
