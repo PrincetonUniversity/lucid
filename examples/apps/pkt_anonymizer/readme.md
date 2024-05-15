@@ -9,9 +9,9 @@ This is a simplified, real-time packet anonymization program that anonymizes MAC
 ## Creating the Specification File
 
 In order to run `lucid_anony.dpt` on a simulated network, you must first configure the specification json file, `lucid_anony.json`. To do so, you can run the provided python script, `pcapcoversion.py`. 
-When script is run, it will convert the content of a provided pcap file (`smallflows.pcap` is provided, make sure to change the file being read in if you decide to use your own pcap) into a json called `lucid_anony.json` with each packet from the pcap being automatically formatted into a list of `eth_ip` events.
-Once you have generated the json, you must manually add the table rules like this if you want to install table rules:
+When script is run, it will convert the content of a pcap file into a json called `lucid_anony.json` with each packet from the pcap being automatically formatted into a list of `eth_ip` events. The script assumes that you are using [smallflows.pcap](https://tcpreplay.appneta.com/wiki/captures.html#smallflows-pcap) in the same directory. If you use a different file, make sure to update the script. 
 
+Once you have generated the json, you must manually add the table rules like this if you want to install table rules:
 ```
 {
   "switches": 1,
