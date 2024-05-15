@@ -1,0 +1,191 @@
+const int<9> OUT_PORT = 1;
+const int<9> SERVER_PORT = 2;
+
+type eth_t = {
+	int<48> dmac;
+	int<48> smac;
+	int<16> etype;
+	int psize;
+	int payload;
+}
+type ip_t = {
+	int src;
+	int dst;
+	int<16> len;
+}
+
+
+const int HASH_SEED = 1234;
+const int pivotter_ip = 33554442;
+// const int internal_ip = 1;
+
+event eth_ip(eth_t eth, ip_t ip);
+event prepare_report(eth_t eth, ip_t ip);
+event report(int src, int dst, int<32> count) {skip;} // report is sent back to the monitoring server.
+
+// using the matchtable to see if the source ip is in the internal range (1-3)
+action_constr mk_result(bool b) = {
+	return action bool acn () {
+		return b;
+	};
+};
+
+table_type filter_table_t = { 
+	key_type: (int)
+	arg_type: ()
+	ret_type: bool
+}
+
+global filter_table_t filter_table = 
+	table_create<filter_table_t>((mk_result), 1024, mk_result(false));
+
+
+fun bool filter_with_table(int addr) {
+	bool r = table_match(
+		filter_table, 
+		(addr), 
+		());
+	return r;
+}
+
+/*******/
+
+global Array.t<32> flow_counts_a_to_p = Array.create(1000);
+global Array.t<32> time_counts_a_to_p = Array.create(1000);
+global Array.t<32> payload_hash_a_to_p = Array.create(1000);
+global Array.t<32> flow_counts_p_to_b = Array.create(1000);
+global Array.t<32> time_counts_p_to_b = Array.create(1000);
+global Array.t<32> src_ip_p_to_b = Array.create(1000);
+global Array.t<32> dst_ip_p_to_b = Array.create(1000);
+global Array.t<32> flow_counts_b_to_p = Array.create(1000);
+global Array.t<32> time_counts_b_to_p = Array.create(1000);
+
+
+fun void store_count_and_time(int src, int dst, int psize, int payload_hash, int table_num) {
+	int hashed = (int<32>)hash<4>(HASH_SEED, src, dst);
+	if (table_num == 0) {
+		Array.set(flow_counts_a_to_p, hashed, psize);
+		Array.set(time_counts_a_to_p, hashed, Sys.time());
+		Array.set(payload_hash_a_to_p, hashed, payload_hash);
+
+	}
+	else if (table_num == 1) {
+		printf("I am here table number 1");	
+		Array.set(flow_counts_p_to_b, payload_hash, psize);
+		Array.set(time_counts_p_to_b, payload_hash, Sys.time());
+		Array.set(src_ip_p_to_b, payload_hash, src);
+		Array.set(dst_ip_p_to_b, payload_hash, dst);
+	}
+	else if (table_num == 2) {
+		printf("I am here table number 2");
+		Array.set(flow_counts_b_to_p, hashed, psize);
+		Array.set(time_counts_b_to_p, hashed, Sys.time());
+	}
+}
+
+fun bool checkRelation(int src, int dst, int psize, int alpha, int beta) {
+	int flag = 0;
+	// Step 1. Look at the a-> p arrays
+	int hashed = (int<32>)hash<4>(HASH_SEED, dst, src);
+	int prev_size = Array.get(flow_counts_a_to_p, hashed);
+	int prev_time = Array.get(time_counts_a_to_p, hashed);
+	int cur = Sys.time();
+	printf("pszie is %d, prev size is %d, prev time is %d, and cur time is %d", psize, prev_size, prev_time, cur);
+	if (((cur - prev_time) < alpha)) {
+		if ((psize - prev_size) < beta) {
+			flag = flag +  1;
+		}
+	}
+	else {
+		return false;
+	}
+
+	// Step 2. Look at the p -> b arrays
+	//int hashed = (int<32>)hash<4>(HASH_SEED, pivotter_ip, internal_ip);
+	int hashed_two = Array.get(payload_hash_a_to_p, hashed);
+	int prev_size = Array.get(flow_counts_p_to_b, hashed_two);
+	int prev_time = Array.get(time_counts_p_to_b, hashed_two);
+	int cur = Sys.time();
+	printf("pszie is %d, prev size is %d, prev time is %d, and cur time is %d", psize, prev_size, prev_time, cur);
+	if (((cur - prev_time) < alpha)) {
+		if ((psize - prev_size) < beta) {
+			flag = flag +  1;
+		}
+	}
+	else {
+		return false;
+	}
+
+	// Step 3. Look at the b -> p arrays
+	int prev_src = Array.get(src_ip_p_to_b, hashed_two);
+	int prev_dst = Array.get(dst_ip_p_to_b, hashed_two);
+	int hashed = (int<32>)hash<4>(HASH_SEED, prev_dst, prev_src);
+	int prev_size = Array.get(flow_counts_b_to_p, hashed);
+	int prev_time = Array.get(time_counts_b_to_p, hashed);
+	int cur = Sys.time();
+	printf("pszie is %d, prev size is %d, prev time is %d, and cur time is %d", psize, prev_size, prev_time, cur);
+	if (((cur - prev_time) < alpha)) {
+		if ((psize - prev_size) < beta) {
+			flag = flag +  1;
+		}
+	}
+	else {
+		return false;
+	}
+
+	printf("flag: %d", flag);
+	if (flag == 3) {
+		return true;
+	}
+	return false;
+}
+
+
+/*******************/
+
+handle eth_ip(eth_t eth, ip_t ip) {
+	generate_port(OUT_PORT, eth_ip(eth, ip));
+	// check of the src is the pivotter itself
+	bool pivotter = false;
+	if (ip#src == pivotter_ip) {
+		pivotter = true;
+	}
+	// if it is from the pivotter, check whether the destination port is internal or external
+	if (pivotter) {
+		bool checking_dst_internal = filter_with_table(ip#dst);
+		// if internal, save it to p_to_b_table
+		if (checking_dst_internal) {
+			int payload_hashed = (int<32>)hash<4>(HASH_SEED, eth#payload);
+			store_count_and_time(ip#src, ip#dst, eth#psize, payload_hashed, 1);
+		}
+		// if it is not internal, it means that it is p_to_a, so we need to check the tables
+		else {
+			// Since it is going out from p, check whether it is pivotting attack
+			if (checkRelation(ip#src, ip#dst, eth#psize, 1000, 50)) {
+				generate(prepare_report(eth, ip));
+			}
+		}
+	}
+	else {
+		// if it is not pivotter, check if the source of the packet is internal
+		bool checking = filter_with_table(ip#src);
+		int payload_hashed = (int<32>)hash<4>(HASH_SEED, eth#payload);
+		// if internal, save it to b->p
+		if (checking) {
+			store_count_and_time(ip#src, ip#dst, eth#psize, payload_hashed, 2); 
+
+		}
+		// if not internal, save it to a -> p
+		else {
+			store_count_and_time(ip#src, ip#dst, eth#psize, payload_hashed, 0);
+		}
+	}
+	
+}
+
+handle prepare_report(eth_t eth, ip_t ip) {
+	printf("caught pivotting about flow {src=%d; dst=%d;} to monitor on port %d", ip#src, ip#dst, SERVER_PORT);
+	int<32> tmp = 0;
+	event r = report(ip#src, ip#dst, tmp);
+	generate_port(SERVER_PORT, r);
+}
