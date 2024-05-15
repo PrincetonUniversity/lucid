@@ -43,7 +43,8 @@ poplfiles = [x for x in os.listdir(popldir) if x.endswith(".dpt")]
 # with its directory relative to the repo root.
 appfiles = [
     "examples/apps/pivotting_app/pivot.dpt",
-    "examples/apps/pkt_anonymizer/lucid_anony.dpt"
+    "examples/apps/pkt_anonymizer/lucid_anony.dpt",
+    "examples/apps/quicbit/quicbit4.dpt"    
 ]
 
 errors = []
