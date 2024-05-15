@@ -42,7 +42,8 @@ poplfiles = [x for x in os.listdir(popldir) if x.endswith(".dpt")]
 # add new app test cases here. Specify the .dpt file to run 
 # with its directory relative to the repo root.
 appfiles = [
-    "examples/apps/pivotting_app/pivot.dpt"
+    "examples/apps/pivotting_app/pivot.dpt",
+    "examples/apps/pkt_anonymizer/lucid_anony.dpt"
 ]
 
 errors = []
