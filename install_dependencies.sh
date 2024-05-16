@@ -42,8 +42,9 @@ then
 fi
 
 # Install lucid dependencies with opam
-opam pin add -yn dpt . 
-opam depext -y dpt 
-opam install -y --deps-only dpt
+opam switch create 4.12.0
+opam switch 4.12.0
+opam depext -y .
+opam install -y --deps-only .
 
 echo "dependencies installed. You should be able to build lucid with 'make' now."

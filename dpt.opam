@@ -12,7 +12,7 @@ bug-reports: "git+https://github.com/PrincetonUniversity/lucid/issues"
 depends: [
   "odoc"
   "integers"
-  "batteries"
+  "batteries" { = "3.5.1" }
   "ounit"
   "ANSITerminal"
   "menhir"
