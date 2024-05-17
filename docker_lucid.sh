@@ -6,14 +6,14 @@
 
 USAGE=$(cat <<-END
 Usage:
-./lucid.sh interp <prog.dpt> -- run lucid interpreter inside of the docker image.
-./lucid.sh compile <prog.dpt> -- run lucid compiler inside the docker image.
-./lucid.sh rebuild -- rebuild the lucid compiler in your docker image, from this local repo.
-./lucid.sh pull -- pull most recently published version of lucid image.
-./lucid.sh enter_dev -- enter a lucid development image where the local repo is mounted at /lucid.
-./lucid.sh pull_dev -- pull most recently published version of lucid dev image.
-./lucid.sh rebuild_and_push -- rebuild docker image and publish (admin only)
-./lucid.sh rebuild_and_push_dev -- rebuild docker image and publish (admin only)
+./docker_lucid.sh interp <prog.dpt> -- run lucid interpreter inside of the docker image.
+./docker_lucid.sh compile <prog.dpt> -- run lucid compiler inside the docker image.
+./docker_lucid.sh rebuild -- rebuild the lucid compiler in your docker image, from this local repo.
+./docker_lucid.sh pull -- pull most recently published version of lucid image.
+./docker_lucid.sh enter_dev -- enter a lucid development image where the local repo is mounted at /lucid.
+./docker_lucid.sh pull_dev -- pull most recently published version of lucid dev image.
+./docker_lucid.sh rebuild_and_push -- rebuild docker image and publish (admin only)
+./docker_lucid.sh rebuild_and_push_dev -- rebuild docker image and publish (admin only)
 END
 
 )
