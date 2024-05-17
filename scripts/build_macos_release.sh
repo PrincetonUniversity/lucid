@@ -12,21 +12,34 @@ then
     exit
 fi
 
-release_dir=./macos/lucid
+# make sure this is run from the repo root
+if [ ! -d ".git" ]
+then
+  echo "This script must be run from the root of the repository."
+  exit 1
+fi
+
+release_base=./release
+os_base=macos
+release_dir=$release_base/$os_base/lucid
 lib_dir=$release_dir/libs
 
 rm -rf $release_dir
 mkdir -p $lib_dir
 
-cd ..
 make
-cd - 
 
-cp ../dpt $release_dir/
+cp dpt $release_dir/
 
 # run dylibbundler to bundle the dynamic libraries (mainly z3)
+echo "patching binary dynamic lib paths"
 dylibbundler -od -b -x $release_dir/dpt -d $lib_dir -p @executable_path/libs/
-# print release information
-echo "======================"
-echo "MacOS binary package built in $release_dir. Please distribute this entire folder and run dpt inside of it."
-echo "======================"    
+
+# package os release in a tarball inside of the release dir
+echo "Packaging release"
+cd $release_base
+tar -zcvf "$os_base".tar.gz $os_base
+# remove the release directory
+rm -rf $os_base
+
+echo "done building macos release"

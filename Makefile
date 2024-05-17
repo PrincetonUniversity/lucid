@@ -25,7 +25,7 @@ DEV_DEPENDENCIES = \
 merlin \
 ocamlformat
 
-.PHONY: test promote test-promote test-cc clean
+.PHONY: test promote test-promote test-cc clean release-macos release-linux
 
 default:
 	dune build src/bin/main.exe
@@ -34,6 +34,16 @@ default:
 	cp -f _build/default/src/bin/compiler.exe dptc
 	dune build src/bin/lucidcc.exe
 	cp -f _build/default/src/bin/lucidcc.exe lucidcc
+
+macos-release:
+	dune build src/bin/main.exe
+	cp -f _build/default/src/bin/main.exe dpt
+	./scripts/build_macos_release.sh
+
+linux-release:
+	dune build src/bin/main.exe
+	cp -f _build/default/src/bin/main.exe dpt
+	./scripts/build_linux_release.sh
 
 all:
 	dune build src/bin/main.exe

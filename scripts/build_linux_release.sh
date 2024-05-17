@@ -12,18 +12,25 @@ else
   exit 1
 fi
 
-release_dir=./linux/lucid
-lib_dir=$release_dir/lib
+# make sure this is run from the repo root
+if [ ! -d ".git" ]
+then
+  echo "This script must be run from the root of the repository."
+  exit 1
+fi
 
+release_base=./release
+os_base=linux
+release_dir=$release_base/$os_base/lucid
+lib_dir=$release_dir/libs
 
+rm -rf $release_dir
 mkdir -p $lib_dir
 # 1. build the binary locally (in the parent directory)
-cd ..
-make
-cd - 
+# make
 
 # copy binary
-cp ../dpt "$release_dir"/dpt
+cp dpt "$release_dir"/dpt
 
 # Run ldd on the binary and parse output
 deps=$(ldd "$release_dir"/dpt | awk '/=>/ {print $3} !/=>/ {if ($1 ~ /^\//) print $1}')
@@ -44,8 +51,13 @@ for lib in $deps; do
   fi
 done
 
+echo "patching binary dynamic lib paths"
 patchelf --set-rpath '$ORIGIN/lib' "$release_dir"/dpt
 
-echo "======================"
-echo "Linux binary package built in $release_dir. Please distribute this entire folder and run dpt inside of it."
-echo "======================"
+# package os release in a tarball inside of the release dir
+echo "Packaging release"
+cd $release_base
+tar -zcvf "$os_base".tar.gz $os_base
+rm -rf $os_base
+
+echo "done building linux release"
