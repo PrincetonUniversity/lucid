@@ -22,12 +22,12 @@ fi
 release_base=./release
 os_base=linux
 release_dir=$release_base/$os_base/lucid
-lib_dir=$release_dir/libs
+lib_dir=$release_dir/lib
 
 rm -rf $release_dir
 mkdir -p $lib_dir
 # 1. build the binary locally (in the parent directory)
-# make
+make
 
 # copy binary
 cp dpt "$release_dir"/dpt
@@ -52,6 +52,7 @@ for lib in $deps; do
 done
 
 echo "patching binary dynamic lib paths"
+chmod +w "$release_dir"/dpt
 patchelf --set-rpath '$ORIGIN/lib' "$release_dir"/dpt
 
 # package os release in a tarball inside of the release dir

@@ -36,13 +36,9 @@ default:
 	cp -f _build/default/src/bin/lucidcc.exe lucidcc
 
 macos-release:
-	dune build src/bin/main.exe
-	cp -f _build/default/src/bin/main.exe dpt
 	./scripts/build_macos_release.sh
 
 linux-release:
-	dune build src/bin/main.exe
-	cp -f _build/default/src/bin/main.exe dpt
 	./scripts/build_linux_release.sh
 
 all:

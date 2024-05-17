@@ -22,7 +22,7 @@ fi
 release_base=./release
 os_base=macos
 release_dir=$release_base/$os_base/lucid
-lib_dir=$release_dir/libs
+lib_dir=$release_dir/lib
 
 rm -rf $release_dir
 mkdir -p $lib_dir
@@ -33,7 +33,8 @@ cp dpt $release_dir/
 
 # run dylibbundler to bundle the dynamic libraries (mainly z3)
 echo "patching binary dynamic lib paths"
-dylibbundler -od -b -x $release_dir/dpt -d $lib_dir -p @executable_path/libs/
+chmod +w $release_dir/dpt
+dylibbundler -od -b -x $release_dir/dpt -d $lib_dir -p @executable_path/lib/
 
 # package os release in a tarball inside of the release dir
 echo "Packaging release"
