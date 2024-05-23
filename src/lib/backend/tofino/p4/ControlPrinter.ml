@@ -95,8 +95,8 @@ def is_model_running():
     return len(output.strip().split(b"\n")) > 0                            
   except subprocess.CalledProcessError:                                      
     return False                       
-
-port_speeds = {1 : (1 << 0), 10 : (1 << 1), 25 : (1 << 2), 40 : (1 << 3), 50 : (1 << 5), 100 : (1 << 6)}
+port_speeds = {speed:"BF_SPEED_%sG" % speed for speed in [1, 10, 25, 40, 50, 100]}
+# port_speeds = {1 : (1 << 0), 10 : (1 << 1), 25 : (1 << 2), 40 : (1 << 3), 50 : (1 << 5), 100 : (1 << 6)}
 fecs = {"BF_FEC_TYP_NONE": 0,
   "BF_FEC_TYP_FIRECODE": (1 << 0),
   "BF_FEC_TYP_REED_SOLOMON": (1 << 1),
