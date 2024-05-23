@@ -97,6 +97,9 @@ class Controller(object):
   def close(self):
     self.libc.close_session()    
 
+
+
+
   def add_multicast_group(self, mc_gid, ports_rids):
     """Add a basic multicast group that clones to all (port, rid) in ports_rids"""
     print ("[add_multicast_group] adding mc group: {0}--> [{1}]".format(str(mc_gid), str(ports_rids)))
@@ -151,6 +154,15 @@ class Controller(object):
     tbl = self.tables[table_id]
     acn_id, acn_args = tbl.get_entry(key)
     return acn_id, acn_args
+  
+  # bring up ports based on name and rate.
+  def port_up(self, dpid, speed):
+    print ("[port_up] bringing up port %s at speed %s"%(dpid, speed))
+    port_table = self.tables['$PORT']
+    keys = list(port_table.key_fields.keys())
+    port_cfg_key = {'$DEV_PORT':dpid}
+    port_cfg_acn = {'$SPEED':speed, '$FEC':"BF_FEC_TYP_NONE", '$PORT_ENABLE':True}
+    port_table.add_entry(port_cfg_key, None, port_cfg_acn)
 
   ### pktgen helpers
   def start_periodic_pktgen(self, pkt, timer_ns=1_000_000_000, pktgen_port=196, generator_id=1):
@@ -441,6 +453,9 @@ class BfRtTable:
         elif (data_type == "BOOL"):
           c_value = c_bool(field_val)          
           self._cintf.data_field_set_bool(data_hdl, field_info["id"], c_value)
+        elif (data_type == "STRING"):
+          c_value = c_char_p(field_val.encode('ascii'))
+          self._cintf.data_field_set_string(data_hdl, field_info["id"], c_value)
         else:
           # TODO: other field types 
           print ("unhandled field data type: %s"%(data_type))
@@ -588,7 +603,7 @@ class BfRtTable:
           return None
         retcode = self.cintf_table_add(key_hdl, data_hdl)
         if (retcode != 0):
-          print ("WARNING: table_entry_add failed")
+          print ("WARNING: table_entry_add failed for actionless entry (data entry) retcode: %i"%retcode)
           self._cintf.table_key_deallocate(key_hdl)        
           self._cintf.table_data_deallocate(data_hdl)        
           return None
@@ -812,6 +827,7 @@ class LibcInterface(object):
       ("data_field_set_value_array", self._driver.bf_rt_data_field_set_value_array),
       ("data_field_set_value_bool_array", self._driver.bf_rt_data_field_set_value_bool_array),
       ("data_field_set_bool", self._driver.bf_rt_data_field_set_bool),
+      ("data_field_set_string", self._driver.bf_rt_data_field_set_string),
       ("table_entry_key_get", self._driver.bf_rt_table_entry_key_get),
       ("data_field_is_active", self._driver.bf_rt_data_field_is_active),
     ]
