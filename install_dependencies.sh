@@ -16,18 +16,20 @@ then
         exit 1
     fi
     sudo apt-get install opam -y
-    # Initialize opam, if not already initialized
-    if ! opam var root &> /dev/null
-    then
-        opam init -y --auto-setup
-    fi
-
-    if ! command -v opam &> /dev/null
-    then
-        echo "Failed to install opam. Exiting."
-        exit 1
-    fi
 fi
+
+# Initialize opam, if not already initialized
+if ! opam var root &> /dev/null
+then
+    opam init -y --auto-setup
+fi
+
+if ! command -v opam &> /dev/null
+then
+    echo "Opam not working, even after install and init attempts. Exiting."
+    exit 1
+fi
+
 
 # check for opam depext and install if not found
 if ! opam list --installed depext &> /dev/null

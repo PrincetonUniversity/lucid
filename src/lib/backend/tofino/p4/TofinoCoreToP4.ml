@@ -1870,13 +1870,30 @@ let prog_to_p4_prog (prog : prog) : p4_prog =
     {globals; ingress=ingress_pipe; control_config; egress=egress_pipe;}
   ;;
 
-let translate_prog prog =
+(* derive the port declarations from the spec *)
+let port_decls portspec = 
+  let open ParsePortSpec in
+  let all_ports = portspec.external_ports@portspec.internal_ports in
+  let decls = List.map 
+    (fun port_config -> 
+      let dpid = port_config.dpid in 
+      let speed = port_config.speed in
+      decl@@DPort{dpid; speed})
+    all_ports
+  in  
+  decls
+;;
+
+let translate_prog prog portspec =
   (* print_endline ("translating prog: " ^ (TofinoCorePrinting.prog_to_string prog)); *)
   let p4_prog = prog_to_p4_prog prog in
   (* print_endline "----- p4_prog -----";
   print_endline (p4_prog_to_string p4_prog);
   print_endline "-------------------"; *)
   let tofino_prog = p4_prog_to_tofino_prog p4_prog in
+  let tofino_port_decls = port_decls portspec in
+  let control_config = tofino_port_decls@tofino_prog.control_config in
+  let tofino_prog = {tofino_prog with control_config} in 
   tofino_prog
 ;;
 

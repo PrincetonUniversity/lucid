@@ -276,7 +276,7 @@ let compile ds portspec =
 
   (* translate into final P4-tofino-lite IR *)
   report_if_verbose "-------Translating to final P4-tofino-lite IR-------";
-  let tofino_prog = TofinoCoreToP4.translate_prog core_prog in
+  let tofino_prog = TofinoCoreToP4.translate_prog core_prog portspec in
   (* generate the python event library *)
   let py_eventlib =
     if 
