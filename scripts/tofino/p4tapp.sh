@@ -216,13 +216,23 @@ function print_userspace_veths() {
 # ========================================
 
 
+
 # multi-threading helpers
 # run program, print stdout to stdout prefixed with
 # PREFIX, and when SIG_STR appears, move program 
 # to background and return 
 function run_prog() {
     trap 'exit' 2
-    PROG="unbuffer $1"
+    # $1 is the command to run. Check if it starts with sudo. 
+    # If so, remove the sudo and call sudo unbuffer $PROG
+    # if it does not start with sudo, call unbuffer $PROG
+    # This is so that it doesn't prompt for a password when
+    # running a sudo command inside of unbuffer.
+    if [[ $1 == sudo* ]]; then
+        PROG="sudo unbuffer ${1:5}"
+    else
+        PROG="unbuffer $1"
+    fi
     SIG_STR=$2
     PREFIX=$3
     $PROG |& 
