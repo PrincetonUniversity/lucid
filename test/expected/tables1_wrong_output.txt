@@ -1,8 +1,8 @@
 
 In examples/interp_tests/tables1_wrong.dpt: 
 
-39|    res_t tbl_out2 = table_match(ftbl, (1), (2));
-                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~
+24|    res_t tbl_out2 = Table.lookup(ftbl, (1), (2));
+                          ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-error: examples/interp_tests/tables1_wrong.dpt: Table match in a handler may violate global order. (Did you include all the necessary constraints when declaring the event?)
+error: examples/interp_tests/tables1_wrong.dpt: Function call in a handler may violate global order. (Did you include all the necessary constraints when declaring the event?)
 
