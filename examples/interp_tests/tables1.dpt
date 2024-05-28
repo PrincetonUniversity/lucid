@@ -13,23 +13,19 @@ type res_t = {
   int val;
   bool is_hit;
 }
-// Action constructors are functions used to create actions. 
-// They are passed to table_create, to specify the domain of 
-// actions that a table supports, and table_install to 
-// construct a specific action for a table entry.
-// All the action constructors used in a table must create 
-// actions of the same type (same argument types and return type).
-action_constr hit_acn(int x) = {
-  return action res_t anon(int a) {
-    return {val = x; is_hit = true};
-  };
-};
+// Actions are functions that take two tuples of arguments. 
+// The first tuple is populated when the action is installed
+// into a table. The second tuple is populated when the action
+// is called by table_match.
+// All actions used in a table must agree on 
+// both argument types and return type.
+action res_t hit_acn(int x)(int a) {
+  return {val = x; is_hit = true};
+}
+action res_t miss_acn(int b)(int a) {
+  return {val = a; is_hit = false};
+}
 
-action_constr miss_acn(int b) = {
-  return action res_t anon(int a) {
-    return {val = a; is_hit = false};
-  };
-};
 
 // table_create creates a table of the given type, binds action constructors to it, and assigns a default action. 
 global Table.t<<int, int, int, res_t>> ftbl = Table.create(1024, [hit_acn; miss_acn], miss_acn, 1);

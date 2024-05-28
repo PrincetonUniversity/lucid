@@ -60,31 +60,23 @@ event report(eth_t eth, ipv4_t ip) {skip;}
 // event packet_out(eth_t eth, ipv4_t ip, int outport);
 
 //************ ACTIONS ************// 
-action_constr nop_mac_action() = {
-    return action int<24> acn (int<24> any_24) {
-        return any_24;
-    };
-};
+action int<24> nop_mac_action()(int<24> any_24) {
+  return any_24;
+}
 
-action_constr nop_ip_action(int unused) = {
-    return action prefix_output acn (int ip) {
-        return {prefix = 4294967295; non_fixed = 0; subnet_mask = 4294967295};
-    };
-};
+action prefix_output nop_ip_action(int prefix_mask)(int ip) {
+  return {prefix = 4294967295; non_fixed = 0; subnet_mask = 4294967295};
+}
 
 // Hash action for MAC address 
-action_constr hash_mac_action() = {
-    return action int<24> acn (int<24> mac_part) {
-        return hash<24>(HASH_SEED, mac_part);
-    };
-};
+action int<24> hash_mac_action()(int<24> mac_part) {
+  return hash<24>(HASH_SEED, mac_part);
+}
 
 // Action to get IP prefix based on subnet mask for prefix
-action_constr get_ip_prefix(int prefix_mask) = {
-    return action prefix_output get_prefix_action(int ip) {
+action prefix_output get_ip_prefix(int prefix_mask)(int ip) {
         return {prefix = ip & prefix_mask; non_fixed = ip & ~prefix_mask; subnet_mask = prefix_mask};
-    };
-};
+}
 
 //************ TABLES ************//
 

@@ -25,25 +25,12 @@ module WriteCacheTable : {
 }
 {
   // table actions
-  action_constr hit_acn(int x) = {
-    return action res_t anon() {
-      return {val = x; found = true};
-    };
-  };
-
-  action_constr miss_acn(int unused) = {
-    return action res_t anon() {
-      return {val = 0; found = false};
-    };
-  };
-
-  // action res_t hit_acn(int x)() {
-  //   return {val = x; found = true};
-  // }
-
-  // action res_t miss_acn()() {
-  //   return {val = 0; found = false};
-  // }
+  action res_t hit_acn(int x)() {
+    return {val = x; found = true};
+  }
+  action res_t miss_acn(int unused)() {
+    return {val = 0; found = false};
+  }
 
   // main module type
   type ct<'i> = {

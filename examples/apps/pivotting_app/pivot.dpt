@@ -24,11 +24,9 @@ event prepare_report(eth_t eth, ip_t ip);
 event report(int src, int dst, int<32> count) {skip;} // report is sent back to the monitoring server.
 
 // using the matchtable to see if the source ip is in the internal range (1-3)
-action_constr mk_result(bool b) = {
-	return action bool acn () {
-		return b;
-	};
-};
+action bool mk_result(bool b)() {
+	return b;
+}
 
 global Table.t<<int, bool, (), bool>> filter_table = Table.create(1024, [mk_result], mk_result, false);
 
