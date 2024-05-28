@@ -66,7 +66,7 @@ action_constr nop_mac_action() = {
     };
 };
 
-action_constr nop_ip_action() = {
+action_constr nop_ip_action(int unused) = {
     return action prefix_output acn (int ip) {
         return {prefix = 4294967295; non_fixed = 0; subnet_mask = 4294967295};
     };
@@ -88,46 +88,15 @@ action_constr get_ip_prefix(int prefix_mask) = {
 
 //************ TABLES ************//
 
-table_type anony_mac_table_t = {
-  key_type: (int)
-  arg_type: (int<24>)
-  ret_type: int<24>
-}
-
-
-table_type ip_prefix_table_t = {
-    key_type: (int)
-    arg_type: (int)
-    ret_type: prefix_output
-}
-
 // Tables for performing match actions on MAC address parts (Separate for each SRC/DST OUI/ID).
 // The tables match on an assigned int ('1' in the case of this program) and perform the hash 
 // action so long as the match occurs. Otherwise, the table will default to the 'nop_mac_action'
 // which will simply pass the respective 24-bit MAC address part unchanged.
-global anony_mac_table_t anony_mac_dst_oui_tb = table_create<anony_mac_table_t>(
-  (hash_mac_action, nop_mac_action),
-  10,
-  nop_mac_action()
-);
+global Table.t<<int, (), int<24>, int<24> >> anony_mac_dst_oui_tb = Table.create(10, [hash_mac_action; nop_mac_action], nop_mac_action, ());
+global Table.t<<int, (), int<24>, int<24> >> anony_mac_dst_id_tb = Table.create(10, [hash_mac_action; nop_mac_action], nop_mac_action, ());
 
-global anony_mac_table_t anony_mac_dst_id_tb = table_create<anony_mac_table_t>(
-  (hash_mac_action, nop_mac_action),
-  10,
-  nop_mac_action()
-);
-
-global anony_mac_table_t anony_mac_src_oui_tb = table_create<anony_mac_table_t>(
-  (hash_mac_action, nop_mac_action),
-  10,
-  nop_mac_action()
-);
-
-global anony_mac_table_t anony_mac_src_id_tb = table_create<anony_mac_table_t>(
-  (hash_mac_action, nop_mac_action),
-  10,
-  nop_mac_action()
-);
+global Table.t<<int, (), int<24>, int<24> >> anony_mac_src_oui_tb = Table.create(10, [hash_mac_action; nop_mac_action], nop_mac_action, ());
+global Table.t<<int, (), int<24>, int<24> >> anony_mac_src_id_tb = Table.create(10, [hash_mac_action; nop_mac_action], nop_mac_action, ());
 
 // Tables for performing match actions on IP addresses (SRC/DST) based on provide prefix. 
 // The tables match an IP address on a matching prefix and perform an IP preparation action
@@ -136,17 +105,8 @@ global anony_mac_table_t anony_mac_src_id_tb = table_create<anony_mac_table_t>(
 // any IP matching that prefix, such as 1.2.3.1 (16909057) will match, allowing for the 
 // 'get_ip_action' to occur. Otherwise, the table will default to the 'nop_ip_action', which
 // will simply pass a subnet of 255.255.255.255 through, indicating that no hash will occur.
-global ip_prefix_table_t anony_src_ip_tb = table_create<ip_prefix_table_t>(
-  (get_ip_prefix, nop_ip_action),
-  24, 
-  nop_ip_action()
-);
-
-global ip_prefix_table_t anony_dst_ip_tb = table_create<ip_prefix_table_t>(
-  (get_ip_prefix, nop_ip_action),
-  24, 
-  nop_ip_action()
-);
+global Table.t<<int, int, int, prefix_output>> anony_src_ip_tb = Table.create(24, [get_ip_prefix; nop_ip_action], nop_ip_action, (0));
+global Table.t<<int, int, int, prefix_output>> anony_dst_ip_tb = Table.create(24, [get_ip_prefix; nop_ip_action], nop_ip_action, (0));
 
 //************ FUNCTIONS ************//
 
@@ -204,13 +164,11 @@ fun void print_pkt_out_detail(eth_t eth, ipv4_t ip) {
 
 fun eth_t anonymize_eth_packet(eth_t eth) {
     // Match and table and return hashed or not-hashed 24 bits
-    int<24> dst_oui = table_match(anony_mac_dst_oui_tb, (1), (eth#dst_mac_oui));
+    int<24> dst_oui = Table.lookup(anony_mac_dst_oui_tb, (1), eth#dst_mac_oui);
+    int<24> dst_id = Table.lookup(anony_mac_dst_id_tb, (1), eth#dst_mac_id);
 
-    int<24> dst_id = table_match(anony_mac_dst_id_tb, (1), (eth#dst_mac_id));
-
-    int<24> src_oui = table_match(anony_mac_src_oui_tb, (1), (eth#src_mac_oui));    
-
-    int<24> src_id = table_match(anony_mac_src_id_tb, (1), (eth#src_mac_id));
+    int<24> src_oui = Table.lookup(anony_mac_src_oui_tb, (1), eth#src_mac_oui);
+    int<24> src_id = Table.lookup(anony_mac_src_id_tb, (1), eth#src_mac_id);
     
     eth_t eth = {dst_mac_oui = dst_oui;
           dst_mac_id = dst_id;
@@ -233,8 +191,8 @@ fun eth_t anonymize_eth_packet(eth_t eth) {
 fun ipv4_t anonymize_ip_packet(ipv4_t ip) {
   // Perform table match on SRC and DST IP. The match occurs if provided IP matches
   // the prefix set as the key during the install.
-  prefix_output src_ip_output = table_match(anony_src_ip_tb, ip#src, (ip#src));
-  prefix_output dst_ip_output = table_match(anony_dst_ip_tb, ip#dst, (ip#dst));
+  prefix_output src_ip_output = Table.lookup(anony_src_ip_tb, ip#src, (ip#src));
+  prefix_output dst_ip_output = Table.lookup(anony_dst_ip_tb, ip#dst, (ip#dst));
 
   // Initialize vars for storing anonymized SRC/DST IPs outside match statements
   int anony_src_ip = 0;
@@ -331,18 +289,15 @@ fun ipv4_t anonymize_ip_packet(ipv4_t ip) {
 
 fun void anonymize_eth_ip_packet(eth_t eth, ipv4_t ip) {
   // MAC address anonymization
-  int<24> dst_oui = table_match(anony_mac_dst_oui_tb, (1), (eth#dst_mac_oui));
+  int<24> dst_oui = Table.lookup(anony_mac_dst_oui_tb, (1), eth#dst_mac_oui);
+  int<24> dst_id = Table.lookup(anony_mac_dst_id_tb, (1), eth#dst_mac_id);
 
-  int<24> dst_id = table_match(anony_mac_dst_id_tb, (1), (eth#dst_mac_id));
-
-  int<24> src_oui = table_match(anony_mac_src_oui_tb, (1), (eth#src_mac_oui));    
-
-  int<24> src_id = table_match(anony_mac_src_id_tb, (1), (eth#src_mac_id));
+  int<24> src_oui = Table.lookup(anony_mac_src_oui_tb, (1), eth#src_mac_oui);
+  int<24> src_id = Table.lookup(anony_mac_src_id_tb, (1), eth#src_mac_id);
   
   // IP address anonymization
-  prefix_output src_ip_output = table_match(anony_src_ip_tb, ip#src, (ip#src));
-  prefix_output dst_ip_output = table_match(anony_dst_ip_tb, ip#dst, (ip#dst));
-
+  prefix_output src_ip_output = Table.lookup(anony_src_ip_tb, ip#src, (ip#src));
+  prefix_output dst_ip_output = Table.lookup(anony_dst_ip_tb, ip#dst, (ip#dst));
   int anony_src_ip = 0;
   int anony_dst_ip = 0;
 

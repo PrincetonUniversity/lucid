@@ -30,18 +30,10 @@ action_constr mk_result(bool b) = {
 	};
 };
 
-table_type filter_table_t = { 
-	key_type: (int)
-	arg_type: ()
-	ret_type: bool
-}
-
-global filter_table_t filter_table = 
-	table_create<filter_table_t>((mk_result), 1024, mk_result(false));
-
+global Table.t<<int, bool, (), bool>> filter_table = Table.create(1024, [mk_result], mk_result, false);
 
 fun bool filter_with_table(int addr) {
-	bool r = table_match(
+	bool r = Table.lookup(
 		filter_table, 
 		(addr), 
 		());
@@ -63,24 +55,25 @@ global Array.t<32> time_counts_b_to_p = Array.create(1000);
 
 fun void store_count_and_time(int src, int dst, int psize, int payload_hash, int table_num) {
 	int hashed = (int<32>)hash<4>(HASH_SEED, src, dst);
-	if (table_num == 0) {
+	match table_num with 
+	| 0 -> {
 		Array.set(flow_counts_a_to_p, hashed, psize);
 		Array.set(time_counts_a_to_p, hashed, Sys.time());
 		Array.set(payload_hash_a_to_p, hashed, payload_hash);
-
 	}
-	else if (table_num == 1) {
+	| 1 -> {
 		printf("I am here table number 1");	
 		Array.set(flow_counts_p_to_b, payload_hash, psize);
 		Array.set(time_counts_p_to_b, payload_hash, Sys.time());
 		Array.set(src_ip_p_to_b, payload_hash, src);
 		Array.set(dst_ip_p_to_b, payload_hash, dst);
 	}
-	else if (table_num == 2) {
+	| 2 -> {
 		printf("I am here table number 2");
 		Array.set(flow_counts_b_to_p, hashed, psize);
 		Array.set(time_counts_b_to_p, hashed, Sys.time());
 	}
+	| _ -> {skip;}
 }
 
 fun bool checkRelation(int src, int dst, int psize, int alpha, int beta) {
