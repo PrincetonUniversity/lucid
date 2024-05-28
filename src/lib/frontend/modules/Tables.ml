@@ -59,8 +59,8 @@ match v with
     let v = Integer.create ~value:v ~size:(List.length b) in
     let m  = Integer.max_int (List.length b) in
     CoreSyntax.VTuple([CoreSyntax.VInt(v); CoreSyntax.VInt(m)])
-  | VGlobal _ -> Console.error "a global cannot appear as a key in a table"
-  | VEvent _ -> Console.error "an event cannot appear as a key in a table"
+  | VGlobal _ -> Syntax.error "a global cannot appear as a key in a table"
+  | VEvent _ -> Syntax.error "an event cannot appear as a key in a table"
   | VPat xs  -> 
     (* for VPat we keep the mask because that is only used by table
   install in the depreciated table syntax. *)
@@ -73,7 +73,7 @@ match v with
 
     
     (* Console.error "pat values are depreciated" *)
-  | VGroup _ -> Console.error "group values cannot appear as a key in a table"
+  | VGroup _ -> Syntax.error "group values cannot appear as a key in a table"
 ;;
 
 
@@ -91,11 +91,10 @@ let matches_pat_vals (vs : CoreSyntax.value list) (pats : CoreSyntax.value list)
 ;;
 
   
-let err_sp = Console.error_position
-let err = Console.error
+let error= Syntax.error
 
 let name = "Table"
-let error fun_name msg =
+let module_error fun_name msg =
   error (name ^ ": " ^ fun_name ^ ": " ^ msg)
 ;;
 let id = Id.create name
@@ -161,7 +160,7 @@ let create_ctor (nst : InterpState.State.network_state) swid args =
     let p = st.pipeline in
     let tbl_id = match tbl_v with 
       | V { v = VGlobal(tbl_id, _) } -> tbl_id
-      | _ -> err "Table.create: expected a global for the table id"
+      | _ -> error"Table.create: expected a global for the table id"
     in
     let def_acn_ctor = 
       ival_fcn_to_internal_action nst swid tbl_def_acn 
@@ -169,7 +168,7 @@ let create_ctor (nst : InterpState.State.network_state) swid args =
     let flat_default_args = match tbl_def_args with 
       | V({v=VTuple(vs)}) -> List.map CoreSyntax.value vs
       | V(v) -> [v]
-      | _ -> err "Table.create: expected a tuple for the default action args"
+      | _ -> error"Table.create: expected a tuple for the default action args"
     in
 
     let def_acn remaining_args =
@@ -182,16 +181,16 @@ let create_ctor (nst : InterpState.State.network_state) swid args =
       | V(v) -> (
         match v.v with 
           | VInt(i) -> Integer.to_int i
-          | _ -> err "Table.create: expected an integer for the table size"
+          | _ -> error"Table.create: expected an integer for the table size"
       )
-      | _ -> err "Table.create: expected an integer for the table size"
+      | _ -> error"Table.create: expected an integer for the table size"
     in
 
     let new_pipe = Pipeline.append p
       (Pipeline.mk_table tbl_id tbl_size def_acn)
     in
     new_pipe  
-  | _ -> err "wrong number of arguments to Table.create"
+  | _ -> error"wrong number of arguments to Table.create"
 ;;
 
 
@@ -199,7 +198,7 @@ let create_ctor (nst : InterpState.State.network_state) swid args =
 let install_name = "install"
 let install_id = Id.create install_name
 let install_cid = Cid.create_ids [id; install_id]
-let install_error msg = error install_name msg
+let install_error msg = module_error install_name msg
 
 let install_ty = 
   let key_rty, iarg_rty, marg_rty, ret_rty = 
@@ -248,7 +247,7 @@ let install_fun nst swid args =
     let vaction_const_args = match vaction_const_arg_tup with 
       | V({v=VTuple(vs)}) -> List.map CoreSyntax.value vs
       | V(v) -> [v]
-      | _ -> err "Table.create: expected a tuple for the default action args"
+      | _ -> error "Table.create: expected a tuple for the default action args"
     in
     let acn_ctor = 
       ival_fcn_to_internal_action nst swid vaction
@@ -276,7 +275,7 @@ let install_fun nst swid args =
 let install_ternary_name = "install_ternary"
 let install_ternary_id = Id.create install_ternary_name
 let install_ternary_cid = Cid.create_ids [id; install_ternary_id]
-let install_ternary_error msg = error install_ternary_name msg
+let install_ternary_error msg = module_error install_ternary_name msg
 
 let install_ternary_ty = 
   let key_rty, iarg_rty, marg_rty, ret_rty = 
@@ -334,7 +333,7 @@ let install_ternary_fun nst swid args =
     let vaction_const_args = match vaction_const_arg_tup with 
       | V({v=VTuple(vs)}) -> List.map CoreSyntax.value vs
       | V(v) -> [v]
-      | _ -> err "Table.create: expected a tuple for the default action args"
+      | _ -> error "Table.create: expected a tuple for the default action args"
     in
     let acn_ctor = 
       ival_fcn_to_internal_action nst swid vaction
@@ -360,7 +359,7 @@ let install_ternary_fun nst swid args =
 let lookup_name = "lookup"
 let lookup_id = Id.create lookup_name
 let lookup_cid = Cid.create_ids [id; lookup_id]
-let lookup_error msg = error lookup_name msg
+let lookup_error msg = module_error lookup_name msg
 (* Table.lookup : Table.t<<'k, iarg, marg, ret>> -> 'k -> iarg -> ret *)
 let lookup_ty = 
   let key_rty, iarg_rty, marg_rty, ret_rty = 
@@ -394,7 +393,7 @@ let lookup_fun nst swid args =
   let open InterpSyntax in
   let open CoreSyntax in
   match args with
-  | [V { v = VGlobal(_, tbl_pos) }; V { v = vkey }; V { v = vargs }] ->  
+  | [V { v = VGlobal(_, tbl_pos); }; V { v = vkey }; V { v = vargs }] ->  
     let keys = flatten_v vkey |> List.map value in  
     (* get all the entries from the table *)
     let default, entries = Pipeline.get_table_entries tbl_pos (State.sw nst swid).pipeline in
@@ -429,8 +428,10 @@ let lookup_fun nst swid args =
     in
     let ret_values = acn arg_values in
     let ret_vs = List.map (fun (valu: CoreSyntax.value) -> valu.v) ret_values in
-    (* wrap the return values in a tuple *)
-    InterpSyntax.V(vtup ret_vs Span.default)
+    (* wrap the return values in a tuple, if more than 1 return *)
+    if (List.length ret_vs = 1) then (InterpSyntax.V (value_sp (List.hd ret_vs) Span.default))
+    else 
+      InterpSyntax.V(vtup ret_vs Span.default)
   | _ ->
     lookup_error "Incorrect number or type of arguments to Table.lookup"
 
@@ -468,6 +469,8 @@ let function_cids =
   )
 ;;
 
+let is_table_lookup cid = Cid.equal cid lookup_cid
+
 let rec flatten_core_exp (exp: CoreSyntax.exp) = match exp.e with 
   | ETuple(es) -> List.map flatten_core_exp es |> List.flatten
   | ERecord(label_exps) -> List.map (fun (_, exp) -> flatten_core_exp exp) label_exps |> List.flatten
@@ -482,7 +485,7 @@ let is_tbl_ty (raw_ty : CoreSyntax.raw_ty) =
 
 type core_tbl_ty = 
   { tkey_sizes : CoreSyntax.size list
-  ; tinstallparam_tys : CoreSyntax.ty list
+  (* ; tinstallparam_tys : CoreSyntax.ty list *)
   ; tparam_tys : CoreSyntax.ty list
   ; tret_tys : CoreSyntax.ty list
   }
@@ -513,19 +516,23 @@ let size_to_ty (sz: int) = (CoreSyntax.ty) @@ TInt(CoreSyntax.Sz sz) ;;
 
 let tname_to_ttable (rty : CoreSyntax.raw_ty) : core_tbl_ty =
   match rty with
-  | TName(cid, [key_sizes; install_param_sizes; param_sizes; ret_sizes]) when Cid.equal cid t_id -> 
-    let _ = install_param_sizes in
-    (* tofino compiler actually doesn't need install param sizes -- it infers them. *)
-    let install_tys = List.map size_to_ty (size_ints install_param_sizes) in
+  | TName(cid, [key_sizes; _; param_sizes; ret_sizes])
+  | TName(cid, [key_sizes; param_sizes; ret_sizes]) -> 
+    if (Cid.equal cid t_id) then (
+      (* tofino compiler actually doesn't need install param sizes -- it infers them. *)
+    (* let install_tys = List.map size_to_ty (size_ints install_param_sizes) in *)
     let param_tys = List.map size_to_ty (size_ints param_sizes) in
     let ret_tys = List.map size_to_ty (size_ints ret_sizes) in
     { 
       tkey_sizes = List.map (fun sz -> (CoreSyntax.Sz sz)) (size_ints key_sizes); 
-      tinstallparam_tys = install_tys;
+      (* tinstallparam_tys = install_tys; *)
       tparam_tys = param_tys;
       tret_tys = ret_tys;
-    }
-  | _ -> err "[tname_to_ttable] table does not have type table."
+    })
+    else 
+      error@@"[tname_to_ttable] table does not have expected type >>"^(CorePrinting.raw_ty_to_string rty)^"<<"
+  | _ ->     
+    error@@"[tname_to_ttable] table does not have expected type >>"^(CorePrinting.raw_ty_to_string rty)^"<<"
 ;;
 
 
@@ -535,7 +542,7 @@ let dglobal_params_to_tbl_def tid (exp : CoreSyntax.exp) : core_tbl_def =
     let default_args = flatten_core_exp default_arg in 
     let default_cid  = match default_acn_ctor.e with 
       | EVar(cid) -> cid
-      | _ -> err "[Tables.dglobal_params_to_tbl_def] unexpected: default action argument is not an evar"
+      | _ -> error "[Tables.dglobal_params_to_tbl_def] unexpected: default action argument is not an evar"
     in
     match actions_tup.e with
     | ETuple(actions) ->
@@ -551,7 +558,7 @@ let dglobal_params_to_tbl_def tid (exp : CoreSyntax.exp) : core_tbl_def =
       let tty = exp.ety in
       {tid; tty; tactions; tsize; tdefault}
   )
-  | _ -> err@@"got invalid table declaration: "^(CorePrinting.exp_to_string exp)
+  | _ -> error@@"got invalid table declaration: "^(CorePrinting.exp_to_string exp)
 ;;
 
 let tbl_def_to_econstr (tbl_def : core_tbl_def) : CoreSyntax.exp = 
@@ -574,7 +581,11 @@ let s_to_tbl_match (s : CoreSyntax.s) : core_tbl_match =
       let outs = ids in
       let out_tys = tys in
       {tbl; keys; args; outs; out_tys}      
-    | _ -> err "[Table.s_to_tbl_match] only a STupleAssign can be translated into a table match"
+    | CoreSyntax.SNoop -> 
+      error "[s_to_tbl_match] called on a noop?"
+    | _ -> 
+      
+      error @@ "[Table.s_to_tbl_match] only a STupleAssign can be translated into a table match, got:\n"^(CorePrinting.s_to_string s)
 ;;
 
 let s_to_tbl_match_opt (s : CoreSyntax.s) : core_tbl_match option = 
@@ -583,10 +594,11 @@ let s_to_tbl_match_opt (s : CoreSyntax.s) : core_tbl_match option =
 
 
 let tbl_match_to_s ({tbl; keys; args; outs; out_tys} : core_tbl_match) : CoreSyntax.s = 
-  let keys_exp = {CoreSyntax.e = CoreSyntax.ETuple(keys); ety = tbl.ety; espan = Span.default} in
-  let args_exp = {CoreSyntax.e = CoreSyntax.ETuple(args); ety = tbl.ety; espan = Span.default} in
+  let keys_exp = CoreSyntax.tup_sp keys Span.default in
+  let args_exp = CoreSyntax.tup_sp args Span.default in    
   let ids = outs in
   let tys = out_tys in
+  (* BUG: the tofino backend assumes that Table.match only appears in a TupleAssign statements. *)
   let exp = {CoreSyntax.e =CoreSyntax.ECall(lookup_cid, [tbl; keys_exp; args_exp], false); ety = tbl.ety; espan = Span.default} in
   CoreSyntax.STupleAssign({ids; tys; exp})
 ;;

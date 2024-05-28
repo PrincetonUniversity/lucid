@@ -10,10 +10,12 @@ val create_ctor : InterpState.State.network_state -> int -> InterpState.State.ne
    to the standardized Table module. *)
 
 val function_cids : Cid.t list
+
+val is_table_lookup : Cid.t -> bool
    
 type core_tbl_ty = 
   { tkey_sizes : CoreSyntax.size list
-  ; tinstallparam_tys : CoreSyntax.ty list
+  (* ; tinstallparam_tys : CoreSyntax.ty list *)
   ; tparam_tys : CoreSyntax.ty list
   ; tret_tys : CoreSyntax.ty list
   }

@@ -208,10 +208,15 @@ let all_tables_used ds =
     let v =
       object
         inherit [_] CoreSyntax.s_iter as super
-
-        method! visit_STupleAssign _ tuple_assign = 
+        method! visit_ECall _ fcid args _ = 
+          if (Tables.is_table_lookup fcid) then 
+            let tbl_id = (List.hd args) |> CoreSyntax.exp_to_id in
+            tbl_ids := tbl_id :: !tbl_ids
+          
+        (* method! visit_STupleAssign _ tuple_assign = 
+          print_endline @@"tuple assign"^(CorePrinting.s_to_string@@STupleAssign tuple_assign);
           let tm = Tables.s_to_tbl_match@@STupleAssign(tuple_assign) in
-          tbl_ids := (tm.tbl |> CoreSyntax.exp_to_id) :: !tbl_ids
+          tbl_ids := (tm.tbl |> CoreSyntax.exp_to_id) :: !tbl_ids *)
       end
     in
     v#visit_decls () ds;

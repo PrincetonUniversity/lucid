@@ -549,7 +549,7 @@ let rec interp_statement nst hdl_sort swid locals s =
     let v_result = interp_exp exp |> extract_ival in
     let vs = match v_result.v with
       | VTuple(vs) -> vs
-      | _ -> error "not a tuple"
+      | _ -> [v_result.v]
     in
     List.fold_left2 
       (fun locals v id -> Env.add (Id id) (InterpSyntax.V v) locals) 

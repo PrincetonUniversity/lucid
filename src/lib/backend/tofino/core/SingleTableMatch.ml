@@ -132,7 +132,7 @@ let is_tbl_call tid stmt =
     let tm = Tables.s_to_tbl_match stmt.s in 
     tblid_equal tid tm.tbl        
     )
-  with Error(_) -> false
+  with _ -> false
 ;;
 
 
@@ -305,7 +305,7 @@ let rec prune_tbl_call_branches (tbl:Tables.core_tbl_def) stmt branchnum  : (sta
       bs
     in
     smatch es bs', pruned, branchnum'
-  | STupleAssign({exp={e=ECall(fcid, _, _); _}}) when (Cid.equal fcid (Tables.constructors |> List.hd |> fst)) -> 
+  | STupleAssign({exp={e=ECall(fcid, _, _); _}}) when Tables.is_table_lookup fcid -> 
     let tm = Tables.s_to_tbl_match stmt.s in
     (* when we reach a table call, replace it with setup stmt and 
        cut the rest of the branch off.*)
@@ -447,7 +447,11 @@ let merged_match_stmt tbldef =
     [exp_of_id cnum_var cnum_ty]
     branches 
   in
+  let res = 
   {wrapper_stmt with spragmas = [Pragma.sprag "ignore_path_conditions" []; Pragma.sprag "solitary" []]}
+  in
+  print_endline @@ "statement: "^(CorePrinting.statement_to_string res);
+  res
 (*   {(sifte 
     (op_sp Neq [(exp_of_id cnum_var cnum_ty);(vint_exp 0 (size_of_tint cnum_ty))] cnum_ty Span.default)
     (statement (STableMatch(tbl_match)))
