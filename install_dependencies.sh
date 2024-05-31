@@ -34,7 +34,7 @@ fi
 # check for opam depext and install if not found
 if ! opam list --installed depext &> /dev/null
 then
-    opam install depext -y
+    opam install -y depext 
     if ! opam list --installed depext &> /dev/null
     then
         echo "Failed to find or install depext. Exiting."
@@ -44,9 +44,14 @@ then
 fi
 
 # Install lucid dependencies with opam
-opam switch create 4.12.0
+# switch to OCaml 4.12.0
+opam switch create 4.12.0 
 opam switch 4.12.0
-opam depext -y .
-opam install -y --deps-only .
-
+# tell opam about the dpt library in the current directory
+opam pin add dpt . -n
+# install the dependencies for dpt
+opam depext dpt --noninteractive
+opam install -y --deps-only dpt
+# unpin dpt
+opam pin remove dpt
 echo "dependencies installed. You should be able to build lucid with 'make' now."
