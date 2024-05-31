@@ -13,7 +13,7 @@ then
         exit 1
     fi
     # Update system packages
-    sudo add-apt-repository ppa:avsm/ppa
+    sudo add-apt-repository -y ppa:avsm/ppa
     sudo apt update
     sudo apt install -y build-essential
     sudo apt install -y opam
