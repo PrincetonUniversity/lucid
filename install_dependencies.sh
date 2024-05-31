@@ -8,14 +8,24 @@ if ! command -v opam &> /dev/null
 then
     # opam install -- we can do this on Ubuntu and Debian, 
     # for other OSes you're on your own.
-    # Update system packages
-    sudo apt-get update -y
-    # Check if the script is running on a supported version of Linux
     if ! grep -qE 'Ubuntu|Debian' /etc/os-release; then
         echo "Opam is not installed and this script can only auto-install it for Ubuntu and Debian. Please install opam manually and re-run this script."
         exit 1
     fi
-    sudo apt-get install opam -y
+    # Update system packages
+    sudo add-apt-repository ppa:avsm/ppa
+    sudo apt update
+    sudo apt install -y build-essential
+    sudo apt install -y opam
+fi
+
+# check that the opam version is greater than 2.1.0
+versions=$(printf '2.1.0\n'$(opam --version))
+sorted_versions=$(echo "$versions" | sort -V)
+first_version=$(echo "$sorted_versions" | head -n 1)
+if [ "$first_version" != "2.1.0" ]; then
+    echo "Opam version is too old. Please update opam to >= 2.1.0 and re-run this script."
+    exit 1
 fi
 
 # Initialize opam, if not already initialized
@@ -23,35 +33,14 @@ if ! opam var root &> /dev/null
 then
     opam init -y --auto-setup
 fi
-
-if ! command -v opam &> /dev/null
-then
-    echo "Opam not working, even after install and init attempts. Exiting."
-    exit 1
-fi
-
-
-# check for opam depext and install if not found
-if ! opam list --installed depext &> /dev/null
-then
-    opam install -y depext 
-    if ! opam list --installed depext &> /dev/null
-    then
-        echo "Failed to find or install depext. Exiting."
-        echo "If you are on macos, the install may have failed because you need homebrew to use depext"
-        exit 1
-    fi
-fi
+# eval $(opam env)
 
 # Install lucid dependencies with opam
 # switch to OCaml 4.12.0
 opam switch create 4.12.0 
 opam switch 4.12.0
-# tell opam about the dpt library in the current directory
-opam pin add dpt . -n
-# install the dependencies for dpt
-opam depext dpt --noninteractive
-opam install -y --deps-only dpt
-# unpin dpt
-opam pin remove dpt
-echo "dependencies installed. You should be able to build lucid with 'make' now."
+# install dependencies
+opam install -y --confirm-level=unsafe-yes --deps-only .
+echo "All Lucid dependencies installed."
+echo "You should be able to build lucid with 'make', after you run the following command to update your shell environment:"
+echo "eval \$(opam env)"
