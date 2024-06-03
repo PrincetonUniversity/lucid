@@ -2,11 +2,18 @@
 
 This example is meant to be a quick introduction to Lucid via a static routing program. We will run the program in the Lucid interpreter in a simulated network with 4 switches that connect 2 endhosts. The Lucid program itself is in ``staticrouter.dpt``, while the interpreter specification file, ``staticrouter.json`` configures the simulated network's topology and gives the interpreter a sequence of input events to execute. 
 
-Before continuing, you may want to make sure you can run the program. Assuming you have already installed docker and run `./lucid.sh pull`, run this example by executing the following command from the root of the Lucid repo: 
+Before continuing, you may want to make sure you can run the program. (And follow the setup instructions on the toplevel readme.md).
+
+- If you are using the lucid pre-compiled binaries, run `./release/dpt.sh examples/static_routing/staticrouter.dpt`
+
+- If you are using the lucid docker image, run this example by executing the following command from the root of the Lucid repo: 
 
 ```
 ./lucid.sh interp examples/static_routing/staticrouter.dpt
 ```
+
+- If you compiled lucid from source, run `./dpt examples/static_routing/staticrouter.dpt`
+
 
 #### Network topology
 
