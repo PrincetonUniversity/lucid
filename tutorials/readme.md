@@ -1,7 +1,7 @@
 This is a work in progress tutorial for Lucid. For now, it contains a series of examples that demonstrate the core parts of Lucid. There will be two series of tutorials: 
 
-- `./interp_examples` : developing Lucid applications with the interpreter
-- `./tofino_examples`: compiling and running Lucid applications to the Tofino. (This is not written yet, for now please reference the [wiki](https://github.com/PrincetonUniversity/lucid/wiki/03-Lucid-tofino-compiler) for documentation on compiling to the tofino.)
+- `./interp` : developing Lucid applications with the interpreter
+- `./tofino`: compiling and running Lucid applications to the Tofino. (This is not written yet, for now please reference the [wiki](https://github.com/PrincetonUniversity/lucid/wiki/03-Lucid-tofino-compiler) for documentation on compiling to the tofino.)
 
 If you are new to Lucid, take a look at the instructions below.
 
