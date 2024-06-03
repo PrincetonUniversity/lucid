@@ -12,6 +12,7 @@ fun int get_output_port(int current_switch, int dst) {
 		| 1, 11 -> {return 0;}
 		| 2, 11 -> {return 0;}
 		| 3, 11 -> {return 0;}
+		| _, _  -> {return 0;} // default case
 }
 handle ip_pkt(int src, int dst) {
 	// ingress_port 
