@@ -51,7 +51,7 @@ Once finished, you can run `./docker_lucid.sh interpret` to run the interpreter 
 Finally, you can also build Lucid from source. Its main dependencies are ocaml and z3. 
 On macos or linux, you should be able to do: 
 ```
-./install dependencies
+./install_dependencies.sh
 make
 ```
 to build the Lucid interpreter (`dpt`) and tofino compiler (`dptc`).
