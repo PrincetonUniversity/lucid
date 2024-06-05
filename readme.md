@@ -56,6 +56,10 @@ make
 ```
 to build the Lucid interpreter (`dpt`) and tofino compiler (`dptc`).
 
+### Syntax highlighting
+There is a VSCode syntax highlighter for Lucid here: ([https://github.com/benherber/Lucid-DPT-VSCode-Extension](https://github.com/benherber/Lucid-DPT-VSCode-Extension))
+
+Lucid also renders okay as C (besides polymorphic size arguments).
 
 ## Run the interpreter
 
