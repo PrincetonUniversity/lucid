@@ -160,7 +160,19 @@ let replacer =
         }
       in
       TTable tbl_ty'
+    method! visit_TBuiltin _ cid raw_tys bool = 
+      (* Builtins may carry tuples, but 
+         singleton tuples must be unpacked. *)
+      let raw_tys' = List.map (
+        fun rty -> 
+          match (flatten_ty (ty rty)).raw_ty with 
+          | TTuple [rty'] -> rty' (*1 ele => unpack *)
+          | _ -> rty) 
+        raw_tys
+      in
+      TBuiltin(cid, raw_tys', bool)      
 
+      
     method! visit_acn_ty _ acn_ty =
       (* flatten param and return types *)
       let acn_ty' =
@@ -181,8 +193,7 @@ let replacer =
       TActionConstr acn_ctor_ty'
 
     method! visit_STupleAssign env tuple_assign = 
-      (* It should not matter whether you 
-         recurse on the tuple assign statement? *)
+      (* recurse to make sure listed exp types are updated *)
       let tuple_assign = self#visit_tuple_assign env tuple_assign in
       match tuple_assign.tys with
       (* flatten any tuple variables that get created *)
@@ -335,8 +346,15 @@ let replacer =
       | Some(true) -> 
         (* a builtin from a module with a type TBuiltin *)
         (* flatten tuple variables and repack them as tuples *)
+        (* however, single-element tuples must be unpacked. *)
         let rec repack arg = 
           match arg.e, arg.ety with 
+          | ETuple([inner_exp]), Some({raw_ty=TTuple([raw_ty_inner])}) -> 
+            (* unpack single-element tuple *)
+            {arg with e=inner_exp.e; ety=Some (ty raw_ty_inner)}
+          | ETuple([inner_exp]), None -> 
+            (* unpack single-element tuple *)
+            {arg with e=inner_exp.e}
           | ETuple(exps), _ -> 
             let exps = List.map repack exps in
             {arg with e = ETuple(exps)}
@@ -349,6 +367,10 @@ let replacer =
           (* nothing to do anywhere else? *)
           | _ -> arg
         in
+        (* recurse on args to update any listed types *)
+        let args = List.map (super#visit_exp env) args in
+        (* then flatten whatever is inside of a tuple arg, 
+           and unpack singleton tuples *)
         let e' = ECall (cid, List.map repack args, unordered) in
         (* let e = ECall(cid, args, unordered) in *)
         e'
@@ -517,9 +539,12 @@ let rec replace_decl (env : env) d =
      | TTable _ ->
        env, [{ d with d = DGlobal (id, replace_ty ty, replace_exp env exp) }]     
      | TName _ -> 
-      (* tuples may appear in global constructors, e.g., actions and action constructors in Table.create *)
-      (* (if the above comment is correct, why are we running replace on ty and exp?) *)
        env, [{ d with d = DGlobal (id, replace_ty ty, replace_exp env exp) }]
+     | TBuiltin _-> 
+       env, [{ d with d = DGlobal (id, replace_ty ty, replace_exp env exp) }]
+      (* we must run the replacer on the entire tbuiltin because the declared types 
+         have to line up with the types that have been placed on variables 
+         by previous passes of the type checker. *)
      | _ -> env, [d])
   | DEvent (id, annot, sort, _, params) ->
     let _, new_params = flatten_params env params in

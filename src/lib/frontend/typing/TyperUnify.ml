@@ -112,7 +112,9 @@ let try_unify_lists f lst1 lst2 =
      bind variables weirdly with all the mutable stuff *)
   if (List.length lst1 = List.length lst2) 
     then List.iter2 f lst1 lst2
-    else raise CannotUnify (* different lengths *)
+    else (
+      raise CannotUnify (* different lengths *)
+    )
 ;;
 
 let check_unify span try_unify f x1 x2 : unit =
@@ -235,7 +237,6 @@ let rec try_unify_ty span ty1 ty2 =
 and try_unify_rty span rty1 rty2 =
   let unify_raw_ty = unify_raw_ty span in
   let unify_ty = unify_ty span in
-
   let unify_param_tys_after_tuple_elim tys1 tys2 = 
     (* unify parameter types in actions (or functions) in a way that is still 
        works after tuple elimination *)
@@ -261,7 +262,8 @@ print_endline ("rtys2: "^(Printing.comma_sep Printing.ty_to_string tys2));      
         | rtys, [TQVar(x)] -> 
           let rty = if (List.length rtys = 1) then List.hd rtys else TTuple(rtys) in
           try_unify_lists unify_raw_ty [TQVar(x)] [rty]
-        | _, _ -> raise CannotUnify
+        | _, _ -> 
+          raise CannotUnify
   in
   
   match rty1, rty2 with
@@ -311,7 +313,8 @@ print_endline ("rtys2: "^(Printing.comma_sep Printing.ty_to_string tys2));      
         unify_raw_ty ty1 ty2)
       (List.sort (fun (x, _) (y, _) -> Pervasives.compare x y) lst1)
       (List.sort (fun (x, _) (y, _) -> Pervasives.compare x y) lst2)
-  | TTuple lst1, TTuple lst2 -> try_unify_lists unify_raw_ty lst1 lst2
+  | TTuple lst1, TTuple lst2 -> 
+    try_unify_lists unify_raw_ty lst1 lst2
   | TVector (ty1, size1), TVector (ty2, size2) ->
     try_unify_size span size1 size2;
     unify_raw_ty ty1 ty2

@@ -880,7 +880,7 @@ and infer_statement (env : env) (s : statement) : env * statement =
       in
       (* unify a tuple of id tys with exp ty *)
       let ty_tuple = match id_tys with 
-        | [TTuple _] -> (List.hd id_tys)
+        | [raw_ty] -> raw_ty (* any singleton type gets unpacked *)
         |  _ -> TTuple (id_tys)
       in
       unify_raw_ty s.sspan ety.raw_ty ty_tuple;
@@ -888,14 +888,18 @@ and infer_statement (env : env) (s : statement) : env * statement =
       env, STupleAssign({ids; tys=None; exp=inf_e})
     )
     | STupleAssign({ids; tys=Some(tys); exp}) -> (
+      (* bug scenario: 
+        a table that is returning a single type is being assigned to a single variable. 
+        That should be fine, but is not. *)
       (* type the exp and unify with a tuple of the declared types *)
       let env, inf_e, ety = infer_exp env exp |> textract in
       let raw_tys = List.map (fun ty -> ty.raw_ty) tys in
-      let ty_tuple = match raw_tys with 
-        | [TTuple _] -> (List.hd raw_tys)
-        |  _ -> TTuple (raw_tys)
+      let expected_exp_ty = match raw_tys with 
+        | [raw_ty] -> raw_ty (* any singleton type gets unpacked *)
+        |  _ -> 
+          TTuple (raw_tys)
       in
-      unify_raw_ty s.sspan ety.raw_ty ty_tuple;
+      unify_raw_ty s.sspan ety.raw_ty expected_exp_ty;
       (* look up the types of the ids *)
       (* update the environment with the new variables *)
       let new_locals = List.combine ids tys in
@@ -1390,6 +1394,7 @@ let rec infer_declaration
       let ty = { ty with teffect = effect_count } in
       unify_ty d.dspan inf_ety ty;
       let ty = generalizer#visit_ty () ty in
+      (* print_endline ("defining const: " ^ Id.name id ^ " with type " ^ ty_to_string ty); *)
       let env = define_const id ty env in
       env, FSucc effect_count, DGlobal (id, ty, inf_e)
     | DConst (id, ty, e) ->

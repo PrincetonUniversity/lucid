@@ -152,8 +152,6 @@ def lucidcc_test(n_tests, i, fullfile, args):
 
 
 if (test_tgt == "interpreter"):
-    print("--- application tests ---")
-    for file in appfiles: interp_test(file, [])
 
     print("--- interpreter tests ---")
     for file in interpfiles: interp_test(file, [])
@@ -171,6 +169,8 @@ if (test_tgt == "interpreter"):
 
     for file in poplfiles: just_typecheck(popldir, file)
 
+    print("--- application tests ---")
+    for file in appfiles: interp_test(file, [])
 
 
     print("Diffs:", diffs)
