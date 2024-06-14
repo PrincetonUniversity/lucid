@@ -223,16 +223,21 @@ function print_userspace_veths() {
 # to background and return 
 function run_prog() {
     trap 'exit' 2
+    PROG="unbuffer $1"
+    # the code below breaks the use of "!$" to get 
+    # the pid of the last backgrounded process.
+    # if you want to use it, you need to change 
+    # stopsim to use killall.
     # $1 is the command to run. Check if it starts with sudo. 
     # If so, remove the sudo and call sudo unbuffer $PROG
     # if it does not start with sudo, call unbuffer $PROG
     # This is so that it doesn't prompt for a password when
     # running a sudo command inside of unbuffer.
-    if [[ $1 == sudo* ]]; then
-        PROG="sudo unbuffer ${1:5}"
-    else
-        PROG="unbuffer $1"
-    fi
+    # if [[ $1 == sudo* ]]; then
+    #     PROG="sudo unbuffer ${1:5}"
+    # else
+    #     PROG="unbuffer $1"
+    # fi
     SIG_STR=$2
     PREFIX=$3
     $PROG |& 
@@ -281,7 +286,13 @@ function start_asic_sim() {
 
 # start the bf_switchd included with sde
 function start_switchd() {
-    local CMD="sudo env SDE=$SDE SDE_INSTALL=$SDE_INSTALL PATH=$SDE_INSTALL/bin:$PATH LD_LIBRARY_PATH=/usr/local/lib:$SDE_INSTALL/lib:$LD_LIBRARY_PATH $SDE_INSTALL/bin/bf_switchd --background --status-port 7777 --install-dir $SDE_INSTALL --conf-file $1 --kernel-pkt"
+    if [ "$2" = "HW" ]; then
+        local CMD="sudo env SDE=$SDE SDE_INSTALL=$SDE_INSTALL PATH=$SDE_INSTALL/bin:$PATH LD_LIBRARY_PATH=/usr/local/lib:$SDE_INSTALL/lib:$LD_LIBRARY_PATH $SDE_INSTALL/bin/bf_switchd --background --status-port 7777 --install-dir $SDE_INSTALL --conf-file $1 --kernel-pkt"
+    else
+        local CMD="sudo env SDE=$SDE SDE_INSTALL=$SDE_INSTALL PATH=$SDE_INSTALL/bin:$PATH LD_LIBRARY_PATH=/usr/local/lib:$SDE_INSTALL/lib:$LD_LIBRARY_PATH $SDE_INSTALL/bin/bf_switchd --background --status-port 7777 --install-dir $SDE_INSTALL --conf-file $1"
+    fi
+
+    # local CMD="sudo env SDE=$SDE SDE_INSTALL=$SDE_INSTALL PATH=$SDE_INSTALL/bin:$PATH LD_LIBRARY_PATH=/usr/local/lib:$SDE_INSTALL/lib:$LD_LIBRARY_PATH $SDE_INSTALL/bin/bf_switchd --background --status-port 7777 --install-dir $SDE_INSTALL --conf-file $1 --kernel-pkt"
     # local CMD="sudo $SDE_INSTALL/bin/bf_switchd --install-dir $SDE_INSTALL --conf-file $1"
     local SIG="bf_switchd: server started - listening on port 9999"
     echo "SWITCHD COMMAND: $CMD"
@@ -313,7 +324,7 @@ function startsim() {
     SIM_PID=$!
 
     # start the switchd program
-    start_switchd "$CONF_FN"
+    start_switchd "$CONF_FN" "SIM"
     SWITCHD_PID=$!
 
     # run the python manager script
@@ -355,7 +366,7 @@ function starthw() {
     rm -rf "$LOG_DIR"; mkdir -p "$LOG_DIR"
 
     # start switchd
-    start_switchd "$CONF_FN"
+    start_switchd "$CONF_FN" "HW"
     SWITCHD_PID=$!
 
     # run the python manager script

@@ -207,6 +207,18 @@ let string_of_generate_seq gs =
   String.concat ", " (List.map string_of_gen_seq gs)
 ;;
 let branches_of_generated_events pkt_var out_ctor_base (members : event list) (gen_seqs : generate_seq list) : parser_branch list = 
+  (* a generate sequence is a sequence of events that may be generated in one execution of a handler. *)
+  (* so, if the program has a handler like this:
+      generate(foo);
+      if (...) {
+        generate(bar);
+      } 
+      there are two generate sequences:
+      1. [foo]
+      2. [foo; bar]
+      we need to generate a parser that can extract each possible generate sequence from the 
+      serialized eventset. 
+    *)
   (* each generate sequence turns into n rules -- one rule for each member *)
     (*
     here's roughly what we'd do in a friendly programming language 
@@ -340,6 +352,13 @@ let make_egr_parser
     (Cid.id egr_intr_id)
     (Cid.create ["egress_rid"])
   in    
+  let from_ingress_members = etagged_members from_ingress in
+  (* List.iter (fun (event_num, event) -> 
+    print_endline ("[make_egr_parser] from_ingress member: "^(string_of_int event_num)^": "^(id_of_event event |> fst));
+    print_endline ("the event is: ");
+    print_endline (TofinoCorePrinting.event_to_string event);
+  )
+  from_ingress_members; *)
   let egr_parser = parser
     (id "main")
     ([pkt_id, pkt_arg_ty])
@@ -366,12 +385,14 @@ let make_egr_parser
     (List.map intrinsic_to_param [egress_intrinsic_metadata_t;]) 
       (* egress_intrinsic_metadata_from_parser_t; egress_intrinsic_metadata_for_deparser_t]) *)
   in
+  (* print_endline ("[make_egr_parser] egr_parser:\n"^(TofinoCorePrinting.td_to_string egr_parser)); *)
   egr_parser
 ;;
 
 let add_parser core_prog : prog =   
   (* we are generating a parser that read the ingress output 
      event and generates the egress input event *)
+  (* find the ingress output event *)
   let ingress_output_event = List.filter_map
     (fun comp -> 
       if (comp.comp_sort = HData)
@@ -380,6 +401,7 @@ let add_parser core_prog : prog =
     core_prog
   |> List.hd
   in
+  (* find the egress input and output events *)
   let egress_input_event, egress_output_event = List.filter_map
   (fun comp -> 
     if (comp.comp_sort = HEgress)

@@ -62,14 +62,8 @@ let typed_generate_seqs (hdl_body:statement) : (id * gen_type) list list =
       generate_sequence)
     generate_sequences
   in
-  (* remove duplicate event id sequences *)
-  let compare_id_seqs (id_seq1: (id * gen_type) list) (id_seq2 : (id * gen_type) list) =
-    let compare_ids id1 id2 = Id.compare id1 id2 in
-    Batteries.List.compare (fun (id1, _) (id2, _) -> compare_ids id1 id2) id_seq1 id_seq2
-  in
 
-  let event_id_sequences = List.sort_uniq compare_id_seqs event_id_sequences in
-  (* print_endline ("[typed_generate_seqs] event: "^ (fst evid));
+  (* print_endline ("before deduplication");
   List.iter (fun seq -> 
     let outstr = ref "seq: " in
     List.iter (fun (id, _) -> 
@@ -78,6 +72,25 @@ let typed_generate_seqs (hdl_body:statement) : (id * gen_type) list list =
     print_endline !outstr)    
   event_id_sequences
   ; *)
+
+  (* remove duplicate event id sequences *)
+  let compare_id_seqs (id_seq1: (id * gen_type) list) (id_seq2 : (id * gen_type) list) =
+    let compare_ids id1 id2 = Id.compare id1 id2 in
+    Batteries.List.compare (fun (id1, _) (id2, _) -> compare_ids id1 id2) id_seq1 id_seq2
+  in
+
+  let event_id_sequences = List.sort_uniq compare_id_seqs event_id_sequences in
+  (* print_endline ("[typed_generate_seqs] event: "^ (fst evid)); *)
+  (* print_endline ("after deduplication");
+  List.iter (fun seq -> 
+    let outstr = ref "seq: " in
+    List.iter (fun (id, _) -> 
+      outstr := !outstr ^ (fst id) ^ ", ") 
+      seq;
+    print_endline !outstr)    
+  event_id_sequences
+  ; *)
+
   event_id_sequences
 ;;
 
@@ -154,6 +167,7 @@ let derive_output_event (ctx:ctx) (hdl_id : id) (hdl_body:statement) : event =
       })
     else 
       let evid = Id.append_string "_ingress_output" hdl_id in 
+      (* print_endline ("finding generate sequences for "^ (fst evid)); *)
       EventSet({
       evid = evid;
       members = events;

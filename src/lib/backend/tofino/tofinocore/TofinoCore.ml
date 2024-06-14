@@ -598,31 +598,69 @@ let append_and_new seqs e =
 let rec find_statement_paths paths_so_far stmt_filter stmt =
   match stmt.s with
   | SSeq (s1, s2) ->
-    let paths_including_s1 = find_statement_paths paths_so_far stmt_filter s1 in
-    (* [[eva()]] *)
-    (* [[eva()]] *)
-    let paths_including_s2 =
-      find_statement_paths paths_including_s1 stmt_filter s2
-    in
+    (* find all the statement paths through s1, then for each of those paths 
+       find all the paths including s2 *)
+    let paths_including_s1 = find_statement_paths paths_so_far stmt_filter s1 in    
+    let paths_including_s2 = find_statement_paths paths_including_s1 stmt_filter s2 in
     (* printres "seq" res; *)
     paths_including_s2
   | SIf (_, s1, s2) ->
-    (* we get all paths for s1 + all paths for s2 *)
-    let res =
+    (* a branch with no inner paths creates a path *)
+    let s1_paths = find_statement_paths paths_so_far stmt_filter s1 in
+    let s1_paths = if (s1_paths = []) then [[]] else s1_paths in
+    let s2_paths = find_statement_paths paths_so_far stmt_filter s2 in
+    let s2_paths = if (s2_paths = []) then [[]] else s2_paths in
+
+
+    (* 
+    what we want for the branches is an or:
+      paths (ps) or paths (qs)
+      or ps qs = 
+        ps = [p1, p2, p3, ...]
+        qs = [q1, q2, q3, ...] 
+    but if we just add the paths together and one branch is 
+      empty, the algorithm continues as though the non-empty 
+      branch was the only option. 
+    *)
+
+    (*  example of bug in previous logic:
+        if (x) {
+          s1;
+        }
+        s2;
+        
+        step 1: paths [] (if x then s1 else noop; s2)
+          step 2: find_statement_paths [] (if x then s1 else noop)
+            step 3: if branch: [[s1]]
+            step 4: else branch: [] <== this is the problem. 
+            result: [[s1]] @ []
+          step 4: find_statement_paths s2
+            result: [[s2]]
+          result: 
+            [[s1]@[s2]]
+    *)
+
+
+
+    let res = s1_paths @ s2_paths in
+    (* let res =
       find_statement_paths paths_so_far stmt_filter s1
       @ find_statement_paths paths_so_far stmt_filter s2
-    in
+    in *)
     res
   | SMatch (_, ps) ->
     let res =
       List.fold_left
         (fun seqs (_, bstmt) ->
-          seqs @ find_statement_paths paths_so_far stmt_filter bstmt)
+          let bstmt_paths = find_statement_paths paths_so_far stmt_filter bstmt in
+          let bstmt_paths = if (bstmt_paths = []) then [[]] else bstmt_paths in
+          seqs @ bstmt_paths)
         []
         ps
     in
     res
   | _ ->
+    (* base case: append this statement to all paths so far *)
     (match stmt_filter stmt with
      | Some r -> append_and_new paths_so_far r
      | None -> paths_so_far)
