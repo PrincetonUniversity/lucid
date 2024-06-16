@@ -23,6 +23,7 @@ let process_prog ?(opts=def_opts) builtin_tys ds =
   print_if_verbose "-------Checking well-formedness---------";
   Wellformed.pre_typing_checks ~handlers:opts.match_event_handlers ds;
   print_if_debug ds;
+  let ds = EventFormat.set_event_nums ds in
   print_if_verbose "---------typing1---------";
   let ds = Typer.infer_prog builtin_tys ds in
   let ds = GlobalConstructorTagging.annotate ds in

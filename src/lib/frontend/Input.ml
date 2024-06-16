@@ -31,6 +31,7 @@ let read ?(filename : string option = None) lexbuf =
          (string_of_int cnum))
 ;;
 
+
 (* Make dest_fname relative to the current directory (or absolute),
    instead of relative to the source_fname *)
 let adjust_filename source_fname dest_fname =
@@ -38,6 +39,7 @@ let adjust_filename source_fname dest_fname =
   |> FilePath.concat (FilePath.dirname source_fname)
   |> FilePath.reduce ~no_symlink:true
 ;;
+
 
 let rec read_from_file fname visited : 'a list * string list =
   if List.mem fname visited
@@ -88,4 +90,18 @@ let parse fname =
   let adjust_fname = adjust_filename FilePath.current_dir fname in
   let ds, _ = read_from_file adjust_fname [] in
   ds
+;;
+
+
+let parse_from_string s =
+  let lexbuf = Lexing.from_string s in
+  lexbuf.lex_curr_p <- { lexbuf.lex_curr_p with pos_fname = "_builtin" };
+  lexbuf.lex_start_p <- { lexbuf.lex_start_p with pos_fname = "_builtin" };
+  let err_header = Printf.sprintf "[Parser]" in
+  let (_, decls) = try Parser.prog Lexer.token lexbuf with
+    | Failure x -> Console.error (Printf.sprintf "%s %s" err_header x)
+    | Console.Error msg -> Console.error (Printf.sprintf "%s error" msg)
+    | _ -> Console.error (Printf.sprintf "%s unknown error" err_header)
+  in
+  decls
 ;;

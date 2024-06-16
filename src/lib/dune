@@ -50,6 +50,7 @@
    typerModules
    memops
    wellformed
+   eventFormat
    functionInlining
    tableInlining
    sizeInlining

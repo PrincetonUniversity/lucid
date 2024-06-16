@@ -20,6 +20,7 @@ let main () =
   let target_filename = Cmdline.parse () in
   Cmdline.set_dpt_file target_filename;
   let ds = Input.parse target_filename in
+  EventFormat.print_event_format ds;
   let renaming, ds =
     (* Profile.time_profile "frontend" @@ fun () -> *)
     FrontendPipeline.process_prog Builtins.interp_builtin_tys ds
