@@ -451,10 +451,16 @@ let add_simple_parser ?(with_payloads=true) recirc_port_opt ds =
       If the target is one that uses recirculation ports for 
       self events, then this event MUST be passed a port id *)
    (* used in new C IR *)
+   (* TODO: this should be simplified. 
+      There should only be 2 cases. 
+      1. no packet events --> generate:  main(bitstring pkt) -> call do_lucid_parsing()
+      2. there is 1 packet event of the form ev(int<48> x; int<48> y; int<16> z; payload.t p)
+         generate: main(bitstring pkt) -> parse_eth; if (LUCID_ETY) do_lucid_parsing else generate ev   
+   *)
    (* 
       case 1: no packet events, no user parser, _ ->
-         // parse all packets as events with compiler-given formats:
-            lucid_background_event_parser 
+         // parse all packets as events with compiler-given formats
+            (main just calls lucid_background_event_parser)
       case 2: 1 packet event, no user parser, no recirc port ->  
          // parse all packets as the single packet event
          // (this assumes self-events are handled some way besides recirc)

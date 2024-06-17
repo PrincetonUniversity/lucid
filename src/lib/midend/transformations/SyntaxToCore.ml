@@ -81,7 +81,7 @@ let rec translate_raw_ty (rty : S.raw_ty) tspan : C.raw_ty =
     let aret_tys = List.map translate_ty a.aacn_ty.aret_tys in
     C.TActionConstr { aconst_param_tys; aacn_ty={aarg_tys; aret_tys }}
   | S.TPat s -> C.TPat (translate_size s)
-  | S.TBitstring -> C.TBits (Sz 1500)
+  | S.TBitstring -> C.pkt_arg_ty.raw_ty
   | S.TRecord fields -> C.TRecord (List.map (fun (id, ty) -> (Id.create id), translate_raw_ty ty tspan) fields)
   | S.TAction a ->
     let aarg_tys = List.map translate_ty a.aarg_tys in

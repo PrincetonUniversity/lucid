@@ -141,3 +141,4 @@ let find_one_in_list fcn lst =
 
 
 let id i = Id.create i
+let cid i = Cid.create [i]

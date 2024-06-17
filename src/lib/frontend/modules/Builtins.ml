@@ -109,3 +109,6 @@ let cell2_id = SyntaxUtils.cell2_id
 let lucid_parse_id = Id.create "do_lucid_parsing"
 let packet_arg_id = Id.create "packet"
 let main_parse_id = Id.create "main"
+(* an alternative to main, which starts with 
+   a parsed ethernet packet. *)
+let eth_parse_id = Id.create "eth_main"

@@ -77,6 +77,7 @@ let atomic_op_form ds =
 ;;
 
 let core_passes ds portspec = 
+  let ds = AddEthStartMain.process ds in
   (* all the passes over CoreSyntax *)
   let ds = EliminateTBuiltin.process_prog ds in
   dump_ir_prog "midend before partial interp (initial prog)" "midend_pre_partial_interp.dpt" ds;
@@ -112,8 +113,8 @@ let core_passes ds portspec =
   (* generate the ingress parser or add background event parsing *)
   report_if_verbose "-------Adding background event parser---------";
   let port_ty = (Builtins.tofino_builtin_tys.ingr_port_ty |> SyntaxToCore.translate_ty) in 
-
   let ds = AddIngressParser.add_parser port_ty portspec ds in
+
   (* static analysis to see if this program is compile-able *)
   report_if_verbose "-------Checking tofino compatibilty---------";
   InputChecks.all_checks ds;

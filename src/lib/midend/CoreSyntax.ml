@@ -429,6 +429,7 @@ let assign cid exp = PAssign(cid, exp)
 let pgen exp = PGen(exp)
 let pdrop = PDrop
 let pcall exp = PCall(exp)
+let pcall_cid cid args = PCall(call cid args tevent)
 let pmatch exps branches = PMatch(exps, branches)
 (* match branches *)
 let pbranch ints block : parser_branch  = (List.map (fun i -> PNum (Z.of_int i)) ints), block

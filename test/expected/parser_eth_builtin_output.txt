@@ -1,0 +1,24 @@
+dpt: Auto-detected specification file examples/interp_tests/parser_eth_builtin.json
+dpt: Simulating...
+dpt: Using random seed: 0
+
+t=0: Parsing packet 000000000003000000000004080011111111222222223333333344444444 at switch 0, port 0
+t=0: Handling packet event eth_ip(3,4,2048,286331153,572662306,858993459,1145324612,) at switch 0, port 0
+t=600: Handling event background(2048) at switch 0, port 196
+2048
+dpt: Final State:
+
+Switch 0 : {
+
+ Pipeline : [ ]
+
+ Events :   [ ]
+
+ Exits :    [ ]
+
+ Drops :    [ ]
+
+ packet events handled: 1
+ total events handled: 2
+
+}

@@ -124,6 +124,7 @@
    EliminatePayloads
    EliminateEventCombinators
    Hoisting
+   AddEthStartMain
    AddIngressParser
    TofinoSplit
    TofinoCore

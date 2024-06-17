@@ -1,3 +1,5 @@
+(* The midend pipeline for the interpreter. 
+   Mainly does partial interpretation. *)
 let print_if_debug ds =
   if Cmdline.cfg.debug
   then (
@@ -40,6 +42,7 @@ let stringify_action_constructor_names ds =
 let process_prog ds =
   print_if_verbose "-------Translating to core syntax---------";
   let ds = SyntaxToCore.translate_prog ds in
+  let ds = AddEthStartMain.process ds in
 
   (* let ds = Despecialization.test_parser_despecialization ds in *)
   (* let ds = Despecialization.test_memop_despecialization ds in *)

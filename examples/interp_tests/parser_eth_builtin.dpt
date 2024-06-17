@@ -1,0 +1,24 @@
+/* 
+  The easiest way to write a parser in Lucid is to define the 
+  "eth_main(int<48> dstMac, int<48> srcMac, int<16> etherTy, bitstring pkt)" parser, 
+  which starts _after_ Lucid's builtin parser. 
+*/
+type eth_t = { int<48> dstMac; int<48> srcMac; int<16> etherTy; }
+type ip_t =  { int srcIp; int dstIp; int srcPort; int dstPort; }
+
+event background(int<16> x) { printf("%d", x); }
+packet event eth(eth_t e, Payload.t payload) { generate background(e#etherTy); }
+packet event eth_ip(eth_t e, ip_t ip, Payload.t payload) { generate background(e#etherTy); }
+
+parser parse_ip(bitstring pkt, eth_t e) {
+  ip_t ip = read(pkt);
+  generate eth_ip(e, ip, Payload.parse(pkt));
+}
+
+const int<16> IP_ETHERTY = 0x0800;
+parser eth_main(int<48> dstMac, int<48> srcMac, int<16> etherTy, bitstring pkt) {
+  eth_t eth_hdr = { dstMac=dstMac; srcMac=srcMac; etherTy=etherTy; };
+  match etherTy with
+  | IP_ETHERTY -> { parse_ip(pkt, eth_hdr); }
+  | _ -> { generate eth(eth_hdr, Payload.parse(pkt)); }
+}

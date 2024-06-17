@@ -30,6 +30,7 @@ let compile ds =
   let ds = SyntaxToCore.translate_prog ~preserve_user_decls:true ds in
   (*** 2. a few passes in core *)
   print_endline ("---- core passes----");
+  let ds = AddEthStartMain.process ds in
   let ds = MiscCorePasses.implicit_payloads ds in
   let ds = MiscCorePasses.set_event_nums ds in
   let ds = CoreRegularizeMemops.process ds in
