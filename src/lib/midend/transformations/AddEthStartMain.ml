@@ -104,7 +104,7 @@ let add_default_eth_main ds =
   in
   let pkt_events = List.filter is_pktev ds in
   let expected_tys = [
-    tint (Sz 48); tint (Sz 48); tint (Sz 16); CoreSyntax.pkt_arg_ty
+    tint (Sz 48); tint (Sz 48); tint (Sz 16); CoreSyntax.payload_ty (* note this is payload type, not packet arg type *)
   ] in
   let eth_event_id_opt = match List.filter_map 
     (fun decl -> match decl.d with 
