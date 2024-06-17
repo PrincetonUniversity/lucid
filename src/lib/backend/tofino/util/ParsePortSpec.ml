@@ -20,7 +20,10 @@ let p dpid speed = {dpid; speed}
 
 type port_config = {
   recirc_dpid : int;
-  internal_ports : port list;
+  (* All of the config below is depreciated. 
+     They are only used by a complicated (and unnecessary) 
+     tofino-specific pass that generates a parser based on a port spec.*)
+  internal_ports : port list; 
   external_ports : port list;
   port_events  : (int * string) list;
 }
@@ -50,6 +53,12 @@ let check recirc_dpid internal_dpids external_dpids (bound_dpids : int list) =
      is in the list (recirc_dpid::internal_dpids@external_dpids)  *)
   let all_dpids = recirc_dpid :: (internal_dpids @ external_dpids) in
   not (Caml.List.exists (fun dpid -> Caml.List.mem dpid all_dpids) bound_dpids)
+;;
+
+(* new simpler method. Should be called on vals from command line --port and --recirc_port *)
+let create front_panel_ports recirc_dpid = 
+  let external_ports = Caml.List.map (fun (dpid, speed) -> p dpid speed) front_panel_ports in
+  {recirc_dpid; internal_ports = []; external_ports; port_events = []}
 ;;
 
 let parse fn_opt =

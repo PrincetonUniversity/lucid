@@ -1870,7 +1870,7 @@ let prog_to_p4_prog (prog : prog) : p4_prog =
     {globals; ingress=ingress_pipe; control_config; egress=egress_pipe;}
   ;;
 
-(* derive the port declarations from the spec *)
+(* read port initialization declarations from config *)
 let port_decls portspec = 
   let open ParsePortSpec in
   let all_ports = portspec.external_ports@portspec.internal_ports in

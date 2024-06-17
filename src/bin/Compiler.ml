@@ -30,7 +30,11 @@ let profile_for_tofino target_filename portspec build_dir profile_cmd =
 ;;
 
 let compile_to_tofino dptfn =
-  let portspec = ParsePortSpec.parse Cmdline.cfg.portspec in
+  (* use the command line port arguments if there is no spec file *)
+  let portspec = if (Cmdline.cfg.portspec = None) 
+    then ParsePortSpec.create (Cmdline.cfg.ports) (Cmdline.cfg.recirc_port)
+    else ParsePortSpec.parse Cmdline.cfg.portspec
+  in
   report
   @@ "Starting P4-Tofino compilation. Using switch port configuration: ";
   print_endline (ParsePortSpec.string_of_portconfig portspec);

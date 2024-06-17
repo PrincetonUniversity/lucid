@@ -25,9 +25,13 @@ type config =
   ; mutable interactive : bool
       (** Run interpreter interactively (stdin / stdout) **)
   ; mutable output : string
-  ; mutable json : bool (* tofino backend *) (** Print json outputs **)
+  ; mutable json : bool  (** Print json outputs **)
+  (* tofino backend config *)
   ; mutable builddir : string (* build directory where p4 + other code goes *)
   ; mutable portspec : string option (* path to port specification json *)
+  (* portspec is depreciated and not necessary. Just use ports and recirc_ports flags *)
+  ; mutable ports : (int * int) list (* list of port ids and speeds *)
+  ; mutable recirc_port : int (* port id for recirculation *)
   ; mutable profile_cmd :
       string option (* something with profiling -- probably depreciated *)
   ; mutable ctl_fn : string option (* path to optional python control program *)
@@ -65,6 +69,8 @@ let default () =
   ; json = false
   ; builddir = "lucid_tofino_build"
   ; portspec = None
+  ; ports = [(128, 10); (129, 10); (130, 10); (131, 10)]
+  ; recirc_port = 196 (* default for tofino1 *)
   ; profile_cmd = None
   ; ctl_fn = None
   ; serverlib = false
@@ -217,6 +223,19 @@ let parse_tofino () =
       ; ( "--ports"
         , Arg.String set_portspec
         , "Path to the ports specification file" )
+      ; ( "--port"
+        , Arg.String
+            (fun s ->
+              let (id, speed) =
+                match String.split_on_char '@' s with
+                | [id; speed] -> (int_of_string id, int_of_string speed)
+                | _ -> failwith "Invalid port specification"
+              in
+              cfg.ports <- (id, speed) :: cfg.ports)
+        , "--port <dpid>@<speed> Specify a port to be brought up automatically in the generated control plane. Can be used multiple times." )
+      ; ( "--recirc_port"
+        , Arg.Int (fun i -> cfg.recirc_port <- i)
+        , "Port id for recirculation" )
       ; ( "-p"
         , Arg.String set_profile_cmd
         , "Profile program instead of compiling." )

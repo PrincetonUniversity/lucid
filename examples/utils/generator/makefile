@@ -1,7 +1,7 @@
 DPTC="../../../dptc"
 
 build:
-	$(DPTC) generator.dpt -o build
+	$(DPTC) --port 130@40 --recirc_port 196 generator.dpt -o build
 assemble:
 	cd build && make
 sim:
