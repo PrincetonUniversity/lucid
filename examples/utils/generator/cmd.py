@@ -84,8 +84,26 @@ def test_generator_app():
     return
 
 def main():
-    test_flow_start_stop()
-    # test_generator_app()
+    interface = "veth257"
+    if len(sys.argv) < 2:
+        print("Usage: ./cmd.py <command> [cmd args]")
+        sys.exit(1)
+    cmd = sys.argv[1]
+    if cmd == "start":
+        generate_port("veth257", start_flow(1, (2^32)-1))
+    elif cmd == "stop":
+        generate_port("veth257", stop_flow(1))
+    elif cmd == "query":
+        global handlers
+        global stop 
+        stop = False
+        handlers["00:02"] = handle_report
+        handle_port("veth257")
+        time.sleep(2)
+        generate_port("veth257", ev_query(4))
+        time.sleep(2)
+        stop = True
+    return
 
 
 #### HELPERS 

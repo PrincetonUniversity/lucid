@@ -39,3 +39,24 @@ event send_report@3(int id) {
     int rx = Array.get(rxct, 0);
     generate_port(ingress_port, report(id, tx, rx));
 }
+
+global Array.t<8> flow_status = Array.create(256);
+
+event continue_flow@4(int<8> flow_id, int<32> max_ct, int<48> dst, int<48> src, int<16> ety, Payload.t pl) {
+    Array.setm(txct, 0, incr, 1);
+    generate_port(server_port, eth(dst, src, ety, pl));
+    if (Array.get(flow_status, flow_id) == 1) {
+        if (max_ct != 0) {
+            generate(continue_flow(flow_id, max_ct - 1, dst, src, ety, pl));
+        }
+    }
+}
+
+event start_flow@5(int<8> flow_id, int<32> max_pkts, int<48>dst, int<48> src, int<16> ety, Payload.t pl) {
+    Array.set(flow_status, flow_id, 1);
+    generate(continue_flow(flow_id, max_pkts, dst, src, ety, pl));
+}
+
+event stop_flow@6(int<8> flow_id) {
+    Array.set(flow_status, flow_id, 0);
+}
