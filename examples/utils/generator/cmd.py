@@ -8,101 +8,70 @@ from collections import namedtuple
 from scapy.all import sendp, Raw, Ether, sniff
 from threading import Thread
 
-### a few simple tests in asic simulator
+iface = "ens1"
 
 #### program-specific handler and generator for test
 def handle_report(raw_ev):
     reqid, txct, rxct = struct.unpack('!III', raw_ev[:12])
     print(f"report id = {reqid} txct = {txct} rxct = {rxct}")
 
-
-def ev_send_pkt(ct, src="01:02:03:04:05:06", dst="07:08:09:10:11:12", et="08:00", data="bb:aa:dd:aa:ff"):
+def ev_send_pkt(ct, src="00:11:22:33:44:55", dst="07:08:09:10:11:12", et="08:00", data="bb:aa:dd:aa:ff"):
+    print(f"generating command to send {ct} packets")
     ct_bytes = unbbytes(ct.to_bytes(2, byteorder='big'))
     # send packet is event number 1
-    return (1, [ct_bytes, src, dst, et, data])
+    return (1, [ct_bytes, dst, src, et, data])
 
+# ev_eth is a packet that returned
 def ev_eth(src="01:02:03:04:05:06", dst="07:08:09:10:11:12", et="08:00", data="bb:aa:dd:aa:ff"):
     # eth is the default / packet event
-    return (None, [src, dst, et, data])
+    return (None, [dst, src, et, data])
 
 def ev_query(reqid):
     reqid_bytes = unbbytes(reqid.to_bytes(4, byteorder='big'))
     # query is event number 3
     return (3, [reqid_bytes])
 
-def start_flow(flow_id, max_pkts, src="01:02:03:04:05:06", dst="07:08:09:10:11:12", et="08:00", data="bb:aa:dd:aa:ff"):
+def start_flow(flow_id, max_pkts, src="00:11:22:33:44:55", dst="07:08:09:10:11:12", et="08:00", data="bb:aa:dd:aa:ff"):
     flow_id_bytes = unbbytes(flow_id.to_bytes(1, byteorder='big'))
     max_pkts_bytes = unbbytes(max_pkts.to_bytes(4, byteorder='big'))
-    return (5, [flow_id_bytes, max_pkts_bytes, src, dst, et, data])
+    return (5, [flow_id_bytes, max_pkts_bytes, dst, src, et, data])
 
 def stop_flow(flow_id):
     flow_id_bytes = unbbytes(flow_id.to_bytes(1, byteorder='big'))
     return (6, [flow_id_bytes])
 
-def test_flow_start_stop():
-    global stop
-    stop = False
-    global handlers
-    handlers["00:02"] = handle_report
-    handler_thread = handle_port("veth257")
-    print ("port 257 started")
-    time.sleep(2)
-    generate_port("veth257", start_flow(1, 9999))
-    print("flow started")
-    time.sleep(6)
-    print("stopping flow")
-    generate_port("veth257", stop_flow(1))
-    time.sleep(2)
-    print("flow stopped")
-    generate_port("veth257", ev_query(4)) 
-    time.sleep(2)
-    stop = True
-    return
-
-def test_generator_app():
-    global stop
-    stop = False
-    global handlers
-    handlers["00:02"] = handle_report
-    handler_thread = handle_port("veth257")
-    print ("port 257 started")
-    print ("sending packet")
-    # send_pkt(1, "01:02:03:04:05:06", "07:08:09:10:11:12", "08:00", "bb:aa:dd:aa:ff)
-    generate_port("veth257", ev_send_pkt(9))
-    time.sleep(2)
-    # send_report(4)
-    generate_port("veth257", ev_query(4)) 
-    time.sleep(2)
-    # eth("01:02:03:04:05:06", "07:08:09:10:11:12", "08:00", "bb:aa:dd:aa:ff)
-    generate_port("veth261", ev_eth())
-    time.sleep(2)
-    # send_report(5)
-    generate_port("veth257", ev_query(5)) 
-    time.sleep(10)
-    print("exiting")
-    stop = True
-    return
+def reset_counters():
+    return (7, [])
 
 def main():
-    interface = "veth257"
+    interface = iface
     if len(sys.argv) < 2:
         print("Usage: ./cmd.py <command> [cmd args]")
         sys.exit(1)
     cmd = sys.argv[1]
-    if cmd == "start":
-        generate_port("veth257", start_flow(1, (2^32)-1))
+    if cmd == "send":
+        if (len(sys.argv) > 2):
+            generate_port(interface, ev_send_pkt(int(sys.argv[2])))
+        else:
+            generate_port(interface, ev_send_pkt(1))
+    elif cmd == "start":
+        generate_port(interface, start_flow(1, (2^32)-1))
     elif cmd == "stop":
-        generate_port("veth257", stop_flow(1))
+        generate_port(interface, stop_flow(1))
     elif cmd == "query":
         global handlers
         global stop 
         stop = False
         handlers["00:02"] = handle_report
-        handle_port("veth257")
+        handle_port(interface)
         time.sleep(2)
-        generate_port("veth257", ev_query(4))
+        generate_port(interface, ev_query(4))
         time.sleep(2)
         stop = True
+    elif cmd == "reset":
+        generate_port(interface, reset_counters())
+    else:
+        print("Invalid command")
     return
 
 
@@ -130,7 +99,7 @@ def generate_port(port_dev : str, ev_args):
     arg_fields = [bbytes(arg) if isinstance(arg, str) else bint(*arg) for arg in args]
     pkt_val = b''.join(hdr_fields + arg_fields)
     pkt = Raw(pkt_val)
-    sendp(pkt, iface=port_dev)
+    sendp(pkt, iface=port_dev, verbose=0)
 
 stop = False
 def start_sniffer(port_dev, fcn):
