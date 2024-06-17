@@ -1,0 +1,41 @@
+// a packet generator
+
+const int<9> server_port = 130;
+
+
+global Array.t<32> txct = Array.create(8);
+global Array.t<32> rxct = Array.create(8);
+
+memop incr(int m, int c) {
+    return m + c;
+}
+
+// ethernet packet handler. parser will be auto-generated 
+// because there is only 1 packet event in the program.
+packet event eth(int<48> dst, int<48> src, int<16> ety, Payload.t pl) {
+    // just count packets from the server
+    if (ingress_port == server_port) {
+        Array.setm(rxct, 0, incr, 1);
+    }
+}
+
+// control event with id 1: send packet to server
+event send_pkt@1(int<16> ct, int<48> dst, int<48> src, int<16> ety, Payload.t pl) {
+    // send a packet to the server and increment count
+    Array.setm(txct, 0, incr, 1);
+    generate_port(server_port, eth(dst, src, ety, pl));
+    // if count is not 1, generate another packet
+    if (ct != 1) {
+        generate(send_pkt(ct - 1, dst, src, ety, pl));
+    }
+}
+
+// control event with id 2: report packet counts
+event report@2(int id, int txct, int rxct){skip;}
+
+// control event with id 3: send report to monitor
+event send_report@3(int id) {
+    int tx = Array.get(txct, 0);
+    int rx = Array.get(rxct, 0);
+    generate_port(ingress_port, report(id, tx, rx));
+}

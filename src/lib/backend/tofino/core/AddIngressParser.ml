@@ -181,6 +181,8 @@ let inline_parsers ?(with_payloads=true) parser_entry_ty pkt_var bg_events decls
       | CallInvalid -> error "[inline_parsers] invalid parser entry type -- this should have been caught earlier"
    in
    let ctx = CidMap.add (Cid.id Builtins.lucid_parse_id) ([Id.create "pkt", pkt_arg_ty], lucid_bg_event_block) CidMap.empty in
+   print_endline ("decls: ");
+   CorePrinting.decls_to_string decls |> print_endline;
    inline_parsers_rec ctx decls
 ;;
 

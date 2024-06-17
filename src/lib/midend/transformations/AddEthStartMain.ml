@@ -120,6 +120,17 @@ let add_default_eth_main ds =
   in
   if (no_main && no_eth_main && (List.length pkt_events = 1) && (Option.is_some eth_event_id_opt)) then (
     let eth_event_id = Option.get eth_event_id_opt in
+  let gen_cmd = pgen 
+    (call
+      (Cid.id eth_event_id)
+      [
+        var (cid "dmac") (tint (Sz 48));
+        var (cid "smac") (tint (Sz 48));
+        var (cid "ety") (tint (Sz 16));
+        var (cid "pl") CoreSyntax.pkt_arg_ty
+      ]
+      (ty TEvent))
+    in
     let eth_main = decl@@DParser(
         Builtins.eth_parse_id,
         [
@@ -130,14 +141,7 @@ let add_default_eth_main ds =
         ],
         (block 
           []
-          (pcall_cid 
-            (Cid.id eth_event_id) 
-            [
-              var (cid "dmac") (tint (Sz 48));
-              var (cid "smac") (tint (Sz 48));
-              var (cid "ety") (tint (Sz 16));
-              var (cid "pl") CoreSyntax.pkt_arg_ty
-            ])))
+          gen_cmd))
     in
     true, ds@[eth_main]
   )

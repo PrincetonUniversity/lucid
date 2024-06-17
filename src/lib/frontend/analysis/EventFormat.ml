@@ -11,15 +11,32 @@ open Printing
 
 (* set integer id numbers for all event declarations *)
 let set_event_nums ds =
-  let num = ref 0 in
+  let num = ref 1 in
+  let used_nums = ref [0] in
+  let find_used_nums = 
+    object(_)
+      inherit [_] s_iter
+      method !visit_DEvent _ _ num_opt _ _ _ =
+        match num_opt with
+        | Some n -> 
+          used_nums := n::(!used_nums);
+        | _ -> ();
+    end
+  in
+  find_used_nums#visit_decls () ds;
   let v = 
     object(_)
       inherit [_] s_map
       method !visit_DEvent _ id num_opt sort specs args =
         match num_opt with
         | None -> 
+          (* increment num until find something not in used nums *)
+          while List.mem !num (!used_nums) do
+            num := !num + 1
+          done;
+          let rv = DEvent(id, Some !num, sort, specs, args) in
           num := !num + 1;
-          DEvent(id, Some !num, sort, specs, args)
+          rv
         | Some _ -> DEvent(id, num_opt, sort, specs, args)
     end
   in
