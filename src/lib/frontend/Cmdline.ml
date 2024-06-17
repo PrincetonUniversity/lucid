@@ -30,7 +30,7 @@ type config =
   ; mutable builddir : string (* build directory where p4 + other code goes *)
   ; mutable portspec : string option (* path to port specification json *)
   (* portspec is depreciated and not necessary. Just use ports and recirc_ports flags *)
-  ; mutable ports : (int * int) list (* list of port ids and speeds *)
+  ; mutable ports :( (int * int) list) option (* list of port ids and speeds *)
   ; mutable recirc_port : int (* port id for recirculation *)
   ; mutable profile_cmd :
       string option (* something with profiling -- probably depreciated *)
@@ -69,7 +69,7 @@ let default () =
   ; json = false
   ; builddir = "lucid_tofino_build"
   ; portspec = None
-  ; ports = [(128, 10); (129, 10); (130, 10); (131, 10)]
+  ; ports = None 
   ; recirc_port = 196 (* default for tofino1 *)
   ; profile_cmd = None
   ; ctl_fn = None
@@ -217,6 +217,7 @@ let parse_tofino () =
   let set_portspec (s : string) = cfg.portspec <- Some s in
   let set_profile_cmd (s : string) = cfg.profile_cmd <- Some s in
   let set_ctl_fn (s : string) = cfg.ctl_fn <- Some s in
+
   let speclist =
     speclist
     @ [ "-o", Arg.String set_builddir, "Output build directory."
@@ -231,7 +232,11 @@ let parse_tofino () =
                 | [id; speed] -> (int_of_string id, int_of_string speed)
                 | _ -> failwith "Invalid port specification"
               in
-              cfg.ports <- (id, speed) :: cfg.ports)
+              let cur_ports = match (cfg.ports) with 
+                | Some(ps) -> ps
+                | None -> []
+              in
+              cfg.ports <- Some((id, speed) :: cur_ports))
         , "--port <dpid>@<speed> Specify a port to be brought up automatically in the generated control plane. Can be used multiple times." )
       ; ( "--recirc_port"
         , Arg.Int (fun i -> cfg.recirc_port <- i)

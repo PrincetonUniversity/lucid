@@ -31,8 +31,12 @@ let profile_for_tofino target_filename portspec build_dir profile_cmd =
 
 let compile_to_tofino dptfn =
   (* use the command line port arguments if there is no spec file *)
+  let cmdline_ports = match Cmdline.cfg.ports with 
+    | None -> [(128, 10); (129, 10); (130, 10); (131, 10)]
+    | Some(ps) -> ps 
+  in
   let portspec = if (Cmdline.cfg.portspec = None) 
-    then ParsePortSpec.create (Cmdline.cfg.ports) (Cmdline.cfg.recirc_port)
+    then ParsePortSpec.create cmdline_ports (Cmdline.cfg.recirc_port)
     else ParsePortSpec.parse Cmdline.cfg.portspec
   in
   report
