@@ -54,9 +54,22 @@ module JP = struct
         (* x<size> *)
         let v, sz = if (String.contains vstr '<')
           then (
-            Scanf.sscanf vstr "%d%[<]%d%[>]" (fun x _ y _ -> x,y))
+            let v_str = String.split_on_char '<' vstr |> List.hd in
+            let pre_sz = String.split_on_char '>' vstr |> List.hd in
+            let sz_str = String.split_on_char '<' pre_sz |> List.rev |> List.hd in
+            int_of_string v_str, int_of_string sz_str
+
+            (* Scanf.sscanf vstr "%d%[<]%d%[>]" (fun x _ y _ -> x,y) *)
+          )
           else (
-            Scanf.sscanf vstr "%d" (fun x -> x, 32)
+            int_of_string vstr,
+              if (String.length vstr >= 2 && String.sub vstr 0 2 = "0x") 
+                then(  
+                  let hex_str = String.split_on_char 'x' vstr |> List.rev |> List.hd in
+                  (String.length hex_str) * 4
+                )
+                else 32
+            (* Scanf.sscanf vstr "%d" (fun x -> x, 32) *)
           )
         in
         vint v sz
@@ -295,6 +308,13 @@ let rec parse_value payloads_t_id err_str ty j =
   | `String s, TName (cid, _) when Cid.equal cid payloads_t_id -> (
     BitString.hexstr_to_bits s |> CoreSyntax.vbits
   )
+  | `String s, TInt (Sz size) -> 
+    let res = JP.to_vint (`String s) in
+    let z = match res with 
+      | {v=VInt(z)} -> Integer.to_int z
+      | _ -> error "invalid string for arg value"
+    in
+    vint z size
   | `Bool b, TBool -> vbool b
   | `List lst, TGroup ->
     vgroup (List.map (fun n -> parse_int "group value definition" n) lst)
