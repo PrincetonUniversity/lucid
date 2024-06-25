@@ -6,7 +6,7 @@ type action = value list -> value list
 val mk_array : id:Id.t -> width:int -> length:int -> pair:bool -> obj
 
 (* create a table object *)
-val mk_table : id:Id.t -> length:int -> def: action -> obj
+val mk_table : id:Id.t -> length:int -> def: action -> tdefault_cid : cid -> tdefault_args : value list -> obj
 
 (* pipeline type *)
 type t
@@ -63,12 +63,15 @@ val get_table_entries:
    -> action * (value list * action) list
 [@@ocamlformat "disable"]
 
+
 (* install entry into table at stage *)
 val install_table_entry:
      stage: int
    -> priority: int
    -> key : value list
    -> action : action
+   -> eaction_name : cid
+   -> eaction_const_args : value list
    -> t
    -> unit
 [@@ocamlformat "disable"]   

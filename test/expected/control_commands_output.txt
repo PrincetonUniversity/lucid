@@ -24,7 +24,11 @@ Switch 0 : {
 
  Pipeline : [
     myarr(0) : [3u32; 10u32; 10u32; 10u32; 10u32; 10u32; 10u32; 10u32]
-    ftbl(1) : Table [...]
+    ftbl(1) :[
+  {key: ((2,3)); action: hit_acn(20)}
+  {key: ((0,0)); action: hit_acn(10)}
+  {default_action: miss_acn(0);}
+]
   ]
 
  Events :   [ ]

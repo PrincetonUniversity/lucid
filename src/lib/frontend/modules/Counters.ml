@@ -54,8 +54,8 @@ let counter_add_ty =
        }
 ;;
 
-let dummy_memop = InterpSyntax.F (fun _ _ args -> V(extract_ival (List.hd args)))
-let setop = InterpSyntax.F (fun _ _ args -> V(extract_ival (List.nth args 1)))
+let dummy_memop = InterpSyntax.F (None, fun _ _ args -> V(extract_ival (List.hd args)))
+let setop = InterpSyntax.F (None, fun _ _ args -> V(extract_ival (List.nth args 1)))
 let dummy_int = InterpSyntax.V (CoreSyntax.vinteger (Integer.of_int 0))
 
 let counter_add_fun nst swid args =

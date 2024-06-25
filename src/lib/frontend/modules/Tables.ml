@@ -162,7 +162,7 @@ let create_ctor (nst : InterpState.State.network_state) swid args =
       | V { v = VGlobal(tbl_id, _) } -> tbl_id
       | _ -> error"Table.create: expected a global for the table id"
     in
-    let def_acn_ctor = 
+    let def_acn_cid, def_acn_ctor = 
       ival_fcn_to_internal_action nst swid tbl_def_acn 
     in
     let flat_default_args = match tbl_def_args with 
@@ -187,7 +187,7 @@ let create_ctor (nst : InterpState.State.network_state) swid args =
     in
 
     let new_pipe = Pipeline.append p
-      (Pipeline.mk_table tbl_id tbl_size def_acn)
+      (Pipeline.mk_table tbl_id tbl_size def_acn def_acn_cid flat_default_args)
     in
     new_pipe  
   | _ -> error"wrong number of arguments to Table.create"
@@ -249,7 +249,7 @@ let install_fun nst swid args =
       | V(v) -> [v]
       | _ -> error "Table.create: expected a tuple for the default action args"
     in
-    let acn_ctor = 
+    let acn_cid, acn_ctor = 
       ival_fcn_to_internal_action nst swid vaction
     in
 
@@ -263,6 +263,8 @@ let install_fun nst swid args =
       10 
       keys
       acn
+      acn_cid
+      vaction_const_args
       target_pipe
     ; 
     V(vtup [] Span.default) (* no return *)
@@ -335,7 +337,7 @@ let install_ternary_fun nst swid args =
       | V(v) -> [v]
       | _ -> error "Table.create: expected a tuple for the default action args"
     in
-    let acn_ctor = 
+    let acn_cid, acn_ctor = 
       ival_fcn_to_internal_action nst swid vaction
     in
     let acn remaining_args = 
@@ -347,6 +349,8 @@ let install_ternary_fun nst swid args =
       10 
       keys
       acn
+      acn_cid
+      vaction_const_args
       target_pipe
     ; 
     V(vtup [] Span.default) (* no return *)

@@ -6,7 +6,7 @@ open CoreSyntax
 (* values used in interpreter contexts. 'nst is network state *)
 type 'nst ival =
   | V of value
-  | F of 'nst code
+  | F of (cid option * 'nst code)
 
 and 'nst code = 'nst -> int (* switch *) -> 'nst ival list -> 'nst ival
 
@@ -14,6 +14,10 @@ and memop
 
 and 'nst handler =
 'nst -> int (* switch *) -> int (* port *) -> event_val -> unit
+
+let f (cid: cid) (code: 'nst code) = F(Some(cid), code)
+let anonf (code:'nst code) = F(None, code)
+
 
 let extract_ival iv =
   match iv with

@@ -74,9 +74,9 @@ let update_fun err nst swid args =
   match args with
   | [ V { v = VGlobal (_, stage) }
     ; V { v = VInt idx }
-    ; F getop
+    ; F (_, getop)
     ; getarg
-    ; F setop
+    ; F (_, setop)
     ; setarg ] ->
     let get_f arg = getop nst swid [V (CoreSyntax.vinteger arg); getarg] in
     let set_f arg =
@@ -91,8 +91,8 @@ let update_fun err nst swid args =
 ;;
 
 let array_update_fun = update_fun array_update_error
-let dummy_memop = InterpSyntax.F (fun _ _ args -> V(extract_ival (List.hd args)))
-let setop = InterpSyntax.F (fun _ _ args -> V(extract_ival (List.nth args 1)))
+let dummy_memop = InterpSyntax.anonf (fun _ _ args -> V(extract_ival (List.hd args)))
+let setop = InterpSyntax.anonf (fun _ _ args -> V(extract_ival (List.nth args 1)))
 let dummy_int = InterpSyntax.V (CoreSyntax.vinteger (Integer.of_int 0))
 
 (* Array.get *)
@@ -233,7 +233,7 @@ let array_update_complex_fun nst swid args =
   let open State in
   let open InterpSyntax in
   match args with
-  | [V { v = VGlobal (_, stage) }; V { v = VInt idx }; F memop; arg1; arg2; default]
+  | [V { v = VGlobal (_, stage) }; V { v = VInt idx }; F(_, memop); arg1; arg2; default]
     ->
     let update_f mem1 _ =
       let args = [V (CoreSyntax.vinteger mem1); arg1; arg2; default] in

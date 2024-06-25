@@ -56,8 +56,9 @@ let taction iarg marg ret =
 let ival_fcn_to_internal_action nst swid vaction = 
   let open CoreSyntax in
   let open InterpState.State in 
-  let action_f = match vaction with 
-    | F f -> f
+  let acn_cid, action_f = match vaction with 
+    | F (Some(cid), f) -> cid, f
+    | F (None, _) -> error "Table.install: interpreter error -- the action was added to the global context without a name"
     | _ -> error "Table.install: expected a function"
   in
   (* fill state and switch id args of the action function, 
@@ -69,7 +70,7 @@ let ival_fcn_to_internal_action nst swid vaction =
     (* passing action and args separately to install makes the 
        action return a function *)
     let result = match result with 
-      | F f -> 
+      | F(_, f) -> 
         f nst swid []
       | V v ->
         V(v)
@@ -80,7 +81,7 @@ let ival_fcn_to_internal_action nst swid vaction =
     | VTuple(vs) -> List.map value vs
     | _ -> [result]
   in
-  acn_f
+  acn_cid, acn_f
 ;;
 
 let rec flatten_v (v : CoreSyntax.v) = 

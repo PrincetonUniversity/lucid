@@ -22,6 +22,8 @@ and tblobj =
     tmaxlen : int
   ; tentries : tbl_entry list
   ; tdefault : action
+  ; tdefault_cid : cid
+  ; tdefault_args : value list;
   }
 (* internally, a table is represented as a list of action, 
    which are pure function, each with a match pattern and a priority *)
@@ -30,9 +32,27 @@ and tbl_entry = {
   eprio : int;
   ematch : value list; (* (key, mask) tuples *)
   eaction : action;
+  (* for printing table contents *)
+  eaction_name : cid; 
+  eaction_const_args : value list;
 }
 
-  
+let entry_to_string tbl_entry = 
+  let key_str = CorePrinting.comma_sep CorePrinting.value_to_string tbl_entry.ematch in
+  let args_str = CorePrinting.comma_sep CorePrinting.value_to_string tbl_entry.eaction_const_args in
+  Printf.sprintf "{key: (%s); action: %s(%s)}"
+    key_str 
+    (CorePrinting.cid_to_string tbl_entry.eaction_name) 
+    args_str
+;;
+
+let tbl_to_string tblobj = 
+  let entries_str = String.concat "\n" (List.map entry_to_string tblobj.tentries) in
+  let default_str = Printf.sprintf "{default_action: %s(%s);}" (CorePrinting.cid_to_string tblobj.tdefault_cid) (CorePrinting.comma_sep CorePrinting.value_to_string tblobj.tdefault_args) in
+  entries_str ^ "\n" ^ default_str
+;;
+
+
 (*** the pipeline ***)
 type t =
   { objs : obj array
@@ -97,11 +117,14 @@ let stage_to_string ?(pad = "") show_ids idx s =
         idx
         (Printing.list_to_string print_entry (Array.to_list a.acells))
   | OTable t ->
+    let contents_str = tbl_to_string t in
+    
     Printf.sprintf
-      "%s%s(%d) : Table [...]\n"
+      "%s%s(%d) :[\n%s\n]\n"
       (pad ^ pad)
       (CorePrinting.id_to_string t.tid)
       idx
+      (CorePrinting.indent_body contents_str)
 ;;
 
 (*** pipeline operations ***)
@@ -261,10 +284,10 @@ let update_complex
 (*** table functions ***)
 
 (* allocate a table with room for n entries *)
-let mk_table ~(id : Id.t) ~(length : int) ~(def : action) =
+let mk_table ~(id : Id.t) ~(length : int) ~(def : action) ~(tdefault_cid : cid) ~(tdefault_args : value list) =
   (* wrap in pipeline object *)
   OTable
-    { tid = id; tdefault = def; tmaxlen = length; tentries = [] }
+    { tid = id; tdefault = def; tmaxlen = length; tentries = []; tdefault_cid; tdefault_args }
 ;;
 
 let get_table_entries
@@ -284,7 +307,9 @@ let get_table_entries
 ;;
 
 let install_table_entry ~(stage : int) ~(priority : int) 
-    ~(key : value list) ~(action : value list -> value list) (t : t) = 
+    ~(key : value list) ~(action : value list -> value list) 
+    ~(eaction_name : cid) ~(eaction_const_args : value list)
+    (t : t) = 
   let obj = get_obj_unconstrained stage t in
   let tbl = match obj with 
     | OTable tbl -> tbl
@@ -292,7 +317,8 @@ let install_table_entry ~(stage : int) ~(priority : int)
   in
   if List.length tbl.tentries == tbl.tmaxlen
     then failwith "Pipeline Error: tried to add an entry to a full table!";
-  let new_entry = {eprio = priority; ematch = key; eaction = action} in
+
+  let new_entry = {eprio = priority; ematch = key; eaction = action; eaction_name; eaction_const_args} in
   let entries = match tbl.tentries with 
   | [] -> [new_entry]
   | _ -> 

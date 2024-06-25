@@ -18,7 +18,12 @@ dpt: Final State:
 Switch 0 : {
 
  Pipeline : [
-    ftbl(0) : Table [...]
+    ftbl(0) :[
+  {key: ((2,4294967295)); action: hit_acn(3)}
+  {key: ((3,4294967295)); action: hit_acn(2)}
+  {key: ((3,2)); action: hit_acn(3)}
+  {default_action: miss_acn(1);}
+]
   ]
 
  Events :   [ ]
@@ -34,7 +39,10 @@ Switch 0 : {
 Switch 1 : {
 
  Pipeline : [
-    ftbl(0) : Table [...]
+    ftbl(0) :[
+  
+  {default_action: miss_acn(1);}
+]
   ]
 
  Events :   [ ]

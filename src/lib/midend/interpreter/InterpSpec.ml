@@ -241,7 +241,7 @@ let create_foreign_functions renaming efuns python_file =
         ^ " is not a function in the python file!"
       | Some o ->
         let f =
-          InterpSyntax.F
+          InterpSyntax.anonf
             (fun _ _ args ->
               let pyretvar =
                 Py.Callable.to_function

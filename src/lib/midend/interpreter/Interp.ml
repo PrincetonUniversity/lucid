@@ -46,7 +46,7 @@ let initial_state (pp : Preprocess.t) (spec : InterpSpec.t) =
   let bg_parse_cid = Cid.id Builtins.lucid_parse_id in 
   let bg_parse_fun = InterpPayload.lucid_parse_fun in
   Array.iteri
-    (fun swid _ -> State.add_global swid bg_parse_cid (F bg_parse_fun) nst)
+    (fun swid _ -> State.add_global swid bg_parse_cid (anonf bg_parse_fun) nst)
     nst.switches
   ;
   (* push interpreter inputs to ingress and control command queues *)
@@ -134,7 +134,7 @@ let execute_main_parser print_log swidx port (nst: State.network_state) (pkt_ev 
   let main_parser = State.lookup swidx (Cid.id Builtins.main_parse_id) nst in
 
   match main_parser with 
-    | F parser_f -> (
+    | F (_, parser_f) -> (
       if print_log
         then
           if Cmdline.cfg.json || Cmdline.cfg.interactive

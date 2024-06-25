@@ -132,7 +132,7 @@ module State = struct
         if InterpSwitch.mem_env g.cid st
         then
           error ("global variable " ^ Cid.to_string g.cid ^ "  already defined")
-        else InterpSwitch.add_global g.cid (F g.body) st)
+        else InterpSwitch.add_global g.cid (F (Some(g.cid), g.body)) st)
       nst.switches
   ;;
 

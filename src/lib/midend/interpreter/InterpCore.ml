@@ -226,7 +226,7 @@ let rec interp_exp (nst : State.network_state) swid locals e : 'a InterpSyntax.i
        error
          (Cid.to_string cid
          ^ " is a value identifier and cannot be used in a call")
-     | F f -> f nst swid vs
+     | F(_, f) -> f nst swid vs
    )
   | EHash (Szs _, _ ) -> 
     error "Hash expression size should not be a tuple"
@@ -796,7 +796,7 @@ and interp_parser_step nst swid payload_id locals parser_step =
           in
           (* call the parser function as you would any other function *)
           match State.lookup swid cid nst with 
-            | F(parser_f) -> let rv = parser_f nst swid args in rv |> extract_ival
+            | F(_, parser_f) -> let rv = parser_f nst swid args in rv |> extract_ival
             | _ -> error "[parser call] could not find parser function"
         )
         | _ -> error "[parser call] expected a call expression"
@@ -871,7 +871,7 @@ let interp_decl (nst : State.network_state) swid d =
       in
       InterpSyntax.V(interp_parser_block nst swid payload_id locals parser_block)
     in
-    State.add_global swid (Cid.id id) (F runtime_function) nst;
+    State.add_global swid (Cid.id id) (InterpSyntax.anonf runtime_function) nst;
     nst
 
   | DEvent (id, num_opt, _, _) ->
@@ -897,11 +897,11 @@ let interp_decl (nst : State.network_state) swid d =
         eserialized = false;
     })
     in
-    State.add_global swid (Id id) (InterpSyntax.F f) nst;
+    State.add_global swid (Id id) (InterpSyntax.f (Id id) f) nst;
     nst
   | DMemop { mid; mparams; mbody } ->
     let f = interp_memop mparams mbody in
-    State.add_global swid (Cid.id mid) (InterpSyntax.F f) nst;
+    State.add_global swid (Cid.id mid) (InterpSyntax.f (Cid.id mid) f) nst;
     nst
   | DExtern _ ->
     failwith "Extern declarations should be handled during preprocessing"
@@ -927,7 +927,7 @@ let interp_decl (nst : State.network_state) swid d =
       nst.switches.(swid).retval := None;
       InterpSyntax.V(ret_v)
     in 
-    State.add_global swid (Cid.id id) (F runtime_function) nst;
+    State.add_global swid (Cid.id id) (InterpSyntax.f (Cid.id id) runtime_function) nst;
     nst
 
   | DActionConstr({aid; aconst_params; aparams; abody}) ->
@@ -953,10 +953,10 @@ let interp_decl (nst : State.network_state) swid d =
         let ret_v = value@@VTuple(ret_vs) in
         InterpSyntax.V(ret_v)
       in
-      let action_f = InterpSyntax.F action_function in
+      let action_f = InterpSyntax.f (Cid.id aid) action_function in
       action_f
     in
-    let constr_f = InterpSyntax.F action_function_generator in
+    let constr_f = InterpSyntax.f (Cid.id aid) action_function_generator in
     State.add_global swid (Cid.id aid) constr_f nst;    
     nst   
 ;;
