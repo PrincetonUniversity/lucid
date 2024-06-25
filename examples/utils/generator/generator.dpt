@@ -3,26 +3,50 @@
 const int<9> server_port = 148;
 
 
-global Array.t<32> txct = Array.create(8);
-global Array.t<32> rxct = Array.create(8);
+// time is in units of 2^16 nanoseconds, or 64 microseconds.
+global Array.t<32> txct = Array.create(256);
+global Array.t<32> tx_start = Array.create(256);
+global Array.t<32> tx_end = Array.create(256);
 
+global Array.t<32> rxct = Array.create(256);
+global Array.t<32> rx_start = Array.create(256);
+global Array.t<32> rx_end = Array.create(256);
+
+
+// command events from controller
+event send_pkt@1(int<16> ct, int<48> dst, int<48> src, int<16> ety, Payload.t pl);
+event send_report@3(int id);
+event send_timed_report@13(int id);
+event reset@7();
+
+// report events to controller
+event report@2(int id, int txct, int rxct){skip;}
+event timed_report@12(int id, int txct, int rxct, int txstart, int txend, int rxstart, int rxend){skip;}
+
+
+
+// functions and handlers
 memop incr(int m, int c) {
     return m + c;
 }
 
-// ethernet packet handler. parser will be auto-generated 
-// because there is only 1 packet event in the program.
 packet event eth(int<48> dst, int<48> src, int<16> ety, Payload.t pl) {
-    // just count packets from the server
     if (ingress_port == server_port) {
-        Array.setm(rxct, 0, incr, 1);
+        int rx_ct = Array.update(rxct, 0, incr, 1, incr, 1);
+        if (rx_ct == 1) {
+            Array.set(rx_start, 0, Sys.time());
+        }
+        Array.set(rx_end, 0, Sys.time());
     }
 }
 
-// control event with id 1: send packet to server
-event send_pkt@1(int<16> ct, int<48> dst, int<48> src, int<16> ety, Payload.t pl) {
-    // send a packet to the server and increment count
-    Array.setm(txct, 0, incr, 1);
+handle send_pkt(int<16> ct, int<48> dst, int<48> src, int<16> ety, Payload.t pl) {
+    int tx_ct = Array.update(txct, 0, incr, 1, incr, 1);
+    if (tx_ct == 1) {
+        Array.set(tx_start, 0, Sys.time());
+    }
+    Array.set(tx_end, 0, Sys.time());
+    // send packet to server
     generate_port(server_port, eth(dst, src, ety, pl));
     // if count is not 1, generate another packet
     if (ct != 1) {
@@ -30,24 +54,41 @@ event send_pkt@1(int<16> ct, int<48> dst, int<48> src, int<16> ety, Payload.t pl
     }
 }
 
-// control event with id 2: report packet counts
-event report@2(int id, int txct, int rxct){skip;}
 
-// control event with id 3: send report to monitor
-event send_report@3(int id) {
+handle send_report(int id) {
     int tx = Array.get(txct, 0);
     int rx = Array.get(rxct, 0);
     generate_port(ingress_port, report(id, tx, rx));
 }
 
-event reset@7() {
-    Array.set(txct, 0, 0);
-    Array.set(rxct, 0, 0);
+handle send_timed_report(int id) {
+    int tx = Array.get(txct, 0);
+    int txs = Array.get(tx_start, 0);
+    int txe = Array.get(tx_end, 0);
+    int rx = Array.get(rxct, 0);
+    int rxs = Array.get(rx_start, 0);
+    int rxe = Array.get(rx_end, 0);
+    generate_port(ingress_port, timed_report(id, tx, rx, txs, txe, rxs, rxe));
 }
+
+handle reset() {
+    Array.set(txct, 0, 0);
+    Array.set(tx_start, 0, 0);
+    Array.set(tx_end, 0, 0);
+    Array.set(rxct, 0, 0);
+    Array.set(rx_start, 0, 0);
+    Array.set(rx_end, 0, 0);
+}
+
+
+// infinite flow events
+event start_flow@5(int<8> flow_id, int<32> max_pkts, int<48>dst, int<48> src, int<16> ety, Payload.t pl);
+event stop_flow@6(int<8> flow_id);
+event continue_flow@4(int<8> flow_id, int<32> max_ct, int<48> dst, int<48> src, int<16> ety, Payload.t pl);
 
 global Array.t<8> flow_status = Array.create(256);
 
-event continue_flow@4(int<8> flow_id, int<32> max_ct, int<48> dst, int<48> src, int<16> ety, Payload.t pl) {
+handle continue_flow(int<8> flow_id, int<32> max_ct, int<48> dst, int<48> src, int<16> ety, Payload.t pl) {
     Array.setm(txct, 0, incr, 1);
     generate_port(server_port, eth(dst, src, ety, pl));
     if (Array.get(flow_status, flow_id) == 1) {
@@ -57,11 +98,11 @@ event continue_flow@4(int<8> flow_id, int<32> max_ct, int<48> dst, int<48> src, 
     }
 }
 
-event start_flow@5(int<8> flow_id, int<32> max_pkts, int<48>dst, int<48> src, int<16> ety, Payload.t pl) {
+handle start_flow(int<8> flow_id, int<32> max_pkts, int<48>dst, int<48> src, int<16> ety, Payload.t pl) {
     Array.set(flow_status, flow_id, 1);
     generate(continue_flow(flow_id, max_pkts, dst, src, ety, pl));
 }
 
-event stop_flow@6(int<8> flow_id) {
+handle stop_flow(int<8> flow_id) {
     Array.set(flow_status, flow_id, 0);
 }
