@@ -27,6 +27,7 @@ DEBUG=False
 # 3/20/23: all keys are strings, get entry method, array set and get functions in Controller
 # 3/21/23: table_install and table_get functions in Controller
 # 4/26/23: added pktgen support, boolean fields
+# 6/27/24: fixed array get index bug
 
 # helper for globals.json: given a node from globals.json, resolve 
 # name of a lucid global to a P4 object
@@ -130,8 +131,9 @@ class Controller(object):
         be the fully qualified array name, i.e., as defined in the 
         bfrt.json file. """
     dprint ("[array_set] %s[%s] = %s"%(array_id, idx, val))
+    key = {"$REGISTER_INDEX":idx}
     arr = self.tables[array_id]
-    arr.add_entry(idx, None, val)
+    arr.add_entry(key, None, val)
 
   def array_get(self, array_id, idx):
     """ get array_id[idx] from all pipes. array_id must 
@@ -139,8 +141,9 @@ class Controller(object):
         bfrt.json file. Return value is a list, with one value 
         from each pipeline """
     arr = self.tables[array_id]
+    key = {"$REGISTER_INDEX":idx}
     # output will be (None [because no action], {"f1"=[...]})
-    _, vals = arr.get_entry(idx)
+    _, vals = arr.get_entry(key)
     vals = list(vals.values())
     return vals
 
