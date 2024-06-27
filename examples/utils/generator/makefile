@@ -1,13 +1,25 @@
-DPTC="../../../dptc"
-
+BUILD_DIR := build
 build:
-	$(DPTC) --port 148@40 --recirc_port 196 generator.dpt -o build
+	@if [ -z "$(LDE)" ]; then \
+		echo "LDE (the directory where the lucid compiler binary, \"dpt\", is located) is not set"; \
+		exit 1; \
+	fi
+	mkdir -p $(BUILD_DIR)
+	sudo chown -R $$USER $(BUILD_DIR)
+	$(LDE)/dptc --port 148@40 --recirc_port 196 generator.dpt -o $(BUILD_DIR)
+
 assemble:
-	cd build && make
+	cd $(BUILD_DIR) && make
 sim:
-	cd build && make sim
-hw:
-	cd build && make hw
+	cd $(BUILD_DIR) && make sim
+start:
+	cd $(BUILD_DIR) && sudo SDE=$(SDE) SDE_INSTALL=$(SDE_INSTALL) make hw &	
+stop: 
+	sudo killall bf_switchd
+
 clean:
-	sudo rm -rf build
-.PHONY: build assemble sim hw clean
+	sudo rm -rf $(BUILD_DIR)
+
+
+
+.PHONY: $(BUILD_DIR) assemble sim clean start stop

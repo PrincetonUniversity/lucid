@@ -10,38 +10,62 @@ from threading import Thread
 
 iface = "ens1"
 
-#### program-specific handler and generator for test
-def handle_report(raw_ev):
-    reqid, txct, rxct = struct.unpack('!III', raw_ev[:12])
-    print(f"report id = {reqid} txct = {txct} rxct = {rxct}")
 
-def ev_send_pkt(ct, src="00:11:22:33:44:55", dst="07:08:09:10:11:12", et="08:00", data="bb:aa:dd:aa:ff"):
+# event defs
+# (this should line up with event numbers in lucid program)
+evnums = {
+    "send_pkt": 1,
+    "query": 3,
+    "start_flow": 5,
+    "stop_flow": 6,
+}
+
+def rawtime_to_us(rawtime):
+    # Converts raw time to microseconds, given that each unit of raw time is 64 microseconds
+    return rawtime * 64.0
+
+def rawtime_pps(start, end, pktct):
+    start_us = rawtime_to_us(start)
+    end_us = rawtime_to_us(end)
+    duration_us = end_us - start_us
+    if duration_us > 0:
+        return (pktct * 10**6) / duration_us
+    else:
+        return None
+    
+
+def handle_report(raw_ev):
+    reqid, txct, rxct, tx_start, tx_end, rx_start, rx_end = struct.unpack('!IIIIIII', raw_ev[:28])
+    print(f"reqid = {reqid}")
+    print(f"tx ct = {txct} rx ct = {rxct}")
+    rx_rate = rawtime_pps(rx_start, rx_end, rxct)
+    tx_rate = rawtime_pps(tx_start, tx_end, txct)
+    print(f"rx rate (pps) = {rx_rate} tx rate (pps) = {tx_rate}")
+    if rxct > 0:
+        loss = 1.0 - (float(rxct) / float(txct))
+        print(f"loss = {loss}")
+
+def send_pkt(ct, src="00:11:22:33:44:55", dst="07:08:09:10:11:12", et="08:00", data="bb:aa:dd:aa:ff"):
     print(f"generating command to send {ct} packets")
     ct_bytes = unbbytes(ct.to_bytes(2, byteorder='big'))
+    port = 148
+    port_bytes = unbbytes(port.to_bytes(2, byteorder='big'))
     # send packet is event number 1
-    return (1, [ct_bytes, dst, src, et, data])
+    return (evnums["send_pkt"], [port_bytes, ct_bytes, dst, src, et, data])
 
-# ev_eth is a packet that returned
-def ev_eth(src="01:02:03:04:05:06", dst="07:08:09:10:11:12", et="08:00", data="bb:aa:dd:aa:ff"):
-    # eth is the default / packet event
-    return (None, [dst, src, et, data])
-
-def ev_query(reqid):
+def query(reqid):
     reqid_bytes = unbbytes(reqid.to_bytes(4, byteorder='big'))
     # query is event number 3
-    return (3, [reqid_bytes])
+    return (evnums["query"], [reqid_bytes])
 
 def start_flow(flow_id, max_pkts, src="00:11:22:33:44:55", dst="07:08:09:10:11:12", et="08:00", data="bb:aa:dd:aa:ff"):
     flow_id_bytes = unbbytes(flow_id.to_bytes(1, byteorder='big'))
     max_pkts_bytes = unbbytes(max_pkts.to_bytes(4, byteorder='big'))
-    return (5, [flow_id_bytes, max_pkts_bytes, dst, src, et, data])
+    return (evnums["start_flow"], [flow_id_bytes, max_pkts_bytes, dst, src, et, data])
 
 def stop_flow(flow_id):
     flow_id_bytes = unbbytes(flow_id.to_bytes(1, byteorder='big'))
-    return (6, [flow_id_bytes])
-
-def reset_counters():
-    return (7, [])
+    return (evnums["stop_flow"], [flow_id_bytes])
 
 def main():
     interface = iface
@@ -51,9 +75,9 @@ def main():
     cmd = sys.argv[1]
     if cmd == "send":
         if (len(sys.argv) > 2):
-            generate_port(interface, ev_send_pkt(int(sys.argv[2])))
+            generate_port(interface, send_pkt(int(sys.argv[2])))
         else:
-            generate_port(interface, ev_send_pkt(1))
+            generate_port(interface, send_pkt(1))
     elif cmd == "start":
         generate_port(interface, start_flow(1, (2^32)-1))
     elif cmd == "stop":
@@ -65,11 +89,9 @@ def main():
         handlers["00:02"] = handle_report
         handle_port(interface)
         time.sleep(2)
-        generate_port(interface, ev_query(4))
+        generate_port(interface, query(4))
         time.sleep(2)
         stop = True
-    elif cmd == "reset":
-        generate_port(interface, reset_counters())
     else:
         print("Invalid command")
     return
