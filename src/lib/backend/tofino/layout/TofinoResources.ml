@@ -358,8 +358,6 @@ let rec array_stmts_of_stmt stmt : statement list =
   res
 ;;
 
-(* this isn't right. pick up tomorrow. *)
-
 let hash_bits_of_stmt dbg stmt = 
   let _, hash_ops = hash_ops_of_stmt [] stmt in
   (* let hash_stmts = hashers_of_stmt stmt |> (MatchAlgebra.unique_stmt_list) in
@@ -372,3 +370,23 @@ let hash_bits_of_stmt dbg stmt =
     exit 1;  );
   hbits
 ;;
+
+
+let has_wildcard_pat pats = 
+  (* does a branch pattern have a wildcard? *)
+  List.exists (fun pat -> match pat with 
+    | PWild -> true
+    | PBit xs -> List.exists (fun x -> x = -1) xs
+    | _ -> false
+  ) pats
+;;
+let is_exact_branch branch = not (has_wildcard_pat (fst branch)) ;;
+let is_exact_match (stmt : statement) = 
+  match stmt.s with 
+  | SMatch(_, branches) -> 
+    (* last branch is default, expected to be wildcard even in exact match *)
+    let non_default_branches = List.rev branches |> List.tl |> List.rev in
+    List.for_all is_exact_branch non_default_branches
+  | _ -> false
+;;
+

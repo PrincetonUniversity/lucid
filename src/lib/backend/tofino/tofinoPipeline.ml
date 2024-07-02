@@ -188,6 +188,8 @@ let tofinocore_passes core_prog portspec =
   let core_prog = IfToMatch.process_core core_prog in 
   report_if_verbose "-------Converting all memops to complex form-------";
   let core_prog = RegularizeMemops.process_core core_prog in
+  report_if_verbose "-------Allocating array address variables-------";
+  let core_prog = RegularizeArrayOpAddrs.process_core core_prog in
   report_if_verbose "-------Allocating memop input variables-------";
   dump_prog "before ShareMemopInputsSat" "tofinocore_pre_memop_overlay" core_prog;
   let core_prog = ShareMemopInputsSat.process_core core_prog in
@@ -231,8 +233,12 @@ let layout (prog : TofinoCore.prog) =
     let dfg = TofinoDfg.process cdg in
     TofinoDfg.print_dfg (logging_prefix ^ "_dfg.dot") dfg;
     report_if_verbose (Printf.sprintf "-------Layout for %s: scheduling data dependency graph to pipeline-------" cn);
+    let dfg = RegularizeArrayOpAddrs.process_dfg dfg in
+    report_if_verbose (Printf.sprintf "-------------------- LAYOUT FOR %s --------------------" (String.uppercase_ascii cn));
     let pipeline_stmts = TofinoLayout.process_new comp.comp_decls dfg in
     let num_stages = List.length(pipeline_stmts) in
+    report_if_verbose (Printf.sprintf "--------- LAYOUT FOR %s SUCCEEDED IN %i STAGES --------" (String.uppercase_ascii cn) num_stages);
+    
     layout_info := (!layout_info)@[(cn, (string_of_int num_stages))];
     let main_handler = TofinoCore.main_handler_of_decls comp.comp_decls in
     let main_handler' = {main_handler with hdl_body = TofinoCore.SPipeline(pipeline_stmts);} in

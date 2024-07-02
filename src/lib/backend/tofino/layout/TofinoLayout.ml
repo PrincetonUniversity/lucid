@@ -754,8 +754,8 @@ let try_place_in_stage prog_info (prior_stages, stmt_group_opt) stage =
       (match stmt_group.arr with
       | Some(arr) -> (
         let stage_num = List.length prior_stages in      
-        print_endline 
-          ("[try_place_in_stage] failed to place array "
+        print_string 
+          ("\n[try_place_in_stage] failed to place array "
           ^(CorePrinting.cid_to_string arr)
           ^" in stage "^string_of_int stage_num^"."
           ^" Reason: "^reason^".");
@@ -779,8 +779,8 @@ let try_place_in_stage prog_info (prior_stages, stmt_group_opt) stage =
       (match stmt_group.arr with
       | Some(arr) -> (
         let stage_num = List.length prior_stages in      
-        print_endline 
-          ("[try_place_in_stage]  SUCCESS. placed array "
+        print_string 
+          ("\n[try_place_in_stage]  SUCCESS. placed array "
           ^(CorePrinting.cid_to_string arr)
           ^" in stage "^string_of_int stage_num^".");
       )

@@ -181,8 +181,6 @@ let inline_parsers ?(with_payloads=true) parser_entry_ty pkt_var bg_events decls
       | CallInvalid -> error "[inline_parsers] invalid parser entry type -- this should have been caught earlier"
    in
    let ctx = CidMap.add (Cid.id Builtins.lucid_parse_id) ([Id.create "pkt", pkt_arg_ty], lucid_bg_event_block) CidMap.empty in
-   print_endline ("decls: ");
-   CorePrinting.decls_to_string decls |> print_endline;
    inline_parsers_rec ctx decls
 ;;
 
@@ -376,7 +374,7 @@ let check_valid_entry_parse_block parse_block : lucid_entry_block_ty =
    let acns, _ = List.split acns_spans in 
    match acns, step with
    (* parser main() { do_lucid_parsing(); } *)
-   | [], PCall({e=ECall(cid, _, _); _}) when cid_is_ingress_port cid -> 
+   | [], PCall({e=ECall(cid, _, _); _}) when ((Cid.names cid |> List.hd) = (Builtins.lucid_parse_id |> fst)) -> 
       CallAlways
    (* parser main() { match ingress_port with <branches>, where branches 
       either directly call the lucid parser or never call the lucid parser } *)

@@ -94,6 +94,9 @@ let rec unify_lists env f_unify xs ys =
   List.fold_left2 f_unify env xs ys 
 ;;
 
+let list_equal f xs ys = 
+  List.length xs = List.length ys && List.for_all2 f xs ys
+
 let rec unify_raw_ty env rawty1 rawty2 : env = 
   match rawty1, rawty2 with
   (* abstract types unify with their inner types *)
@@ -123,7 +126,7 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
   | TEnum(variants1), TEnum(variants2) -> 
       let ids1, _ = List.split variants1 in
       let ids2, _ = List.split variants2 in
-      if not (List.equal (Cid.equal) ids1 ids2) then 
+      if not (list_equal (Cid.equal) ids1 ids2) then 
         (raise (TypeError("enum types have different variants")));
     env
   | TBuiltin(cid1, tys1), TBuiltin(cid2, tys2) -> 

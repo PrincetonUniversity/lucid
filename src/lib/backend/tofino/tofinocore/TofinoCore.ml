@@ -559,6 +559,8 @@ let add_preallocated_locals pvars params =
   pvars@params
 ;;
 
+(* add a shared local variable to the main handler 
+   of the program. *)
 let add_shared_local tds tmp_id tmp_ty =
   let tmp_e = var_sp (Cid.id tmp_id) tmp_ty Span.default in
   let main_handler = main_handler_of_decls tds in
