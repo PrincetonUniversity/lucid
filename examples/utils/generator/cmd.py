@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 
 import sys, time, random, socket, os, struct, json, copy
-from dataclasses import dataclass
 import binascii
 import dpkt
 from collections import namedtuple
 from scapy.all import sendp, Raw, Ether, sniff
 from threading import Thread
 
+# the interface of the 
+# dataplane from the management cpu
 iface = "ens1"
+# iface = "enp5s0"
 
 
 # event defs
@@ -16,8 +18,6 @@ iface = "ens1"
 evnums = {
     "send_pkt": 1,
     "query": 3,
-    "start_flow": 5,
-    "stop_flow": 6,
 }
 
 def rawtime_to_us(rawtime):
@@ -35,37 +35,32 @@ def rawtime_pps(start, end, pktct):
     
 
 def handle_report(raw_ev):
-    reqid, txct, rxct, tx_start, tx_end, rx_start, rx_end = struct.unpack('!IIIIIII', raw_ev[:28])
-    print(f"reqid = {reqid}")
-    print(f"tx ct = {txct} rx ct = {rxct}")
+    port, reqid, txct, rxct, tx_start, tx_end, rx_start, rx_end = struct.unpack('!HIIIIIII', raw_ev[:30])
+    tx_dur_us = rawtime_to_us(tx_end) - rawtime_to_us(tx_start)
+    rx_dur_us = rawtime_to_us(rx_end) - rawtime_to_us(rx_start)
     rx_rate = rawtime_pps(rx_start, rx_end, rxct)
     tx_rate = rawtime_pps(tx_start, tx_end, txct)
-    print(f"rx rate (pps) = {rx_rate} tx rate (pps) = {tx_rate}")
+    print("port = %s" % port)
+    print("reqid = %s" % reqid)
+    print("tx ct = %s rx ct = %s" % (txct, rxct))
+    print("tx dur (us) = %s rx dur (us) = %s" % (tx_dur_us, rx_dur_us))
+    print("rx rate (pps) = %s tx rate (pps) = %s" % (rx_rate, tx_rate))
     if rxct > 0:
         loss = 1.0 - (float(rxct) / float(txct))
-        print(f"loss = {loss}")
-
-def send_pkt(ct, src="00:11:22:33:44:55", dst="07:08:09:10:11:12", et="08:00", data="bb:aa:dd:aa:ff"):
-    print(f"generating command to send {ct} packets")
+        print("loss = %s" % loss)
+    
+def send_pkt(port, ct, src="00:11:22:33:44:55", dst="07:08:09:10:11:12", et="08:00", data="bb:aa:dd:aa:ff"):
+    print("generating command to send %s packets" % ct)
     ct_bytes = unbbytes(ct.to_bytes(2, byteorder='big'))
-    port = 148
     port_bytes = unbbytes(port.to_bytes(2, byteorder='big'))
     # send packet is event number 1
     return (evnums["send_pkt"], [port_bytes, ct_bytes, dst, src, et, data])
 
-def query(reqid):
+def query(port, reqid):
     reqid_bytes = unbbytes(reqid.to_bytes(4, byteorder='big'))
+    port_bytes = unbbytes(port.to_bytes(2, byteorder='big'))
     # query is event number 3
-    return (evnums["query"], [reqid_bytes])
-
-def start_flow(flow_id, max_pkts, src="00:11:22:33:44:55", dst="07:08:09:10:11:12", et="08:00", data="bb:aa:dd:aa:ff"):
-    flow_id_bytes = unbbytes(flow_id.to_bytes(1, byteorder='big'))
-    max_pkts_bytes = unbbytes(max_pkts.to_bytes(4, byteorder='big'))
-    return (evnums["start_flow"], [flow_id_bytes, max_pkts_bytes, dst, src, et, data])
-
-def stop_flow(flow_id):
-    flow_id_bytes = unbbytes(flow_id.to_bytes(1, byteorder='big'))
-    return (evnums["stop_flow"], [flow_id_bytes])
+    return (evnums["query"], [port_bytes, reqid_bytes])
 
 def main():
     interface = iface
@@ -74,14 +69,15 @@ def main():
         sys.exit(1)
     cmd = sys.argv[1]
     if cmd == "send":
-        if (len(sys.argv) > 2):
-            generate_port(interface, send_pkt(int(sys.argv[2])))
+        if (len(sys.argv) == 4):
+            # send <port> <ct>
+            generate_port(interface, send_pkt(int(sys.argv[2]), int(sys.argv[3])))
+        elif (len(sys.argv) == 3):
+            # send <port>
+            generate_port(interface, send_pkt(int(sys.argv[2]), 1))
         else:
-            generate_port(interface, send_pkt(1))
-    elif cmd == "start":
-        generate_port(interface, start_flow(1, (2^32)-1))
-    elif cmd == "stop":
-        generate_port(interface, stop_flow(1))
+            # send
+            generate_port(interface, send_pkt(148, 1))
     elif cmd == "query":
         global handlers
         global stop 
@@ -89,7 +85,11 @@ def main():
         handlers["00:02"] = handle_report
         handle_port(interface)
         time.sleep(2)
-        generate_port(interface, query(4))
+        if (len(sys.argv) == 3):
+            # query <port>
+            generate_port(interface, query(int(sys.argv[2]), 0))
+        else:
+            generate_port(interface, query(148, 0))
         time.sleep(2)
         stop = True
     else:

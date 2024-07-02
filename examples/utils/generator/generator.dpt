@@ -1,14 +1,13 @@
 // a packet generator
 
-const int<9> server_port = 148;
 
 // command events from controller
 // start generating a flow of ct ethernet packets
 event start_flow@1(int<16> port, int<16> ct, int<48> dst, int<48> src, int<16> ety, Payload.t pl);
 // ask for a report about flow stats, id is query id
-event send_report@3(int id);
+event send_report@3(int<16> port, int id);
 // the report back to the controller
-event report@2(int id, int txct, int rxct, int txstart, int txend, int rxstart, int rxend){skip;}
+event report@2(int<16> port, int id, int txct, int rxct, int txstart, int txend, int rxstart, int rxend){skip;}
 
 // ethernet packet to / from the server
 packet event eth(int<48> dst, int<48> src, int<16> ety, Payload.t pl);
@@ -18,7 +17,6 @@ event send_pkt@11(int<16> port, int<16> ct, int<48> dst, int<48> src, int<16> et
 /**** program state ****/
 // time is in units of 2^16 nanoseconds, or 64 microseconds.
 global Array.t<32> txct = Array.create(256);
-global Array.t<16> debug = Array.create(1024);
 global Array.t<32> tx_start = Array.create(256);
 global Array.t<32> tx_end = Array.create(256);
 
@@ -53,59 +51,44 @@ handle start_flow(int<16> port, int<16> ct, int<48> dst, int<48> src, int<16> et
 
 }
 
-/*
-Insane behavior:
-    - scenario: start_flow(148, 2, ...)
-    - expected behavior: send_pkt(148, 2, ...) is called twice
-    - txct[148] ends at 2
-    - debug[148] ends at 2
-    - 2 packets get sent to server
-    - observed behavior: 
-    - txct[148] ends at 3
-    - debug[148] ends at 2
-    - 0 packets get sent to server
-*/
 
 handle send_pkt(int<16> port, int<16> ct, int<48> dst, int<48> src, int<16> ety, Payload.t pl) {
-    int port_cpy = hash<32>(0, port);
+    int<16> port_cpy = hash<16>(0, port);
     int tx_ct = Array.update(txct, port, incr, 1, incr, 1);
-    // Array.setm(txct, port, incr, 1);
-    Array.setm(debug, port, incr_16, 1);
-    // if (tx_ct == 1) {
-    //     Array.set(tx_start, port, Sys.time());
-    // }
+    if (tx_ct == 1) {
+        Array.set(tx_start, port, Sys.time());
+    }
     Array.set(tx_end, port, Sys.time());
     // send packet to server
-    generate_port(server_port, eth(dst, src, ety, pl));
+    generate_port((int<9>)port_cpy, eth(dst, src, ety, pl));
     // if count is not 1, generate another packet
     if (ct != 1) {
         generate(send_pkt(port, ct - 1, dst, src, ety, pl));
     }
 }
 
-handle send_report(int id) {
-    int tx = Array.get(txct, server_port);
-    int txs = Array.get(tx_start, server_port);
-    int txe = Array.get(tx_end, server_port);
-    int rx = Array.get(rxct, server_port);
-    int rxs = Array.get(rx_start, server_port);
-    int rxe = Array.get(rx_end, server_port);
-    generate_port(ingress_port, report(id, tx, rx, txs, txe, rxs, rxe));
+handle send_report(int<16> port, int id) {
+    int tx = Array.get(txct, port);
+    int txs = Array.get(tx_start, port);
+    int txe = Array.get(tx_end, port);
+    int rx = Array.get(rxct, port);
+    int rxs = Array.get(rx_start, port);
+    int rxe = Array.get(rx_end, port);
+    generate_port(ingress_port, report(port, id, tx, rx, txs, txe, rxs, rxe));
 }
 
 handle eth(int<48> dst, int<48> src, int<16> ety, Payload.t pl) {
-    if (ingress_port == server_port) {
-        int rx_ct = Array.update(rxct, server_port, incr, 1, incr, 1);
-        if (rx_ct == 1) {
-            Array.set(rx_start, server_port, Sys.time());
-        }
-        Array.set(rx_end, server_port, Sys.time());
+    int<16> port = hash<16>(0, ingress_port);
+    int rx_ct = Array.update(rxct, port, incr, 1, incr, 1);
+    if (rx_ct == 1) {
+        Array.set(rx_start, port, Sys.time());
     }
+    Array.set(rx_end, port, Sys.time());
 }
 
 
 
-
+// const int<9> server_port = 148;
 // // infinite flow events
 // event start_flow@5(int<8> flow_id, int<32> max_pkts, int<48>dst, int<48> src, int<16> ety, Payload.t pl);
 // event stop_flow@6(int<8> flow_id);
