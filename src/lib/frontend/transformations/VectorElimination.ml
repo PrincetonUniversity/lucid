@@ -8,7 +8,9 @@ open Collections
    any more polymorphic vector sizes. 
    Also assumes that all user type declarations have been made concrete. *)
 
-(* NOTE: skips calls to constructors for builtins. They keep their vector arguments. *)
+(* NOTE: skips calls to constructors for builtins. They keep their vector arguments. 
+   We use this for tables, which have a vector of actions as an argument. 
+   There may be a better way, but this seems to require the minimum number of changes for now. *)
 let extract_size sz =
   match normalize_size sz with
   | IConst n -> n (* Should be the only possible outcome *)
@@ -58,6 +60,10 @@ let subst_index =
     | _ -> exp
   ;;
 
+type replacer_ctx = {
+  in_global_ctor : bool;
+}
+let empty_ctx = { in_global_ctor = false }
 let replacer =
   object (self)
     inherit [_] s_map as super
@@ -92,8 +98,11 @@ let replacer =
       let seq = List.fold_left sseq snoop bodies in
       seq.s
 
+    method! visit_DGlobal _ id ty exp = 
+      super#visit_DGlobal {in_global_ctor = true} id ty exp
+
     method! visit_exp env exp = 
-      (* skip builtin constructors *)
+      (* skip builtin constructor expressions *)
       let is_builtin = match exp.ety with 
         | None -> false
         | Some(ty) -> (
@@ -101,7 +110,8 @@ let replacer =
             | TBuiltin _ -> true
             | _ -> false)            
       in
-      if is_builtin then exp else
+      if env.in_global_ctor && is_builtin then exp 
+      else
         (* re-annotate comprehensions after expansion to set proper index *)
         match exp.e with
         | EComp(_) -> (
@@ -126,7 +136,7 @@ let replacer =
   end
 ;;
 
-let eliminate_prog = (replacer#visit_decls ())
+let eliminate_prog = (replacer#visit_decls empty_ctx)
 
 (* note: before concreteUserTypes pass, we just deleted 
    all user type definitions at this point, to get around 

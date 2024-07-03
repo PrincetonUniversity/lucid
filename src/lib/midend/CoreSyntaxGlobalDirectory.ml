@@ -173,8 +173,28 @@ let rec names_to_compiled_cid dir names =
     | MatGlobal(_) -> error "directory is a leaf, but a node was expected")
 ;;
 
+(* update a name so that indexes are prefixed 
+with a ".", if they are not already *)
+let prefix_idx_with_dot name =
+  let buffer = Buffer.create (String.length name) in
+  let rec aux i =
+    if i >= String.length name then
+      Buffer.contents buffer
+    else
+      let c = name.[i] in
+      if c = '[' && (i = 0 || name.[i - 1] <> '.') then (
+        Buffer.add_char buffer '.';
+        Buffer.add_char buffer c;
+        aux (i + 1)
+      ) else (
+        Buffer.add_char buffer c;
+        aux (i + 1)
+      )
+  in
+  aux 0
+;;
 let name_to_compiled_cid dir name =
-  names_to_compiled_cid dir (String.split_on_char '.' name)
+  names_to_compiled_cid dir (String.split_on_char '.' (prefix_idx_with_dot name))
 ;;
 
 let do_test ds = 
