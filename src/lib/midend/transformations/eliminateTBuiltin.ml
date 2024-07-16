@@ -1,9 +1,22 @@
-(* convert TBuiltin table types to TName, which is still used 
-   in the current tofino and interp implementations *)
+(* 
+   Some small passes to adjust the tofinocore backend 
+   for the new TBuiltin types. 
+
+   1.wrap calls to TBuiltin functions that do not return tuples 
+      in a TupleAssign statement. The tofino backend expects
+      Table.lookup calls to only ever appear inside of
+      STupleAssign statements. But there is no reason for the 
+      frontend to enforce this, and no reason for other 
+      backends to expect it. So we just wrap the calls here
+      in a one-off pass until we can adjust the tofino backend 
+      to not rely on this convention. 
+
+   2.convert TBuiltin table types to TName, which is still used 
+      in the current tofino and interp implementations. *)
 open CoreSyntax
 
 
-let v =
+let tbuiltin_transformer =
    object (self)
      inherit [_] s_map as super
      method! visit_TBuiltin ctx cid raw_tys = 
@@ -45,6 +58,48 @@ let v =
 
 
 
+let builtin_cids = 
+List.map
+   (fun (_, _, global_funs, constructors) ->
+      let fun_cids =
+      List.map
+         (fun (gf : InterpState.State.global_fun) -> gf.cid)
+         global_funs
+      in
+      let constructor_cids = List.map fst constructors in
+      fun_cids @ constructor_cids)
+   (List.map LibraryInterface.sigty_to_tup Builtins.builtin_modules)
+|> List.flatten
+;;
+      
+let is_tuple ty =
+   match ty.raw_ty with
+   | TTuple _ -> true
+   | _ -> false
+ ;;
+ 
+let stupleassign_wrapper = 
+   object 
+      inherit [_] s_map as super
+      method! visit_statement _ s = 
+         match s.s with
+         | SAssign (id, { e = ECall(cid, args, u); ety; espan}) 
+         when ((List.mem cid builtin_cids) && not (ety |> is_tuple)) ->
+            (* let args_pre_stmt, args' = eliminate_exps args in *)
+            (* let exp' = { e = ECall (cid, args', u); ety; espan } in *)
+            let stupleassign = statement@@STupleAssign { ids = [Cid.to_id id]; tys = None; exp = { e = ECall(cid, args, u); ety; espan} } in
+            stupleassign
+         | SLocal (id, ty, exp) 
+         when ((List.mem (Cid.id id) builtin_cids) && not (ty |> is_tuple)) ->
+            let stupleassign = statement@@STupleAssign { ids = [id]; tys = Some([ty]); exp } in
+            stupleassign
+         (* sseq args_pre_stmt stupleassign *)
+         | _ -> super#visit_statement () s
+   end
+;;
+   
+
 let process_prog ds = 
-   v#visit_decls () ds
+   tbuiltin_transformer#visit_decls () ds |>
+   stupleassign_wrapper#visit_decls ()
 ;;
