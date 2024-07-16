@@ -83,15 +83,15 @@ let stupleassign_wrapper =
       inherit [_] s_map as super
       method! visit_statement _ s = 
          match s.s with
-         | SAssign (id, { e = ECall(cid, args, u); ety; espan}) 
-         when ((List.mem cid builtin_cids) && not (ety |> is_tuple)) ->
+         | SAssign (id, { e = ECall(fcncid, args, u); ety; espan}) 
+         when ((List.mem fcncid builtin_cids) && not (ety |> is_tuple)) ->
             (* let args_pre_stmt, args' = eliminate_exps args in *)
             (* let exp' = { e = ECall (cid, args', u); ety; espan } in *)
-            let stupleassign = statement@@STupleAssign { ids = [Cid.to_id id]; tys = None; exp = { e = ECall(cid, args, u); ety; espan} } in
+            let stupleassign = statement@@STupleAssign { ids = [Cid.to_id id]; tys = None; exp = { e = ECall(fcncid, args, u); ety; espan} } in
             stupleassign
-         | SLocal (id, ty, exp) 
-         when ((List.mem (Cid.id id) builtin_cids) && not (ty |> is_tuple)) ->
-            let stupleassign = statement@@STupleAssign { ids = [id]; tys = Some([ty]); exp } in
+         | SLocal (id, ty, { e = ECall(fcncid, args, u); ety; espan}) 
+         when ((List.mem fcncid builtin_cids) && not (ety |> is_tuple)) ->
+            let stupleassign = statement@@STupleAssign { ids = [id]; tys = Some([ty]); exp={ e = ECall(fcncid, args, u); ety; espan} } in
             stupleassign
          (* sseq args_pre_stmt stupleassign *)
          | _ -> super#visit_statement () s
