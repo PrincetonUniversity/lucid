@@ -39,7 +39,7 @@ The most important part of an interpreter specification file is the list of inpu
 
 #### Usage
 
-Finally, to run the program, make sure that you have docker and the lucid-docker image installed, then run `make interp`.
+Finally, run the program with `make interp`. Or, if you're using docker, `make interp_docker`
 
 **Expected output**
 
@@ -106,14 +106,10 @@ Switch 0 : {
 
 **reading the intepreter output**
 
-The first few lines from `make interp` are output from the lucid.sh script, where it is generating the docker command to run. e.g., up to: 
-``
-running command: docker run --rm -it  --mount type=bind,source=/Users/jsonch/Desktop/gits/lucid/tutorials/interp/01monitor/monitor.dpt,target=/app/inputs/monitor.dpt --mount type=bind,source=/Users/jsonch/Desktop/gits/lucid/tutorials/interp/01monitor/monitor.json,target=/app/inputs/monitor.json jsonch/lucid:lucid /bin/sh -c "./dpt /app/inputs/monitor.dpt --spec /app/inputs/monitor.json"
-``
-
-Next, the lines prefixed with `dpt:` are messages from the lucid compiler frontend as it type checks and transforms the program into a simpler form that the interpreter can run. If your program has an error, typically the interpreter will print an error message and halt at some point in between these messages.  
+The lines prefixed with `dpt:` are messages from the lucid compiler frontend as it type checks and transforms the program into a simpler form that the interpreter can run. If your program has an error, typically the interpreter will print an error message and halt at some point in between these messages.  
 
 Finally, after the `dpt: Simulating...` line, we see the output of the lucid simulator. The simulator's output has two components: 
+
 1. a trace summarizing the events that were handled at each switch in the simulation, interleaved with any "printf" statements that executed in the program. In this example, the trace is: 
 ```
 t=0: Handling packet event eth_ip(11,22,2048,1,2,128) at switch 0, port 0

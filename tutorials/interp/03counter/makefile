@@ -18,19 +18,20 @@ endif
 
 .PHONY: interp interp_local build_p4 clean dptc force current_makefile
 
-# run the lucid interpreter on SRC, using the dockerized lucid.sh script.
-interp:
-	@$(LUCID_SH) interp $(SRC)
 
 # run the lucid interpreter on SRC, using the local build 
 # of the lucid interpreter (which is named dpt)
-interp_local:
+interp:
 	@if [ "$(DPT)" = "-" ]; then \
 		echo "local dpt not found. falling back to docker"; \
 		$(LUCID_SH) interp $(SRC); \
 	else \
 		$(DPT) $(SRC); \
 	fi
+
+# run the lucid interpreter on SRC, using the dockerized lucid.sh script.
+interp_docker:
+	@$(LUCID_SH) interp $(SRC)
 
 # everything below is related to compiling 
 # lucid to P4-tofino. Ignore if you are only  
