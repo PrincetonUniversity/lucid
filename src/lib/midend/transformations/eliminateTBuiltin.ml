@@ -58,6 +58,8 @@ let tbuiltin_transformer =
 
 
 
+(* we don't want _ALL_ the builtin cids, just the ones that 
+   need to be wrapped in a tupleassign, i.e., Tables *)
 let builtin_cids = 
 List.map
    (fun (_, _, global_funs, constructors) ->
@@ -68,7 +70,7 @@ List.map
       in
       let constructor_cids = List.map fst constructors in
       fun_cids @ constructor_cids)
-   (List.map LibraryInterface.sigty_to_tup Builtins.builtin_modules)
+   (List.map LibraryInterface.sigty_to_tup [Tables.signature])
 |> List.flatten
 ;;
       
