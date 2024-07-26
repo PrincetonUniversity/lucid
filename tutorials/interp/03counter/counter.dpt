@@ -21,32 +21,19 @@ event get_report(int src, int dst); // get_report is sent by the monitoring serv
 event report(int src, int dst, int<32> count) {skip;} // report is sent back to the monitoring server.
 
 /**** Indexing table -- map a flow to an integer index ****/
-action_constr mk_flow_idx(int idx) = {
-	return action int flow_idx () {
-		return idx;
-	};
-};
-
-
-table_type indexing_table_t = {
-	key_type: (int, int)
-	arg_type: ()
-	ret_type: int
+action int mk_flow_idx(int idx)() {
+	return idx;
 }
 
-global indexing_table_t idx_tbl = 
-	table_create<indexing_table_t>(
-		(mk_flow_idx), 
-		1024, 
-		mk_flow_idx(0)
-	);
+type key_t = {
+	int s;
+	int d;
+}
 
+global Table.t<<key_t, int, (), int>> idx_tbl = Table.create(1024, [mk_flow_idx], mk_flow_idx, 0);
 
 fun int get_idx_exact(int src, int dst) {
-	return table_match(
-		idx_tbl, 
-		(src, dst), 
-		());
+	return Table.lookup(idx_tbl, {s=src; d=dst}, ());
 }
 
 /**** the flow counter array ****/

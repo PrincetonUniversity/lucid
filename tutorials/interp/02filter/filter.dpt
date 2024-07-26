@@ -23,30 +23,32 @@ event report(int src, int dst, int<16> len) {skip;}
 /********** Tables *********/
 // When you call a table, it will 
 // execute a pre-installed action. 
-// Action constructors are used to 
-// build those actions. 
-action_constr mk_result(bool b) = {
-	return action bool acn () {
-		return b;
-	};
-};
-
-// Tables have types. A table's type 
-// specifies the size of its keys, 
-// the types of the arguments to actions
-// and the type of the action's return value. 
-table_type filter_table_t = {
-	key_type: (int, int)
-	arg_type: ()
-	ret_type: bool
+// Actions have two sets of parameters. 
+// The first set of parameters are bound 
+// when the action is installed into the table; 
+// the second set of parameters is bound 
+// when the action is called by Table.lookup.
+action bool mk_result(bool b)() {
+	return b;
 }
 
-global filter_table_t filter_table = 
-	table_create<filter_table_t>(
-		(mk_result), 
-		1024, 
-		mk_result(false)
-	);
+
+type key_t = {
+	int s;
+	int d;
+}
+
+/* 
+	Table.t's type args (inside the << >>): 
+		1. key type
+		2. action install-time argument type
+		3. action run-time argument type
+		4. action return type
+
+	Table.create(num_entries, possible_actions (list), default_action, default_action_installtime_arg);
+*/
+global Table.t<<key_t, bool, (), bool>> filter_table = Table.create(1024, [mk_result], mk_result, false);
+
 
 
 /********** Filtering functions *********/
@@ -74,10 +76,12 @@ fun bool filter_with_match(ip_t ip) {
 
 
 fun bool filter_with_table(ip_t ip) {
-	bool r = table_match(
+	/* Table.lookup(table, key, action_runtime_arg); */
+	bool r = Table.lookup(
 		filter_table, 
-		(ip#src, ip#dst), 
-		());
+		{s=ip#src; d=ip#dst},
+		() // () just means there is no runtime argument
+		);
 	return r;
 }
 
