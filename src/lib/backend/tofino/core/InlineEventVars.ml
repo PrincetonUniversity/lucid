@@ -569,29 +569,9 @@ let rec inline_decls ctx decls =
     d::(inline_decls ctx ds)
 ;;
 
-(* this checker determines whether there are any event variables to inline. 
-   If there are not, we can skip this pass. *)
-let has_event_vars ds = 
-  let found = ref false in
-  let v = object
-      inherit [_] s_iter as super
-      method! visit_exp ctx exp = 
-        match exp.e, exp.ety.raw_ty with 
-        | EVar(_), TEvent -> found := true
-        | _ -> super#visit_exp ctx exp
-    end
-  in
-  v#visit_decls () ds;
-  !found
-;;
-
 let inline tds = 
   (* inline_locations tds |> eliminate_this |> inline_event_vars ;; *)
-  let res = inline_locations tds |> eliminate_this in 
-  let res = if not (has_event_vars res) 
-    then res
-    else inline_decls empty_ctx res 
-  in
+  let res = inline_locations tds |> eliminate_this |> (inline_decls empty_ctx) in
   (* print_endline ("after inline event variables");
   print_endline (CorePrinting.decls_to_string res);
   exit 1; *)

@@ -597,20 +597,20 @@ let append_and_new seqs e =
   | seq :: seqs -> (seq @ [e]) :: append_to_all seqs e
 ;;
 (* find all paths of statements that match the filter_map  *)
-let rec find_statement_paths_not_tail_recursive paths_so_far stmt_filter stmt =
+let rec find_statement_paths paths_so_far stmt_filter stmt =
   match stmt.s with
   | SSeq (s1, s2) ->
     (* find all the statement paths through s1, then for each of those paths 
        find all the paths including s2 *)
-    let paths_including_s1 = find_statement_paths_not_tail_recursive paths_so_far stmt_filter s1 in    
-    let paths_including_s2 = find_statement_paths_not_tail_recursive paths_including_s1 stmt_filter s2 in
+    let paths_including_s1 = find_statement_paths paths_so_far stmt_filter s1 in    
+    let paths_including_s2 = find_statement_paths paths_including_s1 stmt_filter s2 in
     (* printres "seq" res; *)
     paths_including_s2
   | SIf (_, s1, s2) ->
     (* a branch with no inner paths creates a path *)
-    let s1_paths = find_statement_paths_not_tail_recursive paths_so_far stmt_filter s1 in
+    let s1_paths = find_statement_paths paths_so_far stmt_filter s1 in
     let s1_paths = if (s1_paths = []) then [[]] else s1_paths in
-    let s2_paths = find_statement_paths_not_tail_recursive paths_so_far stmt_filter s2 in
+    let s2_paths = find_statement_paths paths_so_far stmt_filter s2 in
     let s2_paths = if (s2_paths = []) then [[]] else s2_paths in
 
 
@@ -654,7 +654,7 @@ let rec find_statement_paths_not_tail_recursive paths_so_far stmt_filter stmt =
     let res =
       List.fold_left
         (fun seqs (_, bstmt) ->
-          let bstmt_paths = find_statement_paths_not_tail_recursive paths_so_far stmt_filter bstmt in
+          let bstmt_paths = find_statement_paths paths_so_far stmt_filter bstmt in
           let bstmt_paths = if (bstmt_paths = []) then [[]] else bstmt_paths in
           seqs @ bstmt_paths)
         []
@@ -667,39 +667,6 @@ let rec find_statement_paths_not_tail_recursive paths_so_far stmt_filter stmt =
      | Some r -> append_and_new paths_so_far r
      | None -> paths_so_far)
 ;;          
-
-let find_statement_paths _ (stmt_filter : statement -> 'a option) stmt : ('a list list) =
-  let rec helper stmt k = match stmt.s with
-    | SSeq (s1, s2) ->
-      helper 
-        s1 
-        (fun paths_s1 ->
-          helper s2 
-            (fun paths_s2 ->
-              k 
-              (paths_s1 @ paths_s2)))
-    | SIf (_, s1, s2) ->
-      helper s1 (fun paths_s1 ->
-        helper s2 (fun paths_s2 ->
-          let paths_s1 = if paths_s1 = [] then [[]] else paths_s1 in
-          let paths_s2 = if paths_s2 = [] then [[]] else paths_s2 in
-          k (paths_s1 @ paths_s2)))
-    | SMatch (_, ps) ->
-      let fold_fun acc (_, bstmt) =
-        helper bstmt (fun bstmt_paths ->
-          let bstmt_paths = if bstmt_paths = [] then [[]] else bstmt_paths in
-          k (acc @ bstmt_paths))
-      in
-      List.fold_left fold_fun [] ps
-    | _ ->
-      (match stmt_filter stmt with
-       | Some r -> k (append_and_new [] r)
-       | None -> k [])
-  in
-  helper stmt (fun x -> x)
-;;
-
-
 
 
 (* find all paths of statements that match stmt_filter and 

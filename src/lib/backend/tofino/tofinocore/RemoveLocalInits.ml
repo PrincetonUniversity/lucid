@@ -98,14 +98,14 @@ let vars_in_exp exp : cid list =
     inherit [_] s_iter as super
     method vars = Hashtbl.create 128;
     method! visit_EVar _ cid =
-      Hashtbl.replace (self#vars) cid true
+      Hashtbl.add (self#vars) cid true
     end
   in
   vars_read#visit_exp () exp;
   Hashtbl.to_seq_keys vars_read#vars |> List.of_seq
 ;;
 
-let update_symbols (symbols : (cid,var_status) Hashtbl.t) exp = 
+let update_symbols symbols exp = 
   List.iter
     (fun cid -> 
       match (find_opt symbols cid) with
@@ -113,7 +113,7 @@ let update_symbols (symbols : (cid,var_status) Hashtbl.t) exp =
         (* a variable is used after it is declared, 
            without an intermediate assignment. It is not 
            removable. *)
-          Hashtbl.replace symbols cid Read
+          add symbols cid Read
       | _ -> ()
         (* used without a declaration. 
            This can happen, e.g., params. 
@@ -121,7 +121,6 @@ let update_symbols (symbols : (cid,var_status) Hashtbl.t) exp =
     )
   (vars_in_exp exp)
 ;;
-
 
 (* find the variables that can be preallocated *)
 let find_vars_to_prealloc stmt = 
@@ -137,13 +136,14 @@ let find_vars_to_prealloc stmt =
         (* post-visit locals (so we hit exp first) *)
         super#visit_SLocal symbols id ty exp;
         (* now, update the symbols table for the newly declared var *)
-        Hashtbl.replace symbols (Cid.id id) Declared;
+        add symbols (Cid.id id) Declared;
+
       method! visit_SAssign symbols cid exp =
         super#visit_SAssign symbols cid exp;
         match (find_opt symbols (cid)) with
         | Some(Declared) -> 
           (* was declared, now is declared and assigned *)
-          Hashtbl.replace symbols (cid) Assigned;
+          add symbols (cid) Assigned;
         | _ -> ()
 
       (* we need to handle branches, ensuring to update the symbols table at the end *)
@@ -160,8 +160,8 @@ let find_vars_to_prealloc stmt =
         let ss1 = ht_to_list symbols1 in
         let ss2 = ht_to_list symbols2 in
         let ss = ht_to_list symbols in
-        let ss = merge_symbols ss [ss1; ss2] in        
-        Hashtbl.replace_seq symbols (List.to_seq ss)
+        let ss = merge_symbols ss [ss1; ss2] in
+        Hashtbl.add_seq symbols (List.to_seq ss)
       method! visit_SMatch symbols exps branches =
         List.iter (super#visit_exp symbols) exps;
         let bstmts = List.split branches |> snd in
@@ -176,7 +176,7 @@ let find_vars_to_prealloc stmt =
         in
         let ss = ht_to_list symbols in
         let ss = merge_symbols ss bstmt_ss in
-        Hashtbl.replace_seq symbols (List.to_seq ss)
+        Hashtbl.add_seq symbols (List.to_seq ss)
     end
   in
   (* traverse the program to build up the symbols table *)

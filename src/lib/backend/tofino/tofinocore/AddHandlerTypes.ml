@@ -95,7 +95,7 @@ let typed_generate_seqs (hdl_body:statement) : (id * gen_type) list list =
 ;;
 
 (* find the generates in a statement *)
-(* let rec find_generates  (stmt : statement) : (gen_type * exp) list =
+let rec find_generates (stmt : statement) : (gen_type * exp) list =
   match stmt.s with
   | SNoop | SUnit _ | SLocal _ | SAssign _ | SPrintf _ | SRet _ ->
       []
@@ -109,38 +109,7 @@ let typed_generate_seqs (hdl_body:statement) : (id * gen_type) list list =
       find_generates stmt1 @ find_generates stmt2
   | SMatch (_, branch_list) ->
       List.concat (List.map (fun (_, stmt) -> find_generates stmt) branch_list)
-;; *)
-
-let extract_generate acc stmt = 
-  match stmt.s with 
-    | SGen (gen_type, exp) -> (gen_type, exp)::acc
-    | _ -> acc
-
-let find_generates stmt = 
-  List.fold_left extract_generate
-  []
-  (flatten_stmt stmt)
-  |> List.rev
-
-
-(* 
-let rec find_generates_aux stmt acc =
-  match stmt.s with
-  | SNoop | SUnit _ | SLocal _ | SAssign _ | SPrintf _ | SRet _ ->
-      acc
-  | STupleAssign _ ->
-      acc
-  | SIf (_, then_stmt, else_stmt) ->
-      find_generates_aux then_stmt (find_generates_aux else_stmt acc)
-  | SGen (gen_type, exp) ->
-      (gen_type, exp) :: acc
-  | SSeq (stmt1, stmt2) ->
-      find_generates_aux stmt1 (find_generates_aux stmt2 acc)
-  | SMatch (_, branch_list) ->
-      List.fold_left (fun acc (_, stmt) -> find_generates_aux stmt acc) acc branch_list
-
-let find_generates stmt =
-  List.rev (find_generates_aux stmt []) *)
+;;
 
 
 (* derive the output event for this handler based on the generate statements *)
