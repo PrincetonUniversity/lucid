@@ -597,6 +597,7 @@ let append_and_new seqs e =
   | seq :: seqs -> (seq @ [e]) :: append_to_all seqs e
 ;;
 (* find all paths of statements that match the filter_map  *)
+
 let rec find_statement_paths paths_so_far stmt_filter stmt =
   match stmt.s with
   | SSeq (s1, s2) ->
@@ -645,6 +646,7 @@ let rec find_statement_paths paths_so_far stmt_filter stmt =
 
 
     let res = s1_paths @ s2_paths in
+    let res = List.sort_uniq compare res in
     (* let res =
       find_statement_paths paths_so_far stmt_filter s1
       @ find_statement_paths paths_so_far stmt_filter s2
@@ -661,6 +663,8 @@ let rec find_statement_paths paths_so_far stmt_filter stmt =
         ps
     in
     res
+  (* just skip noops *)
+  | SNoop -> paths_so_far
   | _ ->
     (* base case: append this statement to all paths so far *)
     (match stmt_filter stmt with

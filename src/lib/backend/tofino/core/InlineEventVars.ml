@@ -318,6 +318,7 @@ let evconstr_of_exp ctx exp =
 
 let rec merge_contexts ctx1 ctx2 = 
   let event_constrs = ctx1.event_constrs @ ctx2.event_constrs in
+  let event_constrs = List.sort_uniq compare event_constrs in
   let event_vars = List.fold_left
     (fun event_vars (cid, constrs) -> 
       match List.assoc_opt cid event_vars with 
