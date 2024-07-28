@@ -65,7 +65,7 @@ let check_e memvars localvars allowed_op exp =
 ;;
 
 let allowed_bool_op = function
-  | Eq | Neq | Less | More | And | Or | Not -> true
+  | Eq | Neq | Less | More | And | Or | Not | Geq | Leq -> true
   | _ -> false
 ;;
 
