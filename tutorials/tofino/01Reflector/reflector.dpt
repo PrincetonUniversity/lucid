@@ -1,0 +1,16 @@
+
+// This is a simple reflector that sends back the packet it receives.
+// - "this" refers to the event being handled. 
+// - The event is a "packet" event, which means that it is parsed directly from 
+//   the packet. 
+// - If a lucid program contains exactly 1 packet event with 
+//   parameters that match the header format of an ethernet packet, 
+//   the lucid compiler will automatically generate a parser that maps 
+//   the packet to the event.
+// - The program may also contain an arbitrary number of other events,
+//   which will be parsed / serialized by wrapping them in an ethernet 
+//   packet with the special "lucid ethertype", followed by an event 
+//   id tag and then the event's arguments. 
+packet event eth_pkt(int<48> dmac, int<48> smac, int<16> ety, Payload.t pl) {
+    generate_port(ingress_port, this);
+}

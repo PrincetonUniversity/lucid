@@ -1,0 +1,12 @@
+global-options: {}
+features:
+  drivers:
+    bfrt: true
+    bfrt-generic-flags: true
+    grpc: true
+    p4rt: true
+    pi: true
+    thrift-driver: true
+architectures:
+  - tofino
+  - tofino2

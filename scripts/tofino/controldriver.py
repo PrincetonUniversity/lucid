@@ -28,6 +28,7 @@ DEBUG=False
 # 3/21/23: table_install and table_get functions in Controller
 # 4/26/23: added pktgen support, boolean fields
 # 6/27/24: fixed array get index bug
+# 7/29/24: fiexd bug when constructing a ternary key from a singleton value
 
 # helper for globals.json: given a node from globals.json, resolve 
 # name of a lucid global to a P4 object
@@ -387,6 +388,8 @@ class BfRtTable:
               value, mask = 0, ((1<<field_info["size"]) - 1)
               if (type(field_val) == tuple):
                 value, mask = field_val
+              elif (type(field_val) == int):
+                value = field_val
               dprint ("ternary key column: (value:%s, mask%s)"%(value, mask))
               value = c_ulonglong(value)
               mask = c_ulonglong(mask)

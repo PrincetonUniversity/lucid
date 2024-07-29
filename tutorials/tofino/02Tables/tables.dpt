@@ -1,0 +1,26 @@
+// This is a simple application that uses a table to 
+// route packets based on their ingress port.
+
+
+action int<16> out_port(int<16> p)() {
+    return p;
+}
+
+// A table that matches 16-bit ints and executes actions with 
+// a 16-bit install-time parameter, no runtime parameters, and
+// a 16-bit return value.
+// The table has 1024 entries, can use the "out_port" action,
+// and runs the default action out_port(0) if no match is found.
+// BUG NOTE: the lucid parser currently breaks if you remove the space
+// between int<16> and the ">>" that follows it in the line below.
+global Table.t<<int<16>, int<16>, (), int<16> >> wire_tbl = Table.create(1024, [out_port], out_port, 129);
+
+
+packet event eth_pkt(int<48> dmac, int<48> smac, int<16> ety, Payload.t pl) {
+    // we cast to / from int<9> because tofino port ids are 9-bits, 
+    // but we'd rather use 16-bit ints in the table for portability.
+    int<16> out_port = Table.lookup(wire_tbl, (int<16>)ingress_port, ());
+    if (out_port != 0) {
+        generate_port((int<9>)out_port, this);
+    }
+}

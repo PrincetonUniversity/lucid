@@ -41,9 +41,17 @@ DPTC := $(shell $(FIND_DPTC) || echo "echo 'dptc not found'; exit 1" | sh)
 
 DPT_BUILD_DIR := build
 
+# build the lucid program to a P4 program
 build:
 	$(DPTC) $(SRC) -o $(DPT_BUILD_DIR)
 
+# assemble the P4 program to the tofino
+assemble:
+	cd $(DPT_BUILD_DIR) && $(MAKE) build
+
+# run the P4 program in the tofino simulator
+sim:
+	cd $(DPT_BUILD_DIR) && $(MAKE) sim
 
 # P4_OUTPUT is the lucid-generate p4 program. 
 # P4_OUTPUT := $(DPT_BUILD_DIR)/lucid.p4
