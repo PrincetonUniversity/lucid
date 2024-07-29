@@ -95,6 +95,8 @@ def lucid_ctl(c, globals_dict):
   c.table_install(tbl_p4_name, key, action_p4_name, action_arg)
 ```
 
+**note: to install a rule with a masked key, pass a tuple in for the field instead of a single value. For example, `key = [(128, 0xff), 1]` would match on only the first 8 bits of the first field.**
+
 To run this control function, use the `patch_lucidpy.sh` script as before: 
 ```
 ./patch_lucidpy.sh tables.lucidctl.py ./build/lucid.py
