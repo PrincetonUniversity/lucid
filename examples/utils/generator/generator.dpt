@@ -3,7 +3,7 @@
 
 // command events from controller
 // start generating a flow of ct ethernet packets
-event start_flow@1(int<16> port, int<16> ct, int<48> dst, int<48> src, int<16> ety, Payload.t pl);
+event start_flow@1(int<16> port, int<32> ct, int<48> dst, int<48> src, int<16> ety, Payload.t pl);
 // ask for a report about flow stats, id is query id
 event send_report@3(int<16> port, int id);
 // the report back to the controller
@@ -12,7 +12,7 @@ event report@2(int<16> port, int id, int txct, int rxct, int txstart, int txend,
 // ethernet packet to / from the server
 packet event eth(int<48> dst, int<48> src, int<16> ety, Payload.t pl);
 // recirculating packet generation event
-event send_pkt@11(int<16> port, int<16> ct, int<48> dst, int<48> src, int<16> ety, Payload.t pl);
+event send_pkt@11(int<16> port, int<32> ct, int<48> dst, int<48> src, int<16> ety, Payload.t pl);
 
 /**** program state ****/
 // time is in units of 2^16 nanoseconds, or 64 microseconds.
@@ -40,7 +40,7 @@ memop incr_16(int<16> m, int<16> c) {
 /**** functions and handlers ****/
 
 
-handle start_flow(int<16> port, int<16> ct, int<48> dst, int<48> src, int<16> ety, Payload.t pl) {
+handle start_flow(int<16> port, int<32> ct, int<48> dst, int<48> src, int<16> ety, Payload.t pl) {
     Array.set(txct, port, 0);
     Array.set(tx_start, port, 0);
     Array.set(tx_end, port, 0);
@@ -51,8 +51,7 @@ handle start_flow(int<16> port, int<16> ct, int<48> dst, int<48> src, int<16> et
 
 }
 
-
-handle send_pkt(int<16> port, int<16> ct, int<48> dst, int<48> src, int<16> ety, Payload.t pl) {
+handle send_pkt(int<16> port, int<32> ct, int<48> dst, int<48> src, int<16> ety, Payload.t pl) {
     int<16> port_cpy = hash<16>(0, port);
     int tx_ct = Array.update(txct, port, incr, 1, incr, 1);
     if (tx_ct == 1) {

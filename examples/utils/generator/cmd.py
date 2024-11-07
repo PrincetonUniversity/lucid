@@ -51,7 +51,7 @@ def handle_report(raw_ev):
     
 def send_pkt(port, ct, src="00:11:22:33:44:55", dst="01:01:01:01:01:01", et="08:00", data="bb:aa:dd:aa:ff"):
     print("generating command to send %s packets" % ct)
-    ct_bytes = unbbytes(ct.to_bytes(2, byteorder='big'))
+    ct_bytes = unbbytes(ct.to_bytes(4, byteorder='big'))
     port_bytes = unbbytes(port.to_bytes(2, byteorder='big'))
     # send packet is event number 1
     return (evnums["send_pkt"], [port_bytes, ct_bytes, dst, src, et, data])
