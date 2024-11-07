@@ -33,10 +33,8 @@ def update_paths_in_config(config_path):
     update_paths(config)
 
     # Write the updated configuration back to the file
-    # (pretty print for debugging on console)
-    print(f"new config: {json.dumps(config, indent=4)}")
-    # with open(config_path, 'w') as f:
-    #     json.dump(config, f, indent=4)
+    with open(config_path, 'w') as f:
+        json.dump(config, f, indent=4)
 
 if __name__ == "__main__":
     if len(sys.argv) != 2:

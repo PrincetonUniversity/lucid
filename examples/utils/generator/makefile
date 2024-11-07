@@ -19,6 +19,14 @@ start:
 stop: 
 	sudo killall bf_switchd
 
+package:
+	# package build dir
+	zip -r $(BUILD_DIR).zip $(BUILD_DIR)
+
+unpackage:
+	# unzip the package on the target machine
+	unzip $(BUILD_DIR).zip
+
 clean:
 	sudo rm -rf $(BUILD_DIR)
 
