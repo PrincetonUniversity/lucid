@@ -26,6 +26,8 @@ package:
 unpackage:
 	# unzip the package on the target machine
 	unzip $(BUILD_DIR).zip
+	# update the conf file paths
+	./$(BUILD_DIR)/libs/updateconfpaths.py $(BUILD_DIR)/lucid_tofino/lucid.conf
 
 clean:
 	sudo rm -rf $(BUILD_DIR)
