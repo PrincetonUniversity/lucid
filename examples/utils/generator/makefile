@@ -20,6 +20,7 @@ stop:
 clean:
 	sudo rm -rf $(BUILD_DIR)
 
-
+reflector: reflector.cpp
+	g++ reflector.cpp -o reflector -lpcap -std=c++11
 
 .PHONY: $(BUILD_DIR) assemble sim clean start stop
