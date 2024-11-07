@@ -9,9 +9,9 @@ from threading import Thread
 
 # the interface of the 
 # dataplane from the management cpu
-iface = "ens1"
+iface = "ens1" # use for real tofino bf100 32x
 # iface = "enp5s0"
-
+iface = "veth257" # use for debugging in sim
 
 # event defs
 # (this should line up with event numbers in lucid program)
@@ -33,7 +33,6 @@ def rawtime_pps(start, end, pktct):
     else:
         return None
     
-
 def handle_report(raw_ev):
     port, reqid, txct, rxct, tx_start, tx_end, rx_start, rx_end = struct.unpack('!HIIIIIII', raw_ev[:30])
     tx_dur_us = rawtime_to_us(tx_end) - rawtime_to_us(tx_start)
