@@ -210,6 +210,16 @@ let rec try_unify_effect span eff1 eff2 =
         eff
     | FZero, FZero -> ()
     | FSucc eff1, FSucc eff2 | FProj eff1, FProj eff2 -> try_unify eff1 eff2
+    (* unwrap a projection of a variable, because projection itself does not change effect *)
+    (* note: this has to come after the base FProj case. *)
+    | FProj(FVar(tqv)), eff | eff, FProj(FVar(tqv)) -> 
+      try_unify_tqvar
+        (occurs_effect span)
+        try_unify
+        FTQVar.phys_equiv_tqvar
+        tqv
+        eff
+
     | FIndex (id1, eff1), FIndex (id2, eff2) ->
       if not (Id.equal id1 id2) then raise CannotUnify else try_unify eff1 eff2
     | (FZero | FSucc _ | FProj _ | FIndex _), _ -> raise CannotUnify)

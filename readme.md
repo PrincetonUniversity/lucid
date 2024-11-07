@@ -13,21 +13,16 @@ There are 3 implementations of Lucid:
 3. A DPDK-C compiler. This backend produces a C program that uses DPDK for packet IO. It is a work in progress and currently single threaded. 
 
 ## Installation
-
-The easiest way to run Lucid is with the pre-built binaries in the `release` directory. 
-This should work for recent macos and ubuntu/debian systems.
+The best way to run Lucid is to compile from source. 
+Its main dependencies are ocaml and z3. On macos or linux, you should be able to do: 
 ```
-git clone https://github.com/PrincetonUniversity/lucid/
-cd lucid
-./release/unpack.sh
-./release/dpt.sh -h
+./install_dependencies.sh
+make
 ```
-
-Note: there is only a pre-built binary for the Interpreter at this time.
+to build the Lucid interpreter (`dpt`) and tofino compiler (`dptc`).
 
 ### Docker
-
-There is also a docker image that can run the Lucid interpreter and Tofino compiler. 
+There is also a fairly lightweight docker image that can run the Lucid interpreter and Tofino compiler. 
 
 **1. Install docker**
   - if you are on a laptop/desktop, just install the docker desktop app: [docker desktop](https://www.docker.com/products/docker-desktop/)
@@ -46,15 +41,18 @@ This will download about 400MB of data and should take < 5 minutes.
 
 Once finished, you can run `./docker_lucid.sh interpret` to run the interpreter or `./docker_lucid.sh compile` to run the Tofino compiler. The `docker_lucid` script takes care of forwarding all arguments, files, and directories to / from the docker image.
 
-### Building from source
+### Pre-built binaries
 
-Finally, you can also build Lucid from source. Its main dependencies are ocaml and z3. 
-On macos or linux, you should be able to do: 
+Finally, there are also pre-built binaries in the `release` directory. 
+This should work for recent macos and ubuntu/debian systems. 
+Caveats: macos will fuss about code signing; the binaries are not updated as often as the docker image; there is only a pre-built binary for the Interpreter at this time.
+
 ```
-./install_dependencies.sh
-make
+git clone https://github.com/PrincetonUniversity/lucid/
+cd lucid
+./release/unpack.sh
+./release/dpt.sh -h
 ```
-to build the Lucid interpreter (`dpt`) and tofino compiler (`dptc`).
 
 ### Syntax highlighting
 There is a VSCode syntax highlighter for Lucid here: ([https://github.com/benherber/Lucid-DPT-VSCode-Extension](https://github.com/benherber/Lucid-DPT-VSCode-Extension))
