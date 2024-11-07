@@ -35,11 +35,6 @@ def rawtime_pps(start, end, pktct):
     
 def handle_report(raw_ev):
     port, reqid, txct, rxct, tx_start, tx_end, rx_start, rx_end = struct.unpack('!HIIIIIII', raw_ev[:30])
-    print(binascii.hexlify(raw_ev[:30]))
-    print(binascii.hexlify(raw_ev[0:2]))
-    print(binascii.hexlify(raw_ev[2:6]))
-    print(binascii.hexlify(raw_ev[6:10]))
-    print(struct.unpack('I', raw_ev[6:10]))
     tx_dur_us = rawtime_to_us(tx_end) - rawtime_to_us(tx_start)
     rx_dur_us = rawtime_to_us(rx_end) - rawtime_to_us(rx_start)
     rx_rate = rawtime_pps(rx_start, rx_end, rxct)
@@ -48,7 +43,6 @@ def handle_report(raw_ev):
     print("reqid = %s" % reqid)
     print("tx ct = %s rx ct = %s" % (txct, rxct))
     print("tx start = %s" % tx_start)
-    return
     print("tx dur (us) = %s rx dur (us) = %s" % (tx_dur_us, rx_dur_us))
     print("rx rate (pps) = %s tx rate (pps) = %s" % (rx_rate, tx_rate))
     if rxct > 0:

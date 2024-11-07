@@ -8,6 +8,8 @@ build:
 	sudo chown -R $$USER $(BUILD_DIR)
 	$(LDE)/dptc --port 148@40 --recirc_port 196 generator.dpt -o $(BUILD_DIR)
 
+control:
+	$(BUILD_DIR)/libs/link_control.sh ./generator_control.py $(BUILD_DIR)/lucid.py 
 assemble:
 	cd $(BUILD_DIR) && make
 sim:
