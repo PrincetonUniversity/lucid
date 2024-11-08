@@ -7,5 +7,6 @@ def lucid_ctl(c, globals_dict):
   while True:
     txct_val = c.array_get(globals_dict["txct"]["compiled_name"], idx)[0]
     rxct_val = c.array_get(globals_dict["rxct"]["compiled_name"], idx)[0]
-    print(f"port {idx} debug -- txct: {txct_val} rxct: {rxct_val}")
+    status = c.array_get(globals_dict["status"]["compiled_name"], idx)[0]
+    print(f"port {idx} debug -- status: {status} txct: {txct_val} rxct: {rxct_val}")
     time.sleep(1)

@@ -1,20 +1,34 @@
-// a packet generator
-
+// multi-flow packet generator
+// usage: 
+// 1. initialize flows for a port with init_flow
+// 2. start a trial with start
+// 3. stop a trial with stop
 
 // command events from controller
 // start generating a flow of ct ethernet packets
-event start_flow@1(int<16> port, int<32> ct, int<48> dst, int<48> src, int<16> ety, Payload.t pl);
+event init_flow@1(int<16> port, int<32> ct, int<48> dst, int<48> src, int<16> ety, Payload.t pl);
+event start@4(int<16> port); // start a trial, resetting all counters.
+event stop@5(int<16> port); // initialize stop.
 // ask for a report about flow stats, id is query id
-event send_report@3(int<16> port, int id);
+event query@3(int<16> port, int id);
 // the report back to the controller
 event report@2(int<16> port, int id, int txct, int rxct, int txstart, int txend, int rxstart, int rxend){skip;}
+
+
+
 
 // ethernet packet to / from the server
 packet event eth(int<48> dst, int<48> src, int<16> ety, Payload.t pl);
 // recirculating packet generation event
 event send_pkt@11(int<16> port, int<32> ct, int<48> dst, int<48> src, int<16> ety, Payload.t pl);
+// set status of a flow
+event set_status@12(int<16> port, int new_status);
 
 /**** program state ****/
+global Array.t<32> status = Array.create(256);
+const int WARMUP =  0;
+const int RUN = 1;
+const int STOP = 2;
 // time is in units of 2^16 nanoseconds, or 64 microseconds.
 global Array.t<32> txct = Array.create(256);
 global Array.t<32> tx_start = Array.create(256);
@@ -37,36 +51,27 @@ memop incr_16(int<16> m, int<16> c) {
     return m + c;
 }
 
-/**** functions and handlers ****/
-
-
-handle start_flow(int<16> port, int<32> ct, int<48> dst, int<48> src, int<16> ety, Payload.t pl) {
-    Array.set(txct, port, 0);
-    Array.set(tx_start, port, 0);
-    Array.set(tx_end, port, 0);
-    Array.set(rxct, port, 0);
-    Array.set(rx_start, port, 0);
-    Array.set(rx_end, port, 0);
+/*** public event handlers ***/
+// load a new flow
+handle init_flow(int<16> port, int<32> ct, int<48> dst, int<48> src, int<16> ety, Payload.t pl) {
     generate(send_pkt(port, ct, dst, src, ety, pl));
-
 }
-
-handle send_pkt(int<16> port, int<32> ct, int<48> dst, int<48> src, int<16> ety, Payload.t pl) {
-    int<16> port_cpy = hash<16>(0, port);
-    int tx_ct = Array.update(txct, port, incr, 1, incr, 1);
-    if (tx_ct == 1) {
-        Array.set(tx_start, port, Sys.time());
-    }
-    Array.set(tx_end, port, Sys.time());
-    // send packet to server
-    generate_port((int<9>)port_cpy, eth(dst, src, ety, pl));
-    // if count is not 1, generate another packet
-    if (ct != 1) {
-        generate(send_pkt(port, ct - 1, dst, src, ety, pl));
-    }
+// start a trial
+handle start(int<16> port) {
+    Array.set(txct, port, 0);
+    Array.set(rxct, port, 0);
+    generate(set_status(port, RUN));
 }
-
-handle send_report(int<16> port, int id) {
+// stop a trial
+// set status to stop, which causes all in-flight flow packets to halt recirculation.
+// generate a set_status(WARMUP), which will execute _after_ all in-flight packets have been processed, 
+// and will reset the status to WARMUP.
+handle stop(int<16> port) {
+    Array.set(status, port, STOP);
+    generate(set_status(port, WARMUP));
+}
+// report counters
+handle query(int<16> port, int id) {
     int tx = Array.get(txct, port);
     int txs = Array.get(tx_start, port);
     int txe = Array.get(tx_end, port);
@@ -76,41 +81,56 @@ handle send_report(int<16> port, int id) {
     generate_port(ingress_port, report(port, id, tx, rx, txs, txe, rxs, rxe));
 }
 
-handle eth(int<48> dst, int<48> src, int<16> ety, Payload.t pl) {
-    int<16> port = hash<16>(0, ingress_port);
-    int rx_ct = Array.update(rxct, port, incr, 1, incr, 1);
-    if (rx_ct == 1) {
-        Array.set(rx_start, port, Sys.time());
+/*** internal event handlers ***/
+handle set_status(int<16> port, int new_status) {
+    Array.set(status, port, new_status);
+}
+// 
+// state: 
+// warmup => recirculate
+// run => send packet; recirculate with count - 1
+// stop => do nothing
+handle send_pkt(int<16> port, int<32> ct, int<48> dst, int<48> src, int<16> ety, Payload.t pl) {
+    int<16> port_cpy = hash<16>(0, port);
+    int flow_status = Array.get(status, port_cpy);
+    if (flow_status == RUN) {
+        // send packet to server
+        int tx_ct = Array.update(txct, port, incr, 1, incr, 1);
+        if (tx_ct == 1) {
+            Array.set(tx_start, port, Sys.time());
+        }
+        Array.set(tx_end, port, Sys.time());
+        generate_port((int<9>)port_cpy, eth(dst, src, ety, pl));
     }
-    Array.set(rx_end, port, Sys.time());
+    // if count is not 1, generate another packet
+    if (ct != 1) {
+        // only decrement count if we are in RUN state
+        int new_ct = 0; 
+        if (flow_status == RUN) {
+            new_ct = ct - 1;
+        } else {
+            new_ct = ct;
+        }
+        // stop state means we don't generate more packets
+        if (flow_status != STOP) {
+            generate(send_pkt(port, new_ct, dst, src, ety, pl));
+        }
+    } else {
+        // when one flow stops, stop everything
+        generate(stop(port));
+    }
 }
 
-
-
-// const int<9> server_port = 148;
-// // infinite flow events
-// event start_flow@5(int<8> flow_id, int<32> max_pkts, int<48>dst, int<48> src, int<16> ety, Payload.t pl);
-// event stop_flow@6(int<8> flow_id);
-// event continue_flow@4(int<8> flow_id, int<32> max_ct, int<48> dst, int<48> src, int<16> ety, Payload.t pl);
-
-// global Array.t<8> flow_status = Array.create(256);
-
-// handle continue_flow(int<8> flow_id, int<32> max_ct, int<48> dst, int<48> src, int<16> ety, Payload.t pl) {
-//     Array.setm(txct, 0, incr, 1);
-//     generate_port(server_port, eth(dst, src, ety, pl));
-//     if (Array.get(flow_status, flow_id) == 1) {
-//         if (max_ct != 0) {
-//             generate(continue_flow(flow_id, max_ct - 1, dst, src, ety, pl));
-//         }
-//     }
-// }
-
-// handle start_flow(int<8> flow_id, int<32> max_pkts, int<48>dst, int<48> src, int<16> ety, Payload.t pl) {
-//     Array.set(flow_status, flow_id, 1);
-//     generate(continue_flow(flow_id, max_pkts, dst, src, ety, pl));
-// }
-
-// handle stop_flow(int<8> flow_id) {
-//     Array.set(flow_status, flow_id, 0);
-// }
-
+// count received packets (if in run mode)
+handle eth(int<48> dst, int<48> src, int<16> ety, Payload.t pl) {
+    int<16> port = hash<16>(0, ingress_port);
+    int flow_status = Array.get(status, port);
+    // only count packets if we are in RUN state
+    if (flow_status == RUN) {
+        int rx_ct = Array.update(rxct, port, incr, 1, incr, 1);
+        if (rx_ct == 1) {
+            Array.set(rx_start, port, Sys.time());
+        }
+        Array.set(rx_end, port, Sys.time());
+    }
+}
