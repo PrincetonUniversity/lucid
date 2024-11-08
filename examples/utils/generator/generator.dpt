@@ -85,6 +85,8 @@ handle query(int<16> port, int id) {
 handle set_status(int<16> port, int new_status) {
     Array.set(status, port, new_status);
 }
+
+
 // 
 // state: 
 // warmup => recirculate
