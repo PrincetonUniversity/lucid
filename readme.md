@@ -14,12 +14,46 @@ There are 3 implementations of Lucid:
 
 ## Installation
 The best way to run Lucid is to compile from source. 
-Its main dependencies are ocaml and z3. On macos or linux, you should be able to do: 
+
+The general instructions are: 
+
+1. install opam
+
+Follow the instructions here: [opam install](https://opam.ocaml.org/doc/Install.html)
+
+The quickest way is to use this script (as they say in the install instructions):
+```
+bash -c "sh <(curl -fsSL https://opam.ocaml.org/install.sh)"
+```
+
+2. add a ocaml 4.12 switch
+
+```
+opam switch create 4.12.0
+opam switch 4.12.0
+```
+
+3. install the lucid dependencies
+
+From the root of this repo, run:
+```
+opam install --deps-only .
+``` 
+
+4. build lucid with make
+
+```
+make
+```
+
+### Install script
+
+On a linux machine (with sudo access), you should be able to do: 
 ```
 ./install_dependencies.sh
 make
 ```
-to build the Lucid interpreter (`dpt`) and tofino compiler (`dptc`).
+to install all the dependencies from scratch (i.e., including opam, ocaml, etc.) and build the Lucid interpreter (`dpt`) and tofino compiler (`dptc`).
 
 ### Docker
 There is also a fairly lightweight docker image that can run the Lucid interpreter and Tofino compiler. 
