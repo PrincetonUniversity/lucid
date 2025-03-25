@@ -4,7 +4,7 @@ Lucid is a data plane programming language that focuses on simple, general, and 
 
 Lucid also has a type-and-effect system that guarantees the ordering of operations on global state (state that persists across packets). Programs that pass Lucid's ordering check can be laid out as a pipeline (important for targets like the Tofino) and also have a convenient memory model: each packet's updates to all the global state can be viewed as an atomic transaction, and a stream of packets can be viewed as a serial sequence of such atomic transactions that executes in the order of packet arrivals. In other words, you don't need to worry about concurrency or race conditions at the packet level for Lucid programs that pass the ordering check. 
 
-There are 3 implementations of Lucid: 
+Lucid has 3 backends:
 
 1. The Lucid interpreter. This defines the semantics of the language in a target-independent way. It is relatively fast and works on simple json events, either from a file given at startup or piped from stdin.
 
@@ -12,16 +12,19 @@ There are 3 implementations of Lucid:
   
 3. A DPDK-C compiler. This backend produces a C program that uses DPDK for packet IO. It is a work in progress and currently single threaded. 
 
-## Installation
-The best way to run Lucid is to compile from source. 
+## Getting Started
 
-The general instructions are: 
+The best way to get started with Lucid is to compile it from source (instructions below), download the ([Visual Studio syntax highlighting extension](https://github.com/benherber/Lucid-DPT-VSCode-Extension)), and then follow the [tutorials](https://github.com/PrincetonUniversity/lucid/tree/main/tutorials/readme.md) to run a program in the interpreter. 
+
+## Installation 
+
+The best way to install Lucid is to compile from source.
 
 1. install opam
 
 Follow the instructions here: [opam install](https://opam.ocaml.org/doc/Install.html)
 
-The quickest way is to use this script (as they say in the install instructions):
+The quickest way to install opam is with this one-liner (from the above link):
 ```
 bash -c "sh <(curl -fsSL https://opam.ocaml.org/install.sh)"
 ```
@@ -56,7 +59,7 @@ make
 to install all the dependencies from scratch (i.e., including opam, ocaml, etc.) and build the Lucid interpreter (`dpt`) and tofino compiler (`dptc`).
 
 ### Docker
-There is also a fairly lightweight docker image that can run the Lucid interpreter and Tofino compiler. 
+There is also a fairly lightweight docker image that can run the Lucid interpreter and Tofino compiler. This may be easier on some systems, but the docker images are not always kept up to date.
 
 **1. Install docker**
   - if you are on a laptop/desktop, just install the docker desktop app: [docker desktop](https://www.docker.com/products/docker-desktop/)
@@ -75,110 +78,33 @@ This will download about 400MB of data and should take < 5 minutes.
 
 Once finished, you can run `./docker_lucid.sh interpret` to run the interpreter or `./docker_lucid.sh compile` to run the Tofino compiler. The `docker_lucid` script takes care of forwarding all arguments, files, and directories to / from the docker image.
 
-### Pre-built binaries
-
-Finally, there are also pre-built binaries in the `release` directory. 
-This should work for recent macos and ubuntu/debian systems. 
-Caveats: macos will fuss about code signing; the binaries are not updated as often as the docker image; there is only a pre-built binary for the Interpreter at this time.
-
-```
-git clone https://github.com/PrincetonUniversity/lucid/
-cd lucid
-./release/unpack.sh
-./release/dpt.sh -h
-```
 
 ### Syntax highlighting
 There is a VSCode syntax highlighter for Lucid here: ([https://github.com/benherber/Lucid-DPT-VSCode-Extension](https://github.com/benherber/Lucid-DPT-VSCode-Extension))
 
-Lucid also renders okay as C (besides polymorphic size arguments).
-
-## Run the interpreter
-
-Using the docker container, you can run the interpreter with `./docker_lucid.sh interpret <lucid program name>`. The interpreter type checks your program, then runs it in a simulated network defined by a specification file. 
-
-Try it out with one of the tutorial programs ([monitor.dpt](https://github.com/PrincetonUniversity/lucid/blob/main/tutorials/interp/01monitor/monitor.dpt)):
-
-```
-jsonch@jsonchs-MBP lucid % ./docker_lucid.sh interp tutorials/interp/01monitor/monitor.dpt
-# ... startup output elided ...
-t=0: Handling event eth_ip(11,22,2048,1,2,128) at switch 0, port 0
-t=600: Handling event prepare_report(11,22,2048,1,2,128) at switch 0, port 196
-sending report about packet {src=1; dst=2; len=128} to monitor on port 2
-dpt: Final State:
-
-Switch 0 : {
-
- Pipeline : [ ]
-
- Events :   [ ]
-
- Exits :    [
-    eth_ip(11,22,2048,1,2,128) at port 1, t=600
-    report(1,2,128) at port 2, t=1200
-  ]
-
- Drops :    [ ]
-
- packet events handled: 0
- total events handled: 2
-
-}
-```
-
-### Run the compiler
-
-Finally, to compile Lucid programs to P4 for the Intel tofino, run the compiler with `./docker_lucid.sh compile <lucid program name> -o <build directory name>`.
-
-The compiler translates a Lucid program into P4, optimizes it, and produces a build directory with a P4 program, Python control plane, and a directory that maps control-plane modifiable Lucid object names to their associated P4 object names. 
-Try it out with the tutorial application: 
-
-```
-jsonch@jsonchs-MBP lucid % ./docker_lucid.sh compile tutorials/interp/01monitor/monitor.dpt -o monitor_build
-build dir: monitor_build
-build dir: /Users/jsonch/Desktop/gits/lucid/monitor_build
-# ... output elided ...
-[coreLayout] placing 41 atomic statement groups into pipeline
-.........................................
-[coreLayout] final pipeline
---- 41 IR statements in 3 physical tables across 2 stages ---
-stage 0 -- 2 tables: [(branches: 3, IR statements: 25, statements: 25),(branches: 4, IR statements: 13, statements: 13)]
-stage 1 -- 1 tables: [(branches: 4, IR statements: 3, statements: 3)]
-Tofino backend: -------Layout for egress: wrapping table branches in functions-------
-Tofino backend: -------Layout for egress: deduplicating table branch functions-------
-Tofino backend: -------Translating to final P4-tofino-lite IR-------
-Tofino backend: -------generating python event parsing library-------
-Tofino backend: -------generating Lucid name => P4 name directory-------
-Tofino backend: -------printing P4 program to string-------
-Tofino backend: -------printing Python control plane to string-------
-compiler: Compilation to P4 finished. Writing to build directory:/app/build
-local p4 build is in: /Users/jsonch/Desktop/gits/lucid/monitor_build
-jsonch@jsonchs-MBP lucid % ls monitor_build
-eventlib.py     libs            lucid.p4        manifest.txt
-globals.json    logs            lucid.py        scripts
-layout_info.txt lucid.cpp       makefile        src
-jsonch@jsonchs-MBP lucid % cat monitor_build/manifest.txt 
-Lucid-generated tofino project folderContents: 
-lucid.p4 -- P4 data plane program
-lucid.py -- Python script to install multicast rules after starting lucid.p4
-eventlib.py -- Python event parsing library
-globals.json -- Globals name directory (maps lucid global variable names to names in compiled P4)
-makefile -- simple makefile to build and run P4 program
-lucid.cpp -- c control plane (currently unused)
-```
+Lucid also renders okay as C (besides polymorphic size arguments with the single quote symbol).
 
 
 ### What to look at next
 
-There are many [example programs](https://github.com/PrincetonUniversity/lucid/tree/main/examples) in our test suite, including some for the [Tofino](https://github.com/PrincetonUniversity/lucid/tree/main/examples/tofino_apps). 
 
-Lucid has been used to implement a number of interesting [applications](https://github.com/PrincetonUniversity/lucid/tree/main/examples/apps). 
+The [tutorials](https://github.com/PrincetonUniversity/lucid/tree/main/tutorials/readme.md) covers basic language features and using the interpreter and compiler. 
 
-Lucid's [wiki](https://github.com/PrincetonUniversity/lucid/wiki) documents all of Lucid's well-supported features. 
 
-There are also a number of publications about Lucid, listed below.
+The [interpreter test programs](https://github.com/PrincetonUniversity/lucid/tree/main/examples/interp_tests) has examples that cover every language feature, with some documentation. 
+
+There are re-usable [data structure libraries](https://github.com/PrincetonUniversity/lucid/tree/main/examples/library) that may be useful for your application, and also illustrate how to package Lucid libraries as modules with clean interfaces.
+
+There are a few [larger example applications](https://github.com/PrincetonUniversity/lucid/tree/main/examples/apps) that give you a sense of some of the cool things you can do with Lucid. 
+
+The [examples directory](https://github.com/PrincetonUniversity/lucid/tree/main/examples) also has some other subdirectories with misc examples. Some may be out of date, though.
+
+Finally, Lucid's [wiki](https://github.com/PrincetonUniversity/lucid/wiki) documents all of Lucid's well-supported features. 
+
 
 ## Publications
+
+There are also a number of publications about Lucid or building higher-level languages on top of it.
 
 ### About Lucid or its components:
 
@@ -190,7 +116,26 @@ There are also a number of publications about Lucid, listed below.
 
 - Automated Optimiation of Parameterized Data-Plane Programs with Parasol ([arxiv preprint](https://arxiv.org/pdf/2402.11155))
 
-### Using Lucid: 
+### Building on Lucid: 
 
 - SwitchLog: A Logic Programming Language for Network Switches ([PADL 2023](https://par.nsf.gov/servlets/purl/10430321))
 
+- Sequence Abstractions for Flexible, Line-Rate Network Monitoring." ([NSDI 2024](https://www.usenix.org/system/files/nsdi24-johnson.pdf))
+
+## Citation
+
+For citations, please use the SIGCOMM 2021 paper: 
+
+```
+Sonchack, John, Devon Loehr, Jennifer Rexford, and David Walker. "Lucid: A language for control in the data plane." In Proceedings of the 2021 ACM SIGCOMM 2021 Conference, pp. 731-747. 2021.
+```
+
+```
+@inproceedings{lucid,
+  title={Lucid: A language for control in the data plane},
+  author={Sonchack, John and Loehr, Devon and Rexford, Jennifer and Walker, David},
+  booktitle={Proceedings of the 2021 ACM SIGCOMM 2021 Conference},
+  pages={731--747},
+  year={2021}
+}
+```
