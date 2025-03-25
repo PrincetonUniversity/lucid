@@ -14,7 +14,7 @@ Lucid has 3 backends:
 
 ## Getting Started
 
-The best way to get started with Lucid is to compile it from source (instructions below), download the ([Visual Studio syntax highlighting extension](https://github.com/benherber/Lucid-DPT-VSCode-Extension)), and then follow the [Tutorials](docs/tutorials/) 
+The best way to get started with Lucid is to compile it from source (instructions below), download the ([Visual Studio syntax highlighting extension](https://github.com/benherber/Lucid-DPT-VSCode-Extension)), and then follow the [Tutorials](/tutorials/) 
 
 ## Installation 
 
