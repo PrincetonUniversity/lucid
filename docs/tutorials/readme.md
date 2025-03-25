@@ -1,6 +1,6 @@
 # Tutorials
 
-There are two [tutorials in the repository](https://github.com/PrincetonUniversity/lucid/tree/main/tutorials). Each tutorial has a short series of well-documented examples that demonstrates and explains the core parts of Lucid. If you have not yet installed Lucid, refer to the install instructions on the [homepage](/lucid/):
+The tutorials in this directory demonstrate how to use the core features of Lucid and run Lucid programs in the interpreter and on the Tofino switch. The tutorials can also be viewed in the [repository itself](https://github.com/PrincetonUniversity/lucid/tree/main/tutorials), as you run the examples.
 
 ### Interpreter tutorials
 
