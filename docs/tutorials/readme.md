@@ -1,6 +1,6 @@
 # Tutorials
 
-There are two [tutorials in the repository](https://github.com/PrincetonUniversity/lucid/tree/main/tutorials). Each tutorial has a short series of well-documented examples that demonstrates and explains the core parts of Lucid. If you have not yet installed Lucid, [...]
+There are two [tutorials in the repository](https://github.com/PrincetonUniversity/lucid/tree/main/tutorials). Each tutorial has a short series of well-documented examples that demonstrates and explains the core parts of Lucid. If you have not yet installed Lucid, refer to the install instructions on the [homepage](/):
 
 - [interp](https://github.com/PrincetonUniversity/lucid/tree/main/tutorials/interp/readme.md) : Developing Lucid applications with the interpreter.
 
