@@ -1,9 +1,8 @@
-There are two tutorials in this directory. Each tutorial has a short series of well-documented examples that demonstrates and explains the core parts of Lucid. If you have not yet installed Lucid, follow the instructions in the `readme.md` at the root of the repository.
+There are two tutorials in this directory. Each tutorial has a short series of well-documented examples that demonstrates and explains the core parts of Lucid. If you have not yet installed Lucid, follow the instructions in the [readme.md](https://github.com/PrincetonUniversity/lucid/tree/main/readme.md) at the root of the repository.
 
 - `./interp` : Developing Lucid applications with the interpreter.
 
 - `./tofino`: Compiling and running Lucid applications to the Tofino.
-
 
 After going through these tutorials, you should be ready to dig into the example and test applications:
 
