@@ -1,10 +1,24 @@
 # Tutorials
 
-There are two [tutorials in the repository](https://github.com/PrincetonUniversity/lucid/tree/main/tutorials). Each tutorial has a short series of well-documented examples that demonstrates and explains the core parts of Lucid. If you have not yet installed Lucid, refer to the install instructions on the [homepage](/lucid):
+There are two [tutorials in the repository](https://github.com/PrincetonUniversity/lucid/tree/main/tutorials). Each tutorial has a short series of well-documented examples that demonstrates and explains the core parts of Lucid. If you have not yet installed Lucid, refer to the install instructions on the [homepage](/lucid/):
 
-- [interp](https://github.com/PrincetonUniversity/lucid/tree/main/tutorials/interp/readme.md) : Developing Lucid applications with the interpreter.
+### Interpreter tutorials
 
-- [tofino](https://github.com/PrincetonUniversity/lucid/tree/main/tutorials/tofino/readme.md): Compiling and running Lucid applications to the Tofino.
+[Tutorial 1](/lucid/tutorials/interp/01monitor.md) Using the interpreter and structuring a packet processing program using _events_ and _handlers_.
+
+[Tutorial 2](/lucid/tutorials/interp/02filter.md) Using match statements and runtime-modifiable tables for sophisticated decision logic, installing match-action rules in the interpreter.
+
+[Tutorial 3](/lucid/tutorials/interp/03counter.md) Using Lucid Arrays to track state across packets/events. Reading program state in the interpreter.
+
+### Tofino tutorials
+
+[Tofino SDE Setup](/lucid/tutorials/tofino/00setup.md) Setting up the Tofino SDE and environment variables.
+
+[Tutorial 1](/lucid/tutorials/tofino/01reflector.md) Compiling and running a simple packet reflector program on the Tofino using Lucid-provided scripts.
+
+[Tutorial 2](/lucid/tutorials/tofino/02tables.md) Writing and running a simple script on the Tofino's management CPU that adds a rule to a table in the program from the control plane.
+
+### Next steps
 
 After going through these tutorials, you should be ready to dig into the example and test applications:
 
