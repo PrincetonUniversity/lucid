@@ -59,6 +59,9 @@ let process_prog ds =
   let ds =
     if cfg.partial_interp
     then (
+      (* print_if_verbose "-------Adding default parser for single-packet programs---------"; *)
+      let ds = InlineEventVars.set_event_nums ds in 
+      let ds = AddIngressParser.add_simple_parser None ds in      
       print_if_verbose "-------Partial interpreting---------";
       let ds = PartialInterpretation.interp_prog ds in
       print_if_debug ds;
