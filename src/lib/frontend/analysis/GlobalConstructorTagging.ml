@@ -28,7 +28,7 @@ let gty_to_tag ty = match (TyTQVar.strip_links ty.raw_ty) with
     (
     match (Cid.names cid) with 
     | "Array"::_ -> (arraytag)
-    (* | "PairArray"::_ -> (arraytag) *)
+    | "PairArray"::_ -> (arraytag)
     | "Table"::_ -> (tabletag)
     | _ -> unknowntag
 
