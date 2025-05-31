@@ -100,7 +100,7 @@ Finally, Lucid's [wiki](https://github.com/PrincetonUniversity/lucid/wiki) docum
 
 
 ## Projects that used Lucid
-Lucid has been used in a number of projects. Here is a listing of those that we know about: [projects](https://github.com/PrincetonUniversity/lucid/tree/main/projects.md)
+Lucid has been used in a number of projects. Here is a listing of those that we know about: [projects](/lucid/projects)
 
 
 ## Publications
