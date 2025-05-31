@@ -4,21 +4,17 @@ Lucid is a data plane programming language that focuses on simple, general, and 
 
 Lucid also has a type-and-effect system that guarantees the ordering of operations on global state (state that persists across packets). Programs that pass Lucid's ordering check can be laid out as a pipeline (important for targets like the Tofino) and also have a convenient memory model: each packet's updates to all the global state can be viewed as an atomic transaction, and a stream of packets can be viewed as a serial sequence of such atomic transactions that executes in the order of packet arrivals. In other words, you don't need to worry about concurrency or race conditions at the packet level for Lucid programs that pass the ordering check. 
 
-Lucid has 3 backends:
+Lucid has an interpreter and a compiler to the Intel Tofino. The interpreter makes testing and getting started easier. It also defines language semantics in a target-independent way. It's relatively fast and works on simple json events, either from a file given at startup or piped from stdin.
 
-1. The Lucid interpreter. This defines the semantics of the language in a target-independent way. It is relatively fast and works on simple json events, either from a file given at startup or piped from stdin.
-
-2. The Lucid-Tofino compiler. This backend compiles a Lucid program to a p416 program for the Tofino 1. It does many target-specific optimizations drawn from our many years of programming the Tofino.
+The compiler translates a Lucid program to a p416 program for the Tofino 1. It does many target-specific optimizations drawn from our many years of programming the Tofino.
   
-3. A DPDK-C compiler. This backend produces a C program that uses DPDK for packet IO. It is a work in progress and currently single threaded. 
-
 ## Getting Started
 
 The best way to get started with Lucid is to compile it from source (instructions below), download the ([Visual Studio syntax highlighting extension](https://github.com/benherber/Lucid-DPT-VSCode-Extension)), and then follow the [Tutorials](/lucid/tutorials/)
 
 ## Installation 
 
-The best way to install Lucid is to compile from source.
+There are 4 steps to compile Lucid from source:
 
 1. install opam
 
@@ -102,25 +98,26 @@ The [examples directory](https://github.com/PrincetonUniversity/lucid/tree/main/
 Finally, Lucid's [wiki](https://github.com/PrincetonUniversity/lucid/wiki) documents all of Lucid's well-supported features. 
 
 
+
+## Projects that used Lucid
+Lucid has been used in a number of projects. Here is a listing of those that we know about: [projects](https://github.com/PrincetonUniversity/lucid/tree/main/projects.md)
+
+
 ## Publications
 
-There are also a number of publications about Lucid or building higher-level languages on top of it.
+This is a list of the main papers/articles/dissertations about core lucid features.
 
 ### About Lucid or its components:
 
-- Lucid, a Language for Control in the Data Plane ([SIGCOMM 2021](https://conferences.sigcomm.org/sigcomm/2021/program.html) -- The SIGCOMM 2021 artifact is in the ``sigcomm21_artifact`` branch).
+- Lucid, a Language for Control in the Data Plane ([SIGCOMM 2021](https://conferences.sigcomm.org/sigcomm/2021/program.html) -- The SIGCOMM 2021 artifact is in the ``sigcomm21_artifact`` branch). This paper is a good place to start, particularly if you have a networking / systems focus.
 
-- Safe, modular packet pipeline programming ([POPL 2022](https://dl.acm.org/doi/pdf/10.1145/3498699))
+- Safe, modular packet pipeline programming ([POPL 2022](https://dl.acm.org/doi/pdf/10.1145/3498699)). This covers modularity and polymorphism.
 
-- Lucid, a high-level easy-to-use dataplane programming language ([Devon K. Loehr's PhD Thesis](https://dkloehr.github.io/files/Thesis.pdf))
+- Lucid, a high-level easy-to-use dataplane programming language ([Devon K. Loehr's PhD Thesis](https://dkloehr.github.io/files/Thesis.pdf)). This is a great general overview and snapshot of Lucid as of late 2024.
 
-- Automated Optimiation of Parameterized Data-Plane Programs with Parasol ([arxiv preprint](https://arxiv.org/pdf/2402.11155))
+- Automated Optimiation of Parameterized Data-Plane Programs with Parasol ([arxiv preprint](https://arxiv.org/pdf/2402.11155)). This is about Lucid's features for automated program tuning, which is not yet well documented. 
 
-### Building on Lucid: 
-
-- SwitchLog: A Logic Programming Language for Network Switches ([PADL 2023](https://par.nsf.gov/servlets/purl/10430321))
-
-- Sequence Abstractions for Flexible, Line-Rate Network Monitoring." ([NSDI 2024](https://www.usenix.org/system/files/nsdi24-johnson.pdf))
+- Sequence Abstractions for Flexible, Line-Rate Network Monitoring. ([NSDI 2024](https://www.usenix.org/system/files/nsdi24-johnson.pdf)). This adds stronger pattern matching to Lucid, and higher-level abstractions that have not yet been integrated. 
 
 ## Citation
 
