@@ -1,4 +1,4 @@
-### Project that have used Lucid
+### Projects that have used Lucid
 
 1. Mary Hogan, Devon Loehr, John Sonchack, Shir Landau Feibish, Jennifer Rexford, David Walker. **Automated Optimization of Parameterized Data-Plane Programs with Parasol.** ToN, 2025. Princeton University. 
 
