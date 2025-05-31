@@ -109,7 +109,7 @@ This is a list of the main papers/articles/dissertations about core lucid featur
 
 ### About Lucid or its components:
 
-- Lucid, a Language for Control in the Data Plane ([SIGCOMM 2021](https://conferences.sigcomm.org/sigcomm/2021/program.html) -- The SIGCOMM 2021 artifact is in the ``sigcomm21_artifact`` branch). This paper is a good place to start, particularly if you have a networking / systems focus.
+- Lucid, a Language for Control in the Data Plane ([SIGCOMM 2021](https://conferences.sigcomm.org/sigcomm/2021/program.html)) -- The SIGCOMM 2021 artifact is in the ``sigcomm21_artifact`` branch). This paper is a good place to start, particularly if you have a networking / systems focus.
 
 - Safe, modular packet pipeline programming ([POPL 2022](https://dl.acm.org/doi/pdf/10.1145/3498699)). This covers modularity and polymorphism.
 
