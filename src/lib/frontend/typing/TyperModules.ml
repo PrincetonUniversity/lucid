@@ -130,6 +130,22 @@ let rec modul_of_interface span env interface =
       in
       { acc with constructors = IdMap.add id fty acc.constructors }
     | InFun (id, ret_ty, constrs, params) ->
+      (* if there is exactly 1 global, infer the specification if it is not present *)
+      let global_args = List.filter (fun (_, ty) -> is_global ty) params in
+      let constrs = 
+        if (((List.length constrs) = 0) && ((List.length global_args) = 1)) 
+          then 
+            [
+              CSpec 
+                [
+                  Cid.create ["start"], SpecLeq;
+                  Cid.id (fst (List.hd global_args)), SpecLeq
+                ];
+              CEnd (Cid.id (fst (List.hd global_args)))
+            ]            
+          else
+            constrs
+      in      
       let start_eff = FVar (QVar (Id.fresh "eff")) in
       let constrs, end_eff =
         spec_to_constraints env span start_eff params constrs
@@ -146,6 +162,22 @@ let rec modul_of_interface span env interface =
       in
       { acc with vars = IdMap.add id (ty @@ TFun fty) acc.vars }
     | InEvent (id, constrs, params) ->
+      (* if there is exactly 1 global, infer the specification if it is not present *)
+      let global_args = List.filter (fun (_, ty) -> is_global ty) params in
+      let constrs = 
+        if (((List.length constrs) = 0) && ((List.length global_args) = 1)) 
+          then 
+            [
+              CSpec 
+                [
+                  Cid.create ["start"], SpecLeq;
+                  Cid.id (fst (List.hd global_args)), SpecLeq
+                ];
+              CEnd (Cid.id (fst (List.hd global_args)))
+            ]            
+          else
+            constrs
+      in
       let start_eff = FVar (QVar (Id.fresh "eff")) in
       let constrs, _ = spec_to_constraints env span start_eff params constrs in
       let fty =
