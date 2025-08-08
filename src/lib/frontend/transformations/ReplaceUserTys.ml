@@ -79,7 +79,7 @@ let extract_ids span sizes =
        Console.error_position
          span
          "User types must be declared with polymorphic size variables \
-          (beginning with a tick")
+          (beginning with a tick)")
     sizes
 ;;
 
