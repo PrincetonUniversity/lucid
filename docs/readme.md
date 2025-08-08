@@ -10,29 +10,32 @@ The compiler translates a Lucid program to a p416 program for the Tofino 1. It d
   
 ## Getting Started
 
+
 The best way to get started with Lucid is to compile it from source (instructions below), download the ([Visual Studio syntax highlighting extension](https://github.com/benherber/Lucid-DPT-VSCode-Extension)), and then follow the [Tutorials](/lucid/tutorials/)
 
 ## Installation 
 
-There are 4 steps to compile Lucid from source:
+Compiling Lucid from source requires installing ocaml and a few dependencies from its package manager. 
 
 1. install opam
 
-Follow the instructions here: [opam install](https://opam.ocaml.org/doc/Install.html)
-
-The quickest way to install opam is with this one-liner (from the above link):
+Opam is ocaml's package manager. Install it from source with:
 ```
 bash -c "sh <(curl -fsSL https://opam.ocaml.org/install.sh)"
 ```
+Or follow the instructions here: [opam install](https://opam.ocaml.org/doc/Install.html)
+
 
 2. add a ocaml 4.12 switch
+
+Lucid is pinned to ocaml 4.12 due to a few minor API changes in later versions. 
 
 ```
 opam switch create 4.12.0
 opam switch 4.12.0
 ```
 
-3. install the lucid dependencies
+3. install the Lucid dependencies
 
 From the root of this repo, run:
 ```
@@ -54,8 +57,8 @@ make
 ```
 to install all the dependencies from scratch (i.e., including opam, ocaml, etc.) and build the Lucid interpreter (`dpt`) and tofino compiler (`dptc`).
 
-### Docker
-There is also a fairly lightweight docker image that can run the Lucid interpreter and Tofino compiler. This may be easier on some systems, but the docker images are not always kept up to date.
+## Docker
+There is also a small docker image for Lucid. Its designed to be as simple as possible to install, but not always up to date.
 
 **1. Install docker**
   - if you are on a laptop/desktop, just install the docker desktop app: [docker desktop](https://www.docker.com/products/docker-desktop/)

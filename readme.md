@@ -14,7 +14,7 @@ Lucid has 3 backends:
 
 ## Getting Started
 
-The best way to get started with Lucid is to compile it from source (instructions below), download the ([Visual Studio syntax highlighting extension](https://github.com/benherber/Lucid-DPT-VSCode-Extension)), and then follow the [tutorials](https://github.com/PrincetonUniversity/lucid/tree/main/tutorials/readme.md) to run a program in the interpreter. 
+The best way to get started with Lucid is to compile it from source (instructions below), download the ([Visual Studio syntax highlighting extension](https://github.com/benherber/Lucid-DPT-VSCode-Extension)), and then follow the [tutorials](https://github.com/PrincetonUniversity/lucid/tree/main/tutorials/readme.md). 
 
 ## Installation 
 
@@ -53,14 +53,14 @@ make
 
 ### Install script
 
-On a linux machine (with sudo access), you should be able to do: 
+On a linux machine (with sudo access), you should be able to run: 
 ```
 ./scripts/utils/install_dependencies.sh
 make
 ```
 to install all the dependencies from scratch (i.e., including opam, ocaml, etc.) and build the Lucid interpreter (`dpt`) and tofino compiler (`dptc`).
 
-### Docker
+## Docker image
 There is also a small docker image for Lucid. Its designed to be as simple as possible to install, but not always up to date.
 
 **1. Install docker**
