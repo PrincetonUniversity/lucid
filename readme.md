@@ -18,25 +18,27 @@ The best way to get started with Lucid is to compile it from source (instruction
 
 ## Installation 
 
-The best way to install Lucid is to compile from source.
+Compiling Lucid from source requires installing ocaml and a few dependencies from its package manager. 
 
 1. install opam
 
-Follow the instructions here: [opam install](https://opam.ocaml.org/doc/Install.html)
-
-The quickest way to install opam is with this one-liner (from the above link):
+Opam is ocaml's package manager. Install it from source with:
 ```
 bash -c "sh <(curl -fsSL https://opam.ocaml.org/install.sh)"
 ```
+Or follow the instructions here: [opam install](https://opam.ocaml.org/doc/Install.html)
+
 
 2. add a ocaml 4.12 switch
+
+Lucid is pinned to ocaml 4.12 due to a few minor API changes in later versions. 
 
 ```
 opam switch create 4.12.0
 opam switch 4.12.0
 ```
 
-3. install the lucid dependencies
+3. install the Lucid dependencies
 
 From the root of this repo, run:
 ```
@@ -53,13 +55,13 @@ make
 
 On a linux machine (with sudo access), you should be able to do: 
 ```
-./install_dependencies.sh
+./scripts/utils/install_dependencies.sh
 make
 ```
 to install all the dependencies from scratch (i.e., including opam, ocaml, etc.) and build the Lucid interpreter (`dpt`) and tofino compiler (`dptc`).
 
 ### Docker
-There is also a fairly lightweight docker image that can run the Lucid interpreter and Tofino compiler. This may be easier on some systems, but the docker images are not always kept up to date.
+There is also a small docker image for Lucid. Its designed to be as simple as possible to install, but not always up to date.
 
 **1. Install docker**
   - if you are on a laptop/desktop, just install the docker desktop app: [docker desktop](https://www.docker.com/products/docker-desktop/)
@@ -87,9 +89,7 @@ Lucid also renders okay as C (besides polymorphic size arguments with the single
 
 ### What to look at next
 
-
 The [tutorials](https://github.com/PrincetonUniversity/lucid/tree/main/tutorials/readme.md) covers basic language features and using the interpreter and compiler. 
-
 
 The [interpreter test programs](https://github.com/PrincetonUniversity/lucid/tree/main/examples/interp_tests) has examples that cover every language feature, with some documentation. 
 
