@@ -40,6 +40,13 @@ fi
 opam switch create 4.12.0 
 opam switch 4.12.0
 # install dependencies
+if [ ! -f "dpt.opam" ]; then
+    echo "Error: dpt.opam not found in the current directory."
+    echo "To complete installation, run the following command"
+    echo "from the root directory of the lucid repo, where dpt.opam is located:"
+    echo "opam install -y --confirm-level=unsafe-yes --deps-only ."
+    exit 1
+fi
 opam install -y --confirm-level=unsafe-yes --deps-only .
 echo "All Lucid dependencies installed."
 echo "You should be able to build lucid with 'make', after you run the following command to update your shell environment:"
