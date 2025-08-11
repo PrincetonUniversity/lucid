@@ -481,13 +481,13 @@ let add_simple_parser ?(with_payloads=true) recirc_port_opt ds =
          let decl = (decl (parser (id "main") [id"pkt", pkt_arg_ty] parser_body)) in
          decl::ds |> parser_after_events 
       | [pkt_ev_decl], None, None -> 
-         let parser_body = packetevent_parse_block pkt_var pkt_ev_decl in
+         let parser_body = packetevent_parse_block  ~with_payloads pkt_var pkt_ev_decl in
          let decl = (decl (parser (id "main") [id"pkt", pkt_arg_ty] parser_body)) in
          decl::ds |> parser_after_events 
       | [pkt_ev_decl], None, Some(recirc_dpid, port_ty) -> 
          let branches = [
             (pbranch [recirc_dpid] (lucid_background_event_parser ~with_payloads pkt_var bg_events));
-            (pbranch_wild 1 (packetevent_parse_block pkt_var pkt_ev_decl))
+            (pbranch_wild 1 (packetevent_parse_block  ~with_payloads pkt_var pkt_ev_decl))
             ] 
          in
          let eingress_port = (var (Cid.id Builtins.ingr_port_id) port_ty) in 
