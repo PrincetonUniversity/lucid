@@ -4,7 +4,7 @@ open Collections
 
 (* Hoisting moves statements from inside of a conditional to outside of the conditional if it is safe to do so.
 
-  if (x == 1) {
+if (x == 1) {
   int y = foo();
   z = y + 2;
 }
@@ -14,14 +14,14 @@ else {
 // transformed into:
 int y = foo();
 if (x == 1) {
-  z = y  +2;
+  z = y + 2;
 }
 else {
   z = 7;
 }
 *)
 
-(* Return a list of variables which are mutated in this statement. Includes
+(* Return a set of variables which are mutated in this statement. Includes
    variables which are defined in a subordinate scope inside the statement,
    so it requires alpha-renaming to really be useful. *)
 let assigned_in_stmt stmt =
@@ -38,6 +38,7 @@ let assigned_in_stmt stmt =
   v#assigned
 ;;
 
+(* variables read in an expression *)
 let vars e =
   let v =
     object
@@ -51,6 +52,7 @@ let vars e =
   v#vars
 ;;
 
+(* variables read in a statement *)
 let stmt_vars stmt = 
   let v =
     object
@@ -64,30 +66,6 @@ let stmt_vars stmt =
   v#visit_statement () stmt;
   v#vars
 
-(* 
-   mut_vars -- a list of variables 
-   that are mutated in the current basic block.
-
-   hoist_stmts -- a list of statements that 
-   can be hoisted up.   
-*)
-
-(* 
-and s =
-  | SNoop
-  | SUnit of exp
-  | SLocal of id * ty * exp
-  | SAssign of cid * exp
-  | SPrintf of string * exp list
-  | SIf of exp * statement * statement
-  | SGen of gen_type * exp
-  | SSeq of statement * statement
-  | SMatch of exp list * branch list
-  | SRet of exp option
-  | STableMatch of tbl_match
-  | STableInstall of exp * tbl_entry list
-*)
-
 (* does a statment contain any of the mutated variables?  *)
 let stmt_is_unmutated (mut_vars : CidSet.t) stmt = 
   let vars_in = stmt_vars stmt in
@@ -98,17 +76,16 @@ let unmutated_stmts mut_vars stmts =
   List.filter (stmt_is_unmutated mut_vars) stmts
 ;;
 
-
-
-(* figure out which statements can be placed before 
-   the src_stmt (because the src_statement doesn't
-   mutate any variables in it) *)
+(* split the stmts_to_place into two lists: 
+   non_deps and deps. 
+   non_deps are statements that can be placed before the src_stmt, 
+   deps are statements that depend on src_stmt and must be placed after it. *)
 let stmt_to_deps src_stmt (stmts_to_place: statement list) = 
   let non_deps, deps = List.fold_left
   (fun (non_deps, deps) stmt_to_place -> 
     if (CidSet.is_empty (CidSet.inter (assigned_in_stmt src_stmt) (stmt_vars stmt_to_place)))
-      (* if the cidset is empty... nothing in the statment was modified, and 
-         we can place before *)
+      (* if the cidset is empty... nothing in the statment was modified, 
+          and we can place before *)
       then (non_deps@[stmt_to_place], deps)
       else (non_deps, deps@[stmt_to_place]))
   ([], [])
@@ -117,36 +94,46 @@ let stmt_to_deps src_stmt (stmts_to_place: statement list) =
   non_deps, deps
 ;;
 
-
-(* deps depend on some previous statement s.
-   non_deps do not. 
-   some of non_deps may depend on something in deps. 
-   we want to add those to deps. 
-   so its kind of a transitive operation   *)
-let rec transitive_deps (non_deps, deps) =
-  let non_deps, new_deps = List.fold_left
-    (fun (non_deps, new_deps) dependee -> 
+(* one "hop" of dependency calculation.
+   move all elements of rest that depend on deps into deps *)
+let single_hop_deps (rest, deps) =
+  let rest, new_deps = List.fold_left
+    (fun (rest, new_deps) dependee -> 
       (* update non deps, possibly taking some out, and new_deps, possibly adding some *)
-      let non_deps, new_deps' = stmt_to_deps (dependee) non_deps in
-      non_deps, new_deps@new_deps'    
+      let rest, new_deps' = stmt_to_deps (dependee) rest in
+      rest, new_deps@new_deps'    
       )
-    (non_deps, [])
+    (rest, [])
     deps
   in
-  non_deps, (deps@new_deps)
+  rest, (deps@new_deps)
 ;;
 
-(* get the dependees of stmt, and the dependees of those statements, and so on *)
+(* get transitive dependencies, by repeatedly calling single_hop_deps
+  until the length of non_deps doesn't change. *)
+let transitive_deps (rest, deps) = 
+  let rec aux (rest, deps) =
+    let rest', deps' = single_hop_deps (rest, deps) in
+    if (List.length rest' = List.length rest)
+      then (rest', deps')
+      else aux (rest', deps')
+  in
+  aux (rest, deps)
+;;
+
+(* pick out the dependencies of a statement, from stmts_to_place, 
+   which can be placed before it. *)
 let stmt_to_transitive_deps stmt stmts_to_place = 
   stmt_to_deps stmt stmts_to_place |> transitive_deps
 ;;
 
 
+let dbg_break : bool ref = ref false ;;
 (* traverse the program in reverse. Every time you reach an slocal, 
    remember it and try to move it earlier in the program, 
    to immediately after the last modification of a variable in the slocal's rhs *)
 let rec hoist (stmts_to_place : statement list) stmt = 
-  match stmt.s with
+  let (stmt', stmts_to_place') = match stmt.s with
   | SLocal(_, _, exp) -> (
     (* before hoisting, get all the statements that depend on this one. *)
     (* only hoist atomic operation and hashes *)
@@ -205,6 +192,8 @@ let rec hoist (stmts_to_place : statement list) stmt =
   (* nothing else changes *)
   | SNoop | SUnit _ | SPrintf _ | SGen _ | SRet _ -> stmt, stmts_to_place
   (* | STableMatch _ -> stmt, stmts_to_place *)
+  in
+  (stmt', stmts_to_place')
 ;;
 
 let rec process decls = 
@@ -218,5 +207,5 @@ let rec process decls =
       {decl with d=DHandler(id, sort, (params, stmt))}::(process decls)
     | _ -> decl::(process decls)
   )
-
+  
 ;;
