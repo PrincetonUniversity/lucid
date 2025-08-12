@@ -18,9 +18,10 @@ END
 
 )
 
+PLATFORM="--platform linux/amd64"
 DOCKER_IMAGE="jsonch/lucid:lucid"
 DOCKER_DEV_IMAGE="jsonch/lucid:lucid_dev"
-DOCKER_CMD="docker run --rm -it"
+DOCKER_CMD="docker run $PLATFORM --rm -it"
 DOCKER_PWD="/app"
 
 ensure_docker()
@@ -83,7 +84,7 @@ get_includes()
     # >&2 echo "get_includes remote: $remote"   
     # GICMD="$DOCKER_CMD $(mount_file_str ${next}) /bin/sh -c \"" 
     # command to get includes of curent file
-    GICMD="docker run --rm -it --mount type=bind,source=$local,target=$remote $DOCKER_IMAGE /bin/sh -c \"$DOCKER_UTIL $next\""
+    GICMD="docker run $PLATFORM --rm -it --mount type=bind,source=$local,target=$remote $DOCKER_IMAGE /bin/sh -c \"$DOCKER_UTIL $next\""
     # >&2 echo "GICMD:$GICMD"
     next_includes=$(eval "$GICMD")
     rv=$?
@@ -133,7 +134,7 @@ get_main()
 {
     DOCKER_PARSE="bin/dockerUtils main"
     # echo "docker run --rm -it $DOCKER_IMAGE /bin/sh -c \"$DOCKER_PARSE $@\""
-    main=`docker run --rm -it $DOCKER_IMAGE /bin/sh -c "$DOCKER_PARSE $@"`
+    main=`docker run $PLATFORM --rm -it $DOCKER_IMAGE /bin/sh -c "$DOCKER_PARSE $@"`
     main=$(strip_whitespace $main)
     echo "$main"    
 }
@@ -364,7 +365,7 @@ case $1 in
         check_lucid_dir
         # note: this command builds the final image defined in the local dockerfile (.) and tags it as
         # $DOCKER_IMAGE. _even if the dockerfile does not name the final image $DOCKER_IMAGE_.
-        CMD="docker build -t $DOCKER_IMAGE ."
+        CMD="docker build $PLATFORM -t $DOCKER_IMAGE ."
         eval "$CMD"
         ;;
     # (admin only) rebuild a new lucid binary and push to docker hub.
@@ -373,7 +374,7 @@ case $1 in
     rebuild_and_push)
         shift 
         check_lucid_dir
-        CMD="docker build -t $DOCKER_IMAGE .  && docker push $DOCKER_IMAGE"
+        CMD="docker build $PLATFORM -t $DOCKER_IMAGE .  && docker push $DOCKER_IMAGE"
         eval "$CMD"
         ;;        
     # enter an instance of the lucid dev image 
@@ -402,7 +403,7 @@ case $1 in
     rebuild_and_push_dev)
         shift 
         check_lucid_dir
-        eval "docker build --target lucid_dev --tag jsonch/lucid:lucid_dev . && docker push jsonch/lucid:lucid_dev"
+        eval "docker build $PLATFORM --target lucid_dev --tag jsonch/lucid:lucid_dev . && docker push jsonch/lucid:lucid_dev"
         ;;
     *)
         echo "unknown command argument."
