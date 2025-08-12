@@ -20,37 +20,7 @@ module ArrayUtils {
     fun int reset(Array.t<32> arr, int idx) {
         return replace(arr, idx, 0);
     }
-
 }
-
-// A simple example of polymorphism
-module PolyArrayUtils {
-    memop curval(int<'a> memval, int<'a> unused) {
-        return memval;
-    }
-    memop swap(int<'b> memval, int<'b> newval) {
-        return newval;
-    }
-    memop incr(int<'c> memval, int<'c> incrby) {
-        return memval + incrby;
-    }    
-    fun 'int_ty replace('arr_ty arr, int idx, 'int_ty newval) {
-        'int_ty zero = 0;
-        'int_ty rv = Array.update(arr, idx, curval, zero, swap, newval);
-        return rv;
-    }
-}
-
-global Array.t<8>  arr8     = Array.create(8);
-global Array.t<16> arr16    = Array.create(16);
-global Array.t<32> arr32    = Array.create(32);
-
-event UsePolyArrayUtils(int x, int y) {
-    PolyArrayUtils.replace(arr8, x, (int<8>)y);
-    PolyArrayUtils.replace(arr16, x, (int<16>)y);
-    PolyArrayUtils.replace(arr32, x, y);
-}
-
 
 // A forwarding table data structure.
 module Fwd : {
