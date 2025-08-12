@@ -1,6 +1,6 @@
-# lucid.sh is a wrapper to the dockerized lucid build system.
-FIND_LUCID_SH := ./findfile.sh lucid.sh
-LUCID_SH := $(shell $(FIND_LUCID_SH) || echo "echo 'lucid.sh not found'; exit 1" | sh)
+# docker_lucid.sh is a wrapper to the dockerized lucid build system.
+FIND_LUCID_SH := ./findfile.sh docker_lucid.sh
+LUCID_SH := $(shell $(FIND_LUCID_SH) || echo "echo 'docker_lucid.sh not found'; exit 1" | sh)
 
 # "dpt" is the lucid interpreter binary. This is for if you have a 
 # local build on your machine, or if you ssh into the docker 
