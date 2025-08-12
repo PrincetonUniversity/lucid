@@ -1,0 +1,7 @@
+{
+  "seed" : 1,
+  "events":[
+    {"type": "command", "name":"Table.install", "args":{"table":"fwd.portTable", "key":[222], "action":"fwd.portTable.Fwd_out_port", "args":[2]}},
+    {"type":"packet", "bytes":"00000000000300000000000412340000006f000000de"}
+  ]
+}

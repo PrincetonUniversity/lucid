@@ -1,0 +1,37 @@
+include "libraries.dpt"
+
+const int myCollectorPort = 5;
+global FlowCounter.t allFlowCts = FlowCounter.create(16, myCollectorPort);
+global Fwd.t fwd = Fwd.create(8);
+global FlowCounter.t droppedFlowCts = FlowCounter.create(16, myCollectorPort);
+
+type eth_t = { int<48> dstMac; int<48> srcMac; int<16> etherTy; }
+
+// The "packet" keyword means that events of this type will be serialized 
+// by writing its field arguments directly to the packet.
+packet event pktin(eth_t eth, int src, int dst, Payload.t payload); 
+
+handle pktin(eth_t eth, int src, int dst, Payload.t payload) {    
+    FlowCounter.countPkt(allFlowCts, src, dst); // Count all packets.
+    int p = Fwd.getPort(fwd, dst);
+    if (p != 0) {
+        printf("forwarding to port %d", p);
+        generate_port(p, pktin(eth, src, dst, payload));
+    } else {
+        FlowCounter.countPkt(droppedFlowCts, src, dst); // Count dropped packets.
+    }
+}
+
+// parser start(eth_t eth, bitstring pkt) {
+//     // custom parsing logic.
+//     int src = read(pkt);
+//     int dst = read(pkt);
+//     generate pktin(eth, src, dst, Payload.parse(pkt));
+// }
+
+// parser main(bitstring pkt) {
+//   eth_t e = read(pkt);
+//   match e#etherTy with
+//   | LUCID_ETHERTY -> { do_lucid_parsing(pkt); }
+//   | _ -> {start(e, pkt);}
+// }

@@ -1,0 +1,87 @@
+// Some utility functions for arrays.
+module ArrayUtils {
+    memop curval(int memval, int unused) {
+        return memval;
+    }
+    memop swap(int memval, int newval) {
+        return newval;
+    }
+    memop incr(int memval, int incrby) {
+        return memval + incrby;
+    }
+    // rv = arr[idx]; arr[idx] = newval, return rv;
+    fun int replace(Array.t<32> arr, int idx, int newval) {
+        int rv = Array.update(arr, idx, curval, 0, swap, newval);
+        return rv;
+    }
+    fun void increment(Array.t<32> arr, int idx) {
+        Array.setm(arr, idx, incr, 1);
+    }
+    fun int reset(Array.t<32> arr, int idx) {
+        return replace(arr, idx, 0);
+    }
+}
+
+// A forwarding table data structure.
+module Fwd : {
+    global type t;    
+    constr t create(int len);
+    fun int getPort(t self, int addr);
+} {
+    type t = {
+        Table.t<<int, int, (), int>> portTable;
+    }
+    action int out_port(int p)() {
+        return p;        
+    }
+    constr t create(int len) = {
+        portTable = Table.create(len, [out_port], out_port, 0); 
+    };
+    fun int getPort(t self, int addr) {
+        return Table.lookup(self#portTable, addr, ());
+    }
+}
+
+
+// A data structure that counts packets in flows, 
+// and export partial records 
+// to collector at given port when full.
+module FlowCounter : {
+    global type t;
+    constr t create(int len, int collector_port);
+    event flowRecord(int src, int dst, int ct);
+    fun void countPkt(t self, int src, int dst);
+} {
+    type t = {
+        Array.t<32> srcs;
+        Array.t<32> dsts;
+        Array.t<32> pktCts;
+        int nFlows;
+        int collectorPort;
+    }
+    constr t create(int len, int collector_port) = {
+        srcs = Array.create(len);
+        dsts = Array.create(len);
+        pktCts = Array.create(len);
+        nFlows = len;
+        collectorPort = collector_port;
+    };
+
+    event flowRecord(int src, int dst, int ct){skip;}
+
+    fun void countPkt(t self, int src, int dst) {
+        int idx = hash<32>(3, src, dst) & (self#nFlows - 1); // get index.
+        printf("idx=%d", idx);
+        int oldSrc = ArrayUtils.replace(self#srcs, idx, src);
+        int oldDst = ArrayUtils.replace(self#dsts, idx, dst);
+        if (src == oldSrc && dst == oldDst) { // Case: not a collision.
+            ArrayUtils.increment(self#pktCts, idx);
+        } else { // case: collision or first install.
+            int oldCt = ArrayUtils.replace(self#pktCts, idx, 1);
+            if (oldSrc != 0 || oldDst != 0) {// export record of evicted flow.
+                event evictedRecord = flowRecord(oldSrc, oldDst, oldCt);
+                generate_port(self#collectorPort, evictedRecord);
+            }
+        }
+    }
+}
