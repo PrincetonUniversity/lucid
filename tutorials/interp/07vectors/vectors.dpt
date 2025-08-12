@@ -1,0 +1,83 @@
+memop swap_if_0(int<'b> memval, int<'b> newval) {
+    if (memval == 0) {
+        return newval;
+    } else {
+        return memval;
+    }
+}
+
+memop memval_if_not0(int<'b> memval, int<'b> unused) {
+    if (memval == 0) {
+        return 0;
+    } else {
+        return memval;
+    }
+}
+
+// if (arr[idx] == newval) then { rv = arr[idx]; arr[idx] = newval; return rv; }
+fun 'int_ty replace_if_empty('arr_ty arr, int<'i> idx, 'int_ty newval) {
+    return Array.update(arr, idx, memval_if_not0, (int<'z>)0, swap_if_0, newval);
+}
+
+fun int calcSeed(int base) {
+    return ((1 + base) << (2 + base)) - 1;
+}
+
+module MultiStageSet : {
+    global type t<'n, 'v>;
+    constr t<'n, 'v> create();
+    fun bool try_insert(t<'n, 'v> self, int<'v> val);
+    fun bool exists(t<'n, 'v> self, int<'v> val);
+}
+{
+    type t<'n, 'v> = {
+        Array.t<'v>['n] stages; 
+    }
+
+    constr t<'n, 'v> create() = {
+        stages = [Array.create(256) for i < 'n]; // TODO: make 256 an argument. Need to sync with size arg to hash<..>
+    };
+
+    fun bool try_insert(t<'n, 'v> self, int<'v> val)  {
+        // Scan through all 'n stages. 
+        // For each stage check if val's slot in that 
+        // stage is empty(stage[hash(val)] == 0)
+        // If so, put val there and exit the loop. 
+        // If no slots for val are free, return false.
+        bool inserted = false;
+        for (i < 'n) {
+            if (!inserted) {
+                auto int_i = size_to_int(i);
+                auto idx = hash<8>(calcSeed(int_i), val);
+                auto oldVal = replace_if_empty(self#stages[i], idx, val);
+                inserted = (oldVal == 0 || oldVal == val);
+            }
+        }
+        return inserted;
+    }
+    fun bool exists(t<'n, 'v> self, int<'v> val) {
+        // Scan through all stages, check for val in 
+        // its slot in each stage. Return true if found, 
+        // else false.
+        bool found = false;
+        for (i < 'n) {
+            if (!found) {
+                auto int_i = size_to_int(i);
+                auto idx = hash<8>(calcSeed(int_i), val);
+                if (Array.get(self#stages[i], idx) == val) {
+                    found = true;
+                }
+            }
+        }
+        return found;        
+    }
+    
+}
+
+global MultiStageSet.t<3, 32> cache1  = MultiStageSet.create();
+global MultiStageSet.t<10, 16> cache2 = MultiStageSet.create();
+
+event pktin(int x, int y) {
+    bool insert_success_1 = MultiStageSet.try_insert(cache1, x);
+    bool insert_success_2 = MultiStageSet.try_insert(cache2, (int<16>)y);
+}
