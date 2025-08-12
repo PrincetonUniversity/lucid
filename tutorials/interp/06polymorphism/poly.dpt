@@ -1,0 +1,42 @@
+
+// Size polymorphism: use variables in place of concrete sizes for int types.
+memop curval(int<'a> memval, int<'a> unused) {
+    return memval;
+}
+memop swap(int<'b> memval, int<'b> newval) {
+    return newval;
+}
+memop incr(int<'c> memval, int<'c> incrby) {
+    return memval + incrby;
+}
+// Type polymorphism: use variables in place of concrete types.
+// Also use auto to tell the type checker, "figure out the right type".
+fun 'int_ty replace('arr_ty arr, int idx, 'int_ty newval) {
+    auto zero = 0;
+    return Array.update(arr, idx, curval, zero, swap, newval);
+}
+
+global Array.t<8>  arr8     = Array.create(256);
+global Array.t<16> arr16    = Array.create(256);
+global Array.t<32> arr32    = Array.create(256);
+
+// Size polymorphism can be used in user-defined types.
+type pair<'a> = {
+    int<'a> fst;
+    int<'a> snd;
+}
+fun int<'a> pair_sum(pair<'a> p) {
+    return p#fst + p#snd;
+}
+
+// The main point of polymorphism is generic programming
+// for better code re-use and modularity, without 
+// sacrificing type safety.
+event pktin(int x, int y) {
+    auto rv8   = replace(arr8, x, (int<8>)y);
+    auto rv16 = replace(arr16, x, (int<16>)y);
+    auto rv32 = replace(arr32, x, y);
+    auto xy = {fst=x; snd=y;};
+    printf("sum of input args: %d", pair_sum(xy));
+}
+
