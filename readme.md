@@ -2,15 +2,12 @@
 
 Lucid is a data plane programming language that focuses on simple, general, and modular abstractions. This makes it easier to express a range of data-plane algorithms and data structures, like specialized hash tables (e.g., cuckoo hashing), sketches, and custom telemetry caches. Programs are often 10X fewer lines of code in Lucid compared to P4, and read much more like Go, Python, or C, than equivalent implementations in P4. 
 
-Lucid also has a type-and-effect system that guarantees the ordering of operations on global state (state that persists across packets). Programs that pass Lucid's ordering check can be laid out as a pipeline (important for targets like the Tofino) and also have a convenient memory model: each packet's updates to all the global state can be viewed as an atomic transaction, and a stream of packets can be viewed as a serial sequence of such atomic transactions that executes in the order of packet arrivals. In other words, you don't need to worry about concurrency or race conditions at the packet level for Lucid programs that pass the ordering check. 
+Lucid also has a type-and-effect system that guarantees pipeline-ability of a program. In other words, all control flows of a program acess persistent objects in the same order, without any back edges. This is necessary on targets like the Tofino that are physical pipelines. On other targets it allows the compiler to use pipelining to exploit parallelism safely (without changing program semantics).
 
-Lucid has 3 backends:
+Lucid has an interpreter designed as an easy-to-use reference implementation of the language with support for fast, multi-node simulations and an actively maintained Tofino compiler. Other backends are planned or in progress. 
 
-1. The Lucid interpreter. This defines the semantics of the language in a target-independent way. It is relatively fast and works on simple json events, either from a file given at startup or piped from stdin.
+The Lucid codebase is also organized for extensibility, with a modular micropass design and frontend / midend / backend components that use a few common core IRs throughout.
 
-2. The Lucid-Tofino compiler. This backend compiles a Lucid program to a p416 program for the Tofino 1. It does many target-specific optimizations drawn from our many years of programming the Tofino.
-  
-3. A DPDK-C compiler. This backend produces a C program that uses DPDK for packet IO. It is a work in progress and currently single threaded. 
 
 ## Getting Started
 

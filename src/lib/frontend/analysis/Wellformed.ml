@@ -516,11 +516,13 @@ let event_qvar_checker =
       Console.error_position span
       @@ "Internal error: declaration was improperly generalized."
 
-    method! visit_QVar _ _ _ =
+    (*TEMPORARY: disable qvar checks for event parameters to test polymorphic events params. *)
+    (* method! visit_QVar _ _ _ =
+      Printf.printf "in event_qvar_checker.visit_QVar\n";
       Console.error_position span
       @@ "Unable to fully determine the type of this expression. If you used \
           auto or any polymorphic variables, try writing out explicitly what \
-          they should be."
+          they should be." *)
 
     method! visit_FVar _ _ = (* Never check effects *) ()
 
