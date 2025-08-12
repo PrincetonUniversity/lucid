@@ -67,4 +67,4 @@ global Fwd fwd = Fwd.create(8);
 int p = fwd.getPort(dst);
 ```
 
-Classes and objects like this, where there is no inheretence and all allocation can be done at compile time, are equivalent to a subset of Lucid's module system. It is a subset because, for example, a module could define multiple global types. Modules are a little more flexible, and were easier (for the Lucid developers) to work with inside the compiler. However, in the future, we can add convenience syntax for classes, as shown above, that work by simply translating into modules. 
+Classes and objects like this, where there is no inheretence and all allocation can be done statically, are a subset of Lucid what you can express in Lucid's module system. For example, a module could define multiple global types. In the future, we can add convenience syntax for classes, as shown above, that work by simply translating into modules. 
