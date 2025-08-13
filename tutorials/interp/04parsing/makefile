@@ -1,4 +1,4 @@
-# docker_lucid.sh is a wrapper to the dockerized lucid build system.
+# lucid.sh is a wrapper to the dockerized lucid build system.
 FIND_LUCID_SH := ./findfile.sh docker_lucid.sh
 LUCID_SH := $(shell $(FIND_LUCID_SH) || echo "echo 'docker_lucid.sh not found'; exit 1" | sh)
 
@@ -13,8 +13,7 @@ DPT := $(shell $(FIND_DPT) || echo "-" )
 # as an argument to this makefile, or as a default 
 # value the first .dpt file found is used.
 ifndef SRC
-# SRC := $(firstword $(wildcard *.dpt))
-SRC := $(filter-out libraries.dpt, $(wildcard *.dpt))
+SRC := $(firstword $(wildcard *.dpt))
 endif
 
 .PHONY: interp interp_local build_p4 clean dptc force current_makefile
@@ -37,6 +36,11 @@ interp_docker:
 # everything below is related to compiling 
 # lucid to P4-tofino. Ignore if you are only  
 # using the interpeter. 
+
+FIND_DPTC := ./findfile.sh dptc
+DPTC := $(shell $(FIND_DPTC) || echo "echo 'dptc not found'; exit 1" | sh)
+DPT_BUILD_DIR := build
+
 
 # P4_OUTPUT is the lucid-generate p4 program. 
 P4_OUTPUT := $(DPT_BUILD_DIR)/lucid.p4

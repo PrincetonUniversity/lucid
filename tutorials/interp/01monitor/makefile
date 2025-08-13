@@ -36,23 +36,20 @@ interp_docker:
 # everything below is related to compiling 
 # lucid to P4-tofino. Ignore if you are only  
 # using the interpeter. 
+
 FIND_DPTC := ./findfile.sh dptc
 DPTC := $(shell $(FIND_DPTC) || echo "echo 'dptc not found'; exit 1" | sh)
-
 DPT_BUILD_DIR := build
-
-build:
-	$(DPTC) $(SRC) -o $(DPT_BUILD_DIR)
 
 
 # P4_OUTPUT is the lucid-generate p4 program. 
-# P4_OUTPUT := $(DPT_BUILD_DIR)/lucid.p4
+P4_OUTPUT := $(DPT_BUILD_DIR)/lucid.p4
 
 
-# build_p4: $(P4_OUTPUT)
+build_p4: $(P4_OUTPUT)
 
-# $(P4_OUTPUT): $(SRC)
-# 	$(DPTC) $< -o $(DPT_BUILD_DIR)
+$(P4_OUTPUT): $(SRC)
+	$(DPTC) $< -o $(DPT_BUILD_DIR)
 
 clean:
 	rm -rf $(DPT_BUILD_DIR)

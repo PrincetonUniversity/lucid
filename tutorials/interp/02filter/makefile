@@ -37,6 +37,11 @@ interp_docker:
 # lucid to P4-tofino. Ignore if you are only  
 # using the interpeter. 
 
+FIND_DPTC := ./findfile.sh dptc
+DPTC := $(shell $(FIND_DPTC) || echo "echo 'dptc not found'; exit 1" | sh)
+DPT_BUILD_DIR := build
+
+
 # P4_OUTPUT is the lucid-generate p4 program. 
 P4_OUTPUT := $(DPT_BUILD_DIR)/lucid.p4
 
