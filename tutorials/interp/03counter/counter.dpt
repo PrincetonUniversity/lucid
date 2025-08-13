@@ -16,6 +16,8 @@ type ip_t = {
 /********** Events *********/
 event eth_ip(eth_t eth, ip_t ip);
 
+event monitor_flow(int src, int dst, int idx); // request switch to monitor a flow.
+
 event get_report(int src, int dst); // get_report is sent by the monitoring server.
 
 event report(int src, int dst, int<32> count) {skip;} // report is sent back to the monitoring server.
@@ -32,32 +34,41 @@ type key_t = {
 
 global Table.t<<key_t, int, (), int>> idx_tbl = Table.create(1024, [mk_flow_idx], mk_flow_idx, 0);
 
-fun int get_idx_exact(int src, int dst) {
+fun int get_idx(int src, int dst) {
 	return Table.lookup(idx_tbl, {s=src; d=dst}, ());
 }
+
+
+handle monitor_flow(int src, int dst, int idx) {
+	Table.install(idx_tbl, {s=src; d=dst}, mk_flow_idx, idx);
+}
+
 
 /**** the flow counter array ****/
 global Array.t<32> flow_counts = Array.create(8);
 
-// a memop is a function that can
-// be passed to array methods to modify the 
-// array's contents.
+// A memop is a function that compiles to an 
+// atomic operation.
 memop incr(int stored_val, int incr_by) {
 	return stored_val + incr_by;
 }
 
 /**** Main functions for counting and reporting with exact indexes ****/
 fun void count_exact(int src, int dst) {
-	int idx = get_idx_exact(src, dst);
+	int idx = get_idx(src, dst);
 	// we use 0 as a special value to indicate that
 	// the flow is not tracked.
 	if (idx != 0) {
+		// Array.setm is defined (e.g., in the interpreter) as:
+		// Array.setm(arr, idx, memop, arg) {
+		// 	flow_counts[idx] = incr(flow_counts[idx], 1)
+		//}
 		Array.setm(flow_counts, idx, incr, 1);
 	}
 }
 
 fun void report_exact(int src, int dst) {
-	int idx = get_idx_exact(src, dst);
+	int idx = get_idx(src, dst);
 	if (idx != 0) {
 		int ct = Array.get(flow_counts, idx);
 		printf("sending report about flow {src=%d; dst=%d; packet ct=%d} to monitor on port %d", src, dst, ct, SERVER_PORT);
@@ -68,8 +79,8 @@ fun void report_exact(int src, int dst) {
 
 /********** Handlers *********/
 handle eth_ip(eth_t eth, ip_t ip) {
-	generate_port(OUT_PORT, eth_ip(eth, ip));
 	count_exact(ip#src, ip#dst);
+	generate_port(OUT_PORT, eth_ip(eth, ip));
 }
 
 handle get_report(int src, int dst) {

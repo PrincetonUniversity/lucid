@@ -10,14 +10,7 @@
         "key":[1, 2], 
         "action":"idx_tbl.mk_flow_idx", 
         "args":[1]}},
-    {
-      "type": "command", 
-      "name":"Table.install", 
-      "args":{
-        "table":"idx_tbl", 
-        "key":[3, 4], 
-        "action":"idx_tbl.mk_flow_idx", 
-        "args":[2]}},
+    {"name":"monitor_flow", "args":[3, 4, 2]},
     {"name":"eth_ip", "args": [11, 22, 2048, 1, 2, 128]},
     {"name":"eth_ip", "args": [11, 22, 2048, 3, 4, 128]},
     {"name":"eth_ip", "args": [11, 22, 2048, 5, 6, 128]},
