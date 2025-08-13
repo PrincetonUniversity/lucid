@@ -80,7 +80,7 @@ module FlowCounter : {
             int oldCt = ArrayUtils.replace(self#pktCts, idx, 1);
             if (oldSrc != 0 || oldDst != 0) {// export record of evicted flow.
                 event evictedRecord = flowRecord(oldSrc, oldDst, oldCt);
-                generate_port(self#collectorPort, evictedRecord);
+                generate_port((int<'p>)(self#collectorPort), evictedRecord);
             }
         }
     }
@@ -96,7 +96,7 @@ event pktin(int src, int dst) {
     int p = Fwd.getPort(fwd, dst);
     if (p != 0) {
         printf("forwarding to port %d", p);
-        generate_port(p, pktin(src, dst));
+        generate_port((int<'p>)p, pktin(src, dst));
     } else {
         FlowCounter.countPkt(droppedFlowCts, src, dst); // Count dropped packets.
     }
