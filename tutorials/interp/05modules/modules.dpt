@@ -91,7 +91,9 @@ global FlowCounter.t allFlowCts = FlowCounter.create(16, myCollectorPort);
 global Fwd.t fwd = Fwd.create(8);
 global FlowCounter.t droppedFlowCts = FlowCounter.create(16, myCollectorPort);
 
-event pktin(int src, int dst) {
+event pktin(int src, int dst); 
+
+handle pktin(int src, int dst) {
     FlowCounter.countPkt(allFlowCts, src, dst); // Count all packets.
     int p = Fwd.getPort(fwd, dst);
     if (p != 0) {
