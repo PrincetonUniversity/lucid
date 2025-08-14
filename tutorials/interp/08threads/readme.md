@@ -1,13 +1,13 @@
 ## threads.dpt
 
-Handlers in Lucid execute atomically: the entire body of a handler executes serially, without interference from other handlers. This is convenient for packet processing, which needs to happen without delay or interruption operations.
+Handlers in Lucid execute atomically: the entire body of a handler executes serially, without preemption to run other handlers.
 
-However, programs also perform other "background" tasks, besides packet processing. For example: deleting old counters; figuring out where to put a new entry in a hash table; or propagating path condition information to other nodes. These background tasks don't make sense to perform as a single atomic operation, for a variety of reasons. They may: take a long time to finish; not need atomic operation; or be okay with preemption for packet processing. 
+It is natural to think of packet processing as a serial task: process one packet to completion, then start on the next one. However, programs also need perform other "background" tasks, besides packet processing. For example: deleting old counters; figuring out where to put a new flow in a hash table; or propagating information about network conditions to other nodes. These background tasks don't need to be atomic. They are generally okay to preempt with other tasks, such as packet processing. Further, background tasks may take a long time to finish, or they may not finish at all. 
+
+In Lucid, we implement background threads like this with *recursive events*. Supporting multiple threads on line-rate data plane hardware was a major initial goal of Lucid, which is why the file format for Lucid programs is `.dpt`.
 
 
-In Lucid, we implement background threads like this with *recursive events*. 
-
-The background thread in this example continuously scans for inactive flows and resets/exports their counters: 
+In this example, `threads.dpt` there is a background thread that continuously scans for inactive flows and resets/exports their counters: 
 
 ```
     // background thread to export and timeout old entries.
