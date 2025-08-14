@@ -1,0 +1,142 @@
+// Some utility functions for arrays.
+module ArrayUtils {
+    memop curval(int memval, int unused) {
+        return memval;
+    }
+    memop swap(int memval, int newval) {
+        return newval;
+    }
+    memop incr(int memval, int incrby) {
+        return memval + incrby;
+    }
+    // rv = arr[idx]; arr[idx] = newval, return rv;
+    fun int replace(Array.t<32> arr, int idx, int newval) {
+        int rv = Array.update(arr, idx, curval, 0, swap, newval);
+        return rv;
+    }
+    fun void increment(Array.t<32> arr, int idx) {
+        Array.setm(arr, idx, incr, 1);
+    }
+    fun int reset(Array.t<32> arr, int idx) {
+        return replace(arr, idx, 0);
+    }
+    fun void set(Array.t<32> arr, int idx, int val) {
+        Array.setm(arr, idx, swap, val);
+    }
+}
+
+// A forwarding table data structure.
+module Fwd : {
+    global type t;    
+    constr t create(int len);
+    fun int getPort(t self, int addr);
+} {
+    type t = {
+        Table.t<<int, int, (), int>> portTable;
+    }
+    action int out_port(int p)() {
+        return p;        
+    }
+    constr t create(int len) = {
+        portTable = Table.create(len, [out_port], out_port, 0); 
+    };
+    fun int getPort(t self, int addr) {
+        return Table.lookup(self#portTable, addr, ());
+    }
+}
+
+
+// A data structure that counts packets in flows, 
+// and export partial records 
+// to collector at given port when full.
+module FlowCounter : {
+    global type t;
+    constr t create(int len, int collector_port, int to);
+    event flowRecord(int src, int dst, int ct);
+    fun void countPkt(t self, int src, int dst);
+    event checkIdx(t self, int idx);
+} {
+    type t = {
+        Array.t<32> srcs;
+        Array.t<32> dsts;
+        Array.t<32> pktCts;
+        Array.t<32> lastUpdated;
+        int nFlows;
+        int collectorPort;
+        int timeout;
+    }
+    constr t create(int len, int collector_port, int to) = {
+        srcs = Array.create(len);
+        dsts = Array.create(len);
+        pktCts = Array.create(len);
+        lastUpdated = Array.create(len);
+        nFlows = len;
+        collectorPort = collector_port;
+        timeout = to;
+    };
+
+    event flowRecord(int src, int dst, int ct);
+    handle flowRecord(int src, int dst, int ct){skip;}
+
+    fun void countPkt(t self, int src, int dst) {
+        int idx = hash<32>(3, src, dst) & (self#nFlows - 1); // get index.
+        printf("idx=%d", idx);
+        int oldSrc = ArrayUtils.replace(self#srcs, idx, src);
+        int oldDst = ArrayUtils.replace(self#dsts, idx, dst);
+        if (src == oldSrc && dst == oldDst) { // Case: not a collision.
+            ArrayUtils.increment(self#pktCts, idx);
+            ArrayUtils.set(self#lastUpdated, idx, Sys.time());
+        } else { // case: collision or first install.
+            int oldCt = ArrayUtils.replace(self#pktCts, idx, 1);
+            ArrayUtils.set(self#lastUpdated, idx, Sys.time());
+            if (oldSrc != 0 || oldDst != 0) {// export record of evicted flow.
+                event evictedRecord = flowRecord(oldSrc, oldDst, oldCt);
+                generate_port((int<'p>)(self#collectorPort), evictedRecord);
+            }
+        }
+    }
+
+    // background thread to export and timeout old entries.
+    event checkIdx(t self, int idx);
+    event clearIndex(t self, int idx);
+
+    handle checkIdx(t self, int idx) {
+        // Clear if it is not already cleared and timeout has elapsed.
+        int lastTime = Array.get(self#lastUpdated, idx);
+        if ((lastTime != 0) && (Sys.time() - lastTime < self#timeout)) {
+            generate(clearIndex(self, idx));
+        }
+        int next_idx = (idx + 1 ) & (self#nFlows - 1);
+        generate(Event.delay(checkIdx(self, next_idx), 1000000));
+    }
+
+    handle clearIndex(t self, int idx) {
+        int oldSrc = ArrayUtils.replace(self#srcs, idx, 0);
+        int oldDst = ArrayUtils.replace(self#dsts, idx, 0);    
+        int oldCt = ArrayUtils.replace(self#pktCts, idx, 0);
+        ArrayUtils.set(self#lastUpdated, idx, 0);
+        event evictedRecord = flowRecord(oldSrc, oldDst, oldCt);
+        generate_port((int<'p>)(self#collectorPort), evictedRecord);
+    }
+}
+
+const int myCollectorPort = 5;
+const int timeout = 1000000000; // 1 second (ns time units)
+global FlowCounter.t flowCts = FlowCounter.create(16, myCollectorPort, timeout);
+global Fwd.t fwd = Fwd.create(8);
+
+event pktin(int src, int dst); 
+
+handle pktin(int src, int dst) {
+    FlowCounter.countPkt(flowCts, src, dst); // Count all packets.
+    int p = Fwd.getPort(fwd, dst);
+    if (p != 0) {
+        printf("forwarding to port %d", p);
+        generate_port((int<'p>)p, pktin(src, dst));
+    }
+}
+
+event startEvictThread();
+handle startEvictThread() {
+    generate(FlowCounter.checkIdx(flowCts, 0));
+}

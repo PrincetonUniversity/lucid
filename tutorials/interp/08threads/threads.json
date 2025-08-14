@@ -1,0 +1,9 @@
+{
+  "seed" : 1,
+ "max time": 11000000,  
+  "events":[
+    {"type": "command", "name":"Table.install", "args":{"table":"fwd.portTable", "key":[222], "action":"fwd.portTable.Fwd_out_port", "args":[2]}}
+    ,{"name":"startEvictThread", "args":[]}
+    ,{"name":"pktin", "args":[111, 222]}
+  ]
+}
