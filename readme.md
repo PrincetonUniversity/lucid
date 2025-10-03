@@ -1,10 +1,10 @@
 # The Lucid / DPT (data plane threads) language
 
-Lucid is a data plane programming language that focuses on simple, general, and modular abstractions. This makes it easier to express a range of data-plane algorithms and data structures, like specialized hash tables (e.g., cuckoo hashing), sketches, and custom telemetry caches. Programs are often 10X fewer lines of code in Lucid compared to P4, and read much more like Go, Python, or C, than equivalent implementations in P4. 
+Lucid is a high-level language for programming high-performance data planes. Its designed to feel more like a regular programming language than P4, with simple, general, and modular abstractions. At the same time, Lucid is carefully designed so that its compiler can translate programs into efficient code optimized for real platforms. 
 
-Lucid also has a type-and-effect system that guarantees pipeline-ability of a program. In other words, all control flows of a program acess persistent objects in the same order, without any back edges. This is necessary on targets like the Tofino that are physical pipelines. On other targets it allows the compiler to use pipelining to exploit parallelism safely (without changing program semantics).
+An important idea in Lucid is pipeline parallelism. Unlike other languages, Lucid guarantees that a program can be pipelined in its type-and-effect. In other words, any type-checking program is guaranteed to always access persistent objects in the same order. This is necessary on targets like the Tofino that are physical pipelines. On other targets it allows the compiler to use pipelining to exploit parallelism safely (without changing program semantics).
 
-Lucid has an interpreter designed as an easy-to-use reference implementation of the language with support for fast, multi-node simulations and an actively maintained Tofino compiler. Other backends are planned or in progress. 
+Lucid also has an interpreter with support for the entire language and fast, multi-node simulations. This makes it a convenient modeling language for data-plane applications. 
 
 The Lucid codebase is also organized for extensibility, with a modular micropass design and frontend / midend / backend components that use a few common core IRs throughout.
 

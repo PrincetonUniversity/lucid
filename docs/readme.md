@@ -1,13 +1,13 @@
 # The Lucid / DPT (data plane threads) language
 
-Lucid is a data plane programming language that focuses on simple, general, and modular abstractions. This makes it easier to express a range of data-plane algorithms and data structures, like specialized hash tables (e.g., cuckoo hashing), sketches, and custom telemetry caches. Programs are often 10X fewer lines of code in Lucid compared to P4, and read much more like Go, Python, or C, than equivalent implementations in P4. 
+Lucid is a high-level language for programming high-performance data planes. Its designed to feel more like a regular programming language than P4, with simple, general, and modular abstractions. At the same time, Lucid is carefully designed so that its compiler can translate programs into efficient code optimized for real platforms. 
 
-Lucid also has a type-and-effect system that guarantees the ordering of operations on global state (state that persists across packets). Programs that pass Lucid's ordering check can be laid out as a pipeline (important for targets like the Tofino) and also have a convenient memory model: each packet's updates to all the global state can be viewed as an atomic transaction, and a stream of packets can be viewed as a serial sequence of such atomic transactions that executes in the order of packet arrivals. In other words, you don't need to worry about concurrency or race conditions at the packet level for Lucid programs that pass the ordering check. 
+An important idea in Lucid is pipeline parallelism. Unlike other languages, Lucid guarantees that a program can be pipelined in its type-and-effect. In other words, any type-checking program is guaranteed to always access persistent objects in the same order. This is necessary on targets like the Tofino that are physical pipelines. On other targets it allows the compiler to use pipelining to exploit parallelism safely (without changing program semantics).
 
-Lucid has an interpreter and a compiler to the Intel Tofino. The interpreter makes testing and getting started easier. It also defines language semantics in a target-independent way. It's relatively fast and works on simple json events, either from a file given at startup or piped from stdin.
+Lucid also has an interpreter with support for the entire language and fast, multi-node simulations. This makes it a convenient modeling language for data-plane applications. 
 
-The compiler translates a Lucid program to a p416 program for the Tofino 1. It does many target-specific optimizations drawn from our many years of programming the Tofino.
-  
+The Lucid codebase is also organized for extensibility, with a modular micropass design and frontend / midend / backend components that use a few common core IRs throughout.
+
 ## Getting Started
 
 
@@ -87,7 +87,7 @@ Lucid also renders okay as C (besides polymorphic size arguments with the single
 ### What to look at next
 
 
-The [tutorials](https://github.com/PrincetonUniversity/lucid/tree/main/tutorials/readme.md) covers basic language features and using the interpreter and compiler. 
+The [tutorials](/lucid/tutorials/) covers basic language features and using the interpreter and compiler. 
 
 
 The [interpreter test programs](https://github.com/PrincetonUniversity/lucid/tree/main/examples/interp_tests) has examples that cover every language feature, with some documentation. 
