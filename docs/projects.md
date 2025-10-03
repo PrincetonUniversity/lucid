@@ -24,11 +24,11 @@
 
 11. Hieu Vu. **Real-time QUIC round-trip-time measurement.** Independent study, 2024. University of Virginia.
 
-12. John Bloch. **Automated testing for network switch programs.** REU project, 2024. Duke University.
+12. John Bloch. **Automated testing for network switch programs.** REU project, 2024.
 
-13. Iris Shi. **Language-supported Data Plane Security.** REU project, 2023. MIT.
+13. Iris Shi. **Language-supported Data Plane Security.** REU project, 2023.
 
-14. Ifesi Dimma Onubogu. **Verifiable Syn Flood Defenses.** REU project, 2022. Columbia University.
+14. **Verifiable Syn Flood Defenses.** REU project, 2022.
 
 15. Yufei Zheng, Huacheng Yu, and Jennifer Rexford. **Detecting tcp packet reordering in the data plane.** arXiv, 2023. Princeton University.
 
@@ -36,7 +36,7 @@
 
 17. Yufei Zheng, Huacheng Yu, David Hay, and Jennifer Rexford. **Programmable Data-Plane Monitoring of Path-Correlated Traffic Behavior.** In submission, 2025. Princeton University, Hebrew University, UMass Amherst
 
-18. **ProD3 Data Plane Prototype.** DARPA OPS-5G (Open, Programmable, Secure 5G) Program, 2024. Peraton Labs.
+18. **ProD3 Data Plane Prototype.** DARPA OPS-5G (Open, Programmable, Secure 5G) Program, 2024.
 
 19. Yoo, Sophia, Xiaoqi Chen, and Jennifer Rexford. **SmartCookie: Blocking Large-Scale SYN Floods with a Split-Proxy Defense on Programmable Data Planes.** USENIX Security, 2024. Princeton University.
 
