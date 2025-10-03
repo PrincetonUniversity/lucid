@@ -1,8 +1,11 @@
 # Tutorials
 
-The tutorials in this directory demonstrate how to use the core features of Lucid and run Lucid programs in the interpreter and on the Tofino switch. The tutorials can also be viewed in the [repository itself](https://github.com/PrincetonUniversity/lucid/tree/main/tutorials), as you run the examples.
 
-### Interpreter tutorials
+The examples in this directory introduce most features of Lucid. Each example includes a readme.md, an annotated .dpt source file and a .json input trace for the interpreter. To run an example in the interpreter, you should be able to just run make in its project directory (Assuming you are in a local copy of the Lucid repo and have compiled it).
+
+The tutorials can also be viewed in the [repository itself](https://github.com/PrincetonUniversity/lucid/tree/main/tutorials), as you run the examples.
+
+### Basic language and interpreter features
 
 [Tutorial 1](/lucid/tutorials/interp/01monitor) Using the interpreter and structuring a packet processing program using _events_ and _handlers_.
 
@@ -10,7 +13,17 @@ The tutorials in this directory demonstrate how to use the core features of Luci
 
 [Tutorial 3](/lucid/tutorials/interp/03counter) Using Lucid Arrays to track state across packets/events. Reading program state in the interpreter.
 
-### Tofino tutorials
+### Language features for modular and re-usable code
+
+[Tutorial 4](/lucid/tutorials/interp/04parsing) Event serialization and deserialization with parsers.
+
+[Tutorial 5](/lucid/tutorials/interp/05modules) Modules for libraries and data structures.
+
+[Tutorial 6](/lucid/tutorials/interp/06polymorphism) Polymorphism for type-safe generic functions and containers.
+
+[Tutorial 7](/lucid/tutorials/interp/07vectors) Vectors and statically-bounded for loops.
+
+### Compiling to the tofino
 
 [Tofino SDE Setup](/lucid/tutorials/tofino/00setup) Setting up the Tofino SDE and environment variables.
 
