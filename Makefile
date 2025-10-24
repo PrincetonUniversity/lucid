@@ -35,11 +35,11 @@ default:
 	dune build src/bin/lucidcc.exe
 	cp -f _build/default/src/bin/lucidcc.exe lucidcc
 
-macos-release:
-	./scripts/build_macos_release.sh
+mac-release:
+	./scripts/builds/build_macos_release.sh
 
 linux-release:
-	./scripts/build_linux_release.sh
+	./scripts/builds/build_linux_release.sh
 
 all:
 	dune build src/bin/main.exe
