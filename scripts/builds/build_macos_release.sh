@@ -1,4 +1,5 @@
 #!/bin/bash
+# build a release binary on macos.
 
 # make sure this is a macos machine
 if [ "$(uname)" != "Darwin" ]; then
@@ -21,6 +22,8 @@ fi
 
 release_base=./release
 os_base=macos
+arch=$(uname -m)
+
 release_dir=$release_base/$os_base/lucid
 lib_dir=$release_dir/lib
 
@@ -36,11 +39,18 @@ echo "patching binary dynamic lib paths"
 chmod +w $release_dir/dpt
 dylibbundler -od -b -x $release_dir/dpt -d $lib_dir -p @executable_path/lib/
 
+echo "# OSX permissions (run to give trust to dpt and libraries)" > $release_dir/osxPermissions.sh
+echo 'xattr -r -d com.apple.quarantine "$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"' >> $release_dir/osxPermissions.sh
+chmod a+x $release_dir/osxPermissions.sh
 # package os release in a tarball inside of the release dir
 echo "Packaging release"
-cd $release_base
-tar -zcvf "$os_base".tar.gz $os_base
+# put the lucid directory into a tar named lucid.$os_base_.tar.gz
+cd $release_dir/..
+echo `pwd`
+tar -zcvf lucid."$os_base"."$arch".tar.gz lucid
 # remove the release directory
-rm -rf $os_base
+cd -
+rm -rf $release_dir
 
 echo "done building macos release"
+
