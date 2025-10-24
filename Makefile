@@ -39,7 +39,7 @@ mac-release:
 	./scripts/builds/build_macos_release.sh
 
 linux-release:
-	./scripts/builds/build_linux_release.sh
+	docker run --rm -v "$(CURDIR)":/build lucid-builder bash -c "eval \$(opam env) && ./scripts/builds/build_linux_release.sh"
 
 all:
 	dune build src/bin/main.exe
