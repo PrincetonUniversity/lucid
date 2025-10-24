@@ -11,7 +11,9 @@ The Lucid codebase is also organized for extensibility, with a modular micropass
 
 ## Getting Started
 
-The best way to get started with Lucid is to compile it from source (instructions below), download the ([Visual Studio syntax highlighting extension](https://github.com/benherber/Lucid-DPT-VSCode-Extension)), and then follow the [tutorials](https://github.com/PrincetonUniversity/lucid/tree/main/tutorials/readme.md). 
+The Lucid interpreter has pre-built binaries (10/24/2025) for macs (arm-based) and ubuntu 20.04+ (x86). Find the latest release in the [releases](https://github.com/PrincetonUniversity/lucid/releases) section.
+
+If you want to use more than the interpreter, the best way to get started with Lucid is to compile it from source (instructions below), download the ([Visual Studio syntax highlighting extension](https://github.com/benherber/Lucid-DPT-VSCode-Extension)), and then follow the [tutorials](https://github.com/PrincetonUniversity/lucid/tree/main/tutorials/readme.md). 
 
 ## Installation 
 
