@@ -39,9 +39,10 @@ echo "patching binary dynamic lib paths"
 chmod +w $release_dir/dpt
 dylibbundler -od -b -x $release_dir/dpt -d $lib_dir -p @executable_path/lib/
 
-echo "# OSX permissions (run to give trust to dpt and libraries)" > $release_dir/osxPermissions.sh
-echo 'xattr -r -d com.apple.quarantine "$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"' >> $release_dir/osxPermissions.sh
-chmod a+x $release_dir/osxPermissions.sh
+echo "# macOS permissions (run to de-quarantine dpt and libraries)" > $release_dir/macPermissions.sh
+echo 'xattr -r -d com.apple.quarantine "$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"' >> $release_dir/macPermissions.sh
+chmod a+x $release_dir/macPermissions.sh
+
 # package os release in a tarball inside of the release dir
 echo "Packaging release"
 # put the lucid directory into a tar named lucid.$os_base_.tar.gz
