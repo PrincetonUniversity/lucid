@@ -83,8 +83,11 @@ Once finished, you can run `./docker_lucid.sh interpret` to run the interpreter 
 ### Syntax highlighting
 There is a VSCode syntax highlighter for Lucid here: ([https://github.com/benherber/Lucid-DPT-VSCode-Extension](https://github.com/benherber/Lucid-DPT-VSCode-Extension))
 
-Lucid also renders okay as C (besides polymorphic size arguments with the single quote symbol).
+To install the Lucid extension, go into VSCode, click the `...` dropdown from the "extensions" menu, and then "Install from VSIX...".
 
+After installing, bind `.dpt` files to the Lucid syntax: 1) enter the command pallete (view => command palette or (on macOS) cmd+shift+p); 2) type "change language mode"; 3) select "Lucid" from the drop down.
+
+Lucid also renders okay as C (besides polymorphic size arguments with the single quote symbol).
 
 ### What to look at next
 
