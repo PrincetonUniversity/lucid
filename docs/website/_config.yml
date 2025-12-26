@@ -1,4 +1,5 @@
 theme: minima
 title: "The Lucid Language"
 description: ""
-header_pages: []
+header_pages:
+  - index.md
