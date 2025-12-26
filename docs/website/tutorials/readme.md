@@ -7,29 +7,29 @@ The tutorials can also be viewed in the [repository itself](https://github.com/P
 
 ### Basic language and interpreter features
 
-[Tutorial 1](/lucid/tutorials/interp/01monitor) Using the interpreter and structuring a packet processing program using _events_ and _handlers_.
+[Tutorial 1](interp/01monitor) Using the interpreter and structuring a packet processing program using _events_ and _handlers_.
 
-[Tutorial 2](/lucid/tutorials/interp/02filter) Using match statements and runtime-modifiable tables for sophisticated decision logic, installing match-action rules in the interpreter.
+[Tutorial 2](interp/02filter) Using match statements and runtime-modifiable tables for sophisticated decision logic, installing match-action rules in the interpreter.
 
-[Tutorial 3](/lucid/tutorials/interp/03counter) Using Lucid Arrays to track state across packets/events. Reading program state in the interpreter.
+[Tutorial 3](interp/03counter) Using Lucid Arrays to track state across packets/events. Reading program state in the interpreter.
 
 ### Language features for modular and re-usable code
 
-[Tutorial 4](/lucid/tutorials/interp/04parsing) Event serialization and deserialization with parsers.
+[Tutorial 4](interp/04parsing) Event serialization and deserialization with parsers.
 
-[Tutorial 5](/lucid/tutorials/interp/05modules) Modules for libraries and data structures.
+[Tutorial 5](interp/05modules) Modules for libraries and data structures.
 
-[Tutorial 6](/lucid/tutorials/interp/06polymorphism) Polymorphism for type-safe generic functions and containers.
+[Tutorial 6](interp/06polymorphism) Polymorphism for type-safe generic functions and containers.
 
-[Tutorial 7](/lucid/tutorials/interp/07vectors) Vectors and statically-bounded for loops.
+[Tutorial 7](interp/07vectors) Vectors and statically-bounded for loops.
 
 ### Compiling to the tofino
 
-[Tofino SDE Setup](/lucid/tutorials/tofino/00setup) Setting up the Tofino SDE and environment variables.
+[Tofino SDE Setup](tofino/00setup) Setting up the Tofino SDE and environment variables.
 
-[Tutorial 1](/lucid/tutorials/tofino/01reflector) Compiling and running a simple packet reflector program on the Tofino using Lucid-provided scripts.
+[Tutorial 1](tofino/01reflector) Compiling and running a simple packet reflector program on the Tofino using Lucid-provided scripts.
 
-[Tutorial 2](/lucid/tutorials/tofino/02tables) Writing and running a simple script on the Tofino's management CPU that adds a rule to a table in the program from the control plane.
+[Tutorial 2](tofino/02tables) Writing and running a simple script on the Tofino's management CPU that adds a rule to a table in the program from the control plane.
 
 ### Next steps
 
