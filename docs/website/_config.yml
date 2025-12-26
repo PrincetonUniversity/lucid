@@ -1,3 +1,4 @@
-theme: jekyll-theme-slate
-title: "The Lucid Programming Language"
+theme: minima
+title: "The Lucid Language"
 description: ""
+header_pages: []
