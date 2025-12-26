@@ -158,7 +158,8 @@ let execute_main_parser print_log swidx port (nst: State.network_state) (pkt_ev 
       let event_val = parser_f nst swidx main_args |> extract_ival in
       match event_val.v with 
       | VEvent(event_val) -> execute_event print_log swidx nst event_val port (InterpSwitch.Ingress)
-      | VBool(false) -> error "main parser did not generate an event"
+      | VBool(false) -> () (* Its okay to not generate an event. That will happen for drops. *)
+      (* error "main parser did not generate an event" *)
       | _ -> error "main parser did not return an event or a no event signal")
     | _ -> error "the global named 'main' is not a parser"
 ;;   
