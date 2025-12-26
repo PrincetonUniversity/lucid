@@ -87,7 +87,7 @@ Lucid also renders okay as C (besides polymorphic size arguments with the single
 ### What to look at next
 
 
-The [tutorials](/lucid/tutorials/) covers basic language features and using the interpreter and compiler. 
+The [tutorials](tutorials/) covers basic language features and using the interpreter and compiler. 
 
 
 The [interpreter test programs](https://github.com/PrincetonUniversity/lucid/tree/main/examples/interp_tests) has examples that cover every language feature, with some documentation. 
