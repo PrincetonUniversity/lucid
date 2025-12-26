@@ -1,4 +1,4 @@
-(* Main file of compiler. *)
+(* Lucid compiler to P4 Tofino *)
 (* open Batteries *)
 open Dpt
 open Cmdline
@@ -71,7 +71,6 @@ let main () =
     (* setup build directory directory. *)
     IoUtils.setup_build_dir Cmdline.cfg.builddir;
     (* compile lucid code to P4 / python / C *)
-    (* todo: also copy the included files *)
     let _ = cpy_src_to_build dpt_fn Cmdline.cfg.builddir in
     compile_to_tofino dpt_fn
   | Some profile_cmd ->
@@ -79,20 +78,5 @@ let main () =
     profile_for_tofino dpt_fn Cmdline.cfg.portspec Cmdline.cfg.builddir profile_cmd
 ;;
 
-(* for profiling. limit is in bytes. *)
-(* let run_with_memory_limit limit f =
-  let limit_memory () =
-    let mem = Gc.(quick_stat ()).heap_words in
-    if mem > limit / (Sys.word_size / 8) then raise Out_of_memory
-  in
-  let alarm = Gc.create_alarm limit_memory in
-  Fun.protect f ~finally:(fun () -> Gc.delete_alarm alarm ; Gc.compact ())
-
-
-let b_1gb   = 1000000000;;
-let b_100mb = 100000000;;
-
-let _ = run_with_memory_limit b_100mb main
- *)
 
 let _ = main ()

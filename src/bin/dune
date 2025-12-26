@@ -1,5 +1,6 @@
 (executables
- (names main compiler dockerUtils lucidcc dfgCompiler eventParsers)
+ (names interp lucidp4t dockerUtils lucidcc dfgCompiler eventParsers)
+;  (names main compiler dockerUtils lucidcc dfgCompiler eventParsers)
  (libraries dpt)
  (link_flags -cc g++)
  )
@@ -7,8 +8,8 @@
 (install
  (section bin)
  (files 
-    (main.exe as dpt) 
-    (compiler.exe as compiler) 
+    (interp.exe as dpt) 
+    (lucidp4t.exe as compiler) 
     (dockerUtils.exe as dockerUtils)
     (lucidcc.exe as lucidcc)
     (dfgCompiler.exe as dfgCompiler) 

@@ -28,10 +28,10 @@ ocamlformat
 .PHONY: test promote test-promote test-cc clean release-macos release-linux
 
 default:
-	dune build src/bin/main.exe
-	cp -f _build/default/src/bin/main.exe dpt
-	dune build src/bin/compiler.exe
-	cp -f _build/default/src/bin/compiler.exe dptc
+	dune build src/bin/interp.exe
+	cp -f _build/default/src/bin/interp.exe dpt
+	dune build src/bin/lucidp4t.exe
+	cp -f _build/default/src/bin/lucidp4t.exe dptc
 	dune build src/bin/lucidcc.exe
 	cp -f _build/default/src/bin/lucidcc.exe lucidcc
 
@@ -42,10 +42,10 @@ linux-release:
 	docker run --rm -v "$(CURDIR)":/build lucid-builder bash -c "eval \$(opam env) && ./scripts/builds/build_linux_release.sh"
 
 all:
-	dune build src/bin/main.exe
-	cp -f _build/default/src/bin/main.exe dpt
-	dune build src/bin/compiler.exe
-	cp -f _build/default/src/bin/compiler.exe dptc
+	dune build src/bin/interp.exe
+	cp -f _build/default/src/bin/interp.exe dpt
+	dune build src/bin/lucidp4t.exe
+	cp -f _build/default/src/bin/lucidp4t.exe dptc
 	dune build src/bin/lucidcc.exe
 	cp -f _build/default/src/bin/lucidcc.exe lucidcc
 	mkdir -p bin
