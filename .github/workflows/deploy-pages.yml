@@ -1,8 +1,8 @@
 name: Deploy Website to Pages
 
 on:
-  push: # run on push to website or workflow change
-    branches: ["main"]
+  push: # run on push to website or change to this workflow
+    branches: ["main"] 
     paths:
       - 'docs/website/**'
       - '.github/workflows/deploy-pages.yml'
@@ -13,17 +13,12 @@ permissions:
   pages: write
   id-token: write
 
-# Allow only one concurrent deployment, skipping runs queued between the run in-progress and latest queued.
-# However, do NOT cancel in-progress runs as we want to allow these production deployments to complete.
 concurrency:
   group: "pages"
   cancel-in-progress: false
 
 jobs:
-  deploy:
-    environment:
-      name: github-pages
-      url: ${{ steps.deployment.outputs.page_url }}
+  build:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
@@ -32,13 +27,23 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
-      # This step packages the folder you choose.
-      # Because we moved everything to docs/website, we point there.
+      - name: Build with Jekyll
+        uses: actions/jekyll-build-pages@v1
+        with:
+          source: ./docs/website
+          destination: ./_site
+
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: './docs/website'
-
+          path: './_site'
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
       - name: Deploy to GitHub Pages
         id: deployment
         uses: actions/deploy-pages@v4
