@@ -27,6 +27,11 @@ jobs:
       - name: Setup Pages
         uses: actions/configure-pages@v4
 
+      - name: Sync Tutorials
+        run: |
+          mkdir -p ./docs/website/tutorials
+          cp -r ./tutorials/* ./docs/website/tutorials/
+
       - name: Build with Jekyll
         uses: actions/jekyll-build-pages@v1
         with:
