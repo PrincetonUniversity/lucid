@@ -13,7 +13,6 @@ then
         exit 1
     fi
     # Update system packages
-    sudo add-apt-repository -y ppa:avsm/ppa
     sudo apt update
     sudo apt install -y build-essential
     sudo apt install -y opam
@@ -49,5 +48,4 @@ if [ ! -f "dpt.opam" ]; then
 fi
 opam install -y --confirm-level=unsafe-yes --deps-only .
 echo "All Lucid dependencies installed."
-echo "You should be able to build lucid with 'make', after you run the following command to update your shell environment:"
-echo "eval \$(opam env)"
+echo "Run eval \$(opam env) to update your shell env before calling make."

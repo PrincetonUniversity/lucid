@@ -102,3 +102,4 @@ clean:
 	rm -f dpt
 	rm -f dptc
 	rm -f test/testing.exe
+	rm -f lucidcc

@@ -1,7 +1,7 @@
 opam-version: "2.0"
 name: "dpt"
 version: "~dev"
-synopsis: "Dataplane threads"
+synopsis: "The lucid data plane language"
 maintainer: "John Sonchack <jsonch@princeton.edu>"
 authors:
   "John Sonchack <jsonch@princeton.edu>"
@@ -23,10 +23,10 @@ depends: [
   "fileutils"
   "ppx_import"
   "core"  { <= "v0.14.1" }
-  "dune" { build }
+  "dune" { = "3.15.3" & build }
   "ocamlgraph"
   "angstrom"
-  "yojson"
+  "yojson" { = "2.2.2" }
   "pyml"
   "pprint"
   "z3"
