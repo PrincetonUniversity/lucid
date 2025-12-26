@@ -1,10 +1,11 @@
 name: Deploy Website to Pages
 
 on:
-  push: # run on push to website or change to this workflow
+  push: # run on push to website or tutorials
     branches: ["main"] 
     paths:
       - 'docs/website/**'
+      - 'tutorials/**'  
       - '.github/workflows/deploy-pages.yml'
   workflow_dispatch:
 

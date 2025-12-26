@@ -1,5 +1,6 @@
-# Tutorials
-
+---
+title: Tutorials
+---
 
 The examples in this directory introduce most features of Lucid. Each example includes a readme.md, an annotated .dpt source file and a .json input trace for the interpreter. To run an example in the interpreter, you should be able to just run make in its project directory (Assuming you are in a local copy of the Lucid repo and have compiled it).
 
