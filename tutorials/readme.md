@@ -29,9 +29,9 @@ The examples in this directory introduce most features of Lucid. Each example in
 
 [Tutorial 2](tofino/02tables) Writing and running a simple script on the Tofino's management CPU that adds a rule to a table in the program from the control plane.
 
-### Next steps
+### Other documentation and examples
 
-After going through these tutorials, you should be ready to dig into the example and test applications:
+For more example applications, look at:
 
 - The suite of [interpreter test programs](https://github.com/PrincetonUniversity/lucid/tree/main/examples/interp_tests)
 
