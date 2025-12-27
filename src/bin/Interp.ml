@@ -21,7 +21,6 @@ let main () =
   Cmdline.set_dpt_file target_filename;
   let ds = Input.parse target_filename in
   let renaming, ds =
-    (* Profile.time_profile "frontend" @@ fun () -> *)
     FrontendPipeline.process_prog Builtins.interp_builtin_tys ds
   in
   let spec_file =
@@ -34,11 +33,9 @@ let main () =
     Console.report "No specification file provided, so skipping simulation"
   | Some spec_file ->
     let ds =
-      (* Profile.time_profile "midend" @@ fun () -> *)
       MidendPipeline.process_prog ds
     in
     let nst, pp, spec =
-      (* Profile.time_profile "initializing interpreter" @@ fun () -> *)
       Interp.initialize renaming spec_file ds
     in
     if cfg.interactive
