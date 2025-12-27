@@ -25,7 +25,6 @@
 
 
 open Collections
-open ParsePortSpec
 open CoreSyntax
 open MiscUtils
 

@@ -43,9 +43,6 @@ type config =
   
   }
 
-(* TODO: We might want to add more parameters controlling which transformations
-   are applied (if we're using the interpreter) *)
-
 let default () =
   { verbose = true
   ; debug = false

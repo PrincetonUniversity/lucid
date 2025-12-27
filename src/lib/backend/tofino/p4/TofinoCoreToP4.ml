@@ -1884,7 +1884,8 @@ let prog_to_p4_prog (prog : prog) : p4_prog =
 (* read port initialization declarations from config *)
 let port_decls portspec = 
   let open ParsePortSpec in
-  let all_ports = portspec.external_ports@portspec.internal_ports in
+  let all_ports = portspec.external_ports@[] in
+  (* let all_ports = portspec.external_ports@portspec.internal_ports in *)
   let decls = List.map 
     (fun port_config -> 
       let dpid = port_config.dpid in 

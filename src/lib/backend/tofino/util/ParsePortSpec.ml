@@ -7,6 +7,10 @@
 "port_events" : [[<port dpid : int>,<event name : string>]]
 *)
 
+(* 
+cleanup: this is for tofino-specific port configuration, most of which is needed anymore.
+*)
+
 open Core
 open Yojson.Basic.Util
 
@@ -18,19 +22,20 @@ type port = {dpid:int; speed:int;}
 
 let p dpid speed = {dpid; speed}
 
+(* Q: what is depreciated here? *)
 type port_config = {
   recirc_dpid : int;
   (* All of the config below is depreciated. 
      They are only used by a complicated (and unnecessary) 
      tofino-specific pass that generates a parser based on a port spec.*)
-  internal_ports : port list; 
+  (* internal_ports : port list;  *)
   external_ports : port list;
   port_events  : (int * string) list;
 }
 
 let default_port_config = {
   recirc_dpid = 196;
-  internal_ports = [];
+  (* internal_ports = []; *)
   external_ports = [p 128 10; p 129 10; p 130 10; p 131 10];
   port_events = [];
 }
@@ -43,7 +48,7 @@ let string_of_port p =
 
 let string_of_portconfig ps =
   "recirc dpid: "^(string_of_int ps.recirc_dpid)^"\n"
-  ^"lucid internal ports: "^((Caml.List.map string_of_port ps.internal_ports) |> Caml.String.concat ", ")^"\n"
+  (* ^"lucid internal ports: "^((Caml.List.map string_of_port ps.internal_ports) |> Caml.String.concat ", ")^"\n" *)
   ^"lucid external ports: "^((Caml.List.map string_of_port ps.external_ports) |> Caml.String.concat ", ")^"\n"
   ^"port-event bindings: "^((Caml.List.map (fun (p, e) -> "("^(string_of_int p)^" : "^e^")") ps.port_events) |> Caml.String.concat ", ")
 ;;
@@ -55,10 +60,12 @@ let check recirc_dpid internal_dpids external_dpids (bound_dpids : int list) =
   not (Caml.List.exists (fun dpid -> Caml.List.mem dpid all_dpids) bound_dpids)
 ;;
 
-(* new simpler method. Should be called on vals from command line --port and --recirc_port *)
+(* This is all that the tofino backend uses for port configuration in 2025.
+   The args here should be from --port and --recirc_port command line args *)
+(* (so internal_ports is depreciated) *)
 let create front_panel_ports recirc_dpid = 
   let external_ports = Caml.List.map (fun (dpid, speed) -> p dpid speed) front_panel_ports in
-  {recirc_dpid; internal_ports = []; external_ports; port_events = []}
+  {recirc_dpid; external_ports; port_events = []}
 ;;
 
 let parse fn_opt =
@@ -111,7 +118,7 @@ let parse fn_opt =
     then (error "port configuration is not valid. Please make sure that all ports bound to events are not declared as recirc, internal, or external ports.")
   );
 
-    let res = {recirc_dpid;internal_ports;external_ports; port_events} in
+    let res = {recirc_dpid;external_ports; port_events} in
     res
   )
 ;;

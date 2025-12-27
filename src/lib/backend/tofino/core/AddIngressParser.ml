@@ -231,7 +231,9 @@ let portspec_to_parser port_ty portspec pkt_var pkt_events bg_events =
          (pbranch [portspec.recirc_dpid] (lucid_background_event_parser pkt_var bg_events))
          ::(List.map (fun port ->          
             bind_port port.dpid;
-            pbranch [port.dpid] (lucid_background_event_parser pkt_var bg_events)) portspec.internal_ports))
+            pbranch [port.dpid] (lucid_background_event_parser pkt_var bg_events)) [])) 
+            (* 12/2025 -- internal ports depreciated *)
+            (* pbranch [port.dpid] (lucid_background_event_parser pkt_var bg_events)) portspec.internal_ports)) *)
          else ([])
       in
       let external_packet_branches = match events with 
