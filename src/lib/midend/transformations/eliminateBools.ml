@@ -90,7 +90,7 @@ let elimination_only ds =
 
 let do_passes (ds : decls) : Syntax.decls =
   (* trans_info "Starting cannonization before IR..."; *)
-  if (Cmdline.cfg.debug) then DBG.start_mlog (!IoUtils.irLogDir) __FILE__ outc dprint_endline;
+  if (Config.cfg.debug) then DBG.start_mlog (!IoUtils.irLogDir) __FILE__ outc dprint_endline;
   (* 1: transform boolean assignment rhs to always be immediates. *)
   (* if not silent then log_prog "before boolean elimination" ds; *)
   let ds = eliminate_complex_bool_assigns ds in

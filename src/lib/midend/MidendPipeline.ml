@@ -1,16 +1,16 @@
 (* The midend pipeline for the interpreter. 
    Mainly does partial interpretation. *)
 let print_if_debug ds =
-  if Cmdline.cfg.debug
+  if Config.cfg.debug
   then (
     print_endline "decls: ";
     let str = CorePrinting.decls_to_string ds in
     Console.report str)
 ;;
 
-let print_if_verbose str = if Cmdline.cfg.verbose then Console.report str
+let print_if_verbose str = if Config.cfg.verbose then Console.report str
 let report str = Console.show_message str ANSITerminal.Green "compiler"
-let cfg = Cmdline.cfg
+let cfg = Config.cfg
 let enable_compound_expressions = true
 let do_ssa = false
 let optimize_simple_calls = ref true

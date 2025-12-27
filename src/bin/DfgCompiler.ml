@@ -15,8 +15,8 @@ open Yojson.Basic
 let do_logging = ref true ;;
 let disable_logging () = 
   do_logging := false;
-  Cmdline.cfg.verbose <- false;
-  Cmdline.cfg.debug <- false;
+  Config.cfg.verbose <- false;
+  Config.cfg.debug <- false;
   (* InterpHelpers.silent := true; *)
   (* NormalizeInts.silent := true;
   PackageTofinoApp.silent := true; *)
@@ -52,7 +52,7 @@ module ArgParse = struct
   let parse_args () =
     let args_ref = ref args_default in
     (* FIXME: Crazy hack, we should unify the two methods of commandline parsing *)
-    let set_symb s = Cmdline.cfg.symb_file <- s in
+    let set_symb s = Config.cfg.symb_file <- s in
     let set_json_fn s = args_ref :=  {!args_ref with json_fn=s;} in 
     let speclist =
       [ "-o", Arg.String set_json_fn, "Output json file"
@@ -60,7 +60,7 @@ module ArgParse = struct
       ]
     in
     let parse_aarg (arg : string) =
-      Cmdline.cfg.dpt_file <- arg;
+      Config.cfg.dpt_file <- arg;
       args_ref := { !args_ref with dptfn = arg };
     in
     Arg.parse speclist parse_aarg usage;
@@ -78,7 +78,7 @@ let profile_for_tofino target_filename portspec build_dir profile_cmd =
 let compile_to_dfg target_filename json_fn =
   let ds = Input.parse target_filename in
   let _, ds = FrontendPipeline.process_prog Builtins.tofino_builtin_tys ds in
-  let portspec = ParsePortSpec.parse Cmdline.cfg.portspec in
+  let portspec = ParsePortSpec.parse Config.cfg.portspec in
   TofinoProfiling.export_dfg ds portspec json_fn;
 ;;
 let main () = 

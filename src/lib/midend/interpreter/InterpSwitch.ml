@@ -102,7 +102,7 @@ let add_global cid v st =
 ;;
 
 let log_exit port (ievent:ievent) current_time st = 
-  if Cmdline.cfg.interactive
+  if Config.cfg.interactive
     then (
       InterpJson.event_exit_to_json 
         st.swid 

@@ -62,7 +62,7 @@ Lucid-generated tofino project folder\
 ;;
 
 let report str = 
-  if (not (Cmdline.cfg.verbose)) then (
+  if (not (Config.cfg.verbose)) then (
   Console.show_message str ANSITerminal.Green "Packager"
   )
 ;;

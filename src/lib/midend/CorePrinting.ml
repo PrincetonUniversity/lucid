@@ -1,7 +1,7 @@
 open Batteries
 open CoreSyntax
 
-let cfg = Cmdline.cfg
+let cfg = Config.cfg
 let concat_map sep f lst = lst |> List.map f |> String.concat sep
 let list_to_string f lst = Printf.sprintf "[%s]" (concat_map "; " f lst)
 let comma_sep f xs = concat_map "," f xs

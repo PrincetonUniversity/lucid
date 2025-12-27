@@ -375,7 +375,7 @@ let printf_replace vs (s : string) : string =
 ;;
 
 let printf_string swid str = 
-  if Cmdline.cfg.json || Cmdline.cfg.interactive
+  if Config.cfg.json || Config.cfg.interactive
     then InterpJson.interp_report_json "printf" str (Some swid)
     else str    
 
@@ -422,7 +422,7 @@ let rec interp_statement nst hdl_sort swid locals s =
     Env.add (id) (interp_exp e) locals
   | SLocal (id, _, e) -> Env.add (Id id) (interp_exp e) locals
   | SPrintf (s, es) ->
-    if (Cmdline.cfg.show_printf) then (
+    if (Config.cfg.show_printf) then (
       let vs = List.map (fun e -> interp_exp e |> extract_ival) es in
       let strout = printf_replace vs s in
       printf_string swid strout |> print_endline);

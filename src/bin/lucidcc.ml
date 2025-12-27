@@ -1,7 +1,7 @@
 (* compile a lucid function (plus globals) to c *)
 open Dpt
 
-let cfg = Cmdline.cfg
+let cfg = Config.cfg
 
 let init_dpdk_config _ =
   CCoreConfig.cfg.driver <- "dpdk";
@@ -17,9 +17,9 @@ let init_lpcap_config _ =
 let build_dir = ref None
 (* parse function with added c-compiler args *)
 let parse () =
-  let speclist = Cmdline.parse_common () in
+  let speclist = Config.parse_common () in
   let speclist = speclist @ [
-    "-o", Arg.String (fun s -> Cmdline.cfg.output <- s), "Output filename.";
+    "-o", Arg.String (fun s -> Config.cfg.output <- s), "Output filename.";
     "--dpdk", Arg.Unit (init_dpdk_config), "Compile against dpdk library";    
     "--lpcap", Arg.Unit (init_lpcap_config), "Compile against lpcap library";  
     "--build", Arg.String (fun s -> build_dir := Some(s)), "Output directory for build files. Overrides output filename.";
@@ -28,13 +28,13 @@ let parse () =
   let target_filename = ref "" in
   let usage_msg = "lucidcc (c compiler). Options available:" in
   Arg.parse speclist (fun s -> target_filename := s) usage_msg;  
-  Cmdline.set_dpt_file !target_filename; (* for symbolic pass *)
+  Config.set_dpt_file !target_filename; (* for symbolic pass *)
   !target_filename
 ;;
 
 let main () = 
   let target_filename = parse () in
-  let out_filename = Cmdline.cfg.output in 
+  let out_filename = Config.cfg.output in 
 
   let ds = Input.parse target_filename in
   (* run frontend pipeline with options to:

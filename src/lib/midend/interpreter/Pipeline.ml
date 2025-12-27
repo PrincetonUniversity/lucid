@@ -179,7 +179,7 @@ let get_obj stage t =
   if stage < 0 then failwith "Pipeline Error: Stage is negative";  
   (* we may want this to double check that accesses are ordered. 
      (I don't think it matters though) *)
-  (* if (not (Cmdline.cfg.unordered) && stage < !(t.current_stage))
+  (* if (not (Config.cfg.unordered) && stage < !(t.current_stage))
   then
     failwith
       "Pipeline Error: Attempted to access global out-of-order. The type \

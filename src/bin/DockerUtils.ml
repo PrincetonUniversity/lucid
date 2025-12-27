@@ -8,7 +8,7 @@
 open Batteries
 open Dpt
 
-let cfg = Cmdline.cfg
+let cfg = Config.cfg
 
 let find_spec_file dpt_file =
   if not (String.ends_with dpt_file ".dpt")

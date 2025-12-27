@@ -8,7 +8,7 @@ open TofinoCore
 open BackendLogging
 
 let start_backend_logging () = 
-  if (Cmdline.cfg.debug)
+  if (Config.cfg.debug)
     then (
       TofinoCdg.start_logging ();
       TofinoDfg.start_logging ();
@@ -26,16 +26,16 @@ let dump_prog comment fn prog =
 ;;
 
 
-let print_if_debug str = if Cmdline.cfg.debug then Console.report str
+let print_if_debug str = if Config.cfg.debug then Console.report str
 
 let report_if_verbose str = 
-  if (Cmdline.cfg.verbose)
+  if (Config.cfg.verbose)
     then Console.show_message str ANSITerminal.Green "Tofino backend"
 ;;
 
 let print_pause = false ;;
 let printprog_if_debug ds =
-  if (Cmdline.cfg.debug)
+  if (Config.cfg.debug)
     then 
       print_endline (CorePrinting.decls_to_string ds);
       if (print_pause)
@@ -81,7 +81,7 @@ let core_passes ds portspec =
   (* all the passes over CoreSyntax *)
   let ds = EliminateTBuiltin.process_prog ds in
   dump_ir_prog "midend before partial interp (initial prog)" "midend_pre_partial_interp.dpt" ds;
-  let ds = if Cmdline.cfg.partial_interp
+  let ds = if Config.cfg.partial_interp
     then (
       report_if_verbose "-------Partial interpreting---------";
       let res = PartialInterpretation.interp_prog ds in 
@@ -289,7 +289,7 @@ let compile ds portspec =
     if 
       report_if_verbose "-------generating python event parsing library-------";
       (* TODO: generate this from the parser?   *)
-      Cmdline.cfg.serverlib then PyEventLib.coresyntax_to_pyeventlib ds else ""
+      Config.cfg.serverlib then PyEventLib.coresyntax_to_pyeventlib ds else ""
   in
   (* build the globals name directory json *)
   report_if_verbose "-------generating Lucid name => P4 name directory-------";
@@ -301,7 +301,7 @@ let compile ds portspec =
   report_if_verbose "-------printing P4 program to string-------";
   let p4 = P4TofinoPrinting.p4_of_prog tofino_prog in
   report_if_verbose "-------printing Python control plane to string-------";
-  let py_ctl = ControlPrinter.pyctl_of_prog tofino_prog Cmdline.cfg.ctl_fn in
+  let py_ctl = ControlPrinter.pyctl_of_prog tofino_prog Config.cfg.ctl_fn in
   (* let cpp_ctl = ControlPrinter.cppctl_of_prog tofino_prog in *)
   let cpp_ctl = "" in 
   p4, cpp_ctl, py_ctl, py_eventlib, globals_directory

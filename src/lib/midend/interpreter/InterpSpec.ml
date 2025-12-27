@@ -331,7 +331,7 @@ let parse
         (* TODO: this isn't quite right. A max_time of 0 in interactive mode 
            prevents any recirculated events from running until the simulation starts. 
            That might be what we want, but it also might not be. Hmm... *)
-        if (Cmdline.cfg.interactive)
+        if (Config.cfg.interactive)
           then 0
           else 10000
       )

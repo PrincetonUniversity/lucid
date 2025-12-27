@@ -18,7 +18,7 @@
    pprint
    )
  (modules
-   cmdline
+   config
    console
    id
    cid

@@ -11,7 +11,7 @@ open CCoreExceptions
 
 let ccore_print phase_str decls = 
 
-  if Cmdline.cfg.debug then 
+  if Config.cfg.debug then 
   (
     print_endline ("---- "^phase_str^" ----");
     print_endline@@CCorePPrint.decls_to_string decls;
