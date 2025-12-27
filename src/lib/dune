@@ -101,7 +101,6 @@
    backendLogging
    addDefaultBranches
    eliminateEventMatch
-   eliminateFloods
    precomputeArgs
    normalizeBools
    eliminateBools

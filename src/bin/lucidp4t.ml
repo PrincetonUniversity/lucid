@@ -22,23 +22,23 @@ let report str =
   Console.show_message str ANSITerminal.Green "compiler"
 ;;
 
+(* load port specs from port config file, or use command-line args *)
+let get_portspec () = 
+  match Cmdline.cfg.portspec with
+    | Some(portspec_fn) -> 
+        TofinoPorts.parse portspec_fn
+    | None -> 
+        TofinoPorts.create Cmdline.cfg.ports Cmdline.cfg.recirc_port
+;;
+
 let profile_for_tofino target_filename portspec build_dir profile_cmd =
   let ds = Input.parse target_filename in
   let _, ds = FrontendPipeline.process_prog Builtins.tofino_builtin_tys ds in
-  let portspec = TofinoPorts.parse portspec in
   TofinoProfiling.profile ds portspec build_dir profile_cmd
 ;;
 
 let compile_to_tofino dptfn =
-  (* use the command line port arguments if there is no spec file *)
-  let cmdline_ports = match Cmdline.cfg.ports with 
-    | None -> [(128, 10); (129, 10); (130, 10); (131, 10)]
-    | Some(ps) -> ps 
-  in
-  let portspec = if (Cmdline.cfg.portspec = None) 
-    then TofinoPorts.create cmdline_ports (Cmdline.cfg.recirc_port)
-    else TofinoPorts.parse Cmdline.cfg.portspec
-  in
+  let portspec = get_portspec () in 
   report
   @@ "Starting P4-Tofino compilation. Using switch port configuration: ";
   print_endline (TofinoPorts.string_of_portconfig portspec);
@@ -75,7 +75,7 @@ let main () =
     compile_to_tofino dpt_fn
   | Some profile_cmd ->
     IoUtils.setup_profile_dir Cmdline.cfg.builddir;
-    profile_for_tofino dpt_fn Cmdline.cfg.portspec Cmdline.cfg.builddir profile_cmd
+    profile_for_tofino dpt_fn (get_portspec ()) Cmdline.cfg.builddir profile_cmd
 ;;
 
 
