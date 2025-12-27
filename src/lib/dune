@@ -163,7 +163,7 @@
    P4TofinoPrinting
    P4TofinoGlobalDirectory
    ControlPrinter
-   ParsePortSpec
+   TofinoPorts
    cEventLib
    pyEventLib
    pyControlLib

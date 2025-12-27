@@ -25,7 +25,7 @@ let report str =
 let profile_for_tofino target_filename portspec build_dir profile_cmd =
   let ds = Input.parse target_filename in
   let _, ds = FrontendPipeline.process_prog Builtins.tofino_builtin_tys ds in
-  let portspec = ParsePortSpec.parse portspec in
+  let portspec = TofinoPorts.parse portspec in
   TofinoProfiling.profile ds portspec build_dir profile_cmd
 ;;
 
@@ -36,12 +36,12 @@ let compile_to_tofino dptfn =
     | Some(ps) -> ps 
   in
   let portspec = if (Cmdline.cfg.portspec = None) 
-    then ParsePortSpec.create cmdline_ports (Cmdline.cfg.recirc_port)
-    else ParsePortSpec.parse Cmdline.cfg.portspec
+    then TofinoPorts.create cmdline_ports (Cmdline.cfg.recirc_port)
+    else TofinoPorts.parse Cmdline.cfg.portspec
   in
   report
   @@ "Starting P4-Tofino compilation. Using switch port configuration: ";
-  print_endline (ParsePortSpec.string_of_portconfig portspec);
+  print_endline (TofinoPorts.string_of_portconfig portspec);
   let ds = Input.parse dptfn in
   let _, ds = FrontendPipeline.process_prog Builtins.tofino_builtin_tys ds in
   (* tofino midend / backend *)

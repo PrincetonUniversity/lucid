@@ -4,7 +4,7 @@ open CoreSyntax
 open Batteries
 open InterpHelpers
 open MiscUtils
-open ParsePortSpec
+open TofinoPorts
 (* TODO: should be part of configuration. *)
 let active_ports = ref [128; 129; 130; 131];; 
 let flood_ports_of p = 

@@ -18,7 +18,7 @@
 
 *)
 open Collections
-open ParsePortSpec
+open TofinoPorts
 open CoreSyntax
 open MiscUtils
 
@@ -204,7 +204,7 @@ let name_of_event eventdecl = match eventdecl.d with
 ;;
 
 
-
+(* LEFT OFF HERE. what does this function do? *)
 
 (* create a full parser from a portspec file, 
    if there are packet events but no parser. *)

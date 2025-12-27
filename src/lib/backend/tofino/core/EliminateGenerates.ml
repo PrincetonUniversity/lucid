@@ -50,7 +50,7 @@
   open TofinoCore
   open AddIntrinsics
   open AddHandlerTypes
-  open ParsePortSpec
+  open TofinoPorts
   
   (* get a member event *)
   let rec member_event event member_id =
@@ -526,7 +526,7 @@ let rec enable_event_headers ev =
   ;;
 
     (* main pass *)
-  let eliminate_generates (portspec:ParsePortSpec.port_config) (prog : prog) : prog = 
+  let eliminate_generates (portspec:TofinoPorts.port_config) (prog : prog) : prog = 
     (* print_endline "[eliminate_generates] pass started"; *)
     let mcgroups, prog = List.fold_left
       (fun (mcgroups, prog) component -> 
