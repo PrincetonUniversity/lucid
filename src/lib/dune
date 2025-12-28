@@ -22,6 +22,7 @@
    interpConfig
    tofinoConfig
    cConfig
+   ports
    console
    id
    cid
