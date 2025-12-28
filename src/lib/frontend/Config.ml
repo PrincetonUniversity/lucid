@@ -112,7 +112,7 @@ let base_speclist =
 
 (* parse args for a backend that uses 
    the base speclist plus its own extensions *)
-let parse_for_backend extra_speclist usage_msg = 
+let parse extra_speclist usage_msg = 
   Arg.parse 
     (base_speclist@extra_speclist) 
     (fun s -> base_cfg.dpt_file <- s) 
@@ -190,7 +190,7 @@ let interp_speclist =
    ]  
 ;;
 
-let parse_interp () = parse_for_backend 
+let parse_interp () = parse 
   interp_speclist
   "Lucid interpreter. Options:"
 ;;
@@ -263,7 +263,7 @@ let tofino_speclist =
 ;;
 
 
-let parse_tofino () = parse_for_backend 
+let parse_tofino () = parse 
   tofino_speclist
   "Lucid Tofino compiler. Options:"
 ;;
@@ -281,7 +281,7 @@ let serverlib_cfg : serverlib_config = {
 
 let parse_serverlib () = 
   let speclist = ["-o", Arg.String (fun s -> serverlib_cfg.output <- s), "Output filename."] in
-  parse_for_backend
+  parse
     speclist
     "Event interface generator. Options: "
 ;;
@@ -327,7 +327,7 @@ let c_speclist =
   ]
 ;;
 
-let parse_c () = parse_for_backend
+let parse_c () = parse
   c_speclist
   "lucidcc (c compiler). Options available:"
 ;;
