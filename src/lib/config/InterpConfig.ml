@@ -13,7 +13,7 @@ type config =
   }
 ;;
 
-(* interp config from spec / test file *)
+(* config for the interpreter's simulator; comes from interp spec file, not stdin args *)
 type simulation_config =
   { num_switches : int
   ; max_time : int
