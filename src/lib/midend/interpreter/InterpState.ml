@@ -225,7 +225,7 @@ module State = struct
       ""
       nst.switches
     in
-    if Config.cfg.json || Config.cfg.interactive
+    if Config.interp_cfg.json || Config.interp_cfg.interactive
       then InterpJson.interp_report_json "final_state" base_str None
       else base_str
   ;;

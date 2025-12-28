@@ -24,11 +24,11 @@ let report str =
 
 (* load port specs from port config file, or use command-line args *)
 let get_portspec () = 
-  match Config.cfg.portspec with
+  match Config.tofino_cfg.portspec with
     | Some(portspec_fn) -> 
         TofinoPorts.parse portspec_fn
     | None -> 
-        TofinoPorts.create Config.cfg.ports Config.cfg.recirc_port
+        TofinoPorts.create Config.tofino_cfg.ports Config.tofino_cfg.recirc_port
 ;;
 
 let profile_for_tofino target_filename portspec build_dir profile_cmd =
@@ -53,29 +53,29 @@ let compile_to_tofino dptfn =
   (* package the program with some helper makefiles *)
   report
   @@ "Compilation to P4 finished. Writing to build directory:"
-  ^ Config.cfg.builddir;
+  ^ Config.tofino_cfg.builddir;
   PackageTofinoApp.generate
     p4_str
     c_str
     py_str
     py_eventlib
     globals
-    Config.cfg.builddir
+    Config.tofino_cfg.builddir
 ;;
 
 let main () =
   report "Compilation to P4 started...";
   let dpt_fn = Config.parse_tofino () in
-  match (Config.cfg.profile_cmd) with
+  match (Config.tofino_cfg.profile_cmd) with
   | None ->
     (* setup build directory directory. *)
-    IoUtils.setup_build_dir Config.cfg.builddir;
+    IoUtils.setup_build_dir Config.tofino_cfg.builddir;
     (* compile lucid code to P4 / python / C *)
-    let _ = cpy_src_to_build dpt_fn Config.cfg.builddir in
+    let _ = cpy_src_to_build dpt_fn Config.tofino_cfg.builddir in
     compile_to_tofino dpt_fn
   | Some profile_cmd ->
-    IoUtils.setup_profile_dir Config.cfg.builddir;
-    profile_for_tofino dpt_fn (get_portspec ()) Config.cfg.builddir profile_cmd
+    IoUtils.setup_profile_dir Config.tofino_cfg.builddir;
+    profile_for_tofino dpt_fn (get_portspec ()) Config.tofino_cfg.builddir profile_cmd
 ;;
 
 

@@ -15,7 +15,7 @@
     TRecord (List.map (fun (id, ty) -> Id.name id, ty.raw_ty) lst)
 
   let mk_t_table tkey_sizes tparam_tys tret_tys span =
-    Config.cfg.show_tvar_links <- true;
+    Config.base_cfg.show_tvar_links <- true;
     ty_sp (TTable({tkey_sizes; tparam_tys; tret_tys})) span
 
   let mk_tmemop span n sizes =

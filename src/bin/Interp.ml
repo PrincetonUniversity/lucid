@@ -1,7 +1,7 @@
 open Batteries
 open Dpt
 
-let cfg = Config.cfg
+let cfg = Config.interp_cfg
 
 let find_spec_file dpt_file =
   if not (String.ends_with dpt_file ".dpt")

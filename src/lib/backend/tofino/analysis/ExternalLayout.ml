@@ -107,8 +107,8 @@ let json_of_locals tds =
    dataflow graph and exports it to a json for 
    python analysis. *)
 let export tds dfg json_fn = 
-  let old_verbose_types = Config.cfg.verbose_types in
-  Config.cfg.verbose_types <- true;
+  let old_verbose_types = Config.base_cfg.verbose_types in
+  Config.base_cfg.verbose_types <- true;
   let json = `Assoc [
     "arrays", json_of_globals tds;
     "vars", json_of_locals tds;
@@ -118,5 +118,5 @@ let export tds dfg json_fn =
   in
   info@@"exporting dataflow graph representation of program to: "^(json_fn);
   Yojson.Basic.pretty_to_channel (open_out json_fn) json;
-  Config.cfg.verbose_types <- old_verbose_types;
+  Config.base_cfg.verbose_types <- old_verbose_types;
 ;;

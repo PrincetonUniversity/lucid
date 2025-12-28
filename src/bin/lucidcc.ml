@@ -1,7 +1,7 @@
 (* compile a lucid function (plus globals) to c *)
 open Dpt
 
-let cfg = Config.cfg
+let cfg = Config.base_cfg
 
 let init_dpdk_config _ =
   CCoreConfig.cfg.driver <- "dpdk";
@@ -17,9 +17,8 @@ let init_lpcap_config _ =
 let build_dir = ref None
 (* parse function with added c-compiler args *)
 let parse () =
-  let speclist = Config.parse_common () in
-  let speclist = speclist @ [
-    "-o", Arg.String (fun s -> Config.cfg.output <- s), "Output filename.";
+  let speclist = Config.base_speclist @ [
+    "-o", Arg.String (fun s -> Config.interp_cfg.output <- s), "Output filename."; (* TODO: no longer need to re-use interp config *)
     "--dpdk", Arg.Unit (init_dpdk_config), "Compile against dpdk library";    
     "--lpcap", Arg.Unit (init_lpcap_config), "Compile against lpcap library";  
     "--build", Arg.String (fun s -> build_dir := Some(s)), "Output directory for build files. Overrides output filename.";
@@ -34,7 +33,7 @@ let parse () =
 
 let main () = 
   let target_filename = parse () in
-  let out_filename = Config.cfg.output in 
+  let out_filename = Config.interp_cfg.output in 
 
   let ds = Input.parse target_filename in
   (* run frontend pipeline with options to:

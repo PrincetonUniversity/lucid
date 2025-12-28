@@ -65,7 +65,7 @@ let dbg_print_example () =
 (* misc helpers used in tofinoPipeline *)
 
 let fail_report str = Console.show_message str ANSITerminal.Red "Tofino Checker"
-let cprint_endline s = if Config.cfg.debug then print_endline s
+let cprint_endline s = if Config.base_cfg.debug then print_endline s
 
 
 let cprint_label label str = 

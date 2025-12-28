@@ -247,11 +247,11 @@ let check_sat_encoded ctx encoded_constraints =
   let try_with_logic result logic =
     match result with
     | Solver.UNKNOWN ->
-      if Config.cfg.show_queries then print_endline ("trying logic: " ^ logic);
+      if Config.base_cfg.show_queries then print_endline ("trying logic: " ^ logic);
       let z3solver = Solver.mk_solver_s ctx.ctx logic in
       Solver.add z3solver (vars @ encoded_constraints);
       let ret = Solver.check z3solver [] in
-      if Config.cfg.show_queries
+      if Config.base_cfg.show_queries
       then (
         print_endline @@ "Solver: " ^ Solver.to_string z3solver;
         match ret with
@@ -278,7 +278,7 @@ let check_sat_encoded ctx encoded_constraints =
     | Solver.UNSATISFIABLE -> false
   in
   solved := !solved + 1;
-  if Config.cfg.show_queries
+  if Config.base_cfg.show_queries
   then
     print_endline @@ "solved count = " ^ string_of_int !solved ^ " constraints";
   res
@@ -286,7 +286,7 @@ let check_sat_encoded ctx encoded_constraints =
 
 let check_sat constraints =
   let constraints = prune_constraints constraints in
-  if Config.cfg.show_constraints
+  if Config.base_cfg.show_constraints
   then
     print_endline
     @@ "Checking satisfiability of "
@@ -305,7 +305,7 @@ let find_max constraints eff1 eff2 =
   match max_effect eff1 eff2 with
   | Some eff -> eff
   | None ->
-    if Config.cfg.show_constraints
+    if Config.base_cfg.show_constraints
     then
       print_endline
       @@ Printf.sprintf
@@ -338,7 +338,7 @@ let find_max constraints eff1 eff2 =
 let check_implies constrs1 constrs2 =
   let constrs1 = prune_constraints constrs1 in
   let constrs2 = prune_constraints constrs2 in
-  if Config.cfg.show_constraints
+  if Config.base_cfg.show_constraints
   then
     print_endline
     @@ Printf.sprintf
