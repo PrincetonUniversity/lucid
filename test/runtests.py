@@ -117,7 +117,9 @@ def check_lucidcc_compat(incompat_keywords, fullfile):
 
 def lucidcc_test(n_tests, i, fullfile, args):
     incompat_keywords = ["Counter.create", "PairArray.create", "Payload.t"]
-    incompat = check_lucidcc_compat(incompat_keywords, fullfile)
+    # get the base of the fullfile without the directory
+    shortfile = os.path.splitext(os.path.basename(fullfile))[0] + ".dpt"
+    incompat = check_lucidcc_compat(incompat_keywords, shortfile)
     if incompat != None:
         print ("skipping lucidcc test on "+fullfile+" because it contains an incompatible feature: "+str(incompat))
         return
@@ -125,9 +127,9 @@ def lucidcc_test(n_tests, i, fullfile, args):
         print ("skipping lucidcc test on "+fullfile+" because it is expected to fail")
         return
     print ("Running lucid cc test {}/{} on {}".format(str(i), str(n_tests), fullfile))
-    fname = fullfile[0:-4]
+    fname = shortfile[0:-4]
     outname = "{}.c".format(fname)
-    inname = interpdir+fullfile
+    inname = interpdir+shortfile
     cmd = ["./lucidcc", inname, "-o", "test/ccoutput/"+outname] + args
     # print("running command: {}".format(" ".join(cmd)))
     ret = subprocess.run(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
