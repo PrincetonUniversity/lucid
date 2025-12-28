@@ -56,7 +56,7 @@ type 'nst network_utils =
 and 'nst state = 
   { 
     swid : int
-  ; config : InterpConfig.interp_config_from_test
+  ; config : InterpConfig.simulation_config
   ; global_env : 'nst ival Env.t
   ; command_queue : CommandQueue.t
   ; ingress_queue : EventQueue.t

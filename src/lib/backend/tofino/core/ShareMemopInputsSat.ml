@@ -1998,7 +1998,7 @@ let process_component component =
 ;;
 
 let process_core core_prog = 
-  if (TofinoConfig.tofino_cfg.optimal_memop_input_alloc)
+  if (TofinoConfig.cfg.optimal_memop_input_alloc)
     then (
       List.map (fun component -> 
         if (component.comp_sort != HControl) then

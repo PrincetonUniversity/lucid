@@ -18,7 +18,7 @@ type t =
   ; links : InterpState.State.topology
   ; externs : value Env.t list
   ; events : interp_input list
-  ; config : InterpConfig.interp_config_from_test
+  ; config : InterpConfig.simulation_config
   ; extern_funs : (InterpState.State.network_state InterpSyntax.ival) Env.t
   ; ctl_pipe_name : string option
   }
@@ -359,7 +359,7 @@ let parse
       | Some (`String filename) -> Some filename
       | _ -> None
     in
-    let config : InterpConfig.interp_config_from_test =
+    let config : InterpConfig.simulation_config =
       { num_switches
       ; max_time
       ; default_input_gap

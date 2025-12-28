@@ -31,7 +31,7 @@ module State = struct
 
   type network_state =
     { current_time : int
-    ; config : InterpConfig.interp_config_from_test
+    ; config : InterpConfig.simulation_config
     ; event_sorts : event_sort Env.t
     ; event_signatures  : (Cid.t * CoreSyntax.ty list) IntMap.t
     ; handlers : handler Env.t

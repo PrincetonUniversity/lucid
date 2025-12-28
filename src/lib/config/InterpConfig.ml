@@ -14,7 +14,7 @@ type config =
 ;;
 
 (* interp config from spec / test file *)
-type interp_config_from_test =
+type simulation_config =
   { num_switches : int
   ; max_time : int
   ; default_input_gap : int
@@ -38,7 +38,7 @@ let cfg : config =
   }
 ;;
 
-let interp_speclist = 
+let speclist = 
   let hide_final_state () = cfg.show_interp_state <- false in
   let hide_event_reports () = cfg.show_interp_events <- false in
   let hide_printf () = cfg.show_printf <- false in
@@ -83,7 +83,7 @@ let interp_speclist =
    ]  
 ;;
 
-let parse_interp () = parse 
-  interp_speclist
+let parse_interp () = parse
+  speclist
   "Lucid interpreter. Options:"
 ;;
