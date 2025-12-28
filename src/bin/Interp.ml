@@ -17,9 +17,8 @@ let find_spec_file dpt_file =
 ;;
 
 let main () =
-  let target_filename = Config.parse () in
-  Config.set_dpt_file target_filename;
-  let ds = Input.parse target_filename in
+  let target_filename = Config.parse_interp () in
+  let ds = Input.parse Config.base_cfg.dpt_file in
   let renaming, ds =
     FrontendPipeline.process_prog Builtins.interp_builtin_tys ds
   in

@@ -17,37 +17,8 @@ type base_config =
   ; mutable use_type_names : bool
   ; mutable show_all_effects : bool (* Show effects even for non-global types *)
   ; mutable partial_interp : bool (* Enable partial interpretation *)
-  ; mutable dpt_file : string (** Path to the input dpt file *)
+  ; mutable dpt_file : string (** Path to the input dpt file. *)
   }
-
-type interp_config = 
-  { mutable spec_file : string (** Path to an interpreter specification file *)
-  ; mutable symb_file : string (** Path to a symbolic specification file *)
-  ; mutable show_interp_state : bool (* report final interpreter state *)
-  ; mutable show_interp_events : bool (* report events processed by interpreter *)
-  ; mutable show_printf        : bool (* report printf statements *)
-      (** Run interpreter interactively (stdin / stdout) **)
-  ; mutable interactive : bool
-  ; mutable json : bool  (** Print json outputs **)
-  ; mutable output : string
-  }
-
-(* tofino backend config *)
-type tofino_config = 
-  { mutable builddir : string (* build directory where p4 + other code goes *)
-  ; mutable portspec : string option (* path to port specification file *)
-  ; mutable ports :(int * int) list (* list of port ids and speeds *)
-  ; mutable recirc_port : int (* port id for recirculation *)
-  ; mutable profile_cmd :
-      string option (* something with profiling -- probably depreciated *)
-  ; mutable ctl_fn : string option (* path to optional python control program *)
-  ; mutable serverlib : bool
-      (* If false, disable the python event library generation *)
-  ; mutable optimal_memop_input_alloc : bool
-    (* find an allocation of memop inputs to sALU input register that requires no extra copy operations.
-      In some cases, this may create larger PHV clusters. *)    
-  }
-
 let base_cfg : base_config = 
   { verbose = true
   ; debug = false
@@ -131,7 +102,30 @@ let base_speclist =
       ]
 ;;
 
+(* parse args for a backend that uses 
+   the base speclist plus its own extensions *)
+let parse_for_backend extra_speclist usage_msg = 
+  Arg.parse 
+    (base_speclist@extra_speclist) 
+    (fun s -> base_cfg.dpt_file <- s) 
+    usage_msg
+  ;
+  base_cfg.dpt_file
+;;
 
+
+(* Interpreter config *)
+type interp_config = 
+  { mutable spec_file : string (** Path to an interpreter specification file *)
+  ; mutable symb_file : string (** Path to a symbolic specification file *)
+  ; mutable show_interp_state : bool (* report final interpreter state *)
+  ; mutable show_interp_events : bool (* report events processed by interpreter *)
+  ; mutable show_printf        : bool (* report printf statements *)
+      (** Run interpreter interactively (stdin / stdout) **)
+  ; mutable interactive : bool
+  ; mutable json : bool  (** Print json outputs **)
+  }
+;;
 let interp_cfg : interp_config = 
   { spec_file = ""
   ; symb_file = ""
@@ -140,7 +134,6 @@ let interp_cfg : interp_config =
   ; show_printf = true
   ; interactive = false
   ; json = false
-  ; output = "lucid.output"
   }
 ;;
 
@@ -188,11 +181,27 @@ let interp_speclist =
             disables verbose and suppresses final state and event reports" )
    ]  
 ;;
-let parse_interp () = 
-  let target_filename = ref "" in
-  let usage_msg = "Lucid command line. Options available:" in
-  Arg.parse (base_speclist@interp_speclist) (fun s -> target_filename := s) usage_msg;
-  !target_filename
+
+let parse_interp () = parse_for_backend 
+  interp_speclist
+  "Lucid interpreter. Options:"
+;;
+
+(* tofino backend config *)
+type tofino_config = 
+  { mutable builddir : string (* build directory where p4 + other code goes *)
+  ; mutable portspec : string option (* path to port specification file *)
+  ; mutable ports :(int * int) list (* list of port ids and speeds *)
+  ; mutable recirc_port : int (* port id for recirculation *)
+  ; mutable profile_cmd :
+      string option (* something with profiling -- probably depreciated *)
+  ; mutable ctl_fn : string option (* path to optional python control program *)
+  ; mutable serverlib : bool
+      (* If false, disable the python event library generation *)
+  ; mutable optimal_memop_input_alloc : bool
+    (* find an allocation of memop inputs to sALU input register that requires no extra copy operations.
+      In some cases, this may create larger PHV clusters. *)    
+  }
 ;;
 
 let tofino_cfg : tofino_config = 
@@ -245,21 +254,73 @@ let tofino_speclist =
   ]
 ;;
 
-let parse_tofino () = 
-  let target_filename = ref "" in
-  let usage_msg = "Lucid Tofino compiler. Args:" in
-  Arg.parse (base_speclist@tofino_speclist) (fun s -> target_filename := s) usage_msg;
-  !target_filename
 
-let parse_serverlib () =
-  let set_output s = interp_cfg.output <- s in
-  let speclist = base_speclist @ ["-o", Arg.String set_output, "Output filename."] in
-  let target_filename = ref "" in
-  let usage_msg = "Event interface generator. Options available:" in
-  Arg.parse speclist (fun s -> target_filename := s) usage_msg;
-  !target_filename
+let parse_tofino () = parse_for_backend 
+  tofino_speclist
+  "Lucid Tofino compiler. Options:"
 ;;
 
-let set_dpt_file fname = base_cfg.dpt_file <- fname
 
-let parse = parse_interp
+(* c event binding generator *)
+type serverlib_config = {
+  mutable output : string
+}
+;;
+let serverlib_cfg : serverlib_config = {
+  output = ""
+}
+;;
+
+let parse_serverlib () = 
+  let speclist = ["-o", Arg.String (fun s -> serverlib_cfg.output <- s), "Output filename."] in
+  parse_for_backend
+    speclist
+    "Event interface generator. Options: "
+;;
+
+(* C backend *)
+type c_config = {
+  mutable output : string;
+  mutable port_id_size : int;
+  mutable switch_id_size : int; (* for testing compatibility *)
+  mutable recirc_port : int;
+  mutable self_id_num: int;
+  mutable driver : string;
+  mutable build_dir : string option;
+}
+;;
+let c_cfg = {
+  output = "";
+  port_id_size = 32;
+  switch_id_size = 32;
+  recirc_port = 0;
+  self_id_num = 0;
+  driver = "lpcap";
+  build_dir = None
+} 
+;;
+
+let c_speclist = 
+  let init_dpdk_config _ =
+    c_cfg.driver <- "dpdk";
+    c_cfg.port_id_size <- 16;
+    c_cfg.switch_id_size <- 16;
+  in
+  let init_lpcap_config _ =
+    c_cfg.driver <- "lpcap";
+    c_cfg.port_id_size <- 32;
+    c_cfg.switch_id_size <- 32;
+  in  
+  [
+    "-o", Arg.String (fun s -> c_cfg.output <- s), "Output filename.";
+    "--dpdk", Arg.Unit (init_dpdk_config), "Compile against dpdk library";    
+    "--lpcap", Arg.Unit (init_lpcap_config), "Compile against lpcap library";  
+    "--build", Arg.String (fun s -> c_cfg.build_dir <- Some(s)), "Output directory for build files. Overrides output filename.";
+  ]
+;;
+
+let parse_c () = parse_for_backend
+  c_speclist
+  "lucidcc (c compiler). Options available:"
+;;
+

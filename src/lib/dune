@@ -171,7 +171,6 @@
    CoreRegularizeMemops
    CCorePasses
    CCoreSyntax
-   CCoreConfig
    CCoreUtils
    CCorePPrint
    CCoreCPrint

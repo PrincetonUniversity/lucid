@@ -82,7 +82,7 @@ let compile ds =
   CCoreWellformedC.all_checks cds;
 
   (*** 8. add target-specific driver interface *)
-  let progbundle = match CCoreConfig.cfg.driver with 
+  let progbundle = match Config.c_cfg.driver with 
     | "lpcap" -> CCoreDriverPcap.package_prog cds
     | "dpdk" -> CCoreDriverDpdk.package_prog cds
     | d -> err (Printf.sprintf "unknown driver %s. valid options are: [lpcap (pcap driver); dpdk (dpdk driver)]" d)

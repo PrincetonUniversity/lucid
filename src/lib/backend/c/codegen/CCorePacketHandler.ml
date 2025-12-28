@@ -96,7 +96,7 @@ let pkt_handler = dfun_foriegn
   (cid"pkt_handler")
   (tint 32)
   [
-    cid"ingress_port", tint (CCoreConfig.cfg).port_id_size;
+    cid"ingress_port", tint Config.c_cfg.port_id_size;
     cid"buf", tref tchar; cid"len", tint 32; 
     cid"out_buf", tref tchar; cid"out_len", tref@@tint 32; 
   ]
