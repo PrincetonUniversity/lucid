@@ -7,7 +7,7 @@
     - config parse function, that also sets base_cfg (see the "parse_for_backend" helper)
 *)
 
-(* the common config *)
+(* the common front end config *)
 type base_config =
   { mutable verbose : bool
       (* Print out each transformation name before we do it *)
