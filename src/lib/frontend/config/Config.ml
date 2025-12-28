@@ -1,3 +1,11 @@
+(*  
+  Configuration is divided into a "base_config", used in the frontend, 
+  and various backend-specific configurations.
+  Each backend should define a:
+    - config type 
+    - global config object
+    - config parse function, that also sets base_cfg (see the "parse_for_backend" helper)
+*)
 
 (* the common config *)
 type base_config =
