@@ -5,7 +5,6 @@ open Batteries
 module Env = Collections.CidMap
 module IntMap = Map.Make (Int)
 
-open InterpConfig
 open InterpSwitch
 
 
@@ -32,7 +31,7 @@ module State = struct
 
   type network_state =
     { current_time : int
-    ; config : InterpConfig.config
+    ; config : InterpConfig.interp_config_from_test
     ; event_sorts : event_sort Env.t
     ; event_signatures  : (Cid.t * CoreSyntax.ty list) IntMap.t
     ; handlers : handler Env.t
@@ -225,7 +224,7 @@ module State = struct
       ""
       nst.switches
     in
-    if Config.interp_cfg.json || Config.interp_cfg.interactive
+    if InterpConfig.cfg.json || InterpConfig.cfg.interactive
       then InterpJson.interp_report_json "final_state" base_str None
       else base_str
   ;;

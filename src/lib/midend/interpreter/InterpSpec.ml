@@ -18,7 +18,7 @@ type t =
   ; links : InterpState.State.topology
   ; externs : value Env.t list
   ; events : interp_input list
-  ; config : InterpConfig.config
+  ; config : InterpConfig.interp_config_from_test
   ; extern_funs : (InterpState.State.network_state InterpSyntax.ival) Env.t
   ; ctl_pipe_name : string option
   }
@@ -331,7 +331,7 @@ let parse
         (* TODO: this isn't quite right. A max_time of 0 in interactive mode 
            prevents any recirculated events from running until the simulation starts. 
            That might be what we want, but it also might not be. Hmm... *)
-        if (Config.interp_cfg.interactive)
+        if (InterpConfig.cfg.interactive)
           then 0
           else 10000
       )
@@ -359,7 +359,7 @@ let parse
       | Some (`String filename) -> Some filename
       | _ -> None
     in
-    let config : InterpConfig.config =
+    let config : InterpConfig.interp_config_from_test =
       { num_switches
       ; max_time
       ; default_input_gap

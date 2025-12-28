@@ -38,7 +38,7 @@ type 'nst network_utils =
 and 'nst state = 
   { 
     swid : int
-  ; config : InterpConfig.config
+  ; config : InterpConfig.interp_config_from_test
   ; global_env : 'nst ival Env.t
   ; command_queue : CommandQueue.t
   ; ingress_queue : EventQueue.t
@@ -54,7 +54,7 @@ and 'nst state =
 (* as you can see, the interface for interpSwitch is 
    kind of messy and in the middle of refactoring. *)
 
-val create : InterpConfig.config -> 'nst network_utils -> int -> 'nst state
+val create : InterpConfig.interp_config_from_test -> 'nst network_utils -> int -> 'nst state
 
 val mem_env : cid -> 'nst state -> bool
 val lookup : cid -> 'nst state -> 'nst ival

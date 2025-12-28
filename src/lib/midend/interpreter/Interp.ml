@@ -87,7 +87,7 @@ let execute_event
   | Some handler ->
     if print_log
     then
-      if Config.interp_cfg.json || Config.interp_cfg.interactive
+      if InterpConfig.cfg.json || InterpConfig.cfg.interactive
       then
         `Assoc
           [ ( "event_arrival"
@@ -137,7 +137,7 @@ let execute_main_parser print_log swidx port (nst: State.network_state) (pkt_ev 
     | F (_, parser_f) -> (
       if print_log
         then
-          if Config.interp_cfg.json || Config.interp_cfg.interactive
+          if InterpConfig.cfg.json || InterpConfig.cfg.interactive
           then
             `Assoc
               [ ( "packet_arrival"
@@ -263,7 +263,7 @@ let rec execute_sim_step idx nst =
     let nst = if (idx = 0) 
       then (
         let nst = advance_current_time next_event_time nst in
-        run_egress_events Config.interp_cfg.show_interp_events nst;
+        run_egress_events InterpConfig.cfg.show_interp_events nst;
         nst)
       else nst
     in
@@ -274,14 +274,14 @@ let rec execute_sim_step idx nst =
         execute_ready_controls idx nst;
         (* check for ingress and egress events with time < nst.current_time *)
         match State.next_ready_event idx nst with
-        | Some (epgs) -> execute_interp_event Config.interp_cfg.show_interp_events execute_sim_step idx nst epgs
+        | Some (epgs) -> execute_interp_event InterpConfig.cfg.show_interp_events execute_sim_step idx nst epgs
         | None -> execute_sim_step ((idx + 1) mod Array.length nst.switches) nst
       )    
   )
 ;;
 
 let simulate (nst : State.network_state) =
-  if (not Config.interp_cfg.json) && not Config.interp_cfg.interactive
+  if (not InterpConfig.cfg.json) && not InterpConfig.cfg.interactive
   then
     Console.report
     @@ "Using random seed: "
@@ -290,7 +290,7 @@ let simulate (nst : State.network_state) =
   Random.init nst.config.random_seed;
   let nst = execute_sim_step 0 nst in
   (* drain all the egresses one last time to get everything into an ingress queue for logging *)
-  finish_egress_events Config.interp_cfg.show_interp_events nst;
+  finish_egress_events InterpConfig.cfg.show_interp_events nst;
   nst
 ;;
 
@@ -328,7 +328,7 @@ let rec execute_interactive_sim_step event_getter_opt max_time idx nst =
   | Some t -> 
     let nst = if (idx = 0)
       then (
-        run_egress_events Config.interp_cfg.show_interp_events nst;
+        run_egress_events InterpConfig.cfg.show_interp_events nst;
         load_new_events nst event_getter_opt;
         advance_current_time t nst)
       else nst
@@ -339,7 +339,7 @@ let rec execute_interactive_sim_step event_getter_opt max_time idx nst =
       match State.next_ready_event idx nst with
       | Some (epgs) ->
         execute_ready_controls idx nst;
-        execute_interp_event Config.interp_cfg.show_interp_events next_step_continuation idx nst epgs
+        execute_interp_event InterpConfig.cfg.show_interp_events next_step_continuation idx nst epgs
       (* if there's no next event, move to the next switch *)
       | None -> next_step_continuation ((idx + 1) mod Array.length nst.switches) nst
 ;;

@@ -1,7 +1,7 @@
 open Batteries
 open Dpt
 
-let cfg = Config.interp_cfg
+let cfg = InterpConfig.cfg
 
 let find_spec_file dpt_file =
   if not (String.ends_with dpt_file ".dpt")
@@ -17,7 +17,7 @@ let find_spec_file dpt_file =
 ;;
 
 let main () =
-  let target_filename = Config.parse_interp () in
+  let target_filename = InterpConfig.parse_interp () in
   let ds = Input.parse Config.base_cfg.dpt_file in
   let renaming, ds =
     FrontendPipeline.process_prog Builtins.interp_builtin_tys ds

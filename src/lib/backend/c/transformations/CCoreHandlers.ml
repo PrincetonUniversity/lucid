@@ -22,7 +22,7 @@ let handler_cid = Cid.create ["handle_event"] ;;
 let in_ev_param = cid"ev_in", tref tevent
 let next_ev_param = cid"ev_next", tref tevent
 let out_ev_param = cid"ev_out", tref tevent
-let out_port_param () = cid"out_port", tref@@tint (Config.c_cfg.port_id_size) (* port for out event, 0 means no out event *)
+let out_port_param () = cid"out_port", tref@@tint (CConfig.c_cfg.port_id_size) (* port for out event, 0 means no out event *)
 let ev_in = param_evar in_ev_param
 let ev_next = param_evar next_ev_param 
 let ev_out = param_evar out_ev_param
@@ -71,7 +71,7 @@ type handler_rec = {
 (* make the main handler *)
 let mk_main_handler handlers = 
   (* ingress_port size is derived from mutable that is set in translation to CCore *)
-  let ingress_port_param = (Cid.id Builtins.ingr_port_id), tint Config.c_cfg.port_id_size in
+  let ingress_port_param = (Cid.id Builtins.ingr_port_id), tint CConfig.c_cfg.port_id_size in
   let out_port_param = out_port_param () in
   let branches = List.map 
     (fun handler -> 

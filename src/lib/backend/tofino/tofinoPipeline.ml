@@ -289,7 +289,7 @@ let compile ds portspec =
     if 
       report_if_verbose "-------generating python event parsing library-------";
       (* TODO: generate this from the parser?   *)
-      Config.tofino_cfg.serverlib then PyEventLib.coresyntax_to_pyeventlib ds else ""
+      TofinoConfig.tofino_cfg.serverlib then PyEventLib.coresyntax_to_pyeventlib ds else ""
   in
   (* build the globals name directory json *)
   report_if_verbose "-------generating Lucid name => P4 name directory-------";
@@ -301,7 +301,7 @@ let compile ds portspec =
   report_if_verbose "-------printing P4 program to string-------";
   let p4 = P4TofinoPrinting.p4_of_prog tofino_prog in
   report_if_verbose "-------printing Python control plane to string-------";
-  let py_ctl = ControlPrinter.pyctl_of_prog tofino_prog Config.tofino_cfg.ctl_fn in
+  let py_ctl = ControlPrinter.pyctl_of_prog tofino_prog TofinoConfig.tofino_cfg.ctl_fn in
   (* let cpp_ctl = ControlPrinter.cppctl_of_prog tofino_prog in *)
   let cpp_ctl = "" in 
   p4, cpp_ctl, py_ctl, py_eventlib, globals_directory

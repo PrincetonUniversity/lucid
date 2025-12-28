@@ -258,7 +258,7 @@ let builtin_checkers =
    in the backend. These should not be necessary in the final type checking pass. *)
 let builtin_vars () = 
   [
-    Builtins.ingr_port_id, (Config.c_cfg.port_id_size) |> tint;
+    Builtins.ingr_port_id, (CConfig.c_cfg.port_id_size) |> tint;
   ]
 ;;
 

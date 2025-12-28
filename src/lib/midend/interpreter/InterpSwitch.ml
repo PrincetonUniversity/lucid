@@ -56,7 +56,7 @@ type 'nst network_utils =
 and 'nst state = 
   { 
     swid : int
-  ; config : InterpConfig.config
+  ; config : InterpConfig.interp_config_from_test
   ; global_env : 'nst ival Env.t
   ; command_queue : CommandQueue.t
   ; ingress_queue : EventQueue.t
@@ -102,7 +102,7 @@ let add_global cid v st =
 ;;
 
 let log_exit port (ievent:ievent) current_time st = 
-  if Config.interp_cfg.interactive
+  if InterpConfig.cfg.interactive
     then (
       InterpJson.event_exit_to_json 
         st.swid 

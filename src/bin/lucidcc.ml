@@ -2,8 +2,8 @@
 open Dpt
 
 let main () = 
-  let target_filename = Config.parse_c () in
-  let out_filename = Config.c_cfg.output in 
+  let target_filename = CConfig.parse_c () in
+  let out_filename = CConfig.c_cfg.output in 
 
   let ds = Input.parse target_filename in
   (* run frontend pipeline with options to:
@@ -17,7 +17,7 @@ let main () =
   in
   print_endline (" --- compiling to c --- ");
   let generated_files = CCorePasses.compile ds in
-  match (Config.c_cfg.build_dir) with 
+  match (CConfig.c_cfg.build_dir) with 
     | Some(dir) -> 
       (* make sure the directory exists, put all the files there *)
       print_endline ("Writing files to " ^ dir);
