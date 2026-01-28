@@ -80,7 +80,7 @@ This will download about 400MB of data and should take < 5 minutes.
 Once finished, you can run `./docker_lucid.sh interpret` to run the interpreter or `./docker_lucid.sh compile` to run the Tofino compiler. The `docker_lucid` script takes care of forwarding all arguments, files, and directories to / from the docker image.
 
 
-### Syntax highlighting
+## Syntax highlighting
 There is a VSCode syntax highlighter for Lucid here: ([https://github.com/benherber/Lucid-DPT-VSCode-Extension](https://github.com/benherber/Lucid-DPT-VSCode-Extension))
 
 To install the Lucid extension, go into VSCode, click the `...` dropdown from the "extensions" menu, and then "Install from VSIX...".
@@ -89,7 +89,7 @@ After installing, bind `.dpt` files to the Lucid syntax: 1) enter the command pa
 
 Lucid also renders okay as C (besides polymorphic size arguments with the single quote symbol).
 
-### What to look at next
+## What to look at next
 
 The [tutorials](https://github.com/PrincetonUniversity/lucid/tree/main/tutorials/readme.md) covers basic language features and using the interpreter and compiler. 
 
