@@ -9,7 +9,7 @@ open TofinoResources
        of a statement group data dependency dag. ****)
 
 let debug_print_endline str = 
-  if (Cmdline.cfg.debug)
+  if (Config.base_cfg.debug)
   then print_endline str
 ;;
 
@@ -825,7 +825,7 @@ let try_place_in_stage prog_info (prior_stages, stmt_group_opt) stage =
 (* place a statement group into the pipe *)
 let place_in_pipe prog_info stmt_group pipe : pipeline =
   debug_print_endline ("[place_in_pipe] trying to place statement group: "^(stmt_group.sguid |> string_of_int));
-  if (Cmdline.cfg.debug)
+  if (Config.base_cfg.debug)
   then (
     debug_print_endline 
       (Printf.sprintf 

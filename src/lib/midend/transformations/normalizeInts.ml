@@ -13,7 +13,7 @@ let error s = raise (Error s)
 let err msg ex = error (msg ^ " " ^ Printing.exp_to_string ex)
 
 let info str =
-  if Cmdline.cfg.verbose
+  if Config.base_cfg.verbose
   then Console.show_message str ANSITerminal.Green "normalizeIntOps"
 ;;
 
@@ -224,7 +224,7 @@ let atomize_int_assigns ds =
 ;;
 
 let do_passes ds =
-  if Cmdline.cfg.debug then DBG.start_mlog (!IoUtils.moduleLogDir) __FILE__ outc dprint_endline;
+  if Config.base_cfg.debug then DBG.start_mlog (!IoUtils.moduleLogDir) __FILE__ outc dprint_endline;
   let orig_ds = ds in
   let ds = balance_assign_exps ds in
   (* info "assignments transformed to balanced exps"; *)

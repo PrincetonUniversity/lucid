@@ -6,7 +6,7 @@ open CCoreExceptions
 open CCoreBuiltinCheckers
 
 let dprint_endline x = 
-  if (Cmdline.cfg.debug) then 
+  if (Config.base_cfg.debug) then 
     print_endline x
   else ()
 ;;

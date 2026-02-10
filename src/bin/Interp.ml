@@ -1,7 +1,7 @@
 open Batteries
 open Dpt
 
-let cfg = Cmdline.cfg
+let cfg = InterpConfig.cfg
 
 let find_spec_file dpt_file =
   if not (String.ends_with dpt_file ".dpt")
@@ -17,9 +17,8 @@ let find_spec_file dpt_file =
 ;;
 
 let main () =
-  let target_filename = Cmdline.parse () in
-  Cmdline.set_dpt_file target_filename;
-  let ds = Input.parse target_filename in
+  let target_filename = InterpConfig.parse_interp () in
+  let ds = Input.parse Config.base_cfg.dpt_file in
   let renaming, ds =
     FrontendPipeline.process_prog Builtins.interp_builtin_tys ds
   in

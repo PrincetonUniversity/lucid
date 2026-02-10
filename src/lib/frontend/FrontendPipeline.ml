@@ -1,12 +1,12 @@
 let print_if_debug ds =
-  if Cmdline.cfg.debug
+  if Config.base_cfg.debug
   then (
     print_endline "decls: ";
     let str = Printing.decls_to_string ds in
     Console.report str)
 ;;
 
-let print_if_verbose str = if Cmdline.cfg.verbose then Console.report str
+let print_if_verbose str = if Config.base_cfg.verbose then Console.report str
 
 type frontend_options = {
    match_event_handlers : bool; (* check that all events are matched with handlers *)

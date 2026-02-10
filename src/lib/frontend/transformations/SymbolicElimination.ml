@@ -130,7 +130,7 @@ let find_symb_file dpt_file filename =
 ;;
 
 let eliminate_prog ds =
-  let filename = find_symb_file Cmdline.cfg.dpt_file Cmdline.cfg.symb_file in
+  let filename = find_symb_file Config.base_cfg.dpt_file InterpConfig.cfg.symb_file in
   let sizes, symbolics =
     if String.is_empty filename
     then StringMap.empty, StringMap.empty

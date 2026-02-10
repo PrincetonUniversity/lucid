@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
-""" Run compile / assemble / execute tests. """
+""" 
+    Tests for Tofino backend. 
+    Uses test commands in testspecs/ directory
+    to compile / assemble / run lucid programs
+"""
 
-usage = "./compilertests.py testsets/test_one.json"
+usage = "./compilertests.py testspecs/compile_only.json"
 
 import os, sys, errno, shutil, subprocess, re, json, itertools
 from sys import path
@@ -10,7 +14,7 @@ from pathlib import Path
 def main():
     dptc = find_file("dptc")
     if (len(sys.argv) != 2):        
-        print ("incorrect args. usage: "+usage)
+        print ("incorrect args. usage example: "+usage)
         return
     print (dptc)
 

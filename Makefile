@@ -58,6 +58,7 @@ all:
 
 generatedVisitors: src/lib/frontend/Syntax.processed.ml
 
+# interpreter tests
 test: default
 	python3 ./test/runtests.py
 
@@ -68,11 +69,17 @@ test-promote: default
 	python3 ./test/runtests.py
 	cp test/output/* test/expected/
 
+# c compiler tests
 test-cc: default
 	python3 ./test/runtests.py --lucidcc
 
+# tofino compiler tests
+# test compilation to P4 only
+test-tofino-compile: default 
+	cd test/backend && ./compilertests.py testspecs/compile_only.json
+
+# test compilation to P4, P4 assembly, and program-specific test cases
 EXPECTED_SDE_VER := bf-sde-9.13.0
-# cd into test/backend and then call ./runtests.sh
 test_tofino: default
 	@if [ -z "$$SDE" ]; then \
 		echo "Error: P4studio SDE directory environment variable (\$$SDE) is not set"; \

@@ -131,7 +131,7 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
     Printf.printf "inferred_fty: %s\n" (Printing.ty_to_string inferred_fty); *)
     
     (* if we are in unordered mode, cast everything as effectless *)
-    (* let inferred_fty = if (Cmdline.cfg.unordered) then  *)
+    (* let inferred_fty = if (Config.cfg.unordered) then  *)
     let inferred_fty = if (unordered = true) then 
         remove_effects inferred_fty
       else inferred_fty 

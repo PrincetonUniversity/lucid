@@ -12,7 +12,7 @@ let error s = raise (Error s)
 
 
 let partial_backend_pipeline ds portspec = 
-  let partial_interp = Cmdline.cfg.partial_interp in
+  let partial_interp = Config.base_cfg.partial_interp in
 
   let core_ds = SyntaxToCore.translate_prog ds in
   let ds = core_ds in 

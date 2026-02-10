@@ -18,7 +18,11 @@
    pprint
    )
  (modules
-   cmdline
+   config
+   interpConfig
+   tofinoConfig
+   cConfig
+   ports
    console
    id
    cid
@@ -75,7 +79,6 @@
    syntaxToCore
    eliminateTBuiltin
    interp
-   InterpConfig
    interpCore
    interpControl
    pipeline
@@ -101,7 +104,6 @@
    backendLogging
    addDefaultBranches
    eliminateEventMatch
-   eliminateFloods
    precomputeArgs
    normalizeBools
    eliminateBools
@@ -172,7 +174,6 @@
    CoreRegularizeMemops
    CCorePasses
    CCoreSyntax
-   CCoreConfig
    CCoreUtils
    CCorePPrint
    CCoreCPrint

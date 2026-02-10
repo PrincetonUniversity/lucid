@@ -11,7 +11,7 @@ open CCoreExceptions
 
 let ccore_print phase_str decls = 
 
-  if Cmdline.cfg.debug then 
+  if Config.base_cfg.debug then 
   (
     print_endline ("---- "^phase_str^" ----");
     print_endline@@CCorePPrint.decls_to_string decls;
@@ -82,7 +82,7 @@ let compile ds =
   CCoreWellformedC.all_checks cds;
 
   (*** 8. add target-specific driver interface *)
-  let progbundle = match CCoreConfig.cfg.driver with 
+  let progbundle = match CConfig.c_cfg.driver with 
     | "lpcap" -> CCoreDriverPcap.package_prog cds
     | "dpdk" -> CCoreDriverDpdk.package_prog cds
     | d -> err (Printf.sprintf "unknown driver %s. valid options are: [lpcap (pcap driver); dpdk (dpdk driver)]" d)

@@ -5,7 +5,7 @@ open CCoreUtils
 open Str
 
 (* for now, group type is an alias for port type *)
-let port_ty = tint ((CCoreConfig.cfg).port_id_size) ;;
+let port_ty = tint (CConfig.c_cfg.port_id_size) ;;
 
 (* Sys.time *)
 let sys_time = 
