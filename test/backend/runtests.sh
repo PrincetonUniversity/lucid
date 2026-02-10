@@ -1,3 +1,5 @@
+#!/bin/bash
+# Run the default tofino tests with compile / assemble / execute
 cd ../../
 make
 cd -
