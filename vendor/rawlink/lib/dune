@@ -1,0 +1,15 @@
+(library
+ (name rawlink)
+ (synopsis "Rawlink is a portable interface to BPF/AF_SOCKET")
+ (public_name rawlink)
+ (modules rawlink)
+ (libraries rawlink_lowlevel))
+
+(library
+ (name rawlink_lowlevel)
+ (synopsis "Rawlink lowlevel/common bits")
+ (public_name rawlink.lowlevel)
+ (modules rawlink_lowlevel)
+ (libraries cstruct unix)
+ (preprocess (pps ppx_cstruct))
+ (foreign_stubs (language c) (names rawlink_stubs)))
