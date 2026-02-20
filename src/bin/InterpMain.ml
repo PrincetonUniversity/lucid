@@ -45,7 +45,7 @@ let main () =
       if cfg.show_interp_state then (
         if (not cfg.interactive) && not cfg.json
           then Console.report "Final State:";
-      print_endline @@ InterpState.State.nst_to_string nst))
+      print_endline @@ InterpState.nst_to_string nst))
 ;;
 
 let _ = main ()

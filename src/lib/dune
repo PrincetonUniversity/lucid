@@ -16,11 +16,13 @@
    fileutils
    pyml
    pprint
+   rawlink
    )
  (modules
    config
    interpConfig
    tofinoConfig
+   softSwitchConfig
    cConfig
    ports
    console
@@ -85,9 +87,13 @@
    preprocess
    InterpJson
    interpSpec
+   interpSim
    interpState
    InterpSwitch
-   interpPayload
+   InterpStdio
+   InterpSocket
+   interpParsing
+   interpDeparsing
    interpSyntax
    libraryInterface
    libraryUtils
@@ -99,6 +105,7 @@
    events
    payloads
    packet
+   constants
    builtins
    TQVar
    backendLogging

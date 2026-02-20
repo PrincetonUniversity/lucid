@@ -51,3 +51,11 @@ let rec read_packet t =
       failwith "Link socket closed";
     t.packets := Lowlevel.process_input t.buffer n;
     read_packet t
+
+let get_fd t = t.fd
+
+let has_buffered_packet t =
+  match !(t.packets) with
+  | [] -> false
+  | _ -> true
+

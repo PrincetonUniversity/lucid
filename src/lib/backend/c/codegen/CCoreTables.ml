@@ -310,7 +310,7 @@ let monomorphic_table_decls actions_enum_ty decl : decls =
 ;;
 
 let monomorphic_table_calls = 
-  let table_fun_cids = List.map Builtins.gfun_cid Tables.signature.m_funs in
+  let table_fun_cids = List.map InterpState.gfun_cid Tables.signature.m_funs in
   object 
     inherit [_] s_map as super
 

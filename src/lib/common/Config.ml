@@ -25,6 +25,7 @@ type base_config =
   ; mutable show_all_effects : bool (* Show effects even for non-global types *)
   ; mutable partial_interp : bool (* Enable partial interpretation *)
   ; mutable dpt_file : string (** Path to the input dpt file. *)
+  ; mutable symb_file : string (** Path to a symbolic specification file *)
   }
 (* the global config with defaults *)
 let base_cfg : base_config = 
@@ -40,6 +41,7 @@ let base_cfg : base_config =
   ; show_all_effects = false
   ; partial_interp = true
   ; dpt_file = ""
+  ; symb_file = ""
   }
 ;;  
 (* the speclist for the Arg module to parse config from 

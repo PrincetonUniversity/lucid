@@ -42,7 +42,7 @@ let packet_parse_fun nst swnum args =
   packet_parse_error "Packet.parse should never be called outside of parsers"
 ;;
 
-let defs : State.global_fun list =
+let defs : global_fun list =
   [ { cid = packet_parse_cid; body = packet_parse_fun; ty = packet_parse_ty } ]
 ;;
 

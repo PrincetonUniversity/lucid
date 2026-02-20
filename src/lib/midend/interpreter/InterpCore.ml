@@ -5,6 +5,7 @@ open CoreSyntax
 open SyntaxUtils
 open InterpState
 open InterpSwitch
+open InterpSyntax
 module Printing = CorePrinting
 
 let raw_integer v =
@@ -143,7 +144,7 @@ let interp_op op vs =
 
 let lookup_var swid nst locals cid =
   try Env.find cid locals with
-  | _ -> State.lookup swid cid nst
+  | _ -> InterpState.lookup swid cid nst
 ;;
 
 let port_arg locals = 
@@ -203,7 +204,7 @@ let calc_crc16_csum (zs : zint list) =
   Integer.bitnot (Integer.set_size 16 !sum)
 ;;
 
-let rec interp_exp (nst : State.network_state) swid locals e : 'a InterpSyntax.ival =
+let rec interp_exp (nst : network_state) swid locals e : 'a InterpSyntax.ival =
   let interp_exps = interp_exps nst swid locals in
   let interp_exp = interp_exp nst swid locals in
   let extract_int = function
@@ -392,13 +393,13 @@ let partial_interp_exps nst swid env exps =
 ;;
 
 (* convert a flood port into a list of declared ports *)
-let expand_flood_port nst swid flood_port =
+let expand_flood_port (nst : network_state) swid flood_port =
   List.filter_map
     (fun (port, dst_swid) -> 
       if (port <> (-(flood_port + 1))) && (dst_swid <> swid) 
         then Some(port)
         else None)
-    (State.ports_to_neighbors nst.State.links swid)
+    (InterpSim.ports_to_neighbors nst.simconfig.links swid)
 ;;
 
 let rec interp_statement nst hdl_sort swid locals s =
@@ -412,7 +413,7 @@ let rec interp_statement nst hdl_sort swid locals s =
   | SAssign (id, e) ->
     if not (Env.mem id locals)
     then
-      if State.mem_env swid (id) nst
+      if InterpState.mem_env swid (id) nst
       then
         error
           (Printf.sprintf
@@ -461,7 +462,7 @@ let rec interp_statement nst hdl_sort swid locals s =
       let output_ports = match g with
         (* recirculation *)
         | GSingle None ->
-          [ Port(State.lookup swid (Cid.from_string "recirculation_port") nst
+          [ Port(InterpState.lookup swid (Cid.from_string "recirculation_port") nst
           |> extract_ival
           |> raw_integer
           |> Integer.to_int )  ]
@@ -483,7 +484,7 @@ let rec interp_statement nst hdl_sort swid locals s =
       in
       (* push all the events to output ports *)
       List.iter (fun out_port -> 
-        InterpSwitch.ingress_send nst (State.lookup_switch nst swid) out_port event) 
+        InterpSwitch.ingress_send nst (lookup_switch nst swid) out_port event) 
         output_ports;
       locals       
     )
@@ -501,11 +502,10 @@ let rec interp_statement nst hdl_sort swid locals s =
       (* serialize packet events *)
       let event_val = match ev_sort with 
         | EBackground -> 
-          event (* background events stay as events *)
-        | EPacket -> 
-          InterpPayload.serialize_packet_event event
+          {event with eserialized = false} (* background events stay as events *)
+        | EPacket -> InterpDeparsing.serialize_packet_event event
       in
-      InterpSwitch.egress_send nst (State.lookup_switch nst swid) port event_val;
+      InterpSwitch.egress_send nst (lookup_switch nst swid) port event_val;
       locals
     )
     | HControl -> (error "control events are not implemented")
@@ -558,7 +558,7 @@ let rec interp_statement nst hdl_sort swid locals s =
       ids
 ;;
 
-let _interp_dglobal (nst : State.network_state) swid id ty e =
+let _interp_dglobal (nst : network_state) swid id ty e =
   (* FIXME: This functions is probably more complicated than it needs to be.
      We can probably do this a lot better by writing the Array.create function
      in Arrays.ml (and similarly for counters), then just calling that. But I
@@ -614,11 +614,11 @@ let _interp_dglobal (nst : State.network_state) swid id ty e =
          appeared during interpretation"
   in
   nst.switches.(swid) <- { st with pipeline = new_p };
-  State.add_global swid (Id id) (V (vglobal id idx ty)) nst;
+  InterpState.add_global swid (Id id) (V (vglobal id idx ty)) nst;
   nst
 ;;
 
-let interp_dglobal (nst : State.network_state) swid id ty e =
+let interp_dglobal (nst : network_state) swid id ty e =
   match e.e with 
   | ECall(cid, args, _) when (Cid.names cid) = ["Table"; "create"] -> (
     (* eval the args *)
@@ -632,7 +632,7 @@ let interp_dglobal (nst : State.network_state) swid id ty e =
     (* update the global state's pipeline *)
     nst.switches.(swid) <- { nst.switches.(swid) with pipeline = new_pipe };
     (* add the global to globals context in nst *)
-    State.add_global swid (Id id) vg_ival nst;
+    InterpState.add_global swid (Id id) vg_ival nst;
     (* return updated nst *)
     nst
     (* interp_dtable nst swid id ty e *)
@@ -747,22 +747,22 @@ let rec interp_parser_block nst swid payload_id locals parser_block =
   (* now interpret the step *)
   interp_parser_step nst swid payload_id locals (fst parser_block.pstep)
   
-and interp_parser_action (nst : State.network_state) swid payload_id locals parser_action = 
+and interp_parser_action (nst : network_state) swid payload_id locals parser_action = 
   (* TODO: implement Payload.read and Payload.peek *)
   match parser_action with 
   | PRead(cid, ty, _) -> 
     let payload = get_local payload_id locals in
     (* semantically, a read creates a new variable and also updates the payload variable *)
-    let parsed_val, payload' = InterpPayload.pread payload ty in
+    let parsed_val, payload' = InterpParsing.pread payload ty in
     (* add the new local and update payload variable *)
     locals
       |> Env.add (cid) (InterpSyntax.V(parsed_val))
       |> update_local payload_id payload'
   | PPeek(cid, ty, _) -> 
-    let peeked_val = InterpPayload.ppeek (get_local payload_id locals) ty in
+    let peeked_val = InterpParsing.ppeek (get_local payload_id locals) ty in
     locals |> Env.add (cid) (InterpSyntax.V(peeked_val))
   | PSkip(ty) ->
-    let payload' = InterpPayload.padvance (get_local payload_id locals) ty in
+    let payload' = InterpParsing.padvance (get_local payload_id locals) ty in
     update_local payload_id payload' locals
   | PAssign(cid, exp) ->
     let assigned_ival = interp_exp nst swid locals exp in
@@ -795,7 +795,7 @@ and interp_parser_step nst swid payload_id locals parser_step =
             (InterpSyntax.V(port_arg locals))::(List.map (interp_exp nst swid locals) args)
           in
           (* call the parser function as you would any other function *)
-          match State.lookup swid cid nst with 
+          match InterpState.lookup swid cid nst with 
             | F(_, parser_f) -> let rv = parser_f nst swid args in rv |> extract_ival
             | _ -> error "[parser call] could not find parser function"
         )
@@ -813,7 +813,7 @@ let rec find_bitstring_param params =
   | _::tl -> find_bitstring_param tl
 ;;
 
-let interp_decl (nst : State.network_state) swid d =
+let interp_decl (nst : network_state) swid d =
   (* print_endline @@ "Interping decl: " ^ Printing.decl_to_string d; *)
   match d.d with
   | DGlobal (id, ty, e) -> interp_dglobal nst swid id ty e
@@ -839,13 +839,13 @@ let interp_decl (nst : State.network_state) swid d =
           event.data
           params
       in
-      State.update_counter swid event nst; (*TODO: why are we counting packet events here? *)
+      InterpState.update_counter swid event nst; (*TODO: why are we counting packet events here? *)
       Pipeline.reset_stage nst.switches.(swid).pipeline;
       ignore @@ interp_statement nst hdl_sort swid locals body
     in
     match hdl_sort with
-    | HData -> State.add_handler (Cid.id id) f nst
-    | HEgress -> State.add_egress_handler (Cid.id id) f nst
+    | HData -> add_handler (Cid.id id) f nst
+    | HEgress -> add_egress_handler (Cid.id id) f nst
     | _ -> error "control handlers not supported"
     )
 
@@ -871,7 +871,7 @@ let interp_decl (nst : State.network_state) swid d =
       in
       InterpSyntax.V(interp_parser_block nst swid payload_id locals parser_block)
     in
-    State.add_global swid (Cid.id id) (InterpSyntax.anonf runtime_function) nst;
+    InterpState.add_global swid (Cid.id id) (InterpSyntax.anonf runtime_function) nst;
     nst
 
   | DEvent (id, num_opt, _, _) ->
@@ -897,17 +897,17 @@ let interp_decl (nst : State.network_state) swid d =
         eserialized = false;
     })
     in
-    State.add_global swid (Id id) (InterpSyntax.f (Id id) f) nst;
+    InterpState.add_global swid (Id id) (InterpSyntax.f (Id id) f) nst;
     nst
   | DMemop { mid; mparams; mbody } ->
     let f = interp_memop mparams mbody in
-    State.add_global swid (Cid.id mid) (InterpSyntax.f (Cid.id mid) f) nst;
+    InterpState.add_global swid (Cid.id mid) (InterpSyntax.f (Cid.id mid) f) nst;
     nst
   | DExtern _ ->
     failwith "Extern declarations should be handled during preprocessing"
   | DUserTy _ -> nst (*all user types should be inlined by now*)
   | DFun(id, _, body) -> 
-    let runtime_function (nst: State.network_state) swid args = 
+    let runtime_function (nst: network_state) swid args = 
       (* bind args to parameters *)
       let locals = 
         List.fold_left2
@@ -927,7 +927,7 @@ let interp_decl (nst : State.network_state) swid d =
       nst.switches.(swid).retval := None;
       InterpSyntax.V(ret_v)
     in 
-    State.add_global swid (Cid.id id) (InterpSyntax.f (Cid.id id) runtime_function) nst;
+    InterpState.add_global swid (Cid.id id) (InterpSyntax.f (Cid.id id) runtime_function) nst;
     nst
 
   | DActionConstr({aid; aconst_params; aparams; abody}) ->
@@ -957,13 +957,13 @@ let interp_decl (nst : State.network_state) swid d =
       action_f
     in
     let constr_f = InterpSyntax.f (Cid.id aid) action_function_generator in
-    State.add_global swid (Cid.id aid) constr_f nst;    
+    InterpState.add_global swid (Cid.id aid) constr_f nst;    
     nst   
 ;;
 
 
 let process_decls nst ds =
-  let rec aux i (nst : State.network_state) =
+  let rec aux i (nst : network_state) =
     if i = Array.length nst.switches
     then nst
     else aux (i + 1) (List.fold_left (fun nst -> interp_decl nst i) nst ds)

@@ -55,7 +55,7 @@ let taction iarg marg ret =
 (* convert a function from ivals -> ivals to a function from values -> values *)
 let ival_fcn_to_internal_action nst swid vaction = 
   let open CoreSyntax in
-  let open InterpState.State in 
+  let open InterpState in 
   let acn_cid, action_f = match vaction with 
     | F (Some(cid), f) -> cid, f
     | F (None, _) -> error "Table.install: interpreter error -- the action was added to the global context without a name"

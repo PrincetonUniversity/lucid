@@ -69,7 +69,6 @@ let array_update_ty =
 let update_fun err nst swid args =
   (* Hack to make the types work *)
   let err str = failwith (err str) in
-  let open State in
   let open InterpSyntax in 
   match args with
   | [ V { v = VGlobal (_, stage) }
@@ -91,8 +90,8 @@ let update_fun err nst swid args =
 ;;
 
 let array_update_fun = update_fun array_update_error
-let dummy_memop = InterpSyntax.anonf (fun _ _ args -> V(extract_ival (List.hd args)))
-let setop = InterpSyntax.anonf (fun _ _ args -> V(extract_ival (List.nth args 1)))
+let dummy_memop = InterpSyntax.anonf (fun _ _ args -> V(InterpSyntax.extract_ival (List.hd args)))
+let setop = InterpSyntax.anonf (fun _ _ args -> V(InterpSyntax.extract_ival (List.nth args 1)))
 let dummy_int = InterpSyntax.V (CoreSyntax.vinteger (Integer.of_int 0))
 
 (* Array.get *)
@@ -102,7 +101,6 @@ let array_get_cid = Cid.create_ids [array_id; array_get_id]
 let array_get_error msg = array_error array_get_name msg
 
 let array_get_fun nst swid args =
-  let open State in
   match args with
   | [arg1; arg2] ->
     update_fun
@@ -120,7 +118,6 @@ let array_getm_cid = Cid.create_ids [array_id; array_getm_id]
 let array_getm_error msg = array_error array_getm_name msg
 
 let array_getm_fun nst swid args =
-  let open State in
   match args with
   | [arg1; arg2; getop; getarg] ->
     update_fun
@@ -138,7 +135,6 @@ let array_set_cid = Cid.create_ids [array_id; array_set_id]
 let array_set_error msg = array_error array_set_name msg
 
 let array_set_fun nst swid args =
-  let open State in
   match args with
   | [arg1; arg2; setval] ->
     update_fun
@@ -156,7 +152,6 @@ let array_setm_cid = Cid.create_ids [array_id; array_setm_id]
 let array_setm_error msg = array_error array_setm_name msg
 
 let array_setm_fun nst swid args =
-  let open State in
   match args with
   | [arg1; arg2; setop; setarg] ->
     update_fun
@@ -230,7 +225,6 @@ let array_update_complex_ty =
 ;;
 
 let array_update_complex_fun nst swid args =
-  let open State in
   let open InterpSyntax in
   match args with
   | [V { v = VGlobal (_, stage) }; V { v = VInt idx }; F(_, memop); arg1; arg2; default]
@@ -249,7 +243,7 @@ let array_update_complex_fun nst swid args =
 
 let constructors = [array_create_id, array_create_sig]
 
-let defs : State.global_fun list =
+let defs : global_fun list =
   [ { cid = array_get_cid; body = array_get_fun; ty = array_get_ty }
   ; { cid = array_getm_cid; body = array_getm_fun; ty = array_getm_ty }
   ; { cid = array_set_cid; body = array_set_fun; ty = array_set_ty }

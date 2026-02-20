@@ -114,7 +114,7 @@ and event_val =
   ; evnum : value option
   ; data : value list
   ; edelay : int
-  ; eserialized : bool
+  ; eserialized : bool (* Only used in parsing and deparsing. Maybe remove. *)
   }
 
 and value =

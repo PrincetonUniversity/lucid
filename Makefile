@@ -28,12 +28,14 @@ ocamlformat
 .PHONY: test promote test-promote test-cc clean release-macos release-linux
 
 default:
-	dune build src/bin/interp.exe
-	cp -f _build/default/src/bin/interp.exe dpt
+	dune build src/bin/interpMain.exe
+	cp -f _build/default/src/bin/interpMain.exe dpt
 	dune build src/bin/lucidp4t.exe
 	cp -f _build/default/src/bin/lucidp4t.exe dptc
 	dune build src/bin/lucidcc.exe
 	cp -f _build/default/src/bin/lucidcc.exe lucidcc
+	dune build src/bin/lucidSoftSwitch.exe
+	cp -f _build/default/src/bin/lucidSoftSwitch.exe lucidSoftSwitch
 
 mac-release:
 	./scripts/builds/build_macos_release.sh
@@ -42,8 +44,8 @@ linux-release:
 	docker run --rm -v "$(CURDIR)":/build lucid-builder bash -c "eval \$(opam env) && ./scripts/builds/build_linux_release.sh"
 
 all:
-	dune build src/bin/interp.exe
-	cp -f _build/default/src/bin/interp.exe dpt
+	dune build src/bin/interpMain.exe
+	cp -f _build/default/src/bin/interpMain.exe dpt
 	dune build src/bin/lucidp4t.exe
 	cp -f _build/default/src/bin/lucidp4t.exe dptc
 	dune build src/bin/lucidcc.exe
@@ -55,6 +57,10 @@ all:
 	cp -f _build/default/src/bin/dfgCompiler.exe bin/dfgCompiler
 	dune build src/bin/eventParsers.exe
 	cp -f _build/default/src/bin/eventParsers.exe bin/eventParsers
+
+switch: 
+	dune build src/bin/lucidSoftSwitch.exe
+	cp -f _build/default/src/bin/lucidSoftSwitch.exe lucidSwitch
 
 generatedVisitors: src/lib/frontend/Syntax.processed.ml
 

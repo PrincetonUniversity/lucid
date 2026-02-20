@@ -61,7 +61,6 @@ let pairarray_update_ty =
 
 let pairarray_update_fun nst swid args =
   let open InterpSyntax in
-  let open State in 
   match args with
   | [V { v = VGlobal (_, stage) }; V { v = VInt idx }; F (_, memop); arg1; arg2; default]
     ->
@@ -84,7 +83,7 @@ let pairarray_update_fun nst swid args =
 
 let constructors = [pairarray_create_id, pairarray_create_sig]
 
-let defs : State.global_fun list =
+let defs : global_fun list =
   [ { cid = pairarray_update_cid
     ; body = pairarray_update_fun
     ; ty = pairarray_update_ty

@@ -3,38 +3,25 @@ open Config
 
 type config = 
   { mutable spec_file : string (** Path to an interpreter specification file *)
-  ; mutable symb_file : string (** Path to a symbolic specification file *)
   ; mutable show_interp_state : bool (* report final interpreter state *)
   ; mutable show_interp_events : bool (* report events processed by interpreter *)
   ; mutable show_printf        : bool (* report printf statements *)
       (** Run interactively (stdin / stdout) **)
   ; mutable interactive : bool
   ; mutable json : bool  (** Print json outputs **)
+  ; mutable interface : string (** name of interface to read from. Temporary. **)
   }
 ;;
 
-(* config for the interpreter's simulator; comes from interp spec file, not stdin args *)
-type simulation_config =
-  { num_switches : int
-  ; max_time : int
-  ; default_input_gap : int
-  ; generate_delay : int
-  ; propagate_delay : int
-  ; random_seed : int
-  ; random_delay_range : int
-  ; random_propagate_range : int
-  ; drop_chance : int
-  }
-;;
 
 let cfg : config = 
   { spec_file = ""
-  ; symb_file = ""
   ; show_interp_state = true
   ; show_interp_events = true
   ; show_printf = true
   ; interactive = false
   ; json = false
+  ; interface = ""
   }
 ;;
 
@@ -53,6 +40,7 @@ let speclist =
     base_cfg.verbose <- false
   in
   let set_spec s = cfg.spec_file <- s in
+  let set_interface intf = cfg.interface <- intf in
   [ 
       ( "--json"
         , Arg.Unit set_json
@@ -80,6 +68,9 @@ let speclist =
         , Arg.Unit set_interactive
         , "Run interpreter interactively, piping events to/from stdin/stdout \
             disables verbose and suppresses final state and event reports" )
+      ; ( "--interface"
+        , Arg.String set_interface
+        , "switch:port->interface Bind the given endpoint identifier (switch:port) to the given interface" )
    ]  
 ;;
 

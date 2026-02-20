@@ -137,7 +137,7 @@ let payload_peek_fun _ _ _ =
 
 
 
-let defs : State.global_fun list =
+let defs : global_fun list =
   [ { cid = payload_empty_cid; body = payload_empty_fun; ty = payload_empty_ty }
   ; { cid = payload_parse_cid; body = payload_parse_fun; ty = payload_parse_ty }
   ; {cid = payload_read_cid; body = payload_read_fun; ty = payload_read_ty}

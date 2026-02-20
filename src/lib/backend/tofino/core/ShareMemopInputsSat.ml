@@ -317,7 +317,7 @@ let array_user_vars tds arr_id =
   (* helpers *)
   let accessor_cids = 
     let defs = Arrays.defs@PairArrays.defs in 
-    CL.map (fun (gf:InterpState.State.global_fun) -> gf.cid) defs
+    CL.map (fun (gf:InterpState.global_fun) -> gf.cid) defs
   in  
   let cid_in_evar (ex : exp) : Cid.t = 
     match ex.e with
@@ -1098,7 +1098,7 @@ let constructor_cids =
 
 let accessor_cids = 
   let defs = Arrays.defs@PairArrays.defs in 
-  CL.map (fun (gf:InterpState.State.global_fun) -> gf.cid) defs
+  CL.map (fun (gf:InterpState.global_fun) -> gf.cid) defs
 ;;
 
 let string_of_fcncid cid = 

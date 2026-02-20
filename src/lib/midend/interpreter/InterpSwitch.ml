@@ -6,6 +6,13 @@ open InterpJson
 open InterpControl
 open Batteries
 module Env = Collections.CidMap
+open InterpSocket
+
+module IntMap = InterpSim.IntMap
+(* maps port numbers to socket datatypes *)
+type socket_map = InterpSocket.t IntMap.t
+
+
 
 (* input queue for a single switch *)
 module EventQueue = BatHeap.Make (struct
@@ -47,7 +54,6 @@ type ingress_destination =
 type 'nst network_utils = 
 {
        save_update : 'nst -> 'nst state -> unit (* for updating queues *)
-     ; lookup_dst : 'nst -> (int * int) -> (int * int) (* for routing *)
      ; lookup_switch : 'nst -> int -> 'nst state (* for moving events *)
      ; get_time : 'nst -> int
      ; calc_arrival_time : 'nst -> int -> int -> int -> int
@@ -56,7 +62,7 @@ type 'nst network_utils =
 and 'nst state = 
   { 
     swid : int
-  ; config : InterpConfig.simulation_config
+  ; config : InterpSim.simulation_config
   ; global_env : 'nst ival Env.t
   ; command_queue : CommandQueue.t
   ; ingress_queue : EventQueue.t
@@ -67,12 +73,24 @@ and 'nst state =
   ; retval : value option ref
   ; counter : stats_counter ref
   ; utils : 'nst network_utils
+  ; sockets : socket_map
   }
 
 let empty_counter = { entries_handled = 0; total_handled = 0 }
 
 
-let create config utils swid =
+let create ?(with_sockets=false) config utils swid =
+  (* construct socket map *)
+  let sockets = if with_sockets then (
+    List.fold_left 
+      (fun ifmap (intf:SoftSwitchConfig.interface) -> 
+        let socket = InterpSocket.create intf.switch intf.port intf.interface in
+        IntMap.add intf.port socket ifmap)
+      IntMap.empty
+      SoftSwitchConfig.cfg.interface  
+    )
+    else IntMap.empty
+  in
   { swid
   ; config
   ; global_env = Env.empty
@@ -85,6 +103,7 @@ let create config utils swid =
   ; retval = ref None
   ; counter = ref empty_counter
   ; utils
+  ; sockets
   }
 ;;
 
@@ -101,17 +120,29 @@ let add_global cid v st =
     { st with global_env = Env.add cid v st.global_env }
 ;;
 
+let get_sockets st : InterpSocket.t list = IntMap.bindings st.sockets |> List.map snd
+;;
+
+
+(* generate an event to stdio or the exit log *)
 let log_exit port (ievent:ievent) current_time st = 
   if InterpConfig.cfg.interactive
     then (
       InterpJson.event_exit_to_json 
         st.swid 
-        port
+        (Some(port))
         ievent.sevent 
         current_time
       |> print_endline)
-    else Queue.push (ievent, port, current_time) st.exits
+    else Queue.push (ievent, Some(port), current_time) st.exits
 ;;
+
+let emit_or_log_exit port (ievent:ievent) current_time st = 
+  match IntMap.find_opt port st.sockets with
+    | None -> log_exit port ievent current_time st
+    | Some(socket) -> InterpSocket.send_event socket ievent.sevent
+;;
+
 
 let log_drop event current_time st = 
   Queue.push (event, current_time) st.drops
@@ -183,7 +214,8 @@ let egress_receive nst st arrival_time port ievent =
   push_to_egress nst st ievent arrival_time port
 ;;
 
-let ingress_send nst src_sw ingress_destination event_val = 
+(* val ingress_send : 'nst -> 'nst state -> ingress_destination -> event_val -> unit *)
+let ingress_send (nst : 'nst) (src_sw : 'nst state) ingress_destination event_val = 
   match ingress_destination with
     | Switch sw -> 
       let dst_sw = src_sw.utils.lookup_switch nst sw in
@@ -194,22 +226,22 @@ let ingress_send nst src_sw ingress_destination event_val =
     | PExit port -> 
       let send_time = src_sw.utils.get_time nst in
       let ievent = to_internal_event event_val {switch = Some src_sw.swid; port = port} send_time in
-      log_exit (Some port) ievent send_time src_sw
-    | Port port -> 
-      let dst_id, _ = src_sw.utils.lookup_dst nst (src_sw.swid, port) in 
+      emit_or_log_exit port ievent send_time src_sw
+    | Port port -> (* NOTE: generate_port goes through an egress for the port *)
+      let dst_id, _ = InterpSim.lookup_dst src_sw.config.links (src_sw.swid, port) in 
       let timestamp = src_sw.utils.calc_arrival_time nst src_sw.swid dst_id (event_val.edelay) in
       let ievent = to_internal_event event_val {switch = Some src_sw.swid; port = port} timestamp in
       egress_receive nst src_sw timestamp port ievent
 ;;
 
 let egress_send nst src_sw out_port event_val = 
-  let dst_id, dst_port = src_sw.utils.lookup_dst nst (src_sw.swid, out_port) in
+  let dst_id, dst_port = InterpSim.lookup_dst src_sw.config.links (src_sw.swid, out_port) in
   let time = src_sw.utils.get_time nst in
   (* dst -1 means "somewhere outside of the lucid network" *)
-  if (dst_id = -1) 
+  if (dst_id = -1)
     then (
       let ievent = to_internal_event event_val {switch = Some src_sw.swid; port = out_port} time in
-      log_exit (Some out_port) ievent time src_sw)
+      emit_or_log_exit out_port ievent time src_sw)
     else (
       let dst_sw = src_sw.utils.lookup_switch nst dst_id in
       let ievent = to_internal_event event_val {switch = Some dst_id; port = dst_port} time in        

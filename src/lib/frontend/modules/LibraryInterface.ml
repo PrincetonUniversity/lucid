@@ -4,7 +4,7 @@ open Syntax
 type sigty = {
   m_id : Id.t;
   m_tys : (Id.t * sizes * ty) list;
-  m_funs  : State.global_fun list; 
+  m_funs  : global_fun list; 
   m_ctors : (Cid.t * func_ty) list;
 }
 let tup_to_sigty (m_id, m_tys, m_funs, m_ctors) = 
@@ -17,7 +17,7 @@ let sigty_to_tup bmod =
 (* All libraries should have this interface *)
 module type BasicInterface = sig
   val module_id : Id.t
-  val defs : State.global_fun list
+  val defs : global_fun list
 
   val signature: sigty
 

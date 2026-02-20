@@ -41,6 +41,12 @@ val read_packet : t -> Cstruct.t
 val send_packet : t -> Cstruct.t -> unit
 (** [send_packet t]. Sends a full packet, may raise Unix.Unix_error. *)
 
+val get_fd : t -> Unix.file_descr
+(** [get_fd t]. Returns the underlying file descriptor for use with Unix.select/poll. *)
+
+val has_buffered_packet : t -> bool
+(** [has_buffered_packet t]. Returns true if there's a packet already buffered in the internal queue. *)
+
 val dhcp_server_filter : unit -> string
 (** [dhcp_server_filter]. Returns a BPF program suitable to be passed in
     [open_link ~filter], it accepts UDP packets destined to

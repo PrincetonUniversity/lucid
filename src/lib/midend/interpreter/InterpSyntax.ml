@@ -41,7 +41,7 @@ type loc = {
 (* an internal event in the interpreter *)
 type ievent = {
   sevent : event_val;
-  sloc : loc; (*we always know where an event is located *)
+  sloc : loc; (* we always know where an event is located *)
   stime : int;
   squeue_order : int; (* tiebreaker for two events queued at the same time *)
 }
@@ -78,24 +78,3 @@ let internal_event_to_string ievent =
   CorePrinting.event_to_string ievent.sevent
 ;;
 
-
-(* an input from the user *)
-
-
-(* type interp_input =
-  | IEvent of {iev : event_val; ilocs : loc list; itime : int}
-  | IControl of {ictl : control_val; ilocs : loc list; itime : int}
-;;
-let ievent iev ilocs itime = IEvent{iev; ilocs; itime}
-let icontrol ictl ilocs itime = IControl{ictl; ilocs; itime}
-let interp_input_to_time interp_input = 
-  match interp_input with
-  | IEvent({itime}) -> itime
-  | IControl({itime}) -> itime
-;;
-
-let input_locs interp_input = 
-  match interp_input with
-  | IEvent({ilocs}) -> ilocs
-  | IControl({ilocs}) -> ilocs
-;; *)

@@ -151,7 +151,7 @@ let create_sig =
 ;;
 
 (* interpreter implementation *)
-let create_ctor (nst : InterpState.State.network_state) swid args = 
+let create_ctor (nst : InterpState.network_state) swid args = 
   match args with 
   (* the table value arg is added by interpcore *)
   | [tbl_v; tbl_len; tbl_acn_ctors; tbl_def_acn; tbl_def_args] -> 
@@ -235,7 +235,7 @@ let install_fun nst swid args =
   let open CoreSyntax in
   match args with
   | [vtbl; vkey; vaction; vaction_const_arg_tup] -> 
-    let target_pipe = (State.sw nst swid).pipeline in    
+    let target_pipe = (sw nst swid).pipeline in    
     let stage = match (extract_ival vtbl).v with 
       | VGlobal(_, stage) -> stage
       | _-> error "Table.install: table arg didn't eval to a global"
@@ -316,7 +316,7 @@ let install_ternary_fun nst swid args =
   let open CoreSyntax in
   match args with
   | [vtbl; vkey; vmask; vaction; vaction_const_arg_tup] -> 
-    let target_pipe = (State.sw nst swid).pipeline in    
+    let target_pipe = (sw nst swid).pipeline in    
     let stage = match (extract_ival vtbl).v with 
       | VGlobal(_, stage) -> stage
       | _-> error "Table.install: table arg didn't eval to a global"
@@ -393,14 +393,13 @@ let lookup_ty =
 
 let lookup_fun nst swid args =
   let _, _ = nst, swid in
-  let open State in
   let open InterpSyntax in
   let open CoreSyntax in
   match args with
   | [V { v = VGlobal(_, tbl_pos); }; V { v = vkey }; V { v = vargs }] ->  
     let keys = flatten_v vkey |> List.map value in  
     (* get all the entries from the table *)
-    let default, entries = Pipeline.get_table_entries tbl_pos (State.sw nst swid).pipeline in
+    let default, entries = Pipeline.get_table_entries tbl_pos (sw nst swid).pipeline in
     (* find the first matching case *)
     let fst_match =
       List.fold_left
@@ -442,7 +441,7 @@ let lookup_fun nst swid args =
 
 let constructors = [create_id, create_sig]
 
-let defs : State.global_fun list =
+let defs : global_fun list =
   [
     { cid = install_cid; body = install_fun; ty = install_ty };
     { cid = install_ternary_cid; body = install_ternary_fun; ty = install_ternary_ty };
@@ -468,7 +467,7 @@ let signature =
 (*** helpers to convert to old syntax for tofino backend ***)
 let function_cids = 
   (fst (List.split constructors))@(List.map 
-    (fun (def: InterpState.State.global_fun ) -> def.cid) 
+    (fun (def: InterpState.global_fun ) -> def.cid) 
     (defs)
   )
 ;;

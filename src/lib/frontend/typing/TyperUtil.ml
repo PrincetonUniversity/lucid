@@ -140,7 +140,7 @@ let default_env =
       (fun (id, tys, defs, constructors) ->
         let vars =
           List.fold_left
-            (fun acc (r : InterpState.State.global_fun) ->
+            (fun acc (r : InterpState.global_fun) ->
               IdMap.add (Cid.last_id r.cid) r.ty acc)
             IdMap.empty
             defs

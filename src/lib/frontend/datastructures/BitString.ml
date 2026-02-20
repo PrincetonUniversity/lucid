@@ -107,7 +107,7 @@ let rec read_msb n bits: int =
     v lor (read_msb (n-1) bs )
 ;; 
 
-(* advance to the nth bit *)
+(* advance to the nth bit, return new string *)
 let rec advance n bits : bits option =
   match n with
   | 0 -> Some(bits)
@@ -118,6 +118,14 @@ let rec advance n bits : bits option =
   )    
 ;;
 
+(* read n bits to unsigned int without advancing. *)
+let peek_msb n bits : int option = 
+  match advance n bits with 
+  | None -> None
+  | Some(_) -> Some(read_msb n bits)
+;;
+
+(* read n bits to unsigned int and advance. *)
 let pop_msb n bits : (int * bits) option = 
   match advance n bits with 
   | None -> None

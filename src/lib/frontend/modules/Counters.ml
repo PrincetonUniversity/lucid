@@ -54,12 +54,11 @@ let counter_add_ty =
        }
 ;;
 
-let dummy_memop = InterpSyntax.F (None, fun _ _ args -> V(extract_ival (List.hd args)))
-let setop = InterpSyntax.F (None, fun _ _ args -> V(extract_ival (List.nth args 1)))
+let dummy_memop = InterpSyntax.F (None, fun _ _ args -> V(InterpSyntax.extract_ival (List.hd args)))
+let setop = InterpSyntax.F (None, fun _ _ args -> V(InterpSyntax.extract_ival (List.nth args 1)))
 let dummy_int = InterpSyntax.V (CoreSyntax.vinteger (Integer.of_int 0))
 
 let counter_add_fun nst swid args =
-  let open State in
   let open InterpSyntax in
   let open CoreSyntax in
   match args with
@@ -73,7 +72,7 @@ let counter_add_fun nst swid args =
 
 let constructors = [counter_create_id, counter_create_sig]
 
-let defs : State.global_fun list =
+let defs : global_fun list =
   [{ cid = counter_add_cid; body = counter_add_fun; ty = counter_add_ty }]
 ;;
 

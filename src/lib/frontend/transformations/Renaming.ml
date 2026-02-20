@@ -113,7 +113,7 @@ let rename prog =
             (fun (_, _, global_funs, constructors) ->
               let fun_cids =
                 List.map
-                  (fun (gf : InterpState.State.global_fun) -> gf.cid)
+                  (fun (gf : InterpState.global_fun) -> gf.cid)
                   global_funs
               in
               let constructor_cids = List.map fst constructors in

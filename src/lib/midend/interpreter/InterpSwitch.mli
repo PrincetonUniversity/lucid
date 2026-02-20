@@ -7,6 +7,7 @@ module Env = Collections.CidMap
 module CommandQueue : BatHeap.H
 module EventQueue : BatHeap.H
 
+type socket_map = InterpSocket.t Collections.IMap.t
 
 (* S with type t = (control_val * int) *)
 
@@ -29,7 +30,6 @@ type ingress_destination =
 type 'nst network_utils = 
 {
        save_update : 'nst -> 'nst state -> unit (* for updating queues *)
-     ; lookup_dst : 'nst -> (int * int) -> (int * int) (* for routing *)
      ; lookup_switch : 'nst -> int -> 'nst state (* for moving events *)
      ; get_time : 'nst -> int
      ; calc_arrival_time : 'nst -> int -> int -> int -> int
@@ -38,7 +38,7 @@ type 'nst network_utils =
 and 'nst state = 
   { 
     swid : int
-  ; config : InterpConfig.simulation_config
+  ; config : InterpSim.simulation_config
   ; global_env : 'nst ival Env.t
   ; command_queue : CommandQueue.t
   ; ingress_queue : EventQueue.t
@@ -49,12 +49,15 @@ and 'nst state =
   ; retval : value option ref
   ; counter : stats_counter ref
   ; utils : 'nst network_utils
+  ; sockets : socket_map
   }
 
 (* as you can see, the interface for interpSwitch is 
    kind of messy and in the middle of refactoring. *)
 
-val create : InterpConfig.simulation_config -> 'nst network_utils -> int -> 'nst state
+val create : ?with_sockets:bool -> InterpSim.simulation_config -> 'nst network_utils -> int -> 'nst state
+
+val get_sockets : 'nst state -> InterpSocket.t list
 
 val mem_env : cid -> 'nst state -> bool
 val lookup : cid -> 'nst state -> 'nst ival

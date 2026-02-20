@@ -3,7 +3,7 @@ include LibraryInterface.TypeInterface
 
 val is_tbl_ty : CoreSyntax.raw_ty -> bool
 (* create the table, adding it to a pipeline in a switch *)
-val create_ctor : InterpState.State.network_state -> int -> InterpState.State.network_state InterpSyntax.ival list -> Pipeline.t
+val create_ctor : InterpState.network_state -> int -> InterpState.network_state InterpSyntax.ival list -> Pipeline.t
 
 (* helpers for tofino backend -- these will eventually be 
    eliminated, but smooth the conversion from custom table syntax 

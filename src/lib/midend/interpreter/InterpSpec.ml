@@ -3,40 +3,42 @@ open Batteries
 open CoreSyntax
 open InterpSyntax
 open InterpJson
-open InterpCore
 open Yojson.Basic
-open Preprocess
+(* open InterpCore *)
+(* open Preprocess *)
 module Env = InterpState.Env
-module IntMap = InterpState.IntMap
+module IntMap = InterpSim.IntMap
 
 module IC = InterpControl
 
 type json = Yojson.Basic.t
 
 type t =
-  { num_switches : int
-  ; links : InterpState.State.topology
-  ; externs : value Env.t list
+  { 
+    (* num_switches : int *)
+   (* links : InterpSim.topology *)
+    externs : value Env.t list
   ; events : interp_input list
-  ; config : InterpConfig.simulation_config
-  ; extern_funs : (InterpState.State.network_state InterpSyntax.ival) Env.t
+  ; simconfig : InterpSim.simulation_config
+  ; extern_funs : (InterpState.network_state InterpSyntax.ival) Env.t
   ; ctl_pipe_name : string option
   }
 
 (* and empty configuration. For function interpretation. *)
 let empty_spec = {
-  num_switches = 1;
-  links = IntMap.empty;
+  (* num_switches = 1; *)
+  
   externs = [];
   events = [];
-  config = { 
+  simconfig = { 
       num_switches = 1
+    ; links = IntMap.empty
     ; max_time = 0
     ; default_input_gap = 0
     ; generate_delay = 0
     ; propagate_delay = 0
-    ; random_delay_range = 1
-    ; random_propagate_range = 1
+    ; random_delay_range = 0
+    ; random_propagate_range = 0
     ; random_seed = 0
     ; drop_chance = 0 };
   extern_funs = Env.empty;
@@ -159,7 +161,7 @@ let parse_externs
 let parse_links num_switches links recirc_ports =
   let add_link id port dst acc =
     try
-      IntMap.modify
+      InterpSim.IntMap.modify
         id
         (fun map ->
           match IntMap.find_opt port map with
@@ -187,7 +189,7 @@ let parse_links num_switches links recirc_ports =
     |> add_link src_id src_port (dst_id, dst_port)
     |> add_link dst_id dst_port (src_id, src_port)
   in
-  List.fold_left add_links (InterpState.State.empty_topology num_switches recirc_ports) links
+  List.fold_left add_links (InterpSim.empty_topology num_switches recirc_ports) links
 ;;
 
 (* Make a full mesh with arbitrary port numbers.
@@ -212,7 +214,7 @@ let make_full_mesh num_switches recirc_ports =
 (*   and code = network_state -> int (* switch *) -> ival list -> value
 *)
 let create_foreign_functions renaming efuns python_file =
-  let open InterpState.State in
+  let open InterpState in
   let oc_to_py v =
     match v with
     | InterpSyntax.V { v = VBool b } -> Py.Bool.of_bool b
@@ -258,8 +260,23 @@ let create_foreign_functions renaming efuns python_file =
     Env.empty
 ;;
 
+
+let default (pp : Preprocess.t) (renaming : Renaming.env) : t = 
+  (* Default configuration for when there is no spec, used with softSwitch*)
+  Py.initialize ();
+  let num_switches = 1 in
+  let recirc_ports = [196] in
+  let recirc_ports_def = List.map 
+    (fun i -> ( "recirculation_port", `List (List.init 1 (fun _ -> `Int i)) ))
+    recirc_ports
+  in
+  let externs = parse_externs pp renaming num_switches recirc_ports_def in
+  let simconfig = InterpSim.default_simulation_config num_switches recirc_ports in
+  { externs; events=[]; simconfig; extern_funs=Env.empty; ctl_pipe_name=None }  
+;;
+
 let parse 
-(* (nst : InterpState.State.network_state) *)
+(* (nst : InterpState.network_state) *)
 (pp : Preprocess.t) (renaming : Renaming.env) (filename : string) : t =
   let json = from_file filename in
   match json with
@@ -315,7 +332,7 @@ let parse
       @@ "Number of recirculation ports does not match number of switches!";
     let links =
       if num_switches = 1
-      then InterpState.State.empty_topology 1 recirc_port_ints
+      then InterpSim.empty_topology 1 recirc_port_ints
       else (
         match List.assoc_opt "links" lst with
         | Some (`Assoc links) -> parse_links num_switches links recirc_port_ints
@@ -359,8 +376,9 @@ let parse
       | Some (`String filename) -> Some filename
       | _ -> None
     in
-    let config : InterpConfig.simulation_config =
+    let simconfig : InterpSim.simulation_config =
       { num_switches
+      ; links
       ; max_time
       ; default_input_gap
       ; generate_delay
@@ -371,6 +389,6 @@ let parse
       ; drop_chance
       }
     in
-    { num_switches; links; externs; events; config; extern_funs; ctl_pipe_name }
+    {  externs; events; simconfig; extern_funs; ctl_pipe_name }
   | _ -> error "Unexpected interpreter specification format"
 ;;

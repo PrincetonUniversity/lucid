@@ -44,7 +44,7 @@ let event_delay_ty =
        }
 ;;
 
-let defs : State.global_fun list =
+let defs : global_fun list =
   [{ cid = event_delay_cid; body = event_delay_fun; ty = event_delay_ty }]
 ;;
 
