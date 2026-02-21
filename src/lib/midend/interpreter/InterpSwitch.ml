@@ -56,7 +56,7 @@ type 'nst network_utils =
        save_update : 'nst -> 'nst state -> unit (* for updating queues *)
      ; lookup_switch : 'nst -> int -> 'nst state (* for moving events *)
      ; get_time : 'nst -> int
-     ; calc_arrival_time : 'nst -> int -> int -> int -> int
+     (* ; calc_arrival_time : 'nst -> int -> int -> int -> int *)
 }   
 
 and 'nst state = 
@@ -74,12 +74,17 @@ and 'nst state =
   ; counter : stats_counter ref
   ; utils : 'nst network_utils
   ; sockets : socket_map
+  ; hdlrs : 'nst InterpSyntax.handler Env.t
+  ; egress_hdlrs : 'nst InterpSyntax.handler Env.t
+  ; event_sorts : event_sort Env.t
+  ; event_signatures  : (Cid.t * CoreSyntax.ty list) InterpSim.IntMap.t
+  ; global_names : SyntaxGlobalDirectory.dir
   }
 
 let empty_counter = { entries_handled = 0; total_handled = 0 }
+;;
 
-
-let create ?(with_sockets=false) config utils swid =
+let create ?(with_sockets=false) event_sorts event_signatures config utils swid =
   (* construct socket map *)
   let sockets = if with_sockets then (
     List.fold_left 
@@ -104,7 +109,20 @@ let create ?(with_sockets=false) config utils swid =
   ; counter = ref empty_counter
   ; utils
   ; sockets
+  ; hdlrs = Env.empty
+  ; egress_hdlrs = Env.empty
+  ; event_sorts
+  ; event_signatures
+  ; global_names = SyntaxGlobalDirectory.empty_dir
   }
+;;
+
+let add_hdlr cid handler st = 
+  {st with hdlrs = Env.add cid handler st.hdlrs}
+;;
+
+let add_egress_hdlr cid handler st = 
+  {st with egress_hdlrs = Env.add cid handler st.egress_hdlrs}
 ;;
 
 let mem_env cid state = Env.mem cid state.global_env
@@ -214,13 +232,28 @@ let egress_receive nst st arrival_time port ievent =
   push_to_egress nst st ievent arrival_time port
 ;;
 
+(* calculate when an event arrives at an input queue *)
+let calc_arrival_time nst (src_sw : 'nst state) dst_id desired_delay = 
+  let propagate_delay =
+    if src_sw.swid = dst_id
+    then
+      src_sw.config.propagate_delay
+      + Random.int src_sw.config.random_propagate_range
+    else 0
+  in
+  src_sw.utils.get_time nst
+    + max desired_delay src_sw.config.generate_delay
+    + propagate_delay
+    + Random.int src_sw.config.random_delay_range
+;;
+
 (* val ingress_send : 'nst -> 'nst state -> ingress_destination -> event_val -> unit *)
 let ingress_send (nst : 'nst) (src_sw : 'nst state) ingress_destination event_val = 
   match ingress_destination with
     | Switch sw -> 
       let dst_sw = src_sw.utils.lookup_switch nst sw in
       let send_time = src_sw.utils.get_time nst in
-      let arrive_time = src_sw.utils.calc_arrival_time nst src_sw.swid dst_sw.swid (event_val.edelay)  in
+      let arrive_time = calc_arrival_time nst src_sw dst_sw.swid event_val.edelay in
       let ievent = to_internal_event event_val {switch = Some dst_sw.swid; port = 0} arrive_time in
       ingress_receive nst dst_sw send_time arrive_time 0 ievent
     | PExit port -> 
@@ -229,7 +262,7 @@ let ingress_send (nst : 'nst) (src_sw : 'nst state) ingress_destination event_va
       emit_or_log_exit port ievent send_time src_sw
     | Port port -> (* NOTE: generate_port goes through an egress for the port *)
       let dst_id, _ = InterpSim.lookup_dst src_sw.config.links (src_sw.swid, port) in 
-      let timestamp = src_sw.utils.calc_arrival_time nst src_sw.swid dst_id (event_val.edelay) in
+      let timestamp = calc_arrival_time nst src_sw dst_id (event_val.edelay) in
       let ievent = to_internal_event event_val {switch = Some src_sw.swid; port = port} timestamp in
       egress_receive nst src_sw timestamp port ievent
 ;;

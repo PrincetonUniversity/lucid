@@ -23,20 +23,25 @@ let event_signatures events = List.fold_left
     InterpSim.IntMap.empty
     (Env.bindings events)
 
+(* initial state is before declarations are parsed and loaded into handlers *)
 let initial_state ?(with_sockets=false) (pp : Preprocess.t) (spec : InterpSpec.t) =
   let nst =
-    { (create spec.simconfig) with
-      event_sorts = event_sorts pp.events
-    ; event_signatures  = event_signatures pp.events
-    ; switches = Array.init spec.simconfig.num_switches 
-      (InterpSwitch.create ~with_sockets:with_sockets spec.simconfig network_utils)
+    { (InterpState.create ()) with
+      switches = Array.init spec.simconfig.num_switches 
+      (InterpSwitch.create ~with_sockets:with_sockets (event_sorts pp.events) (event_signatures pp.events) spec.simconfig network_utils)
     }
   in
+  nst
+;;
+
+(* initialize misc per-switch state, 
+   right now called after process_decls runs, 
+   but does not need to be. *)
+let init_switches nst (spec : InterpSpec.t) ds = 
   (* Add builtins (per switch) *)
   List.iter
     (fun f -> add_global_function f nst)
-    Builtins.builtin_defs
-  ;
+    Builtins.builtin_defs;
   (* Add externs (per switch) *)
   List.iteri
     (fun i exs -> Env.iter (fun cid v -> add_global i cid (V v) nst) exs)
@@ -53,20 +58,27 @@ let initial_state ?(with_sockets=false) (pp : Preprocess.t) (spec : InterpSpec.t
     (fun swid _ -> add_global swid bg_parse_cid (anonf bg_parse_fun) nst)
     nst.switches
   ;
+  (* Initialize global names *)
+  Array.iteri
+    (fun swid _ -> nst.switches.(swid) <- {nst.switches.(swid) with global_names = CoreSyntaxGlobalDirectory.build_coredirectory ds})
+    nst.switches
+  ;
   (* push interpreter inputs to ingress and control command queues *)
   load_interp_inputs nst spec.events;
   nst
 ;;
 
+(* Initialize interpreter with discrete time simulator *)
 let initialize renaming spec_file ds =
   let pp, ds = Preprocess.preprocess ds in
   let spec = InterpSpec.parse pp renaming spec_file in
   let nst = initial_state pp spec in
   let nst = InterpCore.process_decls nst ds in
   (* initialize the global name directory *)
-  let nst =
+  (* let nst =
     { nst with global_names = CoreSyntaxGlobalDirectory.build_coredirectory ds }
-  in
+  in *)
+  let nst = init_switches nst spec ds in
   nst, pp, spec
 ;;
 
@@ -81,8 +93,11 @@ let execute_event
   gress
   =
   let handlers, gress_str = match gress with 
-  | InterpSwitch.Egress -> nst.egress_handlers, " egress "
-  | InterpSwitch.Ingress -> nst.handlers, ""
+  | InterpSwitch.Egress -> nst.switches.(swid).egress_hdlrs, " egress "
+  | InterpSwitch.Ingress -> 
+    (* try using the switch's hdlrs field instead of the global handlers one *)
+    nst.switches.(swid).hdlrs, ""
+    (* nst.handlers, "" *)
   in
   match Env.find_opt event.eid handlers with
   (* if we found a handler, run it *)
@@ -105,7 +120,7 @@ let execute_event
           "t=%d: Handling %s%sevent %s at switch %d, port %d\n"
           nst.current_time
           gress_str
-          (match Env.find event.eid nst.event_sorts with
+          (match Env.find event.eid nst.switches.(swid).event_sorts with
           | EPacket -> "packet "
           | _ -> "")
           (CorePrinting.event_to_string event)
@@ -191,7 +206,7 @@ let execute_control swidx (nst : network_state) (ctl_ev : control_val) =
   InterpControl.handle_control 
     do_tbl_install
     (pipe nst swidx) 
-    nst.global_names 
+    nst.switches.(swidx).global_names 
     ctl_ev    
 ;;
 
@@ -269,7 +284,7 @@ let rec execute_sim_step idx nst =
         nst)
       else nst
     in
-    if nst.current_time > nst.simconfig.max_time
+    if nst.current_time > nst.switches.(idx).config.max_time
       then nst
       else (
         (* run any control events *)
@@ -284,12 +299,12 @@ let rec execute_sim_step idx nst =
 
 let simulate (nst : network_state) =
   if (not InterpConfig.cfg.json) && not InterpConfig.cfg.interactive
-  then
+  then (* there must be at least 1 switch, and all random seeds are the same *)
     Console.report
     @@ "Using random seed: "
-    ^ string_of_int nst.simconfig.random_seed
+    ^ string_of_int nst.switches.(0).config.random_seed
     ^ "\n";
-  Random.init nst.simconfig.random_seed;
+  Random.init nst.switches.(0).config.random_seed;
   let nst = execute_sim_step 0 nst in
   (* drain all the egresses one last time to get everything into an ingress queue for logging *)
   finish_egress_events InterpConfig.cfg.show_interp_events nst;
@@ -383,9 +398,9 @@ let run pp renaming (spec : InterpSpec.t) (nst : network_state) =
       let nst = execute_interactive_sim_step (Some get_input_nonblocking) (-1) 0 nst in
       poll_loop nst
   in
-  Random.init nst.simconfig.random_seed;
+  Random.init nst.switches.(0).config.random_seed;
   (* interp events with no event getter to initialize network, then run the polling loop *)
-  let nst = execute_interactive_sim_step None nst.simconfig.max_time 0 nst in
+  let nst = execute_interactive_sim_step None nst.switches.(0).config.max_time 0 nst in
   poll_loop nst  
 ;;
 
@@ -396,11 +411,8 @@ let initialize_softswitch renaming ds =
   (* create a single-switch configuration for the simulator *)
   let spec = InterpSpec.default pp renaming in 
   let nst = initial_state ~with_sockets:true pp spec in
-  let nst = InterpCore.process_decls nst ds in (* load declarations *)
-  (* initialize the global name directory *)
-  let nst =
-    { nst with global_names = CoreSyntaxGlobalDirectory.build_coredirectory ds }
-  in
+  let nst = InterpCore.process_decls nst ds in (* load declarations, which modifies state *)
+  let nst = init_switches nst spec ds in
   nst, pp, spec
 ;;
 
@@ -470,7 +482,7 @@ let run_softswitch pp renaming (spec : InterpSpec.t) (nst : network_state) =
     (* 4. recurse *)
     poll_loop nst
   in
-  Random.init nst.simconfig.random_seed;
+  Random.init nst.switches.(0).config.random_seed;
   (* interp events with no event getter to initialize network, then run the polling loop *)
   (* let nst = execute_softswitch_step 0 nst in *)
   poll_loop nst  

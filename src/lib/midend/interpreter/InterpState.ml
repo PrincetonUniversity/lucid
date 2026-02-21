@@ -1,4 +1,15 @@
 (* Network-wide state in the interpreter. *)
+(* 
+  The interpreter's state is a mutable array of immutable switches, 
+  plus a current time.
+  This module holds the switch array, time, and helpers to 
+  update the switch state. 
+  Previously, the global state held much more, e.g., handlers, 
+  but that has been largely moved to the switch objects.
+  We may want to refactor the switch object to 
+  contain a mutable pipeline, to simplify the interpreter 
+  architecture and (possibly) improve performance.
+*)
 open CoreSyntax
 open InterpSyntax
 open Batteries
@@ -10,14 +21,7 @@ open InterpSim
 
 type network_state =
   { current_time : int
-  ; simconfig : InterpSim.simulation_config
-  ; event_sorts : event_sort Env.t
-  ; event_signatures  : (Cid.t * CoreSyntax.ty list) IntMap.t
-  ; handlers : handler Env.t
-  ; egress_handlers : handler Env.t
   ; switches : switch array
-  ; actions : action Env.t
-  ; global_names : SyntaxGlobalDirectory.dir
   }
 
 and handler = network_state InterpSyntax.handler
@@ -27,19 +31,11 @@ type global_fun =
   { cid : Cid.t
   ; body : network_state InterpSyntax.code
   ; ty : Syntax.ty
-      (* Not CoreSyntax.ty, since this is needed only for type inference *)
   }
 
-let create simconfig : network_state =
+let create () : network_state =
   { current_time = -1
-  ; simconfig
-  ; event_sorts = Env.empty
-  ; event_signatures = IntMap.empty
-  ; handlers = Env.empty
-  ; egress_handlers = Env.empty
   ; switches = Array.of_list []
-  ; actions = Env.empty
-  ; global_names = SyntaxGlobalDirectory.empty_dir
   }
 ;;
 
@@ -63,26 +59,7 @@ let lookup_switch nst swid = nst.switches.(swid);;
 
 let current_time nst = nst.current_time;;
 
-(* calculate when an event should arrive at the next switch's ingress. 
-    The calculation should be improved to add ingres -> egress queue time and then 
-    propagation time in two separate steps. Also, the names are confusing and why 
-    would propagation delay only apply to recirculating events? *)
-  let calc_arrival_time nst src_id dst_id desired_delay = 
-  let propagate_delay =
-    if src_id = dst_id
-    then
-      (nst : network_state).simconfig.propagate_delay
-      + Random.int nst.simconfig.random_propagate_range
-    else 0
-  in
-  nst.current_time
-    + max desired_delay nst.simconfig.generate_delay
-    + propagate_delay
-    + Random.int nst.simconfig.random_delay_range
-;;
-
-
-let network_utils = { save_update; lookup_switch; get_time=current_time; calc_arrival_time }
+let network_utils = { save_update; lookup_switch; get_time=current_time;}
 ;;
 
 (* updating and accessing globals defined for all switches *)
@@ -99,25 +76,9 @@ let add_global_function (g : global_fun) nst =
     nst.switches
 ;;
 
-let lookup_action cid nst =
-  try Env.find cid nst.actions with
-  | Not_found -> error ("missing action: " ^ Cid.to_string cid)
-;;
-
-let add_handler cid lam nst =
-  { nst with handlers = Env.add cid lam nst.handlers }
-;;
-let add_egress_handler cid lam nst =
-  { nst with egress_handlers = Env.add cid lam nst.egress_handlers }
-;;
-
-let add_action cid action nst =
-  { nst with actions = Env.add cid action nst.actions }
-;;
-
 let update_counter swid event nst =
   let st = nst.switches.(swid) in
-  let event_sort = Env.find event.eid nst.event_sorts in
+  let event_sort = Env.find event.eid nst.switches.(swid).event_sorts in
   InterpSwitch.update_counter event_sort st
 ;;
 

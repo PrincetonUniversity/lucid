@@ -60,7 +60,7 @@ let parse_args (p:value) arg_tys =
 ;;
 
 
-let lucid_parse_fun (nst: network_state) _(*swid*) args = 
+let lucid_parse_fun (nst: network_state) swid args = 
   (* payload is a VBits value *)
   let payload = match args with
     | [_; InterpSyntax.V(payload)] -> payload
@@ -75,11 +75,11 @@ let lucid_parse_fun (nst: network_state) _(*swid*) args =
     | _ -> error "event number is not a value?"
   in
   (* look up the event signature *)
-  let event_cid, param_tys = match InterpSim.IntMap.find_opt event_num_int nst.event_signatures with
+  let event_cid, param_tys = match InterpSim.IntMap.find_opt event_num_int nst.switches.(swid).event_signatures with
   | Some(cid, tys) -> cid, tys
   | None ->
     print_endline ("----event number directory----");
-    InterpSim.IntMap.iter (fun k v -> print_endline ("event num: "^(string_of_int k)^" event id: "^(Cid.to_string (fst v))   )) nst.event_signatures;
+    InterpSim.IntMap.iter (fun k v -> print_endline ("event num: "^(string_of_int k)^" event id: "^(Cid.to_string (fst v))   )) nst.switches.(swid).event_signatures;
     error ("parsed an event tag int that doesn't correspond to a known event: "^(string_of_int event_num_int));
   in
   (* parse arguments from bitstring *)

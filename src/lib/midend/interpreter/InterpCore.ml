@@ -399,7 +399,7 @@ let expand_flood_port (nst : network_state) swid flood_port =
       if (port <> (-(flood_port + 1))) && (dst_swid <> swid) 
         then Some(port)
         else None)
-    (InterpSim.ports_to_neighbors nst.simconfig.links swid)
+    (InterpSim.ports_to_neighbors nst.switches.(swid).config.links swid)
 ;;
 
 let rec interp_statement nst hdl_sort swid locals s =
@@ -498,7 +498,7 @@ let rec interp_statement nst hdl_sort swid locals s =
          egress generate variants the same! *)
       let port = ((port_arg locals).v |> extract_int ).value |> Z.to_int in 
       (* egress serializes packet events *)
-      let ev_sort = Env.find event.eid nst.event_sorts in
+      let ev_sort = Env.find event.eid nst.switches.(swid).event_sorts in
       (* serialize packet events *)
       let event_val = match ev_sort with 
         | EBackground -> 
@@ -844,8 +844,12 @@ let interp_decl (nst : network_state) swid d =
       ignore @@ interp_statement nst hdl_sort swid locals body
     in
     match hdl_sort with
-    | HData -> add_handler (Cid.id id) f nst
-    | HEgress -> add_egress_handler (Cid.id id) f nst
+    | HData -> 
+      nst.switches.(swid) <- InterpSwitch.add_hdlr (Cid.id id) f nst.switches.(swid);
+      nst 
+    | HEgress -> 
+      nst.switches.(swid) <- InterpSwitch.add_egress_hdlr (Cid.id id) f nst.switches.(swid);
+      nst 
     | _ -> error "control handlers not supported"
     )
 
@@ -962,6 +966,7 @@ let interp_decl (nst : network_state) swid d =
 ;;
 
 
+(* interpret declarations to initialize every switch *)
 let process_decls nst ds =
   let rec aux i (nst : network_state) =
     if i = Array.length nst.switches
