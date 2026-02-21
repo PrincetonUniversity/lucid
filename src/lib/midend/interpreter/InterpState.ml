@@ -1,14 +1,15 @@
 (* Network-wide state in the interpreter. *)
 (* 
-  The interpreter's state is a mutable array of immutable switches, 
+  The interpreter's state is a mutable array of switches, 
   plus a current time.
-  This module holds the switch array, time, and helpers to 
-  update the switch state. 
-  Previously, the global state held much more, e.g., handlers, 
-  but that has been largely moved to the switch objects.
-  We may want to refactor the switch object to 
-  contain a mutable pipeline, to simplify the interpreter 
-  architecture and (possibly) improve performance.
+  Each switch has a pipeline with mutable local state in it. 
+  The switches have queues, but they are currently immutable, 
+  and so to update a queue, the switch must call a helper 
+  from here (InterpState) that updates the queue.
+  We may want to refactor the switch objects to have 
+  mutable queues, to simplify the architecture.
+  - But the switch will still need to get references to 
+    other switches from here.
 *)
 open CoreSyntax
 open InterpSyntax
@@ -46,13 +47,12 @@ let sw nst swid = nst.switches.(swid)
 
 let pipe nst swid = nst.switches.(swid).pipeline
 
+(* environment operations *)
 let mem_env swid cid nst = InterpSwitch.mem_env cid nst.switches.(swid)
 let lookup swid k nst = InterpSwitch.lookup k nst.switches.(swid)
 
-
-(* update the state of a switch. Pass this callback to 
-    a switch so that it can update itself without having to know 
-    about the network. *)
+(* update the state of a switch. Used for queues.
+   Provided to switches. *)
 let save_update nst sw = nst.switches.(sw.swid) <- sw;;
 
 let lookup_switch nst swid = nst.switches.(swid);;
