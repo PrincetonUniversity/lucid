@@ -59,3 +59,8 @@ let has_buffered_packet t =
   | [] -> false
   | _ -> true
 
+let drain_buffered t =
+  let pkts = !(t.packets) in
+  t.packets := [];
+  pkts
+

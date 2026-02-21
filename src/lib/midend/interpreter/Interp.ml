@@ -32,21 +32,21 @@ let initial_state ?(with_sockets=false) (pp : Preprocess.t) (spec : InterpSpec.t
       (InterpSwitch.create ~with_sockets:with_sockets spec.simconfig network_utils)
     }
   in
-  (* Add builtins *)
+  (* Add builtins (per switch) *)
   List.iter
     (fun f -> add_global_function f nst)
     Builtins.builtin_defs
   ;
-  (* Add externs *)
+  (* Add externs (per switch) *)
   List.iteri
     (fun i exs -> Env.iter (fun cid v -> add_global i cid (V v) nst) exs)
     spec.externs;
-  (* Add foreign functions *)
+  (* Add foreign functions (per switch) *)
   Env.iter
     (fun cid fval ->
       Array.iteri (fun i _ -> add_global i cid fval nst) nst.switches)
     spec.extern_funs;
-  (* Add error-raising function for background event parser *)
+  (* Add error-raising function for background event parser (per switch) *)
   let bg_parse_cid = Cid.id Builtins.lucid_parse_id in 
   let bg_parse_fun = InterpParsing.lucid_parse_fun in
   Array.iteri
@@ -220,7 +220,7 @@ let execute_interp_event
 ;;
 
 (* run all the egress events from all of the switches *)
-let run_egress_events print_log (nst:network_state) = 
+let execute_ready_egress_events print_log (nst:network_state) = 
   Array.iteri 
     (fun swid _ -> 
         let egr_evs = ready_egress_events swid nst in
@@ -265,7 +265,7 @@ let rec execute_sim_step idx nst =
     let nst = if (idx = 0) 
       then (
         let nst = advance_current_time next_event_time nst in
-        run_egress_events InterpConfig.cfg.show_interp_events nst;
+        execute_ready_egress_events InterpConfig.cfg.show_interp_events nst;
         nst)
       else nst
     in
@@ -330,7 +330,7 @@ let rec execute_interactive_sim_step event_getter_opt max_time idx nst =
   | Some t -> 
     let nst = if (idx = 0)
       then (
-        run_egress_events InterpConfig.cfg.show_interp_events nst;
+        execute_ready_egress_events InterpConfig.cfg.show_interp_events nst;
         load_new_events nst event_getter_opt;
         advance_current_time t nst)
       else nst
@@ -373,7 +373,7 @@ let run pp renaming (spec : InterpSpec.t) (nst : network_state) =
     in
     match input with
     | End -> (* no more input, but we want to finish up the egress events to generate everything *)
-      run_egress_events true nst;
+      execute_ready_egress_events true nst;
       nst
     | NoEvents -> poll_loop nst
     | Events evs -> 
@@ -424,60 +424,54 @@ let get_stdio_input_nonblocking pp renaming (spec : InterpSpec.t) (nst: network_
   List.flatten located_events  
 ;;
 
+(* execute a step of the software switch *)
+let rec execute_softswitch_step idx nst = 
+  let current_time = Int64.to_int (Int64.of_float (Unix.gettimeofday () *. 1e9)) in
+  let nst = {nst with current_time} in 
+  execute_ready_controls idx nst;
+  match next_time nst with
+  | None -> nst
+  | Some next_t -> 
+    if next_t > nst.current_time then ( (* delayed event not yet ready *)
+      nst 
+    ) else ( (* there is an event ready to dispatch *)
+      match next_ready_event idx nst with
+      | Some (epgs) ->
+        execute_interp_event InterpConfig.cfg.show_interp_events execute_softswitch_step idx nst epgs
+      | None -> execute_softswitch_step idx nst
+    )
+;;
+
 (* main loop for software switch *)
 let run_softswitch pp renaming (spec : InterpSpec.t) (nst : network_state) =
-
-  (* need to get an event from one port of one switch *)
-  (* let all_sockets = List. *)
-  (*  assume there's only 1 switch *)
+  (*  assume there's only 1 switch (at index 0) *)
   let all_sockets = InterpSwitch.get_sockets (Array.get nst.switches 0) in
   let cur_sock_idx = ref 0 in
   let n_sockets = List.length(all_sockets) in
-  let read_next_sock_or_stdio block pp renaming (spec : InterpSpec.t) nst = 
-    if !cur_sock_idx == n_sockets then (* time to read from stdio *)
+  let poll_sockets pp renaming (spec : InterpSpec.t) nst = 
+    if !cur_sock_idx == n_sockets then (* read from stdio last *)
       (
-        if (block) then get_stdio_input_blocking pp renaming spec.simconfig.num_switches nst.current_time
-        else ( Events(get_stdio_input_nonblocking pp renaming spec nst) )
+        cur_sock_idx := 0;
+        get_stdio_input_nonblocking pp renaming spec nst
       )
     else (
       let sock = List.nth all_sockets (!cur_sock_idx) in
-      cur_sock_idx := (!cur_sock_idx + 1 ) mod n_sockets;
-      match InterpSocket.read_event_opt sock block nst.current_time with 
-      | Some(ev) -> Events([ev])
-      | None -> NoEvents
+      cur_sock_idx := (!cur_sock_idx + 1 );
+      InterpSocket.read_event_batch sock
     )
-    (* InterpSocket raises an exception on failure, so no need for "End" *)
   in
-
-  let local_get_input_blocking = read_next_sock_or_stdio true in
-  let local_get_input_nonblocking nst = 
-    match read_next_sock_or_stdio false pp renaming spec nst with
-    | Events(es) -> es
-    | NoEvents | End -> []
-  in
-
-  (* read a single event, blocking until it appears. This is used to 
-  read in new events after the interpreter has finished all of its 
-  current work. *)
   let rec poll_loop (nst : network_state) =
-    (* wait for a single event or command *)
-    let input =
-      local_get_input_blocking pp renaming spec nst
-    in
-    match input with
-    | End -> (* no more input, but we want to finish up the egress events to generate everything *)
-      run_egress_events true nst;
-      nst
-    | NoEvents -> poll_loop nst
-    | Events evs -> 
-      load_interp_inputs nst evs;
-      (* interpret all the queued events, using event_getter to poll for more events
-           in between iterations. *)
-      let nst = execute_interactive_sim_step (Some local_get_input_nonblocking) (-1) 0 nst in
-      poll_loop nst
+    (* 1. poll for events *)
+    let input = poll_sockets pp renaming spec nst in
+    (* 2. load any new events *)
+    load_interp_inputs nst input;
+    (* 3. run the interpreter to process one or more events *)
+    let nst = execute_softswitch_step 0 nst in
+    (* 4. recurse *)
+    poll_loop nst
   in
   Random.init nst.simconfig.random_seed;
   (* interp events with no event getter to initialize network, then run the polling loop *)
-  let nst = execute_interactive_sim_step None nst.simconfig.max_time 0 nst in
+  (* let nst = execute_softswitch_step 0 nst in *)
   poll_loop nst  
 ;;

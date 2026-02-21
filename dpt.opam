@@ -31,6 +31,8 @@ depends: [
   "pprint"
   "z3"
   "pp" { <= "1.2.0" }
+  "cstruct" { = "6.2.0" }
+  "ppx_cstruct" { = "6.2.0" }
 ]
 build: [
   ["dune" "build" "-p" name "-j" jobs]

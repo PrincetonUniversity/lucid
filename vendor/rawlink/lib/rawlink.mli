@@ -47,6 +47,9 @@ val get_fd : t -> Unix.file_descr
 val has_buffered_packet : t -> bool
 (** [has_buffered_packet t]. Returns true if there's a packet already buffered in the internal queue. *)
 
+val drain_buffered : t -> Cstruct.t list
+(** [drain_buffered t]. Returns all packets currently buffered in the internal queue and clears it. *)
+
 val dhcp_server_filter : unit -> string
 (** [dhcp_server_filter]. Returns a BPF program suitable to be passed in
     [open_link ~filter], it accepts UDP packets destined to

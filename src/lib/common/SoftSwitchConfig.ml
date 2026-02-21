@@ -24,11 +24,11 @@ let speclist =
   let hide_printf () = cfg.show_printf <- false in
   let set_interface (intf : string) =
     match String.split_on_char ':' intf with
-    | [switch_str; port_str; interface_name] ->
-      let switch = int_of_string switch_str in
+    | [port_str; interface_name] ->
+      let switch = 0 in
       let port = int_of_string port_str in
       cfg.interface <- cfg.interface@[{ switch; port; interface = interface_name }]
-    | _ -> failwith "Invalid interface format. Expected: <switchnum>:<portnum>:<interfacename>"
+    | _ -> failwith "Invalid interface format. Expected: <portnum>:<interfacename>"
   in
   [ 
         ( "--no-printf"
@@ -36,7 +36,7 @@ let speclist =
         , "If set, don't print printf statements while interpreting. ")
       ; ( "--interface"
         , Arg.String set_interface
-        , "port:interface Bind the port on switch 0 to the interface" )
+        , "port:interface Bind the internal port number to the interface name" )
    ]  
 ;;
 

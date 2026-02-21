@@ -23,10 +23,10 @@ let create switch port ifname : t =
   { switch; port; ifname; link }
 ;;
 
-(* IO operations*)
+(* IO operations *)
 let send t buf = Rawlink.send_packet t.link buf ;;
 let read t = Rawlink.read_packet t.link ;;
-let read_nonblock self = 
+let read_nonblock self =
     if Rawlink.has_buffered_packet self.link then (
       (* packet already buffered, read won't block *)
       Some(read self)
@@ -40,6 +40,19 @@ let read_nonblock self =
       | _ ->  Some(read self)
     )
 ;;
+
+let read_batch_nonblock self =
+  let fd = Rawlink.get_fd self.link in
+  let ready, _, _ = Unix.select [fd] [] [] 0.0 in
+  match ready with
+  | [] -> []
+  | _ ->
+    let first = Rawlink.read_packet self.link in
+    let rest = Rawlink.drain_buffered self.link in
+    first :: rest
+;;
+
+
 (* create an event from timestamp, location, and buf *)
 let event_create timestamp locations buf =
   let bytes = hexstr_to_vbits (Cstruct.to_hex_string buf) in
@@ -61,9 +74,10 @@ let event_to_packetbuf (ev : event_val) =
 ;;
 
 (* read an input event, blocking when block = true *)
-let read_event_opt (self :t) block current_time = 
-  (* timestamp passed from interpreter loop *)
-  let timestamp = current_time in
+let read_event_opt (self :t) block _ = 
+  (* timestamp no longer passed from interpreter loop *)
+  let timestamp = Int64.to_int (Int64.of_float (Unix.gettimeofday () *. 1e9)) in
+  (* let (timestamp : int) = current_time in *)
   (* location defined by link *)
   let locations = [{switch=Some(self.switch); port=self.port}] in
   (* blocking: just read a buf and cast to bytes *)
@@ -76,6 +90,15 @@ let read_event_opt (self :t) block current_time =
     | Some(buf) -> Some(event_create timestamp locations buf)
   )
 ;;  
+
+(* read a batch of input events, nonblocking *)
+let read_event_batch (self : t) = 
+  let timestamp = Int64.to_int (Int64.of_float (Unix.gettimeofday () *. 1e9)) in
+  let locations = [{switch=Some(self.switch); port=self.port}] in
+  let bufs = read_batch_nonblock self in
+  List.map (fun buf -> event_create timestamp locations buf) bufs
+;;
+
 
 (* send an event value *)
 let send_event t ev = send t (event_to_packetbuf ev) ;;
