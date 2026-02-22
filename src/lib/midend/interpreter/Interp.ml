@@ -11,10 +11,9 @@ open InterpStdio
 
 module Env = Collections.CidMap
 
-(* Temporary functions from InterpState during refactor. *)
 let save_update nst sw = 
-  let open InterpSwitch in
-  nst.(sw.swid) <- sw;;
+  nst.(sw.swid) <- sw
+;;
 let next_ready_event swid nst =
   let st = nst.(swid) in
   match InterpSwitch.next_event !( st.global_time) st with

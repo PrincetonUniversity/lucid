@@ -72,15 +72,16 @@ type state =
 
 and  network_state = state Array.t
 
+(* values used in interpreter contexts. *)
+(* a handler has side effects, so it needs to see the network state *)
 and  handler = network_state -> int (* switch *) -> int (* port *) -> event_val -> unit
 
-(* values used in interpreter contexts. 'nst is network state *)
+(* code inside the program has no side effects, so it should not need it *)
 and code = network_state -> int (* switch *) -> ival list ->  ival
 
-and  ival =
+and ival =
   | V of value
   | F of (cid option *  code)
-
 
 let f (cid: cid) (code: code) = F(Some(cid), code)
 let anonf (code: code) = F(None, code)
@@ -118,13 +119,14 @@ let gfun_cid (gf : global_fun) : Cid.t =
 let empty_counter = { entries_handled = 0; total_handled = 0 }
 ;;
 
+(* get copy of another switch's state *)
 let lookup_switch self swid = 
   !(self.sws).(swid)
 ;;
-let save_update self sw = 
-  !(self.sws).(sw.swid) <- sw 
+(* update global state *)
+let save_update self = 
+  !(self.sws).(self.swid) <- self 
 ;;
-
 
 let create ?(with_sockets=false) start_time_ref event_sorts event_signatures config swid =
   (* construct socket map *)
@@ -233,7 +235,7 @@ let push_to_ingress st internal_event stime sport =
     stime
   } in
   let st' = {st with ingress_queue=EventQueue.add internal_event st.ingress_queue} in
-  save_update st' st' 
+  save_update st' 
 ;;
 (* push an event from an ingress queue to an egress queue. Here, sport is the output port of the switch *)
 let push_to_egress st internal_event stime sport =
@@ -243,12 +245,12 @@ let push_to_egress st internal_event stime sport =
   let internal_event = {internal_event with squeue_order; sloc = loc (None,sport); stime} in
   (* let internal_event = set_timestamp internal_event stime in *)
   let st' = {st with egress_queue=EventQueue.add internal_event st.egress_queue} in
-  save_update st' st' 
+  save_update st' 
 ;;
 
 let push_to_commands st control_val stime = 
   let st' = {st with command_queue=CommandQueue.add (control_val, stime) st.command_queue} in
-  save_update st' st'
+  save_update st'
 ;;
 
 (** input loading **)
@@ -421,7 +423,7 @@ let ready_control_commands st current_time =
     | None -> st, []
   in
   let st', control_vals = _all_control_commands st in
-  save_update st' st';
+  save_update st';
   control_vals
 ;;
 
