@@ -1,8 +1,10 @@
 open Batteries
 open CoreSyntax
 (* open InterpCore *)
-open InterpState
+(* open InterpState *)
 open Collections
+
+module Env = Collections.CidMap
 
 type t =
   { events : (event_sort * int option * ty list) Env.t

@@ -235,7 +235,7 @@ let install_fun nst swid args =
   let open CoreSyntax in
   match args with
   | [vtbl; vkey; vaction; vaction_const_arg_tup] -> 
-    let target_pipe = (sw nst swid).pipeline in    
+    let target_pipe = nst.switches.(swid).pipeline in    
     let stage = match (extract_ival vtbl).v with 
       | VGlobal(_, stage) -> stage
       | _-> error "Table.install: table arg didn't eval to a global"
@@ -316,7 +316,7 @@ let install_ternary_fun nst swid args =
   let open CoreSyntax in
   match args with
   | [vtbl; vkey; vmask; vaction; vaction_const_arg_tup] -> 
-    let target_pipe = (sw nst swid).pipeline in    
+    let target_pipe = nst.switches.(swid).pipeline in    
     let stage = match (extract_ival vtbl).v with 
       | VGlobal(_, stage) -> stage
       | _-> error "Table.install: table arg didn't eval to a global"
@@ -399,7 +399,7 @@ let lookup_fun nst swid args =
   | [V { v = VGlobal(_, tbl_pos); }; V { v = vkey }; V { v = vargs }] ->  
     let keys = flatten_v vkey |> List.map value in  
     (* get all the entries from the table *)
-    let default, entries = Pipeline.get_table_entries tbl_pos (sw nst swid).pipeline in
+    let default, entries = Pipeline.get_table_entries tbl_pos nst.switches.(swid).pipeline in
     (* find the first matching case *)
     let fst_match =
       List.fold_left

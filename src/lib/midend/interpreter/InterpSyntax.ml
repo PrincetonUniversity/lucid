@@ -12,9 +12,6 @@ and 'nst code = 'nst -> int (* switch *) -> 'nst ival list -> 'nst ival
 
 and memop
 
-and 'nst handler =
-'nst -> int (* switch *) -> int (* port *) -> event_val -> unit
-
 let f (cid: cid) (code: 'nst code) = F(Some(cid), code)
 let anonf (code:'nst code) = F(None, code)
 

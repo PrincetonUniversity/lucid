@@ -25,16 +25,6 @@ type ingress_destination =
   | Switch of int
   | PExit of int
 
-(* utility functions that the network (InterpState) 
-   provides a switch (InterpSwitch) *)
-type 'nst network_utils = 
-{
-       save_update : 'nst -> 'nst state -> unit (* for updating queues *)
-     ; lookup_switch : 'nst -> int -> 'nst state (* for moving events *)
-     ; get_time : 'nst -> int
-     (* ; calc_arrival_time : 'nst -> int -> int -> int -> int *)
-}   
-
 and 'nst state = 
   { 
     swid : int
@@ -48,22 +38,29 @@ and 'nst state =
   ; drops : (ievent * int) Queue.t
   ; retval : value option ref
   ; counter : stats_counter ref
-  ; utils : 'nst network_utils
   ; sockets : socket_map
-  ; hdlrs : 'nst InterpSyntax.handler Env.t
-  ; egress_hdlrs : 'nst InterpSyntax.handler Env.t
+  ; hdlrs : 'nst handler Env.t
+  ; egress_hdlrs : 'nst handler Env.t
   ; event_sorts : event_sort Env.t
   ; event_signatures  : (Cid.t * CoreSyntax.ty list) InterpSim.IntMap.t
   ; global_names : SyntaxGlobalDirectory.dir
+  ; sws : 'nst state Array.t ref
+  ; global_time : int ref (* shared global time *)
   }
+
+and 'nst handler =
+  'nst -> int (* switch *) -> int (* port *) -> event_val -> unit
+
 
 (* as you can see, the interface for interpSwitch is 
    kind of messy and in the middle of refactoring. *)
 
-val create : ?with_sockets:bool -> event_sort Env.t ->  (Cid.t * CoreSyntax.ty list) InterpSim.IntMap.t -> InterpSim.simulation_config -> 'nst network_utils -> int -> 'nst state
+val create : ?with_sockets:bool -> int ref -> event_sort Env.t ->  (Cid.t * CoreSyntax.ty list) InterpSim.IntMap.t -> InterpSim.simulation_config -> int -> 'nst state
 
-val add_hdlr : cid -> 'a handler -> 'a state -> 'a state
-val add_egress_hdlr : cid -> 'a handler -> 'a state -> 'a state
+val set_sws : 'nst state -> 'nst state Array.t -> 'nst state
+
+(* val add_hdlr : cid -> 'a handler -> 'a state -> 'a state
+val add_egress_hdlr : cid -> 'a handler -> 'a state -> 'a state *)
 
 val get_sockets : 'nst state -> InterpSocket.t list
 

@@ -6,7 +6,7 @@ open InterpJson
 open Yojson.Basic
 (* open InterpCore *)
 (* open Preprocess *)
-module Env = InterpState.Env
+module Env = Collections.CidMap
 module IntMap = InterpSim.IntMap
 
 module IC = InterpControl

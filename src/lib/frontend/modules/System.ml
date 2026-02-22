@@ -28,7 +28,7 @@ let sys_time_ty =
 let sys_time_fun (nst : network_state) _ args =
   let open CoreSyntax in
   match args with
-  | [] -> InterpSyntax.V(vinteger (Integer.create ~value:nst.current_time ~size:32))
+  | [] -> InterpSyntax.V(vinteger (Integer.create ~value:!(nst.switches.(0).global_time) ~size:32))
   | _ -> sys_time_error "takes no parameters"
 ;;
 
