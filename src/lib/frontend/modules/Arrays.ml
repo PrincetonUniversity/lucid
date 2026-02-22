@@ -1,7 +1,7 @@
 (* Interpretation of stateful arrays. *)
 open Syntax
 open Batteries
-open InterpState
+open InterpSwitch
 open Pipeline
 let rec create_ls size buckets =
   List.init buckets (fun _ -> Integer.create ~value:0 ~size)
@@ -90,9 +90,9 @@ let update_fun err nst swid args =
 ;;
 
 let array_update_fun = update_fun array_update_error
-let dummy_memop = InterpSyntax.anonf (fun _ _ args -> V(InterpSyntax.extract_ival (List.hd args)))
-let setop = InterpSyntax.anonf (fun _ _ args -> V(InterpSyntax.extract_ival (List.nth args 1)))
-let dummy_int = InterpSyntax.V (CoreSyntax.vinteger (Integer.of_int 0))
+let dummy_memop = InterpSwitch.anonf (fun _ _ args -> V(InterpSwitch.extract_ival (List.hd args)))
+let setop = InterpSwitch.anonf (fun _ _ args -> V(InterpSwitch.extract_ival (List.nth args 1)))
+let dummy_int = InterpSwitch.V (CoreSyntax.vinteger (Integer.of_int 0))
 
 (* Array.get *)
 let array_get_name = "get"

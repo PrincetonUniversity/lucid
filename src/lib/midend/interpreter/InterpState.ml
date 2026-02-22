@@ -17,25 +17,5 @@ open InterpSwitch
 exception Error of string
 let error s = raise (Error s)
 
-type switch = network_state InterpSwitch.state
 
-and network_state = { 
-    switches : switch array
-  }
-;;
 
-let create () : network_state =
-  { 
-    switches = Array.of_list []
-  }
-;;
-
-type global_fun =
-  { cid : Cid.t
-  ; body : network_state InterpSyntax.code
-  ; ty : Syntax.ty
-  }
-
-let gfun_cid (gf : global_fun) : Cid.t = 
-  gf.cid
-;;

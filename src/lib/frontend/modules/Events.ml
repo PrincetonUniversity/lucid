@@ -2,7 +2,7 @@
 
 open Batteries
 open Syntax
-open InterpState
+open InterpSwitch
 
 (* Generic Event defs *)
 let event_name = "Event"

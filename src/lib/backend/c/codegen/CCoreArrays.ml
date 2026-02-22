@@ -128,7 +128,7 @@ let update_complex ctx call_id call_args =
   ctx, new_call
 ;;
 
-let arr_fun_cids = List.map InterpState.gfun_cid Arrays.signature.m_funs ;;
+let arr_fun_cids = List.map InterpSwitch.gfun_cid Arrays.signature.m_funs ;;
 
 let transform_calls ctx decl = 
   let ctx = ref ctx in

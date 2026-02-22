@@ -1,7 +1,7 @@
 (* Interpretation of stateful pairarrays. *)
 open Batteries
 open Syntax
-open InterpState
+open InterpSwitch
 
 (* Generic PairArray defs *)
 let pairarray_name = "PairArray"

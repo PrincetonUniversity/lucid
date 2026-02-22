@@ -1,7 +1,7 @@
 (* Interpretation of stateful counters. *)
 open Batteries
 open Syntax
-open InterpState
+open InterpSwitch
 
 (* Generic Counter defs *)
 let counter_name = "Counter"
@@ -54,9 +54,9 @@ let counter_add_ty =
        }
 ;;
 
-let dummy_memop = InterpSyntax.F (None, fun _ _ args -> V(InterpSyntax.extract_ival (List.hd args)))
-let setop = InterpSyntax.F (None, fun _ _ args -> V(InterpSyntax.extract_ival (List.nth args 1)))
-let dummy_int = InterpSyntax.V (CoreSyntax.vinteger (Integer.of_int 0))
+let dummy_memop = InterpSwitch.F (None, fun _ _ args -> V(InterpSwitch.extract_ival (List.hd args)))
+let setop = InterpSwitch.F (None, fun _ _ args -> V(InterpSwitch.extract_ival (List.nth args 1)))
+let dummy_int = InterpSwitch.V (CoreSyntax.vinteger (Integer.of_int 0))
 
 let counter_add_fun nst swid args =
   let open InterpSyntax in

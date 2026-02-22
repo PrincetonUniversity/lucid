@@ -1,6 +1,6 @@
 open Batteries
 open Syntax
-open InterpState
+open InterpSwitch
 
 let packet_name = "Packet"
 let packet_id = Id.create packet_name

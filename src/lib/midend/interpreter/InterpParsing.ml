@@ -6,7 +6,7 @@
 open Batteries
 open CoreSyntax
 open InterpSyntax
-open InterpState
+open InterpSwitch
 let is_payload_ty ty = equiv_ty ty (Payloads.payload_ty |> SyntaxToCore.translate_ty)
 
 (*** Helper functions used inside of parsers ***)
@@ -63,7 +63,7 @@ let parse_args (p:value) arg_tys =
 let lucid_parse_fun (nst: network_state) swid args = 
   (* payload is a VBits value *)
   let payload = match args with
-    | [_; InterpSyntax.V(payload)] -> payload
+    | [_; InterpSwitch.V(payload)] -> payload
     | _ -> error "unexpected args to lucid builtin parser"
   in
   (* read the event tag *)
@@ -93,5 +93,5 @@ let lucid_parse_fun (nst: network_state) swid args =
     eserialized = false;
   }
   in 
-  InterpSyntax.V(res)
+  InterpSwitch.V(res)
 ;;

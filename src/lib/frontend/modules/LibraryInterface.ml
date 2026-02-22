@@ -1,4 +1,4 @@
-open InterpState
+open InterpSwitch
 open Syntax
 
 type sigty = {

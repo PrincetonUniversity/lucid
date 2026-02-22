@@ -23,7 +23,7 @@ let builtin_cids =
       in
       let fun_cids =
         List.map
-          (fun (gf : InterpState.global_fun) -> gf.cid, is_builtin)
+          (fun (gf : InterpSwitch.global_fun) -> gf.cid, is_builtin)
           global_funs
       in
       let constructor_cids = 

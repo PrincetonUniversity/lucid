@@ -1,5 +1,4 @@
 (* Per-switch state in the interpreter. *)
-
 open CoreSyntax
 open InterpSyntax
 open InterpJson
@@ -7,6 +6,8 @@ open InterpControl
 open Batteries
 module Env = Collections.CidMap
 open InterpSocket
+
+
 
 module IntMap = InterpSim.IntMap
 (* maps port numbers to socket datatypes *)
@@ -46,8 +47,7 @@ type ingress_destination =
   | Switch of int
   | PExit of int
   
-
-and 'nst state = 
+type 'nst state = 
   { 
     swid : int
   ; config : InterpSim.simulation_config
@@ -70,8 +70,54 @@ and 'nst state =
   ; global_time : int ref (* shared global time *)
   }
 
-and 'nst handler =
-  'nst -> int (* switch *) -> int (* port *) -> event_val -> unit
+and 'nst handler = 'nst -> int (* switch *) -> int (* port *) -> event_val -> unit
+
+and network_state = { 
+    switches :  network_state state array
+  }
+
+
+(* values used in interpreter contexts. 'nst is network state *)
+and 'nst ival =
+  | V of value
+  | F of (cid option * 'nst code)
+
+and 'nst code = 'nst -> int (* switch *) -> 'nst ival list -> 'nst ival
+
+and memop
+
+let f (cid: cid) (code: 'nst code) = F(Some(cid), code)
+let anonf (code:'nst code) = F(None, code)
+
+
+let extract_ival iv =
+  match iv with
+  | V v -> v
+  | F _ -> failwith "IVal not a regular value"
+;;
+
+let ival_to_string v =
+  match v with
+  | V v -> CorePrinting.value_to_string v
+  | F _ -> "<function>"
+;;
+
+
+let create_nst () : network_state =
+  { 
+    switches = Array.of_list []
+  }
+;;
+  
+type global_fun =
+  { cid : Cid.t
+  ; body : network_state code
+  ; ty : Syntax.ty
+  }
+
+let gfun_cid (gf : global_fun) : Cid.t = 
+  gf.cid
+;;
 
 
 let empty_counter = { entries_handled = 0; total_handled = 0 }

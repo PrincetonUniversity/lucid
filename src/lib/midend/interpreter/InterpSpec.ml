@@ -20,7 +20,7 @@ type t =
     externs : value Env.t list
   ; events : interp_input list
   ; simconfig : InterpSim.simulation_config
-  ; extern_funs : (InterpState.network_state InterpSyntax.ival) Env.t
+  ; extern_funs : (InterpSwitch.network_state InterpSwitch.ival) Env.t
   ; ctl_pipe_name : string option
   }
 
@@ -217,8 +217,8 @@ let create_foreign_functions renaming efuns python_file =
   let open InterpState in
   let oc_to_py v =
     match v with
-    | InterpSyntax.V { v = VBool b } -> Py.Bool.of_bool b
-    | InterpSyntax.V { v = VInt n } -> Py.Int.of_int (Integer.to_int n)
+    | InterpSwitch.V { v = VBool b } -> Py.Bool.of_bool b
+    | InterpSwitch.V { v = VInt n } -> Py.Int.of_int (Integer.to_int n)
     | _ -> error "Can only call external functions with int/bool arguments"
   in
   let obj =
@@ -243,7 +243,7 @@ let create_foreign_functions renaming efuns python_file =
         ^ " is not a function in the python file!"
       | Some o ->
         let f =
-          InterpSyntax.anonf
+          InterpSwitch.anonf
             (fun _ _ args ->
               let pyretvar =
                 Py.Callable.to_function
@@ -253,7 +253,7 @@ let create_foreign_functions renaming efuns python_file =
               let _ = pyretvar in
               (* this is the return from python? *)
               (* Dummy return value *)
-              InterpSyntax.V(value (VBool false)))
+              InterpSwitch.V(value (VBool false)))
         in
         Env.add id f acc)
     efuns

@@ -156,21 +156,21 @@ let lookup_var sw_st locals cid =
 
 let port_arg locals = 
   let (port:CoreSyntax.value) = match Env.find (Id Builtins.ingr_port_id) locals with 
-    | InterpSyntax.V(port_val) -> port_val
+    | InterpSwitch.V(port_val) -> port_val
     | _ -> error "could not find input port while interpreting parser!"
   in
   port
 ;;
 
 let get_local id locals = match Env.find (Id id) locals with
-  | InterpSyntax.V(v) -> v
+  | InterpSwitch.V(v) -> v
   | _ -> error "not a value"
 ;;
 let update_local local_id v locals = 
-  Env.add (Id local_id) (InterpSyntax.V(v)) (Env.remove (Id local_id) locals)
+  Env.add (Id local_id) (InterpSwitch.V(v)) (Env.remove (Id local_id) locals)
 ;;
 
-let interp_eval exp : 'a InterpSyntax.ival =
+let interp_eval exp : 'a InterpSwitch.ival =
   match exp.e with
   | EVal v -> V v
   | _ ->
@@ -211,7 +211,7 @@ let calc_crc16_csum (zs : zint list) =
   Integer.bitnot (Integer.set_size 16 !sum)
 ;;
 
-let rec interp_exp (nst : network_state) swid locals e : 'a InterpSyntax.ival =
+let rec interp_exp (nst : network_state) swid locals e : 'a InterpSwitch.ival =
   let sw_st = nst.switches.(swid) in
   let interp_exps = interp_exps nst swid locals in
   let interp_exp = interp_exp nst swid locals in
@@ -322,7 +322,7 @@ let rec interp_exp (nst : network_state) swid locals e : 'a InterpSyntax.ival =
 
     (* V (VRecord(fields)) *)
 
-and interp_exps nst swid locals es : 'a InterpSyntax.ival list =
+and interp_exps nst swid locals es : 'a InterpSwitch.ival list =
   List.map (interp_exp nst swid locals) es
 ;;
 
@@ -541,7 +541,7 @@ let rec interp_statement nst hdl_sort swid locals s =
     let update_local locals p v = 
       match p,v.v with
       | PEvent (_, params), VEvent (ev) -> (List.fold_left2
-          (fun acc v (id, _) -> Env.add (Id id) ((V v): 'a InterpSyntax.ival) acc)
+          (fun acc v (id, _) -> Env.add (Id id) ((V v): 'a InterpSwitch.ival) acc)
           locals
           ev.data
           params)
@@ -562,7 +562,7 @@ let rec interp_statement nst hdl_sort swid locals s =
       | _ -> [v_result.v]
     in
     List.fold_left2 
-      (fun locals v id -> Env.add (Id id) (InterpSyntax.V v) locals) 
+      (fun locals v id -> Env.add (Id id) (InterpSwitch.V v) locals) 
       locals 
       (List.map (fun v -> value v) vs)
       ids
@@ -636,7 +636,7 @@ let interp_dglobal (nst : network_state) swid id ty e =
     let arg_ivals = List.map (fun e -> interp_exp nst swid Env.empty e) args in
     (* construct the value *)
     let idx = Pipeline.length (nst.switches.(swid).pipeline) in
-    let vg_ival = InterpSyntax.V (vglobal id idx ty) in
+    let vg_ival = InterpSwitch.V (vglobal id idx ty) in
     (* call the constructor to update the pipeline, adding the value to it *)
     let arg_ivals = vg_ival::arg_ivals in
     let new_pipe = Tables.create_ctor nst swid arg_ivals in 
@@ -728,7 +728,7 @@ let interp_memop params body nst swid args =
   let sz = List.hd args |> extract_ival |> raw_integer |> Integer.size in
   let body = replacer#visit_memop_body sz body in
   match body with
-  | MBComplex body -> InterpSyntax.V(interp_complex_body params body nst swid args)
+  | MBComplex body -> InterpSwitch.V(interp_complex_body params body nst swid args)
   | MBReturn e ->
     let locals =
       List.fold_left2
@@ -769,11 +769,11 @@ and interp_parser_action (nst : network_state) swid payload_id locals parser_act
     let parsed_val, payload' = InterpParsing.pread payload ty in
     (* add the new local and update payload variable *)
     locals
-      |> Env.add (cid) (InterpSyntax.V(parsed_val))
+      |> Env.add (cid) (InterpSwitch.V(parsed_val))
       |> update_local payload_id payload'
   | PPeek(cid, ty, _) -> 
     let peeked_val = InterpParsing.ppeek (get_local payload_id locals) ty in
-    locals |> Env.add (cid) (InterpSyntax.V(peeked_val))
+    locals |> Env.add (cid) (InterpSwitch.V(peeked_val))
   | PSkip(ty) ->
     let payload' = InterpParsing.padvance (get_local payload_id locals) ty in
     update_local payload_id payload' locals
@@ -806,7 +806,7 @@ and interp_parser_step nst swid payload_id locals parser_step =
           (* a call to another parser. *)
           (* construct ival arguments *)
           let args = 
-            (InterpSyntax.V(port_arg locals))::(List.map (interp_exp nst swid locals) args)
+            (InterpSwitch.V(port_arg locals))::(List.map (interp_exp nst swid locals) args)
           in
           (* call the parser function as you would any other function *)
           match InterpSwitch.lookup cid sw_st with 
@@ -842,13 +842,13 @@ let interp_decl (nst : network_state) swid d =
         List.fold_left
           (fun acc (k, v) -> Env.add k v acc)
           Env.empty
-          [ Id Builtins.this_id, InterpSyntax.V (vevent { event with edelay = 0 })
-          ; Id Builtins.ingr_port_id, InterpSyntax.V (vint port 32) ]
+          [ Id Builtins.this_id, InterpSwitch.V (vevent { event with edelay = 0 })
+          ; Id Builtins.ingr_port_id, InterpSwitch.V (vint port 32) ]
       in
       (* add event parameters to locals *)
       let locals =
         List.fold_left2
-          (fun acc v (id, _) -> Env.add (Id id) (InterpSyntax.V v) acc)
+          (fun acc v (id, _) -> Env.add (Id id) (InterpSwitch.V v) acc)
           builtin_env
           event.data
           params
@@ -892,10 +892,10 @@ let interp_decl (nst : network_state) swid d =
           args
           param_ids
       in
-      InterpSyntax.V(interp_parser_block nst swid payload_id locals parser_block)
+      InterpSwitch.V(interp_parser_block nst swid payload_id locals parser_block)
     in
     let st = nst.switches.(swid) in
-    let st = InterpSwitch.add_global  (Cid.id id) (InterpSyntax.anonf runtime_function) st in
+    let st = InterpSwitch.add_global  (Cid.id id) (InterpSwitch.anonf runtime_function) st in
     nst.switches.(swid) <- st;
     nst
 
@@ -914,7 +914,7 @@ let interp_decl (nst : network_state) swid d =
         | State.P(_) -> {v=VPat([]); vty=Payloads.payload_ty |> SyntaxToCore.translate_ty; vspan=Span.default}
         | _ -> extract_ival ival
       in *)
-      InterpSyntax.V (vevent { 
+      InterpSwitch.V (vevent { 
         eid = Id id; 
         data = List.map extract_ival args; 
         edelay = 0;
@@ -923,13 +923,13 @@ let interp_decl (nst : network_state) swid d =
     })
     in
     let st = nst.switches.(swid) in
-    let st = InterpSwitch.add_global  (Id id) (InterpSyntax.f (Id id) f) st in
+    let st = InterpSwitch.add_global  (Id id) (InterpSwitch.f (Id id) f) st in
     nst.switches.(swid) <- st;
     nst
   | DMemop { mid; mparams; mbody } ->
     let f = interp_memop mparams mbody in
     let st = nst.switches.(swid) in
-    let st = InterpSwitch.add_global  (Cid.id mid) (InterpSyntax.f (Cid.id mid) f) st in
+    let st = InterpSwitch.add_global  (Cid.id mid) (InterpSwitch.f (Cid.id mid) f) st in
     nst.switches.(swid) <- st;
     nst
   | DExtern _ ->
@@ -954,10 +954,10 @@ let interp_decl (nst : network_state) swid d =
         | None -> vint 0 0;
       in
       nst.switches.(swid).retval := None;
-      InterpSyntax.V(ret_v)
+      InterpSwitch.V(ret_v)
     in 
     let st = nst.switches.(swid) in
-    let st = InterpSwitch.add_global  (Cid.id id) (InterpSyntax.f (Cid.id id) runtime_function) st in
+    let st = InterpSwitch.add_global  (Cid.id id) (InterpSwitch.f (Cid.id id) runtime_function) st in
     nst.switches.(swid) <- st;
     nst
 
@@ -982,12 +982,12 @@ let interp_decl (nst : network_state) swid d =
           abody 
         in
         let ret_v = value@@VTuple(ret_vs) in
-        InterpSyntax.V(ret_v)
+        InterpSwitch.V(ret_v)
       in
-      let action_f = InterpSyntax.f (Cid.id aid) action_function in
+      let action_f = InterpSwitch.f (Cid.id aid) action_function in
       action_f
     in
-    let constr_f = InterpSyntax.f (Cid.id aid) action_function_generator in
+    let constr_f = InterpSwitch.f (Cid.id aid) action_function_generator in
     let st = nst.switches.(swid) in
     let st = InterpSwitch.add_global   (Cid.id aid) constr_f st in
     nst.switches.(swid) <- st;

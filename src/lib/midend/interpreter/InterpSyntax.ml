@@ -1,32 +1,8 @@
 (* interpreter-specific extensions to core syntax: 
 internal value and event types *)
 open CoreSyntax
-(* open InterpControl *)
-
-(* values used in interpreter contexts. 'nst is network state *)
-type 'nst ival =
-  | V of value
-  | F of (cid option * 'nst code)
-
-and 'nst code = 'nst -> int (* switch *) -> 'nst ival list -> 'nst ival
-
-and memop
-
-let f (cid: cid) (code: 'nst code) = F(Some(cid), code)
-let anonf (code:'nst code) = F(None, code)
 
 
-let extract_ival iv =
-  match iv with
-  | V v -> v
-  | F _ -> failwith "IVal not a regular value"
-;;
-
-let ival_to_string v =
-  match v with
-  | V v -> CorePrinting.value_to_string v
-  | F _ -> "<function>"
-;;
 
 
 (* internal event location in simulated network *)

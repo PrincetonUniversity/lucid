@@ -13,7 +13,7 @@ let exception_cids = [Cid.create ["Event"; "delay"]]
 let array_method_cids = 
   let open InterpState in
   List.map 
-    (fun (def: InterpState.global_fun ) -> def.cid) 
+    (fun (def: InterpSwitch.global_fun ) -> def.cid) 
     (Arrays.defs@PairArrays.defs)
 ;;
 

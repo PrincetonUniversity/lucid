@@ -20,7 +20,7 @@ let nst_to_string
   ?(show_pipeline = true)
   ?(show_queue = true)
   ?(show_exits = true)
-  (nst : InterpState.network_state)
+  (nst : InterpSwitch.network_state)
   =
   let base_str = Array.fold_lefti
     (fun acc idx st ->

@@ -4,7 +4,7 @@ open Yojson.Basic
 open CoreSyntax
 open InterpSyntax
 open InterpJson
-open InterpState
+open InterpSwitch
 open InterpControl
 open CoreSyntaxGlobalDirectory
 open InterpStdio
@@ -76,7 +76,7 @@ let event_signatures events = List.fold_left
 (* initial state is before declarations are parsed and loaded into handlers *)
 let initial_state ?(with_sockets=false) (pp : Preprocess.t) (spec : InterpSpec.t) =
   let global_time = ref (-1) in
-  let empty_state = InterpState.create() in
+  let empty_state = InterpSwitch.create_nst() in
   let switches = Array.init 
     spec.simconfig.num_switches (InterpSwitch.create 
         ~with_sockets:with_sockets 
@@ -212,7 +212,7 @@ let execute_event
       (* add propagation delay and push to destination *)
       (* run a default handling statement that re-serializes the event and 
          pushes it to the next switch.*)
-      let builtin_env = Env.add (Id (Builtins.ingr_port_id)) (InterpSyntax.V (C.vint port 32)) Env.empty in
+      let builtin_env = Env.add (Id (Builtins.ingr_port_id)) (InterpSwitch.V (C.vint port 32)) Env.empty in
       (* print_endline@@"t="^(string_of_int nst.current_time)^" running default egress handler for event " ^ Cid.to_string event.eid ^ " at switch " ^ (string_of_int swid) ^ " port " ^ (string_of_int port); *)
       let default_handler_body = 
         C.SGen(C.GPort(C.vint_exp port 32), C.value_to_exp {v=C.VEvent(event); vty=C.tevent; vspan=Span.default})
@@ -226,7 +226,7 @@ let execute_main_parser print_log swidx port (nst: network_state) (pkt_ev : (Cor
   let sw_st = nst.switches.(swidx) in
   let payload_val = List.hd pkt_ev.data in
   (* main takes 2 arguments, port and payload. Port is implicit. *)
-  let main_args = [InterpSyntax.V (C.vint port 32); InterpSyntax.V payload_val] in
+  let main_args = [InterpSwitch.V (C.vint port 32); InterpSwitch.V payload_val] in
   let main_parser = InterpSwitch.lookup (Cid.id Builtins.main_parse_id) sw_st in
 
   match main_parser with 

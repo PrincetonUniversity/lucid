@@ -31,7 +31,7 @@ open TofinoResources
 
 let array_fun_cids = 
   List.map 
-    (fun (fundef : InterpState.global_fun) -> fundef.cid)
+    (fun (fundef : InterpSwitch.global_fun) -> fundef.cid)
     (Arrays.defs@PairArrays.defs)
 ;;
 

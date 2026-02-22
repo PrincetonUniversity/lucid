@@ -9,7 +9,7 @@
          special table syntax from the frontend *)
 open Batteries
 open Syntax
-open InterpState
+open InterpSwitch
 open LibraryUtils
 open Pipeline
 open InterpSyntax
@@ -151,7 +151,7 @@ let create_sig =
 ;;
 
 (* interpreter implementation *)
-let create_ctor (nst : InterpState.network_state) swid args = 
+let create_ctor (nst : InterpSwitch.network_state) swid args = 
   match args with 
   (* the table value arg is added by interpcore *)
   | [tbl_v; tbl_len; tbl_acn_ctors; tbl_def_acn; tbl_def_args] -> 
@@ -432,9 +432,9 @@ let lookup_fun nst swid args =
     let ret_values = acn arg_values in
     let ret_vs = List.map (fun (valu: CoreSyntax.value) -> valu.v) ret_values in
     (* wrap the return values in a tuple, if more than 1 return *)
-    if (List.length ret_vs = 1) then (InterpSyntax.V (value_sp (List.hd ret_vs) Span.default))
+    if (List.length ret_vs = 1) then (InterpSwitch.V (value_sp (List.hd ret_vs) Span.default))
     else 
-      InterpSyntax.V(vtup ret_vs Span.default)
+      InterpSwitch.V(vtup ret_vs Span.default)
   | _ ->
     lookup_error "Incorrect number or type of arguments to Table.lookup"
 
@@ -467,7 +467,7 @@ let signature =
 (*** helpers to convert to old syntax for tofino backend ***)
 let function_cids = 
   (fst (List.split constructors))@(List.map 
-    (fun (def: InterpState.global_fun ) -> def.cid) 
+    (fun (def: InterpSwitch.global_fun ) -> def.cid) 
     (defs)
   )
 ;;

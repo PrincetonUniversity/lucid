@@ -1,7 +1,7 @@
 (* Interpretation of stateful payloads. *)
 open Batteries
 open Syntax
-open InterpState
+open InterpSwitch
 
 (*  some helpers for readability *)
 let effectless_fun_ty arg_tys ret_ty =
@@ -70,7 +70,7 @@ let payload_empty_ty =
 (* Lets use a pattern value for now. *)
 let payload_empty_fun _ _ args =
   match args with
-  | [] -> InterpSyntax.V({(CoreSyntax.vpat []) with vty = (SyntaxToCore.translate_ty payload_ty)})
+  | [] -> InterpSwitch.V({(CoreSyntax.vpat []) with vty = (SyntaxToCore.translate_ty payload_ty)})
     
     (* CoreSyntax.vint_sp (Integer.create ~size:32 ~value:0) Span.default *)
   | _ ->
@@ -92,7 +92,7 @@ let payload_parse_fun _ _ args =
   let open InterpSyntax in
   let open CoreSyntax in
   match args with 
-  | [V{v}] -> InterpSyntax.V(value v)
+  | [V{v}] -> InterpSwitch.V(value v)
   | _ -> payload_parse_error "Payload.parse called with wrong args"
 ;;
 

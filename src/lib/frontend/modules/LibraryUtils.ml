@@ -1,6 +1,6 @@
 open Batteries
 open Syntax
-
+open InterpSwitch
 
 (*  some type constructor helpers *)
 let effectless_fun_rawty arg_tys ret_ty = 
