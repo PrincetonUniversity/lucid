@@ -47,11 +47,11 @@ type ingress_destination =
   | Switch of int
   | PExit of int
   
-type 'nst state = 
+type state = 
   { 
     swid : int
   ; config : InterpSim.simulation_config
-  ; global_env : 'nst ival Env.t
+  ; global_env : ival Env.t
   ; command_queue : CommandQueue.t
   ; ingress_queue : EventQueue.t
   ; egress_queue : EventQueue.t
@@ -61,34 +61,29 @@ type 'nst state =
   ; retval : value option ref
   ; counter : stats_counter ref
   ; sockets : socket_map
-  ; hdlrs : 'nst handler Env.t
-  ; egress_hdlrs : 'nst handler Env.t
+  ; hdlrs :  handler Env.t
+  ; egress_hdlrs : handler Env.t
   ; event_sorts : event_sort Env.t
   ; event_signatures  : (Cid.t * CoreSyntax.ty list) InterpSim.IntMap.t
   ; global_names : SyntaxGlobalDirectory.dir
-  ; sws : 'nst state Array.t ref (* a reference to the array of switches in the nw *)
+  ; sws : network_state ref (* a reference to the array of switches in the nw *)
   ; global_time : int ref (* shared global time *)
   }
 
-and 'nst handler = 'nst -> int (* switch *) -> int (* port *) -> event_val -> unit
+and  network_state = state Array.t
 
-and network_state = { 
-    switches :  network_state state array
-  }
-
+and  handler = network_state -> int (* switch *) -> int (* port *) -> event_val -> unit
 
 (* values used in interpreter contexts. 'nst is network state *)
-and 'nst ival =
+and code = network_state -> int (* switch *) -> ival list ->  ival
+
+and  ival =
   | V of value
-  | F of (cid option * 'nst code)
+  | F of (cid option *  code)
 
-and 'nst code = 'nst -> int (* switch *) -> 'nst ival list -> 'nst ival
 
-and memop
-
-let f (cid: cid) (code: 'nst code) = F(Some(cid), code)
-let anonf (code:'nst code) = F(None, code)
-
+let f (cid: cid) (code: code) = F(Some(cid), code)
+let anonf (code: code) = F(None, code)
 
 let extract_ival iv =
   match iv with
@@ -103,15 +98,15 @@ let ival_to_string v =
 ;;
 
 
-let create_nst () : network_state =
+(* let create_nst () : network_state =
   { 
     switches = Array.of_list []
   }
-;;
+;; *)
   
 type global_fun =
   { cid : Cid.t
-  ; body : network_state code
+  ; body : code
   ; ty : Syntax.ty
   }
 
@@ -168,7 +163,7 @@ let create ?(with_sockets=false) start_time_ref event_sorts event_signatures con
 
 
 (* set the switch array reference *)
-let set_sws (self : 'nst state) sws = 
+let set_sws (self : state) sws = 
   {self with sws = ref sws;}
 ;;
 
@@ -229,7 +224,7 @@ let n_queued_for_time queued_events stime =
 ;;
 
 (* push an event to an ingress at a different switch *)
-let push_to_ingress nst st internal_event stime sport =
+let push_to_ingress st internal_event stime sport =
   let squeue_order = n_queued_for_time (EventQueue.elems st.ingress_queue) stime in
   let internal_event = {
     internal_event with   
@@ -241,7 +236,7 @@ let push_to_ingress nst st internal_event stime sport =
   save_update st' st' 
 ;;
 (* push an event from an ingress queue to an egress queue. Here, sport is the output port of the switch *)
-let push_to_egress nst st internal_event stime sport =
+let push_to_egress st internal_event stime sport =
   (* if there's already an event in the queue with the same time, we want to 
      make sure this one gets popped after it. So we increment the queue_spot. *)
   let squeue_order = n_queued_for_time (EventQueue.elems st.egress_queue) stime in
@@ -251,19 +246,19 @@ let push_to_egress nst st internal_event stime sport =
   save_update st' st' 
 ;;
 
-let push_to_commands nst st control_val stime = 
+let push_to_commands st control_val stime = 
   let st' = {st with command_queue=CommandQueue.add (control_val, stime) st.command_queue} in
   save_update st' st'
 ;;
 
 (** input loading **)
-let load_interp_input nst st port interp_input = 
+let load_interp_input st port interp_input = 
   match interp_input with
   | IEvent({iev; itime}) -> 
     let internal_event = to_internal_event iev {switch=Some st.swid; port} itime in
-    push_to_ingress nst st internal_event itime port
+    push_to_ingress st internal_event itime port
   | IControl({ictl; itime}) -> 
-    push_to_commands nst st ictl itime
+    push_to_commands st ictl itime
 ;;
 
 
@@ -273,18 +268,18 @@ let gtime self =
 
 (* event movement functions *)
 
-let ingress_receive nst st send_time arrival_time port (ievent : ievent)  =
+let ingress_receive st send_time arrival_time port (ievent : ievent)  =
 if Random.int 100 < st.config.drop_chance
   then (log_drop ievent send_time st)
-  else (push_to_ingress nst st ievent arrival_time port)     
+  else (push_to_ingress st ievent arrival_time port)     
 ;;
 
-let egress_receive nst st arrival_time port ievent = 
-  push_to_egress nst st ievent arrival_time port
+let egress_receive st arrival_time port ievent = 
+  push_to_egress st ievent arrival_time port
 ;;
 
 (* calculate when an event arrives at an input queue *)
-let calc_arrival_time nst (src_sw : 'nst state) dst_id desired_delay = 
+let calc_arrival_time (src_sw : state) dst_id desired_delay = 
   let propagate_delay =
     if src_sw.swid = dst_id
     then
@@ -300,16 +295,16 @@ let calc_arrival_time nst (src_sw : 'nst state) dst_id desired_delay =
 ;;
 
 (* val ingress_send : 'nst -> 'nst state -> ingress_destination -> event_val -> unit *)
-let ingress_send (nst : 'nst) (src_sw : 'nst state) ingress_destination event_val = 
+let ingress_send (src_sw : state) ingress_destination event_val = 
   match ingress_destination with
     | Switch sw -> 
       let dst_sw = lookup_switch src_sw sw in
       let send_time = gtime src_sw in
       (* let send_time = src_sw.utils.get_time nst in *)
 
-      let arrive_time = calc_arrival_time nst src_sw dst_sw.swid event_val.edelay in
+      let arrive_time = calc_arrival_time src_sw dst_sw.swid event_val.edelay in
       let ievent = to_internal_event event_val {switch = Some dst_sw.swid; port = 0} arrive_time in
-      ingress_receive nst dst_sw send_time arrive_time 0 ievent
+      ingress_receive dst_sw send_time arrive_time 0 ievent
     | PExit port -> 
       let send_time = gtime src_sw in
       (* let send_time = src_sw.utils.get_time nst in *)
@@ -317,12 +312,12 @@ let ingress_send (nst : 'nst) (src_sw : 'nst state) ingress_destination event_va
       emit_or_log_exit port ievent send_time src_sw
     | Port port -> (* NOTE: generate_port goes through an egress for the port *)
       let dst_id, _ = InterpSim.lookup_dst src_sw.config.links (src_sw.swid, port) in 
-      let timestamp = calc_arrival_time nst src_sw dst_id (event_val.edelay) in
+      let timestamp = calc_arrival_time src_sw dst_id (event_val.edelay) in
       let ievent = to_internal_event event_val {switch = Some src_sw.swid; port = port} timestamp in
-      egress_receive nst src_sw timestamp port ievent
+      egress_receive src_sw timestamp port ievent
 ;;
 
-let egress_send nst src_sw out_port event_val = 
+let egress_send src_sw out_port event_val = 
   let dst_id, dst_port = InterpSim.lookup_dst src_sw.config.links (src_sw.swid, out_port) in
   let time = gtime src_sw in
   (* let time = src_sw.utils.get_time nst in *)
@@ -336,7 +331,7 @@ let egress_send nst src_sw out_port event_val =
       let dst_sw = lookup_switch src_sw dst_id in
       let ievent = to_internal_event event_val {switch = Some dst_id; port = dst_port} time in        
       (* note that send and arrival times are currently the same -- we model 0-latency egress, for now *)
-      ingress_receive nst dst_sw time time dst_port ievent)
+      ingress_receive dst_sw time time dst_port ievent)
 ;;
 
 let next_q_ele (fsize, fmin, fdel, ftime) q cur_time = 
@@ -416,7 +411,7 @@ let ready_egress_events current_time st =
   _all_egress_events st
 ;;
 
-let ready_control_commands nst st current_time = 
+let ready_control_commands st current_time = 
   (* pop events out of the queue for current time *)
   let rec _all_control_commands st = 
     match next_command current_time st with

@@ -143,8 +143,8 @@ let interp_op op vs =
 ;;
 
 let update_counter swid event nst =
-  let st = nst.switches.(swid) in
-  let event_sort = Env.find event.eid nst.switches.(swid).event_sorts in
+  let st = nst.(swid) in
+  let event_sort = Env.find event.eid nst.(swid).event_sorts in
   InterpSwitch.update_counter event_sort st
 ;;
 
@@ -170,7 +170,7 @@ let update_local local_id v locals =
   Env.add (Id local_id) (InterpSwitch.V(v)) (Env.remove (Id local_id) locals)
 ;;
 
-let interp_eval exp : 'a InterpSwitch.ival =
+let interp_eval exp : InterpSwitch.ival =
   match exp.e with
   | EVal v -> V v
   | _ ->
@@ -211,8 +211,8 @@ let calc_crc16_csum (zs : zint list) =
   Integer.bitnot (Integer.set_size 16 !sum)
 ;;
 
-let rec interp_exp (nst : network_state) swid locals e : 'a InterpSwitch.ival =
-  let sw_st = nst.switches.(swid) in
+let rec interp_exp (nst : network_state) swid locals e : InterpSwitch.ival =
+  let sw_st = nst.(swid) in
   let interp_exps = interp_exps nst swid locals in
   let interp_exp = interp_exp nst swid locals in
   
@@ -322,7 +322,7 @@ let rec interp_exp (nst : network_state) swid locals e : 'a InterpSwitch.ival =
 
     (* V (VRecord(fields)) *)
 
-and interp_exps nst swid locals es : 'a InterpSwitch.ival list =
+and interp_exps nst swid locals es : InterpSwitch.ival list =
   List.map (interp_exp nst swid locals) es
 ;;
 
@@ -408,14 +408,14 @@ let expand_flood_port (nst : network_state) swid flood_port =
       if (port <> (-(flood_port + 1))) && (dst_swid <> swid) 
         then Some(port)
         else None)
-    (InterpSim.ports_to_neighbors nst.switches.(swid).config.links swid)
+    (InterpSim.ports_to_neighbors nst.(swid).config.links swid)
 ;;
 
 let rec interp_statement nst hdl_sort swid locals s =
   (* (match s.s with
   | SSeq _ | SNoop -> () (* We'll print the sub-parts when we get to them *)
   | _ -> print_endline @@ "Interpreting " ^ CorePrinting.stmt_to_string s); *)
-  let sw_st = nst.switches.(swid) in
+  let sw_st = nst.(swid) in
   let interp_exp = interp_exp nst swid locals in
   let interp_s = interp_statement nst hdl_sort swid locals in
   match s.s with
@@ -444,7 +444,7 @@ let rec interp_statement nst hdl_sort swid locals s =
   | SSeq (ss1, ss2) ->
     let locals = interp_s ss1 in
     (* Stop evaluating after hitting a return statement *)
-    if !(nst.switches.(swid).retval) <> None
+    if !(nst.(swid).retval) <> None
     then locals
     else interp_statement nst hdl_sort swid locals ss2
 
@@ -494,7 +494,7 @@ let rec interp_statement nst hdl_sort swid locals s =
       in
       (* push all the events to output ports *)
       List.iter (fun out_port -> 
-        InterpSwitch.ingress_send nst (nst.switches.(swid)) out_port event) 
+        InterpSwitch.ingress_send (nst.(swid)) out_port event) 
         output_ports;
       locals       
     )
@@ -508,14 +508,14 @@ let rec interp_statement nst hdl_sort swid locals s =
          egress generate variants the same! *)
       let port = ((port_arg locals).v |> extract_int ).value |> Z.to_int in 
       (* egress serializes packet events *)
-      let ev_sort = Env.find event.eid nst.switches.(swid).event_sorts in
+      let ev_sort = Env.find event.eid nst.(swid).event_sorts in
       (* serialize packet events *)
       let event_val = match ev_sort with 
         | EBackground -> 
           {event with eserialized = false} (* background events stay as events *)
         | EPacket -> InterpDeparsing.serialize_packet_event event
       in
-      InterpSwitch.egress_send nst (nst.switches.(swid)) port event_val;
+      InterpSwitch.egress_send (nst.(swid)) port event_val;
       locals
     )
     | HControl -> (error "control events are not implemented")
@@ -523,11 +523,11 @@ let rec interp_statement nst hdl_sort swid locals s =
   | SRet (Some e) ->
     let v = interp_exp e |> extract_ival in
     (* Computation stops if retval is Some *)
-    nst.switches.(swid).retval := Some v;
+    nst.(swid).retval := Some v;
     locals
   | SRet None ->
     (* Return a dummy value; type system guarantees it won't be used *)
-    nst.switches.(swid).retval := Some (vint 0 0);
+    nst.(swid).retval := Some (vint 0 0);
     locals
   | SUnit e ->
     ignore (interp_exp e);
@@ -541,7 +541,7 @@ let rec interp_statement nst hdl_sort swid locals s =
     let update_local locals p v = 
       match p,v.v with
       | PEvent (_, params), VEvent (ev) -> (List.fold_left2
-          (fun acc v (id, _) -> Env.add (Id id) ((V v): 'a InterpSwitch.ival) acc)
+          (fun acc v (id, _) -> Env.add (Id id) ((V v): InterpSwitch.ival) acc)
           locals
           ev.data
           params)
@@ -574,7 +574,7 @@ let _interp_dglobal (nst : network_state) swid id ty e =
      in Arrays.ml (and similarly for counters), then just calling that. But I
      don't want to muck around with the interpreter for now, so I'm sticking to
      quick fixes. *)
-  let st = nst.switches.(swid) in
+  let st = nst.(swid) in
   let p = st.pipeline in
   let idx = Pipeline.length p in
   let gty_name, gty_sizes =
@@ -625,7 +625,7 @@ let _interp_dglobal (nst : network_state) swid id ty e =
   in
   let st = { st with pipeline = new_p } in
   let st = InterpSwitch.add_global (Id id) (V (vglobal id idx ty)) st in
-  nst.switches.(swid) <- st;
+  nst.(swid) <- st;
   nst
 ;;
 
@@ -635,17 +635,17 @@ let interp_dglobal (nst : network_state) swid id ty e =
     (* eval the args *)
     let arg_ivals = List.map (fun e -> interp_exp nst swid Env.empty e) args in
     (* construct the value *)
-    let idx = Pipeline.length (nst.switches.(swid).pipeline) in
+    let idx = Pipeline.length (nst.(swid).pipeline) in
     let vg_ival = InterpSwitch.V (vglobal id idx ty) in
     (* call the constructor to update the pipeline, adding the value to it *)
     let arg_ivals = vg_ival::arg_ivals in
     let new_pipe = Tables.create_ctor nst swid arg_ivals in 
     (* update the global state's pipeline *)
-    nst.switches.(swid) <- { nst.switches.(swid) with pipeline = new_pipe };
+    nst.(swid) <- { nst.(swid) with pipeline = new_pipe };
     (* add the global to globals context in nst *)
-    let st = nst.switches.(swid) in
+    let st = nst.(swid) in
     let st = InterpSwitch.add_global (Id id) vg_ival st in
-    nst.switches.(swid) <- st;
+    nst.(swid) <- st;
     (* return updated nst *)
     nst
     (* interp_dtable nst swid id ty e *)
@@ -787,7 +787,7 @@ and interp_parser_action (nst : network_state) swid payload_id locals parser_act
     Env.add (cid) (assigned_ival) locals
 
 and interp_parser_step nst swid payload_id locals parser_step = 
-  let sw_st = nst.switches.(swid) in
+  let sw_st = nst.(swid) in
     match parser_step with
     | PMatch(es, branches) ->
       let vs = List.map (fun e -> interp_exp nst swid locals e |> extract_ival) es in
@@ -854,20 +854,20 @@ let interp_decl (nst : network_state) swid d =
           params
       in
       update_counter swid event nst; (*TODO: why are we counting packet events here? *)
-      Pipeline.reset_stage nst.switches.(swid).pipeline;
+      Pipeline.reset_stage nst.(swid).pipeline;
       ignore @@ interp_statement nst hdl_sort swid locals body
     in
     match hdl_sort with
     | HData -> 
       (* add_hdlr, temporarily inlined for refactoring *)
-      let updated_switch = {nst.switches.(swid) with hdlrs = Env.add (Cid.id id) f nst.switches.(swid).hdlrs} in
-      nst.switches.(swid) <- updated_switch;
+      let updated_switch = {nst.(swid) with hdlrs = Env.add (Cid.id id) f nst.(swid).hdlrs} in
+      nst.(swid) <- updated_switch;
       nst 
     | HEgress -> 
       (* add_egress_hdlr, temporarily inlined for refactoring *)
-      let updated_switch = {nst.switches.(swid) with egress_hdlrs = Env.add (Cid.id id) f nst.switches.(swid).egress_hdlrs} in
-      nst.switches.(swid) <- updated_switch;
-      (* nst.switches.(swid) <- InterpSwitch.add_egress_hdlr (Cid.id id) f nst.switches.(swid); *)
+      let updated_switch = {nst.(swid) with egress_hdlrs = Env.add (Cid.id id) f nst.(swid).egress_hdlrs} in
+      nst.(swid) <- updated_switch;
+      (* nst.(swid) <- InterpSwitch.add_egress_hdlr (Cid.id id) f nst.(swid); *)
       nst 
     | _ -> error "control handlers not supported"
     )
@@ -894,9 +894,9 @@ let interp_decl (nst : network_state) swid d =
       in
       InterpSwitch.V(interp_parser_block nst swid payload_id locals parser_block)
     in
-    let st = nst.switches.(swid) in
+    let st = nst.(swid) in
     let st = InterpSwitch.add_global  (Cid.id id) (InterpSwitch.anonf runtime_function) st in
-    nst.switches.(swid) <- st;
+    nst.(swid) <- st;
     nst
 
   | DEvent (id, num_opt, _, _) ->
@@ -922,15 +922,15 @@ let interp_decl (nst : network_state) swid d =
         eserialized = false;
     })
     in
-    let st = nst.switches.(swid) in
+    let st = nst.(swid) in
     let st = InterpSwitch.add_global  (Id id) (InterpSwitch.f (Id id) f) st in
-    nst.switches.(swid) <- st;
+    nst.(swid) <- st;
     nst
   | DMemop { mid; mparams; mbody } ->
     let f = interp_memop mparams mbody in
-    let st = nst.switches.(swid) in
+    let st = nst.(swid) in
     let st = InterpSwitch.add_global  (Cid.id mid) (InterpSwitch.f (Cid.id mid) f) st in
-    nst.switches.(swid) <- st;
+    nst.(swid) <- st;
     nst
   | DExtern _ ->
     failwith "Extern declarations should be handled during preprocessing"
@@ -946,19 +946,19 @@ let interp_decl (nst : network_state) swid d =
           (fst body |> List.split |> fst)
       in
       (* no need to reset the pipe stage -- main should start at the beginning. *)
-      (* Pipeline.reset_stage nst.switches.(swid).pipeline; *)
+      (* Pipeline.reset_stage nst.(swid).pipeline; *)
       (* interp the statement *)
       let _ = interp_statement  nst HData swid locals (snd body) in
-      let ret_v = match (!(nst.switches.(swid).retval)) with 
+      let ret_v = match (!(nst.(swid).retval)) with 
         | Some(v) -> v
         | None -> vint 0 0;
       in
-      nst.switches.(swid).retval := None;
+      nst.(swid).retval := None;
       InterpSwitch.V(ret_v)
     in 
-    let st = nst.switches.(swid) in
+    let st = nst.(swid) in
     let st = InterpSwitch.add_global  (Cid.id id) (InterpSwitch.f (Cid.id id) runtime_function) st in
-    nst.switches.(swid) <- st;
+    nst.(swid) <- st;
     nst
 
   | DActionConstr({aid; aconst_params; aparams; abody}) ->
@@ -988,9 +988,9 @@ let interp_decl (nst : network_state) swid d =
       action_f
     in
     let constr_f = InterpSwitch.f (Cid.id aid) action_function_generator in
-    let st = nst.switches.(swid) in
+    let st = nst.(swid) in
     let st = InterpSwitch.add_global   (Cid.id aid) constr_f st in
-    nst.switches.(swid) <- st;
+    nst.(swid) <- st;
     nst   
 ;;
 
@@ -998,7 +998,7 @@ let interp_decl (nst : network_state) swid d =
 (* interpret declarations to initialize every switch *)
 let process_decls nst ds =
   let rec aux i (nst : network_state) =
-    if i = Array.length nst.switches
+    if i = Array.length nst
     then nst
     else aux (i + 1) (List.fold_left (fun nst -> interp_decl nst i) nst ds)
   in

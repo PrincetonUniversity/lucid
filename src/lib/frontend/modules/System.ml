@@ -25,10 +25,10 @@ let sys_time_ty =
        }
 ;;
 
-let sys_time_fun (nst : network_state) _ args =
+let sys_time_fun (nst : InterpSwitch.state Array.t) _ args =
   let open CoreSyntax in
   match args with
-  | [] -> InterpSwitch.V(vinteger (Integer.create ~value:!(nst.switches.(0).global_time) ~size:32))
+  | [] -> InterpSwitch.V(vinteger (Integer.create ~value:!(nst.(0).global_time) ~size:32))
   | _ -> sys_time_error "takes no parameters"
 ;;
 

@@ -14,9 +14,9 @@ module Env = Collections.CidMap
 (* Temporary functions from InterpState during refactor. *)
 let save_update nst sw = 
   let open InterpSwitch in
-  nst.switches.(sw.swid) <- sw;;
+  nst.(sw.swid) <- sw;;
 let next_ready_event swid nst =
-  let st = nst.switches.(swid) in
+  let st = nst.(swid) in
   match InterpSwitch.next_event !( st.global_time) st with
     | None -> None
     | Some(st', epgs) -> 
@@ -25,19 +25,19 @@ let next_ready_event swid nst =
 ;;
 
 let ready_egress_events swid nst = 
-  let st = nst.switches.(swid) in
+  let st = nst.(swid) in
   let st', evs = InterpSwitch.ready_egress_events !(st.global_time) st in
   save_update nst st';
   evs
 ;;
 
 let ready_control_commands swid nst = 
-  let st = nst.switches.(swid) in
-  InterpSwitch.ready_control_commands nst st !(st.global_time)
+  let st = nst.(swid) in
+  InterpSwitch.ready_control_commands st !(st.global_time)
 ;;
 
 let all_egress_events swid nst = 
-  let st = nst.switches.(swid) in
+  let st = nst.(swid) in
   let st', evs = InterpSwitch.all_egress_events st in
   save_update nst st';
   evs
@@ -52,7 +52,7 @@ let load_interp_input nst interp_input =
       | None -> error "input event not associated with a switch"
       | Some(switch) -> switch
     in
-    InterpSwitch.load_interp_input nst (nst.switches.(swid)) loc.port interp_input)
+    InterpSwitch.load_interp_input (nst.(swid)) loc.port interp_input)
     locs
 ;;
 
@@ -76,7 +76,7 @@ let event_signatures events = List.fold_left
 (* initial state is before declarations are parsed and loaded into handlers *)
 let initial_state ?(with_sockets=false) (pp : Preprocess.t) (spec : InterpSpec.t) =
   let global_time = ref (-1) in
-  let empty_state = InterpSwitch.create_nst() in
+  (* let empty_state = InterpSwitch.create_nst() in *)
   let switches = Array.init 
     spec.simconfig.num_switches (InterpSwitch.create 
         ~with_sockets:with_sockets 
@@ -85,26 +85,26 @@ let initial_state ?(with_sockets=false) (pp : Preprocess.t) (spec : InterpSpec.t
         (event_signatures pp.events) 
         spec.simconfig) 
   in
-  let nst = { empty_state with switches } in
+  let nst = switches in
   (* give all the switches references to the switches Array *)
   Array.iteri 
     (fun swid _ -> (
        switches.(swid) <- InterpSwitch.set_sws switches.(swid) switches))      
-    nst.switches
+    nst
   ;  
   nst
 ;;
 
-(* nst.switches.(sw.swid) <- sw *)
+(* nst.(sw.swid) <- sw *)
 
 (* initialize misc per-switch state, 
    right now called after process_decls runs, 
    but does not need to be. *)
 let init_switches nst (spec : InterpSpec.t) ds = 
   let add_global i cid x nst = 
-    let sw_st = nst.switches.(i) in
+    let sw_st = nst.(i) in
     let sw_st = InterpSwitch.add_global cid x sw_st in
-    nst.switches.(i) <- sw_st;
+    nst.(i) <- sw_st;
   in
   let add_global_function (g : global_fun) nst =
     Array.modify
@@ -113,7 +113,7 @@ let init_switches nst (spec : InterpSpec.t) ds =
         then
           error ("global variable " ^ Cid.to_string g.cid ^ "  already defined")
         else InterpSwitch.add_global g.cid (F (Some(g.cid), g.body)) st)
-      nst.switches
+      nst
   in
   (* Add builtins (per switch) *)
   List.iter
@@ -126,19 +126,19 @@ let init_switches nst (spec : InterpSpec.t) ds =
   (* Add foreign functions (per switch) *)
   Env.iter
     (fun cid fval ->
-      Array.iteri (fun i _ -> add_global i cid fval nst) nst.switches)
+      Array.iteri (fun i _ -> add_global i cid fval nst) nst)
     spec.extern_funs;
   (* Add error-raising function for background event parser (per switch) *)
   let bg_parse_cid = Cid.id Builtins.lucid_parse_id in 
   let bg_parse_fun = InterpParsing.lucid_parse_fun in
   Array.iteri
     (fun swid _ -> add_global swid bg_parse_cid (anonf bg_parse_fun) nst)
-    nst.switches
+    nst
   ;
   (* Initialize global names *)
   Array.iteri
-    (fun swid _ -> nst.switches.(swid) <- {nst.switches.(swid) with global_names = CoreSyntaxGlobalDirectory.build_coredirectory ds})
-    nst.switches
+    (fun swid _ -> nst.(swid) <- {nst.(swid) with global_names = CoreSyntaxGlobalDirectory.build_coredirectory ds})
+    nst
   ;
   (* push interpreter inputs to ingress and control command queues *)
   load_interp_inputs nst spec.events;
@@ -169,7 +169,7 @@ let execute_event
   port
   gress
   =
-  let st = nst.switches.(swid) in
+  let st = nst.(swid) in
   let handlers, gress_str = match gress with 
   | InterpSwitch.Egress ->st.egress_hdlrs, " egress "
   | InterpSwitch.Ingress -> 
@@ -198,7 +198,7 @@ let execute_event
           "t=%d: Handling %s%sevent %s at switch %d, port %d\n"
           !(st.global_time)
           gress_str
-          (match Env.find event.eid nst.switches.(swid).event_sorts with
+          (match Env.find event.eid nst.(swid).event_sorts with
           | EPacket -> "packet "
           | _ -> "")
           (CorePrinting.event_to_string event)
@@ -223,7 +223,7 @@ let execute_event
 ;;
 
 let execute_main_parser print_log swidx port (nst: network_state) (pkt_ev : (CoreSyntax.event_val)) = 
-  let sw_st = nst.switches.(swidx) in
+  let sw_st = nst.(swidx) in
   let payload_val = List.hd pkt_ev.data in
   (* main takes 2 arguments, port and payload. Port is implicit. *)
   let main_args = [InterpSwitch.V (C.vint port 32); InterpSwitch.V payload_val] in
@@ -284,8 +284,8 @@ let execute_control swidx (nst : network_state) (ctl_ev : control_val) =
   in
   InterpControl.handle_control 
     do_tbl_install
-    nst.switches.(swidx).pipeline
-    nst.switches.(swidx).global_names 
+    nst.(swidx).pipeline
+    nst.(swidx).global_names 
     ctl_ev    
 ;;
 
@@ -299,7 +299,7 @@ let run_event_tup print_log idx nst ((event:CoreSyntax.event_val), port, gress) 
 
 let run_event_at_time print_log idx nst (ievent, port, event_time, gress) = 
   (* let nst = {nst with current_time=event_time} in *)
-  let st = nst.switches.(idx) in
+  let st = nst.(idx) in
   st.global_time := event_time;
   
   run_event_tup print_log idx nst (ievent, port, gress)
@@ -313,7 +313,7 @@ let execute_interp_event
   events
   =
   List.iter (run_event_tup print_log idx nst) events;
-  simulation_callback ((idx + 1) mod Array.length nst.switches) nst
+  simulation_callback ((idx + 1) mod Array.length nst) nst
 ;;
 
 (* run all the egress events from all of the switches *)
@@ -323,7 +323,7 @@ let execute_ready_egress_events print_log (nst:network_state) =
         let egr_evs = ready_egress_events swid nst in
         List.iter (run_event_tup print_log swid nst) egr_evs;
     )
-  nst.switches
+  nst
 ;;
 
 let finish_egress_events print_log (nst:network_state) = 
@@ -332,7 +332,7 @@ let finish_egress_events print_log (nst:network_state) =
         let egr_evs = all_egress_events swid nst in
         List.iter (run_event_at_time print_log swid nst) egr_evs;
     )
-  nst.switches
+  nst
 ;;
 
 (* execute all the control commands at the switch *)
@@ -349,7 +349,7 @@ let advance_current_time next_event_time (nst: network_state) =
      by 1.
      If you run this at the start of processing an event from each 
      switch, it models being able to process 1 event per time unit. *)
-  nst.switches.(0).global_time := max next_event_time (!(nst.switches.(0).global_time) + 1);
+  nst.(0).global_time := max next_event_time (!(nst.(0).global_time) + 1);
   nst
   (* {nst with current_time = max next_event_time (nst.current_time + 1)} *)
 ;;
@@ -361,7 +361,7 @@ let next_time nst =
       | None, x | x, None -> x
       | Some x, Some y -> Some (min x y))
     None
-    nst.switches
+    nst
 ;;
 let rec execute_sim_step idx nst = 
   (* execute a step of the simulation *)
@@ -377,7 +377,7 @@ let rec execute_sim_step idx nst =
         nst)
       else nst
     in
-    if !(nst.switches.(idx).global_time) > nst.switches.(idx).config.max_time
+    if !(nst.(idx).global_time) > nst.(idx).config.max_time
       then nst
       else (
         (* run any control events *)
@@ -385,7 +385,7 @@ let rec execute_sim_step idx nst =
         (* check for ingress and egress events with time < nst.current_time *)
         match next_ready_event idx nst with
         | Some (epgs) -> execute_interp_event InterpConfig.cfg.show_interp_events execute_sim_step idx nst epgs
-        | None -> execute_sim_step ((idx + 1) mod Array.length nst.switches) nst
+        | None -> execute_sim_step ((idx + 1) mod Array.length nst) nst
       )    
   )
 ;;
@@ -395,9 +395,9 @@ let simulate (nst : network_state) =
   then (* there must be at least 1 switch, and all random seeds are the same *)
     Console.report
     @@ "Using random seed: "
-    ^ string_of_int nst.switches.(0).config.random_seed
+    ^ string_of_int nst.(0).config.random_seed
     ^ "\n";
-  Random.init nst.switches.(0).config.random_seed;
+  Random.init nst.(0).config.random_seed;
   let nst = execute_sim_step 0 nst in
   (* drain all the egresses one last time to get everything into an ingress queue for logging *)
   finish_egress_events InterpConfig.cfg.show_interp_events nst;
@@ -443,7 +443,7 @@ let rec execute_interactive_sim_step event_getter_opt max_time idx nst =
         advance_current_time t nst)
       else nst
     in
-    if max_time > -1 && !(nst.switches.(0).global_time) > max_time
+    if max_time > -1 && !(nst.(0).global_time) > max_time
       then nst
     else 
       match next_ready_event idx nst with
@@ -451,7 +451,7 @@ let rec execute_interactive_sim_step event_getter_opt max_time idx nst =
         execute_ready_controls idx nst;
         execute_interp_event InterpConfig.cfg.show_interp_events next_step_continuation idx nst epgs
       (* if there's no next event, move to the next switch *)
-      | None -> next_step_continuation ((idx + 1) mod Array.length nst.switches) nst
+      | None -> next_step_continuation ((idx + 1) mod Array.length nst) nst
 ;;
 
 
@@ -467,7 +467,7 @@ let run pp renaming (spec : InterpSpec.t) (nst : network_state) =
     let located_events =
       List.filter_map
         (fun _ ->
-          match get_stdio_input false pp renaming spec.simconfig.num_switches !(nst.switches.(0).global_time)  with
+          match get_stdio_input false pp renaming spec.simconfig.num_switches !(nst.(0).global_time)  with
           | Events e -> Some e
           | _ -> None)
         (MiscUtils.range 0 spec.simconfig.num_switches)
@@ -477,7 +477,7 @@ let run pp renaming (spec : InterpSpec.t) (nst : network_state) =
   let rec poll_loop (nst : network_state) =
     (* wait for a single event or command *)
     let input =
-      get_input_blocking pp renaming spec.simconfig.num_switches !(nst.switches.(0).global_time)
+      get_input_blocking pp renaming spec.simconfig.num_switches !(nst.(0).global_time)
     in
     match input with
     | End -> (* no more input, but we want to finish up the egress events to generate everything *)
@@ -491,9 +491,9 @@ let run pp renaming (spec : InterpSpec.t) (nst : network_state) =
       let nst = execute_interactive_sim_step (Some get_input_nonblocking) (-1) 0 nst in
       poll_loop nst
   in
-  Random.init nst.switches.(0).config.random_seed;
+  Random.init nst.(0).config.random_seed;
   (* interp events with no event getter to initialize network, then run the polling loop *)
-  let nst = execute_interactive_sim_step None nst.switches.(0).config.max_time 0 nst in
+  let nst = execute_interactive_sim_step None nst.(0).config.max_time 0 nst in
   poll_loop nst  
 ;;
 
@@ -521,7 +521,7 @@ let get_stdio_input_nonblocking pp renaming (spec : InterpSpec.t) (nst: network_
   let located_events =
     List.filter_map
       (fun _ ->
-        match get_stdio_input false pp renaming spec.simconfig.num_switches !(nst.switches.(0).global_time)  with
+        match get_stdio_input false pp renaming spec.simconfig.num_switches !(nst.(0).global_time)  with
         | Events e -> Some e
         | _ -> None)
       (MiscUtils.range 0 spec.simconfig.num_switches)
@@ -532,13 +532,13 @@ let get_stdio_input_nonblocking pp renaming (spec : InterpSpec.t) (nst: network_
 (* execute a step of the software switch *)
 let rec execute_softswitch_step idx nst = 
   let current_time = Int64.to_int (Int64.of_float (Unix.gettimeofday () *. 1e9)) in
-  nst.switches.(0).global_time := current_time;
+  nst.(0).global_time := current_time;
   (* let nst = {nst with current_time} in  *)
   execute_ready_controls idx nst;
   match next_time nst with
   | None -> nst
   | Some next_t -> 
-    if next_t > !(nst.switches.(0).global_time) then ( (* delayed event not yet ready *)
+    if next_t > !(nst.(0).global_time) then ( (* delayed event not yet ready *)
       nst 
     ) else ( (* there is an event ready to dispatch *)
       match next_ready_event idx nst with
@@ -551,7 +551,7 @@ let rec execute_softswitch_step idx nst =
 (* main loop for software switch *)
 let run_softswitch pp renaming (spec : InterpSpec.t) (nst : network_state) =
   (*  assume there's only 1 switch (at index 0) *)
-  let all_sockets = InterpSwitch.get_sockets (Array.get nst.switches 0) in
+  let all_sockets = InterpSwitch.get_sockets (Array.get nst 0) in
   let cur_sock_idx = ref 0 in
   let n_sockets = List.length(all_sockets) in
   let poll_sockets pp renaming (spec : InterpSpec.t) nst = 
@@ -576,7 +576,7 @@ let run_softswitch pp renaming (spec : InterpSpec.t) (nst : network_state) =
     (* 4. recurse *)
     poll_loop nst
   in
-  Random.init nst.switches.(0).config.random_seed;
+  Random.init nst.(0).config.random_seed;
   (* interp events with no event getter to initialize network, then run the polling loop *)
   (* let nst = execute_softswitch_step 0 nst in *)
   poll_loop nst  

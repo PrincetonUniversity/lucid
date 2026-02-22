@@ -20,7 +20,7 @@ type t =
     externs : value Env.t list
   ; events : interp_input list
   ; simconfig : InterpSim.simulation_config
-  ; extern_funs : (InterpSwitch.network_state InterpSwitch.ival) Env.t
+  ; extern_funs : (InterpSwitch.ival) Env.t
   ; ctl_pipe_name : string option
   }
 

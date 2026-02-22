@@ -27,7 +27,7 @@ let nst_to_string
       Printf.sprintf "%s\nSwitch %d : %s" acc idx
       @@ InterpSwitch.to_string ~show_vars ~show_pipeline ~show_queue ~show_exits st)
     ""
-    nst.switches
+    nst
   in
   if InterpConfig.cfg.json || InterpConfig.cfg.interactive
     then InterpJson.interp_report_json "final_state" base_str None

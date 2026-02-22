@@ -151,12 +151,12 @@ let create_sig =
 ;;
 
 (* interpreter implementation *)
-let create_ctor (nst : InterpSwitch.network_state) swid args = 
+let create_ctor (nst : InterpSwitch.state Array.t) swid args = 
   match args with 
   (* the table value arg is added by interpcore *)
   | [tbl_v; tbl_len; tbl_acn_ctors; tbl_def_acn; tbl_def_args] -> 
     let _ = tbl_acn_ctors in
-    let st = nst.switches.(swid) in
+    let st = nst.(swid) in
     let p = st.pipeline in
     let tbl_id = match tbl_v with 
       | V { v = VGlobal(tbl_id, _) } -> tbl_id
@@ -235,7 +235,7 @@ let install_fun nst swid args =
   let open CoreSyntax in
   match args with
   | [vtbl; vkey; vaction; vaction_const_arg_tup] -> 
-    let target_pipe = nst.switches.(swid).pipeline in    
+    let target_pipe = nst.(swid).pipeline in    
     let stage = match (extract_ival vtbl).v with 
       | VGlobal(_, stage) -> stage
       | _-> error "Table.install: table arg didn't eval to a global"
@@ -316,7 +316,7 @@ let install_ternary_fun nst swid args =
   let open CoreSyntax in
   match args with
   | [vtbl; vkey; vmask; vaction; vaction_const_arg_tup] -> 
-    let target_pipe = nst.switches.(swid).pipeline in    
+    let target_pipe = nst.(swid).pipeline in    
     let stage = match (extract_ival vtbl).v with 
       | VGlobal(_, stage) -> stage
       | _-> error "Table.install: table arg didn't eval to a global"
@@ -399,7 +399,7 @@ let lookup_fun nst swid args =
   | [V { v = VGlobal(_, tbl_pos); }; V { v = vkey }; V { v = vargs }] ->  
     let keys = flatten_v vkey |> List.map value in  
     (* get all the entries from the table *)
-    let default, entries = Pipeline.get_table_entries tbl_pos nst.switches.(swid).pipeline in
+    let default, entries = Pipeline.get_table_entries tbl_pos nst.(swid).pipeline in
     (* find the first matching case *)
     let fst_match =
       List.fold_left
