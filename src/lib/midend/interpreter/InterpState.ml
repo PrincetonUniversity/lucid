@@ -22,7 +22,7 @@ type switch = network_state InterpSwitch.state
 and network_state = { 
     switches : switch array
   }
-
+;;
 
 let create () : network_state =
   { 

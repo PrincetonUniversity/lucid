@@ -12,7 +12,6 @@ module IntMap = InterpSim.IntMap
 (* maps port numbers to socket datatypes *)
 type socket_map = InterpSocket.t IntMap.t
 
-
 (* input queue for a single switch *)
 module EventQueue = BatHeap.Make (struct
   (* time, event, port *)
