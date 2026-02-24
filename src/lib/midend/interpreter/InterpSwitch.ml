@@ -127,11 +127,11 @@ let create ?(with_sockets=false) start_time_ref event_sorts event_signatures con
   (* construct socket map *)
   let sockets = if with_sockets then (
     List.fold_left 
-      (fun ifmap (intf:SoftSwitchConfig.interface) -> 
+      (fun ifmap (intf:SwitchConfig.interface) -> 
         let socket = InterpSocket.create intf.switch intf.port intf.interface in
         IntMap.add intf.port socket ifmap)
       IntMap.empty
-      SoftSwitchConfig.cfg.interface  
+      SwitchConfig.cfg.interface  
     )
     else IntMap.empty
   in
@@ -195,14 +195,12 @@ let log_exit port (ievent:ievent) current_time st =
 ;;
 
 let emit_or_log_exit port (ievent:ievent) current_time st = 
+  (* if it is not a port bound to a socket, use 
+      the default send -- which will print to stdio 
+      in the Lucid interpreter. *)
   match IntMap.find_opt port st.sockets with
     | None -> log_exit port ievent current_time st
     | Some(socket) -> InterpSocket.send_event socket ievent.sevent
-;;
-
-
-let log_drop event current_time st = 
-  Queue.push (event, current_time) st.drops
 ;;
 
 let update_counter event_sort st= 
@@ -264,6 +262,10 @@ let gtime self =
 ;;
 
 (* event movement functions *)
+
+let log_drop event current_time st = 
+  Queue.push (event, current_time) st.drops
+;;
 
 let ingress_receive st send_time arrival_time port (ievent : ievent)  =
 if Random.int 100 < st.config.drop_chance

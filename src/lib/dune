@@ -22,7 +22,7 @@
    config
    interpConfig
    tofinoConfig
-   softSwitchConfig
+   switchConfig
    cConfig
    ports
    console

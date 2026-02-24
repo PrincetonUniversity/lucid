@@ -5,7 +5,7 @@ open Dpt
 
 let main () =
   Config.base_cfg.verbose <- false;
-  let _ = SoftSwitchConfig.parse_args () in
+  let _ = SwitchConfig.parse_args () in
   let ds = Input.parse Config.base_cfg.dpt_file in
   let renaming, ds =
     FrontendPipeline.process_prog Builtins.interp_builtin_tys ds

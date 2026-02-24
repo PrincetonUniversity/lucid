@@ -4,7 +4,7 @@
 
 open Rawlink
 open Cstruct
-
+open Yojson.Basic
 open InterpSyntax
 open CoreSyntax
 open InterpJson
@@ -73,26 +73,10 @@ let event_to_packetbuf (ev : event_val) =
   hex_str
 ;;
 
-(* read an input event, blocking when block = true *)
-let read_event_opt (self :t) block _ = 
-  (* timestamp no longer passed from interpreter loop *)
-  let timestamp = Int64.to_int (Int64.of_float (Unix.gettimeofday () *. 1e9)) in
-  (* let (timestamp : int) = current_time in *)
-  (* location defined by link *)
-  let locations = [{switch=Some(self.switch); port=self.port}] in
-  (* blocking: just read a buf and cast to bytes *)
-  if (block) then (
-    let buf = read self in
-    Some(event_create timestamp locations buf)
-  ) else ( (* non blocking *)
-    match read_nonblock self with 
-    | None -> None 
-    | Some(buf) -> Some(event_create timestamp locations buf)
-  )
-;;  
 
-(* read a batch of input events, nonblocking *)
-let read_event_batch (self : t) = 
+(*** Public API ***)
+(* read a batch of event values wrapped in an interp_input, nonblocking *)
+let read_event_batch (self : t) : interp_input list = 
   let timestamp = Int64.to_int (Int64.of_float (Unix.gettimeofday () *. 1e9)) in
   let locations = [{switch=Some(self.switch); port=self.port}] in
   let bufs = read_batch_nonblock self in
@@ -101,8 +85,18 @@ let read_event_batch (self : t) =
 
 
 (* send an event value *)
-let send_event t ev = send t (event_to_packetbuf ev) ;;
+let send_event self ev = send self (event_to_packetbuf ev) ;;
 
+(* experimental: send an event to stdout as a json *)
+let send_event_to_stdio_as_json (self : t) (ev : event_val) = 
+  let base_event = event_to_json ev in  
+  let locs = `List [`String (Printf.sprintf "%i:%i" self.switch self.port)] in
+  let evjson = `Assoc(base_event@["locations", locs]) in
+  Yojson.Basic.to_string evjson
+;;
+
+
+(* 
 let test_rawlink ifname =
   let intf = create 0 0 ifname in 
   let buf = read intf in
@@ -113,4 +107,4 @@ let test_rawlink ifname =
   Printf.printf "Got a packet with %d bytes, echoing...%!\n" (buf.len);
   send intf buf;
   ()
-;;
+;; *)

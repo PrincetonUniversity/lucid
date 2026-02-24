@@ -492,7 +492,7 @@ let rec interp_statement nst hdl_sort swid locals s =
           | _ -> 
             List.map (fun port -> Port(port)) ports)
       in
-      (* push all the events to output ports *)
+      (* push event to all output ports *)
       List.iter (fun out_port -> 
         InterpSwitch.ingress_send (nst.(swid)) out_port event) 
         output_ports;

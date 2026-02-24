@@ -1,6 +1,7 @@
+#!/usr/bin/env python3
 # A few simple tests for the lucid interpreter switch using reflector.dpt
-# This creates a veth pair (feth0, feth1) and runs the switch on feth0, 
-# then sends packets on feth1 and captures on feth0 to verify they go through the switch.
+# This creates a veth pair (SEND_IFACE, SWITCH_IFACE) and runs the switch on SWITCH_IFACE, 
+# then sends packets on SEND_IFACE, which the switch reflects back and are captured on SEND_IFACE.
 
 # lucidSwitch usage:
 # $REPO_ROOT/lucidSwitch reflector.dpt --interface 0:feth0

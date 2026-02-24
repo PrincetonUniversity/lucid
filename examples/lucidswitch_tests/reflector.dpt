@@ -1,18 +1,19 @@
 // minimal packet reflector
+// example input fromstdin:
 // {"name":"pktin","args":[1, 2, 3],"locations":["0:10"]}
-global Array.t<32> countArray = Array.create(1);
+global Array.t<32> countArray = Array.create(1024);
 memop incr(int mv, int ct) {
     return mv + ct;
 }
 
-event delayed_print(){
-    printf("in delayed print");
-}
+const int CONTROL_PORT = 99;
+event cur_count(int ct){skip;}
 
 packet event pktin(int src, int dst, Payload.t pl) {
     // printf("from pktin");
     // printf("time: %d", Sys.time());
-    // int ct_copy = Array.update(countArray, 0, incr, 1, incr, 1);
     generate_port(ingress_port, pktin(src, dst, pl));
+    int ct = Array.update(countArray, hash<10>(7, src), incr, 1, incr, 1);
+    // generate_port(CONTROL_PORT, cur_count(ct));
     // generate Event.delay(delayed_print(), 4000000000);
 }
