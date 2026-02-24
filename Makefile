@@ -34,8 +34,8 @@ default:
 	cp -f _build/default/src/bin/lucidp4t.exe dptc
 	dune build src/bin/lucidcc.exe
 	cp -f _build/default/src/bin/lucidcc.exe lucidcc
-	dune build src/bin/lucidSoftSwitch.exe
-	cp -f _build/default/src/bin/lucidSoftSwitch.exe lucidSoftSwitch
+	dune build src/bin/lucidSwitch.exe
+	cp -f _build/default/src/bin/lucidSwitch.exe lucidSwitch
 
 mac-release:
 	./scripts/builds/build_macos_release.sh
@@ -59,8 +59,8 @@ all:
 	cp -f _build/default/src/bin/eventParsers.exe bin/eventParsers
 
 switch: 
-	dune build src/bin/lucidSoftSwitch.exe
-	cp -f _build/default/src/bin/lucidSoftSwitch.exe lucidSwitch
+	dune build src/bin/lucidSwitch.exe
+	cp -f _build/default/src/bin/lucidSwitch.exe lucidSwitch
 
 generatedVisitors: src/lib/frontend/Syntax.processed.ml
 

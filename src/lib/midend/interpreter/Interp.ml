@@ -101,11 +101,9 @@ let initial_state ?(with_sockets=false) (pp : Preprocess.t) (spec : InterpSpec.t
    but does not need to be. *)
 let init_switches nst (spec : InterpSpec.t) ds = 
   let add_global i cid x nst = 
-    let sw_st = nst.(i) in
-    let sw_st = InterpSwitch.add_global cid x sw_st in
-    nst.(i) <- sw_st;
+    nst.(i) <- InterpSwitch.add_global cid x nst.(i)
   in
-  let add_global_function (g : global_fun) nst =
+  let add_global_function nst (g : global_fun)  =
     Array.modify
       (fun st ->
         if InterpSwitch.mem_env g.cid st
@@ -116,7 +114,7 @@ let init_switches nst (spec : InterpSpec.t) ds =
   in
   (* Add builtins (per switch) *)
   List.iter
-    (fun f -> add_global_function f nst)
+    (add_global_function nst )
     Builtins.builtin_defs;
   (* Add externs (per switch) *)
   List.iteri

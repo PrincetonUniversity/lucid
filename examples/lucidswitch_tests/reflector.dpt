@@ -1,0 +1,18 @@
+// minimal packet reflector
+// {"name":"pktin","args":[1, 2, 3],"locations":["0:10"]}
+global Array.t<32> countArray = Array.create(1);
+memop incr(int mv, int ct) {
+    return mv + ct;
+}
+
+event delayed_print(){
+    printf("in delayed print");
+}
+
+packet event pktin(int src, int dst, Payload.t pl) {
+    // printf("from pktin");
+    // printf("time: %d", Sys.time());
+    // int ct_copy = Array.update(countArray, 0, incr, 1, incr, 1);
+    generate_port(ingress_port, pktin(src, dst, pl));
+    // generate Event.delay(delayed_print(), 4000000000);
+}

@@ -5,9 +5,8 @@ open CoreSyntax
 open CoreSyntaxGlobalDirectory
 open Pipeline
 
-(* left off here -- make this tbl_entry an unevaluated expression, 
+(* TODO -- make this tbl_entry an unevaluated expression, 
    which handle_control should transform into an action function *)
-
 type entry_install_cmd = {
   iprio : int;
   imatch : exp list;  

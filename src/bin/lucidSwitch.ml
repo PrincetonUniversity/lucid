@@ -1,7 +1,5 @@
-(* 
-    interpreter for operating 
-    on live traffic from interfaces 
-*)
+(* A lucid software switch that operates on raw linux interfaces
+    and uses the interpreter to process packets. *)
 open Batteries
 open Dpt
 
@@ -15,13 +13,6 @@ let main () =
   let ds =  MidendPipeline.process_prog ds in
   let nst, pp, spec = Interp.initialize_softswitch renaming ds in
   ignore (Interp.run_softswitch pp renaming spec nst)
-
-
-  (* Simple rawlink test *)
-  (* InterpSocket.test_rawlink "feth0";   *)
-
-  (* () *)
-  (* ignore (Interp.run_softswitch pp renaming spec nst) *)
 ;;
 
 let _ = main ()

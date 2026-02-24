@@ -76,7 +76,8 @@ and  network_state = state Array.t
 (* a handler has side effects, so it needs to see the network state *)
 and  handler = network_state -> int (* switch *) -> int (* port *) -> event_val -> unit
 
-(* code inside the program has no side effects, so it should not need it *)
+(* code inside the program has no side effects, so it should not need network state, 
+   just switch state (or even perhaps only the switch pipeline?) *)
 and code = network_state -> int (* switch *) -> ival list ->  ival
 
 and ival =
@@ -99,12 +100,6 @@ let ival_to_string v =
 ;;
 
 
-(* let create_nst () : network_state =
-  { 
-    switches = Array.of_list []
-  }
-;; *)
-  
 type global_fun =
   { cid : Cid.t
   ; body : code
