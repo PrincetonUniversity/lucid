@@ -12,6 +12,9 @@ let main () =
   in
   let ds =  MidendPipeline.process_prog ds in
   let nst, pp, spec = Interp.initialize_softswitch renaming ds in
+  Gc.compact ();
+  print_endline @@ "{\"Init complete.\":[]}";
+  flush stdout;
   ignore (Interp.run_softswitch pp renaming spec nst)
 ;;
 

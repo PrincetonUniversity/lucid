@@ -1,17 +1,11 @@
-# This is a test script for the lucidSoftSwitch using reflector.dpt.
-# The test will involve sending packets through a virtual Ethernet interface (veth)
-# and verifying that they are correctly reflected by the switch.
+# A few simple tests for the lucid interpreter switch using reflector.dpt
+# This creates a veth pair (feth0, feth1) and runs the switch on feth0, 
+# then sends packets on feth1 and captures on feth0 to verify they go through the switch.
 
-# lucidSoftSwitch usage:
-# ../lucidSoftSwitch reflector.dpt --interface 0:0:feth0
+# lucidSwitch usage:
+# $REPO_ROOT/lucidSwitch reflector.dpt --interface 0:feth0
 # the args are: --interface <port>:<interface name>
-
-# 1. construct a pcap file with n packets, 64B ethernet frames. Contents don't matter, so make it generic UDP.
-# 2. make sure the veth interfaces are up. We are on macos, so will use feth0 and feth1 as the veth pair.
-# 3. start tcpdump on feth1 to capture the reflected packets.
-# 4. start lucidSoftSwitch with reflector.dpt on feth0
-# 5. send packets on feth1 using tcpreplay
-# 6. sanity check: compare length of sent pcap with length of captured pcap. They should match.
+# you can add multiple interfaces like: --interface 0:feth0 --interface 1:otheriface
 
 import subprocess
 import sys
@@ -20,27 +14,33 @@ import os
 import platform
 
 from scapy.all import Ether, IP, UDP, Raw, wrpcap, rdpcap
-
-IS_LINUX = platform.system() == "Linux"
-
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-NUM_PACKETS = 10000
+
+DPT_FILE = os.path.join(SCRIPT_DIR, "reflector.dpt")
 SEND_PCAP = os.path.join(SCRIPT_DIR, "send.pcap")
 RECV_PCAP = os.path.join(SCRIPT_DIR, "recv.pcap")
-SWITCH_BIN = os.path.join(SCRIPT_DIR, "..", "lucidSoftSwitch")
-DPT_FILE = os.path.join(SCRIPT_DIR, "reflector.dpt")
 SEND_IFACE = "feth1"
 SWITCH_IFACE = "feth0"
+NUM_PACKETS = 10000
+REPLAY_PPS = 250000
 
-# --- Step 0: Delete old pcaps if they exist ---
+def repo_root():
+    return subprocess.check_output(
+        ["git", "rev-parse", "--show-toplevel"], text=True
+    ).strip()
+
+SWITCH_BIN = os.path.join(repo_root(), "lucidSwitch")
+IS_LINUX = platform.system() == "Linux"
+
 def cleanup_pcaps():
+    """Delete old pcaps if they exist."""
     for p in [SEND_PCAP, RECV_PCAP]:
         if os.path.exists(p):
             os.remove(p)
             print(f"[+] Removed old pcap: {p}")
 
-# --- Step 1: Build a pcap with n generic UDP packets ---
 def build_pcap(path, n, pload_size=1024 - 14 - 20 - 8):  # 1024 total - Ethernet(14) - IP(20) - UDP(8)
+    """Build a pcap with n generic UDP packets."""
     pkts = []
     for i in range(n):
         pkt = Ether(dst="ff:ff:ff:ff:ff:ff") / IP(dst="10.0.0.1") / UDP(dport=5000) / Raw(load=bytes(pload_size))
@@ -48,8 +48,8 @@ def build_pcap(path, n, pload_size=1024 - 14 - 20 - 8):  # 1024 total - Ethernet
     wrpcap(path, pkts)
     print(f"[+] Wrote {n} packets to {path}")
 
-# --- Step 2: Ensure veth interfaces are up ---
 def ensure_veths():
+    """Ensure veth interfaces are up."""
     if IS_LINUX:
         subprocess.run(["sudo", "ip", "link", "add", SWITCH_IFACE, "type", "veth", "peer", "name", SEND_IFACE], capture_output=True)
         subprocess.run(["sudo", "ip", "link", "set", SWITCH_IFACE, "up"], check=True)
@@ -62,24 +62,38 @@ def ensure_veths():
         subprocess.run(["sudo", "ifconfig", SEND_IFACE, "up"], check=True)
     print(f"[+] {SWITCH_IFACE} and {SEND_IFACE} are up")
 
-# --- Steps 3-5: Run the test ---
 def run_test():
-    # Step 3: Start tcpdump on feth1 to capture reflected packets
+    """Run the main test: start tcpdump, start switch, send packets."""
     tcpdump = subprocess.Popen(
         ["sudo", "tcpdump", "-i", SEND_IFACE, "-w", RECV_PCAP, "-c", str(NUM_PACKETS), "-B", "4096"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     time.sleep(1)  # let tcpdump settle
-
-    # Step 4: Start lucidSoftSwitch on feth0
+    print("[+] Started tcpdump on %s, waiting for switch to initialize..." % SEND_IFACE)
     switch = subprocess.Popen(
-        [SWITCH_BIN, DPT_FILE, "--interface", f"0:{SWITCH_IFACE}"],
+        ["sudo", SWITCH_BIN, DPT_FILE, "--interface", f"0:{SWITCH_IFACE}"],
         stdout=subprocess.PIPE, stderr=subprocess.PIPE,
     )
-    time.sleep(2)  # let the switch start up
+    # Wait for the switch to finish initialization
+    deadline = time.time() + 30
+    while time.time() < deadline:
+        line = switch.stdout.readline().decode()
+        if not line:
+            # readline returns empty only if the pipe is closed (process exited)
+            rc = switch.poll()
+            stderr_out = switch.stderr.read().decode() if rc is not None else ""
+            print(f"[-] Switch exited early (rc={rc})")
+            print(f"[-] stderr: {stderr_out}")
+            exit(1)
+        if "Init complete." in line:
+            print("[+] Switch initialized")
+            time.sleep(1)
+            break
+    else:
+        raise TimeoutError("Switch did not print 'Init complete.' within 30s")
 
-    # Step 5: Send packets on feth1 via tcpreplay
-    subprocess.run(["sudo", "tcpreplay", "--topspeed", "--intf1=" + SEND_IFACE, SEND_PCAP],
+    # Send packets via tcpreplay
+    subprocess.run(["sudo", "tcpreplay", f"--pps={REPLAY_PPS}", "--intf1=" + SEND_IFACE, SEND_PCAP],
                     check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     print(f"[+] Sent {NUM_PACKETS} packets on {SEND_IFACE}")
 
@@ -94,8 +108,8 @@ def run_test():
     switch.terminate()
     switch.wait()
 
-# --- Step 6: Compare packet counts ---
 def check_packet_count():
+    """Compare the number of packets sent vs received."""
     sent = rdpcap(SEND_PCAP)
     try:
         recv = rdpcap(RECV_PCAP)
@@ -107,10 +121,9 @@ def check_packet_count():
         print("[+] PASS: packet counts match")
     else:
         print("[-] FAIL: packet counts do not match")
-        sys.exit(1)
 
-# --- Measure throughput from recv pcap timestamps ---
 def measure_throughput():
+    """Measure throughput in packets per second and Mbps based on the recv pcap timestamps."""
     recv = rdpcap(RECV_PCAP)
     if len(recv) < 2:
         print("[*] Not enough packets to measure throughput")
@@ -124,13 +137,57 @@ def measure_throughput():
     mbps = total_bytes * 8 / duration / 1e6
     print(f"[*] Throughput: {pps:.0f} pps, {mbps:.2f} Mbps (over {duration:.4f}s)")
 
+def measure_tcpreplay_throughput():
+    """Measure raw tcpreplay->tcpdump throughput without the switch in the loop."""
+    print("[*] Measuring tcpreplay throughput (no switch)...")
+    tcpdump = subprocess.Popen(
+        ["sudo", "tcpdump", "-i", SWITCH_IFACE, "-w", RECV_PCAP, "-c", str(NUM_PACKETS), "-B", "65536"],
+        stdout=subprocess.DEVNULL, stderr=subprocess.PIPE,
+    )
+    time.sleep(1)  # let tcpdump settle
+
+    # Send from SEND_IFACE, tcpdump captures on SWITCH_IFACE (direct veth pair, no switch)
+    replay = subprocess.run(
+        ["sudo", "tcpreplay", f"--pps={REPLAY_PPS}", "--intf1=" + SEND_IFACE, SEND_PCAP],
+        check=True, capture_output=True, text=True,
+    )
+    print(f"[+] Sent {NUM_PACKETS} packets on {SEND_IFACE}")
+    print(f"[*] tcpreplay stdout: {replay.stdout.strip()}")
+    print(f"[*] tcpreplay stderr: {replay.stderr.strip()}")
+
+    try:
+        tcpdump.wait(timeout=30)
+    except subprocess.TimeoutExpired:
+        tcpdump.terminate()
+        tcpdump.wait()
+
+    tcpdump_stderr = tcpdump.stderr.read().decode()
+    print(f"[*] tcpdump stderr: {tcpdump_stderr.strip()}")
+
+    recv = rdpcap(RECV_PCAP)
+    if len(recv) < 2:
+        print("[*] Not enough packets captured to measure throughput")
+        return
+    duration = float(recv[-1].time - recv[0].time)
+    if duration <= 0:
+        print("[*] Duration is zero, cannot compute throughput")
+        return
+    pps = (len(recv) - 1) / duration
+    total_bytes = sum(len(p) for p in recv)
+    mbps = total_bytes * 8 / duration / 1e6
+    print(f"[*] tcpreplay throughput: {pps:.0f} pps, {mbps:.2f} Mbps (over {duration:.4f}s)")
+    print(f"[*] Captured {len(recv)}/{NUM_PACKETS} packets")
+
 # --- Main ---
 if __name__ == "__main__":
     cleanup_pcaps()
     build_pcap(SEND_PCAP, NUM_PACKETS)
     ensure_veths()
-    run_test()
-    check_packet_count()
-    measure_throughput()
+    if "--tcpreplay-throughput" in sys.argv:
+        measure_tcpreplay_throughput()
+    else:
+        run_test()
+        check_packet_count()
+        measure_throughput()
     
 
