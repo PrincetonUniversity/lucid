@@ -17,12 +17,23 @@ type t = {
   ifname : string ; (* interface name *)
   link : Rawlink.t  (* FD wrapper *)
 }
-(* create an interface from a name *)
-let create switch port ifname : t = 
-  let link = Rawlink.open_link ~promisc:true ifname in  
+
+let create switch port ifname : t =
+  let link = Rawlink.open_link ~promisc:true ifname in
+  (* drain any packets queued between socket() and bind() in rawlink,
+     since AF_PACKET with ETH_P_ALL captures from all interfaces
+     until bind() restricts it to the target interface *)
+  ignore (Rawlink.drain_buffered link);
+  let fd = Rawlink.get_fd link in
+  let rec drain () =
+    let ready, _, _ = Unix.select [fd] [] [] 0.0 in
+    match ready with
+    | [] -> ()
+    | _ -> ignore (Rawlink.read_packet link); drain ()
+  in
+  drain ();
   { switch; port; ifname; link }
 ;;
-
 (* IO operations *)
 let send t buf = Rawlink.send_packet t.link buf ;;
 let read t = Rawlink.read_packet t.link ;;
