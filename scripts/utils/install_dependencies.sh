@@ -49,3 +49,10 @@ fi
 opam install -y --confirm-level=unsafe-yes --deps-only .
 echo "All Lucid dependencies installed."
 echo "Run eval \$(opam env) to update your shell env before calling make."
+
+# NOTE: 
+# if you get an error like:
+# The compilation of ocaml-base-compiler.4.12.0 failed at "make -j23"
+# run lines 39 and 49 with --jobs=1, e.g.:
+# opam switch create 4.12.0 --jobs=1
+# opam install -y --jobs=1 --confirm-level=unsafe-yes --deps .
