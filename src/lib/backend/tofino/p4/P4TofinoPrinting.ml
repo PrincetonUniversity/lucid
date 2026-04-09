@@ -38,6 +38,7 @@ let doc_to_string d =
 let verbose_ids = false
 ;;
 
+let str_of_zint i = s' (Z.to_string i)
 let str_of_int i = s' (string_of_int i)
 let str_of_bool b = s' (string_of_bool b)
 
@@ -68,8 +69,8 @@ and string_of_tys ts =
   separate_map (s'", ") string_of_ty ts
 
 let string_of_value v = match v with 
-  | VInt (i, None) -> (str_of_int i)
-  | VInt (i, Some(w)) -> (str_of_int w)^^(s'"w")^^(str_of_int i)
+  | VInt (i, None) -> (str_of_zint i)
+  | VInt (i, Some(w)) -> (str_of_int w)^^(s'"w")^^(str_of_zint i)
   | VBool b -> str_of_bool b
   | VStruct _ -> error "vstruct printing not implemented"
   | VString _ -> error "strings are not expected in the p4 program"
@@ -151,7 +152,7 @@ and string_of_eop op args : PPrint.document =
         | {ex=EVal(VInt(v, _)); _} -> v
         | _ -> error "first argument of cast op must be an int constant"
       in
-     (!^"(")^^(string_of_ty (tint wid_int))^^(!^")")^^(string_of_expr var)
+     (!^"(")^^(string_of_ty (tint (Z.to_int wid_int)))^^(!^")")^^(string_of_expr var)
     | Cast, _ -> error "[string_of_eop] wrong args for op."
     | Slice, [estart; efin; evar] -> 
             (string_of_expr evar)

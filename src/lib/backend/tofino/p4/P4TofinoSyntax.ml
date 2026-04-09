@@ -10,6 +10,7 @@ and cid = [%import: (Cid.t[@opqaue])]
 and tagval = [%import: (TaggedCid.tagval[@opqaue])]
 and tcid = [%import: (TaggedCid.t[@opqaue])]
 and sp = [%import: Span.t]
+and z = [%import: (Z.t[@opaque])]
 and struct_ty = 
   | THdr
   | TMeta
@@ -30,7 +31,7 @@ and ty =
     | TPacket
 
 and value = 
-    | VInt of int * (int option)
+    | VInt of z * (int option)
     | VBool of bool    
     | VStruct of id * value list
     | VString of string (* for control plane programs *)
