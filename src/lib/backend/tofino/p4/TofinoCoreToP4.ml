@@ -43,7 +43,7 @@ let translate_rty rty =
 let translate_value v =
   match v with 
   | CS.VBool(b) -> T.VBool(b)
-  | CS.VInt(z) -> vint (Integer.to_int z) (Some (Integer.size z))
+  | CS.VInt(z) -> vint (Integer.value z) (Some (Integer.size z))
   (* | CS.VInt(z) -> vint (Integer.to_int z) None *)
   | _ -> error "[translate_value] values must be bools or ints"
 ;;
@@ -274,10 +274,10 @@ let rec translate_exp (prog_env:prog_env) exp : (T.decl list * T.expr) * prog_en
       (* cast and slice have arguments in a different form *)
       | CS.Cast(Sz sz) -> 
         let (_, exps), _ = translate_exps prog_env args in 
-        (eval_int sz)::(exps)
+        (eval_int@@Z.of_int sz)::(exps)
       | CS.Slice(s, e) -> 
         let (_, exps), _ = translate_exps prog_env args in 
-        (eval_int s)::(eval_int e)::(exps)
+        (eval_int@@Z.of_int s)::(eval_int@@Z.of_int e)::(exps)
       | _ -> 
         let (_, exps), _ = translate_exps prog_env args in 
         exps
@@ -383,7 +383,7 @@ and translate_sys_call fcn_id args =
         [], 
         eop 
           (Slice) 
-          [eval_int 47; eval_int 16; T.evar (Cid.create ["ingress_intrinsic_metadata"; "ingress_mac_tstamp"])]  
+          [eval_int@@Z.of_int 47; eval_int@@Z.of_int 16; T.evar (Cid.create ["ingress_intrinsic_metadata"; "ingress_mac_tstamp"])]  
       | "random" -> 
         (* declare rng_###, call rng_###.get(); *)
         let rng_id = Id.fresh_name "rng" in
@@ -547,7 +547,7 @@ and translate_array_memop_complex env (returns:bool) cell_ty (args: exp list) (m
         (* copy the value of cell 1 to a local variable *)
         local cell1_local cell_ty (T.evar (Cid.id cell1_remote));
         (* there is no remote for cell 2 in a regular array *)
-        local cell2_local cell_ty (eval_int 0)
+        local cell2_local cell_ty (eval_int@@Z.of_int 0)
         ]
       in 
       let statements = init_stmts@statements in
@@ -1489,7 +1489,7 @@ let translate_parser denv parser =
          case -- cid is not param -> read is a slocal lookahead; advance *)
       match (is_param cid) with
       | true -> [], extract pkt_arg cid
-      | false -> [], sseq [slocal_lookahead pkt_arg cid (translate_ty ty); sadvance pkt_arg (size_of_tint ty |> CoreSyntax.size_to_int)]
+      | false -> [], sseq [slocal_lookahead pkt_arg cid (translate_ty ty); sadvance pkt_arg (size_of_tint ty |> CoreSyntax.size_to_int |> Z.of_int)]
     )
     | PPeek(cid, ty, _) -> (
       (* case -- cid is an event field (first id is name of output event param) sassign lookahead -> 
@@ -1498,7 +1498,7 @@ let translate_parser denv parser =
       | true -> [], sassign_lookahead pkt_arg cid (translate_ty ty)
       | false -> [], slocal_lookahead pkt_arg cid (translate_ty ty)
     )
-    | PSkip(ty) -> [], sadvance pkt_arg (size_of_tint ty|> CoreSyntax.size_to_int)
+    | PSkip(ty) -> [], sadvance pkt_arg (size_of_tint ty|> CoreSyntax.size_to_int |> Z.of_int)
     | PAssign(cid, exp) when (is_checksum exp) -> 
       (* invalidate statements come after the use of the headers *)
       let decls, sub_stmt, get_expr, invalid_stmt = translate_parser_checksum denv.penv exp in

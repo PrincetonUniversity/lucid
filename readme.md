@@ -1,8 +1,8 @@
 # The Lucid / DPT (data plane threads) language
 
-Lucid is a high-level language for programming high-performance data planes. Its designed to feel more like a regular programming language than P4, with simple, general, and modular abstractions. At the same time, Lucid is carefully designed so that its compiler can translate programs into efficient code optimized for real platforms. 
+Lucid is a high-level network programming language, focusing on the data plane. It is inspired by P4, but designed to feel more like a conventional high-level language with simple, general, and modular abstractions. At the same time, Lucid is carefully designed so that its compiler can translate programs into efficient code optimized for real platforms. 
 
-An important idea in Lucid is pipeline parallelism. Unlike other languages, Lucid guarantees that a program can be pipelined in its type-and-effect. In other words, any type-checking program is guaranteed to always access persistent objects in the same order. This is necessary on targets like the Tofino that are physical pipelines. On other targets it allows the compiler to use pipelining to exploit parallelism safely (without changing program semantics).
+An important idea in Lucid is pipeline parallelism. Lucid's type/effect system guarantees that a program accesses state in a consistent total order (i.e., a DAG), so any legal program can be pipelined. This allows Lucid's compiler to pipeline programs into hardware configurations for line-rate PISA switches that use physical pipelines. 
 
 Lucid also has an interpreter with support for the entire language and fast, multi-node simulations. This makes it a convenient modeling language for data-plane applications. 
 

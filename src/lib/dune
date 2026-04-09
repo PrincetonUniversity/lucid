@@ -24,7 +24,6 @@
    tofinoConfig
    switchConfig
    cConfig
-   ports
    console
    id
    cid

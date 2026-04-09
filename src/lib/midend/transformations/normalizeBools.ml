@@ -57,8 +57,26 @@ module NormalizeRelops = struct
     test_var_cid, test_var_stmt
   ;;
 
+
+  let eop_not x = aexp (EOp (Not, [x])) x.ety x.espan ;;
+  let distribute_not exp = 
+    match exp.e with
+    | EOp (Not, [arg]) -> (
+      match arg.e with 
+      | EOp (Not, [x]) -> x
+      | EOp (And, [x; y]) -> 
+        let e' = EOp (Or, [eop_not x; eop_not y]) in
+        {arg with e=e'}
+      | EOp (Or, [x; y]) -> 
+        let e' = EOp (And, [eop_not x; eop_not y]) in
+        {arg with e=e'}
+      | _ -> exp
+    )
+    | _ -> exp
+  ;;
   (* normalize a boolean expression in an if. *)
   let rec normalize_exp exp =
+    let exp = distribute_not exp in (* first, distribute any negations *)
     match exp with
     (* operations need to be recursively normalized *)
     | { e = EOp (op, args); espan; ety } -> normalize_erelop op args ety espan

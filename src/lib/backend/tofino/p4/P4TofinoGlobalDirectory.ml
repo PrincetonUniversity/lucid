@@ -12,7 +12,7 @@ let p4_array_to_arrmeta pipe_id id slot_sz len tcid =
   Arr({
     name=tcid.tcid;
     compiled_cid=full_arr_cid (Cid.id id);
-    length=P4.expr_to_int len;
+    length= Z.to_int (P4.expr_to_int len);
     cell_size = slot_sz;})
 ;;
 
