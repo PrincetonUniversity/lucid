@@ -377,6 +377,39 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
         }
     in
     env, { e with e = EIndex (inf_e1, idx); ety }
+  | EGet(e1, idx) -> (
+    (* 4/2026 -- preliminary rule based on TGet and EIndex *)
+    let i =
+      match idx with
+      | IConst i -> i
+      | _ ->
+        error_sp e.espan
+        @@ "Index "
+        ^ size_to_string idx
+        ^ " is neither a variable nor a constant."
+    in
+    (* infer tuple type from expression *)
+    let env, inf_e1, inf_ety = infer_exp env e1 |> textract in
+    (* there is no expected type for a tuple *)
+    let size = match inf_ety.raw_ty with 
+      | TTuple(inf_rtys) -> List.length inf_rtys
+      | _ -> failwith "Type error: could not resolve tuple type length"
+    in
+    let expected_rtys = List.init size (fun _ -> (fresh_type ()).raw_ty) in
+    let expected_ty = mk_ty @@ TTuple expected_rtys in
+    unify_ty e.espan inf_ety expected_ty; (* expected type of the tuple *)
+    if i >= size
+      then (
+        let err_str = "Tuple index "^(string_of_int i)^" is out of bounds ("^(string_of_int size)^")" in
+        error_sp e.espan err_str
+      );
+    let ety = Some(
+      ty_eff
+        (List.nth expected_rtys i)
+        (wrap_effect inf_ety.teffect [None, 0; None, i])
+    ) in
+    env, {e with e = EGet(inf_e1, idx); ety}
+  )    
   | EComp (e1, idx, sz) ->
     validate_size e.espan env sz;
     let renamed_idx = Id.freshen idx in

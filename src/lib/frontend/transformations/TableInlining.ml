@@ -55,6 +55,9 @@ let rec eliminate_exp e =
   | EProj (e1, str) ->
     let stmt, e1' = eliminate_exp e1 in
     stmt, { e with e = EProj (e1', str) }
+  | EGet (e1, str) ->
+    let stmt, e1' = eliminate_exp e1 in
+    stmt, { e with e = EGet (e1', str) }
   | EVector es ->
     let stmt, es' = eliminate_exps es in
     stmt, { e with e = EVector es' }

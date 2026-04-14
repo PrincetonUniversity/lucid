@@ -174,6 +174,7 @@ and e =
   | ERecord of (string * exp) list
   | EWith of exp * (string * exp) list (* { e with ...} syntax *)
   | EProj of exp * string
+  | EGet  of exp * size (* tuple get *)
   | EVector of exp list
   | EComp of exp * id * size (* Vector comprehension *)
   | EIndex of exp * size
@@ -471,6 +472,7 @@ let op_sp op args span = exp_sp (EOp (op, args)) span
 let call_sp cid args span = exp_sp (ECall (cid, args, false)) span
 let ucall_sp cid args span = exp_sp (ECall (cid, args, true)) span
 let hash_sp size args span = exp_sp (EHash (size, args)) span
+let get_sp e l span = exp_sp (EGet (e, l)) span
 let proj_sp e l span = exp_sp (EProj (e, l)) span
 let record_sp lst span = exp_sp (ERecord lst) span
 let with_sp base lst span = exp_sp (EWith (base, lst)) span

@@ -358,7 +358,8 @@ let default_expression ty =
     end
     | TRecord lst ->
       record_sp (List.map (fun (s, raw_ty) -> s, aux raw_ty) lst) Span.default
-    | TTuple _ -> failwith "Cannot create default expression for tuple"
+    | TTuple(raw_tys) -> 
+      tuple_sp (List.map (fun (raw_ty) -> aux raw_ty) raw_tys) Span.default
     | TName(cid, _, _) -> failwith ("Cannot create default expression for user type "^(Cid.to_string cid))
     | TBuiltin(cid, _, _) -> failwith ("Cannot create default expression for builtin type "^(Cid.to_string cid))
     | TMemop _ -> failwith "Cannot create default expression for memop"
@@ -391,7 +392,7 @@ let rec is_compound e =
   | EHash _ | EOp _ | ECall _ | EStmt _ -> true
   | ETableCreate _ -> true
   | ETableMatch _ -> true
-  | EComp (e, _, _) | EIndex (e, _) | EProj (e, _) | EFlood e -> is_compound e
+  | EComp (e, _, _) | EIndex (e, _) | EProj (e, _) | EGet (e, _) | EFlood e -> is_compound e
   | EVector entries | ETuple entries -> List.exists is_compound entries
   | ERecord entries -> List.exists (is_compound % snd) entries
   | EWith (base, entries) ->
@@ -689,6 +690,7 @@ let e_to_constr_str e = match e with
 | ERecord (_) -> "record"
 | EWith (_) -> "with"
 | EProj (_) -> "proj"
+| EGet (_) -> "eget"
 | EVector (_) -> "vector"
 | EComp (_) -> "comp"
 | EIndex (_) -> "index"

@@ -120,6 +120,7 @@
 %token <Span.t> COMMA
 %token <Span.t> DOT
 %token <Span.t> TBOOL
+%token <Span.t> TUPLE
 %token <Span.t> EVENT
 %token <Span.t> GENERATE
 %token <Span.t> SGENERATE
@@ -212,6 +213,11 @@ ty:
     | QID                               { ty_sp (TQVar (QVar (snd $1))) (fst $1) }
     | AUTO                              { ty_sp (TQVar (QVar (fresh_auto ()))) $1 }
     | cid    				            { ty_sp (TName (snd $1, [], true)) (fst $1) }
+    | TUPLE ty_poly                     { 
+                                            let raw_tys = List.map (fun ty -> ty.raw_ty) (snd $2) in
+                                            ty_sp (TTuple (raw_tys)) (Span.extend $1 (fst $2)) }
+
+
     | cid poly				            { ty_sp (TName (snd $1, snd $2, true)) (fst $1) }
     | cid ty_poly                       {
                                             let raw_tys = List.map (fun ty -> ty.raw_ty) (snd $2) in
@@ -332,6 +338,9 @@ exp:
         op_sp PatExact [$3] (Span.extend $1 $4)}
 
     | LPAREN TINT single_poly RPAREN exp  { op_sp (Cast(snd $3))[$5] (Span.extend $1 $5.espan) }
+
+    | exp PROJ NUM                        { get_sp $1 (IConst (Z.to_int (snd $3))) (Span.extend $1.espan (fst $3)) }
+
     | exp PROJ ID                         { proj_sp $1 (Id.name (snd $3)) (Span.extend $1.espan (fst $3)) }
     // | LPAREN exp RPAREN		             	  { $2 }
     | exp LBRACKET size COLON size RBRACKET { op_sp (Slice (snd $3, snd $5)) [$1] (Span.extend ($1).espan (fst $5)) }
@@ -360,6 +369,8 @@ exp:
 // an expression with a parenthesis is a tuple, unless its a single-element tuple, in which case its just the element.
 // note that user-written tuples may not appear in the AST, so any parsed tuple must be unpacked with 
 // SyntaxUtils.unpack_tuple before calling a AST node constructor
+// Update 4/2026 -- the above comment is for table matches, 
+// where tuples were initially used. They are now also may be declared by users.
 paren_exp:
     | LPAREN args RPAREN                  { match $2 with 
                                             | [] -> tuple_sp [] (Span.extend $1 $3)

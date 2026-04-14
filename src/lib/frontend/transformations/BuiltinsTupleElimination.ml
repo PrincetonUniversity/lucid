@@ -85,6 +85,10 @@ let rec eliminate_exp e =
   | EProj (e1, str) ->
     let stmt, e1' = eliminate_exp e1 in
     stmt, { e with e = EProj (e1', str) }
+  | EGet (e1, idx) -> 
+    let stmt, e1' = eliminate_exp e1 in
+    stmt, { e with e = EGet (e1', idx) }
+
   | EVector es ->
     let stmt, es' = eliminate_exps es in
     stmt, { e with e = EVector es' }
@@ -188,4 +192,29 @@ let eliminator =
   end
 ;;
 
-let eliminate_prog (ds : decl list) = eliminator#visit_decls () ds
+(* convert EGet expressions into TGet operations *)
+let eget_eliminator = 
+  object (self)
+  inherit [_] s_map as super
+  method! visit_exp acc exp = 
+    match exp.e with 
+    | EGet(etup, idx) -> 
+      let etup = {etup with e=self#visit_e acc etup.e} in
+      let i =
+        match idx with
+        | IConst i -> i
+        | _ -> failwith "Tuple elimination: encountered invalid tuple get arg"
+      in
+      let tup_len = match (Option.get etup.ety).raw_ty with 
+      | TTuple(raw_tys) -> List.length raw_tys
+      | _ -> failwith "Tuple elimination error: encountered tuple expression with non-tuple type"
+      in
+      let e_new = EOp(TGet(tup_len, i), [etup]) in
+      {exp with e=e_new}
+    | _ -> {exp with e=self#visit_e acc exp.e}
+    end
+;;
+
+let eliminate_prog (ds : decl list) =   
+  eliminator#visit_decls () (eget_eliminator#visit_decls () ds)
+;;

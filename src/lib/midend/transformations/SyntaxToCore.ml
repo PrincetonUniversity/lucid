@@ -196,6 +196,7 @@ and translate_exp (e : S.exp) : C.exp =
     | S.EFlood e -> C.EFlood (translate_exp e)
     | S.ERecord(fields) -> C.ERecord (List.map (fun (id, e) -> (Id.create id), translate_exp e) fields)
     | S.EProj(e, id) -> C.EProj (translate_exp e, Id.create id)
+    | S.EGet(_, _) -> S.error "[translate_exp] tuples should be eliminated in frontend"
     | ETuple exps -> C.ETuple(List.map translate_exp exps)
     | ESizeCast _
     | EStmt _
