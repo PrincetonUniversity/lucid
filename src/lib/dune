@@ -61,6 +61,7 @@
    sizeInlining
    builtinsTupleElimination
    renaming
+   monomorphicEventArgs
    globalArgElimination
    explicitReturns
    moduleAliasing

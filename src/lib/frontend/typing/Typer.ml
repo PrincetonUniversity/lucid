@@ -1296,7 +1296,7 @@ let retrieve_constraints env span id params =
             }
       } ->
     let maps = fresh_maps () in
-    let params2 = List.map (instantiator#visit_ty maps) arg_tys in
+    let params2 = List.map (instantiator#visit_ty maps) arg_tys in (* instantiated event types *)
     let constraints = List.map (instantiator#visit_constr maps) constraints in
     let _ =
       (* FIXME: This isn't quite sufficient -- it won't catch e.g.
@@ -1479,24 +1479,18 @@ let rec infer_declaration
         (Id.name id)
         (ty_to_string (lookup_var d.dspan env (Cid.id id))); *)
       env, effect_count, DEvent (id, annot, sort, constr_specs, params)
+
     | DHandler (id, s, body) ->
+      (* Handlers with polymorphic arguments should not constrain those 
+         arguments in the body. To check this, we make a generalized 
+         copy of the params at the start. *)
+      let generalized_params_start = generalizer#visit_params () (fst body) in
+      let body = (instantiator#visit_params (fresh_maps ()) generalized_params_start, snd body) in
+
       enter_level ();
       let constraints = retrieve_constraints env d.dspan id (fst body) in
-      (* LEFT OFF HERE. Unify handler and event types. *)
-      (* 1. look the type of the event's constructor (follow pattern from EVar inference) *)
-      (* let inst t = instantiator#visit_ty (fresh_maps ()) t in *)
-      (* let inf_ev_ctor_ty = lookup_var d.dspan env (Cid.id id) |> inst in *)
-      (* 2. unify the event's parameters with the handler's parameters *)
-      (* let _ =   match inf_ev_ctor_ty.raw_ty with 
-        | TFun fty -> (
-          match ret_ty.raw_ty with
-        )
-        | _ -> error_sp d.dspan "Error: found a variable with the same name as this handler"
-      in  *)
-      (* match inf_ev_ctor_ty with  *)
 
-
-      (* unify_ty d.dspan ty inf_ety; *)
+      (* type the handler body *)
       let _, inf_body =
         let starting_env =
           { env with current_effect = FZero; constraints }
@@ -1506,12 +1500,35 @@ let rec infer_declaration
         infer_body starting_env body
       in
       leave_level ();
+
+      (* generalize the body *)
       let inf_body = generalizer#visit_body () inf_body in
 
+      (* check that no polymorphic param types have been constrained by inference *)
+      let polymorphic_ty_preserved old_rty new_rty = 
+        print_endline("[polymorphic_ty_preserved] comparing " ^ ty_to_string old_rty ^ " and " ^ ty_to_string new_rty);
+        equiv_ty ~ignore_effects:true ~qvars_wild:false ~ignore_qvar_ids:true old_rty new_rty 
+      in
+      List.iter2 
+        (fun (old_id, old_ty) (_, new_ty) -> 
+          if not (polymorphic_ty_preserved old_ty new_ty)
+          then 
+            (
+              let err_str = Printf.sprintf 
+                "Parameter %s of handler %s was declared as polymorphic (%s), but was \n\
+                used as a type %s in the handler body. \n\
+                Please declare %s parameter with a concrete type instead."
+                (Id.name old_id) (Id.name id) (ty_to_string old_ty) (ty_to_string new_ty) (Id.name old_id)
+              in
+            error_sp old_ty.tspan @@ err_str)
+        )
+        generalized_params_start
+        (fst inf_body);
 
-
+      (* return the handler with the typed body *)
       env, effect_count, DHandler (id, s, inf_body)
-    | DFun (id, ret_ty, constr_specs, body) ->
+
+      | DFun (id, ret_ty, constr_specs, body) ->
       (* a function declaration needs to have all the 
          local builtins available to it as well. *)
       let env' = env 
