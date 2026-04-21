@@ -3,23 +3,10 @@ open Syntax
 open SyntaxUtils
 open Collections
 
-(* 
-  Eliminate polymorphic event arguments. 
-  For each event kind E with 1 or more polymorphic arguments: 
-    1. find all event values of kind E constructed in the program
-    2. construct a map from event_param_ty -> unique monomorphic_event_name
-    3. replace the polymorphic event declaration with all the concrete ones from 2's values
-    4. replace each event constructor with the appropriate one from 2
-        - Also have to replace handlers!
-*)
+(* This pass converts events/handlers with polymorphic parameters into 
+   multiple monomorphic events/handlers, one for each unique type signature
+   of parameters used in the program. *)
 
-(* TODO: 
-    Everything needs to be filtered on events that have polymorphic parameters. 
-    This can only be known from looking at the declaration, so it must be done before
-    processing the event constructor calls. 
-    And the constructor call replacer and declaration replacer 
-    must be aware of the filtering, so they only update the relevant events.
-*)
 
 (* event id -> event arg types *)
 module IdMap = Collections.IdMap
