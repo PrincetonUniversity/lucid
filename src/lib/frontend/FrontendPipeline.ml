@@ -100,6 +100,7 @@ let process_prog ?(opts=def_opts) builtin_tys ds =
          let ds = RecordElimination.eliminate_prog ds in
          print_if_debug ds;
          print_if_verbose "---------------typing7-------------";
+         
          let ds = Typer.infer_prog builtin_tys ds in
          ds)
       else (

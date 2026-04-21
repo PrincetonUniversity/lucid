@@ -17,14 +17,12 @@ type vlan_t = {
 const int<16> ETY_IP = 0x0800;
 const int<16> ETY_VLAN = 0x8080;
 
-packet event anon(auto hdrs, Payload.t payload) {
-    generate_port(1, anon(hdrs, payload));
-}
+// packet event anon(auto hdrs, Payload.t payload) {
+//     generate_port(1, anon(hdrs, payload));
+// }
 
 packet event ip_packet(auto underlay_headers, ip_hdr_t ip_hdr, Payload.t unparsed_payload) {
-// packet event ip_packet(tuple<<eth_t, vlan_t>> underlay_headers, ip_hdr_t ip_hdr, Payload.t unparsed_payload) {
-// packet event ip_packet(eth_t underlay_headers, ip_hdr_t ip_hdr, Payload.t unparsed_payload) {
-    ip_hdr_t new_ip_hdr = {ip_hdr with src = 2; dst = 1;};
+    ip_hdr_t new_ip_hdr = {ip_hdr with src = ip_hdr#dst; dst = ip_hdr#src;};
     event pkt_out = ip_packet(underlay_headers, new_ip_hdr, unparsed_payload);
     generate_port(1, pkt_out);
 }
@@ -45,10 +43,13 @@ parser main(bitstring pkt) {
             generate ip_packet((eth_hdr, vlan_hdr), ip_hdr, Payload.parse(pkt));
         }
         | _ -> {
-            generate anon((eth_hdr, vlan_hdr), Payload.parse(pkt));
+            drop;
+            // generate anon((eth_hdr, vlan_hdr), Payload.parse(pkt));
         }
     }
     | _ -> { 
-        generate anon(eth_hdr, Payload.parse(pkt));
+        drop;
+        // generate anon(eth_hdr, Payload.parse(pkt));
     }
 }
+

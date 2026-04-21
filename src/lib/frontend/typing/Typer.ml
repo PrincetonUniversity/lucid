@@ -261,18 +261,25 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
           (* This commented out code was a workaround to get unification to work 
              for tuple expressions that contained elements from other tuples. 
              The problem was that: tup foo = (bar.1, bar.2)  failed to unify, 
-             because it tried to unify the effect of foo.0 with bar.1, and there 
-             so it ended up trying to unify FSucc(FProj()) with FProj()
-            The solution was to add a case in TyperUnify.try_unify_effect: 
+             because it tried to unify the effect of foo.0 with bar.1, causing 
+             it to attempt unification of FSucc(FProj()) with FProj(). 
+             The workaround is to use the effect of the gotten index, rather 
+             than the index written to. That is acceptable because 
+             it is illegal to dynamically construct tuples of global types, 
+             which are the only tuples with effects that matter. 
+               
+            An attempted alternative solution was to add a case in TyperUnify.try_unify_effect: 
                 | FProj(FVar(tqv)), eff | eff, FProj(FVar(tqv)) -> ...
-            This solves the problem because in such a case, one of the sides 
+            I thought this solved the problem because in such a case, one of the sides 
             is going to be a variable. And it is safe because projecting 
-            does not have an effect itself. *)
-          (* let expected = match (e'.e) with 
+            does not have an effect itself. 
+            However, that change did not solve the problem, so the workaround remains. 
+            *)
+          let expected = match (e'.e) with 
             | EOp(TGet(_, idx), _) -> wrap_effect tuple_eff [None, 0; None, idx]
             | _ -> wrap_effect tuple_eff [None, 0; None, i] 
-          in *)
-          let expected = wrap_effect tuple_eff [None, 0; None, i] in
+          in
+          (* let expected = wrap_effect tuple_eff [None, 0; None, i] in *)
           let derived = (Option.get e'.ety).teffect in           
           unify_effect e.espan expected derived
         )
