@@ -1,0 +1,17 @@
+
+event tuple_foo(auto xy);
+handle tuple_foo(auto xy) {
+    printf("here in tuple_foo");
+}
+
+
+event foo(int x, int y);
+handle foo(int x, int y) {    
+    if (x == 1) {
+        tuple<<int, int>> xy = (x, y);
+        generate(tuple_foo(xy));
+    } else {
+        generate(tuple_foo(x));
+    }
+    generate(foo(1, 2));
+}

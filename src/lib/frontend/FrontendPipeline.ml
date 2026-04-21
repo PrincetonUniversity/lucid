@@ -43,8 +43,7 @@ let process_prog ?(opts=def_opts) builtin_tys ds =
   (* TODO: Might be nice to have an additional renaming pass earlier, so we
      can run the slot analysis immediately after typing *)
   (* TODO: fix slot analysis *)
-  (* print_if_verbose "-------Performing parser slot analysis---------";
-  let slot_assignments = SlotAnalysis.analyze_prog ds in *)
+  print_if_verbose "-------Performing parser slot analysis---------";
   print_if_verbose "-------Eliminating modules---------";
   let ds = ModuleElimination.eliminate_prog ds in
   print_if_debug ds;
@@ -63,12 +62,11 @@ let process_prog ?(opts=def_opts) builtin_tys ds =
   print_if_verbose "-----------inlining tables-----------";
   let ds = TableInlining.eliminate_prog ds in
   print_if_debug ds;
-  print_if_verbose "---------Making Polymorphic Events Monomorphic----------";
-  let ds = MonomorphicEventArgs.eliminate_prog ds in
-  print_if_debug ds;
   print_if_verbose "---------Eliminating events with global arguments----------";
   let ds = GlobalArgElimination.eliminate_prog ds in
   print_if_debug ds;
+  (* print_if_verbose "---------Making Polymorphic Events Monomorphic----------"; *)  
+  let poly_event_renaming, ds = MonomorphicEventArgs.eliminate_prog builtin_tys ds in
   print_if_verbose "---------------typing3-------------";
   let ds = Typer.infer_prog builtin_tys ds in
   print_if_debug ds;
@@ -123,20 +121,26 @@ let process_prog ?(opts=def_opts) builtin_tys ds =
   print_if_debug ds;
   print_if_verbose "---------------typing9-------------";
   let ds = Typer.infer_prog builtin_tys ds in
+  (* Slot analysis does not handle tuples, polymorphic event args, or possibly modules, 
+     so until we get back to it, the earliest it can go is here. *)
+  let slot_assignments = SlotAnalysis.analyze_prog ds in
+
   print_if_verbose "-------Inlining Constants-------";
   let ds = ConstInlining.inline_prog ds in
   print_if_debug ds;
   (* Not sure if this is still necessary *)
   print_if_verbose "-----------re-re-renaming-----------";
   let renaming'', ds = Renaming.rename ds in
-  let renaming = Renaming.compose_envs [renaming; renaming'; renaming''] in
+  let renaming = Renaming.compose_envs [renaming; 
+  poly_event_renaming; 
+  renaming'; renaming''] in
   print_if_debug ds;
   print_if_verbose "---------------typing again-------------";
   (* Just to be safe *)
   let ds = Typer.infer_prog builtin_tys ds in
   print_if_debug ds;
   (* TODO: Return these, maybe apply renaming to them or something *)
-  (* ignore slot_assignments; *)
+  ignore slot_assignments;
   (* let dir = 
    SyntaxGlobalDirectory.syntax_to_globaldir ds in
   print_endline "Global directory:";

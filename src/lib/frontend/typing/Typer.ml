@@ -1481,11 +1481,16 @@ let rec infer_declaration
       env, effect_count, DEvent (id, annot, sort, constr_specs, params)
 
     | DHandler (id, s, body) ->
-      (* Handlers with polymorphic arguments should not constrain those 
-         arguments in the body. To check this, we make a generalized 
+      (* Handlers with polymorphic arguments should not constrain those
+         arguments in the body. To check this, we make a generalized
          copy of the params at the start. *)
       let generalized_params_start = generalizer#visit_params () (fst body) in
-      let body = (instantiator#visit_params (fresh_maps ()) generalized_params_start, snd body) in
+      (* Re-generalize the entire body to clean up any shared TVar refs
+         that were mutated by the params generalization above, then
+         re-instantiate with a single fresh_maps so params and body
+         get consistent fresh TVars. *)
+      let generalized_body = generalizer#visit_body () body in
+      let body = instantiator#visit_body (fresh_maps ()) generalized_body in
 
       enter_level ();
       let constraints = retrieve_constraints env d.dspan id (fst body) in

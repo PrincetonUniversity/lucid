@@ -48,9 +48,9 @@ let main () =
   match spec_file with
   | None ->
     (* run the midend pipeline for debugging *)
-    let _ =
+    (* let _ =
       MidendPipeline.process_prog ds
-    in
+    in *)
     Console.report "No specification file provided, so skipping simulation"
   | Some spec_file ->
     let ds =
