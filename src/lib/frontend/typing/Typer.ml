@@ -1506,7 +1506,6 @@ let rec infer_declaration
 
       (* check that no polymorphic param types have been constrained by inference *)
       let polymorphic_ty_preserved old_rty new_rty = 
-        print_endline("[polymorphic_ty_preserved] comparing " ^ ty_to_string old_rty ^ " and " ^ ty_to_string new_rty);
         equiv_ty ~ignore_effects:true ~qvars_wild:false ~ignore_qvar_ids:true old_rty new_rty 
       in
       List.iter2 

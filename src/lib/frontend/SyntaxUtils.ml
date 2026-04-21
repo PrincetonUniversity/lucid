@@ -263,6 +263,44 @@ let normalizer () =
 let normalize_tfun func_ty = (normalizer ())#visit_func_ty () func_ty
 let normalize_ty ty = (normalizer ())#visit_ty () ty
 
+(* check if a type is polymorphic, i.e., it has a TQVar in it *)
+let rec is_polymorphic_raw_ty rty =
+  match TyTQVar.strip_links rty with
+  | TQVar _ -> true
+  | TBool | TVoid | TGroup | TEvent | TBitstring -> false
+  | TInt sz | TPat sz -> is_polymorphic_size sz
+  | TMemop (_, sz) -> is_polymorphic_size sz
+  | TFun func ->
+    is_polymorphic_ty func.ret_ty || List.exists is_polymorphic_ty func.arg_tys
+  | TName (_, sizes, _) | TAbstract (_, sizes, _, _) ->
+    List.exists is_polymorphic_size sizes
+  | TRecord fields -> List.exists (fun (_, rty) -> is_polymorphic_raw_ty rty) fields
+  | TVector (rty, sz) -> is_polymorphic_raw_ty rty || is_polymorphic_size sz
+  | TTuple rtys -> List.exists is_polymorphic_raw_ty rtys
+  | TTable tbl ->
+    List.exists is_polymorphic_ty tbl.tkey_sizes
+    || List.exists is_polymorphic_ty tbl.tparam_tys
+    || List.exists is_polymorphic_ty tbl.tret_tys
+  | TBuiltin (_, rtys, _) -> List.exists is_polymorphic_raw_ty rtys
+  | TAction acn ->
+    List.exists is_polymorphic_ty acn.aarg_tys
+    || List.exists is_polymorphic_ty acn.aret_tys
+  | TActionConstr acn_ctor ->
+    List.exists is_polymorphic_ty acn_ctor.aconst_param_tys
+    || is_polymorphic_raw_ty (TAction acn_ctor.aacn_ty)
+
+and is_polymorphic_size sz =
+  match STQVar.strip_links sz with
+  | IVar (QVar _) -> true
+  | IVar _ -> false
+  | IConst _ | IUser _ -> false
+  | ISum (sizes, _) | ITup sizes -> List.exists is_polymorphic_size sizes
+
+and is_polymorphic_ty ty =
+  is_polymorphic_raw_ty ty.raw_ty
+;;
+
+
 let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ?(ignore_qvar_ids = false) ty1 ty2 =
   let equiv_size = equiv_size ~qvars_wild ~ignore_qvar_ids in
   let equiv_effect = equiv_effect ~qvars_wild ~ignore_qvar_ids in
