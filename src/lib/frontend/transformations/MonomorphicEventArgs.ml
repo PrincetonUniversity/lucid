@@ -115,8 +115,8 @@ let update_calls emap ds : event_decl IdMap.t * decls =
       PCall(pcall_arg) (* need to skip manually because the arg is type event *)
 
     method! visit_PGen _ pgen_arg = 
-      (* print_endline ("[event_ctor_replacer] visiting PGen with args: "^(Printing.exp_to_string pgen_arg));
-      print_endline ("[event_ctor_replacer] pgen_arg type: "^(Option.get pgen_arg.ety |> Printing.ty_to_string));
+      (* print_endline ("[event_ctor_replacer] visiting PGen with args: "^(Printing.exp_to_string pgen_arg)); *)
+      (* print_endline ("[event_ctor_replacer] pgen_arg type: "^(Option.get pgen_arg.ety |> Printing.ty_to_string));
       (match pgen_arg.e, (Option.get pgen_arg.ety).raw_ty with 
         | ECall(_), TEvent -> print_endline ("[event_ctor_replacer] pgen_arg is an ecall with type TEvent, so we should visit it...");
         | _, TEvent -> print_endline ("[event_ctor_replacer] pgen_arg has type TEvent, but is not an ecall...");
@@ -139,8 +139,8 @@ let update_calls emap ds : event_decl IdMap.t * decls =
         super#visit_exp () exp (* continue to inner event *)
       | ECall(event_cid, args, flag), TEvent -> 
         (* check if it is a builtin event combinator, for which we recurse *)
-        (* print_endline ("[event_ctor_replacer] ECall event_cid = "^(Printing.cid_to_string event_cid));
-        print_endline ("[event_ctor_replacer] visiting ECall with args: "^(Printing.list_to_string Printing.exp_to_string args)); *)
+          (* print_endline ("[event_ctor_replacer] ECall event_cid = "^(Printing.cid_to_string event_cid));
+          print_endline ("[event_ctor_replacer] visiting ECall with args: "^(Printing.list_to_string Printing.exp_to_string args)); *)
         let event_id = Cid.to_id event_cid in
         (match IdMap.find_opt event_id event_map with
           | Some edecl -> (* this is an event with a polymorphic argument. We need a monomorphic id *)
@@ -148,7 +148,7 @@ let update_calls emap ds : event_decl IdMap.t * decls =
               and we will need to replace it with the appropriate monomorphic instance later *)
             let args_are_polymorphic = List.exists (fun arg -> is_polymorphic_ty (Option.get arg.ety)) args in
             if args_are_polymorphic then (
-              (* print_endline ("[event_ctor_replacer] arguments are polymorphic, so we will not replace this call with a monomorphic one..."); *)
+              print_endline ("[event_ctor_replacer] arguments are polymorphic, so we will not replace this call with a monomorphic one...");
               super#visit_exp () exp 
             )
             else (
@@ -245,9 +245,239 @@ let delete_polymorphic_event_decls ds =
   end in
   obj#process ds
 
-let eliminate_prog builtin_tys ds = 
+(* ============================================================ *)
+(*  Parser monomorphization                                      *)
+(*                                                               *)
+(*  Parsers can declare polymorphic parameters (e.g., `auto`)    *)
+(*  the same way events can, and they can be invoked from        *)
+(*  other parsers via `PCall`. Because parsers are non-recursive *)
+(*  and every control-flow path ends in `generate` or `drop`,    *)
+(*  we can monomorphize them by the same scheme used for events: *)
+(*  for each PCall to a polymorphic parser, materialize a        *)
+(*  concrete copy keyed by the arg-type signature.               *)
+(*                                                               *)
+(*  This must run *before* event monomorphization, so that by    *)
+(*  the time the event pass scans `generate` statements inside   *)
+(*  duplicated parser bodies, those statements have concrete     *)
+(*  argument types.                                              *)
+(* ============================================================ *)
+
+type parser_decl = {
+  pid : id;
+  pparams : params;
+  pcalls : concrete_sig list;
+  (* prefix length of pcalls that has already been materialized as DParser
+     decls in the program. Each fixpoint iteration emits only the suffix
+     past this index, then bumps it. *)
+  nemitted : int;
+}
+type parser_map = parser_decl IdMap.t
+
+(* Convergence check: ignores nemitted, since that's bookkeeping. *)
+let parser_pcalls_equal (p1 : parser_decl) (p2 : parser_decl) =
+  Id.equal p1.pid p2.pid
+  && equiv_lists concrete_sig_equal p1.pcalls p2.pcalls
+;;
+
+(* Look up or create a concrete instance of a polymorphic parser for the
+   given call's arg types. *)
+let add_concrete_parser_sig parser_decl call_args : id * parser_decl =
+  let arg_tys = List.map (fun exp -> Option.get exp.ety) call_args in
+  let fst_matching_call_opt =
+    List.find_opt
+      (fun (call : concrete_sig) ->
+        equiv_lists (equiv_ty ~ignore_effects:true) arg_tys call.concrete_tys)
+      parser_decl.pcalls
+  in
+  match fst_matching_call_opt with
+  | Some call -> call.id, parser_decl
+  | None ->
+    let id' =
+      Id.create
+        (Id.name parser_decl.pid
+         ^ "_"
+         ^ string_of_int (List.length parser_decl.pcalls))
+    in
+    let concrete_tys = List.map (fun exp -> Option.get exp.ety) call_args in
+    let pcalls' = parser_decl.pcalls @ [{ id = id'; concrete_tys }] in
+    id', { parser_decl with pcalls = pcalls' }
+;;
+
+(* Walk the program; for each PCall to a polymorphic parser whose call-site
+   args are concrete, rewrite the call's parser id to a (possibly new)
+   monomorphic instance and record that instance in the parser_map. *)
+let update_parser_calls pmap ds : parser_map * decls =
+  let obj =
+    object (self)
+      inherit [_] s_map as super
+      val mutable parser_map = IdMap.empty
+      method parser_map = parser_map
+
+      method process pmap ds =
+        parser_map <- pmap;
+        self#visit_decls () ds
+
+      method! visit_DParser () id params block =
+        if List.exists (fun (_, ty) -> is_polymorphic_ty ty) params then begin
+          if not (IdMap.mem id parser_map) then
+            parser_map
+              <- IdMap.add id { pid = id; pparams = params; pcalls = []; nemitted = 0 } parser_map
+        end;
+        super#visit_DParser () id params block
+
+      method! visit_PCall () pcall_arg =
+        match pcall_arg.e with
+        | ECall (parser_cid, args, flag) ->
+          let parser_id = Cid.to_id parser_cid in
+          (match IdMap.find_opt parser_id parser_map with
+           | Some pdecl ->
+             let args_are_polymorphic =
+               List.exists
+                 (fun arg -> is_polymorphic_ty (Option.get arg.ety))
+                 args
+             in
+             if args_are_polymorphic
+             then super#visit_PCall () pcall_arg
+             else begin
+               let monomorphic_id, updated_pdecl =
+                 add_concrete_parser_sig pdecl args
+               in
+               parser_map <- IdMap.add parser_id updated_pdecl parser_map;
+               let pcall_arg' =
+                 { pcall_arg with e = ECall (Cid.id monomorphic_id, args, flag) }
+               in
+               super#visit_PCall () pcall_arg'
+             end
+           | None -> super#visit_PCall () pcall_arg)
+        | _ -> super#visit_PCall () pcall_arg
+    end
+  in
+  let ds = obj#process pmap ds in
+  obj#parser_map, ds
+;;
+
+(* Build a concrete copy of a polymorphic parser decl. Param identifiers are
+   preserved; only their types are replaced with the concrete sig types. The
+   body is left untouched and will be re-typed against the new params. *)
+let concrete_parser_decl decl params block (cs : concrete_sig) =
+  let params' =
+    List.mapi
+      (fun i (param_id, _) -> param_id, List.nth cs.concrete_tys i)
+      params
+  in
+  { decl with d = DParser (cs.id, params', block) }
+;;
+
+let concrete_parser_decls decl params block concrete_sigs =
+  List.map (fun cs -> concrete_parser_decl decl params block cs) concrete_sigs
+;;
+
+(* Emit one DParser per concrete sig collected so far, but skip any sig that
+   was already emitted in a prior fixpoint iteration (tracked via nemitted).
+   The original polymorphic decl is left in place until after re-typing so
+   the typer can still find it. *)
+let update_parser_decls parser_map ds =
+  let obj =
+    object (self)
+      inherit [_] s_map as super
+      method process pmap ds = self#visit_decls pmap ds
+
+      method! visit_decls pmap decls =
+        match decls with
+        | [] -> []
+        | decl :: rest ->
+          let decl = self#visit_decl pmap decl in
+          let rest' = self#visit_decls pmap rest in
+          (match decl.d with
+           | DParser (id, params, block) ->
+             (match IdMap.find_opt id pmap with
+              | Some pdecl ->
+                let pending = BatList.drop pdecl.nemitted pdecl.pcalls in
+                let new_decls =
+                  concrete_parser_decls decl params block pending
+                in
+                (decl :: new_decls) @ rest'
+              | None -> decl :: rest')
+           | _ -> decl :: rest')
+    end
+  in
+  obj#process parser_map ds
+;;
+
+(* Mark every pcall in the map as emitted. Called after update_parser_decls
+   so the next fixpoint iteration won't re-emit the same decls. *)
+let mark_emitted (pmap : parser_map) : parser_map =
+  IdMap.map
+    (fun pdecl -> { pdecl with nemitted = List.length pdecl.pcalls })
+    pmap
+;;
+
+let delete_polymorphic_parser_decls ds =
+  let obj =
+    object (self)
+      inherit [_] s_map as super
+      method process ds = self#visit_decls () ds
+
+      method! visit_decls _ decls =
+        match decls with
+        | [] -> []
+        | decl :: rest ->
+          let rest' = self#visit_decls () rest in
+          (match decl.d with
+           | DParser (_, params, _) ->
+             if List.exists (fun (_, ty) -> is_polymorphic_ty ty) params
+             then rest'
+             else decl :: rest'
+           | _ -> decl :: rest')
+    end
+  in
+  obj#process ds
+;;
+
+(* Run parser monomorphization to a fixpoint. Each iteration:
+     1. update_parser_calls: walk the program, rewrite PCalls to polymorphic
+        parsers whose call-site args are now concrete, recording the new
+        concrete sigs in pmap.
+     2. If pcalls didn't grow, we've converged.
+     3. Otherwise emit DParsers for the new sigs (update_parser_decls skips
+        sigs already emitted in prior iterations), retype, and loop.
+   Termination is bounded by the parser call-chain depth, since parsers are
+   non-recursive. The max_iters cap is a safety net. *)
+let monomorphize_parsers builtin_tys ds =
+  let max_iters = 100 in
+  let rec loop pmap ds iter =
+    if iter > max_iters
+    then
+      failwith
+        (Printf.sprintf
+           "[MonomorphicEventArgs] parser monomorphization did not converge in \
+            %d iterations"
+           max_iters);
+    let pmap', ds = update_parser_calls pmap ds in
+    if IdMap.equal parser_pcalls_equal pmap pmap'
+    then ds
+    else begin
+      let ds = update_parser_decls pmap' ds in
+      let pmap' = mark_emitted pmap' in
+      let ds = RefreshTypes.refresh_prog ds in
+      let ds = Typer.infer_prog builtin_tys ds in
+      loop pmap' ds (iter + 1)
+    end
+  in
+  let ds = loop IdMap.empty ds 1 in
+  let ds = delete_polymorphic_parser_decls ds in
   let ds = RefreshTypes.refresh_prog ds in
   let ds = Typer.infer_prog builtin_tys ds in
+  ds
+;;
+
+let eliminate_prog builtin_tys ds =
+  let ds = RefreshTypes.refresh_prog ds in
+  let ds = Typer.infer_prog builtin_tys ds in
+
+  (* monomorphize parsers first, so that any polymorphic events referenced by
+     parser bodies get concrete arg types in the duplicated parser copies *)
+  let ds = monomorphize_parsers builtin_tys ds in
 
   (* collect monomorphic calls (and replace their event names) *)
   let emap, ds = update_calls IdMap.empty ds in
@@ -272,6 +502,10 @@ let eliminate_prog builtin_tys ds =
     failwith "[MonomorphicEventArgs] elimination of polymorphic event encountered\
     transitive polymorphism that requires more than 2 passes. This is not yet supported.";
   ignore emap';
+
+    (* print_endline "-------- program at debug point --------"; *)
+  (* Printing.decls_to_string ds |> print_endline; *)
+  (* print_endline "-------- program at debug point --------"; *)
 
   (* delete the polymorphic event declarationss, which were left for type checking *)
   let ds = delete_polymorphic_event_decls ds in

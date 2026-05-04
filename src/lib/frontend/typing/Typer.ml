@@ -1378,6 +1378,7 @@ let rec infer_parser_step env (step, span) =
     (match exp.e with
      | ECall (cid, args, _) ->
        let params = lookup_parser span env cid in
+       let params = instantiator#visit_params (fresh_maps ()) params in
        let _, inf_args = infer_exps env args in
        List.iter2
          (fun (_, pty) arg ->
@@ -1387,7 +1388,8 @@ let rec infer_parser_step env (step, span) =
        let exp' = call_sp cid inf_args span in
        let exp' = { exp' with ety = Some (mk_ty TEvent) } in
        PCall exp', span
-     | _ ->
+
+      | _ ->
        error_sp
          span
          "Parser bodies can only read, skip, generate, match, or call another \
@@ -1538,8 +1540,25 @@ let rec infer_declaration
 
       (* return the handler with the typed body *)
       env, effect_count, DHandler (id, s, inf_body)
+    | DParser (id, params, parser) ->
+      enter_level ();
+      (* a parser may branch on the ingress port *)
+      let ingress_port_param = (Builtins.ingr_port_id, builtin_tys.ingr_port_ty) in
+      let parser_env =
+        add_locals env (ingress_port_param::params) 
+        |> define_parser Builtins.lucid_parse_id [(Id.create "pkt", ty TBitstring)]
+      in
+      
+      let inf_parser = infer_parser_block parser_env parser in
+      leave_level ();
 
-      | DFun (id, ret_ty, constr_specs, body) ->
+      let inf_params = generalizer#visit_params () params in
+      let inf_parser = generalizer#visit_parser_block () inf_parser in
+
+      let env = define_parser id params env in
+      env, effect_count, DParser (id, inf_params, inf_parser)
+
+    | DFun (id, ret_ty, constr_specs, body) ->
       (* a function declaration needs to have all the 
          local builtins available to it as well. *)
       let env' = env 
@@ -1592,6 +1611,7 @@ let rec infer_declaration
         @@ "Function "
         ^ Id.name id
         ^ " violates ordering constraints";
+      (* add the function's type to the environment for later use. *)
       let fty : func_ty =
         { arg_tys = List.map (fun (_, ty) -> ty) (fst inf_body)
         ; ret_ty
@@ -1601,10 +1621,11 @@ let rec infer_declaration
         }
         |> generalizer#visit_func_ty ()
       in
-      let inf_body = generalizer#visit_body () inf_body in
-      (* add the function's type to the environment for later use. *)
       let env = define_const id (mk_ty @@ TFun fty) env in
+      (* generalize the function's body *)
+      let inf_body = generalizer#visit_body () inf_body in
       env, effect_count, DFun (id, ret_ty, constr_specs, inf_body)
+
     | DMemop (id, params, memop_body) ->
       enter_level ();
       let inf_body = infer_memop env params memop_body in
@@ -1784,20 +1805,7 @@ let rec infer_declaration
       ( env
       , effect_count
       , DActionConstr (id, ret_ty, const_params, (params, inf_action_body)) )
-    | DParser (id, params, parser) ->
-      enter_level ();
-      (* a parser may branch on the ingress port *)
-      let ingress_port_param = (Builtins.ingr_port_id, builtin_tys.ingr_port_ty) in
-      let parser_env =
-        add_locals env (ingress_port_param::params) 
-        |> define_parser Builtins.lucid_parse_id [(Id.create "pkt", ty TBitstring)]
-      in
-      
-      let inf_parser = infer_parser_block parser_env parser in
-      leave_level (); (* bug fix: parser never left level *)
-       
-      let env = define_parser id params env in
-      env, effect_count, DParser (id, params, inf_parser)
+
   in
   let new_d = { d with d = new_d } in
   Wellformed.check_qvars new_d;
