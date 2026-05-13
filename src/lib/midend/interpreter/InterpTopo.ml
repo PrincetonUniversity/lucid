@@ -47,6 +47,15 @@ type topology = {
     links : link list;
 }
 
+let get_interface_ports node =
+  List.filter_map (function
+    | PInterface {port_id; ifname} -> Some (port_id, ifname)
+    | _ -> None) node.ports
+
+let get_interface_map topo : (int * (int * string) list) list =
+  List.map (fun node -> ((node : node).node_id, get_interface_ports node)) topo.nodes
+;;
+
 (*** JSON Parsing Functions ***)
 (* 
 **nodes (with inlined ports)**
@@ -371,6 +380,10 @@ let parse pp renaming filename =
       ; drop_chance
       }
     in
-    {  externs; events; simconfig; extern_funs; ctl_pipe_name }    
+    {  externs; events; simconfig; extern_funs; ctl_pipe_name }, Some (topo)   
     | _ -> error "Unexpected interpreter specification format"
 ;;
+
+(* TODO: checks. 
+    Switch IDs should be contiguous and start at 0.
+*)

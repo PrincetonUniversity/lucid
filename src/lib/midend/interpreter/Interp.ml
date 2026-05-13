@@ -73,12 +73,15 @@ let event_signatures events = List.fold_left
     (Env.bindings events)
 
 (* initial state is before declarations are parsed and loaded into handlers *)
-let initial_state ?(with_sockets=false) (pp : Preprocess.t) (spec : InterpSpec.t) =
+let initial_state ?(softswitch_mode=false) 
+    ?(topo_opt=None) (* in topology config, nodes get socket ports *)
+  (pp : Preprocess.t) (spec : InterpSpec.t) =
   let global_time = ref (-1) in
   (* let empty_state = InterpSwitch.create_nst() in *)
   let switches = Array.init 
     spec.simconfig.num_switches (InterpSwitch.create 
-        ~with_sockets:with_sockets 
+        ~softswitch_mode:softswitch_mode 
+        ~interfaces:(match topo_opt with | Some(topo) -> InterpTopo.get_interface_map topo | None -> [])
         global_time
         (event_sorts pp.events) 
         (event_signatures pp.events) 
@@ -145,11 +148,11 @@ let init_switches nst (spec : InterpSpec.t) ds =
 (* Initialize interpreter with discrete time simulator *)
 let initialize renaming spec_file ds =
   let pp, ds = Preprocess.preprocess ds in
-  let spec = if (InterpTopo.contains_topology spec_file) 
-    then InterpTopo.parse pp renaming spec_file (* new topology block *)
-    else InterpSpec.parse pp renaming spec_file 
+  let spec, topo_opt = if (InterpTopo.contains_topology spec_file) 
+    then (InterpTopo.parse pp renaming spec_file) (* new topology block *)
+    else (InterpSpec.parse pp renaming spec_file, None)
   in
-  let nst = initial_state pp spec in
+  let nst = initial_state pp spec ~topo_opt:topo_opt in
   let nst = InterpCore.process_decls nst ds in
   (* initialize the global name directory *)
   (* let nst =
@@ -505,7 +508,7 @@ let initialize_softswitch renaming ds =
   let pp, ds = Preprocess.preprocess ds in
   (* create a single-switch configuration for the simulator *)
   let spec = InterpSpec.default pp renaming in 
-  let nst = initial_state ~with_sockets:true pp spec in
+  let nst = initial_state ~softswitch_mode:true pp spec in
   let nst = InterpCore.process_decls nst ds in (* load declarations, which modifies state *)
   let nst = init_switches nst spec ds in
   nst, pp, spec

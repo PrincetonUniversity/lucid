@@ -5,7 +5,8 @@
       "0": {
         "ports": {
           "1" : {"type": "link"},
-          "2" : {"type": "recirc"}
+          "2" : {"type": "recirc"},
+          "3" : {"type": "interface", "ifname":"feth0"}
         }
       },
       "1": {

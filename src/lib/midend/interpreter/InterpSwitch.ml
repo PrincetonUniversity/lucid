@@ -110,7 +110,6 @@ let gfun_cid (gf : global_fun) : Cid.t =
   gf.cid
 ;;
 
-
 let empty_counter = { entries_handled = 0; total_handled = 0 }
 ;;
 
@@ -123,17 +122,25 @@ let save_update self =
   !(self.sws).(self.swid) <- self 
 ;;
 
-let create ?(with_sockets=false) start_time_ref event_sorts event_signatures config swid =
-  (* construct socket map *)
-  let sockets = if with_sockets then (
-    List.fold_left 
-      (fun ifmap (intf:SwitchConfig.interface) -> 
-        let socket = InterpSocket.create intf.switch intf.port intf.interface in
-        IntMap.add intf.port socket ifmap)
-      IntMap.empty
-      SwitchConfig.cfg.interface  
-    )
-    else IntMap.empty
+let create ?(softswitch_mode=false) ?(interfaces=[]) start_time_ref event_sorts event_signatures config swid =
+  (* in softswitch mode, we take the socket config from the global SwitchConfig map *)
+  let sockets = 
+    if softswitch_mode then
+      List.fold_left 
+        (fun ifmap (intf:SwitchConfig.interface) -> 
+          let socket = InterpSocket.create intf.switch intf.port intf.interface in
+          IntMap.add intf.port socket ifmap)
+        IntMap.empty
+        SwitchConfig.cfg.interface
+    else
+      (* in simulation mode, create the sockets from the interfaces map *)        
+      let my_intfs = List.nth interfaces swid |> snd in
+      List.fold_left
+        (fun ifmap (port_id, interface_name) -> 
+          let socket = InterpSocket.create swid port_id interface_name in
+          IntMap.add port_id socket ifmap)
+        IntMap.empty
+        my_intfs
   in
   { swid
   ; config
