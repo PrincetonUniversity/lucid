@@ -145,7 +145,10 @@ let init_switches nst (spec : InterpSpec.t) ds =
 (* Initialize interpreter with discrete time simulator *)
 let initialize renaming spec_file ds =
   let pp, ds = Preprocess.preprocess ds in
-  let spec = InterpSpec.parse pp renaming spec_file in
+  let spec = if (InterpTopo.contains_topology spec_file) 
+    then InterpTopo.parse pp renaming spec_file (* new topology block *)
+    else InterpSpec.parse pp renaming spec_file 
+  in
   let nst = initial_state pp spec in
   let nst = InterpCore.process_decls nst ds in
   (* initialize the global name directory *)
@@ -209,6 +212,8 @@ let execute_event
       (* add propagation delay and push to destination *)
       (* run a default handling statement that re-serializes the event and 
          pushes it to the next switch.*)
+      if port < 0 then 
+        error "Runtime error: switch model encountered negative egress port number -- this should not be possible";
       let builtin_env = Env.add (Id (Builtins.ingr_port_id)) (InterpSwitch.V (C.vint port 32)) Env.empty in
       (* print_endline@@"t="^(string_of_int nst.current_time)^" running default egress handler for event " ^ Cid.to_string event.eid ^ " at switch " ^ (string_of_int swid) ^ " port " ^ (string_of_int port); *)
       let default_handler_body = 
@@ -549,10 +554,10 @@ let rec execute_softswitch_step idx nst =
 let run_softswitch pp renaming (spec : InterpSpec.t) (nst : network_state) =
   (*  assume there's only 1 switch (at index 0) *)
   let all_sockets = InterpSwitch.get_sockets (Array.get nst 0) in
-  let cur_sock_idx = ref 0 in
   let n_sockets = List.length(all_sockets) in
+  let cur_sock_idx = ref 0 in
   let poll_sockets pp renaming (spec : InterpSpec.t) nst = 
-    if !cur_sock_idx == n_sockets then (* read from stdio last *)
+    if !cur_sock_idx == n_sockets then (* poll stdio *)
       (
         cur_sock_idx := 0;
         get_stdio_input_nonblocking pp renaming spec nst
