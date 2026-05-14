@@ -1,3 +1,8 @@
 event main(int x){
-    generate_ports(flood(ingress_port), this);
+    printf("ingress_port = %d", ingress_port);
+    if(ingress_port == 3) {
+        generate_port(3, main(x));
+    } else {
+        generate_ports(flood(ingress_port), this);
+    }
 }
