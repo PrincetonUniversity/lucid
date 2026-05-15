@@ -905,9 +905,9 @@ let interp_decl (nst : network_state) swid d =
     let f _ _ args =
       let event_num_val = match num_opt with
       | None -> None 
-      | Some(num) -> Some(vint (size_of_tint (
-        SyntaxToCore.translate_ty  
-        Builtins.lucid_eventnum_ty)) num)
+      | Some(num) -> Some(
+          vint num (size_of_tint (SyntaxToCore.translate_ty Builtins.lucid_eventnum_ty))
+        )
       in
       (* let extract_ival_pkt_placeholder ival = 
         match ival with

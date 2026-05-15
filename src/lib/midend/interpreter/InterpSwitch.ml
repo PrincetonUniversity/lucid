@@ -122,7 +122,7 @@ let save_update self =
   !(self.sws).(self.swid) <- self 
 ;;
 
-let create ?(softswitch_mode=false) ?(interfaces=[]) start_time_ref event_sorts event_signatures config swid =
+let create ?(softswitch_mode=false) ?(interfaces=None) start_time_ref event_sorts event_signatures config swid =
   (* in softswitch mode, we take the socket config from the global SwitchConfig map *)
   let sockets = 
     if softswitch_mode then
@@ -132,15 +132,19 @@ let create ?(softswitch_mode=false) ?(interfaces=[]) start_time_ref event_sorts 
           IntMap.add intf.port socket ifmap)
         IntMap.empty
         SwitchConfig.cfg.interface
-    else
+    else (
       (* in simulation mode, create the sockets from the interfaces map *)        
-      let my_intfs = List.nth interfaces swid |> snd in
+      let my_intfs = match interfaces with
+        | Some(intfs) -> List.nth intfs swid |> snd
+        | None -> []
+      in
       List.fold_left
         (fun ifmap (port_id, interface_name) -> 
           let socket = InterpSocket.create swid port_id interface_name in
           IntMap.add port_id socket ifmap)
         IntMap.empty
         my_intfs
+    )
   in
   { swid
   ; config

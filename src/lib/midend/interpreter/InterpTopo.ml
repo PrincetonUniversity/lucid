@@ -386,4 +386,5 @@ let parse pp renaming filename =
 
 (* TODO: checks. 
     Switch IDs should be contiguous and start at 0.
+    At most 1 link should bind to each port.
 *)
