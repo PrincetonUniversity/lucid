@@ -344,7 +344,7 @@ case $1 in
     # get latest from docker hub
     pull)
         shift
-        CMD="docker pull $DOCKER_IMAGE"
+        CMD="docker pull $PLATFORM $DOCKER_IMAGE"
         eval "$CMD"
         ;;
     interp)
@@ -392,7 +392,7 @@ case $1 in
     # your local copy of the dev image
     pull_dev)
         shift
-        CMD="docker pull $DOCKER_DEV_IMAGE"
+        CMD="docker pull $PLATFORM $DOCKER_DEV_IMAGE"
         eval "$CMD"
         ;;
     # (admin only) rebuild the lucid dev image and push to public repo -- 

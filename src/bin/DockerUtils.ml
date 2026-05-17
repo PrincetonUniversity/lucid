@@ -8,7 +8,7 @@
 open Batteries
 open Dpt
 
-let cfg = Config.cfg
+let cfg = InterpConfig.cfg
 
 let find_spec_file dpt_file =
   if not (String.ends_with dpt_file ".dpt")
@@ -24,14 +24,14 @@ let find_spec_file dpt_file =
 ;;
 
 let main () =
-  let command = Sys.argv.(1) in 
+  let command = Sys.argv.(1) in
   Arg.current := 1;
-  match command with 
-  | "main" -> 
-    let target_filename = Cmdline.parse () in
+  match command with
+  | "main" ->
+    let target_filename = InterpConfig.parse_interp () in
     print_endline (target_filename)
-  | "includes" -> 
-    let target_filename = Cmdline.parse () in
+  | "includes" ->
+    let target_filename = InterpConfig.parse_interp () in
     let source_files = Input.get_includes target_filename in
     String.concat ":" source_files |> print_endline    
   | _ -> ()

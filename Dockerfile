@@ -18,9 +18,14 @@
 FROM jsonch/lucid:lucid_dev AS lucid_dev
 MAINTAINER John Sonchack
 
+# replace stale local opam repo with live opam repository so newer packages are available
+RUN opam repository set-url default https://opam.ocaml.org && \
+    opam update
+
 # install lucid dependencies
 ADD dpt.opam .
-RUN opam pin add -yn dpt . && \
+RUN sudo apk add --no-cache autoconf && \
+    opam pin add -yn dpt . && \
     opam depext dpt && \
     opam install --deps-only dpt
 
@@ -31,9 +36,12 @@ MAINTAINER John Sonchack
 
 # add source files
 ADD src ./src
+ADD vendor ./vendor
+ADD dune .
 ADD Makefile .
 ADD dune-project .
 ADD dune-workspace .
+ADD rawlink.opam .
 
 # build lucid 
 RUN sudo chown -R opam:nogroup . && \
