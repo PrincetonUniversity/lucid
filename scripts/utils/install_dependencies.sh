@@ -5,7 +5,7 @@
 
 # Update system packages
 sudo apt update
-sudo apt install -y build-essential
+sudo apt install -y build-essential libpython3.10-dev
 
 # Check for opam and install if not found
 if ! command -v opam &> /dev/null
