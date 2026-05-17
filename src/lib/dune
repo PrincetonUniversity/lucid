@@ -96,6 +96,7 @@
    interpParsing
    interpDeparsing
    interpSyntax
+   interpTopo
    libraryInterface
    libraryUtils
    arrays

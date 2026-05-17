@@ -73,16 +73,23 @@ let event_signatures events = List.fold_left
     (Env.bindings events)
 
 (* initial state is before declarations are parsed and loaded into handlers *)
-let initial_state ?(with_sockets=false) (pp : Preprocess.t) (spec : InterpSpec.t) =
+let initial_state ?(softswitch_mode=false) 
+    ?(topo_opt=None) (* in topology config, nodes get socket ports *)
+  (pp : Preprocess.t) (spec : InterpSpec.t) =
   let global_time = ref (-1) in
   (* let empty_state = InterpSwitch.create_nst() in *)
+  let interface_map = match topo_opt with 
+    | Some(topo) -> Some(InterpTopo.get_interface_map topo)
+    | None -> None    
+  in
   let switches = Array.init 
     spec.simconfig.num_switches (InterpSwitch.create 
-        ~with_sockets:with_sockets 
+        ~softswitch_mode:softswitch_mode 
+        ~interfaces:interface_map
         global_time
         (event_sorts pp.events) 
         (event_signatures pp.events) 
-        spec.simconfig) 
+        spec.simconfig)
   in
   let nst = switches in
   (* give all the switches references to the switches Array *)
@@ -145,8 +152,11 @@ let init_switches nst (spec : InterpSpec.t) ds =
 (* Initialize interpreter with discrete time simulator *)
 let initialize renaming spec_file ds =
   let pp, ds = Preprocess.preprocess ds in
-  let spec = InterpSpec.parse pp renaming spec_file in
-  let nst = initial_state pp spec in
+  let spec, topo_opt = if (InterpTopo.contains_topology spec_file) 
+    then (InterpTopo.parse pp renaming spec_file) (* new topology block *)
+    else (InterpSpec.parse pp renaming spec_file, None)
+  in
+  let nst = initial_state pp spec ~topo_opt:topo_opt in
   let nst = InterpCore.process_decls nst ds in
   (* initialize the global name directory *)
   (* let nst =
@@ -209,6 +219,8 @@ let execute_event
       (* add propagation delay and push to destination *)
       (* run a default handling statement that re-serializes the event and 
          pushes it to the next switch.*)
+      if port < 0 then 
+        error "Runtime error: switch model encountered negative egress port number -- this should not be possible";
       let builtin_env = Env.add (Id (Builtins.ingr_port_id)) (InterpSwitch.V (C.vint port 32)) Env.empty in
       (* print_endline@@"t="^(string_of_int nst.current_time)^" running default egress handler for event " ^ Cid.to_string event.eid ^ " at switch " ^ (string_of_int swid) ^ " port " ^ (string_of_int port); *)
       let default_handler_body = 
@@ -388,6 +400,7 @@ let rec execute_sim_step idx nst =
 ;;
 
 let simulate (nst : network_state) =
+  (* run the interpreter in simulation mode, only processing events in the config file. *)
   if (not InterpConfig.cfg.json) && not InterpConfig.cfg.interactive
   then (* there must be at least 1 switch, and all random seeds are the same *)
     Console.report
@@ -430,7 +443,7 @@ let load_new_events nst event_getter_opt =
 let rec execute_interactive_sim_step event_getter_opt max_time idx nst = 
   let next_step_continuation = execute_interactive_sim_step event_getter_opt max_time in
   match next_time nst with
-  (* no time at which some switch has a thing to do? then nothing will ever change. *)
+  (* if next_time returns none, there is nothing for the simulated network to do *)
   | None -> nst
   | Some t -> 
     let nst = if (idx = 0)
@@ -452,11 +465,161 @@ let rec execute_interactive_sim_step event_getter_opt max_time idx nst =
 ;;
 
 
+(*
+  Interactive mode with interfaces. 
+  We have functions for blocking and nonblocking input polling. 
+
+  Blocking stdin read:
+    block_read(stdin);
+    return (if eof then End else Events([...]));
+
+  NonBlocking stdin read:
+    if (rdy(stdin)) then 
+      str = nonblock_read(stdin);
+      if (str.empty) then return NoEvents else return Events([...])
+
+  
+  Now, we want blocking and nonblocking reads from both stdin _and_ the sockets.
+
+  Blocking: 
+
+    fds = [interface, interface, interface, ..., stdio]
+    while (true) {
+      res = nonblocking_read(fd[next_fx]);
+      next_fd = (next_fd + 1) % len(fds);
+      if (res == eof) {
+        return eof
+      } else if (res != []) {
+        return res  
+      } else if (next_fd == 0) {          
+            sleep 1
+      }
+    }
+*)
+
+type fd = 
+  | Intf of InterpSocket.t
+  | Stdio
+
+let get_fds (nst : network_state) = 
+  (* get all the file descriptors *)
+  let fds = ref [] in
+  for i = 0 to (Array.length nst - 1) do
+    let sockets = InterpSwitch.get_sockets (Array.get nst i) in
+    fds := (!fds) @ (List.map (fun fd -> Intf fd) sockets);
+  done;
+  (!fds) @ [Stdio]
+;;
+
+let update_interp_input_time cur_time interp_input = 
+  match interp_input with 
+  | InterpJson.IEvent ie -> InterpJson.IEvent {ie with itime = cur_time}
+  | InterpJson.IControl ctl -> InterpJson.IControl {ctl with itime = cur_time}
+;;
+
+let next_fd_idx = ref 0 ;;
+let rec read_next_fd_blocking (get_stdio_nonblock : network_state -> interp_input list ) fds (nst: network_state) = 
+  let current_time = !(nst.(0).global_time) in
+  let fd = List.nth fds (!next_fd_idx) in
+  next_fd_idx := (!next_fd_idx + 1) mod (List.length fds);
+  match fd with 
+    | Stdio -> (
+      if check_if_ready Unix.stdin then (
+        let res = get_stdio_nonblock nst in
+        if (res == []) then End
+        else Events(res)
+      )
+      else (* not ready, keep going *)
+        read_next_fd_blocking get_stdio_nonblock fds nst
+    )
+    | Intf(sock) -> 
+      let evs = InterpSocket.read_event_batch sock in
+      let evs = List.map (update_interp_input_time current_time) evs in 
+      if List.length evs > 0 
+        then Events(evs)
+        else read_next_fd_blocking get_stdio_nonblock fds nst
+;;
+
+let read_fds_nonblock (get_stdio_nonblock : network_state -> interp_input list) fds (nst: network_state) = 
+  let starting_fd_idx = ref 0 in
+  let rec read_next_fd_nonblocking (get_stdio_nonblock : network_state -> interp_input list)  fds (starting_fd_idx : int ref) (nst: network_state) = 
+    let current_time = !(nst.(0).global_time) in
+    let fd = List.nth fds (!next_fd_idx) in
+    next_fd_idx := (!next_fd_idx + 1) mod (List.length fds);
+    match fd with 
+      | Stdio -> 
+        if check_if_ready Unix.stdin then (
+          let res = get_stdio_nonblock nst in
+          if (res == []) then error "stdin eof"
+          else res
+        )
+        else (* not ready, keep going *)
+          (if next_fd_idx = starting_fd_idx 
+              then  [] (* polled everyone; give up *)
+              else read_next_fd_nonblocking get_stdio_nonblock fds starting_fd_idx nst)
+      | Intf(sock) -> 
+        let evs = InterpSocket.read_event_batch sock in
+        let evs = List.map (update_interp_input_time current_time) evs in 
+        if List.length evs > 0 
+          then evs
+          else 
+            (if next_fd_idx = starting_fd_idx 
+                then  [] (* polled everyone; give up *)
+                else read_next_fd_nonblocking get_stdio_nonblock fds starting_fd_idx nst)
+  in
+  read_next_fd_nonblocking get_stdio_nonblock fds starting_fd_idx nst
+;;
+
+(* Depreciated run method, from before interfaces and descriptors. *)
 let run pp renaming (spec : InterpSpec.t) (nst : network_state) =
-  (* read a single event, blocking until it appears. This is used to 
-  read in new events after the interpreter has finished all of its 
-  current work. *)
-  let get_input_blocking = get_stdio_input true in
+  (* interactive mode with support for interfaces *)
+
+  (* stdio getter, curried *)
+  let get_stdio_nonblocking (nst: network_state) =
+    let located_events =
+      List.filter_map
+        (fun _ ->
+          match get_stdio_input_nonblocking pp renaming spec.simconfig.num_switches !(nst.(0).global_time)  with
+          | Events e -> Some e
+          | _ -> None)
+        (MiscUtils.range 0 spec.simconfig.num_switches)
+    in
+    List.flatten located_events  
+  in
+
+  (* multi-fd getters *)
+  let fds = get_fds nst in
+  let get_input_blocking = read_next_fd_blocking get_stdio_nonblocking fds in   
+  let get_input_nonblocking = read_fds_nonblock get_stdio_nonblocking fds in
+
+  let rec poll_loop (nst : network_state) =
+    (* wait for a single event or command *)
+    let input =
+      get_input_blocking nst
+    in
+    match input with
+    | End -> (* no more input, but we want to finish up the egress events to generate everything *)
+      execute_ready_egress_events true nst;
+      nst
+    | NoEvents -> poll_loop nst
+    | Events evs -> 
+      load_interp_inputs nst evs;
+      (* interpret all the queued events, using event_getter to poll for more events
+           in between iterations. *)
+      let nst = execute_interactive_sim_step (Some get_input_nonblocking) (-1) 0 nst in
+      poll_loop nst
+  in
+  Random.init nst.(0).config.random_seed;
+  (* interp events with no event getter to initialize network, then run the polling loop *)
+  let nst = execute_interactive_sim_step None nst.(0).config.max_time 0 nst in
+  poll_loop nst    
+
+;;
+
+let run_no_interfaces pp renaming (spec : InterpSpec.t) (nst : network_state) =
+  (* run the interpreter as a simulator in interactive mode *)
+  
+  let get_input_blocking = get_stdio_input_blocking in
   (* read up to n immediately available events from stdin, 
   ignoring end of file. This is used to read in new events 
   while the interpreter is still working on a previous event. *)
@@ -464,13 +627,14 @@ let run pp renaming (spec : InterpSpec.t) (nst : network_state) =
     let located_events =
       List.filter_map
         (fun _ ->
-          match get_stdio_input false pp renaming spec.simconfig.num_switches !(nst.(0).global_time)  with
+          match get_stdio_input_nonblocking pp renaming spec.simconfig.num_switches !(nst.(0).global_time)  with
           | Events e -> Some e
           | _ -> None)
         (MiscUtils.range 0 spec.simconfig.num_switches)
     in
     List.flatten located_events  
   in
+
   let rec poll_loop (nst : network_state) =
     (* wait for a single event or command *)
     let input =
@@ -500,25 +664,22 @@ let initialize_softswitch renaming ds =
   let pp, ds = Preprocess.preprocess ds in
   (* create a single-switch configuration for the simulator *)
   let spec = InterpSpec.default pp renaming in 
-  let nst = initial_state ~with_sockets:true pp spec in
+  let nst = initial_state ~softswitch_mode:true pp spec in
   let nst = InterpCore.process_decls nst ds in (* load declarations, which modifies state *)
   let nst = init_switches nst spec ds in
   nst, pp, spec
 ;;
 
 (* get packet from socket or stdio *)
-let get_stdio_input_blocking = 
-  get_stdio_input true 
-;;
 (* read up to n immediately available events from stdin, 
 ignoring end of file. This is used to read in new events 
 while the interpreter is still working on a previous event. 
 The important thing is ignoring eof, so interp exits on a turn. *)
-let get_stdio_input_nonblocking pp renaming (spec : InterpSpec.t) (nst: network_state) =
+let get_softswitch_stdio_input_nonblocking pp renaming (spec : InterpSpec.t) (nst: network_state) =
   let located_events =
     List.filter_map
       (fun _ ->
-        match get_stdio_input false pp renaming spec.simconfig.num_switches !(nst.(0).global_time)  with
+        match get_stdio_input_nonblocking pp renaming spec.simconfig.num_switches !(nst.(0).global_time)  with
         | Events e -> Some e
         | _ -> None)
       (MiscUtils.range 0 spec.simconfig.num_switches)
@@ -549,13 +710,13 @@ let rec execute_softswitch_step idx nst =
 let run_softswitch pp renaming (spec : InterpSpec.t) (nst : network_state) =
   (*  assume there's only 1 switch (at index 0) *)
   let all_sockets = InterpSwitch.get_sockets (Array.get nst 0) in
-  let cur_sock_idx = ref 0 in
   let n_sockets = List.length(all_sockets) in
+  let cur_sock_idx = ref 0 in
   let poll_sockets pp renaming (spec : InterpSpec.t) nst = 
-    if !cur_sock_idx == n_sockets then (* read from stdio last *)
+    if !cur_sock_idx == n_sockets then (* poll stdio *)
       (
         cur_sock_idx := 0;
-        get_stdio_input_nonblocking pp renaming spec nst
+        get_softswitch_stdio_input_nonblocking pp renaming spec nst
       )
     else (
       let sock = List.nth all_sockets (!cur_sock_idx) in

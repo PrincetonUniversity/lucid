@@ -72,15 +72,31 @@ let add_background_parser ds : bool * decls =
    | Some _ -> false
   in  
   let pkt_events = List.filter is_pktev ds in
-  let jump = (pcall_cid 
-    (Cid.id Builtins.lucid_parse_id) 
-    [var (Cid.id Builtins.packet_arg_id) CoreSyntax.pkt_arg_ty])
-  in
   if (no_main && no_eth_main && ((List.length pkt_events) = 0)) then (
+    let pkt_var = var (Cid.id Builtins.packet_arg_id) CoreSyntax.pkt_arg_ty in
+    let ety_id = Cid.create ["ety"] in
+    let ety_ty = tint (Sz 16) in
+    let actions = [
+      PSkip(tint (Sz 32));
+      PSkip(tint (Sz 16));
+      PSkip(tint (Sz 32));
+      PSkip(tint (Sz 16));
+      PRead(ety_id, ety_ty, pkt_var);
+    ] in
+    let jump = pmatch
+      [var ety_id ety_ty]
+      [
+        pbranch [Builtins.lucid_ety_int]
+          (block []
+            (pcall_cid (Cid.id Builtins.lucid_parse_id) [pkt_var]));
+        pbranch_wild 1
+          (block [] pdrop)
+      ]
+    in
     let main = decl@@DParser(
         Builtins.main_parse_id,
         [(Builtins.packet_arg_id, CoreSyntax.pkt_arg_ty)],
-        (block [] jump))    
+        (block actions jump))
     in
     true, ds@[main]
   )
@@ -231,9 +247,11 @@ let process ds =
    | Some _ -> true
   in
   let has_parsers = has_main || has_eth_main in
+  (* If the program does not have a parser, there are cases where the compiler can auto-generate one *)
   if (not has_parsers) then (
     match (List.length packet_events) with 
     | 0 -> (
+      (* If there's no packet events, then we can generate a background parser *)
       let suc, ds = add_background_parser ds in
       if suc 
         then ds

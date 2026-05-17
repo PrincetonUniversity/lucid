@@ -127,10 +127,24 @@ let parse_interp_inputs
   List.rev located_events_rev
 ;;
 
-let builtins renaming n =
-  List.init n (fun i ->
-    Env.singleton (rename renaming "self" "self") (vint i 32))
+let builtins_env (renaming : Renaming.env) n_switches =
+  List.init n_switches (fun i ->
+    Env.singleton (rename renaming.var_map "self" "self") (vint i 32))
 ;;
+
+
+let parse_extern   
+  (* parse a single extern value *)
+  (pp : Preprocess.t)
+  (renaming : Renaming.env) 
+  (id : string) 
+  (value : json) : (Cid.t * value) =
+  let cid = rename renaming.var_map "extern" id in
+  let ty = Env.find cid pp.externs in
+  let v = parse_value "Extern " ty value in
+  cid, v
+;;
+
 
 let parse_externs
   (pp : Preprocess.t)
@@ -139,46 +153,26 @@ let parse_externs
   (externs : (string * json) list)
   =
   List.fold_left
-    (fun acc (id, values) ->
-      let id = rename renaming.var_map "extern" id in
-      let ty = Env.find id pp.externs in
-      let vs =
-        match values with
-        | `List lst -> List.map (parse_value "Extern" ty) lst
+    (fun switch_envs (id, values) ->
+      (* extract values from json *)
+      let vs_json = match values with 
+        | `List lst -> lst
         | _ -> error "Non-list type for extern value specification"
       in
-      if List.length vs <> num_switches
-      then
-        error
-        @@ "Number of values for extern "
-        ^ Cid.to_string id
-        ^ " does not match number of switches";
-      List.map2 (fun env v -> Env.add id v env) acc vs)
-    (builtins renaming.var_map num_switches)
+      if List.length vs_json <> num_switches
+      then error @@ "Number of values for extern "^id^" does not match number of switches!";
+      let parse_extern_for_switch = parse_extern pp renaming id in
+      let cids_vs = List.map parse_extern_for_switch vs_json in
+      let cid = List.hd cids_vs |> fst in
+      let vs = List.map snd cids_vs in
+      (* add to env for each switch *)
+      List.map2 (fun env v -> Env.add cid v env) switch_envs vs)
+    (builtins_env renaming num_switches)
     externs
 ;;
 
 let parse_links num_switches links recirc_ports =
-  let add_link id port dst acc =
-    try
-      InterpSim.IntMap.modify
-        id
-        (fun map ->
-          match IntMap.find_opt port map with
-          | None -> IntMap.add port dst map
-          | Some dst' when dst = dst' -> map
-          | _ ->
-            error
-            @@ Printf.sprintf
-                 "Switch:port pair %d:%d assigned to two different \
-                  destinations!"
-                 id
-                 port)
-        acc
-    with
-    | Not_found -> error @@ "Invalid switch id " ^ string_of_int id
-  in
-  let add_links acc (src, dst) =
+  let add_bidirectional_links acc (src, dst) =
     let src_id, src_port = parse_port src in
     let dst_id, dst_port =
       match dst with
@@ -186,23 +180,23 @@ let parse_links num_switches links recirc_ports =
       | _ -> error "Non-string format for link entry!"
     in
     acc
-    |> add_link src_id src_port (dst_id, dst_port)
-    |> add_link dst_id dst_port (src_id, src_port)
+    |> InterpSim.add_internal_link src_id src_port ((dst_id, dst_port))
+    |> InterpSim.add_internal_link dst_id dst_port ((src_id, src_port))
   in
-  List.fold_left add_links (InterpSim.empty_topology num_switches recirc_ports) links
+  List.fold_left add_bidirectional_links (InterpSim.default_linkmap num_switches recirc_ports) links
 ;;
 
 (* Make a full mesh with arbitrary port numbers.
    Specifically, we map 1:2 to 2:1, and 3:4 to 4:3, etc. *)
-let make_full_mesh num_switches recirc_ports =
+let make_full_mesh num_switches recirc_ports : InterpSim.linkmap =
   let switch_ids = List.init num_switches (fun n -> n) in
   List.fold_left2
     (fun acc id recirc_port ->
       let port_map =
         List.fold_left
           (fun acc port ->
-            if id = port then acc else IntMap.add port (port, id) acc)
-          (IntMap.add recirc_port (id, recirc_port) IntMap.empty)
+            if id = port then acc else IntMap.add port (Some (port,  id)) acc)
+          (IntMap.add recirc_port (Some (id,  recirc_port)) IntMap.empty)
           switch_ids
       in
       IntMap.add id port_map acc)
@@ -311,7 +305,7 @@ let parse
         | Some _ -> error "Non-assoc type for extern definitions"
       in
       let recirc_ports_def =
-        (* This is an extern under the hood, but users don't see it that way *)
+        (* recirculation_ports is a builtin defined here as an extern *)
         match List.assoc_opt "recirculation_ports" lst with
         | Some (`List lst) -> "recirculation_port", `List lst
         | None ->
@@ -332,7 +326,7 @@ let parse
       @@ "Number of recirculation ports does not match number of switches!";
     let links =
       if num_switches = 1
-      then InterpSim.empty_topology 1 recirc_port_ints
+      then InterpSim.default_linkmap 1 recirc_port_ints
       else (
         match List.assoc_opt "links" lst with
         | Some (`Assoc links) -> parse_links num_switches links recirc_port_ints

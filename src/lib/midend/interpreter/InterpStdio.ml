@@ -78,26 +78,30 @@ type interactive_mode_input =
   | End (* the file is closed *)
 ;;
 
-let get_stdio_input block pp renaming num_switches current_time =
-  let parse_input_str ev_str = InterpSpec.parse_interp_event_list
-    pp
-    renaming
-    num_switches
-    current_time
-    (Yojson.Basic.from_string ev_str)
-  in
-  if (block) then (
-    let ev_strs = blocking_read_lines Unix.stdin in
-    match ev_strs with
-    | [] -> End (* eof is the only option here *)
-    | ev_strs -> 
-      Events (List.map parse_input_str ev_strs |> List.flatten)
-  )
-  else (
-    let ev_strs = non_blocking_read_lines Unix.stdin in
-    match ev_strs with
-      | [] -> NoEvents (* ignore eof until a blocking read *)
-      | ev_strs -> 
-        Events (List.map parse_input_str ev_strs |> List.flatten)
-  )
+  let parse_input_str pp rn ns ct ev_str = 
+    InterpSpec.parse_interp_event_list
+      pp
+      rn
+      ns
+      ct
+      (Yojson.Basic.from_string ev_str)
 ;;
+
+let get_stdio_input_blocking pp renaming num_switches current_time =
+  let parse_str = parse_input_str pp renaming num_switches current_time in 
+  let ev_strs = blocking_read_lines Unix.stdin in
+  match ev_strs with
+  | [] -> End (* eof is the only option here *)
+  | ev_strs -> 
+    Events (List.map parse_str ev_strs |> List.flatten)
+;;
+
+let get_stdio_input_nonblocking pp renaming num_switches current_time =
+  let parse_str = parse_input_str pp renaming num_switches current_time in 
+  let ev_strs = non_blocking_read_lines Unix.stdin in
+  match ev_strs with
+    | [] -> NoEvents (* ignore eof until a blocking read *)
+    | ev_strs -> 
+      Events (List.map parse_str ev_strs |> List.flatten)
+;;
+

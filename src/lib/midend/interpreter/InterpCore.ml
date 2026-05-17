@@ -404,11 +404,11 @@ let partial_interp_exps nst swid env exps =
 (* convert a flood port into a list of declared ports *)
 let expand_flood_port (nst : network_state) swid flood_port =
   List.filter_map
-    (fun (port, dst_swid) -> 
-      if (port <> (-(flood_port + 1))) && (dst_swid <> swid) 
+    (fun (port) -> 
+      if (port <> (-(flood_port + 1))) 
         then Some(port)
         else None)
-    (InterpSim.ports_to_neighbors nst.(swid).config.links swid)
+    (InterpSim.get_internal_non_recirc_ports nst.(swid).config.links swid)
 ;;
 
 let rec interp_statement nst hdl_sort swid locals s =
@@ -467,16 +467,16 @@ let rec interp_statement nst hdl_sort swid locals s =
 
         todo: 
         1. an explicit exit port for each switch
-        2. generate_switch should be depreciated
+        2. should generate_switch be depreciated?
       *)
-      let output_ports = match g with
+      let output_ports : ingress_destination list = match g with
         (* recirculation *)
         | GSingle None ->
           [ Port(InterpSwitch.lookup (Cid.from_string "recirculation_port") sw_st
           |> extract_ival
           |> raw_integer
           |> Integer.to_int )  ]
-        (* teleport to switch ingress. should be depreciated *)
+        (* teleport to switch ingress. should be depreciated? *)
         | GSingle (Some exp) -> 
           let swid = interp_exp exp |> extract_ival |> raw_integer |> Integer.to_int in
           [(Switch(swid))]
@@ -486,9 +486,11 @@ let rec interp_statement nst hdl_sort swid locals s =
         | GMulti grp -> 
           let ports = interp_exp grp |> extract_ival |> raw_group in
           (match ports with
-          | [port] when port < 0 -> (* flood to all ports except: -(port + 1) *)
-            (* if we're flooding, we should also generate an event to the "exit" node in the network.  *)
-              PExit(port)::(List.map (fun p-> Port(p)) (expand_flood_port nst swid port))              
+          | [port] when port < 0 -> (* negative port numbers represent flood ports, i.e., flood to all ports except: -(port + 1) *)
+            (* if we're flooding, we should also generate an event to the "exit" node in the network with the negative flood port...
+              Hmm, that's weird why would we do that? Just for logging?  *)
+              PFlood(port)::
+              (List.map (fun p-> Port(p)) (expand_flood_port nst swid port))              
           | _ -> 
             List.map (fun port -> Port(port)) ports)
       in
@@ -752,8 +754,6 @@ let interp_memop params body nst swid args =
     else interp_exp nst swid locals e3
 ;;
 
-
-
 let rec interp_parser_block nst swid payload_id locals parser_block =
   (* interpret the actions, updating locals *)
   let locals = List.fold_left (interp_parser_action nst swid payload_id) locals (List.split parser_block.pactions |> fst) in
@@ -905,9 +905,9 @@ let interp_decl (nst : network_state) swid d =
     let f _ _ args =
       let event_num_val = match num_opt with
       | None -> None 
-      | Some(num) -> Some(vint (size_of_tint (
-        SyntaxToCore.translate_ty  
-        Builtins.lucid_eventnum_ty)) num)
+      | Some(num) -> Some(
+          vint num (size_of_tint (SyntaxToCore.translate_ty Builtins.lucid_eventnum_ty))
+        )
       in
       (* let extract_ival_pkt_placeholder ival = 
         match ival with

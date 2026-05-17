@@ -45,7 +45,7 @@ type gress =
 type ingress_destination = 
   | Port of int
   | Switch of int
-  | PExit of int
+  | PFlood of int
   
 type state = 
   { 
@@ -110,7 +110,6 @@ let gfun_cid (gf : global_fun) : Cid.t =
   gf.cid
 ;;
 
-
 let empty_counter = { entries_handled = 0; total_handled = 0 }
 ;;
 
@@ -123,17 +122,29 @@ let save_update self =
   !(self.sws).(self.swid) <- self 
 ;;
 
-let create ?(with_sockets=false) start_time_ref event_sorts event_signatures config swid =
-  (* construct socket map *)
-  let sockets = if with_sockets then (
-    List.fold_left 
-      (fun ifmap (intf:SwitchConfig.interface) -> 
-        let socket = InterpSocket.create intf.switch intf.port intf.interface in
-        IntMap.add intf.port socket ifmap)
-      IntMap.empty
-      SwitchConfig.cfg.interface  
+let create ?(softswitch_mode=false) ?(interfaces=None) start_time_ref event_sorts event_signatures config swid =
+  (* in softswitch mode, we take the socket config from the global SwitchConfig map *)
+  let sockets = 
+    if softswitch_mode then
+      List.fold_left 
+        (fun ifmap (intf:SwitchConfig.interface) -> 
+          let socket = InterpSocket.create intf.switch intf.port intf.interface in
+          IntMap.add intf.port socket ifmap)
+        IntMap.empty
+        SwitchConfig.cfg.interface
+    else (
+      (* in simulation mode, create the sockets from the interfaces map *)        
+      let my_intfs = match interfaces with
+        | Some(intfs) -> List.nth intfs swid |> snd
+        | None -> []
+      in
+      List.fold_left
+        (fun ifmap (port_id, interface_name) -> 
+          let socket = InterpSocket.create swid port_id interface_name in
+          IntMap.add port_id socket ifmap)
+        IntMap.empty
+        my_intfs
     )
-    else IntMap.empty
   in
   { swid
   ; config
@@ -278,9 +289,9 @@ let egress_receive st arrival_time port ievent =
 ;;
 
 (* calculate when an event arrives at an input queue *)
-let calc_arrival_time (src_sw : state) dst_id desired_delay = 
+let calc_arrival_time (src_sw : state) (dst_id: location option) desired_delay = 
   let propagate_delay =
-    if src_sw.swid = dst_id
+    if src_sw.swid = Option.default (-1) dst_id 
     then
       src_sw.config.propagate_delay
       + Random.int src_sw.config.random_propagate_range
@@ -299,38 +310,36 @@ let ingress_send (src_sw : state) ingress_destination event_val =
     | Switch sw -> 
       let dst_sw = lookup_switch src_sw sw in
       let send_time = gtime src_sw in
-      (* let send_time = src_sw.utils.get_time nst in *)
-
-      let arrive_time = calc_arrival_time src_sw dst_sw.swid event_val.edelay in
+      let arrive_time = calc_arrival_time src_sw (Some dst_sw.swid) event_val.edelay in
       let ievent = to_internal_event event_val {switch = Some dst_sw.swid; port = 0} arrive_time in
       ingress_receive dst_sw send_time arrive_time 0 ievent
-    | PExit port -> 
+    | PFlood port -> 
+      (* print_endline ("PFlood port = " ^ string_of_int port); *)
       let send_time = gtime src_sw in
-      (* let send_time = src_sw.utils.get_time nst in *)
       let ievent = to_internal_event event_val {switch = Some src_sw.swid; port = port} send_time in
       emit_or_log_exit port ievent send_time src_sw
     | Port port -> (* NOTE: generate_port goes through an egress for the port *)
-      let dst_id, _ = InterpSim.lookup_dst src_sw.config.links (src_sw.swid, port) in 
-      let timestamp = calc_arrival_time src_sw dst_id (event_val.edelay) in
+      let dst_id_opt = InterpSim.lookup_dst_switch src_sw.config.links (src_sw.swid, port) in 
+      let timestamp = calc_arrival_time src_sw dst_id_opt (event_val.edelay) in
       let ievent = to_internal_event event_val {switch = Some src_sw.swid; port = port} timestamp in
       egress_receive src_sw timestamp port ievent
 ;;
 
 let egress_send src_sw out_port event_val = 
-  let dst_id, dst_port = InterpSim.lookup_dst src_sw.config.links (src_sw.swid, out_port) in
+  let dst_opt = InterpSim.lookup_dst src_sw.config.links (src_sw.swid, out_port) in
   let time = gtime src_sw in
   (* let time = src_sw.utils.get_time nst in *)
 
-  (* dst -1 means "somewhere outside of the lucid network" *)
-  if (dst_id = -1)
-    then (
-      let ievent = to_internal_event event_val {switch = Some src_sw.swid; port = out_port} time in
-      emit_or_log_exit out_port ievent time src_sw)
-    else (
+  match dst_opt with 
+  | None -> 
+    (* if the port is not connected to anything, we can just log the exit *)
+    let ievent = to_internal_event event_val {switch = Some src_sw.swid; port = out_port} time in
+    emit_or_log_exit out_port ievent time src_sw
+  | Some (dst_id, dst_port) ->
       let dst_sw = lookup_switch src_sw dst_id in
       let ievent = to_internal_event event_val {switch = Some dst_id; port = dst_port} time in        
       (* note that send and arrival times are currently the same -- we model 0-latency egress, for now *)
-      ingress_receive dst_sw time time dst_port ievent)
+      ingress_receive dst_sw time time dst_port ievent
 ;;
 
 let next_q_ele (fsize, fmin, fdel, ftime) q cur_time = 
