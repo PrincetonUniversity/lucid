@@ -82,7 +82,7 @@ and only ever uses `foo(int x)` events, it is a runtime error to pass in an even
 `tuple_event_wrong.dpt` -- a handler using a polymorphic tuple parameter incorrectly
 `tuple_event2.dpt` -- a handler using a polymorphic tuple parameter correctly
 `tuple_event3.dpt` -- event using a polymorphic parameter with different tuple types depending on parsing (this is the ip_packet example from the motivation).
-
+`nested_tuples.dpt` -- demonstrates support for parsers that also use tuple arguments and polymorphism.
 
 ### Future considerations
 

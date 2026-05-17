@@ -582,8 +582,9 @@ let rec check_qvars d =
   | DAction _ -> ()
   | DGlobal _ ->
     (* None allowed at all *) basic_qvar_checker#visit_decl (true, true) d
-  | DSize _ | DSymbolic _ | DConst _ | DExtern _ | DParser _ ->
+  | DSize _ | DSymbolic _ | DConst _ | DExtern _ ->
     (* Only allowed in effect *) basic_qvar_checker#visit_decl (false, true) d
+  | DParser _ ->  () (* no restrictions, like functions. Previously was only allowed in effects. *)
   | DConstr _ ->
     (* Allowed in both sizes and effects *)
     basic_qvar_checker#visit_decl (false, false) d
