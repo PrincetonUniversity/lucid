@@ -3,6 +3,10 @@
 # this should work on any system with opam installed, 
 # or on Ubuntu and Debian if opam is not installed
 
+# Update system packages
+sudo apt update
+sudo apt install -y build-essential
+
 # Check for opam and install if not found
 if ! command -v opam &> /dev/null
 then
@@ -12,9 +16,6 @@ then
         echo "Opam is not installed and this script can only auto-install it for Ubuntu and Debian. Please install opam manually and re-run this script."
         exit 1
     fi
-    # Update system packages
-    sudo apt update
-    sudo apt install -y build-essential
     sudo apt install -y opam
 fi
 
