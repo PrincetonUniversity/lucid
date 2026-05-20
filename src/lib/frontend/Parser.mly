@@ -263,9 +263,18 @@ poly:
 single_poly:
     | LESS size MORE                    { Span.extend $1 $3, snd $2 }
 
-ty_or_empty_tuple: 
+ty_or_empty_tuple:
     | ty                                      { $1 }
     | LPAREN RPAREN                           { ty_sp (TTuple([])) (Span.extend $1 $2) }
+    /* Parenthesized comma-form tuple type, e.g. `(int<48>, int<32>)`. Only
+       legal inside `<<...>>` slots (Table.t key/data/arg/ret) because that's
+       the only place `ty_or_empty_tuple` is used. Requires at least two
+       element types so `(t)` continues to mean a parenthesized single ty,
+       not a 1-tuple. Avoids the lexer-greedy `>>` issue that `tuple<<...>>`
+       runs into when the inner type ends in `>`. */
+    | LPAREN ty COMMA tys RPAREN              {
+        let raw_tys = List.map (fun ty -> ty.raw_ty) ($2 :: (snd $4)) in
+        ty_sp (TTuple raw_tys) (Span.extend $1 $5) }
 
 ty_polys:
     | ty_or_empty_tuple                       { [$1] }
