@@ -235,7 +235,8 @@ let extract_linkmap (topo : topology) : InterpSim.linkmap =
         match other_end topo.links endpoint with 
         | Some({node_id = dst_node_id; port_id = dst_port_id}) -> 
           linkmap_ref := InterpSim.add_internal_link node.node_id port_id (dst_node_id, dst_port_id) !linkmap_ref
-        | None -> () (* error "Config error: Internal port with no link in topology" *)
+        | None -> linkmap_ref := InterpSim.add_external_link node.node_id port_id !linkmap_ref
+                    (* error "Config error: Internal port with no link in topology" *)
       )
       (* recirc ports are just internal links to the same port on the same switch *)
       | PRecirc {port_id} -> 

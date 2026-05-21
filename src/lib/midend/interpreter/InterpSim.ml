@@ -73,7 +73,7 @@ let get_internal_non_recirc_ports (topology : (int * int) option IntMap.t IntMap
       match recv_opt with 
       | Some(recv_sw, _) -> 
         if (recv_sw <> sw) then port::acc else acc
-      | None -> acc) map []
+      | None -> port::acc) map []
   | None -> []
 ;;
 
