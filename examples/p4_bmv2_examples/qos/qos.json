@@ -1,0 +1,68 @@
+{
+  "max time": 15000,
+  "default_input_gap": 100,
+  "events": [
+    {
+      "type": "command",
+      "name": "Table.install",
+      "args": {
+        "table": "ipv4_lpm",
+        "key": [
+          "167772674<32>"
+        ],
+        "action": "ipv4_lpm.ipv4_forward",
+        "args": [
+          "8796093022722<48>",
+          "2<32>"
+        ]
+      }
+    },
+    {
+      "type": "command",
+      "name": "Table.install",
+      "args": {
+        "table": "ipv4_lpm",
+        "key": [
+          "167772417<32>"
+        ],
+        "action": "ipv4_lpm.ipv4_forward",
+        "args": [
+          "8796093022465<48>",
+          "1<32>"
+        ]
+      }
+    },
+    {
+      "type": "packet",
+      "bytes": "08000000010008000000010108004500001c00000000401163cf0a0001010a000202045700500008e434",
+      "locations": [
+        "0:1"
+      ],
+      "timestamp": 5000
+    },
+    {
+      "type": "packet",
+      "bytes": "08000000010008000000010108004500002800000000400663ce0a0001010a00020208ae00500000000000000000500220006fe20000",
+      "locations": [
+        "0:1"
+      ],
+      "timestamp": 6000
+    },
+    {
+      "type": "packet",
+      "bytes": "08000000010008000000010108004500001c00000000400163df0a0001010a0002020800f7ff00000000",
+      "locations": [
+        "0:1"
+      ],
+      "timestamp": 7000
+    },
+    {
+      "type": "packet",
+      "bytes": "080000000100080000000101080045fc001c00000000401162d30a0001010a0002020d0500500008db86",
+      "locations": [
+        "0:1"
+      ],
+      "timestamp": 8000
+    }
+  ]
+}

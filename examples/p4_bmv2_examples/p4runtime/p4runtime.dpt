@@ -1,0 +1,113 @@
+// Lucid port of the P4 "p4runtime" tutorial — really a demo of
+// **dynamic control via the interpreter's interactive mode**.
+//
+// The data plane is a small flow cache (same shape as `flowcache`):
+// hits forward, misses generate a `packet_in` control event and drop
+// the original packet. What makes this example different is *how* the
+// control plane is connected:
+//
+//   * `dpt --interactive` reads JSON events on stdin and emits exit
+//     events as JSON on stdout (one record per line).
+//   * `controller.py` launches the interpreter as a subprocess, reads
+//     packet_in records off stdout, decides what to install (here:
+//     learn the dst port from the ingress port the packet arrived on),
+//     and writes `Table.install` commands back on stdin.
+//
+// The lifecycle — cold cache → miss → notify → install → hit — plays
+// out in real time across the two processes. This is the same idea
+// the upstream `advanced_tunnel.p4` + `mycontroller.py` pair
+// demonstrates with P4Runtime, just sized to fit the simulator.
+
+const int<32> CONTROLLER_PORT = 99;
+
+type eth_hdr_t = {
+  int<48> dmac;
+  int<48> smac;
+  int<16> ety;
+}
+
+type ipv4_t = {
+  int<4>  version;
+  int<4>  ihl;
+  int<8>  diffserv;
+  int<16> total_len;
+  int<16> id;
+  int<3>  flags;
+  int<13> frag_offset;
+  int<8>  ttl;
+  int<8>  protocol;
+  int<16> hdr_csum;
+  int<32> src;
+  int<32> dst;
+}
+
+type fwd_t = {
+  int<48> fwd_dmac;
+  int<32> fwd_port;
+  bool    fwd_hit;
+}
+
+action fwd_t cached_action(int<48> dmac, int<32> port)() {
+  return {fwd_dmac = dmac; fwd_port = port; fwd_hit = true};
+}
+
+action fwd_t flow_unknown(int<48> _d, int<32> _p)() {
+  return {fwd_dmac = 0; fwd_port = 0; fwd_hit = false};
+}
+
+global Table.t<<int<32>, (int<48>, int<32>), (), fwd_t>> ipv4_lpm =
+  Table.create(1024, [cached_action; flow_unknown], flow_unknown, (0, 0));
+
+packet event ipv4_pkt(eth_hdr_t eth, ipv4_t ip, Payload.t pl);
+
+// PacketIn control event. {skip;} = no handler — the event is only
+// emitted to the controller port so it surfaces on the interpreter's
+// stdout (interactive mode) as a JSON record the controller can read.
+event packet_in(int<32> src_ip, int<32> dst_ip, int<32> ingress) {skip;}
+
+handle ipv4_pkt(eth_hdr_t eth, ipv4_t ip, Payload.t pl) {
+  fwd_t d = Table.lookup(ipv4_lpm, ip#dst, ());
+  if (d#fwd_hit) {
+    eth_hdr_t new_eth = {
+      dmac = d#fwd_dmac;
+      smac = eth#dmac;
+      ety  = eth#ety
+    };
+    ipv4_t new_ip = {
+      version     = ip#version;
+      ihl         = ip#ihl;
+      diffserv    = ip#diffserv;
+      total_len   = ip#total_len;
+      id          = ip#id;
+      flags       = ip#flags;
+      frag_offset = ip#frag_offset;
+      ttl         = ip#ttl - 1;
+      protocol    = ip#protocol;
+      hdr_csum    = 0;
+      src         = ip#src;
+      dst         = ip#dst
+    };
+    printf("sw %d : HIT  dst=%d src=%d -> port %d ttl=%d",
+           self, ip#dst, ip#src, d#fwd_port, new_ip#ttl);
+    generate_port(d#fwd_port,
+      ipv4_pkt(new_eth,
+               {new_ip with hdr_csum = hash<16>(checksum, new_ip)},
+               pl));
+  } else {
+    printf("sw %d : MISS dst=%d src=%d ingress=%d -> PacketIn(controller)",
+           self, ip#dst, ip#src, ingress_port);
+    generate_port(CONTROLLER_PORT,
+      packet_in(ip#src, ip#dst, ingress_port));
+  }
+}
+
+parser main(bitstring pkt) {
+  eth_hdr_t eth = read(pkt);
+  match eth#ety with
+  | LUCID_ETHERTY -> { do_lucid_parsing(pkt); }
+  | 0x0800        -> {
+      ipv4_t ip = read(pkt);
+      generate(ipv4_pkt(eth, ip, Payload.parse(pkt)));
+    }
+  | _             -> { drop; }
+}

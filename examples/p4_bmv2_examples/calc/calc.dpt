@@ -1,0 +1,102 @@
+// Lucid port of the P4 "calc" tutorial: an in-network calculator.
+//
+// A host sends a packet with a custom ether type (0x1234) and a 16-byte
+// calculator header carrying (P, 4, version, op, operand_a, operand_b, res).
+// The switch performs the requested arithmetic on (operand_a, operand_b),
+// writes the result into `res`, swaps src/dst MACs, and reflects the packet
+// back out the port it arrived on. Malformed packets (bad magic, unknown op)
+// are silently dropped.
+//
+// Where this differs from the P4 program:
+//   * The P4 program dispatches on `op` via a const-entries match-action
+//     table. Lucid has a native `match` statement, so we use that — tables
+//     are reserved for state the control plane *changes at runtime*.
+//   * The P4 parser uses `lookahead` to validate the magic before fully
+//     extracting the calc header; Lucid has no lookahead, so we extract
+//     and then validate inside the handler. Same net behavior, one tiny
+//     wasted parse on malformed packets.
+
+const int<16> ETY_CALC  = 0x1234;
+const int<8>  CALC_P    = 0x50;   // 'P'
+const int<8>  CALC_4    = 0x34;   // '4'
+const int<8>  CALC_VER  = 0x01;   // protocol version
+const int<8>  OP_PLUS   = 0x2b;   // '+'
+const int<8>  OP_MINUS  = 0x2d;   // '-'
+const int<8>  OP_AND    = 0x26;   // '&'
+const int<8>  OP_OR     = 0x7c;   // '|'
+const int<8>  OP_XOR    = 0x5e;   // '^'
+
+type eth_hdr_t = {
+  int<48> dmac;
+  int<48> smac;
+  int<16> ety;
+}
+
+// 16-byte calculator header. Field widths are bit-exact with the P4 layout
+// so a `read` off the wire decodes byte-for-byte.
+type calc_t = {
+  int<8>  p;
+  int<8>  four;
+  int<8>  ver;
+  int<8>  op;
+  int<32> operand_a;
+  int<32> operand_b;
+  int<32> res;
+}
+
+packet event calc_pkt(eth_hdr_t eth, calc_t calc, Payload.t pl);
+
+handle calc_pkt(eth_hdr_t eth, calc_t calc, Payload.t pl) {
+  // Magic check. If any of (p, four, ver) is wrong, silently drop.
+  if (calc#p == CALC_P && calc#four == CALC_4 && calc#ver == CALC_VER) {
+    // Compute the result. `ok` lets us silently drop on an unknown op
+    // without needing an early return (handlers don't support one).
+    int<32> result = 0;
+    bool ok = true;
+    match calc#op with
+    | OP_PLUS  -> { result = calc#operand_a + calc#operand_b; }
+    | OP_MINUS -> { result = calc#operand_a - calc#operand_b; }
+    | OP_AND   -> { result = calc#operand_a & calc#operand_b; }
+    | OP_OR    -> { result = calc#operand_a | calc#operand_b; }
+    | OP_XOR   -> { result = calc#operand_a ^^ calc#operand_b; }
+    | _        -> { ok = false; }
+
+    if (ok) {
+      printf("sw %d port %d : %d op=%d %d = %d (reflect)",
+             self, ingress_port,
+             calc#operand_a, calc#op, calc#operand_b, result);
+      eth_hdr_t new_eth = {
+        dmac = eth#smac;
+        smac = eth#dmac;
+        ety  = eth#ety
+      };
+      calc_t new_calc = {
+        p         = calc#p;
+        four      = calc#four;
+        ver       = calc#ver;
+        op        = calc#op;
+        operand_a = calc#operand_a;
+        operand_b = calc#operand_b;
+        res       = result
+      };
+      generate_port(ingress_port, calc_pkt(new_eth, new_calc, pl));
+    } else {
+      printf("sw %d port %d : unknown op %d - drop",
+             self, ingress_port, calc#op);
+    }
+  } else {
+    printf("sw %d port %d : bad magic (p=%d four=%d ver=%d) - drop",
+           self, ingress_port, calc#p, calc#four, calc#ver);
+  }
+}
+
+parser main(bitstring pkt) {
+  eth_hdr_t eth = read(pkt);
+  match eth#ety with
+  | LUCID_ETHERTY -> { do_lucid_parsing(pkt); }
+  | 0x1234        -> {
+      calc_t calc = read(pkt);
+      generate(calc_pkt(eth, calc, Payload.parse(pkt)));
+    }
+  | _             -> { drop; }
+}

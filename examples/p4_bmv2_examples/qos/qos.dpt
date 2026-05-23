@@ -1,0 +1,138 @@
+// Lucid port of the P4 "qos" tutorial.
+//
+// Plain IPv4 forwarding (same shape as `basic`), plus per-protocol DSCP
+// marking before the table lookup:
+//   * UDP packets → diffserv = 46 (Expedited Forwarding)
+//   * TCP packets → diffserv = 44 (Voice Admit)
+//   * everything else → diffserv unchanged
+//
+// The upstream P4 program also defines a bunch of AF_xy actions
+// (Assured Forwarding classes) but never invokes them in the apply
+// block, so they're dead code we don't bother replicating.
+//
+// One small difference from the previous examples: the IPv4 header
+// splits the TOS byte into `diffserv:6 + ecn:2`, matching the actual
+// IPv4 wire format. Earlier examples kept it as a single `diffserv:8`
+// since they never read or wrote those bits. The checksum recompute
+// covers both halves (one's-complement sum is bit-position-agnostic
+// within each 16-bit word).
+
+const int<16> ETY_IPV4    = 0x0800;
+const int<8>  PROTO_TCP   = 6;
+const int<8>  PROTO_UDP   = 17;
+
+// DSCP codepoints (each is the 6-bit value; not shifted).
+const int<6>  DSCP_EF     = 46;   // Expedited Forwarding
+const int<6>  DSCP_VA     = 44;   // Voice Admit
+
+type eth_hdr_t = {
+  int<48> dmac;
+  int<48> smac;
+  int<16> ety;
+}
+
+type ipv4_t = {
+  int<4>  version;
+  int<4>  ihl;
+  int<6>  diffserv;
+  int<2>  ecn;
+  int<16> total_len;
+  int<16> id;
+  int<3>  flags;
+  int<13> frag_offset;
+  int<8>  ttl;
+  int<8>  protocol;
+  int<16> hdr_csum;
+  int<32> src;
+  int<32> dst;
+}
+
+// -------- forwarding table (same shape as basic) ------------------------
+
+type fwd_t = {
+  int<48> fwd_dmac;
+  int<32> fwd_port;
+  bool    fwd_hit;
+}
+
+action fwd_t ipv4_forward(int<48> dmac, int<32> port)() {
+  return {fwd_dmac = dmac; fwd_port = port; fwd_hit = true};
+}
+
+action fwd_t ipv4_drop(int<48> _d, int<32> _p)() {
+  return {fwd_dmac = 0; fwd_port = 0; fwd_hit = false};
+}
+
+global Table.t<<int<32>, (int<48>, int<32>), (), fwd_t>> ipv4_lpm =
+  Table.create(1024, [ipv4_forward; ipv4_drop], ipv4_drop, (0, 0));
+
+// -------- events --------------------------------------------------------
+
+packet event ipv4_pkt(eth_hdr_t eth, ipv4_t ip, Payload.t pl);
+
+// -------- handler -------------------------------------------------------
+
+handle ipv4_pkt(eth_hdr_t eth, ipv4_t ip, Payload.t pl) {
+  // Verify-side IPv4 checksum.
+  int<16> verify = hash<16>(checksum, ip);
+  if (verify != 0) {
+    printf("sw %d port %d : bad input csum (verify=%d) dst=%d",
+           self, ingress_port, verify, ip#dst);
+  }
+
+  // Pick a DSCP based on the L4 protocol. Match falls through to "leave
+  // diffserv as-is" for non-TCP/UDP traffic.
+  int<6> new_dscp = ip#diffserv;
+  match ip#protocol with
+  | PROTO_UDP -> { new_dscp = DSCP_EF; }
+  | PROTO_TCP -> { new_dscp = DSCP_VA; }
+  | _         -> { new_dscp = ip#diffserv; }   // keep existing dscp
+
+  fwd_t d = Table.lookup(ipv4_lpm, ip#dst, ());
+  if (d#fwd_hit) {
+    eth_hdr_t new_eth = {
+      dmac = d#fwd_dmac;
+      smac = eth#dmac;
+      ety  = eth#ety
+    };
+    // Zero hdr_csum before the `with`-form recompute (see basic README).
+    ipv4_t new_ip = {
+      version     = ip#version;
+      ihl         = ip#ihl;
+      diffserv    = new_dscp;
+      ecn         = ip#ecn;
+      total_len   = ip#total_len;
+      id          = ip#id;
+      flags       = ip#flags;
+      frag_offset = ip#frag_offset;
+      ttl         = ip#ttl - 1;
+      protocol    = ip#protocol;
+      hdr_csum    = 0;
+      src         = ip#src;
+      dst         = ip#dst
+    };
+    printf("sw %d port %d -> %d : ipv4 dst=%d proto=%d dscp=%d ttl=%d",
+           self, ingress_port, d#fwd_port,
+           ip#dst, ip#protocol, new_dscp, new_ip#ttl);
+    generate_port(d#fwd_port,
+      ipv4_pkt(new_eth,
+               {new_ip with hdr_csum = hash<16>(checksum, new_ip)},
+               pl));
+  } else {
+    printf("sw %d port %d : drop ipv4 dst=%d (no route)",
+           self, ingress_port, ip#dst);
+  }
+}
+
+// -------- parser --------------------------------------------------------
+
+parser main(bitstring pkt) {
+  eth_hdr_t eth = read(pkt);
+  match eth#ety with
+  | LUCID_ETHERTY -> { do_lucid_parsing(pkt); }
+  | 0x0800        -> {
+      ipv4_t ip = read(pkt);
+      generate(ipv4_pkt(eth, ip, Payload.parse(pkt)));
+    }
+  | _             -> { drop; }
+}

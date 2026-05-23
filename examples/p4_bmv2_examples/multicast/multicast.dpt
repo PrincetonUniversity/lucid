@@ -1,0 +1,73 @@
+// Lucid port of the P4 "multicast" tutorial.
+//
+// Classic L2 learning switch (almost — the *learn* part is delegated to
+// the control plane via `Table.install`). One switch, four host ports.
+//
+//   * Known dst MAC → forward to its specific port (`mac_forward`).
+//   * Unknown dst MAC → flood to all ports except the ingress port.
+//
+// The upstream P4 implements the "flood except ingress" rule by
+// (a) setting a multicast group at ingress, (b) replicating the packet
+// to every member of the group in the bmv2 packet replication engine,
+// and (c) explicitly dropping the copy that would head back out the
+// ingress port at egress. Lucid bundles all of that into a single
+// builtin — `flood <port>` constructs a multicast group of every
+// declared port *except* `<port>`, and `generate_ports` emits the
+// event to all of them.
+//
+// One caveat: `flood` only enumerates ports that the topology block
+// has declared. That's why the spec (gen_spec.py) declares all four
+// host ports explicitly as `link` type, even though none is linked to
+// another node — the simulator treats unlinked declared ports as
+// exits, which gives us the 4-host fan-out we want.
+
+type eth_hdr_t = {
+  int<48> dmac;
+  int<48> smac;
+  int<16> ety;
+}
+
+// Result of a mac_lookup. `fwd_flood = true` means "no specific port;
+// fan out via `flood`". This corresponds to the upstream's
+// `multicast()` action that sets `mcast_grp = 1`.
+type fwd_t = {
+  int<32> fwd_port;
+  bool    fwd_flood;
+}
+
+action fwd_t mac_forward(int<32> port)() {
+  return {fwd_port = port; fwd_flood = false};
+}
+
+// Default action: unknown MAC → flood. install-time arg is ignored.
+action fwd_t mcast_action(int<32> _unused)() {
+  return {fwd_port = 0; fwd_flood = true};
+}
+
+global Table.t<<int<48>, int<32>, (), fwd_t>> mac_lookup =
+  Table.create(1024, [mac_forward; mcast_action], mcast_action, 0);
+
+packet event eth_pkt(eth_hdr_t eth, Payload.t pl);
+
+handle eth_pkt(eth_hdr_t eth, Payload.t pl) {
+  fwd_t d = Table.lookup(mac_lookup, eth#dmac, ());
+  if (d#fwd_flood) {
+    printf("sw %d port %d : flood unknown dst=%d",
+           self, ingress_port, eth#dmac);
+    // `flood ingress_port` = every declared port on this switch except
+    // ingress_port. The "except ingress" piece is the upstream
+    // egress-side drop, baked into the builtin.
+    generate_ports(flood ingress_port, eth_pkt(eth, pl));
+  } else {
+    printf("sw %d port %d -> %d : unicast dst=%d",
+           self, ingress_port, d#fwd_port, eth#dmac);
+    generate_port(d#fwd_port, eth_pkt(eth, pl));
+  }
+}
+
+parser main(bitstring pkt) {
+  eth_hdr_t eth = read(pkt);
+  match eth#ety with
+  | LUCID_ETHERTY -> { do_lucid_parsing(pkt); }
+  | _             -> { generate(eth_pkt(eth, Payload.parse(pkt))); }
+}

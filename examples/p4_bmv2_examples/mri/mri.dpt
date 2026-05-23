@@ -1,0 +1,349 @@
+// Lucid port of the P4 "mri" tutorial: per-hop telemetry that pushes a
+// (swid, qdepth) record onto a stack inside the IPv4 options as the
+// packet traverses the network. The receiver sees the full hop list.
+//
+// Structure mirrors `source_routing` because the same three Lucid
+// constraints apply (see source_routing/README.md for the deep-dive):
+//
+//  1. Parsers are non-recursive → manually unroll the count-keyed
+//     swtrace-stack parse as a `match` over count.
+//  2. Auto-deparser emits every event field → one event per stack
+//     depth (`mri_0`..`mri_3`), and the handler pushes by re-emitting
+//     as the next-larger variant.
+//  3. Parser slot analysis requires distinct variables per arg
+//     position → distinct names for every swtrace's `swid`/`qdepth`.
+//
+// Substantive differences from the upstream P4:
+//   * `qdepth` (egress queue depth) isn't modeled by the Lucid
+//     interpreter; we push 0 in its place. Documented in the README.
+//   * `swid` is sourced from the `self` builtin rather than from a
+//     control-plane `Table.install` on a separate egress table. The
+//     P4 program has one entry per switch with `swid: N` baked in,
+//     which is what `self` already provides — so we skip the table.
+//   * Only MRI-flagged IPv4 packets are handled. Plain IPv4 (ihl=5,
+//     no option) is dropped at the parser.
+
+const int<16> ETY_IPV4 = 0x0800;
+const int<5>  IPV4_OPT_MRI = 31;
+
+type eth_hdr_t = {
+  int<48> dmac;
+  int<48> smac;
+  int<16> ety;
+}
+
+type ipv4_t = {
+  int<4>  version;
+  int<4>  ihl;
+  int<8>  diffserv;
+  int<16> total_len;
+  int<16> id;
+  int<3>  flags;
+  int<13> frag_offset;
+  int<8>  ttl;
+  int<8>  protocol;
+  int<16> hdr_csum;
+  int<32> src;
+  int<32> dst;
+}
+
+// 2-byte IPv4 option header. P4's `ipv4_option_t`.
+type opt_t = {
+  int<1> opt_copy;
+  int<2> opt_class;
+  int<5> opt_num;
+  int<8> opt_len;
+}
+
+// 2-byte MRI header (just a count of trailing swtraces).
+type mri_hdr_t = {
+  int<16> mri_count;
+}
+
+// -------- forwarding table (same shape as basic) ------------------------
+
+type fwd_t = {
+  int<48> fwd_dmac;
+  int<32> fwd_port;
+  bool    fwd_hit;
+}
+
+action fwd_t ipv4_forward(int<48> dmac, int<32> port)() {
+  return {fwd_dmac = dmac; fwd_port = port; fwd_hit = true};
+}
+
+action fwd_t ipv4_drop(int<48> _dmac, int<32> _port)() {
+  return {fwd_dmac = 0; fwd_port = 0; fwd_hit = false};
+}
+
+global Table.t<<int<32>, (int<48>, int<32>), (), fwd_t>> ipv4_lpm =
+  Table.create(1024, [ipv4_forward; ipv4_drop], ipv4_drop, (0, 0));
+
+// -------- events --------------------------------------------------------
+//
+// One event per stack depth 0..MAX_HOPS=3. Each adds two scalar fields
+// per swtrace (swid + qdepth). Beyond mri_3 the stack saturates: mri_3's
+// handler still forwards but does not push another entry.
+
+packet event mri_0(eth_hdr_t eth, ipv4_t ip, opt_t opt, mri_hdr_t m,
+                   Payload.t pl);
+
+packet event mri_1(eth_hdr_t eth, ipv4_t ip, opt_t opt, mri_hdr_t m,
+                   int<32> swid0, int<32> qdepth0,
+                   Payload.t pl);
+
+packet event mri_2(eth_hdr_t eth, ipv4_t ip, opt_t opt, mri_hdr_t m,
+                   int<32> swid0, int<32> qdepth0,
+                   int<32> swid1, int<32> qdepth1,
+                   Payload.t pl);
+
+packet event mri_3(eth_hdr_t eth, ipv4_t ip, opt_t opt, mri_hdr_t m,
+                   int<32> swid0, int<32> qdepth0,
+                   int<32> swid1, int<32> qdepth1,
+                   int<32> swid2, int<32> qdepth2,
+                   Payload.t pl);
+
+// -------- helpers shared across handlers --------------------------------
+//
+// Most of each handler is identical (forward + rewrite eth + bump ihl /
+// total_len / opt_len / count + recompute IPv4 csum). The differences
+// are only the swtrace fields ferried through, so we keep them inline
+// rather than abstracted into a function — Lucid functions don't return
+// records by reference, and the explicit form here exactly matches the
+// upstream P4's egress logic.
+
+// -------- handlers ------------------------------------------------------
+
+handle mri_0(eth_hdr_t eth, ipv4_t ip, opt_t opt, mri_hdr_t m, Payload.t pl) {
+  fwd_t d = Table.lookup(ipv4_lpm, ip#dst, ());
+  if (d#fwd_hit) {
+    eth_hdr_t new_eth = {
+      dmac = d#fwd_dmac;
+      smac = eth#dmac;
+      ety  = eth#ety
+    };
+    // Push the first swtrace: count 0 → 1, ihl +2, opt_len +8, total_len +8.
+    ipv4_t new_ip = {
+      version     = ip#version;
+      ihl         = ip#ihl + 2;
+      diffserv    = ip#diffserv;
+      total_len   = ip#total_len + 8;
+      id          = ip#id;
+      flags       = ip#flags;
+      frag_offset = ip#frag_offset;
+      ttl         = ip#ttl - 1;
+      protocol    = ip#protocol;
+      hdr_csum    = 0;
+      src         = ip#src;
+      dst         = ip#dst
+    };
+    opt_t new_opt = {
+      opt_copy  = opt#opt_copy;
+      opt_class = opt#opt_class;
+      opt_num   = opt#opt_num;
+      opt_len   = opt#opt_len + 8
+    };
+    mri_hdr_t new_m = {mri_count = m#mri_count + 1};
+    int<32> new_swid    = self;
+    int<32> new_qdepth  = 0;
+    printf("sw %d port %d -> %d : mri push (now n=1) dst=%d ttl=%d",
+           self, ingress_port, d#fwd_port, ip#dst, new_ip#ttl);
+    generate_port(d#fwd_port,
+      mri_1(new_eth,
+            {new_ip with hdr_csum = hash<16>(checksum, new_ip)},
+            new_opt, new_m,
+            new_swid, new_qdepth,
+            pl));
+  } else {
+    printf("sw %d port %d : drop mri (no route) dst=%d",
+           self, ingress_port, ip#dst);
+  }
+}
+
+handle mri_1(eth_hdr_t eth, ipv4_t ip, opt_t opt, mri_hdr_t m,
+             int<32> swid0, int<32> qdepth0, Payload.t pl) {
+  fwd_t d = Table.lookup(ipv4_lpm, ip#dst, ());
+  if (d#fwd_hit) {
+    eth_hdr_t new_eth = {
+      dmac = d#fwd_dmac;
+      smac = eth#dmac;
+      ety  = eth#ety
+    };
+    ipv4_t new_ip = {
+      version     = ip#version;
+      ihl         = ip#ihl + 2;
+      diffserv    = ip#diffserv;
+      total_len   = ip#total_len + 8;
+      id          = ip#id;
+      flags       = ip#flags;
+      frag_offset = ip#frag_offset;
+      ttl         = ip#ttl - 1;
+      protocol    = ip#protocol;
+      hdr_csum    = 0;
+      src         = ip#src;
+      dst         = ip#dst
+    };
+    opt_t new_opt = {
+      opt_copy  = opt#opt_copy;
+      opt_class = opt#opt_class;
+      opt_num   = opt#opt_num;
+      opt_len   = opt#opt_len + 8
+    };
+    mri_hdr_t new_m = {mri_count = m#mri_count + 1};
+    int<32> new_swid    = self;
+    int<32> new_qdepth  = 0;
+    printf("sw %d port %d -> %d : mri push (now n=2) dst=%d ttl=%d",
+           self, ingress_port, d#fwd_port, ip#dst, new_ip#ttl);
+    generate_port(d#fwd_port,
+      mri_2(new_eth,
+            {new_ip with hdr_csum = hash<16>(checksum, new_ip)},
+            new_opt, new_m,
+            new_swid, new_qdepth,
+            swid0, qdepth0,
+            pl));
+  } else {
+    printf("sw %d port %d : drop mri (no route) dst=%d",
+           self, ingress_port, ip#dst);
+  }
+}
+
+handle mri_2(eth_hdr_t eth, ipv4_t ip, opt_t opt, mri_hdr_t m,
+             int<32> swid0, int<32> qdepth0,
+             int<32> swid1, int<32> qdepth1, Payload.t pl) {
+  fwd_t d = Table.lookup(ipv4_lpm, ip#dst, ());
+  if (d#fwd_hit) {
+    eth_hdr_t new_eth = {
+      dmac = d#fwd_dmac;
+      smac = eth#dmac;
+      ety  = eth#ety
+    };
+    ipv4_t new_ip = {
+      version     = ip#version;
+      ihl         = ip#ihl + 2;
+      diffserv    = ip#diffserv;
+      total_len   = ip#total_len + 8;
+      id          = ip#id;
+      flags       = ip#flags;
+      frag_offset = ip#frag_offset;
+      ttl         = ip#ttl - 1;
+      protocol    = ip#protocol;
+      hdr_csum    = 0;
+      src         = ip#src;
+      dst         = ip#dst
+    };
+    opt_t new_opt = {
+      opt_copy  = opt#opt_copy;
+      opt_class = opt#opt_class;
+      opt_num   = opt#opt_num;
+      opt_len   = opt#opt_len + 8
+    };
+    mri_hdr_t new_m = {mri_count = m#mri_count + 1};
+    int<32> new_swid    = self;
+    int<32> new_qdepth  = 0;
+    printf("sw %d port %d -> %d : mri push (now n=3) dst=%d ttl=%d",
+           self, ingress_port, d#fwd_port, ip#dst, new_ip#ttl);
+    generate_port(d#fwd_port,
+      mri_3(new_eth,
+            {new_ip with hdr_csum = hash<16>(checksum, new_ip)},
+            new_opt, new_m,
+            new_swid, new_qdepth,
+            swid0, qdepth0,
+            swid1, qdepth1,
+            pl));
+  } else {
+    printf("sw %d port %d : drop mri (no route) dst=%d",
+           self, ingress_port, ip#dst);
+  }
+}
+
+// MAX_HOPS reached. Forward but do *not* push another swtrace — the
+// stack is saturated. TTL still decrements, ihl/total_len/opt_len/count
+// don't change, csum still gets recomputed because TTL did.
+handle mri_3(eth_hdr_t eth, ipv4_t ip, opt_t opt, mri_hdr_t m,
+             int<32> swid0, int<32> qdepth0,
+             int<32> swid1, int<32> qdepth1,
+             int<32> swid2, int<32> qdepth2, Payload.t pl) {
+  fwd_t d = Table.lookup(ipv4_lpm, ip#dst, ());
+  if (d#fwd_hit) {
+    eth_hdr_t new_eth = {
+      dmac = d#fwd_dmac;
+      smac = eth#dmac;
+      ety  = eth#ety
+    };
+    ipv4_t new_ip = {
+      version     = ip#version;
+      ihl         = ip#ihl;
+      diffserv    = ip#diffserv;
+      total_len   = ip#total_len;
+      id          = ip#id;
+      flags       = ip#flags;
+      frag_offset = ip#frag_offset;
+      ttl         = ip#ttl - 1;
+      protocol    = ip#protocol;
+      hdr_csum    = 0;
+      src         = ip#src;
+      dst         = ip#dst
+    };
+    printf("sw %d port %d -> %d : mri stack saturated, forward only dst=%d ttl=%d",
+           self, ingress_port, d#fwd_port, ip#dst, new_ip#ttl);
+    generate_port(d#fwd_port,
+      mri_3(new_eth,
+            {new_ip with hdr_csum = hash<16>(checksum, new_ip)},
+            opt, m,
+            swid0, qdepth0,
+            swid1, qdepth1,
+            swid2, qdepth2,
+            pl));
+  } else {
+    printf("sw %d port %d : drop mri (no route) dst=%d",
+           self, ingress_port, ip#dst);
+  }
+}
+
+// -------- parser --------------------------------------------------------
+
+parser main(bitstring pkt) {
+  eth_hdr_t eth = read(pkt);
+  match eth#ety with
+  | LUCID_ETHERTY -> { do_lucid_parsing(pkt); }
+  | 0x0800        -> {
+      ipv4_t ip = read(pkt);
+      opt_t  opt = read(pkt);
+      mri_hdr_t m = read(pkt);
+      // Dispatch by count. Each branch reads exactly `count` swtraces
+      // off the wire and generates the matching event variant.
+      match m#mri_count with
+      | 0 -> {
+          Payload.t pl = Payload.parse(pkt);
+          generate(mri_0(eth, ip, opt, m, pl));
+        }
+      | 1 -> {
+          int<32> swid0   = read(pkt);
+          int<32> qdepth0 = read(pkt);
+          Payload.t pl = Payload.parse(pkt);
+          generate(mri_1(eth, ip, opt, m, swid0, qdepth0, pl));
+        }
+      | 2 -> {
+          int<32> swid0   = read(pkt);
+          int<32> qdepth0 = read(pkt);
+          int<32> swid1   = read(pkt);
+          int<32> qdepth1 = read(pkt);
+          Payload.t pl = Payload.parse(pkt);
+          generate(mri_2(eth, ip, opt, m, swid0, qdepth0, swid1, qdepth1, pl));
+        }
+      | 3 -> {
+          int<32> swid0   = read(pkt);
+          int<32> qdepth0 = read(pkt);
+          int<32> swid1   = read(pkt);
+          int<32> qdepth1 = read(pkt);
+          int<32> swid2   = read(pkt);
+          int<32> qdepth2 = read(pkt);
+          Payload.t pl = Payload.parse(pkt);
+          generate(mri_3(eth, ip, opt, m,
+                         swid0, qdepth0, swid1, qdepth1, swid2, qdepth2,
+                         pl));
+        }
+      | _ -> { drop; }
+    }
+  | _             -> { drop; }
+}

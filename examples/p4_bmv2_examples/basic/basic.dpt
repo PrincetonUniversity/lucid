@@ -1,0 +1,115 @@
+// IPv4 longest-prefix-match forwarding.
+// The control plane (basic.json) installs one entry per known /32 host into
+// `ipv4_lpm`. On a hit, the handler rewrites the ethernet src/dst MACs,
+// decrements ttl, and emits the packet out the matching port. On a miss the
+// default action drops the packet (handler returns without generating).
+
+const int<16> ETY_IPV4 = 0x0800;
+
+type eth_hdr_t = {
+  int<48> dmac;
+  int<48> smac;
+  int<16> ety;
+}
+
+type ipv4_t = {
+  int<4>  version;
+  int<4>  ihl;
+  int<8>  diffserv;
+  int<16> total_len;
+  int<16> id;
+  int<3>  flags;
+  int<13> frag_offset;
+  int<8>  ttl;
+  int<8>  protocol;
+  int<16> hdr_csum;
+  int<32> src;
+  int<32> dst;
+}
+
+// Result of a routing-table lookup. `fwd_hit=false` means "no entry matched,
+// drop". Field names are prefixed so they don't collide with `eth_hdr_t`
+// fields — Lucid resolves record fields by name across the whole program.
+type fwd_t = {
+  int<48> fwd_dmac;
+  int<32> fwd_port;
+  bool    fwd_hit;
+}
+
+action fwd_t ipv4_forward(int<48> dmac, int<32> port)() {
+  return {fwd_dmac = dmac; fwd_port = port; fwd_hit = true};
+}
+
+// Must share the install-time data type with ipv4_forward to live in the
+// same table; the install args are ignored.
+action fwd_t ipv4_drop(int<48> _dmac, int<32> _port)() {
+  return {fwd_dmac = 0; fwd_port = 0; fwd_hit = false};
+}
+
+// Match-action table keyed on the IPv4 destination address. Entries are
+// installed via Table.install commands in the JSON spec (use a /32 mask for
+// host routes, or a shorter mask for prefix routes; longer prefixes should be
+// installed first since the interpreter matches in install order). The
+// data_ty `(int<48>, int<32>)` carries the next-hop MAC and egress port as
+// the actions' install-time arguments.
+global Table.t<<int<32>, (int<48>, int<32>), (), fwd_t>> ipv4_lpm =
+  Table.create(1024, [ipv4_forward; ipv4_drop], ipv4_drop, (0, 0));
+
+packet event ipv4_pkt(eth_hdr_t eth, ipv4_t ip, Payload.t pl);
+
+handle ipv4_pkt(eth_hdr_t eth, ipv4_t ip, Payload.t pl) {
+  // Verify-side checksum: hashing all IP header fields (csum included) should
+  // yield 0 for a well-formed packet, per RFC 1071. Anything else means the
+  // input csum was wrong — we log but still forward.
+  int<16> verify = hash<16>(checksum, ip);
+  if (verify != 0) {
+    printf("sw %d port %d : bad input csum (verify=%d) dst=%d",
+           self, ingress_port, verify, ip#dst);
+  }
+
+  fwd_t d = Table.lookup(ipv4_lpm, ip#dst, ());
+  if (d#fwd_hit) {
+    eth_hdr_t new_eth = {
+      dmac = d#fwd_dmac;
+      smac = eth#dmac;
+      ety  = eth#ety
+    };
+    // Recompute the IPv4 header checksum after the TTL decrement. We zero
+    // hdr_csum *before* the hash call below — RFC 1071 says compute the sum
+    // with the checksum field set to zero, then write the one's complement
+    // back into it. The `{new_ip with hdr_csum = ...}` at the generate site
+    // does step 2+3 in one shot, but only works because new_ip.hdr_csum is
+    // already 0 at that moment. Do not move/remove the `hdr_csum = 0;` line.
+    ipv4_t new_ip = {
+      version     = ip#version;
+      ihl         = ip#ihl;
+      diffserv    = ip#diffserv;
+      total_len   = ip#total_len;
+      id          = ip#id;
+      flags       = ip#flags;
+      frag_offset = ip#frag_offset;
+      ttl         = ip#ttl - 1;
+      protocol    = ip#protocol;
+      hdr_csum    = 0;
+      src         = ip#src;
+      dst         = ip#dst
+    };
+    printf("sw %d port %d -> %d : dst=%d ttl=%d",
+           self, ingress_port, d#fwd_port, ip#dst, new_ip#ttl);
+    generate_port(d#fwd_port, ipv4_pkt(new_eth, {new_ip with hdr_csum = hash<16>(checksum, new_ip)}, pl));
+  } else {
+    printf("sw %d port %d : drop dst=%d (no route)",
+           self, ingress_port, ip#dst);
+  }
+}
+
+parser main(bitstring pkt) {
+  eth_hdr_t eth = read(pkt);
+  match eth#ety with
+  | LUCID_ETHERTY -> { do_lucid_parsing(pkt); }
+  | 0x0800        -> {
+      ipv4_t ip = read(pkt);
+      generate(ipv4_pkt(eth, ip, Payload.parse(pkt)));
+    }
+  | _             -> { drop; }
+}

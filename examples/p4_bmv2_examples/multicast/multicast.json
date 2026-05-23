@@ -1,0 +1,115 @@
+{
+  "max time": 15000,
+  "default_input_gap": 100,
+  "topology": {
+    "nodes": {
+      "0": {
+        "ports": {
+          "1": {
+            "type": "link"
+          },
+          "2": {
+            "type": "link"
+          },
+          "3": {
+            "type": "link"
+          },
+          "4": {
+            "type": "link"
+          }
+        }
+      }
+    },
+    "links": []
+  },
+  "events": [
+    {
+      "type": "command",
+      "name": "Table.install",
+      "args": {
+        "table": "mac_lookup",
+        "key": [
+          "8796093022481<48>"
+        ],
+        "action": "mac_lookup.mac_forward",
+        "args": [
+          "1<32>"
+        ]
+      }
+    },
+    {
+      "type": "command",
+      "name": "Table.install",
+      "args": {
+        "table": "mac_lookup",
+        "key": [
+          "8796093022754<48>"
+        ],
+        "action": "mac_lookup.mac_forward",
+        "args": [
+          "2<32>"
+        ]
+      }
+    },
+    {
+      "type": "command",
+      "name": "Table.install",
+      "args": {
+        "table": "mac_lookup",
+        "key": [
+          "8796093023027<48>"
+        ],
+        "action": "mac_lookup.mac_forward",
+        "args": [
+          "3<32>"
+        ]
+      }
+    },
+    {
+      "type": "command",
+      "name": "Table.install",
+      "args": {
+        "table": "mac_lookup",
+        "key": [
+          "8796093023300<48>"
+        ],
+        "action": "mac_lookup.mac_forward",
+        "args": [
+          "4<32>"
+        ]
+      }
+    },
+    {
+      "type": "packet",
+      "bytes": "0800000002220800000001119999cafebabe",
+      "locations": [
+        "0:1"
+      ],
+      "timestamp": 5000
+    },
+    {
+      "type": "packet",
+      "bytes": "0800000003330800000001119999cafebabe",
+      "locations": [
+        "0:1"
+      ],
+      "timestamp": 6000
+    },
+    {
+      "type": "packet",
+      "bytes": "0000000000990800000001119999cafebabe",
+      "locations": [
+        "0:1"
+      ],
+      "timestamp": 7000
+    },
+    {
+      "type": "packet",
+      "bytes": "ffffffffffff0800000001119999cafebabe",
+      "locations": [
+        "0:1"
+      ],
+      "timestamp": 8000
+    }
+  ]
+}
