@@ -1,0 +1,164 @@
+// Lucid port of the P4 "ecn" tutorial.
+//
+// The upstream P4 program marks ECN on a packet when the egress
+// queue depth exceeds a threshold. Lucid's interpreter doesn't model
+// queues, so we *synthesize* a queue depth signal:
+//
+//   - A 1-cell `queuedepth` array stands in for the per-port queue.
+//   - Every IPv4 packet bumps the cell on its way through.
+//   - A self-recursive `queue_decr` event drains the cell by 1 each
+//     time it fires. We launch it once from the spec; it loops on
+//     itself for the rest of the simulation.
+//
+// Marking policy:
+//   - depth <= ECN_THRESHOLD              → forward unchanged
+//   - ECN_THRESHOLD < depth <= DROP_THRESHOLD → forward with ECN bits = 0b11 (CE)
+//   - depth >  DROP_THRESHOLD             → drop (no generate)
+//
+// In a real implementation the queue would be per-egress-port and the
+// depth would be sampled from hardware metadata at egress. The
+// "one-cell + recursive drain" approximation is enough to demonstrate
+// the three regimes (clean / marked / dropped) end to end.
+
+const int ECN_THRESHOLD  = 4;
+const int DROP_THRESHOLD = 8;
+
+const int<16> ETY_IPV4 = 0x0800;
+
+type eth_hdr_t = {
+  int<48> dmac;
+  int<48> smac;
+  int<16> ety;
+}
+
+type ipv4_t = {
+  int<4>  version;
+  int<4>  ihl;
+  int<6>  diffserv;
+  int<2>  ecn;
+  int<16> total_len;
+  int<16> id;
+  int<3>  flags;
+  int<13> frag_offset;
+  int<8>  ttl;
+  int<8>  protocol;
+  int<16> hdr_csum;
+  int<32> src;
+  int<32> dst;
+}
+
+// -------- forwarding table (same shape as basic) ------------------------
+
+type fwd_t = {
+  int<48> fwd_dmac;
+  int<32> fwd_port;
+  bool    fwd_hit;
+}
+
+action fwd_t ipv4_forward(int<48> dmac, int<32> port)() {
+  return {fwd_dmac = dmac; fwd_port = port; fwd_hit = true};
+}
+
+action fwd_t ipv4_drop(int<48> _d, int<32> _p)() {
+  return {fwd_dmac = 0; fwd_port = 0; fwd_hit = false};
+}
+
+global Table.t<<int<32>, (int<48>, int<32>), (), fwd_t>> ipv4_lpm =
+  Table.create(1024, [ipv4_forward; ipv4_drop], ipv4_drop, (0, 0));
+
+// -------- synthetic queue depth ----------------------------------------
+
+global Array.t<32> queuedepth = Array.create(1);
+
+// get_memop returns the *new* (post-increment) value so the handler can
+// branch on it; set_memop also writes the new value into the cell.
+// Using the same memop for both sides is the standard Lucid idiom for
+// "atomic increment-and-fetch".
+memop add1(int mv, int unused)         { return mv + 1; }
+
+// floor at 0 so the drain doesn't run negative.
+memop sub1_floor(int mv, int unused) {
+  if (mv == 0) { return 0; }
+  else         { return mv - 1; }
+}
+
+// -------- events --------------------------------------------------------
+
+packet event ipv4_pkt(eth_hdr_t eth, ipv4_t ip, Payload.t pl);
+
+// Background drain. Each tick: decrement queuedepth by 1 (floored at 0)
+// and re-arm itself by generating another queue_decr. Launched from the
+// spec exactly once.
+event queue_decr();
+
+// -------- handlers ------------------------------------------------------
+
+handle ipv4_pkt(eth_hdr_t eth, ipv4_t ip, Payload.t pl) {
+  fwd_t d = Table.lookup(ipv4_lpm, ip#dst, ());
+  if (d#fwd_hit) {
+    // Atomically bump the queue and read the new depth.
+    int new_depth = Array.update(queuedepth, 0, add1, 0, add1, 0);
+
+    if (new_depth > DROP_THRESHOLD) {
+      printf("sw %d : DROP dst=%d (depth=%d > %d)",
+             self, ip#dst, new_depth, DROP_THRESHOLD);
+      // No generate → packet is dropped. queuedepth still got bumped;
+      // the drain will catch up.
+    } else {
+      // Decide whether to ECN-mark.
+      int<2> new_ecn = ip#ecn;
+      if (new_depth > ECN_THRESHOLD) {
+        new_ecn = 3;   // 0b11 = CE (Congestion Experienced)
+        printf("sw %d : MARK dst=%d depth=%d (>%d) -> ecn=11",
+               self, ip#dst, new_depth, ECN_THRESHOLD);
+      } else {
+        printf("sw %d : OK   dst=%d depth=%d -> port %d",
+               self, ip#dst, new_depth, d#fwd_port);
+      }
+
+      eth_hdr_t new_eth = {
+        dmac = d#fwd_dmac;
+        smac = eth#dmac;
+        ety  = eth#ety
+      };
+      ipv4_t new_ip = {
+        version     = ip#version;
+        ihl         = ip#ihl;
+        diffserv    = ip#diffserv;
+        ecn         = new_ecn;
+        total_len   = ip#total_len;
+        id          = ip#id;
+        flags       = ip#flags;
+        frag_offset = ip#frag_offset;
+        ttl         = ip#ttl - 1;
+        protocol    = ip#protocol;
+        hdr_csum    = 0;
+        src         = ip#src;
+        dst         = ip#dst
+      };
+      generate_port(d#fwd_port,
+        ipv4_pkt(new_eth,
+                 {new_ip with hdr_csum = hash<16>(checksum, new_ip)},
+                 pl));
+    }
+  } else {
+    printf("sw %d : no route for dst=%d", self, ip#dst);
+  }
+}
+
+handle queue_decr() {
+  Array.setm(queuedepth, 0, sub1_floor, 0);
+  // Self-recurse so the drain keeps running.
+  generate(queue_decr());
+}
+
+parser main(bitstring pkt) {
+  eth_hdr_t eth = read(pkt);
+  match eth#ety with
+  | LUCID_ETHERTY -> { do_lucid_parsing(pkt); }
+  | 0x0800        -> {
+      ipv4_t ip = read(pkt);
+      generate(ipv4_pkt(eth, ip, Payload.parse(pkt)));
+    }
+  | _             -> { drop; }
+}

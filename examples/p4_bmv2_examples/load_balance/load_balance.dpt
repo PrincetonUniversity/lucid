@@ -1,0 +1,224 @@
+// Lucid port of the P4 "load_balance" tutorial: hash-based ECMP forwarding
+// across 3 switches in a triangle, with one host per switch.
+//
+// The setup is asymmetric: s1 acts as a *load balancer* and treats the
+// magic destination IP 10.0.0.1 as "split this flow across {h2, h3} based
+// on its TCP 5-tuple." s2 and s3 act as plain forwarders for their own
+// hosts (count=1 entries — the ECMP machinery still runs but trivially).
+//
+// Three tables, applied in series in a single handler:
+//   1. ecmp_group   — LPM on hdr.ipv4.dst → (base, count, hit). The action
+//                     hashes the 5-tuple and returns `base + (hash & (count-1))`,
+//                     i.e., it picks an ECMP index. Requires `count` to be a
+//                     power of two (1 or 2 in this example).
+//   2. ecmp_nhop    — exact on the ECMP index → (next-hop dmac, dst-IP rewrite,
+//                     egress port). The dst-IP rewrite is what turns "10.0.0.1"
+//                     into the actual host IP (10.0.2.2 or 10.0.3.3) for the
+//                     downstream switch.
+//   3. send_frame   — exact on egress port → src MAC for the outgoing frame.
+//                     In P4 this lives in MyEgress; here it's just a third
+//                     Table.lookup at the end of the same handler.
+//
+// Non-TCP packets are dropped at the parser — the 5-tuple hash needs TCP
+// ports, and the upstream P4 program's "use undefined port fields" behavior
+// isn't a meaningful semantic in Lucid.
+
+const int SEED = 0xC0FFEE;
+
+const int<16> ETY_IPV4 = 0x0800;
+const int<8>  PROTO_TCP = 6;
+
+type eth_hdr_t = {
+  int<48> dmac;
+  int<48> smac;
+  int<16> ety;
+}
+
+type ipv4_t = {
+  int<4>  version;
+  int<4>  ihl;
+  int<8>  diffserv;
+  int<16> total_len;
+  int<16> id;
+  int<3>  flags;
+  int<13> frag_offset;
+  int<8>  ttl;
+  int<8>  protocol;
+  int<16> hdr_csum;
+  int<32> src;
+  int<32> dst;
+}
+
+type tcp_t = {
+  int<16> src_port;
+  int<16> dst_port;
+  int<32> seq_no;
+  int<32> ack_no;
+  int<4>  data_offset;
+  int<3>  tcp_res;
+  int<3>  ecn;
+  int<6>  ctrl;
+  int<16> window;
+  int<16> tcp_csum;
+  int<16> urgent_ptr;
+}
+
+// -------- ecmp_group: LPM on dst IP -> (base, count) --------------------
+//
+// install-time data is (base, count) where count must be a power of 2.
+// The action just hands those back; the handler then hashes the 5-tuple
+// and computes `select = base + (hash & (count-1))`. Putting the hash in
+// the handler rather than the action keeps the table's runtime-arg type
+// trivial (passing the 5-tuple as a tuple arg trips a type-checker
+// occurs-check) and makes the ECMP math visible at the call site.
+
+type grp_t = {
+  int<16> grp_base;
+  int<32> grp_count;
+  bool    grp_hit;
+}
+
+action grp_t set_ecmp_params(int<16> base, int<32> count)() {
+  return {grp_base = base; grp_count = count; grp_hit = true};
+}
+
+action grp_t group_drop(int<16> _base, int<32> _count)() {
+  return {grp_base = 0; grp_count = 0; grp_hit = false};
+}
+
+global Table.t<<int<32>, (int<16>, int<32>), (), grp_t>>
+  ecmp_group =
+    Table.create(1024, [set_ecmp_params; group_drop], group_drop, (0, 1));
+
+// -------- ecmp_nhop: exact on ECMP index -> (dmac, dst_ip, port) ---------
+
+type nh_t = {
+  int<48> nh_dmac;
+  int<32> nh_dstip;
+  int<32> nh_port;
+  bool    nh_hit;
+}
+
+action nh_t set_nhop(int<48> dmac, int<32> dst_ip, int<32> port)() {
+  return {nh_dmac = dmac; nh_dstip = dst_ip; nh_port = port; nh_hit = true};
+}
+
+action nh_t nhop_drop(int<48> _d, int<32> _ip, int<32> _p)() {
+  return {nh_dmac = 0; nh_dstip = 0; nh_port = 0; nh_hit = false};
+}
+
+global Table.t<<int<16>, (int<48>, int<32>, int<32>), (), nh_t>>
+  ecmp_nhop =
+    Table.create(64, [set_nhop; nhop_drop], nhop_drop, (0, 0, 0));
+
+// -------- send_frame: exact on egress port -> src MAC -------------------
+
+type frame_t = {
+  int<48> fr_smac;
+  bool    fr_hit;
+}
+
+action frame_t rewrite_mac(int<48> smac)() {
+  return {fr_smac = smac; fr_hit = true};
+}
+
+// On miss the input smac is preserved (the P4 default is NoAction, i.e.
+// "leave smac alone"). The default action returns `fr_hit=false`; the
+// handler then skips the smac rewrite.
+action frame_t frame_pass(int<48> _smac)() {
+  return {fr_smac = 0; fr_hit = false};
+}
+
+global Table.t<<int<32>, int<48>, (), frame_t>>
+  send_frame =
+    Table.create(64, [rewrite_mac; frame_pass], frame_pass, 0);
+
+// -------- events ---------------------------------------------------------
+
+packet event tcp_pkt(eth_hdr_t eth, ipv4_t ip, tcp_t tcp, Payload.t pl);
+
+// -------- handler --------------------------------------------------------
+
+handle tcp_pkt(eth_hdr_t eth, ipv4_t ip, tcp_t tcp, Payload.t pl) {
+  // Verify-side IPv4 checksum (same pattern as basic / basic_tunnel).
+  int<16> verify = hash<16>(checksum, ip);
+  if (verify != 0) {
+    printf("sw %d port %d : bad input csum (verify=%d) dst=%d",
+           self, ingress_port, verify, ip#dst);
+  }
+
+  grp_t g = Table.lookup(ecmp_group, ip#dst, ());
+  if (g#grp_hit) {
+    // 5-tuple hash → bucket index. `count` must be a power of two; we
+    // mask with (count-1) instead of doing a modulo (Lucid has no `%`).
+    int<14> h = hash<14>(SEED, ip#src, ip#dst, ip#protocol,
+                         tcp#src_port, tcp#dst_port);
+    int<16> select = g#grp_base + (int<16>)(h & ((int<14>)(g#grp_count) - 1));
+    nh_t n = Table.lookup(ecmp_nhop, select, ());
+    if (n#nh_hit) {
+      // Apply MAC + dst-IP rewrites and decrement TTL. The src MAC is
+      // patched up below after the send_frame lookup.
+      eth_hdr_t mid_eth = {
+        dmac = n#nh_dmac;
+        smac = eth#smac;
+        ety  = eth#ety
+      };
+      ipv4_t new_ip = {
+        version     = ip#version;
+        ihl         = ip#ihl;
+        diffserv    = ip#diffserv;
+        total_len   = ip#total_len;
+        id          = ip#id;
+        flags       = ip#flags;
+        frag_offset = ip#frag_offset;
+        ttl         = ip#ttl - 1;
+        protocol    = ip#protocol;
+        hdr_csum    = 0;
+        src         = ip#src;
+        dst         = n#nh_dstip
+      };
+
+      frame_t f = Table.lookup(send_frame, n#nh_port, ());
+      int<48> chosen_smac = mid_eth#smac;
+      if (f#fr_hit) { chosen_smac = f#fr_smac; }
+      eth_hdr_t new_eth = {
+        dmac = mid_eth#dmac;
+        smac = chosen_smac;
+        ety  = mid_eth#ety
+      };
+
+      printf("sw %d port %d -> %d : select=%d dst(rewrite)=%d ttl=%d",
+             self, ingress_port, n#nh_port,
+             select, n#nh_dstip, new_ip#ttl);
+
+      generate_port(n#nh_port,
+        tcp_pkt(new_eth,
+                {new_ip with hdr_csum = hash<16>(checksum, new_ip)},
+                tcp, pl));
+    } else {
+      printf("sw %d port %d : ecmp_nhop miss select=%d - drop",
+             self, ingress_port, select);
+    }
+  } else {
+    printf("sw %d port %d : ecmp_group miss dst=%d - drop",
+           self, ingress_port, ip#dst);
+  }
+}
+
+// -------- parser ---------------------------------------------------------
+
+parser main(bitstring pkt) {
+  eth_hdr_t eth = read(pkt);
+  match eth#ety with
+  | LUCID_ETHERTY -> { do_lucid_parsing(pkt); }
+  | 0x0800        -> {
+      ipv4_t ip = read(pkt);
+      match ip#protocol with
+      | PROTO_TCP -> {
+          tcp_t tcp = read(pkt);
+          generate(tcp_pkt(eth, ip, tcp, Payload.parse(pkt)));
+        }
+      | _ -> { drop; }
+    }
+  | _             -> { drop; }
+}
