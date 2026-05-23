@@ -50,6 +50,7 @@ rule token = parse
   | "else"            { ELSE (position lexbuf) }
   | "int"             { TINT (position lexbuf) }
   | "bool"            { TBOOL (position lexbuf) }
+  | "tuple"           { TUPLE (position lexbuf) }
   | "event"           { EVENT (position lexbuf) }
   | "generate"        { GENERATE (position lexbuf) }
   | "generate_switch" { SGENERATE (position lexbuf) }

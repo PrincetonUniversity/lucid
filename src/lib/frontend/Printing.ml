@@ -319,6 +319,7 @@ and e_to_string e =
     Printf.sprintf "hash<<%s>>(%s)" (size_to_string size) (es_to_string es)
   | EFlood e -> Printf.sprintf "flood %s" (exp_to_string e)
   | EProj (e, l) -> exp_to_string e ^ "#" ^ l
+  | EGet (e, l) -> exp_to_string e ^ "#" ^ size_to_string l
   | ERecord lst ->
     Printf.sprintf
       "{%s}"

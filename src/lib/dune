@@ -61,7 +61,9 @@
    sizeInlining
    builtinsTupleElimination
    renaming
+   monomorphicEventArgs
    globalArgElimination
+   refreshTypes
    explicitReturns
    moduleAliasing
    recordElimination

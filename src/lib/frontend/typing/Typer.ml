@@ -261,18 +261,25 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
           (* This commented out code was a workaround to get unification to work 
              for tuple expressions that contained elements from other tuples. 
              The problem was that: tup foo = (bar.1, bar.2)  failed to unify, 
-             because it tried to unify the effect of foo.0 with bar.1, and there 
-             so it ended up trying to unify FSucc(FProj()) with FProj()
-            The solution was to add a case in TyperUnify.try_unify_effect: 
+             because it tried to unify the effect of foo.0 with bar.1, causing 
+             it to attempt unification of FSucc(FProj()) with FProj(). 
+             The workaround is to use the effect of the gotten index, rather 
+             than the index written to. That is acceptable because 
+             it is illegal to dynamically construct tuples of global types, 
+             which are the only tuples with effects that matter. 
+               
+            An attempted alternative solution was to add a case in TyperUnify.try_unify_effect: 
                 | FProj(FVar(tqv)), eff | eff, FProj(FVar(tqv)) -> ...
-            This solves the problem because in such a case, one of the sides 
+            I thought this solved the problem because in such a case, one of the sides 
             is going to be a variable. And it is safe because projecting 
-            does not have an effect itself. *)
-          (* let expected = match (e'.e) with 
+            does not have an effect itself. 
+            However, that change did not solve the problem, so the workaround remains. 
+            *)
+          let expected = match (e'.e) with 
             | EOp(TGet(_, idx), _) -> wrap_effect tuple_eff [None, 0; None, idx]
             | _ -> wrap_effect tuple_eff [None, 0; None, i] 
-          in *)
-          let expected = wrap_effect tuple_eff [None, 0; None, i] in
+          in
+          (* let expected = wrap_effect tuple_eff [None, 0; None, i] in *)
           let derived = (Option.get e'.ety).teffect in           
           unify_effect e.espan expected derived
         )
@@ -377,6 +384,39 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
         }
     in
     env, { e with e = EIndex (inf_e1, idx); ety }
+  | EGet(e1, idx) -> (
+    (* 4/2026 -- preliminary rule based on TGet and EIndex *)
+    let i =
+      match idx with
+      | IConst i -> i
+      | _ ->
+        error_sp e.espan
+        @@ "Index "
+        ^ size_to_string idx
+        ^ " is neither a variable nor a constant."
+    in
+    (* infer tuple type from expression *)
+    let env, inf_e1, inf_ety = infer_exp env e1 |> textract in
+    (* there is no expected type for a tuple *)
+    let size = match inf_ety.raw_ty with 
+      | TTuple(inf_rtys) -> List.length inf_rtys
+      | _ -> failwith "Type error: could not resolve tuple type length"
+    in
+    let expected_rtys = List.init size (fun _ -> (fresh_type ()).raw_ty) in
+    let expected_ty = mk_ty @@ TTuple expected_rtys in
+    unify_ty e.espan inf_ety expected_ty; (* expected type of the tuple *)
+    if i >= size
+      then (
+        let err_str = "Tuple index "^(string_of_int i)^" is out of bounds ("^(string_of_int size)^")" in
+        error_sp e.espan err_str
+      );
+    let ety = Some(
+      ty_eff
+        (List.nth expected_rtys i)
+        (wrap_effect inf_ety.teffect [None, 0; None, i])
+    ) in
+    env, {e with e = EGet(inf_e1, idx); ety}
+  )    
   | EComp (e1, idx, sz) ->
     validate_size e.espan env sz;
     let renamed_idx = Id.freshen idx in
@@ -1263,7 +1303,7 @@ let retrieve_constraints env span id params =
             }
       } ->
     let maps = fresh_maps () in
-    let params2 = List.map (instantiator#visit_ty maps) arg_tys in
+    let params2 = List.map (instantiator#visit_ty maps) arg_tys in (* instantiated event types *)
     let constraints = List.map (instantiator#visit_constr maps) constraints in
     let _ =
       (* FIXME: This isn't quite sufficient -- it won't catch e.g.
@@ -1338,6 +1378,7 @@ let rec infer_parser_step env (step, span) =
     (match exp.e with
      | ECall (cid, args, _) ->
        let params = lookup_parser span env cid in
+       let params = instantiator#visit_params (fresh_maps ()) params in
        let _, inf_args = infer_exps env args in
        List.iter2
          (fun (_, pty) arg ->
@@ -1347,7 +1388,8 @@ let rec infer_parser_step env (step, span) =
        let exp' = call_sp cid inf_args span in
        let exp' = { exp' with ety = Some (mk_ty TEvent) } in
        PCall exp', span
-     | _ ->
+
+      | _ ->
        error_sp
          span
          "Parser bodies can only read, skip, generate, match, or call another \
@@ -1446,24 +1488,23 @@ let rec infer_declaration
         (Id.name id)
         (ty_to_string (lookup_var d.dspan env (Cid.id id))); *)
       env, effect_count, DEvent (id, annot, sort, constr_specs, params)
+
     | DHandler (id, s, body) ->
+      (* Handlers with polymorphic arguments should not constrain those
+         arguments in the body. To check this, we make a generalized
+         copy of the params at the start. *)
+      let generalized_params_start = generalizer#visit_params () (fst body) in
+      (* Re-generalize the entire body to clean up any shared TVar refs
+         that were mutated by the params generalization above, then
+         re-instantiate with a single fresh_maps so params and body
+         get consistent fresh TVars. *)
+      let generalized_body = generalizer#visit_body () body in
+      let body = instantiator#visit_body (fresh_maps ()) generalized_body in
+
       enter_level ();
       let constraints = retrieve_constraints env d.dspan id (fst body) in
-      (* LEFT OFF HERE. Unify handler and event types. *)
-      (* 1. look the type of the event's constructor (follow pattern from EVar inference) *)
-      (* let inst t = instantiator#visit_ty (fresh_maps ()) t in *)
-      (* let inf_ev_ctor_ty = lookup_var d.dspan env (Cid.id id) |> inst in *)
-      (* 2. unify the event's parameters with the handler's parameters *)
-      (* let _ =   match inf_ev_ctor_ty.raw_ty with 
-        | TFun fty -> (
-          match ret_ty.raw_ty with
-        )
-        | _ -> error_sp d.dspan "Error: found a variable with the same name as this handler"
-      in  *)
-      (* match inf_ev_ctor_ty with  *)
 
-
-      (* unify_ty d.dspan ty inf_ety; *)
+      (* type the handler body *)
       let _, inf_body =
         let starting_env =
           { env with current_effect = FZero; constraints }
@@ -1473,11 +1514,50 @@ let rec infer_declaration
         infer_body starting_env body
       in
       leave_level ();
+
+      (* generalize the body *)
       let inf_body = generalizer#visit_body () inf_body in
 
+      (* check that no polymorphic param types have been constrained by inference *)
+      let polymorphic_ty_preserved old_rty new_rty = 
+        equiv_ty ~ignore_effects:true ~qvars_wild:false ~ignore_qvar_ids:true old_rty new_rty 
+      in
+      List.iter2 
+        (fun (old_id, old_ty) (_, new_ty) -> 
+          if not (polymorphic_ty_preserved old_ty new_ty)
+          then 
+            (
+              let err_str = Printf.sprintf 
+                "Parameter %s of handler %s was declared as polymorphic (%s), but was \n\
+                used as a type %s in the handler body. \n\
+                Please declare %s parameter with a concrete type instead."
+                (Id.name old_id) (Id.name id) (ty_to_string old_ty) (ty_to_string new_ty) (Id.name old_id)
+              in
+            error_sp old_ty.tspan @@ err_str)
+        )
+        generalized_params_start
+        (fst inf_body);
 
-
+      (* return the handler with the typed body *)
       env, effect_count, DHandler (id, s, inf_body)
+    | DParser (id, params, parser) ->
+      enter_level ();
+      (* a parser may branch on the ingress port *)
+      let ingress_port_param = (Builtins.ingr_port_id, builtin_tys.ingr_port_ty) in
+      let parser_env =
+        add_locals env (ingress_port_param::params) 
+        |> define_parser Builtins.lucid_parse_id [(Id.create "pkt", ty TBitstring)]
+      in
+      
+      let inf_parser = infer_parser_block parser_env parser in
+      leave_level ();
+
+      let inf_params = generalizer#visit_params () params in
+      let inf_parser = generalizer#visit_parser_block () inf_parser in
+
+      let env = define_parser id params env in
+      env, effect_count, DParser (id, inf_params, inf_parser)
+
     | DFun (id, ret_ty, constr_specs, body) ->
       (* a function declaration needs to have all the 
          local builtins available to it as well. *)
@@ -1531,6 +1611,7 @@ let rec infer_declaration
         @@ "Function "
         ^ Id.name id
         ^ " violates ordering constraints";
+      (* add the function's type to the environment for later use. *)
       let fty : func_ty =
         { arg_tys = List.map (fun (_, ty) -> ty) (fst inf_body)
         ; ret_ty
@@ -1540,10 +1621,11 @@ let rec infer_declaration
         }
         |> generalizer#visit_func_ty ()
       in
-      let inf_body = generalizer#visit_body () inf_body in
-      (* add the function's type to the environment for later use. *)
       let env = define_const id (mk_ty @@ TFun fty) env in
+      (* generalize the function's body *)
+      let inf_body = generalizer#visit_body () inf_body in
       env, effect_count, DFun (id, ret_ty, constr_specs, inf_body)
+
     | DMemop (id, params, memop_body) ->
       enter_level ();
       let inf_body = infer_memop env params memop_body in
@@ -1723,20 +1805,7 @@ let rec infer_declaration
       ( env
       , effect_count
       , DActionConstr (id, ret_ty, const_params, (params, inf_action_body)) )
-    | DParser (id, params, parser) ->
-      enter_level ();
-      (* a parser may branch on the ingress port *)
-      let ingress_port_param = (Builtins.ingr_port_id, builtin_tys.ingr_port_ty) in
-      let parser_env =
-        add_locals env (ingress_port_param::params) 
-        |> define_parser Builtins.lucid_parse_id [(Id.create "pkt", ty TBitstring)]
-      in
-      
-      let inf_parser = infer_parser_block parser_env parser in
-      leave_level (); (* bug fix: parser never left level *)
-       
-      let env = define_parser id params env in
-      env, effect_count, DParser (id, params, inf_parser)
+
   in
   let new_d = { d with d = new_d } in
   Wellformed.check_qvars new_d;
