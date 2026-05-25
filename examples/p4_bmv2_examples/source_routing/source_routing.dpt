@@ -1,33 +1,25 @@
 // Lucid port of the P4 "source_routing" tutorial.
 //
-// Packets with ether-type 0x1234 carry a *stack* of (bos:1, port:15) labels
-// between ethernet and IPv4. Each switch on the route reads the top label,
-// forwards on the encoded port, and pops the label. Whichever label has
-// bos=1 marks the *last* hop — that switch strips the source-route header
-// and emits the inner IPv4 packet plain.
+// Packets with ether-type 0x1234 carry a stack of {bos:1, port:15} labels
+// between ethernet and IPv4. Each switch on the route pops the top label 
+// and forwards on the encoded port. The label with bos=1 marks the 
+// last hop, which strips the source-route header and emits the inner 
+// IPv4 packet plain.
 //
-// Three structural differences from the P4 upstream:
+// This example shows:
 //
-//  1. **Non-recursive parsers.** Lucid parsers cannot self-call (see
-//     sources/lucid/src/lib/frontend/transformations/MonomorphicEventArgs.ml:253),
-//     so the P4 `parse_srcRouting → parse_srcRouting` self-loop is
-//     manually unrolled as a chain `sr_chain_0` .. `sr_chain_3`. MAX_HOPS
-//     is therefore a compile-time constant (here, 4) rather than runtime.
-//
+//  1. **Non-recursive parsers.** Lucid does not allow recursion in parsers, 
+//     so parse_more_sr is unrolled manually. Note that we can take 
+//     advantage of the fact that Lucid supports parser redeclarations 
+//     to make unrolling (mostly) a copy-paste process.
 //  2. **No arithmetic in parsers.** We cannot `read` a 16-bit label and
-//     then mask off the bos bit inside the parser. Instead each label is
-//     split at the wire boundary: a 1-bit `read` for bos and a 15-bit
-//     `read` for port. Wire format is identical (16 bits per label, bos
-//     in the top bit).
-//
-//  3. **One event per stack depth.** Lucid's auto-deparser emits the
-//     event's full field list on egress, with no way to make the output
-//     length depend on a runtime value. So a single `sr_pkt(... ports[4],
-//     n_labels)` event can't produce a variable-length wire packet. We
-//     define `sr1`..`sr4`, one per supported depth, and the handler
-//     "pops" by re-emitting as the next-smaller variant. The terminal
-//     case (`sr1`) strips the source-route header entirely and emits a
-//     plain `ipv4_pkt` instead.
+//     then mask off the bos bit inside the parser. Instead, we read 
+//     the structured wire format.
+//  3. **Polymorphic tuples in packet events.** sr_in and sr_pkt 
+//     use polymorphic tuple arguments ("auto sr_tail") to 
+//     carry the tail of the the source routing header chain. 
+//     This allows them to be generic with respect to all of the 
+//     chain except the first record. 
 
 const int<16> ETY_SRC_ROUTE = 0x1234;
 const int<16> ETY_IPV4      = 0x0800;
@@ -53,36 +45,24 @@ type ipv4_t = {
   int<32> dst;
 }
 
+type sr_t = {
+  int<1> bos; 
+  int<15> p;
+}
+
 // -------- events ---------------------------------------------------------
 //
-// One sr event per stack depth (1..4). The wire layout of each event is
-// exactly (bos:1 + port:15) per label, then the IPv4 header and payload.
-// b_i is always 0 except for the *last* label in each event, which has
-// b_i = 1 (per the protocol).
 
-packet event sr1(eth_hdr_t eth,
-                 int<1> b0, int<15> p0,
-                 ipv4_t ip, Payload.t pl);
-packet event sr2(eth_hdr_t eth,
-                 int<1> b0, int<15> p0,
-                 int<1> b1, int<15> p1,
-                 ipv4_t ip, Payload.t pl);
-packet event sr3(eth_hdr_t eth,
-                 int<1> b0, int<15> p0,
-                 int<1> b1, int<15> p1,
-                 int<1> b2, int<15> p2,
-                 ipv4_t ip, Payload.t pl);
-packet event sr4(eth_hdr_t eth,
-                 int<1> b0, int<15> p0,
-                 int<1> b1, int<15> p1,
-                 int<1> b2, int<15> p2,
-                 int<1> b3, int<15> p3,
-                 ipv4_t ip, Payload.t pl);
+packet event sr_bos(eth_hdr_t eth, sr_t sr, ipv4_t ip, Payload.t pl);
+packet event sr_in(eth_hdr_t eth, sr_t sr, auto sr_tail, ipv4_t ip, Payload.t pl);
 
 // Final-hop emission: plain IPv4 packet with the source-route header
 // stripped. `{skip;}` means "no handler" — the event is only used as the
 // output of generate_port.
 packet event ipv4_pkt(eth_hdr_t eth, ipv4_t ip, Payload.t pl) {skip;}
+// Intermediate hop emission: first sr shim popped off
+packet event sr_pkt(eth_hdr_t eth, auto sr_tail, ipv4_t ip, Payload.t pl) {skip;}
+
 
 // -------- handlers -------------------------------------------------------
 //
@@ -90,9 +70,8 @@ packet event ipv4_pkt(eth_hdr_t eth, ipv4_t ip, Payload.t pl) {skip;}
 // hop: rewrite ethertype, emit plain ipv4_pkt. For srN (N > 1), emit
 // srN-1 with the remaining labels.
 
-handle sr1(eth_hdr_t eth, int<1> b0, int<15> p0,
-           ipv4_t ip, Payload.t pl) {
-  int<32> port = (int<32>)p0;
+handle sr_bos(eth_hdr_t eth, sr_t sr, ipv4_t ip, Payload.t pl) {
+  int<32> port = (int<32>)(sr#p);
   eth_hdr_t new_eth = {
     dmac = eth#dmac;
     smac = eth#smac;
@@ -100,103 +79,62 @@ handle sr1(eth_hdr_t eth, int<1> b0, int<15> p0,
   };
   printf("sw %d port %d -> %d : sr_pop (last, strip header) ttl=%d",
          self, ingress_port, port, ip#ttl);
+  ipv4_t ip  = {ip with ttl = ip#ttl - 1};
   generate_port(port, ipv4_pkt(new_eth, ip, pl));
 }
 
-handle sr2(eth_hdr_t eth, int<1> b0, int<15> p0,
-           int<1> b1, int<15> p1,
-           ipv4_t ip, Payload.t pl) {
-  int<32> port = (int<32>)p0;
-  printf("sw %d port %d -> %d : sr_pop (remaining=1) ttl=%d",
-         self, ingress_port, port, ip#ttl);
-  generate_port(port, sr1(eth, b1, p1, ip, pl));
+
+handle sr_in(eth_hdr_t eth, sr_t sr, auto sr_tail, ipv4_t ip, Payload.t pl) {
+  int<32> port = (int<32>)(sr#p);
+  printf("sw %d port %d -> %d : sr_pop ttl=%d",
+         self, ingress_port, sr#p, ip#ttl);
+  ipv4_t ip  = {ip with ttl = ip#ttl - 1};
+  generate_port(port, sr_pkt(eth, sr_tail, ip, pl));
 }
 
-handle sr3(eth_hdr_t eth, int<1> b0, int<15> p0,
-           int<1> b1, int<15> p1,
-           int<1> b2, int<15> p2,
-           ipv4_t ip, Payload.t pl) {
-  int<32> port = (int<32>)p0;
-  printf("sw %d port %d -> %d : sr_pop (remaining=2) ttl=%d",
-         self, ingress_port, port, ip#ttl);
-  generate_port(port, sr2(eth, b1, p1, b2, p2, ip, pl));
-}
-
-handle sr4(eth_hdr_t eth, int<1> b0, int<15> p0,
-           int<1> b1, int<15> p1,
-           int<1> b2, int<15> p2,
-           int<1> b3, int<15> p3,
-           ipv4_t ip, Payload.t pl) {
-  int<32> port = (int<32>)p0;
-  printf("sw %d port %d -> %d : sr_pop (remaining=3) ttl=%d",
-         self, ingress_port, port, ip#ttl);
-  generate_port(port, sr3(eth, b1, p1, b2, p2, b3, p3, ip, pl));
-}
 
 // -------- parser chain ---------------------------------------------------
 //
-// Each step reads one (bos, port) label and either finalises (bos=1,
-// generate srN where N is the number of labels accumulated so far + 1)
-// or recurses into the next step.
-
-parser sr_chain_3(bitstring pkt, eth_hdr_t eth,
-                  int<1> b0, int<15> q0,
-                  int<1> b1, int<15> q1,
-                  int<1> b2, int<15> q2) {
-  int<1>  bos3 = read(pkt);
-  int<15> q3   = read(pkt);
-  match bos3 with
-  | 1 -> {
-      ipv4_t ip = read(pkt);
-      Payload.t pl = Payload.parse(pkt);
-      generate(sr4(eth, b0, q0, b1, q1, b2, q2, bos3, q3, ip, pl));
-    }
-  | _ -> { drop; }
+parser parse_ip(bitstring pkt, eth_hdr_t eth, sr_t sr_top, auto sr_tail) {
+  ipv4_t ip = read(pkt);
+  Payload.t pl = Payload.parse(pkt);
+  generate(sr_in(eth, sr_top, sr_tail, ip, pl));
 }
 
-parser sr_chain_2(bitstring pkt, eth_hdr_t eth,
-                  int<1> b0, int<15> q0,
-                  int<1> b1, int<15> q1) {
-  int<1>  bos2 = read(pkt);
-  int<15> q2   = read(pkt);
-  match bos2 with
-  | 1 -> {
-      ipv4_t ip = read(pkt);
-      Payload.t pl = Payload.parse(pkt);
-      generate(sr3(eth, b0, q0, b1, q1, bos2, q2, ip, pl));
-    }
-  | _ -> { sr_chain_3(pkt, eth, b0, q0, b1, q1, bos2, q2); }
+parser parse_more_sr(bitstring pkt, eth_hdr_t eth, sr_t sr_top, auto sr_tail) {
+    sr_t sr = read(pkt);
+    match sr#bos with
+    | 1 -> { parse_ip(pkt, eth, sr_top, (sr_tail, sr)); }
+    | 0 -> { drop; }
 }
-
-parser sr_chain_1(bitstring pkt, eth_hdr_t eth,
-                  int<1> b0, int<15> q0) {
-  int<1>  bos1 = read(pkt);
-  int<15> q1   = read(pkt);
-  match bos1 with
-  | 1 -> {
-      ipv4_t ip = read(pkt);
-      Payload.t pl = Payload.parse(pkt);
-      generate(sr2(eth, b0, q0, bos1, q1, ip, pl));
-    }
-  | _ -> { sr_chain_2(pkt, eth, b0, q0, bos1, q1); }
+parser parse_more_sr(bitstring pkt, eth_hdr_t eth, sr_t sr_top, auto sr_tail) {
+    sr_t sr = read(pkt);
+    match sr#bos with
+    | 1 -> { parse_ip(pkt, eth, sr_top, (sr_tail, sr)); }
+    | 0 -> { parse_more_sr(pkt, eth, sr_top, (sr_tail, sr)); }
 }
+parser parse_more_sr(bitstring pkt, eth_hdr_t eth, sr_t sr_top, auto sr_tail) {
+    sr_t sr = read(pkt);
+    match sr#bos with
+    | 1 -> { parse_ip(pkt, eth, sr_top, (sr_tail, sr)); }
+    | 0 -> { parse_more_sr(pkt, eth, sr_top, (sr_tail, sr)); }
+}
+parser parse_sr(bitstring pkt, eth_hdr_t eth) { // eth | sr
+  sr_t sr = read(pkt);
+  match sr#bos with
+  | 1 -> { 
+    ipv4_t ip = read(pkt);
+    Payload.t pl = Payload.parse(pkt);
+    generate(sr_bos(eth, sr, ip, pl));
+  }
+  | _ -> { parse_more_sr(pkt, eth, sr, ()); }
 
-parser sr_chain_0(bitstring pkt, eth_hdr_t eth) {
-  int<1>  bos0 = read(pkt);
-  int<15> q0   = read(pkt);
-  match bos0 with
-  | 1 -> {
-      ipv4_t ip = read(pkt);
-      Payload.t pl = Payload.parse(pkt);
-      generate(sr1(eth, bos0, q0, ip, pl));
-    }
-  | _ -> { sr_chain_1(pkt, eth, bos0, q0); }
 }
 
 parser main(bitstring pkt) {
   eth_hdr_t eth = read(pkt);
   match eth#ety with
   | LUCID_ETHERTY  -> { do_lucid_parsing(pkt); }
-  | 0x1234         -> { sr_chain_0(pkt, eth); }
+  | 0x1234         -> { parse_sr(pkt, eth); }
   | _              -> { drop; }
 }

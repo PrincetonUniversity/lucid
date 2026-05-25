@@ -1,12 +1,10 @@
 # `source_routing`
 
-Packets with ether-type `0x1234` carry a *stack* of `(bos:1, port:15)` labels
-between ethernet and IPv4. Each switch on the route reads the top label,
-forwards on the encoded port, and pops the label. Whichever label has
-`bos=1` marks the *last* hop — that switch strips the source-route header
-entirely and emits the inner IPv4 packet plain.
-
-No tables. No control plane. The source route is in the packet.
+Packets with ether-type 0x1234 carry a stack of {bos:1, port:15} labels
+between ethernet and IPv4. Each switch on the route pops the top label 
+and forwards on the encoded port. The label with bos=1 marks the 
+last hop, which strips the source-route header and emits the inner 
+IPv4 packet plain.
 
 ## Files
 - [source_routing.dpt](source_routing.dpt) — the Lucid program.
@@ -16,8 +14,8 @@ No tables. No control plane. The source route is in the packet.
 
 ## Running
 ```bash
-/opt/anaconda3/bin/python3 gen_spec.py
-../../../sources/lucid/dpt source_routing.dpt --spec source_routing.json --silent
+python3 gen_spec.py
+../../../dpt source_routing.dpt --spec source_routing.json --silent
 ```
 
 ## Test cases (defined in `gen_spec.py`)
@@ -52,13 +50,11 @@ source-route header.
   Specifically, sharing a single `zero` variable across two padding slots
   in an event constructor doesn't compile — each slot needs its own
   named local. (This was a 30-minute mystery the first time.)
-- **Parser event args must be bare variables (or `Payload.parse(pkt)`).**
+- **Parser event args must be bare variables, `Payload.parse(pkt)`, or tuples.**
   Literals, vector expressions, and record constructors in a parser-side
-  `generate(...)` all get rejected. Hoist them into locals first.
-  Discovered while trying to pass `[p0; p1; 0; 0]` as a single event arg.
-- **Vectors in packet-event args don't survive slot analysis.** A field
-  of type `int<15>[4]` on a `packet event` lowers through vector→tuple→
-  flat-args, and the analyzer trips on the flattened literal-zero
-  positions. Use explicit scalar fields instead. (Non-packet events
-  appear to handle vector args fine — see
-  `sources/lucid/examples/publications/popl22/starflow.dpt`.)
+  `generate(...)` all get rejected for now.
+- **Polymorphic tuples for generic handlers.** The combination of handlers 
+  with polymorphic arguments and tuples make it clean to express 
+  handlers that are generic to parts of the header stack.
+- **Vectors in packet-event args do not currently work.**  Use scalar 
+   fields instead. Note: non-packet events handle vector args fine.
