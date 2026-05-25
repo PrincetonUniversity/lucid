@@ -148,7 +148,7 @@ let update_calls emap ds : event_decl IdMap.t * decls =
               and we will need to replace it with the appropriate monomorphic instance later *)
             let args_are_polymorphic = List.exists (fun arg -> is_polymorphic_ty (Option.get arg.ety)) args in
             if args_are_polymorphic then (
-              print_endline ("[event_ctor_replacer] arguments are polymorphic, so we will not replace this call with a monomorphic one...");
+              (* print_endline ("[event_ctor_replacer] arguments are polymorphic, so we will not replace this call with a monomorphic one..."); *)
               super#visit_exp () exp 
             )
             else (
@@ -471,23 +471,36 @@ let monomorphize_parsers builtin_tys ds =
   ds
 ;;
 
-let eliminate_prog builtin_tys ds =
-  let ds = RefreshTypes.refresh_prog ds in
-  let ds = Typer.infer_prog builtin_tys ds in
+let monomorphize_events builtin_tys ds = 
+  let max_iters = 100 in
+  (* replace polymorphic declarations with monomorphic copies *)
+  let rec loop emap ds iter = 
+    if iter > max_iters
+    then
+      failwith
+        (Printf.sprintf
+           "[MonomorphicEventArgs] parser monomorphization did not converge in \
+            %d iterations"
+           max_iters);
+    let emap', ds = update_calls emap ds in
+    if IdMap.equal event_decl_equal emap emap' then ds
+    else 
+      let ds = update_decls emap' ds in
+      (* type check to infer all the polymorphic args inside of event calls  *)
+      let ds = RefreshTypes.refresh_prog ds in
+      let ds = Typer.infer_prog builtin_tys ds in      
+      loop emap' ds (iter + 1)
+  in
+  let ds = loop IdMap.empty ds 0 in
 
-  (* monomorphize parsers first, so that any polymorphic events referenced by
-     parser bodies get concrete arg types in the duplicated parser copies *)
-  let ds = monomorphize_parsers builtin_tys ds in
-
+  (* one-pass monomorphizer *)
+  (*
   (* collect monomorphic calls (and replace their event names) *)
   let emap, ds = update_calls IdMap.empty ds in
-  (* replace polymorphic declarations with monomorphic copies *)
   let ds = update_decls emap ds in
-
   (* type check to infer all the polymorphic args inside of event calls  *)
   let ds = RefreshTypes.refresh_prog ds in
   let ds = Typer.infer_prog builtin_tys ds in
-
   (* run the call collector / updator again, for all the calls in the monomorphic
      generated handlers, which are no longer polymorphic *)
   (* print_endline "------ Monomorphization second pass -------"; *)
@@ -502,6 +515,7 @@ let eliminate_prog builtin_tys ds =
     failwith "[MonomorphicEventArgs] elimination of polymorphic event encountered\
     transitive polymorphism that requires more than 2 passes. This is not yet supported.";
   ignore emap';
+  *)
 
     (* print_endline "-------- program at debug point --------"; *)
   (* Printing.decls_to_string ds |> print_endline; *)
@@ -512,6 +526,20 @@ let eliminate_prog builtin_tys ds =
 
   (* reset event numbers *)
   let ds = EventFormat.set_event_nums ds in 
+  ds
+;;
+
+
+
+let eliminate_prog builtin_tys ds =
+  let ds = RefreshTypes.refresh_prog ds in
+  let ds = Typer.infer_prog builtin_tys ds in
+
+  (* monomorphize parsers first, so that any polymorphic events referenced by
+     parser bodies get concrete arg types in the duplicated parser copies *)
+  let ds = monomorphize_parsers builtin_tys ds in
+
+  let ds = monomorphize_events builtin_tys ds in
 
   (* ensure all names are unique (TODO: should be taken care of inside the event / handler copying function) *)
   let renaming, ds = Renaming.rename ds in
@@ -519,10 +547,6 @@ let eliminate_prog builtin_tys ds =
   let ds = Typer.infer_prog builtin_tys ds in
   let ds = RefreshTypes.refresh_prog ds in
 
-  (* print_endline "---------- Output decls -----------";
-  Printing.decls_to_string ds |> print_endline;
-  print_endline "---------- Output decls -----------"; *)
-  (* exit 1; *)
   renaming, ds
 ;;
 
