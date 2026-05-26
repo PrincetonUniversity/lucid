@@ -154,26 +154,8 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
         @@ !(fty.constraints)
       in
       new_env, { e with e = ECall (f, inferred_args, unordered); ety = Some fty.ret_ty }
-    (* Special case for action constructor. TODO: make actions constructors just be functions *)
     | TActionConstr(_) -> (
       failwith "TActionConstr is not expected to ever be reached"
-      (* let env, inferred_args = infer_exps env args in
-      let fty : acn_ctor_ty =
-        { aconst_param_tys = List.map (fun arg -> Option.get arg.ety) inferred_args
-        ; aacn_ty = {
-            aarg_tys = List.init (List.length acn_ctor_ty.aacn_ty.aarg_tys) (fun _ -> fresh_type ());
-            aret_tys = List.init (List.length acn_ctor_ty.aacn_ty.aret_tys) (fun _ -> fresh_type ());}
-        }
-      in
-      unify_raw_ty e.espan (TActionConstr fty) inferred_fty.raw_ty;
-      let aacn_ty = {
-        aarg_tys = List.map strip_links fty.aacn_ty.aarg_tys;
-        aret_tys = List.map strip_links fty.aacn_ty.aret_tys;
-        }
-      in
-      let acn_ty = ty@@TAction (aacn_ty) in
-      let acn_ty = strip_links acn_ty in
-      env, { e with e = ECall (f, inferred_args, unordered); ety = Some (acn_ty) } *)
     )
     | _ -> error_sp e.espan "Cannot call non-function"
   )
@@ -204,6 +186,9 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
         else inst ty
         | None -> error_sp e.espan @@ "Unknown label " ^ List.hd labels ^" in record exp: "^(Printing.exp_to_string e)
       in
+    (* mk_ty wraps the type with a fresh, unconstrained effect, 
+       which is fine because there are no effectful globals
+       (would produce an error in expected_ty above) *)
     let inf_ety =
       TRecord
         (List.map2 (fun l e -> l, (Option.get e.ety).raw_ty) labels inf_es)
@@ -248,66 +233,49 @@ let rec infer_exp (env : env) (e : exp) : env * exp =
       inf_entries;
     env, { e with e = EWith (inf_base, inf_entries); ety = Some expected_ty }
   | ETuple es ->
-    let env, inf_es = infer_exps env es in
+    let env, inf_es = infer_exps env es in (* infer the types and effects of each inner element of the tuple*)
+    (* form check *)
+    List.iter
+      (fun e' ->
+        if (not env.in_global_def) && is_global (Option.get e'.ety)
+        then error_sp e'.espan "Cannot dynamically create tuples containing global types")
+      inf_es;
+    (* effect unification *)
+    (* This is a vestigial. *)
+    (* It checks that effect ordering is preserved internally, 
+       which only blocks programs with global tuples constructed 
+       from other globals in the rhs constructor expression. 
+       But this is not the right place to catch such programs, e.g.,
+       the ERecord and EVector cases let them through anyways. *)
     let tuple_eff = fresh_effect () in
     List.iteri
       (fun i e' ->
-        if (not env.in_global_def) && is_global (Option.get e'.ety)
-        then
-          error_sp
-            e'.espan
-            "Cannot dynamically create tuples containing global types"
-        else (
-          (* This commented out code was a workaround to get unification to work 
-             for tuple expressions that contained elements from other tuples. 
-             The problem was that: tup foo = (bar.1, bar.2)  failed to unify, 
-             because it tried to unify the effect of foo.0 with bar.1, causing 
-             it to attempt unification of FSucc(FProj()) with FProj(). 
-             The workaround is to use the effect of the gotten index, rather 
-             than the index written to. That is acceptable because 
-             it is illegal to dynamically construct tuples of global types, 
-             which are the only tuples with effects that matter. 
-               
-            An attempted alternative solution was to add a case in TyperUnify.try_unify_effect: 
-                | FProj(FVar(tqv)), eff | eff, FProj(FVar(tqv)) -> ...
-            I thought this solved the problem because in such a case, one of the sides 
-            is going to be a variable. And it is safe because projecting 
-            does not have an effect itself. 
-            However, that change did not solve the problem, so the workaround remains. 
-            *)
-          let expected = match (e'.e) with 
-            | EOp(TGet(_, idx), _) -> wrap_effect tuple_eff [None, 0; None, idx]
-            | _ -> wrap_effect tuple_eff [None, 0; None, i] 
-          in
-          (* let expected = wrap_effect tuple_eff [None, 0; None, i] in *)
-          let derived = (Option.get e'.ety).teffect in           
-          unify_effect e.espan expected derived
-        )
-      )
-      inf_es;
+        if is_global (Option.get e'.ety) then (
+          let expected = wrap_effect tuple_eff [None, 0; None, i] in
+          unify_effect e.espan expected (Option.get e'.ety).teffect))
+    inf_es;
     let final_ety =
-      ty_eff (TTuple (List.map (fun e -> (Option.get e.ety).raw_ty) inf_es)) tuple_eff
+      TTuple (List.map (fun e -> (Option.get e.ety).raw_ty) inf_es) |> mk_ty
     in
     env, { e with e = ETuple inf_es; ety = Some final_ety }
-
-
   | EVector es ->
     let env, inf_es = infer_exps env es in
-    let ety = fresh_type () in
-    List.iteri
-      (fun i e' ->
+    (* form check *)
+    List.iter
+      (fun e' ->
         if (not env.in_global_def) && is_global (Option.get e'.ety)
-        then
-          error_sp
-            e'.espan
-            "Cannot dynamically create vectors containing global types"
-        else (
-          let expected =
-            { ety with teffect = wrap_effect ety.teffect [None, 0; None, i] }
-          in
-          unify_ty e.espan expected (Option.get e'.ety)))
+        then error_sp e'.espan "Cannot dynamically create vectors containing global types")
       inf_es;
-    let final_ety = TVector (ety.raw_ty, IConst (List.length es)) |> mk_ty in
+    (* type unification *)
+    let fresh_ety = fresh_type () in
+    List.iteri 
+      (fun i e' ->
+        let expected =
+          { fresh_ety with teffect = wrap_effect fresh_ety.teffect [None, 0; None, i] }
+        in
+        unify_ty e.espan expected (Option.get e'.ety))
+    inf_es;
+    let final_ety = TVector (fresh_ety.raw_ty, IConst (List.length es)) |> mk_ty in
     env, { e with e = EVector inf_es; ety = Some final_ety }
   | EIndex (e1, IUser (Id idx)) ->
     let env, inf_e1, inf_e1ty = infer_exp env e1 |> textract in
