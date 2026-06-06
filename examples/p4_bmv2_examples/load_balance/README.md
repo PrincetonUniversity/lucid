@@ -18,8 +18,8 @@ unicast packet.
 
 ## Running
 ```bash
-/opt/anaconda3/bin/python3 gen_spec.py
-../../../sources/lucid/dpt load_balance.dpt --spec load_balance.json --silent
+./gen_spec.py
+dpt load_balance.dpt --spec load_balance.json --silent
 ```
 
 ## Topology
@@ -53,11 +53,9 @@ The handler walks three tables in series for every TCP packet:
 4. **`send_frame`** (exact on `nh_port`) returns `(fr_smac, fr_hit)`.
    On miss, the input smac is preserved (matches P4's NoAction default).
 
-The handler then rewrites the ethernet header, decrements TTL, and
-recomputes the IPv4 checksum (same `hash<16>(checksum, new_ip)` pattern
-as `basic` and `basic_tunnel`).
+The handler then rewrites/updates headers and generates the packet event. 
 
-## Test cases (defined in `gen_spec.py`)
+## Test cases
 - Six TCP flows from `h1 → 10.0.0.1` with different source ports
   (1111…6666). All 6 hit s1's `ecmp_group` entry for 10.0.0.1 and split
   across `{select=0 → h2, select=1 → h3}` based on hash. Expected: both
@@ -70,7 +68,7 @@ as `basic` and `basic_tunnel`).
 After a run, scan the `Exits` list and confirm packets show up at both
 `1:1` (h2's port) and `2:1` (h3's port).
 
-## Notable design choices
+## Notes
 - **`(int<W>)(rec#field)` not `(int<W>)rec#field`.** Casts bind tighter
   than `#` in Lucid, so the field-access has to be parenthesized.
 - **gen_spec.py emits the whole spec.** topology + 11 `Table.install`
