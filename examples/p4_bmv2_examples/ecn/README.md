@@ -1,19 +1,18 @@
 # `ecn`
 
-ECN-marks (and drops) IPv4 packets based on a synthesized queue-depth
+ECN-marks (and drops) IPv4 packets based on a queue-depth
 signal. We also implement a basic queue model:
 
 - A 1-cell `queuedepth` array stands in for the per-port queue.
-- Every IPv4 packet bumps the cell atomically and reads back the new
-  depth.
+- Every IPv4 packet increments the depth.
 - A self-recursive `queue_decr` event drains the cell by 1 each time
   it fires. We launch it once from the spec; the handler re-arms
   itself via `generate(queue_decr())` for the rest of the simulation.
 
 Three regimes:
 
-| Depth (post-incr) | Action                  |
-|-------------------|-------------------------|
+| Depth (post-incr)   | Action                  |
+|---------------------|-------------------------|
 | `<= ECN_THRESHOLD`  | forward unchanged       |
 | `<= DROP_THRESHOLD` | forward with ECN = 0b11 |
 | `>  DROP_THRESHOLD` | drop (no generate)      |
@@ -28,8 +27,8 @@ back-to-back packets cleanly walks the queue through all three.
 
 ## Running
 ```bash
-/opt/anaconda3/bin/python3 gen_spec.py
-../../../sources/lucid/dpt ecn.dpt --spec ecn.json --silent
+./gen_spec.py
+dpt ecn.dpt --spec ecn.json --silent
 ```
 
 ## Expected trace
@@ -53,18 +52,20 @@ Exit packets confirm the marking in the wire bytes — the TOS byte
 flips from `0x01` (ECT(1) preserved) to `0x03` (CE marked) right at
 the ECN threshold, and the IPv4 checksum updates accordingly.
 
-## Notable Lucid details
+## Notes
 
-- **Recursive event for the drain.** A recursive event can be used to implement a background thread -- a handler that executes periodically over time. `queue_decr`'s handler is:
+- **Background threads.** A recursive event can be used to implement a 
+  background thread -- a handler that executes periodically over time. 
+  `queue_decr`'s handler is a simple example:
   ```
   handle queue_decr() {
     Array.setm(queuedepth, 0, sub1_floor, 0);
     generate(queue_decr());
   }
   ```
-  The delay between `generate(e)` and `e`'s arrival and handler execution is the drain rate.
-- **Memops are restricted enough to be just-barely-enough.** The
-  drain uses `sub1_floor`:
+  The delay between `generate(e)` and `e`'s arrival and 
+  handler execution is the drain rate.
+- **Memops are restrictive but capable.** The drain uses `sub1_floor`:
   ```
   memop sub1_floor(int mv, int unused) {
     if (mv == 0) { return 0; }
@@ -72,11 +73,12 @@ the ECN threshold, and the IPv4 checksum updates accordingly.
   }
   ```
   Each branch uses `mv` at most once (in the if condition or in the
-  return), which keeps the memop within the "compiles to one atomic
-  instruction" budget.
+  return), which keeps the memop within the footprint of a single 
+  atomic instruction (on the Tofino).
 - **`Array.update` with the same memop on both sides** is the
   standard "atomic increment-and-fetch" idiom — get-side returns
   `mv+1`, set-side writes `mv+1`. The returned new depth is what we
   branch on.
-- **Drop = don't generate.** No special "drop" call from a handler.
-  Just skip the `generate_port` and the packet vanishes.
+- **Explicit packet generation.** If a handler doesn't 
+  generate a packet event with `generate_port`, it is equivalent 
+  to dropping the packet. 

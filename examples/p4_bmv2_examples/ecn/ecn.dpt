@@ -1,24 +1,23 @@
-// Lucid port of the P4 "ecn" tutorial.
-//
-// The upstream P4 program marks ECN on a packet when the egress
-// queue depth exceeds a threshold. Lucid's interpreter doesn't model
-// queues, so we *synthesize* a queue depth signal:
-//
-//   - A 1-cell `queuedepth` array stands in for the per-port queue.
-//   - Every IPv4 packet bumps the cell on its way through.
-//   - A self-recursive `queue_decr` event drains the cell by 1 each
-//     time it fires. We launch it once from the spec; it loops on
-//     itself for the rest of the simulation.
-//
-// Marking policy:
+// ecn marking example.
+// ECN (Explicit Congestion Notification) is a mechanism for end-to-end
+// congestion signaling. It allows a switch to mark a packet instead of
+// dropping it when the queue is congested, so the sender can react by
+// reducing its sending rate before packets start getting dropped.
+
+// This example implements a simple ECN marking policy:
 //   - depth <= ECN_THRESHOLD              → forward unchanged
 //   - ECN_THRESHOLD < depth <= DROP_THRESHOLD → forward with ECN bits = 0b11 (CE)
 //   - depth >  DROP_THRESHOLD             → drop (no generate)
 //
-// In a real implementation the queue would be per-egress-port and the
-// depth would be sampled from hardware metadata at egress. The
-// "one-cell + recursive drain" approximation is enough to demonstrate
-// the three regimes (clean / marked / dropped) end to end.
+// For this example, we model queue rates as follows:
+//
+//   - A 1-cell `queuedepth` array counts packets per egress port.
+//   - Every IPv4 packet increments its cell before forwarding.
+//   - A self-recursive `queue_decr` event drains the cell by 1 each
+//     time it fires, representing a queue that drains at a constant rate. 
+//
+// In a full implementation queue depth could also be updated by 
+// an egress handler thread, as it is often only observable there in hardware.
 
 const int ECN_THRESHOLD  = 4;
 const int DROP_THRESHOLD = 8;
@@ -121,20 +120,9 @@ handle ipv4_pkt(eth_hdr_t eth, ipv4_t ip, Payload.t pl) {
         smac = eth#dmac;
         ety  = eth#ety
       };
-      ipv4_t new_ip = {
-        version     = ip#version;
-        ihl         = ip#ihl;
-        diffserv    = ip#diffserv;
-        ecn         = new_ecn;
-        total_len   = ip#total_len;
-        id          = ip#id;
-        flags       = ip#flags;
-        frag_offset = ip#frag_offset;
+      ipv4_t new_ip = {ip with 
         ttl         = ip#ttl - 1;
-        protocol    = ip#protocol;
         hdr_csum    = 0;
-        src         = ip#src;
-        dst         = ip#dst
       };
       generate_port(d#fwd_port,
         ipv4_pkt(new_eth,
