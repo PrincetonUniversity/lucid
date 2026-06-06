@@ -114,7 +114,6 @@ rule token = parse
   | "=="              { EQ (position lexbuf) }
   | "!="              { NEQ (position lexbuf)}
   | "<<"              { LSHIFT (position lexbuf) }
-  | ">>"              { RSHIFT (position lexbuf) }
   | "<="              { LEQ (position lexbuf) }
   | ">="              { GEQ (position lexbuf) }
   | "<"               { LESS (position lexbuf) }

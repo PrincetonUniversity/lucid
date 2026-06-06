@@ -164,7 +164,6 @@
 %token <Span.t> GEQ
 %token <Span.t> COLON
 %token <Span.t> LSHIFT
-%token <Span.t> RSHIFT
 %token <Span.t> END
 %token <Span.t> FOR
 %token <Span.t> SIZECAST
@@ -186,7 +185,7 @@
 %nonassoc LESS EQ MORE NEQ LEQ GEQ
 %left PLUS SUB SATSUB SATPLUS
 %left CONCAT
-%left BITAND BITXOR PIPE LSHIFT RSHIFT
+%left BITAND BITXOR PIPE LSHIFT
 %left PATAND
 %nonassoc PROJ
 %right NOT FLOOD BITNOT RPAREN
@@ -253,11 +252,24 @@ single_poly:
     | LESS size MORE                    { Span.extend $1 $3, snd $2 }
 
 ty_poly: 
-    | LSHIFT tys RSHIFT            { $2 }
+    | LSHIFT tys MORE MORE            { $2 }
 
 paren_args:
     | LPAREN RPAREN                     { Span.extend $1 $2, [] }
     | LPAREN args RPAREN                { Span.extend $1 $3, $2 }
+
+// special rshift rule constructed from two 
+// back-to-back "MORE"s
+// we removed RSHIFT from the lexer to 
+// avoid parsing confusion for type argument lists 
+// ending in a parametric type e.g., (<<int<x>>>)
+rshift:
+    MORE MORE   {
+        let adjacent (s1 : Span.t) (s2 : Span.t) = s1.finish = s2.start in
+        if not (adjacent $1 $2)
+        then Console.error_position (Span.extend $1 $2) "spurious whitespace in '>>' operator";
+        RShift
+    }
 
 binop:
     | exp PLUS exp                        { op_sp Plus [$1; $3] (Span.extend $1.espan $3.espan) }
@@ -277,7 +289,7 @@ binop:
     | exp PIPE exp                        { op_sp BitOr [$1; $3] (Span.extend $1.espan $3.espan) }
     | exp CONCAT exp                      { op_sp Conc [$1; $3] (Span.extend $1.espan $3.espan) }
     | exp LSHIFT exp                      { op_sp LShift [$1; $3] (Span.extend $1.espan $3.espan) }
-    | exp RSHIFT exp                      { op_sp RShift [$1; $3] (Span.extend $1.espan $3.espan) }
+    | exp rshift exp %prec LSHIFT      { op_sp RShift [$1; $3] (Span.extend $1.espan $3.espan) }
     | exp PATAND exp                      { op_sp PatMask [$1; $3] (Span.extend $1.espan $3.espan) }
     // unordered call. put here to avoid conflict with exp LESS exp
     | exp LESS UNORDERED MORE paren_args  { 
