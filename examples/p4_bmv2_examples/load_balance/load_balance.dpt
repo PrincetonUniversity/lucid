@@ -1,10 +1,8 @@
-// Lucid port of the P4 "load_balance" tutorial: hash-based ECMP forwarding
-// across 3 switches in a triangle, with one host per switch.
+// hash-based ECMP load balancing example.
+// Topology is a triangle of 3 switches, with one host per switch.
 //
-// The setup is asymmetric: s1 acts as a *load balancer* and treats the
-// magic destination IP 10.0.0.1 as "split this flow across {h2, h3} based
-// on its TCP 5-tuple." s2 and s3 act as plain forwarders for their own
-// hosts (count=1 entries — the ECMP machinery still runs but trivially).
+// Switch s1 acts as a load balancer, splitting traffic to 10.0.0.1 
+// across h2 and h3 based on a hash of the TCP 5-tuple.
 //
 // Three tables, applied in series in a single handler:
 //   1. ecmp_group   — LPM on hdr.ipv4.dst → (base, count, hit). The action
@@ -19,9 +17,7 @@
 //                     In P4 this lives in MyEgress; here it's just a third
 //                     Table.lookup at the end of the same handler.
 //
-// Non-TCP packets are dropped at the parser — the 5-tuple hash needs TCP
-// ports, and the upstream P4 program's "use undefined port fields" behavior
-// isn't a meaningful semantic in Lucid.
+// Non-TCP packets are dropped at the parser.
 
 const int SEED = 0xC0FFEE;
 
@@ -66,12 +62,8 @@ type tcp_t = {
 // -------- ecmp_group: LPM on dst IP -> (base, count) --------------------
 //
 // install-time data is (base, count) where count must be a power of 2.
-// The action just hands those back; the handler then hashes the 5-tuple
-// and computes `select = base + (hash & (count-1))`. Putting the hash in
-// the handler rather than the action keeps the table's runtime-arg type
-// trivial (passing the 5-tuple as a tuple arg trips a type-checker
-// occurs-check) and makes the ECMP math visible at the call site.
-
+// The action just hands those back for the handler to 
+// calculate the output port as `select = base + (hash & (count-1))`. 
 type grp_t = {
   int<16> grp_base;
   int<32> grp_count;
@@ -122,9 +114,8 @@ action frame_t rewrite_mac(int<48> smac)() {
   return {fr_smac = smac; fr_hit = true};
 }
 
-// On miss the input smac is preserved (the P4 default is NoAction, i.e.
-// "leave smac alone"). The default action returns `fr_hit=false`; the
-// handler then skips the smac rewrite.
+// On miss the input smac is preserved. The default action returns 
+// `fr_hit=false`; the handler then skips the smac rewrite.
 action frame_t frame_pass(int<48> _smac)() {
   return {fr_smac = 0; fr_hit = false};
 }
@@ -163,18 +154,10 @@ handle tcp_pkt(eth_hdr_t eth, ipv4_t ip, tcp_t tcp, Payload.t pl) {
         smac = eth#smac;
         ety  = eth#ety
       };
-      ipv4_t new_ip = {
-        version     = ip#version;
-        ihl         = ip#ihl;
-        diffserv    = ip#diffserv;
-        total_len   = ip#total_len;
-        id          = ip#id;
-        flags       = ip#flags;
-        frag_offset = ip#frag_offset;
+      ipv4_t new_ip = { ip with 
         ttl         = ip#ttl - 1;
         protocol    = ip#protocol;
         hdr_csum    = 0;
-        src         = ip#src;
         dst         = n#nh_dstip
       };
 
