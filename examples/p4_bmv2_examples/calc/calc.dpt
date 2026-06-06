@@ -70,15 +70,7 @@ handle calc_pkt(eth_hdr_t eth, calc_t calc, Payload.t pl) {
         smac = eth#dmac;
         ety  = eth#ety
       };
-      calc_t new_calc = {
-        p         = calc#p;
-        four      = calc#four;
-        ver       = calc#ver;
-        op        = calc#op;
-        operand_a = calc#operand_a;
-        operand_b = calc#operand_b;
-        res       = result
-      };
+      calc_t new_calc = {calc with res = result};
       generate_port(ingress_port, calc_pkt(new_eth, new_calc, pl));
     } else {
       printf("sw %d port %d : unknown op %d - drop",
