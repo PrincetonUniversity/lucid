@@ -1,10 +1,5 @@
 #!/usr/bin/env python3
 """Generate link_monitor.json for the Lucid link_monitor example.
-
-Probe events are regular (non-packet) Lucid events: we inject them
-directly from the spec rather than building wire-format packets and
-running them through a parser. IPv4 packets are still real on-the-wire
-packets (built with scapy).
 """
 
 import ipaddress
@@ -112,7 +107,7 @@ events += [
 
 # ---- traffic + probes ---------------------------------------------------
 #
-# Plan:
+# Approach:
 #  1. Send a handful of IPv4 packets h1→h2 to bump byte_cnt on s1:p2 and
 #     s2:p1. Each ipv4_pkt forward at egress port P increments
 #     byte_cnt_reg[P] by 1.

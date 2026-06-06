@@ -20,11 +20,11 @@ last hop) reads the full hop list.
 
 ## Running
 ```bash
-/opt/anaconda3/bin/python3 gen_spec.py
-../../../sources/lucid/dpt link_monitor.dpt --spec link_monitor.json --silent
+./gen_spec.py
+dpt link_monitor.dpt --spec link_monitor.json --silent
 ```
 
-## Test cases (driven by `gen_spec.py`)
+## Test cases
 
 1. **3 IPv4 packets h1→h2.** Each forwards through s1 (egress port 2)
    then s2 (egress port 1), bumping `byte_cnt_reg` at both ports.
@@ -42,21 +42,18 @@ last hop) reads the full hop list.
 The `printf` `probe DONE` block at the final hop dumps the full chain
 in push-front order (most recent first).
 
-## Notable Lucid details
+## Notes
 
 - The `probe` event is just a regular Lucid event with vector args
   carrying both stacks as fixed-size `int<32>[4]` arrays, so we don't need 
-  a parser. This treats probes as a *control protocol* rather than a wire-format
-  packet. If you ever need a real wire format (to talk to non-Lucid endpoints), 
-  you'd recover the per-depth event variant approach from `source_routing`/`mri`.
-- Probes are injected via the JSON spec's `"events"` list — same way you'd
-  inject any non-packet event in any other Lucid program. `generate_port`
-  ferries them between switches at runtime. At the last hop the event is
-  emitted out a host port and lands in the `Exits` list.
+  a parser. 
+- Probes are injected via the JSON spec's `"events"` list and `generate_port`
+  moves them between switches at runtime. At the last hop the event is
+  emitted out a non-connected host port (so ends up in the `Exits` list).
 - **Global declaration order matters across handlers.**
   `ipv4_lpm → byte_cnt_reg → last_time_reg`. Both handlers (`ipv4_pkt`
   and `probe`) access only some of these but in declaration order, so
-  the typechecker is happy. The `probe` handler skips `ipv4_lpm`
+  the type system is happy. The `probe` handler skips `ipv4_lpm`
   (allowed); the `ipv4_pkt` handler skips `last_time_reg` (allowed).
 - **`Array.update(arr, idx, get_val, _, set_to_arg, now)`** is the
   natural Lucid idiom for "atomically read the old value and write a

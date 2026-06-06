@@ -1,4 +1,4 @@
-// Lucid port of the P4 "link_monitor" tutorial.
+// a link monitor example
 //
 // Each switch keeps per-egress-port telemetry in two arrays:
 //   byte_cnt_reg[port]  — packets sent out that port since the last probe.
@@ -11,17 +11,6 @@
 // (swid, port, byte_cnt, last_time, cur_time) telemetry tuples at every
 // hop. The receiving host reads the full chain.
 //
-// Big design pivot from the upstream P4: **probes are regular Lucid
-// events, not packet events.** The upstream tutorial puts the route +
-// telemetry stacks on the wire as variable-length P4 header stacks,
-// which would force us through the same per-depth-event explosion we
-// saw in `source_routing` and `mri`. A regular Lucid event has no wire
-// format and no auto-deparser, so we can carry the stacks as plain
-// `int<32>[4]` vectors and a single handler does the whole
-// pop-route + push-telemetry transition. This treats the probe as a
-// "control protocol" injected at the source and consumed at the sink,
-// which is faithful to its purpose — what gets on the wire to a real
-// host is a separate concern outside the scope of this example.
 
 // MAX_HOPS = 4 (encoded as the literal `4` throughout — vector sizes and
 // for-loop bounds need a concrete literal, and naming this via `size` ran
