@@ -2,10 +2,9 @@
 
 An exact-match flow cache keyed on `(protocol, src_ip, dst_ip)`. On a
 hit, the cached `(dmac, port)` is used to forward. On a miss, the
-switch emits a **PacketIn** control event to the controller and drops
+switch emits a **PacketIn** event to the controller and drops
 the original packet; the controller is expected to install a matching
-rule (via `Table.install`) and from then on packets in that flow are
-forwarded by the data plane.
+rule (via `Table.install`) to forward the rest of the packets in the flow.
 
 ## Files
 - [flowcache.dpt](flowcache.dpt) — the Lucid program.
@@ -14,23 +13,17 @@ forwarded by the data plane.
 
 ## Running
 ```bash
-/opt/anaconda3/bin/python3 gen_spec.py
-../../../sources/lucid/dpt flowcache.dpt --spec flowcache.json --silent
+./gen_spec.py
+dpt flowcache.dpt --spec flowcache.json --silent
 ```
 
 ## The "controller" is the JSON spec
-
-Lucid's interpreter lets test specifications be used to model the controller. 
+Test specifications can model controller operations. 
 
 - The data plane emits PacketIn events to a designated controller port
   (`CONTROLLER_PORT = 99`). The port has no link, so the events land
-  in the `Exits` list — observable by the test.
-- The spec mixes packet events with `Table.install` commands. A typical
-  flow:
-    1. Send a burst of packets in flow A → they miss → PacketIn events
-       show up in Exits.
-    2. The spec issues `Table.install` for flow A.
-    3. Subsequent flow-A packets hit the cache and forward.
+  in the `Exits` list of interpreter output.
+- `Table.install` commands in the test spec model controller actions.
 
 
 ## Test timeline (in `gen_spec.py`)
@@ -47,15 +40,12 @@ End-state counters:
 - `miss_count[2] = 3`
 - `miss_count[3] = 1`
 
-## Notable Lucid details
+## Notes
 
 - **Record-typed table key.** `Table.t<<flow_key_t, ...>>` works
   cleanly with a record as the key type. In the JSON
   `Table.install`, the record is flattened to a list of width-tagged
   values: `"key": ["6<8>", "<src><32>", "<dst><32>"]` — in declaration
-  order of the record's fields. Same flattening you'd see for record
-  *data* (already used in `basic`, `basic_tunnel`, etc.).
-- **PacketIn is a regular event with `{skip;}` body.** No wire format,
-  no parser, no handler — it exists purely to be `generate_port`'d out
-  the controller port so the test can observe its arguments in the
-  Exits list. Same pattern as `link_monitor`.
+  order of the record's fields.
+- **PacketIn is a regular event with `{skip;}` body.** It exists 
+  purely to be `generate_port`'d out the controller port.
