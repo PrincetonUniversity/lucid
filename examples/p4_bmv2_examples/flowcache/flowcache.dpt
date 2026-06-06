@@ -1,26 +1,13 @@
-// Lucid port of the P4 "flowcache" tutorial.
+// A simple flow cache
 //
 // The data plane has an exact-match table keyed on the 3-tuple
 // (protocol, src_ip, dst_ip). On a hit, the cached action forwards the
-// packet. On a miss the switch (a) silently drops the original packet
-// and (b) emits a `packet_in` *control event* containing the flow key
-// + ingress port. In the upstream P4 this is the PacketIn message to
-// the P4Runtime controller; here we send it to an unconnected "CPU
-// port" so it lands in the `Exits` list for the test to inspect.
-//
-// The "controller" is the JSON spec: it observes the PacketIn (in the
-// Exits list) and issues a `Table.install` command at a later timestamp.
-// Subsequent packets in the same flow then hit the cache.
-//
-// Two design choices vs the upstream:
-//   * **PacketIn is a regular event, not a packet event.** Same play we
-//     made in `link_monitor` — the controller is internal to the
-//     simulator, no wire format needed, no parser for the punt path.
-//   * **No idle timeout.** Lucid handlers cannot install or remove
-//     table entries (`Table.install` is a control-plane command only),
-//     so there's no way to express an in-data-plane TTL on cache
-//     entries. The control plane (whoever writes the JSON spec) is the
-//     only entity that can mutate the table. Documented in the README.
+// packet. On a miss, the original packet gets dropped and a PacketIn
+// event gets emitted to the controller's port.
+// In the test, the controller port is not connected, so the PacketIn 
+// goes to the `Exits` list in the interpreter's output.
+// There is no controller, the JSON spec test case models its 
+// actions by issuing `Table.install` commands. 
 
 const int<32> CONTROLLER_PORT = 99;
 const int<16> ETY_IPV4        = 0x0800;
