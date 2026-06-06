@@ -1,27 +1,6 @@
-// Lucid port of the P4 "mri" tutorial: per-hop telemetry that pushes a
+// per-hop telemetry that pushes a
 // (swid, qdepth) record onto a stack inside the IPv4 options as the
 // packet traverses the network. The receiver sees the full hop list.
-//
-// Structure mirrors `source_routing` because the same three Lucid
-// constraints apply (see source_routing/README.md for the deep-dive):
-//
-//  1. Parsers are non-recursive → manually unroll the count-keyed
-//     swtrace-stack parse as a `match` over count.
-//  2. Auto-deparser emits every event field → one event per stack
-//     depth (`mri_0`..`mri_3`), and the handler pushes by re-emitting
-//     as the next-larger variant.
-//  3. Parser slot analysis requires distinct variables per arg
-//     position → distinct names for every swtrace's `swid`/`qdepth`.
-//
-// Substantive differences from the upstream P4:
-//   * `qdepth` (egress queue depth) isn't modeled by the Lucid
-//     interpreter; we push 0 in its place. Documented in the README.
-//   * `swid` is sourced from the `self` builtin rather than from a
-//     control-plane `Table.install` on a separate egress table. The
-//     P4 program has one entry per switch with `swid: N` baked in,
-//     which is what `self` already provides — so we skip the table.
-//   * Only MRI-flagged IPv4 packets are handled. Plain IPv4 (ihl=5,
-//     no option) is dropped at the parser.
 
 const int<16> ETY_IPV4 = 0x0800;
 const int<5>  IPV4_OPT_MRI = 31;

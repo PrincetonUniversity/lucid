@@ -1,6 +1,6 @@
 Lucid is an event-based data-plane language. It is imperative and syntax is similar to c++ or rust. It has domain-specific constructs inspired by P4, but is higher level, more expressive, and simpler.
 
-*Advice for agents programming in Lucid.* When developing in Lucid, work incrementally. Write the program first and type-check it, then fix errors, then generate a test spec (consider using a Python helper script if it is complicated). Do not try to plan or pre-compute the complete solution.
+*Advice for programming in Lucid.* When developing in Lucid, work incrementally. Write the program first and type-check it, then fix errors, then generate a test spec (consider using a Python helper script if it is complicated). Do not try to plan or pre-compute the complete solution.
 
 ## Contents
 - [Basic features](#basic-features) — the core primitives, with a complete small example
