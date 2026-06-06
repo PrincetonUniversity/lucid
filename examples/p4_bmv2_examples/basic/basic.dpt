@@ -46,10 +46,7 @@ action fwd_t ipv4_drop(int<48> _dmac, int<32> _port)() {
   return {fwd_dmac = 0; fwd_port = 0; fwd_hit = false};
 }
 
-// Match-action table keyed on the IPv4 destination address. Entries are
-// installed via Table.install commands in the JSON spec (use a /32 mask for
-// host routes, or a shorter mask for prefix routes; longer prefixes should be
-// installed first since the interpreter matches in install order). The
+// Match-action table keyed on the IPv4 destination address. The
 // data_ty `(int<48>, int<32>)` carries the next-hop MAC and egress port as
 // the actions' install-time arguments.
 global Table.t<<int<32>, (int<48>, int<32>), (), fwd_t>> ipv4_lpm =
@@ -75,11 +72,7 @@ handle ipv4_pkt(eth_hdr_t eth, ipv4_t ip, Payload.t pl) {
       ety  = eth#ety
     };
     // Recompute the IPv4 header checksum after the TTL decrement. We zero
-    // hdr_csum *before* the hash call below — RFC 1071 says compute the sum
-    // with the checksum field set to zero, then write the one's complement
-    // back into it. The `{new_ip with hdr_csum = ...}` at the generate site
-    // does step 2+3 in one shot, but only works because new_ip.hdr_csum is
-    // already 0 at that moment. Do not move/remove the `hdr_csum = 0;` line.
+    // hdr_csum *before* the hash call below as defined in the standards.
     ipv4_t new_ip = {
       version     = ip#version;
       ihl         = ip#ihl;
