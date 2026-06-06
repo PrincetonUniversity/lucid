@@ -54,8 +54,8 @@ type ipv4_t = {
 // -------- events ---------------------------------------------------------
 //
 
-packet event sr_bos(eth_hdr_t eth, sr_t sr, ipv4_t ip, Payload.t pl);
-packet event sr_in(eth_hdr_t eth, sr_t sr, auto sr_tail, ipv4_t ip, Payload.t pl);
+packet event sr_last(eth_hdr_t eth, sr_t sr, ipv4_t ip, Payload.t pl);
+packet event sr_hop(eth_hdr_t eth, sr_t sr, auto sr_tail, ipv4_t ip, Payload.t pl);
 
 // Final-hop emission: plain IPv4 packet with the source-route header
 // stripped. `{skip;}` means "no handler" — the event is only used as the
@@ -69,7 +69,7 @@ packet event sr_pkt(eth_hdr_t eth, auto sr_tail, ipv4_t ip, Payload.t pl) {skip;
 //
 
 // Bottom of stack: decap IP packet and forward
-handle sr_bos(eth_hdr_t eth, sr_t sr, ipv4_t ip, Payload.t pl) {
+handle sr_last(eth_hdr_t eth, sr_t sr, ipv4_t ip, Payload.t pl) {
   int<32> port = (int<32>)(sr#p);
   eth_hdr_t new_eth = {
     dmac = eth#dmac;
@@ -83,7 +83,7 @@ handle sr_bos(eth_hdr_t eth, sr_t sr, ipv4_t ip, Payload.t pl) {
 }
 
 // Not bottom of stack: pop first source route hdr and forward
-handle sr_intermediate(eth_hdr_t eth, sr_t sr, auto sr_tail, ipv4_t ip, Payload.t pl) {
+handle sr_hop(eth_hdr_t eth, sr_t sr, auto sr_tail, ipv4_t ip, Payload.t pl) {
   int<32> port = (int<32>)(sr#p);
   printf("sw %d port %d -> %d : sr_pop ttl=%d",
          self, ingress_port, sr#p, ip#ttl);
@@ -91,40 +91,28 @@ handle sr_intermediate(eth_hdr_t eth, sr_t sr, auto sr_tail, ipv4_t ip, Payload.
   generate_port(port, sr_pkt(eth, sr_tail, ip, pl));
 }
 
-
 // -------- parsers  -------------------------------------------------------
 //
 parser parse_ip(bitstring pkt, eth_hdr_t eth, sr_t sr_top, auto sr_tail) {
   ipv4_t ip = read(pkt);
   Payload.t pl = Payload.parse(pkt);
-  generate(sr_in(eth, sr_top, sr_tail, ip, pl));
+  generate(sr_hop(eth, sr_top, sr_tail, ip, pl));
+}
+// unroll 3 times, with the base case invoking drop
+@rec(3, drop) parser parse_more_sr(bitstring pkt, eth_hdr_t eth, sr_t sr_top, auto sr_tail) {
+    sr_t sr = read(pkt);
+    match sr#bos with
+    | 1 -> { parse_ip(pkt, eth, sr_top, (sr_tail, sr)); }
+    | 0 -> { parse_more_sr(pkt, eth, sr_top, (sr_tail, sr)); }
 }
 
-parser parse_more_sr(bitstring pkt, eth_hdr_t eth, sr_t sr_top, auto sr_tail) {
-    sr_t sr = read(pkt);
-    match sr#bos with
-    | 1 -> { parse_ip(pkt, eth, sr_top, (sr_tail, sr)); }
-    | 0 -> { drop; }
-}
-parser parse_more_sr(bitstring pkt, eth_hdr_t eth, sr_t sr_top, auto sr_tail) {
-    sr_t sr = read(pkt);
-    match sr#bos with
-    | 1 -> { parse_ip(pkt, eth, sr_top, (sr_tail, sr)); }
-    | 0 -> { parse_more_sr(pkt, eth, sr_top, (sr_tail, sr)); }
-}
-parser parse_more_sr(bitstring pkt, eth_hdr_t eth, sr_t sr_top, auto sr_tail) {
-    sr_t sr = read(pkt);
-    match sr#bos with
-    | 1 -> { parse_ip(pkt, eth, sr_top, (sr_tail, sr)); }
-    | 0 -> { parse_more_sr(pkt, eth, sr_top, (sr_tail, sr)); }
-}
 parser parse_sr(bitstring pkt, eth_hdr_t eth) { // eth | sr
   sr_t sr = read(pkt);
   match sr#bos with
   | 1 -> { 
     ipv4_t ip = read(pkt);
     Payload.t pl = Payload.parse(pkt);
-    generate(sr_bos(eth, sr, ip, pl));
+    generate(sr_last(eth, sr, ip, pl));
   }
   | _ -> { parse_more_sr(pkt, eth, sr, ()); }
 

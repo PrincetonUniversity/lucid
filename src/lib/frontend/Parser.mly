@@ -120,7 +120,7 @@
 %token <Span.t> COMMA
 %token <Span.t> DOT
 %token <Span.t> TBOOL
-%token <Span.t> TUPLE
+// %token <Span.t> TUPLE
 %token <Span.t> EVENT
 %token <Span.t> GENERATE
 %token <Span.t> SGENERATE
@@ -137,6 +137,7 @@
 %token <Span.t> EGRESS
 %token <Span.t> MAIN
 %token <Span.t> PACKET
+%token <Span.t> REC
 %token <Span.t * int> ANNOT
 %token <Span.t> MATCH
 %token <Span.t> WITH
@@ -146,10 +147,6 @@
 %token <Span.t> TYPE
 %token <Span.t> NOINLINE
 
-%token <Span.t> TABLE_TYPE
-%token <Span.t> KEY_TYPE
-%token <Span.t> ARG_TYPE
-%token <Span.t> RET_TYPE
 %token <Span.t> ACTION
 %token <Span.t> ACTION_CONSTR
 %token <Span.t> TABLE_CREATE
@@ -200,10 +197,8 @@
 %right NOT FLOOD BITNOT RPAREN
 %right LBRACKET /* highest precedence */
 
-
 /* FIXME: the RPAREN thing is a hack to make casting work, and I'm not even sure it's correct
    Same with LBRACKET. */
-
 %%
 
 ty:
@@ -213,10 +208,9 @@ ty:
     | QID                               { ty_sp (TQVar (QVar (snd $1))) (fst $1) }
     | AUTO                              { ty_sp (TQVar (QVar (fresh_auto ()))) $1 }
     | cid    				            { ty_sp (TName (snd $1, [], true)) (fst $1) }
-    | TUPLE ty_poly                     { 
-                                            let raw_tys = List.map (fun ty -> ty.raw_ty) (snd $2) in
-                                            ty_sp (TTuple (raw_tys)) (Span.extend $1 (fst $2)) }
-
+    // | TUPLE ty_poly                     { 
+    //                                         let raw_tys = List.map (fun ty -> ty.raw_ty) (snd $2) in
+    //                                         ty_sp (TTuple (raw_tys)) (Span.extend $1 (fst $2)) }
 
     | cid poly				            { ty_sp (TName (snd $1, snd $2, true)) (fst $1) }
     | cid ty_poly                       {
@@ -230,6 +224,10 @@ ty:
     | LBRACE record_def RBRACE          { ty_sp (mk_trecord $2) (Span.extend $1 $3) }
     | ty LBRACKET size RBRACKET         { ty_sp (TVector ($1.raw_ty, snd $3)) (Span.extend $1.tspan $4) }
     | BITSTRING                         { ty_sp TBitstring ($1)}
+    | LPAREN RPAREN                           { ty_sp (TTuple([])) (Span.extend $1 $2) }
+    | LPAREN ty COMMA tys RPAREN        {
+        let raw_tys = List.map (fun ty -> ty.raw_ty) ($2 :: (snd $4)) in
+        ty_sp (TTuple raw_tys) (Span.extend $1 $5) }
 
 tys:
     | ty                                        { $1.tspan, [ $1 ] }
@@ -263,27 +261,8 @@ poly:
 single_poly:
     | LESS size MORE                    { Span.extend $1 $3, snd $2 }
 
-ty_or_empty_tuple:
-    | ty                                      { $1 }
-    | LPAREN RPAREN                           { ty_sp (TTuple([])) (Span.extend $1 $2) }
-    /* Parenthesized comma-form tuple type, e.g. `(int<48>, int<32>)`. Only
-       legal inside `<<...>>` slots (Table.t key/data/arg/ret) because that's
-       the only place `ty_or_empty_tuple` is used. Requires at least two
-       element types so `(t)` continues to mean a parenthesized single ty,
-       not a 1-tuple. Avoids the lexer-greedy `>>` issue that `tuple<<...>>`
-       runs into when the inner type ends in `>`. */
-    | LPAREN ty COMMA tys RPAREN              {
-        let raw_tys = List.map (fun ty -> ty.raw_ty) ($2 :: (snd $4)) in
-        ty_sp (TTuple raw_tys) (Span.extend $1 $5) }
-
-ty_polys:
-    | ty_or_empty_tuple                       { [$1] }
-    | ty_or_empty_tuple COMMA ty_polys        { $1::$3 }
-
 ty_poly: 
-    | LSHIFT ty_polys RSHIFT            { Span.extend $1 $3, $2 }
-
-
+    | LSHIFT tys RSHIFT            { $2 }
 
 paren_args:
     | LPAREN RPAREN                     { Span.extend $1 $2, [] }
@@ -467,22 +446,6 @@ tyname_def:
     | ID                                  { snd $1, [] }
     | ID poly                             { snd $1, snd $2}
 
-ty_args:
-    | LPAREN tys RPAREN                         { (Span.extend $1 $3, snd $2) }
-    | LPAREN RPAREN                             { (Span.extend $1 $2, []) }
-    | ty                                        { ($1.tspan, [ $1 ]) }
-
-dt_table:
-    | ID ASSIGN LBRACE
-        KEY_TYPE ty_args
-        ARG_TYPE ty_args
-        RET_TYPE ty RBRACE
-                                            { duty_sp
-                                                    (snd $1)
-                                                    []
-                                                    (mk_t_table (snd $5) (snd $7) [$9] (Span.extend $3 $10))
-                                                    (Span.extend (fst $1) $10) }
-
 // an expression that can appear as the lhs of an assign in the parser
 lexp:
     | cid			                            { var_sp (snd $1) (fst $1) }
@@ -553,9 +516,12 @@ decl:
 
     | GLOBAL ty ID ASSIGN exp SEMI
                                             { [dglobal_sp (snd $3) $2 $5 (Span.extend $1 $6)] }
-    | TABLE_TYPE dt_table                    { [$2] }
+    // | TABLE_TYPE dt_table                    { [$2] }
     | PARSER ID paramsdef LBRACE parser_block RBRACE { [mk_dparser (snd $2) $3 $5 (Span.extend $1 $6)] }
-
+    | REC LPAREN NUM COMMA DROP RPAREN decl
+        { match $7 with
+        | [d] -> [{ d with dpragmas = Pragma.sprag "rec" [Z.to_string (snd $3); "drop"] :: d.dpragmas }]
+        | _ -> error "parsing error: invalid use of @rec" }
 
 decls:
     | decl                             { $1 }

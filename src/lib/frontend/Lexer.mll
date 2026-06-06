@@ -50,7 +50,6 @@ rule token = parse
   | "else"            { ELSE (position lexbuf) }
   | "int"             { TINT (position lexbuf) }
   | "bool"            { TBOOL (position lexbuf) }
-  | "tuple"           { TUPLE (position lexbuf) }
   | "event"           { EVENT (position lexbuf) }
   | "generate"        { GENERATE (position lexbuf) }
   | "generate_switch" { SGENERATE (position lexbuf) }
@@ -75,16 +74,12 @@ rule token = parse
   | "@egress"         { EGRESS (position lexbuf) }
   | "@"(num as n)     { ANNOT (position lexbuf, Int.of_string n) }
   | "@main"           { MAIN  (position lexbuf) }
+  | "@rec"            { REC (position lexbuf) }
   | "packet"          { PACKET (position lexbuf) }
   | "match"           { MATCH (position lexbuf) }
   | "with"            { WITH (position lexbuf) }
   | "type"            { TYPE (position lexbuf) }
   | "noinline"        { NOINLINE (position lexbuf) }
-
-  | "table_type"              { TABLE_TYPE (position lexbuf) }
-  | "key_type:"               { KEY_TYPE (position lexbuf) }
-  | "arg_type:"               { ARG_TYPE (position lexbuf) }
-  | "ret_type:"               { RET_TYPE (position lexbuf) }
   | "action_constr"           { ACTION_CONSTR (position lexbuf) }
   | "action"                  { ACTION (position lexbuf) }
   | "table_create"            { TABLE_CREATE (position lexbuf) }
