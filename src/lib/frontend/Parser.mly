@@ -148,11 +148,6 @@
 %token <Span.t> NOINLINE
 
 %token <Span.t> ACTION
-%token <Span.t> ACTION_CONSTR
-%token <Span.t> TABLE_CREATE
-%token <Span.t> TABLE_MATCH
-%token <Span.t> TABLE_INSTALL
-%token <Span.t> TABLE_MULTI_INSTALL
 %token <Span.t> PATAND
 
 %token <Span.t> PARSER
@@ -208,10 +203,6 @@ ty:
     | QID                               { ty_sp (TQVar (QVar (snd $1))) (fst $1) }
     | AUTO                              { ty_sp (TQVar (QVar (fresh_auto ()))) $1 }
     | cid    				            { ty_sp (TName (snd $1, [], true)) (fst $1) }
-    // | TUPLE ty_poly                     { 
-    //                                         let raw_tys = List.map (fun ty -> ty.raw_ty) (snd $2) in
-    //                                         ty_sp (TTuple (raw_tys)) (Span.extend $1 (fst $2)) }
-
     | cid poly				            { ty_sp (TName (snd $1, snd $2, true)) (fst $1) }
     | cid ty_poly                       {
                                             let raw_tys = List.map (fun ty -> ty.raw_ty) (snd $2) in
@@ -320,8 +311,6 @@ exp:
     | SUB exp                             { op_sp Neg [$2] (Span.extend $1 $2.espan) }
     | BITNOT exp                          { op_sp BitNot [$2] (Span.extend $1 $2.espan) }
     | HASH single_poly LPAREN args RPAREN { hash_sp (snd $2) $4 (Span.extend $1 $5) }
-
-
     | PATCAST LPAREN exp RPAREN               { 
         op_sp PatExact [$3] (Span.extend $1 $4)}
 
@@ -341,17 +330,6 @@ exp:
     | SIZECAST single_poly LPAREN size RPAREN { szcast_sp (snd $2) (snd $4) (Span.extend $1 $5) }
     | FLOOD exp                           { flood_sp $2 (Span.extend $1 $2.espan) }
     | LBRACE args RBRACE                  { make_group $2 (Span.extend $1 $3) }
-    | TABLE_CREATE LESS tbl_ty=ty MORE LPAREN
-        actions=exp COMMA
-        n_entries=exp COMMA
-        default_action_call=exp // default action initialized with compile time arguments
-        RPAREN
-                                         { make_create_table tbl_ty (unpack_tuple actions) (n_entries) (default_action_call) (Span.extend $1 $11) }
-    | TABLE_MATCH
-        LPAREN tbl=exp COMMA
-        keys=exp COMMA
-        args=exp
-        RPAREN                          { tblmatch_sp tbl (unpack_tuple keys) (unpack_tuple args) (Span.extend $1 $8)}
     | paren_exp                         { $1 }
 
 // an expression with a parenthesis is a tuple, unless its a single-element tuple, in which case its just the element.
@@ -382,10 +360,6 @@ record_entries:
 args:
     | exp                               { [$1] }
     | exp COMMA args                    { $1::$3 }
-
-opt_args:
-    | LPAREN args RPAREN                { Span.extend $1 $3, $2}
-    | LPAREN RPAREN                { Span.extend $1 $2, []}
 
 paramsdef:
     | LPAREN RPAREN                     { [] }
@@ -496,8 +470,6 @@ decl:
                                             { match $2 with 
                                               | [decl] -> [{decl with dpragmas = [Pragma.sprag "main" []]}] 
                                               | _ -> error "parsing error: invalid use of @main"}
-    | ACTION_CONSTR ID constr_params=paramsdef ASSIGN LBRACE RETURN ACTION ty=ty ID acn_params=paramsdef LBRACE acn_body=statement RBRACE SEMI RBRACE SEMI
-        { [mk_daction_ctor (snd $2) [ty] constr_params acn_params acn_body (Span.extend $1 $16)]}
     | ACTION ty=ty ID install_params=paramsdef match_params=paramsdef LBRACE acn_body=statement RBRACE
         { [mk_daction_ctor (snd $3) [ty] install_params match_params acn_body (Span.extend $1 $8)]}
 
@@ -563,28 +535,6 @@ branches:
     | branch                                 { fst $1, [snd $1] }
     | branch branches                        { Span.extend (fst $1) (fst $2), (snd $1::snd $2) }
 
-table_entry:
-    (* an entry with no priority *)
-    | pats=opt_args ARROW ID args=opt_args             
-        { 
-            let pats_span, pats = pats in
-            let pats = List.map cast_int_pats pats in
-            Span.extend (pats_span) (fst args), 
-            mk_entry 50 (pats) (snd $3) (snd args) (Span.extend (pats_span) (fst args))            
-            }
-    (* an entry with a priority *)
-    | LBRACKET NUM RBRACKET pats=opt_args ARROW ID args=opt_args
-        { 
-            let _, pats = pats in
-            let pats = List.map cast_int_pats pats in
-            Span.extend $1 (fst args), 
-            mk_entry (snd $2 |> Z.to_int) (pats) (snd $6) (snd args) (Span.extend $1 (fst args))
-            }
-
-table_entries:
-    | table_entry                                            { fst $1, [snd $1] }
-    | table_entry SEMI table_entries                         { Span.extend (fst $1) (fst $3), (snd $1::snd $3)}
-
 // TODO: remove multiargs for match statements -- no need to suport match x, y, ... with syntax (no parens for multiple args)
 multiargs:
     | exp COMMA args                         { $1::$3 }
@@ -608,10 +558,6 @@ statement1:
     | PRINTF LPAREN STRING RPAREN SEMI             { sprintf_sp (snd $3) [] (Span.extend $1 $5) }
     | PRINTF LPAREN STRING COMMA args RPAREN SEMI  { sprintf_sp (snd $3) $5 (Span.extend $1 $7) }
     | FOR LPAREN ID LESS size RPAREN LBRACE statement RBRACE { loop_sp $8 (snd $3) (snd $5) (Span.extend $1 $9) }
-    | TABLE_MULTI_INSTALL LPAREN tbl=exp COMMA
-        LBRACE tbl_entries=table_entries RBRACE RPAREN SEMI                 {tblinstall_sp (tbl) (snd tbl_entries) (Span.extend $1 $9)}
-    | TABLE_INSTALL LPAREN tbl=exp COMMA
-        LBRACE tbl_entries=table_entries RBRACE RPAREN SEMI                 {mk_tblinstall_single (tbl) (snd tbl_entries) (Span.extend $1 $9)}
 includes:
     | INCLUDE STRING                        {[(snd $2)]}
     | INCLUDE STRING includes               {(snd $2)::$3}
