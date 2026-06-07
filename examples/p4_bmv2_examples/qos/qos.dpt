@@ -1,21 +1,8 @@
-// Lucid port of the P4 "qos" tutorial.
-//
 // Plain IPv4 forwarding (same shape as `basic`), plus per-protocol DSCP
 // marking before the table lookup:
 //   * UDP packets → diffserv = 46 (Expedited Forwarding)
 //   * TCP packets → diffserv = 44 (Voice Admit)
 //   * everything else → diffserv unchanged
-//
-// The upstream P4 program also defines a bunch of AF_xy actions
-// (Assured Forwarding classes) but never invokes them in the apply
-// block, so they're dead code we don't bother replicating.
-//
-// One small difference from the previous examples: the IPv4 header
-// splits the TOS byte into `diffserv:6 + ecn:2`, matching the actual
-// IPv4 wire format. Earlier examples kept it as a single `diffserv:8`
-// since they never read or wrote those bits. The checksum recompute
-// covers both halves (one's-complement sum is bit-position-agnostic
-// within each 16-bit word).
 
 const int<16> ETY_IPV4    = 0x0800;
 const int<8>  PROTO_TCP   = 6;

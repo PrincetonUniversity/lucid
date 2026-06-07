@@ -16,8 +16,8 @@ marking step applied before the table lookup:
 
 ## Running
 ```bash
-/opt/anaconda3/bin/python3 gen_spec.py
-../../../sources/lucid/dpt qos.dpt --spec qos.json --silent
+python3 gen_spec.py
+dpt qos.dpt --spec qos.json --silent
 ```
 
 ## Test cases (in `gen_spec.py`)
