@@ -226,7 +226,7 @@ let execute_event
       let default_handler_body = 
         C.SGen(C.GPort(C.vint_exp port 32), C.value_to_exp {v=C.VEvent(event); vty=C.tevent; vspan=Span.default})
       in      
-      ignore@@InterpCore.interp_statement nst HEgress swid builtin_env (C.statement default_handler_body)
+      ignore@@InterpCore.interp_statement nst.(swid) HEgress builtin_env (C.statement default_handler_body)
     | InterpSwitch.Ingress ->    
       error @@ "No handler for event " ^ Cid.to_string event.eid )
 ;;
@@ -289,7 +289,7 @@ let execute_control swidx (nst : network_state) (ctl_ev : control_val) =
       (ty@@TTuple(List.map (fun exp -> exp.ety.raw_ty) cmd.iargs)) in
     let eargs = [etbl; ekey; emask; eaction_constr; eaction_constr_args] in
     let ecall = C.exp (ECall(Cid.create ["Table"; "install_ternary"],eargs, false)) (ty TBool) in
-    InterpCore.interp_exp nst swidx Env.empty ecall
+    InterpCore.interp_exp nst.(swidx) Env.empty ecall
   in
   InterpControl.handle_control 
     do_tbl_install

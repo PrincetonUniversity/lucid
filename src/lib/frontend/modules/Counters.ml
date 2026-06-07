@@ -59,14 +59,13 @@ let setop = InterpSwitch.F (None, fun _ args -> V(InterpSwitch.extract_ival (Lis
 let dummy_int = InterpSwitch.V (CoreSyntax.vinteger (Integer.of_int 0))
 
 let counter_add_fun st args =
-  let nst, swid = nst_swid st in
   let open InterpSyntax in
   let open CoreSyntax in
   match args with
   | [V { v = VGlobal (_, stage) }; V { v = VInt addval }] ->
     let get_f arg = vinteger arg in
     let set_f arg = Integer.add arg addval in
-    V(Pipeline.update ~stage ~idx:0 ~getop:get_f ~setop:set_f nst.(swid).pipeline)
+    V(Pipeline.update ~stage ~idx:0 ~getop:get_f ~setop:set_f st.pipeline)
   | _ ->
     counter_add_error "Incorrect number or type of arguments to Counter.add"
 ;;

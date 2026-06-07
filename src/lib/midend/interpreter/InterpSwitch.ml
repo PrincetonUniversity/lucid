@@ -86,11 +86,6 @@ and ival =
 let f (cid: cid) (code: code) = F(Some(cid), code)
 let anonf (code: code) = F(None, code)
 
-(* Recover the (network_state, switch id) pair from a switch state. Used to
-   bridge `code` (which now takes just a switch state) to interpreter helpers
-   that still thread network state + switch id. *)
-let nst_swid (st : state) : network_state * int = !(st.sws), st.swid
-
 let extract_ival iv =
   match iv with
   | V v -> v
@@ -309,7 +304,11 @@ let calc_arrival_time (src_sw : state) (dst_id: location option) desired_delay =
 ;;
 
 (* val ingress_send : 'nst -> 'nst state -> ingress_destination -> event_val -> unit *)
-let ingress_send (src_sw : state) ingress_destination event_val = 
+let ingress_send (src_sw : state) ingress_destination event_val =
+  (* re-read the source switch from the live array: a handler may send several
+     events, and each send persists queue changes via save_update. Working from
+     a stale snapshot would make successive sends clobber each other. *)
+  let src_sw = lookup_switch src_sw src_sw.swid in
   match ingress_destination with
     | Switch sw -> 
       let dst_sw = lookup_switch src_sw sw in
@@ -329,7 +328,9 @@ let ingress_send (src_sw : state) ingress_destination event_val =
       egress_receive src_sw timestamp port ievent
 ;;
 
-let egress_send src_sw out_port event_val = 
+let egress_send src_sw out_port event_val =
+  (* re-read the source switch from the live array (see ingress_send). *)
+  let src_sw = lookup_switch src_sw src_sw.swid in
   let dst_opt = InterpSim.lookup_dst src_sw.config.links (src_sw.swid, out_port) in
   let time = gtime src_sw in
   (* let time = src_sw.utils.get_time nst in *)
