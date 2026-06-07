@@ -1,12 +1,7 @@
 (* Tables as a builtin module *)
-(* TODO: test with nested types for keys, args *)
-(* TODO: update documentation *)
 (* TODO: add an install_mask_priority function *)
 (* TODO: add a remove function *)
 (* TODO: add an update function *)
-(* TODO: simplify action / action constructor syntax *)
-(* TODO: remove all the pattern syntax and 
-         special table syntax from the frontend *)
 open Batteries
 open Syntax
 open InterpSwitch
@@ -151,13 +146,13 @@ let create_sig =
 ;;
 
 (* interpreter implementation *)
-let create_ctor (nst : InterpSwitch.state Array.t) swid args = 
+(* Append a new table to the pipeline *)
+let create_ctor (nst : network_state) swid args : Pipeline.t = 
   match args with 
   (* the table value arg is added by interpcore *)
   | [tbl_v; tbl_len; tbl_acn_ctors; tbl_def_acn; tbl_def_args] -> 
     let _ = tbl_acn_ctors in
-    let st = nst.(swid) in
-    let p = st.pipeline in
+    let p = nst.(swid).pipeline in
     let tbl_id = match tbl_v with 
       | V { v = VGlobal(tbl_id, _) } -> tbl_id
       | _ -> error"Table.create: expected a global for the table id"

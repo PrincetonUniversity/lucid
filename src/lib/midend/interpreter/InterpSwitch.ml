@@ -79,6 +79,7 @@ and  handler = network_state -> int (* switch *) -> int (* port *) -> event_val 
 (* code inside the program has no side effects, so it should not need network state, 
    just switch state (or even perhaps only the switch pipeline?) *)
 and code = network_state -> int (* switch *) -> ival list ->  ival
+(* and code = state -> ival list -> ival *)
 
 and ival =
   | V of value
