@@ -1,4 +1,5 @@
 {
+  "random seed": 1,
   "max time": 20000,
   "default_input_gap": 100,
   "events": [

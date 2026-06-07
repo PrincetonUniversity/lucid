@@ -1,4 +1,4 @@
-import subprocess, os, filecmp
+import subprocess, os, filecmp, sys
 
 """
 This script is a simple test harness for the lucid interpreter and lucidcc compiler. 
@@ -174,10 +174,19 @@ if (test_tgt == "interpreter"):
     print("--- application tests ---")
     for file in appfiles: interp_test(file, [])
 
+    print("--- p4 bmv2 example tests ---")
+    bmv2_test = "examples/p4_bmv2_examples/test.py"
+    bmv2_ret = subprocess.run([sys.executable, bmv2_test])
+    if bmv2_ret.returncode != 0:
+        diffs.append("p4_bmv2_examples")
+
 
     print("Diffs:", diffs)
     print("Unexpected error:", errors)
     print("Unexpected success:", bad_successes)
+
+
+
 
 elif (test_tgt == "lucidcc"):
     if not (os.path.isdir("test/ccoutput")):
