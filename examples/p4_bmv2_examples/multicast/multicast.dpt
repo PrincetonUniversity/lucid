@@ -1,25 +1,13 @@
-// Lucid port of the P4 "multicast" tutorial.
-//
+// Dataplane component of an L2 learning switch. 
 // Classic L2 learning switch (almost — the *learn* part is delegated to
 // the control plane via `Table.install`). One switch, four host ports.
 //
 //   * Known dst MAC → forward to its specific port (`mac_forward`).
 //   * Unknown dst MAC → flood to all ports except the ingress port.
-//
-// The upstream P4 implements the "flood except ingress" rule by
-// (a) setting a multicast group at ingress, (b) replicating the packet
-// to every member of the group in the bmv2 packet replication engine,
-// and (c) explicitly dropping the copy that would head back out the
-// ingress port at egress. Lucid bundles all of that into a single
-// builtin — `flood <port>` constructs a multicast group of every
-// declared port *except* `<port>`, and `generate_ports` emits the
-// event to all of them.
-//
-// One caveat: `flood` only enumerates ports that the topology block
-// has declared. That's why the spec (gen_spec.py) declares all four
-// host ports explicitly as `link` type, even though none is linked to
-// another node — the simulator treats unlinked declared ports as
-// exits, which gives us the 4-host fan-out we want.
+// In Lucid, flood(port) multicasts a packet to every declared 
+// port except `port`. Note that ports must be declared in the 
+// topology block for `flood` to work correctly, that's why the spec
+// declares all four host ports explicitly as `link` type.
 
 type eth_hdr_t = {
   int<48> dmac;

@@ -1,4 +1,4 @@
-# `multicast` — Lucid port of the P4 multicast / L2-flooding tutorial
+# `multicast`
 
 An L2 switch with four host ports.
 
@@ -12,8 +12,8 @@ An L2 switch with four host ports.
 
 ## Running
 ```bash
-/opt/anaconda3/bin/python3 gen_spec.py
-../../../sources/lucid/dpt multicast.dpt --spec multicast.json --silent
+./gen_spec.py
+dpt multicast.dpt --spec multicast.json --silent
 ```
 
 ## Test cases (in `gen_spec.py`)
@@ -40,15 +40,12 @@ group of every declared port on the switch *except* `<port>`.
 `generate_ports(flood ingress_port, ev)` then sends `ev` to each port
 in that group.
 
-For the example to behave as expected, the topology block has to
-declare all four host ports — `flood` enumerates the switch's declared
-ports, not "every conceivable port number." We use four `link`-type
-ports with no `links` entries; the interpreter picks them up in 
-the flood enumeration. Packets emitted to them land in `Exits`.
+Flood only considers declared ports, so the topology block 
+of the interpreter spec declares all 4 host ports as link ports, 
+even though they are not connected in the links block.
 
-## Notable Lucid details
-- **Default action returns the "flood" sentinel.** Rather than calling
-  flood from inside the action (actions can't generate events), the
-  default action returns a `fwd_t` with `fwd_flood = true`, and the
-  handler then decides between `generate_port` and `generate_ports`.
-  Same pattern we used for `fwd_hit` in earlier examples.
+## Notes
+- **Default action returns the "flood" sentinel.** Actions can't 
+generate events, so the default action returns a  `fwd_t` with 
+`fwd_flood = true`, and the handler then decides between 
+`generate_port` and `generate_ports`.
