@@ -91,6 +91,7 @@
    interpSim
    interpState
    InterpSwitch
+   InterpNetwork
    InterpStdio
    InterpSocket
    interpParsing

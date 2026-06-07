@@ -11,7 +11,11 @@ open InterpStdio
 
 module Env = Collections.CidMap
 
-let save_update nst sw = 
+(* the simulator orchestrates the whole network; [network_state] lives in
+   InterpNetwork (its conceptual home). Aliased here for brevity. *)
+type network_state = InterpNetwork.network_state
+
+let save_update nst sw =
   nst.(sw.swid) <- sw
 ;;
 let next_ready_event swid nst =
@@ -30,9 +34,11 @@ let ready_egress_events swid nst =
   evs
 ;;
 
-let ready_control_commands swid nst = 
+let ready_control_commands swid nst =
   let st = nst.(swid) in
-  InterpSwitch.ready_control_commands st !(st.global_time)
+  let st', vals = InterpSwitch.ready_control_commands st !(st.global_time) in
+  save_update nst st';
+  vals
 ;;
 
 let all_egress_events swid nst = 
@@ -51,7 +57,7 @@ let load_interp_input nst interp_input =
       | None -> error "input event not associated with a switch"
       | Some(switch) -> switch
     in
-    InterpSwitch.load_interp_input (nst.(swid)) loc.port interp_input)
+    nst.(swid) <- InterpNetwork.load_interp_input (nst.(swid)) loc.port interp_input)
     locs
 ;;
 
@@ -92,12 +98,6 @@ let initial_state ?(softswitch_mode=false)
         spec.simconfig)
   in
   let nst = switches in
-  (* give all the switches references to the switches Array *)
-  Array.iteri 
-    (fun swid _ -> (
-       switches.(swid) <- InterpSwitch.set_sws switches.(swid) switches))      
-    nst
-  ;  
   nst
 ;;
 
@@ -184,7 +184,7 @@ let execute_event
     st.hdlrs, ""
     (* nst.handlers, "" *)
   in
-  match Env.find_opt event.eid handlers with
+  (match Env.find_opt event.eid handlers with
   (* if we found a handler, run it *)
   | Some handler ->
     if print_log
@@ -211,7 +211,7 @@ let execute_event
           (CorePrinting.event_to_string event)
           swid
           port;
-    handler nst swid port event  
+    handler nst.(swid) port event
   (* if we didn't find a handler, that's an error for ingress but okay for egress. *)
   | None -> (
     match gress with
@@ -227,8 +227,10 @@ let execute_event
         C.SGen(C.GPort(C.vint_exp port 32), C.value_to_exp {v=C.VEvent(event); vty=C.tevent; vspan=Span.default})
       in      
       ignore@@InterpCore.interp_statement nst.(swid) HEgress builtin_env (C.statement default_handler_body)
-    | InterpSwitch.Ingress ->    
-      error @@ "No handler for event " ^ Cid.to_string event.eid )
+    | InterpSwitch.Ingress ->
+      error @@ "No handler for event " ^ Cid.to_string event.eid ));
+  (* deliver everything the handler just generated into its mailbox *)
+  InterpNetwork.drain_switch nst swid
 ;;
 
 let execute_main_parser print_log swidx port (nst: network_state) (pkt_ev : (CoreSyntax.event_val)) = 

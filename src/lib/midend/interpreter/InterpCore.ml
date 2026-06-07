@@ -142,9 +142,8 @@ let interp_op op vs =
       ^ " arguments")
 ;;
 
-let update_counter swid event nst =
-  let st = nst.(swid) in
-  let event_sort = Env.find event.eid nst.(swid).event_sorts in
+let update_counter event st =
+  let event_sort = Env.find event.eid st.event_sorts in
   InterpSwitch.update_counter event_sort st
 ;;
 
@@ -494,11 +493,12 @@ let rec interp_statement st hdl_sort locals s =
           | _ -> 
             List.map (fun port -> Port(port)) ports)
       in
-      (* push event to all output ports *)
+      (* record the generated events in the mailbox; the network delivers
+         them in its drain phase, after the handler finishes. *)
       List.iter (fun out_port ->
-        InterpSwitch.ingress_send st out_port event)
+        InterpSwitch.emit st (FromIngress (out_port, event)))
         output_ports;
-      locals       
+      locals
     )
     | HEgress -> (
       let extract_int = function
@@ -517,7 +517,7 @@ let rec interp_statement st hdl_sort locals s =
           {event with eserialized = false} (* background events stay as events *)
         | EPacket -> InterpDeparsing.serialize_packet_event event
       in
-      InterpSwitch.egress_send st port event_val;
+      InterpSwitch.emit st (FromEgress (port, event_val));
       locals
     )
     | HControl -> (error "control events are not implemented")
@@ -829,10 +829,10 @@ let interp_decl (st : InterpSwitch.state) d =
   | DHandler (id, hdl_sort, (params, body)) ->(
     (* print_endline@@"Adding handler"^(CorePrinting.id_to_string id);
     print_endline@@"handler sort: "^(match hdl_sort with | HData -> "ingress" | HEgress -> "egress" | _ ->""); *)
-    (* a handler runs in network context (it can generate to other switches),
-       so it keeps the `handler` type. It enters the per-switch recursion by
-       handing it nst.(swid). *)
-    let f nst swid port event =
+    (* a handler runs a switch's event code; its effects are local to that
+       switch (outgoing events go to the mailbox, the pipeline mutates in
+       place), so it takes just the switch state. *)
+    let f st port event =
       if (hdl_sort = HEgress) then
         print_endline@@"interping egress handler";
       (* add the event to the environment *)
@@ -851,9 +851,9 @@ let interp_decl (st : InterpSwitch.state) d =
           event.data
           params
       in
-      update_counter swid event nst; (*TODO: why are we counting packet events here? *)
-      Pipeline.reset_stage nst.(swid).pipeline;
-      ignore @@ interp_statement nst.(swid) hdl_sort locals body
+      update_counter event st; (*TODO: why are we counting packet events here? *)
+      Pipeline.reset_stage st.pipeline;
+      ignore @@ interp_statement st hdl_sort locals body
     in
     match hdl_sort with
     | HData ->
@@ -972,7 +972,8 @@ let interp_decl (st : InterpSwitch.state) d =
 
 (* interpret declarations to initialize every switch *)
 let process_decls nst ds =
-  let rec aux i (nst : network_state) =
+  (* the core only knows about an array of switches, not "the network" *)
+  let rec aux i (nst : state array) =
     if i = Array.length nst
     then nst
     else (

@@ -1,5 +1,6 @@
 open CoreSyntax
 open InterpSwitch
+open InterpNetwork (* network_state *)
 
 val initialize : Renaming.env -> string -> decl list -> network_state * Preprocess.t * InterpSpec.t
 val simulate : network_state -> network_state
