@@ -1,6 +1,9 @@
-// Lucid port of the P4 "p4runtime" tutorial — really a demo of
-// **dynamic control via the interpreter's interactive mode**.
-//
+// This example is called "p4runtime" because it mimics 
+// the behavior of the P4Runtime tutorial example from BMv2. 
+// This example shows how to use the interpreter's interactive mode to
+// support an interactive control plane in Python that interacts with 
+// the data plane in real time using JSON events and commands. 
+// 
 // The data plane is a small flow cache (same shape as `flowcache`):
 // hits forward, misses generate a `packet_in` control event and drop
 // the original packet. What makes this example different is *how* the
@@ -12,11 +15,6 @@
 //     packet_in records off stdout, decides what to install (here:
 //     learn the dst port from the ingress port the packet arrived on),
 //     and writes `Table.install` commands back on stdin.
-//
-// The lifecycle — cold cache → miss → notify → install → hit — plays
-// out in real time across the two processes. This is the same idea
-// the upstream `advanced_tunnel.p4` + `mycontroller.py` pair
-// demonstrates with P4Runtime, just sized to fit the simulator.
 
 const int<32> CONTROLLER_PORT = 99;
 

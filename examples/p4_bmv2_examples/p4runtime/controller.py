@@ -7,12 +7,6 @@ response. Implements a small "learn from src" policy: when we see a
 packet_in with src S arriving on port P, we install a rule that
 forwards future packets to S out port P. Subsequent packets in either
 direction then hit the cache.
-
-This is the Lucid analog of `advanced_tunnel.p4` + `mycontroller.py`
-from the upstream P4 tutorial — same architecture (data-plane miss
-notifies the controller, controller installs a rule, data plane
-forwards on hit), but the channel is stdin/stdout JSON rather than
-P4Runtime gRPC.
 """
 
 import ipaddress
@@ -27,7 +21,7 @@ from pathlib import Path
 from scapy.all import Ether, IP
 
 HERE   = Path(__file__).parent
-DPT    = HERE / "../../../sources/lucid/dpt"
+DPT    = HERE / "../../../dpt"
 PROG   = HERE / "p4runtime.dpt"
 SPEC   = HERE / "p4runtime.json"
 

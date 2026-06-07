@@ -1,6 +1,6 @@
 # `p4runtime`
 
-This port uses Lucid's **interpreter interactive mode** to support a dynamic controller in Python.
+This uses Lucid's **interpreter interactive mode** to support a dynamic controller in Python.
 
 - `dpt --interactive` reads JSON events on stdin and writes exit
   events as JSON on stdout (one record per line).
@@ -10,7 +10,7 @@ This port uses Lucid's **interpreter interactive mode** to support a dynamic con
 
 The data plane is a flow cache: misses generate `packet_in`; hits
 forward. Same shape as [`flowcache`](../flowcache/), but instead of
-the controller being a static JSON spec, it's a live Python process.
+the controller being a static JSON spec, it's a Python program.
 
 ## Files
 - [p4runtime.dpt](p4runtime.dpt) — the Lucid program.
@@ -20,12 +20,12 @@ the controller being a static JSON spec, it's a live Python process.
 
 ## Running
 ```bash
-/opt/anaconda3/bin/python3 controller.py
+./controller.py
 ```
 
-That single command runs the whole demo — it spawns dpt, sends a few
-test packets, reacts to packet_in's by installing rules, and prints
-the interleaved transcript on stderr.
+The above command spawns the controller, interpreter, sends a few 
+test packets, reacts to the packet_ins, and prints the 
+interleaved transcript on stderr.
 
 Sample transcript (abridged):
 ```
@@ -42,6 +42,9 @@ Sample transcript (abridged):
 
 ## How interactive mode works
 
+The `dpt --interactive` flag turns the interpreter into a long-running
+server that can be driven from any process with line-delimited JSON.
+
 > - **Input**: every event is a JSON dict on its own line. Reads from
 >   stdin until EOF.
 > - **Output**: each exit event is a single-line JSON record on
@@ -50,24 +53,19 @@ Sample transcript (abridged):
 >   has elapsed; events arriving on stdin execute at
 >   `max(current_ts, event.timestamp)`.
 
-The `dpt --interactive` flag turns the simulator into a long-running
-server that can be driven from any process that speaks line-delimited
-JSON.
 
-## Notable details
+## Notes
 
-- **The "controller" is just a Python process** that does JSON in,
-  JSON out. The controller's policy logic 
-  (`react_to_packet_in` in `controller.py`) is plain Python that 
+- **The "controller" is just a Python program** with JSON in,
+  JSON out. The controller's logic 
+  (`react_to_packet_in` in `controller.py`) reads packet_ins and 
   decides what rule to install based on the packet_in's fields.
 - **Bidirectional channel from one stdin/stdout pair.** Each event /
   command is one line of JSON. The same channel carries packet
   events, `Table.install` commands, and the `packet_in` notifications
   in the other direction. Adding a new control protocol over this
   channel is just adding a new event type to the Lucid program.
-- **Shutdown is messy.** Closing stdin causes the interpreter to
+- **Shutdown is currently messy.** Closing stdin causes the interpreter to
   exit with a `Fatal error: ... stdin eof`. The controller catches
-  the error stream and the run is complete by that point, but it's
-  noise. Worth filing as a small interpreter cleanup —
-  `load_new_events`'s non-blocking-poll branch should handle EOF as
-  a clean shutdown signal instead of `error "stdin eof"`.
+  the error stream and the run is complete by that point, so it is just 
+  annoying.
