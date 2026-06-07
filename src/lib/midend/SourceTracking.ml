@@ -60,19 +60,7 @@ let init_tracking ds =
           let ctx' = enter_module ctx id in
           self#visit_interface ctx' intf;
           self#visit_decls ctx' decls
-        (* globals are the things we really want to track... *)
-        | DGlobal(id, _, exp) -> (
-          match exp.e with
-            | ETableCreate({tactions=tactions;}) ->
-              (* update reference map *)
-              refs := add_refs 
-                (!refs) 
-                (Cid.id id) 
-                (List.map cid_of_exp tactions);
-            (* not a table, just recurse *)
-            | _ -> super#visit_decl ctx decl
-        )
-        | _ -> 
+        | _ ->
           super#visit_decl ctx decl
       end
   in

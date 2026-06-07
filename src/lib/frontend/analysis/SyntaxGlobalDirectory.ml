@@ -88,7 +88,6 @@ let exp_to_tblmeta id exp =
     {aid; acompiled_id; arg_sizes}
   in
   let keys = match TyTQVar.strip_links ((Option.get exp.ety).raw_ty) with
-    | TTable(tty) -> (List.map user_key tty.tkey_sizes)@[priority_key] 
     | TName(_, sizes, _) ->
       let key_sz = List.nth sizes 0 in
       let key_sizes = SyntaxUtils.flatten_size key_sz in
@@ -101,13 +100,6 @@ let exp_to_tblmeta id exp =
     | raw_ty -> error@@"[exp_to_tblmeta] expression is not a table type ("^(Printing.raw_ty_to_string raw_ty)^")"
   in
   let actions, length = match exp.e with
-    | ETableCreate(tbl) -> (
-      List.map evar_to_action tbl.tactions,
-      match tbl.tsize.e with 
-        | EVal({v=VInt(z); _}) ->
-          Integer.to_int z
-        | EInt(z, _) -> Z.to_int z
-        | _ -> error "[exp_to_tblmeta] table size expression is not an EVal(EInt(...))")
     | ECall(_, [len_exp; acns_exp; _], _)
     | ECall(_, [len_exp; acns_exp; _; _], _) -> (
         List.map evar_to_action (SyntaxUtils.flatten_exp acns_exp),
@@ -170,9 +162,6 @@ let core_exp_to_tblmeta id (exp : C.exp) =
     | TName(_, sizes) -> 
       let key_sizes = CoreSyntax.size_to_ints (List.hd sizes) in
       (List.map user_key key_sizes)@[priority_key]
-    (* | TTable(tty) -> 
-      let key_sizes = List.map (fun sz -> match sz with | C.Sz sz -> sz | _ -> error "need singleton size") tty.tkey_sizes in
-      (List.map user_key key_sizes)@[priority_key]  *)
     | _ -> error "[exp_to_tblmeta] expression is not a table type"
   in
   let actions, length = match exp.e with
@@ -186,12 +175,6 @@ let core_exp_to_tblmeta id (exp : C.exp) =
         | EVal({v=VInt(z); _}) -> Integer.to_int z
         | _ -> error "[exp_to_tblmeta] table size expression is not an EVal(EInt(...))"
     )
-    (* | ETableCreate(tbl) -> (
-      List.map evar_to_action tbl.tactions,
-      match tbl.tsize.e with 
-        | EVal({v=VInt(z); _}) ->
-          Integer.to_int z
-        | _ -> error "[exp_to_tblmeta] table size expression is not an EVal(EInt(...))") *)
     | _ -> error "[exp_to_tblmeta] expression is not a table create"
   in
   let compiled_cid = (Cid.id id) in 

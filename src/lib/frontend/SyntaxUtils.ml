@@ -67,7 +67,6 @@ let rec is_global_rty rty =
   | TTuple lst -> List.exists is_global_rty lst
   | TRecord lst -> List.exists (fun (_, rty) -> is_global_rty rty) lst
   | TVector (t, _) -> is_global_rty t
-  | TTable _ -> true
   | TActionConstr _ -> false
   | TAction _ -> false
   | TBitstring -> false
@@ -86,7 +85,6 @@ let rec is_not_global_rty rty =
   | TTuple lst -> List.for_all is_not_global_rty lst
   | TRecord lst -> List.for_all (fun (_, rty) -> is_not_global_rty rty) lst
   | TVector (t, _) -> is_not_global_rty t
-  | TTable _ -> false
   | TActionConstr _ -> true
   | TAction _ -> true
   | TBitstring -> true
@@ -277,10 +275,6 @@ let rec is_polymorphic_raw_ty rty =
   | TRecord fields -> List.exists (fun (_, rty) -> is_polymorphic_raw_ty rty) fields
   | TVector (rty, sz) -> is_polymorphic_raw_ty rty || is_polymorphic_size sz
   | TTuple rtys -> List.exists is_polymorphic_raw_ty rtys
-  | TTable tbl ->
-    List.exists is_polymorphic_ty tbl.tkey_sizes
-    || List.exists is_polymorphic_ty tbl.tparam_tys
-    || List.exists is_polymorphic_ty tbl.tret_tys
   | TBuiltin (_, rtys, _) -> List.exists is_polymorphic_raw_ty rtys
   | TAction acn ->
     List.exists is_polymorphic_ty acn.aarg_tys
@@ -344,10 +338,6 @@ let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ?(ignore_qv
     if List.length lst1 <> List.length lst2
     then false
     else List.for_all2 equiv_raw_ty lst1 lst2
-  | TTable t1, TTable t2 ->
-    List.for_all2 equiv_ty t1.tkey_sizes t2.tkey_sizes
-    && List.for_all2 equiv_ty t1.tparam_tys t2.tparam_tys
-    && List.for_all2 equiv_ty t1.tret_tys t2.tret_tys
   | TBitstring, TBitstring -> true
   | ( (TBitstring
       | TBool
@@ -365,7 +355,6 @@ let rec equiv_raw_ty ?(ignore_effects = false) ?(qvars_wild = false) ?(ignore_qv
       | TAbstract _
       | TActionConstr _
       | TAction _
-      | TTable _ 
       | TBuiltin _)
     , _ ) -> false
 
@@ -409,7 +398,6 @@ let default_expression ty =
     | TFun _ -> failwith "Cannot create default expression for function"
     | TActionConstr _ -> failwith "Cannot create default expression for action"
     | TAction _ -> failwith "Cannot create default expression for action"
-    | TTable _ -> failwith "Cannot create default expression for table"
     | TQVar _ -> failwith "Cannot create default expression for type variable"
     | TBitstring -> failwith "Cannot create default expression for bitstring"
 
@@ -428,8 +416,6 @@ let rec is_compound e =
   match e.e with
   | EInt _ | EVal _ | EVar _ | ESizeCast _ -> false
   | EHash _ | EOp _ | ECall _ | EStmt _ -> true
-  | ETableCreate _ -> true
-  | ETableMatch _ -> true
   | EComp (e, _, _) | EIndex (e, _) | EProj (e, _) | EGet (e, _) | EFlood e -> is_compound e
   | EVector entries | ETuple entries -> List.exists is_compound entries
   | ERecord entries -> List.exists (is_compound % snd) entries
@@ -544,19 +530,6 @@ let mk_daction_ctor id rty cp p body span =
 let mk_daction id rty p body span = 
   decl_sp (DAction (id, rty, (p, extract_action_body body))) span
 
-let mk_entry prio pats acn args span =
-  { eprio = prio; ematch = pats; eaction = Syntax.ucall_sp (Cid.id acn) args span;}
-;;
-
-let mk_tblinstall_single tbl entries span =
-  if List.length entries > 1
-  then
-    Console.error_position
-      span
-      "table_install can only install one entry at a time."
-  else tblinstall_sp tbl entries span
-;;
-
 let unpack_tuple (e : exp) =
   match e.e with
   | ETuple lst -> lst
@@ -581,13 +554,6 @@ let rec flatten_size size =
   match (STQVar.strip_links size) with 
   | ITup(sizes) -> List.map flatten_size sizes |> List.flatten
   | size -> [size]
-;;
-
-
-let unpack_default_action e = 
-  match e with 
-  | ECall(cid, args, flag) -> cid, args, flag
-  | _ -> error "default table action must be a expression"
 ;;
 
 
@@ -677,7 +643,6 @@ let raw_ty_to_constr_str raw_ty =
   | TRecord (_) -> "record"
   | TVector (_) -> "vector"
   | TTuple (_) -> "tuple"
-  | TTable (_) -> "table"
   | TActionConstr (_) -> "action"
   | TPat (_) -> "pat"
   | TQVar (_) -> "qvar"
@@ -733,8 +698,6 @@ let e_to_constr_str e = match e with
 | EComp (_) -> "comp"
 | EIndex (_) -> "index"
 | ETuple (_) -> "tuple"
-| ETableCreate (_) -> "tablecreate"
-| ETableMatch (_) -> "tablematch"
 (* | EPatWild (_) -> "patwild" *)
 ;;
 

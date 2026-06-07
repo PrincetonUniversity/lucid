@@ -232,22 +232,6 @@ let rename prog =
         let new_exp = self#visit_exp dummy exp in
         PLocal (new_x, new_ty, new_exp)
 
-      method! visit_STableMatch dummy tm =
-        let tbl = self#visit_exp dummy tm.tbl in
-        let keys = List.map (self#visit_exp dummy) tm.keys in
-        let args = List.map (self#visit_exp dummy) tm.args in
-        (* rename if the variables are declared here *)
-        let outs, out_tys =
-          match tm.out_tys with
-          | None ->
-            (* must visit outs because they have been renamed too. *)
-            List.map (self#visit_id dummy) tm.outs, None
-          | Some out_tys ->
-            ( List.map self#freshen_var tm.outs
-            , Some (List.map (self#visit_ty dummy) out_tys) )
-        in
-        STableMatch { tbl; keys; args; outs; out_tys }
-
       method! visit_body dummy (params, body) =
         let old_env = env in
         let new_params =

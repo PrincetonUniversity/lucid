@@ -1,6 +1,6 @@
 (* Reset effect annotations on types inside handler and function bodies.
    This is a temporary patch / hack for type checking to work in 
-   certain phases of the frontend (from TableInlining to MonomorphicEventArgs),
+   certain phases of the frontend (from function inlining to MonomorphicEventArgs),
    After a typing pass, types in handler bodies carry resolved effects with
    specific index variable IDs. These conflict with fresh variables created
    by a subsequent typing pass. This pass replaces those teffect fields with

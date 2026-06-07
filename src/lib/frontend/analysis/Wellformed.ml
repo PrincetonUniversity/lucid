@@ -483,8 +483,6 @@ let basic_qvar_checker =
       span <- ty.tspan;
       super#visit_ty env ty
 
-    (* table types are always allowed to have QVars *)
-    method! visit_TTable _ _ = ()
     method! visit_exp _ _ = ()
 
     method! visit_decl env d =

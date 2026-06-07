@@ -58,7 +58,6 @@
    eventFormat
    unrollRecursiveParsers
    functionInlining
-   tableInlining
    sizeInlining
    builtinsTupleElimination
    renaming

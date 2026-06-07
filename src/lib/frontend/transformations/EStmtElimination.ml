@@ -50,26 +50,7 @@ let rec inline_exp e =
   | ETuple es ->
     let stmt, es' = inline_exps es in
     stmt, { e with e = ETuple es' }
-  | ETableCreate tc -> 
-    let acn_stmt, tactions = inline_exps tc.tactions in
-    let def_cid, def_args, def_flag = unpack_default_action tc.tdefault.e in
-    let def_stmt, def_args = inline_exps def_args in
-    let tdefault = {tc.tdefault with e = ECall(def_cid, def_args, def_flag)} in
-    sseq 
-      acn_stmt def_stmt
-      ,{e with e = ETableCreate({tc with tactions; tdefault})}  
-  | ETableMatch(tm) -> 
-    let stmt, tm' = inline_tbl_match tm in
-    stmt, {e with e = ETableMatch(tm')}
   (* | EPatWild _ -> snoop, e *)
-
-and inline_tbl_match tm =
-    let tbl_stmt, tbl = inline_exp tm.tbl in
-    let keys_stmt, keys = inline_exps tm.keys in
-    let args_stmt, args = inline_exps tm.args in
-    sseq tbl_stmt (sseq keys_stmt args_stmt), 
-    {tm with tbl; keys; args}
-
 
 and inline_exps es =
   List.fold_right
@@ -113,21 +94,6 @@ and inline_stmt s =
     let branches' = List.map (fun (p, stmt) -> p, inline_stmt stmt) branches in
     sseq s' { s with s = SMatch (es', branches') }
   | SLoop (s1, id, sz) -> { s with s = SLoop (inline_stmt s1, id, sz) }
-  | STableMatch(tm) -> 
-    let pre_s, tm' = inline_tbl_match tm in
-    sseq pre_s {s with s=STableMatch(tm')}
-  | STableInstall(tbl_id, entries) -> 
-    let stmt, entries_rev = List.fold_left
-      (fun (s,entries) entry -> 
-        let acn_cid, eargs, flag = unpack_default_action entry.eaction.e in
-        let a_s, eargs = inline_exps eargs in
-        let entry = {entry with eaction = {entry.eaction with e = ECall(acn_cid, eargs, flag)}} in
-        sseq a_s s, entry::entries)
-      (snoop, [])
-      entries
-    in
-    let entries = List.rev entries_rev in
-    sseq stmt {s with s=STableInstall(tbl_id, entries)}
 ;;
 
 let eliminator =

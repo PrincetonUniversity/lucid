@@ -150,17 +150,7 @@ let replacer =
   object (self)
     inherit [_] s_map as super
 
-    (* Table extensions -- types *)
-    method! visit_TTable _ tbl_ty =
-      (* flatten param and return types *)
-      let tbl_ty' =
-        { tbl_ty with
-          tparam_tys = flatten_tys tbl_ty.tparam_tys
-        ; tret_tys = flatten_tys tbl_ty.tret_tys
-        }
-      in
-      TTable tbl_ty'
-    method! visit_TBuiltin _ cid raw_tys bool = 
+    method! visit_TBuiltin _ cid raw_tys bool =
       (* Builtins may carry tuples, but 
          singleton tuples must be unpacked. *)
       let raw_tys' = List.map (
@@ -216,39 +206,6 @@ let replacer =
         in
         let ids' = List.map lookup_flat_ids tuple_assign.ids |> List.flatten in
         STupleAssign { tuple_assign with ids = ids' }
-
-    (* Table extensions -- statements *)
-    method! visit_STableMatch env tblmatch =
-      (* recurse on inner components *)
-      let tblmatch = self#visit_tbl_match env tblmatch in
-      match tblmatch.out_tys with
-      (* the match table creates new variables, which
-         we must flatten *)
-      | Some out_tys ->
-        let var_defs = List.combine tblmatch.outs out_tys in
-        let env', new_var_defs = flatten_params !env var_defs in
-        let outs', out_tys' = List.split new_var_defs in
-        (* update the environment with the new ids *)
-        env := env';
-        (* return apply table statement with updates *)
-        STableMatch { tblmatch with outs = outs'; out_tys = Some out_tys' }
-      | None ->
-        (* the match table writes existing variables, we must
-           find their flattened id *)
-        let rec lookup_flat_ids id : id list =
-          match IdMap.find_opt id !env with
-          | None -> [id] (* not a tuple *)
-          | Some ids_tys ->
-            List.map lookup_flat_ids (List.split ids_tys |> fst) |> List.flatten
-        in
-        let outs' = List.map lookup_flat_ids tblmatch.outs |> List.flatten in
-        STableMatch { tblmatch with outs = outs' }
-
-    method! visit_ETableMatch _ tblmatch =
-      Console.error_position
-        tblmatch.tbl.espan
-        "Table apply expressions should be converted to statements before \
-         tuple elim."
 
     (* Split into a bunch of variable definitions, one for each
        tuple element. *)
@@ -579,10 +536,7 @@ let rec replace_decl (env : env) d =
            es
        in
        replace_decls env new_ds
-     (* The tuple types inside of a table types must be flattened *)
-     | TTable _ ->
-       env, [{ d with d = DGlobal (id, replace_ty ty, replace_exp env exp) }]     
-     | TName _ -> 
+     | TName _ ->
        env, [{ d with d = DGlobal (id, replace_ty ty, replace_exp env exp) }]
      | TBuiltin _-> 
        env, [{ d with d = DGlobal (id, replace_ty ty, replace_exp env exp) }]

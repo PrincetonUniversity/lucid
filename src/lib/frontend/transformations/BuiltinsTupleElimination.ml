@@ -102,9 +102,6 @@ let rec eliminate_exp e =
     let stmt, e' = eliminate_exp e in
     stmt, { e with e = EComp (e', id, size) }
   (* | EPatWild _ -> snoop, e *)
-  | ETableMatch _ -> snoop, e
-  | ETableCreate _ -> snoop, e 
-  (* error "special table syntax is depreciated" *)
 
 and eliminate_exps exps =
   let acc =
@@ -179,8 +176,6 @@ and eliminate_stmt stmt =
   | SLoop (stmt, id, size) ->
     { stmt with s = SLoop (eliminate_stmt stmt, id, size) }
   | STupleAssign _ -> stmt (* noop for tuple assignments *)
-  | STableMatch _ -> stmt 
-  | STableInstall _ -> stmt
 ;;
 
 let eliminator =

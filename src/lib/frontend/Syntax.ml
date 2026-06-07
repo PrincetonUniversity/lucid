@@ -57,20 +57,13 @@ and raw_ty =
   | TRecord of (string * raw_ty) list
   | TVector of raw_ty * size
   | TTuple of raw_ty list
-  | TTable of tbl_ty
   | TBuiltin of cid * (raw_ty list) * bool (* new named builtin types. Table.t<<key_t, arg1_t, arg2_t, ret_t>>*)
   | TAction of acn_ty
   | TActionConstr of acn_ctor_ty
   | TPat of size (* number of bits *)
   | TBitstring
 
-and tbl_ty =
-  { tkey_sizes : ty list
-  ; tparam_tys : ty list
-  ; tret_tys : ty list
-  }
-
-and acn_ty = 
+and acn_ty =
   {
     aarg_tys : tys;
     aret_tys : tys;
@@ -179,13 +172,6 @@ and e =
   | EComp of exp * id * size (* Vector comprehension *)
   | EIndex of exp * size
   | ETuple of exp list
-  | ETableCreate of
-      { tty : ty
-      ; tactions : exp list
-      ; tsize : exp
-      ; tdefault : exp; (* ECall(default_acn_id, default_installtime_args) *)
-      }
-  | ETableMatch of tbl_match
 
 and exp =
   { e : e
@@ -216,35 +202,12 @@ and s =
   | SSeq of statement * statement
   | SMatch of exp list * branch list
   | SLoop of statement * id * size
-  | STableMatch of tbl_match
-  | STableInstall of exp * tbl_entry list
 
 and tuple_assign = {
   ids : id list;
   tys : (ty list) option;
   exp : exp;
 }
-
-and tbl_match =
-  { tbl : exp
-  ; keys : exp list
-  ; args : exp list
-  ; outs : id list
-  ; out_tys : ty list option
-  }
-(* out_tys is populated for statements that create new vars *)
-
-(* entries are like branches in match statements, except instead of
-   a statement there is a call to an action (really an action generator) *)
-
-(* notes on entry priorities:
-  1. Lower priorities are checked first.
-  2. Priorities should be a bounded size, under 24 bits for tof. *)
-and tbl_entry =
-  { eprio : int
-  ; ematch : exp list (*expresisons because some patterns are given as mask operations *)
-  ; eaction : exp (* ecall(action id, action args) *)
-  }
 
 and statement =
   { s : s
@@ -488,10 +451,6 @@ let tuple_sp_ty es span =
   let ty = ty (TTuple tys) in
   aexp (ETuple es) (Some ty) span
 ;;
-let tblmatch_sp tbl keys args span =
-  let t = { tbl; keys; args; outs = []; out_tys = None } in
-  exp_sp (ETableMatch t) span
-;;
 
 (* declarations *)
 let decl d = { d; dspan = Span.default; dpragmas = []; }
@@ -565,10 +524,6 @@ let loop_sp e i k span = statement_sp (SLoop (e, i, k)) span
 let sexp_sp e span = statement_sp (SUnit e) span
 let scall_sp cid es span = sexp_sp (call_sp cid es span) span
 let sucall_sp cid es span = sexp_sp (ucall_sp cid es span) span
-
-let tblinstall_sp tbl entries span =
-  statement_sp (STableInstall (tbl, entries)) span
-;;
 
 let noinline stmt = { stmt with spragmas = (Pragma.sprag "noinline" [])::stmt.spragmas }
 

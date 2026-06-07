@@ -14,10 +14,6 @@
   let mk_trecord lst =
     TRecord (List.map (fun (id, ty) -> Id.name id, ty.raw_ty) lst)
 
-  let mk_t_table tkey_sizes tparam_tys tret_tys span =
-    Config.base_cfg.show_tvar_links <- true;
-    ty_sp (TTable({tkey_sizes; tparam_tys; tret_tys})) span
-
   let mk_tmemop span n sizes =
     match sizes with
     | [s1] -> TMemop (n, s1)
@@ -51,9 +47,6 @@
         es
     in
     value_sp (VGroup locs) span |> value_to_exp
-
-  let make_create_table tty tactions tsize tdefault span =
-    exp_sp (ETableCreate({tty; tactions; tsize; tdefault})) span
 
   let mk_fty tspan params =
     let start_eff = FVar (QVar (Id.fresh "eff")) in
