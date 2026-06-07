@@ -260,7 +260,7 @@ let execute_main_parser print_log swidx port (nst: network_state) (pkt_ev : (Cor
               (CorePrinting.value_to_string payload_val)
               swidx
               port;
-      let event_val = parser_f nst swidx main_args |> extract_ival in
+      let event_val = parser_f nst.(swidx) main_args |> extract_ival in
       match event_val.v with 
       | VEvent(event_val) -> execute_event print_log swidx nst event_val port (InterpSwitch.Ingress)
       | VBool(false) -> () (* Its okay to not generate an event. That will happen for drops. *)

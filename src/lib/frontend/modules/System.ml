@@ -25,10 +25,12 @@ let sys_time_ty =
        }
 ;;
 
-let sys_time_fun (nst : InterpSwitch.state Array.t) _ args =
+let sys_time_fun (st : InterpSwitch.state) args =
   let open CoreSyntax in
   match args with
-  | [] -> InterpSwitch.V(vinteger (Integer.create ~value:!(nst.(0).global_time) ~size:32))
+  (* global_time is a single shared ref, so the current switch's copy is the
+     network-wide time. *)
+  | [] -> InterpSwitch.V(vinteger (Integer.create ~value:!(st.global_time) ~size:32))
   | _ -> sys_time_error "takes no parameters"
 ;;
 
@@ -52,7 +54,7 @@ let sys_random_ty =
        }
 ;;
 
-let sys_random_fun _ _ args =
+let sys_random_fun _ args =
   let open CoreSyntax in
   match args with
   | [] ->
@@ -101,7 +103,7 @@ let sys_dequeue_depth_cid = Cid.create_ids [sys_id; sys_dequeue_depth_id]
 let sys_dequeue_depth_error msg = sys_error sys_dequeue_depth_name msg
 
 
-let sys_dequeue_depth_fun _ _ args =
+let sys_dequeue_depth_fun _ args =
   let open CoreSyntax in
   match args with
   | [] ->

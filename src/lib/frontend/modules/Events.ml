@@ -16,7 +16,7 @@ let event_delay_id = Id.create event_delay_name
 let event_delay_cid = Cid.create_ids [event_id; event_delay_id]
 let event_delay_error msg = event_error event_delay_name msg
 
-let event_delay_fun _ _ args =
+let event_delay_fun _ args =
   let open CoreSyntax in
   let open InterpSyntax in 
   match args with

@@ -76,10 +76,8 @@ and  network_state = state Array.t
 (* a handler has side effects, so it needs to see the network state *)
 and  handler = network_state -> int (* switch *) -> int (* port *) -> event_val -> unit
 
-(* code inside the program has no side effects, so it should not need network state, 
-   just switch state (or even perhaps only the switch pipeline?) *)
-and code = network_state -> int (* switch *) -> ival list ->  ival
-(* and code = state -> ival list -> ival *)
+(* code inside the program may mutate switch state (first arg) *)
+and code = state -> ival list -> ival
 
 and ival =
   | V of value
@@ -87,6 +85,11 @@ and ival =
 
 let f (cid: cid) (code: code) = F(Some(cid), code)
 let anonf (code: code) = F(None, code)
+
+(* Recover the (network_state, switch id) pair from a switch state. Used to
+   bridge `code` (which now takes just a switch state) to interpreter helpers
+   that still thread network state + switch id. *)
+let nst_swid (st : state) : network_state * int = !(st.sws), st.swid
 
 let extract_ival iv =
   match iv with

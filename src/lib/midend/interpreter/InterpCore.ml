@@ -236,7 +236,7 @@ let rec interp_exp (nst : network_state) swid locals e : InterpSwitch.ival =
        error
          (Cid.to_string cid
          ^ " is a value identifier and cannot be used in a call")
-     | F(_, f) -> f nst swid vs
+     | F(_, f) -> f nst.(swid) vs
    )
   | EHash (Szs _, _ ) -> 
     error "Hash expression size should not be a tuple"
@@ -641,7 +641,7 @@ let interp_dglobal (nst : network_state) swid id ty e =
     let vg_ival = InterpSwitch.V (vglobal id idx ty) in
     (* call the constructor to update the pipeline, adding the value to it *)
     let arg_ivals = vg_ival::arg_ivals in
-    let new_pipe = Tables.create_ctor nst swid arg_ivals in 
+    let new_pipe = Tables.create_ctor nst.(swid) arg_ivals in
     (* update the global state's pipeline *)
     nst.(swid) <- { nst.(swid) with pipeline = new_pipe };
     (* add the global to globals context in nst *)
@@ -660,8 +660,9 @@ let interp_dglobal (nst : network_state) swid id ty e =
   | _ -> _interp_dglobal nst swid id ty e
 ;;
 
-let interp_complex_body params body nst swid args =
-  (* TODO: 
+let interp_complex_body params body st args =
+  let nst, swid = nst_swid st in
+  (* TODO:
         - cell2 should not take default.
         - the default parameter should get removed. Just use 0. *)
   let args, default = List.takedrop (List.length params) args in
@@ -716,7 +717,8 @@ let interp_complex_body params body nst swid args =
   { v = VTuple vs; vty = ty TBool (* Dummy type *); vspan = Span.default }
 ;;
 
-let interp_memop params body nst swid args =
+let interp_memop params body st args =
+  let nst, swid = nst_swid st in
   (* Memops are polymorphic, but since the midend doesn't understand polymorphism,
       the size of all the ints in its body got set to 32. We'll just handle this by
       going through now and setting all the sizes to that of the first argument.
@@ -730,7 +732,7 @@ let interp_memop params body nst swid args =
   let sz = List.hd args |> extract_ival |> raw_integer |> Integer.size in
   let body = replacer#visit_memop_body sz body in
   match body with
-  | MBComplex body -> InterpSwitch.V(interp_complex_body params body nst swid args)
+  | MBComplex body -> InterpSwitch.V(interp_complex_body params body st args)
   | MBReturn e ->
     let locals =
       List.fold_left2
@@ -810,7 +812,7 @@ and interp_parser_step nst swid payload_id locals parser_step =
           in
           (* call the parser function as you would any other function *)
           match InterpSwitch.lookup cid sw_st with 
-            | F(_, parser_f) -> let rv = parser_f nst swid args in rv |> extract_ival
+            | F(_, parser_f) -> let rv = parser_f sw_st args in rv |> extract_ival
             | _ -> error "[parser call] could not find parser function"
         )
         | _ -> error "[parser call] expected a call expression"
@@ -878,7 +880,8 @@ let interp_decl (nst : network_state) swid d =
     (* figure out whether to use the implicit payload argument. if there is an explicit 
         payload for the parser, it must be the first argument. *)
     let payload_id_opt = find_bitstring_param params in
-    let runtime_function nst swid args = 
+    let runtime_function st args =
+      let nst, swid = nst_swid st in
       (* if there is no payload parameter, put one in the front *)
       let param_ids, payload_id = match payload_id_opt with
         | None -> ((Builtins.ingr_port_id)::(Builtins.packet_arg_id)::(List.split params |> fst), Builtins.packet_arg_id)
@@ -902,7 +905,7 @@ let interp_decl (nst : network_state) swid d =
   | DEvent (id, num_opt, _, _) ->
     (* the expression inside a generate just constructs an event value. *)
     (* the generate statement adds the payload, however *)
-    let f _ _ args =
+    let f _ args =
       let event_num_val = match num_opt with
       | None -> None 
       | Some(num) -> Some(
@@ -936,7 +939,8 @@ let interp_decl (nst : network_state) swid d =
     failwith "Extern declarations should be handled during preprocessing"
   | DUserTy _ -> nst (*all user types should be inlined by now*)
   | DFun(id, _, body) -> 
-    let runtime_function (nst: network_state) swid args = 
+    let runtime_function st args =
+      let nst, swid = nst_swid st in
       (* bind args to parameters *)
       let locals = 
         List.fold_left2
@@ -966,9 +970,9 @@ let interp_decl (nst : network_state) swid d =
               interpreted, here and in Tables.ml *)
     (* add a function to the environment that takes the action constructor's params 
        and returns a function version of the inner action *)
-    let action_function_generator _ _ const_args = 
+    let action_function_generator _ const_args =
       (* the inner action function *)
-      let action_function _ _ args = 
+      let action_function _ args =
         (* bind the closure args and runtime args in the env *)
         let locals = 
           List.fold_left2

@@ -37,8 +37,8 @@ let packet_parse_ty =
 ;;
 let packet_parse_error msg = packet_error packet_parse_name msg
 
-let packet_parse_fun nst swnum args =
-  let _, _, _ = nst, swnum, args in
+let packet_parse_fun _ args =
+  let _ = args in
   packet_parse_error "Packet.parse should never be called outside of parsers"
 ;;
 

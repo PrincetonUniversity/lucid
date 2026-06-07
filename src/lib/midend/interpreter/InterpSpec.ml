@@ -238,7 +238,7 @@ let create_foreign_functions renaming efuns python_file =
       | Some o ->
         let f =
           InterpSwitch.anonf
-            (fun _ _ args ->
+            (fun _ args ->
               let pyretvar =
                 Py.Callable.to_function
                   o

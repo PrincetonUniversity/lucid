@@ -60,7 +60,8 @@ let parse_args (p:value) arg_tys =
 ;;
 
 
-let lucid_parse_fun (nst: InterpSwitch.state Array.t) swid args = 
+let lucid_parse_fun (st : InterpSwitch.state) args =
+  let nst, swid = nst_swid st in
   (* payload is a VBits value *)
   let payload = match args with
     | [_; InterpSwitch.V(payload)] -> payload

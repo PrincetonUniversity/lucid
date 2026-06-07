@@ -68,7 +68,7 @@ let payload_empty_ty =
 (* Just use ints to represent payloads in the interpreter. We could make a new
    type if we really wanted to distinguish them better *)
 (* Lets use a pattern value for now. *)
-let payload_empty_fun _ _ args =
+let payload_empty_fun _ args =
   match args with
   | [] -> InterpSwitch.V({(CoreSyntax.vpat []) with vty = (SyntaxToCore.translate_ty payload_ty)})
     
@@ -86,8 +86,8 @@ let payload_parse_cid = Cid.create_ids [payload_id; payload_parse_id]
 let payload_parse_ty = effectless_fun_ty [ty TBitstring] payload_ty
 let payload_parse_error msg = payload_error payload_parse_name msg
 
-let payload_parse_fun _ _ args =
-  (* at this point, Payload.parse is just a wrapper that stores 
+let payload_parse_fun _ args =
+  (* at this point, Payload.parse is just a wrapper that stores
      whatever bitstring is left at the end of packet processing. *)
   let open InterpSyntax in
   let open CoreSyntax in
@@ -105,7 +105,7 @@ let payload_read_ty = effectless_fun_ty [payload_ty] (fresh_ty "payload_read_ret
   
 let payload_read_error msg = payload_error payload_read_name msg
 
-let payload_read_fun _ _ _ =
+let payload_read_fun _ _ =
   payload_read_error "Payload.read is not implemented yet"
 ;;
 
@@ -118,7 +118,7 @@ let payload_skip_id = Id.create payload_skip_name
 let payload_skip_cid = Cid.create_ids [payload_id; payload_skip_id]
 let payload_skip_ty = effectless_fun_ty [payload_ty; ty (TInt(fresh_size "payload_skip_arg"))   ] (ty TVoid) ;;
 let payload_skip_error msg = payload_error payload_skip_name msg
-let payload_skip_fun _ _ _ =
+let payload_skip_fun _ _ =
   payload_skip_error "Payload.skip is not implemented yet"
 ;;
 
@@ -131,7 +131,7 @@ let payload_peek_ty = effectless_fun_ty [payload_ty] (fresh_ty "payload_peek_ret
 
 let payload_peek_error msg = payload_error payload_peek_name msg
 
-let payload_peek_fun _ _ _ =
+let payload_peek_fun _ _ =
   payload_peek_error "Payload.peek is not implemented yet"
 ;;
 

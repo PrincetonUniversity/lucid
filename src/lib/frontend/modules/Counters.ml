@@ -54,11 +54,12 @@ let counter_add_ty =
        }
 ;;
 
-let dummy_memop = InterpSwitch.F (None, fun _ _ args -> V(InterpSwitch.extract_ival (List.hd args)))
-let setop = InterpSwitch.F (None, fun _ _ args -> V(InterpSwitch.extract_ival (List.nth args 1)))
+let dummy_memop = InterpSwitch.F (None, fun _ args -> V(InterpSwitch.extract_ival (List.hd args)))
+let setop = InterpSwitch.F (None, fun _ args -> V(InterpSwitch.extract_ival (List.nth args 1)))
 let dummy_int = InterpSwitch.V (CoreSyntax.vinteger (Integer.of_int 0))
 
-let counter_add_fun nst swid args =
+let counter_add_fun st args =
+  let nst, swid = nst_swid st in
   let open InterpSyntax in
   let open CoreSyntax in
   match args with
