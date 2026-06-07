@@ -305,10 +305,6 @@ let calc_arrival_time (src_sw : state) (dst_id: location option) desired_delay =
 
 (* val ingress_send : 'nst -> 'nst state -> ingress_destination -> event_val -> unit *)
 let ingress_send (src_sw : state) ingress_destination event_val =
-  (* re-read the source switch from the live array: a handler may send several
-     events, and each send persists queue changes via save_update. Working from
-     a stale snapshot would make successive sends clobber each other. *)
-  let src_sw = lookup_switch src_sw src_sw.swid in
   match ingress_destination with
     | Switch sw -> 
       let dst_sw = lookup_switch src_sw sw in
@@ -322,6 +318,7 @@ let ingress_send (src_sw : state) ingress_destination event_val =
       let ievent = to_internal_event event_val {switch = Some src_sw.swid; port = port} send_time in
       emit_or_log_exit port ievent send_time src_sw
     | Port port -> (* NOTE: generate_port goes through an egress for the port *)
+      let src_sw = lookup_switch src_sw src_sw.swid in (* need to re-read the source switch to handle multiple generates *)
       let dst_id_opt = InterpSim.lookup_dst_switch src_sw.config.links (src_sw.swid, port) in 
       let timestamp = calc_arrival_time src_sw dst_id_opt (event_val.edelay) in
       let ievent = to_internal_event event_val {switch = Some src_sw.swid; port = port} timestamp in
@@ -329,8 +326,6 @@ let ingress_send (src_sw : state) ingress_destination event_val =
 ;;
 
 let egress_send src_sw out_port event_val =
-  (* re-read the source switch from the live array (see ingress_send). *)
-  let src_sw = lookup_switch src_sw src_sw.swid in
   let dst_opt = InterpSim.lookup_dst src_sw.config.links (src_sw.swid, out_port) in
   let time = gtime src_sw in
   (* let time = src_sw.utils.get_time nst in *)
