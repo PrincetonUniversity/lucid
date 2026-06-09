@@ -110,10 +110,21 @@ let rec modul_of_interface span env interface =
     match intf.ispec with
     | InSize id -> { acc with sizes = IdSet.add id acc.sizes }
     | InVar (id, ty) -> { acc with vars = IdMap.add id ty acc.vars }
-    | InTy (id, sizes, tyo, _) ->
+    | InTy (id, sizes, tyo, b) ->
       let ty =
         match tyo with
-        | Some ty -> ty
+        | Some ty ->
+          (* When the body is visible, the [global] keyword is optional but
+             checked. When the type's body is hidden, it requires the [global]
+             keyword and checks it both ways in ensure_compatible_interface.) *)
+          if b && not (is_global ty)
+          then
+            error_sp intf.ispan
+            @@ Printf.sprintf
+                 "Type %s is declared 'global' in the interface but its \
+                  definition is not a global type"
+                 (Printing.id_to_string id);
+          ty
         | None -> failwith "Internal error: should be replaced by subst_TNames"
       in
       { acc with user_tys = IdMap.add id (sizes, ty) acc.user_tys }
