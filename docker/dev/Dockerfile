@@ -41,6 +41,12 @@ RUN opam install -y --confirm-level=unsafe-yes \
         ppx_import "core<=v0.14.1" "dune=3.15.3" ocamlgraph angstrom \
         "yojson=2.2.2" pyml pprint z3 "pp<=1.2.0" "cstruct=6.2.0" "ppx_cstruct=6.2.0"
 
+# 5b. editor tooling: LSP + formatter (ocamlformat pinned to match .ocamlformat).
+# Pre-installing these stops the VSCode OCaml Platform extension from trying to
+# install them into the switch on first attach.
+RUN opam install -y --confirm-level=unsafe-yes \
+        ocaml-lsp-server "ocamlformat=0.19.0"
+
 # 6. (optional) install claude
 RUN curl -fsSL https://claude.ai/install.sh | bash
 ENV PATH="/home/ubuntu/.local/bin:${PATH}"

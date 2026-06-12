@@ -1,0 +1,21 @@
+// Dev Container config for the Lucid dev environment.
+// Reuses docker/dev/Dockerfile so the image is defined in one place
+// (same image dockercmd.sh builds). Paths here are relative to this file.
+{
+  "name": "lucid-dev",
+  "build": {
+    "dockerfile": "../docker/dev/Dockerfile",
+    "context": "../docker/dev"
+  },
+  // Mount the repo where the toolchain/scripts expect it, and open there.
+  "workspaceFolder": "/home/ubuntu/lucid",
+  "workspaceMount": "source=${localWorkspaceFolder},target=/home/ubuntu/lucid,type=bind",
+  "remoteUser": "ubuntu",
+  // Lets the interpreter create/configure veth interfaces (matches dockercmd.sh).
+  "runArgs": ["--cap-add=NET_ADMIN"],
+  "customizations": {
+    "vscode": {
+      "extensions": ["ocamllabs.ocaml-platform"]
+    }
+  }
+}
