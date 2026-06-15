@@ -19,47 +19,46 @@ let id = Id.create
 
 let handler_cid = Cid.create ["handle_event"] ;;
 
+let port_size = CConfig.c_cfg.port_id_size
+
+(* out-param form (used by the below-the-boundary `lower` pass) *)
 let in_ev_param = cid"ev_in", tref tevent
 let next_ev_param = cid"ev_next", tref tevent
 let out_ev_param = cid"ev_out", tref tevent
-let out_port_param () = cid"out_port", tref@@tint (CConfig.c_cfg.port_id_size) (* port for out event, 0 means no out event *)
-let ev_in = param_evar in_ev_param
-let ev_next = param_evar next_ev_param 
-let ev_out = param_evar out_ev_param
-let out_port () = param_evar (out_port_param ())
+let out_port_param () = cid"out_port", tref@@tint port_size (* port for out event, 0 means no out event *)
 
-(* transform a generate statement in the body of the event handler function *)
-let transform_generate statement = 
-  let out_port = out_port () in
-  (* instead of generating the event, set the appropriate event variable *)
-  match statement.s with 
-  | SUnit(exp) when is_egen_self exp -> 
-      (sassign_exp (ederef ev_next) (arg exp))
-  | SUnit(exp) when is_egen_port exp -> 
+(* value-semantic form (the waist): ev_in is taken by value, and the three
+   outputs are locals returned as a tuple. *)
+let v_ev_in = evar (cid"ev_in") tevent
+let v_ev_next = evar (cid"ev_next") tevent
+let v_ev_out = evar (cid"ev_out") tevent
+let v_out_port = evar (cid"out_port") (tint port_size)
+(* placeholder "no event" for unset outputs; never reaches C (the `lower` pass
+   drops these inits -- the driver pre-initializes the out-params). A VSymbol so
+   it types as tevent without referencing a real event constructor. *)
+let no_event = { v = VSymbol(Cid.create ["_no_event"], tevent); vty = tevent; vspan = Span.default }
+
+(* transform a generate statement into an assignment to the appropriate output
+   local (value-semantic; the `lower` pass turns these locals into out-params). *)
+let transform_generate statement =
+  match statement.s with
+  | SUnit(exp) when is_egen_self exp ->
+      sassign_exp v_ev_next (arg exp)
+  | SUnit(exp) when is_egen_port exp ->
     let port_exp, event_exp = unbox_egen_port exp in
-    let port_exp_size = size_of_ty port_exp.ety in
-    let out_port_size = size_of_ty (extract_tref out_port.ety) in
-    let port_exp = if (port_exp_size < out_port_size)
-      then ecast (extract_tref out_port.ety) port_exp 
+    let port_exp = if (size_of_ty port_exp.ety < size_of_ty (tint port_size))
+      then ecast (tint port_size) port_exp
       else port_exp
     in
-    sseq 
-      (sassign_exp (ederef ev_out) event_exp)
-      (sassign_exp (ederef out_port) port_exp)
+    sseq (sassign_exp v_ev_out event_exp) (sassign_exp v_out_port port_exp)
   | SUnit(exp) when is_egen_switch exp ->
     let switch_exp, event_exp = unbox_egen_switch exp in
-    (* at this point, switch is just another name for generate_port with a different type *)
-    let switch_exp = ecast (extract_tref out_port.ety) switch_exp in
-    sseq 
-      (sassign_exp (ederef ev_out) event_exp)
-      (sassign_exp (ederef out_port) switch_exp)
+    let switch_exp = ecast (tint port_size) switch_exp in
+    sseq (sassign_exp v_ev_out event_exp) (sassign_exp v_out_port switch_exp)
   | SUnit(exp) when is_egen_group exp ->
-    (* treat group the same as port *)
     let port_exp, event_exp = unbox_egen_port exp in
-    sseq 
-      (sassign_exp (ederef ev_out) event_exp)
-      (sassign_exp (ederef out_port) port_exp)
-  | _ -> 
+    sseq (sassign_exp v_ev_out event_exp) (sassign_exp v_out_port port_exp)
+  | _ ->
     statement
 ;;
 type handler_rec = {
@@ -68,25 +67,32 @@ type handler_rec = {
   hbody : statement;
 }
 
-(* make the main handler *)
-let mk_main_handler handlers = 
+(* make the main handler -- value-semantic form: takes the event by value,
+   returns (ev_next, ev_out, out_port) by value. The below-the-boundary `lower`
+   pass converts this to the out-param calling convention. *)
+let handler_ret_ty = ttuple [tevent; tevent; tint port_size]
+let mk_main_handler handlers =
   (* ingress_port size is derived from mutable that is set in translation to CCore *)
-  let ingress_port_param = (Cid.id Builtins.ingr_port_id), tint CConfig.c_cfg.port_id_size in
-  let out_port_param = out_port_param () in
-  let branches = List.map 
-    (fun handler -> 
+  let ingress_port_param = (Cid.id Builtins.ingr_port_id), tint port_size in
+  let in_ev_val_param = cid"ev_in", tevent in
+  let branches = List.map
+    (fun handler ->
       (* one branch for each handler *)
       let pats = [pevent handler.hcid handler.hparams] in
       (pats, subst_statement#visit_statement transform_generate handler.hbody))
     handlers
-  in  
-  (* add a default no-op branch *)
-  (* we're matching on a pointer to an event *)
-  let branches = branches@[([PWild (extract_tref ev_in.ety)], snoop)] in
-  let merged_body = stmts [
-    smatch [ederef ev_in] branches]
   in
-  dfun handler_cid (tunit) [ingress_port_param; in_ev_param; next_ev_param; out_ev_param; out_port_param] merged_body
+  (* add a default no-op branch *)
+  let branches = branches@[([PWild tevent], snoop)] in
+  let merged_body = stmts [
+    slocal (cid"ev_next") tevent (eval no_event);
+    slocal (cid"ev_out") tevent (eval no_event);
+    slocal (cid"out_port") (tint port_size) (eval (vint 0 port_size));
+    smatch [v_ev_in] branches;
+    sret (etuple [v_ev_next; v_ev_out; v_out_port]);
+  ]
+  in
+  dfun handler_cid handler_ret_ty [ingress_port_param; in_ev_val_param] merged_body
 ;;
 
 let transform_handler last_handler_cid (handlers, decls) decl : (handler_rec list * decls) = 
@@ -125,4 +131,45 @@ let process decls =
     decls
   in
   decls
+;;
+
+(* ===== phase 2: lower the value-return handle_event to out-params ===== *)
+(* the four event/port vars become out-params, accessed by dereference *)
+(* exact-cid match (not by name) so we never touch a user variable that merely
+   prints as e.g. "out_port" -- those are distinct (uniquified) cids. *)
+let is_out_var c =
+  List.exists (Cid.equal c) [cid"ev_in"; cid"ev_next"; cid"ev_out"; cid"out_port"]
+let deref_out_vars = object
+  inherit [_] s_map as super
+  method! visit_exp () e =
+    let e = super#visit_exp () e in
+    match e.e with
+    | EVar c when is_out_var c -> ederef (evar c (tref e.ety))
+    | _ -> e
+end
+
+let lower decls =
+  let out_params =
+    [ (Cid.id Builtins.ingr_port_id), tint port_size;
+      in_ev_param; next_ev_param; out_ev_param; out_port_param () ]
+  in
+  List.map
+    (fun decl ->
+      match decl.d with
+      | DFun(_, cid, _, _, BStatement body) when Cid.equal cid handler_cid ->
+        (* drop the output-local inits and the tuple return; the rest stays, with
+           the output vars dereferenced (they are now out-params, pre-initialized
+           by the driver). *)
+        let body =
+          to_stmt_block body
+          |> List.filter (fun s -> match s.s with
+            | SAssign(OLocal(c, _), _) when is_out_var c -> false
+            | SRet _ -> false
+            | _ -> true)
+          |> stmts
+        in
+        let body = deref_out_vars#visit_statement () body in
+        dfun handler_cid tunit out_params body
+      | _ -> decl)
+    decls
 ;;

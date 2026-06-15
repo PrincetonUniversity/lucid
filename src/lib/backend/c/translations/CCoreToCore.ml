@@ -45,7 +45,7 @@ let rec translate_raw_ty (raw_ty : F.raw_ty) : C.raw_ty =
   | F.TUnit -> err "you shouldn't have to translate a unit type back to CoreSyntax"
   | F.TBool -> C.TBool
   | F.TInt(sz) -> C.TInt(translate_size sz)
-  | F.TEvent -> C.TEvent
+  | F.TEvent _ -> C.TEvent
   | F.TBits{ternary=true; len= sz} -> C.TPat(translate_size sz)
   | F.TBits{ternary=false; len= sz} -> C.TBits(translate_size sz)
   (* named types *)
@@ -109,6 +109,8 @@ let rec translate_raw_ty (raw_ty : F.raw_ty) : C.raw_ty =
         then (C.Sz 8) 
         else (C.Sz 16))
   | F.TPtr(_, Some _) -> err "List types cannot be translated back to core IR"
+  | F.TVec(_, _) -> err "vector types cannot be translated back to core IR"
+  | F.TBytes -> err "bytes type cannot be translated back to core IR"
         (* tbuiltins might be wrapped in global, but they are global already *)
   | F.TPtr(ty, None) -> (translate_ty ty).raw_ty
   | F.TUnion _ -> err "union types cannot be translated back to core IR"
@@ -151,6 +153,8 @@ let translate_op op =
   | F.Hash _ -> err "hash op must translate into hash expression"
   | F.Project _ -> err "project op must translate into project expression"
   | F.Get _ -> err "there is no get op in CoreSyntax"
+  | F.Idx -> err "there is no idx op in CoreSyntax"
+  | F.Peek _ | F.Skip _ | F.BytesOk -> err "there are no bytes ops in CoreSyntax"
   | F.Mod -> err "there is no mod op in CoreSyntax"
 ;;
 

@@ -108,13 +108,14 @@ let deparse_fun event_defs event_t =
           let event_data_ty = CCoreEvents.event_param_ty event_def in
           [PVal(vint (Option.get (event_def.evconstrnum)) event_tag_size)],
           stmts [
-            (* this is wrong -- data is the size of the largest event. 
-                We need to cast ev_out to a pointer to the event's parameter type *)
-      (*this is what we want ( *(((do_add_t* )(buf_out->start)))) = *((do_add_t* )(ev_out)); *)
-          sassign_exp 
+            (* copy the event's parameter struct to the packet buffer. The
+               source is read through the named union member selected by the
+               tag (ev_out->data.<evconstrid>), which is well-defined; the
+               destination cast is the serialization into the raw packet buffer.
+               i.e. ( *(((do_add_t* )(buf_out->start)))) = ev_out->data.do_add; *)
+          sassign_exp
             (ederef (ecast (tref event_data_ty) (buf_out/->cid"start")))
-            (ederef (ecast (tref event_data_ty) (ev_out)));
-          (* memcpy (buf_out/->cid"start") (ecast (tref event_data_ty) (ev_out)); *)
+            ((ev_out/->cid"data") /. event_def.evconstrid);
             (* increment pointer -- this is optional, but should take it back to payload *)
             sptr_incr (buf_out/->cid"start") (CCoreEvents.event_len event_def);
         ])

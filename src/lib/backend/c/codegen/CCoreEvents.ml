@@ -104,14 +104,17 @@ let event_len_val event_def =
   res
 ;;
 let event_data_ty_id = cid"event_data_t";;
-let event_data_ty (event_defs :event_def list) = 
-  let biggest_ev_opt, _ =  List.fold_left 
-    (fun (ev, sz) evdef -> 
-      if (event_len evdef) > sz then (Some(evdef), event_len evdef) else (ev, sz))
-    (None, -1)
+(* the event payload is a real C union with one member per event variant.
+   A union (rather than an alias to the biggest variant) makes field access
+   well-defined: union member access is C's sanctioned punning mechanism, so
+   there is no strict-aliasing UB, and sizeof(union) covers the largest member
+   including any struct padding, so there is no under-sizing. *)
+let event_data_ty (event_defs :event_def list) =
+  let union_members = List.map
+    (fun evdef -> (evdef.evconstrid, event_param_ty evdef))
     event_defs
   in
-  tabstract_cid (event_data_ty_id) (tname@@event_param_tyid (Option.get biggest_ev_opt))
+  tabstract_cid (event_data_ty_id) (tunion_pairs union_members)
 ;;
 
 (* the toplevel event type *)
@@ -150,35 +153,32 @@ let event_constr_ty event_ty event_def =
 ;;
 let event_constr event_ty event_def = 
   (* construct an event *)
-  (* 
+  (*
     event_t mk_ev_a(uint16_t x, u_int16_t y, u_int32_t z) {
-        event_t rv;
-        ((ev_a * )(&rv))->x = x;
-        ((ev_a * )(&rv))->y = y;
-        ((ev_a * )(&rv))->z = z;
+        event_t rv = {0};
+        rv.data.ev_a.x = x;
+        rv.data.ev_a.y = y;
+        rv.data.ev_a.z = z;
         rv.tag = ev_a_num;
         rv.len = sizeof(ev_a);
         return rv;
-    }     
+    }
   *)
   let rv_cid = cid"ev" in
-  let set_data_field (event : exp) (event_params_ty : ty) (field : cid) (newval : exp) : statement = 
-    (* cast the event to the type of the specific event and then 
-       set field to newval *)
-    (* event.field := newval; // where field is a member of event_data_ty *)
-    let event_var, event_var_ty = extract_evar event in 
+  let set_data_field (event : exp) (member : cid) (field : cid) (newval : exp) : statement =
+    (* write through the named union member: event.data.<member>.field := newval.
+       This is well-defined C (no aliasing pun) since the union member we write
+       is the one selected by the event's tag. *)
     sassign_exp
-      (* >>> ((event_data_ty * )(&event_var)) -> field_cid = newval <<< *)
-      (( ecast (tptr event_params_ty) (eaddr event_var event_var_ty))/->(field))
+      (((event /. cid"data") /. member) /. field)
       newval
   in
   let event_var = evar rv_cid event_ty in
-  let event_param_ty = event_param_ty event_def in
   let constr_args = event_def.evparams in
   let constr_param_vars = List.map param_evar constr_args in
   let event_fields = List.split event_def.evparams |> fst in
-  let init_rv = slocal rv_cid event_ty (eval@@memzero event_ty) in 
-  let set_data = stmts@@List.map2 (set_data_field event_var event_param_ty) event_fields constr_param_vars in
+  let init_rv = slocal rv_cid event_ty (eval@@memzero event_ty) in
+  let set_data = stmts@@List.map2 (set_data_field event_var event_def.evconstrid) event_fields constr_param_vars in
   let set_tag = sassign_exp (event_var/.cid"tag") (event_tag_var event_def) in
   let set_len = sassign_exp (event_var/.cid"len") (eval (event_len_val event_def)) in
   let set_packet = sassign_exp (event_var/.cid"is_packet") (eval (if (event_def.is_packet) then vint 1 8 else vint 0 8)) in
@@ -196,23 +196,19 @@ let event_constr event_ty event_def =
 let transformer = 
   (* do all the transformations on event-related types, expressions, and statements *)
   (* first, some helpers *)
-  let extract_fields ev evdef params = 
-    (* ev should be a global event union type expression *)
-    let evref = (* we want a reference to the event *)
-      if (is_ederef ev) then (extract_ederef ev) (* if its a deref, just get the event ref out*)
-      else (* if its not a deref, it must be a var, so we take its address *)
-        let event_var, event_var_ty = extract_evar ev in
-        (eaddr event_var event_var_ty)
-    in
-    let extract_field (field : cid) (ty : ty) = 
-      (* (( ecast (tptr event_params_ty) (eaddr event_var event_var_ty))/->(field)) *)
-      let rhs = (( ecast (tptr (event_param_ty evdef)) evref)/->(field)) in
-      slocal (field) ty rhs
+  let extract_fields ev evdef params =
+    (* ev is the matched event, either an event value or a reference to one.
+       Read each parameter through the named union member selected by the
+       matched variant: ev.data.<evconstrid>.field (no aliasing pun). *)
+    let event_val = if (is_tref ev.ety) then (ederef ev) else ev in
+    let data = (event_val /. cid"data") /. (evdef.evconstrid) in
+    let extract_field (field : cid) (ty : ty) =
+      slocal (field) ty (data /. field)
     in
     stmts
-    @@List.map2 
-      extract_field 
-      (List.split params |> fst) 
+    @@List.map2
+      extract_field
+      (List.split params |> fst)
       (List.split params |> snd)
   in
   let event_tag_val event_def_assoc evid = 
@@ -249,8 +245,11 @@ let transformer =
   (* event types change to the union event type  *)
   method! visit_ty event_def_assoc ty = 
     let ty = super#visit_ty event_def_assoc ty in
-    match ty.raw_ty with 
-      | TEvent -> event_ty (List.map snd event_def_assoc)
+    match ty.raw_ty with
+      (* the event reference is now the named ADT "events"; lower it to the
+         punned event_t record (the waist DTy that defines "events" is removed
+         in process). *)
+      | TName cid when Cid.equal cid events_cid -> event_ty (List.map snd event_def_assoc)
       | _ -> ty
 
   (* event expressions and values change to constructor function calls *)
@@ -333,8 +332,14 @@ let transform_decl last_event_id event_defs decls decl : decls =
       decls@[event_num_decl;event_ty_decl]
 ;;
 
-let process decls = 
-  let event_decls = List.filter is_devent decls in 
+let process decls =
+  (* drop the waist-level `type events = TEvent[...]` definition; the punned
+     event_t typedef generated below replaces it. *)
+  let decls = List.filter
+    (fun d -> match d.d with DTy(cid, _) -> not (Cid.equal cid events_cid) | _ -> true)
+    decls
+  in
+  let event_decls = List.filter is_devent decls in
   let event_defs = List.filter_map extract_devent_opt decls in
   let last_event_id = (List.rev event_defs |> List.hd).evconstrid in
   let decls = List.fold_left (transform_decl last_event_id event_defs) [] decls in

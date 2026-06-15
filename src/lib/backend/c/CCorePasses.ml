@@ -19,6 +19,12 @@ let ccore_print phase_str decls =
   )
 ;;
 
+let ccore_print_always phase_str decls = 
+    print_endline ("---- "^phase_str^" ----");
+    print_endline@@CCorePPrint.decls_to_string decls;
+    print_endline ("------------------------")
+;;
+
 let test_core_translation ds = 
   (* translate into ccore syntax and back *)
   let cds = CoreToCCore.translate ds in
@@ -55,19 +61,36 @@ let compile ds =
   let cds = CCoreParse.process cds in
   let cds = CCoreTables.process cds in
   let cds = CCoreArrays.process cds in
-  let cds = CCoreSystem.process cds in
   (* TODO: implement misc helpers (hash, printf) *)
   ccore_print "after code generation" cds;
   let cds = CCoreTyper.check cds in
 
-  (*** 5. eliminate events and handlers *)
-  print_endline ("---- Eliminating events and handlers ----");
+  (*** 5. eliminate handlers (events stay abstract -- TEvent/ECall CEvent/PEvent --
+        through the value-semantics boundary; CCoreEvents lowers them below it) *)
+  print_endline ("---- Eliminating handlers ----");
   let cds = CCoreHandlers.process cds in
-  let cds = CCoreEvents.process cds in
   let cds = CCoreTyper.check cds in
-  ccore_print "after event and handler generation type checking" cds;
+  ccore_print "after handler generation type checking" cds;
+
+  (* Print current program *)
+  ccore_print_always "after all lowering" cds;
+
+  (* DIAGNOSTIC (read-only): report pointer leaks across the planned
+     value-semantics boundary, before any C-specific pass runs. *)
+  CCoreValueSemantics.report "value-semantics boundary (handlers eliminated; events still abstract)" cds;
+
   (*** 6. small transformations for c-compatible form *)
   print_endline ("---- Normalizing code forms for c ----");
+  (* "pointerize" steps below the boundary: events (TEvent/ECall CEvent/PEvent) ->
+     tagged-union punning; value-semantic vectors (TVec/Idx) and the parser bytes
+     ADT (TBytes + Peek/Skip/BytesOk) -> their pointer forms *)
+  let cds = CCoreHandlers.lower cds in
+  let cds = CCoreEvents.process cds in
+  (* the system runtime (time/flood/hash) is foreign C; generate it below the
+     boundary so the waist stays free of its byte-pointer helper *)
+  let cds = CCoreSystem.process cds in
+  let cds = CCoreCForm.lower_vecs cds in
+  let cds = CCoreParse.lower cds in
   let cds = CCoreCForm.normalize_matches cds in
   let cds = CCoreCForm.normalize_struct_inits cds in
   let cds = CCoreCForm.delete_empty_tuples cds in
@@ -80,6 +103,8 @@ let compile ds =
   (* final type check *)
   (* let cds = CCoreTyper.check cds in *)
   CCoreWellformedC.all_checks cds;
+
+  
 
   (*** 8. add target-specific driver interface *)
   let progbundle = match CConfig.c_cfg.driver with 

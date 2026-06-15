@@ -101,7 +101,7 @@ let rec translate_raw_ty (raw_ty : C.raw_ty) : F.raw_ty =
   | C.TBool -> F.TBool
   | C.TInt(Sz sz) ->  F.TInt(F.sz sz)
   | C.TInt(_) -> err "TInt size should be a singleton"
-  | C.TEvent -> F.TEvent
+  | C.TEvent -> (F.tevent).raw_ty   (* reference to the "events" ADT; the DTy defining it is added in the top-level translation *)
   | C.TName(cid, sizes) when 
     List.exists 
       (fun (builtin_ty_cid, _) -> Cid.equal builtin_ty_cid cid) 
@@ -561,5 +561,15 @@ let translate (ds : C.decls) : F.decls =
   (* if (CConfig.c_cfg.driver == "interp") then  *)  
   (* infer_loc_id_sizes ds; *)
   let ds = List.map translate_decl ds in
-  (builtin_externs ())@ds
+  (* declare the event ADT once: `type events = TEvent[ (ctor, {params}) ]`.
+     Every event reference is TName "events" (see translate_raw_ty); this DTy is
+     the single definition the typer resolves against and the sizer reads. *)
+  let event_sigs = List.filter_map
+    (fun (dcl : F.decl) -> match dcl.d with
+      | F.DEvent ed -> Some (ed.evconstrid, F.trecord ed.evparams)
+      | _ -> None)
+    ds
+  in
+  let events_dty = F.decl (F.DTy(F.events_cid, Some(F.tevent_def event_sigs))) Span.default in
+  events_dty :: (builtin_externs ())@ds
 ;;

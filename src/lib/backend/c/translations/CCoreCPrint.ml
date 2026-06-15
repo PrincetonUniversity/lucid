@@ -68,7 +68,7 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : (string * stri
     sprintf "struct {\n%s\n}" field_str, ""
   | TFun _ -> ty_err "function types string depends on context"
   | TBits _ -> ty_err "bit types should be eliminated"
-  | TEvent -> ty_err "event types should be eliminated"
+  | TEvent _ -> ty_err "event types should be eliminated"
   | TEnum cid_ints ->  
     let list_str = String.concat ", " (List.map (fun (s, i) -> cid_to_string s ^ " = " ^ string_of_int i) cid_ints) in
     "enum {" ^ list_str ^ "}", ""
@@ -77,10 +77,14 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : (string * stri
   | TAbstract (cid, ty) -> 
     if (use_abstract_name) then cid_to_string cid, ""
     else ty_to_string ty
-  | TPtr(ty, Some(len)) -> 
+  | TPtr(ty, Some(len)) ->
     let prefix, suffix = ty_to_string ~use_abstract_name ty in
     prefix, (sprintf "[%s]" (arrlen_to_string len))^suffix
-  | TPtr(ty, None) -> 
+  | TVec(ty, len) ->
+    let prefix, suffix = ty_to_string ~use_abstract_name ty in
+    prefix, (sprintf "[%s]" (arrlen_to_string len))^suffix
+  | TBytes -> ty_err "bytes should be lowered to packet_t before C printing"
+  | TPtr(ty, None) ->
     let prefix, suffix = ty_to_string ~use_abstract_name ty in
     match ty.raw_ty with 
     | TPtr _ -> 
@@ -200,8 +204,9 @@ let rec e_to_string (e: e) : string =
 and exp_to_string exp : string = e_to_string exp.e
 and exps_to_string exps = String.concat ", " (List.map exp_to_string exps)
 and op_to_string (op: op) (args: exp list) : string =
-  match op, args with 
-  | And, [a; b] when is_eop a || is_eop b -> 
+  match op, args with
+  | Idx, [arr; idx] -> sprintf "%s[%s]" (exp_to_string arr) (exp_to_string idx)
+  | And, [a; b] when is_eop a || is_eop b ->
     sprintf "(%s) && (%s)" (exp_to_string a) (exp_to_string b)
   | And, [a; b] -> exp_to_string a ^ " && " ^ exp_to_string b
   | Or, [a; b] -> exp_to_string a ^ " || " ^ exp_to_string b

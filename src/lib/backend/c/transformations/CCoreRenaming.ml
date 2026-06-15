@@ -52,8 +52,8 @@ open CCoreSyntax
     
     method! visit_exp () e = 
       let e = super#visit_exp () e in
-      match e.ety.raw_ty, e.e with
-        | TEvent, EVar(cid) -> 
+      match e.e with
+        | EVar(cid) when is_tevent e.ety ->
           {e with e=EVar(rename cid)}
         | _ -> e
 

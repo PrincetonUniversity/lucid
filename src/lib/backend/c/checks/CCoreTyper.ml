@@ -110,8 +110,12 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
     unify_ty env t1 t2
   | TPtr(t1, Some(l1)), TPtr(t2, Some(l2)) ->
     let env' = unify_ty env t1 t2 in
-    unify_arrlen env' l1 l2      
-  | TName cid1, TName cid2 -> 
+    unify_arrlen env' l1 l2
+  | TVec(t1, l1), TVec(t2, l2) ->
+    let env' = unify_ty env t1 t2 in
+    unify_arrlen env' l1 l2
+  | TBytes, TBytes -> env
+  | TName cid1, TName cid2 ->
     if (not (Cid.equal cid1 cid2)) then 
       (ty_err "named types with different names");
     (* resolve and check the types, but skip if its extern *)
@@ -122,7 +126,7 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
       unify_ty env ty1 ty2
   | TUnit, TUnit -> env
   | TBool, TBool -> env
-  | TEvent, TEvent -> env
+  | TEvent _, TEvent _ -> env
   | TEnum(variants1), TEnum(variants2) -> 
       let ids1, _ = List.split variants1 in
       let ids2, _ = List.split variants2 in
@@ -171,8 +175,8 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
     if (not (List.for_all2 Cid.equal labels1 labels2)) then 
       ty_err "union types with different labels";
     unify_lists env unify_ty tys1 tys2
-  | (TUnit|TBool|TEvent|TInt _|TRecord _ | TTuple _ | TName _ | TPtr _ | TUnion _
-  | TFun _|TBits _|TEnum _|TBuiltin (_, _)), _ -> 
+  | (TUnit|TBool|TEvent _|TInt _|TRecord _ | TTuple _ | TName _ | TPtr _ | TVec _ | TBytes | TUnion _
+  | TFun _|TBits _|TEnum _|TBuiltin (_, _)), _ ->
       dprint_endline@@"type mismatch:\n"^(CCorePPrint.raw_ty_to_string rawty1)^"\nand\n"^(CCorePPrint.raw_ty_to_string rawty2);
       ty_err "type mismatch"
 
@@ -469,6 +473,31 @@ and infer_eop env op (args : exp list) : env * op * exp list * ty = match op, ar
     match (List.nth_opt inf_tys idx) with
       | Some ty -> env, op, [inf_exp], ty
       | None -> raise (UnboundField (Id.create (string_of_int idx)))
+  )
+  | Idx, [arr; idx] -> (
+    let env, inf_arr = infer_exp env arr in
+    let env, inf_idx = infer_exp env idx in
+    if (not (is_tint inf_idx.ety)) then
+      ty_err "vector index must be an int";
+    if (not (is_tlist inf_arr.ety)) then
+      ty_err "indexed expression is not a vector/array";
+    let elem_ty = extract_tlist inf_arr.ety |> fst in
+    env, op, [inf_arr; inf_idx], elem_ty
+  )
+  | Peek read_ty, [bs] -> (
+    let env, inf_bs = infer_exp env bs in
+    if (not (is_tbytes inf_bs.ety)) then ty_err "peek expects a bytes argument";
+    env, op, [inf_bs], read_ty
+  )
+  | Skip _, [bs] -> (
+    let env, inf_bs = infer_exp env bs in
+    if (not (is_tbytes inf_bs.ety)) then ty_err "skip expects a bytes argument";
+    env, op, [inf_bs], tbytes
+  )
+  | BytesOk, [bs] -> (
+    let env, inf_bs = infer_exp env bs in
+    if (not (is_tbytes inf_bs.ety)) then ty_err "bytes_ok expects a bytes argument";
+    env, op, [inf_bs], tbool
   )
   | _,_-> ty_err "error type checking Eop"
 ;;

@@ -205,6 +205,7 @@
    CCoreEvents
    CCoreCForm
    CCoreWellformedC
+   CCoreValueSemantics
    CCorePacketHandler
    CCoreDriverPcap
    CCoreDriverDpdk

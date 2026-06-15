@@ -56,7 +56,7 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : string =
     "{" ^ fields_str ^ "}"
   | TFun func_ty -> "function(" ^ func_ty_to_string func_ty ^ ")"
   | TBits {ternary; len} -> (if ternary then "ternary_" else "") ^ "bit[" ^ size_to_string len ^ "]"
-  | TEvent -> "event"
+  | TEvent _ -> "event"
   | TEnum list -> 
     let list_str = String.concat ", " (List.map (fun (s, i) -> cid_to_string s ^ " = " ^ string_of_int i) list) in
     "enum {" ^ list_str ^ "}"
@@ -69,8 +69,11 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : string =
       cid_to_string cid
     else ty_to_string ty
   | TPtr(ty, None) -> sprintf "%s*" (ty_to_string ~use_abstract_name ty)
-  | TPtr(ty, Some(arrlen)) -> 
+  | TPtr(ty, Some(arrlen)) ->
     ty_to_string ~use_abstract_name:true ty ^ "[" ^ arrlen_to_string arrlen ^ "]"
+  | TVec(ty, arrlen) ->
+    ty_to_string ~use_abstract_name:true ty ^ "[" ^ arrlen_to_string arrlen ^ "]"
+  | TBytes -> "bytes"
 
 and ty_to_string ?(use_abstract_name=false) ty = raw_ty_to_string ~use_abstract_name ty.raw_ty
 
@@ -154,8 +157,12 @@ let rec e_to_string (e: e) : string =
 and exp_to_string exp : string = e_to_string exp.e
 and exps_to_string exps = String.concat ", " (List.map exp_to_string exps)
 and op_to_string (op: op) (args: exp list) : string =
-  match op, args with 
-  | And, [a; b] when is_eop a || is_eop b -> 
+  match op, args with
+  | Idx, [arr; idx] -> sprintf "%s[%s]" (exp_to_string arr) (exp_to_string idx)
+  | Peek ty, [bs] -> sprintf "peek<%s>(%s)" (ty_to_string ty) (exp_to_string bs)
+  | Skip ty, [bs] -> sprintf "skip<%s>(%s)" (ty_to_string ty) (exp_to_string bs)
+  | BytesOk, [bs] -> sprintf "bytes_ok(%s)" (exp_to_string bs)
+  | And, [a; b] when is_eop a || is_eop b ->
     sprintf "(%s) && (%s)" (exp_to_string a) (exp_to_string b)
   | And, [a; b] -> exp_to_string a ^ " && " ^ exp_to_string b
   | Or, [a; b] -> exp_to_string a ^ " || " ^ exp_to_string b

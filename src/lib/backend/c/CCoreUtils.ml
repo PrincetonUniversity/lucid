@@ -109,8 +109,12 @@ let rec compound_eq e1 e2 =
         tys
       in
       emacro_and_fold exps
-    | TPtr(_, Some(IConst(n))) -> 
+    | TPtr(_, Some(IConst(n))) ->
       emacro_and_fold (List.init (n) (fun i -> (e1/@(eval@@vint i 32) /== (e2/@(eval@@vint i 32)))))
+    | TVec(_, IConst(n)) ->
+      emacro_and_fold (List.init (n) (fun i -> (e1/@(eval@@vint i 32) /== (e2/@(eval@@vint i 32)))))
+    | TVec(_, IVar _) -> err "cannot generate equality exp for vector of unknown length"
+    | TBytes -> err "cannot generate equality exp for bytes"
     | TPtr(_, None) -> compound_eq (ederef e1) (ederef e2)
     | TAbstract(_, ty) -> compound_eq {e1 with ety=ty} {e2 with ety=ty}
       (* unbounded lists and unions are problematic *)
@@ -119,7 +123,7 @@ let rec compound_eq e1 e2 =
     (* bits should be removed *)
     | TBits _ -> err "cannot generate equality exp for bitstring"
     (* events and functions -- not sure what to do yet *)
-    | TEvent -> err "cannot generate equality expression for two events"
+    | TEvent _ -> err "cannot generate equality expression for two events"
     | TFun _ -> err "no equality for function"
     (* builtins and names -- opaque, can't compare *)
     | TBuiltin _ -> err "no equality for builtins"
@@ -164,6 +168,14 @@ let rec compound_masked_eq e1 e2 m =
           let idx =(eval@@vint i 32)  in 
           (((e1/@idx) /& (m/@idx)) /== ((e2/@idx) /& (m/@idx)))
         ))
+    | TVec(_, IConst(n)) ->
+      emacro_and_fold (List.init (n)
+        (fun i ->
+          let idx =(eval@@vint i 32)  in
+          (((e1/@idx) /& (m/@idx)) /== ((e2/@idx) /& (m/@idx)))
+        ))
+    | TVec(_, IVar _) -> err "cannot generate masked equality exp for vector of unknown length"
+    | TBytes -> err "cannot generate masked equality exp for bytes"
     | TPtr(_, None) -> compound_masked_eq (ederef e1) (ederef e2) (ederef m)
     | TAbstract(_, ty) -> compound_masked_eq {e1 with ety=ty} {e2 with ety=ty} {m with ety=ty}
       (* unbounded lists and unions are problematic *)
@@ -172,7 +184,7 @@ let rec compound_masked_eq e1 e2 m =
     (* bits should be removed *)
     | TBits _ -> err "cannot generate equality exp for bitstring"
     (* events and functions -- not sure what to do yet *)
-    | TEvent -> err "cannot generate equality expression for two events"
+    | TEvent _ -> err "cannot generate equality expression for two events"
     | TFun _ -> err "no equality for function"
     (* builtins and names -- opaque, can't compare *)
     | TBuiltin _ -> err "no equality for builtins"

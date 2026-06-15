@@ -2,6 +2,23 @@
    for compatability with the current CoreSyntax IR
    (Extensions should be eliminated before any further processing) *)
 
+(* 
+  CCoreSyntax is a small, typed, imperative systems IR — functions, 
+  structs/unions/enums, fixed-capacity arrays, match, explicit loops, 
+  fixed-width integers, and pointers. It is rich enough to 
+  accept a near-direct translation from CoreSyntax (events, handlers, 
+  tables, parsers, and memops survive as first-class constructs), 
+  but also general-purpose enough to define the implementations 
+  of those constructs and Lucid's event-dispatch runtime in terms of 
+  simpler, general-purpose abstractions common to any imperative 
+  language. The entire backend is a sequence of IR->IR passes, which 
+  are also type checked. Finally, the IR can represent both 
+  target-neutral value-semantics code (at the start), and 
+  also C-like pointer code (at the end). A value-semantics check 
+  marks the boundary between the two semantics. (note: value-semantics
+  and check implementation is still TODO).
+*)
+
 type id = [%import: (Id.t[@opaque])]
 and cid = [%import: (Cid.t[@opqaue])]
 and tagval = [%import: (TaggedCid.tagval[@opqaue])]
@@ -29,7 +46,19 @@ and raw_ty =
   | TRecord of cid list * ty list
   | TTuple  of ty list
   | TPtr of ty * (arrlen option) (* a pointer to a memory cell of a certain type or an array of them *)
-  | TEvent
+  | TVec of ty * arrlen (* value-semantic fixed-length vector of [ty]. Above the
+                           value-semantics boundary this is how arrays are spelled;
+                           the C-form lowering rewrites it to TPtr(ty, Some len). *)
+  | TBytes (* an opaque, value-semantic view of an (externally-owned) byte sequence:
+              the unparsed packet. Carried through the value-semantics boundary with
+              the Read/Peek/Skip/Ok ops; a backend lowering implements it (in C, as
+              the pointer-based packet_t). Opaque on purpose -- it is the one place we
+              need a borrowed view of memory, so the representation must stay a backend
+              choice rather than an owned value. *)
+  | TEvent of (cid * ty) list
+      (* the event ADT: each variant is (constructor-name, payload record).
+         This concrete form appears only in the "events" DTy declaration;
+         every *reference* to the event type is TName events_cid (see tevent). *)
   | TFun of func_ty
   (* alias types *)
   | TBuiltin of cid * (ty list) (* abstract types built into lucid that must be implemented in CCore *)
@@ -69,7 +98,18 @@ and op =    | And | Or | Not
             | Hash of size
             | Cast of ty 
             | Conc
-            | Project of cid | Get of int 
+            | Project of cid | Get of int
+            | Idx (* EOp(Idx, [vec; index]): value-semantic vector indexing.
+                     The C-form lowering rewrites it to EDeref(vec + index). *)
+            (* TBytes (parser) operations. All total: a read past the end returns a
+               default value and sets a sticky overflow flag inside the returned bytes
+               (observable via Ok). The parser drops the packet by returning Ok=false. *)
+            (* a "read" is peek + skip; CCoreParse emits the pair and the C-form
+               lowering fuses them back into a single read_<ty>(packet). *)
+            | Peek of ty   (* EOp(Peek ty, [bytes]) : ty      -- decode one value, no advance *)
+            | Skip of ty   (* EOp(Skip ty, [bytes]) : bytes   -- advance past one value (sticky overflow) *)
+            | BytesOk      (* EOp(BytesOk, [bytes]) : bool    -- has no consumed read overflowed?
+                              (named BytesOk, not Ok, to avoid clashing with result's Ok) *)
             | Mod
 
 and e = 
@@ -181,11 +221,17 @@ let cid s = Cid.create([s])
 (**** types ****)
 let ty raw_ty = {raw_ty=raw_ty; tspan=Span.default; timplements = None}
 let tunit = ty TUnit
+let tbytes = ty TBytes
 let tbool = ty TBool
 let tint i = ty@@TInt(sz i)
 let tpat len = ty (TBits {ternary=false; len})
 let tptr base_ty = ty (TPtr(base_ty,None))
-let tevent = ty TEvent
+let events_cid = Cid.create ["events"]
+(* the event type, everywhere it is *referenced*, is the named ADT "events"
+   (declared once by CoreToCCore via a DTy). The concrete variant list lives
+   only in that DTy, as TEvent[sigs]. *)
+let tevent = ty (TName events_cid)
+let tevent_def sigs = ty (TEvent sigs)
 (* let trecord labels tys = ty (TRecord(labels, tys)) *)
 let trecord pairs = 
   let cids, tys = List.split pairs in
@@ -195,7 +241,7 @@ let tunion labels tys = ty (TUnion(labels, tys))
 let tfun_kind func_kind arg_tys ret_ty = ty (TFun {arg_tys; ret_ty; func_kind})
 let tfun arg_tys ret_ty = tfun_kind FNormal arg_tys ret_ty 
 (* global type from CoreSyntax *)
-let tlist ele_ty len = ty (TPtr(ele_ty, Some(len)))
+let tlist ele_ty len = ty (TVec(ele_ty, len))
 let tname cid = ty (TName(cid))
 let textern = tname (Cid.create ["_extern_ty_"])
 let tbuiltin cid tyargs = ty (TBuiltin(cid, tyargs))
@@ -239,14 +285,18 @@ let is_tfun ty = match ty.raw_ty with TFun({func_kind=FNormal}) -> true | _ -> f
 let is_tbool ty = match ty.raw_ty with TBool -> true | _ -> false
 let is_tint ty = match ty.raw_ty with TInt(_) -> true | _ -> false
 let is_tbits ty = match ty.raw_ty with TBits(_) -> true | _ -> false
-let is_tlist ty = match ty.raw_ty with TPtr(_, Some _) -> true | _ -> false
-let is_tevent ty = match ty.raw_ty with TEvent -> true | _ -> false
+let is_tlist ty = match ty.raw_ty with TVec _ | TPtr(_, Some _) -> true | _ -> false
+let is_tevent ty = match (base_type ty).raw_ty with
+  | TName cid -> Cid.equal cid events_cid   (* the usual reference form *)
+  | TEvent _ -> true                          (* the concrete def in the events DTy *)
+  | _ -> false
 let is_tabstract name ty = match ty.raw_ty with TAbstract(cid, _) -> Cid.equal cid (Cid.create [name]) | _ -> false
 let is_tstring ty = is_tabstract "string" ty
 let is_tchar ty = is_tabstract "char" ty
 let is_tbuiltin tycid ty = match ty.raw_ty with TBuiltin(cid, _) -> Cid.equal cid tycid | _ -> false
 let is_tbuiltin_any ty = match ty.raw_ty with TBuiltin(_, _) -> true | _ -> false
 let is_tref  ty = match ty.raw_ty with TPtr _ -> true | _ -> false
+let is_tbytes ty = match ty.raw_ty with TBytes -> true | _ -> false
 let is_tenum ty = match (base_type ty).raw_ty with TEnum _ -> true | _ -> false
 
 let extract_func_ty ty = match ty.raw_ty with 
@@ -271,9 +321,10 @@ let extract_ttuple ty = match ty.raw_ty with
   | TTuple(ts) -> ts
   | _ -> raise (FormError "[extract_ttuple] expected TRecord")
 ;;
-let extract_tlist ty = match ty.raw_ty with 
+let extract_tlist ty = match ty.raw_ty with
+  | TVec(ty, len) -> ty, len
   | TPtr(ty, Some(len)) -> ty, len
-  | _ -> raise (FormError "[extract_tlist] expected TList")
+  | _ -> raise (FormError "[extract_tlist] expected TList or TVec")
 ;;
 let extract_tenum ty = match ty.raw_ty with 
   | TEnum tagpairs -> tagpairs 
@@ -319,8 +370,13 @@ let rec bitsizeof_ty ty =
   | TTuple(tys) -> 
       tys |> List.map bitsizeof_ty_exn |> List.fold_left (+) 0 |> Option.some
   | TPtr _ -> None
+  | TVec _ -> None
+  | TBytes -> None
   | TBits {len} -> len |> Option.some
-  | TEvent -> None
+  | TEvent sigs ->
+    (* tag + largest variant payload (the metadata envelope is added in lowering) *)
+    let payloads = List.filter_map (fun (_, pty) -> bitsizeof_ty pty) sigs in
+    Some (event_tag_size + List.fold_left max 0 payloads)
   | TFun _ -> None
   | TBuiltin _ -> None
   | TName _ -> None
@@ -357,7 +413,7 @@ let vint_ty value ty = match ty.raw_ty with
   | TInt  size -> vint value size
   | _ -> failwith "vint_ty: expected TInt"
 let vbool b = {v=VBool b; vty=ty TBool; vspan=Span.default}
-let vlist vs = {v=VList vs; vty=ty (TPtr((List.hd vs).vty, Some(IConst (List.length vs)))); vspan=Span.default}
+let vlist vs = {v=VList vs; vty=ty (TVec((List.hd vs).vty, IConst (List.length vs))); vspan=Span.default}
 let vtup vs = {v=VTuple(vs); vty=ttuple (List.map (fun v -> v.vty) vs); vspan=Span.default}
 let vpat ints = {v=VBits {ternary=true; bits=ints}; vty=ty (TBits {ternary=true; len=sz (List.length ints)}); vspan=Span.default}
 let vbits ints = {v=VBits {ternary=false; bits=ints}; vty=ty (TBits {ternary=false; len=sz (List.length ints)}); vspan=Span.default}
@@ -371,7 +427,7 @@ let vrecord label_values =
   (* vrecord labels values *)
 let vunion label value ty = {v=VUnion(label, value, ty); vty=ty; vspan=Span.default}
 let vtuple vs = {v=VTuple(vs); vty=ttuple (List.map (fun v -> v.vty) vs); vspan=Span.default}
-let vevent evid evnum evdata meta = {v=VEvent {evid; evnum; evdata; meta}; vty=ty TEvent; vspan=Span.default}
+let vevent evid evnum evdata meta = {v=VEvent {evid; evnum; evdata; meta}; vty=tevent; vspan=Span.default}
 let vevent_simple evid evdata = vevent evid None evdata []
 let venum tag ty = {v=VSymbol(tag, ty); vty=ty; vspan=Span.default}
 let vsymbol str ty = venum str ty
@@ -421,15 +477,18 @@ let rec default_value ty = match ty.raw_ty with
     vtuple (List.map default_value ts)
   | TFun _ -> failwith "no default value for function type"
   | TBits{len} -> vbits (List.init len (fun _ -> 0))
-  | TEvent -> vevent (Cid.create ["_none"]) None [] []
+  | TEvent _ -> vevent (Cid.create ["_none"]) None [] []
   | TEnum(cases) -> 
     venum ((List.hd cases) |> fst) ty
   | TBuiltin _ -> failwith "no default value for builtin type"
   | TName _ -> failwith "no default value for named type"
   | TAbstract(_, inner_ty) -> {(default_value inner_ty) with vty=ty}
   | TPtr(inner_ty, None) -> {(default_value inner_ty) with vty=ty}
-  | TPtr(ty, Some(IConst(n))) -> vlist (List.init n (fun _ -> default_value ty))
+  | TPtr(elem_ty, Some(IConst(n))) -> {v=VList (List.init n (fun _ -> default_value elem_ty)); vty=ty; vspan=Span.default}
   | TPtr(_, Some _) -> failwith "no default value for list of unknown length"
+  | TVec(elem_ty, IConst(n)) -> {v=VList (List.init n (fun _ -> default_value elem_ty)); vty=ty; vspan=Span.default}
+  | TVec(_, IVar _) -> failwith "no default value for vector of unknown length"
+  | TBytes -> failwith "no default value for bytes"
 ;;
 
 
@@ -509,10 +568,19 @@ let eop op es =
         | _ -> failwith "get expects tuple arg"
       in
       List.nth ts idx
+    | Idx ->
+      (* vector index: result type is the vector's element type *)
+      extract_tlist (List.hd es).ety |> fst
+    | Peek read_ty -> read_ty
+    | Skip _ -> tbytes
+    | BytesOk -> tbool
 
-  in 
+  in
   exp (EOp(op, es)) eop_ty Span.default
 let eval value = exp (EVal value) value.vty Span.default
+let epeek read_ty bs = eop (Peek read_ty) [bs]
+let eskip read_ty bs = eop (Skip read_ty) [bs]
+let ebytesok bs = eop BytesOk [bs]
 let evar cid ty = exp (EVar cid) ty Span.default
 let param_evar (id, ty) = evar id ty
 let eunit () = eval (vunit ())
@@ -526,9 +594,9 @@ let eproj rec_exp field_id =
 ;;
 
 let ecall_kind call_kind f es = 
-  let ety = match f.ety.raw_ty with 
+  let ety = match f.ety.raw_ty with
     | TFun {ret_ty; _} -> ret_ty
-    | TEvent -> tevent
+    | _ when is_tevent f.ety -> tevent   (* event constructor: f is typed as the event ADT (TName "events") *)
     | _ -> failwith "ecall: expected function type"
   in
   exp (ECall {f; args=es; call_kind}) ety Span.default
@@ -547,13 +615,14 @@ let eaddr cid ty =
 ;;
 
 
-let elistget arr idx = 
-  (* a list get is just sugar for an add and deref *)
-  (* update -- use pointer arith instead *)
-  let pos = eop Plus [arr; idx] in
-  ederef pos
-  (* let cell_ty = extract_tlist arr.ety |> fst in
-  {e=EListIdx(arr, idx); ety=cell_ty; espan=Span.default} *)
+let elistget arr idx =
+  match (base_type arr.ety).raw_ty with
+  | TVec _ | TPtr(_, Some _) ->
+    (* value-semantic vector index; CCoreCForm.lower_vecs lowers it to deref-of-plus *)
+    eop Idx [arr; idx]
+  | _ ->
+    (* bare pointer (e.g. a packet buffer): genuine pointer arithmetic + deref *)
+    ederef (eop Plus [arr; idx])
 
 
 let to_ref exp = 
@@ -576,9 +645,10 @@ let is_eproject exp = match exp.e with
   | EOp(Project _, _) -> true
   | _ -> false
 
-let is_elistidx exp = match exp.e with 
+let is_elistidx exp = match exp.e with
+  | EOp(Idx, _) -> true
   | EDeref(inner_exp) -> (
-    match inner_exp.e, inner_exp.ety.raw_ty with 
+    match inner_exp.e, inner_exp.ety.raw_ty with
       | EOp(Plus, _), TPtr _ -> true
       | _ -> false
   )
@@ -980,9 +1050,12 @@ let rec equiv_tys ty1 ty2 = match ty1.raw_ty, ty2.raw_ty with
   && List.for_all2 equiv_tys tys1 tys2
 | TPtr(t1, None), TPtr(t2, None) -> equiv_tys t1 t2
 | TPtr(t1, Some(IConst n1)), TPtr(t2, Some(IConst n2)) -> n1 = n2 && equiv_tys t1 t2
+| TVec(t1, IConst n1), TVec(t2, IConst n2) -> n1 = n2 && equiv_tys t1 t2
+| TVec(t1, IVar c1), TVec(t2, IVar c2) -> Cid.equal c1 c2 && equiv_tys t1 t2
+| TBytes, TBytes -> true
 | TBits {ternary=b1; len=l1}, TBits {ternary=b2; len=l2} -> 
   (b1 = b2) && (l1 = l2)
-| TEvent, TEvent -> true
+| TEvent _, TEvent _ -> true
 | TFun {arg_tys=arg_tys1; ret_ty=ret_ty1; func_kind=fk1}, TFun {arg_tys=arg_tys2; ret_ty=ret_ty2; func_kind=fk2} -> 
   List.length arg_tys1 = List.length arg_tys2
   && List.for_all2 equiv_tys arg_tys1 arg_tys2
@@ -996,5 +1069,5 @@ let rec equiv_tys ty1 ty2 = match ty1.raw_ty, ty2.raw_ty with
   Cid.equal cid1 cid2
   && equiv_tys ty1 ty2
 | TName cid1, TName cid2 -> Cid.equal cid1 cid2
-| (TUnit|TBool|TEvent|TInt _|TRecord _ | TTuple _ | TName _ | TPtr _ | TUnion _
+| (TUnit|TBool|TEvent _|TInt _|TRecord _ | TTuple _ | TName _ | TPtr _ | TVec _ | TBytes | TUnion _
 | TFun _|TBits _|TEnum _|TBuiltin (_, _) |TAbstract _), _ -> false

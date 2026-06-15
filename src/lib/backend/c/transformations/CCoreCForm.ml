@@ -8,6 +8,30 @@ open CCoreSyntax
 open CCoreExceptions
 open CCoreTransformers
 
+(* lower value-semantic vectors to pointers: the first "pointerize" step,
+   run right after the value-semantics boundary.
+     TVec(t, len)          -> TPtr(t, Some len)
+     EOp(Idx, [arr; idx])  -> EDeref(arr + idx)
+   This restores the pointer-based array form that the rest of the C backend
+   (and C itself) expects, leaving the final C byte-identical. *)
+let vec_lowerer = object
+  inherit [_] s_map as super
+  method! visit_ty env t =
+    let t = super#visit_ty env t in
+    match t.raw_ty with
+    | TVec(elem, len) -> { t with raw_ty = TPtr(elem, Some len) }
+    | _ -> t
+  method! visit_exp env e =
+    let e = super#visit_exp env e in
+    match e.e with
+    | EOp(Idx, [arr; idx]) ->
+      let plus = { arr with e = EOp(Plus, [arr; idx]); ety = arr.ety } in
+      { e with e = EDeref plus }
+    | _ -> e
+end
+
+let lower_vecs decls = vec_lowerer#visit_decls () decls
+
 (* Convert match statements to if statements *)
 let bitstring_to_maskedint (bs : int list) : int*int = 
   let to_val_and_mask bit = 
