@@ -2,9 +2,14 @@
 # Functional test for the C backend's raw-socket driver (lucidcc --rawsock).
 #
 # Adapted from examples/features/lucidvswitch/test_reflector.py, but instead of running
-# the lucidSwitch interpreter it COMPILES a Lucid program to a standalone raw-socket
-# binary (lucidcc --rawsock -> gcc) and runs that. The compiled binary takes the same
+# the lucidSwitch interpreter it runs a standalone raw-socket binary built from a Lucid
+# program (lucidcc --rawsock -> gcc). The compiled binary takes the same
 # `--interface PORT:IFNAME` args as lucidSwitch.
+#
+# Two-phase, so the in-container loop never rebuilds Lucid:
+#   sudo python3 test_rawsock.py --gen   # once, where lucidcc is built: .dpt -> lucidprog.c
+#                                        # (commit the generated lucidprog.c)
+#   sudo python3 test_rawsock.py         # normal loop: gcc lucidprog.c + run + check
 #
 # Topology: a veth/feth pair (SWITCH_IFACE <-> SEND_IFACE). The switch binds port 0 to
 # SWITCH_IFACE; we send packets on SEND_IFACE and the reflector bounces them back, where
@@ -42,14 +47,28 @@ def repo_root():
     return subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip()
 
 
-def build_switch(workdir):
-    """Compile DPT_FILE to a raw-socket binary with lucidcc --rawsock, then gcc."""
+def gen_c(workdir):
+    """Regenerate the raw-socket C from DPT_FILE via lucidcc --rawsock.
+
+    This is the ONLY step that invokes the Lucid compiler. It is opt-in
+    (`--gen`) so the normal in-container test loop is just gcc + run against
+    the committed lucidprog.c -- no Lucid rebuild needed when iterating on the
+    driver / harness. Re-run with --gen (where lucidcc is built) whenever the
+    compiler or the .dpt changes, then commit the regenerated lucidprog.c."""
     lucidcc = os.path.join(repo_root(), "lucidcc")
     cfile = os.path.join(workdir, "lucidprog.c")
-    binfile = os.path.join(workdir, "lucidprog")
-    print(f"[+] lucidcc --rawsock {os.path.basename(DPT_FILE)}")
+    print(f"[+] lucidcc --rawsock {os.path.basename(DPT_FILE)} -> {os.path.basename(cfile)}")
     subprocess.run([lucidcc, DPT_FILE, "-o", cfile, "--rawsock"], check=True,
                    stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+
+
+def build_switch(workdir):
+    """gcc the (pre-generated, committed) lucidprog.c into a binary. No lucidcc."""
+    cfile = os.path.join(workdir, "lucidprog.c")
+    binfile = os.path.join(workdir, "lucidprog")
+    if not os.path.exists(cfile):
+        sys.exit(f"[-] {cfile} not found -- run `sudo python3 {os.path.basename(__file__)} --gen` "
+                 f"first (needs lucidcc) to generate it.")
     print("[+] gcc")
     subprocess.run(["gcc", "-O2", "-o", binfile, cfile], check=True)
     return binfile
@@ -66,6 +85,11 @@ def build_pcap(path, n, pload_size=64):
 def ensure_veths():
     if IS_LINUX:
         subprocess.run(["sudo", "ip", "link", "add", SWITCH_IFACE, "type", "veth", "peer", "name", SEND_IFACE], capture_output=True)
+        # Disable IPv6 on both ends BEFORE bringing them up: a fresh veth otherwise
+        # floods the link with neighbor-discovery / MLD / router-solicitation frames
+        # (the 33:33:* multicast noise) that pollute the reflection capture.
+        for iface in (SWITCH_IFACE, SEND_IFACE):
+            subprocess.run(["sudo", "sysctl", "-w", f"net.ipv6.conf.{iface}.disable_ipv6=1"], capture_output=True)
         subprocess.run(["sudo", "ip", "link", "set", SWITCH_IFACE, "up"], check=True)
         subprocess.run(["sudo", "ip", "link", "set", SEND_IFACE, "up"], check=True)
     else:
@@ -78,9 +102,12 @@ def ensure_veths():
 
 
 def run_test(switch_bin):
-    # capture ONLY inbound traffic on SEND_IFACE (-Q in) -- the reflected packets
+    # Capture ONLY inbound (-Q in) reflected packets: filter to the UDP flow we
+    # sent (`udp port 5000`) so any residual link noise (IPv6 ND, ARP, etc.) is
+    # excluded and doesn't consume the -c packet cap or land at recv[0].
     tcpdump = subprocess.Popen(
-        ["sudo", "tcpdump", "-i", SEND_IFACE, "-Q", "in", "-w", RECV_PCAP, "-c", str(NUM_PACKETS), "-B", "4096"],
+        ["sudo", "tcpdump", "-i", SEND_IFACE, "-Q", "in", "-w", RECV_PCAP, "-c", str(NUM_PACKETS),
+         "-B", "4096", "udp", "port", "5000"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     time.sleep(1)
     switch = subprocess.Popen(
@@ -119,18 +146,27 @@ def check(send_pcap, recv_pcap):
     print(f"[*] sent {len(sent)}, received {len(recv)}")
     if len(recv) != len(sent):
         print("[-] FAIL: packet counts differ"); return False
-    # the reflector swaps src/dst MAC; check the first received packet
-    s, r = sent[0], recv[0]
-    if r[Ether].dst == s[Ether].src and r[Ether].src == s[Ether].dst:
-        print("[+] PASS: counts match and MACs are swapped"); return True
-    print(f"[-] FAIL: MACs not swapped (sent {s[Ether].src}->{s[Ether].dst}, recv {r[Ether].src}->{r[Ether].dst})")
-    return False
+    # the reflector swaps src/dst MAC; every received packet must be a swapped
+    # copy of what we sent.
+    s = sent[0]
+    for i, r in enumerate(recv):
+        if not (r[Ether].dst == s[Ether].src and r[Ether].src == s[Ether].dst):
+            print(f"[-] FAIL: MACs not swapped on recv[{i}] "
+                  f"(sent {s[Ether].src}->{s[Ether].dst}, recv {r[Ether].src}->{r[Ether].dst})")
+            return False
+    print("[+] PASS: counts match and MACs are swapped"); return True
 
 
 if __name__ == "__main__":
     os.makedirs(os.path.join(SCRIPT_DIR, "pcaps"), exist_ok=True)
     work = os.path.join(SCRIPT_DIR, "_rawsock_build")
     os.makedirs(work, exist_ok=True)
+    if "--gen" in sys.argv[1:]:
+        # (Re)generate lucidprog.c from the .dpt via lucidcc, then stop. Run this
+        # where lucidcc is built; commit the result so plain runs skip the compiler.
+        gen_c(work)
+        print("[+] regenerated lucidprog.c -- commit it, then run without --gen")
+        sys.exit(0)
     switch_bin = build_switch(work)
     build_pcap(SEND_PCAP, NUM_PACKETS)
     ensure_veths()

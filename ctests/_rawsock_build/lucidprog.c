@@ -22,6 +22,7 @@
 #include <stdbool.h>
 #include <fcntl.h>
 #include <unistd.h>
+#include <time.h>
 
 #ifdef DEBUG
   #define debug_printf(...) fprintf(stderr, __VA_ARGS__)
@@ -83,7 +84,6 @@ void write_bits(packet_t* bs, uint64_t v, int n) {
         *p = (uint8_t)((*p & (uint8_t)(~m)) | (bit ? m : 0));
     }
 }
-uint32_t Sys_time(){ return 0; /*TODO!*/ }
 uint32_t flood(uint32_t port ){ return port + 10000;/* TODO!*/ }
 uint32_t hash_32(uint32_t seed , uint8_t*  str , uint32_t len_bits ){
   // len_bits is the value's bit width. Sum the whole bytes, then add the last
@@ -105,6 +105,7 @@ typedef struct {
   uint16_t len;
   uint8_t is_packet;
   uint8_t has_payload;
+  uint32_t timestamp;
 } event_meta;
 uint16_t ethpkt_tag  = 1;
 typedef struct {
@@ -135,7 +136,7 @@ typedef struct {
   uint32_t port;
 } out_event;
 events mk_ethpkt(uint64_t dst_669 , uint64_t src_670 , uint16_t ety_671 ){
-  events tmp_713  = {.meta = {.len = 14, .is_packet = 1, .has_payload = 1}, .data = ethpkt_673(dst_669, src_670, ety_671)};
+  events tmp_713  = {.meta = {.len = 14, .is_packet = 1, .has_payload = 1, .timestamp = 0}, .data = ethpkt_673(dst_669, src_670, ety_671)};
   return tmp_713;
 }
 uint32_t recirculation_port  = 0;
@@ -316,6 +317,13 @@ static packet_t g_out_pkt;
 static ev_queue_t g_queue;
 static uint64_t pkt_ct = 0;
 
+// a 32-bit nanosecond timestamp, stamped onto each event at dequeue (Sys.time())
+static uint32_t now_ns(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint32_t)((uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec);
+}
+
 static void init_ctx(void) {
     g_out_pkt.start  = g_outbuf + HEADROOM;
     g_out_pkt.cursor = g_outbuf + HEADROOM;
@@ -333,6 +341,7 @@ static void dispatch_packet(int ingress_port, uint8_t* pkt, uint32_t len) {
     while (!evq_empty(&g_queue)) {
         events ev;
         evq_pull(&g_queue, &ev);
+        ev.meta.timestamp = now_ns(); // stamp at dequeue (covers arriving + recirculated events)
         out_event out_events[64];
         uint16_t n = handle_event(ingress_port, &ev, out_events);
         for (uint16_t i = 0; i < n; i++) {
