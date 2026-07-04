@@ -151,9 +151,12 @@ let implicit_payloads ds =
       method! visit_DEvent () (id, nopt, esort, params) = 
         let params = List.filter (fun (_, ty) -> not (is_payload ty)) params in
         DEvent(id, nopt, esort, params)
-      method! visit_DHandler () id hdl_sort (params, stmt) = 
+      method! visit_DHandler () id hdl_sort (params, stmt) =
         let params = List.filter (fun (_, ty) -> not (is_payload ty)) params in
-        DHandler(id, hdl_sort, (params, stmt))
+        (* recurse into the body too, so a generate that passes the payload param
+           (e.g. a reflector `generate ev(.., pl)`) has that arg stripped by visit_exp
+           below -- otherwise the stripped param `pl` is left dangling in the body. *)
+        super#visit_DHandler () id hdl_sort (params, stmt)
       method! visit_exp () exp =
         let exp = super#visit_exp () exp in
         match exp.ety.raw_ty, exp.e with

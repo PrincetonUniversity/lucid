@@ -18,8 +18,37 @@ let id = Id.create
 
 let cid s = Cid.create [s]
 
-let n_bytes n_bits = (* number of bytes required to hold n_bits *) 
+let n_bytes n_bits = (* number of bytes required to hold n_bits *)
   (n_bits + 7) / 8
+;;
+
+(* ---- R1' bit-packed serialization layout (see ccore-refactor-notes §21) ----
+   Lucid serializes a sequence of fields as one contiguous MSB-first (network)
+   bitstream. Restriction R1': a field may cross a byte boundary only if it is
+   byte-aligned at its start (offset%8=0) or its end ((offset+n)%8=0). That keeps
+   every field within its natural container and makes the codec a single
+   load/shift/mask. Validate a width sequence against R1' and require a
+   byte-multiple total (rule 3). On the first offending field, return
+   Error(index, reason); index = List.length widths flags a non-byte-multiple total. *)
+let check_r1_widths (widths : int list) : (unit, int * string) result =
+  let rec go off i = function
+    | [] ->
+      if off mod 8 <> 0
+      then Error(i, Printf.sprintf "the fields total %d bits, not a whole number of \
+                                    bytes -- pad to a multiple of 8 bits" off)
+      else Ok ()
+    | n :: rest ->
+      let phase = off mod 8 in
+      let straddles = phase + n > 8 in
+      let aligned = phase = 0 || (off + n) mod 8 = 0 in
+      if straddles && not aligned
+      then Error(i, Printf.sprintf
+        "a %d-bit field at bit-offset %d crosses a byte boundary without aligning to \
+         one -- reorder or pad so it starts or ends on a byte boundary (restriction R1')"
+        n off)
+      else go (off + n) (i + 1) rest
+  in
+  go 0 0 widths
 ;;
 
 (* find a type definition based on its id *)
@@ -49,7 +78,7 @@ let ends_with_smatch statement =
 
 (* monomorphization and code gen sometimes needs type names *)
 let ty_to_namestr ty = match ty.raw_ty with 
-  | TInt _ | TBool | TAbstract _ -> CCorePPrint.ty_to_string ~use_abstract_name:true ty
+  | TInt _ | TBool | TName _ -> CCorePPrint.ty_to_string ~use_abstract_name:true ty
   | _ -> err_expected_ty ty "to convert a type to a string for a generated function, the type must be an int, bool, or abstract"
 ;;
 let cid_for_ty cid ty = 
@@ -116,14 +145,16 @@ let rec compound_eq e1 e2 =
     | TVec(_, IVar _) -> err "cannot generate equality exp for vector of unknown length"
     | TBytes -> err "cannot generate equality exp for bytes"
     | TPtr(_, None) -> compound_eq (ederef e1) (ederef e2)
-    | TAbstract(_, ty) -> compound_eq {e1 with ety=ty} {e2 with ety=ty}
+    | TName cid -> (match tydef_opt cid with
+      | Some d -> compound_eq {e1 with ety=d} {e2 with ety=d}
+      | None -> err "cannot generate equality exp for opaque named type")
       (* unbounded lists and unions are problematic *)
     | TPtr(_, Some(_)) -> err "cannot generate equality exp for list of unknown length"
     | TUnion _ -> err "cannot generate equality exp for untagged union"
     (* bits should be removed *)
     | TBits _ -> err "cannot generate equality exp for bitstring"
     (* events and functions -- not sure what to do yet *)
-    | TEvent _ -> err "cannot generate equality expression for two events"
+    | TVariant _ -> err "cannot generate equality expression for two events"
     | TFun _ -> err "no equality for function"
     (* builtins and names -- opaque, can't compare *)
     | TBuiltin _ -> err "no equality for builtins"
@@ -177,14 +208,16 @@ let rec compound_masked_eq e1 e2 m =
     | TVec(_, IVar _) -> err "cannot generate masked equality exp for vector of unknown length"
     | TBytes -> err "cannot generate masked equality exp for bytes"
     | TPtr(_, None) -> compound_masked_eq (ederef e1) (ederef e2) (ederef m)
-    | TAbstract(_, ty) -> compound_masked_eq {e1 with ety=ty} {e2 with ety=ty} {m with ety=ty}
+    | TName cid -> (match tydef_opt cid with
+      | Some d -> compound_masked_eq {e1 with ety=d} {e2 with ety=d} {m with ety=d}
+      | None -> err "cannot generate masked equality exp for opaque named type")
       (* unbounded lists and unions are problematic *)
     | TPtr(_, Some(_)) -> err "cannot generate equality exp for list of unknown length"
     | TUnion _ -> err "cannot generate equality exp for untagged union"
     (* bits should be removed *)
     | TBits _ -> err "cannot generate equality exp for bitstring"
     (* events and functions -- not sure what to do yet *)
-    | TEvent _ -> err "cannot generate equality expression for two events"
+    | TVariant _ -> err "cannot generate equality expression for two events"
     | TFun _ -> err "no equality for function"
     (* builtins and names -- opaque, can't compare *)
     | TBuiltin _ -> err "no equality for builtins"

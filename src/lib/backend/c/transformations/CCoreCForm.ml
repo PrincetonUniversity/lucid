@@ -72,7 +72,7 @@ let to_bool_atom (e,p) =
         Some(eop Eq [e; eval value])
     | PVal v -> Some(eop Eq [e; eval v])
     | PWild _ -> None (* no constraint *)
-    | PEvent _ -> err "events must be eliminated before matches"
+    | PVariant _ -> err "events must be eliminated before matches"
 ;;
 let eand_list terms = 
   match terms with 
@@ -140,8 +140,29 @@ let is_initializer exp = match exp.e with
   | EVal({v=VTuple _}) -> true
   | _ -> false
 ;;
-let normalize_struct_inits decls = 
-  let v = object 
+(* Name inlined structural types: replace a structural type with a TName reference
+   to the DTy whose body it matches, so the C printer emits the shared typedef name
+   instead of an anonymous struct (anonymous structs are distinct types in C, so
+   structurally-identical types must share a typedef to be compatible). A DTy's own
+   body is left structural -- naming it would make the definition reference itself
+   (`type res_t = res_t`) -- so only *uses* are named, not definitions. *)
+let name_types decls =
+  let ty_defs = List.filter_map
+    (fun d -> match d.d with DTy(cid, Some ty) -> Some (ty, cid) | _ -> None) decls
+  in
+  let name_ty ty = match List.find_opt (fun (def, _) -> equiv_tys def ty) ty_defs with
+    | Some (def, cid) -> tabstract_cid cid def
+    | None -> ty
+  in
+  List.map
+    (fun decl -> match decl.d with
+      | DTy(_, Some _) -> decl
+      | _ -> subst_ty#visit_decl name_ty decl)
+    decls
+;;
+
+let normalize_struct_inits decls =
+  let v = object
     (* new statements that must be added before the current one *)
     val mutable new_stmts = []
     inherit [_] s_map as super
@@ -198,7 +219,43 @@ let normalize_struct_inits decls =
 ;;
 
 
-let delete_empty_tuples decls = 
+(* C has no multi-value assignment, so lower tuple unpacks to single assignments:
+     (a, b) = (x, y)        ->  a = x; b = y;                         (literal: split directly)
+     (a, b) = lookup(...)   ->  tup t = lookup(...); a = t._0; b = t._1;  (call: temp + project)
+   The call case must bind to a temp because the call produces the whole tuple as
+   one value (and runs once); a literal already has the components in hand.
+   This eliminates OTupleLocal / OTupleAssign (verified gone by CCoreWellformedC). *)
+let eliminate_tuple_assigns decls =
+  (* unpack rhs into the given per-component binders (one statement each) *)
+  let unpack binders rhs =
+    match rhs.e with
+    | ETuple es when List.length es = List.length binders ->
+      stmts (List.map2 (fun bind e -> bind e) binders es)
+    | _ ->
+      let comp_tys = extract_ttuple rhs.ety in
+      let tmp = Cid.id (Id.fresh_name "tup") in
+      let tmpv = evar tmp rhs.ety in
+      let projs = List.mapi (fun i cty -> { (tmpv /.@ i) with ety = cty }) comp_tys in
+      stmts (slocal tmp rhs.ety rhs :: List.map2 (fun bind p -> bind p) binders projs)
+  in
+  let v = object
+    inherit [_] s_map as super
+    method! visit_statement () stmt =
+      let stmt = super#visit_statement () stmt in
+      match stmt.s with
+      | SAssign(OTupleLocal(ids, tys), rhs) ->
+        let binders = List.map2 (fun id ty -> fun v -> slocal id ty v) ids tys in
+        unpack binders rhs
+      | SAssign(OTupleAssign(lexps), rhs) ->
+        let binders = List.map (fun lexp -> fun v -> sassign_exp lexp v) lexps in
+        unpack binders rhs
+      | _ -> stmt
+  end
+  in
+  v#visit_decls () decls
+;;
+
+let delete_empty_tuples decls =
   (* remove everything relating to empty tuples. 
       - type and variable declarations
       - SAssigns with rhs : ()
@@ -209,7 +266,7 @@ let delete_empty_tuples decls =
     match ty.raw_ty with 
     | TTuple([]) -> true
     | TPtr(ty, _) -> is_empty_tuple ty
-    | TAbstract(_, ty) -> is_empty_tuple ty
+    | TName cid -> (match tydef_opt cid with Some d -> is_empty_tuple d | None -> false)
     | _ -> false
   in
   let v = object 
@@ -244,10 +301,10 @@ let delete_empty_tuples decls =
       let func_ty = super#visit_func_ty () func_ty in
       let arg_tys = List.filter (fun ty -> not (is_empty_tuple ty)) func_ty.arg_tys in
       {func_ty with arg_tys}
-    method! visit_vevent () vevent = 
-      let evdata = List.map (super#visit_value ()) vevent.evdata in
+    method! visit_vvariant () vvariant = 
+      let evdata = List.map (super#visit_value ()) vvariant.evdata in
       let evdata = List.filter (fun v -> not (is_empty_tuple v.vty)) evdata in
-      super#visit_vevent () {vevent with evdata}
+      super#visit_vvariant () {vvariant with evdata}
     method! visit_ERecord () ids es = 
       let es = List.map (super#visit_exp ()) es in
       let id_es = List.combine ids es in

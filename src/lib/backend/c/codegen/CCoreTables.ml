@@ -279,7 +279,7 @@ let monomorphic_table_decls actions_enum_ty decl : decls =
       | _, [key_ty; const_arg_ty; arg_ty; ret_ty] -> key_ty, const_arg_ty, arg_ty, ret_ty
       | _, _ -> failwith "unexpected type"      
     in
-    let len, default_action_enum_id, default_action_arg = match (eval_exp builtin_constr_call_exp |> extract_vevent).evdata with 
+    let len, default_action_enum_id, default_action_arg = match (eval_exp builtin_constr_call_exp |> extract_vvariant).evdata with 
       | [len; _; default_action; default_action_arg] ->  
         extract_vint len |> arrlen, 
         extract_vsymbol default_action, (* here, the id is the symbol in the enum *) 
@@ -290,10 +290,9 @@ let monomorphic_table_decls actions_enum_ty decl : decls =
     (* print_endline ("table cell type: ");
     print_endline (CCorePPrint.ty_to_string tbl_cell_ty); *)
     let tbl_ty = table_instance_type tbl_id (actions_enum_ty) const_arg_ty tbl_cell_ty len in
-    let tbl_ty = timpl_wrap tbl_ty builtin_tbl_ty in
 
     let tbl_value = table_create tbl_ty default_action_enum_id (actions_enum_ty) default_action_arg in
-    let tbl_constructor =  eimpl_wrap (eval tbl_value) builtin_constr_call_exp in
+    let tbl_constructor = eval tbl_value in
 
     let tbl_spec = {tbl_id; len; tbl_ty; key_ty; const_arg_ty; arg_ty; ret_ty; actions_enum_ty;} in
     let new_decls = [
@@ -337,7 +336,7 @@ let monomorphic_table_calls =
           in
           let f = efunref (fun_id) f_ety in
           let args = List.tl args in
-          eimpl_wrap {exp with e=ECall{f; args; call_kind=CFun}} exp
+          {exp with e=ECall{f; args; call_kind=CFun}}
         )
         else
           super#visit_exp () exp

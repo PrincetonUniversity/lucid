@@ -1,6 +1,14 @@
 module C = CoreSyntax
 module F = CCoreSyntax
 
+(* event base-name -> resolved event-constructor cid. Populated at the top of
+   `translate` from the source event decls. Event-match patterns arrive from the
+   frontend with a name-only placeholder cid (e.g. pkt_out~0) rather than the
+   resolved event id; translate_pat resolves them through this table so a pattern
+   constructor matches the variant DTy's sigs that CCoreVariants lowers against.
+   (This replaced a dedicated id-unification pass that ran over the whole IR.) *)
+let event_cid_of_name : (string, Cid.t) Hashtbl.t = Hashtbl.create 8
+
 (* 
 FIX:
   - group values translate into tuples, but group type is port type (some sized int)   
@@ -187,9 +195,8 @@ and translate_acn_ty (aty : C.acn_ty) =
     F.func_kind = F.FAction;
   }
 and translate_ty (ty : C.ty) : F.ty = 
-  {raw_ty = translate_raw_ty ty.raw_ty; 
-   tspan = ty.tspan;
-   timplements = None}
+  {raw_ty = translate_raw_ty ty.raw_ty;
+   tspan = ty.tspan}
 ;;
 let translate_params (params: C.params) : F.params = 
   List.map (fun ((id: Id.t), ty) -> Cid.id id, translate_ty ty) params
@@ -230,7 +237,7 @@ let rec translate_v (v : C.v) (vty:C.ty) : F.v =
   match vty, v with 
   | _, C.VBool(b) -> (F.vbool b).v
   | _, C.VInt({value; size}) -> (F.vint (Z.to_int value) (Z.to_int size)).v
-  | _, C.VEvent event_val -> F.VEvent(translate_event_val event_val)
+  | _, C.VEvent event_val -> F.VVariant(translate_event_val event_val)
   | _, C.VGlobal(_) -> err "VGlobals should not appear outside of the interpreter's execution"
   | _, C.VGroup(locs) -> (F.vtup (List.map (fun i -> F.vint 32 i ) locs)).v
   | _, C.VPat(tbits) -> (F.vpat tbits).v
@@ -251,7 +258,7 @@ let rec translate_v (v : C.v) (vty:C.ty) : F.v =
     (F.vrecord (List.combine labels values)).v
   | _, C.VRecord(_) -> err "VRecord type should be a record"
 
-and translate_event_val (ev : C.event_val) : F.vevent = 
+and translate_event_val (ev : C.event_val) : F.vvariant = 
   {
     evid = ev.eid;
     evnum = (match ev.evnum with 
@@ -275,9 +282,11 @@ let rec translate_exp (exp : C.exp) : F.exp =
   | _, C.EVal(v) -> (F.eval (translate_value v))
   | _, C.EVar(c) -> F.evar c (translate_ty exp.ety)
   | _, C.EOp(op, es) -> F.eop (translate_op op) (List.map translate_exp es)
-  | {raw_ty=C.TEvent}, C.ECall(cid, es, _) -> 
-    let fexp = F.efunref cid (F.tevent) in     
-    F.eevent fexp (List.map translate_exp es)
+  | {raw_ty=C.TEvent}, C.ECall(cid, es, _) ->
+    (* call the event's monomorphic constructor mk_<cid>(args): it wraps the
+       variant injection in the envelope with constant metadata (no tag dispatch
+       -- the constructor is known here). *)
+    F.emk_event_for cid (List.map translate_exp es)
   (* if its not an event, its an ordered or unordered call *)
   | ret_ty, C.ECall(cid, es, ignores_ordering) -> (
     (* NOTE: we lose information about whether or not the user 
@@ -327,9 +336,14 @@ let translate_pat (pat:C.pat) (ty : C.ty) : F.pat =
   | C.PNum(z)  -> 
     let pat_sz = InterpHelpers.intwidth_from_raw_ty ty.raw_ty in
     F.PVal(F.vint (Z.to_int z) pat_sz)
-  | PEvent(cid, params) -> 
+  | PEvent(cid, params) ->
+    (* resolve the frontend's name-only pattern cid to the real event id *)
+    let cid = match Hashtbl.find_opt event_cid_of_name (Cid.name cid) with
+      | Some resolved -> resolved
+      | None -> cid
+    in
     let params = List.map (fun (id, ty) -> Cid.id id, translate_ty ty) params in
-    F.PEvent {event_id=cid; params;}
+    F.PVariant {event_id=cid; params;}
   | PWild -> F.PWild (translate_ty ty)
 ;;
 
@@ -381,9 +395,16 @@ let rec translate_statement (stmt:C.statement) : F.statement =
     F.egen_group (port) (translate_exp ev) |> F.sunit |> F.swrap stmt.sspan
   | C.SSeq(s1, s2) -> 
     F.sseq (translate_statement s1) (translate_statement s2) |> F.swrap stmt.sspan
-  | C.SMatch(exps, branches) -> 
+  | C.SMatch(exps, branches) ->
     let pat_tys = List.map (fun (exp : C.exp) -> exp.ety) exps in
-    let exps = List.map translate_exp exps in
+    let is_event = List.map (fun (cty : C.ty) -> cty.raw_ty = C.TEvent) pat_tys in
+    (* an event scrutinee is matched against variant patterns, so project it to
+       its variant (.data); a wildcard over it likewise matches the variant, not
+       the envelope. The envelope itself is not pattern-matchable. *)
+    let exps = List.map2
+      (fun ev e -> if ev then F.event_data e else e)
+      is_event (List.map translate_exp exps)
+    in
     (* we have to expand a single wildcard into multiple wildcards *)
     let num_pats = List.length pat_tys in
     let rec extend_single_wild_pats branches = 
@@ -396,9 +417,14 @@ let rec translate_statement (stmt:C.statement) : F.statement =
       | branch::branches -> branch::(extend_single_wild_pats branches)
     in
     let branches = extend_single_wild_pats branches in
-    let branches = List.map 
-      (fun (pats, stmt) -> 
+    let fix_pat ev p = match p with
+      | F.PWild ty when (ev && F.is_tevent_envelope ty) -> F.PWild F.tevent_variant
+      | _ -> p
+    in
+    let branches = List.map
+      (fun (pats, stmt) ->
         let pats = List.map2 translate_pat pats pat_tys in
+        let pats = List.map2 fix_pat is_event pats in
         let stmt = translate_statement stmt in
         (pats, (stmt)))
       branches
@@ -439,12 +465,10 @@ let translate_decl (decl:C.decl) : F.decl =
  let decl' =  match decl.d with 
   | C.DGlobal(cid, ty, exp) -> F.dglobal (Cid.id cid) (translate_ty ty) (translate_exp exp)
   | DExtern(cid, ty) -> F.dextern (Cid.id cid) (translate_ty ty)
-  | C.DEvent((evid, evnum_opt,ev_sort, params)) -> 
-    let is_parsed = match ev_sort with 
-      | C.EPacket -> true 
-      | C.EBackground -> false
-    in
-    F.devent (Cid.id evid) evnum_opt (List.map (fun (id, ty) -> Cid.id id, translate_ty ty) params) is_parsed
+  | C.DEvent _ ->
+    (* events are consumed in `translate` to build the variant type + mk_event,
+       and filtered out before this function -- they have no 1:1 F decl. *)
+    err "[CoreToCCore] DEvent should be handled in translate, not translate_decl"
   | C.DHandler(id, hdl_sort, (params, body)) -> 
   begin
     let params = List.map (fun (id, ty) -> Cid.id id, translate_ty ty) params in
@@ -556,20 +580,83 @@ let translate_decl (decl:C.decl) : F.decl =
     v#visit_decls ()
   ;;
 
-let translate (ds : C.decls) : F.decls = 
+(* the monomorphic event constructors: one `mk_<event> : params -> events` per
+   event, each wrapping its variant injection in the envelope with constant
+   metadata (no tag dispatch -- the constructor is statically known at every
+   construction site). Real DFuns in the program; trivially inlinable. *)
+let mk_event_dfuns (event_defs : F.event_def list) : F.decls =
+  let open F in
+  let payload_bytes params =
+    (List.fold_left (fun s (_, ty) -> s + bitsizeof_ty_exn ty) 0 params + 7) / 8 in
+  let mk_one (ed : event_def) =
+    let meta =
+      { (erecord [ (cid"len", eval (vint (payload_bytes ed.evparams) 16));
+                   (cid"is_packet", eval (vint (if ed.is_packet then 1 else 0) 8));
+                   (cid"has_payload", eval (vint (if ed.has_payload then 1 else 0) 8));
+                   (* placeholder; the driver overwrites this at dequeue (see Sys.time) *)
+                   (cid"timestamp", eval (vint 0 32)) ])
+        with ety = tevent_meta }
+    in
+    let arg_vars = List.map (fun (id, ty) -> evar id ty) ed.evparams in
+    let variant = eevent (efunref ed.evconstrid tevent_variant) arg_vars in
+    let envelope = { (erecord [ (cid"meta", meta); (cid"data", variant) ]) with ety = tevent } in
+    dfun (mk_event_cid_of ed.evconstrid) tevent ed.evparams (sret envelope)
+  in
+  List.map mk_one event_defs
+;;
+
+(* payload_event_names: events that had an explicit Payload.t arg (computed in
+   CCorePasses before MiscCorePasses.implicit_payloads strips it). Such events keep the
+   input tail when deparsed; recorded in each event's meta.has_payload. *)
+let translate ?(payload_event_names=[]) (ds : C.decls) : F.decls =
   (* translate declarations first in case something in there uses a port.. *)
   (* if (CConfig.c_cfg.driver == "interp") then  *)  
   (* infer_loc_id_sizes ds; *)
-  let ds = List.map translate_decl ds in
-  (* declare the event ADT once: `type events = TEvent[ (ctor, {params}) ]`.
-     Every event reference is TName "events" (see translate_raw_ty); this DTy is
-     the single definition the typer resolves against and the sizer reads. *)
-  let event_sigs = List.filter_map
-    (fun (dcl : F.decl) -> match dcl.d with
-      | F.DEvent ed -> Some (ed.evconstrid, F.trecord ed.evparams)
+  (* the source events are the single source of truth for the event model: we
+     read them straight from Core to build the variant type + mk_event, and the
+     C backend has no DEvent node at all. Everything downstream resolves against
+     the variant DTy (the typer registers constructors from it, deparse reads its
+     sigs, and is_packet is carried in the per-event meta). *)
+  let event_defs = List.filter_map
+    (fun (d : C.decl) -> match d.d with
+      | C.DEvent (evid, evnum_opt, ev_sort, params) ->
+        let is_packet = (match ev_sort with C.EPacket -> true | C.EBackground -> false) in
+        let has_payload = List.mem (fst evid) payload_event_names in
+        let evparams = List.map (fun (id, ty) -> Cid.id id, translate_ty ty) params in
+        Some { F.evconstrid = Cid.id evid; F.evconstrnum = evnum_opt;
+               F.evparams = evparams; F.is_packet = is_packet; F.has_payload = has_payload }
       | _ -> None)
     ds
   in
-  let events_dty = F.decl (F.DTy(F.events_cid, Some(F.tevent_def event_sigs))) Span.default in
-  events_dty :: (builtin_externs ())@ds
+  (* index events by name so translate_pat can resolve event-match patterns
+     (must be populated before translating decls, which translate handler bodies) *)
+  Hashtbl.reset event_cid_of_name;
+  List.iter
+    (fun (ed : F.event_def) ->
+      Hashtbl.replace event_cid_of_name (Cid.name ed.evconstrid) ed.evconstrid)
+    event_defs;
+  (* translate the remaining (non-event) decls, in order *)
+  let ds = List.filter_map
+    (fun (d : C.decl) -> match d.d with C.DEvent _ -> None | _ -> Some (translate_decl d))
+    ds
+  in
+  (* declare the event ADT once: `type events = TEvent[ (ctor, {params}) ]`.
+     Every event reference is TName "events" (see translate_raw_ty); this DTy is
+     the single definition the typer resolves against and the sizer reads. Each
+     variant arm carries its discriminant tag (from the source event number) so
+     the variant type is self-describing -- the lowering reads tags from here. *)
+  let event_sigs =
+    List.map
+      (fun (ed : F.event_def) -> (ed.evconstrid, Option.get ed.evconstrnum, F.trecord ed.evparams))
+      event_defs
+  in
+  (* the tagged variant (the constructor union) and the envelope that wraps it.
+     Every event reference is TName events_cid (the envelope); the envelope's
+     `data` field is TName event_variant_cid, defined here as TEvent[sigs]. *)
+  let meta_dty = F.decl (F.DTy(F.event_meta_cid, Some(F.event_meta_def))) Span.default in
+  let variant_dty = F.decl (F.DTy(F.event_variant_cid, Some(F.tevariant_def event_sigs))) Span.default in
+  let events_dty = F.decl (F.DTy(F.events_cid, Some(F.tevent_def))) Span.default in
+  (* the per-event monomorphic constructors, generated from the event defs *)
+  let mk_event_decls = mk_event_dfuns event_defs in
+  meta_dty :: variant_dty :: events_dty :: mk_event_decls @ (builtin_externs ()) @ ds
 ;;

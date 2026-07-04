@@ -33,11 +33,17 @@ let c_speclist =
     c_cfg.driver <- "lpcap";
     c_cfg.port_id_size <- 32;
     c_cfg.switch_id_size <- 32;
-  in  
+  in
+  let init_rawsock_config _ =
+    c_cfg.driver <- "rawsock";
+    c_cfg.port_id_size <- 32;
+    c_cfg.switch_id_size <- 32;
+  in
   [
     "-o", Arg.String (fun s -> c_cfg.output <- s), "Output filename.";
-    "--dpdk", Arg.Unit (init_dpdk_config), "Compile against dpdk library";    
-    "--lpcap", Arg.Unit (init_lpcap_config), "Compile against lpcap library";  
+    "--dpdk", Arg.Unit (init_dpdk_config), "Compile against dpdk library";
+    "--lpcap", Arg.Unit (init_lpcap_config), "Compile against lpcap library";
+    "--rawsock", Arg.Unit (init_rawsock_config), "Compile a raw-socket switch (runs on real interfaces, like lucidSwitch)";
     "--build", Arg.String (fun s -> c_cfg.build_dir <- Some(s)), "Output directory for build files. Overrides output filename.";
   ]
 ;;

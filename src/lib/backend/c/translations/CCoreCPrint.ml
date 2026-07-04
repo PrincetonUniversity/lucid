@@ -26,8 +26,15 @@ let arrlen_to_string = function
   | IConst(i) -> string_of_int i
   | IVar(_) -> ty_err "size variables cannot be printed to c"
 
-let id_to_string id = Id.name id
-  (* Id.to_string id *)
+(* Emit a unique, C-valid identifier. Distinct ids can share a source name (e.g.
+   a loop-unrolled or inlined local `x`); the structural id number disambiguates
+   them. `Id.create` ids carry number 0 (stable compiler/struct-field names) and
+   keep their bare name; freshened ids (non-zero, globally unique via the shared
+   counter) get an `_<n>` suffix (`~` is not a legal C identifier char). *)
+let id_to_string id =
+  match Id.to_id id with
+  | (s, 0) -> s
+  | (s, i) -> s ^ "_" ^ string_of_int i
 let cid_to_string (cid : Cid.t) = 
   String.concat "_" (List.map id_to_string (Cid.to_ids cid))
   (* Cid.to_string cid *)
@@ -47,11 +54,14 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : (string * stri
   match r with
   | TUnit -> "void", ""
   | TInt n when (List.mem n [8; 16; 32; 64]) -> sprintf "uint%i_t" n, ""
-  | TInt n -> 
-    (* full size is smallest int larger than n in [8; 16; 32; 64] *)
-    let int_sz = List.find (fun i -> i > n) [8; 16; 32; 64] in
-    sprintf "uint%i_t" int_sz, sprintf ": %i" n
-    (* sprintf "uint%i_t" (((n_bytes n)*8)), sprintf ": %i" n *)
+  | TInt n ->
+    (* non-standard width: print as the smallest standard container that holds it
+       (uint8/16/32/64). The value is kept in range by the mask-insertion pass
+       (CCoreMaskWidths), so no C bitfield (": n") is needed -- and a container is
+       legal in every position (local, param, return, field), unlike a bitfield.
+       (Widths > 64 are unsupported; List.find raises, same as before.) *)
+    let container = List.find (fun i -> i > n) [8; 16; 32; 64] in
+    sprintf "uint%i_t" container, ""
   | TBool -> "uint8_t", ""
   | TUnion(labels, ts) -> 
     let label_tys = List.map2 (fun l t -> l, t) labels ts in
@@ -68,15 +78,12 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : (string * stri
     sprintf "struct {\n%s\n}" field_str, ""
   | TFun _ -> ty_err "function types string depends on context"
   | TBits _ -> ty_err "bit types should be eliminated"
-  | TEvent _ -> ty_err "event types should be eliminated"
+  | TVariant _ -> ty_err "event types should be eliminated"
   | TEnum cid_ints ->  
     let list_str = String.concat ", " (List.map (fun (s, i) -> cid_to_string s ^ " = " ^ string_of_int i) cid_ints) in
     "enum {" ^ list_str ^ "}", ""
   | TBuiltin (_, _) -> ty_err "builtin types should be eliminated"
   | TName(cid) -> cid_to_string cid, ""
-  | TAbstract (cid, ty) -> 
-    if (use_abstract_name) then cid_to_string cid, ""
-    else ty_to_string ty
   | TPtr(ty, Some(len)) ->
     let prefix, suffix = ty_to_string ~use_abstract_name ty in
     prefix, (sprintf "[%s]" (arrlen_to_string len))^suffix
@@ -128,10 +135,11 @@ let params_to_string params =
 let base_ty_to_string ?(use_abstract_name=false) ty = 
   ty_to_string ~use_abstract_name ty |> fst
 
-let plain_ty_to_string ?(use_abstract_name=false) ty = 
+let plain_ty_to_string ?(use_abstract_name=false) ty =
   (* types that can appear anywhere, like an int or a named struct *)
   let p, s = ty_to_string ~use_abstract_name ty in
   p^s
+
 
 
 let rec v_to_string (v: v) : string =
@@ -157,10 +165,10 @@ let rec v_to_string (v: v) : string =
   | VBits {ternary; bits} -> 
     let bits_str = String.concat "" (List.map (fun i -> if i = -1 then "*" else string_of_int i) bits) in
     (if ternary then "ternary " else "") ^ "bits[" ^ bits_str ^ "]"
-  | VEvent e -> "event(" ^ vevent_to_string e ^ ")"
+  | VVariant e -> "event(" ^ vvariant_to_string e ^ ")"
   | VSymbol (s, _) -> cid_to_string s
 
-and vevent_to_string (e: vevent) : string =
+and vvariant_to_string (e: vvariant) : string =
   sprintf "%s(%s)" (cid_to_string e.evid) (String.concat ", " (List.map value_to_string e.evdata))
 and value_to_string value = 
   if is_tstring value.vty then "\""^charints_to_string value^"\""
@@ -184,7 +192,7 @@ let rec e_to_string (e: e) : string =
     "{" ^ fields_str ^ "}"
   | EUnion(label, exp, _) -> 
     sprintf "{.%s = %s}" (cid_to_string label) (exp_to_string exp)
-  | ECall {f; args; call_kind=CEvent} -> 
+  | ECall {f; args; call_kind=CVariant} -> 
     let f_str = exp_to_string f in
     let args_str = String.concat ", " (List.map exp_to_string args) in
     f_str ^ "(" ^ args_str ^ ")"
@@ -233,16 +241,16 @@ and op_to_string (op: op) (args: exp list) : string =
   | Slice (i, j), [a] -> exp_to_string a ^ "[" ^ string_of_int i ^ ":" ^ string_of_int j ^ "]"
   | PatExact, [a] -> "PatExact(" ^ exp_to_string a ^ ")"
   | PatMask, [a] -> "PatMask(" ^ exp_to_string a ^ ")"
-  | Hash 32, [seed; a] -> 
+  (* the hash length is the value's *bit* width (a compile-time constant), not
+     sizeof: sizeof is the C storage size, which over-counts for sub-byte / padded
+     widths. hash_32 sums whole bytes and masks the last partial byte (see
+     CCoreSystem.hash_fun). The result is masked to its width (when non-standard)
+     by CCoreMaskWidths, not here. *)
+  | Hash _, [seed; a] ->
     let ref_arg = sprintf "(%s)&%s" (plain_ty_to_string (tref (tint 8))) (exp_to_string a) in
     let seed_arg = sprintf "(%s)%s" (plain_ty_to_string (tint 32)) (exp_to_string seed) in
     (* TODO: polymorphic hashes *)
-    sprintf "hash_%i(%s, %s, sizeof(%s))" 32 seed_arg ref_arg (exp_to_string a)
-  | Hash n, [seed; a] -> 
-    let ref_arg = sprintf "(%s)&%s" (plain_ty_to_string (tref (tint 8))) (exp_to_string a) in
-    let seed_arg = sprintf "(%s)%s" (plain_ty_to_string (tint 32)) (exp_to_string seed) in
-    sprintf "(%s)hash_32(%s, %s, sizeof(%s))" (plain_ty_to_string@@tint n) seed_arg ref_arg (exp_to_string a)
-    (* "Hash_" ^ size_to_string size ^ "(" ^exps_to_string args ^ ")" *)
+    sprintf "hash_32(%s, %s, %i)" seed_arg ref_arg (bitsizeof_ty_exn a.ety)
   | Cast new_ty, [a] ->
     (* casting is only between plain types (not bit-ints). This is safe because bitints 
        must be stored in structs, where the mod is done automatically. *)
@@ -254,7 +262,7 @@ and op_to_string (op: op) (args: exp list) : string =
       exp_to_string (extract_ederef a) ^ "->" ^ cid_to_string id
   | Project id, [a] -> exp_to_string a ^ "." ^ cid_to_string id
   | Get i, [a] -> exp_to_string a ^ "._" ^ string_of_int i
-  | Mod, [x; m] -> Printf.sprintf "(%s mod %s)" (exp_to_string x) (exp_to_string m)
+  | Mod, [x; m] -> Printf.sprintf "(%s %% %s)" (exp_to_string x) (exp_to_string m)
   | _, _ -> failwith ("Invalid number of arguments for operator: "^(show_op op))
 
 
@@ -306,7 +314,7 @@ let rec s_to_string (s: s) : string =
 and pat_to_string (p: pat) : string =
   match p with
   | PVal v -> value_to_string v
-  | PEvent {event_id; params} -> 
+  | PVariant {event_id; params} -> 
     let params_str = params_to_string params in
     (cid_to_string event_id) ^ "(" ^ params_str ^ ")"
   | PWild _ -> "_"
@@ -345,7 +353,6 @@ let rec d_to_string (d: d) : string =
       sprintf "typedef %s %s %s;" ty_p (cid_to_string cid) ty_s
   )
   | DTy (_, None) -> ty_err "can't print typdef with no type"
-  | DEvent _ -> ty_err "events should be eliminated"
   | DForiegn str -> str
 
 and fun_def_to_string (kind, id, ty, params, stmt_opt) = 

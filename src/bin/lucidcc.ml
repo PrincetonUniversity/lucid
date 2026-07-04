@@ -12,7 +12,7 @@ let main () =
   let _, ds =
     FrontendPipeline.process_prog ~opts:{
       match_event_handlers=false; 
-      elim_records=false;
+      elim_records=true;
       } Builtins.interp_builtin_tys ds
   in
   print_endline (" --- compiling to c --- ");

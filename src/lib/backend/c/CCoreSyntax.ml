@@ -41,36 +41,29 @@ and raw_ty =
   | TInt of size 
   | TBool 
   | TBits of {ternary: bool; len : size;}
-  | TEnum of (cid * int) list 
-  | TUnion of cid list * ty list
-  | TRecord of cid list * ty list
-  | TTuple  of ty list
-  | TPtr of ty * (arrlen option) (* a pointer to a memory cell of a certain type or an array of them *)
-  | TVec of ty * arrlen (* value-semantic fixed-length vector of [ty]. Above the
-                           value-semantics boundary this is how arrays are spelled;
-                           the C-form lowering rewrites it to TPtr(ty, Some len). *)
-  | TBytes (* an opaque, value-semantic view of an (externally-owned) byte sequence:
-              the unparsed packet. Carried through the value-semantics boundary with
-              the Read/Peek/Skip/Ok ops; a backend lowering implements it (in C, as
-              the pointer-based packet_t). Opaque on purpose -- it is the one place we
-              need a borrowed view of memory, so the representation must stay a backend
-              choice rather than an owned value. *)
-  | TEvent of (cid * ty) list
-      (* the event ADT: each variant is (constructor-name, payload record).
-         This concrete form appears only in the "events" DTy declaration;
-         every *reference* to the event type is TName events_cid (see tevent). *)
+
+  | TEnum of (cid * int) list  
+  | TUnion of cid list * ty list 
+  | TVariant of (cid * int * ty) list (* tagged variant: (constructor, discriminant tag, payload) per arm *)
+
+  | TRecord of cid list * ty list | TTuple  of ty list
+
+  | TPtr of ty * (arrlen option)
+  | TVec of ty * arrlen (* vector *)
+  | TBytes (* reference to unparsed packet. *)
+  
   | TFun of func_ty
   (* alias types *)
   | TBuiltin of cid * (ty list) (* abstract types built into lucid that must be implemented in CCore *)
-  | TAbstract of cid * ty (* a name for another type *)
-  | TName of cid (* an opaque TAbstract -- we should choose one or the other*)
+
+  | TName of cid (* a named type; its definition lives in the program's DTy decls (and the tydefs table) *)
 
 and func_ty = {
   arg_tys : ty list; 
   ret_ty : ty; 
   func_kind : func_kind;
 }
-and ty = {raw_ty:raw_ty; tspan : sp; timplements : (ty[@opaque]) option}
+and ty = {raw_ty:raw_ty; tspan : sp}
 
 and params = (cid * ty) list
 (* values *)
@@ -83,9 +76,9 @@ and v =
   | VTuple of value list
   | VList  of value list
   | VBits of {ternary: bool; bits : int list;}
-  | VEvent of vevent
+  | VVariant of vvariant
   | VSymbol of cid * ty 
-and vevent = {evid : cid; evnum : value option; evdata: value list; meta : (string * value) list;}
+and vvariant = {evid : cid; evnum : value option; evdata: value list; meta : (string * value) list;}
 and value = {v:v; vty:ty; vspan : sp;}
 
 (* expressions *)
@@ -99,17 +92,22 @@ and op =    | And | Or | Not
             | Cast of ty 
             | Conc
             | Project of cid | Get of int
-            | Idx (* EOp(Idx, [vec; index]): value-semantic vector indexing.
-                     The C-form lowering rewrites it to EDeref(vec + index). *)
-            (* TBytes (parser) operations. All total: a read past the end returns a
-               default value and sets a sticky overflow flag inside the returned bytes
-               (observable via Ok). The parser drops the packet by returning Ok=false. *)
-            (* a "read" is peek + skip; CCoreParse emits the pair and the C-form
-               lowering fuses them back into a single read_<ty>(packet). *)
-            | Peek of ty   (* EOp(Peek ty, [bytes]) : ty      -- decode one value, no advance *)
-            | Skip of ty   (* EOp(Skip ty, [bytes]) : bytes   -- advance past one value (sticky overflow) *)
-            | BytesOk      (* EOp(BytesOk, [bytes]) : bool    -- has no consumed read overflowed?
+            | Idx (* Index int a vec *)
+            (* Bytes operations. The bytes value is a *mutable cursor resource*
+               (like an array, which the value-semantics boundary also permits as
+               an in-place aggregate): Read/Skip/Write advance/mutate it in place
+               rather than threading a new bytes value, so they have no rebind. *)
+            | Peek of ty   (* EOp(Peek ty, [bytes]) : ty    -- decode one value, no advance *)
+            | Read of ty   (* EOp(Read ty, [bytes]) : ty    -- decode one value AND advance past
+                              it (peek + skip), mutating the cursor in place *)
+            | Skip of ty   (* EOp(Skip ty, [bytes]) : unit  -- advance past one value in place
+                              (sticky overflow) *)
+            | BytesOk      (* EOp(BytesOk, [bytes]) : bool  -- has no consumed read overflowed?
                               (named BytesOk, not Ok, to avoid clashing with result's Ok) *)
+            | Write of ty  (* EOp(Write ty, [bytes; val]) : unit -- prepend val (of type ty) to the
+                              front of bytes in place. The dual of Read/Skip:
+                              deparse builds the output back-to-front (inner header nearest the
+                              payload written first, outermost written last). *)
             | Mod
 
 and e = 
@@ -125,15 +123,15 @@ and e =
 
 and call_kind = 
   | CFun
-  | CEvent 
+  | CVariant 
   (* a call to a builtin is annotated with the original 
      builtin function and arguments *)
 
-and exp = {e:e; ety:ty; espan : sp; eimplements : (exp[@opaque]) option}
+and exp = {e:e; ety:ty; espan : sp}
 
 and pat = 
   | PVal of value
-  | PEvent of {event_id : cid; params : params;}
+  | PVariant of {event_id : cid; params : params;}
   | PWild of ty 
 
 and branch = pat list * statement
@@ -159,7 +157,7 @@ and s =
 and statement = {s:s; sspan : sp;}
 
 (* declarations *)
-and event_def = {evconstrid : cid; evconstrnum : int option; evparams : params; is_packet : bool}
+and event_def = {evconstrid : cid; evconstrnum : int option; evparams : params; is_packet : bool; has_payload : bool}
 
 
 and fun_def = func_kind * cid * ty * params * fun_body
@@ -174,7 +172,6 @@ and d =
   | DVar of cid * ty * (exp option)
   | DFun of fun_def
   | DTy  of cid * ty option (* named types and external types *)
-  | DEvent of event_def (* declare an event, which is a constructor for the datatype TEvent *)
 
 and decl = {d:d; dspan : sp;}
 and decls = decl list
@@ -219,23 +216,40 @@ let sz n = n
 let cid s = Cid.create([s])
 
 (**** types ****)
-let ty raw_ty = {raw_ty=raw_ty; tspan=Span.default; timplements = None}
+let ty raw_ty = {raw_ty=raw_ty; tspan=Span.default}
 let tunit = ty TUnit
 let tbytes = ty TBytes
 let tbool = ty TBool
 let tint i = ty@@TInt(sz i)
 let tpat len = ty (TBits {ternary=false; len})
 let tptr base_ty = ty (TPtr(base_ty,None))
+(* An event is a metadata envelope wrapping a tagged variant, declared by
+   CoreToCCore via two DTys:
+     events        = record { meta : {len; is_packet};  data : event_variant }
+     event_variant = TVariant[sigs]   (the constructor union)
+   Every *reference* to "an event" is TName events_cid (the envelope); the
+   constructor union, reached via the envelope's `data` field, is
+   TName event_variant_cid. *)
 let events_cid = Cid.create ["events"]
-(* the event type, everywhere it is *referenced*, is the named ADT "events"
-   (declared once by CoreToCCore via a DTy). The concrete variant list lives
-   only in that DTy, as TEvent[sigs]. *)
-let tevent = ty (TName events_cid)
-let tevent_def sigs = ty (TEvent sigs)
+let event_variant_cid = Cid.create ["event_variant"]
+let event_meta_cid = Cid.create ["event_meta"]
+let tevent = ty (TName events_cid)                 (* the envelope *)
+let tevent_variant = ty (TName event_variant_cid)  (* the tagged variant *)
+let tevent_meta = ty (TName event_meta_cid)        (* the metadata record *)
+let tevariant_def sigs = ty (TVariant sigs)
 (* let trecord labels tys = ty (TRecord(labels, tys)) *)
-let trecord pairs = 
+let trecord pairs =
   let cids, tys = List.split pairs in
   ty (TRecord(cids, tys))
+(* the metadata envelope fields (len = wire length; is_packet = packet vs
+   background; has_payload = the event carried an explicit Payload.t, so the deparsed
+   packet keeps the input tail -- a no-payload event serializes only its header fields,
+   matching the interpreter; timestamp = a 32-bit nanosecond stamp the driver writes when
+   the event is dequeued for handling -- Sys.time() reads it); and the envelope record
+   that wraps the tagged variant. Both are value-semantic; meta is currently resolved
+   statically but lives in the IR (except timestamp, which is set at runtime). *)
+let event_meta_def = trecord [ (Cid.create ["len"], ty (TInt 16)); (Cid.create ["is_packet"], ty (TInt 8)); (Cid.create ["has_payload"], ty (TInt 8)); (Cid.create ["timestamp"], ty (TInt 32)) ]
+let tevent_def = trecord [ (Cid.create ["meta"], tevent_meta); (Cid.create ["data"], tevent_variant) ]
 let ttuple tys = ty (TTuple tys)
 let tunion labels tys = ty (TUnion(labels, tys))  
 let tfun_kind func_kind arg_tys ret_ty = ty (TFun {arg_tys; ret_ty; func_kind})
@@ -247,23 +261,24 @@ let textern = tname (Cid.create ["_extern_ty_"])
 let tbuiltin cid tyargs = ty (TBuiltin(cid, tyargs))
 (* let tgroup_cid = Cid.create ["Group"]
 let tgroup = tbuiltin tgroup_cid [] *)
-let tabstract n inner_ty = ty (TAbstract(Cid.create [n], inner_ty))
-let tabstract_cid tcid inner_ty = ty (TAbstract(tcid, inner_ty))
-let tabstract_id id inner_ty = ty (TAbstract(Cid.create_ids [id], inner_ty))
+(* global type-definition table: cid -> its structural definition. A named type
+   is a bare TName cid; its definition is resolved through this table (by
+   base_type and friends). Entries come from the program's DTy decls
+   (refresh_tydefs, below) and from the named-type constructors here. *)
+let tydefs : (Cid.t, ty) Hashtbl.t = Hashtbl.create 128
+let register_tydef tcid inner_ty = Hashtbl.replace tydefs tcid inner_ty
+(* the definition a TName cid refers to, or None if opaque/extern (no DTy body) *)
+let tydef_opt cid = Hashtbl.find_opt tydefs cid
+(* a named type: register its definition, then refer to it by name *)
+let tabstract n inner_ty = let c = Cid.create [n] in register_tydef c inner_ty; tname c
+let tabstract_cid tcid inner_ty = register_tydef tcid inner_ty; tname tcid
+let tabstract_id id inner_ty = let c = Cid.create_ids [id] in register_tydef c inner_ty; tname c
 let tenum_pairs (tagpairs : (Cid.t * int) list) = ty (TEnum tagpairs)
 let tenum ids = tenum_pairs (List.mapi (fun i id -> (id, i)) ids)
 let tref t = ty (TPtr(t, None))
-let rec base_type ty = 
-  match ty.raw_ty with 
-  | TAbstract(_, ty) -> base_type ty
-  | _ -> ty
-;;
-
-(* derive the alias type used to print c *)
-let rec alias_type ty = 
-  match ty.raw_ty with 
-  | TAbstract(cid, _) -> tname cid
-  | TName(_)-> ty
+let rec base_type ty =
+  match ty.raw_ty with
+  | TName cid -> (match Hashtbl.find_opt tydefs cid with Some def -> base_type def | None -> ty)
   | _ -> ty
 ;;
 
@@ -286,13 +301,23 @@ let is_tbool ty = match ty.raw_ty with TBool -> true | _ -> false
 let is_tint ty = match ty.raw_ty with TInt(_) -> true | _ -> false
 let is_tbits ty = match ty.raw_ty with TBits(_) -> true | _ -> false
 let is_tlist ty = match ty.raw_ty with TVec _ | TPtr(_, Some _) -> true | _ -> false
-let is_tevent ty = match (base_type ty).raw_ty with
-  | TName cid -> Cid.equal cid events_cid   (* the usual reference form *)
-  | TEvent _ -> true                          (* the concrete def in the events DTy *)
+(* "event-related": the envelope, the variant, or a bare variant def. Callers
+   that must distinguish use is_tevent_envelope / is_tevent_variant. *)
+(* match the surface name (not base_type, which now resolves TName to structure) *)
+let is_tevent ty = match ty.raw_ty with
+  | TName cid -> Cid.equal cid events_cid || Cid.equal cid event_variant_cid
+  | TVariant _ -> true
   | _ -> false
-let is_tabstract name ty = match ty.raw_ty with TAbstract(cid, _) -> Cid.equal cid (Cid.create [name]) | _ -> false
-let is_tstring ty = is_tabstract "string" ty
-let is_tchar ty = is_tabstract "char" ty
+let is_tevent_envelope ty = match ty.raw_ty with
+  | TName cid -> Cid.equal cid events_cid
+  | _ -> false
+let is_tevent_variant ty = match ty.raw_ty with
+  | TName cid -> Cid.equal cid event_variant_cid
+  | TVariant _ -> true
+  | _ -> false
+let is_tname_called name ty = match ty.raw_ty with TName cid -> Cid.equal cid (Cid.create [name]) | _ -> false
+let is_tstring ty = is_tname_called "string" ty
+let is_tchar ty = is_tname_called "char" ty
 let is_tbuiltin tycid ty = match ty.raw_ty with TBuiltin(cid, _) -> Cid.equal cid tycid | _ -> false
 let is_tbuiltin_any ty = match ty.raw_ty with TBuiltin(_, _) -> true | _ -> false
 let is_tref  ty = match ty.raw_ty with TPtr _ -> true | _ -> false
@@ -335,17 +360,8 @@ let extract_tbuiltin ty = match ty.raw_ty with
   | TBuiltin(cid, tyargs) -> cid, tyargs
   | _ -> raise (FormError "[extract_tbuiltin] expected TBuiltin")
 
-let extract_tabstract ty = match ty.raw_ty with 
-  | TAbstract(cid, inner_ty) -> cid, inner_ty
-  | _ -> raise (FormError "[extract_tabstract] expected TAbstract")
-
-let split_tabstract ty = match ty.raw_ty with 
-  | TAbstract(cid, inner_ty) -> tname cid, inner_ty
-  | _ -> raise (FormError "[split_tabstract] expected TAbstract")
-
-let rec extract_tname ty = match ty.raw_ty with
+let extract_tname ty = match ty.raw_ty with
   | TName cid -> cid
-  | TAbstract(cid, _) -> cid
   | _ -> raise (FormError "[extract_tname] expected TName")
 
 let extract_tref ty = match ty.raw_ty with 
@@ -373,15 +389,14 @@ let rec bitsizeof_ty ty =
   | TVec _ -> None
   | TBytes -> None
   | TBits {len} -> len |> Option.some
-  | TEvent sigs ->
+  | TVariant sigs ->
     (* tag + largest variant payload (the metadata envelope is added in lowering) *)
-    let payloads = List.filter_map (fun (_, pty) -> bitsizeof_ty pty) sigs in
+    let payloads = List.filter_map (fun (_, _, pty) -> bitsizeof_ty pty) sigs in
     Some (event_tag_size + List.fold_left max 0 payloads)
   | TFun _ -> None
   | TBuiltin _ -> None
-  | TName _ -> None
-  | TAbstract(_, ty) -> bitsizeof_ty ty
-and bitsizeof_ty_exn ty = 
+  | TName cid -> (match Hashtbl.find_opt tydefs cid with Some d -> bitsizeof_ty d | None -> None)
+and bitsizeof_ty_exn ty =
   match bitsizeof_ty ty with 
   | Some size -> size
   | None -> failwith "bitsizeof_ty_exn: got an unsizeable type"
@@ -401,7 +416,6 @@ let sizeof_ty ty =
   | _ -> failwith "sizeof_ty: expected TInt or TBits"
 ;;
 
-let timpl_wrap ty impl = {ty with timplements = Some impl}
 
 
 (* value constructors *)
@@ -427,8 +441,8 @@ let vrecord label_values =
   (* vrecord labels values *)
 let vunion label value ty = {v=VUnion(label, value, ty); vty=ty; vspan=Span.default}
 let vtuple vs = {v=VTuple(vs); vty=ttuple (List.map (fun v -> v.vty) vs); vspan=Span.default}
-let vevent evid evnum evdata meta = {v=VEvent {evid; evnum; evdata; meta}; vty=tevent; vspan=Span.default}
-let vevent_simple evid evdata = vevent evid None evdata []
+let vvariant evid evnum evdata meta = {v=VVariant {evid; evnum; evdata; meta}; vty=tevent; vspan=Span.default}
+let vvariant_simple evid evdata = vvariant evid None evdata []
 let venum tag ty = {v=VSymbol(tag, ty); vty=ty; vspan=Span.default}
 let vsymbol str ty = venum str ty
 
@@ -477,12 +491,13 @@ let rec default_value ty = match ty.raw_ty with
     vtuple (List.map default_value ts)
   | TFun _ -> failwith "no default value for function type"
   | TBits{len} -> vbits (List.init len (fun _ -> 0))
-  | TEvent _ -> vevent (Cid.create ["_none"]) None [] []
+  | TVariant _ -> vvariant (Cid.create ["_none"]) None [] []
   | TEnum(cases) -> 
     venum ((List.hd cases) |> fst) ty
   | TBuiltin _ -> failwith "no default value for builtin type"
-  | TName _ -> failwith "no default value for named type"
-  | TAbstract(_, inner_ty) -> {(default_value inner_ty) with vty=ty}
+  | TName cid -> (match Hashtbl.find_opt tydefs cid with
+    | Some inner_ty -> {(default_value inner_ty) with vty=ty}
+    | None -> failwith "no default value for named type")
   | TPtr(inner_ty, None) -> {(default_value inner_ty) with vty=ty}
   | TPtr(elem_ty, Some(IConst(n))) -> {v=VList (List.init n (fun _ -> default_value elem_ty)); vty=ty; vspan=Span.default}
   | TPtr(_, Some _) -> failwith "no default value for list of unknown length"
@@ -492,9 +507,9 @@ let rec default_value ty = match ty.raw_ty with
 ;;
 
 
-let extract_vevent value = match value.v with 
-  | VEvent ev -> ev
-  | _ -> failwith "expected VEvent"
+let extract_vvariant value = match value.v with 
+  | VVariant ev -> ev
+  | _ -> failwith "expected VVariant"
 ;;
 let extract_vint value = match value.v with 
   | VInt {value; _} -> value
@@ -514,14 +529,13 @@ let extract_vtuple value = match value.v with
   | _ -> failwith "expected VRecord"
 ;;
 (* expression constructors *)
-let exp e ety espan = {e; ety; espan; eimplements=None; }
+let exp e ety espan = {e; ety; espan}
 let efunref cid fty = exp (EVar (cid)) fty (Span.default)
 let erecord label_es = 
   let labels, es = List.split label_es in
-  {e=ERecord(labels, es); 
-   ety = trecord (List.map (fun (label, exp) -> (label, exp.ety)) label_es); 
-   espan=Span.default;
-   eimplements=None; }
+  {e=ERecord(labels, es);
+   ety = trecord (List.map (fun (label, exp) -> (label, exp.ety)) label_es);
+   espan=Span.default}
 ;;
 let eunion label e ety = 
   exp (EUnion(label, e, ety)) ety (Span.default)
@@ -572,15 +586,21 @@ let eop op es =
       (* vector index: result type is the vector's element type *)
       extract_tlist (List.hd es).ety |> fst
     | Peek read_ty -> read_ty
-    | Skip _ -> tbytes
+    | Read read_ty -> read_ty
+    | Skip _ -> tunit
     | BytesOk -> tbool
+    | Write _ -> tunit
 
   in
   exp (EOp(op, es)) eop_ty Span.default
 let eval value = exp (EVal value) value.vty Span.default
 let epeek read_ty bs = eop (Peek read_ty) [bs]
+(* decode one value of [read_ty] and advance the cursor past it, in place *)
+let eread read_ty bs = eop (Read read_ty) [bs]
 let eskip read_ty bs = eop (Skip read_ty) [bs]
 let ebytesok bs = eop BytesOk [bs]
+(* prepend [v] (of type [write_ty]) to the front of bytes [bs] *)
+let ewrite write_ty bs v = eop (Write write_ty) [bs; v]
 let evar cid ty = exp (EVar cid) ty Span.default
 let param_evar (id, ty) = evar id ty
 let eunit () = eval (vunit ())
@@ -596,7 +616,7 @@ let eproj rec_exp field_id =
 let ecall_kind call_kind f es = 
   let ety = match f.ety.raw_ty with
     | TFun {ret_ty; _} -> ret_ty
-    | _ when is_tevent f.ety -> tevent   (* event constructor: f is typed as the event ADT (TName "events") *)
+    | _ when is_tevent f.ety -> tevent_variant   (* a variant constructor (CVariant) builds the variant; the envelope comes from mk_event *)
     | _ -> failwith "ecall: expected function type"
   in
   exp (ECall {f; args=es; call_kind}) ety Span.default
@@ -605,9 +625,28 @@ let ecall = ecall_kind CFun
 
 let ecall_op (f: exp) args = ecall f args
 
-let eevent = ecall_kind CEvent
+let eevent = ecall_kind CVariant
 
-let ederef inner = 
+(* ----- the event envelope: { meta; data : variant } ----- *)
+(* each event has its own monomorphic constructor `mk_<event> : params -> events`
+   (no runtime tag dispatch -- the constructor is statically known at every
+   construction site). this names it. *)
+let mk_event_cid_of ctor = Cid.create ["mk_" ^ Cid.name ctor]
+(* the .data projection of an event envelope, explicitly typed as the variant
+   (the envelope is a TName, so the projection type can't be inferred) *)
+let event_data ev = exp (EOp(Project (cid"data"), [ev])) tevent_variant ev.espan
+(* the .meta projection of an event envelope, and the .meta.is_packet field
+   within it; explicitly typed for the same reason as event_data. *)
+let event_meta ev = exp (EOp(Project (cid"meta"), [ev])) tevent_meta ev.espan
+let event_is_packet ev = exp (EOp(Project (cid"is_packet"), [event_meta ev])) (ty (TInt 8)) ev.espan
+(* meta.timestamp -- the per-event nanosecond stamp written by the driver at dequeue;
+   Sys.time() lowers to a read of this on the handler's current event. *)
+let event_timestamp ev = exp (EOp(Project (cid"timestamp"), [event_meta ev])) (ty (TInt 32)) ev.espan
+(* construct an event by calling ctor's monomorphic constructor mk_<ctor>(args) *)
+let emk_event_for ctor args =
+  ecall (efunref (mk_event_cid_of ctor) (tfun (List.map (fun a -> a.ety) args) tevent)) args
+
+let ederef inner =
   exp (EDeref inner) (extract_tref inner.ety) Span.default
 ;;
 let eaddr cid ty = 
@@ -770,13 +809,11 @@ let unbox_egen_switch exp = match exp.e with
 (* let eret eret = exp (EReturn eret) (tunit) Span.default *)
 let ewrap espan exp = {exp with espan}
 
-let eimpl_wrap e eimpl = 
-  {e with eimplements = Some(eimpl)}
 
 let patval value = PVal(value)
 
-let pevent event_id params = 
-  PEvent{event_id; params}
+let pvariant event_id params = 
+  PVariant{event_id; params}
 
 let case enum_ty tag_id statement : branch = 
   ([patval (venum tag_id enum_ty)]), statement
@@ -847,8 +884,10 @@ let dhandler = dfun_kind FHandler
 let dparser = dfun_kind FParser
 let daction = dfun_kind FAction 
 let dmemop = dfun_kind FMemop
-let dfun_extern id fun_kind param_tys ret_ty = 
-  let params = List.map (fun ty -> (Cid.fresh_name "a", ty)) param_tys in
+let dfun_extern id fun_kind param_tys ret_ty =
+  (* extern params are unreferenced (no body), so just give them distinct,
+     readable positional names *)
+  let params = List.mapi (fun i ty -> (Cid.create ["a" ^ string_of_int i], ty)) param_tys in
   decl (DFun(fun_kind, id, ret_ty, params, BExtern))
 ;;
 let dvar_const id ty exp = decl (DVar(id, ty, Some(exp))) Span.default
@@ -865,23 +904,26 @@ let dglobal id ty exp = decl (DVar(id, ty, Some(exp))) Span.default
 
 let dty tycid ty = decl (DTy(tycid, Some ty)) Span.default
 let dty_ext tycid = decl (DTy(tycid, None)) Span.default
-let decl_tabstract ty = 
-  let tname = alias_type ty in
-  let ty = base_type ty in
-  let name = extract_tname tname in
-  dty name ty
+(* (re)populate the global tydefs table from a program's DTy decls, so base_type
+   can resolve a bare TName to its definition. Call when the set of type defs may
+   have changed. *)
+(* additive: don't reset, so type-constructor registrations (e.g. tchar, made at
+   module load) and DTys added by earlier passes survive. Stale entries for
+   removed DTys are harmless (they're no longer referenced). *)
+let refresh_tydefs decls =
+  List.iter (fun decl -> match decl.d with
+    | DTy(cid, Some ty) -> Hashtbl.replace tydefs cid ty
+    | _ -> ()) decls
 ;;
-let devent id evconstrnum params is_packet = decl (DEvent {evconstrid=id; evconstrnum; evparams=params; is_packet}) Span.default
-
+(* ty is a named type (TName cid); declare its definition as a DTy. *)
+let decl_tabstract ty =
+  dty (extract_tname ty) (base_type ty)
+;;
 let dforiegn str = decl (DForiegn(str)) Span.default
 let dinclude str = dforiegn("#include "^str)
 
 
-let is_devent decl = match decl.d with 
-  | DEvent _ -> true
-  | _ -> false
-;;
-let is_dhandler decl = match decl.d with 
+let is_dhandler decl = match decl.d with
   | DFun(FHandler, _, _, _, _) -> true
   | _ -> false
 ;;
@@ -891,10 +933,7 @@ let is_dparser decl = match decl.d with
 ;;
 
 
-let extract_devent_opt decl = match decl.d with 
-  | DEvent ev -> Some ev
-  | _ -> None
-let extract_dhandle_opt decl = match decl.d with 
+let extract_dhandle_opt decl = match decl.d with
 | DFun(FHandler, id, ty, params, BStatement body) -> Some (id, ty, params, body)
 | _ -> None
 ;;
@@ -966,7 +1005,7 @@ let rec eval_exp exp =
     (* calls evaluate to event values *)
     let argvals = List.map eval_exp args in
     let f_cid = extract_evar f |> fst in
-    vevent_simple f_cid argvals  
+    vvariant_simple f_cid argvals  
   | EVar (cid) -> vsymbol cid exp.ety
   | ETuple es -> 
     let es = List.map eval_exp es in
@@ -1020,12 +1059,6 @@ let ( /: ) stmt1 stmt2 =
   sseq stmt1 stmt2
 ;;
 
-(* declarations that must be added to a program *)
-let default_event_id = Cid.create ["_none"]
-let default_event_decl = devent default_event_id None [] false
-let is_default_event_decl decl = match decl.d with 
-  | DEvent {evconstrid; _} -> Cid.equal evconstrid default_event_id
-  | _ -> false
 
 
 
@@ -1055,7 +1088,7 @@ let rec equiv_tys ty1 ty2 = match ty1.raw_ty, ty2.raw_ty with
 | TBytes, TBytes -> true
 | TBits {ternary=b1; len=l1}, TBits {ternary=b2; len=l2} -> 
   (b1 = b2) && (l1 = l2)
-| TEvent _, TEvent _ -> true
+| TVariant _, TVariant _ -> true
 | TFun {arg_tys=arg_tys1; ret_ty=ret_ty1; func_kind=fk1}, TFun {arg_tys=arg_tys2; ret_ty=ret_ty2; func_kind=fk2} -> 
   List.length arg_tys1 = List.length arg_tys2
   && List.for_all2 equiv_tys arg_tys1 arg_tys2
@@ -1065,9 +1098,6 @@ let rec equiv_tys ty1 ty2 = match ty1.raw_ty, ty2.raw_ty with
   Cid.equal cid1 cid2
   && List.length tyargs1 = List.length tyargs2
   && List.for_all2 equiv_tys tyargs1 tyargs2
-| TAbstract(cid1, ty1), TAbstract(cid2, ty2) -> 
-  Cid.equal cid1 cid2
-  && equiv_tys ty1 ty2
 | TName cid1, TName cid2 -> Cid.equal cid1 cid2
-| (TUnit|TBool|TEvent _|TInt _|TRecord _ | TTuple _ | TName _ | TPtr _ | TVec _ | TBytes | TUnion _
-| TFun _|TBits _|TEnum _|TBuiltin (_, _) |TAbstract _), _ -> false
+| (TUnit|TBool|TVariant _|TInt _|TRecord _ | TTuple _ | TName _ | TPtr _ | TVec _ | TBytes | TUnion _
+| TFun _|TBits _|TEnum _|TBuiltin (_, _)), _ -> false

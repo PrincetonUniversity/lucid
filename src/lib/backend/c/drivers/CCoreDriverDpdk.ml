@@ -26,9 +26,12 @@ let dpdk_header = dforiegn {|
 #include <rte_lcore.h>
 #include <rte_mbuf.h>
 
-// the user/compiler-written packet handler function. 
-// return 1 to send, 0 to drop
-static inline uint8_t handle_packet(struct rte_mbuf *buf) __attribute__((always_inline));
+// the dispatch pipeline entry point (defined below, after the generated code):
+// parse the input mbuf, run the queue-based dispatch loop, and TX port events.
+static inline void dispatch_packet(struct rte_mbuf *buf, uint16_t in_port);
+
+// the packet mempool, set in dpdk_init; used to allocate output mbufs.
+struct rte_mempool *mbuf_pool = NULL;
 
 // dpdk initialization helpers 
 typedef struct cfg_t {
@@ -107,7 +110,6 @@ port_init(cfg_t cfg, uint16_t port, struct rte_mempool *mbuf_pool)
 void dpdk_init(cfg_t* cfg, int argc, char *argv[]) {
 	if (rte_eal_init(argc, argv) < 0)
 		rte_exit(EXIT_FAILURE, "Error with EAL initialization\n");
-	struct rte_mempool *mbuf_pool;
 	unsigned nb_ports = rte_eth_dev_count_avail();
 	printf("number of ports: %u\n", nb_ports);
 	if (nb_ports == 0)
@@ -144,21 +146,10 @@ static __rte_noreturn void lcore_main(void) {
 		if (unlikely(nb_rx == 0))
 			continue;
 		for (uint16_t i = 0; i < nb_rx; i++) {
-			// run handler
-			uint8_t acn = handle_packet(bufs[i]);
-			if (likely(acn==1)) {
-				// send packet
-				if (unlikely(bufs[i]->port >= cfg.num_ports)) {
-					rte_pktmbuf_free(bufs[i]);
-					printf("WARNING: dropping packet to out-of-range port: %u\n", bufs[i]->port);
-				} else {
-					uint16_t nb_tx = rte_eth_tx_burst(port, 0, &(bufs[i]), 1);
-					if (unlikely(nb_tx < 1)) rte_pktmbuf_free(bufs[i]);
-				}
-			}
-			else {
-				rte_pktmbuf_free(bufs[i]);
-			}
+			// run the dispatch pipeline; it TXes any port events itself (it
+			// allocates fresh output mbufs), so we always free the input mbuf.
+			dispatch_packet(bufs[i], bufs[i]->port);
+			rte_pktmbuf_free(bufs[i]);
 		}
 	}
 }
@@ -172,67 +163,110 @@ int main(int argc, char *argv[]) {
 |};;
 
 
-let pkt_handler = dforiegn {|
-static inline uint8_t handle_packet(struct rte_mbuf *buf) {
+(* NOTE: this DPDK driver is not validated in the local build environment (no
+   DPDK present); it mirrors the pcap driver's queue-based dispatch structure
+   using DPDK primitives. The mbuf data_off / pkt_len arithmetic in
+   send_port_event follows the same "copy input, deparse over it at the
+   header/payload boundary" approach as the pcap copy_packet path. *)
+let pkt_handler = dforiegn [%string {|
+/********* internal dispatch FIFO of events (single core, single queue) ***********/
+#define EV_QUEUE_CAP 1024
+typedef struct ev_queue_t {
+    events buf[EV_QUEUE_CAP];
+    int head;
+    int tail;
+    int count;
+} ev_queue_t;
 
-	// setup packet, ingress and egress port locals
-	packet_t pkt_in_val = {
-		.start = 0,
-		.payload = rte_pktmbuf_mtod(buf, char*),
-		.end = 0
-	};
-	packet_t* pkt_in = &pkt_in_val;
-	uint16_t ingress_port = buf->port;
-	uint16_t egress_port = 0;
+static ev_queue_t dispatch_queue = {0};
 
-	// locals
-	event_t ev1_v = {0};
-	event_t ev2_v = {0};
-	event_t ev_out_v = {0};
+static int  evq_empty(ev_queue_t* q) { return q->count == 0; }
+static void evq_push(ev_queue_t* q, events* ev) {
+    // no overflow guard (see handler lowering); EV_QUEUE_CAP is generous.
+    q->buf[q->tail] = *ev;
+    q->tail = (q->tail + 1) % EV_QUEUE_CAP;
+    q->count++;
+}
+static void evq_pull(ev_queue_t* q, events* out) {
+    *out = q->buf[q->head];
+    q->head = (q->head + 1) % EV_QUEUE_CAP;
+    q->count--;
+}
 
-	uint8_t send_pkt = 0;
+// Deparse one port event over a copy of the input mbuf and TX it. The input
+// packet is copied so its payload is preserved (mirrors the pcap copy_packet
+// path); deparse writes the event headers backwards from the header/payload
+// boundary, and we fix up the output mbuf's data_off / length accordingly.
+static void send_port_event(struct rte_mbuf *in_buf, packet_t *in_pkt, events *ev, uint16_t out_port) {
+    if (out_port >= cfg.num_ports) {
+        printf("WARNING: dropping packet to out-of-range port: %u\n", out_port);
+        return;
+    }
+    struct rte_mbuf *out = rte_pktmbuf_copy(in_buf, mbuf_pool, 0, UINT32_MAX);
+    if (unlikely(out == NULL)) return;
 
-	event_t * ev1 = &ev1_v;
-	event_t * ev2 = &ev2_v;
-	event_t * ev_out = &ev_out_v;
-	event_t * ev_tmp;
-	uint8_t parse_success = parse_event(pkt_in, ev1);   
-	uint16_t ev_in_len = ev1->len;    
-	if (parse_success == 1) {
-		// event continuation trampoline
-		#pragma unroll 4
-		for (int i=0; i < 100; i++) {
-			reset_event_tag(ev2);
-			reset_event_tag(ev_out); // NEW
-			handle_event(ingress_port, ev1, ev2, ev_out, &egress_port);
-			if (get_event_tag(ev2) == 0) { // no continuation event to process
-				break;
-			}
-			ev_tmp = ev1;
-			ev1 = ev2; 
-			ev2 = ev_tmp;
-		}
-		// we have generated an output event, so we need to 
-		// modify the packet buffer so it gets sent out
-		if (get_event_tag(ev_out) !=0) {
-			buf->port = egress_port;
-			// deparse the packet right back to pkt_in
-			// first adjust the data offset in the mbuf
-			int16_t header_diff = ev_out->len - ev_in_len;
-			buf -> data_off -= header_diff;
-			deparse_event(ev_out, pkt_in); 
-			send_pkt = 1; // NEW
-				// writes to payload - hdr, which should 
-				// be exactly at the mbuf's data start
-		}
-	}
-	else {
-        // parse failed, drop packet
-        send_pkt = 0;
-	}
-	return send_pkt;
-} 
-|}
+    uint8_t *out_base = rte_pktmbuf_mtod(out, uint8_t*);
+    uint32_t boundary = (uint32_t)(in_pkt->cursor - in_pkt->start); // input header length
+    packet_t out_pkt = {
+        .start  = out_base,
+        .cursor = out_base + boundary,
+        .end    = out_base + rte_pktmbuf_pkt_len(out)
+    };
+    uint8_t *payload_boundary = out_base + boundary; // payload start, before deparse prepends
+    deparse_event(ev, &out_pkt); // writes backwards from .cursor
+
+    // the deparsed packet runs from out_pkt.cursor to dump_end. A no-payload event emits
+    // only its header (drop the input tail); a payload event keeps the tail. (matches
+    // interp) Shift the mbuf's data start to out_pkt.cursor (negative shift == headers
+    // grew into the mbuf headroom) and set the new length.
+    uint8_t *dump_end = ev->meta.has_payload ? out_pkt.end : payload_boundary;
+    int32_t front_shift = (int32_t)(out_pkt.cursor - out_base);
+    uint16_t new_len = (uint16_t)(dump_end - out_pkt.cursor);
+    out->data_off = (uint16_t)((int32_t)out->data_off + front_shift);
+    out->data_len = new_len;
+    out->pkt_len  = new_len;
+
+    uint16_t nb_tx = rte_eth_tx_burst(out_port, 0, &out, 1);
+    if (unlikely(nb_tx < 1)) rte_pktmbuf_free(out);
+}
+
+// The dispatch pipeline (mirror of the pcap driver): parse -> dispatch queue ->
+// handle -> {recirc back onto the queue | deparse + TX out a port}. The input
+// mbuf stays valid for the whole drain, so port events (even those from
+// recirculated events) can reuse its payload.
+static inline void dispatch_packet(struct rte_mbuf *buf, uint16_t in_port) {
+    packet_t in_pkt = {
+        .start  = rte_pktmbuf_mtod(buf, uint8_t*),
+        .cursor = rte_pktmbuf_mtod(buf, uint8_t*),
+        .end    = rte_pktmbuf_mtod(buf, uint8_t*) + rte_pktmbuf_pkt_len(buf)
+    };
+
+    // parse round
+    events ev0;
+    if (parse_event(&in_pkt, &ev0) != 1) {
+        return; // parse failed, drop
+    }
+    evq_push(&dispatch_queue, &ev0);
+
+    // dispatch round: drain the queue
+    while (!evq_empty(&dispatch_queue)) {
+        events ev;
+        evq_pull(&dispatch_queue, &ev);
+        ev.meta.timestamp = (uint32_t)rte_get_tsc_cycles(); // stamp at dequeue (Sys.time())
+        out_event out_events[%{string_of_int CCoreHandlers.out_events_cap}];
+        uint16_t n = handle_event(in_port, &ev, out_events);
+        for (uint16_t i = 0; i < n; i++) {
+            if (out_events[i].out_loc == 1) {
+                // recirculation: re-queue for dispatch
+                evq_push(&dispatch_queue, &out_events[i].ev);
+            } else if (out_events[i].out_loc == 2) {
+                // output to a port
+                send_port_event(buf, &in_pkt, &out_events[i].ev, out_events[i].port);
+            }
+        }
+    }
+}
+|}]
 ;;
 
 let get_event_tag t_event = 
@@ -241,22 +275,22 @@ let get_event_tag t_event =
 		(cid"get_event_tag")
 		(tint event_tag_size)
 		[ev_param]
-		(sret (ecast (tint event_tag_size) ((param_evar ev_param)/->cid"tag")))
+		(sret (ecast (tint event_tag_size) (((param_evar ev_param)/->cid"data")/.cid"tag")))
 ;;
-let reset_event_tag t_event = 
+let reset_event_tag t_event =
 	(* this isn't right. Need an address.. *)
 	let ev_param = cid"ev", tref t_event in
-	let enum_ty = ((param_evar ev_param)/->cid"tag").ety in 
-	dfun 
+	let enum_ty = (((param_evar ev_param)/->cid"data")/.cid"tag").ety in
+	dfun
 		(cid"reset_event_tag")
 		(tunit)
 		[ev_param]
-		(sassign_exp ((param_evar ev_param)/->cid"tag") (ecast (enum_ty) (default_exp (tint event_tag_size))))
+		(sassign_exp (((param_evar ev_param)/->cid"data")/.cid"tag") (ecast (enum_ty) (default_exp (tint event_tag_size))))
 ;;
 
 
 let tag_helpers decls = 
-    let teventstruct = match (find_ty_opt (CCoreEvents.event_ty_id) decls) with 
+    let teventstruct = match (find_ty_opt events_cid decls) with
        | Some(ty) -> ty
        | _ -> err "no tevent"
     in  
@@ -266,7 +300,11 @@ let tag_helpers decls =
     ]
  ;;
  
-let helpers = tag_helpers (* don't need cursor init or pkt copy *)
+(* the queue-based dispatch model needs no extra helpers (no cursor init / pkt
+   copy, and it dispatches on the handler's out_event count + out_loc rather than
+   on event tags, so the tag helpers are gone too). *)
+let helpers _decls = ([] : decls)
+let _ = tag_helpers (* silence unused-value warning; kept for reference *)
 let imports = [dpdk_header];;
 let pkt_handler = pkt_handler
 let main = dforiegn ""

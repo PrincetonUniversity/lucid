@@ -56,7 +56,13 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : string =
     "{" ^ fields_str ^ "}"
   | TFun func_ty -> "function(" ^ func_ty_to_string func_ty ^ ")"
   | TBits {ternary; len} -> (if ternary then "ternary_" else "") ^ "bit[" ^ size_to_string len ^ "]"
-  | TEvent _ -> "event"
+  | TVariant sigs ->
+    let arm_strs = List.map
+      (fun (ctor, tag, pty) ->
+        sprintf "%s(%i): %s" (cid_to_string ctor) tag (ty_to_string ~use_abstract_name:true pty))
+      sigs
+    in
+    sprintf "variant {%s}" (String.concat " " arm_strs)
   | TEnum list -> 
     let list_str = String.concat ", " (List.map (fun (s, i) -> cid_to_string s ^ " = " ^ string_of_int i) list) in
     "enum {" ^ list_str ^ "}"
@@ -64,10 +70,6 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : string =
     let ty_list_str = String.concat ", " (List.map (ty_to_string ~use_abstract_name) ty_list) in
     cid_to_string cid ^ "<<" ^ ty_list_str ^ ">>"
   | TName cid -> cid_to_string cid
-  | TAbstract (cid, ty) -> 
-    if (use_abstract_name) then 
-      cid_to_string cid
-    else ty_to_string ty
   | TPtr(ty, None) -> sprintf "%s*" (ty_to_string ~use_abstract_name ty)
   | TPtr(ty, Some(arrlen)) ->
     ty_to_string ~use_abstract_name:true ty ^ "[" ^ arrlen_to_string arrlen ^ "]"
@@ -110,10 +112,10 @@ let rec v_to_string (v: v) : string =
   | VBits {ternary; bits} -> 
     let bits_str = String.concat "" (List.map (fun i -> if i = -1 then "*" else string_of_int i) bits) in
     (if ternary then "ternary " else "") ^ "bits[" ^ bits_str ^ "]"
-  | VEvent e -> "event(" ^ vevent_to_string e ^ ")"
+  | VVariant e -> "event(" ^ vvariant_to_string e ^ ")"
   | VSymbol (s, _) -> cid_to_string s
 
-and vevent_to_string (e: vevent) : string =
+and vvariant_to_string (e: vvariant) : string =
   sprintf "%s(%s)" (cid_to_string e.evid) (String.concat ", " (List.map value_to_string e.evdata))
 and value_to_string value = 
   if is_tstring value.vty then "\""^charints_to_string value^"\""
@@ -137,7 +139,7 @@ let rec e_to_string (e: e) : string =
     "{" ^ fields_str ^ "}"
   | EUnion(label, exp, _) -> 
     sprintf "{.%s = %s}" (cid_to_string label) (exp_to_string exp)
-  | ECall {f; args; call_kind=CEvent} -> 
+  | ECall {f; args; call_kind=CVariant} -> 
     let f_str = exp_to_string f in
     let args_str = String.concat ", " (List.map exp_to_string args) in
     f_str ^ "(" ^ args_str ^ ")"
@@ -160,8 +162,10 @@ and op_to_string (op: op) (args: exp list) : string =
   match op, args with
   | Idx, [arr; idx] -> sprintf "%s[%s]" (exp_to_string arr) (exp_to_string idx)
   | Peek ty, [bs] -> sprintf "peek<%s>(%s)" (ty_to_string ty) (exp_to_string bs)
+  | Read ty, [bs] -> sprintf "read<%s>(%s)" (ty_to_string ty) (exp_to_string bs)
   | Skip ty, [bs] -> sprintf "skip<%s>(%s)" (ty_to_string ty) (exp_to_string bs)
   | BytesOk, [bs] -> sprintf "bytes_ok(%s)" (exp_to_string bs)
+  | Write ty, [bs; v] -> sprintf "write<%s>(%s, %s)" (ty_to_string ty) (exp_to_string bs) (exp_to_string v)
   | And, [a; b] when is_eop a || is_eop b ->
     sprintf "(%s) && (%s)" (exp_to_string a) (exp_to_string b)
   | And, [a; b] -> exp_to_string a ^ " && " ^ exp_to_string b
@@ -203,9 +207,10 @@ and op_to_string (op: op) (args: exp list) : string =
     let int_ty_str = ty_to_string ~use_abstract_name:true (new_ty) in
     "((" ^ int_ty_str ^ ")(" ^ exp_to_string a ^"))"
   | Conc, args -> String.concat "++" ((List.map exp_to_string args))
-  (* use arrow notation shorthand for derefs, unless its a subscript op *)
-  | Project id, [a] when (is_ederef (a) && (not@@is_eop (extract_ederef (a)))) -> 
-      exp_to_string a ^ "->" ^ cid_to_string id
+  (* arrow shorthand: a project on a deref prints as x->id rather than the
+     doubly-derefed form, unless the derefed thing is itself an op (dotted form) *)
+  | Project id, [a] when (is_ederef (a) && (not@@is_eop (extract_ederef (a)))) ->
+      exp_to_string (extract_ederef a) ^ "->" ^ cid_to_string id
   | Project id, [a] -> exp_to_string a ^ "." ^ cid_to_string id
   | Get i, [a] -> exp_to_string a ^ "._" ^ string_of_int i
   | Mod, [x; m] -> Printf.sprintf "(%s mod %s)" (exp_to_string x) (exp_to_string m)
@@ -258,7 +263,7 @@ let rec s_to_string (s: s) : string =
 and pat_to_string (p: pat) : string =
   match p with
   | PVal v -> value_to_string v
-  | PEvent {event_id; params} -> 
+  | PVariant {event_id; params} -> 
     let params_str = params_to_string params in
     (cid_to_string event_id) ^ "(" ^ params_str ^ ")"
   | PWild _ -> "_"
@@ -290,10 +295,6 @@ let rec d_to_string (d: d) : string =
       (match ty_opt with 
                  | Some ty -> ty_to_string ty 
                  | None -> " extern")
-  | DEvent event_def -> 
-    let id_str = cid_to_string event_def.evconstrid in
-    let params_str = params_to_string event_def.evparams in
-    "event " ^ id_str ^ "(" ^ params_str ^ ");"
   | DForiegn str -> str
 
 and fun_def_to_string (kind, id, ty, params, stmt_opt) = 

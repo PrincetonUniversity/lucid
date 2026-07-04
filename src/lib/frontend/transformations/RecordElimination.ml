@@ -13,6 +13,12 @@ let sort_by_label sorted_lst lst =
   List.map (fun (str, _) -> str, List.assoc str lst) sorted_lst
 ;;
 
+let delete_global_user_tys decls =
+  List.filter (fun decl -> match decl.d with
+    | DUserTy(_, _, ty)-> not@@is_global ty
+    | _ -> true) decls
+;;
+
 let replacer =
   object (self)
     inherit [_] s_map as super
@@ -71,7 +77,7 @@ let replacer =
 ;;
 
 
-let eliminate_prog ds = replacer#visit_decls () ds
+let eliminate_prog ds = replacer#visit_decls () ds |> delete_global_user_tys
 
 
 (* for certain backends, we may only want to eliminate records that contain globals *)
@@ -138,12 +144,6 @@ let global_replacer =
       in
       { exp with e; ety = Option.map (self#visit_ty env) exp.ety }
   end
-;;
-
-let delete_global_user_tys decls =
-  List.filter (fun decl -> match decl.d with
-    | DUserTy(_, _, ty)-> not@@is_global ty
-    | _ -> true) decls
 ;;
 
 let eliminate_globals ds = global_replacer#visit_decls () ds |> delete_global_user_tys

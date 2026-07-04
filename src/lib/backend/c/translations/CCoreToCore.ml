@@ -45,7 +45,7 @@ let rec translate_raw_ty (raw_ty : F.raw_ty) : C.raw_ty =
   | F.TUnit -> err "you shouldn't have to translate a unit type back to CoreSyntax"
   | F.TBool -> C.TBool
   | F.TInt(sz) -> C.TInt(translate_size sz)
-  | F.TEvent _ -> C.TEvent
+  | F.TVariant _ -> C.TEvent
   | F.TBits{ternary=true; len= sz} -> C.TPat(translate_size sz)
   | F.TBits{ternary=false; len= sz} -> C.TBits(translate_size sz)
   (* named types *)
@@ -54,7 +54,6 @@ let rec translate_raw_ty (raw_ty : F.raw_ty) : C.raw_ty =
       -> C.TBuiltin(ty_cid, List.map (fun ty -> (translate_ty ty).raw_ty) ty_args)
   | F.TBuiltin(ty_cid, ty_args) -> C.TName(ty_cid, List.map ty_to_size ty_args)
   | F.TName(ty_cid) -> C.TName(ty_cid, [])
-  | F.TAbstract(_, inner_ty) -> (translate_ty inner_ty).raw_ty
   (* functions types for functions, action constructors, actions, and memops *)
   | F.TFun{arg_tys; ret_ty; func_kind} when (func_kind = F.FNormal) -> (
         (* if it returns an action, its an action constructor, else its a function *)
@@ -154,7 +153,7 @@ let translate_op op =
   | F.Project _ -> err "project op must translate into project expression"
   | F.Get _ -> err "there is no get op in CoreSyntax"
   | F.Idx -> err "there is no idx op in CoreSyntax"
-  | F.Peek _ | F.Skip _ | F.BytesOk -> err "there are no bytes ops in CoreSyntax"
+  | F.Peek _ | F.Read _ | F.Skip _ | F.BytesOk | F.Write _ -> err "there are no bytes ops in CoreSyntax"
   | F.Mod -> err "there is no mod op in CoreSyntax"
 ;;
 
@@ -176,7 +175,7 @@ let rec translate_value (value : F.value) : C.value =
   | F.VInt{value=ival; size=(size)} -> 
     let size = size_to_int size in 
     C.value_sp (C.VInt(Integer.create ival size)) value.vspan
-  | F.VEvent(event_val) -> 
+  | F.VVariant(event_val) -> 
     C.value_sp (C.VEvent(translate_event_val event_val)) value.vspan
   | F.VBits {ternary=true; bits} -> 
     C.value_sp (C.VPat(bits)) value.vspan
@@ -203,7 +202,7 @@ let rec translate_value (value : F.value) : C.value =
   | F.VList _ -> err "cannot translate list value back to coreIr"
 
 
-and translate_event_val (ev : F.vevent) : C.event_val = 
+and translate_event_val (ev : F.vvariant) : C.event_val = 
   {
     eid = ev.evid;
     evnum =  Option.map translate_value ev.evnum;
@@ -280,7 +279,7 @@ let rec translate_exp (exp: F.exp) =
         (C.ECall(cid, eargs, false)) 
         (translate_ty exp.ety) 
         exp.espan
-    | F.CEvent -> 
+    | F.CVariant -> 
       let eargs = List.map (translate_exp) eargs in
       C.aexp 
         (C.ECall(cid, eargs, false)) 
@@ -298,7 +297,7 @@ and translate_pat (pat : F.pat) : C.pat =
   | F.PVal({v=F.VBits{ternary=true; bits}}) -> C.PBit(bits)
   | F.PVal({v=F.VInt{value}}) -> C.PNum(Z.of_int value)
   | F.PVal _ -> err "pattern with non-int or non-bit value"
-  | F.PEvent{event_id; params;} -> 
+  | F.PVariant{event_id; params;} -> 
     let params = List.map (fun (id, ty) -> Cid.to_id id, translate_ty ty) params in
     C.PEvent(event_id, params)
   | F.PWild _ -> C.PWild
@@ -372,10 +371,6 @@ let rec translate_decl (decl : F.decl) : C.decl list =
     [C.decl_sp (C.DExtern((Cid.to_id id), ty)) decl.dspan]
   (* | F.DList(_, _, _) -> 
     err "list primitives are not supported in CoreSyntax" *)
-  | F.DEvent{evconstrid; evconstrnum; evparams; is_packet} -> 
-    let ev_sort = if is_packet then C.EPacket else C.EBackground in
-    let params = List.map (fun (id, ty) -> Cid.to_id id, translate_ty ty) evparams in
-    [C.decl_sp (C.DEvent(Cid.to_id evconstrid, evconstrnum, ev_sort, params)) decl.dspan]
   (* functions can be handlers, memops, parsers, or functions *)
   | F.DFun(F.FHandler, id, _, params, BStatement(body)) ->
     let params = List.map (fun (id, ty) -> Cid.to_id id, translate_ty ty) params in

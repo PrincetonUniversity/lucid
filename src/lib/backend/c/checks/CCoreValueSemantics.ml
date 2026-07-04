@@ -21,7 +21,6 @@ let decl_name d =
   | DFun (_, cid, _, _, _) -> CCorePPrint.cid_to_string cid
   | DVar (cid, _, _) -> CCorePPrint.cid_to_string cid
   | DTy (cid, _) -> CCorePPrint.cid_to_string cid
-  | DEvent { evconstrid; _ } -> CCorePPrint.cid_to_string evconstrid
   | DForiegn _ -> "<foreign>"
 ;;
 

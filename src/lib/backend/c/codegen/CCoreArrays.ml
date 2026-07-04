@@ -24,10 +24,8 @@ let emplace_fcn ctx ((cid : Cid.t), decl) =
   else {ctx with generated_fcns=(ctx.generated_fcns@[(cid, decl)])}
 
 (* the value type of the array (inside the global/ref type) *)
-let array_value_ty cell_ty len orig_ty = 
-  timpl_wrap
-    (tlist cell_ty (arrlen len))
-    orig_ty
+let array_value_ty cell_ty len =
+  tlist cell_ty (arrlen len)
 ;;
 
 (* memops: memops are functions passed as arguments. *)
@@ -39,9 +37,9 @@ let array_create ctx (arr_ty : ty) (arr_id : cid) (ctor_call : exp) =
   let cell_size = sizeof_ty cell_ty in
   (* length is the argument of the call *)
   let len = extract_ecall ctor_call |> snd |> List.hd |> eval_exp |> extract_vint in
-  let arr_ty = array_value_ty (tint cell_size) len arr_ty in
+  let arr_ty = array_value_ty (tint cell_size) len in
   let arr_val = eval (zero_list arr_ty) in
-  let arr = eimpl_wrap arr_val ctor_call in
+  let arr = arr_val in
   let ctx = {ctx with 
     arrays = (arr_id, (cell_ty, len))::ctx.arrays;}
   in
@@ -63,7 +61,7 @@ let arr_fcn_id accessor_id arr_id memop_ids =
 let update_complex ctx call_id call_args = 
   let arr = List.nth call_args 0 in (* should have type TBuiltin *)
   let arr_id, (arr_cellty, arr_len) = get_array ctx arr in
-  let arr_ty = array_value_ty arr_cellty arr_len arr.ety in
+  let arr_ty = array_value_ty arr_cellty arr_len in
   let arr = {arr with ety = arr_ty} in
   (* let arr = to_ref arr in *) 
 
@@ -143,7 +141,6 @@ let transform_calls ctx decl =
           if (List.mem f_cid arr_fun_cids) then 
           (
             let ctx', exp' = update_complex (!ctx) f_cid args in
-            let exp' = eimpl_wrap exp' exp in
             ctx := ctx';
             exp'
           )

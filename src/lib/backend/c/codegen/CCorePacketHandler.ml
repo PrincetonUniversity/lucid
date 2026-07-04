@@ -13,17 +13,17 @@ let get_event_tag t_event =
     (cid"get_event_tag")
     (tint event_tag_size)
     [ev_param]
-    (sret (ecast (tint event_tag_size) ((param_evar ev_param)/->cid"tag")))
+    (sret (ecast (tint event_tag_size) (((param_evar ev_param)/->cid"data")/.cid"tag")))
 ;;
-let reset_event_tag t_event = 
+let reset_event_tag t_event =
   (* this isn't right. Need an address.. *)
   let ev_param = cid"ev", tref t_event in
-  let enum_ty = ((param_evar ev_param)/->cid"tag").ety in 
-  dfun 
+  let enum_ty = (((param_evar ev_param)/->cid"data")/.cid"tag").ety in
+  dfun
     (cid"reset_event_tag")
     (tunit)
     [ev_param]
-    (sassign_exp ((param_evar ev_param)/->cid"tag") (ecast (enum_ty) (default_exp (tint event_tag_size))))
+    (sassign_exp (((param_evar ev_param)/->cid"data")/.cid"tag") (ecast (enum_ty) (default_exp (tint event_tag_size))))
 ;;
 
 let reset_cursor = 
@@ -48,15 +48,15 @@ let pkt_handler_str = {|
     // fixed-function toplevel packet handler 
     // locals (that should maybe be globals?)
     packet_t bytes_v;
-    event_t ev1_v;
-    event_t ev2_v;
-    event_t ev_out_v;
+    events ev1_v;
+    events ev2_v;
+    events ev_out_v;
 
     packet_t * bytes = &bytes_v;
-    event_t * ev1 = &ev1_v;
-    event_t * ev2 = &ev2_v;
-    event_t * ev_out = &ev_out_v;
-    event_t * ev_tmp;
+    events * ev1 = &ev1_v;
+    events * ev2 = &ev2_v;
+    events * ev_out = &ev_out_v;
+    events * ev_tmp;
     int generated_port = 0; // return value
 
     // prepare the cursor
@@ -110,7 +110,7 @@ let main_fun =
     return 0;
   }|}
 let process decls = 
-  let t_event = match (find_ty_opt CCoreEvents.event_ty_id decls) with 
+  let t_event = match (find_ty_opt events_cid decls) with
     | Some(ty) -> ty
     | _ -> err "no tevent"
   in

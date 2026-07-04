@@ -161,10 +161,12 @@ let get_memop ty =
   let fname = (suffixed_id id_suffix) in
   let cell_ty = ty in 
   let mem_val_id =  fname "mem_val" in
+  (* two distinct padding-param names (the printer drops the disambiguating id
+     number, so identical names would collide as duplicate C parameters) *)
   let complex_params = [
     (mem_val_id, cell_ty);
-    (fname "unused", cell_ty);                 
-    (fname "unused", cell_ty);                  
+    (fname "unused1", cell_ty);
+    (fname "unused2", cell_ty);
   ]
   in             
   let complex_body = MBComplex{

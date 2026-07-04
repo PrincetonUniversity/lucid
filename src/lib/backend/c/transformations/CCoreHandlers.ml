@@ -1,15 +1,17 @@
-(* 
-  Construct the event handling function. 
-    - input: an event
-    - output: struct with next event, out event, and out port
-    - inputs and outputs are by reference
-    - has one branch for each handler 
-    - generate is implemented by filling appropriate fields in output event
-      - implications: 
-        - no control flow is allowed to call "generate" and "generate_port" 
-          more than once per control flow. 
-        - if an event is recursive, the entire recursive loop may only 
-          call generate_port once.        
+(*
+  Construct the event handling function.
+    - input: an event (by value above the boundary, by ref below)
+    - output: a fixed-capacity array of out_events + the number produced
+    - has one branch for each handler
+    - generate is implemented by appending an out_event to the output array:
+        out_events[n] = { ev; out_loc; port }; n++;
+      where out_loc is 1 (recirc) for generate_self and 2 (port) for
+      generate_port / generate_switch / generate_group. The driver queues
+      recirc events and deparses+sends port events.
+    - there is NO per-control-flow restriction on how many times generate may be
+      called: each call simply appends another out_event (up to the static
+      capacity; we deliberately emit no runtime overflow guard -- a future static
+      pass can bound the max generates per program).
 *)
 open CCoreSyntax
 open CCorePPrint
@@ -21,86 +23,130 @@ let handler_cid = Cid.create ["handle_event"] ;;
 
 let port_size = CConfig.c_cfg.port_id_size
 
-(* out-param form (used by the below-the-boundary `lower` pass) *)
-let in_ev_param = cid"ev_in", tref tevent
-let next_ev_param = cid"ev_next", tref tevent
-let out_ev_param = cid"ev_out", tref tevent
-let out_port_param () = cid"out_port", tref@@tint port_size (* port for out event, 0 means no out event *)
+(* ----- the out_event record: the unit the handler produces ----- *)
+(* out_loc tells the driver where each produced event goes. *)
+let loc_none   = 0  (* unused slot                                   *)
+let loc_recirc = 1  (* feed back into the dispatch queue (generate_self) *)
+let loc_port   = 2  (* deparse + send out `port` (generate_port/switch/group) *)
 
-(* value-semantic form (the waist): ev_in is taken by value, and the three
-   outputs are locals returned as a tuple. *)
-let v_ev_in = evar (cid"ev_in") tevent
-let v_ev_next = evar (cid"ev_next") tevent
-let v_ev_out = evar (cid"ev_out") tevent
-let v_out_port = evar (cid"out_port") (tint port_size)
-(* placeholder "no event" for unset outputs; never reaches C (the `lower` pass
-   drops these inits -- the driver pre-initializes the out-params). A VSymbol so
-   it types as tevent without referencing a real event constructor. *)
-let no_event = { v = VSymbol(Cid.create ["_no_event"], tevent); vty = tevent; vspan = Span.default }
+let out_event_cid = Cid.create ["out_event"]
+let out_event_def =
+  trecord [ cid"ev", tevent; cid"out_loc", tint 8; cid"port", tint port_size ]
+let tout_event = tabstract_cid out_event_cid out_event_def
+let out_event_dty = dty out_event_cid out_event_def
 
-(* transform a generate statement into an assignment to the appropriate output
-   local (value-semantic; the `lower` pass turns these locals into out-params). *)
+(* the handler writes into a fixed-capacity array of out_events (an in-place
+   mutable aggregate, allowed at the value-semantics boundary like any array) and
+   returns the count. No overflow guard is generated (see header). *)
+let out_events_cap = 64
+let tout_events = tlist tout_event (IConst out_events_cap)
+
+(* the count return type *)
+let count_size = 16
+
+(* shared cids / vars for the handler body *)
+let ingr_cid = Cid.id Builtins.ingr_port_id
+let ev_in_cid = cid"ev_in"
+let out_events_cid = cid"out_events"
+let n_cid = cid"n"
+let v_ev_in = evar ev_in_cid tevent
+let v_out_events = evar out_events_cid tout_events
+let v_n = evar n_cid (tint count_size)
+
+(* append one out_event: out_events[n] = { ev; out_loc=loc; port }; n = n + 1; *)
+let mk_push loc ev_exp port_exp =
+  let rec_exp =
+    { (erecord [ cid"ev", ev_exp;
+                 cid"out_loc", eval (vint loc 8);
+                 cid"port", port_exp ])
+      with ety = tout_event }
+  in
+  sseq
+    ((v_out_events, v_n) /<- rec_exp)
+    (sassign_exp v_n (v_n /+ eval (vint 1 count_size)))
+;;
+
+(* transform a generate statement into an out_event append. *)
 let transform_generate statement =
   match statement.s with
   | SUnit(exp) when is_egen_self exp ->
-      sassign_exp v_ev_next (arg exp)
+      (* recirculation: port is irrelevant (the driver re-queues by event) *)
+      mk_push loc_recirc (arg exp) (eval (vint 0 port_size))
   | SUnit(exp) when is_egen_port exp ->
     let port_exp, event_exp = unbox_egen_port exp in
     let port_exp = if (size_of_ty port_exp.ety < size_of_ty (tint port_size))
       then ecast (tint port_size) port_exp
       else port_exp
     in
-    sseq (sassign_exp v_ev_out event_exp) (sassign_exp v_out_port port_exp)
+    mk_push loc_port event_exp port_exp
   | SUnit(exp) when is_egen_switch exp ->
     let switch_exp, event_exp = unbox_egen_switch exp in
     let switch_exp = ecast (tint port_size) switch_exp in
-    sseq (sassign_exp v_ev_out event_exp) (sassign_exp v_out_port switch_exp)
-  | SUnit(exp) when is_egen_group exp ->
-    let port_exp, event_exp = unbox_egen_port exp in
-    sseq (sassign_exp v_ev_out event_exp) (sassign_exp v_out_port port_exp)
+    mk_push loc_port event_exp switch_exp
+  (* generate_ports (multicast, egen_group) is rejected up front by
+     CCoreWellformedC.feature_gate -- the single-port out_event model can't fan out to a
+     group -- so it never reaches here. (It used to be silently mis-compiled as a
+     single-port generate with the group id as the port.) *)
   | _ ->
     statement
 ;;
 type handler_rec = {
   hcid : cid;
-  hparams : params; 
+  hparams : params;
   hbody : statement;
 }
 
-(* make the main handler -- value-semantic form: takes the event by value,
-   returns (ev_next, ev_out, out_port) by value. The below-the-boundary `lower`
-   pass converts this to the out-param calling convention. *)
-let handler_ret_ty = ttuple [tevent; tevent; tint port_size]
+(* Sys.time() -> a read of the current event's meta.timestamp. The driver writes that
+   stamp when it dequeues the event for handling (so it covers both arriving packets and
+   recirculated events). The frontend builtin lowers to a 0-arg call of System.sys_time_cid;
+   we rewrite each such call to `<ev>.meta.timestamp`. *)
+let replace_sys_time ev_exp = object
+  inherit [_] s_map as super
+  method! visit_exp () e =
+    let e = super#visit_exp () e in
+    match e.e with
+    | ECall{f = {e = EVar cid; _}; args = []; _} when Cid.equal cid System.sys_time_cid ->
+      event_timestamp ev_exp
+    | _ -> e
+end
+
+(* make the main handler -- value-semantic form: takes the event by value and a
+   fixed-capacity out_events array, fills the array and returns the count. The
+   below-the-boundary `lower` pass converts ev_in to a by-ref param. *)
+let handler_ret_ty = tint count_size
 let mk_main_handler handlers =
   (* ingress_port size is derived from mutable that is set in translation to CCore *)
-  let ingress_port_param = (Cid.id Builtins.ingr_port_id), tint port_size in
-  let in_ev_val_param = cid"ev_in", tevent in
+  let ingress_port_param = ingr_cid, tint port_size in
+  let in_ev_val_param = ev_in_cid, tevent in
+  let out_events_param = out_events_cid, tout_events in
   let branches = List.map
     (fun handler ->
       (* one branch for each handler *)
-      let pats = [pevent handler.hcid handler.hparams] in
+      let pats = [pvariant handler.hcid handler.hparams] in
       (pats, subst_statement#visit_statement transform_generate handler.hbody))
     handlers
   in
   (* add a default no-op branch *)
-  let branches = branches@[([PWild tevent], snoop)] in
+  let branches = branches@[([PWild tevent_variant], snoop)] in
   let merged_body = stmts [
-    slocal (cid"ev_next") tevent (eval no_event);
-    slocal (cid"ev_out") tevent (eval no_event);
-    slocal (cid"out_port") (tint port_size) (eval (vint 0 port_size));
-    smatch [v_ev_in] branches;
-    sret (etuple [v_ev_next; v_ev_out; v_out_port]);
+    slocal n_cid (tint count_size) (eval (vint 0 count_size));
+    (* match on the incoming event's variant (envelope's .data) *)
+    smatch [event_data v_ev_in] branches;
+    sret v_n;
   ]
   in
-  dfun handler_cid handler_ret_ty [ingress_port_param; in_ev_val_param] merged_body
+  (* Sys.time() in any handler body -> v_ev_in.meta.timestamp (set by the driver at dequeue) *)
+  let merged_body = (replace_sys_time v_ev_in)#visit_statement () merged_body in
+  dfun handler_cid handler_ret_ty
+    [ingress_port_param; in_ev_val_param; out_events_param] merged_body
 ;;
 
-let transform_handler last_handler_cid (handlers, decls) decl : (handler_rec list * decls) = 
-  match extract_dhandle_opt decl with 
+let transform_handler last_handler_cid (handlers, decls) decl : (handler_rec list * decls) =
+  match extract_dhandle_opt decl with
   | None -> (handlers, decls@[decl]) (* not a handler, no change *)
   | Some(handler_cid, _, params, statement) ->
     (* a handler. update handlers list *)
-    let handlers = handlers@[{hcid=handler_cid; hparams=params; hbody=statement}] in 
+    let handlers = handlers@[{hcid=handler_cid; hparams=params; hbody=statement}] in
     if (Cid.equal handler_cid last_handler_cid) then (
       let handler_fun = mk_main_handler handlers in
       handlers, decls@[handler_fun]
@@ -110,66 +156,66 @@ let transform_handler last_handler_cid (handlers, decls) decl : (handler_rec lis
 ;;
 
 
-let process decls = 
-  (* get id of last handler -- that declaration will become the 
+let process decls =
+  (* get id of last handler -- that declaration will become the
      merged handler *)
-  let last_handler_cid = List.filter_map extract_dhandle_opt decls 
+  let last_handler_cid = List.filter_map extract_dhandle_opt decls
     |> List.map (fun (cid, _, _, _) -> cid)
     |> List.rev |> List.hd
-  in 
-  (* merge the handlers into 1 call/return by value event function *)
+  in
+  (* merge the handlers into 1 array-filling event function *)
   let decls = List.fold_left (transform_handler last_handler_cid) ([], []) decls |> snd in
 
   (* finally, remove the declarations for builtin generate functions, since they're no longer needed *)
-  let decls = List.filter 
-    (fun decl -> 
-      match decl.d with 
-      | DFun(_, cid, _, _, BExtern) -> 
+  let decls = List.filter
+    (fun decl ->
+      match decl.d with
+      | DFun(_, cid, _, _, BExtern) ->
         (* if (Cid.to_id cid |> fst) is in ["generate"; "generate_port"; "generate_switch"; "generate_group"] *)
         if (List.mem (Cid.to_id cid |> fst) ["generate_self"; "generate_port"; "generate_switch"; "generate_group"]) then false else true
       | _ -> true)
     decls
   in
-  decls
+  (* declare the out_event type after the `events` type it embeds (and ahead of
+     the handler that uses it). *)
+  let is_events_dty d = match d.d with
+    | DTy(cid, _) -> Cid.equal cid events_cid
+    | _ -> false
+  in
+  if List.exists is_events_dty decls then
+    List.concat_map
+      (fun d -> if is_events_dty d then [d; out_event_dty] else [d])
+      decls
+  else
+    out_event_dty :: decls  (* no events decl found (shouldn't happen): front *)
 ;;
 
-(* ===== phase 2: lower the value-return handle_event to out-params ===== *)
-(* the four event/port vars become out-params, accessed by dereference *)
-(* exact-cid match (not by name) so we never touch a user variable that merely
-   prints as e.g. "out_port" -- those are distinct (uniquified) cids. *)
-let is_out_var c =
-  List.exists (Cid.equal c) [cid"ev_in"; cid"ev_next"; cid"ev_out"; cid"out_port"]
-let deref_out_vars = object
+(* ===== phase 2: lower the value-semantic handle_event to the driver ABI ===== *)
+(* ev_in becomes a by-ref param (events ptr); the out_events array param decays to a
+   pointer for free (lower_vecs); the count return stays. The only rewrite needed
+   is dereferencing uses of ev_in. exact-cid match (not by name) so we never touch
+   a user variable that merely prints as "ev_in". *)
+let deref_in_var = object
   inherit [_] s_map as super
   method! visit_exp () e =
     let e = super#visit_exp () e in
     match e.e with
-    | EVar c when is_out_var c -> ederef (evar c (tref e.ety))
+    | EVar c when Cid.equal c ev_in_cid -> ederef (evar c (tref e.ety))
     | _ -> e
 end
 
 let lower decls =
-  let out_params =
-    [ (Cid.id Builtins.ingr_port_id), tint port_size;
-      in_ev_param; next_ev_param; out_ev_param; out_port_param () ]
-  in
   List.map
     (fun decl ->
       match decl.d with
-      | DFun(_, cid, _, _, BStatement body) when Cid.equal cid handler_cid ->
-        (* drop the output-local inits and the tuple return; the rest stays, with
-           the output vars dereferenced (they are now out-params, pre-initialized
-           by the driver). *)
-        let body =
-          to_stmt_block body
-          |> List.filter (fun s -> match s.s with
-            | SAssign(OLocal(c, _), _) when is_out_var c -> false
-            | SRet _ -> false
-            | _ -> true)
-          |> stmts
+      | DFun(fun_kind, cid, ret_ty, params, BStatement body) when Cid.equal cid handler_cid ->
+        (* ev_in: by value -> by reference, derefing its uses *)
+        let params = List.map
+          (fun (c, ty) -> if Cid.equal c ev_in_cid then (c, tref tevent) else (c, ty))
+          params
         in
-        let body = deref_out_vars#visit_statement () body in
-        dfun handler_cid tunit out_params body
+        let body = deref_in_var#visit_statement () body in
+        dfun_kind fun_kind handler_cid ret_ty params body
       | _ -> decl)
     decls
 ;;

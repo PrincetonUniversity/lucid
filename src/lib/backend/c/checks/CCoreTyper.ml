@@ -99,14 +99,7 @@ let list_equal f xs ys =
 
 let rec unify_raw_ty env rawty1 rawty2 : env = 
   match rawty1, rawty2 with
-  (* abstract types unify with their inner types *)
-  | TAbstract(_, {raw_ty = ty1}), TAbstract(_, {raw_ty = ty2}) -> 
-    unify_raw_ty env ty1 ty2
-  | TAbstract(_, {raw_ty = ty1}), ty2 
-  | ty1, TAbstract(_, {raw_ty = ty2}) -> 
-    unify_raw_ty env ty1 ty2
-  (* named types unify if their names and types are equal *)
-  | TPtr(t1, None), TPtr(t2, None) -> 
+  | TPtr(t1, None), TPtr(t2, None) ->
     unify_ty env t1 t2
   | TPtr(t1, Some(l1)), TPtr(t2, Some(l2)) ->
     let env' = unify_ty env t1 t2 in
@@ -120,13 +113,20 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
       (ty_err "named types with different names");
     (* resolve and check the types, but skip if its extern *)
     if is_textern (ty@@TName(cid1)) then env
-    else 
+    else
       let ty1 = get_ty env cid1 in
       let ty2 = get_ty env cid2 in
       unify_ty env ty1 ty2
+  (* a named type unifies with a structural type by resolving the name to its
+     definition -- e.g. a record literal checked against a named record type
+     (mk_event's envelope), or a variant value against the named variant type *)
+  | TName cid, _ when not (is_textern (ty@@TName cid)) ->
+    unify_raw_ty env (get_ty env cid).raw_ty rawty2
+  | _, TName cid when not (is_textern (ty@@TName cid)) ->
+    unify_raw_ty env rawty1 (get_ty env cid).raw_ty
   | TUnit, TUnit -> env
   | TBool, TBool -> env
-  | TEvent _, TEvent _ -> env
+  | TVariant _, TVariant _ -> env
   | TEnum(variants1), TEnum(variants2) -> 
       let ids1, _ = List.split variants1 in
       let ids2, _ = List.split variants2 in
@@ -175,7 +175,7 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
     if (not (List.for_all2 Cid.equal labels1 labels2)) then 
       ty_err "union types with different labels";
     unify_lists env unify_ty tys1 tys2
-  | (TUnit|TBool|TEvent _|TInt _|TRecord _ | TTuple _ | TName _ | TPtr _ | TVec _ | TBytes | TUnion _
+  | (TUnit|TBool|TVariant _|TInt _|TRecord _ | TTuple _ | TName _ | TPtr _ | TVec _ | TBytes | TUnion _
   | TFun _|TBits _|TEnum _|TBuiltin (_, _)), _ ->
       dprint_endline@@"type mismatch:\n"^(CCorePPrint.raw_ty_to_string rawty1)^"\nand\n"^(CCorePPrint.raw_ty_to_string rawty2);
       ty_err "type mismatch"
@@ -202,7 +202,7 @@ let rec infer_value value : value =
     let ts = List.map type_value vs in
     tlist (List.hd ts) (IConst (List.length ts))
   | VBits{ternary; bits} -> ty@@TBits{ternary; len=sz@@List.length bits}
-  | VEvent _ -> tevent
+  | VVariant _ -> tevent
   | VSymbol(_, ty) -> ty
   | VUnion(label, inner_value, ty) ->
     match (base_type ty).raw_ty with
@@ -280,10 +280,10 @@ let rec infer_exp env exp : env * exp =
       in
       env, {exp with e=EUnion(label, inf_exp, union_ty); ety=union_ty}
     
-    | ECall{f; call_kind=CEvent} ->
+    | ECall{f; call_kind=CVariant} ->
       let env, inf_f = infer_exp env f in
       (* todo: this unify is kind of weird? *)
-      if (is_tevent inf_f.ety) then unify_ty env exp.ety tevent, exp
+      if (is_tevent inf_f.ety) then unify_ty env exp.ety tevent_variant, exp
       else (
         dprint_endline ("current env: ");
         dprint_endline (env_to_string env);
@@ -447,15 +447,19 @@ and infer_eop env op (args : exp list) : env * op * exp list * ty = match op, ar
     env, op, [inf_exp_val; inf_exp_mask], tpat (extract_tint_size inf_exp_val.ety)
   | Project id, [exp] -> (
     let env, inf_exp = infer_exp env exp in
-    if not (is_trecord inf_exp.ety or is_tunion inf_exp.ety) then (
-      let ty1 = inf_exp.ety in
-      let ty2 = trecord [id, inf_exp.ety] in
+    (* resolve a named record/union (e.g. projecting `ev.data` of the named
+       envelope type) to its definition before reading the field *)
+    let rec_ety = match inf_exp.ety.raw_ty with
+      | TName cid when not (is_textern inf_exp.ety) -> get_ty env cid
+      | _ -> inf_exp.ety
+    in
+    if not (is_trecord rec_ety or is_tunion rec_ety) then (
+      let ty1 = rec_ety in
+      let ty2 = trecord [id, rec_ety] in
       dprint_endline@@"type mismatch in project:\n"^(CCorePPrint.ty_to_string ty1)^"\nand\n"^(CCorePPrint.ty_to_string ty2);
       ty_err "type mismatch"
     );
-    dprint_endline ("inf exp: "^CCorePPrint.exp_to_string inf_exp);
-    dprint_endline ("inf exp ty: "^CCorePPrint.ty_to_string inf_exp.ety);
-    let inf_labels, inf_tys = extract_trecord_or_union (base_type inf_exp.ety) in
+    let inf_labels, inf_tys = extract_trecord_or_union (base_type rec_ety) in
     let inf_label_names = List.map Cid.name inf_labels in
     let labels_tys = List.combine inf_label_names inf_tys in
     let inf_ty = List.assoc_opt (Cid.name id) labels_tys in
@@ -489,15 +493,27 @@ and infer_eop env op (args : exp list) : env * op * exp list * ty = match op, ar
     if (not (is_tbytes inf_bs.ety)) then ty_err "peek expects a bytes argument";
     env, op, [inf_bs], read_ty
   )
+  | Read read_ty, [bs] -> (
+    let env, inf_bs = infer_exp env bs in
+    if (not (is_tbytes inf_bs.ety)) then ty_err "read expects a bytes argument";
+    env, op, [inf_bs], read_ty
+  )
   | Skip _, [bs] -> (
     let env, inf_bs = infer_exp env bs in
     if (not (is_tbytes inf_bs.ety)) then ty_err "skip expects a bytes argument";
-    env, op, [inf_bs], tbytes
+    env, op, [inf_bs], tunit
   )
   | BytesOk, [bs] -> (
     let env, inf_bs = infer_exp env bs in
     if (not (is_tbytes inf_bs.ety)) then ty_err "bytes_ok expects a bytes argument";
     env, op, [inf_bs], tbool
+  )
+  | Write write_ty, [bs; v] -> (
+    let env, inf_bs = infer_exp env bs in
+    let env, inf_v = infer_exp env v in
+    if (not (is_tbytes inf_bs.ety)) then ty_err "write expects a bytes argument";
+    let env = unify_ty env write_ty inf_v.ety in
+    env, op, [inf_bs; inf_v], tunit
   )
   | _,_-> ty_err "error type checking Eop"
 ;;
@@ -516,8 +532,10 @@ let unify_pat env exp pat =
           );    
       env
     | PWild ty -> unify_ty env ty exp.ety
-    | PEvent{event_id} -> 
-      let ev_exp = evar event_id tevent in
+    | PVariant{event_id} ->
+      (* a variant pattern matches the variant (the envelope's `data`), not the
+         envelope -- callers project `ev.data` before matching *)
+      let ev_exp = evar event_id tevent_variant in
       unify_ty env ev_exp.ety exp.ety
 let unify_pats env exps pats = 
   List.fold_left2 unify_pat env exps pats
@@ -534,30 +552,31 @@ let rec infer_statement env (stmt:statement) =
     let env = unify_ty env ty inf_exp.ety in
     let env = add_var env cid ty in
     env, {stmt with s=SAssign(OLocal(cid, ty), inf_exp)}
-  (* declare multiple variables, unpack tuple, assign to variables *)
-  | SAssign(OTupleLocal(ids, tys), exp) -> 
+  (* declare multiple variables, unpack tuple, assign to variables. We type-check
+     against the RHS's tuple *type* (its component types), NOT by destructuring the
+     RHS expression -- the RHS may be a call (e.g. Table.lookup) that has no literal
+     components to pair with. CCoreCForm lowers the unpack to a temp + projections. *)
+  | SAssign(OTupleLocal(ids, tys), exp) ->
     let env, inf_exp = infer_exp env exp in
-    if (not@@is_ttuple inf_exp.ety) then 
-      raise (TypeError("only tuples can be unpacked with a multi-assign"));
-    let inf_exps = flatten_tuple inf_exp in
-    if (List.length ids <> List.length inf_exps) then 
-      raise (LengthMismatch(List.length ids, List.length inf_exps));
-    let env = unify_lists env unify_ty tys (List.map (fun exp -> exp.ety) inf_exps) in
+    let comp_tys = match (base_type inf_exp.ety).raw_ty with
+      | TTuple ts -> ts
+      | _ -> raise (TypeError("only tuples can be unpacked with a multi-assign")) in
+    if (List.length ids <> List.length comp_tys) then
+      raise (LengthMismatch(List.length ids, List.length comp_tys));
+    let env = unify_lists env unify_ty tys comp_tys in
     let env = add_vars env ids tys in
-    let inf_exp = {inf_exp with e=ETuple(inf_exps)} in
     env, {stmt with s=SAssign(OTupleLocal(ids, tys), inf_exp)}
   | SAssign(OTupleAssign(lexps), exp) ->
     let env, inf_lexps = infer_lists env infer_exp lexps in
     (* assigning to existing multiple variables from a tuple-type expression *)
     let env, inf_exp = infer_exp env exp in
-    if (not@@is_ttuple inf_exp.ety) then 
-      raise (TypeError("only tuples can be unpacked with a multi-assign"));
-    let inf_exps = flatten_tuple inf_exp in
-    if (List.length inf_lexps <> List.length inf_exps) then 
-      raise (LengthMismatch(List.length inf_lexps, List.length inf_exps));
+    let comp_tys = match (base_type inf_exp.ety).raw_ty with
+      | TTuple ts -> ts
+      | _ -> raise (TypeError("only tuples can be unpacked with a multi-assign")) in
+    if (List.length inf_lexps <> List.length comp_tys) then
+      raise (LengthMismatch(List.length inf_lexps, List.length comp_tys));
     (* make sure all the variables are already declared in the environment *)
-    let env = unify_lists env unify_ty (List.map (fun exp -> exp.ety) inf_lexps) (List.map (fun exp -> exp.ety) inf_exps) in
-    let inf_exp = {inf_exp with e=ETuple(inf_exps)} in
+    let env = unify_lists env unify_ty (List.map (fun exp -> exp.ety) inf_lexps) comp_tys in
     env, {stmt with s=SAssign(OTupleAssign(inf_lexps), inf_exp)}
   | SAssign(OAssign(lexp), exp) ->(
     let env, inf_lexp = infer_exp env lexp in
@@ -604,7 +623,7 @@ let rec infer_statement env (stmt:statement) =
         let inner_env = 
           List.fold_left (fun env pat -> 
             match pat with 
-            | PEvent{params} -> 
+            | PVariant{params} -> 
               let env = add_vars env (List.map (fun f -> f|> fst) params) (List.map snd params) in
               env
             | _ -> env
@@ -694,13 +713,21 @@ let rec infer_decl env decl : env * decl option =
     env, decl |> Option.some
   | DTy(cid, Some(ty)) -> 
     let env = add_ty env cid ty in
+    (* register any variant constructors so CVariant calls / PVariant patterns
+       resolve. generic over any TVariant DTy (today: the event variant): a
+       constructor's type is the variant type itself, which is_tevent /
+       is_tevent_variant accept via their `TVariant _` arm. base_type returns the
+       bare TVariant here (a TName alias would resolve via tydefs). *)
+    let env = match (base_type ty).raw_ty with
+      | TVariant sigs ->
+        List.fold_left
+          (fun env (ctor, _, _) -> add_var env ctor (base_type ty))
+          env sigs
+      | _ -> env
+    in
     env, decl |> Option.some
   | DTy(cid, None) ->
     let env = add_extern_ty env cid in
-    env, decl |> Option.some
-  | DEvent{evconstrid} -> 
-    (* just add the event type to the var_ty table *)
-    let env = add_var env (evconstrid) tevent in
     env, decl |> Option.some
   | DFun(fun_kind, id, ret_ty, params, BStatement(statement)) -> 
     (* set up the environment *)
