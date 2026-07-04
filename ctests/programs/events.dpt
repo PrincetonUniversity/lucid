@@ -1,0 +1,16 @@
+event pkt_in(int src_ip, int src_port);
+event bg_cmd(int src_port) { skip; }
+
+event pkt_out(int src_ip, int src_port) { skip; }
+
+handle pkt_in(int src_ip, int src_port) {
+    printf("Received packet from (ip: %d, port: %d)", src_ip, src_port);
+    event MY_EVENT = pkt_out(src_ip, src_port); 
+    generate bg_cmd(src_port);
+    match MY_EVENT with 
+    | pkt_out(int ip, int port) -> {
+        printf("Sending packet to (ip: %d, port: %d)", ip, port);
+        generate_port(1, pkt_out(src_ip, src_port));
+    }
+    | _ -> { skip; }
+}

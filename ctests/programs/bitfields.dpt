@@ -1,0 +1,11 @@
+// Bit-packed sub-byte fields (restriction R1'). The header packs a 4-bit `ver` and a
+// 12-bit `len` into the first 2 bytes: `len` straddles the byte-0/byte-1 boundary but
+// ends on the byte-2 boundary (R1' aligned-end), so it exercises a cross-byte read and
+// write. The handler increments `len` and echoes the frame (carrying the payload via an
+// explicit Payload.t); the output's `len` field should read back one higher with `ver`
+// and the rest unchanged.
+packet event hdr(int<4> ver, int<12> len, int<48> dst, int<48> src, int<16> ety, Payload.t pl);
+
+handle hdr(int<4> ver, int<12> len, int<48> dst, int<48> src, int<16> ety, Payload.t pl) {
+    generate_port(ingress_port, hdr(ver, len + 1, dst, src, ety, pl));
+}

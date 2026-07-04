@@ -1,0 +1,10 @@
+// Ethernet reflector: swap source and destination MAC addresses and send the
+// packet back out the port it arrived on. Exercises byte-multiple (but
+// non-standard width) packet-event fields end to end: parse the eth header,
+// re-serialize it in the correct wire format, and carry the payload via an explicit
+// Payload.t (the only way to keep the rest of the packet).
+packet event ethpkt(int<48> dst, int<48> src, int<16> ety, Payload.t pl);
+
+handle ethpkt(int<48> dst, int<48> src, int<16> ety, Payload.t pl) {
+    generate_port(ingress_port, ethpkt(src, dst, ety, pl));
+}

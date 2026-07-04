@@ -1,0 +1,18 @@
+
+type pair_t = {int<32> a; int<32> b; }
+
+action pair_t add_pair(int c)(pair_t p) {
+    return {a= p#a; b= c};
+}
+
+
+global Table.t<<int, int, pair_t, pair_t>> my_table = Table.create(32, [add_pair], add_pair, 0);
+
+
+
+
+
+packet event foo(pair_t p) { 
+    
+    auto new_pair = Table.lookup(my_table, 1, p);
+    generate_port(1, foo(new_pair)); }

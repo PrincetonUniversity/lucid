@@ -1,0 +1,10 @@
+// Reflect (swap MACs) only IPv4 frames; drop everything else. Branching on the
+// ethertype is only correct when fields are parsed in network byte order, so this
+// exercises the byteswap in the read helpers (`ety == 0x0800` == 2048).
+packet event ethpkt(int<48> dst, int<48> src, int<16> ety, Payload.t pl);
+
+handle ethpkt(int<48> dst, int<48> src, int<16> ety, Payload.t pl) {
+    if (ety == 2048) {
+        generate_port(ingress_port, ethpkt(src, dst, ety, pl));
+    }
+}

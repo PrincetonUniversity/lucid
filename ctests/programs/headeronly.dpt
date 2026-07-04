@@ -1,0 +1,8 @@
+// No Payload.t: a no-payload event serializes ONLY its header fields, dropping the input
+// packet's tail (matching the interpreter -- the tail is kept only via an explicit
+// Payload.t, see ethswaprefl). Echoes just the 14-byte eth header; the payload is dropped.
+packet event ethhdr(int<48> dst, int<48> src, int<16> ety);
+
+handle ethhdr(int<48> dst, int<48> src, int<16> ety) {
+    generate_port(ingress_port, ethhdr(dst, src, ety));
+}
