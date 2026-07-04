@@ -28,9 +28,12 @@ from scapy.all import Ether, IP, UDP, Raw, wrpcap, rdpcap
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 DPT_FILE = os.path.join(SCRIPT_DIR, "programs", "ethswaprefl.dpt")  # swaps src/dst MAC, reflects
-BUILD_DIR = os.path.join(SCRIPT_DIR, "_dpdk_build")
-SEND_PCAP = os.path.join(SCRIPT_DIR, "pcaps", "dpdk.send.pcap")
-RECV_PCAP = os.path.join(SCRIPT_DIR, "pcaps", "dpdk.recv.pcap")
+# BUILD_DIR / PCAP_DIR default to the committed locations but can be pointed at a
+# temp dir (e.g. by run_c_tests.sh) so a suite run doesn't touch committed files.
+BUILD_DIR = os.environ.get("DPDK_BUILD_DIR") or os.path.join(SCRIPT_DIR, "_dpdk_build")
+PCAP_DIR = os.environ.get("DPDK_PCAP_DIR") or os.path.join(SCRIPT_DIR, "pcaps")
+SEND_PCAP = os.path.join(PCAP_DIR, "dpdk.send.pcap")
+RECV_PCAP = os.path.join(PCAP_DIR, "dpdk.recv.pcap")
 NUM_PACKETS = 100
 RUN_TIMEOUT = 15  # seconds to let the switch drain the input pcap before we stop it
 
@@ -133,7 +136,8 @@ def check(send_pcap, recv_pcap):
 
 
 if __name__ == "__main__":
-    os.makedirs(os.path.join(SCRIPT_DIR, "pcaps"), exist_ok=True)
+    os.makedirs(PCAP_DIR, exist_ok=True)
+    os.makedirs(BUILD_DIR, exist_ok=True)
     if "--gen" in sys.argv[1:]:
         # (Re)generate _dpdk_build/ from the .dpt via lucidcc, then stop. Run this
         # where lucidcc is built; commit the result so plain runs skip the compiler.
