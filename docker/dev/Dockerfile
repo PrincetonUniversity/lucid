@@ -14,11 +14,38 @@ RUN apt-get update && apt-get install -y \
     pkg-config libgmp-dev m4 zlib1g-dev \
     iproute2 net-tools iputils-ping iptables \
     vim nano less procps \
+    meson ninja-build python3-pyelftools libnuma-dev libpcap-dev libelf-dev \
+    wget xz-utils \
     && rm -rf /var/lib/apt/lists/*
 
 # 2. passwordless sudo
 RUN echo "ubuntu ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/ubuntu \
     && chmod 0440 /etc/sudoers.d/ubuntu
+
+# ---- DPDK 24.03 (dev only: net/pcap + net/af_packet PMDs) ----
+# Pinned to 24.03 to match our other project. The driver set is reduced to the
+# two virtual PMDs we test with (pcap / af_packet), which keeps the build
+# tractable under emulation; performance is not a goal here. To build the full
+# driver set instead, drop the `-Denable_drivers=...` flag.
+#
+# On amd64 the CPU baseline is pinned to westmere (SSE4.2, no AVX) so the binary
+# runs under x86-on-ARM emulation -- Rosetta/qemu expose a CPU without AVX, and a
+# DPDK built assuming AVX aborts in rte_eal_init ("unsupported cpu type"). It's
+# harmless on real x86 hosts (just no AVX-optimized paths). arm64 uses DPDK's
+# default baseline.
+ARG TARGETARCH
+RUN wget -q https://fast.dpdk.org/rel/dpdk-24.03.tar.xz \
+    && tar -xJf dpdk-24.03.tar.xz && rm dpdk-24.03.tar.xz \
+    && cd dpdk-24.03 \
+    && case "$TARGETARCH" in \
+         amd64) ISA_OPT="-Dcpu_instruction_set=westmere" ;; \
+         *)     ISA_OPT="" ;; \
+       esac \
+    && meson setup build -Denable_drivers=net/pcap,net/af_packet -Dtests=false $ISA_OPT \
+    && ninja -C build \
+    && meson install -C build \
+    && ldconfig \
+    && cd .. && rm -rf dpdk-24.03
 
 # ---- user setup ----
 USER ubuntu

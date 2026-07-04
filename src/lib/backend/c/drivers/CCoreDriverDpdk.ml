@@ -371,6 +371,8 @@ sudo ./build/%{progname}-shared --log-level=8 -l 1 -n 4 --no-pci --vdev 'net_pca
 let package_prog decls = 
 [
 	"lucidprog.c", `Decls (imports @ decls @ (helpers decls) @ [pkt_handler]);
-	"makefile", `String makefile;
+	(* capital M: the DPDK makefile lists `Makefile` as a prerequisite of its build
+	   rules, so the on-disk name must match (Linux is case-sensitive). *)
+	"Makefile", `String makefile;
 	"run.sh", `String run_sh;
 ]
