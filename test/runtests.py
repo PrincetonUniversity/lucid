@@ -116,7 +116,9 @@ def check_lucidcc_compat(incompat_keywords, fullfile):
     return None
 
 def lucidcc_test(n_tests, i, fullfile, args):
-    incompat_keywords = ["Counter.create", "PairArray.create", "Payload.t"]
+    # |-| / |+| : saturating arithmetic; not yet lowered by the C backend
+    # (operators.dpt also uses concatenation `^`, which the C backend rejects too)
+    incompat_keywords = ["Counter.create", "PairArray.create", "Payload.t", "|-|", "|+|"]
     # get the base of the fullfile without the directory
     shortfile = os.path.splitext(os.path.basename(fullfile))[0] + ".dpt"
     incompat = check_lucidcc_compat(incompat_keywords, shortfile)
