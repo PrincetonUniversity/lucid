@@ -59,6 +59,8 @@ let dpdk_includes = dforiegn {|
 let dpdk_rings = dforiegn [%string {|
 /******** pipeline rings (DPDK rte_ring, single-producer / single-consumer) ********/
 #define RING_SIZE 1024
+#define BURST_SIZE 64   // max events pulled per rx / dispatch / tx call (bounded, so
+                        // a self-recirculating handler can't starve the RX path)
 
 // an event flowing through the pipeline + the mbuf carrying its payload (NULL for
 // events with no payload -- all background / recirc traffic). in_port is the ingress
@@ -184,14 +186,16 @@ void dpdk_init(cfg_t* cfg, int argc, char *argv[]) {
 }
 |}
 
-(* ===== pipeline phases (reference the generated parse/handle/deparse + types) ===== *)
-let dpdk_phases = dforiegn [%string {|
-/******** pipeline phases: rx -> dispatch -> tx ********/
-#define BURST_SIZE 64
+(* ===== pipeline phases (reference the generated parse/handle/deparse + types) =====
+   One dforiegn block per phase. Each pulls a *bounded* burst (<= BURST_SIZE) and
+   loops over it -- so dispatch/tx don't drain to empty, which would let a
+   self-recirculating handler starve the RX path. *)
 
-// RX: poll every port, parse each frame to an event, push it to dispatch_in. The
-// mbuf is stripped to its payload tail and carried iff the event has a payload;
-// otherwise it is freed (the event travels by value).
+(* RX: poll every port, parse each frame to an event, push it to dispatch_in. The
+   mbuf is stripped to its payload tail and carried iff the event has a payload;
+   otherwise it is freed (the event travels by value). *)
+let dpdk_do_rx = dforiegn [%string {|
+/******** RX: poll every port, parse, enqueue on dispatch_in ********/
 static void do_rx(void) {
 	uint16_t port;
 	RTE_ETH_FOREACH_DEV(port) {
@@ -217,59 +221,71 @@ static void do_rx(void) {
 		}
 	}
 }
+|}]
 
-// DISPATCH: handle exactly ONE event per call, so recirculated events interleave
-// with fresh input instead of starving it. Route each out_event: recirc back onto
-// dispatch_in, port output onto tx_in. A payload-carrying output gets its own copy
-// of the input payload.
+(* DISPATCH: handle a bounded burst of events. Recirc outputs go back onto
+   dispatch_in (a FUTURE burst, since they aren't in this burst's snapshot), so a
+   self-recirculating handler can't starve RX. Port outputs go to tx_in. A
+   payload-carrying output gets its own copy of the input payload. *)
+let dpdk_do_dispatch = dforiegn [%string {|
+/******** DISPATCH: handle a burst of events, route their outputs ********/
 static void do_dispatch(void) {
-	disp_elem in;
-	if (rte_ring_dequeue_elem(dispatch_in, &in, sizeof(in)) != 0) return; // empty
-	in.ev.meta.timestamp = (uint32_t)rte_get_tsc_cycles(); // stamp at dequeue (Sys.time())
-	%{out_event_ty} out_events[%{out_events_cap}];
-	uint16_t n = %{handle_event_fn}(in.in_port, &in.ev, out_events);
-	for (uint16_t i = 0; i < n; i++) {
-		uint8_t loc = out_events[i].out_loc;
-		struct rte_mbuf *pl = NULL;
-		if (out_events[i].ev.meta.has_payload && in.payload != NULL)
-			pl = rte_pktmbuf_copy(in.payload, mbuf_pool, 0, UINT32_MAX);
-		if (loc == 1) {          // recirculation (generate_self)
-			disp_elem e = { .ev = out_events[i].ev, .payload = pl, .in_port = in.in_port };
-			if (rte_ring_enqueue_elem(dispatch_in, &e, sizeof(e)) != 0 && pl) rte_pktmbuf_free(pl);
-		} else if (loc == 2) {   // output to a port
-			tx_elem e = { .ev = out_events[i].ev, .payload = pl, .port = out_events[i].port };
-			if (rte_ring_enqueue_elem(tx_in, &e, sizeof(e)) != 0 && pl) rte_pktmbuf_free(pl);
-		} else if (pl) {
-			rte_pktmbuf_free(pl);
+	disp_elem batch[BURST_SIZE];
+	unsigned nb = rte_ring_dequeue_burst_elem(dispatch_in, batch, sizeof(disp_elem), BURST_SIZE, NULL);
+	for (unsigned b = 0; b < nb; b++) {
+		disp_elem *in = &batch[b];
+		in->ev.meta.timestamp = (uint32_t)rte_get_tsc_cycles(); // stamp at dequeue (Sys.time())
+		%{out_event_ty} out_events[%{out_events_cap}];
+		uint16_t n = %{handle_event_fn}(in->in_port, &in->ev, out_events);
+		for (uint16_t i = 0; i < n; i++) {
+			uint8_t loc = out_events[i].out_loc;
+			struct rte_mbuf *pl = NULL;
+			if (out_events[i].ev.meta.has_payload && in->payload != NULL)
+				pl = rte_pktmbuf_copy(in->payload, mbuf_pool, 0, UINT32_MAX);
+			if (loc == 1) {          // recirculation (generate_self)
+				disp_elem e = { .ev = out_events[i].ev, .payload = pl, .in_port = in->in_port };
+				if (rte_ring_enqueue_elem(dispatch_in, &e, sizeof(e)) != 0 && pl) rte_pktmbuf_free(pl);
+			} else if (loc == 2) {   // output to a port
+				tx_elem e = { .ev = out_events[i].ev, .payload = pl, .port = out_events[i].port };
+				if (rte_ring_enqueue_elem(tx_in, &e, sizeof(e)) != 0 && pl) rte_pktmbuf_free(pl);
+			} else if (pl) {
+				rte_pktmbuf_free(pl);
+			}
 		}
+		if (in->payload) rte_pktmbuf_free(in->payload); // input payload consumed (copied per output)
 	}
-	if (in.payload) rte_pktmbuf_free(in.payload); // input payload consumed (copied per output)
 }
+|}]
 
-// TX: deparse exactly ONE output event's header and transmit it. A payload event
-// prepends its header onto the carried payload mbuf; a no-payload event builds a
-// fresh header-only mbuf. Deparse writes the header backwards into the mbuf's
-// headroom, then prepend extends the data region to include it.
+(* TX: deparse a bounded burst of output events and transmit them. A payload event
+   prepends its header onto the carried payload mbuf; a no-payload event builds a
+   fresh header-only mbuf. Deparse writes the header backwards into the mbuf's
+   headroom, then prepend extends the data region to include it. *)
+let dpdk_do_tx = dforiegn [%string {|
+/******** TX: deparse a burst of output events and transmit them ********/
 static void do_tx(void) {
-	tx_elem e;
-	if (rte_ring_dequeue_elem(tx_in, &e, sizeof(e)) != 0) return; // empty
-	if (e.port >= cfg.num_ports) {
-		printf("WARNING: dropping packet to out-of-range port: %u\n", e.port);
-		if (e.payload) rte_pktmbuf_free(e.payload);
-		return;
+	tx_elem batch[BURST_SIZE];
+	unsigned nb = rte_ring_dequeue_burst_elem(tx_in, batch, sizeof(tx_elem), BURST_SIZE, NULL);
+	for (unsigned b = 0; b < nb; b++) {
+		tx_elem *e = &batch[b];
+		if (e->port >= cfg.num_ports) {
+			printf("WARNING: dropping packet to out-of-range port: %u\n", e->port);
+			if (e->payload) rte_pktmbuf_free(e->payload);
+			continue;
+		}
+		struct rte_mbuf *m = e->payload;
+		if (m == NULL) {                       // no-payload event -> fresh, header-only mbuf
+			m = rte_pktmbuf_alloc(mbuf_pool);
+			if (unlikely(m == NULL)) continue;
+		}
+		uint8_t *data = rte_pktmbuf_mtod(m, uint8_t*);
+		%{packet_t_ty} pkt = { .start = data, .cursor = data,
+		                       .end = data + rte_pktmbuf_pkt_len(m), .bit_off = 0 };
+		%{deparse_event_fn}(&e->ev, &pkt);     // writes the header backwards into headroom
+		rte_pktmbuf_prepend(m, (uint16_t)(data - pkt.cursor)); // include the prepended header
+		uint16_t nb_tx = rte_eth_tx_burst(e->port, 0, &m, 1);
+		if (unlikely(nb_tx < 1)) rte_pktmbuf_free(m);
 	}
-	struct rte_mbuf *m = e.payload;
-	if (m == NULL) {                       // no-payload event -> fresh, header-only mbuf
-		m = rte_pktmbuf_alloc(mbuf_pool);
-		if (unlikely(m == NULL)) return;
-	}
-	uint8_t *data = rte_pktmbuf_mtod(m, uint8_t*);
-	%{packet_t_ty} pkt = { .start = data, .cursor = data,
-	                       .end = data + rte_pktmbuf_pkt_len(m), .bit_off = 0 };
-	%{deparse_event_fn}(&e.ev, &pkt);      // writes the header backwards into headroom
-	rte_pktmbuf_prepend(m, (uint16_t)(data - pkt.cursor)); // include the prepended header
-	uint16_t nb_tx = rte_eth_tx_burst(e.port, 0, &m, 1);
-	if (unlikely(nb_tx < 1)) rte_pktmbuf_free(m);
 }
 |}]
 
@@ -357,7 +373,7 @@ let package_prog decls =
 [
 	"lucidprog.c", `Decls (
 		[dpdk_includes] @ decls @ (helpers decls) @
-		[dpdk_rings; dpdk_config_init; dpdk_phases; dpdk_main]);
+		[dpdk_rings; dpdk_config_init; dpdk_do_rx; dpdk_do_dispatch; dpdk_do_tx; dpdk_main]);
 	(* capital M: the DPDK makefile lists `Makefile` as a prerequisite of its build
 	   rules, so the on-disk name must match (Linux is case-sensitive). *)
 	"Makefile", `String makefile;
