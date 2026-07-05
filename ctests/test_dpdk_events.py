@@ -5,19 +5,20 @@
 # The single-output reflector tests (test_dpdk.py / test_dpdk_afpacket.py) never
 # exercise the interesting parts of the queue-based driver. events.dpt does: its
 # pkt_in handler emits BOTH a recirc `bg_cmd` (generate_self) AND a port output
-# `generate_port(1, pkt_out(..))`. So this checks:
+# `generate_port(0, pkt_out(..))`. So this checks:
 #   - multi-out_event dispatch (one handler -> two out_events),
 #   - the recirc queue drain (bg_cmd is queued, handled -- its body is `skip` -- and
 #     drained, with no loop and no spurious output),
-#   - send_port_event's framing + port routing (the pkt_out lands on port 1, framed
-#     as a Lucid background event: dst_mac=1, src_mac=2, ethertype=666, tag, fields).
+#   - send_port_event's framing + port routing (the pkt_out lands on port 0, framed
+#     as a Lucid background event: dst_mac=1, src_mac=2, ethertype=666, tag, fields),
+#   - multi-port rx: ingress is on port 1, so the driver must poll every port (not
+#     just port 0) or this test gets zero output.
 #
 # Transport is DPDK's pcap PMD (net_pcap), like test_dpdk.py, but with TWO ports:
-#   port 0 (net_pcap0): rx = the crafted pkt_in frames; tx should stay empty.
-#   port 1 (net_pcap1): rx = empty; tx = where the pkt_out frames land (checked).
-# generate_port(1, ..) targets port 1, so port 1 must exist -> two vdevs. The driver
-# sizes the mbuf pool as 8191 * num_ports, which overflows --no-huge's default heap at
-# 2 ports, so we pass -m 512.
+#   port 1 (net_pcap1): rx = the crafted pkt_in frames (INGRESS); tx should stay empty.
+#   port 0 (net_pcap0): rx = empty; tx = where the pkt_out frames land (checked).
+# Both ports must exist -> two vdevs. The driver sizes the mbuf pool as 8191 *
+# num_ports, which overflows --no-huge's default heap at 2 ports, so we pass -m 512.
 #
 # events.dpt has no explicit parser, so the auto (Lucid-framing) parser expects the
 # input framed as a background event (ethertype 666 + 16-bit event tag + fields),
@@ -130,14 +131,17 @@ def run_test(switch_bin):
     for p in (PORT0_PCAP, PORT1_PCAP):
         if os.path.exists(p):
             os.remove(p)
-    vdev0 = f"net_pcap0,rx_pcap={IN_PCAP},tx_pcap={PORT0_PCAP}"
-    vdev1 = f"net_pcap1,rx_pcap={EMPTY_PCAP},tx_pcap={PORT1_PCAP}"
+    # Ingress on port 1 (net_pcap1 rx), egress on port 0 (events.dpt does
+    # generate_port(0,..)). This exercises multi-port rx: the driver must poll port 1,
+    # not just port 0 -- before that fix this test gets zero output.
+    vdev0 = f"net_pcap0,rx_pcap={EMPTY_PCAP},tx_pcap={PORT0_PCAP}"
+    vdev1 = f"net_pcap1,rx_pcap={IN_PCAP},tx_pcap={PORT1_PCAP}"
     cmd = ["sudo", switch_bin, "--no-huge", "-m", "512", "-l", "0", "-n", "1", "--no-pci",
            "--vdev", vdev0, "--vdev", vdev1]
     print(f"[+] run: {' '.join(cmd[1:])}")
     switch = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                               start_new_session=True)
-    # poll port 1 until all pkt_out frames arrive (pcap PMD flushes per TX burst),
+    # poll port 0 until all pkt_out frames arrive (pcap PMD flushes per TX burst),
     # then stop -- so the run is fast instead of waiting the full timeout.
     deadline = time.time() + RUN_TIMEOUT
     while time.time() < deadline:
@@ -145,7 +149,7 @@ def run_test(switch_bin):
             break
         time.sleep(0.5)
         try:
-            if len(rdpcap(PORT1_PCAP)) >= NUM_PACKETS:
+            if len(rdpcap(PORT0_PCAP)) >= NUM_PACKETS:
                 break
         except Exception:
             pass
@@ -159,23 +163,24 @@ def run_test(switch_bin):
 def check(tags):
     expected = [frame(tags["pkt_out"], ip, port) for ip, port in inputs()]
     try:
-        recv = [bytes(p) for p in rdpcap(PORT1_PCAP)]
+        recv = [bytes(p) for p in rdpcap(PORT0_PCAP)]   # egress: generate_port(0,..)
     except Exception:
         recv = []
     try:
-        port0 = list(rdpcap(PORT0_PCAP))
+        port1 = list(rdpcap(PORT1_PCAP))                # ingress port, should not emit
     except Exception:
-        port0 = []
-    print(f"[*] sent {NUM_PACKETS} pkt_in, port1 got {len(recv)} pkt_out, port0 got {len(port0)}")
-    if len(port0) != 0:
-        print(f"[-] FAIL: port 0 emitted {len(port0)} packet(s) (expected none)"); return False
+        port1 = []
+    print(f"[*] fed {NUM_PACKETS} pkt_in on port 1, port0 got {len(recv)} pkt_out, port1 got {len(port1)}")
+    if len(port1) != 0:
+        print(f"[-] FAIL: port 1 emitted {len(port1)} packet(s) (expected none)"); return False
     if len(recv) != len(expected):
-        print("[-] FAIL: port1 pkt_out count differs"); return False
+        print("[-] FAIL: port0 pkt_out count differs"); return False
     for i, (r, e) in enumerate(zip(recv, expected)):
         if r != e:
             print(f"[-] FAIL: pkt_out[{i}] framing mismatch\n    got {r.hex()}\n    exp {e.hex()}")
             return False
-    print("[+] PASS: recirc drained, port1 pkt_out frames correct, port0 empty"); return True
+    print("[+] PASS: port-1 ingress dispatched, recirc drained, port0 pkt_out frames correct, port1 empty")
+    return True
 
 
 if __name__ == "__main__":

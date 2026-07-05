@@ -138,18 +138,22 @@ cfg_t cfg = {
 
 static __rte_noreturn void lcore_main(void) {
 	printf("handler loop running -- ctrl-c to quit\n");
-	uint16_t port = 0;
 	for (;;) {
-		// get packets
-		struct rte_mbuf *bufs[BURST_SIZE];
-		const uint16_t nb_rx = rte_eth_rx_burst(port, 0,bufs, BURST_SIZE);
-		if (unlikely(nb_rx == 0))
-			continue;
-		for (uint16_t i = 0; i < nb_rx; i++) {
-			// run the dispatch pipeline; it TXes any port events itself (it
-			// allocates fresh output mbufs), so we always free the input mbuf.
-			dispatch_packet(bufs[i], bufs[i]->port);
-			rte_pktmbuf_free(bufs[i]);
+		// poll every port each round (not just port 0), so packets are received on
+		// all interfaces and each is dispatched with its real ingress port.
+		uint16_t port;
+		RTE_ETH_FOREACH_DEV(port) {
+			// get packets
+			struct rte_mbuf *bufs[BURST_SIZE];
+			const uint16_t nb_rx = rte_eth_rx_burst(port, 0, bufs, BURST_SIZE);
+			if (unlikely(nb_rx == 0))
+				continue;
+			for (uint16_t i = 0; i < nb_rx; i++) {
+				// run the dispatch pipeline; it TXes any port events itself (it
+				// allocates fresh output mbufs), so we always free the input mbuf.
+				dispatch_packet(bufs[i], bufs[i]->port);
+				rte_pktmbuf_free(bufs[i]);
+			}
 		}
 	}
 }
@@ -162,12 +166,6 @@ int main(int argc, char *argv[]) {
 }
 |};;
 
-
-(* NOTE: this DPDK driver is not validated in the local build environment (no
-   DPDK present); it mirrors the pcap driver's queue-based dispatch structure
-   using DPDK primitives. The mbuf data_off / pkt_len arithmetic in
-   send_port_event follows the same "copy input, deparse over it at the
-   header/payload boundary" approach as the pcap copy_packet path. *)
 let pkt_handler = dforiegn [%string {|
 /********* internal dispatch FIFO of events (single core, single queue) ***********/
 #define EV_QUEUE_CAP 1024

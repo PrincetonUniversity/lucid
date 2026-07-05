@@ -158,7 +158,6 @@ let rec compound_eq e1 e2 =
     | TFun _ -> err "no equality for function"
     (* builtins and names -- opaque, can't compare *)
     | TBuiltin _ -> err "no equality for builtins"
-    | TName _ -> err "no equality for named type"
 ;;
 
 (* masked equality expression (e1 & m) == (e2 & m) for all 
@@ -221,5 +220,4 @@ let rec compound_masked_eq e1 e2 m =
     | TFun _ -> err "no equality for function"
     (* builtins and names -- opaque, can't compare *)
     | TBuiltin _ -> err "no equality for builtins"
-    | TName _ -> err "no equality for named type"
 ;;

@@ -10,7 +10,7 @@ handle pkt_in(int src_ip, int src_port) {
     match MY_EVENT with 
     | pkt_out(int ip, int port) -> {
         printf("Sending packet to (ip: %d, port: %d)", ip, port);
-        generate_port(1, pkt_out(src_ip, src_port));
+        generate_port(0, pkt_out(src_ip, src_port));
     }
     | _ -> { skip; }
 }

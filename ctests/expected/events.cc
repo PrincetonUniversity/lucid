@@ -184,7 +184,7 @@ uint16_t handle_event(uint32_t ingress_port , events*  ev_in , out_event out_eve
           uint32_t ip_1198  = MY_EVENT_1197.data.payload.pkt_out_1191.src_ip_1189;
           uint32_t port_1199  = MY_EVENT_1197.data.payload.pkt_out_1191.src_port_1190;
           printf("Sending packet to (ip: %d, port: %d)", ip_1198, port_1199);
-          out_event tmp_1274  = {.ev = mk_pkt_out(src_ip_1195, src_port_1196), .out_loc = 2, .port = 1};
+          out_event tmp_1274  = {.ev = mk_pkt_out(src_ip_1195, src_port_1196), .out_loc = 2, .port = 0};
           out_events[n] = tmp_1274;
           n = n + 1;
           break;
