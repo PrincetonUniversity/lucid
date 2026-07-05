@@ -63,9 +63,9 @@ let dpdk_rings = dforiegn [%string {|
                         // a self-recirculating handler can't starve the RX path)
 
 // an event flowing through the pipeline + the mbuf carrying its payload (NULL for
-// events with no payload -- all background / recirc traffic). in_port is the ingress
-// port, threaded through so the handler sees it even for recirculated events.
-typedef struct { %{events_ty} ev; struct rte_mbuf *payload; uint16_t in_port; } disp_elem;
+// events with no payload -- all background / recirc traffic). The ingress port now
+// rides in ev.meta.in_port, so it isn't a separate field.
+typedef struct { %{events_ty} ev; struct rte_mbuf *payload; } disp_elem;
 // an output event bound for a port, + its payload mbuf (NULL if none).
 typedef struct { %{events_ty} ev; struct rte_mbuf *payload; uint16_t port; } tx_elem;
 
@@ -206,8 +206,9 @@ static void do_rx(void) {
 			uint8_t *data = rte_pktmbuf_mtod(m, uint8_t*);
 			%{packet_t_ty} pkt = { .start = data, .cursor = data,
 			                       .end = data + rte_pktmbuf_pkt_len(m), .bit_off = 0 };
-			disp_elem e = { .in_port = port, .payload = NULL };
+			disp_elem e = { .payload = NULL };
 			if (%{parse_event_fn}(&pkt, &e.ev) != 1) { rte_pktmbuf_free(m); continue; } // drop
+			e.ev.meta.in_port = port;   // stamp the ingress port (read by the handler)
 			if (e.ev.meta.has_payload) {
 				// strip the parsed header; the mbuf now *is* the payload tail.
 				rte_pktmbuf_adj(m, (uint16_t)(pkt.cursor - data));
@@ -236,14 +237,15 @@ static void do_dispatch(void) {
 		disp_elem *in = &batch[b];
 		in->ev.meta.timestamp = (uint32_t)rte_get_tsc_cycles(); // stamp at dequeue (Sys.time())
 		%{out_event_ty} out_events[%{out_events_cap}];
-		uint16_t n = %{handle_event_fn}(in->in_port, &in->ev, out_events);
+		uint16_t n = %{handle_event_fn}(&in->ev, out_events); // ingress read from in->ev.meta.in_port
 		for (uint16_t i = 0; i < n; i++) {
 			uint8_t loc = out_events[i].out_loc;
 			struct rte_mbuf *pl = NULL;
 			if (out_events[i].ev.meta.has_payload && in->payload != NULL)
 				pl = rte_pktmbuf_copy(in->payload, mbuf_pool, 0, UINT32_MAX);
 			if (loc == 1) {          // recirculation (generate_self)
-				disp_elem e = { .ev = out_events[i].ev, .payload = pl, .in_port = in->in_port };
+				out_events[i].ev.meta.in_port = in->ev.meta.in_port; // recirc inherits ingress
+				disp_elem e = { .ev = out_events[i].ev, .payload = pl };
 				if (rte_ring_enqueue_elem(dispatch_in, &e, sizeof(e)) != 0 && pl) rte_pktmbuf_free(pl);
 			} else if (loc == 2) {   // output to a port
 				tx_elem e = { .ev = out_events[i].ev, .payload = pl, .port = out_events[i].port };

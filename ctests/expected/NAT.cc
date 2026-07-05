@@ -97,6 +97,7 @@ typedef struct {
   uint8_t is_packet;
   uint8_t has_payload;
   uint32_t timestamp;
+  uint32_t in_port;
 } event_meta;
 uint16_t inside_packet_tag  = 1;
 uint16_t inside_continue_tag  = 2;
@@ -169,23 +170,23 @@ typedef struct {
   uint32_t port;
 } out_event;
 events mk_inside_packet(uint32_t src_ip_4037 , uint32_t src_port_4038 ){
-  events tmp_4331  = {.meta = {.len = 8, .is_packet = 0, .has_payload = 0, .timestamp = 0}, .data = inside_packet_4039(src_ip_4037, src_port_4038)};
+  events tmp_4331  = {.meta = {.len = 8, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = inside_packet_4039(src_ip_4037, src_port_4038)};
   return tmp_4331;
 }
 events mk_inside_continue(uint32_t src_port_4040 ){
-  events tmp_4332  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0}, .data = inside_continue_4041(src_port_4040)};
+  events tmp_4332  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = inside_continue_4041(src_port_4040)};
   return tmp_4332;
 }
 events mk_outside_packet(uint32_t dst_port_4042 ){
-  events tmp_4333  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0}, .data = outside_packet_4043(dst_port_4042)};
+  events tmp_4333  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = outside_packet_4043(dst_port_4042)};
   return tmp_4333;
 }
 events mk_outside_continue(uint32_t dst_ip_4044 , uint32_t dst_port_4045 ){
-  events tmp_4334  = {.meta = {.len = 8, .is_packet = 0, .has_payload = 0, .timestamp = 0}, .data = outside_continue_4046(dst_ip_4044, dst_port_4045)};
+  events tmp_4334  = {.meta = {.len = 8, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = outside_continue_4046(dst_ip_4044, dst_port_4045)};
   return tmp_4334;
 }
 events mk_add_to_nat(uint32_t src_ip_4047 , uint32_t src_port_4048 ){
-  events tmp_4335  = {.meta = {.len = 8, .is_packet = 0, .has_payload = 0, .timestamp = 0}, .data = add_to_nat_4049(src_ip_4047, src_port_4048)};
+  events tmp_4335  = {.meta = {.len = 8, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = add_to_nat_4049(src_ip_4047, src_port_4048)};
   return tmp_4335;
 }
 uint32_t recirculation_port  = 0;
@@ -232,7 +233,7 @@ uint32_t Array_update_complex_nat_to_port_4036_get_get_memop_32_bit(uint32_t _id
   nat_to_port_4036[(((uint32_t)(_idx)) % 16)] = cell1;
   return ret;
 }
-uint16_t handle_event(uint32_t ingress_port , events*  ev_in , out_event out_events [64]){
+uint16_t handle_event(events*  ev_in , out_event out_events [64]){
   uint16_t n  = 0;
   switch (ev_in->data.tag) {
     case 2: {
@@ -527,8 +528,9 @@ void lpcap_packet_handler(u_char *ctx, const struct pcap_pkthdr *pkthdr, const u
         events ev;
         evq_pull(&hdl_ctx->queue, &ev);
         ev.meta.timestamp = now_ns(); // stamp at dequeue (covers arriving + recirculated events)
+        ev.meta.in_port = hdl_ctx->ingress_port; // ingress port (read by the handler)
         out_event out_events[64];
-        uint16_t n = handle_event(hdl_ctx->ingress_port, &ev, out_events);
+        uint16_t n = handle_event(&ev, out_events);
         for (uint16_t i = 0; i < n; i++) {
             if (out_events[i].out_loc == 1) {
                 // recirculation: re-queue for dispatch

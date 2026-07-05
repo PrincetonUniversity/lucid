@@ -93,6 +93,7 @@ typedef struct {
   uint8_t is_packet;
   uint8_t has_payload;
   uint32_t timestamp;
+  uint32_t in_port;
 } event_meta;
 uint16_t tick_tag  = 1;
 uint16_t pkt_in_tag  = 2;
@@ -139,20 +140,20 @@ typedef struct {
   uint32_t port;
 } out_event;
 events mk_tick(){
-  events tmp_716  = {.meta = {.len = 0, .is_packet = 0, .has_payload = 0, .timestamp = 0}, .data = tick_670()};
+  events tmp_716  = {.meta = {.len = 0, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = tick_670()};
   return tmp_716;
 }
 events mk_pkt_in(uint32_t x_671 ){
-  events tmp_717  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0}, .data = pkt_in_672(x_671)};
+  events tmp_717  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = pkt_in_672(x_671)};
   return tmp_717;
 }
 events mk_pkt_out(uint32_t x_673 ){
-  events tmp_718  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0}, .data = pkt_out_674(x_673)};
+  events tmp_718  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = pkt_out_674(x_673)};
   return tmp_718;
 }
 uint32_t recirculation_port  = 0;
 uint32_t self  = 0;
-uint16_t handle_event(uint32_t ingress_port , events*  ev_in , out_event out_events [64]){
+uint16_t handle_event(events*  ev_in , out_event out_events [64]){
   uint16_t n  = 0;
   switch (ev_in->data.tag) {
     case 3: {
@@ -352,8 +353,9 @@ void lpcap_packet_handler(u_char *ctx, const struct pcap_pkthdr *pkthdr, const u
         events ev;
         evq_pull(&hdl_ctx->queue, &ev);
         ev.meta.timestamp = now_ns(); // stamp at dequeue (covers arriving + recirculated events)
+        ev.meta.in_port = hdl_ctx->ingress_port; // ingress port (read by the handler)
         out_event out_events[64];
-        uint16_t n = handle_event(hdl_ctx->ingress_port, &ev, out_events);
+        uint16_t n = handle_event(&ev, out_events);
         for (uint16_t i = 0; i < n; i++) {
             if (out_events[i].out_loc == 1) {
                 // recirculation: re-queue for dispatch

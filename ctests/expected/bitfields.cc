@@ -93,6 +93,7 @@ typedef struct {
   uint8_t is_packet;
   uint8_t has_payload;
   uint32_t timestamp;
+  uint32_t in_port;
 } event_meta;
 uint16_t hdr_tag  = 1;
 typedef struct {
@@ -127,7 +128,7 @@ typedef struct {
   uint32_t port;
 } out_event;
 events mk_hdr(uint8_t ver_894 , uint16_t len_895 , uint64_t dst_896 , uint64_t src_897 , uint16_t ety_898 ){
-  events tmp_957  = {.meta = {.len = 16, .is_packet = 1, .has_payload = 1, .timestamp = 0}, .data = hdr_900(ver_894, len_895, dst_896, src_897, ety_898)};
+  events tmp_957  = {.meta = {.len = 16, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = hdr_900(ver_894, len_895, dst_896, src_897, ety_898)};
   return tmp_957;
 }
 uint32_t recirculation_port  = 0;
@@ -141,7 +142,7 @@ uint8_t parse_event(packet_t*  pkt , events*  next_event ){
   (*(next_event)) = mk_hdr(ver_894, len_895, dst_896, src_897, ety_898);
   return pkt->cursor <= pkt->end;
 }
-uint16_t handle_event(uint32_t ingress_port , events*  ev_in , out_event out_events [64]){
+uint16_t handle_event(events*  ev_in , out_event out_events [64]){
   uint16_t n  = 0;
   switch (ev_in->data.tag) {
     case 1: {
@@ -151,7 +152,7 @@ uint16_t handle_event(uint32_t ingress_port , events*  ev_in , out_event out_eve
       uint64_t src_904  = ev_in->data.payload.hdr_900.src_897;
       uint16_t ety_905  = ev_in->data.payload.hdr_900.ety_898;
       events this  = mk_hdr(ver_901, len_902, dst_903, src_904, ety_905);
-      out_event tmp_958  = {.ev = mk_hdr(ver_901, len_902 + 1 & 4095, dst_903, src_904, ety_905), .out_loc = 2, .port = ingress_port};
+      out_event tmp_958  = {.ev = mk_hdr(ver_901, len_902 + 1 & 4095, dst_903, src_904, ety_905), .out_loc = 2, .port = ev_in->meta.in_port};
       out_events[n] = tmp_958;
       n = n + 1;
       break;
@@ -276,8 +277,9 @@ void lpcap_packet_handler(u_char *ctx, const struct pcap_pkthdr *pkthdr, const u
         events ev;
         evq_pull(&hdl_ctx->queue, &ev);
         ev.meta.timestamp = now_ns(); // stamp at dequeue (covers arriving + recirculated events)
+        ev.meta.in_port = hdl_ctx->ingress_port; // ingress port (read by the handler)
         out_event out_events[64];
-        uint16_t n = handle_event(hdl_ctx->ingress_port, &ev, out_events);
+        uint16_t n = handle_event(&ev, out_events);
         for (uint16_t i = 0; i < n; i++) {
             if (out_events[i].out_loc == 1) {
                 // recirculation: re-queue for dispatch

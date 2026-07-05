@@ -93,6 +93,7 @@ typedef struct {
   uint8_t is_packet;
   uint8_t has_payload;
   uint32_t timestamp;
+  uint32_t in_port;
 } event_meta;
 uint16_t BloomFilter_clear_all_bf1_tag  = 1;
 uint16_t BloomFilter_clear_helper_bf1_tag  = 2;
@@ -163,23 +164,23 @@ typedef struct {
   uint32_t port;
 } out_event;
 events mk_BloomFilter_clear_all_bf1(){
-  events tmp_6331  = {.meta = {.len = 0, .is_packet = 0, .has_payload = 0, .timestamp = 0}, .data = BloomFilter_clear_all_bf1_5866()};
+  events tmp_6331  = {.meta = {.len = 0, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = BloomFilter_clear_all_bf1_5866()};
   return tmp_6331;
 }
 events mk_BloomFilter_clear_helper_bf1(uint8_t idx_5867 ){
-  events tmp_6332  = {.meta = {.len = 1, .is_packet = 0, .has_payload = 0, .timestamp = 0}, .data = BloomFilter_clear_helper_bf1_5868(idx_5867)};
+  events tmp_6332  = {.meta = {.len = 1, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = BloomFilter_clear_helper_bf1_5868(idx_5867)};
   return tmp_6332;
 }
 events mk_allowed(uint32_t x_5873 ){
-  events tmp_6333  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0}, .data = allowed_5874(x_5873)};
+  events tmp_6333  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = allowed_5874(x_5873)};
   return tmp_6333;
 }
 events mk_denied(uint32_t x_5875 ){
-  events tmp_6334  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0}, .data = denied_5876(x_5875)};
+  events tmp_6334  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = denied_5876(x_5875)};
   return tmp_6334;
 }
 events mk_in(uint8_t add_5877 , uint8_t pad_5878 , uint32_t x_5879 ){
-  events tmp_6335  = {.meta = {.len = 6, .is_packet = 1, .has_payload = 0, .timestamp = 0}, .data = in_5880(add_5877, pad_5878, x_5879)};
+  events tmp_6335  = {.meta = {.len = 6, .is_packet = 1, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = in_5880(add_5877, pad_5878, x_5879)};
   return tmp_6335;
 }
 uint32_t recirculation_port  = 0;
@@ -275,7 +276,7 @@ uint8_t parse_event(packet_t*  pkt , events*  next_event ){
   (*(next_event)) = mk_in(add_5877, pad_5878, x_5879);
   return pkt->cursor <= pkt->end;
 }
-uint16_t handle_event(uint32_t ingress_port , events*  ev_in , out_event out_events [64]){
+uint16_t handle_event(events*  ev_in , out_event out_events [64]){
   uint16_t n  = 0;
   switch (ev_in->data.tag) {
     case 1: {
@@ -502,8 +503,9 @@ void lpcap_packet_handler(u_char *ctx, const struct pcap_pkthdr *pkthdr, const u
         events ev;
         evq_pull(&hdl_ctx->queue, &ev);
         ev.meta.timestamp = now_ns(); // stamp at dequeue (covers arriving + recirculated events)
+        ev.meta.in_port = hdl_ctx->ingress_port; // ingress port (read by the handler)
         out_event out_events[64];
-        uint16_t n = handle_event(hdl_ctx->ingress_port, &ev, out_events);
+        uint16_t n = handle_event(&ev, out_events);
         for (uint16_t i = 0; i < n; i++) {
             if (out_events[i].out_loc == 1) {
                 // recirculation: re-queue for dispatch

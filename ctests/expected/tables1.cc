@@ -98,6 +98,7 @@ typedef struct {
   uint8_t is_packet;
   uint8_t has_payload;
   uint32_t timestamp;
+  uint32_t in_port;
 } event_meta;
 uint16_t do_match_tag  = 1;
 uint16_t do_install_tag  = 2;
@@ -136,11 +137,11 @@ typedef struct {
   uint32_t port;
 } out_event;
 events mk_do_match(uint32_t s_2749 ){
-  events tmp_2954  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0}, .data = do_match_2750(s_2749)};
+  events tmp_2954  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = do_match_2750(s_2749)};
   return tmp_2954;
 }
 events mk_do_install(uint32_t v_2751 , uint32_t m_2752 ){
-  events tmp_2955  = {.meta = {.len = 8, .is_packet = 0, .has_payload = 0, .timestamp = 0}, .data = do_install_2753(v_2751, m_2752)};
+  events tmp_2955  = {.meta = {.len = 8, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = do_install_2753(v_2751, m_2752)};
   return tmp_2955;
 }
 uint32_t recirculation_port  = 0;
@@ -227,7 +228,7 @@ res_t_2741 lookup_ftbl_2748(uint32_t key , uint32_t arg ){
   }
   return rv;
 }
-uint16_t handle_event(uint32_t ingress_port , events*  ev_in , out_event out_events [64]){
+uint16_t handle_event(events*  ev_in , out_event out_events [64]){
   uint16_t n  = 0;
   switch (ev_in->data.tag) {
     case 1: {
@@ -417,8 +418,9 @@ void lpcap_packet_handler(u_char *ctx, const struct pcap_pkthdr *pkthdr, const u
         events ev;
         evq_pull(&hdl_ctx->queue, &ev);
         ev.meta.timestamp = now_ns(); // stamp at dequeue (covers arriving + recirculated events)
+        ev.meta.in_port = hdl_ctx->ingress_port; // ingress port (read by the handler)
         out_event out_events[64];
-        uint16_t n = handle_event(hdl_ctx->ingress_port, &ev, out_events);
+        uint16_t n = handle_event(&ev, out_events);
         for (uint16_t i = 0; i < n; i++) {
             if (out_events[i].out_loc == 1) {
                 // recirculation: re-queue for dispatch

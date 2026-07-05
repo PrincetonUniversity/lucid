@@ -98,6 +98,7 @@ typedef struct {
   uint8_t is_packet;
   uint8_t has_payload;
   uint32_t timestamp;
+  uint32_t in_port;
 } event_meta;
 uint16_t do_set_tag  = 1;
 uint16_t do_get_tag  = 2;
@@ -136,11 +137,11 @@ typedef struct {
   uint32_t port;
 } out_event;
 events mk_do_set(uint32_t k_4324 , uint32_t v_4325 ){
-  events tmp_4596  = {.meta = {.len = 8, .is_packet = 0, .has_payload = 0, .timestamp = 0}, .data = do_set_4326(k_4324, v_4325)};
+  events tmp_4596  = {.meta = {.len = 8, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = do_set_4326(k_4324, v_4325)};
   return tmp_4596;
 }
 events mk_do_get(uint32_t k_4327 ){
-  events tmp_4597  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0}, .data = do_get_4328(k_4327)};
+  events tmp_4597  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = do_get_4328(k_4327)};
   return tmp_4597;
 }
 uint32_t recirculation_port  = 0;
@@ -283,7 +284,7 @@ res_t_4313 lookup_global_cached_table_2_4323(uint32_t key ){
   }
   return rv;
 }
-uint16_t handle_event(uint32_t ingress_port , events*  ev_in , out_event out_events [64]){
+uint16_t handle_event(events*  ev_in , out_event out_events [64]){
   uint16_t n  = 0;
   switch (ev_in->data.tag) {
     case 1: {
@@ -491,8 +492,9 @@ void lpcap_packet_handler(u_char *ctx, const struct pcap_pkthdr *pkthdr, const u
         events ev;
         evq_pull(&hdl_ctx->queue, &ev);
         ev.meta.timestamp = now_ns(); // stamp at dequeue (covers arriving + recirculated events)
+        ev.meta.in_port = hdl_ctx->ingress_port; // ingress port (read by the handler)
         out_event out_events[64];
-        uint16_t n = handle_event(hdl_ctx->ingress_port, &ev, out_events);
+        uint16_t n = handle_event(&ev, out_events);
         for (uint16_t i = 0; i < n; i++) {
             if (out_events[i].out_loc == 1) {
                 // recirculation: re-queue for dispatch

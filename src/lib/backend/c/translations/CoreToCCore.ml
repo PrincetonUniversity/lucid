@@ -593,8 +593,10 @@ let mk_event_dfuns (event_defs : F.event_def list) : F.decls =
       { (erecord [ (cid"len", eval (vint (payload_bytes ed.evparams) 16));
                    (cid"is_packet", eval (vint (if ed.is_packet then 1 else 0) 8));
                    (cid"has_payload", eval (vint (if ed.has_payload then 1 else 0) 8));
-                   (* placeholder; the driver overwrites this at dequeue (see Sys.time) *)
-                   (cid"timestamp", eval (vint 0 32)) ])
+                   (* placeholders; the driver overwrites timestamp at dequeue (Sys.time)
+                      and in_port at RX (the ingress port) *)
+                   (cid"timestamp", eval (vint 0 32));
+                   (cid"in_port", eval (vint 0 32)) ])
         with ety = tevent_meta }
     in
     let arg_vars = List.map (fun (id, ty) -> evar id ty) ed.evparams in

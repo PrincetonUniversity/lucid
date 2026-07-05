@@ -248,7 +248,7 @@ let trecord pairs =
    the event is dequeued for handling -- Sys.time() reads it); and the envelope record
    that wraps the tagged variant. Both are value-semantic; meta is currently resolved
    statically but lives in the IR (except timestamp, which is set at runtime). *)
-let event_meta_def = trecord [ (Cid.create ["len"], ty (TInt 16)); (Cid.create ["is_packet"], ty (TInt 8)); (Cid.create ["has_payload"], ty (TInt 8)); (Cid.create ["timestamp"], ty (TInt 32)) ]
+let event_meta_def = trecord [ (Cid.create ["len"], ty (TInt 16)); (Cid.create ["is_packet"], ty (TInt 8)); (Cid.create ["has_payload"], ty (TInt 8)); (Cid.create ["timestamp"], ty (TInt 32)); (Cid.create ["in_port"], ty (TInt 32)) ]
 let tevent_def = trecord [ (Cid.create ["meta"], tevent_meta); (Cid.create ["data"], tevent_variant) ]
 let ttuple tys = ty (TTuple tys)
 let tunion labels tys = ty (TUnion(labels, tys))  
@@ -642,6 +642,9 @@ let event_is_packet ev = exp (EOp(Project (cid"is_packet"), [event_meta ev])) (t
 (* meta.timestamp -- the per-event nanosecond stamp written by the driver at dequeue;
    Sys.time() lowers to a read of this on the handler's current event. *)
 let event_timestamp ev = exp (EOp(Project (cid"timestamp"), [event_meta ev])) (ty (TInt 32)) ev.espan
+(* meta.in_port -- the ingress port, written by the driver at RX (and inherited by
+   recirculated events); the `ingress_port` builtin lowers to a read of this. *)
+let event_in_port ev = exp (EOp(Project (cid"in_port"), [event_meta ev])) (ty (TInt 32)) ev.espan
 (* construct an event by calling ctor's monomorphic constructor mk_<ctor>(args) *)
 let emk_event_for ctor args =
   ecall (efunref (mk_event_cid_of ctor) (tfun (List.map (fun a -> a.ety) args) tevent)) args

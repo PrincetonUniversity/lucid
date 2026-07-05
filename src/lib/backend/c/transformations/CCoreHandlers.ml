@@ -110,13 +110,23 @@ let replace_sys_time ev_exp = object
     | _ -> e
 end
 
+(* ingress_port -> a read of the current event's meta.in_port (set by the driver at
+   RX, inherited by recirculated events). Mirrors replace_sys_time, so the handler
+   needs no ingress_port parameter -- it reads its ingress from the event. *)
+let replace_ingress_port ev_exp = object
+  inherit [_] s_map as super
+  method! visit_exp () e =
+    let e = super#visit_exp () e in
+    match e.e with
+    | EVar cid when Cid.equal cid ingr_cid -> event_in_port ev_exp
+    | _ -> e
+end
+
 (* make the main handler -- value-semantic form: takes the event by value and a
    fixed-capacity out_events array, fills the array and returns the count. The
    below-the-boundary `lower` pass converts ev_in to a by-ref param. *)
 let handler_ret_ty = tint count_size
 let mk_main_handler handlers =
-  (* ingress_port size is derived from mutable that is set in translation to CCore *)
-  let ingress_port_param = ingr_cid, tint port_size in
   let in_ev_val_param = ev_in_cid, tevent in
   let out_events_param = out_events_cid, tout_events in
   let branches = List.map
@@ -135,10 +145,13 @@ let mk_main_handler handlers =
     sret v_n;
   ]
   in
-  (* Sys.time() in any handler body -> v_ev_in.meta.timestamp (set by the driver at dequeue) *)
+  (* Sys.time() -> v_ev_in.meta.timestamp; ingress_port -> v_ev_in.meta.in_port
+     (both set by the driver: timestamp at dequeue, in_port at RX). So the handler
+     reads them from the event and takes no ingress_port parameter. *)
   let merged_body = (replace_sys_time v_ev_in)#visit_statement () merged_body in
+  let merged_body = (replace_ingress_port v_ev_in)#visit_statement () merged_body in
   dfun handler_cid handler_ret_ty
-    [ingress_port_param; in_ev_val_param; out_events_param] merged_body
+    [in_ev_val_param; out_events_param] merged_body
 ;;
 
 let transform_handler last_handler_cid (handlers, decls) decl : (handler_rec list * decls) =

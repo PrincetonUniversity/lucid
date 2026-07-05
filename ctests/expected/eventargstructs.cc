@@ -98,6 +98,7 @@ typedef struct {
   uint8_t is_packet;
   uint8_t has_payload;
   uint32_t timestamp;
+  uint32_t in_port;
 } event_meta;
 uint16_t foo_tag  = 1;
 typedef struct {
@@ -126,7 +127,7 @@ typedef struct {
   uint32_t port;
 } out_event;
 events mk_foo(uint32_t p_0_1180 , uint32_t p_1_1181 ){
-  events tmp_1266  = {.meta = {.len = 8, .is_packet = 1, .has_payload = 0, .timestamp = 0}, .data = foo_1182(p_0_1180, p_1_1181)};
+  events tmp_1266  = {.meta = {.len = 8, .is_packet = 1, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = foo_1182(p_0_1180, p_1_1181)};
   return tmp_1266;
 }
 uint32_t recirculation_port  = 0;
@@ -204,7 +205,7 @@ uint8_t parse_event(packet_t*  pkt , events*  next_event ){
   (*(next_event)) = mk_foo(p_0_1180, p_1_1181);
   return pkt->cursor <= pkt->end;
 }
-uint16_t handle_event(uint32_t ingress_port , events*  ev_in , out_event out_events [64]){
+uint16_t handle_event(events*  ev_in , out_event out_events [64]){
   uint16_t n  = 0;
   switch (ev_in->data.tag) {
     case 1: {
@@ -334,8 +335,9 @@ void lpcap_packet_handler(u_char *ctx, const struct pcap_pkthdr *pkthdr, const u
         events ev;
         evq_pull(&hdl_ctx->queue, &ev);
         ev.meta.timestamp = now_ns(); // stamp at dequeue (covers arriving + recirculated events)
+        ev.meta.in_port = hdl_ctx->ingress_port; // ingress port (read by the handler)
         out_event out_events[64];
-        uint16_t n = handle_event(hdl_ctx->ingress_port, &ev, out_events);
+        uint16_t n = handle_event(&ev, out_events);
         for (uint16_t i = 0; i < n; i++) {
             if (out_events[i].out_loc == 1) {
                 // recirculation: re-queue for dispatch

@@ -104,6 +104,7 @@ typedef struct {
   uint8_t is_packet;
   uint8_t has_payload;
   uint32_t timestamp;
+  uint32_t in_port;
 } event_meta;
 uint16_t background_tag  = 1;
 uint16_t eth_tag  = 2;
@@ -166,15 +167,15 @@ typedef struct {
   uint32_t port;
 } out_event;
 events mk_background(uint16_t x_1625 ){
-  events tmp_1801  = {.meta = {.len = 2, .is_packet = 0, .has_payload = 0, .timestamp = 0}, .data = background_1626(x_1625)};
+  events tmp_1801  = {.meta = {.len = 2, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = background_1626(x_1625)};
   return tmp_1801;
 }
 events mk_eth(uint64_t e_0_1627 , uint64_t e_1_1628 , uint16_t e_2_1629 ){
-  events tmp_1802  = {.meta = {.len = 14, .is_packet = 1, .has_payload = 0, .timestamp = 0}, .data = eth_1630(e_0_1627, e_1_1628, e_2_1629)};
+  events tmp_1802  = {.meta = {.len = 14, .is_packet = 1, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = eth_1630(e_0_1627, e_1_1628, e_2_1629)};
   return tmp_1802;
 }
 events mk_eth_ip(uint64_t e_0_1631 , uint64_t e_1_1632 , uint16_t e_2_1633 , uint32_t ip_0_1634 , uint32_t ip_1_1635 , uint32_t ip_2_1636 , uint32_t ip_3_1637 ){
-  events tmp_1803  = {.meta = {.len = 30, .is_packet = 1, .has_payload = 1, .timestamp = 0}, .data = eth_ip_1639(e_0_1631, e_1_1632, e_2_1633, ip_0_1634, ip_1_1635, ip_2_1636, ip_3_1637)};
+  events tmp_1803  = {.meta = {.len = 30, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = eth_ip_1639(e_0_1631, e_1_1632, e_2_1633, ip_0_1634, ip_1_1635, ip_2_1636, ip_3_1637)};
   return tmp_1803;
 }
 uint32_t recirculation_port  = 0;
@@ -225,7 +226,7 @@ uint8_t parse_event(packet_t*  pkt_1650 , events*  next_event ){
   }
   return 0;
 }
-uint16_t handle_event(uint32_t ingress_port , events*  ev_in , out_event out_events [64]){
+uint16_t handle_event(events*  ev_in , out_event out_events [64]){
   uint16_t n  = 0;
   switch (ev_in->data.tag) {
     case 1: {
@@ -410,8 +411,9 @@ void lpcap_packet_handler(u_char *ctx, const struct pcap_pkthdr *pkthdr, const u
         events ev;
         evq_pull(&hdl_ctx->queue, &ev);
         ev.meta.timestamp = now_ns(); // stamp at dequeue (covers arriving + recirculated events)
+        ev.meta.in_port = hdl_ctx->ingress_port; // ingress port (read by the handler)
         out_event out_events[64];
-        uint16_t n = handle_event(hdl_ctx->ingress_port, &ev, out_events);
+        uint16_t n = handle_event(&ev, out_events);
         for (uint16_t i = 0; i < n; i++) {
             if (out_events[i].out_loc == 1) {
                 // recirculation: re-queue for dispatch
