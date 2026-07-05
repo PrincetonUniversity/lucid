@@ -1,0 +1,15 @@
+// A handler that recirculates its own event forever -- a stand-in for a periodic
+// task (e.g. continuously scanning a table for timeouts). Used to test that the
+// driver INTERLEAVES recirculated events with fresh input rather than draining the
+// recirc to exhaustion (which would loop forever on `tick` and starve `pkt_in`).
+event tick();
+event pkt_in(int x);
+event pkt_out(int x) { skip; }
+
+handle tick() {
+    generate tick();                // infinite self-recirc, produces no output
+}
+
+handle pkt_in(int x) {
+    generate_port(0, pkt_out(x));   // one output per input packet
+}
