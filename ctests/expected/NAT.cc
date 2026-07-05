@@ -26,6 +26,7 @@ typedef struct {
   uint8_t*  cursor;
   uint8_t*  end;
   uint32_t bit_off;
+  uint8_t*  driver_buf;
 } packet_t;
 
 uint64_t read_bits(packet_t* bs, int n) {
@@ -98,6 +99,7 @@ typedef struct {
   uint8_t has_payload;
   uint32_t timestamp;
   uint32_t in_port;
+  packet_t payload;
 } event_meta;
 uint16_t inside_packet_tag  = 1;
 uint16_t inside_continue_tag  = 2;

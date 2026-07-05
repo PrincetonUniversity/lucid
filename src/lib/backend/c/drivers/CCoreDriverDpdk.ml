@@ -62,19 +62,25 @@ let dpdk_rings = dforiegn [%string {|
 #define BURST_SIZE 64   // max events pulled per rx / dispatch / tx call (bounded, so
                         // a self-recirculating handler can't starve the RX path)
 
-// an event flowing through the pipeline + the mbuf carrying its payload (NULL for
-// events with no payload -- all background / recirc traffic). The ingress port now
-// rides in ev.meta.in_port, so it isn't a separate field.
-typedef struct { %{events_ty} ev; struct rte_mbuf *payload; } disp_elem;
-// an output event bound for a port, + its payload mbuf (NULL if none).
-typedef struct { %{events_ty} ev; struct rte_mbuf *payload; uint16_t port; } tx_elem;
-
+// The events flow through the rings by value. Each event carries its own packet
+// buffer in ev.meta.payload (a packet_t whose driver_buf is the mbuf, NULL for
+// events with no payload) and its ingress port in ev.meta.in_port -- so the ring
+// elements are just the event (dispatch) and the out_event (tx), with no side data.
 static struct rte_ring *dispatch_in;  // parsed + recirculated events awaiting handling
 static struct rte_ring *tx_in;        // output events awaiting deparse + TX
+
+// build a packet_t cursor over a (payload) mbuf, cursor at the front, remembering the
+// mbuf as driver_buf so TX can recover it.
+static inline %{packet_t_ty} pkt_over(struct rte_mbuf *m) {
+	uint8_t *d = rte_pktmbuf_mtod(m, uint8_t*);
+	return (%{packet_t_ty}){ .start = d, .cursor = d, .end = d + rte_pktmbuf_pkt_len(m),
+	                         .bit_off = 0, .driver_buf = (uint8_t*)m };
+}
+static inline struct rte_mbuf *pkt_mbuf(%{packet_t_ty} *p) { return (struct rte_mbuf*)p->driver_buf; }
 |}]
 
 (* ===== config + EAL / port / ring initialization ===== *)
-let dpdk_config_init = dforiegn {|
+let dpdk_config_init = dforiegn [%string {|
 /******** config + EAL / port / ring initialization ********/
 // the packet mempool, set in dpdk_init; used to allocate output mbufs.
 struct rte_mempool *mbuf_pool = NULL;
@@ -171,9 +177,9 @@ void dpdk_init(cfg_t* cfg, int argc, char *argv[]) {
 	if (mbuf_pool == NULL) rte_exit(EXIT_FAILURE, "failed to create mbuf pool. not enough memory?");
 
 	// single core -> single producer / single consumer rings (lockless).
-	dispatch_in = rte_ring_create_elem("dispatch_in", sizeof(disp_elem), RING_SIZE,
+	dispatch_in = rte_ring_create_elem("dispatch_in", sizeof(%{events_ty}), RING_SIZE,
 		rte_socket_id(), RING_F_SP_ENQ | RING_F_SC_DEQ);
-	tx_in = rte_ring_create_elem("tx_in", sizeof(tx_elem), RING_SIZE,
+	tx_in = rte_ring_create_elem("tx_in", sizeof(%{out_event_ty}), RING_SIZE,
 		rte_socket_id(), RING_F_SP_ENQ | RING_F_SC_DEQ);
 	if (dispatch_in == NULL || tx_in == NULL)
 		rte_exit(EXIT_FAILURE, "failed to create pipeline rings\n");
@@ -184,7 +190,7 @@ void dpdk_init(cfg_t* cfg, int argc, char *argv[]) {
 			rte_exit(EXIT_FAILURE, "Cannot init port %"PRIu16 "\n", portid);
 	return;
 }
-|}
+|}]
 
 (* ===== pipeline phases (reference the generated parse/handle/deparse + types) =====
    One dforiegn block per phase. Each pulls a *bounded* burst (<= BURST_SIZE) and
@@ -206,17 +212,18 @@ static void do_rx(void) {
 			uint8_t *data = rte_pktmbuf_mtod(m, uint8_t*);
 			%{packet_t_ty} pkt = { .start = data, .cursor = data,
 			                       .end = data + rte_pktmbuf_pkt_len(m), .bit_off = 0 };
-			disp_elem e = { .payload = NULL };
-			if (%{parse_event_fn}(&pkt, &e.ev) != 1) { rte_pktmbuf_free(m); continue; } // drop
-			e.ev.meta.in_port = port;   // stamp the ingress port (read by the handler)
-			if (e.ev.meta.has_payload) {
-				// strip the parsed header; the mbuf now *is* the payload tail.
+			%{events_ty} ev;
+			if (%{parse_event_fn}(&pkt, &ev) != 1) { rte_pktmbuf_free(m); continue; } // drop
+			ev.meta.in_port = port;   // stamp the ingress port (read by the handler)
+			if (ev.meta.has_payload) {
+				// strip the parsed header; the mbuf now *is* the payload tail, carried
+				// as the event's own packet buffer (ev.meta.payload).
 				rte_pktmbuf_adj(m, (uint16_t)(pkt.cursor - data));
-				e.payload = m;
+				ev.meta.payload = pkt_over(m);
 			}
-			if (rte_ring_enqueue_elem(dispatch_in, &e, sizeof(e)) != 0) {
-				rte_pktmbuf_free(m);        // ring full -> drop (frees the payload too if m)
-			} else if (e.payload == NULL) {
+			if (rte_ring_enqueue_elem(dispatch_in, &ev, sizeof(ev)) != 0) {
+				rte_pktmbuf_free(m);        // ring full -> drop (frees the payload if kept)
+			} else if (!ev.meta.has_payload) {
 				rte_pktmbuf_free(m);        // enqueued by value; no payload to keep
 			}
 		}
@@ -231,30 +238,31 @@ static void do_rx(void) {
 let dpdk_do_dispatch = dforiegn [%string {|
 /******** DISPATCH: handle a burst of events, route their outputs ********/
 static void do_dispatch(void) {
-	disp_elem batch[BURST_SIZE];
-	unsigned nb = rte_ring_dequeue_burst_elem(dispatch_in, batch, sizeof(disp_elem), BURST_SIZE, NULL);
+	%{events_ty} batch[BURST_SIZE];
+	unsigned nb = rte_ring_dequeue_burst_elem(dispatch_in, batch, sizeof(%{events_ty}), BURST_SIZE, NULL);
 	for (unsigned b = 0; b < nb; b++) {
-		disp_elem *in = &batch[b];
-		in->ev.meta.timestamp = (uint32_t)rte_get_tsc_cycles(); // stamp at dequeue (Sys.time())
+		%{events_ty} *in = &batch[b];
+		in->meta.timestamp = (uint32_t)rte_get_tsc_cycles(); // stamp at dequeue (Sys.time())
+		struct rte_mbuf *in_m = pkt_mbuf(&in->meta.payload);
 		%{out_event_ty} out_events[%{out_events_cap}];
-		uint16_t n = %{handle_event_fn}(&in->ev, out_events); // ingress read from in->ev.meta.in_port
+		uint16_t n = %{handle_event_fn}(in, out_events); // ingress read from in->meta.in_port
 		for (uint16_t i = 0; i < n; i++) {
-			uint8_t loc = out_events[i].out_loc;
-			struct rte_mbuf *pl = NULL;
-			if (out_events[i].ev.meta.has_payload && in->payload != NULL)
-				pl = rte_pktmbuf_copy(in->payload, mbuf_pool, 0, UINT32_MAX);
-			if (loc == 1) {          // recirculation (generate_self)
-				out_events[i].ev.meta.in_port = in->ev.meta.in_port; // recirc inherits ingress
-				disp_elem e = { .ev = out_events[i].ev, .payload = pl };
-				if (rte_ring_enqueue_elem(dispatch_in, &e, sizeof(e)) != 0 && pl) rte_pktmbuf_free(pl);
-			} else if (loc == 2) {   // output to a port
-				tx_elem e = { .ev = out_events[i].ev, .payload = pl, .port = out_events[i].port };
-				if (rte_ring_enqueue_elem(tx_in, &e, sizeof(e)) != 0 && pl) rte_pktmbuf_free(pl);
-			} else if (pl) {
-				rte_pktmbuf_free(pl);
+			%{events_ty} *oev = &out_events[i].ev;
+			// give each payload-carrying output its own copy of the input payload
+			if (oev->meta.has_payload && in_m != NULL)
+				oev->meta.payload = pkt_over(rte_pktmbuf_copy(in_m, mbuf_pool, 0, UINT32_MAX));
+			if (out_events[i].out_loc == 1) {          // recirculation (generate_self)
+				oev->meta.in_port = in->meta.in_port;  // recirc inherits ingress
+				if (rte_ring_enqueue_elem(dispatch_in, oev, sizeof(%{events_ty})) != 0 && pkt_mbuf(&oev->meta.payload))
+					rte_pktmbuf_free(pkt_mbuf(&oev->meta.payload));
+			} else if (out_events[i].out_loc == 2) {   // output to a port
+				if (rte_ring_enqueue_elem(tx_in, &out_events[i], sizeof(%{out_event_ty})) != 0 && pkt_mbuf(&oev->meta.payload))
+					rte_pktmbuf_free(pkt_mbuf(&oev->meta.payload));
+			} else if (pkt_mbuf(&oev->meta.payload)) {
+				rte_pktmbuf_free(pkt_mbuf(&oev->meta.payload));
 			}
 		}
-		if (in->payload) rte_pktmbuf_free(in->payload); // input payload consumed (copied per output)
+		if (in_m != NULL) rte_pktmbuf_free(in_m); // input payload consumed (copied per output)
 	}
 }
 |}]
@@ -266,25 +274,24 @@ static void do_dispatch(void) {
 let dpdk_do_tx = dforiegn [%string {|
 /******** TX: deparse a burst of output events and transmit them ********/
 static void do_tx(void) {
-	tx_elem batch[BURST_SIZE];
-	unsigned nb = rte_ring_dequeue_burst_elem(tx_in, batch, sizeof(tx_elem), BURST_SIZE, NULL);
+	%{out_event_ty} batch[BURST_SIZE];
+	unsigned nb = rte_ring_dequeue_burst_elem(tx_in, batch, sizeof(%{out_event_ty}), BURST_SIZE, NULL);
 	for (unsigned b = 0; b < nb; b++) {
-		tx_elem *e = &batch[b];
+		%{out_event_ty} *e = &batch[b];
+		struct rte_mbuf *m = pkt_mbuf(&e->ev.meta.payload);
 		if (e->port >= cfg.num_ports) {
 			printf("WARNING: dropping packet to out-of-range port: %u\n", e->port);
-			if (e->payload) rte_pktmbuf_free(e->payload);
+			if (m) rte_pktmbuf_free(m);
 			continue;
 		}
-		struct rte_mbuf *m = e->payload;
 		if (m == NULL) {                       // no-payload event -> fresh, header-only mbuf
 			m = rte_pktmbuf_alloc(mbuf_pool);
 			if (unlikely(m == NULL)) continue;
+			e->ev.meta.payload = pkt_over(m);
 		}
-		uint8_t *data = rte_pktmbuf_mtod(m, uint8_t*);
-		%{packet_t_ty} pkt = { .start = data, .cursor = data,
-		                       .end = data + rte_pktmbuf_pkt_len(m), .bit_off = 0 };
-		%{deparse_event_fn}(&e->ev, &pkt);     // writes the header backwards into headroom
-		rte_pktmbuf_prepend(m, (uint16_t)(data - pkt.cursor)); // include the prepended header
+		%{packet_t_ty} *pkt = &e->ev.meta.payload;
+		%{deparse_event_fn}(&e->ev, pkt);      // writes the header backwards into headroom
+		rte_pktmbuf_prepend(m, (uint16_t)(pkt->start - pkt->cursor)); // include prepended header
 		uint16_t nb_tx = rte_eth_tx_burst(e->port, 0, &m, 1);
 		if (unlikely(nb_tx < 1)) rte_pktmbuf_free(m);
 	}

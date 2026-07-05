@@ -258,6 +258,10 @@ let packet_t =
         cid"cursor", tref (tint 8);
         cid"end", tref (tint 8);
         cid"bit_off", tint 32;
+        (* handle to the underlying driver buffer this cursor spans (dpdk: an
+           rte_mbuf*, stored as uint8_t* + cast; NULL/unused for pcap/rawsock,
+           which cursor over their own static buffers). *)
+        cid"driver_buf", tref (tint 8);
       ]
 ;;
 
@@ -498,8 +502,24 @@ let lower_deparse decls =
    the two touch disjoint functions (deparse_event vs the parsers), so order between
    them is immaterial. The read_tys/write_tys the lowerings still return are now unused
    (the helpers are width-generic, not per-type). *)
+(* Below the waist, give event_meta a `payload : packet_t` field so an event carries
+   its own packet buffer (the driver stamps it at RX; the deparser writes into it).
+   The value-semantic event_meta stays pointer-free -- this field exists only in the
+   lowered form, so the value-semantics diagnostic never sees it. mk_event's
+   designated-init meta literals zero-init the new field (no post-lowering typer runs,
+   so the literal staying one field short of the struct is fine). *)
+let add_payload_to_event_meta decls =
+  List.map (fun decl -> match decl.d with
+    | DTy(tcid, Some({raw_ty = TRecord(labels, tys); _} as body)) when Cid.equal tcid event_meta_cid ->
+      let body' = { body with raw_ty = TRecord(labels @ [Cid.create ["payload"]], tys @ [packet_t]) } in
+      { decl with d = DTy(tcid, Some body') }
+    | _ -> decl)
+    decls
+;;
+
 let lower decls =
   let _write_tys, decls = lower_deparse decls in
   let _read_tys, decls = lower_parse_bodies decls in
+  let decls = add_payload_to_event_meta decls in
   decl_tabstract packet_t :: codec_helpers @ decls
 ;;
