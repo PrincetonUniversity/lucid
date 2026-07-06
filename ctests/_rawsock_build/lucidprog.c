@@ -196,18 +196,6 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
     bytes->bit_off = 0;
  }
 
- void reset_cursor(packet_t*  bytes){
-    bytes->cursor = bytes->start;
-    bytes->bit_off = 0;
- }
-
- void copy_packet(packet_t*  buf_out , packet_t*  buf_in ) {
-    memcpy(buf_out->start, buf_in->start, buf_in->end - buf_in->start);
-    buf_out->cursor = buf_out->start + (buf_in->cursor - buf_in->start);
-    buf_out->end = buf_out->start + (buf_in->end - buf_in->start);
-    buf_out->bit_off = 0;
- }
-
 #define RXBUF_SIZE 65536
 
 #ifdef USE_BPF
@@ -262,39 +250,6 @@ static int raw_open(const char* ifname) {
 #endif
 }
 
-// forward decl: dispatch one parsed packet from the given ingress port
-static void dispatch_packet(int ingress_port, uint8_t* pkt, uint32_t len);
-
-// hand a freshly-read raw buffer (n bytes) to dispatch_packet, one frame at a time.
-static void process_rx(int ingress_port, uint8_t* buf, ssize_t n) {
-#ifdef USE_AF_PACKET
-    dispatch_packet(ingress_port, buf, (uint32_t)n);
-#else // BPF: the buffer holds zero or more bpf_hdr-prefixed frames
-    uint8_t* p = buf;
-    uint8_t* end = buf + n;
-    while (p + sizeof(struct bpf_hdr) <= end) {
-        struct bpf_hdr* bh = (struct bpf_hdr*)p;
-        if (bh->bh_caplen == bh->bh_datalen) // skip truncated captures
-            dispatch_packet(ingress_port, p + bh->bh_hdrlen, bh->bh_caplen);
-        p += BPF_WORDALIGN(bh->bh_hdrlen + bh->bh_caplen);
-    }
-#endif
-}
-
-
-/********* internal dispatch FIFO of events ***********/
-#define EV_QUEUE_CAP 1024
-typedef struct ev_queue_t {
-    event_t buf[EV_QUEUE_CAP];
-    int head; int tail; int count;
-} ev_queue_t;
-static int  evq_empty(ev_queue_t* q) { return q->count == 0; }
-static void evq_push(ev_queue_t* q, event_t* ev) {
-    q->buf[q->tail] = *ev; q->tail = (q->tail + 1) % EV_QUEUE_CAP; q->count++;
-}
-static void evq_pull(ev_queue_t* q, event_t* out) {
-    *out = q->buf[q->head]; q->head = (q->head + 1) % EV_QUEUE_CAP; q->count--;
-}
 
 /********* ports (Lucid port number <-> interface socket) ***********/
 #define MAX_PORTS 64
@@ -306,94 +261,178 @@ static int port_fd(int port_id) {
     return -1;
 }
 
-/********* single dispatch context (single-threaded) ***********/
-// Deparse writes backwards (prepending headers); HEADROOM reserves slack at the front
-// of the out buffer so a larger output header doesn't underflow it (see pcap driver).
-#define HEADROOM 256
-#define OUTBUF_USABLE 1600
-static uint8_t g_outbuf[OUTBUF_USABLE + HEADROOM];
-static packet_t g_in_pkt;
-static packet_t g_out_pkt;
-static ev_queue_t g_queue;
 static uint64_t pkt_ct = 0;
 
-// a 32-bit nanosecond timestamp, stamped onto each event at dequeue (Sys.time())
+// a 32-bit nanosecond timestamp, stamped onto each event at dispatch (Sys.time())
 static uint32_t now_ns(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (uint32_t)((uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec);
 }
 
-static void init_ctx(void) {
-    g_out_pkt.start  = g_outbuf + HEADROOM;
-    g_out_pkt.cursor = g_outbuf + HEADROOM;
-    g_out_pkt.end    = g_outbuf + HEADROOM + OUTBUF_USABLE;
-    g_out_pkt.bit_off = 0;
-    g_queue.head = g_queue.tail = g_queue.count = 0;
+
+/********* the queue element (a slab slot) ***********/
+// Mirrors the DPDK qe_priv_t + mbuf data region: the event, the handler's outputs,
+// and the packet bytes this element OWNS. The packet occupies data[HEADROOM ..
+// HEADROOM+pkt_len); payload_off marks where the payload begins within it. HEADROOM
+// is slack in front so the deparsed header can be prepended (written backwards).
+#define HEADROOM 256
+#define SLOT_USABLE 1600           // max packet bytes per slot
+#define POOL_SIZE 1024             // number of slab slots (buffers in flight)
+#define RING_CAP (POOL_SIZE + 1)   // ring capacity (>= pool, so rings never overflow)
+#define BURST 64                   // max frames/elements handled per rx/dispatch/tx call
+#define SLOT_NONE 0xFFFF
+
+typedef struct {
+    event_t    ev;
+    out_event_t out_events[64];
+    uint16_t        n_out;
+    uint32_t        pkt_len;        // packet bytes from data+HEADROOM
+    uint32_t        payload_off;    // payload boundary, relative to data+HEADROOM
+    uint8_t         data[HEADROOM + SLOT_USABLE];
+} qe_t;
+
+static qe_t g_pool[POOL_SIZE];
+
+/********* the pool's free list (a ring of free slot indices; no ABA, parallel-ready) ***********/
+static uint16_t g_free_ring[RING_CAP];
+static uint32_t g_free_head, g_free_tail;   // free indices sit in ring[tail .. head)
+static uint16_t slot_alloc(void) {
+    if (g_free_tail == g_free_head) return SLOT_NONE;   // pool exhausted
+    uint16_t idx = g_free_ring[g_free_tail];
+    g_free_tail = (g_free_tail + 1) % RING_CAP;
+    return idx;
+}
+static void slot_free(uint16_t idx) {
+    g_free_ring[g_free_head] = idx;
+    g_free_head = (g_free_head + 1) % RING_CAP;
 }
 
-// The dispatch pipeline is split into three phases, mirroring the DPDK reference
-// driver (rx -> dispatch -> tx). Here they run synchronously per received frame
-// rather than as ring-connected stages: the queue is drained to empty each frame,
-// which keeps the input buffer (g_in_pkt) valid for the whole drain -- port events
-// (even from recirculated events) reuse its payload via copy_packet. (This is still
-// the copy-based buffer model, not yet the "event as a view" design; and because it
-// drains to empty, a self-recirculating handler could delay the next read -- unlike
-// the DPDK driver's bounded-burst dispatch, which owns its payloads via the mempool.)
-
-// forward decl: do_dispatch routes port outputs through do_tx (defined below).
-static void do_tx(out_event_t *oe);
-
-/******** RX: parse a raw frame into an event and enqueue it (0 = dropped) ********/
-static int do_rx(uint8_t *pkt, uint32_t len) {
-    init_cursor(pkt, len, &g_in_pkt);
-    event_t ev0;
-    if (parse_event(&g_in_pkt, &ev0) != 1) { debug_printf("parse failed\n"); return 0; } // drop
-    evq_push(&g_queue, &ev0);
-    return 1;
+/********* pipeline rings (index rings connecting the stages) ***********/
+typedef struct { uint16_t buf[RING_CAP]; uint32_t head, tail; } idx_ring;
+static idx_ring dispatch_in;   // parsed + recirculated elements awaiting handling
+static idx_ring tx_in;         // handled elements awaiting fan-out + deparse + TX
+static int ring_empty(idx_ring* r) { return r->head == r->tail; }
+static int ring_push(idx_ring* r, uint16_t idx) {
+    uint32_t nh = (r->head + 1) % RING_CAP;
+    if (nh == r->tail) return -1;                 // full (shouldn't happen: sized to pool)
+    r->buf[r->head] = idx; r->head = nh; return 0;
+}
+static int ring_pop(idx_ring* r, uint16_t* out) {
+    if (r->tail == r->head) return -1;            // empty
+    *out = r->buf[r->tail]; r->tail = (r->tail + 1) % RING_CAP; return 0;
 }
 
-/******** DISPATCH: drain the queue, routing each output (recirc -> queue, port -> tx) ********/
-static void do_dispatch(int ingress_port) {
-    while (!evq_empty(&g_queue)) {
-        event_t ev;
-        evq_pull(&g_queue, &ev);
-        ev.meta.timestamp = now_ns();   // stamp at dequeue (covers arriving + recirculated events)
-        ev.meta.in_port = ingress_port; // ingress port (read by the handler)
-        out_event_t out_events[64];
-        uint16_t n = handle_event(&ev, out_events);
-        for (uint16_t i = 0; i < n; i++) {
-            if (out_events[i].port == 4294967295u)  // recirculation: re-queue for dispatch
-                evq_push(&g_queue, &out_events[i].ev);
-            else                                        // output to a port: deparse + send
-                do_tx(&out_events[i]);
+static void pool_init(void) {
+    for (uint16_t i = 0; i < POOL_SIZE; i++) g_free_ring[i] = i;
+    g_free_tail = 0; g_free_head = POOL_SIZE;     // POOL_SIZE free slots enqueued
+    dispatch_in.head = dispatch_in.tail = 0;
+    tx_in.head = tx_in.tail = 0;
+}
+
+
+// parse the frame already sitting in slot `idx` (pkt_len bytes at data+HEADROOM) into
+// its event and enqueue it for dispatch; drop (free the slot) on parse failure.
+static void ingest_slot(uint16_t idx, int in_port) {
+    qe_t* q = &g_pool[idx];
+    packet_t view;
+    init_cursor(q->data + HEADROOM, q->pkt_len, &view);
+    if (parse_event(&view, &q->ev) != 1) { debug_printf("parse failed\n"); slot_free(idx); return; }
+    q->payload_off = (uint32_t)(view.cursor - (q->data + HEADROOM)); // where the payload begins
+    q->ev.meta.in_port = in_port;                                    // ingress (read by the handler)
+    if (ring_push(&dispatch_in, idx) != 0) slot_free(idx);           // ring full (shouldn't happen)
+    else pkt_ct++;
+}
+
+// read up to a burst of frames from one port's socket into slab slots and ingest them.
+static inline void port_rx(int fd, int in_port) {
+#ifdef USE_AF_PACKET
+    for (int b = 0; b < BURST; b++) {
+        uint16_t idx = slot_alloc();
+        if (idx == SLOT_NONE) return;                   // pool exhausted -> drop-at-birth
+        ssize_t n = read(fd, g_pool[idx].data + HEADROOM, SLOT_USABLE);
+        if (n <= 0) { slot_free(idx); return; }          // EWOULDBLOCK/error -> done with this port
+        g_pool[idx].pkt_len = (uint32_t)n;
+        ingest_slot(idx, in_port);
+    }
+#else // USE_BPF: one read yields a buffer of bpf_hdr-prefixed frames
+    static uint8_t rxbuf[RXBUF_SIZE];
+    ssize_t n = read(fd, rxbuf, g_bpf_blen);
+    if (n <= 0) return;
+    uint8_t* ptr = rxbuf; uint8_t* end = rxbuf + n;
+    while (ptr + sizeof(struct bpf_hdr) <= end) {
+        struct bpf_hdr* bh = (struct bpf_hdr*)ptr;
+        if (bh->bh_caplen == bh->bh_datalen) {           // skip truncated captures
+            uint16_t idx = slot_alloc();
+            if (idx == SLOT_NONE) return;                // pool exhausted -> drop-at-birth
+            uint32_t flen = bh->bh_caplen; if (flen > SLOT_USABLE) flen = SLOT_USABLE;
+            memcpy(g_pool[idx].data + HEADROOM, ptr + bh->bh_hdrlen, flen);
+            g_pool[idx].pkt_len = flen;
+            ingest_slot(idx, in_port);
         }
+        ptr += BPF_WORDALIGN(bh->bh_hdrlen + bh->bh_caplen);
+    }
+#endif
+}
+
+/******** RX: read a bounded burst from every port into slab slots, enqueue on dispatch_in ********/
+static void do_rx(void) {
+    for (int p = 0; p < g_nports; p++) port_rx(g_ports[p].fd, g_ports[p].port_id);
+}
+
+
+/******** DISPATCH: handle a bounded burst of elements; hand each to tx_in (no copy) ********/
+static void do_dispatch(void) {
+    for (int b = 0; b < BURST; b++) {
+        uint16_t idx;
+        if (ring_pop(&dispatch_in, &idx) != 0) break;
+        qe_t* q = &g_pool[idx];
+        q->ev.meta.timestamp = now_ns();                 // stamp at dequeue (arriving + recirculated)
+        q->n_out = handle_event(&q->ev, q->out_events);  // ingress read from q->ev.meta.in_port
+        if (ring_push(&tx_in, idx) != 0) slot_free(idx); // ring full (shouldn't happen) -> drop
     }
 }
 
-/******** TX: deparse one output event over a copy of the input packet, write it to the port ********/
-static void do_tx(out_event_t *oe) {
-    int out_port = (int)oe->port;
-    int fd = port_fd(out_port);
-    if (fd < 0) { debug_printf("no interface for port %d\n", out_port); return; }
-    reset_cursor(&g_out_pkt);
-    copy_packet(&g_out_pkt, &g_in_pkt);
-    // a no-payload event emits only its header (drop the input tail); a payload event
-    // keeps the tail (matches interp). boundary = cursor before deparse prepends the header.
-    uint8_t *payload_boundary = g_out_pkt.cursor;
-    deparse_event(&oe->ev, &g_out_pkt);
-    uint8_t *dump_end = oe->ev.meta.has_payload ? g_out_pkt.end : payload_boundary;
-    size_t out_len = (size_t)(dump_end - g_out_pkt.cursor);
-    ssize_t w = write(fd, g_out_pkt.cursor, out_len);
-    if (w < 0) debug_printf("write to port %d failed: %s\n", out_port, strerror(errno));
-}
 
-// per-frame entry: rx (parse + enqueue) then dispatch (drain + route this frame's
-// events, and any it recirculates). only a successfully-parsed frame is counted.
-static void dispatch_packet(int ingress_port, uint8_t* pkt, uint32_t len) {
-    if (!do_rx(pkt, len)) return;
-    do_dispatch(ingress_port);
-    pkt_ct++;
+#define PORT_RECIRC 4294967295u // out_event.port sentinel: recirculate, don't egress
+
+/******** TX: fan out each element into one owned clone per output, then route/deparse/send ********/
+static void do_tx(void) {
+    for (int b = 0; b < BURST; b++) {
+        uint16_t idx;
+        if (ring_pop(&tx_in, &idx) != 0) break;
+        qe_t* in = &g_pool[idx];
+        for (uint16_t i = 0; i < in->n_out; i++) {
+            out_event_t* oe = &in->out_events[i];
+            uint16_t cidx = slot_alloc();
+            if (cidx == SLOT_NONE) continue;             // pool exhausted -> drop this output
+            qe_t* c = &g_pool[cidx];
+            c->ev = oe->ev;
+            // the output owns a fresh copy of the input's payload (or none), placed at
+            // data+HEADROOM with headroom in front for the deparsed header.
+            uint32_t plen = oe->ev.meta.has_payload ? (in->pkt_len - in->payload_off) : 0;
+            if (plen) memcpy(c->data + HEADROOM, in->data + HEADROOM + in->payload_off, plen);
+            c->pkt_len = plen;
+            c->payload_off = 0;                          // the payload now sits at the front of c
+            if (oe->port == PORT_RECIRC) {               // recirculation (generate_self)
+                c->ev.meta.in_port = in->ev.meta.in_port; // recirc inherits ingress
+                if (ring_push(&dispatch_in, cidx) != 0) slot_free(cidx);
+            } else {                                     // output to a port: deparse + send
+                int fd = port_fd((int)oe->port);
+                if (fd < 0) { debug_printf("no interface for port %u\n", oe->port); slot_free(cidx); continue; }
+                packet_t view;
+                init_cursor(c->data + HEADROOM, plen, &view); // cursor at the payload boundary (front)
+                deparse_event(&c->ev, &view);            // writes the header backwards into headroom
+                // a no-payload event emits only its header (drop the tail); a payload event keeps it.
+                uint8_t* dump_end = oe->ev.meta.has_payload ? (c->data + HEADROOM + plen) : (c->data + HEADROOM);
+                size_t out_len = (size_t)(dump_end - view.cursor);
+                ssize_t w = write(fd, view.cursor, out_len);
+                if (w < 0) debug_printf("write to port %u failed: %s\n", oe->port, strerror(errno));
+                slot_free(cidx);                         // egress done
+            }
+        }
+        slot_free(idx);                                  // input consumed (cloned per output)
+    }
 }
 
 
@@ -426,35 +465,28 @@ int main(int argc, char** argv) {
         return 1;
     }
 
-    init_ctx();
+    pool_init();
     // the test harness waits for this line on stdout before sending traffic
     printf("Init complete.\n");
     fflush(stdout);
 
-    uint8_t rxbuf[RXBUF_SIZE];
-#ifdef USE_BPF
-    size_t rxlen = g_bpf_blen;          // BPF reads must use the configured buffer length
-#else
-    size_t rxlen = RXBUF_SIZE;
-#endif
-
+    // the pipeline loop: rx -> dispatch -> tx, each a bounded burst. select() blocks
+    // when everything is idle, but only polls (zero timeout) while there is queued
+    // dispatch/tx work -- so recirculation makes progress without waiting on a read,
+    // and an endless self-recirculating handler still can't block fresh input.
     while (g_running) {
+        int have_work = !ring_empty(&dispatch_in) || !ring_empty(&tx_in);
         fd_set rfds; FD_ZERO(&rfds); int maxfd = 0;
         for (int i = 0; i < g_nports; i++) {
             FD_SET(g_ports[i].fd, &rfds);
             if (g_ports[i].fd > maxfd) maxfd = g_ports[i].fd;
         }
-        int r = select(maxfd + 1, &rfds, NULL, NULL, NULL);
+        struct timeval zero = {0, 0};
+        int r = select(maxfd + 1, &rfds, NULL, NULL, have_work ? &zero : NULL);
         if (r < 0) { if (errno == EINTR) continue; perror("select"); break; }
-        for (int i = 0; i < g_nports; i++) {
-            if (!FD_ISSET(g_ports[i].fd, &rfds)) continue;
-            // drain this socket until it would block
-            for (;;) {
-                ssize_t n = read(g_ports[i].fd, rxbuf, rxlen);
-                if (n <= 0) break; // EAGAIN/EWOULDBLOCK or error
-                process_rx(g_ports[i].port_id, rxbuf, n);
-            }
-        }
+        do_rx();        // read available frames into slots, enqueue on dispatch_in
+        do_dispatch();  // handle a bounded burst, forward to tx_in
+        do_tx();        // fan out a bounded burst: deparse+send; recirc re-enqueues
     }
     printf("Processed %llu packets\n", (unsigned long long)pkt_ct);
     return 0;

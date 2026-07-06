@@ -348,10 +348,18 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
     buf_out->bit_off = 0;
  }
 
-/********* internal dispatch FIFO of events ***********/
+/********* the queue element + the dispatch FIFO ***********/
+// The queue element mirrors the DPDK driver's (§28): an event plus where its payload
+// begins. The difference is ownership -- DPDK's element is an mbuf that OWNS its bytes,
+// whereas here the bytes live in the single input buffer (ctx->in_pkt) shared for the
+// whole synchronous drain, and the element just records the payload boundary into it.
+// packet_t is a pure view over that buffer. (No out_events list rides in the element:
+// dispatch hands the handler's outputs straight to do_tx, so it stays a local.)
+typedef struct { event_t ev; uint32_t payload_off; } qe_t;
+
 #define EV_QUEUE_CAP 1024
 typedef struct ev_queue_t {
-    event_t buf[EV_QUEUE_CAP];
+    qe_t buf[EV_QUEUE_CAP];
     int head;
     int tail;
     int count;
@@ -359,13 +367,13 @@ typedef struct ev_queue_t {
 
 static void evq_init(ev_queue_t* q) { q->head = 0; q->tail = 0; q->count = 0; }
 static int  evq_empty(ev_queue_t* q) { return q->count == 0; }
-static void evq_push(ev_queue_t* q, event_t* ev) {
+static void evq_push(ev_queue_t* q, qe_t* e) {
     // no overflow guard (see handler lowering); EV_QUEUE_CAP is generous.
-    q->buf[q->tail] = *ev;
+    q->buf[q->tail] = *e;
     q->tail = (q->tail + 1) % EV_QUEUE_CAP;
     q->count++;
 }
-static void evq_pull(ev_queue_t* q, event_t* out) {
+static void evq_pull(ev_queue_t* q, qe_t* out) {
     *out = q->buf[q->head];
     q->head = (q->head + 1) % EV_QUEUE_CAP;
     q->count--;
@@ -401,61 +409,67 @@ void fill_out_pkthdr(const struct pcap_pkthdr *in_pkthdr, packet_t* out_pkt, uin
     out_pkthdr->len    = (uint32_t)(dump_end - out_pkt->cursor);
 }
 
-// The dispatch pipeline is split into three phases, mirroring the DPDK reference
-// driver (rx -> dispatch -> tx). Here they run synchronously per input packet
-// rather than as ring-connected stages: there is no live competing input (pcap
-// replays an offline file), so the queue is drained to empty each packet, which
-// keeps the input buffer valid for the whole drain -- port events (even from
-// recirculated events) reuse its payload via copy_packet. (The buffer-ownership
-// model is the pcap counterpart of the DPDK event-carries-its-mbuf design; it is
-// still the copy-based approach, not yet the "event as a view" model.)
+// The dispatch pipeline is split into three phases with the same responsibilities as
+// the DPDK reference (§28): rx parses into a queue element; dispatch handles it and
+// hands the outputs to tx; tx fans out (recirc -> re-queue, egress -> deparse + dump).
+// The divergence is that here they run synchronously per input packet -- there is no
+// live competing input (pcap replays an offline file), so the queue is drained to empty,
+// which keeps the shared input buffer valid for the whole drain and lets every output
+// (including from recirculated events) build over it. No mbuf pool: the "queue element"
+// owns nothing; the input buffer is the owner and packet_t is a view over it.
 
-/******** TX: deparse one output event over a copy of the input packet, then dump it ********/
-static void do_tx(pkt_hdl_ctx_t *ctx, out_event_t *oe) {
-    // pcap has a single output file, so oe->port is recorded but every port event
-    // goes to the same dump.
-    reset_cursor(&ctx->out_pkt);
-    copy_packet(&ctx->out_pkt, &ctx->in_pkt);
-    // out_pkt.cursor sits at the payload boundary (input parse position) until deparse
-    // prepends the header. A no-payload event emits only its header (drop the input
-    // tail); a payload event keeps the tail. (matches interp)
-    uint8_t *payload_boundary = ctx->out_pkt.cursor;
-    deparse_event(&oe->ev, &ctx->out_pkt);
-    uint8_t *dump_end = oe->ev.meta.has_payload ? ctx->out_pkt.end : payload_boundary;
-    fill_out_pkthdr(ctx->in_pkthdr, &ctx->out_pkt, dump_end, &ctx->out_pkthdr);
-    pcap_dump((u_char *)ctx->out_pcap, &ctx->out_pkthdr, (u_char *)ctx->out_pkt.cursor);
-}
-
-/******** DISPATCH: drain the queue, routing each output (recirc -> queue, port -> tx) ********/
-static void do_dispatch(pkt_hdl_ctx_t *ctx) {
-    while (!evq_empty(&ctx->queue)) {
-        event_t ev;
-        evq_pull(&ctx->queue, &ev);
-        ev.meta.timestamp = now_ns();        // stamp at dequeue (covers arriving + recirculated events)
-        ev.meta.in_port = ctx->ingress_port; // ingress port (read by the handler)
-        out_event_t out_events[64];
-        uint16_t n = handle_event(&ev, out_events);
-        for (uint16_t i = 0; i < n; i++) {
-            if (out_events[i].port == 4294967295u)  // recirculation: re-queue for dispatch
-                evq_push(&ctx->queue, &out_events[i].ev);
-            else                                        // output to a port: deparse + dump
-                do_tx(ctx, &out_events[i]);
+/******** TX: fan out the handler's outputs -- recirc back to the queue, egress deparse+dump ********/
+static void do_tx(pkt_hdl_ctx_t *ctx, out_event_t *out_events, uint16_t n, uint32_t payload_off) {
+    for (uint16_t i = 0; i < n; i++) {
+        out_event_t *oe = &out_events[i];
+        if (oe->port == 4294967295u) {          // recirculation: re-inject (inherits the boundary)
+            qe_t re = { oe->ev, payload_off };
+            evq_push(&ctx->queue, &re);
+            continue;
         }
+        // egress: build the output over a copy of the shared input buffer, deparse, dump.
+        // (pcap has a single output file, so oe->port is recorded but every port event
+        // goes to the same dump.)
+        reset_cursor(&ctx->out_pkt);
+        copy_packet(&ctx->out_pkt, &ctx->in_pkt);
+        // set the cursor to the payload boundary (from the element); deparse prepends the
+        // header before it. A no-payload event emits only its header (drop the input tail);
+        // a payload event keeps the tail. (matches interp)
+        ctx->out_pkt.cursor = ctx->out_pkt.start + payload_off;
+        uint8_t *payload_boundary = ctx->out_pkt.cursor;
+        deparse_event(&oe->ev, &ctx->out_pkt);
+        uint8_t *dump_end = oe->ev.meta.has_payload ? ctx->out_pkt.end : payload_boundary;
+        fill_out_pkthdr(ctx->in_pkthdr, &ctx->out_pkt, dump_end, &ctx->out_pkthdr);
+        pcap_dump((u_char *)ctx->out_pcap, &ctx->out_pkthdr, (u_char *)ctx->out_pkt.cursor);
     }
 }
 
-/******** RX: parse the input packet into an event and enqueue it (pcap_loop callback) ********/
+/******** DISPATCH: drain the queue; handle each element and hand its outputs to tx ********/
+static void do_dispatch(pkt_hdl_ctx_t *ctx) {
+    while (!evq_empty(&ctx->queue)) {
+        qe_t qe;
+        evq_pull(&ctx->queue, &qe);
+        qe.ev.meta.timestamp = now_ns();        // stamp at dequeue (covers arriving + recirculated events)
+        qe.ev.meta.in_port = ctx->ingress_port; // ingress port (read by the handler)
+        out_event_t out_events[64];
+        uint16_t n = handle_event(&qe.ev, out_events);
+        do_tx(ctx, out_events, n, qe.payload_off); // fan out this element's outputs
+    }
+}
+
+/******** RX: parse the input packet into a queue element and enqueue it (pcap_loop callback) ********/
 void lpcap_packet_handler(u_char *raw_ctx, const struct pcap_pkthdr *pkthdr, const u_char *packet) {
     pkt_hdl_ctx_t *ctx = (pkt_hdl_ctx_t *)raw_ctx;
-    init_cursor((uint8_t *)packet, pkthdr->len, &ctx->in_pkt); // construct a new cursor
+    init_cursor((uint8_t *)packet, pkthdr->len, &ctx->in_pkt); // construct a new cursor over the input
     ctx->in_pkthdr = pkthdr;                                   // remembered for do_tx (ts source)
-    event_t ev0;
-    if (parse_event(&ctx->in_pkt, &ev0) != 1) {
+    qe_t qe;
+    if (parse_event(&ctx->in_pkt, &qe.ev) != 1) {
         debug_printf("parse failed!\n");
         return; // drop
     }
-    evq_push(&ctx->queue, &ev0);
-    do_dispatch(ctx); // drain: handle + route this packet's events (and any it recirculates)
+    qe.payload_off = (uint32_t)(ctx->in_pkt.cursor - ctx->in_pkt.start); // where the payload begins
+    evq_push(&ctx->queue, &qe);
+    do_dispatch(ctx); // drain: handle + fan out this packet's events (and any it recirculates)
     pkt_ct++;
 }
 
