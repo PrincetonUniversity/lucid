@@ -202,8 +202,7 @@
    CCoreVariants
    CCoreCForm
    CCoreMaskWidths
-   CCoreWellformedC
-   CCoreValueSemantics
+   CCoreWellformed
    CCorePacketHandler
    CCoreDriverPcap
    CCoreDriverDpdk

@@ -166,6 +166,16 @@ let implicit_payloads ds =
         | _ -> exp
     end
   in
-  v#visit_decls () ds
-  (* ds *)
+
+  let payload_event_names =
+    let is_payload (ty : CoreSyntax.ty) = match ty.raw_ty with
+      | CoreSyntax.TName(cid, _) -> Cid.equal cid Payloads.t_id
+      | _ -> false
+    in
+    List.filter_map (fun (d : CoreSyntax.decl) -> match d.d with
+      | CoreSyntax.DEvent(id, _, _, params) when List.exists (fun (_, ty) -> is_payload ty) params -> Some (fst id)
+      | _ -> None)
+      ds
+  in  
+  payload_event_names, v#visit_decls () ds
 ;;
