@@ -122,67 +122,67 @@ typedef struct {
       uint8_t pad_5878;
       uint32_t x_5879;
     } in_5880;
-  } payload;
-} event_variant;
-event_variant BloomFilter_clear_all_bf1_5866(){
-  event_variant ev  = {0};
+  } args;
+} event_variant_t;
+event_variant_t BloomFilter_clear_all_bf1_5866(){
+  event_variant_t ev  = {0};
   
   ev.tag = BloomFilter_clear_all_bf1_tag;
   return ev;
 }
-event_variant BloomFilter_clear_helper_bf1_5868(uint8_t idx_5867 ){
-  event_variant ev  = {0};
-  ev.payload.BloomFilter_clear_helper_bf1_5868.idx_5867 = idx_5867;
+event_variant_t BloomFilter_clear_helper_bf1_5868(uint8_t idx_5867 ){
+  event_variant_t ev  = {0};
+  ev.args.BloomFilter_clear_helper_bf1_5868.idx_5867 = idx_5867;
   ev.tag = BloomFilter_clear_helper_bf1_tag;
   return ev;
 }
-event_variant allowed_5874(uint32_t x_5873 ){
-  event_variant ev  = {0};
-  ev.payload.allowed_5874.x_5873 = x_5873;
+event_variant_t allowed_5874(uint32_t x_5873 ){
+  event_variant_t ev  = {0};
+  ev.args.allowed_5874.x_5873 = x_5873;
   ev.tag = allowed_tag;
   return ev;
 }
-event_variant denied_5876(uint32_t x_5875 ){
-  event_variant ev  = {0};
-  ev.payload.denied_5876.x_5875 = x_5875;
+event_variant_t denied_5876(uint32_t x_5875 ){
+  event_variant_t ev  = {0};
+  ev.args.denied_5876.x_5875 = x_5875;
   ev.tag = denied_tag;
   return ev;
 }
-event_variant in_5880(uint8_t add_5877 , uint8_t pad_5878 , uint32_t x_5879 ){
-  event_variant ev  = {0};
-  ev.payload.in_5880.add_5877 = add_5877;
-  ev.payload.in_5880.pad_5878 = pad_5878;
-  ev.payload.in_5880.x_5879 = x_5879;
+event_variant_t in_5880(uint8_t add_5877 , uint8_t pad_5878 , uint32_t x_5879 ){
+  event_variant_t ev  = {0};
+  ev.args.in_5880.add_5877 = add_5877;
+  ev.args.in_5880.pad_5878 = pad_5878;
+  ev.args.in_5880.x_5879 = x_5879;
   ev.tag = in_tag;
   return ev;
 }
 typedef struct {
   event_meta meta;
-  event_variant data;
-} events;
+  event_variant_t data;
+} event_t;
 typedef struct {
-  events ev;
+  event_t ev;
   uint8_t out_loc;
   uint32_t port;
-} out_event;
-events mk_BloomFilter_clear_all_bf1(){
-  events tmp_6331  = {.meta = {.len = 0, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = BloomFilter_clear_all_bf1_5866()};
+} out_event_t;
+event_t mk_BloomFilter_clear_all_bf1(){
+  event_t tmp_6331  = {.meta = {.len = 0, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = BloomFilter_clear_all_bf1_5866()};
   return tmp_6331;
 }
-events mk_BloomFilter_clear_helper_bf1(uint8_t idx_5867 ){
-  events tmp_6332  = {.meta = {.len = 1, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = BloomFilter_clear_helper_bf1_5868(idx_5867)};
+event_t mk_BloomFilter_clear_helper_bf1(uint8_t idx_5867 ){
+  event_t tmp_6332  = {.meta = {.len = 1, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = BloomFilter_clear_helper_bf1_5868(idx_5867)};
   return tmp_6332;
 }
-events mk_allowed(uint32_t x_5873 ){
-  events tmp_6333  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = allowed_5874(x_5873)};
+event_t mk_allowed(uint32_t x_5873 ){
+  event_t tmp_6333  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = allowed_5874(x_5873)};
   return tmp_6333;
 }
-events mk_denied(uint32_t x_5875 ){
-  events tmp_6334  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = denied_5876(x_5875)};
+event_t mk_denied(uint32_t x_5875 ){
+  event_t tmp_6334  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = denied_5876(x_5875)};
   return tmp_6334;
 }
-events mk_in(uint8_t add_5877 , uint8_t pad_5878 , uint32_t x_5879 ){
-  events tmp_6335  = {.meta = {.len = 6, .is_packet = 1, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = in_5880(add_5877, pad_5878, x_5879)};
+event_t mk_in(uint8_t add_5877 , uint8_t pad_5878 , uint32_t x_5879 ){
+  event_t tmp_6335  = {.meta = {.len = 6, .is_packet = 1, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = in_5880(add_5877, pad_5878, x_5879)};
   return tmp_6335;
 }
 uint32_t recirculation_port  = 0;
@@ -271,54 +271,54 @@ uint8_t Array_update_complex_bf1_0_3_5872_get_get_memop_8_bit(uint8_t _idx , uin
   bf1_0_3_5872[(((uint32_t)(_idx)) % 256)] = cell1;
   return ret;
 }
-uint8_t parse_event(packet_t*  pkt , events*  next_event ){
+uint8_t parse_event(packet_t*  pkt , event_t*  next_event ){
   uint8_t add_5877  = ((uint8_t)(read_bits(pkt, 1)));
   uint8_t pad_5878  = ((uint8_t)(read_bits(pkt, 7))) & 127;
   uint32_t x_5879  = ((uint32_t)(read_bits(pkt, 32)));
   (*(next_event)) = mk_in(add_5877, pad_5878, x_5879);
   return pkt->cursor <= pkt->end;
 }
-uint16_t handle_event(events*  ev_in , out_event out_events [64]){
+uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
   uint16_t n  = 0;
   switch (ev_in->data.tag) {
     case 1: {
       
-      events this  = mk_BloomFilter_clear_all_bf1();
-      out_event tmp_6336  = {.ev = mk_BloomFilter_clear_helper_bf1(0), .out_loc = 1, .port = 0};
+      event_t this  = mk_BloomFilter_clear_all_bf1();
+      out_event_t tmp_6336  = {.ev = mk_BloomFilter_clear_helper_bf1(0), .out_loc = 1, .port = 0};
       out_events[n] = tmp_6336;
       n = n + 1;
       break;
     }
     case 2: {
-      uint8_t idx_5881  = ev_in->data.payload.BloomFilter_clear_helper_bf1_5868.idx_5867;
-      events this  = mk_BloomFilter_clear_helper_bf1(idx_5881);
+      uint8_t idx_5881  = ev_in->data.args.BloomFilter_clear_helper_bf1_5868.idx_5867;
+      event_t this  = mk_BloomFilter_clear_helper_bf1(idx_5881);
       Array_update_complex_bf1_0_0_5869_set_set_memop_8_bit(idx_5881, 0, 0);
       Array_update_complex_bf1_0_1_5870_set_set_memop_8_bit(idx_5881, 0, 0);
       Array_update_complex_bf1_0_2_5871_set_set_memop_8_bit(idx_5881, 0, 0);
       Array_update_complex_bf1_0_3_5872_set_set_memop_8_bit(idx_5881, 0, 0);
       false;
       if (idx_5881 < 255) {
-        out_event tmp_6337  = {.ev = mk_BloomFilter_clear_helper_bf1(idx_5881 + 1), .out_loc = 1, .port = 0};
+        out_event_t tmp_6337  = {.ev = mk_BloomFilter_clear_helper_bf1(idx_5881 + 1), .out_loc = 1, .port = 0};
         out_events[n] = tmp_6337;
         n = n + 1;
       }
       break;
     }
     case 3: {
-      uint32_t x_5882  = ev_in->data.payload.allowed_5874.x_5873;
-      events this  = mk_allowed(x_5882);
+      uint32_t x_5882  = ev_in->data.args.allowed_5874.x_5873;
+      event_t this  = mk_allowed(x_5882);
       break;
     }
     case 4: {
-      uint32_t x_5883  = ev_in->data.payload.denied_5876.x_5875;
-      events this  = mk_denied(x_5883);
+      uint32_t x_5883  = ev_in->data.args.denied_5876.x_5875;
+      event_t this  = mk_denied(x_5883);
       break;
     }
     case 5: {
-      uint8_t add_5884  = ev_in->data.payload.in_5880.add_5877;
-      uint8_t pad_5885  = ev_in->data.payload.in_5880.pad_5878;
-      uint32_t x_5886  = ev_in->data.payload.in_5880.x_5879;
-      events this  = mk_in(add_5884, pad_5885, x_5886);
+      uint8_t add_5884  = ev_in->data.args.in_5880.add_5877;
+      uint8_t pad_5885  = ev_in->data.args.in_5880.pad_5878;
+      uint32_t x_5886  = ev_in->data.args.in_5880.x_5879;
+      event_t this  = mk_in(add_5884, pad_5885, x_5886);
       if (add_5884) {
         Array_update_complex_bf1_0_0_5869_set_set_memop_8_bit(hash_32((uint32_t)0, (uint8_t* )&x_5886, 32), 1, 0);
         Array_update_complex_bf1_0_1_5870_set_set_memop_8_bit(hash_32((uint32_t)1, (uint8_t* )&x_5886, 32), 1, 0);
@@ -331,11 +331,11 @@ uint16_t handle_event(events*  ev_in , out_event out_events [64]){
         uint8_t x_5891  = Array_update_complex_bf1_0_2_5871_get_get_memop_8_bit(hash_32((uint32_t)2, (uint8_t* )&x_5886, 32), 0, 0);
         uint8_t x_5892  = Array_update_complex_bf1_0_3_5872_get_get_memop_8_bit(hash_32((uint32_t)3, (uint8_t* )&x_5886, 32), 0, 0);
         if ((((x_5889 == 1) && (x_5890 == 1)) && (x_5891 == 1)) && (x_5892 == 1)) {
-          out_event tmp_6338  = {.ev = mk_allowed(x_5886), .out_loc = 1, .port = 0};
+          out_event_t tmp_6338  = {.ev = mk_allowed(x_5886), .out_loc = 1, .port = 0};
           out_events[n] = tmp_6338;
           n = n + 1;
         }else {
-          out_event tmp_6339  = {.ev = mk_denied(x_5886), .out_loc = 1, .port = 0};
+          out_event_t tmp_6339  = {.ev = mk_denied(x_5886), .out_loc = 1, .port = 0};
           out_events[n] = tmp_6339;
           n = n + 1;
         }
@@ -349,7 +349,7 @@ uint16_t handle_event(events*  ev_in , out_event out_events [64]){
   }
   return n;
 }
-void deparse_event(events*  ev_out , packet_t*  buf_out ){
+void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
   switch (ev_out->data.tag) {
     case 1: {
       
@@ -363,7 +363,7 @@ void deparse_event(events*  ev_out , packet_t*  buf_out ){
       break;
     }
     case 2: {
-      uint8_t idx_5867  = ev_out->data.payload.BloomFilter_clear_helper_bf1_5868.idx_5867;
+      uint8_t idx_5867  = ev_out->data.args.BloomFilter_clear_helper_bf1_5868.idx_5867;
       write_bits(buf_out, ((uint64_t)(idx_5867)), 8);
       if ((ev_out->meta.is_packet) == (0)) {
         write_bits(buf_out, ((uint64_t)(2)), 16);
@@ -375,7 +375,7 @@ void deparse_event(events*  ev_out , packet_t*  buf_out ){
       break;
     }
     case 3: {
-      uint32_t x_5873  = ev_out->data.payload.allowed_5874.x_5873;
+      uint32_t x_5873  = ev_out->data.args.allowed_5874.x_5873;
       write_bits(buf_out, ((uint64_t)(x_5873)), 32);
       if ((ev_out->meta.is_packet) == (0)) {
         write_bits(buf_out, ((uint64_t)(3)), 16);
@@ -387,7 +387,7 @@ void deparse_event(events*  ev_out , packet_t*  buf_out ){
       break;
     }
     case 4: {
-      uint32_t x_5875  = ev_out->data.payload.denied_5876.x_5875;
+      uint32_t x_5875  = ev_out->data.args.denied_5876.x_5875;
       write_bits(buf_out, ((uint64_t)(x_5875)), 32);
       if ((ev_out->meta.is_packet) == (0)) {
         write_bits(buf_out, ((uint64_t)(4)), 16);
@@ -399,9 +399,9 @@ void deparse_event(events*  ev_out , packet_t*  buf_out ){
       break;
     }
     case 5: {
-      uint8_t add_5877  = ev_out->data.payload.in_5880.add_5877;
-      uint8_t pad_5878  = ev_out->data.payload.in_5880.pad_5878;
-      uint32_t x_5879  = ev_out->data.payload.in_5880.x_5879;
+      uint8_t add_5877  = ev_out->data.args.in_5880.add_5877;
+      uint8_t pad_5878  = ev_out->data.args.in_5880.pad_5878;
+      uint32_t x_5879  = ev_out->data.args.in_5880.x_5879;
       write_bits(buf_out, ((uint64_t)(x_5879)), 32);
       write_bits(buf_out, ((uint64_t)(pad_5878)), 7);
       write_bits(buf_out, ((uint64_t)(add_5877)), 1);
@@ -439,7 +439,7 @@ void deparse_event(events*  ev_out , packet_t*  buf_out ){
 /********* internal dispatch FIFO of events ***********/
 #define EV_QUEUE_CAP 1024
 typedef struct ev_queue_t {
-    events buf[EV_QUEUE_CAP];
+    event_t buf[EV_QUEUE_CAP];
     int head;
     int tail;
     int count;
@@ -447,13 +447,13 @@ typedef struct ev_queue_t {
 
 static void evq_init(ev_queue_t* q) { q->head = 0; q->tail = 0; q->count = 0; }
 static int  evq_empty(ev_queue_t* q) { return q->count == 0; }
-static void evq_push(ev_queue_t* q, events* ev) {
+static void evq_push(ev_queue_t* q, event_t* ev) {
     // no overflow guard (see handler lowering); EV_QUEUE_CAP is generous.
     q->buf[q->tail] = *ev;
     q->tail = (q->tail + 1) % EV_QUEUE_CAP;
     q->count++;
 }
-static void evq_pull(ev_queue_t* q, events* out) {
+static void evq_pull(ev_queue_t* q, event_t* out) {
     *out = q->buf[q->head];
     q->head = (q->head + 1) % EV_QUEUE_CAP;
     q->count--;
@@ -476,6 +476,7 @@ typedef struct pkt_hdl_ctx_t {
     pcap_dumper_t *out_pcap;
     packet_t in_pkt;
     packet_t out_pkt;
+    const struct pcap_pkthdr *in_pkthdr; // input header of the packet being handled (ts source for tx)
     struct pcap_pkthdr out_pkthdr;
     ev_queue_t queue;
 } pkt_hdl_ctx_t;
@@ -488,47 +489,61 @@ void fill_out_pkthdr(const struct pcap_pkthdr *in_pkthdr, packet_t* out_pkt, uin
     out_pkthdr->len    = (uint32_t)(dump_end - out_pkt->cursor);
 }
 
-void lpcap_packet_handler(u_char *ctx, const struct pcap_pkthdr *pkthdr, const u_char *packet) {
-    pkt_hdl_ctx_t * hdl_ctx = (pkt_hdl_ctx_t *)ctx;
-    init_cursor((uint8_t *)packet, pkthdr->len, &hdl_ctx->in_pkt); // construct a new cursor
+// The dispatch pipeline is split into three phases, mirroring the DPDK reference
+// driver (rx -> dispatch -> tx). Here they run synchronously per input packet
+// rather than as ring-connected stages: there is no live competing input (pcap
+// replays an offline file), so the queue is drained to empty each packet, which
+// keeps the input buffer valid for the whole drain -- port events (even from
+// recirculated events) reuse its payload via copy_packet. (The buffer-ownership
+// model is the pcap counterpart of the DPDK event-carries-its-mbuf design; it is
+// still the copy-based approach, not yet the "event as a view" model.)
 
-    // parse round: parse the input packet, push the event onto the queue
-    events ev0;
-    if (parse_event(&hdl_ctx->in_pkt, &ev0) != 1) {
+/******** TX: deparse one output event over a copy of the input packet, then dump it ********/
+static void do_tx(pkt_hdl_ctx_t *ctx, out_event_t *oe) {
+    // pcap has a single output file, so oe->port is recorded but every port event
+    // goes to the same dump.
+    reset_cursor(&ctx->out_pkt);
+    copy_packet(&ctx->out_pkt, &ctx->in_pkt);
+    // out_pkt.cursor sits at the payload boundary (input parse position) until deparse
+    // prepends the header. A no-payload event emits only its header (drop the input
+    // tail); a payload event keeps the tail. (matches interp)
+    uint8_t *payload_boundary = ctx->out_pkt.cursor;
+    deparse_event(&oe->ev, &ctx->out_pkt);
+    uint8_t *dump_end = oe->ev.meta.has_payload ? ctx->out_pkt.end : payload_boundary;
+    fill_out_pkthdr(ctx->in_pkthdr, &ctx->out_pkt, dump_end, &ctx->out_pkthdr);
+    pcap_dump((u_char *)ctx->out_pcap, &ctx->out_pkthdr, (u_char *)ctx->out_pkt.cursor);
+}
+
+/******** DISPATCH: drain the queue, routing each output (recirc -> queue, port -> tx) ********/
+static void do_dispatch(pkt_hdl_ctx_t *ctx) {
+    while (!evq_empty(&ctx->queue)) {
+        event_t ev;
+        evq_pull(&ctx->queue, &ev);
+        ev.meta.timestamp = now_ns();        // stamp at dequeue (covers arriving + recirculated events)
+        ev.meta.in_port = ctx->ingress_port; // ingress port (read by the handler)
+        out_event_t out_events[64];
+        uint16_t n = handle_event(&ev, out_events);
+        for (uint16_t i = 0; i < n; i++) {
+            if (out_events[i].out_loc == 1)        // recirculation: re-queue for dispatch
+                evq_push(&ctx->queue, &out_events[i].ev);
+            else if (out_events[i].out_loc == 2)   // output to a port: deparse + dump
+                do_tx(ctx, &out_events[i]);
+        }
+    }
+}
+
+/******** RX: parse the input packet into an event and enqueue it (pcap_loop callback) ********/
+void lpcap_packet_handler(u_char *raw_ctx, const struct pcap_pkthdr *pkthdr, const u_char *packet) {
+    pkt_hdl_ctx_t *ctx = (pkt_hdl_ctx_t *)raw_ctx;
+    init_cursor((uint8_t *)packet, pkthdr->len, &ctx->in_pkt); // construct a new cursor
+    ctx->in_pkthdr = pkthdr;                                   // remembered for do_tx (ts source)
+    event_t ev0;
+    if (parse_event(&ctx->in_pkt, &ev0) != 1) {
         debug_printf("parse failed!\n");
         return; // drop
     }
-    evq_push(&hdl_ctx->queue, &ev0);
-
-    // dispatch round: drain the queue
-    while (!evq_empty(&hdl_ctx->queue)) {
-        events ev;
-        evq_pull(&hdl_ctx->queue, &ev);
-        ev.meta.timestamp = now_ns(); // stamp at dequeue (covers arriving + recirculated events)
-        ev.meta.in_port = hdl_ctx->ingress_port; // ingress port (read by the handler)
-        out_event out_events[64];
-        uint16_t n = handle_event(&ev, out_events);
-        for (uint16_t i = 0; i < n; i++) {
-            if (out_events[i].out_loc == 1) {
-                // recirculation: re-queue for dispatch
-                evq_push(&hdl_ctx->queue, &out_events[i].ev);
-            } else if (out_events[i].out_loc == 2) {
-                // output to a port: deparse over a copy of the input packet, then
-                // dump. (pcap has a single output file, so out_events[i].port is
-                // recorded but every port event goes to the same dump.)
-                reset_cursor(&hdl_ctx->out_pkt);
-                copy_packet(&hdl_ctx->out_pkt, &hdl_ctx->in_pkt);
-                // out_pkt.cursor sits at the payload boundary (input parse position) until
-                // deparse prepends the header. A no-payload event emits only its header
-                // (drop the input tail); a payload event keeps the tail. (matches interp)
-                uint8_t *payload_boundary = hdl_ctx->out_pkt.cursor;
-                deparse_event(&out_events[i].ev, &hdl_ctx->out_pkt);
-                uint8_t *dump_end = out_events[i].ev.meta.has_payload ? hdl_ctx->out_pkt.end : payload_boundary;
-                fill_out_pkthdr(pkthdr, &hdl_ctx->out_pkt, dump_end, &hdl_ctx->out_pkthdr);
-                pcap_dump((u_char *)hdl_ctx->out_pcap, &hdl_ctx->out_pkthdr, (u_char *)hdl_ctx->out_pkt.cursor);
-            }
-        }
-    }
+    evq_push(&ctx->queue, &ev0);
+    do_dispatch(ctx); // drain: handle + route this packet's events (and any it recirculates)
     pkt_ct++;
 }
 
@@ -551,6 +566,7 @@ pkt_hdl_ctx_t ctx = {
     .cursor = (uint8_t *)out_buf + HEADROOM,
     .end = (uint8_t *)out_buf + HEADROOM + out_buf_len
     },
+    .in_pkthdr = NULL,
     .out_pkthdr = {0},
     .queue = {0}
 };

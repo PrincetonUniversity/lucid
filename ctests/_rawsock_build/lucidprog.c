@@ -119,47 +119,47 @@ typedef struct {
       uint64_t src_670;
       uint16_t ety_671;
     } ethpkt_673;
-  } payload;
-} event_variant;
-event_variant ethpkt_673(uint64_t dst_669 , uint64_t src_670 , uint16_t ety_671 ){
-  event_variant ev  = {0};
-  ev.payload.ethpkt_673.dst_669 = dst_669;
-  ev.payload.ethpkt_673.src_670 = src_670;
-  ev.payload.ethpkt_673.ety_671 = ety_671;
+  } args;
+} event_variant_t;
+event_variant_t ethpkt_673(uint64_t dst_669 , uint64_t src_670 , uint16_t ety_671 ){
+  event_variant_t ev  = {0};
+  ev.args.ethpkt_673.dst_669 = dst_669;
+  ev.args.ethpkt_673.src_670 = src_670;
+  ev.args.ethpkt_673.ety_671 = ety_671;
   ev.tag = ethpkt_tag;
   return ev;
 }
 typedef struct {
   event_meta meta;
-  event_variant data;
-} events;
+  event_variant_t data;
+} event_t;
 typedef struct {
-  events ev;
+  event_t ev;
   uint8_t out_loc;
   uint32_t port;
-} out_event;
-events mk_ethpkt(uint64_t dst_669 , uint64_t src_670 , uint16_t ety_671 ){
-  events tmp_713  = {.meta = {.len = 14, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = ethpkt_673(dst_669, src_670, ety_671)};
+} out_event_t;
+event_t mk_ethpkt(uint64_t dst_669 , uint64_t src_670 , uint16_t ety_671 ){
+  event_t tmp_713  = {.meta = {.len = 14, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = ethpkt_673(dst_669, src_670, ety_671)};
   return tmp_713;
 }
 uint32_t recirculation_port  = 0;
 uint32_t self  = 0;
-uint8_t parse_event(packet_t*  pkt , events*  next_event ){
+uint8_t parse_event(packet_t*  pkt , event_t*  next_event ){
   uint64_t dst_669  = ((uint64_t)(read_bits(pkt, 48))) & 281474976710655;
   uint64_t src_670  = ((uint64_t)(read_bits(pkt, 48))) & 281474976710655;
   uint16_t ety_671  = ((uint16_t)(read_bits(pkt, 16)));
   (*(next_event)) = mk_ethpkt(dst_669, src_670, ety_671);
   return pkt->cursor <= pkt->end;
 }
-uint16_t handle_event(events*  ev_in , out_event out_events [64]){
+uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
   uint16_t n  = 0;
   switch (ev_in->data.tag) {
     case 1: {
-      uint64_t dst_674  = ev_in->data.payload.ethpkt_673.dst_669;
-      uint64_t src_675  = ev_in->data.payload.ethpkt_673.src_670;
-      uint16_t ety_676  = ev_in->data.payload.ethpkt_673.ety_671;
-      events this  = mk_ethpkt(dst_674, src_675, ety_676);
-      out_event tmp_714  = {.ev = mk_ethpkt(src_675, dst_674, ety_676), .out_loc = 2, .port = ev_in->meta.in_port};
+      uint64_t dst_674  = ev_in->data.args.ethpkt_673.dst_669;
+      uint64_t src_675  = ev_in->data.args.ethpkt_673.src_670;
+      uint16_t ety_676  = ev_in->data.args.ethpkt_673.ety_671;
+      event_t this  = mk_ethpkt(dst_674, src_675, ety_676);
+      out_event_t tmp_714  = {.ev = mk_ethpkt(src_675, dst_674, ety_676), .out_loc = 2, .port = ev_in->meta.in_port};
       out_events[n] = tmp_714;
       n = n + 1;
       break;
@@ -171,12 +171,12 @@ uint16_t handle_event(events*  ev_in , out_event out_events [64]){
   }
   return n;
 }
-void deparse_event(events*  ev_out , packet_t*  buf_out ){
+void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
   switch (ev_out->data.tag) {
     case 1: {
-      uint64_t dst_669  = ev_out->data.payload.ethpkt_673.dst_669;
-      uint64_t src_670  = ev_out->data.payload.ethpkt_673.src_670;
-      uint16_t ety_671  = ev_out->data.payload.ethpkt_673.ety_671;
+      uint64_t dst_669  = ev_out->data.args.ethpkt_673.dst_669;
+      uint64_t src_670  = ev_out->data.args.ethpkt_673.src_670;
+      uint16_t ety_671  = ev_out->data.args.ethpkt_673.ety_671;
       write_bits(buf_out, ((uint64_t)(ety_671)), 16);
       write_bits(buf_out, ((uint64_t)(src_670)), 48);
       write_bits(buf_out, ((uint64_t)(dst_669)), 48);
@@ -288,14 +288,14 @@ static void process_rx(int ingress_port, uint8_t* buf, ssize_t n) {
 /********* internal dispatch FIFO of events ***********/
 #define EV_QUEUE_CAP 1024
 typedef struct ev_queue_t {
-    events buf[EV_QUEUE_CAP];
+    event_t buf[EV_QUEUE_CAP];
     int head; int tail; int count;
 } ev_queue_t;
 static int  evq_empty(ev_queue_t* q) { return q->count == 0; }
-static void evq_push(ev_queue_t* q, events* ev) {
+static void evq_push(ev_queue_t* q, event_t* ev) {
     q->buf[q->tail] = *ev; q->tail = (q->tail + 1) % EV_QUEUE_CAP; q->count++;
 }
-static void evq_pull(ev_queue_t* q, events* out) {
+static void evq_pull(ev_queue_t* q, event_t* out) {
     *out = q->buf[q->head]; q->head = (q->head + 1) % EV_QUEUE_CAP; q->count--;
 }
 
@@ -335,43 +335,67 @@ static void init_ctx(void) {
     g_queue.head = g_queue.tail = g_queue.count = 0;
 }
 
-static void dispatch_packet(int ingress_port, uint8_t* pkt, uint32_t len) {
-    init_cursor(pkt, len, &g_in_pkt);
-    events ev0;
-    if (parse_event(&g_in_pkt, &ev0) != 1) { debug_printf("parse failed\n"); return; }
-    evq_push(&g_queue, &ev0);
+// The dispatch pipeline is split into three phases, mirroring the DPDK reference
+// driver (rx -> dispatch -> tx). Here they run synchronously per received frame
+// rather than as ring-connected stages: the queue is drained to empty each frame,
+// which keeps the input buffer (g_in_pkt) valid for the whole drain -- port events
+// (even from recirculated events) reuse its payload via copy_packet. (This is still
+// the copy-based buffer model, not yet the "event as a view" design; and because it
+// drains to empty, a self-recirculating handler could delay the next read -- unlike
+// the DPDK driver's bounded-burst dispatch, which owns its payloads via the mempool.)
 
+// forward decl: do_dispatch routes port outputs through do_tx (defined below).
+static void do_tx(out_event_t *oe);
+
+/******** RX: parse a raw frame into an event and enqueue it (0 = dropped) ********/
+static int do_rx(uint8_t *pkt, uint32_t len) {
+    init_cursor(pkt, len, &g_in_pkt);
+    event_t ev0;
+    if (parse_event(&g_in_pkt, &ev0) != 1) { debug_printf("parse failed\n"); return 0; } // drop
+    evq_push(&g_queue, &ev0);
+    return 1;
+}
+
+/******** DISPATCH: drain the queue, routing each output (recirc -> queue, port -> tx) ********/
+static void do_dispatch(int ingress_port) {
     while (!evq_empty(&g_queue)) {
-        events ev;
+        event_t ev;
         evq_pull(&g_queue, &ev);
-        ev.meta.timestamp = now_ns(); // stamp at dequeue (covers arriving + recirculated events)
+        ev.meta.timestamp = now_ns();   // stamp at dequeue (covers arriving + recirculated events)
         ev.meta.in_port = ingress_port; // ingress port (read by the handler)
-        out_event out_events[64];
+        out_event_t out_events[64];
         uint16_t n = handle_event(&ev, out_events);
         for (uint16_t i = 0; i < n; i++) {
-            if (out_events[i].out_loc == 1) {
-                // recirculation: re-queue for dispatch
+            if (out_events[i].out_loc == 1)        // recirculation: re-queue for dispatch
                 evq_push(&g_queue, &out_events[i].ev);
-            } else if (out_events[i].out_loc == 2) {
-                // output to a port: deparse over a copy of the input packet, then write
-                // it to that port's interface socket.
-                int out_port = (int)out_events[i].port;
-                int fd = port_fd(out_port);
-                if (fd < 0) { debug_printf("no interface for port %d\n", out_port); continue; }
-                reset_cursor(&g_out_pkt);
-                copy_packet(&g_out_pkt, &g_in_pkt);
-                // a no-payload event emits only its header (drop the input tail); a
-                // payload event keeps the tail (matches interp). boundary = cursor before
-                // deparse prepends the header.
-                uint8_t* payload_boundary = g_out_pkt.cursor;
-                deparse_event(&out_events[i].ev, &g_out_pkt);
-                uint8_t* dump_end = out_events[i].ev.meta.has_payload ? g_out_pkt.end : payload_boundary;
-                size_t out_len = (size_t)(dump_end - g_out_pkt.cursor);
-                ssize_t w = write(fd, g_out_pkt.cursor, out_len);
-                if (w < 0) debug_printf("write to port %d failed: %s\n", out_port, strerror(errno));
-            }
+            else if (out_events[i].out_loc == 2)   // output to a port: deparse + send
+                do_tx(&out_events[i]);
         }
     }
+}
+
+/******** TX: deparse one output event over a copy of the input packet, write it to the port ********/
+static void do_tx(out_event_t *oe) {
+    int out_port = (int)oe->port;
+    int fd = port_fd(out_port);
+    if (fd < 0) { debug_printf("no interface for port %d\n", out_port); return; }
+    reset_cursor(&g_out_pkt);
+    copy_packet(&g_out_pkt, &g_in_pkt);
+    // a no-payload event emits only its header (drop the input tail); a payload event
+    // keeps the tail (matches interp). boundary = cursor before deparse prepends the header.
+    uint8_t *payload_boundary = g_out_pkt.cursor;
+    deparse_event(&oe->ev, &g_out_pkt);
+    uint8_t *dump_end = oe->ev.meta.has_payload ? g_out_pkt.end : payload_boundary;
+    size_t out_len = (size_t)(dump_end - g_out_pkt.cursor);
+    ssize_t w = write(fd, g_out_pkt.cursor, out_len);
+    if (w < 0) debug_printf("write to port %d failed: %s\n", out_port, strerror(errno));
+}
+
+// per-frame entry: rx (parse + enqueue) then dispatch (drain + route this frame's
+// events, and any it recirculates). only a successfully-parsed frame is counted.
+static void dispatch_packet(int ingress_port, uint8_t* pkt, uint32_t len) {
+    if (!do_rx(pkt, len)) return;
+    do_dispatch(ingress_port);
     pkt_ct++;
 }
 

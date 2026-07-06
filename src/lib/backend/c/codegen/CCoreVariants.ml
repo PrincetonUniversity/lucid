@@ -6,14 +6,14 @@
 
      type event_variant = variant {            type event_variant = {
        foo(1): {x: int; y: int}        -->        tag: int16;
-       bar(2): {z: int}                            payload: union {
+       bar(2): {z: int}                            args: union {
      };                                              foo: {x: int; y: int};
                                                      bar: {z: int};
                                                    };
                                                  };
 
    Per-arm payloads are inline (anonymous) union members -- they are only ever
-   reached via the member (`v.payload.foo.x`), never as standalone types crossing a
+   reached via the member (`v.args.foo.x`), never as standalone types crossing a
    function boundary, so they need no typedef of their own. The pass also emits a
    tag constant per arm and a constructor function per arm, and rewrites uses:
      - ECall(CVariant, ..)  -> a call to the arm's constructor function
@@ -39,13 +39,13 @@ let decl_arm_tag arm =
 let arm_tag_val arm = vint (Option.get arm.evconstrnum) tag_size
 let arm_tag_var arm = evar (arm_tag_cid arm.evconstrid) tag_ty
 
-(* the lowered variant body: { tag; payload: union { arm: {fields}; ... } }, with
+(* the lowered variant body: { tag; args: union { arm: {fields}; ... } }, with
    per-arm payloads inline. *)
 let payload_union_ty arms =
   tunion_pairs (List.map (fun arm -> (arm.evconstrid, trecord arm.evparams)) arms)
 ;;
 let variant_struct_ty arms =
-  trecord [ (cid"tag", tag_ty); (cid"payload", payload_union_ty arms) ]
+  trecord [ (cid"tag", tag_ty); (cid"args", payload_union_ty arms) ]
 ;;
 
 (*
@@ -54,8 +54,8 @@ let variant_struct_ty arms =
   // for arm foo(int a, int b):
   event_variant foo(int a, int b) {
     event_variant rv = {0};
-    rv.payload.foo.a = a;
-    rv.payload.foo.b = b;
+    rv.args.foo.a = a;
+    rv.args.foo.b = b;
     rv.tag = foo_tag;
     return rv;
   }
@@ -63,8 +63,8 @@ let variant_struct_ty arms =
 let variant_constr variant_ty arm =
   let rv_cid = cid"ev" in
   let set_data_field (v : exp) (member : cid) (field : cid) (newval : exp) : statement =
-    (* write through the named union member: v.payload.<member>.<field> *)
-    sassign_exp (((v /. cid"payload") /. member) /. field) newval
+    (* write through the named union member: v.args.<member>.<field> *)
+    sassign_exp (((v /. cid"args") /. member) /. field) newval
   in
   let variant_var = evar rv_cid variant_ty in
   let constr_param_vars = List.map param_evar arm.evparams in
@@ -83,9 +83,9 @@ let variant_constr variant_ty arm =
 let transformer =
   let extract_fields ev arm params =
     (* ev is the matched variant; read each arm field through its union member:
-       ev.payload.<evconstrid>.<field>. *)
+       ev.args.<evconstrid>.<field>. *)
     let v = if (is_tref ev.ety) then (ederef ev) else ev in
-    let data = (v /. cid"payload") /. (arm.evconstrid) in
+    let data = (v /. cid"args") /. (arm.evconstrid) in
     (* bind by position: the pattern may name params differently from the arm
        declaration, so the binding name comes from the pattern, the field read from
        the declaration. *)

@@ -230,8 +230,8 @@ let tptr base_ty = ty (TPtr(base_ty,None))
    Every *reference* to "an event" is TName events_cid (the envelope); the
    constructor union, reached via the envelope's `data` field, is
    TName event_variant_cid. *)
-let events_cid = Cid.create ["events"]
-let event_variant_cid = Cid.create ["event_variant"]
+let events_cid = Cid.create ["event_t"]
+let event_variant_cid = Cid.create ["event_variant_t"]
 let event_meta_cid = Cid.create ["event_meta"]
 let tevent = ty (TName events_cid)                 (* the envelope *)
 let tevent_variant = ty (TName event_variant_cid)  (* the tagged variant *)

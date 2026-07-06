@@ -1,6 +1,11 @@
 open CCoreSyntax
 open CCoreUtils
 
+(* names of compiler-generated types referenced in this driver's raw C, taken from
+   the cids the codegen emits and inlined with %{...} below (see the dpdk driver). *)
+let events_ty    = CCoreCPrint.cid_to_string events_cid
+let out_event_ty = CCoreCPrint.cid_to_string CCoreHandlers.out_event_cid
+
 (* Raw-socket driver: run a compiled Lucid program on real POSIX network
    interfaces, the same way the `lucidSwitch` interpreter does (AF_PACKET raw
    sockets on Linux, /dev/bpf on macOS -- the C here is adapted from the vendored
@@ -144,14 +149,14 @@ let dispatch = dforiegn [%string {|
 /********* internal dispatch FIFO of events ***********/
 #define EV_QUEUE_CAP 1024
 typedef struct ev_queue_t {
-    events buf[EV_QUEUE_CAP];
+    %{events_ty} buf[EV_QUEUE_CAP];
     int head; int tail; int count;
 } ev_queue_t;
 static int  evq_empty(ev_queue_t* q) { return q->count == 0; }
-static void evq_push(ev_queue_t* q, events* ev) {
+static void evq_push(ev_queue_t* q, %{events_ty}* ev) {
     q->buf[q->tail] = *ev; q->tail = (q->tail + 1) % EV_QUEUE_CAP; q->count++;
 }
-static void evq_pull(ev_queue_t* q, events* out) {
+static void evq_pull(ev_queue_t* q, %{events_ty}* out) {
     *out = q->buf[q->head]; q->head = (q->head + 1) % EV_QUEUE_CAP; q->count--;
 }
 
@@ -191,43 +196,67 @@ static void init_ctx(void) {
     g_queue.head = g_queue.tail = g_queue.count = 0;
 }
 
-static void dispatch_packet(int ingress_port, uint8_t* pkt, uint32_t len) {
-    init_cursor(pkt, len, &g_in_pkt);
-    events ev0;
-    if (parse_event(&g_in_pkt, &ev0) != 1) { debug_printf("parse failed\n"); return; }
-    evq_push(&g_queue, &ev0);
+// The dispatch pipeline is split into three phases, mirroring the DPDK reference
+// driver (rx -> dispatch -> tx). Here they run synchronously per received frame
+// rather than as ring-connected stages: the queue is drained to empty each frame,
+// which keeps the input buffer (g_in_pkt) valid for the whole drain -- port events
+// (even from recirculated events) reuse its payload via copy_packet. (This is still
+// the copy-based buffer model, not yet the "event as a view" design; and because it
+// drains to empty, a self-recirculating handler could delay the next read -- unlike
+// the DPDK driver's bounded-burst dispatch, which owns its payloads via the mempool.)
 
+// forward decl: do_dispatch routes port outputs through do_tx (defined below).
+static void do_tx(%{out_event_ty} *oe);
+
+/******** RX: parse a raw frame into an event and enqueue it (0 = dropped) ********/
+static int do_rx(uint8_t *pkt, uint32_t len) {
+    init_cursor(pkt, len, &g_in_pkt);
+    %{events_ty} ev0;
+    if (parse_event(&g_in_pkt, &ev0) != 1) { debug_printf("parse failed\n"); return 0; } // drop
+    evq_push(&g_queue, &ev0);
+    return 1;
+}
+
+/******** DISPATCH: drain the queue, routing each output (recirc -> queue, port -> tx) ********/
+static void do_dispatch(int ingress_port) {
     while (!evq_empty(&g_queue)) {
-        events ev;
+        %{events_ty} ev;
         evq_pull(&g_queue, &ev);
-        ev.meta.timestamp = now_ns(); // stamp at dequeue (covers arriving + recirculated events)
+        ev.meta.timestamp = now_ns();   // stamp at dequeue (covers arriving + recirculated events)
         ev.meta.in_port = ingress_port; // ingress port (read by the handler)
-        out_event out_events[%{string_of_int CCoreHandlers.out_events_cap}];
+        %{out_event_ty} out_events[%{string_of_int CCoreHandlers.out_events_cap}];
         uint16_t n = handle_event(&ev, out_events);
         for (uint16_t i = 0; i < n; i++) {
-            if (out_events[i].out_loc == 1) {
-                // recirculation: re-queue for dispatch
+            if (out_events[i].out_loc == 1)        // recirculation: re-queue for dispatch
                 evq_push(&g_queue, &out_events[i].ev);
-            } else if (out_events[i].out_loc == 2) {
-                // output to a port: deparse over a copy of the input packet, then write
-                // it to that port's interface socket.
-                int out_port = (int)out_events[i].port;
-                int fd = port_fd(out_port);
-                if (fd < 0) { debug_printf("no interface for port %d\n", out_port); continue; }
-                reset_cursor(&g_out_pkt);
-                copy_packet(&g_out_pkt, &g_in_pkt);
-                // a no-payload event emits only its header (drop the input tail); a
-                // payload event keeps the tail (matches interp). boundary = cursor before
-                // deparse prepends the header.
-                uint8_t* payload_boundary = g_out_pkt.cursor;
-                deparse_event(&out_events[i].ev, &g_out_pkt);
-                uint8_t* dump_end = out_events[i].ev.meta.has_payload ? g_out_pkt.end : payload_boundary;
-                size_t out_len = (size_t)(dump_end - g_out_pkt.cursor);
-                ssize_t w = write(fd, g_out_pkt.cursor, out_len);
-                if (w < 0) debug_printf("write to port %d failed: %s\n", out_port, strerror(errno));
-            }
+            else if (out_events[i].out_loc == 2)   // output to a port: deparse + send
+                do_tx(&out_events[i]);
         }
     }
+}
+
+/******** TX: deparse one output event over a copy of the input packet, write it to the port ********/
+static void do_tx(%{out_event_ty} *oe) {
+    int out_port = (int)oe->port;
+    int fd = port_fd(out_port);
+    if (fd < 0) { debug_printf("no interface for port %d\n", out_port); return; }
+    reset_cursor(&g_out_pkt);
+    copy_packet(&g_out_pkt, &g_in_pkt);
+    // a no-payload event emits only its header (drop the input tail); a payload event
+    // keeps the tail (matches interp). boundary = cursor before deparse prepends the header.
+    uint8_t *payload_boundary = g_out_pkt.cursor;
+    deparse_event(&oe->ev, &g_out_pkt);
+    uint8_t *dump_end = oe->ev.meta.has_payload ? g_out_pkt.end : payload_boundary;
+    size_t out_len = (size_t)(dump_end - g_out_pkt.cursor);
+    ssize_t w = write(fd, g_out_pkt.cursor, out_len);
+    if (w < 0) debug_printf("write to port %d failed: %s\n", out_port, strerror(errno));
+}
+
+// per-frame entry: rx (parse + enqueue) then dispatch (drain + route this frame's
+// events, and any it recirculates). only a successfully-parsed frame is counted.
+static void dispatch_packet(int ingress_port, uint8_t* pkt, uint32_t len) {
+    if (!do_rx(pkt, len)) return;
+    do_dispatch(ingress_port);
     pkt_ct++;
 }
 |}]

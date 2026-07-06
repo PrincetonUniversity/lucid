@@ -29,7 +29,7 @@ let loc_none   = 0  (* unused slot                                   *)
 let loc_recirc = 1  (* feed back into the dispatch queue (generate_self) *)
 let loc_port   = 2  (* deparse + send out `port` (generate_port/switch/group) *)
 
-let out_event_cid = Cid.create ["out_event"]
+let out_event_cid = Cid.create ["out_event_t"]
 let out_event_def =
   trecord [ cid"ev", tevent; cid"out_loc", tint 8; cid"port", tint port_size ]
 let tout_event = tabstract_cid out_event_cid out_event_def

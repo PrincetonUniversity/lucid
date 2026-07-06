@@ -131,60 +131,60 @@ typedef struct {
       uint32_t ip_2_1636;
       uint32_t ip_3_1637;
     } eth_ip_1639;
-  } payload;
-} event_variant;
-event_variant background_1626(uint16_t x_1625 ){
-  event_variant ev  = {0};
-  ev.payload.background_1626.x_1625 = x_1625;
+  } args;
+} event_variant_t;
+event_variant_t background_1626(uint16_t x_1625 ){
+  event_variant_t ev  = {0};
+  ev.args.background_1626.x_1625 = x_1625;
   ev.tag = background_tag;
   return ev;
 }
-event_variant eth_1630(uint64_t e_0_1627 , uint64_t e_1_1628 , uint16_t e_2_1629 ){
-  event_variant ev  = {0};
-  ev.payload.eth_1630.e_0_1627 = e_0_1627;
-  ev.payload.eth_1630.e_1_1628 = e_1_1628;
-  ev.payload.eth_1630.e_2_1629 = e_2_1629;
+event_variant_t eth_1630(uint64_t e_0_1627 , uint64_t e_1_1628 , uint16_t e_2_1629 ){
+  event_variant_t ev  = {0};
+  ev.args.eth_1630.e_0_1627 = e_0_1627;
+  ev.args.eth_1630.e_1_1628 = e_1_1628;
+  ev.args.eth_1630.e_2_1629 = e_2_1629;
   ev.tag = eth_tag;
   return ev;
 }
-event_variant eth_ip_1639(uint64_t e_0_1631 , uint64_t e_1_1632 , uint16_t e_2_1633 , uint32_t ip_0_1634 , uint32_t ip_1_1635 , uint32_t ip_2_1636 , uint32_t ip_3_1637 ){
-  event_variant ev  = {0};
-  ev.payload.eth_ip_1639.e_0_1631 = e_0_1631;
-  ev.payload.eth_ip_1639.e_1_1632 = e_1_1632;
-  ev.payload.eth_ip_1639.e_2_1633 = e_2_1633;
-  ev.payload.eth_ip_1639.ip_0_1634 = ip_0_1634;
-  ev.payload.eth_ip_1639.ip_1_1635 = ip_1_1635;
-  ev.payload.eth_ip_1639.ip_2_1636 = ip_2_1636;
-  ev.payload.eth_ip_1639.ip_3_1637 = ip_3_1637;
+event_variant_t eth_ip_1639(uint64_t e_0_1631 , uint64_t e_1_1632 , uint16_t e_2_1633 , uint32_t ip_0_1634 , uint32_t ip_1_1635 , uint32_t ip_2_1636 , uint32_t ip_3_1637 ){
+  event_variant_t ev  = {0};
+  ev.args.eth_ip_1639.e_0_1631 = e_0_1631;
+  ev.args.eth_ip_1639.e_1_1632 = e_1_1632;
+  ev.args.eth_ip_1639.e_2_1633 = e_2_1633;
+  ev.args.eth_ip_1639.ip_0_1634 = ip_0_1634;
+  ev.args.eth_ip_1639.ip_1_1635 = ip_1_1635;
+  ev.args.eth_ip_1639.ip_2_1636 = ip_2_1636;
+  ev.args.eth_ip_1639.ip_3_1637 = ip_3_1637;
   ev.tag = eth_ip_tag;
   return ev;
 }
 typedef struct {
   event_meta meta;
-  event_variant data;
-} events;
+  event_variant_t data;
+} event_t;
 typedef struct {
-  events ev;
+  event_t ev;
   uint8_t out_loc;
   uint32_t port;
-} out_event;
-events mk_background(uint16_t x_1625 ){
-  events tmp_1801  = {.meta = {.len = 2, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = background_1626(x_1625)};
+} out_event_t;
+event_t mk_background(uint16_t x_1625 ){
+  event_t tmp_1801  = {.meta = {.len = 2, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = background_1626(x_1625)};
   return tmp_1801;
 }
-events mk_eth(uint64_t e_0_1627 , uint64_t e_1_1628 , uint16_t e_2_1629 ){
-  events tmp_1802  = {.meta = {.len = 14, .is_packet = 1, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = eth_1630(e_0_1627, e_1_1628, e_2_1629)};
+event_t mk_eth(uint64_t e_0_1627 , uint64_t e_1_1628 , uint16_t e_2_1629 ){
+  event_t tmp_1802  = {.meta = {.len = 14, .is_packet = 1, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = eth_1630(e_0_1627, e_1_1628, e_2_1629)};
   return tmp_1802;
 }
-events mk_eth_ip(uint64_t e_0_1631 , uint64_t e_1_1632 , uint16_t e_2_1633 , uint32_t ip_0_1634 , uint32_t ip_1_1635 , uint32_t ip_2_1636 , uint32_t ip_3_1637 ){
-  events tmp_1803  = {.meta = {.len = 30, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = eth_ip_1639(e_0_1631, e_1_1632, e_2_1633, ip_0_1634, ip_1_1635, ip_2_1636, ip_3_1637)};
+event_t mk_eth_ip(uint64_t e_0_1631 , uint64_t e_1_1632 , uint16_t e_2_1633 , uint32_t ip_0_1634 , uint32_t ip_1_1635 , uint32_t ip_2_1636 , uint32_t ip_3_1637 ){
+  event_t tmp_1803  = {.meta = {.len = 30, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = eth_ip_1639(e_0_1631, e_1_1632, e_2_1633, ip_0_1634, ip_1_1635, ip_2_1636, ip_3_1637)};
   return tmp_1803;
 }
 uint32_t recirculation_port  = 0;
 uint32_t self  = 0;
 typedef tuple_1 eth_1623;
 typedef tuple_2 ip_1624;
-uint8_t parse_event(packet_t*  pkt_1650 , events*  next_event ){
+uint8_t parse_event(packet_t*  pkt_1650 , event_t*  next_event ){
   uint64_t e_0_1651  = ((uint64_t)(read_bits(pkt_1650, 48))) & 281474976710655;
   uint64_t e_1_1652  = ((uint64_t)(read_bits(pkt_1650, 48))) & 281474976710655;
   uint16_t e_2_1653  = ((uint16_t)(read_bits(pkt_1650, 16)));
@@ -228,35 +228,35 @@ uint8_t parse_event(packet_t*  pkt_1650 , events*  next_event ){
   }
   return 0;
 }
-uint16_t handle_event(events*  ev_in , out_event out_events [64]){
+uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
   uint16_t n  = 0;
   switch (ev_in->data.tag) {
     case 1: {
-      uint16_t x_1654  = ev_in->data.payload.background_1626.x_1625;
-      events this  = mk_background(x_1654);
+      uint16_t x_1654  = ev_in->data.args.background_1626.x_1625;
+      event_t this  = mk_background(x_1654);
       printf("%d", x_1654);
       break;
     }
     case 2: {
-      uint64_t e_0_1655  = ev_in->data.payload.eth_1630.e_0_1627;
-      uint64_t e_1_1656  = ev_in->data.payload.eth_1630.e_1_1628;
-      uint16_t e_2_1657  = ev_in->data.payload.eth_1630.e_2_1629;
-      events this  = mk_eth(e_0_1655, e_1_1656, e_2_1657);
-      out_event tmp_1804  = {.ev = mk_background(e_2_1657), .out_loc = 1, .port = 0};
+      uint64_t e_0_1655  = ev_in->data.args.eth_1630.e_0_1627;
+      uint64_t e_1_1656  = ev_in->data.args.eth_1630.e_1_1628;
+      uint16_t e_2_1657  = ev_in->data.args.eth_1630.e_2_1629;
+      event_t this  = mk_eth(e_0_1655, e_1_1656, e_2_1657);
+      out_event_t tmp_1804  = {.ev = mk_background(e_2_1657), .out_loc = 1, .port = 0};
       out_events[n] = tmp_1804;
       n = n + 1;
       break;
     }
     case 3: {
-      uint64_t e_0_1658  = ev_in->data.payload.eth_ip_1639.e_0_1631;
-      uint64_t e_1_1659  = ev_in->data.payload.eth_ip_1639.e_1_1632;
-      uint16_t e_2_1660  = ev_in->data.payload.eth_ip_1639.e_2_1633;
-      uint32_t ip_0_1661  = ev_in->data.payload.eth_ip_1639.ip_0_1634;
-      uint32_t ip_1_1662  = ev_in->data.payload.eth_ip_1639.ip_1_1635;
-      uint32_t ip_2_1663  = ev_in->data.payload.eth_ip_1639.ip_2_1636;
-      uint32_t ip_3_1664  = ev_in->data.payload.eth_ip_1639.ip_3_1637;
-      events this  = mk_eth_ip(e_0_1658, e_1_1659, e_2_1660, ip_0_1661, ip_1_1662, ip_2_1663, ip_3_1664);
-      out_event tmp_1805  = {.ev = mk_background(e_2_1660), .out_loc = 1, .port = 0};
+      uint64_t e_0_1658  = ev_in->data.args.eth_ip_1639.e_0_1631;
+      uint64_t e_1_1659  = ev_in->data.args.eth_ip_1639.e_1_1632;
+      uint16_t e_2_1660  = ev_in->data.args.eth_ip_1639.e_2_1633;
+      uint32_t ip_0_1661  = ev_in->data.args.eth_ip_1639.ip_0_1634;
+      uint32_t ip_1_1662  = ev_in->data.args.eth_ip_1639.ip_1_1635;
+      uint32_t ip_2_1663  = ev_in->data.args.eth_ip_1639.ip_2_1636;
+      uint32_t ip_3_1664  = ev_in->data.args.eth_ip_1639.ip_3_1637;
+      event_t this  = mk_eth_ip(e_0_1658, e_1_1659, e_2_1660, ip_0_1661, ip_1_1662, ip_2_1663, ip_3_1664);
+      out_event_t tmp_1805  = {.ev = mk_background(e_2_1660), .out_loc = 1, .port = 0};
       out_events[n] = tmp_1805;
       n = n + 1;
       break;
@@ -268,10 +268,10 @@ uint16_t handle_event(events*  ev_in , out_event out_events [64]){
   }
   return n;
 }
-void deparse_event(events*  ev_out , packet_t*  buf_out ){
+void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
   switch (ev_out->data.tag) {
     case 1: {
-      uint16_t x_1625  = ev_out->data.payload.background_1626.x_1625;
+      uint16_t x_1625  = ev_out->data.args.background_1626.x_1625;
       write_bits(buf_out, ((uint64_t)(x_1625)), 16);
       if ((ev_out->meta.is_packet) == (0)) {
         write_bits(buf_out, ((uint64_t)(1)), 16);
@@ -283,9 +283,9 @@ void deparse_event(events*  ev_out , packet_t*  buf_out ){
       break;
     }
     case 2: {
-      uint64_t e_0_1627  = ev_out->data.payload.eth_1630.e_0_1627;
-      uint64_t e_1_1628  = ev_out->data.payload.eth_1630.e_1_1628;
-      uint16_t e_2_1629  = ev_out->data.payload.eth_1630.e_2_1629;
+      uint64_t e_0_1627  = ev_out->data.args.eth_1630.e_0_1627;
+      uint64_t e_1_1628  = ev_out->data.args.eth_1630.e_1_1628;
+      uint16_t e_2_1629  = ev_out->data.args.eth_1630.e_2_1629;
       write_bits(buf_out, ((uint64_t)(e_2_1629)), 16);
       write_bits(buf_out, ((uint64_t)(e_1_1628)), 48);
       write_bits(buf_out, ((uint64_t)(e_0_1627)), 48);
@@ -299,13 +299,13 @@ void deparse_event(events*  ev_out , packet_t*  buf_out ){
       break;
     }
     case 3: {
-      uint64_t e_0_1631  = ev_out->data.payload.eth_ip_1639.e_0_1631;
-      uint64_t e_1_1632  = ev_out->data.payload.eth_ip_1639.e_1_1632;
-      uint16_t e_2_1633  = ev_out->data.payload.eth_ip_1639.e_2_1633;
-      uint32_t ip_0_1634  = ev_out->data.payload.eth_ip_1639.ip_0_1634;
-      uint32_t ip_1_1635  = ev_out->data.payload.eth_ip_1639.ip_1_1635;
-      uint32_t ip_2_1636  = ev_out->data.payload.eth_ip_1639.ip_2_1636;
-      uint32_t ip_3_1637  = ev_out->data.payload.eth_ip_1639.ip_3_1637;
+      uint64_t e_0_1631  = ev_out->data.args.eth_ip_1639.e_0_1631;
+      uint64_t e_1_1632  = ev_out->data.args.eth_ip_1639.e_1_1632;
+      uint16_t e_2_1633  = ev_out->data.args.eth_ip_1639.e_2_1633;
+      uint32_t ip_0_1634  = ev_out->data.args.eth_ip_1639.ip_0_1634;
+      uint32_t ip_1_1635  = ev_out->data.args.eth_ip_1639.ip_1_1635;
+      uint32_t ip_2_1636  = ev_out->data.args.eth_ip_1639.ip_2_1636;
+      uint32_t ip_3_1637  = ev_out->data.args.eth_ip_1639.ip_3_1637;
       write_bits(buf_out, ((uint64_t)(ip_3_1637)), 32);
       write_bits(buf_out, ((uint64_t)(ip_2_1636)), 32);
       write_bits(buf_out, ((uint64_t)(ip_1_1635)), 32);
@@ -347,7 +347,7 @@ void deparse_event(events*  ev_out , packet_t*  buf_out ){
 /********* internal dispatch FIFO of events ***********/
 #define EV_QUEUE_CAP 1024
 typedef struct ev_queue_t {
-    events buf[EV_QUEUE_CAP];
+    event_t buf[EV_QUEUE_CAP];
     int head;
     int tail;
     int count;
@@ -355,13 +355,13 @@ typedef struct ev_queue_t {
 
 static void evq_init(ev_queue_t* q) { q->head = 0; q->tail = 0; q->count = 0; }
 static int  evq_empty(ev_queue_t* q) { return q->count == 0; }
-static void evq_push(ev_queue_t* q, events* ev) {
+static void evq_push(ev_queue_t* q, event_t* ev) {
     // no overflow guard (see handler lowering); EV_QUEUE_CAP is generous.
     q->buf[q->tail] = *ev;
     q->tail = (q->tail + 1) % EV_QUEUE_CAP;
     q->count++;
 }
-static void evq_pull(ev_queue_t* q, events* out) {
+static void evq_pull(ev_queue_t* q, event_t* out) {
     *out = q->buf[q->head];
     q->head = (q->head + 1) % EV_QUEUE_CAP;
     q->count--;
@@ -384,6 +384,7 @@ typedef struct pkt_hdl_ctx_t {
     pcap_dumper_t *out_pcap;
     packet_t in_pkt;
     packet_t out_pkt;
+    const struct pcap_pkthdr *in_pkthdr; // input header of the packet being handled (ts source for tx)
     struct pcap_pkthdr out_pkthdr;
     ev_queue_t queue;
 } pkt_hdl_ctx_t;
@@ -396,47 +397,61 @@ void fill_out_pkthdr(const struct pcap_pkthdr *in_pkthdr, packet_t* out_pkt, uin
     out_pkthdr->len    = (uint32_t)(dump_end - out_pkt->cursor);
 }
 
-void lpcap_packet_handler(u_char *ctx, const struct pcap_pkthdr *pkthdr, const u_char *packet) {
-    pkt_hdl_ctx_t * hdl_ctx = (pkt_hdl_ctx_t *)ctx;
-    init_cursor((uint8_t *)packet, pkthdr->len, &hdl_ctx->in_pkt); // construct a new cursor
+// The dispatch pipeline is split into three phases, mirroring the DPDK reference
+// driver (rx -> dispatch -> tx). Here they run synchronously per input packet
+// rather than as ring-connected stages: there is no live competing input (pcap
+// replays an offline file), so the queue is drained to empty each packet, which
+// keeps the input buffer valid for the whole drain -- port events (even from
+// recirculated events) reuse its payload via copy_packet. (The buffer-ownership
+// model is the pcap counterpart of the DPDK event-carries-its-mbuf design; it is
+// still the copy-based approach, not yet the "event as a view" model.)
 
-    // parse round: parse the input packet, push the event onto the queue
-    events ev0;
-    if (parse_event(&hdl_ctx->in_pkt, &ev0) != 1) {
+/******** TX: deparse one output event over a copy of the input packet, then dump it ********/
+static void do_tx(pkt_hdl_ctx_t *ctx, out_event_t *oe) {
+    // pcap has a single output file, so oe->port is recorded but every port event
+    // goes to the same dump.
+    reset_cursor(&ctx->out_pkt);
+    copy_packet(&ctx->out_pkt, &ctx->in_pkt);
+    // out_pkt.cursor sits at the payload boundary (input parse position) until deparse
+    // prepends the header. A no-payload event emits only its header (drop the input
+    // tail); a payload event keeps the tail. (matches interp)
+    uint8_t *payload_boundary = ctx->out_pkt.cursor;
+    deparse_event(&oe->ev, &ctx->out_pkt);
+    uint8_t *dump_end = oe->ev.meta.has_payload ? ctx->out_pkt.end : payload_boundary;
+    fill_out_pkthdr(ctx->in_pkthdr, &ctx->out_pkt, dump_end, &ctx->out_pkthdr);
+    pcap_dump((u_char *)ctx->out_pcap, &ctx->out_pkthdr, (u_char *)ctx->out_pkt.cursor);
+}
+
+/******** DISPATCH: drain the queue, routing each output (recirc -> queue, port -> tx) ********/
+static void do_dispatch(pkt_hdl_ctx_t *ctx) {
+    while (!evq_empty(&ctx->queue)) {
+        event_t ev;
+        evq_pull(&ctx->queue, &ev);
+        ev.meta.timestamp = now_ns();        // stamp at dequeue (covers arriving + recirculated events)
+        ev.meta.in_port = ctx->ingress_port; // ingress port (read by the handler)
+        out_event_t out_events[64];
+        uint16_t n = handle_event(&ev, out_events);
+        for (uint16_t i = 0; i < n; i++) {
+            if (out_events[i].out_loc == 1)        // recirculation: re-queue for dispatch
+                evq_push(&ctx->queue, &out_events[i].ev);
+            else if (out_events[i].out_loc == 2)   // output to a port: deparse + dump
+                do_tx(ctx, &out_events[i]);
+        }
+    }
+}
+
+/******** RX: parse the input packet into an event and enqueue it (pcap_loop callback) ********/
+void lpcap_packet_handler(u_char *raw_ctx, const struct pcap_pkthdr *pkthdr, const u_char *packet) {
+    pkt_hdl_ctx_t *ctx = (pkt_hdl_ctx_t *)raw_ctx;
+    init_cursor((uint8_t *)packet, pkthdr->len, &ctx->in_pkt); // construct a new cursor
+    ctx->in_pkthdr = pkthdr;                                   // remembered for do_tx (ts source)
+    event_t ev0;
+    if (parse_event(&ctx->in_pkt, &ev0) != 1) {
         debug_printf("parse failed!\n");
         return; // drop
     }
-    evq_push(&hdl_ctx->queue, &ev0);
-
-    // dispatch round: drain the queue
-    while (!evq_empty(&hdl_ctx->queue)) {
-        events ev;
-        evq_pull(&hdl_ctx->queue, &ev);
-        ev.meta.timestamp = now_ns(); // stamp at dequeue (covers arriving + recirculated events)
-        ev.meta.in_port = hdl_ctx->ingress_port; // ingress port (read by the handler)
-        out_event out_events[64];
-        uint16_t n = handle_event(&ev, out_events);
-        for (uint16_t i = 0; i < n; i++) {
-            if (out_events[i].out_loc == 1) {
-                // recirculation: re-queue for dispatch
-                evq_push(&hdl_ctx->queue, &out_events[i].ev);
-            } else if (out_events[i].out_loc == 2) {
-                // output to a port: deparse over a copy of the input packet, then
-                // dump. (pcap has a single output file, so out_events[i].port is
-                // recorded but every port event goes to the same dump.)
-                reset_cursor(&hdl_ctx->out_pkt);
-                copy_packet(&hdl_ctx->out_pkt, &hdl_ctx->in_pkt);
-                // out_pkt.cursor sits at the payload boundary (input parse position) until
-                // deparse prepends the header. A no-payload event emits only its header
-                // (drop the input tail); a payload event keeps the tail. (matches interp)
-                uint8_t *payload_boundary = hdl_ctx->out_pkt.cursor;
-                deparse_event(&out_events[i].ev, &hdl_ctx->out_pkt);
-                uint8_t *dump_end = out_events[i].ev.meta.has_payload ? hdl_ctx->out_pkt.end : payload_boundary;
-                fill_out_pkthdr(pkthdr, &hdl_ctx->out_pkt, dump_end, &hdl_ctx->out_pkthdr);
-                pcap_dump((u_char *)hdl_ctx->out_pcap, &hdl_ctx->out_pkthdr, (u_char *)hdl_ctx->out_pkt.cursor);
-            }
-        }
-    }
+    evq_push(&ctx->queue, &ev0);
+    do_dispatch(ctx); // drain: handle + route this packet's events (and any it recirculates)
     pkt_ct++;
 }
 
@@ -459,6 +474,7 @@ pkt_hdl_ctx_t ctx = {
     .cursor = (uint8_t *)out_buf + HEADROOM,
     .end = (uint8_t *)out_buf + HEADROOM + out_buf_len
     },
+    .in_pkthdr = NULL,
     .out_pkthdr = {0},
     .queue = {0}
 };
