@@ -30,6 +30,10 @@
   #define debug_printf(...)
 #endif
 
+
+/********************************************************************************/
+/*                             SECTION: program code                            */
+/********************************************************************************/
 typedef struct {
   uint8_t*  start;
   uint8_t*  cursor;
@@ -189,12 +193,9 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
   }
 }
 
- void init_cursor(uint8_t*  buf , uint32_t len , packet_t*  bytes ){
-    bytes->start = buf;
-    bytes->cursor = buf;
-    bytes->end = buf + len;
-    bytes->bit_off = 0;
- }
+/********************************************************************************/
+/*                             SECTION: driver config                           */
+/********************************************************************************/
 
 /********* sizing constants (shared by the slab pool and the index rings) ***********/
 #define HEADROOM 256               // slack before the packet for deparse to prepend a header
@@ -205,6 +206,24 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
 #define BURST 64                   // max frames/elements handled per rx/dispatch/tx call
 #define SLOT_NONE 0xFFFF           // slot_alloc's "pool exhausted" sentinel
 #define MAX_PORTS 64               // max interfaces (Lucid ports) bound at once
+
+
+/********************************************************************************/
+/*                           SECTION: driver libraries                          */
+/********************************************************************************/
+
+ void init_cursor(uint8_t*  buf , uint32_t len , packet_t*  bytes ){
+    bytes->start = buf;
+    bytes->cursor = buf;
+    bytes->end = buf + len;
+    bytes->bit_off = 0;
+}
+// a 32-bit nanosecond timestamp, stamped onto each event at dispatch (Sys.time())
+static uint32_t now_ns(void) {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return (uint32_t)((uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec);
+}
 
 
 /********* index ring (a FIFO of slot indices) ***********/
@@ -252,25 +271,6 @@ static void slot_free(slab_t* s, uint16_t idx) { ring_push(&s->free, idx); }
 static void slab_init(slab_t* s) {
     ring_init(&s->free);
     for (uint16_t i = 0; i < POOL_SIZE; i++) ring_push(&s->free, i);   // every slot starts free
-}
-
-
-/********* ports (Lucid port number <-> interface socket) ***********/
-typedef struct { int port_id; int fd; char ifname[IFNAMSIZ]; } port_t;
-static port_t g_ports[MAX_PORTS];
-static int g_nports = 0;
-static int port_fd(int port_id) {
-    for (int i = 0; i < g_nports; i++) if (g_ports[i].port_id == port_id) return g_ports[i].fd;
-    return -1;
-}
-
-static uint64_t pkt_ct = 0;
-
-// a 32-bit nanosecond timestamp, stamped onto each event at dispatch (Sys.time())
-static uint32_t now_ns(void) {
-    struct timespec ts;
-    clock_gettime(CLOCK_MONOTONIC, &ts);
-    return (uint32_t)((uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec);
 }
 
 
@@ -370,10 +370,48 @@ static rx_batch port_rx(int fd, slab_t* s) {
 }
 
 
+/********* ports (Lucid port number <-> interface socket) ***********/
+typedef struct { int port_id; int fd; char ifname[IFNAMSIZ]; } port_t;
+typedef struct { port_t ports[MAX_PORTS]; int nports; } port_map_t;
+static int port_fd(int port_id, port_map_t* g_port_map) {
+    for (int i = 0; i < g_port_map->nports; i++) if (g_port_map->ports[i].port_id == port_id) return g_port_map->ports[i].fd;
+    return -1;
+}
+int init_port_map(port_map_t* g_port_map, int argc, char** argv) {
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--interface") == 0 && i + 1 < argc) {
+            char* spec = argv[++i];
+            char* colon = strchr(spec, ':');
+            if (!colon) { fprintf(stderr, "bad --interface '%s' (expected PORT:IFNAME)\n", spec); return 1; }
+            *colon = '\0';
+            int port_id = atoi(spec);
+            const char* ifname = colon + 1;
+            if (g_port_map->nports >= MAX_PORTS) { fprintf(stderr, "too many interfaces (max %d)\n", MAX_PORTS); return 1; }
+            int fd = raw_open(ifname);
+            if (fd < 0) { fprintf(stderr, "failed to open interface '%s' for port %d\n", ifname, port_id); return 1; }
+            g_port_map->ports[g_port_map->nports].port_id = port_id;
+            g_port_map->ports[g_port_map->nports].fd = fd;
+            strncpy(g_port_map->ports[g_port_map->nports].ifname, ifname, IFNAMSIZ - 1);
+            g_port_map->nports++;
+            printf("bound port %d to interface %s\n", port_id, ifname);
+        } else {
+            // ignore unknown args (e.g. the .dpt path, for argv-compatibility with lucidSwitch)
+        }
+    }
+    return 0;
+}
+
+
+/********************************************************************************/
+/*                            SECTION: driver pipeline                          */
+/********************************************************************************/
+
 /********* the driver's runtime state (instances of the slab + ring libraries) ***********/
-static slab_t   g_slab;        // the packet-buffer pool
-static idx_ring dispatch_in;   // parsed + recirculated elements awaiting handling
-static idx_ring tx_in;         // handled elements awaiting fan-out + deparse + TX
+static port_map_t   g_port_map;  // Lucid port number <-> interface socket
+static slab_t       g_slab;        // the packet-buffer pool
+static idx_ring     dispatch_in;   // parsed + recirculated elements awaiting handling
+static idx_ring     tx_in;         // handled elements awaiting fan-out + deparse + TX
+static uint64_t     pkt_ct = 0;    // rx packet counter 
 
 
 // parse the frame sitting in slot `idx` (pkt_len bytes at data+HEADROOM) into its event
@@ -391,9 +429,9 @@ static void ingest_slot(uint16_t idx, int in_port) {
 
 /******** RX: read a bounded burst from every port, parse + enqueue each on dispatch_in ********/
 static void do_rx(void) {
-    for (int p = 0; p < g_nports; p++) {
-        rx_batch batch = port_rx(g_ports[p].fd, &g_slab);
-        for (uint16_t i = 0; i < batch.n; i++) ingest_slot(batch.idx[i], g_ports[p].port_id);
+    for (int p = 0; p < g_port_map.nports; p++) {
+        rx_batch batch = port_rx(g_port_map.ports[p].fd, &g_slab);
+        for (uint16_t i = 0; i < batch.n; i++) ingest_slot(batch.idx[i], g_port_map.ports[p].port_id);
     }
 }
 
@@ -435,7 +473,7 @@ static void do_tx(void) {
                 c->ev.meta.in_port = in->ev.meta.in_port; // recirc inherits ingress
                 if (ring_push(&dispatch_in, cidx) != 0) slot_free(&g_slab, cidx);
             } else {                                     // output to a port: deparse + send
-                int fd = port_fd((int)oe->port);
+                int fd = port_fd((int)oe->port, &g_port_map);
                 if (fd < 0) { debug_printf("no interface for port %u\n", oe->port); slot_free(&g_slab, cidx); continue; }
                 packet_t view;
                 init_cursor(c->data + HEADROOM, plen, &view); // cursor at the payload boundary (front)
@@ -453,31 +491,20 @@ static void do_tx(void) {
 }
 
 
+/********************************************************************************/
+/*                              SECTION: driver main                            */
+/********************************************************************************/
+
 static volatile int g_running = 1;
 
 int main(int argc, char** argv) {
     // parse `--interface PORT:IFNAME` args (same form as lucidSwitch)
-    for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--interface") == 0 && i + 1 < argc) {
-            char* spec = argv[++i];
-            char* colon = strchr(spec, ':');
-            if (!colon) { fprintf(stderr, "bad --interface '%s' (expected PORT:IFNAME)\n", spec); return 1; }
-            *colon = '\0';
-            int port_id = atoi(spec);
-            const char* ifname = colon + 1;
-            if (g_nports >= MAX_PORTS) { fprintf(stderr, "too many interfaces (max %d)\n", MAX_PORTS); return 1; }
-            int fd = raw_open(ifname);
-            if (fd < 0) { fprintf(stderr, "failed to open interface '%s' for port %d\n", ifname, port_id); return 1; }
-            g_ports[g_nports].port_id = port_id;
-            g_ports[g_nports].fd = fd;
-            strncpy(g_ports[g_nports].ifname, ifname, IFNAMSIZ - 1);
-            g_nports++;
-            printf("bound port %d to interface %s\n", port_id, ifname);
-        } else {
-            // ignore unknown args (e.g. the .dpt path, for argv-compatibility with lucidSwitch)
-        }
+    int ret = init_port_map(&g_port_map, argc, argv);
+    if (ret != 0) {
+        fprintf(stderr, "failed to init port map\n");
+        return 1;
     }
-    if (g_nports == 0) {
+    if (g_port_map.nports == 0) {
         fprintf(stderr, "usage: %s --interface PORT:IFNAME [--interface PORT:IFNAME ...]\n", argv[0]);
         return 1;
     }
@@ -496,9 +523,9 @@ int main(int argc, char** argv) {
     while (g_running) {
         int have_work = !ring_empty(&dispatch_in) || !ring_empty(&tx_in);
         fd_set rfds; FD_ZERO(&rfds); int maxfd = 0;
-        for (int i = 0; i < g_nports; i++) {
-            FD_SET(g_ports[i].fd, &rfds);
-            if (g_ports[i].fd > maxfd) maxfd = g_ports[i].fd;
+        for (int i = 0; i < g_port_map.nports; i++) {
+            FD_SET(g_port_map.ports[i].fd, &rfds);
+            if (g_port_map.ports[i].fd > maxfd) maxfd = g_port_map.ports[i].fd;
         }
         struct timeval zero = {0, 0};
         int r = select(maxfd + 1, &rfds, NULL, NULL, have_work ? &zero : NULL);
