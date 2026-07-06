@@ -1,24 +1,28 @@
 #!/usr/bin/env bash
 #
-# C backend (lucidcc) golden-file regression tests.
+# C backend (lucidcc) codegen gate.
 #
-# Each program in ctests/programs/ is compiled with the C backend; the generated
-# C output is compared byte-for-byte against a checked-in expected file in
-# ctests/expected/.
+# For each program in ctests/programs/, generate C with the pcap driver, check it
+# COMPILES (gcc -lpcap), and byte-diff the generated C text against the checked-in
+# golden in ctests/expected/. A program marked `// LUCIDCC_REJECT: <substr>` is instead
+# checked to be *rejected* by lucidcc (it uses a feature the C backend does not support).
+#
+# This is the fast, local, no-root gate. The pcap *run* fixtures (execute the compiled
+# binary + byte-compare output packets) live in ctests/test_pcap; the live-traffic
+# driver tests in ctests/test_rawsock and ctests/test_dpdk.
 #
 # Usage:
-#   ./ctests/run_tests.sh             normal mode: compile + diff against expected
-#   ./ctests/run_tests.sh --update    update mode: (re)generate the expected files
-#   ./ctests/run_tests.sh --no-build  skip the `make` step (reuse the current lucidcc)
+#   ./ctests/run_tests.sh             normal: compile + diff each program vs expected/
+#   ./ctests/run_tests.sh --update    (re)generate expected/ (compile-checked first)
+#   ./ctests/run_tests.sh --no-build  skip `make`, reuse the current ./lucidcc
 #   ./ctests/run_tests.sh --help      show this help
 #
-# Normal mode exits non-zero if any test fails (compile error or output mismatch),
-# so it is CI-friendly. Update mode always exits 0.
+# Exits non-zero on any failure (CI-friendly). Update mode still fails on a compile error
+# or a bad rejection -- it won't record broken C as a golden.
 #
-# Note: the generated C embeds fresh-id temp names (e.g. tmp_4331). These are
-# deterministic for a fixed compiler, so byte-diffing is stable -- but a compiler
-# change that shifts id allocation will legitimately change the output and require
-# a `--update`. Inspect the printed diff to confirm a change is intended.
+# Note: generated C embeds fresh-id temp names (e.g. tmp_4331), deterministic for a fixed
+# compiler -- so a compiler change that shifts id allocation legitimately changes the
+# output and needs a --update. Inspect the printed diff to confirm a change is intended.
 #
 set -uo pipefail
 shopt -s nullglob
@@ -60,52 +64,55 @@ trap 'rm -rf "$WORK"' EXIT
 pass=0; fail=0; updated=0; ran=0
 for prog in "$PROGRAMS_DIR"/*.dpt; do
   name="$(basename "$prog" .dpt)"
-  # reject-marked programs produce no C (they're expected to fail the compat gate); the
-  # gate itself is checked by run_c_tests.sh, so there's no golden to diff here.
-  if grep -q 'LUCIDCC_REJECT' "$prog"; then continue; fi
   ran=$((ran+1))
-  got="$WORK/$name.cc"
+  c="$WORK/$name.c"
   log="$WORK/$name.log"
   exp="$EXPECTED_DIR/$name.cc"
 
-  # Compile. The compiler chatters on stdout; the artifact is the -o file.
-  if ! "$LUCIDCC" "$prog" -o "$got" $FLAGS >"$log" 2>&1; then
-    echo "FAIL  $name  (compiler exited non-zero)"
-    tail -5 "$log" | sed 's/^/      | /'
-    fail=$((fail+1))
-    continue
-  fi
-  if [ ! -f "$got" ]; then
-    echo "FAIL  $name  (no output file produced)"
-    fail=$((fail+1))
+  # A program marked `// LUCIDCC_REJECT: <substr>` must be REJECTED by lucidcc (it uses a
+  # feature the C backend intentionally does not support). It passes iff lucidcc exits
+  # non-zero AND the error mentions <substr>. No golden and no compile for these.
+  reject_pat="$(sed -n 's/.*LUCIDCC_REJECT:[[:space:]]*//p' "$prog" | head -1)"
+  if [ -n "$reject_pat" ]; then
+    if "$LUCIDCC" "$prog" -o "$c" $FLAGS >"$log" 2>&1; then
+      echo "FAIL  $name  (expected rejection, but codegen succeeded)"; fail=$((fail+1))
+    elif grep -qF "$reject_pat" "$log"; then
+      echo "PASS  $name  (correctly rejected: $reject_pat)"; pass=$((pass+1))
+    else
+      echo "FAIL  $name  (rejected, but error did not mention '$reject_pat')"; fail=$((fail+1))
+    fi
     continue
   fi
 
+  # 1. generate C. The compiler chatters on stdout; the artifact is the -o file.
+  if ! "$LUCIDCC" "$prog" -o "$c" $FLAGS >"$log" 2>&1; then
+    echo "FAIL  $name  (compiler exited non-zero)"; tail -5 "$log" | sed 's/^/      | /'; fail=$((fail+1)); continue
+  fi
+  [ -f "$c" ] || { echo "FAIL  $name  (no output file produced)"; fail=$((fail+1)); continue; }
+
+  # 2. gcc-compile the generated C. A compile error is always a failure -- and we won't
+  #    record broken C as a golden (this runs before the --update copy).
+  if ! gcc -o "$WORK/$name.bin" "$c" -lpcap >"$WORK/$name.gcc.log" 2>&1; then
+    echo "FAIL  $name  (gcc)"; grep "error:" "$WORK/$name.gcc.log" | sed 's/^/      | /' | head -3; fail=$((fail+1)); continue
+  fi
+
+  # 3. golden diff (or, in update mode, record the compile-checked output).
   if [ "$UPDATE" -eq 1 ]; then
-    cp "$got" "$exp"
-    echo "UPDATE  $name"
-    updated=$((updated+1))
+    cp "$c" "$exp"; echo "UPDATE  $name"; updated=$((updated+1))
   elif [ ! -f "$exp" ]; then
-    echo "FAIL  $name  (no expected file -- run with --update first)"
-    fail=$((fail+1))
-  elif diff -q "$exp" "$got" >/dev/null; then
-    echo "PASS  $name"
-    pass=$((pass+1))
+    echo "FAIL  $name  (no expected file -- run with --update first)"; fail=$((fail+1))
+  elif diff -q "$exp" "$c" >/dev/null; then
+    echo "PASS  $name"; pass=$((pass+1))
   else
-    echo "FAIL  $name  (output differs from expected)"
-    diff "$exp" "$got" | head -30 | sed 's/^/      | /'
-    fail=$((fail+1))
+    echo "FAIL  $name  (output differs from expected)"; diff "$exp" "$c" | head -30 | sed 's/^/      | /'; fail=$((fail+1))
   fi
 done
 
 echo "-----"
-if [ "$ran" -eq 0 ]; then
-  echo "no programs found in $PROGRAMS_DIR" >&2
-  exit 1
-fi
+if [ "$ran" -eq 0 ]; then echo "no programs found in $PROGRAMS_DIR" >&2; exit 1; fi
 if [ "$UPDATE" -eq 1 ]; then
-  echo "updated $updated expected file(s)"
+  echo "updated $updated golden(s); $pass passed, $fail failed"
 else
   echo "$pass passed, $fail failed"
-  [ "$fail" -eq 0 ] || exit 1
 fi
+[ "$fail" -eq 0 ] || exit 1

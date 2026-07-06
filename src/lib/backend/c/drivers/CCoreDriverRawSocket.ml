@@ -111,6 +111,12 @@ static int port_fd(int port_id, port_map_t* g_port_map) {
     for (int i = 0; i < g_port_map->nports; i++) if (g_port_map->ports[i].port_id == port_id) return g_port_map->ports[i].fd;
     return -1;
 }
+// the descriptor a port reads from / writes to -- the pipeline (do_rx / do_tx) treats it
+// opaquely and only ever hands it to port_rx / send_frame (packet_lib). For a socket both
+// directions are the same bidirectional fd. do_rx walks ports by index; do_tx targets a
+// port by id (from the out_event). (< 0 means "no such port".)
+static int get_in_descriptor(port_map_t* pm, int port_idx) { return pm->ports[port_idx].fd; }
+static int get_out_descriptor(port_map_t* pm, int port_id)  { return port_fd(port_id, pm); }
 int init_port_map(port_map_t* g_port_map, int argc, char** argv) {
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--interface") == 0 && i + 1 < argc) {
@@ -297,18 +303,28 @@ static rx_batch port_rx(int fd, slab_t* s) {
 #endif
     return batch;
 }
+
+// egress: write a deparsed frame [buf, buf+len) out the descriptor get_out_descriptor
+// returned. Handles a bad descriptor (< 0, no such port) itself, so do_tx can stay a
+// pass-through (get_out_descriptor -> send_frame), mirroring do_rx.
+static void send_frame(int fd, uint8_t* buf, size_t len) {
+    if (fd < 0) { debug_printf("send_frame: no egress descriptor (dropped)\n"); return; }
+    if (write(fd, buf, len) < 0) debug_printf("write to fd %d failed: %s\n", fd, strerror(errno));
+}
 |}
 
 (* ===== the driver's runtime state: instances of the slab + ring libraries. Kept out of
    the library blocks so those stay pure (types + functions). Emitted just before the
    stages that use it. ===== *)
+(* shared with the pcap driver: the code is driver-neutral (g_port_map's type -- the
+   port_map_t -- is whatever the driver's port_map_lib defined before this block). *)
 let pipe_state = dforiegn {|
 /********* the driver's runtime state (instances of the slab + ring libraries) ***********/
-static port_map_t   g_port_map;  // Lucid port number <-> interface socket
+static port_map_t   g_port_map;  // Lucid port <-> the driver's I/O (see its port_map_lib)
 static slab_t       g_slab;        // the packet-buffer pool
 static idx_ring     dispatch_in;   // parsed + recirculated elements awaiting handling
 static idx_ring     tx_in;         // handled elements awaiting fan-out + deparse + TX
-static uint64_t     pkt_ct = 0;    // rx packet counter 
+static uint64_t     pkt_ct = 0;    // rx packet counter
 |}
 
 (* ===== RX: parse + enqueue the frames port_rx (socket_layer) read from each port,
@@ -330,7 +346,7 @@ static void ingest_slot(uint16_t idx, int in_port) {
 /******** RX: read a bounded burst from every port, parse + enqueue each on dispatch_in ********/
 static void do_rx(void) {
     for (int p = 0; p < g_port_map.nports; p++) {
-        rx_batch batch = port_rx(g_port_map.ports[p].fd, &g_slab);
+        rx_batch batch = port_rx(get_in_descriptor(&g_port_map, p), &g_slab);
         for (uint16_t i = 0; i < batch.n; i++) ingest_slot(batch.idx[i], g_port_map.ports[p].port_id);
     }
 }
@@ -378,16 +394,15 @@ static void do_tx(void) {
                 c->ev.meta.in_port = in->ev.meta.in_port; // recirc inherits ingress
                 if (ring_push(&dispatch_in, cidx) != 0) slot_free(&g_slab, cidx);
             } else {                                     // output to a port: deparse + send
-                int fd = port_fd((int)oe->port, &g_port_map);
-                if (fd < 0) { debug_printf("no interface for port %u\n", oe->port); slot_free(&g_slab, cidx); continue; }
                 %{packet_t_ty} view;
                 init_cursor(c->data + HEADROOM, plen, &view); // cursor at the payload boundary (front)
                 %{deparse_event_fn}(&c->ev, &view);      // writes the header backwards into headroom
                 // a no-payload event emits only its header (drop the tail); a payload event keeps it.
                 uint8_t* dump_end = oe->ev.meta.has_payload ? (c->data + HEADROOM + plen) : (c->data + HEADROOM);
                 size_t out_len = (size_t)(dump_end - view.cursor);
-                ssize_t w = write(fd, view.cursor, out_len);
-                if (w < 0) debug_printf("write to port %u failed: %s\n", oe->port, strerror(errno));
+                // resolve egress port -> descriptor (mirrors do_rx's ingress lookup) and send;
+                // send_frame drops if the port is unknown.
+                send_frame(get_out_descriptor(&g_port_map, (int)oe->port), view.cursor, out_len);
                 slot_free(&g_slab, cidx);                // egress done
             }
         }

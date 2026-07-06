@@ -1,150 +1,165 @@
 #!/usr/bin/env python3
-# Functional test for the C backend's DPDK driver (lucidcc --dpdk).
+# Wire tests for the C backend's DPDK driver (lucidcc --dpdk).
 #
-# Sibling of test_rawsock.py, but for the DPDK driver. Instead of raw sockets on
-# real interfaces, it runs the compiled switch under DPDK's *pcap PMD* (the
-# net_pcap virtual device): DPDK reads the input frames straight from a pcap file
-# and writes transmitted frames to another pcap file -- no veths, tcpdump, or
-# tcpreplay needed. Performance is irrelevant here; this is a correctness/dev test.
+# Four sub-tests, sharing frame-building / checks / setup via driverlib:
+#   - reflector: reflect 100 UDP packets over the pcap PMD (net_pcap: file in/out);
+#   - af_packet: the same reflector over a real interface (net_af_packet vdev on a veth),
+#                the DPDK analogue of the raw-socket on-wire test;
+#   - events:    events.dpt -- one handler emits a recirc (generate_self) AND a port
+#                output (generate_port); ingress on port 1, egress on port 0. Checks
+#                multi-out dispatch, recirc drain, framing, and multi-port rx;
+#   - scanloop:  endless `tick` + 10 `pkt_in`, check all 10 `pkt_out` (no starvation).
 #
-# The switch binds DPDK port 0 to the net_pcap vdev; the reflector bounces each
-# frame back out its ingress port (port 0), so reflected frames land in tx_pcap.
-#
-# Runs under emulation (x86-on-ARM): `--no-huge` avoids hugepage setup, and the
-# in-container DPDK is built with a westmere CPU baseline (no AVX). Needs root
-# (DPDK EAL): run with sudo.
+# Transports: the pcap-PMD sub-tests read/write pcap files (no veth); af_packet uses a
+# veth pair + tcpdump/tcpreplay. Runs under emulation (--no-huge; the in-container DPDK is
+# built with a westmere baseline). Needs root (DPDK EAL): run with sudo.
 #
 # Two-phase, so the in-container loop never rebuilds Lucid:
-#   sudo python3 test_dpdk.py --gen   # once, where lucidcc is built: .dpt -> _dpdk_build/
-#                                     # (commit the generated build dir)
+#   sudo python3 test_dpdk.py --gen   # once, where lucidcc is built: .dpt -> build dirs
 #   sudo python3 test_dpdk.py         # normal loop: make + run + check
 
-import subprocess
-import sys
 import os
+import sys
 import time
+import subprocess
 
-from scapy.all import Ether, IP, UDP, Raw, wrpcap, rdpcap
+import driverlib as dl
 
-SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
-DPT_FILE = os.path.join(SCRIPT_DIR, "programs", "ethswaprefl.dpt")  # swaps src/dst MAC, reflects
-# BUILD_DIR / PCAP_DIR default to the committed locations but can be pointed at a
-# temp dir (e.g. by run_c_tests.sh) so a suite run doesn't touch committed files.
-BUILD_DIR = os.environ.get("DPDK_BUILD_DIR") or os.path.join(SCRIPT_DIR, "_dpdk_build")
-PCAP_DIR = os.environ.get("DPDK_PCAP_DIR") or os.path.join(SCRIPT_DIR, "pcaps")
-SEND_PCAP = os.path.join(PCAP_DIR, "dpdk.send.pcap")
-RECV_PCAP = os.path.join(PCAP_DIR, "dpdk.recv.pcap")
-NUM_PACKETS = 100
-RUN_TIMEOUT = 15  # seconds to let the switch drain the input pcap before we stop it
+SWITCH_IFACE, SEND_IFACE = "veth0", "veth1"
+NUM = 100          # reflector packets
+NUM_EVENTS = 5     # events pkt_in packets
+NUM_SCAN = 10      # scanloop pkt_in packets
 
-
-def repo_root():
-    return subprocess.check_output(["git", "rev-parse", "--show-toplevel"], text=True).strip()
+REFL_BUILD = os.path.join(dl.SCRIPT_DIR, "_dpdk_build")            # ethswaprefl (reflector + af_packet)
+EVENTS_BUILD = os.path.join(dl.SCRIPT_DIR, "_dpdk_events_build")   # events.dpt
+SCAN_BUILD = os.path.join(dl.SCRIPT_DIR, "_dpdk_scanloop_build")   # scanloop.dpt
 
 
-def gen_build_dir():
-    """Regenerate _dpdk_build/ from DPT_FILE via lucidcc --dpdk. The ONLY step that
-    invokes the Lucid compiler -- opt-in (`--gen`) so the normal test loop is just
-    make + run against the committed lucidprog.c. Re-run with --gen (where lucidcc
-    is built) whenever the compiler or the .dpt changes, then commit _dpdk_build."""
-    lucidcc = os.path.join(repo_root(), "lucidcc")
-    print(f"[+] lucidcc --dpdk {os.path.basename(DPT_FILE)} --build {os.path.relpath(BUILD_DIR)}")
-    subprocess.run([lucidcc, DPT_FILE, "--dpdk", "--build", BUILD_DIR], check=True,
-                   stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
+def gen():
+    dl.gen_dpdk(os.path.join(dl.PROGRAMS, "ethswaprefl.dpt"), REFL_BUILD)
+    dl.gen_dpdk(os.path.join(dl.PROGRAMS, "events.dpt"), EVENTS_BUILD)
+    dl.gen_dpdk(os.path.join(dl.PROGRAMS, "scanloop.dpt"), SCAN_BUILD)
+    print("[+] regenerated build dirs -- run without --gen to make + run + check")
 
 
-def build_switch():
-    """make the (pre-generated, committed) DPDK program. No lucidcc; needs DPDK."""
-    cfile = os.path.join(BUILD_DIR, "lucidprog.c")
-    if not os.path.exists(cfile):
-        sys.exit(f"[-] {cfile} not found -- run `sudo python3 {os.path.basename(__file__)} --gen` "
-                 f"first (needs lucidcc) to generate it.")
-    print("[+] make")
-    subprocess.run(["make", "-C", BUILD_DIR], check=True,
-                   stdout=subprocess.DEVNULL, stderr=subprocess.PIPE)
-    binfile = os.path.join(BUILD_DIR, "build", "lucidprog")
-    if not os.path.exists(binfile):
-        sys.exit(f"[-] {binfile} not built")
-    return binfile
-
-
-def build_pcap(path, n, pload_size=32):
-    pkts = [Ether(dst="ff:ff:ff:ff:ff:ff", src="00:11:22:33:44:55") /
-            IP(dst="10.0.0.1") / UDP(dport=5000) / Raw(load=bytes(pload_size))
-            for _ in range(n)]
-    wrpcap(path, pkts)
-    print(f"[+] wrote {n} packets to {os.path.basename(path)}")
-
-
-def run_test(switch_bin):
-    if os.path.exists(RECV_PCAP):
-        os.remove(RECV_PCAP)
-    # DPDK pcap PMD: port 0 reads frames from SEND_PCAP, writes TX frames to RECV_PCAP.
-    # --no-huge: use normal memory (works under emulation / without hugepage setup).
-    vdev = f"net_pcap0,rx_pcap={SEND_PCAP},tx_pcap={RECV_PCAP}"
-    cmd = ["sudo", switch_bin, "--no-huge", "-l", "0", "-n", "1", "--no-pci", "--vdev", vdev]
+def _run_pcap_pmd(binf, vdevs, poll_pcap, n, extra_eal=()):
+    """Run the switch under the pcap PMD (file in/out): start it, poll poll_pcap until it
+    holds n frames (the PMD flushes per TX burst), then stop. Exits on early switch death."""
+    if os.path.exists(poll_pcap):
+        os.remove(poll_pcap)
+    cmd = ["sudo", binf, "--no-huge", *extra_eal, "-l", "0", "-n", "1", "--no-pci"]
+    for v in vdevs:
+        cmd += ["--vdev", v]
     print(f"[+] run: {' '.join(cmd[1:])}")
-    # The generated main() loops forever (rx_burst returns 0 after the pcap is
-    # drained); there is no self-exit, so run it briefly then stop it. The pcap PMD
-    # writes each TX burst out, so RECV_PCAP holds the reflected frames.
-    switch = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-    # Poll RECV_PCAP until all frames are reflected (the pcap PMD flushes per TX
-    # burst), then stop -- so the run is fast instead of always waiting the full
-    # timeout. RUN_TIMEOUT is the backstop if something stalls.
-    deadline = time.time() + RUN_TIMEOUT
-    while time.time() < deadline:
-        if switch.poll() is not None:
-            break  # exited on its own (e.g. EAL error)
-        time.sleep(0.5)
-        try:
-            if len(rdpcap(RECV_PCAP)) >= NUM_PACKETS:
-                break
-        except Exception:
-            pass  # file not ready / mid-write
-    if switch.poll() is None:
-        # sudo'd child: signal via sudo kill (we can't signal a root process directly)
-        subprocess.run(["sudo", "kill", "-INT", str(switch.pid)], capture_output=True)
-        try:
-            switch.wait(timeout=5)
-        except subprocess.TimeoutExpired:
-            subprocess.run(["sudo", "kill", "-9", str(switch.pid)], capture_output=True)
-            switch.wait()
-    out = switch.stdout.read().decode(errors="replace")
-    tail = "\n".join("    switch: " + l for l in out.strip().splitlines()[-4:])
-    if tail:
-        print(tail)
+    sw = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
+    if not dl.poll_until(poll_pcap, n, sw):
+        out = sw.stdout.read().decode(errors="replace")
+        print("[-] switch exited early:\n" + "\n".join("    " + l for l in out.strip().splitlines()[-8:]))
+        sys.exit(1)
+    dl.stop_switch(sw, binf)
 
 
-def check(send_pcap, recv_pcap):
-    sent = rdpcap(send_pcap)
+def test_reflector():
+    print("=== reflector (pcap PMD) ===")
+    binf = dl.build_make(REFL_BUILD)
+    send = os.path.join(dl.PCAPS, "dpdk.send.pcap")
+    recv = os.path.join(dl.PCAPS, "dpdk.recv.pcap")
+    dl.reflector_pcap(send, NUM)
+    _run_pcap_pmd(binf, [f"net_pcap0,rx_pcap={send},tx_pcap={recv}"], recv, NUM)
+    return dl.reflector_check(send, recv)
+
+
+def test_afpacket():
+    print("=== af_packet (live veth) ===")
+    binf = dl.build_make(REFL_BUILD)   # same reflector program, different vdev
+    dl.ensure_veths(SWITCH_IFACE, SEND_IFACE)
+    send = os.path.join(dl.PCAPS, "afpacket.send.pcap")
+    recv = os.path.join(dl.PCAPS, "afpacket.recv.pcap")
+    dl.reflector_pcap(send, NUM)
+    cap = dl.start_capture(SEND_IFACE, recv, count=NUM)
+    # DPDK's stdout is block-buffered through sudo; just give EAL + the af_packet port a
+    # fixed moment to come up (log to a file, not a pipe we block-read).
+    logf = open(os.path.join(REFL_BUILD, "afpacket.switch.log"), "w")
+    sw = subprocess.Popen(
+        ["sudo", binf, "--no-huge", "-l", "0", "-n", "1", "--no-pci",
+         "--vdev", f"net_af_packet0,iface={SWITCH_IFACE}"],
+        stdout=logf, stderr=subprocess.STDOUT, start_new_session=True)
+    time.sleep(5)
+    if sw.poll() is not None:
+        logf.close()
+        print("[-] switch exited early:\n" + "".join("    " + l for l in open(logf.name).readlines()[-8:]))
+        cap.terminate(); cap.wait(); sys.exit(1)
+    print(f"[+] switch up (af_packet on {SWITCH_IFACE})")
+    dl.replay(SEND_IFACE, send)
     try:
-        recv = rdpcap(recv_pcap)
+        cap.wait(timeout=15)
+    except subprocess.TimeoutExpired:
+        cap.terminate(); cap.wait()
+    dl.stop_switch(sw, binf)
+    logf.close()
+    return dl.reflector_check(send, recv)
+
+
+def test_events():
+    print("=== events (recirc + port, multi-port rx) ===")
+    binf = dl.build_make(EVENTS_BUILD)
+    tags = dl.event_tags(EVENTS_BUILD, "pkt_in", "pkt_out")
+    in_pcap = os.path.join(dl.PCAPS, "dpdk_events.in.pcap")
+    empty = os.path.join(dl.PCAPS, "dpdk_events.empty.pcap")
+    port0 = os.path.join(dl.PCAPS, "dpdk_events.port0.pcap")   # egress (checked)
+    port1 = os.path.join(dl.PCAPS, "dpdk_events.port1.pcap")   # ingress port, must stay empty
+    ins = [(0x0A000001 + i, 5000 + i) for i in range(NUM_EVENTS)]  # vary fields to check passthrough
+    dl.write_frames(in_pcap, [dl.lucid_frame(tags["pkt_in"], ip, port) for ip, port in ins])
+    dl.empty_pcap(empty)
+    if os.path.exists(port1):
+        os.remove(port1)
+    print(f"[+] wrote {NUM_EVENTS} Lucid-framed pkt_in frames")
+    # ingress on port 1, egress on port 0 -> exercises multi-port rx. -m 512 for the
+    # 2-port mbuf pool (overflows --no-huge's default heap otherwise).
+    _run_pcap_pmd(binf,
+                  [f"net_pcap0,rx_pcap={empty},tx_pcap={port0}",
+                   f"net_pcap1,rx_pcap={in_pcap},tx_pcap={port1}"],
+                  port0, NUM_EVENTS, extra_eal=["-m", "512"])
+    expected = [dl.lucid_frame(tags["pkt_out"], ip, port) for ip, port in ins]
+    try:
+        recv = [bytes(p) for p in dl.rdpcap(port0)]
     except Exception:
         recv = []
-    print(f"[*] sent {len(sent)}, received {len(recv)}")
-    if len(recv) != len(sent):
-        print("[-] FAIL: packet counts differ"); return False
-    # the reflector swaps src/dst MAC; every received packet must be a swapped
-    # copy of what we sent.
-    s = sent[0]
-    for i, r in enumerate(recv):
-        if not (r[Ether].dst == s[Ether].src and r[Ether].src == s[Ether].dst):
-            print(f"[-] FAIL: MACs not swapped on recv[{i}] "
-                  f"(sent {s[Ether].src}->{s[Ether].dst}, recv {r[Ether].src}->{r[Ether].dst})")
-            return False
-    print("[+] PASS: counts match and MACs are swapped"); return True
+    try:
+        p1 = list(dl.rdpcap(port1))
+    except Exception:
+        p1 = []
+    print(f"[*] fed {NUM_EVENTS} pkt_in on port 1, port0 got {len(recv)} pkt_out, port1 got {len(p1)}")
+    if len(p1) != 0:
+        print(f"[-] FAIL: port 1 emitted {len(p1)} packet(s) (expected none)"); return False
+    if len(recv) != len(expected):
+        print("[-] FAIL: port0 pkt_out count differs"); return False
+    for i, (r, e) in enumerate(zip(recv, expected)):
+        if r != e:
+            print(f"[-] FAIL: pkt_out[{i}] framing mismatch\n    got {r.hex()}\n    exp {e.hex()}"); return False
+    print("[+] PASS: port-1 ingress dispatched, recirc drained, port0 pkt_out frames correct, port1 empty")
+    return True
 
+
+def test_scanloop():
+    print("=== scanloop ===")
+    binf = dl.build_make(SCAN_BUILD)
+    tags = dl.event_tags(SCAN_BUILD, "tick", "pkt_in", "pkt_out")
+    in_pcap = os.path.join(dl.PCAPS, "dpdk_scanloop.in.pcap")
+    out_pcap = os.path.join(dl.PCAPS, "dpdk_scanloop.out.pcap")
+    dl.write_frames(in_pcap, dl.scanloop_frames(tags, NUM_SCAN))
+    print(f"[+] wrote 1 tick + {NUM_SCAN} pkt_in frames")
+    _run_pcap_pmd(binf, [f"net_pcap0,rx_pcap={in_pcap},tx_pcap={out_pcap}"], out_pcap, NUM_SCAN)
+    return dl.scanloop_check(out_pcap, tags["pkt_out"], NUM_SCAN)
+
+
+TESTS = [test_reflector, test_afpacket, test_events, test_scanloop]
 
 if __name__ == "__main__":
-    os.makedirs(PCAP_DIR, exist_ok=True)
-    os.makedirs(BUILD_DIR, exist_ok=True)
+    os.makedirs(dl.PCAPS, exist_ok=True)
     if "--gen" in sys.argv[1:]:
-        # (Re)generate _dpdk_build/ from the .dpt via lucidcc, then stop. Run this
-        # where lucidcc is built; commit the result so plain runs skip the compiler.
-        gen_build_dir()
-        print("[+] regenerated _dpdk_build -- commit it, then run without --gen")
-        sys.exit(0)
-    switch_bin = build_switch()
-    build_pcap(SEND_PCAP, NUM_PACKETS)
-    run_test(switch_bin)
-    sys.exit(0 if check(SEND_PCAP, RECV_PCAP) else 1)
+        gen(); sys.exit(0)
+    ok = True
+    for t in TESTS:
+        ok = t() and ok
+    sys.exit(0 if ok else 1)

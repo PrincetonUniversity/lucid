@@ -1,22 +1,23 @@
+
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include <pcap.h>
-#include <string.h>
 #include <time.h>
+#include <sys/time.h>
+#include <pcap.h>
 
 #ifdef DEBUG
-    #define debug_printf(...) printf(__VA_ARGS__)
-    #else
-    #define debug_printf(...)
-#endif            
-
-
-#ifdef __GNUC__
-    #define unroll GCC unroll
+  #define debug_printf(...) fprintf(stderr, __VA_ARGS__)
+#else
+  #define debug_printf(...)
 #endif
 
+
+/********************************************************************************/
+/*                             SECTION: program code                            */
+/********************************************************************************/
 typedef struct {
   uint32_t _0;
   uint32_t _1;
@@ -246,209 +247,285 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
   }
 }
 
+/********************************************************************************/
+/*                             SECTION: driver config                           */
+/********************************************************************************/
+
+/********* sizing constants (shared by the slab pool and the index rings) ***********/
+#define HEADROOM 256               // slack before the packet for deparse to prepend a header
+#define SLOT_USABLE 1600           // max packet bytes per slot
+#define POOL_SIZE 1024             // number of slab slots (buffers in flight)
+#define RING_CAP (POOL_SIZE + 1)   // ring capacity: a head/tail ring holds CAP-1 items, so this
+                                   // holds up to POOL_SIZE indices (all slots free, or all in one ring)
+#define BURST 64                   // max frames/elements handled per rx/dispatch/tx call
+#define SLOT_NONE 0xFFFF           // slot_alloc's "pool exhausted" sentinel
+#define MAX_PORTS 64               // max interfaces (Lucid ports) bound at once
+
+
+/********************************************************************************/
+/*                           SECTION: driver libraries                          */
+/********************************************************************************/
+
  void init_cursor(uint8_t*  buf , uint32_t len , packet_t*  bytes ){
     bytes->start = buf;
     bytes->cursor = buf;
     bytes->end = buf + len;
     bytes->bit_off = 0;
- }
-
- void reset_cursor(packet_t*  bytes){
-    bytes->cursor = bytes->start;
-    bytes->bit_off = 0;
- }
-
- void copy_packet(packet_t*  buf_out , packet_t*  buf_in ) {
-    memcpy(buf_out->start, buf_in->start, buf_in->end - buf_in->start);
-    buf_out->cursor = buf_out->start + (buf_in->cursor - buf_in->start);
-    buf_out->end = buf_out->start + (buf_in->end - buf_in->start);
-    buf_out->bit_off = 0;
- }
-
-/********* the queue element + the dispatch FIFO ***********/
-// The queue element mirrors the DPDK driver's (§28): an event plus where its payload
-// begins. The difference is ownership -- DPDK's element is an mbuf that OWNS its bytes,
-// whereas here the bytes live in the single input buffer (ctx->in_pkt) shared for the
-// whole synchronous drain, and the element just records the payload boundary into it.
-// packet_t is a pure view over that buffer. (No out_events list rides in the element:
-// dispatch hands the handler's outputs straight to do_tx, so it stays a local.)
-typedef struct { event_t ev; uint32_t payload_off; } qe_t;
-
-#define EV_QUEUE_CAP 1024
-typedef struct ev_queue_t {
-    qe_t buf[EV_QUEUE_CAP];
-    int head;
-    int tail;
-    int count;
-} ev_queue_t;
-
-static void evq_init(ev_queue_t* q) { q->head = 0; q->tail = 0; q->count = 0; }
-static int  evq_empty(ev_queue_t* q) { return q->count == 0; }
-static void evq_push(ev_queue_t* q, qe_t* e) {
-    // no overflow guard (see handler lowering); EV_QUEUE_CAP is generous.
-    q->buf[q->tail] = *e;
-    q->tail = (q->tail + 1) % EV_QUEUE_CAP;
-    q->count++;
 }
-static void evq_pull(ev_queue_t* q, qe_t* out) {
-    *out = q->buf[q->head];
-    q->head = (q->head + 1) % EV_QUEUE_CAP;
-    q->count--;
-}
-
-/********* per-handler context ***********/
-uint64_t pkt_ct = 0;
-
-// a 32-bit nanosecond timestamp, stamped onto each event at dequeue (Sys.time()).
-// (replay/wall-clock time -- if a program serializes Sys.time() its pcap output would
-// be non-deterministic; switch to pkthdr->ts here if that ever matters for a test.)
+// a 32-bit nanosecond timestamp, stamped onto each event at dispatch (Sys.time())
 static uint32_t now_ns(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return (uint32_t)((uint64_t)ts.tv_sec * 1000000000ull + (uint64_t)ts.tv_nsec);
 }
 
-typedef struct pkt_hdl_ctx_t {
-    uint8_t ingress_port;
-    pcap_dumper_t *out_pcap;
-    packet_t in_pkt;
-    packet_t out_pkt;
-    const struct pcap_pkthdr *in_pkthdr; // input header of the packet being handled (ts source for tx)
-    struct pcap_pkthdr out_pkthdr;
-    ev_queue_t queue;
-} pkt_hdl_ctx_t;
 
-void fill_out_pkthdr(const struct pcap_pkthdr *in_pkthdr, packet_t* out_pkt, uint8_t* dump_end, struct pcap_pkthdr* out_pkthdr) {
-    // the deparsed packet runs from out_pkt->cursor to dump_end (= out_pkt->end for a
-    // payload event, = the payload boundary for a no-payload event -- see below)
-    out_pkthdr->ts = in_pkthdr->ts;
-    out_pkthdr->caplen = (uint32_t)(dump_end - out_pkt->cursor);
-    out_pkthdr->len    = (uint32_t)(dump_end - out_pkt->cursor);
+/********* index ring (a FIFO of slot indices) ***********/
+typedef struct { uint16_t buf[RING_CAP]; uint32_t head, tail; } idx_ring;
+static void ring_init(idx_ring* r) { r->head = r->tail = 0; }
+static int ring_empty(idx_ring* r) { return r->head == r->tail; }
+static int ring_push(idx_ring* r, uint16_t idx) {
+    uint32_t nh = (r->head + 1) % RING_CAP;
+    if (nh == r->tail) return -1;                 // full (shouldn't happen: sized to pool)
+    r->buf[r->head] = idx; r->head = nh; return 0;
+}
+static int ring_pop(idx_ring* r, uint16_t* out) {
+    if (r->tail == r->head) return -1;            // empty
+    *out = r->buf[r->tail]; r->tail = (r->tail + 1) % RING_CAP; return 0;
 }
 
-// The dispatch pipeline is split into three phases with the same responsibilities as
-// the DPDK reference (§28): rx parses into a queue element; dispatch handles it and
-// hands the outputs to tx; tx fans out (recirc -> re-queue, egress -> deparse + dump).
-// The divergence is that here they run synchronously per input packet -- there is no
-// live competing input (pcap replays an offline file), so the queue is drained to empty,
-// which keeps the shared input buffer valid for the whole drain and lets every output
-// (including from recirculated events) build over it. No mbuf pool: the "queue element"
-// owns nothing; the input buffer is the owner and packet_t is a view over it.
 
-/******** TX: fan out the handler's outputs -- recirc back to the queue, egress deparse+dump ********/
-static void do_tx(pkt_hdl_ctx_t *ctx, out_event_t *out_events, uint16_t n, uint32_t payload_off) {
-    for (uint16_t i = 0; i < n; i++) {
-        out_event_t *oe = &out_events[i];
-        if (oe->port == 4294967295u) {          // recirculation: re-inject (inherits the boundary)
-            qe_t re = { oe->ev, payload_off };
-            evq_push(&ctx->queue, &re);
-            continue;
+/********* the queue element (a slab slot) ***********/
+// Mirrors the DPDK qe_priv_t + mbuf data region: the event, the handler's outputs,
+// and the packet bytes this element OWNS. The packet occupies data[HEADROOM ..
+// HEADROOM+pkt_len); payload_off marks where the payload begins within it.
+typedef struct {
+    event_t    ev;
+    out_event_t out_events[64];
+    uint16_t        n_out;
+    uint32_t        pkt_len;        // packet bytes from data+HEADROOM
+    uint32_t        payload_off;    // payload boundary, relative to data+HEADROOM
+    uint8_t         data[HEADROOM + SLOT_USABLE];
+} qe_t;
+
+/********* the slab: the pool + its free-list (an idx_ring of free slot indices) ***********/
+typedef struct {
+    qe_t     pool[POOL_SIZE];
+    idx_ring free;                 // the free-list: indices of currently-unused slots
+} slab_t;
+
+// slot(): the queue element at index idx -- callers go through this, never the pool directly.
+static inline qe_t* slot(slab_t* s, uint16_t idx) { return &s->pool[idx]; }
+static uint16_t slot_alloc(slab_t* s) {
+    uint16_t idx;
+    if (ring_pop(&s->free, &idx) != 0) return SLOT_NONE;   // pool exhausted
+    return idx;
+}
+static void slot_free(slab_t* s, uint16_t idx) { ring_push(&s->free, idx); }
+static void slab_init(slab_t* s) {
+    ring_init(&s->free);
+    for (uint16_t i = 0; i < POOL_SIZE; i++) ring_push(&s->free, i);   // every slot starts free
+}
+
+
+/********* ports (Lucid port number <-> pcap input/output) ***********/
+typedef struct { int port_id; pcap_t* in; pcap_dumper_t* out; int in_eof; } port_t;
+typedef struct { port_t ports[MAX_PORTS]; int nports; } port_map_t;
+
+// get_in_descriptor returns the whole port (so port_rx can set in_eof); get_out_descriptor
+// looks a port up by id and returns its dumper (NULL = no such port). Consumed only by
+// port_rx / send_frame; the pipeline treats them opaquely (mirrors the socket driver).
+static port_t* get_in_descriptor(port_map_t* pm, int port_idx) { return &pm->ports[port_idx]; }
+static pcap_dumper_t* get_out_descriptor(port_map_t* pm, int port_id) {
+    for (int i = 0; i < pm->nports; i++) if (pm->ports[i].port_id == port_id) return pm->ports[i].out;
+    return NULL;
+}
+
+// parse `--interface PORT:INFILE:OUTFILE` args and open the pcaps.
+static int init_port_map(port_map_t* pm, int argc, char** argv) {
+    char errbuf[PCAP_ERRBUF_SIZE];
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--interface") == 0 && i + 1 < argc) {
+            char* spec = argv[++i];
+            char* c1 = strchr(spec, ':');
+            char* c2 = c1 ? strchr(c1 + 1, ':') : NULL;
+            if (!c1 || !c2) { fprintf(stderr, "bad --interface '%s' (expected PORT:IN:OUT)\n", spec); return 1; }
+            *c1 = '\0'; *c2 = '\0';
+            int port_id = atoi(spec);
+            const char* infile = c1 + 1;
+            const char* outfile = c2 + 1;
+            if (pm->nports >= MAX_PORTS) { fprintf(stderr, "too many interfaces (max %d)\n", MAX_PORTS); return 1; }
+            pcap_t* in = pcap_open_offline(infile, errbuf);
+            if (!in) { fprintf(stderr, "open input '%s': %s\n", infile, errbuf); return 1; }
+            pcap_dumper_t* out = pcap_dump_open(in, outfile);
+            if (!out) { fprintf(stderr, "open output '%s': %s\n", outfile, pcap_geterr(in)); return 1; }
+            pm->ports[pm->nports].port_id = port_id;
+            pm->ports[pm->nports].in = in;
+            pm->ports[pm->nports].out = out;
+            pm->ports[pm->nports].in_eof = 0;
+            pm->nports++;
+            printf("bound port %d: %s -> %s\n", port_id, infile, outfile);
         }
-        // egress: build the output over a copy of the shared input buffer, deparse, dump.
-        // (pcap has a single output file, so oe->port is recorded but every port event
-        // goes to the same dump.)
-        reset_cursor(&ctx->out_pkt);
-        copy_packet(&ctx->out_pkt, &ctx->in_pkt);
-        // set the cursor to the payload boundary (from the element); deparse prepends the
-        // header before it. A no-payload event emits only its header (drop the input tail);
-        // a payload event keeps the tail. (matches interp)
-        ctx->out_pkt.cursor = ctx->out_pkt.start + payload_off;
-        uint8_t *payload_boundary = ctx->out_pkt.cursor;
-        deparse_event(&oe->ev, &ctx->out_pkt);
-        uint8_t *dump_end = oe->ev.meta.has_payload ? ctx->out_pkt.end : payload_boundary;
-        fill_out_pkthdr(ctx->in_pkthdr, &ctx->out_pkt, dump_end, &ctx->out_pkthdr);
-        pcap_dump((u_char *)ctx->out_pcap, &ctx->out_pkthdr, (u_char *)ctx->out_pkt.cursor);
+        // ignore unknown args (e.g. the .dpt path, for argv-compatibility with lucidSwitch)
+    }
+    return 0;
+}
+
+
+// a burst of freshly-read slab slots (pkt_len set, not yet parsed).
+typedef struct { uint16_t n; uint16_t idx[BURST]; } rx_batch;
+
+// read up to BURST frames from a port's input pcap into slots allocated from `s`. Sets
+// in_eof when the capture is exhausted.
+static rx_batch port_rx(port_t* p, slab_t* s) {
+    rx_batch batch; batch.n = 0;
+    while (batch.n < BURST) {
+        uint16_t idx = slot_alloc(s);
+        if (idx == SLOT_NONE) break;                       // pool exhausted -> drop-at-birth
+        struct pcap_pkthdr* h; const u_char* data;
+        int r = pcap_next_ex(p->in, &h, &data);
+        if (r != 1) { slot_free(s, idx); p->in_eof = 1; break; } // EOF/error -> done with this port
+        qe_t* q = slot(s, idx);
+        uint32_t len = h->caplen; if (len > SLOT_USABLE) len = SLOT_USABLE;
+        memcpy(q->data + HEADROOM, data, len);
+        q->pkt_len = len;
+        batch.idx[batch.n++] = idx;
+    }
+    return batch;
+}
+
+// egress: dump the deparsed frame [buf, buf+len) to the port's output pcap. The record
+// timestamp is fixed at 0: this driver is for functional replay -- deterministic,
+// byte-comparable output -- not timing (use another driver to profile). NULL dumper drops.
+static void send_frame(pcap_dumper_t* out, uint8_t* buf, size_t len) {
+    if (out == NULL) { debug_printf("send_frame: no egress dumper (dropped)\n"); return; }
+    struct pcap_pkthdr h = {0};   // ts = 0 (see above)
+    h.caplen = (bpf_u_int32)len;
+    h.len    = (bpf_u_int32)len;
+    pcap_dump((u_char*)out, &h, buf);
+}
+
+
+/********************************************************************************/
+/*                            SECTION: driver pipeline                          */
+/********************************************************************************/
+
+/********* the driver's runtime state (instances of the slab + ring libraries) ***********/
+static port_map_t   g_port_map;  // Lucid port <-> the driver's I/O (see its port_map_lib)
+static slab_t       g_slab;        // the packet-buffer pool
+static idx_ring     dispatch_in;   // parsed + recirculated elements awaiting handling
+static idx_ring     tx_in;         // handled elements awaiting fan-out + deparse + TX
+static uint64_t     pkt_ct = 0;    // rx packet counter
+
+
+// parse the frame sitting in slot `idx` (pkt_len bytes at data+HEADROOM) into its event
+// and enqueue it for dispatch; drop (free the slot) on parse failure.
+static void ingest_slot(uint16_t idx, int in_port) {
+    qe_t* q = slot(&g_slab, idx);
+    packet_t view;
+    init_cursor(q->data + HEADROOM, q->pkt_len, &view);
+    if (parse_event(&view, &q->ev) != 1) { debug_printf("parse failed\n"); slot_free(&g_slab, idx); return; }
+    q->payload_off = (uint32_t)(view.cursor - (q->data + HEADROOM)); // where the payload begins
+    q->ev.meta.in_port = in_port;                                    // ingress (read by the handler)
+    if (ring_push(&dispatch_in, idx) != 0) slot_free(&g_slab, idx);  // ring full (shouldn't happen)
+    else pkt_ct++;
+}
+
+/******** RX: read a bounded burst from every port, parse + enqueue each on dispatch_in ********/
+static void do_rx(void) {
+    for (int p = 0; p < g_port_map.nports; p++) {
+        rx_batch batch = port_rx(get_in_descriptor(&g_port_map, p), &g_slab);
+        for (uint16_t i = 0; i < batch.n; i++) ingest_slot(batch.idx[i], g_port_map.ports[p].port_id);
     }
 }
 
-/******** DISPATCH: drain the queue; handle each element and hand its outputs to tx ********/
-static void do_dispatch(pkt_hdl_ctx_t *ctx) {
-    while (!evq_empty(&ctx->queue)) {
-        qe_t qe;
-        evq_pull(&ctx->queue, &qe);
-        qe.ev.meta.timestamp = now_ns();        // stamp at dequeue (covers arriving + recirculated events)
-        qe.ev.meta.in_port = ctx->ingress_port; // ingress port (read by the handler)
-        out_event_t out_events[64];
-        uint16_t n = handle_event(&qe.ev, out_events);
-        do_tx(ctx, out_events, n, qe.payload_off); // fan out this element's outputs
+
+/******** DISPATCH: handle a bounded burst of elements; hand each to tx_in (no copy) ********/
+static void do_dispatch(void) {
+    for (int b = 0; b < BURST; b++) {
+        uint16_t idx;
+        if (ring_pop(&dispatch_in, &idx) != 0) break;
+        qe_t* q = slot(&g_slab, idx);
+        q->ev.meta.timestamp = now_ns();                    // stamp at dequeue (arriving + recirculated)
+        q->n_out = handle_event(&q->ev, q->out_events); // ingress read from q->ev.meta.in_port
+        if (ring_push(&tx_in, idx) != 0) slot_free(&g_slab, idx); // ring full (shouldn't happen) -> drop
     }
 }
 
-/******** RX: parse the input packet into a queue element and enqueue it (pcap_loop callback) ********/
-void lpcap_packet_handler(u_char *raw_ctx, const struct pcap_pkthdr *pkthdr, const u_char *packet) {
-    pkt_hdl_ctx_t *ctx = (pkt_hdl_ctx_t *)raw_ctx;
-    init_cursor((uint8_t *)packet, pkthdr->len, &ctx->in_pkt); // construct a new cursor over the input
-    ctx->in_pkthdr = pkthdr;                                   // remembered for do_tx (ts source)
-    qe_t qe;
-    if (parse_event(&ctx->in_pkt, &qe.ev) != 1) {
-        debug_printf("parse failed!\n");
-        return; // drop
+
+#define PORT_RECIRC 4294967295u // out_event.port sentinel: recirculate, don't egress
+
+/******** TX: fan out each element into one owned clone per output, then route/deparse/send ********/
+static void do_tx(void) {
+    for (int b = 0; b < BURST; b++) {
+        uint16_t idx;
+        if (ring_pop(&tx_in, &idx) != 0) break;
+        qe_t* in = slot(&g_slab, idx);
+        for (uint16_t i = 0; i < in->n_out; i++) {
+            out_event_t* oe = &in->out_events[i];
+            uint16_t cidx = slot_alloc(&g_slab);
+            if (cidx == SLOT_NONE) continue;             // pool exhausted -> drop this output
+            qe_t* c = slot(&g_slab, cidx);
+            c->ev = oe->ev;
+            // the output owns a fresh copy of the input's payload (or none), placed at
+            // data+HEADROOM with headroom in front for the deparsed header.
+            uint32_t plen = oe->ev.meta.has_payload ? (in->pkt_len - in->payload_off) : 0;
+            if (plen) memcpy(c->data + HEADROOM, in->data + HEADROOM + in->payload_off, plen);
+            c->pkt_len = plen;
+            c->payload_off = 0;                          // the payload now sits at the front of c
+            if (oe->port == PORT_RECIRC) {               // recirculation (generate_self)
+                c->ev.meta.in_port = in->ev.meta.in_port; // recirc inherits ingress
+                if (ring_push(&dispatch_in, cidx) != 0) slot_free(&g_slab, cidx);
+            } else {                                     // output to a port: deparse + send
+                packet_t view;
+                init_cursor(c->data + HEADROOM, plen, &view); // cursor at the payload boundary (front)
+                deparse_event(&c->ev, &view);      // writes the header backwards into headroom
+                // a no-payload event emits only its header (drop the tail); a payload event keeps it.
+                uint8_t* dump_end = oe->ev.meta.has_payload ? (c->data + HEADROOM + plen) : (c->data + HEADROOM);
+                size_t out_len = (size_t)(dump_end - view.cursor);
+                // resolve egress port -> descriptor (mirrors do_rx's ingress lookup) and send;
+                // send_frame drops if the port is unknown.
+                send_frame(get_out_descriptor(&g_port_map, (int)oe->port), view.cursor, out_len);
+                slot_free(&g_slab, cidx);                // egress done
+            }
+        }
+        slot_free(&g_slab, idx);                         // input consumed (cloned per output)
     }
-    qe.payload_off = (uint32_t)(ctx->in_pkt.cursor - ctx->in_pkt.start); // where the payload begins
-    evq_push(&ctx->queue, &qe);
-    do_dispatch(ctx); // drain: handle + fan out this packet's events (and any it recirculates)
-    pkt_ct++;
 }
 
-/********** allocation + main ***********/
-// Deparse writes backwards (cursor -= N, prepending headers). If an output event's
-// header is larger than the input event's, the cursor decrements past the logical
-// packet start. HEADROOM reserves that slack at the front of the allocation so the
-// backward writes stay inside the buffer. (Generous constant for now; once bit-packing
-// lands we can derive a real bound from the largest event's serialized size.)
-#define HEADROOM 256
 
-pkt_hdl_ctx_t mk_pkt_hdl_ctx(pcap_dumper_t* out_pcap, u_char* out_buf, uint32_t out_buf_len) {
-pkt_hdl_ctx_t ctx = {
-    .ingress_port = 1, // always 1 in this driver
-    .out_pcap = out_pcap,
-    .in_pkt = {0},
-    .out_pkt = {
-    // logical packet starts HEADROOM into the allocation, leaving room to grow downward
-    .start = (uint8_t *)out_buf + HEADROOM,
-    .cursor = (uint8_t *)out_buf + HEADROOM,
-    .end = (uint8_t *)out_buf + HEADROOM + out_buf_len
-    },
-    .in_pkthdr = NULL,
-    .out_pkthdr = {0},
-    .queue = {0}
-};
-return ctx;
-}
+/********************************************************************************/
+/*                              SECTION: driver main                            */
+/********************************************************************************/
 
-int main(int argc, char const *argv[]){
-    if (argc != 3) {
-        debug_printf(stderr, "Usage: %s <input pcap file> <output pcap file>\n", argv[0]);
+int main(int argc, char** argv) {
+    if (init_port_map(&g_port_map, argc, argv) != 0) { fprintf(stderr, "failed to init port map\n"); return 1; }
+    if (g_port_map.nports == 0) {
+        fprintf(stderr, "usage: %s --interface PORT:IN:OUT [--interface PORT:IN:OUT ...]\n", argv[0]);
         return 1;
     }
+    slab_init(&g_slab);
+    ring_init(&dispatch_in);
+    ring_init(&tx_in);
+    printf("Init complete.\n");
+    fflush(stdout);
 
-    char errbuf[PCAP_ERRBUF_SIZE];    
-    // Open the input pcap file in read mode
-    pcap_t *in_pcap = pcap_open_offline(argv[1], errbuf);
-    if (in_pcap == NULL) {
-        debug_printf(stderr, "Error opening input pcap file: %s\n", errbuf);
-        return 1;
+    // replay loop: rx -> dispatch -> tx (each a bounded burst) until every input is
+    // exhausted AND the pipeline has drained. Offline libpcap blasts through, so there
+    // is no idle wait (unlike the socket driver's select loop).
+    for (;;) {
+        do_rx();
+        do_dispatch();
+        do_tx();
+        int all_eof = 1;
+        for (int i = 0; i < g_port_map.nports; i++) if (!g_port_map.ports[i].in_eof) all_eof = 0;
+        if (all_eof && ring_empty(&dispatch_in) && ring_empty(&tx_in)) break;
     }
 
-    // Open the output pcap file in write mode
-    pcap_dumper_t *out_pcap = pcap_dump_open(in_pcap, argv[2]);
-    if (out_pcap == NULL) {
-        debug_printf(stderr, "Error opening output pcap file: %s\n", pcap_geterr(in_pcap));
-        return 1;
+    printf("Processed %llu packets\n", (unsigned long long)pkt_ct);
+    for (int i = 0; i < g_port_map.nports; i++) {
+        pcap_dump_close(g_port_map.ports[i].out);
+        pcap_close(g_port_map.ports[i].in);
     }
-
-    // prepare the context for the packet handler (reserve HEADROOM in front of the
-    // 1600-byte usable region so backward deparse writes have room to grow)
-    u_char outbuf[1600 + HEADROOM];
-    pkt_hdl_ctx_t ctx = mk_pkt_hdl_ctx(out_pcap, outbuf, 1600);
-
-    pcap_loop(in_pcap, 0, lpcap_packet_handler, (u_char *)&ctx);
-
-    printf("Processed %llu packets\n", pkt_ct);
-
-    // Close the pcap files
-    pcap_dump_close(out_pcap);
-    pcap_close(in_pcap);
-
     return 0;
 }
