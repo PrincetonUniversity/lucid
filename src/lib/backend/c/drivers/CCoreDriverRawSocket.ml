@@ -140,17 +140,17 @@ static int raw_open(const char* ifname) {
 // a burst of freshly-read slab slots (pkt_len set, not yet parsed).
 typedef struct { uint16_t n; uint16_t idx[BURST]; } rx_batch;
 
-// read up to BURST frames from one port's socket into freshly-allocated slab slots and
-// return them (pkt_len set); does NOT parse -- do_rx ingests each.
-static rx_batch port_rx(int fd) {
+// read up to BURST frames from one port's socket into slots freshly allocated from `s`
+// and return them (pkt_len set); does NOT parse -- do_rx ingests each.
+static rx_batch port_rx(int fd, slab_t* s) {
     rx_batch batch; batch.n = 0;
 #ifdef USE_AF_PACKET
     while (batch.n < BURST) {
-        uint16_t idx = slot_alloc(&g_slab);
+        uint16_t idx = slot_alloc(s);
         if (idx == SLOT_NONE) break;                     // pool exhausted -> drop-at-birth
-        qe_t* q = slot(&g_slab, idx);
+        qe_t* q = slot(s, idx);
         ssize_t n = read(fd, q->data + HEADROOM, SLOT_USABLE);
-        if (n <= 0) { slot_free(&g_slab, idx); break; }   // EWOULDBLOCK/error -> done with this port
+        if (n <= 0) { slot_free(s, idx); break; }         // EWOULDBLOCK/error -> done with this port
         q->pkt_len = (uint32_t)n;
         batch.idx[batch.n++] = idx;
     }
@@ -163,10 +163,10 @@ static rx_batch port_rx(int fd) {
         while (ptr + sizeof(struct bpf_hdr) <= end && batch.n < BURST) {
             struct bpf_hdr* bh = (struct bpf_hdr*)ptr;
             if (bh->bh_caplen == bh->bh_datalen) {        // skip truncated captures
-                uint16_t idx = slot_alloc(&g_slab);
+                uint16_t idx = slot_alloc(s);
                 if (idx == SLOT_NONE) break;              // pool exhausted -> drop-at-birth
                 uint32_t flen = bh->bh_caplen; if (flen > SLOT_USABLE) flen = SLOT_USABLE;
-                qe_t* q = slot(&g_slab, idx);
+                qe_t* q = slot(s, idx);
                 memcpy(q->data + HEADROOM, ptr + bh->bh_hdrlen, flen);
                 q->pkt_len = flen;
                 batch.idx[batch.n++] = idx;
@@ -182,7 +182,6 @@ static rx_batch port_rx(int fd) {
 (* ===== helpers: the port table, packet counter, and Sys.time() clock ===== *)
 let driver_helpers = dforiegn {|
 /********* ports (Lucid port number <-> interface socket) ***********/
-#define MAX_PORTS 64
 typedef struct { int port_id; int fd; char ifname[IFNAMSIZ]; } port_t;
 static port_t g_ports[MAX_PORTS];
 static int g_nports = 0;
@@ -201,22 +200,29 @@ static uint32_t now_ns(void) {
 }
 |}
 
-(* ===== the slab allocator: a hand-rolled rte_mempool -- a fixed pool of queue
-   elements and a free-list ring of their indices (slot_alloc / slot_free). Each slot
-   OWNS its packet bytes; see §29. ===== *)
+(* ===== sizing constants, shared by the slab pool and the pipeline rings ===== *)
+let config = dforiegn {|
+/********* sizing constants (shared by the slab pool and the index rings) ***********/
+#define HEADROOM 256               // slack before the packet for deparse to prepend a header
+#define SLOT_USABLE 1600           // max packet bytes per slot
+#define POOL_SIZE 1024             // number of slab slots (buffers in flight)
+#define RING_CAP (POOL_SIZE + 1)   // ring capacity: a head/tail ring holds CAP-1 items, so this
+                                   // holds up to POOL_SIZE indices (all slots free, or all in one ring)
+#define BURST 64                   // max frames/elements handled per rx/dispatch/tx call
+#define SLOT_NONE 0xFFFF           // slot_alloc's "pool exhausted" sentinel
+#define MAX_PORTS 64               // max interfaces (Lucid ports) bound at once
+|}
+
+(* ===== the slab allocator: a hand-rolled rte_mempool -- a fixed pool of queue elements
+   whose free-list is itself an idx_ring (so there is one ring implementation). Each slot
+   OWNS its packet bytes; see §29. Pure library: types + helpers taking a slab_t* (the
+   driver's instance lives in the `state` block). Emitted after rings, whose idx_ring the
+   free-list uses. ===== *)
 let slab = dforiegn [%string {|
 /********* the queue element (a slab slot) ***********/
 // Mirrors the DPDK qe_priv_t + mbuf data region: the event, the handler's outputs,
 // and the packet bytes this element OWNS. The packet occupies data[HEADROOM ..
-// HEADROOM+pkt_len); payload_off marks where the payload begins within it. HEADROOM
-// is slack in front so the deparsed header can be prepended (written backwards).
-#define HEADROOM 256
-#define SLOT_USABLE 1600           // max packet bytes per slot
-#define POOL_SIZE 1024             // number of slab slots (buffers in flight)
-#define RING_CAP (POOL_SIZE + 1)   // ring capacity (>= pool, so rings never overflow)
-#define BURST 64                   // max frames/elements handled per rx/dispatch/tx call
-#define SLOT_NONE 0xFFFF
-
+// HEADROOM+pkt_len); payload_off marks where the payload begins within it.
 typedef struct {
     %{events_ty}    ev;
     %{out_event_ty} out_events[%{out_events_cap}];
@@ -226,37 +232,29 @@ typedef struct {
     uint8_t         data[HEADROOM + SLOT_USABLE];
 } qe_t;
 
-/********* the slab state: the pool + its free-list ring, in one struct so the helpers
-   take a slab_t* and the instance (g_slab) is declared after them ***********/
+/********* the slab: the pool + its free-list (an idx_ring of free slot indices) ***********/
 typedef struct {
     qe_t     pool[POOL_SIZE];
-    uint16_t free_ring[RING_CAP];   // free indices sit in free_ring[free_tail .. free_head)
-    uint32_t free_head, free_tail;
+    idx_ring free;                 // the free-list: indices of currently-unused slots
 } slab_t;
 
 // slot(): the queue element at index idx -- callers go through this, never the pool directly.
 static inline qe_t* slot(slab_t* s, uint16_t idx) { return &s->pool[idx]; }
 static uint16_t slot_alloc(slab_t* s) {
-    if (s->free_tail == s->free_head) return SLOT_NONE;   // pool exhausted
-    uint16_t idx = s->free_ring[s->free_tail];
-    s->free_tail = (s->free_tail + 1) % RING_CAP;
+    uint16_t idx;
+    if (ring_pop(&s->free, &idx) != 0) return SLOT_NONE;   // pool exhausted
     return idx;
 }
-static void slot_free(slab_t* s, uint16_t idx) {
-    s->free_ring[s->free_head] = idx;
-    s->free_head = (s->free_head + 1) % RING_CAP;
-}
+static void slot_free(slab_t* s, uint16_t idx) { ring_push(&s->free, idx); }
 static void slab_init(slab_t* s) {
-    for (uint16_t i = 0; i < POOL_SIZE; i++) s->free_ring[i] = i;
-    s->free_tail = 0; s->free_head = POOL_SIZE;   // POOL_SIZE free slots enqueued
+    ring_init(&s->free);
+    for (uint16_t i = 0; i < POOL_SIZE; i++) ring_push(&s->free, i);   // every slot starts free
 }
-
-static slab_t g_slab;   // the driver's slab instance
 |}]
 
-(* ===== the pipeline rings: a small FIFO of uint16_t slot indices (a hand-rolled
-   rte_ring), plus the two instances that connect the stages. ring_init takes one ring,
-   so the driver initializes each explicitly (see main). ===== *)
+(* ===== the index ring: a small FIFO of uint16_t slot indices (a hand-rolled rte_ring).
+   Pure library (the instances -- the slab's free-list and the pipeline rings -- live in the
+   slab_t and the `state` block). ring_init takes one ring, so each is initialized explicitly. ===== *)
 let rings = dforiegn {|
 /********* index ring (a FIFO of slot indices) ***********/
 typedef struct { uint16_t buf[RING_CAP]; uint32_t head, tail; } idx_ring;
@@ -271,8 +269,14 @@ static int ring_pop(idx_ring* r, uint16_t* out) {
     if (r->tail == r->head) return -1;            // empty
     *out = r->buf[r->tail]; r->tail = (r->tail + 1) % RING_CAP; return 0;
 }
+|}
 
-/********* the pipeline's rings (each init'd via ring_init in main) ***********/
+(* ===== the driver's runtime state: instances of the slab + ring libraries. Kept out of
+   the library blocks so those stay pure (types + functions). Emitted just before the
+   stages that use it. ===== *)
+let state = dforiegn {|
+/********* the driver's runtime state (instances of the slab + ring libraries) ***********/
+static slab_t   g_slab;        // the packet-buffer pool
 static idx_ring dispatch_in;   // parsed + recirculated elements awaiting handling
 static idx_ring tx_in;         // handled elements awaiting fan-out + deparse + TX
 |}
@@ -296,7 +300,7 @@ static void ingest_slot(uint16_t idx, int in_port) {
 /******** RX: read a bounded burst from every port, parse + enqueue each on dispatch_in ********/
 static void do_rx(void) {
     for (int p = 0; p < g_nports; p++) {
-        rx_batch batch = port_rx(g_ports[p].fd);
+        rx_batch batch = port_rx(g_ports[p].fd, &g_slab);
         for (uint16_t i = 0; i < batch.n; i++) ingest_slot(batch.idx[i], g_ports[p].port_id);
     }
 }
@@ -425,7 +429,7 @@ int main(int argc, char** argv) {
 let package_prog decls =
   [
     "lucidprog.c", `Decls (imports @ decls @ helpers @
-      [driver_helpers; slab; rings; socket_layer; rx; dispatch; tx; main]);
+      [config; rings; slab; driver_helpers; socket_layer; state; rx; dispatch; tx; main]);
     "makefile", `String "all: lucidprog\n\nlucidprog: lucidprog.c\n\tgcc -O2 -o lucidprog lucidprog.c\n\n"
   ]
 ;;
