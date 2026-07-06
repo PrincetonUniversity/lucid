@@ -95,8 +95,6 @@ let compile ds =
   (* let cds = CCoreTyper.check cds in *)
   CCoreWellformed.check_ccore_compat cds;
 
-  
-
   (*** 8. add target-specific driver interface *)
   let progbundle = match CConfig.c_cfg.driver with
     | "lpcap" -> CCoreDriverPcap.package_prog cds

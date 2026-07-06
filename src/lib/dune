@@ -203,7 +203,6 @@
    CCoreCForm
    CCoreMaskWidths
    CCoreWellformed
-   CCorePacketHandler
    CCoreDriverPcap
    CCoreDriverDpdk
    CCoreDriverRawSocket

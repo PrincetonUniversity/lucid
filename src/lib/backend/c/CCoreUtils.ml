@@ -51,19 +51,6 @@ let check_r1_widths (widths : int list) : (unit, int * string) result =
   go 0 0 widths
 ;;
 
-(* find a type definition based on its id *)
-let rec find_ty_opt ty_cid decls = 
-  match decls with 
-  | [] -> None
-  | decl::decls -> (
-    match decl.d with 
-    | DTy(cid, Some(ty)) -> 
-      if (Cid.equal cid ty_cid) then Some(tabstract_cid cid ty) else (find_ty_opt ty_cid decls)
-    | _ -> find_ty_opt ty_cid decls
-  )
-;;
-
-
 let is_smatch statement = match statement.s with 
   | SMatch _ -> true 
   | _ -> false

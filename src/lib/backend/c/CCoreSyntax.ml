@@ -395,7 +395,7 @@ let rec bitsizeof_ty ty =
     Some (event_tag_size + List.fold_left max 0 payloads)
   | TFun _ -> None
   | TBuiltin _ -> None
-  | TName cid -> (match Hashtbl.find_opt tydefs cid with Some d -> bitsizeof_ty d | None -> None)
+  | TName cid -> (match Hashtbl.find_opt tydefs cid with Some d -> bitsizeof_ty d | None -> Printf.eprintf "[bitsizeof MISS] %s\n%!" (Cid.to_string cid); None)
 and bitsizeof_ty_exn ty =
   match bitsizeof_ty ty with 
   | Some size -> size
