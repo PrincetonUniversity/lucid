@@ -143,7 +143,7 @@ let rec compound_eq e1 e2 =
     | TVec(_, IConst(n)) ->
       emacro_and_fold (List.init (n) (fun i -> (e1/@(eval@@vint i 32) /== (e2/@(eval@@vint i 32)))))
     | TVec(_, IVar _) -> err "cannot generate equality exp for vector of unknown length"
-    | TBytes -> err "cannot generate equality exp for bytes"
+    | TPacket -> err "cannot generate equality exp for bytes"
     | TPtr(_, None) -> compound_eq (ederef e1) (ederef e2)
     | TName cid -> (match tydef_opt cid with
       | Some d -> compound_eq {e1 with ety=d} {e2 with ety=d}
@@ -205,7 +205,7 @@ let rec compound_masked_eq e1 e2 m =
           (((e1/@idx) /& (m/@idx)) /== ((e2/@idx) /& (m/@idx)))
         ))
     | TVec(_, IVar _) -> err "cannot generate masked equality exp for vector of unknown length"
-    | TBytes -> err "cannot generate masked equality exp for bytes"
+    | TPacket -> err "cannot generate masked equality exp for bytes"
     | TPtr(_, None) -> compound_masked_eq (ederef e1) (ederef e2) (ederef m)
     | TName cid -> (match tydef_opt cid with
       | Some d -> compound_masked_eq {e1 with ety=d} {e2 with ety=d} {m with ety=d}

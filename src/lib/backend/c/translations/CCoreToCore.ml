@@ -109,7 +109,7 @@ let rec translate_raw_ty (raw_ty : F.raw_ty) : C.raw_ty =
         else (C.Sz 16))
   | F.TPtr(_, Some _) -> err "List types cannot be translated back to core IR"
   | F.TVec(_, _) -> err "vector types cannot be translated back to core IR"
-  | F.TBytes -> err "bytes type cannot be translated back to core IR"
+  | F.TPacket -> err "bytes type cannot be translated back to core IR"
         (* tbuiltins might be wrapped in global, but they are global already *)
   | F.TPtr(ty, None) -> (translate_ty ty).raw_ty
   | F.TUnion _ -> err "union types cannot be translated back to core IR"

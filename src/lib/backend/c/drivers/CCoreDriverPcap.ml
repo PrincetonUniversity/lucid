@@ -7,6 +7,8 @@ open CCoreUtils
    so the driver tracks generated names instead of hard-coding them. *)
 let events_ty    = CCoreCPrint.cid_to_string events_cid
 let out_event_ty = CCoreCPrint.cid_to_string CCoreHandlers.out_event_cid
+(* sentinel port value that marks a recirculated (generate_self) out_event *)
+let port_recirc  = string_of_int CCoreHandlers.port_recirc
 
 
 (* Simple Libpcap toplevel. 
@@ -199,9 +201,9 @@ static void do_dispatch(pkt_hdl_ctx_t *ctx) {
         %{out_event_ty} out_events[%{string_of_int CCoreHandlers.out_events_cap}];
         uint16_t n = handle_event(&ev, out_events);
         for (uint16_t i = 0; i < n; i++) {
-            if (out_events[i].out_loc == 1)        // recirculation: re-queue for dispatch
+            if (out_events[i].port == %{port_recirc}u)  // recirculation: re-queue for dispatch
                 evq_push(&ctx->queue, &out_events[i].ev);
-            else if (out_events[i].out_loc == 2)   // output to a port: deparse + dump
+            else                                        // output to a port: deparse + dump
                 do_tx(ctx, &out_events[i]);
         }
     }

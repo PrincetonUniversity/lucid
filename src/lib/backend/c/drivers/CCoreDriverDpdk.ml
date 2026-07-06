@@ -9,18 +9,22 @@ open CCoreUtils
     includes  ->  <generated code: types, parse/handle/deparse>  ->
     rings  ->  config + EAL/port/ring init  ->  rx/dispatch/tx phases  ->  main
 
-  The runtime is a three-stage pipeline connected by two DPDK rings:
-      RX   : poll every port, parse each frame to an event, push to dispatch_in.
-      DISP : handle ONE event, route its outputs (recirc -> dispatch_in, port -> tx_in).
-      TX   : deparse ONE output event and transmit it.
-  Doing one event per main-loop iteration (rather than draining a queue to empty)
-  interleaves recirculated events with fresh input, so a self-recirculating handler
-  can't starve the RX path.
+  The runtime is a three-stage pipeline connected by two DPDK rings that carry mbuf
+  POINTERS -- every event rides an mbuf (the "queue element"):
+      RX   : poll every port, parse each frame into the mbuf's event, push to dispatch_in.
+      DISP : handle a bounded burst of events, filling each mbuf's out_events list; hand
+             the mbuf to tx_in with NO copy.
+      TX   : fan out each mbuf into one copy per output event, then route each copy
+             (recirc -> dispatch_in, else deparse + transmit to its port).
+  Each stage pulls a BOUNDED burst (<= BURST_SIZE) rather than draining to empty, so a
+  self-recirculating handler can't starve the RX path.
 
-  Payload lifetime: an event's payload rides along as an mbuf in the ring element
-  (NULL for events with no payload). RX strips the parsed header so the mbuf *is*
-  the payload; TX prepends the deparsed header back onto it. A handler output that
-  carries a payload gets its own copy of the input payload (copy-per-output).
+  Ownership: the mbuf owns the packet bytes; the event and (on the input mbuf) the
+  handler's output list live in the mbuf's private area (qe_priv_t). packet_t is only
+  ever a transient VIEW built over the mbuf's data to parse/deparse -- it owns nothing.
+  RX records where the payload begins (payload_off) instead of stripping the header;
+  each TX copy takes just that payload (or empty) with fresh headroom, and deparse
+  prepends the output's header into it. The copy is the fan-out -- dispatch never copies.
 
   Assumes every output port id used by the program is bound to a valid device. *)
 
@@ -37,6 +41,7 @@ let parse_event_fn   = CCoreCPrint.cid_to_string CCoreParse.parser_cid
 let deparse_event_fn = CCoreCPrint.cid_to_string CCoreParse.deparse_id
 let handle_event_fn  = CCoreCPrint.cid_to_string CCoreHandlers.handler_cid
 let out_events_cap   = string_of_int CCoreHandlers.out_events_cap
+let port_recirc      = string_of_int CCoreHandlers.port_recirc
 
 (* ===== includes (before the generated code, which needs stdint etc.) ===== *)
 let dpdk_includes = dforiegn {|
@@ -55,28 +60,37 @@ let dpdk_includes = dforiegn {|
 #include <rte_ring.h>
 |}
 
-(* ===== pipeline rings (reference `events`, so emitted after the generated code) ===== *)
-let dpdk_rings = dforiegn [%string {|
+(* ===== queue element + pipeline rings (reference the generated event/packet types) ===== *)
+let dpdk_queue = dforiegn [%string {|
+/******** the queue element: an mbuf whose private area carries the event ********/
+// Every event rides an mbuf. The mbuf OWNS the packet bytes (its data region); the
+// mbuf's private area (priv_size, set at pool creation) holds the event and -- on the
+// input mbuf between dispatch and tx -- the handler's output-event list. packet_t is
+// only ever a transient VIEW built over the data to parse/deparse; it owns nothing.
+typedef struct {
+	%{events_ty}    ev;                        // the event this mbuf carries
+	%{out_event_ty} out_events[%{out_events_cap}]; // handler outputs (input mbuf only)
+	uint16_t        n_out;                     // number of outputs the handler produced
+	uint32_t        payload_off;               // byte offset in the data where the payload begins
+} qe_priv_t;
+
+static inline qe_priv_t *qe(struct rte_mbuf *m) { return (qe_priv_t *)rte_mbuf_to_priv(m); }
+
+// a transient cursor view over an mbuf's data (front .. pkt_len); borrows, never owns.
+static inline %{packet_t_ty} view_over(struct rte_mbuf *m) {
+	uint8_t *d = rte_pktmbuf_mtod(m, uint8_t *);
+	return (%{packet_t_ty}){ .start = d, .cursor = d, .end = d + rte_pktmbuf_pkt_len(m), .bit_off = 0 };
+}
+
 /******** pipeline rings (DPDK rte_ring, single-producer / single-consumer) ********/
 #define RING_SIZE 1024
-#define BURST_SIZE 64   // max events pulled per rx / dispatch / tx call (bounded, so
-                        // a self-recirculating handler can't starve the RX path)
+#define BURST_SIZE 64   // max mbufs pulled per rx / dispatch / tx call (bounded, so a
+                        // self-recirculating handler can't starve the RX path)
+#define PORT_RECIRC %{port_recirc}u  // out_event.port sentinel: recirculate, don't egress
 
-// The events flow through the rings by value. Each event carries its own packet
-// buffer in ev.meta.payload (a packet_t whose driver_buf is the mbuf, NULL for
-// events with no payload) and its ingress port in ev.meta.in_port -- so the ring
-// elements are just the event (dispatch) and the out_event (tx), with no side data.
-static struct rte_ring *dispatch_in;  // parsed + recirculated events awaiting handling
-static struct rte_ring *tx_in;        // output events awaiting deparse + TX
-
-// build a packet_t cursor over a (payload) mbuf, cursor at the front, remembering the
-// mbuf as driver_buf so TX can recover it.
-static inline %{packet_t_ty} pkt_over(struct rte_mbuf *m) {
-	uint8_t *d = rte_pktmbuf_mtod(m, uint8_t*);
-	return (%{packet_t_ty}){ .start = d, .cursor = d, .end = d + rte_pktmbuf_pkt_len(m),
-	                         .bit_off = 0, .driver_buf = (uint8_t*)m };
-}
-static inline struct rte_mbuf *pkt_mbuf(%{packet_t_ty} *p) { return (struct rte_mbuf*)p->driver_buf; }
+// The rings carry mbuf POINTERS (the queue elements themselves).
+static struct rte_ring *dispatch_in;  // parsed + recirculated event-mbufs awaiting handling
+static struct rte_ring *tx_in;        // handled event-mbufs awaiting fan-out + deparse + TX
 |}]
 
 (* ===== config + EAL / port / ring initialization ===== *)
@@ -172,15 +186,18 @@ void dpdk_init(cfg_t* cfg, int argc, char *argv[]) {
 	if (nb_ports == 0)
 		rte_exit(EXIT_FAILURE, "No Ethernet ports - bye\n");
 	cfg->num_ports = nb_ports;
+	// priv_size carries qe_priv_t (the event + output list) alongside each mbuf's data.
+	uint16_t priv_size = RTE_ALIGN(sizeof(qe_priv_t), RTE_MBUF_PRIV_ALIGN);
 	mbuf_pool = rte_pktmbuf_pool_create("MBUF_POOL", cfg->num_mbufs * nb_ports,
-		cfg->mbuf_cache_size, 0, RTE_MBUF_DEFAULT_BUF_SIZE, rte_socket_id());
+		cfg->mbuf_cache_size, priv_size, RTE_MBUF_DEFAULT_BUF_SIZE, rte_socket_id());
 	if (mbuf_pool == NULL) rte_exit(EXIT_FAILURE, "failed to create mbuf pool. not enough memory?");
 
-	// single core -> single producer / single consumer rings (lockless).
-	dispatch_in = rte_ring_create_elem("dispatch_in", sizeof(%{events_ty}), RING_SIZE,
-		rte_socket_id(), RING_F_SP_ENQ | RING_F_SC_DEQ);
-	tx_in = rte_ring_create_elem("tx_in", sizeof(%{out_event_ty}), RING_SIZE,
-		rte_socket_id(), RING_F_SP_ENQ | RING_F_SC_DEQ);
+	// single core -> single producer / single consumer rings (lockless); they carry
+	// mbuf pointers, so plain rte_ring (not the value-carrying _elem variant).
+	dispatch_in = rte_ring_create("dispatch_in", RING_SIZE, rte_socket_id(),
+		RING_F_SP_ENQ | RING_F_SC_DEQ);
+	tx_in = rte_ring_create("tx_in", RING_SIZE, rte_socket_id(),
+		RING_F_SP_ENQ | RING_F_SC_DEQ);
 	if (dispatch_in == NULL || tx_in == NULL)
 		rte_exit(EXIT_FAILURE, "failed to create pipeline rings\n");
 
@@ -197,11 +214,11 @@ void dpdk_init(cfg_t* cfg, int argc, char *argv[]) {
    loops over it -- so dispatch/tx don't drain to empty, which would let a
    self-recirculating handler starve the RX path. *)
 
-(* RX: poll every port, parse each frame to an event, push it to dispatch_in. The
-   mbuf is stripped to its payload tail and carried iff the event has a payload;
-   otherwise it is freed (the event travels by value). *)
+(* RX: poll every port, parse each frame into the mbuf's event, enqueue the mbuf on
+   dispatch_in. No header stripping -- we record where the payload begins (payload_off)
+   and leave the bytes in place; the mbuf IS the queue element. *)
 let dpdk_do_rx = dforiegn [%string {|
-/******** RX: poll every port, parse, enqueue on dispatch_in ********/
+/******** RX: poll every port, parse, enqueue the event-mbuf on dispatch_in ********/
 static void do_rx(void) {
 	uint16_t port;
 	RTE_ETH_FOREACH_DEV(port) {
@@ -209,91 +226,77 @@ static void do_rx(void) {
 		const uint16_t nb_rx = rte_eth_rx_burst(port, 0, bufs, BURST_SIZE);
 		for (uint16_t i = 0; i < nb_rx; i++) {
 			struct rte_mbuf *m = bufs[i];
-			uint8_t *data = rte_pktmbuf_mtod(m, uint8_t*);
-			%{packet_t_ty} pkt = { .start = data, .cursor = data,
-			                       .end = data + rte_pktmbuf_pkt_len(m), .bit_off = 0 };
-			%{events_ty} ev;
-			if (%{parse_event_fn}(&pkt, &ev) != 1) { rte_pktmbuf_free(m); continue; } // drop
-			ev.meta.in_port = port;   // stamp the ingress port (read by the handler)
-			if (ev.meta.has_payload) {
-				// strip the parsed header; the mbuf now *is* the payload tail, carried
-				// as the event's own packet buffer (ev.meta.payload).
-				rte_pktmbuf_adj(m, (uint16_t)(pkt.cursor - data));
-				ev.meta.payload = pkt_over(m);
-			}
-			if (rte_ring_enqueue_elem(dispatch_in, &ev, sizeof(ev)) != 0) {
-				rte_pktmbuf_free(m);        // ring full -> drop (frees the payload if kept)
-			} else if (!ev.meta.has_payload) {
-				rte_pktmbuf_free(m);        // enqueued by value; no payload to keep
-			}
+			qe_priv_t *p = qe(m);
+			%{packet_t_ty} view = view_over(m);
+			if (%{parse_event_fn}(&view, &p->ev) != 1) { rte_pktmbuf_free(m); continue; } // drop
+			p->payload_off = (uint32_t)(view.cursor - view.start); // where the payload begins
+			p->ev.meta.in_port = port;                             // stamp ingress (read by the handler)
+			if (rte_ring_enqueue(dispatch_in, m) != 0) rte_pktmbuf_free(m); // ring full -> drop
 		}
 	}
 }
 |}]
 
-(* DISPATCH: handle a bounded burst of events. Recirc outputs go back onto
-   dispatch_in (a FUTURE burst, since they aren't in this burst's snapshot), so a
-   self-recirculating handler can't starve RX. Port outputs go to tx_in. A
-   payload-carrying output gets its own copy of the input payload. *)
+(* DISPATCH: handle a bounded burst of event-mbufs. The handler fills each mbuf's
+   out_events list; we hand the mbuf straight to tx_in with NO copy (the fan-out
+   happens in TX). Bounded burst -> recirculated events (re-enqueued by TX onto
+   dispatch_in) land in a future burst, so a self-recirculating handler can't starve RX. *)
 let dpdk_do_dispatch = dforiegn [%string {|
-/******** DISPATCH: handle a burst of events, route their outputs ********/
+/******** DISPATCH: handle a burst of event-mbufs; hand each to tx_in (no copy) ********/
 static void do_dispatch(void) {
-	%{events_ty} batch[BURST_SIZE];
-	unsigned nb = rte_ring_dequeue_burst_elem(dispatch_in, batch, sizeof(%{events_ty}), BURST_SIZE, NULL);
+	void *batch[BURST_SIZE];
+	unsigned nb = rte_ring_dequeue_burst(dispatch_in, batch, BURST_SIZE, NULL);
 	for (unsigned b = 0; b < nb; b++) {
-		%{events_ty} *in = &batch[b];
-		in->meta.timestamp = (uint32_t)rte_get_tsc_cycles(); // stamp at dequeue (Sys.time())
-		struct rte_mbuf *in_m = pkt_mbuf(&in->meta.payload);
-		%{out_event_ty} out_events[%{out_events_cap}];
-		uint16_t n = %{handle_event_fn}(in, out_events); // ingress read from in->meta.in_port
-		for (uint16_t i = 0; i < n; i++) {
-			%{events_ty} *oev = &out_events[i].ev;
-			// give each payload-carrying output its own copy of the input payload
-			if (oev->meta.has_payload && in_m != NULL)
-				oev->meta.payload = pkt_over(rte_pktmbuf_copy(in_m, mbuf_pool, 0, UINT32_MAX));
-			if (out_events[i].out_loc == 1) {          // recirculation (generate_self)
-				oev->meta.in_port = in->meta.in_port;  // recirc inherits ingress
-				if (rte_ring_enqueue_elem(dispatch_in, oev, sizeof(%{events_ty})) != 0 && pkt_mbuf(&oev->meta.payload))
-					rte_pktmbuf_free(pkt_mbuf(&oev->meta.payload));
-			} else if (out_events[i].out_loc == 2) {   // output to a port
-				if (rte_ring_enqueue_elem(tx_in, &out_events[i], sizeof(%{out_event_ty})) != 0 && pkt_mbuf(&oev->meta.payload))
-					rte_pktmbuf_free(pkt_mbuf(&oev->meta.payload));
-			} else if (pkt_mbuf(&oev->meta.payload)) {
-				rte_pktmbuf_free(pkt_mbuf(&oev->meta.payload));
-			}
-		}
-		if (in_m != NULL) rte_pktmbuf_free(in_m); // input payload consumed (copied per output)
+		struct rte_mbuf *m = (struct rte_mbuf *)batch[b];
+		qe_priv_t *p = qe(m);
+		p->ev.meta.timestamp = (uint32_t)rte_get_tsc_cycles(); // stamp at dequeue (Sys.time())
+		p->n_out = %{handle_event_fn}(&p->ev, p->out_events);   // ingress read from p->ev.meta.in_port
+		if (rte_ring_enqueue(tx_in, m) != 0) rte_pktmbuf_free(m); // ring full -> drop the element
 	}
 }
 |}]
 
-(* TX: deparse a bounded burst of output events and transmit them. A payload event
-   prepends its header onto the carried payload mbuf; a no-payload event builds a
-   fresh header-only mbuf. Deparse writes the header backwards into the mbuf's
-   headroom, then prepend extends the data region to include it. *)
+(* TX: fan out a bounded burst of event-mbufs. For each input mbuf we make one copy
+   per output event -- the copy holds just that output's payload (the input's bytes at
+   payload_off, or empty for a no-payload output) with fresh headroom -- set the copy's
+   event, then route it: a recirc output (port == PORT_RECIRC) goes back onto dispatch_in
+   un-deparsed; any other output is deparsed (header prepended into the headroom) and
+   transmitted. The input mbuf is freed once all its outputs are copied out. *)
 let dpdk_do_tx = dforiegn [%string {|
-/******** TX: deparse a burst of output events and transmit them ********/
+/******** TX: fan out each event-mbuf into one copy per output, then route/deparse/send ********/
 static void do_tx(void) {
-	%{out_event_ty} batch[BURST_SIZE];
-	unsigned nb = rte_ring_dequeue_burst_elem(tx_in, batch, sizeof(%{out_event_ty}), BURST_SIZE, NULL);
+	void *batch[BURST_SIZE];
+	unsigned nb = rte_ring_dequeue_burst(tx_in, batch, BURST_SIZE, NULL);
 	for (unsigned b = 0; b < nb; b++) {
-		%{out_event_ty} *e = &batch[b];
-		struct rte_mbuf *m = pkt_mbuf(&e->ev.meta.payload);
-		if (e->port >= cfg.num_ports) {
-			printf("WARNING: dropping packet to out-of-range port: %u\n", e->port);
-			if (m) rte_pktmbuf_free(m);
-			continue;
+		struct rte_mbuf *m = (struct rte_mbuf *)batch[b];
+		qe_priv_t *ip = qe(m);
+		uint32_t pkt_len = rte_pktmbuf_pkt_len(m);
+		for (uint16_t i = 0; i < ip->n_out; i++) {
+			%{out_event_ty} *oe = &ip->out_events[i];
+			// each output owns an independent copy: just the input's payload (or empty),
+			// with fresh headroom for the deparsed header to prepend into.
+			uint32_t plen = oe->ev.meta.has_payload ? (pkt_len - ip->payload_off) : 0;
+			struct rte_mbuf *c = plen > 0
+				? rte_pktmbuf_copy(m, mbuf_pool, ip->payload_off, plen)
+				: rte_pktmbuf_alloc(mbuf_pool);
+			if (unlikely(c == NULL)) continue;
+			qe_priv_t *cp = qe(c);
+			cp->ev = oe->ev;
+			cp->payload_off = 0;                // the payload now sits at the front of c
+			if (oe->port == PORT_RECIRC) {          // recirculation (generate_self)
+				cp->ev.meta.in_port = ip->ev.meta.in_port; // recirc inherits ingress
+				if (rte_ring_enqueue(dispatch_in, c) != 0) rte_pktmbuf_free(c);
+			} else if (oe->port >= cfg.num_ports) {
+				printf("WARNING: dropping packet to out-of-range port: %u\n", oe->port);
+				rte_pktmbuf_free(c);
+			} else {                                // output to a port: deparse + transmit
+				%{packet_t_ty} view = view_over(c); // cursor at the payload boundary (front of c)
+				%{deparse_event_fn}(&cp->ev, &view); // writes the header backwards into headroom
+				rte_pktmbuf_prepend(c, (uint16_t)(view.start - view.cursor)); // include the header
+				if (unlikely(rte_eth_tx_burst(oe->port, 0, &c, 1) < 1)) rte_pktmbuf_free(c);
+			}
 		}
-		if (m == NULL) {                       // no-payload event -> fresh, header-only mbuf
-			m = rte_pktmbuf_alloc(mbuf_pool);
-			if (unlikely(m == NULL)) continue;
-			e->ev.meta.payload = pkt_over(m);
-		}
-		%{packet_t_ty} *pkt = &e->ev.meta.payload;
-		%{deparse_event_fn}(&e->ev, pkt);      // writes the header backwards into headroom
-		rte_pktmbuf_prepend(m, (uint16_t)(pkt->start - pkt->cursor)); // include prepended header
-		uint16_t nb_tx = rte_eth_tx_burst(e->port, 0, &m, 1);
-		if (unlikely(nb_tx < 1)) rte_pktmbuf_free(m);
+		rte_pktmbuf_free(m); // input consumed (copied per output)
 	}
 }
 |}]
@@ -382,7 +385,7 @@ let package_prog decls =
 [
 	"lucidprog.c", `Decls (
 		[dpdk_includes] @ decls @ (helpers decls) @
-		[dpdk_rings; dpdk_config_init; dpdk_do_rx; dpdk_do_dispatch; dpdk_do_tx; dpdk_main]);
+		[dpdk_queue; dpdk_config_init; dpdk_do_rx; dpdk_do_dispatch; dpdk_do_tx; dpdk_main]);
 	(* capital M: the DPDK makefile lists `Makefile` as a prerequisite of its build
 	   rules, so the on-disk name must match (Linux is case-sensitive). *)
 	"Makefile", `String makefile;

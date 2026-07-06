@@ -22,7 +22,6 @@ typedef struct {
   uint8_t*  cursor;
   uint8_t*  end;
   uint32_t bit_off;
-  uint8_t*  driver_buf;
 } packet_t;
 
 uint64_t read_bits(packet_t* bs, int n) {
@@ -95,7 +94,6 @@ typedef struct {
   uint8_t has_payload;
   uint32_t timestamp;
   uint32_t in_port;
-  packet_t payload;
 } event_meta;
 uint16_t ethpkt_tag  = 1;
 typedef struct {
@@ -122,7 +120,6 @@ typedef struct {
 } event_t;
 typedef struct {
   event_t ev;
-  uint8_t out_loc;
   uint32_t port;
 } out_event_t;
 event_t mk_ethpkt(uint64_t dst_752 , uint64_t src_753 , uint16_t ety_754 ){
@@ -147,7 +144,7 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
       uint16_t ety_759  = ev_in->data.args.ethpkt_756.ety_754;
       event_t this  = mk_ethpkt(dst_757, src_758, ety_759);
       if (ety_759 == 2048) {
-        out_event_t tmp_803  = {.ev = mk_ethpkt(src_758, dst_757, ety_759), .out_loc = 2, .port = ev_in->meta.in_port};
+        out_event_t tmp_803  = {.ev = mk_ethpkt(src_758, dst_757, ety_759), .port = ev_in->meta.in_port};
         out_events[n] = tmp_803;
         n = n + 1;
       }
@@ -288,9 +285,9 @@ static void do_dispatch(pkt_hdl_ctx_t *ctx) {
         out_event_t out_events[64];
         uint16_t n = handle_event(&ev, out_events);
         for (uint16_t i = 0; i < n; i++) {
-            if (out_events[i].out_loc == 1)        // recirculation: re-queue for dispatch
+            if (out_events[i].port == 4294967295u)  // recirculation: re-queue for dispatch
                 evq_push(&ctx->queue, &out_events[i].ev);
-            else if (out_events[i].out_loc == 2)   // output to a port: deparse + dump
+            else                                        // output to a port: deparse + dump
                 do_tx(ctx, &out_events[i]);
         }
     }

@@ -22,7 +22,6 @@ typedef struct {
   uint8_t*  cursor;
   uint8_t*  end;
   uint32_t bit_off;
-  uint8_t*  driver_buf;
 } packet_t;
 
 uint64_t read_bits(packet_t* bs, int n) {
@@ -95,7 +94,6 @@ typedef struct {
   uint8_t has_payload;
   uint32_t timestamp;
   uint32_t in_port;
-  packet_t payload;
 } event_meta;
 uint16_t tick_tag  = 1;
 uint16_t pkt_in_tag  = 2;
@@ -138,7 +136,6 @@ typedef struct {
 } event_t;
 typedef struct {
   event_t ev;
-  uint8_t out_loc;
   uint32_t port;
 } out_event_t;
 event_t mk_tick(){
@@ -166,7 +163,7 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
     case 1: {
       
       event_t this  = mk_tick();
-      out_event_t tmp_719  = {.ev = mk_tick(), .out_loc = 1, .port = 0};
+      out_event_t tmp_719  = {.ev = mk_tick(), .port = 4294967295};
       out_events[n] = tmp_719;
       n = n + 1;
       break;
@@ -174,7 +171,7 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
     case 2: {
       uint32_t x_676  = ev_in->data.args.pkt_in_672.x_671;
       event_t this  = mk_pkt_in(x_676);
-      out_event_t tmp_720  = {.ev = mk_pkt_out(x_676), .out_loc = 2, .port = 0};
+      out_event_t tmp_720  = {.ev = mk_pkt_out(x_676), .port = 0};
       out_events[n] = tmp_720;
       n = n + 1;
       break;
@@ -374,9 +371,9 @@ static void do_dispatch(pkt_hdl_ctx_t *ctx) {
         out_event_t out_events[64];
         uint16_t n = handle_event(&ev, out_events);
         for (uint16_t i = 0; i < n; i++) {
-            if (out_events[i].out_loc == 1)        // recirculation: re-queue for dispatch
+            if (out_events[i].port == 4294967295u)  // recirculation: re-queue for dispatch
                 evq_push(&ctx->queue, &out_events[i].ev);
-            else if (out_events[i].out_loc == 2)   // output to a port: deparse + dump
+            else                                        // output to a port: deparse + dump
                 do_tx(ctx, &out_events[i]);
         }
     }

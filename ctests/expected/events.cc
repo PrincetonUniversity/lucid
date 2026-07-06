@@ -22,7 +22,6 @@ typedef struct {
   uint8_t*  cursor;
   uint8_t*  end;
   uint32_t bit_off;
-  uint8_t*  driver_buf;
 } packet_t;
 
 uint64_t read_bits(packet_t* bs, int n) {
@@ -95,7 +94,6 @@ typedef struct {
   uint8_t has_payload;
   uint32_t timestamp;
   uint32_t in_port;
-  packet_t payload;
 } event_meta;
 uint16_t pkt_in_tag  = 1;
 uint16_t bg_cmd_tag  = 2;
@@ -142,7 +140,6 @@ typedef struct {
 } event_t;
 typedef struct {
   event_t ev;
-  uint8_t out_loc;
   uint32_t port;
 } out_event_t;
 event_t mk_pkt_in(uint32_t src_ip_1184 , uint32_t src_port_1185 ){
@@ -179,7 +176,7 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
       event_t this  = mk_pkt_in(src_ip_1195, src_port_1196);
       printf("Received packet from (ip: %d, port: %d)", src_ip_1195, src_port_1196);
       event_t MY_EVENT_1197  = mk_pkt_out(src_ip_1195, src_port_1196);
-      out_event_t tmp_1273  = {.ev = mk_bg_cmd(src_port_1196), .out_loc = 1, .port = 0};
+      out_event_t tmp_1273  = {.ev = mk_bg_cmd(src_port_1196), .port = 4294967295};
       out_events[n] = tmp_1273;
       n = n + 1;
       switch (MY_EVENT_1197.data.tag) {
@@ -187,7 +184,7 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
           uint32_t ip_1198  = MY_EVENT_1197.data.args.pkt_out_1191.src_ip_1189;
           uint32_t port_1199  = MY_EVENT_1197.data.args.pkt_out_1191.src_port_1190;
           printf("Sending packet to (ip: %d, port: %d)", ip_1198, port_1199);
-          out_event_t tmp_1274  = {.ev = mk_pkt_out(src_ip_1195, src_port_1196), .out_loc = 2, .port = 0};
+          out_event_t tmp_1274  = {.ev = mk_pkt_out(src_ip_1195, src_port_1196), .port = 0};
           out_events[n] = tmp_1274;
           n = n + 1;
           break;
@@ -402,9 +399,9 @@ static void do_dispatch(pkt_hdl_ctx_t *ctx) {
         out_event_t out_events[64];
         uint16_t n = handle_event(&ev, out_events);
         for (uint16_t i = 0; i < n; i++) {
-            if (out_events[i].out_loc == 1)        // recirculation: re-queue for dispatch
+            if (out_events[i].port == 4294967295u)  // recirculation: re-queue for dispatch
                 evq_push(&ctx->queue, &out_events[i].ev);
-            else if (out_events[i].out_loc == 2)   // output to a port: deparse + dump
+            else                                        // output to a port: deparse + dump
                 do_tx(ctx, &out_events[i]);
         }
     }

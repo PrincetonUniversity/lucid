@@ -5,6 +5,8 @@ open CCoreUtils
    the cids the codegen emits and inlined with %{...} below (see the dpdk driver). *)
 let events_ty    = CCoreCPrint.cid_to_string events_cid
 let out_event_ty = CCoreCPrint.cid_to_string CCoreHandlers.out_event_cid
+(* sentinel port value that marks a recirculated (generate_self) out_event *)
+let port_recirc  = string_of_int CCoreHandlers.port_recirc
 
 (* Raw-socket driver: run a compiled Lucid program on real POSIX network
    interfaces, the same way the `lucidSwitch` interpreter does (AF_PACKET raw
@@ -227,9 +229,9 @@ static void do_dispatch(int ingress_port) {
         %{out_event_ty} out_events[%{string_of_int CCoreHandlers.out_events_cap}];
         uint16_t n = handle_event(&ev, out_events);
         for (uint16_t i = 0; i < n; i++) {
-            if (out_events[i].out_loc == 1)        // recirculation: re-queue for dispatch
+            if (out_events[i].port == %{port_recirc}u)  // recirculation: re-queue for dispatch
                 evq_push(&g_queue, &out_events[i].ev);
-            else if (out_events[i].out_loc == 2)   // output to a port: deparse + send
+            else                                        // output to a port: deparse + send
                 do_tx(&out_events[i]);
         }
     }

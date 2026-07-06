@@ -22,7 +22,6 @@ typedef struct {
   uint8_t*  cursor;
   uint8_t*  end;
   uint32_t bit_off;
-  uint8_t*  driver_buf;
 } packet_t;
 
 uint64_t read_bits(packet_t* bs, int n) {
@@ -95,7 +94,6 @@ typedef struct {
   uint8_t has_payload;
   uint32_t timestamp;
   uint32_t in_port;
-  packet_t payload;
 } event_meta;
 uint16_t hdr_tag  = 1;
 typedef struct {
@@ -126,7 +124,6 @@ typedef struct {
 } event_t;
 typedef struct {
   event_t ev;
-  uint8_t out_loc;
   uint32_t port;
 } out_event_t;
 event_t mk_hdr(uint8_t ver_894 , uint16_t len_895 , uint64_t dst_896 , uint64_t src_897 , uint16_t ety_898 ){
@@ -154,7 +151,7 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
       uint64_t src_904  = ev_in->data.args.hdr_900.src_897;
       uint16_t ety_905  = ev_in->data.args.hdr_900.ety_898;
       event_t this  = mk_hdr(ver_901, len_902, dst_903, src_904, ety_905);
-      out_event_t tmp_958  = {.ev = mk_hdr(ver_901, len_902 + 1 & 4095, dst_903, src_904, ety_905), .out_loc = 2, .port = ev_in->meta.in_port};
+      out_event_t tmp_958  = {.ev = mk_hdr(ver_901, len_902 + 1 & 4095, dst_903, src_904, ety_905), .port = ev_in->meta.in_port};
       out_events[n] = tmp_958;
       n = n + 1;
       break;
@@ -298,9 +295,9 @@ static void do_dispatch(pkt_hdl_ctx_t *ctx) {
         out_event_t out_events[64];
         uint16_t n = handle_event(&ev, out_events);
         for (uint16_t i = 0; i < n; i++) {
-            if (out_events[i].out_loc == 1)        // recirculation: re-queue for dispatch
+            if (out_events[i].port == 4294967295u)  // recirculation: re-queue for dispatch
                 evq_push(&ctx->queue, &out_events[i].ev);
-            else if (out_events[i].out_loc == 2)   // output to a port: deparse + dump
+            else                                        // output to a port: deparse + dump
                 do_tx(ctx, &out_events[i]);
         }
     }

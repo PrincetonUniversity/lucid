@@ -26,7 +26,6 @@ typedef struct {
   uint8_t*  cursor;
   uint8_t*  end;
   uint32_t bit_off;
-  uint8_t*  driver_buf;
 } packet_t;
 
 uint64_t read_bits(packet_t* bs, int n) {
@@ -99,7 +98,6 @@ typedef struct {
   uint8_t has_payload;
   uint32_t timestamp;
   uint32_t in_port;
-  packet_t payload;
 } event_meta;
 uint16_t inside_packet_tag  = 1;
 uint16_t inside_continue_tag  = 2;
@@ -168,7 +166,6 @@ typedef struct {
 } event_t;
 typedef struct {
   event_t ev;
-  uint8_t out_loc;
   uint32_t port;
 } out_event_t;
 event_t mk_inside_packet(uint32_t src_ip_4037 , uint32_t src_port_4038 ){
@@ -258,7 +255,7 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
       printf("Mapped (ip: %d, port: %d) to port %d", src_ip_4053, src_port_4054, NAT_port_4055);
       Array_update_complex_nat_to_ip_4035_set_set_memop_32_bit(NAT_port_4055, src_ip_4053, 0);
       Array_update_complex_nat_to_port_4036_set_set_memop_32_bit(NAT_port_4055, src_port_4054, 0);
-      out_event_t tmp_4337  = {.ev = mk_inside_continue(NAT_port_4055), .out_loc = 1, .port = 0};
+      out_event_t tmp_4337  = {.ev = mk_inside_continue(NAT_port_4055), .port = 4294967295};
       out_events[n] = tmp_4337;
       n = n + 1;
       break;
@@ -281,12 +278,12 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
         tuple_1 tmp_4339  = {._0 = src_ip_4056, ._1 = src_port_4057,};
         uint32_t NAT_port_4064  = ((uint32_t)(hash_32((uint32_t)1234, (uint8_t* )&tmp_4339, 64) & 15));
         printf("IP already in NAT, maps to port %d", NAT_port_4064);
-        out_event_t tmp_4340  = {.ev = mk_inside_continue(NAT_port_4064), .out_loc = 1, .port = 0};
+        out_event_t tmp_4340  = {.ev = mk_inside_continue(NAT_port_4064), .port = 4294967295};
         out_events[n] = tmp_4340;
         n = n + 1;
       }else {
         printf("Adding to NAT");
-        out_event_t tmp_4341  = {.ev = mk_add_to_nat(src_ip_4056, src_port_4057), .out_loc = 1, .port = 0};
+        out_event_t tmp_4341  = {.ev = mk_add_to_nat(src_ip_4056, src_port_4057), .port = 4294967295};
         out_events[n] = tmp_4341;
         n = n + 1;
       }
@@ -301,7 +298,7 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
       if (ip_4066 == 0) {
         printf("dropped");
       }else {
-        out_event_t tmp_4342  = {.ev = mk_outside_continue(ip_4066, port_4067), .out_loc = 1, .port = 0};
+        out_event_t tmp_4342  = {.ev = mk_outside_continue(ip_4066, port_4067), .port = 4294967295};
         out_events[n] = tmp_4342;
         n = n + 1;
       }
@@ -549,9 +546,9 @@ static void do_dispatch(pkt_hdl_ctx_t *ctx) {
         out_event_t out_events[64];
         uint16_t n = handle_event(&ev, out_events);
         for (uint16_t i = 0; i < n; i++) {
-            if (out_events[i].out_loc == 1)        // recirculation: re-queue for dispatch
+            if (out_events[i].port == 4294967295u)  // recirculation: re-queue for dispatch
                 evq_push(&ctx->queue, &out_events[i].ev);
-            else if (out_events[i].out_loc == 2)   // output to a port: deparse + dump
+            else                                        // output to a port: deparse + dump
                 do_tx(ctx, &out_events[i]);
         }
     }

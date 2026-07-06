@@ -90,7 +90,7 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : (string * stri
   | TVec(ty, len) ->
     let prefix, suffix = ty_to_string ~use_abstract_name ty in
     prefix, (sprintf "[%s]" (arrlen_to_string len))^suffix
-  | TBytes -> ty_err "bytes should be lowered to packet_t before C printing"
+  | TPacket -> ty_err "bytes should be lowered to packet_t before C printing"
   | TPtr(ty, None) ->
     let prefix, suffix = ty_to_string ~use_abstract_name ty in
     match ty.raw_ty with 

@@ -7,7 +7,7 @@
 
    Phase 1 (process): produce the *value-semantic* forms, ABOVE the
      value-semantics boundary.
-       parser   -- the unparsed packet is the opaque bytes ADT (TBytes);
+       parser   -- the unparsed packet is the opaque bytes ADT (TPacket);
                    reads/peeks/skips become Peek/Skip ops that thread the bytes as
                    a value; a parser returns (ok, event); generate becomes
                    "return (bytes_ok pkt, event)" and drop "return (false, _)".
@@ -54,8 +54,8 @@ let buf_out_cid = cid "buf_out"
 (* -------------------------------- parser --------------------------------- *)
 (* produce the value-semantic parser *)
 
-(* Payload.t / 1500-bit placeholder -> the opaque TBytes type *)
-let to_tbytes =
+(* Payload.t / 1500-bit placeholder -> the opaque TPacket type *)
+let to_tpacket =
   let is_placeholder ty = match ty.raw_ty with
     | TBits{ternary=false; len=1500} -> true
     | TBuiltin(cid, _) when (Cid.names cid = ["Payload"; "t"]) -> true
@@ -64,7 +64,7 @@ let to_tbytes =
   object (_) inherit [_] s_map as super
     method! visit_ty () ty =
       let ty = super#visit_ty () ty in
-      if is_placeholder ty then tbytes else ty
+      if is_placeholder ty then tpacket else ty
   end
 ;;
 
@@ -101,7 +101,7 @@ let is_payload_parse e = match parse_op_name e with
    [pkt]) into bytes ops on the cursor resource. read/skip advance the cursor in
    place, so nothing is threaded/rebound -- pkt is read by each op. *)
 let rec thread_body pkt stmt =
-  let pktv = evar pkt tbytes in
+  let pktv = evar pkt tpacket in
   match stmt.s with
   | SSeq(s1, s2) -> sseq (thread_body pkt s1) (thread_body pkt s2)
   | SMatch(es, branches) -> smatch es (List.map (fun (ps, b) -> (ps, thread_body pkt b)) branches)
@@ -125,7 +125,7 @@ let rec thread_body pkt stmt =
 
 let process_parser id params body =
   let id = if (Cid.names id = ["main"]) then parser_cid else id in
-  let pkt = match List.find_opt (fun (_, ty) -> is_tbytes ty) params with
+  let pkt = match List.find_opt (fun (_, ty) -> is_tpacket ty) params with
     | Some (pid, _) -> pid
     | None -> err "[CCoreParse] parser has no bytes parameter"
   in
@@ -136,7 +136,7 @@ let process_parser id params body =
 ;;
 
 let process_parse decls =
-  let decls = to_tbytes#visit_decls () decls in
+  let decls = to_tpacket#visit_decls () decls in
   List.map
     (fun decl ->
       match extract_dparser_opt decl with
@@ -195,7 +195,7 @@ let process_deparse decls =
     | None -> err "[CCoreParse] no event_variant type definition found"
   in
   let ev_out = evar ev_out_cid tevent in
-  let bufv = evar buf_out_cid tbytes in
+  let bufv = evar buf_out_cid tpacket in
   (* write<ty>(out, v) -- prepend v of type ty to the front of the bytes, in place *)
   let do_write ty v = sunit (ewrite ty bufv v) in
   let mk_arm event_def =
@@ -225,7 +225,7 @@ let process_deparse decls =
   in
   let body = smatch [ event_data ev_out ] (List.map mk_arm event_defs) in
   let deparse_decl =
-    dfun deparse_id tbytes [ (ev_out_cid, tevent); (buf_out_cid, tbytes) ] body
+    dfun deparse_id tpacket [ (ev_out_cid, tevent); (buf_out_cid, tpacket) ] body
   in
   decls @ [ deparse_decl ]
 ;;
@@ -254,14 +254,13 @@ let packet_t =
   tabstract
     "packet_t"@@trecord
       [
+        (* A pure *view* over a byte buffer: the buffer's ownership lives with the
+           driver's queue element (an rte_mbuf under DPDK; a static buffer under
+           pcap/rawsock), never here -- so packet_t carries no handle to it. *)
         cid"start", tref (tint 8);
         cid"cursor", tref (tint 8);
         cid"end", tref (tint 8);
         cid"bit_off", tint 32;
-        (* handle to the underlying driver buffer this cursor spans (dpdk: an
-           rte_mbuf*, stored as uint8_t* + cast; NULL/unused for pcap/rawsock,
-           which cursor over their own static buffers). *)
-        cid"driver_buf", tref (tint 8);
       ]
 ;;
 
@@ -391,13 +390,13 @@ let lower_parser id ret_ty params body =
   in
   let out_event_param = (cid"next_event", tref ev_ty) in
   let out_event = param_evar out_event_param in
-  let pkt = match List.find_opt (fun (_, ty) -> is_tbytes ty) params with
+  let pkt = match List.find_opt (fun (_, ty) -> is_tpacket ty) params with
     | Some (pid, _) -> pid
     | None -> err "[CCoreParse.lower] parser has no bytes parameter"
   in
   let body = lower_parser_body pkt out_event read_tys body in
   (* bytes param -> packet_t* ; add the out-event param ; return int8 *)
-  let params = List.map (fun (pid, ty) -> if is_tbytes ty then (pid, tref packet_t) else (pid, ty)) params in
+  let params = List.map (fun (pid, ty) -> if is_tpacket ty then (pid, tref packet_t) else (pid, ty)) params in
   let params = params @ [out_event_param] in
   !read_tys, dfun id parser_ret_ty params body
 ;;
@@ -452,12 +451,12 @@ let rec lower_deparse_body write_tys bufv stmt =
 let lower_deparse_fun write_tys id ret params body =
   ignore ret;
   let ev_cid, ev_ty =
-    match List.find_opt (fun (_, ty) -> not (is_tbytes ty)) params with
+    match List.find_opt (fun (_, ty) -> not (is_tpacket ty)) params with
     | Some p -> p
     | None -> err "[CCoreParse.lower_deparse] deparse has no event parameter"
   in
   let bs_cid =
-    match List.find_opt (fun (_, ty) -> is_tbytes ty) params with
+    match List.find_opt (fun (_, ty) -> is_tpacket ty) params with
     | Some (c, _) -> c
     | None -> err "[CCoreParse.lower_deparse] deparse has no bytes parameter"
   in
@@ -471,7 +470,7 @@ let lower_deparse_fun write_tys id ret params body =
   let params =
     List.map
       (fun (c, ty) ->
-        if is_tbytes ty then (c, tref packet_t)
+        if is_tpacket ty then (c, tref packet_t)
         else if Cid.equal c ev_cid then (c, tref ev_ty)
         else (c, ty))
       params
@@ -502,24 +501,11 @@ let lower_deparse decls =
    the two touch disjoint functions (deparse_event vs the parsers), so order between
    them is immaterial. The read_tys/write_tys the lowerings still return are now unused
    (the helpers are width-generic, not per-type). *)
-(* Below the waist, give event_meta a `payload : packet_t` field so an event carries
-   its own packet buffer (the driver stamps it at RX; the deparser writes into it).
-   The value-semantic event_meta stays pointer-free -- this field exists only in the
-   lowered form, so the value-semantics diagnostic never sees it. mk_event's
-   designated-init meta literals zero-init the new field (no post-lowering typer runs,
-   so the literal staying one field short of the struct is fine). *)
-let add_payload_to_event_meta decls =
-  List.map (fun decl -> match decl.d with
-    | DTy(tcid, Some({raw_ty = TRecord(labels, tys); _} as body)) when Cid.equal tcid event_meta_cid ->
-      let body' = { body with raw_ty = TRecord(labels @ [Cid.create ["payload"]], tys @ [packet_t]) } in
-      { decl with d = DTy(tcid, Some body') }
-    | _ -> decl)
-    decls
-;;
-
+(* The event carries no packet buffer of its own: it is a value-semantic {meta; data},
+   and the driver's queue element (the mbuf / static buffer) owns the bytes. packet_t
+   is only ever a transient view the driver builds over that buffer to parse/deparse. *)
 let lower decls =
   let _write_tys, decls = lower_deparse decls in
   let _read_tys, decls = lower_parse_bodies decls in
-  let decls = add_payload_to_event_meta decls in
   decl_tabstract packet_t :: codec_helpers @ decls
 ;;

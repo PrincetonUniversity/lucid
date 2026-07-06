@@ -97,7 +97,7 @@ let compile ds =
   print_endline ("---- Normalizing code forms for c ----");
   (* "pointerize" steps below the boundary: events (TVariant/ECall CVariant/PVariant) ->
      tagged-union punning; value-semantic vectors (TVec/Idx) and the parser bytes
-     ADT (TBytes + Peek/Skip/BytesOk) -> their pointer forms *)
+     ADT (TPacket + Peek/Skip/BytesOk) -> their pointer forms *)
   ccore_print_always "BEFORE CCoreHandlers.lower" cds;
   let cds = CCoreHandlers.lower cds in
   ccore_print_always "CCoreHandlers.lower" cds;

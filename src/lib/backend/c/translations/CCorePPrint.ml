@@ -75,7 +75,7 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : string =
     ty_to_string ~use_abstract_name:true ty ^ "[" ^ arrlen_to_string arrlen ^ "]"
   | TVec(ty, arrlen) ->
     ty_to_string ~use_abstract_name:true ty ^ "[" ^ arrlen_to_string arrlen ^ "]"
-  | TBytes -> "bytes"
+  | TPacket -> "bytes"
 
 and ty_to_string ?(use_abstract_name=false) ty = raw_ty_to_string ~use_abstract_name ty.raw_ty
 

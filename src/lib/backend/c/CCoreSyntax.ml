@@ -50,7 +50,7 @@ and raw_ty =
 
   | TPtr of ty * (arrlen option)
   | TVec of ty * arrlen (* vector *)
-  | TBytes (* reference to unparsed packet. *)
+  | TPacket (* reference to unparsed packet. *)
   
   | TFun of func_ty
   (* alias types *)
@@ -218,7 +218,7 @@ let cid s = Cid.create([s])
 (**** types ****)
 let ty raw_ty = {raw_ty=raw_ty; tspan=Span.default}
 let tunit = ty TUnit
-let tbytes = ty TBytes
+let tpacket = ty TPacket
 let tbool = ty TBool
 let tint i = ty@@TInt(sz i)
 let tpat len = ty (TBits {ternary=false; len})
@@ -321,7 +321,7 @@ let is_tchar ty = is_tname_called "char" ty
 let is_tbuiltin tycid ty = match ty.raw_ty with TBuiltin(cid, _) -> Cid.equal cid tycid | _ -> false
 let is_tbuiltin_any ty = match ty.raw_ty with TBuiltin(_, _) -> true | _ -> false
 let is_tref  ty = match ty.raw_ty with TPtr _ -> true | _ -> false
-let is_tbytes ty = match ty.raw_ty with TBytes -> true | _ -> false
+let is_tpacket ty = match ty.raw_ty with TPacket -> true | _ -> false
 let is_tenum ty = match (base_type ty).raw_ty with TEnum _ -> true | _ -> false
 
 let extract_func_ty ty = match ty.raw_ty with 
@@ -387,7 +387,7 @@ let rec bitsizeof_ty ty =
       tys |> List.map bitsizeof_ty_exn |> List.fold_left (+) 0 |> Option.some
   | TPtr _ -> None
   | TVec _ -> None
-  | TBytes -> None
+  | TPacket -> None
   | TBits {len} -> len |> Option.some
   | TVariant sigs ->
     (* tag + largest variant payload (the metadata envelope is added in lowering) *)
@@ -503,7 +503,7 @@ let rec default_value ty = match ty.raw_ty with
   | TPtr(_, Some _) -> failwith "no default value for list of unknown length"
   | TVec(elem_ty, IConst(n)) -> {v=VList (List.init n (fun _ -> default_value elem_ty)); vty=ty; vspan=Span.default}
   | TVec(_, IVar _) -> failwith "no default value for vector of unknown length"
-  | TBytes -> failwith "no default value for bytes"
+  | TPacket -> failwith "no default value for bytes"
 ;;
 
 
@@ -1088,7 +1088,7 @@ let rec equiv_tys ty1 ty2 = match ty1.raw_ty, ty2.raw_ty with
 | TPtr(t1, Some(IConst n1)), TPtr(t2, Some(IConst n2)) -> n1 = n2 && equiv_tys t1 t2
 | TVec(t1, IConst n1), TVec(t2, IConst n2) -> n1 = n2 && equiv_tys t1 t2
 | TVec(t1, IVar c1), TVec(t2, IVar c2) -> Cid.equal c1 c2 && equiv_tys t1 t2
-| TBytes, TBytes -> true
+| TPacket, TPacket -> true
 | TBits {ternary=b1; len=l1}, TBits {ternary=b2; len=l2} -> 
   (b1 = b2) && (l1 = l2)
 | TVariant _, TVariant _ -> true
@@ -1102,5 +1102,5 @@ let rec equiv_tys ty1 ty2 = match ty1.raw_ty, ty2.raw_ty with
   && List.length tyargs1 = List.length tyargs2
   && List.for_all2 equiv_tys tyargs1 tyargs2
 | TName cid1, TName cid2 -> Cid.equal cid1 cid2
-| (TUnit|TBool|TVariant _|TInt _|TRecord _ | TTuple _ | TName _ | TPtr _ | TVec _ | TBytes | TUnion _
+| (TUnit|TBool|TVariant _|TInt _|TRecord _ | TTuple _ | TName _ | TPtr _ | TVec _ | TPacket | TUnion _
 | TFun _|TBits _|TEnum _|TBuiltin (_, _)), _ -> false

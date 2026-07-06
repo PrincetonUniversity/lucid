@@ -107,7 +107,7 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
   | TVec(t1, l1), TVec(t2, l2) ->
     let env' = unify_ty env t1 t2 in
     unify_arrlen env' l1 l2
-  | TBytes, TBytes -> env
+  | TPacket, TPacket -> env
   | TName cid1, TName cid2 ->
     if (not (Cid.equal cid1 cid2)) then 
       (ty_err "named types with different names");
@@ -175,7 +175,7 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
     if (not (List.for_all2 Cid.equal labels1 labels2)) then 
       ty_err "union types with different labels";
     unify_lists env unify_ty tys1 tys2
-  | (TUnit|TBool|TVariant _|TInt _|TRecord _ | TTuple _ | TName _ | TPtr _ | TVec _ | TBytes | TUnion _
+  | (TUnit|TBool|TVariant _|TInt _|TRecord _ | TTuple _ | TName _ | TPtr _ | TVec _ | TPacket | TUnion _
   | TFun _|TBits _|TEnum _|TBuiltin (_, _)), _ ->
       dprint_endline@@"type mismatch:\n"^(CCorePPrint.raw_ty_to_string rawty1)^"\nand\n"^(CCorePPrint.raw_ty_to_string rawty2);
       ty_err "type mismatch"
@@ -490,28 +490,28 @@ and infer_eop env op (args : exp list) : env * op * exp list * ty = match op, ar
   )
   | Peek read_ty, [bs] -> (
     let env, inf_bs = infer_exp env bs in
-    if (not (is_tbytes inf_bs.ety)) then ty_err "peek expects a bytes argument";
+    if (not (is_tpacket inf_bs.ety)) then ty_err "peek expects a bytes argument";
     env, op, [inf_bs], read_ty
   )
   | Read read_ty, [bs] -> (
     let env, inf_bs = infer_exp env bs in
-    if (not (is_tbytes inf_bs.ety)) then ty_err "read expects a bytes argument";
+    if (not (is_tpacket inf_bs.ety)) then ty_err "read expects a bytes argument";
     env, op, [inf_bs], read_ty
   )
   | Skip _, [bs] -> (
     let env, inf_bs = infer_exp env bs in
-    if (not (is_tbytes inf_bs.ety)) then ty_err "skip expects a bytes argument";
+    if (not (is_tpacket inf_bs.ety)) then ty_err "skip expects a bytes argument";
     env, op, [inf_bs], tunit
   )
   | BytesOk, [bs] -> (
     let env, inf_bs = infer_exp env bs in
-    if (not (is_tbytes inf_bs.ety)) then ty_err "bytes_ok expects a bytes argument";
+    if (not (is_tpacket inf_bs.ety)) then ty_err "bytes_ok expects a bytes argument";
     env, op, [inf_bs], tbool
   )
   | Write write_ty, [bs; v] -> (
     let env, inf_bs = infer_exp env bs in
     let env, inf_v = infer_exp env v in
-    if (not (is_tbytes inf_bs.ety)) then ty_err "write expects a bytes argument";
+    if (not (is_tpacket inf_bs.ety)) then ty_err "write expects a bytes argument";
     let env = unify_ty env write_ty inf_v.ety in
     env, op, [inf_bs; inf_v], tunit
   )

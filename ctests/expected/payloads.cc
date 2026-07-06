@@ -33,7 +33,6 @@ typedef struct {
   uint8_t*  cursor;
   uint8_t*  end;
   uint32_t bit_off;
-  uint8_t*  driver_buf;
 } packet_t;
 
 uint64_t read_bits(packet_t* bs, int n) {
@@ -106,7 +105,6 @@ typedef struct {
   uint8_t has_payload;
   uint32_t timestamp;
   uint32_t in_port;
-  packet_t payload;
 } event_meta;
 uint16_t background_tag  = 1;
 uint16_t eth_tag  = 2;
@@ -165,7 +163,6 @@ typedef struct {
 } event_t;
 typedef struct {
   event_t ev;
-  uint8_t out_loc;
   uint32_t port;
 } out_event_t;
 event_t mk_background(uint16_t x_1625 ){
@@ -242,7 +239,7 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
       uint64_t e_1_1656  = ev_in->data.args.eth_1630.e_1_1628;
       uint16_t e_2_1657  = ev_in->data.args.eth_1630.e_2_1629;
       event_t this  = mk_eth(e_0_1655, e_1_1656, e_2_1657);
-      out_event_t tmp_1804  = {.ev = mk_background(e_2_1657), .out_loc = 1, .port = 0};
+      out_event_t tmp_1804  = {.ev = mk_background(e_2_1657), .port = 4294967295};
       out_events[n] = tmp_1804;
       n = n + 1;
       break;
@@ -256,7 +253,7 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
       uint32_t ip_2_1663  = ev_in->data.args.eth_ip_1639.ip_2_1636;
       uint32_t ip_3_1664  = ev_in->data.args.eth_ip_1639.ip_3_1637;
       event_t this  = mk_eth_ip(e_0_1658, e_1_1659, e_2_1660, ip_0_1661, ip_1_1662, ip_2_1663, ip_3_1664);
-      out_event_t tmp_1805  = {.ev = mk_background(e_2_1660), .out_loc = 1, .port = 0};
+      out_event_t tmp_1805  = {.ev = mk_background(e_2_1660), .port = 4294967295};
       out_events[n] = tmp_1805;
       n = n + 1;
       break;
@@ -432,9 +429,9 @@ static void do_dispatch(pkt_hdl_ctx_t *ctx) {
         out_event_t out_events[64];
         uint16_t n = handle_event(&ev, out_events);
         for (uint16_t i = 0; i < n; i++) {
-            if (out_events[i].out_loc == 1)        // recirculation: re-queue for dispatch
+            if (out_events[i].port == 4294967295u)  // recirculation: re-queue for dispatch
                 evq_push(&ctx->queue, &out_events[i].ev);
-            else if (out_events[i].out_loc == 2)   // output to a port: deparse + dump
+            else                                        // output to a port: deparse + dump
                 do_tx(ctx, &out_events[i]);
         }
     }

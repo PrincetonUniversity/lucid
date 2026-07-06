@@ -4,10 +4,10 @@
     - output: a fixed-capacity array of out_events + the number produced
     - has one branch for each handler
     - generate is implemented by appending an out_event to the output array:
-        out_events[n] = { ev; out_loc; port }; n++;
-      where out_loc is 1 (recirc) for generate_self and 2 (port) for
-      generate_port / generate_switch / generate_group. The driver queues
-      recirc events and deparses+sends port events.
+        out_events[n] = { ev; port }; n++;
+      where `port` is the egress port for generate_port / generate_switch, and the
+      sentinel PORT_RECIRC (0xFFFFFFFF) for generate_self. The driver re-queues
+      recirc events (port == PORT_RECIRC) and deparses+sends the rest to `port`.
     - there is NO per-control-flow restriction on how many times generate may be
       called: each call simply appends another out_event (up to the static
       capacity; we deliberately emit no runtime overflow guard -- a future static
@@ -24,14 +24,13 @@ let handler_cid = Cid.create ["handle_event"] ;;
 let port_size = CConfig.c_cfg.port_id_size
 
 (* ----- the out_event record: the unit the handler produces ----- *)
-(* out_loc tells the driver where each produced event goes. *)
-let loc_none   = 0  (* unused slot                                   *)
-let loc_recirc = 1  (* feed back into the dispatch queue (generate_self) *)
-let loc_port   = 2  (* deparse + send out `port` (generate_port/switch/group) *)
+(* `port` is the egress port, or PORT_RECIRC for a recirculated (generate_self)
+   event -- the driver routes on this single field (no separate out_loc). *)
+let port_recirc = (1 lsl port_size) - 1  (* all-ones sentinel: 0xFFFFFFFF at port_size=32 *)
 
 let out_event_cid = Cid.create ["out_event_t"]
 let out_event_def =
-  trecord [ cid"ev", tevent; cid"out_loc", tint 8; cid"port", tint port_size ]
+  trecord [ cid"ev", tevent; cid"port", tint port_size ]
 let tout_event = tabstract_cid out_event_cid out_event_def
 let out_event_dty = dty out_event_cid out_event_def
 
@@ -53,11 +52,10 @@ let v_ev_in = evar ev_in_cid tevent
 let v_out_events = evar out_events_cid tout_events
 let v_n = evar n_cid (tint count_size)
 
-(* append one out_event: out_events[n] = { ev; out_loc=loc; port }; n = n + 1; *)
-let mk_push loc ev_exp port_exp =
+(* append one out_event: out_events[n] = { ev; port }; n = n + 1; *)
+let mk_push ev_exp port_exp =
   let rec_exp =
     { (erecord [ cid"ev", ev_exp;
-                 cid"out_loc", eval (vint loc 8);
                  cid"port", port_exp ])
       with ety = tout_event }
   in
@@ -70,19 +68,19 @@ let mk_push loc ev_exp port_exp =
 let transform_generate statement =
   match statement.s with
   | SUnit(exp) when is_egen_self exp ->
-      (* recirculation: port is irrelevant (the driver re-queues by event) *)
-      mk_push loc_recirc (arg exp) (eval (vint 0 port_size))
+      (* recirculation: the sentinel port tells the driver to re-queue by event *)
+      mk_push (arg exp) (eval (vint port_recirc port_size))
   | SUnit(exp) when is_egen_port exp ->
     let port_exp, event_exp = unbox_egen_port exp in
     let port_exp = if (size_of_ty port_exp.ety < size_of_ty (tint port_size))
       then ecast (tint port_size) port_exp
       else port_exp
     in
-    mk_push loc_port event_exp port_exp
+    mk_push event_exp port_exp
   | SUnit(exp) when is_egen_switch exp ->
     let switch_exp, event_exp = unbox_egen_switch exp in
     let switch_exp = ecast (tint port_size) switch_exp in
-    mk_push loc_port event_exp switch_exp
+    mk_push event_exp switch_exp
   (* generate_ports (multicast, egen_group) is rejected up front by
      CCoreWellformedC.feature_gate -- the single-port out_event model can't fan out to a
      group -- so it never reaches here. (It used to be silently mis-compiled as a
