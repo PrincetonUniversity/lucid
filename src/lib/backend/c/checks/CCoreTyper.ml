@@ -706,16 +706,11 @@ let rec infer_decl env decl : env * decl option =
       else env
     in
     env, {decl with d=DFun(fun_kind, id, ret_ty, params, BStatement(inf_stmt))} |> Option.some
-  | DFun(fun_kind, id, ret_ty, params, BExtern) -> 
-    let fun_ty = tfun_kind fun_kind (List.map snd params) ret_ty  in
+  | DFun(fun_kind, id, ret_ty, params, BForiegn _) -> 
+    (* foreign body, typed signature *)
+    let fun_ty = tfun_kind fun_kind (List.map snd params) ret_ty in
     let env = add_var env (id) fun_ty in
     env, decl |> Option.some
-  | DFun(FForiegn, id, ret_ty, params, BForiegn _) -> 
-    let fun_ty = tfun_kind FForiegn (List.map snd params) ret_ty in
-    let env = add_var env (id) fun_ty in
-    env, decl |> Option.some
-  | DFun(_, _, _, _, BForiegn _) -> 
-    ty_err "foriegn functions must be declared as type foriegn"
   | DForiegn _ -> env, decl |> Option.some
   | DEnum(pairs) ->
     (* each member is a named int constant *)

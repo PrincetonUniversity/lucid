@@ -79,9 +79,6 @@ let transformer =
     in
     stmts @@ List.map2 extract_field params arm.params
   in
-  (* lower one branch: each PVariant pattern becomes its arm's tag literal,
-     with the arm's fields bound from the matched expression at the top of the
-     branch body; a wildcard on the variant becomes a wildcard on the tag. *)
   let lower_branch arm_assoc exps (pats, bstmt) =
     let pats, inits =
       List.fold_left2

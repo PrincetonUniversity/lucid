@@ -192,7 +192,6 @@
    CoreToCCore
    CCoreTyper
    CCoreBuiltinCheckers
-   CheckFFuns
    CCoreParse
    CCoreTables
    CCoreArrays

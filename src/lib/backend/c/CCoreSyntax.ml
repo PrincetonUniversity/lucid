@@ -20,7 +20,7 @@ and arrlen =
     | IConst of int
     | IVar of cid
 
-and func_kind = | FNormal | FHandler | FParser | FAction | FMemop | FForiegn
+and func_kind = | FNormal | FHandler | FParser | FAction | FMemop
 and raw_ty = 
   (* value types *)
   | TUnit
@@ -63,7 +63,7 @@ and value = {v:v; vty:ty; vspan : sp;}
 (* expressions *)
 and op =    | And | Or | Not
             | Eq  | Neq | Less| More | Leq | Geq
-            | Neg | Plus| Sub | SatPlus | SatSub
+            | Neg | Plus| Sub | SatPlus | SatSub | Mod
             | BitAnd  | BitOr | BitXor | BitNot | LShift | RShift
             | Slice of int * int
             | Hash of size
@@ -71,22 +71,9 @@ and op =    | And | Or | Not
             | Conc
             | Project of cid | Get of int
             | Idx (* Index int a vec *)
-            (* Bytes operations. The bytes value is a *mutable cursor resource*
-               (like an array, which the value-semantics boundary also permits as
-               an in-place aggregate): Read/Skip/Write advance/mutate it in place
-               rather than threading a new bytes value, so they have no rebind. *)
-            | Peek of ty   (* EOp(Peek ty, [bytes]) : ty    -- decode one value, no advance *)
-            | Read of ty   (* EOp(Read ty, [bytes]) : ty    -- decode one value AND advance past
-                              it (peek + skip), mutating the cursor in place *)
-            | Skip of ty   (* EOp(Skip ty, [bytes]) : unit  -- advance past one value in place
-                              (sticky overflow) *)
-            | BytesOk      (* EOp(BytesOk, [bytes]) : bool  -- has no consumed read overflowed?
-                              (named BytesOk, not Ok, to avoid clashing with result's Ok) *)
-            | Write of ty  (* EOp(Write ty, [bytes; val]) : unit -- prepend val (of type ty) to the
-                              front of bytes in place. The dual of Read/Skip:
-                              deparse builds the output back-to-front (inner header nearest the
-                              payload written first, outermost written last). *)
-            | Mod
+            (* Packet parser / deparser operations. Ty is the output type. *)
+            | Peek of ty | Read of ty | Skip of ty | BytesOk (*check if past end of buf*)
+            | Write of ty 
 
 and e = 
   | EVal of value
@@ -142,9 +129,8 @@ and statement = {s:s; sspan : sp;}
 and fun_def = func_kind * cid * ty * params * fun_body
 
 and fun_body = 
-  | BExtern
   | BStatement of statement
-  | BForiegn of string
+  | BForiegn of string (* a C source body; the signature is still typed IR *)
   
 and d = 
   | DForiegn of string (* misc things in the underlying language. Imports, etc. *)
@@ -744,19 +730,12 @@ let dhandler = dfun_kind FHandler
 let dparser = dfun_kind FParser
 let daction = dfun_kind FAction 
 let dmemop = dfun_kind FMemop
-let dfun_extern id fun_kind param_tys ret_ty =
-  (* extern params are unreferenced (no body), so just give them distinct,
-     readable positional names *)
-  let params = List.mapi (fun i ty -> (Cid.create ["a" ^ string_of_int i], ty)) param_tys in
-  decl (DFun(fun_kind, id, ret_ty, params, BExtern))
-;;
 let dvar_const id ty exp = decl (DVar(id, ty, Some(exp))) Span.default
 let dvar_extern id ty = decl (DVar(id, ty, None)) Span.default
 let dextern id ty = decl (DVar(id, ty, None)) Span.default
-let default_checker = Some("gcc -x c - -fsyntax-only");;
-let dfun_foriegn fid fparams fret_ty fstr = 
-  (* foriegn function with default checker. *)
-  decl (DFun(FForiegn, fid, fparams, fret_ty, BForiegn fstr)) Span.default
+(* a function with a typed IR signature and a C source body *)
+let dfun_foriegn fid fret_ty fparams fstr =
+  decl (DFun(FNormal, fid, fret_ty, fparams, BForiegn fstr)) Span.default
 ;;
 (* toplevel variable. Should be declaring as a ref type. *)
 let dglobal id ty exp = decl (DVar(id, ty, Some(exp))) Span.default

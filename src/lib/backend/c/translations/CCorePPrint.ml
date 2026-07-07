@@ -24,7 +24,6 @@ let func_kind_to_string = function
   | FParser -> "parser"
   | FAction -> "action"
   | FMemop -> "memop"
-  | FForiegn -> "fn"
 ;;
 
 
@@ -120,11 +119,7 @@ let rec e_to_string (e: e) : string =
     | ECall {f; args; _} -> 
     let f_str = exp_to_string f in
     let args_str = String.concat ", " (List.map exp_to_string args) in
-    let comment_str = match (extract_func_ty f.ety) with 
-      (* | _, _, FForiegn -> " /* forien */" *)
-      | _ -> "" 
-    in
-    f_str ^ "(" ^ args_str ^ ")" ^ comment_str
+    f_str ^ "(" ^ args_str ^ ")"
   | EOp (op, args) -> op_to_string op args
   (* special case: print deref of pointer arith as a subscript *)
   | EDeref({e=EOp(Plus, [arr_exp; idx_exp])}) -> 
@@ -283,13 +278,9 @@ and fun_def_to_string (kind, id, ty, params, stmt_opt) =
   let params_str = params_to_string params in
   let stmt_str = match stmt_opt with 
                  | BStatement stmt -> "{\n" ^ indent 2 (statement_to_string stmt) ^ "\n}" 
-                 | BExtern -> ";" 
                  | BForiegn s -> s  
   in
-  match stmt_opt with 
-    | BExtern -> 
-      "extern " ^ kind_str ^ " " ^ ret_ty_str ^ " " ^id_str ^ "(" ^ params_str ^ ")" ^ stmt_str
-    | _ -> kind_str ^ " "  ^ ret_ty_str ^ " " ^ id_str ^ "(" ^ params_str ^ ")" ^ stmt_str
+  kind_str ^ " "  ^ ret_ty_str ^ " " ^ id_str ^ "(" ^ params_str ^ ")" ^ stmt_str
   
 and decl_to_string decl = d_to_string decl.d
 
