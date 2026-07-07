@@ -36,7 +36,7 @@ open CCoreUtils
 let events_ty        = CCoreCPrint.cid_to_string events_cid
 let out_event_ty     = CCoreCPrint.cid_to_string CCoreHandlers.out_event_cid
 let packet_t_ty      = CCoreCPrint.cid_to_string
-  (match CCoreParse.packet_t.raw_ty with TName c -> c | _ -> err "packet_t is not a named type")
+  (match CCoreParse.packet_t.raw_ty with TName(c, _) -> c | _ -> err "packet_t is not a named type")
 let parse_event_fn   = CCoreCPrint.cid_to_string CCoreParse.parser_cid
 let deparse_event_fn = CCoreCPrint.cid_to_string CCoreParse.deparse_id
 let handle_event_fn  = CCoreCPrint.cid_to_string CCoreHandlers.handler_cid

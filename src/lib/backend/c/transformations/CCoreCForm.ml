@@ -224,7 +224,7 @@ let delete_empty_tuples decls =
     match ty.raw_ty with 
     | TTuple([]) -> true
     | TPtr(ty, _) -> is_empty_tuple ty
-    | TName cid -> (match tydef_opt cid with Some d -> is_empty_tuple d | None -> false)
+    | TName(_, def_opt) -> (match def_opt with Some d -> is_empty_tuple d | None -> false)
     | _ -> false
   in
   let v = object 

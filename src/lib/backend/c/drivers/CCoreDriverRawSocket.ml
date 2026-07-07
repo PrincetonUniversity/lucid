@@ -7,7 +7,7 @@ open CCoreUtils
 let events_ty        = CCoreCPrint.cid_to_string events_cid
 let out_event_ty     = CCoreCPrint.cid_to_string CCoreHandlers.out_event_cid
 let packet_t_ty      = CCoreCPrint.cid_to_string
-  (match CCoreParse.packet_t.raw_ty with TName c -> c | _ -> failwith "packet_t is not a named type")
+  (match CCoreParse.packet_t.raw_ty with TName(c, _) -> c | _ -> failwith "packet_t is not a named type")
 
 let packet_t_ptr_ty = packet_t_ty ^ "*"
 

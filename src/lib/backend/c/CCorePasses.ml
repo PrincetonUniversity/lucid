@@ -45,7 +45,6 @@ let compile ds =
   print_endline ("---- translating to CCore ----");
   print_endline@@CorePrinting.decls_to_string ds;
   let cds = CoreToCCore.translate ~payload_event_names ds in
-  CCoreSyntax.refresh_tydefs cds; (* may not be needed *)
 
   print_endline ("---- checking types and feature compatibility ----");
   let cds = CCoreTyper.check cds in

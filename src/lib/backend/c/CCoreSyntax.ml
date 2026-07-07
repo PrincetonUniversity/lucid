@@ -1,23 +1,9 @@
-(* simpler c-like IR for lucid, with extensions
-   for compatability with the current CoreSyntax IR
-   (Extensions should be eliminated before any further processing) *)
-
-(* 
-  CCoreSyntax is a small, typed, imperative systems IR — functions, 
-  structs/unions/enums, fixed-capacity arrays, match, explicit loops, 
-  fixed-width integers, and pointers. It is rich enough to 
-  accept a near-direct translation from CoreSyntax (events, handlers, 
-  tables, parsers, and memops survive as first-class constructs), 
-  but also general-purpose enough to define the implementations 
-  of those constructs and Lucid's event-dispatch runtime in terms of 
-  simpler, general-purpose abstractions common to any imperative 
-  language. The entire backend is a sequence of IR->IR passes, which 
-  are also type checked. Finally, the IR can represent both 
-  target-neutral value-semantics code (at the start), and 
-  also C-like pointer code (at the end). A value-semantics check 
-  marks the boundary between the two semantics. (note: value-semantics
-  and check implementation is still TODO).
-*)
+(* CCoreSyntax is a small, typed, imperative IR — functions, 
+   structs/unions/enums, fixed-capacity arrays, match, explicit loops, 
+   fixed-width integers, and pointers. It contains most of Lucid's
+   constructs, and also is general-purpose enough to define the 
+   implementations of those constructs and represent pointers / 
+   references for lowering to C. *)
 
 type id = [%import: (Id.t[@opaque])]
 and cid = [%import: (Cid.t[@opqaue])]
@@ -55,7 +41,10 @@ and raw_ty =
   (* alias types *)
   | TBuiltin of cid * (ty list) (* abstract types built into lucid that must be implemented in CCore *)
 
-  | TName of cid (* a named type; its definition lives in the program's DTy decls (and the tydefs table) *)
+  | TName of cid * ty option
+    (* a named type carrying its own structural definition (None = opaque/extern).
+       the printed typedef lives in the program's DTy decls; base_type unwraps the
+       carried definition, so no global type-definition table is needed. *)
 
 and func_ty = {
   arg_tys : ty list; 
@@ -199,11 +188,6 @@ exception FormError of string
 
 let id = Id.create
 let cid s = Cid.create [s]
-let arrlen_ct = ref (-1);;
-let fresh_arrlen str = 
-  arrlen_ct := (!arrlen_ct + 1);
-  IVar (Cid.fresh str)
-;;
 let arrlen i = IConst i
 let idxvar id = IVar id
 let sz n = n
@@ -226,9 +210,6 @@ let tptr base_ty = ty (TPtr(base_ty,None))
 let events_cid = Cid.create ["event_t"]
 let event_variant_cid = Cid.create ["event_variant_t"]
 let event_meta_cid = Cid.create ["event_meta"]
-let tevent = ty (TName events_cid)                 (* the envelope *)
-let tevent_variant = ty (TName event_variant_cid)  (* the tagged variant *)
-let tevent_meta = ty (TName event_meta_cid)        (* the metadata record *)
 let tevariant_def sigs = ty (TVariant sigs)
 (* let trecord labels tys = ty (TRecord(labels, tys)) *)
 let trecord pairs =
@@ -242,38 +223,37 @@ let trecord pairs =
    that wraps the tagged variant. Both are value-semantic; meta is currently resolved
    statically but lives in the IR (except timestamp, which is set at runtime). *)
 let event_meta_def = trecord [ (Cid.create ["len"], ty (TInt 16)); (Cid.create ["is_packet"], ty (TInt 8)); (Cid.create ["has_payload"], ty (TInt 8)); (Cid.create ["timestamp"], ty (TInt 32)); (Cid.create ["in_port"], ty (TInt 32)) ]
+(* the tagged variant: opaque at this level -- its definition (the program's
+   event signatures) is only known per program. CoreToCCore declares the DTy,
+   and CCoreVariants.lower substitutes the lowered struct body into every
+   reference when it needs field projections to resolve. *)
+let tevent_variant = ty (TName(event_variant_cid, None))
+let tevent_meta = ty (TName(event_meta_cid, Some event_meta_def))
 let tevent_def = trecord [ (Cid.create ["meta"], tevent_meta); (Cid.create ["data"], tevent_variant) ]
+let tevent = ty (TName(events_cid, Some tevent_def))   (* the envelope *)
 let ttuple tys = ty (TTuple tys)
 let tunion labels tys = ty (TUnion(labels, tys))  
 let tfun_kind func_kind arg_tys ret_ty = ty (TFun {arg_tys; ret_ty; func_kind})
 let tfun arg_tys ret_ty = tfun_kind FNormal arg_tys ret_ty 
 (* global type from CoreSyntax *)
 let tlist ele_ty len = ty (TList(ele_ty, len))
-let tname cid = ty (TName(cid))
+let tname ?def cid = ty (TName(cid, def))
 let textern = tname (Cid.create ["_extern_ty_"])
 let tbuiltin cid tyargs = ty (TBuiltin(cid, tyargs))
 (* let tgroup_cid = Cid.create ["Group"]
 let tgroup = tbuiltin tgroup_cid [] *)
 
-(* global type-definition table: cid -> its structural definition. A named type
-   is a bare TName cid; its definition is resolved through this table (by
-   base_type and friends). Entries come from the program's DTy decls
-   (refresh_tydefs, below) and from the named-type constructors here. *)
-let tydefs : (Cid.t, ty) Hashtbl.t = Hashtbl.create 128
-let register_tydef tcid inner_ty = Hashtbl.replace tydefs tcid inner_ty
-(* the definition a TName cid refers to, or None if opaque/extern (no DTy body) *)
-let tydef_opt cid = Hashtbl.find_opt tydefs cid
-(* a named type: register its definition, then refer to it by name *)
-
-let tabstract n inner_ty = let c = Cid.create [n] in register_tydef c inner_ty; tname c
-let tabstract_cid tcid inner_ty = register_tydef tcid inner_ty; tname tcid
-let tabstract_id id inner_ty = let c = Cid.create_ids [id] in register_tydef c inner_ty; tname c
+(* a named type carrying its structural definition *)
+let tabstract n inner_ty = ty (TName(Cid.create [n], Some inner_ty))
+let tabstract_cid tcid inner_ty = ty (TName(tcid, Some inner_ty))
 let tenum_pairs (tagpairs : (Cid.t * int) list) = ty (TEnum tagpairs)
 let tenum ids = tenum_pairs (List.mapi (fun i id -> (id, i)) ids)
 let tref t = ty (TPtr(t, None))
+(* unwrap a (chain of) named type(s) to its structural definition; an opaque
+   name (no carried definition) is its own base type *)
 let rec base_type ty =
   match ty.raw_ty with
-  | TName cid -> (match tydef_opt cid with Some def -> base_type def | None -> ty)
+  | TName(_, Some def) -> base_type def
   | _ -> ty
 ;;
 
@@ -286,7 +266,7 @@ let tunion_pairs pairs =
 let tchar = tabstract "char" (tint 8)
 
 
-let is_textern ty = match ty.raw_ty with TName cid -> Cid.equal cid (Cid.create ["_extern_ty_"]) | _ -> false
+let is_textern ty = match ty.raw_ty with TName(cid, _) -> Cid.equal cid (Cid.create ["_extern_ty_"]) | _ -> false
 let is_tunit ty = match ty.raw_ty with TUnit -> true | _ -> false
 let is_tunion ty = match (base_type ty).raw_ty with TUnion _ -> true | _ -> false
 let is_trecord ty = match (base_type ty).raw_ty with TRecord _ -> true | _ -> false
@@ -299,17 +279,17 @@ let is_tlist ty = match ty.raw_ty with TList _ | TPtr(_, Some _) -> true | _ -> 
    that must distinguish use is_tevent_envelope / is_tevent_variant. *)
 (* match the surface name (not base_type, which now resolves TName to structure) *)
 let is_tevent ty = match ty.raw_ty with
-  | TName cid -> Cid.equal cid events_cid || Cid.equal cid event_variant_cid
+  | TName(cid, _) -> Cid.equal cid events_cid || Cid.equal cid event_variant_cid
   | TVariant _ -> true
   | _ -> false
 let is_tevent_envelope ty = match ty.raw_ty with
-  | TName cid -> Cid.equal cid events_cid
+  | TName(cid, _) -> Cid.equal cid events_cid
   | _ -> false
 let is_tevent_variant ty = match ty.raw_ty with
-  | TName cid -> Cid.equal cid event_variant_cid
+  | TName(cid, _) -> Cid.equal cid event_variant_cid
   | TVariant _ -> true
   | _ -> false
-let is_tname_called name ty = match ty.raw_ty with TName cid -> Cid.equal cid (Cid.create [name]) | _ -> false
+let is_tname_called name ty = match ty.raw_ty with TName(cid, _) -> Cid.equal cid (Cid.create [name]) | _ -> false
 let is_tstring ty = is_tname_called "string" ty
 let is_tchar ty = is_tname_called "char" ty
 let is_tbuiltin tycid ty = match ty.raw_ty with TBuiltin(cid, _) -> Cid.equal cid tycid | _ -> false
@@ -355,7 +335,7 @@ let extract_tbuiltin ty = match ty.raw_ty with
   | _ -> raise (FormError "[extract_tbuiltin] expected TBuiltin")
 
 let extract_tname ty = match ty.raw_ty with
-  | TName cid -> cid
+  | TName(cid, _) -> cid
   | _ -> raise (FormError "[extract_tname] expected TName")
 
 let extract_tref ty = match ty.raw_ty with 
@@ -388,7 +368,7 @@ let rec bitsizeof_ty ty =
     Some (event_tag_size + List.fold_left max 0 payloads)
   | TFun _ -> None
   | TBuiltin _ -> None
-  | TName cid -> (match tydef_opt cid with Some d -> bitsizeof_ty d | None -> None)
+  | TName(_, def_opt) -> (match def_opt with Some d -> bitsizeof_ty d | None -> None)
 and bitsizeof_ty_exn ty =
   match bitsizeof_ty ty with 
   | Some size -> size
@@ -408,20 +388,12 @@ let sizeof_ty ty =
   | _ -> failwith "sizeof_ty: expected TInt or TBool"
 ;;
 
-
-
 (* value constructors *)
 let value v vty = {v=v; vty=vty; vspan=Span.default}
 let vint value size = {v=VInt {value; size = sz size}; vty=ty (TInt(sz size)); vspan=Span.default}
 let vbool b = {v=VBool b; vty=ty TBool; vspan=Span.default}
 let venum tag ty = {v=VSymbol(tag, ty); vty=ty; vspan=Span.default}
 let vsymbol str ty = venum str ty
-
-(* cast a value to an abstract type *)
-(* this is WEIRD... *)
-(* let abstr_cast_value cid value = 
-  {value with vty=tabstract_cid cid value.vty}
-;; *)
 
 (* BUILTIN *)
 let zero_list ty = vsymbol (cid "{0}") ty;;
@@ -435,8 +407,6 @@ let string_to_value (s:string) =
   let str_ty = tabstract "string" (tlist tchar (IConst (String.length s))) in
   vsymbol (cid ("\"" ^ s ^ "\"")) str_ty
 ;;
-
-
 
 let extract_vint value = match value.v with
   | VInt {value; _} -> value
@@ -803,17 +773,6 @@ let dglobal id ty exp = decl (DVar(id, ty, Some(exp))) Span.default
 
 let dty tycid ty = decl (DTy(tycid, Some ty)) Span.default
 let dty_ext tycid = decl (DTy(tycid, None)) Span.default
-(* (re)populate the global tydefs table from a program's DTy decls, so base_type
-   can resolve a bare TName to its definition. Call when the set of type defs may
-   have changed. *)
-(* additive: don't reset, so type-constructor registrations (e.g. tchar, made at
-   module load) and DTys added by earlier passes survive. Stale entries for
-   removed DTys are harmless (they're no longer referenced). *)
-let refresh_tydefs decls =
-  List.iter (fun decl -> match decl.d with
-    | DTy(cid, Some ty) -> Hashtbl.replace tydefs cid ty
-    | _ -> ()) decls
-;;
 (* ty is a named type (TName cid); declare its definition as a DTy. *)
 let decl_tabstract ty =
   dty (extract_tname ty) (base_type ty)
@@ -974,6 +933,6 @@ let rec equiv_tys ty1 ty2 = match ty1.raw_ty, ty2.raw_ty with
   Cid.equal cid1 cid2
   && List.length tyargs1 = List.length tyargs2
   && List.for_all2 equiv_tys tyargs1 tyargs2
-| TName cid1, TName cid2 -> Cid.equal cid1 cid2
+| TName(cid1, _), TName(cid2, _) -> Cid.equal cid1 cid2
 | (TUnit|TBool|TVariant _|TInt _|TRecord _ | TTuple _ | TName _ | TPtr _ | TList _ | TPacket | TUnion _
 | TFun _|TEnum _|TBuiltin (_, _)), _ -> false

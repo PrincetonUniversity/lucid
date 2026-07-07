@@ -90,7 +90,7 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : (string * stri
     let list_str = String.concat ", " (List.map (fun (s, i) -> cid_to_string s ^ " = " ^ string_of_int i) cid_ints) in
     "enum {" ^ list_str ^ "}", ""
   | TBuiltin (_, _) -> ty_err "builtin types should be eliminated"
-  | TName(cid) -> cid_to_string cid, ""
+  | TName(cid, _) -> cid_to_string cid, ""
   | TPtr(ty, Some(len)) ->
     let prefix, suffix = ty_to_string ~use_abstract_name ty in
     prefix, (sprintf "[%s]" (arrlen_to_string len))^suffix

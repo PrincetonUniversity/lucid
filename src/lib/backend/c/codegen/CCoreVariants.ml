@@ -154,18 +154,25 @@ let lower decls =
   in
   let arms = List.map sig_to_event_def sigs in
   let struct_body = variant_struct_ty arms in
-  (* the variant DTy now resolves to its lowered struct body, so the constructors'
-     and matches' field projections type-check. *)
-  register_tydef event_variant_cid struct_body;
+  (* the variant's name now carries its lowered struct body: substitute it into
+     every reference (including inside other carried definitions, e.g. the
+     envelope's `data` field), so the constructors' and matches' field
+     projections resolve. *)
+  let tvariant = tabstract_cid event_variant_cid struct_body in
+  let set_variant_body ty = match ty.raw_ty with
+    | TName(cid, _) when Cid.equal cid event_variant_cid -> tvariant
+    | _ -> ty
+  in
   let lowered_dty = dty event_variant_cid struct_body in
   let tags = List.map decl_arm_tag arms in
-  let ctors = List.map (variant_constr tevent_variant) arms in
+  let ctors = List.map (variant_constr tvariant) arms in
   let decls = List.concat_map
     (fun d -> match d.d with
       | DTy(cid, _) when Cid.equal cid event_variant_cid -> tags @ (lowered_dty :: ctors)
       | _ -> [d])
     decls
   in
+  let decls = List.map (CCoreTransformers.subst_ty#visit_decl set_variant_body) decls in
   let arm_assoc = List.map (fun ed -> (ed.evconstrid, ed)) arms in
   transformer#visit_decls arm_assoc decls
 ;;

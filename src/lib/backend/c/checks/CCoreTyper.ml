@@ -108,11 +108,11 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
     let env' = unify_ty env t1 t2 in
     unify_arrlen env' l1 l2
   | TPacket, TPacket -> env
-  | TName cid1, TName cid2 ->
+  | TName(cid1, _), TName(cid2, _) ->
     if (not (Cid.equal cid1 cid2)) then 
       (ty_err "named types with different names");
     (* resolve and check the types, but skip if its extern *)
-    if is_textern (ty@@TName(cid1)) then env
+    if is_textern (tname cid1) then env
     else
       let ty1 = get_ty env cid1 in
       let ty2 = get_ty env cid2 in
@@ -120,9 +120,9 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
   (* a named type unifies with a structural type by resolving the name to its
      definition -- e.g. a record literal checked against a named record type
      (mk_event's envelope), or a variant value against the named variant type *)
-  | TName cid, _ when not (is_textern (ty@@TName cid)) ->
+  | TName(cid, _), _ when not (is_textern (tname cid)) ->
     unify_raw_ty env (get_ty env cid).raw_ty rawty2
-  | _, TName cid when not (is_textern (ty@@TName cid)) ->
+  | _, TName(cid, _) when not (is_textern (tname cid)) ->
     unify_raw_ty env rawty1 (get_ty env cid).raw_ty
   | TUnit, TUnit -> env
   | TBool, TBool -> env
@@ -414,7 +414,7 @@ and infer_eop env op (args : exp list) : env * op * exp list * ty = match op, ar
     (* resolve a named record/union (e.g. projecting `ev.data` of the named
        envelope type) to its definition before reading the field *)
     let rec_ety = match inf_exp.ety.raw_ty with
-      | TName cid when not (is_textern inf_exp.ety) -> get_ty env cid
+      | TName(cid, _) when not (is_textern inf_exp.ety) -> get_ty env cid
       | _ -> inf_exp.ety
     in
     if not (is_trecord rec_ety or is_tunion rec_ety) then (

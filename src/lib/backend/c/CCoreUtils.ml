@@ -104,7 +104,7 @@ let rec compound_eq e1 e2 =
     | TList(_, IVar _) -> err "cannot generate equality exp for vector of unknown length"
     | TPacket -> err "cannot generate equality exp for bytes"
     | TPtr(_, None) -> compound_eq (ederef e1) (ederef e2)
-    | TName cid -> (match tydef_opt cid with
+    | TName(_, def_opt) -> (match def_opt with
       | Some d -> compound_eq {e1 with ety=d} {e2 with ety=d}
       | None -> err "cannot generate equality exp for opaque named type")
       (* unbounded lists and unions are problematic *)
@@ -164,7 +164,7 @@ let rec compound_masked_eq e1 e2 m =
     | TList(_, IVar _) -> err "cannot generate masked equality exp for vector of unknown length"
     | TPacket -> err "cannot generate masked equality exp for bytes"
     | TPtr(_, None) -> compound_masked_eq (ederef e1) (ederef e2) (ederef m)
-    | TName cid -> (match tydef_opt cid with
+    | TName(_, def_opt) -> (match def_opt with
       | Some d -> compound_masked_eq {e1 with ety=d} {e2 with ety=d} {m with ety=d}
       | None -> err "cannot generate masked equality exp for opaque named type")
       (* unbounded lists and unions are problematic *)
