@@ -184,7 +184,6 @@ let infer_value value : value =
   (* values may only have have const sizes *)
   | VInt{size} -> tint size
   | VBool _ -> tbool
-  | VVariant _ -> tevent
   | VSymbol(_, ty) -> ty
   in
   {value with vty=ty}

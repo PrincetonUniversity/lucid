@@ -249,10 +249,6 @@ let delete_empty_tuples decls =
       let func_ty = super#visit_func_ty () func_ty in
       let arg_tys = List.filter (fun ty -> not (is_empty_tuple ty)) func_ty.arg_tys in
       {func_ty with arg_tys}
-    method! visit_vvariant () vvariant = 
-      let evdata = List.map (super#visit_value ()) vvariant.evdata in
-      let evdata = List.filter (fun v -> not (is_empty_tuple v.vty)) evdata in
-      super#visit_vvariant () {vvariant with evdata}
     method! visit_ERecord () ids es = 
       let es = List.map (super#visit_exp ()) es in
       let id_es = List.combine ids es in

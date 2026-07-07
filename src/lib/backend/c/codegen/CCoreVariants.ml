@@ -107,10 +107,6 @@ let transformer =
         let variant_ty = f.ety in
         let f_ety = tfun (List.map (fun arg -> arg.ety) args) variant_ty in
         {exp with e=ECall{f={f with ety=f_ety}; args; call_kind=CFun}}
-      | EVal({v=VVariant(vvariant); vty=variant_ty}) ->
-        let args = List.map eval vvariant.evdata in
-        let f = efunref vvariant.evid (tfun (List.map (fun arg -> arg.ety) args) variant_ty) in
-        {exp with e=ECall{f; args; call_kind=CFun}}
       | _ -> exp
 
   method! visit_statement arm_assoc stmt =

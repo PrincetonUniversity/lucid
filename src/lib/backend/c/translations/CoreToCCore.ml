@@ -236,24 +236,13 @@ let rec translate_v (v : C.v) (vty:C.ty) : F.v =
   match v with
   | C.VBool(b) -> (F.vbool b).v
   | C.VInt({value; size}) -> (F.vint (Z.to_int value) (Z.to_int size)).v
-  | C.VEvent event_val -> F.VVariant(translate_event_val event_val)
+  | C.VEvent(_) ->
+    err "event values are interpreter-internal and should not reach the C backend (a constant event is a constructor call expression)"
   | C.VGlobal(_) -> err "VGlobals should not appear outside of the interpreter's execution"
   | C.VPat(_) | C.VBits(_) -> err "runtime pat/bitstring values are not supported by the C backend"
   | C.VTuple(_) | C.VRecord(_) | C.VGroup(_) ->
     err "compound constants (tuple/record/group values) only translate to expressions; they cannot appear in value positions (e.g. inside constant event payloads)"
 
-and translate_event_val (ev : C.event_val) : F.vvariant =
-  {
-    evid = ev.eid;
-    evnum = (match ev.evnum with
-      | Some(value) -> Some(translate_value value)
-      | None -> None);
-    evdata = List.map translate_value ev.data;
-    meta = [
-      "edelay", F.vint ev.edelay 16;
-      "eserialized", F.vbool ev.eserialized;
-    ]
-  }
 and translate_value (value : C.value) : F.value =
   {v = translate_v value.v value.vty;
    vty = translate_ty value.vty;

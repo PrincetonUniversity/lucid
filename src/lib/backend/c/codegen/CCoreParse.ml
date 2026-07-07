@@ -75,10 +75,8 @@ let parse_op_name e = match e.e with
 ;;
 
 (* the value-semantic "drop": return (false, <placeholder event>). The event is
-   never used (lower_parser turns drop into "return 0" with no event write); we
-   use a VSymbol so it types directly as tevent without referencing a real event
-   constructor (a VVariant here would be rewritten by CCoreVariants into a call to a
-   nonexistent constructor). *)
+   never used (lower_parser turns drop into "return 0" with no event write); the
+   VSymbol types directly as tevent without referencing a real event constructor. *)
 let no_event = { v = VSymbol(Cid.create ["_no_event"], tevent); vty = tevent; vspan = Span.default }
 let drop_return = sret (etuple [eval (vbool false); eval no_event])
 

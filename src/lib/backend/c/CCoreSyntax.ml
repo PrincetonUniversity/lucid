@@ -69,9 +69,7 @@ and params = (cid * ty) list
 and v =
   | VInt of {value : int; size : size;}
   | VBool of bool
-  | VVariant of vvariant
   | VSymbol of cid * ty
-and vvariant = {evid : cid; evnum : value option; evdata: value list; meta : (string * value) list;}
 and value = {v:v; vty:ty; vspan : sp;}
 
 (* expressions *)

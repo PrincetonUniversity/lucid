@@ -153,11 +153,8 @@ let rec v_to_string (v: v) : string =
   match v with
   | VInt {value; _} -> string_of_int value
   | VBool b -> string_of_bool b
-  | VVariant e -> "event(" ^ vvariant_to_string e ^ ")"
   | VSymbol (s, _) -> cid_to_string s
 
-and vvariant_to_string (e: vvariant) : string =
-  sprintf "%s(%s)" (cid_to_string e.evid) (String.concat ", " (List.map value_to_string e.evdata))
 and value_to_string value =
   v_to_string value.v
 
