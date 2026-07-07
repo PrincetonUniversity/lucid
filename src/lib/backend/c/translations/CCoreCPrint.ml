@@ -39,17 +39,7 @@ let cid_to_string (cid : Cid.t) =
   String.concat "_" (List.map id_to_string (Cid.to_ids cid))
   (* Cid.to_string cid *)
 
-(* use abstract names in parameter and function argument types. Possibly elsewhere. *)
-(* let rec raw_ty_to_string_pair ?(use_abstract_name=false) (r: raw_ty) : (string * string) =
-  match r with
-  | TPtr(ty, (Some(len))) -> 
-    let prefix, suffix = ty_to_string_pair use_abstract_name ty in
-    prefix, (sprintf "[%s]" (arrlen_to_string len))^suffix
-  | TPtr(ty, None) -> 
-    let prefix, suffix = ty_to_string_pair use_abstract_name ty in
-    let prefix = prefix ^ "(*" in
-    let suffix = ")" ^ suffix in
-    prefix, suffix *)
+
 let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : (string * string) =
   match r with
   | TUnit -> "void", ""
@@ -114,20 +104,6 @@ and field_to_string (id, ty) =
   | _ -> prefix ^" "^(cid_to_string id)^" "^suffix^";"
   
 
-  (* ty_to_string ~use_abstract_name:true ty ^ "[" ^ arrlen_to_string arrlen ^ "]" *)
-(* and field_to_string (id,ty) = 
-  if (is_tbit_int ty) then (
-    let n_bits = extract_tint_size ty in
-    sprintf "uint%i_t %s : %i;" (n_bytes n_bits) (id_to_string id) n_bits
-    )
-else 
-  sprintf "%s %s;" (ty_to_string ~use_abstract_name:true ty) (id_to_string id)
-
-and func_ty_to_string (f: func_ty) : string =
-  let arg_tys_str = String.concat ", " (List.map (ty_to_string ~use_abstract_name:true) f.arg_tys) in
-  let ret_ty_str = ty_to_string ~use_abstract_name:true f.ret_ty in
-  "(" ^ arg_tys_str ^ ") -> " ^ ret_ty_str
- *)
 let params_to_string params = 
   let params_str = String.concat ", " (List.map (fun (id, ty) -> 
     let prefix, suffix = ty_to_string ~use_abstract_name:true ty in

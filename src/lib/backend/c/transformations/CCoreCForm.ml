@@ -8,29 +8,6 @@ open CCoreSyntax
 open CCoreExceptions
 open CCoreTransformers
 
-(* lower value-semantic vectors to pointers: the first "pointerize" step,
-   run right after the value-semantics boundary.
-     TList(t, len)          -> TPtr(t, Some len)
-     EOp(Idx, [arr; idx])  -> EDeref(arr + idx)
-   This restores the pointer-based array form that the rest of the C backend
-   (and C itself) expects, leaving the final C byte-identical. *)
-let vec_lowerer = object
-  inherit [_] s_map as super
-  method! visit_ty env t =
-    let t = super#visit_ty env t in
-    match t.raw_ty with
-    | TList(elem, len) -> { t with raw_ty = TPtr(elem, Some len) }
-    | _ -> t
-  method! visit_exp env e =
-    let e = super#visit_exp env e in
-    match e.e with
-    | EOp(Idx, [arr; idx]) ->
-      let plus = { arr with e = EOp(Plus, [arr; idx]); ety = arr.ety } in
-      { e with e = EDeref plus }
-    | _ -> e
-end
-
-let lower_vecs decls = vec_lowerer#visit_decls () decls
 
 (* Convert match statements to if statements *)
 let to_bool_atom (e,p) = 
@@ -69,8 +46,6 @@ let rec match_to_if exps branches =
     sif econd stmt else_stmt
 ;;
 
-
-
 let has_pmask branches =
   List.exists
     (fun (pats, _) -> List.exists (function PMask _ -> true | _ -> false) pats)
@@ -88,7 +63,6 @@ let normalize_matches decls =
   CCoreTransformers.subst_statement#visit_decls transform_match decls
 ;;
 
-
 (* ensure that record, union, tuple, and list expressions only appear in declarations *)
 let is_initializer exp = match exp.e with
   | EUnion _ -> true
@@ -97,12 +71,7 @@ let is_initializer exp = match exp.e with
   | EList _ -> true
   | _ -> false
 ;;
-(* Name inlined structural types: replace a structural type with a TName reference
-   to the DTy whose body it matches, so the C printer emits the shared typedef name
-   instead of an anonymous struct (anonymous structs are distinct types in C, so
-   structurally-identical types must share a typedef to be compatible). A DTy's own
-   body is left structural -- naming it would make the definition reference itself
-   (`type res_t = res_t`) -- so only *uses* are named, not definitions. *)
+(* Give container types names *)
 let name_types decls =
   let ty_defs = List.filter_map
     (fun d -> match d.d with DTy(cid, Some ty) -> Some (ty, cid) | _ -> None) decls
@@ -176,12 +145,10 @@ let normalize_struct_inits decls =
 ;;
 
 
-(* C has no multi-value assignment, so lower tuple unpacks to single assignments:
+(* Unpack multi-assignments
      (a, b) = (x, y)        ->  a = x; b = y;                         (literal: split directly)
      (a, b) = lookup(...)   ->  tup t = lookup(...); a = t._0; b = t._1;  (call: temp + project)
-   The call case must bind to a temp because the call produces the whole tuple as
-   one value (and runs once); a literal already has the components in hand.
-   This eliminates OTupleLocal / OTupleAssign (verified gone by CCoreWellformedC). *)
+*)
 let eliminate_tuple_assigns decls =
   (* unpack rhs into the given per-component binders (one statement each) *)
   let unpack binders rhs =

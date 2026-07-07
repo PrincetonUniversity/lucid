@@ -76,7 +76,6 @@ let compile ds =
   (* masks on non-standard int width operations *)
   let cds = CCoreMaskWidths.process cds in
   (* a bunch of small transformations *)
-  let cds = CCoreCForm.lower_vecs cds in
   let cds = CCoreCForm.normalize_matches cds in
   let cds = CCoreCForm.eliminate_tuple_assigns cds in
   let cds = CCoreCForm.name_types cds in

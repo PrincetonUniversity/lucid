@@ -871,10 +871,6 @@ let ( /: ) stmt1 stmt2 =
 ;;
 
 
-
-
-
-
 (* equivalence *)
 let rec equiv_tys ty1 ty2 = match ty1.raw_ty, ty2.raw_ty with 
 | TUnit, TUnit -> true
