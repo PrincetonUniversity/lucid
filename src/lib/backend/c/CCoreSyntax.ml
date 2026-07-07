@@ -68,8 +68,10 @@ and ty = {raw_ty:raw_ty; tspan : sp}
 and params = (cid * ty) list
 (* values *)
 and v =
+  | VUnit
   | VInt of {value : int; size : size;}
   | VBool of bool
+  | VUnion of cid * value * ty (* ty is the union type *)
   | VRecord of cid list * value list
   | VTuple of value list
   | VList  of value list
@@ -420,7 +422,12 @@ let sizeof_ty ty =
 
 (* value constructors *)
 let value v vty = {v=v; vty=vty; vspan=Span.default}
+let vunit () = {v=VUnit; vty=ty TUnit; vspan=Span.default}
 let vint value size = {v=VInt {value; size = sz size}; vty=ty (TInt(sz size)); vspan=Span.default}
+(* declare a vint with size derived from ty *)
+let vint_ty value ty = match ty.raw_ty with 
+  | TInt  size -> vint value size
+  | _ -> failwith "vint_ty: expected TInt"
 let vbool b = {v=VBool b; vty=ty TBool; vspan=Span.default}
 let vlist vs = {v=VList vs; vty=ty (TVec((List.hd vs).vty, IConst (List.length vs))); vspan=Span.default}
 let vtup vs = {v=VTuple(vs); vty=ttuple (List.map (fun v -> v.vty) vs); vspan=Span.default}
@@ -434,6 +441,7 @@ let vrecord label_values =
   (* labels (List.map (fun v -> v.vty) values); vspan=Span.default} *)
 
   (* vrecord labels values *)
+let vunion label value ty = {v=VUnion(label, value, ty); vty=ty; vspan=Span.default}
 let vtuple vs = {v=VTuple(vs); vty=ttuple (List.map (fun v -> v.vty) vs); vspan=Span.default}
 let vvariant evid evnum evdata meta = {v=VVariant {evid; evnum; evdata; meta}; vty=tevent; vspan=Span.default}
 let vvariant_simple evid evdata = vvariant evid None evdata []
@@ -474,6 +482,31 @@ let charints_to_string (v:value) =
   | _ -> failwith "strings are encoded as int tuples"
 ;;
 
+let rec default_value ty = match ty.raw_ty with 
+  | TUnit -> vunit ()
+  | TInt size -> vint 0 size
+  | TBool -> vbool false
+  | TRecord(labels, ts) -> 
+    vrecord (List.map (fun (label, ty) -> (label, default_value ty)) (List.combine labels ts))
+  | TUnion(ids, tys) -> vunion (List.hd ids) (List.hd tys |> default_value) ty
+  | TTuple(ts) -> 
+    vtuple (List.map default_value ts)
+  | TFun _ -> failwith "no default value for function type"
+  | TBits{len} -> vbits (List.init len (fun _ -> 0))
+  | TVariant _ -> vvariant (Cid.create ["_none"]) None [] []
+  | TEnum(cases) -> 
+    venum ((List.hd cases) |> fst) ty
+  | TBuiltin _ -> failwith "no default value for builtin type"
+  | TName cid -> (match tydef_opt cid with
+    | Some inner_ty -> {(default_value inner_ty) with vty=ty}
+    | None -> failwith "no default value for named type")
+  | TPtr(inner_ty, None) -> {(default_value inner_ty) with vty=ty}
+  | TPtr(elem_ty, Some(IConst(n))) -> {v=VList (List.init n (fun _ -> default_value elem_ty)); vty=ty; vspan=Span.default}
+  | TPtr(_, Some _) -> failwith "no default value for list of unknown length"
+  | TVec(elem_ty, IConst(n)) -> {v=VList (List.init n (fun _ -> default_value elem_ty)); vty=ty; vspan=Span.default}
+  | TVec(_, IVar _) -> failwith "no default value for vector of unknown length"
+  | TPacket -> failwith "no default value for bytes"
+;;
 
 
 let extract_vvariant value = match value.v with 
@@ -572,9 +605,11 @@ let ebytesok bs = eop BytesOk [bs]
 let ewrite write_ty bs v = eop (Write write_ty) [bs; v]
 let evar cid ty = exp (EVar cid) ty Span.default
 let param_evar (id, ty) = evar id ty
+let eunit () = eval (vunit ())
 
 let ecast ty exp = eop (Cast ty) [exp]
 
+let default_exp ty = eval@@default_value ty
 
 let eproj rec_exp field_id = 
   eop (Project(field_id)) [rec_exp]
