@@ -65,11 +65,9 @@ let compile ds =
   let cds = CCoreTables.process cds in
   let cds = CCoreArrays.process cds in
   let cds = CCoreTyper.check cds in
-
-  let cds = CCoreTyper.check cds in
   ccore_print_always "---- After table gen ----" cds;
 
-  (* We shouldn't have used references / pointers yet by this stage. *)
+  (* Make sure there's no references or pointers by this stage *)
   CCoreWellformed.check_no_ptrs cds;
 
   (* simple builtins as foreign functions *)

@@ -22,34 +22,6 @@ let n_bytes n_bits = (* number of bytes required to hold n_bits *)
   (n_bits + 7) / 8
 ;;
 
-(* ---- R1' bit-packed serialization layout (see ccore-refactor-notes §21) ----
-   Lucid serializes a sequence of fields as one contiguous MSB-first (network)
-   bitstream. Restriction R1': a field may cross a byte boundary only if it is
-   byte-aligned at its start (offset%8=0) or its end ((offset+n)%8=0). That keeps
-   every field within its natural container and makes the codec a single
-   load/shift/mask. Validate a width sequence against R1' and require a
-   byte-multiple total (rule 3). On the first offending field, return
-   Error(index, reason); index = List.length widths flags a non-byte-multiple total. *)
-let check_r1_widths (widths : int list) : (unit, int * string) result =
-  let rec go off i = function
-    | [] ->
-      if off mod 8 <> 0
-      then Error(i, Printf.sprintf "the fields total %d bits, not a whole number of \
-                                    bytes -- pad to a multiple of 8 bits" off)
-      else Ok ()
-    | n :: rest ->
-      let phase = off mod 8 in
-      let straddles = phase + n > 8 in
-      let aligned = phase = 0 || (off + n) mod 8 = 0 in
-      if straddles && not aligned
-      then Error(i, Printf.sprintf
-        "a %d-bit field at bit-offset %d crosses a byte boundary without aligning to \
-         one -- reorder or pad so it starts or ends on a byte boundary (restriction R1')"
-        n off)
-      else go (off + n) (i + 1) rest
-  in
-  go 0 0 widths
-;;
 
 let is_smatch statement = match statement.s with 
   | SMatch _ -> true 
