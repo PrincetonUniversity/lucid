@@ -94,3 +94,15 @@ let rec compound_masked_eq e1 e2 m =
     (* builtins and names -- opaque, can't compare *)
     | TBuiltin _ -> err "no equality for builtins"
 ;;
+(* a banner comment for the generated C, marking a major file section *)
+let section_marker str =
+  let str = "SECTION: " ^ str in
+  let width = 80 in
+  let stars = String.make width '*' in
+  let pad = max 0 (width - String.length str) in
+  let left = pad / 2 in
+  let right = pad - left - 2 in
+  dforiegn [%string {|
+/%{stars}/
+/*%{String.make left ' '}%{str}%{String.make right ' '}*/
+/%{stars}/|}]

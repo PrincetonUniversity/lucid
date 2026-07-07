@@ -247,16 +247,10 @@ let rec s_to_string (s: s) : string =
     "return " ^ (match e_opt with 
                   | Some e -> exp_to_string e 
                   | None -> "") ^ ";"  
-  | SFor{idx; bound; stmt; guard=None} -> 
+  | SFor{idx; bound; stmt} -> 
     let loop_init = sprintf "for (int %s = 0; %s < %s; %s++) {\n" (cid_to_string idx) (cid_to_string idx) (arrlen_to_string bound) (cid_to_string idx) in
     let loop_body = indent 2 (statement_to_string stmt) in
     loop_init ^ loop_body ^ "\n}"
-  | SFor{idx; bound; stmt; guard=Some(guard_id)} -> 
-    let guard_init = sprintf "bool %s = true;\n" (cid_to_string guard_id) in
-    let loop_init = sprintf "for (int %s = 0; %s < %s; %s++) {\n" (cid_to_string idx) (cid_to_string idx) (arrlen_to_string bound) (cid_to_string idx) in
-    let loop_body = indent 2 (statement_to_string stmt) in
-    let loop_guard = indent 2 @@ sprintf "if (!%s) break;\n" (cid_to_string guard_id) in
-    guard_init ^ loop_init ^ loop_body ^ loop_guard ^ "\n}"
   | SForEver(stmt) -> 
     "while (1) {\n" ^ indent 2 (statement_to_string stmt) ^ "\n}"
 

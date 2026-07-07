@@ -1,46 +1,36 @@
 open CCoreSyntax
 open CCoreUtils
 
-(* ---- names of compiler-generated constructs referenced in the driver's raw C,
-   taken from the cids the codegen emits and inlined with %{...} below, so the driver
-   tracks generated names instead of hard-coding them (mirrors the dpdk driver). ---- *)
+(* Raw-socket driver: run a compiled Lucid program on POSIX interfaces. 
+   Intended to be compatible with the same platforms as lucidSwitch's 
+   interpreter (AF_PACKET on Linux, bpf on macOS).
+   C is copied / adapted from rawlink_stubs.c
+
+   Ports are wired to interfaces at runtime, like lucidSwitch:
+     ./lucidprog --interface 0:veth0 --interface 1:veth1
+   binds Lucid port 0 to veth0 and port 1 to veth1.
+
+   Data structures are a large part of this file: a simple ring buffer 
+   and slab allocator for packet buffers. There is also a 
+   port table (Lucid port number <-> interface socket). 
+
+   The overall architecture is a pipeline with 3 stages: rx -> dispatch -> tx.
+*)
+
+(* compiler-generated constructs referenced in the driver's raw C *)
 let events_ty        = CCoreCPrint.cid_to_string events_cid
 let out_event_ty     = CCoreCPrint.cid_to_string CCoreHandlers.out_event_cid
 let packet_t_ty      = CCoreCPrint.cid_to_string
   (match CCoreParse.packet_t.raw_ty with TName(c, _) -> c | _ -> failwith "packet_t is not a named type")
-
 let packet_t_ptr_ty = packet_t_ty ^ "*"
-
 let parse_event_fn   = CCoreCPrint.cid_to_string CCoreParse.parser_cid
 let deparse_event_fn = CCoreCPrint.cid_to_string CCoreParse.deparse_id
 let handle_event_fn  = CCoreCPrint.cid_to_string CCoreHandlers.handler_cid
 let out_events_cap   = string_of_int CCoreHandlers.out_events_cap
-(* sentinel port value that marks a recirculated (generate_self) out_event *)
 let port_recirc      = string_of_int CCoreHandlers.port_recirc
 
 
-(* Raw-socket driver: run a compiled Lucid program on real POSIX network
-   interfaces, the same way the `lucidSwitch` interpreter does (AF_PACKET raw
-   sockets on Linux, /dev/bpf on macOS -- the C here is adapted from the vendored
-   rawlink_stubs.c, minus the OCaml glue).
 
-   Ports are wired to interfaces at runtime, exactly like lucidSwitch:
-     ./lucidprog --interface 0:veth0 --interface 1:veth1
-   binds Lucid port 0 to veth0 and port 1 to veth1. A packet read on a port's
-   socket is dispatched with that port as its ingress port; a port output event is
-   written to the target port's socket.
-
-   Architecture (§29): the same queue-separated rx -> dispatch -> tx pipeline as the
-   DPDK reference driver (§28), with the DPDK primitives hand-rolled -- a fixed slab
-   of packet buffers with a free-list stands in for rte_mempool, and index rings for
-   rte_ring. Each slab slot is a queue element that OWNS its bytes (like an mbuf), so
-   a recirculated event gets its own cloned buffer and survives across dispatch
-   iterations. That lets dispatch run in bounded bursts: an endless self-recirculating
-   handler can't starve fresh input (non-blocking recirculation, matching the DPDK
-   driver and the interpreter). *)
-
-(* all includes in one block so the platform conditionals + ordering are explicit
-   (mirrors the vendored rawlink_stubs.c include order, which is known to work) *)
 let imports = dforiegn {|
 #include <sys/types.h>
 #include <sys/socket.h>
@@ -143,9 +133,7 @@ int init_port_map(port_map_t* g_port_map, int argc, char** argv) {
 |}
 
 
-(* ===== the index ring: a small FIFO of uint16_t slot indices (a hand-rolled rte_ring).
-   Pure library (the instances -- the slab's free-list and the pipeline rings -- live in the
-   slab_t and the `state` block). ring_init takes one ring, so each is initialized explicitly. ===== *)
+(* ===== the index ring: a small FIFO of slot indices (a hand-rolled rte_ring) ===== *)
 let ring_lib = dforiegn {|
 /********* index ring (a FIFO of slot indices) ***********/
 typedef struct { uint16_t buf[RING_CAP]; uint32_t head, tail; } idx_ring;
@@ -163,15 +151,12 @@ static int ring_pop(idx_ring* r, uint16_t* out) {
 |}
 
 
-(* ===== the slab allocator: a hand-rolled rte_mempool -- a fixed pool of queue elements
-   whose free-list is itself an idx_ring (so there is one ring implementation). Each slot
-   OWNS its packet bytes; see §29. Pure library: types + helpers taking a slab_t* (the
-   driver's instance lives in the `state` block). Emitted after rings, whose idx_ring the
-   free-list uses. ===== *)
+(* ===== the slab allocator: a fixed pool of queue elements (a hand-rolled
+   rte_mempool) whose free-list is an idx_ring. ===== *)
 let slab_lib = dforiegn [%string {|
 /********* the queue element (a slab slot) ***********/
-// Mirrors the DPDK qe_priv_t + mbuf data region: the event, the handler's outputs,
-// and the packet bytes this element OWNS. The packet occupies data[HEADROOM ..
+// the event, the handler's outputs, and the element's packet bytes (this driver's
+// analogue of the DPDK mbuf + private area). The packet occupies data[HEADROOM ..
 // HEADROOM+pkt_len); payload_off marks where the payload begins within it.
 typedef struct {
     %{events_ty}    ev;
@@ -203,11 +188,8 @@ static void slab_init(slab_t* s) {
 |}]
 
 
-(* the raw-socket library: open a socket bound to an interface (raw_open), and read a
-   bounded burst of frames from one into slab slots (port_rx: AF_PACKET delivers one
-   frame per read; BPF a buffer of bpf_hdr-prefixed frames). Adapted from
-   rawlink_stubs.c. do_rx (below) ingests -- parses + enqueues -- each slot read.
-   Emitted after the slab block, which port_rx allocates from. *)
+(* the raw-socket library is a simple inline block to open, rx, and tx from a
+   raw socket interface. Adapted from rawlink_stubs.c. *)
 let socket_lib = dforiegn {|
 #define RXBUF_SIZE 65536
 
@@ -304,22 +286,16 @@ static rx_batch port_rx(int fd, slab_t* s) {
     return batch;
 }
 
-// egress: write a deparsed frame [buf, buf+len) out the descriptor get_out_descriptor
-// returned. Handles a bad descriptor (< 0, no such port) itself, so do_tx can stay a
-// pass-through (get_out_descriptor -> send_frame), mirroring do_rx.
+// egress: write a deparsed frame [buf, buf+len) out of the descriptor fd.
 static void send_frame(int fd, uint8_t* buf, size_t len) {
     if (fd < 0) { debug_printf("send_frame: no egress descriptor (dropped)\n"); return; }
     if (write(fd, buf, len) < 0) debug_printf("write to fd %d failed: %s\n", fd, strerror(errno));
 }
 |}
 
-(* ===== the driver's runtime state: instances of the slab + ring libraries. Kept out of
-   the library blocks so those stay pure (types + functions). Emitted just before the
-   stages that use it. ===== *)
-(* shared with the pcap driver: the code is driver-neutral (g_port_map's type -- the
-   port_map_t -- is whatever the driver's port_map_lib defined before this block). *)
+(* Runtime state used by the stages *)
 let pipe_state = dforiegn {|
-/********* the driver's runtime state (instances of the slab + ring libraries) ***********/
+/********* driver runtime state (instances of the slab + ring libraries) ***********/
 static port_map_t   g_port_map;  // Lucid port <-> the driver's I/O (see its port_map_lib)
 static slab_t       g_slab;        // the packet-buffer pool
 static idx_ring     dispatch_in;   // parsed + recirculated elements awaiting handling
@@ -327,8 +303,6 @@ static idx_ring     tx_in;         // handled elements awaiting fan-out + depars
 static uint64_t     pkt_ct = 0;    // rx packet counter
 |}
 
-(* ===== RX: parse + enqueue the frames port_rx (socket_layer) read from each port,
-   mirroring the dpdk driver's rx_burst-then-loop shape. ===== *)
 let rx = dforiegn [%string {|
 // parse the frame sitting in slot `idx` (pkt_len bytes at data+HEADROOM) into its event
 // and enqueue it for dispatch; drop (free the slot) on parse failure.
@@ -352,7 +326,6 @@ static void do_rx(void) {
 }
 |}]
 
-(* ===== DISPATCH: handle a bounded burst of elements; forward each to tx_in (no copy) ===== *)
 let dispatch = dforiegn [%string {|
 /******** DISPATCH: handle a bounded burst of elements; hand each to tx_in (no copy) ********/
 static void do_dispatch(void) {
@@ -367,12 +340,11 @@ static void do_dispatch(void) {
 }
 |}]
 
-(* ===== TX: fan out each element into one owned clone per output, then route each
-   (recirc -> dispatch_in, else deparse + write to the port). ===== *)
+(* ===== TX: clone packets and route recircs back to dispatch input queue  ===== *)
 let tx = dforiegn [%string {|
 #define PORT_RECIRC %{port_recirc}u // out_event.port sentinel: recirculate, don't egress
 
-/******** TX: fan out each element into one owned clone per output, then route/deparse/send ********/
+/******** TX: fan out each element into one copy per output, then route/deparse/send ********/
 static void do_tx(void) {
     for (int b = 0; b < BURST; b++) {
         uint16_t idx;
@@ -384,8 +356,8 @@ static void do_tx(void) {
             if (cidx == SLOT_NONE) continue;             // pool exhausted -> drop this output
             qe_t* c = slot(&g_slab, cidx);
             c->ev = oe->ev;
-            // the output owns a fresh copy of the input's payload (or none), placed at
-            // data+HEADROOM with headroom in front for the deparsed header.
+            // each output gets its own copy of the input's payload (or none), with
+            // headroom in front for the deparsed header.
             uint32_t plen = oe->ev.meta.has_payload ? (in->pkt_len - in->payload_off) : 0;
             if (plen) memcpy(c->data + HEADROOM, in->data + HEADROOM + in->payload_off, plen);
             c->pkt_len = plen;
@@ -410,9 +382,6 @@ static void do_tx(void) {
     }
 }
 |}]
-
-
-
 
 let main = dforiegn {|
 static volatile int g_running = 1;
@@ -458,18 +427,6 @@ int main(int argc, char** argv) {
     return 0;
 }
 |}
-
-let section_marker str =
-    let str = "SECTION: " ^ str in
-    let width = 80 in
-    let stars = String.make width '*' in
-    let pad = max 0 (width - String.length str) in
-    let left = pad / 2 in
-    let right = pad - left - 2 in
-    dforiegn [%string {|
-/%{stars}/
-/*%{String.make left ' '}%{str}%{String.make right ' '}*/
-/%{stars}/|}]
 
 let package_prog decls =
     let imports = [imports] in

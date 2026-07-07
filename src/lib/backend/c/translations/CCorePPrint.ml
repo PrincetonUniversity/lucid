@@ -215,11 +215,8 @@ let rec s_to_string (s: s) : string =
     "return " ^ (match e_opt with 
                   | Some e -> exp_to_string e 
                   | None -> "") ^ ";"  
-  | SFor{idx; bound; stmt; guard=None} -> 
+  | SFor{idx; bound; stmt} -> 
     "for (" ^ (cid_to_string idx) ^ " < " ^ arrlen_to_string bound ^ ") {\n" ^ 
-    indent 2 (statement_to_string stmt) ^ "\n}"
-  | SFor{idx; bound; stmt; guard=Some(guard)} -> 
-    "for (" ^ (cid_to_string idx) ^ " < " ^ arrlen_to_string bound ^ ") while ("^(cid_to_string guard)^" == true) {\n" ^ 
     indent 2 (statement_to_string stmt) ^ "\n}"
   | SForEver(stmt) -> 
     "forever {\n" ^ indent 2 (statement_to_string stmt) ^ "\n}"

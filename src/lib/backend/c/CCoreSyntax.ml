@@ -113,8 +113,7 @@ and s =
   | SNoop
   | SUnit of exp
   | SAssign of assign_op * exp
-  | SFor of {idx : cid; bound : arrlen; stmt: statement; guard : cid option}
-    (* for (idx < bound) while guard *)
+  | SFor of {idx : cid; bound : arrlen; stmt: statement}
   | SForEver of statement (* infinite loop *)
   | SIf of exp * statement * statement
   | SMatch of exp list * branch list
@@ -610,11 +609,7 @@ let sret_none = s (SRet None) Span.default
 let sret eret = s (SRet (Some eret)) Span.default
 
 let sfor idx bound stmt = 
-  s (SFor{idx; bound; stmt; guard=None}) Span.default
-;;
-
-let swhile idx bound guard stmt = 
-  s (SFor{idx; bound; stmt; guard=Some(guard)}) Span.default
+  s (SFor{idx; bound; stmt}) Span.default
 ;;
 
 let sseq s1 s2 = 

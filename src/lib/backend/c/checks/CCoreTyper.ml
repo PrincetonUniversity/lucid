@@ -587,18 +587,12 @@ let rec infer_statement env (stmt:statement) =
     env, {stmt with s=SRet(Some({inf_exp with ety=env_ret_ty}))}
   )
   | SRet(None) -> env, stmt
-  | SFor{idx; bound; stmt; guard} -> 
+  | SFor{idx; bound; stmt} -> 
     (* add the index to the env *)
     let env = add_var env (idx) (tint 32) in
-    (* add the guard to the env *)
-    let env = match guard with 
-      | None -> env
-      | Some(guard_id) -> add_var env (guard_id) tbool
-    in
-    (* TODO: add constraint idx < bound --  only while inside of new environment? *)
     let env', inf_stmt = infer_statement env stmt in
     let env = {env' with vars=env.vars} in
-    env, {stmt with s=SFor{idx; bound; stmt=inf_stmt; guard}}
+    env, {stmt with s=SFor{idx; bound; stmt=inf_stmt}}
   
   | SForEver stmt -> 
     let env, inf_stmt = infer_statement env stmt in

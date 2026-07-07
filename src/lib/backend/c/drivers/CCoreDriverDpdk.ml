@@ -5,34 +5,17 @@ open CCoreUtils
 (*
   Single-core DPDK toplevel driver.
 
-  Structure (each a dforiegn block below, in dataflow order):
-    includes  ->  <generated code: types, parse/handle/deparse>  ->
-    rings  ->  config + EAL/port/ring init  ->  rx/dispatch/tx phases  ->  main
-
-  The runtime is a three-stage pipeline connected by two DPDK rings that carry mbuf
-  POINTERS -- every event rides an mbuf (the "queue element"):
+	The overall architecture is a pipeline with 3 stages: rx -> dispatch -> tx, 
+	using DPDK rings carrying mbufs between the stages. 
+	Each mbuf carries an event, and program-generated output events, in its private area. 
+	The stages are the same as the raw socket driver.
       RX   : poll every port, parse each frame into the mbuf's event, push to dispatch_in.
-      DISP : handle a bounded burst of events, filling each mbuf's out_events list; hand
-             the mbuf to tx_in with NO copy.
-      TX   : fan out each mbuf into one copy per output event, then route each copy
-             (recirc -> dispatch_in, else deparse + transmit to its port).
-  Each stage pulls a BOUNDED burst (<= BURST_SIZE) rather than draining to empty, so a
-  self-recirculating handler can't starve the RX path.
-
-  Ownership: the mbuf owns the packet bytes; the event and (on the input mbuf) the
-  handler's output list live in the mbuf's private area (qe_priv_t). packet_t is only
-  ever a transient VIEW built over the mbuf's data to parse/deparse -- it owns nothing.
-  RX records where the payload begins (payload_off) instead of stripping the header;
-  each TX copy takes just that payload (or empty) with fresh headroom, and deparse
-  prepends the output's header into it. The copy is the fan-out -- dispatch never copies.
-
+      DISP : execute event handlers, fill the mbuf's out_events list, send to tx_in.
+      TX   : clone / route each output event, including recirculations. 
+	Stages operate on bursts of mbufs (<= BURST_SIZE)
   Assumes every output port id used by the program is bound to a valid device. *)
 
-(* ---- names of compiler-generated constructs referenced in the driver's raw C.
-   Taken from the cids the codegen emits (cid_to_string is the printer's own
-   namer) and inlined with %{...} below, so the driver tracks generated names
-   instead of hard-coding them. (event_meta / event_variant are internal to the
-   generated code and not referenced by the driver, so they need no binding.) ---- *)
+(* compiler-generated constructs referenced in the driver's raw C *)
 let events_ty        = CCoreCPrint.cid_to_string events_cid
 let out_event_ty     = CCoreCPrint.cid_to_string CCoreHandlers.out_event_cid
 let packet_t_ty      = CCoreCPrint.cid_to_string
@@ -63,10 +46,8 @@ let dpdk_includes = dforiegn {|
 (* ===== queue element + pipeline rings (reference the generated event/packet types) ===== *)
 let dpdk_queue = dforiegn [%string {|
 /******** the queue element: an mbuf whose private area carries the event ********/
-// Every event rides an mbuf. The mbuf OWNS the packet bytes (its data region); the
-// mbuf's private area (priv_size, set at pool creation) holds the event and -- on the
-// input mbuf between dispatch and tx -- the handler's output-event list. packet_t is
-// only ever a transient VIEW built over the data to parse/deparse; it owns nothing.
+// An event is carried in the private region of the mbuf that stores 
+// the packet that generated it. Recirculared events have no payload.
 typedef struct {
 	%{events_ty}    ev;                        // the event this mbuf carries
 	%{out_event_ty} out_events[%{out_events_cap}]; // handler outputs (input mbuf only)
@@ -76,7 +57,7 @@ typedef struct {
 
 static inline qe_priv_t *qe(struct rte_mbuf *m) { return (qe_priv_t *)rte_mbuf_to_priv(m); }
 
-// a transient cursor view over an mbuf's data (front .. pkt_len); borrows, never owns.
+// packet_t is a view of the mbuf's data. 
 static inline %{packet_t_ty} view_over(struct rte_mbuf *m) {
 	uint8_t *d = rte_pktmbuf_mtod(m, uint8_t *);
 	return (%{packet_t_ty}){ .start = d, .cursor = d, .end = d + rte_pktmbuf_pkt_len(m), .bit_off = 0 };
@@ -209,14 +190,9 @@ void dpdk_init(cfg_t* cfg, int argc, char *argv[]) {
 }
 |}]
 
-(* ===== pipeline phases (reference the generated parse/handle/deparse + types) =====
-   One dforiegn block per phase. Each pulls a *bounded* burst (<= BURST_SIZE) and
-   loops over it -- so dispatch/tx don't drain to empty, which would let a
-   self-recirculating handler starve the RX path. *)
+(* ===== pipeline stages ===== *)
 
-(* RX: poll every port, parse each frame into the mbuf's event, enqueue the mbuf on
-   dispatch_in. No header stripping -- we record where the payload begins (payload_off)
-   and leave the bytes in place; the mbuf IS the queue element. *)
+(* RX: poll all ports, call the program's parser, enqueue mbuf to dispatch_in. *)
 let dpdk_do_rx = dforiegn [%string {|
 /******** RX: poll every port, parse, enqueue the event-mbuf on dispatch_in ********/
 static void do_rx(void) {
@@ -237,10 +213,7 @@ static void do_rx(void) {
 }
 |}]
 
-(* DISPATCH: handle a bounded burst of event-mbufs. The handler fills each mbuf's
-   out_events list; we hand the mbuf straight to tx_in with NO copy (the fan-out
-   happens in TX). Bounded burst -> recirculated events (re-enqueued by TX onto
-   dispatch_in) land in a future burst, so a self-recirculating handler can't starve RX. *)
+(* DISPATCH: process a burst of mbufs, populate the out_event list and continue to tx stage. *)
 let dpdk_do_dispatch = dforiegn [%string {|
 /******** DISPATCH: handle a burst of event-mbufs; hand each to tx_in (no copy) ********/
 static void do_dispatch(void) {
@@ -256,12 +229,9 @@ static void do_dispatch(void) {
 }
 |}]
 
-(* TX: fan out a bounded burst of event-mbufs. For each input mbuf we make one copy
-   per output event -- the copy holds just that output's payload (the input's bytes at
-   payload_off, or empty for a no-payload output) with fresh headroom -- set the copy's
-   event, then route it: a recirc output (port == PORT_RECIRC) goes back onto dispatch_in
-   un-deparsed; any other output is deparsed (header prepended into the headroom) and
-   transmitted. The input mbuf is freed once all its outputs are copied out. *)
+(* TX: copy mbufs to output and recirculation ports. For events leaving 
+   on ports, deparse the event into the mbuf's headroom and transmit.
+	 Recirculated events are re-enqueued on dispatch_in without deparsing. *)
 let dpdk_do_tx = dforiegn [%string {|
 /******** TX: fan out each event-mbuf into one copy per output, then route/deparse/send ********/
 static void do_tx(void) {
@@ -273,8 +243,8 @@ static void do_tx(void) {
 		uint32_t pkt_len = rte_pktmbuf_pkt_len(m);
 		for (uint16_t i = 0; i < ip->n_out; i++) {
 			%{out_event_ty} *oe = &ip->out_events[i];
-			// each output owns an independent copy: just the input's payload (or empty),
-			// with fresh headroom for the deparsed header to prepend into.
+			// each output gets its own copy of the input's payload (or none), with
+			// headroom in front for the deparsed header.
 			uint32_t plen = oe->ev.meta.has_payload ? (pkt_len - ip->payload_off) : 0;
 			struct rte_mbuf *c = plen > 0
 				? rte_pktmbuf_copy(m, mbuf_pool, ip->payload_off, plen)
@@ -307,9 +277,9 @@ let dpdk_main = dforiegn {|
 static __rte_noreturn void lcore_main(void) {
 	printf("handler loop running -- ctrl-c to quit\n");
 	for (;;) {
-		do_rx();        // poll all ports, parse, enqueue
-		do_dispatch();  // handle one event, route its outputs
-		do_tx();        // deparse + transmit one output event
+		do_rx();        // poll all ports, parse, enqueue on dispatch_in
+		do_dispatch();  // handle a bounded burst, forward to tx_in
+		do_tx();        // fan out a bounded burst: deparse+send; recirc re-enqueues
 	}
 }
 
@@ -320,10 +290,6 @@ int main(int argc, char *argv[]) {
 	return 0;
 }
 |}
-
-(* the pipeline model needs no extra generated helpers (it dispatches on the
-   handler's out_event count + out_loc, and carries payloads as mbufs). *)
-let helpers _decls = ([] : decls)
 
 let progname = "lucidprog"
 
@@ -382,10 +348,14 @@ sudo ./build/%{progname}-shared --log-level=8 -l 1 -n 4 --no-pci --vdev 'net_pca
 ;;
 (* return a list of files *)
 let package_prog decls =
+	let sm = section_marker in
 [
 	"lucidprog.c", `Decls (
-		[dpdk_includes] @ decls @ (helpers decls) @
-		[dpdk_queue; dpdk_config_init; dpdk_do_rx; dpdk_do_dispatch; dpdk_do_tx; dpdk_main]);
+		[dpdk_includes]
+		@ [sm "program code"] @ decls
+		@ [sm "driver config + init"; dpdk_queue; dpdk_config_init]
+		@ [sm "driver pipeline"; dpdk_do_rx; dpdk_do_dispatch; dpdk_do_tx]
+		@ [sm "driver main"; dpdk_main]);
 	(* capital M: the DPDK makefile lists `Makefile` as a prerequisite of its build
 	   rules, so the on-disk name must match (Linux is case-sensitive). *)
 	"Makefile", `String makefile;

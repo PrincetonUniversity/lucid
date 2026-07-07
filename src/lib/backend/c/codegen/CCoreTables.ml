@@ -219,16 +219,15 @@ let table_install spec =
   let new_slot = table_cell spec.tbl_id key_param mask action_param const_arg_param in
   let idx = cid "_idx" in
   let idx_var = evar (idx) (tint 32) in
-  let cont = cid "_continue" in
-  let body = swhile idx spec.len cont
+  (* write the first free slot and return; fall through if the table is full *)
+  let body = sfor idx spec.len
     (
       let entries = eop (Project(cid"entries")) [tbl] in
       let entry = elistget entries idx_var in
-      (* let entry = (entries/@idx) in     *)
       sif (eop Eq [entry/.cid"valid";eval@@vbool false])
         (stmts [
-            sassign (cont)  (eval (vbool false));
-            (tbl/.cid"entries", idx_var)/<-new_slot;            
+            (tbl/.cid"entries", idx_var)/<-new_slot;
+            sret_none;
           ])
         snoop
     )
@@ -261,16 +260,15 @@ let table_ternary_install spec =
   let new_slot = table_cell spec.tbl_id key_param mask_param action_param const_arg_param in 
   let idx = cid "_idx" in
   let idx_var = evar ( idx) (tint 32) in
-  let cont = cid "_continue" in
-  let body = swhile idx spec.len cont
+  (* write the first free slot and return; fall through if the table is full *)
+  let body = sfor idx spec.len
     (
       let entries = eop (Project(cid"entries")) [tbl] in
       let entry = elistget entries idx_var in
-      (* let entry = (entries/@idx) in     *)
       sif (eop Eq [entry/.cid"valid";eval@@vbool false])
         (stmts [
-            sassign ( cont)  (eval (vbool false));
-            (tbl/.cid"entries", idx_var)/<-new_slot;            
+            (tbl/.cid"entries", idx_var)/<-new_slot;
+            sret_none;
           ])
         snoop
     )

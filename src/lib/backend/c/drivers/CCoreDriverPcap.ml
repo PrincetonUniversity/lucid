@@ -2,18 +2,10 @@ open CCoreSyntax
 open CCoreUtils
 
 (* Libpcap toplevel driver.
-
-   This driver REUSES the raw-socket driver's pipeline wholesale -- the config, the
-   slab allocator, the index rings, and the rx/dispatch/tx stages are all imported from
-   CCoreDriverRawSocket (they are I/O-agnostic: they only reach the outside world through
-   get_in_descriptor / get_out_descriptor / port_rx / send_frame). This module supplies
-   just the pcap-specific I/O: a port map whose descriptors are pcap handles (pcap_t* in,
-   pcap_dumper_t* out), a packet library that reads with pcap_next_ex and writes with
-   pcap_dump, and a main that opens the files and pumps the pipeline until the inputs are
-   exhausted. (The offline libpcap dispatcher does not pace on capture timestamps -- it
-   blasts through -- so there is no idle wait. Output records are stamped ts=0: functional,
-   deterministic replay, not timing.)
-
+   Re-uses most of the rawsocket driver's pipeline. 
+   This driver just supplies a pcap-based packet library and port map library. 
+   Note that output pcaps are stamped with ts=0, so that every run 
+   can compare to a reference output pcap directly. 
    Ports are wired like the raw-socket driver, but each binds an input AND output file:
      ./lucidprog --interface 0:in0.pcap:out0.pcap --interface 1:in1.pcap:out1.pcap  *)
 
@@ -36,9 +28,7 @@ let imports = dforiegn {|
 #endif
 |}
 
-(* ===== the port map: each port binds an input capture + an output dumper. The
-   descriptors the pipeline consumes are a port_t* (in -- so port_rx can flag EOF) and a
-   pcap_dumper_t* (out). ===== *)
+(* port map: each port gets separate input and output files. *)
 let port_map_lib = dforiegn {|
 /********* ports (Lucid port number <-> pcap input/output) ***********/
 typedef struct { int port_id; pcap_t* in; pcap_dumper_t* out; int in_eof; } port_t;
@@ -156,7 +146,7 @@ int main(int argc, char** argv) {
 |}
 
 let package_prog decls =
-    let sm = R.section_marker in
+    let sm = section_marker in
     [
         "lucidprog.c", `Decls (
             [imports]
