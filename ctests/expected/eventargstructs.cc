@@ -93,7 +93,7 @@ uint32_t hash_32(uint32_t seed , uint8_t*  str , uint32_t len_bits ){
   }
   return hashValue;
 }
-typedef enum {tag_add_pair_1178 = 0} action_enum;
+enum {tag_add_pair_1178 = 0};
 typedef struct {
   uint16_t len;
   uint8_t is_packet;
@@ -141,18 +141,18 @@ typedef struct {
   uint8_t valid;
   uint32_t key;
   uint32_t mask;
-  action_enum action_tag;
+  uint32_t action_tag;
   uint32_t action_arg;
 } cellty_my_table_1179;
 typedef struct {
   struct {
-    action_enum action_tag;
+    uint32_t action_tag;
     uint32_t action_arg;
   } _default;
   cellty_my_table_1179 entries [32];
 } ty_my_table_1179;
 ty_my_table_1179 my_table_1179  = {._default = {.action_tag = tag_add_pair_1178, .action_arg = 0}, .entries = {0}};
-void install_my_table_1179(uint32_t key , action_enum action , uint32_t const_arg ){
+void install_my_table_1179(uint32_t key , uint32_t action , uint32_t const_arg ){
   bool _continue = true;
   for (int _idx = 0; _idx < 32; _idx++) {
     if ((my_table_1179.entries[_idx].valid) == (false)) {
@@ -164,7 +164,7 @@ void install_my_table_1179(uint32_t key , action_enum action , uint32_t const_ar
   }
   return ;
 }
-void install_ternary_my_table_1179(uint32_t key , uint32_t mask , action_enum action , uint32_t const_arg ){
+void install_ternary_my_table_1179(uint32_t key , uint32_t mask , uint32_t action , uint32_t const_arg ){
   bool _continue = true;
   for (int _idx = 0; _idx < 32; _idx++) {
     if ((my_table_1179.entries[_idx].valid) == (false)) {

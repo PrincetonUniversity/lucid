@@ -27,7 +27,6 @@ and raw_ty =
   | TInt of size
   | TBool
 
-  | TEnum of (cid * int) list  
   | TUnion of cid list * ty list 
   | TVariant of (cid * int * ty) list (* tagged variant: (constructor, discriminant tag, payload) per arm *)
 
@@ -140,9 +139,6 @@ and s =
 and statement = {s:s; sspan : sp;}
 
 (* declarations *)
-and event_def = {evconstrid : cid; evconstrnum : int option; evparams : params; is_packet : bool; has_payload : bool}
-
-
 and fun_def = func_kind * cid * ty * params * fun_body
 
 and fun_body = 
@@ -155,6 +151,11 @@ and d =
   | DVar of cid * ty * (exp option)
   | DFun of fun_def
   | DTy  of cid * ty option (* named types and external types *)
+  | DEnum of (cid * int) list
+    (* named int constants, printed as an anonymous C enum declaration
+       (`enum {a = 0, b = 1};`). members are integer constant expressions, so
+       they are valid in case labels and static initializers; references are
+       VSymbols (or EVars) at tint 32 *)
 
 and decl = {d:d; dspan : sp;}
 and decls = decl list
@@ -180,7 +181,6 @@ and decls = decl list
 
 (* CONSTANTS *)
 let event_tag_size = 16
-let enum_size = 32
 
 exception FormError of string
 
@@ -246,8 +246,6 @@ let tgroup = tbuiltin tgroup_cid [] *)
 (* a named type carrying its structural definition *)
 let tabstract n inner_ty = ty (TName(Cid.create [n], Some inner_ty))
 let tabstract_cid tcid inner_ty = ty (TName(tcid, Some inner_ty))
-let tenum_pairs (tagpairs : (Cid.t * int) list) = ty (TEnum tagpairs)
-let tenum ids = tenum_pairs (List.mapi (fun i id -> (id, i)) ids)
 let tref t = ty (TPtr(t, None))
 (* unwrap a (chain of) named type(s) to its structural definition; an opaque
    name (no carried definition) is its own base type *)
@@ -296,7 +294,6 @@ let is_tbuiltin tycid ty = match ty.raw_ty with TBuiltin(cid, _) -> Cid.equal ci
 let is_tbuiltin_any ty = match ty.raw_ty with TBuiltin(_, _) -> true | _ -> false
 let is_tref  ty = match ty.raw_ty with TPtr _ -> true | _ -> false
 let is_tpacket ty = match ty.raw_ty with TPacket -> true | _ -> false
-let is_tenum ty = match (base_type ty).raw_ty with TEnum _ -> true | _ -> false
 
 let extract_func_ty ty = match ty.raw_ty with 
   | TFun {arg_tys; ret_ty; func_kind} -> arg_tys, ret_ty, func_kind
@@ -304,7 +301,6 @@ let extract_func_ty ty = match ty.raw_ty with
 
 let extract_tint_size ty = match (base_type ty).raw_ty with 
   | TInt size -> size
-  | TEnum _ -> enum_size
   | _ -> raise (FormError "[extract_tint_size] expected TInt")
 
 let extract_trecord_or_union ty = match ty.raw_ty with 
@@ -324,10 +320,6 @@ let extract_tlist ty = match ty.raw_ty with
   | TList(ty, len) -> ty, len
   | TPtr(ty, Some(len)) -> ty, len
   | _ -> raise (FormError "[extract_tlist] expected TList or TPtr with a length")
-;;
-let extract_tenum ty = match ty.raw_ty with 
-  | TEnum tagpairs -> tagpairs 
-  | _ -> failwith "expected TEnum"
 ;;
 
 let extract_tbuiltin ty = match ty.raw_ty with 
@@ -353,7 +345,6 @@ let rec bitsizeof_ty ty =
   | TUnit -> 0 |> Option.some
   | TInt size -> size |> Option.some
   | TBool -> 8 |> Option.some (* uint8_t *)
-  | TEnum _ -> 32 |> Option.some
   | TUnion(_, tys) -> 
     tys |> List.map bitsizeof_ty_exn |> List.fold_left (max) 0 |> Option.some
   | TRecord(_, tys)
@@ -772,6 +763,10 @@ let dglobal id ty exp = decl (DVar(id, ty, Some(exp))) Span.default
 
 
 let dty tycid ty = decl (DTy(tycid, Some ty)) Span.default
+(* declare named int constants (an anonymous C enum) *)
+let denum pairs = decl (DEnum pairs) Span.default
+(* the type of a reference to an enum member *)
+let tenum_member = tint 32
 let dty_ext tycid = decl (DTy(tycid, None)) Span.default
 (* ty is a named type (TName cid); declare its definition as a DTy. *)
 let decl_tabstract ty =
@@ -906,9 +901,6 @@ let rec equiv_tys ty1 ty2 = match ty1.raw_ty, ty2.raw_ty with
 | TUnit, TUnit -> true
 | TInt sz1, TInt sz2 -> sz1 = sz2
 | TBool, TBool -> true
-| TEnum(cid_nums1), TEnum(cid_nums2) -> 
-  List.length cid_nums1 = List.length cid_nums2
-  && List.for_all2 (fun (cid1, num1) (cid2, num2) -> Cid.equal cid1 cid2 && num1 = num2) cid_nums1 cid_nums2
 | TUnion(ids1, tys1), TUnion(ids2, tys2)
 | TRecord(ids1, tys1), TRecord(ids2, tys2) -> 
   List.length ids1 = List.length ids2
@@ -935,4 +927,4 @@ let rec equiv_tys ty1 ty2 = match ty1.raw_ty, ty2.raw_ty with
   && List.for_all2 equiv_tys tyargs1 tyargs2
 | TName(cid1, _), TName(cid2, _) -> Cid.equal cid1 cid2
 | (TUnit|TBool|TVariant _|TInt _|TRecord _ | TTuple _ | TName _ | TPtr _ | TList _ | TPacket | TUnion _
-| TFun _|TEnum _|TBuiltin (_, _)), _ -> false
+| TFun _|TBuiltin (_, _)), _ -> false

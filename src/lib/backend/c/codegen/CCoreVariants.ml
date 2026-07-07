@@ -13,20 +13,27 @@ open CCoreUtils
 
 let tag_size = 16
 let tag_ty = tint tag_size
+
+(* a variant arm: constructor, discriminant tag, and payload fields.
+   (the honest downstream view of an event: nothing here is fabricated,
+   unlike is_packet/has_payload, which only translation knows and which are
+   carried at runtime in the event's meta.) *)
+type arm = {ctor : cid; tag : int; params : params}
+
 let arm_tag_cid evid = cid (Printf.sprintf "%s_tag" (Cid.name evid));;
 
-let decl_arm_tag arm =
+let decl_arm_tag (arm : arm) =
   (* const uint16_t foo_tag = {$num}; *)
-  dvar_const (arm_tag_cid arm.evconstrid) tag_ty
-    (eval (vint (Option.get arm.evconstrnum) tag_size))
+  dvar_const (arm_tag_cid arm.ctor) tag_ty
+    (eval (vint arm.tag tag_size))
 ;;
-let arm_tag_val arm = vint (Option.get arm.evconstrnum) tag_size
-let arm_tag_var arm = evar (arm_tag_cid arm.evconstrid) tag_ty
+let arm_tag_val (arm : arm) = vint arm.tag tag_size
+let arm_tag_var (arm : arm) = evar (arm_tag_cid arm.ctor) tag_ty
 
 (* the lowered variant body: { tag; args: union { arm: {fields}; ... } }, with
    per-arm payloads inline. *)
 let payload_union_ty arms =
-  tunion_pairs (List.map (fun arm -> (arm.evconstrid, trecord arm.evparams)) arms)
+  tunion_pairs (List.map (fun arm -> (arm.ctor, trecord arm.params)) arms)
 ;;
 let variant_struct_ty arms =
   trecord [ (cid"tag", tag_ty); (cid"args", payload_union_ty arms) ]
@@ -51,26 +58,26 @@ let variant_constr variant_ty arm =
     sassign_exp (((v /. cid"args") /. member) /. field) newval
   in
   let variant_var = evar rv_cid variant_ty in
-  let constr_param_vars = List.map param_evar arm.evparams in
-  let arm_fields = List.split arm.evparams |> fst in
+  let constr_param_vars = List.map param_evar arm.params in
+  let arm_fields = List.split arm.params |> fst in
   let init_rv = slocal rv_cid variant_ty (eval@@memzero variant_ty) in
-  let set_data = stmts@@List.map2 (set_data_field variant_var arm.evconstrid) arm_fields constr_param_vars in
+  let set_data = stmts@@List.map2 (set_data_field variant_var arm.ctor) arm_fields constr_param_vars in
   let set_tag = sassign_exp (variant_var/.cid"tag") (arm_tag_var arm) in
   let ret_rv = sret variant_var in
-  dfun (arm.evconstrid) variant_ty arm.evparams @@
+  dfun (arm.ctor) variant_ty arm.params @@
     stmts [ init_rv; set_data; set_tag; ret_rv ]
 ;;
 
 let transformer =
   let extract_fields ev arm params =
     (* ev is the matched variant; read each arm field through its union member:
-       ev.args.<evconstrid>.<field>. *)
+       ev.args.<ctor>.<field>. *)
     let v = if (is_tref ev.ety) then (ederef ev) else ev in
-    let data = (v /. cid"args") /. (arm.evconstrid) in
+    let data = (v /. cid"args") /. (arm.ctor) in
     let extract_field (pat_id, pat_ty) (decl_id, _) =
       slocal pat_id pat_ty (data /. decl_id)
     in
-    stmts @@ List.map2 extract_field params arm.evparams
+    stmts @@ List.map2 extract_field params arm.params
   in
   let arm_tag_val_of arm_assoc evid =
     arm_tag_val (List.assoc evid arm_assoc)
@@ -139,12 +146,12 @@ let find_variant_sigs decls =
       | _ -> None)
     decls
 ;;
-let sig_to_event_def (ctor, tag, payload_ty) =
-  let evparams = match payload_ty.raw_ty with
+let arm_of_sig (ctor, tag, payload_ty) =
+  let params = match payload_ty.raw_ty with
     | TRecord(cids, tys) -> List.combine cids tys
     | _ -> failwith "[CCoreVariants] variant arm payload is not a record"
   in
-  { evconstrid = ctor; evconstrnum = Some tag; evparams; is_packet = false; has_payload = false }
+  {ctor; tag; params}
 ;;
 
 let lower decls =
@@ -152,7 +159,7 @@ let lower decls =
     | Some sigs -> sigs
     | None -> failwith "[CCoreVariants] no variant type definition found"
   in
-  let arms = List.map sig_to_event_def sigs in
+  let arms = List.map arm_of_sig sigs in
   let struct_body = variant_struct_ty arms in
   (* the variant's name now carries its lowered struct body: substitute it into
      every reference (including inside other carried definitions, e.g. the
@@ -173,6 +180,6 @@ let lower decls =
     decls
   in
   let decls = List.map (CCoreTransformers.subst_ty#visit_decl set_variant_body) decls in
-  let arm_assoc = List.map (fun ed -> (ed.evconstrid, ed)) arms in
+  let arm_assoc = List.map (fun a -> (a.ctor, a)) arms in
   transformer#visit_decls arm_assoc decls
 ;;

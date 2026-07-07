@@ -76,8 +76,8 @@ let check_event_params decls =
   | Some sigs ->
     List.iter
       (fun s ->
-        let ed = CCoreVariants.sig_to_event_def s in
-        let ename = CCorePPrint.cid_to_string ed.evconstrid in
+        let arm = CCoreVariants.arm_of_sig s in
+        let ename = CCorePPrint.cid_to_string arm.ctor in
         (* every field must be a scalar int/bool *)
         List.iter
           (fun (fid, fty) ->
@@ -87,8 +87,8 @@ let check_event_params decls =
               error @@ Printf.sprintf
                 "event %s: field %s has an aggregate type (%s), not supported by the C backend yet"
                 ename (CCorePPrint.cid_to_string fid) (CCorePPrint.ty_to_string fty))
-          ed.evparams;
-        let widths = List.map (fun (_, fty) -> sizeof_ty fty) ed.evparams in
+          arm.params;
+        let widths = List.map (fun (_, fty) -> sizeof_ty fty) arm.params in
         if not (byte_layout_ok widths) then
           error @@ Printf.sprintf
             "event %s: invalid field byte layout (fields must total whole bytes, and any field crossing a byte boundary must start or end on one)"

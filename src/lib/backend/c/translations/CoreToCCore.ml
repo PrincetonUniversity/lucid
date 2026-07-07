@@ -587,15 +587,27 @@ let translate_decl (decl:C.decl) : F.decl =
     v#visit_decls ()
   ;;
 
+(* the image of a Core DEvent, used only during translation: is_packet and
+   has_payload are known here (from the event sort and the payload analysis)
+   and get baked into mk_<event>'s constant metadata; downstream passes see
+   only the variant DTy (CCoreVariants.arm is their view of an event). *)
+type ev_def = {
+  evconstrid : Cid.t;
+  evconstrnum : int option;
+  evparams : F.params;
+  is_packet : bool;
+  has_payload : bool;
+}
+
 (* the monomorphic event constructors: one `mk_<event> : params -> events` per
    event, each wrapping its variant injection in the envelope with constant
    metadata (no tag dispatch -- the constructor is statically known at every
    construction site). Real DFuns in the program; trivially inlinable. *)
-let mk_event_dfuns (event_defs : F.event_def list) : F.decls =
+let mk_event_dfuns (event_defs : ev_def list) : F.decls =
   let open F in
   let payload_bytes params =
     (List.fold_left (fun s (_, ty) -> s + bitsizeof_ty_exn ty) 0 params + 7) / 8 in
-  let mk_one (ed : event_def) =
+  let mk_one (ed : ev_def) =
     let meta =
       { (erecord [ (cid"len", eval (vint (payload_bytes ed.evparams) 16));
                    (cid"is_packet", eval (vint (if ed.is_packet then 1 else 0) 8));
@@ -632,8 +644,8 @@ let translate ?(payload_event_names=[]) (ds : C.decls) : F.decls =
         let is_packet = (match ev_sort with C.EPacket -> true | C.EBackground -> false) in
         let has_payload = List.mem (fst evid) payload_event_names in
         let evparams = List.map (fun (id, ty) -> Cid.id id, translate_ty ty) params in
-        Some { F.evconstrid = Cid.id evid; F.evconstrnum = evnum_opt;
-               F.evparams = evparams; F.is_packet = is_packet; F.has_payload = has_payload }
+        Some { evconstrid = Cid.id evid; evconstrnum = evnum_opt;
+               evparams; is_packet; has_payload }
       | _ -> None)
     ds
   in
@@ -641,7 +653,7 @@ let translate ?(payload_event_names=[]) (ds : C.decls) : F.decls =
      (must be populated before translating decls, which translate handler bodies) *)
   Hashtbl.reset event_cid_of_name;
   List.iter
-    (fun (ed : F.event_def) ->
+    (fun (ed : ev_def) ->
       Hashtbl.replace event_cid_of_name (Cid.name ed.evconstrid) ed.evconstrid)
     event_defs;
   (* translate the remaining (non-event) decls, in order *)
@@ -656,7 +668,7 @@ let translate ?(payload_event_names=[]) (ds : C.decls) : F.decls =
      the variant type is self-describing -- the lowering reads tags from here. *)
   let event_sigs =
     List.map
-      (fun (ed : F.event_def) -> (ed.evconstrid, Option.get ed.evconstrnum, F.trecord ed.evparams))
+      (fun (ed : ev_def) -> (ed.evconstrid, Option.get ed.evconstrnum, F.trecord ed.evparams))
       event_defs
   in
   (* the tagged variant (the constructor union) and the envelope that wraps it.

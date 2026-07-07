@@ -189,15 +189,15 @@ let process_deparse decls =
      event's meta (see below). *)
   let event_defs =
     match CCoreVariants.find_variant_sigs decls with
-    | Some sigs -> List.map CCoreVariants.sig_to_event_def sigs
+    | Some sigs -> List.map CCoreVariants.arm_of_sig sigs
     | None -> err "[CCoreParse] no event_variant type definition found"
   in
   let ev_out = evar ev_out_cid tevent in
   let bufv = evar buf_out_cid tpacket in
   (* write<ty>(out, v) -- prepend v of type ty to the front of the bytes, in place *)
   let do_write ty v = sunit (ewrite ty bufv v) in
-  let mk_arm event_def =
-    let fields = event_def.evparams in
+  let mk_arm (arm : CCoreVariants.arm) =
+    let fields = arm.params in
     (* prepend builds back-to-front: write the last field first so that field
        order on the wire matches declaration order. *)
     let field_writes =
@@ -210,7 +210,7 @@ let process_deparse decls =
        mk_event stamped at construction (rather than a per-arm constant). *)
     let preamble_writes =
       (do_write (tint event_tag_size)
-         (eval (vint (Option.get event_def.evconstrnum) event_tag_size)))
+         (eval (vint arm.tag event_tag_size)))
       :: eth_preamble_writes do_write
     in
     let preamble_stmt =
@@ -218,7 +218,7 @@ let process_deparse decls =
         (stmts preamble_writes) snoop
     in
     let body = stmts (field_writes @ [ preamble_stmt; sret bufv ]) in
-    let pat = PVariant { event_id = event_def.evconstrid; params = event_def.evparams } in
+    let pat = PVariant { event_id = arm.ctor; params = arm.params } in
     ([ pat ], body)
   in
   let body = smatch [ event_data ev_out ] (List.map mk_arm event_defs) in

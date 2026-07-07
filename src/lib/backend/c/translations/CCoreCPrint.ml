@@ -86,9 +86,6 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : (string * stri
     in
     ret_p ^ " (*", sprintf ")(%s)" arg_str
   | TVariant _ -> ty_err "event types should be eliminated"
-  | TEnum cid_ints ->  
-    let list_str = String.concat ", " (List.map (fun (s, i) -> cid_to_string s ^ " = " ^ string_of_int i) cid_ints) in
-    "enum {" ^ list_str ^ "}", ""
   | TBuiltin (_, _) -> ty_err "builtin types should be eliminated"
   | TName(cid, _) -> cid_to_string cid, ""
   | TPtr(ty, Some(len)) ->
@@ -338,6 +335,9 @@ let rec d_to_string (d: d) : string =
   )
   | DTy (_, None) -> ty_err "can't print typdef with no type"
   | DForiegn str -> str
+  | DEnum cid_ints ->
+    let list_str = String.concat ", " (List.map (fun (s, i) -> cid_to_string s ^ " = " ^ string_of_int i) cid_ints) in
+    "enum {" ^ list_str ^ "};"
 
 and fun_def_to_string (kind, id, ty, params, stmt_opt) = 
   (* let kind_str = func_kind_to_string kind in *)

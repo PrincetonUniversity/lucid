@@ -62,9 +62,6 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : string =
       sigs
     in
     sprintf "variant {%s}" (String.concat " " arm_strs)
-  | TEnum list -> 
-    let list_str = String.concat ", " (List.map (fun (s, i) -> cid_to_string s ^ " = " ^ string_of_int i) list) in
-    "enum {" ^ list_str ^ "}"
   | TBuiltin (cid, ty_list) -> 
     let ty_list_str = String.concat ", " (List.map (ty_to_string ~use_abstract_name) ty_list) in
     cid_to_string cid ^ "<<" ^ ty_list_str ^ ">>"
@@ -272,6 +269,9 @@ let rec d_to_string (d: d) : string =
                  | Some ty -> ty_to_string ty 
                  | None -> " extern")
   | DForiegn str -> str
+  | DEnum cid_ints ->
+    let list_str = String.concat ", " (List.map (fun (s, i) -> cid_to_string s ^ " = " ^ string_of_int i) cid_ints) in
+    "enum {" ^ list_str ^ "};"
 
 and fun_def_to_string (kind, id, ty, params, stmt_opt) = 
   let kind_str = func_kind_to_string kind in

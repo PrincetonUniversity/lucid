@@ -79,7 +79,6 @@ let has_pmask branches =
 
 let transform_match stmt = 
   match stmt.s with 
-  | SMatch([exp], _) when is_tenum exp.ety -> stmt
   (* a match on a single integer is just a switch, as long as no ternary patterns are used *)
   | SMatch([exp], branches) when ((is_tint exp.ety) && (not@@has_pmask branches)) -> stmt
   | SMatch(es, branches) -> match_to_if es branches

@@ -63,7 +63,7 @@ let rec emacro_op_fold op exps =
     eop op [exp; eops op exps]
 ;;
 let emacro_and_fold = emacro_op_fold And
-let is_tprimative ty = is_tint ty || is_tbool ty || is_tenum ty
+let is_tprimative ty = is_tint ty || is_tbool ty
 ;;
 
 (* expand equality expressions *)
@@ -73,8 +73,7 @@ let rec compound_eq e1 e2 =
   match ty.raw_ty with 
     | TUnit -> eval@@vbool true; (* two units are always the same *)
     | TInt _ 
-    | TBool  
-    | TEnum _ -> (e1 /== e2)
+    | TBool -> (e1 /== e2)
     | TRecord(ids, tys) -> 
       let exps = List.map 
         (fun (id, ty) -> 
@@ -126,7 +125,6 @@ let rec compound_masked_eq e1 e2 m =
     | TUnit -> eval@@vbool true; (* two units are always the same *)
     | TInt _ 
     | TBool -> ((e1 /& m) /== (e2 /& m))
-    | TEnum _ -> err "masked equality of enums"
     | TRecord(ids, tys) -> 
       let exps = List.map 
         (fun (id, ty) -> 

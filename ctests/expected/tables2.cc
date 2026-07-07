@@ -93,7 +93,7 @@ uint32_t hash_32(uint32_t seed , uint8_t*  str , uint32_t len_bits ){
   }
   return hashValue;
 }
-typedef enum {tag_WriteCacheTable_hit_acn_4315 = 0, tag_WriteCacheTable_miss_acn_4317 = 1} action_enum;
+enum {tag_WriteCacheTable_hit_acn_4315 = 0, tag_WriteCacheTable_miss_acn_4317 = 1};
 typedef struct {
   uint16_t len;
   uint8_t is_packet;
@@ -215,18 +215,18 @@ typedef struct {
   uint8_t valid;
   uint32_t key;
   uint32_t mask;
-  action_enum action_tag;
+  uint32_t action_tag;
   uint32_t action_arg;
 } cellty_global_cached_table_2_4323;
 typedef struct {
   struct {
-    action_enum action_tag;
+    uint32_t action_tag;
     uint32_t action_arg;
   } _default;
   cellty_global_cached_table_2_4323 entries [1024];
 } ty_global_cached_table_2_4323;
 ty_global_cached_table_2_4323 global_cached_table_2_4323  = {._default = {.action_tag = tag_WriteCacheTable_miss_acn_4317, .action_arg = 0}, .entries = {0}};
-void install_global_cached_table_2_4323(uint32_t key , action_enum action , uint32_t const_arg ){
+void install_global_cached_table_2_4323(uint32_t key , uint32_t action , uint32_t const_arg ){
   bool _continue = true;
   for (int _idx = 0; _idx < 1024; _idx++) {
     if ((global_cached_table_2_4323.entries[_idx].valid) == (false)) {
@@ -238,7 +238,7 @@ void install_global_cached_table_2_4323(uint32_t key , action_enum action , uint
   }
   return ;
 }
-void install_ternary_global_cached_table_2_4323(uint32_t key , uint32_t mask , action_enum action , uint32_t const_arg ){
+void install_ternary_global_cached_table_2_4323(uint32_t key , uint32_t mask , uint32_t action , uint32_t const_arg ){
   bool _continue = true;
   for (int _idx = 0; _idx < 1024; _idx++) {
     if ((global_cached_table_2_4323.entries[_idx].valid) == (false)) {

@@ -127,12 +127,6 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
   | TUnit, TUnit -> env
   | TBool, TBool -> env
   | TVariant _, TVariant _ -> env
-  | TEnum(variants1), TEnum(variants2) -> 
-      let ids1, _ = List.split variants1 in
-      let ids2, _ = List.split variants2 in
-      if not (list_equal (Cid.equal) ids1 ids2) then 
-        (raise (TypeError("enum types have different variants")));
-    env
   | TBuiltin(cid1, tys1), TBuiltin(cid2, tys2) -> 
     if (not (Cid.equal cid1 cid2)) then 
       (ty_err "named types with different names");
@@ -170,7 +164,7 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
       ty_err "union types with different labels";
     unify_lists env unify_ty tys1 tys2
   | (TUnit|TBool|TVariant _|TInt _|TRecord _ | TTuple _ | TName _ | TPtr _ | TList _ | TPacket | TUnion _
-  | TFun _|TEnum _|TBuiltin (_, _)), _ ->
+  | TFun _|TBuiltin (_, _)), _ ->
       dprint_endline@@"type mismatch:\n"^(CCorePPrint.raw_ty_to_string rawty1)^"\nand\n"^(CCorePPrint.raw_ty_to_string rawty2);
       ty_err "type mismatch"
 
@@ -386,10 +380,10 @@ and infer_eop env op (args : exp list) : env * op * exp list * ty = match op, ar
     let size2 = extract_tint_size inf_exp2.ety in
     env, op, [inf_exp1; inf_exp2], tint (size1 + size2)
 
-  | Cast(new_ty), [exp] when (is_tint new_ty || is_tenum new_ty) ->
-    (* casting from int <--> int and int <--> enum is allowed  *)
+  | Cast(new_ty), [exp] when is_tint new_ty ->
+    (* casting from int to int is allowed *)
     let env, inf_exp = infer_exp env exp in
-    if ((not (is_tint inf_exp.ety)) && (not (is_tenum inf_exp.ety))) then 
+    if (not (is_tint inf_exp.ety)) then 
       raise (TypeError("cast from int to non-int"));
     env, op, [inf_exp], new_ty
   | Cast(new_ty), [exp] when is_tref new_ty -> 
@@ -484,8 +478,6 @@ and infer_eop env op (args : exp list) : env * op * exp list * ty = match op, ar
 
 let unify_pat env exp pat = 
   match pat with 
-    | PVal v when is_tenum v.vty -> 
-      unify_ty env v.vty exp.ety
     | PVal v -> 
       let v_sz_opt = bitsizeof_ty v.vty in
       let e_sz_opt = bitsizeof_ty exp.ety in
@@ -725,6 +717,10 @@ let rec infer_decl env decl : env * decl option =
   | DFun(_, _, _, _, BForiegn _) -> 
     ty_err "foriegn functions must be declared as type foriegn"
   | DForiegn _ -> env, decl |> Option.some
+  | DEnum(pairs) ->
+    (* each member is a named int constant *)
+    let env = List.fold_left (fun env (cid, _) -> add_var env cid tenum_member) env pairs in
+    env, decl |> Option.some
 
 and infer_decls env decls : env * decl list =
 
