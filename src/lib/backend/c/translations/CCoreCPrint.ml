@@ -76,7 +76,15 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : (string * stri
     let label_tys = List.map2 (fun l t -> l, t) labels ts in
     let field_str = line_sep field_to_string label_tys |> indent 2 in
     sprintf "struct {\n%s\n}" field_str, ""
-  | TFun _ -> ty_err "function types string depends on context"
+  | TFun {arg_tys; ret_ty; _} ->
+    (* a function type in a declaration position (field, param, variable, or
+       typedef) is a function pointer: "ret (* <name> )(arg_tys)" *)
+    let ret_p, ret_s = ty_to_string ~use_abstract_name:true ret_ty in
+    if ret_s <> "" then ty_err "cannot print a function pointer with an array return type";
+    let arg_str = comma_sep (fun aty ->
+      let p, s = ty_to_string ~use_abstract_name:true aty in p ^ s) arg_tys
+    in
+    ret_p ^ " (*", sprintf ")(%s)" arg_str
   | TBits _ -> ty_err "bit types should be eliminated"
   | TVariant _ -> ty_err "event types should be eliminated"
   | TEnum cid_ints ->  
@@ -144,18 +152,15 @@ let plain_ty_to_string ?(use_abstract_name=false) ty =
 
 let rec v_to_string (v: v) : string =
   match v with
-  | VUnit -> "void"
   | VInt {value; _} -> string_of_int value
   | VBool b -> string_of_bool b
-  | VRecord(labels, es) -> 
+  | VRecord(labels, es) ->
     let label_strs = List.map cid_to_string labels in
     let es_strs = List.map value_to_string es in
     let field_strs = List.map2 (fun l e -> "." ^l ^ " = " ^ e) label_strs es_strs in
-    let fields_str = String.concat ", " field_strs in    
+    let fields_str = String.concat ", " field_strs in
     "{" ^ fields_str ^ "}"
-  | VUnion(label, v, _) -> 
-    sprintf "{%s = %s}" (cid_to_string label) (value_to_string v)
-  | VTuple(es) -> 
+  | VTuple(es) ->
     let label_strs = List.mapi (fun i _ -> "_" ^ string_of_int i) es in
     let es_strs = List.map value_to_string es in
     let field_strs = List.map2 (fun l e -> "." ^l ^ " = " ^ e ) label_strs es_strs in

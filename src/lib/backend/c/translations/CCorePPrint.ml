@@ -91,18 +91,15 @@ let params_to_string params =
 
 let rec v_to_string (v: v) : string =
   match v with
-  | VUnit -> "void"
   | VInt {value; _} -> string_of_int value
   | VBool b -> string_of_bool b
-  | VRecord(labels, es) -> 
+  | VRecord(labels, es) ->
     let label_strs = List.map cid_to_string labels in
     let es_strs = List.map value_to_string es in
     let field_strs = List.map2 (fun l e -> "." ^l ^ " = " ^ e ^";") label_strs es_strs in
-    let fields_str = String.concat " " field_strs in    
+    let fields_str = String.concat " " field_strs in
     "{" ^ fields_str ^ "}"
-  | VUnion(label, v, _) -> 
-    sprintf "{%s = %s}" (cid_to_string label) (value_to_string v)
-  | VTuple(es) -> 
+  | VTuple(es) ->
     let label_strs = List.mapi (fun i _ -> "_" ^ string_of_int i) es in
     let es_strs = List.map value_to_string es in
     let field_strs = List.map2 (fun l e -> "." ^l ^ " = " ^ e ^";") label_strs es_strs in
