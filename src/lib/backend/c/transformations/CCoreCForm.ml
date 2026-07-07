@@ -135,8 +135,6 @@ let is_initializer exp = match exp.e with
   | EUnion _ -> true
   | ERecord _ -> true
   | ETuple _ -> true
-  | EVal({v=VRecord _}) -> true
-  | EVal({v=VTuple _}) -> true
   | _ -> false
 ;;
 (* Name inlined structural types: replace a structural type with a TName reference
@@ -286,17 +284,7 @@ let delete_empty_tuples decls =
       let tys = List.map (super#visit_ty ()) tys in
       let tys = List.filter (fun ty -> not (is_empty_tuple ty)) tys in
       TTuple(tys)
-    method! visit_VRecord () ids vs = 
-      let vs = List.map (super#visit_value ()) vs in
-      let id_vs = List.combine ids vs in
-      let id_vs = List.filter (fun (_, v) -> not (is_empty_tuple v.vty)) id_vs in
-      let ids, vs = List.split id_vs in
-      VRecord(ids, vs)
-    method! visit_VTuple () vs = 
-      let vs = List.map (super#visit_value ()) vs in
-      let vs = List.filter (fun v -> not (is_empty_tuple v.vty)) vs in
-      VTuple(vs)
-    method! visit_func_ty () func_ty = 
+    method! visit_func_ty () func_ty =
       let func_ty = super#visit_func_ty () func_ty in
       let arg_tys = List.filter (fun ty -> not (is_empty_tuple ty)) func_ty.arg_tys in
       {func_ty with arg_tys}

@@ -233,35 +233,25 @@ let translate_op (op : C.op) : F.op =
 ;;
 
 (*** values ***)
-let rec translate_v (v : C.v) (vty:C.ty) : F.v = 
-  match vty, v with 
-  | _, C.VBool(b) -> (F.vbool b).v
-  | _, C.VInt({value; size}) -> (F.vint (Z.to_int value) (Z.to_int size)).v
-  | _, C.VEvent event_val -> F.VVariant(translate_event_val event_val)
-  | _, C.VGlobal(_) -> err "VGlobals should not appear outside of the interpreter's execution"
-  | _, C.VGroup(locs) -> (F.vtup (List.map (fun i -> F.vint 32 i ) locs)).v
-  | _, C.VPat(tbits) -> (F.vpat tbits).v
-  | _, C.VBits(bits) -> (F.vbits (bits_to_ints bits)).v
-  | {raw_ty=C.TTuple(raw_tys)}, C.VTuple(vs) -> 
-    let tys = List.map C.ty raw_tys in
-    let vs = List.map2 translate_v vs tys in
-    let values = List.map2 F.value vs (List.map translate_ty tys) in
-    (* let values = List.map F.value vs in *)
-    (F.vtuple values).v
-  | _, C.VTuple(_) -> err "VTuple type should be a tuple"
-  | {raw_ty=C.TRecord(id_rawty_pairs)}, C.VRecord(id_v_pairs) -> 
-    let labels, vs = List.split id_v_pairs in
-    let tys = List.map (fun id -> List.assoc id id_rawty_pairs |> C.ty) labels in
-    let labels = List.map Cid.id labels in
-    let vs = List.map2 translate_v vs tys in
-    let values = List.map2 F.value vs (List.map translate_ty tys) in
-    (F.vrecord (List.combine labels values)).v
-  | _, C.VRecord(_) -> err "VRecord type should be a record"
+(* CCore only has scalar values (ints, bools, bits, symbols, events); compound
+   constants (tuples, records, groups) are translated to tuple/record
+   *expressions* by translate_value_exp, below. *)
+let rec translate_v (v : C.v) (vty:C.ty) : F.v =
+  let _ = vty in
+  match v with
+  | C.VBool(b) -> (F.vbool b).v
+  | C.VInt({value; size}) -> (F.vint (Z.to_int value) (Z.to_int size)).v
+  | C.VEvent event_val -> F.VVariant(translate_event_val event_val)
+  | C.VGlobal(_) -> err "VGlobals should not appear outside of the interpreter's execution"
+  | C.VPat(tbits) -> (F.vpat tbits).v
+  | C.VBits(bits) -> (F.vbits (bits_to_ints bits)).v
+  | C.VTuple(_) | C.VRecord(_) | C.VGroup(_) ->
+    err "compound constants (tuple/record/group values) only translate to expressions; they cannot appear in value positions (e.g. inside constant event payloads)"
 
-and translate_event_val (ev : C.event_val) : F.vvariant = 
+and translate_event_val (ev : C.event_val) : F.vvariant =
   {
     evid = ev.eid;
-    evnum = (match ev.evnum with 
+    evnum = (match ev.evnum with
       | Some(value) -> Some(translate_value value)
       | None -> None);
     evdata = List.map translate_value ev.data;
@@ -269,17 +259,34 @@ and translate_event_val (ev : C.event_val) : F.vvariant =
       "edelay", F.vint ev.edelay 16;
       "eserialized", F.vbool ev.eserialized;
     ]
-  }  
-and translate_value (value : C.value) : F.value = 
-  {v = translate_v value.v value.vty; 
+  }
+and translate_value (value : C.value) : F.value =
+  {v = translate_v value.v value.vty;
    vty = translate_ty value.vty;
    vspan = value.vspan}
 ;;
 
+(* translate a constant to an expression: compound constants become
+   tuple/record expressions of their translated members; scalars stay values *)
+let rec translate_value_exp (value : C.value) : F.exp =
+  match value.vty, value.v with
+  | {raw_ty=C.TTuple(raw_tys)}, C.VTuple(vs) ->
+    F.etuple (List.map2 (fun v rty -> translate_value_exp {value with v; vty=C.ty rty}) vs raw_tys)
+  | _, C.VTuple(_) -> err "VTuple type should be a tuple"
+  | {raw_ty=C.TRecord(id_rawty_pairs)}, C.VRecord(id_v_pairs) ->
+    F.erecord (List.map (fun (id, v) ->
+      let vty = List.assoc id id_rawty_pairs |> C.ty in
+      (Cid.id id, translate_value_exp {value with v; vty})) id_v_pairs)
+  | _, C.VRecord(_) -> err "VRecord type should be a record"
+  | _, C.VGroup(locs) ->
+    F.etuple (List.map (fun i -> F.eval (F.vint i 32)) locs)
+  | _, _ -> F.eval (translate_value value)
+;;
+
 (*** expressions ***)
-let rec translate_exp (exp : C.exp) : F.exp = 
-  let exp' = match exp.ety, exp.e with 
-  | _, C.EVal(v) -> (F.eval (translate_value v))
+let rec translate_exp (exp : C.exp) : F.exp =
+  let exp' = match exp.ety, exp.e with
+  | _, C.EVal(v) -> translate_value_exp v
   | _, C.EVar(c) -> F.evar c (translate_ty exp.ety)
   | _, C.EOp(op, es) -> F.eop (translate_op op) (List.map translate_exp es)
   | {raw_ty=C.TEvent}, C.ECall(cid, es, _) ->

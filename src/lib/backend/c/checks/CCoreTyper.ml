@@ -191,13 +191,7 @@ let rec infer_value value : value =
   (* values may only have have const sizes *)
   | VInt{size} -> tint size
   | VBool _ -> tbool
-  | VRecord(labels, es) -> 
-    let ts = List.map type_value es in
-    trecord (List.combine labels ts)
-  | VTuple es -> 
-    let ts = List.map type_value es in
-    ttuple ts
-  | VList vs -> 
+  | VList vs ->
     let ts = List.map type_value vs in
     tlist (List.hd ts) (IConst (List.length ts))
   | VBits{ternary; bits} -> ty@@TBits{ternary; len=sz@@List.length bits}

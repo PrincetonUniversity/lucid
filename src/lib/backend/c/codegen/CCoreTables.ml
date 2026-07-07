@@ -88,22 +88,30 @@ let table_cell tbl_id key_param mask_param action_param const_arg_param =
   {exp with ety=table_cell_type tbl_id key_param.ety action_param.ety const_arg_param.ety;}
 ;;
 
-(* all-ones value of a key type: the exact-match mask.
+(* all-ones constant of a scalar type; -1 converts to all-ones in C for
+   widths too wide for an OCaml int *)
+let ones_scalar ty =
+  match (base_type ty).raw_ty with
+  | TBool -> vbool true
+  | TInt sz when sz >= 63 -> vint (-1) sz
+  | TInt sz -> vint ((1 lsl sz) - 1) sz
+  | _ -> failwith "[ones_scalar] expected a scalar type"
+;;
+
+(* all-ones expression of a key type: the exact-match mask.
    (k & m) == (k' & m) iff k == k' when every bit of m is set. *)
-let rec ones_value ty =
-  let v = match (base_type ty).raw_ty with
-    | TBool -> VBool true
-    | TInt sz when sz >= 63 ->
-      (* wider than an OCaml int; -1 converts to all-ones in C *)
-      VInt {value = -1; size = sz}
-    | TInt sz -> VInt {value = (1 lsl sz) - 1; size = sz}
+let rec ones_exp ty : exp =
+  let e = match (base_type ty).raw_ty with
+    | TBool | TInt _ -> eval (ones_scalar ty)
     | TRecord(labels, tys) ->
-      VRecord(labels, List.map ones_value tys)
-    | TTuple tys -> VTuple(List.map ones_value tys)
-    | TVec(ele_ty, IConst n) -> VList(List.init n (fun _ -> ones_value ele_ty))
-    | _ -> failwith "[ones_value] unsupported table key type"
+      erecord (List.map2 (fun l t -> l, ones_exp t) labels tys)
+    | TTuple tys -> etuple (List.map ones_exp tys)
+    | TVec(ele_ty, IConst n) ->
+      (* vector keys must have scalar elements: lists exist only as values *)
+      eval {v=VList(List.init n (fun _ -> ones_scalar ele_ty)); vty=ty; vspan=Span.default}
+    | _ -> failwith "[ones_exp] unsupported table key type"
   in
-  {v; vty=ty; vspan=Span.default}
+  {e with ety=ty}
 ;;
 
 let table_instance_type tbl_id acns_enum_ty const_action_arg_ty tbl_cell_ty tbl_len =
@@ -118,23 +126,19 @@ let table_instance_type tbl_id acns_enum_ty const_action_arg_ty tbl_cell_ty tbl_
         cid "entries",tlist tbl_cell_ty tbl_len])
 ;;
 
-let table_create (tbl_ty : ty) (def_enum_id : cid) (acn_enum_ty : ty) (def_arg : value) = 
-  (* let fields, tys = extract_trecord (extract_tref tbl_ty) in *)
+(* the table's initializer expression (a constant record) *)
+let table_create (tbl_ty : ty) (def_enum_id : cid) (acn_enum_ty : ty) (def_arg : exp) =
   let fields, tys = extract_trecord tbl_ty in
-  let field_ty = List.combine fields tys in 
+  let field_ty = List.combine fields tys in
   let entries_ty = List.assoc (cid"entries") field_ty in
-  let default = vrecord [
-    cid"action_tag", venum def_enum_id acn_enum_ty;
+  let default = erecord [
+    cid"action_tag", eval (venum def_enum_id acn_enum_ty);
     cid"action_arg", def_arg
   ] in
-  let base_ty_value = vrecord [
+  erecord [
     cid"_default", default;
-    (* its a global value. Maybe this should just be 
-       baked into a special declaration for globals? *)
-    cid"entries", (zero_list entries_ty)
-  ] 
-  in
-  base_ty_value
+    cid"entries", eval (zero_list entries_ty)
+  ]
 ;;
 
 
@@ -217,7 +221,7 @@ let table_install spec =
   let action_param = evar (cid "action") (spec.actions_enum_ty) in
   let const_arg_param = evar (cid "const_arg") spec.const_arg_ty in
   (* exact match: mask = all ones (only the exact key matches) *)
-  let mask = eval (ones_value spec.key_ty) in
+  let mask = ones_exp spec.key_ty in
   let new_slot = table_cell spec.tbl_id key_param mask action_param const_arg_param in
   let idx = cid "_idx" in
   let idx_var = evar (idx) (tint 32) in
@@ -299,20 +303,20 @@ let monomorphic_table_decls actions_enum_ty decl : decls =
       | _, [key_ty; const_arg_ty; arg_ty; ret_ty] -> key_ty, const_arg_ty, arg_ty, ret_ty
       | _, _ -> failwith "unexpected type"      
     in
-    let len, default_action_enum_id, default_action_arg = match (eval_exp builtin_constr_call_exp |> extract_vvariant).evdata with 
-      | [len; _; default_action; default_action_arg] ->  
-        extract_vint len |> arrlen, 
-        extract_vsymbol default_action, (* here, the id is the symbol in the enum *) 
+    (* destructure the Table.create(len, actions, default, default_arg) call:
+       len and the default action reduce to constants; the default's arg stays
+       an expression and is embedded in the initializer as-is *)
+    let len, default_action_enum_id, default_action_arg = match extract_ecall builtin_constr_call_exp |> snd with
+      | [len; _; default_action; default_action_arg] ->
+        eval_exp len |> extract_vint |> arrlen,
+        eval_exp default_action |> extract_vsymbol, (* here, the id is the symbol in the enum *)
         default_action_arg
       | _ -> failwith "unexpected table declaration"
     in
     let tbl_cell_ty = table_cell_type tbl_id key_ty (actions_enum_ty) const_arg_ty in
-    (* print_endline ("table cell type: ");
-    print_endline (CCorePPrint.ty_to_string tbl_cell_ty); *)
     let tbl_ty = table_instance_type tbl_id (actions_enum_ty) const_arg_ty tbl_cell_ty len in
 
-    let tbl_value = table_create tbl_ty default_action_enum_id (actions_enum_ty) default_action_arg in
-    let tbl_constructor = eval tbl_value in
+    let tbl_constructor = table_create tbl_ty default_action_enum_id (actions_enum_ty) default_action_arg in
 
     let tbl_spec = {tbl_id; len; tbl_ty; key_ty; const_arg_ty; arg_ty; ret_ty; actions_enum_ty;} in
     let new_decls = [
@@ -430,19 +434,20 @@ let table_instance_type2 tbl_id acn_fty const_action_arg_ty tbl_cell_ty tbl_len 
         cid "entries",tlist tbl_cell_ty tbl_len])
 ;;
 
-(* default_acn is the default action as a function-pointer value
-   (a VSymbol holding the action's name at the action's type) *)
-let table_create2 (tbl_ty : ty) (default_acn : value) (def_arg : value) =
+(* the table's initializer expression. default_acn is the default action as a
+   function-pointer value (a VSymbol holding the action's name at the action's
+   type); def_arg is the default action's constant argument expression *)
+let table_create2 (tbl_ty : ty) (default_acn : value) (def_arg : exp) =
   let fields, tys = extract_trecord tbl_ty in
   let field_ty = List.combine fields tys in
   let entries_ty = List.assoc (cid"entries") field_ty in
-  let default = vrecord [
-    cid"action", default_acn;
+  let default = erecord [
+    cid"action", eval default_acn;
     cid"action_arg", def_arg
   ] in
-  vrecord [
+  erecord [
     cid"_default", default;
-    cid"entries", (zero_list entries_ty)
+    cid"entries", eval (zero_list entries_ty)
   ]
 ;;
 
@@ -497,7 +502,7 @@ let table_install2 (spec : table_spec2) =
   let action_param = evar (cid "action") spec.acn_fty in
   let const_arg_param = evar (cid "const_arg") spec.const_arg_ty in
   (* exact match: mask = all ones (only the exact key matches) *)
-  let mask = eval (ones_value spec.key_ty) in
+  let mask = ones_exp spec.key_ty in
   let new_slot = table_cell2 spec.tbl_id key_param mask action_param const_arg_param in
   let idx = cid "_idx" in
   let idx_var = evar idx (tint 32) in
@@ -560,25 +565,27 @@ let monomorphic_table_decls2 decl : decls =
       | _, _ -> failwith "unexpected type"
     in
     let acn_fty = tfun_kind FAction [const_arg_ty; arg_ty] ret_ty in
-    (* the default action arg is an EVar reference to the action function;
-       eval_exp turns it into a VSymbol holding the action's cid *)
-    let len, default_action_cid, default_action_arg = match (eval_exp builtin_constr_call_exp |> extract_vvariant).evdata with
+    (* destructure the Table.create(len, actions, default, default_arg) call:
+       the default action is an EVar reference to the action function (eval_exp
+       turns it into a VSymbol holding the action's cid); the default's arg
+       stays an expression and is embedded in the initializer as-is *)
+    let len, default_action_cid, default_action_arg = match extract_ecall builtin_constr_call_exp |> snd with
       | [len; _; default_action; default_action_arg] ->
-        extract_vint len |> arrlen,
-        extract_vsymbol default_action,
+        eval_exp len |> extract_vint |> arrlen,
+        eval_exp default_action |> extract_vsymbol,
         default_action_arg
       | _ -> failwith "unexpected table declaration"
     in
     let tbl_cell_ty = table_cell_type2 tbl_id key_ty acn_fty const_arg_ty in
     let tbl_ty = table_instance_type2 tbl_id acn_fty const_arg_ty tbl_cell_ty len in
 
-    let tbl_value = table_create2 tbl_ty (vsymbol default_action_cid acn_fty) default_action_arg in
+    let tbl_constructor = table_create2 tbl_ty (vsymbol default_action_cid acn_fty) default_action_arg in
 
     let tbl_spec : table_spec2 = {tbl_id; len; tbl_ty; key_ty; const_arg_ty; arg_ty; ret_ty; acn_fty;} in
     [
       decl_tabstract tbl_cell_ty;               (* cell type within a table *)
       decl_tabstract tbl_ty;                    (* the table's type *)
-      dglobal tbl_id tbl_ty (eval tbl_value);   (* table declaration *)
+      dglobal tbl_id tbl_ty tbl_constructor;    (* table declaration *)
       table_install2 tbl_spec;                  (* table install function *)
       table_ternary_install2 tbl_spec;
       table_lookup2 tbl_spec                    (* table lookup function *)

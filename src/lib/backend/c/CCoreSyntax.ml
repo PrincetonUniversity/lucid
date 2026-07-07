@@ -70,12 +70,10 @@ and params = (cid * ty) list
 and v =
   | VInt of {value : int; size : size;}
   | VBool of bool
-  | VRecord of cid list * value list
-  | VTuple of value list
   | VList  of value list
   | VBits of {ternary: bool; bits : int list;}
   | VVariant of vvariant
-  | VSymbol of cid * ty 
+  | VSymbol of cid * ty
 and vvariant = {evid : cid; evnum : value option; evdata: value list; meta : (string * value) list;}
 and value = {v:v; vty:ty; vspan : sp;}
 
@@ -423,20 +421,8 @@ let value v vty = {v=v; vty=vty; vspan=Span.default}
 let vint value size = {v=VInt {value; size = sz size}; vty=ty (TInt(sz size)); vspan=Span.default}
 let vbool b = {v=VBool b; vty=ty TBool; vspan=Span.default}
 let vlist vs = {v=VList vs; vty=ty (TVec((List.hd vs).vty, IConst (List.length vs))); vspan=Span.default}
-let vtup vs = {v=VTuple(vs); vty=ttuple (List.map (fun v -> v.vty) vs); vspan=Span.default}
 let vpat ints = {v=VBits {ternary=true; bits=ints}; vty=ty (TBits {ternary=true; len=sz (List.length ints)}); vspan=Span.default}
 let vbits ints = {v=VBits {ternary=false; bits=ints}; vty=ty (TBits {ternary=false; len=sz (List.length ints)}); vspan=Span.default}
-let vrecord label_values = 
-  let labels, values = List.split label_values in
-  {v=VRecord(labels, values); vty=trecord (List.map (fun (id, value) -> (id, value.vty)) label_values); vspan=Span.default}
-;;  
-  
-  (* labels (List.map (fun v -> v.vty) values); vspan=Span.default} *)
-
-  (* vrecord labels values *)
-let vtuple vs = {v=VTuple(vs); vty=ttuple (List.map (fun v -> v.vty) vs); vspan=Span.default}
-let vvariant evid evnum evdata meta = {v=VVariant {evid; evnum; evdata; meta}; vty=tevent; vspan=Span.default}
-let vvariant_simple evid evdata = vvariant evid None evdata []
 let venum tag ty = {v=VSymbol(tag, ty); vty=ty; vspan=Span.default}
 let vsymbol str ty = venum str ty
 
@@ -476,11 +462,7 @@ let charints_to_string (v:value) =
 
 
 
-let extract_vvariant value = match value.v with 
-  | VVariant ev -> ev
-  | _ -> failwith "expected VVariant"
-;;
-let extract_vint value = match value.v with 
+let extract_vint value = match value.v with
   | VInt {value; _} -> value
   | _ -> failwith "expected VInt"
 ;;
@@ -489,14 +471,6 @@ let extract_vsymbol v = match v.v with
   | _ -> failwith "expected VEnum"
 ;;
 
-let extract_vrecord value = match value.v with 
-  | VRecord(labels, vs) -> labels, vs
-  | _ -> failwith "expected VRecord"
-;;
-let extract_vtuple value = match value.v with 
-  | VTuple(vs) -> vs
-  | _ -> failwith "expected VRecord"
-;;
 (* expression constructors *)
 let exp e ety espan = {e; ety; espan}
 let efunref cid fty = exp (EVar (cid)) fty (Span.default)
@@ -667,18 +641,7 @@ let is_evar exp = match exp.e with
   | EVar _ -> true
   | _ -> false
 
-let etup_form exp = match exp.e with
-  | ETuple _ -> true
-  | EVal {v=VTuple _} -> true
-  | _ -> false
-;;
-let erec_form exp = match exp.e with
-  | ERecord _ -> true
-  | EVal {v=VRecord _} -> true
-  | _ -> false
-;;
-
-let is_ederef exp = match exp.e with 
+let is_ederef exp = match exp.e with
   | EDeref _ -> true
   | _ -> false
 ;;
@@ -690,12 +653,6 @@ let extract_ederef exp = match exp.e with
 
 
 (* extracting components of expressions *)
-let flatten_tuple exp = match exp.e with
-  | ETuple es -> es
-  | EVal {v=VTuple es} -> 
-    List.map (fun v -> eval v) es
-  | _ -> raise (FormError "[flatten_tuple] expected tuple")
-;;
 let rec flatten_exp exp = match exp.e with
   | ETuple es -> List.concat (List.map flatten_exp es)
   | ERecord(_, es) -> List.concat (List.map flatten_exp es)
@@ -943,16 +900,7 @@ let extract_dvar_cid decl = match decl.d with
 
 
 (* helpers *)
-let untuple exp = match exp.e with
-  | ETuple es -> es
-  | _ -> [exp]
-;;
-let retuple exps = match exps with
-  | [exp] -> exp
-  | _ -> etuple exps
-;;
-
-let kind_of_tfun raw_ty = match raw_ty with 
+let kind_of_tfun raw_ty = match raw_ty with
   | TFun {func_kind; _} -> func_kind
   | _ -> failwith "kind_of_tfun: expected TFun"
 ;;
@@ -963,26 +911,14 @@ let kind_of_tfun raw_ty = match raw_ty with
 exception EvalFailure of string
 let eval_err msg = raise (EvalFailure msg)
 
-let eval_vint value = match value.v with 
-  | VInt {value; _} -> value
-  | _ -> eval_err "expected VInt"
-;;
 
-let rec eval_exp exp = 
-  match exp.e with 
+(* evaluate a scalar constant expression: a literal, or a variable (which
+   evaluates to a symbol -- its name). Compound constants stay expressions;
+   consumers that need their parts destructure the expression instead. *)
+let eval_exp exp =
+  match exp.e with
   | EVal(value) -> value
-  | ECall {f; args; _} -> 
-    (* calls evaluate to event values *)
-    let argvals = List.map eval_exp args in
-    let f_cid = extract_evar f |> fst in
-    vvariant_simple f_cid argvals  
   | EVar (cid) -> vsymbol cid exp.ety
-  | ETuple es -> 
-    let es = List.map eval_exp es in
-    vtuple es
-  | ERecord(labels, es) -> 
-    let es = List.map eval_exp es in
-    vrecord (List.combine labels es)
   | _ ->  eval_err "cannot evalute expression type"
 ;;
 
