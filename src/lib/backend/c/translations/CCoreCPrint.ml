@@ -85,7 +85,6 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : (string * stri
       let p, s = ty_to_string ~use_abstract_name:true aty in p ^ s) arg_tys
     in
     ret_p ^ " (*", sprintf ")(%s)" arg_str
-  | TBits _ -> ty_err "bit types should be eliminated"
   | TVariant _ -> ty_err "event types should be eliminated"
   | TEnum cid_ints ->  
     let list_str = String.concat ", " (List.map (fun (s, i) -> cid_to_string s ^ " = " ^ string_of_int i) cid_ints) in
@@ -154,9 +153,6 @@ let rec v_to_string (v: v) : string =
   match v with
   | VInt {value; _} -> string_of_int value
   | VBool b -> string_of_bool b
-  | VBits {ternary; bits} ->
-    let bits_str = String.concat "" (List.map (fun i -> if i = -1 then "*" else string_of_int i) bits) in
-    (if ternary then "ternary " else "") ^ "bits[" ^ bits_str ^ "]"
   | VVariant e -> "event(" ^ vvariant_to_string e ^ ")"
   | VSymbol (s, _) -> cid_to_string s
 
@@ -231,8 +227,6 @@ and op_to_string (op: op) (args: exp list) : string =
   | LShift, [a; b] -> exp_to_string a ^ " << " ^ exp_to_string b
   | RShift, [a; b] -> exp_to_string a ^ " >> " ^ exp_to_string b
   | Slice (i, j), [a] -> exp_to_string a ^ "[" ^ string_of_int i ^ ":" ^ string_of_int j ^ "]"
-  | PatExact, [a] -> "PatExact(" ^ exp_to_string a ^ ")"
-  | PatMask, [a] -> "PatMask(" ^ exp_to_string a ^ ")"
   (* the hash length is the value's *bit* width (a compile-time constant), not
      sizeof: sizeof is the C storage size, which over-counts for sub-byte / padded
      widths. hash_32 sums whole bytes and masks the last partial byte (see
@@ -306,6 +300,7 @@ let rec s_to_string (s: s) : string =
 and pat_to_string (p: pat) : string =
   match p with
   | PVal v -> value_to_string v
+  | PMask _ -> err "masked (ternary) patterns should be lowered to if statements before C printing"
   | PVariant {event_id; params} -> 
     let params_str = params_to_string params in
     (cid_to_string event_id) ^ "(" ^ params_str ^ ")"

@@ -54,10 +54,10 @@ let buf_out_cid = cid "buf_out"
 (* -------------------------------- parser --------------------------------- *)
 (* produce the value-semantic parser *)
 
-(* Payload.t / 1500-bit placeholder -> the opaque TPacket type *)
+(* Payload.t -> the opaque TPacket type (the 1500-bit placeholder form is
+   already translated to TPacket by CoreToCCore) *)
 let to_tpacket =
   let is_placeholder ty = match ty.raw_ty with
-    | TBits{ternary=false; len=1500} -> true
     | TBuiltin(cid, _) when (Cid.names cid = ["Payload"; "t"]) -> true
     | _ -> false
   in

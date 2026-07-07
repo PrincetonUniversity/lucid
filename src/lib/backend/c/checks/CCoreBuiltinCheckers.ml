@@ -199,8 +199,8 @@ let parse_read_check _ exp =
   let _, args = extract_ecall exp in
   if List.length args <> 1 then 
     ty_err "parse_read takes exactly one argument";
-  if (not (is_tbits (List.hd args).ety))
-    then ty_err "parse_read takes a bits argument";
+  if (not (is_tpacket (List.hd args).ety))
+    then ty_err "parse_read takes a packet argument";
   exp.ety
 ;;
 let parse_drop_cid = Cid.create ["parse"; "drop"];;
@@ -216,8 +216,8 @@ let payload_parse_check _ exp =
   let _, args = extract_ecall exp in
   if List.length args <> 1 then 
     ty_err "payload_parse takes exactly one argument";
-  if (not (is_tbits (List.hd args).ety))
-    then ty_err "payload_parse takes a bits argument";
+  if (not (is_tpacket (List.hd args).ety))
+    then ty_err "payload_parse takes a packet argument";
   exp.ety
 
 (* Sys functions *)

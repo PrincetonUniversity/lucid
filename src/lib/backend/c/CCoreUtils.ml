@@ -110,8 +110,6 @@ let rec compound_eq e1 e2 =
       (* unbounded lists and unions are problematic *)
     | TPtr(_, Some(_)) -> err "cannot generate equality exp for list of unknown length"
     | TUnion _ -> err "cannot generate equality exp for untagged union"
-    (* bits should be removed *)
-    | TBits _ -> err "cannot generate equality exp for bitstring"
     (* events and functions -- not sure what to do yet *)
     | TVariant _ -> err "cannot generate equality expression for two events"
     | TFun _ -> err "no equality for function"
@@ -172,8 +170,6 @@ let rec compound_masked_eq e1 e2 m =
       (* unbounded lists and unions are problematic *)
     | TPtr(_, Some(_)) -> err "cannot generate equality exp for list of unknown length"
     | TUnion _ -> err "cannot generate equality exp for untagged union"
-    (* bits should be removed *)
-    | TBits _ -> err "cannot generate equality exp for bitstring"
     (* events and functions -- not sure what to do yet *)
     | TVariant _ -> err "cannot generate equality expression for two events"
     | TFun _ -> err "no equality for function"

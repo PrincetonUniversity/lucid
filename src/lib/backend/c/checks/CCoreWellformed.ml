@@ -56,21 +56,6 @@ let tuple_assign_checker = object
     err_in_decl cur_decl_opt "tuple locals are not supported in C"
 end
 
-let tbit_checker = object 
-  inherit [_] s_iter as super 
-  val mutable cur_decl_opt = None
-  method! visit_decl () decl = 
-    cur_decl_opt <- Some decl;
-    super#visit_decl () decl
-
-  method! visit_ty () ty = 
-    super#visit_ty () ty;
-    match ty.raw_ty with 
-    | TBits _ -> 
-      err_in_decl cur_decl_opt "TBit types are not supported in C"
-    | _ -> ()
-end
-
 
 (* A field may only cross a byte boundary if its byte-aligned at its start or end. *)
 let byte_layout_ok (widths : int list) : bool =
@@ -167,7 +152,6 @@ let check_c_compat decls =
   List.iter (fun decl ->
     mask_invariant_checker#visit_decl () decl;
     tuple_assign_checker#visit_decl () decl;
-    tbit_checker#visit_decl () decl;
 
   )
   decls

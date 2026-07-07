@@ -38,9 +38,8 @@ and func_kind = | FNormal | FHandler | FParser | FAction | FMemop | FForiegn
 and raw_ty = 
   (* value types *)
   | TUnit
-  | TInt of size 
-  | TBool 
-  | TBits of {ternary: bool; len : size;}
+  | TInt of size
+  | TBool
 
   | TEnum of (cid * int) list  
   | TUnion of cid list * ty list 
@@ -70,7 +69,6 @@ and params = (cid * ty) list
 and v =
   | VInt of {value : int; size : size;}
   | VBool of bool
-  | VBits of {ternary: bool; bits : int list;}
   | VVariant of vvariant
   | VSymbol of cid * ty
 and vvariant = {evid : cid; evnum : value option; evdata: value list; meta : (string * value) list;}
@@ -82,7 +80,6 @@ and op =    | And | Or | Not
             | Neg | Plus| Sub | SatPlus | SatSub
             | BitAnd  | BitOr | BitXor | BitNot | LShift | RShift
             | Slice of int * int
-            | PatExact | PatMask
             | Hash of size
             | Cast of ty 
             | Conc
@@ -125,10 +122,13 @@ and call_kind =
 
 and exp = {e:e; ety:ty; espan : sp}
 
-and pat = 
+and pat =
   | PVal of value
+  | PMask of {value : int; mask : int; width : size}
+    (* ternary pattern, already lowered: matches k iff (k & mask) == value.
+       (value's wildcard bits are 0.) exact patterns are PVal int literals. *)
   | PVariant of {event_id : cid; params : params;}
-  | PWild of ty 
+  | PWild of ty
 
 and branch = pat list * statement
 
@@ -217,7 +217,6 @@ let tunit = ty TUnit
 let tpacket = ty TPacket
 let tbool = ty TBool
 let tint i = ty@@TInt(sz i)
-let tpat len = ty (TBits {ternary=false; len})
 let tptr base_ty = ty (TPtr(base_ty,None))
 (* An event is a metadata envelope wrapping a tagged variant, declared by
    CoreToCCore via two DTys:
@@ -297,7 +296,6 @@ let is_ttuple ty = match ty.raw_ty with TTuple _ -> true | _ -> false
 let is_tfun ty = match ty.raw_ty with TFun({func_kind=FNormal}) -> true | _ -> false
 let is_tbool ty = match ty.raw_ty with TBool -> true | _ -> false
 let is_tint ty = match ty.raw_ty with TInt(_) -> true | _ -> false
-let is_tbits ty = match ty.raw_ty with TBits(_) -> true | _ -> false
 let is_tlist ty = match ty.raw_ty with TList _ | TPtr(_, Some _) -> true | _ -> false
 (* "event-related": the envelope, the variant, or a bare variant def. Callers
    that must distinguish use is_tevent_envelope / is_tevent_variant. *)
@@ -386,7 +384,6 @@ let rec bitsizeof_ty ty =
   | TPtr _ -> None
   | TList _ -> None
   | TPacket -> None
-  | TBits {len} -> len |> Option.some
   | TVariant sigs ->
     (* tag + largest variant payload (the metadata envelope is added in lowering) *)
     let payloads = List.filter_map (fun (_, _, pty) -> bitsizeof_ty pty) sigs in
@@ -406,12 +403,11 @@ let size_of_ty ty =
 ;;
     
 
-let sizeof_ty ty = 
-  match ty.raw_ty with 
+let sizeof_ty ty =
+  match ty.raw_ty with
   | TInt size -> size
   | TBool -> 1
-  | TBits {len} -> len
-  | _ -> failwith "sizeof_ty: expected TInt or TBits"
+  | _ -> failwith "sizeof_ty: expected TInt or TBool"
 ;;
 
 
@@ -420,8 +416,6 @@ let sizeof_ty ty =
 let value v vty = {v=v; vty=vty; vspan=Span.default}
 let vint value size = {v=VInt {value; size = sz size}; vty=ty (TInt(sz size)); vspan=Span.default}
 let vbool b = {v=VBool b; vty=ty TBool; vspan=Span.default}
-let vpat ints = {v=VBits {ternary=true; bits=ints}; vty=ty (TBits {ternary=true; len=sz (List.length ints)}); vspan=Span.default}
-let vbits ints = {v=VBits {ternary=false; bits=ints}; vty=ty (TBits {ternary=false; len=sz (List.length ints)}); vspan=Span.default}
 let venum tag ty = {v=VSymbol(tag, ty); vty=ty; vspan=Span.default}
 let vsymbol str ty = venum str ty
 
@@ -479,13 +473,6 @@ let eop op es =
     | Neg | Plus| Sub | SatPlus | SatSub -> (List.hd es).ety
     | BitAnd  | BitOr | BitXor | BitNot | LShift | RShift | Mod -> (List.hd es).ety
     | Slice(hi, lo) -> ty (TInt (sz (hi - lo + 1)))
-    | PatExact
-    | PatMask ->      
-      let sz = match (List.hd es).ety.raw_ty with 
-      | TInt sz -> sz
-      | _ -> failwith "pat op expects int args"
-      in
-      ty (TBits {ternary=true; len=sz})
     | Hash size -> ty (TInt size)
     | Cast ty  -> ty
     | Conc -> 
@@ -979,8 +966,6 @@ let rec equiv_tys ty1 ty2 = match ty1.raw_ty, ty2.raw_ty with
 | TList(t1, IConst n1), TList(t2, IConst n2) -> n1 = n2 && equiv_tys t1 t2
 | TList(t1, IVar c1), TList(t2, IVar c2) -> Cid.equal c1 c2 && equiv_tys t1 t2
 | TPacket, TPacket -> true
-| TBits {ternary=b1; len=l1}, TBits {ternary=b2; len=l2} -> 
-  (b1 = b2) && (l1 = l2)
 | TVariant _, TVariant _ -> true
 | TFun {arg_tys=arg_tys1; ret_ty=ret_ty1; func_kind=fk1}, TFun {arg_tys=arg_tys2; ret_ty=ret_ty2; func_kind=fk2} -> 
   List.length arg_tys1 = List.length arg_tys2
@@ -993,4 +978,4 @@ let rec equiv_tys ty1 ty2 = match ty1.raw_ty, ty2.raw_ty with
   && List.for_all2 equiv_tys tyargs1 tyargs2
 | TName cid1, TName cid2 -> Cid.equal cid1 cid2
 | (TUnit|TBool|TVariant _|TInt _|TRecord _ | TTuple _ | TName _ | TPtr _ | TList _ | TPacket | TUnion _
-| TFun _|TBits _|TEnum _|TBuiltin (_, _)), _ -> false
+| TFun _|TEnum _|TBuiltin (_, _)), _ -> false

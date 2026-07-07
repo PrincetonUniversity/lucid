@@ -62,11 +62,6 @@ let size_to_ty = function
   | C.Sz(sz) -> F.ty@@F.TInt(F.sz sz)
   | C.Szs(szs) -> F.ttuple @@ List.map (fun sz -> F.ty@@F.TInt(F.sz sz)) szs
 ;;
-let rec bits_to_ints = function 
-  | BitString.B0::bs -> 0::(bits_to_ints bs)
-  | BitString.B1::bs -> 1::(bits_to_ints bs)
-  | [] -> []
-;;
 
 
 (* helpers for actions and action types *)
@@ -184,10 +179,11 @@ let rec translate_raw_ty (raw_ty : C.raw_ty) : F.raw_ty =
     let tys = List.map F.ty raw_tys in
     F.TTuple(tys)
   | C.TGroup -> (F.tint CConfig.c_cfg.port_id_size).raw_ty
-  | C.TPat(Sz(sz)) -> F.TBits{ternary=true; len=F.sz sz}
-  | C.TPat(_) -> err "TPat size should be a singleton"
-  | C.TBits(Sz(sz)) -> F.TBits{ternary=false; len=F.sz sz}
-  | C.TBits(_) -> err "TBits size should be a singleton"
+  | C.TPat(_) -> err "runtime pat values are not supported by the C backend"
+  (* the only TBits that reaches the C backend is the 1500-bit Payload.t
+     placeholder; translate it straight to the opaque packet type *)
+  | C.TBits(Sz(1500)) -> F.TPacket
+  | C.TBits(_) -> err "unexpected TBits type (only the 1500-bit Payload.t placeholder is supported by the C backend)"
 and translate_acn_ty (aty : C.acn_ty) = 
   {
     F.arg_tys = List.map translate_ty aty.aarg_tys; 
@@ -228,8 +224,7 @@ let translate_op (op : C.op) : F.op =
   | C.LShift -> F.LShift
   | C.RShift -> F.RShift
   | C.Slice(i, j) -> F.Slice(i, j)
-  | C.PatExact -> F.PatExact
-  | C.PatMask -> F.PatMask
+  | C.PatExact | C.PatMask -> err "runtime pat values are not supported by the C backend"
 ;;
 
 (*** values ***)
@@ -243,8 +238,7 @@ let rec translate_v (v : C.v) (vty:C.ty) : F.v =
   | C.VInt({value; size}) -> (F.vint (Z.to_int value) (Z.to_int size)).v
   | C.VEvent event_val -> F.VVariant(translate_event_val event_val)
   | C.VGlobal(_) -> err "VGlobals should not appear outside of the interpreter's execution"
-  | C.VPat(tbits) -> (F.vpat tbits).v
-  | C.VBits(bits) -> (F.vbits (bits_to_ints bits)).v
+  | C.VPat(_) | C.VBits(_) -> err "runtime pat/bitstring values are not supported by the C backend"
   | C.VTuple(_) | C.VRecord(_) | C.VGroup(_) ->
     err "compound constants (tuple/record/group values) only translate to expressions; they cannot appear in value positions (e.g. inside constant event payloads)"
 
@@ -337,9 +331,26 @@ let rec translate_exp (exp : C.exp) : F.exp =
   in
   {exp' with espan = exp.espan}
 ;;
+(* a bitstring pattern (0/1/-1 per bit, -1 = wildcard) lowers to the masked-int
+   form here: exact patterns become plain int literals, ternary ones become
+   PMask (value has 0 at wildcard bits; match is (k & mask) == value). *)
+let bits_to_maskedint (bits : int list) : int * int =
+  List.fold_left
+    (fun (value, mask) bit -> match bit with
+      | 0 -> (value lsl 1, (mask lsl 1) lor 1)
+      | 1 -> ((value lsl 1) lor 1, (mask lsl 1) lor 1)
+      | -1 -> (value lsl 1, mask lsl 1)
+      | _ -> err "invalid bitstring bit")
+    (0, 0) bits
+;;
 let translate_pat (pat:C.pat) (ty : C.ty) : F.pat = 
   match pat with 
-  | PBit(ints) -> F.PVal(F.vpat ints)
+  | PBit(ints) ->
+    let width = List.length ints in
+    let value, mask = bits_to_maskedint ints in
+    if List.for_all (fun b -> b <> -1) ints
+      then F.PVal(F.vint value width)
+      else F.PMask{value; mask; width}
   | C.PNum(z)  -> 
     let pat_sz = InterpHelpers.intwidth_from_raw_ty ty.raw_ty in
     F.PVal(F.vint (Z.to_int z) pat_sz)

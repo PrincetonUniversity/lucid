@@ -55,7 +55,6 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : string =
     let fields_str = String.concat " " field_strs in    
     "{" ^ fields_str ^ "}"
   | TFun func_ty -> "function(" ^ func_ty_to_string func_ty ^ ")"
-  | TBits {ternary; len} -> (if ternary then "ternary_" else "") ^ "bit[" ^ size_to_string len ^ "]"
   | TVariant sigs ->
     let arm_strs = List.map
       (fun (ctor, tag, pty) ->
@@ -93,9 +92,6 @@ let rec v_to_string (v: v) : string =
   match v with
   | VInt {value; _} -> string_of_int value
   | VBool b -> string_of_bool b
-  | VBits {ternary; bits} ->
-    let bits_str = String.concat "" (List.map (fun i -> if i = -1 then "*" else string_of_int i) bits) in
-    (if ternary then "ternary " else "") ^ "bits[" ^ bits_str ^ "]"
   | VVariant e -> "event(" ^ vvariant_to_string e ^ ")"
   | VSymbol (s, _) -> cid_to_string s
 
@@ -175,8 +171,6 @@ and op_to_string (op: op) (args: exp list) : string =
   | LShift, [a; b] -> exp_to_string a ^ " << " ^ exp_to_string b
   | RShift, [a; b] -> exp_to_string a ^ " >> " ^ exp_to_string b
   | Slice (i, j), [a] -> exp_to_string a ^ "[" ^ string_of_int i ^ ":" ^ string_of_int j ^ "]"
-  | PatExact, [a] -> "PatExact(" ^ exp_to_string a ^ ")"
-  | PatMask, [a] -> "PatMask(" ^ exp_to_string a ^ ")"
   | Hash 32, [seed; a] -> 
     let ref_arg = sprintf "(%s)&%s" (ty_to_string (tref (tint 8))) (exp_to_string a) in
     let seed_arg = sprintf "(%s)%s" (ty_to_string (tint 32)) (exp_to_string seed) in
@@ -247,6 +241,7 @@ let rec s_to_string (s: s) : string =
 and pat_to_string (p: pat) : string =
   match p with
   | PVal v -> value_to_string v
+  | PMask {value; mask; width} -> sprintf "0x%x &&& 0x%x<%d>" value mask width
   | PVariant {event_id; params} -> 
     let params_str = params_to_string params in
     (cid_to_string event_id) ^ "(" ^ params_str ^ ")"

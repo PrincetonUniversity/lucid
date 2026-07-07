@@ -137,12 +137,6 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
     if (not (Cid.equal cid1 cid2)) then 
       (ty_err "named types with different names");
     unify_lists env unify_ty tys1 tys2
-  | TBits{ternary=t1; len=l1}, TBits{ternary=t2; len=l2} -> 
-    if (t1 <> t2) then 
-      (ty_err("pat type vs bitstring type"));
-    if l1 <> l2 then 
-      ty_err ("pat/bitstring types with different lengths");
-    env
   | TInt l1, TInt l2 -> 
     if l1 <> l2 then 
       ty_err ("int types with different lengths ("^(string_of_int l1)^" vs "^(string_of_int l2));
@@ -176,7 +170,7 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
       ty_err "union types with different labels";
     unify_lists env unify_ty tys1 tys2
   | (TUnit|TBool|TVariant _|TInt _|TRecord _ | TTuple _ | TName _ | TPtr _ | TList _ | TPacket | TUnion _
-  | TFun _|TBits _|TEnum _|TBuiltin (_, _)), _ ->
+  | TFun _|TEnum _|TBuiltin (_, _)), _ ->
       dprint_endline@@"type mismatch:\n"^(CCorePPrint.raw_ty_to_string rawty1)^"\nand\n"^(CCorePPrint.raw_ty_to_string rawty2);
       ty_err "type mismatch"
 
@@ -190,7 +184,6 @@ let infer_value value : value =
   (* values may only have have const sizes *)
   | VInt{size} -> tint size
   | VBool _ -> tbool
-  | VBits{ternary; bits} -> ty@@TBits{ternary; len=sz@@List.length bits}
   | VVariant _ -> tevent
   | VSymbol(_, ty) -> ty
   in
@@ -417,20 +410,6 @@ and infer_eop env op (args : exp list) : env * op * exp list * ty = match op, ar
         env, op, inf_args, ty@@TInt size
       | _ -> ty_err "In the CCore backend, hash op takes a seed and 1 argument (which may be a compound)"
     )
-  | PatExact, [exp] -> 
-    let env, inf_exp = infer_exp env exp in
-    if (not (is_tint inf_exp.ety)) then 
-      raise (TypeError("int-to-pat of non-int"));
-    env, op, [inf_exp], tpat (extract_tint_size inf_exp.ety)
-  | PatMask, [exp_val; exp_mask] -> 
-    let env, inf_exp_val = infer_exp env exp_val in
-    let env, inf_exp_mask = infer_exp env exp_mask in
-    if (not (is_tint inf_exp_val.ety)) then 
-      raise (TypeError("int-to-pat val of non-int"));
-    if (not (is_tint inf_exp_mask.ety)) then 
-      raise (TypeError("int-to-pat mask of non-int"));
-    let env = unify_ty env inf_exp_val.ety inf_exp_mask.ety in
-    env, op, [inf_exp_val; inf_exp_mask], tpat (extract_tint_size inf_exp_val.ety)
   | Project id, [exp] -> (
     let env, inf_exp = infer_exp env exp in
     (* resolve a named record/union (e.g. projecting `ev.data` of the named
@@ -516,6 +495,10 @@ let unify_pat env exp pat =
         else if (v_sz_opt <> e_sz_opt)
           then ty_err@@"the expression"^(CCorePPrint.exp_to_string exp)^" and the pattern matched against it ("^(CCorePPrint.pat_to_string pat)^" have different types"
           );    
+      env
+    | PMask{width} ->
+      if (bitsizeof_ty exp.ety <> Some width) then
+        ty_err "the expression and the masked pattern matched against it have different widths";
       env
     | PWild ty -> unify_ty env ty exp.ety
     | PVariant{event_id} ->

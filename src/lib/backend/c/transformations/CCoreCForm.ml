@@ -33,43 +33,12 @@ end
 let lower_vecs decls = vec_lowerer#visit_decls () decls
 
 (* Convert match statements to if statements *)
-let bitstring_to_maskedint (bs : int list) : int*int = 
-  let to_val_and_mask bit = 
-    match bit with 
-    | 0    -> (0, 1) (* val: 0, mask 1 *) 
-    | 1    -> (1, 1) (* val: 1, mask 1 *) 
-    | -1  -> (0, 0) (* val: 0, mask :0 *)
-    | _ -> err "invalid bitstring bit"
-  in
-  let rec bitstring_to_int bits =  
-    match bits with 
-      | [] -> 0
-      | hd::tl ->
-        (Int.shift_left hd (List.length tl)) + (bitstring_to_int tl)
-  in      
-  let vbits, mbits = List.map to_val_and_mask bs |> List.split in 
-  bitstring_to_int vbits, bitstring_to_int mbits
-;;
-
-let tbit_to_tint ty = 
-  match ty.raw_ty with 
-  | TBits{len} -> tint len
-  | _ -> ty
-;;
-
-
 let to_bool_atom (e,p) = 
   match p with 
-    | PVal {v=VBits{ternary=true; bits;};} -> 
-        let value, mask = bitstring_to_maskedint bits in
-        let value = vint value (List.length bits) in
-        let mask = vint mask (List.length bits) in
-        let rhs = eop BitAnd [eval value; eval mask] in
-        let lhs = eop BitAnd [e; eval mask] in
-        Some(eop Eq [lhs; rhs])
-    | PVal {v=VBits{ternary=false; bits;};} ->
-        let value = (bitstring_to_maskedint bits |> fst |> vint) (List.length bits) in
-        Some(eop Eq [e; eval value])
+    | PMask{value; mask; width} ->
+        (* (e & mask) == value; value's wildcard bits are 0 by construction *)
+        let lhs = eop BitAnd [e; eval (vint mask width)] in
+        Some(eop Eq [lhs; eval (vint value width)])
     | PVal v -> Some(eop Eq [e; eval v])
     | PWild _ -> None (* no constraint *)
     | PVariant _ -> err "events must be eliminated before matches"
@@ -102,26 +71,17 @@ let rec match_to_if exps branches =
 
 
 
-let has_ternary_bits branches = 
-  let v = 
-    object 
-    inherit [_] s_iter as super
-    val mutable has_ternary_bits = false
-    method has_ternary_bits = has_ternary_bits
-    method! visit_TBits () is_tern _ = 
-      if is_tern then has_ternary_bits <- true
-    end
-  in
-  List.iter (v#visit_branch ()) branches;
-  v#has_ternary_bits
+let has_pmask branches =
+  List.exists
+    (fun (pats, _) -> List.exists (function PMask _ -> true | _ -> false) pats)
+    branches
 ;;
 
 let transform_match stmt = 
   match stmt.s with 
   | SMatch([exp], _) when is_tenum exp.ety -> stmt
   (* a match on a single integer is just a switch, as long as no ternary patterns are used *)
-  | SMatch([exp], branches) when ((is_tint exp.ety) && (not@@has_ternary_bits branches)) ->
-    CCoreTransformers.subst_ty#visit_statement tbit_to_tint stmt
+  | SMatch([exp], branches) when ((is_tint exp.ety) && (not@@has_pmask branches)) -> stmt
   | SMatch(es, branches) -> match_to_if es branches
   | _ -> stmt
 ;;
