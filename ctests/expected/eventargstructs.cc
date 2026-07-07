@@ -122,10 +122,6 @@ typedef struct {
   event_meta meta;
   event_variant_t data;
 } event_t;
-typedef struct {
-  event_t ev;
-  uint32_t port;
-} out_event_t;
 event_t mk_foo(uint32_t p_0_1180 , uint32_t p_1_1181 ){
   event_t tmp_1266  = {.meta = {.len = 8, .is_packet = 1, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = foo_1182(p_0_1180, p_1_1181)};
   return tmp_1266;
@@ -200,6 +196,28 @@ uint8_t parse_event(packet_t*  pkt , event_t*  next_event ){
   (*(next_event)) = mk_foo(p_0_1180, p_1_1181);
   return pkt->cursor <= pkt->end;
 }
+void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
+  switch (ev_out->data.tag) {
+    case 1: {
+      uint32_t p_0_1180  = ev_out->data.args.foo_1182.p_0_1180;
+      uint32_t p_1_1181  = ev_out->data.args.foo_1182.p_1_1181;
+      write_bits(buf_out, ((uint64_t)(p_1_1181)), 32);
+      write_bits(buf_out, ((uint64_t)(p_0_1180)), 32);
+      if ((ev_out->meta.is_packet) == (0)) {
+        write_bits(buf_out, ((uint64_t)(1)), 16);
+        write_bits(buf_out, ((uint64_t)(666)), 16);
+        write_bits(buf_out, ((uint64_t)(2)), 48);
+        write_bits(buf_out, ((uint64_t)(1)), 48);
+      }
+      return ;
+      break;
+    }
+  }
+}
+typedef struct {
+  event_t ev;
+  uint32_t port;
+} out_event_t;
 uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
   uint16_t n  = 0;
   switch (ev_in->data.tag) {
@@ -222,24 +240,6 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
     }
   }
   return n;
-}
-void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
-  switch (ev_out->data.tag) {
-    case 1: {
-      uint32_t p_0_1180  = ev_out->data.args.foo_1182.p_0_1180;
-      uint32_t p_1_1181  = ev_out->data.args.foo_1182.p_1_1181;
-      write_bits(buf_out, ((uint64_t)(p_1_1181)), 32);
-      write_bits(buf_out, ((uint64_t)(p_0_1180)), 32);
-      if ((ev_out->meta.is_packet) == (0)) {
-        write_bits(buf_out, ((uint64_t)(1)), 16);
-        write_bits(buf_out, ((uint64_t)(666)), 16);
-        write_bits(buf_out, ((uint64_t)(2)), 48);
-        write_bits(buf_out, ((uint64_t)(1)), 48);
-      }
-      return ;
-      break;
-    }
-  }
 }
 
 /********************************************************************************/

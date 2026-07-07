@@ -123,10 +123,6 @@ typedef struct {
   event_meta meta;
   event_variant_t data;
 } event_t;
-typedef struct {
-  event_t ev;
-  uint32_t port;
-} out_event_t;
 event_t mk_hdr(uint8_t ver_894 , uint16_t len_895 , uint64_t dst_896 , uint64_t src_897 , uint16_t ety_898 ){
   event_t tmp_957  = {.meta = {.len = 16, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = hdr_900(ver_894, len_895, dst_896, src_897, ety_898)};
   return tmp_957;
@@ -141,28 +137,6 @@ uint8_t parse_event(packet_t*  pkt , event_t*  next_event ){
   uint16_t ety_898  = ((uint16_t)(read_bits(pkt, 16)));
   (*(next_event)) = mk_hdr(ver_894, len_895, dst_896, src_897, ety_898);
   return pkt->cursor <= pkt->end;
-}
-uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
-  uint16_t n  = 0;
-  switch (ev_in->data.tag) {
-    case 1: {
-      uint8_t ver_901  = ev_in->data.args.hdr_900.ver_894;
-      uint16_t len_902  = ev_in->data.args.hdr_900.len_895;
-      uint64_t dst_903  = ev_in->data.args.hdr_900.dst_896;
-      uint64_t src_904  = ev_in->data.args.hdr_900.src_897;
-      uint16_t ety_905  = ev_in->data.args.hdr_900.ety_898;
-      event_t this  = mk_hdr(ver_901, len_902, dst_903, src_904, ety_905);
-      out_event_t tmp_958  = {.ev = mk_hdr(ver_901, len_902 + 1 & 4095, dst_903, src_904, ety_905), .port = ev_in->meta.in_port};
-      out_events[n] = tmp_958;
-      n = n + 1;
-      break;
-    }
-    default: {
-      
-      break;
-    }
-  }
-  return n;
 }
 void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
   switch (ev_out->data.tag) {
@@ -187,6 +161,32 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       break;
     }
   }
+}
+typedef struct {
+  event_t ev;
+  uint32_t port;
+} out_event_t;
+uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
+  uint16_t n  = 0;
+  switch (ev_in->data.tag) {
+    case 1: {
+      uint8_t ver_901  = ev_in->data.args.hdr_900.ver_894;
+      uint16_t len_902  = ev_in->data.args.hdr_900.len_895;
+      uint64_t dst_903  = ev_in->data.args.hdr_900.dst_896;
+      uint64_t src_904  = ev_in->data.args.hdr_900.src_897;
+      uint16_t ety_905  = ev_in->data.args.hdr_900.ety_898;
+      event_t this  = mk_hdr(ver_901, len_902, dst_903, src_904, ety_905);
+      out_event_t tmp_958  = {.ev = mk_hdr(ver_901, len_902 + 1 & 4095, dst_903, src_904, ety_905), .port = ev_in->meta.in_port};
+      out_events[n] = tmp_958;
+      n = n + 1;
+      break;
+    }
+    default: {
+      
+      break;
+    }
+  }
+  return n;
 }
 
 /********************************************************************************/

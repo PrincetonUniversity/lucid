@@ -132,10 +132,6 @@ typedef struct {
   event_meta meta;
   event_variant_t data;
 } event_t;
-typedef struct {
-  event_t ev;
-  uint32_t port;
-} out_event_t;
 event_t mk_do_match(uint32_t s_2749 ){
   event_t tmp_2954  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = do_match_2750(s_2749)};
   return tmp_2954;
@@ -220,40 +216,6 @@ res_t_2741 lookup_ftbl_2748(uint32_t key , uint32_t arg ){
     }
   }
 }
-uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
-  uint16_t n  = 0;
-  switch (ev_in->data.tag) {
-    case 1: {
-      uint32_t s_2754  = ev_in->data.args.do_match_2750.s_2749;
-      event_t this  = mk_do_match(s_2754);
-      res_t_2741 tup_2953  = lookup_ftbl_2748(s_2754, 1000);
-      uint32_t tbl_out_0_2756  = tup_2953._0;
-      uint8_t tbl_out_1_2757  = tup_2953._1;
-      printf("return of table match: %d", tbl_out_0_2756);
-      if (tbl_out_1_2757 == true) {
-        printf("table HIT.");
-      }else {
-        printf("table MISS. Installing hit_acn(3) for current key. ");
-        install_ftbl_2748(s_2754, tag_hit_acn_2744, 3);
-      }
-      break;
-    }
-    case 2: {
-      uint32_t v_2758  = ev_in->data.args.do_install_2753.v_2751;
-      uint32_t m_2759  = ev_in->data.args.do_install_2753.m_2752;
-      event_t this  = mk_do_install(v_2758, m_2759);
-      printf("installing entry: (%d &&& %d)", v_2758, m_2759);
-      install_ftbl_2748(v_2758, tag_hit_acn_2744, 2);
-      install_ternary_ftbl_2748(v_2758, m_2759, tag_hit_acn_2744, 3);
-      break;
-    }
-    default: {
-      
-      break;
-    }
-  }
-  return n;
-}
 uint8_t parse_event(packet_t*  packet , event_t*  next_event ){
   skip_bits(packet, 32);
   skip_bits(packet, 16);
@@ -320,6 +282,44 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       break;
     }
   }
+}
+typedef struct {
+  event_t ev;
+  uint32_t port;
+} out_event_t;
+uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
+  uint16_t n  = 0;
+  switch (ev_in->data.tag) {
+    case 1: {
+      uint32_t s_2754  = ev_in->data.args.do_match_2750.s_2749;
+      event_t this  = mk_do_match(s_2754);
+      res_t_2741 tup_2953  = lookup_ftbl_2748(s_2754, 1000);
+      uint32_t tbl_out_0_2756  = tup_2953._0;
+      uint8_t tbl_out_1_2757  = tup_2953._1;
+      printf("return of table match: %d", tbl_out_0_2756);
+      if (tbl_out_1_2757 == true) {
+        printf("table HIT.");
+      }else {
+        printf("table MISS. Installing hit_acn(3) for current key. ");
+        install_ftbl_2748(s_2754, tag_hit_acn_2744, 3);
+      }
+      break;
+    }
+    case 2: {
+      uint32_t v_2758  = ev_in->data.args.do_install_2753.v_2751;
+      uint32_t m_2759  = ev_in->data.args.do_install_2753.m_2752;
+      event_t this  = mk_do_install(v_2758, m_2759);
+      printf("installing entry: (%d &&& %d)", v_2758, m_2759);
+      install_ftbl_2748(v_2758, tag_hit_acn_2744, 2);
+      install_ternary_ftbl_2748(v_2758, m_2759, tag_hit_acn_2744, 3);
+      break;
+    }
+    default: {
+      
+      break;
+    }
+  }
+  return n;
 }
 
 /********************************************************************************/

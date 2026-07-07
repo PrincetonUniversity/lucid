@@ -159,10 +159,6 @@ typedef struct {
   event_meta meta;
   event_variant_t data;
 } event_t;
-typedef struct {
-  event_t ev;
-  uint32_t port;
-} out_event_t;
 event_t mk_BloomFilter_clear_all_bf1(){
   event_t tmp_6331  = {.meta = {.len = 0, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = BloomFilter_clear_all_bf1_5866()};
   return tmp_6331;
@@ -276,6 +272,77 @@ uint8_t parse_event(packet_t*  pkt , event_t*  next_event ){
   (*(next_event)) = mk_in(add_5877, pad_5878, x_5879);
   return pkt->cursor <= pkt->end;
 }
+void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
+  switch (ev_out->data.tag) {
+    case 1: {
+      
+      if ((ev_out->meta.is_packet) == (0)) {
+        write_bits(buf_out, ((uint64_t)(1)), 16);
+        write_bits(buf_out, ((uint64_t)(666)), 16);
+        write_bits(buf_out, ((uint64_t)(2)), 48);
+        write_bits(buf_out, ((uint64_t)(1)), 48);
+      }
+      return ;
+      break;
+    }
+    case 2: {
+      uint8_t idx_5867  = ev_out->data.args.BloomFilter_clear_helper_bf1_5868.idx_5867;
+      write_bits(buf_out, ((uint64_t)(idx_5867)), 8);
+      if ((ev_out->meta.is_packet) == (0)) {
+        write_bits(buf_out, ((uint64_t)(2)), 16);
+        write_bits(buf_out, ((uint64_t)(666)), 16);
+        write_bits(buf_out, ((uint64_t)(2)), 48);
+        write_bits(buf_out, ((uint64_t)(1)), 48);
+      }
+      return ;
+      break;
+    }
+    case 3: {
+      uint32_t x_5873  = ev_out->data.args.allowed_5874.x_5873;
+      write_bits(buf_out, ((uint64_t)(x_5873)), 32);
+      if ((ev_out->meta.is_packet) == (0)) {
+        write_bits(buf_out, ((uint64_t)(3)), 16);
+        write_bits(buf_out, ((uint64_t)(666)), 16);
+        write_bits(buf_out, ((uint64_t)(2)), 48);
+        write_bits(buf_out, ((uint64_t)(1)), 48);
+      }
+      return ;
+      break;
+    }
+    case 4: {
+      uint32_t x_5875  = ev_out->data.args.denied_5876.x_5875;
+      write_bits(buf_out, ((uint64_t)(x_5875)), 32);
+      if ((ev_out->meta.is_packet) == (0)) {
+        write_bits(buf_out, ((uint64_t)(4)), 16);
+        write_bits(buf_out, ((uint64_t)(666)), 16);
+        write_bits(buf_out, ((uint64_t)(2)), 48);
+        write_bits(buf_out, ((uint64_t)(1)), 48);
+      }
+      return ;
+      break;
+    }
+    case 5: {
+      uint8_t add_5877  = ev_out->data.args.in_5880.add_5877;
+      uint8_t pad_5878  = ev_out->data.args.in_5880.pad_5878;
+      uint32_t x_5879  = ev_out->data.args.in_5880.x_5879;
+      write_bits(buf_out, ((uint64_t)(x_5879)), 32);
+      write_bits(buf_out, ((uint64_t)(pad_5878)), 7);
+      write_bits(buf_out, ((uint64_t)(add_5877)), 1);
+      if ((ev_out->meta.is_packet) == (0)) {
+        write_bits(buf_out, ((uint64_t)(5)), 16);
+        write_bits(buf_out, ((uint64_t)(666)), 16);
+        write_bits(buf_out, ((uint64_t)(2)), 48);
+        write_bits(buf_out, ((uint64_t)(1)), 48);
+      }
+      return ;
+      break;
+    }
+  }
+}
+typedef struct {
+  event_t ev;
+  uint32_t port;
+} out_event_t;
 uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
   uint16_t n  = 0;
   switch (ev_in->data.tag) {
@@ -346,73 +413,6 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
     }
   }
   return n;
-}
-void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
-  switch (ev_out->data.tag) {
-    case 1: {
-      
-      if ((ev_out->meta.is_packet) == (0)) {
-        write_bits(buf_out, ((uint64_t)(1)), 16);
-        write_bits(buf_out, ((uint64_t)(666)), 16);
-        write_bits(buf_out, ((uint64_t)(2)), 48);
-        write_bits(buf_out, ((uint64_t)(1)), 48);
-      }
-      return ;
-      break;
-    }
-    case 2: {
-      uint8_t idx_5867  = ev_out->data.args.BloomFilter_clear_helper_bf1_5868.idx_5867;
-      write_bits(buf_out, ((uint64_t)(idx_5867)), 8);
-      if ((ev_out->meta.is_packet) == (0)) {
-        write_bits(buf_out, ((uint64_t)(2)), 16);
-        write_bits(buf_out, ((uint64_t)(666)), 16);
-        write_bits(buf_out, ((uint64_t)(2)), 48);
-        write_bits(buf_out, ((uint64_t)(1)), 48);
-      }
-      return ;
-      break;
-    }
-    case 3: {
-      uint32_t x_5873  = ev_out->data.args.allowed_5874.x_5873;
-      write_bits(buf_out, ((uint64_t)(x_5873)), 32);
-      if ((ev_out->meta.is_packet) == (0)) {
-        write_bits(buf_out, ((uint64_t)(3)), 16);
-        write_bits(buf_out, ((uint64_t)(666)), 16);
-        write_bits(buf_out, ((uint64_t)(2)), 48);
-        write_bits(buf_out, ((uint64_t)(1)), 48);
-      }
-      return ;
-      break;
-    }
-    case 4: {
-      uint32_t x_5875  = ev_out->data.args.denied_5876.x_5875;
-      write_bits(buf_out, ((uint64_t)(x_5875)), 32);
-      if ((ev_out->meta.is_packet) == (0)) {
-        write_bits(buf_out, ((uint64_t)(4)), 16);
-        write_bits(buf_out, ((uint64_t)(666)), 16);
-        write_bits(buf_out, ((uint64_t)(2)), 48);
-        write_bits(buf_out, ((uint64_t)(1)), 48);
-      }
-      return ;
-      break;
-    }
-    case 5: {
-      uint8_t add_5877  = ev_out->data.args.in_5880.add_5877;
-      uint8_t pad_5878  = ev_out->data.args.in_5880.pad_5878;
-      uint32_t x_5879  = ev_out->data.args.in_5880.x_5879;
-      write_bits(buf_out, ((uint64_t)(x_5879)), 32);
-      write_bits(buf_out, ((uint64_t)(pad_5878)), 7);
-      write_bits(buf_out, ((uint64_t)(add_5877)), 1);
-      if ((ev_out->meta.is_packet) == (0)) {
-        write_bits(buf_out, ((uint64_t)(5)), 16);
-        write_bits(buf_out, ((uint64_t)(666)), 16);
-        write_bits(buf_out, ((uint64_t)(2)), 48);
-        write_bits(buf_out, ((uint64_t)(1)), 48);
-      }
-      return ;
-      break;
-    }
-  }
 }
 
 /********************************************************************************/

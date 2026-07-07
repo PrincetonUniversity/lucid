@@ -79,29 +79,23 @@ let transformer =
     in
     stmts @@ List.map2 extract_field params arm.params
   in
-  let arm_tag_val_of arm_assoc evid =
-    arm_tag_val (List.assoc evid arm_assoc)
-  in
-  let rec inline_variant_pat arm_assoc exps n cases =
-    match cases with
-    | [] -> cases
-    | (pats, bstmt)::cases -> (
-      let exp = List.nth exps n in
-      let pat = List.nth pats n in
-      match pat with
-        | PVariant{event_id; params} ->
-          let field_var_init = extract_fields exp (List.assoc event_id arm_assoc) params in
-          let pat = arm_tag_val_of arm_assoc (event_id) in
-          let pats = replace n (patval pat) pats in
-          let bstmt = sseq field_var_init bstmt in
-          (pats, bstmt)::(inline_variant_pat arm_assoc exps n cases)
-        | PWild ty when is_tevent_variant ty ->
-          (* wildcard on the variant -> wildcard on the tag, nothing bound *)
-          let pats = replace n (PWild tag_ty) pats in
-          (pats, bstmt)::(inline_variant_pat arm_assoc exps n cases)
-        | _ ->
-          (pats, bstmt)::(inline_variant_pat arm_assoc exps n cases)
-    )
+  (* lower one branch: each PVariant pattern becomes its arm's tag literal,
+     with the arm's fields bound from the matched expression at the top of the
+     branch body; a wildcard on the variant becomes a wildcard on the tag. *)
+  let lower_branch arm_assoc exps (pats, bstmt) =
+    let pats, inits =
+      List.fold_left2
+        (fun (pats, inits) exp pat ->
+          match pat with
+          | PVariant{event_id; params} ->
+            let arm = List.assoc event_id arm_assoc in
+            (patval (arm_tag_val arm) :: pats,
+             extract_fields exp arm params :: inits)
+          | PWild ty when is_tevent_variant ty -> (PWild tag_ty :: pats, inits)
+          | pat -> (pat :: pats, inits))
+        ([], []) exps pats
+    in
+    (List.rev pats, stmts (List.rev inits @ [bstmt]))
   in
 
   object (_) inherit [_] s_map as super
@@ -125,12 +119,7 @@ let transformer =
         else if is_tref exp.ety && is_tevent_variant (extract_tref exp.ety) then exp/->cid"tag"
         else exp
       in
-      let branches' =
-        List.fold_left
-          (fun branches n -> inline_variant_pat arm_assoc exps n branches)
-          branches
-          (List.init (List.length exps) (fun i -> i))
-      in
+      let branches' = List.map (lower_branch arm_assoc exps) branches in
       let exps = List.map tag_of_variant_exp exps in
       {stmt with s=SMatch(exps, branches')}
     | _ -> stmt

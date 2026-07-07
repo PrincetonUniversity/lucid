@@ -162,10 +162,6 @@ typedef struct {
   event_meta meta;
   event_variant_t data;
 } event_t;
-typedef struct {
-  event_t ev;
-  uint32_t port;
-} out_event_t;
 event_t mk_background(uint16_t x_1625 ){
   event_t tmp_1801  = {.meta = {.len = 2, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = background_1626(x_1625)};
   return tmp_1801;
@@ -226,46 +222,6 @@ uint8_t parse_event(packet_t*  pkt_1650 , event_t*  next_event ){
   }
   return 0;
 }
-uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
-  uint16_t n  = 0;
-  switch (ev_in->data.tag) {
-    case 1: {
-      uint16_t x_1654  = ev_in->data.args.background_1626.x_1625;
-      event_t this  = mk_background(x_1654);
-      printf("%d", x_1654);
-      break;
-    }
-    case 2: {
-      uint64_t e_0_1655  = ev_in->data.args.eth_1630.e_0_1627;
-      uint64_t e_1_1656  = ev_in->data.args.eth_1630.e_1_1628;
-      uint16_t e_2_1657  = ev_in->data.args.eth_1630.e_2_1629;
-      event_t this  = mk_eth(e_0_1655, e_1_1656, e_2_1657);
-      out_event_t tmp_1804  = {.ev = mk_background(e_2_1657), .port = 4294967295};
-      out_events[n] = tmp_1804;
-      n = n + 1;
-      break;
-    }
-    case 3: {
-      uint64_t e_0_1658  = ev_in->data.args.eth_ip_1639.e_0_1631;
-      uint64_t e_1_1659  = ev_in->data.args.eth_ip_1639.e_1_1632;
-      uint16_t e_2_1660  = ev_in->data.args.eth_ip_1639.e_2_1633;
-      uint32_t ip_0_1661  = ev_in->data.args.eth_ip_1639.ip_0_1634;
-      uint32_t ip_1_1662  = ev_in->data.args.eth_ip_1639.ip_1_1635;
-      uint32_t ip_2_1663  = ev_in->data.args.eth_ip_1639.ip_2_1636;
-      uint32_t ip_3_1664  = ev_in->data.args.eth_ip_1639.ip_3_1637;
-      event_t this  = mk_eth_ip(e_0_1658, e_1_1659, e_2_1660, ip_0_1661, ip_1_1662, ip_2_1663, ip_3_1664);
-      out_event_t tmp_1805  = {.ev = mk_background(e_2_1660), .port = 4294967295};
-      out_events[n] = tmp_1805;
-      n = n + 1;
-      break;
-    }
-    default: {
-      
-      break;
-    }
-  }
-  return n;
-}
 void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
   switch (ev_out->data.tag) {
     case 1: {
@@ -321,6 +277,50 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       break;
     }
   }
+}
+typedef struct {
+  event_t ev;
+  uint32_t port;
+} out_event_t;
+uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
+  uint16_t n  = 0;
+  switch (ev_in->data.tag) {
+    case 1: {
+      uint16_t x_1654  = ev_in->data.args.background_1626.x_1625;
+      event_t this  = mk_background(x_1654);
+      printf("%d", x_1654);
+      break;
+    }
+    case 2: {
+      uint64_t e_0_1655  = ev_in->data.args.eth_1630.e_0_1627;
+      uint64_t e_1_1656  = ev_in->data.args.eth_1630.e_1_1628;
+      uint16_t e_2_1657  = ev_in->data.args.eth_1630.e_2_1629;
+      event_t this  = mk_eth(e_0_1655, e_1_1656, e_2_1657);
+      out_event_t tmp_1804  = {.ev = mk_background(e_2_1657), .port = 4294967295};
+      out_events[n] = tmp_1804;
+      n = n + 1;
+      break;
+    }
+    case 3: {
+      uint64_t e_0_1658  = ev_in->data.args.eth_ip_1639.e_0_1631;
+      uint64_t e_1_1659  = ev_in->data.args.eth_ip_1639.e_1_1632;
+      uint16_t e_2_1660  = ev_in->data.args.eth_ip_1639.e_2_1633;
+      uint32_t ip_0_1661  = ev_in->data.args.eth_ip_1639.ip_0_1634;
+      uint32_t ip_1_1662  = ev_in->data.args.eth_ip_1639.ip_1_1635;
+      uint32_t ip_2_1663  = ev_in->data.args.eth_ip_1639.ip_2_1636;
+      uint32_t ip_3_1664  = ev_in->data.args.eth_ip_1639.ip_3_1637;
+      event_t this  = mk_eth_ip(e_0_1658, e_1_1659, e_2_1660, ip_0_1661, ip_1_1662, ip_2_1663, ip_3_1664);
+      out_event_t tmp_1805  = {.ev = mk_background(e_2_1660), .port = 4294967295};
+      out_events[n] = tmp_1805;
+      n = n + 1;
+      break;
+    }
+    default: {
+      
+      break;
+    }
+  }
+  return n;
 }
 
 /********************************************************************************/

@@ -135,10 +135,6 @@ typedef struct {
   event_meta meta;
   event_variant_t data;
 } event_t;
-typedef struct {
-  event_t ev;
-  uint32_t port;
-} out_event_t;
 event_t mk_tick(){
   event_t tmp_716  = {.meta = {.len = 0, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = tick_670()};
   return tmp_716;
@@ -153,37 +149,6 @@ event_t mk_pkt_out(uint32_t x_673 ){
 }
 uint32_t recirculation_port  = 0;
 uint32_t self  = 0;
-uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
-  uint16_t n  = 0;
-  switch (ev_in->data.tag) {
-    case 3: {
-      uint32_t x_675  = ev_in->data.args.pkt_out_674.x_673;
-      event_t this  = mk_pkt_out(x_675);
-      break;
-    }
-    case 1: {
-      
-      event_t this  = mk_tick();
-      out_event_t tmp_719  = {.ev = mk_tick(), .port = 4294967295};
-      out_events[n] = tmp_719;
-      n = n + 1;
-      break;
-    }
-    case 2: {
-      uint32_t x_676  = ev_in->data.args.pkt_in_672.x_671;
-      event_t this  = mk_pkt_in(x_676);
-      out_event_t tmp_720  = {.ev = mk_pkt_out(x_676), .port = 0};
-      out_events[n] = tmp_720;
-      n = n + 1;
-      break;
-    }
-    default: {
-      
-      break;
-    }
-  }
-  return n;
-}
 uint8_t parse_event(packet_t*  packet , event_t*  next_event ){
   skip_bits(packet, 32);
   skip_bits(packet, 16);
@@ -263,6 +228,41 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       break;
     }
   }
+}
+typedef struct {
+  event_t ev;
+  uint32_t port;
+} out_event_t;
+uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
+  uint16_t n  = 0;
+  switch (ev_in->data.tag) {
+    case 3: {
+      uint32_t x_675  = ev_in->data.args.pkt_out_674.x_673;
+      event_t this  = mk_pkt_out(x_675);
+      break;
+    }
+    case 1: {
+      
+      event_t this  = mk_tick();
+      out_event_t tmp_719  = {.ev = mk_tick(), .port = 4294967295};
+      out_events[n] = tmp_719;
+      n = n + 1;
+      break;
+    }
+    case 2: {
+      uint32_t x_676  = ev_in->data.args.pkt_in_672.x_671;
+      event_t this  = mk_pkt_in(x_676);
+      out_event_t tmp_720  = {.ev = mk_pkt_out(x_676), .port = 0};
+      out_events[n] = tmp_720;
+      n = n + 1;
+      break;
+    }
+    default: {
+      
+      break;
+    }
+  }
+  return n;
 }
 
 /********************************************************************************/

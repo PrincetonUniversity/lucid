@@ -50,7 +50,7 @@ let compile ds =
   let cds = CCoreTyper.check cds in
   CCoreWellformed.check_ccore_compat cds;
 
-  print_endline ("---- Lowering parsers and handlers ----");
+  print_endline ("---- Synthesizing parser, deparser, and merged handler ----");
   let cds = CCoreParse.process cds in
   let cds = CCoreHandlers.process cds in
   let cds = CCoreTyper.check cds in

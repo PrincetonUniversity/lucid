@@ -139,10 +139,6 @@ typedef struct {
   event_meta meta;
   event_variant_t data;
 } event_t;
-typedef struct {
-  event_t ev;
-  uint32_t port;
-} out_event_t;
 event_t mk_pkt_in(uint32_t src_ip_1184 , uint32_t src_port_1185 ){
   event_t tmp_1270  = {.meta = {.len = 8, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = pkt_in_1186(src_ip_1184, src_port_1185)};
   return tmp_1270;
@@ -157,53 +153,6 @@ event_t mk_pkt_out(uint32_t src_ip_1189 , uint32_t src_port_1190 ){
 }
 uint32_t recirculation_port  = 0;
 uint32_t self  = 0;
-uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
-  uint16_t n  = 0;
-  switch (ev_in->data.tag) {
-    case 2: {
-      uint32_t src_port_1192  = ev_in->data.args.bg_cmd_1188.src_port_1187;
-      event_t this  = mk_bg_cmd(src_port_1192);
-      break;
-    }
-    case 3: {
-      uint32_t src_ip_1193  = ev_in->data.args.pkt_out_1191.src_ip_1189;
-      uint32_t src_port_1194  = ev_in->data.args.pkt_out_1191.src_port_1190;
-      event_t this  = mk_pkt_out(src_ip_1193, src_port_1194);
-      break;
-    }
-    case 1: {
-      uint32_t src_ip_1195  = ev_in->data.args.pkt_in_1186.src_ip_1184;
-      uint32_t src_port_1196  = ev_in->data.args.pkt_in_1186.src_port_1185;
-      event_t this  = mk_pkt_in(src_ip_1195, src_port_1196);
-      printf("Received packet from (ip: %d, port: %d)", src_ip_1195, src_port_1196);
-      event_t MY_EVENT_1197  = mk_pkt_out(src_ip_1195, src_port_1196);
-      out_event_t tmp_1273  = {.ev = mk_bg_cmd(src_port_1196), .port = 4294967295};
-      out_events[n] = tmp_1273;
-      n = n + 1;
-      switch (MY_EVENT_1197.data.tag) {
-        case 3: {
-          uint32_t ip_1198  = MY_EVENT_1197.data.args.pkt_out_1191.src_ip_1189;
-          uint32_t port_1199  = MY_EVENT_1197.data.args.pkt_out_1191.src_port_1190;
-          printf("Sending packet to (ip: %d, port: %d)", ip_1198, port_1199);
-          out_event_t tmp_1274  = {.ev = mk_pkt_out(src_ip_1195, src_port_1196), .port = 0};
-          out_events[n] = tmp_1274;
-          n = n + 1;
-          break;
-        }
-        default: {
-          
-          break;
-        }
-      }
-      break;
-    }
-    default: {
-      
-      break;
-    }
-  }
-  return n;
-}
 uint8_t parse_event(packet_t*  packet , event_t*  next_event ){
   skip_bits(packet, 32);
   skip_bits(packet, 16);
@@ -291,6 +240,57 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       break;
     }
   }
+}
+typedef struct {
+  event_t ev;
+  uint32_t port;
+} out_event_t;
+uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
+  uint16_t n  = 0;
+  switch (ev_in->data.tag) {
+    case 2: {
+      uint32_t src_port_1192  = ev_in->data.args.bg_cmd_1188.src_port_1187;
+      event_t this  = mk_bg_cmd(src_port_1192);
+      break;
+    }
+    case 3: {
+      uint32_t src_ip_1193  = ev_in->data.args.pkt_out_1191.src_ip_1189;
+      uint32_t src_port_1194  = ev_in->data.args.pkt_out_1191.src_port_1190;
+      event_t this  = mk_pkt_out(src_ip_1193, src_port_1194);
+      break;
+    }
+    case 1: {
+      uint32_t src_ip_1195  = ev_in->data.args.pkt_in_1186.src_ip_1184;
+      uint32_t src_port_1196  = ev_in->data.args.pkt_in_1186.src_port_1185;
+      event_t this  = mk_pkt_in(src_ip_1195, src_port_1196);
+      printf("Received packet from (ip: %d, port: %d)", src_ip_1195, src_port_1196);
+      event_t MY_EVENT_1197  = mk_pkt_out(src_ip_1195, src_port_1196);
+      out_event_t tmp_1273  = {.ev = mk_bg_cmd(src_port_1196), .port = 4294967295};
+      out_events[n] = tmp_1273;
+      n = n + 1;
+      switch (MY_EVENT_1197.data.tag) {
+        case 3: {
+          uint32_t ip_1198  = MY_EVENT_1197.data.args.pkt_out_1191.src_ip_1189;
+          uint32_t port_1199  = MY_EVENT_1197.data.args.pkt_out_1191.src_port_1190;
+          printf("Sending packet to (ip: %d, port: %d)", ip_1198, port_1199);
+          out_event_t tmp_1274  = {.ev = mk_pkt_out(src_ip_1195, src_port_1196), .port = 0};
+          out_events[n] = tmp_1274;
+          n = n + 1;
+          break;
+        }
+        default: {
+          
+          break;
+        }
+      }
+      break;
+    }
+    default: {
+      
+      break;
+    }
+  }
+  return n;
 }
 
 /********************************************************************************/

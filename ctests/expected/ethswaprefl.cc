@@ -119,10 +119,6 @@ typedef struct {
   event_meta meta;
   event_variant_t data;
 } event_t;
-typedef struct {
-  event_t ev;
-  uint32_t port;
-} out_event_t;
 event_t mk_ethpkt(uint64_t dst_669 , uint64_t src_670 , uint16_t ety_671 ){
   event_t tmp_713  = {.meta = {.len = 14, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = ethpkt_673(dst_669, src_670, ety_671)};
   return tmp_713;
@@ -135,26 +131,6 @@ uint8_t parse_event(packet_t*  pkt , event_t*  next_event ){
   uint16_t ety_671  = ((uint16_t)(read_bits(pkt, 16)));
   (*(next_event)) = mk_ethpkt(dst_669, src_670, ety_671);
   return pkt->cursor <= pkt->end;
-}
-uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
-  uint16_t n  = 0;
-  switch (ev_in->data.tag) {
-    case 1: {
-      uint64_t dst_674  = ev_in->data.args.ethpkt_673.dst_669;
-      uint64_t src_675  = ev_in->data.args.ethpkt_673.src_670;
-      uint16_t ety_676  = ev_in->data.args.ethpkt_673.ety_671;
-      event_t this  = mk_ethpkt(dst_674, src_675, ety_676);
-      out_event_t tmp_714  = {.ev = mk_ethpkt(src_675, dst_674, ety_676), .port = ev_in->meta.in_port};
-      out_events[n] = tmp_714;
-      n = n + 1;
-      break;
-    }
-    default: {
-      
-      break;
-    }
-  }
-  return n;
 }
 void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
   switch (ev_out->data.tag) {
@@ -175,6 +151,30 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       break;
     }
   }
+}
+typedef struct {
+  event_t ev;
+  uint32_t port;
+} out_event_t;
+uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
+  uint16_t n  = 0;
+  switch (ev_in->data.tag) {
+    case 1: {
+      uint64_t dst_674  = ev_in->data.args.ethpkt_673.dst_669;
+      uint64_t src_675  = ev_in->data.args.ethpkt_673.src_670;
+      uint16_t ety_676  = ev_in->data.args.ethpkt_673.ety_671;
+      event_t this  = mk_ethpkt(dst_674, src_675, ety_676);
+      out_event_t tmp_714  = {.ev = mk_ethpkt(src_675, dst_674, ety_676), .port = ev_in->meta.in_port};
+      out_events[n] = tmp_714;
+      n = n + 1;
+      break;
+    }
+    default: {
+      
+      break;
+    }
+  }
+  return n;
 }
 
 /********************************************************************************/

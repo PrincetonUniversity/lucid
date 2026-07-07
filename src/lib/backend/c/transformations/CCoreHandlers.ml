@@ -34,9 +34,8 @@ let out_event_def =
 let tout_event = tabstract_cid out_event_cid out_event_def
 let out_event_dty = dty out_event_cid out_event_def
 
-(* the handler writes into a fixed-capacity array of out_events (an in-place
-   mutable aggregate, allowed at the value-semantics boundary like any array) and
-   returns the count. No overflow guard is generated (see header). *)
+(* the handler's output: a fixed-capacity array of out_events plus a count
+   (no overflow guard -- see header) *)
 let out_events_cap = 64
 let tout_events = tlist tout_event (IConst out_events_cap)
 
@@ -94,28 +93,17 @@ type handler_rec = {
   hbody : statement;
 }
 
-(* Sys.time() -> a read of the current event's meta.timestamp. The driver writes that
-   stamp when it dequeues the event for handling (so it covers both arriving packets and
-   recirculated events). The frontend builtin lowers to a 0-arg call of System.sys_time_cid;
-   we rewrite each such call to `<ev>.meta.timestamp`. *)
-let replace_sys_time ev_exp = object
+(* rewrite the ambient builtins to reads of the current event's meta, which the
+   driver stamps: Sys.time() -> <ev>.meta.timestamp (written at dequeue) and
+   ingress_port -> <ev>.meta.in_port (written at RX, inherited by recirculated
+   events). So the handler takes no extra parameters for either. *)
+let replace_meta_builtins ev_exp = object
   inherit [_] s_map as super
   method! visit_exp () e =
     let e = super#visit_exp () e in
     match e.e with
     | ECall{f = {e = EVar cid; _}; args = []; _} when Cid.equal cid System.sys_time_cid ->
       event_timestamp ev_exp
-    | _ -> e
-end
-
-(* ingress_port -> a read of the current event's meta.in_port (set by the driver at
-   RX, inherited by recirculated events). Mirrors replace_sys_time, so the handler
-   needs no ingress_port parameter -- it reads its ingress from the event. *)
-let replace_ingress_port ev_exp = object
-  inherit [_] s_map as super
-  method! visit_exp () e =
-    let e = super#visit_exp () e in
-    match e.e with
     | EVar cid when Cid.equal cid ingr_cid -> event_in_port ev_exp
     | _ -> e
 end
@@ -143,62 +131,30 @@ let mk_main_handler handlers =
     sret v_n;
   ]
   in
-  (* Sys.time() -> v_ev_in.meta.timestamp; ingress_port -> v_ev_in.meta.in_port
-     (both set by the driver: timestamp at dequeue, in_port at RX). So the handler
-     reads them from the event and takes no ingress_port parameter. *)
-  let merged_body = (replace_sys_time v_ev_in)#visit_statement () merged_body in
-  let merged_body = (replace_ingress_port v_ev_in)#visit_statement () merged_body in
+  let merged_body = (replace_meta_builtins v_ev_in)#visit_statement () merged_body in
   dfun handler_cid handler_ret_ty
     [in_ev_val_param; out_events_param] merged_body
 ;;
 
-let transform_handler last_handler_cid (handlers, decls) decl : (handler_rec list * decls) =
-  match extract_dhandle_opt decl with
-  | None -> (handlers, decls@[decl]) (* not a handler, no change *)
-  | Some(handler_cid, _, params, statement) ->
-    (* a handler. update handlers list *)
-    let handlers = handlers@[{hcid=handler_cid; hparams=params; hbody=statement}] in
-    if (Cid.equal handler_cid last_handler_cid) then (
-      let handler_fun = mk_main_handler handlers in
-      handlers, decls@[handler_fun]
-    )
-    else (* not the last handler, don't keep this handler decl *)
-      handlers, decls
-;;
-
-
 let process decls =
-  (* get id of last handler -- that declaration will become the
-     merged handler *)
-  let last_handler_cid = List.filter_map extract_dhandle_opt decls
-    |> List.map (fun (cid, _, _, _) -> cid)
-    |> List.rev |> List.hd
+  (* merge all handlers into one array-filling event function. Everything the
+     merged handler references precedes the handlers, so it (and the out_event
+     type it uses) can simply go at the end. *)
+  let handlers = List.filter_map extract_dhandle_opt decls
+    |> List.map (fun (cid, _, params, body) -> {hcid=cid; hparams=params; hbody=body})
   in
-  (* merge the handlers into 1 array-filling event function *)
-  let decls = List.fold_left (transform_handler last_handler_cid) ([], []) decls |> snd in
-
-  (* finally, remove the declarations for builtin generate functions, since they're no longer needed *)
-  let decls = List.filter
-    (fun decl ->
-      match decl.d with
-      | DFun(_, cid, _, _, BExtern) ->
-        (* if (Cid.to_id cid |> fst) is in ["generate"; "generate_port"; "generate_switch"; "generate_group"] *)
-        if (List.mem (Cid.to_id cid |> fst) ["generate_self"; "generate_port"; "generate_switch"; "generate_group"]) then false else true
-      | _ -> true)
-    decls
-  in
-  (* declare the out_event type after the `events` type it embeds (and ahead of
-     the handler that uses it). *)
-  let is_events_dty d = match d.d with
-    | DTy(cid, _) -> Cid.equal cid events_cid
+  let is_generate_extern decl = match decl.d with
+    | DFun(_, cid, _, _, BExtern) ->
+      List.mem (Cid.to_id cid |> fst)
+        ["generate_self"; "generate_port"; "generate_switch"; "generate_group"]
     | _ -> false
   in
-  if List.exists is_events_dty decls then
-    List.concat_map
-      (fun d -> if is_events_dty d then [d; out_event_dty] else [d])
-      decls
-  else
-    out_event_dty :: decls  (* no events decl found (shouldn't happen): front *)
+  (* drop the handler decls and the now-unreferenced generate externs *)
+  let decls = List.filter
+    (fun d -> not (is_dhandler d) && not (is_generate_extern d))
+    decls
+  in
+  decls @ [out_event_dty; mk_main_handler handlers]
 ;;
 
 (* ===== phase 2: lower the value-semantic handle_event to the driver ABI ===== *)

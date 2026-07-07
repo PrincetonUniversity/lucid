@@ -165,10 +165,6 @@ typedef struct {
   event_meta meta;
   event_variant_t data;
 } event_t;
-typedef struct {
-  event_t ev;
-  uint32_t port;
-} out_event_t;
 event_t mk_inside_packet(uint32_t src_ip_4037 , uint32_t src_port_4038 ){
   event_t tmp_4331  = {.meta = {.len = 8, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = inside_packet_4039(src_ip_4037, src_port_4038)};
   return tmp_4331;
@@ -232,85 +228,6 @@ uint32_t Array_update_complex_nat_to_port_4036_get_get_memop_32_bit(uint32_t _id
   }
   nat_to_port_4036[(((uint32_t)(_idx)) % 16)] = cell1;
   return ret;
-}
-uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
-  uint16_t n  = 0;
-  switch (ev_in->data.tag) {
-    case 2: {
-      uint32_t src_port_4050  = ev_in->data.args.inside_continue_4041.src_port_4040;
-      event_t this  = mk_inside_continue(src_port_4050);
-      break;
-    }
-    case 4: {
-      uint32_t dst_ip_4051  = ev_in->data.args.outside_continue_4046.dst_ip_4044;
-      uint32_t dst_port_4052  = ev_in->data.args.outside_continue_4046.dst_port_4045;
-      event_t this  = mk_outside_continue(dst_ip_4051, dst_port_4052);
-      break;
-    }
-    case 5: {
-      uint32_t src_ip_4053  = ev_in->data.args.add_to_nat_4049.src_ip_4047;
-      uint32_t src_port_4054  = ev_in->data.args.add_to_nat_4049.src_port_4048;
-      event_t this  = mk_add_to_nat(src_ip_4053, src_port_4054);
-      tuple_1 tmp_4336  = {._0 = src_ip_4053, ._1 = src_port_4054,};
-      uint32_t NAT_port_4055  = ((uint32_t)(hash_32((uint32_t)1234, (uint8_t* )&tmp_4336, 64) & 15));
-      printf("Mapped (ip: %d, port: %d) to port %d", src_ip_4053, src_port_4054, NAT_port_4055);
-      Array_update_complex_nat_to_ip_4035_set_set_memop_32_bit(NAT_port_4055, src_ip_4053, 0);
-      Array_update_complex_nat_to_port_4036_set_set_memop_32_bit(NAT_port_4055, src_port_4054, 0);
-      out_event_t tmp_4337  = {.ev = mk_inside_continue(NAT_port_4055), .port = 4294967295};
-      out_events[n] = tmp_4337;
-      n = n + 1;
-      break;
-    }
-    case 1: {
-      uint32_t src_ip_4056  = ev_in->data.args.inside_packet_4039.src_ip_4037;
-      uint32_t src_port_4057  = ev_in->data.args.inside_packet_4039.src_port_4038;
-      event_t this  = mk_inside_packet(src_ip_4056, src_port_4057);
-      uint8_t ret_4059  = false;
-      tuple_1 tmp_4338  = {._0 = src_ip_4056, ._1 = src_port_4057,};
-      uint32_t idx_4060  = ((uint32_t)(hash_32((uint32_t)1234, (uint8_t* )&tmp_4338, 64) & 15));
-      uint32_t ip_4061  = Array_update_complex_nat_to_ip_4035_get_get_memop_32_bit(idx_4060, 0, 0);
-      uint32_t port_4062  = Array_update_complex_nat_to_port_4036_get_get_memop_32_bit(idx_4060, 0, 0);
-      if (ip_4061 == src_ip_4056) {
-        if (port_4062 == src_port_4057) {
-          ret_4059 = true;
-        }
-      }
-      if (ret_4059 == true) {
-        tuple_1 tmp_4339  = {._0 = src_ip_4056, ._1 = src_port_4057,};
-        uint32_t NAT_port_4064  = ((uint32_t)(hash_32((uint32_t)1234, (uint8_t* )&tmp_4339, 64) & 15));
-        printf("IP already in NAT, maps to port %d", NAT_port_4064);
-        out_event_t tmp_4340  = {.ev = mk_inside_continue(NAT_port_4064), .port = 4294967295};
-        out_events[n] = tmp_4340;
-        n = n + 1;
-      }else {
-        printf("Adding to NAT");
-        out_event_t tmp_4341  = {.ev = mk_add_to_nat(src_ip_4056, src_port_4057), .port = 4294967295};
-        out_events[n] = tmp_4341;
-        n = n + 1;
-      }
-      break;
-    }
-    case 3: {
-      uint32_t dst_port_4065  = ev_in->data.args.outside_packet_4043.dst_port_4042;
-      event_t this  = mk_outside_packet(dst_port_4065);
-      uint32_t ip_4066  = Array_update_complex_nat_to_ip_4035_get_get_memop_32_bit(dst_port_4065, 0, 0);
-      uint32_t port_4067  = Array_update_complex_nat_to_port_4036_get_get_memop_32_bit(dst_port_4065, 0, 0);
-      printf("Mapped port %d to (ip: %d, port: %d)", dst_port_4065, ip_4066, port_4067);
-      if (ip_4066 == 0) {
-        printf("dropped");
-      }else {
-        out_event_t tmp_4342  = {.ev = mk_outside_continue(ip_4066, port_4067), .port = 4294967295};
-        out_events[n] = tmp_4342;
-        n = n + 1;
-      }
-      break;
-    }
-    default: {
-      
-      break;
-    }
-  }
-  return n;
 }
 uint8_t parse_event(packet_t*  packet , event_t*  next_event ){
   skip_bits(packet, 32);
@@ -438,6 +355,89 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       break;
     }
   }
+}
+typedef struct {
+  event_t ev;
+  uint32_t port;
+} out_event_t;
+uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
+  uint16_t n  = 0;
+  switch (ev_in->data.tag) {
+    case 2: {
+      uint32_t src_port_4050  = ev_in->data.args.inside_continue_4041.src_port_4040;
+      event_t this  = mk_inside_continue(src_port_4050);
+      break;
+    }
+    case 4: {
+      uint32_t dst_ip_4051  = ev_in->data.args.outside_continue_4046.dst_ip_4044;
+      uint32_t dst_port_4052  = ev_in->data.args.outside_continue_4046.dst_port_4045;
+      event_t this  = mk_outside_continue(dst_ip_4051, dst_port_4052);
+      break;
+    }
+    case 5: {
+      uint32_t src_ip_4053  = ev_in->data.args.add_to_nat_4049.src_ip_4047;
+      uint32_t src_port_4054  = ev_in->data.args.add_to_nat_4049.src_port_4048;
+      event_t this  = mk_add_to_nat(src_ip_4053, src_port_4054);
+      tuple_1 tmp_4336  = {._0 = src_ip_4053, ._1 = src_port_4054,};
+      uint32_t NAT_port_4055  = ((uint32_t)(hash_32((uint32_t)1234, (uint8_t* )&tmp_4336, 64) & 15));
+      printf("Mapped (ip: %d, port: %d) to port %d", src_ip_4053, src_port_4054, NAT_port_4055);
+      Array_update_complex_nat_to_ip_4035_set_set_memop_32_bit(NAT_port_4055, src_ip_4053, 0);
+      Array_update_complex_nat_to_port_4036_set_set_memop_32_bit(NAT_port_4055, src_port_4054, 0);
+      out_event_t tmp_4337  = {.ev = mk_inside_continue(NAT_port_4055), .port = 4294967295};
+      out_events[n] = tmp_4337;
+      n = n + 1;
+      break;
+    }
+    case 1: {
+      uint32_t src_ip_4056  = ev_in->data.args.inside_packet_4039.src_ip_4037;
+      uint32_t src_port_4057  = ev_in->data.args.inside_packet_4039.src_port_4038;
+      event_t this  = mk_inside_packet(src_ip_4056, src_port_4057);
+      uint8_t ret_4059  = false;
+      tuple_1 tmp_4338  = {._0 = src_ip_4056, ._1 = src_port_4057,};
+      uint32_t idx_4060  = ((uint32_t)(hash_32((uint32_t)1234, (uint8_t* )&tmp_4338, 64) & 15));
+      uint32_t ip_4061  = Array_update_complex_nat_to_ip_4035_get_get_memop_32_bit(idx_4060, 0, 0);
+      uint32_t port_4062  = Array_update_complex_nat_to_port_4036_get_get_memop_32_bit(idx_4060, 0, 0);
+      if (ip_4061 == src_ip_4056) {
+        if (port_4062 == src_port_4057) {
+          ret_4059 = true;
+        }
+      }
+      if (ret_4059 == true) {
+        tuple_1 tmp_4339  = {._0 = src_ip_4056, ._1 = src_port_4057,};
+        uint32_t NAT_port_4064  = ((uint32_t)(hash_32((uint32_t)1234, (uint8_t* )&tmp_4339, 64) & 15));
+        printf("IP already in NAT, maps to port %d", NAT_port_4064);
+        out_event_t tmp_4340  = {.ev = mk_inside_continue(NAT_port_4064), .port = 4294967295};
+        out_events[n] = tmp_4340;
+        n = n + 1;
+      }else {
+        printf("Adding to NAT");
+        out_event_t tmp_4341  = {.ev = mk_add_to_nat(src_ip_4056, src_port_4057), .port = 4294967295};
+        out_events[n] = tmp_4341;
+        n = n + 1;
+      }
+      break;
+    }
+    case 3: {
+      uint32_t dst_port_4065  = ev_in->data.args.outside_packet_4043.dst_port_4042;
+      event_t this  = mk_outside_packet(dst_port_4065);
+      uint32_t ip_4066  = Array_update_complex_nat_to_ip_4035_get_get_memop_32_bit(dst_port_4065, 0, 0);
+      uint32_t port_4067  = Array_update_complex_nat_to_port_4036_get_get_memop_32_bit(dst_port_4065, 0, 0);
+      printf("Mapped port %d to (ip: %d, port: %d)", dst_port_4065, ip_4066, port_4067);
+      if (ip_4066 == 0) {
+        printf("dropped");
+      }else {
+        out_event_t tmp_4342  = {.ev = mk_outside_continue(ip_4066, port_4067), .port = 4294967295};
+        out_events[n] = tmp_4342;
+        n = n + 1;
+      }
+      break;
+    }
+    default: {
+      
+      break;
+    }
+  }
+  return n;
 }
 
 /********************************************************************************/

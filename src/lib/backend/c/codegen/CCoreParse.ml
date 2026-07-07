@@ -1,38 +1,26 @@
 (* the packet (de)serialization codec: parser + deparser, each in two phases.
 
-   The parser and deparser are duals over one shared bytes/packet substrate (the
-   packet_t type, the cursor, ememcpy, the size_of_ty byte count). The parser
-   *consumes* the input packet with Peek/Skip; the deparser *produces* an output
-   packet with Write, prepending to the front.
+   The parser and deparser are duals over one packet substrate: the parser
+   *consumes* the input with Read/Peek/Skip ops, the deparser *produces* an
+   output with Write ops that prepend to the front.
 
-   Phase 1 (process): produce the *value-semantic* forms, ABOVE the
-     value-semantics boundary.
-       parser   -- the unparsed packet is the opaque bytes ADT (TPacket);
-                   reads/peeks/skips become Peek/Skip ops that thread the bytes as
-                   a value; a parser returns (ok, event); generate becomes
-                   "return (bytes_ok pkt, event)" and drop "return (false, _)".
-       deparser -- synthesize deparse_event from the event definitions: each event
-                   arm writes its fields (and, for background events, an ethernet
-                   frame + event tag) with Write ops threading an output bytes value.
+   Phase 1 (process) -- pointer-free forms:
+       parser   -- the unparsed packet is the opaque TPacket; parse.read/peek/skip
+                   calls become Read/Peek/Skip ops on it; a parser returns
+                   (ok, event): generate becomes "return (bytes_ok pkt, event)",
+                   drop "return (false, _)".
+       deparser -- deparse_event is synthesized from the event variant's arms:
+                   each arm Writes its fields (and, for background events, the
+                   event tag + ethernet framing).
 
-   Phase 2 (lower): lower both value-semantic forms to the pointer form -- the
-     packet_t record with start/cursor/end pointers.
-       parser   -- Peek/Skip become skip/peek/read helpers and the (events*
-                   out-param, int8 return) calling convention. A read shows up at
-                   the waist as the pair "s = peek<ty>(pkt); pkt = skip<ty>(pkt)",
-                   which this phase fuses back into a single read_<ty>(packet).
-       deparser -- each Write becomes "cursor -= sizeof(ty); memcpy(cursor, &v, ..)";
-                   the by-value event param becomes events*, the return becomes void.
+   Phase 2 (lower) -- the C form: packet_t (a start/cursor/end/bit_off view over
+     the driver's buffer) plus four width-generic bit-codec helpers
+     (read/peek/skip/write_bits). Each op lowers 1:1 to a helper call; the
+     parser gets the (packet_t*, event_t* out-param) -> int8 calling convention,
+     the deparser gets (event_t*, packet_t ptr) -> void.
 
-   Bytestrings (lowered form):
-     typedef struct packet_t { uint8_t* start; uint8_t* cursor; uint8_t* end; } packet_t;
-   Parse helpers (lowered form): skip/peek/read, one instance per type read.
-
-   TODO (deparser):
-     - support payloads (currently only the event headers are serialized).
-     - in Phase 2 the writes are inlined; a later pass could emit write_<ty>
-       helpers (the dual of read_<ty>) for symmetry with the parser.
-*)
+   TODO: deparser payload support (currently only event headers serialize;
+   payload bytes are carried by the driver's buffer copy). *)
 open CCoreSyntax
 open CCoreExceptions
 open CCoreUtils
@@ -70,7 +58,7 @@ let to_tpacket =
 
 (* name of the builtin a call expression invokes, if any *)
 let parse_op_name e = match e.e with
-  | ECall{f; call_kind=CFun} -> (try Some (eval_exp f |> extract_vsymbol |> Cid.names) with _ -> None)
+  | ECall{f; call_kind=CFun} -> (try Some (extract_evar f |> fst |> Cid.names) with _ -> None)
   | _ -> None
 ;;
 
@@ -88,11 +76,8 @@ let drop_return = sret (etuple [eval (vbool false); eval no_event])
    has already stripped the Payload.t event arg + the generate arg that used it, leaving
    the `Payload.t x = Payload.parse(pkt)` parser local dead, so we drop it here. *)
 let is_payload_parse e = match parse_op_name e with
-  | Some names ->
-    let last = match List.rev names with x :: _ -> x | [] -> "" in
-    last = "parse" && List.exists (fun n -> n = "Payload" || n = "Payload_parse") names
-    || String.concat "_" names = "Payload_parse"
-  | None -> false
+  | Some ["Payload"; "parse"] | Some ["Payload_parse"] -> true
+  | _ -> false
 ;;
 
 (* rewrite the parse actions (which all operate on the ambient packet variable
@@ -144,37 +129,29 @@ let process_parse decls =
 ;;
 
 (* ------------------------------- deparser -------------------------------- *)
-(* synthesize the value-semantic deparse_event from the event definitions:
+(* synthesize deparse_event from the event variant's arms. Writes prepend, so
+   everything is emitted back-to-front and the wire order is
+   [dst mac][src mac][ethertype][tag][fields]:
 
      fn bytes deparse_event(event ev_out, bytes out) {
        match (ev_out) {
-         | foo(a, b) ->                 // arm fields are always written
-             out = write<tb>(out, b);   //   prepend builds back-to-front, so
-             out = write<ta>(out, a);   //   write fields in reverse decl order
-             if (ev_out.meta.is_packet == 0) {  // background events also get the
-               out = write<u16>(out, foo_tag);  //   event tag (per-arm constant)
-               out = write<u16>(out, 0);        //   ethertype, then the
-               out = write<u32>(out, 0);        //   12 zero bytes of dst+src mac
-               out = write<u32>(out, 0);
-               out = write<u32>(out, 0);
-             }
+         | foo(a, b) ->
+             write<tb>(out, b);  write<ta>(out, a);   // fields, last first
+             if (ev_out.meta.is_packet == 0) {        // background events also
+               write<u16>(out, foo_tag);              //   get the tag + eth
+               ..ethernet preamble writes..           //   framing (packet
+             }                                        //   events: fields only)
              return out;
        }
      }
 
-   The per-arm field types and the event tag come from the variant type (the
-   single source of truth). Whether the tag + ethernet preamble are written is
-   gated at runtime on the event's meta.is_packet, which mk_event stamped at
-   construction -- a packet event (is_packet=1) serializes just its fields, a
-   background event (is_packet=0) gets the framing. The event match itself is
-   lowered later by CCoreVariants, exactly like a handler's match. *)
+   Arm fields and tags come from the variant type; is_packet is read at runtime
+   from the event's meta (stamped by mk_event). The match itself is lowered
+   later by CCoreVariants, like any other event match. *)
 
-(* the ethernet preamble prepended before background (non-packet) events: the same
-   framing the interpreter writes (InterpDeparsing.lucid_eth_fields) so a serialized
-   background event is byte-identical -- dst mac = 1, src mac = 2 (each 48 bits) and
-   ethertype = LUCID_ETHERTY (666). Emitted *after* the event tag; since writes
-   prepend, the mac ends up at the very front of the frame:
-   [dst mac][src mac][ethertype][tag][fields]. *)
+(* the ethernet framing for background events -- the same bytes the interpreter
+   writes (InterpDeparsing.lucid_eth_fields): dst mac = 1, src mac = 2 (48 bits
+   each), ethertype = LUCID_ETHERTY (666). *)
 let eth_preamble_writes do_write =
   [
     do_write (tint 16) (eval (vint Constants.lucid_ety_int 16));  (* ethertype *)
@@ -184,10 +161,7 @@ let eth_preamble_writes do_write =
 ;;
 
 let process_deparse decls =
-  (* recover the events from the variant type definition (the single source of
-     truth); is_packet is no longer carried here -- it's read at runtime from the
-     event's meta (see below). *)
-  let event_defs =
+  let arms =
     match CCoreVariants.find_variant_sigs decls with
     | Some sigs -> List.map CCoreVariants.arm_of_sig sigs
     | None -> err "[CCoreParse] no event_variant type definition found"
@@ -198,16 +172,10 @@ let process_deparse decls =
   let do_write ty v = sunit (ewrite ty bufv v) in
   let mk_arm (arm : CCoreVariants.arm) =
     let fields = arm.params in
-    (* prepend builds back-to-front: write the last field first so that field
-       order on the wire matches declaration order. *)
+    (* last field first, so wire order matches declaration order *)
     let field_writes =
       List.rev_map (fun (fid, fty) -> do_write fty (evar fid fty)) fields
     in
-    (* the event tag, then the ethernet preamble. With prepend semantics the tag
-       lands immediately before the fields and the mac/ethertype in front of it:
-       [mac][ethertype][tag][fields]. Only non-packet (background) events get
-       this framing -- gated at runtime on the event's meta.is_packet, which
-       mk_event stamped at construction (rather than a per-arm constant). *)
     let preamble_writes =
       (do_write (tint event_tag_size)
          (eval (vint arm.tag event_tag_size)))
@@ -221,7 +189,7 @@ let process_deparse decls =
     let pat = PVariant { event_id = arm.ctor; params = arm.params } in
     ([ pat ], body)
   in
-  let body = smatch [ event_data ev_out ] (List.map mk_arm event_defs) in
+  let body = smatch [ event_data ev_out ] (List.map mk_arm arms) in
   let deparse_decl =
     dfun deparse_id tpacket [ (ev_out_cid, tevent); (buf_out_cid, tpacket) ] body
   in
@@ -229,8 +197,6 @@ let process_deparse decls =
 ;;
 
 (* ------------------------------- combined -------------------------------- *)
-(* both Phase-1 syntheses run back-to-back: produce the value-semantic parser,
-   then the value-semantic deparser (which reads the event definitions). *)
 let process decls = process_deparse (process_parse decls)
 
 
@@ -333,36 +299,29 @@ let call_peek  ty bs   = ecast ty (ecall peek_bits_fun  [bs; nbits_arg ty])
 let call_skip  ty bs   = ecall skip_bits_fun  [bs; nbits_arg ty]
 let call_write ty bs v = ecall write_bits_fun [bs; ecast (tint 64) v; nbits_arg ty]
 
-let parser_out_event_param = cid"next_event", tref tevent;;
-let parser_out_event = param_evar parser_out_event_param;;
 let parser_ret_ty = tint 8
-let parser_ret_cont = eval@@vint 1 8
 let parser_ret_drop = eval@@vint 0 8
 
 
 
 
-(* lower the value-semantic bytes ops to packet_t* helper calls. The packet is a
-   cursor resource mutated in place, so each op maps 1:1 to its helper call.
+(* lower the bytes ops to packet_t* helper calls -- each op maps 1:1.
    Read/Peek are lowered at the *expression* level (not as a bare SAssign rhs) so
    the rewrite survives a wrapping op -- notably the width mask CCoreMaskWidths
    inserts around a sub-byte read (`read<int7>(p) & 127`). Skip (a unit op) and
-   the return are handled at the statement level.
-   [read_tys] accumulates the types read so lower_parse can emit the corresponding
-   skip/peek/read helpers. *)
-let lower_parser_body pkt out_event read_tys body =
+   the return are handled at the statement level. *)
+let lower_parser_body pkt out_event body =
   let pktv = evar pkt (tref packet_t) in
   let visitor = object (_) inherit [_] s_map as super
     method! visit_exp () e =
       let e = super#visit_exp () e in
       match e.e with
-      | EOp(Read ty, _) -> read_tys := ty :: !read_tys; call_read ty pktv
-      | EOp(Peek ty, _) -> read_tys := ty :: !read_tys; call_peek ty pktv
+      | EOp(Read ty, _) -> call_read ty pktv
+      | EOp(Peek ty, _) -> call_peek ty pktv
       | _ -> e
     method! visit_statement () stmt =
       match stmt.s with
       | SUnit { e = EOp(Skip ty, _); _ } ->
-          read_tys := ty :: !read_tys;
           sunit (call_skip ty pktv)
       (* return (ok, ev): drop -> return 0; generate -> *next_event = ev; return ok *)
       | SRet(Some { e = ETuple [ ok_e; ev ]; _ }) -> (
@@ -379,7 +338,6 @@ let lower_parser_body pkt out_event read_tys body =
 ;;
 
 let lower_parser id ret_ty params body =
-  let read_tys = ref [] in
   (* the parser's return type is (bool, event); take the (already-lowered) event
      type from it so the out-event param uses event_t, not raw TVariant. *)
   let ev_ty = match ret_ty.raw_ty with
@@ -392,27 +350,20 @@ let lower_parser id ret_ty params body =
     | Some (pid, _) -> pid
     | None -> err "[CCoreParse.lower] parser has no bytes parameter"
   in
-  let body = lower_parser_body pkt out_event read_tys body in
+  let body = lower_parser_body pkt out_event body in
   (* bytes param -> packet_t* ; add the out-event param ; return int8 *)
   let params = List.map (fun (pid, ty) -> if is_tpacket ty then (pid, tref packet_t) else (pid, ty)) params in
   let params = params @ [out_event_param] in
-  !read_tys, dfun id parser_ret_ty params body
+  dfun id parser_ret_ty params body
 ;;
 
-(* lower the parser bodies and return the types they read. *)
 let lower_parse_bodies decls =
-  let read_tys = ref [] in
-  let decls = List.map
+  List.map
     (fun decl ->
       match extract_dparser_opt decl with
       | None -> decl
-      | Some(id, ret_ty, params, body) ->
-        let rts, d = lower_parser id ret_ty params body in
-        read_tys := (!read_tys) @ rts;
-        d)
+      | Some(id, ret_ty, params, body) -> lower_parser id ret_ty params body)
     decls
-  in
-  MiscUtils.unique_list_of_eq (equiv_tys) !read_tys, decls
 ;;
 
 (* ------------------------------- deparser -------------------------------- *)
@@ -429,25 +380,20 @@ let deref_event_param ev_cid =
   end
 ;;
 
-let rec lower_deparse_body write_tys bufv stmt =
+let rec lower_deparse_body bufv stmt =
   match stmt.s with
-  | SSeq (a, b) -> sseq (lower_deparse_body write_tys bufv a) (lower_deparse_body write_tys bufv b)
-  | SMatch (es, brs) -> smatch es (List.map (fun (ps, b) -> (ps, lower_deparse_body write_tys bufv b)) brs)
-  | SIf (c, a, b) -> sif c (lower_deparse_body write_tys bufv a) (lower_deparse_body write_tys bufv b)
-  (* write<ty>(out, v)  -->  write_<ty>(out, v): prepend n big-endian bytes of v
-     in front of the cursor (which sits at the header/payload boundary on entry).
-     The write helper owns the cursor decrement, the network-order swap, and the
-     by-value temp, so this is a single call. *)
-  | SUnit { e = EOp (Write ty, [ _; v ]); _ } ->
-    write_tys := ty :: !write_tys;
-    sunit (call_write ty bufv v)
+  | SSeq (a, b) -> sseq (lower_deparse_body bufv a) (lower_deparse_body bufv b)
+  | SMatch (es, brs) -> smatch es (List.map (fun (ps, b) -> (ps, lower_deparse_body bufv b)) brs)
+  | SIf (c, a, b) -> sif c (lower_deparse_body bufv a) (lower_deparse_body bufv b)
+  (* write<ty>(out, v) --> write_bits(out, v, n): prepend v's bits in front of
+     the cursor (which sits at the header/payload boundary on entry) *)
+  | SUnit { e = EOp (Write ty, [ _; v ]); _ } -> sunit (call_write ty bufv v)
   (* return out  -->  return; (the driver ignores the result) *)
   | SRet _ -> sret_none
   | _ -> stmt
 ;;
 
-let lower_deparse_fun write_tys id ret params body =
-  ignore ret;
+let lower_deparse_fun id params body =
   let ev_cid, ev_ty =
     match List.find_opt (fun (_, ty) -> not (is_tpacket ty)) params with
     | Some p -> p
@@ -461,10 +407,8 @@ let lower_deparse_fun write_tys id ret params body =
   let bufv = evar bs_cid (tref packet_t) in
   (* event param: by value -> by reference, derefing its uses *)
   let body = (deref_event_param ev_cid)#visit_statement () body in
-  let body = lower_deparse_body write_tys bufv body in
-  (* no seed needed: the cursor already sits at the header/payload boundary on
-     entry, and the writes decrement it directly. *)
-  (* bytes param -> packet_t* ; event param -> events* ; return void *)
+  let body = lower_deparse_body bufv body in
+  (* bytes param -> packet_t* ; event param -> event_t* ; return void *)
   let params =
     List.map
       (fun (c, ty) ->
@@ -476,34 +420,24 @@ let lower_deparse_fun write_tys id ret params body =
   dfun id tunit params body
 ;;
 
-(* lower deparse_event and return the types it writes (so the write helpers can be
-   emitted alongside the read helpers). *)
 let lower_deparse decls =
-  let write_tys = ref [] in
-  let decls =
-    List.map
-      (fun decl ->
-        match decl.d with
-        | DFun (FNormal, id, ret, params, BStatement body) when Cid.equal id deparse_id ->
-          lower_deparse_fun write_tys id ret params body
-        | _ -> decl)
-      decls
-  in
-  MiscUtils.unique_list_of_eq equiv_tys !write_tys, decls
+  List.map
+    (fun decl ->
+      match decl.d with
+      | DFun (FNormal, id, _, params, BStatement body) when Cid.equal id deparse_id ->
+        lower_deparse_fun id params body
+      | _ -> decl)
+    decls
 ;;
 
 (* ------------------------------- combined -------------------------------- *)
-(* lower both halves to the packet_t pointer form, then emit packet_t and the four
-   generic bit-packed codec helpers (read/peek/skip/write_bits) once, ahead of the
-   rest. lower_deparse only needs the event match already lowered (CCoreVariants.lower);
-   the two touch disjoint functions (deparse_event vs the parsers), so order between
-   them is immaterial. The read_tys/write_tys the lowerings still return are now unused
-   (the helpers are width-generic, not per-type). *)
-(* The event carries no packet buffer of its own: it is a value-semantic {meta; data},
-   and the driver's queue element (the mbuf / static buffer) owns the bytes. packet_t
-   is only ever a transient view the driver builds over that buffer to parse/deparse. *)
+(* lower both halves to the packet_t pointer form, then emit packet_t and the
+   four bit-codec helpers once, ahead of the rest. (Requires the event matches
+   already lowered -- CCoreVariants.lower runs first.) The event carries no
+   packet buffer of its own: the driver's queue element owns the bytes, and
+   packet_t is a transient view over that buffer. *)
 let lower decls =
-  let _write_tys, decls = lower_deparse decls in
-  let _read_tys, decls = lower_parse_bodies decls in
+  let decls = lower_deparse decls in
+  let decls = lower_parse_bodies decls in
   decl_tabstract packet_t :: codec_helpers @ decls
 ;;

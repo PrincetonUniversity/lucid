@@ -119,10 +119,6 @@ typedef struct {
   event_meta meta;
   event_variant_t data;
 } event_t;
-typedef struct {
-  event_t ev;
-  uint32_t port;
-} out_event_t;
 event_t mk_ethpkt(uint64_t dst_752 , uint64_t src_753 , uint16_t ety_754 ){
   event_t tmp_802  = {.meta = {.len = 14, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = ethpkt_756(dst_752, src_753, ety_754)};
   return tmp_802;
@@ -136,6 +132,30 @@ uint8_t parse_event(packet_t*  pkt , event_t*  next_event ){
   (*(next_event)) = mk_ethpkt(dst_752, src_753, ety_754);
   return pkt->cursor <= pkt->end;
 }
+void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
+  switch (ev_out->data.tag) {
+    case 1: {
+      uint64_t dst_752  = ev_out->data.args.ethpkt_756.dst_752;
+      uint64_t src_753  = ev_out->data.args.ethpkt_756.src_753;
+      uint16_t ety_754  = ev_out->data.args.ethpkt_756.ety_754;
+      write_bits(buf_out, ((uint64_t)(ety_754)), 16);
+      write_bits(buf_out, ((uint64_t)(src_753)), 48);
+      write_bits(buf_out, ((uint64_t)(dst_752)), 48);
+      if ((ev_out->meta.is_packet) == (0)) {
+        write_bits(buf_out, ((uint64_t)(1)), 16);
+        write_bits(buf_out, ((uint64_t)(666)), 16);
+        write_bits(buf_out, ((uint64_t)(2)), 48);
+        write_bits(buf_out, ((uint64_t)(1)), 48);
+      }
+      return ;
+      break;
+    }
+  }
+}
+typedef struct {
+  event_t ev;
+  uint32_t port;
+} out_event_t;
 uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
   uint16_t n  = 0;
   switch (ev_in->data.tag) {
@@ -157,26 +177,6 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
     }
   }
   return n;
-}
-void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
-  switch (ev_out->data.tag) {
-    case 1: {
-      uint64_t dst_752  = ev_out->data.args.ethpkt_756.dst_752;
-      uint64_t src_753  = ev_out->data.args.ethpkt_756.src_753;
-      uint16_t ety_754  = ev_out->data.args.ethpkt_756.ety_754;
-      write_bits(buf_out, ((uint64_t)(ety_754)), 16);
-      write_bits(buf_out, ((uint64_t)(src_753)), 48);
-      write_bits(buf_out, ((uint64_t)(dst_752)), 48);
-      if ((ev_out->meta.is_packet) == (0)) {
-        write_bits(buf_out, ((uint64_t)(1)), 16);
-        write_bits(buf_out, ((uint64_t)(666)), 16);
-        write_bits(buf_out, ((uint64_t)(2)), 48);
-        write_bits(buf_out, ((uint64_t)(1)), 48);
-      }
-      return ;
-      break;
-    }
-  }
 }
 
 /********************************************************************************/

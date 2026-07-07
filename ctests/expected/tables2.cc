@@ -132,10 +132,6 @@ typedef struct {
   event_meta meta;
   event_variant_t data;
 } event_t;
-typedef struct {
-  event_t ev;
-  uint32_t port;
-} out_event_t;
 event_t mk_do_set(uint32_t k_4324 , uint32_t v_4325 ){
   event_t tmp_4596  = {.meta = {.len = 8, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = do_set_4326(k_4324, v_4325)};
   return tmp_4596;
@@ -276,58 +272,6 @@ res_t_4313 lookup_global_cached_table_2_4323(uint32_t key ){
     }
   }
 }
-uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
-  uint16_t n  = 0;
-  switch (ev_in->data.tag) {
-    case 1: {
-      uint32_t k_4329  = ev_in->data.args.do_set_4326.k_4324;
-      uint32_t v_4330  = ev_in->data.args.do_set_4326.v_4325;
-      event_t this  = mk_do_set(k_4329, v_4330);
-      uint8_t idx_4331  = hash_32((uint32_t)1, (uint8_t* )&k_4329, 32);
-      printf("hash size arg: %d", 8);
-      printf("[set] index: %d", idx_4331);
-      uint32_t cache_key_4332  = Array_update_complex_global_cached_table_0_4321_combined_memop_WriteCacheTable_set_if_empty_WriteCacheTable_set_if_empty_4592(idx_4331, k_4329, k_4329);
-      if (cache_key_4332 == k_4329) {
-        printf("installing entry for %d into CACHE at index %d", k_4329, idx_4331);
-        Array_update_complex_global_cached_table_1_4322_set_set_memop_32_bit(idx_4331, v_4330, 0);
-      }else {
-        printf("installing entry for %d into TABLE", k_4329);
-        install_global_cached_table_2_4323(k_4329, tag_WriteCacheTable_hit_acn_4315, v_4330);
-      }
-      false;
-      break;
-    }
-    case 2: {
-      uint32_t k_4333  = ev_in->data.args.do_get_4328.k_4327;
-      event_t this  = mk_do_get(k_4333);
-      uint32_t WriteCacheTable_get_ret_0_4334  = 0;
-      uint8_t WriteCacheTable_get_ret_1_4335  = false;
-      uint8_t idx_4336  = hash_32((uint32_t)1, (uint8_t* )&k_4333, 32);
-      uint32_t stored_key_4337  = Array_update_complex_global_cached_table_0_4321_get_get_memop_32_bit(idx_4336, 0, 0);
-      if (stored_key_4337 == k_4333) {
-        uint32_t stored_val_4338  = Array_update_complex_global_cached_table_1_4322_get_get_memop_32_bit(idx_4336, 0, 0);
-        WriteCacheTable_get_ret_0_4334 = stored_val_4338;
-        WriteCacheTable_get_ret_1_4335 = true;
-      }else {
-        
-        res_t_4313 tup_4595  = lookup_global_cached_table_2_4323(k_4333);
-        WriteCacheTable_get_ret_0_4334 = tup_4595._0;
-        WriteCacheTable_get_ret_1_4335 = tup_4595._1;
-      }
-      if (WriteCacheTable_get_ret_1_4335) {
-        printf("key: %d result: %d", k_4333, WriteCacheTable_get_ret_0_4334);
-      }else {
-        printf("key: %d result: NOT FOUND", k_4333);
-      }
-      break;
-    }
-    default: {
-      
-      break;
-    }
-  }
-  return n;
-}
 uint8_t parse_event(packet_t*  packet , event_t*  next_event ){
   skip_bits(packet, 32);
   skip_bits(packet, 16);
@@ -394,6 +338,62 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       break;
     }
   }
+}
+typedef struct {
+  event_t ev;
+  uint32_t port;
+} out_event_t;
+uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
+  uint16_t n  = 0;
+  switch (ev_in->data.tag) {
+    case 1: {
+      uint32_t k_4329  = ev_in->data.args.do_set_4326.k_4324;
+      uint32_t v_4330  = ev_in->data.args.do_set_4326.v_4325;
+      event_t this  = mk_do_set(k_4329, v_4330);
+      uint8_t idx_4331  = hash_32((uint32_t)1, (uint8_t* )&k_4329, 32);
+      printf("hash size arg: %d", 8);
+      printf("[set] index: %d", idx_4331);
+      uint32_t cache_key_4332  = Array_update_complex_global_cached_table_0_4321_combined_memop_WriteCacheTable_set_if_empty_WriteCacheTable_set_if_empty_4592(idx_4331, k_4329, k_4329);
+      if (cache_key_4332 == k_4329) {
+        printf("installing entry for %d into CACHE at index %d", k_4329, idx_4331);
+        Array_update_complex_global_cached_table_1_4322_set_set_memop_32_bit(idx_4331, v_4330, 0);
+      }else {
+        printf("installing entry for %d into TABLE", k_4329);
+        install_global_cached_table_2_4323(k_4329, tag_WriteCacheTable_hit_acn_4315, v_4330);
+      }
+      false;
+      break;
+    }
+    case 2: {
+      uint32_t k_4333  = ev_in->data.args.do_get_4328.k_4327;
+      event_t this  = mk_do_get(k_4333);
+      uint32_t WriteCacheTable_get_ret_0_4334  = 0;
+      uint8_t WriteCacheTable_get_ret_1_4335  = false;
+      uint8_t idx_4336  = hash_32((uint32_t)1, (uint8_t* )&k_4333, 32);
+      uint32_t stored_key_4337  = Array_update_complex_global_cached_table_0_4321_get_get_memop_32_bit(idx_4336, 0, 0);
+      if (stored_key_4337 == k_4333) {
+        uint32_t stored_val_4338  = Array_update_complex_global_cached_table_1_4322_get_get_memop_32_bit(idx_4336, 0, 0);
+        WriteCacheTable_get_ret_0_4334 = stored_val_4338;
+        WriteCacheTable_get_ret_1_4335 = true;
+      }else {
+        
+        res_t_4313 tup_4595  = lookup_global_cached_table_2_4323(k_4333);
+        WriteCacheTable_get_ret_0_4334 = tup_4595._0;
+        WriteCacheTable_get_ret_1_4335 = tup_4595._1;
+      }
+      if (WriteCacheTable_get_ret_1_4335) {
+        printf("key: %d result: %d", k_4333, WriteCacheTable_get_ret_0_4334);
+      }else {
+        printf("key: %d result: NOT FOUND", k_4333);
+      }
+      break;
+    }
+    default: {
+      
+      break;
+    }
+  }
+  return n;
 }
 
 /********************************************************************************/
