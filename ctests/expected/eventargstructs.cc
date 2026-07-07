@@ -157,7 +157,7 @@ void install_my_table_1179(uint32_t key , action_enum action , uint32_t const_ar
   for (int _idx = 0; _idx < 32; _idx++) {
     if ((my_table_1179.entries[_idx].valid) == (false)) {
       _continue = false;
-      cellty_my_table_1179 tmp_1268  = {.valid = true, .key = key, .mask = key, .action_tag = action, .action_arg = const_arg};
+      cellty_my_table_1179 tmp_1268  = {.valid = true, .key = key, .mask = 4294967295, .action_tag = action, .action_arg = const_arg};
       my_table_1179.entries[_idx] = tmp_1268;
     }  if (!_continue) break;
     
@@ -177,27 +177,22 @@ void install_ternary_my_table_1179(uint32_t key , uint32_t mask , action_enum ac
   return ;
 }
 pair_t_1174 lookup_my_table_1179(uint32_t key , pair_t_1174 arg ){
-  pair_t_1174 rv  = {._0 = 0, ._1 = 0};
+  for (int _idx = 0; _idx < 32; _idx++) {
+    if ((my_table_1179.entries[_idx].valid) && ((key & my_table_1179.entries[_idx].mask) == (my_table_1179.entries[_idx].key & my_table_1179.entries[_idx].mask))) {
+      switch (my_table_1179.entries[_idx].action_tag) {
+        case tag_add_pair_1178: {
+          return add_pair_1178(my_table_1179.entries[_idx].action_arg, arg);
+          break;
+        }
+      }
+    }
+  }
   switch (my_table_1179._default.action_tag) {
-    case tag_add_pair_1178: {
-      rv = add_pair_1178(my_table_1179._default.action_arg, arg);
+    default: {
+      return add_pair_1178(my_table_1179._default.action_arg, arg);
       break;
     }
   }
-  bool _continue = true;
-  for (int _idx = 0; _idx < 32; _idx++) {
-    switch (my_table_1179.entries[_idx].action_tag) {
-      case tag_add_pair_1178: {
-        if ((key & my_table_1179.entries[_idx].mask) == (my_table_1179.entries[_idx].key & my_table_1179.entries[_idx].mask)) {
-          rv = add_pair_1178(my_table_1179.entries[_idx].action_arg, arg);
-          _continue = false;
-        }
-        break;
-      }
-    }  if (!_continue) break;
-    
-  }
-  return rv;
 }
 uint8_t parse_event(packet_t*  pkt , event_t*  next_event ){
   uint32_t p_0_1180  = ((uint32_t)(read_bits(pkt, 32)));

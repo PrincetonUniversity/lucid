@@ -190,7 +190,6 @@
    CCoreExceptions
    CCoreTransformers
    CoreToCCore
-   CCoreToCore
    CCoreTyper
    CCoreBuiltinCheckers
    CheckFFuns

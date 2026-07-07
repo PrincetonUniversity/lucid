@@ -187,10 +187,9 @@ and unify_ty env ty1 ty2 : env =
 (* derive the type of a value with constant sizes *)
 let rec infer_value value : value = 
   let type_value value = (infer_value value).vty in 
-  let ty = match value.v with 
+  let ty = match value.v with
   (* values may only have have const sizes *)
-  | VUnit -> tunit
-  | VInt{size} -> tint size 
+  | VInt{size} -> tint size
   | VBool _ -> tbool
   | VRecord(labels, es) -> 
     let ts = List.map type_value es in
@@ -204,15 +203,6 @@ let rec infer_value value : value =
   | VBits{ternary; bits} -> ty@@TBits{ternary; len=sz@@List.length bits}
   | VVariant _ -> tevent
   | VSymbol(_, ty) -> ty
-  | VUnion(label, inner_value, ty) ->
-    match (base_type ty).raw_ty with
-    | TUnion(labels, tys) -> (
-      let inf_inner_value = infer_value inner_value in
-      let expected_ty = List.assoc label (List.combine labels tys) in
-      let _ = unify_ty empty_env expected_ty inf_inner_value.vty in
-      ty
-    )
-    | _ -> ty_err "union value does not have the right type for the corresponding member of the union"
   in
   {value with vty=ty}
 ;;

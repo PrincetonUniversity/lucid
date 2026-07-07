@@ -132,10 +132,9 @@ let normalize_matches decls =
 
 (* ensure that record, union, and tuple expressions only appear in declarations *)
 let is_initializer exp = match exp.e with 
-  | EUnion _ -> true 
+  | EUnion _ -> true
   | ERecord _ -> true
   | ETuple _ -> true
-  | EVal({v=VUnion _}) -> true
   | EVal({v=VRecord _}) -> true
   | EVal({v=VTuple _}) -> true
   | _ -> false

@@ -231,7 +231,7 @@ void install_global_cached_table_2_4323(uint32_t key , action_enum action , uint
   for (int _idx = 0; _idx < 1024; _idx++) {
     if ((global_cached_table_2_4323.entries[_idx].valid) == (false)) {
       _continue = false;
-      cellty_global_cached_table_2_4323 tmp_4600  = {.valid = true, .key = key, .mask = key, .action_tag = action, .action_arg = const_arg};
+      cellty_global_cached_table_2_4323 tmp_4600  = {.valid = true, .key = key, .mask = 4294967295, .action_tag = action, .action_arg = const_arg};
       global_cached_table_2_4323.entries[_idx] = tmp_4600;
     }  if (!_continue) break;
     
@@ -251,38 +251,30 @@ void install_ternary_global_cached_table_2_4323(uint32_t key , uint32_t mask , a
   return ;
 }
 res_t_4313 lookup_global_cached_table_2_4323(uint32_t key ){
-  res_t_4313 rv  = {._0 = 0, ._1 = false};
+  for (int _idx = 0; _idx < 1024; _idx++) {
+    if ((global_cached_table_2_4323.entries[_idx].valid) && ((key & global_cached_table_2_4323.entries[_idx].mask) == (global_cached_table_2_4323.entries[_idx].key & global_cached_table_2_4323.entries[_idx].mask))) {
+      switch (global_cached_table_2_4323.entries[_idx].action_tag) {
+        case tag_WriteCacheTable_hit_acn_4315: {
+          return WriteCacheTable_hit_acn_4315(global_cached_table_2_4323.entries[_idx].action_arg);
+          break;
+        }
+        case tag_WriteCacheTable_miss_acn_4317: {
+          return WriteCacheTable_miss_acn_4317(global_cached_table_2_4323.entries[_idx].action_arg);
+          break;
+        }
+      }
+    }
+  }
   switch (global_cached_table_2_4323._default.action_tag) {
     case tag_WriteCacheTable_hit_acn_4315: {
-      rv = WriteCacheTable_hit_acn_4315(global_cached_table_2_4323._default.action_arg);
+      return WriteCacheTable_hit_acn_4315(global_cached_table_2_4323._default.action_arg);
       break;
     }
-    case tag_WriteCacheTable_miss_acn_4317: {
-      rv = WriteCacheTable_miss_acn_4317(global_cached_table_2_4323._default.action_arg);
+    default: {
+      return WriteCacheTable_miss_acn_4317(global_cached_table_2_4323._default.action_arg);
       break;
     }
   }
-  bool _continue = true;
-  for (int _idx = 0; _idx < 1024; _idx++) {
-    switch (global_cached_table_2_4323.entries[_idx].action_tag) {
-      case tag_WriteCacheTable_hit_acn_4315: {
-        if ((key & global_cached_table_2_4323.entries[_idx].mask) == (global_cached_table_2_4323.entries[_idx].key & global_cached_table_2_4323.entries[_idx].mask)) {
-          rv = WriteCacheTable_hit_acn_4315(global_cached_table_2_4323.entries[_idx].action_arg);
-          _continue = false;
-        }
-        break;
-      }
-      case tag_WriteCacheTable_miss_acn_4317: {
-        if ((key & global_cached_table_2_4323.entries[_idx].mask) == (global_cached_table_2_4323.entries[_idx].key & global_cached_table_2_4323.entries[_idx].mask)) {
-          rv = WriteCacheTable_miss_acn_4317(global_cached_table_2_4323.entries[_idx].action_arg);
-          _continue = false;
-        }
-        break;
-      }
-    }  if (!_continue) break;
-    
-  }
-  return rv;
 }
 uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
   uint16_t n  = 0;

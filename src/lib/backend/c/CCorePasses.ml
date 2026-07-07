@@ -25,13 +25,7 @@ let ccore_print_always phase_str decls =
     print_endline ("------------------------")
 ;;
 
-let test_core_translation ds = 
-  (* translate into ccore syntax and back *)
-  let cds = CoreToCCore.translate ds in
-  let ds' = CCoreToCore.translate cds in
-  ds'
-
-let compile ds = 
+let compile ds =
   (*** 1. translate to core syntax *)
   print_endline ("---- translating to core ----");
   let ds = SyntaxToCore.translate_prog ~preserve_user_decls:true ds in

@@ -88,7 +88,25 @@ let table_cell tbl_id key_param mask_param action_param const_arg_param =
   {exp with ety=table_cell_type tbl_id key_param.ety action_param.ety const_arg_param.ety;}
 ;;
 
-let table_instance_type tbl_id acns_enum_ty const_action_arg_ty tbl_cell_ty tbl_len =   
+(* all-ones value of a key type: the exact-match mask.
+   (k & m) == (k' & m) iff k == k' when every bit of m is set. *)
+let rec ones_value ty =
+  let v = match (base_type ty).raw_ty with
+    | TBool -> VBool true
+    | TInt sz when sz >= 63 ->
+      (* wider than an OCaml int; -1 converts to all-ones in C *)
+      VInt {value = -1; size = sz}
+    | TInt sz -> VInt {value = (1 lsl sz) - 1; size = sz}
+    | TRecord(labels, tys) ->
+      VRecord(labels, List.map ones_value tys)
+    | TTuple tys -> VTuple(List.map ones_value tys)
+    | TVec(ele_ty, IConst n) -> VList(List.init n (fun _ -> ones_value ele_ty))
+    | _ -> failwith "[ones_value] unsupported table key type"
+  in
+  {v; vty=ty; vspan=Span.default}
+;;
+
+let table_instance_type tbl_id acns_enum_ty const_action_arg_ty tbl_cell_ty tbl_len =
   (* a table is a struct variable with a default and a list of entries *)
   (* tref@@ *) (* no longer a tref *)
   tabstract_cid
@@ -126,66 +144,66 @@ let table_create (tbl_ty : ty) (def_enum_id : cid) (acn_enum_ty : ty) (def_arg :
    but its easier to just pass them in from the 
    function builder. *)
 let lookup_id tbl_id = Cid.str_cons_plain "lookup" tbl_id ;;
-let table_lookup spec = 
+let table_lookup spec =
   let action_tags = tags_of_actions_enum spec.actions_enum_ty in
   (* note: the table is hard coded into the function, not a parameter. *)
   (* (so it doesn't need to be a ref) *)
   let tbl = (* ederef *) (evar (spec.tbl_id) (spec.tbl_ty)) in
-  (* let tbl_param = evar (cid "tbl") spec.tbl_ty in *)
   let key_param = evar (cid "key") spec.key_ty in
   let arg_param = evar (cid "arg") spec.arg_ty in
   (* reconstruct the action type for the match branches *)
-  let action_ty = tfun_kind FAction [spec.const_arg_ty; spec.arg_ty] spec.ret_ty in  
-  (* first, declare a local variable that calls the default action *)
-  let s_decl_rv = (cid"rv") /::= default_exp spec.ret_ty in
-  let apply_default_branch action_tag =    
-    let action_evar = efunref (untag action_tag) action_ty in
-    (case spec.actions_enum_ty)
-    action_tag
-      ( id"rv" /:= (action_evar /** [tbl/.cid"_default"/.cid"action_arg"; arg_param]))
-  in
-  let s_apply_default = smatch
-    [(tbl/.cid"_default"/.cid"action_tag")]
-    (List.map apply_default_branch action_tags)
-  in
-  let idx = cid "_idx" in
-  let idx = evar idx (tint 32) in
-  let cont = cid "_continue" in
-  let apply_branch  entry action_tag = 
-    (* tbl->entries[idx]->action_arg *)
-    let action_evar = efunref ((untag action_tag)) action_ty in    
-    let eq_test_op = compound_masked_eq key_param (entry/.cid"key") (entry/.cid"mask") in
+  let action_ty = tfun_kind FAction [spec.const_arg_ty; spec.arg_ty] spec.ret_ty in
+  let idx = evar (cid "_idx") (tint 32) in
+  (* per-entry: if (valid && masked_eq) { switch (tag) {..return action(..)..} }
+     the valid check excludes empty entries (a zeroed entry has mask = 0, which
+     matches every key, and tag = 0, which is a real action's tag); the switch
+     runs only on a hit, not once per entry scanned, and a hit returns from
+     inside the loop. actions are pure, so running the default action only
+     after the scan misses (below) is equivalent to running it up front. *)
+  let apply_branch entry action_tag =
+    let action_evar = efunref ((untag action_tag)) action_ty in
     case spec.actions_enum_ty
     action_tag
-      (sif eq_test_op
-        (stmts [
-          (id"rv" /:= (action_evar /** [((tbl/.cid"entries")/@idx)/.cid"action_arg"; arg_param]));
-          sassign (cont)  (eval (vbool false));])
-        snoop)
+      (sret (action_evar /** [entry/.cid"action_arg"; arg_param]))
   in
-  
-  let s_loop = 
-    swhile (cid "_idx") spec.len cont 
+  let s_loop =
+    sfor (cid "_idx") spec.len
       (
         let entry = (tbl/.cid"entries")/@idx in
-        smatch [(entry/.cid"action_tag")]
-        (List.map (apply_branch entry) action_tags);
+        let hit = emacro_and_fold [
+          entry/.cid"valid";
+          compound_masked_eq key_param (entry/.cid"key") (entry/.cid"mask")]
+        in
+        sif hit
+          (smatch [(entry/.cid"action_tag")]
+            (List.map (apply_branch entry) action_tags))
+          snoop
       )
   in
-  let s_ret = sret (evar (cid"rv") spec.ret_ty) in
-  
-  let params = List.map extract_evar 
+  (* no entry matched: dispatch to the default action. the last action's arm
+     is the switch's `default:` case, so every path through the function
+     returns. *)
+  let apply_default_branch is_last action_tag =
+    let action_evar = efunref (untag action_tag) action_ty in
+    let s_ret_default = sret (action_evar /** [tbl/.cid"_default"/.cid"action_arg"; arg_param]) in
+    if is_last then ([PWild spec.actions_enum_ty], s_ret_default)
+    else case spec.actions_enum_ty action_tag s_ret_default
+  in
+  let n_tags = List.length action_tags in
+  let s_apply_default = smatch
+    [(tbl/.cid"_default"/.cid"action_tag")]
+    (List.mapi (fun i tag -> apply_default_branch (i = n_tags - 1) tag) action_tags)
+  in
+  let params = List.map extract_evar
     [key_param; arg_param]
   in
-  dfun 
+  dfun
     (lookup_id spec.tbl_id)
-    spec.ret_ty 
+    spec.ret_ty
     params
     (stmts [
-            s_decl_rv; 
-            s_apply_default; 
-            s_loop; 
-            s_ret;])
+            s_loop;
+            s_apply_default;])
 ;;
 
 (* Table.install(Table_t, key, action, const_arg) *)
@@ -196,9 +214,11 @@ let table_install spec =
   (* let tbl_param = evar (cid "tbl") spec.tbl_ty in *)
   let key_param = evar (cid "key") spec.key_ty in
   (* note: call has to be transformed from an action variable to an action tag value *)
-  let action_param = evar (cid "action") (spec.actions_enum_ty) in 
+  let action_param = evar (cid "action") (spec.actions_enum_ty) in
   let const_arg_param = evar (cid "const_arg") spec.const_arg_ty in
-  let new_slot = table_cell spec.tbl_id key_param key_param action_param const_arg_param in 
+  (* exact match: mask = all ones (only the exact key matches) *)
+  let mask = eval (ones_value spec.key_ty) in
+  let new_slot = table_cell spec.tbl_id key_param mask action_param const_arg_param in
   let idx = cid "_idx" in
   let idx_var = evar (idx) (tint 32) in
   let cont = cid "_continue" in
@@ -349,7 +369,6 @@ let transform_decls decls =
     ::List.flatten (List.map (monomorphic_table_decls actions_enum_ty) decls)
 ;;
 
-
 let process decls = 
   if (List.filter_map extract_daction_id_opt decls) = [] 
   then decls (* no actions, nothing to do here. *)
@@ -360,3 +379,224 @@ let process decls =
     let decls = monomorphic_table_calls#visit_decls () decls in
     decls
 ;;
+
+
+
+(*
+(*** tables with function pointers instead of defunctionalization ***)
+type table_spec2 =
+{
+  tbl_id : cid;
+  len    : arrlen;
+  tbl_ty : ty;
+    key_ty : ty;
+    const_arg_ty : ty;
+    arg_ty : ty;
+    ret_ty : ty;
+  acn_fty : ty; (* (const_arg_ty, arg_ty) -> ret_ty *)
+}
+
+let table_cell_type2 tbl_id key_ty acn_fty const_arg_ty : ty =
+  let tblcellty_id = Cid.str_cons_plain "cellty" tbl_id in
+  tabstract_cid
+    tblcellty_id
+    (trecord [
+      cid"valid", tbool;
+      cid"key", key_ty;
+      cid"mask", key_ty;
+      cid"action", acn_fty;
+      cid"action_arg", const_arg_ty;
+    ])
+;;
+
+let table_cell2 tbl_id key_param mask_param action_param const_arg_param =
+  let exp = erecord [
+         cid "valid", eval (vbool true);
+          cid "key", key_param;
+          cid "mask", mask_param;
+          cid "action", action_param;
+          cid "action_arg", const_arg_param]
+  in
+  {exp with ety=table_cell_type2 tbl_id key_param.ety action_param.ety const_arg_param.ety;}
+;;
+
+let table_instance_type2 tbl_id acn_fty const_action_arg_ty tbl_cell_ty tbl_len =
+  tabstract_cid
+    (Cid.str_cons_plain "ty" tbl_id)
+    (
+      trecord
+        [cid "_default", trecord [cid "action", acn_fty;
+                                cid "action_arg", const_action_arg_ty];
+        cid "entries",tlist tbl_cell_ty tbl_len])
+;;
+
+(* default_acn is the default action as a function-pointer value
+   (a VSymbol holding the action's name at the action's type) *)
+let table_create2 (tbl_ty : ty) (default_acn : value) (def_arg : value) =
+  let fields, tys = extract_trecord tbl_ty in
+  let field_ty = List.combine fields tys in
+  let entries_ty = List.assoc (cid"entries") field_ty in
+  let default = vrecord [
+    cid"action", default_acn;
+    cid"action_arg", def_arg
+  ] in
+  vrecord [
+    cid"_default", default;
+    cid"entries", (zero_list entries_ty)
+  ]
+;;
+
+(* tbl_lookup(key_ty k, arg_ty arg):
+    scan the entries; on the first valid entry whose masked key matches,
+    return its action's result, calling through the stored pointer. if no
+    entry matches, return the default action's result. (actions are pure,
+    so deferring the default call to the miss path is equivalent to running
+    it up front.)
+    the pointer is bound to a local before the call because later passes
+    (and the typer's printf case) assume every call target is a variable. *)
+let table_lookup2 (spec : table_spec2) =
+  (* note: the table is hard coded into the function, not a parameter. *)
+  let tbl = evar (spec.tbl_id) (spec.tbl_ty) in
+  let key_param = evar (cid "key") spec.key_ty in
+  let arg_param = evar (cid "arg") spec.arg_ty in
+  let idx = evar (cid "_idx") (tint 32) in
+  let s_loop =
+    sfor (cid "_idx") spec.len
+      (
+        let entry = (tbl/.cid"entries")/@idx in
+        let hit = emacro_and_fold [
+          entry/.cid"valid";
+          compound_masked_eq key_param (entry/.cid"key") (entry/.cid"mask")]
+        in
+        let acn = evar (cid"_acn") spec.acn_fty in
+        sif hit
+          (stmts [
+            (cid"_acn") /::= (entry/.cid"action");
+            sret (acn /** [entry/.cid"action_arg"; arg_param]);])
+          snoop
+      )
+  in
+  (* no entry matched: return the default action's result *)
+  let default_acn = evar (cid"_default_acn") spec.acn_fty in
+  let s_default = stmts [
+    (cid"_default_acn") /::= (tbl/.cid"_default"/.cid"action");
+    sret (default_acn /** [tbl/.cid"_default"/.cid"action_arg"; arg_param]);
+  ] in
+  dfun
+    (lookup_id spec.tbl_id)
+    spec.ret_ty
+    (List.map extract_evar [key_param; arg_param])
+    (stmts [s_loop; s_default])
+;;
+
+(* Table.install(key, action, const_arg) -- action is a function pointer *)
+let table_install2 (spec : table_spec2) =
+  (* note: the table is hard coded into the function, not a parameter. *)
+  let tbl = evar (spec.tbl_id) (spec.tbl_ty) in
+  let key_param = evar (cid "key") spec.key_ty in
+  let action_param = evar (cid "action") spec.acn_fty in
+  let const_arg_param = evar (cid "const_arg") spec.const_arg_ty in
+  (* exact match: mask = all ones (only the exact key matches) *)
+  let mask = eval (ones_value spec.key_ty) in
+  let new_slot = table_cell2 spec.tbl_id key_param mask action_param const_arg_param in
+  let idx = cid "_idx" in
+  let idx_var = evar idx (tint 32) in
+  let cont = cid "_continue" in
+  let body = swhile idx spec.len cont
+    (
+      let entries = eop (Project(cid"entries")) [tbl] in
+      let entry = elistget entries idx_var in
+      sif (eop Eq [entry/.cid"valid";eval@@vbool false])
+        (stmts [
+            sassign (cont) (eval (vbool false));
+            (tbl/.cid"entries", idx_var)/<-new_slot;
+          ])
+        snoop
+    )
+  in
+  dfun
+    (install_id spec.tbl_id)
+    (tunit)
+    (List.map extract_evar [key_param; action_param; const_arg_param])
+    (sseq body sret_none)
+;;
+
+(* Table.install_ternary(key, mask, action, const_arg) *)
+let table_ternary_install2 (spec : table_spec2) =
+  let tbl = evar (spec.tbl_id) (spec.tbl_ty) in
+  let key_param = evar (cid "key") spec.key_ty in
+  let mask_param = evar (cid"mask") spec.key_ty in
+  let action_param = evar (cid "action") spec.acn_fty in
+  let const_arg_param = evar (cid "const_arg") spec.const_arg_ty in
+  let new_slot = table_cell2 spec.tbl_id key_param mask_param action_param const_arg_param in
+  let idx = cid "_idx" in
+  let idx_var = evar idx (tint 32) in
+  let cont = cid "_continue" in
+  let body = swhile idx spec.len cont
+    (
+      let entries = eop (Project(cid"entries")) [tbl] in
+      let entry = elistget entries idx_var in
+      sif (eop Eq [entry/.cid"valid";eval@@vbool false])
+        (stmts [
+            sassign (cont) (eval (vbool false));
+            (tbl/.cid"entries", idx_var)/<-new_slot;
+          ])
+        snoop
+    )
+  in
+  dfun
+    (install_ternary_id spec.tbl_id)
+    (tunit)
+    (List.map extract_evar [key_param; mask_param; action_param; const_arg_param])
+    (sseq body sret_none)
+;;
+
+let monomorphic_table_decls2 decl : decls =
+  match decl.d with
+  | DVar(tbl_id, builtin_tbl_ty, Some(builtin_constr_call_exp)) when is_tbuiltin Tables.t_id builtin_tbl_ty ->
+    let key_ty, const_arg_ty, arg_ty, ret_ty =
+      match extract_tbuiltin builtin_tbl_ty with
+      | _, [key_ty; const_arg_ty; arg_ty; ret_ty] -> key_ty, const_arg_ty, arg_ty, ret_ty
+      | _, _ -> failwith "unexpected type"
+    in
+    let acn_fty = tfun_kind FAction [const_arg_ty; arg_ty] ret_ty in
+    (* the default action arg is an EVar reference to the action function;
+       eval_exp turns it into a VSymbol holding the action's cid *)
+    let len, default_action_cid, default_action_arg = match (eval_exp builtin_constr_call_exp |> extract_vvariant).evdata with
+      | [len; _; default_action; default_action_arg] ->
+        extract_vint len |> arrlen,
+        extract_vsymbol default_action,
+        default_action_arg
+      | _ -> failwith "unexpected table declaration"
+    in
+    let tbl_cell_ty = table_cell_type2 tbl_id key_ty acn_fty const_arg_ty in
+    let tbl_ty = table_instance_type2 tbl_id acn_fty const_arg_ty tbl_cell_ty len in
+
+    let tbl_value = table_create2 tbl_ty (vsymbol default_action_cid acn_fty) default_action_arg in
+
+    let tbl_spec : table_spec2 = {tbl_id; len; tbl_ty; key_ty; const_arg_ty; arg_ty; ret_ty; acn_fty;} in
+    [
+      decl_tabstract tbl_cell_ty;               (* cell type within a table *)
+      decl_tabstract tbl_ty;                    (* the table's type *)
+      dglobal tbl_id tbl_ty (eval tbl_value);   (* table declaration *)
+      table_install2 tbl_spec;                  (* table install function *)
+      table_ternary_install2 tbl_spec;
+      table_lookup2 tbl_spec                    (* table lookup function *)
+    ]
+  | _ -> [decl]
+;;
+
+(* like process, but: no defunctionalization, no actions enum, and
+   actions are stored / called as function pointers.
+   monomorphic_table_calls is reused as-is: it only rewrites Table.*
+   calls to the table-specific functions and drops the table argument;
+   an action argument at an install site is already a function reference.
+   note: calls must be rewritten *before* the table functions are generated --
+   monomorphic_table_calls assumes every call target is a variable, but the
+   generated lookup calls an action through a record projection. *)
+let process2 decls =
+  let decls = monomorphic_table_calls#visit_decls () decls in
+  List.flatten (List.map monomorphic_table_decls2 decls)
+;;
+*)
+

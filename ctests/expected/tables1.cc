@@ -175,7 +175,7 @@ void install_ftbl_2748(uint32_t key , action_enum action , uint32_t const_arg ){
   for (int _idx = 0; _idx < 1024; _idx++) {
     if ((ftbl_2748.entries[_idx].valid) == (false)) {
       _continue = false;
-      cellty_ftbl_2748 tmp_2958  = {.valid = true, .key = key, .mask = key, .action_tag = action, .action_arg = const_arg};
+      cellty_ftbl_2748 tmp_2958  = {.valid = true, .key = key, .mask = 4294967295, .action_tag = action, .action_arg = const_arg};
       ftbl_2748.entries[_idx] = tmp_2958;
     }  if (!_continue) break;
     
@@ -195,38 +195,30 @@ void install_ternary_ftbl_2748(uint32_t key , uint32_t mask , action_enum action
   return ;
 }
 res_t_2741 lookup_ftbl_2748(uint32_t key , uint32_t arg ){
-  res_t_2741 rv  = {._0 = 0, ._1 = false};
+  for (int _idx = 0; _idx < 1024; _idx++) {
+    if ((ftbl_2748.entries[_idx].valid) && ((key & ftbl_2748.entries[_idx].mask) == (ftbl_2748.entries[_idx].key & ftbl_2748.entries[_idx].mask))) {
+      switch (ftbl_2748.entries[_idx].action_tag) {
+        case tag_hit_acn_2744: {
+          return hit_acn_2744(ftbl_2748.entries[_idx].action_arg, arg);
+          break;
+        }
+        case tag_miss_acn_2747: {
+          return miss_acn_2747(ftbl_2748.entries[_idx].action_arg, arg);
+          break;
+        }
+      }
+    }
+  }
   switch (ftbl_2748._default.action_tag) {
     case tag_hit_acn_2744: {
-      rv = hit_acn_2744(ftbl_2748._default.action_arg, arg);
+      return hit_acn_2744(ftbl_2748._default.action_arg, arg);
       break;
     }
-    case tag_miss_acn_2747: {
-      rv = miss_acn_2747(ftbl_2748._default.action_arg, arg);
+    default: {
+      return miss_acn_2747(ftbl_2748._default.action_arg, arg);
       break;
     }
   }
-  bool _continue = true;
-  for (int _idx = 0; _idx < 1024; _idx++) {
-    switch (ftbl_2748.entries[_idx].action_tag) {
-      case tag_hit_acn_2744: {
-        if ((key & ftbl_2748.entries[_idx].mask) == (ftbl_2748.entries[_idx].key & ftbl_2748.entries[_idx].mask)) {
-          rv = hit_acn_2744(ftbl_2748.entries[_idx].action_arg, arg);
-          _continue = false;
-        }
-        break;
-      }
-      case tag_miss_acn_2747: {
-        if ((key & ftbl_2748.entries[_idx].mask) == (ftbl_2748.entries[_idx].key & ftbl_2748.entries[_idx].mask)) {
-          rv = miss_acn_2747(ftbl_2748.entries[_idx].action_arg, arg);
-          _continue = false;
-        }
-        break;
-      }
-    }  if (!_continue) break;
-    
-  }
-  return rv;
 }
 uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
   uint16_t n  = 0;
