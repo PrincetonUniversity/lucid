@@ -5,30 +5,13 @@ let id = Id.create
 
 let cid s = Cid.create [s]
 
-let n_bytes n_bits = (* number of bytes required to hold n_bits *)
-  (n_bits + 7) / 8
-;;
 
 
-let is_smatch statement = match statement.s with 
-  | SMatch _ -> true 
-  | _ -> false
-;;
-
-let ends_with_smatch statement = 
-  let stmts = to_stmt_block statement in
-  match List.rev stmts with
-  | [] -> false
-  | stmt::_ -> is_smatch stmt
-;;
 
 (* monomorphization and code gen sometimes needs type names *)
 let ty_to_namestr ty = match ty.raw_ty with 
   | TInt _ | TBool | TName _ -> CCorePPrint.ty_to_string ~use_abstract_name:true ty
   | _ -> err_expected_ty ty "to convert a type to a string for a generated function, the type must be an int, bool, or abstract"
-;;
-let cid_for_ty cid ty = 
-  Cid.str_cons_plain (ty_to_namestr ty) cid
 ;;
 
 
@@ -51,56 +34,6 @@ let rec emacro_op_fold op exps =
 ;;
 let emacro_and_fold = emacro_op_fold And
 let is_tprimative ty = is_tint ty || is_tbool ty
-;;
-
-(* expand equality expressions *)
-let rec compound_eq e1 e2 = 
-  let ty = e1.ety in
-  if (equiv_tys e1.ety e2.ety <> true) then err "cannot test equality of two different types" else
-  match ty.raw_ty with 
-    | TUnit -> eval@@vbool true; (* two units are always the same *)
-    | TInt _ 
-    | TBool -> (e1 /== e2)
-    | TRecord(ids, tys) -> 
-      let exps = List.map 
-        (fun (id, ty) -> 
-          (* primitive types use the equal operator *)
-          if (is_tprimative ty) 
-            then (e1/.id) /== (e2/.id)
-          (* non-primitives get expanded *)
-          else (compound_eq (e1/.id) (e2/.id)))
-        (List.combine ids tys)
-      in
-      emacro_and_fold exps
-    | TTuple(tys) -> 
-      let exps = List.mapi
-        (fun i ty ->
-          (* primitive types use the equal operator *)
-          if (is_tprimative ty) 
-            then (e1/.@i) /== (e2/.@i)
-          (* non-primitives get expanded *)
-          else (compound_eq (e1/.@i) (e2/.@i)))
-        tys
-      in
-      emacro_and_fold exps
-    | TPtr(_, Some(IConst(n))) ->
-      emacro_and_fold (List.init (n) (fun i -> (e1/@(eval@@vint i 32) /== (e2/@(eval@@vint i 32)))))
-    | TList(_, IConst(n)) ->
-      emacro_and_fold (List.init (n) (fun i -> (e1/@(eval@@vint i 32) /== (e2/@(eval@@vint i 32)))))
-    | TList(_, IVar _) -> err "cannot generate equality exp for vector of unknown length"
-    | TPacket -> err "cannot generate equality exp for bytes"
-    | TPtr(_, None) -> compound_eq (ederef e1) (ederef e2)
-    | TName(_, def_opt) -> (match def_opt with
-      | Some d -> compound_eq {e1 with ety=d} {e2 with ety=d}
-      | None -> err "cannot generate equality exp for opaque named type")
-      (* unbounded lists and unions are problematic *)
-    | TPtr(_, Some(_)) -> err "cannot generate equality exp for list of unknown length"
-    | TUnion _ -> err "cannot generate equality exp for untagged union"
-    (* events and functions -- not sure what to do yet *)
-    | TVariant _ -> err "cannot generate equality expression for two events"
-    | TFun _ -> err "no equality for function"
-    (* builtins and names -- opaque, can't compare *)
-    | TBuiltin _ -> err "no equality for builtins"
 ;;
 
 (* masked equality expression (e1 & m) == (e2 & m) for all 

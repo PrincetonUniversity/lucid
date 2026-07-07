@@ -94,9 +94,6 @@ let rec unify_lists env f_unify xs ys =
   List.fold_left2 f_unify env xs ys 
 ;;
 
-let list_equal f xs ys = 
-  List.length xs = List.length ys && List.for_all2 f xs ys
-
 let rec unify_raw_ty env rawty1 rawty2 : env = 
   match rawty1, rawty2 with
   | TPtr(t1, None), TPtr(t2, None) ->
@@ -208,14 +205,6 @@ let rec infer_exp env exp : env * exp =
           ty_err@@"cannot find type for unbound variable: "^(CCorePPrint.cid_to_string cid)
       in
       env, {exp with e=EVar cid; ety;}
-    | EAddr(cid) -> 
-      let ety = match CidMap.find_opt cid env.vars with
-        | Some ty -> tref ty
-        | None -> 
-          print_endline ("current env:\n"^(env_to_string env));      
-          ty_err@@"cannot find type for unbound variable: "^(CCorePPrint.cid_to_string cid)
-      in
-      env, {exp with e=EVar cid; ety;}
     | EDeref(inner_exp) -> 
       let env, inf_inner_exp = infer_exp env inner_exp in
       if (is_tref inf_inner_exp.ety) then 
@@ -240,18 +229,6 @@ let rec infer_exp env exp : env * exp =
       let e =ERecord(labels, es') in
       let ety = trecord (List.combine labels (List.map (fun exp -> exp.ety) es')) in
       env, {exp with e; ety;}
-    | EUnion(label, exp, union_ty) -> 
-      let env, inf_exp = infer_exp env exp in
-      let env = match (base_type union_ty).raw_ty with 
-        | TUnion(labels, tys) -> 
-          let expected_ty = List.assoc label (List.combine labels tys) in
-          let env = unify_ty env expected_ty inf_exp.ety in
-          env
-        | _ -> 
-          ty_err "union exp does not have the right type for the corresponding member of the union"
-      in
-      env, {exp with e=EUnion(label, inf_exp, union_ty); ety=union_ty}
-    
     | ECall{f; call_kind=CVariant} ->
       let env, inf_f = infer_exp env f in
       (* todo: this unify is kind of weird? *)

@@ -132,9 +132,6 @@ let ptr_checker =
     method! visit_TPtr _ =
       err_in_decl cur_decl "pointer types are not supported in the C backend";
 
-    method! visit_EAddr _ =
-      err_in_decl cur_decl "address-of operator (&) is not supported in the C backend"
-
     method! visit_EDeref _ =
       err_in_decl cur_decl "dereference operator (*) is not supported in the C backend"
   end

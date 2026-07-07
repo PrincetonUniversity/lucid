@@ -97,7 +97,6 @@ let rec e_to_string (e: e) : string =
   match e with
   | EVal v -> value_to_string v
   | EVar cid -> cid_to_string cid
-  | EAddr(cid) -> sprintf "(&%s)" (cid_to_string cid)
   | ETuple es ->
     let es_strs = List.map exp_to_string es in
     let field_strs = List.mapi (fun i e -> "." ^ "_" ^ string_of_int i ^ " = " ^ e ^";") es_strs in
@@ -110,8 +109,6 @@ let rec e_to_string (e: e) : string =
     let field_strs = List.map2 (fun l e -> "." ^l ^ " = " ^ e ^";") label_strs es_strs in
     let fields_str = String.concat " " field_strs in    
     "{" ^ fields_str ^ "}"
-  | EUnion(label, exp, _) -> 
-    sprintf "{.%s = %s}" (cid_to_string label) (exp_to_string exp)
   | ECall {f; args; call_kind=CVariant} -> 
     let f_str = exp_to_string f in
     let args_str = String.concat ", " (List.map exp_to_string args) in

@@ -11,14 +11,6 @@ let subst_ty = object (_)
   end
 ;;
 
-let subst_exp = object (_)
-  inherit [_] s_map as super
-  method! visit_exp transformer exp = 
-    let exp = transformer exp in
-    super#visit_exp transformer exp
-  end
-;;
-
 let subst_statement = object (_)
   inherit [_] s_map as super
   method! visit_statement transformer stmt = 
@@ -27,13 +19,6 @@ let subst_statement = object (_)
     (* descend *)
     super#visit_statement transformer stmt
   end
-;;
-
-let subst_decl = object(_)
-  inherit [_] s_map as super
-  method! visit_decl transformer decl = 
-    transformer decl
-end
 ;;
 
 (* transform an evar *)

@@ -448,13 +448,6 @@ let translate_memop (m : CoreSyntax.memop) =
 ;;
 
 
-let is_record (param : (C.id * C.ty)) = 
-  match (snd param).raw_ty with 
-  | C.TRecord _ -> true
-  | _ -> false
-;;
-
-
 (* parsers: translate the structured parser block directly to CCore ops.
    read/peek/skip become ops on the packet param; generate returns
    (bytes_ok pkt, event); drop returns (false, <unused placeholder>). *)

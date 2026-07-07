@@ -80,10 +80,8 @@ and e =
   | EOp of op * exp list
   | ECall of {f:exp; args:exp list; call_kind:call_kind;}
   | EVar    of cid 
-  | EAddr   of cid (* tref *)
   | ETuple of exp list
   | EList of exp list (* fixed-length list/array literal *)
-  | EUnion  of cid * exp * ty
   | ERecord of cid list * exp list
   | EDeref of exp
 
@@ -175,7 +173,6 @@ exception FormError of string
 let id = Id.create
 let cid s = Cid.create [s]
 let arrlen i = IConst i
-let idxvar id = IVar id
 let sz n = n
 let cid s = Cid.create([s])
 
@@ -185,14 +182,7 @@ let tunit = ty TUnit
 let tpacket = ty TPacket
 let tbool = ty TBool
 let tint i = ty@@TInt(sz i)
-let tptr base_ty = ty (TPtr(base_ty,None))
-(* An event is a metadata envelope wrapping a tagged variant, declared by
-   CoreToCCore via two DTys:
-     events        = record { meta : {len; is_packet};  data : event_variant }
-     event_variant = TVariant[sigs]   (the constructor union)
-   Every *reference* to "an event" is TName events_cid (the envelope); the
-   constructor union, reached via the envelope's `data` field, is
-   TName event_variant_cid. *)
+(* An event is a record with metadata and a data variant. *)
 let events_cid = Cid.create ["event_t"]
 let event_variant_cid = Cid.create ["event_variant_t"]
 let event_meta_cid = Cid.create ["event_meta"]
@@ -201,18 +191,11 @@ let tevariant_def sigs = ty (TVariant sigs)
 let trecord pairs =
   let cids, tys = List.split pairs in
   ty (TRecord(cids, tys))
-(* the metadata envelope fields (len = wire length; is_packet = packet vs
-   background; has_payload = the event carried an explicit Payload.t, so the deparsed
-   packet keeps the input tail -- a no-payload event serializes only its header fields,
-   matching the interpreter; timestamp = a 32-bit nanosecond stamp the driver writes when
-   the event is dequeued for handling -- Sys.time() reads it); and the envelope record
-   that wraps the tagged variant. Both are value-semantic; meta is currently resolved
-   statically but lives in the IR (except timestamp, which is set at runtime). *)
+(* event metadata fields: len = wire length; is_packet = packet vs
+   background; has_payload = the event carried an explicit Payload.t; 
+   timestamp = a 32-bit nanosecond stamp at start of event handling *)
 let event_meta_def = trecord [ (Cid.create ["len"], ty (TInt 16)); (Cid.create ["is_packet"], ty (TInt 8)); (Cid.create ["has_payload"], ty (TInt 8)); (Cid.create ["timestamp"], ty (TInt 32)); (Cid.create ["in_port"], ty (TInt 32)) ]
-(* the tagged variant: opaque at this level -- its definition (the program's
-   event signatures) is only known per program. CoreToCCore declares the DTy,
-   and CCoreVariants.lower substitutes the lowered struct body into every
-   reference when it needs field projections to resolve. *)
+(* the tagged variant is program dependent *)
 let tevent_variant = ty (TName(event_variant_cid, None))
 let tevent_meta = ty (TName(event_meta_cid, Some event_meta_def))
 let tevent_def = trecord [ (Cid.create ["meta"], tevent_meta); (Cid.create ["data"], tevent_variant) ]
@@ -251,17 +234,13 @@ let tchar = tabstract "char" (tint 8)
 
 
 let is_textern ty = match ty.raw_ty with TName(cid, _) -> Cid.equal cid (Cid.create ["_extern_ty_"]) | _ -> false
-let is_tunit ty = match ty.raw_ty with TUnit -> true | _ -> false
 let is_tunion ty = match (base_type ty).raw_ty with TUnion _ -> true | _ -> false
 let is_trecord ty = match (base_type ty).raw_ty with TRecord _ -> true | _ -> false
 let is_ttuple ty = match ty.raw_ty with TTuple _ -> true | _ -> false
-let is_tfun ty = match ty.raw_ty with TFun({func_kind=FNormal}) -> true | _ -> false
 let is_tbool ty = match ty.raw_ty with TBool -> true | _ -> false
 let is_tint ty = match ty.raw_ty with TInt(_) -> true | _ -> false
 let is_tlist ty = match ty.raw_ty with TList _ | TPtr(_, Some _) -> true | _ -> false
-(* "event-related": the envelope, the variant, or a bare variant def. Callers
-   that must distinguish use is_tevent_envelope / is_tevent_variant. *)
-(* match the surface name (not base_type, which now resolves TName to structure) *)
+
 let is_tevent ty = match ty.raw_ty with
   | TName(cid, _) -> Cid.equal cid events_cid || Cid.equal cid event_variant_cid
   | TVariant _ -> true
@@ -273,9 +252,6 @@ let is_tevent_variant ty = match ty.raw_ty with
   | TName(cid, _) -> Cid.equal cid event_variant_cid
   | TVariant _ -> true
   | _ -> false
-let is_tname_called name ty = match ty.raw_ty with TName(cid, _) -> Cid.equal cid (Cid.create [name]) | _ -> false
-let is_tstring ty = is_tname_called "string" ty
-let is_tchar ty = is_tname_called "char" ty
 let is_tbuiltin tycid ty = match ty.raw_ty with TBuiltin(cid, _) -> Cid.equal cid tycid | _ -> false
 let is_tbuiltin_any ty = match ty.raw_ty with TBuiltin(_, _) -> true | _ -> false
 let is_tref  ty = match ty.raw_ty with TPtr _ -> true | _ -> false
@@ -403,8 +379,6 @@ let erecord label_es =
    ety = trecord (List.map (fun (label, exp) -> (label, exp.ety)) label_es);
    espan=Span.default}
 ;;
-let eunion label e ety = 
-  exp (EUnion(label, e, ety)) ety (Span.default)
 let etuple es =
   exp (ETuple es) (ttuple (List.map (fun e -> e.ety) es)) Span.default
 
@@ -512,9 +486,6 @@ let emk_event_for ctor args =
 let ederef inner =
   exp (EDeref inner) (extract_tref inner.ety) Span.default
 ;;
-let eaddr cid ty = 
-  exp (EAddr cid) (tref ty) Span.default
-;;
 
 
 let elistget arr idx =
@@ -543,23 +514,6 @@ let is_eop exp = match exp.e with
   | EOp _ -> true
   | _ -> false
 
-let is_eproject exp = match exp.e with 
-  | EOp(Project _, _) -> true
-  | _ -> false
-
-let is_elistidx exp = match exp.e with
-  | EOp(Idx, _) -> true
-  | EDeref(inner_exp) -> (
-    match inner_exp.e, inner_exp.ety.raw_ty with
-      | EOp(Plus, _), TPtr _ -> true
-      | _ -> false
-  )
-  | _ -> false
-
-let is_evar exp = match exp.e with 
-  | EVar _ -> true
-  | _ -> false
-
 let is_ederef exp = match exp.e with
   | EDeref _ -> true
   | _ -> false
@@ -572,11 +526,6 @@ let extract_ederef exp = match exp.e with
 
 
 (* extracting components of expressions *)
-let rec flatten_exp exp = match exp.e with
-  | ETuple es -> List.concat (List.map flatten_exp es)
-  | ERecord(_, es) -> List.concat (List.map flatten_exp es)
-  | _ -> [exp]
-;;
 let extract_evar exp = match exp.e with
   | EVar id -> id, exp.ety
   | _ -> raise (FormError "[extract_evar] expected EVar")
@@ -585,10 +534,6 @@ let extract_evar exp = match exp.e with
 let extract_etuple exp = match exp.e with
   | ETuple es -> es
   | _ -> raise (FormError "[flatten_tuple] expected tuple")
-;;
-let extract_evar_id exp = match exp.e with 
-| EVar(cid) -> Cid.to_id(cid), exp.ety
-| _ -> failwith "[evar_to_param] not an evar"
 ;;
 let extract_ecall exp = match exp.e with
   | ECall {f; args; _} -> f, args
@@ -630,14 +575,6 @@ let is_egen_group exp = match exp.e with
   | _ -> false
 ;;
 
-let is_ecall_cid exp cid = match exp.e with 
-| ECall {f; _} -> Cid.equal (extract_evar f |> fst) cid
-| _ -> false
-;;
-let unbox_egen_self exp = match exp.e with 
-  | ECall {args=[eport]} -> eport
-  | _ -> failwith "unbox_egen_self: invalid form for generate"
-;;
 let unbox_egen_port exp = match exp.e with 
   | ECall {args=[eport; eevent]} -> (eport, eevent)
   | _ -> failwith "unbox_egen_port: invalid form for generate"
@@ -645,16 +582,6 @@ let unbox_egen_port exp = match exp.e with
 let unbox_egen_switch exp = match exp.e with 
   | ECall {args=[eloc; eevent]} -> (eloc, eevent)
   | _ -> failwith "unbox_egen_switch: invalid form for generate"
-
-(* let emultiassign ids tys new_vars rhs_exp = exp (EAssign {ids; tys; new_vars; exp=rhs_exp}) (ty TUnit) Span.default *)
-(* let elocal id ty exp = emultiassign [id] [ty] true exp *)
-(* let eassign id exp = emultiassign [id] [exp.ety] false exp *)
-(* let eif cond exp_then exp_else = exp (EIf(cond, exp_then, exp_else)) exp_then.ety Span.default *)
-(* let ematch match_exp branches = exp (EMatch(match_exp, branches)) (List.hd branches |> snd).ety Span.default *)
-(* let eseq exp1 exp2 = exp (ESeq(exp1, exp2)) exp2.ety (Span.extend exp1.espan exp2.espan) *)
-(* let eret eret = exp (EReturn eret) (tunit) Span.default *)
-let ewrap espan exp = {exp with espan}
-
 
 let patval value = PVal(value)
 
@@ -675,9 +602,6 @@ let slistset arr idx exp = sass (OAssign(elistget arr idx)) exp
 (* let slistset_exp arr idx bound exp = 
   let arrlen = arrlen_const_mod idx bound in 
   slistset arr arrlen exp *)
-let srecordset rec_exp field exp = 
-  let lexp = eproj rec_exp field in
-  sass (OAssign(lexp)) exp
 let sif cond s_then s_else = s (SIf(cond, s_then, s_else)) Span.default
 let smatch match_exp branches = s (SMatch(match_exp, branches)) Span.default
 let snoop = s SNoop Span.default
@@ -713,10 +637,6 @@ let rec to_stmt_block stmt =
 
 let swrap sspan s = {s with sspan}
 
-let slocal_evar (evar : exp) (exp : exp) = 
-  let cid, ty = extract_evar evar in
-  slocal cid ty exp
-;;
 let sassign_exp lhs rhs = 
   sass (OAssign lhs) rhs
 ;;
@@ -731,7 +651,6 @@ let dparser = dfun_kind FParser
 let daction = dfun_kind FAction 
 let dmemop = dfun_kind FMemop
 let dvar_const id ty exp = decl (DVar(id, ty, Some(exp))) Span.default
-let dvar_extern id ty = decl (DVar(id, ty, None)) Span.default
 let dextern id ty = decl (DVar(id, ty, None)) Span.default
 (* a function with a typed IR signature and a C source body *)
 let dfun_foriegn fid fret_ty fparams fstr =
@@ -746,21 +665,15 @@ let dty tycid ty = decl (DTy(tycid, Some ty)) Span.default
 let denum pairs = decl (DEnum pairs) Span.default
 (* the type of a reference to an enum member *)
 let tenum_member = tint 32
-let dty_ext tycid = decl (DTy(tycid, None)) Span.default
 (* ty is a named type (TName cid); declare its definition as a DTy. *)
 let decl_tabstract ty =
   dty (extract_tname ty) (base_type ty)
 ;;
 let dforiegn str = decl (DForiegn(str)) Span.default
-let dinclude str = dforiegn("#include "^str)
 
 
 let is_dhandler decl = match decl.d with
   | DFun(FHandler, _, _, _, _) -> true
-  | _ -> false
-;;
-let is_dparser decl = match decl.d with 
-  | DFun(FParser, _, _, _, _) -> true
   | _ -> false
 ;;
 
@@ -769,50 +682,18 @@ let extract_dhandle_opt decl = match decl.d with
 | DFun(FHandler, id, ty, params, BStatement body) -> Some (id, ty, params, body)
 | _ -> None
 ;;
-let extract_daction_opt decl = match decl.d with 
-  | DFun(FAction, id, ty, params, BStatement body) -> Some (id, ty, params, body)
-  | _ -> None
-;;
 let extract_dparser_opt decl = match decl.d with 
   | DFun(FParser, id, ty, params, BStatement body) -> Some(id, ty, params, body)
   | _ -> None
-;;
-let extract_dparser decl = Option.get (extract_dparser_opt decl)
 ;;
 let extract_daction_id_opt decl = match decl.d with 
   | DFun(FAction, id, _, _, _) -> Some id
   | _ -> None
 
-let extract_dfun_opt decl = match decl.d with 
-  | DFun(FNormal, id, ty, params, BStatement body) -> 
-    Some(id, ty, params, body)
-  | _ -> None
-  ;;
-
-let extract_dfun_cid decl = match decl.d with 
-  | DFun(_, cid, _, _, _) -> Some(cid)
-  | _ -> None
-;;
-
-let extract_dvar_cid decl = match decl.d with 
-  | DVar(cid, _, _) -> Some(cid)
-  | _ -> None
-
-(* derive the type of a declared function *)
-(* let extract_dfun_ty decl = match decl.d with 
-  | DFun(_, _, ty, params, _) -> tfun params ty
-  | _ -> failwith "expected DFun" *)
 
 
-(* helpers *)
-let kind_of_tfun raw_ty = match raw_ty with
-  | TFun {func_kind; _} -> func_kind
-  | _ -> failwith "kind_of_tfun: expected TFun"
-;;
 
 (* partial evaluation of constant expressions *)
-
-
 exception EvalFailure of string
 let eval_err msg = raise (EvalFailure msg)
 
@@ -826,9 +707,6 @@ let eval_exp exp =
   | EVar (cid) -> vsymbol cid exp.ety
   | _ ->  eval_err "cannot evalute expression type"
 ;;
-
-
-(**** substitute a variable for an expression ****)
 
 (* function call: f <op> args --> build expression that calls f on args *)
 let ( /** ) f args = ecall_op f args
@@ -850,7 +728,6 @@ let (/-) e1 e2 = eop Sub [e1; e2]
 
 let (/&) e1 e2 = eop BitAnd [e1; e2]
 let ( /== ) e1 e2 = eop Eq [e1; e2]
-let vtrue = eval@@vbool true
 
 let (/@) my_arr_exp idx_exp = 
   elistget my_arr_exp idx_exp
@@ -869,7 +746,6 @@ let ( /::=) var_id rhs_exp =
 let ( /: ) stmt1 stmt2 = 
   sseq stmt1 stmt2
 ;;
-
 
 (* equivalence *)
 let rec equiv_tys ty1 ty2 = match ty1.raw_ty, ty2.raw_ty with 

@@ -65,7 +65,6 @@ let normalize_matches decls =
 
 (* ensure that record, union, tuple, and list expressions only appear in declarations *)
 let is_initializer exp = match exp.e with
-  | EUnion _ -> true
   | ERecord _ -> true
   | ETuple _ -> true
   | EList _ -> true

@@ -9,16 +9,6 @@
 
 open CCoreExceptions
 
-let ccore_print phase_str decls = 
-
-  if Config.base_cfg.debug then 
-  (
-    print_endline ("---- "^phase_str^" ----");
-    print_endline@@CCorePPrint.decls_to_string decls;
-    print_endline ("------------------------")
-  )
-;;
-
 let ccore_print_always phase_str decls = 
     print_endline ("---- "^phase_str^" ----");
     print_endline@@CCorePPrint.decls_to_string decls;
@@ -86,6 +76,7 @@ let compile ds =
   (* final type check *)
   (* let cds = CCoreTyper.check cds in *)
   CCoreWellformed.check_ccore_compat cds;
+  CCoreWellformed.check_c_compat cds;
 
   (*** 8. add target-specific driver interface *)
   let progbundle = match CConfig.c_cfg.driver with
