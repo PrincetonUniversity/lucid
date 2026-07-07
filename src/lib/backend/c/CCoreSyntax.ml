@@ -49,7 +49,7 @@ and raw_ty =
   | TRecord of cid list * ty list | TTuple  of ty list
 
   | TPtr of ty * (arrlen option)
-  | TVec of ty * arrlen (* vector *)
+  | TList of ty * arrlen (* vector *)
   | TPacket (* reference to unparsed packet. *)
   
   | TFun of func_ty
@@ -68,16 +68,11 @@ and ty = {raw_ty:raw_ty; tspan : sp}
 and params = (cid * ty) list
 (* values *)
 and v =
-  | VUnit
   | VInt of {value : int; size : size;}
   | VBool of bool
-  | VUnion of cid * value * ty (* ty is the union type *)
-  | VRecord of cid list * value list
-  | VTuple of value list
-  | VList  of value list
   | VBits of {ternary: bool; bits : int list;}
   | VVariant of vvariant
-  | VSymbol of cid * ty 
+  | VSymbol of cid * ty
 and vvariant = {evid : cid; evnum : value option; evdata: value list; meta : (string * value) list;}
 and value = {v:v; vty:ty; vspan : sp;}
 
@@ -117,6 +112,7 @@ and e =
   | EVar    of cid 
   | EAddr   of cid (* tref *)
   | ETuple of exp list
+  | EList of exp list (* fixed-length list/array literal *)
   | EUnion  of cid * exp * ty
   | ERecord of cid list * exp list
   | EDeref of exp
@@ -255,7 +251,7 @@ let tunion labels tys = ty (TUnion(labels, tys))
 let tfun_kind func_kind arg_tys ret_ty = ty (TFun {arg_tys; ret_ty; func_kind})
 let tfun arg_tys ret_ty = tfun_kind FNormal arg_tys ret_ty 
 (* global type from CoreSyntax *)
-let tlist ele_ty len = ty (TVec(ele_ty, len))
+let tlist ele_ty len = ty (TList(ele_ty, len))
 let tname cid = ty (TName(cid))
 let textern = tname (Cid.create ["_extern_ty_"])
 let tbuiltin cid tyargs = ty (TBuiltin(cid, tyargs))
@@ -302,7 +298,7 @@ let is_tfun ty = match ty.raw_ty with TFun({func_kind=FNormal}) -> true | _ -> f
 let is_tbool ty = match ty.raw_ty with TBool -> true | _ -> false
 let is_tint ty = match ty.raw_ty with TInt(_) -> true | _ -> false
 let is_tbits ty = match ty.raw_ty with TBits(_) -> true | _ -> false
-let is_tlist ty = match ty.raw_ty with TVec _ | TPtr(_, Some _) -> true | _ -> false
+let is_tlist ty = match ty.raw_ty with TList _ | TPtr(_, Some _) -> true | _ -> false
 (* "event-related": the envelope, the variant, or a bare variant def. Callers
    that must distinguish use is_tevent_envelope / is_tevent_variant. *)
 (* match the surface name (not base_type, which now resolves TName to structure) *)
@@ -349,9 +345,9 @@ let extract_ttuple ty = match ty.raw_ty with
   | _ -> raise (FormError "[extract_ttuple] expected TRecord")
 ;;
 let extract_tlist ty = match ty.raw_ty with
-  | TVec(ty, len) -> ty, len
+  | TList(ty, len) -> ty, len
   | TPtr(ty, Some(len)) -> ty, len
-  | _ -> raise (FormError "[extract_tlist] expected TList or TVec")
+  | _ -> raise (FormError "[extract_tlist] expected TList or TPtr with a length")
 ;;
 let extract_tenum ty = match ty.raw_ty with 
   | TEnum tagpairs -> tagpairs 
@@ -388,7 +384,7 @@ let rec bitsizeof_ty ty =
   | TTuple(tys) -> 
       tys |> List.map bitsizeof_ty_exn |> List.fold_left (+) 0 |> Option.some
   | TPtr _ -> None
-  | TVec _ -> None
+  | TList _ -> None
   | TPacket -> None
   | TBits {len} -> len |> Option.some
   | TVariant sigs ->
@@ -422,29 +418,10 @@ let sizeof_ty ty =
 
 (* value constructors *)
 let value v vty = {v=v; vty=vty; vspan=Span.default}
-let vunit () = {v=VUnit; vty=ty TUnit; vspan=Span.default}
 let vint value size = {v=VInt {value; size = sz size}; vty=ty (TInt(sz size)); vspan=Span.default}
-(* declare a vint with size derived from ty *)
-let vint_ty value ty = match ty.raw_ty with 
-  | TInt  size -> vint value size
-  | _ -> failwith "vint_ty: expected TInt"
 let vbool b = {v=VBool b; vty=ty TBool; vspan=Span.default}
-let vlist vs = {v=VList vs; vty=ty (TVec((List.hd vs).vty, IConst (List.length vs))); vspan=Span.default}
-let vtup vs = {v=VTuple(vs); vty=ttuple (List.map (fun v -> v.vty) vs); vspan=Span.default}
 let vpat ints = {v=VBits {ternary=true; bits=ints}; vty=ty (TBits {ternary=true; len=sz (List.length ints)}); vspan=Span.default}
 let vbits ints = {v=VBits {ternary=false; bits=ints}; vty=ty (TBits {ternary=false; len=sz (List.length ints)}); vspan=Span.default}
-let vrecord label_values = 
-  let labels, values = List.split label_values in
-  {v=VRecord(labels, values); vty=trecord (List.map (fun (id, value) -> (id, value.vty)) label_values); vspan=Span.default}
-;;  
-  
-  (* labels (List.map (fun v -> v.vty) values); vspan=Span.default} *)
-
-  (* vrecord labels values *)
-let vunion label value ty = {v=VUnion(label, value, ty); vty=ty; vspan=Span.default}
-let vtuple vs = {v=VTuple(vs); vty=ttuple (List.map (fun v -> v.vty) vs); vspan=Span.default}
-let vvariant evid evnum evdata meta = {v=VVariant {evid; evnum; evdata; meta}; vty=tevent; vspan=Span.default}
-let vvariant_simple evid evdata = vvariant evid None evdata []
 let venum tag ty = {v=VSymbol(tag, ty); vty=ty; vspan=Span.default}
 let vsymbol str ty = venum str ty
 
@@ -459,61 +436,17 @@ let zero_list ty = vsymbol (cid "{0}") ty;;
 let memzero ty = vsymbol (cid "{0}") ty;;
 
 
+(* a string literal is an opaque C token, like `{0}`: a symbol whose name is
+   the quoted literal, at the abstract "string" (char array) type. Nothing
+   computes on string contents, so they don't need a structural encoding. *)
 let string_to_value (s:string) =
-  let chars = List.of_seq (String.to_seq s) in
-  let vchars = List.map (fun c -> vint (Char.code c) 8) chars in
-  (* wrap chars in "char" type *)
-  let vchars = List.map (fun value -> {value with vty=tabstract "char" value.vty}) vchars in
-  let vstr = vlist vchars in
-  {vstr with vty=tabstract "string" vstr.vty}
-;;
-let charints_to_string (v:value) =
-  match v.v with
-  | VList ints ->
-    let charints = List.map 
-      (fun v -> 
-        match v.v with 
-          | VInt({value}) -> value
-          | _ -> failwith "strings are encoded as int tuples") 
-      ints 
-    in
-    let chars = List.map (fun i -> Char.chr i) charints in
-    String.of_seq (List.to_seq chars)
-  | _ -> failwith "strings are encoded as int tuples"
-;;
-
-let rec default_value ty = match ty.raw_ty with 
-  | TUnit -> vunit ()
-  | TInt size -> vint 0 size
-  | TBool -> vbool false
-  | TRecord(labels, ts) -> 
-    vrecord (List.map (fun (label, ty) -> (label, default_value ty)) (List.combine labels ts))
-  | TUnion(ids, tys) -> vunion (List.hd ids) (List.hd tys |> default_value) ty
-  | TTuple(ts) -> 
-    vtuple (List.map default_value ts)
-  | TFun _ -> failwith "no default value for function type"
-  | TBits{len} -> vbits (List.init len (fun _ -> 0))
-  | TVariant _ -> vvariant (Cid.create ["_none"]) None [] []
-  | TEnum(cases) -> 
-    venum ((List.hd cases) |> fst) ty
-  | TBuiltin _ -> failwith "no default value for builtin type"
-  | TName cid -> (match tydef_opt cid with
-    | Some inner_ty -> {(default_value inner_ty) with vty=ty}
-    | None -> failwith "no default value for named type")
-  | TPtr(inner_ty, None) -> {(default_value inner_ty) with vty=ty}
-  | TPtr(elem_ty, Some(IConst(n))) -> {v=VList (List.init n (fun _ -> default_value elem_ty)); vty=ty; vspan=Span.default}
-  | TPtr(_, Some _) -> failwith "no default value for list of unknown length"
-  | TVec(elem_ty, IConst(n)) -> {v=VList (List.init n (fun _ -> default_value elem_ty)); vty=ty; vspan=Span.default}
-  | TVec(_, IVar _) -> failwith "no default value for vector of unknown length"
-  | TPacket -> failwith "no default value for bytes"
+  let str_ty = tabstract "string" (tlist tchar (IConst (String.length s))) in
+  vsymbol (cid ("\"" ^ s ^ "\"")) str_ty
 ;;
 
 
-let extract_vvariant value = match value.v with 
-  | VVariant ev -> ev
-  | _ -> failwith "expected VVariant"
-;;
-let extract_vint value = match value.v with 
+
+let extract_vint value = match value.v with
   | VInt {value; _} -> value
   | _ -> failwith "expected VInt"
 ;;
@@ -522,14 +455,6 @@ let extract_vsymbol v = match v.v with
   | _ -> failwith "expected VEnum"
 ;;
 
-let extract_vrecord value = match value.v with 
-  | VRecord(labels, vs) -> labels, vs
-  | _ -> failwith "expected VRecord"
-;;
-let extract_vtuple value = match value.v with 
-  | VTuple(vs) -> vs
-  | _ -> failwith "expected VRecord"
-;;
 (* expression constructors *)
 let exp e ety espan = {e; ety; espan}
 let efunref cid fty = exp (EVar (cid)) fty (Span.default)
@@ -541,8 +466,11 @@ let erecord label_es =
 ;;
 let eunion label e ety = 
   exp (EUnion(label, e, ety)) ety (Span.default)
-let etuple es = 
+let etuple es =
   exp (ETuple es) (ttuple (List.map (fun e -> e.ety) es)) Span.default
+
+let elist es =
+  exp (EList es) (tlist (List.hd es).ety (IConst (List.length es))) Span.default
 
 let eop op es = 
   let eop_ty = match op with 
@@ -605,11 +533,9 @@ let ebytesok bs = eop BytesOk [bs]
 let ewrite write_ty bs v = eop (Write write_ty) [bs; v]
 let evar cid ty = exp (EVar cid) ty Span.default
 let param_evar (id, ty) = evar id ty
-let eunit () = eval (vunit ())
 
 let ecast ty exp = eop (Cast ty) [exp]
 
-(* let default_exp ty = eval@@default_value ty *)
 
 let eproj rec_exp field_id = 
   eop (Project(field_id)) [rec_exp]
@@ -661,7 +587,7 @@ let eaddr cid ty =
 
 let elistget arr idx =
   match (base_type arr.ety).raw_ty with
-  | TVec _ | TPtr(_, Some _) ->
+  | TList _ | TPtr(_, Some _) ->
     (* value-semantic vector index; CCoreCForm.lower_vecs lowers it to deref-of-plus *)
     eop Idx [arr; idx]
   | _ ->
@@ -702,18 +628,7 @@ let is_evar exp = match exp.e with
   | EVar _ -> true
   | _ -> false
 
-let etup_form exp = match exp.e with
-  | ETuple _ -> true
-  | EVal {v=VTuple _} -> true
-  | _ -> false
-;;
-let erec_form exp = match exp.e with
-  | ERecord _ -> true
-  | EVal {v=VRecord _} -> true
-  | _ -> false
-;;
-
-let is_ederef exp = match exp.e with 
+let is_ederef exp = match exp.e with
   | EDeref _ -> true
   | _ -> false
 ;;
@@ -725,12 +640,6 @@ let extract_ederef exp = match exp.e with
 
 
 (* extracting components of expressions *)
-let flatten_tuple exp = match exp.e with
-  | ETuple es -> es
-  | EVal {v=VTuple es} -> 
-    List.map (fun v -> eval v) es
-  | _ -> raise (FormError "[flatten_tuple] expected tuple")
-;;
 let rec flatten_exp exp = match exp.e with
   | ETuple es -> List.concat (List.map flatten_exp es)
   | ERecord(_, es) -> List.concat (List.map flatten_exp es)
@@ -978,16 +887,7 @@ let extract_dvar_cid decl = match decl.d with
 
 
 (* helpers *)
-let untuple exp = match exp.e with
-  | ETuple es -> es
-  | _ -> [exp]
-;;
-let retuple exps = match exps with
-  | [exp] -> exp
-  | _ -> etuple exps
-;;
-
-let kind_of_tfun raw_ty = match raw_ty with 
+let kind_of_tfun raw_ty = match raw_ty with
   | TFun {func_kind; _} -> func_kind
   | _ -> failwith "kind_of_tfun: expected TFun"
 ;;
@@ -998,26 +898,14 @@ let kind_of_tfun raw_ty = match raw_ty with
 exception EvalFailure of string
 let eval_err msg = raise (EvalFailure msg)
 
-let eval_vint value = match value.v with 
-  | VInt {value; _} -> value
-  | _ -> eval_err "expected VInt"
-;;
 
-let rec eval_exp exp = 
-  match exp.e with 
+(* evaluate a scalar constant expression: a literal, or a variable (which
+   evaluates to a symbol -- its name). Compound constants stay expressions;
+   consumers that need their parts destructure the expression instead. *)
+let eval_exp exp =
+  match exp.e with
   | EVal(value) -> value
-  | ECall {f; args; _} -> 
-    (* calls evaluate to event values *)
-    let argvals = List.map eval_exp args in
-    let f_cid = extract_evar f |> fst in
-    vvariant_simple f_cid argvals  
   | EVar (cid) -> vsymbol cid exp.ety
-  | ETuple es -> 
-    let es = List.map eval_exp es in
-    vtuple es
-  | ERecord(labels, es) -> 
-    let es = List.map eval_exp es in
-    vrecord (List.combine labels es)
   | _ ->  eval_err "cannot evalute expression type"
 ;;
 
@@ -1088,8 +976,8 @@ let rec equiv_tys ty1 ty2 = match ty1.raw_ty, ty2.raw_ty with
   && List.for_all2 equiv_tys tys1 tys2
 | TPtr(t1, None), TPtr(t2, None) -> equiv_tys t1 t2
 | TPtr(t1, Some(IConst n1)), TPtr(t2, Some(IConst n2)) -> n1 = n2 && equiv_tys t1 t2
-| TVec(t1, IConst n1), TVec(t2, IConst n2) -> n1 = n2 && equiv_tys t1 t2
-| TVec(t1, IVar c1), TVec(t2, IVar c2) -> Cid.equal c1 c2 && equiv_tys t1 t2
+| TList(t1, IConst n1), TList(t2, IConst n2) -> n1 = n2 && equiv_tys t1 t2
+| TList(t1, IVar c1), TList(t2, IVar c2) -> Cid.equal c1 c2 && equiv_tys t1 t2
 | TPacket, TPacket -> true
 | TBits {ternary=b1; len=l1}, TBits {ternary=b2; len=l2} -> 
   (b1 = b2) && (l1 = l2)
@@ -1104,5 +992,5 @@ let rec equiv_tys ty1 ty2 = match ty1.raw_ty, ty2.raw_ty with
   && List.length tyargs1 = List.length tyargs2
   && List.for_all2 equiv_tys tyargs1 tyargs2
 | TName cid1, TName cid2 -> Cid.equal cid1 cid2
-| (TUnit|TBool|TVariant _|TInt _|TRecord _ | TTuple _ | TName _ | TPtr _ | TVec _ | TPacket | TUnion _
+| (TUnit|TBool|TVariant _|TInt _|TRecord _ | TTuple _ | TName _ | TPtr _ | TList _ | TPacket | TUnion _
 | TFun _|TBits _|TEnum _|TBuiltin (_, _)), _ -> false

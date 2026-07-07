@@ -106,9 +106,8 @@ let rec ones_exp ty : exp =
     | TRecord(labels, tys) ->
       erecord (List.map2 (fun l t -> l, ones_exp t) labels tys)
     | TTuple tys -> etuple (List.map ones_exp tys)
-    | TVec(ele_ty, IConst n) ->
-      (* vector keys must have scalar elements: lists exist only as values *)
-      eval {v=VList(List.init n (fun _ -> ones_scalar ele_ty)); vty=ty; vspan=Span.default}
+    | TList(ele_ty, IConst n) ->
+      elist (List.init n (fun _ -> ones_exp ele_ty))
     | _ -> failwith "[ones_exp] unsupported table key type"
   in
   {e with ety=ty}
@@ -606,4 +605,3 @@ let process2 decls =
   List.flatten (List.map monomorphic_table_decls2 decls)
 ;;
 *)
-

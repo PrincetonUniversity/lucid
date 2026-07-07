@@ -10,7 +10,7 @@ open CCoreTransformers
 
 (* lower value-semantic vectors to pointers: the first "pointerize" step,
    run right after the value-semantics boundary.
-     TVec(t, len)          -> TPtr(t, Some len)
+     TList(t, len)          -> TPtr(t, Some len)
      EOp(Idx, [arr; idx])  -> EDeref(arr + idx)
    This restores the pointer-based array form that the rest of the C backend
    (and C itself) expects, leaving the final C byte-identical. *)
@@ -19,7 +19,7 @@ let vec_lowerer = object
   method! visit_ty env t =
     let t = super#visit_ty env t in
     match t.raw_ty with
-    | TVec(elem, len) -> { t with raw_ty = TPtr(elem, Some len) }
+    | TList(elem, len) -> { t with raw_ty = TPtr(elem, Some len) }
     | _ -> t
   method! visit_exp env e =
     let e = super#visit_exp env e in
@@ -130,11 +130,12 @@ let normalize_matches decls =
 ;;
 
 
-(* ensure that record, union, and tuple expressions only appear in declarations *)
-let is_initializer exp = match exp.e with 
+(* ensure that record, union, tuple, and list expressions only appear in declarations *)
+let is_initializer exp = match exp.e with
   | EUnion _ -> true
   | ERecord _ -> true
   | ETuple _ -> true
+  | EList _ -> true
   | _ -> false
 ;;
 (* Name inlined structural types: replace a structural type with a TName reference

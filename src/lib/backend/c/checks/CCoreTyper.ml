@@ -104,7 +104,7 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
   | TPtr(t1, Some(l1)), TPtr(t2, Some(l2)) ->
     let env' = unify_ty env t1 t2 in
     unify_arrlen env' l1 l2
-  | TVec(t1, l1), TVec(t2, l2) ->
+  | TList(t1, l1), TList(t2, l2) ->
     let env' = unify_ty env t1 t2 in
     unify_arrlen env' l1 l2
   | TPacket, TPacket -> env
@@ -175,7 +175,7 @@ let rec unify_raw_ty env rawty1 rawty2 : env =
     if (not (List.for_all2 Cid.equal labels1 labels2)) then 
       ty_err "union types with different labels";
     unify_lists env unify_ty tys1 tys2
-  | (TUnit|TBool|TVariant _|TInt _|TRecord _ | TTuple _ | TName _ | TPtr _ | TVec _ | TPacket | TUnion _
+  | (TUnit|TBool|TVariant _|TInt _|TRecord _ | TTuple _ | TName _ | TPtr _ | TList _ | TPacket | TUnion _
   | TFun _|TBits _|TEnum _|TBuiltin (_, _)), _ ->
       dprint_endline@@"type mismatch:\n"^(CCorePPrint.raw_ty_to_string rawty1)^"\nand\n"^(CCorePPrint.raw_ty_to_string rawty2);
       ty_err "type mismatch"
@@ -185,34 +185,14 @@ and unify_ty env ty1 ty2 : env =
 ;;
 
 (* derive the type of a value with constant sizes *)
-let rec infer_value value : value = 
-  let type_value value = (infer_value value).vty in 
-  let ty = match value.v with 
+let infer_value value : value =
+  let ty = match value.v with
   (* values may only have have const sizes *)
-  | VUnit -> tunit
-  | VInt{size} -> tint size 
+  | VInt{size} -> tint size
   | VBool _ -> tbool
-  | VRecord(labels, es) -> 
-    let ts = List.map type_value es in
-    trecord (List.combine labels ts)
-  | VTuple es -> 
-    let ts = List.map type_value es in
-    ttuple ts
-  | VList vs -> 
-    let ts = List.map type_value vs in
-    tlist (List.hd ts) (IConst (List.length ts))
   | VBits{ternary; bits} -> ty@@TBits{ternary; len=sz@@List.length bits}
   | VVariant _ -> tevent
   | VSymbol(_, ty) -> ty
-  | VUnion(label, inner_value, ty) ->
-    match (base_type ty).raw_ty with
-    | TUnion(labels, tys) -> (
-      let inf_inner_value = infer_value inner_value in
-      let expected_ty = List.assoc label (List.combine labels tys) in
-      let _ = unify_ty empty_env expected_ty inf_inner_value.vty in
-      ty
-    )
-    | _ -> ty_err "union value does not have the right type for the corresponding member of the union"
   in
   {value with vty=ty}
 ;;
@@ -258,11 +238,17 @@ let rec infer_exp env exp : env * exp =
       else 
         ty_err (Printf.sprintf "tried to dereference a non reference type (%s : %s)" (CCorePPrint.exp_to_string inf_inner_exp) (CCorePPrint.ty_to_string inf_inner_exp.ety));
     (* | ERecord{labels=None; es} ->        *)
-    | ETuple(es) -> 
+    | ETuple(es) ->
       let env, es' = infer_exps env es in
       let e = ETuple(es') in
       let ety = ttuple (List.map (fun exp -> exp.ety) es') in
       env, {exp with e; ety;}
+    | EList(es) ->
+      (* a fixed-length list literal: all elements must have the same type *)
+      let env, es' = infer_exps env es in
+      let ele_ty = (List.hd es').ety in
+      let env = List.fold_left (fun env e -> unify_ty env ele_ty e.ety) env es' in
+      env, {exp with e=EList(es'); ety=tlist ele_ty (IConst (List.length es'))}
     | ERecord(labels, es) -> 
       let env, es' = infer_exps env es in
       let e =ERecord(labels, es') in

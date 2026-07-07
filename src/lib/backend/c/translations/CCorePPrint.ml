@@ -73,7 +73,7 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : string =
   | TPtr(ty, None) -> sprintf "%s*" (ty_to_string ~use_abstract_name ty)
   | TPtr(ty, Some(arrlen)) ->
     ty_to_string ~use_abstract_name:true ty ^ "[" ^ arrlen_to_string arrlen ^ "]"
-  | TVec(ty, arrlen) ->
+  | TList(ty, arrlen) ->
     ty_to_string ~use_abstract_name:true ty ^ "[" ^ arrlen_to_string arrlen ^ "]"
   | TPacket -> "bytes"
 
@@ -91,25 +91,9 @@ let params_to_string params =
 
 let rec v_to_string (v: v) : string =
   match v with
-  | VUnit -> "void"
   | VInt {value; _} -> string_of_int value
   | VBool b -> string_of_bool b
-  | VRecord(labels, es) -> 
-    let label_strs = List.map cid_to_string labels in
-    let es_strs = List.map value_to_string es in
-    let field_strs = List.map2 (fun l e -> "." ^l ^ " = " ^ e ^";") label_strs es_strs in
-    let fields_str = String.concat " " field_strs in    
-    "{" ^ fields_str ^ "}"
-  | VUnion(label, v, _) -> 
-    sprintf "{%s = %s}" (cid_to_string label) (value_to_string v)
-  | VTuple(es) -> 
-    let label_strs = List.mapi (fun i _ -> "_" ^ string_of_int i) es in
-    let es_strs = List.map value_to_string es in
-    let field_strs = List.map2 (fun l e -> "." ^l ^ " = " ^ e ^";") label_strs es_strs in
-    let fields_str = String.concat " " field_strs in    
-    "{" ^ fields_str ^ "}"
-  | VList vs -> "{" ^ String.concat ", " (List.map value_to_string vs) ^ "}"
-  | VBits {ternary; bits} -> 
+  | VBits {ternary; bits} ->
     let bits_str = String.concat "" (List.map (fun i -> if i = -1 then "*" else string_of_int i) bits) in
     (if ternary then "ternary " else "") ^ "bits[" ^ bits_str ^ "]"
   | VVariant e -> "event(" ^ vvariant_to_string e ^ ")"
@@ -117,20 +101,20 @@ let rec v_to_string (v: v) : string =
 
 and vvariant_to_string (e: vvariant) : string =
   sprintf "%s(%s)" (cid_to_string e.evid) (String.concat ", " (List.map value_to_string e.evdata))
-and value_to_string value = 
-  if is_tstring value.vty then "\""^charints_to_string value^"\""
-  else v_to_string value.v
+and value_to_string value =
+  v_to_string value.v
 
 let rec e_to_string (e: e) : string =
   match e with
   | EVal v -> value_to_string v
   | EVar cid -> cid_to_string cid
   | EAddr(cid) -> sprintf "(&%s)" (cid_to_string cid)
-  | ETuple es -> 
+  | ETuple es ->
     let es_strs = List.map exp_to_string es in
     let field_strs = List.mapi (fun i e -> "." ^ "_" ^ string_of_int i ^ " = " ^ e ^";") es_strs in
-    let fields_str = String.concat " " field_strs in    
+    let fields_str = String.concat " " field_strs in
     "{" ^ fields_str ^ "}"
+  | EList es -> "{" ^ String.concat ", " (List.map exp_to_string es) ^ "}"
   | ERecord(labels, es) -> 
     let label_strs = List.map cid_to_string labels in
     let es_strs = List.map exp_to_string es in
