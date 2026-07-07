@@ -35,26 +35,12 @@ let err = Console.error ;;
 let builtin_externs () =
   let open F in
   let config = CConfig.c_cfg in 
-  let cid = Cid.create in
   [
-    dfun_extern (cid ["generate_self"]) FNormal [tevent] tunit Span.default;
-    dfun_extern (cid ["generate_port"]) FNormal [tint config.port_id_size; tevent] tunit Span.default;
-    dfun_extern (cid ["generate_switch"]) FNormal [tint config.switch_id_size; tevent] tunit Span.default;
-    dfun_extern (cid ["generate_group"]) FNormal [(F.tint config.port_id_size); tevent] tunit Span.default;    
-    (* dvar_extern (Cid.id Builtins.ingr_port_id) (F.tint config.port_id_size); *)
-    (* recirc port id is a constant from a config file *)
+    (* the generate builtins are typed by CCoreBuiltinCheckers and rewritten
+       away by CCoreHandlers -- no decls needed *)
     dvar_const  (Cid.id Builtins.recirc_id) (F.tint config.port_id_size) (F.eval (F.vint config.recirc_port config.port_id_size));
     dvar_const (Cid.id Builtins.self_id) (F.tint config.switch_id_size) (F.eval (F.vint config.self_id_num config.switch_id_size));
-    
   ] 
-;;
-let builtin_cids = List.filter_map 
-  (fun (decl: F.decl) -> 
-    match decl.d with
-    | F.DFun _ -> F.extract_dfun_cid decl
-    | F.DVar _ -> F.extract_dvar_cid decl
-    | _ -> None)
-  (builtin_externs ())
 ;;
 (* a singleton size is an int; 
    a list of sizes is a tuple *)
@@ -115,6 +101,7 @@ let rec translate_raw_ty (raw_ty : C.raw_ty) : F.raw_ty =
       err "unexpected: a TName with size args that is not a builtin"
       (* (F.tbuiltin cid (List.map size_to_ty sizes)).raw_ty *)
       (* builtin types with size args *)
+  | C.TBuiltin(cid, _) when Cid.equal cid Payloads.t_id -> F.TPacket
   | C.TBuiltin(cid, raw_tys) -> 
     (F.tbuiltin cid (List.map (fun raw_ty -> F.ty (translate_raw_ty raw_ty)) raw_tys )).raw_ty
       (* builtin types with type args *)
@@ -468,6 +455,42 @@ let is_record (param : (C.id * C.ty)) =
 ;;
 
 
+(* parsers: translate the structured parser block directly to CCore ops.
+   read/peek/skip become ops on the packet param; generate returns
+   (bytes_ok pkt, event); drop returns (false, <unused placeholder>). *)
+let no_event = F.eval { F.v = F.VSymbol(Cid.create ["_no_event"], F.tevent); vty = F.tevent; vspan = Span.default }
+let parser_drop = F.sret (F.etuple [F.eval (F.vbool false); no_event])
+
+(* a Payload.parse local only marks the event as a payload event (carried in
+   meta.has_payload); it binds no data here *)
+let is_payload_parse_call (exp : C.exp) = match exp.e with
+  | C.ECall(cid, _, _) -> Cid.equal cid Payloads.payload_parse_cid
+  | _ -> false
+
+let rec translate_parser_block pktv (pb : C.parser_block) : F.statement =
+  let translate_action (pa, _) = match pa with
+    | C.PRead(cid, ty, _) -> let ty = translate_ty ty in F.slocal cid ty (F.eread ty pktv)
+    | C.PPeek(cid, ty, _) -> let ty = translate_ty ty in F.slocal cid ty (F.epeek ty pktv)
+    | C.PSkip(ty) -> F.sunit (F.eskip (translate_ty ty) pktv)
+    | C.PAssign(cid, exp) -> F.sassign cid (translate_exp exp)
+    | C.PLocal(_, _, exp) when is_payload_parse_call exp -> F.snoop
+    | C.PLocal(cid, ty, exp) -> F.slocal cid (translate_ty ty) (translate_exp exp)
+  in
+  let step = match fst pb.pstep with
+    | C.PMatch(exps, branches) ->
+      let pat_tys = List.map (fun (e : C.exp) -> e.ety) exps in
+      let branches = List.map
+        (fun (pats, blk) -> (List.map2 translate_pat pats pat_tys, translate_parser_block pktv blk))
+        branches
+      in
+      F.smatch (List.map translate_exp exps) branches
+    | C.PGen(exp) -> F.sret (F.etuple [F.ebytesok pktv; translate_exp exp])
+    | C.PCall(exp) -> F.sunit (translate_exp exp)
+    | C.PDrop -> parser_drop
+  in
+  F.stmts (List.map translate_action pb.pactions @ [step])
+;;
+
 let translate_decl (decl:C.decl) : F.decl = 
  let decl' =  match decl.d with 
   | C.DGlobal(cid, ty, exp) -> F.dglobal (Cid.id cid) (translate_ty ty) (translate_exp exp)
@@ -556,10 +579,19 @@ let translate_decl (decl:C.decl) : F.decl =
       (translate_params [const_param; param])
       (F.sret acn_body)
   | DParser(id, params, parser_block) -> 
-    (* despecialize parser with Core pass *)
-    let parse_stmt = Despecialization.despecialize_parser_block parser_block in
-    (* translate the statement *)
-    F.dparser (Cid.id id) (F.tunit) (translate_params params) (translate_statement parse_stmt)
+    let id = if Id.name id = "main" then CCoreParse.parser_cid else Cid.id id in
+    let params = translate_params params in
+    let pkt = match List.find_opt (fun (_, ty) -> F.is_tpacket ty) params with
+      | Some (pid, _) -> pid
+      | None -> err "[translate_decl] parser has no packet parameter"
+    in
+    let body = translate_parser_block (F.evar pkt F.tpacket) parser_block in
+    (* a trailing (possibly non-exhaustive) match falls through to a drop *)
+    let body = match fst parser_block.pstep with
+      | C.PMatch _ -> F.sseq body parser_drop
+      | _ -> body
+    in
+    F.dparser id (F.ttuple [F.tbool; F.tevent]) params body
   | DFun(id, rty, (params, body)) -> 
     F.dfun (Cid.id id) (translate_ty rty) (translate_params params) (translate_statement body)
   in

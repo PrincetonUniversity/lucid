@@ -50,21 +50,20 @@ let compile ds =
   let cds = CCoreTyper.check cds in
   CCoreWellformed.check_ccore_compat cds;
 
-  print_endline ("---- Synthesizing parser, deparser, and merged handler ----");
-  let cds = CCoreParse.process cds in
+  print_endline ("---- Synthesizing deparser and merging handler ----");
+  let cds = CCoreParse.make_deparser cds in
   let cds = CCoreHandlers.process cds in
   let cds = CCoreTyper.check cds in
   print_endline ("---- Implementing tables and arrays ----");
   let cds = CCoreTables.process cds in
   let cds = CCoreArrays.process cds in
-  let cds = CCoreTyper.check cds in
-  ccore_print_always "---- After table gen ----" cds;
-
-  (* Make sure there's no references or pointers by this stage *)
-  CCoreWellformed.check_no_ptrs cds;
-
   (* simple builtins as foreign functions *)
   let cds = CCoreSystem.process cds in
+  ccore_print_always "---- After all code generation except parse primitives ----" cds;
+
+  (* Make sure there's no references or pointers *)
+  let cds = CCoreTyper.check cds in
+  CCoreWellformed.check_no_ptrs cds;
 
   (*** 6. lowering to C-compatible form *)
   print_endline ("---- Normalizing code forms for c ----");

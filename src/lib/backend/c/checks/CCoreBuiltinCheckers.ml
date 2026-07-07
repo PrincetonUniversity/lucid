@@ -186,39 +186,22 @@ let array_update_complex_check _ exp =
 ;;
 
 (* parse functions *)
-let parse_skip_cid = Cid.create ["parse"; "skip"] ;;
-let parse_skip_check _ exp = 
+(* the generate builtins: rewritten away by CCoreHandlers, never declared;
+   their calls are typed here *)
+let generate_arg_check name arg_tys _ exp =
   let _, args = extract_ecall exp in
-  (* parse skip should really be changed to take the payload / packet as an arg *)
-  if List.length args > 0 then 
-    ty_err "parse_skip takes no arguments";
-  exp.ety;
-;;
-let parse_read_cid = Cid.create ["parse"; "read"] ;;
-let parse_read_check _ exp = 
-  let _, args = extract_ecall exp in
-  if List.length args <> 1 then 
-    ty_err "parse_read takes exactly one argument";
-  if (not (is_tpacket (List.hd args).ety))
-    then ty_err "parse_read takes a packet argument";
-  exp.ety
-;;
-let parse_drop_cid = Cid.create ["parse"; "drop"];;
-let parse_drop_check _ exp = 
-  let _, args = extract_ecall exp in
-  if args <> [] then 
-    ty_err "parse_drop takes no arguments";
+  if List.length args <> List.length arg_tys then
+    ty_err (name ^ ": wrong number of arguments");
+  List.iter2
+    (fun aty (arg : exp) ->
+      if not (equiv_tys aty arg.ety) then ty_err (name ^ ": argument type mismatch"))
+    arg_tys args;
   tunit
 ;;
-
-let payload_parse_cid = Payloads.payload_parse_cid ;;
-let payload_parse_check _ exp = 
-  let _, args = extract_ecall exp in
-  if List.length args <> 1 then 
-    ty_err "payload_parse takes exactly one argument";
-  if (not (is_tpacket (List.hd args).ety))
-    then ty_err "payload_parse takes a packet argument";
-  exp.ety
+let generate_self_cid = Cid.create ["generate_self"]
+let generate_port_cid = Cid.create ["generate_port"]
+let generate_switch_cid = Cid.create ["generate_switch"]
+let generate_group_cid = Cid.create ["generate_group"]
 
 (* Sys functions *)
 let sys_time_cid = System.sys_time_cid ;;
@@ -244,10 +227,10 @@ let builtin_checkers =
     table_install_ternary_cid, table_install_ternary_check;
     array_create_cid, array_create_check;
     array_update_complex_cid, array_update_complex_check;
-    parse_skip_cid, parse_skip_check;
-    parse_read_cid, parse_read_check;
-    parse_drop_cid, parse_drop_check;
-    payload_parse_cid, payload_parse_check;
+    generate_self_cid, generate_arg_check "generate_self" [tevent];
+    generate_port_cid, generate_arg_check "generate_port" [tint CConfig.c_cfg.port_id_size; tevent];
+    generate_switch_cid, generate_arg_check "generate_switch" [tint CConfig.c_cfg.switch_id_size; tevent];
+    generate_group_cid, generate_arg_check "generate_group" [tint CConfig.c_cfg.port_id_size; tevent];
     sys_time_cid, sys_time_check;
     flood_cid, flood_check
   ]
