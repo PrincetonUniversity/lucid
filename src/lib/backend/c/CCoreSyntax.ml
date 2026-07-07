@@ -261,6 +261,7 @@ let textern = tname (Cid.create ["_extern_ty_"])
 let tbuiltin cid tyargs = ty (TBuiltin(cid, tyargs))
 (* let tgroup_cid = Cid.create ["Group"]
 let tgroup = tbuiltin tgroup_cid [] *)
+
 (* global type-definition table: cid -> its structural definition. A named type
    is a bare TName cid; its definition is resolved through this table (by
    base_type and friends). Entries come from the program's DTy decls
@@ -270,6 +271,7 @@ let register_tydef tcid inner_ty = Hashtbl.replace tydefs tcid inner_ty
 (* the definition a TName cid refers to, or None if opaque/extern (no DTy body) *)
 let tydef_opt cid = Hashtbl.find_opt tydefs cid
 (* a named type: register its definition, then refer to it by name *)
+
 let tabstract n inner_ty = let c = Cid.create [n] in register_tydef c inner_ty; tname c
 let tabstract_cid tcid inner_ty = register_tydef tcid inner_ty; tname tcid
 let tabstract_id id inner_ty = let c = Cid.create_ids [id] in register_tydef c inner_ty; tname c
@@ -278,7 +280,7 @@ let tenum ids = tenum_pairs (List.mapi (fun i id -> (id, i)) ids)
 let tref t = ty (TPtr(t, None))
 let rec base_type ty =
   match ty.raw_ty with
-  | TName cid -> (match Hashtbl.find_opt tydefs cid with Some def -> base_type def | None -> ty)
+  | TName cid -> (match tydef_opt cid with Some def -> base_type def | None -> ty)
   | _ -> ty
 ;;
 
@@ -395,7 +397,7 @@ let rec bitsizeof_ty ty =
     Some (event_tag_size + List.fold_left max 0 payloads)
   | TFun _ -> None
   | TBuiltin _ -> None
-  | TName cid -> (match Hashtbl.find_opt tydefs cid with Some d -> bitsizeof_ty d | None -> None)
+  | TName cid -> (match tydef_opt cid with Some d -> bitsizeof_ty d | None -> None)
 and bitsizeof_ty_exn ty =
   match bitsizeof_ty ty with 
   | Some size -> size
@@ -495,7 +497,7 @@ let rec default_value ty = match ty.raw_ty with
   | TEnum(cases) -> 
     venum ((List.hd cases) |> fst) ty
   | TBuiltin _ -> failwith "no default value for builtin type"
-  | TName cid -> (match Hashtbl.find_opt tydefs cid with
+  | TName cid -> (match tydef_opt cid with
     | Some inner_ty -> {(default_value inner_ty) with vty=ty}
     | None -> failwith "no default value for named type")
   | TPtr(inner_ty, None) -> {(default_value inner_ty) with vty=ty}

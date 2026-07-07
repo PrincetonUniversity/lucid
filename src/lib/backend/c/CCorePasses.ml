@@ -51,7 +51,7 @@ let compile ds =
   print_endline ("---- translating to CCore ----");
   print_endline@@CorePrinting.decls_to_string ds;
   let cds = CoreToCCore.translate ~payload_event_names ds in
-  (* CCoreSyntax.refresh_tydefs cds; *) (* TODO: check if this is needed for anything or dead code *)
+  CCoreSyntax.refresh_tydefs cds; (* may not be needed *)
 
   print_endline ("---- checking types and feature compatibility ----");
   let cds = CCoreTyper.check cds in
@@ -65,6 +65,9 @@ let compile ds =
   let cds = CCoreTables.process cds in
   let cds = CCoreArrays.process cds in
   let cds = CCoreTyper.check cds in
+
+  let cds = CCoreTyper.check cds in
+  ccore_print_always "---- After table gen ----" cds;
 
   (* We shouldn't have used references / pointers yet by this stage. *)
   CCoreWellformed.check_no_ptrs cds;
