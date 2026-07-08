@@ -53,4 +53,25 @@ write_pcap("headeronly.in.pcap", [
     eth("aabbccddeeff", "112233445566", 0x0800),
 ])
 
+# ---- Lucid background-event framing: dst=1 ++ src=2 ++ ety 666 ++ 16-bit tag ++ fields --
+def lucid_frame(tag, *fields):
+    return (bytes.fromhex("000000000001") + bytes.fromhex("000000000002")
+            + struct.pack(">HH", 666, tag) + b"".join(struct.pack(">I", f) for f in fields))
+
+# tables1_pcap: Table.install + Table.lookup end-to-end. Event tags are hardcoded from
+# tables1_pcap.dpt's declaration order: query_result=1, do_install=2, do_query=3.
+# Expected query_result frames (key, val, hit) on port 1:
+#   (42, 1000, 0)  miss before install (default miss_acn echoes the lookup arg)
+#   (42, 7, 1)     hit after install
+#   (43, 1000, 0)  miss -- 43 & 42 == 42, catches an install that masks with the key
+#                  instead of all-ones
+#   (1, 1000, 0)   miss -- other keys unaffected
+write_pcap("tables1_pcap.in.pcap", [
+    lucid_frame(3, 42),      # do_query(42)
+    lucid_frame(2, 42, 7),   # do_install(42, 7): hit_acn(7) for key 42, no output
+    lucid_frame(3, 42),      # do_query(42)
+    lucid_frame(3, 43),      # do_query(43)
+    lucid_frame(3, 1),       # do_query(1)
+])
+
 print("wrote input pcaps to", HERE)

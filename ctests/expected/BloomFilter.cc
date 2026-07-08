@@ -464,8 +464,8 @@ static int ring_pop(idx_ring* r, uint16_t* out) {
 
 
 /********* the queue element (a slab slot) ***********/
-// Mirrors the DPDK qe_priv_t + mbuf data region: the event, the handler's outputs,
-// and the packet bytes this element OWNS. The packet occupies data[HEADROOM ..
+// the event, the handler's outputs, and the element's packet bytes (this driver's
+// analogue of the DPDK mbuf + private area). The packet occupies data[HEADROOM ..
 // HEADROOM+pkt_len); payload_off marks where the payload begins within it.
 typedef struct {
     event_t    ev;
@@ -502,7 +502,7 @@ typedef struct { port_t ports[MAX_PORTS]; int nports; } port_map_t;
 
 // get_in_descriptor returns the whole port (so port_rx can set in_eof); get_out_descriptor
 // looks a port up by id and returns its dumper (NULL = no such port). Consumed only by
-// port_rx / send_frame; the pipeline treats them opaquely (mirrors the socket driver).
+// port_rx / send_frame; opaque to the pipeline.
 static port_t* get_in_descriptor(port_map_t* pm, int port_idx) { return &pm->ports[port_idx]; }
 static pcap_dumper_t* get_out_descriptor(port_map_t* pm, int port_id) {
     for (int i = 0; i < pm->nports; i++) if (pm->ports[i].port_id == port_id) return pm->ports[i].out;
@@ -543,8 +543,8 @@ static int init_port_map(port_map_t* pm, int argc, char** argv) {
 // a burst of freshly-read slab slots (pkt_len set, not yet parsed).
 typedef struct { uint16_t n; uint16_t idx[BURST]; } rx_batch;
 
-// read up to BURST frames from a port's input pcap into slots allocated from `s`. Sets
-// in_eof when the capture is exhausted.
+// read up to BURST frames from a port's input pcap into slots allocated from `s`. 
+// Sets in_eof when capture is done.
 static rx_batch port_rx(port_t* p, slab_t* s) {
     rx_batch batch; batch.n = 0;
     while (batch.n < BURST) {
@@ -562,9 +562,8 @@ static rx_batch port_rx(port_t* p, slab_t* s) {
     return batch;
 }
 
-// egress: dump the deparsed frame [buf, buf+len) to the port's output pcap. The record
-// timestamp is fixed at 0: this driver is for functional replay -- deterministic,
-// byte-comparable output -- not timing (use another driver to profile). NULL dumper drops.
+// egress: dump the deparsed frame [buf, buf+len) to the port's output pcap. 
+// output timestamp is always 0 for deterministic output comparison.
 static void send_frame(pcap_dumper_t* out, uint8_t* buf, size_t len) {
     if (out == NULL) { debug_printf("send_frame: no egress dumper (dropped)\n"); return; }
     struct pcap_pkthdr h = {0};   // ts = 0 (see above)
@@ -578,7 +577,7 @@ static void send_frame(pcap_dumper_t* out, uint8_t* buf, size_t len) {
 /*                            SECTION: driver pipeline                          */
 /********************************************************************************/
 
-/********* the driver's runtime state (instances of the slab + ring libraries) ***********/
+/********* driver runtime state (instances of the slab + ring libraries) ***********/
 static port_map_t   g_port_map;  // Lucid port <-> the driver's I/O (see its port_map_lib)
 static slab_t       g_slab;        // the packet-buffer pool
 static idx_ring     dispatch_in;   // parsed + recirculated elements awaiting handling
@@ -623,7 +622,7 @@ static void do_dispatch(void) {
 
 #define PORT_RECIRC 4294967295u // out_event.port sentinel: recirculate, don't egress
 
-/******** TX: fan out each element into one owned clone per output, then route/deparse/send ********/
+/******** TX: fan out each element into one copy per output, then route/deparse/send ********/
 static void do_tx(void) {
     for (int b = 0; b < BURST; b++) {
         uint16_t idx;
@@ -635,8 +634,8 @@ static void do_tx(void) {
             if (cidx == SLOT_NONE) continue;             // pool exhausted -> drop this output
             qe_t* c = slot(&g_slab, cidx);
             c->ev = oe->ev;
-            // the output owns a fresh copy of the input's payload (or none), placed at
-            // data+HEADROOM with headroom in front for the deparsed header.
+            // each output gets its own copy of the input's payload (or none), with
+            // headroom in front for the deparsed header.
             uint32_t plen = oe->ev.meta.has_payload ? (in->pkt_len - in->payload_off) : 0;
             if (plen) memcpy(c->data + HEADROOM, in->data + HEADROOM + in->payload_off, plen);
             c->pkt_len = plen;
@@ -679,8 +678,7 @@ int main(int argc, char** argv) {
     fflush(stdout);
 
     // replay loop: rx -> dispatch -> tx (each a bounded burst) until every input is
-    // exhausted AND the pipeline has drained. Offline libpcap blasts through, so there
-    // is no idle wait (unlike the socket driver's select loop).
+    // exhausted and pipeline is drained.
     for (;;) {
         do_rx();
         do_dispatch();

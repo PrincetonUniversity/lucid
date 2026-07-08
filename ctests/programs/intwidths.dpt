@@ -1,0 +1,9 @@
+// non-standard int widths: parser reads (int<7>, int<1>), arithmetic (masked +),
+// and deparser writes of a non-standard-width event field.
+event pkt_in(int<7> src_ip, int<1> src_port);
+event bg_cmd(int<7> res, int<1> flag) { skip; }
+
+handle pkt_in(int<7> src_ip, int<1> src_port) {
+    int<7> nxt = src_ip + 1;
+    generate(bg_cmd(nxt, src_port));
+}

@@ -1,0 +1,41 @@
+// Runtime pcap fixture for tables (run by ctests/test_pcap.sh; input frames come
+// from pcaps/gen_inputs.py, which hardcodes this file's event tags -- they are
+// assigned in declaration order: query_result=1, do_install=2, do_query=3).
+//
+// Same table / actions as tables1.dpt, but split into two control events and an
+// observable output event, so a pcap run can prove that install + lookup work:
+//   do_install(key, val) -- install hit_acn(val) for key
+//   do_query(key)        -- look key up and emit query_result(key, val, hit) on port 1
+// A miss runs the default miss_acn, which echoes the lookup arg (1000).
+
+type res_t = {
+  int val;
+  bool is_hit;
+}
+
+action res_t hit_acn(int x)(int a) {
+  return {val = x; is_hit = true};
+}
+action res_t miss_acn(int b)(int a) {
+  return {val = a; is_hit = false};
+}
+
+global Table.t<<int, int, int, res_t>> ftbl = Table.create(1024, [hit_acn; miss_acn], miss_acn, 1);
+
+// output event: the result of a query, observable in the output pcap
+event query_result(int key, int val, int hit) { skip; }
+
+event do_install(int key, int val) {
+  printf("installing entry: key=%d -> hit_acn(%d)", key, val);
+  Table.install<unordered>(ftbl, key, hit_acn, val);
+}
+
+event do_query(int key) {
+  res_t r = Table.lookup(ftbl, key, 1000);
+  int hit = 0;
+  if (r#is_hit == true) {
+    hit = 1;
+  }
+  printf("query key=%d -> val=%d hit=%d", key, r#val, hit);
+  generate_port(1, query_result(key, r#val, hit));
+}

@@ -36,8 +36,9 @@ list of sub-tests.
 - `pcaps/` — pcap fixtures (`<name>.in.pcap` + `<name>.expected.pcap` for `test_pcap.sh`)
   and `gen_inputs.py` which (re)generates the input pcaps. The driver tests also write
   transient `*.send.pcap` / `*.recv.pcap` / `dpdk_*.pcap` here at runtime.
-- `_rawsock_build/`, `_rawsock_scanloop_build/`, `_dpdk_*_build/` — per-driver build dirs
-  holding the pre-generated `lucidprog.c` (see the two-phase note below).
+- `_rawsock_build/`, `_dpdk_build/` — per-driver build dirs, one subdir per sub-test
+  (`refl`, `events`, `scanloop`), holding the pre-generated `lucidprog.c` (see the
+  two-phase note below).
 
 ## Usage
 
@@ -67,8 +68,8 @@ and writes the generated C / build dir; a plain run just gcc/make's + runs that 
 source. Regenerate when the compiler or a `.dpt` changes:
 
 ```sh
-sudo python3 ctests/test_rawsock.py --gen   # .dpt -> _rawsock*_build/lucidprog.c
-sudo python3 ctests/test_dpdk.py --gen      # .dpt -> _dpdk*_build/
+sudo python3 ctests/test_rawsock.py --gen   # .dpt -> _rawsock_build/<test>/lucidprog.c
+sudo python3 ctests/test_dpdk.py --gen      # .dpt -> _dpdk_build/<test>/
 ```
 
 ## Adding a program

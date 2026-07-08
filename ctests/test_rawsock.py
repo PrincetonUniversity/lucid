@@ -25,8 +25,9 @@ SWITCH_IFACE, SEND_IFACE = "veth0", "veth1"   # switch binds port 0 to veth0; we
 NUM = 100        # reflector packets
 NUM_SCAN = 10    # scanloop pkt_in packets
 
-REFL_BUILD = os.path.join(dl.SCRIPT_DIR, "_rawsock_build")
-SCAN_BUILD = os.path.join(dl.SCRIPT_DIR, "_rawsock_scanloop_build")
+BUILD = os.path.join(dl.SCRIPT_DIR, "_rawsock_build")   # one subdir per sub-test
+REFL_BUILD = os.path.join(BUILD, "refl")
+SCAN_BUILD = os.path.join(BUILD, "scanloop")
 
 
 def _cfile(build): return os.path.join(build, "lucidprog.c")

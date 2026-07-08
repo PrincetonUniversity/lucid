@@ -30,9 +30,10 @@ NUM = 100          # reflector packets
 NUM_EVENTS = 5     # events pkt_in packets
 NUM_SCAN = 10      # scanloop pkt_in packets
 
-REFL_BUILD = os.path.join(dl.SCRIPT_DIR, "_dpdk_build")            # ethswaprefl (reflector + af_packet)
-EVENTS_BUILD = os.path.join(dl.SCRIPT_DIR, "_dpdk_events_build")   # events.dpt
-SCAN_BUILD = os.path.join(dl.SCRIPT_DIR, "_dpdk_scanloop_build")   # scanloop.dpt
+BUILD = os.path.join(dl.SCRIPT_DIR, "_dpdk_build")   # one subdir per sub-test
+REFL_BUILD = os.path.join(BUILD, "refl")             # ethswaprefl (reflector + af_packet)
+EVENTS_BUILD = os.path.join(BUILD, "events")         # events.dpt
+SCAN_BUILD = os.path.join(BUILD, "scanloop")         # scanloop.dpt
 
 
 def gen():

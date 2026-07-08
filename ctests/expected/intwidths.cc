@@ -1,28 +1,12 @@
 
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <sys/ioctl.h>
-#include <sys/select.h>
-#include <net/ethernet.h>
-#ifdef __linux__
-  #define USE_AF_PACKET
-  #include <linux/if_packet.h>
-#else
-  #define USE_BPF
-  #include <net/bpf.h>
-#endif
-#include <netinet/in.h>
-#include <net/if.h>
-#include <arpa/inet.h>
-#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <stdint.h>
 #include <stdbool.h>
-#include <fcntl.h>
-#include <unistd.h>
 #include <time.h>
+#include <sys/time.h>
+#include <pcap.h>
 
 #ifdef DEBUG
   #define debug_printf(...) fprintf(stderr, __VA_ARGS__)
@@ -112,75 +96,94 @@ typedef struct {
   uint32_t timestamp;
   uint32_t in_port;
 } event_meta;
-uint16_t ethpkt_tag  = 1;
+uint16_t pkt_in_tag  = 1;
+uint16_t bg_cmd_tag  = 2;
 typedef struct {
   uint16_t tag;
   union {
     struct {
-      uint64_t dst_669;
-      uint64_t src_670;
-      uint16_t ety_671;
-    } ethpkt_673;
+      uint8_t src_ip_693;
+      uint8_t src_port_694;
+    } pkt_in_695;
+    struct {
+      uint8_t res_696;
+      uint8_t flag_697;
+    } bg_cmd_698;
   } args;
 } event_variant_t;
-event_variant_t ethpkt_673(uint64_t dst_669 , uint64_t src_670 , uint16_t ety_671 ){
+event_variant_t pkt_in_695(uint8_t src_ip_693 , uint8_t src_port_694 ){
   event_variant_t ev  = {0};
-  ev.args.ethpkt_673.dst_669 = dst_669;
-  ev.args.ethpkt_673.src_670 = src_670;
-  ev.args.ethpkt_673.ety_671 = ety_671;
-  ev.tag = ethpkt_tag;
+  ev.args.pkt_in_695.src_ip_693 = src_ip_693;
+  ev.args.pkt_in_695.src_port_694 = src_port_694;
+  ev.tag = pkt_in_tag;
+  return ev;
+}
+event_variant_t bg_cmd_698(uint8_t res_696 , uint8_t flag_697 ){
+  event_variant_t ev  = {0};
+  ev.args.bg_cmd_698.res_696 = res_696;
+  ev.args.bg_cmd_698.flag_697 = flag_697;
+  ev.tag = bg_cmd_tag;
   return ev;
 }
 typedef struct {
   event_meta meta;
   event_variant_t data;
 } event_t;
-typedef struct {
-  event_t ev;
-  uint32_t port;
-} out_event_t;
-event_t mk_ethpkt(uint64_t dst_669 , uint64_t src_670 , uint16_t ety_671 ){
-  event_t tmp_713  = {.meta = {.len = 14, .is_packet = 1, .has_payload = 1, .timestamp = 0, .in_port = 0}, .data = ethpkt_673(dst_669, src_670, ety_671)};
-  return tmp_713;
+event_t mk_pkt_in(uint8_t src_ip_693 , uint8_t src_port_694 ){
+  event_t tmp_741  = {.meta = {.len = 1, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = pkt_in_695(src_ip_693, src_port_694)};
+  return tmp_741;
+}
+event_t mk_bg_cmd(uint8_t res_696 , uint8_t flag_697 ){
+  event_t tmp_742  = {.meta = {.len = 1, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = bg_cmd_698(res_696, flag_697)};
+  return tmp_742;
 }
 uint32_t recirculation_port  = 0;
 uint32_t self  = 0;
-uint8_t parse_event(packet_t*  pkt , event_t*  next_event ){
-  uint64_t dst_669  = ((uint64_t)(read_bits(pkt, 48))) & 281474976710655;
-  uint64_t src_670  = ((uint64_t)(read_bits(pkt, 48))) & 281474976710655;
-  uint16_t ety_671  = ((uint16_t)(read_bits(pkt, 16)));
-  (*(next_event)) = mk_ethpkt(dst_669, src_670, ety_671);
-  return pkt->cursor <= pkt->end;
-}
-uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
-  uint16_t n  = 0;
-  switch (ev_in->data.tag) {
-    case 1: {
-      uint64_t dst_674  = ev_in->data.args.ethpkt_673.dst_669;
-      uint64_t src_675  = ev_in->data.args.ethpkt_673.src_670;
-      uint16_t ety_676  = ev_in->data.args.ethpkt_673.ety_671;
-      event_t this  = mk_ethpkt(dst_674, src_675, ety_676);
-      out_event_t tmp_714  = {.ev = mk_ethpkt(src_675, dst_674, ety_676), .port = ev_in->meta.in_port};
-      out_events[n] = tmp_714;
-      n = n + 1;
+uint8_t parse_event(packet_t*  packet , event_t*  next_event ){
+  skip_bits(packet, 32);
+  skip_bits(packet, 16);
+  skip_bits(packet, 32);
+  skip_bits(packet, 16);
+  uint16_t ety  = ((uint16_t)(read_bits(packet, 16)));
+  switch (ety) {
+    case 666: {
+      uint16_t tag  = ((uint16_t)(read_bits(packet, 16)));
+      switch (tag) {
+        case 1: {
+          uint8_t src_ip_693  = ((uint8_t)(read_bits(packet, 7))) & 127;
+          uint8_t src_port_694  = ((uint8_t)(read_bits(packet, 1))) & 1;
+          (*(next_event)) = mk_pkt_in(src_ip_693, src_port_694);
+          return packet->cursor <= packet->end;
+          break;
+        }
+        case 2: {
+          uint8_t res_696  = ((uint8_t)(read_bits(packet, 7))) & 127;
+          uint8_t flag_697  = ((uint8_t)(read_bits(packet, 1))) & 1;
+          (*(next_event)) = mk_bg_cmd(res_696, flag_697);
+          return packet->cursor <= packet->end;
+          break;
+        }
+        default: {
+          return 0;
+          break;
+        }
+      }
       break;
     }
     default: {
-      
+      return 0;
       break;
     }
   }
-  return n;
+  return 0;
 }
 void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
   switch (ev_out->data.tag) {
     case 1: {
-      uint64_t dst_669  = ev_out->data.args.ethpkt_673.dst_669;
-      uint64_t src_670  = ev_out->data.args.ethpkt_673.src_670;
-      uint16_t ety_671  = ev_out->data.args.ethpkt_673.ety_671;
-      write_bits(buf_out, ((uint64_t)(ety_671)), 16);
-      write_bits(buf_out, ((uint64_t)(src_670)), 48);
-      write_bits(buf_out, ((uint64_t)(dst_669)), 48);
+      uint8_t src_ip_693  = ev_out->data.args.pkt_in_695.src_ip_693;
+      uint8_t src_port_694  = ev_out->data.args.pkt_in_695.src_port_694;
+      write_bits(buf_out, ((uint64_t)(src_port_694)), 1);
+      write_bits(buf_out, ((uint64_t)(src_ip_693)), 7);
       if ((ev_out->meta.is_packet) == (0)) {
         write_bits(buf_out, ((uint64_t)(1)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -190,7 +193,50 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       return ;
       break;
     }
+    case 2: {
+      uint8_t res_696  = ev_out->data.args.bg_cmd_698.res_696;
+      uint8_t flag_697  = ev_out->data.args.bg_cmd_698.flag_697;
+      write_bits(buf_out, ((uint64_t)(flag_697)), 1);
+      write_bits(buf_out, ((uint64_t)(res_696)), 7);
+      if ((ev_out->meta.is_packet) == (0)) {
+        write_bits(buf_out, ((uint64_t)(2)), 16);
+        write_bits(buf_out, ((uint64_t)(666)), 16);
+        write_bits(buf_out, ((uint64_t)(2)), 48);
+        write_bits(buf_out, ((uint64_t)(1)), 48);
+      }
+      return ;
+      break;
+    }
   }
+}
+typedef struct {
+  event_t ev;
+  uint32_t port;
+} out_event_t;
+uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
+  uint16_t n  = 0;
+  switch (ev_in->data.tag) {
+    case 2: {
+      uint8_t res_699  = ev_in->data.args.bg_cmd_698.res_696;
+      uint8_t flag_700  = ev_in->data.args.bg_cmd_698.flag_697;
+      event_t this  = mk_bg_cmd(res_699, flag_700);
+      break;
+    }
+    case 1: {
+      uint8_t src_ip_701  = ev_in->data.args.pkt_in_695.src_ip_693;
+      uint8_t src_port_702  = ev_in->data.args.pkt_in_695.src_port_694;
+      event_t this  = mk_pkt_in(src_ip_701, src_port_702);
+      out_event_t tmp_743  = {.ev = mk_bg_cmd(src_ip_701 + 1 & 127, src_port_702), .port = 4294967295};
+      out_events[n] = tmp_743;
+      n = n + 1;
+      break;
+    }
+    default: {
+      
+      break;
+    }
+  }
+  return n;
 }
 
 /********************************************************************************/
@@ -242,8 +288,8 @@ static int ring_pop(idx_ring* r, uint16_t* out) {
 
 
 /********* the queue element (a slab slot) ***********/
-// Mirrors the DPDK qe_priv_t + mbuf data region: the event, the handler's outputs,
-// and the packet bytes this element OWNS. The packet occupies data[HEADROOM ..
+// the event, the handler's outputs, and the element's packet bytes (this driver's
+// analogue of the DPDK mbuf + private area). The packet occupies data[HEADROOM ..
 // HEADROOM+pkt_len); payload_off marks where the payload begins within it.
 typedef struct {
     event_t    ev;
@@ -274,145 +320,80 @@ static void slab_init(slab_t* s) {
 }
 
 
-#define RXBUF_SIZE 65536
+/********* ports (Lucid port number <-> pcap input/output) ***********/
+typedef struct { int port_id; pcap_t* in; pcap_dumper_t* out; int in_eof; } port_t;
+typedef struct { port_t ports[MAX_PORTS]; int nports; } port_map_t;
 
-#ifdef USE_BPF
-static unsigned int g_bpf_blen = RXBUF_SIZE; // actual BPF read size (set at open)
-#endif
-
-// open a raw socket bound to ifname; returns the fd or -1.
-static int raw_open(const char* ifname) {
-#ifdef USE_AF_PACKET
-    int fd = socket(AF_PACKET, SOCK_RAW, htons(ETH_P_ALL));
-    if (fd < 0) { perror("socket(AF_PACKET)"); return -1; }
-    int ifidx = if_nametoindex(ifname);
-    if (ifidx == 0) { perror("if_nametoindex"); close(fd); return -1; }
-    struct sockaddr_ll sll;
-    memset(&sll, 0, sizeof(sll));
-    sll.sll_family = AF_PACKET;
-    sll.sll_ifindex = ifidx;
-    sll.sll_protocol = htons(ETH_P_ALL);
-    if (bind(fd, (struct sockaddr*)&sll, sizeof(sll)) < 0) { perror("bind"); close(fd); return -1; }
-    // don't deliver our own outgoing frames back to us (avoids reflect loops)
-#ifdef PACKET_IGNORE_OUTGOING
-    { int one = 1; setsockopt(fd, SOL_PACKET, PACKET_IGNORE_OUTGOING, &one, sizeof(one)); }
-#endif
-    // promiscuous so we see all frames on the wire
-    { struct packet_mreq mr; memset(&mr, 0, sizeof(mr));
-      mr.mr_ifindex = ifidx; mr.mr_type = PACKET_MR_PROMISC;
-      setsockopt(fd, SOL_PACKET, PACKET_ADD_MEMBERSHIP, &mr, sizeof(mr)); }
-    fcntl(fd, F_SETFL, O_NONBLOCK);
-    return fd;
-#else // USE_BPF
-    int fd = -1;
-    for (int i = 0; i < 99; i++) {
-        char path[16]; snprintf(path, sizeof(path), "/dev/bpf%d", i);
-        fd = open(path, O_RDWR);
-        if (fd >= 0) break;
-        if (errno == EBUSY) continue;
-        break;
-    }
-    if (fd < 0) { perror("open(/dev/bpf)"); return -1; }
-    unsigned int enable = 1, disable = 0, blen = RXBUF_SIZE;
-    ioctl(fd, BIOCSSEESENT, &disable);  // don't see our own sent frames (avoids loops)
-    ioctl(fd, BIOCSHDRCMPLT, &enable);  // we supply complete link-layer headers
-    ioctl(fd, BIOCSBLEN, &blen);        // set + read back the kernel buffer length
-    g_bpf_blen = blen;
-    struct ifreq ifr; memset(&ifr, 0, sizeof(ifr));
-    strncpy(ifr.ifr_name, ifname, IFNAMSIZ - 1);
-    if (ioctl(fd, BIOCSETIF, &ifr) < 0) { perror("BIOCSETIF"); close(fd); return -1; }
-    ioctl(fd, BIOCIMMEDIATE, &enable);  // deliver each packet immediately
-    ioctl(fd, BIOCPROMISC, NULL);
-    fcntl(fd, F_SETFL, O_NONBLOCK);
-    return fd;
-#endif
+// get_in_descriptor returns the whole port (so port_rx can set in_eof); get_out_descriptor
+// looks a port up by id and returns its dumper (NULL = no such port). Consumed only by
+// port_rx / send_frame; opaque to the pipeline.
+static port_t* get_in_descriptor(port_map_t* pm, int port_idx) { return &pm->ports[port_idx]; }
+static pcap_dumper_t* get_out_descriptor(port_map_t* pm, int port_id) {
+    for (int i = 0; i < pm->nports; i++) if (pm->ports[i].port_id == port_id) return pm->ports[i].out;
+    return NULL;
 }
+
+// parse `--interface PORT:INFILE:OUTFILE` args and open the pcaps.
+static int init_port_map(port_map_t* pm, int argc, char** argv) {
+    char errbuf[PCAP_ERRBUF_SIZE];
+    for (int i = 1; i < argc; i++) {
+        if (strcmp(argv[i], "--interface") == 0 && i + 1 < argc) {
+            char* spec = argv[++i];
+            char* c1 = strchr(spec, ':');
+            char* c2 = c1 ? strchr(c1 + 1, ':') : NULL;
+            if (!c1 || !c2) { fprintf(stderr, "bad --interface '%s' (expected PORT:IN:OUT)\n", spec); return 1; }
+            *c1 = '\0'; *c2 = '\0';
+            int port_id = atoi(spec);
+            const char* infile = c1 + 1;
+            const char* outfile = c2 + 1;
+            if (pm->nports >= MAX_PORTS) { fprintf(stderr, "too many interfaces (max %d)\n", MAX_PORTS); return 1; }
+            pcap_t* in = pcap_open_offline(infile, errbuf);
+            if (!in) { fprintf(stderr, "open input '%s': %s\n", infile, errbuf); return 1; }
+            pcap_dumper_t* out = pcap_dump_open(in, outfile);
+            if (!out) { fprintf(stderr, "open output '%s': %s\n", outfile, pcap_geterr(in)); return 1; }
+            pm->ports[pm->nports].port_id = port_id;
+            pm->ports[pm->nports].in = in;
+            pm->ports[pm->nports].out = out;
+            pm->ports[pm->nports].in_eof = 0;
+            pm->nports++;
+            printf("bound port %d: %s -> %s\n", port_id, infile, outfile);
+        }
+        // ignore unknown args (e.g. the .dpt path, for argv-compatibility with lucidSwitch)
+    }
+    return 0;
+}
+
 
 // a burst of freshly-read slab slots (pkt_len set, not yet parsed).
 typedef struct { uint16_t n; uint16_t idx[BURST]; } rx_batch;
 
-// read up to BURST frames from one port's socket into slots freshly allocated from `s`
-// and return them (pkt_len set); does NOT parse -- do_rx ingests each.
-static rx_batch port_rx(int fd, slab_t* s) {
+// read up to BURST frames from a port's input pcap into slots allocated from `s`. 
+// Sets in_eof when capture is done.
+static rx_batch port_rx(port_t* p, slab_t* s) {
     rx_batch batch; batch.n = 0;
-#ifdef USE_AF_PACKET
     while (batch.n < BURST) {
         uint16_t idx = slot_alloc(s);
-        if (idx == SLOT_NONE) break;                     // pool exhausted -> drop-at-birth
+        if (idx == SLOT_NONE) break;                       // pool exhausted -> drop-at-birth
+        struct pcap_pkthdr* h; const u_char* data;
+        int r = pcap_next_ex(p->in, &h, &data);
+        if (r != 1) { slot_free(s, idx); p->in_eof = 1; break; } // EOF/error -> done with this port
         qe_t* q = slot(s, idx);
-        ssize_t n = read(fd, q->data + HEADROOM, SLOT_USABLE);
-        if (n <= 0) { slot_free(s, idx); break; }         // EWOULDBLOCK/error -> done with this port
-        q->pkt_len = (uint32_t)n;
+        uint32_t len = h->caplen; if (len > SLOT_USABLE) len = SLOT_USABLE;
+        memcpy(q->data + HEADROOM, data, len);
+        q->pkt_len = len;
         batch.idx[batch.n++] = idx;
     }
-#else // USE_BPF: one read yields a buffer of bpf_hdr-prefixed frames (capped at BURST here;
-      // BPF is the dev-only path, so dropping a rare >BURST single-read burst is acceptable)
-    static uint8_t rxbuf[RXBUF_SIZE];
-    ssize_t n = read(fd, rxbuf, g_bpf_blen);
-    if (n > 0) {
-        uint8_t* ptr = rxbuf; uint8_t* end = rxbuf + n;
-        while (ptr + sizeof(struct bpf_hdr) <= end && batch.n < BURST) {
-            struct bpf_hdr* bh = (struct bpf_hdr*)ptr;
-            if (bh->bh_caplen == bh->bh_datalen) {        // skip truncated captures
-                uint16_t idx = slot_alloc(s);
-                if (idx == SLOT_NONE) break;              // pool exhausted -> drop-at-birth
-                uint32_t flen = bh->bh_caplen; if (flen > SLOT_USABLE) flen = SLOT_USABLE;
-                qe_t* q = slot(s, idx);
-                memcpy(q->data + HEADROOM, ptr + bh->bh_hdrlen, flen);
-                q->pkt_len = flen;
-                batch.idx[batch.n++] = idx;
-            }
-            ptr += BPF_WORDALIGN(bh->bh_hdrlen + bh->bh_caplen);
-        }
-    }
-#endif
     return batch;
 }
 
-// egress: write a deparsed frame [buf, buf+len) out the descriptor get_out_descriptor
-// returned. Handles a bad descriptor (< 0, no such port) itself, so do_tx can stay a
-// pass-through (get_out_descriptor -> send_frame), mirroring do_rx.
-static void send_frame(int fd, uint8_t* buf, size_t len) {
-    if (fd < 0) { debug_printf("send_frame: no egress descriptor (dropped)\n"); return; }
-    if (write(fd, buf, len) < 0) debug_printf("write to fd %d failed: %s\n", fd, strerror(errno));
-}
-
-
-/********* ports (Lucid port number <-> interface socket) ***********/
-typedef struct { int port_id; int fd; char ifname[IFNAMSIZ]; } port_t;
-typedef struct { port_t ports[MAX_PORTS]; int nports; } port_map_t;
-static int port_fd(int port_id, port_map_t* g_port_map) {
-    for (int i = 0; i < g_port_map->nports; i++) if (g_port_map->ports[i].port_id == port_id) return g_port_map->ports[i].fd;
-    return -1;
-}
-// the descriptor a port reads from / writes to -- the pipeline (do_rx / do_tx) treats it
-// opaquely and only ever hands it to port_rx / send_frame (packet_lib). For a socket both
-// directions are the same bidirectional fd. do_rx walks ports by index; do_tx targets a
-// port by id (from the out_event). (< 0 means "no such port".)
-static int get_in_descriptor(port_map_t* pm, int port_idx) { return pm->ports[port_idx].fd; }
-static int get_out_descriptor(port_map_t* pm, int port_id)  { return port_fd(port_id, pm); }
-int init_port_map(port_map_t* g_port_map, int argc, char** argv) {
-    for (int i = 1; i < argc; i++) {
-        if (strcmp(argv[i], "--interface") == 0 && i + 1 < argc) {
-            char* spec = argv[++i];
-            char* colon = strchr(spec, ':');
-            if (!colon) { fprintf(stderr, "bad --interface '%s' (expected PORT:IFNAME)\n", spec); return 1; }
-            *colon = '\0';
-            int port_id = atoi(spec);
-            const char* ifname = colon + 1;
-            if (g_port_map->nports >= MAX_PORTS) { fprintf(stderr, "too many interfaces (max %d)\n", MAX_PORTS); return 1; }
-            int fd = raw_open(ifname);
-            if (fd < 0) { fprintf(stderr, "failed to open interface '%s' for port %d\n", ifname, port_id); return 1; }
-            g_port_map->ports[g_port_map->nports].port_id = port_id;
-            g_port_map->ports[g_port_map->nports].fd = fd;
-            strncpy(g_port_map->ports[g_port_map->nports].ifname, ifname, IFNAMSIZ - 1);
-            g_port_map->nports++;
-            printf("bound port %d to interface %s\n", port_id, ifname);
-        } else {
-            // ignore unknown args (e.g. the .dpt path, for argv-compatibility with lucidSwitch)
-        }
-    }
-    return 0;
+// egress: dump the deparsed frame [buf, buf+len) to the port's output pcap. 
+// output timestamp is always 0 for deterministic output comparison.
+static void send_frame(pcap_dumper_t* out, uint8_t* buf, size_t len) {
+    if (out == NULL) { debug_printf("send_frame: no egress dumper (dropped)\n"); return; }
+    struct pcap_pkthdr h = {0};   // ts = 0 (see above)
+    h.caplen = (bpf_u_int32)len;
+    h.len    = (bpf_u_int32)len;
+    pcap_dump((u_char*)out, &h, buf);
 }
 
 
@@ -420,7 +401,7 @@ int init_port_map(port_map_t* g_port_map, int argc, char** argv) {
 /*                            SECTION: driver pipeline                          */
 /********************************************************************************/
 
-/********* the driver's runtime state (instances of the slab + ring libraries) ***********/
+/********* driver runtime state (instances of the slab + ring libraries) ***********/
 static port_map_t   g_port_map;  // Lucid port <-> the driver's I/O (see its port_map_lib)
 static slab_t       g_slab;        // the packet-buffer pool
 static idx_ring     dispatch_in;   // parsed + recirculated elements awaiting handling
@@ -465,7 +446,7 @@ static void do_dispatch(void) {
 
 #define PORT_RECIRC 4294967295u // out_event.port sentinel: recirculate, don't egress
 
-/******** TX: fan out each element into one owned clone per output, then route/deparse/send ********/
+/******** TX: fan out each element into one copy per output, then route/deparse/send ********/
 static void do_tx(void) {
     for (int b = 0; b < BURST; b++) {
         uint16_t idx;
@@ -477,8 +458,8 @@ static void do_tx(void) {
             if (cidx == SLOT_NONE) continue;             // pool exhausted -> drop this output
             qe_t* c = slot(&g_slab, cidx);
             c->ev = oe->ev;
-            // the output owns a fresh copy of the input's payload (or none), placed at
-            // data+HEADROOM with headroom in front for the deparsed header.
+            // each output gets its own copy of the input's payload (or none), with
+            // headroom in front for the deparsed header.
             uint32_t plen = oe->ev.meta.has_payload ? (in->pkt_len - in->payload_off) : 0;
             if (plen) memcpy(c->data + HEADROOM, in->data + HEADROOM + in->payload_off, plen);
             c->pkt_len = plen;
@@ -508,45 +489,33 @@ static void do_tx(void) {
 /*                              SECTION: driver main                            */
 /********************************************************************************/
 
-static volatile int g_running = 1;
-
 int main(int argc, char** argv) {
-    // parse `--interface PORT:IFNAME` args (same form as lucidSwitch)
-    int ret = init_port_map(&g_port_map, argc, argv);
-    if (ret != 0) {
-        fprintf(stderr, "failed to init port map\n");
-        return 1;
-    }
+    if (init_port_map(&g_port_map, argc, argv) != 0) { fprintf(stderr, "failed to init port map\n"); return 1; }
     if (g_port_map.nports == 0) {
-        fprintf(stderr, "usage: %s --interface PORT:IFNAME [--interface PORT:IFNAME ...]\n", argv[0]);
+        fprintf(stderr, "usage: %s --interface PORT:IN:OUT [--interface PORT:IN:OUT ...]\n", argv[0]);
         return 1;
     }
-
     slab_init(&g_slab);
     ring_init(&dispatch_in);
     ring_init(&tx_in);
-    // the test harness waits for this line on stdout before sending traffic
     printf("Init complete.\n");
     fflush(stdout);
 
-    // the pipeline loop: rx -> dispatch -> tx, each a bounded burst. select() blocks
-    // when everything is idle, but only polls (zero timeout) while there is queued
-    // dispatch/tx work -- so recirculation makes progress without waiting on a read,
-    // and an endless self-recirculating handler still can't block fresh input.
-    while (g_running) {
-        int have_work = !ring_empty(&dispatch_in) || !ring_empty(&tx_in);
-        fd_set rfds; FD_ZERO(&rfds); int maxfd = 0;
-        for (int i = 0; i < g_port_map.nports; i++) {
-            FD_SET(g_port_map.ports[i].fd, &rfds);
-            if (g_port_map.ports[i].fd > maxfd) maxfd = g_port_map.ports[i].fd;
-        }
-        struct timeval zero = {0, 0};
-        int r = select(maxfd + 1, &rfds, NULL, NULL, have_work ? &zero : NULL);
-        if (r < 0) { if (errno == EINTR) continue; perror("select"); break; }
-        do_rx();        // read available frames into slots, enqueue on dispatch_in
-        do_dispatch();  // handle a bounded burst, forward to tx_in
-        do_tx();        // fan out a bounded burst: deparse+send; recirc re-enqueues
+    // replay loop: rx -> dispatch -> tx (each a bounded burst) until every input is
+    // exhausted and pipeline is drained.
+    for (;;) {
+        do_rx();
+        do_dispatch();
+        do_tx();
+        int all_eof = 1;
+        for (int i = 0; i < g_port_map.nports; i++) if (!g_port_map.ports[i].in_eof) all_eof = 0;
+        if (all_eof && ring_empty(&dispatch_in) && ring_empty(&tx_in)) break;
     }
+
     printf("Processed %llu packets\n", (unsigned long long)pkt_ct);
+    for (int i = 0; i < g_port_map.nports; i++) {
+        pcap_dump_close(g_port_map.ports[i].out);
+        pcap_close(g_port_map.ports[i].in);
+    }
     return 0;
 }

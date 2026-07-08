@@ -20,7 +20,7 @@
 /********************************************************************************/
 typedef struct {
   uint32_t _0;
-  uint32_t _1;
+  uint8_t _1;
 } tuple_1;
 typedef struct {
   uint8_t*  start;
@@ -93,6 +93,7 @@ uint32_t hash_32(uint32_t seed , uint8_t*  str , uint32_t len_bits ){
   }
   return hashValue;
 }
+enum {tag_hit_acn_2380 = 0, tag_miss_acn_2383 = 1};
 typedef struct {
   uint16_t len;
   uint8_t is_packet;
@@ -100,134 +101,134 @@ typedef struct {
   uint32_t timestamp;
   uint32_t in_port;
 } event_meta;
-uint16_t inside_packet_tag  = 1;
-uint16_t inside_continue_tag  = 2;
-uint16_t outside_packet_tag  = 3;
-uint16_t outside_continue_tag  = 4;
-uint16_t add_to_nat_tag  = 5;
+uint16_t query_result_tag  = 1;
+uint16_t do_install_tag  = 2;
+uint16_t do_query_tag  = 3;
 typedef struct {
   uint16_t tag;
   union {
     struct {
-      uint32_t src_ip_4037;
-      uint32_t src_port_4038;
-    } inside_packet_4039;
+      uint32_t key_2385;
+      uint32_t val_2386;
+      uint32_t hit_2387;
+    } query_result_2388;
     struct {
-      uint32_t src_port_4040;
-    } inside_continue_4041;
+      uint32_t key_2389;
+      uint32_t val_2390;
+    } do_install_2391;
     struct {
-      uint32_t dst_port_4042;
-    } outside_packet_4043;
-    struct {
-      uint32_t dst_ip_4044;
-      uint32_t dst_port_4045;
-    } outside_continue_4046;
-    struct {
-      uint32_t src_ip_4047;
-      uint32_t src_port_4048;
-    } add_to_nat_4049;
+      uint32_t key_2392;
+    } do_query_2393;
   } args;
 } event_variant_t;
-event_variant_t inside_packet_4039(uint32_t src_ip_4037 , uint32_t src_port_4038 ){
+event_variant_t query_result_2388(uint32_t key_2385 , uint32_t val_2386 , uint32_t hit_2387 ){
   event_variant_t ev  = {0};
-  ev.args.inside_packet_4039.src_ip_4037 = src_ip_4037;
-  ev.args.inside_packet_4039.src_port_4038 = src_port_4038;
-  ev.tag = inside_packet_tag;
+  ev.args.query_result_2388.key_2385 = key_2385;
+  ev.args.query_result_2388.val_2386 = val_2386;
+  ev.args.query_result_2388.hit_2387 = hit_2387;
+  ev.tag = query_result_tag;
   return ev;
 }
-event_variant_t inside_continue_4041(uint32_t src_port_4040 ){
+event_variant_t do_install_2391(uint32_t key_2389 , uint32_t val_2390 ){
   event_variant_t ev  = {0};
-  ev.args.inside_continue_4041.src_port_4040 = src_port_4040;
-  ev.tag = inside_continue_tag;
+  ev.args.do_install_2391.key_2389 = key_2389;
+  ev.args.do_install_2391.val_2390 = val_2390;
+  ev.tag = do_install_tag;
   return ev;
 }
-event_variant_t outside_packet_4043(uint32_t dst_port_4042 ){
+event_variant_t do_query_2393(uint32_t key_2392 ){
   event_variant_t ev  = {0};
-  ev.args.outside_packet_4043.dst_port_4042 = dst_port_4042;
-  ev.tag = outside_packet_tag;
-  return ev;
-}
-event_variant_t outside_continue_4046(uint32_t dst_ip_4044 , uint32_t dst_port_4045 ){
-  event_variant_t ev  = {0};
-  ev.args.outside_continue_4046.dst_ip_4044 = dst_ip_4044;
-  ev.args.outside_continue_4046.dst_port_4045 = dst_port_4045;
-  ev.tag = outside_continue_tag;
-  return ev;
-}
-event_variant_t add_to_nat_4049(uint32_t src_ip_4047 , uint32_t src_port_4048 ){
-  event_variant_t ev  = {0};
-  ev.args.add_to_nat_4049.src_ip_4047 = src_ip_4047;
-  ev.args.add_to_nat_4049.src_port_4048 = src_port_4048;
-  ev.tag = add_to_nat_tag;
+  ev.args.do_query_2393.key_2392 = key_2392;
+  ev.tag = do_query_tag;
   return ev;
 }
 typedef struct {
   event_meta meta;
   event_variant_t data;
 } event_t;
-event_t mk_inside_packet(uint32_t src_ip_4037 , uint32_t src_port_4038 ){
-  event_t tmp_4331  = {.meta = {.len = 8, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = inside_packet_4039(src_ip_4037, src_port_4038)};
-  return tmp_4331;
+event_t mk_query_result(uint32_t key_2385 , uint32_t val_2386 , uint32_t hit_2387 ){
+  event_t tmp_2557  = {.meta = {.len = 12, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = query_result_2388(key_2385, val_2386, hit_2387)};
+  return tmp_2557;
 }
-event_t mk_inside_continue(uint32_t src_port_4040 ){
-  event_t tmp_4332  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = inside_continue_4041(src_port_4040)};
-  return tmp_4332;
+event_t mk_do_install(uint32_t key_2389 , uint32_t val_2390 ){
+  event_t tmp_2558  = {.meta = {.len = 8, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = do_install_2391(key_2389, val_2390)};
+  return tmp_2558;
 }
-event_t mk_outside_packet(uint32_t dst_port_4042 ){
-  event_t tmp_4333  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = outside_packet_4043(dst_port_4042)};
-  return tmp_4333;
-}
-event_t mk_outside_continue(uint32_t dst_ip_4044 , uint32_t dst_port_4045 ){
-  event_t tmp_4334  = {.meta = {.len = 8, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = outside_continue_4046(dst_ip_4044, dst_port_4045)};
-  return tmp_4334;
-}
-event_t mk_add_to_nat(uint32_t src_ip_4047 , uint32_t src_port_4048 ){
-  event_t tmp_4335  = {.meta = {.len = 8, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = add_to_nat_4049(src_ip_4047, src_port_4048)};
-  return tmp_4335;
+event_t mk_do_query(uint32_t key_2392 ){
+  event_t tmp_2559  = {.meta = {.len = 4, .is_packet = 0, .has_payload = 0, .timestamp = 0, .in_port = 0}, .data = do_query_2393(key_2392)};
+  return tmp_2559;
 }
 uint32_t recirculation_port  = 0;
 uint32_t self  = 0;
-uint32_t nat_to_ip_4035 [16] = {0};
-uint32_t Array_update_complex_nat_to_ip_4035_set_set_memop_32_bit(uint32_t _idx , uint32_t new_val_set_memop_32_bit , uint32_t unused_set_memop_32_bit ){
-  uint32_t cell1  = nat_to_ip_4035[(((uint32_t)(_idx)) % 16)];
-  uint32_t cell2  = 0;
-  uint32_t ret  = 0;
-  if (true) {
-    cell1 = new_val_set_memop_32_bit;
-  }
-  nat_to_ip_4035[(((uint32_t)(_idx)) % 16)] = cell1;
-  return ret;
+typedef tuple_1 res_t_2377;
+res_t_2377 hit_acn_2380(uint32_t x_2378 , uint32_t a_2379 ){
+  res_t_2377 tmp_2560  = {._0 = x_2378, ._1 = true,};
+  return tmp_2560;
 }
-uint32_t Array_update_complex_nat_to_ip_4035_get_get_memop_32_bit(uint32_t _idx , uint32_t unused1_get_memop_32_bit , uint32_t unused2_get_memop_32_bit ){
-  uint32_t cell1  = nat_to_ip_4035[(((uint32_t)(_idx)) % 16)];
-  uint32_t cell2  = 0;
-  uint32_t ret  = 0;
-  if (true) {
-    ret = nat_to_ip_4035[(((uint32_t)(_idx)) % 16)];
-  }
-  nat_to_ip_4035[(((uint32_t)(_idx)) % 16)] = cell1;
-  return ret;
+res_t_2377 miss_acn_2383(uint32_t b_2381 , uint32_t a_2382 ){
+  res_t_2377 tmp_2561  = {._0 = a_2382, ._1 = false,};
+  return tmp_2561;
 }
-uint32_t nat_to_port_4036 [16] = {0};
-uint32_t Array_update_complex_nat_to_port_4036_set_set_memop_32_bit(uint32_t _idx , uint32_t new_val_set_memop_32_bit , uint32_t unused_set_memop_32_bit ){
-  uint32_t cell1  = nat_to_port_4036[(((uint32_t)(_idx)) % 16)];
-  uint32_t cell2  = 0;
-  uint32_t ret  = 0;
-  if (true) {
-    cell1 = new_val_set_memop_32_bit;
+typedef struct {
+  uint8_t valid;
+  uint32_t key;
+  uint32_t mask;
+  uint32_t action_tag;
+  uint32_t action_arg;
+} cellty_ftbl_2384;
+typedef struct {
+  struct {
+    uint32_t action_tag;
+    uint32_t action_arg;
+  } _default;
+  cellty_ftbl_2384 entries [1024];
+} ty_ftbl_2384;
+ty_ftbl_2384 ftbl_2384  = {._default = {.action_tag = tag_miss_acn_2383, .action_arg = 1}, .entries = {0}};
+void install_ftbl_2384(uint32_t key , uint32_t action , uint32_t const_arg ){
+  for (int _idx = 0; _idx < 1024; _idx++) {
+    if ((ftbl_2384.entries[_idx].valid) == (false)) {
+      cellty_ftbl_2384 tmp_2562  = {.valid = true, .key = key, .mask = 4294967295, .action_tag = action, .action_arg = const_arg};
+      ftbl_2384.entries[_idx] = tmp_2562;
+      return ;
+    }
   }
-  nat_to_port_4036[(((uint32_t)(_idx)) % 16)] = cell1;
-  return ret;
+  return ;
 }
-uint32_t Array_update_complex_nat_to_port_4036_get_get_memop_32_bit(uint32_t _idx , uint32_t unused1_get_memop_32_bit , uint32_t unused2_get_memop_32_bit ){
-  uint32_t cell1  = nat_to_port_4036[(((uint32_t)(_idx)) % 16)];
-  uint32_t cell2  = 0;
-  uint32_t ret  = 0;
-  if (true) {
-    ret = nat_to_port_4036[(((uint32_t)(_idx)) % 16)];
+void install_ternary_ftbl_2384(uint32_t key , uint32_t mask , uint32_t action , uint32_t const_arg ){
+  for (int _idx = 0; _idx < 1024; _idx++) {
+    if ((ftbl_2384.entries[_idx].valid) == (false)) {
+      cellty_ftbl_2384 tmp_2563  = {.valid = true, .key = key, .mask = mask, .action_tag = action, .action_arg = const_arg};
+      ftbl_2384.entries[_idx] = tmp_2563;
+      return ;
+    }
   }
-  nat_to_port_4036[(((uint32_t)(_idx)) % 16)] = cell1;
-  return ret;
+  return ;
+}
+res_t_2377 lookup_ftbl_2384(uint32_t key , uint32_t arg ){
+  for (int _idx = 0; _idx < 1024; _idx++) {
+    if ((ftbl_2384.entries[_idx].valid) && ((key & ftbl_2384.entries[_idx].mask) == (ftbl_2384.entries[_idx].key & ftbl_2384.entries[_idx].mask))) {
+      switch (ftbl_2384.entries[_idx].action_tag) {
+        case tag_hit_acn_2380: {
+          return hit_acn_2380(ftbl_2384.entries[_idx].action_arg, arg);
+          break;
+        }
+        case tag_miss_acn_2383: {
+          return miss_acn_2383(ftbl_2384.entries[_idx].action_arg, arg);
+          break;
+        }
+      }
+    }
+  }
+  switch (ftbl_2384._default.action_tag) {
+    case tag_hit_acn_2380: {
+      return hit_acn_2380(ftbl_2384._default.action_arg, arg);
+      break;
+    }
+    default: {
+      return miss_acn_2383(ftbl_2384._default.action_arg, arg);
+      break;
+    }
+  }
 }
 uint8_t parse_event(packet_t*  packet , event_t*  next_event ){
   skip_bits(packet, 32);
@@ -240,35 +241,23 @@ uint8_t parse_event(packet_t*  packet , event_t*  next_event ){
       uint16_t tag  = ((uint16_t)(read_bits(packet, 16)));
       switch (tag) {
         case 1: {
-          uint32_t src_ip_4037  = ((uint32_t)(read_bits(packet, 32)));
-          uint32_t src_port_4038  = ((uint32_t)(read_bits(packet, 32)));
-          (*(next_event)) = mk_inside_packet(src_ip_4037, src_port_4038);
+          uint32_t key_2385  = ((uint32_t)(read_bits(packet, 32)));
+          uint32_t val_2386  = ((uint32_t)(read_bits(packet, 32)));
+          uint32_t hit_2387  = ((uint32_t)(read_bits(packet, 32)));
+          (*(next_event)) = mk_query_result(key_2385, val_2386, hit_2387);
           return packet->cursor <= packet->end;
           break;
         }
         case 2: {
-          uint32_t src_port_4040  = ((uint32_t)(read_bits(packet, 32)));
-          (*(next_event)) = mk_inside_continue(src_port_4040);
+          uint32_t key_2389  = ((uint32_t)(read_bits(packet, 32)));
+          uint32_t val_2390  = ((uint32_t)(read_bits(packet, 32)));
+          (*(next_event)) = mk_do_install(key_2389, val_2390);
           return packet->cursor <= packet->end;
           break;
         }
         case 3: {
-          uint32_t dst_port_4042  = ((uint32_t)(read_bits(packet, 32)));
-          (*(next_event)) = mk_outside_packet(dst_port_4042);
-          return packet->cursor <= packet->end;
-          break;
-        }
-        case 4: {
-          uint32_t dst_ip_4044  = ((uint32_t)(read_bits(packet, 32)));
-          uint32_t dst_port_4045  = ((uint32_t)(read_bits(packet, 32)));
-          (*(next_event)) = mk_outside_continue(dst_ip_4044, dst_port_4045);
-          return packet->cursor <= packet->end;
-          break;
-        }
-        case 5: {
-          uint32_t src_ip_4047  = ((uint32_t)(read_bits(packet, 32)));
-          uint32_t src_port_4048  = ((uint32_t)(read_bits(packet, 32)));
-          (*(next_event)) = mk_add_to_nat(src_ip_4047, src_port_4048);
+          uint32_t key_2392  = ((uint32_t)(read_bits(packet, 32)));
+          (*(next_event)) = mk_do_query(key_2392);
           return packet->cursor <= packet->end;
           break;
         }
@@ -289,10 +278,12 @@ uint8_t parse_event(packet_t*  packet , event_t*  next_event ){
 void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
   switch (ev_out->data.tag) {
     case 1: {
-      uint32_t src_ip_4037  = ev_out->data.args.inside_packet_4039.src_ip_4037;
-      uint32_t src_port_4038  = ev_out->data.args.inside_packet_4039.src_port_4038;
-      write_bits(buf_out, ((uint64_t)(src_port_4038)), 32);
-      write_bits(buf_out, ((uint64_t)(src_ip_4037)), 32);
+      uint32_t key_2385  = ev_out->data.args.query_result_2388.key_2385;
+      uint32_t val_2386  = ev_out->data.args.query_result_2388.val_2386;
+      uint32_t hit_2387  = ev_out->data.args.query_result_2388.hit_2387;
+      write_bits(buf_out, ((uint64_t)(hit_2387)), 32);
+      write_bits(buf_out, ((uint64_t)(val_2386)), 32);
+      write_bits(buf_out, ((uint64_t)(key_2385)), 32);
       if ((ev_out->meta.is_packet) == (0)) {
         write_bits(buf_out, ((uint64_t)(1)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -303,8 +294,10 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       break;
     }
     case 2: {
-      uint32_t src_port_4040  = ev_out->data.args.inside_continue_4041.src_port_4040;
-      write_bits(buf_out, ((uint64_t)(src_port_4040)), 32);
+      uint32_t key_2389  = ev_out->data.args.do_install_2391.key_2389;
+      uint32_t val_2390  = ev_out->data.args.do_install_2391.val_2390;
+      write_bits(buf_out, ((uint64_t)(val_2390)), 32);
+      write_bits(buf_out, ((uint64_t)(key_2389)), 32);
       if ((ev_out->meta.is_packet) == (0)) {
         write_bits(buf_out, ((uint64_t)(2)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
@@ -315,38 +308,10 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       break;
     }
     case 3: {
-      uint32_t dst_port_4042  = ev_out->data.args.outside_packet_4043.dst_port_4042;
-      write_bits(buf_out, ((uint64_t)(dst_port_4042)), 32);
+      uint32_t key_2392  = ev_out->data.args.do_query_2393.key_2392;
+      write_bits(buf_out, ((uint64_t)(key_2392)), 32);
       if ((ev_out->meta.is_packet) == (0)) {
         write_bits(buf_out, ((uint64_t)(3)), 16);
-        write_bits(buf_out, ((uint64_t)(666)), 16);
-        write_bits(buf_out, ((uint64_t)(2)), 48);
-        write_bits(buf_out, ((uint64_t)(1)), 48);
-      }
-      return ;
-      break;
-    }
-    case 4: {
-      uint32_t dst_ip_4044  = ev_out->data.args.outside_continue_4046.dst_ip_4044;
-      uint32_t dst_port_4045  = ev_out->data.args.outside_continue_4046.dst_port_4045;
-      write_bits(buf_out, ((uint64_t)(dst_port_4045)), 32);
-      write_bits(buf_out, ((uint64_t)(dst_ip_4044)), 32);
-      if ((ev_out->meta.is_packet) == (0)) {
-        write_bits(buf_out, ((uint64_t)(4)), 16);
-        write_bits(buf_out, ((uint64_t)(666)), 16);
-        write_bits(buf_out, ((uint64_t)(2)), 48);
-        write_bits(buf_out, ((uint64_t)(1)), 48);
-      }
-      return ;
-      break;
-    }
-    case 5: {
-      uint32_t src_ip_4047  = ev_out->data.args.add_to_nat_4049.src_ip_4047;
-      uint32_t src_port_4048  = ev_out->data.args.add_to_nat_4049.src_port_4048;
-      write_bits(buf_out, ((uint64_t)(src_port_4048)), 32);
-      write_bits(buf_out, ((uint64_t)(src_ip_4047)), 32);
-      if ((ev_out->meta.is_packet) == (0)) {
-        write_bits(buf_out, ((uint64_t)(5)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
         write_bits(buf_out, ((uint64_t)(2)), 48);
         write_bits(buf_out, ((uint64_t)(1)), 48);
@@ -363,73 +328,35 @@ typedef struct {
 uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
   uint16_t n  = 0;
   switch (ev_in->data.tag) {
-    case 2: {
-      uint32_t src_port_4050  = ev_in->data.args.inside_continue_4041.src_port_4040;
-      event_t this  = mk_inside_continue(src_port_4050);
-      break;
-    }
-    case 4: {
-      uint32_t dst_ip_4051  = ev_in->data.args.outside_continue_4046.dst_ip_4044;
-      uint32_t dst_port_4052  = ev_in->data.args.outside_continue_4046.dst_port_4045;
-      event_t this  = mk_outside_continue(dst_ip_4051, dst_port_4052);
-      break;
-    }
-    case 5: {
-      uint32_t src_ip_4053  = ev_in->data.args.add_to_nat_4049.src_ip_4047;
-      uint32_t src_port_4054  = ev_in->data.args.add_to_nat_4049.src_port_4048;
-      event_t this  = mk_add_to_nat(src_ip_4053, src_port_4054);
-      tuple_1 tmp_4336  = {._0 = src_ip_4053, ._1 = src_port_4054,};
-      uint32_t NAT_port_4055  = ((uint32_t)(hash_32((uint32_t)1234, (uint8_t* )&tmp_4336, 64) & 15));
-      printf("Mapped (ip: %d, port: %d) to port %d", src_ip_4053, src_port_4054, NAT_port_4055);
-      Array_update_complex_nat_to_ip_4035_set_set_memop_32_bit(NAT_port_4055, src_ip_4053, 0);
-      Array_update_complex_nat_to_port_4036_set_set_memop_32_bit(NAT_port_4055, src_port_4054, 0);
-      out_event_t tmp_4337  = {.ev = mk_inside_continue(NAT_port_4055), .port = 4294967295};
-      out_events[n] = tmp_4337;
-      n = n + 1;
-      break;
-    }
     case 1: {
-      uint32_t src_ip_4056  = ev_in->data.args.inside_packet_4039.src_ip_4037;
-      uint32_t src_port_4057  = ev_in->data.args.inside_packet_4039.src_port_4038;
-      event_t this  = mk_inside_packet(src_ip_4056, src_port_4057);
-      uint8_t ret_4059  = false;
-      tuple_1 tmp_4338  = {._0 = src_ip_4056, ._1 = src_port_4057,};
-      uint32_t idx_4060  = ((uint32_t)(hash_32((uint32_t)1234, (uint8_t* )&tmp_4338, 64) & 15));
-      uint32_t ip_4061  = Array_update_complex_nat_to_ip_4035_get_get_memop_32_bit(idx_4060, 0, 0);
-      uint32_t port_4062  = Array_update_complex_nat_to_port_4036_get_get_memop_32_bit(idx_4060, 0, 0);
-      if (ip_4061 == src_ip_4056) {
-        if (port_4062 == src_port_4057) {
-          ret_4059 = true;
-        }
-      }
-      if (ret_4059 == true) {
-        tuple_1 tmp_4339  = {._0 = src_ip_4056, ._1 = src_port_4057,};
-        uint32_t NAT_port_4064  = ((uint32_t)(hash_32((uint32_t)1234, (uint8_t* )&tmp_4339, 64) & 15));
-        printf("IP already in NAT, maps to port %d", NAT_port_4064);
-        out_event_t tmp_4340  = {.ev = mk_inside_continue(NAT_port_4064), .port = 4294967295};
-        out_events[n] = tmp_4340;
-        n = n + 1;
-      }else {
-        printf("Adding to NAT");
-        out_event_t tmp_4341  = {.ev = mk_add_to_nat(src_ip_4056, src_port_4057), .port = 4294967295};
-        out_events[n] = tmp_4341;
-        n = n + 1;
-      }
+      uint32_t key_2394  = ev_in->data.args.query_result_2388.key_2385;
+      uint32_t val_2395  = ev_in->data.args.query_result_2388.val_2386;
+      uint32_t hit_2396  = ev_in->data.args.query_result_2388.hit_2387;
+      event_t this  = mk_query_result(key_2394, val_2395, hit_2396);
+      break;
+    }
+    case 2: {
+      uint32_t key_2397  = ev_in->data.args.do_install_2391.key_2389;
+      uint32_t val_2398  = ev_in->data.args.do_install_2391.val_2390;
+      event_t this  = mk_do_install(key_2397, val_2398);
+      printf("installing entry: key=%d -> hit_acn(%d)", key_2397, val_2398);
+      install_ftbl_2384(key_2397, tag_hit_acn_2380, val_2398);
       break;
     }
     case 3: {
-      uint32_t dst_port_4065  = ev_in->data.args.outside_packet_4043.dst_port_4042;
-      event_t this  = mk_outside_packet(dst_port_4065);
-      uint32_t ip_4066  = Array_update_complex_nat_to_ip_4035_get_get_memop_32_bit(dst_port_4065, 0, 0);
-      uint32_t port_4067  = Array_update_complex_nat_to_port_4036_get_get_memop_32_bit(dst_port_4065, 0, 0);
-      printf("Mapped port %d to (ip: %d, port: %d)", dst_port_4065, ip_4066, port_4067);
-      if (ip_4066 == 0) {
-        printf("dropped");
-      }else {
-        out_event_t tmp_4342  = {.ev = mk_outside_continue(ip_4066, port_4067), .port = 4294967295};
-        out_events[n] = tmp_4342;
-        n = n + 1;
+      uint32_t key_2399  = ev_in->data.args.do_query_2393.key_2392;
+      event_t this  = mk_do_query(key_2399);
+      res_t_2377 tup_2556  = lookup_ftbl_2384(key_2399, 1000);
+      uint32_t r_0_2400  = tup_2556._0;
+      uint8_t r_1_2401  = tup_2556._1;
+      uint32_t hit_2402  = 0;
+      if (r_1_2401 == true) {
+        hit_2402 = 1;
       }
+      printf("query key=%d -> val=%d hit=%d", key_2399, r_0_2400, hit_2402);
+      out_event_t tmp_2564  = {.ev = mk_query_result(key_2399, r_0_2400, hit_2402), .port = 1};
+      out_events[n] = tmp_2564;
+      n = n + 1;
       break;
     }
     default: {
