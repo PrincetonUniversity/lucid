@@ -1,14 +1,9 @@
 (* CCoreMaskWidths: keep non-standard-width unsigned ints in range.
 
-   An int<n> whose width n is not 8/16/32/64 is represented in C as its smallest
-   standard container (uint8/16/32/64), so the container can hold junk in bits
-   >= n. This pass restores the invariant
-
-     every materialized int<n> value (n non-standard) has bits >= n clear
-
-   by masking the result of every operation that can set those bits, with
-   BitAnd(_, (1<<n)-1). Consumers then never have to re-mask: comparisons,
-   serialization, array indices, etc. all see clean values.
+   An int<n> whose width n is not 8/16/32/64 is stored internally 
+   in a standard-width container (uint8/16/32/64). 
+   To provide arbitrary-width semantics, this pass masks the result of 
+   every operation on a nonstandard int<n> with BitAnd(_, (1<<n)-1).
 
    It runs late (after handler/variant lowering, while Read/Peek are still ops),
    so it also covers the packet-read entry point: a read of int<n> memcpys
@@ -18,11 +13,7 @@
      Plus, Sub, Neg, LShift, BitNot, Cast _, Hash _, Read _, Peek _.
    Eliminated here (no C lowering; result is naturally masked):
      Slice(hi,lo) -> (a >> lo) & ((1<<(hi-lo+1))-1).
-   NOT touched (already in range given the invariant, or handled elsewhere):
-     BitAnd/BitOr/BitXor/RShift/Mod (<= a clean operand), comparisons (-> bool),
-     projections / Idx (access existing clean values), standard widths (the exact
-     container truncates on store), and SatPlus/SatSub (their saturating lowering
-     must clamp at the type max 2^n-1, leaving the result already in range). *)
+*)
 open CCoreSyntax
 
 let is_standard n = List.mem n [8; 16; 32; 64]
