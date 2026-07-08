@@ -54,6 +54,8 @@ let compile ds =
   (* Make sure there's no references or pointers *)
   let cds = CCoreTyper.check cds in
   CCoreWellformed.check_no_ptrs cds;
+  (* mask non-standard int width operations for storage in C containers *)
+  let cds = CCoreMaskWidths.process cds in
 
   (*** 6. lowering to C-compatible form *)
   print_endline ("---- Normalizing code forms for c ----");
@@ -63,8 +65,6 @@ let compile ds =
   let cds = CCoreVariants.lower cds in
   (* parser, expects variants to be lowered *)
   let cds = CCoreParse.lower cds in
-  (* masks on non-standard int width operations *)
-  let cds = CCoreMaskWidths.process cds in
   (* a bunch of small transformations *)
   let cds = CCoreCForm.normalize_matches cds in
   let cds = CCoreCForm.eliminate_tuple_assigns cds in
