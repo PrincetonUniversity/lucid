@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 # Wire tests for the C backend's raw-socket driver (lucidcc --rawsock), over a veth pair.
 #
-# Two sub-tests, sharing the veth setup + build via driverlib:
+# Two sub-tests:
 #   - reflector: send 100 UDP packets, check the count + MAC swap on the way back (the
 #     switch binds port 0 to veth0; we send/capture on veth1);
-#   - scanloop:  feed one endless `tick` + 10 `pkt_in`, check all 10 `pkt_out` come back
-#     -- proving the pipeline interleaves the endless recirc with fresh input (no
-#     starvation), not just plumbing.
+#   - scanloop:  feed one recirculating `tick` + 10 `pkt_in`, check all 10 `pkt_out` come back
+#     -- proving the pipeline interleaves the endless recirc with fresh input.
 #
 # Two-phase, so the in-container loop never rebuilds Lucid:
 #   sudo python3 test_rawsock.py --gen   # once, where lucidcc is built: .dpt -> lucidprog.c
@@ -21,7 +20,10 @@ import subprocess
 
 import driverlib as dl
 
-SWITCH_IFACE, SEND_IFACE = "veth0", "veth1"   # switch binds port 0 to veth0; we drive veth1
+if dl.IS_LINUX:
+    SWITCH_IFACE, SEND_IFACE = "veth0", "veth1"
+else:
+    SWITCH_IFACE, SEND_IFACE = "feth0", "feth1"
 NUM = 100        # reflector packets
 NUM_SCAN = 10    # scanloop pkt_in packets
 
@@ -29,16 +31,13 @@ BUILD = os.path.join(dl.SCRIPT_DIR, "_rawsock_build")   # one subdir per sub-tes
 REFL_BUILD = os.path.join(BUILD, "refl")
 SCAN_BUILD = os.path.join(BUILD, "scanloop")
 
-
 def _cfile(build): return os.path.join(build, "lucidprog.c")
 def _bin(build):   return os.path.join(build, "lucidprog")
-
 
 def gen():
     dl.gen_single(os.path.join(dl.PROGRAMS, "ethswaprefl.dpt"), "--rawsock", _cfile(REFL_BUILD))
     dl.gen_single(os.path.join(dl.PROGRAMS, "scanloop.dpt"), "--rawsock", _cfile(SCAN_BUILD))
-    print("[+] regenerated lucidprog.c -- commit them, then run without --gen")
-
+    print("[+] regenerated lucidprog.c, rerun without --gen to test")
 
 def _start_switch(binf):
     """Start the switch (port 0 -> veth0) and wait for its readiness line."""

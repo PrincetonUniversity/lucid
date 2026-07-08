@@ -1,17 +1,8 @@
 #!/usr/bin/env python3
 # Shared helpers for the C-backend driver tests (test_rawsock.py, test_dpdk.py).
-#
-# The driver tests are the same handful of shapes over different transports:
-#   - reflector: send N UDP packets, check the count + MAC swap on the way back;
-#   - scanloop:  feed one endless `tick` + N `pkt_in`, check all N `pkt_out` come
-#                back (the driver interleaved recirc with fresh input -- no starvation);
-#   - events:    feed N `pkt_in` on an ingress port, check the `pkt_out` frames on the
-#                egress port (recirc drained, framing + port routing correct).
-# This module factors out what they share: codegen (--gen) + build, Lucid frame
-# building, the reflector traffic + check, and the veth / subprocess plumbing. Each
-# test_<driver>.py supplies only its transport-specific run flow.
 
 import os
+import platform
 import re
 import struct
 import subprocess
@@ -19,6 +10,8 @@ import sys
 import time
 
 from scapy.all import Ether, IP, UDP, Raw, wrpcap, rdpcap
+
+IS_LINUX = platform.system() == "Linux"
 
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 PROGRAMS = os.path.join(SCRIPT_DIR, "programs")
@@ -34,9 +27,7 @@ def lucidcc():
 
 
 # ---- codegen (--gen) + build --------------------------------------------------
-# The tests are two-phase: `--gen` runs lucidcc (only where it's built) and commits
-# the generated C / build dir; a plain run just gcc/make's that committed source, so
-# the in-container loop never rebuilds Lucid.
+# compile Lucid programs to C
 
 def gen_single(dpt, driver_flag, cfile):
     """lucidcc <dpt> <driver_flag> -o cfile  (single-file drivers: --rawsock)."""
@@ -174,7 +165,7 @@ def scanloop_check(recv_pcap, pkt_out_tag, n):
     return False
 
 
-# ---- veth / subprocess plumbing (Linux, root) ---------------------------------
+# ---- veth / subprocess plumbing (Linux + macOS, root) --------------------------
 
 def sudo(cmd):
     """Prefix cmd with sudo only when not already root. An inner sudo holding the
@@ -184,16 +175,26 @@ def sudo(cmd):
 
 
 def ensure_veths(a, b):
-    """(Re)create + bring up a veth pair (a <-> b), IPv6 disabled to cut ND/MLD noise.
-    Deletes any existing pair first so sub-tests sharing the pair start clean."""
-    subprocess.run(sudo(["ip", "link", "del", a]), capture_output=True)
-    subprocess.run(sudo(["ip", "link", "add", a, "type", "veth", "peer", "name", b]),
-                   capture_output=True)
-    for iface in (a, b):
-        subprocess.run(sudo(["sysctl", "-w", f"net.ipv6.conf.{iface}.disable_ipv6=1"]),
+    """(Re)create + bring up a virtual ethernet pair (a <-> b).
+    Linux: veth pair, IPv6 disabled to cut ND/MLD noise.
+    macOS: feth (fake ethernet) pair via ifconfig create/peer."""
+    if IS_LINUX:
+        subprocess.run(sudo(["ip", "link", "del", a]), capture_output=True)
+        subprocess.run(sudo(["ip", "link", "add", a, "type", "veth", "peer", "name", b]),
                        capture_output=True)
-    subprocess.run(sudo(["ip", "link", "set", a, "up"]), check=True)
-    subprocess.run(sudo(["ip", "link", "set", b, "up"]), check=True)
+        for iface in (a, b):
+            subprocess.run(sudo(["sysctl", "-w", f"net.ipv6.conf.{iface}.disable_ipv6=1"]),
+                           capture_output=True)
+        subprocess.run(sudo(["ip", "link", "set", a, "up"]), check=True)
+        subprocess.run(sudo(["ip", "link", "set", b, "up"]), check=True)
+    else:
+        subprocess.run(sudo(["ifconfig", a, "destroy"]), capture_output=True)
+        subprocess.run(sudo(["ifconfig", b, "destroy"]), capture_output=True)
+        subprocess.run(sudo(["ifconfig", a, "create"]), capture_output=True)
+        subprocess.run(sudo(["ifconfig", b, "create"]), capture_output=True)
+        subprocess.run(sudo(["ifconfig", a, "peer", b]), capture_output=True)
+        subprocess.run(sudo(["ifconfig", a, "up"]), check=True)
+        subprocess.run(sudo(["ifconfig", b, "up"]), check=True)
     print(f"[+] {a} <-> {b} up")
 
 
@@ -202,7 +203,12 @@ def start_capture(iface, out_pcap, count=None, bpf="udp port 5000"):
     noise (IPv6 ND, ARP) is excluded. Returns the Popen. count -> -c (stop after N)."""
     if os.path.exists(out_pcap):
         os.remove(out_pcap)
-    cmd = sudo(["tcpdump", "-i", iface, "-Q", "in", "-w", out_pcap, "-B", "4096"])
+    base = ["tcpdump", "-i", iface, "-w", out_pcap, "-B", "4096"]
+    if IS_LINUX:
+        base[3:3] = ["-Q", "in"]          # inbound only; feth on macOS lacks direction metadata
+    else:
+        base[3:3] = ["-Q", "in"]          # inbound only; feth on macOS lacks direction metadata
+    cmd = sudo(base)
     if count is not None:
         cmd += ["-c", str(count)]
     cmd += bpf.split()

@@ -2,27 +2,13 @@
 #
 # pcap driver run tests.
 #
-# For each program with a pcap fixture (ctests/pcaps/<name>.in.pcap), generate + compile
-# the pcap binary, run it on the input, and byte-compare the output against
-# ctests/pcaps/<name>.expected.pcap. This is the "does running it produce the right
-# packets" tier -- compile-checking *every* program is run_tests.sh's job.
-#
-# It stays bash (not python) on purpose: the pcap driver's output is deterministic, so
-# the check is a plain byte-compare (`cmp`) with no scapy dependency -- so it runs
-# locally with just gcc + libpcap, like run_tests.sh. (The live-traffic driver tests,
-# which sniff and content-check, are python: test_rawsock.py, test_dpdk.py.)
-#
+# For each program with a pcap (ctests/pcaps/<name>.in.pcap), generate + compile
+# the binary, run it, and compare the output against the pcap. 
 # Usage:
-#   ./ctests/test_pcap.sh            run + diff each fixture
-#   ./ctests/test_pcap.sh --update   (re)capture pcaps/<name>.expected.pcap
+#   ./ctests/test_pcap.sh            run + diff
+#   ./ctests/test_pcap.sh --update   regenerate pcaps/<name>.expected.pcap
 #   ./ctests/test_pcap.sh --no-build skip `make`, reuse the current ./lucidcc
 #   ./ctests/test_pcap.sh --help     show this help
-#
-# Exits non-zero if any fixture fails to build/run or its output drifts (CI-friendly).
-#
-# Adding a fixture: drop an input at pcaps/<name>.in.pcap (extend pcaps/gen_inputs.py so
-# it's reproducible), then run with --update to capture pcaps/<name>.expected.pcap.
-#
 set -uo pipefail
 shopt -s nullglob
 
@@ -69,8 +55,7 @@ for prog in "$PROGRAMS_DIR"/*.dpt; do
   ran=$((ran+1))
   exp_pcap="$PCAPS_DIR/$name.expected.pcap"
 
-  # generate + compile the pcap binary (bind Lucid port 1 to the fixture; ingress port
-  # is irrelevant to the reflectors, and 1 matches the driver's historical default).
+  # generate + compile the pcap binary
   if ! "$LUCIDCC" "$prog" -o "$WORK/$name.c" --lpcap >"$WORK/$name.gen.log" 2>&1; then
     echo "FAIL  $name  (lucidcc codegen)"; sed 's/^/    /' "$WORK/$name.gen.log" | tail -3 >&2; fail=$((fail+1)); continue
   fi

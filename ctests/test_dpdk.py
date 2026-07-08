@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # Wire tests for the C backend's DPDK driver (lucidcc --dpdk).
 #
-# Four sub-tests, sharing frame-building / checks / setup via driverlib:
+# Four sub-tests:
 #   - reflector: reflect 100 UDP packets over the pcap PMD (net_pcap: file in/out);
 #   - af_packet: the same reflector over a real interface (net_af_packet vdev on a veth),
 #                the DPDK analogue of the raw-socket on-wire test;
@@ -10,12 +10,10 @@
 #                multi-out dispatch, recirc drain, framing, and multi-port rx;
 #   - scanloop:  endless `tick` + 10 `pkt_in`, check all 10 `pkt_out` (no starvation).
 #
-# Transports: the pcap-PMD sub-tests read/write pcap files (no veth); af_packet uses a
-# veth pair + tcpdump/tcpreplay. Runs under emulation (--no-huge; the in-container DPDK is
-# built with a westmere baseline). Needs root (DPDK EAL): run with sudo.
+# Runs with hugepages disabled (--no-huge). Needs root.
 #
-# Two-phase, so the in-container loop never rebuilds Lucid:
-#   sudo python3 test_dpdk.py --gen   # once, where lucidcc is built: .dpt -> build dirs
+# Usage:
+#   sudo python3 test_dpdk.py --gen   # where lucidcc is built: .dpt -> build dirs
 #   sudo python3 test_dpdk.py         # normal loop: make + run + check
 
 import os
@@ -78,8 +76,7 @@ def test_afpacket():
     recv = os.path.join(dl.PCAPS, "afpacket.recv.pcap")
     dl.reflector_pcap(send, NUM)
     cap = dl.start_capture(SEND_IFACE, recv, count=NUM)
-    # DPDK's stdout is block-buffered through sudo; just give EAL + the af_packet port a
-    # fixed moment to come up (log to a file, not a pipe we block-read).
+
     logf = open(os.path.join(REFL_BUILD, "afpacket.switch.log"), "w")
     sw = subprocess.Popen(
         dl.sudo([binf, "--no-huge", "-l", "0", "-n", "1", "--no-pci",
@@ -107,16 +104,15 @@ def test_events():
     tags = dl.event_tags(EVENTS_BUILD, "pkt_in", "pkt_out")
     in_pcap = os.path.join(dl.PCAPS, "dpdk_events.in.pcap")
     empty = os.path.join(dl.PCAPS, "dpdk_events.empty.pcap")
-    port0 = os.path.join(dl.PCAPS, "dpdk_events.port0.pcap")   # egress (checked)
-    port1 = os.path.join(dl.PCAPS, "dpdk_events.port1.pcap")   # ingress port, must stay empty
+    port0 = os.path.join(dl.PCAPS, "dpdk_events.port0.pcap")   # output
+    port1 = os.path.join(dl.PCAPS, "dpdk_events.port1.pcap")   # input
     ins = [(0x0A000001 + i, 5000 + i) for i in range(NUM_EVENTS)]  # vary fields to check passthrough
     dl.write_frames(in_pcap, [dl.lucid_frame(tags["pkt_in"], ip, port) for ip, port in ins])
     dl.empty_pcap(empty)
     if os.path.exists(port1):
         os.remove(port1)
     print(f"[+] wrote {NUM_EVENTS} Lucid-framed pkt_in frames")
-    # ingress on port 1, egress on port 0 -> exercises multi-port rx. -m 512 for the
-    # 2-port mbuf pool (overflows --no-huge's default heap otherwise).
+    # ingress on port 1, egress on port 0 -> exercises multi-port rx. -m 512 memory for mbufs
     _run_pcap_pmd(binf,
                   [f"net_pcap0,rx_pcap={empty},tx_pcap={port0}",
                    f"net_pcap1,rx_pcap={in_pcap},tx_pcap={port1}"],
