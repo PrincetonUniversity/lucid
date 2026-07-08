@@ -36,7 +36,7 @@ typedef struct { port_t ports[MAX_PORTS]; int nports; } port_map_t;
 
 // get_in_descriptor returns the whole port (so port_rx can set in_eof); get_out_descriptor
 // looks a port up by id and returns its dumper (NULL = no such port). Consumed only by
-// port_rx / send_frame; the pipeline treats them opaquely (mirrors the socket driver).
+// port_rx / send_frame; opaque to the pipeline.
 static port_t* get_in_descriptor(port_map_t* pm, int port_idx) { return &pm->ports[port_idx]; }
 static pcap_dumper_t* get_out_descriptor(port_map_t* pm, int port_id) {
     for (int i = 0; i < pm->nports; i++) if (pm->ports[i].port_id == port_id) return pm->ports[i].out;
@@ -74,14 +74,13 @@ static int init_port_map(port_map_t* pm, int argc, char** argv) {
 }
 |}
 
-(* ===== the pcap packet library: the read (port_rx via pcap_next_ex) and write
-   (send_frame via pcap_dump) the shared do_rx / do_tx call. ===== *)
+(*  the pcap packet library: port_rx and send_frame *)
 let pcap_lib = dforiegn {|
 // a burst of freshly-read slab slots (pkt_len set, not yet parsed).
 typedef struct { uint16_t n; uint16_t idx[BURST]; } rx_batch;
 
-// read up to BURST frames from a port's input pcap into slots allocated from `s`. Sets
-// in_eof when the capture is exhausted.
+// read up to BURST frames from a port's input pcap into slots allocated from `s`. 
+// Sets in_eof when capture is done.
 static rx_batch port_rx(port_t* p, slab_t* s) {
     rx_batch batch; batch.n = 0;
     while (batch.n < BURST) {
@@ -99,9 +98,8 @@ static rx_batch port_rx(port_t* p, slab_t* s) {
     return batch;
 }
 
-// egress: dump the deparsed frame [buf, buf+len) to the port's output pcap. The record
-// timestamp is fixed at 0: this driver is for functional replay -- deterministic,
-// byte-comparable output -- not timing (use another driver to profile). NULL dumper drops.
+// egress: dump the deparsed frame [buf, buf+len) to the port's output pcap. 
+// output timestamp is always 0 for deterministic output comparison.
 static void send_frame(pcap_dumper_t* out, uint8_t* buf, size_t len) {
     if (out == NULL) { debug_printf("send_frame: no egress dumper (dropped)\n"); return; }
     struct pcap_pkthdr h = {0};   // ts = 0 (see above)
@@ -125,8 +123,7 @@ int main(int argc, char** argv) {
     fflush(stdout);
 
     // replay loop: rx -> dispatch -> tx (each a bounded burst) until every input is
-    // exhausted AND the pipeline has drained. Offline libpcap blasts through, so there
-    // is no idle wait (unlike the socket driver's select loop).
+    // exhausted and pipeline is drained.
     for (;;) {
         do_rx();
         do_dispatch();

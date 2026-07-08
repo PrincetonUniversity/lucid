@@ -64,7 +64,7 @@ let imports = dforiegn {|
 #endif
 |}
 
-(* ===== constants, some shared by the slab pool and the pipeline rings ===== *)
+(* constants, some shared by the slab pool and the pipeline rings *)
 let config = dforiegn {|
 /********* sizing constants (shared by the slab pool and the index rings) ***********/
 #define HEADROOM 256               // slack before the packet for deparse to prepend a header
@@ -77,7 +77,7 @@ let config = dforiegn {|
 #define MAX_PORTS 64               // max interfaces (Lucid ports) bound at once
 |}
 
-(* ===== misc helpers: the port table, packet counter, and Sys.time() clock ===== *)
+(* misc helpers: the port table, packet counter, and Sys.time() clock *)
 let helpers_lib = dforiegn [%string {|
  void init_cursor(uint8_t*  buf , uint32_t len , %{packet_t_ptr_ty}  bytes ){
     bytes->start = buf;
@@ -101,10 +101,7 @@ static int port_fd(int port_id, port_map_t* g_port_map) {
     for (int i = 0; i < g_port_map->nports; i++) if (g_port_map->ports[i].port_id == port_id) return g_port_map->ports[i].fd;
     return -1;
 }
-// the descriptor a port reads from / writes to -- the pipeline (do_rx / do_tx) treats it
-// opaquely and only ever hands it to port_rx / send_frame (packet_lib). For a socket both
-// directions are the same bidirectional fd. do_rx walks ports by index; do_tx targets a
-// port by id (from the out_event). (< 0 means "no such port".)
+// get in / out descriptor. Two separate functions for pipeline compatibility with pcap driver.
 static int get_in_descriptor(port_map_t* pm, int port_idx) { return pm->ports[port_idx].fd; }
 static int get_out_descriptor(port_map_t* pm, int port_id)  { return port_fd(port_id, pm); }
 int init_port_map(port_map_t* g_port_map, int argc, char** argv) {
@@ -151,8 +148,8 @@ static int ring_pop(idx_ring* r, uint16_t* out) {
 |}
 
 
-(* ===== the slab allocator: a fixed pool of queue elements (a hand-rolled
-   rte_mempool) whose free-list is an idx_ring. ===== *)
+(* the slab allocator: a fixed pool of queue elements (a hand-rolled
+   rte_mempool) whose free-list is an idx_ring. *)
 let slab_lib = dforiegn [%string {|
 /********* the queue element (a slab slot) ***********/
 // the event, the handler's outputs, and the element's packet bytes (this driver's

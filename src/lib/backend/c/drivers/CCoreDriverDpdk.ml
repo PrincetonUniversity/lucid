@@ -5,7 +5,7 @@ open CCoreUtils
 (*
   Single-core DPDK toplevel driver.
 
-	The overall architecture is a pipeline with 3 stages: rx -> dispatch -> tx, 
+	The architecture is a pipeline with 3 stages: rx -> dispatch -> tx, 
 	using DPDK rings carrying mbufs between the stages. 
 	Each mbuf carries an event, and program-generated output events, in its private area. 
 	The stages are the same as the raw socket driver.
