@@ -42,7 +42,7 @@ def gen():
 
 def _start_switch(binf):
     """Start the switch (port 0 -> veth0) and wait for its readiness line."""
-    sw = subprocess.Popen(["sudo", binf, "--interface", f"0:{SWITCH_IFACE}"],
+    sw = subprocess.Popen(dl.sudo([binf, "--interface", f"0:{SWITCH_IFACE}"]),
                           stdout=subprocess.PIPE, stderr=subprocess.PIPE)
     dl.wait_for_line(sw, "Init complete.")
     time.sleep(1)

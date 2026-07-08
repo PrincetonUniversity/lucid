@@ -48,7 +48,7 @@ def _run_pcap_pmd(binf, vdevs, poll_pcap, n, extra_eal=()):
     holds n frames (the PMD flushes per TX burst), then stop. Exits on early switch death."""
     if os.path.exists(poll_pcap):
         os.remove(poll_pcap)
-    cmd = ["sudo", binf, "--no-huge", *extra_eal, "-l", "0", "-n", "1", "--no-pci"]
+    cmd = dl.sudo([binf, "--no-huge", *extra_eal, "-l", "0", "-n", "1", "--no-pci"])
     for v in vdevs:
         cmd += ["--vdev", v]
     print(f"[+] run: {' '.join(cmd[1:])}")
@@ -82,8 +82,8 @@ def test_afpacket():
     # fixed moment to come up (log to a file, not a pipe we block-read).
     logf = open(os.path.join(REFL_BUILD, "afpacket.switch.log"), "w")
     sw = subprocess.Popen(
-        ["sudo", binf, "--no-huge", "-l", "0", "-n", "1", "--no-pci",
-         "--vdev", f"net_af_packet0,iface={SWITCH_IFACE}"],
+        dl.sudo([binf, "--no-huge", "-l", "0", "-n", "1", "--no-pci",
+                 "--vdev", f"net_af_packet0,iface={SWITCH_IFACE}"]),
         stdout=logf, stderr=subprocess.STDOUT, start_new_session=True)
     time.sleep(5)
     if sw.poll() is not None:

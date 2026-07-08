@@ -176,17 +176,24 @@ def scanloop_check(recv_pcap, pkt_out_tag, n):
 
 # ---- veth / subprocess plumbing (Linux, root) ---------------------------------
 
+def sudo(cmd):
+    """Prefix cmd with sudo only when not already root. An inner sudo holding the
+    terminal (`Defaults use_pty`, on by default in recent Ubuntu/Debian) puts the tty
+    into raw mode for its whole lifetime, staircasing all test output to the right."""
+    return cmd if os.geteuid() == 0 else ["sudo"] + cmd
+
+
 def ensure_veths(a, b):
     """(Re)create + bring up a veth pair (a <-> b), IPv6 disabled to cut ND/MLD noise.
     Deletes any existing pair first so sub-tests sharing the pair start clean."""
-    subprocess.run(["sudo", "ip", "link", "del", a], capture_output=True)
-    subprocess.run(["sudo", "ip", "link", "add", a, "type", "veth", "peer", "name", b],
+    subprocess.run(sudo(["ip", "link", "del", a]), capture_output=True)
+    subprocess.run(sudo(["ip", "link", "add", a, "type", "veth", "peer", "name", b]),
                    capture_output=True)
     for iface in (a, b):
-        subprocess.run(["sudo", "sysctl", "-w", f"net.ipv6.conf.{iface}.disable_ipv6=1"],
+        subprocess.run(sudo(["sysctl", "-w", f"net.ipv6.conf.{iface}.disable_ipv6=1"]),
                        capture_output=True)
-    subprocess.run(["sudo", "ip", "link", "set", a, "up"], check=True)
-    subprocess.run(["sudo", "ip", "link", "set", b, "up"], check=True)
+    subprocess.run(sudo(["ip", "link", "set", a, "up"]), check=True)
+    subprocess.run(sudo(["ip", "link", "set", b, "up"]), check=True)
     print(f"[+] {a} <-> {b} up")
 
 
@@ -195,7 +202,7 @@ def start_capture(iface, out_pcap, count=None, bpf="udp port 5000"):
     noise (IPv6 ND, ARP) is excluded. Returns the Popen. count -> -c (stop after N)."""
     if os.path.exists(out_pcap):
         os.remove(out_pcap)
-    cmd = ["sudo", "tcpdump", "-i", iface, "-Q", "in", "-w", out_pcap, "-B", "4096"]
+    cmd = sudo(["tcpdump", "-i", iface, "-Q", "in", "-w", out_pcap, "-B", "4096"])
     if count is not None:
         cmd += ["-c", str(count)]
     cmd += bpf.split()
@@ -205,19 +212,19 @@ def start_capture(iface, out_pcap, count=None, bpf="udp port 5000"):
 
 
 def replay(iface, send_pcap, pps=1000):
-    subprocess.run(["sudo", "tcpreplay", f"--pps={pps}", "--intf1=" + iface, send_pcap],
+    subprocess.run(sudo(["tcpreplay", f"--pps={pps}", "--intf1=" + iface, send_pcap]),
                    check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     print(f"[+] replayed {os.path.basename(send_pcap)} on {iface}")
 
 
 def stop_switch(switch, switch_bin):
-    """The switch runs as root under sudo (re-parented into its own session), so signal
+    """The switch runs as root (possibly re-parented into its own session), so signal
     it by its unique binary path via pkill, then reap our Popen handle."""
-    subprocess.run(["sudo", "pkill", "-INT", "-f", switch_bin], capture_output=True)
+    subprocess.run(sudo(["pkill", "-INT", "-f", switch_bin]), capture_output=True)
     try:
         switch.wait(timeout=5)
     except subprocess.TimeoutExpired:
-        subprocess.run(["sudo", "pkill", "-9", "-f", switch_bin], capture_output=True)
+        subprocess.run(sudo(["pkill", "-9", "-f", switch_bin]), capture_output=True)
         try:
             switch.wait(timeout=5)
         except subprocess.TimeoutExpired:
