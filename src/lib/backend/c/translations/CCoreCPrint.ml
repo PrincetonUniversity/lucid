@@ -78,14 +78,11 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : (string * stri
   | TVariant _ -> ty_err "event types should be eliminated"
   | TBuiltin (_, _) -> ty_err "builtin types should be eliminated"
   | TName(cid, _) -> cid_to_string cid, ""
-  | TPtr(ty, Some(len)) ->
-    let prefix, suffix = ty_to_string ~use_abstract_name ty in
-    prefix, (sprintf "[%s]" (arrlen_to_string len))^suffix
   | TList(ty, len) ->
     let prefix, suffix = ty_to_string ~use_abstract_name ty in
     prefix, (sprintf "[%s]" (arrlen_to_string len))^suffix
   | TPacket -> ty_err "bytes should be lowered to packet_t before C printing"
-  | TPtr(ty, None) ->
+  | TPtr(ty) ->
     let prefix, suffix = ty_to_string ~use_abstract_name ty in
     match ty.raw_ty with 
     | TPtr _ -> 

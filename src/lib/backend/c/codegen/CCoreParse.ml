@@ -168,8 +168,6 @@ let call_read  ty bs   = ecast ty (ecall read_bits_fun  [bs; nbits_arg ty])
 let call_peek  ty bs   = ecast ty (ecall peek_bits_fun  [bs; nbits_arg ty])
 let call_skip  ty bs   = ecall skip_bits_fun  [bs; nbits_arg ty]
 let call_write ty bs v = ecall write_bits_fun [bs; ecast (tint 64) v; nbits_arg ty]
-let parser_ret_ty = tint 8
-let parser_ret_drop = eval@@vint 0 8
 
 (* lower the bytes ops to packet_t* helper calls. Skip and return are
    handled at the statement level. *)
@@ -189,7 +187,7 @@ let lower_parser_body pkt out_event body =
       (* return (ok, ev): drop -> return 0; generate -> *next_event = ev; return ok *)
       | SRet(Some { e = ETuple [ success; ev ]; _ }) -> (
           match success.e with
-          | EVal { v = VBool false; _ } -> sret parser_ret_drop
+          | EVal { v = VBool false; _ } -> sret (eval@@vint 0 8)
           | _ ->
             let ok = eop Leq [pktv/->cid"cursor"; pktv/->cid"end"] in
             sseq (sassign_exp (ederef out_event) ev) (sret ok))
@@ -200,10 +198,9 @@ let lower_parser_body pkt out_event body =
 ;;
 
 let lower_parser id ret_ty params body =
-  (* the parser's return type is (bool, event); take the (already-lowered) event
-     type from it so the out-event param uses event_t, not raw TVariant. *)
-  let ev_ty = match ret_ty.raw_ty with
-    | TTuple [_; ev_ty] -> ev_ty
+  (* make the event output param a reference param *)
+  let flag_ty, ev_ty = match ret_ty.raw_ty with
+    | TTuple [flag_ty; ev_ty] -> flag_ty, ev_ty
     | _ -> err "[CCoreParse.lower] parser return type is not (bool, event)"
   in
   let out_event_param = (cid"next_event", tref ev_ty) in
@@ -216,7 +213,7 @@ let lower_parser id ret_ty params body =
   (* bytes param -> packet_t* ; add the out-event param ; return int8 *)
   let params = List.map (fun (pid, ty) -> if is_tpacket ty then (pid, tref packet_t) else (pid, ty)) params in
   let params = params @ [out_event_param] in
-  dfun id parser_ret_ty params body
+  dfun id flag_ty params body
 ;;
 
 let lower_parse_bodies decls =

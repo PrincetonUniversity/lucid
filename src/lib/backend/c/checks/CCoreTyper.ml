@@ -96,11 +96,8 @@ let rec unify_lists env f_unify xs ys =
 
 let rec unify_raw_ty env rawty1 rawty2 : env = 
   match rawty1, rawty2 with
-  | TPtr(t1, None), TPtr(t2, None) ->
+  | TPtr(t1), TPtr(t2) ->
     unify_ty env t1 t2
-  | TPtr(t1, Some(l1)), TPtr(t2, Some(l2)) ->
-    let env' = unify_ty env t1 t2 in
-    unify_arrlen env' l1 l2
   | TList(t1, l1), TList(t2, l2) ->
     let env' = unify_ty env t1 t2 in
     unify_arrlen env' l1 l2
@@ -307,7 +304,7 @@ and infer_eop env op (args : exp list) : env * op * exp list * ty = match op, ar
     let env, inf_exp1 = infer_exp env exp1 in
     let env, inf_exp2 = infer_exp env exp2 in    
     match inf_exp1.ety.raw_ty with 
-      | TPtr(_, _) -> 
+      | TPtr(_) ->
         (* allow pointer arithmetic if t1 is a ref type. *)
         env, op, [inf_exp1; inf_exp2], inf_exp1.ety
       | _ -> 
@@ -617,19 +614,12 @@ let rec infer_decl env decl : env * decl option =
   )
   | DVar(id, ty, Some(arg)) -> (
     match ty.raw_ty with 
-    | TPtr(_, None) -> 
+    | TPtr(_) ->
       (* if this a pointer to a single cell, the other side is a single value *)
       let env, inf_arg = infer_exp env arg in
       let env = unify_ty env ty (tref inf_arg.ety) in
       let env = add_var env (id) ty in
       env, {decl with d=DVar(id, ty, Some(inf_arg))} |> Option.some
-    | TPtr(_, Some(_)) -> (
-      (* if this is an array, the rhs must also be an array *)
-      let env, inf_arg = infer_exp env arg in
-      let env = unify_ty env ty inf_arg.ety in
-      let env = add_var env (id) ty in
-      env, {decl with d=DVar(id, ty, Some(inf_arg))} |> Option.some
-    )
     | _ -> (
       (* anything else is fine too without a special case *)
       let env, inf_arg = infer_exp env arg in

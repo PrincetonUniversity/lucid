@@ -67,12 +67,6 @@ let rec compound_masked_eq e1 e2 m =
         tys
       in
       emacro_and_fold exps
-    | TPtr(_, Some(IConst(n))) -> 
-      emacro_and_fold (List.init (n) 
-        (fun i -> 
-          let idx =(eval@@vint i 32)  in 
-          (((e1/@idx) /& (m/@idx)) /== ((e2/@idx) /& (m/@idx)))
-        ))
     | TList(_, IConst(n)) ->
       emacro_and_fold (List.init (n)
         (fun i ->
@@ -81,12 +75,11 @@ let rec compound_masked_eq e1 e2 m =
         ))
     | TList(_, IVar _) -> err "cannot generate masked equality exp for vector of unknown length"
     | TPacket -> err "cannot generate masked equality exp for bytes"
-    | TPtr(_, None) -> compound_masked_eq (ederef e1) (ederef e2) (ederef m)
+    | TPtr(_) -> compound_masked_eq (ederef e1) (ederef e2) (ederef m)
     | TName(_, def_opt) -> (match def_opt with
       | Some d -> compound_masked_eq {e1 with ety=d} {e2 with ety=d} {m with ety=d}
       | None -> err "cannot generate masked equality exp for opaque named type")
       (* unbounded lists and unions are problematic *)
-    | TPtr(_, Some(_)) -> err "cannot generate equality exp for list of unknown length"
     | TUnion _ -> err "cannot generate equality exp for untagged union"
     (* events and functions -- not sure what to do yet *)
     | TVariant _ -> err "cannot generate equality expression for two events"

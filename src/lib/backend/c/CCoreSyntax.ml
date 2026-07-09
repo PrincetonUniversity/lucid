@@ -32,7 +32,7 @@ and raw_ty =
 
   | TRecord of cid list * ty list | TTuple  of ty list
 
-  | TPtr of ty * (arrlen option)
+  | TPtr of ty
   | TList of ty * arrlen (* vector *)
   | TPacket (* reference to unparsed packet. *)
   
@@ -214,7 +214,7 @@ let tgroup = tbuiltin tgroup_cid [] *)
 (* a named type carrying its structural definition *)
 let tabstract n inner_ty = ty (TName(Cid.create [n], Some inner_ty))
 let tabstract_cid tcid inner_ty = ty (TName(tcid, Some inner_ty))
-let tref t = ty (TPtr(t, None))
+let tref t = ty (TPtr(t))
 (* unwrap a (chain of) named type(s) to its structural definition; an opaque
    name (no carried definition) is its own base type *)
 let rec base_type ty =
@@ -238,7 +238,7 @@ let is_trecord ty = match (base_type ty).raw_ty with TRecord _ -> true | _ -> fa
 let is_ttuple ty = match ty.raw_ty with TTuple _ -> true | _ -> false
 let is_tbool ty = match ty.raw_ty with TBool -> true | _ -> false
 let is_tint ty = match ty.raw_ty with TInt(_) -> true | _ -> false
-let is_tlist ty = match ty.raw_ty with TList _ | TPtr(_, Some _) -> true | _ -> false
+let is_tlist ty = match ty.raw_ty with TList _ -> true | _ -> false
 
 let is_tevent ty = match ty.raw_ty with
   | TName(cid, _) -> Cid.equal cid events_cid || Cid.equal cid event_variant_cid
@@ -279,8 +279,7 @@ let extract_ttuple ty = match ty.raw_ty with
 ;;
 let extract_tlist ty = match ty.raw_ty with
   | TList(ty, len) -> ty, len
-  | TPtr(ty, Some(len)) -> ty, len
-  | _ -> raise (FormError "[extract_tlist] expected TList or TPtr with a length")
+  | _ -> raise (FormError "[extract_tlist] expected TList")
 ;;
 
 let extract_tbuiltin ty = match ty.raw_ty with 
@@ -291,8 +290,8 @@ let extract_tname ty = match ty.raw_ty with
   | TName(cid, _) -> cid
   | _ -> raise (FormError "[extract_tname] expected TName")
 
-let extract_tref ty = match ty.raw_ty with 
-  | TPtr(tinner, _) -> tinner
+let extract_tref ty = match ty.raw_ty with
+  | TPtr(tinner) -> tinner
   | _ -> raise (FormError "[extract_tref] expected TGlobal")
 
 
@@ -489,7 +488,7 @@ let ederef inner =
 
 let elistget arr idx =
   match (base_type arr.ety).raw_ty with
-  | TList _ | TPtr(_, Some _) ->
+  | TList _ ->
     (* value-semantic vector index; CCoreCForm.lower_vecs lowers it to deref-of-plus *)
     eop Idx [arr; idx]
   | _ ->
@@ -756,8 +755,7 @@ let rec equiv_tys ty1 ty2 = match ty1.raw_ty, ty2.raw_ty with
 | TTuple(tys1), TTuple(tys2) -> 
   List.length tys1 = List.length tys2
   && List.for_all2 equiv_tys tys1 tys2
-| TPtr(t1, None), TPtr(t2, None) -> equiv_tys t1 t2
-| TPtr(t1, Some(IConst n1)), TPtr(t2, Some(IConst n2)) -> n1 = n2 && equiv_tys t1 t2
+| TPtr(t1), TPtr(t2) -> equiv_tys t1 t2
 | TList(t1, IConst n1), TList(t2, IConst n2) -> n1 = n2 && equiv_tys t1 t2
 | TList(t1, IVar c1), TList(t2, IVar c2) -> Cid.equal c1 c2 && equiv_tys t1 t2
 | TPacket, TPacket -> true

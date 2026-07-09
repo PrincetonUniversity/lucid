@@ -65,9 +65,7 @@ let rec raw_ty_to_string ?(use_abstract_name=false) (r: raw_ty) : string =
     let ty_list_str = String.concat ", " (List.map (ty_to_string ~use_abstract_name) ty_list) in
     cid_to_string cid ^ "<<" ^ ty_list_str ^ ">>"
   | TName(cid, _) -> cid_to_string cid
-  | TPtr(ty, None) -> sprintf "%s*" (ty_to_string ~use_abstract_name ty)
-  | TPtr(ty, Some(arrlen)) ->
-    ty_to_string ~use_abstract_name:true ty ^ "[" ^ arrlen_to_string arrlen ^ "]"
+  | TPtr(ty) -> sprintf "%s*" (ty_to_string ~use_abstract_name ty)
   | TList(ty, arrlen) ->
     ty_to_string ~use_abstract_name:true ty ^ "[" ^ arrlen_to_string arrlen ^ "]"
   | TPacket -> "bytes"

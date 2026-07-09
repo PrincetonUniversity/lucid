@@ -188,7 +188,7 @@ let delete_empty_tuples decls =
   let rec is_empty_tuple ty = 
     match ty.raw_ty with 
     | TTuple([]) -> true
-    | TPtr(ty, _) -> is_empty_tuple ty
+    | TPtr(ty) -> is_empty_tuple ty
     | TName(_, def_opt) -> (match def_opt with Some d -> is_empty_tuple d | None -> false)
     | _ -> false
   in
