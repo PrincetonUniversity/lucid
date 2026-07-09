@@ -651,18 +651,10 @@ let mk_event_dfuns (event_defs : ev_def list) : F.decls =
   List.map mk_one event_defs
 ;;
 
-(* payload_event_names: events that had an explicit Payload.t arg (computed in
-   CCorePasses before MiscCorePasses.implicit_payloads strips it). Such events keep the
-   input tail when deparsed; recorded in each event's meta.has_payload. *)
 let translate ?(payload_event_names=[]) (ds : C.decls) : F.decls =
   (* translate declarations first in case something in there uses a port.. *)
   (* if (CConfig.c_cfg.driver == "interp") then  *)  
   (* infer_loc_id_sizes ds; *)
-  (* the source events are the single source of truth for the event model: we
-     read them straight from Core to build the variant type + mk_event, and the
-     C backend has no DEvent node at all. Everything downstream resolves against
-     the variant DTy (the typer registers constructors from it, deparse reads its
-     sigs, and is_packet is carried in the per-event meta). *)
   let event_defs = List.filter_map
     (fun (d : C.decl) -> match d.d with
       | C.DEvent (evid, evnum_opt, ev_sort, params) ->
@@ -686,11 +678,7 @@ let translate ?(payload_event_names=[]) (ds : C.decls) : F.decls =
     (fun (d : C.decl) -> match d.d with C.DEvent _ -> None | _ -> Some (translate_decl d))
     ds
   in
-  (* declare the event ADT once: `type events = TEvent[ (ctor, {params}) ]`.
-     Every event reference is TName "events" (see translate_raw_ty); this DTy is
-     the single definition the typer resolves against and the sizer reads. Each
-     variant arm carries its discriminant tag (from the source event number) so
-     the variant type is self-describing -- the lowering reads tags from here. *)
+  (* declare the event ADT once: `type events = TEvent[ (ctor, {params}) ]`. *)
   let event_sigs =
     List.map
       (fun (ed : ev_def) -> (ed.evconstrid, Option.get ed.evconstrnum, F.trecord ed.evparams))
