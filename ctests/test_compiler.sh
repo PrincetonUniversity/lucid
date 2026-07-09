@@ -2,14 +2,10 @@
 #
 # C backend (lucidcc) codegen gate.
 #
-# For each program in ctests/programs/, generate C with the pcap driver, check it
-# COMPILES (gcc -lpcap), and byte-diff the generated C text against the checked-in
+# For each program in ctests/programs/, generate C with the pcap driver, check if it
+# compiles (gcc -lpcap), and byte-diff the generated C text against the checked-in
 # golden in ctests/expected/. A program marked `// LUCIDCC_REJECT: <substr>` is instead
-# checked to be *rejected* by lucidcc (it uses a feature the C backend does not support).
-#
-# This is the fast, local, no-root gate. The pcap *run* fixtures (execute the compiled
-# binary + byte-compare output packets) live in ctests/test_pcap; the live-traffic
-# driver tests in ctests/test_rawsock and ctests/test_dpdk.
+# checked to be rejected by lucidcc (it uses a feature the C backend does not support).
 #
 # Usage:
 #   ./ctests/run_tests.sh             normal: compile + diff each program vs expected/
@@ -19,11 +15,6 @@
 #
 # Exits non-zero on any failure (CI-friendly). Update mode still fails on a compile error
 # or a bad rejection -- it won't record broken C as a golden.
-#
-# Note: generated C embeds fresh-id temp names (e.g. tmp_4331), deterministic for a fixed
-# compiler -- so a compiler change that shifts id allocation legitimately changes the
-# output and needs a --update. Inspect the printed diff to confirm a change is intended.
-#
 set -uo pipefail
 shopt -s nullglob
 
@@ -69,9 +60,7 @@ for prog in "$PROGRAMS_DIR"/*.dpt; do
   log="$WORK/$name.log"
   exp="$EXPECTED_DIR/$name.cc"
 
-  # A program marked `// LUCIDCC_REJECT: <substr>` must be REJECTED by lucidcc (it uses a
-  # feature the C backend intentionally does not support). It passes iff lucidcc exits
-  # non-zero AND the error mentions <substr>. No golden and no compile for these.
+  # Mark for programs that should be rejected.
   reject_pat="$(sed -n 's/.*LUCIDCC_REJECT:[[:space:]]*//p' "$prog" | head -1)"
   if [ -n "$reject_pat" ]; then
     if "$LUCIDCC" "$prog" -o "$c" $FLAGS >"$log" 2>&1; then
@@ -90,13 +79,12 @@ for prog in "$PROGRAMS_DIR"/*.dpt; do
   fi
   [ -f "$c" ] || { echo "FAIL  $name  (no output file produced)"; fail=$((fail+1)); continue; }
 
-  # 2. gcc-compile the generated C. A compile error is always a failure -- and we won't
-  #    record broken C as a golden (this runs before the --update copy).
+  # 2. gcc-compile the generated C. A compile error is always a failure
   if ! gcc -o "$WORK/$name.bin" "$c" -lpcap >"$WORK/$name.gcc.log" 2>&1; then
     echo "FAIL  $name  (gcc)"; grep "error:" "$WORK/$name.gcc.log" | sed 's/^/      | /' | head -3; fail=$((fail+1)); continue
   fi
 
-  # 3. golden diff (or, in update mode, record the compile-checked output).
+  # 3. diff with expected.
   if [ "$UPDATE" -eq 1 ]; then
     cp "$c" "$exp"; echo "UPDATE  $name"; updated=$((updated+1))
   elif [ ! -f "$exp" ]; then
