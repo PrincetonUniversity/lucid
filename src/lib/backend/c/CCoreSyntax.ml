@@ -14,11 +14,8 @@ and sp = [%import: Span.t]
 (* types *)
 and size = int
 
-(* length of an array. I think its just a size, 
-   but not positive how it will work out yet. *)
-and arrlen = 
-    | IConst of int
-    | IVar of cid
+(* length of an array; always a concrete constant by the time we reach CCore *)
+and arrlen = int
 
 and func_kind = | FNormal | FHandler | FParser | FAction | FMemop
 and raw_ty = 
@@ -26,20 +23,14 @@ and raw_ty =
   | TUnit
   | TInt of size
   | TBool
-
-  | TUnion of cid list * ty list 
-  | TVariant of (cid * int * ty) list (* tagged variant: (constructor, discriminant tag, payload) per arm *)
-
-  | TRecord of cid list * ty list | TTuple  of ty list
-
-  | TPtr of ty
-  | TList of ty * arrlen (* vector *)
-  | TPacket (* reference to unparsed packet. *)
-  
   | TFun of func_ty
-  (* alias types *)
+  | TRecord of cid list * ty list | TTuple  of ty list
+  | TVariant of (cid * int * ty) list (* tagged variant: (constructor, discriminant tag, payload) per arm *)
+  | TUnion of cid list * ty list 
+  | TList of ty * arrlen (* vector *)
+  | TPtr of ty
+  | TPacket (* reference to unparsed packet. *)
   | TBuiltin of cid * (ty list) (* abstract types built into lucid that must be implemented in CCore *)
-
   | TName of cid * ty option
     (* a named type carrying its own structural definition (None = opaque/extern).
        the printed typedef lives in the program's DTy decls; base_type unwraps the
@@ -70,7 +61,7 @@ and op =    | And | Or | Not
             | Cast of ty 
             | Conc
             | Project of cid | Get of int
-            | Idx (* Index int a vec *)
+            | Idx (* Index into a list *)
             (* Packet parser / deparser operations. Ty is the output type. *)
             | Peek of ty | Read of ty | Skip of ty | BytesOk (*check if past end of buf*)
             | Write of ty 
@@ -96,8 +87,6 @@ and exp = {e:e; ety:ty; espan : sp}
 and pat =
   | PVal of value
   | PMask of {value : int; mask : int; width : size}
-    (* ternary pattern, already lowered: matches k iff (k & mask) == value.
-       (value's wildcard bits are 0.) exact patterns are PVal int literals. *)
   | PVariant of {event_id : cid; params : params;}
   | PWild of ty
 
@@ -127,7 +116,7 @@ and fun_def = func_kind * cid * ty * params * fun_body
 
 and fun_body = 
   | BStatement of statement
-  | BForiegn of string (* a C source body; the signature is still typed IR *)
+  | BForiegn of string (* a C function with a type signature here *)
   
 and d = 
   | DForiegn of string (* misc things in the underlying language. Imports, etc. *)
@@ -135,10 +124,6 @@ and d =
   | DFun of fun_def
   | DTy  of cid * ty option (* named types and external types *)
   | DEnum of (cid * int) list
-    (* named int constants, printed as an anonymous C enum declaration
-       (`enum {a = 0, b = 1};`). members are integer constant expressions, so
-       they are valid in case labels and static initializers; references are
-       VSymbols (or EVars) at tint 32 *)
 
 and decl = {d:d; dspan : sp;}
 and decls = decl list
@@ -171,7 +156,6 @@ exception FormError of string
 
 let id = Id.create
 let cid s = Cid.create [s]
-let arrlen i = IConst i
 let sz n = n
 let cid s = Cid.create([s])
 
@@ -355,7 +339,7 @@ let memzero ty = vsymbol (cid "{0}") ty;;
    the quoted literal, at the abstract "string" (char array) type. Nothing
    computes on string contents, so they don't need a structural encoding. *)
 let string_to_value (s:string) =
-  let str_ty = tabstract "string" (tlist tchar (IConst (String.length s))) in
+  let str_ty = tabstract "string" (tlist tchar (String.length s)) in
   vsymbol (cid ("\"" ^ s ^ "\"")) str_ty
 ;;
 
@@ -381,7 +365,7 @@ let etuple es =
   exp (ETuple es) (ttuple (List.map (fun e -> e.ety) es)) Span.default
 
 let elist es =
-  exp (EList es) (tlist (List.hd es).ety (IConst (List.length es))) Span.default
+  exp (EList es) (tlist (List.hd es).ety (List.length es)) Span.default
 
 let eop op es = 
   let eop_ty = match op with 
@@ -756,8 +740,7 @@ let rec equiv_tys ty1 ty2 = match ty1.raw_ty, ty2.raw_ty with
   List.length tys1 = List.length tys2
   && List.for_all2 equiv_tys tys1 tys2
 | TPtr(t1), TPtr(t2) -> equiv_tys t1 t2
-| TList(t1, IConst n1), TList(t2, IConst n2) -> n1 = n2 && equiv_tys t1 t2
-| TList(t1, IVar c1), TList(t2, IVar c2) -> Cid.equal c1 c2 && equiv_tys t1 t2
+| TList(t1, n1), TList(t2, n2) -> n1 = n2 && equiv_tys t1 t2
 | TPacket, TPacket -> true
 | TVariant _, TVariant _ -> true
 | TFun {arg_tys=arg_tys1; ret_ty=ret_ty1; func_kind=fk1}, TFun {arg_tys=arg_tys2; ret_ty=ret_ty2; func_kind=fk2} -> 

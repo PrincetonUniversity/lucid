@@ -14,9 +14,7 @@ let cid_to_string (cid : Cid.t) =
   (* Cid.to_string cid *)
 
 let size_to_string size = string_of_int size
-let arrlen_to_string = function 
-  | IConst(i) -> string_of_int i
-  | IVar(v) -> cid_to_string v
+let arrlen_to_string = string_of_int
 
 let func_kind_to_string = function
   | FNormal -> "fn"

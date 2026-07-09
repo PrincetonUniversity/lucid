@@ -67,13 +67,12 @@ let rec compound_masked_eq e1 e2 m =
         tys
       in
       emacro_and_fold exps
-    | TList(_, IConst(n)) ->
+    | TList(_, n) ->
       emacro_and_fold (List.init (n)
         (fun i ->
           let idx =(eval@@vint i 32)  in
           (((e1/@idx) /& (m/@idx)) /== ((e2/@idx) /& (m/@idx)))
         ))
-    | TList(_, IVar _) -> err "cannot generate masked equality exp for vector of unknown length"
     | TPacket -> err "cannot generate masked equality exp for bytes"
     | TPtr(_) -> compound_masked_eq (ederef e1) (ederef e2) (ederef m)
     | TName(_, def_opt) -> (match def_opt with

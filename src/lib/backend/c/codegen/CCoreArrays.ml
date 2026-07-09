@@ -25,7 +25,7 @@ let emplace_fcn ctx ((cid : Cid.t), decl) =
 
 (* the value type of the array (inside the global/ref type) *)
 let array_value_ty cell_ty len =
-  tlist cell_ty (arrlen len)
+  tlist cell_ty len
 ;;
 
 (* memops: memops are functions passed as arguments. *)

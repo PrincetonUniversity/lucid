@@ -103,7 +103,7 @@ let rec ones_exp ty : exp =
     | TRecord(labels, tys) ->
       erecord (List.map2 (fun l t -> l, ones_exp t) labels tys)
     | TTuple tys -> etuple (List.map ones_exp tys)
-    | TList(ele_ty, IConst n) ->
+    | TList(ele_ty, n) ->
       elist (List.init n (fun _ -> ones_exp ele_ty))
     | _ -> failwith "[ones_exp] unsupported table key type"
   in
@@ -297,7 +297,7 @@ let monomorphic_table_decls action_tags decl : decls =
        an expression and is embedded in the initializer as-is *)
     let len, default_action_enum_id, default_action_arg = match extract_ecall builtin_constr_call_exp |> snd with
       | [len; _; default_action; default_action_arg] ->
-        eval_exp len |> extract_vint |> arrlen,
+        eval_exp len |> extract_vint,
         eval_exp default_action |> extract_vsymbol, (* here, the id is the symbol in the enum *)
         default_action_arg
       | _ -> failwith "unexpected table declaration"

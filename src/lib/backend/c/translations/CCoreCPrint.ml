@@ -22,9 +22,7 @@ let is_tbit_int ty =
   | _ -> false
 ;;
 let size_to_string size = string_of_int size
-let arrlen_to_string = function 
-  | IConst(i) -> string_of_int i
-  | IVar(_) -> ty_err "size variables cannot be printed to c"
+let arrlen_to_string = string_of_int
 
 (* Emit a unique, C-valid identifier. Distinct ids can share a source name (e.g.
    a loop-unrolled or inlined local `x`); the structural id number disambiguates

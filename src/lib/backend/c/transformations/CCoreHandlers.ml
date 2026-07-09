@@ -25,7 +25,7 @@ let tout_event = tabstract_cid out_event_cid out_event_def
 let out_event_dty = dty out_event_cid out_event_def
 
 let out_events_cap = 64
-let tout_events = tlist tout_event (IConst out_events_cap)
+let tout_events = tlist tout_event out_events_cap
 let count_size = 16
 
 (* shared cids / vars for the handler body *)

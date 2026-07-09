@@ -11,17 +11,10 @@ let dprint_endline x =
   else ()
 ;;
 
-type constr_var = 
-  | IVar of string
-  | IVal of int
-type constr = 
-  | Eq of string * constr_var
-
 type env =
 {
   vars : ty CidMap.t;
   tys  : ty CidMap.t;
-  idx_constrs : constr list;
   ret_ty : ty option;
   builtin_checkers : (cid * builtin_checker_t) list 
     (* checkers for builtin functions *)
@@ -33,7 +26,6 @@ let empty_env =
   {
     vars = CidMap.empty;
     tys = CidMap.empty;
-    idx_constrs = [];
     ret_ty = None;
     builtin_checkers = CCoreBuiltinCheckers.builtin_checkers;
   }
@@ -67,30 +59,19 @@ let get_ty env cid =
   | Some ty -> ty
   | None -> raise (UnboundType cid)
 
-let add_constr env constr = 
-  {env with idx_constrs = constr::env.idx_constrs}
-
-let add_builtins env = 
+let add_builtins env =
   let params = CCoreBuiltinCheckers.builtin_vars () in
   let ids, tys = List.split params in
   let cids = List.map Cid.id ids in
   add_vars env cids tys
 ;;  
   
-(* unify just adds constraints to context for arrlenes *)
-let rec unify_arrlen env x y =
-  match x, y with 
-  | IConst x, IConst y -> 
-    if (x = y) then env
-    else ty_err "array index mismatch"
-  | IConst x, IVar v 
-  | IVar v , IConst x ->
-    add_constr env (Eq(Cid.name v, (IVal x)))
-  | IVar v, IVar w -> 
-    add_constr env (Eq(Cid.name v, (IVar (Cid.name w))))
+let unify_arrlen env x y =
+  if (x = y) then env
+  else ty_err "array index mismatch"
 ;;
 
-let rec unify_lists env f_unify xs ys = 
+let rec unify_lists env f_unify xs ys =
   List.fold_left2 f_unify env xs ys 
 ;;
 
@@ -220,7 +201,7 @@ let rec infer_exp env exp : env * exp =
       let env, es' = infer_exps env es in
       let ele_ty = (List.hd es').ety in
       let env = List.fold_left (fun env e -> unify_ty env ele_ty e.ety) env es' in
-      env, {exp with e=EList(es'); ety=tlist ele_ty (IConst (List.length es'))}
+      env, {exp with e=EList(es'); ety=tlist ele_ty (List.length es')}
     | ERecord(labels, es) -> 
       let env, es' = infer_exps env es in
       let e =ERecord(labels, es') in
