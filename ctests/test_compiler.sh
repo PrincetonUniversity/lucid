@@ -3,8 +3,8 @@
 # C backend (lucidcc) codegen gate.
 #
 # For each program in ctests/programs/, generate C with the pcap driver, check if it
-# compiles (gcc -lpcap), and byte-diff the generated C text against the checked-in
-# golden in ctests/expected/. A program marked `// LUCIDCC_REJECT: <substr>` is instead
+# compiles (gcc -lpcap), and byte-diff the generated C text against the expected 
+# in ctests/expected/. A program marked `// LUCIDCC_REJECT: <substr>` is instead
 # checked to be rejected by lucidcc (it uses a feature the C backend does not support).
 #
 # Usage:
@@ -13,8 +13,7 @@
 #   ./ctests/run_tests.sh --no-build  skip `make`, reuse the current ./lucidcc
 #   ./ctests/run_tests.sh --help      show this help
 #
-# Exits non-zero on any failure (CI-friendly). Update mode still fails on a compile error
-# or a bad rejection -- it won't record broken C as a golden.
+# Exits non-zero on any failure. Update mode still fails on a compile error or a bad rejection.
 set -uo pipefail
 shopt -s nullglob
 
