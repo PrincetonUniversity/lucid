@@ -56,7 +56,8 @@ let compile ds =
   CCoreWellformed.check_no_ptrs cds;
   (* mask non-standard int width operations for storage in C containers *)
   let cds = CCoreMaskWidths.process cds in
-
+  (* parser + deparser; handlers merged into 1 function with switch; builtin data structures   *)
+  (* (in intermediate representation, not quite C yet) *)
   (*** 6. lowering to C-compatible form *)
   print_endline ("---- Normalizing code forms for c ----");
   (* handlers to functions *)
@@ -73,6 +74,8 @@ let compile ds =
   let cds = CCoreCForm.delete_empty_tuples cds in
   let cds = CCoreCForm.declare_tuples cds in
 
+  (* parser + deparser; handlers merged into 1 function with switch; builtin data structures   *)
+  (* ready to be printed out as C code *)
   (* final type check *)
   (* let cds = CCoreTyper.check cds in *)
   CCoreWellformed.check_ccore_compat cds;

@@ -2,6 +2,33 @@ open CCoreSyntax
 open CCoreExceptions
 open CCoreUtils
 
+(* 
+	TODO: single producer is not correct for the dispatch stage bc it gets 
+	events from both the rx stage and the tx stage (recirculation).
+
+	TODO: internal ringbufs should block / poll on insert, not drop in the middle
+	e.g., this is wrong in parser:
+		"if (rte_ring_enqueue(dispatch_in, m) != 0) rte_pktmbuf_free(m); // ring full -> drop"
+
+	TODO: TX should not copy mbuf of the first event 
+			// loop: start with b = 1, do all the stuff for the copies
+			// after loop: if nb > 0, do event 0 else free the packet (drop)
+
+	TODO: Printfs should be deleted or guarded by #ifdefs
+			- Also, does printf from inside of DPDK work?
+				- DPDK log function write, maybe with certain debug level
+					- RTE_LOG_LINE macro 
+						- to console by default
+							#include <rte_log.h> // defines macros + USER1
+							// Syntax: RTE_LOG_LINE(level, type, "format string", ...)
+							RTE_LOG_LINE(INFO, USER1, "hello");					
+	TODO: 
+		- Multiple cores for each stage as default
+		- Then, the more interesting questions avout how to parallelize and balance
+
+
+*)
+
 (*
   Single-core DPDK toplevel driver.
 
@@ -237,7 +264,9 @@ let dpdk_do_tx = dforiegn [%string {|
 static void do_tx(void) {
 	void *batch[BURST_SIZE];
 	unsigned nb = rte_ring_dequeue_burst(tx_in, batch, BURST_SIZE, NULL);
-	for (unsigned b = 0; b < nb; b++) {
+	// loop: start with b = 1, do all the stuff for the copies
+	// after loop: if nb > 0, do event 0 else free the packet (drop)
+	for (unsigned b = 0; b < nb; b++) { 
 		struct rte_mbuf *m = (struct rte_mbuf *)batch[b];
 		qe_priv_t *ip = qe(m);
 		uint32_t pkt_len = rte_pktmbuf_pkt_len(m);
