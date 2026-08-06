@@ -271,7 +271,8 @@ function cd_launch_and_wait() {
 
 function start_asic_sim() {
     local P4_CONF=$1
-    local SIMULATOR="sudo $SDE_INSTALL/bin/tofino-model"
+    # local SIMULATOR="sudo $SDE_INSTALL/bin/tofino-model"
+    local SIMULATOR="sudo env LD_LIBRARY_PATH=/usr/local/lib:$SDE_INSTALL/lib:$LD_LIBRARY_PATH $SDE_INSTALL/bin/tofino-model"
 
     # setup veths for simulator
     create_veth_pairs 
