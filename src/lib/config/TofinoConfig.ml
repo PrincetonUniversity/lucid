@@ -35,6 +35,16 @@ let speclist =
   let set_profile_cmd (s : string) =  cfg.profile_cmd <- Some s in
   let set_ctl_fn (s : string) =  cfg.ctl_fn <- Some s in
   let set_serverlib () = cfg.serverlib <- true in
+  (* the first --port clears the default port list, so that the user-provided
+     ports replace the defaults rather than adding to them *)
+  let user_set_ports = ref false in
+  let add_port (id, speed) =
+    if not !user_set_ports
+    then (
+      cfg.ports <- [];
+      user_set_ports := true);
+    cfg.ports <- cfg.ports @ [id, speed]
+  in
   [ "-o", Arg.String set_builddir, "Output build directory."
       ; ( "--ports"
         , Arg.String set_portspec
@@ -47,8 +57,8 @@ let speclist =
                 | [id; speed] -> (int_of_string id, int_of_string speed)
                 | _ -> failwith "Invalid port specification"
               in
-               cfg.ports <- (id, speed) ::  cfg.ports)
-        , "--port <dpid>@<speed> Specify a port to be brought up automatically in the generated control plane. Can be used multiple times." )
+              add_port (id, speed))
+        , "--port <dpid>@<speed> Specify a port to be brought up automatically in the generated control plane. Can be used multiple times. Using this flag at all replaces the default port list." )
       ; ( "--recirc_port"
         , Arg.Int (fun i ->  cfg.recirc_port <- i)
         , "Port id for recirculation" )
