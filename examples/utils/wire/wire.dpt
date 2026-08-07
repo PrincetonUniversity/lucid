@@ -1,16 +1,15 @@
 // simple wire between two hard coded ports, for tofino (9 bit port ids)
 
-const int<9> p1 = 44;
+const int<9> p1 = 28;
 const int<9> p2 = 4;
 
 packet event eth(int<48> dmac, int<48> smac, int<16> ety) {
-    skip;
-    // match ingress_port with 
-    // | p1 -> {
-    //     generate_port(p2, this);
-    // }
-    // | p2 -> {
-    //     generate_port(p1, this);
-    // }
-    // | _ -> { skip; }
+    match ingress_port with 
+    | p1 -> {
+        generate_port(p2, this);
+    }
+    | p2 -> {
+        generate_port(p1, this);
+    }
+    | _ -> { skip; }
 }

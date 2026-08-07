@@ -165,7 +165,10 @@ class Controller(object):
     port_table = self.tables['$PORT']
     keys = list(port_table.key_fields.keys())
     port_cfg_key = {'$DEV_PORT':dpid}
-    port_cfg_acn = {'$SPEED':speed, '$FEC':"BF_FEC_TYP_NONE", '$PORT_ENABLE':True}
+    if (speed == "BF_SPEED_100G"):
+      port_cfg_acn = {'$SPEED':speed, '$FEC':"BF_FEC_TYP_RS", '$PORT_ENABLE':True}
+    else:
+      port_cfg_acn = {'$SPEED':speed, '$FEC':"BF_FEC_TYP_NONE", '$PORT_ENABLE':True}
     port_table.add_entry(port_cfg_key, None, port_cfg_acn)
 
   ### pktgen helpers
