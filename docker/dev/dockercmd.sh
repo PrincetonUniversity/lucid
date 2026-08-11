@@ -86,12 +86,10 @@ cmd_up() {
         echo "container '$CONTAINER' is already running. Use '$PROG exec' for a shell." >&2
         return 0
     fi
-    # Drop a stale stopped container so the new mount/workdir take effect.
+    # Drop a stale stopped container so the new mount/workdir take effect
     container_exists && docker rm -f "$CONTAINER" >/dev/null
 
-    # Start the shell in the home dir (-w $HOME_DIR), matching `enter`; the mount
-    # lands at $HOME_DIR/<name> as a subdir. (Previously -w was the mounted dir, so
-    # `exec` dropped you *inside* the mount -- inconsistent with `enter`.)
+    # Start the shell in the home dir (-w $HOME_DIR)
     local run_args=(-d --name "$CONTAINER" --cap-add=NET_ADMIN -w "$HOME_DIR")
     local mount_at="$HOME_DIR"
     local path="${1:-}"
@@ -110,9 +108,7 @@ cmd_up() {
 }
 
 cmd_ls() {
-    # Print the name(s) of running containers from the '$IMAGE' image -- whether
-    # started by `up` (name '$CONTAINER') or a throwaway `enter` (random name).
-    # The NAME is the identifier to pass to `docker exec` (or hand to tooling).
+    # Print the name(s) of running containers from the '$IMAGE' image
     local names
     names="$(docker ps --filter ancestor="$IMAGE" --format '{{.Names}}')"
     if [[ -z "$names" ]]; then
@@ -124,7 +120,7 @@ cmd_ls() {
 
 cmd_exec() {
     container_running || { echo "error: container '$CONTAINER' is not running; start it with '$PROG up [PATH]'." >&2; exit 1; }
-    # bash (interactive) sources ~/.bashrc, which loads the opam env.
+    # bash (interactive) sources ~/.bashrc, to load opam env
     if [[ $# -gt 0 ]]; then
         docker exec -it "$CONTAINER" "$@"
     else
@@ -142,15 +138,14 @@ cmd_down() {
 }
 
 cmd_pull() {
-    # Fetch the prebuilt image (Docker picks your arch) and tag it for local use,
-    # so `enter` behaves the same whether you built or pulled.
+    # Fetch the prebuilt image (Docker picks your arch) and tag it for local use
     docker pull "$REMOTE:$TAG"
     docker tag "$REMOTE:$TAG" "$IMAGE"
 }
 
 cmd_publish() {
-    # Multi-arch build + push. Requires `docker login ghcr.io` first. Uses a
-    # buildx builder with the docker-container driver (created here if missing).
+    # Multi-arch build + push. Requires `docker login ghcr.io` first 
+    # Uses a buildx builder with the docker-container driver (created here if missing)
     local platforms="${PLATFORMS:-linux/amd64,linux/arm64}"
     docker buildx inspect lucid-builder >/dev/null 2>&1 \
         || docker buildx create --name lucid-builder --driver docker-container >/dev/null
