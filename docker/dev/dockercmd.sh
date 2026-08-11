@@ -27,6 +27,8 @@ Usage:
   $PROG up [PATH]          Start the named '$CONTAINER' container in the
                            background (for IDE attach). PATH is mounted as
                            with 'enter'. Idempotent.
+  $PROG ls                 Print the name(s) of running dev containers (from
+                           'up' or 'enter') -- the identifier to pass to 'exec'.
   $PROG exec [CMD...]      Run a shell (or CMD) in the background container.
   $PROG down               Stop and remove the background container.
   $PROG pull               Pull the prebuilt image from the registry.
@@ -84,30 +86,41 @@ cmd_up() {
         echo "container '$CONTAINER' is already running. Use '$PROG exec' for a shell." >&2
         return 0
     fi
-    # Drop a stale stopped container so the new mount/workdir take effect.
+    # Drop a stale stopped container so the new mount/workdir take effect
     container_exists && docker rm -f "$CONTAINER" >/dev/null
 
-    local run_args=(-d --name "$CONTAINER" --cap-add=NET_ADMIN)
-    local workdir="$HOME_DIR"
+    # Start the shell in the home dir (-w $HOME_DIR)
+    local run_args=(-d --name "$CONTAINER" --cap-add=NET_ADMIN -w "$HOME_DIR")
+    local mount_at="$HOME_DIR"
     local path="${1:-}"
     if [[ -n "$path" ]]; then
         require_path "$path"
         local abs; abs="$(abspath "$path")"
-        workdir="$HOME_DIR/$(basename "$abs")"
-        run_args+=(-v "$abs:$workdir")
+        mount_at="$HOME_DIR/$(basename "$abs")"
+        run_args+=(-v "$abs:$mount_at")
     fi
-    run_args+=(-w "$workdir")
 
     # sleep infinity keeps the container alive for exec/IDE attach.
     docker run "${run_args[@]}" "$IMAGE" sleep infinity >/dev/null
-    echo "container '$CONTAINER' is up (workdir: $workdir)."
+    echo "container '$CONTAINER' is up (mounted at: $mount_at)."
     echo "Attach your IDE (VSCode: Dev Containers > Attach to Running Container)"
     echo "or run '$PROG exec' for a shell."
 }
 
+cmd_ls() {
+    # Print the name(s) of running containers from the '$IMAGE' image
+    local names
+    names="$(docker ps --filter ancestor="$IMAGE" --format '{{.Names}}')"
+    if [[ -z "$names" ]]; then
+        echo "no running '$IMAGE' container. Start one with '$PROG up [PATH]' or '$PROG enter [PATH]'." >&2
+        return 1
+    fi
+    echo "$names"
+}
+
 cmd_exec() {
     container_running || { echo "error: container '$CONTAINER' is not running; start it with '$PROG up [PATH]'." >&2; exit 1; }
-    # bash (interactive) sources ~/.bashrc, which loads the opam env.
+    # bash (interactive) sources ~/.bashrc, to load opam env
     if [[ $# -gt 0 ]]; then
         docker exec -it "$CONTAINER" "$@"
     else
@@ -125,15 +138,14 @@ cmd_down() {
 }
 
 cmd_pull() {
-    # Fetch the prebuilt image (Docker picks your arch) and tag it for local use,
-    # so `enter` behaves the same whether you built or pulled.
+    # Fetch the prebuilt image (Docker picks your arch) and tag it for local use
     docker pull "$REMOTE:$TAG"
     docker tag "$REMOTE:$TAG" "$IMAGE"
 }
 
 cmd_publish() {
-    # Multi-arch build + push. Requires `docker login ghcr.io` first. Uses a
-    # buildx builder with the docker-container driver (created here if missing).
+    # Multi-arch build + push. Requires `docker login ghcr.io` first 
+    # Uses a buildx builder with the docker-container driver (created here if missing)
     local platforms="${PLATFORMS:-linux/amd64,linux/arm64}"
     docker buildx inspect lucid-builder >/dev/null 2>&1 \
         || docker buildx create --name lucid-builder --driver docker-container >/dev/null
@@ -149,6 +161,7 @@ main() {
         build)   cmd_build "$@" ;;
         enter)   cmd_enter "$@" ;;
         up)      cmd_up "$@" ;;
+        ls)      cmd_ls "$@" ;;
         exec)    cmd_exec "$@" ;;
         down)    cmd_down "$@" ;;
         pull)    cmd_pull "$@" ;;
