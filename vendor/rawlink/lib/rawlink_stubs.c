@@ -56,6 +56,9 @@
 #include "caml/custom.h"
 #include "caml/bigarray.h"
 
+/* requested kernel capture buffer size */
+#define RAWLINK_BUFFER_REQUEST	(512 * 1024)
+
 #ifdef USE_BPF
 
 #define FILTER bpf_insn
@@ -202,7 +205,7 @@ caml_rawlink_open(value vfilter, value vpromisc, value vifname)
 		CAMLreturn(Val_unit);
 	if (bpf_sethdrcmplt(fd, 1) == -1)
 		CAMLreturn(Val_unit);
-	if (bpf_setblen(fd, UNIX_BUFFER_SIZE) == -1)
+	if (bpf_setblen(fd, RAWLINK_BUFFER_REQUEST) == -1)
 		CAMLreturn(Val_unit);
 	if (bpf_setfilter(fd, vfilter) == -1)
 		CAMLreturn(Val_unit);
@@ -229,6 +232,19 @@ caml_bpf_align(value va, value vb)
 	v = Val_int(BPF_WORDALIGN (a + b));
 
 	CAMLreturn (v);
+}
+
+/* buffer size granted by the kernel */
+CAMLprim value
+caml_rawlink_blen(value vfd)
+{
+	CAMLparam1(vfd);
+	u_int blen;
+
+	if (ioctl(Int_val(vfd), BIOCGBLEN, &blen) == -1)
+		uerror("caml_rawlink_blen", Nothing);
+
+	CAMLreturn (Val_int(blen));
 }
 
 #endif	/* USE_BPF */
@@ -382,6 +398,14 @@ caml_bpf_align(value va, value vb)
 {
 	CAMLparam2(va, vb);
 	CAMLreturn (Val_int(0));
+}
+
+/* AF_PACKET reads one packet per read(); a fixed buffer size is fine */
+CAMLprim value
+caml_rawlink_blen(value vfd)
+{
+	CAMLparam1(vfd);
+	CAMLreturn (Val_int(UNIX_BUFFER_SIZE));
 }
 
 #endif	/* USE_AF_PACKET */

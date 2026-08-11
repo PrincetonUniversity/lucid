@@ -23,7 +23,7 @@ let pwrite (p:BitString.bits) (v:value) : BitString.bits =
     The values are just serialized directly. *)
 let serialize_packet_event event_val = 
   (* serialize all the event arguments to a single bitstring *)
-  let packet_bits = List.fold_left pwrite [] event_val.data in 
+  let packet_bits = List.fold_left pwrite BitString.empty event_val.data in
   (* tag with metadata *)
   {event_val with eid=Cid.create ["bytes"]; data=[vbits packet_bits]; eserialized=true;}
 ;;
@@ -37,7 +37,7 @@ let serialize_background_event lucid_hdrs event_val =
     | Some(evnum) -> evnum 
   in
   let all_data = lucid_hdrs@[evnum]@event_val.data in
-  let packet_bits = List.fold_left pwrite [] all_data in 
+  let packet_bits = List.fold_left pwrite BitString.empty all_data in
   {event_val with eid=Cid.create ["bytes"]; data=[vbits packet_bits]; eserialized=true;}
 ;;
 

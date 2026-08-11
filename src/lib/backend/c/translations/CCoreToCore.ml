@@ -15,12 +15,7 @@ let rec ty_to_size (ty : F.ty) =
   | _ -> failwith "not done"
 ;;
 
-let rec ints_to_bits = function
-  | 0::is -> BitString.B0 :: ints_to_bits is
-  | 1::is -> BitString.B1 :: ints_to_bits is
-  | [] -> []
-  | _ -> err "invalid int to convert into a bit"
-;;
+let ints_to_bits = BitString.of_ints ;;
 
 let detuple_ty (ty : F.ty) = match ty.raw_ty with 
   | F.TTuple(ts) -> ts

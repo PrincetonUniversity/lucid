@@ -198,22 +198,20 @@ let emit (st : state) (intent : send_intent) : unit =
   st.outbox := intent :: !(st.outbox)
 ;;
 
-(* how many events are already queued at [stime] -- a stable tiebreaker for
-   events that arrive at the same time. *)
-let n_queued_for_time queued_events stime =
-  List.length (List.filter (fun e -> (timestamp e) = stime) queued_events)
-;;
+(* arrival order, the tiebreaker for events queued at the same time *)
+let enqueue_seq = ref 0 ;;
+let next_enqueue_seq () = incr enqueue_seq; !enqueue_seq ;;
 
 (* enqueue an event into this switch's ingress queue (pure). *)
 let enqueue_ingress st iev stime sport : state =
-  let squeue_order = n_queued_for_time (EventQueue.elems st.ingress_queue) stime in
+  let squeue_order = next_enqueue_seq () in
   let iev = { iev with sloc = loc (None, sport); squeue_order; stime } in
   { st with ingress_queue = EventQueue.add iev st.ingress_queue }
 ;;
 
 (* enqueue an event into this switch's egress queue (pure). *)
 let enqueue_egress st iev stime sport : state =
-  let squeue_order = n_queued_for_time (EventQueue.elems st.egress_queue) stime in
+  let squeue_order = next_enqueue_seq () in
   let iev = { iev with squeue_order; sloc = loc (None, sport); stime } in
   { st with egress_queue = EventQueue.add iev st.egress_queue }
 ;;

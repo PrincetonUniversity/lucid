@@ -51,8 +51,8 @@ match v with
     CoreSyntax.VTuple([v; CoreSyntax.VInt(mask)])
   | VBits b -> 
     let v = BitString.bits_to_int b  in 
-    let v = Integer.create ~value:v ~size:(List.length b) in
-    let m  = Integer.max_int (List.length b) in
+    let v = Integer.create ~value:v ~size:(BitString.length b) in
+    let m  = Integer.max_int (BitString.length b) in
     CoreSyntax.VTuple([CoreSyntax.VInt(v); CoreSyntax.VInt(m)])
   | VGlobal _ -> Syntax.error "a global cannot appear as a key in a table"
   | VEvent _ -> Syntax.error "an event cannot appear as a key in a table"

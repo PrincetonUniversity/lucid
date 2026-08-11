@@ -4,6 +4,7 @@ open Batteries
 open Dpt
 
 let main () =
+  Gc.set { (Gc.get ()) with Gc.minor_heap_size = 32 * 1024 * 1024 (* words *) };
   Config.base_cfg.verbose <- false;
   let _ = SwitchConfig.parse_args () in
   let ds = Input.parse Config.base_cfg.dpt_file in

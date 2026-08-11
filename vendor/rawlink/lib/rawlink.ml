@@ -28,9 +28,11 @@ let dhcp_server_filter = Lowlevel.dhcp_server_filter
 let dhcp_client_filter = Lowlevel.dhcp_client_filter
 
 let open_link ?filter ?(promisc=false) ifname =
-  { fd = Lowlevel.opensock ?filter ~promisc ifname;
+  let fd = Lowlevel.opensock ?filter ~promisc ifname in
+  (* blen is the granted buffer size *)
+  { fd;
     packets = ref [];
-    buffer = Cstruct.create 65536 }
+    buffer = Cstruct.create (Lowlevel.blen fd) }
 
 let close_link t = Unix.close t.fd
 

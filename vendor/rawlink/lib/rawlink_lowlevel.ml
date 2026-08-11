@@ -36,6 +36,7 @@ external driver: unit -> driver = "caml_driver"
 external unix_bytes_read: Unix.file_descr -> Cstruct.buffer -> int -> int -> int =
   "caml_unix_bytes_read"
 external bpf_align: int -> int -> int = "caml_bpf_align"
+external blen: Unix.file_descr -> int = "caml_rawlink_blen"
 
 let bpf_split_buffer buffer len =
   let rec loop buffer n packets =

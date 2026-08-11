@@ -22,8 +22,8 @@ SEND_PCAP = os.path.join(SCRIPT_DIR, "send.pcap")
 RECV_PCAP = os.path.join(SCRIPT_DIR, "recv.pcap")
 SEND_IFACE = "feth1"
 SWITCH_IFACE = "feth0"
-NUM_PACKETS = 1000
-REPLAY_PPS = 5000
+NUM_PACKETS = 10000
+REPLAY_PPS = 250000
 TIMEOUT = 2
 
 def repo_root():

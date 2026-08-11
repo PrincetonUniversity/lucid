@@ -47,9 +47,9 @@ let parse_args (p:value) arg_tys =
   let _, args = List.fold_left
     (fun ((payload:CoreSyntax.value), argvs) ty ->
       if (is_payload_ty ty) then
-        (* (vbits []) will cause an error if there's anything
+        (* (vbits BitString.empty) will cause an error if there's anything
            after a payload (as expected) *)
-        (vbits []), argvs@[payload]
+        (vbits BitString.empty), argvs@[payload]
       else 
       let arg, payload = pread payload ty in
       payload, argvs@[arg])
