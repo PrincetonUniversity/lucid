@@ -14,7 +14,7 @@ d. 	Testing and documentation.
 
 ### Overview of changes
 
-The relevant changes for the above milestones are all on this branch -- [26.2.interp-io](https://github.com/PrincetonUniversity/lucid/tree/26.2.interp-io). We will merge them into main after review. 
+The relevant changes for the above milestones are all on this branch -- [26.2.interp-io](https://github.com/PrincetonUniversity/lucid/tree/26.2.interp-io). We will merge the updates into main after review, and also integrate the notes in this document and the new examples into the appropriate sections of the tutorials / wiki.
 
 **Major changes**
 1. Library for interpreter IO from sockets / interfaces. **(milestone a+b)**  
