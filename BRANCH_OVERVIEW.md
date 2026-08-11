@@ -111,7 +111,7 @@ Everything described here is exercised in the testing instructions above, this i
   - Vendored rawlink lib: [https://github.com/PrincetonUniversity/lucid/tree/26.2.interp-io/vendor/rawlink](https://github.com/PrincetonUniversity/lucid/tree/26.2.interp-io/vendor/rawlink)   
   - Rawlink wrapper: [https://github.com/PrincetonUniversity/lucid/blob/26.2.interp-io/src/lib/midend/interpreter/InterpSocket.ml](https://github.com/PrincetonUniversity/lucid/blob/26.2.interp-io/src/lib/midend/interpreter/InterpSocket.ml)  
   - Integration with Rawlink wrapper at various points in interpreter: [https://github.com/PrincetonUniversity/lucid/tree/26.2.interp-io/src/lib/midend/interpreter](https://github.com/PrincetonUniversity/lucid/tree/26.2.interp-io/src/lib/midend/interpreter)   
-2. New interpreter-based Lucid switch that processes packets from sockets in real time. Benchmarks on an M3 macbook pro for a simple program are around 2Gbps.  **(milestone a+b+d)**  
+2. New interpreter-based Lucid switch that processes packets from sockets in real time. Benchmarks on an M3 macbook pro for a simple program are around 1Gbps.  **(milestone a+b+d)**  
 - Code references:   
   - lucidSwitch binary: [https://github.com/PrincetonUniversity/lucid/blob/26.2.interp-io/src/bin/lucidSwitch.ml](https://github.com/PrincetonUniversity/lucid/blob/26.2.interp-io/src/bin/lucidSwitch.ml) (short, but relies on new code paths in interpreter backend)  
   - lucidSwitch test / benchmark example: [https://github.com/PrincetonUniversity/lucid/tree/26.2.interp-io/examples/features/lucidvswitch](https://github.com/PrincetonUniversity/lucid/tree/26.2.interp-io/examples/features/lucidvswitch) 
