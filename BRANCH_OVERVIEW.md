@@ -1,6 +1,6 @@
-### Task description
+## Branch description
 
-Extend Lucid’s interpreter to support packet IO from standard network interfaces (e.g., in Linux, BSD). This will make it easy and safe to run Lucid programs on many platforms at 1-5Gb/s rates.
+This branch extends Lucid’s interpreter to support packet IO from standard network interfaces (e.g., in Linux, BSD). This will make it easy and safe to run Lucid programs on many platforms at 1-5Gb/s rates.
 
 Milestone(s)
 
@@ -14,7 +14,7 @@ d. 	Testing and documentation.
 
 ### Overview of changes
 
-The relevant changes are all on the [26.2.interp-io](https://github.com/PrincetonUniversity/lucid/tree/26.2.interp-io) branch -- which you should be on. We will merge them into main after review.
+The relevant changes for the above milestones are all on this branch -- [26.2.interp-io](https://github.com/PrincetonUniversity/lucid/tree/26.2.interp-io). We will merge them into main after review. 
 
 **Major changes**
 1. Library for interpreter IO from sockets / interfaces. **(milestone a+b)**  
