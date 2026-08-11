@@ -22,23 +22,23 @@ RUN apt-get update && apt-get install -y \
 RUN echo "ubuntu ALL=(ALL) NOPASSWD:ALL" > /etc/sudoers.d/ubuntu \
     && chmod 0440 /etc/sudoers.d/ubuntu
 
-# ---- DPDK 24.03 (dev only: net/pcap + net/af_packet PMDs) ----
+# ---- DPDK 24.03 (dev only: net/pcap + net/af_packet PMDs; amd64 images only) ----
 # To build the full driver set instead, drop the `-Denable_drivers=...` flag
-# ISA is set to (SSE4.2, no AVX) for Rosetta/qemu on macos arm64
-# For better performance on real x86 hosts, remove the ISA_OPT override
+# ISA is set to westmere (SSE4.2, no AVX) so amd64 images also run under
+# Rosetta/qemu on macos arm64; remove for better performance on real x86 hosts
 ARG TARGETARCH
-RUN wget -q https://fast.dpdk.org/rel/dpdk-24.03.tar.xz \
-    && tar -xJf dpdk-24.03.tar.xz && rm dpdk-24.03.tar.xz \
-    && cd dpdk-24.03 \
-    && case "$TARGETARCH" in \
-         amd64) ISA_OPT="-Dcpu_instruction_set=westmere" ;; \
-         *)     ISA_OPT="" ;; \
-       esac \
-    && meson setup build -Denable_drivers=net/pcap,net/af_packet -Dtests=false $ISA_OPT \
-    && ninja -C build \
-    && meson install -C build \
-    && ldconfig \
-    && cd .. && rm -rf dpdk-24.03
+RUN if [ "$TARGETARCH" = "amd64" ]; then \
+      wget -q https://fast.dpdk.org/rel/dpdk-24.03.tar.xz \
+      && tar -xJf dpdk-24.03.tar.xz && rm dpdk-24.03.tar.xz \
+      && cd dpdk-24.03 \
+      && meson setup build -Denable_drivers=net/pcap,net/af_packet -Dtests=false -Dcpu_instruction_set=westmere \
+      && ninja -C build \
+      && meson install -C build \
+      && ldconfig \
+      && cd .. && rm -rf dpdk-24.03; \
+    else \
+      echo "TARGETARCH=$TARGETARCH: skipping DPDK build"; \
+    fi
 
 # ---- user setup ----
 USER ubuntu
@@ -66,9 +66,5 @@ RUN opam install -y --confirm-level=unsafe-yes \
 # install them into the switch on first attach.
 RUN opam install -y --confirm-level=unsafe-yes \
         ocaml-lsp-server "ocamlformat=0.19.0"
-
-# 6. (optional) install claude
-RUN curl -fsSL https://claude.ai/install.sh | bash
-ENV PATH="/home/ubuntu/.local/bin:${PATH}"
 
 CMD ["bash"]
