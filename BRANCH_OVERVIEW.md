@@ -28,42 +28,48 @@ The relevant changes are all on the [26.2.interp-io](https://github.com/Princeto
 
 1. clone the repo; cd in
 
+```
 git clone https://github.com/princetonuniversity/lucid
 cd lucid
-
+```
 2. switch to interpreter improvements branch
 
+```
 git checkout 26.2.interp-io
-
+```
 3. build or pull the lucid dev docker container. Build may take ~20 minutes to build ocaml + z3 + etc
 
-./docker/dev/dockercmd.sh build
 
+```
+./docker/dev/dockercmd.sh build
+```
 or 
 
+```
 ./docker/dev/dockercmd.sh pull
-
+```
 4. Spawn and enter the container, build lucid interpreter 
 (note the path argument at the end that mounts the repo in the container) 
 
+```
 ./docker/dev/dockercmd.sh enter ./
 cd lucid
 make
+```
 
 5. Test the new interpreter-based Lucid switch on veth interfaces
 
 There is a simple reflector program, reflector.dpt, and a python script that starts it on the interpreter, sends packets in with tcpreplay, and measures output rate. Try them in the lucid dev container:
 
 ```
-(base) johnsonchack@Johns-MBP-2 lucid % ./docker/dev/dockercmd.sh enter ./
-To run a command as administrator (user "root"), use "sudo <command>".
-See "man sudo_root" for details.
+cd lucid
+cd examples/features/lucidvswitch/
+python3 test_reflector.py
+```
 
-ubuntu@dc89b9424462:~$ cd lucid
-ubuntu@dc89b9424462:~/lucid$ cd examples/features/lucidvswitch/
-ubuntu@dc89b9424462:~/lucid/examples/features/lucidvswitch$ ls
-__pycache__  interpio.md  readme.md  recv.pcap  reflector.dpt  send.pcap  switch_profile.txt  test_reflector.py
-ubuntu@dc89b9424462:~/lucid/examples/features/lucidvswitch$ python3 test_reflector.py
+The output should be something like: 
+
+```
 [+] Removed old pcap: /home/ubuntu/lucid/examples/features/lucidvswitch/send.pcap
 [+] Removed old pcap: /home/ubuntu/lucid/examples/features/lucidvswitch/recv.pcap
 [+] Wrote 10000 packets to /home/ubuntu/lucid/examples/features/lucidvswitch/send.pcap
@@ -75,13 +81,17 @@ ubuntu@dc89b9424462:~/lucid/examples/features/lucidvswitch$ python3 test_reflect
 [-] FAIL: packet counts do not match
 [*] Throughput: 125705 pps, 1029.98 Mbps (over 0.0406s)
 ```
-Note, packet drops will probably happen because the test script just replays at a high throughput.
+Note: packet drops will probably happen because the test script just replays at a high throughput.
 
 6. Test the new interpreter topology configuration with the examples ported from P4 BMv2. We chose these examples because many of them were focused on multi-node programs, which is also the point of topology configuration in the Lucid interpreter.
 From the repo root inside the dev container, run:
 ```
-ubuntu@dc89b9424462:~/lucid$ cd examples/p4_bmv2_examples/
-ubuntu@dc89b9424462:~/lucid/examples/p4_bmv2_examples$ python3 test.py 
+cd examples/p4_bmv2_examples/
+python3 test.py 
+```
+
+The output should look like: 
+```
 Running 11 example test(s):
   PASS     basic
   PASS     basic_tunnel
