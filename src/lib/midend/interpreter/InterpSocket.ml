@@ -66,7 +66,7 @@ let read_batch_nonblock self =
 
 (* create an event from timestamp, location, and buf *)
 let event_create timestamp locations buf =
-  let bytes = hexstr_to_vbits (Cstruct.to_hex_string buf) in
+  let bytes = vbits (BitString.of_byte_string (Cstruct.to_string buf)) in
   let pkt_event = packet_event bytes 0 in
   let ev = ievent pkt_event locations timestamp in
   ev
@@ -80,8 +80,7 @@ let event_to_packetbuf (ev : event_val) =
     | [vbits] -> extract_bits vbits
     | _ -> error "[InterpSocket.ml] Interpreter fault: event serialized wrong"
   in
-  let hex_str = BitString.bits_to_hexstr vbits |> Cstruct.of_hex in
-  hex_str
+  Cstruct.of_string (BitString.to_byte_string vbits)
 ;;
 
 

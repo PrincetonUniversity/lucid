@@ -1,139 +1,155 @@
-(* simple bitstrings, used to represent unparsed packet payloads *)
-type bit = |B0|B1
-type bits = bit list
+(* simple bitstrings, used to represent unparsed packet payloads.
+   Represented as an immutable byte string plus a bit length.
+   Bits are stored MSB-first: bit i lives in byte (i/8), at mask (0x80 lsr (i mod 8)).
+   Canonical form invariant: `bstr` is exactly (blen+7)/8 bytes and any pad bits
+   in the final byte are zero. Every operation returns a canonical value, so
+   structural equality on `bits` is semantic equality. *)
+type bits =
+  { bstr : string
+  ; blen : int (* length in bits *)
+  }
 
-let empty = []
-let char_to_bits c =
+let empty = { bstr = ""; blen = 0 }
+let length bits = bits.blen
+
+(* read bit i (0-indexed from the MSB); assumes i < blen *)
+let get_bit bs i =
+  (Char.code (String.unsafe_get bs.bstr (i lsr 3)) lsr (7 - (i land 7))) land 1
+;;
+
+(* build a canonical bits of length len whose ith bit is f i *)
+let init_bits len f =
+  let nbytes = (len + 7) / 8 in
+  let b = Bytes.make nbytes '\000' in
+  for i = 0 to len - 1 do
+    if f i = 1
+    then
+      Bytes.unsafe_set
+        b
+        (i lsr 3)
+        (Char.unsafe_chr (Char.code (Bytes.unsafe_get b (i lsr 3)) lor (0x80 lsr (i land 7))))
+  done;
+  { bstr = Bytes.unsafe_to_string b; blen = len }
+;;
+
+let hex_char_to_int c =
   match c with
-  | '0' -> [B0; B0; B0; B0]
-  | '1' -> [B0; B0; B0; B1]
-  | '2' -> [B0; B0; B1; B0]
-  | '3' -> [B0; B0; B1; B1]
-  | '4' -> [B0; B1; B0; B0]
-  | '5' -> [B0; B1; B0; B1]
-  | '6' -> [B0; B1; B1; B0]
-  | '7' -> [B0; B1; B1; B1]
-  | '8' -> [B1; B0; B0; B0]
-  | '9' -> [B1; B0; B0; B1]
-  | 'a' | 'A' -> [B1; B0; B1; B0]
-  | 'b' | 'B' -> [B1; B0; B1; B1]
-  | 'c' | 'C' -> [B1; B1; B0; B0]
-  | 'd' | 'D' -> [B1; B1; B0; B1]
-  | 'e' | 'E' -> [B1; B1; B1; B0]
-  | 'f' | 'F' -> [B1; B1; B1; B1]
+  | '0' .. '9' -> Char.code c - Char.code '0'
+  | 'a' .. 'f' -> Char.code c - Char.code 'a' + 10
+  | 'A' .. 'F' -> Char.code c - Char.code 'A' + 10
   | _ -> failwith "[hex_to_bits] Invalid hex character"
 ;;
-(* take a string of hex numbers with no delimiters and 
-   convert it into a bit list. *)
-let rec hexstr_to_bits (str:String.t) : bits = 
-  match str with 
-  | "" -> []    
-  | _ -> 
-    let c = String.get str 0 in
-    let remaining_str = String.sub str 1 ((String.length str)-1) in
-    (char_to_bits c) @ (hexstr_to_bits remaining_str)
+
+(* take a string of hex numbers with no delimiters and
+   convert it into a bitstring. *)
+let hexstr_to_bits (str : String.t) : bits =
+  let n = String.length str in
+  let b = Bytes.make ((n + 1) / 2) '\000' in
+  for i = 0 to n - 1 do
+    let v = hex_char_to_int (String.get str i) in
+    let cur = Char.code (Bytes.get b (i lsr 1)) in
+    let nv = if i land 1 = 0 then cur lor (v lsl 4) else cur lor v in
+    Bytes.set b (i lsr 1) (Char.chr nv)
+  done;
+  { bstr = Bytes.unsafe_to_string b; blen = 4 * n }
 ;;
 
-let rec bits_to_hexstr (bits:bits) : string = 
-  match bits with 
-  | [] -> ""
-  | b1::b2::b3::b4::bs -> 
-    let c = match (b1,b2,b3,b4) with 
-      | (B0,B0,B0,B0) -> '0'
-      | (B0,B0,B0,B1) -> '1'
-      | (B0,B0,B1,B0) -> '2'
-      | (B0,B0,B1,B1) -> '3'
-      | (B0,B1,B0,B0) -> '4'
-      | (B0,B1,B0,B1) -> '5'
-      | (B0,B1,B1,B0) -> '6'
-      | (B0,B1,B1,B1) -> '7'
-      | (B1,B0,B0,B0) -> '8'
-      | (B1,B0,B0,B1) -> '9'
-      | (B1,B0,B1,B0) -> 'a'
-      | (B1,B0,B1,B1) -> 'b'
-      | (B1,B1,B0,B0) -> 'c'
-      | (B1,B1,B0,B1) -> 'd'
-      | (B1,B1,B1,B0) -> 'e'
-      | (B1,B1,B1,B1) -> 'f'
-    in
-    String.make 1 c ^ (bits_to_hexstr bs)
-  | _ -> failwith "[bits_to_hexstr] bits must be a multiple of 4"
+let char_to_bits c = hexstr_to_bits (String.make 1 c)
+
+let bits_to_hexstr (bits : bits) : string =
+  if bits.blen mod 4 <> 0 then failwith "[bits_to_hexstr] bits must be a multiple of 4";
+  String.init (bits.blen / 4) (fun i ->
+    let byte = Char.code (String.get bits.bstr (i lsr 1)) in
+    let v = if i land 1 = 0 then byte lsr 4 else byte land 0xf in
+    "0123456789abcdef".[v])
 ;;
+
+(* raw byte string conversions. of_byte_string is where packet payloads enter;
+   because the representation is bytes, both directions are (at most) one copy. *)
+let of_byte_string (s : string) : bits = { bstr = s; blen = 8 * String.length s }
+
+let to_byte_string (bits : bits) : string =
+  if bits.blen mod 8 <> 0 then failwith "[to_byte_string] bits must be a multiple of 8";
+  bits.bstr
+;;
+
 (* print as a bitstring *)
-let rec to_string bits : string = 
-  match bits with 
-  | [] -> ""
-  | B1::bits -> "1" ^ (to_string bits)
-  | B0::bits -> "0" ^ (to_string bits)
+let to_string bits : string =
+  String.init bits.blen (fun i -> if get_bit bits i = 1 then '1' else '0')
 ;;
 
 (* convert an unsigned integer to a bitstring *)
-let rec int_to_bits_rev width n : bits = 
-  if (width = 0) then []
-  else 
-    let b = match (n land 1) with 
-      | 0 -> B0
-      | 1 -> B1
-      | _ -> failwith "[int_to_bits] invalid result from n land 1"
-    in
-    b::(int_to_bits_rev (width-1) (n lsr 1))
+let int_to_bits width n : bits =
+  let b = Bytes.make ((width + 7) / 8) '\000' in
+  let x = ref n in
+  for j = 0 to width - 1 do
+    if !x land 1 = 1
+    then begin
+      let i = width - 1 - j in
+      Bytes.set b (i lsr 3) (Char.chr (Char.code (Bytes.get b (i lsr 3)) lor (0x80 lsr (i land 7))))
+    end;
+    x := !x lsr 1
+  done;
+  { bstr = Bytes.unsafe_to_string b; blen = width }
 ;;
 
-let int_to_bits width n = 
-  List.rev (int_to_bits_rev width n)
+let bits_to_int (bits : bits) : int =
+  let r = ref 0 in
+  for i = 0 to bits.blen - 1 do
+    r := (!r lsl 1) lor get_bit bits i
+  done;
+  !r
 ;;
-let rec bits_to_int (bits:bits) : int = 
-  match bits with
-  | [] -> 0
-  | b::bs -> 
-    let v = match b with 
-      | B1 -> 1 lsl (List.length bs)
-      | B0 -> 0
-    in
-    v lor (bits_to_int bs)
-;;
-
-(* read n most significant bits into an unsigned int *)
-let rec read_msb n bits: int = 
-  match bits with 
-  | [] -> 0
-  | b::bs -> 
-    if (n = 0) then 0
-    else 
-    let v = match b with 
-      | B1 -> 1 lsl ((n-1))
-      | B0 -> 0
-    in
-    v lor (read_msb (n-1) bs )
-;; 
 
 (* advance to the nth bit, return new string *)
-let rec advance n bits : bits option =
-  match n with
-  | 0 -> Some(bits)
-  | _ -> (
-    match bits with
-    | [] -> None
-    | _::bs -> advance (n-1) bs
-  )    
+let advance n bits : bits option =
+  if n < 0 || n > bits.blen
+  then None
+  else if n land 7 = 0
+  then (
+    (* byte-aligned fast path: copy the remaining bytes. pad bits of the
+       final byte are unchanged, so canonical form holds. *)
+    let len = bits.blen - n in
+    Some { bstr = String.sub bits.bstr (n lsr 3) ((len + 7) / 8); blen = len })
+  else (
+    (* unaligned: rebuild bit-by-bit *)
+    let len = bits.blen - n in
+    Some (init_bits len (fun i -> get_bit bits (i + n))))
 ;;
 
 (* read n bits to unsigned int without advancing. *)
-let peek_msb n bits : int option = 
-  match advance n bits with 
-  | None -> None
-  | Some(_) -> Some(read_msb n bits)
+let peek_msb n bits : int option =
+  if n > bits.blen
+  then None
+  else (
+    let r = ref 0 in
+    for i = 0 to n - 1 do
+      r := (!r lsl 1) lor get_bit bits i
+    done;
+    Some !r)
 ;;
 
 (* read n bits to unsigned int and advance. *)
-let pop_msb n bits : (int * bits) option = 
-  match advance n bits with 
-  | None -> None
-  | Some(bits') -> Some(read_msb n bits, bits')
+let pop_msb n bits : (int * bits) option =
+  match advance n bits, peek_msb n bits with
+  | Some bits', Some v -> Some (v, bits')
+  | _ -> None
 ;;
 
 (* concat 2 bitstrings *)
-let rec concat bits1 bits2 : bits = 
-  match bits1 with 
-  | [] -> bits2
-  | b::bs -> b::(concat bs bits2)
+let concat bits1 bits2 : bits =
+  if bits1.blen land 7 = 0
+  then { bstr = bits1.bstr ^ bits2.bstr; blen = bits1.blen + bits2.blen }
+  else
+    init_bits (bits1.blen + bits2.blen) (fun i ->
+      if i < bits1.blen then get_bit bits1 i else get_bit bits2 (i - bits1.blen))
+;;
+
+(* conversions to/from lists of 0/1 ints, for compile-time translation passes *)
+let to_ints (bits : bits) : int list = List.init bits.blen (fun i -> get_bit bits i)
+
+let of_ints (is : int list) : bits =
+  let arr = Array.of_list is in
+  Array.iter (fun i -> if i <> 0 && i <> 1 then failwith "[of_ints] invalid bit int") arr;
+  init_bits (Array.length arr) (fun i -> arr.(i))
+;;
