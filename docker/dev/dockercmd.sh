@@ -27,8 +27,6 @@ Usage:
   $PROG up [PATH]          Start the named '$CONTAINER' container in the
                            background (for IDE attach). PATH is mounted as
                            with 'enter'. Idempotent.
-  $PROG ls                 Print the name(s) of running dev containers (from
-                           'up' or 'enter') -- the identifier to pass to 'exec'.
   $PROG exec [CMD...]      Run a shell (or CMD) in the background container.
   $PROG down               Stop and remove the background container.
   $PROG pull               Pull the prebuilt image from the registry.
@@ -89,37 +87,22 @@ cmd_up() {
     # Drop a stale stopped container so the new mount/workdir take effect.
     container_exists && docker rm -f "$CONTAINER" >/dev/null
 
-    # Start the shell in the home dir (-w $HOME_DIR), matching `enter`; the mount
-    # lands at $HOME_DIR/<name> as a subdir. (Previously -w was the mounted dir, so
-    # `exec` dropped you *inside* the mount -- inconsistent with `enter`.)
-    local run_args=(-d --name "$CONTAINER" --cap-add=NET_ADMIN -w "$HOME_DIR")
-    local mount_at="$HOME_DIR"
+    local run_args=(-d --name "$CONTAINER" --cap-add=NET_ADMIN)
+    local workdir="$HOME_DIR"
     local path="${1:-}"
     if [[ -n "$path" ]]; then
         require_path "$path"
         local abs; abs="$(abspath "$path")"
-        mount_at="$HOME_DIR/$(basename "$abs")"
-        run_args+=(-v "$abs:$mount_at")
+        workdir="$HOME_DIR/$(basename "$abs")"
+        run_args+=(-v "$abs:$workdir")
     fi
+    run_args+=(-w "$workdir")
 
     # sleep infinity keeps the container alive for exec/IDE attach.
     docker run "${run_args[@]}" "$IMAGE" sleep infinity >/dev/null
-    echo "container '$CONTAINER' is up (mounted at: $mount_at)."
+    echo "container '$CONTAINER' is up (workdir: $workdir)."
     echo "Attach your IDE (VSCode: Dev Containers > Attach to Running Container)"
     echo "or run '$PROG exec' for a shell."
-}
-
-cmd_ls() {
-    # Print the name(s) of running containers from the '$IMAGE' image -- whether
-    # started by `up` (name '$CONTAINER') or a throwaway `enter` (random name).
-    # The NAME is the identifier to pass to `docker exec` (or hand to tooling).
-    local names
-    names="$(docker ps --filter ancestor="$IMAGE" --format '{{.Names}}')"
-    if [[ -z "$names" ]]; then
-        echo "no running '$IMAGE' container. Start one with '$PROG up [PATH]' or '$PROG enter [PATH]'." >&2
-        return 1
-    fi
-    echo "$names"
 }
 
 cmd_exec() {
@@ -166,7 +149,6 @@ main() {
         build)   cmd_build "$@" ;;
         enter)   cmd_enter "$@" ;;
         up)      cmd_up "$@" ;;
-        ls)      cmd_ls "$@" ;;
         exec)    cmd_exec "$@" ;;
         down)    cmd_down "$@" ;;
         pull)    cmd_pull "$@" ;;
