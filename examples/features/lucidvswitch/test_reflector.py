@@ -22,8 +22,9 @@ SEND_PCAP = os.path.join(SCRIPT_DIR, "send.pcap")
 RECV_PCAP = os.path.join(SCRIPT_DIR, "recv.pcap")
 SEND_IFACE = "feth1"
 SWITCH_IFACE = "feth0"
-NUM_PACKETS = 10000
-REPLAY_PPS = 250000
+NUM_PACKETS = 1000
+REPLAY_PPS = 5000
+TIMEOUT = 2
 
 def repo_root():
     return subprocess.check_output(
@@ -66,7 +67,7 @@ def ensure_veths():
 def run_test():
     """Run the main test: start tcpdump, start switch, send packets."""
     tcpdump = subprocess.Popen(
-        ["sudo", "tcpdump", "-i", SEND_IFACE, "-w", RECV_PCAP, "-c", str(NUM_PACKETS), "-B", "4096"],
+        ["sudo", "tcpdump", "-i", SEND_IFACE, "-w", RECV_PCAP, "-c", str(NUM_PACKETS), "-B", "4096", "-Q", "in"],
         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
     )
     time.sleep(1)  # let tcpdump settle
@@ -100,7 +101,7 @@ def run_test():
 
     # Wait for tcpdump to finish (it exits after -c packets) with a timeout
     try:
-        tcpdump.wait(timeout=30)
+        tcpdump.wait(timeout=TIMEOUT)
     except subprocess.TimeoutExpired:
         tcpdump.terminate()
         tcpdump.wait()

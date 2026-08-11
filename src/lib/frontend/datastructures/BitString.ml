@@ -25,13 +25,43 @@ let char_to_bits c =
 ;;
 (* take a string of hex numbers with no delimiters and 
    convert it into a bit list. *)
-let rec hexstr_to_bits (str:String.t) : bits = 
-  match str with 
-  | "" -> []    
-  | _ -> 
-    let c = String.get str 0 in
-    let remaining_str = String.sub str 1 ((String.length str)-1) in
-    (char_to_bits c) @ (hexstr_to_bits remaining_str)
+let hexstr_to_bits (str : string) : bits =
+  let acc = ref [] in
+  for i = String.length str - 1 downto 0 do
+    acc := char_to_bits str.[i] @ !acc
+  done;
+  !acc
+;;
+
+let bits_to_hexstr (bits : bits) : string =
+  let buf = Buffer.create 256 in
+  let rec convert bits =
+    match bits with
+    | [] -> Buffer.contents buf
+    | b1 :: b2 :: b3 :: b4 :: bs ->
+      let c = match (b1, b2, b3, b4) with
+        | (B0,B0,B0,B0) -> '0'
+        | (B0,B0,B0,B1) -> '1'
+        | (B0,B0,B1,B0) -> '2'
+        | (B0,B0,B1,B1) -> '3'
+        | (B0,B1,B0,B0) -> '4'
+        | (B0,B1,B0,B1) -> '5'
+        | (B0,B1,B1,B0) -> '6'
+        | (B0,B1,B1,B1) -> '7'
+        | (B1,B0,B0,B0) -> '8'
+        | (B1,B0,B0,B1) -> '9'
+        | (B1,B0,B1,B0) -> 'a'
+        | (B1,B0,B1,B1) -> 'b'
+        | (B1,B1,B0,B0) -> 'c'
+        | (B1,B1,B0,B1) -> 'd'
+        | (B1,B1,B1,B0) -> 'e'
+        | (B1,B1,B1,B1) -> 'f'
+      in
+      Buffer.add_char buf c;
+      convert bs
+    | _ -> failwith "[bits_to_hexstr] bits must be a multiple of 4"
+  in
+  convert bits
 ;;
 
 let rec bits_to_hexstr (bits:bits) : string = 
