@@ -156,8 +156,8 @@ uint32_t Array_update_complex_global_cached_table_0_4321_combined_memop_WriteCac
   uint32_t cell1  = global_cached_table_0_4321[(((uint32_t)(_idx)) % 256)];
   uint32_t cell2  = 0;
   uint32_t ret  = 0;
-  uint8_t mbool_4590  = (global_cached_table_0_4321[(((uint32_t)(_idx)) % 256)]) == (0);
-  uint8_t mbool_4591  = (global_cached_table_0_4321[(((uint32_t)(_idx)) % 256)]) == (0);
+  uint8_t mbool_4590  = global_cached_table_0_4321[(((uint32_t)(_idx)) % 256)] == 0;
+  uint8_t mbool_4591  = global_cached_table_0_4321[(((uint32_t)(_idx)) % 256)] == 0;
   if (mbool_4590) {
     cell1 = newval_set_4589;
   }
@@ -224,7 +224,7 @@ typedef struct {
 ty_global_cached_table_2_4323 global_cached_table_2_4323  = {._default = {.action_tag = tag_WriteCacheTable_miss_acn_4317, .action_arg = 0}, .entries = {0}};
 void install_global_cached_table_2_4323(uint32_t key , uint32_t action , uint32_t const_arg ){
   for (int _idx = 0; _idx < 1024; _idx++) {
-    if ((global_cached_table_2_4323.entries[_idx].valid) == (false)) {
+    if (global_cached_table_2_4323.entries[_idx].valid == false) {
       cellty_global_cached_table_2_4323 tmp_4600  = {.valid = true, .key = key, .mask = 4294967295, .action_tag = action, .action_arg = const_arg};
       global_cached_table_2_4323.entries[_idx] = tmp_4600;
       return ;
@@ -234,7 +234,7 @@ void install_global_cached_table_2_4323(uint32_t key , uint32_t action , uint32_
 }
 void install_ternary_global_cached_table_2_4323(uint32_t key , uint32_t mask , uint32_t action , uint32_t const_arg ){
   for (int _idx = 0; _idx < 1024; _idx++) {
-    if ((global_cached_table_2_4323.entries[_idx].valid) == (false)) {
+    if (global_cached_table_2_4323.entries[_idx].valid == false) {
       cellty_global_cached_table_2_4323 tmp_4601  = {.valid = true, .key = key, .mask = mask, .action_tag = action, .action_arg = const_arg};
       global_cached_table_2_4323.entries[_idx] = tmp_4601;
       return ;
@@ -244,7 +244,7 @@ void install_ternary_global_cached_table_2_4323(uint32_t key , uint32_t mask , u
 }
 res_t_4313 lookup_global_cached_table_2_4323(uint32_t key ){
   for (int _idx = 0; _idx < 1024; _idx++) {
-    if ((global_cached_table_2_4323.entries[_idx].valid) && ((key & global_cached_table_2_4323.entries[_idx].mask) == (global_cached_table_2_4323.entries[_idx].key & global_cached_table_2_4323.entries[_idx].mask))) {
+    if (global_cached_table_2_4323.entries[_idx].valid && ((key & global_cached_table_2_4323.entries[_idx].mask) == (global_cached_table_2_4323.entries[_idx].key & global_cached_table_2_4323.entries[_idx].mask))) {
       switch (global_cached_table_2_4323.entries[_idx].action_tag) {
         case tag_WriteCacheTable_hit_acn_4315: {
           return WriteCacheTable_hit_acn_4315(global_cached_table_2_4323.entries[_idx].action_arg);
@@ -268,7 +268,7 @@ res_t_4313 lookup_global_cached_table_2_4323(uint32_t key ){
     }
   }
 }
-uint8_t parse_event(packet_t*  packet , event_t*  next_event ){
+uint8_t parse_event(packet_t*  packet , event_t*  next_event , uint32_t ingress_port ){
   skip_bits(packet, 32);
   skip_bits(packet, 16);
   skip_bits(packet, 32);
@@ -312,7 +312,7 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       uint32_t v_4325  = ev_out->data.args.do_set_4326.v_4325;
       write_bits(buf_out, ((uint64_t)(v_4325)), 32);
       write_bits(buf_out, ((uint64_t)(k_4324)), 32);
-      if ((ev_out->meta.is_packet) == (0)) {
+      if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(1)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
         write_bits(buf_out, ((uint64_t)(2)), 48);
@@ -324,7 +324,7 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
     case 2: {
       uint32_t k_4327  = ev_out->data.args.do_get_4328.k_4327;
       write_bits(buf_out, ((uint64_t)(k_4327)), 32);
-      if ((ev_out->meta.is_packet) == (0)) {
+      if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(2)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
         write_bits(buf_out, ((uint64_t)(2)), 48);
@@ -568,7 +568,7 @@ static void ingest_slot(uint16_t idx, int in_port) {
     qe_t* q = slot(&g_slab, idx);
     packet_t view;
     init_cursor(q->data + HEADROOM, q->pkt_len, &view);
-    if (parse_event(&view, &q->ev) != 1) { debug_printf("parse failed\n"); slot_free(&g_slab, idx); return; }
+    if (parse_event(&view, &q->ev, (uint32_t)in_port) != 1) { debug_printf("parse failed\n"); slot_free(&g_slab, idx); return; }
     q->payload_off = (uint32_t)(view.cursor - (q->data + HEADROOM)); // where the payload begins
     q->ev.meta.in_port = in_port;                                    // ingress (read by the handler)
     if (ring_push(&dispatch_in, idx) != 0) slot_free(&g_slab, idx);  // ring full (shouldn't happen)

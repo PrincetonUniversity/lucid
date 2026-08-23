@@ -231,7 +231,7 @@ static void do_rx(void) {
 			struct rte_mbuf *m = bufs[i];
 			qe_priv_t *p = qe(m);
 			%{packet_t_ty} view = view_over(m);
-			if (%{parse_event_fn}(&view, &p->ev) != 1) { rte_pktmbuf_free(m); continue; } // drop
+			if (%{parse_event_fn}(&view, &p->ev, (uint32_t)port) != 1) { rte_pktmbuf_free(m); continue; } // drop
 			p->payload_off = (uint32_t)(view.cursor - view.start); // where the payload begins
 			p->ev.meta.in_port = port;                             // stamp ingress (read by the handler)
 			if (rte_ring_enqueue(dispatch_in, m) != 0) rte_pktmbuf_free(m); // ring full -> drop

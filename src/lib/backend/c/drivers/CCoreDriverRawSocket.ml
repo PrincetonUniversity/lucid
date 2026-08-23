@@ -307,7 +307,7 @@ static void ingest_slot(uint16_t idx, int in_port) {
     qe_t* q = slot(&g_slab, idx);
     %{packet_t_ty} view;
     init_cursor(q->data + HEADROOM, q->pkt_len, &view);
-    if (%{parse_event_fn}(&view, &q->ev) != 1) { debug_printf("parse failed\n"); slot_free(&g_slab, idx); return; }
+    if (%{parse_event_fn}(&view, &q->ev, (uint32_t)in_port) != 1) { debug_printf("parse failed\n"); slot_free(&g_slab, idx); return; }
     q->payload_off = (uint32_t)(view.cursor - (q->data + HEADROOM)); // where the payload begins
     q->ev.meta.in_port = in_port;                                    // ingress (read by the handler)
     if (ring_push(&dispatch_in, idx) != 0) slot_free(&g_slab, idx);  // ring full (shouldn't happen)

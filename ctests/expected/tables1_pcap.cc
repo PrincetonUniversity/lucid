@@ -186,7 +186,7 @@ typedef struct {
 ty_ftbl_2384 ftbl_2384  = {._default = {.action_tag = tag_miss_acn_2383, .action_arg = 1}, .entries = {0}};
 void install_ftbl_2384(uint32_t key , uint32_t action , uint32_t const_arg ){
   for (int _idx = 0; _idx < 1024; _idx++) {
-    if ((ftbl_2384.entries[_idx].valid) == (false)) {
+    if (ftbl_2384.entries[_idx].valid == false) {
       cellty_ftbl_2384 tmp_2562  = {.valid = true, .key = key, .mask = 4294967295, .action_tag = action, .action_arg = const_arg};
       ftbl_2384.entries[_idx] = tmp_2562;
       return ;
@@ -196,7 +196,7 @@ void install_ftbl_2384(uint32_t key , uint32_t action , uint32_t const_arg ){
 }
 void install_ternary_ftbl_2384(uint32_t key , uint32_t mask , uint32_t action , uint32_t const_arg ){
   for (int _idx = 0; _idx < 1024; _idx++) {
-    if ((ftbl_2384.entries[_idx].valid) == (false)) {
+    if (ftbl_2384.entries[_idx].valid == false) {
       cellty_ftbl_2384 tmp_2563  = {.valid = true, .key = key, .mask = mask, .action_tag = action, .action_arg = const_arg};
       ftbl_2384.entries[_idx] = tmp_2563;
       return ;
@@ -206,7 +206,7 @@ void install_ternary_ftbl_2384(uint32_t key , uint32_t mask , uint32_t action , 
 }
 res_t_2377 lookup_ftbl_2384(uint32_t key , uint32_t arg ){
   for (int _idx = 0; _idx < 1024; _idx++) {
-    if ((ftbl_2384.entries[_idx].valid) && ((key & ftbl_2384.entries[_idx].mask) == (ftbl_2384.entries[_idx].key & ftbl_2384.entries[_idx].mask))) {
+    if (ftbl_2384.entries[_idx].valid && ((key & ftbl_2384.entries[_idx].mask) == (ftbl_2384.entries[_idx].key & ftbl_2384.entries[_idx].mask))) {
       switch (ftbl_2384.entries[_idx].action_tag) {
         case tag_hit_acn_2380: {
           return hit_acn_2380(ftbl_2384.entries[_idx].action_arg, arg);
@@ -230,7 +230,7 @@ res_t_2377 lookup_ftbl_2384(uint32_t key , uint32_t arg ){
     }
   }
 }
-uint8_t parse_event(packet_t*  packet , event_t*  next_event ){
+uint8_t parse_event(packet_t*  packet , event_t*  next_event , uint32_t ingress_port ){
   skip_bits(packet, 32);
   skip_bits(packet, 16);
   skip_bits(packet, 32);
@@ -284,7 +284,7 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       write_bits(buf_out, ((uint64_t)(hit_2387)), 32);
       write_bits(buf_out, ((uint64_t)(val_2386)), 32);
       write_bits(buf_out, ((uint64_t)(key_2385)), 32);
-      if ((ev_out->meta.is_packet) == (0)) {
+      if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(1)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
         write_bits(buf_out, ((uint64_t)(2)), 48);
@@ -298,7 +298,7 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       uint32_t val_2390  = ev_out->data.args.do_install_2391.val_2390;
       write_bits(buf_out, ((uint64_t)(val_2390)), 32);
       write_bits(buf_out, ((uint64_t)(key_2389)), 32);
-      if ((ev_out->meta.is_packet) == (0)) {
+      if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(2)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
         write_bits(buf_out, ((uint64_t)(2)), 48);
@@ -310,7 +310,7 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
     case 3: {
       uint32_t key_2392  = ev_out->data.args.do_query_2393.key_2392;
       write_bits(buf_out, ((uint64_t)(key_2392)), 32);
-      if ((ev_out->meta.is_packet) == (0)) {
+      if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(3)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
         write_bits(buf_out, ((uint64_t)(2)), 48);
@@ -543,7 +543,7 @@ static void ingest_slot(uint16_t idx, int in_port) {
     qe_t* q = slot(&g_slab, idx);
     packet_t view;
     init_cursor(q->data + HEADROOM, q->pkt_len, &view);
-    if (parse_event(&view, &q->ev) != 1) { debug_printf("parse failed\n"); slot_free(&g_slab, idx); return; }
+    if (parse_event(&view, &q->ev, (uint32_t)in_port) != 1) { debug_printf("parse failed\n"); slot_free(&g_slab, idx); return; }
     q->payload_off = (uint32_t)(view.cursor - (q->data + HEADROOM)); // where the payload begins
     q->ev.meta.in_port = in_port;                                    // ingress (read by the handler)
     if (ring_push(&dispatch_in, idx) != 0) slot_free(&g_slab, idx);  // ring full (shouldn't happen)

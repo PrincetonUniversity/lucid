@@ -198,7 +198,7 @@ let lower_parser_body pkt out_event body =
 ;;
 
 let lower_parser id ret_ty params body =
-  (* make the event output param a reference param *)
+  (* make the event output param a reference param, add ingress port param *)
   let flag_ty, ev_ty = match ret_ty.raw_ty with
     | TTuple [flag_ty; ev_ty] -> flag_ty, ev_ty
     | _ -> err "[CCoreParse.lower] parser return type is not (bool, event)"
@@ -210,9 +210,9 @@ let lower_parser id ret_ty params body =
     | None -> err "[CCoreParse.lower] parser has no bytes parameter"
   in
   let body = lower_parser_body pkt out_event body in
-  (* bytes param -> packet_t* ; add the out-event param ; return int8 *)
+  let ingr_port_param = (Cid.id Builtins.ingr_port_id, tint CConfig.c_cfg.port_id_size) in
   let params = List.map (fun (pid, ty) -> if is_tpacket ty then (pid, tref packet_t) else (pid, ty)) params in
-  let params = params @ [out_event_param] in
+  let params = params @ [out_event_param; ingr_port_param] in
   dfun id flag_ty params body
 ;;
 

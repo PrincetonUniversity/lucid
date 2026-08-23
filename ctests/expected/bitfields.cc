@@ -129,7 +129,7 @@ event_t mk_hdr(uint8_t ver_894 , uint16_t len_895 , uint64_t dst_896 , uint64_t 
 }
 uint32_t recirculation_port  = 0;
 uint32_t self  = 0;
-uint8_t parse_event(packet_t*  pkt , event_t*  next_event ){
+uint8_t parse_event(packet_t*  pkt , event_t*  next_event , uint32_t ingress_port ){
   uint8_t ver_894  = ((uint8_t)(read_bits(pkt, 4))) & 15;
   uint16_t len_895  = ((uint16_t)(read_bits(pkt, 12))) & 4095;
   uint64_t dst_896  = ((uint64_t)(read_bits(pkt, 48))) & 281474976710655;
@@ -151,7 +151,7 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       write_bits(buf_out, ((uint64_t)(dst_896)), 48);
       write_bits(buf_out, ((uint64_t)(len_895)), 12);
       write_bits(buf_out, ((uint64_t)(ver_894)), 4);
-      if ((ev_out->meta.is_packet) == (0)) {
+      if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(1)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
         write_bits(buf_out, ((uint64_t)(2)), 48);
@@ -176,7 +176,7 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
       uint64_t src_904  = ev_in->data.args.hdr_900.src_897;
       uint16_t ety_905  = ev_in->data.args.hdr_900.ety_898;
       event_t this  = mk_hdr(ver_901, len_902, dst_903, src_904, ety_905);
-      out_event_t tmp_958  = {.ev = mk_hdr(ver_901, len_902 + 1 & 4095, dst_903, src_904, ety_905), .port = ev_in->meta.in_port};
+      out_event_t tmp_958  = {.ev = mk_hdr(ver_901, (len_902 + 1) & 4095, dst_903, src_904, ety_905), .port = ev_in->meta.in_port};
       out_events[n] = tmp_958;
       n = n + 1;
       break;
@@ -365,7 +365,7 @@ static void ingest_slot(uint16_t idx, int in_port) {
     qe_t* q = slot(&g_slab, idx);
     packet_t view;
     init_cursor(q->data + HEADROOM, q->pkt_len, &view);
-    if (parse_event(&view, &q->ev) != 1) { debug_printf("parse failed\n"); slot_free(&g_slab, idx); return; }
+    if (parse_event(&view, &q->ev, (uint32_t)in_port) != 1) { debug_printf("parse failed\n"); slot_free(&g_slab, idx); return; }
     q->payload_off = (uint32_t)(view.cursor - (q->data + HEADROOM)); // where the payload begins
     q->ev.meta.in_port = in_port;                                    // ingress (read by the handler)
     if (ring_push(&dispatch_in, idx) != 0) slot_free(&g_slab, idx);  // ring full (shouldn't happen)

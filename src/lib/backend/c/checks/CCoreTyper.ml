@@ -312,9 +312,8 @@ and infer_eop env op (args : exp list) : env * op * exp list * ty = match op, ar
     let env, inf_exp2 = infer_exp env exp2 in
     if (not (is_tint inf_exp1.ety)) then 
       raise (TypeError("shift on non-int"));
-    if (not (is_tint inf_exp2.ety)) then 
+    if (not (is_tint inf_exp2.ety)) then
       raise (TypeError("shift by non-int"));
-    let env = unify_ty env inf_exp1.ety inf_exp2.ety in
     env, op, [inf_exp1; inf_exp2], inf_exp1.ety
   | Slice(hi, lo), [exp] -> 
     let env, inf_exp = infer_exp env exp in

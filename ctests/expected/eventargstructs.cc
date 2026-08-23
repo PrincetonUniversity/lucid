@@ -150,7 +150,7 @@ typedef struct {
 ty_my_table_1179 my_table_1179  = {._default = {.action_tag = tag_add_pair_1178, .action_arg = 0}, .entries = {0}};
 void install_my_table_1179(uint32_t key , uint32_t action , uint32_t const_arg ){
   for (int _idx = 0; _idx < 32; _idx++) {
-    if ((my_table_1179.entries[_idx].valid) == (false)) {
+    if (my_table_1179.entries[_idx].valid == false) {
       cellty_my_table_1179 tmp_1268  = {.valid = true, .key = key, .mask = 4294967295, .action_tag = action, .action_arg = const_arg};
       my_table_1179.entries[_idx] = tmp_1268;
       return ;
@@ -160,7 +160,7 @@ void install_my_table_1179(uint32_t key , uint32_t action , uint32_t const_arg )
 }
 void install_ternary_my_table_1179(uint32_t key , uint32_t mask , uint32_t action , uint32_t const_arg ){
   for (int _idx = 0; _idx < 32; _idx++) {
-    if ((my_table_1179.entries[_idx].valid) == (false)) {
+    if (my_table_1179.entries[_idx].valid == false) {
       cellty_my_table_1179 tmp_1269  = {.valid = true, .key = key, .mask = mask, .action_tag = action, .action_arg = const_arg};
       my_table_1179.entries[_idx] = tmp_1269;
       return ;
@@ -170,7 +170,7 @@ void install_ternary_my_table_1179(uint32_t key , uint32_t mask , uint32_t actio
 }
 pair_t_1174 lookup_my_table_1179(uint32_t key , pair_t_1174 arg ){
   for (int _idx = 0; _idx < 32; _idx++) {
-    if ((my_table_1179.entries[_idx].valid) && ((key & my_table_1179.entries[_idx].mask) == (my_table_1179.entries[_idx].key & my_table_1179.entries[_idx].mask))) {
+    if (my_table_1179.entries[_idx].valid && ((key & my_table_1179.entries[_idx].mask) == (my_table_1179.entries[_idx].key & my_table_1179.entries[_idx].mask))) {
       switch (my_table_1179.entries[_idx].action_tag) {
         case tag_add_pair_1178: {
           return add_pair_1178(my_table_1179.entries[_idx].action_arg, arg);
@@ -186,7 +186,7 @@ pair_t_1174 lookup_my_table_1179(uint32_t key , pair_t_1174 arg ){
     }
   }
 }
-uint8_t parse_event(packet_t*  pkt , event_t*  next_event ){
+uint8_t parse_event(packet_t*  pkt , event_t*  next_event , uint32_t ingress_port ){
   uint32_t p_0_1180  = ((uint32_t)(read_bits(pkt, 32)));
   uint32_t p_1_1181  = ((uint32_t)(read_bits(pkt, 32)));
   (*(next_event)) = mk_foo(p_0_1180, p_1_1181);
@@ -199,7 +199,7 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       uint32_t p_1_1181  = ev_out->data.args.foo_1182.p_1_1181;
       write_bits(buf_out, ((uint64_t)(p_1_1181)), 32);
       write_bits(buf_out, ((uint64_t)(p_0_1180)), 32);
-      if ((ev_out->meta.is_packet) == (0)) {
+      if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(1)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
         write_bits(buf_out, ((uint64_t)(2)), 48);
@@ -414,7 +414,7 @@ static void ingest_slot(uint16_t idx, int in_port) {
     qe_t* q = slot(&g_slab, idx);
     packet_t view;
     init_cursor(q->data + HEADROOM, q->pkt_len, &view);
-    if (parse_event(&view, &q->ev) != 1) { debug_printf("parse failed\n"); slot_free(&g_slab, idx); return; }
+    if (parse_event(&view, &q->ev, (uint32_t)in_port) != 1) { debug_printf("parse failed\n"); slot_free(&g_slab, idx); return; }
     q->payload_off = (uint32_t)(view.cursor - (q->data + HEADROOM)); // where the payload begins
     q->ev.meta.in_port = in_port;                                    // ingress (read by the handler)
     if (ring_push(&dispatch_in, idx) != 0) slot_free(&g_slab, idx);  // ring full (shouldn't happen)

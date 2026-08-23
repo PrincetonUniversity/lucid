@@ -229,7 +229,7 @@ uint32_t Array_update_complex_nat_to_port_4036_get_get_memop_32_bit(uint32_t _id
   nat_to_port_4036[(((uint32_t)(_idx)) % 16)] = cell1;
   return ret;
 }
-uint8_t parse_event(packet_t*  packet , event_t*  next_event ){
+uint8_t parse_event(packet_t*  packet , event_t*  next_event , uint32_t ingress_port ){
   skip_bits(packet, 32);
   skip_bits(packet, 16);
   skip_bits(packet, 32);
@@ -293,7 +293,7 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       uint32_t src_port_4038  = ev_out->data.args.inside_packet_4039.src_port_4038;
       write_bits(buf_out, ((uint64_t)(src_port_4038)), 32);
       write_bits(buf_out, ((uint64_t)(src_ip_4037)), 32);
-      if ((ev_out->meta.is_packet) == (0)) {
+      if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(1)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
         write_bits(buf_out, ((uint64_t)(2)), 48);
@@ -305,7 +305,7 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
     case 2: {
       uint32_t src_port_4040  = ev_out->data.args.inside_continue_4041.src_port_4040;
       write_bits(buf_out, ((uint64_t)(src_port_4040)), 32);
-      if ((ev_out->meta.is_packet) == (0)) {
+      if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(2)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
         write_bits(buf_out, ((uint64_t)(2)), 48);
@@ -317,7 +317,7 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
     case 3: {
       uint32_t dst_port_4042  = ev_out->data.args.outside_packet_4043.dst_port_4042;
       write_bits(buf_out, ((uint64_t)(dst_port_4042)), 32);
-      if ((ev_out->meta.is_packet) == (0)) {
+      if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(3)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
         write_bits(buf_out, ((uint64_t)(2)), 48);
@@ -331,7 +331,7 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       uint32_t dst_port_4045  = ev_out->data.args.outside_continue_4046.dst_port_4045;
       write_bits(buf_out, ((uint64_t)(dst_port_4045)), 32);
       write_bits(buf_out, ((uint64_t)(dst_ip_4044)), 32);
-      if ((ev_out->meta.is_packet) == (0)) {
+      if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(4)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
         write_bits(buf_out, ((uint64_t)(2)), 48);
@@ -345,7 +345,7 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       uint32_t src_port_4048  = ev_out->data.args.add_to_nat_4049.src_port_4048;
       write_bits(buf_out, ((uint64_t)(src_port_4048)), 32);
       write_bits(buf_out, ((uint64_t)(src_ip_4047)), 32);
-      if ((ev_out->meta.is_packet) == (0)) {
+      if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(5)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
         write_bits(buf_out, ((uint64_t)(2)), 48);
@@ -616,7 +616,7 @@ static void ingest_slot(uint16_t idx, int in_port) {
     qe_t* q = slot(&g_slab, idx);
     packet_t view;
     init_cursor(q->data + HEADROOM, q->pkt_len, &view);
-    if (parse_event(&view, &q->ev) != 1) { debug_printf("parse failed\n"); slot_free(&g_slab, idx); return; }
+    if (parse_event(&view, &q->ev, (uint32_t)in_port) != 1) { debug_printf("parse failed\n"); slot_free(&g_slab, idx); return; }
     q->payload_off = (uint32_t)(view.cursor - (q->data + HEADROOM)); // where the payload begins
     q->ev.meta.in_port = in_port;                                    // ingress (read by the handler)
     if (ring_push(&dispatch_in, idx) != 0) slot_free(&g_slab, idx);  // ring full (shouldn't happen)

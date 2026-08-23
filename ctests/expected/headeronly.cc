@@ -125,7 +125,7 @@ event_t mk_ethhdr(uint64_t dst_599 , uint64_t src_600 , uint16_t ety_601 ){
 }
 uint32_t recirculation_port  = 0;
 uint32_t self  = 0;
-uint8_t parse_event(packet_t*  pkt , event_t*  next_event ){
+uint8_t parse_event(packet_t*  pkt , event_t*  next_event , uint32_t ingress_port ){
   uint64_t dst_599  = ((uint64_t)(read_bits(pkt, 48))) & 281474976710655;
   uint64_t src_600  = ((uint64_t)(read_bits(pkt, 48))) & 281474976710655;
   uint16_t ety_601  = ((uint16_t)(read_bits(pkt, 16)));
@@ -141,7 +141,7 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       write_bits(buf_out, ((uint64_t)(ety_601)), 16);
       write_bits(buf_out, ((uint64_t)(src_600)), 48);
       write_bits(buf_out, ((uint64_t)(dst_599)), 48);
-      if ((ev_out->meta.is_packet) == (0)) {
+      if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(1)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
         write_bits(buf_out, ((uint64_t)(2)), 48);
@@ -353,7 +353,7 @@ static void ingest_slot(uint16_t idx, int in_port) {
     qe_t* q = slot(&g_slab, idx);
     packet_t view;
     init_cursor(q->data + HEADROOM, q->pkt_len, &view);
-    if (parse_event(&view, &q->ev) != 1) { debug_printf("parse failed\n"); slot_free(&g_slab, idx); return; }
+    if (parse_event(&view, &q->ev, (uint32_t)in_port) != 1) { debug_printf("parse failed\n"); slot_free(&g_slab, idx); return; }
     q->payload_off = (uint32_t)(view.cursor - (q->data + HEADROOM)); // where the payload begins
     q->ev.meta.in_port = in_port;                                    // ingress (read by the handler)
     if (ring_push(&dispatch_in, idx) != 0) slot_free(&g_slab, idx);  // ring full (shouldn't happen)

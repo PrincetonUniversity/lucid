@@ -265,7 +265,7 @@ uint8_t Array_update_complex_bf1_0_3_5872_get_get_memop_8_bit(uint8_t _idx , uin
   bf1_0_3_5872[(((uint32_t)(_idx)) % 256)] = cell1;
   return ret;
 }
-uint8_t parse_event(packet_t*  pkt , event_t*  next_event ){
+uint8_t parse_event(packet_t*  pkt , event_t*  next_event , uint32_t ingress_port ){
   uint8_t add_5877  = ((uint8_t)(read_bits(pkt, 1)));
   uint8_t pad_5878  = ((uint8_t)(read_bits(pkt, 7))) & 127;
   uint32_t x_5879  = ((uint32_t)(read_bits(pkt, 32)));
@@ -276,7 +276,7 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
   switch (ev_out->data.tag) {
     case 1: {
       
-      if ((ev_out->meta.is_packet) == (0)) {
+      if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(1)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
         write_bits(buf_out, ((uint64_t)(2)), 48);
@@ -288,7 +288,7 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
     case 2: {
       uint8_t idx_5867  = ev_out->data.args.BloomFilter_clear_helper_bf1_5868.idx_5867;
       write_bits(buf_out, ((uint64_t)(idx_5867)), 8);
-      if ((ev_out->meta.is_packet) == (0)) {
+      if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(2)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
         write_bits(buf_out, ((uint64_t)(2)), 48);
@@ -300,7 +300,7 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
     case 3: {
       uint32_t x_5873  = ev_out->data.args.allowed_5874.x_5873;
       write_bits(buf_out, ((uint64_t)(x_5873)), 32);
-      if ((ev_out->meta.is_packet) == (0)) {
+      if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(3)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
         write_bits(buf_out, ((uint64_t)(2)), 48);
@@ -312,7 +312,7 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
     case 4: {
       uint32_t x_5875  = ev_out->data.args.denied_5876.x_5875;
       write_bits(buf_out, ((uint64_t)(x_5875)), 32);
-      if ((ev_out->meta.is_packet) == (0)) {
+      if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(4)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
         write_bits(buf_out, ((uint64_t)(2)), 48);
@@ -328,7 +328,7 @@ void deparse_event(event_t*  ev_out , packet_t*  buf_out ){
       write_bits(buf_out, ((uint64_t)(x_5879)), 32);
       write_bits(buf_out, ((uint64_t)(pad_5878)), 7);
       write_bits(buf_out, ((uint64_t)(add_5877)), 1);
-      if ((ev_out->meta.is_packet) == (0)) {
+      if (ev_out->meta.is_packet == 0) {
         write_bits(buf_out, ((uint64_t)(5)), 16);
         write_bits(buf_out, ((uint64_t)(666)), 16);
         write_bits(buf_out, ((uint64_t)(2)), 48);
@@ -591,7 +591,7 @@ static void ingest_slot(uint16_t idx, int in_port) {
     qe_t* q = slot(&g_slab, idx);
     packet_t view;
     init_cursor(q->data + HEADROOM, q->pkt_len, &view);
-    if (parse_event(&view, &q->ev) != 1) { debug_printf("parse failed\n"); slot_free(&g_slab, idx); return; }
+    if (parse_event(&view, &q->ev, (uint32_t)in_port) != 1) { debug_printf("parse failed\n"); slot_free(&g_slab, idx); return; }
     q->payload_off = (uint32_t)(view.cursor - (q->data + HEADROOM)); // where the payload begins
     q->ev.meta.in_port = in_port;                                    // ingress (read by the handler)
     if (ring_push(&dispatch_in, idx) != 0) slot_free(&g_slab, idx);  // ring full (shouldn't happen)

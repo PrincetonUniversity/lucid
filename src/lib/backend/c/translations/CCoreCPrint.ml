@@ -158,38 +158,41 @@ let rec e_to_string (e: e) : string =
 and exp_to_string exp : string = e_to_string exp.e
 and exps_to_string exps = String.concat ", " (List.map exp_to_string exps)
 and op_to_string (op: op) (args: exp list) : string =
+  (* operand of an infix/prefix op: parenthesize compound operands so C's
+     precedence cannot regroup the printed expression (e.g. `(a << 6) + b`
+     must not print as `a << 6 + b`, which C parses as `a << (6 + b)`). *)
+  let operand exp =
+    match exp.e with
+    (* these print as postfix/primary forms (subscript, member access, call)
+       or already wrap themselves in parens (cast, mod) *)
+    | EOp((Idx | Project _ | Get _ | Cast _ | Hash _ | Mod), _) -> exp_to_string exp
+    | EOp _ -> "(" ^ exp_to_string exp ^ ")"
+    | _ -> exp_to_string exp
+  in
   match op, args with
-  | Idx, [arr; idx] -> sprintf "%s[%s]" (exp_to_string arr) (exp_to_string idx)
-  | And, [a; b] when is_eop a || is_eop b ->
-    sprintf "(%s) && (%s)" (exp_to_string a) (exp_to_string b)
-  | And, [a; b] -> exp_to_string a ^ " && " ^ exp_to_string b
-  | Or, [a; b] -> exp_to_string a ^ " || " ^ exp_to_string b
-  | Not, [a] -> "!" ^ exp_to_string a
-  | Eq, [a; b] when is_eop a || is_eop b -> 
-    sprintf "(%s) == (%s)" (exp_to_string a) (exp_to_string b)
-  | Eq, [a; b] -> exp_to_string a ^ " == " ^ exp_to_string b
-  | Neq, [a; b] -> exp_to_string a ^ " != " ^ exp_to_string b
-  | Less, [a; b] -> exp_to_string a ^ " < " ^ exp_to_string b
-  | More, [a; b] -> exp_to_string a ^ " > " ^ exp_to_string b
-  | Leq, [a; b] -> exp_to_string a ^ " <= " ^ exp_to_string b
-  | Geq, [a; b] -> exp_to_string a ^ " >= " ^ exp_to_string b
-  | Neg, [a] -> "-" ^ exp_to_string a
-  | Plus, [a; b] -> exp_to_string a ^ " + " ^ exp_to_string b
-  | Sub, [a; b] -> exp_to_string a ^ " - " ^ exp_to_string b
-  | SatPlus, [a; b] -> exp_to_string a ^ " |+| " ^ exp_to_string b
-  | SatSub, [a; b] -> exp_to_string a ^ " |-| " ^ exp_to_string b
-  | BitAnd, [a; b] -> exp_to_string a ^ " & " ^ exp_to_string b
-  | BitOr, [a; b] -> exp_to_string a ^ " | " ^ exp_to_string b
-  | BitXor, [a; b] -> exp_to_string a ^ " ^ " ^ exp_to_string b
-  | BitNot, [a] -> "~" ^ exp_to_string a
-  | LShift, [a; b] -> exp_to_string a ^ " << " ^ exp_to_string b
-  | RShift, [a; b] -> exp_to_string a ^ " >> " ^ exp_to_string b
+  | Idx, [arr; idx] -> sprintf "%s[%s]" (operand arr) (exp_to_string idx)
+  | And, [a; b] -> operand a ^ " && " ^ operand b
+  | Or, [a; b] -> operand a ^ " || " ^ operand b
+  | Not, [a] -> "!" ^ operand a
+  | Eq, [a; b] -> operand a ^ " == " ^ operand b
+  | Neq, [a; b] -> operand a ^ " != " ^ operand b
+  | Less, [a; b] -> operand a ^ " < " ^ operand b
+  | More, [a; b] -> operand a ^ " > " ^ operand b
+  | Leq, [a; b] -> operand a ^ " <= " ^ operand b
+  | Geq, [a; b] -> operand a ^ " >= " ^ operand b
+  | Neg, [a] -> "-" ^ operand a
+  | Plus, [a; b] -> operand a ^ " + " ^ operand b
+  | Sub, [a; b] -> operand a ^ " - " ^ operand b
+  | SatPlus, [a; b] -> operand a ^ " |+| " ^ operand b
+  | SatSub, [a; b] -> operand a ^ " |-| " ^ operand b
+  | BitAnd, [a; b] -> operand a ^ " & " ^ operand b
+  | BitOr, [a; b] -> operand a ^ " | " ^ operand b
+  | BitXor, [a; b] -> operand a ^ " ^ " ^ operand b
+  | BitNot, [a] -> "~" ^ operand a
+  | LShift, [a; b] -> operand a ^ " << " ^ operand b
+  | RShift, [a; b] -> operand a ^ " >> " ^ operand b
   | Slice (i, j), [a] -> exp_to_string a ^ "[" ^ string_of_int i ^ ":" ^ string_of_int j ^ "]"
-  (* the hash length is the value's *bit* width (a compile-time constant), not
-     sizeof: sizeof is the C storage size, which over-counts for sub-byte / padded
-     widths. hash_32 sums whole bytes and masks the last partial byte (see
-     CCoreSystem.hash_fun). The result is masked to its width (when non-standard)
-     by CCoreMaskWidths, not here. *)
+  (* TODO: understand what this is doing with respect to hash width *)
   | Hash _, [seed; a] ->
     let ref_arg = sprintf "(%s)&%s" (plain_ty_to_string (tref (tint 8))) (exp_to_string a) in
     let seed_arg = sprintf "(%s)%s" (plain_ty_to_string (tint 32)) (exp_to_string seed) in
@@ -204,8 +207,8 @@ and op_to_string (op: op) (args: exp list) : string =
   (* use arrow notation shorthand for derefs, unless its a subscript op *)
   | Project id, [a] when (is_ederef (a) && (not@@is_eop (extract_ederef (a)))) -> 
       exp_to_string (extract_ederef a) ^ "->" ^ cid_to_string id
-  | Project id, [a] -> exp_to_string a ^ "." ^ cid_to_string id
-  | Get i, [a] -> exp_to_string a ^ "._" ^ string_of_int i
+  | Project id, [a] -> operand a ^ "." ^ cid_to_string id
+  | Get i, [a] -> operand a ^ "._" ^ string_of_int i
   | Mod, [x; m] -> Printf.sprintf "(%s %% %s)" (exp_to_string x) (exp_to_string m)
   | _, _ -> failwith ("Invalid number of arguments for operator: "^(show_op op))
 
