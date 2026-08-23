@@ -1,0 +1,22 @@
+// LUCIDCC_REJECT: byte boundary
+// A parser that takes Payload.parse mid-byte: after the eth header it skips 3
+// bits, so the payload tail starts 3 bits past a byte boundary. The event's own
+// fields are layout-legal (112 bits) -- only the parser's consumption is odd.
+// The C driver records the payload start at byte granularity (payload_off drops
+// bit_off), so this must be rejected by the payload-alignment check rather than
+// silently mis-carrying the payload (the interpreter tracks exact bit positions).
+packet event oddtail(int<48> dst, int<48> src, int<16> ety, Payload.t pl) {
+  generate_port(ingress_port, this);
+}
+
+parser main(bitstring pkt) {
+  int<48> d = read(pkt);
+  int<48> s = read(pkt);
+  int<16> t = read(pkt);
+  match t with
+  | LUCID_ETHERTY -> { do_lucid_parsing(pkt); }
+  | _ -> {
+    skip(int<3>, pkt);
+    generate oddtail(d, s, t, Payload.parse(pkt));
+  }
+}

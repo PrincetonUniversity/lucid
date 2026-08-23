@@ -39,6 +39,7 @@ let compile ds =
   print_endline ("---- checking types and feature compatibility ----");
   let cds = CCoreTyper.check cds in
   CCoreWellformed.check_ccore_compat cds;
+  CCoreWellformed.check_payload_alignment payload_event_names cds;
 
   print_endline ("---- Synthesizing deparser and merging handler ----");
   let cds = CCoreParse.make_deparser cds in

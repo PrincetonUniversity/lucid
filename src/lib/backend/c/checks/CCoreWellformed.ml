@@ -96,6 +96,78 @@ let check_event_params decls =
       sigs
 ;;
 
+(* ---- payload byte-alignment (parsers) ---- *)
+let read_skip_bits count_of = (* total wire bits consumed by reads/skips inside *)
+  let n = ref 0 in
+  let v = object (_) inherit [_] s_iter as super
+    method! visit_exp () e =
+      (match e.e with
+       | EOp((Read ty | Skip ty), _) -> n := !n + sizeof_ty ty
+       | _ -> ());
+      super#visit_exp () e
+  end
+  in
+  count_of v; !n
+;;
+let stmt_bits stmt = read_skip_bits (fun v -> v#visit_statement () stmt)
+let exps_bits exps = read_skip_bits (fun v -> List.iter (v#visit_exp ()) exps)
+
+let check_payload_alignment payload_event_names decls =
+  (* the generated event in a parser return is a mk_<event>(...) call; map it
+     back to the event name (the same name-keyed convention translation uses) *)
+  let payload_event_name fcid = (* Some <event name> iff fcid is a payload event's mk_ ctor *)
+    let n = Cid.name fcid in
+    if String.length n > 3 && String.sub n 0 3 = "mk_" then (
+      let ev_name = String.sub n 3 (String.length n - 3) in
+      if List.mem ev_name payload_event_names then Some ev_name else None)
+    else None
+  in
+  let advance cur bits =
+    match cur with Some p -> Some ((p + bits) mod 8) | None -> None
+  in
+  let join a b =
+    match a, b with Some x, Some y when x = y -> a | _, _ -> None
+  in
+  let rec walk cur stmt =
+    match stmt.s with
+    | SSeq(a, b) -> walk (walk cur a) b
+    | SIf(c, a, b) ->
+      let cur = advance cur (exps_bits [c]) in
+      join (walk cur a) (walk cur b)
+    | SMatch(es, branches) -> (
+      let cur = advance cur (exps_bits es) in
+      match branches with
+      | [] -> cur
+      | (_, b0)::rest ->
+        List.fold_left (fun acc (_, bstmt) -> join acc (walk cur bstmt)) (walk cur b0) rest)
+    | SRet(Some { e = ETuple [ _ok; ev ]; _ }) ->
+      (match ev.e with
+       | ECall { f = { e = EVar fcid; _ }; _ } -> (
+         match payload_event_name fcid, cur with
+         | None, _ | Some _, Some 0 -> ()
+         | Some ev_name, Some p ->
+           error @@ Printf.sprintf
+             "parser generates payload event %s with the payload starting %d bit(s) past a byte boundary (the C driver carries payloads at byte granularity) -- pad or restructure the preceding reads so the payload begins on a byte boundary"
+             ev_name p
+         | Some ev_name, None ->
+           error @@ Printf.sprintf
+             "parser generates payload event %s at a bit offset that differs between paths -- the payload's byte alignment cannot be checked; make every path to this generate consume the same number of bits mod 8"
+             ev_name)
+       | _ -> ());
+      cur
+    (* loops don't occur in parser bodies today; if one ever contains reads,
+       the phase is unknown afterward *)
+    | SFor _ | SForEver _ -> if stmt_bits stmt > 0 then None else cur
+    | SNoop | SUnit _ | SAssign _ | SRet _ -> advance cur (stmt_bits stmt)
+  in
+  List.iter
+    (fun decl ->
+      match extract_dparser_opt decl with
+      | Some (_, _, _, body) -> ignore (walk (Some 0) body)
+      | None -> ())
+    decls
+;;
+
 let op_checker = object
   inherit [_] s_iter as super
   val mutable cur_decl_opt = None
