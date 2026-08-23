@@ -82,32 +82,12 @@ let pack_hash_args =
   end
 ;;
 
-(* assign a number to each event *)
-let set_event_nums decls =
-  let event_nums = List.filter_map 
-    (fun decl -> match decl.d with
-      | DEvent(_, nopt, _, _) -> nopt
-      | _ -> None)
-    decls
-  in
-  let rec set_event_nums' num decls = 
-    if (List.exists (fun v -> v = num) event_nums)
-    then set_event_nums' (num+1) decls
-    else 
-      match decls with
-      | [] -> []
-      | decl::decls -> (
-        match decl.d with
-        | DEvent(a, None, b, c) -> 
-          {decl with d = DEvent(a, Some(num), b, c)}::(set_event_nums' (num+1) decls)
-        | _ -> decl::(set_event_nums' num decls)
-      )
-  in
-  set_event_nums' 1 decls
-;;
+(* event numbering happens in the frontend (EventFormat.set_event_nums, re-run
+   after event monomorphization); a fill-in-the-blanks copy of it lived here for
+   the C pipeline but was a no-op -- CoreToCCore now checks numbers are present
+   when it turns them into variant tags. *)
 
-
-let warn str = 
+let warn str =
   Console.show_message str ANSITerminal.Yellow "Unsupported feature"
 ;;
 

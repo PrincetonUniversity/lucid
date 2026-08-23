@@ -23,7 +23,6 @@ let compile ds =
   print_endline ("---- core passes----");
   let ds = AddEthStartMain.process ds in
   let payload_event_names, ds = MiscCorePasses.implicit_payloads ds in
-  let ds = MiscCorePasses.set_event_nums ds in
   let ds = CoreRegularizeMemops.process ds in
   let ds = PartialInterpretation.interp_prog ds in
   let ds = AddIngressParser.add_simple_parser None ds in 

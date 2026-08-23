@@ -618,7 +618,7 @@ let translate_decl (decl:C.decl) : F.decl =
    only the variant DTy (CCoreVariants.arm is their view of an event). *)
 type ev_def = {
   evconstrid : Cid.t;
-  evconstrnum : int option;
+  evconstrnum : int; (* becomes the variant tag; the frontend numbers every event *)
   evparams : F.params;
   is_packet : bool;
   has_payload : bool;
@@ -658,10 +658,14 @@ let translate ?(payload_event_names=[]) (ds : C.decls) : F.decls =
   let event_defs = List.filter_map
     (fun (d : C.decl) -> match d.d with
       | C.DEvent (evid, evnum_opt, ev_sort, params) ->
+        let evnum = match evnum_opt with
+          | Some n -> n
+          | None -> err ("[CoreToCCore] event "^(fst evid)^" has no number -- all events must arrive numbered from the frontend")
+        in
         let is_packet = (match ev_sort with C.EPacket -> true | C.EBackground -> false) in
         let has_payload = List.mem (fst evid) payload_event_names in
         let evparams = List.map (fun (id, ty) -> Cid.id id, translate_ty ty) params in
-        Some { evconstrid = Cid.id evid; evconstrnum = evnum_opt;
+        Some { evconstrid = Cid.id evid; evconstrnum = evnum;
                evparams; is_packet; has_payload }
       | _ -> None)
     ds
@@ -681,7 +685,7 @@ let translate ?(payload_event_names=[]) (ds : C.decls) : F.decls =
   (* declare the event ADT once: `type events = TEvent[ (ctor, {params}) ]`. *)
   let event_sigs =
     List.map
-      (fun (ed : ev_def) -> (ed.evconstrid, Option.get ed.evconstrnum, F.trecord ed.evparams))
+      (fun (ed : ev_def) -> (ed.evconstrid, ed.evconstrnum, F.trecord ed.evparams))
       event_defs
   in
   (* the tagged variant (the constructor union) and the envelope that wraps it.
