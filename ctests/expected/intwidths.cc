@@ -501,12 +501,18 @@ int main(int argc, char** argv) {
     printf("Init complete.\n");
     fflush(stdout);
 
-    // replay loop: rx -> dispatch -> tx (each a bounded burst) until every input is
-    // exhausted and pipeline is drained.
+    // replay loop: after each rx burst, fully drain the pipeline (including
+    // recirculation chains, which advance one dispatch->tx step at a time)
+    // before reading more input. Offline replay must be lossless: unpaced reads
+    // against a bounded slot pool would otherwise hit do_tx's pool-exhausted
+    // drop under recirculation load. (The real-time drivers keep bounded
+    // bursts -- backpressure is correct when the wire sets the pace.)
     for (;;) {
         do_rx();
-        do_dispatch();
-        do_tx();
+        while (!ring_empty(&dispatch_in) || !ring_empty(&tx_in)) {
+            do_dispatch();
+            do_tx();
+        }
         int all_eof = 1;
         for (int i = 0; i < g_port_map.nports; i++) if (!g_port_map.ports[i].in_eof) all_eof = 0;
         if (all_eof && ring_empty(&dispatch_in) && ring_empty(&tx_in)) break;

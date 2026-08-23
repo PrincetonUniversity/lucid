@@ -339,7 +339,7 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
       uint32_t key_2397  = ev_in->data.args.do_install_2391.key_2389;
       uint32_t val_2398  = ev_in->data.args.do_install_2391.val_2390;
       event_t this  = mk_do_install(key_2397, val_2398);
-      printf("installing entry: key=%d -> hit_acn(%d)", key_2397, val_2398);
+      printf("installing entry: key=%d -> hit_acn(%d)\n", key_2397, val_2398);
       install_ftbl_2384(key_2397, tag_hit_acn_2380, val_2398);
       break;
     }
@@ -353,7 +353,7 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
       if (r_1_2401 == true) {
         hit_2402 = 1;
       }
-      printf("query key=%d -> val=%d hit=%d", key_2399, r_0_2400, hit_2402);
+      printf("query key=%d -> val=%d hit=%d\n", key_2399, r_0_2400, hit_2402);
       out_event_t tmp_2564  = {.ev = mk_query_result(key_2399, r_0_2400, hit_2402), .port = 1};
       out_events[n] = tmp_2564;
       n = n + 1;
@@ -629,12 +629,18 @@ int main(int argc, char** argv) {
     printf("Init complete.\n");
     fflush(stdout);
 
-    // replay loop: rx -> dispatch -> tx (each a bounded burst) until every input is
-    // exhausted and pipeline is drained.
+    // replay loop: after each rx burst, fully drain the pipeline (including
+    // recirculation chains, which advance one dispatch->tx step at a time)
+    // before reading more input. Offline replay must be lossless: unpaced reads
+    // against a bounded slot pool would otherwise hit do_tx's pool-exhausted
+    // drop under recirculation load. (The real-time drivers keep bounded
+    // bursts -- backpressure is correct when the wire sets the pace.)
     for (;;) {
         do_rx();
-        do_dispatch();
-        do_tx();
+        while (!ring_empty(&dispatch_in) || !ring_empty(&tx_in)) {
+            do_dispatch();
+            do_tx();
+        }
         int all_eof = 1;
         for (int i = 0; i < g_port_map.nports; i++) if (!g_port_map.ports[i].in_eof) all_eof = 0;
         if (all_eof && ring_empty(&dispatch_in) && ring_empty(&tx_in)) break;

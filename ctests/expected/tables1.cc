@@ -292,11 +292,11 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
       res_t_2741 tup_2953  = lookup_ftbl_2748(s_2754, 1000);
       uint32_t tbl_out_0_2756  = tup_2953._0;
       uint8_t tbl_out_1_2757  = tup_2953._1;
-      printf("return of table match: %d", tbl_out_0_2756);
+      printf("return of table match: %d\n", tbl_out_0_2756);
       if (tbl_out_1_2757 == true) {
-        printf("table HIT.");
+        printf("table HIT.\n");
       }else {
-        printf("table MISS. Installing hit_acn(3) for current key. ");
+        printf("table MISS. Installing hit_acn(3) for current key. \n");
         install_ftbl_2748(s_2754, tag_hit_acn_2744, 3);
       }
       break;
@@ -305,7 +305,7 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
       uint32_t v_2758  = ev_in->data.args.do_install_2753.v_2751;
       uint32_t m_2759  = ev_in->data.args.do_install_2753.m_2752;
       event_t this  = mk_do_install(v_2758, m_2759);
-      printf("installing entry: (%d &&& %d)", v_2758, m_2759);
+      printf("installing entry: (%d &&& %d)\n", v_2758, m_2759);
       install_ftbl_2748(v_2758, tag_hit_acn_2744, 2);
       install_ternary_ftbl_2748(v_2758, m_2759, tag_hit_acn_2744, 3);
       break;
@@ -580,12 +580,18 @@ int main(int argc, char** argv) {
     printf("Init complete.\n");
     fflush(stdout);
 
-    // replay loop: rx -> dispatch -> tx (each a bounded burst) until every input is
-    // exhausted and pipeline is drained.
+    // replay loop: after each rx burst, fully drain the pipeline (including
+    // recirculation chains, which advance one dispatch->tx step at a time)
+    // before reading more input. Offline replay must be lossless: unpaced reads
+    // against a bounded slot pool would otherwise hit do_tx's pool-exhausted
+    // drop under recirculation load. (The real-time drivers keep bounded
+    // bursts -- backpressure is correct when the wire sets the pace.)
     for (;;) {
         do_rx();
-        do_dispatch();
-        do_tx();
+        while (!ring_empty(&dispatch_in) || !ring_empty(&tx_in)) {
+            do_dispatch();
+            do_tx();
+        }
         int all_eof = 1;
         for (int i = 0; i < g_port_map.nports; i++) if (!g_port_map.ports[i].in_eof) all_eof = 0;
         if (all_eof && ring_empty(&dispatch_in) && ring_empty(&tx_in)) break;

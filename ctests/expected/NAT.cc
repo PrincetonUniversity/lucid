@@ -380,7 +380,7 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
       event_t this  = mk_add_to_nat(src_ip_4053, src_port_4054);
       tuple_1 tmp_4336  = {._0 = src_ip_4053, ._1 = src_port_4054,};
       uint32_t NAT_port_4055  = ((uint32_t)(hash_32((uint32_t)1234, (uint8_t* )&tmp_4336, 64) & 15));
-      printf("Mapped (ip: %d, port: %d) to port %d", src_ip_4053, src_port_4054, NAT_port_4055);
+      printf("Mapped (ip: %d, port: %d) to port %d\n", src_ip_4053, src_port_4054, NAT_port_4055);
       Array_update_complex_nat_to_ip_4035_set_set_memop_32_bit(NAT_port_4055, src_ip_4053, 0);
       Array_update_complex_nat_to_port_4036_set_set_memop_32_bit(NAT_port_4055, src_port_4054, 0);
       out_event_t tmp_4337  = {.ev = mk_inside_continue(NAT_port_4055), .port = 4294967295};
@@ -405,12 +405,12 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
       if (ret_4059 == true) {
         tuple_1 tmp_4339  = {._0 = src_ip_4056, ._1 = src_port_4057,};
         uint32_t NAT_port_4064  = ((uint32_t)(hash_32((uint32_t)1234, (uint8_t* )&tmp_4339, 64) & 15));
-        printf("IP already in NAT, maps to port %d", NAT_port_4064);
+        printf("IP already in NAT, maps to port %d\n", NAT_port_4064);
         out_event_t tmp_4340  = {.ev = mk_inside_continue(NAT_port_4064), .port = 4294967295};
         out_events[n] = tmp_4340;
         n = n + 1;
       }else {
-        printf("Adding to NAT");
+        printf("Adding to NAT\n");
         out_event_t tmp_4341  = {.ev = mk_add_to_nat(src_ip_4056, src_port_4057), .port = 4294967295};
         out_events[n] = tmp_4341;
         n = n + 1;
@@ -422,9 +422,9 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
       event_t this  = mk_outside_packet(dst_port_4065);
       uint32_t ip_4066  = Array_update_complex_nat_to_ip_4035_get_get_memop_32_bit(dst_port_4065, 0, 0);
       uint32_t port_4067  = Array_update_complex_nat_to_port_4036_get_get_memop_32_bit(dst_port_4065, 0, 0);
-      printf("Mapped port %d to (ip: %d, port: %d)", dst_port_4065, ip_4066, port_4067);
+      printf("Mapped port %d to (ip: %d, port: %d)\n", dst_port_4065, ip_4066, port_4067);
       if (ip_4066 == 0) {
-        printf("dropped");
+        printf("dropped\n");
       }else {
         out_event_t tmp_4342  = {.ev = mk_outside_continue(ip_4066, port_4067), .port = 4294967295};
         out_events[n] = tmp_4342;
@@ -702,12 +702,18 @@ int main(int argc, char** argv) {
     printf("Init complete.\n");
     fflush(stdout);
 
-    // replay loop: rx -> dispatch -> tx (each a bounded burst) until every input is
-    // exhausted and pipeline is drained.
+    // replay loop: after each rx burst, fully drain the pipeline (including
+    // recirculation chains, which advance one dispatch->tx step at a time)
+    // before reading more input. Offline replay must be lossless: unpaced reads
+    // against a bounded slot pool would otherwise hit do_tx's pool-exhausted
+    // drop under recirculation load. (The real-time drivers keep bounded
+    // bursts -- backpressure is correct when the wire sets the pace.)
     for (;;) {
         do_rx();
-        do_dispatch();
-        do_tx();
+        while (!ring_empty(&dispatch_in) || !ring_empty(&tx_in)) {
+            do_dispatch();
+            do_tx();
+        }
         int all_eof = 1;
         for (int i = 0; i < g_port_map.nports; i++) if (!g_port_map.ports[i].in_eof) all_eof = 0;
         if (all_eof && ring_empty(&dispatch_in) && ring_empty(&tx_in)) break;

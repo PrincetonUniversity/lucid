@@ -349,9 +349,12 @@ let rec translate_statement (stmt:C.statement) : F.statement =
     F.sassign (id) (translate_exp exp) |> F.swrap stmt.sspan
   | C.SLocal(id, ty, exp) -> 
     F.slocal (Cid.id id) (translate_ty ty) (translate_exp exp) |> F.swrap stmt.sspan
-  | C.SPrintf(fmt_str, args) -> 
-    (* printf  *)
-    let str_exp = F.eval (F.string_to_value fmt_str) in
+  | C.SPrintf(fmt_str, args) ->
+    (* printf. Lucid's printf prints a line (the interpreter uses print_endline),
+       so append a newline escape to the emitted C format string -- also makes
+       line-buffered logs flush per printf instead of accumulating one endless
+       unflushable line. *)
+    let str_exp = F.eval (F.string_to_value (fmt_str ^ "\\n")) in
     let args = str_exp::List.map (fun arg -> (translate_exp arg)) args in
     let arg_tys = List.map (fun (arg:F.exp) -> arg.ety) args in
     let ret_ty = F.ty@@TUnit in

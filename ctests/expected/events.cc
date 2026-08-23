@@ -263,7 +263,7 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
       uint32_t src_ip_1195  = ev_in->data.args.pkt_in_1186.src_ip_1184;
       uint32_t src_port_1196  = ev_in->data.args.pkt_in_1186.src_port_1185;
       event_t this  = mk_pkt_in(src_ip_1195, src_port_1196);
-      printf("Received packet from (ip: %d, port: %d)", src_ip_1195, src_port_1196);
+      printf("Received packet from (ip: %d, port: %d)\n", src_ip_1195, src_port_1196);
       event_t MY_EVENT_1197  = mk_pkt_out(src_ip_1195, src_port_1196);
       out_event_t tmp_1273  = {.ev = mk_bg_cmd(src_port_1196), .port = 4294967295};
       out_events[n] = tmp_1273;
@@ -272,7 +272,7 @@ uint16_t handle_event(event_t*  ev_in , out_event_t out_events [64]){
         case 3: {
           uint32_t ip_1198  = MY_EVENT_1197.data.args.pkt_out_1191.src_ip_1189;
           uint32_t port_1199  = MY_EVENT_1197.data.args.pkt_out_1191.src_port_1190;
-          printf("Sending packet to (ip: %d, port: %d)", ip_1198, port_1199);
+          printf("Sending packet to (ip: %d, port: %d)\n", ip_1198, port_1199);
           out_event_t tmp_1274  = {.ev = mk_pkt_out(src_ip_1195, src_port_1196), .port = 0};
           out_events[n] = tmp_1274;
           n = n + 1;
@@ -555,12 +555,18 @@ int main(int argc, char** argv) {
     printf("Init complete.\n");
     fflush(stdout);
 
-    // replay loop: rx -> dispatch -> tx (each a bounded burst) until every input is
-    // exhausted and pipeline is drained.
+    // replay loop: after each rx burst, fully drain the pipeline (including
+    // recirculation chains, which advance one dispatch->tx step at a time)
+    // before reading more input. Offline replay must be lossless: unpaced reads
+    // against a bounded slot pool would otherwise hit do_tx's pool-exhausted
+    // drop under recirculation load. (The real-time drivers keep bounded
+    // bursts -- backpressure is correct when the wire sets the pace.)
     for (;;) {
         do_rx();
-        do_dispatch();
-        do_tx();
+        while (!ring_empty(&dispatch_in) || !ring_empty(&tx_in)) {
+            do_dispatch();
+            do_tx();
+        }
         int all_eof = 1;
         for (int i = 0; i < g_port_map.nports; i++) if (!g_port_map.ports[i].in_eof) all_eof = 0;
         if (all_eof && ring_empty(&dispatch_in) && ring_empty(&tx_in)) break;
