@@ -239,9 +239,12 @@ let builtin_checkers =
 
 (* builtin globals from the frontend that are not implemented as globals 
    in the backend. These should not be necessary in the final type checking pass. *)
-let builtin_vars () = 
+let builtin_vars () =
   [
     Builtins.ingr_port_id, (CConfig.c_cfg.port_id_size) |> tint;
+    (* the `checksum` hash seed; only valid as hash<16>'s first arg;
+       implemented in CCoreSystem *)
+    Builtins.checksum_id, tint 32;
   ]
 ;;
 

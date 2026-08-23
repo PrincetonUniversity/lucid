@@ -53,6 +53,22 @@ write_pcap("headeronly.in.pcap", [
     eth("aabbccddeeff", "112233445566", 0x0800),
 ])
 
+# csum: recompute the IPv4 header checksum (hash<16>(checksum, ...)). The input's
+# checksum field is wrong (0xdead); the program zeroes and recomputes it over the
+# wire-format header bits. csum.expected.pcap is crafted independently (correct
+# RFC 1071 checksum computed here in python), NOT produced by --update -- keep it
+# that way so the test stays a cross-check rather than a snapshot of itself.
+def ipv4(ver=4, ihl=5, dscp=0, ecn=0, total_len=32, pkt_id=0x1c46, flags=2, frag=0,
+         ttl=64, proto=17, csum=0, src="0a350101", dst="0a350105"):
+    return struct.pack(">BBHHHBBH", (ver << 4) | ihl, (dscp << 2) | ecn, total_len,
+                       pkt_id, (flags << 13) | frag, ttl, proto, csum) \
+        + bytes.fromhex(src) + bytes.fromhex(dst)
+
+write_pcap("csum.in.pcap", [
+    eth("aabbccddeeff", "112233445566", 0x0800, ipv4(csum=0xdead) + b"PAYLOAD-DATA"),
+    eth("aabbccddeeff", "112233445566", 0x0806, b"arp-payload."),  # non-IP -> reflected as-is
+])
+
 # ---- Lucid background-event framing: dst=1 ++ src=2 ++ ety 666 ++ 16-bit tag ++ fields --
 def lucid_frame(tag, *fields):
     return (bytes.fromhex("000000000001") + bytes.fromhex("000000000002")
