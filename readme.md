@@ -145,16 +145,10 @@ Sonchack, John, Devon Loehr, Jennifer Rexford, and David Walker. "Lucid: A langu
 ## Funding acknowledgements
 Work on Lucid is funded by grants from NSF and the NLnet foundation.
 
-<table width="100%">
-  <tr>
-    <td align="center" valign="middle" width="50%">
-      <img src="docs/images/NSF_Official_logo_Med_Res_600ppi.png" alt="NSF Logo" width="150" />
-    </td>
-    <td align="center" valign="middle" width="50%">
-      <img src="docs/images/nlnet-logo.png" alt="NLnet Logo" width="300" />
-    </td>
-  </tr>
-</table>
+<p align="center">
+  <img src="docs/images/NSF_Official_logo_Med_Res_600ppi.png" alt="NSF Logo" width="150" />
+  <img src="docs/images/nlnet-logo.png" alt="NLnet Logo" width="300" />
+</p>
 
 
 
